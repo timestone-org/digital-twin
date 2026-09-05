@@ -7,7 +7,18 @@
  * 会整片错，而图上的校验也拦不住。
  */
 import type { FormulaNode } from './formula'
-import { cases, frac, nameOf, numOf, opOf, run, sqrt, sum, varOf, warnOf } from './formula'
+import {
+  cases,
+  frac,
+  nameOf,
+  numOf,
+  opOf,
+  run,
+  sqrt,
+  sum,
+  varOf,
+  warnOf,
+} from './formula'
 import type { FormulaContext, FormulaSpec } from './formulaArgs'
 import {
   NO_BLOCK,
@@ -84,7 +95,12 @@ function oneHotRule(context: FormulaContext): FormulaSpec {
     id: 'encode',
     title: '一个类目变成哪一列',
     symbolic: [
-      run(varOf('e_{j,c}(x)'), opOf('='), varOf('1[x = c]'), nameOf('，列名 = key=c')),
+      run(
+        varOf('e_{j,c}(x)'),
+        opOf('='),
+        varOf('1[x = c]'),
+        nameOf('，列名 = key=c'),
+      ),
     ],
     filled:
       names.length === 0
@@ -93,7 +109,10 @@ function oneHotRule(context: FormulaContext): FormulaSpec {
     fallback: names.length === 0 ? NO_BLOCK : null,
     isOpen: false,
     legend: [
-      { symbol: 'C_j', text: `保留下来的类目，按 (命中行数降序, 字典序) 排${cap === null ? '' : `，最多 ${niceNumber(cap)} 个`}` },
+      {
+        symbol: 'C_j',
+        text: `保留下来的类目，按 (命中行数降序, 字典序) 排${cap === null ? '' : `，最多 ${niceNumber(cap)} 个`}`,
+      },
       { symbol: '1[·]', text: '成立记 1，不成立记 0' },
     ],
     notes: [
@@ -128,7 +147,10 @@ function selectScore(context: FormulaContext): FormulaSpec {
     isOpen: false,
     legend: [
       { symbol: 's_j', text: '第 j 列的分' },
-      { symbol: 'k', text: `留下前几名 top_k${topK === null ? '' : ` = ${niceNumber(topK)}`}` },
+      {
+        symbol: 'k',
+        text: `留下前几名 top_k${topK === null ? '' : ` = ${niceNumber(topK)}`}`,
+      },
     ],
     notes: [
       isVariance
@@ -156,7 +178,12 @@ function cutLine(
   if (next === undefined) return [run(...line, nameOf('，后面没有别的列了'))]
   return [
     run(...line),
-    run(opOf(','), varOf('下一名'), opOf('='), numOf(numberIn(next, 'value') ?? 0)),
+    run(
+      opOf(','),
+      varOf('下一名'),
+      opOf('='),
+      numOf(numberIn(next, 'value') ?? 0),
+    ),
   ]
 }
 
@@ -187,7 +214,9 @@ function pcaTerms(context: FormulaContext): FormulaSpec {
 }
 
 /** 一条主成分里的一项：权重、中心点与列名，缺一样就不成一项。 */
-function pcTerm(raw: unknown): { key: string; weight: number; center: number } | null {
+function pcTerm(
+  raw: unknown,
+): { key: string; weight: number; center: number } | null {
   const item = recordOf(raw)
   const key = item['key']
   const weight = numberIn(item, 'weight')
@@ -224,7 +253,8 @@ function pcTerms(
 
 function timeParts(context: FormulaContext): FormulaSpec {
   const axis = blockAt(context.blocks, 'axis')
-  const offset = axis === null ? null : numberIn(axis.payload, 'tz_offset_minutes')
+  const offset =
+    axis === null ? null : numberIn(axis.payload, 'tz_offset_minutes')
   const parts = textsAt(context.config, 'parts')
   return {
     id: 'parts',
@@ -247,7 +277,9 @@ function timeParts(context: FormulaContext): FormulaSpec {
               varOf('Δ'),
               opOf('='),
               numOf(offset),
-              nameOf(`分钟 = UTC${offset < 0 ? '' : '+'}${niceNumber(offset / 60)}`),
+              nameOf(
+                `分钟 = UTC${offset < 0 ? '' : '+'}${niceNumber(offset / 60)}`,
+              ),
             ),
           ],
     fallback: offset === null ? NO_BLOCK : null,
@@ -286,7 +318,11 @@ function lagShift(context: FormulaContext): FormulaSpec {
               varOf(`{${kept.map((one) => niceNumber(one)).join(', ')}}`),
               ...(kept.length === lags.length
                 ? []
-                : [warnOf(`配了 ${niceNumber(lags.length)} 档，去重后只造得出 ${niceNumber(kept.length)} 列`)]),
+                : [
+                    warnOf(
+                      `配了 ${niceNumber(lags.length)} 档，去重后只造得出 ${niceNumber(kept.length)} 列`,
+                    ),
+                  ]),
             ),
           ],
     fallback: kept.length === 0 ? NO_CONFIG : null,
@@ -310,7 +346,11 @@ function rollingWindow(context: FormulaContext): FormulaSpec {
     id: 'window',
     title: '一格滚动值是在哪几行上算的',
     symbolic: [
-      run(varOf('S_i'), opOf('='), varOf('{ x_t : i − W + 1 ≤ t ≤ i, x_t ≠ ∅ }')),
+      run(
+        varOf('S_i'),
+        opOf('='),
+        varOf('{ x_t : i − W + 1 ≤ t ≤ i, x_t ≠ ∅ }'),
+      ),
       run(opOf(','), varOf('m_i'), opOf('='), varOf('|S_i|')),
       run(opOf(','), varOf('std'), opOf('=')),
       sqrt([frac([run(varOf('Σ(x − x̄)²'))], [run(varOf('m_i'))])]),

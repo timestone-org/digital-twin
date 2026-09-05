@@ -7,7 +7,7 @@
 """
 
 from collections.abc import Mapping, Sequence
-from dataclasses import dataclass
+from dataclasses import dataclass, replace
 from typing import Any
 
 from platform_server.apps.modeling.operators.evalcurves import (
@@ -304,21 +304,24 @@ def _at(
 
 
 def _bins_block(residuals: Sequence[float], buckets: int) -> ReportBlock:
-    """残差分布，带零线、偏均值与 ±1σ 三种参考线。
+    """残差分布，带零线、偏均值与 ±1σ 三种参考线，以及同参数的正态曲线。
 
+    ⚠ 正态参考曲线与那两个数出自同一份残差：只印偏均值与离散度两个数字的话，
+    「这堆残差正不正态」还是要读者自己在脑子里画一遍（规格 §5-22）。
     Args: residuals, buckets。
     """
     mean = _ZERO if not residuals else sum(residuals) / len(residuals)
+    deviation = deviation_of(residuals) or _ZERO
+    column = column_bins(
+        RESIDUAL_KEY,
+        spread_of(residuals, buckets=buckets),
+        off_label="算不出的残差",
+        marks=residual_marks(mean, deviation),
+    )
+    if deviation > _ZERO:
+        column = replace(column, curve={"mean": mean, "sd": deviation})
     return bins_block(
-        _at("charts", "残差分布", TIER_SMALL, is_primary=True),
-        (
-            column_bins(
-                RESIDUAL_KEY,
-                spread_of(residuals, buckets=buckets),
-                off_label="算不出的残差",
-                marks=residual_marks(mean, deviation_of(residuals) or _ZERO),
-            ),
-        ),
+        _at("charts", "残差分布", TIER_SMALL, is_primary=True), (column,)
     )
 
 
@@ -389,11 +392,14 @@ def _probability_blocks(view: Classified) -> list[ReportBlock]:
 
     ⚠ 画不出来的那几张一块都不摆：空块与「这一步本来就没有这张图」在屏幕上长得
     一模一样，而两者的原因已经在第一区那条告警里分开说过了。
+    ⚠ 打分那一档要在抽样**之前**先算出来交给 `curves_of`：抽完再标的话它常常
+    不在网格上，滑杆默认停到旁边一档，四格与 ② 区的指标卡对不上账。
     Args: view。
     """
     if view.probabilities is None or len(view.labels) > BINARY_CLASSES:
         return []
-    curves = curves_of(view.probabilities, view.actual_positive)
+    stood = _scoring_threshold(view.probabilities, view.predicted_positive)
+    curves = curves_of(view.probabilities, view.actual_positive, keep=stood)
     made = [_probability_stats(curves, view)]
     made.extend(_curve_blocks(curves, view.probabilities, view.actual_positive))
     grid = grid_items(curves)
@@ -401,12 +407,7 @@ def _probability_blocks(view: Classified) -> list[ReportBlock]:
         made.append(
             breakdown_block(
                 _at("charts", "阈值网格", TIER_LARGE, is_primary=False),
-                Scale(
-                    label=GRID_NOTE,
-                    baseline=_scoring_threshold(
-                        view.probabilities, view.predicted_positive
-                    ),
-                ),
+                Scale(label=GRID_NOTE, baseline=stood),
                 grid,
             )
         )
@@ -481,8 +482,11 @@ def _curve_blocks(
 def _scoring_threshold(
     probabilities: Sequence[float], predicted_positive: Sequence[bool]
 ) -> float | None:
-    """打分时站的那个阈值：判成正类的行里最低的那个概率。
+    """打分那一刀反推出来的阈值：判成正类的行里最低的那个概率。
 
+    ⚠ 只能反推：分类评估的入口只有一份打分帧，超参在模型那一侧的负载上，这里拿
+    不到。反推值与真超参可以不同（配 0.5、反推得 0.5405），但两者切出来的正类行
+    **是同一批**，故网格上这一档的四格与同屏指标卡逐个相等。
     ⚠ 不写死 0.5：阈值是逻辑回归的超参，写死之后网格上那条竖线会指在一个模型
     根本没用过的位置，而同屏的指标卡是按真阈值算的。
     Args: probabilities, predicted_positive。

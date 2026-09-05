@@ -307,6 +307,92 @@ describe('成组的数摆成横条', () => {
   })
 })
 
+describe('按时刻分格的那一档走时间序列', () => {
+  const HOUR = 3_600_000
+  const SINCE = Date.UTC(2026, 0, 1, 0, 0)
+
+  /** 后端实测：`residual_analysis` 的「残差随时间」，每格一个均值。 */
+  const DRIFT_PAYLOAD = {
+    label: '每格取均值；整段偏移在直方图上会摊平成胖尾',
+    unit: '',
+    score_kind: '',
+    baseline: null,
+    items: [
+      {
+        name: '2026-01-01T00:00:00+00:00',
+        value: -2,
+        count: 12,
+        since: SINCE,
+        until: SINCE + HOUR,
+      },
+      {
+        name: '2026-01-01T01:00:00+00:00',
+        value: -2,
+        count: 12,
+        since: SINCE + HOUR,
+        until: SINCE + 2 * HOUR,
+      },
+      {
+        name: '2026-01-01T02:00:00+00:00',
+        value: 2,
+        count: 12,
+        since: SINCE + 2 * HOUR,
+        until: SINCE + 3 * HOUR,
+      },
+    ],
+    is_primary: false,
+  }
+
+  it('画成一路序列，不是一排以裸时刻串命名的横条', () => {
+    const wrapper = mounted(DRIFT_PAYLOAD, 2)
+
+    expect(wrapper.findComponent(BarList).exists()).toBe(false)
+    expect(wrapper.find('.dt-ml-scatter__line').exists()).toBe(true)
+    expect(wrapper.text()).not.toContain('2026-01-01T00:00:00+00:00')
+  })
+
+  it('横轴是距起点的时长，起点连同单位写在轴名上', () => {
+    const text = mounted(DRIFT_PAYLOAD, 2).text()
+
+    expect(text).toContain('的小时数')
+    expect(text).toContain('3 格，每格一个均值')
+  })
+
+  it('横条那几句结论不跟着摆：它们说的是另一张图', () => {
+    expect(mounted(DRIFT_PAYLOAD, 2).text()).not.toContain('共 3 项')
+  })
+
+  it('没有时刻的那几块照旧走横条', () => {
+    const wrapper = mounted(FOLD_PAYLOAD)
+
+    expect(wrapper.findComponent(BarList).exists()).toBe(true)
+    expect(wrapper.find('.dt-ml-scatter__line').exists()).toBe(false)
+  })
+})
+
+describe('并列时不许把同一项说成两头', () => {
+  it('每一项都一样高时改一种说法，不点名最高与最低', () => {
+    const text = mounted({
+      ...FOLD_PAYLOAD,
+      baseline: null,
+      items: [
+        { name: '0', value: 24 },
+        { name: '1', value: 24 },
+      ],
+    }).text()
+
+    expect(text).toContain('共 2 项：算得出来的 2 项一样高，都是 24')
+    expect(text).not.toContain('最高')
+    expect(text).not.toContain('最低')
+  })
+
+  it('高低真的不同时照旧点名两端', () => {
+    expect(mounted(FOLD_PAYLOAD).text()).toContain(
+      '共 3 项：最高「第 1 折」0.91，最低「第 3 折」0.61',
+    )
+  })
+})
+
 describe('四种「没有」各说各的', () => {
   it('一项都没有时给空态，不是一片空白', () => {
     const wrapper = mounted({ ...IMPORTANCE_PAYLOAD, items: [] })
@@ -339,17 +425,18 @@ describe('四种「没有」各说各的', () => {
     })
 
     expect(wrapper.findComponent(BarList).props('items')).toHaveLength(2)
-    expect(wrapper.text()).toContain('最高「甲」0')
+    expect(wrapper.text()).toContain('算得出来的 2 项一样高，都是 0')
   })
 
-  it('只有一项时最高与最低是同一项，照实写', () => {
+  // ⚠ 一项的两端本来就是它自己，点名两遍会让读者去找那个并不存在的第二项
+  it('只有一项时只报这一项，不把它说成一高一低', () => {
     expect(
       mounted({
         ...IMPORTANCE_PAYLOAD,
         baseline: null,
         items: [{ name: '甲', value: 3 }],
       }).text(),
-    ).toContain('共 1 项：最高「甲」3，最低「甲」3')
+    ).toContain('共 1 项：「甲」3')
   })
 
   it('顶到 60 项时说清后端可能还截过', () => {

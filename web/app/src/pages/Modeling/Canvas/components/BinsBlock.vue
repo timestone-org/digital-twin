@@ -17,6 +17,7 @@ import type { BarListItem, BarListMode, BarListRule } from '../scripts/barList'
 import type {
   HistogramBin,
   HistogramMark,
+  NormalCurve,
   OffAxisBar,
 } from '../scripts/histogramGeometry'
 import { grouped, niceNumber, percentText } from '../scripts/numbers'
@@ -74,13 +75,25 @@ interface ColumnView {
   bins: HistogramBin[]
   marks: HistogramMark[]
   offAxis: OffAxisBar | null
+  /** 同均值同方差的正态参考曲线；null = 这张图不比对正态。 */
+  curve: NormalCurve | null
   range: Range
   /** 图下那行结论：轴铺在哪、几个箱、几条参考线（规格 §2-P6）。 */
   note: string
 }
 
-/** 桶高折成柱：等宽铺在 `[low, high]` 上。两端缺一个就一根柱都不画。 */
-function barsOf(counts: readonly number[], range: Range): HistogramBin[] {
+/**
+ * 桶高折成柱：等宽铺在 `[low, high]` 上。两端缺一个就一根柱都不画。
+ *
+ * ⚠ 丢弃段跟着桶走：这一步筛掉的行数是后端逐桶数出来的，前端拿参考线的哪一侧
+ * 去推的话，判据是 `>` 还是 `<` 它根本不知道。
+ * Args: counts, dropped, range。
+ */
+function barsOf(
+  counts: readonly number[],
+  dropped: readonly number[],
+  range: Range,
+): HistogramBin[] {
   const { low, high } = range
   if (counts.length === 0 || low === null || high === null) return []
   const width = (high - low) / counts.length
@@ -88,6 +101,7 @@ function barsOf(counts: readonly number[], range: Range): HistogramBin[] {
     low: low + seat * width,
     high: low + (seat + 1) * width,
     count,
+    dropped: dropped[seat] ?? 0,
   }))
 }
 
@@ -138,9 +152,10 @@ const columns = computed<ColumnView[]>(() =>
       id: `${seat}:${column.key}`,
       name: column.key,
       values: column.bins,
-      bins: barsOf(column.bins, range),
+      bins: barsOf(column.bins, column.dropped, range),
       marks,
       offAxis: column.offAxis,
+      curve: column.curve,
       range,
       note: noteOf(column.bins, range, marks),
     }
@@ -275,6 +290,8 @@ const summary = computed(() => {
             :bins="column.bins"
             :marks="column.marks"
             :off-axis="column.offAxis"
+            :curve="column.curve"
+            dropped-label="被这一步筛掉"
           />
           <figcaption class="dt-ml-bins__note">{{ column.note }}</figcaption>
         </figure>

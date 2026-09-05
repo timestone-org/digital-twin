@@ -32,11 +32,11 @@ export interface ThresholdRow {
 export interface ThresholdGrid {
   /** 按阈值从低到高：滑杆往右推就是把门槛抬高。 */
   rows: ThresholdRow[]
-  /** 打分时站的那个阈值；null = 那一次一行都没判成正类。 */
+  /** 打分那一刀：判成正类的行里最低的那个概率；null = 一行都没判成正类。 */
   trainedThreshold: number | null
   /** 默认停在第几档；网格是空的时候是 0。 */
   trainedSeat: number
-  /** 默认那一档正好就是打分时那个阈值，不是就近找的。 */
+  /** 默认那一档正好就是打分那一刀，不是就近找的。 */
   isExact: boolean
 }
 
@@ -92,7 +92,7 @@ function rowsOf(payload: Item): ThresholdRow[] {
   return found.sort((left, right) => left.threshold - right.threshold)
 }
 
-/** 离打分时那个阈值最近的一档。Args: rows, trained。 */
+/** 离打分那一刀最近的一档。Args: rows, trained。 */
 function nearestSeat(
   rows: readonly ThresholdRow[],
   trained: number | null,
@@ -114,9 +114,10 @@ function nearestSeat(
 /**
  * 一整张网格。
  *
- * ⚠ 默认那一档是**就近**找的：网格是从全部不同概率值上抽出来的几十档，打分时
- * 那个阈值不一定正好是抽中的一档，硬说它是会让卡片上的数与 ② 区对不上。
- * Args: payload 这一块的 payload；trained 打分时那个阈值。
+ * ⚠ 默认那一档是**就近**找的，且 `isExact` 照实说：后端会把打分那一刀强行留在
+ * 网格上，留不住时（旧结果、或那一次一行都没判成正类）只能就近站，而就近那一
+ * 档的四格与 ② 区那张指标卡不是同一组数，界面上得说清楚。
+ * Args: payload 这一块的 payload；trained 打分那一刀的阈值。
  */
 export function buildThresholdGrid(
   payload: Item,
@@ -145,10 +146,7 @@ export function buildThresholdGrid(
  */
 function cardsOf(row: ThresholdRow): StatItem[] {
   const total =
-    row.truePositive +
-    row.falsePositive +
-    row.trueNegative +
-    row.falseNegative
+    row.truePositive + row.falsePositive + row.trueNegative + row.falseNegative
   const guessed = row.truePositive + row.falsePositive
   const real = row.truePositive + row.falseNegative
   const both = 2 * row.truePositive + row.falsePositive + row.falseNegative
@@ -168,15 +166,22 @@ function cardsOf(row: ThresholdRow): StatItem[] {
   ]
 }
 
-/** 离打分时那个阈值有多远。Args: row, grid。 */
+/**
+ * 离打分那一刀有多远。
+ *
+ * ⚠ 不许写成「打分时用的是 X」：X 是从打分帧反推的——判成正类的行里最低的那个
+ * 概率，与用户配的那个超参可以不是同一个数（配 0.5、反推得 0.541），照那么说
+ * 用户会去找一个自己从没填过的值。
+ * Args: row, grid。
+ */
 function offsetOf(row: ThresholdRow, grid: ThresholdGrid): string {
   const trained = grid.trainedThreshold
   if (trained === null) {
     return '这一次打分一行都没判成正类，没有可比的阈值'
   }
   const gap = row.threshold - trained
-  const at = `打分时用的是 ${niceNumber(trained)}`
-  if (gap === 0) return `就停在打分时用的那个阈值 ${niceNumber(trained)} 上`
+  const at = `打分那一刀切在 ${niceNumber(trained)}`
+  if (gap === 0) return `${at}，就停在这一档上：四个数与上面那张指标卡同源`
   const way = gap > 0 ? '高' : '低'
   const more = gap > 0 ? '判成正类的行更少' : '判成正类的行更多'
   return `${at}，这里${way}了 ${niceNumber(Math.abs(gap))}：门槛${way}了，${more}`
@@ -191,10 +196,7 @@ export function standAt(grid: ThresholdGrid, seat: number): ThresholdStand {
   const row = grid.rows[seat]
   if (row === undefined) return EMPTY_STAND
   const total =
-    row.truePositive +
-    row.falsePositive +
-    row.trueNegative +
-    row.falseNegative
+    row.truePositive + row.falsePositive + row.trueNegative + row.falseNegative
   const right = row.truePositive + row.trueNegative
   return {
     text: row.text,

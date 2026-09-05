@@ -132,9 +132,6 @@ describe('默认展开只有那六处', () => {
       formulasOf(code, EMPTY).some((spec) => spec.isOpen),
     )
 
-    expect(opened).toEqual([
-      'classification_metrics',
-      'regression_metrics',
-    ])
+    expect(opened).toEqual(['classification_metrics', 'regression_metrics'])
   })
 })

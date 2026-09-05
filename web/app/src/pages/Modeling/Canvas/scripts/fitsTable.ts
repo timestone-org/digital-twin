@@ -96,13 +96,23 @@ const PARAM_LABELS: Record<string, string> = {
   odds_ratio: '几率比 e^β',
 }
 
-// 0–1 的比率，按百分数印。⚠ 走 `niceNumber` 会把 0.375 印成 0.375 而不是 37.5%
-const RATIO_KEYS = new Set(['explained', 'cumulative'])
-// ⚠ 认的是整个词而不是后缀：`null_ratio_before` 的 ratio 在中间，只认后缀会漏
-const RATIO_WORD = /(?:^|_)ratio(?:_|$)/
+/**
+ * 0–1 的比率，按百分数印。⚠ 走 `niceNumber` 会把 0.375 印成 0.375 而不是 37.5%。
+ *
+ * ⚠ 逐个列名字，不许按 `ratio` 这个词去认：`odds_ratio` 是几率比 e^β，一个**倍
+ * 数**——按词认会把 8.3362 印成「833.6%」，与同屏算式上的那个数差两个数量级。
+ * 新键漏登记只会印成一个原样的小数，比印错量级安全。
+ */
+const RATIO_KEYS = new Set([
+  'explained',
+  'cumulative',
+  'null_ratio_before',
+  'unseen_ratio',
+  'blank_ratio',
+])
 
 function isRatio(key: string): boolean {
-  return RATIO_KEYS.has(key) || RATIO_WORD.test(key)
+  return RATIO_KEYS.has(key)
 }
 
 function asText(value: unknown): string {

@@ -199,6 +199,28 @@ function cardSummary(scale: Breakdown): string {
     : `共 ${total} 个数，其中 ${blank} 个算不出来，写成「无定义」`
 }
 
+/**
+ * 两端那一句。
+ *
+ * ⚠ 全等值时不许照旧点名两端：那会印成「最高「0」24 行，最低「0」24 行」——同
+ * 一个名字被说成两头（并列时两端取的是同一项，只有一项时更是如此），读者只会
+ * 去找那两个不同的东西。
+ * Args: edges 最高与最低那两项；unit 共用的单位；known 算得出来的项数。
+ */
+function edgeText(
+  edges: { top: BreakdownItem; low: BreakdownItem },
+  unit: string,
+  known: number,
+): string {
+  const top = numbered(edges.top.value, unit)
+  if (edges.top.value === edges.low.value) {
+    if (known === 1) return `「${edges.top.name}」${top}`
+    return `算得出来的 ${known} 项一样高，都是 ${top}`
+  }
+  const low = numbered(edges.low.value, unit)
+  return `最高「${edges.top.name}」${top}，最低「${edges.low.name}」${low}`
+}
+
 function barSummary(scale: Breakdown, unit: string): string {
   const edges = edgesOf(scale)
   const total = scale.items.length
@@ -208,9 +230,8 @@ function barSummary(scale: Breakdown, unit: string): string {
     (item) => item.value !== null && item.value < 0,
   ).length
   const minus = negative === 0 ? '' : `；${negative} 项是负的，画在零线左侧`
-  const head = `共 ${total} 项：最高「${edges.top.name}」${numbered(edges.top.value, unit)}`
-  const tail = `，最低「${edges.low.name}」${numbered(edges.low.value, unit)}`
-  return `${head}${tail}${minus}${blankText(blank)}`
+  const said = edgeText(edges, unit, total - blank)
+  return `共 ${total} 项：${said}${minus}${blankText(blank)}`
 }
 
 /** 基准那一条：画得进量程的画成线，画不进的退成一句话。 */

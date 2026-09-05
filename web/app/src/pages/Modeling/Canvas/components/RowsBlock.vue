@@ -66,12 +66,20 @@ const hints = computed(() =>
     })),
 )
 
-// ⚠ 只说「列到上限」不说「共 M 项」：payload 不带原始总数，M 只能编
-const funnelCut = computed(() =>
-  stages.value.length >= LEDGER_LIMITS.funnel
-    ? `逐级账已经列到上限 ${LEDGER_LIMITS.funnel} 级，后面的几级没有带出来`
-    : '',
-)
+/**
+ * 截了才说，并说清一共几级。
+ *
+ * ⚠ 判据是后端带回的截断前级数，不是「摆满了六级」：漏斗按构造恰好六级的算子
+ * 一抓一把，按条数判的话那句话在它们身上是**假话**。老运行没有这个数，读成 0，
+ * 那时一句都不说。
+ */
+const funnelCut = computed(() => {
+  const total = counts.value.funnelTotal
+  // ⚠ 比的是带回来的那几条，不是画出来的：名字读不出来的那一级不画，但它带回来了
+  const listed = counts.value.funnel.length
+  if (total <= listed) return ''
+  return `逐级账共 ${total} 级，这里只列了前 ${listed} 级，后面的几级没有带出来`
+})
 
 const blameCut = computed(() =>
   blame.value.length >= LEDGER_LIMITS.blame

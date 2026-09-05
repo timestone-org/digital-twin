@@ -26,6 +26,13 @@ export interface ResultPanelDeps {
   nodeRunOf: (nodeId: string) => ModelingNodeRun | undefined
   /** 按需拉一个节点的详情。 */
   loadPreview: (nodeId: string) => Promise<void>
+  /**
+   * 这次运行冻结下来的那张图；还没跑过给 null。
+   *
+   * ⚠ 与 `graph` 分开：结果面的公式要照当时那份参数代实参，拿画布上现在这份
+   * 的话，改过参数再回看历史会印出一串看着完全正常的假账（规格 §6）。
+   */
+  runGraph: () => ModelingGraph | null
 }
 
 export function useResultPanel(deps: ResultPanelDeps) {
@@ -41,8 +48,17 @@ export function useResultPanel(deps: ResultPanelDeps) {
     return table
   })
 
+  /** 开着那个节点在这次运行里的参数快照；取不到就是空的。 */
+  const config = computed<Record<string, unknown>>(() => {
+    const found = deps
+      .runGraph()
+      ?.nodes.find((item) => item.id === nodeId.value)
+    return found?.config ?? {}
+  })
+
   return {
     labels,
+    config,
     /** 当前开着的是哪个节点。⚠ 下载地址要用它，别从详情里反推。 */
     nodeId: computed(() => nodeId.value),
     /** 这个节点的详情；null = 还没拉回来。 */

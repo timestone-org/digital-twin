@@ -16,7 +16,6 @@ from typing import Any
 from platform_server.apps.modeling.operators.reporting import (
     MAX_BINS,
     MAX_DTYPE_BEFORE,
-    MAX_FUNNEL,
     MAX_GAPS,
     MAX_OCCUPANCY,
     MAX_ROW_COLUMNS,
@@ -67,8 +66,10 @@ class AxisSpan:
 
 
 def funnel_of(stages: Sequence[Stage]) -> list[dict[str, Any]]:
-    """逐级收窄的账，截到上限。
+    """逐级收窄的账，一级不落地折成明细。
 
+    ⚠ 这里**不截**：截断归 `rows_block`，它同时把截断前的级数记进 payload。
+    在这里先截的话那个数恒等于上限，界面据它说的「后面还有几级」是句假话。
     Args: stages。
     """
     return [
@@ -78,7 +79,7 @@ def funnel_of(stages: Sequence[Stage]) -> list[dict[str, Any]]:
             "unit": stage.unit,
             "note": stage.note,
         }
-        for stage in stages[:MAX_FUNNEL]
+        for stage in stages
     ]
 
 
@@ -119,10 +120,11 @@ def column_bins(
     *,
     off_label: str = "空值",
     marks: Sequence[Item] = (),
+    dropped: Sequence[float] = (),
 ) -> ColumnBins:
     """把一份分布折成 `bins` 块里的一列。
 
-    Args: key, spread, off_label, marks。
+    Args: key, spread, off_label, marks, dropped（逐桶被丢掉的行数）。
     """
     return ColumnBins(
         key=key,
@@ -130,12 +132,29 @@ def column_bins(
         low=spread.low,
         high=spread.high,
         marks=marks,
+        dropped=dropped,
         off_axis=(
             None
             if spread.off_count <= 0
             else {"label": off_label, "count": spread.off_count}
         ),
     )
+
+
+def dropped_bins(before: Spread, after: Spread) -> list[float]:
+    """同一条轴上「进来的」减「留下的」= 这一桶里被丢掉的行数。
+
+    ⚠ 两份分布必须铺在同一条轴上、切一样多的桶（取数时把 `before` 的两端传给
+    `after`），否则逐桶相减减的是两条不同的轴。
+    ⚠ 减出负数一律夹回 0：那说明两条轴对不上，宁可不报也不许把「留下的」画成
+    「丢掉的」。
+    Args: before, after。
+    """
+    kept = after.counts
+    return [
+        max(count - (kept[seat] if seat < len(kept) else 0.0), 0.0)
+        for seat, count in enumerate(before.counts)
+    ]
 
 
 def axis_span(
@@ -154,7 +173,7 @@ def axis_span(
     step = _median_step(moments)
     if step is None or moments[-1] <= moments[0]:
         return AxisSpan([], [], step)
-    seats = max(1, min(slots, MAX_OCCUPANCY))
+    seats = _seats_of(moments, step, slots)
     return AxisSpan(
         _occupancy(moments, step, seats), _gaps(moments, step, factor), step
     )
@@ -232,6 +251,18 @@ def moment_text(moment_ms: int) -> str:
     Args: moment_ms。
     """
     return datetime.fromtimestamp(moment_ms / 1000, UTC).isoformat()
+
+
+def _seats_of(moments: Sequence[int], step: int, slots: int) -> int:
+    """占用率切几格。
+
+    ⚠ 格子不许比中位采集间隔还窄：窄了之后「这一格本该有多少行」恒为 1，占用率
+    退化成「行数 ÷ 格数」——48 行铺在 200 格上会印出「平均占用率 24%」，而那一段
+    其实一个断档都没有。故格数还要按跨度 ÷ 间隔封一道顶。
+    Args: moments, step, slots。
+    """
+    reach = int((moments[-1] - moments[0]) / step)
+    return max(1, min(slots, MAX_OCCUPANCY, reach))
 
 
 def _seat(value: float, low: float, width: float, seats: int) -> int:

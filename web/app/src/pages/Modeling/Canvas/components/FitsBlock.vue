@@ -69,6 +69,15 @@ const minWidth = computed(
 )
 
 const summary = computed(() => fitsSummary(fit.value, rows.value))
+
+/**
+ * 表自己的名字。
+ *
+ * ⚠ 不许再拿块标题：那句话已经印在表**上方**，`<caption>` 是可见的（12px 灰
+ * 字），两处一字不差就是同一句话印两遍。这里改说这张表的每一行是什么。
+ */
+const CAPTION = '逐行一列的拟合参数'
+
 const formulas = computed(() => fitFormulasOf(rows.value))
 // ⚠ 两档不能合并：会让人读出错误结论的那一句要整条摆，口径说明一行灰字就够
 const notes = computed(() => sortedNotes(notesOf(props.block.payload)))
@@ -87,7 +96,7 @@ const notes = computed(() => sortedNotes(notesOf(props.block.payload)))
         :columns="columns"
         :rows="tableRows"
         :min-width="minWidth"
-        :caption="props.block.title"
+        :caption="CAPTION"
       >
         <template #cell-key="{ row }">
           <DtTooltip class="dt-ml-fits__name" :content="row.name">

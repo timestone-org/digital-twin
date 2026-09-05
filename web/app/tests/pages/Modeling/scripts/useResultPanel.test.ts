@@ -22,10 +22,16 @@ const GRAPH: ModelingGraph = {
       operator: 'split_dataset',
       alias: '',
       position: { left: 0, top: 0 },
-      config: {},
+      config: { test_ratio: 0.4 },
     },
   ],
   edges: [],
+}
+
+/** 运行时冻结的那份图：同一个节点上的参数与画布上那份**不一样**。 */
+const FROZEN: ModelingGraph = {
+  ...GRAPH,
+  nodes: GRAPH.nodes.map((one) => ({ ...one, config: { test_ratio: 0.2 } })),
 }
 
 const SPLIT: ModelingOperator = {
@@ -68,10 +74,14 @@ const DETAIL: ModelingNodeRun = {
   fitted: { coef: {} },
 }
 
-function panelOf(detail: ModelingNodeRun | undefined) {
+function panelOf(
+  detail: ModelingNodeRun | undefined,
+  runGraph: ModelingGraph | null = FROZEN,
+) {
   const loaded: string[] = []
   const panel = useResultPanel({
     graph: ref(GRAPH),
+    runGraph: () => runGraph,
     operators: computed(() => new Map([['split_dataset', SPLIT]])),
     nodeRunOf: () => detail,
     loadPreview: (id: string) => {
@@ -136,5 +146,34 @@ describe('结果弹窗那一摊', () => {
 
     expect(panel.nodeId.value).toBeNull()
     expect(panel.labels.value).toEqual({})
+  })
+})
+
+describe('公式代实参用的那份参数', () => {
+  // ⚠ 取的是运行时冻结的那张图：拿画布上现在这份的话，改过参数再回看历史，
+  // 公式会照新参数印出一串看着完全正常的假账（规格 §6）
+  it('取的是这次运行冻结的那份，不是画布上现在那份', async () => {
+    const { panel } = panelOf(DETAIL)
+    await panel.open('n1')
+
+    expect(panel.config.value).toEqual({ test_ratio: 0.2 })
+  })
+
+  it('没开在任何节点上时是空的', () => {
+    expect(panelOf(DETAIL).panel.config.value).toEqual({})
+  })
+
+  it('还没跑过（没有冻结图）时是空的，不退回画布那份', async () => {
+    const { panel } = panelOf(DETAIL, null)
+    await panel.open('n1')
+
+    expect(panel.config.value).toEqual({})
+  })
+
+  it('冻结图里没有这个节点时是空的', async () => {
+    const { panel } = panelOf(DETAIL)
+    await panel.open('n2')
+
+    expect(panel.config.value).toEqual({})
   })
 })

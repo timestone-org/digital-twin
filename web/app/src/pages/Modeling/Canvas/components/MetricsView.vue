@@ -26,7 +26,20 @@ import FoldScoreView from './FoldScoreView.vue'
 import ImportanceView from './ImportanceView.vue'
 import RegressionMetricsView from './RegressionMetricsView.vue'
 
-const props = defineProps<{ preview: MetricsPreview }>()
+const props = withDefaults(
+  defineProps<{
+    preview: MetricsPreview
+    /**
+     * 这一路还带回了讲解块。
+     *
+     * ⚠ 「没有产出任何指标」要 metrics 与 blocks **双空**才成立（规格 §4.3）：
+     * 重要性与基线分早已搬进块里，只看 metrics 的话，那句话会印在一整屏数的
+     * 正下方。
+     */
+    hasBlocks?: boolean
+  }>(),
+  { hasBlocks: false },
+)
 
 type MetricsShape =
   'folds' | 'importance' | 'classification' | 'regression' | 'plain'
@@ -39,7 +52,7 @@ const keys = computed(() => props.preview.metrics.map(([key]) => key))
 /** 键是指标名还是列名。列名那一档不查阈值表也不拼单位（规格 R-34）。 */
 const space = computed(() => metricSpaceOf(keys.value))
 
-/** 四种「有没有东西可看」的判据都不成立才是真的什么都没有。 */
+/** 四种「有没有东西可看」的判据都不成立时，这份摘要里没有可画的。 */
 const isBlank = computed(() => {
   const preview = props.preview
   return (
@@ -50,6 +63,14 @@ const isBlank = computed(() => {
     preview.matrix.length === 0
   )
 })
+
+/**
+ * 真的一个数都没有：摘要与块双空（规格 §4.3）。
+ *
+ * ⚠ 只看摘要的话，这句话会印在一整屏块里的数正下方——重要性与基线分早就搬进
+ * 块里了，`metrics` 空着是常态。
+ */
+const isSilent = computed(() => isBlank.value && !props.hasBlocks)
 
 /**
  * 这份摘要该画成哪一屏。
@@ -91,7 +112,7 @@ const cards = computed(() =>
         <DtTag :intent="card.intent" size="sm">{{ card.text }}</DtTag>
       </li>
     </ul>
-    <DtNotice v-if="isBlank" intent="warning">
+    <DtNotice v-if="isSilent" intent="warning">
       这一步没有产出任何指标
     </DtNotice>
     <ClassificationMetricsView
@@ -105,6 +126,7 @@ const cards = computed(() =>
     <FoldScoreView
       v-else-if="shape === 'folds'"
       :metrics="props.preview.metrics"
+      :has-fold-blocks="props.hasBlocks"
     />
     <ImportanceView
       v-else-if="shape === 'importance'"

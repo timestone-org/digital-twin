@@ -24,7 +24,13 @@ const ITEMS = [
 // 打分时判成正类的行里最低的那个概率
 const TRAINED = 0.8
 
-const GRID = { label: '', unit: '', score_kind: '', baseline: TRAINED, items: ITEMS }
+const GRID = {
+  label: '',
+  unit: '',
+  score_kind: '',
+  baseline: TRAINED,
+  items: ITEMS,
+}
 
 function built(baseline: number | null = TRAINED) {
   return buildThresholdGrid({ ...GRID, baseline }, baseline)
@@ -172,9 +178,17 @@ describe('站定一档：混淆矩阵与四个指标', () => {
   })
 })
 
-describe('离打分时那个阈值有多远', () => {
-  it('停在原处时说停在原处', () => {
-    expect(standAt(built(), 2).offset).toBe('就停在打分时用的那个阈值 0.8 上')
+describe('离打分那一刀有多远', () => {
+  // ⚠ 那个数是从打分帧反推的（判成正类的最低概率），不是用户配的那个超参：配
+  // 0.5、反推得 0.5405 是真链路上的实况，说成「打分时用的是」会让用户去找一个
+  // 自己从没填过的值
+  it('停在原处时说停在原处，并且不把反推值说成用户配的超参', () => {
+    const text = standAt(built(), 2).offset
+
+    expect(text).toBe(
+      '打分那一刀切在 0.8，就停在这一档上：四个数与上面那张指标卡同源',
+    )
+    expect(text).not.toContain('打分时用的是')
   })
 
   it('往右推：门槛高了，判成正类的更少', () => {

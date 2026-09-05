@@ -7,6 +7,7 @@
 
 import math
 import statistics
+from collections.abc import Mapping, Sequence
 from typing import Any
 
 import pytest
@@ -51,8 +52,8 @@ MAX_ROUNDS = 100
 SHIFT = 50.0
 
 
-def frame_of(columns: dict[str, list[float]]) -> Frame:
-    """按列造一份带时间索引的数值帧。
+def frame_of(columns: Mapping[str, Sequence[float | None]]) -> Frame:
+    """按列造一份带时间索引的数值帧。空格照原样留着，不补 0。
 
     Args: columns。
     """
@@ -123,18 +124,29 @@ def split_of(frame: Frame) -> dict[str, Any]:
     return splitter.run({"frame": frame})
 
 
-def blocks_of(code: str, frame: Frame, **config: Any) -> dict[str, ReportBlock]:
-    """切一刀再拟合一次，把讲解按区归好。
+def blocks_of(
+    code: str, frame: Frame, **config: Any
+) -> tuple[ReportBlock, ...]:
+    """切一刀再拟合一次，把讲解**整串**交出来。
 
-    ⚠ 按**区**归而不按种类：一个算子的两块可以是同一种块，按种类归会静默丢掉
-    其中一块，而用例照样绿。
+    ⚠ 不按区（也不按种类）归成字典：同一区里本来就可以有好几块（③ 区三张图），
+    归成字典时后面那几块会静默盖掉前面那几块，而字节预算那条用例正是照这份
+    字典记账的——图越大它越量不到。
     Args: code, frame, config。
     """
     parts = split_of(frame)
     operator, _ = registry.build(code, config)
     operator.bind_runtime(tz_offset_minutes=480, split_plan=None)
     operator.run({"train": parts["train"], "test": parts["test"]})
-    return {block.zone: block for block in operator.report()}
+    return operator.report()
+
+
+def zoned(blocks: Sequence[ReportBlock], zone: str) -> ReportBlock:
+    """某一区的第一块。
+
+    Args: blocks, zone。
+    """
+    return next(block for block in blocks if block.zone == zone)
 
 
 def notes_of(block: ReportBlock) -> list[str]:
@@ -179,10 +191,10 @@ def wide_columns(rows: int) -> dict[str, list[float]]:
 def test_the_least_squares_report_recovers_the_two_slopes() -> None:
     """严格线性的数据上，系数就是造数时的那两个斜率。"""
     blocks = blocks_of("linear_regression", frame_of(linear_columns()))
-    assert params_of(blocks["formula"], WARM)["coef"] == pytest.approx(
+    assert params_of(zoned(blocks, "formula"), WARM)["coef"] == pytest.approx(
         SLOPE_WARM
     )
-    assert params_of(blocks["formula"], LOAD)["coef"] == pytest.approx(
+    assert params_of(zoned(blocks, "formula"), LOAD)["coef"] == pytest.approx(
         SLOPE_LOAD
     )
 
@@ -191,7 +203,7 @@ def test_the_least_squares_report_measures_sigma_on_the_training_rows() -> None:
     """σ 按总体口径、只在训练行上算：拿整帧算的话用户核对不上。"""
     blocks = blocks_of("linear_regression", frame_of(linear_columns()))
     expected = statistics.pstdev([warm_of(seat) for seat in range(TRAIN_ROWS)])
-    assert params_of(blocks["formula"], WARM)["sigma"] == pytest.approx(
+    assert params_of(zoned(blocks, "formula"), WARM)["sigma"] == pytest.approx(
         expected
     )
 
@@ -199,8 +211,8 @@ def test_the_least_squares_report_measures_sigma_on_the_training_rows() -> None:
 def test_the_least_squares_report_scales_each_coefficient_by_sigma() -> None:
     """可比贡献是 |β·σ|：负荷的量纲大一个量级，贡献也跟着大。"""
     blocks = blocks_of("linear_regression", frame_of(linear_columns()))
-    warm = params_of(blocks["formula"], WARM)
-    load = params_of(blocks["formula"], LOAD)
+    warm = params_of(zoned(blocks, "formula"), WARM)
+    load = params_of(zoned(blocks, "formula"), LOAD)
     assert warm["contribution"] == pytest.approx(
         abs(warm["coef"]) * warm["sigma"]
     )
@@ -209,22 +221,30 @@ def test_the_least_squares_report_scales_each_coefficient_by_sigma() -> None:
 
 def test_the_least_squares_report_counts_both_sides_of_the_split() -> None:
     """训练行数与总行数分开记：两个数一样才是漏了测试那一半。"""
-    payload = blocks_of("linear_regression", frame_of(linear_columns()))[
-        "formula"
-    ].payload
+    payload = zoned(
+        blocks_of("linear_regression", frame_of(linear_columns())), "formula"
+    ).payload
     assert payload["method"] == "none"
     assert payload["train_rows"] == TRAIN_ROWS
     assert payload["total_rows"] == ROWS
 
 
 def test_the_least_squares_report_scores_both_sides() -> None:
-    """严格线性的数据上两侧 R² 都是 1，且卡片上的那个数取测试侧。"""
+    """严格线性的数据上两侧 R² 都是 1，两侧各摆一张卡。
+
+    ⚠ 两个数都要落在 `value` 上：指标卡只读这一个键，摆进别的键里等于没摆。
+    """
     blocks = blocks_of("linear_regression", frame_of(linear_columns()))
-    scored = item_of(blocks["stats"], "R²")
-    assert scored["before"] == pytest.approx(1.0)
-    assert scored["after"] == pytest.approx(1.0)
-    assert scored["value"] == scored["after"]
-    assert scored["score_kind"] == "r2"
+    stats = zoned(blocks, "stats")
+    assert [item["name"] for item in stats.payload["items"]] == [
+        "训练 R²",
+        "测试 R²",
+        "训练 RMSE",
+        "测试 RMSE",
+    ]
+    for name in ("训练 R²", "测试 R²"):
+        assert item_of(stats, name)["value"] == pytest.approx(1.0)
+        assert item_of(stats, name)["score_kind"] == "r2"
 
 
 def test_the_least_squares_report_scores_the_two_sides_separately() -> None:
@@ -238,20 +258,20 @@ def test_the_least_squares_report_scores_the_two_sides_separately() -> None:
         for seat, value in enumerate(columns[TARGET])
     ]
     blocks = blocks_of("linear_regression", frame_of(columns))
-    scored = item_of(blocks["stats"], "RMSE")
-    assert scored["before"] == pytest.approx(0.0, abs=1e-9)
-    assert scored["after"] == pytest.approx(SHIFT)
+    stats = zoned(blocks, "stats")
+    assert item_of(stats, "训练 RMSE")["value"] == pytest.approx(0.0, abs=1e-9)
+    assert item_of(stats, "测试 RMSE")["value"] == pytest.approx(SHIFT)
     assert (
-        item_of(blocks["stats"], "R²")["before"]
-        > item_of(blocks["stats"], "R²")["after"]
+        item_of(stats, "训练 R²")["value"] > item_of(stats, "测试 R²")["value"]
     )
 
 
 def test_the_least_squares_report_carries_the_target_unit_on_rmse() -> None:
     """RMSE 跟着目标列的量纲走，R² 无量纲：两者不能共用一档染色口径。"""
     blocks = blocks_of("linear_regression", frame_of(linear_columns()))
-    assert item_of(blocks["stats"], "RMSE")["unit"] == "千瓦时"
-    assert item_of(blocks["stats"], "R²")["unit"] == ""
+    assert item_of(zoned(blocks, "stats"), "测试 RMSE")["unit"] == "千瓦时"
+    assert item_of(zoned(blocks, "stats"), "训练 RMSE")["unit"] == "千瓦时"
+    assert item_of(zoned(blocks, "stats"), "测试 R²")["unit"] == ""
 
 
 def test_the_least_squares_report_gives_none_when_r2_is_undefined() -> None:
@@ -259,18 +279,20 @@ def test_the_least_squares_report_gives_none_when_r2_is_undefined() -> None:
     columns = linear_columns()
     columns[TARGET] = [7.0] * ROWS
     blocks = blocks_of("linear_regression", frame_of(columns))
-    assert item_of(blocks["stats"], "R²")["after"] is None
-    assert item_of(blocks["stats"], "RMSE")["after"] == pytest.approx(
-        0.0, abs=1e-9
-    )
+    stats = zoned(blocks, "stats")
+    assert item_of(stats, "训练 R²")["value"] is None
+    assert item_of(stats, "测试 R²")["value"] is None
+    assert item_of(stats, "测试 RMSE")["value"] == pytest.approx(0.0, abs=1e-9)
 
 
 def test_the_least_squares_report_counts_the_intercept_as_a_column() -> None:
     """两个特征加一列截距是三列，互不相关时满秩，不出告警。"""
     blocks = blocks_of("linear_regression", frame_of(linear_columns()))
-    assert item_of(blocks["step"], "设计矩阵的秩")["value"] == 3
-    assert item_of(blocks["step"], "训练行数")["value"] == TRAIN_ROWS
-    assert not [note for note in notes_of(blocks["step"]) if "不满秩" in note]
+    assert item_of(zoned(blocks, "step"), "设计矩阵的秩")["value"] == 3
+    assert item_of(zoned(blocks, "step"), "训练行数")["value"] == TRAIN_ROWS
+    assert not [
+        note for note in notes_of(zoned(blocks, "step")) if "不满秩" in note
+    ]
 
 
 def test_the_least_squares_report_flags_a_rank_deficient_design() -> None:
@@ -278,16 +300,20 @@ def test_the_least_squares_report_flags_a_rank_deficient_design() -> None:
     columns = linear_columns()
     columns[TWIN] = list(columns[LOAD])
     blocks = blocks_of("linear_regression", frame_of(columns))
-    assert item_of(blocks["step"], "特征列数")["value"] == 3
-    assert item_of(blocks["step"], "设计矩阵的秩")["value"] == 3
-    assert item_of(blocks["step"], "条件数")["value"] is None
-    assert [note for note in notes_of(blocks["step"]) if "不满秩" in note]
+    assert item_of(zoned(blocks, "step"), "特征列数")["value"] == 3
+    assert item_of(zoned(blocks, "step"), "设计矩阵的秩")["value"] == 3
+    assert item_of(zoned(blocks, "step"), "条件数")["value"] is None
+    assert [
+        note for note in notes_of(zoned(blocks, "step")) if "不满秩" in note
+    ]
 
 
 def test_the_least_squares_report_warns_about_mismatched_scales() -> None:
     """各列量纲差过十倍就提醒按 |β·σ| 比，差得不多时不提。"""
     blocks = blocks_of("linear_regression", frame_of(linear_columns()))
-    assert [note for note in notes_of(blocks["step"]) if "量纲差得远" in note]
+    assert [
+        note for note in notes_of(zoned(blocks, "step")) if "量纲差得远" in note
+    ]
     even = linear_columns()
     even[LOAD] = [warm_of(seat) + 1.0 for seat in range(ROWS)]
     even[TARGET] = [
@@ -297,7 +323,7 @@ def test_the_least_squares_report_warns_about_mismatched_scales() -> None:
     assert not [
         note
         for note in notes_of(
-            blocks_of("linear_regression", frame_of(even))["step"]
+            zoned(blocks_of("linear_regression", frame_of(even)), "step")
         )
         if "量纲差得远" in note
     ]
@@ -316,9 +342,13 @@ def test_the_least_squares_report_warns_about_a_nearly_singular_design() -> (
         for one, other in zip(columns[WARM], columns[LOAD], strict=True)
     ]
     blocks = blocks_of("linear_regression", frame_of(columns))
-    assert item_of(blocks["step"], "条件数")["value"] > 1e6
-    assert not [note for note in notes_of(blocks["step"]) if "不满秩" in note]
-    assert [note for note in notes_of(blocks["step"]) if "条件数" in note]
+    assert item_of(zoned(blocks, "step"), "条件数")["value"] > 1e6
+    assert not [
+        note for note in notes_of(zoned(blocks, "step")) if "不满秩" in note
+    ]
+    assert [
+        note for note in notes_of(zoned(blocks, "step")) if "条件数" in note
+    ]
 
 
 def test_the_least_squares_report_names_a_column_that_never_moves() -> None:
@@ -327,7 +357,7 @@ def test_the_least_squares_report_names_a_column_that_never_moves() -> None:
     columns[LOAD] = [400.0] * ROWS
     columns[TARGET] = [SLOPE_WARM * one + INTERCEPT for one in columns[WARM]]
     blocks = blocks_of("linear_regression", frame_of(columns))
-    by_column: Any = blocks["formula"].payload["by_column"]
+    by_column: Any = zoned(blocks, "formula").payload["by_column"]
     flat = next(item for item in by_column if item["key"] == LOAD)
     assert flat["params"]["sigma"] == 0.0
     assert flat["params"]["contribution"] == 0.0
@@ -337,11 +367,13 @@ def test_the_least_squares_report_names_a_column_that_never_moves() -> None:
 def test_the_worst_least_squares_load_still_fits_the_report_budget() -> None:
     """60 列宽帧 × 366 天逐时：讲解装得下，一块都不用降档丢掉。"""
     blocks = blocks_of("linear_regression", frame_of(wide_columns(YEAR_ROWS)))
-    report = report_budget.fit_report(tuple(blocks.values()))
+    report = report_budget.fit_report(blocks)
     assert report is not None
     assert report["dropped"] == []
     assert report_budget.size_of(report) < REPORT_MAX_BYTES
-    assert len(blocks["formula"].payload["by_column"]) == WIDE_COLUMNS - 1
+    assert (
+        len(zoned(blocks, "formula").payload["by_column"]) == WIDE_COLUMNS - 1
+    )
 
 
 def test_the_least_squares_report_is_empty_before_it_has_run() -> None:
@@ -365,18 +397,18 @@ def logit_columns(positives: int = ROWS // 2) -> dict[str, list[float]]:
 def test_the_logit_report_turns_each_coefficient_into_an_odds_ratio() -> None:
     """几率比就是 exp(β)——这是逻辑回归唯一能讲给业务听的读法。"""
     blocks = blocks_of("logistic_regression", frame_of(logit_columns()))
-    params = params_of(blocks["formula"], WARM)
+    params = params_of(zoned(blocks, "formula"), WARM)
     assert params["odds_ratio"] == pytest.approx(math.exp(params["coef"]))
-    assert blocks["formula"].payload["method"] == "l2"
+    assert zoned(blocks, "formula").payload["method"] == "l2"
 
 
 def test_the_logit_report_counts_the_training_classes() -> None:
     """训练集上每一类各多少行，类目印成整数。"""
     blocks = blocks_of("logistic_regression", frame_of(logit_columns()))
-    items: Any = blocks["charts"].payload["items"]
+    items: Any = zoned(blocks, "charts").payload["items"]
     assert [item["name"] for item in items] == ["0", "1"]
     assert [item["value"] for item in items] == [4, TRAIN_ROWS - 4]
-    assert blocks["charts"].payload["is_primary"] is True
+    assert zoned(blocks, "charts").payload["is_primary"] is True
 
 
 @pytest.mark.parametrize("threshold", [0.5, 0.7])
@@ -389,11 +421,14 @@ def test_the_logit_report_spells_out_the_threshold_it_really_used(
     互相打脸，而没有任何一处会报错（§13.2）。
     """
     notes = notes_of(
-        blocks_of(
-            "logistic_regression",
-            frame_of(logit_columns()),
-            positive_threshold=threshold,
-        )["step"]
+        zoned(
+            blocks_of(
+                "logistic_regression",
+                frame_of(logit_columns()),
+                positive_threshold=threshold,
+            ),
+            "step",
+        )
     )
     assert [note for note in notes if f"阈值 {threshold:g} 比大小" in note]
     assert [
@@ -409,29 +444,34 @@ def test_the_logit_report_spells_out_the_threshold_it_really_used(
 def test_the_logit_report_shows_the_rounds_it_actually_took() -> None:
     """迭代轮数与上限并排：没撞上上限就不出那条告警。"""
     blocks = blocks_of("logistic_regression", frame_of(logit_columns()))
-    rounds = item_of(blocks["step"], "迭代轮数")["value"]
+    rounds = item_of(zoned(blocks, "step"), "迭代轮数")["value"]
     assert isinstance(rounds, int)
     assert 0 < rounds < MAX_ROUNDS
-    assert item_of(blocks["step"], "迭代上限")["value"] == MAX_ROUNDS
+    assert item_of(zoned(blocks, "step"), "迭代上限")["value"] == MAX_ROUNDS
     assert not [
-        note for note in notes_of(blocks["step"]) if "迭代撞上了上限" in note
+        note
+        for note in notes_of(zoned(blocks, "step"))
+        if "迭代撞上了上限" in note
     ]
 
 
 def test_the_logit_report_names_the_positive_class() -> None:
     """正类是两个类目里靠后那个：不说清楚的话权重条的方向就是反的。"""
     blocks = blocks_of("logistic_regression", frame_of(logit_columns()))
-    assert "正类是「1」" in blocks["step"].payload["label"]
+    assert "正类是「1」" in zoned(blocks, "step").payload["label"]
 
 
 def test_the_logit_report_warns_when_one_class_barely_shows_up() -> None:
     """少数类只占一小撮：模型很可能全押多数类，告警里带着当次的阈值。"""
     notes = notes_of(
-        blocks_of(
-            "logistic_regression",
-            frame_of(logit_columns(1)),
-            positive_threshold=0.7,
-        )["step"]
+        zoned(
+            blocks_of(
+                "logistic_regression",
+                frame_of(logit_columns(1)),
+                positive_threshold=0.7,
+            ),
+            "step",
+        )
     )
     assert [note for note in notes if note.startswith("少数类只占")]
     assert [note for note in notes if "而阈值是 0.7" in note]
@@ -457,10 +497,10 @@ def test_the_logit_report_says_when_the_fit_never_converged() -> None:
         max_iter=MAX_ROUNDS,
         threshold=0.5,
     )
-    blocks = {block.zone: block for block in logit_blocks(seen)}
+    blocks = logit_blocks(seen)
     assert [
         note
-        for note in notes_of(blocks["step"])
+        for note in notes_of(zoned(blocks, "step"))
         if note.startswith("迭代撞上了上限")
     ]
 
@@ -485,11 +525,13 @@ def test_the_logit_report_stays_quiet_about_a_positive_class_it_lacks() -> None:
         max_iter=MAX_ROUNDS,
         threshold=0.5,
     )
-    blocks = {block.zone: block for block in logit_blocks(seen)}
-    assert "正类是" not in blocks["step"].payload["label"]
-    assert blocks["charts"].payload["items"] == []
+    blocks = logit_blocks(seen)
+    assert "正类是" not in zoned(blocks, "step").payload["label"]
+    assert zoned(blocks, "charts").payload["items"] == []
     assert not [
-        note for note in notes_of(blocks["step"]) if note.startswith("少数类")
+        note
+        for note in notes_of(zoned(blocks, "step"))
+        if note.startswith("少数类")
     ]
 
 
@@ -498,7 +540,7 @@ def test_the_worst_logit_load_still_fits_the_report_budget() -> None:
     columns = wide_columns(YEAR_ROWS)
     columns[TARGET] = [float(row % 2) for row in range(YEAR_ROWS)]
     blocks = blocks_of("logistic_regression", frame_of(columns))
-    report = report_budget.fit_report(tuple(blocks.values()))
+    report = report_budget.fit_report(blocks)
     assert report is not None
     assert report["dropped"] == []
     assert report_budget.size_of(report) < REPORT_MAX_BYTES

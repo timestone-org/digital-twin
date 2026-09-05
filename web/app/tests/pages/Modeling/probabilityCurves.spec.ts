@@ -4,6 +4,8 @@
  *
  * ⚠ 夹具照抄后端真跑出来的 payload（概率 [0.9, 0.8, 0.4, 0.1]、真实 [1, 0, 1, 0]
  * 那四行，以及多分类 / 缺概率列 / 只有一类 / 全同概率四种退化），不是手编的形状。
+ * ⚠ 那四行的正负恰好各半，「读正类占比」与「写死 0.5」在它上面同值；凡是与正类
+ * 占比有关的断言一律改站正类占比 0.3 的那份 `SKEWED_*` 夹具。
  * ⚠ 掉回横条画法既不报错也不白屏，只会变成六十根条子——只有点名问「是不是这个
  * 件」才拦得住。
  */
@@ -55,9 +57,27 @@ const PR = {
     score_kind: '',
     baseline: 0.5,
     items: [
-      { name: '0.900', threshold: 0.9, recall: 0.5, precision: 1.0, value: 1.0 },
-      { name: '0.800', threshold: 0.8, recall: 0.5, precision: 0.5, value: 0.5 },
-      { name: '0.100', threshold: 0.1, recall: 1.0, precision: 0.5, value: 0.5 },
+      {
+        name: '0.900',
+        threshold: 0.9,
+        recall: 0.5,
+        precision: 1.0,
+        value: 1.0,
+      },
+      {
+        name: '0.800',
+        threshold: 0.8,
+        recall: 0.5,
+        precision: 0.5,
+        value: 0.5,
+      },
+      {
+        name: '0.100',
+        threshold: 0.1,
+        recall: 1.0,
+        precision: 0.5,
+        value: 0.5,
+      },
     ],
     is_primary: true,
   },
@@ -107,15 +127,32 @@ const GRID = {
   title: '阈值网格',
   tier: 2,
   payload: {
-    label: '每个阈值上的 TP / FP / TN / FN 与 F1；竖线是打分时判成正类的最低概率',
+    label:
+      '每个阈值上的 TP / FP / TN / FN 与 F1；竖线按判成正类的行里最低的那个概率反推，与这一份指标卡切在同一刀上',
     unit: '',
     score_kind: '',
     baseline: 0.8,
     items: [
-      { name: '0.900', threshold: 0.9, tp: 1, fp: 0, tn: 2, fn: 1, value: 2 / 3 },
+      {
+        name: '0.900',
+        threshold: 0.9,
+        tp: 1,
+        fp: 0,
+        tn: 2,
+        fn: 1,
+        value: 2 / 3,
+      },
       { name: '0.800', threshold: 0.8, tp: 1, fp: 1, tn: 1, fn: 1, value: 0.5 },
       { name: '0.400', threshold: 0.4, tp: 2, fp: 1, tn: 1, fn: 0, value: 0.8 },
-      { name: '0.100', threshold: 0.1, tp: 2, fp: 2, tn: 0, fn: 0, value: 2 / 3 },
+      {
+        name: '0.100',
+        threshold: 0.1,
+        tp: 2,
+        fp: 2,
+        tn: 0,
+        fn: 0,
+        value: 2 / 3,
+      },
     ],
     is_primary: false,
   },
@@ -162,6 +199,102 @@ const NO_PROBA_SCOPE = {
   },
 }
 
+// 正类占比 0.3 的那十行（真实 3 正 7 负、按 0.5 判正类）后端真跑出来的三块。
+// ⚠ 正负各半的夹具上，基线读正类占比、读负类占比、写死 0.5 三种写法同值
+const SKEWED_PR = {
+  ...PR,
+  payload: {
+    ...PR.payload,
+    baseline: 0.3,
+    items: [
+      { name: '0.950', threshold: 0.95, recall: 1 / 3, precision: 1, value: 1 },
+      {
+        name: '0.550',
+        threshold: 0.55,
+        recall: 1,
+        precision: 0.6,
+        value: 0.6,
+      },
+      {
+        name: '0.050',
+        threshold: 0.05,
+        recall: 1,
+        precision: 0.3,
+        value: 0.3,
+      },
+    ],
+  },
+}
+
+const SKEWED_GRID = {
+  ...GRID.payload,
+  baseline: 0.55,
+  items: [
+    { name: '0.950', threshold: 0.95, tp: 1, fp: 0, tn: 7, fn: 2, value: 0.5 },
+    { name: '0.850', threshold: 0.85, tp: 1, fp: 1, tn: 6, fn: 2, value: 0.4 },
+    {
+      name: '0.750',
+      threshold: 0.75,
+      tp: 2,
+      fp: 1,
+      tn: 6,
+      fn: 1,
+      value: 2 / 3,
+    },
+    {
+      name: '0.650',
+      threshold: 0.65,
+      tp: 2,
+      fp: 2,
+      tn: 5,
+      fn: 1,
+      value: 4 / 7,
+    },
+    { name: '0.550', threshold: 0.55, tp: 3, fp: 2, tn: 5, fn: 0, value: 0.75 },
+    {
+      name: '0.450',
+      threshold: 0.45,
+      tp: 3,
+      fp: 3,
+      tn: 4,
+      fn: 0,
+      value: 2 / 3,
+    },
+    { name: '0.350', threshold: 0.35, tp: 3, fp: 4, tn: 3, fn: 0, value: 0.6 },
+    {
+      name: '0.250',
+      threshold: 0.25,
+      tp: 3,
+      fp: 5,
+      tn: 2,
+      fn: 0,
+      value: 6 / 11,
+    },
+    { name: '0.150', threshold: 0.15, tp: 3, fp: 6, tn: 1, fn: 0, value: 0.5 },
+    {
+      name: '0.050',
+      threshold: 0.05,
+      tp: 3,
+      fp: 7,
+      tn: 0,
+      fn: 0,
+      value: 6 / 13,
+    },
+  ],
+}
+
+// 同一份网格上那张 ② 区指标卡：滑杆默认那一档必须印出同样这四个数
+const SKEWED_CARD: readonly (readonly [string, string])[] = [
+  ['准确率', '0.8'],
+  ['精确率', '0.6'],
+  ['召回率', '1'],
+  ['F1', '0.75'],
+]
+
+// 打分那一刀落在网格外的那一份：后端留不住它时（旧结果、或一行都没判成正类）
+// 滑杆只能就近站，界面上必须说出来
+const OFF_GRID = { ...SKEWED_GRID, baseline: 0.5405 }
+
 /** 另一份网格：四档一样多，但打分时站在最高那一档上。 */
 const OTHER_GRID = {
   ...GRID.payload,
@@ -181,7 +314,15 @@ const FLAT_GRID = {
     ...GRID.payload,
     baseline: 0.5,
     items: [
-      { name: '0.500', threshold: 0.5, tp: 2, fp: 2, tn: 0, fn: 0, value: 2 / 3 },
+      {
+        name: '0.500',
+        threshold: 0.5,
+        tp: 2,
+        fp: 2,
+        tn: 0,
+        fn: 0,
+        value: 2 / 3,
+      },
     ],
   },
 }
@@ -226,12 +367,16 @@ describe('三条曲线的参考几何各不相同', () => {
   })
 
   // ⚠ PR 的基准是「全押正类」那条横线，给它画对角线等于凭空立一个判据
+  // ⚠ 站正类占比 0.3 的夹具：正负各半时这条线画在 0.5 上，读的是占比还是写死的
+  // 0.5 分不出来
   it('PR 不画对角线，改画正类占比那条横线', () => {
-    const one = mount(ReportBlocks, { props: { blocks: blocksOf([PR]) } })
+    const one = mount(ReportBlocks, {
+      props: { blocks: blocksOf([SKEWED_PR]) },
+    })
 
     expect(one.find('.dt-ml-scatter__ideal').exists()).toBe(false)
     expect(one.find('.dt-ml-scatter__rule--reference').exists()).toBe(true)
-    expect(one.find('.dt-ml-scatter__rules text').text()).toBe('正类占比 0.5')
+    expect(one.find('.dt-ml-scatter__rules text').text()).toBe('正类占比 0.3')
   })
 
   it('校准曲线把不足十行的那几箱画成空心，并在图下说一句', () => {
@@ -368,7 +513,9 @@ describe('阈值滑杆', () => {
       '2',
     )
     expect(wrapper.text()).toContain('拖到第 3 档：阈值 0.800')
-    expect(wrapper.text()).toContain('竖线是打分时用的那个阈值，0.800')
+    expect(wrapper.text()).toContain(
+      '竖线是打分那一刀：判成正类的最低概率 0.800',
+    )
   })
 
   it('滑杆是原生 range，键盘能操作，读屏读得出阈值而不是档号', () => {
@@ -383,7 +530,9 @@ describe('阈值滑杆', () => {
   it('拖到最左：矩阵四格与四个指标一起跟着走', async () => {
     const wrapper = slider()
     await wrapper.find('input[type="range"]').setValue(0)
-    const cells = wrapper.findAll('.dt-ml-matrix__cell--hit, .dt-ml-matrix__cell--miss')
+    const cells = wrapper.findAll(
+      '.dt-ml-matrix__cell--hit, .dt-ml-matrix__cell--miss',
+    )
 
     expect(wrapper.text()).toContain('阈值 0.100：共 4 行，判对 2 行')
     expect(cells.map((cell) => cell.text())).toEqual(['2', '0', '2', '0'])
@@ -458,6 +607,44 @@ describe('阈值滑杆', () => {
     expect(wrapper.find('.dt-ml-threshold__mark').attributes('style')).toBe(
       'left: 66.67%;',
     )
+  })
+
+  // ⚠ 一屏两张混淆矩阵是这一块最坏的失败样式：滑杆默认档与 ② 区那张卡对不上
+  // 账时，两张矩阵、两组指标同时在屏幕上，而没有一处说哪一张才是打分那一刀
+  it('默认那一档印的四个数与 ② 区那张指标卡一字不差', () => {
+    const wrapper = slider(SKEWED_GRID)
+    const cards = wrapper.findAll('.dt-ml-stats__grid li')
+
+    expect(wrapper.text()).toContain('拖到第 6 档：阈值 0.550')
+    for (const [label, text] of SKEWED_CARD) {
+      const found = cards.find((card) => card.text().startsWith(label))
+      expect(found?.find('.dt-digits__text').text()).toBe(text)
+    }
+  })
+
+  it('打分那一刀就在网格上时，竖线那句不提「就近」', () => {
+    const text = slider(SKEWED_GRID).text()
+
+    expect(text).toContain('竖线是打分那一刀：判成正类的最低概率 0.550')
+    expect(text).not.toContain('就近站')
+    expect(text).toContain('就停在这一档上')
+  })
+
+  // ⚠ 就近站着却不说，屏幕上就只剩两组对不上的数、没有一处解释
+  it('打分那一刀不在网格上时，说清是就近站的、数会有出入', () => {
+    const text = slider(OFF_GRID).text()
+
+    expect(text).toContain('就近站在 0.550')
+    expect(text).toContain('与上面那张指标卡会有出入')
+  })
+
+  // ⚠ 竖线那个数是从打分帧反推的（判成正类的最低概率），说成「打分时用的是」
+  // 会让用户去找一个自己从没填过的值：配 0.5、反推得 0.55
+  it('两句话都不许把反推值说成用户配的那个超参', () => {
+    const text = slider(SKEWED_GRID).text()
+
+    expect(text).not.toContain('打分时用的是')
+    expect(text).toContain('打分那一刀切在 0.55')
   })
 
   it('全同概率时 ROC 只剩两个点，仍画得出来', () => {

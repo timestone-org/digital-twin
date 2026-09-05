@@ -12,12 +12,14 @@ import { computed, ref } from 'vue'
 
 import { modelingFrameUrl } from '@/api/modeling'
 
+import { formulasOf } from '../scripts/formulaCatalog'
 import { grouped } from '../scripts/numbers'
 import type { PortPreview } from '../scripts/preview'
 import { portPreviewsOf } from '../scripts/preview'
 import { axisOf, recordOf, reportOf } from '../scripts/reportBlocks'
 import type { ReportZone } from '../scripts/zones'
 import {
+  FORMULA_ZONE,
   LEAD_ZONES,
   TABLE_ZONE,
   ZONE_ORDER,
@@ -58,6 +60,15 @@ const props = defineProps<{
   report?: Record<string, unknown> | null | undefined
   /** 结果摘要撑爆了字节预算，有一部分没存下来。 */
   isPreviewTruncated?: boolean | undefined
+  /** 这一步是哪个算子；④ 区的公式骨架按它建键。空串 = 不摆公式。 */
+  code?: string | undefined
+  /**
+   * 这一步的参数。
+   *
+   * ⚠ 要**运行时冻结的那份快照**而不是画布上现在那份：历史回看时后者早改过了，
+   * 而公式会照它印出一串看着完全正常的假账（规格 §6）。
+   */
+  config?: Readonly<Record<string, unknown>> | undefined
 }>()
 
 const TABLE_ZONES: readonly ReportZone[] = [TABLE_ZONE]
@@ -98,6 +109,22 @@ const shownPorts = computed<PortPreview[]>(() => {
 })
 
 const nodeBlocks = computed(() => blocksOfPort(report.value.blocks, ''))
+
+/**
+ * ④ 区的公式：骨架随算子代码走，实参从这一步的块、逐路摘要与 config 快照取。
+ *
+ * ⚠ 跟着 `hasFace` 一起出现：没有讲解的老运行要一个字不多地退回升级前的样子
+ * （规格 §4.7）。
+ */
+const formulas = computed(() =>
+  hasFace.value && props.code !== undefined && props.code !== ''
+    ? formulasOf(props.code, {
+        blocks: report.value.blocks,
+        ports: ports.value,
+        config: props.config ?? {},
+      })
+    : [],
+)
 
 /**
  * 每一路输出的外壳。
@@ -196,7 +223,8 @@ const anchors = computed<Anchor[]>(() => {
   const found: Anchor[] = []
   for (const zone of ZONE_ORDER) {
     if (zone === TABLE_ZONE) continue
-    if (report.value.blocks.some((block) => block.zone === zone)) {
+    const hasOwn = zone === FORMULA_ZONE && formulas.value.length > 0
+    if (hasOwn || report.value.blocks.some((block) => block.zone === zone)) {
       found.push({
         key: zone,
         label: ZONE_TITLES[zone],
@@ -244,6 +272,7 @@ function jump(target: string): void {
       :zones="LEAD_ZONES"
       :dropped="report.dropped"
       :note="report.note"
+      :formulas="formulas"
     />
     <DtSegmented
       v-if="hasFace && isLabelled"
@@ -314,6 +343,7 @@ function jump(target: string): void {
           <MetricsView
             v-else-if="item.preview.kind === 'metrics'"
             :preview="item.preview"
+            :has-blocks="portBlocks(item.port).length > 0"
           />
           <UnknownView
             v-else

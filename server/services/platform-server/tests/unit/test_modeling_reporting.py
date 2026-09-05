@@ -81,6 +81,25 @@ def test_rows_caps_the_funnel_and_the_per_column_reasons() -> None:
     assert len(payload["by_column"]) == reporting.MAX_ROW_COLUMNS
 
 
+def test_rows_records_how_many_levels_there_were_before_the_cut() -> None:
+    """截断前的级数一起带上：界面据它说「后面还有几级没带出来」。
+
+    ⚠ 光看明细分不出「一共就这么多级」与「截了」——两句话要用户做的事不同。
+    """
+    payload = reporting.rows_block(
+        at(), RowCounts(before=1, after=1), funnel=items(9)
+    ).payload
+    assert (payload["funnel_total"], len(payload["funnel"])) == (9, 6)
+
+
+def test_rows_says_the_funnel_is_whole_when_it_fits() -> None:
+    """恰好摆满六级而没被截时，记的总数就是六——不是「还有更多」。"""
+    payload = reporting.rows_block(
+        at(), RowCounts(before=1, after=1), funnel=items(6)
+    ).payload
+    assert payload["funnel_total"] == 6
+
+
 def test_columns_caps_both_name_lists_and_the_dtype_table() -> None:
     """多出来的与少掉的列名各截到上限，改过类型的那张表另有一档。"""
     change = ColumnChange(
@@ -145,6 +164,27 @@ def test_bins_caps_the_columns_the_buckets_and_the_marks() -> None:
     assert len(first["bins"]) == reporting.MAX_BINS
     assert len(first["marks"]) == reporting.MAX_MARKS
     assert first["off_axis"] == {"label": "上界之外", "count": 3}
+
+
+def test_bins_carries_the_dropped_share_of_each_bucket() -> None:
+    """逐桶被丢掉的行数与桶高同序带出去，并按同一个上限截。"""
+    over = reporting.MAX_BINS + 5
+    column = ColumnBins(
+        key="c0",
+        bins=[float(step) for step in range(over)],
+        dropped=[1.0] * over,
+    )
+    first = reporting.bins_block(at(), [column]).payload["by_column"][0]
+    assert first["dropped"] == [1.0] * reporting.MAX_BINS
+    assert len(first["dropped"]) == len(first["bins"])
+
+
+def test_bins_carries_the_normal_curve_when_the_column_has_one() -> None:
+    """正态参考曲线的两个参数原样带出去；没有就是 None。"""
+    with_curve = ColumnBins(key="c0", bins=[1.0], curve={"mean": 0.5, "sd": 2})
+    payload = reporting.bins_block(at(), [with_curve, ColumnBins(key="c1")])
+    assert payload.payload["by_column"][0]["curve"] == {"mean": 0.5, "sd": 2}
+    assert payload.payload["by_column"][1]["curve"] is None
 
 
 def test_bins_without_off_axis_says_none_instead_of_an_empty_shell() -> None:

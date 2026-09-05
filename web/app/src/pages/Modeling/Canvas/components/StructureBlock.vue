@@ -5,10 +5,13 @@
  *
  * ⚠ 部分依赖一条曲线一张小图，不并进同一张：每条曲线的横轴是**它自己那一列**的
  * 取值，温度 0–40 与负荷 0–2000 共用一根轴之后，两条曲线都读不出东西。
+ * ⚠ 散点也是一张一块：残差图与真值图的横轴是同一个数，摆进同一张之后两片点会
+ * 叠在一起，而两者要答的是两回事。
  */
 import { DtEmpty } from '@dt/ui'
 import { computed } from 'vue'
 
+import { cloudPanels } from '../scripts/fitClouds'
 import type { ScatterRule, ScatterSeries } from '../scripts/scatterGeometry'
 import type { ReportBlock } from '../scripts/reportBlocks'
 import {
@@ -42,6 +45,7 @@ const loadings = computed(() => loadingsView(payload.value))
 const importances = computed(() => importanceRows(payload.value))
 const ranges = computed(() => rangeRows(payload.value))
 const panels = computed(() => pdpPanels(payload.value))
+const clouds = computed(() => cloudPanels(payload.value))
 const tree = computed(() => treeView(payload.value))
 const notes = computed(() => blockNotes(payload.value))
 
@@ -87,7 +91,8 @@ const isEmpty = computed(
     tree.value.isBlank &&
     importances.value.length === 0 &&
     ranges.value.length === 0 &&
-    panels.value.length === 0,
+    panels.value.length === 0 &&
+    clouds.value.length === 0,
 )
 </script>
 
@@ -123,6 +128,14 @@ const isEmpty = computed(
       <p v-if="loadings.cutNote !== ''" class="dt-ml-structure__cut">
         {{ loadings.cutNote }}
       </p>
+    </div>
+    <div v-for="one in clouds" :key="one.key" class="dt-ml-structure__part">
+      <ScatterPlot
+        :mode="one.mode"
+        :series="one.series"
+        :x-label="one.xLabel"
+        :y-label="one.yLabel"
+      />
     </div>
     <div v-if="importances.length > 0" class="dt-ml-structure__part">
       <p class="dt-ml-structure__part-title">特征重要性</p>

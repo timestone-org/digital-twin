@@ -208,6 +208,81 @@ describe('派发', () => {
   })
 })
 
+describe('同屏已经画出来的事不许再说没有', () => {
+  /** 这一路带回的讲解块；端口名与摘要那一路一致（五个评估算子都叫 metrics）。 */
+  function blockOf(over: Record<string, unknown> = {}) {
+    return {
+      kind: 'breakdown',
+      zone: 'charts',
+      port: 'metrics',
+      title: '逐折分数',
+      tier: 1,
+      payload: {
+        label: '每折的分',
+        items: [
+          { name: '第 1 折', value: 0.9 },
+          { name: '第 2 折', value: 0.7 },
+        ],
+      },
+      ...over,
+    }
+  }
+
+  /**
+   * 有讲解时那张表默认是收起来的，评估那一屏就摆在里面——不展开的话，下面这
+   * 几条断言只是在一片空白上做的，怎么改都绿。
+   */
+  async function withBlocks(
+    body: Record<string, unknown>,
+    blocks: Record<string, unknown>[],
+  ) {
+    const wrapper = mount(ResultView, {
+      props: {
+        payload: payloadOf(body),
+        report: { blocks, dropped: [], note: '' },
+      },
+    })
+    await wrapper.find('.dt-ml-result__toggle').trigger('click')
+    return wrapper
+  }
+
+  const FOLD_METRICS = {
+    task: 'regression',
+    metrics: { folds: 3, score_mean: 0.82, score_std: 0.03, score_worst: 0.7 },
+  }
+
+  it('逐折分数已经画在同屏时，不再说它没随摘要带回来', async () => {
+    const wrapper = await withBlocks(FOLD_METRICS, [blockOf()])
+
+    expect(wrapper.text()).toContain('第 1 折')
+    expect(wrapper.text()).toContain('最差一折')
+    expect(wrapper.text()).not.toContain('逐折的分数没有随这份摘要带回来')
+  })
+
+  it('老运行只有那四个标量时照旧说清逐折的分没带回来', () => {
+    const wrapper = screen(FOLD_METRICS)
+
+    expect(wrapper.text()).toContain('逐折的分数没有随这份摘要带回来')
+  })
+
+  it('指标搬进块里之后不许再报「没有产出任何指标」', async () => {
+    const wrapper = await withBlocks({ task: 'regression', metrics: {} }, [
+      blockOf({ title: '特征重要性' }),
+    ])
+
+    expect(wrapper.text()).toContain('特征重要性')
+    expect(wrapper.text()).not.toContain('这一步没有产出任何指标')
+  })
+
+  it('摘要与块双空才是真的什么都没有', async () => {
+    const wrapper = await withBlocks({ task: 'regression', metrics: {} }, [
+      blockOf({ port: 'other', title: '别的一路的账' }),
+    ])
+
+    expect(wrapper.text()).toContain('这一步没有产出任何指标')
+  })
+})
+
 describe('键空间冲突', () => {
   // ⚠ 一列恰好叫 mape 时，无量纲的 ΔR²=0.12 会被印成「0.12%」（规格 R-34）
   it('一列叫 mape 的重要性值不许被印成百分数', () => {

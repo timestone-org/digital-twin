@@ -160,6 +160,13 @@ export interface RowCounts {
   /** ⚠ 与配的那个分开：两者差得远时用户才有得追。 */
   ratioActual: number | null
   funnel: Item[]
+  /**
+   * 截断前的漏斗级数。
+   *
+   * ⚠ 与 `funnel.length` 分开读：两者相等 = 一级都没少，`funnelTotal` 更大才是
+   * 真的截了。老运行的 payload 里没有这个数，读成 0，那时一句都不说。
+   */
+  funnelTotal: number
   byColumn: Item[]
 }
 
@@ -172,6 +179,7 @@ export function rowsOf(payload: Item): RowCounts {
     ratioConfigured: asNumber(payload['ratio_configured']),
     ratioActual: asNumber(payload['ratio_actual']),
     funnel: asItems(payload['funnel']),
+    funnelTotal: asCount(payload['funnel_total']),
     byColumn: asItems(payload['by_column']),
   }
 }
@@ -246,18 +254,32 @@ export interface BinMark {
 export interface ColumnBins {
   key: string
   bins: number[]
+  /** 逐桶里被这一步丢掉的行数，与 `bins` 同序；空数组 = 这一步不丢行。 */
+  dropped: number[]
   marks: BinMark[]
   /** 落不到这条数轴上的那些行（空值等）；null = 没有。 */
   offAxis: { label: string; count: number } | null
+  /** 同均值同方差的正态参考曲线；null = 这张图不比对正态。 */
+  curve: { mean: number; sd: number } | null
 }
 
 export function binsOf(payload: Item): ColumnBins[] {
   return asItems(payload['by_column']).map((item) => ({
     key: asText(item['key']),
     bins: asNumbers(item['bins']),
+    dropped: asNumbers(item['dropped']),
     marks: markOf(item['marks']),
     offAxis: offAxisOf(item['off_axis']),
+    curve: curveOf(item['curve']),
   }))
+}
+
+/** 正态参考曲线的两个参数；缺一个就整条不画——半条曲线画不出来。 */
+function curveOf(raw: unknown): { mean: number; sd: number } | null {
+  if (!isRecord(raw)) return null
+  const mean = asNumber(raw['mean'])
+  const sd = asNumber(raw['sd'])
+  return mean === null || sd === null ? null : { mean, sd }
 }
 
 /** 位置读不出来的参考线丢掉：画在 0 处的一条线会被读成「阈值是 0」。 */

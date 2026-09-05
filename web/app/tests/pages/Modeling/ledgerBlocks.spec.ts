@@ -54,6 +54,8 @@ const SOURCE = blockOf('rows', '取数漏斗', {
     { name: '行数上限', value: 50000, unit: '行', note: '' },
     { name: '实取', value: 5, unit: '行', note: '' },
   ],
+  // ⚠ 这一步的漏斗按构造恰好六级，一级都没被截：与列数上限相等 ≠ 截过
+  funnel_total: 6,
   by_column: [],
 })
 
@@ -270,10 +272,40 @@ describe('行数的账', () => {
     expect(wrapper.findAllComponents(BarList)).toHaveLength(1)
   })
 
-  it('逐级账触到上限时说清后面的没带出来', () => {
+  // ⚠ 恰好摆满六级的算子一抓一把（`ledger_source` 就是），按条数判的话，这句
+  // 100% 是假话——它说的「后面还有几级」根本不存在
+  it('一级都没少时一个字都不说', () => {
     const wrapper = mount(RowsBlock, { props: { block: SOURCE } })
 
-    expect(wrapper.text()).toContain('逐级账已经列到上限 6 级')
+    expect(wrapper.text()).not.toContain('逐级账')
+  })
+
+  it('真的截了才说，并说清一共几级', () => {
+    const wrapper = mount(RowsBlock, {
+      props: {
+        block: blockOf('rows', '取数漏斗', {
+          ...SOURCE.payload,
+          funnel_total: 9,
+        }),
+      },
+    })
+
+    expect(wrapper.text()).toContain(
+      '逐级账共 9 级，这里只列了前 6 级，后面的几级没有带出来',
+    )
+  })
+
+  it('老运行没带这个数时不硬猜，一句都不说', () => {
+    const wrapper = mount(RowsBlock, {
+      props: {
+        block: blockOf('rows', '取数漏斗', {
+          ...SOURCE.payload,
+          funnel_total: undefined,
+        }),
+      },
+    })
+
+    expect(wrapper.text()).not.toContain('逐级账')
   })
 
   it('按列归因触到上限时说清摊得少的没带出来', () => {

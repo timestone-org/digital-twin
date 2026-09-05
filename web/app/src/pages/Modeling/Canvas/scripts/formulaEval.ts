@@ -79,7 +79,15 @@ function errorFormulas(context: FormulaContext): FormulaSpec {
             run(nameOf('RMSE'), opOf('='), numOf(rmse)),
             ...(mape === null
               ? []
-              : [run(opOf(','), nameOf('MAPE'), opOf('='), numOf(mape), nameOf('%'))]),
+              : [
+                  run(
+                    opOf(','),
+                    nameOf('MAPE'),
+                    opOf('='),
+                    numOf(mape),
+                    nameOf('%'),
+                  ),
+                ]),
           ],
     fallback:
       mape === null && rmse !== null
@@ -117,7 +125,15 @@ function confusionFormula(context: FormulaContext): FormulaSpec {
     filled: blind
       ? null
       : [
-          run(nameOf('P'), opOf('='), numOf(precision), opOf(','), nameOf('R'), opOf('='), numOf(recall)),
+          run(
+            nameOf('P'),
+            opOf('='),
+            numOf(precision),
+            opOf(','),
+            nameOf('R'),
+            opOf('='),
+            numOf(recall),
+          ),
         ],
     // ⚠ 两种分母为 0 要分得开：一次都没判成正类（P 的分母为 0）与正类一次都
     // 没出现过（R 的分母为 0），前者调阈值、后者换测试集
@@ -126,7 +142,10 @@ function confusionFormula(context: FormulaContext): FormulaSpec {
       : null,
     isOpen: blind,
     legend: [
-      { symbol: 'TP', text: `真的是正类${label === null ? '' : `「${niceNumber(label)}」`}、也判成了正类的行数` },
+      {
+        symbol: 'TP',
+        text: `真的是正类${label === null ? '' : `「${niceNumber(label)}」`}、也判成了正类的行数`,
+      },
       { symbol: 'FP', text: '不是正类却判成了正类' },
       { symbol: 'FN', text: '是正类却没判出来' },
     ],
@@ -152,7 +171,17 @@ function residualStats(context: FormulaContext): FormulaSpec {
     filled:
       mean === null || std === null
         ? null
-        : [run(varOf('ē'), opOf('='), numOf(mean), opOf(','), varOf('s_e'), opOf('='), numOf(std))],
+        : [
+            run(
+              varOf('ē'),
+              opOf('='),
+              numOf(mean),
+              opOf(','),
+              varOf('s_e'),
+              opOf('='),
+              numOf(std),
+            ),
+          ],
     fallback: mean === null || std === null ? NO_BLOCK : null,
     isOpen: false,
     legend: [
@@ -216,7 +245,15 @@ function foldFormula(context: FormulaContext): FormulaSpec {
     id: 'folds',
     title: isChain ? '前向链是怎么切的' : 'K 折是怎么切的',
     symbolic: [
-      run(varOf('w'), opOf('='), varOf('⌊N / K⌋'), opOf(','), varOf('T_k'), opOf('='), varOf('[kw, (k+1)w)')),
+      run(
+        varOf('w'),
+        opOf('='),
+        varOf('⌊N / K⌋'),
+        opOf(','),
+        varOf('T_k'),
+        opOf('='),
+        varOf('[kw, (k+1)w)'),
+      ),
       run(
         opOf(','),
         varOf('Tr_k'),

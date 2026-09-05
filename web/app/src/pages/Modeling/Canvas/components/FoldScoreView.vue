@@ -11,10 +11,19 @@ import { niceNumber } from '../scripts/numbers'
 
 import BarList from './BarList.vue'
 
-const props = defineProps<{
-  /** 后端 `diagnostics._summary` 的四个标量。 */
-  metrics: readonly (readonly [string, number | null])[]
-}>()
+const props = withDefaults(
+  defineProps<{
+    /** 后端 `diagnostics._summary` 的四个标量。 */
+    metrics: readonly (readonly [string, number | null])[]
+    /**
+     * 这一路带回了讲解块——逐折分数与折布局就在其中，同屏上方已经画出来了。
+     *
+     * ⚠ 缺省是 false：老运行只有那四个标量，那时「逐折的分没带回来」是实话。
+     */
+    hasFoldBlocks?: boolean
+  }>(),
+  { hasFoldBlocks: false },
+)
 
 const table = computed(() => new Map(props.metrics))
 
@@ -61,7 +70,7 @@ const caption = computed(
       :caption="caption"
       empty-text="这一步没有带回可画的分数"
     />
-    <DtNotice intent="info">
+    <DtNotice v-if="!props.hasFoldBlocks" intent="info">
       逐折的分数没有随这份摘要带回来，这里只有它们的均值、波动与最差的那一折；
       每折各自的分与训练/测试段的摆法要等后端补上。
     </DtNotice>

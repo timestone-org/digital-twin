@@ -70,6 +70,7 @@ MAX_PDP_POINTS = 20
 MAX_LOADINGS = 20
 MAX_LOADING_WIDTH = 20
 MAX_EXPLAINED = 20
+MAX_CLOUD_POINTS = 200
 
 
 @dataclass(frozen=True)
@@ -144,6 +145,11 @@ class ColumnBins:
 
     key: str
     bins: Sequence[float] = ()
+    #: 逐桶里被这一步丢掉的行数，与 `bins` 同序等长。⚠ 必须由后端逐桶数：前端
+    #: 拿参考线的哪一侧去推的话，判据是 `>` 还是 `<` 它根本不知道
+    dropped: Sequence[float] = ()
+    #: 同均值同方差的正态参考曲线 `{mean, sd}`；None = 这张图不比对正态
+    curve: Item | None = None
     #: 这条轴的两端。⚠ 桶高自己说不出它横跨哪一段，缺了这两个数，界面既画不出
     #: 刻度也放不下参考线——只有一排不知道量的是什么的柱子
     low: float | None = None
@@ -190,6 +196,23 @@ class Pdp:
 
 
 @dataclass(frozen=True)
+class Cloud:
+    """一张散点图：一串 `[x, y]` 点，加上两根轴各叫什么。
+
+    ⚠ 画法跟着 `mode` 走而不是跟着标题走：`pairs` 两轴同尺并自带理想对角线，
+    `residual` 自带一条零线——认标题的话，改一个字整张图的参照物就没了。
+    """
+
+    key: str
+    name: str
+    #: `pairs` = 真值对预测；`residual` = 残差对预测
+    mode: str
+    x_label: str
+    y_label: str
+    points: Sequence[Sequence[float]] = ()
+
+
+@dataclass(frozen=True)
 class ModelStructure:
     """模型内部长什么样。六样各自可缺。"""
 
@@ -199,6 +222,8 @@ class ModelStructure:
     #: 限深代表树 `{depth, nodes}`；深度在造树那一侧限死
     tree: Item | None = None
     pdp: Sequence[Pdp] = ()
+    #: 逐点摆开的散点图，一张一个 `Cloud`
+    clouds: Sequence[Cloud] = ()
     loadings: Sequence[Sequence[float]] = ()
     explained: Sequence[float] = ()
 
@@ -212,6 +237,8 @@ def rows_block(
 ) -> ReportBlock:
     """行数变了多少、谁的锅。
 
+    ⚠ `funnel_total` 记的是**截断前**的级数：条数正好等于上限时，光看明细分不出
+    「一共就这么多级」与「后面还有几级没带出来」，而界面上那两句话说的不是一回事。
     Args: at, counts, funnel（逐级漏斗）, by_column（按列归因）。
     """
     payload: dict[str, Any] = {
@@ -222,6 +249,7 @@ def rows_block(
         "ratio_configured": counts.ratio_configured,
         "ratio_actual": counts.ratio_actual,
         "funnel": _items(funnel, MAX_FUNNEL),
+        "funnel_total": len(funnel),
         "by_column": _items(by_column, MAX_ROW_COLUMNS),
     }
     return _block("rows", at, payload)
@@ -295,10 +323,12 @@ def bins_block(at: BlockAt, by_column: Sequence[ColumnBins]) -> ReportBlock:
             {
                 "key": item.key,
                 "bins": list(item.bins[:MAX_BINS]),
+                "dropped": list(item.dropped[:MAX_BINS]),
                 "low": item.low,
                 "high": item.high,
                 "marks": _items(item.marks, MAX_MARKS),
                 "off_axis": _mapping(item.off_axis),
+                "curve": _mapping(item.curve),
             }
             for item in by_column[:MAX_BIN_COLUMNS]
         ]
@@ -352,8 +382,19 @@ def structure_block(at: BlockAt, structure: ModelStructure) -> ReportBlock:
         "ranges": _items(structure.ranges, MAX_RANGES),
         "tree": _tree(structure.tree),
         "pdp": [
-            {"key": item.key, "points": _points(item.points)}
+            {"key": item.key, "points": _points(item.points, MAX_PDP_POINTS)}
             for item in structure.pdp[:MAX_PDP]
+        ],
+        "clouds": [
+            {
+                "key": item.key,
+                "name": item.name,
+                "mode": item.mode,
+                "x_label": item.x_label,
+                "y_label": item.y_label,
+                "points": _points(item.points, MAX_CLOUD_POINTS),
+            }
+            for item in structure.clouds
         ],
         "loadings": [
             list(row[:MAX_LOADING_WIDTH])
@@ -409,12 +450,12 @@ def _items(items: Sequence[Item], limit: int) -> list[dict[str, Any]]:
     return [dict(item) for item in items[:limit]]
 
 
-def _points(points: Sequence[Sequence[float]]) -> list[list[float]]:
-    """曲线上的点截到上限。
+def _points(points: Sequence[Sequence[float]], limit: int) -> list[list[float]]:
+    """图上的点截到上限。
 
-    Args: points。
+    Args: points, limit。
     """
-    return [list(point) for point in points[:MAX_PDP_POINTS]]
+    return [list(point) for point in points[:limit]]
 
 
 def _mapping(item: Item | None) -> dict[str, Any] | None:

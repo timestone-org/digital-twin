@@ -26,10 +26,13 @@ def test_a_funnel_keeps_the_level_it_cannot_count_as_none() -> None:
     assert got[1]["value"] == 9
 
 
-def test_a_funnel_stops_at_six_levels() -> None:
-    """六级封顶：再多就读不成一条收窄的账了。"""
+def test_a_funnel_hands_every_level_over_for_the_block_to_cut() -> None:
+    """漏斗自己不截：截在这里的话，块上记的「一共几级」恒等于上限。
+
+    六级封顶由 `rows_block` 做，它同时把截断前的级数记进 payload。
+    """
     stages = tuple(Stage(f"第{index}级", index) for index in range(10))
-    assert len(steps.funnel_of(stages)) == 6
+    assert len(steps.funnel_of(stages)) == 10
 
 
 def test_the_buckets_are_equal_width_over_the_data() -> None:
@@ -98,6 +101,32 @@ def test_occupancy_is_measured_against_the_median_sampling_step() -> None:
     assert span.occupancy == [0.5, 0.0, 0.0, 0.0, 0.1]
 
 
+def test_a_short_run_is_not_spread_over_more_slots_than_it_has_readings() -> (
+    None
+):
+    """行数比格数少时不许把格子切得比采集间隔还细。
+
+    ⚠ 切细了之后每格「本该有多少行」恒为 1，占用率退化成「行数 ÷ 格数」：这一段
+    每 10 秒一行、一个断档都没有，旧算法却会印出「平均占用率 24%」。
+    """
+    moments = [index * 10_000 for index in range(48)]
+    span = steps.axis_span(moments, slots=200)
+    assert span.gaps == []
+    assert len(span.occupancy) == 47
+    assert sum(span.occupancy) / len(span.occupancy) == 1.0
+
+
+def test_a_slot_still_shows_the_share_it_is_missing() -> None:
+    """格子不比间隔细以后，缺行的那一格照旧按缺多少画矮。
+
+    ⚠ 与上一条一起看才有意义：只钉「满格是 1.0」的话，把占用率写死成 1 也能绿。
+    """
+    moments = [0, 10_000, 20_000, 30_000, 60_000, 70_000, 80_000, 90_000]
+    span = steps.axis_span(moments, slots=200, factor=10)
+    assert len(span.occupancy) == 9
+    assert span.occupancy == [1.0, 1.0, 1.0, 1.0, 0.0, 0.0, 1.0, 1.0, 1.0]
+
+
 def test_a_gap_says_how_many_rows_are_missing_in_it() -> None:
     """断档给出这一段本该有多少行——「断了 46 秒」看不出丢了 45 行。"""
     span = steps.axis_span([0, 1000, 2000, 3000, 4000, 50_000], slots=5)
@@ -143,6 +172,34 @@ def test_the_longest_gaps_survive_the_cap() -> None:
     widths = [gap["until"] - gap["since"] for gap in span.gaps]
     assert len(widths) == 20
     assert widths == sorted(widths, reverse=True)
+
+
+def test_dropped_bins_subtract_what_stayed_from_what_came_in() -> None:
+    """逐桶的丢弃段 = 进来的减留下的，两份铺在同一条轴上。"""
+    before = steps.spread_of([1.0, 2.0, 3.0, 4.0], buckets=2)
+    after = steps.spread_of([3.0, 4.0], buckets=2, low=1.0, high=4.0)
+    assert steps.dropped_bins(before, after) == [2.0, 0.0]
+
+
+def test_dropped_bins_never_report_more_kept_than_came_in() -> None:
+    """减出负数一律夹回 0：那说明两条轴对不上，不许把留下的画成丢掉的。"""
+    before = steps.spread_of([1.0, 2.0], buckets=2)
+    after = steps.spread_of([1.0, 1.0, 2.0], buckets=2, low=1.0, high=2.0)
+    assert steps.dropped_bins(before, after) == [0.0, 0.0]
+
+
+def test_dropped_bins_count_the_whole_bucket_when_nothing_stayed() -> None:
+    """留下的那一份一根柱都没有时，进来的整桶都是被丢掉的。"""
+    before = steps.spread_of([1.0, 2.0], buckets=2)
+    assert steps.dropped_bins(before, steps.spread_of([])) == [1.0, 1.0]
+
+
+def test_a_column_of_bins_carries_the_dropped_share_it_was_given() -> None:
+    """逐桶的丢弃段原样挂到这一列上。"""
+    bins = steps.column_bins(
+        "温度", steps.spread_of([1.0, 2.0], buckets=2), dropped=[1.0, 0.0]
+    )
+    assert bins.dropped == [1.0, 0.0]
 
 
 def test_attribution_ranks_the_culprits_and_skips_the_innocent() -> None:

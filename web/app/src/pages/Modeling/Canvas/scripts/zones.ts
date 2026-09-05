@@ -31,6 +31,9 @@ export const TABLE_ZONE: ReportZone = 'table'
 /** 「对比图」那一区：唯一一个再分主体位与辅图格的区（规格 §3.2）。 */
 export const CHART_ZONE: ReportZone = 'charts'
 
+/** 「怎么算的」那一区：公式摆在这儿，而公式不是块（规格 §6）。 */
+export const FORMULA_ZONE: ReportZone = 'formula'
+
 /** 摆在主体视图之前的四区。 */
 export const LEAD_ZONES: readonly ReportZone[] = ZONE_ORDER.filter(
   (zone) => zone !== TABLE_ZONE,
@@ -75,4 +78,23 @@ export function blocksOfPort<T extends { port: string }>(
   port: string,
 ): T[] {
   return blocks.filter((block) => block.port === port)
+}
+
+/**
+ * 给某一区留一个位置，哪怕它一块都没有。
+ *
+ * ⚠ 公式随算子代码走、不随运行走，因此不是块（规格 §6）：只按块分区的话，④ 区
+ * 在「有公式没块」的算子上整个不出现，而那正是最该有公式的那几个。
+ * Args: groups 已经按 `ZONE_ORDER` 排好的分组；zone 要留位置的那一区。
+ */
+export function withZone<T>(
+  groups: readonly ZoneGroup<T>[],
+  zone: ReportZone,
+): ZoneGroup<T>[] {
+  if (groups.some((group) => group.zone === zone)) return [...groups]
+  const seat = ZONE_ORDER.indexOf(zone)
+  const at = groups.findIndex((group) => ZONE_ORDER.indexOf(group.zone) > seat)
+  const one: ZoneGroup<T> = { zone, blocks: [] }
+  if (at < 0) return [...groups, one]
+  return [...groups.slice(0, at), one, ...groups.slice(at)]
 }

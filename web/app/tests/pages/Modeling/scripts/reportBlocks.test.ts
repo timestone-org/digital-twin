@@ -201,6 +201,33 @@ describe('分布与参考线', () => {
     expect(bins[0]?.marks).toEqual([{ at: 3, label: '上界', intent: 'danger' }])
   })
 
+  // ⚠ 半条曲线画不出来：只有均值没有 σ 时，那条钟形线连宽度都定不下来
+  it('正态参考曲线缺一个参数就整条不画', () => {
+    const columns = binsOf({
+      by_column: [
+        { key: 'a', curve: { mean: 0.5, sd: 1.5 } },
+        { key: 'b', curve: { mean: 0.5 } },
+        { key: 'c' },
+      ],
+    })
+
+    expect(columns[0]?.curve).toEqual({ mean: 0.5, sd: 1.5 })
+    expect(columns[1]?.curve).toBeNull()
+    expect(columns[2]?.curve).toBeNull()
+  })
+
+  it('逐桶的丢弃段读成数组，没有就是空的一份', () => {
+    const columns = binsOf({
+      by_column: [
+        { key: 'a', bins: [3, 2], dropped: [1, 'x'] },
+        { key: 'b', bins: [3, 2] },
+      ],
+    })
+
+    expect(columns[0]?.dropped).toEqual([1])
+    expect(columns[1]?.dropped).toEqual([])
+  })
+
   it('落在轴外的那一撮没有就是 null，不是 0 根', () => {
     expect(binsOf({ by_column: [{ key: 'a' }] })[0]?.offAxis).toBeNull()
     expect(

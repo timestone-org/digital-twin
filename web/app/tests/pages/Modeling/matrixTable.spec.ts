@@ -257,9 +257,7 @@ describe('颜色不作唯一编码', () => {
 
     expect(alphaOf(wrapper, '500')).toBeCloseTo(0.7, 5)
     expect(alphaOf(wrapper, '100')).toBeGreaterThan(alphaOf(wrapper, '500'))
-    expect(
-      wrapper.findAll('.dt-ml-matrix__cell--miss.is-deep'),
-    ).toHaveLength(0)
+    expect(wrapper.findAll('.dt-ml-matrix__cell--miss.is-deep')).toHaveLength(0)
     expect(SOURCE).toContain('color: var(--text-primary)')
   })
 

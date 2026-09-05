@@ -11,6 +11,7 @@ import {
   blocksOfPort,
   groupByZone,
   isReportZone,
+  withZone,
 } from '@/pages/Modeling/Canvas/scripts/zones'
 
 function blockOf(zone: (typeof ZONE_ORDER)[number], port = '') {
@@ -69,5 +70,35 @@ describe('按端口挑块', () => {
     expect(blocksOfPort(blocks, '')).toHaveLength(1)
     expect(blocksOfPort(blocks, 'train')[0]?.port).toBe('train')
     expect(blocksOfPort(blocks, 'test')).toEqual([])
+  })
+})
+
+describe('给一区留位置', () => {
+  // ⚠ 公式不是块：只按块分区的话，「有公式没块」的算子上 ④ 区整个不出现
+  it('那一区一块都没有时也给它留一格', () => {
+    const groups = withZone(
+      groupByZone([blockOf('step'), blockOf('table')]),
+      'formula',
+    )
+
+    expect(groups.map((group) => group.zone)).toEqual([
+      'step',
+      'formula',
+      'table',
+    ])
+    expect(groups[1]?.blocks).toEqual([])
+  })
+
+  it('那一区已经有块时原样返回，不多留一格', () => {
+    const groups = withZone(groupByZone([blockOf('formula')]), 'formula')
+
+    expect(groups).toHaveLength(1)
+    expect(groups[0]?.blocks).toHaveLength(1)
+  })
+
+  it('它排在最后一区之后时接在末尾', () => {
+    const groups = withZone(groupByZone([blockOf('step')]), 'table')
+
+    expect(groups.map((group) => group.zone)).toEqual(['step', 'table'])
   })
 })

@@ -164,10 +164,17 @@ describe('PR 曲线', () => {
   })
 
   // ⚠ 一个「全押正类」的模型精确率恰好等于正类占比：这条线才是 PR 的判据
+  // ⚠ 这四行的正类占比恰好是 0.5，「读基线」与「写死 0.5」在它上面同值；再钉
+  // 一份占比 0.3 的，两种写法才分得开
   it('基线是正类占比那条横线，不是对角线', () => {
+    const skewed = buildCurve({ ...PR, baseline: 0.3 }, 'pr')
+
     expect(view.diagonal).toBe(false)
     expect(view.rules).toEqual([
       { at: 0.5, label: '正类占比', intent: 'reference' },
+    ])
+    expect(skewed.rules).toEqual([
+      { at: 0.3, label: '正类占比', intent: 'reference' },
     ])
   })
 
@@ -176,7 +183,13 @@ describe('PR 曲线', () => {
       ...PR,
       items: [
         ...PR.items,
-        { name: '1.000', threshold: 1, recall: 0, precision: null, value: null },
+        {
+          name: '1.000',
+          threshold: 1,
+          recall: 0,
+          precision: null,
+          value: null,
+        },
       ],
     }
     const made = buildCurve(blind, 'pr')

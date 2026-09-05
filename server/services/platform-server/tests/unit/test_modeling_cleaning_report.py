@@ -208,10 +208,12 @@ def test_the_null_ratio_is_paired_before_and_after_over_one_denominator() -> (
         {
             "key": SECOND,
             "bins": [0.25, 0.5],
+            "dropped": [],
             "low": 0.0,
             "high": 1.0,
             "marks": [],
             "off_axis": None,
+            "curve": None,
         }
     ]
 
@@ -454,6 +456,33 @@ def test_the_blank_rows_stand_on_their_own_bar_off_the_axis() -> None:
     assert column["off_axis"] == {"label": OFF_AXIS_BLANK, "count": 2}
     assert sum(column["bins"]) == 3.0
     assert (column["low"], column["high"]) == (1.0, 9.0)
+
+
+def test_the_rows_a_filter_cut_are_shaded_bucket_by_bucket() -> None:
+    """被筛掉的那些行逐桶标出来：只报一个总数看不出这一刀砍在哪一头。
+
+    ⚠ 三行落在轴上（1 / 5 / 9），`>=5` 只砍掉最左那一行——丢弃段整段照搬桶高
+    的话，这张图会把留下的两行也画成丢弃。
+    """
+    column = blocks_of(
+        "filter_rows", gapped(), column=FIRST, op="gte", value=5.0
+    )["bins"].payload["by_column"][0]
+    assert sum(column["bins"]) == 3.0
+    assert sum(column["dropped"]) == 1.0
+    assert column["dropped"][0] == 1.0
+    assert column["dropped"][-1] == 0.0
+
+
+def test_a_judge_that_keeps_only_blanks_shades_every_bucket_on_the_axis() -> (
+    None
+):
+    """空值档留下的全在轴外，故轴上那三行整个是丢弃段。"""
+    column = blocks_of("filter_rows", gapped(), column=FIRST, op="is_blank")[
+        "bins"
+    ].payload["by_column"][0]
+    assert sum(column["dropped"]) == 3.0
+    assert column["dropped"][0] == 1.0
+    assert column["dropped"][-1] == 1.0
 
 
 def test_the_threshold_gets_a_line_on_the_histogram() -> None:

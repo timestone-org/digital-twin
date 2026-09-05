@@ -524,3 +524,63 @@ describe('六样各自缺席时的退化', () => {
     ).toContain('这一块没有可画的模型内部结构')
   })
 })
+
+/** 后端实测：`linear_regression` 的「残差对预测值」。 */
+const RESIDUAL_PAYLOAD = {
+  importances: [],
+  ranges: [],
+  tree: null,
+  pdp: [],
+  clouds: [
+    {
+      key: 'residual',
+      name: '残差',
+      mode: 'residual',
+      x_label: '预测值（千瓦时）',
+      y_label: '残差（千瓦时）',
+      points: [
+        [1245.8, 40],
+        [1385, 40],
+        [1524.21, 40],
+      ],
+    },
+  ],
+  loadings: [],
+  explained: [],
+  is_primary: true,
+}
+
+describe('线性回归的诊断散点', () => {
+  it('一张图一块散点，画法与轴名照后端给的走', () => {
+    const plots = mounted(RESIDUAL_PAYLOAD).findAllComponents(ScatterPlot)
+
+    expect(plots).toHaveLength(1)
+    expect(plots[0]?.props('mode')).toBe('residual')
+    expect(plots[0]?.props('xLabel')).toBe('预测值（千瓦时）')
+    expect(plots[0]?.props('yLabel')).toBe('残差（千瓦时）')
+  })
+
+  // ⚠ 这一块只有散点：漏了它的话空态会盖在图上，读起来是「这一步什么都没算」
+  it('只有散点时不摆空态', () => {
+    expect(mounted(RESIDUAL_PAYLOAD).text()).not.toContain(
+      '这一块没有可画的模型内部结构',
+    )
+  })
+
+  it('两张散点各摆一张，不并进同一张', () => {
+    const clouds = RESIDUAL_PAYLOAD.clouds
+    const plots = mounted({
+      ...RESIDUAL_PAYLOAD,
+      clouds: [...clouds, { ...clouds[0], key: 'truth', mode: 'pairs' }],
+    }).findAllComponents(ScatterPlot)
+
+    expect(plots).toHaveLength(2)
+    expect(plots[1]?.props('mode')).toBe('pairs')
+  })
+
+  it('一张散点都没有时照旧摆空态', () => {
+    expect(mounted({ ...RESIDUAL_PAYLOAD, clouds: [] }).text()).toContain(
+      '这一块没有可画的模型内部结构',
+    )
+  })
+})

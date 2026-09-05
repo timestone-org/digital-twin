@@ -50,6 +50,17 @@ HAND: tuple[Row, ...] = (
 # 上面那四行的 AUC 与 AP：AUC = 3/4 对正负配对，AP = 1×0.5 + 2/3×0.5
 HAND_AUC = 0.75
 HAND_AP = 5 / 6
+# 正负各半的夹具上「读真实正类占比」与「写死 0.5」同值，基线写错也全绿；正类
+# 占比刻意偏成 0.3，且 1 − 0.3 也不等于 0.3，把正负两个分子也分辨开
+SKEWED: tuple[Row, ...] = tuple(
+    (
+        1.0 if seat in {5, 7, 9} else 0.0,
+        1.0 if seat >= 5 else 0.0,
+        seat / 10.0 + 0.05,
+    )
+    for seat in range(10)
+)
+SKEWED_POSITIVE_RATE = 0.3
 
 
 def scored(
@@ -186,10 +197,18 @@ def test_the_average_precision_is_the_hand_computed_five_sixths() -> None:
 
 
 def test_the_positive_share_is_the_pr_baseline() -> None:
-    """正类占比同时是关键数字与 PR 曲线的基线：两处必须是同一个数。"""
-    blocks = ran(scored(HAND)).report()
-    assert stat_of(blocks, "positive_rate") == pytest.approx(0.5)
-    assert block_of(blocks, "PR 曲线").payload["baseline"] == pytest.approx(0.5)
+    """正类占比同时是关键数字与 PR 曲线的基线：两处必须是同一个数。
+
+    ⚠ 夹具的正类占比不是 0.5：正负各半时「读真实正类占比」「写死 0.5」「读负类
+    占比」三种写法同值，基线画错了照样全绿。
+    """
+    blocks = ran(scored(SKEWED)).report()
+    share = stat_of(blocks, "positive_rate")
+    baseline = block_of(blocks, "PR 曲线").payload["baseline"]
+    assert share == pytest.approx(SKEWED_POSITIVE_RATE)
+    assert baseline == pytest.approx(SKEWED_POSITIVE_RATE)
+    assert baseline != pytest.approx(0.5)
+    assert baseline != pytest.approx(1 - SKEWED_POSITIVE_RATE)
 
 
 def test_the_three_key_numbers_are_never_colour_banded() -> None:

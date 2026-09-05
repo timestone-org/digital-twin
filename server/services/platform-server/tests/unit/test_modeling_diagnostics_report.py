@@ -181,6 +181,34 @@ def test_the_residual_report_draws_qq_and_drift_when_it_can() -> None:
     ]
 
 
+def test_the_residual_histogram_carries_the_normal_curve_to_compare_with() -> (
+    None
+):
+    """直方图带上同均值同方差的正态曲线：两个数字印在别处，形状要自己比。
+
+    ⚠ 参数取自这一份残差本身——写死一条标准正态的话，这条曲线与柱子根本不在
+    同一个量级上。
+    """
+    blocks = ran(
+        "residual_analysis", {"scored": scored(drifting(48), has_index=True)}
+    ).report()
+    column = block_of(blocks, "残差分布").payload["by_column"][0]
+    named = items_of(blocks, "残差统计量")
+    stats = {item["name"]: item["value"] for item in named}
+    assert column["curve"] == {
+        "mean": stats["偏均值"],
+        "sd": stats["离散度"],
+    }
+
+
+def test_a_flat_residual_gets_no_normal_curve_at_all() -> None:
+    """σ=0 时不画：那条曲线会退化成一根竖直的针。"""
+    blocks = ran(
+        "residual_analysis", {"scored": scored(((3.0, 1.0), (5.0, 3.0)))}
+    ).report()
+    assert block_of(blocks, "残差分布").payload["by_column"][0]["curve"] is None
+
+
 def test_the_residual_stats_carry_the_chinese_names() -> None:
     """五个键补上中文名：界面上今天印的是裸 snake_case。"""
     blocks = ran(

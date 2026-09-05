@@ -30,13 +30,7 @@ import type {
   FormulaMaker,
   FormulaSpec,
 } from './formulaArgs'
-import {
-  frameAt,
-  modelAt,
-  numberAt,
-  percent,
-  textAt,
-} from './formulaArgs'
+import { frameAt, modelAt, numberAt, percent, textAt } from './formulaArgs'
 import { CLEAN_FORMULAS } from './formulaClean'
 import { EVAL_FORMULAS } from './formulaEval'
 import { FEATURE_FORMULAS } from './formulaFeature'
@@ -47,6 +41,10 @@ export type { FormulaContext, FormulaLegend, FormulaSpec }
 
 // 实得比例与配置比例差到这个数才值得说一句
 const RATIO_GAP = 0.005
+
+// 判正类的出厂阈值。⚠ 与后端 `regression.py::_DECISION_THRESHOLD` 同一个数：
+// 存量运行的 config 快照里没有这个键，读不到时两边必须落在同一个值上
+const DEFAULT_THRESHOLD = 0.5
 
 /**
  * 代不进系数时那句话。四种「没有」措辞各不相同，合并了就分不清是哪一种。
@@ -313,9 +311,15 @@ function splitOrder(context: FormulaContext): FormulaSpec {
   }
 }
 
+/** 判正类的阈值：这一次运行配的那个，配不出来时退回出厂值。 */
+function thresholdOf(context: FormulaContext): number {
+  return numberAt(context.config, 'positive_threshold') ?? DEFAULT_THRESHOLD
+}
+
 function logitScore(context: FormulaContext): FormulaSpec {
+  const line = niceNumber(thresholdOf(context))
   return linearShape(context, 'score', '判别式 z', varOf('z'), [
-    '⚠ z 还要过一层 sigmoid 再跟 0.5 比，别把这些系数当线性回归的系数直接读。',
+    `⚠ z 还要过一层 sigmoid 再跟 ${line} 比，别把这些系数当线性回归的系数直接读。`,
   ])
 }
 
@@ -341,11 +345,12 @@ function logitDecide(context: FormulaContext): FormulaSpec {
   const model = modelAt(context.ports)
   const [low, high] = model?.classes ?? []
   const known = low !== undefined && high !== undefined
+  const line = niceNumber(thresholdOf(context))
   const rule = (small: FormulaTerm, large: FormulaTerm): FormulaNode[] => [
     run(nameOf('ŷ'), opOf('=')),
     cases([
-      { when: 'p(x) ≥ 0.5', then: [run(large)] },
-      { when: 'p(x) < 0.5', then: [run(small)] },
+      { when: `p(x) ≥ ${line}`, then: [run(large)] },
+      { when: `p(x) < ${line}`, then: [run(small)] },
     ]),
   ]
   return {
@@ -357,7 +362,7 @@ function logitDecide(context: FormulaContext): FormulaSpec {
     isOpen: false,
     legend: [{ symbol: 'c₀ / c₁', text: '目标列的两个类目，升序；c₁ 是正类' }],
     notes: [
-      '阈值 0.5 是写死在算子里的常量，既不是超参也不进结果摘要：类目不平衡时它调不了也看不见。',
+      `判正类的阈值是超参，这一次配的是 ${line}：全部分类指标都只是这一个阈值上的切片，调低它换召回、调高换精确率。`,
       'penalty 与 solver 用的是 sklearn 的默认值，本仓只传了截距开关与 C。',
     ],
   }

@@ -17,8 +17,9 @@ type Item = Record<string, unknown>
 /**
  * 后端逐块的硬上限，与 `operators/reporting.py` 的 `MAX_*` 逐个对齐。
  *
- * ⚠ 条数正好等于上限时**无法判定**到底截没截：payload 不带原始总数。所以措辞
- * 一律是「已经列到上限」，不是「共 M 项」——后者要编一个数出来。
+ * ⚠ 除漏斗外，条数正好等于上限时**无法判定**到底截没截：那几处 payload 不带
+ * 原始总数，所以措辞一律是「已经列到上限」，不是「共 M 项」——后者要编一个数
+ * 出来。漏斗带回了 `funnel_total`，那一处才说得出真的截没截。
  */
 export const LEDGER_LIMITS = {
   funnel: 6,

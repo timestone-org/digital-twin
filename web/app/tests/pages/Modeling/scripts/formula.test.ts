@@ -367,6 +367,47 @@ describe('逻辑回归的公式', () => {
     expect(spec.notes[0]).toContain('0.5')
   })
 
+  // ⚠ 阈值升成超参之后照着「固定 0.5」讲的话，公式会与它自己的参数面板互相
+  // 打脸，而两侧用例、typecheck 与 lint 全绿（§13.2）
+  it('判正类的阈值照这一次配的那个印，不写死 0.5', () => {
+    const spec = pick(
+      formulasOf('logistic_regression', {
+        blocks: [],
+        ports,
+        config: { positive_threshold: 0.7 },
+      }),
+      'decide',
+    )
+
+    expect(formulaText(spec.filled ?? [])).toBe(
+      'y = { 1 若 p(x) >= 0.7; 0 若 p(x) < 0.7 }',
+    )
+    expect(spec.notes[0]).toContain('0.7')
+    expect(spec.notes[0]).not.toContain('写死')
+  })
+
+  it('判别式那句提醒里的阈值也跟着配置走', () => {
+    const spec = pick(
+      formulasOf('logistic_regression', {
+        blocks: [],
+        ports,
+        config: { positive_threshold: 0.7 },
+      }),
+      'score',
+    )
+
+    expect(spec.notes[0]).toContain('跟 0.7 比')
+  })
+
+  it('config 里读不出阈值时退回出厂值，与后端落在同一个数上', () => {
+    const spec = pick(
+      formulasOf('logistic_regression', { blocks: [], ports, config: {} }),
+      'decide',
+    )
+
+    expect(formulaText(spec.filled ?? [])).toContain('p(x) >= 0.5')
+  })
+
   it('摘要里没有类目时不硬编一个正类出来', () => {
     const blind = model({ classes: [] })
     const spec = pick(
@@ -425,7 +466,11 @@ describe('训练测试切分的公式', () => {
 
   it('两路行数取不到时只出符号态', () => {
     const spec = pick(
-      formulasOf('split_dataset', { blocks: [], ports: [], config: { test_ratio: 0.2 } }),
+      formulasOf('split_dataset', {
+        blocks: [],
+        ports: [],
+        config: { test_ratio: 0.2 },
+      }),
       'size',
     )
 
@@ -478,7 +523,11 @@ describe('训练测试切分的公式', () => {
 
   it('没记下切分方式时说的是「没记下方式」而不是「没有行数」', () => {
     const spec = pick(
-      formulasOf('split_dataset', { blocks: [], ports: split(8, 2), config: {} }),
+      formulasOf('split_dataset', {
+        blocks: [],
+        ports: split(8, 2),
+        config: {},
+      }),
       'order',
     )
 
@@ -488,7 +537,11 @@ describe('训练测试切分的公式', () => {
 
   it('两路行数缺席时的措辞另算一档', () => {
     const spec = pick(
-      formulasOf('split_dataset', { blocks: [], ports: [], config: { method: 'random' } }),
+      formulasOf('split_dataset', {
+        blocks: [],
+        ports: [],
+        config: { method: 'random' },
+      }),
       'order',
     )
 
@@ -507,7 +560,11 @@ describe('树回归的公式', () => {
 
   it('通道 B 画不出系数是正常的，措辞要说清这一点', () => {
     const spec = pick(
-      formulasOf('tree_regressor', { blocks: [], ports, config: { shape: 'forest' } }),
+      formulasOf('tree_regressor', {
+        blocks: [],
+        ports,
+        config: { shape: 'forest' },
+      }),
       'ensemble',
     )
 
@@ -534,7 +591,11 @@ describe('树回归的公式', () => {
 
   it('梯度提升换一副骨架，并交代改不了的学习率', () => {
     const spec = pick(
-      formulasOf('tree_regressor', { blocks: [], ports, config: { shape: 'gbdt' } }),
+      formulasOf('tree_regressor', {
+        blocks: [],
+        ports,
+        config: { shape: 'gbdt' },
+      }),
       'ensemble',
     )
 

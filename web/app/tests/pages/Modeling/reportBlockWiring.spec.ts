@@ -44,7 +44,12 @@ const ROWS = {
     ratio_actual: 1.0,
     funnel: [
       { name: '进来', value: 48, unit: '行', note: '' },
-      { name: '被判缺失', value: 0, unit: '行', note: '判据列里有一个空就丢这行' },
+      {
+        name: '被判缺失',
+        value: 0,
+        unit: '行',
+        note: '判据列里有一个空就丢这行',
+      },
       { name: '留下', value: 48, unit: '行', note: '' },
     ],
     by_column: [],
@@ -76,7 +81,13 @@ const CELLS = {
   tier: 0,
   payload: {
     by_column: [
-      { key: '温度', changed: 48, low: null, high: null, samples: [20.0, 20.7] },
+      {
+        key: '温度',
+        changed: 48,
+        low: null,
+        high: null,
+        samples: [20.0, 20.7],
+      },
     ],
     notes: [
       {
@@ -117,7 +128,14 @@ const BINS = {
   tier: 1,
   payload: {
     by_column: [
-      { key: '温度', bins: [0.0], low: 0.0, high: 1.0, marks: [], off_axis: null },
+      {
+        key: '温度',
+        bins: [0.0],
+        low: 0.0,
+        high: 1.0,
+        marks: [],
+        off_axis: null,
+      },
     ],
     is_primary: true,
     notes: [{ level: 'hint', text: '空的格一格都没有' }],
@@ -331,7 +349,10 @@ describe('降档留痕摆在块流里', () => {
 
   it('降到最后一档时后端那句说明也印出来', () => {
     const wrapper = mount(ReportBlocks, {
-      props: { blocks: [], note: '这一步的讲解太大，只留下了每一步都有的那几行' },
+      props: {
+        blocks: [],
+        note: '这一步的讲解太大，只留下了每一步都有的那几行',
+      },
     })
 
     expect(wrapper.text()).toContain('只留下了每一步都有的那几行')

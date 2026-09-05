@@ -1,7 +1,7 @@
 <script setup lang="ts">
 /**
  * @fileoverview 阈值滑杆：拖到哪一档，混淆矩阵与四个指标卡就跟到哪一档
- * （结果展示规格 §13.3）。轨道上另有一条竖线，标着打分时真正用的那个阈值。
+ * （结果展示规格 §13.3）。轨道上另有一条竖线，标着打分那一刀。
  *
  * ⚠ 查的是后端给的那张网格，一个概率都不重算：前端手上只有抽样过的散点，
  * 拿它现算的指标与同屏那几张卡对不上账，同屏两个数打架比没有这张图更坏。
@@ -61,11 +61,20 @@ const markStyle = computed(() => {
   return { left: `${share.toFixed(MARK_DIGITS)}%` }
 })
 
+/**
+ * 竖线那一句。
+ *
+ * ⚠ 「打分时用的是 X」是假话：X 是从打分帧反推的——判成正类的行里最低的那个
+ * 概率，与用户配的那个超参可以不是同一个数。这里只说它是怎么来的。
+ * ⚠ 就近站的时候必须说出来：那一档的四格与 ② 区那张指标卡不是同一组数。
+ */
 const trainedText = computed(() => {
   const row = grid.value.rows[grid.value.trainedSeat]
-  const near = grid.value.isExact ? '' : '最近的一档是 '
   if (row === undefined) return ''
-  return `竖线是打分时用的那个阈值，${near}${row.text}（第 ${grid.value.trainedSeat + 1} 档，共 ${grid.value.rows.length} 档）`
+  const seat = `（第 ${grid.value.trainedSeat + 1} 档，共 ${grid.value.rows.length} 档）`
+  const head = '竖线是打分那一刀：判成正类的最低概率'
+  if (grid.value.isExact) return `${head} ${row.text}${seat}`
+  return `${head}不在网格上，就近站在 ${row.text}${seat}，四个数与上面那张指标卡会有出入`
 })
 
 const readText = computed(

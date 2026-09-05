@@ -110,7 +110,10 @@ function castRule(context: FormulaContext): FormulaSpec {
   const rows: { when: string; then: FormulaNode[] }[] = [
     { when: 'v 是空', then: [run(varOf('∅'))] },
     { when: 'v 是 true / false', then: [run(varOf('1.0 / 0.0'))] },
-    { when: 'v 解析得动', then: [run(nameOf(`${to === '' ? 'number' : to}(v)`))] },
+    {
+      when: 'v 解析得动',
+      then: [run(nameOf(`${to === '' ? 'number' : to}(v)`))],
+    },
     {
       when: onError === 'error' ? '解析不动（当前配置）' : '解析不动',
       then: [run(onError === 'error' ? varOf('当场报错') : varOf('∅'))],
@@ -235,13 +238,22 @@ function filterRule(context: FormulaContext): FormulaSpec {
 function resampleBucket(context: FormulaContext): FormulaSpec {
   const axis = blockAt(context.blocks, 'axis')
   const width = axis === null ? null : numberIn(axis.payload, BUCKET_MS)
-  const offset = axis === null ? null : numberIn(axis.payload, 'tz_offset_minutes')
+  const offset =
+    axis === null ? null : numberIn(axis.payload, 'tz_offset_minutes')
   const agg = textAt(context.config, 'agg')
   return {
     id: 'bucket',
     title: '一行落进哪个桶',
     symbolic: [
-      run(nameOf('b(t)'), opOf('='), varOf('⌊(t + Δ) / w⌋'), opOf('·'), varOf('w'), opOf('−'), varOf('Δ')),
+      run(
+        nameOf('b(t)'),
+        opOf('='),
+        varOf('⌊(t + Δ) / w⌋'),
+        opOf('·'),
+        varOf('w'),
+        opOf('−'),
+        varOf('Δ'),
+      ),
     ],
     filled:
       width === null || offset === null
@@ -256,7 +268,9 @@ function resampleBucket(context: FormulaContext): FormulaSpec {
               varOf('Δ'),
               opOf('='),
               numOf(offset),
-              nameOf(`分钟（UTC${offset < 0 ? '' : '+'}${niceNumber(offset / 60)}）`),
+              nameOf(
+                `分钟（UTC${offset < 0 ? '' : '+'}${niceNumber(offset / 60)}）`,
+              ),
             ),
           ],
     fallback: width === null || offset === null ? NO_BLOCK : null,
@@ -285,7 +299,11 @@ function fillValue(context: FormulaContext): FormulaSpec {
       run(
         varOf('x̂_c'),
         opOf('='),
-        nameOf(strategy === 'value' ? 'value' : `${strategy === '' ? 'mean' : strategy}`),
+        nameOf(
+          strategy === 'value'
+            ? 'value'
+            : `${strategy === '' ? 'mean' : strategy}`,
+        ),
         varOf('{ x_{i,c} : i ∈ 训练行, x ≠ ∅ }'),
       ),
     ],
@@ -317,11 +335,21 @@ function clipBound(context: FormulaContext): FormulaSpec {
       ? [
           run(varOf('σ'), opOf('=')),
           sqrt([frac([run(varOf('Σ(xᵢ − μ)²'))], [run(varOf('n'))])]),
-          run(opOf(','), varOf('[lo, hi]'), opOf('='), varOf('[μ − kσ, μ + kσ]')),
+          run(
+            opOf(','),
+            varOf('[lo, hi]'),
+            opOf('='),
+            varOf('[μ − kσ, μ + kσ]'),
+          ),
         ]
       : [
           run(varOf('IQR'), opOf('='), varOf('Q₃ − Q₁')),
-          run(opOf(','), varOf('[lo, hi]'), opOf('='), varOf('[Q₁ − k·IQR, Q₃ + k·IQR]')),
+          run(
+            opOf(','),
+            varOf('[lo, hi]'),
+            opOf('='),
+            varOf('[Q₁ − k·IQR, Q₃ + k·IQR]'),
+          ),
         ],
     filled: head === null ? null : boundLine(head[0], head[1], isZ),
     fallback: head === null ? NO_BLOCK : null,
@@ -372,8 +400,20 @@ function boundLine(
         numOf(numberIn(params, 'q3') ?? 0),
       ]
   return [
-    run(nameOf(key), opOf('：'), ...lead, opOf(','), varOf('k'), opOf('='), numOf(k)),
-    run(varOf('[lo, hi]'), opOf('='), varOf(`[${niceNumber(low)}, ${niceNumber(high)}]`)),
+    run(
+      nameOf(key),
+      opOf('：'),
+      ...lead,
+      opOf(','),
+      varOf('k'),
+      opOf('='),
+      numOf(k),
+    ),
+    run(
+      varOf('[lo, hi]'),
+      opOf('='),
+      varOf(`[${niceNumber(low)}, ${niceNumber(high)}]`),
+    ),
   ]
 }
 

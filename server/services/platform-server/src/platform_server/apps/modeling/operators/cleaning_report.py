@@ -34,9 +34,11 @@ from platform_server.apps.modeling.operators.reporting import (
     rows_block,
 )
 from platform_server.apps.modeling.operators.steps import (
+    Spread,
     Stage,
     by_column,
     column_bins,
+    dropped_bins,
     dtype_changes,
     funnel_of,
     ratio_of,
@@ -458,6 +460,7 @@ def _filter_bins_block(run: FilterRun) -> ReportBlock | None:
         if run.is_blank_judge
         else ({"at": run.threshold, "label": "阈值", "intent": "danger"},)
     )
+    before = spread_of(numbers_of(run.before, run.column))
     return bins_block(
         BlockAt(
             zone="charts",
@@ -469,12 +472,29 @@ def _filter_bins_block(run: FilterRun) -> ReportBlock | None:
         [
             column_bins(
                 run.column,
-                spread_of(numbers_of(run.before, run.column)),
+                before,
                 off_label=OFF_AXIS_BLANK,
                 marks=marks,
+                dropped=_filter_dropped(run, before),
             )
         ],
     )
+
+
+def _filter_dropped(run: FilterRun, before: Spread) -> list[float]:
+    """逐桶被这一步筛掉的行数：同一条轴上，进来的减留下的。
+
+    ⚠ 留下的那份必须按**进来那条轴**铺（两端与桶数都照抄），各自定界的话两份
+    桶宽不同，逐桶相减减的是两条不同的轴。
+    Args: run, before。
+    """
+    after = spread_of(
+        numbers_of(run.after, run.column),
+        buckets=len(before.counts),
+        low=before.low,
+        high=before.high,
+    )
+    return dropped_bins(before, after)
 
 
 def _dtypes(frame: Frame) -> dict[str, str]:

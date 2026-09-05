@@ -183,6 +183,85 @@ describe('分布档', () => {
   })
 })
 
+describe('丢弃段与正态参考曲线', () => {
+  /** `filter_rows` 的真实产出：三行落在轴上，`>=5` 只砍掉最左那一行。 */
+  const CUT = blockOf(
+    {
+      by_column: [
+        {
+          key: '露点',
+          bins: [1.0, 1.0, 1.0],
+          dropped: [1.0, 0.0, 0.0],
+          low: 1.0,
+          high: 9.0,
+          marks: [{ at: 5.0, label: '阈值', intent: 'danger' }],
+          off_axis: { label: '空值（不在这条轴上）', count: 2 },
+        },
+      ],
+    },
+    '判据列的分布',
+  )
+
+  /** `residual_analysis` 的真实产出：残差直方 + 同均值同方差的正态曲线。 */
+  const RESIDUAL = blockOf(
+    {
+      by_column: [
+        {
+          key: 'residual',
+          bins: [1.0, 2.0, 1.0],
+          dropped: [],
+          low: -3.0,
+          high: 3.0,
+          marks: [{ at: 0, label: '零误差', intent: 'warning' }],
+          off_axis: null,
+          curve: { mean: 0.5, sd: 1.5 },
+        },
+      ],
+    },
+    '残差分布',
+  )
+
+  it('被筛掉的那一段画成斜纹，留下的那几桶一根斜纹都没有', () => {
+    const wrapper = mount(BinsBlock, { props: { block: CUT } })
+    const dropped = wrapper.findAll('.dt-ml-hist__bar-dropped')
+
+    expect(dropped).toHaveLength(1)
+    expect(dropped[0]?.find('title').text()).toBe(
+      '1 ~ 3.6667：1 行，其中 1 行被这一步筛掉',
+    )
+    expect(wrapper.findAll('.dt-ml-hist__bar-kept')).toHaveLength(2)
+  })
+
+  it('图下那行结论把丢弃的行数与占比一起说出来', () => {
+    const wrapper = mount(BinsBlock, { props: { block: CUT } })
+
+    expect(wrapper.find('.dt-ml-hist__summary').text()).toContain(
+      '被这一步筛掉 1 行（33.3%）',
+    )
+  })
+
+  it('一行都没丢的那一块不画斜纹也不摆图例', () => {
+    const wrapper = mount(BinsBlock, { props: { block: SOURCE } })
+
+    expect(wrapper.find('.dt-ml-hist__bar-dropped').exists()).toBe(false)
+    expect(wrapper.find('.dt-ml-hist__legend').exists()).toBe(false)
+  })
+
+  it('带了参数的那一列画出正态参考曲线', () => {
+    const wrapper = mount(BinsBlock, { props: { block: RESIDUAL } })
+    const curve = wrapper.find('.dt-ml-hist__curve')
+
+    expect(curve.exists()).toBe(true)
+    expect(curve.attributes('points')?.split(' ').length).toBe(49)
+  })
+
+  it('没带参数的那一列一条曲线都不画', () => {
+    const wrapper = mount(BinsBlock, { props: { block: SOURCE } })
+
+    expect(wrapper.find('.dt-ml-hist__curve').exists()).toBe(false)
+  })
+})
+
 describe('分布档的退化分支', () => {
   it('payload 整个是空的：照实说没有分布，不画一张空框', () => {
     const wrapper = mount(BinsBlock, { props: { block: blockOf({}) } })

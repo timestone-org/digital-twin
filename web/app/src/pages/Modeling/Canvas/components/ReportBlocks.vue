@@ -7,6 +7,8 @@
  * ⚠ 对比图那一区再分主体位与辅图格（规格 §3.2）：主体图独占一行 44rem，辅图
  * 走 22rem 起的网格。挤在同一排时图的宽度由图注那行字的长短决定，改一个字版式
  * 就变一档。
+ * ⚠ 公式不是块（规格 §6：它随算子代码走、不随运行走），但它摆在 ④ 区里，因此
+ * 从这里一并派发——分开渲染的话，同一区会出现两个标题，或者公式落到区外。
  */
 import { DtSkeleton } from '@dt/ui'
 import type { Component } from 'vue'
@@ -14,8 +16,16 @@ import { computed } from 'vue'
 
 import type { BlockKind, ReportBlock } from '../scripts/reportBlocks'
 import { isBlockKind } from '../scripts/reportBlocks'
+import type { FormulaSpec } from '../scripts/formulaCatalog'
 import type { ReportZone } from '../scripts/zones'
-import { CHART_ZONE, ZONE_ORDER, ZONE_TITLES, groupByZone } from '../scripts/zones'
+import {
+  CHART_ZONE,
+  FORMULA_ZONE,
+  ZONE_ORDER,
+  ZONE_TITLES,
+  groupByZone,
+  withZone,
+} from '../scripts/zones'
 
 import AxisBlock from './AxisBlock.vue'
 import BinsBlock from './BinsBlock.vue'
@@ -23,6 +33,7 @@ import BreakdownBlock from './BreakdownBlock.vue'
 import CellsBlock from './CellsBlock.vue'
 import ColumnsBlock from './ColumnsBlock.vue'
 import FitsBlock from './FitsBlock.vue'
+import FormulaBlock from './FormulaBlock.vue'
 import RowsBlock from './RowsBlock.vue'
 import StructureBlock from './StructureBlock.vue'
 import TruncationNotice from './TruncationNotice.vue'
@@ -46,6 +57,8 @@ const props = withDefaults(
     dropped?: readonly string[] | undefined
     /** 降到最后一档时后端留下的那句说明；空串 = 没降到那一档。 */
     note?: string | undefined
+    /** ④ 区的公式。骨架在前端、实参由调用方代好，这里只管摆。 */
+    formulas?: readonly FormulaSpec[] | undefined
   }>(),
   {
     blocks: () => [],
@@ -53,6 +66,7 @@ const props = withDefaults(
     pending: false,
     dropped: () => [],
     note: '',
+    formulas: () => [],
   },
 )
 
@@ -86,7 +100,14 @@ interface Lane {
   blocks: ReportBlock[]
 }
 
-const groups = computed(() => groupByZone(props.blocks, props.zones))
+const hasFormulas = computed(
+  () => props.formulas.length > 0 && props.zones.includes(FORMULA_ZONE),
+)
+
+const groups = computed(() => {
+  const found = groupByZone(props.blocks, props.zones)
+  return hasFormulas.value ? withZone(found, FORMULA_ZONE) : found
+})
 
 const holds = computed(() =>
   HOLDS.filter((hold) => props.zones.includes(hold.zone)),
@@ -120,6 +141,11 @@ function keyOf(block: ReportBlock): string {
 const hasTrace = computed(() => props.dropped.length > 0 || props.note !== '')
 
 const hasBody = computed(() => groups.value.length > 0 || hasTrace.value)
+
+/** 这一区要不要摆公式。⚠ 只有 ④ 区摆，别的区一条都不摆。 */
+function formulasIn(zone: ReportZone): readonly FormulaSpec[] {
+  return zone === FORMULA_ZONE && hasFormulas.value ? props.formulas : []
+}
 </script>
 
 <template>
@@ -154,6 +180,11 @@ const hasBody = computed(() => groups.value.length > 0 || hasTrace.value)
           :block="block"
         />
       </div>
+      <FormulaBlock
+        v-for="spec in formulasIn(group.zone)"
+        :key="spec.id"
+        :spec="spec"
+      />
     </section>
     <div v-if="hasTrace" class="dt-ml-blocks__gone">
       <p class="dt-ml-blocks__gone-title">这里本来还有几块，没能一起存下来</p>

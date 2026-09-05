@@ -421,7 +421,9 @@ describe('散点画幅：比率曲线', () => {
       '0.8',
       '1',
     ])
-    expect(view.yTicks.map((tick) => tick.text)).toEqual(view.xTicks.map((t) => t.text))
+    expect(view.yTicks.map((tick) => tick.text)).toEqual(
+      view.xTicks.map((t) => t.text),
+    )
   })
 
   it('画幅比另外四态高：两轴都是 0–1，横长纵短会把曲线压扁', () => {

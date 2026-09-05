@@ -224,7 +224,12 @@ const REGRESSION_METRICS = {
       { name: 'R²', key: 'r2', value: 0.99812382739212, score_kind: 'r2' },
       { name: 'RMSE', key: 'rmse', value: 0.5, score_kind: '' },
       { name: 'MAE', key: 'mae', value: 0.5, score_kind: '' },
-      { name: 'MAPE', key: 'mape', value: 5.34817879867047, score_kind: 'mape' },
+      {
+        name: 'MAPE',
+        key: 'mape',
+        value: 5.34817879867047,
+        score_kind: 'mape',
+      },
     ],
   },
 }
@@ -333,8 +338,16 @@ describe('取数与对齐', () => {
 
 describe('预处理那六个', () => {
   it('转坏的那一支按 on_error 说清是变空还是报错', () => {
-    const coerce = pick('cast_type', 'cast', contextOf([], { on_error: 'coerce' }))
-    const error = pick('cast_type', 'cast', contextOf([], { on_error: 'error' }))
+    const coerce = pick(
+      'cast_type',
+      'cast',
+      contextOf([], { on_error: 'coerce' }),
+    )
+    const error = pick(
+      'cast_type',
+      'cast',
+      contextOf([], { on_error: 'error' }),
+    )
 
     expect(coerce.notes.join('')).toContain('变成空值')
     expect(error.notes.join('')).toContain('整步报错')
@@ -457,9 +470,7 @@ describe('造特征那七个', () => {
     const context = contextOf([ONE_HOT_HITS], { max_categories: 20 })
 
     expect(filledOf('one_hot', 'encode', context)).toContain('班次=乙')
-    expect(pick('one_hot', 'encode', context).notes.join('')).toContain(
-      '全零',
-    )
+    expect(pick('one_hot', 'encode', context).notes.join('')).toContain('全零')
   })
 
   // ⚠ 分数断层在哪比排名本身更能指导调参
@@ -588,7 +599,11 @@ describe('评估那五个', () => {
   })
 
   it('三个误差指标都在，且点破它们带着量纲', () => {
-    const spec = pick('regression_metrics', 'errors', contextOf([REGRESSION_METRICS]))
+    const spec = pick(
+      'regression_metrics',
+      'errors',
+      contextOf([REGRESSION_METRICS]),
+    )
 
     expect(formulaText(spec.filled ?? [])).toContain('MAPE = 5.348')
     expect(spec.notes.join('')).toContain('没有公认的好坏线')
@@ -618,9 +633,9 @@ describe('评估那五个', () => {
     const context = contextOf([RESIDUAL_STATS])
 
     expect(filledOf('residual_analysis', 'spread', context)).toContain('0.25')
-    expect(pick('residual_analysis', 'spread', context).notes.join('')).toContain(
-      'n−1',
-    )
+    expect(
+      pick('residual_analysis', 'spread', context).notes.join(''),
+    ).toContain('n−1')
   })
 
   it('置换重要性把基线分与重复次数代进去', () => {
@@ -640,7 +655,10 @@ describe('评估那五个', () => {
   })
 
   it('前向链把配置折数与实得折数并排代出来', () => {
-    const context = contextOf([FOLD_ROWS], { folds: 4, method: 'forward_chain' })
+    const context = contextOf([FOLD_ROWS], {
+      folds: 4,
+      method: 'forward_chain',
+    })
     const text = filledOf('cross_validate', 'folds', context)
 
     expect(text).toContain('K = 4')
@@ -655,14 +673,18 @@ describe('评估那五个', () => {
     expect(pick('cross_validate', 'folds', context).notes.join('')).toContain(
       '未来的行去训过去',
     )
-    expect(pick('cross_validate', 'folds', context).notes.join('')).not.toContain(
-      '实得折数比配置少',
-    )
+    expect(
+      pick('cross_validate', 'folds', context).notes.join(''),
+    ).not.toContain('实得折数比配置少')
   })
 
   it('漏斗里没有实得折数那一级时代不进，也不编一个出来', () => {
     const bare = { ...FOLD_ROWS, payload: { funnel: [], by_column: [] } }
-    const spec = pick('cross_validate', 'folds', contextOf([bare], { folds: 4 }))
+    const spec = pick(
+      'cross_validate',
+      'folds',
+      contextOf([bare], { folds: 4 }),
+    )
 
     expect(spec.filled).toBeNull()
     expect(spec.fallback).toContain('没有这一块')
@@ -698,12 +720,24 @@ describe('退化分支：读不出来就不编', () => {
         by_column: [
           {
             key: '温度',
-            params: { k: 1.5, mean: null, sd: null, q1: 21.5, q3: 26.2, low: 14.45, high: 33.25 },
+            params: {
+              k: 1.5,
+              mean: null,
+              sd: null,
+              q1: 21.5,
+              q3: 26.2,
+              low: 14.45,
+              high: 33.25,
+            },
           },
         ],
       },
     }
-    const text = filledOf('clip_outlier', 'bound', contextOf([iqr], { method: 'iqr' }))
+    const text = filledOf(
+      'clip_outlier',
+      'bound',
+      contextOf([iqr], { method: 'iqr' }),
+    )
 
     expect(text).toContain('21.5')
     expect(text).toContain('26.2')
@@ -814,9 +848,9 @@ describe('退化分支：读不出来就不编', () => {
   })
 
   it('滞后档没有重复时不多说一句「配了几档」', () => {
-    expect(filledOf('lag_feature', 'shift', contextOf([], { lags: [1, 3] }))).not.toContain(
-      '配了',
-    )
+    expect(
+      filledOf('lag_feature', 'shift', contextOf([], { lags: [1, 3] })),
+    ).not.toContain('配了')
   })
 
   it('没配窗口时那句「前几行」写成符号，不写成 NaN', () => {
@@ -827,7 +861,11 @@ describe('退化分支：读不出来就不编', () => {
   })
 
   it('分类那条在没配正类时也画得出符号态', () => {
-    const spec = pick('classification_metrics', 'confusion', contextOf([CLASSIFY_METRICS]))
+    const spec = pick(
+      'classification_metrics',
+      'confusion',
+      contextOf([CLASSIFY_METRICS]),
+    )
 
     expect(spec.legend.some((one) => one.symbol === 'TP')).toBe(true)
   })
@@ -841,11 +879,17 @@ describe('退化分支：读不出来就不编', () => {
       },
     }
 
-    expect(pick('residual_analysis', 'spread', contextOf([half])).filled).toBeNull()
+    expect(
+      pick('residual_analysis', 'spread', contextOf([half])).filled,
+    ).toBeNull()
   })
 
   it('置换重要性没配重复次数时只代基线分', () => {
-    const text = filledOf('feature_importance', 'permutation', contextOf([IMPORTANCE_BASE]))
+    const text = filledOf(
+      'feature_importance',
+      'permutation',
+      contextOf([IMPORTANCE_BASE]),
+    )
 
     expect(text).toContain('0.9')
     expect(text).not.toContain('R =')

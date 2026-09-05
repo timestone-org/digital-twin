@@ -256,6 +256,53 @@ describe('跳过理由', () => {
   })
 })
 
+// logistic_regression：系数、这一列的 σ、几率比 e^β（`linearreport.py::_odds_item`）
+const ODDS = {
+  method: 'logit',
+  train_rows: 48,
+  total_rows: 60,
+  by_column: [
+    {
+      key: '负荷',
+      params: { coef: 2.1207, sigma: 1.4142, odds_ratio: 8.3362 },
+      skipped_reason: '',
+    },
+  ],
+}
+
+describe('几率比不是比率', () => {
+  it('e^β 按倍数印，不许乘 100 印成百分数', () => {
+    const shown = cells(blockOf(ODDS, '系数与几率比'))
+
+    expect(shown).toEqual(['负荷', '2.1207', '1.4142', '8.3362'])
+    expect(shown.join()).not.toContain('%')
+  })
+
+  it('表上那个数与算式里的那个数逐字相同', () => {
+    const wrapper = blockOf(ODDS, '系数与几率比')
+
+    expect(wrapper.find('.dt-ml-fits__fx-row').text()).toContain('e^β=8.3362')
+    expect(cells(wrapper).at(-1)).toBe('8.3362')
+  })
+
+  it('真的是 0–1 比率的那几个键照旧印成百分数', () => {
+    expect(cells(blockOf(FILL))[3]).toBe('37.5%')
+    expect(cells(blockOf(ONE_HOT)).slice(-2)).toEqual(['12.5%', '12.5%'])
+  })
+})
+
+describe('块标题与表名', () => {
+  it('标题只印一遍：表自己的名字说的是另一件事', () => {
+    const wrapper = blockOf(FILL, '系数与可比贡献')
+    const title = wrapper.find('.dt-ml-fits__title').text()
+    const caption = wrapper.find('caption').text()
+
+    expect(title).toBe('系数与可比贡献')
+    expect(caption).not.toBe(title)
+    expect(wrapper.text().split('系数与可比贡献').length - 1).toBe(1)
+  })
+})
+
 describe('图下那行结论', () => {
   function summaryOf(payload: Record<string, unknown>): string {
     return blockOf(payload).find('.dt-ml-fits__summary').text()

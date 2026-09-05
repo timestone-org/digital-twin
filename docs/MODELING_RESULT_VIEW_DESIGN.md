@@ -267,6 +267,7 @@ RUN_REPORT_MAX_BYTES  = 2 * 1024 * 1024
 
 **读法**：`块` = §4.3 的 block kind（`zone` 在括号里）；`图` = §7 的图元件；`公式` = LaTeX，实参来源在括号里；`后端` = 是否需要后端改动。
 **通用约定**（不再逐条重复）：每个算子的 ⑤ 区都保留既有主体视图（`FrameView`/`ModelView`/`MetricsView`）；每个算子的 ④ 区都有公式；参数 chips 一律从 `ModelingRun.graph.nodes[].config` 取（运行时冻结的快照，历史回看正确，**零后端**）。
+**⚠ `isPrimary` 只标在 `zone == 'charts'` 的块上**（§4.3），下表里别的区一个都不带——降档梯子第 2 档只认图区，别的区标了也没人读，反倒让人以为它有效。
 
 ### source（2 个）
 
@@ -318,14 +319,14 @@ RUN_REPORT_MAX_BYTES  = 2 * 1024 * 1024
 - **后端**：**要**。⚠ `tz_offset_minutes` 由运行环境注入、界面拿不到，必须进 `report`——按 UTC 切一天在东八区会整体偏 8 小时且每个数看着完全正常。顺手把 `cleaning.py:531` 每格一次的线性查列 `position_of` 提到循环外
 
 #### 7. `fill_missing` · 填缺失
-- **块**：`fits`(table, **isPrimary**) 逐列填充表 · `cells`(step) 填格数 · `bins`(charts) 填充前分布
+- **块**：`fits`(table) 逐列填充表 · `cells`(step) 填格数 · `bins`(charts) 填充前分布
 - **图**：`DtTable`（列 / 填充值 / 填了多少格 / 填前空值率 / 拟合样本数）· `HistogramChart` + 填充值竖线（用均值填 30% 的空会在正中堆出一根假柱、把方差压掉——只有图看得见）· `BarList` pairs（空值率前后）
 - **公式**：$\hat{x}_c=\operatorname{mean}/\operatorname{median}\{x_{i,c}: i\in\text{train},\,x\neq\varnothing\}$ 或 $\texttt{value}$；$P_c=\{i\in\text{train}: x_{i,c}\neq\varnothing\}$（**这个下标集单独讲**——它正是「用户拿全表均值核对填充值却对不上」的原因，`fitting.py:3-5` 的防泄漏是刻意设计）
 - **来源**：填充值已落 `fitted_json`（`preprocess.py:141`）→ 走 §4.5 的 `NodeRunOut.fitted`；填格数与训练行数走 `report`
 - **后端**：**要**（fitted 出口 + report）
 
 #### 8. `clip_outlier` · 离群裁剪
-- **块**：`fits`(table, **isPrimary**) 定界表 · `cells`(step) 触界计数 · `bins`(charts) 裁剪前分布
+- **块**：`fits`(table) 定界表 · `cells`(step) 触界计数 · `bins`(charts) 裁剪前分布
 - **图**：`DtTable`（列 / 方法 / k / μ,σ 或 Q1,Q3 / lo / hi）· `HistogramChart` + 两条界线（超界部分标红并堆到边界柱）· `BarList` 堆叠（夹到下界 / 夹到上界 / 未动）
 - **公式**：zscore $\mu=\frac1n\sum x_i,\ \sigma=\sqrt{\frac1n\sum(x_i-\mu)^2}$（**总体口径，除 $n$**），$[lo,hi]=[\mu-k\sigma,\ \mu+k\sigma]$；iqr $[Q_1-k\cdot\text{IQR},\ Q_3+k\cdot\text{IQR}]$。**代入实参**：μ=23.41、σ=1.83、k=3 ⇒ [17.92, 28.90]。**这是全模块第一处能把公式代上真参数的地方，做成范例**
 - **来源**：lo/hi 在 `fitted_json`；μ/σ/Q1/Q3 在 `preprocess.py:347-356` 算完即弃
@@ -337,7 +338,7 @@ RUN_REPORT_MAX_BYTES  = 2 * 1024 * 1024
 ### feature（7 个）
 
 #### 9. `standardize` · 标准化
-- **块**：`fits`(table, **isPrimary**) 逐列尺度 · `bins`(charts) 前后分布
+- **块**：`fits`(table) 逐列尺度 · `bins`(charts) 前后分布
 - **图**：`DtTable`（列 / 中心 μ 或 min / 跨度 σ 或 max−min / 训练行数 / 是否被跳过）· `BarList` pairs 区间模式（前后 min–p50–mean–max 四点，一眼看出哪列还是几百量级 = 被 skip 了）
 - **公式**：$z_j=\frac{x_j-\mu_j}{\sigma_j}$，$\sigma_j=\sqrt{\frac1n\sum(x_{ij}-\mu_j)^2}$（**总体口径**，`feature.py:182-186`）；minmax $z_j=\frac{x_j-\min_j}{\max_j-\min_j}$。逐列代入：$z_{\text{温度}}=\frac{x-27.75}{4.62}$
 - **来源**：`fitted_json` 的 center/scale
@@ -407,7 +408,7 @@ RUN_REPORT_MAX_BYTES  = 2 * 1024 * 1024
 - **版式**：按 §3.4 的页签处理两路 FrameView；两路 provenance 相同时出处只印一次
 
 #### 17. `linear_regression` · 线性回归
-- **块**（port=""）：`fits`(formula, **isPrimary**) 模型公式与系数 · `structure`(stats) 训练分 vs 测试分 · `structure`(step) 共线性告警
+- **块**（port=""）：`fits`(formula) 模型公式与系数 · `structure`(stats) 训练分 vs 测试分 · `structure`(step) 共线性告警
 - **图**：`FormulaBlock`（$\hat{y}=1403.2+3.21\cdot\text{温度}-0.84\cdot\text{负荷}$，**可抄走的一行式子，右上角复制成纯 ASCII**）· `DtTable` 系数表（值 / 符号 / **可比贡献 $\beta_j\sigma_j$**，排序可在 $|\beta|$ 与 $|\beta\sigma|$ 之间切）· `BarList` 权重条（**修好 D-1 与 D-5 之后才画得出来**）· scored 端口的 `ScatterPlot`×2 + `HistogramChart`（真值-预测 / 残差-预测 / 残差直方，**由 head 的 200 行前端现算，不必再接一个评估算子**，须标注「这 200 行来自摘要，time_order 下是测试段最早的 200 行」）
 - **公式**：$\hat{y}=\beta_0+\sum_j\beta_j x_j$；$\hat{\boldsymbol\beta}=\arg\min\sum_i\bigl(y_i-\beta_0-\sum_j\beta_jx_{ij}\bigr)^2+\alpha\sum_j\beta_j^2$，$\alpha=0$（none）或 $\texttt{ridge\_alpha}$（ridge）；岭解 $(\tilde X^\top\tilde X+\alpha I)\boldsymbol\beta=\tilde X^\top\tilde y$，已中心化故截距不进惩罚项
 - **来源**：`preview.fitted` 的 coef/intercept（已在传）
@@ -415,13 +416,13 @@ RUN_REPORT_MAX_BYTES  = 2 * 1024 * 1024
 - **必带告警**：上游没有 standardize 时按 $|\beta|$ 排序会把单位小的列顶到最前——`diagnostics.py:141-145` 已经把这条坑写下来了，展示侧还在犯
 
 #### 18. `logistic_regression` · 逻辑回归
-- **块**（port=""）：`fits`(formula, **isPrimary**) 判别式与几率比 · `breakdown`(charts) 训练集类目占比 · `structure`(stats) 正类与收敛
+- **块**（port=""）：`fits`(formula) 判别式与几率比 · `breakdown`(charts) 训练集类目占比 · `structure`(stats) 正类与收敛
 - **图**：`FormulaBlock` · `BarList`（$\exp(\beta_j)$，零线在 1.0——「这一列每加 1 个单位，出事的几率乘几倍」是逻辑回归唯一能讲给业务听的读法）· `BarList` 堆叠（类目占比）
-- **公式**：$z=\beta_0+\sum_j\beta_jx_j$；$p(x)=\sigma\bigl(\operatorname{clip}(z,-700,700)\bigr)=\frac{1}{1+e^{-z}}$；$\hat{y}=c_1$ if $p\ge 0.5$ else $c_0$，$(c_0<c_1)=\texttt{fitted.classes}$；$\hat{\boldsymbol\beta}=\arg\min\frac12\lVert\boldsymbol\beta\rVert_2^2+C\sum_i\log(1+e^{-\tilde y_i(\beta_0+\boldsymbol\beta^\top x_i)})$。业务读法：$\frac{p}{1-p}=e^{\beta_0}\prod_j(e^{\beta_j})^{x_j}$
+- **公式**：$z=\beta_0+\sum_j\beta_jx_j$；$p(x)=\sigma\bigl(\operatorname{clip}(z,-700,700)\bigr)=\frac{1}{1+e^{-z}}$；$\hat{y}=c_1$ if $p\ge\texttt{positive\_threshold}$ else $c_0$，$(c_0<c_1)=\texttt{fitted.classes}$；$\hat{\boldsymbol\beta}=\arg\min\frac12\lVert\boldsymbol\beta\rVert_2^2+C\sum_i\log(1+e^{-\tilde y_i(\beta_0+\boldsymbol\beta^\top x_i)})$。业务读法：$\frac{p}{1-p}=e^{\beta_0}\prod_j(e^{\beta_j})^{x_j}$
 - **来源**：`fitted.classes` **后端已在传**（`model.py:501-507`），`preview.ts:190-210` 一个字没读
 - **后端**：**要**（类目计数、`n_iter_`/收敛、概率饱和行数）
-- **必带三条 note**：① **这是过一层 sigmoid 再比 0.5**（今天那排权重条会被当成线性系数直接读，界面上没有任何一处拦这个误读）；② 阈值 0.5 是私有常量（`model.py:50`），既不是超参也不进摘要，类不平衡时用户改不了也看不见；③ penalty/solver 用的是 sklearn 默认（`estimators.py:198-200` 只传了 `fit_intercept` 与 `C`），公式里按默认写死并注明
-- **本批不做**：ROC / PR / 校准 / 阈值扫描——打分帧只有硬标签没有概率（`model.py:477-499`，注释自认「那是下一轮的事」）。见 §12-Q5
+- **必带四条 note**：① **这是过一层 sigmoid 再比阈值**（今天那排权重条会被当成线性系数直接读，界面上没有任何一处拦这个误读）；② 判正类的阈值是超参 `positive_threshold`（默认 0.5，§13.2），要连同「全部分类指标都只是这一个阈值上的切片」一起说；③ penalty/solver 用的是 sklearn 默认（`estimators.py:198-200` 只传了 `fit_intercept` 与 `C`），公式里按默认写死并注明；④ 打分结果每行都带正类概率（列 `y_proba`），换阈值不用重训
+- **概率那一路在 §13**：打分帧多带一列 `y_proba` 之后，ROC / PR / 校准曲线与阈值网格都摆在 `classification_metrics` 那一屏上，判正类的阈值同时升为超参 `positive_threshold`
 
 #### 19. `tree_regressor` · 树回归
 - **块**（port=""）：`structure`(charts, **isPrimary**) 重要性 / PDP / 训练区间 / 代表树 · `structure`(stats) 集成结构
@@ -452,6 +453,7 @@ RUN_REPORT_MAX_BYTES  = 2 * 1024 * 1024
 - **⚠ 正类匹配必须归一化**：config 的 `positive_label` 是 **float**（`evaluate.py:193`，default=1.0），而摘要里的 `labels` 是 **str**（`evaluate.py:328` 的 `_label_text`，1.0 → `"1"`）。**由后端出 `positive_label_text`**，前端只做字符串比对
 - **⚠ 正类可能不在 labels 里**：`labels = sorted({*truth, *predicted})` 只从测试集取。类别极不平衡、模型全押多数类时正类既没出现也没被预测过 → 矩阵里**没有那一行**，P/R 双双 None。此时**不画正类徽标**，改成一条 danger note：「正类 `1` 在这份测试集里一次都没出现过，精确率与召回率无定义」
 - **⚠ 空测试集**：回归评估会明确报错（`evaluate.py:134`），分类评估不检查（`evaluate.py:253-265`），四个指标全 None、矩阵空元组、界面一片空白。两侧对齐
+- **概率那一路在 §13**：二分类且打分帧带 `y_proba` 时，这一屏上还有 ROC / PR / 校准三条曲线与 59 档阈值网格；多分类或缺概率列时四样一块都不摆，改摆一条说清是哪一种「没有」的 note
 
 #### 22. `residual_analysis` · 残差分析
 - **块**：`breakdown`(stats) 五个统计量 · `bins`(charts, **isPrimary**) 残差直方 · `structure`(charts) QQ 与时间序列
@@ -738,8 +740,11 @@ interface FormulaTerm { text: string; kind: 'var' | 'num' | 'op' | 'name' | 'war
 2. **「每个算子都要有结果面」**（`server/.../tests/contract/test_modeling_report_coverage.py`）：从**后端算子花名册**（`registry.py` 的 24 个 code，`test_modeling_operator_catalog.py:30-55` 已有写死名单）出发遍历，断言每个 code 的 `report()` 在一份最小输入上**至少产出一个 zone='step' 的块**。
    > 这是评审 1 挑出的、三份提案全缺的一层：双向 kind 契约只挡拼写，挡不住「算子 X 的 `report()` 返回 `()`」。缺了它，失败形态是某一个算子的结果面永远只有裸骨架、全闸绿——本仓已为这一类失败记过一次账（「有路由没导航」）。
 3. **formula id 单向覆盖**（`web/app/tests/contract/modeling-formulas.contract.spec.ts`）：后端算子清单快照里出现的每个 `formula id` 在 `formulaCatalog` 里都要有；反向允许多（前端可先备好）。
-4. **逐算子最坏字节**（`server/.../tests/contract/test_modeling_report_bytes.py`）：对 24 个算子各造一份最坏负载（60 列宽帧 / 20 类混淆 / 20 折 / 深树 / 60 列载荷 / 366 天时间轴），逐个断言 `report` 序列化后 < `REPORT_MAX_BYTES` 且 `preview` < `PREVIEW_MAX_BYTES`。
+4. **逐算子最坏字节**（`server/.../tests/contract/test_modeling_report_bytes.py`，**已建**）：从 `registry.codes()` 反向遍历，对 24 个算子各造一份最坏负载（60 列宽帧 / 366 天时间轴 / 12 列 × 200 类目 / 20 类混淆 / 59 档阈值网格 / 20 折 / 深树 / 59 个主成分），逐个断言 `report` 序列化后 < `REPORT_MAX_BYTES` 且 `fit_report` 的 `dropped` 为空，`preview` 过完字节预算 < `PREVIEW_MAX_BYTES` 且**一个键都没被摘掉**（只许削行）。
    > 这是三份提案全缺的一条。没有它，下一个人往块里加一个字段，§1.6 的洞会以「有的运行有图、有的没有」的形式重新打开。
+   > **必须从花名册反向遍历**：24 条 `test_the_worst_*` 散在 12 个 unit 文件里也算齐，但第 25 个算子不写那条用例时全闸照绿——而契约 #2 虽然遍历花名册，喂的是**最小**输入，挡不住宽帧 / 20 类 / 深树这一头。
+   > 最坏帧只造一份、24 条负载共用，另有两条用例守着夹具本身：帧一被改窄改短就先红（否则往下加算子的人塞一份三列小帧就能让最坏字节全绿）。**唯一没有上限的那一维是列名长度**——讲解按它逐字带走，夹具按现场最长的那一类命名。
+   > 实测最紧的一份是 `pca`（59 个主成分，53KB / 64KB）；把 `MAX_LOADINGS` 与 `MAX_LOADING_WIDTH` 各调大一档（20 → 40）这条契约当场红，而 `test_modeling_pca_report.py` 里那条最坏字节用例照绿。
 
 ### 10.3 视觉验收（三份提案全缺）
 
@@ -834,7 +839,7 @@ interface FormulaTerm { text: string; kind: 'var' | 'num' | 'op' | 'name' | 'war
 
 **打分帧增加一列概率**，走列声明契约的正规改法，不走旁路。
 
-- 新列 key 为 `<target_key>__proba`，`role='prediction_proba'`，`dtype='float'`，`unit=''`。
+- 新列 key 为定值 `y_proba`（`model.py` 的 `SCORED_PROBA`），`role='feature'`，`dtype='number'`，`unit=''`。⚠ 三处都是被仓里的硬约束定死的，不是可挑的口径：`describe_columns(config, inputs)` 只拿得到各端口的**列 key**、拿不到哪一列是目标，`<target_key>__proba` 根本推不出来（`y_true` / `y_pred` 取定值是同一个理由）；`frame.COLUMN_ROLES` 只有 `feature` / `target` / `ignored` 三个值，`frame.DTYPES` 只有 `number` / `bool` / `string`——新造 `prediction_proba` 或 `float` 各是另一桩契约变更。
 - **`describe_columns` 必须同步声明**（`docs/MODELING_PLATFORM_DESIGN.md` D2：算子声明自己怎么改列集，声明是纯函数，训练与推理共用；D3：声明是约定、真值是实测，两者不一致时发布失败）。这是本阶段唯一的契约变更，也是它必须单列一期的原因。
 - **判正类的阈值升为超参** `positive_threshold: float = 0.5`（`ge=0`、`le=1`、带 title/description），进 `hyper_params` 因而进 `serving_json`，推理侧照用同一个值。
 - **只有二分类产概率列**。多分类时不产，并在结果面上明说「多分类不产概率列，ROC / PR / 校准曲线需要二分类」。
@@ -843,12 +848,14 @@ interface FormulaTerm { text: string; kind: 'var' | 'num' | 'op' | 'name' | 'war
 
 | 图 | 组件 | 数据 | 说明 |
 |---|---|---|---|
-| ROC 曲线 + AUC | `ScatterPlot`（新 `mode: 'curve'`） | 后端按 ≤200 个阈值网格算好 `(fpr, tpr)` 点列，**不在前端从 pairs 现算** | 对角线是随机基准；AUC 进关键数字区 |
+| ROC 曲线 + AUC | `ScatterPlot`（新 `mode: 'curve'`） | 后端按 ≤59 个阈值的网格算好 `(fpr, tpr)` 点列，**不在前端从 pairs 现算** | 对角线是随机基准；AUC 进关键数字区 |
 | PR 曲线 + AP | 同上 | `(recall, precision)` 点列 + 正类占比基线 | 类不平衡时它比 ROC 诚实，两张都要 |
 | 校准曲线 | 同上 | 十等分箱的 `(平均预测概率, 实际正类率)` + 每箱样本数 | 对角线是完美校准；箱内样本 <10 的点画空心 |
-| 阈值滑杆 | `ThresholdSlider.vue`（新） | 后端给 ≤200 个阈值上的 `(threshold, tp, fp, tn, fn)` 网格，前端**查表**不重算 | 拖动即时联动混淆矩阵与四个指标卡；默认停在训练时的 `positive_threshold` 并标一条竖线 |
+| 阈值滑杆 | `ThresholdSlider.vue`（新） | 后端给 ≤59 个阈值上的 `(threshold, tp, fp, tn, fn)` 网格，前端**查表**不重算 | 拖动即时联动混淆矩阵与四个指标卡；默认停在训练时的 `positive_threshold` 并标一条竖线 |
 
-**为什么阈值网格由后端给**：前端只有截断过的 `pairs`（默认上限 500 行），拿它现算的曲线与指标卡对不上账——同一屏两个数打架是比没有这张图更坏的结果。网格 200 × 5 个整数约 4KB，在 `REPORT_MAX_BYTES` 里毫无压力。
+**为什么阈值网格由后端给**：前端只有截断过的 `pairs`（默认上限 500 行），拿它现算的曲线与指标卡对不上账——同一屏两个数打架是比没有这张图更坏的结果。
+
+**网格是 59 档，不是 200 档**：曲线与网格都走 `breakdown` 块，而 `reporting.MAX_ITEMS = 60` 是它的逐项上限，`evalcurves.GRID_POINTS = MAX_ITEMS - 1`——留出的那一格给 ROC 的「全判负类」锚点，不留的话多算的那一截会被无声截掉。实测这四块合计约 20KB（ROC 5.0KB · PR 6.2KB · 校准 1.6KB · 网格 6.9KB），在 `REPORT_MAX_BYTES` 里仍然宽裕；⚠ 要更密的网格就得给 `breakdown` 单开一档更大的上限，那是契约变更，不在本期。
 
 ### 13.4 PR 切分
 
@@ -864,4 +871,4 @@ interface FormulaTerm { text: string; kind: 'var' | 'num' | 'op' | 'name' | 'war
 |---|---|---|
 | R-36 | 打分帧加列是**契约变更**，会动到 `describe_columns` 与列声明契约测试、`serving_json` 的逐步列集（`docs/MODELING_PLATFORM_DESIGN.md` D4 的 `2.0` 形状） | PR-24 单列一期，只做这一件事；契约用例先红后绿 |
 | R-37 | 存量已发布的逻辑回归模型版本，其 `serving_json` 里没有 `positive_threshold` | 推理侧读不到时回落 0.5（与今天的行为一字不差），**不回填**存量版本 |
-| R-38 | 下游算子（残差分析、特征重要性）拿到多出来的一列会不会串味 | 概率列 `role='prediction_proba'`，与 `truth`/`prediction` 都不同；`scored_columns_of` 按 role 取，不按位置取——实施时必须逐个核实这一点，不能假定 |
+| R-38 | 下游算子（残差分析、特征重要性）拿到多出来的一列会不会串味 | **已核实不会**：三个吃打分帧的下游全都按**列 key** 取（回归评估 `evaluate.py:127` → `scored_columns_of` `:171-172`、分类评估 `evaluate.py:325-326`、残差分析 `diagnostics.py:129`），既不按位置也不按 role，多一列不会错位。⚠ 这条结论不能靠 role 立论——概率列的 role 就是 `feature`（§13.2） |

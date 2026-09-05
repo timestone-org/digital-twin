@@ -21,6 +21,12 @@ const props = defineProps<{
   /** 这次运行的 id 与开着的那个节点，只用来拼下载地址。 */
   runId: string | undefined
   nodeId: string | null
+  /**
+   * 这一步的参数，④ 区的公式照它代实参。
+   *
+   * ⚠ 要运行时冻结的那份快照：画布上现在那份在历史回看时早改过了。
+   */
+  config: Readonly<Record<string, unknown>>
 }>()
 
 const emit = defineEmits<{ close: [] }>()
@@ -42,6 +48,8 @@ const emit = defineEmits<{ close: [] }>()
       :exported-ports="props.detail.exported_ports"
       :report="props.detail.report"
       :is-preview-truncated="props.detail.is_preview_truncated"
+      :code="props.detail.operator"
+      :config="props.config"
     />
     <!-- ⚠ 占位高度按区固定：拉回来之后各区落在原处，不跳版 -->
     <ReportBlocks v-else pending />

@@ -10,6 +10,7 @@
 from collections.abc import Mapping, Sequence
 from dataclasses import dataclass
 
+from platform_server.apps.modeling.operators.evalstats import even_sample
 from platform_server.apps.modeling.operators.frame import (
     Frame,
     matrix_of,
@@ -26,14 +27,19 @@ from platform_server.apps.modeling.operators.modelstats import (
     with_hints,
 )
 from platform_server.apps.modeling.operators.reporting import (
+    MAX_CLOUD_POINTS,
+    TIER_LARGE,
     TIER_SCALAR,
     TIER_SMALL,
     BlockAt,
+    Cloud,
     Item,
+    ModelStructure,
     ReportBlock,
     Scale,
     breakdown_block,
     fits_block,
+    structure_block,
 )
 
 # 条件数超过它就该提醒：列之间高度相关，系数对几行数据的增删都很敏感
@@ -44,12 +50,29 @@ SIGMA_SPREAD_ALERT = 10.0
 IMBALANCE_ALERT = 0.1
 # 逻辑回归只做两类
 TWO_CLASSES = 2
+# 散点坐标留几位有效数字。⚠ 不是为了好看：200 个点的全精度浮点要多花一倍字节，
+# 而两位像素宽的点上一位都看不出来
+CLOUD_DIGITS = 6
 
 SCORE_LABEL = "训练集与测试集上各算一次：两边差得远就是过拟合"
+RESIDUAL_LABEL = "横轴预测值、纵轴残差（真值 − 预测值）；点该均匀散在零线两侧"
+TRUTH_LABEL = "横轴预测值、纵轴真值；两轴同尺，点越贴对角线越准"
+WEIGHT_LABEL = "每一列的系数，零线居中：正的往右、负的往左"
 RANK_LABEL = "满不满秩、条件数多大——系数稳不稳定只有这两个数看得出来"
 CLASS_LABEL = "训练集上每一类占多少行"
 LOGIT_LABEL = "判成正类的口径，以及这组系数收敛了没有"
 FLAT_COLUMN_REASON = "训练集上这一列没有变化，它的系数与别的列不可比"
+
+RESIDUAL_NOTE = (
+    "点在测试集上取，等距抽到 {points}/{rows} 行："
+    "残差随预测值一起变大（喇叭口）是异方差，只有这张图看得出来；"
+    "R² 与 RMSE 一个字都不说"
+)
+TRUTH_NOTE = "对角线是理想线：点整体压在线的一侧就是系统性高估或低估"
+WEIGHT_SCALE_NOTE = (
+    "条长按 β 的绝对值排，而 β 跟着各列的量纲走：上游没做标准化时它不是重要性，"
+    "要比就看系数表里的可比贡献 |β·σ|"
+)
 
 DEFICIENT_NOTE = (
     "设计矩阵不满秩（秩 {rank} < 列数 {columns}）：有列是别的列的线性组合，"
@@ -119,7 +142,7 @@ class LogitTrained:
 
 
 def linear_blocks(seen: Trained) -> tuple[ReportBlock, ...]:
-    """线性回归的三块：拟合概况与共线性、系数与可比贡献、两侧拟合分。
+    """线性回归讲的话：拟合概况与共线性、系数、两侧拟合分，与三张诊断图。
 
     Args: seen。
     """
@@ -130,7 +153,124 @@ def linear_blocks(seen: Trained) -> tuple[ReportBlock, ...]:
         _gist_block(seen, check, sigmas),
         _coef_block(seen, sigmas),
         _score_block(seen, rows),
+        *_chart_blocks(seen, sigmas),
     )
+
+
+def _chart_blocks(
+    seen: Trained, sigmas: Mapping[str, float]
+) -> tuple[ReportBlock, ...]:
+    """③ 区那三张：残差对预测、真值对预测、每一列的系数。
+
+    ⚠ 两张散点都标主体图：辅图那一格在 72rem 的弹窗里只有半幅宽，而两轴刻度
+    随画幅等比缩，摆进去刻度字会掉到 10px 上（规格 §3.2 的辅图网格）。
+    Args: seen, sigmas。
+    """
+    pairs = even_sample(_pairs_of(seen), MAX_CLOUD_POINTS)
+    made = [_weight_block(seen, sigmas)]
+    if not pairs:
+        return tuple(made)
+    unit = seen.train.column_of(seen.target).unit
+    residual = _cloud_block(
+        "残差对预测值",
+        Cloud(
+            key="residual",
+            name="残差",
+            mode="residual",
+            x_label=_axis_text("预测值", unit),
+            y_label=_axis_text("残差", unit),
+            points=[
+                [_short(guess), _short(value - guess)] for guess, value in pairs
+            ],
+        ),
+        RESIDUAL_LABEL,
+        (RESIDUAL_NOTE.format(points=len(pairs), rows=seen.test.row_count),),
+    )
+    truth = _cloud_block(
+        "真值对预测值",
+        Cloud(
+            key="truth",
+            name="每一行",
+            mode="pairs",
+            x_label=_axis_text("预测值", unit),
+            y_label=_axis_text("真值", unit),
+            points=[[_short(guess), _short(value)] for guess, value in pairs],
+        ),
+        TRUTH_LABEL,
+        (TRUTH_NOTE,),
+    )
+    return (residual, truth, *made)
+
+
+def _short(value: float) -> float:
+    """一个坐标留 `CLOUD_DIGITS` 位有效数字。
+
+    Args: value。
+    """
+    return float(f"{value:.{CLOUD_DIGITS}g}")
+
+
+def _axis_text(name: str, unit: str) -> str:
+    """轴名带上目标列的单位；没单位就只有轴名。
+
+    Args: name, unit。
+    """
+    return name if unit == "" else f"{name}（{unit}）"
+
+
+def _pairs_of(seen: Trained) -> list[tuple[float, float]]:
+    """测试集上一行一对 `(预测值, 真值)`。
+
+    ⚠ 真值是空的那些行整行不进图：补 0 顶上去会在零附近堆出一片本来不存在的
+    点，而图上看着完全正常（规格 §2-P4）。
+    Args: seen。
+    """
+    truth = numbers_of(seen.test, seen.target)
+    if len(truth) != len(seen.predicted):
+        return []
+    return [
+        (guess, float(value))
+        for value, guess in zip(truth, seen.predicted, strict=True)
+        if value is not None
+    ]
+
+
+def _cloud_block(
+    title: str, cloud: Cloud, caption: str, notes: Sequence[str]
+) -> ReportBlock:
+    """一张散点图一块。
+
+    Args: title, cloud, caption, notes。
+    """
+    block = structure_block(
+        BlockAt(zone="charts", title=title, tier=TIER_LARGE, is_primary=True),
+        ModelStructure(clouds=(cloud,)),
+    )
+    return with_hints(block, (caption, *notes))
+
+
+def _weight_block(seen: Trained, sigmas: Mapping[str, float]) -> ReportBlock:
+    """每一列的系数横条，零线居中。
+
+    Args: seen, sigmas。
+    """
+    block = breakdown_block(
+        BlockAt(
+            zone="charts",
+            title="每一列的系数",
+            tier=TIER_SMALL,
+            is_primary=False,
+        ),
+        Scale(label=WEIGHT_LABEL),
+        [{"name": key, "value": seen.coef.get(key)} for key in seen.keys],
+    )
+    spread = [value for value in sigmas.values() if value > 0]
+    hint = (
+        (WEIGHT_SCALE_NOTE,)
+        if spread and max(spread) > min(spread) * SIGMA_SPREAD_ALERT
+        else ()
+    )
+    return with_hints(block, hint)
 
 
 def logit_blocks(seen: LogitTrained) -> tuple[ReportBlock, ...]:
@@ -229,10 +369,12 @@ def _coef_item(key: str, coef: float | None, sigma: float | None) -> Item:
 
 
 def _score_block(seen: Trained, rows: Sequence[Sequence[float]]) -> ReportBlock:
-    """训练分与测试分并排。
+    """训练分与测试分，四个数各摆一张卡。
 
-    ⚠ 两个数各带各的 `score_kind`：R² 有公认的好坏线、RMSE 跟着目标列的量纲走，
-    用同一档口径染色会把一个很好的 RMSE 判成「差」。
+    ⚠ 两侧各摆一张而不是只摆测试侧：指标卡只读 `value`，把训练分放进
+    `before` 里等于没放——而这一块要说的正是两边差多少。
+    ⚠ 四个数各带各的 `score_kind`：R² 有公认的好坏线、RMSE 跟着目标列的量纲
+    走，用同一档口径染色会把一个很好的 RMSE 判成「差」。
     Args: seen, rows。
     """
     train = scores_of(_target_of(seen.train, seen.target), _guessed(seen, rows))
@@ -242,29 +384,25 @@ def _score_block(seen: Trained, rows: Sequence[Sequence[float]]) -> ReportBlock:
         BlockAt(zone="stats", title="训练分与测试分", tier=TIER_SCALAR),
         Scale(label=SCORE_LABEL),
         (
-            _score_item("R²", "r2", (train.r2, test.r2), unit=""),
-            _score_item("RMSE", "rmse", (train.rmse, test.rmse), unit=unit),
+            _score_item("训练 R²", "r2", train.r2, unit=""),
+            _score_item("测试 R²", "r2", test.r2, unit=""),
+            _score_item("训练 RMSE", "rmse", train.rmse, unit=unit),
+            _score_item("测试 RMSE", "rmse", test.rmse, unit=unit),
         ),
     )
 
 
-def _score_item(
-    name: str, key: str, sides: tuple[float | None, float | None], *, unit: str
-) -> Item:
-    """一个指标在两侧各是多少。
+def _score_item(name: str, key: str, value: float | None, *, unit: str) -> Item:
+    """一侧的一个分。
 
-    ⚠ `value` 给测试侧那个：卡片上只摆得下一个数，而能说明这个模型好不好的
-    是测试分。
-    Args: name, key, sides, unit。
+    Args: name, key, value, unit。
     """
     return {
         "name": name,
         "key": key,
         "unit": unit,
         "score_kind": key,
-        "value": sides[1],
-        "before": sides[0],
-        "after": sides[1],
+        "value": value,
     }
 
 

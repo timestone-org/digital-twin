@@ -30,10 +30,7 @@ const PARTS = [
 /** 只留代码，注释一律剥掉：注释里的令牌名会把 `toContain` 骗过去。 */
 function codeOf(part: string): string {
   const text = readFileSync(
-    join(
-      process.cwd(),
-      `app/src/pages/Modeling/Canvas/components/${part}.vue`,
-    ),
+    join(process.cwd(), `app/src/pages/Modeling/Canvas/components/${part}.vue`),
     'utf8',
   )
   return text.replace(/\/\*[\s\S]*?\*\//g, '').replace(/\/\/[^\n]*/g, '')
@@ -147,11 +144,11 @@ describe('两段叠在一行时看得出是两段', () => {
     const wrapper = mount(TimelineBand, {
       props: { rows: OVERLAP, scale: 'index' },
     })
-    const bars = wrapper.findAll('.dt-ml-band__bar--primary, .dt-ml-band__bar--secondary')
-    const main = bars.find((bar) => bar.classes('dt-ml-band__bar--primary'))
-    const second = bars.find((bar) =>
-      bar.classes('dt-ml-band__bar--secondary'),
+    const bars = wrapper.findAll(
+      '.dt-ml-band__bar--primary, .dt-ml-band__bar--secondary',
     )
+    const main = bars.find((bar) => bar.classes('dt-ml-band__bar--primary'))
+    const second = bars.find((bar) => bar.classes('dt-ml-band__bar--secondary'))
 
     expect(Number(second?.attributes('y'))).toBeGreaterThan(
       Number(main?.attributes('y')),
@@ -214,7 +211,9 @@ describe('混淆矩阵的格线与列宽', () => {
   // ⚠ th 上的 max-width 对表格单元格根本不生效，而 table-layout: fixed 在表宽为
   // auto 时也不生效：只有把列宽之和写成表宽，行头与列头才是同一套收口口径
   it('整张表按列宽之和定宽，列数变了跟着变', () => {
-    const two = mount(MatrixTable, { props: { labels: ['A', 'B'], matrix: MATRIX } })
+    const two = mount(MatrixTable, {
+      props: { labels: ['A', 'B'], matrix: MATRIX },
+    })
     const three = mount(MatrixTable, {
       props: {
         labels: ['A', 'B', 'C'],

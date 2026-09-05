@@ -111,6 +111,7 @@ const result = useResultPanel({
   operators: page.operatorMap,
   nodeRunOf: (id) => page.runner.previews.value.get(id),
   loadPreview: page.runner.loadPreview,
+  runGraph: () => page.runner.run.value?.graph ?? null,
 })
 
 /** 点问题条里的卡片名：选中它并把参数面板开在那一项上。 */
@@ -433,6 +434,7 @@ onMounted(async () => {
       :labels="result.labels.value"
       :run-id="page.runner.run.value?.id"
       :node-id="result.nodeId.value"
+      :config="result.config.value"
       @close="result.close"
     />
 

@@ -9,6 +9,7 @@ import { DtModal } from '@dt/ui'
 import { mount } from '@vue/test-utils'
 import { describe, expect, it } from 'vitest'
 
+import FormulaBlock from '@/pages/Modeling/Canvas/components/FormulaBlock.vue'
 import ProvenanceBar from '@/pages/Modeling/Canvas/components/ProvenanceBar.vue'
 import ResultDialog from '@/pages/Modeling/Canvas/components/ResultDialog.vue'
 import ReportBlocks from '@/pages/Modeling/Canvas/components/ReportBlocks.vue'
@@ -252,7 +253,10 @@ describe('有讲解时铺成六区', () => {
     const wrapper = mount(ResultView, {
       props: {
         payload: FRAME,
-        report: { ...REPORT, note: '这一步的讲解太大，只留下了每一步都有的那几行' },
+        report: {
+          ...REPORT,
+          note: '这一步的讲解太大，只留下了每一步都有的那几行',
+        },
       },
     })
 
@@ -522,7 +526,7 @@ describe('结果弹窗', () => {
 
   function open(detail: ModelingNodeRun | null) {
     return mount(ResultDialog, {
-      props: { detail, labels: {}, runId: 'r1', nodeId: 'n1' },
+      props: { detail, labels: {}, runId: 'r1', nodeId: 'n1', config: {} },
       attachTo: document.body,
     })
   }
@@ -554,5 +558,100 @@ describe('结果弹窗', () => {
       'min(72rem, 92vw)',
     )
     wrapper.unmount()
+  })
+})
+
+describe('④ 区的公式', () => {
+  /** 后端实测：线性回归 model 那一路的摘要，系数就是造数时的两个斜率。 */
+  const MODEL = {
+    model: {
+      kind: 'model',
+      algo: 'linear_regression',
+      task: 'regression',
+      hyper_params: { use_intercept: true },
+      feature_keys: ['温度', '负荷'],
+      target_key: '能耗',
+      serving_channel: 'json',
+      fitted: { coef: { 温度: 2, 负荷: 3 }, intercept: 5 },
+    },
+  }
+
+  function opened(over: Record<string, unknown> = {}) {
+    return mount(ResultView, {
+      props: {
+        payload: MODEL,
+        report: reportOf([blockOf({ zone: 'stats', title: '训练分与测试分' })]),
+        code: 'linear_regression',
+        config: {},
+        ...over,
+      },
+    })
+  }
+
+  // ⚠ 这条是整个 ④ 区的入口：公式目录写好了却没有一处调它的话，两侧用例、
+  // 契约闸与 typecheck 全绿，而屏幕上一条公式都没有
+  it('线性拟合摆得出代入了系数的那一行整式', () => {
+    expect(opened().text()).toContain('ŷ=5+2·温度+3·负荷')
+  })
+
+  it('代入态默认就是展开的，不用点一下才看得到', () => {
+    const spec = opened().findComponent(FormulaBlock).props('spec')
+
+    expect(spec?.id).toBe('predict')
+    expect(spec?.isOpen).toBe(true)
+  })
+
+  it('符号态那一行也在，且与代入态不是同一串', () => {
+    expect(opened().text()).toContain('β₀')
+  })
+
+  it('公式摆在 ④ 区里，不另起一个同名分区', () => {
+    const zones = opened()
+      .findAll('[data-zone]')
+      .map((one) => one.attributes('data-zone'))
+
+    expect(zones).toEqual(['stats', 'formula'])
+    expect(countOf(opened().text(), '怎么算的')).toBe(2)
+  })
+
+  it('锚点条上多出「怎么算的」这一格', () => {
+    const anchors = opened()
+      .findAll('.dt-ml-result__anchor')
+      .map((one) => one.text())
+
+    expect(anchors).toContain('怎么算的')
+  })
+
+  // ⚠ 参数取的是**运行时冻结的那份**：拿画布上现在那份的话，改过参数再回看
+  // 历史会印出一串看着完全正常的假账
+  it('阈值这类只在 config 里的参数照那份快照代进去', () => {
+    const text = opened({
+      payload: {
+        model: {
+          ...MODEL.model,
+          algo: 'logistic_regression',
+          fitted: { coef: { 温度: 2 }, intercept: 5, classes: [0, 1] },
+        },
+      },
+      code: 'logistic_regression',
+      config: { positive_threshold: 0.7 },
+    }).text()
+
+    expect(text).toContain('0.7')
+    expect(text).not.toContain('p(x) ≥ 0.5')
+  })
+
+  it('没有讲解的老运行一条公式都不摆', () => {
+    expect(opened({ report: null }).findComponent(FormulaBlock).exists()).toBe(
+      false,
+    )
+  })
+
+  it('没登记公式的算子照旧不摆 ④ 区，不留一格空标题', () => {
+    const zones = opened({ code: '还没登记进公式表的算子' })
+      .findAll('[data-zone]')
+      .map((one) => one.attributes('data-zone'))
+
+    expect(zones).toEqual(['stats'])
   })
 })

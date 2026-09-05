@@ -54,7 +54,7 @@ CALIBRATION_NOTE = (
 )
 GRID_NOTE = (
     "每个阈值上的 TP / FP / TN / FN 与 F1；"
-    "竖线是打分时判成正类的最低概率，也就是这一份指标卡站的那个阈值"
+    "竖线按判成正类的行里最低的那个概率反推，与这一份指标卡切在同一刀上"
 )
 _ZERO = 0.0
 
@@ -124,19 +124,20 @@ def curves_of(
     probabilities: Sequence[float],
     actual_positive: Sequence[bool],
     limit: int = GRID_POINTS,
+    keep: float | None = None,
 ) -> Curves:
     """阈值网格、AUC、AP 与正类占比。
 
     ⚠ 只有一类时 AUC 与 AP 双双给 `None`：全是正类时 AP 在数学上等于 1，而那是
     「没有负类可分辨」不是「分得完美」，印出来必被读成后者。
-    Args: probabilities, actual_positive, limit。
+    Args: probabilities, actual_positive, limit, keep 打分那一档的阈值。
     """
     full = threshold_counts(probabilities, actual_positive)
     positives = sum(1 for flag in actual_positive if flag)
     negatives = len(actual_positive) - positives
     both = positives > 0 and negatives > 0
     return Curves(
-        grid=even_sample(full, limit),
+        grid=_sampled(full, limit, keep),
         positives=positives,
         negatives=negatives,
         auc=_auc_of(full, positives, negatives) if both else None,
@@ -147,6 +148,30 @@ def curves_of(
             None if not actual_positive else positives / len(actual_positive)
         ),
     )
+
+
+def _sampled(
+    full: Sequence[ThresholdCount], limit: int, keep: float | None
+) -> tuple[ThresholdCount, ...]:
+    """等距抽这么多档，并把打分那一档强行留在网格里。
+
+    ⚠ 抽样会把打分那一档抽掉：真链路上 160 个不同概率抽 59 档，滑杆只好停在最近
+    的一档上，于是同一屏摆出两张四格不同的混淆矩阵（规格 §13.3）。挤掉离它最近
+    的那一档来腾位置：档数不变，等距也只错开一格。
+    Args: full, limit, keep。
+    """
+    picked = even_sample(tuple(full), limit)
+    if keep is None or not picked:
+        return picked
+    if any(count.threshold == keep for count in picked):
+        return picked
+    wanted = next((count for count in full if count.threshold == keep), None)
+    if wanted is None:
+        return picked
+    crowded = min(picked, key=lambda count: abs(count.threshold - keep))
+    kept = [count for count in picked if count is not crowded]
+    kept.append(wanted)
+    return tuple(sorted(kept, key=lambda count: -count.threshold))
 
 
 def roc_items(curves: Curves) -> list[dict[str, Any]]:
