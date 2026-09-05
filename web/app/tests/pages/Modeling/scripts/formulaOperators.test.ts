@@ -27,8 +27,8 @@ function contextOf(
 /** 一个算子的某一条公式。找不到就当场炸，不静默给一条别的。 */
 function pick(code: string, id: string, context: FormulaContext) {
   const found = formulasOf(code, context).find((spec) => spec.id === id)
-  expect(found, `${code} 少了 ${id} 这一条`).toBeDefined()
-  return found ?? formulasOf(code, context)[0]!
+  if (found === undefined) throw new Error(`${code} 少了 ${id} 这一条`)
+  return found
 }
 
 function filledOf(code: string, id: string, context: FormulaContext): string {
