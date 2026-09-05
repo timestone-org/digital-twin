@@ -4,11 +4,13 @@
  * 挂每类的精确率与判成数，右下角是总行数与准确率（设计规格 §5-21）。
  *
  * ⚠ 热力格必须坐在一层不透明实底上：面板与弹窗底色都是半透明、背后还压着一张
- * 会动的画布，直接叠半透明色会把 3% 与 12% 的格子糊成一片（规格 §7）。
+ * 会动的画布，直叠半透明色会把 3% 与 12% 的格子糊成一片（规格 §7）。透明度档
+ * 与列宽在 `scripts/matrixPaint.ts`。
  * ⚠ 颜色不作唯一编码：判对的格子数字加粗，判错的格子另加斜纹。
  * ⚠ 两半各一把尺子：对角格铺这一行的召回率，判错格铺与最深错格的行数比，图例
  * 与图注要把两句口径都写出来。判对色用 `--state-success`、判错用
  * `--state-danger`——六套预设里只有这一对色相角差处处 ≥120°（规格 §5-21）。
+ * ⚠ 格线不是装饰：相邻两个深浅相近的错格没有格线就会连成一整片斜纹区。
  */
 import type { DtTableColumn } from '@dt/contracts'
 import { DtEmpty, DtTable, DtTooltip } from '@dt/ui'
@@ -20,7 +22,18 @@ import {
   type ClassStat,
   type MatrixCell,
 } from '../scripts/matrixStats'
-import { grouped, niceNumber } from '../scripts/numbers'
+import {
+  alphaOf,
+  boardWidthRem,
+  hintOf,
+  rate,
+  CLASS_WIDTH,
+  DEEP_ALPHA,
+  RECALL_WIDTH,
+  SUPPORT_WIDTH,
+  TRUTH_WIDTH,
+} from '../scripts/matrixPaint'
+import { grouped } from '../scripts/numbers'
 
 const props = withDefaults(
   defineProps<{
@@ -42,15 +55,6 @@ const TRUTH_KEY = 'truth'
 // 右侧边栏的两列
 const RECALL_KEY = 'recall'
 const SUPPORT_KEY = 'support'
-// 热力深浅的两端：再淡就看不出这一格有数，再深就压不住字
-const MIN_ALPHA = 0.12
-const MAX_ALPHA = 0.72
-// ⚠ 判错格上限低一档：危险色明度比成功色低得多，铺到 0.72 时暗色预设下白字只
-// 剩 4.4:1、换深墨更只有 3.3:1；六套逐档实测 0.58 是六套都还有 4.6:1 的最深一档
-const MISS_MAX_ALPHA = 0.58
-// 过了这一档，判对格的字要换成压在实心底上的深墨色
-const DEEP_ALPHA = 0.45
-
 type CellKind = 'hit' | 'miss' | 'edge'
 
 interface CellView {
@@ -84,29 +88,8 @@ const BLANK: CellView = {
 
 const stats = computed(() => buildMatrixStats(props.labels, props.matrix))
 
-/**
- * 比率原样写成 0–1 的数，不换算成百分数。
- * ⚠ 乘 100 会把 0.923077 推进 `niceNumber` 的定点档，印出 92.3077% 这种六位有
- * 效数字；比率档走的是四位有效数字，正是这些数该有的位数。
- */
-function rate(value: number | null): string {
-  return niceNumber(value)
-}
-
-/** 深浅铺在 `matrixStats` 已按两把尺子归好的强度上，这里只管两端的取值。 */
-function alphaOf(cell: MatrixCell): number {
-  if (cell.heat <= 0) return 0
-  const top = cell.isHit ? MAX_ALPHA : MISS_MAX_ALPHA
-  return MIN_ALPHA + cell.heat * (top - MIN_ALPHA)
-}
-
-/** 读数里始终印绝对行数与行内占比：颜色是相对尺子，这两个数才是绝对的。 */
-function hintOf(cell: MatrixCell, truth: string, guess: string): string {
-  return `真实「${truth}」判成「${guess}」：${grouped(cell.count)} 行，占这一行 ${rate(cell.share)}`
-}
-
 function heatCell(cell: MatrixCell, truth: string, guess: string): CellView {
-  const alpha = alphaOf(cell)
+  const alpha = alphaOf(cell.heat, cell.isHit)
   return {
     kind: cell.isHit ? 'hit' : 'miss',
     text: grouped(cell.count),
@@ -197,32 +180,36 @@ const columns = computed<MatrixColumn[]>(() => [
   {
     key: TRUTH_KEY,
     label: '真实＼判成',
-    width: '8rem',
+    width: `${TRUTH_WIDTH}rem`,
     align: 'left',
     slot: `cell-${TRUTH_KEY}`,
   },
   ...stats.value.labels.map((label, index) => ({
     key: `p${index}`,
     label,
-    width: '5.5rem',
+    width: `${CLASS_WIDTH}rem`,
     align: 'center' as const,
     slot: `cell-p${index}`,
   })),
   {
     key: RECALL_KEY,
     label: '召回率',
-    width: '5.5rem',
+    width: `${RECALL_WIDTH}rem`,
     align: 'right',
     slot: `cell-${RECALL_KEY}`,
   },
   {
     key: SUPPORT_KEY,
     label: '支持度',
-    width: '5rem',
+    width: `${SUPPORT_WIDTH}rem`,
     align: 'right',
     slot: `cell-${SUPPORT_KEY}`,
   },
 ])
+
+const boardStyle = computed<CSSProperties>(() => ({
+  '--matrix-width': `${boardWidthRem(stats.value.labels.length)}rem`,
+}))
 
 const rows = computed<MatrixRow[]>(() => {
   const { classes, cells, labels, accuracy, total } = stats.value
@@ -288,6 +275,7 @@ function cellOf(row: MatrixRow, key: string): CellView {
     <DtTable
       v-if="hasGrid"
       class="dt-ml-matrix__board"
+      :style="boardStyle"
       :columns="columns"
       :rows="rows"
       min-width="0"
@@ -367,8 +355,8 @@ function cellOf(row: MatrixRow, key: string): CellView {
     background-color: rgba(var(--state-danger-rgb), 0.5);
     background-image: repeating-linear-gradient(
       45deg,
-      rgba(var(--neutral-fg-rgb), 0.45) 0 2px,
-      transparent 2px 5px
+      rgba(var(--neutral-fg-rgb), 0.45) 0 1px,
+      transparent 1px 4px
     );
   }
 
@@ -383,10 +371,10 @@ function cellOf(row: MatrixRow, key: string): CellView {
     background: var(--surface-base);
   }
 
-  // ⚠ 表格按列宽自然排布：铺满 100% 会把两个类目的矩阵拉成两块巨幅色块，
-  // 宽了由 DtTable 自己的滚动容器横着滚
+  // ⚠ 按列宽之和定宽：铺满 100% 会把两个类目的矩阵拉成巨幅色块，写 auto 则
+  // `table-layout: fixed` 整个失效（口径见 `matrixPaint.boardWidthRem`）
   &__board :deep(table.dt-table) {
-    width: auto;
+    width: var(--matrix-width);
   }
 
   // 格子要铺满整格才读得出深浅，内边距挪到格子自己身上
@@ -400,22 +388,27 @@ function cellOf(row: MatrixRow, key: string): CellView {
     border-bottom: 0;
   }
 
-  // ⚠ 列名也要按 8rem 收口：`table-layout: fixed` 在表宽为 auto 时不生效，
-  // 列宽回落成按内容撑开，一个长类名就能把那一列拉出两倍宽
+  // 列名的收口由列宽本身管：DtTable 的 th 自带省略号，列宽落实它就收得住
   &__board :deep(.dt-table th) {
-    max-width: 8rem;
     padding: 6px;
     background: var(--surface-panel);
   }
 
+  // ⚠ 每格右下角各一道格线：没有它，相邻两个深浅相近的错格会连成一整片斜纹
+  // 区，读者只能靠数字猜这个数属于哪一格。inset 投影不占位，不顶开列宽
   &__cell {
     display: block;
     box-sizing: border-box;
     height: 100%;
     padding: 0.4rem 0.35rem;
+    box-shadow:
+      inset -1px 0 0 rgba(var(--neutral-fg-rgb), 0.35),
+      inset 0 -1px 0 rgba(var(--neutral-fg-rgb), 0.35);
     color: var(--text-secondary);
     font-family: var(--font-digit);
+    text-overflow: ellipsis;
     white-space: nowrap;
+    overflow: hidden;
   }
 
   // 边栏：与热力格区分开，不参与深浅
@@ -449,11 +442,13 @@ function cellOf(row: MatrixRow, key: string): CellView {
     color: var(--text-primary);
   }
 
+  // ⚠ 斜纹只占两成面宽：铺满四成时深浅这条顺序色阶被它按 0.72 整体压扁，相邻
+  // 两档就差进一个 JND 以内。线细了照旧认得出「这是判错的格」
   &__cell.is-striped {
     background-image: repeating-linear-gradient(
       45deg,
-      rgba(var(--neutral-fg-rgb), 0.28) 0 2px,
-      transparent 2px 5px
+      rgba(var(--neutral-fg-rgb), 0.38) 0 1px,
+      transparent 1px 5px
     );
   }
 

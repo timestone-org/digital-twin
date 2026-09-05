@@ -281,6 +281,7 @@ function jump(target: string): void {
           <FrameView
             v-if="item.preview.kind === 'frame'"
             :preview="item.preview"
+            :has-provenance-bar="hasFace"
           />
           <ModelView
             v-else-if="item.preview.kind === 'model'"

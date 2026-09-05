@@ -63,7 +63,14 @@ interface MarkView {
   /** 标签这一行的基线，与 `lineTop` 一同随错行上移。 */
   labelTop: number
   lineTop: number
+  /** 画在图上的标签；两行都塞不下时是空串。 */
   text: string
+  /**
+   * 这条线叫什么，不管标签画没画出来。
+   * ⚠ 标签被挤掉时线照旧要画——那是真数据；`text` 空着而 `full` 有值，件里
+   * 靠它给线挂 `<title>` 并换成点线，读者才不会看见一条无名的线。
+   */
+  full: string
 }
 
 /** 一根刻度：`at` 是它在画幅上的坐标，不是刻度值本身。 */
@@ -262,6 +269,7 @@ function markOf(slot: Slot, padTop: number): MarkView {
     labelTop,
     lineTop: labelTop - 5,
     text: slot.row < 0 ? '' : slot.text,
+    full: slot.text,
   }
 }
 

@@ -16,7 +16,20 @@ import { formatDateTime } from '@/utils/datetime'
 import { grouped, niceNumber, percentText } from '../scripts/numbers'
 import type { ColumnStat, FramePreview } from '../scripts/preview'
 
-const props = defineProps<{ preview: FramePreview }>()
+const props = withDefaults(
+  defineProps<{
+    preview: FramePreview
+    /**
+     * ⑥ 区已经摆着出处那一行了（`ProvenanceBar`）。
+     *
+     * ⚠ 那一行比这里这句更全（请求区间与实际取到的区间分两段），两处一起印就是
+     * 同一句话在同一个折叠区里说两遍。没有讲解的老运行没有 ⑥ 区，那时这句还是
+     * 这一屏唯一的出处，不能一删了事（结果展示规格 §2-P1）。
+     */
+    hasProvenanceBar?: boolean | undefined
+  }>(),
+  { hasProvenanceBar: false },
+)
 
 /**
  * 列角色的中文名。认不出的角色不摆徽标，不瞎猜。
@@ -32,7 +45,7 @@ const ROLE_LABELS: Record<string, string> = {
 /** 「台账 energy_log · 2026-01-01 00:00 ~ 至今」。取不到来源时给空串。 */
 const provenance = computed(() => {
   const source = props.preview.provenance
-  if (source.tableCodes.length === 0) return ''
+  if (props.hasProvenanceBar || source.tableCodes.length === 0) return ''
   const since = formatDateTime(source.since, '最早')
   const until = formatDateTime(source.until, '此刻')
   return `台账 ${source.tableCodes.join('、')} · ${since} ~ ${until}`

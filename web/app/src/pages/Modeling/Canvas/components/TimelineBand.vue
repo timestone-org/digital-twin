@@ -7,6 +7,10 @@
  * ⚠ 断档与「有数据但值为空」不是一回事：断档是这一段压根没有行，画成交叉散列；
  * 空值率那件事归直方图与条形表，别在这里混着说。
  * ⚠ 时刻按**本机时区**显示，图下那行结论里明说——后端给的一律是 UTC。
+ * ⚠ 参考几何一律走文字色不走 `--border-strong`：后者压在浅色面板底上只有
+ * 1.38:1，远不到 WCAG 1.4.11 对非文本图形的 3:1（口径与实测见 §7 的配色表）。
+ * ⚠ 次色不能是 `--state-success`：它与 `--accent-primary` 在翡翠绿下色相只差
+ * 10.7°，两档会塌成同一片绿；`--state-warning` 在六套里最小差 46.9°。
  */
 import { computed, useId } from 'vue'
 
@@ -45,6 +49,27 @@ function fillOf(tone: string): string | undefined {
   if (tone === 'gap') return `url(#${patternId}-gap)`
   if (tone === 'shuffled') return `url(#${patternId}-shuffled)`
   return undefined
+}
+
+// 次色那一档上下各让出这么多：叠在主色上时主色从上下两条缝里露出来
+const SECONDARY_INSET = 2
+
+/**
+ * 一段在自己那一行里占的纵向位置。
+ * ⚠ 主次两段叠在同一行时，后画的那个整块盖住前一个，只有不重叠的一小截露出
+ * 另一个颜色——而「取数覆盖真的叠了没有」正是这个件的主用途。次色缩一圈画，
+ * 重叠处就一定看得见下面那一段的上下两条边。
+ * Args: tone 这一段的档；top 这一行的顶；height 行高。
+ */
+function laneOf(
+  tone: string,
+  top: number,
+  height: number,
+): { y: number; height: number } {
+  if (tone !== 'secondary' || height <= SECONDARY_INSET * 3) {
+    return { y: top, height }
+  }
+  return { y: top + SECONDARY_INSET, height: height - SECONDARY_INSET * 2 }
 }
 </script>
 
@@ -112,9 +137,9 @@ function fillOf(tone: string): string | undefined {
             :class="`dt-ml-band__bar--${bar.tone}`"
             :fill="fillOf(bar.tone)"
             :x="bar.left"
-            :y="row.top"
+            :y="laneOf(bar.tone, row.top, view.rowHeight).y"
             :width="bar.width"
-            :height="view.rowHeight"
+            :height="laneOf(bar.tone, row.top, view.rowHeight).height"
           >
             <title>{{ bar.title }}</title>
           </rect>
@@ -185,8 +210,9 @@ function fillOf(tone: string): string | undefined {
     text-anchor: middle;
   }
 
+  // 坐标轴与刻度字同一档：六套预设里最低 5.10:1
   &__axis {
-    stroke: var(--border-strong);
+    stroke: var(--text-disabled);
   }
 
   &__lane {
@@ -194,12 +220,19 @@ function fillOf(tone: string): string | undefined {
   }
 
   &__bar {
+    // 每段都描一圈中性边：重叠处两条边都在，读者看得出这是两段而不是一段
+    &--primary,
+    &--secondary {
+      stroke: rgba(var(--neutral-fg-rgb), 0.5);
+      stroke-width: 0.6;
+    }
+
     &--primary {
       fill: rgba(var(--accent-primary-rgb), 0.65);
     }
 
     &--secondary {
-      fill: rgba(var(--state-success-rgb), 0.65);
+      fill: rgba(var(--state-warning-rgb), 0.65);
     }
 
     // 「之前」/ 请求区间：空心描边、无填充
@@ -209,15 +242,17 @@ function fillOf(tone: string): string | undefined {
       stroke-width: 1;
     }
 
-    // 打乱重排：警示色的交叉散列之外还有一圈边，颜色不作唯一编码
+    // 打乱重排：交叉散列是它的身份，外圈那道边走中性色。
+    // ⚠ 边不许跟着散列走 --state-warning——那在浅色预设下只有 2.31:1，这一段
+    // 的轮廓就没了；散列本身照旧是警示色，颜色不作唯一编码
     &--shuffled {
-      stroke: var(--state-warning);
+      stroke: rgba(var(--neutral-fg-rgb), 0.5);
       stroke-width: 1;
     }
 
     // 断档：交叉散列之外还有一圈虚边
     &--gap {
-      stroke: var(--border-strong);
+      stroke: var(--text-disabled);
       stroke-dasharray: 2 2;
     }
   }
@@ -268,7 +303,7 @@ function fillOf(tone: string): string | undefined {
   &__swatch {
     width: 0.75rem;
     height: 0.5rem;
-    border: 1px solid var(--border-strong);
+    border: 1px solid var(--text-disabled);
     border-radius: 2px;
 
     &--primary {
@@ -276,9 +311,11 @@ function fillOf(tone: string): string | undefined {
       background: rgba(var(--accent-primary-rgb), 0.65);
     }
 
+    // 次色比主色矮一圈，与图上缩一圈画的那一档对上
     &--secondary {
-      border-color: var(--state-success);
-      background: rgba(var(--state-success-rgb), 0.65);
+      height: 0.34rem;
+      border-color: var(--state-warning);
+      background: rgba(var(--state-warning-rgb), 0.65);
     }
 
     &--requested {

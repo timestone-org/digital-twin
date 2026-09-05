@@ -161,11 +161,20 @@ onUnmounted(() => {
           </span>
         </span>
         <span v-else-if="line.kind === 'frac'" class="dt-fx__frac">
-          <FormulaBlock :nodes="line.over" />
-          <FormulaBlock class="dt-fx__under" :nodes="line.under" />
+          <FormulaBlock class="dt-fx__part" :nodes="line.over" />
+          <span class="dt-fx__bar" />
+          <FormulaBlock class="dt-fx__part" :nodes="line.under" />
         </span>
         <span v-else-if="line.kind === 'sqrt'" class="dt-fx__sqrt">
-          <span class="dt-fx__radical">√</span>
+          <svg
+            class="dt-fx__radical"
+            viewBox="0 0 12 24"
+            preserveAspectRatio="none"
+            role="img"
+            aria-label="根号"
+          >
+            <path d="M0 15 L4 23.5 L11.5 0" />
+          </svg>
           <FormulaBlock class="dt-fx__roof" :nodes="line.of" />
         </span>
         <span v-else-if="line.kind === 'sum'" class="dt-fx__sum">
@@ -281,16 +290,24 @@ onUnmounted(() => {
     margin-left: 0;
   }
 
+  // 分式是一列网格：列宽取分子与分母里较宽的那一个
   &__frac {
-    display: inline-flex;
-    flex-direction: column;
-    align-items: center;
-    justify-content: center;
+    display: inline-grid;
+    grid-template-columns: auto;
+    justify-items: center;
     text-align: center;
   }
 
+  &__part {
+    padding: 0 0.2em;
+  }
+
+  // 横杠自己占一行并拉满整列。⚠ 不能画成分母的 border-top：
+  // 那样它只有分母那么宽，分子一宽（Σ 加求和项）就整个伸到线外。
   // currentColor 而不是 border 令牌：分数线要跟着它所在那行的字色走
-  &__under {
+  &__bar {
+    justify-self: stretch;
+    margin: 0.12em 0;
     border-top: 1px solid currentcolor;
   }
 
@@ -299,12 +316,28 @@ onUnmounted(() => {
     align-items: stretch;
   }
 
+  // 根号跟着被开方式一起长高：不缩放的 √ 字形配上两行高的式子，
+  // 会小小地挂在左下角、跟顶上那条横线断开。
+  // ⚠ non-scaling-stroke 不能省：preserveAspectRatio="none" 下描边会跟着拉伸，
+  // 省了它根号会随高度越来越粗、与 1px 的横线接不上
   &__radical {
-    align-self: flex-end;
+    flex: none;
+    align-self: stretch;
+    width: 0.62em;
+    height: auto;
+    overflow: visible;
+
+    path {
+      fill: none;
+      stroke: currentcolor;
+      stroke-linecap: round;
+      stroke-linejoin: round;
+      vector-effect: non-scaling-stroke;
+    }
   }
 
   &__roof {
-    padding: 0 0.15em;
+    padding: 0.1em 0.2em 0;
     border-top: 1px solid currentcolor;
   }
 

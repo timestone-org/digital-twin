@@ -1,15 +1,24 @@
 <script setup lang="ts">
 /**
- * @fileoverview 分类这一屏：混淆矩阵 + 每类 P/R/F1/支持度 + 真实占比对预测占比
- * + 正类判定（设计规格 §5-21）。指标卡在派发外壳 `MetricsView.vue` 上。
+ * @fileoverview 分类这一屏：混淆矩阵 + 真实占比对预测占比 + 逐类总账 + 正类判定
+ * （设计规格 §5-21）。指标卡在派发外壳 `MetricsView.vue` 上。
+ *
+ * ⚠ 矩阵与总账各答各的问题，不许互相复述：矩阵读的是「这一类的行数流向哪儿」，
+ * 精确率与召回率分别贴在列脚与行尾，位置本身就是口径；总账读的是「哪一类最
+ * 弱」，给的是矩阵横扫半天也读不出的 F1、最常错判去向，并且能排序、能复制。
  */
-import type { DtTableColumn } from '@dt/contracts'
+import type { DtTableColumn, DtTableSort } from '@dt/contracts'
 import { DtNotice, DtTable, DtTag } from '@dt/ui'
-import { computed } from 'vue'
+import { computed, ref } from 'vue'
 
 import type { BarListItem } from '../scripts/barList'
+import {
+  DEFAULT_LEDGER_SORT,
+  buildClassLedger,
+  sortLedger,
+} from '../scripts/classLedger'
 import { buildMatrixStats } from '../scripts/matrixStats'
-import { niceNumber } from '../scripts/numbers'
+import { grouped, niceNumber } from '../scripts/numbers'
 import { positiveClassOf } from '../scripts/positiveClass'
 import type { MetricsPreview } from '../scripts/preview'
 
@@ -18,21 +27,31 @@ import MatrixTable from './MatrixTable.vue'
 
 const props = defineProps<{ preview: MetricsPreview }>()
 
-const CLASS_COLUMNS: readonly DtTableColumn[] = [
-  { key: 'label', label: '类目', width: '10rem', align: 'left' },
-  { key: 'support', label: '支持度', width: '6rem', align: 'right' },
-  { key: 'precision', label: '精确率', width: '6rem', align: 'right' },
-  { key: 'recall', label: '召回率', width: '6rem', align: 'right' },
-  { key: 'f1', label: 'F1', width: '6rem', align: 'right' },
+const LEDGER_COLUMNS: readonly DtTableColumn[] = [
+  { key: 'label', label: '类目', width: '11rem', align: 'left' },
+  {
+    key: 'support',
+    label: '支持度',
+    width: '6rem',
+    align: 'right',
+    sortable: true,
+  },
+  { key: 'f1', label: 'F1', width: '6rem', align: 'right', sortable: true },
+  {
+    key: 'miss',
+    label: '最常错判成',
+    width: '11rem',
+    align: 'left',
+    sortable: true,
+  },
 ]
 
-interface ClassRow {
+interface LedgerView {
   readonly id: string
   readonly label: string
   readonly support: string
-  readonly precision: string
-  readonly recall: string
   readonly f1: string
+  readonly miss: string
   readonly isPositive: boolean
 }
 
@@ -44,16 +63,20 @@ const positive = computed(() =>
   positiveClassOf(stats.value.classes, props.preview.metrics),
 )
 
-const rows = computed<ClassRow[]>(() =>
-  stats.value.classes.map((item, index) => ({
-    id: `class-${index}`,
-    label: item.label,
-    support: niceNumber(item.support),
-    precision: niceNumber(item.precision),
-    recall: niceNumber(item.recall),
-    f1: niceNumber(item.f1),
+const sort = ref<DtTableSort>({ ...DEFAULT_LEDGER_SORT })
+
+const rows = computed<LedgerView[]>(() =>
+  sortLedger(buildClassLedger(stats.value), sort.value).map((row) => ({
+    id: row.id,
+    label: row.label,
+    support: grouped(row.support),
+    f1: niceNumber(row.f1),
+    miss:
+      row.missCount === 0
+        ? '没有错判'
+        : `${row.missLabel} ${grouped(row.missCount)} 行`,
     isPositive:
-      positive.value.kind === 'found' && positive.value.label === item.label,
+      positive.value.kind === 'found' && positive.value.label === row.label,
   })),
 )
 
@@ -98,33 +121,42 @@ const positiveText = computed(
       有不止一类的精确率与召回率一模一样，这份摘要里认不出哪一类是正类，所以不
       标徽标。
     </DtNotice>
-    <MatrixTable
-      :labels="props.preview.labels"
-      :matrix="props.preview.matrix"
-      caption="行是真实类别、列是判成的类别；对角格越深、这一类召回率越高，错格越深、错到那一格的行数越多"
-    />
-    <BarList
-      v-if="hasClasses"
-      mode="pairs"
-      :items="shares"
-      :pair-labels="SHARE_LABELS"
-      caption="真实占比对预测占比——两排差得远，说明模型在往某一类上押"
-    />
-    <div v-if="hasClasses" class="dt-ml-clf__table">
-      <DtTable :columns="CLASS_COLUMNS" :rows="rows" min-width="34rem">
-        <template #cell-label="{ row }">
-          <span class="dt-ml-clf__name">{{ row.label }}</span>
-          <DtTag v-if="row.isPositive" intent="primary" size="sm">正类</DtTag>
-        </template>
-        <template #cell-support="{ row }">{{ row.support }}</template>
-        <template #cell-precision="{ row }">{{ row.precision }}</template>
-        <template #cell-recall="{ row }">{{ row.recall }}</template>
-        <template #cell-f1="{ row }">{{ row.f1 }}</template>
-      </DtTable>
+    <div class="dt-ml-clf__stack">
+      <MatrixTable
+        :labels="props.preview.labels"
+        :matrix="props.preview.matrix"
+        caption="行是真实类别、列是判成的类别；对角格越深、这一类召回率越高，错格越深、错到那一格的行数越多"
+      />
+      <BarList
+        v-if="hasClasses"
+        mode="pairs"
+        :items="shares"
+        :pair-labels="SHARE_LABELS"
+        caption="真实占比对预测占比——两排差得远，说明模型在往某一类上押"
+      />
+      <div v-if="hasClasses" class="dt-ml-clf__ledger">
+        <DtTable
+          :columns="LEDGER_COLUMNS"
+          :rows="rows"
+          :sort="sort"
+          min-width="30rem"
+          @update:sort="sort = $event"
+        >
+          <template #cell-label="{ row }">
+            <span class="dt-ml-clf__name">{{ row.label }}</span>
+            <DtTag v-if="row.isPositive" intent="primary" size="sm">
+              正类
+            </DtTag>
+          </template>
+          <template #cell-support="{ row }">{{ row.support }}</template>
+          <template #cell-f1="{ row }">{{ row.f1 }}</template>
+          <template #cell-miss="{ row }">{{ row.miss }}</template>
+        </DtTable>
+      </div>
     </div>
     <p v-if="hasClasses" class="dt-ml-clf__note">
-      精确率与召回率写成 0–1 的比率；分母为 0 的那些写「—」，那是无定义，不是
-      0。
+      逐类总账默认按 F1 从低到高排，最弱的一类排在最上面；点表头换一列排。比率
+      都写成 0–1 的数，分母为 0 的那些写「—」，那是无定义，不是 0。
     </p>
   </div>
 </template>
@@ -143,10 +175,30 @@ const positiveText = computed(
     margin-right: 0.375rem;
   }
 
+  // 三块摞在一起要读成一块：矩阵有多宽，占比条与逐类总账就跟着多宽。
+  // ⚠ 宽度只能由矩阵这一头定：热力表按列宽自然排布（`MatrixTable` 的 `__board`
+  // 是 fit-content），另两块若各自铺满整屏，右边缘就会从矩阵旁边探出一大截
+  &__stack {
+    display: flex;
+    flex-direction: column;
+    gap: 0.75rem;
+    width: fit-content;
+    max-width: 100%;
+  }
+
   // 完整数据区不许把弹窗顶到十几屏高（规格 §3.1）
-  &__table {
+  &__ledger {
     overflow: auto;
     max-height: 28rem;
+  }
+
+  // 行高跟着矩阵的格子走：两块摞在一起时，行距不一样最先露馅
+  &__ledger :deep(.dt-table td) {
+    padding: 6px 12px;
+  }
+
+  &__ledger :deep(.dt-table th) {
+    padding: 8px 12px;
   }
 
   &__note {

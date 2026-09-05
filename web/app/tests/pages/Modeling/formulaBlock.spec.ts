@@ -3,6 +3,7 @@
  * 折行只断在运算符前，以及复制出去的必须是纯 ASCII 而不是屏幕上那串符号。
  */
 import { mount } from '@vue/test-utils'
+import { readFileSync } from 'node:fs'
 import { beforeEach, describe, expect, it, vi } from 'vitest'
 
 import FormulaBlock from '@/pages/Modeling/Canvas/components/FormulaBlock.vue'
@@ -23,6 +24,18 @@ import { copyText } from '@/utils/clipboard'
 vi.mock('@/utils/clipboard', () => ({ copyText: vi.fn() }))
 
 const copied = vi.mocked(copyText)
+
+// ⚠ 排版是 CSS 排的，而 happy-dom 不排版、量不出真实宽度：分式与根号那两条
+// 「对得齐」只能从样式正文上钉。vitest 的 cwd 就是 web/
+const STYLE = readFileSync(
+  `${process.cwd()}/app/src/pages/Modeling/Canvas/components/FormulaBlock.vue`,
+  'utf8',
+)
+
+/** 取 `&__x { … }` 这一条规则的正文（含它自己的嵌套规则）。 */
+function ruleOf(name: string): string {
+  return new RegExp(`&${name} \\{([\\s\\S]*?)\\n  \\}`).exec(STYLE)?.[1] ?? ''
+}
 
 function spec(patch: Partial<FormulaSpec> = {}): FormulaSpec {
   return {
@@ -149,7 +162,7 @@ describe('复制', () => {
 })
 
 describe('递归排版', () => {
-  it('分式的分子分母都画得出来，且分数线挂在下半截上', () => {
+  it('分式的分子分母各画一半，中间夹一道横杠', () => {
     const wrapper = mount(FormulaBlock, {
       props: {
         nodes: [
@@ -162,15 +175,16 @@ describe('递归排版', () => {
     })
 
     expect(wrapper.text()).toContain('exp(−z)')
-    expect(wrapper.find('.dt-fx__under').exists()).toBe(true)
+    expect(wrapper.findAll('.dt-fx__part')).toHaveLength(2)
+    expect(wrapper.find('.dt-fx__bar').exists()).toBe(true)
   })
 
-  it('根号画成 √ 加一条上横线', () => {
+  it('根号画成一笔可伸缩的描边，加一条上横线', () => {
     const wrapper = mount(FormulaBlock, {
       props: { nodes: [sqrt([run(varOf('x'))])] },
     })
 
-    expect(wrapper.text()).toContain('√')
+    expect(wrapper.find('.dt-fx__radical').exists()).toBe(true)
     expect(wrapper.find('.dt-fx__roof').exists()).toBe(true)
   })
 
@@ -217,6 +231,58 @@ describe('递归排版', () => {
     const wrapper = mount(FormulaBlock, { props: { nodes: [] } })
 
     expect(wrapper.find('.dt-fx__row').exists()).toBe(true)
+  })
+})
+
+describe('二维排版对得齐', () => {
+  // 分子是 Σ 加一串求和项、比分母那个 n 宽得多——横杠只有分母那么宽时，
+  // 分子就整个伸到线外去了
+  const MAPE = frac(
+    [
+      sum('i = 1', 'n', [
+        run(varOf('|入口温度ᵢ'), opOf('−'), varOf('预测入口温度ᵢ|')),
+      ]),
+    ],
+    [run(varOf('n'))],
+  )
+
+  it('横杠自成一格夹在分子分母中间，不是挂在分母上的一条边', () => {
+    const wrapper = mount(FormulaBlock, { props: { nodes: [MAPE] } })
+    const box = wrapper.find('.dt-fx__frac').element
+
+    expect([...box.children].map((one) => one.getAttribute('class'))).toEqual([
+      'dt-fx dt-fx__part',
+      'dt-fx__bar',
+      'dt-fx dt-fx__part',
+    ])
+    expect(wrapper.findAll('.dt-fx__part .dt-fx__bar')).toHaveLength(0)
+  })
+
+  // 分子分母同在一列、列宽取宽的那个，横杠拉满这一列 → 横杠不窄于分子
+  it('横杠拉满分子分母共用的那一列，两半自己不带横线', () => {
+    expect(ruleOf('__bar')).toContain('justify-self: stretch')
+    expect(ruleOf('__part')).not.toContain('border-top')
+  })
+
+  // ⚠ 不缩放的 √ 字形配两行高的被开方式，会小小地挂在左下角、跟顶上那条线断开
+  it('根号按被开方式的高度伸缩，描边宽度不跟着变粗', () => {
+    const wrapper = mount(FormulaBlock, {
+      props: { nodes: [sqrt([MAPE])] },
+    })
+    const radical = wrapper.find('.dt-fx__radical')
+
+    expect(radical.attributes('preserveAspectRatio')).toBe('none')
+    expect(ruleOf('__radical')).toContain('vector-effect: non-scaling-stroke')
+  })
+
+  it('根号读得出来：一笔描边也带一个可朗读的名字', () => {
+    const wrapper = mount(FormulaBlock, {
+      props: { nodes: [sqrt([run(varOf('x'))])] },
+    })
+
+    expect(wrapper.find('.dt-fx__radical').attributes('aria-label')).toBe(
+      '根号',
+    )
   })
 })
 

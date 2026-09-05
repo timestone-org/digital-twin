@@ -5,6 +5,8 @@
  *
  * ⚠ 用 HTML 不用 SVG：名称要跟条子对齐、要能 `text-overflow` 省略、右侧要挂
  * 读数，这三样 SVG 都做不好（设计规格 §7）。取数在 `scripts/barList.ts`。
+ * ⚠ 参考几何一律走文字色不走 `--border-strong`：后者压在浅色面板底上只有
+ * 1.38:1，远不到 WCAG 1.4.11 对非文本图形的 3:1（口径与实测见 §7 的配色表）。
  */
 import { DtEmpty, DtTooltip } from '@dt/ui'
 import { computed } from 'vue'
@@ -203,7 +205,7 @@ const moreText = computed(
       top: 100%;
       left: 0;
       height: 0.25rem;
-      border-left: 1px dashed var(--border-strong);
+      border-left: 1px dashed var(--text-disabled);
       content: '';
     }
   }
@@ -213,10 +215,12 @@ const moreText = computed(
     height: 1.3rem;
   }
 
-  // ⚠ 字不跟着线换色：浅色预设里 --state-warning 压在面板底上只有 2.5:1。
-  // 线是哪一条由引线的颜色与这块字自己的名字认，不靠字色
+  // 阈值线的引线跟着阈值线走：更粗一档的文字色。
+  // ⚠ 不许回到 --state-warning——它压在浅色面板底上只有 2.31:1，远不到 WCAG
+  // 1.4.11 对非文本图形的 3:1。哪条线是阈值靠线宽与这块字自己的名字认
   &__mark--threshold::after {
-    border-left-color: var(--state-warning);
+    border-left-width: 2px;
+    border-left-color: var(--text-secondary);
   }
 
   &__mark-text {
@@ -341,21 +345,27 @@ const moreText = computed(
     width: 0;
   }
 
+  // ⚠ 参考几何一律走文字色不走 --border-strong：后者压在浅色面板底上只有
+  // 1.38:1，零线与参考线在浅色预设里根本找不到（六套实测见 §7 的配色表）
   &__swatch--zero,
   &__swatch--reference,
   &__swatch--threshold,
   &__rule {
-    border-left: 1px dashed var(--border-strong);
+    border-left: 1px dashed var(--text-disabled);
   }
 
+  // 零线是这张图的基准：实线，走 8.07:1 那一档
   &__swatch--zero,
   &__rule--zero {
     border-left-style: solid;
+    border-left-color: var(--text-secondary);
   }
 
+  // 阈值线：更粗一档，配它自己那块字
   &__swatch--threshold,
   &__rule--threshold {
-    border-left-color: var(--state-warning);
+    border-left-width: 2px;
+    border-left-color: var(--text-secondary);
   }
 
   &__swatch--tick,

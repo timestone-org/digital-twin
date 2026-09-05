@@ -245,16 +245,18 @@ describe('颜色不作唯一编码', () => {
     expect(many - one).toBeGreaterThan(0.4)
   })
 
-  // ⚠ 危险色的明度比成功色低得多：判错格铺到 0.72 时，暗色预设下白字只剩
-  // 4.4:1、换深墨更只有 3.3:1。六套预设逐档实测，判错格的上限得单独压到 0.58，
-  // 而且一格都不许换深墨（换了就是把字压进中明度带）
-  it('判错格的上限比判对格低一档，且从不换深墨色', () => {
+  // ⚠ 判错格的上限卡在「白字还有 4.5:1」那一档：六套预设逐档实测，0.70 时最低
+  // 4.55:1（暗夜紫），0.72 就掉到 4.39。而压到 0.58 时浅色预设整条错格量程只有
+  // 0.192（oklab 欧氏），3%↔25% 两格只差 0.063 ≈ 3 JND，四格淡粉分不出归属。
+  // ⚠ 一格都不许换深墨：错格铺不到「深墨够 4.5」那一带，换了就是把字压进黑白
+  // 两种墨都不够的中明度带（暗色预设下 0.45 那一档换深墨只有 2.19:1）
+  it('判错格的上限卡在白字还有 4.5:1 的那一档，且从不换深墨色', () => {
     const wrapper = mount(MatrixTable, {
       props: { labels: ['A', 'B', 'C'], matrix: LOPSIDED },
     })
 
-    expect(alphaOf(wrapper, '500')).toBeLessThanOrEqual(0.58)
-    expect(alphaOf(wrapper, '100')).toBeGreaterThan(0.58)
+    expect(alphaOf(wrapper, '500')).toBeCloseTo(0.7, 5)
+    expect(alphaOf(wrapper, '100')).toBeGreaterThan(alphaOf(wrapper, '500'))
     expect(
       wrapper.findAll('.dt-ml-matrix__cell--miss.is-deep'),
     ).toHaveLength(0)

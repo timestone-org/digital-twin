@@ -6,6 +6,8 @@
  *
  * ⚠ 颜色不作唯一编码：「之前」那一路除了灰还空心，多路序列除了色相还有各自的
  * 标记形状与线型，参考线与阈值线的线型也不同。
+ * ⚠ 参考几何一律走文字色不走 `--border-strong`：后者压在浅色面板底上只有
+ * 1.38:1，远不到 WCAG 1.4.11 对非文本图形的 3:1（口径与实测见 §7 的配色表）。
  */
 import { computed } from 'vue'
 
@@ -230,12 +232,14 @@ const view = computed(() =>
     text-anchor: start;
   }
 
+  // 坐标轴与刻度字同一档：六套预设里最低 5.10:1
   &__axis {
-    stroke: var(--border-strong);
+    stroke: var(--text-disabled);
   }
 
+  // 理想对角线是 pairs 态的基准，走 8.07:1 那一档
   &__ideal {
-    stroke: var(--border-strong);
+    stroke: var(--text-secondary);
     stroke-dasharray: 4 3;
   }
 
@@ -245,7 +249,7 @@ const view = computed(() =>
 
     rect {
       fill: rgba(var(--neutral-fg-rgb), 0.07);
-      stroke: var(--border-strong);
+      stroke: var(--text-disabled);
       stroke-dasharray: 2 3;
     }
   }
@@ -253,17 +257,23 @@ const view = computed(() =>
   &__rule {
     stroke-dasharray: 4 3;
 
-    // 参考线走中性描边，阈值线走警示色 + 更疏的虚线
+    // 两条都走文字色，靠线宽与虚线疏密分：阈值线更粗更疏，且各自带文字标签。
+    // ⚠ 阈值线不再走 --state-warning——它在浅色预设下只有 2.31:1，而零残差线
+    // 这类基准一旦看不见，整张残差图就没有参照物了
     &--reference {
-      stroke: var(--border-strong);
+      stroke: var(--text-secondary);
     }
 
     &--threshold {
-      stroke: var(--state-warning);
+      stroke: var(--text-secondary);
+      stroke-width: 1.8;
       stroke-dasharray: 8 4;
     }
   }
 
+  // ⚠ 系列色顺序：主 → 警示 → 危险 → 成功 → 次强调 → 静默。第二档不能是
+  // --state-success——它与 --accent-primary 在翡翠绿下色相只差 10.7°，两路序列
+  // 会塌成同一片绿；换成 --state-warning 之后六套里最小差 46.9°（§7 的配色表）
   &__dots {
     stroke-width: 1;
 
@@ -278,15 +288,15 @@ const view = computed(() =>
     }
 
     &--t1 {
-      fill: rgba(var(--state-success-rgb), 0.7);
-    }
-
-    &--t2 {
       fill: rgba(var(--state-warning-rgb), 0.7);
     }
 
-    &--t3 {
+    &--t2 {
       fill: rgba(var(--state-danger-rgb), 0.7);
+    }
+
+    &--t3 {
+      fill: rgba(var(--state-success-rgb), 0.7);
     }
 
     &--t4 {
@@ -312,17 +322,17 @@ const view = computed(() =>
     }
 
     &--t1 {
-      stroke: var(--state-success);
+      stroke: var(--state-warning);
       stroke-dasharray: 6 3;
     }
 
     &--t2 {
-      stroke: var(--state-warning);
+      stroke: var(--state-danger);
       stroke-dasharray: 2 2;
     }
 
     &--t3 {
-      stroke: var(--state-danger);
+      stroke: var(--state-success);
       stroke-dasharray: 8 2 2 2;
     }
 
@@ -389,18 +399,18 @@ const view = computed(() =>
     }
 
     &--t1 {
-      border-color: var(--state-success);
-      background: rgba(var(--state-success-rgb), 0.7);
-    }
-
-    &--t2 {
       border-color: var(--state-warning);
       background: rgba(var(--state-warning-rgb), 0.7);
     }
 
-    &--t3 {
+    &--t2 {
       border-color: var(--state-danger);
       background: rgba(var(--state-danger-rgb), 0.7);
+    }
+
+    &--t3 {
+      border-color: var(--state-success);
+      background: rgba(var(--state-success-rgb), 0.7);
     }
 
     &--t4 {

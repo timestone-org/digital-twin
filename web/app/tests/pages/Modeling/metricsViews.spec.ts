@@ -312,3 +312,88 @@ describe('分类这一屏', () => {
     expect(names).toEqual(['准确率', '精确率', '召回率', 'F1'])
   })
 })
+
+/**
+ * A 强 B 弱，且弱的那一类排在后面：默认序若没生效，行序会与矩阵一模一样，
+ * 用矩阵序的夹具是看不出来的。
+ */
+const RANKED = {
+  task: 'classification',
+  metrics: { accuracy: 0.8947 },
+  labels: ['A', 'B'],
+  matrix: [
+    [90, 4],
+    [8, 12],
+  ],
+}
+
+/** 逐类总账那张表的行，按当前顺序。 */
+function ledgerRows(wrapper: ReturnType<typeof screen>): string[][] {
+  return wrapper
+    .findAll('.dt-ml-clf__ledger tbody tr')
+    .map((row) => row.findAll('td').map((cell) => cell.text()))
+}
+
+describe('逐类总账', () => {
+  // ⚠ 矩阵边栏与列脚已经把精确率与召回率印过一遍，那两处贴着行、贴着列，
+  // 口径由位置说清楚；表这一处再印一遍就是同一份账印两遍（规格 §2-P1）
+  it('不复述矩阵已经印过的精确率与召回率', () => {
+    const wrapper = screen(RANKED)
+
+    const heads = wrapper
+      .findAll('.dt-ml-clf__ledger th')
+      .map((head) => head.text())
+    expect(heads).toEqual(['类目', '支持度', 'F1', '最常错判成'])
+  })
+
+  it('默认按 F1 从低到高排，最弱的一类排在最上面', () => {
+    const wrapper = screen(RANKED)
+
+    expect(ledgerRows(wrapper).map((row) => row[0])).toEqual(['B', 'A'])
+  })
+
+  it('点表头换一列排', async () => {
+    const wrapper = screen(RANKED)
+    const heads = wrapper.findAll('.dt-ml-clf__ledger .dt-table__sort')
+
+    expect(heads.map((head) => head.text())).toEqual([
+      '支持度',
+      'F1',
+      '最常错判成',
+    ])
+
+    await heads[2]?.trigger('click')
+
+    expect(ledgerRows(wrapper).map((row) => row[0])).toEqual(['A', 'B'])
+
+    await heads[2]?.trigger('click')
+
+    expect(ledgerRows(wrapper).map((row) => row[0])).toEqual(['B', 'A'])
+  })
+
+  // ⚠ 这是整张表上唯一一件矩阵读不出来的事：在矩阵里它是一行中最深的那一格
+  it('印这一类错得最多的去向与行数', () => {
+    const wrapper = screen(RANKED)
+    const rows = ledgerRows(wrapper)
+
+    expect(rows[0]).toEqual(['B', '20', '0.6667', 'A 8 行'])
+    expect(rows[1]).toEqual(['A', '94', '0.9375', 'B 4 行'])
+  })
+
+  it('一格都没错的类目写「没有错判」，不留一格空白', () => {
+    const wrapper = screen({
+      task: 'classification',
+      metrics: { accuracy: 1 },
+      labels: ['A', 'B'],
+      matrix: [
+        [9, 0],
+        [0, 6],
+      ],
+    })
+
+    expect(ledgerRows(wrapper).map((row) => row[3])).toEqual([
+      '没有错判',
+      '没有错判',
+    ])
+  })
+})

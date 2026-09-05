@@ -5,6 +5,8 @@
  * 共用这一张画法，规格 §7「同一个语义永远同一个外形」。
  *
  * ⚠ 颜色不作唯一编码：丢弃段除了警示色还有斜纹，越界段除了危险色还有边框。
+ * ⚠ 参考几何一律走文字色不走 `--border-strong`：后者压在浅色面板底上只有
+ * 1.38:1，远不到 WCAG 1.4.11 对非文本图形的 3:1（口径与实测见 §7 的配色表）。
  */
 import { computed, useId } from 'vue'
 
@@ -131,12 +133,17 @@ const dropFill = computed(() => `url(#${patternId}-${props.dropIntent})`)
         <template v-for="mark in view.drawnMarks" :key="mark.key">
           <line
             class="dt-ml-hist__mark"
-            :class="`dt-ml-hist__mark--${mark.intent}`"
+            :class="[
+              `dt-ml-hist__mark--${mark.intent}`,
+              { 'is-unnamed': mark.text === '' },
+            ]"
             :x1="mark.left"
             :y1="mark.lineTop"
             :x2="mark.left"
             :y2="view.plot.baseline"
-          />
+          >
+            <title>{{ mark.full }}</title>
+          </line>
           <text
             class="dt-ml-hist__mark-label"
             :x="mark.labelLeft"
@@ -264,8 +271,9 @@ const dropFill = computed(() => `url(#${patternId}-${props.dropIntent})`)
     text-anchor: start;
   }
 
+  // 坐标轴与刻度字同一档：六套预设里最低 5.10:1
   &__axis {
-    stroke: var(--border-strong);
+    stroke: var(--text-disabled);
   }
 
   &__bar-kept {
@@ -294,35 +302,54 @@ const dropFill = computed(() => `url(#${patternId}-${props.dropIntent})`)
 
   &__bar-off {
     fill: rgba(var(--neutral-fg-rgb), 0.35);
-    stroke: var(--border-strong);
+    stroke: var(--text-disabled);
     stroke-width: 1;
     stroke-dasharray: 3 2;
   }
 
+  // 正态参考曲线是拿来比对形状的基准，走 8.07:1 那一档
   &__curve {
     fill: none;
-    stroke: var(--border-strong);
+    stroke: var(--text-secondary);
     stroke-dasharray: 3 2;
   }
 
   &__off-split {
-    stroke: var(--border-strong);
+    stroke: var(--text-disabled);
     stroke-dasharray: 2 3;
   }
 
+  // 三档标记线各有各的线型与文字标签，颜色不作唯一编码。
+  // ⚠ 软界与位置标记不再走 --state-warning / --state-info：这两个在浅色预设下
+  // 只有 2.31:1 与 2.99:1，压在面板底上就是一条看不见的线
   &__mark {
     stroke-dasharray: 4 3;
 
+    // 硬界（裁剪上下界）：危险色，六套最低 3.38:1
     &--danger {
       stroke: var(--state-danger);
+      stroke-width: 1.2;
     }
 
+    // 软界 / 阈值：更粗更疏的虚线
     &--warning {
-      stroke: var(--state-warning);
+      stroke: var(--text-secondary);
+      stroke-width: 1.8;
+      stroke-dasharray: 8 4;
     }
 
+    // 位置标记（均值 / 中位数）：最细最密的虚线
     &--info {
-      stroke: var(--state-info);
+      stroke: var(--text-disabled);
+      stroke-dasharray: 2 3;
+    }
+
+    // 标签被挤掉的那条：只换线型不换色——档还是那个档，点线明说「这条线的名字
+    // 不在图上」，名字由结论那行点名、悬停时也读得到。
+    // ⚠ 照旧画成同款虚线的话，读者只会看见一条无名的线
+    &.is-unnamed {
+      stroke-width: 1;
+      stroke-dasharray: 1 2;
     }
   }
 

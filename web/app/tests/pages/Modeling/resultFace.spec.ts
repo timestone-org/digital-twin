@@ -49,6 +49,8 @@ const FRAME_BODY = {
 
 const FRAME = { frame: FRAME_BODY }
 
+const FRAME_URL = '/api/v1/platform/modeling-runs/r1/frames/n1?port=frame'
+
 function blockOf(over: Record<string, unknown> = {}) {
   return {
     kind: 'rows',
@@ -59,6 +61,11 @@ function blockOf(over: Record<string, unknown> = {}) {
     payload: { before: 12, after: 8 },
     ...over,
   }
+}
+
+/** 一段话里某个记号出现了几次。 */
+function countOf(text: string, mark: string): number {
+  return text.split(mark).length - 1
 }
 
 function reportOf(blocks: Record<string, unknown>[]) {
@@ -82,6 +89,17 @@ describe('四档截断各说各的', () => {
 
     expect(text).toContain('载荷热力')
     expect(text).toContain('前后叠图')
+  })
+
+  // ⚠ 这一档说的是「摘要装不下、块被削掉了」：数据是全的，缺的只是讲解。
+  // 换成一句笼统的「数据不全」，用户会跑去改取数范围或重跑这一步
+  it('字节预算那一档说的是摘要装不下，不是数据没进来', () => {
+    const text = mount(TruncationNotice, { props: { kind: 'budget' } }).text()
+
+    expect(text).toContain('没能存下来')
+    expect(text).toContain('数据本身没受影响')
+    expect(text).not.toContain('取数')
+    expect(text).not.toContain('重跑')
   })
 
   it('上游被削与这一屏被削不是同一句话', () => {
@@ -118,6 +136,15 @@ describe('没有讲解的运行退回升级前的样子', () => {
 
     expect(wrapper.findComponent(ProvenanceBar).exists()).toBe(false)
     expect(wrapper.text()).not.toContain('这一步讲的话太长')
+  })
+
+  // ⚠ 那时没有 ⑥ 区，表自己那行就是这一屏唯一的出处，删不得
+  it('report 为 null 时出处由那张表自己印', () => {
+    const wrapper = mount(ResultView, {
+      props: { payload: FRAME, report: null },
+    })
+
+    expect(countOf(wrapper.text(), '台账 energy_log')).toBe(1)
   })
 
   // ⚠ 空区摆空态的话，老运行的弹窗上会凭空多出一片白块
@@ -169,6 +196,19 @@ describe('有讲解时铺成六区', () => {
 
     expect(wrapper.find('.dt-ml-result__scroll').exists()).toBe(true)
     expect(wrapper.text()).toContain('中位')
+  })
+
+  // ⚠ ⑥ 区那行比表自己那句更全（请求区间与实际取到的区间分两段），两处一起印
+  // 就是同一句灰字在同一个折叠区里说两遍。收起来的那一档看不见这个重复
+  it('点开之后出处只印一行，不是同一句话说两遍', async () => {
+    const wrapper = mount(ResultView, {
+      props: { payload: FRAME, report: REPORT },
+    })
+
+    await wrapper.find('.dt-ml-result__toggle').trigger('click')
+
+    expect(countOf(wrapper.text(), '台账 energy_log')).toBe(1)
+    expect(wrapper.findComponent(ProvenanceBar).exists()).toBe(true)
   })
 
   // ⚠ 摘要被预算削过这件事后端一直在传，界面上一个字都没读过（规格 §1.4）
@@ -320,6 +360,81 @@ describe('出处那一行', () => {
 
     expect(text).not.toContain('实际取到')
     expect(text).toContain('energy_log')
+  })
+
+  // 出处不一定有台账：模型与评估那两路只有时间区间
+  it('取不到台账来源时只印时间区间，不留一个空标签', () => {
+    const bare = {
+      tableCodes: [],
+      since: '2026-01-01T00:00:00Z',
+      until: null,
+      actualUntil: null,
+      downloadUrl: '',
+    }
+    const asked = mount(ProvenanceBar, {
+      props: { ...bare, actualSince: null },
+    })
+    const truncated = mount(ProvenanceBar, {
+      props: { ...bare, actualSince: '2026-08-12T03:00:00Z' },
+    })
+
+    expect(asked.text()).not.toContain('台账')
+    expect(asked.text()).toContain('2026/1/1')
+    expect(truncated.text()).not.toContain('台账')
+    expect(truncated.text()).toContain('实际取到')
+  })
+
+  // ⚠ 屏上那份摘要有 200 行硬上限：想把处理好的数据拿走只能走这个链接
+  it('留了全量结果时给一个原生下载链接', () => {
+    const link = mount(ProvenanceBar, {
+      props: {
+        tableCodes: [],
+        since: null,
+        until: null,
+        actualSince: null,
+        actualUntil: null,
+        downloadUrl: FRAME_URL,
+      },
+    }).find('a')
+
+    expect(link.attributes('href')).toBe(FRAME_URL)
+    // 交给浏览器直接下：几十 MB 的 CSV 拉回内存造 blob 是白付一遍内存
+    expect(link.attributes('download')).toBe('')
+    expect(link.text()).toBe('下载全量结果')
+  })
+
+  it('这次运行没留全量结果时不摆链接，不给一个点了没用的入口', () => {
+    const wrapper = mount(ProvenanceBar, {
+      props: {
+        tableCodes: ['energy_log'],
+        since: null,
+        until: null,
+        actualSince: null,
+        actualUntil: null,
+        downloadUrl: '',
+      },
+    })
+
+    expect(wrapper.find('a').exists()).toBe(false)
+    expect(wrapper.text()).not.toContain('下载全量结果')
+  })
+
+  it('只有 exported_ports 里点了名的那一路才拿得到下载地址', () => {
+    const shared = {
+      payload: FRAME,
+      report: reportOf([blockOf()]),
+      runId: 'r1',
+      nodeId: 'n1',
+    }
+    const kept = mount(ResultView, {
+      props: { ...shared, exportedPorts: ['frame'] },
+    })
+    const gone = mount(ResultView, { props: { ...shared, exportedPorts: [] } })
+
+    expect(kept.findComponent(ProvenanceBar).props('downloadUrl')).toContain(
+      'port=frame',
+    )
+    expect(gone.findComponent(ProvenanceBar).props('downloadUrl')).toBe('')
   })
 })
 
