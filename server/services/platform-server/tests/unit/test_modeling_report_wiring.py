@@ -174,7 +174,11 @@ async def test_a_step_that_says_nothing_leaves_the_column_null() -> None:
 async def test_a_step_that_talks_lands_its_blocks_through_the_real_runner() -> (
     None
 ):
-    """真跑法上，取数那一步的讲解一路走到落库那份 JSON。"""
+    """真跑法上，取数那一步的讲解一路走到落库那份 JSON。
+
+    ⚠ 没有 `bins`：这份假帧一格空值都没有，那一块整个不发（`source.py` 的
+    `_quality_block`），好消息落成漏斗上的一句话。
+    """
     outcome = await run_with(DirectRunner())
     source = next(
         node for node in outcome.nodes if node.operator == "ledger_source"
@@ -183,7 +187,6 @@ async def test_a_step_that_talks_lands_its_blocks_through_the_real_runner() -> (
     assert [block["kind"] for block in source.report["blocks"]] == [
         "rows",
         "columns",
-        "bins",
         "axis",
     ]
 

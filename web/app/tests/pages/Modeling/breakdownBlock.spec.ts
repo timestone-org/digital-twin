@@ -13,6 +13,7 @@ import { describe, expect, it } from 'vitest'
 
 import BarList from '@/pages/Modeling/Canvas/components/BarList.vue'
 import BreakdownBlock from '@/pages/Modeling/Canvas/components/BreakdownBlock.vue'
+import ScatterPlot from '@/pages/Modeling/Canvas/components/ScatterPlot.vue'
 import StatCards from '@/pages/Modeling/Canvas/components/StatCards.vue'
 import { buildBreakdown } from '@/pages/Modeling/Canvas/scripts/breakdownParts'
 import type { ReportBlock } from '@/pages/Modeling/Canvas/scripts/reportBlocks'
@@ -367,6 +368,60 @@ describe('按时刻分格的那一档走时间序列', () => {
 
     expect(wrapper.findComponent(BarList).exists()).toBe(true)
     expect(wrapper.find('.dt-ml-scatter__line').exists()).toBe(false)
+  })
+})
+
+describe('分位点那一档走正态 QQ', () => {
+  /**
+   * 后端实测：`residual_analysis` 的「正态 QQ」，五十一个分位点里留下首、
+   * 四分位、中位、四分位、末这五个——判据只看这几处，别的点删掉不改结论。
+   * 这一份的残差里混着几行错得特别离谱的，中段反而比正态挤。
+   */
+  const QQ_PAYLOAD = {
+    label: '实测分位对同均值同方差的正态分位',
+    unit: '',
+    score_kind: '',
+    baseline: null,
+    items: [
+      { name: '0.010', value: -7.487423, expected: -5.246815, ratio: 0.009804 },
+      { name: '0.245', value: -0.834923, expected: -1.470578, ratio: 0.245098 },
+      { name: '0.500', value: 0.043611, expected: 0.114552, ratio: 0.5 },
+      { name: '0.755', value: 1.12572, expected: 1.699682, ratio: 0.754902 },
+      { name: '0.990', value: 6.671171, expected: 5.475919, ratio: 0.990196 },
+    ],
+    is_primary: false,
+  }
+
+  it('画成散点的 qq 态，不是一排以分位数命名的横条', () => {
+    const wrapper = mounted(QQ_PAYLOAD, 1)
+
+    expect(wrapper.findComponent(BarList).exists()).toBe(false)
+    expect(wrapper.findComponent(ScatterPlot).props('mode')).toBe('qq')
+  })
+
+  it('那条对角线画得出来：贴着它才叫接近正态', () => {
+    expect(mounted(QQ_PAYLOAD, 1).find('.dt-ml-scatter__ideal').exists()).toBe(
+      true,
+    )
+  })
+
+  it('图下那句说的是点偏离对角线偏成了什么样，不是复述图名', () => {
+    const text = mounted(QQ_PAYLOAD, 1).text()
+
+    expect(text).toContain('尾巴比正态厚')
+    expect(text).toContain('少数几行错得特别离谱')
+    expect(text).not.toContain('正态 QQ')
+  })
+
+  it('横条那几句结论不跟着摆：它们说的是另一张图', () => {
+    expect(mounted(QQ_PAYLOAD, 1).text()).not.toContain('共 5 项')
+  })
+
+  it('没有分位点的那几块照旧走横条', () => {
+    const wrapper = mounted(FOLD_PAYLOAD)
+
+    expect(wrapper.findComponent(BarList).exists()).toBe(true)
+    expect(wrapper.findComponent(ScatterPlot).exists()).toBe(false)
   })
 })
 

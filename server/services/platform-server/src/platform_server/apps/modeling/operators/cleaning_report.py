@@ -6,7 +6,7 @@
 来 import 会成环。
 """
 
-from collections.abc import Collection, Mapping, Sequence
+from collections.abc import Collection, Iterable, Mapping, Sequence
 from dataclasses import dataclass
 
 from platform_server.apps.modeling.operators.frame import (
@@ -18,6 +18,7 @@ from platform_server.apps.modeling.operators.frame import (
 )
 from platform_server.apps.modeling.operators.reporting import (
     MAX_SAMPLES,
+    NOTE_HINT,
     TIER_LARGE,
     TIER_SCALAR,
     TIER_SMALL,
@@ -28,6 +29,7 @@ from platform_server.apps.modeling.operators.reporting import (
     Item,
     ReportBlock,
     RowCounts,
+    annotated,
     bins_block,
     cells_block,
     columns_block,
@@ -64,6 +66,10 @@ NOTE_BLANK_COMPARED = "比较档一律丢弃，不拿它当 0 去比"
 NOTE_BLANK_JUDGED = "这一档专判空值，空与不空各有去向"
 NOTE_HOLED_ANY = "判据列里有一个空就丢这行"
 NOTE_HOLED_ALL = "判据列全空才丢这行"
+# 空值率那一块没发时，好消息改落成第一区的一句话。⚠ 与零行的帧上「算不出来」
+# 分开说（规格 §2-P5）：那一档是数据根本没进来，空不空无从谈起
+NOTE_NO_BLANK = "{columns} 列 {rows} 行，一格空值都没有"
+NOTE_CAST_NO_BLANK = "{columns} 列 {rows} 行，转前转后一格空值都没有"
 
 
 @dataclass(frozen=True)
@@ -176,33 +182,54 @@ def blame_of(frame: Frame, keys: Sequence[str], kept: Collection[int]) -> Blame:
 def cast_blocks(run: CastRun) -> tuple[ReportBlock, ...]:
     """类型归一的三块：转不动的格、类型对照、空值率前后。
 
+    ⚠ 转前转后一格空值都没有时最后那一块不发：几根柱全是 0，一排零高的横条
+    说不出任何事（规格 §2-P5）。那件事是好消息，落成类型对照上的一句话。
     Args: run。
     """
-    return (
-        _cast_cells_block(run),
-        _cast_columns_block(run),
-        _cast_bins_block(run),
+    broken = _cast_cells_block(run)
+    named = _cast_columns_block(run)
+    spread = _cast_bins_block(run)
+    if spread is not None:
+        return (broken, named, spread)
+    note = NOTE_CAST_NO_BLANK.format(
+        columns=len(run.failed), rows=run.before.row_count
     )
+    return (broken, _hinted(named, note))
 
 
 def holed_blocks(run: HoledRun) -> tuple[ReportBlock, ...]:
     """丢行档的两块：行数账带归因、判据列各自的空值率。
 
+    ⚠ 判据列一格空值都没有时后一块不发：「哪几列空得最多」这个问题在没有空值
+    时根本不存在，几根零高的柱只是占版面（规格 §2-P5）。
     Args: run。
     """
-    return (_holed_rows_block(run), _holed_bins_block(run))
+    counted = _holed_rows_block(run)
+    spread = _holed_bins_block(run)
+    if spread is not None:
+        return (counted, spread)
+    note = NOTE_NO_BLANK.format(
+        columns=len(run.watched), rows=run.before.row_count
+    )
+    return (_hinted(counted, note),)
 
 
 def empty_blocks(run: EmptyRun) -> tuple[ReportBlock, ...]:
     """丢列档的三块：列数账、丢掉的是谁、各列空值率对着那条阈值线。
 
+    ⚠ 一格空值都没有时最后那一块不发：每列一根零高的柱贴着那条阈值线，说的是
+    零（规格 §2-P5）。那件事是好消息，落成列数账上的一句话。
     Args: run。
     """
-    return (
-        _empty_rows_block(run),
-        _empty_columns_block(run),
-        _empty_bins_block(run),
+    counted = _empty_rows_block(run)
+    named = _empty_columns_block(run)
+    spread = _empty_bins_block(run)
+    if spread is not None:
+        return (counted, named, spread)
+    note = NOTE_NO_BLANK.format(
+        columns=len(run.ratios), rows=run.before.row_count
     )
+    return (_hinted(counted, note), named)
 
 
 def filter_blocks(run: FilterRun) -> tuple[ReportBlock, ...]:
@@ -258,8 +285,8 @@ def _cast_columns_block(run: CastRun) -> ReportBlock:
     )
 
 
-def _cast_bins_block(run: CastRun) -> ReportBlock:
-    """每列空值率的转前转后两根柱。
+def _cast_bins_block(run: CastRun) -> ReportBlock | None:
+    """每列空值率的转前转后两根柱；两边都没有空值时不发。
 
     ⚠ 行数不变，两根柱共用同一个分母，故差值可信——这是全步唯一一处直接比得出
     「转坏了多少」的地方。
@@ -267,6 +294,15 @@ def _cast_bins_block(run: CastRun) -> ReportBlock:
     """
     rows = run.before.row_count
     ranked = sorted(run.failed, key=lambda key: (-run.failed[key].count, key))
+    paired = {
+        key: (
+            _rounded(null_ratio_of(run.before, key), rows),
+            _rounded(null_ratio_of(run.after, key), rows),
+        )
+        for key in ranked
+    }
+    if _is_all_zero(one for pair in paired.values() for one in pair):
+        return None
     return bins_block(
         BlockAt(
             zone="charts",
@@ -275,16 +311,7 @@ def _cast_bins_block(run: CastRun) -> ReportBlock:
             tier=TIER_SMALL,
             is_primary=True,
         ),
-        [
-            _ratio_bins(
-                key,
-                (
-                    _rounded(null_ratio_of(run.before, key), rows),
-                    _rounded(null_ratio_of(run.after, key), rows),
-                ),
-            )
-            for key in ranked
-        ],
+        [_ratio_bins(key, paired[key]) for key in ranked],
     )
 
 
@@ -322,14 +349,16 @@ def _holed_rows_block(run: HoledRun) -> ReportBlock:
     )
 
 
-def _holed_bins_block(run: HoledRun) -> ReportBlock:
-    """判据看的那几列各有多高的空值率，最空的排前面。
+def _holed_bins_block(run: HoledRun) -> ReportBlock | None:
+    """判据看的那几列各有多高的空值率，最空的排前面；全是零时不发。
 
     Args: run。
     """
     rows = run.before.row_count
     ratios = {key: null_ratio_of(run.before, key) for key in run.watched}
     ranked = sorted(ratios, key=lambda key: (-ratios[key], key))
+    if _is_all_zero(_rounded(ratios[key], rows) for key in ranked):
+        return None
     return bins_block(
         BlockAt(
             zone="charts",
@@ -386,8 +415,8 @@ def _empty_columns_block(run: EmptyRun) -> ReportBlock:
     )
 
 
-def _empty_bins_block(run: EmptyRun) -> ReportBlock:
-    """各列空值率对着那条阈值线，最空的排前面。
+def _empty_bins_block(run: EmptyRun) -> ReportBlock | None:
+    """各列空值率对着那条阈值线，最空的排前面；全是零时不发。
 
     ⚠ 只画得下前几列（`MAX_BIN_COLUMNS`）：最空的排前面，那条线两边的邻居才落
     得进画面。
@@ -396,6 +425,8 @@ def _empty_bins_block(run: EmptyRun) -> ReportBlock:
     rows = run.before.row_count
     mark: Item = {"at": run.limit, "label": "阈值", "intent": "danger"}
     ranked = sorted(run.ratios, key=lambda key: (-run.ratios[key], key))
+    if _is_all_zero(_rounded(run.ratios[key], rows) for key in ranked):
+        return None
     return bins_block(
         BlockAt(
             zone="charts",
@@ -513,6 +544,25 @@ def _rounded(ratio: float, rows: int) -> float | None:
     Args: ratio, rows。
     """
     return None if rows <= 0 else round(ratio, NULL_RATIO_DIGITS)
+
+
+def _is_all_zero(ratios: Iterable[float | None]) -> bool:
+    """这几个空值率是不是全都货真价实地等于零。
+
+    ⚠ 算不出来的那几个（零行的帧）不算数：那一档是「数据根本没进来」，与「真
+    的一格空值都没有」措辞与位置都不同，合并了就分不出（规格 §2-P5）。
+    Args: ratios。
+    """
+    found = list(ratios)
+    return bool(found) and all(ratio == 0 for ratio in found)
+
+
+def _hinted(block: ReportBlock, note: str) -> ReportBlock:
+    """给一块挂上一句口径说明。
+
+    Args: block, note。
+    """
+    return annotated(block, NOTE_HINT, (note,))
 
 
 def _ratio_bins(

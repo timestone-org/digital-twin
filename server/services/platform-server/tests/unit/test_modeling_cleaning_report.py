@@ -8,6 +8,8 @@
 
 from typing import Any
 
+import pytest
+
 from platform_server.apps.modeling.operators import (
     CellValue,
     Frame,
@@ -18,8 +20,10 @@ from platform_server.apps.modeling.operators import (
 from platform_server.apps.modeling.operators.cleaning_report import (
     NOTE_BLANK_COMPARED,
     NOTE_BLANK_JUDGED,
+    NOTE_CAST_NO_BLANK,
     NOTE_HOLED_ALL,
     NOTE_HOLED_ANY,
+    NOTE_NO_BLANK,
     OFF_AXIS_BLANK,
 )
 from platform_server.apps.modeling.services import report_budget
@@ -97,6 +101,20 @@ def stages_of(code: str, frame: Frame, **config: Any) -> dict[str, Any]:
         "rows"
     ].payload["funnel"]
     return {stage["name"]: stage for stage in rows}
+
+
+def notes_of(block: ReportBlock) -> list[str]:
+    """一块上挂的那几句话。
+
+    Args: block。
+    """
+    listed: list[dict[str, Any]] = block.payload.get("notes") or []
+    return [one["text"] for one in listed]
+
+
+def spotless() -> Frame:
+    """两列三行，一格空值都没有。"""
+    return framed(((1.0, "1"), (2.0, "2"), (3.0, "3")))
 
 
 def fitted_size(code: str, frame: Frame, **config: Any) -> int:
@@ -215,6 +233,19 @@ def test_the_null_ratio_is_paired_before_and_after_over_one_denominator() -> (
             "off_axis": None,
             "curve": None,
         }
+    ]
+
+
+def test_a_cast_with_no_blank_on_either_side_draws_no_bar_at_all() -> None:
+    """⚠ 转前转后都没有空值时那一块整个不发。
+
+    照发的话每列两根 0 高的横条，一排零说不出任何事，而「转坏了多少」这个问题
+    在没有空值时根本不存在（规格 §2-P5）。
+    """
+    made = blocks_of("cast_type", spotless(), columns=[SECOND], to="number")
+    assert "bins" not in made
+    assert notes_of(made["columns"]) == [
+        NOTE_CAST_NO_BLANK.format(columns=1, rows=3)
     ]
 
 
@@ -382,6 +413,24 @@ def test_every_column_gets_a_bar_against_the_threshold_line() -> None:
         (FIRST, [0.75], [{"at": 0.5, "label": "阈值", "intent": "danger"}]),
         (SECOND, [0.25], [{"at": 0.5, "label": "阈值", "intent": "danger"}]),
     ]
+
+
+@pytest.mark.parametrize("axis", ["row", "col"])
+def test_a_frame_without_a_blank_draws_no_null_ratio_bar(axis: str) -> None:
+    """丢行丢列两档同理：一格空值都没有时那一块不发。
+
+    ⚠ 每列一根零高的柱说不出任何事（规格 §2-P5）；好消息落成行数账上的一句话。
+    """
+    made = blocks_of("drop_missing", spotless(), axis=axis)
+    assert "bins" not in made
+    assert notes_of(made["rows"]) == [NOTE_NO_BLANK.format(columns=2, rows=3)]
+
+
+def test_a_frame_with_no_rows_still_draws_the_bar_it_cannot_compute() -> None:
+    """⚠ 零行的帧上「算不出来」照发，不许跟着好消息一起被吞掉（规格 §2-P5）。"""
+    made = blocks_of("drop_missing", framed(()), axis="col")
+    assert made["bins"].payload["by_column"][0]["bins"] == []
+    assert notes_of(made["rows"]) == []
 
 
 def test_dropping_empty_columns_out_of_a_wide_frame_fits_the_budget() -> None:

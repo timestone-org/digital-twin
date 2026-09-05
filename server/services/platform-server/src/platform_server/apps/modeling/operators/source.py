@@ -31,6 +31,7 @@ from platform_server.apps.modeling.operators.frame import (
 from platform_server.apps.modeling.operators.registry import register_operator
 from platform_server.apps.modeling.operators.reporting import (
     MAX_BIN_COLUMNS,
+    NOTE_HINT,
     TIER_LARGE,
     TIER_SCALAR,
     TIER_SMALL,
@@ -41,6 +42,7 @@ from platform_server.apps.modeling.operators.reporting import (
     ReportBlock,
     RowCounts,
     TimeAxis,
+    annotated,
     axis_block,
     bins_block,
     columns_block,
@@ -63,6 +65,10 @@ PORT = "frame"
 # 回来。⚠ 拿手里这一份的数去顶替就成了假账（规格 §2-P4）
 NOTE_LEDGER_COLUMNS = "只点名取了几列，台账当前一共几列没跟着交进来"
 NOTE_WINDOW_HIT = "触顶了，窗口里究竟命中多少行没跟着交进来"
+# 空值那一块没发时，好消息改落成漏斗上的一句话。⚠ 两句不许合并（规格 §2-P5）：
+# 一行都没取到是「数据根本没进来」，与「真的一格空值都没有」要用户做的事完全不同
+NOTE_NO_ROWS = "这段窗口里一行都没取到，空不空无从谈起"
+NOTE_NO_BLANK = "{columns} 列 {rows} 行，一格空值都没有"
 
 # 行来源。⚠ 只有采集行走桶身份、同一时刻至多一行；manual/import 的同一时刻
 # 合法地有多行，选 `all` 时时间索引不再唯一（§3.3）
@@ -186,17 +192,25 @@ class LedgerSource(OperatorBase):
         return {"frame": kept}
 
     def report(self) -> tuple[ReportBlock, ...]:
-        """取数的四块：漏斗、丢空列、时间覆盖、各列空值率与转坏格数。"""
+        """取数的四块：漏斗、丢空列、时间覆盖、各列空值率与转坏格数。
+
+        ⚠ 一格空值都没有时最后那一块整个不发，改成漏斗上的一句话：照发的话每
+        列一张全零直方图，几百像素的版面说的是零（规格 §2-P5）。
+        """
         taken = self._taken
         if taken is None:
             return ()
-        blocks = (
-            _funnel_block(taken, self._config),
+        quality = _quality_block(taken)
+        made = [
+            _funnel_with_note(taken, self._config, quality),
             _empty_columns_block(taken, self._config),
-            _quality_block(taken),
-        )
+        ]
+        if quality is not None:
+            made.append(quality)
         axis = _axis_block(taken, self.tz_offset_minutes)
-        return blocks if axis is None else (*blocks, axis)
+        if axis is not None:
+            made.append(axis)
+        return tuple(made)
 
 
 @dataclass(frozen=True)
@@ -209,6 +223,34 @@ class _Taken:
     kept: Frame
     #: 整列全空的列，不论丢没丢
     empty: tuple[str, ...]
+
+
+def _funnel_with_note(
+    taken: _Taken, config: LedgerSourceConfig, quality: ReportBlock | None
+) -> ReportBlock:
+    """取数漏斗；空值那一块没发时，那件好消息落在它身上。
+
+    Args: taken, config, quality（空值那一块，None = 这一步没发）。
+    """
+    funnel = _funnel_block(taken, config)
+    if quality is not None:
+        return funnel
+    return annotated(funnel, NOTE_HINT, (_no_blank_note(taken),))
+
+
+def _no_blank_note(taken: _Taken) -> str:
+    """一格空值都没有那件事，落成漏斗上的一句话。
+
+    ⚠ 与「一行都没取到」分开说（规格 §2-P5）：一行都没有时空不空无从谈起，
+    两句合成一句会把「这段窗口是空的」读成「这段数据很干净」。
+    Args: taken。
+    """
+    frame = taken.kept
+    if frame.row_count <= 0:
+        return NOTE_NO_ROWS
+    return NOTE_NO_BLANK.format(
+        columns=len(frame.columns), rows=frame.row_count
+    )
 
 
 def _funnel_block(taken: _Taken, config: LedgerSourceConfig) -> ReportBlock:
@@ -343,9 +385,12 @@ def _requested(source: Provenance) -> tuple[Item, ...]:
     )
 
 
-def _quality_block(taken: _Taken) -> ReportBlock:
-    """空的格最多的那几列，转坏的格单独一段。
+def _quality_block(taken: _Taken) -> ReportBlock | None:
+    """空的格最多的那几列，转坏的格单独一段；一格空值都没有时整块不发。
 
+    ⚠ 一个空都没有的列不列进来，一列都不剩时整块不发：那几根柱全是 0，界面照
+    实画成一张全零直方图，几百像素的版面说的是零（规格 §2-P5）。这件事是好消
+    息，改由漏斗上的一句话说。
     Args: taken。
     """
     frame = taken.kept
@@ -353,9 +398,10 @@ def _quality_block(taken: _Taken) -> ReportBlock:
         (column, sum(1 for row in frame.rows if row[position] is None))
         for position, column in enumerate(frame.columns)
     ]
-    counted.sort(
-        key=lambda pair: (-pair[1] - pair[0].coerce_failed, pair[0].key)
-    )
+    dirty = [pair for pair in counted if pair[1] > 0]
+    if not dirty:
+        return None
+    dirty.sort(key=lambda pair: (-pair[1] - pair[0].coerce_failed, pair[0].key))
     return bins_block(
         BlockAt(
             zone="charts",
@@ -366,7 +412,7 @@ def _quality_block(taken: _Taken) -> ReportBlock:
         ),
         [
             _column_quality(column, nulls, frame.row_count)
-            for column, nulls in counted[:MAX_BIN_COLUMNS]
+            for column, nulls in dirty[:MAX_BIN_COLUMNS]
         ],
     )
 
@@ -378,18 +424,15 @@ def _column_quality(column: FrameColumn, nulls: int, total: int) -> ColumnBins:
     成缺失（`frame.py` 的 `coerce_failed`）。两者合成一个空值率之后，用户会去查
     采集为什么没上来，而真因是这一列的类型配错了。
     ⚠ 转坏格数是取数那一刻记下的，行少了它不跟着少，故先夹回空格数以内。
+    ⚠ 只在真有空格的列上调用，故 `nulls` 与 `total` 都必然大于零。
     Args: column, nulls, total。
     """
     bad = min(column.coerce_failed, nulls)
     return ColumnBins(
         key=column.key,
-        bins=[float(nulls - bad), float(bad)] if total > 0 else [],
+        bins=[float(nulls - bad), float(bad)],
         low=0.0,
         high=float(total),
-        marks=(
-            ()
-            if total <= 0
-            else ({"at": total / 2, "label": "一半", "intent": "danger"},)
-        ),
-        off_axis=None if nulls <= 0 else {"label": "空的格", "count": nulls},
+        marks=({"at": total / 2, "label": "一半", "intent": "danger"},),
+        off_axis={"label": "空的格", "count": nulls},
     )

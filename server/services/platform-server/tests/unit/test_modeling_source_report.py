@@ -16,6 +16,10 @@ from platform_server.apps.modeling.operators import (
     registry,
 )
 from platform_server.apps.modeling.operators.reporting import ReportBlock
+from platform_server.apps.modeling.operators.source import (
+    NOTE_NO_BLANK,
+    NOTE_NO_ROWS,
+)
 from platform_server.apps.modeling.services import report_budget
 from platform_server.apps.modeling.services.preview import (
     REPORT_MAX_BYTES,
@@ -231,6 +235,70 @@ def test_the_unconvertible_count_cannot_outgrow_the_blank_one() -> None:
         "by_column"
     ][0]
     assert column["bins"] == [0.0, 1.0]
+
+
+def notes_of(frame: Frame, **config: Any) -> list[str]:
+    """漏斗上挂的那几句话。
+
+    Args: frame, config。
+    """
+    rows = report_of(frame, **config)["rows"][0]
+    listed: list[dict[str, Any]] = rows.payload.get("notes") or []
+    return [one["text"] for one in listed]
+
+
+def clean_frame() -> Frame:
+    """三列四行，一格空值都没有。"""
+    return frame_of(
+        ("温度", "负荷", "湿度"),
+        tuple((float(index), 1.0, 2.0) for index in range(4)),
+    )
+
+
+def test_a_frame_without_a_single_blank_draws_no_histogram_at_all() -> None:
+    """⚠ 一格空值都没有时那一块整个不发。
+
+    照发的话每列两根 0 高的柱，界面照实画成一张全零直方图，几百像素的版面说
+    的是零，图注还写着「轴上共 0 行」。
+    """
+    assert "bins" not in report_of(clean_frame(), table_code="energy_h")
+
+
+def test_the_clean_news_lands_as_one_line_on_the_funnel() -> None:
+    """不发那一块不等于不说：这件好消息落成第一区的一句话。"""
+    assert notes_of(clean_frame(), table_code="energy_h") == [
+        NOTE_NO_BLANK.format(columns=3, rows=4)
+    ]
+
+
+def test_a_window_that_matched_no_row_says_so_in_its_own_words() -> None:
+    """⚠ 「一行都没取到」与「真的一格空值都没有」不是同一件事（规格 §2-P5）。
+
+    两句合成一句会把「这段窗口是空的」读成「这段数据很干净」。
+    """
+    empty = frame_of(("温度", "负荷"), ())
+    assert notes_of(empty, table_code="energy_h") == [NOTE_NO_ROWS]
+    assert "bins" not in report_of(empty, table_code="energy_h")
+
+
+def test_a_frame_with_one_blank_still_draws_it_and_says_nothing_extra() -> None:
+    """有空值就照常发那一块，漏斗上也不挂那句话。"""
+    blocks = report_of(small_frame(), table_code="energy_h")
+    assert [item["key"] for item in blocks["bins"][0].payload["by_column"]] == [
+        "湿度"
+    ]
+    assert notes_of(small_frame(), table_code="energy_h") == []
+
+
+def test_a_column_without_a_single_blank_is_left_out() -> None:
+    """一个空都没有的列不列进来——列成 0 会把真正空着的那列挤出上限。"""
+    keys = tuple(f"c{index}" for index in range(10))
+    rows = tuple(
+        tuple(None if index == 9 and step == 0 else 1.0 for index in range(10))
+        for step in range(4)
+    )
+    bins = report_of(frame_of(keys, rows), table_code="energy_h")["bins"][0]
+    assert [item["key"] for item in bins.payload["by_column"]] == ["c9"]
 
 
 def test_the_dirtiest_columns_come_first_and_only_eight_are_kept() -> None:
