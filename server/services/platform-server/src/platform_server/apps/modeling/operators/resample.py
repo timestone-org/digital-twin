@@ -247,7 +247,11 @@ def _axis_block(
     span = axis_span(starts)
     return axis_block(
         BlockAt(
-            zone="charts", title="桶占用与断档", port=PORT, tier=TIER_LARGE
+            zone="charts",
+            title="桶占用与断档",
+            port=PORT,
+            tier=TIER_LARGE,
+            is_primary=True,
         ),
         TimeAxis(
             bucket_ms=width,
@@ -281,7 +285,13 @@ def _sizes_block(folding: _Folding) -> ReportBlock:
     )
     spread = spread_of([float(size) for size in folding.sizes])
     return bins_block(
-        BlockAt(zone="charts", title="每桶行数", port=PORT, tier=TIER_SMALL),
+        BlockAt(
+            zone="charts",
+            title="每桶行数",
+            port=PORT,
+            tier=TIER_SMALL,
+            is_primary=False,
+        ),
         [column_bins(BUCKET_SIZE_KEY, spread, marks=marks)],
     )
 

@@ -7,7 +7,7 @@
 """
 
 from collections.abc import Mapping, Sequence
-from dataclasses import dataclass, replace
+from dataclasses import dataclass
 from typing import Any
 
 from platform_server.apps.modeling.operators.evalstats import (
@@ -173,7 +173,7 @@ def classification_blocks(view: Classified) -> tuple[ReportBlock, ...]:
             metric_items(CLASSIFICATION_METRICS, view.metrics),
         ),
         breakdown_block(
-            _at("charts", "类别分布", TIER_SMALL),
+            _at("charts", "类别分布", TIER_SMALL, is_primary=True),
             Scale(label="真实占比与预测占比并排：模型是不是全押多数类"),
             _class_items(view),
         ),
@@ -243,7 +243,7 @@ def importance_blocks(view: Importances) -> tuple[ReportBlock, ...]:
             ),
         ),
         breakdown_block(
-            _at("charts", "特征重要性", TIER_SMALL),
+            _at("charts", "特征重要性", TIER_SMALL, is_primary=True),
             Scale(
                 label="打乱一列后掉的分；不大于零 = 打乱反而没变差，是噪声列",
                 baseline=view.baseline,
@@ -266,33 +266,27 @@ def fold_blocks(view: Folds) -> tuple[ReportBlock, ...]:
             funnel=funnel_of(_fold_stages(view)),
         ),
         breakdown_block(
-            _at("charts", "逐折分数", TIER_SMALL),
+            _at("charts", "逐折分数", TIER_SMALL, is_primary=True),
             Scale(label=FOLD_NOTE, score_kind=view.score_kind, baseline=mean),
             fold_score_items(view.scores),
         ),
-        _aux(
-            axis_block(
-                _at("charts", "折布局", TIER_SMALL),
-                TimeAxis(segments=fold_items(view.spans)),
-            )
+        axis_block(
+            _at("charts", "折布局", TIER_SMALL, is_primary=False),
+            TimeAxis(segments=fold_items(view.spans)),
         ),
     )
 
 
-def _at(zone: Zone, title: str, tier: int) -> BlockAt:
+def _at(
+    zone: Zone, title: str, tier: int, *, is_primary: bool | None = None
+) -> BlockAt:
     """一块摆在哪儿。五个评估算子都只有一路输出，端口名都一样。
 
-    Args: zone, title, tier。
+    Args: zone, title, tier, is_primary（图区必填）。
     """
-    return BlockAt(zone=zone, title=title, port=PORT, tier=tier)
-
-
-def _aux(block: ReportBlock) -> ReportBlock:
-    """把一块标成辅图：超预算时它比主体图先走（规格 §4.6）。
-
-    Args: block。
-    """
-    return replace(block, payload={**block.payload, "is_primary": False})
+    return BlockAt(
+        zone=zone, title=title, port=PORT, tier=tier, is_primary=is_primary
+    )
 
 
 def _bins_block(residuals: Sequence[float], buckets: int) -> ReportBlock:
@@ -302,7 +296,7 @@ def _bins_block(residuals: Sequence[float], buckets: int) -> ReportBlock:
     """
     mean = _ZERO if not residuals else sum(residuals) / len(residuals)
     return bins_block(
-        _at("charts", "残差分布", TIER_SMALL),
+        _at("charts", "残差分布", TIER_SMALL, is_primary=True),
         (
             column_bins(
                 RESIDUAL_KEY,
@@ -323,23 +317,19 @@ def _residual_charts(scored: Scored) -> list[ReportBlock]:
     quantiles = qq_items(scored.residuals)
     if quantiles:
         made.append(
-            _aux(
-                breakdown_block(
-                    _at("charts", "正态 QQ", TIER_SMALL),
-                    Scale(label="实测分位对同均值同方差的正态分位"),
-                    quantiles,
-                )
+            breakdown_block(
+                _at("charts", "正态 QQ", TIER_SMALL, is_primary=False),
+                Scale(label="实测分位对同均值同方差的正态分位"),
+                quantiles,
             )
         )
     drift = drift_items(scored)
     if drift:
         made.append(
-            _aux(
-                breakdown_block(
-                    _at("charts", "残差随时间", TIER_LARGE),
-                    Scale(label="每格取均值；整段偏移在直方图上会摊平成胖尾"),
-                    drift,
-                )
+            breakdown_block(
+                _at("charts", "残差随时间", TIER_LARGE, is_primary=False),
+                Scale(label="每格取均值；整段偏移在直方图上会摊平成胖尾"),
+                drift,
             )
         )
     return made

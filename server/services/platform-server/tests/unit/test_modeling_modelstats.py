@@ -16,7 +16,6 @@ from platform_server.apps.modeling.operators.estimators import TreeEnsemble
 from platform_server.apps.modeling.operators.modelstats import (
     MAX_TREE_NODES,
     TREE_DEPTH,
-    as_aux,
     class_items,
     class_text,
     odds_ratio_of,
@@ -26,9 +25,10 @@ from platform_server.apps.modeling.operators.modelstats import (
     scores_of,
     sigmas_of,
     tree_outline,
-    with_notes,
+    with_hints,
 )
 from platform_server.apps.modeling.operators.reporting import (
+    NOTE_HINT,
     TIER_SCALAR,
     BlockAt,
     ReportBlock,
@@ -333,17 +333,10 @@ def test_the_tree_outline_gives_none_when_there_is_no_tree_at_all() -> None:
 
 
 def test_the_notes_ride_along_in_the_payload_of_that_very_block() -> None:
-    """说的是哪一块的事就挂在哪一块上，空话不挂。"""
-    made = with_notes(a_block(), ("要紧的一句", "", "另一句"))
-    assert made.payload["notes"] == ["要紧的一句", "另一句"]
-    assert "notes" not in with_notes(a_block(), ("", "")).payload
-
-
-def test_the_aux_mark_is_the_only_thing_that_changes() -> None:
-    """标成辅图只多一个键：块的种类、区与标题一个字都不动。"""
-    plain = a_block()
-    made = as_aux(plain)
-    assert made.payload["is_primary"] is False
-    assert made.kind == plain.kind
-    assert made.zone == plain.zone
-    assert made.title == plain.title
+    """说的是哪一块的事就挂在哪一块上，空话不挂，且逐句带着它那一档。"""
+    made = with_hints(a_block(), ("要紧的一句", "", "另一句"))
+    assert made.payload["notes"] == [
+        {"level": NOTE_HINT, "text": "要紧的一句"},
+        {"level": NOTE_HINT, "text": "另一句"},
+    ]
+    assert "notes" not in with_hints(a_block(), ("", "")).payload

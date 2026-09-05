@@ -29,6 +29,7 @@ from platform_server.apps.modeling.operators.reporting import (
 )
 from platform_server.apps.modeling.services import report_budget
 from platform_server.apps.modeling.services.preview import REPORT_MAX_BYTES
+from unit.modeling_fakes import hints_of
 
 # 最坏负载：60 列宽帧 × 366 天逐时
 WIDE_COLUMNS = 60
@@ -155,7 +156,7 @@ def test_a_wide_axis_only_lists_its_biggest_terms() -> None:
     row = axis_row(blocks, "pc1")
     assert len(row["params"]["terms"]) == MAX_TERMS
     assert row["params"]["terms_total"] == 12
-    assert blocks["fits"].payload["notes"] == [
+    assert hints_of(blocks["fits"]) == [
         "每条轴只列了权重绝对值最大的前 6 项，完整的一组权重在载荷矩阵里"
     ]
 
@@ -175,7 +176,7 @@ def test_the_labels_are_cut_exactly_where_the_matrix_is() -> None:
     assert len(payload["loading_columns"]) == MAX_LOADING_WIDTH
     assert payload["loading_columns"][0] == "很长的列名字第0列"
     assert payload["is_loadings_cut"] is True
-    assert payload["notes"] == [
+    assert hints_of(blocks["structure"]) == [
         "轴或列太多，载荷矩阵只画得下前 20 条轴 × 前 20 列"
     ]
 
@@ -190,7 +191,7 @@ def test_the_step_block_counts_the_compression() -> None:
     assert payload["reason"] == (
         "在 4 行训练行上把 3 列压成 2 条主成分轴，合计解释掉原始方差的 100.0%"
     )
-    assert payload["notes"] == [OPAQUE_NOTE, BLANK_NOTE]
+    assert hints_of(blocks["columns"]) == [OPAQUE_NOTE, BLANK_NOTE]
 
 
 def test_a_missing_scree_reads_as_missing_not_as_zero() -> None:

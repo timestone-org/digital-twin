@@ -22,7 +22,7 @@ from platform_server.apps.modeling.operators.modelstats import (
     ranges_of,
     scores_of,
     tree_outline,
-    with_notes,
+    with_hints,
 )
 from platform_server.apps.modeling.operators.reporting import (
     TIER_LARGE,
@@ -126,7 +126,7 @@ def _gist_block(seen: TreeTrained) -> ReportBlock:
         Scale(label=GIST_LABEL),
         items,
     )
-    return with_notes(block, _gist_notes(seen))
+    return with_hints(block, _gist_notes(seen))
 
 
 def _gist_notes(seen: TreeTrained) -> tuple[str, ...]:
@@ -163,7 +163,7 @@ def _shape_block(
         Scale(label=SHAPE_LABEL),
         items,
     )
-    return with_notes(block, _shape_notes(seen, train, test))
+    return with_hints(block, _shape_notes(seen, train, test))
 
 
 def _score_item(name: str, value: float | None) -> Item:
@@ -210,10 +210,11 @@ def _inside_block(
             zone="charts",
             title="重要性、部分依赖与训练取值区间",
             tier=TIER_LARGE,
+            is_primary=True,
         ),
         structure,
     )
-    return with_notes(block, _inside_notes(seen, len(structure.pdp)))
+    return with_hints(block, _inside_notes(seen, len(structure.pdp)))
 
 
 def _inside_notes(seen: TreeTrained, shown: int) -> tuple[str, ...]:

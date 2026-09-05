@@ -5,10 +5,11 @@
 """
 
 from collections.abc import Mapping, Sequence
-from dataclasses import dataclass, replace
+from dataclasses import dataclass
 
 from platform_server.apps.modeling.operators.frame import Frame, numbers_of
 from platform_server.apps.modeling.operators.reporting import (
+    NOTE_ALERT,
     TIER_SCALAR,
     TIER_SMALL,
     BlockAt,
@@ -17,6 +18,7 @@ from platform_server.apps.modeling.operators.reporting import (
     ReportBlock,
     Scale,
     TimeAxis,
+    annotated,
     axis_block,
     breakdown_block,
     columns_block,
@@ -125,7 +127,11 @@ def _time_breakdown(run: TimeRun) -> ReportBlock:
         items.extend(_part_items(run, part, key))
     return breakdown_block(
         BlockAt(
-            zone="charts", title="各档取值分布", port=PORT, tier=TIER_SMALL
+            zone="charts",
+            title="各档取值分布",
+            port=PORT,
+            tier=TIER_SMALL,
+            is_primary=True,
         ),
         Scale(label="行数", unit="行"),
         items,
@@ -202,10 +208,8 @@ def _bucket_text(part: str, bucket: int) -> str:
 def _alerted(block: ReportBlock, alerts: Sequence[str]) -> ReportBlock:
     """给一块挂上必须整条摆出来的告警。
 
-    ⚠ 与 `notes` 分成两档：这一档说的是会让人**读出错误结论**的事，收进小问号
-    里等于没说（规格 §11 的 R-24）。
+    ⚠ 这一档说的是会让人**读出错误结论**的事，收进小问号里等于没说
+    （规格 §11 的 R-24）。
     Args: block, alerts。
     """
-    if not alerts:
-        return block
-    return replace(block, payload={**block.payload, "alerts": list(alerts)})
+    return annotated(block, NOTE_ALERT, alerts)

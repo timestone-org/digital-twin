@@ -11,6 +11,7 @@ from typing import Any
 from platform_server.apps.modeling.operators.reporting import (
     MAX_LOADING_WIDTH,
     MAX_LOADINGS,
+    NOTE_HINT,
     TIER_LARGE,
     TIER_SMALL,
     BlockAt,
@@ -18,6 +19,7 @@ from platform_server.apps.modeling.operators.reporting import (
     Item,
     ModelStructure,
     ReportBlock,
+    annotated,
     columns_block,
     fits_block,
     structure_block,
@@ -94,7 +96,7 @@ def _pca_columns(run: PcaRun) -> ReportBlock:
             ),
         ),
     )
-    return _noted(block, (OPAQUE_NOTE, BLANK_NOTE))
+    return _hinted(block, (OPAQUE_NOTE, BLANK_NOTE))
 
 
 def _pca_structure(run: PcaRun) -> ReportBlock:
@@ -112,6 +114,7 @@ def _pca_structure(run: PcaRun) -> ReportBlock:
             title="解释方差与载荷",
             port=PORT,
             tier=TIER_LARGE,
+            is_primary=True,
         ),
         ModelStructure(
             loadings=[_rounded(row) for row in run.components],
@@ -126,7 +129,7 @@ def _pca_structure(run: PcaRun) -> ReportBlock:
         "is_loadings_cut": is_cut,
     }
     cut = CUT_NOTE.format(rows=len(rows), columns=len(columns))
-    return _noted(_with(block, extra), (cut,) if is_cut else ())
+    return _hinted(_with(block, extra), (cut,) if is_cut else ())
 
 
 def _pca_formula(run: PcaRun) -> ReportBlock:
@@ -148,7 +151,7 @@ def _pca_formula(run: PcaRun) -> ReportBlock:
     )
     is_cut = len(run.columns) > MAX_TERMS
     note = TERMS_NOTE.format(terms=MAX_TERMS)
-    return _noted(block, (note,) if is_cut else ())
+    return _hinted(block, (note,) if is_cut else ())
 
 
 def _axis_row(run: PcaRun, seat: int) -> Item:
@@ -262,11 +265,9 @@ def _with(block: ReportBlock, extra: Mapping[str, Any]) -> ReportBlock:
     return replace(block, payload={**block.payload, **extra})
 
 
-def _noted(block: ReportBlock, notes: Sequence[str]) -> ReportBlock:
-    """给一块挂上几句口径说明；一句都没有时原样返回。
+def _hinted(block: ReportBlock, notes: Sequence[str]) -> ReportBlock:
+    """给一块挂上几句口径说明，收在小问号里。
 
     Args: block, notes。
     """
-    if not notes:
-        return block
-    return replace(block, payload={**block.payload, "notes": list(notes)})
+    return annotated(block, NOTE_HINT, notes)

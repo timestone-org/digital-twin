@@ -119,10 +119,18 @@ def test_the_result_carries_no_report_unless_the_operator_makes_one() -> None:
     assert NodeResult(outputs={}).report == ()
 
 
-def test_every_registered_operator_answers_the_report_call() -> None:
-    """每个算子都答得出这个问题，答不出的会在跑完那一刻抛。"""
-    for code in registry.codes():
-        assert hasattr(registry.get(code), "report")
+def test_every_registered_operator_overrides_the_report_call() -> None:
+    """每个算子都自己写了 `report()`，没有一个还坐在基类那个空缺省上。
+
+    ⚠ `hasattr` 在这里是恒真的：缺省实现就挂在基类上。真跑一遍看它讲不讲得出
+    东西的那一道在 `tests/contract/test_modeling_report_coverage.py`。
+    """
+    inherited = [
+        code
+        for code in registry.codes()
+        if registry.get(code).report is OperatorBase.report
+    ]
+    assert inherited == []
 
 
 def test_the_subprocess_asks_the_operator_what_to_say(

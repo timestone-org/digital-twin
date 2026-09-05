@@ -17,14 +17,13 @@ from platform_server.apps.modeling.operators.frame import (
 )
 from platform_server.apps.modeling.operators.modelstats import (
     RankCheck,
-    as_aux,
     class_items,
     class_text,
     odds_ratio_of,
     rank_check_of,
     scores_of,
     sigmas_of,
-    with_notes,
+    with_hints,
 )
 from platform_server.apps.modeling.operators.reporting import (
     TIER_SCALAR,
@@ -142,7 +141,7 @@ def logit_blocks(seen: LogitTrained) -> tuple[ReportBlock, ...]:
     return (
         _logit_gist_block(seen),
         _odds_block(seen.fit, sigmas),
-        as_aux(_class_block(seen)),
+        _class_block(seen),
     )
 
 
@@ -170,7 +169,7 @@ def _gist_block(
         Scale(label=RANK_LABEL),
         items,
     )
-    return with_notes(block, _gist_notes(check, sigmas))
+    return with_hints(block, _gist_notes(check, sigmas))
 
 
 def _gist_notes(
@@ -283,7 +282,7 @@ def _logit_gist_block(seen: LogitTrained) -> ReportBlock:
         Scale(label=_positive_label(seen)),
         items,
     )
-    return with_notes(block, _logit_notes(seen))
+    return with_hints(block, _logit_notes(seen))
 
 
 def _positive_label(seen: LogitTrained) -> str:
@@ -370,7 +369,12 @@ def _class_block(seen: LogitTrained) -> ReportBlock:
     Args: seen。
     """
     return breakdown_block(
-        BlockAt(zone="charts", title="训练集类目占比", tier=TIER_SMALL),
+        BlockAt(
+            zone="charts",
+            title="训练集类目占比",
+            tier=TIER_SMALL,
+            is_primary=True,
+        ),
         Scale(label=CLASS_LABEL, unit="行"),
         class_items(_target_of(seen.fit.train, seen.fit.target), seen.classes),
     )

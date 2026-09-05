@@ -38,6 +38,7 @@ from platform_server.apps.modeling.operators.treereport import (
 )
 from platform_server.apps.modeling.services import report_budget
 from platform_server.apps.modeling.services.preview import REPORT_MAX_BYTES
+from unit.modeling_fakes import hints_of
 
 STEP = "台阶"
 NOISE = "噪声"
@@ -108,12 +109,11 @@ def blocks_of(
 
 
 def notes_of(block: ReportBlock) -> list[str]:
-    """一块上挂着的那几句话。
+    """一块上收进小问号的那几句口径说明。
 
     Args: block。
     """
-    found: Any = block.payload.get("notes") or []
-    return [str(text) for text in found]
+    return hints_of(block)
 
 
 def items_of(block: ReportBlock) -> dict[str, Any]:
@@ -340,7 +340,7 @@ def test_a_narrow_frame_draws_every_curve_and_leaves_out_no_note() -> None:
 
 def test_the_inside_chart_stays_the_main_picture() -> None:
     """重要性与部分依赖是主体图：超预算时它最后才走。"""
-    assert "is_primary" not in blocks_of(step_frame())["charts"].payload
+    assert blocks_of(step_frame())["charts"].payload["is_primary"] is True
 
 
 def test_the_worst_tree_load_still_fits_the_report_budget() -> None:

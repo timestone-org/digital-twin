@@ -266,7 +266,13 @@ def _cast_bins_block(run: CastRun) -> ReportBlock:
     rows = run.before.row_count
     ranked = sorted(run.failed, key=lambda key: (-run.failed[key].count, key))
     return bins_block(
-        BlockAt(zone="charts", title="空值率前后", port=PORT, tier=TIER_SMALL),
+        BlockAt(
+            zone="charts",
+            title="空值率前后",
+            port=PORT,
+            tier=TIER_SMALL,
+            is_primary=True,
+        ),
         [
             _ratio_bins(
                 key,
@@ -328,6 +334,7 @@ def _holed_bins_block(run: HoledRun) -> ReportBlock:
             title="判据列的空值率",
             port=PORT,
             tier=TIER_SMALL,
+            is_primary=True,
         ),
         [_ratio_bins(key, (_rounded(ratios[key], rows),)) for key in ranked],
     )
@@ -388,7 +395,13 @@ def _empty_bins_block(run: EmptyRun) -> ReportBlock:
     mark: Item = {"at": run.limit, "label": "阈值", "intent": "danger"}
     ranked = sorted(run.ratios, key=lambda key: (-run.ratios[key], key))
     return bins_block(
-        BlockAt(zone="charts", title="各列空值率", port=PORT, tier=TIER_SMALL),
+        BlockAt(
+            zone="charts",
+            title="各列空值率",
+            port=PORT,
+            tier=TIER_SMALL,
+            is_primary=True,
+        ),
         [
             _ratio_bins(key, (_rounded(run.ratios[key], rows),), (mark,))
             for key in ranked
@@ -451,6 +464,7 @@ def _filter_bins_block(run: FilterRun) -> ReportBlock | None:
             title="判据列的分布",
             port=PORT,
             tier=TIER_LARGE,
+            is_primary=True,
         ),
         [
             column_bins(

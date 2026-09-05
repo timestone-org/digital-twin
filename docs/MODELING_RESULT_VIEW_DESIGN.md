@@ -185,6 +185,15 @@ class ReportBlock:
 | `breakdown` | 按项的一组数 | `label/unit/score_kind/baseline/items[≤60]{name,value,spread}` | 3 个算子 |
 | `structure` | 模型内部长什么样 | `importances[≤60]/ranges[≤60]/tree{depth≤3,nodes≤31}/pdp[≤10×20]/loadings[≤20×20]/explained[≤20]` | 3 个算子 |
 
+**四个通用扩展键**（任何 `kind` 都可以带，前端按同一套规则读；由 `BlockAt` 与 `reporting.annotated()` 一处产出，算子不自己拼字典）：
+
+| 键 | 形状 | 谁产 | 界面怎么摆 |
+|---|---|---|---|
+| `is_primary` | `bool` | **`zone == 'charts'` 的块必带**，别的区一律不带 | 不直接渲染；降档梯子第 2 档只丢 `false` 的那几张（§4.6「主体图最后丢」）。⚠ 缺省不是 `true`——漏标由 `tests/contract/test_modeling_report_coverage.py` 逐个算子拦下，否则同一档梯子在不同算子上行为不同 |
+| `notes` | `[{level, text}]`，`level` ∈ `alert` / `hint` | 需要说清口径或点破误读的块 | `alert` = 会让人**读出错误结论**的那一句，`DtNotice` 占一整行；`hint` = 口径说明，收进图/卡片旁的 `DtHelpTip` 小问号（§11 的 R-24）。⚠ 两档共用**一个键**、逐句带 `level`：拆成两个键时那条区分只活在写了第二个键的那几个模块里 |
+| `degraded` | `bool` | `select_feature` 的 `columns` 块 | `true` 时按 `degraded_reason` 原样印一条告警 |
+| `degraded_reason` | `str` | 同上，`degraded` 为假时是空串 | 文案由后端给：真条件是**下游**切分的个数，前端沿上游找会在没退化时乱报（§11 的 R-12） |
+
 **`breakdown` 是键空间冲突的根治**：`feature_importance` 今天把**列名**当指标键塞进扁平的 `metrics` 字典（`diagnostics.py:190,215`），于是某列若恰好叫 `r2`，`metricBands.ts:22` 会给它套上回归阈值染色；更隐蔽的是 `MetricsView.vue:30` 拼的是 `${niceNumber(value)}${unitOf(key)}`，`UNITS` 里有 `mape: '%'`——一列叫 `mape` 时，无量纲的 ΔR²=0.12 会被印成「0.12%」（评审 2 发现，三份提案都只修了颜色）。搬进 `breakdown` 之后 `metrics` 字典留空；`MetricsView` 的「这一步没有产出任何指标」告警条件同步改成「metrics 与 blocks 双空才报」。
 
 ### 4.4 `report()` 这条缝

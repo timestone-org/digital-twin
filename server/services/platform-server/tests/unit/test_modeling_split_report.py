@@ -27,7 +27,7 @@ from platform_server.apps.modeling.operators.model import (
 from platform_server.apps.modeling.operators.reporting import ReportBlock
 from platform_server.apps.modeling.services import report_budget
 from platform_server.apps.modeling.services.preview import REPORT_MAX_BYTES
-from unit.modeling_fakes import START_MS, STEP_MS
+from unit.modeling_fakes import START_MS, STEP_MS, hints_of
 
 TARGET = "能耗"
 FEATURE = "温度"
@@ -81,12 +81,11 @@ def blocks_of(frame: Frame, **config: Any) -> dict[str, ReportBlock]:
 
 
 def notes_of(block: ReportBlock) -> list[str]:
-    """一块上挂着的那几句话。
+    """一块上收进小问号的那几句口径说明。
 
     Args: block。
     """
-    found: Any = block.payload.get("notes") or []
-    return [str(text) for text in found]
+    return hints_of(block)
 
 
 def ten_rows() -> Frame:
@@ -275,7 +274,7 @@ def test_the_split_leaves_the_time_band_as_the_main_picture() -> None:
         ),
         test_ratio=0.5,
     )
-    assert "is_primary" not in blocks["axis"].payload
+    assert blocks["axis"].payload["is_primary"] is True
     assert blocks["bins"].payload["is_primary"] is False
     assert blocks["breakdown"].payload["is_primary"] is False
 

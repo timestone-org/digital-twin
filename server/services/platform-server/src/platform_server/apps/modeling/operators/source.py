@@ -306,7 +306,13 @@ def _axis_block(taken: _Taken, tz_offset_minutes: int) -> ReportBlock | None:
         return None
     span = axis_span(index)
     return axis_block(
-        BlockAt(zone="charts", title="时间覆盖", port=PORT, tier=TIER_LARGE),
+        BlockAt(
+            zone="charts",
+            title="时间覆盖",
+            port=PORT,
+            tier=TIER_LARGE,
+            is_primary=True,
+        ),
         TimeAxis(
             tz_offset_minutes=tz_offset_minutes,
             actual_since=moment_text(min(index)),
@@ -356,6 +362,7 @@ def _quality_block(taken: _Taken) -> ReportBlock:
             title="空的格最多的几列",
             port=PORT,
             tier=TIER_SMALL,
+            is_primary=False,
         ),
         [
             _column_quality(column, nulls, frame.row_count)

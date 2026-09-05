@@ -30,6 +30,7 @@ from platform_server.apps.modeling.operators.fitting import (
 from platform_server.apps.modeling.operators.reporting import ReportBlock
 from platform_server.apps.modeling.services import report_budget
 from platform_server.apps.modeling.services.preview import REPORT_MAX_BYTES
+from unit.modeling_fakes import hints_of
 
 KEY = "温度"
 OTHER = "负荷"
@@ -257,7 +258,7 @@ def test_the_scale_comes_from_the_training_rows_only() -> None:
 def test_the_step_block_says_the_mean_will_not_be_zero() -> None:
     """μ 只在训练行上学这条口径必须随讲解一起给，不然会被当成没生效。"""
     blocks = blocks_of("standardize", frame_of({KEY: [1.0, 2.0, 3.0]}))
-    assert MEAN_NOTE in blocks["cells"].payload["notes"]
+    assert MEAN_NOTE in hints_of(blocks["cells"])
 
 
 def test_a_standardized_column_drops_the_unit_it_used_to_wear() -> None:
@@ -278,13 +279,13 @@ def test_the_unit_note_shows_up_when_any_scaled_column_wore_one() -> None:
         {KEY: [1.0, 2.0, 3.0], OTHER: [4.0, 5.0, 6.0]}, units={KEY: "℃"}
     )
     blocks = blocks_of("standardize", frame)
-    assert UNIT_NOTE in blocks["cells"].payload["notes"]
+    assert UNIT_NOTE in hints_of(blocks["cells"])
 
 
 def test_the_unit_note_stays_away_when_no_column_wore_one() -> None:
     """原本就没单位时不说这句废话——每一句都占用户一行注意力。"""
     blocks = blocks_of("standardize", frame_of({KEY: [1.0, 2.0, 3.0]}))
-    assert blocks["cells"].payload["notes"] == [MEAN_NOTE]
+    assert hints_of(blocks["cells"]) == [MEAN_NOTE]
 
 
 def test_the_cells_block_counts_the_numbers_it_replaced() -> None:
@@ -377,10 +378,10 @@ def test_the_widest_column_leads_the_distribution_charts() -> None:
     assert [column["key"] for column in listed] == ["Z 宽", "A 窄"]
 
 
-def test_the_distribution_chart_is_the_one_that_goes_first() -> None:
-    """分布图是辅图：超预算时它先走，逐列尺度表最后丢。"""
+def test_the_distribution_chart_is_the_main_picture() -> None:
+    """分布图是这一步图区里唯一的一张，标成主体图：超预算时它最后才走。"""
     blocks = blocks_of("standardize", frame_of({KEY: [1.0, 2.0, 3.0]}))
-    assert blocks["bins"].payload["is_primary"] is False
+    assert blocks["bins"].payload["is_primary"] is True
     assert "is_primary" not in blocks["fits"].payload
 
 
@@ -444,7 +445,7 @@ def test_the_two_kinds_of_miss_are_reported_apart() -> None:
     assert params["blank_rows"] == 1
     assert params["unseen_ratio"] == 0.25
     assert params["blank_ratio"] == 0.125
-    assert MISS_NOTE in blocks["fits"].payload["notes"]
+    assert MISS_NOTE in hints_of(blocks["fits"])
 
 
 def test_the_cut_categories_stay_in_the_ranking_marked_as_dropped() -> None:

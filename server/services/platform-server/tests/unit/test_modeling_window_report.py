@@ -22,6 +22,7 @@ from platform_server.apps.modeling.operators.windowblocks import (
 )
 from platform_server.apps.modeling.services import report_budget
 from platform_server.apps.modeling.services.preview import REPORT_MAX_BYTES
+from unit.modeling_fakes import alerts_of, hints_of
 
 # 最坏负载：60 列宽帧 × 366 天
 WIDE_COLUMNS = 60
@@ -120,8 +121,8 @@ def test_the_lag_block_says_how_many_levels_survived_the_dedupe() -> None:
     assert payload["reason"] == (
         "1 列 × 2 个档位造出 2 列；参数里写了 3 个档位，去重排序之后是 1、3"
     )
-    assert payload["alerts"] == [SERVING_ALERT]
-    assert payload["notes"] == [ORDER_NOTE]
+    assert alerts_of(blocks["columns"]) == [SERVING_ALERT]
+    assert hints_of(blocks["columns"]) == [ORDER_NOTE]
 
 
 def test_the_head_of_every_lag_column_is_blank_and_counted() -> None:
@@ -139,7 +140,7 @@ def test_the_head_of_every_lag_column_is_blank_and_counted() -> None:
     assert blank_count(produced, "甲@lag3") == 3
     assert blocks["rows"].payload["before"] == 5
     assert blocks["rows"].payload["after"] == 5
-    assert blocks["rows"].payload["notes"] == [ZERO_FILL_NOTE]
+    assert hints_of(blocks["rows"]) == [ZERO_FILL_NOTE]
 
 
 def test_a_lag_longer_than_the_frame_blanks_every_row() -> None:
@@ -164,7 +165,7 @@ def test_the_lag_sketch_points_at_the_row_each_level_reads() -> None:
     )
     payload = blocks["axis"].payload
     assert payload["scale"] == "index"
-    assert payload["is_primary"] is False
+    assert payload["is_primary"] is True
     assert [(item["label"], item["since"]) for item in payload["segments"]] == [
         ("当前行", 3),
         ("滞后 1 期取的那一行", 2),
@@ -209,7 +210,7 @@ def test_the_denominator_alert_names_the_column_and_the_numbers() -> None:
         window=3,
         stats=["mean"],
     )
-    assert blocks["rows"].payload["alerts"] == [
+    assert alerts_of(blocks["rows"]) == [
         "窗口里的空值先被滤掉再折，所以分母逐行不同："
         "「甲」有 6 行的窗口没填满（最少的一行只用了 1 个点），"
         "它们与用满 3 个点算出来的结果在图上长得一模一样"
@@ -225,8 +226,8 @@ def test_no_denominator_alert_when_every_window_is_full() -> None:
         window=2,
         stats=["mean"],
     )
-    assert "alerts" not in blocks["rows"].payload
-    assert blocks["columns"].payload["alerts"] == [SERVING_ALERT]
+    assert alerts_of(blocks["rows"]) == []
+    assert alerts_of(blocks["columns"]) == [SERVING_ALERT]
 
 
 def test_the_sample_count_chart_is_anchored_at_zero_and_the_window() -> None:
@@ -246,7 +247,7 @@ def test_the_sample_count_chart_is_anchored_at_zero_and_the_window() -> None:
     assert column["marks"] == [
         {"at": 3.0, "label": "窗口填满", "intent": "info"}
     ]
-    assert blocks["bins"].payload["notes"] == [
+    assert hints_of(blocks["bins"]) == [
         "只数了窗口已满的那些行：开头 2 行本来就给空值，不进这张图"
     ]
 
@@ -270,7 +271,7 @@ def test_the_rolling_sketch_says_the_window_includes_this_row() -> None:
         ("窗口 3 行", 0, 3),
         ("当前行", 2, 3),
     ]
-    assert payload["notes"] == [
+    assert hints_of(blocks["axis"]) == [
         "窗口连当前行一起数：窗口 3 就是「当前行 + 前 2 行」"
     ]
 

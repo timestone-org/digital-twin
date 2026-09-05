@@ -15,6 +15,7 @@ from platform_server.apps.modeling.operators.frame import Frame, numbers_of
 from platform_server.apps.modeling.operators.reporting import (
     MAX_BIN_COLUMNS,
     MAX_CELL_COLUMNS,
+    NOTE_HINT,
     TIER_LARGE,
     TIER_SCALAR,
     TIER_SMALL,
@@ -24,6 +25,7 @@ from platform_server.apps.modeling.operators.reporting import (
     Item,
     ReportBlock,
     Scale,
+    annotated,
     bins_block,
     breakdown_block,
     cells_block,
@@ -130,7 +132,7 @@ def scale_blocks(run: ScaleRun) -> tuple[ReportBlock, ...]:
 
     Args: run。
     """
-    return (_scale_cells(run), _scale_fits(run), _aux(_scale_bins(run)))
+    return (_scale_cells(run), _scale_fits(run), _scale_bins(run))
 
 
 def one_hot_blocks(run: OneHotRun) -> tuple[ReportBlock, ...]:
@@ -142,7 +144,7 @@ def one_hot_blocks(run: OneHotRun) -> tuple[ReportBlock, ...]:
     return (
         _one_hot_columns(run),
         _one_hot_breakdown(run),
-        _noted(_one_hot_fits(run, misses), (MISS_NOTE,)),
+        _hinted(_one_hot_fits(run, misses), (MISS_NOTE,)),
     )
 
 
@@ -189,7 +191,7 @@ def _scale_cells(run: ScaleRun) -> ReportBlock:
             for key, count in counted[:MAX_CELL_COLUMNS]
         ],
     )
-    return _noted(block, (MEAN_NOTE, *_unit_note(run)))
+    return _hinted(block, (MEAN_NOTE, *_unit_note(run)))
 
 
 def _unit_note(run: ScaleRun) -> tuple[str, ...]:
@@ -247,7 +249,13 @@ def _scale_bins(run: ScaleRun) -> ReportBlock:
     keys = [key for key in run.keys if key in run.scales]
     keys.sort(key=lambda key: (-run.scales[key]["scale"], key))
     return bins_block(
-        BlockAt(zone="charts", title="缩放前分布", port=PORT, tier=TIER_LARGE),
+        BlockAt(
+            zone="charts",
+            title="缩放前分布",
+            port=PORT,
+            tier=TIER_LARGE,
+            is_primary=True,
+        ),
         [
             column_bins(
                 key,
@@ -305,7 +313,13 @@ def _one_hot_breakdown(run: OneHotRun) -> ReportBlock:
     Args: run。
     """
     return breakdown_block(
-        BlockAt(zone="charts", title="类目命中", port=PORT, tier=TIER_SMALL),
+        BlockAt(
+            zone="charts",
+            title="类目命中",
+            port=PORT,
+            tier=TIER_SMALL,
+            is_primary=True,
+        ),
         Scale(label="命中行数", unit="行"),
         [
             _category_item(run, key, category, count)
@@ -389,7 +403,7 @@ def _select_columns(run: SelectRun) -> ReportBlock:
             ),
         ),
     )
-    return _noted(_flagged(block, run.is_degraded), _select_hints(run.method))
+    return _hinted(_flagged(block, run.is_degraded), _select_hints(run.method))
 
 
 def _select_hints(method: str) -> tuple[str, ...]:
@@ -410,7 +424,13 @@ def _select_breakdown(run: SelectRun) -> ReportBlock:
     ranked = sorted(run.candidates, key=lambda key: (-run.scores[key], key))
     kept = set(run.kept)
     return breakdown_block(
-        BlockAt(zone="charts", title="打分排行", port=PORT, tier=TIER_SMALL),
+        BlockAt(
+            zone="charts",
+            title="打分排行",
+            port=PORT,
+            tier=TIER_SMALL,
+            is_primary=True,
+        ),
         Scale(
             label=SCORE_LABELS.get(run.method, run.method),
             baseline=_cut_score(run),
@@ -500,14 +520,12 @@ def _present_count(frame: Frame, key: str) -> int:
     return len(_present(frame, key))
 
 
-def _noted(block: ReportBlock, notes: Sequence[str]) -> ReportBlock:
-    """给一块挂上几行口径说明；一行都没有就原样返回。
+def _hinted(block: ReportBlock, notes: Sequence[str]) -> ReportBlock:
+    """给一块挂上几行口径说明，收在小问号里。
 
     Args: block, notes。
     """
-    if not notes:
-        return block
-    return replace(block, payload={**block.payload, "notes": list(notes)})
+    return annotated(block, NOTE_HINT, notes)
 
 
 def _flagged(block: ReportBlock, is_degraded: bool) -> ReportBlock:
@@ -525,11 +543,3 @@ def _flagged(block: ReportBlock, is_degraded: bool) -> ReportBlock:
             "degraded_reason": DEGRADED_REASON if is_degraded else "",
         },
     )
-
-
-def _aux(block: ReportBlock) -> ReportBlock:
-    """标成辅图：超预算时辅图先走，主体那一块最后丢（规格 §4.6）。
-
-    Args: block。
-    """
-    return replace(block, payload={**block.payload, "is_primary": False})

@@ -30,7 +30,7 @@ from platform_server.apps.modeling.operators.linearreport import (
 from platform_server.apps.modeling.operators.reporting import ReportBlock
 from platform_server.apps.modeling.services import report_budget
 from platform_server.apps.modeling.services.preview import REPORT_MAX_BYTES
-from unit.modeling_fakes import START_MS, STEP_MS
+from unit.modeling_fakes import START_MS, STEP_MS, hints_of
 
 TARGET = "能耗"
 WARM = "温度"
@@ -140,12 +140,11 @@ def blocks_of(code: str, frame: Frame, **config: Any) -> dict[str, ReportBlock]:
 
 
 def notes_of(block: ReportBlock) -> list[str]:
-    """一块上挂着的那几句话。
+    """一块上收进小问号的那几句口径说明。
 
     Args: block。
     """
-    found: Any = block.payload.get("notes") or []
-    return [str(text) for text in found]
+    return hints_of(block)
 
 
 def item_of(block: ReportBlock, name: str) -> dict[str, Any]:
@@ -379,7 +378,7 @@ def test_the_logit_report_counts_the_training_classes() -> None:
     items: Any = blocks["charts"].payload["items"]
     assert [item["name"] for item in items] == ["0", "1"]
     assert [item["value"] for item in items] == [4, TRAIN_ROWS - 4]
-    assert blocks["charts"].payload["is_primary"] is False
+    assert blocks["charts"].payload["is_primary"] is True
 
 
 def test_the_logit_report_always_spells_out_the_half_threshold() -> None:

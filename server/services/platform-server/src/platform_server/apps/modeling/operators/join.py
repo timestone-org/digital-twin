@@ -376,6 +376,7 @@ def _spread_block(aligned: _Aligned, config: LedgerJoinConfig) -> ReportBlock:
             title="时刻差与右行复用次数",
             port=PORT,
             tier=TIER_SMALL,
+            is_primary=True,
         ),
         [_gap_bins(aligned, config), _reuse_bins(aligned)],
     )

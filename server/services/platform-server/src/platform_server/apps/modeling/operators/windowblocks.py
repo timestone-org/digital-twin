@@ -13,6 +13,8 @@ from platform_server.apps.modeling.operators.reporting import (
     MAX_BIN_COLUMNS,
     MAX_ROW_COLUMNS,
     MAX_SEGMENTS,
+    NOTE_ALERT,
+    NOTE_HINT,
     TIER_LARGE,
     TIER_SCALAR,
     TIER_SMALL,
@@ -22,6 +24,7 @@ from platform_server.apps.modeling.operators.reporting import (
     ReportBlock,
     RowCounts,
     TimeAxis,
+    annotated,
     axis_block,
     bins_block,
     columns_block,
@@ -160,7 +163,7 @@ def _lag_columns(run: LagRun) -> ReportBlock:
             ),
         ),
     )
-    return _noted(_alerted(block, (SERVING_ALERT,)), (ORDER_NOTE,))
+    return _hinted(_alerted(block, (SERVING_ALERT,)), (ORDER_NOTE,))
 
 
 def _lag_rows(run: LagRun) -> ReportBlock:
@@ -184,7 +187,7 @@ def _lag_rows(run: LagRun) -> ReportBlock:
         RowCounts(before=run.rows, after=run.rows),
         by_column=ranked[:MAX_ROW_COLUMNS],
     )
-    return _noted(block, (ZERO_FILL_NOTE,))
+    return _hinted(block, (ZERO_FILL_NOTE,))
 
 
 def _lag_axis(run: LagRun) -> ReportBlock:
@@ -216,13 +219,17 @@ def _lag_axis(run: LagRun) -> ReportBlock:
     block = _indexed(
         axis_block(
             BlockAt(
-                zone="charts", title="窗口示意", port=PORT, tier=TIER_SMALL
+                zone="charts",
+                title="窗口示意",
+                port=PORT,
+                tier=TIER_SMALL,
+                is_primary=True,
             ),
             TimeAxis(segments=segments),
         )
     )
     cut = CUT_NOTE.format(kept=len(kept))
-    return _noted(_aux(block), () if len(kept) == len(run.lags) else (cut,))
+    return _hinted(block, () if len(kept) == len(run.lags) else (cut,))
 
 
 def _rolling_columns(run: RollingRun) -> ReportBlock:
@@ -241,14 +248,14 @@ def _rolling_columns(run: RollingRun) -> ReportBlock:
             ),
         ),
     )
-    noted = _noted(
+    hinted = _hinted(
         block,
         (
             WINDOW_NOTE.format(window=run.window, before=run.window - 1),
             ORDER_NOTE,
         ),
     )
-    return _alerted(noted, (SERVING_ALERT,))
+    return _alerted(hinted, (SERVING_ALERT,))
 
 
 def _rolling_rows(run: RollingRun) -> ReportBlock:
@@ -266,7 +273,7 @@ def _rolling_rows(run: RollingRun) -> ReportBlock:
         RowCounts(before=run.rows, after=run.rows),
         by_column=ranked[:MAX_ROW_COLUMNS],
     )
-    return _alerted(_noted(block, (ZERO_FILL_NOTE,)), _denominator(run))
+    return _alerted(_hinted(block, (ZERO_FILL_NOTE,)), _denominator(run))
 
 
 def _rolling_row(run: RollingRun, key: str, source: str, head: int) -> Item:
@@ -322,6 +329,7 @@ def _rolling_bins(run: RollingRun) -> ReportBlock:
             title="逐行有效样本数",
             port=PORT,
             tier=TIER_LARGE,
+            is_primary=True,
         ),
         [
             column_bins(
@@ -343,7 +351,7 @@ def _rolling_bins(run: RollingRun) -> ReportBlock:
             for source in run.sources[:MAX_BIN_COLUMNS]
         ],
     )
-    return _noted(block, (FULL_WINDOW_NOTE.format(head=head),))
+    return _hinted(block, (FULL_WINDOW_NOTE.format(head=head),))
 
 
 def _rolling_axis(run: RollingRun) -> ReportBlock:
@@ -370,16 +378,18 @@ def _rolling_axis(run: RollingRun) -> ReportBlock:
     block = _indexed(
         axis_block(
             BlockAt(
-                zone="charts", title="窗口示意", port=PORT, tier=TIER_SMALL
+                zone="charts",
+                title="窗口示意",
+                port=PORT,
+                tier=TIER_SMALL,
+                is_primary=False,
             ),
             TimeAxis(segments=segments),
         )
     )
-    return _aux(
-        _noted(
-            block,
-            (WINDOW_NOTE.format(window=run.window, before=run.window - 1),),
-        )
+    return _hinted(
+        block,
+        (WINDOW_NOTE.format(window=run.window, before=run.window - 1),),
     )
 
 
@@ -392,31 +402,19 @@ def _indexed(block: ReportBlock) -> ReportBlock:
     return replace(block, payload={**block.payload, "scale": "index"})
 
 
-def _aux(block: ReportBlock) -> ReportBlock:
-    """标成辅图：超预算时它比主体图先走（规格 §4.6）。
-
-    Args: block。
-    """
-    return replace(block, payload={**block.payload, "is_primary": False})
-
-
-def _noted(block: ReportBlock, notes: Sequence[str]) -> ReportBlock:
+def _hinted(block: ReportBlock, notes: Sequence[str]) -> ReportBlock:
     """给一块挂上几句口径说明，收在小问号里。
 
     Args: block, notes。
     """
-    if not notes:
-        return block
-    return replace(block, payload={**block.payload, "notes": list(notes)})
+    return annotated(block, NOTE_HINT, notes)
 
 
 def _alerted(block: ReportBlock, alerts: Sequence[str]) -> ReportBlock:
     """给一块挂上必须整条摆出来的告警。
 
-    ⚠ 与 `notes` 分成两档：这一档说的是会让人**读出错误结论**的事，收进小问号
-    里等于没说（规格 §11 的 R-24）。
+    ⚠ 这一档说的是会让人**读出错误结论**的事，收进小问号里等于没说
+    （规格 §11 的 R-24）。
     Args: block, alerts。
     """
-    if not alerts:
-        return block
-    return replace(block, payload={**block.payload, "alerts": list(alerts)})
+    return annotated(block, NOTE_ALERT, alerts)

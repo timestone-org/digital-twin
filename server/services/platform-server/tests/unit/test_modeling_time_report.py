@@ -16,6 +16,7 @@ from platform_server.apps.modeling.operators.reporting import ReportBlock
 from platform_server.apps.modeling.operators.timeblocks import TZ_ALERT
 from platform_server.apps.modeling.services import report_budget
 from platform_server.apps.modeling.services.preview import REPORT_MAX_BYTES
+from unit.modeling_fakes import alerts_of
 
 # 最坏负载：366 天逐时，五档全开
 YEAR_ROWS = 366 * 24
@@ -150,7 +151,7 @@ def test_the_axis_block_states_the_offset_and_the_real_span() -> None:
     assert payload["tz_offset_minutes"] == 480
     assert payload["actual_since"] == "2026-01-01T00:00:00+00:00"
     assert payload["actual_until"] == "2026-01-02T05:00:00+00:00"
-    assert payload["alerts"] == [TZ_ALERT.format(zone="UTC+08:00")]
+    assert alerts_of(blocks["axis"]) == [TZ_ALERT.format(zone="UTC+08:00")]
 
 
 def test_a_negative_offset_prints_with_its_minutes() -> None:
@@ -159,9 +160,7 @@ def test_a_negative_offset_prints_with_its_minutes() -> None:
     assert blocks["columns"].payload["reason"] == (
         "按业务时区 UTC-05:30 从每一行的时刻造了 1 列"
     )
-    assert blocks["axis"].payload["alerts"] == [
-        TZ_ALERT.format(zone="UTC-05:30")
-    ]
+    assert alerts_of(blocks["axis"]) == [TZ_ALERT.format(zone="UTC-05:30")]
 
 
 def test_the_columns_block_names_what_was_made() -> None:

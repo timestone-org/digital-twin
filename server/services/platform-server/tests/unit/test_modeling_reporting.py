@@ -9,6 +9,8 @@ from typing import Any
 from platform_server.apps.modeling.operators import reporting
 from platform_server.apps.modeling.operators.reporting import (
     BLOCK_KINDS,
+    NOTE_ALERT,
+    NOTE_HINT,
     TIER_LARGE,
     ZONES,
     BlockAt,
@@ -229,6 +231,60 @@ def test_every_block_lands_in_a_known_zone() -> None:
         block = reporting.rows_block(at(zone), RowCounts(before=1, after=1))
         assert block.zone in ZONES
     assert ZONES == ("step", "stats", "charts", "formula", "table")
+
+
+def test_a_block_outside_the_charts_zone_carries_no_main_picture_mark() -> None:
+    """只有图区的块标主次：别的区没有「辅图先走」这一档，多一个键是噪声。"""
+    block = reporting.rows_block(at(), RowCounts(before=1, after=1))
+    assert "is_primary" not in block.payload
+
+
+def test_a_chart_carries_the_main_picture_mark_it_was_given() -> None:
+    """图区的块把主次原样带进 payload：预算降档照它决定谁先走（§4.6）。"""
+    for is_primary in (True, False):
+        block = reporting.bins_block(
+            BlockAt(
+                zone="charts",
+                title="标题",
+                port="frame",
+                tier=TIER_LARGE,
+                is_primary=is_primary,
+            ),
+            [ColumnBins(key="c0")],
+        )
+        assert block.payload["is_primary"] is is_primary
+
+
+def test_the_two_kinds_of_note_share_one_key_and_say_which_they_are() -> None:
+    """两档合在一个 `notes` 键里，逐句带 `level`；空话不挂。
+
+    ⚠ 分成两个键的话，「必须整条摆出来」这条区分只活在写了第二个键的那几个
+    模块里，其余模块的告警会被一起收进小问号（规格 §11 的 R-24）。
+    """
+    plain = reporting.rows_block(at(), RowCounts(before=1, after=1))
+    made = reporting.annotated(
+        reporting.annotated(plain, NOTE_ALERT, ("会读错的那句", "")),
+        NOTE_HINT,
+        ("口径那句",),
+    )
+    assert made.payload["notes"] == [
+        {"level": "alert", "text": "会读错的那句"},
+        {"level": "hint", "text": "口径那句"},
+    ]
+    assert "notes" not in reporting.annotated(plain, NOTE_HINT, ("",)).payload
+
+
+def test_annotating_a_block_changes_nothing_but_the_notes() -> None:
+    """挂话只多一个键：块的种类、区、标题与档位一个字都不动。"""
+    plain = reporting.rows_block(at(), RowCounts(before=1, after=1))
+    made = reporting.annotated(plain, NOTE_HINT, ("一句",))
+    assert (made.kind, made.zone, made.title, made.tier) == (
+        plain.kind,
+        plain.zone,
+        plain.title,
+        plain.tier,
+    )
+    assert made.payload["before"] == 1
 
 
 def every_block() -> list[Any]:

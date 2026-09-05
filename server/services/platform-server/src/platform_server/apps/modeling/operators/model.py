@@ -34,8 +34,7 @@ from platform_server.apps.modeling.operators.frame import (
     with_roles,
 )
 from platform_server.apps.modeling.operators.modelstats import (
-    as_aux,
-    with_notes,
+    with_hints,
 )
 from platform_server.apps.modeling.operators.registry import register_operator
 from platform_server.apps.modeling.operators.reporting import (
@@ -232,7 +231,7 @@ def _counts_block(split: _Split, config: SplitDatasetConfig) -> ReportBlock:
             )
         ),
     )
-    return with_notes(made, _counts_notes(split, config))
+    return with_hints(made, _counts_notes(split, config))
 
 
 def _counts_notes(split: _Split, config: SplitDatasetConfig) -> tuple[str, ...]:
@@ -267,7 +266,12 @@ def _span_blocks(
         return ()
     span = axis_span(index)
     made = axis_block(
-        BlockAt(zone="charts", title="两段的时间跨度", tier=TIER_LARGE),
+        BlockAt(
+            zone="charts",
+            title="两段的时间跨度",
+            tier=TIER_LARGE,
+            is_primary=True,
+        ),
         TimeAxis(
             tz_offset_minutes=tz_offset_minutes,
             actual_since=moment_text(min(index)),
@@ -277,7 +281,7 @@ def _span_blocks(
             segments=_segments(split, config),
         ),
     )
-    return (with_notes(made, _span_notes(split, config)),)
+    return (with_hints(made, _span_notes(split, config)),)
 
 
 def _segments(split: _Split, config: SplitDatasetConfig) -> tuple[Item, ...]:
@@ -356,6 +360,7 @@ def _target_blocks(
             zone="charts",
             title=f"目标列「{key}」在两路上的分布",
             tier=TIER_SMALL,
+            is_primary=False,
         ),
         (
             column_bins(
@@ -368,7 +373,7 @@ def _target_blocks(
             ),
         ),
     )
-    return (as_aux(with_notes(made, (TARGET_LABEL,))),)
+    return (with_hints(made, (TARGET_LABEL,)),)
 
 
 def _null_blocks(split: _Split) -> tuple[ReportBlock, ...]:
@@ -381,12 +386,15 @@ def _null_blocks(split: _Split) -> tuple[ReportBlock, ...]:
         return ()
     made = breakdown_block(
         BlockAt(
-            zone="charts", title="每列空值率：训练 / 测试", tier=TIER_SMALL
+            zone="charts",
+            title="每列空值率：训练 / 测试",
+            tier=TIER_SMALL,
+            is_primary=False,
         ),
         Scale(label=NULL_LABEL),
         items,
     )
-    return (as_aux(made),)
+    return (made,)
 
 
 def _null_items(split: _Split) -> list[Item]:

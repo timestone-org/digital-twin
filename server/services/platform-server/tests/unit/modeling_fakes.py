@@ -4,6 +4,7 @@
 核对，「跑完没报错」不等于「算对了」（docs/MODELING_DESIGN.md §10.3）。
 """
 
+from collections.abc import Mapping, Sequence
 from datetime import UTC, datetime
 from typing import cast
 
@@ -12,6 +13,12 @@ from platform_server.apps.modeling.operators import (
     Frame,
     FrameColumn,
     Provenance,
+)
+from platform_server.apps.modeling.operators.reporting import (
+    NOTE_ALERT,
+    NOTE_HINT,
+    NoteLevel,
+    ReportBlock,
 )
 from platform_server.apps.modeling.schemas.graph import (
     GraphEdge,
@@ -91,6 +98,27 @@ def with_hole(frame: Frame, *, row: int, key: str) -> Frame:
         index_name=frame.index_name,
         provenance=frame.provenance,
     )
+
+
+def hints_of(block: ReportBlock) -> list[str]:
+    """一块上收进小问号的那几句口径说明。
+
+    Args: block。
+    """
+    return _texts_of(block, NOTE_HINT)
+
+
+def alerts_of(block: ReportBlock) -> list[str]:
+    """一块上必须整条摆出来的那几句告警。
+
+    Args: block。
+    """
+    return _texts_of(block, NOTE_ALERT)
+
+
+def _texts_of(block: ReportBlock, level: NoteLevel) -> list[str]:
+    notes: Sequence[Mapping[str, str]] = block.payload.get("notes") or ()
+    return [note["text"] for note in notes if note["level"] == level]
 
 
 def node(node_id: str, operator: str, **config: object) -> GraphNode:

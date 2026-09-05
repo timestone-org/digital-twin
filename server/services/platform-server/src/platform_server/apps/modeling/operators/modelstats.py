@@ -9,7 +9,7 @@
 
 import math
 from collections.abc import Callable, Sequence
-from dataclasses import dataclass, replace
+from dataclasses import dataclass
 from typing import Any
 
 import numpy as np
@@ -19,9 +19,11 @@ from platform_server.apps.modeling.operators.reporting import (
     MAX_PDP_POINTS,
     MAX_RANGES,
     MAX_TREE_NODES,
+    NOTE_HINT,
     Item,
     Pdp,
     ReportBlock,
+    annotated,
 )
 from platform_server.apps.modeling.operators.steps import ratio_of
 
@@ -240,27 +242,12 @@ def tree_outline(
     return {"depth": depth, "nodes": _walked(tree, keys, depth)}
 
 
-def with_notes(block: ReportBlock, notes: Sequence[str]) -> ReportBlock:
-    """给一块挂上这一步必须说清的几句话；一句都没有时原样返回。
+def with_hints(block: ReportBlock, notes: Sequence[str]) -> ReportBlock:
+    """给一块挂上这一步的几句口径说明，收在小问号里。
 
-    ⚠ 挂在块上而不是笼统摆在屏顶：说的是哪一块的事就摆在哪一块的位置
-    （规格 §2-P5）。
     Args: block, notes。
     """
-    kept = [text for text in notes if text]
-    return (
-        block
-        if not kept
-        else replace(block, payload={**block.payload, "notes": kept})
-    )
-
-
-def as_aux(block: ReportBlock) -> ReportBlock:
-    """把一块标成辅图：超预算时它比主体图先走（规格 §4.6）。
-
-    Args: block。
-    """
-    return replace(block, payload={**block.payload, "is_primary": False})
+    return annotated(block, NOTE_HINT, notes)
 
 
 def _curve_of(

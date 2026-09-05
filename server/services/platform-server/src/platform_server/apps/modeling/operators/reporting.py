@@ -7,7 +7,7 @@
 """
 
 from collections.abc import Mapping, Sequence
-from dataclasses import dataclass
+from dataclasses import dataclass, replace
 from typing import Any, Literal, get_args
 
 # 一项自由形状的明细。⚠ 只有**外层条数**在这里截断，内层长度由带类型的
@@ -33,6 +33,14 @@ BLOCK_KINDS: tuple[str, ...] = tuple(get_args(BlockKind))
 Zone = Literal["step", "stats", "charts", "formula", "table"]
 
 ZONES: tuple[str, ...] = tuple(get_args(Zone))
+
+# 一句话的两档，一个键两种摆法（§4.3 的 `notes`、§11 的 R-24）
+type NoteLevel = Literal["alert", "hint"]
+
+#: 会让人读出**错误结论**的那一句。界面整条摆出来，收进小问号等于没说
+NOTE_ALERT: NoteLevel = "alert"
+#: 口径说明。收进图旁的小问号，不占版面
+NOTE_HINT: NoteLevel = "hint"
 
 # 降档档位：标量 / 小数组 / 大数组
 TIER_SCALAR = 0
@@ -86,6 +94,10 @@ class BlockAt:
     title: str
     port: str = ""
     tier: int = TIER_SCALAR
+    #: 图区的块必填：True=主体图（最后才丢）、False=辅图；None=不是图区的块
+    #: ⚠ 缺省不许是 True——降档梯子第 2 档只丢辅图，漏标的辅图会挤掉真正的主体图
+    #: （§4.6），而漏标在运行期是静默的，只有契约用例逐个算子问得出来
+    is_primary: bool | None = None
 
 
 @dataclass(frozen=True)
@@ -352,16 +364,40 @@ def structure_block(at: BlockAt, structure: ModelStructure) -> ReportBlock:
     return _block("structure", at, payload)
 
 
+def annotated(
+    block: ReportBlock, level: NoteLevel, texts: Sequence[str]
+) -> ReportBlock:
+    """给一块挂上几句同一档的话；一句都没有时原样返回。
+
+    ⚠ 两档合在**同一个** `notes` 键里、逐句带 `level`，不各起一个键：分成两个键
+    时「哪一句必须整条摆出来」这条区分只活在写了第二个键的那两个模块里，其余模块
+    的告警会被一起收进小问号（§11 的 R-24）。
+    ⚠ 挂在块上而不是笼统摆在屏顶：说的是哪一块的事就摆在哪一块的位置（§2-P5）。
+    界面按 `level` 分档摆，故同一档内才有先后，两档之间的先后不作数。
+    Args: block, level, texts。
+    """
+    kept = [{"level": level, "text": text} for text in texts if text]
+    if not kept:
+        return block
+    before: Sequence[Any] = block.payload.get("notes") or ()
+    return replace(block, payload={**block.payload, "notes": [*before, *kept]})
+
+
 def _block(
     kind: BlockKind, at: BlockAt, payload: dict[str, Any]
 ) -> ReportBlock:
+    marked = (
+        payload
+        if at.is_primary is None
+        else {**payload, "is_primary": at.is_primary}
+    )
     return ReportBlock(
         kind=kind,
         zone=at.zone,
         port=at.port,
         title=at.title,
         tier=at.tier,
-        payload=payload,
+        payload=marked,
     )
 
 

@@ -17,6 +17,7 @@ from platform_server.apps.modeling.operators import (
     OperatorBase,
     registry,
 )
+from platform_server.apps.modeling.operators.evalstats import fold_score_items
 from platform_server.apps.modeling.operators.frame import (
     ROLE_FEATURE,
     ROLE_TARGET,
@@ -32,6 +33,11 @@ YEAR_ROWS = 366 * 24
 WIDE_COLUMNS = 60
 MAX_FOLDS = 20
 TARGET = "能耗"
+# 四折前向链在这么多行上恰好切出三折，每折十行
+FOLD_ROWS = 40
+# 第二折抬一点、末折抬一大截：三折的分因此互不相同
+MID_SHIFT = 2.0
+LATE_SHIFT = 40.0
 
 
 def scored(
@@ -404,6 +410,58 @@ def test_the_fold_scores_survive_instead_of_being_folded_into_four() -> None:
     )
 
 
+def drifting_folds() -> Frame:
+    """第一折严格线性、第二折抬一点、末折抬一大截：三折的分必然互不相同。
+
+    ⚠ 「互不相同」是这份数据的全部用意：三折同分时，把逐折分换成全折均值照样
+    一片绿，而那正是这条图要防的事。
+    """
+    return Frame(
+        columns=(
+            FrameColumn(key="甲", name="甲", dtype="number", role=ROLE_FEATURE),
+            FrameColumn(
+                key=TARGET, name=TARGET, dtype="number", role=ROLE_TARGET
+            ),
+        ),
+        rows=tuple(
+            (float(seat % 10), 3.0 * float(seat % 10) + 10.0 + _shift(seat))
+            for seat in range(FOLD_ROWS)
+        ),
+    )
+
+
+def _shift(seat: int) -> float:
+    """这一行的目标列被抬高多少。第一折不动、第二折抬一点、末折抬一大截。
+
+    Args: seat。
+    """
+    if seat >= FOLD_ROWS - 10:
+        return LATE_SHIFT
+    return MID_SHIFT if seat >= FOLD_ROWS - 20 else 0.0
+
+
+def test_each_fold_keeps_its_own_score_instead_of_the_average() -> None:
+    """⚠ 逐折的分逐折给：抹成全折均值的话，「第 3 折特别差」在图上就没了。"""
+    items = fold_score_items((0.9, 0.2, 0.95))
+    assert [item["value"] for item in items] == [0.9, 0.2, 0.95]
+    assert [item["name"] for item in items] == ["第 1 折", "第 2 折", "第 3 折"]
+
+
+def test_the_fold_that_drifted_shows_up_as_its_own_low_bar() -> None:
+    """末折上关系整体漂了：它的分是很负的一个数，前两折仍贴着 1。
+
+    三个数互不相同，且没有一个等于那条均值基准线——抹平之后三根柱一样高。
+    """
+    blocks = validated(drifting_folds(), folds=4).report()
+    scores = [item["value"] for item in items_of(blocks, "逐折分数")]
+    assert scores[0] == pytest.approx(1.0)
+    assert scores[1] == pytest.approx(0.9461, abs=1e-4)
+    assert scores[2] == pytest.approx(-19.8365, abs=1e-4)
+    baseline = block_of(blocks, "逐折分数").payload["baseline"]
+    assert baseline == pytest.approx(sum(scores) / 3)
+    assert [value for value in scores if value == baseline] == []
+
+
 def test_the_fold_layout_puts_the_train_and_test_spans_on_the_row_axis() -> (
     None
 ):
@@ -427,7 +485,7 @@ def test_the_fold_layout_is_the_auxiliary_chart() -> None:
     """折布局是辅图：超预算时它比逐折分数那张主体图先走。"""
     blocks = validated(training(), folds=4).report()
     assert block_of(blocks, "折布局").payload["is_primary"] is False
-    assert "is_primary" not in block_of(blocks, "逐折分数").payload
+    assert block_of(blocks, "逐折分数").payload["is_primary"] is True
 
 
 def test_the_fold_worst_load_still_fits_the_report_budget() -> None:

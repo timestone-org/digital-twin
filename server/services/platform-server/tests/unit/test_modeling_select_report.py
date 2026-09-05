@@ -28,6 +28,7 @@ from platform_server.apps.modeling.operators.fitting import (
 from platform_server.apps.modeling.operators.reporting import ReportBlock
 from platform_server.apps.modeling.services import report_budget
 from platform_server.apps.modeling.services.preview import REPORT_MAX_BYTES
+from unit.modeling_fakes import hints_of
 
 OTHER = "负荷"
 # 最坏负载：60 列宽帧 × 366 天逐时
@@ -228,7 +229,7 @@ def test_the_variance_hint_is_a_hint_and_only_on_that_method() -> None:
         }
     )
     by_variance = blocks_of(frame, top_k=1)
-    assert by_variance["columns"].payload["notes"] == [VARIANCE_HINT]
+    assert hints_of(by_variance["columns"]) == [VARIANCE_HINT]
     by_correlation = blocks_of(
         frame,
         plan=half_split(),
@@ -236,7 +237,7 @@ def test_the_variance_hint_is_a_hint_and_only_on_that_method() -> None:
         top_k=1,
         columns=["甲", "乙"],
     )
-    assert "notes" not in by_correlation["columns"].payload
+    assert hints_of(by_correlation["columns"]) == []
 
 
 def test_the_correlation_score_is_the_absolute_value() -> None:

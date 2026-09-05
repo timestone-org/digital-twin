@@ -6,7 +6,7 @@
 """
 
 from collections.abc import Mapping, Sequence
-from dataclasses import dataclass, replace
+from dataclasses import dataclass
 from typing import Any
 
 from platform_server.apps.modeling.operators.frame import Frame, numbers_of
@@ -95,7 +95,7 @@ def fill_blocks(run: FillRun) -> tuple[ReportBlock, ...]:
 
     Args: run。
     """
-    return (_fill_cells(run), _fill_fits(run), _aux(_fill_bins(run)))
+    return (_fill_cells(run), _fill_fits(run), _fill_bins(run))
 
 
 def clip_blocks(run: ClipRun) -> tuple[ReportBlock, ...]:
@@ -107,7 +107,7 @@ def clip_blocks(run: ClipRun) -> tuple[ReportBlock, ...]:
     return (
         _clip_cells(run, touched),
         _clip_fits(run, touched),
-        _aux(_clip_bins(run, touched)),
+        _clip_bins(run, touched),
     )
 
 
@@ -194,7 +194,13 @@ def _fill_bins(run: FillRun) -> ReportBlock:
     keys = [key for key in run.keys if key in run.fills]
     ranked = sorted(keys, key=lambda key: (-_null_count(run.source, key), key))
     return bins_block(
-        BlockAt(zone="charts", title="填充前分布", port=PORT, tier=TIER_LARGE),
+        BlockAt(
+            zone="charts",
+            title="填充前分布",
+            port=PORT,
+            tier=TIER_LARGE,
+            is_primary=True,
+        ),
         [_fill_column(run, key) for key in ranked[:MAX_BIN_COLUMNS]],
     )
 
@@ -321,7 +327,13 @@ def _clip_bins(run: ClipRun, touched: Mapping[str, _Touch]) -> ReportBlock:
     keys = [key for key in run.keys if key in run.bounds]
     keys.sort(key=lambda key: (-touched[key].changed, key))
     return bins_block(
-        BlockAt(zone="charts", title="裁剪前分布", port=PORT, tier=TIER_LARGE),
+        BlockAt(
+            zone="charts",
+            title="裁剪前分布",
+            port=PORT,
+            tier=TIER_LARGE,
+            is_primary=True,
+        ),
         [_clip_column(run, key) for key in keys[:MAX_BIN_COLUMNS]],
     )
 
@@ -375,11 +387,3 @@ def _null_count(frame: Frame, key: str) -> int:
     Args: frame, key。
     """
     return sum(1 for value in numbers_of(frame, key) if value is None)
-
-
-def _aux(block: ReportBlock) -> ReportBlock:
-    """标成辅图：超预算时辅图先走，主体那一块最后丢（规格 §4.6）。
-
-    Args: block。
-    """
-    return replace(block, payload={**block.payload, "is_primary": False})
