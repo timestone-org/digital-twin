@@ -207,10 +207,11 @@ const isEmpty = computed(
     gap: 0.375rem;
   }
 
-  // 辅图网格：70rem 下两列（规格 §3.2）
+  // 辅图网格：列宽下限与主体图同档，摆得下两张 44rem 的图才排两列（规格 §3.2）。
+  // ⚠ 下限写小了，viewBox 会把 7px 的刻度字按「渲染宽 ÷ 360」一起缩到读不动
   &__panels {
     display: grid;
-    grid-template-columns: repeat(auto-fit, minmax(18rem, 1fr));
+    grid-template-columns: repeat(auto-fit, minmax(min(44rem, 100%), 44rem));
     gap: 0.75rem;
 
     figure {

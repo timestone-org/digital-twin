@@ -321,6 +321,63 @@ describe('线性回归的公式', () => {
     expect(spec.filled).toBeNull()
     expect(spec.fallback).toContain('正则化方式')
   })
+
+  // ⚠ config 快照只保证有建节点时种进去的键；α 只从它读的话，存量运行会拿到
+  // 一句「没记下正则化方式」，而那个数就在同屏 model 端口的超参里躺着
+  it('config 快照里没有 α 时改从模型超参上取', () => {
+    const kept: PortPreview[] = [
+      {
+        port: 'model',
+        preview: model({ hyperParams: [['ridge_alpha', '0.5']] }),
+      },
+    ]
+    const spec = pick(
+      formulasOf('linear_regression', {
+        blocks: [],
+        ports: kept,
+        config: { regularization: 'ridge' },
+      }),
+      'fit',
+    )
+
+    expect(formulaText(spec.filled ?? [])).toBe(
+      'b = argmin sum(i = 1..n, ei^2) + 0.5 sum(j = 1..p, bj^2)',
+    )
+  })
+
+  it('两处都取不到 α 时那句话只说 α，不赖到正则化方式头上', () => {
+    const spec = pick(
+      formulasOf('linear_regression', {
+        blocks: [],
+        ports,
+        config: { regularization: 'ridge' },
+      }),
+      'fit',
+    )
+
+    expect(spec.filled).toBeNull()
+    expect(spec.fallback).toBe('这次运行没有记下岭回归的 α，代不进')
+    expect(spec.fallback).not.toContain('正则化方式')
+  })
+
+  it('config 没记下正则化方式时也看一眼模型超参', () => {
+    const kept: PortPreview[] = [
+      {
+        port: 'model',
+        preview: model({ hyperParams: [['regularization', 'none']] }),
+      },
+    ]
+    const spec = pick(
+      formulasOf('linear_regression', {
+        blocks: [],
+        ports: kept,
+        config: {},
+      }),
+      'fit',
+    )
+
+    expect(formulaText(spec.filled ?? [])).toContain('普通最小二乘')
+  })
 })
 
 describe('逻辑回归的公式', () => {
@@ -406,6 +463,25 @@ describe('逻辑回归的公式', () => {
     )
 
     expect(formulaText(spec.filled ?? [])).toContain('p(x) >= 0.5')
+  })
+
+  it('出厂值只是最后一步：模型超参上有阈值时按它印', () => {
+    const kept = model({
+      algo: 'logistic_regression',
+      task: 'classification',
+      classes: [0, 1],
+      hyperParams: [['positive_threshold', '0.7']],
+    })
+    const spec = pick(
+      formulasOf('logistic_regression', {
+        blocks: [],
+        ports: [{ port: 'model', preview: kept }],
+        config: {},
+      }),
+      'decide',
+    )
+
+    expect(formulaText(spec.filled ?? [])).toContain('p(x) >= 0.7')
   })
 
   it('摘要里没有类目时不硬编一个正类出来', () => {

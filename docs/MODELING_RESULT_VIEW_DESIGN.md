@@ -105,7 +105,7 @@ D-1～D-8 排在任何新画法之前。不修的话新旧画法一起黑，而�
 |---|---|---|---|---|
 | ① | **这一步做了什么** | 一句话 gist + 参数 chips + 行/列/格子的账 + 告警 note | `StepSummary.vue`（内含 `DtTag` chips + `DtNotice`） | 全宽，≤3 行文字 + ≤2 个 note |
 | ② | **关键数字** | 4–8 张指标卡 | `StatCards.vue`（`grid gap-3 sm:grid-cols-2 lg:grid-cols-4` + `DtCard padding="sm"` + `DtDigits` + `DtHelpTip`） | 每卡最小 12rem，最多两行 |
-| ③ | **对比图** | 主体图 + 辅图 | 见 §7 的六个图元件 | 主体图 `min(44rem, 100%)`；辅图网格 `repeat(auto-fit, minmax(22rem, 1fr))`（70rem 下两列） |
+| ③ | **对比图** | 主体图 + 辅图 | 见 §7 的六个图元件 | 主体图与辅图同为 `min(44rem, 100%)` 一档；辅图网格 `repeat(auto-fit, minmax(min(44rem, 100%), 44rem))`——⚠ 列宽下限低于一档时，`viewBox` 会把 7px 的刻度字按「渲染宽 ÷ 360」一起缩到读不出数（1084px 的格子里排三列实测只剩 6.87px），故摆得下两张整图才排两列 |
 | ④ | **怎么算的** | 公式（符号态 / 代入态）+ 变量表 | `FormulaBlock.vue` | 全宽，行内 flex-wrap |
 | ⑤ | **完整数据** | 列统计表 / 系数表 / 明细表 / 混淆矩阵 | `DtTable`（禁手写 `<table>`） | 默认折叠 + 内滚 28rem |
 | ⑥ | **出处与截断** | provenance 行 + 四档截断说明 + 下载全量结果 | `ProvenanceBar.vue` + `TruncationNotice.vue` | 一行灰字 + 0–3 条 `DtNotice` |
@@ -413,13 +413,13 @@ RUN_REPORT_MAX_BYTES  = 2 * 1024 * 1024
 - **公式**：$\hat{y}=\beta_0+\sum_j\beta_j x_j$；$\hat{\boldsymbol\beta}=\arg\min\sum_i\bigl(y_i-\beta_0-\sum_j\beta_jx_{ij}\bigr)^2+\alpha\sum_j\beta_j^2$，$\alpha=0$（none）或 $\texttt{ridge\_alpha}$（ridge）；岭解 $(\tilde X^\top\tilde X+\alpha I)\boldsymbol\beta=\tilde X^\top\tilde y$，已中心化故截距不进惩罚项
 - **来源**：`preview.fitted` 的 coef/intercept（已在传）
 - **后端**：**要**（训练集 R²/RMSE、`rank_`/`singular_`、每列 σ）。秩亏时系数符号会整体翻过来而模型看着完全正常，这是「公式讲不通」最常见的真因
-- **必带告警**：上游没有 standardize 时按 $|\beta|$ 排序会把单位小的列顶到最前——`diagnostics.py:141-145` 已经把这条坑写下来了，展示侧还在犯
+- **必带告警**：上游没有 standardize 时按 $|\beta|$ 排序会把单位小的列顶到最前——`diagnostics.py:141-145` 已经把这条坑写下来了，**展示侧已补上**：系数块按各列 σ 的倍差挂告警（`linearreport.py` 的量纲那一条），公式的 note 里也跟着说一句
 
 #### 18. `logistic_regression` · 逻辑回归
 - **块**（port=""）：`fits`(formula) 判别式与几率比 · `breakdown`(charts) 训练集类目占比 · `structure`(stats) 正类与收敛
 - **图**：`FormulaBlock` · `BarList`（$\exp(\beta_j)$，零线在 1.0——「这一列每加 1 个单位，出事的几率乘几倍」是逻辑回归唯一能讲给业务听的读法）· `BarList` 堆叠（类目占比）
 - **公式**：$z=\beta_0+\sum_j\beta_jx_j$；$p(x)=\sigma\bigl(\operatorname{clip}(z,-700,700)\bigr)=\frac{1}{1+e^{-z}}$；$\hat{y}=c_1$ if $p\ge\texttt{positive\_threshold}$ else $c_0$，$(c_0<c_1)=\texttt{fitted.classes}$；$\hat{\boldsymbol\beta}=\arg\min\frac12\lVert\boldsymbol\beta\rVert_2^2+C\sum_i\log(1+e^{-\tilde y_i(\beta_0+\boldsymbol\beta^\top x_i)})$。业务读法：$\frac{p}{1-p}=e^{\beta_0}\prod_j(e^{\beta_j})^{x_j}$
-- **来源**：`fitted.classes` **后端已在传**（`model.py:501-507`），`preview.ts:190-210` 一个字没读
+- **来源**：`fitted.classes` **两侧都已在传在读**（后端 `regression.py::LogisticRegressionOperator.dump_fitted`，前端 `preview.ts::classesOf`）——判成哪一类那条公式的正类方向就靠它，读不到时只出符号态
 - **后端**：**要**（类目计数、`n_iter_`/收敛、概率饱和行数）
 - **必带四条 note**：① **这是过一层 sigmoid 再比阈值**（今天那排权重条会被当成线性系数直接读，界面上没有任何一处拦这个误读）；② 判正类的阈值是超参 `positive_threshold`（默认 0.5，§13.2），要连同「全部分类指标都只是这一个阈值上的切片」一起说；③ penalty/solver 用的是 sklearn 默认（`estimators.py:198-200` 只传了 `fit_intercept` 与 `C`），公式里按默认写死并注明；④ 打分结果每行都带正类概率（列 `y_proba`），换阈值不用重训
 - **概率那一路在 §13**：打分帧多带一列 `y_proba` 之后，ROC / PR / 校准曲线与阈值网格都摆在 `classification_metrics` 那一屏上，判正类的阈值同时升为超参 `positive_threshold`
@@ -452,7 +452,7 @@ RUN_REPORT_MAX_BYTES  = 2 * 1024 * 1024
 - **后端**：**几乎不要**——这是全模块投入产出比最高的一屏。只补两件小事：`positive_label` 与空测试集检查
 - **⚠ 正类匹配必须归一化**：config 的 `positive_label` 是 **float**（`evaluate.py:193`，default=1.0），而摘要里的 `labels` 是 **str**（`evaluate.py:328` 的 `_label_text`，1.0 → `"1"`）。**由后端出 `positive_label_text`**，前端只做字符串比对
 - **⚠ 正类可能不在 labels 里**：`labels = sorted({*truth, *predicted})` 只从测试集取。类别极不平衡、模型全押多数类时正类既没出现也没被预测过 → 矩阵里**没有那一行**，P/R 双双 None。此时**不画正类徽标**，改成一条 danger note：「正类 `1` 在这份测试集里一次都没出现过，精确率与召回率无定义」
-- **⚠ 空测试集**：回归评估会明确报错（`evaluate.py:134`），分类评估不检查（`evaluate.py:253-265`），四个指标全 None、矩阵空元组、界面一片空白。两侧对齐
+- **⚠ 空测试集**：不检查的话四个指标全 None、矩阵空元组、界面一片空白。**两侧口径已对齐**：回归评估与分类评估（`evaluate.py::_scored_pairs`）都明确抛「测试集一行都没有，算不出指标」
 - **概率那一路在 §13**：二分类且打分帧带 `y_proba` 时，这一屏上还有 ROC / PR / 校准三条曲线与 59 档阈值网格；多分类或缺概率列时四样一块都不摆，改摆一条说清是哪一种「没有」的 note
 
 #### 22. `residual_analysis` · 残差分析
@@ -829,7 +829,7 @@ interface FormulaTerm { text: string; kind: 'var' | 'num' | 'op' | 'name' | 'war
 
 ### 13.1 病症
 
-`operators/model.py` 的逻辑回归对每一行都算出了正类概率，比完一个**私有常量 0.5**（`model.py:50`）就把概率扔掉，只留硬标签。后果三条：
+逻辑回归（`operators/regression.py`）对每一行都算出了正类概率，比完一个**私有常量 0.5**（`_DECISION_THRESHOLD`）就把概率扔掉，只留硬标签。后果三条：
 
 1. **ROC / PR / 校准曲线 / 可拖阈值四张图全部画不出来**——它们全都要每行的概率，不是硬标签。
 2. **判正类的 0.5 既不是超参也不进摘要**，类不平衡时用户既改不了也看不见。
@@ -851,9 +851,11 @@ interface FormulaTerm { text: string; kind: 'var' | 'num' | 'op' | 'name' | 'war
 | ROC 曲线 + AUC | `ScatterPlot`（新 `mode: 'curve'`） | 后端按 ≤59 个阈值的网格算好 `(fpr, tpr)` 点列，**不在前端从 pairs 现算** | 对角线是随机基准；AUC 进关键数字区 |
 | PR 曲线 + AP | 同上 | `(recall, precision)` 点列 + 正类占比基线 | 类不平衡时它比 ROC 诚实，两张都要 |
 | 校准曲线 | 同上 | 十等分箱的 `(平均预测概率, 实际正类率)` + 每箱样本数 | 对角线是完美校准；箱内样本 <10 的点画空心 |
-| 阈值滑杆 | `ThresholdSlider.vue`（新） | 后端给 ≤59 个阈值上的 `(threshold, tp, fp, tn, fn)` 网格，前端**查表**不重算 | 拖动即时联动混淆矩阵与四个指标卡；默认停在训练时的 `positive_threshold` 并标一条竖线 |
+| 阈值滑杆 | `ThresholdSlider.vue`（新） | 后端给 ≤59 个阈值上的 `(threshold, tp, fp, tn, fn)` 网格，前端**查表**不重算 | 拖动即时联动混淆矩阵与四个指标卡；默认停在**从打分帧反推的那一刀**（判成正类的行里最低的那个概率）并标一条竖线，后端保证这一档留在网格上 |
 
 **为什么阈值网格由后端给**：前端只有截断过的 `pairs`（默认上限 500 行），拿它现算的曲线与指标卡对不上账——同一屏两个数打架是比没有这张图更坏的结果。
+
+**竖线不是 `positive_threshold`，是反推出来的那一刀**：分类评估的入口只有一份打分帧（`ClassificationMetrics.INPUTS` 只有 `scored`），超参在模型那一侧的负载上，这一屏**结构上拿不到**——要拿就得给它加一个 model 端口，那是另一桩契约变更。故按「判成正类的行里最低的那个概率」反推（`evalblocks._scoring_threshold`）。反推值与真超参可以不同（配 0.5、反推得 0.5405），但两者切出来的正类行**是同一批**，故这一档的四格与同屏指标卡逐个相等——而写死 0.5 会把竖线指在模型根本没用过的位置。⚠ 反推那一刀要在**抽样之前**交给 `curves_of(keep=…)`：59 档等距抽样会把它抽掉，滑杆于是停到旁边一档，同一屏摆出两张四格不同的混淆矩阵。
 
 **网格是 59 档，不是 200 档**：曲线与网格都走 `breakdown` 块，而 `reporting.MAX_ITEMS = 60` 是它的逐项上限，`evalcurves.GRID_POINTS = MAX_ITEMS - 1`——留出的那一格给 ROC 的「全判负类」锚点，不留的话多算的那一截会被无声截掉。实测这四块合计约 20KB（ROC 5.0KB · PR 6.2KB · 校准 1.6KB · 网格 6.9KB），在 `REPORT_MAX_BYTES` 里仍然宽裕；⚠ 要更密的网格就得给 `breakdown` 单开一档更大的上限，那是契约变更，不在本期。
 

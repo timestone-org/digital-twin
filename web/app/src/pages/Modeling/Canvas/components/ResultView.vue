@@ -127,6 +127,22 @@ const formulas = computed(() =>
 )
 
 /**
+ * 公式挂在哪一段块流上：节点级块非空时跟着它，否则跟着这一路的块。
+ *
+ * ⚠ 只能挂一段。24 个算子里只有 4 个出节点级块，其余 21 个的块全挂在端口上——
+ * 一律挂节点级那段的话，那 21 个会拿一份空块流单独铺出 ④ 区，公式于是印在整屏
+ * 最上面，与锚点条印的顺序对不上（规格 §2-P1）。两段都挂则同一屏出现两个
+ * 「怎么算的」。
+ */
+const nodeFormulas = computed(() =>
+  nodeBlocks.value.length > 0 ? formulas.value : [],
+)
+
+const portFormulas = computed(() =>
+  nodeBlocks.value.length > 0 ? [] : formulas.value,
+)
+
+/**
  * 每一路输出的外壳。
  *
  * ⚠ 只在有讲解时才套卡片（规格 §3.3）：没有讲解的老运行要一个字不多地退回升级
@@ -272,7 +288,7 @@ function jump(target: string): void {
       :zones="LEAD_ZONES"
       :dropped="report.dropped"
       :note="report.note"
-      :formulas="formulas"
+      :formulas="nodeFormulas"
     />
     <DtSegmented
       v-if="hasFace && isLabelled"
@@ -311,6 +327,7 @@ function jump(target: string): void {
         v-if="hasFace"
         :blocks="portBlocks(item.port)"
         :zones="LEAD_ZONES"
+        :formulas="portFormulas"
       />
       <div class="dt-ml-result__data" data-anchor="data">
         <button

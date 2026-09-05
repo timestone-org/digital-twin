@@ -14,9 +14,9 @@ from typing import Any
 from platform_server.apps.modeling.operators.evalstats import even_sample
 from platform_server.apps.modeling.operators.reporting import MAX_ITEMS
 
-# 阈值网格取多少档。⚠ 规格 §13.3 写的是 ≤200，而 `breakdown` 的 `items` 在
-# `reporting.py` 那一侧按 MAX_ITEMS 截断；ROC 还要在网格前面多摆一个「全判负类」
-# 的锚点，故取 MAX_ITEMS − 1，多算的那一截才不会被无声截掉
+# 阈值网格取多少档。⚠ 曲线与网格都走 `breakdown`，`items` 在 `reporting.py`
+# 那一侧按 MAX_ITEMS 截断；ROC 还要在网格前面多摆一个「全判负类」的锚点，
+# 故取 MAX_ITEMS − 1，多算的那一截才不会被无声截掉（规格 §13.3）
 GRID_POINTS = MAX_ITEMS - 1
 # 校准曲线切几个等宽箱
 CALIBRATION_BINS = 10

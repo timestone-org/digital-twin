@@ -7,14 +7,24 @@
  * ⚠ 混淆矩阵那张 `MatrixTable` 接不了这份数据：它按方阵算召回率与精确率，行列
  * 必须是同一组类目，而载荷是 K×J 的长方阵。
  */
+import { computed } from 'vue'
+
 import type { LoadingsView } from '../scripts/structureParts'
 
 const props = defineProps<{ view: LoadingsView }>()
+
+/** 画幅横向有多少个用户单位；载荷格的宽度随列数变，字号不跟着变靠它折算。 */
+const units = computed(() => Number(props.view.viewBox.split(' ')[2]) || 1)
 </script>
 
 <template>
   <figure class="dt-ml-loadings">
-    <svg :viewBox="props.view.viewBox" role="img" aria-label="载荷矩阵">
+    <svg
+      :viewBox="props.view.viewBox"
+      :style="{ '--dt-ml-loadings-units': units }"
+      role="img"
+      aria-label="载荷矩阵"
+    >
       <g class="dt-ml-loadings__rows">
         <text
           v-for="one in props.view.rowLabels"
@@ -59,12 +69,17 @@ const props = defineProps<{ view: LoadingsView }>()
 <style scoped lang="scss">
 .dt-ml-loadings {
   // 上限归摆放它的那一区给，44rem 只是兜底：viewBox 会把 7px 的字连同线宽一起
-  // 等比放大，没有上限的宽容器里字就成了三四倍
+  // 等比放大，没有上限的宽容器里字就成了三四倍。
+  // ⚠ 列多到摆不下时横向滚，不靠缩小换取塞得下：缩下去刻度字就读不出了
   max-width: var(--dt-ml-chart-max, 44rem);
   margin: 0;
+  overflow-x: auto;
 
+  // 一个用户单位固定铺 44rem ÷ 360 px，也就是主体图那一档的密度。
+  // ⚠ 这里不能写 `width: 100%`——载荷格的画幅宽随列数变（`68 + 列数 × 16 + 6`），
+  // 跟着容器铺满的话三列的矩阵会把 7px 的字放成 40px、二十列的又缩到 12.5px
   svg {
-    width: 100%;
+    width: calc(var(--dt-ml-loadings-units, 360) * 44rem / 360);
   }
 
   text {

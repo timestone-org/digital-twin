@@ -324,10 +324,12 @@ const summary = computed(() => {
     font-weight: 600;
   }
 
-  // 一列一张图并排铺；图自己的宽度上限仍归摆放它的那一区管
+  // 一列一张图并排铺；列宽下限与主体图同档，摆不下两张就整列摞下来。
+  // ⚠ 下限写小了是「配了不生效」的隐形版：图照画，只是 viewBox 把 7px 的刻度字
+  // 按「渲染宽 ÷ 360」缩到读不动，代码一行都不红
   &__grid {
     display: grid;
-    grid-template-columns: repeat(auto-fit, minmax(16rem, 1fr));
+    grid-template-columns: repeat(auto-fit, minmax(min(44rem, 100%), 44rem));
     gap: 0.75rem;
   }
 

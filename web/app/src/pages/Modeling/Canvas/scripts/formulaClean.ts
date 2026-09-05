@@ -235,11 +235,32 @@ function filterRule(context: FormulaContext): FormulaSpec {
   }
 }
 
+/**
+ * 桶宽与时区偏移的代入态。⚠ Δ 按**分钟**存，印小时要先除 60。
+ * Args: width, offset。
+ */
+function bucketFilled(width: number, offset: number): FormulaNode[] {
+  return [
+    run(
+      varOf('w'),
+      opOf('='),
+      numOf(width),
+      nameOf('毫秒'),
+      opOf(','),
+      varOf('Δ'),
+      opOf('='),
+      numOf(offset),
+      nameOf(`分钟（UTC${offset < 0 ? '' : '+'}${niceNumber(offset / 60)}）`),
+    ),
+  ]
+}
+
 function resampleBucket(context: FormulaContext): FormulaSpec {
   const axis = blockAt(context.blocks, 'axis')
   const width = axis === null ? null : numberIn(axis.payload, BUCKET_MS)
   const offset =
     axis === null ? null : numberIn(axis.payload, 'tz_offset_minutes')
+  const blind = width === null || offset === null
   const agg = textAt(context.config, 'agg')
   return {
     id: 'bucket',
@@ -255,25 +276,8 @@ function resampleBucket(context: FormulaContext): FormulaSpec {
         varOf('Δ'),
       ),
     ],
-    filled:
-      width === null || offset === null
-        ? null
-        : [
-            run(
-              varOf('w'),
-              opOf('='),
-              numOf(width),
-              nameOf('毫秒'),
-              opOf(','),
-              varOf('Δ'),
-              opOf('='),
-              numOf(offset),
-              nameOf(
-                `分钟（UTC${offset < 0 ? '' : '+'}${niceNumber(offset / 60)}）`,
-              ),
-            ),
-          ],
-    fallback: width === null || offset === null ? NO_BLOCK : null,
+    filled: blind ? null : bucketFilled(width, offset),
+    fallback: blind ? NO_BLOCK : null,
     isOpen: false,
     legend: [
       { symbol: 'w', text: '桶宽' },

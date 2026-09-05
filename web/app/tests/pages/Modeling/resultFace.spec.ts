@@ -655,3 +655,142 @@ describe('④ 区的公式', () => {
     expect(zones).toEqual(['stats'])
   })
 })
+
+describe('④ 区跟着有块的那一段块流走', () => {
+  // 分区座次，与 scripts/zones.ts 的 `ZONE_ORDER` 逐字对齐
+  const SEATS = ['step', 'stats', 'charts', 'formula', 'table']
+
+  /** 后端实测：pca 把主成分那条算式当块出，摆的也是 ④ 区。 */
+  const PCA_FORMULA = {
+    kind: 'fits',
+    zone: 'formula',
+    port: 'frame',
+    title: '主成分的线性组合',
+    tier: 1,
+    payload: {
+      method: 'pca',
+      train_rows: 500,
+      total_rows: 500,
+      by_column: [{ key: 'pc1', weight: 0.6, center: 1 }],
+    },
+  }
+
+  const MODEL = {
+    model: {
+      kind: 'model',
+      algo: 'linear_regression',
+      task: 'regression',
+      hyper_params: { use_intercept: true },
+      feature_keys: ['温度'],
+      target_key: '能耗',
+      serving_channel: 'json',
+      fitted: { coef: { 温度: 2 }, intercept: 5 },
+    },
+  }
+
+  // ⚠ 四类算子各走一条不同的路：24 个算子里只有 4 个出节点级块，端口级那 21 个
+  // 走另一条路，这张表逐个钉住
+  const CASES: readonly {
+    label: string
+    props: Record<string, unknown>
+    zones: string[]
+  }[] = [
+    {
+      label: '纯端口级的 filter_rows',
+      props: {
+        report: reportOf([
+          blockOf({ port: 'frame', title: '条件过滤' }),
+          blockOf({ port: 'frame', zone: 'stats', title: '留下多少行' }),
+        ]),
+        code: 'filter_rows',
+        config: { op: 'gte', column: '功率', value: 3 },
+      },
+      zones: ['step', 'stats', 'formula'],
+    },
+    {
+      label: '端口级且自带 ④ 区块的 pca',
+      props: {
+        report: reportOf([
+          blockOf({ port: 'frame', title: '压缩说明' }),
+          blockOf({ port: 'frame', zone: 'charts', title: '解释方差与载荷' }),
+          PCA_FORMULA,
+        ]),
+        code: 'pca',
+      },
+      zones: ['step', 'charts', 'formula'],
+    },
+    {
+      label: '纯节点级的 linear_regression',
+      props: {
+        payload: MODEL,
+        report: reportOf([
+          blockOf({ title: '拟合概况' }),
+          blockOf({ zone: 'stats', title: '训练分与测试分' }),
+        ]),
+        code: 'linear_regression',
+      },
+      zones: ['step', 'stats', 'formula'],
+    },
+    {
+      label: '节点级且自带 ④ 区块的 linear_regression',
+      props: {
+        payload: MODEL,
+        report: reportOf([
+          blockOf({ title: '拟合概况' }),
+          { ...PCA_FORMULA, port: '', title: '系数与可比贡献' },
+        ]),
+        code: 'linear_regression',
+      },
+      zones: ['step', 'formula'],
+    },
+    {
+      label: '两路输出的 split_dataset',
+      props: {
+        payload: { train: FRAME_BODY, test: FRAME_BODY },
+        report: reportOf([blockOf({ title: '切分的账' })]),
+        code: 'split_dataset',
+        config: { test_ratio: 0.2 },
+      },
+      zones: ['step', 'formula'],
+    },
+  ]
+
+  /** 屏幕上从上到下的分区序列。 */
+  function zonesOf(props: Record<string, unknown>): string[] {
+    const wrapper = mount(ResultView, {
+      props: { payload: FRAME, config: {}, ...props },
+    })
+    const found = wrapper
+      .findAll('[data-zone]')
+      .map((one) => one.attributes('data-zone') ?? '')
+    wrapper.unmount()
+    return found
+  }
+
+  it('四类算子的分区序列都照 ZONE_ORDER 排', () => {
+    for (const one of CASES) {
+      expect([one.label, zonesOf(one.props)]).toEqual([one.label, one.zones])
+    }
+  })
+
+  // ⚠ 这条钉的是规格 §2-P1「同一种信息永远在同一位置」：④ 区一旦挂到空的那段
+  // 块流上，公式会铺在整屏最前，读者按锚点条找东西时第一块就是「怎么算的」
+  it('分区座次一路单调不减，④ 区不会被顶到整屏最上面', () => {
+    for (const one of CASES) {
+      const seats = zonesOf(one.props).map((zone) => SEATS.indexOf(zone))
+
+      expect([one.label, seats]).toEqual([
+        one.label,
+        [...seats].sort((left, right) => left - right),
+      ])
+    }
+  })
+
+  it('同一屏只出现一个「怎么算的」', () => {
+    for (const one of CASES) {
+      const seats = zonesOf(one.props).filter((zone) => zone === 'formula')
+
+      expect([one.label, seats.length]).toEqual([one.label, 1])
+    }
+  })
+})

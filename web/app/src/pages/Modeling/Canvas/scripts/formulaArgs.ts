@@ -105,6 +105,36 @@ export function modelAt(ports: readonly PortPreview[]): ModelPreview | null {
 }
 
 /**
+ * 同屏 model 端口上的一个超参。读不到就是空串。
+ *
+ * ⚠ 它与 config 快照互补、不是二选一：快照只保证有建节点时种进去的那些键，
+ * 而超参是这次运行自己带出来的一份全量（`regression.py::_hyper_params_of`）。
+ * ⚠ 值是字符串：摘要那一侧已经过一次 `String()`（`preview.ts::modelOf`）。
+ * Args: ports, key。
+ */
+export function hyperAt(ports: readonly PortPreview[], key: string): string {
+  const model = modelAt(ports)
+  if (model === null) return ''
+  for (const [name, value] of model.hyperParams) {
+    if (name === key) return value
+  }
+  return ''
+}
+
+/**
+ * 一个数值超参。⚠ 空串要单独拦：`Number('')` 是 0 不是 NaN，缺的参数会变成 0。
+ * Args: ports, key。
+ */
+export function hyperNumber(
+  ports: readonly PortPreview[],
+  key: string,
+): number | null {
+  const text = hyperAt(ports, key)
+  const value = Number(text)
+  return text !== '' && Number.isFinite(value) ? value : null
+}
+
+/**
  * 挑一块讲解。同一种块可能有好几块（分布图逐列一张），故按标题再收一次窄。
  *
  * Args: blocks, kind, title——空串 = 这一种的第一块。

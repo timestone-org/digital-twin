@@ -129,14 +129,15 @@ const hasAux = computed(
     --dt-ml-chart-max: min(44rem, 100%);
   }
 
-  // 辅图两列（45rem 以下自动收成一列），上限比主体图低一档
-  // ⚠ 这一档不是为并排那两张设的——并排时格子本来就比它窄。它兜的是「辅图只
-  // 剩一张、独占一整行」：不设的话那张图会长到主体图那么大，主次就没了
+  // 辅图格的列宽下限与主体图同档，摆得下两张 44rem 的图才排两列。
+  // ⚠ 辅图不靠画小来分主次——`svg` 的 viewBox 把 7px 的刻度字按「渲染宽 ÷ 360」
+  // 等比缩，28rem 的图上刻度字只有 8.7px，读不出数的图不是次要的图，是废图。
+  // 主次改由摆放次序与图注承担
   &__aux {
-    --dt-ml-chart-max: min(28rem, 100%);
+    --dt-ml-chart-max: 100%;
 
     display: grid;
-    grid-template-columns: repeat(auto-fit, minmax(22rem, 1fr));
+    grid-template-columns: repeat(auto-fit, minmax(min(44rem, 100%), 44rem));
     gap: 1rem;
     align-items: start;
   }

@@ -30,7 +30,15 @@ import type {
   FormulaMaker,
   FormulaSpec,
 } from './formulaArgs'
-import { frameAt, modelAt, numberAt, percent, textAt } from './formulaArgs'
+import {
+  frameAt,
+  hyperAt,
+  hyperNumber,
+  modelAt,
+  numberAt,
+  percent,
+  textAt,
+} from './formulaArgs'
 import { CLEAN_FORMULAS } from './formulaClean'
 import { EVAL_FORMULAS } from './formulaEval'
 import { FEATURE_FORMULAS } from './formulaFeature'
@@ -43,7 +51,7 @@ export type { FormulaContext, FormulaLegend, FormulaSpec }
 const RATIO_GAP = 0.005
 
 // 判正类的出厂阈值。⚠ 与后端 `regression.py::_DECISION_THRESHOLD` 同一个数：
-// 存量运行的 config 快照里没有这个键，读不到时两边必须落在同一个值上
+// config 快照与模型超参都没有这个键时，两边必须落在同一个值上
 const DEFAULT_THRESHOLD = 0.5
 
 /**
@@ -134,14 +142,33 @@ function linearPredict(context: FormulaContext): FormulaSpec {
   ])
 }
 
-function linearFit(context: FormulaContext): FormulaSpec {
-  const kind = textAt(context.config, 'regularization')
+/**
+ * 正则化方式与它的 α：先看运行时冻结的 config，再看同屏 model 端口的超参。
+ *
+ * ⚠ 两处都要看：config 快照只保证有建节点时种进去的键，存量运行里这两个键
+ * 常常只剩超参那一份（`formulaArgs.ts::hyperAt`）。
+ * Args: context。
+ */
+function ridgeOf(context: FormulaContext): [string, number | null] {
+  const configured = textAt(context.config, 'regularization')
+  const kind =
+    configured === '' ? hyperAt(context.ports, 'regularization') : configured
   const alpha =
-    kind === 'none'
-      ? 0
-      : kind === 'ridge'
-        ? numberAt(context.config, 'ridge_alpha')
-        : null
+    numberAt(context.config, 'ridge_alpha') ??
+    hyperNumber(context.ports, 'ridge_alpha')
+  return [kind, alpha]
+}
+
+/** 代不进 α 的两种「没有」。⚠ 分开写：一种只缺 α，另一种连正则化方式都没有。 */
+function alphaFallback(kind: string): string {
+  return kind === 'ridge'
+    ? '这次运行没有记下岭回归的 α，代不进'
+    : '这次运行没有记下正则化方式，代不进 α'
+}
+
+function linearFit(context: FormulaContext): FormulaSpec {
+  const [kind, ridgeAlpha] = ridgeOf(context)
+  const alpha = kind === 'none' ? 0 : kind === 'ridge' ? ridgeAlpha : null
   const head = [
     run(varOf('β'), opOf('='), nameOf('argmin')),
     sum('i = 1', 'n', [run(varOf('eᵢ²'))]),
@@ -159,7 +186,7 @@ function linearFit(context: FormulaContext): FormulaSpec {
       sum('j = 1', 'p', [run(varOf('βⱼ²'))]),
     ],
     filled: alpha === null ? null : [...head, ...penalty],
-    fallback: alpha === null ? '这次运行没有记下正则化方式，代不进 α' : null,
+    fallback: alpha === null ? alphaFallback(kind) : null,
     isOpen: false,
     legend: [
       { symbol: 'eᵢ', text: '第 i 行的残差 yᵢ − β₀ − Σ βⱼ·xᵢⱼ' },
@@ -311,9 +338,13 @@ function splitOrder(context: FormulaContext): FormulaSpec {
   }
 }
 
-/** 判正类的阈值：这一次运行配的那个，配不出来时退回出厂值。 */
+/** 判正类的阈值：这一次运行配的那个，config 与超参都没有时才退回出厂值。 */
 function thresholdOf(context: FormulaContext): number {
-  return numberAt(context.config, 'positive_threshold') ?? DEFAULT_THRESHOLD
+  return (
+    numberAt(context.config, 'positive_threshold') ??
+    hyperNumber(context.ports, 'positive_threshold') ??
+    DEFAULT_THRESHOLD
+  )
 }
 
 function logitScore(context: FormulaContext): FormulaSpec {

@@ -5,6 +5,7 @@
  * 自己就看得出是哪一种分母为 0（没判过正类 / 判成正类的全错）。这几条因此在
  * 指标读不出来时**自动展开**（规格 §6）。
  */
+import type { FormulaNode } from './formula'
 import { frac, nameOf, numOf, opOf, run, sqrt, sum, varOf } from './formula'
 import type { FormulaContext, FormulaSpec } from './formulaArgs'
 import {
@@ -235,12 +236,36 @@ function permutationFormula(context: FormulaContext): FormulaSpec {
   }
 }
 
+/**
+ * 配的折数与实得折数并排的代入态。
+ * Args: configured, got, isChain——前向链的第一折没有可训的行。
+ */
+function foldFilled(
+  configured: number,
+  got: number,
+  isChain: boolean,
+): FormulaNode[] {
+  return [
+    run(
+      varOf('K'),
+      opOf('='),
+      numOf(configured),
+      opOf(','),
+      varOf('实得'),
+      opOf('='),
+      numOf(got),
+      nameOf(isChain ? '折（第一折没有可训的行，整折丢弃）' : '折'),
+    ),
+  ]
+}
+
 function foldFormula(context: FormulaContext): FormulaSpec {
   const method = textAt(context.config, 'method')
   const configured = numberAt(context.config, 'folds')
   const isChain = method !== 'kfold'
   const rows = blockAt(context.blocks, 'rows')
   const got = rows === null ? null : foldCount(rows.payload)
+  const blind = configured === null || got === null
   return {
     id: 'folds',
     title: isChain ? '前向链是怎么切的' : 'K 折是怎么切的',
@@ -261,22 +286,8 @@ function foldFormula(context: FormulaContext): FormulaSpec {
         varOf(isChain ? '[0, kw)' : '全部行 \\ T_k'),
       ),
     ],
-    filled:
-      configured === null || got === null
-        ? null
-        : [
-            run(
-              varOf('K'),
-              opOf('='),
-              numOf(configured),
-              opOf(','),
-              varOf('实得'),
-              opOf('='),
-              numOf(got),
-              nameOf(isChain ? '折（第一折没有可训的行，整折丢弃）' : '折'),
-            ),
-          ],
-    fallback: configured === null || got === null ? NO_BLOCK : null,
+    filled: blind ? null : foldFilled(configured, got, isChain),
+    fallback: blind ? NO_BLOCK : null,
     isOpen: false,
     legend: [
       { symbol: 'N', text: '总行数' },
