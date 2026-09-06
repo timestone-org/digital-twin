@@ -145,6 +145,10 @@ class ColumnBins:
 
     key: str
     bins: Sequence[float] = ()
+    #: 每根柱各自叫什么，与 `bins` 同序等长；空 = 这几根柱是一条分布上的桶，
+    #: 没有各自的名字。⚠ 带了名字就不是分布：界面据此把它们画成互不相交的几段，
+    #: 而不是一条轴上的相邻两桶
+    labels: Sequence[str] = ()
     #: 逐桶里被这一步丢掉的行数，与 `bins` 同序等长。⚠ 必须由后端逐桶数：前端
     #: 拿参考线的哪一侧去推的话，判据是 `>` 还是 `<` 它根本不知道
     dropped: Sequence[float] = ()
@@ -323,6 +327,7 @@ def bins_block(at: BlockAt, by_column: Sequence[ColumnBins]) -> ReportBlock:
             {
                 "key": item.key,
                 "bins": list(item.bins[:MAX_BINS]),
+                "labels": list(item.labels[:MAX_BINS]),
                 "dropped": list(item.dropped[:MAX_BINS]),
                 "low": item.low,
                 "high": item.high,

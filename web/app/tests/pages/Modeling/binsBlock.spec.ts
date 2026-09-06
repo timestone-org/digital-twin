@@ -26,23 +26,56 @@ function blockOf(
   }
 }
 
-/** `ledger_source` 的真实产出：两列，各两根柱铺在 0–24 上，一条 danger 线。 */
-const SOURCE = blockOf({
+/** `ledger_join` 的真实产出：时刻差铺 30 箱，右行复用次数只有一箱且带离轴柱。 */
+const JOIN = blockOf(
+  {
+    by_column: [
+      {
+        key: '时刻差（毫秒）',
+        bins: [3.0, ...Array.from({ length: 29 }, () => 0)],
+        low: 0.0,
+        high: 3000.0,
+        marks: [
+          { at: 3000.0, label: '容差', intent: 'danger' },
+          { at: 0.0, label: '中位差', intent: 'info' },
+        ],
+        off_axis: null,
+      },
+      {
+        key: '右行被命中次数',
+        bins: [3.0],
+        low: 1.0,
+        high: 1.0,
+        marks: [{ at: 1.0, label: '最多被命中', intent: 'info' }],
+        off_axis: { label: '从没被用上', count: 1 },
+      },
+    ],
+  },
+  '时刻差与右行复用次数',
+)
+
+/**
+ * `ledger_source` 的真实产出：每列两段铺在 0–1 上的比率，各带一个名字。
+ * ⚠ 两段互不相交、相加正好是这一列的空值率，且一条参考线都没有。
+ */
+const QUALITY = blockOf({
   by_column: [
     {
-      key: '湿度',
-      bins: [8.0, 0.0],
+      key: '散射辐照度',
+      bins: [0.375, 0.0],
+      labels: ['空的格', '转坏的格'],
       low: 0.0,
-      high: 24.0,
-      marks: [{ at: 12.0, label: '一半', intent: 'danger' }],
-      off_axis: { label: '空的格', count: 8 },
+      high: 1.0,
+      marks: [],
+      off_axis: null,
     },
     {
-      key: '温度',
-      bins: [0.0, 0.0],
+      key: '风向',
+      bins: [0.125, 0.125],
+      labels: ['空的格', '转坏的格'],
       low: 0.0,
-      high: 24.0,
-      marks: [{ at: 12.0, label: '一半', intent: 'danger' }],
+      high: 1.0,
+      marks: [],
       off_axis: null,
     },
   ],
@@ -119,27 +152,27 @@ const PAIRED = blockOf(
 
 describe('分布档', () => {
   it('一列一张直方图，柱按两端等宽铺开', () => {
-    const wrapper = mount(BinsBlock, { props: { block: SOURCE } })
+    const wrapper = mount(BinsBlock, { props: { block: JOIN } })
 
     expect(wrapper.findAll('.dt-ml-bins__cell')).toHaveLength(2)
-    // 8 行落在 0~12 那一箱，另一箱是 0 故不画柱
-    expect(wrapper.findAll('.dt-ml-hist__bar-kept')).toHaveLength(1)
+    // 三行全落在最左那一箱，其余 29 箱是 0 故不画柱；第二列只有一箱
+    expect(wrapper.findAll('.dt-ml-hist__bar-kept')).toHaveLength(2)
     expect(wrapper.find('.dt-ml-hist__bar-kept title').text()).toBe(
-      '0 ~ 12：8 行',
+      '0 ~ 100：3 行',
     )
   })
 
   it('块的标题照实印出来', () => {
-    const wrapper = mount(BinsBlock, { props: { block: SOURCE } })
+    const wrapper = mount(BinsBlock, { props: { block: QUALITY } })
 
     expect(wrapper.find('.dt-ml-bins__title').text()).toBe('空的格最多的几列')
   })
 
   it('图下那行结论说清轴铺在哪、几个箱、参考线在哪', () => {
-    const wrapper = mount(BinsBlock, { props: { block: SOURCE } })
+    const wrapper = mount(BinsBlock, { props: { block: JOIN } })
 
     expect(wrapper.findAll('.dt-ml-bins__note')[0]?.text()).toBe(
-      '横轴 0 ~ 24，共 2 个箱；参考线 1 条：一半（12）',
+      '横轴 0 ~ 3000，共 30 个箱；参考线 2 条：容差（3000）、中位差（0）',
     )
   })
 
@@ -241,7 +274,7 @@ describe('丢弃段与正态参考曲线', () => {
   })
 
   it('一行都没丢的那一块不画斜纹也不摆图例', () => {
-    const wrapper = mount(BinsBlock, { props: { block: SOURCE } })
+    const wrapper = mount(BinsBlock, { props: { block: JOIN } })
 
     expect(wrapper.find('.dt-ml-hist__bar-dropped').exists()).toBe(false)
     expect(wrapper.find('.dt-ml-hist__legend').exists()).toBe(false)
@@ -256,7 +289,7 @@ describe('丢弃段与正态参考曲线', () => {
   })
 
   it('没带参数的那一列一条曲线都不画', () => {
-    const wrapper = mount(BinsBlock, { props: { block: SOURCE } })
+    const wrapper = mount(BinsBlock, { props: { block: JOIN } })
 
     expect(wrapper.find('.dt-ml-hist__curve').exists()).toBe(false)
   })
@@ -458,6 +491,82 @@ describe('比率档', () => {
     expect(wrapper.find('.dt-ml-bins__note').text()).toBe(
       '最高的一列是「湿度」：25% → 50%。',
     )
+  })
+
+  it('空的格那一块走横条，一根直方柱都不画', () => {
+    const wrapper = mount(BinsBlock, { props: { block: QUALITY } })
+
+    expect(wrapper.findAll('.dt-ml-bars__row')).toHaveLength(2)
+    expect(wrapper.find('.dt-ml-hist__summary').exists()).toBe(false)
+    expect(wrapper.find('.dt-ml-hist__bar-kept').exists()).toBe(false)
+  })
+
+  it('空的格与转坏的格分成两段，图例上各站一个名字', () => {
+    const wrapper = mount(BinsBlock, { props: { block: QUALITY } })
+    const keys = wrapper
+      .findAll('.dt-ml-bars__keys li')
+      .map((one) => one.text())
+
+    expect(keys).toEqual(['空的格', '转坏的格'])
+    // 第二列两段各非零，两段各画一块
+    const rows = wrapper.findAll('.dt-ml-bars__row')
+    expect(rows[1]?.findAll('.dt-ml-bars__piece').length).toBe(2)
+  })
+
+  // ⚠ 空的格已经是条子本身：再挂一笔「不在这条轴上」的同一撮，读者会把两个数
+  // 相加，得出的行数是真值的两倍
+  it('结论那行把两段各印一次，不把同一撮数两遍', () => {
+    const wrapper = mount(BinsBlock, { props: { block: QUALITY } })
+
+    expect(wrapper.find('.dt-ml-bins__note').text()).toBe(
+      '最高的一列是「散射辐照度」：37.5%，其中空的格 37.5%、转坏的格 0%。',
+    )
+    expect(wrapper.find('.dt-ml-bars__num').text()).toBe('0.375')
+  })
+
+  // ⚠ 挑最高那一列要按**两段之和**：只看第一段的话，一列大半格子转不成数（空得
+  // 少、坏得多）会被漏过去，而那正是类型配错时最该被指出来的一列。两段里第二段
+  // 恰好是 0 的夹具分不出这两种写法
+  it('挑最高那一列按两段之和，不只看第一段', () => {
+    const wrapper = mount(BinsBlock, {
+      props: {
+        block: blockOf({
+          by_column: [
+            {
+              key: '温度',
+              bins: [0.3, 0.0],
+              labels: ['空的格', '转坏的格'],
+              low: 0.0,
+              high: 1.0,
+              marks: [],
+              off_axis: null,
+            },
+            {
+              key: '湿度',
+              bins: [0.05, 0.4],
+              labels: ['空的格', '转坏的格'],
+              low: 0.0,
+              high: 1.0,
+              marks: [],
+              off_axis: null,
+            },
+          ],
+        }),
+      },
+    })
+
+    expect(wrapper.find('.dt-ml-bins__note').text()).toBe(
+      '最高的一列是「湿度」：45%，其中空的格 5%、转坏的格 40%。',
+    )
+  })
+
+  // ⚠ 两根柱铺在 `[0, 总行数]` 上时箱宽恒是总行数的一半，画在那儿的参考线永远
+  // 贴着两柱交界：对任何一列、任何空值率都一模一样，一比特信息都没有
+  it('取数那一步没有阈值可比，一条参考线都不画', () => {
+    const wrapper = mount(BinsBlock, { props: { block: QUALITY } })
+
+    expect(wrapper.find('.dt-ml-bars__rule').exists()).toBe(false)
+    expect(wrapper.find('.dt-ml-bars__mark').exists()).toBe(false)
   })
 
   it('零行的帧上空值率算不出来：画成「—」而不是 0', () => {

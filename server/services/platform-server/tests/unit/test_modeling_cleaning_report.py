@@ -226,6 +226,7 @@ def test_the_null_ratio_is_paired_before_and_after_over_one_denominator() -> (
         {
             "key": SECOND,
             "bins": [0.25, 0.5],
+            "labels": [],
             "dropped": [],
             "low": 0.0,
             "high": 1.0,

@@ -6,14 +6,22 @@
  *
  * ⚠ 后端的 `by_column[].low/high` 是这条轴的两端，桶高自己说不出它横跨哪一段：
  * 缺了这两个数只能照实说画不出来，不许拿下标当刻度顶上去。
- * ⚠ `reporting.py::_ratio_bins` 那一族（cast_type / drop_missing）铺的是 0–1 的
- * 空值率、每列只有一两个数，不是分布：拿直方图画会印出「轴上共 0.42 行」这种
- * 假账，故这一档改走横条。判据只认「两端恰是 0 与 1 且每列不超过两根柱」。
+ * ⚠ `reporting.py::_ratio_bins` 那一族（cast_type / drop_missing）与 `source.py`
+ * 的空值那一块铺的是 0–1 的空值率、每列只有一两个数，不是分布：拿直方图画会印出
+ * 「轴上共 0.42 行」这种假账，故这一档改走横条。判据只认「两端恰是 0 与 1 且每
+ * 列不超过两根柱」。
+ * ⚠ 这一档里再分两路，靠后端给不给每段名字（`labels`）认：带名字的是同一列上互
+ * 不相交的几撮（空的格 / 转坏的格），不带名字的才是同一撮的转前转后。
  */
 import { DtButton, DtTooltip } from '@dt/ui'
 import { computed, ref } from 'vue'
 
-import type { BarListItem, BarListMode, BarListRule } from '../scripts/barList'
+import type {
+  BarListItem,
+  BarListMode,
+  BarListRule,
+  BarSegment,
+} from '../scripts/barList'
 import type {
   HistogramBin,
   HistogramMark,
@@ -72,6 +80,8 @@ interface ColumnView {
   name: string
   /** 后端给的桶高原样留一份：比率档要按数读，不按柱读。 */
   values: number[]
+  /** 每根柱各自的名字；空 = 这几根是一条分布上的桶。 */
+  labels: string[]
   bins: HistogramBin[]
   marks: HistogramMark[]
   offAxis: OffAxisBar | null
@@ -152,6 +162,7 @@ const columns = computed<ColumnView[]>(() =>
       id: `${seat}:${column.key}`,
       name: column.key,
       values: column.bins,
+      labels: column.labels,
       bins: barsOf(column.bins, column.dropped, range),
       marks,
       offAxis: column.offAxis,
@@ -190,18 +201,54 @@ const isRatio = computed(
     ),
 )
 
-const ratioMode = computed<BarListMode>(() =>
-  columns.value.some((column) => column.values.length > 1) ? 'pairs' : 'single',
+/**
+ * 几段各带一个名字 = 同一列上互不相交的几撮，不是同一撮的转前转后。
+ * ⚠ 少了这一档，「空的格 / 转坏的格」会被读成前后对比，写出「14.3% → 0%」。
+ */
+const isParts = computed(
+  () =>
+    columns.value.length > 0 &&
+    columns.value.every(
+      (column) =>
+        column.labels.length > 0 &&
+        column.labels.length === column.values.length,
+    ),
 )
 
+const ratioMode = computed<BarListMode>(() => {
+  if (isParts.value) return 'stacked'
+  return columns.value.some((column) => column.values.length > 1)
+    ? 'pairs'
+    : 'single'
+})
+
+function segmentsOf(column: ColumnView): BarSegment[] {
+  return column.labels.map((label, seat) => ({
+    label,
+    value: column.values[seat] ?? null,
+  }))
+}
+
 const ratioItems = computed<BarListItem[]>(() =>
-  columns.value.map((column) => ({
-    name: column.name,
-    value: column.values[0] ?? null,
-    before: column.values[0] ?? null,
-    after: column.values[1] ?? null,
-  })),
+  columns.value.map((column) =>
+    isParts.value
+      ? { name: column.name, segments: segmentsOf(column) }
+      : {
+          name: column.name,
+          value: column.values[0] ?? null,
+          before: column.values[0] ?? null,
+          after: column.values[1] ?? null,
+        },
+  ),
 )
+
+/** 一列的空值率：分段档是几段相加，其余档就是第一个数。 */
+function ratioOf(column: ColumnView): number | null {
+  if (!isParts.value) return column.values[0] ?? null
+  return column.values.length === 0
+    ? null
+    : column.values.reduce((sum, one) => sum + one, 0)
+}
 
 /** 阈值那条线：几列共用同一条，取第一条读得出来的。 */
 const ratioRule = computed<BarListRule | null>(() => {
@@ -214,22 +261,42 @@ const ratioRule = computed<BarListRule | null>(() => {
 
 /** 最高的那一列。⚠ 算不出来的那几列不参与比较，也不当成 0（规格 §2-P4）。 */
 interface RatioTop {
-  name: string
+  column: ColumnView
   value: number
-  after: number | null
 }
 
 const ratioTop = computed<RatioTop | null>(() => {
   let best: RatioTop | null = null
   for (const column of columns.value) {
-    const [value] = column.values
-    if (value === undefined) continue
-    if (best === null || value > best.value) {
-      best = { name: column.name, value, after: column.values[1] ?? null }
-    }
+    const value = ratioOf(column)
+    if (value === null) continue
+    if (best === null || value > best.value) best = { column, value }
   }
   return best
 })
+
+/** 每一段各印一次读数：只印总数的话，两撮的分界就只剩条子上的一道缝。 */
+function partsText(column: ColumnView): string {
+  return column.labels
+    .map((label, seat) => {
+      const value = column.values[seat]
+      return `${label} ${percentText(value === undefined ? null : value * 100)}`
+    })
+    .join('、')
+}
+
+/** 结论那行的开头：最高的那一列是谁、它那个数怎么读。 */
+function headOf(top: RatioTop): string {
+  const name = `最高的一列是「${top.column.name}」`
+  const whole = percentText(top.value * 100)
+  if (isParts.value) return `${name}：${whole}，其中${partsText(top.column)}`
+  if (ratioMode.value === 'pairs') {
+    const after = top.column.values[1]
+    const tail = percentText(after === undefined ? null : after * 100)
+    return `${name}：${whole} → ${tail}`
+  }
+  return `${name}：${whole}`
+}
 
 /** 比率档的结论：最高的那一列是谁、有没有越过阈值（规格 §2-P6）。 */
 const ratioNote = computed(() => {
@@ -237,14 +304,11 @@ const ratioNote = computed(() => {
   if (top === null) {
     return '这几列的空值率一个都算不出来（这一步一行都没有），一列都没画。'
   }
-  const head =
-    ratioMode.value === 'pairs'
-      ? `最高的一列是「${top.name}」：${percentText(top.value * 100)} → ${percentText(top.after === null ? null : top.after * 100)}`
-      : `最高的一列是「${top.name}」：${percentText(top.value * 100)}`
+  const head = headOf(top)
   const rule = ratioRule.value
   if (rule === null) return `${head}。`
   const over = columns.value.filter(
-    (column) => (column.values[0] ?? -1) > rule.value,
+    (column) => (ratioOf(column) ?? -1) > rule.value,
   ).length
   const line = `${rule.label} ${percentText(rule.value * 100)}`
   return over === 0

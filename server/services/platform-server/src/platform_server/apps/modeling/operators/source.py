@@ -69,6 +69,12 @@ NOTE_WINDOW_HIT = "触顶了，窗口里究竟命中多少行没跟着交进来"
 # 一行都没取到是「数据根本没进来」，与「真的一格空值都没有」要用户做的事完全不同
 NOTE_NO_ROWS = "这段窗口里一行都没取到，空不空无从谈起"
 NOTE_NO_BLANK = "{columns} 列 {rows} 行，一格空值都没有"
+# 空值那一块里两段各叫什么。⚠ 两段互不相交：转坏的那一撮已从空的那一撮里扣掉，
+# 相加正好是这一列的空值率，界面据这两个名字把它们画成一条上的两段
+LABEL_BLANK = "空的格"
+LABEL_UNCONVERTIBLE = "转坏的格"
+# 空值率留几位小数。⚠ 再多是浮点噪声，且逐列摊开后要占讲解的字节预算
+BLANK_RATIO_DIGITS = 6
 
 # 行来源。⚠ 只有采集行走桶身份、同一时刻至多一行；manual/import 的同一时刻
 # 合法地有多行，选 `all` 时时间索引不再唯一（§3.3）
@@ -388,9 +394,9 @@ def _requested(source: Provenance) -> tuple[Item, ...]:
 def _quality_block(taken: _Taken) -> ReportBlock | None:
     """空的格最多的那几列，转坏的格单独一段；一格空值都没有时整块不发。
 
-    ⚠ 一个空都没有的列不列进来，一列都不剩时整块不发：那几根柱全是 0，界面照
-    实画成一张全零直方图，几百像素的版面说的是零（规格 §2-P5）。这件事是好消
-    息，改由漏斗上的一句话说。
+    ⚠ 一个空都没有的列不列进来，一列都不剩时整块不发：那几段全是 0，界面照实
+    画成一排零长的条，几百像素的版面说的是零（规格 §2-P5）。这件事是好消息，
+    改由漏斗上的一句话说。
     Args: taken。
     """
     frame = taken.kept
@@ -418,21 +424,28 @@ def _quality_block(taken: _Taken) -> ReportBlock | None:
 
 
 def _column_quality(column: FrameColumn, nulls: int, total: int) -> ColumnBins:
-    """一列的空格与转坏格，两段分开。
+    """一列的空格与转坏格，两段分开，都铺成 0–1 的比率。
 
     ⚠ 转坏的格与空的格分开数：台账 values_json 里的类型不可信，转不动的格被当
     成缺失（`frame.py` 的 `coerce_failed`）。两者合成一个空值率之后，用户会去查
     采集为什么没上来，而真因是这一列的类型配错了。
     ⚠ 转坏格数是取数那一刻记下的，行少了它不跟着少，故先夹回空格数以内。
+    ⚠ 铺比率不铺行数：这两段是一列上互不相交的两小撮格，不是一条分布。铺在行数
+    轴上的话，界面照直方图画，印出的刻度、箱数与「一半」那条线量的都不是它们
+    （界面按「两端恰是 0 与 1」认出这一档改走横条）。
+    ⚠ 两段的名字必须带出去：不带名字就与「转前转后两个空值率」长得一模一样，
+    界面会把这两撮读成同一撮的前后两次。
     ⚠ 只在真有空格的列上调用，故 `nulls` 与 `total` 都必然大于零。
     Args: column, nulls, total。
     """
     bad = min(column.coerce_failed, nulls)
     return ColumnBins(
         key=column.key,
-        bins=[float(nulls - bad), float(bad)],
+        bins=[
+            round((nulls - bad) / total, BLANK_RATIO_DIGITS),
+            round(bad / total, BLANK_RATIO_DIGITS),
+        ],
+        labels=(LABEL_BLANK, LABEL_UNCONVERTIBLE),
         low=0.0,
-        high=float(total),
-        marks=({"at": total / 2, "label": "一半", "intent": "danger"},),
-        off_axis={"label": "空的格", "count": nulls},
+        high=1.0,
     )

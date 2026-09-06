@@ -218,9 +218,46 @@ def test_blank_cells_and_unconvertible_ones_are_counted_apart() -> None:
     )
     bins = report_of(frame, table_code="energy_h")["bins"][0]
     column = bins.payload["by_column"][0]
-    assert column["bins"] == [1.0, 2.0]
-    assert column["high"] == 4.0
-    assert column["off_axis"] == {"label": "空的格", "count": 3}
+    assert column["bins"] == [0.25, 0.5]
+    assert column["labels"] == ["空的格", "转坏的格"]
+
+
+def test_the_blank_share_is_laid_out_on_a_nought_to_one_axis() -> None:
+    """⚠ 两端是 0 与 1，不是 0 与总行数。
+
+    铺在行数轴上的话，界面把这两撮当成一条分布画直方图：刻度、箱数与那条参考线
+    量的都不是它们，而每个数看着都完全正常。
+    """
+    frame = frame_of(("温度",), ((None,), (1.0,), (2.0,), (3.0,)))
+    column = report_of(frame, table_code="energy_h")["bins"][0].payload[
+        "by_column"
+    ][0]
+    assert (column["low"], column["high"]) == (0.0, 1.0)
+
+
+def test_the_blank_cells_are_not_counted_a_second_time_off_the_axis() -> None:
+    """⚠ 空的格已经是条子本身，再挂一笔离轴的就是同一撮数了两遍。
+
+    图注会印成「共 1255 行；空的格 1255 行（不在这条轴上）」，读者相加得 2510。
+    """
+    frame = frame_of(("温度",), ((None,), (1.0,)))
+    column = report_of(frame, table_code="energy_h")["bins"][0].payload[
+        "by_column"
+    ][0]
+    assert column["off_axis"] is None
+
+
+def test_the_blank_block_draws_no_reference_line() -> None:
+    """⚠ 取数这一步没有阈值可比，一条线都不画。
+
+    两根柱铺在 `[0, 总行数]` 上时箱宽恒是总行数的一半，画在那儿的线永远贴着两柱
+    交界，对任何一列、任何空值率都长得一模一样——一比特信息都没有。
+    """
+    frame = frame_of(("温度",), ((None,), (1.0,)))
+    column = report_of(frame, table_code="energy_h")["bins"][0].payload[
+        "by_column"
+    ][0]
+    assert column["marks"] == []
 
 
 def test_the_unconvertible_count_cannot_outgrow_the_blank_one() -> None:
@@ -234,7 +271,7 @@ def test_the_unconvertible_count_cannot_outgrow_the_blank_one() -> None:
     column = report_of(frame, table_code="energy_h")["bins"][0].payload[
         "by_column"
     ][0]
-    assert column["bins"] == [0.0, 1.0]
+    assert column["bins"] == [0.0, 0.25]
 
 
 def notes_of(frame: Frame, **config: Any) -> list[str]:
@@ -258,8 +295,8 @@ def clean_frame() -> Frame:
 def test_a_frame_without_a_single_blank_draws_no_histogram_at_all() -> None:
     """⚠ 一格空值都没有时那一块整个不发。
 
-    照发的话每列两根 0 高的柱，界面照实画成一张全零直方图，几百像素的版面说
-    的是零，图注还写着「轴上共 0 行」。
+    照发的话每列两段 0 长的条，界面照实画成一排零长的条，几百像素的版面说的是
+    零，图注还写着「最高的一列是 0%」。
     """
     assert "bins" not in report_of(clean_frame(), table_code="energy_h")
 

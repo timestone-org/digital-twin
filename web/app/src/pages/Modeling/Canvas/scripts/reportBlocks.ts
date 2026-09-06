@@ -254,6 +254,11 @@ export interface BinMark {
 export interface ColumnBins {
   key: string
   bins: number[]
+  /**
+   * 每根柱各自叫什么，与 `bins` 同序等长；空数组 = 它们是一条分布上的桶。
+   * ⚠ 带了名字的那几根不是相邻两桶，是互不相交的几段。
+   */
+  labels: string[]
   /** 逐桶里被这一步丢掉的行数，与 `bins` 同序；空数组 = 这一步不丢行。 */
   dropped: number[]
   marks: BinMark[]
@@ -267,6 +272,7 @@ export function binsOf(payload: Item): ColumnBins[] {
   return asItems(payload['by_column']).map((item) => ({
     key: asText(item['key']),
     bins: asNumbers(item['bins']),
+    labels: asTexts(item['labels']),
     dropped: asNumbers(item['dropped']),
     marks: markOf(item['marks']),
     offAxis: offAxisOf(item['off_axis']),

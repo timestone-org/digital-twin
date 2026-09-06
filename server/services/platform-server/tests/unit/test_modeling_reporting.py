@@ -179,6 +179,31 @@ def test_bins_carries_the_dropped_share_of_each_bucket() -> None:
     assert len(first["dropped"]) == len(first["bins"])
 
 
+def test_bins_carries_the_name_of_each_bar_and_caps_it_alike() -> None:
+    """每根柱的名字与桶高同序带出去，并按同一个上限截。
+
+    ⚠ 丢了这几个名字，界面分不出「一列上互不相交的两撮」与「同一撮的转前转后」，
+    会把两撮读成一撮的前后两次。
+    """
+    over = reporting.MAX_BINS + 5
+    column = ColumnBins(
+        key="c0",
+        bins=[float(step) for step in range(over)],
+        labels=[f"第{step}段" for step in range(over)],
+    )
+    first = reporting.bins_block(at(), [column]).payload["by_column"][0]
+    assert first["labels"][0] == "第0段"
+    assert len(first["labels"]) == reporting.MAX_BINS
+
+
+def test_bins_without_names_says_so_with_an_empty_list() -> None:
+    """没名字就是空列表：那几根柱是一条分布上的桶，本来就没有各自的名字。"""
+    first = reporting.bins_block(at(), [ColumnBins(key="c0")]).payload[
+        "by_column"
+    ][0]
+    assert first["labels"] == []
+
+
 def test_bins_carries_the_normal_curve_when_the_column_has_one() -> None:
     """正态参考曲线的两个参数原样带出去；没有就是 None。"""
     with_curve = ColumnBins(key="c0", bins=[1.0], curve={"mean": 0.5, "sd": 2})
