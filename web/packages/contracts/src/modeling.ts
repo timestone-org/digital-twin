@@ -185,6 +185,19 @@ export interface ModelingNodeRun extends ModelingNodeRunSummary {
    * 那条路也一起交出去。
    */
   exported_ports: string[]
+  /**
+   * 这一步在结果面上讲的那些块：`{blocks, dropped, note}`。
+   *
+   * ⚠ `null` = 这次运行早于结果面上线，或这一步没有可讲的。界面上退化成
+   * 升级前的样子，不摆空态。
+   */
+  report: Record<string, unknown> | null
+  /**
+   * 这一步学到的参数：填充值、上下界、标准化统计量、类目清单、载荷。
+   *
+   * ⚠ 只读出口——它独立成列是为了不让摘要预算削掉它，不是为了不让看。
+   */
+  fitted: Record<string, unknown> | null
 }
 
 /** 运行列表里的一条。 */

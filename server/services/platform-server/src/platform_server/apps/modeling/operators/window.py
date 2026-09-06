@@ -32,6 +32,14 @@ from platform_server.apps.modeling.operators.frame import (
     numbers_of,
 )
 from platform_server.apps.modeling.operators.registry import register_operator
+from platform_server.apps.modeling.operators.reporting import ReportBlock
+from platform_server.apps.modeling.operators.windowblocks import (
+    LagRun,
+    RollingRun,
+    lag_blocks,
+    rolling_blocks,
+    valid_counts,
+)
 
 # 造出来的列名接法：`原列名@lag3` / `原列名@mean5`
 FEATURE_JOINER = "@"
@@ -77,6 +85,10 @@ class LagFeature(OperatorBase):
     OUTPUTS = (PortSpec(name="frame", contract=CONTRACT_FRAME, label="输出"),)
     SERVING_NEEDS_WINDOW = True
 
+    def __init__(self, config: OperatorConfig) -> None:
+        super().__init__(config)
+        self._ran: LagRun | None = None
+
     @property
     def _config(self) -> LagFeatureConfig:
         # pragma 理由 —— 参数由注册表按算子造，型别不会错
@@ -105,15 +117,41 @@ class LagFeature(OperatorBase):
         config = self._config
         frame = frame_input(inputs, "frame")
         _refuse_clashes(frame, _lag_keys(config))
+        lags = _checked(config.lags, MAX_LAG, "滞后期数")
         made = [
             (
                 f"{key}{FEATURE_JOINER}lag{lag}",
                 _shifted(numbers_of(frame, key), lag),
             )
             for key in config.columns
-            for lag in _checked(config.lags, MAX_LAG, "滞后期数")
+            for lag in lags
         ]
-        return {"frame": _appended(frame, made)}
+        result = _appended(frame, made)
+        self._ran = self._recorded(frame, result, lags)
+        return {"frame": result}
+
+    def report(self) -> tuple[ReportBlock, ...]:
+        """滞后特征的三块：新增列与实际档位、头部空行、窗口示意。"""
+        return () if self._ran is None else lag_blocks(self._ran)
+
+    def _recorded(self, frame: Frame, result: Frame, lags: list[int]) -> LagRun:
+        """把这一步造列的经过留给 `report()`。
+
+        Args: frame, result, lags。
+        """
+        config = self._config
+        return LagRun(
+            made=tuple(
+                (f"{key}{FEATURE_JOINER}lag{lag}", lag)
+                for key in config.columns
+                for lag in lags
+            ),
+            sources=tuple(config.columns),
+            lags=tuple(lags),
+            configured=len(config.lags),
+            kept=len(result.columns),
+            rows=frame.row_count,
+        )
 
 
 class RollingFeatureConfig(OperatorConfig):
@@ -159,6 +197,10 @@ class RollingFeature(OperatorBase):
     OUTPUTS = (PortSpec(name="frame", contract=CONTRACT_FRAME, label="输出"),)
     SERVING_NEEDS_WINDOW = True
 
+    def __init__(self, config: OperatorConfig) -> None:
+        super().__init__(config)
+        self._ran: RollingRun | None = None
+
     @property
     def _config(self) -> RollingFeatureConfig:
         # pragma 理由 —— 参数由注册表按算子造，型别不会错
@@ -189,15 +231,49 @@ class RollingFeature(OperatorBase):
         config = self._config
         frame = frame_input(inputs, "frame")
         _refuse_clashes(frame, _rolling_keys(config))
+        stats = _deduped(list(config.stats))
         made = [
             (
                 f"{key}{FEATURE_JOINER}{stat}{config.window}",
                 _rolled(numbers_of(frame, key), config.window, stat),
             )
             for key in config.columns
-            for stat in _deduped(list(config.stats))
+            for stat in stats
         ]
-        return {"frame": _appended(frame, made)}
+        result = _appended(frame, made)
+        self._ran = self._recorded(frame, result, stats)
+        return {"frame": result}
+
+    def report(self) -> tuple[ReportBlock, ...]:
+        """滚动统计的四块：新增列、空掉的行、逐行有效样本数、窗口示意。"""
+        return () if self._ran is None else rolling_blocks(self._ran)
+
+    def _recorded(
+        self, frame: Frame, result: Frame, stats: list[str]
+    ) -> RollingRun:
+        """把这一步造列的经过留给 `report()`。
+
+        ⚠ 逐行有效样本数在这里数一遍：滚动统计的分母就是它，而算完那一份帧上
+        只剩折出来的结果，分母再也数不回来。
+        Args: frame, result, stats。
+        """
+        config = self._config
+        return RollingRun(
+            made=tuple(
+                (f"{key}{FEATURE_JOINER}{stat}{config.window}", key)
+                for key in config.columns
+                for stat in stats
+            ),
+            sources=tuple(config.columns),
+            stats=tuple(stats),
+            window=config.window,
+            kept=len(result.columns),
+            rows=frame.row_count,
+            counts={
+                key: valid_counts(numbers_of(frame, key), config.window)
+                for key in config.columns
+            },
+        )
 
 
 def _lag_keys(config: LagFeatureConfig) -> tuple[str, ...]:

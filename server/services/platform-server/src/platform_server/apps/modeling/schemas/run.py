@@ -53,6 +53,13 @@ class NodeRunOut(NodeRunSummaryOut):
     #: 留下了全量结果的那些端口。⚠ 只给端口名，不给对象键——键是服务端的事，
     #: 交出去等于把「猜一个别的键」这条路也一起交出去
     exported_ports: list[str] = Field(default_factory=list[str])
+    #: 这一步在结果面上讲的那些块；`None` = 这次运行早于本次升级，或这一步没有
+    #: 可讲的。⚠ 界面上退化成升级前的样子，不摆空态
+    report: dict[str, Any] | None = None
+    #: 这一步学到的参数（填充值、上下界、标准化统计量、类目清单、载荷）。
+    #: ⚠ 只读出口：那一列独立成列是为了不让摘要预算削掉它，不是为了不让看
+    #: （docs/MODELING_RESULT_VIEW_DESIGN.md §4.5）
+    fitted: dict[str, Any] | None = None
 
 
 class RunSummaryOut(OutputModel):

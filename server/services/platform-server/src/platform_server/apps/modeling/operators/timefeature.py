@@ -28,6 +28,13 @@ from platform_server.apps.modeling.operators.frame import (
     frame_input,
 )
 from platform_server.apps.modeling.operators.registry import register_operator
+from platform_server.apps.modeling.operators.reporting import ReportBlock
+from platform_server.apps.modeling.operators.timeblocks import (
+    PART_DAYOFYEAR,
+    PART_LABELS,
+    TimeRun,
+    time_blocks,
+)
 
 # 造得出来的几档时间成分
 type TimePart = Literal["hour", "dayofweek", "month", "dayofyear", "is_weekend"]
@@ -43,14 +50,6 @@ TIME_PARTS: tuple[str, ...] = (
 COLUMN_PREFIX = "ts_"
 # 周六起算的星期序号（周一为 0）
 _SATURDAY = 5
-# 每档给人看的名字
-_PART_LABELS: dict[str, str] = {
-    "hour": "小时",
-    "dayofweek": "星期",
-    "month": "月份",
-    "dayofyear": "年内第几天",
-    "is_weekend": "是否周末",
-}
 
 
 class TimeFeatureConfig(OperatorConfig):
@@ -85,6 +84,10 @@ class TimeFeature(OperatorBase):
     OUTPUTS = (PortSpec(name="frame", contract=CONTRACT_FRAME, label="输出"),)
     # 推理时也要跑——训练造了这几列，线上不造就是列对不上
     SERVING_NEEDS_INDEX = True
+
+    def __init__(self, config: OperatorConfig) -> None:
+        super().__init__(config)
+        self._ran: TimeRun | None = None
 
     @property
     def _config(self) -> TimeFeatureConfig:
@@ -124,7 +127,38 @@ class TimeFeature(OperatorBase):
             _made_column(part, frame.index, self.tz_offset_minutes)
             for part in parts
         ]
-        return {"frame": _appended(frame, parts, made)}
+        result = _appended(frame, parts, made)
+        self._ran = self._recorded(result, parts, frame.index)
+        return {"frame": result}
+
+    def report(self) -> tuple[ReportBlock, ...]:
+        """时间特征的三块：新增列、时区口径、各档取值分布。"""
+        return () if self._ran is None else time_blocks(self._ran)
+
+    def _recorded(
+        self, result: Frame, parts: list[str], index: tuple[int, ...]
+    ) -> TimeRun:
+        """把这一步造列的经过留给 `report()`。
+
+        ⚠ 本地月份在这里算：折算时区的那一份必须与造列用的是同一个，两处各写
+        一遍的话，讲解里的月份与 `ts_month` 列会差出一个时区且不报错。
+        Args: result, parts, index。
+        """
+        return TimeRun(
+            made=_made_keys(parts),
+            parts=tuple(parts),
+            result=result,
+            months=(
+                tuple(
+                    _local(moment, self.tz_offset_minutes).month
+                    for moment in index
+                )
+                if PART_DAYOFYEAR in parts
+                else ()
+            ),
+            tz_offset_minutes=self.tz_offset_minutes,
+            span=(min(index), max(index)) if index else None,
+        )
 
 
 def _made_keys(parts: list[str]) -> tuple[str, ...]:
@@ -214,7 +248,7 @@ def _appended(
         *(
             FrameColumn(
                 key=f"{COLUMN_PREFIX}{part}",
-                name=_PART_LABELS[part],
+                name=PART_LABELS[part],
                 dtype=DTYPE_NUMBER,
             )
             for part in parts

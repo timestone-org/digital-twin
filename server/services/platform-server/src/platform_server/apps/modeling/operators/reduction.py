@@ -25,6 +25,10 @@ from platform_server.apps.modeling.operators.estimators import (
     PrincipalComponents,
     projected,
 )
+from platform_server.apps.modeling.operators.featureblocks import (
+    SelectRun,
+    select_blocks,
+)
 from platform_server.apps.modeling.operators.fitting import (
     PLAN_TARGET,
     fit_columns,
@@ -39,7 +43,12 @@ from platform_server.apps.modeling.operators.frame import (
     numbers_of,
     without_columns,
 )
+from platform_server.apps.modeling.operators.pcablocks import (
+    PcaRun,
+    pca_blocks,
+)
 from platform_server.apps.modeling.operators.registry import register_operator
+from platform_server.apps.modeling.operators.reporting import ReportBlock
 
 # 主成分列的名字：pc1、pc2……
 COMPONENT_PREFIX = "pc"
@@ -100,6 +109,9 @@ class SelectFeature(OperatorBase):
     def __init__(self, config: OperatorConfig) -> None:
         super().__init__(config)
         self._kept: list[str] = []
+        self._scores: dict[str, float] = {}
+        self._train_rows = 0
+        self._ran: SelectRun | None = None
 
     @property
     def _config(self) -> SelectFeatureConfig:
@@ -125,15 +137,46 @@ class SelectFeature(OperatorBase):
         Args: inputs。
         """
         frame = frame_input(inputs, "frame")
-        if not self._kept:
+        fitting = not self._kept
+        if fitting:
             self._fits(frame)
-        candidates = set(self._candidates(frame))
+        candidates = self._candidates(frame)
+        chosen = set(candidates)
         dropped = tuple(
-            key
-            for key in frame.keys
-            if key in candidates and key not in self._kept
+            key for key in frame.keys if key in chosen and key not in self._kept
         )
-        return {"frame": without_columns(frame, dropped)}
+        selected = without_columns(frame, dropped)
+        if fitting:
+            self._ran = self._recorded(selected, candidates, dropped)
+        return {"frame": selected}
+
+    def report(self) -> tuple[ReportBlock, ...]:
+        """特征筛选的两块：保留与淘汰、打分排行。"""
+        return () if self._ran is None else select_blocks(self._ran)
+
+    def _recorded(
+        self,
+        selected: Frame,
+        candidates: tuple[str, ...],
+        dropped: tuple[str, ...],
+    ) -> SelectRun:
+        """把这一步排名的经过留给 `report()`。
+
+        ⚠ `is_degraded` 直接读注入进来的切分计划：真条件是**下游**切分的个数不是
+        恰好一个，沿上游判会在没退化时乱报（规格 §11 的 R-12）。
+        Args: selected, candidates, dropped。
+        """
+        return SelectRun(
+            result=selected,
+            candidates=candidates,
+            scores=dict(self._scores),
+            kept=list(self._kept),
+            removed=dropped,
+            method=self._config.method,
+            top_k=self._config.top_k,
+            train_rows=self._train_rows,
+            is_degraded=self.split_plan is None,
+        )
 
     def dump_fitted(self) -> dict[str, Any] | None:
         """留下来的那几列，按排名。"""
@@ -169,9 +212,11 @@ class SelectFeature(OperatorBase):
         candidates = self._candidates(frame)
         if not candidates:
             raise OperatorError("没有可筛的数值列")
+        self._train_rows = train.row_count
+        self._scores = {key: self._score(train, key) for key in candidates}
         ranked = sorted(
             candidates,
-            key=lambda key: (-self._score(train, key), key),
+            key=lambda key: (-self._scores[key], key),
         )
         self._kept = ranked[: config.top_k]
 
@@ -224,6 +269,9 @@ class Pca(OperatorBase):
         self._columns: list[str] = []
         self._mean: list[float] = []
         self._components: list[list[float]] = []
+        self._explained: list[float] = []
+        self._train_rows = 0
+        self._ran: PcaRun | None = None
 
     @property
     def _config(self) -> PcaConfig:
@@ -249,9 +297,38 @@ class Pca(OperatorBase):
         Args: inputs。
         """
         frame = frame_input(inputs, "frame")
-        if not self._components:
+        fitting = not self._components
+        if fitting:
             self._fits(frame)
-        return {"frame": _with_components(frame, self._columns, self._axes())}
+        made = _with_components(frame, self._columns, self._axes())
+        if fitting:
+            self._ran = self._recorded(frame, made)
+        return {"frame": made}
+
+    def report(self) -> tuple[ReportBlock, ...]:
+        """主成分的三块：压缩说明、解释方差与载荷、逐条轴的线性组合。"""
+        return () if self._ran is None else pca_blocks(self._ran)
+
+    def _recorded(self, frame: Frame, made: Frame) -> PcaRun:
+        """把这一趟压缩的经过留给 `report()`。
+
+        ⚠ 解释方差比只有拟合那一趟拿得到：回灌参数上线的那一路没有它，那时
+        `report()` 一块都不讲。
+        Args: frame, made。
+        """
+        return PcaRun(
+            columns=tuple(self._columns),
+            made=tuple(
+                f"{COMPONENT_PREFIX}{seat + 1}"
+                for seat in range(len(self._components))
+            ),
+            mean=list(self._mean),
+            components=[list(row) for row in self._components],
+            explained=list(self._explained),
+            kept=len(made.columns),
+            train_rows=self._train_rows,
+            total_rows=frame.row_count,
+        )
 
     def dump_fitted(self) -> dict[str, Any] | None:
         """压了哪几列、中心点在哪、几条轴各自的权重。"""
@@ -308,12 +385,13 @@ class Pca(OperatorBase):
         if not columns:
             raise OperatorError("没有可压的数值列")
         estimator = PrincipalComponents(n_components=config.n_components)
-        estimator.fit(
-            matrix_of(training_frame(frame, self.split_plan), columns)
-        )
+        train = training_frame(frame, self.split_plan)
+        estimator.fit(matrix_of(train, columns))
         self._columns = list(columns)
         self._mean = estimator.mean
         self._components = estimator.components
+        self._explained = estimator.explained
+        self._train_rows = train.row_count
 
 
 def _as_list(params: dict[str, Any], key: str) -> list[object]:

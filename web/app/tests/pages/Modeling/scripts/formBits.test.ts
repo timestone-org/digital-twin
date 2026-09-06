@@ -69,6 +69,7 @@ describe('卡片上那行结果', () => {
         isFitted: true,
         isFittedTrimmed: false,
         coefficients: [],
+        classes: [],
         intercept: null,
         servingChannel: 'json',
       }),
@@ -87,7 +88,10 @@ describe('卡片上那行结果', () => {
         ],
         pairs: [],
         isPairsTruncated: false,
+        isPairsTrimmed: false,
         residualBins: [],
+        labels: [],
+        matrix: [],
       }),
     ).toBe('R² 0.93 · RMSE 2')
   })
@@ -167,7 +171,10 @@ describe('无定义的指标不往卡片上印', () => {
         ],
         pairs: [],
         isPairsTruncated: false,
+        isPairsTrimmed: false,
         residualBins: [],
+        labels: [],
+        matrix: [],
       }),
     ).toBe('RMSE 2 · MAE 1')
   })

@@ -4,45 +4,46 @@
  * ⚠ 卡片上要看得见数：都藏在弹窗里的话，用户想比较两步之间行数掉了多少，得把
  * 两个弹窗轮流开关四次——而这正是看中间结果最常见的用法。
  */
+import { grouped, niceNumber } from './numbers'
 import type { Preview } from './preview'
 import { portPreviewsOf } from './preview'
 
-/** 指标名在卡片上的短写法。列在这里的按顺序取前两个印出来。 */
+/**
+ * 指标名在卡片上的短写法。列在这里的按顺序取前两个印出来。
+ *
+ * ⚠ 键名逐条对着后端真正产出的那四组（`evaluate.py::_metrics_of` 与
+ * `_classification_scores`、`diagnostics.py::_residual_stats` 与 `_summary`）：
+ * 漏掉一组，那个算子的卡片上就一个字都没有。`feature_importance` 的键是列名，
+ * 数量与写法都由数据定，故不在这份名单里。
+ */
 const HEADLINE_METRICS: readonly [string, string][] = [
   ['r2', 'R²'],
   ['rmse', 'RMSE'],
   ['mae', 'MAE'],
   ['accuracy', '准确率'],
   ['f1', 'F1'],
+  ['precision', '精确率'],
+  ['recall', '召回率'],
+  ['residual_mean', '残差均值'],
+  ['residual_std', '残差标准差'],
+  ['residual_max_abs', '最大残差'],
+  ['score_mean', '折均分'],
+  ['score_worst', '最差折'],
+  ['folds', '折数'],
 ]
 
 /** 卡片上最多印几个指标。再多一行就放不下了。 */
 const MAX_METRICS = 2
 
-/** 一个数印在卡片上的样子：四位有效小数，整数不补零。 */
-function short(value: number): string {
-  if (Number.isInteger(value)) return String(value)
-  return value.toFixed(4).replace(/0+$/, '').replace(/\.$/, '')
-}
-
-/**
- * 行数带千分位——六位数字连成一串读不出量级。
- *
- * ⚠ 自己插逗号而不用 `toLocaleString`：本仓的 CI runner 是中文 locale、开发机
- * 是 en-US，不钉 locale 的格式化会本地绿、CI 红。
- */
-function grouped(value: number): string {
-  return String(value).replace(/\B(?=(\d{3})+(?!\d))/g, ',')
-}
-
 function metricsLine(pairs: readonly [string, number | null][]): string {
   const table = new Map(pairs)
   const shown: string[] = []
   for (const [key, label] of HEADLINE_METRICS) {
-    // ⚠ 无定义（null）的指标不往卡片上印：印成 0 就是一个假数
+    // ⚠ 无定义（null）的指标整条不印：`niceNumber` 会给「—」，而卡片上摆一个
+    // 「R² —」等于用一行的位置说了句废话
     const value = table.get(key)
     if (value === undefined || value === null) continue
-    shown.push(`${label} ${short(value)}`)
+    shown.push(`${label} ${niceNumber(value)}`)
     if (shown.length >= MAX_METRICS) break
   }
   return shown.join(' · ')

@@ -157,6 +157,8 @@ const NODE_RUN = {
   preview: true,
   is_preview_truncated: true,
   exported_ports: true,
+  report: true,
+  fitted: true,
 } satisfies Keys<ModelingNodeRun>
 
 const RUN_SUMMARY = {

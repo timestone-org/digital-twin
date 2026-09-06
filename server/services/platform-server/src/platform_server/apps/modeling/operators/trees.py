@@ -38,6 +38,11 @@ from platform_server.apps.modeling.operators.model import (
 )
 from platform_server.apps.modeling.operators.payloads import ModelPayload
 from platform_server.apps.modeling.operators.registry import register_operator
+from platform_server.apps.modeling.operators.reporting import ReportBlock
+from platform_server.apps.modeling.operators.treereport import (
+    TreeTrained,
+    tree_blocks,
+)
 
 # 树的棵数与深度的上下限。⚠ 必须封顶：一千棵树的产物有几百 MB，而它要跨进程
 # 回传、进对象存储、再在每个 API 副本上反序列化一次
@@ -110,6 +115,7 @@ class TreeRegressor(OperatorBase):
         super().__init__(config)
         self._trees: TreeEnsemble | None = None
         self._feature_keys: tuple[str, ...] = ()
+        self._seen: TreeTrained | None = None
 
     @property
     def _config(self) -> TreeRegressorConfig:
@@ -141,6 +147,8 @@ class TreeRegressor(OperatorBase):
         if not feature_keys:
             raise OperatorError("训练集里一个特征列都没有")
         self._fit(train, feature_keys, target_key)
+        predicted = self.predict_rows(test)
+        self._seen = self._trained(train, test, target_key, predicted)
         return {
             "model": ModelPayload(
                 algo=self.CODE,
@@ -152,8 +160,42 @@ class TreeRegressor(OperatorBase):
                 fitted={},
                 serving_channel=self.SERVING_CHANNEL,
             ),
-            "scored": scored_frame(test, target_key, self.predict_rows(test)),
+            "scored": scored_frame(test, target_key, predicted),
         }
+
+    def report(self) -> tuple[ReportBlock, ...]:
+        """拟合概况、集成结构与两侧拟合分、重要性与部分依赖那几张图。"""
+        seen = self._seen
+        return () if seen is None else tree_blocks(seen)
+
+    def _trained(
+        self,
+        train: Frame,
+        test: Frame,
+        target_key: str,
+        predicted: list[float],
+    ) -> TreeTrained:
+        """这一步实际拟合出了什么，讲解照它讲。
+
+        ⚠ 估计器本身也带上：树的重要性、深度与叶子数一个字都不在 `fitted` 里，
+        只有它身上有。
+        Args: train, test, target_key, predicted。
+        """
+        config = self._config
+        trees = self._trees
+        # pragma 理由 —— 只在 `_fit` 之后调，那一步不成功就已经抛出去了
+        if trees is None:  # pragma: no cover
+            raise OperatorError("模型还没有拟合结果")
+        return TreeTrained(
+            trees=trees,
+            train=train,
+            test=test,
+            keys=self._feature_keys,
+            target=target_key,
+            predicted=predicted,
+            kind=config.shape,
+            depth_configured=config.max_depth,
+        )
 
     def predict_rows(self, frame: Frame) -> list[float]:
         """整批打分。

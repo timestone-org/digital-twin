@@ -10,7 +10,11 @@
 from dataclasses import dataclass, field
 from typing import Any
 
-from platform_server.apps.modeling.operators import Frame, registry
+from platform_server.apps.modeling.operators import (
+    Frame,
+    ReportBlock,
+    registry,
+)
 from platform_server.apps.modeling.services.artifact_store import (
     SealedArtifact,
     seal,
@@ -44,6 +48,9 @@ class NodeResult:
     #: ⚠ **在子进程里就封好**：估计器对象跨不回来（它自己就是要序列化的
     #: 那个东西），而封存件是纯字节，跨得回来
     artifact: SealedArtifact | None = None
+    #: 结果面上要讲的块。⚠ 与拟合参数同理：算子实例用完即弃，讲解不跟着输出走，
+    #: 留在子进程里就再也拿不回来了（docs/MODELING_RESULT_VIEW_DESIGN.md §4.4）
+    report: tuple[ReportBlock, ...] = ()
 
 
 def run_node_payload(payload: NodePayload) -> NodeResult:
@@ -68,6 +75,7 @@ def run_node_payload(payload: NodePayload) -> NodeResult:
             "inputs": _keys_by_port(payload.inputs),
             "outputs": _keys_by_port(outputs),
         },
+        report=operator.report(),
     )
 
 

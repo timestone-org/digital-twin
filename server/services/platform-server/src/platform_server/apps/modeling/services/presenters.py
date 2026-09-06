@@ -134,6 +134,8 @@ def to_node_out(row: ModelingNodeRun) -> NodeRunOut:
         preview=row.preview_json or {},
         is_preview_truncated=row.preview_truncated,
         exported_ports=sorted(row.frames_json or {}),
+        report=row.report_json,
+        fitted=row.fitted_json,
     )
 
 

@@ -23,11 +23,9 @@ from platform_server.apps.modeling.operators.base import (
     PortSpec,
 )
 from platform_server.apps.modeling.operators.cleaning import (
-    AGG_FUNCS,
     CastType,
     DropMissing,
     FilterRows,
-    Resample,
 )
 from platform_server.apps.modeling.operators.diagnostics import (
     CrossValidate,
@@ -54,11 +52,7 @@ from platform_server.apps.modeling.operators.frame import (
     Provenance,
 )
 from platform_server.apps.modeling.operators.join import LedgerJoin
-from platform_server.apps.modeling.operators.model import (
-    LinearRegressionOperator,
-    LogisticRegressionOperator,
-    SplitDataset,
-)
+from platform_server.apps.modeling.operators.model import SplitDataset
 from platform_server.apps.modeling.operators.payloads import (
     MetricsPayload,
     ModelPayload,
@@ -77,6 +71,41 @@ from platform_server.apps.modeling.operators.registry import (
     register_operator,
     registry,
 )
+from platform_server.apps.modeling.operators.regression import (
+    LinearRegressionOperator,
+    LogisticRegressionOperator,
+)
+from platform_server.apps.modeling.operators.reporting import (
+    BLOCK_KINDS,
+    TIER_LARGE,
+    TIER_SCALAR,
+    TIER_SMALL,
+    ZONES,
+    BlockAt,
+    BlockKind,
+    CellChange,
+    ColumnBins,
+    ColumnChange,
+    ModelStructure,
+    Pdp,
+    ReportBlock,
+    RowCounts,
+    Scale,
+    TimeAxis,
+    Zone,
+    axis_block,
+    bins_block,
+    breakdown_block,
+    cells_block,
+    columns_block,
+    fits_block,
+    rows_block,
+    structure_block,
+)
+from platform_server.apps.modeling.operators.resample import (
+    AGG_FUNCS,
+    Resample,
+)
 from platform_server.apps.modeling.operators.source import LedgerSource
 from platform_server.apps.modeling.operators.timefeature import (
     TIME_PARTS,
@@ -91,6 +120,7 @@ from platform_server.apps.modeling.operators.window import (
 
 __all__ = [
     "AGG_FUNCS",
+    "BLOCK_KINDS",
     "CATEGORIES",
     "CHANNEL_BINARY",
     "CHANNEL_JSON",
@@ -106,11 +136,20 @@ __all__ = [
     "ROLE_TARGET",
     "ROLLING_STATS",
     "SERVING_CHANNELS",
+    "TIER_LARGE",
+    "TIER_SCALAR",
+    "TIER_SMALL",
     "TIME_PARTS",
+    "ZONES",
+    "BlockAt",
+    "BlockKind",
     "CastType",
+    "CellChange",
     "CellValue",
     "ClassificationMetrics",
     "ClipOutlier",
+    "ColumnBins",
+    "ColumnChange",
     "ColumnKeys",
     "ColumnsByPort",
     "CrossValidate",
@@ -127,6 +166,7 @@ __all__ = [
     "LogisticRegressionOperator",
     "MetricsPayload",
     "ModelPayload",
+    "ModelStructure",
     "OneHot",
     "OperatorBase",
     "OperatorConfig",
@@ -135,17 +175,31 @@ __all__ = [
     "OperatorRegistryError",
     "OperatorSpec",
     "Pca",
+    "Pdp",
     "PortSpec",
     "Provenance",
     "RegressionMetrics",
+    "ReportBlock",
     "Resample",
     "ResidualAnalysis",
     "RollingFeature",
+    "RowCounts",
+    "Scale",
     "SelectFeature",
     "SplitDataset",
     "Standardize",
+    "TimeAxis",
     "TimeFeature",
     "TreeRegressor",
+    "Zone",
+    "axis_block",
+    "bins_block",
+    "breakdown_block",
+    "cells_block",
+    "columns_block",
+    "fits_block",
     "register_operator",
     "registry",
+    "rows_block",
+    "structure_block",
 ]

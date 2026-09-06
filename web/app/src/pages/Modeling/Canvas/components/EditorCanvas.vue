@@ -433,7 +433,7 @@ defineExpose({
   &__marquee {
     position: absolute;
     border: 1px solid var(--accent-primary);
-    background: rgb(var(--accent-primary-rgb) / 0.12);
+    background: rgba(var(--accent-primary-rgb), 0.12);
     pointer-events: none;
   }
 
@@ -441,7 +441,7 @@ defineExpose({
     position: absolute;
     border: 1px dashed var(--accent-primary);
     border-radius: var(--radius-md);
-    background: rgb(var(--accent-primary-rgb) / 0.1);
+    background: rgba(var(--accent-primary-rgb), 0.1);
     pointer-events: none;
   }
 

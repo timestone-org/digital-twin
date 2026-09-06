@@ -193,6 +193,13 @@ class ModelingNodeRun(UuidPrimaryKeyMixin, EagerDefaultsMixin, Base):
     frames_json: Mapped[dict[str, Any] | None] = mapped_column(
         JSONB, nullable=True
     )
+    # `{"blocks": [...], "dropped": [...], "note": "…"}`，这一步在结果面上讲的
+    # 那些块，有硬上限。⚠ 同样独立成列：帧摘要已经贴着自己的天花板，块一进去
+    # 就会触发降档，而降档只削行——表现是「明细行数莫名变少」，一个字都不说是
+    # 为了腾地方（docs/MODELING_RESULT_VIEW_DESIGN.md §4.2）
+    report_json: Mapped[dict[str, Any] | None] = mapped_column(
+        JSONB, nullable=True
+    )
     # `{端口名: 结果摘要}`，有硬上限（D19）
     preview_json: Mapped[dict[str, Any] | None] = mapped_column(
         JSONB, nullable=True

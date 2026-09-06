@@ -23,6 +23,7 @@ from platform_server.apps.modeling.operators import (
 from platform_server.apps.modeling.protocols import NodeRunStatus, RunStatus
 from platform_server.apps.modeling.schemas.graph import GraphNode, PipelineGraph
 from platform_server.apps.modeling.services import preview as preview_service
+from platform_server.apps.modeling.services import report_budget
 from platform_server.apps.modeling.services.artifact_store import (
     SealedArtifact,
 )
@@ -70,6 +71,9 @@ class NodeOutcome:
     )
     #: 走二进制通道那一步的封存件。⚠ 不落库：它只是一串字节，落进对象存储
     artifact: SealedArtifact | None = None
+    #: 结果面上要讲的块，已压进字节预算。⚠ 与 `preview` 分家：讲解走独立那一列，
+    #: 不必与帧摘要抢同一份预算（docs/MODELING_RESULT_VIEW_DESIGN.md §4.2）
+    report: dict[str, Any] | None = None
     #: 这一步每个输出端口的**全量**帧。⚠ 不落库：它只是 `context` 里那几张帧的
     #: 引用，开了「保留全量产物」时由落库那一层写成 CSV 进对象存储（D12）
     frames: dict[str, Frame] = field(default_factory=dict[str, Frame])
@@ -121,7 +125,9 @@ async def execute_graph(
     order = topological_order(graph)
     context: dict[tuple[str, str], Any] = {}
     outcomes: list[NodeOutcome] = []
-    budget = _Budget()
+    budgets = _Budgets(
+        previews=_Budget(), reports=report_budget.RunReportBudget()
+    )
     for ordinal, node_id in enumerate(order):
         if await execution.should_cancel():
             skipped = _skipped(order[ordinal:], nodes, ordinal)
@@ -131,7 +137,7 @@ async def execute_graph(
             nodes[node_id],
             _setting_of(graph, nodes, ordinal, execution),
             context,
-            budget,
+            budgets,
         )
         outcomes.append(outcome)
         await execution.on_node_finished(outcome)
@@ -177,7 +183,12 @@ def _setting_of(
 
 
 class _Budget:
-    """一次运行里全部摘要合计的字节预算。用光之后的节点只留统计。"""
+    """一次运行里全部摘要合计的字节预算。用光之后的节点只留统计。
+
+    ⚠ 按**实际字节**记账，不是每个端口一律记满单份摘要的上限：那样记的话
+    第 33 路端口起一律只剩桩，而绝大多数图的每份摘要都远不到那个上限。装不下
+    的那一路才换成桩，于是合计**不会**超出预算。
+    """
 
     def __init__(self) -> None:
         self._used = 0
@@ -192,29 +203,41 @@ class _Budget:
         kept: dict[str, dict[str, Any]] = {}
         truncated = False
         for port, raw in previews.items():
-            if self._used >= preview_service.RUN_PREVIEW_MAX_BYTES:
+            fitted, was_cut = preview_service.fit_budget(raw)
+            size = preview_service.size_of(fitted)
+            if self._used + size > preview_service.RUN_PREVIEW_MAX_BYTES:
                 kept[port] = {
                     "kind": raw.get("kind", "unknown"),
                     "note": "本次运行的结果摘要已用满预算",
                 }
                 truncated = True
                 continue
-            fitted, was_cut = preview_service.fit_budget(raw)
             kept[port] = fitted
             truncated = truncated or was_cut
-            self._used += preview_service.PREVIEW_MAX_BYTES
+            self._used += size
         return kept, truncated
+
+
+@dataclass(frozen=True)
+class _Budgets:
+    """一次运行的两本字节账：摘要一本、结果面讲解一本。
+
+    ⚠ 各记各的：讲解被削不该让摘要跟着少行，反过来也一样。
+    """
+
+    previews: _Budget
+    reports: report_budget.RunReportBudget
 
 
 async def _run_one(
     node: GraphNode,
     setting: _Setting,
     context: dict[tuple[str, str], Any],
-    budget: _Budget,
+    budgets: "_Budgets",
 ) -> NodeOutcome:
-    """跑一个节点：装参数、注入运行期上下文、拼输入、算、出摘要。
+    """跑一个节点：装参数、注入运行期上下文、拼输入、算、出摘要与讲解。
 
-    Args: node, setting, context, budget。
+    Args: node, setting, context, budgets。
     """
     started = time.monotonic()
     failure = setting.execution.sources.failures.get(node.id)
@@ -230,7 +253,7 @@ async def _run_one(
         return _node_failed(node, setting, started, traceback.format_exc())
     for port, payload in result.outputs.items():
         context[(node.id, port)] = payload
-    previews, truncated = budget.take(
+    previews, truncated = budgets.previews.take(
         {
             port: preview_service.summarize(value)
             for port, value in result.outputs.items()
@@ -247,6 +270,7 @@ async def _run_one(
         is_preview_truncated=truncated,
         fitted=result.fitted,
         io=result.io,
+        report=budgets.reports.take(report_budget.fit_report(result.report)),
         artifact=result.artifact,
         frames={
             port: value

@@ -119,7 +119,7 @@ const emit = defineEmits<{
     cursor: pointer;
 
     &:hover:not(:disabled) {
-      background: rgb(var(--accent-primary-rgb) / 0.14);
+      background: rgba(var(--accent-primary-rgb), 0.14);
       color: var(--text-primary);
     }
 
@@ -133,7 +133,7 @@ const emit = defineEmits<{
     width: 1.75rem;
 
     &--on {
-      background: rgb(var(--accent-primary-rgb) / 0.2);
+      background: rgba(var(--accent-primary-rgb), 0.2);
       color: var(--accent-primary);
     }
   }

@@ -37,5 +37,8 @@ class MetricsPayload:
     residual_bins: tuple[tuple[float, float, int], ...] = ()
     # 混淆矩阵的类目，按升序。分类任务才有
     labels: tuple[str, ...] = ()
+    # 正类在界面上的写法。⚠ 配置里那个是浮点数、类目是字符串，两边直接比会永远
+    # 不相等；归一化只做一次，就做在这里
+    positive_label_text: str = ""
     # 混淆矩阵：第 i 行第 j 列 = 真实是第 i 类而判成第 j 类的行数
     matrix: tuple[tuple[int, ...], ...] = ()

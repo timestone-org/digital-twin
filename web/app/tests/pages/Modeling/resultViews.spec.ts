@@ -89,7 +89,9 @@ describe('结果视图按 kind 派发', () => {
     })
 
     expect(wrapper.text()).toContain('R²')
-    expect(wrapper.findAll('circle')).toHaveLength(2)
+    // 真值-预测与预测-残差两张：后者才看得出异方差（规格 §5-20）
+    expect(wrapper.findAll('.dt-ml-scatter__dots')).toHaveLength(2)
+    expect(wrapper.text()).toContain('共 2 个点')
   })
 
   it('评估：真值全都一样时不会因为除以 0 画出 NaN', () => {
@@ -110,9 +112,12 @@ describe('结果视图按 kind 派发', () => {
       },
     })
 
-    const cx = wrapper.findAll('circle').map((c) => c.attributes('cx'))
+    const paths = wrapper
+      .findAll('.dt-ml-scatter__dots')
+      .map((dots) => dots.attributes('d'))
+    expect(paths).toHaveLength(2)
     expect(
-      cx.every((value) => value !== undefined && !value.includes('NaN')),
+      paths.every((value) => value !== undefined && !value.includes('NaN')),
     ).toBe(true)
   })
 
@@ -151,15 +156,42 @@ describe('模型结果', () => {
 
   it('可服务性说清楚能不能配到台账里去', () => {
     expect(mount(ResultView, { props: { payload: MODEL } }).text()).toContain(
-      '可上线',
+      '可上线：拟合参数是纯 JSON',
     )
     expect(
       mount(ResultView, {
         props: {
-          payload: { model: { ...MODEL_BODY, serving_channel: 'binary' } },
+          payload: { model: { ...MODEL_BODY, serving_channel: '' } },
         },
       }).text(),
-    ).toContain('不可上线')
+    ).toContain('不产出可上线的模型')
+  })
+
+  // ⚠ 通道 B 也是可上线的：发布那一侧判的是「二进制产物在不在」而不是
+  // 「fitted 空不空」（`services/publish_service.py::_channel_refusal`）
+  it('二进制通道不说成不可上线', () => {
+    const text = mount(ResultView, {
+      props: {
+        payload: { model: { ...MODEL_BODY, serving_channel: 'binary' } },
+      },
+    }).text()
+
+    expect(text).not.toContain('不可上线')
+    expect(text).toContain('可上线')
+  })
+
+  // ⚠ 树模型的 `fitted` 刻意是空的（`operators/trees.py::run`），按空不空判
+  // 会把每一个训练成功的树模型说成没训出来
+  it('二进制通道的模型拟合参数为空也不喊「还没训练出来」', () => {
+    const wrapper = mount(ResultView, {
+      props: {
+        payload: {
+          model: { ...MODEL_BODY, serving_channel: 'binary', fitted: {} },
+        },
+      },
+    })
+
+    expect(wrapper.text()).not.toContain('还没有训练出模型')
   })
 
   // ⚠ 「摘要被截断」与「没训出来」是两回事，混作一处会冤枉一个跑成功的模型
@@ -194,23 +226,87 @@ describe('评估结果', () => {
   it('残差直方图按桶画出来', () => {
     const wrapper = mount(ResultView, { props: { payload: METRICS } })
 
-    expect(wrapper.findAll('.dt-ml-residual__bar')).toHaveLength(3)
+    expect(wrapper.findAll('.dt-ml-hist__bar-kept')).toHaveLength(3)
+    // ⚠ 标题与轴名是靠 prop 传下去的，名字写错时 typecheck 与 lint 双双放行
+    expect(wrapper.find('.dt-ml-hist figcaption').text()).toContain('残差分布')
+    expect(wrapper.find('.dt-ml-hist__axis-name').text()).toBe('残差')
   })
 
   it('残差跨过 0 时把零线画出来', () => {
     const wrapper = mount(ResultView, { props: { payload: METRICS } })
 
-    expect(wrapper.find('.dt-ml-residual__zero').exists()).toBe(true)
+    expect(wrapper.find('.dt-ml-hist__mark').exists()).toBe(true)
+    expect(wrapper.find('.dt-ml-hist__mark-label').text()).toBe('零误差 0')
   })
 
-  it('残差全在一侧时不画零线，免得画到框外去', () => {
+  // ⚠ 零线落到框外去会骗人，但「不画」也不能一声不吭：残差全同号本身就是结论
+  it('残差全在一侧时不画零线，改成图下一行字', () => {
     const wrapper = mount(ResultView, {
       props: {
         payload: { metrics: { ...METRICS_BODY, residual_bins: [[1, 2, 5]] } },
       },
     })
 
-    expect(wrapper.find('.dt-ml-residual__zero').exists()).toBe(false)
+    expect(wrapper.find('.dt-ml-hist__mark').exists()).toBe(false)
+    expect(wrapper.find('.dt-ml-hist__stray').text()).toContain('零误差 0')
+  })
+
+  // ⚠ 偏均值与离散度就在同一份 metrics 里，今天只印成两个数字，与那张直方图
+  // 互不相干（规格 §5-22）
+  it('残差分析给了偏均值与离散度时叠一条正态参考曲线', () => {
+    const wrapper = mount(ResultView, {
+      props: {
+        payload: {
+          metrics: {
+            ...METRICS_BODY,
+            metrics: { residual_mean: -0.2, residual_std: 1.4 },
+          },
+        },
+      },
+    })
+
+    expect(wrapper.find('.dt-ml-hist__curve').exists()).toBe(true)
+  })
+
+  it('只有偏均值没有离散度时不硬画那条曲线', () => {
+    const wrapper = mount(ResultView, {
+      props: {
+        payload: {
+          metrics: { ...METRICS_BODY, metrics: { residual_mean: -0.2 } },
+        },
+      },
+    })
+
+    expect(wrapper.find('.dt-ml-hist__curve').exists()).toBe(false)
+  })
+
+  // ⚠ 「点太多只画了一部分」与「整份散点被摘要预算削掉」要分开说：
+  // `preview.py::_stripped` 摘 `pairs` 时留着 `pairs_truncated`，只读后者的话
+  // 那张图会无声消失
+  it('散点被摘要削掉时照实说一句，不是一声不吭地少一张图', () => {
+    const trimmed: Record<string, unknown> = {
+      ...METRICS_BODY,
+      pairs_truncated: true,
+    }
+    delete trimmed['pairs']
+
+    const wrapper = mount(ResultView, {
+      props: { payload: { metrics: trimmed } },
+    })
+
+    expect(wrapper.text()).toContain('没有一起带回来')
+    expect(wrapper.text()).not.toContain('点太多')
+  })
+
+  it('点太多只画了一部分时说的是另一句', () => {
+    const wrapper = mount(ResultView, {
+      props: {
+        payload: { metrics: { ...METRICS_BODY, pairs_truncated: true } },
+      },
+    })
+
+    expect(wrapper.text()).toContain('点太多')
+    expect(wrapper.text()).not.toContain('没有一起带回来')
   })
 
   // ⚠ 无定义写成 0 会被读成「一点都不准」

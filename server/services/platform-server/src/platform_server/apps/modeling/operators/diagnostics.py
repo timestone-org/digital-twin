@@ -5,7 +5,8 @@
 压在上限内。
 """
 
-import math
+from collections.abc import Sequence
+from dataclasses import dataclass
 from typing import Any, Literal
 
 import numpy as np
@@ -20,8 +21,23 @@ from platform_server.apps.modeling.operators.base import (
     OperatorError,
     PortSpec,
 )
+from platform_server.apps.modeling.operators.evalblocks import (
+    Folds,
+    Importances,
+    fold_blocks,
+    importance_blocks,
+    residual_blocks,
+)
+from platform_server.apps.modeling.operators.evalstats import (
+    Scored,
+    even_sample,
+    quantile_at,
+    repeat_spread,
+    scored_of,
+)
 from platform_server.apps.modeling.operators.evaluate import (
     DEFAULT_RESIDUAL_BINS,
+    DEFAULT_SCATTER_POINTS,
     residual_histogram,
     scored_columns_of,
 )
@@ -45,6 +61,7 @@ from platform_server.apps.modeling.operators.registry import (
     register_operator,
     registry,
 )
+from platform_server.apps.modeling.operators.reporting import ReportBlock
 
 # 分母为零的判据，与 `evaluate.py` 那份同义
 _ZERO = 0.0
@@ -99,23 +116,47 @@ class ResidualAnalysis(OperatorBase):
             raise OperatorError("残差分析拿到了不匹配的参数")
         return self.config
 
+    def __init__(self, config: OperatorConfig) -> None:
+        super().__init__(config)
+        self._seen: _Residuals | None = None
+
     def run(self, inputs: dict[str, Any]) -> dict[str, Any]:
         """算残差的几个统计量与它的分布。
 
         Args: inputs。
         """
-        truth, predicted = scored_columns_of(frame_input(inputs, "scored"))
-        residuals = [
-            actual - guess
-            for actual, guess in zip(truth, predicted, strict=True)
-        ]
+        scored = frame_input(inputs, "scored")
+        truth, predicted = scored_columns_of(scored)
+        seen = scored_of(truth, predicted, scored.index)
+        metrics = _residual_stats(seen.residuals)
+        self._seen = _Residuals(scored=seen, metrics=metrics)
+        pairs = tuple(zip(truth, predicted, strict=True))
         return {
             "metrics": MetricsPayload(
                 task=TASK_REGRESSION,
-                metrics=_residual_stats(residuals),
-                residual_bins=residual_histogram(residuals, self._config.bins),
+                metrics=metrics,
+                pairs=even_sample(pairs, DEFAULT_SCATTER_POINTS),
+                is_truncated=len(pairs) > DEFAULT_SCATTER_POINTS,
+                residual_bins=residual_histogram(
+                    list(seen.residuals), self._config.bins
+                ),
             )
         }
+
+    def report(self) -> tuple[ReportBlock, ...]:
+        """口径、五个统计量、残差分布，以及画得出来的 QQ 与残差随时间。"""
+        seen = self._seen
+        if seen is None:
+            return ()
+        return residual_blocks(seen.scored, seen.metrics, self._config.bins)
+
+
+@dataclass(frozen=True)
+class _Residuals:
+    """一次残差分析实际看到了什么，`report()` 照它讲。"""
+
+    scored: Scored
+    metrics: dict[str, float | None]
 
 
 class FeatureImportanceConfig(OperatorConfig):
@@ -174,49 +215,114 @@ class FeatureImportance(OperatorBase):
             raise OperatorError("特征重要性拿到了不匹配的参数")
         return self.config
 
+    def __init__(self, config: OperatorConfig) -> None:
+        super().__init__(config)
+        self._seen: Importances | None = None
+
     def run(self, inputs: dict[str, Any]) -> dict[str, Any]:
         """逐列打乱再打分，掉的分就是这一列的重要性。
 
+        ⚠ 指标字典**留空**：这一步的键是列名不是指标名，塞进扁平的 metrics 里
+        会与指标键撞名——某列恰好叫 `mape` 时，无量纲的 ΔR² 会被印上百分号
+        （docs/MODELING_RESULT_VIEW_DESIGN.md R-34）。按列的数一律走块。
         Args: inputs。
         """
         payload = inputs.get("model")
         if not isinstance(payload, ModelPayload):
             raise OperatorError("输入端口 model 上没有模型")
         test = frame_input(inputs, "test")
-        model = _rebuilt(payload)
-        return {
-            "metrics": MetricsPayload(
-                task=payload.task,
-                metrics=self._importances(model, payload, test),
-            )
-        }
+        self._seen = self._importances(_rebuilt(payload), payload, test)
+        return {"metrics": MetricsPayload(task=payload.task)}
+
+    def report(self) -> tuple[ReportBlock, ...]:
+        """口径、打乱前的基线分、按列降序的重要性排行。"""
+        seen = self._seen
+        return () if seen is None else importance_blocks(seen)
 
     def _importances(
         self, model: OperatorBase, payload: ModelPayload, test: Frame
-    ) -> dict[str, float | None]:
+    ) -> Importances:
+        """逐列算一遍重要性，按它降序排好。
+
+        Args: model, payload, test。
+        """
         config = self._config
         target = _target_values(test, payload.target_key)
-        baseline = _scored_by_task(
-            payload.task, target, model.predict_rows(test)
+        probe = _Probe(
+            model=model,
+            payload=payload,
+            test=test,
+            target=target,
+            baseline=_scored_by_task(
+                payload.task, target, model.predict_rows(test)
+            ),
+            repeats=config.repeats,
+            seed=config.random_state,
         )
-        found: dict[str, float | None] = {}
-        for key in payload.feature_keys:
-            drops = [
-                baseline
-                - _scored_by_task(
-                    payload.task,
-                    target,
-                    model.predict_rows(
-                        _shuffled(test, key, config.random_state + turn)
-                    ),
-                )
-                for turn in range(config.repeats)
-            ]
-            found[key] = sum(drops) / len(drops)
-        return found
+        items = [_column_item(probe, key) for key in payload.feature_keys]
+        items.sort(key=_rank, reverse=True)
+        return Importances(
+            items=tuple(items),
+            baseline=probe.baseline,
+            score_kind=_score_kind(payload.task),
+            rows=test.row_count,
+            repeats=config.repeats,
+        )
 
 
-def _residual_stats(residuals: list[float]) -> dict[str, float | None]:
+@dataclass(frozen=True)
+class _Probe:
+    """打乱一列要用的一整包。打成一包是因为形参上限是 5。"""
+
+    model: OperatorBase
+    payload: ModelPayload
+    test: Frame
+    target: list[float]
+    baseline: float
+    repeats: int
+    seed: int
+
+
+def _column_item(probe: _Probe, key: str) -> dict[str, Any]:
+    """一列打乱 R 遍之后掉的分：均值与几遍之间的波动。
+
+    Args: probe, key。
+    """
+    drops = [
+        probe.baseline
+        - _scored_by_task(
+            probe.payload.task,
+            probe.target,
+            probe.model.predict_rows(
+                _shuffled(probe.test, key, probe.seed + turn)
+            ),
+        )
+        for turn in range(probe.repeats)
+    ]
+    return {
+        "name": key,
+        "value": sum(drops) / len(drops),
+        "spread": repeat_spread(drops),
+    }
+
+
+def _rank(item: dict[str, Any]) -> float:
+    """排序用的那个数。
+
+    Args: item。
+    """
+    return float(item["value"])
+
+
+def _score_kind(task: str) -> str:
+    """这一份分是什么口径：回归给 R²、分类给准确率。
+
+    Args: task。
+    """
+    return "r2" if task == TASK_REGRESSION else "accuracy"
+
+
+def _residual_stats(residuals: Sequence[float]) -> dict[str, float | None]:
     """残差的五个统计量。
 
     ⚠ 均值单独列出来：它明显不为零就是系统性偏差，而 R² 看不出这一点。
@@ -229,23 +335,10 @@ def _residual_stats(residuals: list[float]) -> dict[str, float | None]:
     return {
         "residual_mean": mean,
         "residual_std": variance**0.5,
-        "residual_p05": _percentile(ordered, 0.05),
-        "residual_p95": _percentile(ordered, 0.95),
+        "residual_p05": quantile_at(ordered, 0.05),
+        "residual_p95": quantile_at(ordered, 0.95),
         "residual_max_abs": max(abs(value) for value in residuals),
     }
-
-
-def _percentile(ordered: list[float], ratio: float) -> float:
-    """有序残差上的线性插值分位数。
-
-    Args: ordered, ratio。
-    """
-    position = ratio * (len(ordered) - 1)
-    low = math.floor(position)
-    high = math.ceil(position)
-    if low == high:
-        return ordered[low]
-    return ordered[low] + (ordered[high] - ordered[low]) * (position - low)
 
 
 def _rebuilt(payload: ModelPayload) -> OperatorBase:
@@ -377,6 +470,10 @@ class CrossValidate(OperatorBase):
             raise OperatorError("交叉验证拿到了不匹配的参数")
         return self.config
 
+    def __init__(self, config: OperatorConfig) -> None:
+        super().__init__(config)
+        self._seen: Folds | None = None
+
     def run(self, inputs: dict[str, Any]) -> dict[str, Any]:
         """逐折训练、逐折打分，最后给均值与波动。
 
@@ -388,17 +485,27 @@ class CrossValidate(OperatorBase):
         frame = with_roles(
             frame_input(inputs, "frame"), target_key=payload.target_key
         )
+        spans = _folds(frame.row_count, self._config.folds, self._config.method)
         scores = [
-            _fold_score(payload, frame, train, test)
-            for train, test in _folds(
-                frame.row_count, self._config.folds, self._config.method
-            )
+            _fold_score(payload, frame, train, test) for train, test in spans
         ]
+        self._seen = Folds(
+            scores=tuple(scores),
+            spans=tuple(spans),
+            configured=self._config.folds,
+            rows=frame.row_count,
+            score_kind=_score_kind(payload.task),
+        )
         return {
             "metrics": MetricsPayload(
                 task=payload.task, metrics=_summary(scores)
             )
         }
+
+    def report(self) -> tuple[ReportBlock, ...]:
+        """配置对实得的账、逐折分数、每折的训练段与测试段。"""
+        seen = self._seen
+        return () if seen is None else fold_blocks(seen)
 
 
 def _folds(

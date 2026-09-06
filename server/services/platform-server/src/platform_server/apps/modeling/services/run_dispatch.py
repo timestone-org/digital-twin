@@ -267,6 +267,7 @@ def _node_row(
         preview_json=node.preview or None,
         preview_truncated=node.is_preview_truncated,
         fitted_json=node.fitted,
+        report_json=node.report,
         io_json=node.io or None,
         artifact_json=artifact,
         frames_json=frames,

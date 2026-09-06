@@ -147,7 +147,7 @@ function portMood(side: 'in' | 'out', name: string): string {
   border: 2px solid var(--border-default);
   border-radius: var(--radius-md);
   background: var(--surface-raised);
-  box-shadow: 0 1px 3px rgb(var(--neutral-fg-rgb) / 0.14);
+  box-shadow: 0 1px 3px rgba(var(--neutral-fg-rgb), 0.14);
 
   &--selected {
     border-color: var(--accent-primary);

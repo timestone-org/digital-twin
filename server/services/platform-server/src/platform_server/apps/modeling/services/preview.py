@@ -23,6 +23,13 @@ PREVIEW_MAX_BYTES = 256 * 1024
 FALLBACK_ROWS = (50, 20, 0)
 # 一次运行全部摘要合计的上限，超了之后的节点只留统计
 RUN_PREVIEW_MAX_BYTES = 8 * 1024 * 1024
+# 单个节点那份结果面讲解的独立上限。⚠ 64KB 不是保守值，是被一条乘法定死的：
+# 一次运行成功后前端最多预取 24 份详情来算卡片那行字，讲解跟着一起下载
+REPORT_MAX_BYTES = 64 * 1024
+# 一次运行全部讲解合计的上限
+RUN_REPORT_MAX_BYTES = 2 * 1024 * 1024
+# 摘无可摘那一档留给界面的说明
+OVERSIZE_NOTE = "这一步的结果太大，摘要只留下了类型"
 
 KIND_FRAME = "frame"
 KIND_MODEL = "model"
@@ -48,17 +55,32 @@ def summarize(payload: object) -> dict[str, Any]:
 def fit_budget(preview: dict[str, Any]) -> tuple[dict[str, Any], bool]:
     """把一份摘要压进字节上限，回 `(摘要, 是否被截断)`。
 
+    ⚠ 每降一档都要**复量一次**：摘大键摘的是一张固定名单，名单外的键（混淆
+    矩阵、特征名清单）自己不会变小，不复量就会超着上限写进 JSONB。
     Args: preview。
     """
-    if _size_of(preview) <= PREVIEW_MAX_BYTES:
+    if size_of(preview) <= PREVIEW_MAX_BYTES:
         return preview, bool(preview.get("rows_truncated"))
-    if preview.get("kind") != KIND_FRAME:
-        return _stripped(preview), True
-    for rows in FALLBACK_ROWS:
-        trimmed = _trim_rows(preview, rows)
-        if _size_of(trimmed) <= PREVIEW_MAX_BYTES:
-            return trimmed, True
-    return _stripped(preview), True
+    if preview.get("kind") == KIND_FRAME:
+        for rows in FALLBACK_ROWS:
+            trimmed = _trim_rows(preview, rows)
+            if size_of(trimmed) <= PREVIEW_MAX_BYTES:
+                return trimmed, True
+    return _last_resort(preview), True
+
+
+def _last_resort(preview: dict[str, Any]) -> dict[str, Any]:
+    """摘掉大键，仍然超上限就再降一档，只留类型与一句说明。
+
+    Args: preview。
+    """
+    stripped = _stripped(preview)
+    if size_of(stripped) <= PREVIEW_MAX_BYTES:
+        return stripped
+    return {
+        "kind": preview.get("kind", "unknown"),
+        "note": OVERSIZE_NOTE,
+    }
 
 
 def _frame_preview(frame: Frame, rows: int) -> dict[str, Any]:
@@ -85,6 +107,9 @@ def _frame_preview(frame: Frame, rows: int) -> dict[str, Any]:
 def _column_stat(frame: Frame, key: str) -> dict[str, Any]:
     """一列的统计。非数值列只给空值率与唯一值个数。
 
+    ⚠ 转不动的格数与空值率分开给：台账 values_json 里的类型不可信，转不动的格
+    在取数那一步被当成缺失记进 `coerce_failed`（`operators/frame.py`）。两者合成
+    一个空值率之后，用户会去查采集为什么没上来，而真因是这一列的类型配错了。
     Args: frame, key。
     """
     column = frame.column_of(key)
@@ -98,6 +123,7 @@ def _column_stat(frame: Frame, key: str) -> dict[str, Any]:
         "unit": column.unit,
         "null_ratio": _ratio(len(values) - len(present), len(values)),
         "n_unique": len({str(value) for value in present}),
+        "coerce_failed": column.coerce_failed,
     }
     numbers = [float(value) for value in present if _is_number(value)]
     stat.update(_number_stat(numbers))
@@ -150,6 +176,7 @@ def _metrics_preview(payload: MetricsPayload) -> dict[str, Any]:
         "pairs_truncated": payload.is_truncated,
         "residual_bins": [list(item) for item in payload.residual_bins],
         "labels": list(payload.labels),
+        "positive_label_text": payload.positive_label_text,
         "matrix": [list(row) for row in payload.matrix],
     }
 
@@ -174,8 +201,11 @@ def _trim_rows(preview: dict[str, Any], rows: int) -> dict[str, Any]:
 
 
 def _stripped(preview: dict[str, Any]) -> dict[str, Any]:
-    """只留下形状与统计的最后一档。
+    """摘掉画图用的那几个大键，其余原样留下。
 
+    ⚠ 这张名单是**黑名单**，只许往里加键，绝不许翻成「只留这几个键」的白名单：
+    `metrics` 一被摘掉，`model_service._metrics_of` 读的 `preview["metrics"]
+    ["metrics"]` 就是空的，发布出去的模型版本指标全空而后端一声不吭。
     Args: preview。
     """
     kept = {
@@ -187,7 +217,11 @@ def _stripped(preview: dict[str, Any]) -> dict[str, Any]:
     return kept
 
 
-def _size_of(preview: dict[str, Any]) -> int:
+def size_of(preview: dict[str, Any]) -> int:
+    """一份摘要落库要占多少字节。运行级预算按它记账。
+
+    Args: preview。
+    """
     return len(json.dumps(preview, ensure_ascii=False).encode())
 
 

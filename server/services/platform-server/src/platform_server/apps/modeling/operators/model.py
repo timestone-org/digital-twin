@@ -1,58 +1,104 @@
-"""建模算子：切分训练 / 测试，以及在训练集上拟合出一个模型。
+"""训练 / 测试切分，以及各族模型算子共用的打分帧与任务口径。
 
-⚠ `scored_frame` 与 `single_target` 是公开的：树模型那一族在
-`trees.py` 里，两边必须共用同一份打分帧形状与同一条「唯一目标列」判据
+⚠ `scored_frame` 与 `single_target` 是公开的：线性族在 `regression.py`、树模型族
+在 `trees.py`，两边必须共用同一份打分帧形状与同一条「唯一目标列」判据
 ——各写一份的话，评估算子读得懂一族、读不懂另一族。
 """
 
-import math
-from typing import Any, Literal, cast
+from dataclasses import dataclass
+from typing import Any, Literal
 
 from pydantic import Field
 
 from platform_server.apps.modeling.operators.base import (
     CONTRACT_FRAME,
-    CONTRACT_MODEL,
-    ColumnsByPort,
     OperatorBase,
     OperatorConfig,
     OperatorError,
     PortSpec,
     column_field,
 )
-from platform_server.apps.modeling.operators.estimators import (
-    BinaryLogit,
-    LeastSquares,
-    Regularization,
-    logistic_probability,
-)
 from platform_server.apps.modeling.operators.frame import (
     DTYPE_NUMBER,
-    ROLE_FEATURE,
     ROLE_TARGET,
     SPLIT_METHODS,
+    SPLIT_RANDOM,
     SPLIT_TIME_ORDER,
     Frame,
     FrameColumn,
     frame_input,
-    matrix_of,
+    null_ratio_of,
     numbers_of,
     select_rows,
     split_row_indices,
     with_roles,
 )
-from platform_server.apps.modeling.operators.payloads import ModelPayload
+from platform_server.apps.modeling.operators.modelstats import (
+    with_hints,
+)
 from platform_server.apps.modeling.operators.registry import register_operator
+from platform_server.apps.modeling.operators.reporting import (
+    MAX_ITEMS,
+    TIER_LARGE,
+    TIER_SCALAR,
+    TIER_SMALL,
+    BlockAt,
+    Item,
+    ReportBlock,
+    RowCounts,
+    Scale,
+    TimeAxis,
+    axis_block,
+    bins_block,
+    breakdown_block,
+    rows_block,
+)
+from platform_server.apps.modeling.operators.steps import (
+    Stage,
+    axis_span,
+    column_bins,
+    funnel_of,
+    moment_text,
+    ratio_of,
+    spread_of,
+)
+
+# 两路在图上的叫法。⚠ 它们当的是**系列名**不是列 key：块的标题里已经写着是
+# 哪一列，这一层答的是「训练侧还是测试侧」
+TRAIN_SERIES = "训练集"
+TEST_SERIES = "测试集"
+# 时间带上两段的语义色。random 档下两段完全交错，故都标成打乱
+TONE_TRAIN = "primary"
+TONE_TEST = "secondary"
+TONE_SHUFFLED = "shuffled"
+# 配的比例与实到比例差过这么多就出一条说明
+RATIO_TOLERANCE = 0.005
+
+SAME_PROVENANCE_NOTE = (
+    "两路来自同一次取数，切分不改出处：下面两个端口的出处一字不差"
+)
+RATIO_NOTE = (
+    "配的是 {configured:.1%}，而向下取整并至少留一行之后，实际切给测试集的是 "
+    "{rows} 行、占 {actual:.1%}"
+)
+RANDOM_LEAK_NOTE = (
+    "随机切分把两段在时间上完全混在一起：靠后的行会进训练集，"
+    "指标会虚高而上线之后崩"
+)
+NO_INDEX_NOTE = "这份数据没有时间索引，看不出测试段是不是真的在训练段之后"
+OVERLAP_NOTE = "测试段的起点早于训练段的终点，两段在时间上有重叠"
+ORDERED_NOTE = "测试段整段在训练段之后，最早的一行是 {since}"
+TARGET_LABEL = "两路共用同一条轴才比得出来：形状差得远就是切歪了"
+NULL_LABEL = "两侧差得远的列，多半只在其中一段有数据，上线之后整列是空"
 
 TASK_REGRESSION = "regression"
 TASK_CLASSIFICATION = "classification"
-# 判成正类的概率门槛
-_DECISION_THRESHOLD = 0.5
-# 两类模型的类目个数
-_TWO_CLASSES = 2
-# 打分帧上的两列，评估算子按它们取数
+# 打分帧上的列，评估算子按它们取数。⚠ 三个都是**定值 key**，不按目标列取名：
+# `describe_columns` 只拿得到列 key、拿不到列角色，推不出哪一列是目标
 SCORED_TRUE = "y_true"
 SCORED_PRED = "y_pred"
+# 只有二分类的模型多产这一列：每行落在正类上的概率
+SCORED_PROBA = "y_proba"
 
 type SplitMethod = Literal["time_order", "random"]
 
@@ -106,6 +152,10 @@ class SplitDataset(OperatorBase):
     CHANGES_ROW_COUNT = True
     PROVIDES_SPLIT_PLAN = True
 
+    def __init__(self, config: OperatorConfig) -> None:
+        super().__init__(config)
+        self._split: _Split | None = None
+
     def run(self, inputs: dict[str, Any]) -> dict[str, Any]:
         """切两份出来，两份都带上列角色。
 
@@ -124,174 +174,262 @@ class SplitDataset(OperatorBase):
             random_state=config.random_state,
         )
         _check_test_rows(config, test_rows=len(test), row_count=frame.row_count)
-        return {
+        made = {
             "train": select_rows(frame, sorted(train)),
             "test": select_rows(frame, sorted(test)),
         }
+        self._split = _Split(
+            source=frame, train=made["train"], test=made["test"]
+        )
+        return made
+
+    def report(self) -> tuple[ReportBlock, ...]:
+        """切分的四块：比例账、两段时间跨度、目标列分布、每列空值率两侧对比。
+
+        ⚠ 全是节点级（port=""）：这一屏最要紧的问题——测试段在不在训练段之后
+        ——问的是两路的关系，挂在任何一路上都答不了。
+        """
+        split = self._split
+        if split is None:
+            return ()
+        config = _split_config(self.config)
+        return (
+            _counts_block(split, config),
+            *_span_blocks(split, config, self.tz_offset_minutes),
+            *_target_blocks(split, config),
+            *_null_blocks(split),
+        )
 
 
-class LinearRegressionConfig(OperatorConfig):
-    """线性回归的参数。"""
+@dataclass(frozen=True)
+class _Split:
+    """切分这一步实际切出了什么，`report()` 照它讲。"""
 
-    use_intercept: bool = Field(
-        default=True,
-        title="拟合截距",
-        description="关掉相当于强制过原点，一般不要关",
-    )
-    regularization: Regularization = Field(
-        default="none",
-        title="正则化",
-        description=(
-            "none=普通最小二乘；ridge=岭回归，按 alpha 收缩系数（截距不参与）"
+    #: 切之前那一份
+    source: Frame
+    train: Frame
+    test: Frame
+
+
+def _counts_block(split: _Split, config: SplitDatasetConfig) -> ReportBlock:
+    """行怎么分的：配的比例、实到比例、两路各多少行。
+
+    Args: split, config。
+    """
+    whole = split.source.row_count
+    test_rows = split.test.row_count
+    made = rows_block(
+        BlockAt(zone="step", title="切分的账", tier=TIER_SCALAR),
+        RowCounts(
+            before=whole,
+            after=whole,
+            ratio_configured=config.test_ratio,
+            ratio_actual=ratio_of(test_rows, whole),
         ),
-    )
-    ridge_alpha: float = Field(
-        default=1.0,
-        ge=0.0,
-        title="岭回归的 alpha",
-        description="正则化选 ridge 时才用得上，越大系数收得越狠",
-    )
-
-
-@register_operator
-class LinearRegressionOperator(OperatorBase):
-    """最小二乘线性回归。拟合参数是纯数，因此可以直接上线（通道 A）。"""
-
-    CODE = "linear_regression"
-    NAME = "线性回归"
-    DESCRIPTION = "在训练集上拟合一条线性关系，并在测试集上打分"
-    CATEGORY = "model"
-    ICON = "chart-line"
-    CONFIG_MODEL = LinearRegressionConfig
-    INPUTS = (
-        PortSpec(name="train", contract=CONTRACT_FRAME, label="训练集"),
-        PortSpec(name="test", contract=CONTRACT_FRAME, label="测试集"),
-    )
-    OUTPUTS = (
-        PortSpec(name="model", contract=CONTRACT_MODEL, label="模型"),
-        PortSpec(
-            name="scored",
-            contract=CONTRACT_FRAME,
-            label="打分",
-            description="测试集上的真实值与预测值，供评估算子算指标",
-        ),
-    )
-    REQUIRES_FIT = True
-    SERVING_CHANNEL = "json"
-
-    def __init__(self, config: OperatorConfig) -> None:
-        super().__init__(config)
-        self._coef: dict[str, float] = {}
-        self._intercept = 0.0
-
-    def run(self, inputs: dict[str, Any]) -> dict[str, Any]:
-        """在训练集上拟合，在测试集上打分。
-
-        Args: inputs。
-        """
-        train = frame_input(inputs, "train")
-        test = frame_input(inputs, "test")
-        feature_keys = train.keys_by_role(ROLE_FEATURE)
-        target_key = single_target(train)
-        if not feature_keys:
-            raise OperatorError("训练集里一个特征列都没有")
-        self._fit(train, feature_keys, target_key)
-        return {
-            "model": ModelPayload(
-                algo=self.CODE,
-                task=TASK_REGRESSION,
-                feature_keys=feature_keys,
-                target_key=target_key,
-                hyper_params=_hyper_params_of(_linear_config(self.config)),
-                fitted=self.dump_fitted() or {},
-                serving_channel=self.SERVING_CHANNEL,
-            ),
-            "scored": scored_frame(test, target_key, self.predict_rows(test)),
-        }
-
-    @classmethod
-    def describe_columns(
-        cls, config: OperatorConfig, inputs: ColumnsByPort
-    ) -> ColumnsByPort:
-        """打分帧是**新造**的两列，与两个输入的列集无关。
-
-        ⚠ 默认的恒等实现在这里是错的：它会把训练集那一堆特征列当成打分帧的列，
-        于是下游评估节点的列候选里出现一串根本不存在的名字。
-        Args: config, inputs。
-        """
-        del config, inputs
-        return {"scored": (SCORED_TRUE, SCORED_PRED)}
-
-    def predict_rows(self, frame: Frame) -> list[float]:
-        """按拟合参数给每一行算一个预测值。
-
-        ⚠ 训练期给测试集打分与推理期单行预测走的是**这同一个方法**：各写一份
-        的话，线上与离线会算出不同的数而两边看着都对。
-        Args: frame。
-        """
-        if not self._coef:
-            raise OperatorError("模型还没有拟合参数")
-        keys = tuple(self._coef)
-        rows = matrix_of(frame, keys)
-        return [
-            self._intercept
-            + sum(
-                self._coef[key] * value
-                for key, value in zip(keys, row, strict=True)
+        funnel=funnel_of(
+            (
+                Stage("切分前", whole, "行"),
+                Stage(TRAIN_SERIES, split.train.row_count, "行"),
+                Stage(TEST_SERIES, test_rows, "行"),
             )
-            for row in rows
-        ]
+        ),
+    )
+    return with_hints(made, _counts_notes(split, config))
 
-    def dump_fitted(self) -> dict[str, Any] | None:
-        """按列 key 建键的系数与截距。"""
-        return {"coef": dict(self._coef), "intercept": self._intercept}
 
-    def load_fitted(self, params: dict[str, Any]) -> None:
-        """回灌系数与截距。
+def _counts_notes(split: _Split, config: SplitDatasetConfig) -> tuple[str, ...]:
+    """出处只有一份、实到比例与配的不一样、以及随机切的泄漏。
 
-        Args: params。
-        """
-        self.validate_fitted(params)
-        coef = cast("dict[str, object]", params["coef"])
-        self._coef = {key: float(str(value)) for key, value in coef.items()}
-        self._intercept = float(params["intercept"])
-
-    @classmethod
-    def validate_fitted(cls, params: dict[str, Any]) -> None:
-        """系数必须按列 key 建键，且都是有限数。
-
-        Args: params。
-        """
-        raw: object = params.get("coef")
-        if not isinstance(raw, dict) or not raw:
-            raise OperatorError("模型缺少系数")
-        coef = cast("dict[object, object]", raw)
-        for key, value in coef.items():
-            if not isinstance(key, str):
-                raise OperatorError("系数必须按列 key 建键，不能按列下标")
-            if not _is_finite(value):
-                raise OperatorError(f"列「{key}」的系数不是有限数")
-        if not _is_finite(params.get("intercept")):
-            raise OperatorError("截距不是有限数")
-
-    def _fit(
-        self, train: Frame, feature_keys: tuple[str, ...], target_key: str
-    ) -> None:
-        target = numbers_of(train, target_key)
-        if any(value is None for value in target):
-            raise OperatorError("训练集的目标列里有空值，请先补上或去掉这些行")
-        config = _linear_config(self.config)
-        estimator = LeastSquares(
-            use_intercept=config.use_intercept,
-            regularization=config.regularization,
-            ridge_alpha=config.ridge_alpha,
+    Args: split, config。
+    """
+    made = [SAME_PROVENANCE_NOTE]
+    actual = ratio_of(split.test.row_count, split.source.row_count)
+    if actual is not None and abs(actual - config.test_ratio) > RATIO_TOLERANCE:
+        made.append(
+            RATIO_NOTE.format(
+                configured=config.test_ratio,
+                rows=split.test.row_count,
+                actual=actual,
+            )
         )
-        estimator.fit(
-            matrix_of(train, feature_keys),
-            [float(value or 0.0) for value in target],
+    if not split.source.index:
+        made.append(NO_INDEX_NOTE)
+    return tuple(made)
+
+
+def _span_blocks(
+    split: _Split, config: SplitDatasetConfig, tz_offset_minutes: int
+) -> tuple[ReportBlock, ...]:
+    """两路的时间跨度画成一条轴上的两段。没有时间索引时一块都不出。
+
+    Args: split, config, tz_offset_minutes。
+    """
+    index = split.source.index
+    if not index:
+        return ()
+    span = axis_span(index)
+    made = axis_block(
+        BlockAt(
+            zone="charts",
+            title="两段的时间跨度",
+            tier=TIER_LARGE,
+            is_primary=True,
+        ),
+        TimeAxis(
+            tz_offset_minutes=tz_offset_minutes,
+            actual_since=moment_text(min(index)),
+            actual_until=moment_text(max(index)),
+            occupancy=span.occupancy,
+            gaps=span.gaps,
+            segments=_segments(split, config),
+        ),
+    )
+    return (with_hints(made, _span_notes(split, config)),)
+
+
+def _segments(split: _Split, config: SplitDatasetConfig) -> tuple[Item, ...]:
+    """两路各占哪一段。
+
+    Args: split, config。
+    """
+    is_shuffled = config.method == SPLIT_RANDOM
+    sides = (
+        (TRAIN_SERIES, split.train, TONE_TRAIN),
+        (TEST_SERIES, split.test, TONE_TEST),
+    )
+    made: list[Item] = []
+    for label, frame, tone in sides:
+        edges = _span_of(frame)
+        if edges is None:
+            continue
+        made.append(
+            {
+                "label": label,
+                "tone": TONE_SHUFFLED if is_shuffled else tone,
+                "since": edges[0],
+                "until": edges[1],
+                "since_text": moment_text(edges[0]),
+                "until_text": moment_text(edges[1]),
+                "rows": frame.row_count,
+            }
         )
-        self._coef = dict(zip(feature_keys, estimator.coef, strict=True))
-        self._intercept = estimator.intercept
+    return tuple(made)
+
+
+def _span_notes(split: _Split, config: SplitDatasetConfig) -> tuple[str, ...]:
+    """测试段在不在训练段之后——切分这一屏最要紧的那个问题。
+
+    Args: split, config。
+    """
+    if config.method == SPLIT_RANDOM:
+        return (RANDOM_LEAK_NOTE,)
+    train = _span_of(split.train)
+    test = _span_of(split.test)
+    if train is None or test is None:
+        return ()
+    if test[0] <= train[1]:
+        return (OVERLAP_NOTE,)
+    return (ORDERED_NOTE.format(since=moment_text(test[0])),)
+
+
+def _span_of(frame: Frame) -> tuple[int, int] | None:
+    """一份帧覆盖的时刻区间；没有索引或一行都没有时给 `None`。
+
+    Args: frame。
+    """
+    index = frame.index
+    return None if not index else (min(index), max(index))
+
+
+def _target_blocks(
+    split: _Split, config: SplitDatasetConfig
+) -> tuple[ReportBlock, ...]:
+    """目标列在两路上的分布。
+
+    ⚠ 两路共用同一条轴（整列的 min/max）：各按各的跨度分桶的话，两张图看着
+    一样高，而它们量的根本不是同一段。
+    Args: split, config。
+    """
+    key = config.target_column
+    numbers = [
+        value for value in numbers_of(split.source, key) if value is not None
+    ]
+    if not numbers:
+        return ()
+    low = min(numbers)
+    high = max(numbers)
+    made = bins_block(
+        BlockAt(
+            zone="charts",
+            title=f"目标列「{key}」在两路上的分布",
+            tier=TIER_SMALL,
+            is_primary=False,
+        ),
+        (
+            column_bins(
+                TRAIN_SERIES,
+                spread_of(numbers_of(split.train, key), low=low, high=high),
+            ),
+            column_bins(
+                TEST_SERIES,
+                spread_of(numbers_of(split.test, key), low=low, high=high),
+            ),
+        ),
+    )
+    return (with_hints(made, (TARGET_LABEL,)),)
+
+
+def _null_blocks(split: _Split) -> tuple[ReportBlock, ...]:
+    """每列空值率两侧对比。两侧都没有空值时一块都不出。
+
+    Args: split。
+    """
+    items = _null_items(split)
+    if not items:
+        return ()
+    made = breakdown_block(
+        BlockAt(
+            zone="charts",
+            title="每列空值率：训练 / 测试",
+            tier=TIER_SMALL,
+            is_primary=False,
+        ),
+        Scale(label=NULL_LABEL),
+        items,
+    )
+    return (made,)
+
+
+def _null_items(split: _Split) -> list[Item]:
+    """按两侧空值率之差降序；两侧都没有空值的列不列。
+
+    ⚠ `value` 给测试侧那个：一列在测试段全空才是上线会出事的那一档。
+    Args: split。
+    """
+    made: list[Item] = []
+    for column in split.source.columns:
+        before = null_ratio_of(split.train, column.key)
+        after = null_ratio_of(split.test, column.key)
+        if before <= 0 and after <= 0:
+            continue
+        made.append(
+            {
+                "name": column.key,
+                "value": after,
+                "before": before,
+                "after": after,
+            }
+        )
+    made.sort(key=_null_gap_of, reverse=True)
+    return made[:MAX_ITEMS]
+
+
+def _null_gap_of(item: Item) -> float:
+    """一列在两侧的空值率差多少，排序用。
+
+    Args: item。
+    """
+    return abs(float(item["after"]) - float(item["before"]))
 
 
 def scored_frame(
@@ -337,29 +475,11 @@ def _check_test_rows(
     )
 
 
-def _hyper_params_of(config: LinearRegressionConfig) -> dict[str, Any]:
-    """落进模型版本、供模型卡展示的超参。
-
-    Args: config。
-    """
-    return {
-        "use_intercept": config.use_intercept,
-        "regularization": config.regularization,
-        "ridge_alpha": config.ridge_alpha,
-    }
-
-
 def single_target(frame: Frame) -> str:
     keys = frame.keys_by_role(ROLE_TARGET)
     if len(keys) != 1:
         raise OperatorError("上游没有指定唯一的目标列，请先接一个切分算子")
     return keys[0]
-
-
-def _is_finite(value: Any) -> bool:
-    if isinstance(value, bool) or not isinstance(value, (int, float)):
-        return False
-    return math.isfinite(float(value))
 
 
 def _split_config(config: OperatorConfig) -> SplitDatasetConfig:
@@ -369,212 +489,11 @@ def _split_config(config: OperatorConfig) -> SplitDatasetConfig:
     return config
 
 
-def _linear_config(config: OperatorConfig) -> LinearRegressionConfig:
-    # pragma 理由 —— 参数由注册表按算子造，型别不会错
-    if not isinstance(config, LinearRegressionConfig):  # pragma: no cover
-        raise OperatorError("线性回归拿到了不匹配的参数")
-    return config
-
-
 __all__ = [
     "SCORED_PRED",
+    "SCORED_PROBA",
     "SCORED_TRUE",
     "SPLIT_METHODS",
     "TASK_REGRESSION",
-    "LinearRegressionOperator",
     "SplitDataset",
 ]
-
-
-class LogisticRegressionConfig(OperatorConfig):
-    """逻辑回归的参数。"""
-
-    use_intercept: bool = Field(
-        default=True,
-        title="拟合截距",
-        description="关掉相当于强制过原点，一般不要关",
-    )
-    regularization_strength: float = Field(
-        default=1.0,
-        gt=0.0,
-        title="正则化强度的倒数",
-        description="越小罚得越狠；它就是 sklearn 那个 C",
-    )
-
-
-@register_operator
-class LogisticRegressionOperator(OperatorBase):
-    """二分类逻辑回归。拟合参数是纯数，可以直接上线（通道 A）。
-
-    ⚠ 目标列必须是**数值**的两类（比如 0 / 1）：切分算子只认数值目标列。
-    文本类目先用「类型归一」转成数值。
-    """
-
-    CODE = "logistic_regression"
-    NAME = "逻辑回归"
-    DESCRIPTION = "在训练集上拟合一个两类判别模型，并在测试集上打分"
-    CATEGORY = "model"
-    ICON = "chart-pie"
-    CONFIG_MODEL = LogisticRegressionConfig
-    INPUTS = (
-        PortSpec(name="train", contract=CONTRACT_FRAME, label="训练集"),
-        PortSpec(name="test", contract=CONTRACT_FRAME, label="测试集"),
-    )
-    OUTPUTS = (
-        PortSpec(name="model", contract=CONTRACT_MODEL, label="模型"),
-        PortSpec(
-            name="scored",
-            contract=CONTRACT_FRAME,
-            label="打分",
-            description="测试集上的真实类目与预测类目，供评估算子算指标",
-        ),
-    )
-    REQUIRES_FIT = True
-    SERVING_CHANNEL = "json"
-
-    def __init__(self, config: OperatorConfig) -> None:
-        super().__init__(config)
-        self._coef: dict[str, float] = {}
-        self._intercept = 0.0
-        self._classes: list[float] = []
-
-    @classmethod
-    def describe_columns(
-        cls, config: OperatorConfig, inputs: ColumnsByPort
-    ) -> ColumnsByPort:
-        """打分帧是新造的两列，与两个输入的列集无关。
-
-        Args: config, inputs。
-        """
-        del config, inputs
-        return {"scored": (SCORED_TRUE, SCORED_PRED)}
-
-    def run(self, inputs: dict[str, Any]) -> dict[str, Any]:
-        """在训练集上拟合，在测试集上打分。
-
-        Args: inputs。
-        """
-        train = frame_input(inputs, "train")
-        test = frame_input(inputs, "test")
-        feature_keys = train.keys_by_role(ROLE_FEATURE)
-        target_key = single_target(train)
-        if not feature_keys:
-            raise OperatorError("训练集里一个特征列都没有")
-        self._fit(train, feature_keys, target_key)
-        return {
-            "model": ModelPayload(
-                algo=self.CODE,
-                task=TASK_CLASSIFICATION,
-                feature_keys=feature_keys,
-                target_key=target_key,
-                hyper_params=_logit_hyper_params(_logit_config(self.config)),
-                fitted=self.dump_fitted() or {},
-                serving_channel=self.SERVING_CHANNEL,
-            ),
-            "scored": scored_frame(test, target_key, self.predict_rows(test)),
-        }
-
-    def predict_rows(self, frame: Frame) -> list[float]:
-        """按拟合参数给每一行判一个**类目**。
-
-        ⚠ 给的是类目不是概率：台账那一格与第三方接口拿到的都是「判成哪一类」。
-        概率想看的话在打分帧上另开一列，那是下一轮的事。
-        Args: frame。
-        """
-        if not self._coef:
-            raise OperatorError("模型还没有拟合参数")
-        keys = tuple(self._coef)
-        coef = [self._coef[key] for key in keys]
-        rows = matrix_of(frame, keys)
-        return [
-            self._classes[
-                (
-                    1
-                    if logistic_probability(coef, self._intercept, row)
-                    >= _DECISION_THRESHOLD
-                    else 0
-                )
-            ]
-            for row in rows
-        ]
-
-    def dump_fitted(self) -> dict[str, Any] | None:
-        """按列 key 建键的系数、截距与两个类目。"""
-        return {
-            "coef": dict(self._coef),
-            "intercept": self._intercept,
-            "classes": list(self._classes),
-        }
-
-    def load_fitted(self, params: dict[str, Any]) -> None:
-        """回灌系数、截距与类目。
-
-        Args: params。
-        """
-        self.validate_fitted(params)
-        coef = cast("dict[str, object]", params["coef"])
-        self._coef = {key: float(str(value)) for key, value in coef.items()}
-        self._intercept = float(params["intercept"])
-        self._classes = [
-            float(str(item)) for item in cast("list[object]", params["classes"])
-        ]
-
-    @classmethod
-    def validate_fitted(cls, params: dict[str, Any]) -> None:
-        """系数按列 key 建键、都是有限数，且恰好带两个类目。
-
-        Args: params。
-        """
-        raw: object = params.get("coef")
-        if not isinstance(raw, dict) or not raw:
-            raise OperatorError("模型缺少系数")
-        coef = cast("dict[object, object]", raw)
-        for key, value in coef.items():
-            if not isinstance(key, str):
-                raise OperatorError("系数必须按列 key 建键，不能按列下标")
-            if not _is_finite(value):
-                raise OperatorError(f"列「{key}」的系数不是有限数")
-        if not _is_finite(params.get("intercept")):
-            raise OperatorError("模型的截距不是有限数")
-        classes: object = params.get("classes")
-        if not isinstance(classes, list):
-            raise OperatorError("两类模型必须恰好带两个类目")
-        if len(cast("list[object]", classes)) != _TWO_CLASSES:
-            raise OperatorError("两类模型必须恰好带两个类目")
-
-    def _fit(
-        self, train: Frame, feature_keys: tuple[str, ...], target_key: str
-    ) -> None:
-        config = _logit_config(self.config)
-        target = numbers_of(train, target_key)
-        if any(value is None for value in target):
-            raise OperatorError("训练集的目标列里有空值，请先补一个填缺失")
-        estimator = BinaryLogit(
-            use_intercept=config.use_intercept,
-            regularization_strength=config.regularization_strength,
-        )
-        estimator.fit(
-            matrix_of(train, feature_keys),
-            [float(value or 0.0) for value in target],
-        )
-        self._coef = dict(zip(feature_keys, estimator.coef, strict=True))
-        self._intercept = estimator.intercept
-        self._classes = estimator.classes
-
-
-def _logit_config(config: OperatorConfig) -> LogisticRegressionConfig:
-    # pragma 理由 —— 参数由注册表按算子造，型别不会错
-    if not isinstance(config, LogisticRegressionConfig):  # pragma: no cover
-        raise OperatorError("逻辑回归拿到了不匹配的参数")
-    return config
-
-
-def _logit_hyper_params(config: LogisticRegressionConfig) -> dict[str, Any]:
-    """落进模型描述里的超参，界面上照它显示。
-
-    Args: config。
-    """
-    return {
-        "use_intercept": config.use_intercept,
-        "regularization_strength": config.regularization_strength,
-    }

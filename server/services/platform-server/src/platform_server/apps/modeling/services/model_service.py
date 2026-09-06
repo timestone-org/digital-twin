@@ -33,6 +33,7 @@ from platform_server.apps.modeling.schemas import (
     ModelVersionSummaryOut,
     ParamMapOut,
 )
+from platform_server.apps.modeling.schemas.graph import PipelineGraph
 from platform_server.apps.modeling.services import (
     artifact_io,
     artifact_store,
@@ -57,6 +58,12 @@ from platform_server.apps.modeling.services.publish_service import (
     model_artifact,
     require_publishable_run,
     require_version,
+)
+
+# 只有这两个算子的 metrics 是「这个模型好不好」；另外三个评估算子的端口也叫
+# metrics，取到它们会把残差统计量或折数冻成模型指标
+PUBLISHED_METRIC_OPERATORS = frozenset(
+    {"regression_metrics", "classification_metrics"}
 )
 
 
@@ -89,7 +96,7 @@ async def publish_version(
         verdict=_refused_if(
             inspect_run(graph, records, binary.estimator), binary.reason
         ),
-        metrics=_metrics_of(records),
+        metrics=_metrics_of(graph, records),
     )
     row = model_version_crud.add(session, _version_row(draft))
     if draft.verdict.is_servable and binary.meta:
@@ -351,15 +358,27 @@ async def _records_of(
     }
 
 
-def _metrics_of(records: dict[str, NodeRecord]) -> dict[str, Any]:
+def _metrics_of(
+    graph: PipelineGraph, records: dict[str, NodeRecord]
+) -> dict[str, Any]:
     """发布时冻结的指标。找不到评估节点时给空字典，不编数。
 
-    Args: records。
+    ⚠ 判据必须连**算子**一起看：五个评估算子的输出端口都叫 `metrics`，只认端口
+    的话，一条同时挂了回归评估与残差分析的图会把残差五统计量冻成模型指标，取到
+    哪一个还取决于字典迭代顺序（docs/MODELING_RESULT_VIEW_DESIGN.md R-19）。
+    ⚠ 按图上的节点序走，不按记录字典序：同一次运行两次发布要冻出同一份指标。
+    Args: graph, records。
     """
-    for record in records.values():
-        metrics = as_dict(record.preview.get("metrics"))
-        if metrics.get("kind") == "metrics":
-            return as_dict(metrics.get("metrics"))
+    for node in graph.nodes:
+        if node.operator not in PUBLISHED_METRIC_OPERATORS:
+            continue
+        record = records.get(node.id)
+        if record is None:
+            continue
+        preview = as_dict(record.preview.get("metrics"))
+        found = as_dict(preview.get("metrics"))
+        if found:
+            return found
     return {}
 
 
