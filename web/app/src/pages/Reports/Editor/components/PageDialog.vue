@@ -69,7 +69,7 @@ function save(): void {
     footer: footer.value,
     font_size_pt: Number(fontSize.value),
     is_toc_enabled: toc.value,
-    watermark: { text: watermark.value },
+    watermark: { ...props.page.watermark, text: watermark.value },
     margins_cm: {
       top: Number(margins.value.top),
       bottom: Number(margins.value.bottom),
@@ -91,6 +91,7 @@ function save(): void {
       <DtSelect
         v-model="size"
         label="纸张"
+        size="sm"
         :options="[
           { value: 'A4', label: 'A4' },
           { value: 'A3', label: 'A3' },
@@ -101,6 +102,7 @@ function save(): void {
       <DtSelect
         v-model="orientation"
         label="方向"
+        size="sm"
         :options="[
           { value: 'portrait', label: '纵向' },
           { value: 'landscape', label: '横向' },
@@ -112,16 +114,17 @@ function save(): void {
           :key="side.key"
           v-model="margins[side.key]"
           :label="`${side.label}边距（厘米）`"
+          size="sm"
         />
       </div>
-      <DtInput v-model="fontSize" label="正文字号（磅）" />
-      <DtInput v-model="header" label="页眉" />
-      <DtInput v-model="footer" label="页脚" />
-      <DtInput v-model="watermark" label="水印文字" />
+      <DtInput v-model="fontSize" label="正文字号（磅）" size="sm" />
+      <DtInput v-model="header" label="页眉" size="sm" />
+      <DtInput v-model="footer" label="页脚" size="sm" />
+      <DtInput v-model="watermark" label="水印文字" size="sm" />
       <DtCheckbox v-model="toc" label="生成目录" />
     </div>
     <template #footer>
-      <DtButton @click="save"> 应用 </DtButton>
+      <DtButton size="sm" icon="check" @click="save">应用</DtButton>
     </template>
   </DtModal>
 </template>

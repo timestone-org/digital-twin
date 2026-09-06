@@ -15,6 +15,19 @@ import NodeDialog from '@/pages/Reports/Editor/components/NodeDialog.vue'
 import { BizError } from '@/api/client'
 import { useAuthStore } from '@/stores/auth'
 
+vi.mock('@/pages/Reports/Editor/components/ReportEditor.vue', async () => {
+  const { defineComponent, h } = await import('vue')
+  return {
+    default: defineComponent({
+      name: 'ReportEditorStub',
+      setup(_, { expose }) {
+        expose({ insert: vi.fn() })
+        return () => h('div', '报告正文编辑器')
+      },
+    }),
+  }
+})
+
 vi.mock('vue-router', () => {
   const route = reactive({
     path: '/reports/templates/r1',

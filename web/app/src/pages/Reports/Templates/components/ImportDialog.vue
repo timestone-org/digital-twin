@@ -119,6 +119,7 @@ async function create(): Promise<void> {
         accept=".docx"
         :disabled="busy"
         label="选择 Word 文件"
+        size="sm"
         @select="select"
       />
       <p>
@@ -135,14 +136,16 @@ async function create(): Promise<void> {
         {{ warning }}
       </DtNotice>
       <template v-if="imported">
-        <DtInput v-model="name" label="报告名称" />
-        <DtInput v-model="code" label="模板编码" />
+        <DtInput v-model="name" label="报告名称" size="sm" />
+        <DtInput v-model="code" label="模板编码" size="sm" />
       </template>
     </div>
     <template #footer>
       <DtButton
         :disabled="!imported || !name || !code"
         :loading="busy"
+        size="sm"
+        icon="plus"
         @click="create"
       >
         使用导入内容创建模板

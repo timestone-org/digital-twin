@@ -69,6 +69,7 @@ describe('报告配置交互', () => {
           header: '页眉',
           footer: '页脚',
           orientation: 'landscape',
+          watermark: { text: '内部资料', font_size_pt: 18, rotation: -35 },
         },
       },
       global: { stubs: { teleport: true } },
@@ -84,6 +85,11 @@ describe('报告配置交互', () => {
         header: '页眉',
         footer: '页脚',
         margins_cm: expect.objectContaining({ left: 2, right: 2 }),
+        watermark: {
+          text: '内部资料',
+          font_size_pt: 18,
+          rotation: -35,
+        },
       }),
     )
     wrapper.unmount()

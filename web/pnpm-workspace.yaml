@@ -11,3 +11,5 @@ allowBuilds:
   # ⚠ @parcel/watcher 只是 sass-embedded 的文件监听后端，编不出原生模块时
   # 自动退回轮询。CI 不需要它，编译它反而多一段跑在安装期的任意代码。
   '@parcel/watcher': false
+  # Umo 间接依赖 core-js；它的安装脚本只打印兼容性/赞助信息，运行时不依赖该脚本。
+  core-js: false

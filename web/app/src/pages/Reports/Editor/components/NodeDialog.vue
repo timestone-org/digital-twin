@@ -67,29 +67,32 @@ function dataNode(selected: ReportMetric | undefined): ReportDocument | null {
     @update:model-value="emit('update:modelValue', $event)"
   >
     <div class="flex flex-col gap-3">
-      <DtSelect v-model="kind" label="节点类型" :options="kinds" />
+      <DtSelect v-model="kind" label="节点类型" size="sm" :options="kinds" />
       <DtInput
         v-if="kind === 'condText' || kind === 'metricRef'"
         v-model="expression"
         label="表达式"
+        size="sm"
         placeholder="IF({本期}>{上期}, '升高', '降低')"
       />
       <template v-else>
         <DtSelect
           v-model="metric"
           label="使用指标的数据来源"
+          size="sm"
           :options="metricOptions"
         />
-        <DtInput v-model="title" label="图表标题" />
+        <DtInput v-model="title" label="图表标题" size="sm" />
         <DtInput
           v-model="window"
           label="取数窗口"
+          size="sm"
           hint="留空使用整个报告期；例如 12mo"
         />
       </template>
     </div>
     <template #footer>
-      <DtButton @click="insert"> 插入正文 </DtButton>
+      <DtButton size="sm" icon="plus" @click="insert">插入正文</DtButton>
     </template>
   </DtModal>
 </template>

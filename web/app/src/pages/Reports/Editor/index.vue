@@ -13,15 +13,7 @@ import {
   onBeforeRouteLeave,
   onBeforeRouteUpdate,
 } from 'vue-router'
-import {
-  DtButton,
-  DtInput,
-  DtNotice,
-  DtSelect,
-  DtCheckbox,
-  useToast,
-  useConfirm,
-} from '@dt/ui'
+import { DtButton, DtInput, DtNotice, useToast, useConfirm } from '@dt/ui'
 import type {
   ReportBody,
   ReportDocument,
@@ -39,15 +31,15 @@ import MetricPanel from './components/MetricPanel.vue'
 import NodeDialog from './components/NodeDialog.vue'
 import PreviewPanel from './components/PreviewPanel.vue'
 import PageDialog from './components/PageDialog.vue'
+import TemplateSettingsCard from './components/TemplateSettingsCard.vue'
 import {
   blankReport,
   reportDraft,
   reportUpdate,
-  GRANULARITIES,
 } from '../scripts/reportDocument'
 
-const ReportEditor = defineAsyncComponent(
-  () => import('./components/ReportEditor.vue'),
+const ReportEditor = defineAsyncComponent(() =>
+  import('./components/ReportEditor.vue').then((module) => module.default),
 )
 const route = useRoute()
 const router = useRouter()
@@ -67,6 +59,7 @@ const trials = useRacedFetch()
 const saves = useRacedFetch()
 const confirm = useConfirm()
 const savedSnapshot = ref('')
+const LOADING_MESSAGE = '正在加载报告模板…'
 const isDirty = computed(
   () =>
     template.value !== null &&
@@ -110,15 +103,17 @@ onBeforeUnmount(() => {
   trials.cancel()
   saves.cancel()
 })
-async function save(): Promise<void> {
-  if (!template.value) return
+async function save(): Promise<boolean> {
+  if (!template.value) return false
   isBusy.value = true
+  let isSaved = false
   const payload = reportUpdate(draft.value, template.value.row_version)
   const snapshot = JSON.stringify(draft.value)
   await saves.run(() => api.saveReport(id.value, payload), {
     ok: (value) => {
       template.value = value
       savedSnapshot.value = snapshot
+      isSaved = true
       toast.success('模板已保存')
     },
     fail: (caught) => {
@@ -128,6 +123,7 @@ async function save(): Promise<void> {
       isBusy.value = false
     },
   })
+  return isSaved
 }
 async function trial(): Promise<void> {
   if (!template.value) return
@@ -159,15 +155,6 @@ async function generate(): Promise<void> {
     isBusy.value = false
   }
 }
-function setGranularity(value: string): void {
-  if (
-    value === 'day' ||
-    value === 'month' ||
-    value === 'quarter' ||
-    value === 'year'
-  )
-    draft.value.granularity = value
-}
 function insert(node: ReportDocument): void {
   editor.value?.insert(node)
 }
@@ -179,61 +166,78 @@ function insert(node: ReportDocument): void {
     subtitle="编辑后保存，再按报告期生成"
   >
     <template #actions>
-      <DtInput v-model="period" aria-label="报告期" placeholder="2026-08" />
+      <DtInput
+        v-model="period"
+        class="w-36"
+        size="sm"
+        aria-label="报告期"
+        placeholder="2026-08"
+      />
       <PermGuard :codes="['report:manage']">
         <DtButton
           :loading="isBusy"
           :disabled="!template"
           variant="ghost"
+          size="sm"
+          icon="activity"
           @click="trial"
         >
           试算
         </DtButton>
-        <DtButton :loading="isBusy" :disabled="!template" @click="save">
+        <DtButton
+          :loading="isBusy"
+          :disabled="!template"
+          size="sm"
+          icon="save"
+          @click="save"
+        >
           保存模板
         </DtButton>
       </PermGuard>
       <PermGuard :codes="['report:render']">
-        <DtButton :loading="isBusy" :disabled="!template" @click="generate">
+        <DtButton
+          :loading="isBusy"
+          :disabled="!template"
+          size="sm"
+          icon="play"
+          @click="generate"
+        >
           生成已保存模板
         </DtButton>
       </PermGuard>
     </template>
-    <div class="flex h-full min-h-0 flex-col gap-3">
-      <DtNotice v-if="!template && !error" intent="info"
-        >正在加载报告模板…</DtNotice
-      >
+    <div class="flex h-full min-h-0 flex-col gap-4">
+      <DtNotice v-if="!template && !error" intent="info">
+        {{ LOADING_MESSAGE }}
+      </DtNotice>
       <DtNotice v-if="error" intent="danger">
         {{ error }}
       </DtNotice>
       <div
         v-if="template"
-        class="grid min-h-0 flex-1 grid-cols-[minmax(0,1fr)_20rem] gap-4"
+        class="grid min-h-0 flex-1 grid-rows-[minmax(38rem,1fr)_auto] gap-4 overflow-y-auto xl:grid-cols-[minmax(0,1fr)_21rem] xl:grid-rows-1 xl:overflow-hidden"
       >
         <ReportEditor
           ref="editor"
           :model-value="draft.doc_json ?? { type: 'doc' }"
+          :page="draft.page_json ?? {}"
+          :title="draft.name"
           :disabled="!canEdit || isBusy"
+          :save-document="save"
           @update:model-value="draft.doc_json = $event"
+          @update:page="draft.page_json = $event"
         />
-        <aside class="flex min-h-0 flex-col gap-4 overflow-auto">
-          <DtInput
-            v-model="draft.name"
-            label="报告名称"
+        <aside class="flex min-h-0 flex-col gap-4 overflow-auto pr-1">
+          <TemplateSettingsCard
+            :name="draft.name"
+            :granularity="draft.granularity ?? 'month'"
+            :enabled="draft.is_enabled ?? true"
             :disabled="!canEdit || isBusy"
-          />
-          <DtSelect
-            :model-value="draft.granularity ?? 'month'"
-            label="报告周期"
-            :options="GRANULARITIES"
-            :disabled="!canEdit || isBusy"
-            @update:model-value="setGranularity"
-          />
-          <DtCheckbox
-            :model-value="draft.is_enabled ?? true"
-            label="启用模板"
-            :disabled="!canEdit || isBusy"
-            @update:model-value="draft.is_enabled = $event"
+            :can-edit="canEdit"
+            @update:name="draft.name = $event"
+            @update:granularity="draft.granularity = $event"
+            @update:enabled="draft.is_enabled = $event"
+            @open-page="isPageOpen = true"
           />
           <MetricPanel
             :model-value="draft.metrics ?? []"
@@ -246,11 +250,13 @@ function insert(node: ReportDocument): void {
               })
             "
           />
-          <DtButton v-if="canEdit" @click="isNodeOpen = true">
-            插入图表、表格或条件文本
-          </DtButton>
-          <DtButton v-if="canEdit" @click="isPageOpen = true">
-            页面设置
+          <DtButton
+            v-if="canEdit"
+            size="sm"
+            icon="plus"
+            @click="isNodeOpen = true"
+          >
+            插入数据内容
           </DtButton>
           <PreviewPanel v-if="preview" :preview="preview" />
         </aside>

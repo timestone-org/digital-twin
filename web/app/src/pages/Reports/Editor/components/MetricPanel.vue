@@ -1,7 +1,7 @@
 <script setup lang="ts">
 /** @fileoverview 指标配置与插入正文，绑定选择取自台账目录。 */
 import { computed, onBeforeUnmount, onMounted, ref, watch } from 'vue'
-import { DtButton, DtInput, DtNotice, DtSelect } from '@dt/ui'
+import { DtButton, DtCard, DtInput, DtNotice, DtSelect, DtTag } from '@dt/ui'
 import type {
   DatasetColumn,
   DatasetTableSummary,
@@ -104,55 +104,71 @@ function remove(name: string): void {
 }
 </script>
 <template>
-  <div class="flex flex-col gap-3">
-    <h3 class="font-semibold">指标</h3>
-    <div
-      v-for="metric in props.modelValue"
-      :key="metric.name"
-      class="flex items-center gap-2"
-    >
-      <span class="flex-1">
-        {{ metric.name }}
-      </span>
-      <DtButton
-        v-if="!disabled"
-        size="sm"
-        variant="ghost"
-        @click="emit('insert', `{${metric.name}}`)"
+  <DtCard title="报告指标" icon="activity" padding="sm">
+    <div class="flex flex-col gap-3">
+      <div
+        v-for="metric in props.modelValue"
+        :key="metric.name"
+        class="flex items-center gap-2"
       >
-        插入
-      </DtButton>
-      <DtButton
-        v-if="!disabled"
-        size="sm"
-        variant="ghost"
-        @click="remove(metric.name)"
-      >
-        移除
-      </DtButton>
-    </div>
-    <template v-if="!disabled">
-      <DtInput v-model="name" label="指标名称" />
-      <DtSelect v-model="mode" label="取数方式" :options="modes" />
-      <template v-if="mode !== 'expr'">
-        <DtSelect v-model="tableId" label="数据台账" :options="tableOptions" />
-        <DtSelect v-model="key" label="台账列" :options="columnOptions" />
+        <DtTag class="flex-1" intent="info">
+          {{ metric.name }}
+        </DtTag>
+        <DtButton
+          v-if="!disabled"
+          size="sm"
+          variant="ghost"
+          icon="plus"
+          @click="emit('insert', `{${metric.name}}`)"
+        >
+          插入
+        </DtButton>
+        <DtButton
+          v-if="!disabled"
+          size="sm"
+          variant="ghost"
+          intent="danger"
+          icon="trash"
+          @click="remove(metric.name)"
+        >
+          移除
+        </DtButton>
+      </div>
+      <template v-if="!disabled">
+        <DtInput v-model="name" label="指标名称" size="sm" />
+        <DtSelect v-model="mode" label="取数方式" size="sm" :options="modes" />
+        <template v-if="mode !== 'expr'">
+          <DtSelect
+            v-model="tableId"
+            label="数据台账"
+            size="sm"
+            :options="tableOptions"
+          />
+          <DtSelect
+            v-model="key"
+            label="台账列"
+            size="sm"
+            :options="columnOptions"
+          />
+          <DtInput
+            v-model="offset"
+            label="报告期偏移"
+            size="sm"
+            hint="0 为本期，-1 为上期"
+          />
+        </template>
         <DtInput
-          v-model="offset"
-          label="报告期偏移"
-          hint="0 为本期，-1 为上期"
+          v-else
+          v-model="expression"
+          label="指标表达式"
+          size="sm"
+          placeholder="({本期}-{上期})/{上期}*100"
         />
+        <DtNotice v-if="error" intent="danger">
+          {{ error }}
+        </DtNotice>
+        <DtButton size="sm" icon="plus" @click="add">添加指标</DtButton>
       </template>
-      <DtInput
-        v-else
-        v-model="expression"
-        label="指标表达式"
-        placeholder="({本期}-{上期})/{上期}*100"
-      />
-      <DtNotice v-if="error" intent="danger">
-        {{ error }}
-      </DtNotice>
-      <DtButton @click="add"> 添加指标 </DtButton>
-    </template>
-  </div>
+    </div>
+  </DtCard>
 </template>

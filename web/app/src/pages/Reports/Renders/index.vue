@@ -2,7 +2,7 @@
 /** @fileoverview 生成记录、状态轮询、产物下载与警告。 */
 import { computed, onBeforeUnmount, onMounted, ref } from 'vue'
 import { RouterLink } from 'vue-router'
-import { DtButton, DtDataView, DtModal, DtNotice } from '@dt/ui'
+import { DtButton, DtDataView, DtModal, DtNotice, DtTag } from '@dt/ui'
 import type { DtDataColumn, ReportRender } from '@dt/contracts'
 import * as api from '@/api/reports'
 import { AppShell } from '@/components/layout'
@@ -12,7 +12,7 @@ import { describeError } from '@/composables/useAsyncList'
 import { useViewMode } from '@/composables/useViewMode'
 import { downloadBytes } from '@/utils/downloadJson'
 
-const columns: readonly DtDataColumn[] = [
+const COLUMNS: readonly DtDataColumn[] = [
   { key: 'period', label: '报告期', card: 'title' },
   { key: 'status', label: '状态' },
   { key: 'warnings', label: '提示' },
@@ -84,35 +84,61 @@ async function download(id: string): Promise<void> {
   >
     <template #actions>
       <RouterLink to="/reports">
-        <DtButton variant="ghost"> 报告模板 </DtButton>
+        <DtButton variant="ghost" size="sm" icon="table">报告模板</DtButton>
       </RouterLink>
-      <DtButton @click="reload()"> 刷新 </DtButton>
+      <DtButton
+        size="sm"
+        icon="refresh-cw"
+        :loading="loading"
+        @click="reload()"
+      >
+        刷新
+      </DtButton>
     </template>
     <div class="flex h-full min-h-0 flex-col gap-3">
       <DtDataView
         v-model:view="view"
         class="min-h-0 flex-1"
-        :columns="columns"
+        :columns="COLUMNS"
         :rows="rows"
         :loading="loading"
         :error="error"
+        :empty="{
+          title: '还没有生成记录',
+          hint: '从报告编辑页选择报告期并生成后，任务状态与 Word 产物会显示在这里。',
+        }"
       >
         <template #cell-period="{ row }">{{
           row.kind === 'import' ? 'Word 导入' : row.period
         }}</template>
         <template #cell-status="{ row }">
-          {{ labels[row.status] }}
+          <DtTag
+            :intent="
+              row.status === 'succeeded'
+                ? 'success'
+                : row.status === 'failed'
+                  ? 'danger'
+                  : 'info'
+            "
+          >
+            {{ labels[row.status] }}
+          </DtTag>
         </template>
         <template #cell-warnings="{ row }">
-          <DtButton variant="ghost" size="sm" @click="selected = row">{{
-            row.error || `${row.warnings.length} 条提示`
-          }}</DtButton>
+          <DtButton
+            variant="ghost"
+            size="sm"
+            icon="activity"
+            @click="selected = row"
+            >{{ row.error || `${row.warnings.length} 条提示` }}</DtButton
+          >
         </template>
         <template #cell-actions="{ row }">
           <PermGuard :codes="['report:render']">
             <DtButton
               v-if="row.status === 'succeeded' && row.kind === 'render'"
               size="sm"
+              icon="download"
               @click="download(row.id)"
             >
               下载 Word
@@ -121,10 +147,19 @@ async function download(id: string): Promise<void> {
         </template>
       </DtDataView>
       <div class="flex gap-2">
-        <DtButton variant="ghost" :disabled="!current" @click="latest">
+        <DtButton
+          size="sm"
+          variant="ghost"
+          :disabled="!current"
+          @click="latest"
+        >
           最新记录
         </DtButton>
-        <DtButton :disabled="!next" @click="reload(next ?? undefined)">
+        <DtButton
+          size="sm"
+          :disabled="!next"
+          @click="reload(next ?? undefined)"
+        >
           下一页
         </DtButton>
       </div>
