@@ -327,6 +327,8 @@ jobs:
         with:
           fetch-depth: 0
       - uses: ./.github/actions/setup-server
+      - name: 报告位图测试的中文字体
+        run: sudo apt-get update && sudo apt-get install -y --no-install-recommends fonts-noto-cjk
 
       # ⚠ 端口通了不等于能用了：GitHub 的服务容器有 health-cmd 守着，act 没有
       - name: 等依赖就绪
@@ -565,6 +567,9 @@ jobs:
           fetch-depth: 0
       - uses: ./.github/actions/setup-web
       - uses: ./.github/actions/setup-server
+
+      - name: 报告生成类型与 OpenAPI 一致
+        run: uv run --project server python server/services/platform-server/scripts/export_report_types.py --check
 
       # 阈值写在 vitest.config.ts 里，本地与 CI 同一份口径
       - name: 单元 + 组件 + 契约（含覆盖率阈值）

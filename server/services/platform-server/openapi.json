@@ -1350,6 +1350,51 @@
         "title": "ApiResponse[CursorPage[RecordOut]]",
         "type": "object"
       },
+      "ApiResponse_CursorPage_RenderOut__": {
+        "properties": {
+          "code": {
+            "default": 0,
+            "title": "Code",
+            "type": "integer"
+          },
+          "data": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/CursorPage_RenderOut_"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "details": {
+            "anyOf": [
+              {
+                "items": {
+                  "$ref": "#/components/schemas/FieldErrorOut"
+                },
+                "type": "array"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Details"
+          },
+          "message": {
+            "default": "ok",
+            "title": "Message",
+            "type": "string"
+          },
+          "trace_id": {
+            "default": "",
+            "title": "Trace Id",
+            "type": "string"
+          }
+        },
+        "title": "ApiResponse[CursorPage[RenderOut]]",
+        "type": "object"
+      },
       "ApiResponse_CursorPage_StartupEpisodeOut__": {
         "properties": {
           "code": {
@@ -1888,6 +1933,51 @@
           }
         },
         "title": "ApiResponse[GraphCheckOut]",
+        "type": "object"
+      },
+      "ApiResponse_ImportTicketOut_": {
+        "properties": {
+          "code": {
+            "default": 0,
+            "title": "Code",
+            "type": "integer"
+          },
+          "data": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/ImportTicketOut"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "details": {
+            "anyOf": [
+              {
+                "items": {
+                  "$ref": "#/components/schemas/FieldErrorOut"
+                },
+                "type": "array"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Details"
+          },
+          "message": {
+            "default": "ok",
+            "title": "Message",
+            "type": "string"
+          },
+          "trace_id": {
+            "default": "",
+            "title": "Trace Id",
+            "type": "string"
+          }
+        },
+        "title": "ApiResponse[ImportTicketOut]",
         "type": "object"
       },
       "ApiResponse_LatestOut_": {
@@ -3285,6 +3375,51 @@
         "title": "ApiResponse[Page[ProjectOut]]",
         "type": "object"
       },
+      "ApiResponse_Page_ReportTemplateSummaryOut__": {
+        "properties": {
+          "code": {
+            "default": 0,
+            "title": "Code",
+            "type": "integer"
+          },
+          "data": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/Page_ReportTemplateSummaryOut_"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "details": {
+            "anyOf": [
+              {
+                "items": {
+                  "$ref": "#/components/schemas/FieldErrorOut"
+                },
+                "type": "array"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Details"
+          },
+          "message": {
+            "default": "ok",
+            "title": "Message",
+            "type": "string"
+          },
+          "trace_id": {
+            "default": "",
+            "title": "Trace Id",
+            "type": "string"
+          }
+        },
+        "title": "ApiResponse[Page[ReportTemplateSummaryOut]]",
+        "type": "object"
+      },
       "ApiResponse_Page_RoomOut__": {
         "properties": {
           "code": {
@@ -3373,6 +3508,51 @@
           }
         },
         "title": "ApiResponse[Page[RunSummaryOut]]",
+        "type": "object"
+      },
+      "ApiResponse_Page_ScheduleOut__": {
+        "properties": {
+          "code": {
+            "default": 0,
+            "title": "Code",
+            "type": "integer"
+          },
+          "data": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/Page_ScheduleOut_"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "details": {
+            "anyOf": [
+              {
+                "items": {
+                  "$ref": "#/components/schemas/FieldErrorOut"
+                },
+                "type": "array"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Details"
+          },
+          "message": {
+            "default": "ok",
+            "title": "Message",
+            "type": "string"
+          },
+          "trace_id": {
+            "default": "",
+            "title": "Trace Id",
+            "type": "string"
+          }
+        },
+        "title": "ApiResponse[Page[ScheduleOut]]",
         "type": "object"
       },
       "ApiResponse_Page_SourceOut__": {
@@ -3733,6 +3913,51 @@
           }
         },
         "title": "ApiResponse[PredictOut]",
+        "type": "object"
+      },
+      "ApiResponse_PreviewOut_": {
+        "properties": {
+          "code": {
+            "default": 0,
+            "title": "Code",
+            "type": "integer"
+          },
+          "data": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/PreviewOut"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "details": {
+            "anyOf": [
+              {
+                "items": {
+                  "$ref": "#/components/schemas/FieldErrorOut"
+                },
+                "type": "array"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Details"
+          },
+          "message": {
+            "default": "ok",
+            "title": "Message",
+            "type": "string"
+          },
+          "trace_id": {
+            "default": "",
+            "title": "Trace Id",
+            "type": "string"
+          }
+        },
+        "title": "ApiResponse[PreviewOut]",
         "type": "object"
       },
       "ApiResponse_ProjectOut_": {
@@ -4140,6 +4365,186 @@
         "title": "ApiResponse[RecordWriteOut]",
         "type": "object"
       },
+      "ApiResponse_RenderDetailOut_": {
+        "properties": {
+          "code": {
+            "default": 0,
+            "title": "Code",
+            "type": "integer"
+          },
+          "data": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/RenderDetailOut"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "details": {
+            "anyOf": [
+              {
+                "items": {
+                  "$ref": "#/components/schemas/FieldErrorOut"
+                },
+                "type": "array"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Details"
+          },
+          "message": {
+            "default": "ok",
+            "title": "Message",
+            "type": "string"
+          },
+          "trace_id": {
+            "default": "",
+            "title": "Trace Id",
+            "type": "string"
+          }
+        },
+        "title": "ApiResponse[RenderDetailOut]",
+        "type": "object"
+      },
+      "ApiResponse_RenderOut_": {
+        "properties": {
+          "code": {
+            "default": 0,
+            "title": "Code",
+            "type": "integer"
+          },
+          "data": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/RenderOut"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "details": {
+            "anyOf": [
+              {
+                "items": {
+                  "$ref": "#/components/schemas/FieldErrorOut"
+                },
+                "type": "array"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Details"
+          },
+          "message": {
+            "default": "ok",
+            "title": "Message",
+            "type": "string"
+          },
+          "trace_id": {
+            "default": "",
+            "title": "Trace Id",
+            "type": "string"
+          }
+        },
+        "title": "ApiResponse[RenderOut]",
+        "type": "object"
+      },
+      "ApiResponse_ReportRuntimeOut_": {
+        "properties": {
+          "code": {
+            "default": 0,
+            "title": "Code",
+            "type": "integer"
+          },
+          "data": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/ReportRuntimeOut"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "details": {
+            "anyOf": [
+              {
+                "items": {
+                  "$ref": "#/components/schemas/FieldErrorOut"
+                },
+                "type": "array"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Details"
+          },
+          "message": {
+            "default": "ok",
+            "title": "Message",
+            "type": "string"
+          },
+          "trace_id": {
+            "default": "",
+            "title": "Trace Id",
+            "type": "string"
+          }
+        },
+        "title": "ApiResponse[ReportRuntimeOut]",
+        "type": "object"
+      },
+      "ApiResponse_ReportTemplateOut_": {
+        "properties": {
+          "code": {
+            "default": 0,
+            "title": "Code",
+            "type": "integer"
+          },
+          "data": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/ReportTemplateOut"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "details": {
+            "anyOf": [
+              {
+                "items": {
+                  "$ref": "#/components/schemas/FieldErrorOut"
+                },
+                "type": "array"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Details"
+          },
+          "message": {
+            "default": "ok",
+            "title": "Message",
+            "type": "string"
+          },
+          "trace_id": {
+            "default": "",
+            "title": "Trace Id",
+            "type": "string"
+          }
+        },
+        "title": "ApiResponse[ReportTemplateOut]",
+        "type": "object"
+      },
       "ApiResponse_RoomOut_": {
         "properties": {
           "code": {
@@ -4228,6 +4633,51 @@
           }
         },
         "title": "ApiResponse[RunOut]",
+        "type": "object"
+      },
+      "ApiResponse_ScheduleOut_": {
+        "properties": {
+          "code": {
+            "default": 0,
+            "title": "Code",
+            "type": "integer"
+          },
+          "data": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/ScheduleOut"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "details": {
+            "anyOf": [
+              {
+                "items": {
+                  "$ref": "#/components/schemas/FieldErrorOut"
+                },
+                "type": "array"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Details"
+          },
+          "message": {
+            "default": "ok",
+            "title": "Message",
+            "type": "string"
+          },
+          "trace_id": {
+            "default": "",
+            "title": "Trace Id",
+            "type": "string"
+          }
+        },
+        "title": "ApiResponse[ScheduleOut]",
         "type": "object"
       },
       "ApiResponse_SeriesOut_": {
@@ -4768,6 +5218,51 @@
           }
         },
         "title": "ApiResponse[UploadTicketOut]",
+        "type": "object"
+      },
+      "ApiResponse_ValidationOut_": {
+        "properties": {
+          "code": {
+            "default": 0,
+            "title": "Code",
+            "type": "integer"
+          },
+          "data": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/ValidationOut"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "details": {
+            "anyOf": [
+              {
+                "items": {
+                  "$ref": "#/components/schemas/FieldErrorOut"
+                },
+                "type": "array"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Details"
+          },
+          "message": {
+            "default": "ok",
+            "title": "Message",
+            "type": "string"
+          },
+          "trace_id": {
+            "default": "",
+            "title": "Trace Id",
+            "type": "string"
+          }
+        },
+        "title": "ApiResponse[ValidationOut]",
         "type": "object"
       },
       "ApiResponse_ValidationReportOut_": {
@@ -6675,6 +7170,28 @@
         "title": "CatalogTypeDocOut",
         "type": "object"
       },
+      "ChartSeries": {
+        "description": "具名图表序列。",
+        "properties": {
+          "name": {
+            "title": "Name",
+            "type": "string"
+          },
+          "points": {
+            "items": {
+              "$ref": "#/components/schemas/SeriesPoint"
+            },
+            "title": "Points",
+            "type": "array"
+          }
+        },
+        "required": [
+          "name",
+          "points"
+        ],
+        "title": "ChartSeries",
+        "type": "object"
+      },
       "ChromeKeyOut": {
         "description": "卡片外壳词汇表里的一个键。\n\n⚠ 这批键**不在任何模块的 `config_schema` 里**：它们住在模块配置的\n`__cardStyle` 段与大屏级 `chrome_json.card` 两处，对所有模块通用。铁律是\n「键不存在 = 未设置」，故 `values` 里不含「缺省档」——那一档是删键，\n不是一个可写的值。",
         "properties": {
@@ -7602,6 +8119,39 @@
         "title": "CursorPage[RecordOut]",
         "type": "object"
       },
+      "CursorPage_RenderOut_": {
+        "properties": {
+          "has_more": {
+            "title": "Has More",
+            "type": "boolean"
+          },
+          "items": {
+            "items": {
+              "$ref": "#/components/schemas/RenderOut"
+            },
+            "title": "Items",
+            "type": "array"
+          },
+          "next": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Next"
+          }
+        },
+        "required": [
+          "items",
+          "next",
+          "has_more"
+        ],
+        "title": "CursorPage[RenderOut]",
+        "type": "object"
+      },
       "CursorPage_StartupEpisodeOut_": {
         "properties": {
           "has_more": {
@@ -8357,6 +8907,82 @@
           "items"
         ],
         "title": "DatasetsOut",
+        "type": "object"
+      },
+      "DocumentMark": {
+        "additionalProperties": false,
+        "description": "富文本标记。",
+        "properties": {
+          "attrs": {
+            "additionalProperties": {
+              "$ref": "#/components/schemas/JsonValue"
+            },
+            "title": "Attrs",
+            "type": "object"
+          },
+          "type": {
+            "maxLength": 64,
+            "minLength": 1,
+            "title": "Type",
+            "type": "string"
+          }
+        },
+        "required": [
+          "type"
+        ],
+        "title": "DocumentMark",
+        "type": "object"
+      },
+      "DocumentNode": {
+        "additionalProperties": false,
+        "description": "编辑器节点。",
+        "properties": {
+          "attrs": {
+            "additionalProperties": {
+              "$ref": "#/components/schemas/JsonValue"
+            },
+            "title": "Attrs",
+            "type": "object"
+          },
+          "content": {
+            "items": {
+              "$ref": "#/components/schemas/DocumentNode"
+            },
+            "maxItems": 2000,
+            "title": "Content",
+            "type": "array"
+          },
+          "marks": {
+            "items": {
+              "$ref": "#/components/schemas/DocumentMark"
+            },
+            "maxItems": 20,
+            "title": "Marks",
+            "type": "array"
+          },
+          "text": {
+            "anyOf": [
+              {
+                "maxLength": 100000,
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Text"
+          },
+          "type": {
+            "maxLength": 64,
+            "minLength": 1,
+            "title": "Type",
+            "type": "string"
+          }
+        },
+        "required": [
+          "type"
+        ],
+        "title": "DocumentNode",
         "type": "object"
       },
       "DuplicateDashboardIn": {
@@ -9752,6 +10378,93 @@
         "title": "HistoryPointOut",
         "type": "object"
       },
+      "ImportResultOut": {
+        "description": "Word 导入结果及丢失清单。",
+        "properties": {
+          "doc_json": {
+            "$ref": "#/components/schemas/DocumentNode"
+          },
+          "dropped": {
+            "items": {
+              "type": "string"
+            },
+            "title": "Dropped",
+            "type": "array"
+          },
+          "page_json": {
+            "$ref": "#/components/schemas/PageSettings"
+          }
+        },
+        "required": [
+          "doc_json",
+          "page_json",
+          "dropped"
+        ],
+        "title": "ImportResultOut",
+        "type": "object"
+      },
+      "ImportStartIn": {
+        "additionalProperties": false,
+        "description": "已上传原件的身份。",
+        "properties": {
+          "object_key": {
+            "maxLength": 256,
+            "minLength": 1,
+            "title": "Object Key",
+            "type": "string"
+          }
+        },
+        "required": [
+          "object_key"
+        ],
+        "title": "ImportStartIn",
+        "type": "object"
+      },
+      "ImportTicketIn": {
+        "additionalProperties": false,
+        "description": "Word 直传的大小声明。",
+        "properties": {
+          "size_bytes": {
+            "maximum": 10485760.0,
+            "minimum": 1.0,
+            "title": "Size Bytes",
+            "type": "integer"
+          }
+        },
+        "required": [
+          "size_bytes"
+        ],
+        "title": "ImportTicketIn",
+        "type": "object"
+      },
+      "ImportTicketOut": {
+        "description": "对象存储直传凭证。",
+        "properties": {
+          "fields": {
+            "additionalProperties": {
+              "type": "string"
+            },
+            "title": "Fields",
+            "type": "object"
+          },
+          "object_key": {
+            "title": "Object Key",
+            "type": "string"
+          },
+          "url": {
+            "title": "Url",
+            "type": "string"
+          }
+        },
+        "required": [
+          "url",
+          "fields",
+          "object_key"
+        ],
+        "title": "ImportTicketOut",
+        "type": "object"
+      },
+      "JsonValue": {},
       "LatestOut": {
         "description": "最后一行的值。大屏实时取数就读它。",
         "properties": {
@@ -10907,6 +11620,162 @@
         "title": "LlmRerankDialectOut",
         "type": "object"
       },
+      "Margins": {
+        "additionalProperties": false,
+        "description": "纸张边距，单位厘米。",
+        "properties": {
+          "bottom": {
+            "default": 2.54,
+            "maximum": 10.0,
+            "minimum": 0.0,
+            "title": "Bottom",
+            "type": "number"
+          },
+          "left": {
+            "default": 3.18,
+            "maximum": 10.0,
+            "minimum": 0.0,
+            "title": "Left",
+            "type": "number"
+          },
+          "right": {
+            "default": 3.18,
+            "maximum": 10.0,
+            "minimum": 0.0,
+            "title": "Right",
+            "type": "number"
+          },
+          "top": {
+            "default": 2.54,
+            "maximum": 10.0,
+            "minimum": 0.0,
+            "title": "Top",
+            "type": "number"
+          }
+        },
+        "title": "Margins",
+        "type": "object"
+      },
+      "MetricDef": {
+        "additionalProperties": false,
+        "description": "具名取数口径或派生表达式。",
+        "properties": {
+          "agg": {
+            "default": "avg",
+            "enum": [
+              "avg",
+              "min",
+              "max",
+              "last",
+              "first",
+              "sum",
+              "count",
+              "delta"
+            ],
+            "title": "Agg",
+            "type": "string"
+          },
+          "anchor": {
+            "default": "period",
+            "enum": [
+              "period",
+              "latest"
+            ],
+            "title": "Anchor",
+            "type": "string"
+          },
+          "expr": {
+            "anyOf": [
+              {
+                "maxLength": 2000,
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Expr"
+          },
+          "key": {
+            "anyOf": [
+              {
+                "maxLength": 64,
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Key"
+          },
+          "mode": {
+            "default": "window_agg",
+            "enum": [
+              "latest",
+              "at_bucket",
+              "window_agg",
+              "expr"
+            ],
+            "title": "Mode",
+            "type": "string"
+          },
+          "name": {
+            "maxLength": 64,
+            "minLength": 1,
+            "pattern": "^[^{}\\s][^{}]*$",
+            "title": "Name",
+            "type": "string"
+          },
+          "offset": {
+            "default": 0,
+            "maximum": 120.0,
+            "minimum": -120.0,
+            "title": "Offset",
+            "type": "integer"
+          },
+          "table": {
+            "anyOf": [
+              {
+                "maxLength": 64,
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Table"
+          },
+          "unit": {
+            "anyOf": [
+              {
+                "maxLength": 32,
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Unit"
+          },
+          "window": {
+            "anyOf": [
+              {
+                "maxLength": 16,
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Window"
+          }
+        },
+        "required": [
+          "name"
+        ],
+        "title": "MetricDef",
+        "type": "object"
+      },
       "MetricLimitIn": {
         "additionalProperties": false,
         "description": "一个指标的达标范围。两端都省略等同于不配置该指标。",
@@ -11055,6 +11924,91 @@
           "is_charted_by_default"
         ],
         "title": "MetricOut",
+        "type": "object"
+      },
+      "MetricValue": {
+        "description": "指标结果及实际取数窗口。",
+        "properties": {
+          "error": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Error"
+          },
+          "is_stale": {
+            "default": false,
+            "title": "Is Stale",
+            "type": "boolean"
+          },
+          "is_truncated": {
+            "default": false,
+            "title": "Is Truncated",
+            "type": "boolean"
+          },
+          "name": {
+            "title": "Name",
+            "type": "string"
+          },
+          "since": {
+            "anyOf": [
+              {
+                "format": "date-time",
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Since"
+          },
+          "until": {
+            "anyOf": [
+              {
+                "format": "date-time",
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Until"
+          },
+          "value": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "boolean"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Value"
+          },
+          "value_kind": {
+            "default": "empty",
+            "enum": [
+              "number",
+              "text",
+              "boolean",
+              "empty"
+            ],
+            "title": "Value Kind",
+            "type": "string"
+          }
+        },
+        "required": [
+          "name",
+          "value"
+        ],
+        "title": "MetricValue",
         "type": "object"
       },
       "MetricsBlockOut": {
@@ -13236,6 +14190,64 @@
         "title": "NodeUpdateIn",
         "type": "object"
       },
+      "NodeValue": {
+        "description": "业务节点的展示结果。",
+        "properties": {
+          "columns": {
+            "items": {
+              "type": "string"
+            },
+            "title": "Columns",
+            "type": "array"
+          },
+          "is_stale": {
+            "default": false,
+            "title": "Is Stale",
+            "type": "boolean"
+          },
+          "is_truncated": {
+            "default": false,
+            "title": "Is Truncated",
+            "type": "boolean"
+          },
+          "kind": {
+            "title": "Kind",
+            "type": "string"
+          },
+          "rows": {
+            "items": {
+              "items": {
+                "type": "string"
+              },
+              "type": "array"
+            },
+            "title": "Rows",
+            "type": "array"
+          },
+          "series": {
+            "items": {
+              "$ref": "#/components/schemas/ChartSeries"
+            },
+            "title": "Series",
+            "type": "array"
+          },
+          "text": {
+            "default": "",
+            "title": "Text",
+            "type": "string"
+          },
+          "title": {
+            "default": "",
+            "title": "Title",
+            "type": "string"
+          }
+        },
+        "required": [
+          "kind"
+        ],
+        "title": "NodeValue",
+        "type": "object"
+      },
       "OpenModelInfoOut": {
         "description": "算这一次的是哪个模型。",
         "properties": {
@@ -13658,6 +14670,99 @@
         "title": "OverrideWriteOut",
         "type": "object"
       },
+      "PageSettings": {
+        "additionalProperties": false,
+        "description": "Word 页面设置。",
+        "properties": {
+          "font_family": {
+            "default": "宋体",
+            "maxLength": 128,
+            "minLength": 1,
+            "title": "Font Family",
+            "type": "string"
+          },
+          "font_size_pt": {
+            "default": 12,
+            "maximum": 72.0,
+            "minimum": 6.0,
+            "title": "Font Size Pt",
+            "type": "number"
+          },
+          "footer": {
+            "default": "",
+            "maxLength": 1000,
+            "title": "Footer",
+            "type": "string"
+          },
+          "header": {
+            "default": "",
+            "maxLength": 1000,
+            "title": "Header",
+            "type": "string"
+          },
+          "height_cm": {
+            "default": 29.7,
+            "maximum": 60.0,
+            "minimum": 5.0,
+            "title": "Height Cm",
+            "type": "number"
+          },
+          "is_toc_enabled": {
+            "default": false,
+            "title": "Is Toc Enabled",
+            "type": "boolean"
+          },
+          "margins_cm": {
+            "$ref": "#/components/schemas/Margins",
+            "default": {
+              "bottom": 2.54,
+              "left": 3.18,
+              "right": 3.18,
+              "top": 2.54
+            }
+          },
+          "orientation": {
+            "default": "portrait",
+            "enum": [
+              "portrait",
+              "landscape"
+            ],
+            "title": "Orientation",
+            "type": "string"
+          },
+          "size": {
+            "default": "A4",
+            "enum": [
+              "A4",
+              "A3",
+              "Letter",
+              "Legal",
+              "custom"
+            ],
+            "title": "Size",
+            "type": "string"
+          },
+          "watermark": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/Watermark"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "width_cm": {
+            "default": 21,
+            "maximum": 60.0,
+            "minimum": 5.0,
+            "title": "Width Cm",
+            "type": "number"
+          }
+        },
+        "title": "PageSettings",
+        "type": "object"
+      },
       "Page_AcUnitOut_": {
         "properties": {
           "items": {
@@ -13906,6 +15011,37 @@
         "title": "Page[ProjectOut]",
         "type": "object"
       },
+      "Page_ReportTemplateSummaryOut_": {
+        "properties": {
+          "items": {
+            "items": {
+              "$ref": "#/components/schemas/ReportTemplateSummaryOut"
+            },
+            "title": "Items",
+            "type": "array"
+          },
+          "page": {
+            "title": "Page",
+            "type": "integer"
+          },
+          "size": {
+            "title": "Size",
+            "type": "integer"
+          },
+          "total": {
+            "title": "Total",
+            "type": "integer"
+          }
+        },
+        "required": [
+          "items",
+          "page",
+          "size",
+          "total"
+        ],
+        "title": "Page[ReportTemplateSummaryOut]",
+        "type": "object"
+      },
       "Page_RoomOut_": {
         "properties": {
           "items": {
@@ -13966,6 +15102,37 @@
           "total"
         ],
         "title": "Page[RunSummaryOut]",
+        "type": "object"
+      },
+      "Page_ScheduleOut_": {
+        "properties": {
+          "items": {
+            "items": {
+              "$ref": "#/components/schemas/ScheduleOut"
+            },
+            "title": "Items",
+            "type": "array"
+          },
+          "page": {
+            "title": "Page",
+            "type": "integer"
+          },
+          "size": {
+            "title": "Size",
+            "type": "integer"
+          },
+          "total": {
+            "title": "Total",
+            "type": "integer"
+          }
+        },
+        "required": [
+          "items",
+          "page",
+          "size",
+          "total"
+        ],
+        "title": "Page[ScheduleOut]",
         "type": "object"
       },
       "Page_SourceOut_": {
@@ -15035,6 +16202,98 @@
           "size_bytes"
         ],
         "title": "PresignUploadIn",
+        "type": "object"
+      },
+      "PreviewIn": {
+        "additionalProperties": false,
+        "description": "已保存或未保存模板的试算参数。",
+        "properties": {
+          "draft": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/TemplateBody"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "granularity": {
+            "anyOf": [
+              {
+                "enum": [
+                  "day",
+                  "month",
+                  "quarter",
+                  "year"
+                ],
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Granularity"
+          },
+          "period": {
+            "maxLength": 16,
+            "minLength": 1,
+            "title": "Period",
+            "type": "string"
+          }
+        },
+        "required": [
+          "period"
+        ],
+        "title": "PreviewIn",
+        "type": "object"
+      },
+      "PreviewOut": {
+        "description": "模板试算全貌。",
+        "properties": {
+          "is_valid": {
+            "title": "Is Valid",
+            "type": "boolean"
+          },
+          "metrics": {
+            "items": {
+              "$ref": "#/components/schemas/MetricValue"
+            },
+            "title": "Metrics",
+            "type": "array"
+          },
+          "nodes": {
+            "additionalProperties": {
+              "$ref": "#/components/schemas/NodeValue"
+            },
+            "title": "Nodes",
+            "type": "object"
+          },
+          "period": {
+            "title": "Period",
+            "type": "string"
+          },
+          "timezone": {
+            "title": "Timezone",
+            "type": "string"
+          },
+          "warnings": {
+            "items": {
+              "type": "string"
+            },
+            "title": "Warnings",
+            "type": "array"
+          }
+        },
+        "required": [
+          "is_valid",
+          "period",
+          "timezone",
+          "metrics",
+          "nodes",
+          "warnings"
+        ],
+        "title": "PreviewOut",
         "type": "object"
       },
       "ProjectCreateIn": {
@@ -16361,6 +17620,334 @@
         "title": "RecordWriteOut",
         "type": "object"
       },
+      "RenderCreateIn": {
+        "additionalProperties": false,
+        "description": "提交一次生成。",
+        "properties": {
+          "granularity": {
+            "anyOf": [
+              {
+                "enum": [
+                  "day",
+                  "month",
+                  "quarter",
+                  "year"
+                ],
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Granularity"
+          },
+          "period": {
+            "maxLength": 16,
+            "minLength": 1,
+            "title": "Period",
+            "type": "string"
+          },
+          "template_id": {
+            "format": "uuid",
+            "title": "Template Id",
+            "type": "string"
+          }
+        },
+        "required": [
+          "template_id",
+          "period"
+        ],
+        "title": "RenderCreateIn",
+        "type": "object"
+      },
+      "RenderDetailOut": {
+        "description": "已完成任务的试算快照或导入结果。",
+        "properties": {
+          "created_at": {
+            "format": "date-time",
+            "title": "Created At",
+            "type": "string"
+          },
+          "error": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Error"
+          },
+          "finished_at": {
+            "anyOf": [
+              {
+                "format": "date-time",
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Finished At"
+          },
+          "granularity": {
+            "enum": [
+              "day",
+              "month",
+              "quarter",
+              "year"
+            ],
+            "title": "Granularity",
+            "type": "string"
+          },
+          "id": {
+            "format": "uuid",
+            "title": "Id",
+            "type": "string"
+          },
+          "imported": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/ImportResultOut"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "kind": {
+            "enum": [
+              "render",
+              "import"
+            ],
+            "title": "Kind",
+            "type": "string"
+          },
+          "period": {
+            "title": "Period",
+            "type": "string"
+          },
+          "preview": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/PreviewOut"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "schedule_id": {
+            "anyOf": [
+              {
+                "format": "uuid",
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Schedule Id"
+          },
+          "started_at": {
+            "anyOf": [
+              {
+                "format": "date-time",
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Started At"
+          },
+          "status": {
+            "enum": [
+              "pending",
+              "running",
+              "succeeded",
+              "failed"
+            ],
+            "title": "Status",
+            "type": "string"
+          },
+          "template_id": {
+            "anyOf": [
+              {
+                "format": "uuid",
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Template Id"
+          },
+          "timezone": {
+            "title": "Timezone",
+            "type": "string"
+          },
+          "warnings": {
+            "items": {
+              "type": "string"
+            },
+            "title": "Warnings",
+            "type": "array"
+          }
+        },
+        "required": [
+          "id",
+          "template_id",
+          "schedule_id",
+          "period",
+          "granularity",
+          "timezone",
+          "kind",
+          "status",
+          "warnings",
+          "error",
+          "created_at",
+          "started_at",
+          "finished_at"
+        ],
+        "title": "RenderDetailOut",
+        "type": "object"
+      },
+      "RenderOut": {
+        "description": "任务状态，成功之后才可下载。",
+        "properties": {
+          "created_at": {
+            "format": "date-time",
+            "title": "Created At",
+            "type": "string"
+          },
+          "error": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Error"
+          },
+          "finished_at": {
+            "anyOf": [
+              {
+                "format": "date-time",
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Finished At"
+          },
+          "granularity": {
+            "enum": [
+              "day",
+              "month",
+              "quarter",
+              "year"
+            ],
+            "title": "Granularity",
+            "type": "string"
+          },
+          "id": {
+            "format": "uuid",
+            "title": "Id",
+            "type": "string"
+          },
+          "kind": {
+            "enum": [
+              "render",
+              "import"
+            ],
+            "title": "Kind",
+            "type": "string"
+          },
+          "period": {
+            "title": "Period",
+            "type": "string"
+          },
+          "schedule_id": {
+            "anyOf": [
+              {
+                "format": "uuid",
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Schedule Id"
+          },
+          "started_at": {
+            "anyOf": [
+              {
+                "format": "date-time",
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Started At"
+          },
+          "status": {
+            "enum": [
+              "pending",
+              "running",
+              "succeeded",
+              "failed"
+            ],
+            "title": "Status",
+            "type": "string"
+          },
+          "template_id": {
+            "anyOf": [
+              {
+                "format": "uuid",
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Template Id"
+          },
+          "timezone": {
+            "title": "Timezone",
+            "type": "string"
+          },
+          "warnings": {
+            "items": {
+              "type": "string"
+            },
+            "title": "Warnings",
+            "type": "array"
+          }
+        },
+        "required": [
+          "id",
+          "template_id",
+          "schedule_id",
+          "period",
+          "granularity",
+          "timezone",
+          "kind",
+          "status",
+          "warnings",
+          "error",
+          "created_at",
+          "started_at",
+          "finished_at"
+        ],
+        "title": "RenderOut",
+        "type": "object"
+      },
       "ReplaceLayoutIn": {
         "additionalProperties": false,
         "description": "整树替换。\n\n⚠ `expected_version` 必填：不带版本断言的整树替换就是「最后写入者获胜」，\n人与 Agent 同时在场时一方的改动会被静默抹掉（ADR-0012 二）。",
@@ -16396,6 +17983,270 @@
           "nodes"
         ],
         "title": "ReplaceLayoutIn",
+        "type": "object"
+      },
+      "ReportRuntimeOut": {
+        "description": "真实生效的调度配置。",
+        "properties": {
+          "is_schedule_enabled": {
+            "title": "Is Schedule Enabled",
+            "type": "boolean"
+          },
+          "timezone": {
+            "title": "Timezone",
+            "type": "string"
+          }
+        },
+        "required": [
+          "is_schedule_enabled",
+          "timezone"
+        ],
+        "title": "ReportRuntimeOut",
+        "type": "object"
+      },
+      "ReportTemplateCreateIn": {
+        "additionalProperties": false,
+        "description": "创建模板。",
+        "properties": {
+          "code": {
+            "maxLength": 64,
+            "pattern": "^[A-Za-z_][A-Za-z0-9_]*$",
+            "title": "Code",
+            "type": "string"
+          },
+          "description": {
+            "anyOf": [
+              {
+                "maxLength": 2000,
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Description"
+          },
+          "doc_json": {
+            "$ref": "#/components/schemas/DocumentNode",
+            "default": {
+              "attrs": {},
+              "content": [],
+              "marks": [],
+              "type": "doc"
+            }
+          },
+          "granularity": {
+            "default": "month",
+            "enum": [
+              "day",
+              "month",
+              "quarter",
+              "year"
+            ],
+            "title": "Granularity",
+            "type": "string"
+          },
+          "is_enabled": {
+            "default": true,
+            "title": "Is Enabled",
+            "type": "boolean"
+          },
+          "metrics": {
+            "items": {
+              "$ref": "#/components/schemas/MetricDef"
+            },
+            "maxItems": 200,
+            "title": "Metrics",
+            "type": "array"
+          },
+          "name": {
+            "maxLength": 128,
+            "minLength": 1,
+            "title": "Name",
+            "type": "string"
+          },
+          "page_json": {
+            "$ref": "#/components/schemas/PageSettings",
+            "default": {
+              "font_family": "宋体",
+              "font_size_pt": 12.0,
+              "footer": "",
+              "header": "",
+              "height_cm": 29.7,
+              "is_toc_enabled": false,
+              "margins_cm": {
+                "bottom": 2.54,
+                "left": 3.18,
+                "right": 3.18,
+                "top": 2.54
+              },
+              "orientation": "portrait",
+              "size": "A4",
+              "width_cm": 21.0
+            }
+          }
+        },
+        "required": [
+          "name",
+          "code"
+        ],
+        "title": "ReportTemplateCreateIn",
+        "type": "object"
+      },
+      "ReportTemplateOut": {
+        "description": "完整模板。",
+        "properties": {
+          "code": {
+            "title": "Code",
+            "type": "string"
+          },
+          "created_at": {
+            "format": "date-time",
+            "title": "Created At",
+            "type": "string"
+          },
+          "description": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Description"
+          },
+          "doc_json": {
+            "$ref": "#/components/schemas/DocumentNode"
+          },
+          "granularity": {
+            "enum": [
+              "day",
+              "month",
+              "quarter",
+              "year"
+            ],
+            "title": "Granularity",
+            "type": "string"
+          },
+          "id": {
+            "format": "uuid",
+            "title": "Id",
+            "type": "string"
+          },
+          "is_enabled": {
+            "title": "Is Enabled",
+            "type": "boolean"
+          },
+          "metrics": {
+            "items": {
+              "$ref": "#/components/schemas/MetricDef"
+            },
+            "title": "Metrics",
+            "type": "array"
+          },
+          "name": {
+            "title": "Name",
+            "type": "string"
+          },
+          "page_json": {
+            "$ref": "#/components/schemas/PageSettings"
+          },
+          "row_version": {
+            "title": "Row Version",
+            "type": "integer"
+          },
+          "updated_at": {
+            "format": "date-time",
+            "title": "Updated At",
+            "type": "string"
+          }
+        },
+        "required": [
+          "id",
+          "code",
+          "name",
+          "description",
+          "granularity",
+          "is_enabled",
+          "row_version",
+          "created_at",
+          "updated_at",
+          "doc_json",
+          "metrics",
+          "page_json"
+        ],
+        "title": "ReportTemplateOut",
+        "type": "object"
+      },
+      "ReportTemplateSummaryOut": {
+        "description": "模板列表项。",
+        "properties": {
+          "code": {
+            "title": "Code",
+            "type": "string"
+          },
+          "created_at": {
+            "format": "date-time",
+            "title": "Created At",
+            "type": "string"
+          },
+          "description": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Description"
+          },
+          "granularity": {
+            "enum": [
+              "day",
+              "month",
+              "quarter",
+              "year"
+            ],
+            "title": "Granularity",
+            "type": "string"
+          },
+          "id": {
+            "format": "uuid",
+            "title": "Id",
+            "type": "string"
+          },
+          "is_enabled": {
+            "title": "Is Enabled",
+            "type": "boolean"
+          },
+          "name": {
+            "title": "Name",
+            "type": "string"
+          },
+          "row_version": {
+            "title": "Row Version",
+            "type": "integer"
+          },
+          "updated_at": {
+            "format": "date-time",
+            "title": "Updated At",
+            "type": "string"
+          }
+        },
+        "required": [
+          "id",
+          "code",
+          "name",
+          "description",
+          "granularity",
+          "is_enabled",
+          "row_version",
+          "created_at",
+          "updated_at"
+        ],
+        "title": "ReportTemplateSummaryOut",
         "type": "object"
       },
       "RoomCreateIn": {
@@ -17038,6 +18889,174 @@
         "title": "RuntimeParamWriteIn",
         "type": "object"
       },
+      "ScheduleCreateIn": {
+        "additionalProperties": false,
+        "description": "创建定时规则。",
+        "properties": {
+          "delay_hours": {
+            "default": 24,
+            "maximum": 720.0,
+            "minimum": 0.0,
+            "title": "Delay Hours",
+            "type": "integer"
+          },
+          "granularity": {
+            "default": "month",
+            "enum": [
+              "day",
+              "month",
+              "quarter",
+              "year"
+            ],
+            "title": "Granularity",
+            "type": "string"
+          },
+          "is_enabled": {
+            "default": true,
+            "title": "Is Enabled",
+            "type": "boolean"
+          },
+          "name": {
+            "maxLength": 128,
+            "minLength": 1,
+            "title": "Name",
+            "type": "string"
+          },
+          "template_id": {
+            "format": "uuid",
+            "title": "Template Id",
+            "type": "string"
+          }
+        },
+        "required": [
+          "name",
+          "template_id"
+        ],
+        "title": "ScheduleCreateIn",
+        "type": "object"
+      },
+      "ScheduleOut": {
+        "description": "规则与已生成水位。",
+        "properties": {
+          "created_at": {
+            "format": "date-time",
+            "title": "Created At",
+            "type": "string"
+          },
+          "delay_hours": {
+            "title": "Delay Hours",
+            "type": "integer"
+          },
+          "granularity": {
+            "enum": [
+              "day",
+              "month",
+              "quarter",
+              "year"
+            ],
+            "title": "Granularity",
+            "type": "string"
+          },
+          "id": {
+            "format": "uuid",
+            "title": "Id",
+            "type": "string"
+          },
+          "is_enabled": {
+            "title": "Is Enabled",
+            "type": "boolean"
+          },
+          "last_run_period": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Last Run Period"
+          },
+          "name": {
+            "title": "Name",
+            "type": "string"
+          },
+          "row_version": {
+            "title": "Row Version",
+            "type": "integer"
+          },
+          "template_id": {
+            "format": "uuid",
+            "title": "Template Id",
+            "type": "string"
+          },
+          "updated_at": {
+            "format": "date-time",
+            "title": "Updated At",
+            "type": "string"
+          }
+        },
+        "required": [
+          "id",
+          "template_id",
+          "name",
+          "granularity",
+          "delay_hours",
+          "is_enabled",
+          "row_version",
+          "last_run_period",
+          "created_at",
+          "updated_at"
+        ],
+        "title": "ScheduleOut",
+        "type": "object"
+      },
+      "ScheduleUpdateIn": {
+        "additionalProperties": false,
+        "description": "按预期版本更新规则。",
+        "properties": {
+          "delay_hours": {
+            "default": 24,
+            "maximum": 720.0,
+            "minimum": 0.0,
+            "title": "Delay Hours",
+            "type": "integer"
+          },
+          "expected_version": {
+            "minimum": 1.0,
+            "title": "Expected Version",
+            "type": "integer"
+          },
+          "granularity": {
+            "default": "month",
+            "enum": [
+              "day",
+              "month",
+              "quarter",
+              "year"
+            ],
+            "title": "Granularity",
+            "type": "string"
+          },
+          "is_enabled": {
+            "default": true,
+            "title": "Is Enabled",
+            "type": "boolean"
+          },
+          "name": {
+            "maxLength": 128,
+            "minLength": 1,
+            "title": "Name",
+            "type": "string"
+          }
+        },
+        "required": [
+          "name",
+          "expected_version"
+        ],
+        "title": "ScheduleUpdateIn",
+        "type": "object"
+      },
       "SeriesOut": {
         "description": "若干列的时间序列，按 ts 升序。\n\n⚠ `is_truncated` 与 `limit` 必须如实给：只给 `series` 的话，前端分不清\n「这段时间就这么多数据」与「数据太多被砍了」，用户看到的是一段看不出\n不完整的曲线（§6.2）。",
         "properties": {
@@ -17066,6 +19085,33 @@
           "limit"
         ],
         "title": "SeriesOut",
+        "type": "object"
+      },
+      "SeriesPoint": {
+        "description": "图表里的一个测量点。",
+        "properties": {
+          "ts": {
+            "format": "date-time",
+            "title": "Ts",
+            "type": "string"
+          },
+          "value": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Value"
+          }
+        },
+        "required": [
+          "ts",
+          "value"
+        ],
+        "title": "SeriesPoint",
         "type": "object"
       },
       "SeriesPointOut": {
@@ -18444,6 +20490,88 @@
         "title": "TableUpdateIn",
         "type": "object"
       },
+      "TemplateBody": {
+        "additionalProperties": false,
+        "description": "一份完整模板定义。",
+        "properties": {
+          "description": {
+            "anyOf": [
+              {
+                "maxLength": 2000,
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Description"
+          },
+          "doc_json": {
+            "$ref": "#/components/schemas/DocumentNode",
+            "default": {
+              "attrs": {},
+              "content": [],
+              "marks": [],
+              "type": "doc"
+            }
+          },
+          "granularity": {
+            "default": "month",
+            "enum": [
+              "day",
+              "month",
+              "quarter",
+              "year"
+            ],
+            "title": "Granularity",
+            "type": "string"
+          },
+          "is_enabled": {
+            "default": true,
+            "title": "Is Enabled",
+            "type": "boolean"
+          },
+          "metrics": {
+            "items": {
+              "$ref": "#/components/schemas/MetricDef"
+            },
+            "maxItems": 200,
+            "title": "Metrics",
+            "type": "array"
+          },
+          "name": {
+            "maxLength": 128,
+            "minLength": 1,
+            "title": "Name",
+            "type": "string"
+          },
+          "page_json": {
+            "$ref": "#/components/schemas/PageSettings",
+            "default": {
+              "font_family": "宋体",
+              "font_size_pt": 12.0,
+              "footer": "",
+              "header": "",
+              "height_cm": 29.7,
+              "is_toc_enabled": false,
+              "margins_cm": {
+                "bottom": 2.54,
+                "left": 3.18,
+                "right": 3.18,
+                "top": 2.54
+              },
+              "orientation": "portrait",
+              "size": "A4",
+              "width_cm": 21.0
+            }
+          }
+        },
+        "required": [
+          "name"
+        ],
+        "title": "TemplateBody",
+        "type": "object"
+      },
       "TemplateCreateIn": {
         "additionalProperties": false,
         "description": "把一张大屏另存为模板。\n\n⚠ 只收源屏 id：包与缩略图都由服务端从源屏现取。让客户端喂包等于放行\n一份没经过导出侧校验的整屏结构。",
@@ -18519,6 +20647,35 @@
           "target_project_id"
         ],
         "title": "TemplateInstantiateIn",
+        "type": "object"
+      },
+      "TemplateIssue": {
+        "description": "定位到指标或节点的问题。",
+        "properties": {
+          "is_blocking": {
+            "default": true,
+            "title": "Is Blocking",
+            "type": "boolean"
+          },
+          "message": {
+            "title": "Message",
+            "type": "string"
+          },
+          "scope": {
+            "title": "Scope",
+            "type": "string"
+          },
+          "where": {
+            "title": "Where",
+            "type": "string"
+          }
+        },
+        "required": [
+          "scope",
+          "where",
+          "message"
+        ],
+        "title": "TemplateIssue",
         "type": "object"
       },
       "TemplateOut": {
@@ -18685,6 +20842,94 @@
           "updated_at"
         ],
         "title": "TemplateSummaryOut",
+        "type": "object"
+      },
+      "TemplateUpdateIn": {
+        "additionalProperties": false,
+        "description": "整份保存并校验读到的版本。",
+        "properties": {
+          "description": {
+            "anyOf": [
+              {
+                "maxLength": 2000,
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Description"
+          },
+          "doc_json": {
+            "$ref": "#/components/schemas/DocumentNode",
+            "default": {
+              "attrs": {},
+              "content": [],
+              "marks": [],
+              "type": "doc"
+            }
+          },
+          "expected_version": {
+            "minimum": 1.0,
+            "title": "Expected Version",
+            "type": "integer"
+          },
+          "granularity": {
+            "default": "month",
+            "enum": [
+              "day",
+              "month",
+              "quarter",
+              "year"
+            ],
+            "title": "Granularity",
+            "type": "string"
+          },
+          "is_enabled": {
+            "default": true,
+            "title": "Is Enabled",
+            "type": "boolean"
+          },
+          "metrics": {
+            "items": {
+              "$ref": "#/components/schemas/MetricDef"
+            },
+            "maxItems": 200,
+            "title": "Metrics",
+            "type": "array"
+          },
+          "name": {
+            "maxLength": 128,
+            "minLength": 1,
+            "title": "Name",
+            "type": "string"
+          },
+          "page_json": {
+            "$ref": "#/components/schemas/PageSettings",
+            "default": {
+              "font_family": "宋体",
+              "font_size_pt": 12.0,
+              "footer": "",
+              "header": "",
+              "height_cm": 29.7,
+              "is_toc_enabled": false,
+              "margins_cm": {
+                "bottom": 2.54,
+                "left": 3.18,
+                "right": 3.18,
+                "top": 2.54
+              },
+              "orientation": "portrait",
+              "size": "A4",
+              "width_cm": 21.0
+            }
+          }
+        },
+        "required": [
+          "name",
+          "expected_version"
+        ],
+        "title": "TemplateUpdateIn",
         "type": "object"
       },
       "ThemeCreateIn": {
@@ -18953,6 +21198,28 @@
         "title": "ValidationError",
         "type": "object"
       },
+      "ValidationOut": {
+        "description": "模板校验结果。",
+        "properties": {
+          "is_valid": {
+            "title": "Is Valid",
+            "type": "boolean"
+          },
+          "issues": {
+            "items": {
+              "$ref": "#/components/schemas/TemplateIssue"
+            },
+            "title": "Issues",
+            "type": "array"
+          }
+        },
+        "required": [
+          "is_valid",
+          "issues"
+        ],
+        "title": "ValidationOut",
+        "type": "object"
+      },
       "ValidationReportOut": {
         "description": "一次自检的结果。`is_valid` 为假时 `issues` 列全部问题，不止第一条。",
         "properties": {
@@ -18979,6 +21246,34 @@
           "issues"
         ],
         "title": "ValidationReportOut",
+        "type": "object"
+      },
+      "Watermark": {
+        "additionalProperties": false,
+        "description": "文本水印。",
+        "properties": {
+          "font_size_pt": {
+            "default": 36,
+            "maximum": 100.0,
+            "minimum": 8.0,
+            "title": "Font Size Pt",
+            "type": "number"
+          },
+          "rotation": {
+            "default": -45,
+            "maximum": 180.0,
+            "minimum": -180.0,
+            "title": "Rotation",
+            "type": "integer"
+          },
+          "text": {
+            "default": "",
+            "maxLength": 128,
+            "title": "Text",
+            "type": "string"
+          }
+        },
+        "title": "Watermark",
         "type": "object"
       },
       "WorkshopCreateIn": {
@@ -29406,6 +31701,992 @@
         "summary": "就绪探针",
         "tags": [
           "probe"
+        ]
+      }
+    },
+    "/api/v1/platform/report-renders": {
+      "get": {
+        "operationId": "list_renders_api_v1_platform_report_renders_get",
+        "parameters": [
+          {
+            "in": "query",
+            "name": "template_id",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "format": "uuid",
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Template Id"
+            }
+          },
+          {
+            "in": "query",
+            "name": "limit",
+            "required": false,
+            "schema": {
+              "default": 100,
+              "maximum": 200,
+              "minimum": 1,
+              "title": "Limit",
+              "type": "integer"
+            }
+          },
+          {
+            "in": "query",
+            "name": "after",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "After"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiResponse_CursorPage_RenderOut__"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "List Renders",
+        "tags": [
+          "report-render"
+        ]
+      },
+      "post": {
+        "operationId": "start_render_api_v1_platform_report_renders_post",
+        "parameters": [
+          {
+            "in": "header",
+            "name": "idempotency-key",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Idempotency-Key"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/RenderCreateIn"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "202": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiResponse_RenderOut_"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Start Render",
+        "tags": [
+          "report-render"
+        ]
+      }
+    },
+    "/api/v1/platform/report-renders/runtime/settings": {
+      "get": {
+        "operationId": "runtime_api_v1_platform_report_renders_runtime_settings_get",
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiResponse_ReportRuntimeOut_"
+                }
+              }
+            },
+            "description": "Successful Response"
+          }
+        },
+        "summary": "Runtime",
+        "tags": [
+          "report-render"
+        ]
+      }
+    },
+    "/api/v1/platform/report-renders/{render_id}": {
+      "get": {
+        "operationId": "read_render_api_v1_platform_report_renders__render_id__get",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "render_id",
+            "required": true,
+            "schema": {
+              "format": "uuid",
+              "title": "Render Id",
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiResponse_RenderDetailOut_"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Read Render",
+        "tags": [
+          "report-render"
+        ]
+      }
+    },
+    "/api/v1/platform/report-renders/{render_id}/files": {
+      "get": {
+        "operationId": "download_api_v1_platform_report_renders__render_id__files_get",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "render_id",
+            "required": true,
+            "schema": {
+              "format": "uuid",
+              "title": "Render Id",
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Download",
+        "tags": [
+          "report-render"
+        ]
+      }
+    },
+    "/api/v1/platform/report-schedules": {
+      "get": {
+        "operationId": "list_schedules_api_v1_platform_report_schedules_get",
+        "parameters": [
+          {
+            "in": "query",
+            "name": "page",
+            "required": false,
+            "schema": {
+              "default": 1,
+              "minimum": 1,
+              "title": "Page",
+              "type": "integer"
+            }
+          },
+          {
+            "in": "query",
+            "name": "size",
+            "required": false,
+            "schema": {
+              "default": 20,
+              "maximum": 200,
+              "minimum": 1,
+              "title": "Size",
+              "type": "integer"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiResponse_Page_ScheduleOut__"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "List Schedules",
+        "tags": [
+          "report-schedule"
+        ]
+      },
+      "post": {
+        "operationId": "create_schedule_api_v1_platform_report_schedules_post",
+        "parameters": [
+          {
+            "in": "header",
+            "name": "idempotency-key",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Idempotency-Key"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/ScheduleCreateIn"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "201": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiResponse_ScheduleOut_"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Create Schedule",
+        "tags": [
+          "report-schedule"
+        ]
+      }
+    },
+    "/api/v1/platform/report-schedules/{schedule_id}": {
+      "delete": {
+        "operationId": "delete_schedule_api_v1_platform_report_schedules__schedule_id__delete",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "schedule_id",
+            "required": true,
+            "schema": {
+              "format": "uuid",
+              "title": "Schedule Id",
+              "type": "string"
+            }
+          },
+          {
+            "in": "header",
+            "name": "idempotency-key",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Idempotency-Key"
+            }
+          }
+        ],
+        "responses": {
+          "204": {
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Delete Schedule",
+        "tags": [
+          "report-schedule"
+        ]
+      },
+      "put": {
+        "operationId": "update_schedule_api_v1_platform_report_schedules__schedule_id__put",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "schedule_id",
+            "required": true,
+            "schema": {
+              "format": "uuid",
+              "title": "Schedule Id",
+              "type": "string"
+            }
+          },
+          {
+            "in": "header",
+            "name": "idempotency-key",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Idempotency-Key"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/ScheduleUpdateIn"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiResponse_ScheduleOut_"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Update Schedule",
+        "tags": [
+          "report-schedule"
+        ]
+      }
+    },
+    "/api/v1/platform/report-templates": {
+      "get": {
+        "operationId": "list_templates_api_v1_platform_report_templates_get",
+        "parameters": [
+          {
+            "in": "query",
+            "name": "page",
+            "required": false,
+            "schema": {
+              "default": 1,
+              "minimum": 1,
+              "title": "Page",
+              "type": "integer"
+            }
+          },
+          {
+            "in": "query",
+            "name": "size",
+            "required": false,
+            "schema": {
+              "default": 20,
+              "maximum": 200,
+              "minimum": 1,
+              "title": "Size",
+              "type": "integer"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiResponse_Page_ReportTemplateSummaryOut__"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "List Templates",
+        "tags": [
+          "report-template"
+        ]
+      },
+      "post": {
+        "operationId": "create_template_api_v1_platform_report_templates_post",
+        "parameters": [
+          {
+            "in": "header",
+            "name": "idempotency-key",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Idempotency-Key"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/ReportTemplateCreateIn"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "201": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiResponse_ReportTemplateOut_"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Create Template",
+        "tags": [
+          "report-template"
+        ]
+      }
+    },
+    "/api/v1/platform/report-templates/{template_id}": {
+      "delete": {
+        "operationId": "delete_template_api_v1_platform_report_templates__template_id__delete",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "template_id",
+            "required": true,
+            "schema": {
+              "format": "uuid",
+              "title": "Template Id",
+              "type": "string"
+            }
+          },
+          {
+            "in": "header",
+            "name": "idempotency-key",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Idempotency-Key"
+            }
+          }
+        ],
+        "responses": {
+          "204": {
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Delete Template",
+        "tags": [
+          "report-template"
+        ]
+      },
+      "get": {
+        "operationId": "read_template_api_v1_platform_report_templates__template_id__get",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "template_id",
+            "required": true,
+            "schema": {
+              "format": "uuid",
+              "title": "Template Id",
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiResponse_ReportTemplateOut_"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Read Template",
+        "tags": [
+          "report-template"
+        ]
+      },
+      "put": {
+        "operationId": "update_template_api_v1_platform_report_templates__template_id__put",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "template_id",
+            "required": true,
+            "schema": {
+              "format": "uuid",
+              "title": "Template Id",
+              "type": "string"
+            }
+          },
+          {
+            "in": "header",
+            "name": "idempotency-key",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Idempotency-Key"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/TemplateUpdateIn"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiResponse_ReportTemplateOut_"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Update Template",
+        "tags": [
+          "report-template"
+        ]
+      }
+    },
+    "/api/v1/platform/report-templates/{template_id}:preview": {
+      "post": {
+        "operationId": "preview_template_api_v1_platform_report_templates__template_id__preview_post",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "template_id",
+            "required": true,
+            "schema": {
+              "format": "uuid",
+              "title": "Template Id",
+              "type": "string"
+            }
+          },
+          {
+            "in": "header",
+            "name": "idempotency-key",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Idempotency-Key"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/PreviewIn"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiResponse_PreviewOut_"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Preview Template",
+        "tags": [
+          "report-template"
+        ]
+      }
+    },
+    "/api/v1/platform/report-templates:import": {
+      "post": {
+        "operationId": "import_document_api_v1_platform_report_templates_import_post",
+        "parameters": [
+          {
+            "in": "header",
+            "name": "idempotency-key",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Idempotency-Key"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/ImportStartIn"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "202": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiResponse_RenderOut_"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Import Document",
+        "tags": [
+          "report-import"
+        ]
+      }
+    },
+    "/api/v1/platform/report-templates:upload-ticket": {
+      "post": {
+        "operationId": "issue_ticket_api_v1_platform_report_templates_upload_ticket_post",
+        "parameters": [
+          {
+            "in": "header",
+            "name": "idempotency-key",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Idempotency-Key"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/ImportTicketIn"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiResponse_ImportTicketOut_"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Issue Ticket",
+        "tags": [
+          "report-import"
+        ]
+      }
+    },
+    "/api/v1/platform/report-templates:validate": {
+      "post": {
+        "operationId": "validate_api_v1_platform_report_templates_validate_post",
+        "parameters": [
+          {
+            "in": "header",
+            "name": "idempotency-key",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Idempotency-Key"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/TemplateBody"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiResponse_ValidationOut_"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Validate",
+        "tags": [
+          "report-template"
         ]
       }
     },

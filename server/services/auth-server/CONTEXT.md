@@ -218,3 +218,9 @@ uv run python -m scripts.seed   # 写权限码、内置角色、路由规则、�
 uv run auth-server              # 起服务（默认 8004）
 uv run pytest -q                # 全量测试
 ```
+
+## 报告权限
+
+报告分 `report:view`、`report:manage`、`report:render`、`report:schedule` 四档。
+报告生成与下载独立于查看，下载规则优先于通用 GET 规则；Word 导入使用管理权限。
+对应规则在 `catalog/rules_report.py`，两侧的报告路由矩阵分别验证边缘与 API 权限。

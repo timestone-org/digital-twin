@@ -19,6 +19,7 @@ from platform_server.apps.modeling.api import ROUTERS as MODELING_ROUTERS
 from platform_server.apps.modeling.services.model_provider import (
     ModelingAnalysisProvider,
 )
+from platform_server.apps.report.api import ROUTERS as REPORT_ROUTERS
 from platform_server.apps.runtime_params.api import (
     ROUTERS as RUNTIME_PARAM_ROUTERS,
 )
@@ -53,6 +54,7 @@ def build_app(settings: Settings) -> FastAPI:
             *RUNTIME_PARAM_ROUTERS,
             *ASSET_ROUTERS,
             *LLM_ROUTERS,
+            *REPORT_ROUTERS,
         ),
         runtime=Runtime(
             lifespan_hooks=_hooks(container),

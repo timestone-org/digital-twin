@@ -18,6 +18,7 @@ from platform_server.apps.dataset.models import Base as DatasetBase
 from platform_server.apps.hvac.models import Base as HvacBase
 from platform_server.apps.llm_providers.models import Base as LlmProvidersBase
 from platform_server.apps.modeling.models import Base as ModelingBase
+from platform_server.apps.report.models import Base as ReportBase
 from platform_server.apps.runtime_params.models import Base as RuntimeParamsBase
 from platform_server.settings import DB_SCHEMA, Settings
 
@@ -33,6 +34,7 @@ target_metadata = [
     AssetsBase.metadata,
     ModelingBase.metadata,
     LlmProvidersBase.metadata,
+    ReportBase.metadata,
 ]
 
 _settings = load_settings_or_exit(Settings)
@@ -69,6 +71,8 @@ def _configure(connection: Connection) -> None:
 
 def _run(connection: Connection) -> None:
     connection.execute(text(f'CREATE SCHEMA IF NOT EXISTS "{DB_SCHEMA}"'))
+    # schema 引导事务必须先结束，Alembic 才能管理并发索引的 autocommit 块。
+    connection.commit()
     _configure(connection)
     with context.begin_transaction():
         context.run_migrations()

@@ -39,6 +39,10 @@ from auth_server.apps.auth.catalog.permissions import (
     OPCUA_OPERATE,
     OPCUA_VIEW,
     PERMISSIONS,
+    REPORT_MANAGE,
+    REPORT_RENDER,
+    REPORT_SCHEDULE,
+    REPORT_VIEW,
     ROLE_MANAGE,
     ROUTE_RULE_MANAGE,
     ROUTE_RULE_VIEW,
@@ -60,6 +64,7 @@ from auth_server.apps.auth.catalog.rules_modeling import (
 from auth_server.apps.auth.catalog.rules_opcua import OPCUA_RULES
 from auth_server.apps.auth.catalog.rules_platform import PLATFORM_RULES
 from auth_server.apps.auth.catalog.rules_realtime import REALTIME_RULES
+from auth_server.apps.auth.catalog.rules_report import REPORT_RULES
 from auth_server.apps.auth.catalog.specs import (
     PermissionGroup,
     PermissionSpec,
@@ -71,6 +76,7 @@ ROUTE_RULES: tuple[RouteRuleSpec, ...] = (
     *AUTH_RULES,
     *PLATFORM_RULES,
     *MODELING_RULES,
+    *REPORT_RULES,
     *OPEN_MODEL_RULES,
     *OPCUA_RULES,
     *REALTIME_RULES,
@@ -120,6 +126,10 @@ __all__ = [
     "PERMISSIONS",
     "PLATFORM_RULES",
     "REALTIME_RULES",
+    "REPORT_MANAGE",
+    "REPORT_RENDER",
+    "REPORT_SCHEDULE",
+    "REPORT_VIEW",
     "ROLES",
     "ROLE_ADMIN",
     "ROLE_MANAGE",

@@ -19,6 +19,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from lib.auth import CallerContext
 from lib.idempotency import IdempotencyStore
 from lib.objectstore import ObjectStore
+from lib.stream import StreamLike
 from lib.web.authdeps import (
     REQUIRED_CODES_ATTR,
     REQUIRED_MODE_ATTR,
@@ -35,6 +36,7 @@ __all__ = [
     "get_idempotency_key",
     "get_object_store",
     "get_session",
+    "get_stream",
     "require",
     "require_service_key",
 ]
@@ -73,6 +75,13 @@ def get_object_store(
     Args: container。
     """
     return container.object_store
+
+
+def get_stream(
+    container: Annotated[Container, Depends(get_container)],
+) -> StreamLike:
+    """取进程共用的队列连接。Args: container。"""
+    return container.stream
 
 
 def get_idempotency_key(

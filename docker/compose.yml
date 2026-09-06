@@ -434,6 +434,7 @@ services:
       # ⚠ **三个角色必须同值**：api 按一种边界算公式窗口、worker 按另一种分桶，
       # 行会成批落进隔壁那一格，而数值本身合法、全程不报错
       PLATFORM_DATASET_BUCKET_TIMEZONE: ${DATASET_BUCKET_TIMEZONE:-Asia/Shanghai}
+      PLATFORM_REPORT_SCHEDULE_ENABLED: ${PLATFORM_REPORT_SCHEDULE_ENABLED:-false}
       # 抽取分片队列。api 角色只投递，worker 角色消费
       PLATFORM_REDIS_HOST: ${REDIS_HOST:?必填}
       PLATFORM_REDIS_PORT: ${REDIS_PORT:-6379}
@@ -835,6 +836,7 @@ services:
       # 台账聚合采集器（docs/DATASET_DESIGN.md §12、§13）。分桶时区与 api 角色
       # 同值，理由见那一侧的告诫
       PLATFORM_DATASET_BUCKET_TIMEZONE: ${DATASET_BUCKET_TIMEZONE:-Asia/Shanghai}
+      PLATFORM_REPORT_SCHEDULE_ENABLED: ${PLATFORM_REPORT_SCHEDULE_ENABLED:-false}
       # ⚠ 默认关。它同时是**运行参数**：界面上（dataset 分组）改一下立刻生效，
       # 且覆盖值优先于这里——这一行只是没被覆盖时的取值
       PLATFORM_DATASET_ENABLED: ${DATASET_ENABLED:-false}
@@ -896,6 +898,7 @@ services:
       # 组合根装配时就要解析这个时区名，故三个角色都要带上；取值也必须
       # 三处同值（§4.5.1）
       PLATFORM_DATASET_BUCKET_TIMEZONE: ${DATASET_BUCKET_TIMEZONE:-Asia/Shanghai}
+      PLATFORM_REPORT_SCHEDULE_ENABLED: ${PLATFORM_REPORT_SCHEDULE_ENABLED:-false}
       PLATFORM_SQLSERVER_CHARSET: ${ACSOURCE_CHARSET:-UTF-8}
       # ⚠ 回退链必须与 platform-server 逐字一致：少写一处就是非对称失效
       PLATFORM_EDGE_SIGNING_SECRET: ${AUTH_EDGE_SIGNING_SECRET:?必填}

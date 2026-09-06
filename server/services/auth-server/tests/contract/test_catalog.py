@@ -51,6 +51,10 @@ PUBLISHED_CODES = frozenset(
         "knowledge:manage",
         "llm:view",
         "llm:manage",
+        "report:view",
+        "report:manage",
+        "report:render",
+        "report:schedule",
     }
 )
 
@@ -202,6 +206,7 @@ def test_permission_groups_keep_catalog_order_and_sorting() -> None:
         "modeling",
         "knowledge",
         "llm",
+        "report",
     ]
     for group in groups:
         orders = [item.sort_order for item in group.items]

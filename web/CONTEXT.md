@@ -171,3 +171,9 @@ python3 ../scripts/check_structure_web.py
 ```
 
 > Node 经 nvm 安装；非交互 shell 里先补 PATH 再执行 `pnpm`。
+
+## 报告工作面
+
+`pages/Reports` 按模板、编辑、生成记录、定时规则分路由。四类业务节点在结构化
+正文中保持身份，编辑器不在浏览器里另造 Word。报告接口类型由 platform OpenAPI
+生成到 `@dt/contracts` 的 `report.ts`，字段契约与生成一致性同时校验。

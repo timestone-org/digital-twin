@@ -115,6 +115,34 @@ export const NAV_ITEMS: readonly NavItem[] = [
     permission: [PERMISSION_CODES.collectView, PERMISSION_CODES.datasetView],
   },
   {
+    key: 'reports',
+    label: '自动报告',
+    icon: 'calendar',
+    children: [
+      {
+        key: 'report-templates',
+        label: '报告模板',
+        icon: 'table',
+        to: '/reports',
+        permission: [PERMISSION_CODES.reportView],
+      },
+      {
+        key: 'report-renders',
+        label: '生成记录',
+        icon: 'activity',
+        to: '/reports/renders',
+        permission: [PERMISSION_CODES.reportView],
+      },
+      {
+        key: 'report-schedules',
+        label: '定时规则',
+        icon: 'calendar',
+        to: '/reports/schedules',
+        permission: [PERMISSION_CODES.reportView],
+      },
+    ],
+  },
+  {
     key: 'hvac',
     label: '空调管理',
     icon: 'snowflake',

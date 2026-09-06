@@ -60,6 +60,11 @@ FORMULA_MANAGE = "formula:manage"
 # platform-server 的 apps/modeling 复述一份，同上。⚠ `run` 与 `publish` 必须
 # 分家：能跑实验 ≠ 能把模型接进生产台账——发布之后，引用那条公式条目的每一张
 # 台账的数值都会跟着变，爆炸半径与 `formula:manage` 同一量级
+REPORT_VIEW = "report:view"
+REPORT_MANAGE = "report:manage"
+REPORT_RENDER = "report:render"
+REPORT_SCHEDULE = "report:schedule"
+
 MODELING_VIEW = "modeling:view"
 MODELING_MANAGE = "modeling:manage"
 MODELING_RUN = "modeling:run"
@@ -508,6 +513,42 @@ PERMISSIONS: tuple[PermissionSpec, ...] = (
             "⚠ 这一份是**整套部署共用的**：改了之后助手与知识库十秒内"
             "都改用新端点说话，且密钥会拿去打外部地址"
         ),
+    ),
+    PermissionSpec(
+        code=REPORT_VIEW,
+        name="查看报告",
+        kind="view",
+        group_code="report",
+        group_label="报告",
+        sort_order=10,
+        description="查看模板、生成记录与定时规则",
+    ),
+    PermissionSpec(
+        code=REPORT_MANAGE,
+        name="管理报告模板",
+        kind="manage",
+        group_code="report",
+        group_label="报告",
+        sort_order=20,
+        description="编辑模板、指标、试算和导入 Word",
+    ),
+    PermissionSpec(
+        code=REPORT_RENDER,
+        name="生成与下载报告",
+        kind="operate",
+        group_code="report",
+        group_label="报告",
+        sort_order=30,
+        description="生成并下载含台账数据的 Word 报告",
+    ),
+    PermissionSpec(
+        code=REPORT_SCHEDULE,
+        name="管理报告定时规则",
+        kind="manage",
+        group_code="report",
+        group_label="报告",
+        sort_order=40,
+        description="配置周期自动生成报告",
     ),
 )
 

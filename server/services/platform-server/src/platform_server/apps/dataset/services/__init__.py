@@ -93,3 +93,7 @@ __all__ = [
     "registered_providers",
     "table_service",
 ]
+
+from platform_server.apps.dataset.services import report_formula
+
+__all__ += ["report_formula"]

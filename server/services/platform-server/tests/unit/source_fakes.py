@@ -135,3 +135,8 @@ class InMemoryStream:
 
     async def close(self) -> None:
         self.entries.clear()
+
+
+def empty_stream() -> InMemoryStream:
+    """没有请求参数的队列依赖替身。"""
+    return InMemoryStream()

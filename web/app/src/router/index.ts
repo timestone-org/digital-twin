@@ -217,6 +217,30 @@ export const routes: RouteRecordRaw[] = [
     },
   },
   {
+    path: '/reports',
+    name: 'report-templates',
+    component: () => import('@/pages/Reports/Templates/index.vue'),
+    meta: { title: '自动报告', permissions: [PERMISSION_CODES.reportView] },
+  },
+  {
+    path: '/reports/templates/:templateId',
+    name: 'report-editor',
+    component: () => import('@/pages/Reports/Editor/index.vue'),
+    meta: { title: '编辑报告', permissions: [PERMISSION_CODES.reportView] },
+  },
+  {
+    path: '/reports/renders',
+    name: 'report-renders',
+    component: () => import('@/pages/Reports/Renders/index.vue'),
+    meta: { title: '生成记录', permissions: [PERMISSION_CODES.reportView] },
+  },
+  {
+    path: '/reports/schedules',
+    name: 'report-schedules',
+    component: () => import('@/pages/Reports/Schedules/index.vue'),
+    meta: { title: '定时规则', permissions: [PERMISSION_CODES.reportView] },
+  },
+  {
     // 分析建模：把台账数据串成一张算子图，训练出模型，再发布成台账公式。
     // ⚠ 这一条只挂**读码** `modeling:view`——写（modeling:manage）、跑
     // （modeling:run）、发布（modeling:publish）三档在页内逐个入口门控。把写码

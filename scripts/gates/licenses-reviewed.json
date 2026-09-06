@@ -4,6 +4,7 @@
   "npm:lightningcss*": "MPL-2.0：文件级 copyleft，只要不改它的源文件就不传染到本仓；各平台二进制同源，故用通配。",
   "py:asyncua": "LGPLv3+：以 import 方式原样引用、未修改、未静态链接，传染只及于对它自身源码的修改。本仓靠子类扩展点接入而非 patch 它的私有类（见 server/services/opcua-server/CONTEXT.md §5），且它按版本从 PyPI 装、可被替换成同接口的其它版本，满足 LGPL 的可替换要求。⚠ 一旦改动它的源码或把它 vendor 进仓，本条结论即失效，须重新评估。",
   "py:certifi": "MPL-2.0：只是一份 CA 证书数据包，未修改，不传染。",
+  "py:matplotlib": "Python Software Foundation License：已核对 3.11.1 随包许可及官方说明，许可证基于 PSF，使用 BSD 兼容代码。本仓仅原样 import 以生成报告位图，不修改、不 vendor；保留随包的版权与许可声明。与项目允许 PSF 的口径一致。若修改上游源码，需遵守其变更说明条款并重新评估。官方说明：https://matplotlib.org/stable/project/license.html",
   "py:orjson": "MPL-2.0 AND (Apache-2.0 OR MIT)：MPL 是文件级 copyleft，作为轮子原样引用、未修改，故不传染到本仓。它经 langgraph-sdk 进入 ai-assistant，仅用于序列化。⚠ 一旦改动它的源码或把它 vendor 进仓，本条结论即失效。",
   "py:pathspec": "MPL-2.0：文件级 copyleft，作为库原样引用，未修改。",
   "py:pillow": "MIT-CMU：即 PIL 沿用至今的那份历史许可（HPND 家族），条款只有「保留版权与许可声明」，无 copyleft、无署名广告条款，与 MIT 等价。它经 python-pptx 进入 knowledge-server，只在解析 .pptx 时被那个库用来读图元数据，本仓不直接 import、未修改、未 vendor。",

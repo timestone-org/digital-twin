@@ -8,7 +8,7 @@
 | 后端基础设施 | `server/lib/` | `server/lib/README.md` | 已建 |
 | 领域共享包 | `server/domain/` | 各包 `README.md`（`timeseries` / `collectwire` / `llmcore`） | 已建 |
 | 认证与授权 | `server/services/auth-server/` | [`server/services/auth-server/CONTEXT.md`](server/services/auth-server/CONTEXT.md) | 已建 |
-| 业务平台 | `server/services/platform-server/` | [`server/services/platform-server/CONTEXT.md`](server/services/platform-server/CONTEXT.md) | 已建（`api` 角色：空调台账 / 大屏组态 / 采集配置面 / 分析建模；`publisher` 角色：大屏实时发布） |
+| 业务平台 | `server/services/platform-server/` | [`server/services/platform-server/CONTEXT.md`](server/services/platform-server/CONTEXT.md) | 已建（`api` 角色：空调台账 / 大屏组态 / 采集配置面 / 分析建模 / 报告自动生成；`publisher` 角色：大屏实时发布） |
 | 采集运行时 | `server/services/collector-server/` | [`server/services/collector-server/CONTEXT.md`](server/services/collector-server/CONTEXT.md) | 已建（驱动层 + OPC UA 驱动 + 运行时 + 归档管道） |
 | OPC UA 服务端 | `server/services/opcua-server/` | [`server/services/opcua-server/CONTEXT.md`](server/services/opcua-server/CONTEXT.md) | 已建 |
 | 实时通道 | `server/services/realtime-hub/` | [`server/services/realtime-hub/CONTEXT.md`](server/services/realtime-hub/CONTEXT.md) | 已建 |
@@ -25,6 +25,7 @@
 - 跨大屏跳转：[`docs/DASHBOARD_NAV_DESIGN.md`](docs/DASHBOARD_NAV_DESIGN.md)
 - 孪生部件交互：[`docs/TWIN_PART_INTERACTION_DESIGN.md`](docs/TWIN_PART_INTERACTION_DESIGN.md)
 - AI 助手：[`docs/AI_ASSISTANT_DESIGN.md`](docs/AI_ASSISTANT_DESIGN.md)
+- 报告模板与自动生成：[`docs/REPORT_TEMPLATE_DESIGN.md`](docs/REPORT_TEMPLATE_DESIGN.md)
 - 分析建模：[`docs/MODELING_DESIGN.md`](docs/MODELING_DESIGN.md)
 - 知识库与 AgenticRAG：[`docs/KNOWLEDGE_BASE_GUIDE.md`](docs/KNOWLEDGE_BASE_GUIDE.md)（通读说明：项目坐标 → 四条主流程 → 数据与接口 → 部署运维 → 故障速查）、[`docs/KNOWLEDGE_BASE_DESIGN.md`](docs/KNOWLEDGE_BASE_DESIGN.md)（设计决策）、[`docs/KNOWLEDGE_CHAT_DESIGN.md`](docs/KNOWLEDGE_CHAT_DESIGN.md)（对话页）
 - 预测下发与每日增量：[`docs/AC_PUBLISH_DESIGN.md`](docs/AC_PUBLISH_DESIGN.md)

@@ -19,6 +19,7 @@ from __future__ import annotations
 
 import os
 import subprocess
+import sys
 import tempfile
 from pathlib import Path
 
@@ -48,7 +49,7 @@ if failed:
 
 
 def _probe(*args: str, timeout_s: int) -> tuple[int, str]:
-    """在 `server/` 下跑一条命令，返回（退出码, 标准错误+标准输出）。
+    """在 `server/` 下跑一条命令，成功取 stdout，失败取诊断。
 
     ⚠ 两处不能省：`NO_COLOR` 让 uv 不吐 ANSI 转义——否则导出的 requirements
     首行就解析不了；`cwd` 必须是 server/——导出里的 `-e ./lib` 是相对路径，
@@ -69,7 +70,12 @@ def _probe(*args: str, timeout_s: int) -> tuple[int, str]:
         )
     except (OSError, subprocess.TimeoutExpired) as error:
         raise GateError(f"{' '.join(args[:2])} 无法完成：{error}") from error
-    return result.returncode, (result.stderr or result.stdout).strip()
+    output = (
+        result.stdout
+        if result.returncode == 0
+        else (result.stderr or result.stdout)
+    )
+    return result.returncode, output.strip()
 
 
 def _must(*args: str, timeout_s: int, doing: str) -> str:
@@ -137,6 +143,23 @@ def _install_isolated(service_name: str, venv: Path) -> None:
     )
 
 
+def check_command_stream_contract() -> list[Violation]:
+    """警告不许污染成功命令的数据输出。"""
+    program = (
+        'import sys; print("dependency==1"); print("warning", file=sys.stderr)'
+    )
+    code, output = _probe(sys.executable, "-c", program, timeout_s=5)
+    if code == 0 and output == "dependency==1":
+        return []
+    return [
+        Violation(
+            "命令标准输出与诊断必须分开",
+            "check_service_deps",
+            "stderr 警告被当成了依赖清单",
+        )
+    ]
+
+
 def check_services_declare_what_they_import() -> list[Violation]:
     """每个服务按自己声明的依赖装完之后，它的模块必须全部 import 得动。"""
     found: list[Violation] = []
@@ -167,7 +190,10 @@ def check_services_declare_what_they_import() -> list[Violation]:
     return found
 
 
-CHECKS = (check_services_declare_what_they_import,)
+CHECKS = (
+    check_command_stream_contract,
+    check_services_declare_what_they_import,
+)
 
 
 if __name__ == "__main__":

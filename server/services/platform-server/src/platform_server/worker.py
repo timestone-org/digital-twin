@@ -66,6 +66,12 @@ from platform_server.apps.modeling.services.retention import (
     ModelingRetention,
     RetentionOptions,
 )
+from platform_server.apps.report.services.scheduler import ReportScheduler
+from platform_server.apps.report.services.worker import (
+    ReportWorker,
+    WordPool,
+    WorkerOptions,
+)
 from platform_server.container import Container, build_container
 from platform_server.settings import Settings
 
@@ -447,6 +453,27 @@ async def _release(container: Container) -> None:
     await container.database.dispose()
 
 
+def _report_consumers(
+    container: Container, pool: WordPool
+) -> tuple[Consumer, ...]:
+    """装配报告生成与定时调度。Args: container, pool。"""
+    settings = container.settings
+    options = WorkerOptions(
+        database=container.database,
+        stream=container.stream,
+        store=container.object_store,
+        consumer=settings.app_instance,
+    )
+    return (
+        ReportWorker(options, pool),
+        ReportScheduler(
+            options,
+            settings.dataset_bucket_timezone,
+            settings.report_schedule_enabled,
+        ),
+    )
+
+
 async def serve(settings: Settings, *, wait: Wait) -> None:
     """装配并跑到收到终止信号为止。
 
@@ -461,6 +488,7 @@ async def serve(settings: Settings, *, wait: Wait) -> None:
     # 建模的算子池与它分开：一次训练跑几分钟，共用一个池的话建模会被空调训练
     # 整个堵住，而两边的超时口径也不一样
     node_pool = NodePool()
+    word_pool = WordPool()
     publisher = build_publish_loop(container)
     scheduler = build_daily_scheduler(container)
     collector = build_dataset_collector(container)
@@ -479,6 +507,7 @@ async def serve(settings: Settings, *, wait: Wait) -> None:
                     retention,
                     build_modeling_runner(container, pool=node_pool),
                     build_modeling_retention(container),
+                    *_report_consumers(container, word_pool),
                 ),
                 leaseholders=(publisher, scheduler, collector, retention),
                 container=container,
@@ -489,6 +518,7 @@ async def serve(settings: Settings, *, wait: Wait) -> None:
     finally:
         pool.shutdown()
         node_pool.shutdown()
+        word_pool.close()
 
 
 def run(settings: Settings) -> None:  # pragma: no cover - 进程入口

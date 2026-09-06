@@ -57,6 +57,8 @@ class Settings(
         frozen=True,
     )
 
+    report_schedule_enabled: bool = False
+
     app_name: str = SERVICE_NAME
     app_http_port: int = 8005
     postgres_schema: str = DB_SCHEMA

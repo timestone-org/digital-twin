@@ -1,9 +1,4 @@
-"""全局 fixture。
-
-L2/L3 打真实 Postgres（SQLite 上全绿的迁移可以在生产直接失败），每条用例包在
-一个回滚事务里，互不残留。本服务没有令牌概念，调用者身份靠 `sign` 造出与边缘
-下发形状完全一致的签名头——用例因此走的是与生产同一条鉴权路径。
-"""
+"""真实 PostgreSQL 上的隔离夹具与边缘签名身份头。"""
 
 import os
 import socket
@@ -29,7 +24,12 @@ from unit.collect_fakes import (
 from unit.database_fakes import MakerSessions, rollback_sessions
 from unit.dataset_fakes import FakeSetSink, RecordingRunner
 from unit.opcua_fakes import FakeNodeWriter
-from unit.source_fakes import FakeAcSource, InMemoryStream, full_shape
+from unit.source_fakes import (
+    FakeAcSource,
+    InMemoryStream,
+    empty_stream,
+    full_shape,
+)
 
 from lib.auth import (
     SignedContext,
@@ -86,12 +86,13 @@ from platform_server.apps.hvac.services.ac_source_reader import AcSourceReader
 from platform_server.apps.llm_providers.catalog import LLM_MANAGE, LLM_VIEW
 from platform_server.apps.modeling import catalog as modeling_catalog
 from platform_server.apps.modeling.deps import get_modeling_sessions
+from platform_server.apps.report.catalog import REPORT_CODES
 from platform_server.container import (
     IDEMPOTENCY_NAMESPACE,
     TIMESCALE_SCHEMA,
     Container,
 )
-from platform_server.deps import get_session
+from platform_server.deps import get_session, get_stream
 from platform_server.settings import Settings
 from timeseries import HISTORY_SCHEMA
 
@@ -103,6 +104,7 @@ HEADER_TTL_S = 300
 # ⚠ 每加一个受权限守着的功能面都要往这里补：漏了不是「那面没被测到」，
 # 而是那面**全部用例整片 403**，而失败信息只说不可迭代 None
 FULL_CODES = (
+    *REPORT_CODES,
     AC_VIEW,
     AC_MANAGE,
     DASHBOARD_VIEW,
@@ -439,14 +441,11 @@ def _wire_fakes(
 ) -> None:
     """把会打网络的依赖换成假件。
 
-    ⚠ 事务件只有一份（`platform_server.deps.get_session`），换一次就够。
-    它此前是每个功能模块各一份、五份都要换，而 `runtime_params` 那份漏过一次，
-    表现是「单跑绿、连着跑红」——那个模块打真库真提交，残留行躺在库里毒下一次
-    运行。收成一份之后这类漏换不可能再发生，由
-    `tests/contract/test_route_matrix.py` 守住不许再分叉。
+    ⚠ 事务、存储与报告队列经共享依赖覆盖，避免用例走到真实外部端口。
     Args: application, maker, fakes, validation, object_store。
     """
     application.dependency_overrides[get_session] = _session_override(maker)
+    application.dependency_overrides[get_stream] = empty_stream
     application.dependency_overrides[get_object_store] = lambda: object_store
     application.dependency_overrides[get_ac_source_reader] = lambda: (
         AcSourceReader(source=fakes.ac_source, timezone=SOURCE_TIMEZONE)
