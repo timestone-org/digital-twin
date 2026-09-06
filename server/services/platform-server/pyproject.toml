@@ -9,6 +9,7 @@ dependencies = [
     # 计划、命令信封、快照键与运行态列名的唯一真源，与 collector 共用（ADR-0017）
     "collectwire",
     "numpy>=2.1",
+    "python-docx==1.2.0",
     "scikit-learn>=1.7",
     # publisher 角色打 realtime-hub 的主题登记与批推（docs/DASHBOARD_DESIGN.md §6）。
     # ⚠ 必须自己声明：httpx 在工作区根的 dev 组里，本地与全部用例都 import 得到，
@@ -25,6 +26,7 @@ dependencies = [
     # 静默失效，而现象是「登录页转圈转到超时」。设备码那两跳的线形不借它的，
     # 见 `apps/llm_providers/services/oauth_client.py` 文件头列的四处差异
     "langchain-openai>=1.6",
+    "matplotlib>=3.10",
 ]
 
 [project.scripts]
