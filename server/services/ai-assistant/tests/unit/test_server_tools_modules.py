@@ -128,7 +128,10 @@ async def test_the_module_list_gives_cards_not_config_fields() -> None:
     assert card["config_field_count"] == 2
     # 子槽写成 `键:类型`：一个槽里 value 收数值、time 收字符串是常态，
     # 只给键名的话模型只能按父槽的类型去理解每一个子槽
-    assert card["slots"][0]["array_fields"] == ["value:number", "time:string"]
+    assert [
+        (one["key"], one["data_type"])
+        for one in card["slots"][0]["array_fields"]
+    ] == [("value", "number"), ("time", "string")]
     # 行钉在配置项上还是由绑定条数决定，是两种完全不同的写法
     assert card["slots"][0]["is_entity_pinned"] is True
 
@@ -400,4 +403,5 @@ async def test_a_sub_slot_without_a_type_is_listed_by_key_alone() -> None:
     modules = got["modules"]
     assert isinstance(modules, list)
 
-    assert modules[0]["slots"][0]["array_fields"] == ["value"]
+    assert modules[0]["slots"][0]["array_fields"][0]["key"] == "value"
+    assert modules[0]["slots"][0]["array_fields"][0]["data_type"] is None

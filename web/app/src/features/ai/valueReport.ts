@@ -7,6 +7,7 @@
  * ⚠ `waiting` 与 `unavailable` **必须分开**：合成一档的话，「刚保存还没到下一拍」
  * 会被模型读成「这个点位是坏的」，然后它去把绑定改掉。
  */
+import { applyBindingTransform, type BindingSlot } from '@dt/runtime'
 import type { BindingView } from '@dt/contracts'
 
 import type { ReadPointSample } from '@/runtime/bindingReader'
@@ -22,6 +23,7 @@ const MAX_ITEMS = 200
  */
 export const VALUE_STATUSES = [
   'has_value',
+  'empty',
   'waiting',
   'unavailable',
   'unbound',
@@ -30,7 +32,19 @@ export const VALUE_STATUSES = [
 export type ValueStatus = (typeof VALUE_STATUSES)[number]
 
 /** 报告里的一条。 */
+export interface SeriesSummary {
+  point_count: number
+  from: string | null
+  to: string | null
+  is_truncated: boolean
+  truncated_side: string | null
+  is_stale: boolean
+}
+
 export interface ValueReportItem {
+  node_id?: string
+  series?: SeriesSummary
+
   field_key: string
   /** 这一行喂谁；没有名字时是空串。 */
   entity: string
@@ -63,6 +77,7 @@ export interface ValueReport {
  * 绑定盖掉前一块的——每一行都读得出值，读的却是别人的点位。
  */
 export interface ValueRow {
+  nodeId?: string
   row: BindingRowInput
   /** 这一行接的绑定；没接给 null。 */
   binding: BindingView | null
@@ -72,19 +87,26 @@ export interface ValueReportInput {
   rows: readonly ValueRow[]
   /** 画布那份快照缓存的查询函数。 */
   read: ReadPointSample
+  readSeries?: (
+    binding: BindingView,
+    nodeId: string | undefined,
+  ) => BindingSlot | undefined
   /** 最多列几条；不给用 200。 */
   maxItems?: number
 }
 
 /** 序列类来源在画布上本来就不展开，不是坏了。 */
-const SERIES_NOTE = '序列要异步取数，画布上不展开'
+const SERIES_NOTE = '当前工作面未提供历史序列快照，无法验收'
 const NO_POINT_NOTE = '实时绑定还没挑点位'
 const NO_SOURCE_NOTE = '这一行还没配来源'
 const NO_CONSTANT_NOTE = '常量绑定没有值'
 const WAITING_NOTE = '已订阅，还没收到第一帧'
 
 /** 一条绑定此刻的结论，不含 `field_key` 与 `entity` 那两格。 */
-type Reading = Pick<ValueReportItem, 'value' | 'at' | 'status' | 'note'>
+type Reading = Pick<
+  ValueReportItem,
+  'value' | 'at' | 'status' | 'note' | 'series'
+>
 
 const UNBOUND: Reading = {
   value: null,
@@ -174,16 +196,72 @@ export function pairRows(
 export function valueReport(input: ValueReportInput): ValueReport {
   const limit = input.maxItems ?? MAX_ITEMS
   const kept = input.rows.slice(0, limit)
-  const items = kept.map(({ row, binding }) => ({
+  const items = kept.map(({ row, binding, nodeId }) => ({
+    ...(nodeId === undefined ? {} : { node_id: nodeId }),
     field_key: row.fieldKey,
     entity: row.label,
     node_key: binding?.nodeKey ?? null,
     source_kind: binding?.sourceKind ?? null,
-    ...(binding === null ? UNBOUND : readingOf(binding, input.read)),
+    ...(binding === null
+      ? UNBOUND
+      : (binding.sourceKind === 'archive' ||
+            binding.sourceKind === 'dataset') &&
+          input.readSeries !== undefined
+        ? seriesReading(input.readSeries(binding, nodeId), binding)
+        : readingOf(binding, input.read)),
   }))
   return {
     items,
     unbound_count: items.filter((one) => one.status === 'unbound').length,
     is_truncated: input.rows.length > kept.length,
+  }
+}
+
+/** 与画布相同的序列状态；空窗口不是请求失败。 */
+function seriesReading(
+  slot: BindingSlot | undefined,
+  binding: BindingView,
+): Reading {
+  if (slot === undefined)
+    return {
+      value: null,
+      at: null,
+      status: 'unavailable',
+      note: '该节点尚无可验收的渲染序列；请显示模块后重读',
+    }
+  if (slot.state === 'pending')
+    return {
+      value: null,
+      at: null,
+      status: 'waiting',
+      note: '历史序列正在取数，请稍后重读',
+    }
+  if (slot.state === 'error')
+    return { value: null, at: null, status: 'unavailable', note: slot.message }
+  const points = slot.points ?? []
+  const last = points.at(-1)
+  return {
+    value: applyBindingTransform(slot.value, binding.transformJson),
+    at: last === undefined ? null : atOf(last.t),
+    status: points.length === 0 ? 'empty' : 'has_value',
+    note:
+      points.length === 0
+        ? '取数成功，但该时间窗口内没有数据'
+        : '已核对画布实际使用的历史序列',
+    series: summaryOf(slot),
+  }
+}
+
+function summaryOf(slot: Extract<BindingSlot, { state: 'ok' }>): SeriesSummary {
+  const points = slot.points ?? []
+  const first = points[0]
+  const last = points.at(-1)
+  return {
+    point_count: points.length,
+    from: first === undefined ? null : atOf(first.t),
+    to: last === undefined ? null : atOf(last.t),
+    is_truncated: slot.isTruncated ?? false,
+    truncated_side: slot.truncatedSide ?? null,
+    is_stale: slot.isStale ?? false,
   }
 }

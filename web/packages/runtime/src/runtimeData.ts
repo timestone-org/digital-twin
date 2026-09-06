@@ -4,7 +4,11 @@
  * ⚠ 注入的是**函数不是值**：`ModuleRenderer` 在 computed 里调用它，响应式依赖由那次
  * 调用建立；传一个取好的值进来，值再变也不会重算，而且不报任何错。
  */
-import type { ModuleConnectionState, SeriesReader } from '@dt/contracts'
+import type {
+  BindingView,
+  ModuleConnectionState,
+  SeriesReader,
+} from '@dt/contracts'
 import { inject, provide, type InjectionKey } from 'vue'
 
 import type { BindingSlot, BindingValueReader } from './moduleValues'
@@ -31,6 +35,12 @@ export interface RuntimeDataSource {
    * 编辑期刻意不装，编辑一格的时候不该有东西在背后自己刷。
    */
   seriesEpoch?: () => number
+  /** 发布实际渲染使用的序列槽，返回撤销发布的清理函数。 */
+  observeSeries?: (
+    nodeId: string,
+    bindings: readonly BindingView[],
+    slots: ReadonlyMap<string, BindingSlot>,
+  ) => () => void
 }
 
 export const RUNTIME_DATA_KEY: InjectionKey<RuntimeDataSource> =

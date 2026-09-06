@@ -2,6 +2,7 @@
  * @fileoverview 编辑器周边件的接线：全屏预览态、画布右键菜单、导出 JSON、
  * 保存后 best-effort 截图。收在一处让页面只剩绑定；本地草稿流在 useEditorPageOps。
  */
+import type { ReadRenderedSeries } from '@/runtime/renderedSeries'
 import { ref, type Ref } from 'vue'
 import type { DashboardPayload } from '@dt/contracts'
 import type { DesignSize, GetModuleManifest } from '@dt/runtime'
@@ -72,6 +73,7 @@ export interface EditorExtrasDeps {
    * 画布渲染用的那份快照缓存，助手读实时读数走它。
    * ⚠ 不许让助手另发一次请求：另发的话会出现「助手说有值、画面上是占位符」。
    */
+  readSeries?: ReadRenderedSeries
   readSample: ReadPointSample
 }
 
@@ -82,11 +84,7 @@ export interface EditorExtras {
   /** 工具栏保存入口：保存成功后顺手截缩略图并清草稿。 */
   saveWithThumbnail: () => Promise<SaveOutcome>
   exportJson: () => Promise<void>
-  /**
-   * 助手面板。
-   * ⚠ 这套部署没装助手时 `isAvailable` 恒假，入口不出现——而不是出现一个
-   * 点了报错的按钮（features/ai/ports.ts）。
-   */
+  /** 未部署助手时入口隐藏，见 features/ai/ports.ts。 */
   ai: AiPanel
 }
 
@@ -109,6 +107,9 @@ function aiPanelOf(
         stageEl: deps.stageEl,
         getManifest: deps.getManifest,
         readSample: deps.readSample,
+        ...(deps.readSeries === undefined
+          ? {}
+          : { readSeries: deps.readSeries }),
         save,
         savedVersion: () => deps.dashboard.value?.rowVersion ?? null,
       }),

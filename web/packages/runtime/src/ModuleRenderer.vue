@@ -15,6 +15,7 @@ import {
   ref,
   shallowRef,
   watch,
+  watchEffect,
   type Component,
 } from 'vue'
 
@@ -161,6 +162,18 @@ const seriesSlots = useSeriesSlots({
   bindings: () => props.bindings ?? [],
   read: () => runtimeData.readSeries,
   epoch: () => runtimeData.seriesEpoch?.() ?? 0,
+})
+
+watchEffect((onCleanup) => {
+  if (props.nodeId === undefined || runtimeData.observeSeries === undefined)
+    return
+  onCleanup(
+    runtimeData.observeSeries(
+      props.nodeId,
+      props.bindings ?? [],
+      seriesSlots.value,
+    ),
+  )
 })
 
 // ⚠ 读取器在 computed 里调用：对取数源的响应式依赖由那次调用建立

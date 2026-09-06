@@ -34,3 +34,8 @@ requirements-audit.txt
 
 # 会话用的 git worktree：那是完整检出，不是本仓的内容
 .claude/worktrees/
+
+# 代理的本机会话状态与本地权限不进版本库
+.claude/settings.local.json
+.claude/scheduled_tasks.lock
+.codex/worktrees/

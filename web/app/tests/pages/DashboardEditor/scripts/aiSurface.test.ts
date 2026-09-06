@@ -34,7 +34,13 @@ const MANIFEST: ModuleManifest = {
   defaultSize: { width: 100, height: 50 },
   configSchema: [],
   bindings: [
-    { key: 'itemValues', label: '读数', dataType: 'number', isArray: true },
+    {
+      key: 'itemValues',
+      label: '读数',
+      dataType: 'number',
+      isArray: true,
+      arrayFields: [{ key: 'value', label: '读数', dataType: 'number' }],
+    },
   ],
   component: () => Promise.resolve({ default: {} }),
 }

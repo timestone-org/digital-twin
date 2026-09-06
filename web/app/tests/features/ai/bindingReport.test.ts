@@ -111,6 +111,7 @@ describe('靠模块清单摊', () => {
         source_kind: 'static',
         node_key: null,
         static_value: 7,
+        detail: null,
       },
     ])
   })

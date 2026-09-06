@@ -1,17 +1,9 @@
-/**
- * @fileoverview 助手写一条绑定时，那条绑定的**取数方式**从工具入参里怎么读。
- *
- * ⚠ 一份而不是每个工作面各写一份：大屏与孪生两边都实现 `dashboard.write_binding`，
- * 而「常量写不写得下去」「null 算不算值」这两条口径一旦漂开，同一句话在两页上
- * 的行为就不一样了，且两边代码单看都对。
- *
- * ⚠ 助手只写 `opcua` 与 `static` 两种。`archive` / `dataset` 还要跟一份取数范围
- * （时间窗、台账列身份），少给一格的绑定存得下去、永远取不到数——那与「台账里
- * 这一格确实是空」长得一模一样。要接那两种，让用户走绑点面板。
- */
+/** @fileoverview 助手绑定来源转换，保留绑定身份并清理旧来源配置。 */
 import type { AssistantToolCall, BindingPayload } from '@dt/contracts'
 
-/** 助手写得了的两种来源。 */
+import { historyDetail } from './historyBinding'
+
+/** 默认工作面可写的来源。 */
 export type WritableSourceKind = 'opcua' | 'static'
 
 /**
@@ -24,10 +16,22 @@ export type WritableSourceKind = 'opcua' | 'static'
 export function withSource(
   base: BindingPayload,
   call: AssistantToolCall,
+  allowSeries = false,
 ): BindingPayload {
+  const clean = { ...base, computeJson: null, detailJson: null }
+  const kind = call.arguments.source_kind
+  if (allowSeries && (kind === 'archive' || kind === 'dataset')) {
+    return {
+      ...clean,
+      sourceKind: kind,
+      nodeKey: null,
+      staticValueJson: null,
+      detailJson: historyDetail(call, kind),
+    }
+  }
   return sourceKindOf(call) === 'static'
-    ? asConstant(base, call)
-    : asPoint(base, call)
+    ? asConstant(clean, call)
+    : asPoint(clean, call)
 }
 
 /** 接实时点位。 */

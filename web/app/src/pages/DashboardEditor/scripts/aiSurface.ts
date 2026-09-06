@@ -11,8 +11,20 @@
  * ⚠ 快照是**摘要**不是整棵树。一屏最多 2000 个画布节点，整份塞进去会把上下文
  * 占满，而被挤掉的是技能正文与工具结果。
  */
-import type { AssistantToolCall, ModuleManifest } from '@dt/contracts'
+import type {
+  AssistantToolCall,
+  BindingPayload,
+  DashboardNodePayload,
+  ModuleManifest,
+} from '@dt/contracts'
+import { resolveBindingSpec } from '@dt/runtime'
 
+import { manifestBindingRows } from '@/features/ai/bindingReport'
+import { assertConfigRemovalSafe } from '@/features/ai/configBindings'
+import {
+  checkedConfigPatch,
+  deleteOverride,
+} from '@/features/ai/configValidation'
 import type { ConfigPath } from '@/features/dashboard/configPath'
 import { createBinding } from '@/features/dashboard/editorDoc'
 import { nodeLabelOf } from '@/features/dashboard/nodeLabel'
@@ -161,7 +173,13 @@ function writeBinding(
   // ⚠ 也不能直接调 `applyPickedPoint`：它是为「用户先点绑点、再挑点位」那条路
   // 写的，对不存在的绑定**静默返回**——助手每次都「成功」而一条都没写出来。
   const current = node.bindings.find((one) => one.fieldKey === fieldKey)
-  const written = withSource(current ?? createBinding(node.id, fieldKey), call)
+  const written = withSource(
+    current ?? createBinding(node.id, fieldKey),
+    call,
+    true,
+  )
+  assertSeriesSource(deps, node.moduleType, written)
+  assertPinnedTarget(deps, node, fieldKey)
   deps.actions.writeBinding(written)
   return {
     ok: true,
@@ -169,6 +187,42 @@ function writeBinding(
     field_key: fieldKey,
     source_kind: written.sourceKind,
   }
+}
+
+function assertSeriesSource(
+  deps: EditorSurfaceDeps,
+  moduleType: string,
+  written: BindingPayload,
+): void {
+  const manifest = deps.getManifest(moduleType)
+  const spec = resolveBindingSpec(manifest?.bindings ?? [], written.fieldKey)
+  if (spec === undefined || spec.isArray === true)
+    throw new Error(`没有声明过的绑定子槽 ${written.fieldKey}`)
+  const isSeries =
+    written.sourceKind === 'archive' || written.sourceKind === 'dataset'
+  if (spec.isTimeSeries === true && !isSeries)
+    throw new Error('此槽需要历史序列，请使用 archive 或 dataset 来源')
+  if (isSeries && spec.isTimeSeries !== true)
+    throw new Error('此槽不接收历史序列，请先读取模块的时序槽声明')
+}
+
+function assertPinnedTarget(
+  deps: EditorSurfaceDeps,
+  node: DashboardNodePayload,
+  fieldKey: string,
+): void {
+  const manifest = deps.getManifest(node.moduleType)
+  const pinned = manifest?.bindings.some(
+    (spec) => spec.isEntityPinned && fieldKey.startsWith(`${spec.key}[`),
+  )
+  if (!pinned) return
+  const rows = manifestBindingRows({
+    manifest,
+    config: node.configJson,
+    bindings: node.bindings,
+  })
+  if (!rows.some((row) => row.fieldKey === fieldKey))
+    throw new Error('该槽没有对应的配置实体，请先添加配置项')
 }
 
 /** 解掉一条绑定。⚠ 换点位不要用它——直接重写那一条，绑定 id 要沿用。 */
@@ -196,7 +250,29 @@ function setConfig(
   refuseSilentNoop(deps.getManifest(node.moduleType), path)
   deps.editor.select(node.id)
   deps.editor.flush()
-  deps.actions.changeConfig(path, call.arguments.value, false)
+  const manifest = deps.getManifest(node.moduleType)
+  if (
+    manifest !== undefined &&
+    typeof path[0] === 'string' &&
+    !path[0].startsWith('__')
+  ) {
+    const next = checkedConfigPatch(
+      manifest,
+      node.configJson,
+      path,
+      call.arguments.value,
+    )
+    if (path.length === 1) assertConfigRemovalSafe(manifest, node, next, 0)
+    deps.actions.changeConfig([], next, false)
+  } else {
+    if (call.arguments.value === null)
+      deps.actions.changeConfig(
+        [],
+        deleteOverride(node.configJson, path),
+        false,
+      )
+    else deps.actions.changeConfig(path, call.arguments.value, false)
+  }
   return { ok: true, node_id: node.id, path }
 }
 
@@ -253,5 +329,12 @@ function pathArg(call: AssistantToolCall): ConfigPath {
   const given = call.arguments.path
   if (!Array.isArray(given)) throw new Error('set_config 的 path 必须是数组')
   const parts: unknown[] = given
-  return parts.map((one) => (typeof one === 'number' ? one : String(one)))
+  if (parts.length === 0) throw new Error('set_config 必须指向一个声明过的字段')
+  return parts.map((one) => {
+    if (typeof one !== 'string' && typeof one !== 'number')
+      throw new Error('配置路径只接受字段名和下标')
+    if (['__proto__', 'constructor', 'prototype'].includes(String(one)))
+      throw new Error('不允许此配置路径')
+    return one
+  })
 }

@@ -583,3 +583,12 @@ export function ariaSummaryOf(
   const blank = noted.map((view) => view.legendName).join('、')
   return `${head}${tail}；另有 ${String(noted.length)} 根轴画不出来：${blank}`
 }
+
+/** 雷达逐轴量程的跨字段校验；未配量程由现有空态解释。 */
+export function validateAxisRanges(config: Record<string, unknown>): string[] {
+  return readAxisItems(config[AXIS_ITEMS_KEY]).flatMap((item, index) =>
+    item.min !== null && item.max !== null && item.max <= item.min
+      ? [`${AXIS_ITEMS_KEY}[${index}] 量程上限必须大于下限`]
+      : [],
+  )
+}

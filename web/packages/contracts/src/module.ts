@@ -317,6 +317,8 @@ export interface ModuleManifest {
   keywords?: string[]
   defaultSize: ModuleDefaultSize
   configSchema: ConfigField[]
+  /** 客户端跨字段校验；收有效配置，返回阻止写入的原因。函数不进服务端目录。 */
+  validateConfig?: (config: Record<string, unknown>) => readonly string[]
   /** 属性面板顶部的一排预设按钮，缺省不显示。只放「整套观感」级的组合。 */
   configPresets?: ConfigPreset[]
   /**

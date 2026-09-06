@@ -50,7 +50,13 @@ const MANIFEST: ModuleManifest = {
   contentKeys: ['title', 'items'],
   unsupportedChromeKeys: ['backdropBlur'],
   bindings: [
-    { key: 'itemValues', label: '读数', dataType: 'number', isArray: true },
+    {
+      key: 'itemValues',
+      label: '读数',
+      dataType: 'number',
+      isArray: true,
+      arrayFields: [{ key: 'value', label: '读数', dataType: 'number' }],
+    },
   ],
   component: () => Promise.resolve({ default: {} }),
 }
@@ -347,10 +353,10 @@ describe('绑常量', () => {
         call('dashboard.write_binding', {
           node_id: 'a',
           field_key: 'itemValues[0].value',
-          source_kind: 'dataset',
+          source_kind: 'unknown-source',
         }),
       ),
-    ).rejects.toThrow(/dataset/)
+    ).rejects.toThrow(/unknown-source/)
   })
 })
 
@@ -492,5 +498,50 @@ describe('套一整套观感', () => {
 
     expect(config.items).toHaveLength(1)
     expect(config.align).toBeUndefined()
+  })
+})
+
+describe('未落库的数组默认项', () => {
+  it('追加保留默认项，撤销恢复未配置状态', async () => {
+    const { editor, surface } = setup()
+    editor.reset([{ ...node('a'), configJson: {} }])
+    const result = await run(surface, 'dashboard.add_config_item', {
+      node_id: 'a',
+      field: 'items',
+      values: { label: '新增' },
+    })
+    expect(result.index).toBe(1)
+    expect(itemsOf(editor).map((row) => row.label)).toEqual(['指标 1', '新增'])
+    editor.undo()
+    expect(editor.nodes.value[0]?.configJson).toEqual({})
+  })
+
+  it('新增项不猜子槽名', async () => {
+    const { surface } = setup()
+    const result = await run(surface, 'dashboard.add_config_item', {
+      node_id: 'a',
+      field: 'items',
+      values: { label: '新增' },
+    })
+    expect(String(result.note)).not.toContain('.value')
+    expect(String(result.note)).toContain('read_bindings')
+  })
+
+  it.each([
+    { path: ['items', 0, 'typo'], value: 1 },
+    { path: ['items', 0, 'precision'], value: '2' },
+    { path: ['items', 9, 'label'], value: '越界' },
+  ])('拒绝错误的子字段配置 $path', async (args) => {
+    const { editor, surface } = setup()
+    const before = JSON.stringify(editor.nodes.value)
+    await expect(
+      surface.run(
+        call('dashboard.set_config', {
+          node_id: 'a',
+          ...args,
+        }),
+      ),
+    ).rejects.toThrow()
+    expect(JSON.stringify(editor.nodes.value)).toBe(before)
   })
 })

@@ -6,7 +6,11 @@
  * （docs/DASHBOARD_CHART_MODULES_DESIGN.md §4.3 D8）。
  */
 import type { DashboardNodeView, DashboardPayload } from '@dt/contracts'
-import type { Ref } from 'vue'
+import { onScopeDispose, watch, type Ref } from 'vue'
+import {
+  createRenderedSeries,
+  type ReadRenderedSeries,
+} from '@/runtime/renderedSeries'
 
 import { fetchPointHistory } from '@/api/pointHistories'
 import {
@@ -29,7 +33,7 @@ import { fetchDatasetSeries } from '@/runtime/seriesReader'
 export function useEditorDataSources(
   dashboard: Ref<DashboardPayload | null>,
   nodes: () => readonly DashboardNodeView[],
-): DashboardValues {
+): DashboardValues & { readSeries: ReadRenderedSeries } {
   installDashboardDataSources({
     subscribe: createPointSubscribe(useRealtimeChannel(), () => {
       const current = dashboard.value
@@ -40,6 +44,12 @@ export function useEditorDataSources(
   })
   const values = useDashboardValues(nodes, () => dashboard.value?.id ?? '')
   // ⚠ 必须排在 `useDashboardValues` 之后：两次注入的是同一个键，后者整份覆盖前者
-  installDashboardSeries({ readPoint: values.read })
-  return values
+  const rendered = createRenderedSeries()
+  watch(() => dashboard.value?.id, rendered.clear)
+  onScopeDispose(rendered.clear)
+  installDashboardSeries({
+    readPoint: values.read,
+    observeSeries: rendered.observe,
+  })
+  return { ...values, readSeries: rendered.read }
 }

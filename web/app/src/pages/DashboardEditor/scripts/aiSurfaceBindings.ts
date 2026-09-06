@@ -113,11 +113,23 @@ function readValues(
     for (const one of paired) {
       rows.push({
         ...one,
+        nodeId: node.id,
         row: { ...one.row, label: `${prefix}${one.row.label}` },
       })
     }
   }
-  return valueReport({ rows, read: deps.readSample })
+  return valueReport({
+    rows,
+    read: deps.readSample,
+    ...(deps.readSeries === undefined
+      ? {}
+      : {
+          readSeries: (binding, nodeId) =>
+            nodeId === undefined
+              ? undefined
+              : deps.readSeries?.(nodeId, binding),
+        }),
+  })
 }
 
 /** 把一处接好的整套取数来源照抄到另一处。 */

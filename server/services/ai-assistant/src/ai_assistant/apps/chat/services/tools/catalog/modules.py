@@ -100,6 +100,7 @@ def detail_of(body: object, preset_id: str | None) -> dict[str, Any]:
         "is_container": bool(module.get("is_container")),
         "region": module.get("region"),
         "config_schema": _list_of(module.get("config_schema")),
+        "content_keys": _list_of(module.get("content_keys")),
         "slots": [_slot_of(one) for one in _list_of(module.get("bindings"))],
     }
     # 出厂就落库的那几个键。⚠ 与字段的 `default` 不是一回事：那个不落库、
@@ -260,8 +261,7 @@ def _searchable(module: dict[str, object]) -> str:
 def _slot_of(slot: object) -> dict[str, Any]:
     """一个绑定槽的形状。
 
-    ⚠ 子槽写成 `键:类型` 而不是光给键名：一个槽里 `value` 收数值、`time` 收
-    字符串是常态，只给键名的话模型只能按父槽的类型去理解每一个子槽。
+    子槽保留自己的类型、名称和时序约束，不能从父槽推断。
     ⚠ `is_entity_pinned` 必须在：它决定「这个槽有几行」——钉行的槽行数跟着
     配置里的实体走、绑一部分是常态；列表式的槽行由绑定条数决定且索引必须
     连续，中间空一格会被服务端拒。两种槽的写法不一样，认错就白写一轮。
@@ -289,25 +289,18 @@ def _slot_of(slot: object) -> dict[str, Any]:
     return out
 
 
-def _sub_slot_of(slot: object) -> str:
-    """数组槽的一个子槽，写成 `键:类型`。
-
-    ⚠ 上游没给类型时只给键名，不写一个 `None` 上去：那一串会被模型当成
-    「这个子槽的类型叫 None」，照着它去猜值的形状。
-
-    Args: slot。
-    """
-    body = _as_body(slot)
-    key = str(body.get("key"))
-    data_type = body.get("data_type")
-    if not isinstance(data_type, str) or not data_type:
-        return key
-    return f"{key}:{data_type}"
+def _sub_slot_of(slot: object) -> dict[str, Any]:
+    """保留子槽类型、名称、时序与必填约束。Args: slot。"""
+    return _slot_of(slot)
 
 
 def _size_of(given: object) -> dict[str, Any]:
     body = _as_body(given)
-    return {"width": body.get("width"), "height": body.get("height")}
+    return {
+        key: body[key]
+        for key in ("width", "height", "min_width", "min_height")
+        if key in body
+    }
 
 
 def _as_body(given: object) -> dict[str, object]:

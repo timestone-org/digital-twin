@@ -2,6 +2,7 @@
  * @fileoverview 助手工作面要握的那几样句柄。
  * 单独一个文件是为了让绑点与组态两半互不 import——它们只共用这份形状。
  */
+import type { ReadRenderedSeries } from '@/runtime/renderedSeries'
 import type { GetModuleManifest } from '@dt/runtime'
 
 import type { DashboardEditor } from '@/composables/useDashboardEditor'
@@ -46,6 +47,7 @@ export interface EditorToolDeps extends ComposeDeps, MetaSurfaceDeps {
    * 画布渲染用的那份快照缓存。
    * ⚠ 助手不许另发一次请求：另发的话会出现「助手说有值、画面上是占位符」。
    */
+  readSeries?: ReadRenderedSeries
   readSample: ReadPointSample
   /** 页面**现有**的保存路径。⚠ 不许另写一套：双轴保存的顺序不变量只有那份是对的。 */
   save: () => Promise<SaveOutcome>

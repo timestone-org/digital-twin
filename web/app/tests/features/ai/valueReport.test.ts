@@ -125,11 +125,11 @@ describe('非实时的那几种来源', () => {
     expect(found.items[0]?.status).toBe('unbound')
   })
 
-  it('序列类在画布上本来就不展开，说清楚不是点位坏了', () => {
+  it('没有序列快照接口时明确说明无法验收', () => {
     const found = report([binding('a', { sourceKind: 'archive' })])
     expect(found.items[0]).toMatchObject({
       status: 'unavailable',
-      note: '序列要异步取数，画布上不展开',
+      note: '当前工作面未提供历史序列快照，无法验收',
     })
   })
 
@@ -172,4 +172,82 @@ describe('行与绑定成对进来', () => {
     })
     expect(found.items.map((one) => one.node_key)).toEqual(['s:p1', 's:other'])
   })
+})
+
+describe('历史序列验收', () => {
+  it('复用渲染序列并给出实际覆盖范围和截断', () => {
+    const bound = binding('a', {
+      sourceKind: 'archive',
+      detailJson: { nodeKey: 's:p', range: { lastWindow: '7d' } },
+    })
+    const found = valueReport({
+      rows: pairRows([row('a', '温度')], [bound]),
+      read: () => undefined,
+      readSeries: () => ({
+        state: 'ok',
+        value: 2,
+        points: [
+          { t: 1000, v: 1 },
+          { t: 2000, v: 2 },
+        ],
+        isTruncated: true,
+        truncatedSide: 'early',
+        isStale: true,
+      }),
+    })
+    expect(found.items[0]).toMatchObject({
+      status: 'has_value',
+      series: {
+        point_count: 2,
+        from: '1970-01-01T00:00:01.000Z',
+        to: '1970-01-01T00:00:02.000Z',
+        is_truncated: true,
+        truncated_side: 'early',
+        is_stale: true,
+      },
+    })
+  })
+  it('空窗口与取数失败分开', () => {
+    const bound = binding('a', { sourceKind: 'dataset' })
+    const found = valueReport({
+      rows: pairRows([row('a', '产量')], [bound]),
+      read: () => undefined,
+      readSeries: () => ({ state: 'ok', value: null, points: [] }),
+    })
+    expect(found.items[0]?.status).toBe('empty')
+    expect(found.items[0]?.note).toContain('窗口')
+  })
+})
+
+it.each([
+  [undefined, 'unavailable'],
+  [{ state: 'pending' }, 'waiting'],
+  [{ state: 'error', message: '取数失败' }, 'unavailable'],
+] as const)('序列读数状态 %s 原样解释', (slot, status) => {
+  const bound = binding('a', { sourceKind: 'archive' })
+  expect(
+    valueReport({
+      rows: pairRows([row('a', '温度')], [bound]),
+      read: () => undefined,
+      readSeries: () => slot,
+    }).items[0]?.status,
+  ).toBe(status)
+})
+
+it('历史末值使用与图表一致的定值变换', () => {
+  const bound = binding('a', {
+    sourceKind: 'archive',
+    transformJson: { scale: 0.001 },
+  })
+  expect(
+    valueReport({
+      rows: pairRows([row('a', '压力')], [bound]),
+      read: () => undefined,
+      readSeries: () => ({
+        state: 'ok',
+        value: 1000,
+        points: [{ t: 1, v: 1000 }],
+      }),
+    }).items[0]?.value,
+  ).toBe(1)
 })

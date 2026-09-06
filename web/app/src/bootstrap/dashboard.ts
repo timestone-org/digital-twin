@@ -11,6 +11,7 @@
  * ⚠ 模型地址解析必须走深路径 `@dt/three-core/host`：桶文件第一行就静态依赖
  * 整个 three，从桶进来会把 three 拖进首屏 chunk（startup-graph 契约测试守着）。
  */
+import type { RuntimeDataSource } from '@dt/runtime'
 import type {
   HistoryQuery,
   HistoryResult,
@@ -196,6 +197,9 @@ export function useSeriesEpoch(): () => number {
 
 /** 装配序列取数时要给的那几样。 */
 export interface DashboardSeriesPorts {
+  /** 可选的页面内序列快照接收端。 */
+  observeSeries?: RuntimeDataSource['observeSeries']
+
   /** 点位快照读取器，取自 `useDashboardValues` 的返回值。 */
   readPoint: ReadPointSample
   /**
@@ -227,6 +231,9 @@ export function installDashboardSeries(ports: DashboardSeriesPorts): void {
       ? {}
       : { connectionState: ports.connectionState }),
     readSeries: readDashboardSeries,
+    ...(ports.observeSeries === undefined
+      ? {}
+      : { observeSeries: ports.observeSeries }),
     ...(ports.seriesEpoch === undefined
       ? {}
       : { seriesEpoch: ports.seriesEpoch }),

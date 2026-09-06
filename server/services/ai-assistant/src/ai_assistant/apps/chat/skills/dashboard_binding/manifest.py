@@ -15,6 +15,9 @@ DASHBOARD_BINDING = SkillManifest(
     surface_kinds=("dashboard-editor", "twin-editor", "twin2d-editor"),
     required_codes=("dashboard:edit", "collect:view"),
     server_tools=(
+        "modules.catalog",
+        "datasets.list_tables",
+        "datasets.read_columns",
         "points.list_sources",
         "points.search",
         "points.resolve",

@@ -207,7 +207,7 @@ export function resolveBindingSpec(
  * @param value 取到的原值
  * @param transform 绑定上的变换；没有则原样返回
  */
-function applyTransform(
+export function applyBindingTransform(
   value: unknown,
   transform: BindingTransform | null,
 ): unknown {
@@ -237,7 +237,7 @@ function transformPoints(
   if (transform === null) return points
   return points.map((point) => ({
     t: point.t,
-    v: applyTransform(point.v, transform),
+    v: applyBindingTransform(point.v, transform),
   }))
 }
 
@@ -301,7 +301,7 @@ function resolveBinding(
   injectPoints(state.values, binding, slot.points)
   const spec = resolveBindingSpec(input.specs, binding.fieldKey)
   const value = applyEnumMap(
-    applyTransform(slot.value, binding.transformJson),
+    applyBindingTransform(slot.value, binding.transformJson),
     spec,
   )
   if (value === null || value === undefined) state.tally.empty += 1

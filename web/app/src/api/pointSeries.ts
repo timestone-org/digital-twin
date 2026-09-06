@@ -91,6 +91,7 @@ export interface PointSeriesRequest {
 
 /** 一组并成同一次请求的绑定：窗口、桶宽与聚合档位都相同。 */
 interface PointGroup {
+  timezone?: string
   fromMs: number
   toMs: number
   bucket: TrendBucket
@@ -147,9 +148,6 @@ function absorbRequest(
 ): void {
   const { detail, fieldKey } = request
   const bounds = resolveWindow(detail.range, nowMs)
-  // ⚠ 时区进得了分组键、发不出去：`fetchPointAggregate` 今天不带 timezone 参数，
-  // 而后端缺了它就跟业务时区的缺省走（`collect_bucket_timezone`，现网是东八区），
-  // 所以这个字段今天在取数上没有任何作用。分组照样按它分开：接上之后不必改这里
   const key = JSON.stringify([
     detail.interval ?? '',
     detail.aggregate ?? '',
@@ -161,6 +159,7 @@ function absorbRequest(
     ...bounds,
     bucket: bucketOf(bounds.toMs - bounds.fromMs, detail.interval),
     aggregate: detail.aggregate ?? DEFAULT_AGGREGATE,
+    ...(detail.timezone === undefined ? {} : { timezone: detail.timezone }),
     slots: new Map<string, string[]>(),
   }
   groups.set(key, group)
@@ -217,33 +216,57 @@ export function isBucketOutOfReach(
  * @param bounds 整段窗口
  * @param bucket 这一组用的桶宽
  */
-function splitWindow(bounds: Segment, bucket: TrendBucket): Segment[] {
+function splitWindow(
+  bounds: Segment,
+  bucket: TrendBucket,
+  timezone?: string,
+): Segment[] {
   const spanMs = bucket.ms * BUCKETS_PER_CALL
   const found: Segment[] = []
   for (
-    let start = floorToBucket(bounds.fromMs, bucket.ms);
-    start < bounds.toMs;
-    start += spanMs
+    let start = floorToBucket(bounds.fromMs, bucket.ms, timezone);
+    start < bounds.toMs && found.length <= SEGMENTS_PER_READ_CAP;
+    start = floorToBucket(start + spanMs, bucket.ms, timezone)
   ) {
-    found.push({ fromMs: start, toMs: Math.min(start + spanMs, bounds.toMs) })
+    const end = floorToBucket(start + spanMs, bucket.ms, timezone)
+    found.push({ fromMs: start, toMs: Math.min(end, bounds.toMs) })
   }
   if (found.length === 0)
     found.push({ fromMs: bounds.fromMs, toMs: bounds.toMs })
   return found
 }
 
-/**
- * 一个时刻吸附到它所在那一格的起点。
- * ⚠ 带上时区偏移：日桶由库按当地零点对齐（后端 `collect_bucket_timezone` 现网
- * 是东八区），按 UNIX 纪元吸附的话日桶起点会整整差一个时区。取的是浏览器本地
- * 偏移——取数这条路今天下发不了时区（`ArchiveBindingDetail.timezone` 还没接），
- * 而现场的浏览器与后端在同一个时区。
- * @param atMs 要吸附的时刻
- * @param bucketMs 桶宽
- */
-function floorToBucket(atMs: number, bucketMs: number): number {
-  const offsetMs = -new Date(atMs).getTimezoneOffset() * 60_000
-  return Math.floor((atMs + offsetMs) / bucketMs) * bucketMs - offsetMs
+/** 按绑定时区对齐桶网格；未配置时保留浏览器本地语义。 */
+function floorToBucket(
+  atMs: number,
+  bucketMs: number,
+  timezone?: string,
+): number {
+  const wall =
+    Math.floor((atMs + offsetAt(atMs, timezone)) / bucketMs) * bucketMs
+  let candidate = wall - offsetAt(atMs, timezone)
+  // 日桶所在午夜的偏移可能不同于采样时刻（夏令时切换日）。
+  for (let pass = 0; pass < 2; pass += 1)
+    candidate = wall - offsetAt(candidate, timezone)
+  return candidate
+}
+
+function offsetAt(atMs: number, timezone: string | undefined): number {
+  if (timezone === undefined)
+    return -new Date(atMs).getTimezoneOffset() * 60_000
+  const parts = new Intl.DateTimeFormat('en', {
+    timeZone: timezone,
+    timeZoneName: 'longOffset',
+  }).formatToParts(atMs)
+  const name = parts.find((part) => part.type === 'timeZoneName')?.value
+  if (name === 'GMT') return 0
+  const matched = /^GMT([+-])(\d{2}):(\d{2})$/.exec(name ?? '')
+  if (matched === null) throw new Error(`无法解析时区偏移：${timezone}`)
+  return (
+    (matched[1] === '+' ? 1 : -1) *
+    (Number(matched[2]) * 60 + Number(matched[3])) *
+    60_000
+  )
 }
 
 /** 这一组实际怎么取：桶宽、切好的段，以及有没有降过档。 */
@@ -261,14 +284,14 @@ interface ReadPlan {
  * @param group 这一组的窗口与桶宽
  */
 function planRead(group: PointGroup): ReadPlan {
-  const segments = splitWindow(group, group.bucket)
+  const segments = splitWindow(group, group.bucket, group.timezone)
   if (segments.length <= SEGMENTS_PER_READ_CAP) {
     return { bucket: group.bucket, segments }
   }
   const coarse = bucketOf(group.toMs - group.fromMs, undefined)
   return {
     bucket: coarse,
-    segments: splitWindow(group, coarse),
+    segments: splitWindow(group, coarse, group.timezone),
     coarsenedTo: coarse.value,
   }
 }
@@ -313,6 +336,9 @@ async function readGroup(
               toMs: call.segment.toMs,
               interval: plan.bucket.value,
               aggregate: group.aggregate,
+              ...(group.timezone === undefined
+                ? {}
+                : { timezone: group.timezone }),
             },
             signal,
           ),

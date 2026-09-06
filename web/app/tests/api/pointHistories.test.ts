@@ -200,6 +200,7 @@ describe('分桶聚合', () => {
       toMs: NOW,
       interval: '5m',
       aggregate: 'max',
+      timezone: 'Asia/Shanghai',
     })
 
     const [path, options] = lastCall()
@@ -212,6 +213,7 @@ describe('分桶聚合', () => {
       range_end: '2026-08-14T12:00:00.000Z',
       interval: '5m',
       aggregate: 'max',
+      timezone: 'Asia/Shanghai',
     })
   })
 

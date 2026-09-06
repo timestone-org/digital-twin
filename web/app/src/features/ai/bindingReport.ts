@@ -13,6 +13,8 @@ import type {
   ModuleManifest,
 } from '@dt/contracts'
 
+import { resolveModuleConfig } from '@dt/runtime'
+
 import { arrayRowCount, slotRows } from '@/features/dashboard/bindingSlots'
 
 /** 一份规格书最多摊几行。一份大场景能有几百行，整份塞进去会占满上下文。 */
@@ -57,6 +59,7 @@ export interface BindingReportRow {
   source_kind: string | null
   node_key: string | null
   static_value: unknown
+  detail: BindingView['detailJson']
 }
 
 /** 规格书里的一个槽。 */
@@ -78,6 +81,7 @@ export interface BindingReportScalar {
   source_kind: string | null
   node_key: string | null
   static_value: unknown
+  detail: BindingView['detailJson']
 }
 
 /** 一处绑定的规格书。 */
@@ -135,7 +139,9 @@ export function manifestBindingSlots(
   input: Pick<ManifestReportInput, 'manifest' | 'config' | 'bindings'>,
 ): BindingSlotInput[] {
   const specs = input.manifest?.bindings ?? []
-  const counts = input.manifest?.bindingRowCounts?.(input.config)
+  const counts = input.manifest?.bindingRowCounts?.(
+    resolveModuleConfig(input.manifest, input.config),
+  )
   return specs.map((spec) => ({
     key: spec.key,
     label: spec.label,
@@ -190,8 +196,12 @@ export function manifestBindingRows(
   input: Pick<ManifestReportInput, 'manifest' | 'config' | 'bindings'>,
 ): BindingRowInput[] {
   const specs = input.manifest?.bindings ?? []
-  const labels = input.manifest?.bindingRowLabels?.(input.config)
-  const counts = input.manifest?.bindingRowCounts?.(input.config)
+  const labels = input.manifest?.bindingRowLabels?.(
+    resolveModuleConfig(input.manifest, input.config),
+  )
+  const counts = input.manifest?.bindingRowCounts?.(
+    resolveModuleConfig(input.manifest, input.config),
+  )
   return specs.flatMap((spec) =>
     spec.isArray === true
       ? arrayRowsOf(spec, rowCountOf(spec, counts, input.bindings), labels)
@@ -227,15 +237,24 @@ export function slotsFromRows(
 function sourceOf(
   bound: ReadonlyMap<string, BindingView>,
   fieldKey: string,
-): Pick<BindingReportRow, 'source_kind' | 'node_key' | 'static_value'> {
+): Pick<
+  BindingReportRow,
+  'source_kind' | 'node_key' | 'static_value' | 'detail'
+> {
   const found = bound.get(fieldKey)
   if (found === undefined) {
-    return { source_kind: null, node_key: null, static_value: null }
+    return {
+      source_kind: null,
+      node_key: null,
+      static_value: null,
+      detail: null,
+    }
   }
   return {
     source_kind: found.sourceKind,
     node_key: found.nodeKey,
     static_value: found.staticValueJson,
+    detail: found.detailJson,
   }
 }
 

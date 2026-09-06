@@ -16,6 +16,11 @@
  * ⚠ 套一整套观感也只能在这一侧：一套外壳 40 个键，逐键调 `set_config` 就是 40 次
  * 工具调用，中途被上下文截断的话画面停在半套样式上——而半套样式看着像「配错了」。
  */
+import { assertConfigRemovalSafe } from '@/features/ai/configBindings'
+import {
+  validateConfigValue,
+  validateModuleConfig,
+} from '@/features/ai/configValidation'
 import { CHROME_KEYS, isChromeKey, styleKeysOf } from '@dt/contracts'
 import type { AssistantToolCall, ConfigField } from '@dt/contracts'
 import { configDefaults } from '@dt/modules'
@@ -87,7 +92,12 @@ function applyStyle(
         '这套样式多半绑的是别的模块类型，换一条或只套它的外壳',
     )
   }
+  for (const field of manifest?.configSchema ?? []) {
+    if (Object.hasOwn(config, field.key))
+      validateConfigValue(field, config[field.key])
+  }
   const next: Record<string, unknown> = { ...node.configJson, ...config }
+  validateModuleConfig(manifest, next)
   // 空袋子按「删键」处理：外壳的语义是「键不存在 = 没设置」，留一只空对象
   // 与删掉它同义，但会让下次读配置时多出一段说不清的噪声
   if (Object.keys(chrome).length === 0) delete next[CARD_STYLE]
@@ -119,6 +129,7 @@ function readConfig(
     node_id: node.id,
     module_type: node.moduleType,
     config,
+    content_keys: manifest?.contentKeys ?? [],
     card_style: chrome ?? {},
     chrome_configurable: manifest?.chromeConfigurable !== false,
     unsupported_chrome_keys: manifest?.unsupportedChromeKeys ?? [],
@@ -139,7 +150,7 @@ function addItem(
 ): SurfaceSnapshot {
   const node = nodeOf(deps, call)
   const field = arrayFieldOf(deps, call, node.moduleType)
-  const rows = rowsOf(node.configJson, field.key)
+  const rows = rowsOf(node.configJson, field)
   const seeded = {
     ...configDefaults(field.itemSchema ?? []),
     ...objectArg(call, 'values'),
@@ -148,6 +159,7 @@ function addItem(
   if (rows.length >= max) {
     throw new Error(`${field.label} 最多 ${max} 项，加不上了`)
   }
+  validateConfigValue(field, [...rows, seeded])
   write(deps, node.id, field.key, [...rows, seeded])
   return {
     ok: true,
@@ -155,7 +167,7 @@ function addItem(
     field: field.key,
     index: rows.length,
     item: seeded,
-    note: `数据槽的行号与它一致，绑这一行用 …[${rows.length}].value`,
+    note: '用 dashboard.read_bindings 重读实际槽键与实体；配置数组不一定对应数据行。',
   }
 }
 
@@ -166,7 +178,7 @@ function dropItem(
 ): SurfaceSnapshot {
   const node = nodeOf(deps, call)
   const field = arrayFieldOf(deps, call, node.moduleType)
-  const rows = rowsOf(node.configJson, field.key)
+  const rows = rowsOf(node.configJson, field)
   const index = intArg(call, 'index')
   if (index < 0 || index >= rows.length) {
     throw new Error(`${field.key} 只有 ${rows.length} 项，没有第 ${index} 项`)
@@ -175,19 +187,21 @@ function dropItem(
   if (rows.length <= min) {
     throw new Error(`${field.label} 至少要 ${min} 项，删不得`)
   }
-  write(
-    deps,
-    node.id,
-    field.key,
-    rows.filter((_row, at) => at !== index),
+  const remaining = rows.filter((_row, at) => at !== index)
+  assertConfigRemovalSafe(
+    deps.getManifest(node.moduleType),
+    node,
+    { ...node.configJson, [field.key]: remaining },
+    index,
   )
+  write(deps, node.id, field.key, remaining)
   return {
     ok: true,
     node_id: node.id,
     field: field.key,
     removed_index: index,
     // ⚠ 必须说出来：行与项一一对应，删中间一项之后每一行都改喂前一项
-    note: '它之后每一行的数据绑定都改喂前一项了，请重读绑定并跟用户说清',
+    note: '已删除配置项；用 dashboard.read_bindings 核对剩余实体与绑定。',
   }
 }
 
@@ -258,6 +272,12 @@ function write(
   deps.editor.select(nodeId)
   deps.editor.flush()
   // 不连续：这一步就是完整的一笔，用户一次 Ctrl+Z 应当整个退回
+  const node = deps.editor.nodes.value.find((one) => one.id === nodeId)
+  if (node !== undefined)
+    validateModuleConfig(deps.getManifest(node.moduleType), {
+      ...node.configJson,
+      [key]: rows,
+    })
   deps.actions.changeConfig([key], rows, false)
 }
 
@@ -279,8 +299,11 @@ function arrayFieldOf(
   return field
 }
 
-function rowsOf(config: Record<string, unknown>, key: string): unknown[] {
-  const given = readConfigAt(config, [key])
+function rowsOf(
+  config: Record<string, unknown>,
+  field: ConfigField,
+): unknown[] {
+  const given = readConfigAt(config, [field.key]) ?? field.default
   if (!Array.isArray(given)) return []
   const rows: unknown[] = given
   return [...rows]

@@ -167,9 +167,36 @@ dashboard.write_binding(node_id=…, field_key="itemValues[2].value",
 
 多数数据模块的槽位是**数组槽**（一个槽对应 N 行），槽键形如 `itemValues[0].value`。
 
-- 行号**必须从 0 起、连续**。跳号的绑定服务端会拒收。
+- 列表式槽行号**必须从 0 起、连续**；`is_entity_pinned=true` 的实体槽允许只绑其中几行，不能为了凑连续而替用户绑定其它实体。
 - 有的数组槽是**钉在实体上**的（孪生的锚点、信息牌）：第 i 行喂配置里第 i 个实体，
   行数由配置决定。这种槽 `dashboard.read_bindings` 会给出每行对应的实体名字
   （`entity`），**按名字对，不要按行号猜**。
 - 还没绑的行也会出现在 `rows` 里、`node_key` 为 null。那不是这一行不存在，
   是它还空着——正好是你要接的那些。
+
+
+## 历史图表与台账来源（大屏编辑器）
+
+趋势曲线和日历热力需要历史序列，不能给它们接实时点位或常量来冒充历史。
+先用 `modules.catalog(module_type=…)` 查看子槽的 `is_time_series`，再用
+`dashboard.read_bindings` 获取实际 field_key 和已有的 detail。在大屏编辑器用 `dashboard.read_config`
+核对已配置的系列、指标和表格列名。不要猜子槽叫 value：
+趋势和日历是 series，数据表格是 c1…c8。
+
+- 点位归档：`source_kind="archive"`、`node_key`、`range`；根据用户含义选择
+  `aggregate`（avg / max / min / sum / count）、`interval` 和 `timezone`。
+- 数据台账：先 `datasets.list_tables` 获取表 code，再 `datasets.read_columns`
+  核对列 key、类型与单位；身份是 `ds:<表code>:<列key>`，写入 `dataset_key`，
+  同时给 `source_kind="dataset"` 与 `range`。不能编造表或列。
+- `range` 必须给相对窗 `{"last_window":"7d"}` 或绝对窗
+  `{"from_ms":…, "to_ms":…}`，只能给一组；时间均为 UTC 毫秒。
+  当前时序渲染不支持 `limit`，通过时间窗和归档桶宽控制取数。
+- 日历模块的显示时区与归档分桶时区应一致。逐日归并与采样聚合是两层计算：
+  必须依据指标含义选择，不能仅凭单位断定累计表底应该求和。
+- 时序绑定的草稿在画布中就会触发取数；纯历史配置不需要为看数主动保存。
+  实时绑定仍遵守上文「绑—存—看」流程。
+- `dashboard.read_values` 读取画布实际使用的序列，检查 `series.point_count`、
+  `from` / `to`、`is_truncated`、`truncated_side`、`is_stale`。
+  `empty` 表示请求成功但窗口内无点，不等于失败；`waiting` 稍后重读；
+  `unavailable` 按 note 说明原因。截断、陈旧与尚未渲染都不能宣称已验收完成。
+- 孪生子编辑器暂不支持写历史来源，应引导到相应绑定面板。

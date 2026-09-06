@@ -136,6 +136,7 @@ const extras = useEditorExtras({
   getManifest,
   dashboardId: () => dashboardId.value,
   readSample: values.read,
+  readSeries: values.readSeries,
 })
 
 const editing = useEditorVisibility(

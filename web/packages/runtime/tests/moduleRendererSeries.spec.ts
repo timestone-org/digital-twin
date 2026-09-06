@@ -6,11 +6,11 @@
 import type { BindingPayload, SeriesOutcome, SeriesReader } from '@dt/contracts'
 import { flushPromises, mount } from '@vue/test-utils'
 import { defineComponent, h, type PropType } from 'vue'
-import { describe, expect, it } from 'vitest'
+import { describe, expect, it, vi } from 'vitest'
 
 import ModuleRenderer from '../src/ModuleRenderer.vue'
 import type { BindingValueReader } from '../src/moduleValues'
-import { provideRuntimeData } from '../src/runtimeData'
+import { provideRuntimeData, type RuntimeDataSource } from '../src/runtimeData'
 import {
   asAsyncModule,
   fakeBinding,
@@ -66,6 +66,7 @@ function seriesBinding(fieldKey: string): BindingPayload {
 // ⚠ 用模块级开关而不是 prop：在 setup 的根作用域上读 prop 会丢响应性，
 // 而装不装批量取数口这件事只需要在挂载那一刻定死
 let seriesReader: SeriesReader | undefined
+let observeSeries: RuntimeDataSource['observeSeries']
 
 const Host = defineComponent({
   name: 'SeriesHost',
@@ -78,6 +79,7 @@ const Host = defineComponent({
   setup(props) {
     provideRuntimeData({
       readBinding: () => BASE_READER,
+      ...(observeSeries === undefined ? {} : { observeSeries }),
       ...(seriesReader === undefined ? {} : { readSeries: seriesReader }),
     })
     return () =>
@@ -193,4 +195,24 @@ describe('其余槽照旧', () => {
       '序列要异步取数，画布上不展开',
     )
   })
+})
+
+it('发布正在渲染的序列，换绑定与卸载都撤销旧发布', async () => {
+  const cleanup = vi.fn()
+  const observe = vi.fn(() => cleanup)
+  observeSeries = observe
+  const wrapper = mountChart([seriesBinding(SLOT_KEY)], readerOf(TRUNCATED))
+  await flushPromises()
+  expect(observe).toHaveBeenLastCalledWith(
+    'node-1',
+    expect.any(Array),
+    expect.any(Map),
+  )
+  const last = observe.mock.lastCall
+  expect(last).toBeDefined()
+  expect(cleanup).toHaveBeenCalled()
+  const count = cleanup.mock.calls.length
+  wrapper.unmount()
+  expect(cleanup.mock.calls.length).toBeGreaterThan(count)
+  observeSeries = undefined
 })

@@ -442,3 +442,39 @@ describe('失败', () => {
     expect(found.get('a')).toEqual({ state: 'error', message: '说不清' })
   })
 })
+
+it('把绑定时区传到聚合接口', async () => {
+  await readPointSeries(
+    [request('a', 'src:p1', { timezone: 'Asia/Shanghai' })],
+    undefined,
+    NOW,
+  )
+  expect(callAt(0).timezone).toBe('Asia/Shanghai')
+})
+
+it('分段边界按绑定时区而不是浏览器时区对齐', async () => {
+  await readPointSeries(
+    [
+      request('a', 'src:p1', {
+        range: { lastWindow: '365d' },
+        interval: '1d',
+        timezone: 'Asia/Tokyo',
+      }),
+    ],
+    undefined,
+    NOW,
+  )
+  expect(aggregateMock.mock.calls.length).toBeGreaterThan(1)
+  for (let i = 0; i < aggregateMock.mock.calls.length; i += 1) {
+    const from = callAt(i).fromMs
+    expect(typeof from).toBe('number')
+    expect(
+      new Intl.DateTimeFormat('en', {
+        timeZone: 'Asia/Tokyo',
+        hour: '2-digit',
+        minute: '2-digit',
+        hourCycle: 'h23',
+      }).format(new Date(Number(from))),
+    ).toBe('00:00')
+  }
+})

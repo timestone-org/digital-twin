@@ -21,7 +21,8 @@
 ```
 /
 ├── CONTEXT-MAP.md
-├── CLAUDE.md
+├── AGENTS.md             # 统一代理规范（Codex 入口）
+├── CLAUDE.md             # Claude 兼容入口，引用 AGENTS.md
 ├── docs/{adr,agents}/
 ├── docker/
 │

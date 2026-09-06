@@ -29,6 +29,7 @@ import {
   AXIS_SLOT_KEY,
   axisRowCounts,
   axisRowLabels,
+  validateAxisRanges,
   COMPARE_NAME_DEFAULT,
   RADAR_EMPTY_TEXT,
   SERIES_NAME_DEFAULT,
@@ -72,6 +73,7 @@ export default defineModule({
   ],
   defaultSize: { width: 360, height: 300, minWidth: 200, minHeight: 180 },
   configPresets: RADAR_CHART_PRESETS,
+  validateConfig: validateAxisRanges,
   contentKeys: [
     'title',
     AXIS_ITEMS_KEY,

@@ -7,6 +7,7 @@
 ⚠ 这里只有形状，没有实现——客户端工具在服务端压根没有实现。
 """
 
+from ai_assistant.apps.chat.services.tools.providers.client_specs import history
 from llmcore.tools.shapes import (
     ToolSpec,
     integer_schema,
@@ -128,7 +129,9 @@ CLIENT_SPECS: tuple[ToolSpec, ...] = (
             "数组槽形如 `itemValues[0].value`；槽位还不存在时会顺手建出来。"
             "接实时点位用 `source_kind='opcua'` 并给 `node_key`；"
             "写一个不随现场变的固定值用 `source_kind='static'` 并给 `value`"
-            "（数字、文本、真假都行）。"
+            "（数字、文本、真假都行）。大屏编辑器的时序槽用 archive + node_key "
+            "或 dataset + dataset_key，并必须给 range；"
+            "孪生子编辑器仍只接实时和常量。"
             "⚠ 绑完要 `dashboard.save` 才会有实时数：推送计划按**已落库**的"
             "绑定组装，草稿里的绑定它看不见。"
         ),
@@ -138,17 +141,19 @@ CLIENT_SPECS: tuple[ToolSpec, ...] = (
                 "field_key": string_schema("槽键"),
                 "source_kind": {
                     "type": "string",
-                    "enum": ["opcua", "static"],
+                    "enum": ["opcua", "static", "archive", "dataset"],
                     "description": (
-                        "取数来源：opcua = 采集点位，static = 常量。缺省 opcua"
+                        "opcua 实时，static 常量；大屏时序槽还支持 "
+                        "archive 归档、dataset 台账。缺省 opcua"
                     ),
                 },
                 "node_key": string_schema(
                     "点位身份，形如 `{数据源id}:{点位编码}`；opcua 才要"
                 ),
                 "value": {
-                    "description": "常量值，static 才要。给 null 表示空值",
+                    "description": "常量值，static 才要，不能是 null",
                 },
+                **history.history_parameters(),
             },
             ["node_id", "field_key"],
         ),
@@ -174,7 +179,9 @@ CLIENT_SPECS: tuple[ToolSpec, ...] = (
             "读此刻画面上的实时读数，与画布渲染的是同一份数。"
             "给 node_id 就只读那一个画布节点，不给则读整屏。"
             "每一行的 `status`：`has_value` 有数、`waiting` 订上了还没来"
-            "第一帧、`unavailable` 订不上或这个点位不推、`unbound` 还没绑。"
+            "第一帧、`empty` 历史窗口内无数据、`unavailable` 取数失败、"
+            "`unbound` 还没绑。"
+            "大屏历史槽还返回 series：点数、实际起止时刻、截断方向与陈旧标记。"
             "⚠ `waiting` **不等于**点位坏了：刚 `dashboard.save` 完就读，"
             "多半全是 waiting。等一下再读一次，不要据此去改绑定。"
         ),

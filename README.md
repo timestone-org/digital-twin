@@ -6,6 +6,12 @@
 > [`docs/ARCHITECTURE_MICROSERVICES.md`](docs/ARCHITECTURE_MICROSERVICES.md)，
 > 各语言的规范见 [`docs/agents/`](docs/agents/)。
 
+## AI 编程助手
+
+Codex 的项目规范入口是 [`AGENTS.md`](AGENTS.md)，详细规范保留在
+[`docs/agents/`](docs/agents/)。配置迁移与使用方式见
+[`docs/CODEX_SETUP.md`](docs/CODEX_SETUP.md)。
+
 ## 目录
 
 ```

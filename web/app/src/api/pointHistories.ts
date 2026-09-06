@@ -147,6 +147,7 @@ export async function fetchPointHistory(
 
 /** 一次分桶聚合要问的东西。 */
 export interface PointAggregateQuery {
+  timezone?: string
   /** 一次最多 50 个，与后端 `MAX_NODE_KEYS` 同值。 */
   nodeKeys: readonly string[]
   fromMs: number
@@ -177,6 +178,7 @@ export async function fetchPointAggregate(
         range_end: new Date(query.toMs).toISOString(),
         interval: query.interval,
         aggregate: query.aggregate,
+        ...(query.timezone === undefined ? {} : { timezone: query.timezone }),
       },
       ...(signal === undefined ? {} : { signal }),
     }),
