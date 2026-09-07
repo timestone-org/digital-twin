@@ -28,7 +28,10 @@ from auth_server.apps.auth.deps import (
 )
 from auth_server.apps.auth.errors import AccountDisabled
 from auth_server.apps.auth.schemas import PermissionCodesOut, UserDetailOut
-from auth_server.apps.auth.services import load_identity_by_id
+from auth_server.apps.auth.services import (
+    load_identity_by_id,
+    to_edge_identity,
+)
 from auth_server.apps.auth.services.presenters import to_user_detail
 from auth_server.container import Container
 from auth_server.settings import INTERNAL_PREFIX
@@ -89,7 +92,7 @@ async def reissue_edge_headers(
         raise AccountDisabled("账号已停用")
     return Response(
         status_code=status.HTTP_200_OK,
-        headers=container.verify.build_headers(identity),
+        headers=container.verify.build_headers(to_edge_identity(identity)),
     )
 
 

@@ -5,6 +5,7 @@ from dataclasses import dataclass
 from auth_server.apps.auth.services import (
     ApiKeyService,
     AuthService,
+    IdentityCache,
     RouteRuleCache,
     TokenService,
     VerifyService,
@@ -30,6 +31,7 @@ class Container:
     auth: AuthService
     verify: VerifyService
     rules: RouteRuleCache
+    identities: IdentityCache
 
 
 def _build_database(settings: Settings) -> Database:
@@ -98,6 +100,7 @@ def build_container(settings: Settings, *, clock: Clock = utcnow) -> Container:
     hasher = PasswordHasher()
     tokens = _build_tokens(settings, cache)
     rules = RouteRuleCache(clock=clock)
+    identities = IdentityCache(ttl_s=settings.identity_cache_ttl_s, clock=clock)
     api_keys = ApiKeyService(
         hasher=hasher,
         cache=cache,
@@ -119,9 +122,11 @@ def build_container(settings: Settings, *, clock: Clock = utcnow) -> Container:
             tokens=tokens,
             api_keys=api_keys,
             rules=rules,
+            identities=identities,
             signing_secret=(settings.edge_signing_secret.get_secret_value()),
             header_ttl_s=settings.edge_permission_ttl_s,
             clock=clock,
         ),
         rules=rules,
+        identities=identities,
     )
