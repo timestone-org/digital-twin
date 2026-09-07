@@ -72,6 +72,13 @@ def test_the_registry_keeps_the_declared_order() -> None:
     ]
 
 
+def test_the_skill_loader_is_exclusive_and_says_to_call_it_alone() -> None:
+    loader = next(spec for spec in SERVER_SPECS if spec.name == "skills.load")
+
+    assert loader.is_exclusive is True
+    assert "必须单独调用" in loader.description
+
+
 def test_the_module_level_table_is_the_registry_snapshot() -> None:
     """`TOOL_SPECS` 与执行用的那一份同源，不是手抄的第二份。"""
     assert all_specs() == TOOL_SPECS

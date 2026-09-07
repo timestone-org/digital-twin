@@ -20,6 +20,7 @@ from llmcore.turn import (
     TurnDeps,
     run_turn,
 )
+from llmcore.turn.exclusive import isolate_exclusive_call
 
 SERVER_TOOL = ToolSpec(
     name="kb.search",
@@ -33,6 +34,22 @@ CLIENT_TOOL = ToolSpec(
     parameters={"type": "object", "properties": {}},
     runs_on="client",
 )
+
+
+def test_tools_are_nonexclusive_by_default() -> None:
+    assert SERVER_TOOL.is_exclusive is False
+
+
+def test_one_exclusive_call_also_drops_invalid_calls() -> None:
+    reply = AIMessage(
+        content="",
+        invalid_tool_calls=[{"name": "broken", "args": "{", "id": "bad"}],
+        tool_calls=[tool_call("skills.load", {}, "load")],
+    )
+
+    cleaned = isolate_exclusive_call(reply, {"skills.load"})
+
+    assert cleaned.invalid_tool_calls == []
 
 
 async def _noop(name: str, arguments: dict[str, Any]) -> object:
@@ -84,6 +101,77 @@ async def test_a_server_tool_runs_here_and_the_model_sees_its_output() -> None:
 
     assert seen == [("kb.search", {"q": "锅炉"})]
     assert got.reply == "查到了"
+
+
+async def test_a_unique_single_underscore_alias_routes_to_the_client_tool() -> (
+    None
+):
+    responder = ScriptedResponder(
+        [
+            AIMessage(
+                content="",
+                tool_calls=[
+                    tool_call("user_ask", {"question": "选哪个"}, "c1")
+                ],
+            )
+        ]
+    )
+
+    got = await run_turn(_deps(responder), [])
+
+    assert [call.name for call in got.pending] == ["user.ask"]
+
+
+async def test_an_exclusive_tool_is_the_only_call_kept_from_its_batch() -> None:
+    exclusive = ToolSpec(
+        name="skills.load",
+        description="取技能正文",
+        parameters={"type": "object", "properties": {}},
+        runs_on="server",
+        is_exclusive=True,
+    )
+    responder = ScriptedResponder(
+        [
+            AIMessage(
+                content="",
+                invalid_tool_calls=[
+                    {"name": "broken", "args": "{", "id": "invalid"}
+                ],
+                tool_calls=[
+                    tool_call("kb.search", {"q": "先查"}, "regular"),
+                    tool_call(
+                        "skills.load",
+                        {"name": "dashboard-binding"},
+                        "exclusive-first",
+                    ),
+                    tool_call("user.ask", {"question": "哪个"}, "client"),
+                ],
+            ),
+            AIMessage(content="读完指令后再决定"),
+        ]
+    )
+    seen: list[tuple[str, dict[str, object]]] = []
+
+    async def run_tool(name: str, arguments: dict[str, Any]) -> object:
+        seen.append((name, arguments))
+        return {"instructions": "完整指令"}
+
+    deps = TurnDeps(
+        model=responder,
+        specs=(SERVER_TOOL, CLIENT_TOOL, exclusive),
+        run_tool=run_tool,
+    )
+    got = await run_turn(deps, [])
+
+    assert seen == [("skills.load", {"name": "dashboard-binding"})]
+    assert got.pending == ()
+    retained = responder.asked[1][0]
+    assert isinstance(retained, AIMessage)
+    assert [call["id"] for call in retained.tool_calls] == ["exclusive-first"]
+    assert retained.invalid_tool_calls == []
+    answer = responder.asked[1][-1]
+    assert isinstance(answer, ToolMessage)
+    assert answer.tool_call_id == "exclusive-first"
 
 
 async def test_a_client_tool_stops_the_turn_instead_of_running_here() -> None:

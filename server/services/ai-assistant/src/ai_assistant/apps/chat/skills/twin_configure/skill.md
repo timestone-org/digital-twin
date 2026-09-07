@@ -40,6 +40,10 @@
 - `arrows` / `flows`：方向标记与锚点之间的能量流。
 - `viewpoints` / `roamTour`：视点切换控件与自动漫游。
 
+修改 `model.asset` 前调用 `assets.search(kind="model")`，确认结果 `kind=model` 后只
+复制 `ref`（`asset:<uuid>`）；裸 id、文件夹 id 与 URL 都不是合法素材引用。压缩档
+单独写进 `model.variant`，不能拼进引用串。
+
 `patch` 只写读回配置里真实存在的键，不能改 `id`。嵌套对象可以只给一个叶子，
 例如 `{"look":{"opacity":0.45}}` 不会冲掉已有颜色；数组是完整替换，例如改
 `nodes`、`detail.fields`、`tint.stops` 时必须把要保留的项全部带回。

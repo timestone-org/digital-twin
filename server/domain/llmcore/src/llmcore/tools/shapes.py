@@ -1,4 +1,4 @@
-"""一个工具的对外形状：叫什么、收什么参数、**在哪一侧执行**。
+"""一个工具的对外形状：名字、参数、执行侧与是否必须单独执行。
 
 ⚠ `runs_on` 是这份形状里最要紧的一格。服务端工具在本进程里跑完就有结果；
 客户端工具要下发到浏览器、由编辑器执行，回合会在那里停下来等。两者的失败
@@ -22,6 +22,8 @@ class ToolSpec:
     # 判断该填什么，缺了的那一格它会自己编一个看起来合理的值
     parameters: dict[str, Any]
     runs_on: ToolSide
+    # 同批只保留它：必须先看完结果，再决定后续工具调用
+    is_exclusive: bool = False
 
 
 def openai_schema(spec: ToolSpec) -> dict[str, Any]:
