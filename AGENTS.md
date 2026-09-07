@@ -1,6 +1,6 @@
 # DigitalTwin
 
-本文件是本仓库的统一代理指令入口，适用于 Codex。下文引用的 `docs/agents/*.md` 是工程规范：开始任务时，按修改范围阅读对应文档并遵守；涉及领域行为时同时阅读 `CONTEXT-MAP.md` 与相关上下文的 `CONTEXT.md`。
+本文件是本仓库的统一代理指令入口，适用于 Codex。下文引用的 `docs/agents/*.md` 是工程规范。**开始编辑代码前必须完成上下文预检**：按修改范围阅读对应工程规范；从 `CONTEXT-MAP.md` 找到并阅读所有相关上下文的 `CONTEXT.md`；再按领域词与修改路径检索 `docs/adr/` 和上下文自己的 `docs/adr/`，读完所有命中的 ADR。开始编辑前的进度更新必须列出本次读过的上下文与 ADR；没有命中 ADR 时明确写“未找到相关 ADR”。完整检索规则见 `docs/agents/domain.md`。
 
 ## Agent skills
 
@@ -18,7 +18,7 @@
 
 ### Service topology
 
-后端 **6 个代码单元、9 个部署单元**：`auth-server` / `platform-server` / `collector-server` / `opcua-server` / `realtime-hub` / `ai-assistant`，其中 `platform-server` 按 `ROLE=api|worker|publisher` 跑出三种进程，`opcua-server` 独占 opc.tcp 端口段、单活且不经边缘。**代码单元 ≠ 部署单元**——扩缩与故障隔离在部署层解决，不为运行角色另建服务目录。数据是一库多 schema、**写独占读放行**。见 `docs/ARCHITECTURE_MICROSERVICES.md` 与 `docs/adr/0001`–`0007`。
+后端 **7 个服务代码单元**，连同边缘网关共 **11 个部署单元**：`auth-server` / `platform-server` / `collector-server` / `opcua-server` / `realtime-hub` / `ai-assistant` / `knowledge-server`；`platform-server` 按 `ROLE=api|worker|publisher` 跑出三种进程，`knowledge-server` 按 `ROLE=api|worker` 跑出两种进程，`opcua-server` 独占 opc.tcp 端口段、单活且不经边缘。**代码单元 ≠ 部署单元**——扩缩与故障隔离在部署层解决，不为运行角色另建服务目录。数据是一库多 schema、**写独占读放行**。见 `docs/ARCHITECTURE_MICROSERVICES.md` 与 `docs/adr/`。
 
 ### Project structure
 

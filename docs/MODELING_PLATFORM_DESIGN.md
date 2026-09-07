@@ -218,7 +218,7 @@ def describe_columns(
 | 模型签名 | 区分「入口列」与「派生列」 | 不存在 |
 
 ⚠ **前端那一份必须删掉、改成读后端算好的结果**（`POST …:validate` 的回执里带
-`known_keys_by_node`）。两份口径就是[单向契约留下盲区](../CLAUDE.md)那一类：
+`known_keys_by_node`）。两份口径就是 [AGENTS.md](../AGENTS.md) 所说的契约盲区：
 两边各自自洽，只有真跑起来才对不上。
 
 ### D3 · 声明是**约定**，真值是**实测**；两者不一致时发布失败
@@ -911,7 +911,7 @@ POST /api/v1/platform/modeling-model-versions/{id}:register-formula
 | 二 ✅ | 入口契约与模型签名 | `describe_columns`；`known_keys_by_node` 改用它；`serving_json` 2.0 + 双版本分派；`signature_json` 生成器；前端删掉第二份收窄口径 | 一 |
 | 三 ✅ | 算子扩容 A（不改列集的） | `cast_type` / `drop_missing` / `filter_rows` / `clip_outlier` / `resample` / `logistic_regression` / `classification_metrics` / `residual_analysis` / `feature_importance`。⚠ `kmeans` 移出本期，见 D22 | 一 |
 | 四 ✅ | 算子扩容 B（改列集的） | `time_feature` / `one_hot` / `select_feature` / `pca` / `lag_feature` / `rolling_feature` / `ledger_join` / `cross_validate`；逐步期望列改按实测 io 推 | 二 |
-| **五+六** ✅ | **产物、通道 B 与台账批量相位** | 迁移 3/4；四条护栏；`tree_regressor`；发布搬产物 + 实跑；`converge_pipeline` 接上并清产物；`BatchAnalysisModel` / `ModelMemo` / 收集相位；ADR-0045、ADR-0046 | 二 |
+| **五+六** ✅ | **产物、通道 B 与台账批量相位** | 迁移 3/4；四条护栏；`tree_regressor`；发布搬产物 + 实跑；`converge_pipeline` 接上并清产物；`BatchAnalysisModel` / `ModelMemo` / 收集相位；ADR-0048、ADR-0046 | 二 |
 | 七 ✅ | 对外服务 | 迁移 5；管理面 + 对外面；边缘 location + 限流；auth 规则；ADR-0047 | 二（schema 就是接口文档） |
 | 八 ✅ | 公式一键化 | `:register-formula`；**绑定改按入口契约核对**（原来按特征列，带特征工程的链上必错）；换绑的入口契约比对 | 二 |
 | 九 ✅ | 前端四面 | 运行面、模型详情（入口契约 + 一键注册）、服务面（服务 / 密钥 / 调用量）、开箱模板、结果全量导出（迁移 6 + 新权限码 `dataset:record:export`） | 六 / 七 / 八 |
@@ -930,10 +930,10 @@ POST /api/v1/platform/modeling-model-versions/{id}:register-formula
 | 题 | 期 |
 | --- | --- |
 | ~~台账公式重算加批量预测相位，求值器保持纯同步~~ → **ADR-0046** | 五+六 ✅ |
-| ~~模型二进制产物走对象存储且只加载自产字节~~ → **ADR-0045** | 五+六 ✅ |
+| ~~模型二进制产物走对象存储且只加载自产字节~~ → **ADR-0048** | 五+六 ✅ |
 | ~~对外推理面走 API 密钥并由边缘免认证 location 承载~~ → **ADR-0047** | 七 ✅ |
 
-⚠ 编号取当前未占用的下一个。本分支已占 0045、0046 与 0047。
+⚠ 编号取当前未占用的下一个。本设计对应 ADR-0048、ADR-0046 与 ADR-0047；ADR-0045 属于知识库索引决策。
 
 ### 部署时必做的两件事
 

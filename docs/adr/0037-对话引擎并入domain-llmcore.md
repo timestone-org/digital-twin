@@ -26,7 +26,7 @@
    `assistant` schema，权限与发布周期也跟着助手走，两个产品被焊死；
 3. 抽成 domain 包，两边各接各的工具。
 
-`domain/*` 的入场券是「已有 ≥2 个服务真实消费」（CLAUDE.md），这次正好是第二个。
+`domain/*` 的入场券是「已有 ≥2 个服务真实消费」（AGENTS.md），这次正好是第二个。
 
 ## 决策
 
@@ -42,7 +42,7 @@
 入场券是「已有 ≥2 个服务真实消费」——只有一个消费方的东西下沉是提前抽象。
 
 ⚠ **原本打算新开一个 `chatcore` 包，被结构闸推翻了，而它推翻得对。**
-`domain/*` 之间**不许互相 import**（CLAUDE.md，`check_structure_python` 里的
+`domain/*` 之间**不许互相 import**（AGENTS.md，`check_structure_python` 里的
 `check_domain_stays_flat`），而回合循环要 `llmcore` 的 `ModelChoice`——且必须是
 **同一个类型**，否则助手的 `GuardedModel` 与 `Responder` 这个结构化协议在
 pyright strict 下对不上。绕法有两种（各自复制一份类型别名、或把它们推进
@@ -52,7 +52,7 @@ pyright strict 下对不上。绕法有两种（各自复制一份类型别名�
 
 **二、它不碰 ORM，持久化走端口。**
 
-CLAUDE.md 明令 `domain` 不许含 ORM 模型与 CRUD。这条不是阻碍，它正好切在天然的
+AGENTS.md 明令 `domain` 不许含 ORM 模型与 CRUD。这条不是阻碍，它正好切在天然的
 缝上——实测 `turn.py`、工具注册表、SSE 输出层**一行 ORM 都不碰**，只有
 `history.py` 与 `summarize.py` 引了 `ChatMessage`，而它们只做「库里的一行 ↔
 模型认的一条」的转换。

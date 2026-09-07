@@ -7,12 +7,13 @@
 | 原配置 | Codex 中的处理 |
 |---|---|
 | `CLAUDE.md` 中的项目规范 | 已迁入根目录 `AGENTS.md`；`CLAUDE.md` 保留为引用它的兼容入口 |
+| Claude 项目 memory | 已按“决策 / 规范 / 历史状态”分类；有效决策进入 ADR 或已有设计文档，操作经验进入工程规范或闸门，历史状态不复制 |
 | `docs/agents/*.md` 工程文档 | 保留原路径，由 `AGENTS.md` 指引按需阅读 |
 | `.claude/settings.local.json` 的 `permissions.allow` | 属于 Claude 的本地执行授权，未直接转换；Codex 使用当前客户端的权限与沙箱设置 |
 | `.claude/worktrees/` | 保留原 Git 工作树及其未提交内容；不复制或移动到 Codex |
 | `.claude/scheduled_tasks.lock` | 本机会话锁，不包含可迁移的任务定义，保留并忽略 |
 
-本次检查未发现项目级 MCP 配置、hooks、自定义命令或 `SKILL.md` 技能包。`docs/agents/` 是工程规范文档，不需要转换成独立技能才能使用。
+仓库内没有需要转换的项目级 MCP 配置或 hooks；工程技能已位于 `.agents/skills/`。Claude 在 `~/.claude/projects/.../memory/` 保存的项目记忆不会被 Codex 自动读取，因此其内容不能作为架构真源。迁移后的权威入口是 `AGENTS.md`、`CONTEXT-MAP.md`、相关 `CONTEXT.md`、`docs/adr/` 与 `docs/agents/`。
 
 ## 权限与模型
 
@@ -25,7 +26,7 @@
 ## 验证与日常使用
 
 1. 在本仓库目录启动新的 Codex 任务，让它列出加载的项目指令来源，应包含根目录 `AGENTS.md`。
-2. 提交任务时直接描述需求；Codex 应按修改范围读取关联规范和领域上下文。
+2. 提交任务时直接描述需求；Codex 应在编辑前列出它按修改范围读取的领域上下文与 ADR。
 3. 修改工程规范时，更新 `AGENTS.md` 或对应 `docs/agents/` 文档；Claude 的兼容入口共享同一份规范。
 
 已有会话不保证重新加载新增的指令文件，使用新任务验证加载结果。此次变更只包含代理指令和文档；业务代码的测试与发布仍遵循 `docs/agents/ci-gates.md`。

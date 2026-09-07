@@ -1820,7 +1820,7 @@ onBeforeUnmount(() => raced.cancel())
 ```
 
 > ⚠ `check_ts_style.py` 的 `check_race_guards_come_from_one_place` 认「领号 + 比号」
-> 这一对手搓写法并要求改用 `useRacedFetch`；CLAUDE.md 也点名「可被快速切换触发的
+> 这一对手搓写法并要求改用 `useRacedFetch`；AGENTS.md 也点名「可被快速切换触发的
 > 加载必须防竞态」。漏了的表现是**界面显示上一次的文档**，零报错。
 > §17 的编辑器用例里有一条「快速切 nodeId 时旧响应不覆盖新文档」。
 

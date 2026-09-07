@@ -1,6 +1,6 @@
 # 服务架构
 
-> 后端由 **6 个代码单元、9 个部署单元**构成。本文定义它们各自的边界、通信方式与数据所有权。
+> 后端由 **7 个服务代码单元**构成，连同边缘网关共 **11 个部署单元**。本文定义它们各自的边界、通信方式与数据所有权。
 > 每条约束的理由见 [`adr/`](adr/)；代码结构见 [`agents/project-structure-python.md`](agents/project-structure-python.md)；镜像构建见 [`agents/docker-build.md`](agents/docker-build.md)。
 
 ---

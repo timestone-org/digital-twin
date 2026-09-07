@@ -39,3 +39,6 @@ requirements-audit.txt
 .claude/settings.local.json
 .claude/scheduled_tasks.lock
 .codex/worktrees/
+
+.agents/skills/
+skills-lock.json

@@ -46,7 +46,7 @@ llm/                    ← 模型接入，重整成适配器 + 注册表
 `check_feature_modules_use_public_face` 的判据是「跨功能 import 的路径第 4 段必须是
 `services`」（`_reaches_inside`，段之下不限深度）。所以
 `…apps.chat.services.memory.ports` 机械满足，而与它平级的 `…apps.chat.memory.ports`
-当场被拦。CLAUDE.md 又规定功能内是 `api → services → crud → models` 四层——
+当场被拦。AGENTS.md 又规定功能内是 `api → services → crud → models` 四层——
 放里面两条都满足，放外面两条都违。
 
 ⚠ 闸只管到「第 4 段是不是 `services`」，**不强制经过 `services/__init__.py`**。

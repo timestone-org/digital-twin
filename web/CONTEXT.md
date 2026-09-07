@@ -17,6 +17,8 @@
 
 ## 2. 包与依赖方向
 
+结构选择与取舍见 [`web/docs/adr/0001`](docs/adr/0001-前端采用source-only-pnpm-workspace.md)。
+
 ```
 L0  零依赖     contracts    tokens    security
 L1  基础                      ui
@@ -96,6 +98,8 @@ useGlobalTheme ── applyTheme(document.documentElement, id)
    原生滚动条、下拉、日期选择器与自动填充底色统统还是深色皮肤，且不报任何错。
 
 ## 4. 认证链路
+
+刷新令牌的跨标签并发决策见 [`web/docs/adr/0002`](docs/adr/0002-刷新令牌跨标签串行化.md)。
 
 ```
 LoginPage → auth store.login → POST /api/v1/auth/sessions
