@@ -224,6 +224,9 @@ jobs:
       PLATFORM_POSTGRES_PASSWORD: dt
       PLATFORM_POSTGRES_DB: dt
       PLATFORM_POSTGRES_SCHEMA: platform
+      # 覆盖率全套会让共享 runner 的短查询偶发越过生产用 2 秒预算；CI 不靠
+      # 调度抖动判慢查询，仍保留 10 秒硬上限且不重试。
+      PLATFORM_POSTGRES_STATEMENT_TIMEOUT_MS: '10000'
       # 外部只读库在 CI 里没有实例，用例一律打假外库。⚠ host 写成解析不出来的
       # 名字：真有用例去连它，要当场炸而不是连到别的什么东西上
       PLATFORM_SQLSERVER_HOST: sqlserver-not-used-in-this-job
