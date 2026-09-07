@@ -253,8 +253,10 @@ onBeforeUnmount(() => {
   else document.documentElement.setAttribute(THEME_ATTRIBUTE, previousTheme)
 })
 
-function insert(node: ReportDocument): void {
-  tiptap.value?.chain().focus().insertContent(editorDocument(node)).run()
+function insert(node: ReportDocument): boolean {
+  const current = tiptap.value
+  if (current === null) return false
+  return current.chain().focus().insertContent(editorDocument(node)).run()
 }
 
 defineExpose({ insert })

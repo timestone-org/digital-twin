@@ -13,6 +13,8 @@ import type { TwinSelection } from './types'
 export interface TwinSurfaceDeps {
   /** 归一化后的孪生配置；还没读出来时给 null。 */
   config: () => TwinConfig | null
+  /** 把归一化后的整份配置压进页面现有撤销栈。 */
+  patchConfig: (config: TwinConfig) => void
   /** 当前这一份绑定，含还没保存的草稿。 */
   bindings: () => readonly BindingPayload[]
   write: (binding: BindingPayload) => void

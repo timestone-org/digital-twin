@@ -21,17 +21,20 @@ import type {
   ReportTemplate,
 } from '@dt/contracts'
 import * as api from '@/api/reports'
+import AiDock from '@/components/ai/AiDock.vue'
 import { AppShell } from '@/components/layout'
 import PermGuard from '@/components/PermGuard.vue'
 import { useAuthStore } from '@/stores/auth'
 import { useUnsavedGuard } from '@/composables/useUnsavedGuard'
 import { useRacedFetch } from '@/composables/useRacedFetch'
+import { useAiPanel } from '@/composables/useAiPanel'
 import { describeError } from '@/composables/useAsyncList'
 import MetricPanel from './components/MetricPanel.vue'
 import NodeDialog from './components/NodeDialog.vue'
 import PreviewPanel from './components/PreviewPanel.vue'
 import PageDialog from './components/PageDialog.vue'
 import TemplateSettingsCard from './components/TemplateSettingsCard.vue'
+import { createReportSurface } from './scripts/aiSurface'
 import {
   blankReport,
   reportDraft,
@@ -53,7 +56,7 @@ const preview = ref<ReportPreview | null>(null)
 const error = ref('')
 const isBusy = ref(false)
 const isNodeOpen = ref(false)
-const editor = ref<{ insert: (node: ReportDocument) => void } | null>(null)
+const editor = ref<{ insert: (node: ReportDocument) => boolean } | null>(null)
 const raced = useRacedFetch()
 const trials = useRacedFetch()
 const saves = useRacedFetch()
@@ -70,6 +73,24 @@ onBeforeRouteLeave(confirmLeave)
 onBeforeRouteUpdate(confirmLeave)
 const canEdit = computed(() => auth.can(['report:manage']))
 const id = computed(() => String(route.params['templateId'] ?? ''))
+const ai = useAiPanel({
+  surface: () =>
+    createReportSurface({
+      templateId: () => id.value,
+      draft: () => draft.value,
+      setDraft: (value) => {
+        draft.value = value
+      },
+      canEdit: () => canEdit.value,
+      insert: insertForAssistant,
+      validate: api.validateReport,
+      preview: previewForAssistant,
+      showPreview: (value) => {
+        preview.value = value
+      },
+    }),
+  refId: () => id.value || null,
+})
 watch(id, load, { immediate: true })
 function load(): void {
   saves.cancel()
@@ -157,6 +178,18 @@ async function generate(): Promise<void> {
 }
 function insert(node: ReportDocument): void {
   editor.value?.insert(node)
+}
+function insertForAssistant(node: ReportDocument): void {
+  if (editor.value === null) throw new Error('报告编辑器尚未就绪')
+  if (!editor.value.insert(node)) throw new Error('正文插入失败，请稍后再试')
+}
+async function previewForAssistant(
+  nextPeriod: string,
+  body: ReportBody,
+): Promise<ReportPreview> {
+  const result = await api.previewReport(id.value, nextPeriod, body)
+  period.value = nextPeriod
+  return result
 }
 </script>
 <template>
@@ -270,6 +303,17 @@ function insert(node: ReportDocument): void {
         v-model="isNodeOpen"
         :metrics="draft.metrics ?? []"
         @insert="insert"
+      />
+      <AiDock
+        v-if="template"
+        :ai="ai"
+        surface-label="报告模板编辑器"
+        hint="助手只修改未保存草稿；请审阅、校验后再手动保存。"
+        :starters="[
+          '帮我根据现有台账设计这份月报的指标和正文',
+          '检查当前模板结构并试算本期数据',
+          '把页面设置成适合正式汇报的版式',
+        ]"
       />
     </div>
   </AppShell>

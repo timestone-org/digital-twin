@@ -1,6 +1,5 @@
 /**
- * @fileoverview 孪生编辑器作为助手的工作面：读场景、读绑定、写绑定、照抄绑定、
- * 读实时读数、落库、截视口。
+ * @fileoverview 孪生编辑器的 AI 工作面：配置实体、管理绑定、读实时值与截视口。
  *
  * ⚠ 截图与大屏同一份口径（`captureWithGl`）：视口是 WebGL，截图库直接读不到
  * 它的缓冲，靠场景登记的「先画一帧再拷」快照插替身截进去。
@@ -25,6 +24,7 @@ import {
   sameNodeOrThrow,
   TWIN_BINDING_TOOLS,
 } from './aiSurfaceBindings'
+import { runTwinConfigTool, TWIN_CONFIG_TOOLS } from './aiSurfaceConfig'
 import type { TwinSurfaceDeps } from './aiSurfaceTypes'
 import { buildTwinOutline } from './outlineNodes'
 import type { TwinEntityKind, TwinSelection } from './types'
@@ -38,6 +38,7 @@ export const TWIN_TOOLS = [
   'dashboard.remove_binding',
   'dashboard.capture',
   ...TWIN_BINDING_TOOLS,
+  ...TWIN_CONFIG_TOOLS,
 ] as const
 
 /**
@@ -164,6 +165,8 @@ function dispatch(deps: TwinSurfaceDeps, call: AssistantToolCall): unknown {
   if (call.name === 'dashboard.capture') return captureCanvas(deps.stage())
   const bound = runTwinBindingTool(deps, call)
   if (bound !== null) return bound
+  const configured = runTwinConfigTool(deps, call)
+  if (configured !== null) return configured
   throw new Error(`当前页面没有实现 ${call.name}`)
 }
 

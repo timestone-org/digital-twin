@@ -13,6 +13,8 @@ from ai_assistant.apps.chat.services.tools.providers.client_specs import (
     core,
     interaction,
     look,
+    report,
+    twin,
 )
 from llmcore.tools.ports import RunsElsewhere
 from llmcore.tools.shapes import ToolSpec
@@ -27,10 +29,14 @@ class ClientTools:
         """这一路提供哪些工具。
 
         ⚠ 顺序是契约的一部分：它决定这几批在提示词里的先后，而先后影响模型的
-        第一反应。三份按主题分家只是为了不破模块行数闸，拼接次序不许动。
+        第一反应。各份按主题分家只是为了不破模块行数闸，拼接次序不许动。
         """
         return (
-            core.CLIENT_SPECS + interaction.INTERACTION_SPECS + look.LOOK_SPECS
+            core.CLIENT_SPECS
+            + report.REPORT_SPECS
+            + twin.TWIN_SPECS
+            + interaction.INTERACTION_SPECS
+            + look.LOOK_SPECS
         )
 
     async def run(self, name: str, arguments: dict[str, Any]) -> Any:

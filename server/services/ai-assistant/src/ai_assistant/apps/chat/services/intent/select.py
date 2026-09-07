@@ -27,6 +27,7 @@ from llmcore.tools.shapes import ToolSpec
 
 # 哪个工作面都有的服务端工具：拉技能正文、写执行计划
 CORE_SERVER_TOOLS = ("skills.load", "plan.write")
+BUILTIN_CLIENT_TOOLS = ("user.ask",)
 
 # 长期记忆档：助手自己的记忆，不碰任何业务数据，故不受工作面约束
 # （ADR-0030）。⚠ `memory.remember` 是写动作却进了这一档——它写的是助手自己
@@ -81,11 +82,13 @@ def allowed_for(context: TurnContext) -> Allowed:
         *CROSS_MODULE_READ_TOOLS,
         *(name for skill in kept for name in skill.server_tools),
     }
-    client_allowed = (
-        set(context.client_tools)
-        if context.client_tools is not None
-        else {name for skill in kept for name in skill.client_tools}
-    )
+    declared_client = {name for skill in kept for name in skill.client_tools}
+    client_allowed = declared_client
+    if context.client_tools is not None:
+        client_allowed = set(context.client_tools) & {
+            *declared_client,
+            *BUILTIN_CLIENT_TOOLS,
+        }
     named = {
         spec.name
         for spec in TOOL_SPECS

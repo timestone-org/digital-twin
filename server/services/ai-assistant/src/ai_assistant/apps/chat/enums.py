@@ -12,6 +12,7 @@ SURFACE_KINDS = (
     "twin-editor",
     "twin2d-editor",
     "dataset-table",
+    "report-editor",
     "collect-source",
     "dashboard-view",
 )

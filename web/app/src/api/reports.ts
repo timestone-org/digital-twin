@@ -46,6 +46,11 @@ export const createReport = (body: ReportTemplateCreate) =>
   requestData<ReportTemplate>('/report-templates', write(body))
 export const saveReport = (id: string, body: ReportTemplateUpdate) =>
   requestData<ReportTemplate>(`/report-templates/${id}`, write(body, 'PUT'))
+export const validateReport = (body: ReportBody) =>
+  requestData<ReportSchemas['ValidationOut']>(
+    '/report-templates:validate',
+    write(body),
+  )
 export const deleteReport = (id: string) =>
   request(`/report-templates/${id}`, options({ method: 'DELETE' }))
 export const previewReport = (

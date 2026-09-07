@@ -15,6 +15,8 @@ from ai_assistant.apps.chat.services.tools.providers.client_specs import (
     core,
     interaction,
     look,
+    report,
+    twin,
 )
 from ai_assistant.apps.chat.services.tools.providers.knowledge import (
     KNOWLEDGE_SPECS,
@@ -60,6 +62,8 @@ def test_the_registry_keeps_the_declared_order() -> None:
         + MEMORY_SPECS
         + KNOWLEDGE_SPECS
         + core.CLIENT_SPECS
+        + report.REPORT_SPECS
+        + twin.TWIN_SPECS
         + interaction.INTERACTION_SPECS
         + look.LOOK_SPECS
     )
@@ -130,10 +134,12 @@ def test_both_shipped_sources_satisfy_the_port() -> None:
 
 
 def test_the_client_source_declares_every_client_spec() -> None:
-    """三份按主题分家的规格必须全部进这一路，漏一份模型就看不见那一批。"""
+    """按主题分家的规格必须全部进这一路，漏一份模型就看不见那一批。"""
     listed = {spec.name for spec in ClientTools().specs()}
     for batch in (
         core.CLIENT_SPECS,
+        report.REPORT_SPECS,
+        twin.TWIN_SPECS,
         interaction.INTERACTION_SPECS,
         look.LOOK_SPECS,
     ):

@@ -19,6 +19,7 @@ KNOWLEDGE_QA = SkillManifest(
         "twin2d-editor",
         "dashboard-view",
         "dataset-table",
+        "report-editor",
         "collect-source",
     ),
     required_codes=("knowledge:use",),

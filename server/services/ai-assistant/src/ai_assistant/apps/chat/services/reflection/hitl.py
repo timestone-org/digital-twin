@@ -28,6 +28,7 @@ SURFACE_UNDO: dict[str, UndoModel] = {
     "twin-editor": "draft",
     "twin2d-editor": "draft",
     "dataset-table": "commit",
+    "report-editor": "draft",
     "collect-source": "commit",
     "dashboard-view": "commit",
 }
