@@ -16,7 +16,11 @@
 ## 读取与修改
 
 `section` 可取 `model`、`viewpoints`、`roam`、`parts`、`anchors`、`cameras`、
-`panels`、`arrows`、`flows`。数组节不给 id 时只返回名片；要改之前再带 id 读取完整项。
+`panels`、`arrows`、`flows`。数组节不给 id 时返回 `folders` 目录和名片；目录项是
+`{id,name,item_count}`，每张名片的 `folder` 是 `{id,name}`，`null` 表示未分类。
+问题涉及“某一类”时，先从目录确认稳定的文件夹 id，再带 `folder_id` 读取该类；
+筛选发生在 100 条上限之前。要改实体之前再带 id 读取完整项，所属 `folder` 会与
+`config` 分开返回，不能把它写进 patch。
 
 - `model`：素材、缩放、位置、旋转、背景、自动旋转、动画与场景特效。
 - `parts`：名字、从属、关联模型节点、外观、显隐、状态染色、点击和详情卡片。
@@ -31,6 +35,8 @@
 
 ## 部件的易错口径
 
+- 大纲文件夹只是分类，不是装配关系；部件的装配层级看 `parentId`。文件夹不改变
+  实体文档序，也不改变数组绑定的行号，不能按文件夹里的显示顺序猜绑定行。
 - `look.color=''` 表示保留模型原材质；`opacity`、`blend` 范围 0–1，`glow` 范围 0–3。
 - `tint=null` 表示不取数；启用染色后还要配置规则并用绑定工具绑定对应行。
 - `visibility.visible` 是初始可见；距离规则必须同时带 `ref` 与 `value`。

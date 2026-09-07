@@ -144,3 +144,11 @@ def test_the_client_source_declares_every_client_spec() -> None:
         look.LOOK_SPECS,
     ):
         assert {spec.name for spec in batch} <= listed
+
+
+def test_twin_read_config_exposes_the_folder_filter() -> None:
+    """分类筛选在浏览器实现后，模型侧也必须看得见同名参数。"""
+    spec = next(
+        spec for spec in twin.TWIN_SPECS if spec.name == "twin.read_config"
+    )
+    assert "folder_id" in spec.parameters["properties"]

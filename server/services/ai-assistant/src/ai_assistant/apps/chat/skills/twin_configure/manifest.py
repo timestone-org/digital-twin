@@ -8,8 +8,8 @@ TWIN_CONFIGURE = SkillManifest(
     name="twin-configure",
     title="配置三维孪生",
     summary=(
-        "修改三维孪生的模型、部件、锚点、视点、信息牌、箭头、"
-        "能量流和漫游配置，并诊断与截图核验。"
+        "读取三维孪生的大纲文件夹分类，修改模型、部件、锚点、视点、"
+        "信息牌、箭头、能量流和漫游配置，并诊断与截图核验。"
     ),
     surface_kinds=("twin-editor",),
     required_codes=("dashboard:edit",),
