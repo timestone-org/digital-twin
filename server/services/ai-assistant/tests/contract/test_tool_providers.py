@@ -146,9 +146,18 @@ def test_the_client_source_declares_every_client_spec() -> None:
         assert {spec.name for spec in batch} <= listed
 
 
-def test_twin_read_config_exposes_the_folder_filter() -> None:
-    """分类筛选在浏览器实现后，模型侧也必须看得见同名参数。"""
-    spec = next(
-        spec for spec in twin.TWIN_SPECS if spec.name == "twin.read_config"
-    )
-    assert "folder_id" in spec.parameters["properties"]
+def test_twin_folder_tools_keep_their_inputs_unambiguous() -> None:
+    """目录、分类列表与详情读取各自只接自己那一种身份。"""
+    specs = {spec.name: spec for spec in twin.TWIN_SPECS}
+    read = specs["twin.read_config"].parameters
+    folders = specs["twin.list_folders"].parameters
+    entities = specs["twin.list_entities"].parameters
+    detail = specs["twin.read_entity"].parameters
+    properties = entities["properties"]
+
+    assert read["properties"]["section"]["enum"] == twin.SINGLETON_SECTIONS
+    assert folders["properties"] == {}
+    assert properties["section"]["enum"] == twin.ENTITY_SECTIONS
+    assert entities["required"] == ["section"]
+    assert detail["required"] == ["section", "id"]
+    assert "twin.list_folders" in properties["folder_id"]["description"]

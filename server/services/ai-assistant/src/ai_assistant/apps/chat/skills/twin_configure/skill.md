@@ -6,7 +6,8 @@
 ## 工作顺序
 
 1. 从工作面快照确认用户当前选中了什么。用户说“这个部件”时只认 `selected`。
-2. 用 `twin.read_config` 读取目标节；修改实体时必须带真实 id，不按数组下标猜。
+2. 类别先用 `twin.list_folders` 查，再将同一 `section` 的 `folder_id` 原样交给
+   `twin.list_entities`；单例用 `twin.read_config`，实体详情用 `twin.read_entity`。
 3. 用 `twin.patch_config` 只给要改的字段。它会深合并对象、整段替换数组，并返回
    归一化后的真实配置；范围外数字可能被夹取，非法值可能回落缺省，以回执为准。
 4. 每批修改后调用 `twin.diagnose`。修完阻断配置含义的问题再结束。
@@ -15,12 +16,22 @@
 
 ## 读取与修改
 
-`section` 可取 `model`、`viewpoints`、`roam`、`parts`、`anchors`、`cameras`、
-`panels`、`arrows`、`flows`。数组节不给 id 时返回 `folders` 目录和名片；目录项是
-`{id,name,item_count}`，每张名片的 `folder` 是 `{id,name}`，`null` 表示未分类。
-问题涉及“某一类”时，先从目录确认稳定的文件夹 id，再带 `folder_id` 读取该类；
-筛选发生在 100 条上限之前。要改实体之前再带 id 读取完整项，所属 `folder` 会与
-`config` 分开返回，不能把它写进 patch。
+读取职责不能混用：
+
+- `twin.list_folders` 不接收入参，一次返回六类实体的全局目录。回执带
+  `schema_version`，每项是 `{section,folder_id,name,item_count}`；文件夹身份是
+  `section + folder_id`，不是一段可凭名字构造的文本。
+- `twin.list_entities` 的 `section` 只可取 `parts`、`anchors`、`cameras`、
+  `panels`、`arrows`、`flows`。需要筛选时，`folder_id` 只能逐字复制
+  `twin.list_folders` 中同一 `section` 的结果；不能填文件夹名字、实体 id、素材 id
+  或 `asset:<uuid>`。名片的 `id` 可直接传给详情与修改工具，所属目录为
+  `{section,folder_id,name}` 或 `null`；筛选发生在 100 条上限之前。
+- `twin.read_entity` 必须同时给实体 `section` 与名片上的 `id`，返回完整 `config`
+  和同一套文件夹身份；`twin.read_config` 只读 `model`、`viewpoints`、`roam` 三个单例。
+
+如果本轮工具清单缺少上述三个实体读取工具，说明浏览器仍是旧页面能力。此时不得猜
+`folder_id`，也不得假装已经按类别读取；请用户刷新页面后再继续。新工具名就是这项
+能力的版本协商信号。
 
 - `model`：素材、缩放、位置、旋转、背景、自动旋转、动画与场景特效。
 - `parts`：名字、从属、关联模型节点、外观、显隐、状态染色、点击和详情卡片。

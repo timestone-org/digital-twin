@@ -14,11 +14,15 @@ import type { TwinEntityKind } from './types'
 
 export const TWIN_CONFIG_TOOLS = [
   'twin.read_config',
+  'twin.list_folders',
+  'twin.list_entities',
+  'twin.read_entity',
   'twin.patch_config',
   'twin.diagnose',
 ] as const
 
 const MAX_LIST_ITEMS = 100
+const TWIN_TOOL_SCHEMA_VERSION = 2
 const ENTITY_SECTIONS = [
   'parts',
   'anchors',
@@ -36,6 +40,9 @@ export function runTwinConfigTool(
   call: AssistantToolCall,
 ): SurfaceSnapshot | null {
   if (call.name === 'twin.read_config') return readConfig(deps, call)
+  if (call.name === 'twin.list_folders') return listFolders(deps)
+  if (call.name === 'twin.list_entities') return listEntities(deps, call)
+  if (call.name === 'twin.read_entity') return readEntity(deps, call)
   if (call.name === 'twin.patch_config') return patchConfig(deps, call)
   if (call.name === 'twin.diagnose') return diagnose(deps)
   return null
@@ -93,6 +100,63 @@ function readConfig(
   }
 }
 
+function listFolders(deps: TwinSurfaceDeps): SurfaceSnapshot {
+  const config = requireConfig(deps)
+  return {
+    schema_version: TWIN_TOOL_SCHEMA_VERSION,
+    folders: config.folders.map((folder) => ({
+      ...folderIdentityOf(folder),
+      item_count: folder.itemIds.length,
+    })),
+  }
+}
+
+function listEntities(
+  deps: TwinSurfaceDeps,
+  call: AssistantToolCall,
+): SurfaceSnapshot {
+  const config = requireConfig(deps)
+  const section = entitySectionArg(call)
+  const folders = foldersOf(config, section)
+  const selectedFolder = selectFolder(
+    folders,
+    section,
+    optionalText(call, 'folder_id'),
+  )
+  const items = config[section].filter(
+    (item) =>
+      selectedFolder === null || selectedFolder.itemIds.includes(item.id),
+  )
+  return {
+    schema_version: TWIN_TOOL_SCHEMA_VERSION,
+    section,
+    applied_folder_id: selectedFolder?.id ?? null,
+    items: items.slice(0, MAX_LIST_ITEMS).map((item) => ({
+      id: item.id,
+      name: item.name,
+      folder: folderIdentityFor(folders, item.id),
+    })),
+    is_truncated: items.length > MAX_LIST_ITEMS,
+  }
+}
+
+function readEntity(
+  deps: TwinSurfaceDeps,
+  call: AssistantToolCall,
+): SurfaceSnapshot {
+  const config = requireConfig(deps)
+  const section = entitySectionArg(call)
+  const id = requiredText(call, 'id')
+  const folders = foldersOf(config, section)
+  return {
+    schema_version: TWIN_TOOL_SCHEMA_VERSION,
+    section,
+    id,
+    folder: folderIdentityFor(folders, id),
+    config: entityOf(config, section, id),
+  }
+}
+
 function foldersOf(
   config: TwinConfig,
   section: TwinEntityKind,
@@ -125,6 +189,26 @@ function folderOf(
 ): { id: string; name: string } | null {
   const folder = folders.find((item) => item.itemIds.includes(itemId))
   return folder === undefined ? null : folderBriefOf(folder)
+}
+
+function folderIdentityOf(folder: TwinOutlineFolder): {
+  section: TwinEntityKind
+  folder_id: string
+  name: string
+} {
+  return {
+    section: folder.kind,
+    folder_id: folder.id,
+    name: folder.name,
+  }
+}
+
+function folderIdentityFor(
+  folders: readonly TwinOutlineFolder[],
+  itemId: string,
+): ReturnType<typeof folderIdentityOf> | null {
+  const folder = folders.find((item) => item.itemIds.includes(itemId))
+  return folder === undefined ? null : folderIdentityOf(folder)
 }
 
 function patchConfig(
@@ -243,6 +327,12 @@ function sectionArg(call: AssistantToolCall): TwinConfigSection {
   throw new Error(`${call.name} 的 section 无效`)
 }
 
+function entitySectionArg(call: AssistantToolCall): TwinEntityKind {
+  const value = call.arguments['section']
+  if (isEntitySection(value)) return value
+  throw new Error(`${call.name} 的 section 必须是六类实体之一`)
+}
+
 function isEntitySection(value: unknown): value is TwinEntityKind {
   return ENTITY_SECTIONS.some((section) => section === value)
 }
@@ -255,6 +345,12 @@ function optionalText(
   if (value === undefined) return undefined
   if (typeof value !== 'string' || value === '')
     throw new Error(`${call.name} 的 ${name} 必须是非空文本`)
+  return value
+}
+
+function requiredText(call: AssistantToolCall, name: string): string {
+  const value = optionalText(call, name)
+  if (value === undefined) throw new Error(`${call.name} 少了参数 ${name}`)
   return value
 }
 

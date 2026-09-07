@@ -14,6 +14,9 @@ TWIN_CONFIGURE = SkillManifest(
     surface_kinds=("twin-editor",),
     required_codes=("dashboard:edit",),
     client_tools=(
+        "twin.list_folders",
+        "twin.list_entities",
+        "twin.read_entity",
         "twin.read_config",
         "twin.patch_config",
         "twin.diagnose",

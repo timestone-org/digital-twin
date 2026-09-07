@@ -131,3 +131,13 @@ def test_the_core_tools_survive_even_with_no_codes_at_all() -> None:
     """核心档不归任何技能，收窄不该把它们带走——带走了助手连技能都拉不动。"""
     names = {one.name for one in specs_for("dashboard-editor", [], frozenset())}
     assert {"skills.load", "plan.write"} <= names
+
+
+def test_versioned_client_tools_require_an_explicit_page_report() -> None:
+    versioned = {"twin.list_folders", "twin.list_entities", "twin.read_entity"}
+    legacy = {one.name for one in specs_for("twin-editor", None, ALL_CODES)}
+    modern = {
+        one.name for one in specs_for("twin-editor", list(versioned), ALL_CODES)
+    }
+    assert versioned.isdisjoint(legacy)
+    assert versioned <= modern

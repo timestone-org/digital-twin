@@ -41,6 +41,8 @@ def test_the_selected_node_gets_a_sentence_of_its_own() -> None:
                 "id": "n7",
                 "module_type": "info-card",
                 "label": "机组温度",
+                "section": "parts",
+                "folder": {"folder_id": "f1"},
             },
         )
     )
@@ -48,6 +50,8 @@ def test_the_selected_node_gets_a_sentence_of_its_own() -> None:
     assert "机组温度" in text
     assert "info-card" in text
     assert "n7" in text
+    assert "section=parts" in text
+    assert "folder_id=f1" in text
 
 
 def test_a_multi_selection_names_every_one_of_them() -> None:
@@ -107,6 +111,13 @@ def test_a_huge_selection_says_it_was_cut() -> None:
 
 def test_an_empty_selection_array_reads_as_nothing_selected() -> None:
     assert "没有选中" in render(_shot(selected=[], selected_ids=[]))
+
+
+def test_a_selected_configuration_section_is_not_called_no_selection() -> None:
+    text = render(_shot(selected=[], selected_ids=[], selected_section="roam"))
+
+    assert "选中的是配置节 `roam`" in text
+    assert "没有选中" not in text
 
 
 def test_no_selection_is_said_out_loud() -> None:
