@@ -24,6 +24,20 @@ const ok = { code: 0, message: 'ok', data: { id: 1 }, trace_id: 't1' }
 
 let fetchMock: ReturnType<typeof vi.fn>
 
+function deferred<T>() {
+  let settle: ((value: T) => void) | null = null
+  const promise = new Promise<T>((resolve) => {
+    settle = resolve
+  })
+  return {
+    promise,
+    resolve(value: T): void {
+      if (settle === null) throw new Error('deferred 尚未初始化')
+      settle(value)
+    },
+  }
+}
+
 beforeEach(() => {
   fetchMock = vi.fn()
   vi.stubGlobal('fetch', fetchMock)
@@ -67,6 +81,18 @@ describe('request', () => {
     expect(
       (init.headers as Record<string, string>).Authorization,
     ).toBeUndefined()
+  })
+
+  it('显式凭据只覆盖本次请求的 Bearer', async () => {
+    fetchMock.mockResolvedValue(envelope(ok))
+    await request('/sessions:from-api-key', {
+      method: 'POST',
+      credentialOverride: { bearerToken: 'dtk_prefix_secret' },
+    })
+    const init = fetchMock.mock.calls[0]?.[1] as RequestInit
+    expect((init.headers as Record<string, string>).Authorization).toBe(
+      'Bearer dtk_prefix_secret',
+    )
   })
 
   it('query 里的 undefined 被丢掉', async () => {
@@ -131,6 +157,32 @@ describe('request', () => {
     expect(fetchMock).toHaveBeenCalledTimes(2)
   })
 
+  it('旧请求的 401 晚到时不刷新也不退出新会话', async () => {
+    const response = deferred<Response>()
+    let token = 'old-token'
+    const onRefresh = vi.fn().mockResolvedValue(false)
+    const onUnauthorized = vi.fn()
+    configureApiClient({
+      getToken: () => token,
+      onRefresh,
+      onUnauthorized,
+    })
+    fetchMock.mockImplementation(() => response.promise)
+
+    const running = request('/x')
+    token = 'new-token'
+    response.resolve(
+      envelope(
+        { code: 40102, message: '过期', data: null, trace_id: 't' },
+        401,
+      ),
+    )
+
+    await expect(running).rejects.toBeInstanceOf(BizError)
+    expect(onRefresh).not.toHaveBeenCalled()
+    expect(onUnauthorized).not.toHaveBeenCalled()
+  })
+
   it('刷新失败才触发登出，且不再重试', async () => {
     const onUnauthorized = vi.fn()
     configureApiClient({
@@ -161,6 +213,27 @@ describe('request', () => {
       BizError,
     )
     expect(onRefresh).not.toHaveBeenCalled()
+  })
+
+  it('显式凭据的 401 不触发普通刷新与登出', async () => {
+    const onRefresh = vi.fn()
+    const onUnauthorized = vi.fn()
+    configureApiClient({ onRefresh, onUnauthorized })
+    fetchMock.mockResolvedValue(
+      envelope(
+        { code: 40102, message: '密钥无效', data: null, trace_id: 't' },
+        401,
+      ),
+    )
+
+    await expect(
+      request('/sessions:from-api-key', {
+        method: 'POST',
+        credentialOverride: { bearerToken: 'dtk_prefix_secret' },
+      }),
+    ).rejects.toBeInstanceOf(BizError)
+    expect(onRefresh).not.toHaveBeenCalled()
+    expect(onUnauthorized).not.toHaveBeenCalled()
   })
 })
 
@@ -230,6 +303,27 @@ describe('取字节', () => {
 
     expect(await made.text()).toBe('second')
     expect(fetchMock).toHaveBeenCalledTimes(2)
+  })
+
+  it('取字节的旧 401 晚到时不碰新会话', async () => {
+    const response = deferred<Response>()
+    let token = 'old-token'
+    const onRefresh = vi.fn().mockResolvedValue(false)
+    const onUnauthorized = vi.fn()
+    configureApiClient({
+      getToken: () => token,
+      onRefresh,
+      onUnauthorized,
+    })
+    fetchMock.mockImplementation(() => response.promise)
+
+    const running = requestBytes('/documents/d1/figures/f1')
+    token = 'new-token'
+    response.resolve(new Response('', { status: 401 }))
+
+    await expect(running).rejects.toBeInstanceOf(TransportError)
+    expect(onRefresh).not.toHaveBeenCalled()
+    expect(onUnauthorized).not.toHaveBeenCalled()
   })
 
   it('刷新也失败时把会话过期报上去', async () => {

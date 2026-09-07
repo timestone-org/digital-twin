@@ -8,11 +8,34 @@ import { createPinia, setActivePinia } from 'pinia'
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 import type { NavigationGuard, Router } from 'vue-router'
 
+import * as authApi from '@/api/auth'
+import { resetEmbedContext, useEmbedContext } from '@/features/embed/context'
 import { installAuthGuard, safeReturnTarget } from '@/router/guards'
 import { useAuthStore } from '@/stores/auth'
 
 /** exp 落在 2001 年，前端只读 exp，签名无所谓。 */
 const EXPIRED_TOKEN = 'eyJhbGciOiJIUzI1NiJ9.eyJleHAiOiAxMDAwMDAwMDAwfQ.sig'
+
+function embedSession(access = 'embed-access', permissions: string[] = []) {
+  return {
+    token: { access_token: access, token_type: 'bearer', expires_in_s: 300 },
+    user: { id: 'u1', username: 'embed', permissions } as never,
+  }
+}
+
+function deferred<T>() {
+  let settle: ((value: T) => void) | null = null
+  const promise = new Promise<T>((resolve) => {
+    settle = resolve
+  })
+  return {
+    promise,
+    resolve(value: T): void {
+      if (settle === null) throw new Error('deferred 尚未初始化')
+      settle(value)
+    },
+  }
+}
 
 describe('safeReturnTarget', () => {
   it('站内相对路径原样返回', () => {
@@ -52,8 +75,22 @@ describe('installAuthGuard 的判定', () => {
     installAuthGuard(router as unknown as Router)
     return {
       router,
-      run: (to: Record<string, unknown>) =>
-        guard?.(to as never, { fullPath: '/from' } as never, () => undefined),
+      run: (to: Record<string, unknown>) => {
+        const target = {
+          path: '/x',
+          fullPath: '/x',
+          hash: '',
+          query: {},
+          meta: {},
+          name: 'x',
+          ...to,
+        }
+        return guard?.(
+          target as never,
+          { fullPath: '/from' } as never,
+          () => undefined,
+        )
+      },
     }
   }
 
@@ -64,11 +101,14 @@ describe('installAuthGuard 的判定', () => {
   }
 
   beforeEach(() => {
+    resetEmbedContext()
+    localStorage.clear()
     setActivePinia(createPinia())
   })
 
   afterEach(() => {
     vi.restoreAllMocks()
+    resetEmbedContext()
   })
 
   it('匿名路由直接放行', async () => {
@@ -163,5 +203,158 @@ describe('installAuthGuard 的判定', () => {
       name: 'login',
       query: { returnUrl: '/x' },
     })
+  })
+
+  it('API Key 换票未完成时已经移除 token，第二航等它完成再放行', async () => {
+    const result = deferred<ReturnType<typeof embedSession>>()
+    const exchange = vi
+      .spyOn(authApi, 'createSessionFromApiKey')
+      .mockImplementation(() => result.promise)
+    const { run } = fakeRouter()
+    const route = {
+      path: '/dashboards/d1',
+      fullPath: '/dashboards/d1',
+      name: 'dashboard-view',
+      meta: { permissions: ['dashboard:view'] },
+    }
+
+    await expect(
+      run({
+        ...route,
+        fullPath: '/dashboards/d1?token=secret&theme=emerald',
+        query: { token: 'dtk_prefix_secret', theme: 'emerald', keep: 'yes' },
+      }),
+    ).resolves.toEqual({
+      path: '/dashboards/d1',
+      query: { theme: 'emerald', keep: 'yes', embed: '1' },
+      hash: '',
+      replace: true,
+    })
+    expect(exchange).toHaveBeenCalledWith('dtk_prefix_secret')
+    expect(useAuthStore().accessToken).toBeNull()
+
+    const continued = Promise.resolve(
+      run({ ...route, query: { embed: '1', theme: 'emerald' } }),
+    )
+    const settled = vi.fn()
+    void continued.then(settled)
+    await Promise.resolve()
+    expect(settled).not.toHaveBeenCalled()
+
+    result.resolve(embedSession('embed-access', ['dashboard:view']))
+    await expect(continued).resolves.toBe(true)
+    expect(useAuthStore().accessToken).toBe('embed-access')
+    expect(useEmbedContext().themeId.value).toBe('emerald')
+  })
+
+  it('交换后的第二次导航按嵌入用户权限放行', async () => {
+    vi.spyOn(authApi, 'createSessionFromApiKey').mockResolvedValue(
+      embedSession('embed-access', ['dashboard:view']),
+    )
+    const { run } = fakeRouter()
+    const route = {
+      path: '/dashboards/d1',
+      fullPath: '/dashboards/d1',
+      name: 'dashboard-view',
+      meta: { permissions: ['dashboard:view'] },
+    }
+    await run({ ...route, query: { token: 'dtk_prefix_secret' } })
+
+    await expect(run({ ...route, query: { embed: '1' } })).resolves.toBe(true)
+  })
+
+  it('嵌入态站内跳转直接放行，不启动第二次 Router 导航', async () => {
+    vi.spyOn(authApi, 'createSessionFromApiKey').mockResolvedValue(
+      embedSession('embed-access', ['dashboard:view']),
+    )
+    const { run } = fakeRouter()
+    await run({
+      path: '/dashboards/d1',
+      name: 'dashboard-view',
+      query: { token: 'dtk_prefix_secret', theme: 'light' },
+      meta: { permissions: ['dashboard:view'] },
+    })
+
+    await expect(
+      run({
+        path: '/dashboards/d2',
+        name: 'dashboard-view',
+        query: {},
+        meta: { permissions: ['dashboard:view'] },
+      }),
+    ).resolves.toBe(true)
+  })
+
+  it.each(['/profile', '/system/users'])(
+    '%s 集中拒绝嵌入，且不拿 API Key 发交换请求',
+    async (path) => {
+      const exchange = vi.spyOn(authApi, 'createSessionFromApiKey')
+      const { run } = fakeRouter()
+
+      await expect(
+        run({
+          path,
+          name: path === '/profile' ? 'profile' : 'system-users',
+          query: { token: 'dtk_prefix_secret', theme: 'light' },
+        }),
+      ).resolves.toMatchObject({
+        query: { embed: '1', theme: 'light' },
+        replace: true,
+      })
+      expect(exchange).not.toHaveBeenCalled()
+      expect(useEmbedContext().error.value).toContain('不支持嵌入')
+    },
+  )
+
+  it('嵌入用户权限不足显示明确错误，不跳普通 403 页面', async () => {
+    vi.spyOn(authApi, 'createSessionFromApiKey').mockResolvedValue(
+      embedSession('embed-access', []),
+    )
+    const { run } = fakeRouter()
+    const route = {
+      path: '/assets',
+      name: 'assets',
+      meta: { permissions: ['asset:view'] },
+    }
+    await run({ ...route, query: { token: 'dtk_prefix_secret' } })
+
+    await expect(run({ ...route, query: { embed: '1' } })).resolves.toBe(true)
+    expect(useEmbedContext().error.value).toContain('没有访问此页面所需的权限')
+  })
+
+  it('只有 embed 标记而内存凭据已丢失时不回落同源普通登录态', async () => {
+    localStorage.setItem('dt.auth.access_token', 'normal-access')
+    localStorage.setItem(
+      'dt.auth.user',
+      JSON.stringify({ permissions: ['dashboard:view'] }),
+    )
+    const { run } = fakeRouter()
+
+    await expect(
+      run({
+        path: '/dashboards/d1',
+        name: 'dashboard-view',
+        query: { embed: '1', theme: 'emerald' },
+        meta: { permissions: ['dashboard:view'] },
+      }),
+    ).resolves.toBe(true)
+    expect(useAuthStore().accessToken).toBeNull()
+    expect(useEmbedContext().error.value).toContain('宿主页面重新加载')
+  })
+
+  it('伪造 query 或重复 token 不会绕过交换', async () => {
+    const exchange = vi.spyOn(authApi, 'createSessionFromApiKey')
+    const { run } = fakeRouter()
+
+    await run({
+      path: '/assets',
+      name: 'assets',
+      query: { token: ['dtk_one', 'dtk_two'], theme: 'not-a-theme' },
+      meta: { permissions: ['asset:view'] },
+    })
+
+    expect(exchange).not.toHaveBeenCalled()
+    expect(useEmbedContext().error.value).toContain('格式不正确')
+    expect(useEmbedContext().themeId.value).toBe('dark-tech')
   })
 })

@@ -29,6 +29,20 @@ async function collect(stream: AsyncGenerator<string>): Promise<string[]> {
   return seen
 }
 
+function deferred<T>() {
+  let settle: ((value: T) => void) | null = null
+  const promise = new Promise<T>((resolve) => {
+    settle = resolve
+  })
+  return {
+    promise,
+    resolve(value: T): void {
+      if (settle === null) throw new Error('deferred 尚未初始化')
+      settle(value)
+    },
+  }
+}
+
 let fetchMock: ReturnType<typeof vi.fn>
 
 beforeEach(() => {
@@ -96,6 +110,27 @@ describe('开不起来的时候', () => {
       .mockResolvedValueOnce(streaming(['ok']))
     expect(await collect(openStream('/x:advance'))).toEqual(['ok'])
     expect(fetchMock).toHaveBeenCalledTimes(2)
+  })
+
+  it('开流请求的旧 401 晚到时不碰新会话', async () => {
+    const response = deferred<Response>()
+    let token = 'old-token'
+    const onRefresh = vi.fn().mockResolvedValue(false)
+    const onUnauthorized = vi.fn()
+    configureApiClient({
+      getToken: () => token,
+      onRefresh,
+      onUnauthorized,
+    })
+    fetchMock.mockImplementation(() => response.promise)
+
+    const running = collect(openStream('/x:advance'))
+    token = 'new-token'
+    response.resolve(streaming([], 401))
+
+    await expect(running).rejects.toBeInstanceOf(TransportError)
+    expect(onRefresh).not.toHaveBeenCalled()
+    expect(onUnauthorized).not.toHaveBeenCalled()
   })
 
   it('刷不动就交给登出钩子，并把 401 如实抛出去', async () => {
