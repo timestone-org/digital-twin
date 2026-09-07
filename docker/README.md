@@ -36,6 +36,42 @@ nginx 自带的 `mime.types` 里**没有 `.mjs`**，于是 ES 模块被按 `defa
 worker 加载失败、知识库的 PDF 预览一律画不出来，而访问日志里那条请求是干干净净的
 200。⚠ 不能挪进 `server` / `location`：`types` 块会**丢掉整份继承**。
 
+### 嵌入页的响应头与日志
+
+任意业务页可按 [ADR-0051](../docs/adr/0051-任意业务页用API密钥换短期会话后嵌入.md) 以
+`?token=<APIKey>&theme=<theme-id>` 进入嵌入模式。这是已明确接受风险的内网方案，
+不得用于互联网或不受管网站。
+
+边缘仅做四件可验证的泄漏缩减：
+
+1. 带非空 `token` 或 `embed=1` 的静态入口下发 `Cache-Control: no-store` 与
+   `Referrer-Policy: no-referrer`；
+2. access log 记从原始请求剥掉 query 的稳定路径，不记 `$request_uri` /
+   `$request`；两条公开大屏路径里的票据段进一步固定记成 `<redacted>`；
+3. 普通页用 CSP `frame-ancestors 'none'`，带 token 或 `embed=1` 的入口以
+   `frame-ancestors *` 允许外域 iframe。原有 `/public/<token>` 大屏也保持可嵌入。
+4. 精确的 `POST /api/v1/auth/sessions:from-api-key` 换票路径单列 IP 限流：
+   `60r/m`、`burst=20`、超限回 429；该 location 仍 `include auth-inject.conf`，
+   绝不是免认证入口。
+
+是否为 `/public/` 要用从原始 `$request_uri` 剥掉 query 得到的
+`$original_path` / `$dt_original_path` 判断，不许改成 `$uri`。SPA 的
+`try_files` 回落会把 `$uri` 内部改成 `/index.html`，拿它判断会让公开大屏在响应阶段
+静默掉回 `frame-ancestors 'none'`。
+
+前端换到短期 access 后会从地址栏移除 `token`、保留 `theme` 并写入
+`embed=1`。边缘必须继续认这个标记，否则跨域 iframe 内硬刷新会在前端给出
+「凭据已不在内存」的错误页之前，先被 CSP 拦成空白页。
+
+⚠ `frame-ancestors *` **不是父页授权**。本方案没有 origin 白名单，nginx 无法判断
+哪个内网页面可信；拿到 URL 的页面都能嵌入。这些头也清不掉浏览器历史、截图、
+上一层反向代理/WAF 或错误日志中的副本。必须为每个嵌入方创建专用最小权限账号、
+给 API 密钥设到期日并定期轮换。Linux 和 Windows 两份 nginx 配置必须同步改动。
+
+⚠ **生产必须使用 HTTPS/TLS**。可以由本 nginx 终结 TLS，也可在它前面放受管的
+TLS 终结代理，但浏览器到第一个可信终结点之间不得是明文 HTTP。否则 URL 中的
+长期 API 密钥可被被动抓包；WebSocket 对外也必须是 WSS。
+
 ## compose
 
 ```bash

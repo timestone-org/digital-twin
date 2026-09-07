@@ -72,6 +72,10 @@ class Connection:
     # 真主题 → 这条连接对外看到的名字。只有匿名连接有条目
     aliases: dict[str, str] = field(default_factory=dict[str, str])
     close: CloseFn | None = None
+    # reauth 截止变更信号
+    credential_changed: asyncio.Event = field(
+        default_factory=asyncio.Event, repr=False, compare=False
+    )
 
     def outgoing_topic(self, topic: str) -> str:
         """一帧发给这条连接时，信封上该写哪个主题名。

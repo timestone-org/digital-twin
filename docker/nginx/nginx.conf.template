@@ -29,13 +29,11 @@ http {
   proxy_buffer_size 8k;
   proxy_buffers     8 8k;
 
-  log_format json escape=json '{"ts":"$time_iso8601","status":$status,'
-    '"method":"$request_method","uri":"$uri","rt":$request_time,'
-    '"trace":"$http_traceparent"}';
-  access_log /dev/stdout json;
-
   # 公开面是可枚举凭据的爆破面，必须限流
   limit_req_zone $binary_remote_addr zone=login:10m rate=10r/m;
+  # 嵌入页每 5 分钟换一枚短 access。单列比登录更宽的 IP 配额，
+  # 既容纳同一出口后的多个 iframe，也不让被盗 API 密钥无界换票。
+  limit_req_zone $binary_remote_addr zone=embed_exchange:10m rate=60r/m;
   # 公开大屏免认证且每次都打一次库，同样要有闸
   limit_req_zone $binary_remote_addr zone=public_dashboard:10m rate=60r/m;
   # 模型对外推理面免认证，且一次调用可能算上百行，闸要更严
@@ -96,6 +94,53 @@ http {
   map $request_uri $original_path {
     default              $request_uri;
     "~^(?<path_only>[^?]*)\?" $path_only;
+  }
+
+  # 日志保留原路由但不记 query。不能用 $uri：SPA 内部回落后它只剩
+  # `/index.html`；也不能用 $request_uri / $request：嵌入 API 密钥在 query 里。
+  # 原有公开大屏的凭据在 path 里，顺手把两个对外路径收敛成稳定模板。
+  map $original_path $dt_access_path {
+    default                                      $original_path;
+    "~^/public/"                                "/public/<redacted>";
+    "~^/api/v1/platform/public-dashboards/"     "/api/v1/platform/public-dashboards/<redacted>";
+  }
+  log_format json escape=json '{"ts":"$time_iso8601","status":$status,'
+    '"method":"$request_method","uri":"$dt_access_path","rt":$request_time,'
+    '"trace":"$http_traceparent"}';
+  access_log /dev/stdout json;
+
+  # 原业务页用 `?token=<APIKey>` 进场，前端取出后以 `embed=1`
+  # 保留嵌入意图（ADR-0051）。映射只被静态 location 消费：API 请求
+  # 不会因为加了 token/embed query 就改变缓存、frame 或日志行为。
+  # ⚠ 必须用从 $request_uri 剥出的 $original_path：`try_files` 回落
+  # `/index.html` 会改写 $uri，拿 $uri 判 `/public/` 会在响应阶段静默失效。
+  # $arg_* 也会在 `try_files` 的内部重定向后丢掉，故 query 同样必须
+  # 从始终保留原始值的 $request_uri 中判定。只输出 0/1，不把密钥拼进头。
+  map $request_uri $dt_embed_from_token {
+    default                   0;
+    "~(?:\\?|&)token=[^&]+" 1;
+  }
+  map $request_uri $dt_embed_from_flag {
+    default                         0;
+    "~(?:\\?|&)embed=1(?:&|$)"     1;
+  }
+  map "$original_path:$dt_embed_from_token:$dt_embed_from_flag" $dt_embed_mode {
+    default       0;
+    "~^/public/" 1;
+    "~:1:"       1;
+    "~:1$"       1;
+  }
+  map $dt_embed_mode $dt_embed_cache_control {
+    0 "";
+    1 "no-store";
+  }
+  map $dt_embed_mode $dt_embed_referrer_policy {
+    0 "";
+    1 "no-referrer";
+  }
+  map $dt_embed_mode $dt_embed_frame_policy {
+    0 "frame-ancestors 'none'";
+    1 "frame-ancestors *";
   }
 
   server {
@@ -201,6 +246,18 @@ http {
     }
 
     # —— 受保护面 ——
+    # API 密钥换嵌入 access。⚠ 它仍是受保护面：必须先走
+    # auth_request，端点内部还会再验一次 API 密钥。这条若漏了
+    # auth-inject，就不是「只加了限流」，而是把换票面在边缘层改成
+    # 免认证可达、丢掉闸 1；不能用「端点还会再验」作为漏挂的理由。
+    location = /api/v1/auth/sessions:from-api-key {
+      limit_req zone=embed_exchange burst=20 nodelay;
+      limit_req_status 429;
+      include /etc/nginx/conf.d/auth-inject.conf;
+      proxy_pass http://$auth_upstream$request_uri;
+      include /etc/nginx/conf.d/proxy-common.conf;
+    }
+
     location /api/v1/auth/ {
       include /etc/nginx/conf.d/auth-inject.conf;
       proxy_pass http://$auth_upstream$request_uri;
@@ -470,6 +527,12 @@ http {
 
     location / {
       root /usr/share/nginx/html;
+      # 普通页防外域点击劫持；带 token 的嵌入入口有意允许外域 frame。
+      # 本方案没有父页 origin 清单，因此 `*` 是已接受的内网风险，
+      # 不得把它误写成真实的父页授权。
+      add_header Content-Security-Policy $dt_embed_frame_policy always;
+      add_header Cache-Control $dt_embed_cache_control always;
+      add_header Referrer-Policy $dt_embed_referrer_policy always;
       # ⚠ 刻意**不**试 `$uri/`：构建产物里有个真实的 `assets/` 目录，而前端也有
       # 一条 `/assets` 路由（素材库）。试目录的话 nginx 会先 301 到 `/assets/`
       # 再因为没有索引页回 403——直接输地址与刷新页面都进不去，而站内点导航
