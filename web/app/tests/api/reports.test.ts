@@ -126,8 +126,23 @@ describe('报告 HTTP 契约', () => {
       }),
     )
     vi.stubGlobal('fetch', fetcher)
+    fetcher.mockImplementation(responseFor({ is_valid: true, issues: [] }))
+    expect(
+      (await reports.validateReport({ name: '未保存草稿' })).is_valid,
+    ).toBe(true)
+    expect(fetcher.mock.calls[0]?.[0]).toContain('/report-templates:validate')
+    fetcher.mockImplementation(
+      responseFor({
+        is_valid: true,
+        period: '2026-08',
+        timezone: 'UTC',
+        metrics: [],
+        nodes: {},
+        warnings: [],
+      }),
+    )
     await reports.previewReport(id, '2026-08', { name: '未保存草稿' })
-    expect(fetcher.mock.calls[0]?.[1]?.body).toContain('未保存草稿')
+    expect(fetcher.mock.calls[1]?.[1]?.body).toContain('未保存草稿')
     fetcher.mockImplementation(
       responseFor({ ...render, imported: null, preview: null }),
     )

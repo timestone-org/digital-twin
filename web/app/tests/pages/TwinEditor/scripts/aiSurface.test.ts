@@ -28,6 +28,14 @@ vi.mock('@/features/ai/captureWithGl', () => ({ captureCanvas }))
 /** 两块牌各两个字段：照抄那一组用它——牌名不同、字段名相同。 */
 function config(): TwinConfig {
   return normalizeTwinConfig({
+    parts: [
+      {
+        id: 'part-1',
+        name: '1号冷水机组',
+        nodes: ['Chiller_01'],
+        look: { opacity: 1, color: '#ffffff', blend: 0.8, glow: 0 },
+      },
+    ],
     anchors: [
       { id: 'a1', name: '1号机组出口' },
       { id: 'a2', name: '2号机组出口' },
@@ -76,6 +84,7 @@ interface SetupOptions {
 }
 
 function setup(options: SetupOptions = {}) {
+  let currentConfig = ('config' in options ? options.config : config()) ?? null
   const bindings = [...(options.bindings ?? [])]
   const write = vi.fn<(binding: BindingPayload) => void>((one) => {
     const at = bindings.findIndex((item) => item.fieldKey === one.fieldKey)
@@ -90,8 +99,12 @@ function setup(options: SetupOptions = {}) {
     }),
   )
   const stageEl = document.createElement('div')
+  const patchConfig = vi.fn<(next: TwinConfig) => void>((next) => {
+    currentConfig = next
+  })
   const deps: TwinSurfaceDeps = {
-    config: () => ('config' in options ? options.config : config()) ?? null,
+    config: () => currentConfig,
+    patchConfig,
     bindings: () => bindings,
     write,
     drop,
@@ -104,7 +117,14 @@ function setup(options: SetupOptions = {}) {
     save,
     savedVersion: () => 7,
   }
-  return { surface: createTwinSurface(deps), write, drop, save, stageEl }
+  return {
+    surface: createTwinSurface(deps),
+    write,
+    drop,
+    save,
+    stageEl,
+    patchConfig,
+  }
 }
 
 async function run(
@@ -155,6 +175,120 @@ describe('读场景', () => {
     expect(shot.selected_section).toBe('roam')
     expect(shot.selected_id).toBeNull()
     expect(shot.selected).toEqual([])
+  })
+})
+
+describe('配置场景实体', () => {
+  it('先列名片，再按 id 读取部件完整配置', async () => {
+    const { surface } = setup()
+
+    const listed = await run(surface, 'twin.read_config', {
+      section: 'parts',
+    })
+    expect(listed.items).toEqual([{ id: 'part-1', name: '1号冷水机组' }])
+
+    const detail = await run(surface, 'twin.read_config', {
+      section: 'parts',
+      id: 'part-1',
+    })
+    expect(detail.config).toEqual(
+      expect.objectContaining({
+        id: 'part-1',
+        nodes: ['Chiller_01'],
+        look: expect.objectContaining({ color: '#ffffff' }),
+      }),
+    )
+  })
+
+  it('深合并部件叶子并把归一化结果压入撤销入口', async () => {
+    const { surface, patchConfig } = setup()
+
+    const changed = await run(surface, 'twin.patch_config', {
+      section: 'parts',
+      id: 'part-1',
+      patch: { look: { opacity: 0.45, glow: 9 } },
+    })
+
+    expect(changed.changed).toBe(true)
+    expect(changed.config).toEqual(
+      expect.objectContaining({
+        look: {
+          opacity: 0.45,
+          color: '#ffffff',
+          blend: 0.8,
+          glow: 3,
+        },
+      }),
+    )
+    expect(patchConfig).toHaveBeenCalledOnce()
+  })
+
+  it('数组整段替换，单例配置同样按叶子合并', async () => {
+    const { surface } = setup()
+    await run(surface, 'twin.patch_config', {
+      section: 'parts',
+      id: 'part-1',
+      patch: { nodes: ['Chiller_01', 'Pump_01'] },
+    })
+    const model = await run(surface, 'twin.patch_config', {
+      section: 'model',
+      patch: { scale: 1.5, animations: { speed: 0.5 } },
+    })
+    expect(model.config).toEqual(
+      expect.objectContaining({
+        scale: 1.5,
+        animations: expect.objectContaining({ speed: 0.5 }),
+      }),
+    )
+    const part = await run(surface, 'twin.read_config', {
+      section: 'parts',
+      id: 'part-1',
+    })
+    expect(part.config).toEqual(
+      expect.objectContaining({ nodes: ['Chiller_01', 'Pump_01'] }),
+    )
+  })
+
+  it('诊断当前草稿里的跨字段问题', async () => {
+    const { surface } = setup()
+    await run(surface, 'twin.patch_config', {
+      section: 'parts',
+      id: 'part-1',
+      patch: { click: { near: 'detail' } },
+    })
+
+    const got = await run(surface, 'twin.diagnose')
+
+    expect(got.issue_count).toBeGreaterThan(0)
+    expect(JSON.stringify(got.issues)).toContain('part-detail-empty')
+  })
+
+  it('拒绝未知字段、改 id、缺实体和错误参数形状', async () => {
+    const { surface } = setup()
+    for (const args of [
+      { section: 'parts', id: 'part-1', patch: { id: 'part-2' } },
+      { section: 'parts', id: 'part-1', patch: { look: { metalness: 1 } } },
+      { section: 'parts', patch: { name: '缺 id' } },
+      { section: 'parts', id: 'missing', patch: { name: '不存在' } },
+      { section: 'model', id: 'unexpected', patch: { scale: 2 } },
+      { section: 'model', patch: {} },
+      { section: 'model', patch: 'bad' },
+      { section: 'unknown', patch: { name: 'bad' } },
+    ]) {
+      await expect(
+        surface.run(call('twin.patch_config', args)),
+      ).rejects.toThrow()
+    }
+  })
+
+  it('配置尚未加载时不假装读写成功', async () => {
+    const { surface } = setup({ config: null })
+    await expect(
+      surface.run(call('twin.read_config', { section: 'parts' })),
+    ).rejects.toThrow('还没读出来')
+    await expect(surface.run(call('twin.diagnose', {}))).rejects.toThrow(
+      '还没读出来',
+    )
   })
 })
 

@@ -74,6 +74,15 @@ async def test_a_session_can_live_on_the_2d_twin_surface(
     assert created["surface_kind"] == "twin2d-editor"
 
 
+async def test_a_session_can_live_on_the_report_editor_surface(
+    db_client: httpx.AsyncClient, sign: HeaderFactory
+) -> None:
+    created = await _create(
+        db_client, sign([ASSISTANT_USE]), surface_kind="report-editor"
+    )
+    assert created["surface_kind"] == "report-editor"
+
+
 async def test_a_new_session_belongs_to_its_caller(
     db_client: httpx.AsyncClient, sign: HeaderFactory
 ) -> None:

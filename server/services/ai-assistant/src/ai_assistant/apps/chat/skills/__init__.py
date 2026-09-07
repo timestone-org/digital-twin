@@ -15,6 +15,10 @@ from ai_assistant.apps.chat.skills.manifest import (
     SkillInstructionsMissing,
     SkillManifest,
 )
+from ai_assistant.apps.chat.skills.report_template_author import (
+    REPORT_TEMPLATE_AUTHOR,
+)
+from ai_assistant.apps.chat.skills.twin_configure import TWIN_CONFIGURE
 
 SKILLS: tuple[SkillManifest, ...] = (
     DASHBOARD_BINDING,
@@ -23,6 +27,8 @@ SKILLS: tuple[SkillManifest, ...] = (
     DASHBOARD_REVIEW,
     FORMULA_AUTHOR,
     KNOWLEDGE_QA,
+    REPORT_TEMPLATE_AUTHOR,
+    TWIN_CONFIGURE,
 )
 
 

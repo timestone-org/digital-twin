@@ -1,5 +1,5 @@
 /**
- * @fileoverview 把孪生编辑器接进助手。
+ * @fileoverview 把孪生编辑器的配置、绑定、视口与保存能力接进助手。
  * 单独一层是为了让页面只写一行——接线细节不摊进那份单文件组件。
  *
  * ⚠ 保存接页面**现有**的那条路径：落库走大屏的整树替换，漏一个节点就是把它
@@ -39,6 +39,11 @@ export function useTwinAi(
     surface: () =>
       createTwinSurface({
         config,
+        patchConfig: (next) => {
+          const doc = page.doc.value
+          if (doc === null) throw new Error('孪生配置还没读出来')
+          doc.commit(next)
+        },
         bindings: () => binding.bindings.value,
         write: binding.write,
         drop: binding.drop,

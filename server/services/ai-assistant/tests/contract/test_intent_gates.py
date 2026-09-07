@@ -110,6 +110,23 @@ def test_dropping_a_skill_also_drops_the_tools_only_it_declared() -> None:
     assert "formula.validate" not in without
 
 
+def test_report_tools_require_report_manage() -> None:
+    with_code = {
+        one.name
+        for one in specs_for(
+            "report-editor", ["report.read_draft"], frozenset({"report:manage"})
+        )
+    }
+    without = {
+        one.name
+        for one in specs_for(
+            "report-editor", ["report.read_draft"], frozenset()
+        )
+    }
+    assert "report.read_draft" in with_code
+    assert "report.read_draft" not in without
+
+
 def test_the_core_tools_survive_even_with_no_codes_at_all() -> None:
     """核心档不归任何技能，收窄不该把它们带走——带走了助手连技能都拉不动。"""
     names = {one.name for one in specs_for("dashboard-editor", [], frozenset())}

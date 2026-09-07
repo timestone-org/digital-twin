@@ -20,6 +20,7 @@ import { ASSISTANT_ASK_TOOL } from '@dt/contracts'
 import { BUILTIN_CLIENT_TOOLS } from '@/features/ai/builtinTools'
 import { EDITOR_TOOLS } from '@/pages/DashboardEditor/scripts/aiSurface'
 import { TABLE_TOOLS } from '@/pages/Dataset/TableDetail/scripts/aiSurface'
+import { REPORT_TOOLS } from '@/pages/Reports/Editor/scripts/aiSurface'
 import { TWIN_TOOLS } from '@/pages/TwinEditor/scripts/aiSurface'
 import { TWIN_2D_TOOLS } from '@/pages/Twin2dEditor/scripts/aiSurface'
 
@@ -37,7 +38,13 @@ const CHAT_DIR = join(
 )
 
 /** 规格分住这几个模块；加了新的一份要记得挂进来，否则这道闸只对了一半。 */
-const SPEC_FILES = ['core.py', 'interaction.py', 'look.py']
+const SPEC_FILES = [
+  'core.py',
+  'report.py',
+  'twin.py',
+  'interaction.py',
+  'look.py',
+]
 
 /** 客户端规格所在的包，相对 `CHAT_DIR`。 */
 const SPEC_DIR = ['services', 'tools', 'providers', 'client_specs']
@@ -48,6 +55,7 @@ const SURFACE_TOOLS: Record<string, readonly string[]> = {
   'twin-editor': TWIN_TOOLS,
   'twin2d-editor': TWIN_2D_TOOLS,
   'dataset-table': TABLE_TOOLS,
+  'report-editor': REPORT_TOOLS,
 }
 
 /** 后端登记的全部客户端工具名。 */

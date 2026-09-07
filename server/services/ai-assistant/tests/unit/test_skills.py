@@ -52,10 +52,20 @@ def test_dashboard_editor_offers_every_dashboard_skill() -> None:
     }
 
 
+def test_report_editor_offers_template_authoring_and_knowledge() -> None:
+    names = {skill.name for skill in skills_for("report-editor")}
+    assert names == {"report-template-author", "knowledge-qa"}
+
+
 def test_twin_editor_offers_binding_and_review() -> None:
     # 看图技能也在列：孪生视口的截图走「先画一帧再拷」的替身，3D 画面截得到
     names = {skill.name for skill in skills_for("twin-editor")}
-    assert names == {"dashboard-binding", "dashboard-review", "knowledge-qa"}
+    assert names == {
+        "dashboard-binding",
+        "dashboard-review",
+        "knowledge-qa",
+        "twin-configure",
+    }
 
 
 def test_an_unknown_surface_offers_nothing() -> None:

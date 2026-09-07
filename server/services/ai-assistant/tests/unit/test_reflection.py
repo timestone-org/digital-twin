@@ -77,6 +77,7 @@ def test_the_two_undo_models_are_told_apart() -> None:
     """有撤销栈的先做后撤，没有的只提议——分界线就是这一格。"""
     assert undo_model_of("dashboard-editor") == "draft"
     assert undo_model_of("dataset-table") == "commit"
+    assert undo_model_of("report-editor") == "draft"
 
 
 def test_an_unknown_surface_falls_back_to_the_strict_side() -> None:

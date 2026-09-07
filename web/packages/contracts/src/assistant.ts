@@ -10,6 +10,7 @@ export const ASSISTANT_SURFACE_KINDS = [
   'dashboard-editor',
   'twin-editor',
   'dataset-table',
+  'report-editor',
   'collect-source',
   'dashboard-view',
   'twin2d-editor',
