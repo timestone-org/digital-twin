@@ -6,6 +6,7 @@
 几十份过期快照再喂一遍，而模型分不出哪一份是此刻的。
 """
 
+import json
 import uuid
 from typing import Any
 
@@ -23,6 +24,7 @@ from ai_assistant.apps.chat.services.advance_service import (
     incoming_messages,
 )
 from ai_assistant.apps.chat.services.memory import state_block
+from ai_assistant.settings import MAX_TOOL_RESULT_CHARS
 from llmcore.memory import history
 
 SURFACE = "dashboard-editor"
@@ -101,6 +103,22 @@ def test_the_block_is_the_last_message_when_tools_report_back() -> None:
 
     assert "<当前状态" in str(messages[-1].content)
     assert "绑好了" in str(messages[-2].content)
+
+
+def test_structured_client_results_are_bounded_json() -> None:
+    result = ClientToolResult(
+        call_id="c1",
+        output={"name": "冷站设备", "active": True},
+    )
+    text = result.as_text()
+    assert json.loads(text) == {"name": "冷站设备", "active": True}
+
+    oversized = ClientToolResult(call_id="c2", output={"text": "长" * 30_000})
+    clipped = oversized.as_text()
+    envelope = json.loads(clipped)
+    assert len(clipped) < MAX_TOOL_RESULT_CHARS + 100
+    assert envelope["is_truncated"] is True
+    assert envelope["total_chars"] > MAX_TOOL_RESULT_CHARS
 
 
 def test_the_block_never_lands_in_the_database() -> None:

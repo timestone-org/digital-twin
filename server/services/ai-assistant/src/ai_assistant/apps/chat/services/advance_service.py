@@ -8,6 +8,7 @@
 回来，而它要能在库里找到自己接的是哪一步。
 """
 
+import json
 import uuid
 from collections.abc import AsyncIterator, Callable, Sequence
 from contextlib import AbstractAsyncContextManager
@@ -45,7 +46,7 @@ from ai_assistant.llm import (
     ModelDisabled,
     ModelKind,
 )
-from ai_assistant.settings import MAX_HISTORY_MESSAGES
+from ai_assistant.settings import MAX_HISTORY_MESSAGES, MAX_TOOL_RESULT_CHARS
 from lib.logging import get_logger
 from llmcore.memory import (
     HistoryRow,
@@ -169,13 +170,38 @@ class ClientToolResult:
         # 表现是模型说「我没看到图」而调用明明成功了
         if vision.is_image(self.output):
             return vision.HANDOFF
-        return str(self.output)
+        if isinstance(self.output, str):
+            body, is_json = self.output, False
+        else:
+            body, is_json = _json_text(self.output), True
+        if len(body) <= MAX_TOOL_RESULT_CHARS:
+            return body
+        if is_json:
+            return _truncated_json(body)
+        return (
+            f"{body[:MAX_TOOL_RESULT_CHARS]}\n"
+            f"……（产出太大已截断，共 {len(body)} 字）"
+        )
 
     def image(self) -> str | None:
         """这一条带回来的图；没有就是 None。"""
         if not vision.is_image(self.output):
             return None
         return str(self.output)
+
+
+def _json_text(output: object) -> str:
+    return json.dumps(output, ensure_ascii=False, default=str)
+
+
+def _truncated_json(body: str) -> str:
+    return _json_text(
+        {
+            "is_truncated": True,
+            "preview": body[: MAX_TOOL_RESULT_CHARS // 3],
+            "total_chars": len(body),
+        }
+    )
 
 
 @dataclass(frozen=True)

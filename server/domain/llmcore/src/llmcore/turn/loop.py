@@ -44,10 +44,12 @@ from llmcore import (
 from llmcore.deltas import text_of
 from llmcore.memory.history import sized
 from llmcore.textcalls import salvage
+from llmcore.tools.names import restore_offered_aliases
 from llmcore.tools.shapes import (
     ToolSpec,
     openai_schema,
 )
+from llmcore.turn.exclusive import isolate_exclusive_call
 from llmcore.turn.ports import Responder
 from llmcore.turn.types import (
     ClientToolCall,
@@ -277,6 +279,9 @@ def _thinker(deps: TurnDeps) -> Callable[[TurnState], Awaitable[TurnUpdate]]:
     schemas = [openai_schema(spec) for spec in deps.specs]
     overhead = _overhead(schemas)
     offered = frozenset(spec.name for spec in deps.specs)
+    exclusive_names = frozenset(
+        spec.name for spec in deps.specs if spec.is_exclusive
+    )
 
     async def think(state: TurnState) -> TurnUpdate:
         # ⚠ 没地方了这一轮就不发工具，捡回那一步也要跟着关：捡回来的调用照样
@@ -288,7 +293,13 @@ def _thinker(deps: TurnDeps) -> Callable[[TurnState], Awaitable[TurnUpdate]]:
             tools=schemas if roomy else [],
             on_delta=deps.on_delta,
         )
-        reply = _salvaged(answered, offered if roomy else frozenset())
+        offered_now: frozenset[str] = offered if roomy else frozenset()
+        reply = isolate_exclusive_call(
+            restore_offered_aliases(
+                _salvaged(answered, offered_now), offered_now
+            ),
+            exclusive_names,
+        )
         pending = _client_calls(reply, client_names)
         return {
             "messages": [reply],

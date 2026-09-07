@@ -106,5 +106,6 @@ def _roster(skills: tuple[SkillManifest, ...]) -> str:
             "",
             "⚠ 上面只是简介，**里面没有任何关于怎么做的约束**。",
             "动手之前先用 `skills.load` 把要用的那个技能拉全，照它说的做。",
+            "`skills.load` 必须单独调用，拿到完整指令后再决定其它工具调用。",
         ]
     )

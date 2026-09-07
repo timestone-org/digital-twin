@@ -221,6 +221,7 @@ async def test_searching_assets_narrows_and_passes_the_filters() -> None:
     assert got["assets"] == [
         {
             "id": "a1",
+            "ref": "asset:a1",
             "name": "水泵",
             "kind": "model",
             "variants": [{"variant": "light", "status": "ready"}],

@@ -133,6 +133,12 @@ def test_the_resident_prompt_carries_nothing_volatile() -> None:
         assert heading not in body
 
 
+def test_the_resident_prompt_says_the_skill_loader_must_run_alone() -> None:
+    body = build_system_prompt(SURFACE, surface_label="大屏编辑器")
+
+    assert "`skills.load` 必须单独调用" in body
+
+
 def test_the_resident_prompt_is_the_same_for_every_session() -> None:
     """同一页上，两个毫无关系的会话拿到的常驻提示词逐字相同。
 

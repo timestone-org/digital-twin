@@ -23,12 +23,14 @@ SERVER_SPECS: tuple[ToolSpec, ...] = (
         description=(
             "取一个技能的完整指令。提示词里只有技能的名字与一句话简介，"
             "**动手之前必须先把要用的那个技能拉全**——简介里没有任何"
-            "关于怎么做的约束。"
+            "关于怎么做的约束。这个工具**必须单独调用**，拿到指令"
+            "后再决定其它工具调用。"
         ),
         parameters=object_schema(
             {"name": string_schema("技能名，取自可用技能清单")}, ["name"]
         ),
         runs_on="server",
+        is_exclusive=True,
     ),
     ToolSpec(
         name="plan.write",
@@ -165,7 +167,9 @@ SERVER_SPECS: tuple[ToolSpec, ...] = (
         name="assets.search",
         description=(
             "按关键词与类型搜素材库（三维模型、图片、图标），"
-            "回 id、名字、类型与压缩档，新的在前。都不给就列最新的一批。"
+            "回可直接写配置的 ref、id、名字、类型与压缩档，新的在前。"
+            "素材引用必须复制 ref（形如 asset:<uuid>），不能只填 id。"
+            "都不给就列最新的一批。"
             "空表就是真的没有这个素材，不要编一个 id 或 ref。"
         ),
         parameters=object_schema(

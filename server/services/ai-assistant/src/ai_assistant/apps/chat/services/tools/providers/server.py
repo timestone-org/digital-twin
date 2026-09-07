@@ -453,6 +453,7 @@ def _asset_of(row: object) -> dict[str, Any]:
     rows = cast("list[object]", variants) if isinstance(variants, list) else []
     return {
         "id": body.get("id"),
+        "ref": body.get("ref"),
         "name": body.get("name"),
         "kind": body.get("kind"),
         "variants": [_variant_of(one) for one in rows],

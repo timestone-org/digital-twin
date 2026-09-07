@@ -57,7 +57,19 @@ def _opening() -> list[BaseMessage]:
 async def test_the_model_pulls_the_skill_before_it_acts() -> None:
     model = ScriptedChat(
         script=[
-            _asks("skills.load", "s1", name="dashboard-binding"),
+            AIMessage(
+                content="",
+                tool_calls=[
+                    tool_call("skills.load", "s1", name="dashboard-binding"),
+                    tool_call(
+                        "dashboard.write_binding",
+                        "too-early",
+                        node_id="n1",
+                        field_key="itemValues[0].value",
+                        node_key="src:K1_TMT_HOT_T_PI",
+                    ),
+                ],
+            ),
             _asks(
                 "dashboard.write_binding",
                 "w1",
@@ -77,6 +89,7 @@ async def test_the_model_pulls_the_skill_before_it_acts() -> None:
     # 而回合停在了客户端工具上，没有替用户改任何东西
     assert outcome.is_waiting is True
     assert outcome.pending[0].name == "dashboard.write_binding"
+    assert outcome.pending[0].call_id == "w1"
 
 
 async def test_the_pulled_body_is_the_one_on_disk() -> None:
