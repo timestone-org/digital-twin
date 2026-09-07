@@ -20,7 +20,9 @@ TWIN_SPECS: tuple[ToolSpec, ...] = (
         description=(
             "读取当前未保存的三维孪生配置。section 取 model/viewpoints/roam/"
             "parts/anchors/cameras/panels/arrows/flows。数组节不给 id 时返回"
-            "最多 100 条名片；给 id 时返回完整配置。修改前必须先读。"
+            "folders 目录与最多 100 条名片，目录项含 id/name/item_count，名片带"
+            "所属 folder；可给 folder_id 先按类别筛选。给 id 时返回完整配置及"
+            "所属 folder。修改前必须先读。"
         ),
         parameters=object_schema(
             {
@@ -30,6 +32,9 @@ TWIN_SPECS: tuple[ToolSpec, ...] = (
                     "description": "要读取的配置节",
                 },
                 "id": string_schema("数组节中的实体 id；读取完整项时给"),
+                "folder_id": string_schema(
+                    "数组节中的文件夹 id；只列该类别时给，不能与 id 同时给"
+                ),
             },
             ["section"],
         ),

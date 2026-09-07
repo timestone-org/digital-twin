@@ -3,6 +3,7 @@ import {
   collectTwinConfigIssues,
   normalizeTwinConfig,
   type TwinConfig,
+  type TwinOutlineFolder,
 } from '@dt/twin-config'
 import type { AssistantToolCall } from '@dt/contracts'
 
@@ -53,22 +54,77 @@ function readConfig(
   const config = requireConfig(deps)
   const section = sectionArg(call)
   const id = optionalText(call, 'id')
+  const folderId = optionalText(call, 'folder_id')
   if (!isEntitySection(section)) {
     if (id !== undefined) throw new Error(`${section} 是单例配置，不接收 id`)
+    if (folderId !== undefined)
+      throw new Error(`${section} 是单例配置，不接收 folder_id`)
     return { section, config: singletonOf(config, section) }
   }
+  const folders = foldersOf(config, section)
   if (id !== undefined) {
-    return { section, id, config: entityOf(config, section, id) }
+    if (folderId !== undefined) throw new Error('id 与 folder_id 不能同时使用')
+    return {
+      section,
+      id,
+      folder: folderOf(folders, id),
+      config: entityOf(config, section, id),
+    }
   }
-  const items = config[section]
+  const selectedFolder = selectFolder(folders, section, folderId)
+  const items =
+    selectedFolder === null
+      ? config[section]
+      : config[section].filter((item) =>
+          selectedFolder.itemIds.includes(item.id),
+        )
   return {
     section,
+    folders: folders.map((folder) => ({
+      ...folderBriefOf(folder),
+      item_count: folder.itemIds.length,
+    })),
     items: items.slice(0, MAX_LIST_ITEMS).map((item) => ({
       id: item.id,
       name: item.name,
+      folder: folderOf(folders, item.id),
     })),
     is_truncated: items.length > MAX_LIST_ITEMS,
   }
+}
+
+function foldersOf(
+  config: TwinConfig,
+  section: TwinEntityKind,
+): TwinOutlineFolder[] {
+  return config.folders.filter((folder) => folder.kind === section)
+}
+
+function selectFolder(
+  folders: readonly TwinOutlineFolder[],
+  section: TwinEntityKind,
+  folderId: string | undefined,
+): TwinOutlineFolder | null {
+  if (folderId === undefined) return null
+  const folder = folders.find((item) => item.id === folderId)
+  if (folder === undefined)
+    throw new Error(`${section} 里找不到文件夹 ${folderId}`)
+  return folder
+}
+
+function folderBriefOf(folder: TwinOutlineFolder): {
+  id: string
+  name: string
+} {
+  return { id: folder.id, name: folder.name }
+}
+
+function folderOf(
+  folders: readonly TwinOutlineFolder[],
+  itemId: string,
+): { id: string; name: string } | null {
+  const folder = folders.find((item) => item.itemIds.includes(itemId))
+  return folder === undefined ? null : folderBriefOf(folder)
 }
 
 function patchConfig(

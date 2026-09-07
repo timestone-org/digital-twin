@@ -1,6 +1,6 @@
 /**
- * @fileoverview 契约：助手在孪生编辑器上按**实体名字**绑点，不按行号猜；照抄绑定
- * 对不上名字时列进 `skipped` 而不是按行号硬抄；读数与视口同源；保存失败一律抛。
+ * @fileoverview 契约：助手读取实体时带大纲文件夹分类，绑点按实体名字而非行号；
+ * 照抄绑定对不上名字时跳过，读数与视口同源，保存失败一律抛。
  *
  * 守的是这一页最容易静默出错的那件事：数组绑定的行号是文档序，实体本身不在
  * fieldKey 里露面。按行号猜的结果是每一条绑定都有值、却全接错了对象，
@@ -56,6 +56,26 @@ function config(): TwinConfig {
           { key: 'temp', label: '温度' },
           { key: 'press', label: '压力' },
         ],
+      },
+    ],
+    folders: [
+      {
+        id: 'cold-station',
+        kind: 'parts',
+        name: '冷站设备',
+        itemIds: ['part-1'],
+      },
+      {
+        id: 'spares',
+        kind: 'parts',
+        name: '备用设备',
+        itemIds: [],
+      },
+      {
+        id: 'outlets',
+        kind: 'anchors',
+        name: '出口测点',
+        itemIds: ['a1'],
       },
     ],
   })
@@ -179,18 +199,29 @@ describe('读场景', () => {
 })
 
 describe('配置场景实体', () => {
-  it('先列名片，再按 id 读取部件完整配置', async () => {
+  it('先列带文件夹分类的名片，再按 id 读取部件完整配置', async () => {
     const { surface } = setup()
 
     const listed = await run(surface, 'twin.read_config', {
       section: 'parts',
     })
-    expect(listed.items).toEqual([{ id: 'part-1', name: '1号冷水机组' }])
+    expect(listed.folders).toEqual([
+      { id: 'cold-station', name: '冷站设备', item_count: 1 },
+      { id: 'spares', name: '备用设备', item_count: 0 },
+    ])
+    expect(listed.items).toEqual([
+      {
+        id: 'part-1',
+        name: '1号冷水机组',
+        folder: { id: 'cold-station', name: '冷站设备' },
+      },
+    ])
 
     const detail = await run(surface, 'twin.read_config', {
       section: 'parts',
       id: 'part-1',
     })
+    expect(detail.folder).toEqual({ id: 'cold-station', name: '冷站设备' })
     expect(detail.config).toEqual(
       expect.objectContaining({
         id: 'part-1',
@@ -198,6 +229,117 @@ describe('配置场景实体', () => {
         look: expect.objectContaining({ color: '#ffffff' }),
       }),
     )
+  })
+
+  it('未分类实体显式返回空文件夹', async () => {
+    const { surface } = setup()
+
+    const listed = await run(surface, 'twin.read_config', {
+      section: 'anchors',
+    })
+
+    expect(listed.items).toEqual([
+      {
+        id: 'a1',
+        name: '1号机组出口',
+        folder: { id: 'outlets', name: '出口测点' },
+      },
+      { id: 'a2', name: '2号机组出口', folder: null },
+    ])
+  })
+
+  it('文件夹归属同时按实体类别与 id 匹配', async () => {
+    const sharedId = normalizeTwinConfig({
+      parts: [{ id: 'same', name: '循环泵' }],
+      anchors: [{ id: 'same', name: '循环泵温度' }],
+      folders: [
+        {
+          id: 'equipment',
+          kind: 'parts',
+          name: '设备',
+          itemIds: ['same'],
+        },
+        {
+          id: 'measurements',
+          kind: 'anchors',
+          name: '测点',
+          itemIds: ['same'],
+        },
+      ],
+    })
+    const { surface } = setup({ config: sharedId })
+
+    const parts = await run(surface, 'twin.read_config', { section: 'parts' })
+    const anchors = await run(surface, 'twin.read_config', {
+      section: 'anchors',
+    })
+
+    expect(parts.items).toEqual([
+      {
+        id: 'same',
+        name: '循环泵',
+        folder: { id: 'equipment', name: '设备' },
+      },
+    ])
+    expect(anchors.items).toEqual([
+      {
+        id: 'same',
+        name: '循环泵温度',
+        folder: { id: 'measurements', name: '测点' },
+      },
+    ])
+  })
+
+  it('按文件夹筛选后再应用名片上限，并保持实体文档序', async () => {
+    const parts = Array.from({ length: 102 }, (_, index) => ({
+      id: `part-${String(index + 1)}`,
+      name: `部件 ${String(index + 1)}`,
+    }))
+    const categorized = normalizeTwinConfig({
+      parts,
+      folders: [
+        {
+          id: 'late-category',
+          kind: 'parts',
+          name: '后段设备',
+          itemIds: ['part-102', 'part-101'],
+        },
+      ],
+    })
+    const { surface } = setup({ config: categorized })
+
+    const listed = await run(surface, 'twin.read_config', {
+      section: 'parts',
+      folder_id: 'late-category',
+    })
+
+    expect(listed.items).toEqual([
+      {
+        id: 'part-101',
+        name: '部件 101',
+        folder: { id: 'late-category', name: '后段设备' },
+      },
+      {
+        id: 'part-102',
+        name: '部件 102',
+        folder: { id: 'late-category', name: '后段设备' },
+      },
+    ])
+    expect(listed.is_truncated).toBe(false)
+  })
+
+  it('拒绝把文件夹筛选用于错误类别、单例或实体详情', async () => {
+    const { surface } = setup()
+
+    for (const args of [
+      { section: 'parts', folder_id: 'outlets' },
+      { section: 'model', folder_id: 'cold-station' },
+      { section: 'parts', id: 'part-1', folder_id: 'cold-station' },
+    ]) {
+      await expect(
+        surface.run(call('twin.read_config', args)),
+      ).rejects.toThrow()
+    }
   })
 
   it('深合并部件叶子并把归一化结果压入撤销入口', async () => {
