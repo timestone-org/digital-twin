@@ -175,14 +175,25 @@ describe('读场景', () => {
   // ⚠ 用户在大纲里点了一个说「把这个接上」，快照里没有选中的话，模型只能挑一个
   //   它自己觉得像的去改
   it('带上用户此刻选中的那一个，名字就是大纲上那一行', async () => {
-    const { surface } = setup({ selection: { kind: 'panels', id: 'p2' } })
+    const { surface } = setup({ selection: { kind: 'parts', id: 'part-1' } })
 
     const shot = await run(surface, 'dashboard.read_canvas')
 
-    expect(shot.selected_id).toBe('p2')
-    expect(shot.selected_ids).toEqual(['p2'])
+    expect(shot.selected_id).toBe('part-1')
+    expect(shot.selected_ids).toEqual(['part-1'])
+    expect(shot.selected_section).toBe('parts')
     expect(shot.selected).toEqual([
-      { kind: 'panel', id: 'p2', name: '2号机组' },
+      {
+        kind: 'part',
+        section: 'parts',
+        id: 'part-1',
+        name: '1号冷水机组',
+        folder: {
+          section: 'parts',
+          folder_id: 'cold-station',
+          name: '冷站设备',
+        },
+      },
     ])
   })
 
@@ -199,6 +210,41 @@ describe('读场景', () => {
 })
 
 describe('配置场景实体', () => {
+  it('一次列出六类文件夹的可复用身份与成员数', async () => {
+    const { surface } = setup()
+
+    const listed = await run(surface, 'twin.list_folders')
+
+    expect(listed).toMatchObject({
+      schema_version: 2,
+      folders: [
+        { section: 'parts', folder_id: 'cold-station', item_count: 1 },
+        { section: 'parts', folder_id: 'spares', item_count: 0 },
+        { section: 'anchors', folder_id: 'outlets', item_count: 1 },
+      ],
+    })
+  })
+
+  it('未筛选的实体列表回显空筛选与未分类实体', async () => {
+    const { surface } = setup()
+
+    const listed = await run(surface, 'twin.list_entities', {
+      section: 'anchors',
+    })
+
+    expect(listed).toMatchObject({
+      schema_version: 2,
+      section: 'anchors',
+      applied_folder_id: null,
+      is_truncated: false,
+    })
+    expect(listed.items).toContainEqual({
+      id: 'a2',
+      name: '2号机组出口',
+      folder: null,
+    })
+  })
+
   it('先列带文件夹分类的名片，再按 id 读取部件完整配置', async () => {
     const { surface } = setup()
 
@@ -217,11 +263,15 @@ describe('配置场景实体', () => {
       },
     ])
 
-    const detail = await run(surface, 'twin.read_config', {
+    const detail = await run(surface, 'twin.read_entity', {
       section: 'parts',
       id: 'part-1',
     })
-    expect(detail.folder).toEqual({ id: 'cold-station', name: '冷站设备' })
+    expect(detail.folder).toEqual({
+      section: 'parts',
+      folder_id: 'cold-station',
+      name: '冷站设备',
+    })
     expect(detail.config).toEqual(
       expect.objectContaining({
         id: 'part-1',
@@ -326,6 +376,17 @@ describe('配置场景实体', () => {
       },
     ])
     expect(listed.is_truncated).toBe(false)
+
+    const versioned = await run(surface, 'twin.list_entities', {
+      section: 'parts',
+      folder_id: 'late-category',
+    })
+    expect(versioned).toMatchObject({
+      schema_version: 2,
+      applied_folder_id: 'late-category',
+      items: [{ id: 'part-101' }, { id: 'part-102' }],
+      is_truncated: false,
+    })
   })
 
   it('拒绝把文件夹筛选用于错误类别、单例或实体详情', async () => {
@@ -340,6 +401,9 @@ describe('配置场景实体', () => {
         surface.run(call('twin.read_config', args)),
       ).rejects.toThrow()
     }
+    await expect(
+      surface.run(call('twin.list_entities', { section: 'model' })),
+    ).rejects.toThrow()
   })
 
   it('深合并部件叶子并把归一化结果压入撤销入口', async () => {

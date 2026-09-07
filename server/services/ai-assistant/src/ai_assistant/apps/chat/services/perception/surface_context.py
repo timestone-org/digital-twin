@@ -24,12 +24,13 @@ MAX_CONTEXT_CHARS = 6000
 # 就把快照的预算占光了
 MAX_NAMED = 12
 
-# 选中项在快照里的三个键。与前端 `AiSurface.snapshot()` 逐字对齐。
+# 选中项在快照里的四个键。与前端 `AiSurface.snapshot()` 逐字对齐。
 # ⚠ `selected` 现在是数组，但**旧的单个对象也必须认**：会话是跨版本的，
 # 只认数组会让老前端发来的快照连选中项都读不出来
 SELECTED_ID_KEY = "selected_id"
 SELECTED_IDS_KEY = "selected_ids"
 SELECTED_KEY = "selected"
+SELECTED_SECTION_KEY = "selected_section"
 
 _HEADING = "## 这一页此刻的样子"
 
@@ -72,6 +73,13 @@ def _selected_line(context: dict[str, Any]) -> str:
     """
     chosen = _chosen_of(context)
     if not chosen:
+        section = context.get(SELECTED_SECTION_KEY)
+        if isinstance(section, str) and section:
+            return (
+                f"用户此刻选中的是配置节 `{section}`。"
+                "他说「这个」「当前配置节」时指的就是它，"
+                "**不要再猜别的**。"
+            )
         return _NOTHING_SELECTED
     if len(chosen) == 1:
         return _describe(chosen[0])
@@ -119,7 +127,25 @@ def _describe(chosen: dict[str, Any]) -> str:
     """
     return (
         f"用户此刻选中的是{_named(chosen)}。"
+        f"{_tool_identity(chosen)}"
         "他说「这个」「当前模块」时指的就是它，**不要再猜别的**。"
+    )
+
+
+def _tool_identity(chosen: dict[str, Any]) -> str:
+    """把快照里可直接复用的工具参数单独念出来。"""
+    section = chosen.get("section")
+    if not isinstance(section, str) or not section:
+        return ""
+    folder = chosen.get("folder")
+    folder_id = (
+        cast("dict[str, Any]", folder).get("folder_id")
+        if isinstance(folder, dict)
+        else None
+    )
+    suffix = f"、`folder_id={folder_id}`" if folder_id else ""
+    return (
+        f"工具参数直接用 `section={section}`、`id={chosen.get('id')}`{suffix}。"
     )
 
 

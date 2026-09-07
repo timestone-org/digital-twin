@@ -58,8 +58,16 @@ const BRIEF_KINDS: Readonly<Record<TwinEntityKind, string>> = {
 /** 快照里选中的那一个。 */
 interface TwinBrief {
   kind: string
+  section: TwinEntityKind
   id: string
   /** 用户在大纲里看到的那个名字。 */
+  name: string
+  folder: TwinBriefFolder | null
+}
+
+interface TwinBriefFolder {
+  section: TwinEntityKind
+  folder_id: string
   name: string
 }
 
@@ -94,9 +102,8 @@ function snapshotOf(deps: TwinSurfaceDeps): SurfaceSnapshot {
     selected_id: brief?.id ?? null,
     selected_ids: brief === null ? [] : [brief.id],
     selected: brief === null ? [] : [brief],
-    // ⚠ 单例段没有 id，如实说是哪一档、不硬造一个：造一个的话模型会拿它当实体
-    //   去绑，而那个 id 谁都不喂
-    selected_section: 'id' in selection ? null : selection.kind,
+    // ⚠ 单例段没有 id；实体则直接给可传回工具的复数 section
+    selected_section: selection.kind,
   }
 }
 
@@ -112,9 +119,23 @@ function briefOf(
   if (!('id' in selection)) return null
   return {
     kind: BRIEF_KINDS[selection.kind],
+    section: selection.kind,
     id: selection.id,
     name: outlineNameOf(config, selection.kind, selection.id),
+    folder: briefFolderOf(config, selection.kind, selection.id),
   }
+}
+
+function briefFolderOf(
+  config: TwinConfig,
+  section: TwinEntityKind,
+  entityId: string,
+): TwinBriefFolder | null {
+  const folder = config.folders.find(
+    (item) => item.kind === section && item.itemIds.includes(entityId),
+  )
+  if (folder === undefined) return null
+  return { section, folder_id: folder.id, name: folder.name }
 }
 
 /**

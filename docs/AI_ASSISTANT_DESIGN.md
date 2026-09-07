@@ -184,11 +184,14 @@ A+B 在 dashboard-editor 上是 11 812 字符，而它**跨会话共享**——�
 模型不能把自己提交的原始参数当成最终状态。修改后用 `twin.diagnose` 检查悬空引用、
 不可达点击、空详情与染色区间等跨字段问题，布局或外观修改再截图核验。
 
-六类实体的读取结果同时带大纲文件夹分类：列表先给 `folders`
-（`{id,name,item_count}`）目录，每张实体名片带 `folder: {id,name} | null`，
-按 id 展开时也在实体 `config` 之外返回 `folder`。
-按 `folder_id` 筛选发生在 100 条名片上限之前，仍保持实体文档序；文件夹只是展示
-分组，不等于部件的 `parentId` 装配层级，也不改变数组绑定的行号。
+六类实体的目录、名片与详情分成三个无歧义工具。`twin.list_folders` 无参读取全局
+目录，每项用 `{section,folder_id,name,item_count}` 表达完整身份；
+`twin.list_entities` 只接受六个实体 `section`，可选的 `folder_id` 必须逐字复制同一
+`section` 的目录结果，返回名片、`applied_folder_id` 与截断标记；
+`twin.read_entity` 要求实体 `section + id`，`twin.read_config` 只读三个单例。
+筛选发生在 100 条名片上限之前，仍保持实体文档序；文件夹只是展示分组，不等于部件
+的 `parentId` 装配层级，也不改变数组绑定的行号。三个新工具名同时承担页面能力版本
+协商：本轮未下发时说明仍是旧页面，助手不得猜文件夹 id，须请用户刷新。
 
 ---
 

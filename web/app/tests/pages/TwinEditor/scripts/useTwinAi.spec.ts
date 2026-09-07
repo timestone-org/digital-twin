@@ -187,7 +187,13 @@ describe('快照', () => {
     harness.selection.value = { kind: 'anchors', id: 'a1' }
 
     expect(surface().snapshot().selected).toEqual([
-      { kind: 'anchor', id: 'a1', name: '1号机组出口' },
+      {
+        kind: 'anchor',
+        section: 'anchors',
+        id: 'a1',
+        name: '1号机组出口',
+        folder: null,
+      },
     ])
   })
 })
