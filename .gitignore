@@ -42,3 +42,5 @@ requirements-audit.txt
 
 .agents/skills/
 skills-lock.json
+
+logs/
