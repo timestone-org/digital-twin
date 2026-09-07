@@ -21,6 +21,8 @@ export {
 } from './asset'
 export type {
   AuthUser,
+  EmbedAccessToken,
+  EmbedSessionResult,
   PermissionCatalog,
   PermissionCode,
   PermissionGroup,

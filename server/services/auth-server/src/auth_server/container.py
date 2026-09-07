@@ -63,13 +63,14 @@ def _build_auth(
     settings: Settings,
     *,
     cache: Cache,
-    hasher: PasswordHasher,
     tokens: TokenService,
+    api_keys: ApiKeyService,
     clock: Clock,
 ) -> AuthService:
     return AuthService(
         tokens=tokens,
-        hasher=hasher,
+        api_keys=api_keys,
+        hasher=api_keys.hasher,
         login_limiter=FixedWindowLimiter(
             cache=cache,
             namespace="login",
@@ -113,7 +114,11 @@ def build_container(settings: Settings, *, clock: Clock = utcnow) -> Container:
         tokens=tokens,
         api_keys=api_keys,
         auth=_build_auth(
-            settings, cache=cache, hasher=hasher, tokens=tokens, clock=clock
+            settings,
+            cache=cache,
+            tokens=tokens,
+            api_keys=api_keys,
+            clock=clock,
         ),
         verify=VerifyService(
             tokens=tokens,

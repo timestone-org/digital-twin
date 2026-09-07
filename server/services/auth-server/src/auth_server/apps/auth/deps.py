@@ -21,6 +21,7 @@ from auth_server.apps.auth.errors import (
 from auth_server.apps.auth.services import (
     Identity,
     Operation,
+    is_embed_session,
     load_identity_by_id,
     looks_like_api_key,
 )
@@ -77,6 +78,8 @@ async def get_identity(
     if looks_like_api_key(token):
         raise TokenInvalid("API 密钥不能用于账号管理面，请改用账号令牌")
     claims = container.tokens.decode_access(token)
+    if is_embed_session(claims):
+        raise TokenInvalid("嵌入会话不能用于账号管理面")
     identity = await load_identity_by_id(session, _as_uuid(claims.subject))
     if identity is None:
         raise TokenInvalid("令牌对应的账号不存在")

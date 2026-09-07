@@ -15,13 +15,16 @@ from auth_server.apps.auth.errors import (
 )
 from auth_server.apps.auth.models import User
 from auth_server.apps.auth.schemas import (
+    AccessTokenOut,
     ChangePasswordIn,
+    EmbedSessionOut,
     MeUpdateIn,
     RegistrationIn,
     SessionOut,
     TokenPairOut,
     UserDetailOut,
 )
+from auth_server.apps.auth.services.api_key_service import ApiKeyService
 from auth_server.apps.auth.services.identity import (
     Identity,
     load_identity,
@@ -52,6 +55,7 @@ class AuthService:
     """会话面的业务逻辑。事务边界在这一层。"""
 
     tokens: TokenService
+    api_keys: ApiKeyService
     hasher: PasswordHasher
     login_limiter: FixedWindowLimiter
     signup_limiter: FixedWindowLimiter
@@ -96,6 +100,32 @@ class AuthService:
         if not identity.user.is_active:
             raise AccountDisabled("账号已停用，请联系管理员")
         return self._session_out(identity)
+
+    async def create_embed_session(
+        self, session: AsyncSession, *, api_key: str
+    ) -> EmbedSessionOut:
+        """用 API 密钥创建无刷新能力的短期嵌入会话。
+
+        Args: session, api_key。
+        """
+        user_id = await self.api_keys.authenticate_for_embed(session, api_key)
+        identity = await load_identity_by_id(session, user_id)
+        if identity is None:
+            raise TokenInvalid("API 密钥对应的账号不存在")
+        if not identity.user.is_active:
+            raise AccountDisabled("账号已停用，请联系管理员")
+        issued = self.tokens.issue_embed_access(
+            identity.user.id,
+            now=self.clock(),
+        )
+        _logger.info("embed_session_created", "", user_id=str(identity.user.id))
+        return EmbedSessionOut(
+            token=AccessTokenOut(
+                access_token=issued.access_token,
+                expires_in_s=issued.expires_in_s,
+            ),
+            user=to_user_detail(identity),
+        )
 
     async def logout(self, *, refresh_token: str) -> None:
         """登出。重复调用无副作用。

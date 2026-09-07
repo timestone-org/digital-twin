@@ -30,8 +30,10 @@ from auth_server.apps.auth.services.route_rule_service import (
 )
 from auth_server.apps.auth.services.token_service import (
     TokenService,
+    is_embed_session,
     parse_bearer,
 )
+from auth_server.settings import API_PREFIX
 from lib.auth import (
     MAX_PERMISSION_HEADER_BYTES,
     SignedContext,
@@ -51,6 +53,14 @@ HEADER_PERMISSIONS = "X-Auth-Permissions"
 HEADER_TRUNCATED = "X-Auth-Permissions-Truncated"
 HEADER_EXPIRES = "X-Auth-Exp"
 HEADER_SIGNATURE = "X-Auth-Sig"
+
+
+@dataclass(frozen=True)
+class AuthenticatedIdentity:
+    """已认证身份及其是否来自嵌入交换。"""
+
+    identity: Identity
+    is_embed: bool
 
 
 @dataclass(frozen=True)
@@ -76,7 +86,10 @@ class VerifyService:
 
         Args: session, authorization, path, method。
         """
-        identity = await self._authenticate(session, authorization)
+        authenticated = await self._authenticate(session, authorization)
+        if authenticated.is_embed and _is_auth_path(path):
+            raise TokenInvalid("嵌入会话不能用于账号管理面")
+        identity = authenticated.identity
         decision = decide(
             await self.rules.rules(session),
             path=path,
@@ -118,29 +131,30 @@ class VerifyService:
 
     async def _authenticate(
         self, session: AsyncSession, authorization: str | None
-    ) -> Identity:
+    ) -> AuthenticatedIdentity:
         """两种凭据同一个出口：短期 JWT，或第三方系统的常驻 API 密钥。
 
-        ⚠ 两条分支收敛成同一个 `Identity` 之后，下游（签名头、规则表、各服务
-        的闸 2）完全不知道调用方用的是哪一种——密钥不是第二套权限体系，
-        它只是同一个账号的另一把钥匙。
+        ⚠ 两条分支收敛成同一个 `Identity`；只有嵌入 JWT 的来源标记会保留到
+        本层，用来阻断 auth 管理面。其它下游仍只看账号有效权限。
 
         Args: session, authorization。
         """
         token = parse_bearer(authorization)
         if token is None:
             raise TokenInvalid("未提供访问令牌")
-        user_id = (
-            await self.api_keys.authenticate(session, token)
-            if looks_like_api_key(token)
-            else _subject(self.tokens.decode_access(token).subject)
-        )
+        is_embed = False
+        if looks_like_api_key(token):
+            user_id = await self.api_keys.authenticate(session, token)
+        else:
+            claims = self.tokens.decode_access(token)
+            user_id = _subject(claims.subject)
+            is_embed = is_embed_session(claims)
         identity = await load_identity_by_id(session, user_id)
         if identity is None:
             raise TokenInvalid("令牌对应的账号不存在")
         if not identity.user.is_active:
             raise AccountDisabled("账号已停用")
-        return identity
+        return AuthenticatedIdentity(identity=identity, is_embed=is_embed)
 
     @staticmethod
     def _log_denied(
@@ -174,3 +188,7 @@ def _subject(raw: str) -> uuid.UUID:
         return uuid.UUID(raw)
     except ValueError as error:
         raise TokenInvalid("令牌主体不是合法标识") from error
+
+
+def _is_auth_path(path: str) -> bool:
+    return path == API_PREFIX or path.startswith(f"{API_PREFIX}/")

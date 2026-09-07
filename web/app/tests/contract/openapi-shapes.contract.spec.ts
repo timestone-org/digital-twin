@@ -17,6 +17,8 @@ import type {
   ApiKey,
   ApiKeySecret,
   AuthUser,
+  EmbedAccessToken,
+  EmbedSessionResult,
   FieldError,
   Page,
   PermissionCatalog,
@@ -152,6 +154,17 @@ const SHAPES: Record<string, Record<string, true>> = {
     token: true,
     user: true,
   } satisfies Keys<SessionResult>,
+
+  AccessTokenOut: {
+    access_token: true,
+    token_type: true,
+    expires_in_s: true,
+  } satisfies Keys<EmbedAccessToken>,
+
+  EmbedSessionOut: {
+    token: true,
+    user: true,
+  } satisfies Keys<EmbedSessionResult>,
 
   FieldErrorOut: {
     field: true,

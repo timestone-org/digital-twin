@@ -7,6 +7,7 @@ import pytest
 from auth_server.apps.auth.errors import RefreshTokenRejected, TokenInvalid
 from auth_server.apps.auth.services.token_service import (
     TokenService,
+    is_embed_session,
     parse_bearer,
 )
 from lib.auth import JwtCodec
@@ -33,6 +34,17 @@ async def test_issued_access_token_decodes_to_the_subject() -> None:
     pair = service.issue_pair(USER, now=utcnow())
     assert service.decode_access(pair.access_token).subject == str(USER)
     assert pair.expires_in_s == 900
+
+
+def test_embed_access_keeps_the_access_type_and_carries_its_session_kind() -> (
+    None
+):
+    service = make_service(InMemoryCache())
+    issued = service.issue_embed_access(USER, now=utcnow())
+    claims = service.decode_access(issued.access_token)
+    assert claims.token_type == "access"
+    assert is_embed_session(claims)
+    assert issued.expires_in_s == 300
 
 
 async def test_access_token_is_not_usable_as_refresh_token() -> None:
