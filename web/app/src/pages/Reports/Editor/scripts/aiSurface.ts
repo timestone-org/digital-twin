@@ -299,8 +299,8 @@ function pageOf(current: ReportPage, call: AssistantToolCall): ReportPage {
   const orientation = optionalOrientation(call.arguments['orientation'])
   const family = optionalText(call, 'font_family')
   const fontSize = optionalNumber(call, 'font_size_pt', 1, 200)
-  const header = optionalText(call, 'header')
-  const footer = optionalText(call, 'footer')
+  const header = optionalText(call, 'page_header')
+  const footer = optionalText(call, 'page_footer')
   const toc = optionalBoolean(call, 'is_toc_enabled')
   if (size !== undefined) page.size = size
   if (orientation !== undefined) page.orientation = orientation

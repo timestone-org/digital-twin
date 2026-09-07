@@ -142,8 +142,8 @@ REPORT_SPECS: tuple[ToolSpec, ...] = (
                 },
                 "font_family": string_schema("正文字体"),
                 "font_size_pt": {"type": "number", "description": "正文字号"},
-                "header": string_schema("页眉；空串表示清空"),
-                "footer": string_schema("页脚；空串表示清空"),
+                "page_header": string_schema("页眉；空串表示清空"),
+                "page_footer": string_schema("页脚；空串表示清空"),
                 "is_toc_enabled": {
                     "type": "boolean",
                     "description": "是否生成目录",

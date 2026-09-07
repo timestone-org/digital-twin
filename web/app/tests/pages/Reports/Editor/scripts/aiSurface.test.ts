@@ -343,8 +343,8 @@ describe('报告模板 AI 工作面', () => {
       tool('report.set_page', {
         orientation: 'portrait',
         font_family: 'SimSun',
-        header: '月度运行报告',
-        footer: '第 {PAGE} 页',
+        page_header: '月度运行报告',
+        page_footer: '第 {PAGE} 页',
         margin_top_cm: 2,
         margin_bottom_cm: 2,
         margin_right_cm: 2.5,
