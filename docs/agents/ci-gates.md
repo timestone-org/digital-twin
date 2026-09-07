@@ -29,7 +29,7 @@
 
 | 文件 | 触发 | 管什么 |
 |---|---|---|
-| `pr-policy.yml` | 只在 PR | 规模 ≤400 行 / ≤20 文件 / ≤1 服务（三类豁免见 [engineering-workflow §3.1](engineering-workflow.md)）、提交信息、分支名、锁文件单独成 PR、PR 描述、抽取逻辑版本 |
+| `pr-policy.yml` | 只在 PR | 范围 ≤20 文件 / ≤1 服务（三类文件数豁免见 [engineering-workflow §3.1](engineering-workflow.md)）、提交信息、分支名、锁文件单独成 PR、PR 描述、抽取逻辑版本；不限制变更行数 |
 | `nightly.yml` | 每日定时 | 变异测试、可访问性全站扫描、镜像内容断言。**失败开 issue，不阻断合并** |
 
 E2E、a11y、变异测试不进 PR 闸门是 `testing-standard-*.md` §9 的明确要求——它们太慢，
@@ -119,7 +119,7 @@ E2E、a11y、变异测试不进 PR 闸门是 `testing-standard-*.md` §9 的明�
 | engineering-workflow §5.4 Action 按 SHA 固定、§6.1 禁 `latest`、锁文件在仓 | `check_ci_hygiene.py` |
 | 同 §5.3 许可证（GPL/AGPL 阻断） | `check_licenses.py` + `licenses-reviewed.json` |
 | 同 §5.4 依赖漏洞 | `pip-audit --strict` · `pnpm audit --audit-level=high` |
-| 同 §1–§3 分支、提交、PR 规模 | `check_pr_policy.py`（PR 专用） |
+| 同 §1–§3 分支、提交、PR 范围 | `check_pr_policy.py`（PR 专用） |
 | 密钥不进版本库 | `gitleaks` + `.gitleaks.toml` |
 | docker-build §5 镜像内容断言 | `nightly.yml` 的 `images` 作业 |
 | 服务只用自己声明的依赖 | `check_service_deps.py` |

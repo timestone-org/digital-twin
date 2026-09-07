@@ -1,8 +1,8 @@
 # ADR-0006：OPC UA 服务端独立成第六个代码单元
 
-- 状态：已采纳
+- 状态：已采纳（PR 行数上限部分由 [ADR-0050](0050-PR不设统一变更行数上限.md) 调整）
 - 日期：2026-08-12
-- 影响范围：`server/services/opcua-server/`、[`ARCHITECTURE_MICROSERVICES.md`](../ARCHITECTURE_MICROSERVICES.md) §2、部署编排、PR 规模闸的适用口径
+- 影响范围：`server/services/opcua-server/`、[`ARCHITECTURE_MICROSERVICES.md`](../ARCHITECTURE_MICROSERVICES.md) §2、部署编排、PR 范围闸的适用口径
 
 ## 背景
 
@@ -21,7 +21,7 @@
 同时确定两条配套口径：
 
 - **不做租约竞选**：`replicas: 1` + 进程级重启，不实现 leader 选举与热备。
-- **首次落地提交豁免 PR 规模闸**：新代码单元的第一个提交不受 400 行 / 20 文件限制，此后一律照常。
+- **首次落地提交豁免 PR 文件数闸**：新代码单元的第一个提交不受 20 文件限制，此后一律照常。原 400 行上限已由 ADR-0050 移除。
 
 ## 理由
 

@@ -1,9 +1,8 @@
 #!/usr/bin/env python3
-"""PR 规模与提交约定闸：engineering-workflow.md §1–§3、§5.2。
+"""PR 范围与提交约定闸：engineering-workflow.md §1–§3、§5.2。
 
-评审质量随 PR 规模断崖式下降：超过几百行之后，评审就从「逐行看」退化为
-「看起来没问题」，而那正是缺陷溜进去的方式。锁文件混在逻辑改动里同理——
-几千行 diff 没人看，那正是供应链攻击的藏身处。
+文件数、后端服务边界与锁文件纪律约束一次评审的认知范围；变更行数不再作为
+统一上限，理由见 ADR-0050。
 
 用法：`check_pr_policy.py <base-ref> [head-ref]`。
 """
@@ -24,7 +23,6 @@ from _report import (
     main,
 )
 
-MAX_CHANGED_LINES = 400
 MAX_CHANGED_FILES = 20
 MAX_SERVICES = 1
 
@@ -47,10 +45,8 @@ MECHANICAL = re.compile(r"\[(?:机械|mechanical)]", re.IGNORECASE)
 LOCKFILES = frozenset({"server/uv.lock", "web/pnpm-lock.yaml"})
 # 锁文件的变更由清单文件引起，两者必须一起评审才看得懂
 MANIFESTS = frozenset({"pyproject.toml", "package.json"})
-# 生成物不计入评审规模
+# 生成物不计入可评审文件数
 GENERATED = ("openapi.json", "/dist/", "/coverage/")
-# `git diff --numstat` 每行是「新增\t删除\t路径」
-NUMSTAT_FIELDS = 3
 # `server/services/<svc>/…` —— 取服务名要有三段以上
 SERVICE_PATH_DEPTH = 2
 # 大屏模块的两处落脚点
@@ -73,7 +69,7 @@ MODULE_REGISTRY = frozenset(
         "server/services/platform-server/tests/unit"
         "/test_dashboard_module_catalog.py",
         # 对外清单接口的那份逐字副本：它同样是「加一个模块必然要改」的一处，
-        # 漏了它的后果不是宽松而是**过严**——落地 PR 拿不到豁免，只能撞规模闸
+        # 漏了它的后果不是宽松而是**过严**——落地 PR 拿不到文件数豁免
         "server/services/platform-server/tests/integration"
         "/test_dashboard_module_types_api.py",
     }
@@ -86,17 +82,6 @@ def _reviewable(name: str) -> bool:
     return name not in LOCKFILES and not any(
         marker in f"/{name}" for marker in GENERATED
     )
-
-
-def _changed_lines() -> int:
-    total = 0
-    for line in git("diff", "--numstat", diff_range()).splitlines():
-        parts = line.split("\t")
-        if len(parts) != NUMSTAT_FIELDS or not _reviewable(parts[2]):
-            continue
-        added, removed = parts[0], parts[1]
-        total += int(added or 0) + int(removed or 0)
-    return total
 
 
 def _is_mechanical() -> bool:
@@ -200,8 +185,8 @@ def _is_module_landing() -> bool:
     )
 
 
-def check_pr_size() -> list[Violation]:
-    """改动 ≤400 行、≤20 个文件。超了就拆成多个 PR。
+def check_pr_file_count() -> list[Violation]:
+    """改动不超过 20 个文件；超了就拆成多个 PR。
 
     三类例外：机械化改动（标题标记）、新代码单元的首次落地提交
     （[ADR-0006](../../docs/adr/0006-opcua服务端独立成代码单元.md)），
@@ -211,16 +196,7 @@ def check_pr_size() -> list[Violation]:
     if _is_mechanical() or _is_landing_commit() or _is_module_landing():
         return []
     files = [name for name in changed_files() if _reviewable(name)]
-    lines = _changed_lines()
     found: list[Violation] = []
-    if lines > MAX_CHANGED_LINES:
-        found.append(
-            Violation(
-                f"PR 改动不许超过 {MAX_CHANGED_LINES} 行",
-                diff_range(),
-                f"{lines} 行（不含锁文件与生成物）",
-            )
-        )
     if len(files) > MAX_CHANGED_FILES:
         found.append(
             Violation(
@@ -319,7 +295,7 @@ def check_branch_name() -> list[Violation]:
 
 
 CHECKS = (
-    check_pr_size,
+    check_pr_file_count,
     check_pr_touches_one_service,
     check_lockfile_stands_alone,
     check_commit_messages,
@@ -328,4 +304,4 @@ CHECKS = (
 
 
 if __name__ == "__main__":
-    raise SystemExit(main("PR 规模与提交约定检查", CHECKS))
+    raise SystemExit(main("PR 范围与提交约定检查", CHECKS))
