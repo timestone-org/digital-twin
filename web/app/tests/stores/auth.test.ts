@@ -8,6 +8,11 @@ import { STORAGE_KEYS } from '@dt/security'
 
 import * as authApi from '@/api/auth'
 import { REFRESH_SKEW_S } from '@/config/app'
+import {
+  activateEmbed,
+  resetEmbedContext,
+  useEmbedContext,
+} from '@/features/embed/context'
 import { setUnauthorizedRedirect, useAuthStore } from '@/stores/auth'
 
 function session(access = 'a1', refresh = 'r1', permissions: string[] = []) {
@@ -19,6 +24,31 @@ function session(access = 'a1', refresh = 'r1', permissions: string[] = []) {
       expires_in_s: 900,
     },
     user: { id: 'u1', username: 'admin', permissions } as never,
+  }
+}
+
+function embedSession(access = 'e1', permissions: string[] = []) {
+  return {
+    token: {
+      access_token: access,
+      token_type: 'bearer',
+      expires_in_s: 300,
+    },
+    user: { id: 'u1', username: 'embed', permissions } as never,
+  }
+}
+
+function deferred<T>() {
+  let settle: ((value: T) => void) | null = null
+  const promise = new Promise<T>((resolve) => {
+    settle = resolve
+  })
+  return {
+    promise,
+    resolve(value: T): void {
+      if (settle === null) throw new Error('deferred 尚未初始化')
+      settle(value)
+    },
   }
 }
 
@@ -34,13 +64,16 @@ function otherTabWrote(key: string | null): void {
 }
 
 beforeEach(() => {
+  resetEmbedContext()
   localStorage.clear()
   setActivePinia(createPinia())
+  setUnauthorizedRedirect(() => undefined)
 })
 
 afterEach(() => {
   vi.restoreAllMocks()
   vi.useRealTimers()
+  resetEmbedContext()
 })
 
 describe('auth store', () => {
@@ -288,6 +321,196 @@ describe('auth store 跨标签同步', () => {
 
     await expect(auth.refresh()).resolves.toBe(false)
     expect(auth.isAuthenticated).toBe(false)
+  })
+})
+
+describe('auth store 嵌入会话', () => {
+  it('首航在创建 store 前标记后一个普通 storage 键都不读', () => {
+    localStorage.setItem(STORAGE_KEYS.accessToken, 'normal-access')
+    localStorage.setItem(STORAGE_KEYS.refreshToken, 'normal-refresh')
+    localStorage.setItem(
+      STORAGE_KEYS.user,
+      JSON.stringify({ username: 'normal', permissions: ['user:view'] }),
+    )
+    activateEmbed('emerald')
+    setActivePinia(createPinia())
+    const read = vi.spyOn(Storage.prototype, 'getItem')
+
+    const auth = useAuthStore()
+
+    expect(read).not.toHaveBeenCalled()
+    expect(auth.accessToken).toBeNull()
+    expect(auth.user).toBeNull()
+  })
+
+  it('交换结果只写内存，不覆盖同源普通登录态', async () => {
+    localStorage.setItem(STORAGE_KEYS.accessToken, 'normal-access')
+    localStorage.setItem(STORAGE_KEYS.refreshToken, 'normal-refresh')
+    localStorage.setItem(
+      STORAGE_KEYS.user,
+      JSON.stringify({ username: 'normal', permissions: ['user:view'] }),
+    )
+    activateEmbed('emerald')
+    setActivePinia(createPinia())
+    vi.spyOn(authApi, 'createSessionFromApiKey').mockResolvedValue(
+      embedSession('embed-access', ['dashboard:view']),
+    )
+
+    const auth = useAuthStore()
+    await expect(
+      auth.startEmbedSession('dtk_prefix_secret', 'emerald'),
+    ).resolves.toBe(true)
+
+    expect(auth.accessToken).toBe('embed-access')
+    expect(auth.permissions.has('dashboard:view')).toBe(true)
+    expect(localStorage.getItem(STORAGE_KEYS.accessToken)).toBe('normal-access')
+    expect(localStorage.getItem(STORAGE_KEYS.refreshToken)).toBe(
+      'normal-refresh',
+    )
+    expect(JSON.parse(localStorage.getItem(STORAGE_KEYS.user) ?? '{}')).toEqual(
+      {
+        username: 'normal',
+        permissions: ['user:view'],
+      },
+    )
+  })
+
+  it('续租复用内存 API Key，并替换短期 access token', async () => {
+    const exchange = vi
+      .spyOn(authApi, 'createSessionFromApiKey')
+      .mockResolvedValueOnce(embedSession('embed-a'))
+      .mockResolvedValueOnce(embedSession('embed-b'))
+    const auth = useAuthStore()
+    await auth.startEmbedSession('dtk_prefix_secret', 'light')
+
+    await expect(auth.refresh()).resolves.toBe(true)
+
+    expect(exchange).toHaveBeenNthCalledWith(1, 'dtk_prefix_secret')
+    expect(exchange).toHaveBeenNthCalledWith(2, 'dtk_prefix_secret')
+    expect(auth.accessToken).toBe('embed-b')
+  })
+
+  it('嵌入续租仍按标签内 single-flight 合并并发', async () => {
+    const next = deferred<ReturnType<typeof embedSession>>()
+    const exchange = vi
+      .spyOn(authApi, 'createSessionFromApiKey')
+      .mockResolvedValueOnce(embedSession('embed-a'))
+      .mockImplementationOnce(() => next.promise)
+    const auth = useAuthStore()
+    await auth.startEmbedSession('dtk_prefix_secret', 'light')
+
+    const first = auth.refresh()
+    const second = auth.refresh()
+    next.resolve(embedSession('embed-b'))
+
+    await expect(Promise.all([first, second])).resolves.toEqual([true, true])
+    expect(exchange).toHaveBeenCalledTimes(2)
+  })
+
+  it('续租失败显示嵌入错误，不跳登录也不清普通 storage', async () => {
+    localStorage.setItem(STORAGE_KEYS.accessToken, 'normal-access')
+    localStorage.setItem(STORAGE_KEYS.refreshToken, 'normal-refresh')
+    const redirect = vi.fn()
+    setUnauthorizedRedirect(redirect)
+    vi.spyOn(authApi, 'createSessionFromApiKey')
+      .mockResolvedValueOnce(embedSession('embed-a'))
+      .mockRejectedValueOnce(new Error('revoked'))
+    const auth = useAuthStore()
+    await auth.startEmbedSession('dtk_prefix_secret', 'light')
+
+    await expect(auth.refresh()).resolves.toBe(false)
+
+    expect(useEmbedContext().error.value).toContain('嵌入授权已失效')
+    expect(redirect).not.toHaveBeenCalled()
+    expect(localStorage.getItem(STORAGE_KEYS.accessToken)).toBe('normal-access')
+    expect(localStorage.getItem(STORAGE_KEYS.refreshToken)).toBe(
+      'normal-refresh',
+    )
+  })
+
+  it('嵌入态 clear、logout、storage 与前台事件都不碰普通登录态', async () => {
+    localStorage.setItem(STORAGE_KEYS.accessToken, 'normal-access')
+    localStorage.setItem(STORAGE_KEYS.refreshToken, 'normal-refresh')
+    vi.spyOn(authApi, 'createSessionFromApiKey').mockResolvedValue(
+      embedSession('embed-access'),
+    )
+    const revoke = vi.spyOn(authApi, 'revokeSession')
+    const auth = useAuthStore()
+    await auth.startEmbedSession('dtk_prefix_secret', 'light')
+
+    const read = vi.spyOn(Storage.prototype, 'getItem')
+    otherTabWrote(STORAGE_KEYS.accessToken)
+    document.dispatchEvent(new Event('visibilitychange'))
+    expect(auth.accessToken).toBe('embed-access')
+    expect(read).not.toHaveBeenCalled()
+
+    auth.clear()
+    expect(localStorage.getItem(STORAGE_KEYS.accessToken)).toBe('normal-access')
+    await auth.startEmbedSession('dtk_prefix_secret', 'light')
+    await auth.logout()
+
+    expect(revoke).not.toHaveBeenCalled()
+    expect(localStorage.getItem(STORAGE_KEYS.accessToken)).toBe('normal-access')
+    expect(localStorage.getItem(STORAGE_KEYS.refreshToken)).toBe(
+      'normal-refresh',
+    )
+  })
+
+  it('普通刷新晚返回不能覆盖后来建立的嵌入身份', async () => {
+    vi.spyOn(authApi, 'createSession').mockResolvedValue(
+      session('normal-a', 'r1'),
+    )
+    const oldRefresh = deferred<ReturnType<typeof session>>()
+    vi.spyOn(authApi, 'refreshSession').mockImplementation(
+      () => oldRefresh.promise,
+    )
+    vi.spyOn(authApi, 'createSessionFromApiKey').mockResolvedValue(
+      embedSession('embed-access'),
+    )
+    const auth = useAuthStore()
+    await auth.login('admin', 'pw')
+
+    const stale = auth.refresh()
+    await auth.startEmbedSession('dtk_prefix_secret', 'emerald')
+    oldRefresh.resolve(session('stale-access', 'stale-refresh'))
+    await stale
+
+    expect(auth.accessToken).toBe('embed-access')
+    expect(localStorage.getItem(STORAGE_KEYS.accessToken)).toBe('normal-a')
+    expect(localStorage.getItem(STORAGE_KEYS.refreshToken)).toBe('r1')
+  })
+
+  it('连续两个 token 首航乱序返回时只采用最新一次', async () => {
+    const first = deferred<ReturnType<typeof embedSession>>()
+    const second = deferred<ReturnType<typeof embedSession>>()
+    vi.spyOn(authApi, 'createSessionFromApiKey').mockImplementation((key) =>
+      key === 'dtk_first_secret' ? first.promise : second.promise,
+    )
+    const auth = useAuthStore()
+
+    const stale = auth.startEmbedSession('dtk_first_secret', 'emerald')
+    const latest = auth.startEmbedSession('dtk_second_secret', 'light')
+    second.resolve(embedSession('latest-access'))
+    await latest
+    first.resolve(embedSession('stale-access'))
+    await stale
+
+    expect(auth.accessToken).toBe('latest-access')
+    expect(useEmbedContext().themeId.value).toBe('light')
+    expect(useEmbedContext().error.value).toBeNull()
+  })
+
+  it('嵌入态不调用 auth 管理面的 users/me 对齐权限', async () => {
+    vi.spyOn(authApi, 'createSessionFromApiKey').mockResolvedValue(
+      embedSession(),
+    )
+    const fetchMe = vi.spyOn(authApi, 'fetchMe')
+    const auth = useAuthStore()
+    await auth.startEmbedSession('dtk_prefix_secret', 'light')
+
+    await auth.syncMe()
+
+    expect(fetchMe).not.toHaveBeenCalled()
   })
 })
 

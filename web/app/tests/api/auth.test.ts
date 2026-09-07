@@ -43,6 +43,18 @@ describe('会话接口', () => {
     expect(options.body).toEqual({ refresh_token: 'r1' })
   })
 
+  it('API Key 交换走显式 Bearer override，不进 body 也不走匿名请求', async () => {
+    await authApi.createSessionFromApiKey('dtk_prefix_secret')
+    const [path, options] = lastCall()
+    expect(path).toBe('/sessions:from-api-key')
+    expect(options.method).toBe('POST')
+    expect(options.body).toBeUndefined()
+    expect(options.anonymous).toBeUndefined()
+    expect(options.credentialOverride).toEqual({
+      bearerToken: 'dtk_prefix_secret',
+    })
+  })
+
   it('登出打吊销端点且匿名', async () => {
     await authApi.revokeSession('r1')
     const [path, options] = lastCall()

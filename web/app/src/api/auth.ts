@@ -4,6 +4,7 @@
 
 import type {
   AuthUser,
+  EmbedSessionResult,
   PermissionCatalog,
   SessionResult,
   TokenPair,
@@ -31,6 +32,19 @@ export async function refreshSession(
     method: 'POST',
     body: { refresh_token: refreshToken },
     anonymous: true,
+  })
+}
+
+/**
+ * 用长期 API Key 换一枚短期嵌入令牌。
+ * ⚠ API Key 只经本次 Authorization 头发送，不进请求体与会话持久化。
+ */
+export async function createSessionFromApiKey(
+  apiKey: string,
+): Promise<EmbedSessionResult> {
+  return await requestData<EmbedSessionResult>('/sessions:from-api-key', {
+    method: 'POST',
+    credentialOverride: { bearerToken: apiKey },
   })
 }
 
@@ -74,4 +88,4 @@ export async function fetchPermissionCatalog(): Promise<PermissionCatalog> {
   return await requestData<PermissionCatalog>('/permissions')
 }
 
-export type { AuthUser, SessionResult, TokenPair }
+export type { AuthUser, EmbedSessionResult, SessionResult, TokenPair }

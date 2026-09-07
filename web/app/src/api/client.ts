@@ -53,7 +53,7 @@ export class TransportError extends Error {
 interface ClientHooks {
   getToken: () => string | null
   onRefresh: () => Promise<boolean>
-  onUnauthorized: () => void
+  onUnauthorized: (attemptedToken: string | null) => void
 }
 
 let hooks: ClientHooks = {
@@ -82,6 +82,11 @@ export interface RequestOptions {
   signal?: AbortSignal | undefined
   /** 附加请求头，如 `Idempotency-Key`。不许在这里塞 Authorization。 */
   headers?: Record<string, string> | undefined
+  /**
+   * 仅给凭据交换这类引导请求使用。它覆盖当前会话 Bearer，且 401 不触发普通
+   * refresh/logout 链路，避免拿 API Key 交换失败时误登出同源的正常用户。
+   */
+  credentialOverride?: { bearerToken: string } | undefined
 }
 
 function buildUrl(path: string, options: RequestOptions): string {
@@ -94,6 +99,12 @@ function buildUrl(path: string, options: RequestOptions): string {
   }
   const search = params.toString()
   return search ? `${url}?${search}` : url
+}
+
+/** 匿名请求无 Bearer；显式引导凭据优先于当前会话。 */
+function bearerToken(options: RequestOptions): string | null {
+  if (options.anonymous) return null
+  return options.credentialOverride?.bearerToken ?? hooks.getToken()
 }
 
 /**
@@ -130,7 +141,11 @@ async function readEnvelope<T>(
   return { ...body, data: body.data as T }
 }
 
-async function send(path: string, options: RequestOptions): Promise<Response> {
+async function send(
+  path: string,
+  options: RequestOptions,
+  token: string | null,
+): Promise<Response> {
   const headers: Record<string, string> = {
     Accept: 'application/json',
     ...options.headers,
@@ -138,10 +153,7 @@ async function send(path: string, options: RequestOptions): Promise<Response> {
   if (options.body !== undefined) {
     headers['Content-Type'] = 'application/json'
   }
-  if (!options.anonymous) {
-    const token = hooks.getToken()
-    if (token !== null) headers.Authorization = `Bearer ${token}`
-  }
+  if (token !== null) headers.Authorization = `Bearer ${token}`
   // ⚠ 每个跨进程调用都要有超时：没有超时的请求会在下游卡住时永远挂着
   const timeout = AbortSignal.timeout(REQUEST_TIMEOUT_MS)
   const signal = options.signal
@@ -208,16 +220,22 @@ export async function request<T>(
   path: string,
   options: RequestOptions = {},
 ): Promise<T | null> {
-  const first = await send(path, options)
-  if (first.status !== 401 || options.anonymous) {
+  const attemptedToken = bearerToken(options)
+  const first = await send(path, options, attemptedToken)
+  if (
+    first.status !== 401 ||
+    options.anonymous ||
+    options.credentialOverride !== undefined
+  ) {
     return unwrap<T>(first)
   }
+  if (hooks.getToken() !== attemptedToken) return unwrap<T>(first)
   const refreshed = await hooks.onRefresh()
   if (!refreshed) {
-    hooks.onUnauthorized()
+    hooks.onUnauthorized(attemptedToken)
     return unwrap<T>(first)
   }
-  return unwrap<T>(await send(path, options))
+  return unwrap<T>(await send(path, options, bearerToken(options)))
 }
 
 /**
@@ -236,16 +254,22 @@ export async function requestBytes(
   path: string,
   options: RequestOptions = {},
 ): Promise<Blob> {
-  const first = await send(path, options)
-  if (first.status !== 401 || options.anonymous) {
+  const attemptedToken = bearerToken(options)
+  const first = await send(path, options, attemptedToken)
+  if (
+    first.status !== 401 ||
+    options.anonymous ||
+    options.credentialOverride !== undefined
+  ) {
     return unwrapBytes(first)
   }
+  if (hooks.getToken() !== attemptedToken) return unwrapBytes(first)
   const refreshed = await hooks.onRefresh()
   if (!refreshed) {
-    hooks.onUnauthorized()
+    hooks.onUnauthorized(attemptedToken)
     return unwrapBytes(first)
   }
-  return unwrapBytes(await send(path, options))
+  return unwrapBytes(await send(path, options, bearerToken(options)))
 }
 
 /**
@@ -349,25 +373,27 @@ async function sendStream(
   path: string,
   options: StreamOptions,
 ): Promise<Response> {
-  const first = await fetchStream(path, options)
+  const attemptedToken = hooks.getToken()
+  const first = await fetchStream(path, options, attemptedToken)
   if (first.status !== 401) return first
+  if (hooks.getToken() !== attemptedToken) return first
   const refreshed = await hooks.onRefresh()
   if (!refreshed) {
-    hooks.onUnauthorized()
+    hooks.onUnauthorized(attemptedToken)
     return first
   }
-  return fetchStream(path, options)
+  return fetchStream(path, options, hooks.getToken())
 }
 
 async function fetchStream(
   path: string,
   options: StreamOptions,
+  token: string | null,
 ): Promise<Response> {
   const headers: Record<string, string> = {
     Accept: 'text/event-stream',
     'Content-Type': 'application/json',
   }
-  const token = hooks.getToken()
   if (token !== null) headers.Authorization = `Bearer ${token}`
   try {
     return await fetch(`${options.baseUrl ?? AUTH_BASE_URL}${path}`, {

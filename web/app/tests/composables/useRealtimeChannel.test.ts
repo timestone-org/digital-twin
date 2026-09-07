@@ -26,6 +26,10 @@ import {
 } from '@dt/contracts'
 import { STORAGE_KEYS } from '@dt/security'
 
+import * as authApi from '@/api/auth'
+import { resetEmbedContext } from '@/features/embed/context'
+import { useAuthStore } from '@/stores/auth'
+
 type Listener = (event: unknown) => void
 
 /** 记下每次构造与发送的假 WebSocket。 */
@@ -97,6 +101,7 @@ function sentTopics(socket: FakeSocket, action: string): string[] {
 }
 
 beforeEach(() => {
+  resetEmbedContext()
   vi.useFakeTimers()
   setActivePinia(createPinia())
   localStorage.setItem(STORAGE_KEYS.accessToken, 'tok-1')
@@ -109,6 +114,7 @@ afterEach(() => {
   vi.unstubAllGlobals()
   vi.useRealTimers()
   localStorage.clear()
+  resetEmbedContext()
 })
 
 describe('实时通道', () => {
@@ -122,6 +128,23 @@ describe('实时通道', () => {
     localStorage.removeItem(STORAGE_KEYS.accessToken)
     useRealtimeChannel()
     expect(FakeSocket.instances).toHaveLength(0)
+  })
+
+  it('嵌入态握手使用换出的短期 access token，不把 API Key 交给 hub', async () => {
+    vi.spyOn(authApi, 'createSessionFromApiKey').mockResolvedValue({
+      token: {
+        access_token: 'embed-access',
+        token_type: 'bearer',
+        expires_in_s: 300,
+      },
+      user: { permissions: ['dashboard:view'] } as never,
+    })
+    await useAuthStore().startEmbedSession('dtk_prefix_secret', 'emerald')
+
+    useRealtimeChannel()
+
+    expect(latest().protocols).toEqual([AUTH_SUBPROTOCOL, 'embed-access'])
+    expect(latest().protocols).not.toContain('dtk_prefix_secret')
   })
 
   it('订阅在连接就绪后发出，退订在最后一个订阅者走时发出', () => {
