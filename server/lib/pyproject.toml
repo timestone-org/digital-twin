@@ -36,6 +36,9 @@ testpaths = ["tests"]
 asyncio_mode = "auto"
 addopts = "-q"
 
+[tool.mutmut]
+paths_to_mutate = ["src/lib/auth", "src/lib/web"]
+
 [tool.coverage.run]
 branch = true
 source = ["lib"]

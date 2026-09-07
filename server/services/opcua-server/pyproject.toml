@@ -48,6 +48,9 @@ markers = [
     "requires_redis: 需要真实 Redis",
 ]
 
+[tool.mutmut]
+paths_to_mutate = ["src/opcua_server/apps/instance/runtime"]
+
 [tool.coverage.run]
 # ⚠ 本服务是全仓唯一关掉分支覆盖的单元，理由与补偿控制见 ADR-0008。
 # 实测：`Server().init()` 裸跑 0.5s，在任何「非 sysmon 或开分支」的覆盖率
