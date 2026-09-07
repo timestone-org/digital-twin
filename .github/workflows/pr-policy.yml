@@ -1,10 +1,9 @@
-# PR 专用闸门：规模、提交信息、分支命名、锁文件纪律，以及抽取逻辑版本。
+# PR 专用闸门：文件/服务范围、提交信息、分支命名、锁文件纪律，以及抽取逻辑版本。
 #
 # 这些条目在 push 上没有意义（分支中途的提交本来就可以是碎的），
 # 只在「要合进主干」这一刻才成立，故与主流水线分开。
 #
-# ⚠ 评审质量随 PR 规模断崖式下降：超过几百行之后，评审就从「逐行看」
-# 退化为「看起来没问题」，而那正是缺陷溜进去的方式。
+# 变更行数不设统一上限；文件数与后端服务边界继续限制一次评审的认知范围。
 
 name: PR 规范
 
@@ -21,7 +20,7 @@ permissions:
 
 jobs:
   policy:
-    name: PR 规模与提交约定
+    name: PR 范围与提交约定
     runs-on: ubuntu-24.04
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
@@ -36,7 +35,7 @@ jobs:
           PR_HEAD_REF: ${{ github.event.pull_request.head.sha }}
           PR_HEAD_BRANCH: ${{ github.head_ref }}
           # 机械化的大范围改动（重命名、格式化、自动生成）在标题里标
-          # `[机械]` 可豁免规模上限，但仍必须单独成 PR
+          # `[机械]` 可豁免文件数上限，但仍必须单独成 PR
           PR_TITLE: ${{ github.event.pull_request.title }}
         run: |
           git fetch --no-tags origin "${{ github.base_ref }}"
