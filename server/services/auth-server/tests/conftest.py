@@ -141,21 +141,22 @@ def _with_test_doubles(built: Container) -> Container:
         access_ttl_s=built.tokens.access_ttl_s,
         refresh_ttl_s=built.tokens.refresh_ttl_s,
     )
-    auth = built.auth.__class__(
-        tokens=tokens,
-        hasher=TEST_HASHER,
-        login_limiter=_relimit(built.auth.login_limiter, cache),
-        signup_limiter=_relimit(built.auth.signup_limiter, cache),
-        signup_enabled=built.auth.signup_enabled,
-        signup_default_role=built.auth.signup_default_role,
-        clock=built.auth.clock,
-    )
     api_keys = built.api_keys.__class__(
         hasher=TEST_HASHER,
         cache=cache,
         clock=built.api_keys.clock,
         verify_cache_ttl_s=built.api_keys.verify_cache_ttl_s,
         touch_interval_s=built.api_keys.touch_interval_s,
+    )
+    auth = built.auth.__class__(
+        tokens=tokens,
+        api_keys=api_keys,
+        hasher=TEST_HASHER,
+        login_limiter=_relimit(built.auth.login_limiter, cache),
+        signup_limiter=_relimit(built.auth.signup_limiter, cache),
+        signup_enabled=built.auth.signup_enabled,
+        signup_default_role=built.auth.signup_default_role,
+        clock=built.auth.clock,
     )
     verify = built.verify.__class__(
         tokens=tokens,

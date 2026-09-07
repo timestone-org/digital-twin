@@ -19,6 +19,9 @@ from lib.utils.timeutils import utcnow
 
 ACCESS_TYPE = "access"
 REFRESH_TYPE = "refresh"
+SESSION_KIND_CLAIM = "session_kind"
+EMBED_SESSION_KIND = "embed"
+EMBED_ACCESS_TTL_S = 300
 _REVOKED_PREFIX = "auth:refresh:revoked:"
 _BEARER_PREFIX = "bearer "
 
@@ -41,6 +44,14 @@ class TokenPair:
 
     access_token: str
     refresh_token: str
+    expires_in_s: int
+
+
+@dataclass(frozen=True)
+class AccessToken:
+    """一枚访问令牌与它的有效期。"""
+
+    access_token: str
     expires_in_s: int
 
 
@@ -78,6 +89,25 @@ class TokenService:
             refresh_token=refresh,
             expires_in_s=self.access_ttl_s,
         )
+
+    def issue_embed_access(
+        self,
+        user_id: uuid.UUID,
+        *,
+        now: datetime | None = None,
+    ) -> AccessToken:
+        """签发一枚无刷新能力的嵌入访问令牌。
+
+        Args: user_id, now。
+        """
+        token, _ = self.codec.issue(
+            subject=str(user_id),
+            token_type=ACCESS_TYPE,
+            ttl_s=EMBED_ACCESS_TTL_S,
+            extra={SESSION_KIND_CLAIM: EMBED_SESSION_KIND},
+            now=now or utcnow(),
+        )
+        return AccessToken(access_token=token, expires_in_s=EMBED_ACCESS_TTL_S)
 
     def decode_access(self, token: str) -> TokenClaims:
         """校验 access token；不合法抛 TokenInvalid。
@@ -138,3 +168,11 @@ def _subject_uuid(claims: TokenClaims) -> uuid.UUID:
         return uuid.UUID(claims.subject)
     except ValueError as error:
         raise TokenInvalid("令牌主体不是合法标识") from error
+
+
+def is_embed_session(claims: TokenClaims) -> bool:
+    """这枚 access token 是否来自 API 密钥嵌入交换。
+
+    Args: claims。
+    """
+    return claims.extra.get(SESSION_KIND_CLAIM) == EMBED_SESSION_KIND

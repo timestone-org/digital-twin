@@ -34,6 +34,8 @@ from auth_server.apps.auth.schemas.route_rule import (
     RouteRuleUpdateIn,
 )
 from auth_server.apps.auth.schemas.session import (
+    AccessTokenOut,
+    EmbedSessionOut,
     LoginIn,
     RefreshIn,
     SessionOut,
@@ -56,12 +58,14 @@ from auth_server.apps.auth.schemas.user import (
 )
 
 __all__ = [
+    "AccessTokenOut",
     "ApiKeyCreateIn",
     "ApiKeyFilters",
     "ApiKeyOut",
     "ApiKeySecretOut",
     "AssignRoleIn",
     "ChangePasswordIn",
+    "EmbedSessionOut",
     "HttpMethod",
     "InputModel",
     "LoginIn",

@@ -19,6 +19,14 @@ class RefreshIn(InputModel):
     refresh_token: str = Field(min_length=1, max_length=4096)
 
 
+class AccessTokenOut(OutputModel):
+    """一枚短期访问令牌，不带刷新能力。"""
+
+    access_token: str
+    token_type: str = "bearer"  # noqa: S105  OAuth2 令牌类型，不是口令
+    expires_in_s: int
+
+
 class TokenPairOut(OutputModel):
     """一对令牌。`expires_in_s` 是 access token 的剩余秒数。"""
 
@@ -32,4 +40,11 @@ class SessionOut(OutputModel):
     """登录结果：令牌 + 当前用户（含权限码，省去前端再拉一次）。"""
 
     token: TokenPairOut
+    user: UserDetailOut
+
+
+class EmbedSessionOut(OutputModel):
+    """API 密钥换出的嵌入会话：短期访问令牌 + 当前用户。"""
+
+    token: AccessTokenOut
     user: UserDetailOut

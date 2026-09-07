@@ -1,6 +1,30 @@
 {
   "components": {
     "schemas": {
+      "AccessTokenOut": {
+        "description": "一枚短期访问令牌，不带刷新能力。",
+        "properties": {
+          "access_token": {
+            "title": "Access Token",
+            "type": "string"
+          },
+          "expires_in_s": {
+            "title": "Expires In S",
+            "type": "integer"
+          },
+          "token_type": {
+            "default": "bearer",
+            "title": "Token Type",
+            "type": "string"
+          }
+        },
+        "required": [
+          "access_token",
+          "expires_in_s"
+        ],
+        "title": "AccessTokenOut",
+        "type": "object"
+      },
       "ApiKeyCreateIn": {
         "additionalProperties": false,
         "description": "签发一枚密钥。\n\n⚠ `expires_in_days` 没有默认值，`null` 要显式写出来：一枚永不过期的密钥\n必须是有人主动选的，不能是漏填字段的结果。",
@@ -222,6 +246,51 @@
           }
         },
         "title": "ApiResponse[ApiKeySecretOut]",
+        "type": "object"
+      },
+      "ApiResponse_EmbedSessionOut_": {
+        "properties": {
+          "code": {
+            "default": 0,
+            "title": "Code",
+            "type": "integer"
+          },
+          "data": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/EmbedSessionOut"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "details": {
+            "anyOf": [
+              {
+                "items": {
+                  "$ref": "#/components/schemas/FieldErrorOut"
+                },
+                "type": "array"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Details"
+          },
+          "message": {
+            "default": "ok",
+            "title": "Message",
+            "type": "string"
+          },
+          "trace_id": {
+            "default": "",
+            "title": "Trace Id",
+            "type": "string"
+          }
+        },
+        "title": "ApiResponse[EmbedSessionOut]",
         "type": "object"
       },
       "ApiResponse_Page_ApiKeyOut__": {
@@ -667,6 +736,23 @@
           "new_password"
         ],
         "title": "ChangePasswordIn",
+        "type": "object"
+      },
+      "EmbedSessionOut": {
+        "description": "API 密钥换出的嵌入会话：短期访问令牌 + 当前用户。",
+        "properties": {
+          "token": {
+            "$ref": "#/components/schemas/AccessTokenOut"
+          },
+          "user": {
+            "$ref": "#/components/schemas/UserDetailOut"
+          }
+        },
+        "required": [
+          "token",
+          "user"
+        ],
+        "title": "EmbedSessionOut",
         "type": "object"
       },
       "FieldErrorOut": {
@@ -3162,6 +3248,56 @@
           }
         },
         "summary": "登录并创建会话",
+        "tags": [
+          "session"
+        ]
+      }
+    },
+    "/api/v1/auth/sessions:from-api-key": {
+      "post": {
+        "description": "API 密钥换短期 access token，不签发 refresh token。\n\nArgs: session, container, authorization。",
+        "operationId": "create_session_from_api_key_api_v1_auth_sessions_from_api_key_post",
+        "parameters": [
+          {
+            "in": "header",
+            "name": "authorization",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Authorization"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiResponse_EmbedSessionOut_"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "用 API 密钥创建嵌入会话",
         "tags": [
           "session"
         ]

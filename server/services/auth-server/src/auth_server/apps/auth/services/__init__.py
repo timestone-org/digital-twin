@@ -28,12 +28,15 @@ from auth_server.apps.auth.services.route_rule_service import (
     RouteRuleCache,
 )
 from auth_server.apps.auth.services.token_service import (
+    AccessToken,
     TokenPair,
     TokenService,
+    is_embed_session,
 )
 from auth_server.apps.auth.services.verify_service import VerifyService
 
 __all__ = [
+    "AccessToken",
     "ApiKeyService",
     "AuthService",
     "Decision",
@@ -47,6 +50,7 @@ __all__ = [
     "VerifyService",
     "decide",
     "find_rule",
+    "is_embed_session",
     "is_redundant",
     "load_identity",
     "load_identity_by_id",

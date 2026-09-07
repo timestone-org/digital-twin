@@ -28,7 +28,7 @@ AUTH_RULES: tuple[RouteRuleSpec, ...] = (
         f"{_P}/sessions*",
         "*",
         priority=995,
-        description="登录/刷新/登出。⚠ 匿名可达性由边缘免认证 location 保证",
+        description="会话动作。登录/刷新/登出由边缘免认证；API 密钥交换仍鉴权",
     ),
     RouteRuleSpec(
         f"{_P}/registrations",

@@ -121,6 +121,19 @@ export interface SessionResult {
   user: AuthUser
 }
 
+/** API Key 换出的短期嵌入令牌；刻意没有 refresh token。 */
+export interface EmbedAccessToken {
+  access_token: string
+  token_type: string
+  expires_in_s: number
+}
+
+/** API Key 嵌入首航与续租的回参。 */
+export interface EmbedSessionResult {
+  token: EmbedAccessToken
+  user: AuthUser
+}
+
 export interface PermissionItem {
   id: string
   code: string

@@ -16,6 +16,7 @@
 | **全权账号**（super admin） | 有效码集 ⊇ **内置码集**的账号 | 不看角色名，改名不影响判定 |
 | **闸 1 / 闸 2 / 闸 3** | 路由规则 / 端点权限 / 前端门禁 | 见 §3 |
 | **API 密钥**（api key） | 签发给某个账号的常驻凭据，权限完全继承该账号 | 不是第二套权限体系，见 §7.2 |
+| **嵌入会话**（embed session） | API 密钥经专用动作换出的短期 access token；无 refresh，且不能进入认证管理面 | 不是普通浏览器会话 |
 
 ## 2. 权限码档位
 
@@ -87,6 +88,7 @@
 | 端点 | 权限码 |
 |---|---|
 | `POST /sessions` · `POST /sessions:refresh` · `POST /sessions:revoke` | （空，需边缘免认证 location） |
+| `POST /sessions:from-api-key` | （空，但仍经边缘用 API 密钥认证；端点内再次校验） |
 | `POST /registrations` | （空，同上；默认未开放） |
 | `GET|PATCH /users/me` · `POST /users/me:change-password` | （空，任意登录用户） |
 | `GET /users*` · `GET /roles*` | `user:view` |
@@ -172,8 +174,9 @@
 
 ## 7. 凭据
 
-系统有**两种**凭据。它们在 `VerifyService._authenticate` 分流，之后收敛成同一个
-`Identity`——下游服务不知道调用方用的是哪一种。
+系统有**两种**根凭据。它们在 `VerifyService._authenticate` 分流，之后收敛成同一个
+`Identity`——下游服务不知道调用方用的是哪一种。API 密钥还可派生一种受限的
+短期嵌入会话，见 §7.3。
 
 ### 7.1 账号令牌（access + refresh）
 
@@ -198,16 +201,38 @@
 | 只 `:revoke`，没有 DELETE | 删行等于让「它曾经存在过」从审计里消失 |
 | **不能用于本服务的管理面**（`deps.get_identity` 判前缀后拒绝） | 否则被盗的密钥能给自己再签一枚，吊销追不上签发 |
 | `expires_in_days` 无默认值，永不过期要显式写 `null` | 它必须是有人主动选的，不能是漏填的结果 |
+| 嵌入交换只接受有明确 `expires_at` 的密钥 | URL 会把长期密钥交给浏览器；永久密钥不进入这条例外 |
 | 签发/吊销挂 `user:manage` + `assert_target_not_higher` | 与「重置他人密码」同构风险，故同构的闸 |
 
 管理入口在前端 `/system/api-keys`（`web/app/src/pages/System/ApiKeys/`）。
-⚠ **前端自己从不使用密钥**，它一律用账号令牌——密钥不过期，落进浏览器就是把
-一把长期钥匙交给了 XSS。那一页只负责签发、展示一次明文、吊销。
+⚠ 普通前端自己从不使用密钥，它一律用账号令牌。唯一例外是带 `token` 的嵌入首航：
+它从 URL 读密钥，只在内存里调用专用交换动作，随即从地址栏移除；不写本地存储。
+密钥进入 URL 仍会暴露给浏览器历史、访问日志与能读取父页面的人，这是产品明确接受
+的可信环境取舍，不得把例外扩到普通登录与管理页面。
 
 ⚠ 认证路径上有一层按密钥缓存的 argon2 结果（60 秒），因为 `/verify` 是全站前置且
 只有 500ms 超时。它缓存的**只是算力结果**，且永远在吊销与过期判定之后才被读到；
 Redis 不可达时**退回逐次 argon2 而不是拒绝**——这一层是性能件，让它 fail-closed
 等于 Redis 一抖第三方系统就全线写不进值。
+
+### 7.3 嵌入会话
+
+`POST /api/v1/auth/sessions:from-api-key` 只接受 `Authorization: Bearer dtk_…`，
+不接受普通 access token。边缘先按现有 `/verify` 路径校验一次，端点内再调用
+`ApiKeyService.authenticate_for_embed`，避免直连服务端口绕过校验，并拒绝
+`expires_at=NULL` 的永久密钥。该拒绝与伪造、吊销、过期使用同一条 401 错误，
+不泄漏密钥是否存在。成功只返回：
+
+- `typ=access` 的 JWT，保持现有 HTTP 与 `dt.auth` WebSocket 路径兼容；
+- 签名载荷 `session_kind=embed`；
+- 当前用户与有效权限；
+- **没有 refresh token**。
+
+有效期固定 300 秒。嵌入 token 自身与普通 access token 一样不可
+吊销，因此 API 密钥被吊销、到期、账号停用或降权后，已经换出的 token 最多继续存活
+这一小段时间；下一次交换立即失败。`deps.get_identity` 与 `/verify` 都会按
+`session_kind=embed` 拒绝 `/api/v1/auth/` 管理面，避免从长期密钥绕出一枚能再签密钥
+或修改账号权限的浏览器身份。
 
 ## 8. 本地命令
 
