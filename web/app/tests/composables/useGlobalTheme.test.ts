@@ -12,6 +12,7 @@ async function mountInjector() {
   const { useGlobalTheme } = await import('@/composables/useGlobalTheme')
   const { useThemePreference } =
     await import('@/composables/useThemePreference')
+  const embed = await import('@/features/embed/context')
   const host = defineComponent({
     setup() {
       useGlobalTheme()
@@ -19,7 +20,7 @@ async function mountInjector() {
     },
   })
   const wrapper = mount(host)
-  return { wrapper, handle: useThemePreference() }
+  return { wrapper, handle: useThemePreference(), embed }
 }
 
 beforeEach(() => {
@@ -90,5 +91,23 @@ describe('useGlobalTheme', () => {
     await Promise.resolve()
 
     expect(document.documentElement.style.colorScheme).toBe('light')
+  })
+
+  it('嵌入主题高于用户偏好，且不会把 embed 取值写进 dt.theme', async () => {
+    const { handle, embed } = await mountInjector()
+    handle.setPreference('emerald')
+    embed.activateEmbed('lava-amber')
+    await Promise.resolve()
+
+    expect(
+      document.documentElement.style.getPropertyValue('--accent-primary'),
+    ).toBe('#ff8a3d')
+    expect(localStorage.getItem('dt.theme')).toBe('emerald')
+
+    embed.resetEmbedContext()
+    await Promise.resolve()
+    expect(
+      document.documentElement.style.getPropertyValue('--accent-primary'),
+    ).toBe('#2ee6a6')
   })
 })

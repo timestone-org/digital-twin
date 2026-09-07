@@ -17,6 +17,9 @@
  */
 import AppNavRail from './AppNavRail.vue'
 import AppTopbar from './AppTopbar.vue'
+import { useEmbedContext } from '@/features/embed/context'
+
+const embed = useEmbedContext()
 
 defineProps<{
   title?: string | undefined
@@ -31,7 +34,7 @@ defineProps<{
   <div
     class="dt-grid-bg flex h-screen w-screen overflow-hidden bg-surface-base"
   >
-    <AppNavRail />
+    <AppNavRail v-if="!embed.isEmbedded.value" />
 
     <slot name="sidebar" />
 

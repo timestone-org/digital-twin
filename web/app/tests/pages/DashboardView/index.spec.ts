@@ -18,6 +18,7 @@ import {
   installDashboardSeries,
 } from '@/bootstrap/dashboard'
 import { OFFLINE_GRACE_MS } from '@/composables/useRealtimeOffline'
+import { activateEmbed, resetEmbedContext } from '@/features/embed/context'
 import DashboardView from '@/pages/DashboardView/index.vue'
 
 // ⚠ 只把装配那一支换成间谍、其余原样：这一页要验的是它**怎么装**，
@@ -101,6 +102,7 @@ vi.mock('@/composables/useDashboardDoc', () => ({
 }))
 
 beforeEach(() => {
+  resetEmbedContext()
   connectionState.value = 'open'
   __resetModules()
   __resetConfigControls()
@@ -111,6 +113,7 @@ beforeEach(() => {
 
 afterEach(() => {
   vi.restoreAllMocks()
+  resetEmbedContext()
 })
 
 describe('自装配', () => {
@@ -135,6 +138,19 @@ describe('自装配', () => {
     expect(kinds).toContain('static')
     expect(kinds).toContain('computed')
     wrapper.unmount()
+  })
+})
+
+describe('嵌入外壳', () => {
+  it('普通运行态保留返回工作台入口，嵌入态不显示', async () => {
+    const normal = mount(DashboardView)
+    await flushPromises()
+    expect(normal.text()).toContain('返回工作台')
+
+    activateEmbed('emerald')
+    await flushPromises()
+    expect(normal.text()).not.toContain('返回工作台')
+    normal.unmount()
   })
 })
 

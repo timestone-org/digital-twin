@@ -44,12 +44,14 @@ import { useRealtimeChannel } from '@/composables/useRealtimeChannel'
 import { dashboardTopic } from '@/runtime/pointFrames'
 import { createPointSubscribe } from '@/runtime/pointStream'
 import { fetchDatasetSeries } from '@/runtime/seriesReader'
+import { useEmbedContext } from '@/features/embed/context'
 
 // 鼠标停下多久之后把返回入口淡掉
 const CHROME_IDLE_MS = 2400
 
 const route = useRoute()
 const router = useRouter()
+const embed = useEmbedContext()
 
 // ⚠ 运行态页面必须自己装配：直连本路由时没有任何别的页面替它注册过模块，
 // 不装的话每一格都是「未知模块类型」，且没有报错
@@ -253,6 +255,7 @@ onBeforeUnmount(() => {
     <RealtimeOfflineNotice />
 
     <div
+      v-if="!embed.isEmbedded.value"
       class="absolute left-4 top-4 transition-opacity duration-300"
       :class="chromeVisible ? 'opacity-100' : 'opacity-0'"
     >
