@@ -1,9 +1,8 @@
 /**
  * @fileoverview API 密钥管理面的接口封装（ADR-0013）。
  *
- * ⚠ 这里管的是**发给第三方系统的凭据**，不是本前端自己的凭据。前端一律用
- * 账号令牌（`api/client.ts` 注入），任何时候都不该把 API 密钥放进浏览器——
- * 它不过期，落进 localStorage 就是把一把长期钥匙交给了 XSS。
+ * ⚠ 这里管的是**发给第三方系统的凭据**，不是普通前端会话自己的凭据。唯一例外
+ * 是 ADR-0051 的受控嵌入首航：API Key 只在内存里换短期令牌，绝不落 storage。
  */
 
 import type { ApiKey, ApiKeyFilters, ApiKeySecret, Page } from '@dt/contracts'

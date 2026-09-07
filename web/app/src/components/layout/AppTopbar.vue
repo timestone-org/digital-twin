@@ -8,6 +8,7 @@ import { RouterLink } from 'vue-router'
 import { DtDigits, DtIcon } from '@dt/ui'
 
 import { formatTimeOfDay } from '@/utils/datetime'
+import { useEmbedContext } from '@/features/embed/context'
 
 import ThemeSwitcher from './ThemeSwitcher.vue'
 
@@ -18,6 +19,8 @@ const props = defineProps<{
   backTo?: string | undefined
   backLabel?: string | undefined
 }>()
+
+const embed = useEmbedContext()
 
 const backText = computed(() => props.backLabel ?? '返回')
 
@@ -91,7 +94,7 @@ onBeforeUnmount(() => {
     <div class="relative z-10 ml-auto flex min-w-0 items-center gap-4">
       <slot name="actions" />
       <!-- 换肤是外壳常驻功能，不走 actions 槽——那个槽归页面自己 -->
-      <ThemeSwitcher />
+      <ThemeSwitcher v-if="!embed.isEmbedded.value" />
       <div
         class="hidden shrink-0 items-center gap-2 text-text-secondary sm:flex"
       >

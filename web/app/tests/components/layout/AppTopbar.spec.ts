@@ -2,10 +2,11 @@
  * @fileoverview 顶栏的契约：返回入口缺省不显示、给了就是一条真实链接（不是按钮）、
  * 标题与 actions 槽、时钟首帧就有值且卸载时清定时器。
  */
-import { afterEach, describe, expect, it, vi } from 'vitest'
+import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 import { mount } from '@vue/test-utils'
 
 import AppTopbar from '@/components/layout/AppTopbar.vue'
+import { activateEmbed, resetEmbedContext } from '@/features/embed/context'
 
 vi.mock('vue-router', () => ({
   RouterLink: {
@@ -14,8 +15,13 @@ vi.mock('vue-router', () => ({
   },
 }))
 
+beforeEach(() => {
+  resetEmbedContext()
+})
+
 afterEach(() => {
   vi.restoreAllMocks()
+  resetEmbedContext()
 })
 
 describe('AppTopbar · 返回入口', () => {
@@ -105,6 +111,16 @@ describe('AppTopbar · 换肤入口', () => {
       .map((node) => node.attributes('aria-label') ?? '')
     expect(labels).toContain('新建')
     expect(labels.some((label) => label.includes('主题外观'))).toBe(true)
+  })
+
+  it('嵌入态主题由宿主固定，不显示会写用户偏好的换肤入口', () => {
+    activateEmbed('emerald')
+    const wrapper = mount(AppTopbar, { props: { title: '嵌入页面' } })
+    expect(
+      wrapper
+        .findAll('button')
+        .some((node) => node.attributes('aria-label')?.includes('主题外观')),
+    ).toBe(false)
   })
 })
 

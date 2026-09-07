@@ -3,6 +3,8 @@
   <head>
     <meta charset="UTF-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <!-- API Key 首航完成前 Referer 也不能把初始 query 带出当前文档。 -->
+    <meta name="referrer" content="no-referrer" />
     <!-- 与 AppLogo.vue 同一枚标志；favicon 读不到页面的 CSS 变量，故那份写死取值 -->
     <link rel="icon" type="image/svg+xml" href="/logo.svg" />
     <title>数字孪生平台</title>

@@ -7,10 +7,15 @@ import { watchEffect } from 'vue'
 import { applyTheme } from '@dt/tokens'
 
 import { useThemePreference } from './useThemePreference'
+import { useEmbedContext } from '@/features/embed/context'
 
 export function useGlobalTheme(): void {
   const { resolvedId } = useThemePreference()
+  const embed = useEmbedContext()
   watchEffect(() => {
-    applyTheme(document.documentElement, resolvedId.value)
+    applyTheme(
+      document.documentElement,
+      embed.isEmbedded.value ? embed.themeId.value : resolvedId.value,
+    )
   })
 }

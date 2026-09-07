@@ -9,6 +9,7 @@ import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 import { mount } from '@vue/test-utils'
 
 import AppShell from '@/components/layout/AppShell.vue'
+import { activateEmbed, resetEmbedContext } from '@/features/embed/context'
 import { useAuthStore } from '@/stores/auth'
 
 vi.mock('vue-router', () => ({
@@ -21,6 +22,7 @@ vi.mock('vue-router', () => ({
 }))
 
 beforeEach(() => {
+  resetEmbedContext()
   setActivePinia(createPinia())
   localStorage.clear()
   const auth = useAuthStore()
@@ -37,6 +39,7 @@ beforeEach(() => {
 
 afterEach(() => {
   vi.restoreAllMocks()
+  resetEmbedContext()
 })
 
 describe('AppShell', () => {
@@ -86,6 +89,16 @@ describe('AppShell', () => {
 
   it('左侧导航常驻', () => {
     expect(mount(AppShell).find('aside').exists()).toBe(true)
+  })
+
+  it('嵌入态隐藏全局导航，但保留页面自己的 sidebar 插槽', () => {
+    activateEmbed('emerald')
+    const wrapper = mount(AppShell, {
+      slots: { sidebar: '<nav class="business-sidebar">项目栏</nav>' },
+    })
+
+    expect(wrapper.find('aside').exists()).toBe(false)
+    expect(wrapper.find('.business-sidebar').exists()).toBe(true)
   })
 
   it('不填 sidebar 槽时不多出任何节点', () => {
