@@ -241,6 +241,7 @@ async def test_reauth_with_the_same_ticket_pushes_the_expiry_out() -> None:
     await _act(service, connection, action="reauth", token=TICKET)
     assert sent[-1]["type"] == TYPE_ACK
     assert connection.expires_at > utcnow() + timedelta(seconds=60)
+    assert connection.credential_changed.is_set()
 
 
 async def test_reauth_with_another_ticket_is_refused() -> None:

@@ -242,6 +242,7 @@ async def test_reauth_replaces_the_codes_and_the_deadline() -> None:
     assert sent[-1]["type"] == TYPE_ACK
     assert connection.codes == frozenset({"opcua:manage"})
     assert connection.expires_at >= before
+    assert connection.credential_changed.is_set()
 
 
 async def test_reauth_drops_subscriptions_that_no_longer_qualify() -> None:
@@ -294,6 +295,33 @@ async def test_permissions_come_from_auth_not_from_the_token() -> None:
     handshake = await service.authenticate(raw)
 
     assert handshake.codes == frozenset({"opcua:view"})
+
+
+async def test_embed_access_uses_auth_codes_and_300_second_expiry() -> None:
+    service, _connections = _service()
+    issued_at = utcnow().replace(microsecond=0)
+    raw, _claims = _codec().issue(
+        subject=USER,
+        token_type="access",
+        ttl_s=300,
+        extra={"session_kind": "embed"},
+        now=issued_at,
+    )
+    _GRANTED[USER] = frozenset({"opcua:view", "dashboard:view"})
+
+    handshake = await service.authenticate(raw)
+
+    assert (
+        handshake.user_id,
+        handshake.codes,
+        handshake.expires_at,
+        handshake.grant,
+    ) == (
+        uuid.UUID(USER),
+        frozenset({"opcua:view", "dashboard:view"}),
+        issued_at + timedelta(seconds=300),
+        None,
+    )
 
 
 async def test_a_user_auth_grants_nothing_to_gets_an_empty_set() -> None:

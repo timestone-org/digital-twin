@@ -360,6 +360,7 @@ class SessionService:
         connection.codes = handshake.codes
         connection.expires_at = handshake.expires_at
         connection.checked_at = utcnow()
+        connection.credential_changed.set()
         await self.revoke_unauthorized(connection)
 
     async def _reauth_public(self, connection: Connection, ticket: str) -> None:
@@ -376,6 +377,7 @@ class SessionService:
         handshake = await self.authenticate_public(ticket)
         connection.expires_at = handshake.expires_at
         connection.checked_at = utcnow()
+        connection.credential_changed.set()
 
     async def revoke_unauthorized(self, connection: Connection) -> int:
         """按当前权限重判该连接的全部订阅，退掉不再满足的，返回退了几个。

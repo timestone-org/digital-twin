@@ -16,17 +16,20 @@
 import asyncio
 import json
 import uuid
+from collections.abc import Awaitable, Callable
+from datetime import timedelta
 from typing import Annotated, cast
 
 from fastapi import APIRouter, Depends, WebSocket, WebSocketDisconnect
 
 from lib.logging import get_logger
-from lib.utils.timeutils import utcnow
+from lib.utils.timeutils import Clock, utcnow
 from realtime_hub.apps.channel.deps import get_container
 from realtime_hub.apps.channel.errors import UserCodesUnavailable
 from realtime_hub.apps.channel.services import (
     AnonymousQuotaExceeded,
     AuthenticationRejected,
+    ConnectionRegistry,
     Handshake,
     PublicGrantRejected,
 )
@@ -34,6 +37,7 @@ from realtime_hub.apps.channel.services.session import (
     CLOSE_ANONYMOUS_QUOTA,
     CLOSE_PUBLIC_GRANT_REVOKED,
     CLOSE_TOKEN_EXPIRED,
+    REAUTH_LEAD_S,
     TYPE_ERROR,
     TYPE_SYSTEM,
     is_expired,
@@ -60,6 +64,8 @@ CLOSE_UNAUTHENTICATED = 1008
 CLOSE_DEPENDENCY_DOWN = 1013
 # 握手要报的两个子协议：标记 + 凭据，缺一不可
 SUBPROTOCOL_COUNT = 2
+
+type DeadlineWaiter = Callable[[asyncio.Event, float], Awaitable[None]]
 
 
 @router.websocket("/ws")
@@ -173,9 +179,49 @@ async def _authenticate(
 
 
 async def _pump(
+    websocket: WebSocket,
+    container: Container,
+    *,
+    connection_id: uuid.UUID,
+    clock: Clock = utcnow,
+    deadline_waiter: DeadlineWaiter | None = None,
+) -> None:
+    """并行驱动入站帧与凭据期限，任一结束即停止另一支。
+
+    Args: websocket, container, connection_id, clock, deadline_waiter。
+    """
+    waiter = deadline_waiter or _wait_for_deadline
+    connections = container.connections
+    tasks = (
+        asyncio.create_task(
+            _receive_frames(websocket, container, connection_id=connection_id)
+        ),
+        asyncio.create_task(
+            _drive_credential_deadline(
+                websocket,
+                connections,
+                connection_id,
+                clock=clock,
+                deadline_waiter=waiter,
+            )
+        ),
+    )
+    try:
+        done, _pending = await asyncio.wait(
+            tasks, return_when=asyncio.FIRST_COMPLETED
+        )
+        for task in done:
+            task.result()
+    finally:
+        for task in tasks:
+            task.cancel()
+        await asyncio.gather(*tasks, return_exceptions=True)
+
+
+async def _receive_frames(
     websocket: WebSocket, container: Container, *, connection_id: uuid.UUID
 ) -> None:
-    """收发循环。
+    """持续处理客户端帧；凭据期限由并行驱动负责。
 
     ⚠ 解不出的 JSON 只回一帧 error，不关连接：一条坏帧不该断掉整条通道。
 
@@ -187,10 +233,6 @@ async def _pump(
         connection = await container.connections.get(connection_id)
         if connection is None:  # pragma: no cover - 摘除与收帧竞争，极窄
             return
-        if is_expired(connection, now=utcnow()):
-            # ⚠ 4001：票过期了，客户端该换票重连，而不是当成网络故障重试
-            await websocket.close(code=CLOSE_TOKEN_EXPIRED)
-            return
         message = _decode(raw)
         if message is None:
             await connection.send(
@@ -198,10 +240,57 @@ async def _pump(
             )
             continue
         await session.dispatch(connection, message)
-        if needs_reauth(connection, now=utcnow()):
+
+
+async def _drive_credential_deadline(
+    websocket: WebSocket,
+    connections: ConnectionRegistry,
+    connection_id: uuid.UUID,
+    *,
+    clock: Clock,
+    deadline_waiter: DeadlineWaiter,
+) -> None:
+    """静默连接也按当前凭据期限提醒换票并到期关闭。
+
+    Args: websocket, connections, connection_id, clock, deadline_waiter。
+    """
+    warned_expiry = None
+    while True:
+        connection = await connections.get(connection_id)
+        if connection is None:
+            return
+        connection.credential_changed.clear()
+        expires_at = connection.expires_at
+        now = clock()
+        if is_expired(connection, now=now):
+            # ⚠ 4001：票过期了，客户端该换票重连，而不是当成网络故障重试
+            await websocket.close(code=CLOSE_TOKEN_EXPIRED)
+            return
+        if needs_reauth(connection, now=now) and warned_expiry != expires_at:
             await connection.send(
                 {"type": TYPE_SYSTEM, "event": "reauth_required"}
             )
+            warned_expiry = expires_at
+        wake_at = (
+            expires_at
+            if warned_expiry == expires_at
+            else expires_at - timedelta(seconds=REAUTH_LEAD_S)
+        )
+        timeout_s = max(0.0, (wake_at - now).total_seconds())
+        await deadline_waiter(connection.credential_changed, timeout_s)
+
+
+async def _wait_for_deadline(
+    credential_changed: asyncio.Event, timeout_s: float
+) -> None:
+    """等到凭据被替换或当前截止点到达。
+
+    Args: credential_changed, timeout_s。
+    """
+    try:
+        await asyncio.wait_for(credential_changed.wait(), timeout=timeout_s)
+    except TimeoutError:
+        return
 
 
 def _credential_from_subprotocols(

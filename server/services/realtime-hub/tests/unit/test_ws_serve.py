@@ -13,7 +13,11 @@ from typing import Any, cast
 import anyio
 from fastapi import WebSocket
 from realtime_hub.apps.channel.api.ws import _serve
-from realtime_hub.apps.channel.services import Connection, Handshake
+from realtime_hub.apps.channel.services import (
+    Connection,
+    ConnectionRegistry,
+    Handshake,
+)
 from realtime_hub.container import Container
 
 from lib.utils.timeutils import utcnow
@@ -31,11 +35,12 @@ class SlowSession:
 
     def __init__(self) -> None:
         self.closed: list[uuid.UUID] = []
+        self.connections = ConnectionRegistry()
 
     async def open(
         self, handshake: Handshake, *, send: Any, send_frame: Any
     ) -> Connection:
-        return Connection(
+        connection = Connection(
             id=uuid.uuid4(),
             user_id=handshake.user_id,
             codes=handshake.codes,
@@ -44,6 +49,8 @@ class SlowSession:
             send=send,
             send_frame=send_frame,
         )
+        await self.connections.add(connection)
+        return connection
 
     async def close(self, connection_id: uuid.UUID) -> None:
         await asyncio.sleep(0)
@@ -78,7 +85,14 @@ async def test_a_cancelled_connection_still_gets_swept() -> None:
     挂起点重新送达——摘除的第一个 await 就断在那里。
     """
     session = SlowSession()
-    container = cast("Container", type("C", (), {"session": session})())
+    container = cast(
+        "Container",
+        type(
+            "C",
+            (),
+            {"session": session, "connections": session.connections},
+        )(),
+    )
 
     with anyio.move_on_after(0.01):
         await _serve(cast("WebSocket", SilentSocket()), container, _handshake())

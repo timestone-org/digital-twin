@@ -8,6 +8,7 @@ accept 之前就被关掉。
 
 import base64
 import json
+from typing import Protocol
 
 import pytest
 from fastapi import FastAPI
@@ -32,6 +33,13 @@ PUBLIC_TICKET = "public-ticket-for-tests"
 PUBLIC_TOPIC = "opcua:9f8e7d6c"
 # 握手不合法的关闭码。⚠ 与「票过期」的 4001 分开，客户端的处置完全不同
 CLOSE_UNAUTHENTICATED = 1008
+EMBED_USER = "3fa85f64-5717-4562-b3fc-2c963f66afa6"
+
+
+class UserCodeGrant(Protocol):
+    """测试夹具暴露的用户权限登记面。"""
+
+    def grant(self, subject: str, codes: frozenset[str]) -> None: ...
 
 
 def _connect(client: TestClient, *protocols: str) -> None:
@@ -52,6 +60,43 @@ def test_a_valid_token_completes_the_handshake(
     assert hello["event"] == "connected"
     # ⚠ 明确告知何时换票，客户端不必自己解 token 猜
     assert "reauth_before" in hello
+
+
+@pytest.mark.usefixtures("_clean")
+def test_a_300_second_embed_access_uses_dt_auth_and_current_permissions(
+    application: FastAPI,
+    settings: Settings,
+    codec: JwtCodec,
+    user_codes: UserCodeGrant,
+) -> None:
+    user_codes.grant(EMBED_USER, frozenset({"opcua:view"}))
+    embedded, _claims = codec.issue(
+        subject=EMBED_USER,
+        token_type="access",
+        ttl_s=300,
+        extra={"session_kind": "embed"},
+    )
+    protocols = [AUTH_SUBPROTOCOL, embedded]
+    with TestClient(application) as client:
+        _grant(client, settings.edge_service_key.get_secret_value())
+        with client.websocket_connect(
+            WS_PATH, subprotocols=protocols
+        ) as socket:
+            hello = socket.receive_json()
+            accepted_subprotocol = socket.accepted_subprotocol
+            socket.send_json(
+                {
+                    "action": "subscribe",
+                    "topic": PUBLIC_TOPIC,
+                    "req_id": "embed-1",
+                }
+            )
+            acknowledged = socket.receive_json()
+    assert (
+        accepted_subprotocol,
+        hello["event"],
+        acknowledged["type"],
+    ) == (AUTH_SUBPROTOCOL, "connected", "ack")
 
 
 def test_no_subprotocol_at_all_is_refused(application: FastAPI) -> None:
