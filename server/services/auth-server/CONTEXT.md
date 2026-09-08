@@ -201,7 +201,7 @@
 | 只 `:revoke`，没有 DELETE | 删行等于让「它曾经存在过」从审计里消失 |
 | **不能用于本服务的管理面**（`deps.get_identity` 判前缀后拒绝） | 否则被盗的密钥能给自己再签一枚，吊销追不上签发 |
 | `expires_in_days` 无默认值，永不过期要显式写 `null` | 它必须是有人主动选的，不能是漏填的结果 |
-| 嵌入交换只接受有明确 `expires_at` 的密钥 | URL 会把长期密钥交给浏览器；永久密钥不进入这条例外 |
+| 嵌入交换接受所有可用密钥（包括永久密钥） | 交换后仍只签发 300 秒 access，密钥本身继续逐次回库判定 |
 | 签发/吊销挂 `user:manage` + `assert_target_not_higher` | 与「重置他人密码」同构风险，故同构的闸 |
 
 管理入口在前端 `/system/api-keys`（`web/app/src/pages/System/ApiKeys/`）。
@@ -219,9 +219,9 @@ Redis 不可达时**退回逐次 argon2 而不是拒绝**——这一层是性�
 
 `POST /api/v1/auth/sessions:from-api-key` 只接受 `Authorization: Bearer dtk_…`，
 不接受普通 access token。边缘先按现有 `/verify` 路径校验一次，端点内再调用
-`ApiKeyService.authenticate_for_embed`，避免直连服务端口绕过校验，并拒绝
-`expires_at=NULL` 的永久密钥。该拒绝与伪造、吊销、过期使用同一条 401 错误，
-不泄漏密钥是否存在。成功只返回：
+`ApiKeyService.authenticate`，避免直连服务端口绕过校验。永久密钥与有限期密钥
+使用同一条交换路径；伪造、吊销或过期密钥仍返回同一条 401 错误，不泄漏密钥
+是否存在。成功只返回：
 
 - `typ=access` 的 JWT，保持现有 HTTP 与 `dt.auth` WebSocket 路径兼容；
 - 签名载荷 `session_kind=embed`；

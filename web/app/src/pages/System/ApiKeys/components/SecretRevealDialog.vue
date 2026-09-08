@@ -6,8 +6,7 @@
  * 当场、显眼地摆出来，并说清关掉就没了——做成一条会自己消失的 toast，用户就
  * 失去了唯一一次抄走的机会，只能吊销重发。
  *
- * ⚠ 顺带给一段调用示例：拿到密钥的人下一步要做的事就是把它接进自己的程序，
- * 而「Bearer 后面直接放它、不需要任何刷新循环」正是最容易被问的一句。
+ * ⚠ 顺带给普通 API 调用示例；嵌入场景另由 web/README.md 给出 URL 口径。
  */
 import { computed } from 'vue'
 import { DtButton, DtIcon, DtModal, DtNotice, useToast } from '@dt/ui'
@@ -89,8 +88,8 @@ async function copy(text: string, what: string): Promise<void> {
           class="m-0 overflow-x-auto rounded bg-surface-sunken p-2 font-mono text-2xs"
           >{{ usage }}</pre>
         <p class="m-0 mt-2 text-text-disabled">
-          放在对方的服务端配置里，别放进浏览器——它不过期，落进前端就是把一把
-          长期钥匙交给了 XSS。
+          普通 API 集成建议放在对方服务端。iframe 嵌入可把它放进首航 URL；HTTP
+          下密钥会明文传输，永久密钥泄漏后只能吊销收回。
         </p>
       </div>
     </div>

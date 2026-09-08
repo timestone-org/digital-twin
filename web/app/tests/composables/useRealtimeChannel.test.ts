@@ -121,7 +121,21 @@ describe('实时通道', () => {
   it('⚠ 握手报两个子协议：标记在前、token 在后', () => {
     useRealtimeChannel()
     expect(latest().protocols).toEqual([AUTH_SUBPROTOCOL, 'tok-1'])
-    expect(latest().url).toContain('/api/v1/realtime/ws')
+  })
+
+  it('HTTP 页面使用 WS 连接实时通道', () => {
+    useRealtimeChannel()
+    expect(latest().url).toBe('ws://localhost:3000/api/v1/realtime/ws')
+  })
+
+  it('HTTPS 页面使用 WSS 连接实时通道', () => {
+    vi.stubGlobal('window', {
+      location: { protocol: 'https:', host: 'secure.example.test' },
+      addEventListener: vi.fn(),
+      removeEventListener: vi.fn(),
+    })
+    useRealtimeChannel()
+    expect(latest().url).toBe('wss://secure.example.test/api/v1/realtime/ws')
   })
 
   it('没有令牌时不连——连上也订不到任何主题', () => {

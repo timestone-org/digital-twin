@@ -156,20 +156,6 @@ class ApiKeyService:
         self._touch(row, now)
         return row.user_id
 
-    async def authenticate_for_embed(
-        self, session: AsyncSession, raw: str
-    ) -> uuid.UUID:
-        """校验一枚有明确到期日的嵌入密钥，返回所属用户 id。
-
-        Args: session, raw（Bearer 里的明文）。
-        """
-        row, now = await self._authenticate_row(session, raw)
-        # ⚠ 永不过期与其它失败用同一条错误，不能泄漏密钥是否真实存在
-        if row.expires_at is None:
-            raise TokenInvalid("API 密钥无效或已失效")
-        self._touch(row, now)
-        return row.user_id
-
     async def _authenticate_row(
         self, session: AsyncSession, raw: str
     ) -> tuple[ApiKey, datetime]:
