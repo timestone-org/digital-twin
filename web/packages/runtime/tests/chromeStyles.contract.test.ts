@@ -20,6 +20,10 @@ const STYLES = readFileSync(
   path.resolve(HERE, '../src/styles/chrome.scss'),
   'utf-8',
 )
+const RENDERER = readFileSync(
+  path.resolve(HERE, '../src/ModuleRenderer.vue'),
+  'utf-8',
+)
 
 /**
  * 取一条规则的声明块，用于只在这一档里断言。
@@ -51,6 +55,15 @@ function ruleBodies(selector: string): string[] {
 describe('扫描器确实读到了源码', () => {
   it('扫空会让下面每条断言假绿', () => {
     expect(STYLES).toContain('.dt-corners::before')
+  })
+})
+
+describe('读数字体的模块局部覆盖', () => {
+  it('渲染根把 card 字体适配到 --font-digit，缺省仍回到鸿蒙基准', () => {
+    expect(RENDERER).toContain('--card-digit-font: initial')
+    expect(RENDERER).toContain(
+      '--font-digit: var(--card-digit-font, var(--font-digit-base))',
+    )
   })
 })
 

@@ -3,7 +3,11 @@
  * `--card-*` 覆盖变量 + 少数几个修饰类。键的词汇表在 `@dt/contracts` 的 `CHROME_KEYS`，
  * 这里只写逐键特例（单位、简写串、只有某一档才注入）。
  */
-import type { CardChrome, ChromeKey } from '@dt/contracts'
+import {
+  dashboardDigitFontFamily,
+  type CardChrome,
+  type ChromeKey,
+} from '@dt/contracts'
 
 /**
  * 卡片边框样式的选项表：面板的选项源，同时生成 `normalizeCardBorderStyle` 的白名单。
@@ -269,6 +273,7 @@ function textVars(chrome: CardChrome): Record<string, string> {
     '--card-font',
     typeof family === 'string' ? FONT_FAMILY_VAR[family] : undefined,
   )
+  put(out, '--card-digit-font', dashboardDigitFontFamily(chrome.digitFont))
   put(out, '--card-font-size', pxOf(chrome, 'fontSize'))
   put(out, '--card-text', rawOf(chrome, 'textColor'))
   return out

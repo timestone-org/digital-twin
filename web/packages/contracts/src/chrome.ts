@@ -28,6 +28,45 @@ export interface ChromeKeySpec {
   values?: readonly string[]
 }
 
+/** 大屏读数字体选项；id 落库，CSS 变量只在渲染缝内使用。 */
+export interface DashboardDigitFontOption {
+  value: string
+  label: string
+  cssVariable: string
+}
+
+/**
+ * 大屏读数字体目录。新字体在这里加一项，属性面板与渲染侧同时获得它。
+ * DS-Digital 缺少某个字符时逐字回退默认字体。
+ */
+export const DASHBOARD_DIGIT_FONT_OPTIONS = [
+  {
+    value: 'harmony',
+    label: '默认字体',
+    cssVariable: '--font-family-harmony',
+  },
+  {
+    value: 'ds-digital',
+    label: 'DS-Digital',
+    cssVariable: '--font-family-ds-digital',
+  },
+] as const satisfies readonly DashboardDigitFontOption[]
+
+export type DashboardDigitFont =
+  (typeof DASHBOARD_DIGIT_FONT_OPTIONS)[number]['value']
+
+/**
+ * 持久化 id 对应的 CSS 字体族；空值与未知 id 都交回平台缺省。
+ * @param value chrome 袋里的自由值
+ */
+export function dashboardDigitFontFamily(value: unknown): string | undefined {
+  if (typeof value !== 'string') return undefined
+  const option = DASHBOARD_DIGIT_FONT_OPTIONS.find(
+    (candidate) => candidate.value === value,
+  )
+  return option === undefined ? undefined : `var(${option.cssVariable})`
+}
+
 /**
  * 边框样式的合法值。带 label 的选项表（面板选项源 + `normalizeCardBorderStyle` 的白名单）
  * 在 `@dt/runtime` 的 `CARD_BORDER_STYLE_OPTIONS`：值在契约层、译名在渲染层，
@@ -113,6 +152,11 @@ export const CHROME_KEYS = [
     type: 'enum',
     values: ['sans', 'display', 'mono'],
   }, // 正文字体
+  {
+    key: 'digitFont',
+    type: 'enum',
+    values: DASHBOARD_DIGIT_FONT_OPTIONS.map((option) => option.value),
+  }, // 读数字体
   { key: 'fontSize', type: 'number' }, // 正文字号
   { key: 'textColor', type: 'color' }, // 正文字色
 

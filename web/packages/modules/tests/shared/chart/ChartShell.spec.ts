@@ -124,6 +124,20 @@ describe('喂给各族的东西', () => {
     wrapper.unmount()
   })
 
+  it('canvas 图表显式接入全局鸿蒙字体，不能指望 DOM 继承', async () => {
+    const { wrapper } = await buildWith(
+      '--font-sans',
+      'HarmonyOS Sans SC, sans-serif',
+    )
+
+    expect(echarts.handle.setOption.mock.calls.at(-1)?.[0]).toEqual({
+      textStyle: { fontFamily: 'HarmonyOS Sans SC, sans-serif' },
+      series: [],
+    })
+
+    wrapper.unmount()
+  })
+
   it('首帧是全量重建', async () => {
     const spy = vi.fn(build)
     const wrapper = await mountShell({ build: spy })

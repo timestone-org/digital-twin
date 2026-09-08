@@ -307,8 +307,15 @@ export type {
   ChromeKey,
   ChromeKeySpec,
   ChromeKeyType,
+  DashboardDigitFont,
+  DashboardDigitFontOption,
 } from './chrome'
-export { CHROME_KEYS, isChromeKey } from './chrome'
+export {
+  CHROME_KEYS,
+  DASHBOARD_DIGIT_FONT_OPTIONS,
+  dashboardDigitFontFamily,
+  isChromeKey,
+} from './chrome'
 export type {
   DashboardHandle,
   InteractionAction,

@@ -111,7 +111,7 @@ describe('不动控件就不写值', () => {
       .findAllComponents(DtSelect)
       .filter((item) => item.props('label') !== '外观风格')
 
-    expect(enums.length).toBe(7)
+    expect(enums.length).toBe(8)
     for (const item of enums) expect(item.props('modelValue')).toBe('')
   })
 
@@ -225,6 +225,22 @@ describe('写值语义', () => {
     await openGroup(wrapper, '标题条')
 
     expect(selectField(wrapper, '标题字重').props('modelValue')).toBe('400')
+  })
+
+  it('读数字体目录可选默认字体与 DS-Digital，节点可以显式盖过整屏', async () => {
+    const wrapper = mountFields()
+    await openGroup(wrapper, '文字')
+    const control = selectField(wrapper, '读数字体')
+
+    expect(control.props('options')).toEqual([
+      { value: '', label: '继承上级' },
+      { value: 'harmony', label: '默认字体' },
+      { value: 'ds-digital', label: 'DS-Digital' },
+    ])
+
+    control.vm.$emit('update:modelValue', 'ds-digital')
+
+    expect(written(wrapper)).toEqual({ digitFont: 'ds-digital' })
   })
 
   it('改一项不动其余键', () => {
@@ -351,6 +367,10 @@ describe('字段覆盖面', () => {
     '右侧装饰带',
     '装饰带高度',
     '装饰带透明度',
+    '正文字体',
+    '读数字体',
+    '正文字号',
+    '正文字色',
     '毛玻璃模糊',
     '悬停上浮',
     '悬停辉光',

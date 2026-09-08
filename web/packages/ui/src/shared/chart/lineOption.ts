@@ -27,6 +27,7 @@ const GRID_INSET_PX = { left: 56, right: 56, top: 36, bottom: 28 }
 interface ChartTheme {
   palette: string[]
   axis: string | undefined
+  font: string | undefined
   label: string | undefined
   split: string | undefined
   surface: string | undefined
@@ -66,6 +67,7 @@ export type DtChartOption = {
   // ⚠ 不写 `| undefined`：echarts 的 color 在 exactOptionalPropertyTypes 下
   // 不收 undefined，取不到 token 时这个键必须整个不出现
   color?: string[]
+  textStyle?: { fontFamily: string }
   grid: { left: number; right: number; top: number; bottom: number }
   legend: {
     type: 'scroll'
@@ -85,21 +87,22 @@ export type DtChartOption = {
 }
 
 /** 变量缺席（样式表还没挂上）时不给取值，让 echarts 用自己的默认。 */
-function tokenColor(name: string): string | undefined {
+function tokenValue(name: string): string | undefined {
   const value = readToken(name, '')
   return value === '' ? undefined : value
 }
 
 function chartTheme(): ChartTheme {
   return {
-    palette: SERIES_COLOR_TOKENS.map(tokenColor).filter(
+    palette: SERIES_COLOR_TOKENS.map(tokenValue).filter(
       (color) => color !== undefined,
     ),
-    axis: tokenColor('--border-default'),
-    label: tokenColor('--text-secondary'),
-    split: tokenColor('--border-subtle'),
-    surface: tokenColor('--surface-overlay'),
-    text: tokenColor('--text-primary'),
+    axis: tokenValue('--border-default'),
+    font: tokenValue('--font-family-harmony'),
+    label: tokenValue('--text-secondary'),
+    split: tokenValue('--border-subtle'),
+    surface: tokenValue('--surface-overlay'),
+    text: tokenValue('--text-primary'),
   }
 }
 
@@ -153,6 +156,9 @@ export function buildLineOption(
   const groups = axisGroups(series)
   return {
     ...(theme.palette.length > 0 ? { color: theme.palette } : {}),
+    ...(theme.font === undefined
+      ? {}
+      : { textStyle: { fontFamily: theme.font } }),
     grid: GRID_INSET_PX,
     legend: { type: 'scroll', top: 0, textStyle: { color: theme.label } },
     tooltip: {

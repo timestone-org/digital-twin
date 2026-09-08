@@ -4,7 +4,12 @@
  */
 import { describe, expect, it } from 'vitest'
 
-import { CHROME_KEYS, isChromeKey } from '../src/index'
+import {
+  CHROME_KEYS,
+  DASHBOARD_DIGIT_FONT_OPTIONS,
+  dashboardDigitFontFamily,
+  isChromeKey,
+} from '../src/index'
 import type {
   CardChrome,
   ChromeKey,
@@ -83,5 +88,28 @@ describe('键名判定', () => {
       bag[key] = 4
     }
     expect(bag).toEqual({ radius: 4 })
+  })
+})
+
+describe('读数字体目录', () => {
+  it('持久化 id 唯一，目录同时提供属性面板标签与渲染字体族', () => {
+    const ids = DASHBOARD_DIGIT_FONT_OPTIONS.map((option) => option.value)
+
+    expect(new Set(ids).size).toBe(ids.length)
+    expect(ids).toEqual(['harmony', 'ds-digital'])
+    expect(DASHBOARD_DIGIT_FONT_OPTIONS.every((option) => option.label)).toBe(
+      true,
+    )
+  })
+
+  it('合法 id 解析为字体族，未知与脏值交回平台缺省', () => {
+    expect(dashboardDigitFontFamily('harmony')).toBe(
+      'var(--font-family-harmony)',
+    )
+    expect(dashboardDigitFontFamily('ds-digital')).toBe(
+      'var(--font-family-ds-digital)',
+    )
+    expect(dashboardDigitFontFamily('missing')).toBeUndefined()
+    expect(dashboardDigitFontFamily({})).toBeUndefined()
   })
 })

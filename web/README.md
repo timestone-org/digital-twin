@@ -3,6 +3,18 @@
 前端是 Vue 3 + TypeScript 的 pnpm workspace。开发、检查与构建命令见
 [`CONTEXT.md`](CONTEXT.md#8-本地命令)。
 
+## 字体与授权
+
+本软件使用并随包分发 HarmonyOS Sans SC，字体版权归 Huawei Device Co., Ltd.；
+资源保持官方原件，授权全文与来源说明见
+[`packages/tokens/src/fonts/`](packages/tokens/src/fonts/)，发布物同时保留
+[`THIRD_PARTY_NOTICES.txt`](app/public/THIRD_PARTY_NOTICES.txt)。
+
+大屏读数可选择随包提供的 DS-Digital。它是 shareware，正式商业交付前需按原始
+授权完成商业注册；授权全文同时保留在
+[`DS-Digital-LICENSE.txt`](app/public/DS-Digital-LICENSE.txt)。字体缺少的中文、
+单位与符号会安全回退到默认字体。
+
 ## 嵌入业务页面
 
 在任意受支持的原页面 URL 上增加 `token` 与 `theme`，即可作为 iframe 首航：

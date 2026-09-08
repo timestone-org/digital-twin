@@ -7,6 +7,7 @@ import { applyTheme, DEFAULT_THEME_ID, listThemes } from '@dt/tokens'
 import { themes } from 'storybook/theming'
 import type { Decorator, Preview } from '@storybook/vue3-vite'
 
+import '@dt/tokens/fonts.scss'
 import '@dt/tokens/tokens.scss'
 import './preview.scss'
 

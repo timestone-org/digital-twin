@@ -256,6 +256,14 @@
       ]
     },
     {
+      "key": "digitFont",
+      "type": "enum",
+      "values": [
+        "harmony",
+        "ds-digital"
+      ]
+    },
+    {
       "key": "fontSize",
       "type": "number"
     },

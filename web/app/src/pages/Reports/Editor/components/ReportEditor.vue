@@ -290,6 +290,8 @@ defineExpose({ insert })
   --umo-button-hover-background: var(--surface-raised);
   --umo-mask-color: var(--surface-overlay);
   --umo-shadow: var(--fx-shadow-menu);
+  --umo-font-family: var(--font-sans);
+  --td-font-family: var(--font-sans);
   --umo-text-color: var(--text-primary);
   --umo-text-color-light: var(--text-secondary);
   --umo-text-color-disabled: var(--text-disabled);

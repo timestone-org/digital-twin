@@ -152,17 +152,17 @@
   --card-corner-glow: 5px;
 
   /* —— 字体族 ——
-   * 库包脱离 app 时字体资源缺席，逐项回退到 PingFang / 雅黑，布局不受影响。 */
-  --font-display:
-    'Chakra Petch', 'HarmonyOS Sans SC', 'PingFang SC', 'Microsoft YaHei',
-    system-ui, sans-serif;
-  --font-sans:
-    'HarmonyOS Sans SC', 'PingFang SC', 'Microsoft YaHei', 'Chakra Petch',
-    system-ui, -apple-system, sans-serif;
+   * HarmonyOS Sans SC 由应用入口自托管；库包单独使用时逐项回退到系统字体。 */
+  --font-family-harmony:
+    'HarmonyOS Sans SC', 'PingFang SC', 'Microsoft YaHei', system-ui,
+    -apple-system, sans-serif;
+  --font-family-ds-digital:
+    'DS-Digital', 'DS Digital', var(--font-family-harmony);
+  --font-display: var(--font-family-harmony);
+  --font-sans: var(--font-family-harmony);
   --font-mono: ui-monospace, 'Cascadia Code', 'JetBrains Mono', monospace;
-  /* 读数专用族：与 --font-display 同源，单列一个名字是为了让「墙上所有数字」
-   * 能一处改完。⚠ 只给字体族，等宽数字要消费处自己配 font-variant-numeric。 */
-  --font-digit:
-    'Chakra Petch', ui-monospace, 'HarmonyOS Sans SC', 'PingFang SC',
-    'Microsoft YaHei', system-ui, sans-serif;
+  /* 读数专用族：基准与正文同为鸿蒙，大屏模块可在自己的宿主上局部覆盖。
+   * ⚠ 只给字体族，等宽数字要消费处自己配 font-variant-numeric。 */
+  --font-digit-base: var(--font-family-harmony);
+  --font-digit: var(--font-digit-base);
 }

@@ -6,14 +6,15 @@
  * ⚠ 住在 `features/` 而不是某一页的 `scripts/`：大屏编辑器的右栏与卡片样式库
  * 那一页配的是同一批旋钮，各抄一份必漂成「一边能配、另一边配了不生效」。
  */
-import type {
-  CardChrome,
-  ChromeKey,
-  DtNumberRange,
-  DtSelectOption,
-  ModuleChrome,
+import {
+  DASHBOARD_DIGIT_FONT_OPTIONS,
+  isChromeKey,
+  type CardChrome,
+  type ChromeKey,
+  type DtNumberRange,
+  type DtSelectOption,
+  type ModuleChrome,
 } from '@dt/contracts'
-import { isChromeKey } from '@dt/contracts'
 import {
   CARD_BORDER_STYLE_OPTIONS,
   bareBorderClasses,
@@ -315,6 +316,19 @@ const TEXT_FIELDS: readonly CardField[] = [
       { value: 'display', label: '标题体' },
       { value: 'mono', label: '等宽' },
     ],
+  },
+  {
+    key: 'digitFont',
+    label: '读数字体',
+    kind: 'enum',
+    options: [
+      { value: '', label: '继承上级' },
+      ...DASHBOARD_DIGIT_FONT_OPTIONS.map((option) => ({
+        value: option.value,
+        label: option.label,
+      })),
+    ],
+    help: '只影响模块内标记为读数的数字；日期、标识和说明文字保持默认字体。',
   },
   {
     key: 'fontSize',

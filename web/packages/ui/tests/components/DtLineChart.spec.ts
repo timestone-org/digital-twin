@@ -71,6 +71,7 @@ beforeEach(() => {
 })
 
 afterEach(() => {
+  document.documentElement.style.removeProperty('--font-family-harmony')
   vi.unstubAllGlobals()
 })
 
@@ -124,6 +125,20 @@ describe('DtLineChart 实例生命周期', () => {
 })
 
 describe('DtLineChart 取值与状态', () => {
+  it('Canvas 文字显式使用鸿蒙字体，不能依赖 DOM 继承', async () => {
+    document.documentElement.style.setProperty(
+      '--font-family-harmony',
+      'HarmonyOS Sans SC, sans-serif',
+    )
+
+    mount(DtLineChart, { props: { series: [series('t', 'a')] } })
+    await flushPromises()
+
+    expect(optionAt(0)?.textStyle).toEqual({
+      fontFamily: 'HarmonyOS Sans SC, sans-serif',
+    })
+  })
+
   it('null 传成断档而不是 0，且不连线', async () => {
     mount(DtLineChart, {
       props: {

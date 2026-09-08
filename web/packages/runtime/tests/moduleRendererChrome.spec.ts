@@ -53,6 +53,30 @@ describe('卡片外观的注入', () => {
     expect(style).toContain('--card-title-gap: 6px')
   })
 
+  it('读数字体支持整屏缺省与单模块覆盖，且只注入模块局部变量', () => {
+    const base = mountCell('card-module', { digitFont: 'ds-digital' })
+    expect(base.attributes('style')).toContain(
+      '--card-digit-font: var(--font-family-ds-digital)',
+    )
+
+    const overridden = mountCell(
+      'card-module',
+      { digitFont: 'ds-digital' },
+      { __cardStyle: { digitFont: 'harmony' } },
+    )
+    expect(overridden.attributes('style')).toContain(
+      '--card-digit-font: var(--font-family-harmony)',
+    )
+  })
+
+  it('读数字体切回未知值时移除旧覆盖，不把 DS-Digital 残留在模块上', async () => {
+    const wrapper = mountCell('card-module', { digitFont: 'ds-digital' })
+
+    await wrapper.setProps({ cardChrome: { digitFont: 'missing' } })
+
+    expect(wrapper.attributes('style')).toBeUndefined()
+  })
+
   it('模块级把某项改回默认时删键即可，不留大屏级的残留', () => {
     const wrapper = mountCell(
       'card-module',

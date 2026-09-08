@@ -54,6 +54,17 @@ const ariaAttrs = computed<Record<string, string>>(() => {
 })
 
 /**
+ * 给 canvas 图表补上 DOM 无法继承进去的全局字体。
+ * @param full 本次是否全量重建
+ */
+function buildOption(full: boolean) {
+  const resolve = (name: string): string => readCssVar(rootRef.value, name)
+  const option = props.build(readChartTheme(rootRef.value), resolve, full)
+  const fontFamily = resolve('--font-sans')
+  return fontFamily === '' ? option : { textStyle: { fontFamily }, ...option }
+}
+
+/**
  * 壳的 props → 挂载选项。
  * ⚠ 这几项只在挂载时读一次，是有意的：它们是族的静态口径（点击取值、要换哪些键），
  * 运行中换掉也没有「重新接线」的语义；`itemClick` 尤其不能改成恒有——
@@ -67,12 +78,7 @@ function chartOptions(): UseEChartOptions {
     itemValueOf: props.itemClick?.readValue,
     partialMerge: props.partialMerge,
     valuesDeep: props.valuesDeep,
-    build: (full) =>
-      props.build(
-        readChartTheme(rootRef.value),
-        (name) => readCssVar(rootRef.value, name),
-        full,
-      ),
+    build: buildOption,
     watchConfig: () => props.config,
     watchValues: () => (props.watchValues ? props.watchValues() : props.values),
   }

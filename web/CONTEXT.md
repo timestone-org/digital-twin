@@ -107,6 +107,20 @@ useGlobalTheme ── applyTheme(document.documentElement, id)
 局部主题必须完整注入默认值、附加变量和派生别名；不能沿用全局默认主题的
 「移除内联值」做法，否则会继承祖先的另一套配色。恢复跟随系统时移除局部覆盖。
 
+### 3.3 字体
+
+应用壳从 `@dt/tokens/fonts.scss` 自托管 HarmonyOS Sans SC，正文与标题的语义
+token 都以它为首选；系统等宽体继续只服务代码、密钥、地址与公式等技术文本。
+报告正文、文本块与 2D 图元里由用户显式指定的字体属于内容配置，优先于应用缺省。
+
+大屏读数单独消费 `--font-digit`。整屏缺省存
+`chromeJson.card.digitFont`，节点可用 `configJson.__cardStyle.digitFont`
+覆盖；运行时只在对应 `.dt-module` 内改写读数字体，所以管理页面与相邻模块不受
+影响。可用 id、面板标签与字体 token 映射的唯一目录是
+`@dt/contracts.DASHBOARD_DIGIT_FONT_OPTIONS`；id 一旦落库不改名，未知 id
+回退默认字体，实际字体栈只定义在 `@dt/tokens`。DS-Digital 随包加载且只覆盖
+有限字符，缺少的中文、单位与符号逐字回退默认字体；商业交付前必须完成其授权。
+
 ## 4. 认证链路
 
 刷新令牌的跨标签并发决策见 [`web/docs/adr/0002`](docs/adr/0002-刷新令牌跨标签串行化.md)。

@@ -12,6 +12,7 @@ import { router } from './router'
 // 决定了级联层的先后。它必须先出现，后面 index.scss 往 base / components 层里
 // 追加的规则才排在 utilities 之前——否则工具类会被全局样式压住。
 import './styles/tailwind.css'
+import '@dt/tokens/fonts.scss'
 import './styles/index.scss'
 // ⚠ 单独一条：装饰位图的 url() 只有走纯 CSS 才会被构建重写成带 hash 的产物路径，
 // 并进 index.scss 会被 Sass 内联掉、产物里留一条死路径（见该文件头）

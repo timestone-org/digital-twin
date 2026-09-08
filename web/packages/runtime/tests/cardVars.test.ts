@@ -94,6 +94,16 @@ describe('布尔只认严格 true / false', () => {
 })
 
 describe('简写串与逐档特例', () => {
+  it('读数字体只发射模块局部变量，未知档位不污染平台缺省', () => {
+    expect(cardVars({ digitFont: 'ds-digital' })).toEqual({
+      '--card-digit-font': 'var(--font-family-ds-digital)',
+    })
+    expect(cardVars({ digitFont: 'harmony' })).toEqual({
+      '--card-digit-font': 'var(--font-family-harmony)',
+    })
+    expect(cardVars({ digitFont: 'missing' })).toEqual({})
+  })
+
   it('呼吸描边注入完整 animation 简写串，缺周期时用平台现值', () => {
     expect(cardVars({ borderPulse: true })['--card-anim']).toBe(
       'dt-card-breathe 6s ease-in-out infinite',

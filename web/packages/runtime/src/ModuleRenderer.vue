@@ -279,6 +279,9 @@ const chrome = computed(() =>
   height: 100%;
   min-height: 0;
   overflow: hidden;
+  // 读数字体只在一格模块内覆盖；管理页面与相邻模块都不会继承到这一档。
+  --card-digit-font: initial;
+  --font-digit: var(--card-digit-font, var(--font-digit-base));
   // 画布级正文缺省：三条都靠继承往下走，未注入时 inherit = 完全不改变现有渲染。
   // 模块自己写死或配过的排版天然赢过继承来的值，不需要第二套合并逻辑
   font-family: var(--card-font, inherit);

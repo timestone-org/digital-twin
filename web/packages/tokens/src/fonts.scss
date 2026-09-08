@@ -1,0 +1,26 @@
+/**
+ * @fileoverview 应用自带字体入口。字体文件保持官方原件，由构建器重写为带哈希的资源地址。
+ */
+
+@font-face {
+  font-family: 'HarmonyOS Sans SC';
+  src:
+    local('HarmonyOS Sans SC Regular'),
+    local('HarmonyOS Sans SC'),
+    url('./fonts/harmonyos-sans-sc/HarmonyOS_Sans_SC_Regular.ttf')
+      format('truetype');
+  font-display: swap;
+  font-style: normal;
+  font-weight: 400;
+}
+
+@font-face {
+  font-family: 'DS-Digital';
+  src:
+    local('DS-Digital'),
+    local('DS Digital'),
+    url('./fonts/ds-digital/DS-DIGI.TTF') format('truetype');
+  font-display: swap;
+  font-style: normal;
+  font-weight: 400;
+}
