@@ -2,7 +2,14 @@
 import { flushPromises, mount } from '@vue/test-utils'
 import { createPinia, setActivePinia } from 'pinia'
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
-import { DtButton, DtInput, DtSelect, DtModal, useConfirm } from '@dt/ui'
+import {
+  DtButton,
+  DtCursorPager,
+  DtInput,
+  DtSelect,
+  DtModal,
+  useConfirm,
+} from '@dt/ui'
 import type {
   AuthUser,
   ReportRender,
@@ -185,7 +192,7 @@ describe('报告页面', () => {
     expect(wrapper.text()).not.toContain('新建规则')
     wrapper.unmount()
   })
-  it('生成记录的最新按钮确实回到第一页', async () => {
+  it('生成记录使用游标分页器，并能返回上一页', async () => {
     vi.spyOn(api, 'listReportRenders').mockResolvedValue({
       items: [job('succeeded')],
       next: 'cursor',
@@ -193,18 +200,24 @@ describe('报告页面', () => {
     })
     const wrapper = mount(Renders, { global: { stubs: { teleport: true } } })
     await flushPromises()
-    await wrapper
-      .findAllComponents(DtButton)
-      .find((button) => button.text() === '下一页')
-      ?.trigger('click')
+
+    const pager = wrapper.findComponent(DtCursorPager)
+    expect(pager.props()).toMatchObject({
+      page: 1,
+      count: 1,
+      hasPrev: false,
+      hasNext: true,
+    })
+
+    pager.vm.$emit('next')
     await flushPromises()
     expect(api.listReportRenders).toHaveBeenLastCalledWith('cursor')
-    await wrapper
-      .findAllComponents(DtButton)
-      .find((button) => button.text() === '最新记录')
-      ?.trigger('click')
+    expect(pager.props('page')).toBe(2)
+
+    pager.vm.$emit('prev')
     await flushPromises()
     expect(api.listReportRenders).toHaveBeenLastCalledWith(undefined)
+    expect(pager.props('page')).toBe(1)
     wrapper.unmount()
   })
 })

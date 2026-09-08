@@ -2,7 +2,14 @@
 /** @fileoverview 生成记录、状态轮询、产物下载与警告。 */
 import { computed, onBeforeUnmount, onMounted, ref } from 'vue'
 import { RouterLink } from 'vue-router'
-import { DtButton, DtDataView, DtModal, DtNotice, DtTag } from '@dt/ui'
+import {
+  DtButton,
+  DtCursorPager,
+  DtDataView,
+  DtModal,
+  DtNotice,
+  DtTag,
+} from '@dt/ui'
 import type { DtDataColumn, ReportRender } from '@dt/contracts'
 import * as api from '@/api/reports'
 import { AppShell } from '@/components/layout'
@@ -20,12 +27,15 @@ const COLUMNS: readonly DtDataColumn[] = [
 ]
 const rows = ref<ReportRender[]>([])
 const next = ref<string | null>(null)
-const current = ref<string | undefined>(undefined)
+const trail = ref<readonly (string | undefined)[]>([undefined])
 const error = ref<string | null>(null)
 const loading = ref(false)
 const selected = ref<ReportRender | null>(null)
 const view = useViewMode('report-renders')
 const raced = useRacedFetch()
+const current = computed(() => trail.value[trail.value.length - 1])
+const pageNumber = computed(() => trail.value.length)
+const hasPrev = computed(() => trail.value.length > 1)
 const active = computed(() =>
   rows.value.some(
     (row) => row.status === 'pending' || row.status === 'running',
@@ -40,7 +50,7 @@ const labels = {
 let timer: ReturnType<typeof setInterval> | undefined
 async function reload(after = current.value): Promise<void> {
   loading.value = true
-  current.value = after
+  error.value = null
   await raced.run(() => api.listReportRenders(after), {
     ok: (page) => {
       rows.value = page.items
@@ -64,8 +74,15 @@ onBeforeUnmount(() => {
   if (timer) clearInterval(timer)
   raced.cancel()
 })
-async function latest(): Promise<void> {
-  current.value = undefined
+async function nextPage(): Promise<void> {
+  if (next.value === null || loading.value) return
+  const after = next.value
+  trail.value = [...trail.value, after]
+  await reload(after)
+}
+async function prevPage(): Promise<void> {
+  if (!hasPrev.value || loading.value) return
+  trail.value = trail.value.slice(0, -1)
   await reload()
 }
 async function download(id: string): Promise<void> {
@@ -146,23 +163,17 @@ async function download(id: string): Promise<void> {
           </PermGuard>
         </template>
       </DtDataView>
-      <div class="flex gap-2">
-        <DtButton
-          size="sm"
-          variant="ghost"
-          :disabled="!current"
-          @click="latest"
-        >
-          最新记录
-        </DtButton>
-        <DtButton
-          size="sm"
-          :disabled="!next"
-          @click="reload(next ?? undefined)"
-        >
-          下一页
-        </DtButton>
-      </div>
+      <DtCursorPager
+        class="shrink-0"
+        aria-label="报告生成记录翻页"
+        :page="pageNumber"
+        :count="rows.length"
+        :has-prev="hasPrev"
+        :has-next="next !== null"
+        :loading="loading"
+        @prev="prevPage"
+        @next="nextPage"
+      />
     </div>
     <DtModal
       :model-value="selected !== null"
