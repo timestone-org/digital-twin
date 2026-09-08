@@ -10,11 +10,15 @@ import type { EditorMetaDraft } from './useEditorMeta'
 
 const PREFIX = 'dt.editor.draft.'
 
-/** 草稿结构版本：形状一变就加一，读到别的版本一律丢弃（对齐剪贴板的版本守卫）。 */
+/** 草稿结构版本：不兼容变更才递增，可选字段保持旧草稿可读。 */
 const DRAFT_VERSION = 2
 
 /** 自动落盘间隔。 */
 export const DRAFT_INTERVAL_MS = 10_000
+
+export type StoredEditorMeta = Omit<EditorMetaDraft, 'themeJson'> & {
+  themeJson?: Record<string, unknown>
+}
 
 export interface EditorDraft {
   version: typeof DRAFT_VERSION
@@ -22,7 +26,7 @@ export interface EditorDraft {
   basedOnUpdatedAt: string
   nodes: DashboardNodePayload[]
   /** 元数据轴的草稿；写草稿那刻元数据还没加载出来时为 null。 */
-  meta: EditorMetaDraft | null
+  meta: StoredEditorMeta | null
 }
 
 function keyOf(dashboardId: string): string {
@@ -51,19 +55,22 @@ export function writeDraft(
   }
 }
 
-/** 元数据载荷的形状校验；chromeJson 的深结构交给恢复链路的归一化 setter。 */
-function isDraftMeta(value: unknown): value is EditorMetaDraft {
+function isJsonBag(value: unknown): value is Record<string, unknown> {
+  return typeof value === 'object' && value !== null && !Array.isArray(value)
+}
+
+/** 元数据载荷的形状校验；缺失主题字段的旧草稿沿用已加载主题。 */
+function isDraftMeta(value: unknown): value is StoredEditorMeta {
   if (typeof value !== 'object' || value === null) return false
   // Partial 断言只用于逐字段验型，验过才放行
-  const shape = value as Partial<EditorMetaDraft>
+  const shape = value as Partial<StoredEditorMeta>
   return (
     typeof shape.name === 'string' &&
     (shape.description === null || typeof shape.description === 'string') &&
     typeof shape.designWidth === 'number' &&
     typeof shape.designHeight === 'number' &&
-    typeof shape.chromeJson === 'object' &&
-    shape.chromeJson !== null &&
-    !Array.isArray(shape.chromeJson)
+    isJsonBag(shape.chromeJson) &&
+    (shape.themeJson === undefined || isJsonBag(shape.themeJson))
   )
 }
 

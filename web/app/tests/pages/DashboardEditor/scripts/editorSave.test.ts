@@ -9,7 +9,7 @@ import { useDashboardEditor } from '@/composables/useDashboardEditor'
 import { setVisible } from '@/features/dashboard/editorDoc'
 import { saveDashboard } from '@/pages/DashboardEditor/scripts/editorSave'
 import { useEditorMeta } from '@/pages/DashboardEditor/scripts/useEditorMeta'
-import { ref } from 'vue'
+import { nextTick, ref } from 'vue'
 
 const MANIFEST: ModuleManifest = {
   type: 'demo',
@@ -76,6 +76,10 @@ function setup(rowVersion = 3) {
   })
   const file = {
     dashboard,
+    loading: ref(false),
+    saving: ref(false),
+    load: vi.fn(() => Promise.resolve(dashboard.value)),
+    dispose: vi.fn(),
     saveMeta,
     save,
     conflict: ref<string | null>(null),
@@ -85,8 +89,6 @@ function setup(rowVersion = 3) {
   return { dashboard, editor, meta, file, saveMeta, save, onFail }
 }
 
-type FileArg = Parameters<typeof saveDashboard>[0]['file']
-
 describe('双轴顺序', () => {
   it('两轴都脏：先元数据后布局，布局用推进后的行版本', async () => {
     const { editor, meta, file, saveMeta, save, onFail } = setup(3)
@@ -95,7 +97,7 @@ describe('双轴顺序', () => {
 
     const done = await saveDashboard({
       editor,
-      file: file as unknown as FileArg,
+      file,
       meta,
       onFail,
     })
@@ -119,7 +121,7 @@ describe('双轴顺序', () => {
 
     const done = await saveDashboard({
       editor,
-      file: file as unknown as FileArg,
+      file,
       meta,
       onFail,
     })
@@ -137,7 +139,7 @@ describe('双轴顺序', () => {
 
     const done = await saveDashboard({
       editor,
-      file: file as unknown as FileArg,
+      file,
       meta,
       onFail,
     })
@@ -151,15 +153,142 @@ describe('双轴顺序', () => {
 })
 
 describe('元数据草稿', () => {
+  it('保存回包保留请求期间新选的主题，并推进已保存基线', async () => {
+    const { editor, meta, file, saveMeta, onFail } = setup()
+    let finish: (value: DashboardPayload) => void = () => undefined
+    const response = new Promise<DashboardPayload>((resolve) => {
+      finish = resolve
+    })
+    saveMeta.mockReturnValueOnce(response)
+    meta.setTheme('light')
+
+    const saving = saveDashboard({ editor, file, meta, onFail })
+    meta.setTheme('emerald')
+    finish({ ...payload(4), themeJson: { __base: 'light' } })
+
+    expect(await saving).toBe(true)
+    expect(meta.draft.value?.themeJson).toEqual({ __base: 'emerald' })
+    expect(meta.isDirty.value).toBe(true)
+    expect(meta.toPatch()?.themeJson).toEqual({ __base: 'emerald' })
+    meta.setTheme('light')
+    expect(meta.isDirty.value).toBe(false)
+    expect(meta.toPatch()).toBeNull()
+  })
+
+  it('保存期间改回原主题，回包后相对于新基线仍然未保存', async () => {
+    const { editor, meta, file, saveMeta, onFail } = setup()
+    let finish: (value: DashboardPayload) => void = () => undefined
+    const response = new Promise<DashboardPayload>((resolve) => {
+      finish = resolve
+    })
+    saveMeta.mockReturnValueOnce(response)
+    meta.setTheme('light')
+
+    const saving = saveDashboard({ editor, file, meta, onFail })
+    meta.setTheme(null)
+    expect(meta.isDirty.value).toBe(false)
+    finish({ ...payload(4), themeJson: { __base: 'light' } })
+
+    expect(await saving).toBe(true)
+    expect(meta.draft.value?.themeJson).toEqual({})
+    expect(meta.isDirty.value).toBe(true)
+    expect(meta.toPatch()?.themeJson).toEqual({})
+  })
+
+  it('未设置主题时跟随系统，选择后写入主题袋并标记为未保存', () => {
+    const { meta } = setup()
+
+    expect(meta.draft.value?.themeJson).toEqual({})
+    expect(meta.isDirty.value).toBe(false)
+    meta.setTheme('light')
+
+    expect(meta.toPatch()?.themeJson).toEqual({ __base: 'light' })
+    expect(meta.isDirty.value).toBe(true)
+    meta.setTheme(null)
+    expect(meta.toPatch()).toBeNull()
+    expect(meta.isDirty.value).toBe(false)
+  })
+
+  it('切换或恢复跟随系统只改 __base，保留主题袋的其它字段', () => {
+    const { meta } = setup()
+    const saved = {
+      ...payload(3),
+      themeJson: { __base: 'light', custom: { accent: 'kept' } },
+    }
+    meta.reset(saved)
+
+    meta.setTheme('dark-tech')
+    expect(meta.toPatch()?.themeJson).toEqual({
+      __base: 'dark-tech',
+      custom: { accent: 'kept' },
+    })
+    meta.setTheme(null)
+    expect(meta.toPatch()?.themeJson).toEqual({ custom: { accent: 'kept' } })
+    expect(saved.themeJson.__base).toBe('light')
+
+    meta.setTheme('light')
+    expect(meta.isDirty.value).toBe(false)
+    expect(meta.toPatch()).toBeNull()
+  })
+
+  it('只改主题时通过元数据轴保存，成功后清除脏状态并可重新打开', async () => {
+    const { editor, meta, file, saveMeta, save, onFail } = setup()
+    const saved = { ...payload(4), themeJson: { __base: 'light' } }
+    saveMeta.mockResolvedValueOnce(saved)
+    meta.setTheme('light')
+
+    const done = await saveDashboard({
+      editor,
+      file,
+      meta,
+      onFail,
+    })
+
+    expect(done).toBe(true)
+    expect(saveMeta).toHaveBeenCalledWith(
+      expect.objectContaining({ themeJson: { __base: 'light' } }),
+    )
+    expect(save).not.toHaveBeenCalled()
+    expect(meta.isDirty.value).toBe(false)
+    expect(meta.draft.value?.themeJson).toEqual({ __base: 'light' })
+    const reopened = useEditorMeta(ref(saved))
+    expect(reopened.draft.value?.themeJson).toEqual({ __base: 'light' })
+    expect(reopened.toPatch()).toBeNull()
+  })
+
+  it('重置与切换大屏各自重播主题，未加载时写入安全无操作', async () => {
+    const { meta, dashboard } = setup()
+    meta.setTheme('light')
+    meta.reset(payload(3))
+    expect(meta.draft.value?.themeJson).toEqual({})
+    expect(meta.isDirty.value).toBe(false)
+
+    dashboard.value = {
+      ...payload(1),
+      id: 'd2',
+      themeJson: { __base: 'dark-tech' },
+    }
+    await nextTick()
+    expect(meta.draft.value?.themeJson).toEqual({ __base: 'dark-tech' })
+    dashboard.value = null
+    await nextTick()
+    meta.setTheme('light')
+    meta.setThemeJson({ __base: 'light' })
+    expect(meta.draft.value).toBeNull()
+    expect(meta.toPatch()).toBeNull()
+  })
+
   it('保存后布局轴换载荷不冲掉未保存的元数据编辑', async () => {
     const { dashboard, meta } = setup(3)
     meta.setField('name', '没保存的新名字')
+    meta.setTheme('light')
 
     // 布局轴保存推进行版本（id 不变）
     dashboard.value = payload(4)
     await Promise.resolve()
 
     expect(meta.draft.value?.name).toBe('没保存的新名字')
+    expect(meta.draft.value?.themeJson).toEqual({ __base: 'light' })
     expect(meta.isDirty.value).toBe(true)
   })
 

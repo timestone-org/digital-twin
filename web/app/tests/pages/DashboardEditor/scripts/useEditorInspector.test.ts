@@ -77,7 +77,10 @@ function metaStub(): EditorMeta {
     isDirty: computed(() => false),
     setField: vi.fn(),
     setChromeSection: vi.fn(),
+    setTheme: vi.fn(),
+    setThemeJson: vi.fn(),
     toPatch: () => null,
+    acceptSaved: vi.fn(),
     reset: vi.fn(),
   }
 }

@@ -26,7 +26,7 @@ export async function saveDashboard(deps: SaveDeps): Promise<boolean> {
       deps.onFail()
       return false
     }
-    meta.reset(savedMeta)
+    meta.acceptSaved(savedMeta, patch)
   }
   if (editor.isDirty.value || patch === null) {
     const fresh = file.dashboard.value

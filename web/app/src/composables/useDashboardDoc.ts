@@ -12,6 +12,7 @@ import {
   createLoader,
   createMetaSaver,
   createSaver,
+  type DashboardLoadOptions,
   type DocState,
 } from '@/features/dashboard/docIo'
 
@@ -25,7 +26,10 @@ export interface DashboardDoc {
   /** 版本冲突的提示；非 null 时界面必须挡住继续保存。 */
   conflict: Ref<string | null>
   /** 加载一张大屏；返回它，被更晚的一次加载取代时返回 null。 */
-  load: (dashboardId: string) => Promise<DashboardPayload | null>
+  load: (
+    dashboardId: string,
+    options?: DashboardLoadOptions,
+  ) => Promise<DashboardPayload | null>
   /** 整树替换；成功返回新载荷，冲突或失败返回 null。 */
   save: (input: ReplaceLayoutInput) => Promise<DashboardPayload | null>
   /**
