@@ -6,8 +6,8 @@
  * ⚠ 这些口径全活在 scoped SCSS 里，happy-dom 不套用样式，只能扫源码文本；扫之
  * 前必须先把注释剥掉，否则注释里写着的令牌名会把断言骗过去。
  * ⚠ 数字都是全部内置预设逐套实测来的：`--border-strong` 压在浅色面板底上只有
- * 1.38:1、`--state-warning` 最低只有 2.00:1，都不到 WCAG 1.4.11 要求的 3:1；
- * 换用的 `--text-secondary` 最低 6.77:1、`--text-disabled` 最低 4.64:1。
+ * 1.38:1、`--state-warning` 最低只有 2.08:1，都不到 WCAG 1.4.11 要求的 3:1；
+ * 换用的 `--text-secondary` 最低 5.67:1、`--text-disabled` 最低 4.61:1。
  */
 import { mount } from '@vue/test-utils'
 import { readFileSync } from 'node:fs'
@@ -75,7 +75,7 @@ describe('参考几何的笔色', () => {
   )
 })
 
-// ⚠ 阈值线原来走 --state-warning：浅色预设下最低 2.00:1，一条画了等于没画的线
+// ⚠ 阈值线原来走 --state-warning：浅色预设下最低 2.08:1，一条画了等于没画的线
 describe('阈值线不再走警示色', () => {
   it('散点的阈值线换成更粗更疏的文字色虚线', () => {
     const code = flat(codeOf('ScatterPlot'))

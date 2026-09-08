@@ -210,7 +210,7 @@ function laneOf(
     text-anchor: middle;
   }
 
-  // 坐标轴与刻度字同一档：全部内置预设里最低 4.64:1
+  // 坐标轴与刻度字同一档：全部内置预设里最低 4.61:1
   &__axis {
     stroke: var(--text-disabled);
   }
@@ -243,7 +243,7 @@ function laneOf(
     }
 
     // 打乱重排：交叉散列是它的身份，外圈那道边走中性色。
-    // ⚠ 边不许跟着散列走 --state-warning——那在浅色预设下最低只有 2.00:1，这一段
+    // ⚠ 边不许跟着散列走 --state-warning——那在浅色预设下最低只有 2.08:1，这一段
     // 的轮廓就没了；散列本身照旧是警示色，颜色不作唯一编码
     &--shuffled {
       stroke: rgba(var(--neutral-fg-rgb), 0.5);

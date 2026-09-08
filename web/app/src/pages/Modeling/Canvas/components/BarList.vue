@@ -216,7 +216,7 @@ const moreText = computed(
   }
 
   // 阈值线的引线跟着阈值线走：更粗一档的文字色。
-  // ⚠ 不许回到 --state-warning——它压在浅色面板底上最低只有 2.00:1，远不到 WCAG
+  // ⚠ 不许回到 --state-warning——它压在浅色面板底上最低只有 2.08:1，远不到 WCAG
   // 1.4.11 对非文本图形的 3:1。哪条线是阈值靠线宽与这块字自己的名字认
   &__mark--threshold::after {
     border-left-width: 2px;

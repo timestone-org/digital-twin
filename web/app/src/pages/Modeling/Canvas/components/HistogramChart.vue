@@ -271,7 +271,7 @@ const dropFill = computed(() => `url(#${patternId}-${props.dropIntent})`)
     text-anchor: start;
   }
 
-  // 坐标轴与刻度字同一档：全部内置预设里最低 4.64:1
+  // 坐标轴与刻度字同一档：全部内置预设里最低 4.61:1
   &__axis {
     stroke: var(--text-disabled);
   }
@@ -321,7 +321,7 @@ const dropFill = computed(() => `url(#${patternId}-${props.dropIntent})`)
 
   // 三档标记线各有各的线型与文字标签，颜色不作唯一编码。
   // ⚠ 软界与位置标记不再走 --state-warning / --state-info：这两个在浅色预设下
-  // 最低只有 2.00:1，压在面板底上就是一条看不见的线
+  // 最低只有 2.08:1，压在面板底上就是一条看不见的线
   &__mark {
     stroke-dasharray: 4 3;
 

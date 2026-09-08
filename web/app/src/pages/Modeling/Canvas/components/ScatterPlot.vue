@@ -242,7 +242,7 @@ const view = computed(() =>
     text-anchor: start;
   }
 
-  // 坐标轴与刻度字同一档：全部内置预设里最低 4.64:1
+  // 坐标轴与刻度字同一档：全部内置预设里最低 4.61:1
   &__axis {
     stroke: var(--text-disabled);
   }
@@ -268,7 +268,7 @@ const view = computed(() =>
     stroke-dasharray: 4 3;
 
     // 两条都走文字色，靠线宽与虚线疏密分：阈值线更粗更疏，且各自带文字标签。
-    // ⚠ 阈值线不再走 --state-warning——它在浅色预设下最低只有 2.00:1，而零残差线
+    // ⚠ 阈值线不再走 --state-warning——它在浅色预设下最低只有 2.08:1，而零残差线
     // 这类基准一旦看不见，整张残差图就没有参照物了
     &--reference {
       stroke: var(--text-secondary);

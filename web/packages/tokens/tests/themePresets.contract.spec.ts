@@ -203,7 +203,7 @@ describe('预设的取值形状', () => {
     ).toEqual([
       ['dark-tech', 'dark', '#010d1e', '#00cefc', '#45d3fd'],
       ['light', 'light', '#f4f7fb', '#0098c8', '#0077a8'],
-      ['naive-green', 'light', '#f4f7f5', '#18a058', '#36ad6a'],
+      ['naive-green', 'light', '#f9f9f9', '#00b9ab', '#0bac5e'],
       ['nebula-violet', 'dark', '#0a0a1e', '#9d6bff', '#6f7bff'],
       ['emerald', 'dark', '#03140f', '#2ee6a6', '#36d6c2'],
       ['lava-amber', 'dark', '#1a0d05', '#ff8a3d', '#ffb454'],
