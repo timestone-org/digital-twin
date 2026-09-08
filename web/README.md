@@ -9,7 +9,7 @@
 
 ```html
 <iframe
-  src="https://twin.example.com/dashboards/019...?token=dtk_xxx_xxx&theme=emerald"
+  src="http://twin.example.com/dashboards/019...?token=dtk_xxx_xxx&theme=emerald"
   title="数字孪生页面"
   width="1440"
   height="900"
@@ -46,7 +46,11 @@ API Key 所属用户完全一致；无权访问时显示嵌入错误，不进入
 - `/public/:publicToken`
 - 403 与 404 错误页
 
-初始 URL 短暂包含长期 API Key，只应交给受信任的宿主页面。密钥必须设置明确
-到期日（永不过期的密钥会被换票端点拒绝），并按既有轮换与吊销机制管理。
-生产环境必须使用 HTTPS/WSS；页面入口声明了 `no-referrer`，不会把这段初始 URL
-作为 Referer 带给后续请求。
+有限期与永久 API Key 都可以嵌入。HTTP/WS 与 HTTPS/WSS 均受支持，
+实时通道会自动跟随页面协议。但初始 URL 短暂包含完整 API Key：HTTP 下它会
+以明文经过网络，永久密钥泄漏后又不会自动到期。建议使用专用最小权限账号，
+并确保可以随时吊销。页面入口声明了 `no-referrer`，但无法防止抓包、浏览器历史、
+截图或父页脚本读取初始 URL。
+
+HTTPS 宿主页通常会被浏览器禁止嵌入 HTTP iframe（mixed content）。这是浏览器
+限制，不是本应用的协议门禁；这种组合下嵌入页仍需改用 HTTPS。

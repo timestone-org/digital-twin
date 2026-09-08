@@ -132,6 +132,8 @@ describe('签发弹窗', () => {
       name: 'XX系统写点位',
       expires_in_days: null,
     })
+    expect(document.body.textContent).toContain('也可用于嵌入')
+    expect(document.body.textContent).toContain('只能靠吊销收回')
   })
 
   it('签发成功后把明文交给上层，并关掉自己', async () => {
@@ -167,6 +169,16 @@ describe('明文回执弹窗', () => {
     expect(document.body.textContent).toContain(
       `Authorization: Bearer ${SECRET}`,
     )
+  })
+
+  it('明示 iframe 可用永久密钥，并告知 HTTP 明文风险', async () => {
+    mount(SecretRevealDialog, {
+      props: { issued: { name: 'XX系统写点位', secret: SECRET } },
+    })
+    await flushPromises()
+    expect(document.body.textContent).toContain('iframe 嵌入')
+    expect(document.body.textContent).toContain('HTTP 下密钥会明文传输')
+    expect(document.body.textContent).toContain('永久密钥泄漏后只能吊销收回')
   })
 
   it('复制走 copyText——现场是纯 HTTP，navigator.clipboard 在那里不存在', async () => {

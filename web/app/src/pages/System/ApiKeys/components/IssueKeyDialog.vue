@@ -101,7 +101,7 @@ async function onSubmit(): Promise<void> {
     :model-value="props.modelValue"
     :dirty="isDirty"
     title="签发 API 密钥"
-    description="给第三方系统用的常驻凭据。权限完全继承所选账号。"
+    description="给第三方接口或嵌入页面用的常驻凭据。权限完全继承所选账号。"
     @update:model-value="emit('update:modelValue', $event)"
   >
     <div class="flex flex-col gap-3">
@@ -131,7 +131,7 @@ async function onSubmit(): Promise<void> {
 
       <DtSelect v-model="ttl" label="有效期" :options="TTL_OPTIONS" />
       <DtTag v-if="ttl === NEVER" intent="warning">
-        永不过期的密钥只能靠吊销收回，请确认对方有妥善的保管方式
+        永不过期的密钥也可用于嵌入，但泄漏后只能靠吊销收回
       </DtTag>
 
       <DtNotice v-if="error" intent="danger">{{ error }}</DtNotice>

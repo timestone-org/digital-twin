@@ -163,14 +163,15 @@ async def test_expired_api_key_cannot_create_an_embed_session(
     assert response.status_code == 401
 
 
-async def test_permanent_api_key_cannot_create_an_embed_session(
+async def test_permanent_api_key_can_create_an_embed_session(
     app_client: httpx.AsyncClient,
 ) -> None:
     issued, _ = await issue_admin_api_key(app_client, expires_in_days=None)
-    permanent = await exchange_api_key(app_client, issued["secret"])
-    malformed = await exchange_api_key(app_client, "dtk_bad")
-    assert permanent.status_code == malformed.status_code == 401
-    assert permanent.json()["message"] == malformed.json()["message"]
+    response = await exchange_api_key(app_client, issued["secret"])
+    token = response.json()["data"]["token"]
+    assert response.status_code == 200
+    assert token["expires_in_s"] == 300
+    assert "refresh_token" not in token
 
 
 async def test_disabled_api_key_owner_cannot_create_an_embed_session(

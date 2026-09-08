@@ -108,7 +108,7 @@ class AuthService:
 
         Args: session, api_key。
         """
-        user_id = await self.api_keys.authenticate_for_embed(session, api_key)
+        user_id = await self.api_keys.authenticate(session, api_key)
         identity = await load_identity_by_id(session, user_id)
         if identity is None:
             raise TokenInvalid("API 密钥对应的账号不存在")

@@ -2,8 +2,8 @@
 /**
  * @fileoverview API 密钥管理：签发、查看、吊销（ADR-0013）。
  *
- * ⚠ 这一页管的是**发给第三方系统的凭据**，本前端自己从不使用它们——前端一律
- * 用账号令牌。密钥不过期，落进浏览器就是把一把长期钥匙交给了 XSS。
+ * ⚠ 普通前端会话一律用账号令牌；唯一例外是 iframe 嵌入首航，它会从 URL
+ * 读取有限期或永久 API 密钥，换取短期 access 后立即清理地址栏。
  *
  * ⚠ 列表里永远没有明文，只有前缀。明文只在签发那一次弹窗里出现，之后库里只
  * 剩散列，我们自己也取不回来。
@@ -113,7 +113,7 @@ onMounted(async () => {
 </script>
 
 <template>
-  <AppShell title="API 密钥" subtitle="第三方系统的常驻凭据">
+  <AppShell title="API 密钥" subtitle="第三方系统与嵌入页面的常驻凭据">
     <template #actions>
       <PermGuard :codes="[PERMISSION_CODES.userManage]" explain>
         <DtButton size="sm" icon="plus" @click="issueOpen = true">
@@ -137,7 +137,7 @@ onMounted(async () => {
         :pagination="list.pager.value"
         :layout="{ minWidth: '64rem', cardColumns: 3, cardMinWidth: '19rem' }"
         :empty="{
-          hint: '还没有签发过密钥。第三方系统要写点位时，在这里发一枚',
+          hint: '还没有签发过密钥。第三方系统或嵌入页面需要凭据时，在这里发一枚',
         }"
         @update:page="list.goToPage"
         @update:size="list.setSize"
