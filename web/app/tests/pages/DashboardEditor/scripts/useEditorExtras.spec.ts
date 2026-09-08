@@ -26,6 +26,11 @@ import {
 import type { CanvasZoom } from '@/features/dashboard/canvasZoom'
 import { createEditorActions } from '@/pages/DashboardEditor/scripts/editorActions'
 import { createArrangeActions } from '@/pages/DashboardEditor/scripts/editorArrange'
+import {
+  readDraft,
+  writeDraft,
+} from '@/pages/DashboardEditor/scripts/editorDraft'
+import { captureThumbnail } from '@/pages/DashboardEditor/scripts/editorThumbnail'
 import { activeSurface } from '@/features/ai/surfaces'
 import {
   useEditorExtras,
@@ -34,6 +39,9 @@ import {
 
 vi.mock('@/api/dashboardTransfer', () => ({ exportDashboard: vi.fn() }))
 vi.mock('@/utils/downloadJson', () => ({ downloadJson: vi.fn() }))
+vi.mock('@/pages/DashboardEditor/scripts/editorThumbnail', () => ({
+  captureThumbnail: vi.fn(() => Promise.resolve(true)),
+}))
 
 const MANIFEST: ModuleManifest = {
   type: 'demo',
@@ -76,6 +84,7 @@ interface Harness {
 function setup(
   pickerConsumes: () => boolean,
   dashboard: DashboardPayload | null = null,
+  isMetaDirty: () => boolean = () => false,
 ): Harness {
   let editor!: DashboardEditor
   let extras!: EditorExtras
@@ -118,6 +127,7 @@ function setup(
         removeSelected: vi.fn(),
         consumePicker,
         save,
+        isMetaDirty,
         confirm: { ask: vi.fn(() => Promise.resolve(false)) },
         chrome: {
           card: computed(() => ({})),
@@ -144,6 +154,8 @@ function pressEscape(): void {
 }
 
 afterEach(() => {
+  localStorage.clear()
+  vi.mocked(captureThumbnail).mockClear()
   vi.restoreAllMocks()
 })
 
@@ -236,6 +248,67 @@ const EXPORT_PAYLOAD: DashboardExportPayload = {
     },
   ],
 }
+
+describe('主题草稿保存', () => {
+  function storeThemeDraft(): void {
+    writeDraft(DASHBOARD.id, DASHBOARD.updatedAt, DASHBOARD.nodes, {
+      name: DASHBOARD.name,
+      description: DASHBOARD.description,
+      designWidth: DASHBOARD.designWidth,
+      designHeight: DASHBOARD.designHeight,
+      themeJson: { __base: 'emerald' },
+      chromeJson: {},
+    })
+  }
+
+  it('仅修改主题保存失败时保留本地草稿，并不生成未保存主题的缩略图', async () => {
+    const ctx = setup(() => false, DASHBOARD)
+    storeThemeDraft()
+    ctx.save.mockResolvedValue({ isSaved: false, message: null })
+    expect(ctx.editor.isDirty.value).toBe(false)
+
+    const outcome = await ctx.extras.saveWithThumbnail()
+
+    expect(outcome.isSaved).toBe(false)
+    expect(
+      readDraft(DASHBOARD.id, DASHBOARD.updatedAt)?.meta?.themeJson,
+    ).toEqual({
+      __base: 'emerald',
+    })
+    expect(captureThumbnail).not.toHaveBeenCalled()
+    ctx.wrapper.unmount()
+  })
+
+  it('主题保存成功后清除本地草稿并刷新缩略图', async () => {
+    const ctx = setup(() => false, DASHBOARD)
+    storeThemeDraft()
+
+    const outcome = await ctx.extras.saveWithThumbnail()
+
+    expect(outcome.isSaved).toBe(true)
+    expect(readDraft(DASHBOARD.id, DASHBOARD.updatedAt)).toBeNull()
+    expect(captureThumbnail).toHaveBeenCalledWith(DASHBOARD.id, null)
+    ctx.wrapper.unmount()
+  })
+
+  it('保存期间又修改主题时保留新草稿，不生成旧主题的缩略图', async () => {
+    const ctx = setup(
+      () => false,
+      DASHBOARD,
+      () => true,
+    )
+    storeThemeDraft()
+
+    const outcome = await ctx.extras.saveWithThumbnail()
+
+    expect(outcome.isSaved).toBe(true)
+    expect(
+      readDraft(DASHBOARD.id, DASHBOARD.updatedAt)?.meta?.themeJson,
+    ).toEqual({ __base: 'emerald' })
+    expect(captureThumbnail).not.toHaveBeenCalled()
+    ctx.wrapper.unmount()
+  })
+})
 
 describe('导出 JSON', () => {
   it('落盘的是线形整包：导入端的 parseExportPackage 能原样读回', async () => {

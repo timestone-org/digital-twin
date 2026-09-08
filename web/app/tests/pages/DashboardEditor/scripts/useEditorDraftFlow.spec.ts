@@ -81,8 +81,8 @@ interface Harness {
   wrapper: ReturnType<typeof mount>
 }
 
-function setup(confirmAnswer = false): Harness {
-  const dashboard = shallowRef<DashboardPayload | null>(payload())
+function setup(confirmAnswer = false, initial = payload()): Harness {
+  const dashboard = shallowRef<DashboardPayload | null>(initial)
   const confirmSpy = vi.fn(() => Promise.resolve(confirmAnswer))
   const restoreEditorSection = vi.fn()
   let editor!: DashboardEditor
@@ -118,7 +118,7 @@ function setup(confirmAnswer = false): Harness {
 
 function storedDraft(): {
   nodes: DashboardNodePayload[]
-  meta: { name: string } | null
+  meta: { name: string; themeJson: Record<string, unknown> } | null
   basedOnUpdatedAt: string
 } | null {
   const raw = localStorage.getItem(KEY)
@@ -138,6 +138,16 @@ afterEach(() => {
 })
 
 describe('定时落盘', () => {
+  it('只改主题也会定时写入本地草稿', () => {
+    const ctx = setup()
+    ctx.meta.setTheme('light')
+
+    vi.advanceTimersByTime(10_000)
+
+    expect(storedDraft()?.meta?.themeJson).toEqual({ __base: 'light' })
+    ctx.wrapper.unmount()
+  })
+
   it('两轴都干净时到点也不写', () => {
     const ctx = setup()
 
@@ -244,19 +254,62 @@ describe('离开守卫', () => {
 
 describe('进屏恢复', () => {
   function seedDraft(
-    over: { name?: string; chromeJson?: Record<string, unknown> } = {},
+    over: {
+      name?: string
+      chromeJson?: Record<string, unknown>
+      themeJson?: Record<string, unknown>
+    } = {},
   ): void {
     writeDraft('db1', 'v-2026', [node('x'), node('y')], {
       name: over.name ?? '草稿里的名字',
       description: '草稿描述',
       designWidth: 2560,
       designHeight: 1440,
+      themeJson: over.themeJson ?? {},
       chromeJson: over.chromeJson ?? {
         card: { radius: 20 },
         editor: { snap: { mode: 'px', step: 10 } },
       },
     })
   }
+
+  it.each([{ __base: 'light', custom: { accent: 'kept' } }, {}])(
+    '接受恢复后主题袋还原为 %j',
+    async (themeJson) => {
+      seedDraft({ themeJson })
+      const ctx = setup(true, payload({ themeJson: { __base: 'dark-tech' } }))
+      await flushPromises()
+
+      expect(ctx.meta.draft.value?.themeJson).toEqual(themeJson)
+      expect(ctx.meta.toPatch()?.themeJson).toEqual(themeJson)
+      ctx.wrapper.unmount()
+    },
+  )
+
+  it('恢复缺少主题字段的旧 v2 草稿时保留服务端主题和旧布局', async () => {
+    localStorage.setItem(
+      KEY,
+      JSON.stringify({
+        version: 2,
+        basedOnUpdatedAt: 'v-2026',
+        nodes: [node('legacy')],
+        meta: {
+          name: '旧草稿',
+          description: null,
+          designWidth: 1920,
+          designHeight: 1080,
+          chromeJson: {},
+        },
+      }),
+    )
+    const ctx = setup(true, payload({ themeJson: { __base: 'light' } }))
+    await flushPromises()
+
+    expect(ctx.editor.nodes.value.map((item) => item.id)).toEqual(['legacy'])
+    expect(ctx.meta.draft.value?.name).toBe('旧草稿')
+    expect(ctx.meta.draft.value?.themeJson).toEqual({ __base: 'light' })
+    ctx.wrapper.unmount()
+  })
 
   it('接受恢复：布局一次 apply（可一步撤销回加载态），元数据逐段回灌', async () => {
     seedDraft()

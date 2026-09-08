@@ -32,6 +32,11 @@ export interface DocState {
   conflict: Ref<string | null>
 }
 
+export interface DashboardLoadOptions {
+  /** 重载失败时保留当前文档，让编辑草稿仍可继续保存。 */
+  retainCurrentOnError?: boolean
+}
+
 /**
  * 这个错误是不是「你的版本旧了」。⚠ 只按码分支，不按 message、也不按状态码：
  * `BizError` 必出自统一信封，code 一定真实；HTTP 409 还住着 41005/41006 这类
@@ -46,12 +51,18 @@ function isVersionConflict(caught: unknown): boolean {
 
 /** 只有最后一次发起的加载能写状态；乱序返回的那些一律丢弃。 */
 export function createLoader(state: DocState): {
-  load: (dashboardId: string) => Promise<DashboardPayload | null>
+  load: (
+    dashboardId: string,
+    options?: DashboardLoadOptions,
+  ) => Promise<DashboardPayload | null>
   dispose: () => void
 } {
   const raced = useRacedFetch()
 
-  async function load(dashboardId: string): Promise<DashboardPayload | null> {
+  async function load(
+    dashboardId: string,
+    options: DashboardLoadOptions = {},
+  ): Promise<DashboardPayload | null> {
     state.loading.value = true
     state.error.value = null
     state.conflict.value = null
@@ -64,7 +75,7 @@ export function createLoader(state: DocState): {
       },
       fail: (caught) => {
         state.error.value = describeError(caught)
-        state.dashboard.value = null
+        if (options.retainCurrentOnError !== true) state.dashboard.value = null
       },
       settled: () => (state.loading.value = false),
     })

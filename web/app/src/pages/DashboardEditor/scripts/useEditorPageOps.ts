@@ -1,11 +1,9 @@
 /**
- * @fileoverview 页面级操作组：加载/保存/删除确认/选中项的几何与显隐/挑点回填，
- * 加上本地草稿流与离开守卫的装配。只做把状态层与动作层串起来这一件事。
+ * @fileoverview 大屏编辑器页面操作：加载、保存、删除、几何、显隐、挑点与草稿守卫。
  */
 import type { GetModuleManifest } from '@dt/runtime'
 import type { Ref } from 'vue'
 import type { DashboardNodePayload, ModuleManifest } from '@dt/contracts'
-
 import type { CollectPoint } from '@dt/contracts'
 import type { DashboardEditor } from '@/composables/useDashboardEditor'
 import type { useDashboardDoc } from '@/composables/useDashboardDoc'
@@ -29,7 +27,6 @@ interface ConfirmPort {
     danger: boolean
   }) => Promise<boolean>
 }
-
 interface ToastPort {
   error: (message: string) => void
   success: (message: string) => void
@@ -109,8 +106,12 @@ async function removeSelected(deps: EditorPageOpsDeps): Promise<void> {
 }
 
 async function reload(deps: EditorPageOpsDeps): Promise<void> {
-  const loaded = await deps.file.load(deps.dashboardId())
-  if (loaded !== null) deps.editor.reset(loaded.nodes)
+  const targetId = deps.dashboardId()
+  const retainCurrentOnError = deps.file.dashboard.value?.id === targetId
+  const loaded = await deps.file.load(targetId, { retainCurrentOnError })
+  if (loaded === null) return
+  deps.editor.reset(loaded.nodes)
+  deps.meta.reset(loaded)
 }
 
 // 双轴保存的顺序不变量见 editorSave.ts
@@ -158,7 +159,6 @@ export function createEditorPageOps(deps: EditorPageOpsDeps): EditorPageOps {
   })
 
   installDraftFlow(deps)
-
   return {
     openSubEditor: (nodeId: string) =>
       openSubEditor(editor, deps.getManifest, enterSubEditor, nodeId),

@@ -11,7 +11,7 @@
 import type { ModuleManifest } from '@dt/contracts'
 import { getModule, listModules } from '@dt/modules'
 import { useConfirm, useToast } from '@dt/ui'
-import { computed, onUnmounted, ref } from 'vue'
+import { computed, onUnmounted, provide, ref } from 'vue'
 import { useRoute } from 'vue-router'
 
 import { installDashboardModules } from '@/bootstrap/dashboard'
@@ -19,6 +19,7 @@ import { AppShell } from '@/components/layout'
 import { useDashboardDoc } from '@/composables/useDashboardDoc'
 import { useDashboardEditor } from '@/composables/useDashboardEditor'
 import { snapStep } from '@/features/dashboard/canvasSnap'
+import { DASHBOARD_THEME_KEY } from '@/features/dashboard/useDashboardTheme'
 import { createEditorActions } from './scripts/editorActions'
 import { useEditorDataSources } from './scripts/useEditorDataSources'
 import { createArrangeActions } from './scripts/editorArrange'
@@ -68,6 +69,7 @@ const actions = createEditorActions({
 })
 
 const meta = useEditorMeta(file.dashboard)
+provide(DASHBOARD_THEME_KEY, () => meta.draft.value?.themeJson)
 const chrome = useEditorChrome(file.dashboard, meta)
 const { snap, grid } = chrome
 
@@ -126,6 +128,7 @@ const extras = useEditorExtras({
   zoom,
   fitScale: () => fitScale.value,
   save: () => ops.save(),
+  isMetaDirty: () => meta.isDirty.value,
   removeSelected: () => void ops.removeSelected(),
   openSubEditor: ops.openSubEditor,
   consumePicker: () => ops.consumePicker(),
@@ -267,6 +270,7 @@ onUnmounted(file.dispose)
           @set-snap="chrome.setSnap"
           @set-grid="chrome.setGrid"
           @set-card="chrome.setCard"
+          @set-theme="meta.setTheme"
         />
       </div>
     </div>
