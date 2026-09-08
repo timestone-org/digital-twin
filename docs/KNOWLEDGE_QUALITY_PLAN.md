@@ -656,5 +656,5 @@ GET /api/v1/knowledge/documents/{document_id}/figures/{figure_id}
 ⚠ P3 与 P4 都会超 400 行。按本仓既有先例（新模块落地、UI 统一），
 **PR 描述里写清豁免理由，并把铺路的改动先单独开 PR**。
 
-每一期合并前本地跑 `scripts/ci-local.sh --all`；⚠ 分支与 PR 上不触发流水线，
-合进 main 之后要盯那一轮。
+每一期提交前本地跑 `scripts/ci-local.sh --fast` 与该期定向测试；⚠ 分支与 PR 上不触发
+主流水线，合并并推送 main 后要监控对应运行到终态，失败后先定位再决定修复或回滚。

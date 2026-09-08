@@ -1113,8 +1113,9 @@ arm64 上要先从 `download.pytorch.org/whl/cpu` 钉住 `torch` 再装 mineru�
 
 ⚠ 缺陷修复必须先有一条**修复前必红**的用例。
 ⚠ 增量覆盖 ≥ 85%，零容忍 flaky，**CI 不重试**。
-⚠ 本地过闸用 `scripts/ci-local.sh`（`--fast` 秒级，其余走 act）；
-**开发期不要推分支等 GitHub 的 CI——分支与 PR 上根本不触发流水线**。
+⚠ 本地提交前跑 `scripts/ci-local.sh --fast` 与修改范围内的定向测试；`--all` 仅在高风险
+或明确要求时选跑。**分支与 PR 上不触发主流水线；合并并推送 main 后必须监控正式
+CI 到终态，失败后先定位再决定修复或回滚。**
 
 ---
 

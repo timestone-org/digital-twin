@@ -1343,7 +1343,7 @@ config + values + meta.slots ──► rows.ts / cells.ts ──► RowView[] / 
 | 轮 | 范围 | 产出 | 行数量级 | 过闸命令 | 验收标准 |
 |---|---|---|---|---|---|
 | **R0** | 本设计文档 + `docs/DASHBOARD_DESIGN.md` §5.7 尾部补一段（四个模块是什么、是哪条机制的使用者、链到本文） | `docs/MODULE_INFO_CARD_DESIGN.md` · `docs/DASHBOARD_DESIGN.md` | ~50（纯文档） | `scripts/ci-local.sh --fast` | 文档评审通过；`check_comments` 不扫 `.md`，但仍按 [comment-style-typescript](agents/comment-style-typescript.md) 写 |
-| **R1** | **`info-card` 落地**：三排布 · 外壳三档 · hover · 四段编排 · 图标四档 · 数值八旋钮（含渐变三前提）· 单位四档 · 标签 · 格式 · 带 color 的规则表 · 逐格四档 · 涨跌块 · 空态 · 行点击上抛 · 5 个预设 | `src/modules/info-card/*`（15 个文件）+ `tests/modules/info-card/{manifest,look,cells,rules,presets,Component}.*` + 六处花名册 | ~2 950 src + ~1 100 test | `pnpm vitest run packages/modules/tests/catalog.contract.spec.ts -u` → `scripts/ci-local.sh --fast` → 合并前 `scripts/ci-local.sh --all` | **机械豁免适用**（全部文件在允许集合内）；目录 `toEqual` +1、`KEY_CONSTANTS` +2、`BUILTIN_TYPES` +1、平台三份花名册 +1；5 个预设逐个挂载通过；`.ts` 行 ≥95 / 分支 ≥90 |
+| **R1** | **`info-card` 落地**：三排布 · 外壳三档 · hover · 四段编排 · 图标四档 · 数值八旋钮（含渐变三前提）· 单位四档 · 标签 · 格式 · 带 color 的规则表 · 逐格四档 · 涨跌块 · 空态 · 行点击上抛 · 5 个预设 | `src/modules/info-card/*`（15 个文件）+ `tests/modules/info-card/{manifest,look,cells,rules,presets,Component}.*` + 六处花名册 | ~2 950 src + ~1 100 test | `pnpm vitest run packages/modules/tests/catalog.contract.spec.ts -u` → `scripts/ci-local.sh --fast` → 推送 main 后监控正式 CI | **机械豁免适用**（全部文件在允许集合内）；目录 `toEqual` +1、`KEY_CONSTANTS` +2、`BUILTIN_TYPES` +1、平台三份花名册 +1；5 个预设逐个挂载通过；`.ts` 行 ≥95 / 分支 ≥90 |
 | **R2** | **`info-list` 落地**：行结构模型（lead ｜ 三段 lines ｜ tail ｜ extras）· `columns` 档与表头 · 两个徽章位 · 进度件（bar / 双条 / 圆点 / 占比 / 定宽）· 分组三档（组头计数 / tab 条 role=tablist + 键盘）· 滚动 · 行筛选与严重度排序 · 迟滞（定时器在 `Component.vue`）· 三档时刻来源 · 8 个预设 | `src/modules/info-list/*`（19 个文件）+ `tests/modules/info-list/{manifest,look,rules,rows,hold,presets,Component}.*` + 六处花名册 | ~3 500 src + ~1 400 test | 同上 | **机械豁免适用**；⚠ **绝不能与 R1 合并**（两个新目录 → `_new_module()` 返回 `None`）；断言表头与行共用同一份 `--il-cols-tpl`、tab 计数用全量而非当前子集、同签名行插删重排后 `since` 不串行 |
 | **R3** | **`gauge-card` 落地**：五档几何（arc 270° + `pathLength` / linear / track 18px + 刻度 + 目标标记 + pill / tank / thermometer）· 量程与万格式（`max < 10000` 整卡回落）· 读数三处（居中 / 并排 / 下方）· 带 color 的规则表 · 网格多仪表 · 6 个预设 | `src/modules/gauge-card/*`（16 个文件）+ `tests/modules/gauge-card/{manifest,geometry,look,gauges,rules,presets,Component}.*` + 六处花名册 | ~2 750 src + ~1 000 test | 同上 | **机械豁免适用**；`geometry.test.ts` 覆盖 `largeArc` 翻转点与 `min >= max` 给 null；tank 档断言 DOM 里**没有** `mix-blend-mode` |
 | **R4** | **`info-feed` 落地**：列表式数组槽（刻意不给 `isEntityPinned` 与 `bindingRowCounts`）· 11 键内置级别档 + 用户 `levels` 覆盖（橙色刻意不映射）· 六个尺寸旋钮下发到 CSS 变量 · `rowBorderStyle` 四档 · `sortByRank`（index 做 tiebreak）· 逐行四档 · 空态 · 2 个预设 | `src/modules/info-feed/*`（7 个文件）+ `tests/modules/info-feed/{manifest,levels,rows,presets,Component}.*` + 六处花名册 | ~1 030 src + ~500 test | 同上 | **机械豁免适用**；`manifest.test` 必须有一条断言 `isEntityPinned === undefined` **且** `bindingRowCounts === undefined`；`levels.test` 必须有一条断言 `orange` 不映射到任何 token |
@@ -1356,10 +1356,11 @@ config + values + meta.slots ──► rows.ts / cells.ts ──► RowView[] / 
 分支与提交：分支名走 `feat/…`（`feature/x` 不合规）；`base..head` 的**每一条**提交标题都要匹配
 `<类型>(<范围>): <一句话>`；PR 正文必须含「动机」「验证」「风险」三个词。
 
-本地过闸：`scripts/ci-local.sh --fast`（含 black + prettier）→ 合并前
-`scripts/ci-local.sh --all`（act 跑同一份 `ci.yml`，只有它跑得到覆盖率棘轮、增量覆盖、包体、真库）。
-⚠ **GitHub 上分支与 PR 都不触发 `ci.yml`**，推上去等 CI 是白等；`pr-policy.yml` 虽在 PR 上跑
-但红了不拦合并。⚠ 跑 act 期间不要动工作树。见 [ci-gates](agents/ci-gates.md)。
+本地过闸：`scripts/ci-local.sh --fast`（含 black + prettier）与当轮定向测试。覆盖率棘轮、
+增量覆盖、包体和真库由合并并推送 main 后的正式 CI 验证，必须监控到终态。
+⚠ **GitHub 上分支与 PR 都不触发 `ci.yml`**；`pr-policy.yml` 虽在 PR 上跑但红了不拦
+合并。`--all` 仅在高风险或明确要求时选跑，跑 act 期间不要动工作树。见
+[ci-gates](agents/ci-gates.md)。
 
 ---
 

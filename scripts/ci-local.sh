@@ -1,9 +1,9 @@
 #!/usr/bin/env bash
 # 本地跑 CI。默认用 act 在容器里跑真流水线；带 --fast 只跑不需要容器的闸门。
 #
-# ⚠ GitHub 上的流水线只在 main 的 push 上跑，分支与 PR 上都不跑——**合并前的
-# 绿灯由这里出**，`--all` 跑的就是那条流水线本身（同一份 ci.yml、同一批闸门
-# 脚本）。规矩见 docs/agents/ci-gates.md §4。
+# ⚠ GitHub 上的完整流水线只在 main 的 push 上跑，分支与 PR 上都不跑。日常
+# 提交前跑 `--fast` 并补定向测试；`--all` 只在高风险变更、CI 自身改动或明确
+# 要求时选跑。推送 main 后监控正式 CI 到终态。规矩见 docs/agents/ci-gates.md §4。
 #
 # ⚠ 流水线跑在 GitHub 托管运行器上（runs-on: ubuntu-24.04），.actrc 里把这个
 # 标签映射到同一档的本地镜像。
@@ -15,7 +15,7 @@
 #   scripts/ci-local.sh --fast          不起容器就能跑的全部静态检查（约 4 分钟）
 #   scripts/ci-local.sh                 act 逐个跑第 1–2 段的作业
 #   scripts/ci-local.sh -j server-test  act 跑指定作业
-#   scripts/ci-local.sh --all           act 跑整条流水线（推送前跑这个）
+#   scripts/ci-local.sh --all           可选：用 act 跑整条流水线
 
 set -euo pipefail
 

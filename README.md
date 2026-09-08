@@ -25,13 +25,14 @@ scripts/       仓库级闸门脚本（scripts/gates/）
 
 ## CI
 
-每次 push 与每个 PR 跑五段闸门：秒级检查 → 静态检查 → 测试（真 Postgres + Redis）
-→ 契约与产物 → 汇总。分支保护只需把 `5·全部闸门` 设成必需检查。
+`main` 每次 push 跑五段闸门：秒级检查 → 静态检查 → 测试（真 Postgres + Redis）
+→ 契约与产物 → 汇总。分支与 PR 不跑主流水线；提交前用本地快闸与定向测试，
+推送 `main` 后监控对应 CI 到终态。
 规范条目与闸门的对照见 [`docs/agents/ci-gates.md`](docs/agents/ci-gates.md)。
 
 ```bash
-scripts/ci-local.sh --fast    # 只跑闸门脚本，秒级
-scripts/ci-local.sh --all     # 用 act 在容器里跑整条流水线
+scripts/ci-local.sh --fast    # 日常提交前：静态闸门、格式、Lint 与类型
+scripts/ci-local.sh --all     # 可选：高风险或 CI 改动时在 act 中跑完整流水线
 ```
 
 ## 当前进度

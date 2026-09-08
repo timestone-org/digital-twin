@@ -40,17 +40,21 @@ E2E、a11y、变异测试不进 PR 闸门是 `testing-standard-*.md` §9 的明�
 **功能分支推上去不会有任何流水线结果，PR 页面上也不会有**——那不是 CI 坏了，
 是它按设计只在 main 的 push 上跑。
 
-于是规矩是两条，且没有例外：
+于是日常规矩是两条：
 
-1. **改完先在本地过闸**：`scripts/ci-local.sh --fast`（约 5 分钟，不起容器，
-   覆盖流水线第 1–2 段的全部内容）；推送或合并之前用 `scripts/ci-local.sh --all`
-   （act 跑的就是 `ci.yml` 本身，同一份 YAML、同一批闸门脚本，与合并后在
-   GitHub 上跑的是同一件事）。
-2. **合并进 main 之后盯一眼那轮流水线**：它是最后一道真运行器上的验证，
-   红了按「main 永远可发布」当场修或回滚，不许拖到下一个 PR。
+1. **改完先在本地过快闸**：`scripts/ci-local.sh --fast`（约 5 分钟，不起容器，
+   覆盖流水线第 1–2 段的全部内容），并补修改范围内的定向测试。`--all` 不再是
+   每次合并的前置条件；迁移、鉴权、并发、跨服务契约、CI 自身改动等高风险变更，
+   或任务明确要求时再选跑。
+2. **合并并推送 main 后监控对应流水线到终态**：这是正式运行器上的完整验证。
+   红了先看失败作业与日志，再决定修复或回滚；不在根因未明时猜改，也不拖到
+   下一个提交。
 
-理由是反馈时长：本地 act 改一次就当场知道红绿，而推一次要等一轮完整流水线。要在真运行器上补跑一次分支，用 `ci.yml` 的 `workflow_dispatch` 手动触发，
-不要为了触发 CI 去造一次推送。
+理由是反馈时长与重复成本：快闸能在提交前挡住格式、类型、结构与静态契约问题，
+正式 CI 再在 main 上覆盖真库、覆盖率、构建与供应链。每次本地用 act 完整复制一轮
+会显著拖慢日常交付，且 linked worktree 中还可能因 `.git` 指针无法被容器解析而
+产生环境性失败。要在真运行器上补跑一次分支，用 `ci.yml` 的
+`workflow_dispatch` 手动触发，不要为了触发 CI 去造一次推送。
 
 ---
 
@@ -185,7 +189,7 @@ docstring 不去，它可能被程序读走。
 scripts/ci-local.sh --fast          # 第 1–2 段的全部静态检查，约 5 分钟，不起容器
 scripts/ci-local.sh                 # act 跑第 1–2 段
 scripts/ci-local.sh -j server-test  # act 跑指定作业（含服务容器）
-scripts/ci-local.sh --all           # act 跑整条流水线 —— 推送/合并前必须绿
+scripts/ci-local.sh --all           # 可选：高风险或 CI 改动时用 act 跑整条流水线
 ```
 
 `--fast` 跑 21 道闸门脚本，外加与「2·前端/后端格式、lint、类型」逐字同源的六步：
@@ -198,8 +202,9 @@ scripts/ci-local.sh --all           # act 跑整条流水线 —— 推送/合�
 「改了 docstring 忘了重导 openapi」这一类只有它拦得住，而第 4 段要等前三段
 跑完——留到那时等于每次都用一轮 main 的流水线去发现它。
 
-⚠ **`--fast` 仍然漏掉两样**：增量覆盖（diff-cover）与真库用例。合并前判增量
-覆盖要自己跑一遍带 `--cov-branch` 的 pytest，再
+⚠ **`--fast` 仍然漏掉两样**：增量覆盖（diff-cover）与真库用例。正式 CI 会在
+main 上验证两者；高风险变更若要在合并前提前判增量覆盖，可自己跑一遍带
+`--cov-branch` 的 pytest，再
 `uv run --project server diff-cover <cov.xml> --compare-branch origin/main
 --fail-under=85`；前端那一侧是 `pnpm --dir web test:coverage` 之后拿
 `web/coverage/lcov.info` 比。⚠ 它是**每个 PR 都要过的闸**，而 `--fast` 一声
@@ -225,9 +230,10 @@ node 的 PATH（否则 JS action 的 post 步骤会把一个全绿的作业报�
 ## 5. 分支保护怎么配
 
 ⚠ **没有必需的状态检查可设**：主流水线在 PR 上不跑，把 `5·全部闸门` 设成必需
-只会让每个 PR 永远卡在 pending。合并前的绿灯由 `scripts/ci-local.sh --all` 出，
-合并后 main 上的那一轮是**事后**的守门人——它 `needs` 全部上游作业，任一失败
-**或被跳过**都会让它失败（跳过的闸门不算通过），红了当场修或回滚。
+只会让每个 PR 永远卡在 pending。合并前的基础绿灯由
+`scripts/ci-local.sh --fast` 与定向测试给出；main 上的那一轮是正式的完整守门人——
+它 `needs` 全部上游作业，任一失败**或被跳过**都会让它失败（跳过的闸门不算通过）。
+推送后必须监控到终态，红了先定位，再决定修复或回滚。
 
 仍然要配的：禁止直推 `main`、禁止管理员绕过、要求分支为最新再合并。
 

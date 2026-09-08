@@ -2250,11 +2250,11 @@ export default defineModule({
 ## 19. 实施轮次表
 
 R0–R13 已全部落地。「新增行」是各轮提交的实测新增行数（含测试与文档），
-§19.1 的「落点实测」是当前的 `wc -l` 与用例数。本地过闸一律用 `scripts/ci-local.sh`：
-`--fast` 是秒级子集（含 black + prettier），`--all` 走 act 跑整条 `ci.yml`（覆盖率棘轮、
-`diff-cover --fail-under=85`、包体预算、gitleaks 只有这条路径才跑得到）。
-⚠ **跑 act 期间不要动工作树**。
-⚠ 开发期不要推分支等 GitHub 的 CI——分支与 PR 上根本不触发流水线。
+§19.1 的「落点实测」是当前的 `wc -l` 与用例数。日常提交前跑
+`scripts/ci-local.sh --fast`（含 black + prettier）与当轮定向测试；覆盖率棘轮、
+`diff-cover --fail-under=85`、包体预算和 gitleaks 由 main push 的正式 CI 验证并监控
+到终态。`--all` 只在高风险或明确要求时选跑，跑 act 期间不要动工作树。
+⚠ 开发期不要推分支等 GitHub 的主流水线——分支与 PR 上根本不触发。
 
 | 轮 | 落下的东西 | 新增行 | 兑现的验收点 |
 |---|---|---|---|

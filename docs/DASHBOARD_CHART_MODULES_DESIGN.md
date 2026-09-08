@@ -564,9 +564,8 @@ uv run --project server python scripts/gates/check_bundle_budget.py
 PR_TITLE='feat(dashboard): trend-chart 趋势曲线模块' \
   uv run --project server python scripts/gates/check_pr_policy.py origin/main HEAD
 
-# 推送前
-docker stop dt-ci-pg dt-ci-redis 2>/dev/null
-scripts/ci-local.sh --all
+# 合并并推送 main 后
+gh run watch --exit-status
 ```
 
 ### 13.2 验收标准
@@ -590,7 +589,7 @@ scripts/ci-local.sh --all
 
 ### 13.3 合并纪律
 
-- **分支与 PR 上不触发 `ci.yml`**，唯一的真运行器验证是合并后 main 上那一轮——**合并后盯一眼**，红了当场修或回滚。
+- **分支与 PR 上不触发 `ci.yml`**；提交前跑 `scripts/ci-local.sh --fast` 与本节定向验证，合并并推送 main 后监控对应的正式 CI 到终态，红了先定位再决定修复或回滚。
 - 并发组只留一个 pending run，连着合几个 PR 会让中间的提交 cancelled 且零作业，要跟着 runner 的节奏合。
 - PR 正文必须逐字含 **`动机`**、**`验证`**、**`风险`** 三个词（`pr-policy.yml:75` 是 `grep -q`）。⚠ 它与规模闸是两个作业，写了不换来规模豁免。
 - 提交标题 `^(feat|fix|refactor|perf|test|docs|build|chore)(\(范围\))?!?: 一句话`；分支名 `^(同类型)/[\w./-]+$`（`feature/x` 不合规）。
