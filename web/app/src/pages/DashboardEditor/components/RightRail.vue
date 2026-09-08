@@ -64,6 +64,7 @@ const emit = defineEmits<{
   'set-snap': [patch: Partial<SnapConfig>]
   'set-grid': [patch: Partial<EditorGridConfig>]
   'set-card': [card: CardChrome]
+  'set-theme': [id: string | null]
   'select-type': [ids: readonly string[]]
   'size-batch': [mode: SizeMatchMode]
 }>()
@@ -167,6 +168,7 @@ function onPreset(preset: ConfigPreset): void {
       @set-snap="emit('set-snap', $event)"
       @set-grid="emit('set-grid', $event)"
       @set-card="emit('set-card', $event)"
+      @set-theme="emit('set-theme', $event)"
       @set-interactions="emit('interactions', $event)"
     />
   </section>

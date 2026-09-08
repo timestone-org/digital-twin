@@ -8,6 +8,7 @@ import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 import { createPinia, setActivePinia } from 'pinia'
 import { flushPromises, mount } from '@vue/test-utils'
 import type { DashboardPayload } from '@dt/contracts'
+import { applyTheme } from '@dt/tokens'
 
 import * as dashboardApi from '@/api/dashboard'
 import { BizError } from '@/api/client'
@@ -137,6 +138,82 @@ beforeEach(() => {
 
 afterEach(() => {
   vi.restoreAllMocks()
+  document.documentElement.removeAttribute('style')
+})
+
+describe('单屏主题设置', () => {
+  it('选择后画布和预览立即生效，保存重开仍保留，且可以恢复跟随系统', async () => {
+    applyTheme(document.documentElement, 'light')
+    const globalStyle = document.documentElement.getAttribute('style')
+    const saved = payload({ themeJson: { __base: 'emerald' }, rowVersion: 8 })
+    const patch = vi
+      .spyOn(dashboardApi, 'updateDashboard')
+      .mockResolvedValue(saved)
+    const wrapper = await mountEditor()
+    expect(wrapper.get('[data-test="chrome-theme"]').text()).toContain(
+      '跟随系统',
+    )
+
+    await wrapper
+      .get('[data-test="chrome-theme"] [role="combobox"]')
+      .trigger('click')
+    const option = wrapper
+      .findAll('[role="option"]')
+      .find((item) => item.text().includes('翡翠'))
+    expect(option).toBeDefined()
+    await option?.trigger('click')
+    expect(
+      wrapper
+        .get<HTMLElement>('.dt-canvas__stage')
+        .element.style.getPropertyValue('--accent-primary'),
+    ).toBe('#2ee6a6')
+    expect(wrapper.get('.dt-canvas__stage').classes()).toContain(
+      'text-text-primary',
+    )
+    expect(wrapper.text()).toContain('未保存')
+
+    await buttonWith(wrapper, '预览')?.trigger('click')
+    expect(
+      wrapper
+        .get<HTMLElement>('[role="dialog"][aria-label="预览"]')
+        .element.style.getPropertyValue('--accent-primary'),
+    ).toBe('#2ee6a6')
+    expect(
+      wrapper.get('[role="dialog"][aria-label="预览"]').classes(),
+    ).toContain('text-text-primary')
+    await wrapper.get('[data-test="close-preview"]').trigger('click')
+    await buttonWith(wrapper, '保存')?.trigger('click')
+    await flushPromises()
+    expect(patch).toHaveBeenCalledWith(
+      'db1',
+      expect.objectContaining({ themeJson: { __base: 'emerald' } }),
+    )
+    expect(buttonWith(wrapper, '保存')?.attributes('disabled')).toBeDefined()
+    wrapper.unmount()
+
+    vi.mocked(dashboardApi.getDashboard).mockResolvedValue(saved)
+    const reopened = await mountEditor()
+    expect(
+      reopened
+        .get<HTMLElement>('.dt-canvas__stage')
+        .element.style.getPropertyValue('--accent-primary'),
+    ).toBe('#2ee6a6')
+    await reopened
+      .get('[data-test="chrome-theme"] [role="combobox"]')
+      .trigger('click')
+    const follow = reopened
+      .findAll('[role="option"]')
+      .find((item) => item.text() === '跟随系统')
+    expect(follow).toBeDefined()
+    await follow?.trigger('click')
+    expect(
+      reopened
+        .get<HTMLElement>('.dt-canvas__stage')
+        .element.style.getPropertyValue('--accent-primary'),
+    ).toBe('')
+    expect(document.documentElement.getAttribute('style')).toBe(globalStyle)
+    reopened.unmount()
+  })
 })
 
 describe('加载', () => {

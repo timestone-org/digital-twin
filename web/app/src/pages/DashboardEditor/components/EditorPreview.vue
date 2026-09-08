@@ -25,6 +25,7 @@ import {
 } from 'vue'
 
 import { usePreviewInteraction } from '../scripts/usePreviewInteraction'
+import { useDashboardTheme } from '@/features/dashboard/useDashboardTheme'
 
 const props = defineProps<{
   nodes: readonly DashboardNodePayload[]
@@ -49,6 +50,7 @@ const interaction = usePreviewInteraction({
 })
 
 const host = ref<HTMLElement | null>(null)
+useDashboardTheme(host)
 const viewport = ref({ width: 0, height: 0 })
 let observer: ResizeObserver | null = null
 
@@ -78,7 +80,7 @@ onBeforeUnmount(() => {
 <template>
   <div
     ref="host"
-    class="fixed inset-0 z-50 overflow-hidden bg-surface-base"
+    class="fixed inset-0 z-50 overflow-hidden bg-surface-base text-text-primary"
     role="dialog"
     aria-modal="true"
     aria-label="预览"

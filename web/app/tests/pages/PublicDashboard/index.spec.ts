@@ -5,10 +5,11 @@
  * 之后屏上每一格都要把「数据可能过期」标出来。
  */
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
-import { flushPromises, mount } from '@vue/test-utils'
+import { enableAutoUnmount, flushPromises, mount } from '@vue/test-utils'
 import { computed, ref } from 'vue'
 import { __resetConfigControls, __resetModules } from '@dt/modules'
 import { __resetProviders, listProviders } from '@dt/datasources'
+import { applyTheme } from '@dt/tokens'
 import type {
   DashboardNodeView,
   ModuleConnectionState,
@@ -19,10 +20,13 @@ import { __resetDashboardBootstrap } from '@/bootstrap/dashboard'
 import PublicDashboard from '@/pages/PublicDashboard/index.vue'
 
 const TOKEN = 'tok-1'
+const routePublicToken = ref(TOKEN)
 
 vi.mock('vue-router', () => ({
   useRoute: () => ({
-    params: { publicToken: TOKEN },
+    get params() {
+      return { publicToken: routePublicToken.value }
+    },
     path: `/public/${TOKEN}`,
   }),
   useRouter: () => ({ push: vi.fn() }),
@@ -117,7 +121,13 @@ function payload(
   }
 }
 
+enableAutoUnmount(afterEach)
+
+let originalRootStyle = ''
+
 beforeEach(() => {
+  originalRootStyle = document.documentElement.style.cssText
+  routePublicToken.value = TOKEN
   // 模拟「直连本路由」：全局注册表一片空白，页面不自装就什么都画不出
   __resetModules()
   __resetConfigControls()
@@ -132,6 +142,7 @@ beforeEach(() => {
 })
 
 afterEach(() => {
+  document.documentElement.style.cssText = originalRootStyle
   vi.restoreAllMocks()
 })
 
@@ -164,6 +175,72 @@ describe('自装配', () => {
     await flushPromises()
 
     expect(listProviders().map((item) => item.kind)).not.toContain('archive')
+    wrapper.unmount()
+  })
+})
+
+describe('大屏主题', () => {
+  it('公开快照中的独立主题作用于本屏，不修改全局主题', async () => {
+    applyTheme(document.documentElement, 'light')
+    const globalStyle = document.documentElement.style.cssText
+    getPublicDashboard.mockResolvedValue({
+      ...payload(),
+      themeJson: { __base: 'emerald' },
+    })
+    const wrapper = mount(PublicDashboard, { attachTo: document.body })
+    await flushPromises()
+    const host = wrapper.get<HTMLElement>('.h-screen').element
+    expect(host.classList.contains('text-text-primary')).toBe(true)
+    host.style.color = 'var(--accent-primary)'
+
+    expect(getComputedStyle(host).color).toBe('#2ee6a6')
+    expect(document.documentElement.style.cssText).toBe(globalStyle)
+    wrapper.unmount()
+    expect(document.documentElement.style.cssText).toBe(globalStyle)
+  })
+
+  it('没有独立主题的公开屏跟随当前系统主题', async () => {
+    applyTheme(document.documentElement, 'light')
+    const wrapper = mount(PublicDashboard, { attachTo: document.body })
+    await flushPromises()
+    const host = wrapper.get<HTMLElement>('.h-screen').element
+    host.style.color = 'var(--accent-primary)'
+
+    expect(host.style.getPropertyValue('--accent-primary')).toBe('')
+    expect(getComputedStyle(host).color).toBe('#0098c8')
+    applyTheme(document.documentElement, 'emerald')
+    expect(getComputedStyle(host).color).toBe('#2ee6a6')
+    wrapper.unmount()
+  })
+
+  it('跨屏加载完成前保留原主题，目标无覆盖时恢复继承', async () => {
+    applyTheme(document.documentElement, 'light')
+    const globalStyle = document.documentElement.style.cssText
+    getPublicDashboard.mockResolvedValue({
+      ...payload(),
+      themeJson: { __base: 'emerald' },
+    })
+    const wrapper = mount(PublicDashboard, { attachTo: document.body })
+    await flushPromises()
+    const host = wrapper.get<HTMLElement>('.h-screen').element
+    host.style.color = 'var(--accent-primary)'
+    let finishLoad: (value: PublicDashboardPayload) => void = () => undefined
+    getPublicDashboard.mockReturnValueOnce(
+      new Promise<PublicDashboardPayload>((resolve) => {
+        finishLoad = resolve
+      }),
+    )
+
+    routePublicToken.value = 'tok-2'
+    await flushPromises()
+    expect(wrapper.find('[data-test="public-switching"]').exists()).toBe(true)
+    expect(getComputedStyle(host).color).toBe('#2ee6a6')
+    finishLoad(payload())
+    await flushPromises()
+
+    expect(host.style.getPropertyValue('--accent-primary')).toBe('')
+    expect(getComputedStyle(host).color).toBe('#0098c8')
+    expect(document.documentElement.style.cssText).toBe(globalStyle)
     wrapper.unmount()
   })
 })

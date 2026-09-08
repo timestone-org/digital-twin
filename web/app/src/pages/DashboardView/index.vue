@@ -38,6 +38,7 @@ import {
 } from '@/bootstrap/dashboard'
 import { useDashboardDoc } from '@/composables/useDashboardDoc'
 import { parseInteractionRules } from '@/features/dashboard/interactionRules'
+import { useDashboardTheme } from '@/features/dashboard/useDashboardTheme'
 import RealtimeOfflineNotice from '@/components/RealtimeOfflineNotice.vue'
 import { useDashboardValues } from '@/composables/useDashboardValues'
 import { useRealtimeChannel } from '@/composables/useRealtimeChannel'
@@ -151,6 +152,7 @@ const stageStyle = computed<CSSProperties>(() => ({
 }))
 
 const host = ref<HTMLElement | null>(null)
+useDashboardTheme(host, () => file.dashboard.value?.themeJson)
 let observer: ResizeObserver | null = null
 
 const chromeVisible = ref(true)
@@ -203,7 +205,7 @@ onBeforeUnmount(() => {
 <template>
   <div
     ref="host"
-    class="relative h-screen w-screen overflow-hidden bg-surface-base"
+    class="relative h-screen w-screen overflow-hidden bg-surface-base text-text-primary"
     @mousemove="keepChromeAwake"
   >
     <!-- ⚠ 整屏的加载/错误态只留给「手上一张都没有」：跨屏跳转时把画面整片换掉，

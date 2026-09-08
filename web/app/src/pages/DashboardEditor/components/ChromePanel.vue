@@ -9,6 +9,7 @@ import type {
   InteractionRule,
 } from '@dt/contracts'
 import type { GetModuleManifest } from '@dt/runtime'
+import { listThemes } from '@dt/tokens'
 import { computed, ref } from 'vue'
 import {
   DtInput,
@@ -31,6 +32,7 @@ import {
   type SnapConfig,
 } from '@/features/dashboard/canvasSnap'
 import { parseInteractionRules } from '@/features/dashboard/interactionRules'
+import { dashboardThemeId } from '@/features/dashboard/useDashboardTheme'
 import type { EditorMetaDraft } from '../scripts/useEditorMeta'
 import CardStyleFields from '@/components/chrome/CardStyleFields.vue'
 import InteractionEditor from './InteractionEditor.vue'
@@ -51,6 +53,7 @@ const emit = defineEmits<{
   'set-snap': [patch: Partial<SnapConfig>]
   'set-grid': [patch: Partial<EditorGridConfig>]
   'set-card': [card: CardChrome]
+  'set-theme': [id: string | null]
   'set-interactions': [rules: InteractionRule[]]
 }>()
 
@@ -59,6 +62,11 @@ const PANEL_TABS = [
   { value: 'interaction', label: '联动' },
 ]
 const panelTab = ref('page')
+const THEME_OPTIONS = [
+  { value: '', label: '跟随系统' },
+  ...listThemes().map((theme) => ({ value: theme.id, label: theme.name })),
+]
+const themeId = computed(() => dashboardThemeId(props.draft?.themeJson) ?? '')
 
 const rules = computed(() =>
   props.draft === null ? [] : parseInteractionRules(props.draft.chromeJson),
@@ -108,6 +116,10 @@ function onMode(value: string): void {
   emit('set-snap', { mode: value === 'px' ? 'px' : 'grid' })
 }
 
+function onTheme(value: string): void {
+  emit('set-theme', value === '' ? null : value)
+}
+
 /** 全屏卡片缺省住在 chromeJson.card；缺席给空袋。 */
 function cardOf(draft: EditorMetaDraft | null): CardChrome {
   const raw = draft?.chromeJson.card
@@ -152,6 +164,15 @@ function cardOf(draft: EditorMetaDraft | null): CardChrome {
           :rows="2"
           data-test="chrome-description"
           @update:model-value="onDescription"
+        />
+        <DtSelect
+          size="sm"
+          label="大屏主题"
+          hint="仅影响当前大屏；跟随系统时使用系统当前主题。"
+          :model-value="themeId"
+          :options="THEME_OPTIONS"
+          data-test="chrome-theme"
+          @update:model-value="onTheme"
         />
         <div class="grid grid-cols-2 gap-2">
           <DtNumberInput
@@ -252,7 +273,7 @@ function cardOf(draft: EditorMetaDraft | null): CardChrome {
   </div>
 </template>
 
-<style scoped>
+<style scoped lang="scss">
 .dt-chrome__heading {
   font-size: 11px;
   font-weight: 600;
