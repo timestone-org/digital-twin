@@ -17,6 +17,10 @@ export default defineConfig({
     },
   },
   test: {
+    // 真实 Umo 契约测试需由 Vite 接管包内 CSS，Node 外置加载会拒绝 `.css`。
+    server: {
+      deps: { inline: ['@umoteam/editor'] },
+    },
     environment: 'happy-dom',
     globals: false,
     // ⚠ 默认的 5s 对这套规模（近六千条，大半要 mount 组件）在 CPU 受限的

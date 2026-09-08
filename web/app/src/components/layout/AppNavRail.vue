@@ -83,7 +83,7 @@ async function onLogout(): Promise<void> {
          等一级项多到折叠态也需要滚时，得把面板改成 teleport + fixed 定位。 -->
     <nav
       id="app-nav"
-      class="flex flex-1 flex-col gap-2.5 py-3"
+      class="flex flex-1 flex-col gap-1.5 py-3"
       :class="isCollapsed ? 'items-center' : 'overflow-y-auto px-2'"
       aria-label="主导航"
     >
@@ -95,6 +95,7 @@ async function onLogout(): Promise<void> {
         />
         <AppNavGroupTree
           v-else-if="item.children?.length"
+          class="shrink-0"
           :item="item"
           :current-path="route.path"
         />
@@ -103,7 +104,7 @@ async function onLogout(): Promise<void> {
           :to="item.to ?? '/'"
           class="relative flex h-10 items-center gap-2 rounded-md text-[13px] transition-colors"
           :class="[
-            isCollapsed ? 'w-10 justify-center' : 'px-2.5',
+            isCollapsed ? 'w-10 justify-center' : 'shrink-0 px-2.5',
             isActive(item.to)
               ? 'bg-accent-primary/10 text-accent-on-surface'
               : 'text-text-secondary hover:bg-accent-primary/10 hover:text-text-primary',

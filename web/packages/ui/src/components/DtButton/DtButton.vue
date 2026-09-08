@@ -190,6 +190,8 @@ function onClick(event: MouseEvent): void {
 @each $size in ctl.$sizes {
   .dt-btn--#{$size} {
     @include ctl.control-box($size, 'btn-px');
+    // ⚠ height 会参与纵向 flex 收缩；min-height 才能守住控件尺寸档
+    min-height: var(--ctl-h-#{$size});
     @include ctl.control-font($size);
   }
 
@@ -207,6 +209,7 @@ function onClick(event: MouseEvent): void {
 //   typecheck、lint 与全部单测一律放行——只有人眼盯着那一处才看得见
 .dt-btn--xs {
   height: 20px;
+  min-height: 20px;
   // 横向内边距是 sm 档（--ctl-btn-px-sm: 12px）的一半：xs 不在 --ctl-* 尺寸轴上，
   // 与上面那 20px / 12px 一样只能就地写
   padding: 0 6px;

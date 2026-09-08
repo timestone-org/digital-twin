@@ -29,12 +29,14 @@ import { useUnsavedGuard } from '@/composables/useUnsavedGuard'
 import { useRacedFetch } from '@/composables/useRacedFetch'
 import { useAiPanel } from '@/composables/useAiPanel'
 import { describeError } from '@/composables/useAsyncList'
+import { nowStamp } from '@/utils/datetime'
 import MetricPanel from './components/MetricPanel.vue'
 import NodeDialog from './components/NodeDialog.vue'
 import PreviewPanel from './components/PreviewPanel.vue'
 import PageDialog from './components/PageDialog.vue'
 import TemplateSettingsCard from './components/TemplateSettingsCard.vue'
 import { createReportSurface } from './scripts/aiSurface'
+import { currentReportPeriod } from '../scripts/reportPeriod'
 import {
   blankReport,
   reportDraft,
@@ -58,10 +60,14 @@ const isBusy = ref(false)
 const isNodeOpen = ref(false)
 const editor = ref<{ insert: (node: ReportDocument) => boolean } | null>(null)
 const raced = useRacedFetch()
+const periods = useRacedFetch()
 const trials = useRacedFetch()
 const saves = useRacedFetch()
 const confirm = useConfirm()
 const savedSnapshot = ref('')
+const periodTimezone = ref<string | null>(null)
+const periodWarning = ref('')
+const canDefaultPeriod = ref(true)
 const LOADING_MESSAGE = '正在加载报告模板…'
 const isDirty = computed(
   () =>
@@ -95,8 +101,13 @@ watch(id, load, { immediate: true })
 function load(): void {
   saves.cancel()
   trials.cancel()
+  periods.cancel()
   template.value = null
   preview.value = null
+  period.value = ''
+  periodTimezone.value = null
+  periodWarning.value = ''
+  canDefaultPeriod.value = true
   error.value = ''
   isBusy.value = false
   void raced.run((signal) => api.getReport(id.value, signal), {
@@ -104,12 +115,45 @@ function load(): void {
       template.value = value
       draft.value = reportDraft(value)
       savedSnapshot.value = JSON.stringify(draft.value)
+      loadCurrentPeriod()
     },
     fail: (caught) => {
       error.value = describeError(caught)
     },
     settled: () => undefined,
   })
+}
+function loadCurrentPeriod(): void {
+  void periods.run((signal) => api.reportRuntime(signal), {
+    ok: (runtime) => {
+      periodTimezone.value = runtime.timezone
+      if (canDefaultPeriod.value) {
+        period.value = currentReportPeriod(
+          draft.value.granularity ?? 'month',
+          runtime.timezone,
+          nowStamp(),
+        )
+        canDefaultPeriod.value = false
+      }
+    },
+    fail: () => {
+      periodTimezone.value = null
+      periodWarning.value = '未能读取业务时区，请手动填写报告期'
+    },
+    settled: () => undefined,
+  })
+}
+function changeGranularity(value: ReportTemplate['granularity']): void {
+  draft.value.granularity = value
+  const timezone = periodTimezone.value
+  canDefaultPeriod.value = timezone === null
+  period.value = timezone
+    ? currentReportPeriod(value, timezone, nowStamp())
+    : ''
+}
+function changePeriod(value: string): void {
+  canDefaultPeriod.value = false
+  period.value = value
 }
 async function confirmLeave(): Promise<boolean> {
   if (!isDirty.value) return true
@@ -121,6 +165,7 @@ async function confirmLeave(): Promise<boolean> {
 }
 onBeforeUnmount(() => {
   raced.cancel()
+  periods.cancel()
   trials.cancel()
   saves.cancel()
 })
@@ -188,6 +233,7 @@ async function previewForAssistant(
   body: ReportBody,
 ): Promise<ReportPreview> {
   const result = await api.previewReport(id.value, nextPeriod, body)
+  canDefaultPeriod.value = false
   period.value = nextPeriod
   return result
 }
@@ -200,11 +246,12 @@ async function previewForAssistant(
   >
     <template #actions>
       <DtInput
-        v-model="period"
+        :model-value="period"
         class="w-36"
         size="sm"
         aria-label="报告期"
-        placeholder="2026-08"
+        placeholder="按模板周期填写"
+        @update:model-value="changePeriod"
       />
       <PermGuard :codes="['report:manage']">
         <DtButton
@@ -246,6 +293,9 @@ async function previewForAssistant(
       <DtNotice v-if="error" intent="danger">
         {{ error }}
       </DtNotice>
+      <DtNotice v-if="periodWarning" intent="warning">
+        {{ periodWarning }}
+      </DtNotice>
       <div
         v-if="template"
         class="grid min-h-0 flex-1 grid-rows-[minmax(38rem,1fr)_auto] gap-4 overflow-y-auto xl:grid-cols-[minmax(0,1fr)_21rem] xl:grid-rows-1 xl:overflow-hidden"
@@ -268,7 +318,7 @@ async function previewForAssistant(
             :disabled="!canEdit || isBusy"
             :can-edit="canEdit"
             @update:name="draft.name = $event"
-            @update:granularity="draft.granularity = $event"
+            @update:granularity="changeGranularity"
             @update:enabled="draft.is_enabled = $event"
             @open-page="isPageOpen = true"
           />

@@ -141,6 +141,26 @@ describe('报告编辑器', () => {
     wrapper.unmount()
   })
 
+  it('不把 Word 专用的水印旋转角下发给 Umo', async () => {
+    const wrapper = mount(ReportEditor, {
+      props: {
+        modelValue: blank,
+        page: {
+          watermark: { text: '内部', font_size_pt: 12, rotation: -30 },
+        },
+      },
+    })
+    await flushPromises()
+    const page = record(
+      wrapper.findComponent({ name: 'UmoEditorStub' }).props('page'),
+    )
+    expect(record(page['watermark'])).toEqual(
+      expect.objectContaining({ text: '内部', fontSize: 16 }),
+    )
+    expect(record(page['watermark'])).not.toHaveProperty('rotate')
+    wrapper.unmount()
+  })
+
   it('把 Umo 页面设置换算并合并到报告契约', async () => {
     const wrapper = mount(ReportEditor, {
       props: {
@@ -167,7 +187,7 @@ describe('报告编辑器', () => {
       pageMargin: { top: 2, bottom: 2, left: 2.5, right: 2.5 },
     })
     umo.emit?.('changed:pageWatermark', {
-      pageWatermark: { text: '机密', fontSize: 20, rotate: -45 },
+      pageWatermark: { text: '机密', fontSize: 20 },
     })
     const updates = wrapper.emitted('update:page')
     expect(updates?.at(-1)?.[0]).toEqual({
@@ -176,7 +196,7 @@ describe('报告编辑器', () => {
       width_cm: 29.7,
       height_cm: 42,
       margins_cm: { top: 2, bottom: 2, left: 2.5, right: 2.5 },
-      watermark: { text: '机密', font_size_pt: 15, rotation: -45 },
+      watermark: { text: '机密', font_size_pt: 15, rotation: -30 },
     })
     wrapper.unmount()
   })

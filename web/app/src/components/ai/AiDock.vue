@@ -9,7 +9,7 @@
  * ⚠ window 监听用 AbortController 持有并在卸载时 abort：挂它的页面是会被
  * 切走的路由，留下的监听会在别的页面上继续吞掉 ⌘I。
  */
-import { onMounted, onUnmounted, ref } from 'vue'
+import { computed, onMounted, onUnmounted, ref } from 'vue'
 import { PERMISSION_CODES } from '@dt/contracts'
 
 import AiAssistantPanel from '@/components/ai/AiAssistantPanel.vue'
@@ -31,6 +31,12 @@ const props = defineProps<{
 // ⚠ 放大不是装饰：助手的回答里常有表格与代码块，26rem 宽的话它们只能在自己的
 // 框里横向滚，读一行要来回拖两次
 const isWide = ref(false)
+const isPeeking = computed(
+  () =>
+    !props.ai.isOpen.value &&
+    !props.ai.chat.isRunning.value &&
+    !props.ai.chat.isAsking.value,
+)
 
 const modKey = modLabelOf(navigator.platform)
 
@@ -59,7 +65,11 @@ onUnmounted(() => {
 
 <template>
   <PermGuard :codes="[PERMISSION_CODES.assistantUse]">
-    <div v-if="ai.isAvailable.value" class="ai-dock">
+    <div
+      v-if="ai.isAvailable.value"
+      class="ai-dock"
+      :class="{ 'is-peeking': isPeeking }"
+    >
       <button
         v-if="!ai.isOpen.value"
         type="button"
@@ -94,8 +104,19 @@ onUnmounted(() => {
 .ai-dock {
   position: fixed;
   right: 1rem;
-  bottom: 1rem;
+  bottom: max(1rem, env(safe-area-inset-bottom, 0px));
   z-index: var(--z-assistant);
+  transition: transform 0.2s ease;
+}
+
+/* 收起态保留 28px 点击面；移动根节点，避免原位的透明盒挡住页面。 */
+.ai-dock.is-peeking {
+  right: 0;
+  transform: translateX(calc(100% - 28px));
+}
+
+.ai-dock.is-peeking:focus-within {
+  transform: translateX(0);
 }
 
 /* 收起时的入口：机器人本体就是按钮。它自带不透明软壳与投影，
@@ -126,11 +147,30 @@ onUnmounted(() => {
     rgba(var(--accent-primary-rgb), 0.1) 55%,
     transparent 72%
   );
+  pointer-events: none;
   animation: ai-dock-halo 3.2s ease-in-out infinite;
 }
 
-.ai-dock__call:hover {
-  transform: translateY(-2px);
+/* 贴边时收紧光晕，不让它继续盖着旁边内容。 */
+.ai-dock.is-peeking:not(:focus-within) .ai-dock__call::before {
+  inset: -10%;
+  opacity: 0.28;
+  animation: none;
+}
+
+@media (hover: hover) {
+  .ai-dock.is-peeking:hover {
+    transform: translateX(0);
+  }
+
+  .ai-dock.is-peeking:hover .ai-dock__call::before {
+    inset: -35%;
+    animation: ai-dock-halo 3.2s ease-in-out infinite;
+  }
+
+  .ai-dock:hover .ai-dock__call {
+    transform: translateY(-2px);
+  }
 }
 
 @keyframes ai-dock-halo {
@@ -148,7 +188,7 @@ onUnmounted(() => {
 
 .ai-dock__call:focus-visible {
   outline: 2px solid var(--accent-primary);
-  outline-offset: 2px;
+  outline-offset: -3px;
 }
 
 /* 浮层配方与全局一致（overlay 底 + 毛玻璃 + 弹层投影），面板才像这个产品
@@ -189,15 +229,17 @@ onUnmounted(() => {
 }
 
 @media (prefers-reduced-motion: reduce) {
+  .ai-dock,
   .ai-dock__call {
     transition: none;
   }
 
-  .ai-dock__call:hover {
+  .ai-dock:hover .ai-dock__call {
     transform: none;
   }
 
-  .ai-dock__call::before {
+  .ai-dock__call::before,
+  .ai-dock.is-peeking:hover .ai-dock__call::before {
     animation: none;
   }
 

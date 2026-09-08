@@ -1,6 +1,6 @@
 /**
  * @fileoverview 契约：入口只在「有权限 + 这套部署有助手」时出现；
- * 收起时是机器人图标球，点一下走 open()，展开后球让位给面板。
+ * 收起时机器人贴边探出，点一下走 open()，展开后让位给面板。
  */
 import { createPinia, setActivePinia } from 'pinia'
 import { mount } from '@vue/test-utils'
@@ -75,6 +75,7 @@ describe('AiDock', () => {
     const call = wrapper.find('button[aria-label="打开 AI 助手"]')
     expect(call.exists()).toBe(true)
     expect(wrapper.findComponent(AiCoreIcon).exists()).toBe(true)
+    expect(wrapper.get('.ai-dock').classes()).toContain('is-peeking')
   })
 
   it('点球走 open()，展开后球让位给面板', async () => {
@@ -86,7 +87,19 @@ describe('AiDock', () => {
     expect(wrapper.find('button[aria-label="打开 AI 助手"]').exists()).toBe(
       false,
     )
+    expect(wrapper.get('.ai-dock').classes()).not.toContain('is-peeking')
     expect(wrapper.find('aside').exists()).toBe(true)
+  })
+
+  it.each([
+    ['还在执行', 'isRunning'],
+    ['等待回答', 'isAsking'],
+  ] as const)('助手%s时保持完整入口', (_, state) => {
+    const ai = fakeAi()
+    ai.chat[state].value = true
+    const wrapper = mountDock(ai)
+
+    expect(wrapper.get('.ai-dock').classes()).not.toContain('is-peeking')
   })
 
   it('这套部署没有助手时干净地不出现', () => {

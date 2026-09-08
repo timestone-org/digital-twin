@@ -129,14 +129,15 @@ function onPageWatermark(payload: unknown): void {
     return
   }
   const fontSize = watermark['fontSize']
-  const rotation = watermark['rotate']
+  // ⚠ Umo 不接旋转角；该字段只供服务端 Word 生成，回写时必须保留。
+  const previous = (pendingPage ?? props.page).watermark
   patchPage({
     watermark: {
+      ...(previous ?? {}),
       text,
       ...(typeof fontSize === 'number'
         ? { font_size_pt: fontSize * 0.75 }
         : {}),
-      ...(typeof rotation === 'number' ? { rotation } : {}),
     },
   })
 }
@@ -152,9 +153,6 @@ function umoWatermark(): Record<string, unknown> {
     ...(watermark?.text ? { text: watermark.text } : {}),
     ...(watermark?.font_size_pt
       ? { fontSize: Math.round((watermark.font_size_pt / 0.75) * 100) / 100 }
-      : {}),
-    ...(watermark?.rotation !== undefined
-      ? { rotate: watermark.rotation }
       : {}),
   }
 }

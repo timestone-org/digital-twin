@@ -9,6 +9,7 @@ import { createPinia, setActivePinia } from 'pinia'
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 import { flushPromises, mount } from '@vue/test-utils'
 import type { VueWrapper } from '@vue/test-utils'
+import { PERMISSION_CODES } from '@dt/contracts'
 
 import * as authApi from '@/api/auth'
 import AppNavRail from '@/components/layout/AppNavRail.vue'
@@ -98,6 +99,25 @@ describe('AppNavRail · 按权限收敛', () => {
 })
 
 describe('AppNavRail · 展开态', () => {
+  it('多个分组同时展开时，导航区滚动且顶级菜单块保持尺寸', async () => {
+    const wrapper = render(Object.values(PERMISSION_CODES))
+
+    for (const trigger of wrapper.findAll('[aria-controls^="nav-group-"]')) {
+      if (trigger.attributes('aria-expanded') === 'false') {
+        await trigger.trigger('click')
+      }
+    }
+
+    expect(wrapper.get('#app-nav').classes()).toContain('overflow-y-auto')
+    expect(wrapper.findAll('#app-nav > .nav-tree').length).toBeGreaterThan(1)
+    expect(wrapper.findAll('#app-nav > a').length).toBeGreaterThan(1)
+    expect(
+      wrapper
+        .findAll('#app-nav > .nav-tree, #app-nav > a')
+        .every((item) => item.classes().includes('shrink-0')),
+    ).toBe(true)
+  })
+
   it('二级项就地展开成真实链接，而不是飞出面板', () => {
     const wrapper = render(['user:view'])
     expect(wrapper.find('.nav-flyout').exists()).toBe(false)
@@ -154,6 +174,12 @@ describe('AppNavRail · 展开态', () => {
 })
 
 describe('AppNavRail · 折叠态', () => {
+  it('导航区不开滚动裁剪，飞出面板可以伸出侧栏', () => {
+    expect(render(['user:view'], true).get('#app-nav').classes()).not.toContain(
+      'overflow-y-auto',
+    )
+  })
+
   it('只剩图标，一级文字收掉', () => {
     const wrapper = render(['user:view'], true)
     expect(homeLink(wrapper).text()).toBe('')

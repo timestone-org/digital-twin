@@ -150,7 +150,14 @@ describe('报告 HTTP 契约', () => {
     fetcher.mockImplementation(
       responseFor({ is_schedule_enabled: true, timezone: 'UTC' }),
     )
-    expect((await reports.reportRuntime()).is_schedule_enabled).toBe(true)
+    const runtimeController = new AbortController()
+    expect(
+      (await reports.reportRuntime(runtimeController.signal))
+        .is_schedule_enabled,
+    ).toBe(true)
+    const requestSignal = fetcher.mock.calls.at(-1)?.[1]?.signal
+    runtimeController.abort()
+    expect(requestSignal?.aborted).toBe(true)
     fetcher.mockResolvedValue(new Response('PK document'))
     expect(await (await reports.downloadReport(id)).text()).toBe('PK document')
   })

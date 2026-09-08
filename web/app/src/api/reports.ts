@@ -88,10 +88,10 @@ export const saveReportSchedule = (id: string, body: ReportScheduleUpdate) =>
   requestData<ReportSchedule>(`/report-schedules/${id}`, write(body, 'PUT'))
 export const deleteReportSchedule = (id: string) =>
   request(`/report-schedules/${id}`, options({ method: 'DELETE' }))
-export const reportRuntime = () =>
+export const reportRuntime = (signal?: AbortSignal) =>
   requestData<ReportSchemas['ReportRuntimeOut']>(
     '/report-renders/runtime/settings',
-    options(),
+    options({ signal }),
   )
 
 /** 将原件直传对象存储，再提交异步导入。 */
