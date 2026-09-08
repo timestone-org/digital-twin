@@ -122,11 +122,13 @@ function flattenTokens(tokens: ThemeTokens): Record<string, string> {
  * @param style 宿主元素的内联样式
  * @param cssVar CSS 变量名，含前导 `--`
  * @param value 缺省表示这套主题不覆盖它，回落 :root
+ * @param isScoped 是否阻断非 hex 伴生变量的祖先继承
  */
 function writeToken(
   style: CSSStyleDeclaration,
   cssVar: string,
   value?: string,
+  isScoped = false,
 ): void {
   if (value === undefined) {
     style.removeProperty(cssVar)
@@ -137,7 +139,9 @@ function writeToken(
   const triplet = hexToRgbTriplet(value)
   // ⚠ 非 hex 必须把伴生变量清掉：留着上一套的三元组，rgba(var(--x-rgb), α)
   // 就会拿着旧主题的颜色画，页面不报错
-  if (triplet === null) style.removeProperty(`${cssVar}-rgb`)
+  if (triplet === null && isScoped)
+    style.setProperty(`${cssVar}-rgb`, 'initial')
+  else if (triplet === null) style.removeProperty(`${cssVar}-rgb`)
   else style.setProperty(`${cssVar}-rgb`, triplet)
 }
 
@@ -147,6 +151,17 @@ const EXTRA_VAR_UNIVERSE: readonly string[] = [
     THEME_PRESETS.flatMap((theme) => Object.keys(theme.extraVars ?? {})),
   ),
 ]
+
+/** 局部主题的派生别名与附加变量缺省。 */
+export const SCOPED_THEME_DEFAULTS: Readonly<Record<string, string>> = {
+  '--border-focus': 'var(--accent-primary)',
+  '--card-bg': 'var(--surface-panel)',
+  '--card-border': 'var(--border-default)',
+  '--card-border-hover': 'var(--border-hover)',
+  '--card-corner-color': 'var(--fx-corner-color)',
+  '--neutral-fg-rgb': '255, 255, 255',
+  '--card-corner-display': 'block',
+}
 
 /**
  * 幂等写 extraVars：本主题没有的键一律移除，不留上一套的取值。
@@ -180,4 +195,26 @@ export function applyTheme(el: HTMLElement, id?: string | null): void {
   // ⚠ color-scheme 不跟着 mode 走，浅色主题下原生滚动条 / 下拉 / 日期选择器
   // 与自动填充底色统统还是深色皮肤，而且不报任何错
   el.style.colorScheme = theme.mode
+}
+
+/**
+ * 在宿主独立应用主题，或清除覆盖以恢复祖先级联。
+ * @param el 承载局部主题的宿主元素
+ * @param id 主题 id；null 恢复继承，未知 id 回退默认深色
+ */
+export function applyScopedTheme(el: HTMLElement, id: string | null): void {
+  const theme = id === null ? null : getTheme(id)
+  const values: Record<string, string> =
+    theme === null ? {} : flattenTokens(theme.tokens)
+  for (const [path, cssVar] of Object.entries(TOKEN_CSS_VAR)) {
+    const value = values[path]
+    // ⚠ 移除非 hex 的伴生值会继承祖先旧色；initial 才能阻断局部继承。
+    writeToken(el.style, cssVar, value, true)
+  }
+  // ⚠ :root 的别名在祖先处求值，局部必须重声明才能使用本层主题。
+  for (const [name, fallback] of Object.entries(SCOPED_THEME_DEFAULTS)) {
+    if (theme === null) el.style.removeProperty(name)
+    else el.style.setProperty(name, theme.extraVars?.[name] ?? fallback)
+  }
+  el.style.colorScheme = theme?.mode ?? ''
 }
