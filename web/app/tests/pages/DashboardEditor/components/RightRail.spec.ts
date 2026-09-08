@@ -15,7 +15,7 @@ function stub(testId: string, emits: string[]) {
 }
 
 const InspectorStub = stub('inspector', ['interactions'])
-const ChromeStub = stub('chrome', ['set-interactions'])
+const ChromeStub = stub('chrome', ['set-interactions', 'set-theme'])
 const MultiStub = stub('multi', [
   'config',
   'preset',
@@ -105,6 +105,16 @@ describe('多选面板的批量事件逐个转发', () => {
 })
 
 describe('两个面板的联动改动走同一个出口', () => {
+  it('页面主题变更透传预设 id 和跟随系统的 null', () => {
+    const wrapper = render([])
+    const chrome = wrapper.getComponent(ChromeStub)
+    chrome.vm.$emit('set-theme', 'light')
+    chrome.vm.$emit('set-theme', null)
+
+    expect(wrapper.emitted('set-theme')).toEqual([['light'], [null]])
+    wrapper.unmount()
+  })
+
   it('属性面板与页面面板的联动都抛成 interactions', () => {
     const single = render(['n1'])
     single.findComponent(InspectorStub).vm.$emit('interactions', [])

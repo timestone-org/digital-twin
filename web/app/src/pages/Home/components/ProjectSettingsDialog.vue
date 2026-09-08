@@ -210,7 +210,7 @@ function save(): void {
         <DtSelect
           v-model="themeBase"
           label="项目默认主题"
-          hint="项目内的大屏默认用它，单张屏还能再覆盖。"
+          hint="单张大屏默认跟随系统，也可在大屏编辑器中单独设置。"
           :options="themeOptions"
           :disabled="!canUpdate"
         />

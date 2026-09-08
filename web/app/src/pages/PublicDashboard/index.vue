@@ -48,6 +48,7 @@ import {
 } from '@/composables/useRealtimeChannel'
 import { boundPointKeys } from '@/features/dashboard/editorDoc'
 import { parseInteractionRules } from '@/features/dashboard/interactionRules'
+import { useDashboardTheme } from '@/features/dashboard/useDashboardTheme'
 import { publicTopic } from '@/runtime/pointFrames'
 import { createPointSubscribe } from '@/runtime/pointStream'
 import { formatDateTime } from '@/utils/datetime'
@@ -169,6 +170,7 @@ const stageStyle = computed<CSSProperties>(() => ({
 }))
 
 const host = ref<HTMLElement | null>(null)
+useDashboardTheme(host, () => doc.dashboard.value?.themeJson)
 let observer: ResizeObserver | null = null
 
 /**
@@ -218,7 +220,7 @@ onBeforeUnmount(() => {
 <template>
   <div
     ref="host"
-    class="relative h-screen w-screen overflow-hidden bg-surface-base"
+    class="relative h-screen w-screen overflow-hidden bg-surface-base text-text-primary"
   >
     <!-- ⚠ 整屏的加载/错误态只留给「手上一张都没有」：跳转时把画面整片换掉，
          墙上每跳一次先白一下（`DashboardView` 同口径） -->
