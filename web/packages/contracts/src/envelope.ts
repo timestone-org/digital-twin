@@ -45,7 +45,7 @@ export const SUCCESS_CODE = 0
 /**
  * 已发布的错误码。**按码分支，不要按 message 分支**——文案会改、会翻译。
  * 分段十进制 `<4|5><领域两位><序号两位>`，领域 00 通用、01 认证与授权、
- * 12 数据台账、16 空调与空间。
+ * 12 数据台账、14 建模、16 空调与空间。
  *
  * ⚠ 只登记**前端真的按它分支**的码：登记一个没人消费的码，等于摆出一条
  * 看起来处理过、实际走的是通用兜底的分支。
@@ -94,6 +94,8 @@ export const ERROR_CODES = {
   datasetFormulaInUse: 41222,
   /** 预设删不得（只能停用），自建则没有出厂口径可恢复。 */
   datasetFormulaPresetRule: 41223,
+  /** 同一次成功运行已经发布过模型版本；刷新运行的发布状态，不再重复提交。 */
+  modelingRunAlreadyPublished: 41411,
   workshopNotFound: 41601,
   roomNotFound: 41602,
   acUnitNotFound: 41603,

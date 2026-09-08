@@ -7,13 +7,14 @@
  */
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 
-import type { ModelingGraph } from '@dt/contracts'
+import type { ModelingGraph, ModelingVersionSummary } from '@dt/contracts'
 
 import * as client from '@/api/client'
 import * as modeling from '@/api/modeling'
 import { PLATFORM_BASE_URL } from '@/config/app'
 
 const EMPTY_GRAPH: ModelingGraph = { format_version: '1', nodes: [], edges: [] }
+const STAMP = '2026-01-01T00:00:00.000Z'
 
 let requestMock: ReturnType<typeof vi.fn>
 
@@ -39,6 +40,25 @@ function headersOf(options: Record<string, unknown>): Record<string, string> {
   return (options['headers'] ?? {}) as Record<string, string>
 }
 
+function version(id: string, runId: string): ModelingVersionSummary {
+  return {
+    id,
+    pipeline_id: 'p1',
+    run_id: runId,
+    version: 1,
+    name: id,
+    algo: 'linear_regression',
+    task: 'regression',
+    is_servable: true,
+    serving_channel: 'json',
+    unservable_reason: null,
+    feature_keys: ['temperature'],
+    target_key: 'energy',
+    created_by_name: null,
+    created_at: STAMP,
+  }
+}
+
 const CALLS: [string, () => Promise<unknown>][] = [
   ['listModelingOperators', () => modeling.listModelingOperators()],
   ['listModelingPipelines', () => modeling.listModelingPipelines()],
@@ -62,6 +82,7 @@ const CALLS: [string, () => Promise<unknown>][] = [
   ['getModelingNodeRun', () => modeling.getModelingNodeRun('r1', 'n1')],
   ['cancelModelingRun', () => modeling.cancelModelingRun('r1')],
   ['listModelingVersions', () => modeling.listModelingVersions()],
+  ['listAllModelingVersions', () => modeling.listAllModelingVersions()],
   [
     'publishModelingVersion',
     () => modeling.publishModelingVersion({ run_id: 'r1', name: 'v' }),
@@ -152,6 +173,42 @@ describe('URL 与方法', () => {
       page: undefined,
       size: undefined,
     })
+  })
+
+  it('完整版本列表翻完所有页，并把取消信号传到每一次请求', async () => {
+    const first = Array.from({ length: 200 }, (_item, index) =>
+      version(`v-${index}`, `run-${index}`),
+    )
+    requestMock
+      .mockResolvedValueOnce({ items: first, page: 1, size: 200, total: 201 })
+      .mockResolvedValueOnce({
+        items: [version('v-last', 'run-last')],
+        page: 2,
+        size: 200,
+        total: 201,
+      })
+    const controller = new AbortController()
+
+    const found = await modeling.listAllModelingVersions(controller.signal)
+
+    expect(found).toHaveLength(201)
+    expect(found.at(-1)?.run_id).toBe('run-last')
+    expect(requestMock).toHaveBeenNthCalledWith(
+      1,
+      '/modeling-model-versions',
+      expect.objectContaining({
+        query: { pipeline_id: undefined, page: 1, size: 200 },
+        signal: controller.signal,
+      }),
+    )
+    expect(requestMock).toHaveBeenNthCalledWith(
+      2,
+      '/modeling-model-versions',
+      expect.objectContaining({
+        query: { pipeline_id: undefined, page: 2, size: 200 },
+        signal: controller.signal,
+      }),
+    )
   })
 
   it('改流水线是 PATCH，缺省字段不动', async () => {

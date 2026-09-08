@@ -15,13 +15,14 @@ import type {
   ModelingVersionSummary,
 } from '@dt/contracts'
 import { PERMISSION_CODES } from '@dt/contracts'
-import { DtButton } from '@dt/ui'
-import { onMounted, ref } from 'vue'
+import { DtButton, DtNotice } from '@dt/ui'
+import { onBeforeUnmount, onMounted, ref } from 'vue'
 
 import * as modeling from '@/api/modeling'
 import PermGuard from '@/components/PermGuard.vue'
 import { AppShell } from '@/components/layout'
 import { describeError } from '@/composables/useAsyncList'
+import { useRacedFetch } from '@/composables/useRacedFetch'
 import { useViewMode } from '@/composables/useViewMode'
 
 import ApiKeyDrawer from './components/ApiKeyDrawer.vue'
@@ -30,13 +31,13 @@ import DeploymentTable from './components/DeploymentTable.vue'
 import MintedKeyDialog from './components/MintedKeyDialog.vue'
 import { useDeploymentOps } from './scripts/useDeploymentOps'
 
-// 版本下拉一次取满：可上线的版本是业务级资源，量级在几十
-const VERSION_PAGE_SIZE = 200
-
 const view = useViewMode('modeling-deployments')
 
 const rows = ref<ModelDeployment[]>([])
 const versions = ref<ModelingVersionSummary[]>([])
+const isVersionLoading = ref(true)
+const versionError = ref<string | null>(null)
+const versionRequest = useRacedFetch()
 const isLoading = ref(false)
 const error = ref<string | null>(null)
 
@@ -66,11 +67,19 @@ async function reload(): Promise<void> {
 }
 
 async function loadVersions(): Promise<void> {
-  const page = await modeling.listModelingVersions({
-    page: 1,
-    size: VERSION_PAGE_SIZE,
-  })
-  versions.value = page.items
+  isVersionLoading.value = true
+  versionError.value = null
+  await versionRequest.run(
+    (signal) => modeling.listAllModelingVersions(signal),
+    {
+      ok: (found) => (versions.value = found),
+      fail: (caught) => {
+        versions.value = []
+        versionError.value = describeError(caught)
+      },
+      settled: () => (isVersionLoading.value = false),
+    },
+  )
 }
 
 async function openKeys(row: ModelDeployment): Promise<void> {
@@ -80,6 +89,7 @@ async function openKeys(row: ModelDeployment): Promise<void> {
 }
 
 function openForm(row: ModelDeployment | null): void {
+  if (isVersionLoading.value || versionError.value !== null) return
   editing.value = row
   isFormOpen.value = true
 }
@@ -115,6 +125,8 @@ onMounted(() => {
   void reload()
   void loadVersions()
 })
+
+onBeforeUnmount(versionRequest.cancel)
 </script>
 
 <template>
@@ -125,6 +137,12 @@ onMounted(() => {
   >
     <!-- h-full + min-h-0 见 AppShell 的契约：main 不滚，高度由页面自己吃满 -->
     <div class="flex h-full min-h-0 flex-col gap-3 overflow-y-auto">
+      <DtNotice v-if="versionError" intent="warning">
+        模型版本加载失败：{{ versionError }}
+        <DtButton size="xs" variant="ghost" @click="void loadVersions()">
+          重新加载模型版本
+        </DtButton>
+      </DtNotice>
       <DeploymentTable
         v-model:view="view"
         :rows="rows"
@@ -137,7 +155,13 @@ onMounted(() => {
       >
         <template #toolbar>
           <PermGuard :codes="[PERMISSION_CODES.modelingPublish]">
-            <DtButton size="sm" icon="plus" @click="openForm(null)">
+            <DtButton
+              size="sm"
+              icon="plus"
+              :loading="isVersionLoading"
+              :disabled="isVersionLoading || versionError !== null"
+              @click="openForm(null)"
+            >
               开一个服务
             </DtButton>
           </PermGuard>

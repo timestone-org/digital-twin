@@ -11,9 +11,11 @@ import type {
   ModelingRunStatus,
   ModelingRunSummary,
 } from '@dt/contracts'
-import { DtDataView, DtTag } from '@dt/ui'
+import { PERMISSION_CODES } from '@dt/contracts'
+import { DtButton, DtDataView, DtTag } from '@dt/ui'
 import { RouterLink } from 'vue-router'
 
+import PermGuard from '@/components/PermGuard.vue'
 import { formatDateTime } from '@/utils/datetime'
 
 const COLUMNS: readonly DtDataColumn[] = [
@@ -24,6 +26,13 @@ const COLUMNS: readonly DtDataColumn[] = [
   { key: 'duration', label: '耗时', width: '7rem', align: 'right' },
   { key: 'created_at', label: '发起时间', width: '10rem' },
   { key: 'why', label: '失败原因' },
+  {
+    key: 'actions',
+    label: '发布',
+    width: '7rem',
+    align: 'right',
+    card: 'actions',
+  },
 ]
 
 const EMPTY = {
@@ -60,11 +69,15 @@ const TRIGGER_LABELS: Record<string, string> = {
 const props = defineProps<{
   rows: readonly ModelingRunSummary[]
   pipelineNames: ReadonlyMap<string, string>
+  publishedRunIds: ReadonlySet<string>
+  canPublish: boolean
   isLoading: boolean
   error: string | null
 }>()
 
 const view = defineModel<DtDataViewMode>('view', { required: true })
+
+defineEmits<{ publish: [row: ModelingRunSummary] }>()
 
 /** 耗时。还没跑完时给空，不显示成 0 秒。 */
 function duration(ms: number | null): string {
@@ -84,7 +97,7 @@ function duration(ms: number | null): string {
     :empty="EMPTY"
     :layout="{
       fixedLayout: true,
-      minWidth: '72rem',
+      minWidth: '79rem',
       cardColumns: 2,
       cardMinWidth: '24rem',
     }"
@@ -121,6 +134,23 @@ function duration(ms: number | null): string {
       <span class="dt-ml-runs__why" :title="row.error_text ?? ''">
         {{ row.error_text ?? '' }}
       </span>
+    </template>
+    <template #cell-actions="{ row }">
+      <DtTag
+        v-if="props.publishedRunIds.has(row.id)"
+        intent="neutral"
+        size="sm"
+      >
+        已发布
+      </DtTag>
+      <PermGuard
+        v-else-if="props.canPublish && row.status === 'succeeded'"
+        :codes="[PERMISSION_CODES.modelingPublish]"
+      >
+        <DtButton variant="ghost" size="xs" @click="$emit('publish', row)">
+          发布版本
+        </DtButton>
+      </PermGuard>
     </template>
   </DtDataView>
 </template>

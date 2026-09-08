@@ -13,6 +13,7 @@ import type {
   ModelingVersionSummary,
 } from '@dt/contracts'
 import { flushPromises, mount } from '@vue/test-utils'
+import { useToast } from '@dt/ui'
 import { createPinia, setActivePinia } from 'pinia'
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 
@@ -22,6 +23,7 @@ import { useAuthStore } from '@/stores/auth'
 
 const STAMP = '2026-01-01T00:00:00.000Z'
 const PLAINTEXT = 'dtmk_this-is-the-only-time-you-see-it'
+const mounted: { unmount: () => void }[] = []
 
 vi.mock('vue-router', () => ({
   useRouter: () => ({ replace: vi.fn(), push: vi.fn() }),
@@ -70,42 +72,74 @@ function minted(): ModelApiKeyMinted {
   return { ...apiKey(), plaintext: PLAINTEXT }
 }
 
+function version(): ModelingVersionSummary {
+  return {
+    id: 'v1',
+    pipeline_id: 'p1',
+    run_id: 'r1',
+    version: 3,
+    name: '能耗回归',
+    algo: 'linear_regression',
+    task: 'regression',
+    is_servable: true,
+    serving_channel: 'json',
+    unservable_reason: null,
+    feature_keys: ['temperature', 'load'],
+    target_key: 'energy',
+    created_by_name: '张三',
+    created_at: STAMP,
+  }
+}
+
 function signIn(permissions: string[]): void {
   const auth = useAuthStore()
   auth.user = {
+    id: 'u1',
     username: 'u',
+    email: 'u@example.com',
+    full_name: null,
+    avatar_url: null,
+    phone: null,
+    is_active: true,
+    last_login_at: null,
+    created_at: STAMP,
+    updated_at: STAMP,
     permissions,
     role_permissions: permissions,
     direct_permissions: [],
-    role: { name: 'r', description: '' },
-  } as never
+    role: { id: 'r1', name: 'r', description: null, is_builtin: false },
+  }
   auth.accessToken = 'token'
 }
 
-function stub(rows: ModelDeployment[], keys: ModelApiKey[] = []): void {
+function stub(
+  rows: ModelDeployment[],
+  keys: ModelApiKey[] = [],
+  versions: ModelingVersionSummary[] = [],
+): void {
   vi.spyOn(modeling, 'listModelDeployments').mockResolvedValue(rows)
   vi.spyOn(modeling, 'listModelApiKeys').mockResolvedValue(keys)
   vi.spyOn(modeling, 'listModelCallStats').mockResolvedValue([])
-  vi.spyOn(modeling, 'listModelingVersions').mockResolvedValue({
-    items: [] as ModelingVersionSummary[],
-    page: 1,
-    size: 200,
-    total: 0,
-  })
+  vi.spyOn(modeling, 'listAllModelingVersions').mockResolvedValue(versions)
 }
 
 function open() {
-  return mount(ServicesPage, {
+  const wrapper = mount(ServicesPage, {
     attachTo: document.body,
     global: { stubs: { Teleport: true } },
   })
+  mounted.push(wrapper)
+  return wrapper
 }
 
 beforeEach(() => {
+  localStorage.clear()
   setActivePinia(createPinia())
 })
 
 afterEach(() => {
+  for (const wrapper of mounted.splice(0)) wrapper.unmount()
+  useToast().clear()
   vi.restoreAllMocks()
 })
 
@@ -217,5 +251,90 @@ describe('模型服务', () => {
 
     expect(wrapper.text()).toContain('还没有开出对外服务')
     expect(wrapper.text()).toContain('模型库')
+  })
+
+  it('没有可上线版本时指向运行记录里的发布入口', async () => {
+    stub([])
+    signIn([PERMISSION_CODES.modelingView, PERMISSION_CODES.modelingPublish])
+
+    const wrapper = open()
+    await flushPromises()
+    await wrapper
+      .findAll('button')
+      .find((item) => item.text() === '开一个服务')
+      ?.trigger('click')
+    await flushPromises()
+
+    expect(wrapper.text()).toContain('先到「运行记录」')
+    expect(wrapper.text()).toContain('成功运行发布成版本')
+  })
+
+  it('完整版本列表里的可服务版本会进入开通下拉', async () => {
+    stub([], [], [version()])
+    signIn([PERMISSION_CODES.modelingView, PERMISSION_CODES.modelingPublish])
+
+    const wrapper = open()
+    await flushPromises()
+    await wrapper
+      .findAll('button')
+      .find((item) => item.text() === '开一个服务')
+      ?.trigger('click')
+    await flushPromises()
+
+    expect(wrapper.text()).toContain('能耗回归 v3')
+    expect(wrapper.text()).not.toContain('还没有可上线的模型版本')
+  })
+
+  it('模型版本加载失败时不伪装成空列表，并可重试恢复', async () => {
+    stub([])
+    vi.mocked(modeling.listAllModelingVersions)
+      .mockRejectedValueOnce(new Error('offline'))
+      .mockResolvedValue([version()])
+    signIn([PERMISSION_CODES.modelingView, PERMISSION_CODES.modelingPublish])
+
+    const wrapper = open()
+    await flushPromises()
+
+    expect(wrapper.text()).toContain('模型版本加载失败')
+    expect(wrapper.text()).toContain('请求失败，请重试')
+    expect(
+      wrapper
+        .findAll('button')
+        .find((item) => item.text() === '开一个服务')
+        ?.attributes('disabled'),
+    ).toBeDefined()
+    await wrapper
+      .findAll('button')
+      .find((item) => item.text() === '重新加载模型版本')
+      ?.trigger('click')
+    await flushPromises()
+    await wrapper
+      .findAll('button')
+      .find((item) => item.text() === '开一个服务')
+      ?.trigger('click')
+
+    expect(wrapper.text()).not.toContain('模型版本加载失败')
+    expect(wrapper.text()).toContain('能耗回归 v3')
+    expect(modeling.listAllModelingVersions).toHaveBeenCalledTimes(2)
+    expect(modeling.listAllModelingVersions).toHaveBeenCalledWith(
+      expect.any(AbortSignal),
+    )
+  })
+
+  it('离开页面会中止仍在翻页的模型版本请求', async () => {
+    stub([])
+    let signal: AbortSignal | undefined
+    vi.mocked(modeling.listAllModelingVersions).mockImplementation((given) => {
+      signal = given
+      return new Promise(() => undefined)
+    })
+    signIn([PERMISSION_CODES.modelingView])
+
+    const wrapper = open()
+    await flushPromises()
+    wrapper.unmount()
+    mounted.splice(mounted.indexOf(wrapper), 1)
+
+    expect(signal?.aborted).toBe(true)
   })
 })

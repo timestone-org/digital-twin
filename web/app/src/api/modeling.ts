@@ -235,6 +235,7 @@ export async function cancelModelingRun(runId: string): Promise<ModelingRun> {
 /** 一页模型版本。给流水线 id 就只看这一条流水线产出的。 */
 export async function listModelingVersions(
   query: ModelingPageQuery & { pipelineId?: string | undefined } = {},
+  signal?: AbortSignal,
 ): Promise<Page<ModelingVersionSummary>> {
   return await requestData<Page<ModelingVersionSummary>>(
     '/modeling-model-versions',
@@ -244,8 +245,27 @@ export async function listModelingVersions(
         page: query.page,
         size: query.size,
       },
+      ...(signal === undefined ? {} : { signal }),
     }),
   )
+}
+
+/** 翻完版本列表；运行发布状态与服务下拉都不能拿第一页冒充完整集合。 */
+export async function listAllModelingVersions(
+  signal?: AbortSignal,
+): Promise<ModelingVersionSummary[]> {
+  const size = 200
+  const items: ModelingVersionSummary[] = []
+  let page = 1
+  let total = 1
+  while (items.length < total) {
+    const next = await listModelingVersions({ page, size }, signal)
+    total = next.total
+    if (next.items.length === 0) break
+    items.push(...next.items)
+    page += 1
+  }
+  return items
 }
 
 /** 把一次成功的运行发布成一个模型版本。版本号由后端递增。 */

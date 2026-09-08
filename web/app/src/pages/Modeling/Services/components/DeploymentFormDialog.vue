@@ -132,7 +132,7 @@ function submit(): void {
   >
     <div class="flex flex-col gap-3">
       <DtNotice v-if="options.length === 0" intent="warning">
-        还没有可上线的模型版本。先在模型库里发布一个，再回来开服务。
+        还没有可上线的模型版本。先到「运行记录」把一次成功运行发布成版本，再回来开服务。
       </DtNotice>
       <DtInput
         v-model="form.code"
