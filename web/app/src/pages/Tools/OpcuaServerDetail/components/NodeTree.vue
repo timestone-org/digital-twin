@@ -182,7 +182,7 @@ function onClick(row: NodeTreeRow, index: number): void {
     outline-offset: -2px;
   }
 
-  // 选中态与页签一致：强调色的浅色底 + 强调色文字，跨 6 套主题都成立
+  // 选中态与页签一致：强调色的浅色底 + 强调色文字，跨全部内置主题都成立
   &.is-active {
     background: color-mix(in srgb, var(--accent-primary) 12%, transparent);
     color: var(--text-primary);

@@ -1,5 +1,5 @@
 /**
- * @fileoverview 换肤器的契约：六套主题都列得出、点哪个换哪个、选中态只有一处，
+ * @fileoverview 换肤器的契约：七套主题都列得出、点哪个换哪个、选中态只有一处，
  * 以及缩略预览确实画的是该主题自己的颜色。
  *
  * ⚠ 模板里的 prop 名、插槽名、图标名写错，typecheck 与 lint 双双放行——
@@ -86,7 +86,7 @@ describe('ThemeSwitcher · 触发器', () => {
 })
 
 describe('ThemeSwitcher · 列表', () => {
-  it('六套内置主题外加「跟随系统」都列得出', async () => {
+  it('七套内置主题外加「跟随系统」都列得出', async () => {
     const wrapper = mount(ThemeSwitcher)
     await open(wrapper)
 

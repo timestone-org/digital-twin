@@ -192,7 +192,7 @@ pnpm typecheck
 pnpm test
 pnpm test:coverage
 pnpm build
-pnpm storybook       # @dt/ui 的组件展示，:6006；顶栏可切 6 套主题
+pnpm storybook       # @dt/ui 的组件展示，:6006；顶栏可切 7 套主题
 pnpm storybook:build # 出静态站到 packages/ui/storybook-static/
 python3 ../scripts/check_structure_web.py
 ```

@@ -245,7 +245,7 @@ describe('颜色不作唯一编码', () => {
     expect(many - one).toBeGreaterThan(0.4)
   })
 
-  // ⚠ 判错格的上限卡在「白字还有 4.5:1」那一档：六套预设逐档实测，0.70 时最低
+  // ⚠ 判错格的上限卡在「白字还有 4.5:1」那一档：全部内置预设逐档实测，0.70 时最低
   // 4.55:1（暗夜紫），0.72 就掉到 4.39。而压到 0.58 时浅色预设整条错格量程只有
   // 0.192（oklab 欧氏），3%↔25% 两格只差 0.063 ≈ 3 JND，四格淡粉分不出归属。
   // ⚠ 一格都不许换深墨：错格铺不到「深墨够 4.5」那一带，换了就是把字压进黑白
@@ -288,7 +288,7 @@ describe('颜色不作唯一编码', () => {
     expect(wrapper.findAll('.is-striped')).toHaveLength(0)
   })
 
-  // ⚠ 六套预设里只有这一对色相角差处处 ≥120°：accent-primary 配 state-warning
+  // ⚠ 全部内置预设里只有这一对色相角差处处 ≥120°：accent-primary 配 state-warning
   // 在熔岩橙下只差 47°，两半会塌成同一个色相族
   it('判对与判错用的是两个色相拉得开的令牌', () => {
     expect(SOURCE).toContain('--cell-hue: var(--state-success)')

@@ -1,5 +1,5 @@
 /**
- * @fileoverview 6 套内置主题的取值。`dark-tech` 逐项等于 tokens.scss 的 :root
+ * @fileoverview 7 套内置主题的取值。`dark-tech` 逐项等于 tokens.scss 的 :root
  * （注入时只做 removeProperty），其余各套按色相整盘换色。
  */
 import type { ThemeDefinition } from './themeTokens'
@@ -119,6 +119,64 @@ const LIGHT: ThemeDefinition = {
   extraVars: {
     '--neutral-fg-rgb': '10, 26, 43',
     // 四角辉光是深色科技风的装饰，浅底上只剩四个色块
+    '--card-corner-display': 'none',
+  },
+}
+
+const NAIVE_GREEN: ThemeDefinition = {
+  id: 'naive-green',
+  name: '清新绿',
+  mode: 'light',
+  tokens: {
+    surface: {
+      base: '#f4f7f5',
+      sunken: 'rgba(17, 52, 35, 0.05)',
+      panel: 'rgba(255, 255, 255, 0.82)',
+      raised: 'rgba(24, 160, 88, 0.1)',
+      overlay: 'rgba(247, 250, 248, 0.96)',
+    },
+    border: {
+      subtle: 'rgba(24, 100, 61, 0.14)',
+      default: 'rgba(24, 100, 61, 0.2)',
+      strong: '#abc3b4',
+      hover: 'rgba(24, 160, 88, 0.5)',
+    },
+    text: {
+      primary: '#1f2d25',
+      secondary: 'rgba(31, 45, 37, 0.78)',
+      disabled: 'rgba(31, 45, 37, 0.66)',
+      title: '#096b3a',
+      inverse: '#18231d',
+      onEmphasis: '#07160e',
+    },
+    accent: {
+      primary: '#18a058',
+      secondary: '#36ad6a',
+      onSurface: '#0c7a43',
+    },
+    state: {
+      success: '#18a058',
+      warning: '#f0a020',
+      danger: '#e44761',
+      info: '#2080f0',
+      idle: '#52685b',
+      offline: '#5d6d63',
+    },
+    fx: {
+      glowTitle: 'rgba(24, 160, 88, 0.2)',
+      cornerColor: '#18a058',
+      scanline: 'rgba(17, 52, 35, 0.018)',
+      gridLine: 'rgba(24, 160, 88, 0.06)',
+      scrim: 'rgba(20, 38, 29, 0.32)',
+      shadowModal: '0 24px 64px -16px rgba(20, 38, 29, 0.22)',
+      shadowMenu: '0 12px 32px rgba(20, 38, 29, 0.14)',
+      shadowInset: 'inset 0 1px 2px rgba(20, 38, 29, 0.1)',
+      sheen: 'rgba(255, 255, 255, 0.62)',
+      transition: '0.5s ease',
+    },
+  },
+  extraVars: {
+    '--neutral-fg-rgb': '31, 45, 37',
     '--card-corner-display': 'none',
   },
 }
@@ -349,6 +407,7 @@ export const DEFAULT_PRESET = DARK_TECH
 export const THEME_PRESETS: readonly ThemeDefinition[] = [
   DARK_TECH,
   LIGHT,
+  NAIVE_GREEN,
   NEBULA_VIOLET,
   EMERALD,
   LAVA_AMBER,

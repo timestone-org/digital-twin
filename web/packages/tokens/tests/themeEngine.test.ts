@@ -171,16 +171,17 @@ describe('hexToRgbTriplet', () => {
 })
 
 describe('主题注册表', () => {
-  it('内置 6 套且 id 互不重复', () => {
+  it('内置 7 套且 id 互不重复', () => {
     const themes = listThemes()
-    expect(themes).toHaveLength(6)
-    expect(new Set(themes.map((theme) => theme.id)).size).toBe(6)
+    expect(themes).toHaveLength(7)
+    expect(new Set(themes.map((theme) => theme.id)).size).toBe(7)
   })
 
   it('下拉顺序以默认深色打头', () => {
     expect(listThemes().map((theme) => theme.id)).toEqual([
       'dark-tech',
       'light',
+      'naive-green',
       'nebula-violet',
       'emerald',
       'lava-amber',

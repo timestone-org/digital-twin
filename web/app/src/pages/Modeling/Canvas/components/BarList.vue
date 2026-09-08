@@ -216,7 +216,7 @@ const moreText = computed(
   }
 
   // 阈值线的引线跟着阈值线走：更粗一档的文字色。
-  // ⚠ 不许回到 --state-warning——它压在浅色面板底上只有 2.31:1，远不到 WCAG
+  // ⚠ 不许回到 --state-warning——它压在浅色面板底上最低只有 2.00:1，远不到 WCAG
   // 1.4.11 对非文本图形的 3:1。哪条线是阈值靠线宽与这块字自己的名字认
   &__mark--threshold::after {
     border-left-width: 2px;
@@ -299,7 +299,7 @@ const moreText = computed(
     background-color: rgba(var(--accent-primary-rgb), 0.75);
   }
 
-  // 「之前」是空心描边无填充：两个色相在六套预设下的对比关系不稳定
+  // 空心描边无填充时，两个色相在全部内置预设下的对比关系不稳定
   &__swatch--before,
   &__piece--before {
     border: 1px dashed var(--text-disabled);
@@ -354,7 +354,7 @@ const moreText = computed(
     border-left: 1px dashed var(--text-disabled);
   }
 
-  // 零线是这张图的基准：实线，走 8.07:1 那一档
+  // 零线是这张图的基准：实线，走高对比度文字色
   &__swatch--zero,
   &__rule--zero {
     border-left-style: solid;

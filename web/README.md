@@ -16,10 +16,11 @@
 ></iframe>
 ```
 
-`theme` 必须是以下六个 id 之一：
+`theme` 必须是以下七个 id 之一：
 
 - `dark-tech`
 - `light`
+- `naive-green`
 - `nebula-violet`
 - `emerald`
 - `lava-amber`

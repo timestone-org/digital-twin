@@ -1,6 +1,6 @@
 // @vitest-environment node —— 直接读 tokens.scss 源文件，需要 import.meta.url 是 file: URL
 /**
- * @fileoverview 契约：6 套预设的可读性与注入面。锁三件事——承载正文的组合过
+ * @fileoverview 契约：7 套预设的可读性与注入面。锁三件事——承载正文的组合过
  * WCAG AA（肉眼在霓虹配色上骗得过，算出来骗不过）、被 `rgba(var(--x-rgb), α)`
  * 消费的 token 必须是 `#hex`、引擎写的每个变量名都真的在 tokens.scss 里声明过。
  */
@@ -203,6 +203,7 @@ describe('预设的取值形状', () => {
     ).toEqual([
       ['dark-tech', 'dark', '#010d1e', '#00cefc', '#45d3fd'],
       ['light', 'light', '#f4f7fb', '#0098c8', '#0077a8'],
+      ['naive-green', 'light', '#f4f7f5', '#18a058', '#36ad6a'],
       ['nebula-violet', 'dark', '#0a0a1e', '#9d6bff', '#6f7bff'],
       ['emerald', 'dark', '#03140f', '#2ee6a6', '#36d6c2'],
       ['lava-amber', 'dark', '#1a0d05', '#ff8a3d', '#ffb454'],

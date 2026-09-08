@@ -2,7 +2,7 @@
  * @fileoverview 算子公式的数据模型：一棵可排版的树，外加一份纯 ASCII 序列化。
  *
  * 用 HTML + CSS 手排，不引 KaTeX / MathJax、不用 MathML：工控内网离线拿不到
- * CDN 字体、全局 dist CSS 计入首屏预算、HTML 排的式子跟着六套主题白拿且读屏
+ * CDN 字体、全局 dist CSS 计入首屏预算、HTML 排的式子跟着全部内置主题白拿且读屏
  * 能念（MODELING_RESULT_VIEW_DESIGN §6）。复议条件：要展示矩阵推导、多行等式
  * 对齐或积分超过三处时，另开 ADR + 锁文件 PR 引 KaTeX。
  *

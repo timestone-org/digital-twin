@@ -10,7 +10,7 @@
  * ⚠ 参考几何一律走文字色不走 `--border-strong`：后者压在浅色面板底上只有
  * 1.38:1，远不到 WCAG 1.4.11 对非文本图形的 3:1（口径与实测见 §7 的配色表）。
  * ⚠ 次色不能是 `--state-success`：它与 `--accent-primary` 在翡翠绿下色相只差
- * 10.7°，两档会塌成同一片绿；`--state-warning` 在六套里最小差 46.9°。
+ * 10.7°，两档会塌成同一片绿；`--state-warning` 在全部内置预设里最小差 46.9°。
  */
 import { computed, useId } from 'vue'
 
@@ -210,7 +210,7 @@ function laneOf(
     text-anchor: middle;
   }
 
-  // 坐标轴与刻度字同一档：六套预设里最低 5.10:1
+  // 坐标轴与刻度字同一档：全部内置预设里最低 4.64:1
   &__axis {
     stroke: var(--text-disabled);
   }
@@ -243,7 +243,7 @@ function laneOf(
     }
 
     // 打乱重排：交叉散列是它的身份，外圈那道边走中性色。
-    // ⚠ 边不许跟着散列走 --state-warning——那在浅色预设下只有 2.31:1，这一段
+    // ⚠ 边不许跟着散列走 --state-warning——那在浅色预设下最低只有 2.00:1，这一段
     // 的轮廓就没了；散列本身照旧是警示色，颜色不作唯一编码
     &--shuffled {
       stroke: rgba(var(--neutral-fg-rgb), 0.5);

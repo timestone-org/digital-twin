@@ -5,9 +5,9 @@
  *
  * ⚠ 这些口径全活在 scoped SCSS 里，happy-dom 不套用样式，只能扫源码文本；扫之
  * 前必须先把注释剥掉，否则注释里写着的令牌名会把断言骗过去。
- * ⚠ 数字都是六套预设逐套实测来的：`--border-strong` 压在浅色面板底上只有
- * 1.38:1、`--state-warning` 只有 2.31:1，都不到 WCAG 1.4.11 要求的 3:1；换用的
- * `--text-secondary` 最低 8.07:1、`--text-disabled` 最低 5.10:1。
+ * ⚠ 数字都是全部内置预设逐套实测来的：`--border-strong` 压在浅色面板底上只有
+ * 1.38:1、`--state-warning` 最低只有 2.00:1，都不到 WCAG 1.4.11 要求的 3:1；
+ * 换用的 `--text-secondary` 最低 6.77:1、`--text-disabled` 最低 4.64:1。
  */
 import { mount } from '@vue/test-utils'
 import { readFileSync } from 'node:fs'
@@ -46,7 +46,7 @@ describe('参考几何的笔色', () => {
     expect(codeOf(part)).not.toContain('--border-strong')
   })
 
-  it('散点的理想对角线与零残差线走 8.07:1 那一档', () => {
+  it('散点的理想对角线与零残差线走高对比度文字色', () => {
     const code = flat(codeOf('ScatterPlot'))
 
     expect(code).toContain('&__ideal { stroke: var(--text-secondary);')
@@ -66,7 +66,7 @@ describe('参考几何的笔色', () => {
   })
 
   it.each(['ScatterPlot', 'HistogramChart', 'TimelineBand'] as const)(
-    '%s 的坐标轴走 5.10:1 那一档',
+    '%s 的坐标轴走正文可读的次要文字色',
     (part) => {
       expect(flat(codeOf(part))).toContain(
         '&__axis { stroke: var(--text-disabled); }',
@@ -75,7 +75,7 @@ describe('参考几何的笔色', () => {
   )
 })
 
-// ⚠ 阈值线原来走 --state-warning：浅色预设下 2.31:1，一条画了等于没画的线
+// ⚠ 阈值线原来走 --state-warning：浅色预设下最低 2.00:1，一条画了等于没画的线
 describe('阈值线不再走警示色', () => {
   it('散点的阈值线换成更粗更疏的文字色虚线', () => {
     const code = flat(codeOf('ScatterPlot'))
@@ -108,7 +108,7 @@ describe('阈值线不再走警示色', () => {
 
 // ⚠ --accent-primary 与 --state-success 在翡翠绿下 oklch 色相只差 10.7°，两路
 // 序列合成后 ΔE 只有 0.033 ≈ 1.6 JND，图上就是两片一样的绿；换成
-// --state-warning 之后六套里最小色相差 46.9°、最小 ΔE 0.143
+// --state-warning 之后全部内置预设里最小色相差 46.9°、最小 ΔE 0.143
 describe('系列色的第二档不许再是成功色', () => {
   it('散点的 t1 是警示色，t2 才是危险色、t3 才是成功色', () => {
     const code = flat(codeOf('ScatterPlot'))

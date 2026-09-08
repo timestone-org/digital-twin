@@ -102,7 +102,7 @@ const units = computed(() => Number(props.view.viewBox.split(' ')[2]) || 1)
     stroke: none;
   }
 
-  // 负载荷空心描边：不用第二个色相——两个色相在六套预设下的对比关系不稳定，
+  // 负载荷空心描边：不用第二个色相——两个色相在全部内置预设下的对比关系不稳定，
   // 而空心与实心在灰度打印与色觉障碍下照样分得开
   &__cell--negative {
     fill: none;
