@@ -7,7 +7,7 @@
 **对话引擎**（回合编排、工具注册表、SSE 摊平、按权限收窄、一步做完的检验）。
 两段同住一个包不是图省事——`domain/*` 之间不许互相 import，而对话引擎要调用面
 的 `ModelChoice` 且必须是同一个类型；何况没有任何消费方会只要其中一段
-（[ADR-0037](../../../docs/adr/0037-对话引擎并入domain-llmcore.md)）。
+（[ADR-0032](../../../docs/adr/0032-知识库独立成代码单元且LLM客户端下沉domain.md)）。
 
 ⚠ **不含 ORM**：`domain` 不许有模型与 CRUD。会话、消息、步骤的持久化走端口，
 各服务用自己的 schema 与迁移去实现。
@@ -28,7 +28,7 @@
 | `reasoning.py` | 覆写 langchain 的一个私有接缝，把第三方端点的 `reasoning_content` 捡回来 |
 | `openai_compat.py` | 按量计费的对话端点那一路 |
 | `openai_embedding.py` | 嵌入端点那一路 |
-| `rerank/` | 重排那一路：`Reranker` 协议 + 线形方言注册表 + 一份共用的调用面（ADR-0042） |
+| `rerank/` | 重排那一路：`Reranker` 协议 + 线形方言注册表 + 一份共用的调用面（ADR-0041） |
 
 ## 它不管什么
 

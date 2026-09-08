@@ -2,7 +2,7 @@
 
 > 后端在 `platform-server/apps/dashboard` + `publisher` 角色，前端在 `web/packages/{modules,runtime,three-core,twin-config}` 与编辑器页面。
 > 写入面以节点为可寻址资源（[ADR-0012](adr/0012-大屏组态以节点为可寻址资源而非整文档替换.md)）。
-> 一期只落 **header** 与 **twin-view（数字孪生）** 两个模块。
+> 可用模块以 `@dt/modules` 清单及其导出的服务端目录为准，本设计不复制数量库存。
 
 ---
 
@@ -393,9 +393,9 @@ ModuleSlotMeta = { state: 'ok' | 'pending' | 'error', message?, timestampMs? }
 `twin-view` 的 three.js 依赖收在 `@dt/three-core` 并**异步加载**：
 不打开孪生模块的大屏不该为它付首屏包体。
 
-其后补的 `metric-card`（实时数值）是第一个数据模块：一块摆 1..N 个点位读数，
-行与配置里的指标一一对应，绑点面板因此与孪生同一套口径。它也是 §5.6 那条
-自述的第一个使用者，设计见 [MODULE_METRIC_CARD_DESIGN](MODULE_METRIC_CARD_DESIGN.md)。
+其后补的 `info-card`（实时数值）是数据模块之一：一块摆 1..N 个点位读数，
+行与配置里的指标一一对应，绑点面板因此与孪生同一套口径。设计见
+[信息卡片设计](MODULE_INFO_CARD_DESIGN.md)。
 
 `action-button`（按钮）是第一个**控件**类模块：它不取任何数，只把点击上抛成
 联动事件，显隐 / 弹窗 / 跨屏跳转由规则决定。它也是 `chromeConfigurable: false`
@@ -413,7 +413,7 @@ ModuleSlotMeta = { state: 'ok' | 'pending' | 'error', message?, timestampMs? }
 本身也是文档**——一组可配置的图元描述（几何 / 槽位 / 变体 / 端口）。内置的那批
 节点样式因此只是预置数据，渲染组件里没有一处按样式 id 分支；用户能从零画出一个
 新形状、新配色、新字段布局，画电路符号走的是同一条路。它是
-[ADR-0016](adr/0016-复杂config段由清单声明的整页子编辑器接管.md) 的第二个使用者，
+[ADR-0012](adr/0012-大屏组态以节点为可寻址资源而非整文档替换.md) 中子编辑器机制的使用者，
 设计见 [MODULE_TWIN_2D_DESIGN](MODULE_TWIN_2D_DESIGN.md)。两条结构性判断各有一份 ADR：
 样式从形状枚举下沉成图元文档见
 [ADR-0027](adr/0027-2D孪生的节点与连线样式是可配置图元文档.md)，
@@ -443,8 +443,8 @@ collector ──写──> Redis 快照 collect:snapshot:{source_id}
 ```
 
 - **主题** `dashboard:{dashboard_id}`，形状照 api-contract §10 的 `<域>:<标识>`。
-  由 publisher 在大屏创建时向 hub **登记**并声明所需权限码 `dashboard:view`，
-  删除时注销（[ADR-0007](adr/0007-实时通道薄化与开放主题命名空间.md)）。
+  由 publisher 周期对账登记、注销并声明所需权限码 `dashboard:view`
+  （[ADR-0005](adr/0005-实时通道与边缘网关的职责分界.md)）。
 - **`seq` 归 hub**，跨重启单调。客户端据它发现丢帧，不许自己推断。
 - **节流归推送方**：合并窗口、条目上限、分片都在 publisher 做。
   hub 一旦知道"哪些载荷可以合并"，就又长出业务知识了。
@@ -455,13 +455,14 @@ collector ──写──> Redis 快照 collect:snapshot:{source_id}
   hub 从不解释 `items` 的内容。
 - **hub 不可达时降级为"没有实时通道"，绝不降级为"大屏打不开"。**
 
-### 6.1 运行态零 HTTP
+### 6.1 实时点位零 HTTP
 
 本节的架构取舍见 [ADR-0049](adr/0049-大屏运行态取数统一走WS.md)。
 
-大屏运行时的取数**全部走 WS**，包括首帧初值——publisher 发现新观看者时推一次全量。
-参考实现让首屏走 HTTP 拉快照、后续走 WS，于是同一份数据有两条口径，
-两条口径的字段名、时间戳精度、质量位在演进中各漂各的。
+大屏的实时点位值**全部走 WS**，包括首帧初值——publisher 发现新观看者时推一次
+全量。参考实现让首屏走 HTTP 拉快照、后续走 WS，于是同一份实时数据有两条口径，
+两条口径的字段名、时间戳精度、质量位在演进中各漂各的。归档窗口、台账与其它按需
+数据不属于点位快照，仍由各自 provider 走 HTTP。
 
 ---
 
@@ -494,4 +495,3 @@ WS 客户端留在应用壳（它要读 auth store），`@dt/datasources` 的 pr
 - 大屏模板库、素材对象存储、导入导出。
 - 节点联动（点击显隐、弹窗）。
 - 拓扑图编辑器。
-- 公开分享面（表结构里留了 `is_public` / `public_token`，接口不开）。

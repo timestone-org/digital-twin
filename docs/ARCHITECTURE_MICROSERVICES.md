@@ -137,7 +137,9 @@
 
 知识库。它是本仓第二个**数据属主兼消费方**的服务：拥有自己的文档、块与向量（schema `knowledge`），同时经 HTTP 调 platform 取外部系统来源的数据。`api` 角色只做读写与检索，解析、嵌入、来源同步这些重活全在 `worker` 角色（[ADR-0032](adr/0032-知识库独立成代码单元且LLM客户端下沉domain.md)）。
 
-它与 `ai-assistant` 共用 `server/domain/llm/`，但**两者互不调用**——助手经 HTTP 调知识库的只读面，知识库不回调助手。设计见 [KNOWLEDGE_BASE_DESIGN](KNOWLEDGE_BASE_DESIGN.md)。
+它与 `ai-assistant` 共用 `server/domain/llmcore/` 的模型与对话机制，但**两者互不
+import、知识库也不回调助手**；助手只经知识库的受保护 HTTP 面使用检索能力。设计见
+[KNOWLEDGE_BASE_DESIGN](KNOWLEDGE_BASE_DESIGN.md)。
 
 ---
 
@@ -154,12 +156,13 @@ server/
 
 `domain/*` 的入场券极窄：**必须已经有 ≥ 2 个服务真实消费它**。"将来可能共用"不构成理由——先放在使用它的那个服务里，第二个消费方出现时再抽。
 
-初始只有两个包：
+当前共享包：
 
 | 包 | 内容 | 消费方 |
 |---|---|---|
-| `domain/formula` | 台账公式的解析、求值、函数库、记法、上下文 | platform 的 `api` 与 `worker` 角色 |
 | `domain/timeseries` | 点位历史宽表的 DDL 契约、值编解码、`node_key` 拆分口径 | collector（写）、platform（读） |
+| `domain/collectwire` | 采集计划、命令、快照与运行态的跨进程线形 | collector、platform |
+| `domain/llmcore` | 模型调用与产品无关的对话机制 | ai-assistant、knowledge |
 
 完整约束见 [ADR-0004](adr/0004-server分三层且domain承载领域共享包.md)，结构闸见 [`agents/project-structure-python.md`](agents/project-structure-python.md) §7。
 
@@ -173,10 +176,11 @@ server/
 |---|---|---|
 | `auth` | 用户、角色、权限码、路由规则、API 密钥 | auth-server |
 | `opcua` | 服务器实例、地址空间节点与类型、方法定义、实例凭据与信任证书 | opcua-server |
-| `realtime` | 主题登记、用户订阅 | realtime-hub |
-| `assistant` | 会话、消息、回合步骤 | ai-assistant |
+| `realtime` | 主题声明、订阅、公开授权 | realtime-hub |
+| `assistant` | 会话、消息、回合步骤、长期记忆 | ai-assistant |
 | `platform` | 大屏、绑定、项目、模板、素材、点位配置、台账、报告、建模 | platform-server |
 | `collect` | 点位历史、采集运行态 | collector-server |
+| `knowledge` | 知识库、来源、文档、块、向量与对话 | knowledge-server |
 
 口径是 **写独占、读放行**：一张表只有一个属主，只有属主能写、只有属主管迁移；跨 schema 只读允许，但要用独立的只读 DB role 授权，不靠自觉。
 
@@ -244,4 +248,3 @@ server/
 - `platform-server` 的模块间 import 计数持续上升，白名单闸频繁被要求放宽。
 
 在此之前，platform 内部靠 `apps/<feature>/` 的模块边界与**跨模块 import 白名单闸**维持可拆分性——真要拆时，拆分动作应当只是把目录搬走。
-</content>

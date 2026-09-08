@@ -100,6 +100,9 @@
 ### 4.1 分级阈值
 
 覆盖率**必须开分支覆盖**（`branch = true`）。只看行覆盖会把未测的 `if` 分支算成已覆盖。
+`opcua-server` 是唯一例外：coverage 与 asyncua 的组合要求 `branch = false` 和
+`COVERAGE_CORE=sysmon` 成对使用，并由 nightly 变异测试补偿，见
+[ADR-0008](../adr/0008-opcua服务端放弃分支覆盖并以变异测试补偿.md)。
 
 | 层级 | 行覆盖 | 分支覆盖 |
 |---|---|---|

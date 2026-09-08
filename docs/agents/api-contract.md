@@ -266,11 +266,15 @@ POST /api/v1/platform/nodes/{id}:write        ← 向 PLC 下发写值
 后端的 FastAPI 自动产出 `openapi.json`，它是**前后端之间唯一的类型真源**：
 
 1. 每个服务在 CI 中导出 `openapi.json` 并**提交进仓**（`server/services/<svc>/openapi.json`）。
-2. 前端由它生成 TS 类型到 `@dt/contracts`，**不手写**后端返回的类型。
+2. 目标状态是由它生成 TS 类型到 `@dt/contracts`，**不新增第二套手写真源**。
+   当前遗留手写形状是 [ADR-0019](../adr/0019-前端线形先补覆盖闸而不是改成生成.md)
+   记录的迁移期例外：每个前端实际读取的形状都必须逐字段与 OpenAPI 比对。
 3. CI 校验：重新生成后与仓库中的文件**逐字节一致**，不一致即失败——这让"改了接口忘了同步"变成红灯而不是运行时惊喜。
 4. 破坏性变更由 diff 检查拦截（删字段、改类型、改必填性），命中则要求走 §2.2 的弃用流程。
 
-⚠ 生成的类型只保证**形状**一致，不保证**语义**一致。语义（这个字段什么时候为 null、这两个字段的互斥关系）仍然要靠契约测试锁定，见 [`testing-standard-python.md`](testing-standard-python.md) §1 L3。
+⚠ 生成或逐字段比对只保证**形状**一致，不保证**语义**一致。语义（这个字段什么时候为
+null、这两个字段的互斥关系）仍然要靠契约测试锁定，见
+[`testing-standard-python.md`](testing-standard-python.md) §1 L3。
 
 ---
 

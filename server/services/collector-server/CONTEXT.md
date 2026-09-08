@@ -1,8 +1,8 @@
 # collector-server 上下文
 
-采集运行时：唯一持有现场连接的进程。按采集计划建会话、订阅采样、写实时快照与历史归档，并执行来自 platform 的浏览与读写命令。数据在 `collect` schema，写独占（[ADR-0003](../../../docs/adr/0003-一库多schema且写独占读放行.md)）。切线见 [ADR-0001](../../../docs/adr/0001-采集运行时独立成服务而配置面留在平台.md)，驱动分层见 [ADR-0011](../../../docs/adr/0011-采集按驱动适配器分协议而采集计划保持协议无关.md)。
+采集运行时：唯一持有现场连接的进程。按采集计划建会话、订阅采样、写实时快照与历史归档，并执行来自 platform 的浏览与读写命令。数据在 `collect` schema，写独占（[ADR-0003](../../../docs/adr/0003-一库多schema且写独占读放行.md)）。切线与驱动分层见 [ADR-0001](../../../docs/adr/0001-采集运行时独立成服务而配置面留在平台.md)。
 
-⚠ 与 platform 之间的四条线形口径（计划、命令信封、快照键、运行态列名）**不在本服务里声明**，两侧 import `domain/collectwire` 的同一份（[ADR-0017](../../../docs/adr/0017-采集控制面的跨进程线形收进domain共享包.md)）。本服务只留传输实现与驱动适配。
+⚠ 与 platform 之间的四条线形口径（计划、命令信封、快照键、运行态列名）**不在本服务里声明**，两侧 import `domain/collectwire` 的同一份（ADR-0001）。本服务只留传输实现与驱动适配。
 
 ---
 
@@ -90,12 +90,12 @@
 
 | 不做 | 原因 |
 |---|---|
-| OPC UA 之外的驱动 | 一期只有一个协议。接口留形状不留字段（ADR-0011） |
+| OPC UA 之外的驱动 | 一期只有一个协议。接口留形状不留字段（ADR-0001） |
 | 业务 HTTP 面 | 配置面留在 platform，这里只有探针 |
 | 归档的 continuous aggregate | 先让原始表跑起来，聚合查询直接扫原始表（COLLECT_DESIGN §8） |
 | 按点位的保留期执行 | 全局压缩策略在迁移里，按点位的清理归 `platform-worker` 夜间批处理——迁移里禁止回填与删数据 |
 | 采集侧的 consumer group | 单活租约已经保证单消费者 |
-| 命令总线的 `validate` 动作 | 线上已有这个动作（platform 会发），本服务一期不实现，回 `unknown_action`；发起方据此记「未校验」而不是「通过」（ADR-0011 代价三）。实现集是 `SUPPORTED_ACTIONS`，它是 `collectwire.ACTIONS` 的真子集 |
+| 命令总线的 `validate` 动作 | 线上已有这个动作（platform 会发），本服务一期不实现，回 `unknown_action`；发起方据此记「未校验」而不是「通过」（ADR-0001）。实现集是 `SUPPORTED_ACTIONS`，它是 `collectwire.ACTIONS` 的真子集 |
 | 直接推 WebSocket | 只写 Redis 快照，推送归 `platform-publisher`（ADR-0005） |
 
 ## 8. 数据

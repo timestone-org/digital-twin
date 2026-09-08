@@ -142,7 +142,7 @@ api client ── 401 → 先 refresh 再重试一次 → 仍失败才登出
 5. 嵌入主题优先于用户偏好，只写当前 iframe 的 `documentElement` 且不持久化；外壳
    隐藏全局导航与主题切换器，但保留页面自己的业务 sidebar。
 6. 有限期与永久 API Key 均可嵌入；协议跟随页面环境，HTTP 走 WS，HTTPS 走
-   WSS，前端不做 scheme 门禁。完整风险边界见根 ADR-0051 与 ADR-0052。
+   WSS，前端不做 scheme 门禁。完整风险边界见根 ADR-0051。
 
 ## 5. 组件与样式约定
 
@@ -178,7 +178,7 @@ typecheck 与 lint 对下面这些**双双放行**，只能靠契约测试：
   见 [ADR-0019](../docs/adr/0019-前端线形先补覆盖闸而不是改成生成.md)）
 - 手搓一份竞态防护 → 慢的那次后返回覆盖快的那次，界面显示过期数据且不报错
   （`app/` 下只许用 `useRacedFetch`；要作废在飞的那次用它的 `cancel()`，
-  见 [ADR-0020](../docs/adr/0020-写动作不抽公共外壳而竞态防护只留一份.md)）
+  见 [TypeScript 代码规范](../docs/agents/code-style-typescript.md) §7.1）
 
 ## 8. 本地命令
 

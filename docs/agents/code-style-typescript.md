@@ -60,7 +60,11 @@
 | `!` 非空断言 | ESLint 报错。用可选链、显式判空或早返回 |
 | `@ts-ignore` | **禁止**。要压制就用 `@ts-expect-error` + 理由——它在错误消失后会自己报错，不会长期留着 |
 
-⚠ `as` 最危险的用法是给**从后端拿到的数据**断言类型：`const data = res.data as Dashboard`。后端改了字段，编译期什么都不会说，运行时在某个深层组件里崩。后端数据的类型来自 `@dt/contracts`（由 `openapi.json` 生成，见 [`api-contract.md`](api-contract.md) §9），**不是手写断言**。
+⚠ `as` 最危险的用法是给**从后端拿到的数据**断言类型：`const data = res.data as Dashboard`。
+后端改了字段，编译期什么都不会说，运行时在某个深层组件里崩。后端数据的类型来自
+`@dt/contracts`，**不是调用点的手写断言**。目标状态是由 `openapi.json` 生成；
+当前遗留手写形状必须逐字段钉在 OpenAPI 上，迁移期例外见
+[ADR-0019](../adr/0019-前端线形先补覆盖闸而不是改成生成.md)。
 
 ### 2.3 写法
 
@@ -209,20 +213,10 @@ const emit = defineEmits<{ 'update:modelValue': [value: string] }>()
 
 只要一个加载路径可能被"快速切换"触发第二次（切换数据源、切换时间范围、快速点列表），就必须防竞态——否则慢的那次请求后返回，会覆盖快的那次的结果，**界面显示的是过期数据且没有任何报错**。
 
-两种做法任选，但必须有一种：
-
-```ts
-// 序号法
-let seq = 0
-async function load(id: string) {
-  const mine = ++seq
-  const data = await fetch(id)
-  if (mine !== seq) return          // 已经有更新的请求了，丢弃
-  state.value = data
-}
-
-// AbortController 法：新请求发起前 abort 掉上一个
-```
+`app/` 中统一使用 `useRacedFetch`；需要作废在途请求时调用它的 `cancel()`，
+不要在页面里另写序号或 `AbortController`。workspace 包无法依赖 `app/`，且若
+丢弃结果时还必须释放 GPU 等资源，可保留自己的实现；第三个同形消费方出现时再下沉
+共享件。
 
 对应的乱序返回用例是**强制要求**，见 [`testing-standard-typescript.md`](testing-standard-typescript.md) §3。
 

@@ -38,8 +38,7 @@ worker 加载失败、知识库的 PDF 预览一律画不出来，而访问日�
 
 ### 嵌入页的响应头与日志
 
-任意业务页可按 [ADR-0051](../docs/adr/0051-任意业务页用API密钥换短期会话后嵌入.md) 与
-[ADR-0052](../docs/adr/0052-嵌入允许永久API密钥与HTTP传输.md) 以
+受支持业务页可按 [ADR-0051](../docs/adr/0051-任意业务页用API密钥换短期会话后嵌入.md) 以
 `?token=<APIKey>&theme=<theme-id>` 进入嵌入模式。有限期与永久 API Key 都可使用，
 HTTP/WS 与 HTTPS/WSS 都是受支持的部署形态。
 
@@ -99,7 +98,7 @@ docker compose --profile mineru up -d --build
 | `AUTH_JWT_SECRET` / `AUTH_EDGE_SIGNING_SECRET` / `AUTH_EDGE_SERVICE_KEY` | auth（后两个 platform ×3 / opcua / realtime / assistant / knowledge ×2 / 边缘也读） | 各 32 字节以上 |
 | `OSS_ENDPOINT` `OSS_ACCESS_KEY` `OSS_SECRET_KEY` | `minio-init` / platform ×3 / knowledge ×2 | 对象存储在本编排之外（ADR-0015）。`OSS_UPSTREAM` 另给边缘，**只能是 `host:port`、不带 scheme**——带了 nginx 直接起不来 |
 | `COLLECT_CREDENTIAL_SECRET` | platform ×3 | 数据源口令的加密密钥（≥32 字符）。换钥后旧密文解不开，界面上重填即恢复 |
-| `LLM_PROVIDER_SECRET` | platform ×3 | 模型供应商目录的加密密钥（ADR-0039）。留空即目录整个缺席 |
+| `LLM_PROVIDER_SECRET` | platform ×3 | 模型供应商目录与凭据的加密密钥（ADR-0041）。留空即目录整个缺席 |
 | `AUTH_SEED_ADMIN_PASSWORD` | `auth-migrate` | **绝不给默认值**——弱默认的管理员口令等于没有口令 |
 | `ACSOURCE_HOST` `ACSOURCE_USER` `ACSOURCE_PASSWORD` `ACSOURCE_DB` | platform | 现场 EMS 的 SQL Server，**只读**；compose 把它们转成 `PLATFORM_SQLSERVER_*` |
 | `ACSOURCE_PORT`（默认 1433）`ACSOURCE_TIMEZONE`（默认 `Asia/Shanghai`） | platform | 有默认值，取值差异不是行为差异 |
@@ -174,7 +173,7 @@ WS 的 token 走 `Sec-WebSocket-Protocol` 子协议，而 `auth_request` 的子�
 助手整套是**可缺席**的：不起这个服务，前端探测不到就干净地不出现入口，别的功能
 一件不少。起了它，**接几路模型在界面上配**：系统管理 → 模型管理 里新建供应商，
 先选类型（OpenAI 兼容端点 / Codex 订阅），再配这一类要的那几项
-（[ADR-0040](../docs/adr/0040-供应商按接入形态配置且档位即供应商.md)）。
+（[ADR-0041](../docs/adr/0041-订阅账号凭据归平台持有.md)）。
 配出来的每一路都是面板下拉里的一档，会话自己选走哪一路。
 
 下面这两组环境变量是**按类型逐格**的永久默认值：目录里配了同一类型的供应商就以
@@ -187,10 +186,12 @@ WS 的 token 走 `Sec-WebSocket-Protocol` 子协议，而 `auth_request` 的子�
 | `ASSISTANT_MODEL_STREAM_ENABLED` / `_EXTRA_BODY` | 逐字流式开关、透传的额外请求体（一段 JSON 对象） |
 | 订阅账号那一路 | **不在环境变量里**：去「系统管理 → 模型管理」建一路「Codex 订阅」形态的供应商并登录一次（ADR-0041），加密用的是 `PLATFORM_LLM_PROVIDER_SECRET` |
 | `ASSISTANT_CODEX_REASONING_EFFORT` | 那一路没配推理档位时的缺省（`low`/`medium`/`high`/`xhigh` 闭合集合） |
-| `LLM_PROVIDER_SECRET` | 模型供应商目录的加密密钥（ADR-0039）。**配上它才配得出供应商**；留空即目录整个缺席，两边各用各的环境变量 |
+| `LLM_PROVIDER_SECRET` | 模型供应商目录与凭据的加密密钥（ADR-0041）。**配上它才配得出供应商**；留空即目录整个缺席，两边各用各的环境变量 |
 
-⚠ **`ASSISTANT_MODEL_*` 与 `KNOWLEDGE_*` 那两组模型变量是目录的永久默认值**：目录里
-没给某个用途分配时才用它们，分配了就走目录。存量部署一行不改也照常跑。
+⚠ 两侧的环境变量都是永久默认值，但让位口径不同：助手的 `ASSISTANT_MODEL_*`
+按**接入形态**让位，只要目录里已有启用的 `openai_compat` 供应商就不再装这一档；
+知识库的 `KNOWLEDGE_*` 按**用途分配**让位，该用途未分配时才回退。存量部署在目录
+为空时一行不改照常跑。
 
 ⚠ **宿主 `.env` 里配了不等于容器里有。** compose 不给服务挂 `env_file`，每个变量
 都要在 `ai-assistant` 的 `environment` 里逐条列出来；漏列的表现是页面上那一路
@@ -237,7 +238,7 @@ exist」，与「装没装扩展」这件事看着毫无关系。
 | `KNOWLEDGE_MINERU_ENABLED` | 不收 PDF：上传面给的是一句点得出名字的错，而不是一份状态 ready 却检索不到的空文档 |
 | `KNOWLEDGE_ASR_ENABLED` | 对话页没有麦克风键 |
 
-⚠ **真正走哪一路由模型目录说了算**（ADR-0039）：`KNOWLEDGE_EMBEDDING_*` /
+⚠ **真正走哪一路由模型目录说了算**（ADR-0041）：`KNOWLEDGE_EMBEDDING_*` /
 `_MODEL_*` 只是目录里没给这个用途分配时的永久默认值。
 ⚠ **`KNOWLEDGE_MODEL_CONTEXT_TOKENS` 不要凭印象填**：`0` = 不知道、一格都不收紧；
 本地 llama.cpp 看 `/props` 的 `n_ctx`，它是启动参数，多半远小于模型的训练长度。

@@ -6,19 +6,20 @@
 对应的代码单元是 `server/services/knowledge-server/`（端口 8009、schema `knowledge`），
 两个部署单元：`api` 角色与 `worker` 角色。前端在 `web/app/src/pages/knowledge/`。
 
-架构范式整体照抄 AI 助手的能力分层（[ADR-0029](adr/0029-助手按能力分层且每层一个注册表.md)）：
-**每层一副骨架 `ports.py` + `registry.py` + 实现目录**，扩展一层被钉死成三步——
-加一个实现文件、注册元组里加一行、加一条契约测试。
+每层使用 Protocol、显式注册表与实现目录；能力分层不是物理执行流水线。扩展一层
+仍是加实现、登记注册项并补契约测试。
 
-决策见 [ADR-0032](adr/0032-知识库独立成代码单元且LLM客户端下沉domain.md)
-至 [ADR-0035](adr/0035-检索编排是策略注册表.md)，以及
-[ADR-0043](adr/0043-解析后端可插拔且外部解析服务留口.md)（解析后端可插拔）。
+决策见 [ADR-0032](adr/0032-知识库独立成代码单元且LLM客户端下沉domain.md)（服务边界）、
+[ADR-0035](adr/0035-检索编排是策略注册表.md)（检索）、
+[ADR-0041](adr/0041-订阅账号凭据归平台持有.md)（模型目录）、
+[ADR-0043](adr/0043-解析后端可插拔且外部解析服务留口.md)（来源与解析）及
+[ADR-0045](adr/0045-向量与关键词索引改为硬依赖.md)（索引）。
 
 ---
 
 ## 1. 三条支柱
 
-### 1.1 来源是可插拔的，文档只是其中一路（[ADR-0033](adr/0033-知识来源与解析按注册表分层.md)）
+### 1.1 来源是可插拔的，文档只是其中一路（[ADR-0043](adr/0043-解析后端可插拔且外部解析服务留口.md)）
 
 真正会变的不是「支持几种文件格式」，是「知识从哪来」。所以最外面那一层不是解析器，
 是 `KnowledgeSource`：
@@ -88,7 +89,7 @@ AgenticRAG 的「agentic」落在**两侧**，各解决一半：
   它要一路 LLM；LLM 端口缺席时**这个策略如实不可用**，不是悄悄退化成 `naive`
   （悄悄退化的表现是「质量忽然变差了」，没有任何一处报错）。
 
-接了重排档时，`hybrid` 与 `agentic` 在给出结果之前多走一步（[ADR-0042](adr/0042-重排是第三种模型种类且方言可插拔.md)）；
+接了重排档时，`hybrid` 与 `agentic` 在给出结果之前多走一步（[ADR-0041](adr/0041-订阅账号凭据归平台持有.md)）；
 `naive` **不接**——它是基线，也是「召回忽然变差了」时唯一的对照组。
 
 ⚠ **打分只排序不取舍，并把「为什么它排在这」一并交出去。** 这条与点位召回同源
@@ -107,12 +108,12 @@ AgenticRAG 的「agentic」落在**两侧**，各解决一半：
 | `sources/` | 知识**从哪来** | `KnowledgeSource` | `UploadSource`、`PlatformSource` |
 | `parsing/` | 一份原件**由谁解、解成什么** | `ParserBackend` → `DocumentParser` / `ExternalParserBackend` | 本地：`TextParser`、`DocxParser`、`XlsxParser`、`PptxParser`；外部：`MineruBackend` |
 | `chunking/` | 怎么**切块** | `Chunker` | `StructuralChunker`、`FixedWindowChunker`、`RowChunker` |
-| `embedding/` | 用哪一路**嵌入** | `Embedder` | `DomainEmbedder`（走 `server/domain/llm`）、`NullEmbedder` |
+| `embedding/` | 用哪一路**嵌入** | `Embedder` | `DomainEmbedder`（走 `server/domain/llmcore`）、`NullEmbedder` |
 | `indexing/` | 向量与关键词**存哪、怎么查** | `VectorIndex` / `KeywordIndex` | `PgVectorIndex`；`TrgmKeywordIndex`（各只有一个实现，ADR-0045） |
 | `retrieval/` | **检索策略** | `RetrievalStrategy` | `NaiveVector`、`Hybrid`、`Agentic` |
-| `reranking/` | 召回之后**怎么重排**（[ADR-0042](adr/0042-重排是第三种模型种类且方言可插拔.md)） | `Reranker` | `RemoteReranker`、`NullReranker` |
+| `reranking/` | 召回之后**怎么重排**（[ADR-0041](adr/0041-订阅账号凭据归平台持有.md)） | `Reranker` | `RemoteReranker`、`NullReranker` |
 
-⚠ 七层是**能力分层，不是执行流水线**（ADR-0029 决策一）。摄取那条链确实按顺序穿过
+⚠ 七层是**能力分层，不是执行流水线**。摄取那条链确实按顺序穿过
 前五层，但检索只穿过后三层，而 `agentic` 策略会**反复重入** `indexing/`——
 按执行顺序分层的话，每一层都要能被重入，那与「分层」这件事本身矛盾。
 
@@ -184,9 +185,8 @@ JSON，翻成带 `locator` 的块序列这一步**在那一路后端的实现里
 候选，于是整条链路与「没有这一层」逐字相同。界面的 accept 名单是两路的并集——
 接了一路能吃 PDF 的后端之后，上传面必须当场收 PDF。
 
-⚠ **一期外部那一路是空的，而空就是诚实缺席。** `/capabilities` 的 `parsing`
-一格如实报「本地装了哪几路、外部接了哪几路、没接的原因」。不留半吊子 stub：
-一个「看着能用、调下去报奇怪错」的占位比缺席更糟。
+当前外部实现是 `MineruBackend`；只有配置启用时才进入候选。`/capabilities` 的
+`parsing` 如实列出本地与外部后端，未启用时不摆占位。
 
 ⚠ 两路都**不自动重试**：外部服务此刻不可达与这份文件解不动，在管线里都写成
 `failed` + 一句人话，由人按「重新解析」（§1.2）。
@@ -330,10 +330,10 @@ schema `knowledge`，域前缀 `kb_`（database-standard §1）。
   给出的是整串一个词，任何一次部分匹配都命不中。trigram 对中文够用，代价是索引大。
 - 两路结果按**名次融合**（RRF）而不是按分数加权：两路的分数根本不同量纲，
   加权融合要先定标，而定标参数会随语料漂移——名次不会。
-- `pg_trgm` 也可能装不上，所以关键词那一路同样有回退实现（`LikeKeywordIndex`）。
-  回退的表现要如实进 `/capabilities`，不许装作一切正常。
+- `pg_trgm` 与 GIN 索引同样是迁移前置；装不上时迁移失败，不提供
+  `LikeKeywordIndex` 回退（ADR-0045）。
 
-### 4.2 重排是**排序增强**，不是取舍（[ADR-0042](adr/0042-重排是第三种模型种类且方言可插拔.md)）
+### 4.2 重排是**排序增强**，不是取舍（[ADR-0041](adr/0041-订阅账号凭据归平台持有.md)）
 
 融合解决的是「两路量纲不同」，解决不了「这十条里哪一条真的答得上这句话」——
 工业资料里同一台设备的十来段文字彼此高度相似，两路都只能把它们一起捞上来。
@@ -374,7 +374,7 @@ schema `knowledge`，域前缀 `kb_`（database-standard §1）。
 
 助手是知识库的**消费方**，不是它的一部分：
 
-- 助手侧多一路 `ToolProvider`（`KnowledgeTools`），出三个只读原语工具。它排在
+- 助手侧多一路 `ToolProvider`（`KnowledgeTools`），出列库与检索两个只读原语。它排在
   **服务端工具之后、客户端工具之前**——注册序即工具在提示词里的先后，而先后影响
   模型的第一反应。
 - 多一个技能 `knowledge-qa`：正文交代「先改写成 2–3 条检索式、召回不足就换词再查一轮、
@@ -383,7 +383,7 @@ schema `knowledge`，域前缀 `kb_`（database-standard §1）。
 - ⚠ 助手调知识库时**原样转发边缘注入的七个 `X-Auth-*` 签名头**，由知识库自己判权限
   （AI_ASSISTANT_DESIGN §8 同一口径）。助手绝不用服务级密钥替用户读它本来读不到的库。
 - ⚠ 知识库**不回调助手**（ARCHITECTURE §6 禁双向同步 RPC）。`agentic` 策略要的 LLM
-  走 `server/domain/llm/`，不是走助手。
+  走 `server/domain/llmcore/`，不是走助手。
 
 ---
 
@@ -395,7 +395,7 @@ schema `knowledge`，域前缀 `kb_`（database-standard §1）。
 |---|---|
 | `knowledge:use` | 检索、问答、看块 |
 | `knowledge:write` | 传文档、删文档、触发重新解析、跑来源同步 |
-| `knowledge:manage` | 建库删库、改嵌入档、改来源配置、开关加速索引 |
+| `knowledge:manage` | 建库删库、改嵌入档、改来源配置 |
 
 ⚠ `knowledge:manage` 比另外两条严：改嵌入档等于让整库的既有向量作废，
 而那件事**没有任何运行期迹象**，只表现为召回忽然全错。
@@ -414,15 +414,13 @@ schema `knowledge`，域前缀 `kb_`（database-standard §1）。
 
 ⚠ 探测失败一律读成「这套部署没有知识库」，不是「暂时故障」。
 
-嵌入档同样可缺席：没配嵌入时服务照常起、能被上传与解析，检索**如实回答
-「这个库还没建索引」**——不是返回空表。空表与「确实没有相关内容」长得一模一样。
+嵌入档未配置时服务仍可暴露管理面，但文档摄取必须失败并指出缺失原因，不能生成
+“ready 但没有向量”的半成品（ADR-0045）。
 
 ---
 
 ## 8. 一期不做
 
-- **PDF 与 OCR**（§2.4 已说清加它的代价只有一个文件）。
-- **外部解析服务的客户端**：端口与注册位摆好了，一期一个实现都没有（§2.2）。
 - 权限**下沉到文档**：一期权限的粒度是「这个库」，不是「这份文档」。
 - 多租户隔离：一期所有库对有权限的人都可见。
 - 增量重嵌：换嵌入档只能整库重嵌，没有「只补新块」的路径。

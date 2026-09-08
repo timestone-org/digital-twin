@@ -27,7 +27,7 @@
 
 ### API contract
 
-全服务同一套口径：URL `/api/v1/<service>/<资源复数>`、动作端点 `POST …:verb`、统一信封 `{code,message,data,trace_id}` 且 **HTTP 状态码必须真实（严禁恒 200）**、错误码分段十进制、时序集合用游标分页（页码分页会静默重复漏行）、时间一律 UTC RFC3339、精确小数走 string、**禁数字枚举**、下发写值与长任务必须支持 `Idempotency-Key`、内部接口挂 `/internal/` 并用服务级密钥。`openapi.json` 提交进仓、CI 校验一致，前端类型由它生成。见 `docs/agents/api-contract.md`。
+全服务同一套口径：URL `/api/v1/<service>/<资源复数>`、动作端点 `POST …:verb`、统一信封 `{code,message,data,trace_id}` 且 **HTTP 状态码必须真实（严禁恒 200）**、错误码分段十进制、时序集合用游标分页（页码分页会静默重复漏行）、时间一律 UTC RFC3339、精确小数走 string、**禁数字枚举**、下发写值与长任务必须支持 `Idempotency-Key`、内部接口挂 `/internal/` 并用服务级密钥。`openapi.json` 提交进仓、CI 校验一致；前端类型目标由它生成，现存手写形状按 ADR-0019 的迁移闸逐字段比对。见 `docs/agents/api-contract.md`。
 
 ### Database
 
