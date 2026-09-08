@@ -2,10 +2,11 @@
  * @fileoverview 锁住主题注入引擎的三条铁律：默认深色注入后元素上零残留、
  * 切主题时上一套的 extraVars 被清干净、`-rgb` 伴生变量与 color-scheme 跟着走。
  */
-import { describe, expect, it } from 'vitest'
+import { afterEach, describe, expect, it } from 'vitest'
 
 import {
   applyTheme,
+  applyScopedTheme,
   DEFAULT_THEME_ID,
   getTheme,
   hexToRgbTriplet,
@@ -15,6 +16,125 @@ import {
 
 const THEME_VARS = Object.values(TOKEN_CSS_VAR)
 const EXTRA_VARS = ['--neutral-fg-rgb', '--card-corner-display']
+
+describe('局部主题的级联隔离', () => {
+  afterEach(() => {
+    document.documentElement.removeAttribute('style')
+    document.body.replaceChildren()
+  })
+
+  it('全局浅色下独立深色写全底色、文字、伴生变量与原生配色', () => {
+    applyTheme(document.documentElement, 'light')
+    const rootStyle = document.documentElement.style.cssText
+    const el = host()
+    document.body.append(el)
+
+    applyScopedTheme(el, 'dark-tech')
+
+    expect(el.style.getPropertyValue('--surface-base')).toBe('#010d1e')
+    expect(el.style.getPropertyValue('--text-primary')).toBe('#ffffff')
+    expect(el.style.getPropertyValue('--accent-primary-rgb')).toBe(
+      '0, 206, 252',
+    )
+    expect(el.style.getPropertyValue('--state-info-rgb')).toBe('0, 206, 252')
+    expect(el.style.getPropertyValue('--neutral-fg-rgb')).toBe('255, 255, 255')
+    expect(el.style.getPropertyValue('--card-corner-display')).toBe('block')
+    expect(el.style.colorScheme).toBe('dark')
+    expect(document.documentElement.style.cssText).toBe(rootStyle)
+  })
+
+  it('卡片与焦点环在局部重新解析主题变量', () => {
+    const el = host()
+    applyScopedTheme(el, 'emerald')
+    expect(el.style.getPropertyValue('--border-focus')).toBe(
+      'var(--accent-primary)',
+    )
+    expect(el.style.getPropertyValue('--card-bg')).toBe('var(--surface-panel)')
+    expect(el.style.getPropertyValue('--card-border')).toBe(
+      'var(--border-default)',
+    )
+    expect(el.style.getPropertyValue('--card-border-hover')).toBe(
+      'var(--border-hover)',
+    )
+    expect(el.style.getPropertyValue('--card-corner-color')).toBe(
+      'var(--fx-corner-color)',
+    )
+  })
+
+  it('半透明局部 token 不继承祖先不透明颜色的 RGB 伴生值', () => {
+    applyTheme(document.documentElement, 'light')
+    const el = host()
+    applyScopedTheme(el, 'dark-tech')
+    expect(el.style.getPropertyValue('--surface-panel-rgb')).toBe('initial')
+    applyScopedTheme(el, null)
+    expect(el.style.getPropertyValue('--surface-panel-rgb')).toBe('')
+  })
+
+  it('取消覆盖后跟随祖先的当前主题，保留布局与无关变量', () => {
+    applyTheme(document.documentElement, 'light')
+    const el = host()
+    document.body.append(el)
+    el.style.width = '1920px'
+    el.style.color = 'var(--accent-primary)'
+    el.style.setProperty('--local-layout', '40px')
+    applyScopedTheme(el, 'emerald')
+
+    applyTheme(document.documentElement, 'lava-amber')
+    expect(getComputedStyle(el).color).toBe('#2ee6a6')
+    applyScopedTheme(el, null)
+
+    expect(getComputedStyle(el).color).toBe('#ff8a3d')
+    expect(injected(el)).toEqual({})
+    expect(el.style.getPropertyValue('--card-bg')).toBe('')
+    expect(el.style.getPropertyValue('--border-focus')).toBe('')
+    expect(el.style.colorScheme).toBe('')
+    expect(el.style.width).toBe('1920px')
+    expect(el.style.getPropertyValue('--local-layout')).toBe('40px')
+  })
+
+  it.each(listThemes())('$name 不继承其它主题的附加变量', (theme) => {
+    applyTheme(document.documentElement, 'light')
+    const el = host()
+    applyScopedTheme(el, 'light')
+    applyScopedTheme(el, theme.id)
+    for (const name of EXTRA_VARS) {
+      expect(el.style.getPropertyValue(name)).not.toBe('')
+    }
+    expect(el.style.getPropertyValue('--card-corner-display')).toBe(
+      theme.mode === 'light' ? 'none' : 'block',
+    )
+  })
+
+  it('相邻与嵌套局部主题各自生效，内层恢复继承外层', () => {
+    const outer = host()
+    const inner = host()
+    const sibling = host()
+    outer.append(inner)
+    document.body.append(outer, sibling)
+    inner.style.color = 'var(--accent-primary)'
+    sibling.style.color = 'var(--accent-primary)'
+    applyScopedTheme(outer, 'emerald')
+    applyScopedTheme(inner, 'light')
+    applyScopedTheme(sibling, 'lava-amber')
+
+    expect(getComputedStyle(inner).color).toBe('#0098c8')
+    expect(getComputedStyle(sibling).color).toBe('#ff8a3d')
+    applyScopedTheme(inner, null)
+    expect(getComputedStyle(inner).color).toBe('#2ee6a6')
+  })
+
+  it('未知主题按默认深色注入，重复设置与取消都幂等', () => {
+    const el = host()
+    applyScopedTheme(el, 'no-such-theme')
+    expect(el.style.getPropertyValue('--accent-primary')).toBe('#00cefc')
+    const first = el.style.cssText
+    applyScopedTheme(el, 'dark-tech')
+    expect(el.style.cssText).toBe(first)
+    applyScopedTheme(el, null)
+    applyScopedTheme(el, null)
+    expect(el.style.cssText).toBe('')
+  })
+})
 
 function host(): HTMLElement {
   return document.createElement('div')

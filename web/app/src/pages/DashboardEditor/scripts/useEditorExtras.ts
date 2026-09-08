@@ -1,6 +1,5 @@
 /**
- * @fileoverview 编辑器周边件的接线：全屏预览态、画布右键菜单、导出 JSON、
- * 保存后 best-effort 截图。收在一处让页面只剩绑定；本地草稿流在 useEditorPageOps。
+ * @fileoverview 编辑器周边接线：预览、右键菜单、导出、保存截图、助手与快捷键。
  */
 import type { ReadRenderedSeries } from '@/runtime/renderedSeries'
 import { ref, type Ref } from 'vue'
@@ -51,6 +50,7 @@ export interface EditorExtrasDeps {
   consumePicker: () => boolean
   /** ops.save；截图挂在它成功之后。回执带失败原因，助手那条保存工具要如实抛。 */
   save: () => Promise<SaveOutcome>
+  isMetaDirty: () => boolean
   /** 确认弹窗宿主；由页面统一注入。 */
   confirm: {
     ask: (input: {
@@ -137,8 +137,8 @@ function saverOf(deps: EditorExtrasDeps): () => Promise<SaveOutcome> {
     const outcome = await deps.save()
     const current = deps.dashboard.value
     if (current === null) return outcome
-    // 保存失败时文档仍脏，草稿留着；成功才清
-    if (!deps.editor.isDirty.value) {
+    // ⚠ 元数据保存失败时节点树仍可能干净，必须同时检查保存回执。
+    if (outcome.isSaved && !deps.editor.isDirty.value && !deps.isMetaDirty()) {
       clearDraft(current.id)
       void captureThumbnail(current.id, deps.stageEl())
     }

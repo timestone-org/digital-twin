@@ -6,10 +6,11 @@
  * 会停在打开那一刻，而它与「设备停了」长得一模一样。
  */
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
-import { flushPromises, mount } from '@vue/test-utils'
+import { enableAutoUnmount, flushPromises, mount } from '@vue/test-utils'
 import { computed, ref, shallowRef } from 'vue'
 import { __resetConfigControls, __resetModules } from '@dt/modules'
 import { __resetProviders, listProviders } from '@dt/datasources'
+import { applyTheme } from '@dt/tokens'
 import type { DashboardPayload, ModuleConnectionState } from '@dt/contracts'
 
 import type * as DashboardBootstrap from '@/bootstrap/dashboard'
@@ -31,9 +32,12 @@ vi.mock('@/bootstrap/dashboard', async (importOriginal) => {
   }
 })
 
+const routeDashboardId = ref('d-1')
 vi.mock('vue-router', () => ({
   useRoute: () => ({
-    params: { dashboardId: 'd-1' },
+    get params() {
+      return { dashboardId: routeDashboardId.value }
+    },
     path: '/dashboards/d-1',
   }),
   useRouter: () => ({ push: vi.fn(), back: vi.fn() }),
@@ -88,9 +92,10 @@ const PAYLOAD: DashboardPayload = {
   ],
 }
 
+const dashboard = shallowRef<DashboardPayload | null>(PAYLOAD)
 vi.mock('@/composables/useDashboardDoc', () => ({
   useDashboardDoc: () => ({
-    dashboard: shallowRef(PAYLOAD),
+    dashboard,
     loading: ref(false),
     saving: ref(false),
     error: ref<string | null>(null),
@@ -101,7 +106,14 @@ vi.mock('@/composables/useDashboardDoc', () => ({
   }),
 }))
 
+enableAutoUnmount(afterEach)
+
+let originalRootStyle = ''
+
 beforeEach(() => {
+  originalRootStyle = document.documentElement.style.cssText
+  dashboard.value = PAYLOAD
+  routeDashboardId.value = 'd-1'
   resetEmbedContext()
   connectionState.value = 'open'
   __resetModules()
@@ -112,6 +124,7 @@ beforeEach(() => {
 })
 
 afterEach(() => {
+  document.documentElement.style.cssText = originalRootStyle
   vi.restoreAllMocks()
   resetEmbedContext()
 })
@@ -151,6 +164,64 @@ describe('嵌入外壳', () => {
     await flushPromises()
     expect(normal.text()).not.toContain('返回工作台')
     normal.unmount()
+  })
+})
+
+describe('大屏主题', () => {
+  it('未单独设置时继承系统主题，并跟随系统换色', async () => {
+    applyTheme(document.documentElement, 'light')
+    const wrapper = mount(DashboardView, { attachTo: document.body })
+    await flushPromises()
+    const host = wrapper.get<HTMLElement>('.h-screen').element
+    expect(host.classList.contains('text-text-primary')).toBe(true)
+    host.style.color = 'var(--accent-primary)'
+
+    expect(host.style.getPropertyValue('--accent-primary')).toBe('')
+    expect(getComputedStyle(host).color).toBe('#0098c8')
+    applyTheme(document.documentElement, 'emerald')
+    expect(getComputedStyle(host).color).toBe('#2ee6a6')
+    wrapper.unmount()
+  })
+
+  it('已保存的深色主题优先于嵌入浅色主题，且不改全局', async () => {
+    activateEmbed('light')
+    applyTheme(document.documentElement, 'light')
+    const globalStyle = document.documentElement.style.cssText
+    dashboard.value = { ...PAYLOAD, themeJson: { __base: 'dark-tech' } }
+    const wrapper = mount(DashboardView, { attachTo: document.body })
+    await flushPromises()
+    const host = wrapper.get<HTMLElement>('.h-screen').element
+    host.style.color = 'var(--accent-primary)'
+
+    expect(getComputedStyle(host).getPropertyValue('--surface-base')).toBe(
+      '#010d1e',
+    )
+    expect(host.style.colorScheme).toBe('dark')
+    expect(document.documentElement.style.cssText).toBe(globalStyle)
+    wrapper.unmount()
+    expect(document.documentElement.style.cssText).toBe(globalStyle)
+  })
+
+  it('跨屏期间沿用已加载主题，新屏清除覆盖后恢复系统主题', async () => {
+    applyTheme(document.documentElement, 'light')
+    const globalStyle = document.documentElement.style.cssText
+    dashboard.value = { ...PAYLOAD, themeJson: { __base: 'emerald' } }
+    const wrapper = mount(DashboardView, { attachTo: document.body })
+    await flushPromises()
+    const host = wrapper.get<HTMLElement>('.h-screen').element
+    host.style.color = 'var(--accent-primary)'
+    expect(getComputedStyle(host).color).toBe('#2ee6a6')
+
+    routeDashboardId.value = 'd-2'
+    await flushPromises()
+    expect(getComputedStyle(host).color).toBe('#2ee6a6')
+    dashboard.value = { ...PAYLOAD, id: 'd-2', themeJson: {} }
+    await flushPromises()
+
+    expect(host.style.getPropertyValue('--accent-primary')).toBe('')
+    expect(getComputedStyle(host).color).toBe('#0098c8')
+    expect(document.documentElement.style.cssText).toBe(globalStyle)
+    wrapper.unmount()
   })
 })
 

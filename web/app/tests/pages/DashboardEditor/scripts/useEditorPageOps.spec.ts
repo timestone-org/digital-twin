@@ -24,7 +24,10 @@ import {
   createEditorPageOps,
   type EditorPageOps,
 } from '@/pages/DashboardEditor/scripts/useEditorPageOps'
-import { useEditorMeta } from '@/pages/DashboardEditor/scripts/useEditorMeta'
+import {
+  useEditorMeta,
+  type EditorMeta,
+} from '@/pages/DashboardEditor/scripts/useEditorMeta'
 
 const guard = vi.hoisted(() => ({ current: null as (() => unknown) | null }))
 
@@ -104,6 +107,8 @@ function fakeDoc(): DashboardDoc {
 
 interface Harness {
   editor: DashboardEditor
+  meta: EditorMeta
+  file: DashboardDoc
   ops: EditorPageOps
   picking: ReturnType<typeof ref<string | null>>
   wrapper: ReturnType<typeof mount>
@@ -112,18 +117,21 @@ interface Harness {
 function setup(
   nodes: DashboardNodePayload[],
   manifest?: ModuleManifest,
+  targetDashboardId = 'db1',
 ): Harness {
   const picking = ref<string | null>(null)
+  const file = fakeDoc()
   let editor!: DashboardEditor
+  let meta!: EditorMeta
   let ops!: EditorPageOps
   const host = defineComponent({
     setup() {
       editor = useDashboardEditor(() => MANIFEST)
       editor.reset(nodes)
-      const file = fakeDoc()
+      meta = useEditorMeta(file.dashboard)
       const actions = createEditorActions({
         editor,
-        dashboardId: () => 'db1',
+        dashboardId: () => targetDashboardId,
         getManifest: () => MANIFEST,
         design: () => ({ width: 1920, height: 1080 }),
       })
@@ -132,7 +140,7 @@ function setup(
         getManifest: () => MANIFEST,
         design: () => ({ width: 1920, height: 1080 }),
         steps: () => ({ x: 10, y: 10 }),
-        dashboardId: () => 'db1',
+        dashboardId: () => targetDashboardId,
         chrome: {
           rules: computed(() => []),
           setInteractions: vi.fn(),
@@ -146,10 +154,10 @@ function setup(
         actions,
         arrange,
         file,
-        meta: useEditorMeta(file.dashboard),
+        meta,
         confirm: { ask: vi.fn(() => Promise.resolve(false)) },
         toast: { error: vi.fn(), success: vi.fn() },
-        dashboardId: () => 'db1',
+        dashboardId: () => targetDashboardId,
         pickingFieldKey: picking,
         getManifest: () => manifest,
       })
@@ -157,7 +165,7 @@ function setup(
     },
   })
   const wrapper = mount(host)
-  return { editor, ops, picking, wrapper }
+  return { editor, meta, file, ops, picking, wrapper }
 }
 
 beforeEach(() => {
@@ -167,6 +175,77 @@ beforeEach(() => {
 afterEach(() => {
   localStorage.clear()
   vi.restoreAllMocks()
+})
+
+describe('重新加载', () => {
+  it.each([{ __base: 'cobalt-deep' }, {}])(
+    '同一大屏重载采用服务器主题 %j，并清除未保存主题和布局',
+    async (themeJson) => {
+      const ctx = setup([node('a')])
+      ctx.meta.setTheme('light')
+      ctx.editor.select('a')
+      ctx.ops.toggleSelectedVisible(false)
+      const loaded = {
+        ...payload(),
+        themeJson,
+        nodes: [node('server')],
+        rowVersion: 8,
+        updatedAt: 'v-2',
+      }
+      vi.mocked(ctx.file.load).mockImplementationOnce(() => {
+        ctx.file.dashboard.value = loaded
+        return Promise.resolve(loaded)
+      })
+
+      await ctx.ops.reload()
+
+      expect(ctx.file.load).toHaveBeenCalledWith('db1', {
+        retainCurrentOnError: true,
+      })
+      expect(ctx.meta.draft.value?.themeJson).toEqual(themeJson)
+      expect(ctx.meta.isDirty.value).toBe(false)
+      expect(ctx.meta.toPatch()).toBeNull()
+      expect(ctx.editor.nodes.value.map((item) => item.id)).toEqual(['server'])
+      expect(ctx.editor.isDirty.value).toBe(false)
+      ctx.wrapper.unmount()
+    },
+  )
+
+  it('重新加载失败时保留未保存主题', async () => {
+    const ctx = setup([node('a')])
+    ctx.meta.setTheme('light')
+    vi.mocked(ctx.file.load).mockImplementationOnce((_id, options) => {
+      if (options?.retainCurrentOnError !== true) {
+        ctx.file.dashboard.value = null
+      }
+      return Promise.resolve(null)
+    })
+
+    await ctx.ops.reload()
+
+    expect(ctx.meta.draft.value?.themeJson).toEqual({ __base: 'light' })
+    expect(ctx.meta.isDirty.value).toBe(true)
+    expect(ctx.editor.nodes.value.map((item) => item.id)).toEqual(['a'])
+    ctx.wrapper.unmount()
+  })
+
+  it('切换到另一张屏失败时不保留旧屏，避免新地址显示旧内容', async () => {
+    const ctx = setup([node('a')], undefined, 'db2')
+    vi.mocked(ctx.file.load).mockImplementationOnce((_id, options) => {
+      if (options?.retainCurrentOnError !== true) {
+        ctx.file.dashboard.value = null
+      }
+      return Promise.resolve(null)
+    })
+
+    await ctx.ops.reload()
+
+    expect(ctx.file.load).toHaveBeenCalledWith('db2', {
+      retainCurrentOnError: false,
+    })
+    expect(ctx.file.dashboard.value).toBeNull()
+    ctx.wrapper.unmount()
+  })
 })
 
 describe('批量显隐', () => {

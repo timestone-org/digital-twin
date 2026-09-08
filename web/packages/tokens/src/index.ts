@@ -1,5 +1,6 @@
 export { CONTROL_SIZE_PX, observeThemeChange, readToken } from './theme'
 export {
+  applyScopedTheme,
   applyTheme,
   DEFAULT_THEME_ID,
   TOKEN_CSS_VAR,

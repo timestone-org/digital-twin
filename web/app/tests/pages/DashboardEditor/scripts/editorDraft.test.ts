@@ -41,6 +41,7 @@ function meta(over: Partial<EditorMetaDraft> = {}): EditorMetaDraft {
     description: null,
     designWidth: 1920,
     designHeight: 1080,
+    themeJson: {},
     chromeJson: { editor: { snap: { mode: 'px' } } },
     ...over,
   }
@@ -52,6 +53,31 @@ afterEach(() => {
 })
 
 describe('写读往返', () => {
+  it('主题覆盖和未知主题字段随本地草稿原样读回', () => {
+    const themeJson = { __base: 'light', custom: { accent: 'kept' } }
+    writeDraft('db1', 'v-2026', [], meta({ themeJson }))
+
+    expect(readDraft('db1', 'v-2026')?.meta?.themeJson).toEqual(themeJson)
+  })
+
+  it('旧 v2 草稿缺少主题字段仍可读回，不丢布局和其它元数据', () => {
+    const { themeJson, ...legacyMeta } = meta()
+    expect(themeJson).toEqual({})
+    localStorage.setItem(
+      KEY,
+      JSON.stringify({
+        version: 2,
+        basedOnUpdatedAt: 'v-2026',
+        nodes: [node('a')],
+        meta: legacyMeta,
+      }),
+    )
+
+    const draft = readDraft('db1', 'v-2026')
+    expect(draft?.nodes.map((item) => item.id)).toEqual(['a'])
+    expect(draft?.meta).toEqual(legacyMeta)
+  })
+
   it('v2 草稿带版本号、基版本、节点与元数据，原样读回', () => {
     writeDraft('db1', 'v-2026', [node('a')], meta())
 
@@ -82,6 +108,24 @@ describe('写读往返', () => {
 })
 
 describe('失效即清', () => {
+  it.each([null, [], 'light'])(
+    'themeJson 为 %j 时不是主题袋，拒绝损坏草稿',
+    (themeJson) => {
+      localStorage.setItem(
+        KEY,
+        JSON.stringify({
+          version: 2,
+          basedOnUpdatedAt: 'v-2026',
+          nodes: [],
+          meta: { ...meta(), themeJson },
+        }),
+      )
+
+      expect(readDraft('db1', 'v-2026')).toBeNull()
+      expect(localStorage.getItem(KEY)).toBeNull()
+    },
+  )
+
   it('旧版无版本号的草稿（丢元数据轴的那一代）不认并清掉', () => {
     // v1 形状：没有 version 与 meta，只有节点——直接塞进存储模拟存量
     localStorage.setItem(

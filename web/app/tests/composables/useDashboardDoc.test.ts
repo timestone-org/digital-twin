@@ -110,6 +110,20 @@ describe('加载', () => {
     expect(doc.error.value).toBe('大屏不存在')
   })
 
+  it('编辑器重载失败时保留当前大屏，并照常给出错误', async () => {
+    vi.spyOn(dashboardApi, 'getDashboard')
+      .mockResolvedValueOnce(payload('d1'))
+      .mockRejectedValueOnce(new BizError(50000, '暂时不可用', 500, 't'))
+    const doc = useDashboardDoc()
+    await doc.load('d1')
+
+    const loaded = await doc.load('d1', { retainCurrentOnError: true })
+
+    expect(loaded).toBeNull()
+    expect(doc.dashboard.value?.id).toBe('d1')
+    expect(doc.error.value).toBe('暂时不可用')
+  })
+
   it('卸载之后返回的那次不再写状态', async () => {
     const first = deferred<DashboardPayload>()
     vi.spyOn(dashboardApi, 'getDashboard').mockReturnValue(first.promise)

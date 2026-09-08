@@ -12,8 +12,9 @@ import {
   clearDraft,
   readDraft,
   writeDraft,
+  type StoredEditorMeta,
 } from './editorDraft'
-import type { EditorMeta, EditorMetaDraft } from './useEditorMeta'
+import type { EditorMeta } from './useEditorMeta'
 
 export interface DraftFlowDeps {
   editor: DashboardEditor
@@ -44,12 +45,13 @@ function isSameJson(left: unknown, right: unknown): boolean {
 }
 
 /** 把草稿里的元数据经既有 setter 逐项回灌；editor 段（吸附/栅格）走归一化口。 */
-function restoreMeta(deps: DraftFlowDeps, saved: EditorMetaDraft): void {
+function restoreMeta(deps: DraftFlowDeps, saved: StoredEditorMeta): void {
   const { meta } = deps
   meta.setField('name', saved.name)
   meta.setField('description', saved.description)
   meta.setField('designWidth', saved.designWidth)
   meta.setField('designHeight', saved.designHeight)
+  if (saved.themeJson !== undefined) meta.setThemeJson(saved.themeJson)
   const current = meta.draft.value?.chromeJson ?? {}
   const sections = new Set([
     ...Object.keys(current),

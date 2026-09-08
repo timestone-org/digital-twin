@@ -14,6 +14,7 @@ import type {
 } from '@/features/dashboard/canvasSnap'
 import type { CanvasZoom } from '@/features/dashboard/canvasZoom'
 import type { EditorFrame } from '@/features/dashboard/editorLayout'
+import { useDashboardTheme } from '@/features/dashboard/useDashboardTheme'
 import { rectStyleOf } from '../scripts/canvasViewport'
 import { useCanvasWiring, type CanvasEmit } from '../scripts/useCanvasWiring'
 import CanvasGuides from './CanvasGuides.vue'
@@ -58,6 +59,8 @@ const {
   centerOn,
 } = useCanvasWiring(props, emit)
 
+useDashboardTheme(stageRef)
+
 // stageRef 给保存后截图用：舞台元素是设计坐标系的根
 defineExpose({ centerOn, fitScale, stageRef })
 </script>
@@ -73,7 +76,7 @@ defineExpose({ centerOn, fitScale, stageRef })
     <div class="dt-canvas__wrap" :style="wrapStyle">
       <div
         ref="stageRef"
-        class="dt-canvas__stage"
+        class="dt-canvas__stage text-text-primary"
         :style="stageStyle"
         @dragover="palette.onDragOver"
         @dragleave="palette.onDragLeave"

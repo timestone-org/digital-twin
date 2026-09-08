@@ -9,7 +9,7 @@ import { fileURLToPath } from 'node:url'
 
 import { describe, expect, it } from 'vitest'
 
-import { TOKEN_CSS_VAR } from '../src/themeEngine'
+import { SCOPED_THEME_DEFAULTS, TOKEN_CSS_VAR } from '../src/themeEngine'
 import { DEFAULT_PRESET, THEME_PRESETS } from '../src/themePresets'
 import type { ThemeDefinition } from '../src/themeTokens'
 
@@ -213,6 +213,30 @@ describe('预设的取值形状', () => {
 })
 
 describe('注入面与 tokens.scss 对得上', () => {
+  it('局部主题补齐全部附加变量及主题派生别名，默认值与样式表同源', () => {
+    const controlled = new Set([
+      ...Object.values(TOKEN_CSS_VAR),
+      ...Object.values(TOKEN_CSS_VAR).map((name) => `${name}-rgb`),
+    ])
+    const expected = new Map<string, string>()
+    for (const theme of THEME_PRESETS) {
+      for (const name of Object.keys(theme.extraVars ?? {})) {
+        expected.set(name, DECLARED.get(name) ?? '')
+      }
+    }
+    for (const [name, value] of DECLARED) {
+      const target = /^var\((--[a-z0-9-]+)\)$/.exec(value)?.[1]
+      if (
+        !controlled.has(name) &&
+        target !== undefined &&
+        controlled.has(target)
+      ) {
+        expected.set(name, value)
+      }
+    }
+    expect(SCOPED_THEME_DEFAULTS).toEqual(Object.fromEntries(expected))
+  })
+
   it.each(Object.entries(TOKEN_CSS_VAR))(
     '%s 写的 %s 在 tokens.scss 里声明过',
     (_path, cssVar) => {

@@ -33,7 +33,7 @@ export interface DashboardPayload {
   designWidth: number
   /** 设计坐标系高度（像素），默认 1080。 */
   designHeight: number
-  /** 屏级主题 token 覆盖，盖在项目主题之上。 */
+  /** `__base` 为单屏内置主题 id；缺失时跟随系统当前主题。 */
   themeJson: Record<string, unknown>
   /** 屏级卡片框与模块外观默认值。 */
   chromeJson: Record<string, unknown>
