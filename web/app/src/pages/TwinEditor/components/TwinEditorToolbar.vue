@@ -5,7 +5,8 @@
  * 这里不再自带一个，免得同一行上有两个「返回」。
  * 工具栏自己不改文档，只把动作抛给页面统一编排。
  */
-import { DtButton, DtTag } from '@dt/ui'
+import type { TwinNavigationMode } from '@dt/twin-config'
+import { DtButton, DtSegmented, DtTag } from '@dt/ui'
 import { computed } from 'vue'
 
 const props = defineProps<{
@@ -14,6 +15,7 @@ const props = defineProps<{
   canUndo: boolean
   canRedo: boolean
   issueCount: number
+  navigationMode: TwinNavigationMode
 }>()
 
 const emit = defineEmits<{
@@ -21,13 +23,34 @@ const emit = defineEmits<{
   undo: []
   redo: []
   toggleIssues: []
+  'update:navigationMode': [mode: TwinNavigationMode]
 }>()
 
 const hasIssues = computed(() => props.issueCount > 0)
+const NAVIGATION_OPTIONS = [
+  { value: 'orbit', label: '轨道操作' },
+  { value: 'game', label: '游戏操作' },
+] as const
+
+/** 分段控件给回来的是裸字符串；只接受已声明的两档。 */
+function onNavigationMode(value: string): void {
+  const option = NAVIGATION_OPTIONS.find((item) => item.value === value)
+  if (option !== undefined) emit('update:navigationMode', option.value)
+}
 </script>
 
 <template>
   <div class="dt-twin-bar" role="toolbar" aria-label="孪生编辑器工具条">
+    <DtSegmented
+      :model-value="navigationMode"
+      :options="NAVIGATION_OPTIONS"
+      size="sm"
+      aria-label="编辑视口操作模式"
+      @update:model-value="onNavigationMode"
+    />
+
+    <span class="dt-twin-bar__sep" />
+
     <DtButton
       size="sm"
       variant="ghost"

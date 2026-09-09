@@ -10,6 +10,7 @@
 import type {
   TwinConfig,
   TwinDistanceRef,
+  TwinNavigationMode,
   TwinPose,
   Vec3,
 } from '@dt/twin-config'
@@ -29,6 +30,7 @@ import {
 import * as THREE from 'three'
 
 import { flowMidpointOf, panelPositionOf } from './distanceBasis'
+import { GameNavigationControls } from './gameNavigationControls'
 import { distanceContextOf, distanceResolver } from './distanceContext'
 import { createFrameClock } from './frameClock'
 import { resolveTwinModelUrl } from './host'
@@ -233,6 +235,8 @@ export class EditorScene {
   private helpers: THREE.Group | null = null
   private selectionBox: THREE.Box3Helper | null = null
   private gizmo: TransformGizmo | null = null
+  private gameNavigation: GameNavigationControls | null = null
+  private navigationMode: TwinNavigationMode = 'orbit'
   private gizmoMode: GizmoMode = 'translate'
   private marquee: MarqueeGesture | null = null
   private modelObject: THREE.Object3D | null = null
@@ -313,6 +317,12 @@ export class EditorScene {
     this.pickMode = mode
     this.container.style.cursor = mode === null ? '' : 'crosshair'
     this.syncGizmo()
+  }
+
+  /** 切编辑视口的手动操作方式；只改本地视口，不写入孪生配置。 */
+  setNavigationMode(mode: TwinNavigationMode): void {
+    this.navigationMode = mode
+    this.gameNavigation?.setMode(mode)
   }
 
   /**
@@ -464,6 +474,8 @@ export class EditorScene {
     this.picks = null
     this.gizmo?.dispose()
     this.gizmo = null
+    this.gameNavigation?.dispose()
+    this.gameNavigation = null
     this.marquee?.dispose()
     this.marquee = null
     if (this.core !== null) disposeScene(this.core)
@@ -502,6 +514,12 @@ export class EditorScene {
       onChange: (change) => this.on.entityTransform(change),
       onDragEnd: () => this.on.entityTransformEnd(),
     })
+    this.gameNavigation = new GameNavigationControls({
+      core,
+      surface: core.renderer.domElement,
+      span: () => this.modelSpan,
+    })
+    this.gameNavigation.setMode(this.navigationMode)
     core.scene.add(this.picks.group, this.helpers, this.selectionBox)
     this.attach(core)
     this.measure()
@@ -519,6 +537,7 @@ export class EditorScene {
     surface.addEventListener('pointerup', this.onPointerUp)
     surface.addEventListener('pointercancel', this.onPointerCancel)
     core.controls.addEventListener('end', this.onControlsEnd)
+    core.controls.addEventListener('start', this.onControlsStart)
     this.observer = new ResizeObserver(this.measure)
     this.observer.observe(this.container)
   }
@@ -532,6 +551,7 @@ export class EditorScene {
       surface.removeEventListener('pointercancel', this.onPointerCancel)
     }
     this.core?.controls.removeEventListener('end', this.onControlsEnd)
+    this.core?.controls.removeEventListener('start', this.onControlsStart)
     this.surface = null
   }
 
@@ -795,6 +815,7 @@ export class EditorScene {
     // ⚠ 喂帧钟夹过的时长：标签页切走再回来那一帧有几十秒，直接算下去预览会一帧飞完
     this.advanceRoam(delta * MS_PER_S, core)
     this.flight.advance(delta * MS_PER_S)
+    this.gameNavigation?.advance(delta)
     // ⚠ 宿主被折叠（clientHeight 为 0）时不换算标记尺寸：拿 0 当视口高度算出来的
     // 世界尺寸会把相机整个包进标记球里，之后连点都点不中，而画面上什么异常都看不出
     const height = this.container.clientHeight
@@ -816,11 +837,20 @@ export class EditorScene {
     this.emitCamera()
   }
 
+  private readonly onControlsStart = (): void => {
+    this.stopRoamPreview()
+    this.flight.cancel()
+  }
+
   private readonly onPointerDown = (event: PointerEvent): void => {
     // ⚠ 用户一碰视口就停预览、停飞行：镜头还自己往前飞会变成两个人抢方向盘
     this.stopRoamPreview()
     this.flight.cancel()
     this.shiftSelectingPartNodes = false
+    if (this.navigationMode === 'game') {
+      this.downValid = false
+      return
+    }
     // 只有左侧已经选中部件时 Shift 才接管。否则 Shift 仍留给普通视口操作，
     // 不能平白画出一个最终也不知道该写回哪个部件的框。
     if (this.canShiftSelectPartNodes() && this.marquee?.down(event) === true) {

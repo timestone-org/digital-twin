@@ -614,6 +614,10 @@ export interface TwinCamera {
   isDefault: boolean
 }
 
+/** 3D 视口的手动操作方式：轨道观察，或游戏式第一人称移动。 */
+export const TWIN_NAVIGATION_MODES = ['orbit', 'game'] as const
+export type TwinNavigationMode = (typeof TWIN_NAVIGATION_MODES)[number]
+
 /** 视点切换控件的形态。 */
 export const TWIN_VIEWPOINT_MODES = ['buttons', 'dropdown'] as const
 export type TwinViewpointMode = (typeof TWIN_VIEWPOINT_MODES)[number]

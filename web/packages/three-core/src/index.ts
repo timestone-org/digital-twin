@@ -67,6 +67,8 @@ export {
 } from './host'
 export type { TwinModelHost } from './host'
 export { EditorScene } from './editorScene'
+export { GameNavigationControls } from './gameNavigationControls'
+export type { GameNavigationOptions } from './gameNavigationControls'
 export { TransformGizmo } from './transformGizmo'
 export type { GizmoChange, GizmoKind, GizmoMode } from './transformGizmo'
 export type {

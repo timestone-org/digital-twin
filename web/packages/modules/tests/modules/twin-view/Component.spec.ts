@@ -16,6 +16,7 @@ const scene = vi.hoisted(() => ({
     props: {
       config: { type: Object, required: true },
       values: { type: Object, default: undefined },
+      navigationMode: { type: String, default: undefined },
     },
     template: '<div class="scene-stub" />',
   },
@@ -61,6 +62,26 @@ describe('孪生场景的装配', () => {
     const wrapper = await render({})
 
     expect(wrapper.find('.scene-stub').exists()).toBe(true)
+  })
+
+  it('预览操作模式独立按模块配置传给 3D 宿主', async () => {
+    const wrapper = await render({ navigationMode: 'game' })
+
+    expect(wrapper.getComponent(scene.TwinScene).props('navigationMode')).toBe(
+      'game',
+    )
+  })
+
+  it('缺少或写错预览操作模式时回落到现有的轨道操作', async () => {
+    const missing = await render({})
+    const invalid = await render({ navigationMode: 'fly' })
+
+    expect(missing.getComponent(scene.TwinScene).props('navigationMode')).toBe(
+      'orbit',
+    )
+    expect(invalid.getComponent(scene.TwinScene).props('navigationMode')).toBe(
+      'orbit',
+    )
   })
 })
 

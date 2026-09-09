@@ -3,7 +3,11 @@
  * 标题那几档的取值范围与组件的白名单是同一份，以及配置面按标题/运行态/模型分组。
  * ⚠ 分组名等于模块名时属性面板等于没分组——一个折叠段装下全部字段。
  */
-import { TWIN_CONFIG_KEY, TWIN_VIEW_BINDINGS } from '@dt/twin-config'
+import {
+  TWIN_CONFIG_KEY,
+  TWIN_NAVIGATION_MODES,
+  TWIN_VIEW_BINDINGS,
+} from '@dt/twin-config'
 import { describe, expect, it } from 'vitest'
 
 import manifest from '../../../src/modules/twin-view/manifest'
@@ -46,6 +50,7 @@ describe('孪生清单的声明', () => {
       'title',
       'showSceneTools',
       'showStructureTree',
+      'navigationMode',
       TWIN_CONFIG_KEY,
     ])
   })
@@ -68,6 +73,7 @@ describe('孪生清单的分组', () => {
     expect(groupOf('title')).toBe('标题')
     expect(groupOf('titlePosition')).toBe('标题')
     expect(groupOf('titleFontSize')).toBe('标题')
+    expect(groupOf('navigationMode')).toBe('运行态')
     expect(groupOf(TWIN_CONFIG_KEY)).toBe('模型')
   })
 })
@@ -90,6 +96,11 @@ describe('孪生清单的取值范围', () => {
   //   给上 default 等于改存量大屏的渲染
   it('标题刻意不给缺省', () => {
     expect(field('title')?.default).toBeUndefined()
+  })
+
+  it('预览操作模式只允许轨道与游戏两档，存量配置回落轨道操作', () => {
+    expect(optionValues('navigationMode')).toEqual(TWIN_NAVIGATION_MODES)
+    expect(field('navigationMode')?.default).toBe('orbit')
   })
 })
 

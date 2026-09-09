@@ -8,6 +8,7 @@
 import type {
   TwinConfig,
   TwinFocusView,
+  TwinNavigationMode,
   TwinPart,
   TwinSceneValues,
 } from '@dt/twin-config'
@@ -16,6 +17,7 @@ import type * as THREE from 'three'
 import { computed, onBeforeUnmount, onMounted, provide, ref, watch } from 'vue'
 
 import { GroundGridLayer } from './groundGrid'
+import { GameNavigationControls } from './gameNavigationControls'
 import { ModelAnimations } from './modelAnimations'
 import TwinPartModal from './TwinPartModal.vue'
 import TwinRoamControls from './TwinRoamControls.vue'
@@ -67,6 +69,8 @@ const props = defineProps<{
   sceneTitle?: string
   /** 显示只读结构树：浏览层级、勾选显隐、点击定位。 */
   showStructureTree?: boolean
+  /** 手动操作方式；缺省保持现有的轨道操作。 */
+  navigationMode?: TwinNavigationMode
 }>()
 
 /** 点中了某个部件，且通过了距离门禁。 */
@@ -78,6 +82,7 @@ let core: SceneCore | null = null
 let layers: SceneLayers | null = null
 let groundGrid: GroundGridLayer | null = null
 let animations: ModelAnimations | null = null
+let gameNavigation: GameNavigationControls | null = null
 let nodeIndex: NodeIndex = EMPTY_NODE_INDEX
 
 /** 模型包围盒对角线；相机、图层与剪裁面都按它定尺度。 */
@@ -176,7 +181,9 @@ usePartClick({
   parts: () => layers?.parts ?? null,
   onNearClick,
   onFarClick,
-  intercept: tools.interceptClick,
+  // 游戏档的一次左键只负责捕获鼠标，不能顺手点中模型里的部件
+  intercept: (event) =>
+    props.navigationMode === 'game' || tools.interceptClick(event),
 })
 const structure = useStructureTree({
   core: () => core,
@@ -204,6 +211,7 @@ const loop = useRenderLoop({
     // 漫游开播即接管镜头：半路的飞行就地取消，免得两边同帧抢方向盘
     if (roam.playing.value) flight.cancel()
     flight.advance(deltaS * MS_PER_S)
+    gameNavigation?.advance(deltaS)
     // ⚠ 每帧都要算：镜头一直在动，距离规则的成立与否随时在变
     if (core !== null) layers?.applyDistanceRules(distanceContextOf(core))
   },
@@ -221,7 +229,7 @@ const tintValues = computed(() => sceneValuesOf(props).parts)
 
 function refreshLayers(): void {
   if (core === null) return
-  core.controls.autoRotate = props.config.model.autoRotate
+  syncNavigationMode()
   // ⚠ 摆放要跟着配置重算：只在装载时应用的话，编辑器里改缩放/位移/旋转
   // 会一直到换模型才生效，中间那段是「调了没反应」
   placeModel()
@@ -229,6 +237,15 @@ function refreshLayers(): void {
   layers?.build(props.config, liveValues(), nodeIndex)
   // ⚠ 建完立刻按当前机位算一次：等下一帧的话，配了近距隐藏的元素会先露一帧
   layers?.applyDistanceRules(distanceContextOf(core))
+}
+
+/** 操作模式与模型自转共用 OrbitControls，任一变化都从这里对账。 */
+function syncNavigationMode(): void {
+  const mode = props.navigationMode ?? 'orbit'
+  gameNavigation?.setMode(mode)
+  if (core !== null) {
+    core.controls.autoRotate = mode === 'orbit' && props.config.model.autoRotate
+  }
 }
 
 /**
@@ -253,6 +270,12 @@ onMounted(() => {
   const renderer = createWebGLRenderer()
   if (renderer === null) return model.fail(WEBGL_UNAVAILABLE_MESSAGE)
   core = createSceneCore({ container: element, renderer })
+  gameNavigation = new GameNavigationControls({
+    core,
+    surface: core.renderer.domElement,
+    span: modelSpan,
+  })
+  syncNavigationMode()
   layers = new SceneLayers(element)
   layers.addTo(core.scene)
   groundGrid = new GroundGridLayer(core.scene, element)
@@ -281,6 +304,8 @@ onBeforeUnmount(() => {
   model.abort()
   viewpoints.detach()
   flight.cancel()
+  gameNavigation?.dispose()
+  gameNavigation = null
   core?.controls.removeEventListener('start', flight.cancel)
   disposeLayers()
   if (core !== null) disposeScene(core)
@@ -293,6 +318,7 @@ watch(
   () => void model.load(),
 )
 watch(() => props.focusView, sceneCamera.applyView)
+watch(() => props.navigationMode, syncNavigationMode)
 watch(
   () => props.config,
   (config) => {
@@ -335,6 +361,13 @@ watch(liveValues, (values) => layers?.setValues(values))
       @next="roam.next()"
       @prev="roam.prev()"
     />
+    <div
+      v-if="navigationMode === 'game'"
+      class="twin-scene__game-hint"
+      data-test="game-navigation-hint"
+    >
+      单击画面捕获鼠标 · WASD 平移 · 空格上升 · Shift 下降 · 鼠标转向 · Esc 释放
+    </div>
     <TwinPartModal
       :part="detail.part.value"
       :parts="config.parts"
@@ -354,5 +387,21 @@ watch(liveValues, (values) => layers?.setValues(values))
   width: 100%;
   height: 100%;
   overflow: hidden;
+
+  &__game-hint {
+    position: absolute;
+    top: 12px;
+    left: 50%;
+    z-index: var(--z-sticky);
+    padding: 5px 10px;
+    font-size: 12px;
+    color: var(--text-secondary);
+    white-space: nowrap;
+    pointer-events: none;
+    background: var(--surface-sunken);
+    border: 1px solid var(--border-default);
+    border-radius: var(--radius-pill);
+    transform: translateX(-50%);
+  }
 }
 </style>

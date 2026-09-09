@@ -9,7 +9,7 @@
  * 右栏「初始可见」只进持久化配置，两者不共用状态。
  */
 import { collectTwinConfigIssues } from '@dt/twin-config'
-import type { Vec3 } from '@dt/twin-config'
+import type { TwinNavigationMode, Vec3 } from '@dt/twin-config'
 import { DtPageState, useConfirm, useToast } from '@dt/ui'
 import { computed, ref } from 'vue'
 import { onBeforeRouteLeave, useRoute } from 'vue-router'
@@ -58,6 +58,8 @@ const page = useTwinEditorPage(
 
 const selection = ref<TwinSelection>(TWIN_SELECT_MODEL)
 const showIssues = ref(false)
+/** 只管当前编辑视口；预览用的模式来自模块专属配置，二者刻意独立。 */
+const editorNavigationMode = ref<TwinNavigationMode>('orbit')
 /** 刚建出来的夹 id；左栏大纲拿它立刻进入就地重命名。 */
 const renamingFolderId = ref<string | null>(null)
 /** 模型里的全部节点名，视口加载完给的；部件检查器要用。 */
@@ -194,10 +196,12 @@ useUnsavedGuard(() => page.doc.value?.isDirty.value === true)
         :can-undo="page.doc.value?.canUndo.value ?? false"
         :can-redo="page.doc.value?.canRedo.value ?? false"
         :issue-count="issues.length"
+        :navigation-mode="editorNavigationMode"
         @save="save"
         @undo="page.doc.value?.undo()"
         @redo="page.doc.value?.redo()"
         @toggle-issues="showIssues = !showIssues"
+        @update:navigation-mode="editorNavigationMode = $event"
       />
     </template>
 
@@ -243,6 +247,7 @@ useUnsavedGuard(() => page.doc.value?.isDirty.value === true)
               :config="hidden.config.value ?? config"
               :selection="selection"
               :pick-mode="viewport.pickMode.value"
+              :navigation-mode="editorNavigationMode"
               :pick-hint="
                 viewport.isPlacingPanel.value
                   ? '在模型表面点一下，新信息牌会吸附到那个点'

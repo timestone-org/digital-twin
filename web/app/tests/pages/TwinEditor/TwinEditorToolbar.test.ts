@@ -13,6 +13,7 @@ interface ToolbarProps {
   canUndo: boolean
   canRedo: boolean
   issueCount: number
+  navigationMode: 'orbit' | 'game'
 }
 
 function mountToolbar(over: Partial<ToolbarProps> = {}) {
@@ -23,6 +24,7 @@ function mountToolbar(over: Partial<ToolbarProps> = {}) {
       canUndo: false,
       canRedo: false,
       issueCount: 0,
+      navigationMode: 'orbit',
       ...over,
     },
   })
@@ -85,6 +87,31 @@ describe('撤销重做', () => {
     expect(wrapper.find('[data-test="redo"]').attributes('aria-label')).toBe(
       '重做',
     )
+  })
+})
+
+describe('编辑视口操作模式', () => {
+  it('顶栏显示轨道操作与游戏操作，并标出当前模式', () => {
+    const wrapper = mountToolbar({ navigationMode: 'game' })
+    const switcher = wrapper.get('[aria-label="编辑视口操作模式"]')
+
+    expect(switcher.text()).toContain('轨道操作')
+    expect(switcher.text()).toContain('游戏操作')
+    expect(
+      switcher
+        .findAll('button')
+        .map((button) => button.attributes('aria-pressed')),
+    ).toEqual(['false', 'true'])
+  })
+
+  it('切换只抛编辑视口模式，不改孪生文档', async () => {
+    const wrapper = mountToolbar()
+
+    await wrapper
+      .get('[aria-label="编辑视口操作模式"] button:last-child')
+      .trigger('click')
+
+    expect(wrapper.emitted('update:navigationMode')).toEqual([['game']])
   })
 })
 

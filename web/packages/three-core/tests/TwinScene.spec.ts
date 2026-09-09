@@ -460,6 +460,28 @@ describe('快照登记', () => {
   })
 })
 
+describe('游戏操作模式', () => {
+  it('游戏档显示 Pointer Lock 与 WASD 操作提示', async () => {
+    const wrapper = mountScene({ navigationMode: 'game' })
+    await flushPromises()
+
+    expect(wrapper.get('[data-test="game-navigation-hint"]').text()).toContain(
+      'WASD',
+    )
+    wrapper.unmount()
+  })
+
+  it('缺省轨道档不遮一条游戏操作提示', async () => {
+    const wrapper = mountScene()
+    await flushPromises()
+
+    expect(wrapper.find('[data-test="game-navigation-hint"]').exists()).toBe(
+      false,
+    )
+    wrapper.unmount()
+  })
+})
+
 describe('卸载清理', () => {
   it('渲染上下文被丢，两层画布从宿主摘走', async () => {
     const wrapper = mountScene()

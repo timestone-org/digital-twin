@@ -12,7 +12,12 @@ import {
   type TwinCameraPose,
   type TwinPickMode,
 } from '@dt/three-core'
-import type { TwinConfig, TwinDistanceRef, Vec3 } from '@dt/twin-config'
+import type {
+  TwinConfig,
+  TwinDistanceRef,
+  TwinNavigationMode,
+  Vec3,
+} from '@dt/twin-config'
 import { DEFAULT_CAMERA_FOV } from '@dt/twin-config'
 import { DtButton, DtNotice, DtSpinner } from '@dt/ui'
 import { computed, onBeforeUnmount, onMounted, ref, watch } from 'vue'
@@ -25,6 +30,8 @@ const props = defineProps<{
   config: TwinConfig
   selection: TwinSelection | null
   pickMode: TwinPickMode
+  /** 编辑视口本次使用的操作方式，不从持久化预览配置读取。 */
+  navigationMode: TwinNavigationMode
   /** 覆盖拾取提示条的文案；不给就按 `pickMode` 用缺省的两句。 */
   pickHint?: string | undefined
   /** 坐标轴手柄的模式；箭头与钉死朝向的信息牌用得上 `rotate`。 */
@@ -155,6 +162,7 @@ onMounted(() => {
   })
   scene.setSelection(props.selection)
   scene.setPickMode(props.pickMode)
+  scene.setNavigationMode(props.navigationMode)
   // 挂载时视口已经错过了此前的每一次 watch，首帧值要在这里补一次
   if (props.values !== undefined) scene.setValues(props.values)
   window.addEventListener('keydown', onKeydown)
@@ -177,6 +185,10 @@ watch(
 watch(
   () => props.pickMode,
   (value) => scene?.setPickMode(value),
+)
+watch(
+  () => props.navigationMode,
+  (value) => scene?.setNavigationMode(value),
 )
 watch(
   () => props.gizmoMode,
@@ -244,6 +256,14 @@ defineExpose({
         >
           取消
         </DtButton>
+      </div>
+      <div
+        v-if="navigationMode === 'game' && pickHint === ''"
+        class="twin-viewport__game-hint"
+        data-test="game-navigation-hint"
+      >
+        单击视口捕获鼠标 · WASD 平移 · 空格上升 · Shift 下降 · 鼠标转向 · Esc
+        释放
       </div>
     </div>
   </div>
@@ -325,6 +345,21 @@ defineExpose({
 
   &__pick-cancel {
     pointer-events: auto;
+  }
+
+  &__game-hint {
+    position: absolute;
+    top: 8px;
+    left: 50%;
+    padding: 5px 10px;
+    font-size: 12px;
+    color: var(--text-secondary);
+    white-space: nowrap;
+    pointer-events: none;
+    background: var(--surface-sunken);
+    border: 1px solid var(--border-default);
+    border-radius: var(--radius-pill);
+    transform: translateX(-50%);
   }
 }
 </style>

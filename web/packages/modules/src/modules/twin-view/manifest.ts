@@ -5,6 +5,7 @@
  */
 import {
   TWIN_CONFIG_KEY,
+  TWIN_NAVIGATION_MODES,
   TWIN_VIEW_BINDINGS,
   normalizeTwinConfig,
   twinRowCounts,
@@ -53,6 +54,7 @@ export default defineModule({
     'title',
     'showSceneTools',
     'showStructureTree',
+    'navigationMode',
     TWIN_CONFIG_KEY,
   ],
   configSchema: [
@@ -109,6 +111,20 @@ export default defineModule({
       // ⚠ 同样刻意不给 default：缺省即 false = 不显示，存量大屏零回归
       span: 'full',
       help: '在运行态左下角提供只读模型结构树，支持层级浏览、临时显隐和定位；不写回配置。',
+    },
+    {
+      key: 'navigationMode',
+      label: '预览操作模式',
+      type: 'enum',
+      group: '运行态',
+      default: 'orbit',
+      span: 'full',
+      options: TWIN_NAVIGATION_MODES.map((value) => ({
+        value,
+        label:
+          value === 'orbit' ? '轨道操作' : '游戏操作（WASD / 空格 / Shift）',
+      })),
+      help: '决定运行态预览与发布后的 3D 画面如何操作；与孪生编辑器顶栏当前选择相互独立。游戏操作用 WASD 前后左右、空格上升、Shift 下降，按 Esc 释放鼠标。',
     },
     {
       key: TWIN_CONFIG_KEY,

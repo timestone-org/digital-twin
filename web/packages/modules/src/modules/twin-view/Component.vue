@@ -15,6 +15,7 @@ import {
   TWIN_ARROW_BINDING_KEY,
   TWIN_CONFIG_KEY,
   TWIN_FLOW_BINDING_KEY,
+  TWIN_NAVIGATION_MODES,
   TWIN_PANEL_BINDING_KEY,
   TWIN_PART_BINDING_KEY,
   TWIN_PART_FIELD_BINDING_KEY,
@@ -82,6 +83,9 @@ const title = computed(() => readText(props.config.title))
 const showSceneTools = computed(() => readBoolean(props.config.showSceneTools))
 const showStructureTree = computed(() =>
   readBoolean(props.config.showStructureTree),
+)
+const navigationMode = computed(() =>
+  readEnum(props.config.navigationMode, TWIN_NAVIGATION_MODES, 'orbit'),
 )
 
 /**
@@ -209,6 +213,7 @@ const titleStyle = computed<CSSProperties>(() => ({
       :values="live"
       :show-scene-tools="showSceneTools"
       :show-structure-tree="showStructureTree"
+      :navigation-mode="navigationMode"
       :scene-title="title"
       @part-click="onPartClick"
     />

@@ -724,6 +724,15 @@ describe('视口拾取', () => {
     })
   })
 
+  it('游戏操作的一次左键只捕获鼠标，不顺手改选中', async () => {
+    const harness = await ready()
+    harness.scene.setNavigationMode('game')
+
+    click(harness, CENTER_X, CENTER_Y)
+
+    expect(harness.events.select).not.toHaveBeenCalled()
+  })
+
   it('左侧选中部件后 Shift 单击把节点交给连续选择，不改当前选中', async () => {
     const harness = await ready()
     harness.scene.setSelection({ kind: 'parts', id: 'part-pump' })

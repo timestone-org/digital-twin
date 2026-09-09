@@ -30,6 +30,7 @@ interface SceneStub {
   setConfig: Mock
   setSelection: Mock
   setPickMode: Mock
+  setNavigationMode: Mock
   focus: Mock
   snapshot: Mock
   measureDistance: Mock
@@ -56,6 +57,7 @@ vi.mock('@dt/three-core', async (importOriginal) => {
     readonly setConfig = vi.fn()
     readonly setSelection = vi.fn()
     readonly setPickMode = vi.fn()
+    readonly setNavigationMode = vi.fn()
     readonly focus = vi.fn()
     readonly snapshot = vi.fn(() => seam.pose)
     readonly measureDistance = vi.fn(() => seam.measured)
@@ -75,7 +77,13 @@ function twinConfig(overrides: Record<string, unknown> = {}): TwinConfig {
 
 function mountViewport(props: Record<string, unknown> = {}) {
   return mount(TwinViewport, {
-    props: { config: twinConfig(), selection: null, pickMode: null, ...props },
+    props: {
+      config: twinConfig(),
+      selection: null,
+      pickMode: null,
+      navigationMode: 'orbit',
+      ...props,
+    },
     attachTo: document.body,
   })
 }
@@ -114,6 +122,7 @@ describe('接线', () => {
       id: 'a1',
     })
     expect(scene().setPickMode).toHaveBeenCalledWith('node')
+    expect(scene().setNavigationMode).toHaveBeenCalledWith('orbit')
     wrapper.unmount()
   })
 
@@ -137,6 +146,23 @@ describe('接线', () => {
 
     expect(scene().setSelection).toHaveBeenLastCalledWith({ kind: 'model' })
     expect(scene().setPickMode).toHaveBeenLastCalledWith('position')
+    wrapper.unmount()
+  })
+
+  it('编辑操作模式变化时转给场景，游戏档显示操作提示', async () => {
+    const wrapper = mountViewport()
+
+    await wrapper.setProps({ navigationMode: 'game' })
+
+    expect(scene().setNavigationMode).toHaveBeenLastCalledWith('game')
+    expect(wrapper.get('[data-test="game-navigation-hint"]').text()).toContain(
+      'WASD',
+    )
+
+    await wrapper.setProps({ navigationMode: 'orbit' })
+    expect(wrapper.find('[data-test="game-navigation-hint"]').exists()).toBe(
+      false,
+    )
     wrapper.unmount()
   })
 

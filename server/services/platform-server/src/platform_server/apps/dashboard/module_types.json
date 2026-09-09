@@ -13297,6 +13297,25 @@
           "span": "full"
         },
         {
+          "key": "navigationMode",
+          "label": "预览操作模式",
+          "type": "enum",
+          "default": "orbit",
+          "options": [
+            {
+              "value": "orbit",
+              "label": "轨道操作"
+            },
+            {
+              "value": "game",
+              "label": "游戏操作（WASD / 空格 / Shift）"
+            }
+          ],
+          "group": "运行态",
+          "help": "决定运行态预览与发布后的 3D 画面如何操作；与孪生编辑器顶栏当前选择相互独立。游戏操作用 WASD 前后左右、空格上升、Shift 下降，按 Esc 释放鼠标。",
+          "span": "full"
+        },
+        {
           "key": "twin",
           "label": "孪生场景",
           "type": "object",
@@ -13399,6 +13418,7 @@
         "title",
         "showSceneTools",
         "showStructureTree",
+        "navigationMode",
         "twin"
       ],
       "sub_editor": {
