@@ -21,7 +21,7 @@ export const RADAR_CHART_PRESETS: ConfigPreset[] = [
   {
     id: 'green-factory',
     label: '绿色工厂',
-    hint: '多边形网格 + 一层实面，单组评价一眼看出短板；底部图例交代画不出来的那几根轴。',
+    hint: '多边形网格搭配单层填充，便于识别单组评价短板；底部图例说明无法渲染的轴。',
     config: {
       chartStyle: 'area',
       shape: 'polygon',
@@ -39,7 +39,7 @@ export const RADAR_CHART_PRESETS: ConfigPreset[] = [
   {
     id: 'group-compare',
     label: '双组对比',
-    hint: '面调淡，两组叠着也分得出前后；网格加一环，读得出差在哪一档。',
+    hint: '降低填充透明度以区分两组数据，并增加网格环数以辅助判断差异区间。',
     config: {
       chartStyle: 'area',
       shape: 'polygon',
@@ -57,7 +57,7 @@ export const RADAR_CHART_PRESETS: ConfigPreset[] = [
   {
     id: 'outline-clean',
     label: '净描边',
-    hint: '不铺面、圆形网格，轴多时最清爽；顶点上直接写读数。',
+    hint: '使用无填充的圆形网格，适合轴数较多的场景；顶点直接显示读数。',
     config: {
       // 描边档不吃 areaOpacity，但预设仍要写全它，否则残留上一套的浓度
       chartStyle: 'line',
@@ -76,7 +76,7 @@ export const RADAR_CHART_PRESETS: ConfigPreset[] = [
   {
     id: 'compact-radar',
     label: '紧凑轮',
-    hint: '窄块里用：三环、细描边、图例与标签都不占地方——代价是画不出来的那几根轴在屏上没有说明。',
+    hint: '适用于窄幅模块：三环、细描边，并隐藏图例与标签；无法渲染的轴不再显示原因。',
     config: {
       chartStyle: 'line',
       shape: 'polygon',

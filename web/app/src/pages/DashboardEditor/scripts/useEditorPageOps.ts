@@ -14,7 +14,7 @@ import type {
 import type { EditorActions } from './editorActions'
 import type { ArrangeActions } from './editorArrange'
 import type { SaveOutcome } from '@/features/ai/saveTool'
-import { saveDashboard } from './editorSave'
+import { saveDashboardWithFeedback } from './editorSave'
 import { useEditorDraftFlow } from './useEditorDraftFlow'
 import type { EditorMeta } from './useEditorMeta'
 import { openSubEditor, useSubEditorEntry } from './useSubEditorEntry'
@@ -114,25 +114,6 @@ async function reload(deps: EditorPageOpsDeps): Promise<void> {
   deps.meta.reset(loaded)
 }
 
-// 双轴保存的顺序不变量见 editorSave.ts
-async function save(deps: EditorPageOpsDeps): Promise<SaveOutcome> {
-  const { file, toast } = deps
-  // ⚠ 用一只可变盒子而不是裸变量：赋值发生在回调里，TS 不跟踪那一次赋值，
-  //   裸变量在返回处会被窄化成 null，于是失败原因永远传不出去
-  const failure: { message: string | null } = { message: null }
-  const done = await saveDashboard({
-    editor: deps.editor,
-    file,
-    meta: deps.meta,
-    onFail: () => {
-      failure.message = file.conflict.value ?? file.error.value ?? '保存失败'
-      toast.error(failure.message)
-    },
-  })
-  if (done) toast.success('大屏已保存')
-  return { isSaved: done, message: failure.message }
-}
-
 /** 草稿流与离开守卫装在本工厂：要的（编辑器/载荷/元数据/确认框）恰与这里的依赖重合。 */
 function installDraftFlow(deps: EditorPageOpsDeps): void {
   useEditorDraftFlow({
@@ -153,7 +134,7 @@ export function createEditorPageOps(deps: EditorPageOpsDeps): EditorPageOps {
     dashboardId: deps.dashboardId,
     selectedId: editor.selectedId,
     isDirty: () => editor.isDirty.value || meta.isDirty.value,
-    save: () => save(deps),
+    save: () => saveDashboardWithFeedback(deps),
     confirm: deps.confirm,
     toast,
   })
@@ -170,7 +151,7 @@ export function createEditorPageOps(deps: EditorPageOpsDeps): EditorPageOps {
     removeNode: (nodeId) => removeNode(deps, nodeId),
     removeSelected: () => removeSelected(deps),
     reload: () => reload(deps),
-    save: () => save(deps),
+    save: () => saveDashboardWithFeedback(deps),
     changeSelectedGeometry: (geometry, isContinuous) => {
       const node = editor.selected.value
       if (node === null) return

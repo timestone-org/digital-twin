@@ -24,6 +24,7 @@ function row(over: Partial<FeedRowView> = {}): FeedRowView {
     time: '10:24',
     rank: 4,
     vars: { '--if-level-color': 'var(--state-danger)' },
+    issue: null,
     ...over,
   }
 }

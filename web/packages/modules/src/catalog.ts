@@ -155,7 +155,7 @@ function moduleType(manifest: ModuleManifest): CatalogJson {
   out.version = manifest.version ?? 1
   out.config_schema = manifest.configSchema.map(configField)
   out.bindings = manifest.bindings.map(bindingSpec)
-  // 一次写一整套观感的按钮。模型逐个字段去凑同样的效果时，漏一个也看不出漏在哪
+  // 一次写入一整套配置的预设；是否覆盖内容可与 content_keys 对照判断
   put(out, 'config_presets', manifest.configPresets?.map(configPreset))
   // 新建节点时**显式落库**的出厂配置，与 `ConfigField.default` 的不落库兜底不是一回事
   put(

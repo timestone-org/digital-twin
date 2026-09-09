@@ -7,13 +7,14 @@ import { defineModule } from '../../registry'
 export default defineModule({
   type: 'text-block',
   description:
-    '装饰文本块：几行固定文案加一整套排版旋钮（字号、行高、字重、字间距、四档字体、水平/垂直对齐、内边距、不透明度、溢出处理、辉光）。大屏上的说明、标注、副标题、单位注解，以及页头/页脚里的大屏标题，都由它出。⚠ 它没有任何绑定槽、不取任何数：要显示读数请用 info-card 或 data-card，那边才有单位、小数位与阈值。整块可点，配了以它为源的联动规则时点它上抛一个不带值的 click。⚠ 「字间距」的 0 是哨兵不是零——表示沿用内置的约 0.02em；⚠ 「不透明度」量纲是 0–1，与 image-block 同名字段的 0–100 不是一回事。',
+    '静态文本模块，支持多行内容、字体、对齐、间距、溢出和辉光配置。适用于说明、标注、副标题、单位及页头页脚中的固定文字；实时读数应使用数据卡片类模块。模块不含数据绑定，配置联动规则后可作为整块点击入口。字间距 0 表示沿用默认值，不透明度采用 0–1 范围。',
   displayName: '文本块',
   category: '装饰',
   icon: 'type',
   keywords: ['text', 'wenben', '文本', '文字', '说明', '标注'],
   chrome: 'bare',
   hostClickable: true,
+  contentKeys: ['title', 'text'],
   defaultSize: { width: 320, height: 72, minWidth: 40, minHeight: 24 },
   configSchema: [
     {
@@ -23,7 +24,7 @@ export default defineModule({
       group: '内容',
       default: '',
       span: 'full',
-      placeholder: '留空则不画标题栏',
+      placeholder: '留空则隐藏标题栏',
     },
     {
       key: 'text',
@@ -32,7 +33,7 @@ export default defineModule({
       group: '内容',
       default: '示例文本',
       span: 'full',
-      help: '按行换行；行内连续空格原样保留，可以拿空格排版。',
+      help: '支持换行并保留行内连续空格。',
     },
     {
       key: 'fontSize',
@@ -80,7 +81,7 @@ export default defineModule({
       // ⚠ 0 是哨兵不是零：它表示沿用样式表里的 0.02em（16px 字号下约 0.32px）。
       //   改成「0 = 真的 0」会把每一张没配过字距的存量大屏一起改窄，而两者的差
       //   小到看不出来——真正够不着的是负字距，那条路留给日后单开一个字段
-      help: '0 = 沿用内置字间距（约字号的 2%）；大于 0 时按 px 覆盖，填 0 不等于零字距。',
+      help: '0 表示沿用内置字间距（约为字号的 2%）；正数表示使用指定像素值。',
     },
     {
       key: 'fontFamily',
@@ -105,8 +106,8 @@ export default defineModule({
       default: '',
       span: 'half',
       when: { key: 'fontFamily', in: ['custom'] },
-      placeholder: '如 Source Han Sans, sans-serif',
-      help: '直接写 CSS font-family 值；字体要在放大屏的机器上装好，装不到会回落系统字体。留空 = 继承正文。',
+      placeholder: '例如：Source Han Sans, sans-serif',
+      help: '填写 CSS font-family；运行设备未安装对应字体时回退至系统字体，留空则继承正文。',
     },
     {
       key: 'color',
@@ -166,7 +167,7 @@ export default defineModule({
       span: 'half',
       // ⚠ 量纲是 0–1，与图片块同名字段的 0–100 不是一回事：两边各自锁死，
       //   改任何一边的取值范围都会改存量大屏的渲染
-      help: '取值 0–1（1 = 完全不透明）。调小可整体压暗，页头一类的次要信息常用 0.7。',
+      help: '取值 0–1，1 表示完全不透明；次要信息可适当降低。',
     },
     {
       key: 'background',
@@ -175,7 +176,7 @@ export default defineModule({
       group: '外观',
       default: '',
       span: 'half',
-      placeholder: '留空 = 透明',
+      placeholder: '留空时透明',
     },
     {
       key: 'overflow',
@@ -184,7 +185,7 @@ export default defineModule({
       group: '外观',
       default: 'hidden',
       span: 'half',
-      help: '文字超出模块矩形时：裁掉 / 可滚动 / 逐行省略号。',
+      help: '设置文字超出模块矩形时的裁剪、滚动或逐行省略策略。',
       options: [
         { value: 'hidden', label: '裁剪' },
         { value: 'scroll', label: '滚动' },
@@ -211,7 +212,7 @@ export default defineModule({
       step: 1,
       span: 'half',
       when: { key: 'glow', in: [true] },
-      help: '辉光的扩散半径；0 = 只贴着笔画一圈。',
+      help: '设置辉光扩散半径；0 表示仅贴合文字轮廓。',
     },
   ],
   // 装饰文本不取数：要显示读数请用读数类模块，那边才有单位与阈值

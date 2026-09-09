@@ -7,7 +7,7 @@
  * `dashboardId` + `nodeId`。落库走大屏整树替换（见 `useCardEditorPage`）。
  */
 import type { ConfigField } from '@dt/contracts'
-import { getModule, readText } from '@dt/modules'
+import { getCardPart, getModule, readText } from '@dt/modules'
 import type { GetModuleManifest } from '@dt/runtime'
 import { DtButton, DtNotice, DtSpinner, useConfirm, useToast } from '@dt/ui'
 import { computed, onBeforeUnmount, onMounted, ref, watch } from 'vue'
@@ -133,6 +133,13 @@ const activeTitle = computed<string>(() => {
   const rows: readonly StructureRow[] =
     hit.key === PARTS_KEY ? partRows.value : cellRows.value
   return rows[hit.index]?.label ?? ''
+})
+
+const activeHelp = computed(() => {
+  const hit = active.value
+  if (hit === null || hit.key !== PARTS_KEY) return ''
+  const kind = readText(partsOf(config.value)[hit.index]?.kind)
+  return getCardPart(kind)?.hint ?? ''
 })
 
 function write(next: Record<string, unknown>): void {
@@ -275,6 +282,7 @@ onBeforeRouteLeave(async () => {
             :schema="activeSchema"
             :row="activeRow"
             :title="activeTitle"
+            :help="activeHelp"
             @update="onUpdate"
           />
         </aside>

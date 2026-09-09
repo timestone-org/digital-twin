@@ -7,6 +7,7 @@ import { beforeEach, describe, expect, it } from 'vitest'
 import { mount } from '@vue/test-utils'
 import type { ConfigField } from '@dt/contracts'
 import { __resetConfigControls } from '@dt/modules'
+import { DtHelpTip } from '@dt/ui'
 
 import { installConfigControls } from '@/features/dashboard/configControls'
 import ArrayControl from '@/features/dashboard/controls/ArrayControl.vue'
@@ -135,6 +136,38 @@ describe('行移动', () => {
 })
 
 describe('行内编辑', () => {
+  it('子字段缺省值回显到控件，但不提前写进配置', () => {
+    const wrapper = mountArray([{}], {
+      itemSchema: [
+        { key: 'label', label: '名称', type: 'string', default: '未命名' },
+      ],
+    })
+
+    expect(
+      (wrapper.find('input.dt-input__el').element as HTMLInputElement).value,
+    ).toBe('未命名')
+    expect(wrapper.emitted('update')).toBeUndefined()
+  })
+
+  it('子字段帮助使用问号气泡，不在每一行重复铺开', () => {
+    const wrapper = mountArray([{}], {
+      itemSchema: [
+        {
+          key: 'label',
+          label: '名称',
+          type: 'string',
+          help: '显示在卡片顶部。',
+        },
+      ],
+    })
+
+    expect(wrapper.text()).not.toContain('显示在卡片顶部。')
+    expect(wrapper.findComponent(DtHelpTip).props()).toMatchObject({
+      label: '名称说明',
+      text: '显示在卡片顶部。',
+    })
+  })
+
   it('改一格只动那一行，按连续输入抛出整表', async () => {
     const wrapper = mountArray(rows('一', '二'))
     const inputs = wrapper.findAll('input.dt-input__el')

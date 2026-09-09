@@ -549,6 +549,27 @@ describe('读屏摘要与值签名', () => {
     expect(signatureOf(before)).not.toBe(signatureOf(after))
   })
 
+  it('两个日期等量反向变化时签名仍会变化', () => {
+    const first = Date.UTC(2026, 2, 5)
+    const second = Date.UTC(2026, 2, 6)
+    const before = viewsOf(
+      config,
+      rowsOf({
+        series: 2,
+        seriesPoints: pointsOf([first, 1], [second, 2]),
+      }),
+    )
+    const after = viewsOf(
+      config,
+      rowsOf({
+        series: 2,
+        seriesPoints: pointsOf([first, 2], [second, 1]),
+      }),
+    )
+
+    expect(signatureOf(before)).not.toBe(signatureOf(after))
+  })
+
   it('同一批读数算出来的签名逐字相同', () => {
     const rows = rowsOf({
       series: 4,

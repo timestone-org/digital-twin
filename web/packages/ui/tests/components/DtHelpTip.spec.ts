@@ -3,7 +3,7 @@
  * ⚠ 问号按钮必须有可访问名称：一个只画着「?」的图标按钮，读屏读出来是空的。
  */
 import { mount } from '@vue/test-utils'
-import { afterEach, describe, expect, it } from 'vitest'
+import { afterEach, describe, expect, it, vi } from 'vitest'
 import { nextTick } from 'vue'
 
 import DtHelpTip from '../../src/components/DtHelpTip/DtHelpTip.vue'
@@ -51,6 +51,26 @@ describe('DtHelpTip', () => {
   it('同页多个时可以各给各的名称', () => {
     const wrapper = mountHelpTip({ label: '采样周期说明' })
     expect(wrapper.find('button').attributes('aria-label')).toBe('采样周期说明')
+    wrapper.unmount()
+  })
+
+  it('展开后的对话框沿用字段说明名称', async () => {
+    const wrapper = mountHelpTip({ label: '采样周期说明' })
+    await wrapper.find('button').trigger('click')
+
+    expect(bubble()?.getAttribute('aria-label')).toBe('采样周期说明')
+    wrapper.unmount()
+  })
+
+  it('点击说明入口不触发外层业务点击', async () => {
+    const wrapper = mountHelpTip()
+    const clicked = vi.fn()
+    document.addEventListener('click', clicked)
+
+    await wrapper.find('button').trigger('click')
+
+    expect(clicked).not.toHaveBeenCalled()
+    document.removeEventListener('click', clicked)
     wrapper.unmount()
   })
 

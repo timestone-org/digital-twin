@@ -8,7 +8,7 @@
  * `isRequired` 会让整块被浮层盖住、逐张状态白画；漏掉 `isTimeSeries` 则整条历史序列
  * 永远不会被取回，而屏上只是一张空日历。
  */
-import type { BindingSpec, ConfigField } from '@dt/contracts'
+import type { BindingSpec, BindingView, ConfigField } from '@dt/contracts'
 import { describe, expect, it } from 'vitest'
 
 import {
@@ -54,6 +54,19 @@ function slot(): BindingSpec | undefined {
   return manifest.bindings.find((spec) => spec.key === DAY_SLOT_KEY)
 }
 
+function archiveBinding(timezone: string): BindingView {
+  return {
+    id: 'b1',
+    fieldKey: 'dayValues[0].series',
+    sourceKind: 'archive',
+    nodeKey: 's1:p1',
+    staticValueJson: null,
+    computeJson: null,
+    detailJson: { nodeKey: 's1:p1', range: {}, timezone },
+    transformJson: null,
+  }
+}
+
 describe('身份与出厂形状', () => {
   it('类型与目录名逐字相等，图标是仓里已有的那一个', () => {
     expect(manifest.type).toBe('calendar-heat')
@@ -79,12 +92,14 @@ describe('身份与出厂形状', () => {
     expect(text).toContain('触顶')
   })
 
-  it('内容键就是标题、指标、空态与时区那四个', () => {
+  it('内容键覆盖指标、时区与色阶量程', () => {
     expect(manifest.contentKeys).toEqual([
       'title',
       METRIC_ITEMS_KEY,
       'emptyText',
       'timezone',
+      'minValue',
+      'maxValue',
     ])
   })
 
@@ -152,6 +167,35 @@ describe('配置字段', () => {
   it('时区出厂留空 = 跟浏览器本地走，不预设某个城市', () => {
     expect(field('timezone')?.default).toBe('')
     expect(field('timezone')?.type).toBe('string')
+  })
+
+  it('时区提示要求与历史分桶一致，非法 IANA 时区不能通过配置校验', () => {
+    expect(field('timezone')?.help).toContain('分桶时区')
+    expect(manifest.validateConfig?.({ timezone: 'Asia/Shanghai' })).toEqual([])
+    expect(manifest.validateConfig?.({ timezone: 'Mars/Olympus' })).toEqual([
+      '时区必须填写有效的 IANA 时区',
+    ])
+  })
+
+  it('显式历史分桶时区必须与模块时区一致', () => {
+    expect(
+      manifest.validateBindings?.({ timezone: 'Asia/Shanghai' }, [
+        archiveBinding('Asia/Shanghai'),
+      ]),
+    ).toEqual([])
+    expect(
+      manifest.validateBindings?.({ timezone: 'Asia/Shanghai' }, [
+        archiveBinding('UTC'),
+      ]),
+    ).toEqual(['点位历史分桶时区 UTC 必须与模块时区 Asia/Shanghai 一致'])
+    expect(manifest.validateBindings?.({}, [archiveBinding('UTC')])).toEqual([
+      '模块时区必须显式设为点位历史分桶时区 UTC',
+    ])
+    expect(
+      manifest.validateBindings?.({ timezone: 'Asia/Shanghai' }, [
+        archiveBinding('Mars/Olympus'),
+      ]),
+    ).toEqual([])
   })
 
   it('空态文案的出厂值就是取值层那句兜底', () => {

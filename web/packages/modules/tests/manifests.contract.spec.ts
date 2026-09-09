@@ -304,6 +304,19 @@ describe('清单自身的不变量', () => {
     expect(offenders).toEqual([])
   })
 
+  it('内容键存在于顶层配置且不重复', () => {
+    const offenders = listModules().flatMap((manifest) => {
+      const declared = new Set(manifest.configSchema.map((field) => field.key))
+      const keys = manifest.contentKeys ?? []
+      return [
+        ...keys.filter((key) => !declared.has(key)),
+        ...duplicated(keys),
+      ].map((key) => `${manifest.type}.${key}`)
+    })
+
+    expect(offenders).toEqual([])
+  })
+
   it('绑定槽的键在一个模块里唯一', () => {
     const offenders = listModules().flatMap((manifest) =>
       duplicated(bindingKeys(manifest.bindings)).map(
@@ -365,6 +378,35 @@ describe('清单自身的不变量', () => {
         .filter((key) => geometryKeys.has(key))
         .map((key) => `${manifest.type}.${key}`),
     )
+
+    expect(offenders).toEqual([])
+  })
+
+  it('子编辑器接管的配置一定声明为内容', () => {
+    const offenders = listModules()
+      .filter((manifest) => manifest.subEditor !== undefined)
+      .filter(
+        (manifest) =>
+          !new Set(manifest.contentKeys ?? []).has(
+            manifest.subEditor?.configKey ?? '',
+          ),
+      )
+      .map((manifest) => manifest.type)
+
+    expect(offenders).toEqual([])
+  })
+
+  it('容器的内容区几何一定声明为内容', () => {
+    const offenders = listModules()
+      .filter((manifest) => manifest.isContainer === true)
+      .filter((manifest) =>
+        manifest.configSchema.some(
+          (field) =>
+            field.key === CONTAINER_CONFIG_KEY &&
+            !new Set(manifest.contentKeys ?? []).has(CONTAINER_CONFIG_KEY),
+        ),
+      )
+      .map((manifest) => manifest.type)
 
     expect(offenders).toEqual([])
   })

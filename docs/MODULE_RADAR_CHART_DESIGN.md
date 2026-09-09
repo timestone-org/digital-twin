@@ -198,10 +198,9 @@ SVG 路径，与直接喂 `0` 的那一份逐字节相同——都落在圆心�
 | 图例 / 提示框 / 数据标签 / 动画 | 四个工厂各自产出 |
 
 - **不 spread `cartesianAxisFields()`**：雷达没有直角坐标轴，摆出「X 轴名称」是纯噪声。
-- `contentKeys: ['title', 'indicators', 'emptyText', 'seriesName', 'compareName']`。
+- `contentKeys: ['title', 'indicators', 'emptyText', 'seriesName', 'compareName', 'unit', 'precision']`。
   不声明的话这几个内容键会被 `styleKeysOf()` 当成观感键，别人套预设时把用户配好的指标整片抹掉。
-- `indicators` **出厂给满三项**（各带 `0–100` 的量程）：只给一项时新拖出来的一块必然是
-  空态，看着像模块坏了。
+- `indicators` **至少三项且出厂给满三项**（各带 `0–100` 的量程），避免配置结构退化为线段。
 - 逐轴 `min` / `max` 是 `type: 'number'` 而不是 `'range'`：量纲不同的指标量程差着几个
   数量级，滑杆表达不了。
 - 逐轴 `precision` **刻意没有 `default`**：留空 = 跟随整块。同样必须是 `number`——
@@ -211,6 +210,7 @@ SVG 路径，与直接喂 `0` 的那一份逐字节相同——都落在圆心�
 - `showLegend` 缺省 `true`（§2.2 唯一的承载面）；`showValueLabel` 缺省 `false`
   ——两组 × 六根轴就是十二个数糊在轮子上。
 - `splitArea` 一律关掉：隔行底色会把两个半透明的形状搅成四五种深浅，谁压着谁看不出来。
+- 自定义色板最多两项，分别对应主系列与对比系列；更多颜色没有消费方。
 
 ---
 

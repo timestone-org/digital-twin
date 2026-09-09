@@ -8,6 +8,7 @@
  */
 import type { BindingPayload } from '@dt/contracts'
 import { normalizeTwinConfig } from '@dt/twin-config'
+import { DtHelpTip } from '@dt/ui'
 import { describe, expect, it } from 'vitest'
 import { mount } from '@vue/test-utils'
 
@@ -68,9 +69,12 @@ describe('行跟着实体走', () => {
 
   it('每一行标着与信息牌字段列表一致的 id', () => {
     const wrapper = mountPane()
+    const details = wrapper
+      .findAllComponents(DtHelpTip)
+      .map((item) => String(item.props('text')))
 
-    expect(wrapper.text()).toContain('p1::temp')
-    expect(wrapper.text()).toContain('p1::flow')
+    expect(details).toContain('实体标识：p1::temp')
+    expect(details).toContain('实体标识：p1::flow')
   })
 
   it('不摆「新增一行」，也不摆正常行的删除键', () => {
@@ -183,7 +187,7 @@ describe('只看选中的那一个', () => {
       },
     })
 
-    expect(wrapper.text()).toContain('没有可绑的数据')
+    expect(wrapper.text()).toContain('暂无可绑定字段')
   })
 
   it('选中的信息牌一个字段都没有时，老实说它没有可绑的数据', () => {
@@ -198,6 +202,6 @@ describe('只看选中的那一个', () => {
       },
     })
 
-    expect(wrapper.text()).toContain('没有可绑的数据')
+    expect(wrapper.text()).toContain('暂无可绑定字段')
   })
 })

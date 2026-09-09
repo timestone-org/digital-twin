@@ -214,10 +214,15 @@ function hostStyle(config: Record<string, unknown>): CSSProperties {
  * ⚠ 有可见文字时必须给 undefined——`aria-label` 会**盖掉**可见文案，
  * 两者不一致时读屏读到的与屏幕上写的就是两回事。
  * @param text 按钮上的可见文案
+ * @param subText 按钮上的可见副文案
  * @param hint 悬停提示，图标按钮拿它当名字
  */
-function ariaLabelOf(text: string, hint: string): string | undefined {
-  if (text.trim() !== '') return undefined
+function ariaLabelOf(
+  text: string,
+  subText: string,
+  hint: string,
+): string | undefined {
+  if (text.trim() !== '' || subText.trim() !== '') return undefined
   return hint === '' ? BUTTON_TEXT_DEFAULT : hint
 }
 
@@ -227,14 +232,15 @@ function ariaLabelOf(text: string, hint: string): string | undefined {
  */
 export function readButtonSpec(config: Record<string, unknown>): ButtonSpec {
   const text = readText(config.text, BUTTON_TEXT_DEFAULT)
+  const subText = readText(config.subText)
   const hint = readTrimmedText(config.hint)
   return {
     text,
-    subText: readText(config.subText),
+    subText,
     icon: readEnum(config.icon, BUTTON_ICON_VALUES, ''),
     iconSize: iconSizeOf(config),
     hint,
-    ariaLabel: ariaLabelOf(text, hint),
+    ariaLabel: ariaLabelOf(text, subText, hint),
     linkValue: readTrimmedText(config.linkValue),
     isDisabled: readBoolean(config.disabled),
     isHud: readEnum(config.variant, BUTTON_VARIANT_VALUES, 'solid') === 'hud',

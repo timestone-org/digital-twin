@@ -73,6 +73,9 @@ const JOIN = '：'
 /** 堆叠面积共用的那一个堆名。 */
 const STACK_NAME = 'trend'
 
+/** 时间轴错开时的可见降级说明。 */
+export const TREND_STACK_UNALIGNED_TEXT = '时间轴未对齐，当前按独立面积曲线显示'
+
 function pad2(value: number): string {
   return String(value).padStart(2, '0')
 }
@@ -145,9 +148,33 @@ function colorOf(
   return resolveColor(view.color, resolve) || seriesColor(palette, view.index)
 }
 
-/** 一条系列的点摊成 echarts 时间轴要的 `[时刻, 值]` 对。 */
+/** 一条系列的点转换为 echarts 时间轴数据。 */
 function pairsOf(view: SeriesView): [number, number][] {
   return view.points.map((point) => [point.t, point.v])
+}
+
+/** 堆叠只接受完全相同的桶时间戳，避免错列累加或补空后曲线断裂。 */
+function hasAlignedStack(views: readonly SeriesView[]): boolean {
+  const drawable = views.filter(
+    (view) => view.state === 'ok' && view.points.length > 0,
+  )
+  const first = drawable[0]?.points ?? []
+  return drawable.every(
+    (view) =>
+      view.points.length === first.length &&
+      view.points.every((point, index) => point.t === first[index]?.t),
+  )
+}
+
+/** 堆叠面积无法安全累加时返回降级说明。 */
+export function stackWarningOf(
+  config: Record<string, unknown>,
+  views: readonly SeriesView[],
+): string {
+  const style = readEnum(config.chartStyle, TREND_STYLE_VALUES, 'line')
+  return style === 'stackedArea' && !hasAlignedStack(views)
+    ? TREND_STACK_UNALIGNED_TEXT
+    : ''
 }
 
 /**
@@ -188,13 +215,14 @@ interface TrendLayout {
   style: TrendStyle
   theme: ChartTheme
   dualAxis: boolean
+  stackAligned: boolean
   /** 变量名 → 实际色值，逐条取色与面积渐变共用同一份。 */
   resolve: ColorResolver
   colorOf: (view: SeriesView) => string
 }
 
 /**
- * 这一条挂在哪根值轴上。开了双轴才有第二根，没开时右轴那一档静默等同左轴。
+ * 这一条挂在哪根值轴上；第二根轴由系列配置自动推导。
  * @param view 这一条
  * @param dualAxis 双轴开着没有
  */
@@ -226,7 +254,9 @@ function lineSeries(
     data: drawable ? pairsOf(view) : [],
     smooth: layout.style === 'smooth',
     ...(layout.style === 'step' ? { step: 'end' } : {}),
-    ...(layout.style === 'stackedArea' ? { stack: STACK_NAME } : {}),
+    ...(layout.style === 'stackedArea' && layout.stackAligned
+      ? { stack: STACK_NAME }
+      : {}),
     ...(area === undefined ? {} : { areaStyle: area }),
     // ⚠ 缺口就是缺口：连起来会把「这段时间没采到数」画成一条平滑过渡的假线
     connectNulls: false,
@@ -338,7 +368,7 @@ function valueAxes(
 function legendData(
   views: readonly SeriesView[],
   theme: ChartTheme,
-  colorer: (view: SeriesView) => string,
+  layout: TrendLayout,
 ): OptionFragment[] {
   return views.map((view) => ({
     name: view.legendName,
@@ -346,7 +376,9 @@ function legendData(
       ...withColor(view.state === 'error' ? theme.textMuted : theme.text),
     },
     itemStyle: {
-      ...withColor(view.state === 'ok' ? colorer(view) : theme.textMuted),
+      ...withColor(
+        view.state === 'ok' ? layout.colorOf(view) : theme.textMuted,
+      ),
     },
   }))
 }
@@ -496,7 +528,7 @@ function legendOf(
 ): OptionFragment {
   if (!showLegend) return { show: false }
   return legendStyle(layout.theme, {
-    data: legendData(views, layout.theme, layout.colorOf),
+    data: legendData(views, layout.theme, layout),
     fontSize: LABEL_FONT_SIZE,
   })
 }
@@ -517,15 +549,18 @@ export function buildTrendOption(
   const palette = resolvePalette(config, theme, resolve)
   const showLegend = readBoolean(config.showLegend, true)
   const showZoom = readBoolean(config.showDataZoom, false)
-  const dualAxis = readBoolean(config.dualAxis, false)
+  const dualAxis = views.some((view) => view.axis === 'right')
   const band = bottomBand({
     legend: showLegend,
     legendFontSize: LABEL_FONT_SIZE,
   })
+  const style = readEnum(config.chartStyle, TREND_STYLE_VALUES, 'line')
+  const stackAligned = stackWarningOf(config, views) === ''
   const layout: TrendLayout = {
-    style: readEnum(config.chartStyle, TREND_STYLE_VALUES, 'line'),
+    style,
     theme,
     dualAxis,
+    stackAligned,
     resolve,
     colorOf: (view: SeriesView) => colorOf(view, palette, resolve),
   }

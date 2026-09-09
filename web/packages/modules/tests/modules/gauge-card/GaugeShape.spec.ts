@@ -341,4 +341,78 @@ describe('自定义色标', () => {
       render({ shape: 'arc', fillStyle: 'solid' }).findAll('stop'),
     ).toEqual([])
   })
+
+  it.each([
+    ['linear', '.gc-bar__fill', '90deg'],
+    ['track', '.gc-bar__fill', '90deg'],
+    ['tank', '.gc-tank__fill', '0deg'],
+    ['thermometer', '.gc-thermo__fill', '0deg'],
+  ] as const)('%s 档同样消费自定义色标', (shape, selector, angle) => {
+    const fill = render({ ...STOPS, shape }).get(selector)
+    const style = fill.attributes('style') ?? ''
+
+    expect(style).toContain(`linear-gradient(${angle}`)
+    expect(style).toContain('var(--state-danger) 0%')
+    expect(style).toContain('var(--accent-secondary) 100%')
+  })
+
+  const RANGE_STOPS = {
+    fillStyle: 'stops',
+    colorStops: [
+      { at: 0, color: 'var(--state-danger)' },
+      { at: 50, color: 'var(--state-warning)' },
+      { at: 100, color: 'var(--state-success)' },
+    ],
+  }
+
+  it.each([
+    [
+      10,
+      '1000% 100%',
+      'color-mix(in srgb, var(--state-danger) 80%, var(--state-warning))',
+    ],
+    [50, '200% 100%', 'var(--state-warning)'],
+    [
+      90,
+      '111.111% 100%',
+      'color-mix(in srgb, var(--state-warning) 20%, var(--state-success))',
+    ],
+  ] as const)(
+    '横向色谱在 %s%% 时仍按整量程坐标，并计算当前位置颜色',
+    (value, size, current) => {
+      const wrapper = render({ ...RANGE_STOPS, shape: 'linear' }, value)
+      const style = wrapper.get('.gc-bar__fill').attributes('style') ?? ''
+
+      expect(style).toContain(`background-size: ${size}`)
+      expect(style).toContain(`--gc-current-stop: ${current}`)
+    },
+  )
+
+  it.each([
+    [
+      10,
+      '100% 1000%',
+      'color-mix(in srgb, var(--state-danger) 80%, var(--state-warning))',
+    ],
+    [50, '100% 200%', 'var(--state-warning)'],
+    [
+      90,
+      '100% 111.111%',
+      'color-mix(in srgb, var(--state-warning) 20%, var(--state-success))',
+    ],
+  ] as const)(
+    '竖向色谱在 %s%% 时保持整量程坐标，液面与球体使用当前位置颜色',
+    (value, size, current) => {
+      const tank = render({ ...RANGE_STOPS, shape: 'tank' }, value)
+      const thermo = render({ ...RANGE_STOPS, shape: 'thermometer' }, value)
+      const fillStyle = tank.get('.gc-tank__fill').attributes('style') ?? ''
+      const surfaceStyle =
+        tank.get('.gc-tank__surface').attributes('style') ?? ''
+      const bulbStyle = thermo.get('.gc-thermo__bulb').attributes('style') ?? ''
+
+      expect(fillStyle).toContain(`background-size: ${size}`)
+      expect(surfaceStyle).toContain(`--gc-current-stop: ${current}`)
+      expect(bulbStyle).toContain(`--gc-current-stop: ${current}`)
+    },
+  )
 })

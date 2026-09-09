@@ -1,7 +1,7 @@
 /**
- * @fileoverview 守八套外观预设的数据面：id 集合、只写清单里有的键、枚举取值都在
+ * @fileoverview 守八套配置预设的数据面：id 集合、只写清单里有的键、枚举取值都在
  * 该字段的选项里、每套都把每一个簇写全且子键顺序与字段缺省逐字相同、颜色一律
- * `var(--…)`、内容键一个都不写。
+ * `var(--…)`，以及明确覆盖的告警与筛选语义。
  *
  * ⚠ 这几类错法点了按钮什么都不会发生，而 typecheck、lint、build 全绿：
  * 键写错就是「配了不生效」；少写一个簇，上一套留在配置里的那一整块原样残留，
@@ -17,8 +17,22 @@ const SCHEMA = manifest.configSchema
 const TOP_KEYS = new Set(SCHEMA.map((field) => field.key))
 const OBJECT_FIELDS = SCHEMA.filter((field) => field.type === 'object')
 
-/** 预设换的是观感，这三个内容键写了就会抹掉用户配好的行。 */
 const CONTENT_KEYS = manifest.contentKeys ?? []
+const SEMANTIC_PRESET_KEYS = [
+  'columnHeader',
+  'defaultGroup',
+  'subSource',
+  'subLabel',
+  'badge',
+  'meter',
+  'extras',
+  'alarmOn',
+  'rowFilter',
+  'rowSort',
+  'holdSeconds',
+  'calmText',
+  'timeSource',
+] as const
 
 function asRecord(value: unknown): Record<string, unknown> {
   return typeof value === 'object' && value !== null && !Array.isArray(value)
@@ -114,7 +128,7 @@ describe('预设写的键', () => {
     expect(unknown).toEqual([])
   })
 
-  it('八套写的是同一组观感键——少一个键就会让上一套的那个取值原样残留', () => {
+  it('八套写的是同一组基础配置键——少一个就会残留上一套取值', () => {
     const shapes = INFO_LIST_PRESETS.map((preset) =>
       Object.keys(preset.config)
         .filter((key) => key !== 'rules')
@@ -144,16 +158,22 @@ describe('预设写的键', () => {
     expect(carriers).toEqual(['vessel-card', 'work-order'])
   })
 
-  // `rules` 也是内容键，但它有出厂规则那一条例外，由上面那条用例单独管
-  it('内容键一个都不写：预设换的是观感，不是把用户配好的行抹掉', () => {
+  it('只允许明确声明的告警与筛选语义进入预设', () => {
+    const semantic = new Set<string>(SEMANTIC_PRESET_KEYS)
     const wiped = INFO_LIST_PRESETS.flatMap((preset) =>
-      CONTENT_KEYS.filter((key) => key !== 'rules' && key in preset.config).map(
-        (key) => `${preset.id}.${key}`,
-      ),
+      CONTENT_KEYS.filter(
+        (key) => key !== 'rules' && key in preset.config && !semantic.has(key),
+      ).map((key) => `${preset.id}.${key}`),
     )
 
     expect(wiped).toEqual([])
-    // 反过来锁住这几个键真的在清单里，免得改名之后这条断言变成空转
+    expect(
+      INFO_LIST_PRESETS.flatMap((preset) =>
+        SEMANTIC_PRESET_KEYS.filter((key) => !(key in preset.config)).map(
+          (key) => `${preset.id}.${key}`,
+        ),
+      ),
+    ).toEqual([])
     expect(CONTENT_KEYS.filter((key) => TOP_KEYS.has(key))).toEqual(
       CONTENT_KEYS,
     )

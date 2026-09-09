@@ -11,6 +11,7 @@
  */
 import type { BindingPayload } from '@dt/contracts'
 import { normalizeTwin2dConfig } from '@dt/twin2d'
+import { DtHelpTip } from '@dt/ui'
 import { mount } from '@vue/test-utils'
 import { describe, expect, it } from 'vitest'
 
@@ -81,10 +82,12 @@ describe('行跟着实体走', () => {
 
   it('每一行标着与大纲一致的 id', () => {
     const wrapper = mountPane()
-    const ids = wrapper.findAll('.font-mono').map((item) => item.text())
+    const details = wrapper
+      .findAllComponents(DtHelpTip)
+      .map((item) => String(item.props('text')))
 
-    expect(ids).toContain('n1')
-    expect(ids).toContain('e1')
+    expect(details).toContain('实体标识：n1')
+    expect(details).toContain('实体标识：e1')
   })
 
   it('不摆「新增一行」，也不摆正常行的删除键', () => {
@@ -112,7 +115,7 @@ describe('行跟着实体走', () => {
 
     await remove?.trigger('click')
 
-    expect(wrapper.text()).toContain('没有对应的实体')
+    expect(wrapper.text()).toContain('没有对应实体')
     expect(wrapper.emitted('removeRow')?.[0]).toEqual(['nodeValues', 2])
   })
 })
@@ -231,7 +234,7 @@ describe('只看选中的那一个', () => {
   // 选中态摘悬空 id 要等配置变了那一拍；这中间老实说它没有可绑的数据
   it('选中一个已经不在图上的节点时说它没有可绑的数据', () => {
     expect(mountPane({ kind: 'nodes', id: 'gone' }).text()).toContain(
-      '没有可绑的数据',
+      '暂无可绑定字段',
     )
   })
 })

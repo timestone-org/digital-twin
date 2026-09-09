@@ -17,7 +17,7 @@ export const INFO_CARD_PRESETS: ConfigPreset[] = [
   {
     id: 'kpi-single',
     label: '单值大字',
-    hint: '一块一个读数，居中大字 + 下方标签 + 涨跌对比。',
+    hint: '单模块显示一个居中大号读数，并展示下方标签与涨跌对比。',
     config: {
       layout: 'single',
       columns: 'auto',
@@ -68,7 +68,7 @@ export const INFO_CARD_PRESETS: ConfigPreset[] = [
   {
     id: 'kpi-grid',
     label: '指标小卡',
-    hint: '自适应网格，每格描边渐变小卡 + 左侧发光竖条。',
+    hint: '使用自适应网格，每格采用渐变描边卡片与左侧发光竖条。',
     config: {
       layout: 'grid',
       columns: 'auto',
@@ -118,7 +118,7 @@ export const INFO_CARD_PRESETS: ConfigPreset[] = [
   {
     id: 'icon-grid',
     label: '图标网格',
-    hint: '圆形图标 + 右侧「标签上 / 读数下」，气象与环境量的排法。',
+    hint: '左侧使用圆形图标，右侧依次显示标签与读数，适合气象和环境指标。',
     config: {
       layout: 'grid',
       // ⚠ 字符串档值：参考仓 columns 的缺省就是 '2'，写成数字 2 判不中白名单
@@ -173,7 +173,7 @@ export const INFO_CARD_PRESETS: ConfigPreset[] = [
   {
     id: 'icon-column',
     label: '图标竖排',
-    hint: '图标在上、标签与读数居中，窄块用。',
+    hint: '图标位于上方，标签与读数居中，适合窄幅模块。',
     config: {
       layout: 'grid',
       columns: '2',
@@ -224,7 +224,7 @@ export const INFO_CARD_PRESETS: ConfigPreset[] = [
   {
     id: 'plain-grid',
     label: '裸排网格',
-    hint: '无边框无底，纯标签与读数，密排大屏用。',
+    hint: '不显示边框与背景，仅保留标签和读数，适合高密度大屏。',
     config: {
       layout: 'grid',
       columns: 'auto',

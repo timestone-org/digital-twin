@@ -16,16 +16,17 @@ defineOptions({ inheritAttrs: false })
 // 声明一遍只是把同一件事写两份，还会把 props 数量推过上限。
 withDefaults(
   defineProps<{
-    modelValue?: string
-    label?: string
-    hint?: string
-    error?: string
+    modelValue?: string | undefined
+    label?: string | undefined
+    help?: string | undefined
+    hint?: string | undefined
+    error?: string | undefined
     type?: 'text' | 'password' | 'email' | 'search' | 'tel'
     // ⚠ 显式 `| undefined`：exactOptionalPropertyTypes 下 withDefaults 不收窄读取端，
     // 上游组件原样转发自己的 size / disabled 时必然带着 undefined（同 DtField）
     size?: DtSize | undefined
     disabled?: boolean | undefined
-    required?: boolean
+    required?: boolean | undefined
   }>(),
   {
     modelValue: '',
@@ -79,6 +80,7 @@ defineExpose({ inputEl: exposed })
     :class="hostClass"
     :style="hostStyle"
     :label="label"
+    :help="help"
     :hint="hint"
     :error="error"
     :required="required"

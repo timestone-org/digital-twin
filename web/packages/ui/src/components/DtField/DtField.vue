@@ -6,12 +6,15 @@
 import { computed, useId } from 'vue'
 import { DT_CONTROL_DEFAULT_SIZE } from '@dt/contracts'
 import type { DtSize } from '@dt/contracts'
+import DtHelpTip from '../DtHelpTip/DtHelpTip.vue'
 
 const props = withDefaults(
   // ⚠ 显式写出 `| undefined`：开着 exactOptionalPropertyTypes 时
   // 「没有这个属性」与「属性值是 undefined」是两回事，透传方传下来的是后者。
   defineProps<{
     label?: string | undefined
+    /** 标签旁的按需说明；需要常驻显示的短提示仍用 hint。 */
+    help?: string | undefined
     hint?: string | undefined
     error?: string | undefined
     required?: boolean | undefined
@@ -35,12 +38,19 @@ const describedby = computed(() => {
 
 <template>
   <div class="dt-field" :class="`dt-field--${size}`">
-    <label v-if="label" class="dt-field__label" :for="controlId">
-      {{ label }}
-      <span v-if="required" class="dt-field__required" aria-hidden="true">
-        *
-      </span>
-    </label>
+    <div v-if="label || help" class="dt-field__label-row">
+      <label v-if="label" class="dt-field__label" :for="controlId">
+        {{ label }}
+        <span v-if="required" class="dt-field__required" aria-hidden="true">
+          *
+        </span>
+      </label>
+      <DtHelpTip
+        v-if="help"
+        :text="help"
+        :label="label ? `${label}说明` : '字段说明'"
+      />
+    </div>
     <slot :id="controlId" :describedby="describedby" :invalid="invalid" />
     <p v-if="shownHint" :id="hintId" class="dt-field__hint">{{ shownHint }}</p>
     <p v-if="error" :id="errorId" class="dt-field__error" role="alert">
@@ -56,6 +66,13 @@ const describedby = computed(() => {
   display: flex;
   flex-direction: column;
   gap: 6px;
+
+  &__label-row {
+    display: flex;
+    align-items: center;
+    gap: 4px;
+    min-width: 0;
+  }
 
   &__label {
     color: var(--text-secondary);

@@ -50,7 +50,7 @@ export const LIST_DIVIDER_STYLE_VALUES = valuesOf(LIST_DIVIDER_STYLES)
 export const LIST_HOVERS = [
   { value: 'none', label: '无' },
   { value: 'tint', label: '提亮' },
-  { value: 'lift', label: '上浮' },
+  { value: 'lift', label: '辉光高亮' },
 ] as const satisfies readonly ConfigOption[]
 
 export type ListHover = (typeof LIST_HOVERS)[number]['value']

@@ -21,7 +21,7 @@ export default defineCardPart({
       type: 'enum',
       default: 'auto',
       span: 'half',
-      help: '自动 = 接了「占比」槽就直读它、没接则按量程折算主读数（多数场合够用）。另三档是显式指定。',
+      help: '自动：占比槽已绑定时直接使用，否则依据主读数与量程计算。其余选项用于显式指定数据来源。',
       options: [
         { value: 'auto', label: '自动' },
         { value: 'ratio', label: '直读占比' },

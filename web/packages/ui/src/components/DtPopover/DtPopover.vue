@@ -19,6 +19,8 @@ const props = withDefaults(
     side?: DtOverlaySide | undefined
     align?: DtOverlayAlign | undefined
     disabled?: boolean | undefined
+    /** role=dialog 面板的可访问名称。 */
+    panelLabel?: string | undefined
   }>(),
   // ⚠ open 必须显式给 undefined：Boolean 型 prop 缺省会被 Vue 强制成 false，
   // 那样「没传 open」和「传了 false」就分不开，受控判定永远为真
@@ -82,6 +84,13 @@ function requestClose(): void {
   restoreFocus()
 }
 
+/** 仅在已展开时消费 Esc；关闭状态继续交给外层快捷键。 */
+function closeFromEscape(event: KeyboardEvent): void {
+  if (!isOpen.value) return
+  event.stopPropagation()
+  requestClose()
+}
+
 function toggle(): void {
   if (isOpen.value) requestClose()
   else requestOpen()
@@ -110,7 +119,7 @@ defineExpose({ open: requestOpen, close: requestClose, toggle })
 </script>
 
 <template>
-  <span ref="trigger" class="dt-popover" @keydown.escape.stop="requestClose">
+  <span ref="trigger" class="dt-popover" @keydown.escape="closeFromEscape">
     <slot
       :toggle="toggle"
       :open="requestOpen"
@@ -125,9 +134,10 @@ defineExpose({ open: requestOpen, close: requestClose, toggle })
         class="dt-popover__panel"
         :class="`dt-popover__panel--${placedSide}`"
         role="dialog"
+        :aria-label="panelLabel"
         tabindex="-1"
         :style="{ ...style, '--_arrow': `${arrowOffset}px` }"
-        @keydown.escape.stop="requestClose"
+        @keydown.escape="closeFromEscape"
       >
         <slot name="content" :close="requestClose" />
       </div>

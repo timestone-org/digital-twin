@@ -84,13 +84,15 @@ describe('身份与出厂形状', () => {
     expect(text).toContain('凹陷')
   })
 
-  it('内容键就是标题、指标、空态与两组称呼那五个', () => {
+  it('内容键覆盖指标、组名与数值口径', () => {
     expect(manifest.contentKeys).toEqual([
       'title',
       AXIS_ITEMS_KEY,
       'emptyText',
       'seriesName',
       'compareName',
+      'unit',
+      'precision',
     ])
   })
 
@@ -151,6 +153,10 @@ describe('配置字段', () => {
     expect(field('splitCount')?.default).toBe(RADAR_SPLIT_DEFAULT)
   })
 
+  it('色板最多配置主系列与对比系列两种颜色', () => {
+    expect(field('palette')?.maxItems).toBe(2)
+  })
+
   it('缺省画法是填充：单组评价一眼看得出形状的胖瘦', () => {
     expect(field('chartStyle')?.default).toBe('area')
   })
@@ -169,7 +175,7 @@ describe('配置字段', () => {
     const fallback = items?.default
 
     expect(items?.type).toBe('array')
-    expect(items?.minItems).toBe(1)
+    expect(items?.minItems).toBe(RADAR_MIN_AXES)
     expect(items?.itemLabelKey).toBe('name')
     expect(Array.isArray(fallback)).toBe(true)
     expect((Array.isArray(fallback) ? fallback : []).length).toBe(

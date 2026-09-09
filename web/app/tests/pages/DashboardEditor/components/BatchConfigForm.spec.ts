@@ -6,6 +6,7 @@ import { beforeEach, describe, expect, it } from 'vitest'
 import { mount } from '@vue/test-utils'
 import type { DashboardNodePayload, ModuleManifest } from '@dt/contracts'
 import { __resetConfigControls } from '@dt/modules'
+import { DtTooltip } from '@dt/ui'
 
 import type { BatchFieldState } from '@/features/dashboard/batchConfig'
 import { installConfigControls } from '@/features/dashboard/configControls'
@@ -126,6 +127,34 @@ describe('交集字段表', () => {
 })
 
 describe('预设条', () => {
+  it('预设说明使用设计系统提示，不写原生 title', () => {
+    const wrapper = mountForm([node('a')], {
+      manifest: {
+        ...MANIFEST,
+        configPresets: [
+          {
+            id: 'plain',
+            label: '朴素',
+            hint: '移除装饰效果。',
+            config: { title: '朴' },
+          },
+        ],
+      },
+    })
+
+    expect(
+      wrapper.get('[data-test="batch-preset-plain"]').attributes('title'),
+    ).toBeUndefined()
+    expect(wrapper.findComponent(DtTooltip).props('content')).toBe(
+      '移除装饰效果。',
+    )
+    expect(
+      wrapper
+        .get('[data-test="batch-preset-plain"]')
+        .attributes('aria-describedby'),
+    ).toBe(wrapper.findComponent(DtTooltip).attributes('aria-describedby'))
+  })
+
   it('每个预设一个按钮，点了抛 preset', async () => {
     const wrapper = mountForm([node('a'), node('b')])
 

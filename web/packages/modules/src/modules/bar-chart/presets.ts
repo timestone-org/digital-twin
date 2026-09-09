@@ -40,7 +40,7 @@ export const BAR_CHART_PRESETS: ConfigPreset[] = [
   {
     id: 'rank-bars',
     label: '竖排名',
-    hint: '并排竖柱 + 柱顶读数，一眼看出谁高谁低；实时档最常用的一套。',
+    hint: '使用并排竖柱与柱顶读数，便于比较各项高低，适合实时数据。',
     config: {
       chartStyle: 'grouped',
       barWidth: null,
@@ -61,7 +61,7 @@ export const BAR_CHART_PRESETS: ConfigPreset[] = [
   {
     id: 'rank-horizontal',
     label: '横排名',
-    hint: '类目转到左边，名字长也排得开；条右侧写读数。窄高的块里用这一套。',
+    hint: '类目显示在左侧，适合较长名称；读数显示在条形右侧，适用于窄高模块。',
     config: {
       chartStyle: 'horizontal',
       barWidth: 18,
@@ -82,7 +82,7 @@ export const BAR_CHART_PRESETS: ConfigPreset[] = [
   {
     id: 'stacked-hours',
     label: '分时堆叠',
-    hint: '按时间桶堆起来看总量与构成，配缩放条拖着看；桶多时标签自动抽稀。',
+    hint: '按时间桶堆叠以展示总量与构成，并提供缩放条；时间桶较多时自动抽稀标签。',
     config: {
       chartStyle: 'stacked',
       barWidth: null,
@@ -105,7 +105,7 @@ export const BAR_CHART_PRESETS: ConfigPreset[] = [
   {
     id: 'share-percent',
     label: '构成占比',
-    hint: '每一列归一到 100%，只看构成不看总量。⚠ 一整列全缺时那一列整列留空，不画成 0%。',
+    hint: '每列归一化为 100%，用于比较构成而非总量。整列数据缺失时保持空白，不显示为 0%。',
     config: {
       chartStyle: 'percent',
       barWidth: null,
@@ -126,7 +126,7 @@ export const BAR_CHART_PRESETS: ConfigPreset[] = [
   {
     id: 'balance-diverging',
     label: '正负对比',
-    hint: '值轴按最大绝对值向两侧对称铺开，回馈与用电各占一半；负值照实向下画。',
+    hint: '数值轴按最大绝对值向两侧对称展开，便于比较回馈与用电；负值按实际方向向下显示。',
     config: {
       chartStyle: 'diverging',
       barWidth: null,

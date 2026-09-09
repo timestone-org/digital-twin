@@ -71,12 +71,15 @@ describe('身份与出厂形状', () => {
     expect(text).toContain('负值')
   })
 
-  it('内容键就是标题、扇区、空态与环心单位那四个', () => {
+  it('内容键覆盖数据、数值口径与环心单位', () => {
     expect(manifest.contentKeys).toEqual([
       'title',
       SLICE_ITEMS_KEY,
       'emptyText',
+      'centerText',
       'centerUnit',
+      'unit',
+      'precision',
     ])
   })
 
@@ -115,19 +118,20 @@ describe('配置字段', () => {
     )
   })
 
-  it('环心两项与内半径都只在有心可写的两档上出现', () => {
-    const gated = ['centerText', 'centerUnit', 'innerRadius']
+  it('环心读数与内半径只在有中心区域的样式中出现', () => {
+    for (const key of ['centerText', 'innerRadius']) {
+      expect(field(key)?.when).toEqual({
+        key: 'chartStyle',
+        in: ['donut', 'rose'],
+      })
+    }
+  })
 
-    expect(gated.map((key) => field(key)?.when?.key)).toEqual([
-      'chartStyle',
-      'chartStyle',
-      'chartStyle',
-    ])
-    expect(gated.map((key) => field(key)?.when?.in)).toEqual([
-      ['donut', 'rose'],
-      ['donut', 'rose'],
-      ['donut', 'rose'],
-    ])
+  it('环心单位只在合计或最大值模式中出现', () => {
+    expect(field('centerUnit')?.when).toEqual({
+      key: 'centerText',
+      in: ['sum', 'max'],
+    })
   })
 
   it('外半径不带条件：实心饼也要能调大小', () => {
@@ -138,6 +142,7 @@ describe('配置字段', () => {
     expect(field('innerRadius')?.min).toBe(PIE_RADIUS_MIN)
     expect(field('innerRadius')?.max).toBe(PIE_RADIUS_MAX)
     expect(field('innerRadius')?.default).toBe(PIE_INNER_RADIUS_DEFAULT)
+    expect(field('outerRadius')?.min).toBeGreaterThan(0)
     expect(field('outerRadius')?.default).toBe(PIE_OUTER_RADIUS_DEFAULT)
   })
 

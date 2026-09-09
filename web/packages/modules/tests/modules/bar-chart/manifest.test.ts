@@ -79,12 +79,17 @@ describe('身份与出厂形状', () => {
     expect(text).toContain('负值')
   })
 
-  it('内容键是标题、数据组、空态与取数来源那四个', () => {
+  it('内容键覆盖数据、数值口径、坐标轴与参考线', () => {
     expect(manifest.contentKeys).toEqual([
       'title',
       BAR_ITEMS_KEY,
       'emptyText',
       'valueSource',
+      'unit',
+      'precision',
+      'xAxisName',
+      'yAxisName',
+      'refLines',
     ])
   })
 
@@ -126,6 +131,28 @@ describe('配置字段', () => {
     expect(optionValues(itemField('axis'))).toEqual(
       BAR_AXES.map((option) => option.value),
     )
+  })
+
+  it('图表样式提示说明百分比模式不接受负值', () => {
+    expect(field('chartStyle')?.help).toContain('含负值的整列不显示占比')
+  })
+
+  it('固定量程模式隐藏无效的参考线或数值轴自适应', () => {
+    const refLineStyles = BAR_STYLES.map((option) => option.value).filter(
+      (value) => value !== 'percent',
+    )
+    const autoScaleStyles = refLineStyles.filter(
+      (value) => value !== 'diverging',
+    )
+
+    expect(field('refLines')?.when).toEqual({
+      key: 'chartStyle',
+      in: refLineStyles,
+    })
+    expect(field('yScale')?.when).toEqual({
+      key: 'chartStyle',
+      in: autoScaleStyles,
+    })
   })
 
   it('柱宽与圆角的区间与取值表逐字相等，面板拖得到的渲染就不会夹回去', () => {
@@ -179,10 +206,11 @@ describe('配置字段', () => {
     expect(Object.keys(itemField('stack') ?? {})).not.toContain('when')
   })
 
-  it('画数值的两个口径键摆在样式分段里，不与内容键混在一起', () => {
+  it('数值口径虽然摆在样式分段，仍声明为内容', () => {
     expect(TOP_KEYS).toContain('unit')
     expect(TOP_KEYS).toContain('precision')
-    expect(manifest.contentKeys).not.toContain('unit')
+    expect(manifest.contentKeys).toContain('unit')
+    expect(manifest.contentKeys).toContain('precision')
   })
 
   it('顶层键不重复：重了的那一个在属性面板上会摆出两遍', () => {

@@ -68,7 +68,7 @@ function rowLabels(
 export default defineModule({
   type: 'gauge-card',
   description:
-    '仪表卡片：一块摆 1..N 个带量程的读数，五档几何（弧度盘 / 横向条 / 目标轨道 / 储罐 / 温度计）共用「量程 → 百分比 → 填充」同一条链，可画刻度、量程端点与目标标记。读数要表达「离满还有多远」「完成了多少」「液位到哪儿」时用它；只要裸数字加单位用 data-card 或 info-card，要带图标与涨跌对比的卡片网格用 info-card，要一行里带副读数与徽章的清单用 info-list。一个数组绑定槽 `gaugeValues`，行钉在 `items` 配置项上：第 i 行喂第 i 个仪表，子槽 `value` 是主读数、`aux` 是目标值的实时来源（绑了就顶掉行内那个静态「目标值」），都收数值；量程上下限、单位、小数位是逐项的配置，不从点位来。⚠ 每一项的「量程上限」必须大于「量程下限」，否则这一个仪表既不画填充也不伪造 0%；「目标值」留空 = 不画目标标记且完成率退回按量程算。⚠ 删掉 `items` 中间一项，它之后每一个仪表的绑定都会改喂前一个。',
+    '仪表卡片用于表达数值在量程中的位置，支持弧形、横向条、目标轨道、储罐和温度计；仅需标准数字时可选信息卡片。数据通过 gaugeValues 数组绑定，第 i 行对应 items 第 i 项，value 为主值，aux 为动态目标值。每项必须配置有效量程；aux 一旦绑定便优先于静态目标，取值失败时不会回退为静态值。',
   displayName: '仪表卡片',
   category: '数据',
   icon: 'gauge',
@@ -96,14 +96,14 @@ export default defineModule({
       group: '内容',
       default: '',
       span: 'full',
-      placeholder: '留空则不画标题栏',
+      placeholder: '留空则隐藏标题栏',
     },
     {
       key: GAUGE_ITEMS_KEY,
       label: '仪表',
       type: 'array',
       group: '内容',
-      help: '每一项在绑点面板上是一行。⚠ 删掉中间一项，它之后每一个仪表的绑定都会改喂前一个——删完请核对绑点面板。',
+      help: '每项对应一个绑定行。删除中间项会使后续绑定索引前移，操作后请复核绑定。',
       itemLabelKey: 'label',
       minItems: 1,
       // ⚠ 出厂给一项：空列表时模块是一块什么都没有的白板，而属性面板上
@@ -116,18 +116,18 @@ export default defineModule({
           label: '名称',
           type: 'string',
           default: '',
-          placeholder: '留空则这一个不画标签',
+          placeholder: '留空则隐藏标签',
           // ⚠ 留空不是「回落一个默认名」：标签整行不渲染，档位类名也跟着不挂
-          help: '这一个仪表的名称；留空则不画标签。绑点面板上仍按「第 N 个仪表」称呼它。',
+          help: '仪表名称；留空则隐藏标签，绑定面板仍按序号标识。',
         },
         {
           key: 'unit',
           label: '单位',
           type: 'string',
           default: '',
-          placeholder: '如 ℃ / kWh / m³/h',
+          placeholder: '例如：℃ / kWh / m³/h',
           // ⚠ 不去首尾空格：「° C」这类带空格是用户显式的排版意图
-          help: '首尾空格照原样保留，「° C」这种写法是有意的排版。',
+          help: '保留首尾空格，可用于控制单位与读数的间距。',
         },
         {
           key: 'precision',
@@ -143,14 +143,14 @@ export default defineModule({
           label: '量程下限',
           type: 'number',
           default: 0,
-          help: '百分比 =（值 − 下限）÷（上限 − 下限），填充与刻度都按它算。',
+          help: '百分比按“（当前值 − 下限）÷（上限 − 下限）”计算，填充与刻度均使用该结果。',
         },
         {
           key: 'max',
           label: '量程上限',
           type: 'number',
           default: 100,
-          help: '⚠ 上限不大于下限时这一个仪表不画填充，也不伪造 0%——量程错了比空着更难发现。',
+          help: '上限必须大于下限；量程无效时不显示填充或百分比。',
         },
         {
           key: 'target',
@@ -158,21 +158,21 @@ export default defineModule({
           // ⚠ 刻意没有 default：留空 = 不画目标标记、完成率退回按量程算。
           //   给个 0 会让完成率一路除零
           type: 'number',
-          help: '留空则不画目标标记，完成率也退回按量程算。完成率 = 值 ÷ 目标，可以超过 100%。',
+          help: '留空时隐藏目标标记，并按量程计算完成率。配置后按“当前值 ÷ 目标值”计算，结果可超过 100%。',
         },
         {
           key: 'color',
           label: '固定颜色',
           type: 'color',
           default: '',
-          help: '填了就固定这一个仪表的填充色并压过规则命中色。只填 var(--…) 引用，填死色值换肤时不跟着走。',
+          help: '设置仪表基础色；规则命中色优先。建议使用 var(--…) 主题变量。',
         },
         {
           key: 'emitValue',
           label: '联动值',
           type: 'string',
           default: '',
-          help: '点这一个仪表时上抛的值，留空则这一个点了不上抛。',
+          help: '点击仪表时发送的联动值；留空则不发送仪表级事件。',
         },
       ],
     },
@@ -183,7 +183,7 @@ export default defineModule({
       group: '内容',
       default: '—',
       span: 'half',
-      help: '取不到值时画在读数位的那个符号。⚠ 缺值绝不伪造 0，填充也一并不画。',
+      help: '数据缺失时显示在读数位置的占位符；缺失值不会转换为 0，同时隐藏填充。',
     },
     {
       key: 'layout',
@@ -192,7 +192,7 @@ export default defineModule({
       group: '排布',
       default: 'auto',
       span: 'half',
-      help: '自动 = 只有一个时铺满整块，多个时按网格。',
+      help: '自动模式下，单个仪表填满模块，多个仪表使用网格排列。',
       options: [...GAUGE_LAYOUTS],
     },
     {
@@ -202,7 +202,7 @@ export default defineModule({
       group: '排布',
       default: 'auto',
       span: 'half',
-      help: '自动 = 按最小列宽自适应铺满；行数一律随仪表个数自适应。',
+      help: '自动模式按最小列宽自适应排列，行数随仪表数量调整。',
       options: [...GAUGE_COLUMNS],
     },
     {
@@ -215,11 +215,11 @@ export default defineModule({
       max: 40,
       step: 1,
       span: 'half',
-      help: '行列同值：仪表是方的，横竖分两个旋钮只会让网格歪。',
+      help: '水平与垂直间距使用相同数值，以保持方形仪表网格规整。',
     },
     {
       key: 'padX',
-      label: '整块左右内边距 (px)',
+      label: '模块水平内边距 (px)',
       type: 'range',
       group: '排布',
       default: 10,
@@ -230,7 +230,7 @@ export default defineModule({
     },
     {
       key: 'padY',
-      label: '整块上下内边距 (px)',
+      label: '模块垂直内边距 (px)',
       type: 'range',
       group: '排布',
       default: 6,
@@ -246,7 +246,7 @@ export default defineModule({
       group: '几何',
       default: 'arc',
       span: 'half',
-      help: '五档共用同一条「量程 → 百分比 → 填充」的链，只在最后一步分叉。',
+      help: '五种几何形态共用“量程 → 百分比 → 填充”计算，仅最终绘制方式不同。',
       options: [...GAUGE_SHAPES],
     },
     {
@@ -257,7 +257,7 @@ export default defineModule({
       span: 'full',
       // ⚠ 五个子键一律全摆：簇内子字段的条件显示判的是**簇内**同级取值，
       //   判不到顶层的几何档，摆不出「按几何档只露相关的那几个」（§10.13）
-      help: '五个子键按几何档各管一段：弧度盘吃厚度与张角、横向条与目标轨道吃厚度、储罐吃罐宽、温度计吃管宽与球径。',
+      help: '弧形使用厚度与张角；横向条和目标轨道使用厚度；储罐使用罐宽；温度计使用管宽与球径。',
       default: {
         thickness: 0,
         arcSpan: GAUGE_ARC_SPAN_DEFAULT,
@@ -275,7 +275,7 @@ export default defineModule({
           min: 0,
           max: GAUGE_THICKNESS_MAX,
           step: 1,
-          help: `0 = 随几何档：弧 9 / 条 12 / 轨道 18；非零按 ${GAUGE_THICKNESS_MIN}–${GAUGE_THICKNESS_MAX} 夹取。储罐与温度计不吃这一项。`,
+          help: `0 表示使用几何默认值：弧形 9、横向条 12、目标轨道 18；自定义值限制在 ${GAUGE_THICKNESS_MIN}–${GAUGE_THICKNESS_MAX}。储罐与温度计不适用。`,
         },
         {
           key: 'arcSpan',
@@ -285,7 +285,7 @@ export default defineModule({
           min: GAUGE_ARC_SPAN_MIN,
           max: GAUGE_ARC_SPAN_MAX,
           step: 5,
-          help: '缺口永远在正下方居中。只有弧度盘吃这一项。',
+          help: '弧形专用；缺口固定在正下方中央。',
         },
         {
           key: 'tankWidth',
@@ -295,7 +295,7 @@ export default defineModule({
           min: GAUGE_SIZE_BOUNDS.tankWidth.min,
           max: GAUGE_SIZE_BOUNDS.tankWidth.max,
           step: 1,
-          help: '同时受「不超过半块宽」约束，窄块里罐会自己收窄。只有储罐吃这一项。',
+          help: '储罐专用；实际宽度不超过可用区域的一半。',
         },
         {
           key: 'tubeWidth',
@@ -305,7 +305,7 @@ export default defineModule({
           min: GAUGE_SIZE_BOUNDS.tubeWidth.min,
           max: GAUGE_SIZE_BOUNDS.tubeWidth.max,
           step: 1,
-          help: '管顶是半圆帽，宽度改了帽子跟着走。只有温度计吃这一项。',
+          help: '温度计专用；管顶圆角随管宽同步调整。',
         },
         {
           key: 'bulbSize',
@@ -315,7 +315,7 @@ export default defineModule({
           min: GAUGE_SIZE_BOUNDS.bulbSize.min,
           max: GAUGE_SIZE_BOUNDS.bulbSize.max,
           step: 1,
-          help: '温度计底下那个球的直径。只有温度计吃这一项。',
+          help: '温度计专用；设置底部球体直径。',
         },
       ],
     },
@@ -326,7 +326,7 @@ export default defineModule({
       group: '几何',
       default: 'solid',
       span: 'half',
-      help: '渐变档由填充色自己调深浅；自定义色标档按下面那张表左右分色（红区→绿区那种彩虹弧）。',
+      help: '渐变模式根据填充色生成明暗变化；自定义色标模式按下方色标从左至右分配颜色。',
       options: [...GAUGE_FILL_STYLES],
     },
     {
@@ -336,7 +336,8 @@ export default defineModule({
       group: '几何',
       default: 'fill',
       span: 'half',
-      help: '填充 = 填到读数处；满弧 + 指针 = 整条弧是量程、指针指位置。⚠ 只有弧度盘吃这一项，其余四档摆着不生效。',
+      help: '“填充”按读数裁切弧长；“满弧 + 指针”以完整弧线表示量程，并用指针标示当前位置。',
+      when: { key: 'shape', in: ['arc'] },
       options: [...GAUGE_INDICATORS],
     },
     {
@@ -347,7 +348,8 @@ export default defineModule({
       span: 'full',
       itemLabelKey: 'color',
       default: [],
-      help: '只有「填充上色 = 自定义色标」那一档吃它，且至少要两档才生效。⚠ 颜色只填 var(--…) 引用或十六进制；算出来的色值换肤时不跟着走。',
+      when: { key: 'fillStyle', in: ['stops'] },
+      help: '至少配置两个色标。建议使用 var(--…) 主题变量；固定色值不会随主题切换。',
       itemSchema: [
         {
           key: 'at',
@@ -387,14 +389,14 @@ export default defineModule({
           label: '显示量程端点',
           type: 'boolean',
           default: false,
-          help: '在仪表两端标出下限与上限（弧度盘 / 横向条）。',
+          help: '在仪表两端显示量程下限与上限，适用于全部几何形态。',
         },
         {
           key: 'ticks',
           label: '显示刻度',
           type: 'boolean',
           default: false,
-          help: '在轨道下方摆一排等距刻度（横向条 / 目标轨道）。',
+          help: '在目标轨道下方显示等距刻度。',
         },
         {
           key: 'tickCount',
@@ -405,14 +407,15 @@ export default defineModule({
           min: GAUGE_TICK_COUNT_MIN,
           max: GAUGE_TICK_COUNT_MAX,
           step: 1,
-          help: '首尾各占一个，四个即 0 / 33.3 / 66.7 / 100。',
+          when: { key: 'ticks', in: [true] },
+          help: '刻度包含量程两端；配置 4 个刻度时对应 0 / 33.3 / 66.7 / 100。',
         },
         {
           key: 'wanFormat',
           label: '按「万」显示',
           type: 'boolean',
           default: false,
-          help: '⚠ 量程上限不足 1 万时整卡回落原始格式：小量程走「万」会让刻度全塌成「0.0万」，信息全失。',
+          help: '量程上限低于 1 万时使用原始格式，避免「万」格式将小量程刻度显示为相同数值。',
         },
         {
           key: 'wanDigits',
@@ -422,7 +425,8 @@ export default defineModule({
           min: 0,
           max: 4,
           step: 1,
-          help: '刻度、读数与目标标签共用这一个小数位。',
+          when: { key: 'wanFormat', in: [true] },
+          help: '刻度、读数与目标标签共用此小数位设置。',
         },
       ],
     },
@@ -436,16 +440,17 @@ export default defineModule({
       max: 20,
       step: 1,
       span: 'half',
-      help: '刻度与量程端点共用这一个字号。',
+      help: '刻度与量程端点共用此字号设置。',
     },
     {
       key: 'targetMark',
-      label: '画目标标记',
+      label: '显示目标标记',
       type: 'boolean',
       group: '目标',
       default: true,
       span: 'half',
-      help: '⚠ 只在这一个仪表填了目标值时才画：没有目标就连标记位都不占。',
+      when: { key: 'shape', in: ['track'] },
+      help: '仅在目标值有效时显示，不预留空白位置。',
     },
     {
       key: 'targetLabel',
@@ -454,8 +459,9 @@ export default defineModule({
       group: '目标',
       default: '计划',
       span: 'half',
-      placeholder: '如 计划 / 目标',
-      help: '画在目标标记上方，后面紧接目标值。',
+      when: { key: 'targetMark', in: [true] },
+      placeholder: '例如：计划 / 目标',
+      help: '显示在目标标记上方，并与目标值相邻。',
     },
     {
       key: 'showPercent',
@@ -464,7 +470,8 @@ export default defineModule({
       group: '目标',
       default: true,
       span: 'half',
-      help: '⚠ 完成率 = 值 ÷ 目标，不夹取、可以超过 100%；与「量程百分比」不是一个数。',
+      when: { key: 'shape', in: ['track'] },
+      help: '完成率按“当前值 ÷ 目标值”计算，不限制在 100% 以内；该值与量程百分比不同。',
     },
     {
       key: 'readout',
@@ -473,7 +480,7 @@ export default defineModule({
       group: '读数',
       default: 'value',
       span: 'half',
-      help: '⚠ 这里的百分比是**量程**百分比（夹在 0–100），不是完成率。',
+      help: '此处显示量程百分比，并限制在 0–100；不表示完成率。',
       options: [...GAUGE_READOUTS],
     },
     {
@@ -483,7 +490,7 @@ export default defineModule({
       group: '读数',
       default: 'center',
       span: 'half',
-      help: '⚠ 横向条与目标轨道要吃满整行，「旁边」在这两档上落在轨道上方那一行。',
+      help: '横向条与目标轨道使用整行宽度，因此“图形旁边”显示在轨道上方。',
       options: [...GAUGE_READOUT_PLACES],
     },
     {
@@ -496,7 +503,7 @@ export default defineModule({
       max: 200,
       step: 1,
       span: 'half',
-      help: '0 = 跟着块宽自适应。填正数即钉死一个字号，多个并排时字号才对得齐。',
+      help: '0 表示根据模块宽度自适应；正数表示固定字号，便于多个仪表保持一致。',
     },
     {
       key: 'valueColor',
@@ -506,7 +513,7 @@ export default defineModule({
       // 命中规则的那一个改用规则自己的颜色，这里是没命中时的颜色
       default: 'var(--accent-primary)',
       span: 'half',
-      help: '命中取值规则的那一个改用规则的颜色，这里配的是没有命中时的颜色。',
+      help: '未命中取值规则时使用此颜色；命中后使用规则颜色。',
     },
     {
       key: 'valueGlow',
@@ -537,7 +544,7 @@ export default defineModule({
       group: '单位',
       default: 'baseline',
       span: 'half',
-      help: '两档都与读数同基线，差的只是那一道小间隙。',
+      help: '两种位置均与读数保持同一基线，仅间距不同。',
       options: [...GAUGE_UNIT_PLACES],
     },
     {
@@ -547,7 +554,7 @@ export default defineModule({
       group: '标签',
       default: 'below',
       span: 'half',
-      help: '⚠ 它只管摆在哪儿，不管显不显示：这一个没有名称时整行不渲染。要藏标签就把那一项的「名称」留空。',
+      help: '设置标签相对读数的位置；名称留空时不显示标签。',
       options: [...GAUGE_LABEL_PLACES],
     },
     {
@@ -577,8 +584,8 @@ export default defineModule({
       group: '配色',
       default: '',
       span: 'half',
-      placeholder: '留空 = 跟随读数颜色',
-      help: '这一项配的是整块的填充色；逐个仪表的固定颜色与规则命中色都压过它。',
+      placeholder: '留空时跟随读数颜色',
+      help: '设置模块的默认填充色；单个仪表的固定颜色与规则颜色优先级更高。',
     },
     {
       key: 'trackColor',
@@ -587,8 +594,8 @@ export default defineModule({
       group: '配色',
       default: '',
       span: 'half',
-      placeholder: '留空 = 跟随主题的沉底色',
-      help: '空轨道那一层的颜色；填满的那一段走填充色。',
+      placeholder: '留空时使用主题轨道色',
+      help: '设置未填充轨道的颜色；已填充区域使用填充色。',
     },
     {
       key: 'thousands',
@@ -597,7 +604,7 @@ export default defineModule({
       group: '格式',
       default: true,
       span: 'half',
-      help: '读数、刻度与目标标签一起走这一档。',
+      help: '读数、刻度与目标标签共用此文字颜色。',
     },
     { ...valueRulesField('rules', '取值规则'), group: '告警' },
   ],

@@ -79,7 +79,7 @@ const PREVIEW_SCENE = {
 export default defineModule({
   type: 'twin-2d-view',
   description:
-    '2D 孪生画面：一张由节点、连线、标注与节点样式画成的流程图 / 系统图 / 一次接线图，节点按状态变色、连线按读数流动，整张图按四档缩放方式适配模块矩形。工艺流程、能流、管网、配电接线这类平面图上挂读数时用它；三维模型请用 twin-view。⚠ 图本身不在属性面板里配——`twin2d` 那一段由子编辑器（路由 `twin-2d-editor`）整块写入，这里能配的只有标题、缩放、留白、内置图标集开关与两项流动动画。三个数组绑定槽，行都钉在图文档里的实体上（行数由图里的节点 / 连线数决定，不由绑定条数决定，空行只表示那个实体没接数据源）：`nodeValues[i].value` 第 i 个节点的数值、`nodeStatus[i].status` 第 i 个节点的状态（数值原样进来，不要给它配枚举映射，配了全图状态会集体退回灰色的 unknown）、`edgeValues[i]` 第 i 条连线的三个子槽——`active` 收布尔（有流 / 通电）、`direction` 收数值（负数 = 反向）、`value` 收数值（标签读数）。⚠ 它上抛的联动事件是 `select` 而不是 `click`，联动规则的触发事件要选对，选错永远不触发；另外「连线流动动画」是总闸，关着时样式里怎么配都不动。',
+    '2D 数字孪生模块，用于构建流程图、系统图、管网和一次接线图；三维模型场景应选择 3D 孪生。图元文档由 2D 孪生编辑器维护，属性面板仅控制标题、五档缩放和流动效果。节点数值、节点状态及连线数据通过三个实体钉定的数组槽按文档顺序关联。节点点击发送带稳定节点 id 的 `select` 事件，连线动画总开关关闭时所有流动效果停止。',
   displayName: '2D 孪生',
   category: '孪生',
   icon: 'network',
@@ -96,6 +96,7 @@ export default defineModule({
   // 套框（chrome 缺省即 card）：一张图配上统一卡片外观与标题条，40 个 chrome 键全吃。
   // ⚠ `unsupportedChromeKeys` 一个都不声明——本模块没有自绘外壳，全套外观都落得下去
   defaultSize: { width: 1280, height: 480, minWidth: 240, minHeight: 120 },
+  contentKeys: ['title', TWIN_2D_CONFIG_KEY, 'showSprite'],
   configSchema: [
     {
       key: 'title',
@@ -125,7 +126,7 @@ export default defineModule({
       default: 'contain',
       span: 'half',
       options: FIT_MODE_OPTIONS,
-      help: '完整显示会留出安全边距；拉满两轴各自缩放，电路图别用。原尺寸一点不缩放（字与线最清晰），格子比画布小的部分会被裁掉。',
+      help: '「完整显示」保留安全边距；「拉满」可产生变形；「原尺寸」保持 1:1，超出模块的部分会被裁剪。',
     },
     {
       key: 'fitPadding',
@@ -148,7 +149,7 @@ export default defineModule({
       group: '画面',
       default: true,
       span: 'half',
-      help: '关掉后内置图标集那一档的图标不显示，自带图标集的项目可以省下这一份。',
+      help: '关闭后不显示内置 sprite 图标；素材图标和自定义图元不受影响。',
     },
     {
       key: 'animateFlow',
@@ -157,7 +158,7 @@ export default defineModule({
       group: '运行态',
       // ⚠ 同样刻意不给 default：缺省即 false = 不动，存量大屏零回归
       span: 'full',
-      help: '总闸：关掉时所有连线都不动，不论样式里怎么配。',
+      help: '全局开关；关闭时忽略各连线样式中的流动配置。',
     },
     {
       key: 'flowSpeed',
@@ -189,7 +190,7 @@ export default defineModule({
     configKey: TWIN_2D_CONFIG_KEY,
     routeName: 'twin-2d-editor',
     label: '打开 2D 孪生编辑器',
-    hint: '节点、连线、标注与节点样式都在那里画。',
+    hint: '在 2D 孪生编辑器中维护节点、连线、标注与节点样式。',
   },
   bindingRowLabels: (config) =>
     twin2dRowLabels(normalizeTwin2dConfig(config[TWIN_2D_CONFIG_KEY])),

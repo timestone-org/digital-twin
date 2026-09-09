@@ -7,6 +7,7 @@
  * ⚠ 行数由推送数组的长度决定，配置里没有对应的行清单——这正是本模块与另外三个卡片模块
  * 分家的理由（MODULE_INFO_CARD_DESIGN §1.2）。
  */
+import type { ModuleSlotMeta } from '@dt/contracts'
 import type { CSSProperties } from 'vue'
 
 import {
@@ -17,6 +18,7 @@ import {
   readTrimmedText,
 } from '../../shared/config'
 import { NO_DATA } from '../../shared/format'
+import { reasonOf } from '../../shared/slotState'
 
 import {
   FEED_BUILTIN_LEVELS,
@@ -69,6 +71,14 @@ export interface FeedRowView {
   rank: number
   /** ⚠ 没有颜色的级别**不写这个键**：注入空串就落不回样式表里的中性缺省。 */
   vars: FeedRowVars
+  issue: FeedRowIssue | null
+}
+
+/** 一条信息中已绑定但未正常取值的子槽。 */
+export interface FeedRowIssue {
+  state: 'pending' | 'error'
+  mark: string
+  reason: string
 }
 
 /** 组装一条信息流要用到的输入。 */
@@ -76,6 +86,64 @@ export interface FeedRowsInput {
   config: Record<string, unknown>
   /** `values[FEED_SLOT_KEY]` 的原值，正常是一个行数组。 */
   rows: unknown
+  slots?: Readonly<Record<string, ModuleSlotMeta>>
+}
+
+const SLOT_LABELS: Readonly<Record<(typeof FEED_SLOT_FIELDS)[number], string>> =
+  {
+    level: '级别',
+    text: '内容',
+    time: '时间',
+  }
+
+function fieldKey(
+  index: number,
+  field: (typeof FEED_SLOT_FIELDS)[number],
+): string {
+  return `${FEED_SLOT_KEY}[${String(index)}].${field}`
+}
+
+function trustedField(
+  record: Record<string, unknown>,
+  index: number,
+  field: (typeof FEED_SLOT_FIELDS)[number],
+  slots: Readonly<Record<string, ModuleSlotMeta>> | undefined,
+): unknown {
+  const slot = slots?.[fieldKey(index, field)]
+  return slot !== undefined && slot.state !== 'ok' ? undefined : record[field]
+}
+
+/** 优先报告错误，其次报告仍在等待首帧的子槽。 */
+function issueAt(
+  index: number,
+  slots: Readonly<Record<string, ModuleSlotMeta>> | undefined,
+): FeedRowIssue | null {
+  for (const state of ['error', 'pending'] as const) {
+    for (const field of FEED_SLOT_FIELDS) {
+      const slot = slots?.[fieldKey(index, field)]
+      if (slot?.state !== state) continue
+      return {
+        state,
+        mark: state === 'error' ? '✕' : '⋯',
+        reason: `${SLOT_LABELS[field]}：${reasonOf(state, slot)}`,
+      }
+    }
+  }
+  return null
+}
+
+/** 值数组与逐槽状态中的最大行号共同决定要呈现几行。 */
+function feedRowCount(
+  rows: readonly unknown[],
+  slots: Readonly<Record<string, ModuleSlotMeta>> | undefined,
+): number {
+  let count = rows.length
+  const pattern = /^feedValues\[(\d+)]\.(?:level|text|time)$/
+  for (const key of Object.keys(slots ?? {})) {
+    const index = Number(pattern.exec(key)?.[1])
+    if (Number.isInteger(index)) count = Math.max(count, index + 1)
+  }
+  return count
 }
 
 /** 级别色板里的一行配置。 */
@@ -141,12 +209,14 @@ function toRow(
   raw: unknown,
   index: number,
   levels: Record<string, FeedLevelStyle>,
+  issue: FeedRowIssue | null,
+  slots: Readonly<Record<string, ModuleSlotMeta>> | undefined,
 ): FeedRowView | null {
   const record = readRecord(raw)
-  const level = normKey(record.level)
-  const text = readTrimmedText(record.text)
-  const time = readTrimmedText(record.time)
-  if (level === '' && text === '' && time === '') return null
+  const level = normKey(trustedField(record, index, 'level', slots))
+  const text = readTrimmedText(trustedField(record, index, 'text', slots))
+  const time = readTrimmedText(trustedField(record, index, 'time', slots))
+  if (level === '' && text === '' && time === '' && issue === null) return null
   const style = levels[level] ?? FEED_UNKNOWN_LEVEL
   return {
     key: `${String(index)}|${level}|${text}`,
@@ -159,6 +229,7 @@ function toRow(
     time,
     rank: style.rank,
     vars: style.color === '' ? {} : { '--if-level-color': style.color },
+    issue,
   }
 }
 
@@ -170,11 +241,17 @@ function toRow(
  */
 export function buildFeedRows(input: FeedRowsInput): FeedRowView[] {
   const levels = readFeedLevels(input.config)
+  const source = readArray(input.rows)
   const rows: FeedRowView[] = []
-  let index = 0
-  for (const raw of readArray(input.rows)) {
-    const row = toRow(raw, index, levels)
-    index += 1
+  const count = feedRowCount(source, input.slots)
+  for (let index = 0; index < count; index += 1) {
+    const row = toRow(
+      source[index],
+      index,
+      levels,
+      issueAt(index, input.slots),
+      input.slots,
+    )
     if (row !== null) rows.push(row)
   }
   if (!readBoolean(input.config.sortByRank)) return rows

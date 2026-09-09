@@ -16,7 +16,7 @@ import type {
   BindingRowLabel,
   BindingSpec,
 } from '@dt/contracts'
-import { DtButton, DtEmpty, DtTag } from '@dt/ui'
+import { DtButton, DtEmpty, DtHelpTip, DtTag } from '@dt/ui'
 import { computed } from 'vue'
 
 import {
@@ -164,14 +164,14 @@ function bindingOf(fieldKey: string): BindingPayload | null {
     <DtEmpty
       v-if="specs.length === 0"
       icon="activity"
-      title="这个面不取数"
-      hint="它没有声明任何绑定槽"
+      title="无需数据绑定"
+      hint="此模块未声明数据槽。"
     />
     <DtEmpty
       v-else-if="isFilteredEmpty"
       icon="activity"
-      title="选中的这一个没有可绑的数据"
-      hint="给它加上字段之后再来绑，或切回全部查看这段孪生的其它绑定。"
+      title="暂无可绑定字段"
+      hint="请先为所选对象添加字段，或切换至“全部”。"
     />
     <template v-else>
       <section
@@ -179,8 +179,14 @@ function bindingOf(fieldKey: string): BindingPayload | null {
         :key="section.spec.key"
         class="flex flex-col gap-2 rounded border border-border-subtle p-2"
       >
-        <header class="flex items-center gap-2">
-          <span class="flex-1 truncate text-xs text-text-primary">
+        <header
+          v-if="section.spec.isArray || section.spec.isRequired"
+          class="flex items-center gap-2"
+        >
+          <span
+            v-if="section.spec.isArray"
+            class="flex-1 truncate text-xs text-text-primary"
+          >
             {{ section.spec.label }}
           </span>
           <DtTag v-if="section.spec.isRequired" size="sm" intent="warning">
@@ -214,20 +220,17 @@ function bindingOf(fieldKey: string): BindingPayload | null {
             v-if="group.title !== null"
             class="flex items-start justify-between gap-2"
           >
-            <div class="flex min-w-0 flex-col">
-              <span class="truncate text-2xs text-text-disabled">
+            <div class="flex min-w-0 items-center gap-1">
+              <span class="min-w-0 truncate text-2xs text-text-disabled">
                 {{ group.title }}
               </span>
-              <!-- 与实体清单上显示的 id 逐字相同：绑第 7 行时靠它确认绑的是谁 -->
-              <span
+              <DtHelpTip
                 v-if="group.entityId !== ''"
-                class="truncate font-mono text-2xs text-text-disabled"
-                :title="group.entityId"
-              >
-                {{ group.entityId }}
-              </span>
+                :text="`实体标识：${group.entityId}`"
+                :label="`${group.title ?? '绑定行'}实体标识`"
+              />
               <span v-if="group.isOrphan" class="text-2xs text-state-danger">
-                没有对应的实体，这一行喂不到任何东西
+                没有对应实体，该行不会参与取值
               </span>
             </div>
             <DtButton

@@ -1,6 +1,6 @@
 <script setup lang="ts">
 /**
- * @fileoverview 舞台：按容器尺寸把画布等比缩放贴进模块矩形（`fitMode` 四档）、钉死六层
+ * @fileoverview 舞台：按容器尺寸把画布以五档 `fitMode` 贴进模块矩形、钉死六层
  * 的层序、铺底图与图案底、一个节点都没有时出空态，并把 sprite 宿主在每个 DOM 文档里
  * 挂一次。口径见 docs/MODULE_TWIN_2D_DESIGN.md §9.1、§7.10。
  *
@@ -20,6 +20,7 @@ import Twin2dEdgeLayer from './Twin2dEdgeLayer.vue'
 import Twin2dIconSprite from './Twin2dIconSprite.vue'
 import Twin2dMarkLayer from './Twin2dMarkLayer.vue'
 import Twin2dNodeBox from './Twin2dNodeBox.vue'
+import { claimTwin2dSprite } from './spriteOwner'
 import type { Twin2dEdgeState } from '../edgeView'
 import type { Twin2dSlotValues } from '../expr'
 import type { Twin2dFitMode, Twin2dStatus } from '../kinds'
@@ -35,13 +36,6 @@ import type {
 
 /** 空态文案：这张图上一个节点、一条标注都没有时的那一行 */
 const EMPTY_TEXT = '这张 2D 孪生还没有画任何节点'
-/**
- * 同一个 DOM 文档里 sprite 宿主已经有主了的标记。
- * ⚠ 记在文档上而不是模块变量里：宿主挂进的是文档，判据就该在文档上。同一份包被打进
- * 两份产物（运行态与编辑器各一份）时模块变量各算各的，两边都会判成没挂过。
- */
-const SPRITE_CLAIM_ATTR = 'data-twin2d-sprite'
-
 /** 空读数表共用一份：每次求值都换一个新 Map 等于告诉子组件「数据变了」。 */
 const EMPTY_SLOTS: Twin2dSlotValues = new Map<string, unknown>()
 
@@ -145,23 +139,9 @@ const host = ref<HTMLElement | null>(null)
 const measured = ref<Twin2dStageBox>({ w: 0, h: 0 })
 let observer: ResizeObserver | null = null
 
-/**
- * 领 sprite 宿主：同一个 DOM 文档里只有头一个舞台领得到。
- * ⚠ 在 setup 里同步领，不等 `onMounted`：同帧建起来的两个舞台在 mounted 之前都还没
- * 落进文档，靠查 DOM 判「有没有挂过」两边都会判成没有，于是同一份 symbol 挂两遍。
- */
-function claimSprite(): boolean {
-  const root = document.documentElement
-  if (root.hasAttribute(SPRITE_CLAIM_ATTR)) return false
-  root.setAttribute(SPRITE_CLAIM_ATTR, '')
-  return true
-}
-
-/**
- * ⚠ 漏挂 sprite 时图标**静默消失**：`<use>` 元素照样在 devtools 里，只是解析不到任何
- * 目标，控制台一声不吭（§5）。
- */
-const ownsSprite = claimSprite()
+// ⚠ 所有者卸载时必须转交；否则其他已挂载舞台的 `<use>` 会全部失去目标。
+const spriteClaim = claimTwin2dSprite(document)
+const ownsSprite = spriteClaim.isOwner
 
 /**
  * 量一次宿主。
@@ -189,10 +169,7 @@ onMounted(() => {
 onBeforeUnmount(() => {
   observer?.disconnect()
   observer = null
-  // 把标记还回去，之后新挂起来的舞台接手
-  // ⚠ 此刻已经挂着的另一个舞台不会补挂：它的 setup 只跑过一次。同页多张图且会
-  // 逐张卸载时，宿主该由外层挂一次而不是交给舞台
-  if (ownsSprite) document.documentElement.removeAttribute(SPRITE_CLAIM_ATTR)
+  spriteClaim.release()
 })
 
 /**

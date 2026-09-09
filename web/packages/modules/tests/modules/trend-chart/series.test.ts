@@ -308,7 +308,7 @@ describe('跨度、签名与读屏摘要', () => {
     expect(spanOf([])).toBe(0)
   })
 
-  it('签名只含行数、点数、末点与状态这几样廉价指纹', () => {
+  it('不同序列产生不同签名，相同序列保持稳定', () => {
     const config = { [SERIES_ITEMS_KEY]: [{}] }
     const before = build(config, [row(1, points(1, 2))], allOk(1))
     const after = build(config, [row(1, points(1, 3))], allOk(1))
@@ -318,6 +318,14 @@ describe('跨度、签名与读屏摘要', () => {
       signatureOf(build(config, [row(1, points(1, 2))], allOk(1))),
     )
     expect(signatureOf([])).toBe('')
+  })
+
+  it('点数与末点不变时，中间点修订仍会改变签名', () => {
+    const config = { [SERIES_ITEMS_KEY]: [{}] }
+    const before = build(config, [row(3, points(1, 2, 3))], allOk(1))
+    const after = build(config, [row(3, points(1, 9, 3))], allOk(1))
+
+    expect(signatureOf(before)).not.toBe(signatureOf(after))
   })
 
   it('读屏摘要连没画出来的那几条一起报，图例关得掉它关不掉', () => {

@@ -9,12 +9,16 @@ import type { DtOverlaySide } from '../../overlay/placement'
 
 const props = withDefaults(
   defineProps<{
-    content?: string
-    side?: DtOverlaySide
-    disabled?: boolean
+    content?: string | undefined
+    side?: DtOverlaySide | undefined
+    disabled?: boolean | undefined
   }>(),
   { side: 'top', disabled: false },
 )
+
+defineSlots<{
+  default?: (props: { describedby: string | undefined }) => unknown
+}>()
 
 const tipId = `dt-tooltip-${useId()}`
 
@@ -43,6 +47,13 @@ function show(): void {
   if (hasContent.value) overlay.open()
 }
 
+/** 仅在提示已展开时消费 Esc；关闭状态继续交给外层快捷键。 */
+function closeFromEscape(event: KeyboardEvent): void {
+  if (!overlay.isOpen.value) return
+  event.stopPropagation()
+  overlay.close()
+}
+
 // 内容被清空或组件被禁用时立刻收起，否则气泡会挂着一句已经作废的话
 watch(hasContent, (available) => {
   if (!available) overlay.close()
@@ -58,9 +69,9 @@ watch(hasContent, (available) => {
     @mouseleave="overlay.close()"
     @focusin="show"
     @focusout="overlay.close()"
-    @keydown.escape="overlay.close()"
+    @keydown.escape="closeFromEscape"
   >
-    <slot />
+    <slot :describedby="describedby" />
     <Teleport v-if="overlay.isOpen.value" :to="host">
       <span
         :id="tipId"

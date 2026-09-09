@@ -149,6 +149,27 @@ describe('进度条', () => {
     expect(wrapper.find('.dt-meter__fill').attributes('style')).toContain('25%')
   })
 
+  it('占比槽已绑定但取值失败时不改用主读数换算', async () => {
+    const wrapper = await mountCard(
+      { parts: [{ kind: 'meter' }] },
+      { cellValues: [{ value: 50 }] },
+      {
+        slots: {
+          'cellValues[0].value': { state: 'ok' },
+          'cellValues[0].ratio': { state: 'error', message: '占比点位断连' },
+        },
+      },
+    )
+
+    expect(wrapper.find('.dt-meter').exists()).toBe(false)
+    expect(wrapper.get('.dc-meter__status').classes()).toContain(
+      'dc-meter__status--error',
+    )
+    expect(wrapper.get('.dc-meter__status').attributes('title')).toContain(
+      '占比点位断连',
+    )
+  })
+
   // ⚠ 拿 0% 冒充「算不出来」会让一条满量程的管道看着像空的
   it('两条路都算不出时整件不画，不画成 0%', async () => {
     const wrapper = await mountCard(
@@ -171,6 +192,55 @@ describe('进度条', () => {
     )
     expect(wrapper.find('.dt-meter__pct').text()).toBe('120%')
   })
+
+  it('全卡占比排除取值失败格携带的旧值', async () => {
+    const wrapper = await mountCard(
+      {
+        cells: [{ label: '甲' }, { label: '乙' }],
+        parts: [
+          { kind: 'meter', 'meter-source': 'share', 'meter-slot': 'value' },
+        ],
+      },
+      { cellValues: [{ value: 90 }, { value: 10 }] },
+      {
+        slots: {
+          'cellValues[0].value': { state: 'error' },
+          'cellValues[1].value': { state: 'ok' },
+        },
+      },
+    )
+
+    expect(
+      wrapper.findAll('.dt-meter__pct').map((node) => node.text()),
+    ).toEqual(['100%'])
+  })
+
+  it('目标槽取值失败时粗轨道不使用旧目标值', async () => {
+    const wrapper = await mountCard(
+      {
+        cells: [{ label: '甲' }],
+        parts: [
+          {
+            kind: 'meter',
+            'meter-look': 'track',
+            'meter-showTarget': true,
+          },
+        ],
+      },
+      { cellValues: [{ value: 50, aux: 80 }] },
+      {
+        slots: {
+          'cellValues[0].value': { state: 'ok' },
+          'cellValues[0].aux': { state: 'error', message: '目标点位断连' },
+        },
+      },
+    )
+
+    expect(wrapper.find('.dt-meter__target').exists()).toBe(false)
+    expect(wrapper.get('.dc-cell__status').attributes('aria-label')).toContain(
+      '目标点位断连',
+    )
+  })
 })
 
 describe('联动', () => {
@@ -187,6 +257,22 @@ describe('联动', () => {
     expect(wrapper.emitted('interaction')?.[0]).toEqual([
       { event: 'click', value: 'a' },
     ])
+  })
+
+  it('未配置格级联动值时点击继续交给模块宿主', async () => {
+    const onHostClick = vi.fn()
+    const wrapper = await mountCard(
+      { cells: [{ label: '甲' }] },
+      { cellValues: [{ value: 1 }] },
+    )
+    const host: unknown = wrapper.element
+    if (!(host instanceof HTMLElement))
+      throw new Error('模块根节点不是 HTML 元素')
+    host.addEventListener('click', onHostClick)
+
+    await wrapper.get('.dc-cell').trigger('click')
+
+    expect(onHostClick).toHaveBeenCalledOnce()
   })
 })
 
@@ -216,6 +302,24 @@ describe('栅格', () => {
 })
 
 describe('逐槽结论摊到格上', () => {
+  it('取值失败格携带的旧值不再触发告警规则', async () => {
+    const wrapper = await mountCard(
+      {
+        cells: [{ label: '甲' }],
+        parts: [{ kind: 'value' }],
+        rules: [{ op: 'gt', value: 50, level: 'danger' }],
+      },
+      { cellValues: [{ value: 90 }] },
+      {
+        slots: {
+          'cellValues[0].value': { state: 'error', message: '点位断连' },
+        },
+      },
+    )
+
+    expect(wrapper.get('.dc-cell').classes()).not.toContain('dc-cell--alarm')
+  })
+
   // ⚠ 键拼错不报错也不渲染：整张卡片一律落到「没配来源」，而配置一字没错
   it('按「槽键[行号].子槽」认领这一格自己的那几条结论', async () => {
     const wrapper = await mountCard(
@@ -244,6 +348,43 @@ describe('逐槽结论摊到格上', () => {
 
     expect(wrapper.find('.dc-value__num').classes()).toContain(
       'dc-value__num--unbound',
+    )
+  })
+
+  it('状态徽标区分取值失败与未知设备状态', async () => {
+    const wrapper = await mountCard(
+      { cells: [CELLS[0]], parts: [{ kind: 'badge' }] },
+      { cellValues: [{}] },
+      {
+        slots: {
+          'cellValues[0].state': { state: 'error', message: '状态点位断连' },
+        },
+      },
+    )
+
+    const status = wrapper.get('.dc-badge__status')
+    expect(status.classes()).toContain('dc-badge__status--error')
+    expect(status.attributes('title')).toContain('状态点位断连')
+    expect(wrapper.text()).not.toContain('未知')
+  })
+
+  it('未被当前部件直接呈现的辅助槽异常仍有格级提示', async () => {
+    const wrapper = await mountCard(
+      { cells: [CELLS[0]], parts: [{ kind: 'label' }] },
+      { cellValues: [{}] },
+      {
+        slots: {
+          'cellValues[0].extra3': {
+            state: 'error',
+            message: '扩展点位断连',
+          },
+        },
+      },
+    )
+
+    expect(wrapper.get('.dc-cell__status').text()).toBe('✕')
+    expect(wrapper.get('.dc-cell__status').attributes('aria-label')).toContain(
+      '扩展点位断连',
     )
   })
 })

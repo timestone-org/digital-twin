@@ -1,43 +1,16 @@
 /**
- * @fileoverview 守五套外观预设的数据面：id 集合、只写清单里有的顶层键、枚举取值都在
- * 该字段的选项里、每套都把观感键写全（数值口径、轴名、参考线与取数来源这几个除外），
- * 内容键一个都不写，以及逐套那几个「照抄别套就会错」的取值。
- *
- * ⚠ 这几类错法点了按钮什么都不会发生，而 typecheck、lint、build 全绿：
- * 键写错就是「配了不生效」；少写一个键，上一套留在配置里的那个值原样残留，
- * 而点亮判定做的是子集比较、照样把按钮点亮。
- * ⚠ `valueSource` 尤其不许写：它决定这一块读哪一路绑定，一套「换个样子」把它
- * 从历史档翻回实时档，整屏曲线会当场变成一排单值柱。
+ * @fileoverview 守对比柱图预设：观感键完整、内容键隔离，枚举值与清单一致。
  */
-import type { ConfigField } from '@dt/contracts'
+import { styleKeysOf, type ConfigField } from '@dt/contracts'
 import { describe, expect, it } from 'vitest'
 
-import { BAR_ITEMS_KEY } from '../../../src/modules/bar-chart/bars'
 import manifest from '../../../src/modules/bar-chart/manifest'
 import { BAR_CHART_PRESETS } from '../../../src/modules/bar-chart/presets'
 
 const SCHEMA = manifest.configSchema
 const TOP_KEYS = new Set(SCHEMA.map((item) => item.key))
 const CONTENT_KEYS = manifest.contentKeys ?? []
-
-/**
- * 摆在样式与坐标轴分段里、语义却不是观感的那几个键。
- * ⚠ 一套观感把它们写掉，用户配好的数值口径、轴名、阈值线与取数来源会在
- * 换个样子时一起消失。
- */
-const DATA_KEYS = [
-  'valueSource',
-  'unit',
-  'precision',
-  'xAxisName',
-  'yAxisName',
-  'refLines',
-]
-
-/** 每一套都该写全的观感键：顶层键去掉内容键，再去掉上面那几个。 */
-const STYLE_KEYS = SCHEMA.map((item) => item.key).filter(
-  (key) => !CONTENT_KEYS.includes(key) && !DATA_KEYS.includes(key),
-)
+const STYLE_KEYS = styleKeysOf(manifest)
 
 function optionValues(target: ConfigField | undefined): unknown[] {
   return (target?.options ?? []).map((option) => option.value)
@@ -82,21 +55,11 @@ describe('对比柱图的五套预设', () => {
     expect(missing).toEqual([])
   })
 
-  it('取数来源、数值口径、轴名与参考线一套都不写', () => {
+  it('内容键一套都不写，写了会覆盖用户配置的数据与数值口径', () => {
     const stray = BAR_CHART_PRESETS.flatMap((preset) =>
-      DATA_KEYS.filter((key) => key in preset.config).map(
+      CONTENT_KEYS.filter((key) => key in preset.config).map(
         (key) => `${preset.id}.${key}`,
       ),
-    )
-
-    expect(stray).toEqual([])
-  })
-
-  it('三个内容键一套都不写，写了会把用户配好的数据组整片抹掉', () => {
-    const stray = BAR_CHART_PRESETS.flatMap((preset) =>
-      ['title', BAR_ITEMS_KEY, 'emptyText']
-        .filter((key) => key in preset.config)
-        .map((key) => `${preset.id}.${key}`),
     )
 
     expect(stray).toEqual([])

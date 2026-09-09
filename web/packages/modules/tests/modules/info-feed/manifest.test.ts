@@ -64,6 +64,15 @@ describe('信息流清单的身份', () => {
     expect(manifest.unsupportedChromeKeys).toBeUndefined()
   })
 
+  it('级别映射与排序策略属于内容，不允许被外观写入覆盖', () => {
+    expect(manifest.contentKeys).toEqual([
+      'title',
+      'emptyText',
+      'levels',
+      'sortByRank',
+    ])
+  })
+
   it('默认尺寸摆得下几条信息，最小尺寸仍留得住一条', () => {
     expect(manifest.defaultSize).toEqual({
       width: 400,

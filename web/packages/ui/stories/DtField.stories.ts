@@ -1,5 +1,5 @@
 /**
- * @fileoverview DtField 的展示：表单字段的外壳（标签 / 提示 / 错误 / a11y 关联）。
+ * @fileoverview DtField 的展示：表单字段的外壳（标签 / 按需帮助 / 提示 / 错误）。
  * 库里的输入类组件都套着它，这里单独摆出来是给「库里没有的控件」当模板用。
  */
 import { DT_SIZES } from '@dt/contracts'
@@ -24,6 +24,7 @@ const meta = {
   },
   argTypes: {
     label: { control: 'text' },
+    help: { control: 'text', description: '标签旁的按需帮助气泡' },
     hint: { control: 'text', description: '常态提示；有 error 时让位' },
     error: { control: 'text', description: '错误文案，非空即进入错误态' },
     required: { control: 'boolean', description: '标签后加必填标记' },
@@ -31,7 +32,7 @@ const meta = {
   },
   args: {
     label: '采样周期',
-    hint: '留空表示跟随通道默认值',
+    help: '留空表示跟随通道默认值',
     required: false,
     size: 'md',
   },

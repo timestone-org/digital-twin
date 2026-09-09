@@ -8,7 +8,7 @@
 import { describe, expect, it } from 'vitest'
 import { mount } from '@vue/test-utils'
 import type { BindingPayload, BindingSpec } from '@dt/contracts'
-import { DtSelect } from '@dt/ui'
+import { DtHelpTip, DtSelect } from '@dt/ui'
 
 import BindingPanel from '@/components/binding/BindingPanel.vue'
 
@@ -63,11 +63,24 @@ describe('空态', () => {
   it('一个槽都没声明时说它不取数，而不是留白', () => {
     const wrapper = mount(BindingPanel, { props: { specs: [], bindings: [] } })
 
-    expect(wrapper.text()).toContain('这个面不取数')
+    expect(wrapper.text()).toContain('无需数据绑定')
   })
 })
 
 describe('槽位由声明摆出', () => {
+  it('标量槽只显示一个中文名称，稳定键收进按需提示', () => {
+    const wrapper = mount(BindingPanel, {
+      props: { specs: SPECS.slice(0, 1), bindings: [] },
+    })
+
+    expect(wrapper.text()).toContain('标题')
+    expect(wrapper.text()).not.toContain('title')
+    expect(wrapper.findComponent(DtHelpTip).props()).toMatchObject({
+      label: '标题说明',
+      text: '字段键：title',
+    })
+  })
+
   it('每个槽一段，必绑的标出来', () => {
     const wrapper = mount(BindingPanel, {
       props: { specs: SPECS, bindings: [] },
@@ -83,7 +96,12 @@ describe('槽位由声明摆出', () => {
       props: { specs: SPECS, bindings: [row(0)] },
     })
 
-    expect(wrapper.text()).toContain('rows[0].value')
+    expect(wrapper.text()).not.toContain('rows[0].value')
+    expect(
+      wrapper
+        .findAllComponents(DtHelpTip)
+        .some((tip) => tip.props('text') === '字段键：rows[0].value'),
+    ).toBe(true)
     expect(wrapper.text()).toContain('第 1 行')
   })
 
@@ -147,8 +165,11 @@ describe('行数跟着实体走（rowCounts）', () => {
       props: { specs: SPECS, bindings: [], rowCounts: { rows: 2 } },
     })
 
-    expect(wrapper.text()).toContain('rows[0].value')
-    expect(wrapper.text()).toContain('rows[1].value')
+    const helps = wrapper
+      .findAllComponents(DtHelpTip)
+      .map((tip) => tip.props('text'))
+    expect(helps).toContain('字段键：rows[0].value')
+    expect(helps).toContain('字段键：rows[1].value')
   })
 
   it('不摆「新增一行」，正常行也不摆删除键', () => {
@@ -172,7 +193,7 @@ describe('行数跟着实体走（rowCounts）', () => {
       },
     })
 
-    expect(wrapper.text()).toContain('没有对应的实体')
+    expect(wrapper.text()).toContain('没有对应实体')
     const remove = wrapper
       .findAll('button')
       .find((item) => item.attributes('aria-label') === '删除这一行')
@@ -200,7 +221,7 @@ describe('行数跟着实体走（rowCounts）', () => {
 })
 
 describe('数组槽的行名与行 id', () => {
-  it('给了 rowLabels 就拿它当组标题，并把 id 一起摆出来', () => {
+  it('给了 rowLabels 就拿它当组标题，并把 id 收进按需提示', () => {
     const wrapper = mount(BindingPanel, {
       props: {
         specs: SPECS,
@@ -210,8 +231,12 @@ describe('数组槽的行名与行 id', () => {
     })
 
     expect(wrapper.text()).toContain('一号锚点')
-    // id 与实体清单上显示的那一份逐字相同，绑的时候靠它核对
-    expect(wrapper.text()).toContain('p1::temp')
+    expect(wrapper.text()).not.toContain('p1::temp')
+    expect(
+      wrapper
+        .findAllComponents(DtHelpTip)
+        .some((tip) => tip.props('text') === '实体标识：p1::temp'),
+    ).toBe(true)
     expect(wrapper.text()).not.toContain('第 1 行')
   })
 

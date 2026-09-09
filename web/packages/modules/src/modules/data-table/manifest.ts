@@ -61,7 +61,7 @@ const CELL_FIELDS = TABLE_COLUMN_KEYS.map((column) => ({
 export default defineModule({
   type: 'data-table',
   description:
-    '数据表格：列头 + N 行 × M 列的矩阵，回答「这一批对象的这几项分别是多少」。一台设备只看几个数用 info-card 或 data-card，逐行比高低用 info-list 的进度件，看占比构成用 pie-chart。一个数组绑定槽 `cellValues`，行钉在 `rows` 配置项上、列是八个固定子槽 `c1`…`c8`：第 i 行第 c 列那一格喂 `cellValues[i].c` ——列名、单位、小数位、对齐与列宽都是逐列的配置，不从点位来。⚠ 列的绑定按**列键**认，调列的顺序不动任何绑定；行的绑定按**下标**认，删掉 `rows` 中间一项会让它之后每一行的绑定都改喂前一行。⚠ 没在「列」里挑列键的子槽整列不渲染，重复挑同一个列键的那几列只画先声明的那一条并在表下说明。⚠ 逐格四档各有记号：没配来源画「—」、等首帧画「⋯」、取不到画「✕」并标红、有值才画数，完整原因挂在这一格的悬停提示上。⚠ `maxRows` 截断时表下面有一句说明，不会静默少画几行。点某一行上抛的联动值是这一行配置里写的名称，没起名的点了不上抛。',
+    '数据表格用于呈现固定对象与多项指标构成的二维矩阵；单对象指标可选信息卡片，单指标纵向比较可选信息列表。数据通过 cellValues 数组绑定，行按 rows 下标对应，列按 c1 至 c8 的列键对应，并分别配置名称、单位、精度和宽度。列顺序调整不影响绑定，删除中间行会移动后续下标；每个单元格独立呈现四档取值状态。',
   displayName: '数据表格',
   category: '数据',
   icon: 'table',
@@ -85,7 +85,9 @@ export default defineModule({
     'nameHeader',
     TABLE_COLUMNS_KEY,
     TABLE_ROWS_KEY,
+    'precision',
     'emptyText',
+    'maxRows',
     TABLE_RULES_KEY,
   ],
   configSchema: [
@@ -96,8 +98,8 @@ export default defineModule({
       group: GROUP.data,
       default: '',
       span: 'half',
-      placeholder: '留空则不画标题栏',
-      help: '留空时整条标题栏都不出，模块从最上面一行就开始画表。',
+      placeholder: '留空则隐藏标题栏',
+      help: '留空时隐藏标题栏，表格从模块顶部开始显示。',
     },
     {
       key: 'nameHeader',
@@ -106,14 +108,15 @@ export default defineModule({
       group: GROUP.data,
       default: NAME_HEADER_DEFAULT,
       span: 'half',
-      help: `最左边那一列的列头文案；留空回落「${NAME_HEADER_DEFAULT}」。`,
+      when: { key: 'showHeader', in: [true] },
+      help: `最左侧行名列的表头；留空时使用「${NAME_HEADER_DEFAULT}」。`,
     },
     {
       key: TABLE_ROWS_KEY,
       label: '行',
       type: 'array',
       group: GROUP.data,
-      help: '每一项在绑点面板上是一行。⚠ 删掉中间一项，它之后每一行的绑定都会改喂前一行——删完请核对绑点面板。',
+      help: '每项对应一个绑定行。删除中间项会使后续绑定索引前移，操作后请复核绑定。',
       itemLabelKey: 'name',
       minItems: 1,
       // ⚠ 出厂给一行：空列表时模块是一块什么都没有的白板，而属性面板上
@@ -126,7 +129,7 @@ export default defineModule({
           type: 'string',
           default: '',
           placeholder: '留空则按「第 N 行」称呼',
-          help: '最左列显示的名字；留空时按「第 N 行」称呼它。点这一行上抛的联动值也是它，留空则这一行点了不上抛。',
+          help: '最左列显示名称，同时作为行级联动值；留空时仅按序号显示且不发送行级事件。',
         },
       ],
     },
@@ -135,7 +138,7 @@ export default defineModule({
       label: '列',
       type: 'array',
       group: GROUP.columns,
-      help: '一列一项，摆在行名列右边，顺序就是这里的顺序。⚠ 每一列必须挑一个**不同**的列键：列键就是绑定认的那一半，重复挑同一个的那几列读的是同一个子槽，只画先声明的那一条。⚠ 调顺序、改名字、删列都不动任何绑定——绑定按列键认，不按位置认。',
+      help: '每项定义一列，顺序即显示顺序。列键必须唯一；绑定按列键识别，不受列顺序、名称或单位调整影响。',
       itemLabelKey: 'name',
       minItems: 1,
       default: [{ key: 'c1', name: '数值', align: 'right' }],
@@ -146,7 +149,7 @@ export default defineModule({
           type: 'enum',
           default: 'c1',
           options: [...TABLE_COLUMN_KEYS],
-          help: '这一列读第几个子槽。⚠ 同一张表里不许重复：重复的那几列读的是同一个数，只有先声明的那一条会画出来。改它等于把这一列的绑定整条换掉。',
+          help: '指定该列对应的绑定子槽。同一表格内必须唯一；修改列键会切换整列的数据绑定。',
         },
         {
           key: 'name',
@@ -154,7 +157,7 @@ export default defineModule({
           type: 'string',
           default: '',
           placeholder: '留空则显示列键',
-          help: '表头上的文案；留空时显示列键本身，好让人对得上绑点面板。',
+          help: '表头显示的名称；留空时显示列键，便于核对数据绑定。',
         },
         {
           key: 'unit',
@@ -162,7 +165,7 @@ export default defineModule({
           type: 'string',
           default: '',
           // ⚠ 不去首尾空格：「° C」这类带空格是用户显式的排版意图
-          help: '跟在读数后面的单位。首尾空格照原样保留。⚠ 没有读数的那三档一律不带单位——「— kV」看着像是有读数的。',
+          help: '显示在读数后的单位，并保留首尾空格。无读数状态不显示单位，避免将占位符误认为有效读数。',
         },
         {
           key: 'precision',
@@ -174,7 +177,7 @@ export default defineModule({
           min: 0,
           max: TABLE_PRECISION_MAX,
           step: 1,
-          help: '留空跟随整块那一档。',
+          help: '留空时使用模块的小数位设置。',
         },
         {
           key: 'align',
@@ -182,7 +185,7 @@ export default defineModule({
           type: 'enum',
           default: 'right',
           options: [...TABLE_ALIGNS],
-          help: '数值列右对齐才逐行对得齐；文本列可以改成左对齐。',
+          help: '数值列建议右对齐以便逐行比较；文本列可使用左对齐。',
         },
         {
           key: 'width',
@@ -192,7 +195,7 @@ export default defineModule({
           min: 0,
           max: TABLE_WIDTH_MAX,
           step: 4,
-          help: '0 = 不定宽，跟其余不定宽的列平分剩下的地方。',
+          help: '0 表示不固定宽度，与其他自适应列均分剩余空间。',
         },
       ],
     },
@@ -206,7 +209,7 @@ export default defineModule({
       max: TABLE_PRECISION_MAX,
       step: 1,
       span: 'half',
-      help: '没有单独配小数位的那几列用这一档。',
+      help: '未单独配置小数位的列使用此设置。',
     },
     {
       key: 'grouping',
@@ -215,7 +218,7 @@ export default defineModule({
       group: GROUP.data,
       default: false,
       span: 'half',
-      help: '开了整数部分按三位分组。⚠ 一屏里开与不开混着用，同一个量看着像两个精度不同的表。',
+      help: '启用后按三位分隔整数部分。同类指标宜保持一致，避免产生精度不一致的视觉误判。',
     },
     {
       key: 'emptyText',
@@ -224,7 +227,7 @@ export default defineModule({
       group: GROUP.data,
       default: TABLE_EMPTY_TEXT,
       span: 'half',
-      help: '一行都没配时画在表区正中的那一句。⚠ 「格子都还没绑」不算空：那时照画整张表，逐格自己交代四档。',
+      help: '未配置任何行时显示在表格区域中央。已配置但未绑定的数据格不属于空态，仍按各自状态显示。',
     },
     {
       key: 'density',
@@ -234,7 +237,7 @@ export default defineModule({
       default: 'normal',
       span: 'half',
       options: [...TABLE_DENSITIES],
-      help: '一屏塞得下多少行由它决定。',
+      help: '决定可视区域内的行密度。',
     },
     {
       key: 'striped',
@@ -243,7 +246,7 @@ export default defineModule({
       group: GROUP.style,
       default: true,
       span: 'half',
-      help: '隔行加一层很淡的底色，列多时更容易横着读一行。',
+      help: '为相邻行使用交替底色，便于横向识别数据。',
     },
     {
       key: 'gridLines',
@@ -253,7 +256,7 @@ export default defineModule({
       default: 'horizontal',
       span: 'half',
       options: [...TABLE_GRID_LINES],
-      help: '竖线在列多时帮着分格，列少时只会显得吵。',
+      help: '列数较多时可启用纵向网格线，以增强单元格边界。',
     },
     {
       key: 'showHeader',
@@ -262,7 +265,7 @@ export default defineModule({
       group: GROUP.style,
       default: true,
       span: 'half',
-      help: '⚠ 关掉之后没有任何一处写着这几列各是什么——只在列名已经画进标题里时才关。',
+      help: '关闭后不再显示列名；仅在其他位置已明确标注列含义时关闭。',
     },
     {
       key: 'headerSticky',
@@ -271,7 +274,7 @@ export default defineModule({
       group: GROUP.style,
       default: true,
       span: 'half',
-      help: '行多要滚时列头留在最上面。表头关着时这一项不起作用。',
+      help: '滚动时将表头固定在顶部。关闭表头后此设置不生效。',
       when: { key: 'showHeader', in: [true] },
     },
     {
@@ -284,7 +287,7 @@ export default defineModule({
       max: TABLE_MAX_ROWS_CAP,
       step: 1,
       span: 'half',
-      help: '0 = 不限。⚠ 截断时表下面会写一句「共 N 行，只显示前 M 行」——那几行的绑定还在，只是屏上不画。',
+      help: '0 表示不限制。截断时显示总行数与当前行数，其余行保留绑定但不参与渲染。',
     },
     {
       key: 'nameTone',
@@ -294,7 +297,7 @@ export default defineModule({
       default: 'secondary',
       span: 'half',
       options: [...TABLE_TONES],
-      help: '行名列与表头共用一档文字层级，跟着主题走。',
+      help: '行名列与表头共用文字层级，并随主题更新。',
     },
     {
       key: 'headSize',
@@ -306,6 +309,7 @@ export default defineModule({
       max: TABLE_FONT_MAX,
       step: 1,
       span: 'half',
+      when: { key: 'showHeader', in: [true] },
       help: '设计坐标系像素。',
     },
     {
@@ -339,7 +343,7 @@ export default defineModule({
       group: GROUP.style,
       default: '',
       span: 'half',
-      help: '留空跟随主题正文色。只填 var(--…) 引用，填死色值换肤时不跟着走。⚠ 命中值规则的那几格用规则自己的颜色，压过这一档。',
+      help: '留空时使用主题正文色。建议填写 var(--…) 主题变量；固定色值不会随主题切换。值规则命中时优先使用规则颜色。',
     },
     { ...tableRulesField(), group: GROUP.rules },
   ],

@@ -1,14 +1,13 @@
 /**
  * @fileoverview 守四套外观预设的数据面：id 集合、只写清单里有的顶层键、枚举取值都在
- * 该字段的选项里、每套都把观感键写全（`precision` / `grouping` 两个数值口径键除外，
- * 一套观感把它们抹掉等于让用户配好的精度消失）、内容键一个都不写，
+ * 该字段的选项里、每套都把观感键写全、内容键一个都不写，
  * 以及逐套那几个「照抄别套就会错」的取值。
  *
  * ⚠ 这几类错法点了按钮什么都不会发生，而 typecheck、lint、build 全绿：
  * 键写错就是「配了不生效」；少写一个键，上一套留在配置里的那个值原样残留，
  * 而点亮判定做的是子集比较、照样把按钮点亮。
  */
-import type { ConfigField } from '@dt/contracts'
+import { styleKeysOf, type ConfigField } from '@dt/contracts'
 import { describe, expect, it } from 'vitest'
 
 import manifest from '../../../src/modules/data-table/manifest'
@@ -17,17 +16,10 @@ import { DATA_TABLE_PRESETS } from '../../../src/modules/data-table/presets'
 const SCHEMA = manifest.configSchema
 const TOP_KEYS = new Set(SCHEMA.map((item) => item.key))
 const CONTENT_KEYS = manifest.contentKeys ?? []
+const SEMANTIC_PRESET_KEYS = ['maxRows'] as const
 
-/**
- * 摆在「数据」分段里、语义是这块屏数值口径的那两个键。
- * ⚠ 一套观感把它们抹掉，用户配好的三位小数会在换个样子时消失。
- */
-const FORMAT_KEYS = ['precision', 'grouping']
-
-/** 每一套都该写全的观感键：顶层键去掉内容键，再去掉那两个数值口径键。 */
-const STYLE_KEYS = SCHEMA.map((item) => item.key).filter(
-  (key) => !CONTENT_KEYS.includes(key) && !FORMAT_KEYS.includes(key),
-)
+/** 每一套都该写全的观感键，唯一真源是清单的内容边界。 */
+const STYLE_KEYS = styleKeysOf(manifest)
 
 function optionValues(target: ConfigField | undefined): unknown[] {
   return (target?.options ?? []).map((option) => option.value)
@@ -65,24 +57,22 @@ describe('数据表格的四套预设', () => {
     expect(stray).toEqual([])
   })
 
-  it('内容键一个都不写，否则套预设会把用户配好的列与行抹掉', () => {
+  it('内容键仅允许明确的截行模板覆盖', () => {
+    const semantic = new Set<string>(SEMANTIC_PRESET_KEYS)
     const leaked = DATA_TABLE_PRESETS.flatMap((preset) =>
-      CONTENT_KEYS.filter((key) => key in preset.config).map(
-        (key) => `${preset.id}.${key}`,
-      ),
+      CONTENT_KEYS.filter(
+        (key) => key in preset.config && !semantic.has(key),
+      ).map((key) => `${preset.id}.${key}`),
     )
 
     expect(leaked).toEqual([])
-  })
-
-  it('数值口径那两个键也一个都不写', () => {
-    const leaked = DATA_TABLE_PRESETS.flatMap((preset) =>
-      FORMAT_KEYS.filter((key) => key in preset.config).map(
-        (key) => `${preset.id}.${key}`,
+    expect(
+      DATA_TABLE_PRESETS.flatMap((preset) =>
+        SEMANTIC_PRESET_KEYS.filter((key) => !(key in preset.config)).map(
+          (key) => `${preset.id}.${key}`,
+        ),
       ),
-    )
-
-    expect(leaked).toEqual([])
+    ).toEqual([])
   })
 
   it('每一套都把观感键写全，缺一个就会残留上一套的值', () => {
@@ -119,13 +109,22 @@ describe('数据表格的四套预设', () => {
     expect(painted).toEqual([])
   })
 
+  it('四套都显式关闭千分位，切换预设不会残留旧格式', () => {
+    expect(DATA_TABLE_PRESETS.map((preset) => preset.config.grouping)).toEqual([
+      false,
+      false,
+      false,
+      false,
+    ])
+  })
+
   it('四套里只有前十行截行，且它的说明里写清了代价', () => {
     const capped = DATA_TABLE_PRESETS.filter(
       (preset) => preset.config.maxRows !== 0,
     )
 
     expect(capped.map((preset) => preset.id)).toEqual(['top-ten'])
-    expect(capped[0]?.hint).toContain('看不见')
+    expect(capped[0]?.hint).toContain('不参与渲染')
   })
 
   it('大屏看板是四套里字号最大的一套', () => {

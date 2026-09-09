@@ -96,7 +96,7 @@ def test_a_module_carries_the_description_the_agent_reads() -> None:
     assert module is not None
     assert module.description is not None
     # 划界那半句是描述最要紧的部分：模型正是在这几个卡片族之间选错模块
-    assert "info-card" in module.description
+    assert "信息卡片" in module.description
 
 
 def test_an_unknown_type_has_no_manifest() -> None:

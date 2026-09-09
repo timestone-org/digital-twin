@@ -20,7 +20,7 @@ export const CALENDAR_HEAT_PRESETS: ConfigPreset[] = [
   {
     id: 'year-calendar',
     label: '整年日历',
-    hint: '按周铺的日历 + 顺序色阶，一眼找出哪几天异常；周中还是周末出的事看得出来。',
+    hint: '按周排列日历并使用顺序色阶，便于识别异常日期及其工作日或周末分布。',
     config: {
       chartStyle: 'calendar',
       colorScale: 'sequential',
@@ -33,7 +33,7 @@ export const CALENDAR_HEAT_PRESETS: ConfigPreset[] = [
   {
     id: 'month-matrix',
     label: '月 × 日矩阵',
-    hint: '横轴几号、纵轴年月，看的是「每个月的同一天是不是都这样」；换的只是坐标，读数一个不变。',
+    hint: '横轴表示日期，纵轴表示年月，便于比较各月同一日期；仅改变坐标布局，不改变读数。',
     config: {
       chartStyle: 'matrix',
       colorScale: 'sequential',
@@ -46,7 +46,7 @@ export const CALENDAR_HEAT_PRESETS: ConfigPreset[] = [
   {
     id: 'deviation-scan',
     label: '偏差扫描',
-    hint: '发散色阶 + 更宽的格缝，给本身就有正负两个方向的量（同比增减、偏差）用；单调递增的能耗别选它。',
+    hint: '使用发散色阶与较宽单元格间距，适合同比增减、偏差等双向指标；不适用于单调递增的能耗数据。',
     config: {
       chartStyle: 'calendar',
       colorScale: 'diverging',
@@ -59,7 +59,7 @@ export const CALENDAR_HEAT_PRESETS: ConfigPreset[] = [
   {
     id: 'dense-year',
     label: '紧凑年历',
-    hint: '格缝收成 0，窄块里也塞得下一整年；代价是相邻两天连成一片，得靠提示框认日期。',
+    hint: '将单元格间距设为 0，以便在窄幅模块中展示全年数据；相邻日期边界不明显，需通过提示框确认。',
     config: {
       chartStyle: 'calendar',
       colorScale: 'sequential',

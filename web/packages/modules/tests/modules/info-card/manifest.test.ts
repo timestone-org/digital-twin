@@ -315,6 +315,30 @@ describe('信息卡片的条件显示', () => {
     })
   })
 
+  it('图标容器与涨跌细项只在对应开关启用时显示', () => {
+    for (const key of [
+      'position',
+      'shape',
+      'bgFrom',
+      'bgTo',
+      'bgAngle',
+      'borderColor',
+      'glow',
+      'gap',
+    ]) {
+      expect(subField('icon', key)?.when).toEqual({
+        key: 'mode',
+        in: ['badge'],
+      })
+    }
+    for (const key of ['mode', 'label', 'invertTrend']) {
+      expect(subField('compare', key)?.when).toEqual({
+        key: 'show',
+        in: [true],
+      })
+    }
+  })
+
   it('每条条件显示都指着一个真存在的同级字段', () => {
     const dangling = SCHEMA.filter((item) => item.when !== undefined)
       .filter((item) => !TOP_KEYS.has(item.when?.key ?? ''))

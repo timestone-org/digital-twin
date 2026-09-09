@@ -8,6 +8,7 @@ import type { BindingSpec, ConfigField } from '@dt/contracts'
 import { describe, expect, it } from 'vitest'
 
 import manifest from '../../../src/modules/info-list/manifest'
+import { LIST_HOVERS } from '../../../src/modules/info-list/options'
 import {
   LIST_ITEMS_KEY,
   LIST_SLOT_KEY,
@@ -65,6 +66,28 @@ describe('信息列表清单的身份', () => {
     expect(manifest.chromeConfigurable).toBeUndefined()
     // 标题栏交给 ModulePanel，四十个外观键一个都不挑
     expect(manifest.unsupportedChromeKeys).toBeUndefined()
+  })
+
+  it('告警判据、筛选、排序、迟滞与时刻策略都属于内容', () => {
+    expect(manifest.contentKeys).toEqual([
+      'title',
+      LIST_ITEMS_KEY,
+      'noRowsText',
+      'columnHeader',
+      'defaultGroup',
+      'subSource',
+      'subLabel',
+      'badge',
+      'meter',
+      'extras',
+      'rules',
+      'alarmOn',
+      'rowFilter',
+      'rowSort',
+      'holdSeconds',
+      'calmText',
+      'timeSource',
+    ])
   })
 
   it('默认尺寸摆得下一屏行，最小尺寸仍留得住一行', () => {
@@ -219,10 +242,49 @@ describe('信息列表的缺省', () => {
 })
 
 describe('信息列表的条件显示', () => {
+  it('历史档值 lift 的界面名称描述实际辉光反馈，不宣称存在位移', () => {
+    expect(LIST_HOVERS.find((item) => item.value === 'lift')?.label).toBe(
+      '辉光高亮',
+    )
+  })
+
   it('表头只在三列表那一档露出来', () => {
     expect(field('columnHeader')).toMatchObject({
       when: { key: 'rowLayout', in: ['columns'] },
     })
+  })
+
+  it('行结构、分组、徽章、进度与筛选细项只在生效时显示', () => {
+    expect(field('rowLines')).toMatchObject({
+      when: { key: 'rowLayout', in: ['stack'] },
+    })
+    expect(field('rowShape')).toMatchObject({
+      when: { key: 'rowLayout', in: ['stack'] },
+    })
+    expect(field('defaultGroup')).toMatchObject({
+      when: { key: 'grouping', in: ['tabs'] },
+    })
+    expect(subField('columnHeader', 'name')).toMatchObject({
+      when: { key: 'show', in: [true] },
+    })
+    expect(subField('badge', 'style')).toMatchObject({
+      when: { key: 'kind', in: ['severity', 'rule'] },
+    })
+    expect(subField('meter', 'source')).toMatchObject({
+      when: { key: 'kind', in: ['bar'] },
+    })
+    expect(subField('meter', 'label2')).toMatchObject({
+      when: {
+        key: 'source2',
+        in: ['range', 'share', 'aux', 'aux2', 'aux3'],
+      },
+    })
+    for (const key of ['holdSeconds', 'calmText']) {
+      expect(field(key)).toMatchObject({
+        when: { key: 'rowFilter', in: ['hit', 'alarm'] },
+      })
+    }
+    expect(field('timeSource')?.when).toBeUndefined()
   })
 
   it('每条条件显示都指着一个真存在的同级字段', () => {
@@ -241,6 +303,49 @@ describe('信息列表的条件显示', () => {
       .map((item) => item.key)
 
     expect(dangling).toEqual([])
+  })
+})
+
+describe('信息列表的跨字段校验', () => {
+  it('规则判副读数时拒绝文本来源，避免规则永久无法命中', () => {
+    expect(
+      manifest.validateConfig?.({ alarmOn: 'sub', subSource: 'text' }),
+    ).toEqual(['规则判定不能使用文本型副读数，请选择数值副读数或主读数'])
+    expect(
+      manifest.validateConfig?.({ alarmOn: 'sub', subSource: 'aux' }),
+    ).toEqual([])
+    expect(
+      manifest.validateConfig?.({ alarmOn: 'value', subSource: 'text' }),
+    ).toEqual([])
+  })
+
+  it('行内目标值来源明确提示每行必须配置目标值', () => {
+    expect(field('subSource')?.help).toContain('每行')
+    expect(field('subSource')?.help).toContain('目标值')
+  })
+
+  it('告警起始时刻只允许用于命中或告警筛选，并在字段帮助中明示', () => {
+    expect(
+      manifest.validateConfig?.({
+        rowFilter: 'all',
+        timeSource: 'alarmSince',
+      }),
+    ).toEqual(['告警起始时刻仅适用于“命中规则”或“只看告警”筛选'])
+    expect(
+      manifest.validateConfig?.({
+        rowFilter: 'hit',
+        timeSource: 'alarmSince',
+      }),
+    ).toEqual([])
+    expect(
+      manifest.validateConfig?.({
+        rowFilter: 'alarm',
+        timeSource: 'alarmSince',
+      }),
+    ).toEqual([])
+    expect(field('timeSource')?.help).toContain('仅适用于')
+    expect(field('timeSource')?.help).toContain('命中规则')
+    expect(field('timeSource')?.help).toContain('只看告警')
   })
 })
 

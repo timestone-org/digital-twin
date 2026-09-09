@@ -6,6 +6,7 @@
 import type { Component } from 'vue'
 
 import type { ChromeKey } from './chrome'
+import type { BindingView } from './dashboard'
 import type { InteractionEventName } from './interaction'
 
 /** 属性面板按它选控件。新增一档是非破坏的，删一档会让存量配置渲染不出控件。 */
@@ -248,10 +249,10 @@ export interface ModuleDefaultSize {
 }
 
 /**
- * 模块级「外观预设」：一次显式写入一整套 config 字段。
+ * 模块级配置预设：一次显式写入一整套 config 字段。
  * 与 `ConfigField.default` 的语义刻意不同——default 是不落库的渲染兜底，
  * 预设是用户点了按钮后**浅合并落库**的一笔（一步撤销），未列出的键原样保留。
- * 存在的理由：有些观感是十几个字段的组合，逐个照抄必漏、漏了也看不出漏在哪。
+ * 多数预设只调整观感；场景模板也可有意覆盖 `contentKeys`，界面必须明确提示。
  */
 export interface ConfigPreset {
   /** 稳定 id，用于 key 与测试断言，不展示。 */
@@ -291,7 +292,7 @@ export interface ModuleSubEditor {
   routeName: string
   /** 入口按钮上的字。 */
   label: string
-  /** 按钮下的一行说明；讲清楚这段配置为什么不在这里改。 */
+  /** 入口旁的按需说明；讲清楚这段配置为什么不在这里改。 */
   hint?: string
 }
 
@@ -317,13 +318,19 @@ export interface ModuleManifest {
   keywords?: string[]
   defaultSize: ModuleDefaultSize
   configSchema: ConfigField[]
-  /** 客户端跨字段校验；收有效配置，返回阻止写入的原因。函数不进服务端目录。 */
+  /** 客户端跨字段校验；收有效配置，返回阻止保存的原因。函数不进服务端目录。 */
   validateConfig?: (config: Record<string, unknown>) => readonly string[]
-  /** 属性面板顶部的一排预设按钮，缺省不显示。只放「整套观感」级的组合。 */
+  /** 配置与绑定的联合校验；用于时区等跨两部分才可判断的约束。函数不进服务端目录。 */
+  validateBindings?: (
+    config: Record<string, unknown>,
+    bindings: readonly BindingView[],
+  ) => readonly string[]
+  /** 属性面板顶部的一排配置预设，缺省不显示。 */
   configPresets?: ConfigPreset[]
   /**
    * `configSchema` 顶层键里属于**内容**的那几个：标题、行列表、缺值占位、阈值规则。
-   * 其余顶层键即**观感键**，一整套观感预设写的就是它们。
+   * 其余顶层键即 `dashboard.apply_style` 可写的**观感键**。配置预设可有意包含
+   * 内容键，属性面板会在提示中明确其覆盖风险。
    *
    * 观感与内容的分界只有模块自己说得清，而分错的两个方向都静默：把内容键当观感
    * 存进一套样式，别人套用时他配好的行整片被抹掉；把观感键漏在名单外，那一项就

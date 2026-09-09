@@ -59,12 +59,13 @@ function asRecord(row: unknown): Record<string, unknown> {
     : {}
 }
 
-function readCell(row: unknown, key: string): unknown {
+/** 读行内当前值；键缺席时只回显声明缺省，不提前写入配置。 */
+function readCell(row: unknown, field: ConfigField): unknown {
   if (typeof row !== 'object' || row === null || Array.isArray(row)) {
-    return undefined
+    return field.default
   }
   const record: Record<string, unknown> = { ...row }
-  return record[key]
+  return Object.hasOwn(record, field.key) ? record[field.key] : field.default
 }
 
 function writeCell(
@@ -156,11 +157,12 @@ function moveRow(at: number, delta: -1 | 1): void {
         v-for="sub in visibleCells(entry.row)"
         :key="sub.key"
         :label="sub.label"
+        :help="sub.help"
         size="sm"
       >
         <ConfigFieldControl
           :field="sub"
-          :value="readCell(entry.row, sub.key)"
+          :value="readCell(entry.row, sub)"
           :depth="depth"
           :disabled="disabled"
           @update="

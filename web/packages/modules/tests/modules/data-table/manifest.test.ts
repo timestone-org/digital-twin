@@ -6,7 +6,7 @@
  * ⚠ 这几类错法 typecheck 与 lint 双双放行，表现只是「这一项永远没反应」：
  * `when` 指错键那个字段永远不出现，`isRequired` 会让整块被浮层盖住、逐格四档白画。
  */
-import type { BindingSpec, ConfigField } from '@dt/contracts'
+import { styleKeysOf, type BindingSpec, type ConfigField } from '@dt/contracts'
 import { describe, expect, it } from 'vitest'
 
 import {
@@ -73,18 +73,23 @@ describe('身份与出厂形状', () => {
     expect(text).toContain('四档')
   })
 
-  it('内容键含标题、表头文案、列、行、空态与规则六个', () => {
+  it('内容键包含数据格式，外观写入不得改变数值口径', () => {
     expect(manifest.contentKeys).toEqual([
       'title',
       'nameHeader',
       TABLE_COLUMNS_KEY,
       TABLE_ROWS_KEY,
+      'precision',
       'emptyText',
+      'maxRows',
       TABLE_RULES_KEY,
     ])
     expect(manifest.contentKeys?.every((key) => TOP_KEYS.includes(key))).toBe(
       true,
     )
+    expect(styleKeysOf(manifest)).not.toContain('precision')
+    expect(styleKeysOf(manifest)).not.toContain('maxRows')
+    expect(styleKeysOf(manifest)).toContain('grouping')
   })
 
   it('预设整套挂在清单上，画布演示只提清单里有的键', () => {
@@ -111,11 +116,10 @@ describe('配置字段', () => {
   })
 
   // ⚠ 表头关着时钉不钉都没有意义，摆出来只会让人以为配了没反应
-  it('「钉住表头」只在表头画得出来时出现', () => {
-    expect(field('headerSticky')?.when).toEqual({
-      key: 'showHeader',
-      in: [true],
-    })
+  it('表头文案、字号与固定开关只在表头显示时出现', () => {
+    for (const key of ['nameHeader', 'headerSticky', 'headSize']) {
+      expect(field(key)?.when).toEqual({ key: 'showHeader', in: [true] })
+    }
   })
 
   it('空态文案的出厂值就是取值层那句兜底', () => {

@@ -32,7 +32,7 @@ import {
 export default defineModule({
   type: 'nav-tabs',
   description:
-    '页签栏：一排互斥的页签，点一格高亮它并上抛一次「选项点击」事件，带上这一格的联动值。它不取任何数、也不认识任何一种动作——切到哪张大屏、显隐哪一组节点，全由大屏级联动规则按上抛的值分流：跨屏切换配「按值跳转大屏」，同屏内换一组内容配「按值互斥切换」。要一排并列、同时只有一个当前项的入口时用它；单独一个入口用 action-button，那是按钮不是页签。⚠ 每一格的「联动值」留空的话，点它只会挪一下高亮、不上抛任何事件，于是什么也不会发生。跨屏切换不用管「默认选中」：高亮自动落在「按值跳转大屏」里指向当前这张屏的那一格，同一条页签栏原样摆到每张屏上就行。',
+    '互斥页签控件，选择一项后发送带值的 `select` 联动事件。跨屏导航应配置「按值跳转大屏」，同屏分区应配置「按值互斥切换」；单一入口应使用按钮。模块不含数据绑定，目标大屏仅保存在联动规则中，避免公开配置泄露内部标识。联动值为空的页签仅改变本地选中态，不触发规则。',
   displayName: '页签栏',
   category: '控件',
   icon: 'panel-tabs',
@@ -139,7 +139,7 @@ export default defineModule({
       label: '页签',
       type: 'array',
       group: '内容',
-      help: '每一项是一格。⚠ 「联动值」留空的那一格点了不上抛任何事件，也就什么都不会发生。',
+      help: '每项对应一个页签；联动值为空时仅更新选中态，不发送事件。',
       itemLabelKey: 'label',
       minItems: 1,
       maxItems: 12,
@@ -164,7 +164,7 @@ export default defineModule({
           label: '联动值',
           type: 'string',
           default: '',
-          help: '点这一格时上抛的值，留空则这一格点了不上抛。联动规则按它分流：跨屏切换配「按值跳转大屏」，页内分区配「按值互斥切换」。',
+          help: '随 `select` 事件发送，供按值跳转或互斥规则匹配；留空时不触发联动。',
         },
         {
           key: 'icon',
@@ -178,7 +178,7 @@ export default defineModule({
           label: '禁用',
           type: 'boolean',
           default: false,
-          help: '压暗并挡住点击。⚠ 它是常态置灰，不随数据变。',
+          help: '禁用后该项不可聚焦或选择，且不随数据动态变化。',
         },
       ],
     },
@@ -192,7 +192,7 @@ export default defineModule({
       max: 12,
       step: 1,
       span: 'half',
-      help: '开屏时高亮哪一格，超出格数时夹到最后一格。⚠ 只对页内分区有用：配了「按值跳转大屏」时，高亮由「哪一格指向当前这张屏」定，这个值不参与。',
+      help: '页内分区的初始项；跨屏导航的当前项由跳转规则自动确定。',
     },
     {
       key: 'variant',
@@ -221,7 +221,7 @@ export default defineModule({
       default: '',
       span: 'half',
       when: { key: 'tone', in: ['custom'] },
-      placeholder: '留空 = 主题强调色',
+      placeholder: '留空时使用主题强调色',
     },
     {
       key: 'textColor',
@@ -230,7 +230,7 @@ export default defineModule({
       group: '外观',
       default: '',
       span: 'half',
-      placeholder: '留空 = 主题次要文字色',
+      placeholder: '留空时使用主题次要文字色',
     },
     {
       key: 'activeTextColor',
@@ -239,7 +239,7 @@ export default defineModule({
       group: '外观',
       default: '',
       span: 'half',
-      placeholder: '留空 = 跟风格自动',
+      placeholder: '留空时根据风格自动设置',
       help: '实心档默认压深色字。自定义主色配浅色时，用这里显式指定字色。',
     },
     {
@@ -249,7 +249,7 @@ export default defineModule({
       group: '外观',
       default: '',
       span: 'half',
-      placeholder: '留空 = 跟风格自动',
+      placeholder: '留空时根据风格自动设置',
     },
     {
       key: 'shape',
@@ -312,7 +312,7 @@ export default defineModule({
       group: '外观',
       default: false,
       span: 'half',
-      help: '选中那一格外一圈与主色同色的光晕。',
+      help: '在选中项外侧显示与主色一致的光晕。',
     },
     {
       key: 'glowRadius',
@@ -333,7 +333,7 @@ export default defineModule({
       group: '外观',
       default: 'bar',
       span: 'half',
-      help: '选中格上那一道亮条。竖排时用「首侧竖条」，底部横条在一列页签里读不出层次。',
+      help: '设置选中项的高亮条。竖排导航建议使用「首侧竖条」，以保持清晰层级。',
       options: [...TABS_INDICATORS],
     },
     {
@@ -380,7 +380,7 @@ export default defineModule({
       max: 900,
       step: 100,
       span: 'half',
-      help: '0 = 与未选中同一个字重。⚠ 只给选中格加粗会让那一格变宽，「按内容」尺寸下每切一格整条轨道都要抖一下。',
+      help: '0 表示沿用普通字重；按内容布局时，不同字重可能引起轨道宽度变化。',
     },
     {
       key: 'letterSpacing',
@@ -403,7 +403,7 @@ export default defineModule({
       max: 64,
       step: 1,
       span: 'half',
-      help: '0 = 跟着文字字号走（约 1.1 倍）。',
+      help: '0 表示跟随文字字号，约为文字字号的 1.1 倍。',
     },
     {
       key: 'orientation',
@@ -422,7 +422,7 @@ export default defineModule({
       group: '排布',
       default: 'center',
       span: 'half',
-      help: '图标与文案在一格之内靠哪一边。竖排导航一般靠左，横排一般居中。',
+      help: '设置图标与文案在选项内的对齐方式。竖排导航通常左对齐，横排导航通常居中。',
       options: [...TABS_ITEM_ALIGNS],
     },
     {
@@ -432,7 +432,7 @@ export default defineModule({
       group: '排布',
       default: 'fill',
       span: 'half',
-      help: '充满模块：轨道就是这个矩形，拖尺寸即改轨道大小。按内容：由字号与内边距撑开，再摆到矩形的某一处。',
+      help: '「充满模块」使用节点矩形尺寸；「按内容」由文字与内边距决定尺寸。',
       options: [...TABS_SIZINGS],
     },
     {
@@ -442,7 +442,7 @@ export default defineModule({
       group: '排布',
       default: true,
       span: 'half',
-      help: '各格平分轨道，关掉则每格按自己的文案宽度收缩。',
+      help: '启用后各选项均分轨道；关闭后按各自内容宽度收缩。',
     },
     {
       key: 'align',
@@ -496,7 +496,7 @@ export default defineModule({
       max: 48,
       step: 1,
       span: 'half',
-      help: '「按内容」尺寸时它决定轨道高度；「充满模块」时高度由矩形定。',
+      help: '「按内容」模式下决定轨道高度；「充满模块」模式下由模块矩形决定高度。',
     },
     {
       key: 'trackPadding',
@@ -508,7 +508,7 @@ export default defineModule({
       max: 32,
       step: 1,
       span: 'half',
-      help: '槽与格子之间的那一圈。「凹槽」风格靠它才看得出格子是浮在槽里的。',
+      help: '设置轨道与选项之间的间距；「凹槽」风格依靠该间距呈现层次。',
     },
     {
       key: 'hover',
@@ -517,7 +517,7 @@ export default defineModule({
       group: '动效',
       default: 'tint',
       span: 'half',
-      help: '只作用在没选中的格上。⚠ 触摸屏没有悬停：只靠这一档的大屏，在触摸屏上按下去是没有反馈的。',
+      help: '仅作用于未选中项。触摸设备不触发悬停，建议同时配置按下反馈。',
       options: [...TABS_HOVERS],
     },
     {
@@ -527,7 +527,7 @@ export default defineModule({
       group: '动效',
       default: 'none',
       span: 'half',
-      help: '按住时的位移，触摸屏上唯一看得到的那一档反馈。',
+      help: '按下时的视觉反馈，适用于鼠标和触摸操作。',
       options: [...TABS_PRESSES],
     },
   ],

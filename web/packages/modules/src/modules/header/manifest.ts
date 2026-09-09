@@ -41,7 +41,7 @@ const SCAN_FIELDS: ConfigField[] = [
     max: 100,
     step: 1,
     span: 'half',
-    help: '光带宽度占页头宽度的百分比。行程固定为 -30% → 130%，宽度偏离 30 太多时两端会有跳入感。',
+    help: '光带宽度占页头宽度的比例；偏离 30% 较多时，循环边界可能出现跳变。',
     when: { key: 'scan', in: [true] },
   },
   {
@@ -54,7 +54,7 @@ const SCAN_FIELDS: ConfigField[] = [
     max: 60,
     step: 0.5,
     span: 'half',
-    help: '光带匀速跑完一趟的秒数，循环播放。',
+    help: '光带完成一次横向运动的时长，循环播放。',
     when: { key: 'scan', in: [true] },
   },
   {
@@ -75,7 +75,7 @@ const SCAN_FIELDS: ConfigField[] = [
     group: '动效',
     default: true,
     span: 'half',
-    help: '开着时光带盖在花纹与扫描线之上，是「光扫过页头」的手感；关掉则沉到花纹层附近。子节点始终在光带之上。',
+    help: '开启后光带位于花纹与扫描线上方；子节点始终位于光带上方。',
     when: { key: 'scan', in: [true] },
   },
 ]
@@ -83,7 +83,7 @@ const SCAN_FIELDS: ConfigField[] = [
 export default defineModule({
   type: 'header',
   description:
-    "钉在大屏顶部的整宽容器，自己只画科技风外壳：背景底图层、七档花纹风格、CRT 扫描线、横向扫光带、底部辉光分隔线与中央两侧装饰。`region: 'header'` 意味着每张大屏最多一个页头节点，上沿钉死、只能拖下沿改高，横向位置与宽度由编辑器夹取。⚠ 壳里没有标题条、没有时钟：大屏标题、时间、logo 一律是拖进页头里的独立子节点（多半是 text-block），由运行时注入默认插槽——问「大屏标题在哪配」时答案是那个子节点，不是这里。自己不取数，没有绑定槽。⚠ 「CRT 扫描线」「横向扫光」这几项在「素净」风格下调了没有任何变化：那一档把花纹层整个关掉了。",
+    '固定在大屏顶部的单实例整宽容器，用于承载标题、时钟和品牌标识等子节点。页头负责背景、装饰纹理、扫描线、横向扫光及底部分隔线，不直接渲染标题或数据。子节点坐标相对内部内容区计算；选择「素净」风格时，装饰、扫描线和扫光全部停用。模块不含数据绑定。',
   displayName: '页头',
   category: '布局',
   icon: 'layout-grid',
@@ -91,6 +91,7 @@ export default defineModule({
   chrome: 'bare',
   isContainer: true,
   region: 'header',
+  contentKeys: [CONTAINER_CONFIG_KEY],
   // 壳里没有标题条，整套标题键都没有消费点。少登记一个 = 面板上多一个
   // 「配了没反应」的控件
   unsupportedChromeKeys: [
@@ -121,7 +122,7 @@ export default defineModule({
     {
       id: 'podium',
       label: '翼台横幅',
-      hint: '翼台轮廓 + 倒角横带底图 + 4 秒横向扫光。下沿由轮廓自己收口，不画分隔线。节点高度与子节点（文字块、时钟）仍需自己摆。',
+      hint: '翼台轮廓、倒角横带与 4 秒横向扫光；下边缘不显示分隔线。',
       config: {
         variant: 'podium',
         bgImage: 'var(--fx-decor-topbg) center bottom / 100% 100% no-repeat',
@@ -147,7 +148,7 @@ export default defineModule({
       group: '外观',
       default: 'default',
       span: 'full',
-      help: '⚠ 选「素净」等于把整个花纹层关掉：两侧装饰、CRT 扫描线、横向扫光在它下面一律不画，那几项也随之从面板上收起。',
+      help: '「素净」不渲染两侧装饰、CRT 扫描线或横向扫光，相关字段同步隐藏。',
       options: [...HEADER_VARIANTS],
     },
     {
@@ -173,7 +174,7 @@ export default defineModule({
       max: 800,
       step: 10,
       span: 'half',
-      help: '两条装饰之间留出的空 (px)；0 = 随宽度自适应。中间的子节点（标题文字块之类）较宽或屏幕较窄时调大它避免重叠。',
+      help: '两侧装饰的中央间距；0 表示按宽度自适应，中央子节点较宽时可适当增大。',
       when: { key: 'deco', in: DECORATED_STYLES },
     },
     {
@@ -183,7 +184,7 @@ export default defineModule({
       group: '外观',
       default: 'var(--accent-primary)',
       span: 'half',
-      help: '花纹、装饰条与底部分隔线都取这个色。',
+      help: '花纹、装饰条与底部分隔线共用此颜色。',
     },
     {
       key: 'background',
@@ -192,7 +193,7 @@ export default defineModule({
       group: '外观',
       default: '',
       span: 'half',
-      placeholder: '留空 = 透明，继承大屏背景',
+      placeholder: '留空时透明并继承大屏背景',
     },
     {
       // 底图单独一层：滤镜只染底图，不把子节点的文字一起偏色
@@ -202,8 +203,8 @@ export default defineModule({
       group: '外观',
       default: '',
       span: 'full',
-      placeholder: '留空 = 用风格自带花纹',
-      help: '可从素材库挑一张，也可填图片地址（自动铺成整宽贴底）或 CSS background 简写 / 渐变；填 var(--fx-decor-topbg) 用内置的倒角横带底图。',
+      placeholder: '留空时使用风格内置花纹',
+      help: '支持素材、图片地址或 CSS background；图片地址按整宽贴底方式渲染。',
     },
     {
       key: 'bgFilter',
@@ -212,8 +213,8 @@ export default defineModule({
       group: '外观',
       default: '',
       span: 'full',
-      placeholder: '留空 = 跟随主题装饰滤镜',
-      help: '只作用在底图那一层上。留空时走主题的 var(--fx-decor-filter)；也可自填 hue-rotate(30deg) 之类。',
+      placeholder: '留空时使用主题装饰滤镜',
+      help: '仅作用于背景图层；留空时使用主题滤镜，也可填写合法的 CSS filter。',
     },
     {
       key: 'glowLineInset',
@@ -225,7 +226,7 @@ export default defineModule({
       max: 49,
       step: 1,
       span: 'half',
-      help: '底部辉光分隔线左右各内缩的百分比。0 = 整条贯通；填 10 则只有中间八成有线。',
+      help: '设置底部辉光分隔线两侧的内缩比例。0 表示贯通整行，10 表示保留中间 80%。',
       when: { key: 'variant', in: GLOW_LINE_VARIANTS },
     },
     {
@@ -235,7 +236,7 @@ export default defineModule({
       group: '外观',
       default: true,
       span: 'half',
-      help: '关掉后只剩 1px 渐变线本体，观感更硬朗。',
+      help: '关闭后仅显示 1px 渐变线，不显示外发光。',
       when: { key: 'variant', in: GLOW_LINE_VARIANTS },
     },
     {
@@ -268,7 +269,7 @@ export default defineModule({
       group: '布局',
       // ⚠ 整块缺省写在这里，不从子字段拼：两个形状一定会漂（shared/config.ts）
       default: { pad: CONTAINER_PAD_DEFAULT_PX },
-      help: '子节点摆在内容区里，内边距决定内容区比页头矩形小多少。',
+      help: '内边距决定子节点内容区相对页头矩形的内缩量。',
       fields: [
         {
           key: 'pad',

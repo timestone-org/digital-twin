@@ -139,17 +139,18 @@ echarts 的图例只认两条认领路径：匹配某条 series 的 `name`，或
 |---|---|
 | 数据 | `title` · `series`(array) · `emptyText` |
 | 样式 | `chartStyle` · `palette` · `areaGradient`/`areaGradientTo`/`areaTopAlpha`/`areaOpacity` · `showSymbol`/`symbolSize` · `unit`/`precision` · `showDataZoom` |
-| 坐标轴 | `xAxisName` · `yAxisName` · `yScale` · `boundaryGap` · `dualAxis` · `rightAxisName` |
+| 坐标轴 | `xAxisName` · `yAxisName` · `yScale` · `boundaryGap` · `rightAxisName` |
 | 图例 / 提示框 / 数据标签 / 动画 / 参考线 | 五组片段工厂 |
 
 `series` 行内：`name` · `unit` · `precision` · `color` · `axis(left|right)` · `lineType`。
 
-`contentKeys: ['title', 'series', 'emptyText', 'rightAxisName']`。
+`contentKeys` 还保护单位、精度、轴名称与参考线；这些字段改变数据含义，不属于纯观感。
 **顶层没有任何 `type: 'json'` 的数据矩阵字段**——那是「假数据接入」，本设计的红线。
 
 五档画法：`line` / `smooth` / `area` / `stackedArea` / `step`。
-⚠ `stackedArea` 把各条系列的值逐点相加，只有**采样时刻对齐**的几条才叠得对；
-而两条系列的窗口本来就允许不同，时刻对不上时叠出来的高度没有物理意义。
+⚠ `stackedArea` 只在所有可绘系列的采样时刻完全对齐时堆叠；任一时刻不一致就保留
+各自原始曲线、不做堆叠，并显示降级说明。不能补零或拼联合时间轴，否则会制造并不存在
+的断点和累计值。
 
 ### 4.1 缺省值上的四处判断
 
@@ -162,8 +163,8 @@ echarts 的图例只认两条认领路径：匹配某条 series 的 `name`，或
 
 ## 5. 双轴与参考线
 
-- `dualAxis` 开着时 `yAxis` 是两根，逐条按 `axis` 档挂 `yAxisIndex`；右轴不再画一遍
-  分隔线（两套横线叠在一起网格会变成双份）。没开双轴时右轴那一档**静默等同左轴**。
+- 只要存在 `axis:'right'` 的系列，就自动生成第二根 `yAxis` 并挂对应 `yAxisIndex`；
+  不再提供与系列配置冲突的 `dualAxis` 总开关。右轴不重复画分隔线，避免双份网格。
 - **刻度上不写单位**：双轴时两根轴量纲不同，把整块那一个单位贴到两根轴上就是给右轴
   标了一个错的单位。单位写在轴名与提示框里。
 - ⚠ **参考线只挂在一条 series 上**，且它跟着那条 series 的 `yAxisIndex` 走。
@@ -176,9 +177,8 @@ echarts 的图例只认两条认领路径：匹配某条 series 的 `name`，或
 
 - `partialMerge: ['series', 'legend']`：图例承载逐条状态，series 承载曲线本身，两者都随值走。
   画布正中没有派生读数，故不必像饼族那样把 `title` 一起纳入。
-- `valuesDeep: false` + `watchValues: () => signature`：签名只取**行数 + 各行点数 +
-  末点 t/v + 状态**这类廉价指纹，不深遍历序列。6 条 × 几百个点逐键深度遍历一遍，
-  每个刷新节拍都来一次。
+- `valuesDeep: false` + `watchValues: () => signature`：签名包含各行状态及每个点的
+  `t/v`，因此中段历史修订也会刷新；同时只读这两个必要字段，不深遍历其它对象属性。
 - `connectNulls: false`：缺口就是缺口，连起来会把「这段时间没采到数」画成一条假线。
 - 不开 `hostClickable`：缩放条与内置缩放都是拖拽手势，松手也会派发一次 click。
 

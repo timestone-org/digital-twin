@@ -20,7 +20,7 @@ withDefaults(
 </script>
 
 <template>
-  <DtPopover class="dt-help-tip" :side="side">
+  <DtPopover class="dt-help-tip" :side="side" :panel-label="label">
     <template #default="{ toggle, isOpen, panelId }">
       <button
         type="button"
@@ -29,7 +29,7 @@ withDefaults(
         aria-haspopup="dialog"
         :aria-expanded="isOpen"
         :aria-controls="panelId"
-        @click="toggle"
+        @click.stop="toggle"
       >
         <DtIcon name="circle-question" :size="14" />
       </button>

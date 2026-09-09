@@ -174,7 +174,9 @@ function iconSizeOf(config: Record<string, unknown>): number {
 /** 一行配置 → 一格页签。 */
 function readItem(raw: unknown, index: number): TabView {
   const row = readRecord(raw)
-  const label = readText(row.label, `${TABS_ITEM_LABEL_DEFAULT} ${index + 1}`)
+  const fallback = `${TABS_ITEM_LABEL_DEFAULT} ${index + 1}`
+  const configured = readText(row.label)
+  const label = configured.trim() === '' ? fallback : configured
   return {
     key: `${index}:${label}`,
     label,

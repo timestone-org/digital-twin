@@ -58,7 +58,7 @@ function changeKind(raw: string): void {
 </script>
 
 <template>
-  <DtField :label="row.fieldKey" :hint="row.spec.label" size="sm">
+  <DtField :label="row.spec.label" :help="`字段键：${row.fieldKey}`" size="sm">
     <div class="flex flex-col gap-2">
       <div class="flex items-center gap-2">
         <template v-if="binding">

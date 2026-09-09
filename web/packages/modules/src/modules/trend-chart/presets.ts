@@ -1,6 +1,6 @@
 /**
- * @fileoverview trend-chart 的四套外观预设：素净的工艺曲线、带渐变的面积、
- * 双轴对比，以及带缩放条的长窗回放。
+ * @fileoverview trend-chart 的三套外观预设：素净的工艺曲线、带渐变的面积，
+ * 以及带缩放条的长窗回放。
  *
  * ⚠ 每套都把观感键写全，且顺序与 `configSchema` 的书写序一致。应用预设是**浅合并**：
  * 少写一个键，上一套留在 configJson 里的那个值就原样残留，而点亮判定做的是子集
@@ -20,7 +20,7 @@ export const TREND_CHART_PRESETS: ConfigPreset[] = [
   {
     id: 'process-line',
     label: '工艺曲线',
-    hint: '素净折线 + 底部图例，数值轴按数据范围自适应；工艺温度这类窄幅波动看得出起伏。',
+    hint: '简洁折线搭配底部图例，数值轴按数据范围自适应，适合呈现工艺温度等窄幅波动。',
     config: {
       chartStyle: 'line',
       palette: [],
@@ -34,7 +34,6 @@ export const TREND_CHART_PRESETS: ConfigPreset[] = [
       showDataZoom: false,
       yScale: true,
       boundaryGap: false,
-      dualAxis: false,
       showLegend: true,
       showTooltip: true,
       showValueLabel: false,
@@ -45,7 +44,7 @@ export const TREND_CHART_PRESETS: ConfigPreset[] = [
   {
     id: 'filled-area',
     label: '渐变面积',
-    hint: '面积 + 上浓下透的竖向渐变，一条主曲线单独占一块时最好看。',
+    hint: '使用由上至下渐隐的面积图，适合单独展示一条主要趋势。',
     config: {
       chartStyle: 'area',
       palette: [],
@@ -59,31 +58,6 @@ export const TREND_CHART_PRESETS: ConfigPreset[] = [
       showDataZoom: false,
       yScale: false,
       boundaryGap: false,
-      dualAxis: false,
-      showLegend: true,
-      showTooltip: true,
-      showValueLabel: false,
-      animation: false,
-      animationDuration: 600,
-    },
-  },
-  {
-    id: 'dual-axis',
-    label: '双轴对比',
-    hint: '开双 Y 轴：量纲差得远的两组量各挂一根轴，逐条在「系列」里选左右。⚠ 参考线跟着左轴走。',
-    config: {
-      chartStyle: 'line',
-      palette: [],
-      areaGradient: false,
-      areaGradientTo: '',
-      areaTopAlpha: 0.3,
-      areaOpacity: 0.18,
-      showSymbol: false,
-      symbolSize: 6,
-      showDataZoom: false,
-      yScale: true,
-      boundaryGap: false,
-      dualAxis: true,
       showLegend: true,
       showTooltip: true,
       showValueLabel: false,
@@ -94,7 +68,7 @@ export const TREND_CHART_PRESETS: ConfigPreset[] = [
   {
     id: 'long-window',
     label: '长窗回放',
-    hint: '带缩放条：一天以上的窗口拖着看局部。四套里唯一关掉图例的一套，代价是取不到数的那几条在屏上没有说明。',
+    hint: '带缩放条，适合查看长时间窗的局部区间。关闭图例后，取不到数据的系列不会显示状态说明。',
     config: {
       chartStyle: 'line',
       palette: [],
@@ -107,7 +81,6 @@ export const TREND_CHART_PRESETS: ConfigPreset[] = [
       showDataZoom: true,
       yScale: true,
       boundaryGap: false,
-      dualAxis: false,
       // 缩放条自己要占掉底部一条，再摆图例就只剩一条缝画曲线
       showLegend: false,
       showTooltip: true,

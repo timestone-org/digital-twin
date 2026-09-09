@@ -26,10 +26,15 @@ import {
 } from './options'
 import { BUTTON_TEXT_DEFAULT } from './look'
 
+/** 需要实际图标才能生效的字段共用这份条件值。 */
+const ENABLED_ICONS = BUTTON_ICONS.filter((item) => item.value !== '').map(
+  (item) => item.value,
+)
+
 export default defineModule({
   type: 'action-button',
   description:
-    '按钮控件：一个原生 `<button>`，点一下上抛一次联动事件；显隐、开弹窗、跨屏跳转、按值互斥切换全由大屏级联动规则决定，模块自己不认识任何一种动作。要一块明确「能点」的入口时用它；只想让一段文字或一张图可点，text-block 与 image-block 本身就整块可点，不必换成按钮。它没有绑定槽、不取数：「禁用」是常态置灰而不是随数据变，要按读数决定能不能点得靠联动规则控制显隐。配了「联动值」就随事件抛出它（「按值跳转大屏」「按值互斥切换」按它分流），留空则抛一个不带值的点击，显隐与弹窗类动作够用。⚠ 只配按钮不配联动规则的话，点了什么都不会发生，而两侧都不报错。',
+    '原生按钮控件，用于触发大屏联动，不直接执行显隐、弹窗或跳转。需要单一操作入口时选用；仅需文字或图片响应点击时，使用对应的展示模块。模块不含数据绑定；`linkValue` 仅供按值规则分流，留空时发送普通 `click`。未配置联动规则或处于禁用状态时，点击不产生业务动作。',
   displayName: '按钮',
   category: '控件',
   icon: 'square-mouse-pointer',
@@ -42,11 +47,12 @@ export default defineModule({
   // 按钮外的空白也能点，且同一次点击会上抛两遍（toggle 类动作当场自我抵消）
   emitsInteractions: true,
   bindings: [],
+  contentKeys: ['text', 'subText', 'icon', 'hint', 'linkValue', 'disabled'],
   configPresets: [
     {
       id: 'primary-action',
       label: '主行动',
-      hint: '实心主色 + 圆角 + 辉光，一屏里最重要的那一个入口。',
+      hint: '实心主色、圆角与辉光，适用于页面主操作。',
       config: {
         variant: 'solid',
         tone: 'primary',
@@ -75,7 +81,7 @@ export default defineModule({
     {
       id: 'quiet-outline',
       label: '次要描边',
-      hint: '中性描边胶囊，放在主行动旁边当「返回 / 取消」这类次要入口。',
+      hint: '中性描边胶囊，适用于返回或取消等次要操作。',
       config: {
         variant: 'outline',
         tone: 'neutral',
@@ -95,7 +101,7 @@ export default defineModule({
       group: '内容',
       default: BUTTON_TEXT_DEFAULT,
       span: 'full',
-      help: '留空 = 只摆图标，按钮收成方形；读屏的名字改由「悬停提示」给。',
+      help: '主、副文案均为空时仅显示图标，读屏名称由「悬停提示」提供。',
     },
     {
       key: 'subText',
@@ -104,8 +110,8 @@ export default defineModule({
       group: '内容',
       default: '',
       span: 'full',
-      placeholder: '留空则不画第二行',
-      help: '主文案下面的一行小字，字号跟着主文案按比例走。',
+      placeholder: '留空则隐藏副文案',
+      help: '显示在主文案下方，字号按主文案比例计算。',
     },
     {
       key: 'icon',
@@ -123,6 +129,7 @@ export default defineModule({
       group: '内容',
       default: 'left',
       span: 'half',
+      when: { key: 'icon', in: ENABLED_ICONS },
       options: [...BUTTON_ICON_POSITIONS],
     },
     {
@@ -133,7 +140,7 @@ export default defineModule({
       default: '',
       span: 'full',
       placeholder: '留空则不提示',
-      help: '鼠标停住时的一句话；没有文案的图标按钮拿它当读屏名称。',
+      help: '指针悬停时显示；无可见文案时同时作为读屏名称。',
     },
     {
       key: 'linkValue',
@@ -142,7 +149,7 @@ export default defineModule({
       group: '行为',
       default: '',
       span: 'full',
-      help: '点击时随事件上抛的值，「按值跳转大屏」「按值互斥切换」按它分流。留空 = 只抛一个不带值的点击，显示/隐藏/弹窗/单目标跳转都够用。',
+      help: '随点击事件发送，供按值跳转或互斥规则匹配；留空时发送普通 `click`。',
     },
     {
       key: 'disabled',
@@ -151,7 +158,7 @@ export default defineModule({
       group: '行为',
       default: false,
       span: 'half',
-      help: '压暗并挡住点击。⚠ 它是常态置灰，不随数据变——要按数据决定能不能点，请用联动规则控制显隐。',
+      help: '禁用后不可聚焦或触发。数据驱动的可用性应通过联动显隐控制。',
     },
     {
       key: 'variant',
@@ -169,7 +176,7 @@ export default defineModule({
       group: '外观',
       default: 'primary',
       span: 'half',
-      help: '取主题里的语义色，换肤时整屏按钮一起变。',
+      help: '使用主题语义色，主题切换时同步更新。',
       options: [...BUTTON_TONES],
     },
     {
@@ -180,7 +187,7 @@ export default defineModule({
       default: '',
       span: 'half',
       when: { key: 'tone', in: ['custom'] },
-      placeholder: '留空 = 主题强调色',
+      placeholder: '留空时使用主题强调色',
     },
     {
       key: 'textColor',
@@ -189,8 +196,8 @@ export default defineModule({
       group: '外观',
       default: '',
       span: 'half',
-      placeholder: '留空 = 跟风格自动',
-      help: '实心档默认压深色字。自定义主色配浅色时，用这里显式指定字色。',
+      placeholder: '留空时根据风格自动设置',
+      help: '实心风格默认使用深色文字；自定义浅色背景时可在此覆盖。',
     },
     {
       key: 'shape',
@@ -232,7 +239,7 @@ export default defineModule({
       group: '外观',
       default: false,
       span: 'half',
-      help: '按钮外一圈与主色同色的光晕。',
+      help: '在按钮外缘添加与主色一致的光晕。',
     },
     {
       key: 'glowRadius',
@@ -289,7 +296,8 @@ export default defineModule({
       max: 64,
       step: 1,
       span: 'half',
-      help: '0 = 跟着文字字号走（约 1.2 倍）。',
+      when: { key: 'icon', in: ENABLED_ICONS },
+      help: '0 表示按文字字号的约 1.2 倍自动计算。',
     },
     {
       key: 'sizing',
@@ -298,7 +306,7 @@ export default defineModule({
       group: '排布',
       default: 'fill',
       span: 'half',
-      help: '充满模块：按钮就是这个矩形，拖尺寸即改按钮大小。按内容：由字号与内边距撑开，再摆到矩形的某一处。',
+      help: '「充满模块」使用节点矩形尺寸；「按内容」由文字与内边距决定尺寸。',
       options: [...BUTTON_SIZINGS],
     },
     {
@@ -331,7 +339,7 @@ export default defineModule({
       max: 64,
       step: 1,
       span: 'half',
-      help: '只摆图标不写文案时，四边一律取「上下内边距」，这一项不参与。',
+      help: '仅显示图标时，四边统一使用「上下内边距」。',
     },
     {
       key: 'paddingY',
@@ -343,7 +351,7 @@ export default defineModule({
       max: 48,
       step: 1,
       span: 'half',
-      help: '「按内容」尺寸时它决定按钮高度；「充满模块」时高度由矩形定。',
+      help: '「按内容」模式下决定按钮高度；「充满模块」模式下由模块矩形决定高度。',
     },
     {
       key: 'gap',
@@ -355,6 +363,7 @@ export default defineModule({
       max: 32,
       step: 1,
       span: 'half',
+      when: { key: 'icon', in: ENABLED_ICONS },
     },
     {
       key: 'hover',
@@ -363,7 +372,7 @@ export default defineModule({
       group: '动效',
       default: 'brighten',
       span: 'half',
-      help: '⚠ 触摸屏没有悬停：只靠这一档的大屏，在触摸屏上按下去是没有反馈的。',
+      help: '触摸设备不触发悬停，建议同时配置按下反馈。',
       options: [...BUTTON_HOVERS],
     },
     {
@@ -373,7 +382,7 @@ export default defineModule({
       group: '动效',
       default: 'sink',
       span: 'half',
-      help: '按住时的位移，触摸屏上唯一看得到的那一档反馈。',
+      help: '按下时的视觉反馈，适用于鼠标和触摸操作。',
       options: [...BUTTON_PRESSES],
     },
     {
@@ -383,7 +392,7 @@ export default defineModule({
       group: '动效',
       default: false,
       span: 'half',
-      help: '常亮的一圈光环明暗呼吸，用来把视线引到某一个入口上。一屏里开一个就够。',
+      help: '以呼吸光环强调重要入口，建议单屏仅使用一处。',
     },
     {
       key: 'pulseDuration',

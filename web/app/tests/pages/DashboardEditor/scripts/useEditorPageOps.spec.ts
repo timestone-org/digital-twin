@@ -111,6 +111,7 @@ interface Harness {
   file: DashboardDoc
   ops: EditorPageOps
   picking: ReturnType<typeof ref<string | null>>
+  toast: { error: ReturnType<typeof vi.fn>; success: ReturnType<typeof vi.fn> }
   wrapper: ReturnType<typeof mount>
 }
 
@@ -124,6 +125,7 @@ function setup(
   let editor!: DashboardEditor
   let meta!: EditorMeta
   let ops!: EditorPageOps
+  const toast = { error: vi.fn(), success: vi.fn() }
   const host = defineComponent({
     setup() {
       editor = useDashboardEditor(() => MANIFEST)
@@ -156,7 +158,7 @@ function setup(
         file,
         meta,
         confirm: { ask: vi.fn(() => Promise.resolve(false)) },
-        toast: { error: vi.fn(), success: vi.fn() },
+        toast,
         dashboardId: () => targetDashboardId,
         pickingFieldKey: picking,
         getManifest: () => manifest,
@@ -165,7 +167,7 @@ function setup(
     },
   })
   const wrapper = mount(host)
-  return { editor, meta, file, ops, picking, wrapper }
+  return { editor, meta, file, ops, picking, toast, wrapper }
 }
 
 beforeEach(() => {
@@ -340,6 +342,33 @@ describe('装配', () => {
     expect(ctx.ops.consumePicker()).toBe(true)
     expect(ctx.picking.value).toBeNull()
     expect(ctx.ops.consumePicker()).toBe(false)
+    ctx.wrapper.unmount()
+  })
+})
+
+describe('保存前配置校验', () => {
+  it('任一节点跨字段配置无效时阻断两条保存轴并提示节点', async () => {
+    const ctx = setup([node('a', { configJson: { min: 10, max: 5 } })], {
+      ...MANIFEST,
+      displayName: '仪表',
+      configSchema: [],
+      validateConfig: (config) =>
+        Number(config.max) > Number(config.min) ? [] : ['上限必须大于下限'],
+    })
+    ctx.editor.select('a')
+    ctx.ops.toggleSelectedVisible(false)
+
+    const outcome = await ctx.ops.save()
+
+    expect(outcome).toEqual({
+      isSaved: false,
+      message: '配置无效：仪表：上限必须大于下限',
+    })
+    expect(ctx.file.save).not.toHaveBeenCalled()
+    expect(ctx.file.saveMeta).not.toHaveBeenCalled()
+    expect(ctx.toast.error).toHaveBeenCalledWith(
+      '配置无效：仪表：上限必须大于下限',
+    )
     ctx.wrapper.unmount()
   })
 })

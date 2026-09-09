@@ -93,7 +93,7 @@ describe('页签的读取', () => {
   })
 
   it('没写文案的格给一个带序号的占位，空轨道看着像模块坏了', () => {
-    const spec = readTabsSpec({ items: [{}, {}] })
+    const spec = readTabsSpec({ items: [{}, { label: '   ' }] })
 
     expect(spec.items.map((tab) => tab.label)).toEqual(['页签 1', '页签 2'])
   })

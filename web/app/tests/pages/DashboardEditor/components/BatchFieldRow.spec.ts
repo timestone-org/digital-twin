@@ -7,6 +7,7 @@ import { beforeEach, describe, expect, it } from 'vitest'
 import { mount } from '@vue/test-utils'
 import type { ConfigField } from '@dt/contracts'
 import { __resetConfigControls } from '@dt/modules'
+import { DtHelpTip } from '@dt/ui'
 
 import type { BatchFieldState } from '@/features/dashboard/batchConfig'
 import { installConfigControls } from '@/features/dashboard/configControls'
@@ -96,11 +97,15 @@ describe('批量字段行', () => {
     expect(enumRow.findComponent(ConfigFieldControl).props('value')).toBe('b')
   })
 
-  it('字段的 help 说明照常画出来', () => {
+  it('字段的 help 收进按需气泡，不在表单里常驻铺开', () => {
     const wrapper = mountRow(
       state({ field: field({ type: 'string', help: '批量改会写到全体' }) }),
     )
 
-    expect(wrapper.text()).toContain('批量改会写到全体')
+    expect(wrapper.text()).not.toContain('批量改会写到全体')
+    expect(wrapper.findComponent(DtHelpTip).props()).toMatchObject({
+      label: '演示字段说明',
+      text: '批量改会写到全体',
+    })
   })
 })

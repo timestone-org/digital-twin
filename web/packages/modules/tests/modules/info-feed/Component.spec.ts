@@ -7,6 +7,7 @@
  * ⚠ 吞不吞冒泡按这一条有没有正文分开：没正文的那一条要放行，否则「整块可点」那条
  * 兜底路径在这几行上永远触发不了。
  */
+import { DtTooltip } from '@dt/ui'
 import { mount } from '@vue/test-utils'
 import { describe, expect, it, vi } from 'vitest'
 
@@ -28,11 +29,13 @@ interface Item {
 function render(
   config: Record<string, unknown> = {},
   items?: unknown,
+  meta?: Record<string, unknown>,
 ): ReturnType<typeof mount> {
   return mount(Component, {
     props: {
       config: { ...DEFAULTS, ...config },
       values: items === undefined ? {} : { [FEED_SLOT_KEY]: items },
+      ...(meta === undefined ? {} : { meta }),
     },
   })
 }
@@ -132,6 +135,20 @@ describe('信息流的空态', () => {
   it('空态文案配了就照写', () => {
     expect(render({ emptyText: '暂无预警' }, []).get('.if-empty').text()).toBe(
       '暂无预警',
+    )
+  })
+
+  it('已绑定但尚无文本时显示条目状态而不是误报为空', () => {
+    const wrapper = render({}, [], {
+      slots: {
+        'feedValues[0].text': { state: 'pending' },
+      },
+    })
+
+    expect(wrapper.find('.if-empty').exists()).toBe(false)
+    expect(wrapper.get('.if-status').text()).toBe('⋯')
+    expect(wrapper.findComponent(DtTooltip).props('content')).toContain(
+      '第一帧',
     )
   })
 })

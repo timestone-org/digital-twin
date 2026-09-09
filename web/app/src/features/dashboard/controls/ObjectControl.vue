@@ -5,6 +5,7 @@
  * 孪生场景那种 `Vec3` + `Record<string,string>` 混着的形状，两列通用表单表达不了，
  * 但「表达不了」不等于「不给改」。
  */
+import type { ConfigField } from '@dt/contracts'
 import { configDefaults, readRecord } from '@dt/modules'
 import { DtField } from '@dt/ui'
 import { computed } from 'vue'
@@ -30,6 +31,13 @@ const visibleFields = computed(() => {
 function writeKey(key: string, next: unknown, isContinuous: boolean): void {
   emit('update', { ...record.value, [key]: next }, isContinuous)
 }
+
+/** 读子字段当前值；键缺席时只回显声明缺省，不提前写入配置。 */
+function readField(field: ConfigField): unknown {
+  return Object.hasOwn(record.value, field.key)
+    ? record.value[field.key]
+    : field.default
+}
 </script>
 
 <template>
@@ -49,12 +57,12 @@ function writeKey(key: string, next: unknown, isContinuous: boolean): void {
       v-for="sub in visibleFields"
       :key="sub.key"
       :label="sub.label"
-      :hint="sub.help"
+      :help="sub.help"
       size="sm"
     >
       <ConfigFieldControl
         :field="sub"
-        :value="record[sub.key]"
+        :value="readField(sub)"
         :depth="depth"
         :disabled="disabled"
         @update="

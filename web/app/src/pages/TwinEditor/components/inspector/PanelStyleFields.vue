@@ -21,6 +21,7 @@ import {
   DtSelect,
   DtSlider,
   DtSwitch,
+  DtTooltip,
 } from '@dt/ui'
 import { computed } from 'vue'
 
@@ -112,17 +113,22 @@ function toggleAutoHeight(auto: boolean): void {
   <InspectorSection title="外观">
     <!-- 一整套观感是十几个开关的组合，逐个试很难自己看出漏了哪条 -->
     <div class="panel-presets">
-      <DtButton
+      <DtTooltip
         v-for="preset in TWIN_PANEL_PRESETS"
         :key="preset.id"
-        size="sm"
-        :pressed="activePreset === preset.id"
-        :title="preset.hint"
-        :data-test="`panel-preset-${preset.id}`"
-        @click="applyPreset(preset)"
+        v-slot="{ describedby }"
+        :content="preset.hint"
       >
-        {{ preset.label }}
-      </DtButton>
+        <DtButton
+          size="sm"
+          :pressed="activePreset === preset.id"
+          :aria-describedby="describedby"
+          :data-test="`panel-preset-${preset.id}`"
+          @click="applyPreset(preset)"
+        >
+          {{ preset.label }}
+        </DtButton>
+      </DtTooltip>
     </div>
     <DtField label="风格" size="sm">
       <DtSelect

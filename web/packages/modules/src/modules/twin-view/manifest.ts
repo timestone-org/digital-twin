@@ -16,7 +16,7 @@ import { defineModule } from '../../registry'
 export default defineModule({
   type: 'twin-view',
   description:
-    '数字孪生查看器：一个 3D 场景，模型上摆部件、锚点、信息牌、箭头与能量流，各自接上点位后随读数染色、变数、流动，运行态还可开场景工具条与只读结构树。要在三维模型上做可视化时用它；平面的流程图 / 系统图 / 接线图请用 twin-2d-view。⚠ 场景本身（模型、部件、锚点、信息牌、能量流）不在属性面板里配——`twin` 那一段由子编辑器（路由 `twin-editor`）整块写入，属性面板只出一个入口按钮，这里能配的只有标题、标题位置与字号，以及场景工具条与结构树两个运行态开关。六个数组绑定槽，行全部钉在场景实体上（行号 = 归一化后的文档序，行数跟着场景走，空行只表示那个实体没接数据源，不会让后面的行移位）：`partValues` 部件状态染色、`anchorValues` 锚点读数、`panelValues` 信息牌字段（按信息牌摊平后的序）、`arrowValues` 箭头读数、`partFieldValues` 部件详情字段，这五个的唯一子槽 `value` 都收数值；`flowValues` 是能量流，两个子槽——`intensity` 收数值（驱动粒子）、`active` 收布尔（流不流）。⚠ `partValues` 的行号是「配了状态染色的部件」之间的序号，不是场景里全部部件的下标：给中间某个部件关掉染色，会让它之后每一行改喂前一个部件。',
+    '3D 数字孪生模块，用于在模型中呈现部件、锚点、信息牌、箭头和能量流。场景文档由孪生编辑器维护；属性面板仅配置标题及运行态工具，平面流程或接线图应选择 2D 孪生。六个实体钉定的数组绑定槽按归一化文档顺序关联数据，未绑定行不会改变后续实体索引。部件点击发送以稳定部件 id 为值的 `click` 事件。',
   displayName: '数字孪生',
   category: '孪生',
   icon: 'building',
@@ -49,6 +49,12 @@ export default defineModule({
     'textColor',
   ],
   defaultSize: { width: 1280, height: 720, minWidth: 320, minHeight: 240 },
+  contentKeys: [
+    'title',
+    'showSceneTools',
+    'showStructureTree',
+    TWIN_CONFIG_KEY,
+  ],
   configSchema: [
     {
       key: 'title',
@@ -58,7 +64,7 @@ export default defineModule({
       // ⚠ 刻意不给 default：default 会 materialize 进每一次渲染，改它等于改存量
       //   大屏的渲染结果。缺省即空串 = 画布上不叠标题
       span: 'full',
-      placeholder: '留空则画布上不叠标题',
+      placeholder: '留空则不显示画布标题',
     },
     {
       key: 'titlePosition',
@@ -102,7 +108,7 @@ export default defineModule({
       group: '运行态',
       // ⚠ 同样刻意不给 default：缺省即 false = 不显示，存量大屏零回归
       span: 'full',
-      help: '运行态左下角提供只读的模型结构树：浏览层级、勾选显隐、点击定位。勾选显隐只影响当前会话，不写回配置。',
+      help: '在运行态左下角提供只读模型结构树，支持层级浏览、临时显隐和定位；不写回配置。',
     },
     {
       key: TWIN_CONFIG_KEY,
@@ -112,11 +118,13 @@ export default defineModule({
       // ⚠ 刻意不给 fields：TwinConfig 里有 Vec3 这种两列通用表单表达不了的形状。
       //   属性面板对「object 且无 fields」的字段渲染成只读摘要 + 子编辑器入口，
       //   绝不许静默画成空白
-      help: '模型、部件与锚点，整块由孪生子编辑器写入。',
+      help: '模型、部件与锚点由孪生编辑器统一维护。',
     },
   ],
   // 点中部件时上抛 `{ event: 'click', value: 部件 id }`
   emitsInteractions: true,
+  // 六个实体钉定槽允许局部失败，不得遮住其余可用场景。
+  ownsStatusDisplay: true,
   // ⚠ `hostClickable` 刻意不开：3D 视口内部有拖拽手势，整块可点会让每次
   //   转完镜头松手都派发一次 click（清单里 `hostClickable` 的注释写了这条）
   // 属性面板只读这份声明来决定出不出入口，故这里的路由名写错 = 入口点了没反应
@@ -124,7 +132,7 @@ export default defineModule({
     configKey: TWIN_CONFIG_KEY,
     routeName: 'twin-editor',
     label: '打开孪生编辑器',
-    hint: '模型摆放、部件、锚点、信息牌与能量流都在那里配。',
+    hint: '在孪生编辑器中维护模型、部件、锚点、信息牌与能量流。',
   },
   bindings: [...TWIN_VIEW_BINDINGS],
   // 绑点面板按它把「第 3 行」显示成「3 号机组温度」——行号与实体的对应关系

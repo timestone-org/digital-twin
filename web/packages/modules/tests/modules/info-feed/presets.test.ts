@@ -1,13 +1,13 @@
 /**
- * @fileoverview 守两套外观预设的数据面：id 集合、只写清单里有的键、两套写的是同一组
+ * @fileoverview 守两套配置预设的数据面：id 集合、只写清单里有的键、两套写的是同一组
  * 键、枚举取值都在该字段的选项里、色板每条都写全四个子键、颜色一律由主题 token 拼出来、
- * 内容键一个都不写。
+ * 以及气象预设明确覆盖的两项级别语义。
  *
  * ⚠ 这几类错法点了按钮什么都不会发生，而 typecheck、lint、build 全绿：
  * 键写错就是「配了不生效」；少写一个键，上一套留在配置里的那个取值原样残留，
  * 而点亮判定做的是子集比较、照样把按钮点亮。
  */
-import type { ConfigField } from '@dt/contracts'
+import { styleKeysOf, type ConfigField } from '@dt/contracts'
 import { describe, expect, it } from 'vitest'
 
 import manifest from '../../../src/modules/info-feed/manifest'
@@ -16,8 +16,9 @@ import { INFO_FEED_PRESETS } from '../../../src/modules/info-feed/presets'
 const SCHEMA = manifest.configSchema
 const TOP_KEYS = new Set(SCHEMA.map((field) => field.key))
 
-/** 预设换的是观感，这两个内容键写了就会抹掉用户自己写的字。 */
 const CONTENT_KEYS = manifest.contentKeys ?? []
+const STYLE_KEYS = styleKeysOf(manifest)
+const SEMANTIC_PRESET_KEYS = ['levels', 'sortByRank'] as const
 
 /** 气象五色里唯一一处没有对应 token 的颜色，由黄与红调出来。 */
 const WEATHER_ORANGE =
@@ -131,18 +132,17 @@ describe('预设写的键', () => {
     expect(Object.keys(INFO_FEED_PRESETS[0]?.config ?? {})).toHaveLength(16)
   })
 
-  it('观感键一个不落：顶层十八个字段里除去两个内容键，全在预设里', () => {
+  it('观感键一个不落', () => {
     const wrote = new Set(Object.keys(INFO_FEED_PRESETS[0]?.config ?? {}))
-    const missing = [...TOP_KEYS].filter(
-      (key) => !wrote.has(key) && !CONTENT_KEYS.includes(key),
-    )
+    const missing = STYLE_KEYS.filter((key) => !wrote.has(key))
 
     expect(missing).toEqual([])
   })
 
   it('键序跟着清单走——两边不同序时，改哪个字段就得在预设里满篇找', () => {
+    const semantic = new Set<string>(SEMANTIC_PRESET_KEYS)
     const wanted = SCHEMA.map((field) => field.key).filter(
-      (key) => !CONTENT_KEYS.includes(key),
+      (key) => STYLE_KEYS.includes(key) || semantic.has(key),
     )
 
     expect(
@@ -150,15 +150,22 @@ describe('预设写的键', () => {
     ).toEqual(INFO_FEED_PRESETS.map(() => wanted))
   })
 
-  it('内容键一个都不写：预设换的是观感，不是把用户写的字抹掉', () => {
+  it('只允许明确声明的级别语义进入预设', () => {
+    const semantic = new Set<string>(SEMANTIC_PRESET_KEYS)
     const wiped = INFO_FEED_PRESETS.flatMap((preset) =>
-      CONTENT_KEYS.filter((key) => key in preset.config).map(
-        (key) => `${preset.id}.${key}`,
-      ),
+      CONTENT_KEYS.filter(
+        (key) => key in preset.config && !semantic.has(key),
+      ).map((key) => `${preset.id}.${key}`),
     )
 
     expect(wiped).toEqual([])
-    // 反过来锁住这两个键真的在清单里，免得改名之后这条断言变成空转
+    expect(
+      INFO_FEED_PRESETS.flatMap((preset) =>
+        SEMANTIC_PRESET_KEYS.filter((key) => !(key in preset.config)).map(
+          (key) => `${preset.id}.${key}`,
+        ),
+      ),
+    ).toEqual([])
     expect(CONTENT_KEYS.filter((key) => TOP_KEYS.has(key))).toEqual(
       CONTENT_KEYS,
     )

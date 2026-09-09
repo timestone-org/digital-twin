@@ -8,7 +8,7 @@
  * 第三方模块就永远开不出自己的子编辑器——而且既不报错也不失败。
  */
 import type { ModuleSubEditor } from '@dt/contracts'
-import { DtButton } from '@dt/ui'
+import { DtButton, DtHelpTip } from '@dt/ui'
 import { computed } from 'vue'
 
 import { useOpenSubEditor } from '@/features/dashboard/editorContext'
@@ -47,9 +47,11 @@ const configured = computed(
       >
         {{ configured ? '已配置' : '尚未配置' }}
       </span>
+      <DtHelpTip
+        v-if="subEditor.hint !== undefined"
+        :text="subEditor.hint"
+        :label="`${subEditor.label}说明`"
+      />
     </div>
-    <p v-if="subEditor.hint !== undefined" class="text-xs text-text-disabled">
-      {{ subEditor.hint }}
-    </p>
   </div>
 </template>

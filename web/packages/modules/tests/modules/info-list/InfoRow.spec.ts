@@ -62,10 +62,12 @@ function row(over: Partial<ListRow> = {}): ListRow {
     alarmText: '',
     level: null,
     rank: -1,
+    judgmentState: 'ok',
     blink: false,
     isAlarm: false,
     emitValue: '',
     vars: {},
+    issue: null,
     ...over,
   }
 }

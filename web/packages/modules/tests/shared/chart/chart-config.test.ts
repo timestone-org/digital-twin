@@ -230,6 +230,27 @@ describe('gradientFields', () => {
     expect(byKey(fields, 'areaOpacity').default).toBe(0.18)
   })
 
+  it('渐变末端色与起始透明度只在启用渐变时出现', () => {
+    const fields = gradientFields({
+      when: { key: 'chartStyle', in: ['area'] },
+    })
+
+    expect(byKey(fields, 'areaGradient').when).toEqual({
+      key: 'chartStyle',
+      in: ['area'],
+    })
+    for (const key of ['areaGradientTo', 'areaTopAlpha']) {
+      expect(byKey(fields, key).when).toEqual({
+        key: 'areaGradient',
+        in: [true],
+      })
+    }
+    expect(byKey(fields, 'areaOpacity').when).toEqual({
+      key: 'chartStyle',
+      in: ['area'],
+    })
+  })
+
   it('两档透明度的缺省可逐族覆盖', () => {
     const fields = gradientFields({ topAlpha: 0.25, opacity: 0.35 })
 

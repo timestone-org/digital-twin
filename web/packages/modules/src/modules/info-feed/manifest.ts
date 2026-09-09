@@ -24,7 +24,7 @@ import { INFO_FEED_PRESETS } from './presets'
 export default defineModule({
   type: 'info-feed',
   description:
-    '信息流：直通渲染后端推来的成品文本条目，一条是「级别圆点 ｜ 级别文字 ｜ 正文 ｜ 时间」四件，自带自动滚动；它不做阈值评估也不做数值格式化。预警、公告、日志、告警消息这类条数不固定、内容与级别由后端给的流用它；一行一个点位、由前端按规则表评估数值的固定清单用 info-list。一个数组绑定槽 `feedValues`，三个子槽 `level` / `text` / `time` 全收字符串：`level` 与内置档比对来上色（danger / red / error、warning / warn / yellow、info / blue、success / normal / green），`time` 是后端给的时间文本而不是墙钟。⚠ 本族四个模块里只有它的数组槽是列表式的：条目由用户在绑点面板上手工增删，服务端强制索引连续且从 0 起，中间空一格会被拒——不像另外三个那样把行钉在配置项上。⚠ 气象「橙色」没有内置档（主题只有四支状态色），要橙必须在「级别色板」里配一条。',
+    '信息流用于呈现由数据源直接提供的预警、公告或日志条目，适合数量动态变化的文本流；固定点位清单可选信息列表。数据通过 feedValues 列表式数组绑定，每行包含 level、text 和 time 三个文本子槽，并可按级别映射着色与排序。绑定行必须从 0 连续编号；已绑定条目的等待或错误状态会在对应行明确提示。',
   displayName: '信息流',
   category: '数据',
   icon: 'activity',
@@ -41,7 +41,7 @@ export default defineModule({
   ],
   defaultSize: { width: 400, height: 260, minWidth: 160, minHeight: 96 },
   configPresets: INFO_FEED_PRESETS,
-  contentKeys: ['title', 'emptyText'],
+  contentKeys: ['title', 'emptyText', 'levels', 'sortByRank'],
   configSchema: [
     {
       key: 'title',
@@ -50,7 +50,7 @@ export default defineModule({
       group: '内容',
       default: '',
       span: 'full',
-      placeholder: '留空则不画标题栏',
+      placeholder: '留空则隐藏标题栏',
     },
     {
       key: 'emptyText',
@@ -60,7 +60,7 @@ export default defineModule({
       default: '暂无信息',
       span: 'half',
       placeholder: '暂无信息',
-      help: '一条都摆不出来时画的一句话。⚠ 没推来文本的条目不占位，所以刚打开、后端还没推的那一刻看到的也是这一句。',
+      help: '无可显示条目时使用；首次数据到达前同样显示。',
     },
     {
       key: 'showDot',
@@ -69,7 +69,7 @@ export default defineModule({
       group: '圆点',
       default: true,
       span: 'half',
-      help: '行首那颗按级别着色的圆点。',
+      help: '在行首显示按级别着色的圆点。',
     },
     {
       key: 'dotSize',
@@ -94,7 +94,7 @@ export default defineModule({
       step: 1,
       span: 'half',
       when: { key: 'showDot', in: [true] },
-      help: '同色外发光的模糊半径；0 = 纯色点。',
+      help: '设置同色外发光的模糊半径；0 表示纯色圆点。',
     },
     {
       key: 'showLevel',
@@ -103,7 +103,7 @@ export default defineModule({
       group: '级别',
       default: true,
       span: 'half',
-      help: '圆点与文字是同一件事的两种编码。⚠ 关掉后级别只剩色相一路，色觉障碍、远看与读屏都读不出来。未知级别本来就不编造文字，与这个开关无关。',
+      help: '圆点与文字共同表达级别。关闭文字后仅保留颜色，不利于远距离识别、色觉障碍用户及读屏访问；未知级别始终不生成文字。',
     },
     {
       key: 'levelSize',
@@ -127,7 +127,7 @@ export default defineModule({
       max: FEED_SIZE_BOUNDS.textSize.max,
       step: 1,
       span: 'half',
-      help: '正文超长时单行截断，全文挂在悬停提示上。',
+      help: '正文过长时单行截断，完整内容通过悬停提示展示。',
     },
     {
       key: 'showTime',
@@ -136,7 +136,7 @@ export default defineModule({
       group: '时间',
       default: true,
       span: 'half',
-      help: '⚠ 时间是后端直通的文本，不是墙钟：那一条没推时间就整列留白，故可关。',
+      help: '时间按数据源提供的文本显示；缺少时间的条目保留空白，可按需关闭该列。',
     },
     {
       key: 'timeSize',
@@ -158,7 +158,7 @@ export default defineModule({
       default: 'right',
       span: 'half',
       when: { key: 'showTime', in: [true] },
-      help: '摆行首时时间排在圆点之前，几条的时刻竖着对齐；摆行尾时正文吃满中间的空档。',
+      help: '行首模式便于纵向对齐时间；行尾模式将中间空间优先分配给正文。',
       options: [...FEED_TIME_PLACES],
     },
     {
@@ -200,15 +200,15 @@ export default defineModule({
       itemLabelKey: 'key',
       span: 'full',
       default: [],
-      help: '留空 = 走内置档（danger / warning / info / success 与 red / yellow / blue / green 等别名各自映到一个主题状态色）。这里按级别值覆盖：只填了文字或权重的条目，颜色仍回落内置档。⚠ 橙没有内置档——本仓没有橙这一档语义色，要它只能在这里配。',
+      help: '留空时使用内置级别映射（danger / warning / info / success 及 red / yellow / blue / green 等别名）。自定义项按级别值覆盖；仅配置文字或权重时，颜色仍使用内置映射。橙色无内置语义色，需在此显式配置。',
       itemSchema: [
         {
           key: 'key',
           label: '级别值',
           type: 'string',
           default: '',
-          placeholder: '如 orange',
-          help: '与推来的级别文本比对，两侧都去首尾空格再转小写。⚠ 同一个级别值配了两条时后一条生效。',
+          placeholder: '例如：orange',
+          help: '与数据源级别文本比较，双方均去除首尾空格并转为小写。重复配置同一级别值时，以后一项为准。',
         },
         {
           key: 'label',
@@ -223,14 +223,14 @@ export default defineModule({
           type: 'color',
           default: '',
           placeholder: '留空取内置档',
-          help: '只填 var(--…) 引用，填死色值换肤时不跟着走。',
+          help: '建议填写 var(--…) 主题变量；固定色值不会随主题切换。',
         },
         {
           key: 'rank',
           label: '排序权重',
           type: 'number',
           default: 0,
-          help: '越大越靠前，只在「按级别排序」开着时才参与。',
+          help: '数值越大排序越靠前，仅在启用级别排序时生效。',
         },
       ],
     },
@@ -241,7 +241,7 @@ export default defineModule({
       group: '色板',
       default: false,
       span: 'half',
-      help: '按权重降序排，同权重的保持推送顺序。⚠ 缺省关着：本模块的语义是直通，重排会让「最新的一条在最上面」这条默认读法失效。',
+      help: '按权重降序排列，同权重保持推送顺序。启用后不再保留整体推送顺序。',
     },
     ...scrollConfigFields(),
   ],

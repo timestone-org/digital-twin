@@ -11,6 +11,7 @@ import type {
   ModuleSubEditor,
 } from '@dt/contracts'
 import { __resetConfigControls } from '@dt/modules'
+import { DtHelpTip, DtTooltip } from '@dt/ui'
 
 import { installConfigControls } from '@/features/dashboard/configControls'
 import { EDITOR_SUB_EDITOR_KEY } from '@/features/dashboard/editorContext'
@@ -61,6 +62,10 @@ const NODE: DashboardNodePayload = {
   bindings: [],
 }
 
+function validateRange(config: Record<string, unknown>): readonly string[] {
+  return Number(config.end) > Number(config.start) ? [] : ['终点必须大于起点']
+}
+
 beforeEach(() => {
   __resetConfigControls()
   installConfigControls()
@@ -72,11 +77,54 @@ describe('没有专属配置的模块', () => {
       props: { node: NODE, manifest: undefined },
     })
 
-    expect(wrapper.text()).toContain('这个模块没有专属配置')
+    expect(wrapper.text()).toContain('无专属配置')
   })
 })
 
 describe('泛型渲染', () => {
+  it('字段帮助只保留标签旁的按需入口', () => {
+    const wrapper = mount(PropertyPanel, {
+      props: {
+        node: NODE,
+        manifest: {
+          ...MANIFEST,
+          configSchema: [
+            {
+              key: 'title',
+              label: '标题',
+              type: 'string',
+              help: '留空则不显示标题栏。',
+            },
+          ],
+        },
+      },
+    })
+
+    expect(wrapper.text()).not.toContain('留空则不显示标题栏。')
+    expect(wrapper.findComponent(DtHelpTip).props()).toMatchObject({
+      label: '标题说明',
+      text: '留空则不显示标题栏。',
+    })
+  })
+
+  it('跨字段配置无效时使用错误提示明确说明', () => {
+    const wrapper = mount(PropertyPanel, {
+      props: {
+        node: { ...NODE, configJson: { start: 20, end: 10 } },
+        manifest: {
+          ...MANIFEST,
+          configSchema: [
+            { key: 'start', label: '起点', type: 'number' },
+            { key: 'end', label: '终点', type: 'number' },
+          ],
+          validateConfig: validateRange,
+        },
+      },
+    })
+
+    expect(wrapper.find('[role="alert"]').text()).toContain('终点必须大于起点')
+  })
+
   it('按清单声明摆出分段与字段标签', () => {
     const wrapper = mount(PropertyPanel, {
       props: { node: NODE, manifest: MANIFEST },
@@ -112,7 +160,12 @@ describe('泛型渲染', () => {
   })
 
   it('清单声明了预设就摆出预设按钮，点一下整套抛上去', async () => {
-    const preset = { id: 'p1', label: '极简', config: { title: 'x' } }
+    const preset = {
+      id: 'p1',
+      label: '极简',
+      hint: '精简装饰并保留内容。',
+      config: { title: 'x' },
+    }
     const wrapper = mount(PropertyPanel, {
       props: {
         node: NODE,
@@ -124,6 +177,13 @@ describe('泛型渲染', () => {
       .findAll('button.dt-btn')
       .find((button) => button.text() === '极简')
     expect(pill).toBeDefined()
+    expect(pill?.attributes('title')).toBeUndefined()
+    expect(wrapper.findComponent(DtTooltip).props('content')).toBe(
+      '精简装饰并保留内容。',
+    )
+    expect(pill?.attributes('aria-describedby')).toBe(
+      wrapper.findComponent(DtTooltip).attributes('aria-describedby'),
+    )
     await pill?.trigger('click')
 
     expect(wrapper.emitted('preset')?.[0]).toEqual([preset])
@@ -245,7 +305,14 @@ describe('子编辑器入口', () => {
       .findAll('button')
       .find((item) => item.text() === '打开场景编辑器')
     expect(button).toBeDefined()
-    expect(wrapper.text()).toContain('模型与锚点在那里配')
+    expect(wrapper.text()).not.toContain('模型与锚点在那里配')
+    expect(wrapper.findComponent(DtHelpTip).props()).toMatchObject({
+      label: '打开场景编辑器说明',
+      text: '模型与锚点在那里配。',
+    })
+    expect(
+      wrapper.findAll('.dt-field__label').map((label) => label.text().trim()),
+    ).not.toContain('场景')
     expect(wrapper.text()).toContain('尚未配置')
   })
 

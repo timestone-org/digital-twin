@@ -33,8 +33,21 @@ describe('孪生清单的声明', () => {
     expect(manifest.bindings).toEqual([...TWIN_VIEW_BINDINGS])
   })
 
+  it('多点位场景自行交代局部状态，不因一条绑定失败遮住整张场景', () => {
+    expect(manifest.ownsStatusDisplay).toBe(true)
+  })
+
   it('刻意不给预览：编造一份只会在画布上留一块空白', () => {
     expect(manifest.preview).toBeUndefined()
+  })
+
+  it('套用外观不会覆盖场景文档与运行态工具', () => {
+    expect(manifest.contentKeys).toEqual([
+      'title',
+      'showSceneTools',
+      'showStructureTree',
+      TWIN_CONFIG_KEY,
+    ])
   })
 })
 

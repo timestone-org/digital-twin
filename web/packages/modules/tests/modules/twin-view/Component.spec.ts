@@ -4,6 +4,7 @@
  * ⚠ 数组行错位一格既不报错也不空白：每条曲线都有值，只是全都接错了对象。
  */
 import { TWIN_CONFIG_KEY } from '@dt/twin-config'
+import { DtHelpTip } from '@dt/ui'
 import { flushPromises, mount } from '@vue/test-utils'
 import { describe, expect, it, vi } from 'vitest'
 
@@ -164,5 +165,78 @@ describe('取不到就说取不到', () => {
     await flushPromises()
 
     expect(wrapper.find('.dt-twin__error').exists()).toBe(false)
+  })
+
+  it('局部绑定失败时保留场景，并在说明中指明实体', async () => {
+    const wrapper = mount(Component, {
+      props: {
+        config: { [TWIN_CONFIG_KEY]: TWIN },
+        values: {},
+        meta: {
+          status: 'error',
+          slots: {
+            'anchorValues[0].value': {
+              state: 'error',
+              message: '点位不存在',
+            },
+          },
+        },
+      },
+    })
+    await flushPromises()
+
+    expect(wrapper.find('.scene-stub').exists()).toBe(true)
+    expect(wrapper.get('.dt-twin__error').text()).toContain('1 个绑定取数失败')
+    expect(wrapper.getComponent(DtHelpTip).props('text')).toContain('进口')
+    expect(wrapper.getComponent(DtHelpTip).props('text')).toContain(
+      '点位不存在',
+    )
+  })
+
+  it('局部绑定等待首帧时指明正在等待的实体', async () => {
+    const wrapper = mount(Component, {
+      props: {
+        config: { [TWIN_CONFIG_KEY]: TWIN },
+        values: {},
+        meta: {
+          status: 'loading',
+          slots: { 'anchorValues[1].value': { state: 'pending' } },
+        },
+      },
+    })
+    await flushPromises()
+
+    expect(wrapper.get('.dt-twin__pending').text()).toContain(
+      '1 个绑定等待首帧',
+    )
+    expect(wrapper.getComponent(DtHelpTip).props('text')).toContain('出口')
+  })
+
+  it('能量流的活跃子槽失败时仍能回查到实体', async () => {
+    const wrapper = mount(Component, {
+      props: {
+        config: {
+          [TWIN_CONFIG_KEY]: {
+            ...TWIN,
+            flows: [{ id: 'f1', name: '冷却水' }],
+          },
+        },
+        values: {},
+        meta: {
+          status: 'error',
+          slots: {
+            'flowValues[0].active': {
+              state: 'error',
+              message: '活跃状态取不到',
+            },
+          },
+        },
+      },
+    })
+    await flushPromises()
+
+    const detail = wrapper.getComponent(DtHelpTip).props('text')
+    expect(detail).toContain('冷却水（f1）')
+    expect(detail).toContain('活跃状态取不到')
   })
 })

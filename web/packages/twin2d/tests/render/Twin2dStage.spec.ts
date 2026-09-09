@@ -1,5 +1,5 @@
 /**
- * @fileoverview 舞台守的契约：`fitMode` 四档的倍率与对齐、量不出容器时只藏起来**不产
+ * @fileoverview 舞台守的契约：`fitMode` 五档的倍率与对齐、量不出容器时只藏起来**不产
  * transform**、自下而上六层的 DOM 顺序、底图与三档图案底、空态那一行，以及 sprite 宿主
  * 在每个 DOM 文档里只挂一次。
  *
@@ -178,7 +178,7 @@ function markIds(wrapper: Wrapper, layer: string): string[] {
     .map((node) => node.attributes('data-id') ?? '')
 }
 
-describe('等比缩放四档', () => {
+describe('缩放五档', () => {
   it('contain 取两轴较小者并按 fitPadding 留白，居中摆', () => {
     const wrapper = render({}, { containerSize: BOX })
 
@@ -217,6 +217,17 @@ describe('等比缩放四档', () => {
 
     expect(viewportStyle(wrapper)).toContain(
       'transform: translate(0px, 0px) scale(2, 4)',
+    )
+  })
+
+  it('none 保持原尺寸并在容器中居中', () => {
+    const wrapper = render(
+      {},
+      { view: { fitMode: 'none' }, containerSize: BOX },
+    )
+
+    expect(viewportStyle(wrapper)).toContain(
+      'transform: translate(200px, 300px) scale(1, 1)',
     )
   })
 
@@ -502,11 +513,17 @@ describe('sprite 宿主', () => {
     expect(spriteCount(second)).toBe(0)
   })
 
-  it('拥有者卸载后下一个舞台接手', () => {
+  it('拥有者卸载后已挂载的下一个舞台立即接手', async () => {
     const first = render()
-    first.unmount()
+    const second = render()
 
-    expect(spriteCount(render())).toBe(1)
+    expect(spriteCount(first)).toBe(1)
+    expect(spriteCount(second)).toBe(0)
+
+    first.unmount()
+    await nextTick()
+
+    expect(spriteCount(second)).toBe(1)
   })
 })
 

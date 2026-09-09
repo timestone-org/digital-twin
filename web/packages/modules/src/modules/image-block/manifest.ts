@@ -7,13 +7,14 @@ import { defineModule } from '../../registry'
 export default defineModule({
   type: 'image-block',
   description:
-    '装饰图片块：从素材库挑一张图，或手填图片地址，或填一段 CSS background 值（渐变 / url() / var()），再配填充方式、裁剪定位、圆角、旋转、翻转与六项滤镜。放 logo、底图、示意图、装饰花纹用它；要按读数换图请用状态类模块——它没有任何绑定槽、不取数。填素材库引用最稳：落库的是素材引用，换部署不会失效。⚠ 「平铺」只对 CSS 值那条路生效——填图片地址时走的是 `<img>` + object-fit，没有平铺这回事。⚠ 「不透明度 (%)」量纲是 0–100，与 text-block 同名字段的 0–1 不是一回事。',
+    '静态图片模块，支持素材引用、图片地址及 CSS 背景值，并提供填充、定位、变换和滤镜配置。适用于标识、底图和说明图；需要依据实时值切换内容时，应使用状态类模块。模块不含数据绑定，素材引用可在不同部署间保持稳定。平铺仅适用于 CSS 背景值，替代文字仅作用于实际图片元素。',
   displayName: '图片块',
   category: '装饰',
   icon: 'image',
   keywords: ['image', 'picture', 'tupian', '图片', '图', 'logo'],
   chrome: 'bare',
   hostClickable: true,
+  contentKeys: ['title', 'src', 'alt', 'emptyText', 'errorText'],
   defaultSize: { width: 240, height: 108, minWidth: 40, minHeight: 24 },
   configSchema: [
     {
@@ -23,7 +24,7 @@ export default defineModule({
       group: '内容',
       default: '',
       span: 'full',
-      placeholder: '留空则不画标题栏',
+      placeholder: '留空则隐藏标题栏',
     },
     {
       key: 'src',
@@ -33,7 +34,7 @@ export default defineModule({
       default: '',
       span: 'full',
       placeholder: 'https://… 或 linear-gradient(…)',
-      help: '右侧按钮从素材库挑一张（推荐，落库的是素材引用，换部署不会失效）；也可手填图片地址按图片画，或填 CSS 值（渐变 / url() / var()）按背景画。',
+      help: '支持素材引用（推荐）、图片地址或 CSS background；素材引用可在部署变更后保持稳定。',
     },
     {
       key: 'alt',
@@ -42,7 +43,7 @@ export default defineModule({
       group: '内容',
       default: '',
       span: 'full',
-      help: '读屏时念出来的一句话；纯装饰图留空即可。',
+      help: '供读屏软件识别图片内容；纯装饰图应留空。',
     },
     {
       key: 'emptyText',
@@ -51,7 +52,7 @@ export default defineModule({
       group: '内容',
       default: '未设置图片',
       span: 'half',
-      help: '没填图片时画在方块里的一句话；留空则一个字都不显示。',
+      help: '未配置图片时显示；留空则不显示文字。',
     },
     {
       key: 'errorText',
@@ -60,7 +61,7 @@ export default defineModule({
       group: '内容',
       default: '图片加载失败',
       span: 'half',
-      help: '取不回图时画在方块里的一句话；留空则一个字都不显示。',
+      help: '图片加载失败时显示；留空则不显示文字。',
     },
     {
       key: 'fit',
@@ -82,7 +83,7 @@ export default defineModule({
       group: '画面',
       default: 'center',
       span: 'half',
-      help: '「裁剪填满」时保住画面的哪一侧。',
+      help: '在裁剪或完整显示时确定图片对齐位置；拉伸时不生效。',
       options: [
         { value: 'center', label: '居中' },
         { value: 'top', label: '上' },
@@ -99,7 +100,7 @@ export default defineModule({
       default: 'no-repeat',
       span: 'half',
       // ⚠ 只对「CSS 值」那条路生效：`<img>` 走的是 object-fit，没有平铺这回事
-      help: '仅当图片填的是 CSS 值（渐变 / url()）时生效，用来铺底纹。',
+      help: '仅对 CSS background 值生效，可用于重复铺设底纹。',
       options: [
         { value: 'no-repeat', label: '不平铺' },
         { value: 'repeat', label: '双向平铺' },
@@ -119,7 +120,7 @@ export default defineModule({
       span: 'half',
       // ⚠ 量纲是 0–100（百分比），与文本块同名字段的 0–1 不是一回事：
       //   两边各自锁死，改任何一边的取值范围都会改存量大屏的渲染
-      help: '取值 0–100（100 = 完全不透明）。',
+      help: '取值范围为 0–100，100 表示完全不透明。',
     },
     {
       key: 'rounded',
@@ -224,7 +225,7 @@ export default defineModule({
       max: 180,
       step: 1,
       span: 'half',
-      help: '整幅画面的色相沿色轮转一个角度，可正可负；0 = 不动。',
+      help: '沿色轮旋转整幅图片的色相；0 表示不处理。',
     },
     {
       key: 'invert',
@@ -236,7 +237,7 @@ export default defineModule({
       max: 100,
       step: 1,
       span: 'half',
-      help: '100 = 完全反色，常用来把黑底图标翻成白底。',
+      help: '100 表示完全反色，常用于将深色图标转换为浅色显示。',
     },
     {
       key: 'sepia',
@@ -248,7 +249,7 @@ export default defineModule({
       max: 100,
       step: 1,
       span: 'half',
-      help: '100 = 全幅老照片色调。',
+      help: '100 表示完整应用棕褐色调。',
     },
   ],
   // 装饰图片不取数：按读数换图请用状态类模块，那边才有阈值与枚举映射

@@ -55,10 +55,12 @@ export function titleField(opts: { placeholder?: string } = {}): ConfigField[] {
  * 图表样式切换，固定落在 `chartStyle` 键上。
  * @param options 本族的样式枚举
  * @param def 缺省样式，不给取第一项
+ * @param help 可选的族级约束说明
  */
 export function chartStyleField(
   options: ConfigOption[],
   def?: unknown,
+  help?: string,
 ): ConfigField[] {
   return [
     {
@@ -69,6 +71,7 @@ export function chartStyleField(
       default: def ?? options[0]?.value,
       span: 'half',
       options,
+      ...(help === undefined ? {} : { help }),
     },
   ]
 }
@@ -182,7 +185,7 @@ export function unitPrecisionFields(opts: { when?: When } = {}): ConfigField[] {
       step: 1,
       group: GROUP.style,
       span: 'half',
-      help: '留空自动（最多 2 位、去尾随零）',
+      help: '留空时自动保留最多 2 位，并去除末尾零。',
       ...whenOf(opts.when),
     },
   ]
@@ -203,7 +206,7 @@ export function dataZoomFields(
       default: opts.default ?? false,
       group: GROUP.style,
       span: 'half',
-      help: '类目较多时启用滑动缩放。⚠ 滑块跟着几何走：竖柱与曲线摆在图下方，横条图摆在图右侧。',
+      help: '类目较多时启用滑动缩放。竖向图的滑块位于底部，横向图的滑块位于右侧。',
       ...whenOf(opts.when),
     },
   ]
@@ -226,7 +229,7 @@ export function animationFields(
       default: false,
       group: GROUP.animation,
       span: 'half',
-      help: '默认关闭；开启后首帧入场与数据更新会带过渡。',
+      help: '默认关闭。开启后，首次渲染与数据更新应用过渡动画。',
       ...whenOf(opts.when),
     },
   ]
@@ -236,14 +239,14 @@ export function animationFields(
   // 本字段会因 animation 恒为 false 而一并隐藏。
   fields.push({
     key: 'animationDuration',
-    label: '动画时长(ms)',
+    label: '动画时长（ms）',
     type: 'number',
     min: 0,
     step: 50,
     default: 600,
     group: GROUP.animation,
     span: 'half',
-    help: '首帧入场 / 数据更新的过渡时长；仅在启用动画时生效。',
+    help: '首次渲染与数据更新的过渡时长，仅在启用动画时生效。',
     when: { key: 'animation', in: [true] },
   })
   return fields
@@ -254,7 +257,7 @@ export function animationFields(
  * @param opts 显隐条件
  */
 export function paletteOverrideField(
-  opts: { when?: When } = {},
+  opts: { when?: When; maxItems?: number } = {},
 ): ConfigField[] {
   return [
     {
@@ -262,9 +265,10 @@ export function paletteOverrideField(
       label: '自定义色板',
       type: 'array',
       group: GROUP.style,
-      help: '留空使用主题色板；每行一个颜色，按系列顺序取用。',
+      help: '留空时使用主题色板；各颜色按系列顺序应用。',
       itemSchema: [{ key: 'color', label: '颜色', type: 'color' }],
       default: [],
+      ...(opts.maxItems === undefined ? {} : { maxItems: opts.maxItems }),
       ...whenOf(opts.when),
     },
   ]
@@ -298,7 +302,7 @@ const GRADIENT_TEMPLATES: Record<
       default: false,
       group: GROUP.style,
       span: 'half',
-      help: '默认关闭（纯色填充）；开启后由主色派生上浓下透的竖向渐变。',
+      help: '默认使用纯色；开启后由主色生成由实至透的竖向渐变。',
     },
   },
   gradientTo: {
@@ -308,7 +312,7 @@ const GRADIENT_TEMPLATES: Record<
       default: '',
       group: GROUP.style,
       span: 'half',
-      help: '留空由主色自动派生同色渐隐；支持 var(--x) 随换肤走。',
+      help: '留空时由主色生成同色渐隐；支持 var(--x) 主题变量。',
     },
   },
   topAlpha: {
@@ -321,7 +325,7 @@ const GRADIENT_TEMPLATES: Record<
       step: 0.05,
       group: GROUP.style,
       span: 'half',
-      help: '渐变顶端的不透明度，底端固定全透明。',
+      help: '渐变起点的不透明度，终点固定为全透明。',
     },
   },
   opacity: {
@@ -334,7 +338,7 @@ const GRADIENT_TEMPLATES: Record<
       step: 0.02,
       group: GROUP.style,
       span: 'half',
-      help: '叠在填充色之上的整体透明度，与渐变无关，纯色填充时也生效。',
+      help: '填充区域的整体不透明度，纯色与渐变模式均生效。',
     },
   },
 }
@@ -370,15 +374,22 @@ export function gradientFields(opts: GradientOptions = {}): ConfigField[] {
   const prefix = opts.prefix ?? 'area'
   const label = opts.label ?? '面积'
   const wanted = opts.include ?? GRADIENT_ORDER
+  const activationKey = prefix ? prefix + cap('gradient') : 'gradient'
   return GRADIENT_ORDER.filter((name) => wanted.includes(name)).map((name) => {
     const template = GRADIENT_TEMPLATES[name]
     const override = gradientDefault(name, opts)
+    const dependsOnGradient =
+      wanted.includes('gradient') &&
+      (name === 'gradientTo' || name === 'topAlpha')
+    const when = dependsOnGradient
+      ? { key: activationKey, in: [true] }
+      : opts.when
     return {
       ...template.field,
       key: prefix ? prefix + cap(name) : name,
       label: `${label}${template.labelSuffix}`,
       ...(override === undefined ? {} : { default: override }),
-      ...whenOf(opts.when),
+      ...whenOf(when),
     }
   })
 }
@@ -395,7 +406,7 @@ export function markLineFields(opts: { when?: When } = {}): ConfigField[] {
       type: 'array',
       group: GROUP.refLine,
       default: [],
-      help: '阈值线 / 目标线 / 基线；留空不画。',
+      help: '配置阈值线、目标线或基线；列表为空时不显示。',
       itemLabelKey: 'label',
       itemSchema: [
         { key: 'value', label: '参考值', type: 'number' },
@@ -438,7 +449,12 @@ export function markLineFields(opts: { when?: When } = {}): ConfigField[] {
  * @param opts 显隐条件与两个缺省值覆盖
  */
 export function axisIntervalFields(
-  opts: { when?: When; boundaryGap?: boolean; yScale?: boolean } = {},
+  opts: {
+    when?: When
+    boundaryGap?: boolean
+    yScale?: boolean
+    yScaleWhen?: When
+  } = {},
 ): ConfigField[] {
   return [
     {
@@ -449,18 +465,18 @@ export function axisIntervalFields(
       group: GROUP.axis,
       span: 'half',
       placeholder: '自动',
-      help: '留空自动抽稀；填 0 全部显示，填 n 每隔 n 个显示一个。',
+      help: '留空时自动抽稀；0 表示全部显示，n 表示每隔 n 个显示一个。',
       ...whenOf(opts.when),
     },
     {
       key: 'yScale',
-      label: '数值轴不强制含 0',
+      label: '数值轴自适应',
       type: 'boolean',
       default: opts.yScale ?? false,
       group: GROUP.axis,
       span: 'half',
-      help: '默认从 0 起；开启后按数据范围自适应，适合高基线上的窄幅波动。',
-      ...whenOf(opts.when),
+      help: '开启后不强制包含 0，并按数据范围自适应，适合高基线的小幅波动。',
+      ...whenOf(opts.yScaleWhen ?? opts.when),
     },
     {
       key: 'boundaryGap',
@@ -469,7 +485,7 @@ export function axisIntervalFields(
       default: opts.boundaryGap ?? true,
       group: GROUP.axis,
       span: 'half',
-      help: '关闭后曲线 / 面积贴紧左右边缘。',
+      help: '关闭后，数据范围贴合类目轴两端。',
       ...whenOf(opts.when),
     },
   ]
@@ -490,7 +506,7 @@ export function symbolFields(
       default: opts.showSymbol ?? true,
       group: GROUP.style,
       span: 'half',
-      help: '关闭后只画线不画点，密集时序远观更干净。',
+      help: '关闭后仅显示线条，适用于高密度时序。',
       ...whenOf(opts.when),
     },
     {
@@ -584,7 +600,7 @@ const CHART_FONT_TEMPLATES: Record<ChartFontFieldKey, ConfigField> = {
     default: 'sans',
     group: GROUP.dataLabel,
     span: 'half',
-    help: '族层负责把它换成已解析的字体栈——canvas 不认 var(--x)。',
+    help: '选择数值标签字体；实际字体栈由图表主题解析。',
     options: [
       { value: 'sans', label: '默认（继承正文）' },
       { value: 'display', label: '标题体' },
@@ -598,7 +614,7 @@ const CHART_FONT_TEMPLATES: Record<ChartFontFieldKey, ConfigField> = {
     default: '',
     group: GROUP.dataLabel,
     span: 'half',
-    help: '留空用次要文字色；支持 var(--x) 随换肤走。',
+    help: '留空时使用次要文字色；支持 var(--x) 主题变量。',
   },
 }
 

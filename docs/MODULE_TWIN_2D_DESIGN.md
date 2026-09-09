@@ -209,7 +209,7 @@ web/packages/twin2d/
     └── render/
         ├── icons.svg                 内置图标 sprite，从参考项目原样搬（§5）
         ├── Twin2dIconSprite.vue      sprite 宿主：每个 DOM 文档挂一次
-        ├── Twin2dStage.vue           舞台：等比缩放贴合（fitMode 四档）、六层层序、图案底、空态
+        ├── Twin2dStage.vue           舞台：缩放贴合（fitMode 五档）、六层层序、图案底、空态
         ├── Twin2dNodeBox.vue         一个节点：根位姿、六个 --t2-* 注入、hover 自检、变体求值
         ├── Twin2dPrimView.vue        图元树的递归渲染件（四分支）
         ├── Twin2dVec.vue             SVG 图元层（渐变 id 带实例前缀）
@@ -1299,12 +1299,15 @@ export const TWIN_2D_PALETTE = {
 | `width` | `bw/cw`，顶端对齐 | 宽幅工艺流程图，上下可裁 |
 | `height` | `bh/ch`，左对齐 | 竖排系统图 |
 | `stretch` | 两轴各自缩放 | 明知会变形但要填满（电路图别用） |
+| `none` | 两轴倍率恒为 1，居中 | 按设计像素 1:1 显示，允许四周裁切 |
 
 ⚠ 首帧或被隐藏时容器宽高是 0：这时只输出宽高并 `visibility:hidden`，**不输出 transform**。
 少了这条保护，`translate(NaN, NaN)` 会让整块空白，而 devtools 里看什么都正常。
 
 层序（自下而上）：底图 → 图案 → `zOrder:'below'` 的标注 → 连线 → 节点 → `zOrder:'above'` 的标注。
 sprite 宿主（`Twin2dIconSprite.vue`）挂在舞台根上，`position:absolute; width:0; height:0; overflow:hidden`。
+所有权通过 `Document` 上的 `Symbol.for` 注册表协调，跨 bundle 也只挂一份；当前宿主卸载时，
+所有权转交给仍挂载的下一舞台，避免其它实例的 `<use>` 静默失效。
 
 ### 9.2 一个节点的渲染管线
 
@@ -2039,7 +2042,7 @@ export default defineModule({
 |---|---|---|---|---|---|---|---|
 | `title` | 标题 | `string` | ⚠ **不给**（缺省空串 = 不显示标题条） | 标题 | full | — | 留空则不显示标题条 |
 | `twin2d` | 2D 孪生画面 | `object` | ⚠ **不给 `fields`** | 画面 | full | — | 节点、连线、标注与节点样式都由 2D 孪生编辑器写入。 |
-| `fitMode` | 缩放方式 | `enum` | `'contain'` | 画面 | half | — | `contain` 完整显示 / `width` 按宽 / `height` 按高 / `stretch` 拉满（会变形） |
+| `fitMode` | 缩放方式 | `enum` | `'contain'` | 画面 | half | — | `contain` 完整显示 / `width` 按宽 / `height` 按高 / `stretch` 拉满（会变形）/ `none` 设计像素 1:1 |
 | `fitPadding` | 四周留白 (%) | `range` 0–20 step 1 | `4` | 画面 | half | `fitMode in ['contain']` | 只在「完整显示」下有意义 |
 | `showSprite` | 使用内置图标集 | `boolean` | `true` | 画面 | half | — | 关掉后 `sprite` 档的图标不渲染（自带图标集的项目可以省这 10 KB） |
 | `animateFlow` | 连线流动动画 | `boolean` | ⚠ **不给**（缺省 false） | 运行态 | full | — | 总闸：关掉时所有连线都不动，不论样式里怎么配 |
@@ -2161,7 +2164,7 @@ export default defineModule({
 | 组件 | `.../render/Twin2dVec.spec.ts` | 五种几何各出对的 SVG 元素；渐变 id 加了实例前缀（同页两份不撞、且永不撞 sprite 的四个 id）；`stretch` → `preserveAspectRatio="none"`；`nonScaling` → `vector-effect` |
 | 组件 | `.../render/Twin2dGlyph.spec.ts` | 四档来源各渲对元素；`sprite` 档的外壳 `viewBox` 是 `0 0 48 48`；**`ico.color` 在单色 sprite 上落到 `color` 样式、在 `TWIN_2D_FIXED_COLOR_SPRITES` 那 4 枚上不落**（两条用例，各挑一枚）；`asset` 档未注入 resolver 时空 + 进诊断 |
 | 组件 | `.../render/Twin2dEdgeLayer.spec.ts` | 多遍描边的元素数与顺序；四种 marker + 引脚 marker 的线宽；`flow` 的 dashoffset 终点 = dash 求和的负值；**`animateFlow=false` 时 `edgeStyle.flow.enabled=true` 也不动**；非活跃档；**带 waypoints 的反向渲染路径不自交**；标签沿路径位置 |
-| 组件 | `.../render/Twin2dStage.spec.ts` | 四档 fitMode 的 transform；容器 0 尺寸时不输出 transform 而是 `visibility:hidden`；层序（below 标注在连线下、above 在节点上）；hover 抬 z；sprite 宿主挂了一次 |
+| 组件 | `.../render/Twin2dStage.spec.ts` | 五档 fitMode 的 transform；容器 0 尺寸时不输出 transform 而是 `visibility:hidden`；层序（below 标注在连线下、above 在节点上）；hover 抬 z；sprite 宿主挂一次并可在舞台卸载后转移所有权 |
 | 清单 | `packages/modules/tests/modules/twin-2d-view/manifest.test.ts` | 身份（type/category/chrome/icon）；`ownsStatusDisplay`/`emitsInteractions` 为真、`interactionEvents === ['select']`、`hostClickable` 缺席；`unsupportedChromeKeys === undefined`；三个槽的 `isArray`+`isEntityPinned`+`arrayFields`；**`nodeStatus` 的子槽 `enumMap === undefined`**；`bindingRowCounts` 三键都在（含空配置给 0）；`bindingRowLabels` 的 `{title,id}`；`subEditor` 四个字段；`when` 指着真字段；`preview.config` 只含 `twin2d` |
 | 挂载 | `.../twin-2d-view/Component.spec.ts` | 七个配置键各有一条读到的用例；逐槽四档各自可辨（未配 / pending 半透明 / error 变色带 title / ok 有值）；**`archive` 与 `dataset` 两档各一条：`title` 上挂着字面文案「序列要异步取数，画布上不展开」**（§14.4）；**实时 status 覆盖静态 status，且 `unknown` 不覆盖**；配了联动才吞冒泡（`attachTo: document.body` + body 上装 spy）；空文档不留白而是一句话 |
 | 编辑器 | `app/tests/pages/Twin2dEditor/*.spec.ts` | 文档态与撤销栈（一手势一步）；保存把同屏其余节点原样带回；`expectedVersion` 冲突走重新加载；**快速切 `nodeId` 时旧响应不覆盖新文档**；离开守卫两道；快捷键让位表单 |

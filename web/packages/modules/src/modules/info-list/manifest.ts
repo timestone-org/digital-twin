@@ -41,10 +41,25 @@ import {
 } from './rows'
 import { valueRulesField } from './rules'
 
+function validateInfoListConfig(config: Record<string, unknown>): string[] {
+  const issues: string[] = []
+  if (config.alarmOn === 'sub' && config.subSource === 'text') {
+    issues.push('规则判定不能使用文本型副读数，请选择数值副读数或主读数')
+  }
+  if (
+    config.timeSource === 'alarmSince' &&
+    config.rowFilter !== 'hit' &&
+    config.rowFilter !== 'alarm'
+  ) {
+    issues.push('告警起始时刻仅适用于“命中规则”或“只看告警”筛选')
+  }
+  return issues
+}
+
 export default defineModule({
   type: 'info-list',
   description:
-    '信息列表：一块摆 N 行，每行由「前导列 ｜ 最多三段左右分列的行段 ｜ 两个尾列」声明式编排，行内可挂徽章、分类标签、两条进度件、命中文案、描述与时刻，另有一条有值才出的扩展指标行；整块还能按行内「分组」分段或分页签，按严重度排序，只看命中规则或只看告警的行。一屏里要竖着列十几个点位、每行还带副读数 / 状态 / 进度条时用它；一格一个大数字的网格用 info-card 或 data-card，带量程图形用 gauge-card，条目由后端推送、条数不固定的用 info-feed。一个数组绑定槽 `listValues`，行钉在 `items` 配置项上：第 i 行喂第 i 项，子槽十一个——`value` 主读数、`aux` / `aux2` / `aux3` 副读数、`extra1` / `extra2` / `extra3` 扩展指标、`status` 设备状态（收数值，不要配 enum 映射）这八个收数值，`name` 行名、`text` 描述、`time` 时刻文本这三个收字符串；单位、小数位、量程与目标值是逐行的配置项。⚠ 删掉 `items` 中间一项，它之后每一行的绑定都会改喂前一行。',
+    '信息列表用于纵向呈现固定实体及其主值、副值、状态、进度和扩展指标；单值 KPI 可选信息卡片，动态消息流可选信息流。数据通过 listValues 数组绑定，第 i 行对应 items 第 i 项，并提供数值、文本、状态与扩展子槽。行结构、筛选、分组和告警规则可组合配置；删除或调整 items 顺序会改变后续绑定索引。',
   displayName: '信息列表',
   category: '数据',
   icon: 'table',
@@ -60,8 +75,27 @@ export default defineModule({
     '排行',
   ],
   defaultSize: { width: 360, height: 420, minWidth: 160, minHeight: 96 },
+  validateConfig: validateInfoListConfig,
   configPresets: INFO_LIST_PRESETS,
-  contentKeys: ['title', LIST_ITEMS_KEY, 'noRowsText', 'rules'],
+  contentKeys: [
+    'title',
+    LIST_ITEMS_KEY,
+    'noRowsText',
+    'columnHeader',
+    'defaultGroup',
+    'subSource',
+    'subLabel',
+    'badge',
+    'meter',
+    'extras',
+    'rules',
+    'alarmOn',
+    'rowFilter',
+    'rowSort',
+    'holdSeconds',
+    'calmText',
+    'timeSource',
+  ],
   configSchema: [
     {
       key: 'title',
@@ -70,14 +104,14 @@ export default defineModule({
       group: '内容',
       default: '',
       span: 'full',
-      placeholder: '留空则不画标题栏',
+      placeholder: '留空则隐藏标题栏',
     },
     {
       key: LIST_ITEMS_KEY,
       label: '行',
       type: 'array',
       group: '内容',
-      help: '每一项在绑点面板上是一行。⚠ 删掉中间一项，它之后每一行的绑定都会改喂前一行——删完请核对绑点面板。',
+      help: '每项对应一个绑定行。删除中间项会使后续绑定索引前移，操作后请复核绑定。',
       itemLabelKey: 'label',
       minItems: 1,
       // ⚠ 出厂给一项：空列表时模块是一块什么都没有的白板，而属性面板上
@@ -97,9 +131,9 @@ export default defineModule({
           label: '单位',
           type: 'string',
           default: '',
-          placeholder: '如 ℃ / kWh / m³/h',
+          placeholder: '例如：℃ / kWh / m³/h',
           // ⚠ 不去首尾空格：「° C」这类带空格是用户显式的排版意图
-          help: '首尾空格照原样保留，「° C」这种写法是有意的排版。',
+          help: '保留首尾空格，可用于控制单位与读数的间距。',
         },
         {
           key: 'precision',
@@ -115,28 +149,28 @@ export default defineModule({
           label: '分类标签',
           type: 'string',
           default: '',
-          help: '画在行内的分类 chip，文字颜色跟随这一行当前的颜色。它与状态徽章正交，两个可以同时挂。',
+          help: '在行内显示分类标签，文字跟随当前行颜色；可与状态徽章同时显示。',
         },
         {
           key: 'group',
           label: '分组',
           type: 'string',
           default: '',
-          help: '分组档下这一行归到哪一段 / 哪个页签；留空的行落进「其它」段，不计入任何页签计数。',
+          help: '指定分段或页签归属。留空时在分段模式归入“其它”，在页签模式仅显示于“全部”。',
         },
         {
           key: 'color',
           label: '固定颜色',
           type: 'color',
           default: '',
-          help: '填了就固定这一行的颜色并压过规则命中色，用来表达「能源类型」这种静态元数据。只填 var(--…) 引用，填死色值换肤时不跟着走。',
+          help: '设置当前行的固定颜色，优先级高于规则颜色，适用于能源类型等静态分类。建议填写 var(--…) 主题变量，固定色值不会随主题切换。',
         },
         {
           key: 'icon',
           label: '行首图标',
           type: 'image',
           default: '',
-          help: '素材库里的图标；前导列选「图标」时画在行首，取不到时回退一个圆点。',
+          help: '选择「图标」作为前导列时显示素材库图标；素材不可用时显示圆点。',
         },
         {
           key: 'range',
@@ -144,7 +178,7 @@ export default defineModule({
           type: 'object',
           // ⚠ 三个子键刻意都不给 default：留空 = 不画目标标记、不算完成率。
           //   给 0 会让「没填」与「真的是 0」在算式里再也分不开
-          help: '进度条选「量程占比」时的上下界与目标值。留空 = 这一项不判。',
+          help: '设置「量程占比」进度条的上下界与目标值；留空时不计算对应项。',
           fields: [
             { key: 'min', label: '下限', type: 'number' },
             { key: 'max', label: '上限', type: 'number' },
@@ -156,14 +190,14 @@ export default defineModule({
           label: '描述',
           type: 'string',
           default: '',
-          help: '行内的长描述；绑定了描述槽时以绑定值为准，这里是它的回落。',
+          help: '设置行内描述；已绑定描述子槽时优先使用绑定值，此处作为默认内容。',
         },
         {
           key: 'emitValue',
           label: '联动值',
           type: 'string',
           default: '',
-          help: '点这一行时上抛的值，留空则这一行点了不上抛。',
+          help: '点击行时发送的联动值；留空则不发送行级事件。',
         },
       ],
     },
@@ -174,7 +208,7 @@ export default defineModule({
       group: '内容',
       default: '暂无数据',
       span: 'half',
-      help: '一项都没配时画的一句话。',
+      help: '未配置任何行时显示。',
     },
     {
       key: 'rowLayout',
@@ -183,7 +217,7 @@ export default defineModule({
       group: '行结构',
       default: 'stack',
       span: 'half',
-      help: '三列表档下「行编排」与「前导 / 尾列」不生效，整行是名称 / 数值 / 单位三列。',
+      help: '三列表模式不使用「行编排」与「前导 / 尾列」，固定显示名称、数值和单位三列。',
       options: [...LIST_ROW_LAYOUTS],
     },
     {
@@ -194,7 +228,8 @@ export default defineModule({
       maxItems: 3,
       itemLabelKey: 'left',
       span: 'full',
-      help: '一行最多三段，每段左右分列：左组左对齐、右组右对齐。⚠ 四个段位全为「空」的那一段整段不画。',
+      when: { key: 'rowLayout', in: ['stack'] },
+      help: '每行最多显示三段，各段分为左右两组并分别对齐；内容均为空的段不显示。',
       default: [
         { left: 'label', left2: 'none', right: 'value', right2: 'none' },
       ],
@@ -235,6 +270,7 @@ export default defineModule({
       type: 'object',
       group: '行结构',
       span: 'full',
+      when: { key: 'rowLayout', in: ['stack'] },
       help: '前导列与两个尾列都垂直居中、跨全部行段。',
       default: { lead: 'none', tail: 'none', tail2: 'none', extras: false },
       fields: [
@@ -264,7 +300,7 @@ export default defineModule({
           label: '扩展指标行',
           type: 'boolean',
           default: false,
-          help: '在行段下方补一条扩展指标行，取「扩展指标」里配的那几项，有值才画。',
+          help: '在行段下方显示扩展指标；仅展示「扩展指标」中已配置且有值的项目。',
         },
       ],
     },
@@ -278,9 +314,27 @@ export default defineModule({
       default: { show: true, name: '名称', value: '数值', unit: '单位' },
       fields: [
         { key: 'show', label: '显示表头', type: 'boolean', default: true },
-        { key: 'name', label: '名称列', type: 'string', default: '名称' },
-        { key: 'value', label: '数值列', type: 'string', default: '数值' },
-        { key: 'unit', label: '单位列', type: 'string', default: '单位' },
+        {
+          key: 'name',
+          label: '名称列',
+          type: 'string',
+          default: '名称',
+          when: { key: 'show', in: [true] },
+        },
+        {
+          key: 'value',
+          label: '数值列',
+          type: 'string',
+          default: '数值',
+          when: { key: 'show', in: [true] },
+        },
+        {
+          key: 'unit',
+          label: '单位列',
+          type: 'string',
+          default: '单位',
+          when: { key: 'show', in: [true] },
+        },
       ],
     },
     {
@@ -293,7 +347,7 @@ export default defineModule({
       fields: [
         {
           key: 'padX',
-          label: '整块左右内边距 (px)',
+          label: '模块水平内边距 (px)',
           type: 'range',
           default: 6,
           min: 0,
@@ -302,7 +356,7 @@ export default defineModule({
         },
         {
           key: 'padY',
-          label: '整块上下内边距 (px)',
+          label: '模块垂直内边距 (px)',
           type: 'range',
           default: 4,
           min: 0,
@@ -336,7 +390,7 @@ export default defineModule({
       group: '外壳',
       default: 'divider',
       span: 'half',
-      help: '⚠ 告警态不在这五档里：它是叠在外壳之上的一层描边与呼吸，不会顶掉这里选的外壳。',
+      help: '告警状态以描边和呼吸效果叠加在外壳上，不会替换此处选择的外壳样式。',
       options: [...LIST_ROW_SHELLS],
     },
     {
@@ -355,7 +409,7 @@ export default defineModule({
       group: '外壳',
       default: 'none',
       span: 'half',
-      help: '⚠ 触摸屏没有悬停：只靠这一档的大屏，手指按上去是没有反馈的。',
+      help: '触摸设备不支持悬停，建议同时配置适用于触摸操作的反馈方式。',
       options: [...LIST_HOVERS],
     },
     ...scrollConfigFields(),
@@ -366,7 +420,7 @@ export default defineModule({
       group: '分组',
       default: 'none',
       span: 'half',
-      help: '按行内的「分组」字符串分段或分页签；页签的计数用全量行数，不是当前页签的子集。',
+      help: '按行内「分组」值进行分段或分页签；页签计数使用全部行数，而非当前页签子集。',
       options: [...LIST_GROUPINGS],
     },
     {
@@ -376,8 +430,9 @@ export default defineModule({
       group: '分组',
       default: '',
       span: 'half',
-      placeholder: '留空 = 全部',
-      help: '页签档下打开大屏时初始选中的那一个；用户点击切换不受它影响。',
+      when: { key: 'grouping', in: ['tabs'] },
+      placeholder: '留空时显示全部分组',
+      help: '页签模式的默认选项；用户手动切换后以当前选择为准。',
     },
     {
       key: 'labelSize',
@@ -418,7 +473,7 @@ export default defineModule({
       // 命中规则的那一行改用规则自己的颜色，这里是没命中时的颜色
       default: 'var(--accent-secondary)',
       span: 'half',
-      help: '命中取值规则的那一行改用规则的颜色，这里配的是没有命中时的颜色。',
+      help: '设置未命中取值规则时的颜色；规则命中后优先使用规则颜色。',
     },
     {
       key: 'valueGlow',
@@ -438,7 +493,7 @@ export default defineModule({
       group: '单位',
       default: 'attached',
       span: 'half',
-      help: '「独占一列」只在三列表档有意义，行内编排档下它等同于紧跟读数。',
+      help: '「独占一列」仅在三列表模式生效；行内编排模式下等同于紧跟读数。',
       options: [...LIST_UNIT_PLACES],
     },
     {
@@ -459,7 +514,7 @@ export default defineModule({
       group: '副读数',
       default: 'aux',
       span: 'half',
-      help: '它与两条进度条的选源各自独立，所以副读数槽有三个。',
+      help: '与两条进度条的选源相互独立。选择“行内目标值”时，每行都必须配置量程中的目标值。',
       options: [...LIST_SUB_SOURCES],
     },
     {
@@ -469,7 +524,7 @@ export default defineModule({
       group: '副读数',
       default: '',
       span: 'half',
-      placeholder: '如 目标 / 水温 / 能效',
+      placeholder: '例如：目标 / 水温 / 能效',
     },
     {
       key: 'badge',
@@ -484,15 +539,16 @@ export default defineModule({
           label: '取值来源',
           type: 'enum',
           default: 'none',
-          help: '「严重度」画正常 / 提示 / 警告 / 危急四个词，「命中规则」画规则自己的文案——两者不是同一句话。',
+          help: '「严重度」显示正常、提示、警告或危急；「命中规则」显示规则自身文案。',
           options: [...LIST_BADGE_KINDS],
         },
         {
           key: 'style',
-          label: '画法',
+          label: '样式',
           type: 'enum',
           default: 'outline',
-          help: '⚠ 设备状态那一档自带五档配色与呼吸，这一项对它不作用。',
+          when: { key: 'kind', in: ['severity', 'rule'] },
+          help: '设备状态使用内置五级配色与呼吸效果，不受此设置影响。',
           options: [...LIST_BADGE_STYLES],
         },
       ],
@@ -503,7 +559,7 @@ export default defineModule({
       type: 'object',
       group: '进度',
       span: 'full',
-      help: '两条同构的进度条，样式子键是共享的：只有选源与前缀各有一套。',
+      help: '两条进度条共用样式设置，仅数据源与前缀分别配置。',
       default: {
         kind: 'none',
         source: 'range',
@@ -520,19 +576,26 @@ export default defineModule({
       fields: [
         {
           key: 'kind',
-          label: '画法',
+          label: '样式',
           type: 'enum',
           default: 'none',
           options: [...LIST_METER_KINDS],
         },
         {
           key: 'source',
-          label: '第一条选源',
+          label: '第一条数据源',
           type: 'enum',
           default: 'range',
+          when: { key: 'kind', in: ['bar'] },
           options: [...LIST_METER_SOURCES],
         },
-        { key: 'label', label: '第一条前缀', type: 'string', default: '' },
+        {
+          key: 'label',
+          label: '第一条前缀',
+          type: 'string',
+          default: '',
+          when: { key: 'kind', in: ['bar'] },
+        },
         {
           key: 'height',
           label: '条粗 (px)',
@@ -541,6 +604,7 @@ export default defineModule({
           min: 1,
           max: 24,
           step: 1,
+          when: { key: 'kind', in: ['bar'] },
         },
         {
           key: 'width',
@@ -550,14 +614,16 @@ export default defineModule({
           min: 0,
           max: 400,
           step: 1,
-          help: '0 = 铺满剩余宽度。',
+          when: { key: 'kind', in: ['bar'] },
+          help: '0 表示填满剩余宽度。',
         },
         {
           key: 'color',
           label: '条色',
           type: 'color',
           default: '',
-          placeholder: '留空 = 跟随行当前色',
+          when: { key: 'kind', in: ['bar'] },
+          placeholder: '留空时跟随当前行颜色',
         },
         {
           key: 'glow',
@@ -567,28 +633,41 @@ export default defineModule({
           min: 0,
           max: 24,
           step: 1,
+          when: { key: 'kind', in: ['bar'] },
         },
         {
           key: 'dot',
           label: '发光圆点',
           type: 'boolean',
           default: false,
-          help: '条前面加一个 4px 的发光圆点。⚠ 两条共享它，开了第二条也会跟着有。',
+          when: { key: 'kind', in: ['bar'] },
+          help: '在进度条前显示 4px 发光圆点；两条进度条共用此设置。',
         },
         {
           key: 'showPercent',
           label: '显示百分比',
           type: 'boolean',
           default: true,
+          when: { key: 'kind', in: ['bar'] },
         },
         {
           key: 'source2',
-          label: '第二条选源',
+          label: '第二条数据源',
           type: 'enum',
           default: 'none',
+          when: { key: 'kind', in: ['bar'] },
           options: [...LIST_METER_SOURCE2S],
         },
-        { key: 'label2', label: '第二条前缀', type: 'string', default: '' },
+        {
+          key: 'label2',
+          label: '第二条前缀',
+          type: 'string',
+          default: '',
+          when: {
+            key: 'source2',
+            in: ['range', 'share', 'aux', 'aux2', 'aux3'],
+          },
+        },
       ],
     },
     {
@@ -600,7 +679,7 @@ export default defineModule({
       itemLabelKey: 'label',
       span: 'full',
       default: [],
-      help: '取绑定的三个扩展槽，有值才画（真实 0 算有值）。要它出现还得把「扩展指标行」打开。',
+      help: '读取三个扩展子槽，仅显示有值的项目（0 视为有效值）；同时需启用「扩展指标行」。',
       itemSchema: [
         { key: 'label', label: '名称', type: 'string', default: '' },
         { key: 'unit', label: '单位', type: 'string', default: '' },
@@ -626,7 +705,7 @@ export default defineModule({
     { ...valueRulesField('rules', '取值规则'), group: '告警' },
     {
       key: 'alarmOn',
-      label: '规则判哪个读数',
+      label: '规则数据源',
       type: 'enum',
       group: '告警',
       default: 'value',
@@ -644,7 +723,7 @@ export default defineModule({
     },
     {
       key: 'rowSort',
-      label: '行序',
+      label: '排序方式',
       type: 'enum',
       group: '告警',
       default: 'docOrder',
@@ -661,7 +740,8 @@ export default defineModule({
       max: 300,
       step: 1,
       span: 'half',
-      help: '告警清除后至少保留的秒数，压住值在阈值附近抖动导致的反复进出列表；0 = 清除即移除。',
+      when: { key: 'rowFilter', in: ['hit', 'alarm'] },
+      help: '设置告警清除后的最短保留时间，避免阈值附近波动导致条目频繁增删；0 表示清除后立即移除。',
     },
     {
       key: 'calmText',
@@ -670,7 +750,8 @@ export default defineModule({
       group: '迟滞',
       default: '无活动告警',
       span: 'half',
-      help: '⚠ 与「无行占位」是两件事：这一句说的是「配了 N 行但一条都没命中」，那一句说的是「一行都没配」。',
+      when: { key: 'rowFilter', in: ['hit', 'alarm'] },
+      help: '用于已配置行但无任何匹配结果的情况；「无行占位」仅用于未配置任何行。',
     },
     {
       key: 'timeSource',
@@ -679,7 +760,7 @@ export default defineModule({
       group: '时刻',
       default: 'sample',
       span: 'half',
-      help: '⚠ 采样时刻是「最后一帧什么时候到的」，告警起始时刻是「什么时候开始报的」，两个数字长得一样但不是一回事。',
+      help: '采样时刻表示最近一帧到达时间；告警起始时刻仅适用于“命中规则”或“只看告警”筛选；绑定文本原样显示 time 子槽。',
       options: [...LIST_TIME_SOURCES],
     },
   ],

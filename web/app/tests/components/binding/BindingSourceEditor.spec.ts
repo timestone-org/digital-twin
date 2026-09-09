@@ -13,7 +13,7 @@ import type {
   DtSelectOption,
 } from '@dt/contracts'
 import { BINDING_SOURCE_KINDS } from '@dt/contracts'
-import { DtSelect } from '@dt/ui'
+import { DtHelpTip, DtSelect } from '@dt/ui'
 
 import BindingSourceEditor from '@/components/binding/BindingSourceEditor.vue'
 import { TREND_BUCKET_AUTO } from '@/features/trend/trendBucket'
@@ -170,6 +170,22 @@ describe('派生', () => {
 })
 
 describe('历史序列', () => {
+  it('相对窗只常驻显示名称，格式示例收进按需说明', () => {
+    const wrapper = mountEditor(
+      binding({
+        sourceKind: 'archive',
+        detailJson: { nodeKey: 's1:temp', range: { lastWindow: '1h' } },
+      }),
+    )
+    const help = wrapper
+      .findAllComponents(DtHelpTip)
+      .find((item) => item.props('label') === '相对窗说明')
+
+    expect(wrapper.text()).toContain('相对窗')
+    expect(wrapper.text()).not.toContain('如 1h / 7d')
+    expect(help?.props('text')).toContain('例如 1h 或 7d')
+  })
+
   it('改相对窗时把点位身份一起带上，不把它丢掉', async () => {
     const wrapper = mountEditor(
       binding({
@@ -232,13 +248,17 @@ describe('分桶取数口径', () => {
     })
   }
 
-  it('只有点位历史那一档摆出这两项', () => {
-    const withPair = BINDING_SOURCE_KINDS.filter((kind) => {
+  it('只有点位历史来源显示三项分桶配置', () => {
+    const withBucketing = BINDING_SOURCE_KINDS.filter((kind) => {
       const text = mountEditor(binding({ sourceKind: kind })).text()
-      return text.includes('取点间隔') || text.includes('折算')
+      return (
+        text.includes('取点间隔') ||
+        text.includes('折算') ||
+        text.includes('分桶时区')
+      )
     })
 
-    expect(withPair).toEqual(['archive'])
+    expect(withBucketing).toEqual(['archive'])
   })
 
   it('没配过时桶宽停在自动档、聚合档停在跟服务端缺省走', () => {
@@ -324,16 +344,40 @@ describe('分桶取数口径', () => {
     })
   })
 
-  it('日界对齐的时区没有输入框，但配过就一路带着走', async () => {
-    // ⚠ 面板上只摆桶宽与聚合两项；时区由取数适配器与模块侧写入，重写取数说明
-    // 时把它抹掉的话，跨零点的样本会静静落到错误的那一天
+  it('分桶时区可编辑，并提示与日历模块使用同一时区', async () => {
     const wrapper = mountEditor(archive({ timezone: 'Asia/Shanghai' }))
+    const timezoneHelp = wrapper
+      .findAllComponents(DtHelpTip)
+      .find((item) => item.props('label') === '分桶时区说明')
 
-    expect(wrapper.text()).not.toContain('时区')
-    await wrapper.find('.dt-input__el').setValue('7d')
+    expect(wrapper.text()).toContain('分桶时区')
+    expect(timezoneHelp?.props('text')).toContain('日历热力模块')
+    await wrapper.findAll('.dt-input__el')[1]?.setValue('UTC')
 
     expect(written(wrapper).detailJson).toEqual({
       nodeKey: 's1:t1',
+      range: { lastWindow: '24h' },
+      timezone: 'UTC',
+    })
+  })
+
+  it('无效分桶时区就地报错并关联到输入框', () => {
+    const wrapper = mountEditor(archive({ timezone: 'Mars/Olympus' }))
+    const input = wrapper.get('input[aria-label="分桶时区"]')
+    const error = wrapper.get('[role="alert"]')
+
+    expect(error.text()).toContain('有效的 IANA 时区')
+    expect(input.attributes('aria-invalid')).toBe('true')
+    expect(input.attributes('aria-describedby')).toBe(error.attributes('id'))
+  })
+
+  it('带首尾空格的时区判为无效，修改其它字段时会规范化', async () => {
+    const wrapper = mountEditor(archive({ timezone: ' Asia/Shanghai ' }))
+
+    expect(wrapper.get('[role="alert"]').text()).toContain('有效的 IANA 时区')
+    await wrapper.findAll('.dt-input__el')[0]?.setValue('7d')
+
+    expect(written(wrapper).detailJson).toMatchObject({
       range: { lastWindow: '7d' },
       timezone: 'Asia/Shanghai',
     })
@@ -389,6 +433,6 @@ describe('来源逐档显式', () => {
       binding({ sourceKind: 'mqtt' as BindingSourceKind }),
     )
 
-    expect(wrapper.text()).toContain('没有认出的绑定来源')
+    expect(wrapper.text()).toContain('未识别绑定来源')
   })
 })

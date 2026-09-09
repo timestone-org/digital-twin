@@ -7,7 +7,7 @@ import { beforeEach, describe, expect, it } from 'vitest'
 import { mount } from '@vue/test-utils'
 import type { ConfigField } from '@dt/contracts'
 import { __resetConfigControls, missingConfigControls } from '@dt/modules'
-import { DtSelect } from '@dt/ui'
+import { DtHelpTip, DtSelect } from '@dt/ui'
 
 import { installConfigControls } from '@/features/dashboard/configControls'
 import ConfigFieldControl from '@/features/dashboard/controls/ConfigFieldControl.vue'
@@ -186,6 +186,33 @@ describe('开关与枚举', () => {
 })
 
 describe('对象与数组', () => {
+  it('对象子字段回显自己的缺省值与按需帮助', () => {
+    const wrapper = mountField(
+      field({
+        type: 'object',
+        fields: [
+          {
+            key: 'pad',
+            label: '内边距',
+            type: 'number',
+            default: 8,
+            help: '按设计坐标系像素计。',
+          },
+        ],
+      }),
+      {},
+    )
+
+    expect(
+      (wrapper.find('.dt-number__el').element as HTMLInputElement).value,
+    ).toBe('8')
+    expect(wrapper.text()).not.toContain('按设计坐标系像素计。')
+    expect(wrapper.findComponent(DtHelpTip).props()).toMatchObject({
+      label: '内边距说明',
+      text: '按设计坐标系像素计。',
+    })
+  })
+
   it('对象按 fields 摊出子表单，改子键写回整块', async () => {
     const wrapper = mountField(
       field({

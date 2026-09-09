@@ -89,3 +89,18 @@ export function activePresetIds(
     )
   return new Set(presets.filter(matches).map((preset) => preset.id))
 }
+
+/** 预设涉及内容键时，在按需提示中明确告知覆盖风险。 */
+export function presetHelp(
+  preset: ConfigPreset,
+  contentKeys: readonly string[],
+): string | undefined {
+  const changesContent = Object.keys(preset.config).some((key) =>
+    contentKeys.includes(key),
+  )
+  const warning = changesContent ? '该预设会覆盖当前内容或数据规则。' : ''
+  const text = [preset.hint ?? '', warning]
+    .filter((part) => part !== '')
+    .join(' ')
+  return text === '' ? undefined : text
+}

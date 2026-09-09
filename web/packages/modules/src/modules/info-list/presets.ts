@@ -1,12 +1,12 @@
 /**
- * @fileoverview info-list 的八套外观预设：参考仓那八个各写一遍的列表类模块，
+ * @fileoverview info-list 的八套配置预设：参考仓那八个各写一遍的列表类模块，
  * 逐值落成这里的八组配置（MODULE_INFO_CARD_DESIGN §1.3）。
  *
  * ⚠ 每套都把「观感」那 32 个键写全，且簇内子键顺序与该字段 `default` 逐字相同。
  * 应用预设是**浅合并**：少写一个键，上一套留在 configJson 里的那个值就原样残留，
  * 而点亮判定做的是子集比较、照样把按钮点亮——既错了又没有任何提示。
- * ⚠ `title` / `items` / `noRowsText` 三个内容键一个都不写：预设换的是观感，
- * 写了它们就会把用户配好的行整片抹掉。
+ * ⚠ 场景预设会改变告警、筛选与时刻策略，属性面板会在提示中明确说明
+ * 内容覆盖风险。`title` / `items` / `noRowsText` 不由预设修改。
  */
 import type { ConfigPreset } from '@dt/contracts'
 
@@ -14,7 +14,7 @@ export const INFO_LIST_PRESETS: ConfigPreset[] = [
   {
     id: 'row-list',
     label: '点线行列表',
-    hint: '一行一个点位，左标签右读数，点线分隔 + 自动滚动。',
+    hint: '每行显示一个点位，名称左对齐、读数右对齐，并使用点线分隔与自动滚动。',
     config: {
       rowLayout: 'stack',
       rowLines: [
@@ -66,7 +66,7 @@ export const INFO_LIST_PRESETS: ConfigPreset[] = [
   {
     id: 'three-col',
     label: '三列表',
-    hint: '名称 / 数值 / 单位三列对齐，带表头，超长自动滚动。',
+    hint: '名称、数值与单位三列对齐并显示表头，内容超长时自动滚动。',
     config: {
       rowLayout: 'columns',
       rowLines: [
@@ -119,7 +119,7 @@ export const INFO_LIST_PRESETS: ConfigPreset[] = [
   {
     id: 'target-badge-list',
     label: '指标维护表',
-    hint: '双行行卡：名称与读数在上，目标与状态徽章在下。徽章要配了取值规则才出。',
+    hint: '双行卡片布局：名称与读数位于上方，目标与状态徽章位于下方；状态徽章仅在配置取值规则后显示。',
     config: {
       rowLayout: 'stack',
       rowLines: [
@@ -178,7 +178,7 @@ export const INFO_LIST_PRESETS: ConfigPreset[] = [
   {
     id: 'source-card',
     label: '能源源卡片',
-    hint: '左图标 + 状态徽章 + 分类标签 + 占比条 + 扩展指标行。',
+    hint: '依次展示左侧图标、状态徽章、分类标签、占比条与扩展指标行。',
     config: {
       rowLayout: 'stack',
       rowLines: [
@@ -237,7 +237,7 @@ export const INFO_LIST_PRESETS: ConfigPreset[] = [
   {
     id: 'terminal-card',
     label: '分类末端卡',
-    hint: '顶部分类页签，行内「当日读数 + 定宽占比条」。',
+    hint: '顶部显示分类页签，行内展示当日读数与固定宽度占比条。',
     config: {
       rowLayout: 'stack',
       rowLines: [
@@ -290,7 +290,7 @@ export const INFO_LIST_PRESETS: ConfigPreset[] = [
   {
     id: 'vessel-card',
     label: '容器卡片',
-    hint: '按类型分段的组头，行内两条同构进度条（占比 / 液位），水温按色相分档。',
+    hint: '按类型分段显示组头，行内展示占比与液位两条同构进度条，水温按区间着色。',
     config: {
       rowLayout: 'stack',
       rowLines: [
@@ -385,7 +385,7 @@ export const INFO_LIST_PRESETS: ConfigPreset[] = [
   {
     id: 'work-order',
     label: '工单条目',
-    hint: '左侧状态色边 + 底纹，实心徽章 + 描述 + 时间；状态由三条等值规则给。',
+    hint: '使用左侧状态色边与底纹，并显示实心徽章、描述和时间；状态由三条等值规则确定。',
     config: {
       rowLayout: 'stack',
       rowLines: [
@@ -467,7 +467,7 @@ export const INFO_LIST_PRESETS: ConfigPreset[] = [
   {
     id: 'alarm-rows',
     label: '活动告警',
-    hint: '只显示命中告警的行，按严重度降序，行首严重度点 + 起始时刻。',
+    hint: '仅显示命中告警的行，按严重度降序排列，并在行首展示严重度圆点与起始时刻。',
     config: {
       rowLayout: 'stack',
       rowLines: [

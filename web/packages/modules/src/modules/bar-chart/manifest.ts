@@ -51,10 +51,26 @@ import {
 } from './options'
 import { BAR_CHART_PRESETS } from './presets'
 
+/** 参考线使用原始量纲，百分比模式不适用。 */
+const REF_LINE_STYLES = {
+  key: 'chartStyle',
+  in: BAR_STYLES.map((option) => option.value).filter(
+    (value) => value !== 'percent',
+  ),
+}
+
+/** 固定百分比或对称量程时，数值轴自适应不生效。 */
+const AUTO_SCALE_STYLES = {
+  key: 'chartStyle',
+  in: BAR_STYLES.map((option) => option.value).filter(
+    (value) => value !== 'percent' && value !== 'diverging',
+  ),
+}
+
 export default defineModule({
   type: 'bar-chart',
   description:
-    '对比柱图：把几路读数摆成共享同一条值轴的柱，回答「谁高谁低」与「按时间怎么走」。要看占比构成用 pie-chart，要逐行摆一串数字用 info-list 或 info-card，要「离满还有多远」用 gauge-card。一个数组绑定槽 `barValues`，行钉在 `items` 配置项上：第 i 行喂第 i 组。行内两个子槽——`value` 是实时档，一行画一根柱；`series` 是历史档（时序），一行画一条按时间桶铺开的系列。读哪一路由「取数来源」这一档决定，两路都绑了也只读它指定的那一路，另一路在图例后缀上标出来。⚠ 两档的类目轴不是一回事：实时档的类目是各行的名字，历史档的类目是各行时刻的并集，两行的取数窗口本来就可以不同。⚠ 百分比档的分母由前端按列现算，一整列全缺时整列留空而不是画成 0%；负值是真读数（回馈电量、温差），一律照实向下画，不取绝对值。⚠ 行级切成折线的那几行不参与堆叠——把达标率堆到产量上去，画出来的线不对应任何一个真实的量。⚠ 图例是逐行状态唯一的承载面，缺省开着；关掉它「等首帧」与「取不到」在屏上就一个字都没有。点某一根柱上抛的联动值是这一行配置里写的名称，没起名的点了不上抛。',
+    '对比柱图适合比较多组实时读数，或按时间桶呈现分组、堆叠、百分比和双轴组合；连续趋势应选择趋势曲线。模块使用数组槽 `barValues`，每行包含实时 `value` 与历史 `series`，由“取数来源”确定生效路径。实时模式的类目轴为组名，历史模式为时间戳并集，百分比的分母按有效列计算。负值在普通模式保留方向；百分比模式遇到负值时整列不计算占比。',
   displayName: '对比柱图',
   category: '图表',
   icon: 'chart-column',
@@ -76,7 +92,17 @@ export default defineModule({
   configPresets: BAR_CHART_PRESETS,
   // ⚠ `valueSource` 是内容键：它决定这一块读哪一路绑定，一套「换个样子」把它从
   //   历史档翻回实时档，整屏曲线会当场变成一排单值柱
-  contentKeys: ['title', BAR_ITEMS_KEY, 'emptyText', 'valueSource'],
+  contentKeys: [
+    'title',
+    BAR_ITEMS_KEY,
+    'emptyText',
+    'valueSource',
+    'unit',
+    'precision',
+    'xAxisName',
+    'yAxisName',
+    'refLines',
+  ],
   configSchema: [
     ...titleField(),
     {
@@ -84,7 +110,7 @@ export default defineModule({
       label: '数据组',
       type: 'array',
       group: GROUP.data,
-      help: '每一项在绑点面板上是一行。⚠ 删掉中间一项，它之后每一组的绑定都会改喂前一组——删完请核对绑点面板。',
+      help: '每项对应一个绑定行。删除中间项会使后续绑定索引前移；删除后请核对绑定关系。',
       itemLabelKey: 'name',
       minItems: 1,
       // ⚠ 出厂给一项：空列表时模块是一块什么都没有的白板，而属性面板上
@@ -98,16 +124,16 @@ export default defineModule({
           type: 'string',
           default: '',
           placeholder: '留空则按「第 N 行」称呼',
-          help: '图例与实时档类目轴上的名字；留空时按「第 N 行」称呼它。点这一组上抛的联动值也是它，留空则这一组点了不上抛。⚠ 两组重名会被加上 #1 这样的后缀，否则 echarts 会把它们并成一条图例；上抛的仍是这里写的原名。',
+          help: '用于图例、实时类目轴和联动值。留空时显示「第 N 行」且不触发分项联动；重名项在图例中自动追加序号，联动仍使用原名称。',
         },
         {
           key: 'unit',
           label: '单位',
           type: 'string',
           default: '',
-          placeholder: '留空跟随整块',
+          placeholder: '留空时使用模块设置',
           // ⚠ 不去首尾空格：「° C」这类带空格是用户显式的排版意图
-          help: '这一组自己的单位，留空跟随整块那一档。首尾空格照原样保留。',
+          help: '该组单位；留空时继承模块单位。首尾空格保持不变。',
         },
         {
           key: 'precision',
@@ -119,14 +145,14 @@ export default defineModule({
           min: 0,
           max: 6,
           step: 1,
-          help: '留空跟随整块那一档。',
+          help: '留空时继承模块小数位。',
         },
         {
           key: 'color',
           label: '固定颜色',
           type: 'color',
           default: '',
-          help: '填了就固定这一组的颜色，压过色板。只填 var(--…) 引用，填死色值换肤时不跟着走。',
+          help: '设置后覆盖色板。建议使用 var(--…) 主题变量，以支持主题切换。',
         },
         {
           key: 'stack',
@@ -134,23 +160,23 @@ export default defineModule({
           type: 'string',
           default: '',
           placeholder: '留空不堆叠',
-          help: '同名的几组堆成一根柱。⚠ 只在历史档生效：实时档一行就是一个类目，堆无可堆。⚠ 切成折线的那几组一律不参与堆叠。',
+          help: '同名组归入同一堆叠。仅在历史档生效；折线组不参与堆叠。',
         },
         {
           key: 'plot',
-          label: '画法',
+          label: '系列类型',
           type: 'enum',
           default: 'bar',
           options: [...BAR_PLOTS],
-          help: '这一组画成柱还是折线。达标率、单耗这类与柱不同量纲的量，切成折线再挂右轴才读得出来。',
+          help: '选择柱形或折线。不同量纲的指标可设为折线并使用副轴。',
         },
         {
           key: 'axis',
-          label: '挂轴',
+          label: '所属数值轴',
           type: 'enum',
           default: 'left',
           options: [...BAR_AXES],
-          help: '挂左轴还是右轴。⚠ 只要有一组挂了右轴就会多出一条值轴；两条轴的量程互不相干，别拿两边的柱高直接比。',
+          help: '选择主轴或副轴。启用副轴后，两轴量程独立，不应按图形高度直接比较。',
         },
       ],
     },
@@ -162,21 +188,25 @@ export default defineModule({
       default: 'live',
       span: 'half',
       options: [...BAR_VALUE_SOURCES],
-      help: '实时档读每一组的「数值」子槽（一组 = 一根柱），历史档读「历史序列」子槽（一组 = 一条按时间桶铺开的系列）。⚠ 两路都绑了也只读这一档指定的那一路，被忽略的那一路会在图例后缀上标出来。',
+      help: '实时模式读取「数值」子槽，历史模式读取「历史序列」子槽。仅选定来源参与渲染，其他已绑定来源会在图例中标记为未使用。',
     },
     {
       key: 'emptyText',
-      label: '空态文案',
+      label: '无数据提示',
       type: 'string',
       group: GROUP.data,
       default: BAR_EMPTY_TEXT,
       span: 'half',
-      help: '一根柱都画不出来时画在图区正中的那一句。⚠ 这一页压根不提供历史取数时另说一句，压过本文案——公开大屏上历史档必然画不出来，那不是现场没数。',
+      help: '无有效柱形时显示；若当前页面不支持历史数据，将优先显示专用说明。',
     },
-    ...chartStyleField([...BAR_STYLES], 'grouped'),
+    ...chartStyleField(
+      [...BAR_STYLES],
+      'grouped',
+      '百分比堆叠仅对非负值计算；含负值的整列不显示占比。',
+    ),
     {
       key: 'barWidth',
-      label: '柱宽上限 (px)',
+      label: '柱宽上限（px）',
       type: 'number',
       group: GROUP.style,
       // ⚠ 刻意没有 default：留空 = 交给 echarts 按类目数自适应；给个 0 会让
@@ -185,11 +215,11 @@ export default defineModule({
       max: BAR_WIDTH_MAX,
       step: 1,
       span: 'half',
-      help: '留空自动。只封上限，类目多时仍会自己变窄。',
+      help: '留空时自适应，仅限制最大宽度。',
     },
     {
       key: 'barRadius',
-      label: '柱角圆角 (px)',
+      label: '柱体圆角（px）',
       type: 'range',
       group: GROUP.style,
       default: BAR_RADIUS_DEFAULT,
@@ -197,7 +227,7 @@ export default defineModule({
       max: BAR_RADIUS_MAX,
       step: 1,
       span: 'half',
-      help: '⚠ 堆叠档里每一段都会被圆角切一刀，堆高的那几段之间会露出缝——堆叠时建议调回 0。',
+      help: '堆叠模式会对每段应用圆角，可能产生段间缝隙；建议设为 0。',
     },
     ...paletteOverrideField(),
     // 柱体的渐变缺省整体不透明：那批工厂给的是折线面积的口径，0.18 摊在柱上几乎看不见
@@ -209,14 +239,14 @@ export default defineModule({
     }),
     ...unitPrecisionFields(),
     ...cartesianAxisFields(),
-    ...axisIntervalFields(),
+    ...axisIntervalFields({ yScaleWhen: AUTO_SCALE_STYLES }),
     ...dataZoomFields(),
     // ⚠ 缺省开着：图例是逐行四档唯一的承载面（`ownsStatusDisplay` 让整格浮层不出），
     //   关着的话「取不到」与「等首帧」在屏上一个字都没有
     ...legendFields({ default: true }),
     ...tooltipFields(),
     ...dataLabelFields({ default: false }),
-    ...markLineFields(),
+    ...markLineFields({ when: REF_LINE_STYLES }),
     ...animationFields(),
     ...chartFontFields({
       include: [

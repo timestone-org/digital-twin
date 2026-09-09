@@ -74,6 +74,9 @@ static 绑定，于是 `meta.slots` 里会多出一个模块自己不认识的 `
 
 **日界必须按 `config.timezone` 给的 IANA 串算，留空即浏览器本地。**
 
+归档绑定显式配置了桶时区时，必须与 `config.timezone` 一致；不一致会把同一条读数
+聚合到另一个自然日，保存前直接报错，不允许静默显示错位日历。
+
 ```
 dayFormatterOf(zone) → Intl.DateTimeFormat('en-US', zone === '' ? 三段 : { …三段, timeZone: zone })
 dayKeyOf(formatter, t) → formatToParts → `YYYY-MM-DD`
@@ -316,9 +319,9 @@ dayKeyOf(formatter, t) → formatToParts → `YYYY-MM-DD`
 只换 `series` 会让日历框停在第一帧的跨度上，而格子按新跨度落位——**整片错格**，
 且零报错。这与 `pie-chart` 把 `title`（环心读数）纳入替换范围是同一类问题的加重版。
 
-`watchValues` 收的是**函数**，配 `valuesDeep: false`：签名里带上天数、首尾日期与
-**读数之和**——天数与首尾都不变、只有今天那一格在长，是这一族的常态，光比天数会让
-整块停在第一帧上。
+`watchValues` 收的是**函数**，配 `valuesDeep: false`：签名包含每个日期和值。
+不能只比天数、首尾日期或读数之和；任意中间日期更新，或两格一增一减但总和不变时，
+都必须触发刷新。
 
 ---
 

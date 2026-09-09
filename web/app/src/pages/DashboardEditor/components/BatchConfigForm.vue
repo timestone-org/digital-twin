@@ -9,11 +9,11 @@ import type {
   ModuleManifest,
 } from '@dt/contracts'
 import { resolveModuleConfig } from '@dt/runtime'
-import { DtButton } from '@dt/ui'
+import { DtButton, DtTooltip } from '@dt/ui'
 import { computed } from 'vue'
 
 import { batchConfigGroups } from '@/features/dashboard/batchConfig'
-import { activePresetIds } from '@/features/dashboard/configForm'
+import { activePresetIds, presetHelp } from '@/features/dashboard/configForm'
 import type { ConfigPath } from '@/features/dashboard/configPath'
 import BatchFieldRow from './BatchFieldRow.vue'
 
@@ -54,22 +54,31 @@ function forwardConfig(
 ): void {
   emit('config', path, value, isContinuous)
 }
+
+function presetHelpText(preset: ConfigPreset): string | undefined {
+  return presetHelp(preset, props.manifest?.contentKeys ?? [])
+}
 </script>
 
 <template>
   <div class="dt-batch flex flex-col gap-4">
     <section v-if="presets.length > 0" class="flex flex-wrap gap-1.5">
-      <DtButton
+      <DtTooltip
         v-for="preset in presets"
         :key="preset.id"
-        size="sm"
-        :pressed="activePresets.has(preset.id)"
-        :title="preset.hint"
-        :data-test="`batch-preset-${preset.id}`"
-        @click="emit('preset', preset)"
+        v-slot="{ describedby }"
+        :content="presetHelpText(preset)"
       >
-        {{ preset.label }}
-      </DtButton>
+        <DtButton
+          size="sm"
+          :pressed="activePresets.has(preset.id)"
+          :aria-describedby="describedby"
+          :data-test="`batch-preset-${preset.id}`"
+          @click="emit('preset', preset)"
+        >
+          {{ preset.label }}
+        </DtButton>
+      </DtTooltip>
     </section>
 
     <section v-for="group in groups" :key="group.title" class="dt-batch__grid">

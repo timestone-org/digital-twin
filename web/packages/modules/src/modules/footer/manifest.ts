@@ -12,7 +12,7 @@ import {
 export default defineModule({
   type: 'footer',
   description:
-    "钉在大屏底部的整宽容器：下沿钉死、只能拖上沿改高，`region: 'footer'` 意味着每张大屏最多一个。版权、联系方式、状态灯都是独立子节点，由运行时注入默认插槽；与页头对称，壳里没有标题条，要一行字就往里放一个 text-block。自己不取数，没有绑定槽；外观只有强调色、背景、背景底图、顶部分隔线、顶边扫光与点阵底纹六项。⚠ 「顶部分隔线 (px)」与「顶边扫光浓度」填 0 就是不画，没有另外的显示开关。",
+    '固定在大屏底部的单实例整宽容器，用于承载版权、联系方式或状态节点。页脚仅渲染背景、顶部分隔线、扫光和可选点阵，具体内容由独立子节点提供。模块不含数据绑定，子节点坐标相对内部内容区计算。分隔线宽度或扫光浓度设为 0 时，对应效果关闭。',
   displayName: '页脚',
   category: '布局',
   icon: 'panel-bottom',
@@ -20,6 +20,7 @@ export default defineModule({
   chrome: 'bare',
   isContainer: true,
   region: 'footer',
+  contentKeys: [CONTAINER_CONFIG_KEY],
   // 壳里没有标题条，整套标题键都没有消费点。少登记一个 = 面板上多一个
   // 「配了没反应」的控件
   unsupportedChromeKeys: [
@@ -52,7 +53,7 @@ export default defineModule({
       group: '外观',
       default: 'var(--accent-primary)',
       span: 'half',
-      help: '顶部分隔线、顶边扫光与点阵底纹都取这个色。',
+      help: '顶部分隔线、顶边扫光与点阵底纹共用此颜色。',
     },
     {
       key: 'background',
@@ -61,7 +62,7 @@ export default defineModule({
       group: '外观',
       default: '',
       span: 'half',
-      placeholder: '留空 = 透明，继承大屏背景',
+      placeholder: '留空时透明并继承大屏背景',
     },
     {
       // 与页头同一格：素材库能挑，也接地址与 CSS 简写
@@ -71,8 +72,8 @@ export default defineModule({
       group: '外观',
       default: '',
       span: 'full',
-      placeholder: '留空 = 无，只有背景色',
-      help: '可从素材库挑一张，也可填图片地址（自动铺满整条）或 CSS background 简写 / 渐变。',
+      placeholder: '留空时仅显示背景色',
+      help: '支持素材、图片地址或 CSS background；图片地址按整宽贴底方式渲染。',
     },
     {
       // ⚠ 不另设「显示分隔线」开关：两个旋钮描述同一条边必然会漂，0 就是不画
@@ -85,7 +86,7 @@ export default defineModule({
       max: 8,
       step: 1,
       span: 'half',
-      help: '0 = 不画这条线。',
+      help: '0 表示不显示分隔线。',
     },
     {
       // 同上：浓度 0 就是没有扫光，不再多一个开关
@@ -98,7 +99,7 @@ export default defineModule({
       max: 1,
       step: 0.05,
       span: 'half',
-      help: '顶边一条由强调色渐隐的高光带，纯装饰；0 = 不要它。',
+      help: '顶边强调色渐隐高光的透明度；0 表示关闭。',
     },
     {
       key: 'showDotGrid',
@@ -109,7 +110,7 @@ export default defineModule({
       //   的每一条页脚凭空铺一层底纹
       default: false,
       span: 'half',
-      help: '内容区铺一层点阵，示意子节点的可放置范围。',
+      help: '在内容区显示点阵底纹，用于辅助识别子节点可用区域。',
     },
     {
       key: CONTAINER_CONFIG_KEY,
@@ -118,7 +119,7 @@ export default defineModule({
       group: '布局',
       // ⚠ 整块缺省写在这里，不从子字段拼：两个形状一定会漂（shared/config.ts）
       default: { pad: CONTAINER_PAD_DEFAULT_PX },
-      help: '子节点摆在内容区里，内边距决定内容区比页脚矩形小多少。',
+      help: '内边距决定子节点内容区相对页脚矩形的内缩量。',
       fields: [
         {
           key: 'pad',

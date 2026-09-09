@@ -1,7 +1,7 @@
 <script setup lang="ts">
 /**
  * @fileoverview 右栏「专属配置」页：由 `configSchema` **泛型渲染**出来的表单，
- * 外加清单声明的外观预设。
+ * 外加清单声明的配置预设。
  * ⚠ 这里没有一行针对某个具体模块的表单代码——控件按 `ConfigField.type` 查注册表，
  * 分组与条件显示按清单声明走，新增模块自动获得完整属性面板（DASHBOARD_DESIGN §5.2）。
  * 几何、显隐、卡片外观是每个模块都有的，归「通用配置」页，不在这里。
@@ -13,11 +13,16 @@ import type {
   ModuleManifest,
 } from '@dt/contracts'
 import { resolveModuleConfig } from '@dt/runtime'
-import { DtButton, DtEmpty, DtField } from '@dt/ui'
+import { DtButton, DtEmpty, DtField, DtNotice, DtTooltip } from '@dt/ui'
 import { computed } from 'vue'
 
 import type { ConfigPath } from '@/features/dashboard/configPath'
-import { activePresetIds, formGroups } from '@/features/dashboard/configForm'
+import { bindingConfigIssues } from '@/features/dashboard/moduleConfigIssues'
+import {
+  activePresetIds,
+  formGroups,
+  presetHelp,
+} from '@/features/dashboard/configForm'
 import ConfigFieldControl from '@/features/dashboard/controls/ConfigFieldControl.vue'
 import SubEditorEntry from './SubEditorEntry.vue'
 
@@ -43,6 +48,13 @@ const presets = computed<readonly ConfigPreset[]>(
   () => props.manifest?.configPresets ?? [],
 )
 
+const validationErrors = computed<readonly string[]>(() => [
+  ...bindingConfigIssues(props.node.bindings),
+  ...(props.manifest?.validateConfig?.(resolved.value) ?? []),
+  ...(props.manifest?.validateBindings?.(resolved.value, props.node.bindings) ??
+    []),
+])
+
 // 子集匹配：预设写过的键全部与当前 resolved 值相等就点亮，多个同亮是正常的
 const activePresets = computed(() =>
   activePresetIds(presets.value, resolved.value),
@@ -54,6 +66,14 @@ const subEditor = computed(() => props.manifest?.subEditor ?? null)
 function writeField(field: ConfigField, value: unknown, live: boolean): void {
   emit('config', [field.key], value, live)
 }
+
+function isSubEditorField(field: ConfigField): boolean {
+  return subEditor.value?.configKey === field.key
+}
+
+function presetHelpText(preset: ConfigPreset): string | undefined {
+  return presetHelp(preset, props.manifest?.contentKeys ?? [])
+}
 </script>
 
 <template>
@@ -61,23 +81,36 @@ function writeField(field: ConfigField, value: unknown, live: boolean): void {
     <DtEmpty
       v-if="groups.length === 0 && presets.length === 0"
       icon="settings"
-      title="这个模块没有专属配置"
-      hint="它的外观在「通用」页里调"
+      title="无专属配置"
+      hint="请在“通用”页调整基础外观。"
     />
 
     <template v-else>
+      <DtNotice
+        v-if="validationErrors.length > 0"
+        intent="danger"
+        icon="alert-triangle"
+      >
+        {{ validationErrors.join('；') }}
+      </DtNotice>
+
       <!-- 预设排在最上面：先定基调、再逐项微调，下面每一项都是在它的结果上做局部覆盖 -->
       <section v-if="presets.length > 0" class="flex flex-wrap gap-1.5">
-        <DtButton
+        <DtTooltip
           v-for="preset in presets"
           :key="preset.id"
-          size="sm"
-          :pressed="activePresets.has(preset.id)"
-          :title="preset.hint"
-          @click="emit('preset', preset)"
+          v-slot="{ describedby }"
+          :content="presetHelpText(preset)"
         >
-          {{ preset.label }}
-        </DtButton>
+          <DtButton
+            size="sm"
+            :pressed="activePresets.has(preset.id)"
+            :aria-describedby="describedby"
+            @click="emit('preset', preset)"
+          >
+            {{ preset.label }}
+          </DtButton>
+        </DtTooltip>
       </section>
 
       <section v-for="group in groups" :key="group.title" class="dt-prop__grid">
@@ -86,12 +119,12 @@ function writeField(field: ConfigField, value: unknown, live: boolean): void {
           v-for="field in group.fields"
           :key="field.key"
           :class="{ 'dt-prop__cell--half': field.span === 'half' }"
-          :label="field.label"
-          :hint="field.help"
+          :label="isSubEditorField(field) ? undefined : field.label"
+          :help="isSubEditorField(field) ? undefined : field.help"
           size="sm"
         >
           <SubEditorEntry
-            v-if="subEditor !== null && subEditor.configKey === field.key"
+            v-if="isSubEditorField(field) && subEditor !== null"
             :sub-editor="subEditor"
             :value="resolved[field.key]"
           />

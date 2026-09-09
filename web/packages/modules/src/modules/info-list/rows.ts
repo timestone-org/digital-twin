@@ -54,6 +54,8 @@ import {
   absentReading,
   readingOf,
   numberText,
+  reasonOf,
+  type CellState,
   type ReadingView,
 } from './rowValue'
 import {
@@ -175,11 +177,34 @@ export interface ListRow {
   level: ThresholdLevel | null
   /** 严重度权重，没命中是 -1。 */
   rank: number
+  judgmentState: CellState
   blink: boolean
   /** 行的告警态，叠在 `rowShell` 之上的一层修饰。 */
   isAlarm: boolean
   emitValue: string
   vars: ListRowVars
+  issue: ListRowIssue | null
+}
+
+/** 一行中任一已绑定子槽的非正常取值结论。 */
+export interface ListRowIssue {
+  state: 'pending' | 'error'
+  mark: string
+  reason: string
+}
+
+const SLOT_LABELS: Readonly<Record<ListSlotField, string>> = {
+  value: '主读数',
+  aux: '副读数 1',
+  aux2: '副读数 2',
+  aux3: '副读数 3',
+  status: '设备状态',
+  name: '行名',
+  text: '描述',
+  time: '时刻',
+  extra1: '扩展 1',
+  extra2: '扩展 2',
+  extra3: '扩展 3',
 }
 
 /** 组装一整块的行要用到的输入。 */
@@ -364,6 +389,34 @@ function slotAt(
   return ctx.slots?.[listFieldKey(index, field)]
 }
 
+function trustedSlotValue(
+  raw: unknown,
+  slot: ModuleSlotMeta | undefined,
+): unknown {
+  return slot !== undefined && slot.state !== 'ok' ? undefined : raw
+}
+
+/** pending/error 槽可能仍携带最后值；派生逻辑只能读取可信的 ok 值。 */
+function trustedRaw(
+  ctx: RowContext,
+  index: number,
+  field: ListSlotField,
+): unknown {
+  return trustedSlotValue(rawAt(ctx, index, field), slotAt(ctx, index, field))
+}
+
+/** 绑定异常时不使用旧文本，也不以静态配置伪装成当前绑定值。 */
+function trustedText(
+  ctx: RowContext,
+  index: number,
+  field: 'name' | 'text' | 'time',
+  fallback: string,
+): string {
+  const slot = slotAt(ctx, index, field)
+  if (slot !== undefined && slot.state !== 'ok') return ''
+  return pickText(rawAt(ctx, index, field), fallback)
+}
+
 /** 绑定优先、缺值回落配置：绑定值非空白时取绑定。 */
 function pickText(bound: unknown, fallback: string): string {
   const text = readTrimmedText(bound)
@@ -387,6 +440,10 @@ function subReading(
     return { state: 'ok', text, unit: item.unit, reason: '' }
   }
   if (source === 'text') {
+    const slot = slotAt(ctx, index, 'text')
+    if (slot !== undefined && slot.state !== 'ok') {
+      return absentReading(slot.state, slot)
+    }
     const text = pickText(rawAt(ctx, index, 'text'), item.desc)
     if (text === '') return absentReading('unbound')
     return { state: 'ok', text, unit: '', reason: '' }
@@ -417,7 +474,12 @@ function readingsOf(
   item: ListItem,
   index: number,
   ctx: RowContext,
-): { value: ReadingView; sub: ReadingView; hit: ValueHit | null } {
+): {
+  value: ReadingView
+  sub: ReadingView
+  hit: ValueHit | null
+  judgmentState: CellState
+} {
   const value = readingOf({
     slot: slotAt(ctx, index, 'value'),
     raw: rawAt(ctx, index, 'value'),
@@ -432,13 +494,13 @@ function readingsOf(
     judged.state === 'ok'
       ? evaluateValueRules(judgedRaw(item, index, ctx), ctx.rules)
       : null
-  return { value, sub, hit }
+  return { value, sub, hit, judgmentState: judged.state }
 }
 
 /** 时刻。`alarmSince` 档留空，由 `selectRows` 按迟滞里的起始时刻补上。 */
 function timeOf(index: number, ctx: RowContext): string {
   if (ctx.timeSource === 'bound') {
-    return readTrimmedText(rawAt(ctx, index, 'time'))
+    return trustedText(ctx, index, 'time', '')
   }
   if (ctx.timeSource !== 'sample') return ''
   const at = slotAt(ctx, index, 'value')?.timestampMs
@@ -451,7 +513,7 @@ function extrasOf(index: number, ctx: RowContext): ExtraView[] {
   EXTRA_FIELDS.forEach((field, slot) => {
     const spec = ctx.extras[slot]
     if (spec === undefined) return
-    const raw = rawAt(ctx, index, field)
+    const raw = trustedRaw(ctx, index, field)
     if (!isPresent(raw)) return
     out.push({
       key: `${slot}:${spec.label}`,
@@ -470,10 +532,10 @@ function metersOf(
   ctx: RowContext,
 ): { meter: MeterView; meter2: MeterView } {
   const input: MeterInput = {
-    value: toNumOrNull(rawAt(ctx, index, 'value')),
-    aux: toNumOrNull(rawAt(ctx, index, 'aux')),
-    aux2: toNumOrNull(rawAt(ctx, index, 'aux2')),
-    aux3: toNumOrNull(rawAt(ctx, index, 'aux3')),
+    value: toNumOrNull(trustedRaw(ctx, index, 'value')),
+    aux: toNumOrNull(trustedRaw(ctx, index, 'aux')),
+    aux2: toNumOrNull(trustedRaw(ctx, index, 'aux2')),
+    aux3: toNumOrNull(trustedRaw(ctx, index, 'aux3')),
     min: item.min,
     max: item.max,
     shareBasis: ctx.shareBasis,
@@ -542,31 +604,49 @@ function rowVars(item: ListItem, hit: ValueHit | null): ListRowVars {
   return vars
 }
 
+/** 优先报告错误，其次报告仍在等待首帧的子槽。 */
+function rowIssue(index: number, ctx: RowContext): ListRowIssue | null {
+  for (const state of ['error', 'pending'] as const) {
+    for (const field of LIST_SLOT_FIELDS) {
+      const slot = slotAt(ctx, index, field)
+      if (slot?.state !== state) continue
+      return {
+        state,
+        mark: state === 'error' ? '✕' : '⋯',
+        reason: `${SLOT_LABELS[field]}：${reasonOf(state, slot)}`,
+      }
+    }
+  }
+  return null
+}
+
 /** 一行配置 + 这一行各槽的结论 → 一行。 */
 function toRow(item: ListItem, index: number, ctx: RowContext): ListRow {
   const parts = readingsOf(item, index, ctx)
   const build: BadgeBuild = {
     look: ctx.look.badge,
-    status: rawAt(ctx, index, 'status'),
+    status: trustedRaw(ctx, index, 'status'),
     hit: parts.hit,
   }
   return {
     key: rowKey(item, ctx),
     index,
-    label: pickText(rawAt(ctx, index, 'name'), displayLabel(item, index)),
+    label: trustedText(ctx, index, 'name', displayLabel(item, index)),
     group: item.group,
     tag: item.tag,
-    desc: pickText(rawAt(ctx, index, 'text'), item.desc),
+    desc: trustedText(ctx, index, 'text', item.desc),
     time: timeOf(index, ctx),
     icon: item.icon,
     value: parts.value,
     sub: parts.sub,
     subLabel: ctx.subLabel,
+    judgmentState: parts.judgmentState,
     ...alarmOf(build),
     ...metersOf(item, index, ctx),
     extras: extrasOf(index, ctx),
     emitValue: item.emitValue,
     vars: rowVars(item, parts.hit),
+    issue: rowIssue(index, ctx),
   }
 }
 
@@ -591,7 +671,14 @@ function rowContext(
 ): RowContext {
   const raws = readArray(input.rows)
   const share = shareBasis(
-    items.map((_, index) => toNumOrNull(readRecord(raws[index]).value)),
+    items.map((_, index) =>
+      toNumOrNull(
+        trustedSlotValue(
+          readRecord(raws[index]).value,
+          input.slots?.[listFieldKey(index, 'value')],
+        ),
+      ),
+    ),
   )
   return {
     raws,
@@ -603,11 +690,7 @@ function rowContext(
     subSource: readEnum(input.config.subSource, LIST_SUB_SOURCE_VALUES, 'aux'),
     subLabel: readTrimmedText(input.config.subLabel),
     alarmOn: readEnum(input.config.alarmOn, LIST_ALARM_ON_VALUES, 'value'),
-    timeSource: readEnum(
-      input.config.timeSource,
-      LIST_TIME_SOURCE_VALUES,
-      'sample',
-    ),
+    timeSource: readListPolicy(input.config).timeSource,
     grouping: readBoolean(input.config.thousands, true),
     shareBasis: share.basis,
     anyValue: share.any,
@@ -631,10 +714,17 @@ export function buildListRows(input: ListRowsInput): ListRow[] {
  */
 export function readListPolicy(config: Record<string, unknown>): ListPolicy {
   const seconds = clamp(readNumber(config.holdSeconds, 0), 0, MAX_HOLD_SECONDS)
+  const filter = readEnum(config.rowFilter, LIST_ROW_FILTER_VALUES, 'all')
+  const timeSource = readEnum(
+    config.timeSource,
+    LIST_TIME_SOURCE_VALUES,
+    'sample',
+  )
   return {
-    filter: readEnum(config.rowFilter, LIST_ROW_FILTER_VALUES, 'all'),
+    filter,
     sort: readEnum(config.rowSort, LIST_ROW_SORT_VALUES, 'docOrder'),
-    timeSource: readEnum(config.timeSource, LIST_TIME_SOURCE_VALUES, 'sample'),
+    timeSource:
+      filter === 'all' && timeSource === 'alarmSince' ? 'sample' : timeSource,
     holdMs: seconds * SECOND_MS,
   }
 }
@@ -648,6 +738,7 @@ export function readListPolicy(config: Record<string, unknown>): ListPolicy {
  */
 export function isRowKept(row: ListRow, filter: ListRowFilter): boolean {
   if (filter === 'all') return true
+  if (row.judgmentState !== 'ok') return true
   if (row.level === null) return false
   return filter === 'hit' || isAlarmLevel(row.level)
 }

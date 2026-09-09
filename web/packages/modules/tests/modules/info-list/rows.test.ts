@@ -208,6 +208,38 @@ describe('行名、分类与描述', () => {
     expect(row.tag).toBe('余热')
     expect(row.group).toBe('洗浴')
   })
+
+  it('文本与扩展槽异常时不使用旧值或静态回退，正常主读数保持显示', () => {
+    const row = first(
+      {
+        items: [{ label: '静态名称', desc: '静态描述' }],
+        timeSource: 'bound',
+        extras: [{ label: '功率', unit: 'kW' }],
+      },
+      [
+        {
+          value: 42,
+          name: '旧名称',
+          text: '旧描述',
+          time: '旧时刻',
+          extra1: 88,
+        },
+      ],
+      {
+        [listFieldKey(0, 'value')]: { state: 'ok' },
+        [listFieldKey(0, 'name')]: { state: 'error' },
+        [listFieldKey(0, 'text')]: { state: 'pending' },
+        [listFieldKey(0, 'time')]: { state: 'error' },
+        [listFieldKey(0, 'extra1')]: { state: 'pending' },
+      },
+    )
+
+    expect(row.value.text).toBe('42')
+    expect(row.label).toBe('')
+    expect(row.desc).toBe('')
+    expect(row.time).toBe('')
+    expect(row.extras).toEqual([])
+  })
 })
 
 describe('副读数五档取的是哪一路', () => {
@@ -346,6 +378,23 @@ describe('徽章四档', () => {
     expect(row.badge.text).toBe('')
   })
 
+  it('设备状态槽取值失败时不使用旧状态', () => {
+    const row = first(
+      { items: [{}], badge: { kind: 'device' } },
+      [{ status: 1 }],
+      {
+        [listFieldKey(0, 'status')]: {
+          state: 'error',
+          message: '状态点位断连',
+        },
+      },
+    )
+
+    expect(row.badge.status).toBe('unknown')
+    expect(row.isAlarm).toBe(false)
+    expect(row.issue?.reason).toContain('状态点位断连')
+  })
+
   it('严重度那一档画的是严重度词与语义色，不跟规则自己的颜色走', () => {
     const row = first(
       {
@@ -475,6 +524,19 @@ describe('两条进度条', () => {
     expect(rows[2]?.meter.text).toBe('0%')
   })
 
+  it('全表占比的分母排除取值失败行的旧值', () => {
+    const rows = build(
+      { items: [{}, {}], meter: { ...meter, source: 'share' } },
+      [{ value: 90 }, { value: 10 }],
+      {
+        [listFieldKey(0, 'value')]: { state: 'error' },
+        [listFieldKey(1, 'value')]: { state: 'ok' },
+      },
+    )
+
+    expect(rows[1]?.meter.text).toBe('100%')
+  })
+
   it('一行都没有主读数时占比算不出，不伪造 0%', () => {
     const rows = build({ items: [{}], meter: { ...meter, source: 'share' } }, [
       {},
@@ -514,6 +576,26 @@ describe('两条进度条', () => {
     expect(both.meter2.label).toBe('液位')
     expect(both.meter2.text).toBe('30%')
     expect(single.meter2.show).toBe(false)
+  })
+
+  it('副读数槽取值失败时进度条不使用旧值', () => {
+    const row = first(
+      {
+        items: [{}],
+        meter: { ...meter, source2: 'aux2', label2: '液位' },
+      },
+      [{ aux2: 64 }],
+      {
+        [listFieldKey(0, 'aux2')]: {
+          state: 'error',
+          message: '液位点位断连',
+        },
+      },
+    )
+
+    expect(row.meter2.text).toBe('—')
+    expect(row.meter2.fill).toBe('')
+    expect(row.issue?.reason).toContain('液位点位断连')
   })
 
   it('整簇不画那一档两条都不出', () => {
@@ -596,15 +678,20 @@ describe('时刻三档', () => {
   })
 
   it('告警起始档留给迟滞去补，取值这一步先空着', () => {
-    const row = first({ items, timeSource: 'alarmSince' }, [{ value: 1 }], {
-      [listFieldKey(0, 'value')]: OK,
-    })
+    const row = first(
+      { items, rowFilter: 'alarm', timeSource: 'alarmSince' },
+      [{ value: 1 }],
+      { [listFieldKey(0, 'value')]: OK },
+    )
 
     expect(row.time).toBe('')
   })
 
   it('选行时按迟滞里的起始时刻补上——那是「什么时候开始报的」，不是最后一帧', () => {
-    const rows = build({ items, timeSource: 'alarmSince' }, [{ value: 1 }])
+    const rows = build(
+      { items, rowFilter: 'alarm', timeSource: 'alarmSince' },
+      [{ value: 1 }],
+    )
     const key = rows[0]?.key ?? ''
     const picked = selectRows(rows, {
       keys: [key],
@@ -618,7 +705,10 @@ describe('时刻三档', () => {
   })
 
   it('起始时刻还没记下来时不硬造一个', () => {
-    const rows = build({ items, timeSource: 'alarmSince' }, [{ value: 1 }])
+    const rows = build(
+      { items, rowFilter: 'alarm', timeSource: 'alarmSince' },
+      [{ value: 1 }],
+    )
     const picked = selectRows(rows, {
       keys: rows.map((row) => row.key),
       since: {},
@@ -627,6 +717,22 @@ describe('时刻三档', () => {
     })
 
     expect(picked[0]?.time).toBe('')
+  })
+
+  it('未按规则筛选时拒绝把组件挂载时间解释为告警起始时刻', () => {
+    expect(
+      readListPolicy({ rowFilter: 'all', timeSource: 'alarmSince' }).timeSource,
+    ).toBe('sample')
+    expect(
+      readListPolicy({ rowFilter: 'alarm', timeSource: 'alarmSince' })
+        .timeSource,
+    ).toBe('alarmSince')
+    const row = first(
+      { items, rowFilter: 'all', timeSource: 'alarmSince' },
+      [{ value: 1 }],
+      { [listFieldKey(0, 'value')]: OK },
+    )
+    expect(row.time).not.toBe('')
   })
 })
 

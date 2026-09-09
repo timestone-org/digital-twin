@@ -12,7 +12,7 @@ import {
 export default defineModule({
   type: 'container',
   description:
-    '通用容器：自己只画一条可关的标题条与一块内容区，里面的东西是独立子节点，由运行时按节点树注入——它不渲染任何内容，也没有绑定槽、不取数。要把几个模块框成一组、给它们共同的标题与背景时用它；钉在屏幕上下沿的整宽横条请用 header / footer，那两个各自钉死一条边且每屏只许一个。子节点的坐标以内容区左上角为原点，内容区 = 容器矩形减去 `__container.pad` 内边距，标题条开着时再减去顶部 28px。⚠ 关掉「显示标题条」会让这个容器里已有的全部子节点整体上移 28px：那一项不是纯外观开关，它改的是内容区原点。',
+    '可嵌套的布局容器，用于为一组子节点提供统一背景、标题条与内容区。子节点保持独立配置和数据绑定，坐标相对内容区左上角计算。关闭标题条会使内容区原点上移 28 px，内边距也会同步改变子节点的可用区域。固定在画布上下边缘的横向区域应使用页头或页脚模块。',
   displayName: '容器',
   category: '布局',
   icon: 'layout-template',
@@ -36,6 +36,7 @@ export default defineModule({
     'titleRuleOpacity',
   ],
   defaultSize: { width: 640, height: 432, minWidth: 120, minHeight: 80 },
+  contentKeys: ['title', SHOW_TITLE_CONFIG_KEY, CONTAINER_CONFIG_KEY],
   configSchema: [
     {
       key: 'title',
@@ -44,7 +45,7 @@ export default defineModule({
       group: '标题',
       default: '',
       span: 'full',
-      placeholder: '留空则标题条上没有文字',
+      placeholder: '留空则隐藏标题文字',
       // 标题文本只在标题条里渲染，条关着时填了不会上屏 → 面板同步隐藏，免得「填了没反应」
       when: { key: SHOW_TITLE_CONFIG_KEY, in: [true] },
     },
@@ -65,7 +66,7 @@ export default defineModule({
       group: '外观',
       default: 'var(--accent-primary)',
       span: 'half',
-      help: '标题竖条与内容区点阵取这个色。',
+      help: '标题竖条与内容区点阵共用此颜色。',
     },
     {
       key: 'background',
@@ -74,7 +75,7 @@ export default defineModule({
       group: '外观',
       default: '',
       span: 'half',
-      placeholder: '留空 = 透明，继承大屏背景',
+      placeholder: '留空时透明并继承大屏背景',
     },
     {
       // 与页头页脚同一格：素材库能挑，也接图片地址与 CSS 值
@@ -84,8 +85,8 @@ export default defineModule({
       group: '外观',
       default: '',
       span: 'full',
-      placeholder: '留空 = 无，只有背景色',
-      help: '可从素材库挑一张，也可填图片地址（按 cover 居中盖满）或 CSS 值（渐变 / url() / var()，铺法用浏览器默认，可拿它铺底纹）。叠在背景色之上，留空不注入。',
+      placeholder: '留空时仅显示背景色',
+      help: '支持素材、图片地址或 CSS background；图片地址按 cover 居中，CSS 值保留自身铺设规则。',
     },
     {
       key: 'radius',
@@ -107,7 +108,7 @@ export default defineModule({
       //   凭空描一圈线
       default: false,
       span: 'half',
-      help: '描边颜色取卡片外观里的边框色。',
+      help: '描边使用卡片外观中的边框颜色。',
     },
     {
       key: 'borderWidth',
@@ -128,7 +129,7 @@ export default defineModule({
       group: '外观',
       default: true,
       span: 'half',
-      help: '内容区铺一层点阵，示意子节点的可放置范围。',
+      help: '在内容区显示点阵底纹，用于辅助识别子节点可用区域。',
     },
     {
       key: 'dotSize',
@@ -173,7 +174,7 @@ export default defineModule({
       group: '布局',
       // ⚠ 整块缺省写在这里，不从子字段拼：两个形状一定会漂（shared/config.ts）
       default: { pad: CONTAINER_PAD_DEFAULT_PX },
-      help: '子节点摆在内容区里，内边距决定内容区比容器矩形小多少。',
+      help: '内边距决定子节点内容区相对容器矩形的内缩量。',
       fields: [
         {
           key: 'pad',

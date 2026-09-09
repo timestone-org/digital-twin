@@ -233,6 +233,15 @@ export function dayFormatterOf(zone: string): Intl.DateTimeFormat | null {
   }
 }
 
+/** 校验模块配置中的 IANA 时区；留空表示浏览器本地时区。 */
+export function validateTimezoneConfig(
+  config: Record<string, unknown>,
+): string[] {
+  return dayFormatterOf(readTimezone(config)) === null
+    ? ['时区必须填写有效的 IANA 时区']
+    : []
+}
+
 /**
  * 一个采样时刻落在哪一天。
  * @param formatter 按目标时区建好的格式化器
@@ -604,14 +613,15 @@ export function emptyStateOf(
  * 值签名：只含画得出来的那几样，取回的日子一变它就变。
  * ⚠ 它是 `ChartShell` 的 `watchValues` 的返回值，配 `valuesDeep: false` 用——
  * 传解包后的整袋值会让四张 × 三百多天被逐键深度遍历。
- * ⚠ 带上读数之和：天数与首尾都不变、只有今天那一格在长的场合是常态，
- * 光比天数会让整块停在第一帧上。
+ * ⚠ 带上逐格日期与读数：只记合计会漏掉两天等量反向变化，整块停在旧画面。
  * @param views 这一块的全部日历
  */
 export function signatureOf(views: readonly MetricView[]): string {
   return views
     .map((view) => {
-      const sum = view.cells.reduce((total, cell) => total + cell.value, 0)
+      const cells = view.cells
+        .map((cell) => `${cell.day}=${String(cell.value)}`)
+        .join(',')
       const first = view.cells[0]?.day ?? ''
       const last = view.cells[view.cells.length - 1]?.day ?? ''
       return [
@@ -621,7 +631,7 @@ export function signatureOf(views: readonly MetricView[]): string {
         String(view.cells.length),
         first,
         last,
-        String(sum),
+        cells,
       ].join(':')
     })
     .join('␟')

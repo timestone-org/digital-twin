@@ -55,7 +55,7 @@ export const PIE_CENTER_LABELS: Record<
   count: '片数',
 }
 
-/** 半径按绘图区短边的百分比给，两个旋钮共用这一档区间。 */
+/** 半径按绘图区短边的百分比给；内半径允许从圆心起。 */
 export const PIE_RADIUS_MIN = 0
 export const PIE_RADIUS_MAX = 100
 
@@ -71,3 +71,6 @@ export const PIE_INNER_RADIUS_DEFAULT = 45
  * 与其画不出来，不如把内半径压到留得下这一档宽度的位置。
  */
 export const PIE_MIN_RING = 6
+
+/** 外半径至少保留一个最小环宽，避免合法配置将整张图缩为零。 */
+export const PIE_OUTER_RADIUS_MIN = PIE_MIN_RING

@@ -19,7 +19,7 @@ export const GAUGE_CARD_PRESETS: ConfigPreset[] = [
   {
     id: 'target-track',
     label: '目标进度',
-    hint: '顶行标题与读数，下方带刻度与目标标记的粗轨道。',
+    hint: '顶部显示标题与读数，下方使用带刻度和目标标记的粗轨道。',
     config: {
       layout: 'single',
       columns: 'auto',
@@ -76,7 +76,7 @@ export const GAUGE_CARD_PRESETS: ConfigPreset[] = [
   {
     id: 'arc-gauge',
     label: '弧度盘',
-    hint: '270° 圆弧 + 居中读数 + 量程端点。',
+    hint: '使用 270° 圆弧，并显示居中读数与量程端点。',
     config: {
       layout: 'single',
       columns: 'auto',
@@ -136,7 +136,7 @@ export const GAUGE_CARD_PRESETS: ConfigPreset[] = [
   {
     id: 'arc-spectrum',
     label: '光谱弧 + 指针',
-    hint: '半圆彩虹弧当量程，指针指读数；效率、COP 这类「落在区间的哪一段」比「填了多少」更要紧的量用它。',
+    hint: '使用半圆彩色量程与读数指针，适合效率、COP 等需要突出所处区间的指标。',
     config: {
       layout: 'single',
       columns: 'auto',
@@ -193,7 +193,7 @@ export const GAUGE_CARD_PRESETS: ConfigPreset[] = [
   {
     id: 'linear-bar',
     label: '横向条',
-    hint: '细长胶囊条 + 上方读数，窄块用。',
+    hint: '使用细长胶囊轨道与上方读数，适合窄幅模块。',
     config: {
       layout: 'single',
       columns: 'auto',
@@ -244,7 +244,7 @@ export const GAUGE_CARD_PRESETS: ConfigPreset[] = [
   {
     id: 'tank',
     label: '储罐',
-    hint: '竖向液面 + 液面高光 + 居中读数。',
+    hint: '使用竖向液面、液面高光与居中读数。',
     config: {
       layout: 'single',
       columns: 'auto',
@@ -296,7 +296,7 @@ export const GAUGE_CARD_PRESETS: ConfigPreset[] = [
   {
     id: 'thermometer',
     label: '温度计',
-    hint: '管 + 球 + 右侧读数。',
+    hint: '使用温度管、底部球体与右侧读数。',
     config: {
       layout: 'single',
       columns: 'auto',
@@ -347,7 +347,7 @@ export const GAUGE_CARD_PRESETS: ConfigPreset[] = [
   {
     id: 'gauge-grid',
     label: '仪表阵列',
-    hint: '一行几个同款仪表，网格等分。',
+    hint: '以等分网格排列多个同类型仪表。',
     config: {
       layout: 'grid',
       // ⚠ 字符串档值：写成数字 3 判不中白名单、静默回落「自动」，

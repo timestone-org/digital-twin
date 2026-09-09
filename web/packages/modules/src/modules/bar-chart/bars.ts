@@ -378,13 +378,13 @@ function collect(
  * 逐列的分母。
  * ⚠ 一整列全缺时给 `null` 而不是 0：分母为 0 的那一列必须整列留空，画成 0%
  * 会让「这一桶没采到」看着像「这一桶产量为零」。
- * ⚠ 合计 ≤ 0 也给 `null`：占比对负值与零和没有几何意义。
+ * ⚠ 含负值或合计 ≤ 0 也给 `null`：占比对负值与零和没有几何意义。
  * @param columns 逐列的读数
  */
 function totalsOf(columns: readonly (number | null)[][]): (number | null)[] {
   return columns.map((column) => {
     const numbers = column.filter((value): value is number => value !== null)
-    if (numbers.length === 0) return null
+    if (numbers.length === 0 || numbers.some((value) => value < 0)) return null
     const total = numbers.reduce((sum, value) => sum + value, 0)
     return total > 0 ? total : null
   })
@@ -423,7 +423,10 @@ function liveGrid(raws: readonly RawRow[]): {
     .map((raw) => (raw.state === 'ok' ? raw.value : null))
     .filter((value): value is number => value !== null)
   const sum = numbers.reduce((total, value) => total + value, 0)
-  const shared = numbers.length > 0 && sum > 0 ? sum : null
+  const shared =
+    numbers.length > 0 && numbers.every((value) => value >= 0) && sum > 0
+      ? sum
+      : null
   return {
     categories: raws.map((raw) => raw.name),
     data,

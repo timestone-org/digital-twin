@@ -38,6 +38,17 @@ describe('按钮清单的声明', () => {
     expect(manifest.ownsStatusDisplay).toBeUndefined()
   })
 
+  it('套用外观不会覆盖文案、图标与交互行为', () => {
+    expect(manifest.contentKeys).toEqual([
+      'text',
+      'subText',
+      'icon',
+      'hint',
+      'linkValue',
+      'disabled',
+    ])
+  })
+
   it('每个配置字段都有缺省，摊得出一份完整配置', () => {
     const missing = manifest.configSchema
       .filter((item) => item.default === undefined)
@@ -87,6 +98,14 @@ describe('按钮清单的取值范围', () => {
     expect(field('vAlign')).toMatchObject({
       when: { key: 'sizing', in: ['auto'] },
     })
+  })
+
+  it('没有图标时不显示位置、字号与间距这三个无效字段', () => {
+    const enabledIcons = optionValues('icon').filter((value) => value !== '')
+
+    for (const key of ['iconPosition', 'iconSize', 'gap']) {
+      expect(field(key)?.when).toEqual({ key: 'icon', in: enabledIcons })
+    }
   })
 
   it('每条条件显示都指着一个真存在的同级字段', () => {

@@ -46,7 +46,7 @@ export default defineCardPart({
       default: '',
       span: 'half',
       placeholder: '如 kW',
-      help: '逐件配；不吃格级单位——附加字段装的多半是另一种量。',
+      help: '按部件单独配置，不继承数据格单位；适用于与主读数量纲不同的附加指标。',
     },
     {
       key: 'precision',

@@ -54,3 +54,17 @@ describe('行数', () => {
     expect(manifest.bindingRowCounts?.({})).toEqual({ [SLOT]: 0 })
   })
 })
+
+describe('内容边界', () => {
+  it('部件结构与规则判据不会被外观写入覆盖', () => {
+    expect(manifest.contentKeys).toEqual([
+      'title',
+      'cells',
+      'parts',
+      'emptyText',
+      'defaultGroup',
+      'rules',
+      'alarmOn',
+    ])
+  })
+})

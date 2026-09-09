@@ -44,9 +44,6 @@ import {
 /** 面积那两档才有填充可调。 */
 const AREA_ONLY = { key: 'chartStyle', in: ['area', 'stackedArea'] }
 
-/** 右轴的名字只在双轴开着时摆得出来。 */
-const DUAL_ONLY = { key: 'dualAxis', in: [true] }
-
 /**
  * 时间轴上没有「每隔 n 个类目显示一个」这回事。
  * ⚠ `axisLabel.interval` 只对类目轴生效，摆出来就是一个配了没反应的旋钮；
@@ -57,7 +54,7 @@ const CATEGORY_ONLY_AXIS_FIELD = 'xLabelInterval'
 export default defineModule({
   type: 'trend-chart',
   description:
-    '趋势曲线：把一条或多条点位归档 / 台账列的历史序列画成带真实时间轴的折线、面积或阶梯图，回答「这个数过去几小时怎么走的」。只要当前值用 info-card 或 data-card，要比几个量的高低用 bar-chart，要看占比构成用 pie-chart。一个数组绑定槽 `seriesValues`，行钉在 `series` 配置项上：第 i 行喂第 i 条曲线，行内 `series` 收历史序列（只有点位归档与数据台账两支给得出）、`latest` 收可选的实时末值。⚠ 取数窗口不在这份配置里——它住在每条绑定自己的取数说明上，由绑点面板写入；同一块图里两条系列的窗口可以不一样，时间轴按取回来的点铺。⚠ 实时末值只在它的采样时刻严格晚于序列末点时才接上去，时刻缺席一律不接：否则曲线尾巴上会凭空长出一个位置不明的点。⚠ 图例是逐条状态唯一的承载面，缺省开着；关掉它「等首帧」「取不到」「早段未取全」在屏上就一个字都没有。⚠ 公开屏不装历史取数，这块图在那里画不出曲线，空态会照实说明。',
+    '趋势曲线适合分析多个指标随真实时间变化的过程；仅比较当前值时应选择数据卡片或对比柱图。模块使用数组槽 `seriesValues`，每行以 `series` 接收历史序列，并可通过 `latest` 补充实时末值。取数窗口不在这份配置里，而由各绑定独立定义，因此同图系列可具有不同时间范围。实时末值仅在采样时刻严格晚于历史末点时追加，缺少时间戳时不参与曲线。',
   displayName: '趋势曲线',
   category: '图表',
   icon: 'chart-line',
@@ -79,7 +76,17 @@ export default defineModule({
   ],
   defaultSize: { width: 520, height: 300, minWidth: 220, minHeight: 160 },
   configPresets: TREND_CHART_PRESETS,
-  contentKeys: ['title', SERIES_ITEMS_KEY, 'emptyText', 'rightAxisName'],
+  contentKeys: [
+    'title',
+    SERIES_ITEMS_KEY,
+    'emptyText',
+    'rightAxisName',
+    'unit',
+    'precision',
+    'xAxisName',
+    'yAxisName',
+    'refLines',
+  ],
   configSchema: [
     ...titleField(),
     {
@@ -87,7 +94,7 @@ export default defineModule({
       label: '系列',
       type: 'array',
       group: GROUP.data,
-      help: '每一项在绑点面板上是一行，行内两个槽：历史序列与可选的实时末值。⚠ 删掉中间一项，它之后每一条的绑定都会改喂前一条——删完请核对绑点面板。',
+      help: '每项对应一个绑定行，包含历史序列和可选实时末值。删除中间项会使后续绑定索引前移；删除后请核对绑定关系。',
       itemLabelKey: 'name',
       minItems: 1,
       // ⚠ 出厂给一项：空列表时模块是一块什么都没有的白板，而属性面板上
@@ -101,16 +108,16 @@ export default defineModule({
           type: 'string',
           default: '',
           placeholder: '留空则按「第 N 条」称呼',
-          help: '图例与提示框上的名字；留空时按「第 N 条」称呼它。点这条线上抛的联动值也是它，留空则这一条点了不上抛。⚠ 两条重名会被加上 #1 这样的后缀，否则 echarts 会把它们并成一条图例；上抛的仍是这里写的原名。',
+          help: '用于图例、提示框和联动值。留空时显示「第 N 条」且不触发分项联动；重名项在图例中自动追加序号，联动仍使用原名称。',
         },
         {
           key: 'unit',
           label: '单位',
           type: 'string',
           default: '',
-          placeholder: '留空跟随整块',
+          placeholder: '留空时使用模块设置',
           // ⚠ 不去首尾空格：「° C」这类带空格是用户显式的排版意图
-          help: '这一条自己的单位，提示框与数值标签用它。留空跟随整块那一档，首尾空格照原样保留。',
+          help: '该系列单位，用于提示框和数值标签；留空时继承模块单位。首尾空格保持不变。',
         },
         {
           key: 'precision',
@@ -122,22 +129,22 @@ export default defineModule({
           min: 0,
           max: 6,
           step: 1,
-          help: '留空跟随整块那一档。',
+          help: '留空时继承模块小数位。',
         },
         {
           key: 'color',
           label: '固定颜色',
           type: 'color',
           default: '',
-          help: '填了就固定这一条的颜色，压过色板。只填 var(--…) 引用，填死色值换肤时不跟着走。',
+          help: '设置后覆盖色板。建议使用 var(--…) 主题变量，以支持主题切换。',
         },
         {
           key: 'axis',
-          label: '挂在哪根轴',
+          label: '所属 Y 轴',
           type: 'enum',
           default: 'left',
           options: [...TREND_AXES],
-          help: '⚠ 只有开了「双 Y 轴」才分得出两根轴；没开时右轴根本不存在，这一档静默等同左轴。',
+          help: '选择左轴或右轴；存在右轴系列时自动创建右侧 Y 轴。',
         },
         {
           key: 'lineType',
@@ -145,18 +152,18 @@ export default defineModule({
           type: 'enum',
           default: 'solid',
           options: [...TREND_LINE_TYPES],
-          help: '两条颜色相近的曲线叠在一起时，换一种线型比换颜色更认得出。',
+          help: '用于区分颜色接近或重叠的系列。',
         },
       ],
     },
     {
       key: 'emptyText',
-      label: '空态文案',
+      label: '无数据提示',
       type: 'string',
       group: GROUP.data,
       default: TREND_EMPTY_TEXT,
       span: 'half',
-      help: '一条都画不出来时画在图区正中的那一句。⚠ 「这一页没有历史取数」与「窗口里确实没有点」两种情况另有专门的文案，不走这里。',
+      help: '无有效序列时显示；历史能力不可用或时间窗内无数据时显示对应专用说明。',
     },
     ...chartStyleField([...TREND_STYLES], 'line'),
     ...paletteOverrideField(),
@@ -170,15 +177,6 @@ export default defineModule({
       (field) => field.key !== CATEGORY_ONLY_AXIS_FIELD,
     ),
     {
-      key: 'dualAxis',
-      label: '双 Y 轴',
-      type: 'boolean',
-      group: GROUP.axis,
-      default: false,
-      span: 'half',
-      help: '量纲差得远的两组量（功率与温度）叠在一根轴上，小的那条会被压成一条平线。⚠ 参考线跟着左轴走。',
-    },
-    {
       key: 'rightAxisName',
       label: '右轴名称',
       type: 'string',
@@ -186,8 +184,7 @@ export default defineModule({
       default: '',
       span: 'half',
       placeholder: '留空不显示',
-      help: '双轴时右边那根轴的名字；刻度上不写单位，单位写在这里。',
-      when: DUAL_ONLY,
+      help: '存在右轴系列时生效。刻度不附加单位，建议在名称中标明单位。',
     },
     // ⚠ 缺省开着：图例是逐条四档唯一的承载面（`ownsStatusDisplay` 让整格浮层不出），
     //   关着的话「取不到」与「等首帧」在屏上一个字都没有

@@ -336,8 +336,12 @@ describe('变量名与样式表双向吻合', () => {
     expect(referencedVars().filter((name) => !known.has(name))).toEqual([])
   })
 
-  it('样式表里的别名真的只有那两个，别名不许悄悄替掉注入的变量', () => {
-    expect(localVars()).toEqual(['--gc-read-color', '--gc-tone'])
+  it('样式表里的局部变量只有这三项，不许悄悄替掉注入变量', () => {
+    expect(localVars()).toEqual([
+      '--gc-current-stop',
+      '--gc-read-color',
+      '--gc-tone',
+    ])
   })
 
   it('块级变量真的全都摊在 vars 里，没有只声明不注入的', () => {

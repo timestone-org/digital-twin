@@ -171,6 +171,15 @@ export function axisFieldKey(index: number, field: AxisSlotField): string {
   return `${AXIS_SLOT_KEY}[${index}].${field}`
 }
 
+/** 缺键使用行字段缺省；显式空值或非法值仍保留为“量程未配”。 */
+function rangeEndpoint(
+  row: Record<string, unknown>,
+  key: 'min' | 'max',
+  fallback: number,
+): number | null {
+  return Object.hasOwn(row, key) ? readLooseNumber(row[key]) : fallback
+}
+
 /**
  * 把配置里的一行规整成一根轴。缺什么补什么，不丢行。
  * ⚠ 脏行不丢、只补默认：丢一行会让它之后每一条绑定改喂另一根轴，而绑定的
@@ -181,8 +190,8 @@ function toItem(raw: unknown): AxisItem {
   const row = readRecord(raw)
   return {
     name: readTrimmedText(row.name),
-    min: readLooseNumber(row.min),
-    max: readLooseNumber(row.max),
+    min: rangeEndpoint(row, 'min', RADAR_AXIS_MIN_DEFAULT),
+    max: rangeEndpoint(row, 'max', RADAR_AXIS_MAX_DEFAULT),
     unit: readText(row.unit),
     precision: readLooseNumber(row.precision),
   }

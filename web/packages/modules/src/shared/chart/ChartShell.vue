@@ -38,6 +38,8 @@ const props = defineProps<{
   ariaSummary?: string
 }>()
 
+defineSlots<{ notice?: () => unknown }>()
+
 const rootRef = ref<HTMLDivElement | null>(null)
 const chartRef = ref<HTMLDivElement | null>(null)
 
@@ -92,6 +94,7 @@ useEChart(chartOptions())
     <ModulePanel :title="title">
       <div class="dt-chart__body">
         <div ref="chartRef" class="dt-chart__canvas" v-bind="ariaAttrs" />
+        <slot name="notice" />
         <p v-if="isEmpty" class="dt-chart__empty">
           {{ emptyText ?? '暂无数据' }}
         </p>

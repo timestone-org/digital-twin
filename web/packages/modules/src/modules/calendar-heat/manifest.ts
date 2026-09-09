@@ -10,7 +10,10 @@
  * ⚠ 区间与档位一律取自 `./options`：面板的 min / max 与渲染侧的夹取一旦各写一份，
  * 面板上拖得到的那一格渲染时会被夹回去——「配了不生效」。
  */
+import type { BindingView } from '@dt/contracts'
+
 import { defineModule } from '../../registry'
+import { readTrimmedText } from '../../shared/config'
 import {
   animationFields,
   chartStyleField,
@@ -23,8 +26,10 @@ import {
   DAY_SERIES_FIELD,
   DAY_SLOT_KEY,
   METRIC_ITEMS_KEY,
+  dayFormatterOf,
   metricRowCounts,
   metricRowLabels,
+  validateTimezoneConfig,
 } from './days'
 import {
   CALENDAR_STYLES,
@@ -59,10 +64,48 @@ const PREVIEW_POINTS = [
 /** 演示序列的末值，与上面最后一个点同值。 */
 const PREVIEW_LAST = 1240
 
+function archiveTimezone(binding: BindingView): string {
+  const detail = binding.detailJson
+  if (
+    binding.sourceKind !== 'archive' ||
+    detail === null ||
+    !('timezone' in detail)
+  ) {
+    return ''
+  }
+  return readTrimmedText(detail.timezone)
+}
+
+/** 显式历史分桶与日历日界必须使用同一 IANA 时区。 */
+function validateBindingTimezones(
+  config: Record<string, unknown>,
+  bindings: readonly BindingView[],
+): readonly string[] {
+  // 非法时区由全模块绑定校验单独报告，不能再伪装成一条“不一致”。
+  const zones = [
+    ...new Set(
+      bindings
+        .map(archiveTimezone)
+        .filter((zone) => zone !== '' && dayFormatterOf(zone) !== null),
+    ),
+  ]
+  if (zones.length === 0) return []
+  const moduleZone = readTrimmedText(config.timezone)
+  if (moduleZone === '') {
+    return [`模块时区必须显式设为点位历史分桶时区 ${zones.join('、')}`]
+  }
+  const mismatched = zones.filter((zone) => zone !== moduleZone)
+  return mismatched.length === 0
+    ? []
+    : [
+        `点位历史分桶时区 ${mismatched.join('、')} 必须与模块时区 ${moduleZone} 一致`,
+      ]
+}
+
 export default defineModule({
   type: 'calendar-heat',
   description:
-    '日历热力：把一条历史序列按天折成一格，铺成日历（横轴周、纵轴星期）或月 × 日矩阵（横轴几号、纵轴年月），回答「哪几天异常、哪几天停机」。每日能耗、每日达标率、每日产量这类以天为粒度的长周期观察归它；要看一天之内怎么走用趋势曲线，要逐项比高低用对比柱图。一个数组绑定槽 `dayValues`，行钉在 `metrics` 配置项上：一行 = 一张日历，唯一的子槽 `series` 收一条历史序列（点位归档或数据台账）。⚠ 日界按配置里的时区串算，留空即浏览器本地——跨零点的读数落在哪一天完全取决于它。⚠ 一天之内那几百个采样怎么并成一个数是逐张可配的：电量这类累积量要求和或最大，温度这类瞬时量要平均，选错了每一个数都合法而整张图是假的。⚠ 一块里的几张日历共用一条色阶，所以同一块只该摆同量纲的指标。⚠ 取数触顶时只画得出最近那一段，标题上会写清取回的是哪一段——早期那一段空白与「那几天真停机」在日历上长得一模一样。⚠ 删掉 `metrics` 中间一项，它之后每一张的绑定都会改喂前一张。',
+    '日历热力适合分析每日能耗、达标率或产量等长周期指标，支持日历与月日矩阵两种布局；日内趋势应选择趋势曲线。模块使用数组槽 `dayValues`，每行的 `series` 接收历史序列，并按配置的时区和逐日归并方式生成每日数值。多项指标共用色阶，因此应保持相同量纲；色阶上下限可自动计算或固定。历史取数触顶时会标明实际覆盖区间，避免将未返回日期误判为停机。',
   displayName: '日历热力',
   category: '图表',
   icon: 'calendar',
@@ -83,7 +126,16 @@ export default defineModule({
   ],
   defaultSize: { width: 480, height: 300, minWidth: 240, minHeight: 160 },
   configPresets: CALENDAR_HEAT_PRESETS,
-  contentKeys: ['title', METRIC_ITEMS_KEY, 'emptyText', 'timezone'],
+  validateConfig: validateTimezoneConfig,
+  validateBindings: validateBindingTimezones,
+  contentKeys: [
+    'title',
+    METRIC_ITEMS_KEY,
+    'emptyText',
+    'timezone',
+    'minValue',
+    'maxValue',
+  ],
   configSchema: [
     ...titleField(),
     {
@@ -91,7 +143,7 @@ export default defineModule({
       label: '指标',
       type: 'array',
       group: GROUP.data,
-      help: '每一项在绑点面板上是一行，也是屏上的一张日历。⚠ 删掉中间一项，它之后每一张的绑定都会改喂前一张——删完请核对绑点面板。⚠ 几张共用一条色阶，同一块里只摆同量纲的指标。',
+      help: '每项对应一个绑定行和一张日历。删除中间项会使后续绑定索引前移；多项指标共用色阶，应保持相同量纲。',
       itemLabelKey: 'name',
       minItems: 1,
       maxItems: MAX_METRICS,
@@ -108,16 +160,16 @@ export default defineModule({
           type: 'string',
           default: '',
           placeholder: '留空则按「第 N 张」称呼',
-          help: '这张日历标题上的名字。点这张日历上抛的联动值也是它，留空则点了不上抛。⚠ 两张重名会被加上 #1 这样的后缀，否则标题栏上分不出谁是谁；上抛的仍是这里写的原名。',
+          help: '用于日历标题和联动值。留空时不触发分项联动；重名项在标题中自动追加序号，联动仍使用原名称。',
         },
         {
           key: 'unit',
           label: '单位',
           type: 'string',
           default: '',
-          placeholder: '如 kWh',
+          placeholder: '例如：kWh',
           // ⚠ 不去首尾空格：「° C」这类带空格是用户显式的排版意图
-          help: '写在标题与提示框里的单位。首尾空格照原样保留。',
+          help: '用于标题和提示框；首尾空格保持不变。',
         },
         {
           key: 'precision',
@@ -129,26 +181,26 @@ export default defineModule({
           min: 0,
           max: 6,
           step: 1,
-          help: '留空跟随缺省（最多 2 位）。',
+          help: '留空时自动保留最多 2 位小数。',
         },
         {
           key: 'dayAggregate',
-          label: '逐日归并',
+          label: '日聚合方式',
           type: 'enum',
           default: DAY_AGGREGATE_DEFAULT,
           options: [...DAY_AGGREGATES],
-          help: '一天之内那几百个采样怎么并成一个数。⚠ 电量这类累积量要求和或最大，温度这类瞬时量要平均——选错了每一个数都合法，而整张图是假的。',
+          help: '将同一自然日内的采样合成为一个值。增量数据通常选求和，累计表底选末值或最大值，瞬时量选平均；应与绑定侧的取点间隔及聚合方式保持一致。',
         },
       ],
     },
     {
       key: 'emptyText',
-      label: '空态文案',
+      label: '无数据提示',
       type: 'string',
       group: GROUP.data,
       default: CALENDAR_EMPTY_TEXT,
       span: 'half',
-      help: '一张都没配来源时画在图区正中的那一句。⚠ 配了却取不到数时画的是逐张的原因，不是这一句。',
+      help: '未配置任何数据来源时显示；已配置但取数失败时显示逐项原因。',
     },
     {
       key: 'timezone',
@@ -158,7 +210,7 @@ export default defineModule({
       default: '',
       span: 'half',
       placeholder: '留空跟随浏览器本地时区',
-      help: 'IANA 时区串，如 Asia/Shanghai。日界按它算——跨零点的读数落在哪一天完全取决于它。⚠ 填了认不出的串不会静默按本地算：整块画不出来并把那个串说出来。',
+      help: '用于确定自然日边界的 IANA 时区，例如 Asia/Shanghai。点位历史设置分桶时区时，两处必须一致；无效值会阻止渲染。',
     },
     ...chartStyleField([...CALENDAR_STYLES], 'calendar'),
     {
@@ -169,7 +221,7 @@ export default defineModule({
       default: 'sequential',
       span: 'half',
       options: [...COLOR_SCALES],
-      help: '⚠ 发散色阶只在读数本身有正负两个方向时才对；拿它画单调递增的能耗，中间那一档颜色会把中位数误读成基准线。',
+      help: '顺序色阶适用于单向数值；发散色阶仅适用于具有正负方向的偏差类数据。',
     },
     {
       key: 'minValue',
@@ -181,7 +233,7 @@ export default defineModule({
       // ⚠ 刻意没有 default，理由同上
       step: 1,
       span: 'half',
-      help: '留空按取回的数据自动定。两个端点都留空 = 每次刷新都跟着数据走，跨天比色深就没有意义了；要横向比就把它填死。',
+      help: '留空时按当前数据自动计算。若需跨日期比较颜色深浅，请固定上下限。',
     },
     {
       key: 'maxValue',
@@ -190,11 +242,11 @@ export default defineModule({
       group: GROUP.style,
       step: 1,
       span: 'half',
-      help: '留空按取回的数据自动定。⚠ 与下限填反了按小的那个当下限，不报错。',
+      help: '留空时按当前数据自动计算；上下限颠倒时按数值顺序归一。',
     },
     {
       key: 'cellGap',
-      label: '格缝(px)',
+      label: '单元格间距（px）',
       type: 'number',
       group: GROUP.style,
       default: CELL_GAP_DEFAULT,
@@ -202,7 +254,7 @@ export default defineModule({
       max: CELL_GAP_MAX,
       step: 1,
       span: 'half',
-      help: '格与格之间那道缝，画成分隔线色。填 0 时相邻两天连成一片，得靠提示框认日期。',
+      help: '使用分隔线色绘制单元格间距；设为 0 时需通过提示框识别日期边界。',
     },
     ...tooltipFields(),
     ...animationFields(),

@@ -8,6 +8,7 @@ import { computed } from 'vue'
 
 import type { CardPartProps } from '../../../../cardParts/types'
 import { readEnum, readText } from '../../../../shared/config'
+import { cellState, reasonOf } from '../../../../shared/slotState'
 import StatusBadge from '../../../../shared/StatusBadge.vue'
 import { toDeviceStatus } from '../../../../shared/status'
 
@@ -18,6 +19,20 @@ const props = defineProps<CardPartProps>()
 const STYLES = ['outline', 'solid', 'dot'] as const
 
 const status = computed(() => toDeviceStatus(props.cell.values.state))
+
+const slotState = computed(() =>
+  cellState(
+    props.meta.slots.state,
+    props.cell.values.state,
+    props.meta.hasSlots,
+  ),
+)
+
+const statusReason = computed(() =>
+  props.meta.hasSlots && slotState.value !== 'ok'
+    ? reasonOf(slotState.value, props.meta.slots.state)
+    : '',
+)
 
 const look = computed(() => readEnum(props.part.style, STYLES, 'outline'))
 
@@ -35,14 +50,35 @@ const labelProp = computed<{ label?: string }>(() => {
 
 <template>
   <span class="dc-badge" :class="`dc-badge--${look}`">
-    <StatusBadge :status="status" v-bind="labelProp" />
+    <span
+      v-if="statusReason !== ''"
+      class="dc-badge__status"
+      :class="`dc-badge__status--${slotState}`"
+      :title="statusReason"
+      >{{ cell.format.emptyText }}</span
+    >
+    <StatusBadge v-else :status="status" v-bind="labelProp" />
   </span>
 </template>
 
-<style scoped>
+<style scoped lang="scss">
 .dc-badge {
   display: inline-flex;
   min-width: 0;
+}
+
+.dc-badge__status {
+  color: var(--text-disabled);
+  font-size: 12px;
+}
+
+.dc-badge__status--pending {
+  color: var(--text-secondary);
+  opacity: 0.7;
+}
+
+.dc-badge__status--error {
+  color: var(--state-danger);
 }
 
 /* 实心档：把共用件的透明底换成语义色的浅底，边框跟着透明 */

@@ -159,6 +159,12 @@ describe('逐轴状态', () => {
 })
 
 describe('逐轴量程', () => {
+  it('新增空行按清单缺省使用 0–100 量程', () => {
+    const config = { [AXIS_ITEMS_KEY]: [{}] }
+
+    expect(viewsOf(config, [50])[0]?.range).toEqual({ min: 0, max: 100 })
+  })
+
   it('量程填反的那根轴整根留空，而不是把读数夹成 0', () => {
     const config = {
       [AXIS_ITEMS_KEY]: [
@@ -180,10 +186,10 @@ describe('逐轴量程', () => {
     expect(viewsOf(config, [5])[0]?.note).toBe(AXIS_NOTES.badRange)
   })
 
-  it('量程没填出一个有限数时另说一句，跟填反了分开', () => {
+  it('量程显式留空或填入非法值时另说一句，跟填反了分开', () => {
     const config = {
       [AXIS_ITEMS_KEY]: [
-        { name: '能效', max: 100 },
+        { name: '能效', min: null, max: 100 },
         { name: '达标率', min: 0, max: 'x' },
       ],
     }

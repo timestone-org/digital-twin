@@ -1,11 +1,11 @@
 /**
- * @fileoverview 舞台缩放贴合的算术：四档缩放倍率，以及它的反函数——「想让上屏后
+ * @fileoverview 舞台缩放贴合的算术：五档缩放倍率，以及它的反函数——「想让上屏后
  * 恰好 1:1，画布该配多大」。两支必须住在同一个文件里，反函数才有得对照。
  *
  * ⚠ 倍率这一支是**唯一**一份：`Twin2dStage.vue` 从这里取，编辑器的 1:1 也从这里取。
  * 各写各的表现是「编辑器说 1:1、上了大屏还是缩了一点」，而两边单看都对。
- * ⚠ 只有 `contain` 吃 `fitPadding`：其余三档的意思就是「把某一轴填满」，再乘一个
- * 安全留白就填不满了，而表现是「配了 width 却两边留白」（§9.1 那张表）。
+ * ⚠ 只有 `contain` 使用 `fitPadding`；`width` / `height` / `stretch` 保持填充语义。
+ * 安全留白不得改变这三档的缩放结果（§9.1）。
  */
 import { TWIN_2D_MAX_CANVAS_SIZE, TWIN_2D_MIN_CANVAS_SIZE } from './constants'
 import { clamp, finiteOr } from './sanitize'

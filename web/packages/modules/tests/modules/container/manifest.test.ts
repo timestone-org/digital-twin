@@ -38,6 +38,14 @@ describe('容器清单的声明', () => {
     expect(manifest.bindings).toEqual([])
   })
 
+  it('套用外观不会改标题条状态或移动子节点坐标系', () => {
+    expect(manifest.contentKeys).toEqual([
+      'title',
+      SHOW_TITLE_CONFIG_KEY,
+      CONTAINER_CONFIG_KEY,
+    ])
+  })
+
   it('每个配置字段都有缺省，摊得出一份完整配置', () => {
     const missing = manifest.configSchema
       .filter((item) => item.default === undefined)

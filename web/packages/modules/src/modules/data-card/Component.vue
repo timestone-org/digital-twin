@@ -78,13 +78,28 @@ const formatDefaults = computed(() => ({
   fixedDecimals: readBoolean(props.config.fixedDecimals, false),
 }))
 
+function slotMetaAt(
+  index: number,
+  key: CardSlotKey,
+): ModuleSlotMeta | undefined {
+  return props.meta?.slots?.[`${DATA_CARD_SLOT_KEY}[${String(index)}].${key}`]
+}
+
+/** pending/error 槽可能仍携带最后值；展示与派生只读取可信的 ok 值。 */
+function trustedSlotValue(index: number, key: CardSlotKey): unknown {
+  const raw = readRecord(readArray(props.values[DATA_CARD_SLOT_KEY])[index])[
+    key
+  ]
+  const meta = slotMetaAt(index, key)
+  return meta !== undefined && meta.state !== 'ok' ? undefined : raw
+}
+
 /** 第 i 格的逐子槽取值。⚠ 取不到的键**不放进去**，部件据「键在不在」分得开没接与取不到。 */
 function slotValues(index: number): CardCellView['values'] {
-  const rows = readArray(props.values[DATA_CARD_SLOT_KEY])
-  const row = readRecord(rows[index])
   const out: Partial<Record<CardSlotKey, unknown>> = {}
   for (const key of CARD_SLOT_KEYS) {
-    if (row[key] !== undefined) out[key] = row[key]
+    const value = trustedSlotValue(index, key)
+    if (value !== undefined) out[key] = value
   }
   return out
 }
@@ -95,7 +110,7 @@ function slotMeta(index: number): CardPartMeta {
   const out: Partial<Record<CardSlotKey, ModuleSlotMeta>> = {}
   if (table === undefined) return { slots: out, hasSlots: false }
   for (const key of CARD_SLOT_KEYS) {
-    const found = table[`${DATA_CARD_SLOT_KEY}[${String(index)}].${key}`]
+    const found = slotMetaAt(index, key)
     if (found !== undefined) out[key] = found
   }
   return { slots: out, hasSlots: true }
@@ -112,8 +127,8 @@ const slotTotals = computed<CardCellView['totals']>(() => {
   for (const key of CARD_SLOT_KEYS) {
     let sum = 0
     let seen = false
-    for (const one of rows) {
-      const num = toNumOrNull(readRecord(one)[key])
+    for (let index = 0; index < rows.length; index += 1) {
+      const num = toNumOrNull(trustedSlotValue(index, key))
       if (num === null) continue
       sum += num
       seen = true

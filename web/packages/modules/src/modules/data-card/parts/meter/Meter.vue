@@ -20,6 +20,7 @@ import { fmtTrim, toNumOrNull } from '../../../../shared/format'
 import MeterBar from '../../../../shared/MeterBar.vue'
 import { litSegments } from '../../../../shared/meter'
 import type { MeterScale, MeterVars, MeterView } from '../../../../shared/meter'
+import { cellState, reasonOf } from '../../../../shared/slotState'
 
 // ⚠ 三件套一个都不能少：没声明的那个会掉成透传属性，在 DOM 上留下
 //   `meta="[object Object]"` 这种脏东西，而两侧都不报错
@@ -39,6 +40,34 @@ const slot = computed<CardSlotKey>(() =>
   readEnum(props.part.slot, CARD_SLOT_KEYS, 'value'),
 )
 
+/** 自动档只在占比槽没有绑定时回退主读数；已绑定但失败不得改变计算口径。 */
+const sourceSlot = computed<CardSlotKey>(() => {
+  if (source.value !== 'auto') return slot.value
+  if (props.meta.hasSlots) {
+    return props.meta.slots.ratio === undefined ? 'value' : 'ratio'
+  }
+  return toNumOrNull(props.cell.values.ratio) === null ? 'value' : 'ratio'
+})
+
+function trustedValue(key: CardSlotKey): unknown {
+  const slotMeta = props.meta.slots[key]
+  return slotMeta !== undefined && slotMeta.state !== 'ok'
+    ? undefined
+    : props.cell.values[key]
+}
+
+const raw = computed(() => trustedValue(sourceSlot.value))
+
+const state = computed(() =>
+  cellState(props.meta.slots[sourceSlot.value], raw.value, props.meta.hasSlots),
+)
+
+const statusReason = computed(() =>
+  props.meta.hasSlots && state.value !== 'ok'
+    ? reasonOf(state.value, props.meta.slots[sourceSlot.value])
+    : '',
+)
+
 /** 按量程折算。⚠ 量程倒挂（上限 ≤ 下限）时算不出，返回 null 而不是 0。 */
 function byRange(value: number): number | null {
   const min = readNumber(props.part.min, 0)
@@ -54,14 +83,12 @@ function byRange(value: number): number | null {
  * 三种都是「算不出来」，画成 0% 会让一条满量程的管道看着像空的。
  */
 const percent = computed<number | null>(() => {
-  if (source.value === 'auto') {
-    const ratio = toNumOrNull(props.cell.values.ratio)
-    if (ratio !== null) return ratio
-    const value = toNumOrNull(props.cell.values.value)
-    return value === null ? null : byRange(value)
-  }
-  const value = toNumOrNull(props.cell.values[slot.value])
+  if (state.value !== 'ok') return null
+  const value = toNumOrNull(raw.value)
   if (value === null) return null
+  if (source.value === 'auto') {
+    return sourceSlot.value === 'ratio' ? value : byRange(value)
+  }
   if (source.value === 'ratio') return value
   if (source.value === 'range') return byRange(value)
   const total = props.cell.totals[slot.value]
@@ -96,7 +123,7 @@ const view = computed<MeterView>(() => {
 const scale = computed<MeterScale | null>(() => {
   if (look.value !== 'track') return null
   const target = readBoolean(props.part.showTarget, false)
-    ? toNumOrNull(props.cell.values.aux)
+    ? toNumOrNull(trustedValue('aux'))
     : null
   return {
     min: readNumber(props.part.min, 0),
@@ -138,11 +165,32 @@ const vars = computed<MeterVars>(() => {
       :scale="scale"
     />
   </div>
+  <span
+    v-else-if="statusReason !== ''"
+    class="dc-meter__status"
+    :class="`dc-meter__status--${state}`"
+    :title="statusReason"
+    >{{ cell.format.emptyText }}</span
+  >
 </template>
 
-<style scoped>
+<style scoped lang="scss">
 .dc-meter {
   width: 100%;
   min-width: 0;
+}
+
+.dc-meter__status {
+  color: var(--text-disabled);
+  font-size: 12px;
+}
+
+.dc-meter__status--pending {
+  color: var(--text-secondary);
+  opacity: 0.7;
+}
+
+.dc-meter__status--error {
+  color: var(--state-danger);
 }
 </style>

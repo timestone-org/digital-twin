@@ -229,6 +229,15 @@ describe('实时档', () => {
     ])
   })
 
+  it('实时读数含负值时整列不计算占比', () => {
+    const view = liveView(BASE_CONFIG, [100, -20])
+
+    expect(view.series.map((series) => series.shares)).toEqual([
+      [null, null],
+      [null, null],
+    ])
+  })
+
   it('没起名的那几行按「第 N 行」称呼，重名的按出现序去重', () => {
     const config = {
       [BAR_ITEMS_KEY]: [{ name: '甲' }, { name: '甲' }, {}],
@@ -299,6 +308,15 @@ describe('历史档', () => {
     const view = historyView(BASE_CONFIG, [
       [{ t: BASE, v: 10 }],
       [{ t: BASE, v: -10 }],
+    ])
+
+    expect(view.series.map((series) => series.shares)).toEqual([[null], [null]])
+  })
+
+  it('历史列含负值但合计为正时仍不计算占比', () => {
+    const view = historyView(BASE_CONFIG, [
+      [{ t: BASE, v: 100 }],
+      [{ t: BASE, v: -20 }],
     ])
 
     expect(view.series.map((series) => series.shares)).toEqual([[null], [null]])

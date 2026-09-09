@@ -50,6 +50,7 @@ import {
   PIE_INNER_RADIUS_DEFAULT,
   PIE_MIN_RING,
   PIE_OUTER_RADIUS_DEFAULT,
+  PIE_OUTER_RADIUS_MIN,
   PIE_RADIUS_MAX,
   PIE_RADIUS_MIN,
   PIE_STYLE_VALUES,
@@ -108,7 +109,7 @@ function radiusOf(
 ): [string, string] {
   const outer = clamp(
     readNumber(config.outerRadius, PIE_OUTER_RADIUS_DEFAULT),
-    PIE_RADIUS_MIN,
+    PIE_OUTER_RADIUS_MIN,
     PIE_RADIUS_MAX,
   )
   if (style === 'pie') return ['0%', `${String(outer)}%`]
@@ -223,7 +224,7 @@ function centerReadout(
   const unit = readTrimmedText(config.centerUnit)
   if (mode === 'count') {
     return {
-      text: valueText(numbers.length, 0, unit),
+      text: valueText(numbers.length, 0),
       label: PIE_CENTER_LABELS[mode],
     }
   }

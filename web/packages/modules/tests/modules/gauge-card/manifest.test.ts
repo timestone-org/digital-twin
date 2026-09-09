@@ -365,16 +365,27 @@ describe('仪表卡片的枚举档位来自那张取值表', () => {
 })
 
 describe('仪表卡片的条件显示', () => {
-  it('顶层与行内一条条件显示都不摆——五档几何靠说明分工，不靠隐藏', () => {
-    // ⚠ 簇内子字段的条件显示判的是**簇内**同级取值，判不到顶层的几何档：
-    //   给尺寸子键挂 when 会一条都不生效，而面板上看不出来
-    expect(SCHEMA.filter((item) => item.when !== undefined)).toEqual([])
+  it('仅在适用几何与开关下显示指针、色标、目标和刻度细项', () => {
+    expect(field('indicator')?.when).toEqual({ key: 'shape', in: ['arc'] })
+    expect(field('colorStops')?.when).toEqual({
+      key: 'fillStyle',
+      in: ['stops'],
+    })
+    expect(field('targetMark')?.when).toEqual({ key: 'shape', in: ['track'] })
+    expect(field('targetLabel')?.when).toEqual({
+      key: 'targetMark',
+      in: [true],
+    })
+    expect(field('showPercent')?.when).toEqual({ key: 'shape', in: ['track'] })
+    expect(subField('scale', 'tickCount')?.when).toEqual({
+      key: 'ticks',
+      in: [true],
+    })
+    expect(subField('scale', 'wanDigits')?.when).toEqual({
+      key: 'wanFormat',
+      in: [true],
+    })
     expect(itemFields().filter((item) => item.when !== undefined)).toEqual([])
-    expect(
-      objectFields().flatMap((item) =>
-        (item.fields ?? []).filter((child) => child.when !== undefined),
-      ),
-    ).toEqual([])
   })
 
   it('五个尺寸子键各自说明哪一档吃它——摆着不生效的那几个只能靠说明认', () => {

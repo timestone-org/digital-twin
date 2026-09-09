@@ -6,7 +6,7 @@
  * 这里白拿（MODULE_DATA_CARD_DESIGN §3.1）。
  */
 import type { ConfigField } from '@dt/contracts'
-import { DtEmpty, DtField } from '@dt/ui'
+import { DtEmpty, DtField, DtHelpTip } from '@dt/ui'
 import { computed } from 'vue'
 
 import { formGroups } from '@/features/dashboard/configForm'
@@ -18,6 +18,7 @@ const props = defineProps<{
   /** 选中那一行的当前取值。 */
   row: Record<string, unknown>
   title: string
+  help: string
 }>()
 
 const emit = defineEmits<{ update: [key: string, value: unknown] }>()
@@ -32,18 +33,21 @@ const groups = computed(() => formGroups(props.schema, props.row))
     <DtEmpty
       v-if="schema.length === 0"
       icon="settings"
-      title="左边选一项"
-      hint="选中的部件或格，字段摆在这里"
+      title="选择配置项"
+      hint="请从左侧选择部件或数据格。"
     />
     <template v-else>
-      <h3 class="ce-fields__head">{{ title }}</h3>
+      <div class="flex items-center gap-1.5">
+        <h3 class="ce-fields__head">{{ title }}</h3>
+        <DtHelpTip v-if="help !== ''" :text="help" :label="`${title}说明`" />
+      </div>
       <div v-for="group in groups" :key="group.title" class="ce-fields__grid">
         <DtField
           v-for="field in group.fields"
           :key="field.key"
           :class="{ 'ce-fields__cell--half': field.span === 'half' }"
           :label="field.label"
-          :hint="field.help"
+          :help="field.help"
           size="sm"
         >
           <ConfigFieldControl

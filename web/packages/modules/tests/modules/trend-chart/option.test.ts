@@ -25,6 +25,7 @@ import {
   buildTrendOption,
   markLineCarrier,
   pickedSeriesValue,
+  stackWarningOf,
   tickFormatter,
 } from '../../../src/modules/trend-chart/option'
 import {
@@ -229,6 +230,63 @@ describe('画法与配色', () => {
     expect('stack' in seriesAt(optionOf(BASE, views), 0)).toBe(false)
   })
 
+  it('时间戳不完全对齐时保留原曲线并停用堆叠', () => {
+    const start = 1_700_000_000_000
+    const config = { ...BASE, chartStyle: 'stackedArea' }
+    const views = viewsOf(config, [
+      { series: 2, seriesPoints: points(start, 1, 2) },
+      { series: 4, seriesPoints: points(start + 60_000, 3, 4) },
+    ])
+    const option = optionOf(config, views)
+
+    expect(seriesAt(option, 0).data).toEqual([
+      [start, 1],
+      [start + 60_000, 2],
+    ])
+    expect(seriesAt(option, 1).data).toEqual([
+      [start + 60_000, 3],
+      [start + 120_000, 4],
+    ])
+    expect('stack' in seriesAt(option, 0)).toBe(false)
+    expect(seriesAt(option, 0).name).toBe('进水')
+    expect(stackWarningOf(config, views)).toBe(
+      '时间轴未对齐，当前按独立面积曲线显示',
+    )
+  })
+
+  it('完全交错的多系列不扩成时间戳笛卡尔积', () => {
+    const start = 1_700_000_000_000
+    const config = { ...BASE, chartStyle: 'stackedArea' }
+    const views = viewsOf(config, [
+      { series: 2, seriesPoints: points(start, 1, 2) },
+      { series: 4, seriesPoints: points(start + 30_000, 3, 4) },
+    ])
+    const option = optionOf(config, views)
+
+    expect(asArray(seriesAt(option, 0).data)).toHaveLength(2)
+    expect(asArray(seriesAt(option, 1).data)).toHaveLength(2)
+    expect('stack' in seriesAt(option, 1)).toBe(false)
+  })
+
+  it('窗内无点的系列不应让其余对齐曲线退出堆叠', () => {
+    const start = 1_700_000_000_000
+    const config = {
+      ...BASE,
+      chartStyle: 'stackedArea',
+      [SERIES_ITEMS_KEY]: [...TWO, { name: '空窗' }],
+    }
+    const views = viewsOf(config, [
+      { series: 2, seriesPoints: points(start, 1, 2) },
+      { series: 4, seriesPoints: points(start, 3, 4) },
+      { series: null, seriesPoints: [] },
+    ])
+    const option = optionOf(config, views)
+
+    expect(seriesAt(option, 0).stack).toBe('trend')
+    expect(seriesAt(option, 1).stack).toBe('trend')
+    expect(stackWarningOf(config, views)).toBe('')
+  })
+
   it('面积填充只在带面积的两档上出现，其余档整个键都不写', () => {
     const views = viewsOf(BASE, ROWS)
 
@@ -308,19 +366,26 @@ describe('双轴与参考线', () => {
       { name: '功率', axis: 'right' },
       { name: '温度', axis: 'left' },
     ],
-    dualAxis: true,
     refLines: [{ value: 80, label: '上限' }],
   }
 
-  it('没开双轴时只有一根轴，右轴那一档静默等同左轴', () => {
-    const flat = { ...config, dualAxis: false }
-    const option = optionOf(flat, viewsOf(flat, ROWS))
+  it('副轴由系列所属轴自动推导，不受遗留 dualAxis 值影响', () => {
+    const legacyFalse = { ...config, dualAxis: false }
+    const withRight = optionOf(legacyFalse, viewsOf(legacyFalse, ROWS))
+    const allLeft = {
+      ...config,
+      dualAxis: true,
+      [SERIES_ITEMS_KEY]: [{ name: '功率' }, { name: '温度' }],
+    }
 
-    expect(asArray(option.yAxis)).toHaveLength(1)
-    expect(seriesAt(option, 0).yAxisIndex).toBe(0)
+    expect(asArray(withRight.yAxis)).toHaveLength(2)
+    expect(seriesAt(withRight, 0).yAxisIndex).toBe(1)
+    expect(
+      asArray(optionOf(allLeft, viewsOf(allLeft, ROWS)).yAxis),
+    ).toHaveLength(1)
   })
 
-  it('开了双轴时逐条挂对轴，右轴不再画一遍分隔线', () => {
+  it('存在右轴系列时逐条挂对轴，右轴不再画一遍分隔线', () => {
     const option = optionOf(config, viewsOf(config, ROWS))
 
     expect(asArray(option.yAxis)).toHaveLength(2)

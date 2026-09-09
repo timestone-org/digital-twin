@@ -32,6 +32,10 @@ describe('文本块清单的声明', () => {
     expect(manifest.bindings).toEqual([])
   })
 
+  it('套用外观不会覆盖标题与正文', () => {
+    expect(manifest.contentKeys).toEqual(['title', 'text'])
+  })
+
   it('每个配置字段都有缺省，摊得出一份完整配置', () => {
     const missing = manifest.configSchema
       .filter((item) => item.default === undefined)
@@ -100,8 +104,8 @@ describe('文本块清单的取值范围', () => {
   it('字间距的 help 写明 0 是「沿用内置」而不是零字距', () => {
     const help = field('letterSpacing')?.help ?? ''
 
-    expect(help).toContain('沿用内置字间距')
-    expect(help).toContain('填 0 不等于零字距')
+    expect(help).toContain('0 表示沿用内置字间距')
+    expect(help).toContain('正数表示使用指定像素值')
   })
 })
 
@@ -120,6 +124,6 @@ describe('文本块的正文控件', () => {
 
     expect(text?.type).toBe('textarea')
     expect(text?.default).toBe('示例文本')
-    expect(text?.help).toContain('按行换行')
+    expect(text?.help).toContain('换行')
   })
 })

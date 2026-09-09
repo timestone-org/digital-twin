@@ -179,6 +179,8 @@ export interface GaugeView {
   range: GaugeRange | null
   ticks: GaugeTick[]
   target: GaugeTargetMark | null
+  /** 已绑定的目标槽未正常取值时给用户的原因。 */
+  targetReason: string
   /** 轨道内 pill 的文本；空串 = 不画。 */
   pillText: string
   blink: boolean
@@ -513,8 +515,18 @@ function showsUnit(state: GaugeState, ctx: GaugeContext): boolean {
  * @param bound `aux` 子槽注入的原值
  * @param item 归一化后的这一个仪表
  */
-function targetValue(bound: unknown, item: GaugeItem): number | null {
-  return isPresent(bound) ? bound : item.target
+function targetValue(
+  bound: unknown,
+  item: GaugeItem,
+  slot: ModuleSlotMeta | undefined,
+): { value: number | null; reason: string } {
+  if (slot?.state === 'pending' || slot?.state === 'error') {
+    return { value: null, reason: `目标值：${reasonOf(slot.state, slot)}` }
+  }
+  if (slot?.state === 'ok') {
+    return { value: isPresent(bound) ? bound : null, reason: '' }
+  }
+  return { value: isPresent(bound) ? bound : item.target, reason: '' }
 }
 
 /**
@@ -532,7 +544,11 @@ function toView(item: GaugeItem, index: number, ctx: GaugeContext): GaugeView {
   const percent = normalizePercent(reading, scale.min, scale.max)
   const hit = state === 'ok' ? evaluateValueRules(raw, ctx.rules) : null
   const override = hit?.color ?? item.color
-  const target = targetValue(rawAt(ctx, index, 'aux'), item)
+  const target = targetValue(
+    rawAt(ctx, index, 'aux'),
+    item,
+    slotAt(ctx, index, 'aux'),
+  )
   return {
     key: gaugeKey(item, ctx),
     index,
@@ -546,10 +562,11 @@ function toView(item: GaugeItem, index: number, ctx: GaugeContext): GaugeView {
     dashOffset: arcDashOffset(percent),
     range: rangeOf(scale, ctx),
     ticks: ticksOf(scale, ctx),
-    target: targetOf(target, scale, ctx),
+    target: targetOf(target.value, scale, ctx),
+    targetReason: target.reason,
     pillText: pillTextOf(
       reading,
-      completionPercent(reading, target, percent),
+      completionPercent(reading, target.value, percent),
       item,
       scale,
       ctx,

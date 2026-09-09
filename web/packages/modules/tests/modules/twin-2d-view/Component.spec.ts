@@ -5,7 +5,8 @@
  * ⚠ 这几类错法既不报错也不空白：图照样画得出来，只是那一路数据永远不到。
  */
 import { TWIN_2D_CONFIG_KEY, Twin2dStage } from '@dt/twin2d'
-import { mount } from '@vue/test-utils'
+import { DtHelpTip } from '@dt/ui'
+import { enableAutoUnmount, mount } from '@vue/test-utils'
 import { afterEach, describe, expect, it, vi } from 'vitest'
 
 import Component from '../../../src/modules/twin-2d-view/Component.vue'
@@ -15,6 +16,10 @@ const SERIES_MESSAGE = '序列要异步取数，画布上不展开'
 
 /** 节点读数那一行的 fieldKey。 */
 const READING_FIELD = 'nodeValues[0].value'
+/** 第一个节点的状态子槽。 */
+const STATUS_FIELD = 'nodeStatus[0].status'
+/** 第一条连线的活跃子槽。 */
+const EDGE_ACTIVE_FIELD = 'edgeValues[0].active'
 
 /**
  * 一个只画一格读数的样式：整个节点上只有这一个 `txt` 图元，于是节点的文本就是那一格
@@ -180,6 +185,8 @@ function readingClasses(wrapper: ReturnType<typeof render>): readonly string[] {
   return wrapper.get('.t2-node .t2-prim').classes()
 }
 
+enableAutoUnmount(afterEach)
+
 afterEach(() => {
   document.body.innerHTML = ''
 })
@@ -309,7 +316,7 @@ describe('逐槽取数四档在墙上各自可辨', () => {
     expect(readout.attributes('title')).toBeUndefined()
   })
 
-  it('取不到那一档变色并把原因挂在 title 上', () => {
+  it('取不到那一档变色并把原因收进帮助提示', () => {
     const wrapper = render({
       meta: {
         slots: { [READING_FIELD]: { state: 'error', message: '通道断了' } },
@@ -319,7 +326,7 @@ describe('逐槽取数四档在墙上各自可辨', () => {
 
     expect(readingText(wrapper)).toBe('--')
     expect(readout.classes()).toContain('dt-twin2d__readout--error')
-    expect(readout.attributes('title')).toBe('通道断了')
+    expect(wrapper.getComponent(DtHelpTip).props('text')).toContain('通道断了')
   })
 
   it('有值那一档画读数与单位，角上一个字都不多', () => {
@@ -448,15 +455,15 @@ describe('序列类来源在这块图上取不到数', () => {
    * ⚠ 断言的是那句原话本身而不是半匹配：文案改了要当场红一条，
    * 而不是让一句改过的话继续被放行。
    */
-  it('历史来源那一档把原话挂到 title 上', () => {
+  it('历史来源那一档把原话收进帮助提示', () => {
     const wrapper = render({
       meta: {
         slots: { [READING_FIELD]: { state: 'error', message: SERIES_MESSAGE } },
       },
     })
 
-    expect(wrapper.get('.dt-twin2d__readout').attributes('title')).toBe(
-      '序列要异步取数，画布上不展开',
+    expect(wrapper.getComponent(DtHelpTip).props('text')).toContain(
+      SERIES_MESSAGE,
     )
   })
 
@@ -467,9 +474,41 @@ describe('序列类来源在这块图上取不到数', () => {
       },
     })
 
-    expect(wrapper.get('.dt-twin2d__readout').attributes('title')).toBe(
-      '序列要异步取数，画布上不展开',
+    expect(wrapper.getComponent(DtHelpTip).props('text')).toContain(
+      SERIES_MESSAGE,
     )
+  })
+})
+
+describe('状态与连线绑定失败可定位', () => {
+  it('节点状态失败时说明具体节点', () => {
+    const wrapper = render({
+      meta: {
+        slots: { [STATUS_FIELD]: { state: 'error', message: '状态点离线' } },
+      },
+    })
+
+    const detail = wrapper.getComponent(DtHelpTip).props('text')
+    expect(detail).toContain('一号')
+    expect(detail).toContain('状态点离线')
+  })
+
+  it('活跃绑定失败时停止流动，并说明具体连线', () => {
+    const wrapper = render({
+      config: { [TWIN_2D_CONFIG_KEY]: LINKED_SCENE },
+      values: { edgeValues: [{ active: true }] },
+      meta: {
+        slots: {
+          [EDGE_ACTIVE_FIELD]: { state: 'error', message: '流量点不存在' },
+        },
+      },
+    })
+    const live = wrapper.getComponent(Twin2dStage).props('live') as {
+      edges: Record<string, { active: boolean }>
+    }
+
+    expect(live.edges.e1?.active).toBe(false)
+    expect(wrapper.getComponent(DtHelpTip).props('text')).toContain('a → b')
   })
 })
 

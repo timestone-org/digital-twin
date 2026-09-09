@@ -6,7 +6,7 @@
  * 绑不上，于是焦点相关的用例全部空跑成绿灯。面板一律从 document 上查。
  */
 import { mount } from '@vue/test-utils'
-import { afterEach, describe, expect, it } from 'vitest'
+import { afterEach, describe, expect, it, vi } from 'vitest'
 import { nextTick } from 'vue'
 
 import DtPopover from '../../../src/components/DtPopover/DtPopover.vue'
@@ -178,6 +178,28 @@ describe('DtPopover 关闭路径', () => {
     await wrapper.find('.dt-popover').trigger('keydown.escape')
     await wrapper.find('.dt-popover').trigger('keydown.escape')
     expect(wrapper.emitted('update:open')).toEqual([[true], [false]])
+    wrapper.unmount()
+  })
+
+  it('收起状态的 Esc 继续交给外层快捷键', async () => {
+    const wrapper = mountPopover()
+    const escaped = vi.fn()
+    document.addEventListener('keydown', escaped)
+
+    await wrapper.find('.trigger').trigger('keydown.escape')
+
+    expect(escaped).toHaveBeenCalledTimes(1)
+    document.removeEventListener('keydown', escaped)
+    wrapper.unmount()
+  })
+})
+
+describe('DtPopover 对话框名称', () => {
+  it('panelLabel 成为面板的可访问名称', async () => {
+    const wrapper = mountPopover({ panelLabel: '采样周期说明' })
+    await wrapper.find('.trigger').trigger('click')
+
+    expect(panel()?.getAttribute('aria-label')).toBe('采样周期说明')
     wrapper.unmount()
   })
 })

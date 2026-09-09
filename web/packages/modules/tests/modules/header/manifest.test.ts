@@ -8,6 +8,7 @@ import { describe, expect, it } from 'vitest'
 import manifest from '../../../src/modules/header/manifest'
 import { configDefaults } from '../../../src/shared/config'
 import {
+  CONTAINER_CONFIG_KEY,
   SHOW_TITLE_CONFIG_KEY,
   hasTitleBar,
   resolveContentInset,
@@ -19,6 +20,10 @@ describe('页头清单的声明', () => {
     expect(manifest.region).toBe('header')
     expect(manifest.isContainer).toBe(true)
     expect(manifest.chrome).toBe('bare')
+  })
+
+  it('套用外观不会改变子节点坐标系', () => {
+    expect(manifest.contentKeys).toEqual([CONTAINER_CONFIG_KEY])
   })
 })
 

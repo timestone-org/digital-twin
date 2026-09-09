@@ -20,6 +20,7 @@ import {
 import {
   PIE_CENTER_LABELS,
   PIE_MIN_RING,
+  PIE_OUTER_RADIUS_MIN,
 } from '../../../src/modules/pie-chart/options'
 import {
   buildSliceViews,
@@ -193,6 +194,17 @@ describe('扇区', () => {
     ).radius
 
     expect(radius).toEqual([`${String(70 - PIE_MIN_RING)}%`, '70%'])
+  })
+
+  it('手工配置的零外半径也会夹到可见下限', () => {
+    const radius = seriesOf(
+      optionOf(
+        { ...BASE, chartStyle: 'pie', outerRadius: 0 },
+        viewsOf(BASE, [1]),
+      ),
+    ).radius
+
+    expect(radius).toEqual(['0%', `${String(PIE_OUTER_RADIUS_MIN)}%`])
   })
 
   it('玫瑰档把占比也映射到半径，另外两档不写这个键', () => {
@@ -376,7 +388,7 @@ describe('环心读数', () => {
     expect(title.subtext).toBe(PIE_CENTER_LABELS.sum)
   })
 
-  it('最大片取的是读数不是占比，片数不带小数', () => {
+  it('最大片取的是读数不是占比，片数不带小数或单位', () => {
     const shared = {
       ...BASE,
       chartStyle: 'donut',
@@ -389,7 +401,10 @@ describe('环心读数', () => {
       asRecord(optionOf({ ...shared, centerText: 'max' }, views).title).text,
     ).toBe('60')
     expect(
-      asRecord(optionOf({ ...shared, centerText: 'count' }, views).title).text,
+      asRecord(
+        optionOf({ ...shared, centerText: 'count', centerUnit: '台' }, views)
+          .title,
+      ).text,
     ).toBe('2')
   })
 

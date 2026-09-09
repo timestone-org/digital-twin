@@ -18,9 +18,7 @@ function valuesOf<T extends string>(
 
 /**
  * 五档画法，共用同一条「点序列 → 时间轴」的链，只在折线本身的形状上分叉。
- * ⚠ `stackedArea` 把各条系列的值逐点相加，只有**采样时刻对齐**的几条才叠得对；
- * 而同一块图里两条系列的取数窗口本来就允许不同（窗口住在每条绑定上），
- * 时刻对不上时 echarts 按各自的点各画各的，叠出来的高度没有物理意义。
+ * `stackedArea` 仅在各系列时间戳完全一致时堆叠；否则保留原曲线并提示。
  */
 export const TREND_STYLES = [
   { value: 'line', label: '折线' },
@@ -37,8 +35,7 @@ export const TREND_STYLE_VALUES = valuesOf(TREND_STYLES)
 export const AREA_STYLES: readonly TrendStyle[] = ['area', 'stackedArea']
 
 /**
- * 一条系列挂在哪根 Y 轴上。
- * ⚠ 只有开了双轴才分得出两根轴：没开双轴时右轴根本不存在，这一档静默等同左轴。
+ * 一条系列使用哪根 Y 轴；存在右轴系列时自动创建副轴。
  */
 export const TREND_AXES = [
   { value: 'left', label: '左轴' },

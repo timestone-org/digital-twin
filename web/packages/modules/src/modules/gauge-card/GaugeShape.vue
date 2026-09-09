@@ -9,7 +9,8 @@
  * 的圆角色块，读起来像「有一点点」。
  * ⚠ 刻度、目标标记与轨道内 pill 是粗轨道那一档独有的（§4.2 的参数列），其余四档不摆。
  */
-import { computed, useId } from 'vue'
+import { DtTooltip } from '@dt/ui'
+import { computed, useId, type CSSProperties } from 'vue'
 
 import { needlePath } from './geometry'
 
@@ -52,6 +53,59 @@ const stops = computed(() =>
   props.look.fillStyle === 'stops' ? props.look.colorStops : [],
 )
 
+function compact(value: number): string {
+  return String(Number(value.toFixed(3)))
+}
+
+function stopColorAt(percent: number): string {
+  const table = props.look.colorStops
+  const first = table[0]
+  const last = table.at(-1)
+  if (first === undefined || last === undefined) return ''
+  if (percent <= first.at) return first.color
+  for (let index = 1; index < table.length; index += 1) {
+    const right = table[index]
+    const left = table[index - 1]
+    if (right === undefined || left === undefined || percent > right.at)
+      continue
+    if (percent === right.at || right.at <= left.at) return right.color
+    const rightWeight = ((percent - left.at) / (right.at - left.at)) * 100
+    return `color-mix(in srgb, ${left.color} ${compact(100 - rightWeight)}%, ${right.color})`
+  }
+  return last.color
+}
+
+/** 非弧形渐变按整量程缩放，裁短填充只显示当前位置之前的色谱。 */
+const customFillStyle = computed<CSSProperties>(() => {
+  if (
+    props.look.shape === 'arc' ||
+    props.look.fillStyle !== 'stops' ||
+    props.look.colorStops.length < 2
+  ) {
+    return {}
+  }
+  const angle =
+    props.look.shape === 'tank' || props.look.shape === 'thermometer' ? 0 : 90
+  const colors = props.look.colorStops
+    .map((stop) => `${stop.color} ${String(stop.at)}%`)
+    .join(', ')
+  const percent = Math.max(0.001, Math.min(100, props.view.percent ?? 100))
+  const scale = `${compact(10_000 / percent)}%`
+  const vertical = angle === 0
+  return {
+    '--gc-current-stop': stopColorAt(percent),
+    backgroundImage: `linear-gradient(${String(angle)}deg, ${colors})`,
+    backgroundPosition: vertical ? 'center bottom' : 'left center',
+    backgroundSize: vertical ? `100% ${scale}` : `${scale} 100%`,
+  }
+})
+
+const currentStopStyle = computed<CSSProperties>(() => {
+  if (props.look.fillStyle !== 'stops' || props.view.percent === null) return {}
+  const color = stopColorAt(props.view.percent)
+  return color === '' ? {} : { '--gc-current-stop': color }
+})
+
 /** 满弧 + 指针那一档：整条弧都上色，读数由指针指。只有弧度盘吃得下。 */
 const hasNeedle = computed(
   () => props.look.shape === 'arc' && props.look.indicator === 'needle',
@@ -72,6 +126,18 @@ const isTrack = computed(() => props.look.shape === 'track')
 <template>
   <span class="gc-shape" :class="shapeClasses">
     <span class="gc-figure">
+      <DtTooltip
+        v-if="view.targetReason !== ''"
+        class="gc-target-issue"
+        :content="view.targetReason"
+      >
+        <span
+          class="gc-target-issue__mark"
+          tabindex="0"
+          :aria-label="view.targetReason"
+          >!</span
+        >
+      </DtTooltip>
       <svg
         v-if="look.shape === 'arc'"
         class="gc-arc"
@@ -145,7 +211,7 @@ const isTrack = computed(() => props.look.shape === 'track')
         <i
           v-if="view.fill !== ''"
           class="gc-bar__fill"
-          :style="{ width: view.fill }"
+          :style="[{ width: view.fill }, customFillStyle]"
         />
         <span v-if="isTrack && view.pillText !== ''" class="gc-pill">{{
           view.pillText
@@ -170,9 +236,9 @@ const isTrack = computed(() => props.look.shape === 'track')
         <span
           v-if="view.fill !== ''"
           class="gc-tank__fill"
-          :style="{ height: view.fill }"
+          :style="[{ height: view.fill }, customFillStyle]"
         >
-          <i class="gc-tank__surface" />
+          <i class="gc-tank__surface" :style="currentStopStyle" />
         </span>
       </span>
       <span v-else class="gc-thermo">
@@ -180,10 +246,10 @@ const isTrack = computed(() => props.look.shape === 'track')
           <i
             v-if="view.fill !== ''"
             class="gc-thermo__fill"
-            :style="{ height: view.fill }"
+            :style="[{ height: view.fill }, customFillStyle]"
           />
         </span>
-        <i class="gc-thermo__bulb" />
+        <i class="gc-thermo__bulb" :style="currentStopStyle" />
       </span>
       <span v-if="isTrack && view.ticks.length > 0" class="gc-ticks">
         <i

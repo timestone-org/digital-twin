@@ -4,8 +4,8 @@
  * ⚠ 不用 teleport 存根，理由同 DtPopover.spec。
  */
 import { mount } from '@vue/test-utils'
-import { afterEach, describe, expect, it } from 'vitest'
-import { nextTick } from 'vue'
+import { afterEach, describe, expect, it, vi } from 'vitest'
+import { h, nextTick } from 'vue'
 
 import DtTooltip from '../../src/components/DtTooltip/DtTooltip.vue'
 
@@ -14,7 +14,14 @@ type TooltipProps = InstanceType<typeof DtTooltip>['$props']
 function mountTooltip(props: Partial<TooltipProps> = {}) {
   return mount(DtTooltip, {
     props: { content: '这里是提示', ...props },
-    slots: { default: '<button class="trigger">悬停我</button>' },
+    slots: {
+      default: (slot: { describedby: string | undefined }) =>
+        h(
+          'button',
+          { class: 'trigger', 'aria-describedby': slot.describedby },
+          '悬停我',
+        ),
+    },
     attachTo: document.body,
   })
 }
@@ -66,9 +73,37 @@ describe('DtTooltip 显隐', () => {
 
   it('⚠ Esc 可关掉，覆盖 WCAG 对悬浮内容的可消除要求', async () => {
     const wrapper = mountTooltip()
+    const escaped = vi.fn()
+    document.addEventListener('keydown', escaped)
     await wrapper.find('.dt-tooltip').trigger('mouseenter')
     await wrapper.find('.dt-tooltip').trigger('keydown.escape')
     expect(bubble()).toBeNull()
+    expect(escaped).not.toHaveBeenCalled()
+    document.removeEventListener('keydown', escaped)
+    wrapper.unmount()
+  })
+
+  it('提示关闭时 Esc 继续交给外层快捷键', async () => {
+    const wrapper = mountTooltip()
+    const escaped = vi.fn()
+    document.addEventListener('keydown', escaped)
+
+    await wrapper.find('.trigger').trigger('keydown.escape')
+
+    expect(escaped).toHaveBeenCalledTimes(1)
+    document.removeEventListener('keydown', escaped)
+    wrapper.unmount()
+  })
+
+  it('没有提示内容时 Esc 同样继续冒泡', async () => {
+    const wrapper = mountTooltip({ content: '' })
+    const escaped = vi.fn()
+    document.addEventListener('keydown', escaped)
+
+    await wrapper.find('.trigger').trigger('keydown.escape')
+
+    expect(escaped).toHaveBeenCalledTimes(1)
+    document.removeEventListener('keydown', escaped)
     wrapper.unmount()
   })
 
@@ -125,10 +160,10 @@ describe('DtTooltip 显隐', () => {
 })
 
 describe('DtTooltip 无障碍', () => {
-  it('触发器经 aria-describedby 指向气泡', async () => {
+  it('真正可聚焦的触发控件经 aria-describedby 指向气泡', async () => {
     const wrapper = mountTooltip()
     await wrapper.find('.dt-tooltip').trigger('mouseenter')
-    expect(wrapper.find('.dt-tooltip').attributes('aria-describedby')).toBe(
+    expect(wrapper.find('.trigger').attributes('aria-describedby')).toBe(
       bubble()?.id,
     )
     wrapper.unmount()
@@ -137,7 +172,7 @@ describe('DtTooltip 无障碍', () => {
   it('⚠ 没内容时不挂 describedby：它会指向不存在的节点', () => {
     const wrapper = mountTooltip({ content: '' })
     expect(
-      wrapper.find('.dt-tooltip').attributes('aria-describedby'),
+      wrapper.find('.trigger').attributes('aria-describedby'),
     ).toBeUndefined()
     wrapper.unmount()
   })

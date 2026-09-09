@@ -8,6 +8,7 @@
  * 为的是把「加载中」「冲突」「出错」这几种界面分支逐个摆出来。
  */
 import type { DashboardNodePayload } from '@dt/contracts'
+import { DtHelpTip } from '@dt/ui'
 import { flushPromises, mount } from '@vue/test-utils'
 import { createPinia, setActivePinia } from 'pinia'
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
@@ -346,6 +347,21 @@ describe('右栏字段', () => {
     const schema: unknown = pane.props('schema')
     expect(Array.isArray(schema)).toBe(true)
     expect(pane.props('row')).toEqual({ kind: 'value' })
+  })
+
+  it('选中部件时用提示组件说明该部件的用途', async () => {
+    const wrapper = await mountPage()
+
+    await wrapper.find('[data-test="pick-part:1"]').trigger('click')
+    await nextTick()
+
+    const pane = wrapper.findComponent(FieldsPane)
+    expect(pane.props('help')).toContain('主读数')
+    expect(
+      pane
+        .findAllComponents(DtHelpTip)
+        .some((tip) => String(tip.props('text')).includes('主读数')),
+    ).toBe(true)
   })
 
   it('选中格时摆的是这一格的取值', async () => {

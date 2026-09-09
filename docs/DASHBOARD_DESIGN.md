@@ -240,6 +240,13 @@ interface ModuleComponentProps {
 按 `ConfigField.type`（`string`/`number`/`enum`/`color`/`boolean`/`array`/`object`/…）
 渲染对应控件。新增模块自动获得完整属性面板。
 
+字段只常驻显示一个简短标签；`help` 统一由 `DtHelpTip` 按需展开，错误信息才常驻显示。
+模块通过 `validateConfig` 声明跨字段约束，通过 `validateBindings` 声明配置与绑定的联合约束；
+属性面板即时提示，保存入口对全屏节点统一复核并阻止无效配置落库。
+
+`configPresets` 是显式浅合并的配置预设。多数仅调整观感；场景模板可包含
+`contentKeys`，此时按钮提示必须明确说明会覆盖当前内容或数据规则。
+
 同理，绑定选点面板读 `bindings: BindingSpec[]`，自动摆出该模块的槽位。
 
 面板的入参只有「槽声明 + 当前绑定」两样，**不认识"大屏节点"**，所以它同时服务

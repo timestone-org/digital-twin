@@ -105,6 +105,28 @@ describe('直通渲染', () => {
       '--if-level-color': 'var(--state-info)',
     })
   })
+
+  it('异常子槽不使用旧级别、正文或时间', () => {
+    const [row] = buildFeedRows({
+      config: {},
+      rows: [{ level: 'danger', text: '旧消息', time: '10:24' }],
+      slots: {
+        'feedValues[0].level': { state: 'error' },
+        'feedValues[0].text': { state: 'pending' },
+        'feedValues[0].time': { state: 'error', message: '时钟源断连' },
+      },
+    })
+
+    expect(row).toMatchObject({
+      level: '',
+      label: '',
+      text: NO_DATA,
+      pickValue: '',
+      time: '',
+      vars: {},
+    })
+    expect(row?.issue?.state).toBe('error')
+  })
 })
 
 describe('三槽全空的条目整条跳过', () => {

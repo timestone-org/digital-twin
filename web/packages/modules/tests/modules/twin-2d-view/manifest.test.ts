@@ -54,6 +54,14 @@ describe('2D 孪生清单的身份', () => {
     expect(groups).toEqual(['标题', '画面', '运行态'])
     expect(groups).not.toContain(manifest.displayName)
   })
+
+  it('套用外观不会覆盖图文档、标题或内置图标能力', () => {
+    expect(manifest.contentKeys).toEqual([
+      'title',
+      TWIN_2D_CONFIG_KEY,
+      'showSprite',
+    ])
+  })
 })
 
 describe('2D 孪生清单的状态与联动声明', () => {
@@ -80,7 +88,7 @@ describe('2D 孪生清单的状态与联动声明', () => {
       configKey: TWIN_2D_CONFIG_KEY,
       routeName: 'twin-2d-editor',
       label: '打开 2D 孪生编辑器',
-      hint: '节点、连线、标注与节点样式都在那里画。',
+      hint: '在 2D 孪生编辑器中维护节点、连线、标注与节点样式。',
     })
   })
 

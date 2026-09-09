@@ -156,6 +156,7 @@ const groups = computed(() => {
   const counts = new Map<string, number>()
   for (const row of visible.value) {
     const name = groupOf(row)
+    if (look.value.grouping === 'tabs' && name === OTHER_GROUP) continue
     counts.set(name, (counts.get(name) ?? 0) + 1)
   }
   return [...counts].map(([name, count]) => ({ name, count }))

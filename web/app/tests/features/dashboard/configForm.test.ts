@@ -9,6 +9,7 @@ import {
   activePresetIds,
   formGroups,
   isFieldVisible,
+  presetHelp,
 } from '@/features/dashboard/configForm'
 
 const SHOW: ConfigField = {
@@ -161,6 +162,20 @@ describe('预设命中', () => {
 
   it('没有预设就给空集', () => {
     expect(activePresetIds([], { size: 12 })).toEqual(new Set())
+  })
+
+  it('覆盖内容键的场景预设在按需提示中明确告警', () => {
+    const template = {
+      id: 'alarm',
+      label: '活动告警',
+      hint: '按严重度排序。',
+      config: { rowFilter: 'alarm', hover: 'tint' },
+    }
+
+    expect(presetHelp(template, ['rowFilter'])).toBe(
+      '按严重度排序。 该预设会覆盖当前内容或数据规则。',
+    )
+    expect(presetHelp(template, [])).toBe('按严重度排序。')
   })
 })
 

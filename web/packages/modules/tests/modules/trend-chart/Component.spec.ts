@@ -229,6 +229,45 @@ describe('六条先接两条', () => {
   })
 })
 
+describe('错时堆叠降级', () => {
+  it('图例关闭时仍显示降级说明，并写入图区的可访问摘要', async () => {
+    const later = line(3, 4)
+    const points = Array.isArray(later.seriesPoints) ? later.seriesPoints : []
+    const shifted = {
+      ...later,
+      seriesPoints: points.map((point) => ({
+        ...asRecord(point),
+        t: Number(asRecord(point).t) + 30_000,
+      })),
+    }
+    const wrapper = await render(
+      {
+        [SERIES_ITEMS_KEY]: TWO,
+        chartStyle: 'stackedArea',
+        showLegend: false,
+      },
+      rows(line(1, 2), shifted),
+      {
+        [historyFieldKey(0)]: { state: 'ok' },
+        [historyFieldKey(1)]: { state: 'ok' },
+      },
+    )
+
+    const warning = '时间轴未对齐，当前按独立面积曲线显示'
+    expect(
+      wrapper.get('.dt-chart__notice button').attributes('aria-label'),
+    ).toBe('图表状态说明')
+    expect(wrapper.get('.dt-chart__notice-sr').text()).toBe(warning)
+    expect(wrapper.get('.dt-chart__notice-sr').attributes('role')).toBe(
+      'status',
+    )
+    expect(wrapper.get('.dt-chart__canvas').attributes('aria-label')).toContain(
+      warning,
+    )
+    wrapper.unmount()
+  })
+})
+
 describe('刷新口径', () => {
   it('值变只替换 series / legend 两个键', async () => {
     const slots = { [historyFieldKey(0)]: { state: 'ok' as const } }

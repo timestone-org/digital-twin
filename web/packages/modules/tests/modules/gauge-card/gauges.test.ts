@@ -424,10 +424,27 @@ describe('目标标记', () => {
     const view = only(
       { [GAUGE_ITEMS_KEY]: [item({ target: 80 })], targetMark: true },
       [{ value: 42, aux: 30 }],
-      slots,
+      {
+        ...slots,
+        [gaugeFieldKey(0, 'aux')]: { state: 'ok' },
+      },
     )
 
     expect(view.target?.percent).toBe(30)
+  })
+
+  it('目标槽已绑定但取值失败时不回退行内静态目标', () => {
+    const view = only(
+      { [GAUGE_ITEMS_KEY]: [item({ target: 80 })], targetMark: true },
+      [{ value: 42 }],
+      {
+        ...slots,
+        [gaugeFieldKey(0, 'aux')]: { state: 'error', message: '目标点位断连' },
+      },
+    )
+
+    expect(view.target).toBeNull()
+    expect(view.targetReason).toContain('目标点位断连')
   })
 
   it('目标贴到两端时换对齐基准', () => {

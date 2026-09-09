@@ -83,6 +83,10 @@ describe('新模块实际清单', () => {
     '已有中间轴绑定时 %s 不允许静默移位',
     async (tool) => {
       const { editor, run } = setup('radar-chart')
+      await run('add_config_item', {
+        field: 'indicators',
+        values: { name: '第四轴', min: 0, max: 100 },
+      })
       await run('write_binding', {
         field_key: 'axisValues[1].value',
         source_kind: 'static',
@@ -94,7 +98,11 @@ describe('新模块实际清单', () => {
           ? { field: 'indicators', index: 0 }
           : {
               path: ['indicators'],
-              value: [{ name: '新的', min: 0, max: 100 }],
+              value: [
+                { name: '新的 1', min: 0, max: 100 },
+                { name: '新的 2', min: 0, max: 100 },
+                { name: '新的 3', min: 0, max: 100 },
+              ],
             }
       await expect(run(tool, args)).rejects.toThrow(/绑定/)
       expect(JSON.stringify(editor.nodes.value)).toBe(before)
@@ -184,18 +192,22 @@ describe('新模块实际清单', () => {
 
 it('删除末尾未绑定轴不影响前面已绑定轴，撤销恢复全部配置', async () => {
   const { editor, run } = setup('radar-chart')
+  await run('add_config_item', {
+    field: 'indicators',
+    values: { name: '第四轴', min: 0, max: 100 },
+  })
   await run('write_binding', {
     field_key: 'axisValues[0].value',
     source_kind: 'static',
     value: 70,
   })
   const id = editor.nodes.value[0]?.bindings[0]?.id
-  await run('remove_config_item', { field: 'indicators', index: 2 })
+  await run('remove_config_item', { field: 'indicators', index: 3 })
   expect(editor.nodes.value[0]?.bindings[0]?.id).toBe(id)
-  expect(editor.nodes.value[0]?.configJson.indicators).toHaveLength(2)
+  expect(editor.nodes.value[0]?.configJson.indicators).toHaveLength(3)
   editor.undo()
   expect(await run('read_bindings')).toMatchObject({
-    slots: [{ row_count: 3 }],
+    slots: [{ row_count: 4 }],
   })
 })
 

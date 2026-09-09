@@ -3,7 +3,7 @@
  * @fileoverview 批量表单的一行：注册表派发的通用控件 + 「混合」徽标。
  * 用户一改即「统一为此值」，由上层写到全部选中节点。
  */
-import { DtTag } from '@dt/ui'
+import { DtHelpTip, DtTag } from '@dt/ui'
 import { computed } from 'vue'
 
 import type { BatchFieldState } from '@/features/dashboard/batchConfig'
@@ -32,6 +32,11 @@ function onUpdate(value: unknown, isContinuous: boolean): void {
   <div class="flex flex-col gap-1.5">
     <div class="flex items-center gap-1.5">
       <span class="text-xs text-text-secondary">{{ state.field.label }}</span>
+      <DtHelpTip
+        v-if="state.field.help"
+        :text="state.field.help"
+        :label="`${state.field.label}说明`"
+      />
       <DtTag
         v-if="state.isMixed"
         size="sm"
@@ -48,8 +53,5 @@ function onUpdate(value: unknown, isContinuous: boolean): void {
       :depth="0"
       @update="onUpdate"
     />
-    <p v-if="state.field.help" class="m-0 text-2xs text-text-disabled">
-      {{ state.field.help }}
-    </p>
   </div>
 </template>

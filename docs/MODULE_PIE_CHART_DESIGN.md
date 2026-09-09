@@ -190,11 +190,10 @@ echarts 只认两条认领路径：名字等于某个系列的 `name`，或名�
 | 图例 / 提示框 / 数据标签 / 动画 | 四个工厂各自产出 |
 
 - **不 spread `cartesianAxisFields()`**：饼图没有坐标轴，摆出「X 轴名称」是纯噪声。
-- `centerText` / `centerUnit` / `innerRadius` 三项都挂
-  `when: { key: 'chartStyle', in: ['donut', 'rose'] }`——实心饼没有心可写，也没有
-  内半径可调。⚠ `when` 只判**同一层**里的键，且判的取值必须在控制字段的 `options`
-  名单里，两条都有契约用例守着。
-- `contentKeys: ['title', 'slices', 'emptyText', 'centerUnit']`。不声明的话这几个
+- `centerText` 与 `innerRadius` 只在 `donut` / `rose` 中显示；`centerUnit` 进一步只在
+  `centerText` 为 `sum` / `max` 时显示，片数模式始终不附加单位。条件沿字段链传递，
+  因此实心饼中三项都会隐藏。
+- `contentKeys: ['title', 'slices', 'emptyText', 'centerText', 'centerUnit', 'unit', 'precision']`。不声明的话这几个
   内容键会被 `styleKeysOf()` 当成观感键，别人套预设时把用户配好的扇区整片抹掉。
 - 逐片 `precision` **刻意没有 `default`**：留空 = 跟随整块那一档。给个 0 会让
   「没填」与「真的要 0 位」再也分不开。
@@ -207,7 +206,7 @@ echarts 只认两条认领路径：名字等于某个系列的 `name`，或名�
 ### 6.1 内半径压回去，而不是画成宽度 0
 
 内半径填得不小于外半径时，环带宽度为 0，屏上一片空白且零报错。取值层把它压到
-`外半径 − PIE_MIN_RING`——画得窄比画不出来诚实。
+`外半径 − PIE_MIN_RING`；外半径本身也以 `PIE_MIN_RING` 为下限，合法配置不会将整图缩为零。
 
 ---
 

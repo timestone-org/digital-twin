@@ -25,6 +25,7 @@ import {
   TWIN_2D_DEFAULT_FLOW_SPEED,
   TWIN_2D_EDGE_BINDING_KEY,
   TWIN_2D_EDGE_PRESETS,
+  TWIN_2D_EDGE_ROW_SLOTS,
   TWIN_2D_FIT_MODES,
   TWIN_2D_MAX_FIT_PADDING,
   TWIN_2D_MAX_FLOW_SPEED,
@@ -32,8 +33,10 @@ import {
   TWIN_2D_MIN_FLOW_SPEED,
   TWIN_2D_NODE_BINDING_KEY,
   TWIN_2D_STATUS_BINDING_KEY,
+  TWIN_2D_VIEW_BINDINGS,
   Twin2dStage,
   clamp,
+  edgeRowFieldKey,
   formatSlotValue,
   normalizeTwin2dConfig,
   twin2dBindingRows,
@@ -41,12 +44,15 @@ import {
   uniqueBy,
 } from '@dt/twin2d'
 import type {
+  Twin2dBindingRow,
+  Twin2dEdgeRowSlot,
   Twin2dEdgeState,
   Twin2dSlotFormat,
   Twin2dSlotRead,
   Twin2dSlotState,
   Twin2dStatus,
 } from '@dt/twin2d'
+import { DtHelpTip } from '@dt/ui'
 import { computed } from 'vue'
 
 import ModulePanel from '../../shared/ModulePanel.vue'
@@ -118,8 +124,8 @@ interface Twin2dReadout {
   tone: 'pending' | 'error'
   /** 画在角上的一句话。 */
   text: string
-  /** 原因那一项；说不出原因时一个属性都不产（空 `title` 会弹出一个空气泡）。 */
-  attrs: Record<string, string>
+  /** 按实体定位的说明；空串时不显示帮助入口。 */
+  detail: string
 }
 
 const title = computed(() => readText(props.config.title))
@@ -180,6 +186,8 @@ const rows = computed(() => ({
 // 对应关系，到大屏上全接错对象」
 const stitched = computed(() => twin2dValues(scene.value, rows.value))
 
+const bindingRows = computed(() => twin2dBindingRows(scene.value))
+
 const statusOverride = computed<Readonly<Record<string, Twin2dStatus | null>>>(
   () => {
     const out: Record<string, Twin2dStatus | null> = {}
@@ -201,13 +209,39 @@ function edgeLabelText(raw: unknown): string {
   return formatSlotValue(raw, EDGE_LABEL_FORMAT)
 }
 
+function edgeFieldKey(index: number, sub: Twin2dEdgeRowSlot): string {
+  return edgeRowFieldKey(index, sub)
+}
+
+/** 绑定尚未产生可信值时，不得继续驱动连线动画。 */
+function isUnavailable(fieldKey: string): boolean {
+  const state = props.meta?.slots?.[fieldKey]?.state
+  return state === 'pending' || state === 'error'
+}
+
+/** 这条连线是否有任一子槽已接入运行态。 */
+function hasEdgeRuntime(index: number): boolean {
+  return TWIN_2D_EDGE_ROW_SLOTS.some(
+    (sub) => props.meta?.slots?.[edgeFieldKey(index, sub)] !== undefined,
+  )
+}
+
 const edgeStates = computed<Readonly<Record<string, Twin2dEdgeState>>>(() => {
   const out: Record<string, Twin2dEdgeState> = {}
-  for (const [edgeId, reading] of Object.entries(stitched.value.edges)) {
-    out[edgeId] = {
-      active: boolFromValue(reading.active, EDGE_ACTIVE_FALLBACK),
-      reversed: reverseFromValue(reading.direction),
-      label: edgeLabelText(reading.value),
+  for (const [index, edge] of scene.value.edges.entries()) {
+    const reading = stitched.value.edges[edge.id]
+    if (reading === undefined && !hasEdgeRuntime(index)) continue
+    const activeKey = edgeFieldKey(index, 'active')
+    const directionKey = edgeFieldKey(index, 'direction')
+    const valueKey = edgeFieldKey(index, 'value')
+    out[edge.id] = {
+      active: isUnavailable(activeKey)
+        ? false
+        : boolFromValue(reading?.active, EDGE_ACTIVE_FALLBACK),
+      reversed: isUnavailable(directionKey)
+        ? false
+        : reverseFromValue(reading?.direction),
+      label: isUnavailable(valueKey) ? '—' : edgeLabelText(reading?.value),
     }
   }
   return out
@@ -269,15 +303,38 @@ const live = computed(() => ({
   edges: edgeStates.value,
 }))
 
-/**
- * 取不到那一档的原因，去重后拼成一句。
- * @param failed 落在 error 档的那些槽
- */
-function reasonsOf(failed: readonly ModuleSlotMeta[]): string {
-  const messages = failed
-    .map((slot) => slot.message ?? '')
-    .filter((message) => message !== '')
-  return [...new Set(messages)].join(REASON_SEP)
+/** 查找 fieldKey 所属的实体行。 */
+function rowOf(fieldKey: string): Twin2dBindingRow | undefined {
+  return bindingRows.value.find(
+    (row) =>
+      row.fieldKey === fieldKey ||
+      fieldKey.startsWith(`${row.slotKey}[${row.index}].`),
+  )
+}
+
+/** 将 fieldKey 翻成编辑器中可核对的实体与子槽名。 */
+function issueLabel(fieldKey: string): string {
+  const row = rowOf(fieldKey)
+  if (row === undefined) return fieldKey
+  const separator = fieldKey.lastIndexOf('.')
+  const sub = separator < 0 ? '' : fieldKey.slice(separator + 1)
+  const spec = TWIN_2D_VIEW_BINDINGS.find((item) => item.key === row.slotKey)
+  const label = spec?.arrayFields?.find((item) => item.key === sub)?.label
+  const suffix = label === undefined ? '' : ` · ${label}`
+  return `${row.label}（${row.entityId}）${suffix}`
+}
+
+/** 把局部取数状态整理为可展开的定位说明。 */
+function issueDetails(
+  issues: readonly [string, ModuleSlotMeta][],
+  fallback: string,
+): string {
+  return issues
+    .map(([fieldKey, slot]) => {
+      const message = slot.message?.trim() || fallback
+      return `${issueLabel(fieldKey)}：${message}`
+    })
+    .join(REASON_SEP)
 }
 
 /**
@@ -291,18 +348,23 @@ function reasonsOf(failed: readonly ModuleSlotMeta[]): string {
  */
 const readout = computed<Twin2dReadout | null>(() => {
   const all = Object.values(props.meta?.slots ?? {})
-  const failed = all.filter((slot) => slot.state === 'error')
+  const entries = Object.entries(props.meta?.slots ?? {})
+  const failed = entries.filter((entry) => entry[1].state === 'error')
   if (failed.length > 0) {
-    const reason = reasonsOf(failed)
     return {
       tone: 'error',
       text: `${failed.length} 个读数取不到`,
-      attrs: reason === '' ? {} : { title: reason },
+      detail: issueDetails(failed, '取数失败'),
     }
   }
   const waiting = all.filter((slot) => slot.state === 'pending').length
   if (waiting === 0) return null
-  return { tone: 'pending', text: `${waiting} 个读数还没来`, attrs: {} }
+  const pending = entries.filter((entry) => entry[1].state === 'pending')
+  return {
+    tone: 'pending',
+    text: `${waiting} 个读数还没来`,
+    detail: issueDetails(pending, '等待首帧'),
+  }
 })
 
 /**
@@ -344,9 +406,13 @@ function onCanvasClick(event: MouseEvent): void {
         v-if="readout !== null"
         class="dt-twin2d__readout"
         :class="`dt-twin2d__readout--${readout.tone}`"
-        v-bind="readout.attrs"
       >
         {{ readout.text }}
+        <DtHelpTip
+          v-if="readout.detail !== ''"
+          :text="readout.detail"
+          label="查看绑定详情"
+        />
       </p>
     </div>
   </ModulePanel>
@@ -368,6 +434,9 @@ function onCanvasClick(event: MouseEvent): void {
 
 .dt-twin2d__readout {
   position: absolute;
+  display: flex;
+  align-items: center;
+  gap: 4px;
   right: 8px;
   bottom: 6px;
   margin: 0;

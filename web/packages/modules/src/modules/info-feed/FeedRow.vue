@@ -5,6 +5,7 @@
  * ⚠ 圆点与级别文字是同一件事的两种编码：色觉障碍、大屏远看与读屏都读不出色相，
  * 关掉级别文字就只剩色相在表达级别。
  */
+import { DtTooltip } from '@dt/ui'
 import { computed } from 'vue'
 
 import type { FeedRowView } from './feed'
@@ -45,6 +46,15 @@ function onPick(event: MouseEvent): void {
 
 <template>
   <div class="if-row" :class="look.classes" :style="row.vars" @click="onPick">
+    <DtTooltip v-if="row.issue !== null" :content="row.issue.reason">
+      <span
+        class="if-status"
+        :class="`if-status--${row.issue.state}`"
+        tabindex="0"
+        :aria-label="row.issue.reason"
+        >{{ row.issue.mark }}</span
+      >
+    </DtTooltip>
     <span v-if="look.show.dot" class="if-dot" aria-hidden="true" />
     <span v-if="showLevel" class="if-level">{{ row.label }}</span>
     <span class="if-text" :title="fullText">{{ row.text }}</span>
@@ -54,4 +64,19 @@ function onPick(event: MouseEvent): void {
 
 <style scoped lang="scss">
 @use './variants';
+
+.if-status {
+  color: var(--text-secondary);
+  font-size: var(--if-level-size, 12px);
+}
+
+.if-status--error {
+  color: var(--state-danger);
+}
+
+.if-status:focus-visible {
+  border-radius: var(--radius-sm);
+  outline: 2px solid var(--border-focus);
+  outline-offset: 2px;
+}
 </style>

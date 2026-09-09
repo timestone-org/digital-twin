@@ -182,6 +182,7 @@ const UNIT_COLUMN_CLASS = 'il--unit-column'
 </script>
 
 <script setup lang="ts">
+import { DtTooltip } from '@dt/ui'
 import { computed, type CSSProperties } from 'vue'
 
 import CellBadge from './CellBadge.vue'
@@ -420,6 +421,19 @@ function onPick(event: MouseEvent): void {
 
 <template>
   <div class="il-row" :class="rowClasses" :style="rowStyle" @click="onPick">
+    <DtTooltip
+      v-if="row.issue !== null"
+      class="il-status-tip"
+      :content="row.issue.reason"
+    >
+      <span
+        class="il-status"
+        :class="`il-status--${row.issue.state}`"
+        tabindex="0"
+        :aria-label="row.issue.reason"
+        >{{ row.issue.mark }}</span
+      >
+    </DtTooltip>
     <div
       v-for="group in groups"
       :key="group.key"

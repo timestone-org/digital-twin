@@ -61,7 +61,7 @@ function rowLabels(
 export default defineModule({
   type: 'info-card',
   description:
-    '信息卡片：一块摆 1..N 个格，一格纵向四段「徽章·标签 ｜ 读数 + 单位 ｜ 涨跌块 ｜ 脚注」，排布、格外壳、标签、数值、单位、图标六组档位正交可配，读数可走渐变文字与素材图标 / emoji。要一屏好看的 KPI 网格、带图标或带「较上期」对比时用它；要自己拼段序、或要在格里嵌进度条用 data-card，要量程 / 进度 / 液位那种图形用 gauge-card，要竖着一列多字段的行用 info-list。一个数组绑定槽 `cardValues`，行钉在 `items` 配置项上：第 i 行喂第 i 格，子槽 `value` 是主读数、`aux` 是涨跌块要的对比值（上期 / 目标），都收数值；单位、小数位、emoji 与固定颜色是逐格的配置项，不从点位来。⚠ 涨跌块要 `value` 与 `aux` 两个子槽都有值才画，缺一整块不出。⚠ 删掉 `items` 中间一格，它之后每一格的绑定都会改喂前一格。',
+    '信息卡片用于呈现一组固定 KPI，支持图标、数值、单位、状态规则和环比信息；需要自由组合内容时可选可组合卡片，需要量程图形时可选仪表卡片。数据通过 cardValues 数组绑定，第 i 行对应 items 第 i 项，value 为主值，aux 为对比基准。删除或调整 items 顺序会改变后续绑定索引，操作后必须复核绑定。',
   displayName: '信息卡片',
   category: '数据',
   icon: 'layout-grid',
@@ -87,14 +87,14 @@ export default defineModule({
       group: '内容',
       default: '',
       span: 'full',
-      placeholder: '留空则不画标题栏',
+      placeholder: '留空则隐藏标题栏',
     },
     {
       key: CARD_ITEMS_KEY,
       label: '格',
       type: 'array',
       group: '内容',
-      help: '每一项在绑点面板上是一行。⚠ 删掉中间一项，它之后每一格的绑定都会改喂前一格——删完请核对绑点面板。',
+      help: '每项对应一个绑定行。删除中间项会使后续绑定索引前移，操作后请复核绑定。',
       itemLabelKey: 'label',
       minItems: 1,
       // ⚠ 出厂给一项：空列表时模块是一块什么都没有的白板，而属性面板上
@@ -107,19 +107,19 @@ export default defineModule({
           label: '名称',
           type: 'string',
           default: '',
-          placeholder: '留空则这一格不画标签行',
+          placeholder: '留空则隐藏标签',
           // ⚠ 留空不是「回落一个默认名」：整行不渲染，档位类名也跟着不挂，
           //   挂了会多出一列空网格 + 一个列间距，读数偏移几像素
-          help: '这一格的名称；留空则不画标签行。绑点面板上仍按「第 N 格」称呼它。',
+          help: '数据格名称；留空则隐藏标签，绑定面板仍按序号标识。',
         },
         {
           key: 'unit',
           label: '单位',
           type: 'string',
           default: '',
-          placeholder: '如 ℃ / kWh / m³/h',
+          placeholder: '例如：℃ / kWh / m³/h',
           // ⚠ 不去首尾空格：「° C」这类带空格是用户显式的排版意图
-          help: '首尾空格照原样保留，「° C」这种写法是有意的排版。',
+          help: '保留首尾空格，可用于控制单位与读数的间距。',
         },
         {
           key: 'precision',
@@ -135,7 +135,7 @@ export default defineModule({
           label: '值类型',
           type: 'enum',
           default: 'number',
-          help: '⚠ 只有数值档会去评估取值规则：开关量与文本命中不了阈值，也就没有告警色。',
+          help: '仅数值类型参与取值规则计算；布尔值与文本不匹配阈值，也不显示规则颜色。',
           options: [...CARD_VALUE_KINDS],
         },
         {
@@ -157,28 +157,28 @@ export default defineModule({
           label: 'emoji 图标',
           type: 'string',
           default: '',
-          placeholder: '如 🌡️ 💧 🌧️',
+          placeholder: '例如：🌡️ 💧 🌧️',
         },
         {
           key: 'icon',
           label: '素材图标',
           type: 'image',
           default: '',
-          help: '素材库里的图标；留空则用 emoji，两者都留空时这一格不画图标。',
+          help: '优先使用素材库图标；留空时使用 emoji，两者均为空时隐藏图标。',
         },
         {
           key: 'color',
           label: '固定颜色',
           type: 'color',
           default: '',
-          help: '填了就固定这一格的读数颜色并压过渐变与规则命中色。只填 var(--…) 引用，填死色值换肤时不跟着走。',
+          help: '设置数据格基础色并停用渐变；规则命中色优先。建议使用 var(--…) 主题变量。',
         },
         {
           key: 'emitValue',
           label: '联动值',
           type: 'string',
           default: '',
-          help: '点这一格时上抛的值，留空则这一格点了不上抛。',
+          help: '点击数据格时发送的联动值；留空则不发送格级事件。',
         },
       ],
     },
@@ -189,7 +189,7 @@ export default defineModule({
       group: '内容',
       default: '—',
       span: 'half',
-      help: '取不到值时画在读数位的那个符号。⚠ 缺值绝不伪造 0。',
+      help: '数据缺失时显示在读数位置的占位符；缺失值不会转换为 0。',
     },
     {
       key: 'layout',
@@ -198,7 +198,7 @@ export default defineModule({
       group: '排布',
       default: 'auto',
       span: 'half',
-      help: '自动 = 只有一格时大字铺满，多格时按网格。',
+      help: '自动模式下，单个数据格突出显示，多个数据格使用网格排列。',
       options: [...CARD_LAYOUTS],
     },
     {
@@ -208,7 +208,7 @@ export default defineModule({
       group: '排布',
       default: 'auto',
       span: 'half',
-      help: '自动 = 按最小列宽自适应铺满；行数一律随格数自适应，没有单独的行数档。',
+      help: '自动模式按最小列宽自适应排列，行数随数据格数量调整。',
       options: [...CARD_COLUMNS],
     },
     {
@@ -235,7 +235,7 @@ export default defineModule({
     },
     {
       key: 'padX',
-      label: '整块左右内边距 (px)',
+      label: '模块水平内边距 (px)',
       type: 'range',
       group: '排布',
       default: 10,
@@ -246,7 +246,7 @@ export default defineModule({
     },
     {
       key: 'padY',
-      label: '整块上下内边距 (px)',
+      label: '模块垂直内边距 (px)',
       type: 'range',
       group: '排布',
       default: 6,
@@ -293,7 +293,7 @@ export default defineModule({
       group: '外壳',
       default: 'none',
       span: 'half',
-      help: '⚠ 触摸屏没有悬停：只靠这一档的大屏，手指按上去是没有反馈的。',
+      help: '触摸设备不支持悬停，建议同时配置适用于触摸操作的反馈方式。',
       options: [...CARD_HOVERS],
     },
     {
@@ -312,7 +312,7 @@ export default defineModule({
       group: '标签',
       default: 'above',
       span: 'half',
-      help: '⚠ 它只管摆在哪儿，不管显不显示：这一格没有名称时整行不渲染，也不占位。要藏某一格的标签，把那一项的「名称」留空。',
+      help: '设置标签相对读数的位置；名称留空时不显示标签或占位。',
       options: [...CARD_LABEL_PLACES],
     },
     {
@@ -356,7 +356,7 @@ export default defineModule({
       max: 200,
       step: 1,
       span: 'half',
-      help: '0 = 跟着格宽自适应。填正数即钉死一个字号，多格并排时字号才对得齐。',
+      help: '0 表示根据数据格宽度自适应；正数表示固定字号，便于多个数据格保持一致。',
     },
     {
       key: 'valueColor',
@@ -366,7 +366,7 @@ export default defineModule({
       // 命中规则的那一格改用规则自己的颜色，这里是没命中时的颜色
       default: 'var(--accent-primary)',
       span: 'half',
-      help: '命中取值规则的那一格改用规则的颜色，这里配的是没有命中时的颜色。',
+      help: '设置未命中取值规则时的颜色；规则命中后优先使用规则颜色。',
     },
     {
       key: 'valueFill',
@@ -375,7 +375,7 @@ export default defineModule({
       group: '数值',
       default: 'solid',
       span: 'half',
-      help: '⚠ 渐变文字有三个前提：模块开了渐变、这一格没有固定颜色也没命中规则、这个值有资格用数字字体。缺一即静默回落纯色。',
+      help: '仅当启用渐变、数据格无固定颜色且未命中规则、读数使用数字字体时生效；其他情况使用纯色。',
       options: [...CARD_VALUE_FILLS],
     },
     {
@@ -388,7 +388,7 @@ export default defineModule({
       itemLabelKey: 'color',
       span: 'full',
       when: { key: 'valueFill', in: ['gradient'] },
-      help: '≥2 个色标才画渐变，只填一个整组回落纯色。',
+      help: '至少配置 2 个色标才显示渐变，仅配置 1 个时使用纯色。',
       itemSchema: [
         {
           key: 'color',
@@ -409,7 +409,7 @@ export default defineModule({
       step: 5,
       span: 'half',
       when: { key: 'valueFill', in: ['gradient'] },
-      help: '0 = 自下而上。',
+      help: '0 表示自下而上。',
     },
     {
       key: 'valueGlow',
@@ -421,7 +421,7 @@ export default defineModule({
       max: 24,
       step: 1,
       span: 'half',
-      help: '⚠ 渐变文字档下辉光一律不画：阴影会糊在字面上。',
+      help: '渐变文字不显示辉光，避免阴影影响文字清晰度。',
     },
     {
       key: 'valueFont',
@@ -430,7 +430,7 @@ export default defineModule({
       group: '数值',
       default: 'digit',
       span: 'half',
-      help: '数字字体是等宽的，读数逐帧跳动时列宽不抖。',
+      help: '数字字体采用等宽样式，可避免读数变化时宽度跳动。',
       options: [...CARD_VALUE_FONTS],
     },
     {
@@ -440,7 +440,7 @@ export default defineModule({
       group: '数值',
       default: true,
       span: 'half',
-      help: '开着时文本值与缺值回落正文字体 + 纯色；关掉则一视同仁。',
+      help: '启用后，文本值与缺值占位使用正文字体和纯色；停用后沿用数值样式。',
     },
     {
       key: 'unit',
@@ -455,7 +455,7 @@ export default defineModule({
           label: '位置',
           type: 'enum',
           default: 'baseline',
-          help: '两档都与读数同基线，差的只是那一道小间隙。',
+          help: '两种位置均与读数保持同一基线，仅间距不同。',
           options: [...CARD_UNIT_PLACES],
         },
         {
@@ -472,7 +472,7 @@ export default defineModule({
           label: '文字色',
           type: 'enum',
           default: 'secondary',
-          help: '「跟随数值色」会一并跟着命中规则后的告警色走。',
+          help: '选择「跟随数值色」时，单位同步使用规则命中后的状态颜色。',
           options: [...CARD_UNIT_TONES],
         },
         {
@@ -501,7 +501,7 @@ export default defineModule({
       group: '格式',
       default: false,
       span: 'half',
-      help: '开着时按「小数位」补零对齐（42.00 / 3.50），读数跳动时位数不变。',
+      help: '启用后按「小数位」补零对齐（如 42.00 / 3.50），保持读数位数稳定。',
     },
     {
       key: 'icon',
@@ -509,7 +509,7 @@ export default defineModule({
       type: 'object',
       group: '图标',
       span: 'full',
-      help: '角标钉在格的右上角，图标容器跟着文字走；两者都取这一项配的素材图标或 emoji。',
+      help: '角标固定在数据格右上角，图标容器随文字排列；两者均使用此处配置的素材图标或 emoji。',
       default: {
         mode: 'none',
         position: 'left',
@@ -527,7 +527,7 @@ export default defineModule({
       fields: [
         {
           key: 'mode',
-          label: '画法',
+          label: '样式',
           type: 'enum',
           default: 'none',
           options: [...CARD_ICON_MODES],
@@ -537,7 +537,8 @@ export default defineModule({
           label: '方位',
           type: 'enum',
           default: 'left',
-          help: '⚠ 只对图标容器生效：右上角标钉死在角上，不看这一项。',
+          when: { key: 'mode', in: ['badge'] },
+          help: '仅影响图标容器；右上角标位置固定，不受此设置影响。',
           options: [...CARD_ICON_POSITIONS],
         },
         {
@@ -556,6 +557,7 @@ export default defineModule({
           label: '形状',
           type: 'enum',
           default: 'circle',
+          when: { key: 'mode', in: ['badge'] },
           options: [...CARD_ICON_SHAPES],
         },
         {
@@ -563,14 +565,16 @@ export default defineModule({
           label: '底色起',
           type: 'color',
           default: '',
-          placeholder: '留空 = 跟随强调色',
+          when: { key: 'mode', in: ['badge'] },
+          placeholder: '留空时跟随强调色',
         },
         {
           key: 'bgTo',
           label: '底色止',
           type: 'color',
           default: '',
-          placeholder: '留空 = 跟随强调色',
+          when: { key: 'mode', in: ['badge'] },
+          placeholder: '留空时跟随强调色',
         },
         {
           key: 'bgAngle',
@@ -580,13 +584,15 @@ export default defineModule({
           min: 0,
           max: 360,
           step: 5,
+          when: { key: 'mode', in: ['badge'] },
         },
         {
           key: 'borderColor',
           label: '描边色',
           type: 'color',
           default: '',
-          placeholder: '留空 = 跟随强调色',
+          when: { key: 'mode', in: ['badge'] },
+          placeholder: '留空时跟随强调色',
         },
         {
           key: 'glow',
@@ -596,6 +602,7 @@ export default defineModule({
           min: 0,
           max: 24,
           step: 1,
+          when: { key: 'mode', in: ['badge'] },
         },
         {
           key: 'gap',
@@ -605,6 +612,7 @@ export default defineModule({
           min: 0,
           max: 40,
           step: 1,
+          when: { key: 'mode', in: ['badge'] },
         },
         {
           key: 'fontSize',
@@ -633,16 +641,17 @@ export default defineModule({
       type: 'object',
       group: '对比',
       span: 'full',
-      help: '要接「对比值」子槽才画：当前值与对比值任一缺席时整块不出。',
+      help: '需绑定「对比值」子槽；当前值或对比值缺失时不显示。',
       default: { show: false, mode: 'percent', label: '', invertTrend: false },
       fields: [
         { key: 'show', label: '显示涨跌块', type: 'boolean', default: false },
         {
           key: 'mode',
-          label: '显示什么',
+          label: '对比方式',
           type: 'enum',
           default: 'percent',
-          help: '⚠ 百分比档在对比基数为 0 时回退显绝对差值，不留空。',
+          when: { key: 'show', in: [true] },
+          help: '对比基数为 0 时，百分比模式改为显示绝对差值。',
           options: [...CARD_COMPARE_MODES],
         },
         {
@@ -650,14 +659,16 @@ export default defineModule({
           label: '标注',
           type: 'string',
           default: '',
-          placeholder: '如 较上期 / 目标',
+          when: { key: 'show', in: [true] },
+          placeholder: '例如：较上期 / 目标',
         },
         {
           key: 'invertTrend',
           label: '下降为好',
           type: 'boolean',
           default: false,
-          help: '开着时数值下降显绿（能耗 / 成本类指标）。',
+          when: { key: 'show', in: [true] },
+          help: '启用后将数值下降标记为正向变化，适用于能耗或成本指标。',
         },
       ],
     },
@@ -669,7 +680,7 @@ export default defineModule({
       group: '告警',
       default: 'none',
       span: 'half',
-      help: '⚠ 只在命中规则时画点：没有判据就连「正常」都不该说。',
+      help: '仅在命中取值规则时显示状态点；未配置有效判据时不显示。',
       options: [...CARD_STATUS_DOTS],
     },
   ],

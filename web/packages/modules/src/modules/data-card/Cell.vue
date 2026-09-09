@@ -6,12 +6,19 @@
  * ⚠ 格自己不判「有没有值」：那是各部件的事（读数画占位符、进度条整件不画），
  * 在这里统一判的话，一个只摆了名称与分隔线的格会因为没接槽而整格消失。
  */
+import { DtTooltip } from '@dt/ui'
 import { computed, type CSSProperties } from 'vue'
 
 import CardPartRenderer from '../../cardParts/CardPartRenderer.vue'
 import { CARD_PART_PLACE_KEY } from '../../cardParts/define'
 import { readPlace, toCardLines } from '../../cardParts/lines'
-import type { CardCellView, CardPartMeta } from '../../cardParts/types'
+import {
+  CARD_SLOT_KEYS,
+  type CardCellView,
+  type CardPartMeta,
+  type CardSlotKey,
+} from '../../cardParts/types'
+import { reasonOf } from '../../shared/slotState'
 import type { CardPartRow } from './cells'
 import type { CardAlarm } from './groups'
 
@@ -33,6 +40,33 @@ const props = defineProps<{
 const emit = defineEmits<{ pick: [value: string] }>()
 
 const isPickable = computed(() => props.emitValue !== '')
+
+const SLOT_LABELS: Readonly<Record<CardSlotKey, string>> = {
+  value: '主读数',
+  aux: '副读数',
+  aux2: '第三个数',
+  ratio: '占比',
+  state: '状态',
+  extra1: '附加字段一',
+  extra2: '附加字段二',
+  extra3: '附加字段三',
+}
+
+/** 优先报告错误，其次报告仍在等待首帧的子槽。 */
+const issue = computed(() => {
+  for (const state of ['error', 'pending'] as const) {
+    for (const key of CARD_SLOT_KEYS) {
+      const slot = props.meta.slots[key]
+      if (slot?.state !== state) continue
+      return {
+        state,
+        mark: state === 'error' ? '✕' : '⋯',
+        reason: `${SLOT_LABELS[key]}：${reasonOf(state, slot)}`,
+      }
+    }
+  }
+  return null
+})
 
 /**
  * 命中规则时把这一格染成规则的颜色。
@@ -65,11 +99,12 @@ const lines = computed(() =>
 )
 
 /**
- * ⚠ `.stop`：整块可点由宿主接管，不吞掉的话同一次点击会被兜底再抛一次，
- * toggle 类联动动作当场自我抵消。
+ * ⚠ 只有格级联动值存在时才阻止冒泡；否则点击继续交给整块联动。
  */
-function onPick(): void {
-  if (isPickable.value) emit('pick', props.emitValue)
+function onPick(event: MouseEvent): void {
+  if (!isPickable.value) return
+  event.stopPropagation()
+  emit('pick', props.emitValue)
 }
 </script>
 
@@ -86,8 +121,21 @@ function onPick(): void {
       },
     ]"
     :style="[vars, colorVars, alarmVars]"
-    @click.stop="onPick"
+    @click="onPick"
   >
+    <DtTooltip
+      v-if="issue !== null"
+      class="dc-cell__status-tip"
+      :content="issue.reason"
+    >
+      <span
+        class="dc-cell__status"
+        :class="`dc-cell__status--${issue.state}`"
+        tabindex="0"
+        :aria-label="issue.reason"
+        >{{ issue.mark }}</span
+      >
+    </DtTooltip>
     <template v-for="(line, at) in lines" :key="`line-${String(at)}`">
       <CardPartRenderer
         v-if="line.block !== null"
@@ -123,13 +171,36 @@ function onPick(): void {
   </div>
 </template>
 
-<style scoped>
+<style scoped lang="scss">
 .dc-cell {
+  position: relative;
   display: flex;
   flex-direction: column;
   gap: var(--dc-part-gap, 4px);
   min-width: 0;
   padding: var(--dc-cell-py, 8px) var(--dc-cell-px, 12px);
+}
+
+.dc-cell__status-tip {
+  position: absolute;
+  z-index: 1;
+  top: 2px;
+  right: 2px;
+}
+
+.dc-cell__status {
+  color: var(--text-secondary);
+  font-size: 10px;
+}
+
+.dc-cell__status--error {
+  color: var(--state-danger);
+}
+
+.dc-cell__status:focus-visible {
+  border-radius: var(--radius-sm);
+  outline: 2px solid var(--border-focus);
+  outline-offset: 2px;
 }
 
 /* 一行：左簇推到左、右簇推到右，中间的空档自己撑开 */

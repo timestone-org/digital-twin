@@ -1,14 +1,7 @@
 /**
- * @fileoverview 守四套外观预设的数据面：id 集合、只写清单里有的顶层键、枚举取值都在
- * 该字段的选项里、每套都把观感键写全（色阶两个端点除外——它们刻意没有 default，
- * 写进去就再也回不到「留空 = 自动」）、内容键一个都不写，以及逐套那几个
- * 「照抄别套就会错」的取值。
- *
- * ⚠ 这几类错法点了按钮什么都不会发生，而 typecheck、lint、build 全绿：
- * 键写错就是「配了不生效」；少写一个键，上一套留在配置里的那个值原样残留，
- * 而点亮判定做的是子集比较、照样把按钮点亮。
+ * @fileoverview 守日历热力预设：观感键完整、内容键隔离，枚举值与清单一致。
  */
-import type { ConfigField } from '@dt/contracts'
+import { styleKeysOf, type ConfigField } from '@dt/contracts'
 import { describe, expect, it } from 'vitest'
 
 import manifest from '../../../src/modules/calendar-heat/manifest'
@@ -17,18 +10,7 @@ import { CALENDAR_HEAT_PRESETS } from '../../../src/modules/calendar-heat/preset
 const SCHEMA = manifest.configSchema
 const TOP_KEYS = new Set(SCHEMA.map((item) => item.key))
 const CONTENT_KEYS = manifest.contentKeys ?? []
-
-/**
- * 摆在「样式」分段里、语义却是这块屏的数值口径的那两个键。
- * ⚠ 一套观感把它们写死，等于替用户定量程；而它们刻意没有 `default`，
- * 写进去之后就再也回不到「留空 = 按数据自动定色阶」。
- */
-const SCALE_KEYS = ['minValue', 'maxValue']
-
-/** 每一套都该写全的观感键：顶层键去掉内容键，再去掉那两个色阶端点。 */
-const STYLE_KEYS = SCHEMA.map((item) => item.key).filter(
-  (key) => !CONTENT_KEYS.includes(key) && !SCALE_KEYS.includes(key),
-)
+const STYLE_KEYS = styleKeysOf(manifest)
 
 function optionValues(target: ConfigField | undefined): unknown[] {
   return (target?.options ?? []).map((option) => option.value)
@@ -76,16 +58,6 @@ describe('日历热力的四套预设', () => {
     expect(leaked).toEqual([])
   })
 
-  it('色阶那两个端点也一个都不写，留空那一档因此还回得去', () => {
-    const leaked = CALENDAR_HEAT_PRESETS.flatMap((preset) =>
-      SCALE_KEYS.filter((key) => key in preset.config).map(
-        (key) => `${preset.id}.${key}`,
-      ),
-    )
-
-    expect(leaked).toEqual([])
-  })
-
   it('每一套都把观感键写全，缺一个就会残留上一套的值', () => {
     const missing = CALENDAR_HEAT_PRESETS.flatMap((preset) =>
       STYLE_KEYS.filter((key) => !(key in preset.config)).map(
@@ -126,7 +98,7 @@ describe('日历热力的四套预设', () => {
     )
 
     expect(diverging.map((preset) => preset.id)).toEqual(['deviation-scan'])
-    expect(diverging[0]?.hint ?? '').toContain('正负')
+    expect(diverging[0]?.hint ?? '').toContain('双向指标')
   })
 
   it('紧凑年历把格缝收成 0，四套里只有它开着动画', () => {

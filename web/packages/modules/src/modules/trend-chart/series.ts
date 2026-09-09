@@ -392,21 +392,21 @@ export function buildSeriesViews(input: SeriesViewsInput): SeriesView[] {
  * 值签名：只含画得出来的那几样，取一轮数它就变。
  * ⚠ 它是 `ChartShell` 的 `watchValues` 的返回值，配 `valuesDeep: false` 用——
  * 6 条系列 × 几百个点被逐键深度遍历一遍，每个节拍都来一次。
- * ⚠ 只取行数、各行点数、末点与状态这几样廉价指纹，不遍历整条序列：中间几个点
- * 变了而末点没变，是同一轮取数里不可能出现的形状。
+ * ⚠ 带上逐点时刻与读数：历史回补可能只修订窗口内部，点数与末点都不变化。
  * @param views 这一块的全部系列
  */
 export function signatureOf(views: readonly SeriesView[]): string {
   return views
     .map((view) => {
-      const last = view.points.at(-1)
+      const points = view.points
+        .map((point) => `${String(point.t)}=${String(point.v)}`)
+        .join(',')
       return [
         String(view.index),
         view.state,
         view.note,
         String(view.points.length),
-        String(last?.t ?? ''),
-        String(last?.v ?? ''),
+        points,
       ].join(':')
     })
     .join('␟')

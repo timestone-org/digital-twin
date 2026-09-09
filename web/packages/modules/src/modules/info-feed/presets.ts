@@ -1,13 +1,13 @@
 /**
- * @fileoverview info-feed 的两套外观预设：参考仓 feed-list 的那一套观感落成
+ * @fileoverview info-feed 的两套配置预设：参考仓 feed-list 的那一套观感落成
  * `feed-plain`，中国气象预警那套级别色板落成 `weather-alert`
  * （MODULE_INFO_CARD_DESIGN §1.3 第 12 行）。
  *
  * ⚠ 两套都把「观感」那 16 个键写全，色板每一条也把四个子键按 itemSchema 的顺序
  * 写全。应用预设是**浅合并**：少写一个键，上一套留在 configJson 里的那个值就原样
  * 残留，而点亮判定做的是子集比较、照样把按钮点亮——既错了又没有任何提示。
- * ⚠ `title` 与 `emptyText` 两个内容键一个都不写：预设换的是观感，写了会把用户
- * 自己写的标题与空态文案抹掉。
+ * ⚠ 预设会有意改变级别映射与排序，属性面板会在提示中明确说明内容
+ * 覆盖风险。`title` 与 `emptyText` 不由预设修改。
  */
 import type { ConfigPreset } from '@dt/contracts'
 
@@ -26,7 +26,7 @@ export const INFO_FEED_PRESETS: ConfigPreset[] = [
   {
     id: 'feed-plain',
     label: '消息流',
-    hint: '圆点 + 级别 + 正文 + 右侧时间，点线分隔。',
+    hint: '依次显示级别圆点、级别、正文与右侧时间，并使用点线分隔。',
     config: {
       showDot: true,
       dotSize: 8,
@@ -50,7 +50,7 @@ export const INFO_FEED_PRESETS: ConfigPreset[] = [
   {
     id: 'weather-alert',
     label: '气象预警',
-    hint: '预警五色（含橙）+ 按级别排序：红橙黄蓝四档，外加一档解除。',
+    hint: '使用包含橙色的五级预警配色，并按级别排序：红、橙、黄、蓝及解除。',
     config: {
       showDot: true,
       dotSize: 8,

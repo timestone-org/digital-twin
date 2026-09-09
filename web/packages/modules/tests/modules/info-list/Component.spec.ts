@@ -7,6 +7,7 @@
  * 行数。⚠ 空态三档合成一句之后，「该去配点位」与「该去查现场」就再也分不开了。
  */
 import type { ModuleSlotMeta } from '@dt/contracts'
+import { DtTooltip } from '@dt/ui'
 import { mount } from '@vue/test-utils'
 import { nextTick } from 'vue'
 import { afterEach, describe, expect, it, vi } from 'vitest'
@@ -84,6 +85,21 @@ describe('信息列表的骨架', () => {
       autoScroll: false,
       secondsPerItem: 7,
     })
+  })
+
+  it('辅助槽取值失败时在对应行显示紧凑提示', () => {
+    const wrapper = render({ items: [{ label: '甲' }] }, readings(1), {
+      [`${LIST_SLOT_KEY}[0].value`]: { state: 'ok' },
+      [`${LIST_SLOT_KEY}[0].status`]: {
+        state: 'error',
+        message: '状态点位断连',
+      },
+    })
+
+    expect(wrapper.get('.il-status').text()).toBe('✕')
+    expect(wrapper.findComponent(DtTooltip).props('content')).toContain(
+      '状态点位断连',
+    )
   })
 })
 
@@ -166,6 +182,20 @@ describe('分组的三档', () => {
     expect(texts(wrapper, '.il-tab__count')).toEqual(['3', '2', '1'])
   })
 
+  it('未分组行只出现在全部页，不生成含义不明的其它页签', async () => {
+    const wrapper = render(
+      {
+        items: [{ label: '甲', group: '蓄热' }, { label: '乙' }],
+        grouping: 'tabs',
+      },
+      readings(1, 2),
+    )
+    await nextTick()
+
+    expect(texts(wrapper, '.il-tab__name')).toEqual(['全部', '蓄热'])
+    expect(wrapper.findAll('.il-row')).toHaveLength(2)
+  })
+
   it('点一页只留那一页的行，页签自己的计数不跟着塌', async () => {
     const wrapper = render(
       { items: THREE_GROUPS, grouping: 'tabs' },
@@ -241,7 +271,36 @@ describe('空态的三档', () => {
     expect(wrapper.get('.il-empty').text()).toBe('当前无告警')
   })
 
-  it('绑了却一个读数都没回来时报的是有几个点位没数据', async () => {
+  it('告警判据槽异常时保留该行，不误报为无活动告警', async () => {
+    const wrapper = render(
+      {
+        items: [{ label: '甲' }],
+        rowLines: [{ left: 'label', right: 'sub' }],
+        subSource: 'aux',
+        alarmOn: 'sub',
+        rowFilter: 'alarm',
+        rules: [{ op: 'gt', value: 80, level: 'danger' }],
+      },
+      { [LIST_SLOT_KEY]: [{ value: 10, aux: 99 }] },
+      {
+        [`${LIST_SLOT_KEY}[0].value`]: { state: 'ok' },
+        [`${LIST_SLOT_KEY}[0].aux`]: {
+          state: 'error',
+          message: '副读数断连',
+        },
+      },
+    )
+    await nextTick()
+
+    expect(wrapper.find('.il-empty').exists()).toBe(false)
+    expect(wrapper.findAll('.il-row')).toHaveLength(1)
+    expect(wrapper.get('.il-cell--error').text()).toBe('—')
+    expect(wrapper.get('.il-status').attributes('aria-label')).toContain(
+      '副读数断连',
+    )
+  })
+
+  it('筛选告警时保留取数异常行，不把旧值当作告警判据', async () => {
     const wrapper = render(
       { items: [{ label: '甲' }, { label: '乙' }], rowFilter: 'alarm' },
       {},
@@ -252,7 +311,11 @@ describe('空态的三档', () => {
     )
     await nextTick()
 
-    expect(wrapper.get('.il-empty').text()).toBe('2 个点位无数据')
+    expect(wrapper.find('.il-empty').exists()).toBe(false)
+    expect(wrapper.findAll('.il-row')).toHaveLength(2)
+    expect(wrapper.findAll('.il-cell--error')).toHaveLength(1)
+    expect(wrapper.findAll('.il-cell--pending')).toHaveLength(1)
+    expect(wrapper.findAll('.il-status')).toHaveLength(2)
   })
 
   it('有行要画时空态那一句一个字都不出', async () => {

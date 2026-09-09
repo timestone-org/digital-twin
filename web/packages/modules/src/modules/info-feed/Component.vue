@@ -36,7 +36,11 @@ const onPick = rowClickEmitter(emit)
 const look = computed(() => readFeedLook(props.config))
 
 const rows = computed(() =>
-  buildFeedRows({ config: props.config, rows: props.values[FEED_SLOT_KEY] }),
+  buildFeedRows({
+    config: props.config,
+    rows: props.values[FEED_SLOT_KEY],
+    ...(props.meta?.slots === undefined ? {} : { slots: props.meta.slots }),
+  }),
 )
 
 const title = computed(() => readText(props.config.title))

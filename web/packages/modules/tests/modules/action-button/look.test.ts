@@ -193,6 +193,9 @@ describe('按钮的排布', () => {
 describe('按钮的文案与读屏名称', () => {
   it('有可见文案时不给 aria-label：它会盖掉屏幕上写的字', () => {
     expect(readButtonSpec({ text: '进入详情' }).ariaLabel).toBeUndefined()
+    expect(
+      readButtonSpec({ text: '', subText: '返回总览' }).ariaLabel,
+    ).toBeUndefined()
   })
 
   it('只摆图标时拿悬停提示当名字，没提示就叫「按钮」', () => {

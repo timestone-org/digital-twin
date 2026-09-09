@@ -38,6 +38,10 @@ describe('页脚清单的声明', () => {
     expect(manifest.bindings).toEqual([])
   })
 
+  it('套用外观不会改变子节点坐标系', () => {
+    expect(manifest.contentKeys).toEqual([CONTAINER_CONFIG_KEY])
+  })
+
   it('每个配置字段都有缺省，摊得出一份完整配置', () => {
     const missing = manifest.configSchema
       .filter((item) => item.default === undefined)

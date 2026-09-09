@@ -10,11 +10,12 @@
  * ⚠ 时间的格式化一律在 `option.ts` 里：组件里禁 `new Date(` 与 `toLocaleString(`。
  */
 import type { InteractionEvent, ModuleMeta } from '@dt/contracts'
+import { DtHelpTip } from '@dt/ui'
 import { computed } from 'vue'
 
 import type { ChartBuild } from '../../shared/chart/chartKit'
 import ChartShell from '../../shared/chart/ChartShell.vue'
-import { buildTrendOption, pickedSeriesValue } from './option'
+import { buildTrendOption, pickedSeriesValue, stackWarningOf } from './option'
 import {
   ariaSummaryOf,
   buildSeriesViews,
@@ -47,7 +48,13 @@ const signature = computed(() => signatureOf(views.value))
 // 一条都画不出来才算空；配了 6 条接了 2 条是常态，那不是空态
 const empty = computed(() => emptyStateOf(props.config, views.value))
 
-const ariaSummary = computed(() => ariaSummaryOf(views.value))
+const stackWarning = computed(() => stackWarningOf(props.config, views.value))
+
+const ariaSummary = computed(() =>
+  [ariaSummaryOf(views.value), stackWarning.value]
+    .filter((part) => part !== '')
+    .join('；'),
+)
 
 const build: ChartBuild = (theme, resolve) =>
   buildTrendOption(props.config, views.value, theme, resolve)
@@ -83,5 +90,35 @@ function onPick(event: InteractionEvent): void {
     :partial-merge="PARTIAL_MERGE"
     :values-deep="false"
     :watch-values="() => signature"
-  />
+  >
+    <template #notice>
+      <span v-if="stackWarning !== ''" class="dt-chart__notice">
+        <DtHelpTip :text="stackWarning" label="图表状态说明" side="bottom" />
+        <span class="dt-chart__notice-sr" role="status">
+          {{ stackWarning }}
+        </span>
+      </span>
+    </template>
+  </ChartShell>
 </template>
+
+<style scoped lang="scss">
+.dt-chart__notice {
+  position: absolute;
+  z-index: 1;
+  top: 6px;
+  right: 6px;
+}
+
+.dt-chart__notice-sr {
+  position: absolute;
+  width: 1px;
+  height: 1px;
+  padding: 0;
+  border: 0;
+  margin: -1px;
+  clip-path: inset(50%);
+  overflow: hidden;
+  white-space: nowrap;
+}
+</style>

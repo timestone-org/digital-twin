@@ -1,7 +1,7 @@
 /**
  * @fileoverview 守趋势曲线清单的声明：分段名只用图表族那八个、枚举档位取自本模块
  * 那三张取值表而不是手抄、时间轴上没有的那个类目抽稀旋钮真的没摆出来、右轴名只在
- * 双轴开着时出现、两个子槽逐字对上且一个都不给 isRequired、历史序列那一槽自报时序、
+ * 副轴由系列配置推导、两个子槽逐字对上且一个都不给 isRequired、历史序列那一槽自报时序、
  * 行钉在配置里的系列上，以及三个状态与交互开关的取值。
  *
  * ⚠ 这几类错法 typecheck 与 lint 双双放行，表现只是「这一项永远没反应」：
@@ -76,12 +76,17 @@ describe('身份与出厂形状', () => {
     expect(text).toContain('严格晚于')
   })
 
-  it('内容键就是标题、系列、空态与右轴名那四个', () => {
+  it('内容键覆盖数据、数值口径、坐标轴与参考线', () => {
     expect(manifest.contentKeys).toEqual([
       'title',
       SERIES_ITEMS_KEY,
       'emptyText',
       'rightAxisName',
+      'unit',
+      'precision',
+      'xAxisName',
+      'yAxisName',
+      'refLines',
     ])
   })
 
@@ -137,7 +142,7 @@ describe('配置面', () => {
     expect(field('boundaryGap')?.default).toBe(false)
   })
 
-  it('面积那四项只在带面积的两档上出现', () => {
+  it('面积配置按样式与渐变开关分层显示', () => {
     const area = SCHEMA.filter((item) => item.key.startsWith('area'))
 
     expect(area.map((item) => item.key)).toEqual([
@@ -146,15 +151,20 @@ describe('配置面', () => {
       'areaTopAlpha',
       'areaOpacity',
     ])
-    expect(area.every((item) => item.when?.key === 'chartStyle')).toBe(true)
-    expect(area[0]?.when?.in).toEqual(['area', 'stackedArea'])
+    for (const key of ['areaGradient', 'areaOpacity']) {
+      expect(field(key)?.when).toEqual({
+        key: 'chartStyle',
+        in: ['area', 'stackedArea'],
+      })
+    }
+    for (const key of ['areaGradientTo', 'areaTopAlpha']) {
+      expect(field(key)?.when).toEqual({ key: 'areaGradient', in: [true] })
+    }
   })
 
-  it('右轴名只在双轴开着时出现', () => {
-    expect(field('rightAxisName')?.when).toEqual({
-      key: 'dualAxis',
-      in: [true],
-    })
+  it('副轴由系列配置推导，不再保留可冲突的双轴开关', () => {
+    expect(TOP_KEYS).not.toContain('dualAxis')
+    expect(field('rightAxisName')?.when).toBeUndefined()
   })
 
   it('图例缺省开着，数据标签缺省关着，数据点缺省不画', () => {
