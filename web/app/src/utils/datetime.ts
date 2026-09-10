@@ -125,3 +125,9 @@ export function formatTimeAt(value: string): string {
 export function formatDate(at: Date = new Date()): string {
   return at.toLocaleDateString('zh-CN')
 }
+
+/** 格式化协议中的毫秒时刻。@param timestampMs 采样时刻 */
+export function formatTimestampMs(timestampMs: number): string {
+  const date = new Date(timestampMs)
+  return Number.isNaN(date.getTime()) ? '—' : formatDateTime(date.toISOString())
+}

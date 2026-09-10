@@ -36,6 +36,7 @@ class CollectPoint(UuidPrimaryKeyMixin, TimestampMixin, Base):
     )
     code: Mapped[str] = mapped_column(Text, nullable=False)
     name: Mapped[str] = mapped_column(Text, nullable=False)
+    description: Mapped[str | None] = mapped_column(Text, nullable=True)
     address: Mapped[str] = mapped_column(Text, nullable=False)
     data_type: Mapped[str] = mapped_column(Text, nullable=False)
     unit: Mapped[str | None] = mapped_column(Text, nullable=True)

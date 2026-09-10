@@ -179,6 +179,7 @@ export interface CollectPoint {
   node_key: string
   code: string
   name: string
+  description?: string | null
   /** 协议寻址串，可改；改它不断历史。 */
   address: string
   data_type: CollectDataType
@@ -196,6 +197,7 @@ export interface CollectPoint {
 export interface CollectPointItemInput {
   code: string
   name: string
+  description?: string | null
   address: string
   data_type?: CollectDataType | undefined
   unit?: string | null | undefined
@@ -213,6 +215,7 @@ export interface CollectPointCreateInput {
 
 export interface CollectPointUpdateInput {
   name?: string | undefined
+  description?: string | null | undefined
   address?: string | undefined
   data_type?: CollectDataType | undefined
   unit?: string | null | undefined

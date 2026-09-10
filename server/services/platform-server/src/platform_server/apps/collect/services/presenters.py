@@ -85,6 +85,7 @@ def to_point_out(point: CollectPoint) -> PointOut:
         node_key=compose_node_key(point.source_id, point.code),
         code=point.code,
         name=point.name,
+        description=point.description,
         address=point.address,
         data_type=as_data_type(point.data_type),
         unit=point.unit,

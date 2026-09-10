@@ -590,3 +590,5 @@ export type {
   ReportScheduleCreate,
   ReportScheduleUpdate,
 } from './report'
+
+export type { PointMatchOut, PointMatchesOut } from './collectSearch'

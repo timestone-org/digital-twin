@@ -117,7 +117,14 @@ watch(
           :ask="entry.ask"
           @answer="(value) => emit('answer', entry.id, value)"
         />
-        <AiToolCard v-else-if="entry.step" :step="entry.step" />
+        <slot
+          v-else-if="entry.step"
+          name="tool"
+          :step="entry.step"
+          :entry-id="entry.id"
+        >
+          <AiToolCard :step="entry.step" />
+        </slot>
       </template>
     </ul>
   </div>

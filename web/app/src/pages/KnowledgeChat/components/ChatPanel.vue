@@ -6,6 +6,10 @@
  * ⚠ `--ai-edge` 在这里的根上再声明一遍：助手把它声明在 `.ai-panel` 上，
  * 这一页不套那层壳，标题栏与输入区的两条发光线引的都是这一份。
  */
+import { computed, onScopeDispose, provide } from 'vue'
+import { LIVE_SOURCES, createLiveSources } from '../scripts/liveSources'
+import { livePointOfStep } from '@/features/knowledgeChat/liveTools'
+import ChatToolStep from './ChatToolStep.vue'
 import type { KnowledgeChatScopeBase } from '@dt/contracts'
 import { DtButton, DtCard, DtTag } from '@dt/ui'
 
@@ -15,7 +19,7 @@ import AiTimeline from '@/components/ai/AiTimeline.vue'
 import type { KnowledgeConversation } from '@/composables/useKnowledgeConversation'
 import KnowledgeChatComposer from './KnowledgeChatComposer.vue'
 
-defineProps<{
+const props = defineProps<{
   /** 这一页的那段对话，由页面持有；面板只把它接到时间线与输入区上。 */
   chat: KnowledgeConversation
   /** 当前对话的显示名；没选中时 null，标题栏写「新对话」。 */
@@ -29,6 +33,19 @@ defineProps<{
   /** 这次对话的检索范围；null = 全部知识库。 */
   scope: readonly KnowledgeChatScopeBase[] | null
 }>()
+
+const sources = createLiveSources()
+provide(LIVE_SOURCES, sources)
+onScopeDispose(sources.dispose)
+const activeCards = computed(
+  () =>
+    new Set(
+      props.chat.entries.value
+        .filter((one) => one.step && livePointOfStep(one.step))
+        .slice(-6)
+        .map((one) => one.id),
+    ),
+)
 
 defineEmits<{
   send: [text: string]
@@ -66,10 +83,14 @@ defineEmits<{
     <AiTimeline
       :entries="chat.entries.value"
       :starters="starters"
-      empty-title="问一句资料里的事"
+      empty-title="查资料，也能查看实时数据"
       @starter="$emit('send', $event)"
       @answer="chat.answerAsk"
-    />
+    >
+      <template #tool="{ step, entryId }">
+        <ChatToolStep :step="step" :enabled="activeCards.has(entryId)" />
+      </template>
+    </AiTimeline>
 
     <KnowledgeChatComposer
       :running="chat.isRunning.value"

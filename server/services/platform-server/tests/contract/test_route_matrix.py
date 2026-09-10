@@ -130,6 +130,7 @@ DASHBOARD_READ_ACTIONS = (
 COLLECT_PREFIXES = (
     f"{API_PREFIX}/collect-sources",
     f"{API_PREFIX}/collect-points",
+    f"{API_PREFIX}/collect-point-matches",
     # 采集/归档两组运行参数：读 view、写 manage，与采集配置面同一套码
     f"{API_PREFIX}/collect-runtime-params",
     f"{API_PREFIX}/point-histories",
@@ -503,8 +504,8 @@ def test_the_collect_face_was_actually_covered() -> None:
         for path, method in ROUTE_CASES
         if collect_expectation(path, method) is not None
     ]
-    # 16 条配置/动作面 + 3 条采集运行参数面
-    assert len(covered) == 19
+    # 配置、动作、语义检索与采集运行参数面
+    assert len(covered) == 20
 
 
 def test_every_field_action_still_points_at_a_live_route() -> None:

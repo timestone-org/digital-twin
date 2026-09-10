@@ -26,6 +26,7 @@ const STARTERS = [
   '这套资料里有哪些设备？',
   '冷却水出口温度的上限是多少？',
   '润滑周期是怎么规定的？',
+  '我想查看设备的实时温度',
 ] as const
 
 /** 标题栏上写的当前对话名；没选中时 null。 */
@@ -54,10 +55,7 @@ onMounted(() => void page.reload())
 </script>
 
 <template>
-  <AppShell
-    title="知识库对话"
-    subtitle="对着手册、规程与台账资料提问，答复带出处"
-  >
+  <AppShell title="知识库对话" subtitle="查阅资料、查看采集点位的实时数据">
     <template #actions>
       <DtButton
         size="sm"

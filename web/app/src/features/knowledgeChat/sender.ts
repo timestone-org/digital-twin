@@ -49,6 +49,7 @@ export function createKnowledgeSender(
     parts.state.running = controller
     parts.isRunning.value = true
     parts.edit((log) => withSaid(log, 'user', text))
+    const scoped = guardedParts(parts, controller)
     try {
       await runKnowledgeTurn(
         {
@@ -56,10 +57,10 @@ export function createKnowledgeSender(
           sessionId: id,
           userText: text,
           signal: controller.signal,
-          onTitled: parts.onTitled,
-          onCited: (items) => parts.edit((log) => withCitations(log, items)),
+          onTitled: scoped.onTitled,
+          onCited: (items) => scoped.edit((log) => withCitations(log, items)),
         },
-        sinkOf(parts),
+        sinkOf(scoped),
       )
     } catch (error) {
       if (!controller.signal.aborted) {
@@ -89,4 +90,22 @@ function sinkOf(parts: KnowledgeSenderParts): KnowledgeRunnerSink {
 function reason(error: unknown): string {
   if (error instanceof Error) return error.message
   return '知识库没能答上来'
+}
+
+/** 清屏或切会话后，旧回合的迟到事件不能写入新时间线。 */
+function guardedParts(
+  parts: KnowledgeSenderParts,
+  controller: AbortController,
+): KnowledgeSenderParts {
+  const isCurrent = () =>
+    parts.state.running === controller && !controller.signal.aborted
+  return {
+    ...parts,
+    edit: (next) => {
+      if (isCurrent()) parts.edit(next)
+    },
+    onTitled: (title, version) => {
+      if (isCurrent()) parts.onTitled?.(title, version)
+    },
+  }
 }

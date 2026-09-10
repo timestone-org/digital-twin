@@ -29,6 +29,8 @@ import type {
   CollectSubtreeResult,
   CollectWriteResult,
   Page,
+  PointMatchOut,
+  PointMatchesOut,
 } from '@dt/contracts'
 import {
   COLLECT_DATA_TYPES,
@@ -60,6 +62,25 @@ const schemas = spec.components.schemas
 type Keys<T> = Record<keyof T, true>
 
 const SHAPES: Record<string, Record<string, true>> = {
+  PointMatchOut: {
+    id: true,
+    source_id: true,
+    node_key: true,
+    code: true,
+    name: true,
+    description: true,
+    unit: true,
+    source_name: true,
+    is_enabled: true,
+    is_exact: true,
+    score: true,
+  } satisfies Keys<PointMatchOut>,
+  PointMatchesOut: {
+    items: true,
+    mode: true,
+    pending_count: true,
+    note: true,
+  } satisfies Keys<PointMatchesOut>,
   SourceOut: {
     id: true,
     name: true,
@@ -122,6 +143,7 @@ const SHAPES: Record<string, Record<string, true>> = {
   } satisfies Keys<CollectSubtreeResult>,
 
   PointOut: {
+    description: true,
     id: true,
     source_id: true,
     node_key: true,

@@ -50,3 +50,22 @@ def test_the_per_hit_share_never_exceeds_the_old_ceiling() -> None:
 
 def test_no_budget_means_the_old_ceiling() -> None:
     assert budget.snippet_chars(0, 6, 1200) == 1200
+
+
+def test_client_search_continuation_reserves_tool_space() -> None:
+    limit, keep_summary = budget.continuation_history(7027, 800, 2641, 0, 3333)
+    assert limit == 389
+    assert keep_summary is True
+    assert 2641 + 3333 + limit + 400 < 7027
+
+
+def test_large_old_summary_cannot_displace_followup_tools() -> None:
+    limit, keep_summary = budget.continuation_history(
+        7027, 800, 2641, 2000, 3333
+    )
+    assert keep_summary is False
+    assert limit == 389
+
+
+def test_unknown_context_budget_keeps_original_history_policy() -> None:
+    assert budget.continuation_history(0, 800, 4000, 2000, 3000) == (800, True)

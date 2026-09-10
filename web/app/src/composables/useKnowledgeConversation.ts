@@ -23,7 +23,7 @@ import {
   type ConversationLog,
 } from '@/features/ai/conversationLog'
 import type { RunState } from '@/features/ai/conversationSender'
-import { replayedLog } from '@/features/ai/replayLog'
+import { replayKnowledgeLog } from '@/features/knowledgeChat/liveReplay'
 import {
   createKnowledgeSender,
   type KnowledgeSenderParts,
@@ -121,7 +121,7 @@ function controlsOf(
     },
     restore: (detail) => {
       if (parts.state.running !== null) return
-      parts.edit(() => replayedLog(detail))
+      parts.edit(() => replayKnowledgeLog(detail))
     },
     answerAsk: asks.answer,
     note: (text) => parts.edit((given) => withSaid(given, 'note', text)),

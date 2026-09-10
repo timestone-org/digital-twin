@@ -2,6 +2,9 @@
 
 from platform_server.apps.collect.models.base import Base
 from platform_server.apps.collect.models.point import CollectPoint
+from platform_server.apps.collect.models.point_embedding import (
+    CollectPointEmbedding,
+)
 from platform_server.apps.collect.models.source import (
     MIN_INTERVAL_MS,
     CollectSource,
@@ -11,5 +14,6 @@ __all__ = [
     "MIN_INTERVAL_MS",
     "Base",
     "CollectPoint",
+    "CollectPointEmbedding",
     "CollectSource",
 ]

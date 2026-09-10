@@ -62,6 +62,7 @@ const isEdit = computed(() => props.point !== null)
 
 const code = ref('')
 const name = ref('')
+const description = ref('')
 const address = ref('')
 const dataType = ref<CollectDataType>('float')
 const unit = ref('')
@@ -79,6 +80,7 @@ const { isDirty } = useFormDirty(
   [
     code,
     name,
+    description,
     address,
     dataType,
     unit,
@@ -94,6 +96,7 @@ const { isDirty } = useFormDirty(
 interface FormValues {
   code: string
   name: string
+  description: string
   address: string
   dataType: CollectDataType
   unit: string
@@ -107,6 +110,7 @@ interface FormValues {
 const DEFAULTS: FormValues = {
   code: '',
   name: '',
+  description: '',
   address: '',
   dataType: 'float',
   unit: '',
@@ -123,6 +127,7 @@ function valuesOf(target: CollectPoint | null, preset: string): FormValues {
   return {
     code: target.code,
     name: target.name,
+    description: target.description ?? '',
     address: target.address,
     dataType: target.data_type,
     unit: target.unit ?? '',
@@ -139,6 +144,7 @@ function reset(): void {
   error.value = null
   code.value = values.code
   name.value = values.name
+  description.value = values.description
   address.value = values.address
   dataType.value = values.dataType
   unit.value = values.unit
@@ -188,6 +194,7 @@ function submit(): void {
   if (error.value !== null) return
   const shared = {
     name: name.value.trim(),
+    description: description.value.trim() || null,
     address: address.value.trim(),
     data_type: dataType.value,
     unit: unit.value.trim() === '' ? null : unit.value.trim(),
@@ -232,6 +239,17 @@ function submit(): void {
 
       <DtField label="名称" required>
         <DtInput v-model="name" placeholder="如：出口温度" />
+      </DtField>
+
+      <DtField
+        label="描述"
+        hint="写明设备、位置、用途及常用叫法，保存后用于语义查找。"
+      >
+        <DtInput
+          v-model="description"
+          :maxlength="1000"
+          placeholder="如：一号机出风口温度，也称送风温度"
+        />
       </DtField>
 
       <DtField

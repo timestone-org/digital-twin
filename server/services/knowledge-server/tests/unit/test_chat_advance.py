@@ -1,5 +1,6 @@
 """推进一个回合的纯逻辑：上下文怎么拼、哪些工具下发、回填怎么摊。"""
 
+import json
 import uuid
 
 from langchain_core.messages import (
@@ -177,15 +178,23 @@ def test_a_failed_client_tool_is_reported_as_such() -> None:
 
 def test_ask_is_offered_only_when_the_page_reports_it() -> None:
     """⚠ 页面没报 user.ask 就不下发它：下发了模型会调，而那一页渲染不出选项。"""
-    specs = (_spec("kb.search", "server"), _spec(ASK_TOOL, "client"))
+    specs = (
+        _spec("kb.search", "server"),
+        _spec(ASK_TOOL, "client"),
+        _spec("collect.watch_point", "client"),
+    )
 
     without = svc._offered(specs, ())  # pyright: ignore[reportPrivateUsage]
     with_ask = svc._offered(
-        specs, (ASK_TOOL,)
+        specs, (ASK_TOOL, "collect.watch_point", "unknown.tool")
     )  # pyright: ignore[reportPrivateUsage]
 
     assert [one.name for one in without] == ["kb.search"]
-    assert {one.name for one in with_ask} == {"kb.search", ASK_TOOL}
+    assert {one.name for one in with_ask} == {
+        "kb.search",
+        ASK_TOOL,
+        "collect.watch_point",
+    }
 
 
 def test_a_plain_user_text_becomes_one_human_message() -> None:
@@ -238,3 +247,53 @@ def test_a_deleted_base_is_not_dropped_from_the_note() -> None:
 def test_the_prompt_warns_that_out_of_scope_bases_are_refused() -> None:
     """⚠ 提示词是辅助：不写的话模型会把硬过滤读成「这个库坏了」并反复重试。"""
     assert "范围外的库" in SYSTEM_PROMPT
+
+
+def test_point_search_receipts_leave_room_for_the_followup_tools() -> None:
+    source = "01a05b86-6ea7-7ec6-bda7-4fc9b34f5a20"
+    names = [
+        "余热回收系统:水箱4水温(℃)（动力水箱）",
+        "余热回收系统:水箱2水温(℃)（联合工房洗浴水箱）",
+        "余热回收系统:水箱3水温(℃)（补充水箱）",
+        "余热回收系统:水箱1温度（培训楼水箱）",
+    ]
+    codes = [
+        "YR.YR.DB149.REAL402",
+        "YR.YR.DB7.REAL236",
+        "YR.YR.DB7.REAL60",
+        "YR.YR.DB30.REAL14",
+    ]
+    raw = json.dumps(
+        {
+            "items": [
+                {
+                    "id": str(uuid.uuid4()),
+                    "source_id": source,
+                    "source_name": "3D数据服务器",
+                    "node_key": f"{source}:{code}",
+                    "code": code,
+                    "name": name,
+                    "description": None,
+                    "unit": None,
+                    "is_enabled": True,
+                    "is_exact": False,
+                    "score": 0.016,
+                }
+                for name, code in zip(names, codes, strict=True)
+            ],
+            "mode": "hybrid",
+            "pending_count": 0,
+            "note": None,
+        },
+        ensure_ascii=False,
+    )
+    messages = svc.incoming_messages(
+        svc.AdvanceInput(
+            tool_results=[svc.ClientToolResult(call_id="search", output=raw)]
+        )
+    )
+    content = str(messages[0].content)
+    assert len(content) <= 700
+    for name, code in zip(names, codes, strict=True):
+        assert name in content
+        assert f"{source}:{code}" in content

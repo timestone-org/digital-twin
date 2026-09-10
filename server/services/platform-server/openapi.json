@@ -3825,6 +3825,51 @@
         "title": "ApiResponse[PointBatchOut]",
         "type": "object"
       },
+      "ApiResponse_PointMatchesOut_": {
+        "properties": {
+          "code": {
+            "default": 0,
+            "title": "Code",
+            "type": "integer"
+          },
+          "data": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/PointMatchesOut"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "details": {
+            "anyOf": [
+              {
+                "items": {
+                  "$ref": "#/components/schemas/FieldErrorOut"
+                },
+                "type": "array"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Details"
+          },
+          "message": {
+            "default": "ok",
+            "title": "Message",
+            "type": "string"
+          },
+          "trace_id": {
+            "default": "",
+            "title": "Trace Id",
+            "type": "string"
+          }
+        },
+        "title": "ApiResponse[PointMatchesOut]",
+        "type": "object"
+      },
       "ApiResponse_PointSavedOut_": {
         "properties": {
           "code": {
@@ -15683,6 +15728,18 @@
             "title": "Deadband",
             "type": "number"
           },
+          "description": {
+            "anyOf": [
+              {
+                "maxLength": 1000,
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Description"
+          },
           "name": {
             "maxLength": 64,
             "minLength": 1,
@@ -15714,6 +15771,129 @@
           "address"
         ],
         "title": "PointItemIn",
+        "type": "object"
+      },
+      "PointMatchOut": {
+        "description": "可绑定的点位候选，不含连接凭据或现场地址。",
+        "properties": {
+          "code": {
+            "title": "Code",
+            "type": "string"
+          },
+          "description": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Description"
+          },
+          "id": {
+            "format": "uuid",
+            "title": "Id",
+            "type": "string"
+          },
+          "is_enabled": {
+            "title": "Is Enabled",
+            "type": "boolean"
+          },
+          "is_exact": {
+            "title": "Is Exact",
+            "type": "boolean"
+          },
+          "name": {
+            "title": "Name",
+            "type": "string"
+          },
+          "node_key": {
+            "title": "Node Key",
+            "type": "string"
+          },
+          "score": {
+            "title": "Score",
+            "type": "number"
+          },
+          "source_id": {
+            "format": "uuid",
+            "title": "Source Id",
+            "type": "string"
+          },
+          "source_name": {
+            "title": "Source Name",
+            "type": "string"
+          },
+          "unit": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Unit"
+          }
+        },
+        "required": [
+          "id",
+          "source_id",
+          "node_key",
+          "code",
+          "name",
+          "description",
+          "unit",
+          "source_name",
+          "is_enabled",
+          "is_exact",
+          "score"
+        ],
+        "title": "PointMatchOut",
+        "type": "object"
+      },
+      "PointMatchesOut": {
+        "description": "候选及当前语义索引的可用程度。",
+        "properties": {
+          "items": {
+            "items": {
+              "$ref": "#/components/schemas/PointMatchOut"
+            },
+            "title": "Items",
+            "type": "array"
+          },
+          "mode": {
+            "enum": [
+              "hybrid",
+              "keyword"
+            ],
+            "title": "Mode",
+            "type": "string"
+          },
+          "note": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Note"
+          },
+          "pending_count": {
+            "minimum": 0.0,
+            "title": "Pending Count",
+            "type": "integer"
+          }
+        },
+        "required": [
+          "items",
+          "mode",
+          "pending_count"
+        ],
+        "title": "PointMatchesOut",
         "type": "object"
       },
       "PointOut": {
@@ -15764,6 +15944,17 @@
           "deadband": {
             "title": "Deadband",
             "type": "number"
+          },
+          "description": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Description"
           },
           "id": {
             "format": "uuid",
@@ -15928,6 +16119,18 @@
               }
             ],
             "title": "Deadband"
+          },
+          "description": {
+            "anyOf": [
+              {
+                "maxLength": 1000,
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Description"
           },
           "name": {
             "anyOf": [
@@ -23261,6 +23464,81 @@
         "summary": "申请直传凭证",
         "tags": [
           "asset"
+        ]
+      }
+    },
+    "/api/v1/platform/collect-point-matches": {
+      "get": {
+        "description": "搜索可绑定点位并回显降级状态。\n\nArgs: container, _viewer, q, source_id, limit。",
+        "operationId": "list_matches_api_v1_platform_collect_point_matches_get",
+        "parameters": [
+          {
+            "in": "query",
+            "name": "q",
+            "required": true,
+            "schema": {
+              "maxLength": 300,
+              "minLength": 1,
+              "pattern": ".*\\S.*",
+              "title": "Q",
+              "type": "string"
+            }
+          },
+          {
+            "in": "query",
+            "name": "source_id",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "format": "uuid",
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Source Id"
+            }
+          },
+          {
+            "in": "query",
+            "name": "limit",
+            "required": false,
+            "schema": {
+              "default": 6,
+              "maximum": 12,
+              "minimum": 1,
+              "title": "Limit",
+              "type": "integer"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiResponse_PointMatchesOut_"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "点位混合搜索",
+        "tags": [
+          "collect-point"
         ]
       }
     },

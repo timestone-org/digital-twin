@@ -1,13 +1,6 @@
 /**
- * @fileoverview 知识库对话这一侧的回合循环：内核在 `features/ai/turnLoop.ts`，
- * 这里只是知识库的门面。
- *
- * 与助手那个门面的差别只有三处：信封里**没有工作面**（对话不在任何一页上）；
- * 客户端工具只有内建的 `user.ask`（模型看得见的就这一个）；没有计划子系统，
- * 模型收了嘴就是收了嘴，不代用户催。
- *
- * ⚠ 信封里一格都不许多带：知识库那边的入参是 `extra="forbid"`，多一格
- * `surface_kind` 整个回合就是 400。
+ * @fileoverview 知识库对话的回合门面：反问、资料引用与采集客户端工具。
+ * 通用循环见 features/ai/turnLoop.ts，实时卡片契约见 KNOWLEDGE_LIVE_DATA_DESIGN.md。
  */
 import type { KnowledgeChatAdvanceIn, KnowledgeCitation } from '@dt/contracts'
 
@@ -16,6 +9,7 @@ import {
   isBuiltinTool,
   runBuiltinTool,
 } from '@/features/ai/builtinTools'
+import { LIVE_TOOLS, runLiveTool } from './liveTools'
 import { UnsupportedTool } from '@/features/ai/surfaces'
 import { runLoop, type LoopSink } from '@/features/ai/turnLoop'
 
@@ -64,10 +58,12 @@ export async function runKnowledgeTurn(
     {
       advance: input.advance,
       sessionId: input.sessionId,
-      envelope: () => ({ client_tools: [...BUILTIN_CLIENT_TOOLS] }),
+      envelope: () => ({
+        client_tools: [...BUILTIN_CLIENT_TOOLS, ...LIVE_TOOLS],
+      }),
       userText: input.userText,
       signal: input.signal,
-      dispatch,
+      dispatch: (call) => dispatch(call, input.signal),
       maxRounds: MAX_ROUNDS,
       onFrame: (name, data) => {
         if (name === 'session_titled') titled(input, data)
@@ -116,8 +112,14 @@ function isCitation(one: unknown): one is KnowledgeCitation {
   )
 }
 
-/** 只认内建表。别的名字一律不支持——这一页没有工作面，也就没有别的工具。 */
-async function dispatch(call: Parameters<typeof runBuiltinTool>[0]) {
+/** 派发内建反问与已登记的只读采集工具。 */
+async function dispatch(
+  call: Parameters<typeof runBuiltinTool>[0],
+  signal?: AbortSignal,
+) {
+  signal?.throwIfAborted()
+  if (LIVE_TOOLS.some((name) => name === call.name))
+    return runLiveTool(call, signal)
   if (isBuiltinTool(call.name)) return runBuiltinTool(call)
   throw new UnsupportedTool(call.name)
 }

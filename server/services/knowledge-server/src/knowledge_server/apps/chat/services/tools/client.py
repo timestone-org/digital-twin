@@ -1,6 +1,6 @@
-"""客户端工具那一路：只有 `user.ask`，只交规格，不执行。
+"""客户端工具那一路：反问与采集卡片，只交规格，不执行。
 
-⚠ 参数形状与助手那边**逐字相同**：浏览器里实现它的是同一份代码
+⚠ `user.ask` 的参数形状与助手那边**逐字相同**：浏览器里实现它的是同一份代码
 （`web/app/src/features/ai/builtinTools.ts`），形状漂开前端就渲染不出选项。
 由契约测试钉住。
 
@@ -10,6 +10,7 @@
 
 from typing import Any
 
+from knowledge_server.apps.chat.services.tools.collect import COLLECT_SPECS
 from llmcore.tools.ports import RunsElsewhere
 from llmcore.tools.shapes import ToolSpec, object_schema, string_schema
 
@@ -62,13 +63,13 @@ ASK_SPEC = ToolSpec(
 
 
 class ClientTools:
-    """下发到浏览器执行的那一批：只有反问。"""
+    """下发到浏览器执行的那一批：反问与只读采集工具。"""
 
     name = "client"
 
     def specs(self) -> tuple[ToolSpec, ...]:
         """这一路提供哪些工具。"""
-        return (ASK_SPEC,)
+        return (ASK_SPEC, *COLLECT_SPECS)
 
     async def run(self, name: str, arguments: dict[str, Any]) -> Any:
         """恒抛：这一批在浏览器里跑，服务端没有它们的实现。

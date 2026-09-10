@@ -100,7 +100,11 @@ describe('知识库对话的回合门面', () => {
 
     expect(replies).toEqual(['上限 65 ℃ [1]'])
     expect(bodies[0]).toEqual({
-      client_tools: [ASSISTANT_ASK_TOOL],
+      client_tools: [
+        ASSISTANT_ASK_TOOL,
+        'collect.search_points',
+        'collect.watch_point',
+      ],
       user_text: '上限多少',
     })
     expect(bodies[0]).not.toHaveProperty('surface_kind')

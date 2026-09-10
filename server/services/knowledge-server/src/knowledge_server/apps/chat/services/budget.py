@@ -93,3 +93,38 @@ def context_chars(context_tokens: int) -> int:
         MIN_RESULT_CHARS,
         int((context_tokens - ANSWER_TOKENS) * CHARS_PER_TOKEN),
     )
+
+
+# 当前待续工具调用的最低历史余量
+MIN_CONTINUATION_HISTORY_CHARS = 256
+CONTINUATION_MARGIN_CHARS = 64
+
+
+def continuation_history(
+    context_chars: int,
+    history_chars: int,
+    fixed_chars: int,
+    summary_chars: int,
+    schemas_chars: int,
+) -> tuple[int, bool]:
+    """给工具回填后的续推分配历史预算。
+
+    Args: context_chars, history_chars, fixed_chars, summary_chars,
+        schemas_chars。
+    """
+    if context_chars <= 0:
+        return history_chars, True
+    available = (
+        context_chars
+        - fixed_chars
+        - schemas_chars
+        - MIN_RESULT_CHARS
+        - CONTINUATION_MARGIN_CHARS
+    )
+    keep_summary = summary_chars <= max(
+        0, available - MIN_CONTINUATION_HISTORY_CHARS
+    )
+    remaining = available - (summary_chars if keep_summary else 0)
+    if remaining < MIN_CONTINUATION_HISTORY_CHARS:
+        return history_chars, keep_summary
+    return min(history_chars or remaining, remaining), keep_summary

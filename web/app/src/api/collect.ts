@@ -75,10 +75,13 @@ export async function listSources(
   )
 }
 
-export async function getSource(sourceId: string): Promise<CollectSource> {
+export async function getSource(
+  sourceId: string,
+  signal?: AbortSignal,
+): Promise<CollectSource> {
   return await requestData<CollectSource>(
     `/collect-sources/${sourceId}`,
-    onPlatform(),
+    onPlatform({ signal }),
   )
 }
 

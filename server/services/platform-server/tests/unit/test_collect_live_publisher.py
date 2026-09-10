@@ -256,3 +256,13 @@ async def test_losing_the_lease_forces_a_full_frame_next_time() -> None:
     await harness.publisher.publish_once()
     _, items, _ = harness.realtime.published[1]
     assert len(items) == 2
+
+
+async def test_heartbeat_republishes_unchanged_points() -> None:
+    harness = build_harness()
+    await harness.publisher.publish_once()
+    harness.ticker.now_s = 15.0
+    report = await harness.publisher.publish_once()
+    assert report.items == 2
+    assert len(harness.realtime.published) == 2
+    assert harness.realtime.published[-1][1][0]["timestampMs"] == NOW_MS

@@ -40,6 +40,7 @@ class PointOut(OutputModel):
     node_key: str
     code: str
     name: str
+    description: str | None = None
     address: str
     data_type: DataType
     unit: str | None
@@ -57,6 +58,7 @@ class PointItemIn(InputModel):
 
     code: Code
     name: Label
+    description: str | None = Field(default=None, max_length=1000)
     address: Address
     data_type: DataType = "float"
     unit: str | None = Field(default=None, max_length=32)
@@ -100,6 +102,7 @@ class PointUpdateIn(UpdateModel):
     )
 
     name: Label | None = None
+    description: str | None = Field(default=None, max_length=1000)
     address: Address | None = None
     data_type: DataType | None = None
     unit: str | None = Field(default=None, max_length=32)

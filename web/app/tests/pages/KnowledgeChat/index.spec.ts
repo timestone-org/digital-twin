@@ -203,7 +203,7 @@ describe('首屏', () => {
 
     expect(wrapper.text()).toContain('锅炉那几台')
     expect(api.readSession).not.toHaveBeenCalled()
-    expect(wrapper.text()).toContain('问一句资料里的事')
+    expect(wrapper.text()).toContain('查资料，也能查看实时数据')
   })
 
   it('没标题的对话显示建立时刻而不是空白', async () => {
@@ -342,7 +342,7 @@ describe('发一句', () => {
     expect(api.advanceTurn).toHaveBeenCalledTimes(1)
   })
 
-  it('信封里只自报 user.ask，没有工作面', async () => {
+  it('信封里自报反问和采集工具，没有工作面', async () => {
     api.listSessions.mockResolvedValue([])
     api.createSession.mockResolvedValue(sessionOf('s9'))
     api.readSession.mockResolvedValue({ ...sessionOf('s9'), messages: [] })
@@ -353,7 +353,11 @@ describe('发一句', () => {
     await flushPromises()
 
     const body = api.advanceTurn.mock.calls[0]?.[1] as Record<string, unknown>
-    expect(body.client_tools).toEqual(['user.ask'])
+    expect(body.client_tools).toEqual([
+      'user.ask',
+      'collect.search_points',
+      'collect.watch_point',
+    ])
     expect(body).not.toHaveProperty('surface_kind')
   })
 
@@ -480,7 +484,7 @@ describe('面板标题栏', () => {
     await clear().trigger('click')
 
     expect(wrapper.text()).not.toContain('上限 65 ℃')
-    expect(wrapper.text()).toContain('问一句资料里的事')
+    expect(wrapper.text()).toContain('查资料，也能查看实时数据')
   })
 })
 

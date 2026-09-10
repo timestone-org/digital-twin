@@ -5,7 +5,9 @@
  * 本地要跟着删），而这些与「socket 怎么重连」无关，混在一起两边都不好测。
  */
 
-export type TopicHandler = (payload: Record<string, unknown>) => void
+export type TopicHandler = ((payload: Record<string, unknown>) => void) & {
+  onUnavailable?: (message: string) => void
+}
 
 export interface TopicRegistry {
   /** 登记一个订阅者；返回 true 表示这是该主题的第一个，调用方该发 subscribe。 */
@@ -44,7 +46,10 @@ export function createTopicRegistry(): TopicRegistry {
       return true
     },
     forget(topic) {
+      const revoked = [...(handlers.get(topic) ?? [])]
       handlers.delete(topic)
+      for (const handler of revoked)
+        handler.onUnavailable?.('实时订阅已被撤回，请检查查看权限')
     },
     topics() {
       return [...handlers.keys()]

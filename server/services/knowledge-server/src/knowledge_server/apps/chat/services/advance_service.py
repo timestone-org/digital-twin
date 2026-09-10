@@ -5,6 +5,7 @@
 （含窗口外折成的摘要）→ 这一次的输入。
 """
 
+import json
 import uuid
 from collections.abc import AsyncIterator, Callable
 from contextlib import AbstractAsyncContextManager
@@ -42,11 +43,13 @@ from knowledge_server.apps.chat.services.prompt import (
     scope_messages,
 )
 from knowledge_server.apps.chat.services.scope import BaseScope
+from knowledge_server.apps.chat.services.search_receipt import (
+    compact_search_receipts,
+)
 from knowledge_server.apps.chat.services.tools import (
     ToolDeps,
     build_registry,
 )
-from knowledge_server.apps.chat.services.tools.client import ASK_TOOL
 from knowledge_server.apps.knowledge.services.assembly import (
     lanes_of,
     strategies,
@@ -64,7 +67,7 @@ from llmcore.memory import (
 )
 from llmcore.tools.registry import ToolRegistry
 from llmcore.tools.selection import specs_named
-from llmcore.tools.shapes import ToolSpec
+from llmcore.tools.shapes import ToolSpec, openai_schema
 from llmcore.turn import (
     DEFAULT_MAX_TOOL_RESULT_CHARS,
     Responder,
@@ -175,9 +178,12 @@ def incoming_messages(payload: AdvanceInput) -> list[BaseMessage]:
     """
     if payload.user_text is not None:
         return [HumanMessage(content=payload.user_text)]
+    texts = compact_search_receipts(
+        [result.as_text() for result in payload.tool_results]
+    )
     return [
-        ToolMessage(content=result.as_text(), tool_call_id=result.call_id)
-        for result in payload.tool_results
+        ToolMessage(content=body, tool_call_id=result.call_id)
+        for result, body in zip(payload.tool_results, texts, strict=True)
     ]
 
 
@@ -406,8 +412,11 @@ def _offered(
     Args: specs, client_tools。
     """
     wanted = {one.name for one in specs if one.runs_on == "server"}
-    if ASK_TOOL in client_tools:
-        wanted.add(ASK_TOOL)
+    wanted.update(
+        one.name
+        for one in specs
+        if one.runs_on == "client" and one.name in client_tools
+    )
     return specs_named(specs, frozenset(wanted))
 
 
@@ -421,12 +430,15 @@ async def _opened(
     async with deps.sessions() as session:
         loaded = await load_context(session, chat_session_id=chat_session_id)
     summary = await _summary_of(deps, chat_session_id, loaded)
+    history_limit, keep_summary = _continuation_budget(
+        deps, loaded, payload, summary
+    )
     return loaded, assemble(
         payload=payload,
         rows=loaded.rows,
-        summary=summary,
+        summary=summary if keep_summary else None,
         scope=loaded.scope,
-        history_chars=deps.history_chars,
+        history_chars=history_limit,
     )
 
 
@@ -457,3 +469,32 @@ async def _summary_of(
             .values(summary_json=summarize.as_json(folded))
         )
     return folded
+
+
+def _continuation_budget(
+    deps: AdvanceDeps,
+    loaded: LoadedContext,
+    payload: AdvanceInput,
+    summary: Summary | None,
+) -> tuple[int, bool]:
+    """按实际前缀分配历史。Args: deps, loaded, payload, summary。"""
+    if deps.context_chars <= 0 or not payload.tool_results:
+        return deps.history_chars, True
+    specs = _offered(
+        deps.tools(loaded.scope, Ledger()).specs, payload.client_tools
+    )
+    schemas_chars = len(
+        json.dumps([openai_schema(spec) for spec in specs], ensure_ascii=False)
+    )
+    fixed = [
+        SystemMessage(content=SYSTEM_PROMPT),
+        *scope_messages(loaded.scope),
+        *incoming_messages(payload),
+    ]
+    return budget.continuation_history(
+        deps.context_chars,
+        deps.history_chars,
+        sum(history.sized(one) for one in fixed),
+        sum(history.sized(one) for one in summarize.messages_of(summary)),
+        schemas_chars,
+    )

@@ -318,6 +318,7 @@ def _new_point(source_id: uuid.UUID, item: PointItemIn) -> CollectPoint:
         source_id=source_id,
         code=item.code,
         name=item.name,
+        description=item.description,
         address=item.address,
         data_type=item.data_type,
         unit=item.unit,

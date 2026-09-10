@@ -9,6 +9,7 @@ import re
 
 from knowledge_server.apps.chat import enums
 from knowledge_server.apps.chat.services.tools.client import ASK_SPEC
+from knowledge_server.apps.chat.services.tools.collect import COLLECT_SPECS
 
 # 助手的源码在仓里的位置。⚠ 按文件读而不是 import：服务之间不许互相 import
 ASSISTANT = (
@@ -71,3 +72,16 @@ def test_the_ask_tool_has_the_same_parameter_shape_as_the_assistant() -> None:
 
 def test_the_ask_tool_runs_on_the_client() -> None:
     assert ASK_SPEC.runs_on == "client"
+
+
+def test_point_search_exposes_a_short_query_limit_to_the_model() -> None:
+    query = COLLECT_SPECS[0].parameters["properties"]["query"]
+    assert query.get("maxLength") == 80
+    assert query.get("minLength") == 1
+
+
+def test_unknown_point_source_can_be_explicitly_null() -> None:
+    source = COLLECT_SPECS[0].parameters["properties"]["source_id"]
+    assert {"type": "null"} in source["anyOf"]
+    assert "全零UUID" in source["description"]
+    assert "source_id" not in COLLECT_SPECS[0].parameters["required"]

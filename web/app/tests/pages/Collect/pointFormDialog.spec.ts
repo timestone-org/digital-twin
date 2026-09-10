@@ -48,3 +48,25 @@ describe('误关保护', () => {
     expect(wrapper.text()).toContain('有还没提交的内容')
   })
 })
+
+it('saves a point description with the other metadata', async () => {
+  const wrapper = await render()
+  await wrapper.find('input[placeholder="如：outlet_temp"]').setValue('temp')
+  await wrapper.find('input[placeholder="如：出口温度"]').setValue('出口温度')
+  await wrapper
+    .find('input[placeholder="ns=2;s=Plant1.OutletTemp"]')
+    .setValue('ns=2;s=temp')
+  await wrapper
+    .find('input[placeholder="如：一号机出风口温度，也称送风温度"]')
+    .setValue(' 一号机送风温度 ')
+  const save = wrapper
+    .findAll('button')
+    .find((one) => /保存|创建|添加/.test(one.text()))
+  expect(save).toBeDefined()
+  await save?.trigger('click')
+  expect(wrapper.emitted('create')?.[0]?.[0]).toMatchObject({
+    code: 'temp',
+    description: '一号机送风温度',
+  })
+  wrapper.unmount()
+})

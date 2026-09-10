@@ -20,6 +20,9 @@ from platform_server.apps.assets.services.compress_worker import (
     CompressOptions,
     ModelCompressor,
 )
+from platform_server.apps.collect.services.point_index_worker import (
+    PointIndexWorker,
+)
 from platform_server.apps.dataset.services import register_provider
 from platform_server.apps.dataset.services.collector import (
     CollectorContext,
@@ -508,6 +511,7 @@ async def serve(settings: Settings, *, wait: Wait) -> None:
                     build_modeling_runner(container, pool=node_pool),
                     build_modeling_retention(container),
                     *_report_consumers(container, word_pool),
+                    PointIndexWorker(container.database, container.llm.cipher),
                 ),
                 leaseholders=(publisher, scheduler, collector, retention),
                 container=container,

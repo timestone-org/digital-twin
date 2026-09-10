@@ -70,6 +70,8 @@ def test_the_registry_offers_three_read_tools_and_one_ask() -> None:
         SEARCH,
         READ_CHUNK,
         ASK_TOOL,
+        "collect.search_points",
+        "collect.watch_point",
     ]
 
 

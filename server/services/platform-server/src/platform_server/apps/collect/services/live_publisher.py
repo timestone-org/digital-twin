@@ -43,6 +43,7 @@ _logger = get_logger("platform.collect.live")
 
 # 单调时钟，秒。⚠ 不能用墙钟：改系统时间会让重读周期一次跳过或永远不到期
 Ticker = Callable[[], float]
+LIVE_HEARTBEAT_S = 15.0
 
 
 @dataclass(frozen=True)
@@ -69,6 +70,7 @@ class _Cached:
     plan: LivePlan
     loaded_at_s: float
     sent: dict[str, Item] = field(default_factory=dict[str, Item])
+    last_full_at_s: float = float("-inf")
 
 
 @dataclass
@@ -121,7 +123,11 @@ class SourceLivePublisher:
         if entry is None or not entry.plan.node_keys:
             return 0
         node_keys = entry.plan.node_keys
-        is_full = is_new or is_changed
+        is_full = (
+            is_new
+            or is_changed
+            or self.ticker() - entry.last_full_at_s >= LIVE_HEARTBEAT_S
+        )
         items = await self._items_of(source_id, node_keys)
         outgoing = items if is_full else changed_items(items, entry.sent)
         if not outgoing:
@@ -129,7 +135,10 @@ class SourceLivePublisher:
         if is_full:
             # 全量帧覆盖整份清单，顺手把已经不在清单里的键清掉
             entry.sent.clear()
-        return await self._send(source_id, entry, outgoing)
+        sent = await self._send(source_id, entry, outgoing)
+        if is_full and sent == len(outgoing):
+            entry.last_full_at_s = self.ticker()
+        return sent
 
     async def _items_of(
         self, source_id: uuid.UUID, node_keys: tuple[str, ...]
@@ -201,6 +210,9 @@ class SourceLivePublisher:
             loaded_at_s=self.ticker(),
             # 清单没变就把已发送表带过来：清空它等于下一拍重推一遍全量
             sent={} if cached is None else cached.sent,
+            last_full_at_s=(
+                float("-inf") if cached is None else cached.last_full_at_s
+            ),
         )
         self._cache[source_id] = entry
         return entry, is_changed

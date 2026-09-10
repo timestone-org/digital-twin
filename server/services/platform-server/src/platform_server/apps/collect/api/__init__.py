@@ -8,6 +8,7 @@ from platform_server.apps.collect.api import (
     collect_sources,
     internal,
     point_histories,
+    point_matches,
 )
 
 ROUTERS: tuple[APIRouter, ...] = (
@@ -15,6 +16,7 @@ ROUTERS: tuple[APIRouter, ...] = (
     collect_points.router,
     collect_runtime_params.router,
     point_histories.router,
+    point_matches.router,
     # ⚠ 内部面挂在 `/internal/v1/`，走服务级密钥而不是权限码：它要挡的是
     # 「任何人」，而权限码挂在人身上（ADR-0005）
     internal.router,
