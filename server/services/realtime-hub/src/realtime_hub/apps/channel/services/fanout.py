@@ -9,6 +9,7 @@
 import asyncio
 import contextlib
 import json
+import random
 from collections.abc import Mapping, Sequence
 from typing import Any
 
@@ -21,6 +22,11 @@ from realtime_hub.apps.channel.services.connections import (
 
 _logger = get_logger("realtime.fanout")
 
+RECONNECT_BASE_S = 1.0
+RECONNECT_MAX_S = 30.0
+CLOSE_TIMEOUT_S = 1.0
+CLOSE_TRY_AGAIN = 1013
+
 
 class FanoutListener:
     """订阅扇出频道，把消息发给本副本上订了该主题的连接。"""
@@ -32,6 +38,8 @@ class FanoutListener:
         self._connections = connections
         self._channel = channel
         self._task: asyncio.Task[None] | None = None
+        self._retry_delay_s = RECONNECT_BASE_S
+        self._needs_resync = False
 
     async def start(self) -> None:
         """起后台任务。重复调用是幂等的。"""
@@ -55,13 +63,37 @@ class FanoutListener:
             await task
 
     async def _run(self) -> None:
-        """收发主循环。
+        """监听中断后退避重建订阅，直到关停取消任务。"""
+        while True:
+            try:
+                await self._listen()
+                return
+            except Exception as error:
+                self._needs_resync = True
+                _logger.warning(
+                    "fanout_listen_failed",
+                    "扇出监听中断，将重建订阅",
+                    error_type=type(error).__name__,
+                    retry_delay_s=self._retry_delay_s,
+                )
+                await self._resync_clients()
+                await asyncio.sleep(
+                    self._retry_delay_s
+                    * random.uniform(0.8, 1.2)  # noqa: S311 - 重连抖动
+                )
+                self._retry_delay_s = min(
+                    self._retry_delay_s * 2, RECONNECT_MAX_S
+                )
 
-        ⚠ 单条消息处理失败只记日志、继续循环：一个坏载荷或一条已死的 socket
-        不该让整个副本停止扇出——那会让所有客户端一起静默失联。
-        """
-        _logger.info("fanout_started", "扇出订阅已建立", channel=self._channel)
+    async def _listen(self) -> None:
+        """消费订阅，并在恢复后促使客户端重订以获得全量帧。"""
         async for _name, envelope in self._pubsub.listen([self._channel]):
+            self._retry_delay_s = RECONNECT_BASE_S
+            if self._needs_resync:
+                # ⚠ 恢复前新连上的客户端也可能漏过首帧，必须一起重订。
+                await self._resync_clients()
+                self._needs_resync = False
+                _logger.info("fanout_recovered", "扇出监听已恢复")
             try:
                 await self._deliver(envelope)
             except Exception as error:
@@ -70,6 +102,11 @@ class FanoutListener:
                     "扇出一条消息时失败，已跳过",
                     error_type=type(error).__name__,
                 )
+
+    async def _resync_clients(self) -> None:
+        """关闭本副本连接，借客户端重连触发推送方全量同步。"""
+        connections = await self._connections.all_connections()
+        await asyncio.gather(*(_close_for_resync(item) for item in connections))
 
     async def _deliver(self, envelope: dict[str, Any]) -> None:
         """把一条信封发给本副本上订了它的连接。
@@ -104,6 +141,21 @@ class FanoutListener:
                 targets=len(targets),
                 failed=failed,
             )
+
+
+async def _close_for_resync(connection: Connection) -> None:
+    """限时关闭一条连接；单条失败不阻塞其它连接。Args: connection。"""
+    if connection.close is None:
+        return
+    try:
+        async with asyncio.timeout(CLOSE_TIMEOUT_S):
+            await connection.close(CLOSE_TRY_AGAIN)
+    except Exception as error:
+        _logger.warning(
+            "fanout_connection_close_failed",
+            "关闭失去实时同步的连接失败",
+            error_type=type(error).__name__,
+        )
 
 
 def encode_per_name(
