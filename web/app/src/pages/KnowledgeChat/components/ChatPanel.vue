@@ -10,6 +10,8 @@ import { computed, onScopeDispose, provide } from 'vue'
 import { LIVE_SOURCES, createLiveSources } from '../scripts/liveSources'
 import { livePointOfStep } from '@/features/knowledgeChat/liveTools'
 import ChatToolStep from './ChatToolStep.vue'
+import ChatLivePoint from './ChatLivePoint.vue'
+import { liveCardRows } from '../scripts/liveCardRows'
 import type { KnowledgeChatScopeBase } from '@dt/contracts'
 import { DtButton, DtCard, DtTag } from '@dt/ui'
 
@@ -37,6 +39,7 @@ const props = defineProps<{
 const sources = createLiveSources()
 provide(LIVE_SOURCES, sources)
 onScopeDispose(sources.dispose)
+const cardRows = computed(() => liveCardRows(props.chat.entries.value))
 const activeCards = computed(
   () =>
     new Set(
@@ -81,14 +84,24 @@ defineEmits<{
     </div>
 
     <AiTimeline
-      :entries="chat.entries.value"
+      :entries="cardRows.entries"
       :starters="starters"
       empty-title="查资料，也能查看实时数据"
       @starter="$emit('send', $event)"
       @answer="chat.answerAsk"
     >
       <template #tool="{ step, entryId }">
-        <ChatToolStep :step="step" :enabled="activeCards.has(entryId)" />
+        <li v-if="cardRows.rows.has(entryId)" class="chat-panel__card-row">
+          <ul class="chat-panel__cards" aria-label="实时数值卡片">
+            <ChatLivePoint
+              v-for="card in cardRows.rows.get(entryId)"
+              :key="card.id"
+              :point="card.point"
+              :enabled="activeCards.has(card.id)"
+            />
+          </ul>
+        </li>
+        <ChatToolStep v-else :step="step" :enabled="false" />
       </template>
     </AiTimeline>
 
@@ -116,6 +129,19 @@ defineEmits<{
     rgba(var(--accent-secondary-rgb), 0.35),
     transparent
   );
+}
+
+.chat-panel__card-row {
+  min-width: 0;
+  list-style: none;
+}
+.chat-panel__cards {
+  display: flex;
+  gap: 0.625rem;
+  flex-wrap: wrap;
+  padding: 0.25rem 0 0.5rem;
+  margin: 0;
+  list-style: none;
 }
 
 .chat-panel__bar {

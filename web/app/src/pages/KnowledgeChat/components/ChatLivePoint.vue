@@ -1,23 +1,21 @@
 <script setup lang="ts">
 /** @fileoverview 对话中的只读实时卡片。 */
-import { computed, toRef } from 'vue'
-import { DtButton, DtCard, DtNotice, DtTag } from '@dt/ui'
+import { computed, ref, toRef } from 'vue'
+import { DtButton, DtCard, DtNotice } from '@dt/ui'
 import type { LivePoint } from '@/features/knowledgeChat/liveTools'
 import { formatTimestampMs } from '@/utils/datetime'
+import { formatLiveValue } from '../scripts/formatLiveValue'
 import { useLivePoint } from '../scripts/useLivePoint'
+import ChatLivePointSettings from './ChatLivePointSettings.vue'
 
 const props = defineProps<{ point: LivePoint; enabled: boolean }>()
 const live = useLivePoint(toRef(props, 'point'), toRef(props, 'enabled'))
+const decimals = ref<number | undefined>(2)
 const value = computed(() => {
   const sample = live.sample.value
-  if (sample?.state !== 'ok') return '—'
-  if (sample.value === null) return 'null'
-  if (typeof sample.value === 'boolean') return sample.value ? 'true' : 'false'
-  return typeof sample.value === 'object'
-    ? JSON.stringify(sample.value)
-    : typeof sample.value === 'string' || typeof sample.value === 'number'
-      ? String(sample.value)
-      : '—'
+  return sample?.state === 'ok'
+    ? formatLiveValue(sample.value, decimals.value)
+    : '—'
 })
 const sampledAt = computed(() => {
   const sample = live.sample.value
@@ -46,34 +44,44 @@ const status = computed(() => {
 <template>
   <li class="chat-live-point">
     <DtCard padding="sm">
-      <div class="chat-live-point__header">
-        <div>
-          <strong>{{ live.current.value.name }}</strong>
-          <div class="chat-live-point__source">
-            {{ live.current.value.source_name }}
-          </div>
-        </div>
-        <DtTag
-          :intent="
-            live.isLive.value && live.sample.value?.state === 'ok'
-              ? 'success'
-              : 'warning'
-          "
-          size="sm"
-          >{{ status }}</DtTag
+      <strong class="chat-live-point__name" :title="live.current.value.name">
+        {{ live.current.value.name }}
+      </strong>
+      <div class="chat-live-point__reading">
+        <div
+          class="chat-live-point__value"
+          :class="{ 'chat-live-point__value--stale': !live.isLive.value }"
         >
+          {{ value }} <span>{{ live.current.value.unit }}</span>
+        </div>
         <DtButton v-if="enabled" variant="ghost" size="xs" @click="live.toggle">
           {{ live.isPaused.value ? '恢复' : '暂停' }}
         </DtButton>
+        <ChatLivePointSettings
+          v-model="decimals"
+          :source-name="live.current.value.source_name"
+          :sampled-at="sampledAt"
+          :quality="quality"
+        />
       </div>
-      <div
-        class="chat-live-point__value"
-        :class="{ 'chat-live-point__value--stale': !live.isLive.value }"
-      >
-        {{ value }} <span>{{ live.current.value.unit }}</span>
-      </div>
-      <div class="chat-live-point__source">
-        采样时间：{{ sampledAt }} · {{ quality || '尚无读数' }}
+      <div class="chat-live-point__status" :title="`${sampledAt} · ${quality}`">
+        <span
+          class="chat-live-point__dot"
+          :class="{
+            'chat-live-point__dot--live':
+              live.isLive.value &&
+              live.sample.value?.state === 'ok' &&
+              live.sample.value.quality === 'good',
+          }"
+        />
+        {{ status }}
+        <span
+          v-if="
+            live.sample.value?.state === 'ok' &&
+            live.sample.value.quality !== 'good'
+          "
+          >· {{ quality }}</span
+        >
       </div>
       <DtNotice v-if="live.error.value" intent="warning">{{
         live.error.value
@@ -91,36 +99,55 @@ const status = computed(() => {
 
 <style scoped lang="scss">
 .chat-live-point {
-  margin-block: 0.5rem;
+  flex: 0 0 17rem;
+  width: 17rem;
+  max-width: 100%;
+  min-width: 0;
   list-style: none;
 }
-.chat-live-point__header {
+.chat-live-point__name {
+  display: block;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  font-size: 0.8125rem;
+}
+.chat-live-point__reading {
   display: flex;
   align-items: center;
-  flex-wrap: wrap;
-  gap: 0.75rem;
-}
-.chat-live-point__header > div {
-  flex: 1;
-  min-width: 0;
-  overflow-wrap: anywhere;
-}
-.chat-live-point__source {
-  color: var(--text-secondary);
-  font-size: 0.75rem;
+  gap: 0.125rem;
+  padding-block: 0.375rem;
 }
 .chat-live-point__value {
+  flex: 1;
+  min-width: 0;
   color: var(--accent-primary);
-  font-size: 2rem;
+  font-size: 1.625rem;
   font-variant-numeric: tabular-nums;
   overflow-wrap: anywhere;
-  padding-block: 0.5rem;
 }
 .chat-live-point__value > span {
   color: var(--text-secondary);
-  font-size: 0.875rem;
+  font-size: 0.75rem;
 }
 .chat-live-point__value--stale {
   color: var(--text-secondary);
+}
+.chat-live-point__status {
+  display: flex;
+  align-items: center;
+  gap: 0.25rem;
+  color: var(--text-secondary);
+  font-size: 0.6875rem;
+}
+.chat-live-point__dot {
+  flex-shrink: 0;
+  width: 0.375rem;
+  height: 0.375rem;
+  border-radius: 50%;
+  background: var(--state-warning);
+}
+.chat-live-point__dot--live {
+  background: var(--state-success);
 }
 </style>

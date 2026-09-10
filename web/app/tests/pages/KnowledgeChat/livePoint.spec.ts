@@ -38,7 +38,7 @@ function push(value: unknown, quality = 'good') {
 function open(sources = createLiveSources()) {
   const wrapper = mount(ChatLivePoint, {
     props: { point: LIVE_POINT, enabled: true },
-    global: { provide: { [LIVE_SOURCES]: sources } },
+    global: { provide: { [LIVE_SOURCES]: sources }, stubs: { teleport: true } },
   })
   wrappers.push(wrapper)
   return wrapper
@@ -78,7 +78,9 @@ it('renders streamed zero and false values, quality and sampling time', async ()
   await flushPromises()
   expect(wrapper.find('.chat-live-point__value').text()).toContain('0')
   expect(wrapper.text()).toContain('持续接收')
-  expect(wrapper.text()).toContain('2026')
+  expect(wrapper.get('.chat-live-point__status').attributes('title')).toContain(
+    '2026',
+  )
   push(false, 'bad')
   await flushPromises()
   expect(wrapper.find('.chat-live-point__value').text()).toContain('false')
@@ -226,4 +228,54 @@ it('changing point identity never relabels the previous point value', async () =
   })
   await flushPromises()
   expect(wrapper.find('.chat-live-point__value').text()).not.toContain('22')
+})
+
+it('defaults numeric readings to two decimal places and allows adjustment', async () => {
+  const wrapper = open()
+  await flushPromises()
+  push(39.78009033203125)
+  await flushPromises()
+  expect(wrapper.get('.chat-live-point__value').text()).toBe('39.78 ℃')
+  await wrapper.get('button[aria-label="数值卡片设置"]').trigger('click')
+  await flushPromises()
+  await wrapper.get('input[aria-label="小数位"]').setValue('4')
+  expect(wrapper.get('.chat-live-point__value').text()).toBe('39.7801 ℃')
+  await wrapper.get('input[aria-label="小数位"]').setValue('0')
+  expect(wrapper.get('.chat-live-point__value').text()).toBe('40 ℃')
+  await wrapper.get('input[aria-label="小数位"]').setValue('')
+  expect(wrapper.get('.chat-live-point__value').text()).toBe('39.78 ℃')
+  push(0)
+  await flushPromises()
+  expect(wrapper.get('.chat-live-point__value').text()).toBe('0.00 ℃')
+})
+
+it('bounds decimal places and keeps the selection for new readings', async () => {
+  const wrapper = open()
+  await flushPromises()
+  push(-1.23456789)
+  await flushPromises()
+  await wrapper.get('button[aria-label="数值卡片设置"]').trigger('click')
+  await flushPromises()
+  await wrapper.get('input[aria-label="小数位"]').setValue('12')
+  expect(wrapper.get('.chat-live-point__value').text()).toBe('-1.2345678900 ℃')
+  await wrapper.get('input[aria-label="小数位"]').setValue('-1')
+  expect(wrapper.get('.chat-live-point__value').text()).toBe('-1 ℃')
+  await wrapper.get('input[aria-label="小数位"]').setValue('3')
+  push(2.5)
+  await flushPromises()
+  expect(wrapper.get('.chat-live-point__value').text()).toBe('2.500 ℃')
+})
+
+it.each([
+  ['running', 'running'],
+  ['001.2300', '001.2300'],
+  [null, 'null'],
+  [true, 'true'],
+  [{ value: 1 }, '{"value":1}'],
+])('keeps non-numeric reading %j unchanged', async (reading, expected) => {
+  const wrapper = open()
+  await flushPromises()
+  push(reading)
+  await flushPromises()
+  expect(wrapper.get('.chat-live-point__value').text()).toBe(`${expected} ℃`)
 })

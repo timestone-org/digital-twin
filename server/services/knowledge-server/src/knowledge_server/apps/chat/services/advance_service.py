@@ -363,17 +363,16 @@ async def _closing(
     ⚠ 引用排在 outcome **之前**：前端拿到 outcome 就把回合标成结束了，之后
     再来的帧要么被丢掉、要么显得像「答完了又冒出来一块」。
 
-    ⚠ 起名字排在 outcome **之后**：它要再调一次模型，而用户此刻已经看到答案
-    了；排在前面的话，那一秒会被读成「还在答」。
+    ⚠ 标题必须先于 outcome：前端收到 turn.done 后会立即关闭流。
 
     Args: deps, chat_session_id, payload, cited（已落库的那几条）, outcome。
     """
     if cited:
         yield CitationsFound(items=tuple(cited))
-    yield outcome
     named = await _named(deps, chat_session_id, payload, outcome)
     if named is not None:
         yield named
+    yield outcome
 
 
 async def _named(
@@ -384,20 +383,18 @@ async def _named(
 ) -> title_service.SessionTitled | None:
     """这一轮之后，会话还没有标题就给它起一个。
 
-    ⚠ 只拿**用户发话**那一轮起名：工具回填那一轮的 `user_text` 是空的，
-    拿它起名会得到一个基于半截上下文的标题。
-
-    ⚠ 停在等浏览器时不起名：那时 `reply` 是「我准备这么做」那句，不是答案。
+    首轮进入客户端工具时也按用户问题命名，工具回填不重复起名。
+    待续时不把工具执行前的说明当作答案。
 
     Args: deps, chat_session_id, payload, outcome。
     """
-    if payload.user_text is None or outcome.is_waiting:
+    if payload.user_text is None:
         return None
     return await title_service.autotitle(
         deps.sessions,
         deps.model,
         chat_session_id,
-        (payload.user_text, outcome.reply),
+        (payload.user_text, "" if outcome.is_waiting else outcome.reply),
     )
 
 

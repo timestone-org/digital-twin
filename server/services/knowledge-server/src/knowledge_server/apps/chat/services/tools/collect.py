@@ -13,7 +13,8 @@ COLLECT_SPECS = (
         description=(
             "用设备名、编号和测量量这几个关键词查找采集点位，不扩写描述。"
             "使用向量与关键词混合检索。返回候选、来源和检索降级说明。"
-            "标识只能来自结果；多项可能匹配时用 user.ask 确认。"
+            "标识只能来自结果；多项可能匹配时用 user.ask 确认，"
+            "allow_multiple=true 允许多选。"
         ),
         parameters=object_schema(
             {
@@ -44,7 +45,7 @@ COLLECT_SPECS = (
     ),
     ToolSpec(
         name=WATCH_POINT,
-        description="打开一个持续接收采集数据的只读实时卡片。必须先查点位并消除歧义；不能猜测标识。回执仅表示卡片已创建，不代表已经收到现场读数；不要编造实时值。",
+        description="打开一个持续接收采集数据的只读实时卡片。用户多选时对每个选中点位分别调用，可同批调用多个，页面并排展示。必须先查点位并消除歧义；不能猜测标识。回执仅表示卡片已创建，不代表已经收到现场读数；不要编造实时值。",
         parameters=object_schema(
             {"node_key": string_schema("搜索结果中的点位身份，原样传入")},
             ["node_key"],
