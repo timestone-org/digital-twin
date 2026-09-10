@@ -7,6 +7,7 @@
  */
 import type { TwinConfig } from '@dt/twin-config'
 
+import type { OutlinePlacement } from '../scripts/outlinePlacement'
 import type { TwinEntityKind, TwinSelection } from '../scripts/types'
 import TwinOutline from './TwinOutline.vue'
 
@@ -25,6 +26,8 @@ withDefaults(
 const emit = defineEmits<{
   select: [TwinSelection]
   add: [TwinEntityKind]
+  addInFolder: [{ kind: TwinEntityKind; folderId: string }]
+  place: [OutlinePlacement]
   bulkAdd: []
   remove: [{ kind: TwinEntityKind; id: string }]
   duplicate: [{ kind: TwinEntityKind; id: string }]
@@ -49,6 +52,8 @@ const emit = defineEmits<{
         :renaming-folder-id="renamingFolderId"
         @select="emit('select', $event)"
         @add="emit('add', $event)"
+        @add-in-folder="emit('addInFolder', $event)"
+        @place="emit('place', $event)"
         @bulk-add="emit('bulkAdd')"
         @remove="emit('remove', $event)"
         @duplicate="emit('duplicate', $event)"

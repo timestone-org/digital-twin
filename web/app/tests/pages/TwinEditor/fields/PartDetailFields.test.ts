@@ -76,7 +76,7 @@ describe('标题与风格', () => {
 })
 
 describe('弹窗里那块 3D', () => {
-  it('缺省画模型、也缺省自转', () => {
+  it('缺省画模型、自转默认关闭', () => {
     const wrapper = render()
 
     expect(
@@ -85,7 +85,7 @@ describe('弹窗里那块 3D', () => {
       ),
     ).toBe('true')
     expect(switchByText(wrapper, '模型自转').attributes('aria-checked')).toBe(
-      'true',
+      'false',
     )
   })
 

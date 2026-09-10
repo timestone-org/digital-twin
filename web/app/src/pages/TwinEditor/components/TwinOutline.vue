@@ -252,7 +252,12 @@ function commitRename(id: string, name: string): void {
             @rename-cancel="renamingId = null"
             @remove="emit('removeFolder', folderView.folder.id)"
           />
-          <template v-if="!isCollapsed(folderView.folder.key)">
+          <div
+            v-if="!isCollapsed(folderView.folder.key)"
+            class="max-h-[min(25dvh,200px)] overflow-y-auto overscroll-contain"
+            data-test="outline-folder-scroll"
+            :data-folder-id="folderView.folder.id"
+          >
             <div
               v-for="rowView in folderView.rows"
               :key="rowView.row.key"
@@ -274,28 +279,35 @@ function commitRename(id: string, name: string): void {
                 @act="onRowAct(rowView.row, $event)"
               />
             </div>
-          </template>
+          </div>
         </div>
         <div
-          v-for="rowView in sectionView.rows"
-          :key="rowView.row.key"
-          draggable="true"
-          :style="rowDropStyle(rowView.row)"
-          @dragover.stop="drag.overRow(rowView.row, $event)"
-          @drop.stop.prevent="drag.dropRow(rowView.row)"
-          @dragstart="drag.start(rowView.row, null)"
-          @dragend="drag.end()"
+          v-if="sectionView.rows.length > 0"
+          class="max-h-[min(40dvh,320px)] shrink-0 overflow-y-auto overscroll-contain"
+          data-test="outline-section-scroll"
+          :data-kind="sectionView.section.kind"
         >
-          <OutlineRow
-            :row="rowView.row"
-            :selected="isRowSelected(rowView.row)"
-            :searching="view.active"
-            :slices="rowView.slices"
-            :folders="sectionView.section.folders"
-            :folder-id="null"
-            :confirm-text="confirmTextFor(rowView.row)"
-            @act="onRowAct(rowView.row, $event)"
-          />
+          <div
+            v-for="rowView in sectionView.rows"
+            :key="rowView.row.key"
+            draggable="true"
+            :style="rowDropStyle(rowView.row)"
+            @dragover.stop="drag.overRow(rowView.row, $event)"
+            @drop.stop.prevent="drag.dropRow(rowView.row)"
+            @dragstart="drag.start(rowView.row, null)"
+            @dragend="drag.end()"
+          >
+            <OutlineRow
+              :row="rowView.row"
+              :selected="isRowSelected(rowView.row)"
+              :searching="view.active"
+              :slices="rowView.slices"
+              :folders="sectionView.section.folders"
+              :folder-id="null"
+              :confirm-text="confirmTextFor(rowView.row)"
+              @act="onRowAct(rowView.row, $event)"
+            />
+          </div>
         </div>
       </template>
     </template>

@@ -150,7 +150,7 @@ export const DEFAULT_PART_DETAIL: TwinPartDetail = Object.freeze({
   subtitle: '',
   fields: [],
   showModel: true,
-  autoRotate: true,
+  autoRotate: false,
   modelHeight: 420,
   width: 1120,
   variant: 'card',

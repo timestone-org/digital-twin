@@ -268,3 +268,22 @@ describe('normalizeTwinConfig 的幂等', () => {
     expect(roundTripped).toEqual(once)
   })
 })
+
+describe('部件自转默认值', () => {
+  it('未配置自转时默认关闭，显式开关按配置保留', () => {
+    const config = normalizeTwinConfig({
+      parts: [
+        { id: 'default' },
+        { id: 'empty', detail: {} },
+        { id: 'enabled', detail: { autoRotate: true } },
+        { id: 'disabled', detail: { autoRotate: false } },
+      ],
+    })
+    expect(config.parts.map((part) => part.detail.autoRotate)).toEqual([
+      false,
+      false,
+      true,
+      false,
+    ])
+  })
+})
