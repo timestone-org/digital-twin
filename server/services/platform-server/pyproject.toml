@@ -8,6 +8,7 @@ dependencies = [
     "timeseries",
     # 计划、命令信封、快照键与运行态列名的唯一真源，与 collector 共用（ADR-0017）
     "collectwire",
+    "llmcore",
     "numpy>=2.1",
     "python-docx==1.2.0",
     "scikit-learn>=1.7",
@@ -36,6 +37,7 @@ platform-server = "platform_server.__main__:main"
 lib = { workspace = true }
 timeseries = { workspace = true }
 collectwire = { workspace = true }
+llmcore = { workspace = true }
 
 [build-system]
 requires = ["hatchling"]
