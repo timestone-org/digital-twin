@@ -16,9 +16,10 @@ import type {
 } from '@umoteam/editor'
 import type { Editor as TiptapEditor } from '@tiptap/core'
 import '@umoteam/editor/style'
-import type { ReportDocument, ReportPage } from '@dt/contracts'
+import type { ReportDocument, ReportPage, ReportMetric } from '@dt/contracts'
 import { UMO_ASSETS_DIR } from '../../../../../umoAssets.shared'
 import { businessExtensions } from '../scripts/businessNodes'
+import NodeDialog from './NodeDialog.vue'
 import { documentFrom } from '../../scripts/reportDocument'
 
 const props = withDefaults(
@@ -26,10 +27,11 @@ const props = withDefaults(
     modelValue: ReportDocument
     disabled?: boolean
     page?: ReportPage
+    metrics?: ReportMetric[]
     title?: string
     saveDocument?: () => Promise<boolean>
   }>(),
-  { disabled: false, page: () => ({}), title: '' },
+  { disabled: false, page: () => ({}), title: '', metrics: () => [] },
 )
 
 const emit = defineEmits<{
@@ -39,6 +41,20 @@ const emit = defineEmits<{
 
 const editorRef = ref<UmoEditorInstance | null>(null)
 const tiptap = shallowRef<TiptapEditor | null>(null)
+const editingNode = ref<ReportDocument | null>(null)
+const isEditingNode = ref(false)
+let applyNode: ((attrs: Record<string, unknown>) => boolean) | null = null
+function editNode(event: Event): void {
+  if (props.disabled || !(event instanceof CustomEvent)) return
+  const detail: unknown = event.detail
+  if (!isRecord(detail) || typeof detail['apply'] !== 'function') return
+  editingNode.value = documentFrom(detail['node'])
+  applyNode = detail['apply'] as (attrs: Record<string, unknown>) => boolean
+  isEditingNode.value = true
+}
+function updateNode(node: ReportDocument): void {
+  if (!props.disabled) applyNode?.(node.attrs ?? {})
+}
 let emitted = ''
 let pendingPage: ReportPage | null = null
 
@@ -261,7 +277,13 @@ defineExpose({ insert })
 </script>
 
 <template>
-  <div class="umo-dt-theme" :style="paperStyle">
+  <div class="umo-dt-theme" :style="paperStyle" @report-node-edit="editNode">
+    <NodeDialog
+      v-model="isEditingNode"
+      :node="editingNode"
+      :metrics="props.metrics"
+      @insert="updateNode"
+    />
     <UmoEditor
       ref="editorRef"
       v-bind="options"
@@ -317,5 +339,43 @@ defineExpose({ insert })
 .umo-dt-theme .umo-editor-content .umo-editor {
   font-family: var(--report-body-font);
   font-size: var(--report-body-size);
+}
+</style>
+
+<style lang="scss">
+.umo-dt-theme .report-data-node {
+  display: inline-block;
+  max-width: 100%;
+  padding: 0.15em 0.55em;
+  margin: 0.15em;
+  border: 1px solid var(--accent-primary);
+  border-radius: var(--radius-sm);
+  background: var(--surface-panel);
+  color: var(--text-primary);
+  font-family: var(--font-sans);
+  font-size: 0.9em;
+  cursor: pointer;
+  white-space: normal;
+  overflow-wrap: anywhere;
+  &[data-report-node='condText'] {
+    border-style: dashed;
+  }
+  &[data-report-node='dsChart'],
+  &[data-report-node='dsTable'] {
+    display: block;
+    padding: 1.25em;
+    margin: 0.75em 0;
+    border-left-width: 4px;
+  }
+  &[data-report-node='dsTable'] {
+    border-style: double;
+  }
+  &:hover,
+  &:focus-visible,
+  &.ProseMirror-selectednode {
+    outline: 2px solid var(--accent-primary);
+    outline-offset: 2px;
+    background: var(--surface-raised);
+  }
 }
 </style>

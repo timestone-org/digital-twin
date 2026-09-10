@@ -1,4 +1,5 @@
 /** @fileoverview 四类原子业务节点；DOM 文本不拼接 HTML。 */
+import { businessNodeView } from './businessNodeView'
 import { Node, mergeAttributes } from '@tiptap/core'
 import type { Attributes } from '@tiptap/core'
 
@@ -14,6 +15,9 @@ export const businessExtensions = [
     inline: kind === 'metricRef' || kind === 'condText',
     atom: true,
     addAttributes: defaultAttributes,
+    addNodeView() {
+      return businessNodeView
+    },
     parseHTML() {
       return [{ tag: `span[data-report-node="${kind}"]` }]
     },

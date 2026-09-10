@@ -4,6 +4,7 @@
 会让在途那一片拿着一个已经关掉的连接池（docs/agents/runtime-resilience.md §8）。
 """
 
+import asyncio
 from concurrent.futures import ThreadPoolExecutor
 from dataclasses import dataclass, field
 from typing import cast
@@ -259,7 +260,8 @@ async def test_serving_wires_the_container_and_shuts_it_down(
     await worker.serve(build_settings(), wait=_immediate)
     assert ledger[:2] == ["stop", "stop"]
     assert sorted(ledger[2:4]) == ["drain", "drain"]
-    assert ledger[4:] == [
+    assert ledger[4:8] == ["lease_released"] * 4
+    assert ledger[8:] == [
         "stream",
         # ⚠ 四把租约都要在关连接池之前让出来：让位要连得上 Redis，排在后面就
         # 只能等它自然过期，接任的副本白等一整个 TTL
@@ -302,3 +304,57 @@ def test_the_api_role_serves_http(monkeypatch: pytest.MonkeyPatch) -> None:
     )
     main_module.main()
     assert started == ["http"]
+
+
+async def test_report_group_startup_failure_exits_worker_instead_of_hanging(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """报告消费组初始化失败必须让进程退出，避免容器存活却永久排队。"""
+    ledger: list[str] = []
+    container = build_container(ledger)
+
+    async def unavailable_group(_target: object) -> None:
+        raise RuntimeError("queue unavailable at startup")
+
+    monkeypatch.setattr(
+        container.stream, "ensure_group", unavailable_group, raising=False
+    )
+    pool = worker.WordPool()
+    try:
+        report = worker._report_consumers(container, pool)[0]
+        with pytest.raises(RuntimeError, match="queue unavailable at startup"):
+            async with asyncio.timeout(0.2):
+                await run_until_stopped(
+                    WorkerRuntime(
+                        consumers=(report,),
+                        leaseholders=(),
+                        container=container,
+                        wait=_never_terminate,
+                    ),
+                    drain_timeout_s=0.1,
+                )
+    finally:
+        pool.close()
+    assert ledger[-1] == "database"
+
+
+async def test_consumer_unexpected_return_exits_worker() -> None:
+    """常驻消费循环提前返回也必须暴露为失败。"""
+    ledger: list[str] = []
+    with pytest.raises(RuntimeError, match="consumer exited unexpectedly"):
+        async with asyncio.timeout(0.2):
+            await run_until_stopped(
+                WorkerRuntime(
+                    consumers=(FakeConsumer(ledger),),
+                    leaseholders=(),
+                    container=build_container(ledger),
+                    wait=_never_terminate,
+                ),
+                drain_timeout_s=0.1,
+            )
+    assert ledger[-1] == "database"
+
+
+async def _never_terminate() -> None:
+    """持续等待外部关停信号。"""
+    await asyncio.Event().wait()

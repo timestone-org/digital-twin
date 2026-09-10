@@ -45,7 +45,21 @@ def test_word_page_orientation_watermark_and_toc():
         is_toc_enabled=True,
     )
     result = build_docx(
-        TemplateBody(name="报告", page_json=page), empty_preview()
+        TemplateBody(
+            name="报告",
+            page_json=page,
+            doc_json=DocumentNode(
+                type="doc",
+                content=[
+                    DocumentNode(
+                        type="heading",
+                        attrs={"level": 2},
+                        content=[DocumentNode(type="text", text="内容")],
+                    )
+                ],
+            ),
+        ),
+        empty_preview(),
     )
     document = Document(io.BytesIO(result.payload))
     assert document.sections[0].page_width > document.sections[0].page_height

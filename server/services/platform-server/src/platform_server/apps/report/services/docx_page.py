@@ -1,15 +1,17 @@
 """Word 纸张、页眉页脚、水印及目录设置。"""
 
-from xml.sax.saxutils import quoteattr
+from xml.sax.saxutils import escape
 
 from docx.document import Document
 from docx.enum.section import WD_ORIENT
-from docx.shared import Cm, Pt
-from docx.styles.style import ParagraphStyle
+from docx.shared import Cm
 
 from platform_server.apps.report.schemas.document import PageSettings
 from platform_server.apps.report.services.ooxml import append_xml
+from platform_server.apps.report.services.typography import apply_typography
 from platform_server.apps.report.services.watermark import watermark_xml
+
+_W_NS = "http://schemas.openxmlformats.org/wordprocessingml/2006/main"
 
 _PAPERS = {
     "A4": (21.0, 29.7),
@@ -36,14 +38,9 @@ def apply_page(document: Document, page: PageSettings) -> None:
         setattr(section, f"{side}_margin", Cm(getattr(page.margins_cm, side)))
     section.header.paragraphs[0].text = page.header
     section.footer.paragraphs[0].text = page.footer
-    style = document.styles["Normal"]
-    if isinstance(style, ParagraphStyle):
-        style.font.name = page.font_family
-        style.font.size = Pt(page.font_size_pt)
+    apply_typography(document, page)
     if page.watermark and page.watermark.text:
         _watermark(document, page)
-    if page.is_toc_enabled:
-        _toc(document)
 
 
 def _watermark(document: Document, page: PageSettings) -> None:
@@ -56,13 +53,34 @@ def _watermark(document: Document, page: PageSettings) -> None:
     )
 
 
-def _toc(document: Document) -> None:
-    document.add_heading("目录", level=1)
-    instruction = quoteattr('TOC \\o "1-3" \\h \\z \\u')
+def add_toc(document: Document, headings: list[str]) -> None:
+    """写入有缓存的目录。Args: document, headings。"""
+    if not headings:
+        return
+    document.add_paragraph("目录", style="Caption")
+    instruction = escape('TOC \\o "1-3" \\h \\z \\u')
+    first = document.add_paragraph()
     append_xml(
-        document.add_paragraph(),
-        '<w:fldSimple xmlns:w="http://schemas.openxmlformats.org/'
-        f'wordprocessingml/2006/main" w:instr={instruction}/>',
+        first.add_run(),
+        f'<w:fldChar xmlns:w="{_W_NS}" w:fldCharType="begin"/>',
+    )
+    append_xml(
+        first.add_run(),
+        f'<w:instrText xmlns:w="{_W_NS}" xml:space="preserve">'
+        f"{instruction}</w:instrText>",
+    )
+    append_xml(
+        first.add_run(),
+        f'<w:fldChar xmlns:w="{_W_NS}" w:fldCharType="separate"/>',
+    )
+    paragraph = first
+    for index, text in enumerate(headings):
+        paragraph = first if index == 0 else document.add_paragraph()
+        paragraph.add_run(text)
+        paragraph.paragraph_format.space_after = Cm(0.05)
+    append_xml(
+        paragraph.add_run(),
+        f'<w:fldChar xmlns:w="{_W_NS}" w:fldCharType="end"/>',
     )
     append_xml(
         document.settings,

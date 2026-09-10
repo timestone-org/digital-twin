@@ -44,6 +44,7 @@ describe('报告配置交互', () => {
     wrapper
       .findAllComponents(DtSelect)[1]
       ?.vm.$emit('update:modelValue', '能耗')
+    await flushPromises()
     await wrapper
       .findAllComponents(DtButton)
       .find((button) => button.text() === '插入正文')
@@ -75,6 +76,7 @@ describe('报告配置交互', () => {
       global: { stubs: { teleport: true } },
     })
     await wrapper.setProps({ modelValue: true })
+    await flushPromises()
     await wrapper
       .findAllComponents(DtButton)
       .find((button) => button.text() === '应用')
@@ -123,6 +125,7 @@ it('页面设置的每个字段都能实际修改', async () => {
       select.props('label') === '纸张' ? 'A3' : 'landscape',
     )
   wrapper.findComponent(DtCheckbox).vm.$emit('update:modelValue', true)
+  await flushPromises()
   await wrapper
     .findAllComponents(DtButton)
     .find((button) => button.text() === '应用')
@@ -155,6 +158,7 @@ it('条件文本表达式与数据表标题窗口都会进入节点配置', asyn
   wrapper
     .findComponent(DtInput)
     .vm.$emit('update:modelValue', "IF({本期}>{上期}, '升高', '降低')")
+  await flushPromises()
   await wrapper
     .findAllComponents(DtButton)
     .find((button) => button.text() === '插入正文')
@@ -170,11 +174,10 @@ it('条件文本表达式与数据表标题窗口都会进入节点配置', asyn
   wrapper.findComponent(DtSelect).vm.$emit('update:modelValue', 'dsTable')
   await flushPromises()
   wrapper.findAllComponents(DtSelect)[1]?.vm.$emit('update:modelValue', '能耗')
+
   for (const input of wrapper.findAllComponents(DtInput))
-    input.vm.$emit(
-      'update:modelValue',
-      input.props('label') === '图表标题' ? '年度能耗' : '12mo',
-    )
+    input.vm.$emit('update:modelValue', tableInputValue(input.props('label')))
+  await flushPromises()
   await wrapper
     .findAllComponents(DtButton)
     .find((button) => button.text() === '插入正文')
@@ -189,3 +192,47 @@ it('条件文本表达式与数据表标题窗口都会进入节点配置', asyn
   expect(wrapper.emitted('update:modelValue')).toContainEqual([false])
   wrapper.unmount()
 })
+
+it('编辑图表保留多序列和聚合配置，取消不回写', async () => {
+  const node = {
+    type: 'dsChart',
+    attrs: {
+      title: '原图',
+      kind: 'line',
+      series: [
+        { table: 'energy', key: 'a' },
+        { table: 'energy', key: 'b' },
+      ],
+      agg: 'sum',
+      bucket: 'day',
+    },
+  }
+  const wrapper = mount(NodeDialog, {
+    props: { modelValue: true, metrics: [], node },
+    global: { stubs: { teleport: true } },
+  })
+  expect(
+    wrapper
+      .findAllComponents(DtInput)
+      .find((input) => input.props('label') === '图表标题')
+      ?.props('modelValue'),
+  ).toBe('原图')
+  wrapper.findComponent(DtSelect).vm.$emit('update:modelValue', 'bar')
+  await flushPromises()
+  await wrapper
+    .findAllComponents(DtButton)
+    .find((button) => button.text() === '应用修改')
+    ?.trigger('click')
+  expect(wrapper.emitted('insert')?.[0]?.[0]).toMatchObject({
+    type: 'dsChart',
+    attrs: { ...node.attrs, kind: 'bar' },
+  })
+  expect(node.attrs.kind).toBe('line')
+  wrapper.unmount()
+})
+
+function tableInputValue(label: string | undefined): string {
+  if (label === '图表标题') return '年度能耗'
+  if (label === '取数窗口') return '12mo'
+  return '2'
+}

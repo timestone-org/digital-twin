@@ -420,10 +420,11 @@ async def run_until_stopped(
     Args: runtime, drain_timeout_s。
     """
     tasks = [
-        asyncio.create_task(consumer.run()) for consumer in runtime.consumers
+        asyncio.create_task(consumer.run(), name=type(consumer).__name__)
+        for consumer in runtime.consumers
     ]
     try:
-        await runtime.wait()
+        await _wait_for_consumers(tasks, runtime.wait)
     finally:
         # 1 停收新活 → 2 drain 并行等各自手上那条跑完（墙钟取最慢的一条）
         for consumer in runtime.consumers:
@@ -433,12 +434,45 @@ async def run_until_stopped(
         )
         for task in tasks:
             task.cancel()
+        await asyncio.gather(*tasks, return_exceptions=True)
         # 3 让租约（要连得上 Redis，故排在关资源之前）
         for holder in runtime.leaseholders:
             await holder.release()
         # 4 让资源：队列 → 外库 → 连接池，连接池最后关
         await _release(runtime.container)
     _logger.info("worker_stopped", "worker 已退出")
+
+
+async def _wait_for_consumers(
+    tasks: list[asyncio.Task[None]], wait: Wait
+) -> None:
+    """消费循环提前退出即终止进程，由部署层重启。Args: tasks, wait。"""
+    stopping = asyncio.ensure_future(wait())
+    try:
+        done, _ = await asyncio.wait(
+            [stopping, *tasks], return_when=asyncio.FIRST_COMPLETED
+        )
+        if stopping in done:
+            await stopping
+            return
+        for task in tasks:
+            if task not in done:
+                continue
+            try:
+                if not task.cancelled():
+                    task.result()
+                raise RuntimeError("consumer exited unexpectedly")
+            except Exception as error:
+                _logger.error(
+                    "worker_consumer_exited",
+                    "消费循环提前退出，停止 worker 等待重启",
+                    consumer=task.get_name(),
+                    error=error,
+                )
+                raise
+    finally:
+        stopping.cancel()
+        await asyncio.gather(stopping, return_exceptions=True)
 
 
 async def _release(container: Container) -> None:

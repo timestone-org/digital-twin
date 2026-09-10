@@ -307,6 +307,7 @@ async function previewForAssistant(
           :title="draft.name"
           :disabled="!canEdit || isBusy"
           :save-document="save"
+          :metrics="draft.metrics ?? []"
           @update:model-value="draft.doc_json = $event"
           @update:page="draft.page_json = $event"
         />

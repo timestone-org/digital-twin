@@ -7,7 +7,7 @@ from typing import Protocol
 from docx import Document
 from docx.document import Document as WordDocument
 from docx.enum.text import WD_ALIGN_PARAGRAPH, WD_BREAK
-from docx.shared import Cm, Pt, RGBColor
+from docx.shared import Cm, RGBColor
 from docx.table import Table
 from docx.text.paragraph import Paragraph
 from docx.text.run import Run
@@ -21,10 +21,17 @@ from platform_server.apps.report.schemas.template import TemplateBody
 from platform_server.apps.report.services.chart_ooxml import add_chart
 from platform_server.apps.report.services.chart_raster import render_chart
 from platform_server.apps.report.services.document import text_attr
-from platform_server.apps.report.services.docx_page import apply_page
-from platform_server.apps.report.services.ooxml import append_xml
+from platform_server.apps.report.services.docx_page import add_toc, apply_page
+from platform_server.apps.report.services.ooxml import append_property
+from platform_server.apps.report.services.table_layout import format_table
+from platform_server.apps.report.services.typography import (
+    point_size,
+    set_font_family,
+    set_font_size,
+)
 
 _HEX_COLOR_LENGTH = 7
+_NATIVE_CHART_POINT_LIMIT = 12
 
 
 class BlockParent(Protocol):
@@ -62,17 +69,48 @@ def build_docx(template: TemplateBody, preview: PreviewOut) -> WordResult:
     state = RenderState(
         document=document, preview=preview, warnings=list(preview.warnings)
     )
-    for index, node in enumerate(template.doc_json.content):
+    nodes = template.doc_json.content
+    has_title = bool(
+        nodes
+        and nodes[0].type == "heading"
+        and nodes[0].attrs.get("level", 1) == 1
+    )
+    if template.page_json.is_toc_enabled and not has_title:
+        add_toc(document, _heading_texts(nodes))
+    for index, node in enumerate(nodes):
         _block(state, document, node, f"content.{index}")
+        if index == 0 and has_title:
+            document.paragraphs[0].style = "Title"
+            if template.page_json.is_toc_enabled:
+                add_toc(document, _heading_texts(nodes[1:]))
     if state.warnings:
         document.add_heading("数据与版式提示", level=2)
         for warning in dict.fromkeys(state.warnings):
-            document.add_paragraph(warning)
+            document.add_paragraph(_warning_text(warning, preview))
     output = io.BytesIO()
     document.save(output)
     return WordResult(
         payload=output.getvalue(), warnings=tuple(dict.fromkeys(state.warnings))
     )
+
+
+def _warning_text(warning: str, preview: PreviewOut) -> str:
+    """用内容标题替代导出提示中的内部路径。Args: warning, preview。"""
+    path, separator, message = warning.partition("：")
+    if not separator or not path.startswith("content."):
+        return warning
+    value = preview.nodes.get(path)
+    title = value.title if value and value.title else "正文内容"
+    return f"{title}：{message}"
+
+
+def _heading_texts(nodes: list[DocumentNode]) -> list[str]:
+    """收集目录正文条目。Args: nodes。"""
+    return [
+        "".join(child.text or "" for child in node.content)
+        for node in nodes
+        if node.type == "heading"
+    ]
 
 
 def _block(
@@ -132,9 +170,9 @@ def _paragraph(
         "right": WD_ALIGN_PARAGRAPH.RIGHT,
         "justify": WD_ALIGN_PARAGRAPH.JUSTIFY,
     }
-    paragraph.alignment = alignments.get(
-        text_attr(node, "textAlign", "left"), WD_ALIGN_PARAGRAPH.LEFT
-    )
+    alignment = node.attrs.get("textAlign")
+    if isinstance(alignment, str) and alignment in alignments:
+        paragraph.alignment = alignments[alignment]
     for index, child in enumerate(node.content):
         child_path = f"{path}.content.{index}"
         if child.type == "text":
@@ -143,7 +181,10 @@ def _paragraph(
             paragraph.add_run().add_break()
         elif child.type in ("metricRef", "condText"):
             value = state.preview.nodes.get(child_path)
-            paragraph.add_run(value.text if value else "[数据未配置]")
+            _marks(
+                paragraph.add_run(value.text if value else "[数据未配置]"),
+                child,
+            )
         else:
             state.warnings.append(
                 f"{child_path}：行内节点 {child.type} 无法保留"
@@ -169,12 +210,12 @@ def _set_paragraph_style(paragraph: Paragraph, node: DocumentNode) -> None:
 def _text_style(run: Run, mark: DocumentMark) -> None:
     font = mark.attrs.get("fontFamily")
     if isinstance(font, str):
-        run.font.name = font
+        set_font_family(run.font, font)
     size = mark.attrs.get("fontSize")
     if isinstance(size, str):
-        number = size.removesuffix("pt").removesuffix("px")
-        if number.replace(".", "", 1).isdigit():
-            run.font.size = Pt(min(72, max(6, float(number))))
+        points = point_size(size)
+        if points is not None:
+            set_font_size(run.font, points)
     color = mark.attrs.get("color")
     if (
         isinstance(color, str)
@@ -209,6 +250,7 @@ def _table(
             cell_path = f"{path}.content.{row_index}.content.{column_index}"
             _cell_blocks(state, target, cell, cell_path)
     _repeat_header(table.rows[0])
+    format_table(table, state.document)
 
 
 def _cell_blocks(
@@ -235,14 +277,14 @@ def _business_block(
         parent.add_paragraph(value.text if value else "[数据未配置]")
         return
     if value.title:
-        parent.add_paragraph(value.title)
+        parent.add_paragraph(value.title).style = "Caption"
     if node.type == "dsChart":
         if not isinstance(parent, WordDocument):
             state.warnings.append(f"{path}：表格内图表未生成")
             return
         _draw_chart(state, parent, node, value, path)
     else:
-        _data_table(parent, value)
+        _data_table(parent, value, state.document)
 
 
 def _draw_chart(
@@ -252,7 +294,20 @@ def _draw_chart(
     value: NodeValue,
     path: str,
 ) -> None:
-    if text_attr(node, "render", "native") == "native":
+    native = text_attr(node, "render", "native") == "native"
+    point_count = len(
+        {point.ts for series in value.series for point in series.points}
+    )
+    if (
+        native
+        and point_count > _NATIVE_CHART_POINT_LIMIT
+        and _dense_chart(document, value, state.preview.timezone)
+    ):
+        state.warnings.append(
+            f"{path}：高密度趋势已生成高清图像，保留全部数据点"
+        )
+        return
+    if native:
         try:
             add_chart(document, value, state.preview.timezone)
             return
@@ -261,12 +316,30 @@ def _draw_chart(
     try:
         payload = render_chart(value, state.preview.timezone)
         document.add_picture(io.BytesIO(payload), width=Cm(14))
+        document.paragraphs[-1].paragraph_format.line_spacing = 1.0
     except (ValueError, RuntimeError):
         state.warnings.append(f"{path}：位图生成失败，请检查中文字体")
         document.add_paragraph("[图表不可用]")
 
 
-def _data_table(parent: BlockParent, value: NodeValue) -> None:
+def _dense_chart(
+    document: WordDocument, value: NodeValue, timezone: str
+) -> bool:
+    """固定密集图表排版。Args: document, value, timezone。"""
+    try:
+        payload = render_chart(value, timezone)
+    except (ValueError, RuntimeError):
+        return False
+    document.add_picture(io.BytesIO(payload), width=Cm(14))
+    paragraph = document.paragraphs[-1]
+    paragraph.paragraph_format.line_spacing = 1.0
+    paragraph.alignment = WD_ALIGN_PARAGRAPH.CENTER
+    return True
+
+
+def _data_table(
+    parent: BlockParent, value: NodeValue, document: WordDocument
+) -> None:
     if not value.columns:
         parent.add_paragraph("暂无数据")
         return
@@ -279,12 +352,13 @@ def _data_table(parent: BlockParent, value: NodeValue) -> None:
         cells = table.add_row().cells
         for index, text in enumerate(row[: len(cells)]):
             cells[index].text = text
+    format_table(table, document)
 
 
 def _repeat_header(row: object) -> None:
-    append_xml(
+    append_property(
         row,
-        '<w:trPr xmlns:w="http://schemas.openxmlformats.org/'
-        'wordprocessingml/2006/main"><w:tblHeader/></w:trPr>',
+        "trPr",
+        '<w:tblHeader xmlns:w="http://schemas.openxmlformats.org/wordprocessingml/2006/main"/>',
         attribute="_tr",
     )

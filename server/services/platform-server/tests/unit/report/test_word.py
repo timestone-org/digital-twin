@@ -61,6 +61,8 @@ def test_word_contains_resolved_text_and_native_chart():
             )
             is not None
         )
+    drawings = [p for p in document.paragraphs if "<w:drawing" in p._p.xml]
+    assert drawings[0].paragraph_format.line_spacing == 1.0
     assert not result.warnings
 
 
