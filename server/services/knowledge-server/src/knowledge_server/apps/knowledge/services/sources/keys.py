@@ -87,6 +87,14 @@ def figure_key(
     )
 
 
+def preview_key(base_id: uuid.UUID, document_id: uuid.UUID) -> str:
+    """DOCX 派生 PDF 的固定落点。
+
+    Args: base_id, document_id。
+    """
+    return f"{document_prefix(base_id, document_id)}preview.pdf"
+
+
 def base_prefix(base_id: uuid.UUID) -> str:
     """一个库名下的全部原件。删库时按它一把清。
 

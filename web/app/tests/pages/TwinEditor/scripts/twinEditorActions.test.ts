@@ -244,3 +244,78 @@ describe('文件夹', () => {
     expect(doc.bindings.value[0]?.fieldKey).toBe('anchorValues[1].value')
   })
 })
+
+describe('大纲快速操作', () => {
+  it('跨夹放到指定项后，一次撤销恢复顺序与归属', () => {
+    const { doc, actions } = setup({
+      anchors: [{ id: 'a' }, { id: 'b' }, { id: 'c' }, { id: 'd' }],
+      folders: [{ id: 'f', kind: 'anchors', name: '组', itemIds: ['c'] }],
+    })
+    actions.place({
+      kind: 'anchors',
+      id: 'a',
+      targetId: 'c',
+      position: 'after',
+    })
+    expect(doc.config.value.anchors.map((item) => item.id)).toEqual([
+      'b',
+      'c',
+      'a',
+      'd',
+    ])
+    expect(doc.config.value.folders[0]?.itemIds).toContain('a')
+    doc.undo()
+    expect(doc.config.value.anchors.map((item) => item.id)).toEqual([
+      'a',
+      'b',
+      'c',
+      'd',
+    ])
+    expect(doc.config.value.folders[0]?.itemIds).toEqual(['c'])
+    doc.redo()
+    actions.place({
+      kind: 'anchors',
+      id: 'a',
+      targetId: 'b',
+      position: 'before',
+    })
+    expect(doc.config.value.anchors.map((item) => item.id)).toEqual([
+      'a',
+      'b',
+      'c',
+      'd',
+    ])
+    expect(doc.config.value.folders[0]?.itemIds).toEqual(['c'])
+  })
+  it('在夹内新建、选中并整笔撤销', () => {
+    const { doc, actions, select } = setup({
+      folders: [{ id: 'f', kind: 'anchors', name: '组', itemIds: [] }],
+    })
+    actions.add('anchors', 'f')
+    const id = doc.config.value.anchors[0]?.id
+    expect(doc.config.value.folders[0]?.itemIds).toEqual([id])
+    expect(select).toHaveBeenCalledWith({ kind: 'anchors', id })
+    doc.undo()
+    expect(doc.config.value.anchors).toEqual([])
+    expect(doc.config.value.folders[0]?.itemIds).toEqual([])
+  })
+  it('不存在或异类文件夹不产生实体', () => {
+    const { doc, actions } = setup({
+      folders: [{ id: 'f', kind: 'parts', name: '组', itemIds: [] }],
+    })
+    actions.add('anchors', 'f')
+    actions.add('anchors', 'missing')
+    expect(doc.config.value.anchors).toEqual([])
+  })
+})
+
+it('跨多行放置后绑定跟随原锚点，撤销恢复原字段', () => {
+  const { actions, doc } = setup(
+    { anchors: [{ id: 'a' }, { id: 'b' }, { id: 'c' }] },
+    [binding('anchorValues[0].value')],
+  )
+  actions.place({ kind: 'anchors', id: 'a', targetId: 'c', position: 'after' })
+  expect(doc.bindings.value[0]?.fieldKey).toBe('anchorValues[2].value')
+  doc.undo()
+  expect(doc.bindings.value[0]?.fieldKey).toBe('anchorValues[0].value')
+})

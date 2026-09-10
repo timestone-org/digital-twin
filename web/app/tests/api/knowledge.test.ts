@@ -241,4 +241,14 @@ describe('取原件', () => {
 
     expect(lastCall(requestBytes)[1].signal).toBe(controller.signal)
   })
+
+  it('DOCX 页面预览走派生物端点并带上中止信号', async () => {
+    const controller = new AbortController()
+
+    await knowledge.readDocumentPreview('d1', controller.signal)
+
+    expect(lastCall(requestBytes)[0]).toBe('/documents/d1/preview')
+    expect(lastCall(requestBytes)[1].baseUrl).toBe(KNOWLEDGE_PREFIX)
+    expect(lastCall(requestBytes)[1].signal).toBe(controller.signal)
+  })
 })

@@ -5,16 +5,16 @@
  */
 import { mount } from '@vue/test-utils'
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
-import { defineComponent, h } from 'vue'
+import { defineComponent, h, nextTick, ref } from 'vue'
 
 import {
   PANE_DEFAULTS,
   PANE_MIN_PX,
-} from '@/pages/DashboardEditor/scripts/paneWidths'
+} from '../../../src/components/EditorPanes/paneWidths'
 import {
   useEditorPanes,
   type EditorPanes,
-} from '@/pages/DashboardEditor/scripts/useEditorPanes'
+} from '../../../src/components/EditorPanes/useEditorPanes'
 
 const HOST_WIDTH = 1600
 
@@ -29,11 +29,11 @@ function pointer(type: string, clientX: number): PointerEvent {
   return new PointerEvent(type, { clientX })
 }
 
-function mountPanes() {
+function mountPanes(storageKey?: string) {
   const captured: EditorPanes[] = []
   const Host = defineComponent({
     setup() {
-      const created = useEditorPanes()
+      const created = useEditorPanes(storageKey)
       captured.push(created)
       return () => h('div', { ref: created.hostRef })
     },
@@ -165,5 +165,40 @@ describe('栅格模板', () => {
     panes.startDrag('left', pointer('pointerdown', 10))
 
     expect(panes.gridStyle.value.userSelect).toBe('none')
+  })
+})
+
+describe('跨编辑器复用', () => {
+  it('不同编辑器的宽度分别存档', () => {
+    const { panes, wrapper } = mountPanes('dt.twin-editor.panes')
+    panes.nudge('left', 64)
+    expect(localStorage.getItem('dt.editor.panes')).toBeNull()
+    expect(
+      JSON.parse(localStorage.getItem('dt.twin-editor.panes') ?? '{}'),
+    ).toEqual({ left: 304, right: 320 })
+    wrapper.unmount()
+    const restored = mountPanes('dt.twin-editor.panes')
+    expect(restored.panes.left.value).toBe(304)
+    restored.wrapper.unmount()
+  })
+
+  it('异步加载完成后才出现的容器也会观察尺寸，卸载后断开', async () => {
+    const ready = ref(false)
+    const observe = vi.spyOn(ResizeObserver.prototype, 'observe')
+    const disconnect = vi.spyOn(ResizeObserver.prototype, 'disconnect')
+    const wrapper = mount(
+      defineComponent({
+        setup() {
+          const panes = useEditorPanes()
+          return () => (ready.value ? h('div', { ref: panes.hostRef }) : null)
+        },
+      }),
+    )
+    expect(observe).not.toHaveBeenCalled()
+    ready.value = true
+    await nextTick()
+    expect(observe).toHaveBeenCalledWith(wrapper.element)
+    wrapper.unmount()
+    expect(disconnect).toHaveBeenCalled()
   })
 })

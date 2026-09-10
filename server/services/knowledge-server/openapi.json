@@ -2805,6 +2805,57 @@
         ]
       }
     },
+    "/api/v1/knowledge/documents/{document_id}/preview": {
+      "get": {
+        "description": "优先吐 DOCX 的 PDF 派生物，缺席时回原件兼容预览。\n\nArgs: session, container, _viewer, document_id。",
+        "operationId": "read_preview_api_v1_knowledge_documents__document_id__preview_get",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "document_id",
+            "required": true,
+            "schema": {
+              "format": "uuid",
+              "title": "Document Id",
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/pdf": {
+                "schema": {
+                  "format": "binary",
+                  "type": "string"
+                }
+              },
+              "application/vnd.openxmlformats-officedocument.wordprocessingml.document": {
+                "schema": {
+                  "format": "binary",
+                  "type": "string"
+                }
+              }
+            },
+            "description": "PDF 派生预览，未生成时为原 DOCX"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "取 DOCX 原件的页面预览",
+        "tags": [
+          "document"
+        ]
+      }
+    },
     "/api/v1/knowledge/documents/{document_id}/raw": {
       "get": {
         "description": "把一份文档的原件吐出去，供页面里预览与下载。\n\n⚠ 回的是字节不是信封（与图那条同一份 api-contract 显式豁免）。\n\nArgs: session, container, _viewer, document_id。",

@@ -4,7 +4,8 @@
  * 单测直接喂 dt 就能驱动完整一圈。
  */
 import { clampedOr } from './normalizeShared'
-import { applyRoamEasing, interpTwinPose, type TwinPose } from './roamPose'
+import type { TwinPose } from './roamPose'
+import { RoamSpline, type RoamSplineSegment } from './roamSpline'
 import type { TwinCamera, TwinRoamTour } from './types'
 
 /**
@@ -16,17 +17,11 @@ import type { TwinCamera, TwinRoamTour } from './types'
 export const MAX_ROAM_STEP_MS = 100
 
 /** 轨迹上的一段：从一个视点飞到下一个，到站再停一会儿。 */
-export interface TwinRoamSegment {
+export interface TwinRoamSegment extends RoamSplineSegment {
   /** 本段起始视点 id；逐段覆盖按它取。 */
   fromId: string
   /** 本段落点视点 id；编辑器拿它显示「A → B」。 */
   toId: string
-  from: TwinPose
-  to: TwinPose
-  /** 飞行时长 ms。 */
-  flyMs: number
-  /** 到站后的停留时长 ms。 */
-  holdMs: number
 }
 
 /** 时间线此刻在干什么。`idle` = 非循环轨迹已经走完，停在终点上。 */
@@ -108,6 +103,7 @@ export function buildRoamSegments(
 export class RoamTimeline {
   private readonly segments: readonly TwinRoamSegment[]
   private readonly loop: boolean
+  private readonly spline: RoamSpline
   private index = 0
   private phase: TwinRoamPhase = 'flying'
   private elapsedMs = 0
@@ -120,6 +116,7 @@ export class RoamTimeline {
   constructor(segments: readonly TwinRoamSegment[], loop: boolean) {
     this.segments = segments
     this.loop = loop
+    this.spline = new RoamSpline(segments, loop)
   }
 
   get isPlaying(): boolean {
@@ -186,7 +183,7 @@ export class RoamTimeline {
     if (segment === undefined) return null
     if (this.phase !== 'flying') return segment.to
     const progress = segment.flyMs > 0 ? this.elapsedMs / segment.flyMs : 1
-    return interpTwinPose(segment.from, segment.to, applyRoamEasing(progress))
+    return this.spline.pose(this.index, progress, segment)
   }
 
   private rewind(): void {

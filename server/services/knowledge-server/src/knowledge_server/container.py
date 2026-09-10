@@ -8,6 +8,7 @@
 订阅账号那一路的登录态归 platform，本服务经内部面领令牌、只领不刷。
 """
 
+import uuid
 from dataclasses import dataclass, field
 
 import httpx
@@ -15,6 +16,10 @@ from langchain_core.language_models import BaseChatModel
 
 from knowledge_server.apps.knowledge.services.assembly import (
     external_parsers,
+)
+from knowledge_server.apps.knowledge.services.docx_preview import (
+    DocumentPreviewer,
+    build_previewer,
 )
 from knowledge_server.apps.knowledge.services.embedding import (
     Embedder,
@@ -106,6 +111,11 @@ class Container:
     # 库上那几件启动之后才知道的事（向量列的维数）。⚠ 可变对象，故不带 frozen：
     # 它是这份容器里唯一「装配之后才填得出来」的东西
     schema: SchemaFacts = field(default_factory=SchemaFacts)
+    # DOCX 的 PDF 派生器。只有 worker 调它；放在组合根保证开关只装配一次。
+    previewer: DocumentPreviewer | None = None
+    # Redis consumer 的进程级随机后缀。⚠ app_instance 可能为空或多副本同名，
+    # 只用它会让旧进程在新 owner 接管后仍被 Lua 误判为 owner。
+    ingest_consumer_nonce: uuid.UUID = field(default_factory=uuid.uuid4)
 
     def ingest_group(self) -> StreamGroup:
         """摄取队列的消费组身份。
@@ -113,10 +123,11 @@ class Container:
         ⚠ 消费者名带实例号：同一个组里两个消费者同名的话，`XAUTOCLAIM`
         会把对方手上还在跑的消息认领过来，于是同一份文档被两个进程一起解。
         """
+        instance = self.settings.app_instance.strip() or SERVICE_NAME
         return StreamGroup(
             stream=self.settings.ingest_stream,
             group=self.settings.ingest_group,
-            consumer=self.settings.app_instance,
+            consumer=f"{instance}:{self.ingest_consumer_nonce}",
         )
 
     def embedding_choice(self) -> tuple[str | None, int | None]:
@@ -187,13 +198,7 @@ def build_container(settings: Settings) -> Container:
         # 而真要代表用户去拉数据时，api 侧会按请求另造一份带头的
         sources=build_sources(SourceDeps(store=store, platform=platform)),
         external_parsers=external_parsers(settings),
-        embedder=build_dynamic_embedder(
-            DynamicEmbeddingAdapter(
-                resolve=lambda: _embedding_endpoint(settings, catalog),
-                refresh=catalog.refresh,
-            ),
-            settings.embedding_max_input_tokens,
-        ),
+        embedder=_build_embedder(settings, catalog),
         catalog=catalog,
         # ⚠ 断路器一个进程一份、跟着容器活，且 `:ask` 与对话面**共用**这一份：
         # 它们打的是同一个端点，那个端点不行就是整个不行
@@ -202,6 +207,25 @@ def build_container(settings: Settings) -> Container:
         ),
         reranker=_build_reranker(settings, catalog),
         responder=_build_responder(chat_adapter, chat_breaker, catalog),
+        previewer=build_previewer(
+            settings.office_preview_enabled,
+            settings.office_preview_command,
+            settings.office_preview_timeout_s,
+        ),
+    )
+
+
+def _build_embedder(settings: Settings, catalog: CatalogCache) -> Embedder:
+    """装出运行期按模型目录解析端点的嵌入面。
+
+    Args: settings, catalog。
+    """
+    return build_dynamic_embedder(
+        DynamicEmbeddingAdapter(
+            resolve=lambda: _embedding_endpoint(settings, catalog),
+            refresh=catalog.refresh,
+        ),
+        settings.embedding_max_input_tokens,
     )
 
 

@@ -6,7 +6,7 @@
 """
 
 import uuid
-from typing import Annotated
+from typing import Annotated, Any
 from urllib.parse import quote
 
 from fastapi import APIRouter, Depends, Query, Response, status
@@ -44,6 +44,21 @@ WriteDep = Annotated[CallerContext, Depends(require(KNOWLEDGE_WRITE))]
 # 图的缓存时长。⚠ 只能是 `private`：这张图是某个库里的内容，不许被共享缓存
 # 留下来。ETag 用内容哈希，所以时长长一点也不会拿到旧图
 FIGURE_CACHE_S = 3600
+DOCX_MEDIA_TYPE = (
+    "application/vnd.openxmlformats-officedocument.wordprocessingml.document"
+)
+# FastAPI 把 OpenAPI 元数据声明成动态 JSON；Any 在这一处边界内不向业务层流动
+PREVIEW_RESPONSES: dict[int | str, dict[str, Any]] = {
+    200: {
+        "description": "PDF 派生预览，未生成时为原 DOCX",
+        "content": {
+            "application/pdf": {
+                "schema": {"type": "string", "format": "binary"}
+            },
+            DOCX_MEDIA_TYPE: {"schema": {"type": "string", "format": "binary"}},
+        },
+    }
+}
 # 原件的缓存时长。同上只能是 `private`，ETag 同样是内容哈希——重新解析不改
 # 字节，那份缓存因此仍然有效
 RAW_CACHE_S = 3600
@@ -144,6 +159,22 @@ async def get_one(
     return ok(document_service.document_out(row))
 
 
+async def _requeued(
+    session: SessionDep, container: ContainerDep, document_id: uuid.UUID
+) -> DocumentOut:
+    """按当前 rollout 档开启一次人工重排。
+
+    Args: session, container, document_id。
+    """
+    return await document_service.requeue_document(
+        session,
+        container.stream,
+        container.ingest_group(),
+        document_id,
+        container.settings.ingest_generation_write_enabled,
+    )
+
+
 @router.post(
     "/{document_id}:reparse",
     response_model=ApiResponse[DocumentOut],
@@ -162,11 +193,7 @@ async def reparse(
 
     Args: session, container, _actor, document_id。
     """
-    return ok(
-        await document_service.requeue_document(
-            session, container.stream, container.ingest_group(), document_id
-        )
-    )
+    return ok(await _requeued(session, container, document_id))
 
 
 @router.get(
@@ -211,6 +238,33 @@ def _figure_response(made: document_service.FigureBytes) -> Response:
 
 
 @router.get(
+    "/{document_id}/preview",
+    summary="取 DOCX 原件的页面预览",
+    response_class=Response,
+    responses=PREVIEW_RESPONSES,
+)
+async def read_preview(
+    session: SessionDep,
+    container: ContainerDep,
+    _viewer: UseDep,
+    document_id: uuid.UUID,
+) -> Response:
+    """优先吐 DOCX 的 PDF 派生物，缺席时回原件兼容预览。
+
+    Args: session, container, _viewer, document_id。
+    """
+    made = await document_service.read_preview(
+        session, container.objectstore, document_id
+    )
+    cache_control = (
+        "private, no-store"
+        if made.is_fallback
+        else f"private, max-age={RAW_CACHE_S}"
+    )
+    return _raw_response(made, cache_control=cache_control)
+
+
+@router.get(
     "/{document_id}/raw",
     summary="取原件的字节",
     response_class=Response,
@@ -233,7 +287,11 @@ async def read_raw(
     return _raw_response(made)
 
 
-def _raw_response(made: document_service.RawBytes) -> Response:
+def _raw_response(
+    made: document_service.RawBytes,
+    *,
+    cache_control: str = f"private, max-age={RAW_CACHE_S}",
+) -> Response:
     """一份原件连缓存头、护栏头与文件名。
 
     ⚠ `Content-Disposition` 的取值由**类型白名单**定，不由调用方定：把用户传上
@@ -248,7 +306,7 @@ def _raw_response(made: document_service.RawBytes) -> Response:
         media_type=made.media_type,
         headers={
             "ETag": f'"{made.etag}"',
-            "Cache-Control": f"private, max-age={RAW_CACHE_S}",
+            "Cache-Control": cache_control,
             "Content-Disposition": _disposition(made),
             **RAW_GUARD_HEADERS,
         },

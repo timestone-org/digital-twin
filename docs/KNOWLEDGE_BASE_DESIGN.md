@@ -54,8 +54,9 @@ pending ──→ parsing ──→ chunking ──→ embedding ──→ index
   留内存的话一次重启就把「它到底卡在哪一步」全丢了，而界面上表现为「一直在处理中」。
 - 队列是 Redis Stream 消费组（复用 `platform_server/stream.py` 那一套，
   [ADR-0032](adr/0032-知识库独立成代码单元且LLM客户端下沉domain.md) 决策五要求它上移到 `lib`）。
-  **at-least-once 是常态**，所以消费者按**当前状态**判幂等：已经越过这一段的直接跳过。
-  ⚠ 「先查再插」不是幂等——判据必须是那一行的状态，不是「有没有查到」。
+  **at-least-once 是常态**，所以消费者按**当前状态 + 摄取 generation** 判幂等：
+  `ready` / `failed` 与旧期次直接跳过。⚠ 「先查再插」不是幂等——认领必须是一条
+  带 generation 条件的原子更新；重新解析只允许待投递或终态开启新期次。
 - **不自动重试。** 一份解不动的文档重试一万次也解不动，而重试会把 worker 占满。
   失败即写 `failed` + 一句人话，由人在界面上按「重新解析」
   （runtime-resilience §4：一条链路只有一层负责重试，而那一层是人按的那一下）。
@@ -313,8 +314,20 @@ schema `knowledge`，域前缀 `kb_`（database-standard §1）。
 ⚠ 写图**不新增摄取状态**，算在 `parsing` 那一段里：状态是线上契约（CHECK 与
 前端文案都按那几档写的），而写图本来就是解析产出的一部分。
 
-⚠ 本地那几路解析器**恒不出图**（§2.3）。那不是缺陷：docx 里图与正文的对应
-关系 python-docx 给不出来，硬猜一个位置会让引用指错地方。
+⚠ 本地解析器里只有 DOCX 会产出图，而且只收 `a:blip/@r:embed` 指向的嵌入
+图片。Word 形状、图表与 SmartArt 不是图片关系，不伪装成 Figure；它们的显示由
+下面的 PDF 原件预览负责，内容理解仍不在一期范围内。
+
+### 3.3 DOCX 原件另派生 PDF 预览
+
+worker 取到 DOCX 原件后，除本地结构化解析外再用 LibreOffice 派生一份 PDF，写到
+`knowledge/{base}/{document}/preview.pdf`。派生 PDF 不进切块与索引，也不替代
+`DocxParser`；它只补浏览器 HTML 渲染器画不出的 Word 形状、图表与 SmartArt。
+
+派生物仍在私有 `knowledge/` 前缀，读取走
+`GET /documents/{id}/preview`。不存在时端点回原 DOCX 且禁缓存，前端用
+`docx-preview` 兼容显示并提示复杂图形可能不完整。转换失败不把一份本来可检索的
+文档判成 failed；它记稳定事件日志，用户仍可下载原件。完整取舍见 ADR-0054。
 
 ---
 

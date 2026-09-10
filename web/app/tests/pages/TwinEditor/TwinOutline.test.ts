@@ -664,3 +664,50 @@ describe('拖行入夹', () => {
     expect(wrapper.emitted('moveIntoFolder')).toBeUndefined()
   })
 })
+
+describe('直接放置与夹内新建', () => {
+  it.each([
+    [-1, 'before'],
+    [1, 'after'],
+  ])('拖到高度 %s 插到 %s，不冒泡入夹', async (clientY, position) => {
+    const wrapper = mountOutline()
+    await dragWrapOf(wrapper, 'a3').trigger('dragstart')
+    await dragWrapOf(wrapper, 'a1').trigger('dragover', { clientY })
+    await dragWrapOf(wrapper, 'a1').trigger('drop')
+    expect(wrapper.emitted('place')).toEqual([
+      [{ kind: 'anchors', id: 'a3', targetId: 'a1', position }],
+    ])
+    expect(wrapper.emitted('moveIntoFolder')).toBeUndefined()
+    wrapper.unmount()
+  })
+  it('夹内新建会展开文件夹并携带归属', async () => {
+    const wrapper = mountOutline()
+    await folderOf(wrapper, 'f1')
+      .get('[data-test="folder-toggle"]')
+      .trigger('click')
+    await folderOf(wrapper, 'f1')
+      .get('[data-test="folder-add"]')
+      .trigger('click')
+    expect(wrapper.emitted('addInFolder')).toEqual([
+      [{ kind: 'anchors', folderId: 'f1' }],
+    ])
+    expect(rowOf(wrapper, 'a1').exists()).toBe(true)
+    wrapper.unmount()
+  })
+})
+
+it('异类实体、自己和已取消的拖动不能作为排序落点', async () => {
+  const wrapper = mountOutline()
+  await dragWrapOf(wrapper, 'p1').trigger('dragstart')
+  await dragWrapOf(wrapper, 'a1').trigger('dragover', { clientY: 1 })
+  await dragWrapOf(wrapper, 'a1').trigger('drop')
+  await dragWrapOf(wrapper, 'a1').trigger('dragstart')
+  await dragWrapOf(wrapper, 'a1').trigger('dragover', { clientY: 1 })
+  await dragWrapOf(wrapper, 'a1').trigger('drop')
+  await dragWrapOf(wrapper, 'a3').trigger('dragstart')
+  await dragWrapOf(wrapper, 'a1').trigger('dragover', { clientY: 1 })
+  await dragWrapOf(wrapper, 'a3').trigger('dragend')
+  await dragWrapOf(wrapper, 'a1').trigger('drop')
+  expect(wrapper.emitted('place')).toBeUndefined()
+  wrapper.unmount()
+})

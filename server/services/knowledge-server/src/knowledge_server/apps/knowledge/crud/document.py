@@ -26,6 +26,7 @@ class DocumentWrite:
     object_key: str
     byte_size: int
     content_hash: str
+    ingest_generation: uuid.UUID | None = None
 
 
 async def insert_document(session: AsyncSession, write: DocumentWrite) -> None:
@@ -48,6 +49,7 @@ async def insert_document(session: AsyncSession, write: DocumentWrite) -> None:
             object_key=write.object_key,
             byte_size=write.byte_size,
             content_hash=write.content_hash,
+            ingest_generation=write.ingest_generation,
         )
     )
     await session.flush()
@@ -143,6 +145,61 @@ async def mark_status(
     )
     # cast 的理由 —— DML 的 execute 运行期返回 CursorResult，而 AsyncSession
     # 的静态签名只承诺 Result，`rowcount` 在后者上不存在
+    return max(0, cast("CursorResult[Any]", done).rowcount)
+
+
+async def claim_ingest(
+    session: AsyncSession,
+    document_id: uuid.UUID,
+    generation: uuid.UUID | None,
+) -> KnowledgeDocument | None:
+    """原子认领当前 generation 的非终态文档并推进 parsing。
+
+    Args: session, document_id, generation（None 只兼容存量 v1 消息）。
+    """
+    statement = (
+        update(KnowledgeDocument)
+        .where(
+            KnowledgeDocument.id == document_id,
+            KnowledgeDocument.status.not_in(("ready", "failed")),
+        )
+        .values(status="parsing", failure_reason="")
+        .returning(KnowledgeDocument)
+    )
+    if generation is None:
+        statement = statement.where(
+            KnowledgeDocument.ingest_generation.is_(None)
+        )
+    else:
+        statement = statement.where(
+            KnowledgeDocument.ingest_generation == generation
+        )
+    found = await session.execute(statement)
+    return found.scalar_one_or_none()
+
+
+async def mark_requeued(
+    session: AsyncSession,
+    document_id: uuid.UUID,
+    generation: uuid.UUID | None,
+) -> int:
+    """仅待投递或终态可开启新 generation；处理中不被旧请求打断。
+
+    Args: session, document_id, generation。
+    """
+    done = await session.execute(
+        update(KnowledgeDocument)
+        .where(
+            KnowledgeDocument.id == document_id,
+            KnowledgeDocument.status.in_(("pending", "ready", "failed")),
+        )
+        .values(
+            status="pending",
+            failure_reason="",
+            ready_at=None,
+            ingest_generation=generation,
+        )
+    )
     return max(0, cast("CursorResult[Any]", done).rowcount)
 
 

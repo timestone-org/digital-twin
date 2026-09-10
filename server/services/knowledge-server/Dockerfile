@@ -24,12 +24,24 @@ RUN --mount=type=cache,target=/root/.cache/uv \
 
 COPY lib/ lib/
 COPY domain/llmcore/ domain/llmcore/
-COPY services/knowledge-server/ services/knowledge-server/
+# 只拷运行期需要的服务文件；测试、覆盖率产物和本地配置都不进入镜像层。
+COPY services/knowledge-server/src/ services/knowledge-server/src/
+COPY services/knowledge-server/migrations/ services/knowledge-server/migrations/
+COPY services/knowledge-server/alembic.ini services/knowledge-server/alembic.ini
 RUN --mount=type=cache,target=/root/.cache/uv \
     uv sync --package knowledge-server --frozen --no-dev
 
 
 FROM python:3.12-slim-bookworm AS runtime
+
+# DOCX 原件预览由 worker 派生 PDF（ADR-0054）。同镜像跑 api/worker，故只装一份。
+# 只装 Writer 的 nogui 变体；中文字体决定现场手册会不会变成方框。
+RUN apt-get update \
+ && apt-get install -y --no-install-recommends \
+      fonts-noto-cjk \
+      libreoffice-writer-nogui \
+ && rm -rf /var/lib/apt/lists/* \
+ && soffice --headless --version
 
 # 非 root 运行
 RUN groupadd --gid 10001 app \
@@ -39,9 +51,14 @@ ENV PATH="/src/.venv/bin:$PATH" \
     PYTHONUNBUFFERED=1 \
     PYTHONDONTWRITEBYTECODE=1
 
-COPY --from=builder --chown=app:app /src /src
-# ⚠ 落在服务目录：alembic 与 `python -m scripts.<名>` 都按 CWD 找自己那份，
-# 停在 /src 会让部署期的迁移/索引命令逐个失败
+# builder 可带测试来完成 workspace 安装，运行层只取虚拟环境与生产源码。
+COPY --from=builder --chown=app:app /src/.venv /src/.venv
+COPY --from=builder --chown=app:app /src/lib/src /src/lib/src
+COPY --from=builder --chown=app:app /src/domain/llmcore/src /src/domain/llmcore/src
+COPY --from=builder --chown=app:app /src/services/knowledge-server/src /src/services/knowledge-server/src
+COPY --from=builder --chown=app:app /src/services/knowledge-server/migrations /src/services/knowledge-server/migrations
+COPY --from=builder --chown=app:app /src/services/knowledge-server/alembic.ini /src/services/knowledge-server/alembic.ini
+# ⚠ 落在服务目录：alembic 按 CWD 找自己那份迁移，停在 /src 会让部署期迁移失败
 WORKDIR /src/services/knowledge-server
 
 USER app

@@ -18,6 +18,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 
 from knowledge_server.apps.knowledge import crud
 from knowledge_server.apps.knowledge.errors import (
+    DocumentIngestInProgress,
     DocumentNotFound,
     DuplicateDocument,
     FigureBytesGone,
@@ -45,6 +46,8 @@ from knowledge_server.apps.knowledge.services.parsing import (
 from knowledge_server.apps.knowledge.services.sources import (
     UPLOAD_KIND,
     document_key,
+    document_prefix,
+    preview_key,
     staging_key,
     suffix_of,
 )
@@ -248,6 +251,7 @@ def queue_ingest(
     stream: StreamLike,
     group: StreamGroup,
     document: DocumentOut,
+    generation: uuid.UUID | None = None,
 ) -> None:
     """事务提交之后把摄取任务投进队列。
 
@@ -259,14 +263,18 @@ def queue_ingest(
     （一个字符串）而不是客户端——而它只在投递时炸，被那条「投递失败不回滚」
     的兜底吞成一行日志。真库用例才逮到。
 
-    Args: session, stream, group, document。
+    Args: session, stream, group, document, generation。
     """
 
     async def dispatch() -> None:
         await ingest_queue.dispatch_ingest(
             stream,
             group,
-            ingest_queue.new_message(document.id, document.base_id),
+            ingest_queue.new_message(
+                document.id,
+                document.base_id,
+                generation,
+            ),
         )
 
     after_commit(session, dispatch)
@@ -290,6 +298,7 @@ async def requeue_document(
     stream: StreamLike,
     group: StreamGroup,
     document_id: uuid.UUID,
+    is_generation_enabled: bool,
 ) -> DocumentOut:
     """把一份文档退回待处理并重新排队。
 
@@ -297,12 +306,19 @@ async def requeue_document(
     一条链路只有一层负责重试）。一份解不动的文档自动重试一万次也解不动，
     只会把 worker 占满。
 
-    Args: session, stream, group, document_id。
+    Args: session, stream, group, document_id, is_generation_enabled。
     """
     row = await read_document(session, document_id)
-    await crud.document.mark_status(session, row.id, "pending")
+    if not is_generation_enabled and row.ingest_generation is not None:
+        # ⚠ 第二次滚动时旧配置副本不能复投新期次；否则会造两个同 generation
+        # 的 entry，而 entry 级 owner 保护不了同一文档的两条消息。
+        raise DocumentIngestInProgress("摄取期次正在切换，请稍后再重新解析")
+    generation = uuid7() if is_generation_enabled else row.ingest_generation
+    changed = await crud.document.mark_requeued(session, row.id, generation)
+    if changed == 0:
+        raise DocumentIngestInProgress("这份文档正在解析，请完成后再重新解析")
     made = document_out(row)
-    queue_ingest(session, stream, group, made)
+    queue_ingest(session, stream, group, made, generation)
     return made
 
 
@@ -321,12 +337,13 @@ async def drop_document(
     """
     row = await read_document(session, document_id)
     key = row.object_key
+    derived = document_prefix(row.base_id, row.id)
     await crud.document.delete_document(session, document_id)
-    if not key:
-        return
 
     async def sweep() -> None:
-        await store.delete(key)
+        if key:
+            await store.delete(key)
+        await store.delete_prefix(derived)
 
     after_commit(session, sweep)
 
@@ -387,6 +404,8 @@ class RawBytes:
     etag: str
     # 能不能让浏览器当场摊开。⚠ 为假时端点回 `attachment`
     is_inline: bool
+    # 预览端点拿不到派生 PDF 时为真；响应必须禁缓存，稍后重开才能切到 PDF
+    is_fallback: bool = False
 
 
 async def read_raw(
@@ -426,3 +445,54 @@ async def read_raw(
         etag=row.content_hash,
         is_inline=is_inline_safe(media_type),
     )
+
+
+async def read_preview(
+    session: AsyncSession, store: ObjectStore, document_id: uuid.UUID
+) -> RawBytes:
+    """优先取 DOCX 的 PDF 派生物，缺席时回原件。
+
+    Args: session, store, document_id。
+    """
+    row = await read_document(session, document_id)
+    if not row.object_key:
+        return await read_raw(session, store, document_id)
+    if suffix_of(row.object_key) != ".docx":
+        raise UnsupportedRawItem("只有 DOCX 原件有单独的页面预览")
+    try:
+        content = await store.get_bytes(preview_key(row.base_id, row.id))
+    except ObjectNotFound:
+        return _fallback_preview(await read_raw(session, store, document_id))
+    if not content.startswith(b"%PDF-"):
+        return _fallback_preview(await read_raw(session, store, document_id))
+    return RawBytes(
+        content=content,
+        media_type="application/pdf",
+        filename=_preview_filename(row.title),
+        etag=hashlib.sha256(content).hexdigest(),
+        is_inline=True,
+    )
+
+
+def _fallback_preview(raw: RawBytes) -> RawBytes:
+    """原件标成不可缓存的兼容预览。
+
+    Args: raw。
+    """
+    return RawBytes(
+        content=raw.content,
+        media_type=raw.media_type,
+        filename=raw.filename,
+        etag=raw.etag,
+        is_inline=raw.is_inline,
+        is_fallback=True,
+    )
+
+
+def _preview_filename(filename: str) -> str:
+    """原文件名换成 PDF 后缀。
+
+    Args: filename。
+    """
+    head, dot, _tail = filename.rpartition(".")
+    return f"{head if dot and head else filename}.pdf"

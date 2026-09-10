@@ -45,6 +45,9 @@ MAX_RETRIEVAL_HITS = 50
 # 一份原件最大多少字节。⚠ 有上限：一份几百兆的文件会把 worker 的内存吃干，
 # 而倒下的不只是这一次摄取
 MAX_RAW_BYTES = 64 * 1024 * 1024
+# 整份摄取任务的总预算
+DEFAULT_INGEST_TIMEOUT_S = 30 * 60
+DEFAULT_INGEST_CLAIM_IDLE_MS = 5 * 60 * 1000
 
 
 class MigrationSettings(PostgresSettings):
@@ -159,12 +162,22 @@ class Settings(
     ingest_stream: str = "knowledge:ingest"
     ingest_group: str = "knowledge-ingest-workers"
     # 一条消息滞留多久算掉队，由别的消费者认领
-    ingest_claim_idle_ms: int = 5 * 60 * 1000
+    # pending idle 的续期间隔由它折算；worker 真死后至多等这一段再被认领
+    ingest_claim_idle_ms: int = DEFAULT_INGEST_CLAIM_IDLE_MS
+    # 从认领到落终态的总预算。⚠ 没有总上限就无法给 stale claim 定安全边界
+    ingest_timeout_s: float = Field(default=DEFAULT_INGEST_TIMEOUT_S, gt=0)
+    # generation 写入分两次发布：先让所有 worker 学会读，再统一打开生产者。
+    ingest_generation_write_enabled: bool = False
     ingest_block_ms: int = 5_000
     ingest_batch: int = 1
     # 一份文档解析多久算卡死。⚠ 必须有：没有超时的解析会把这条消费循环
     # 永久占住，而现象是「队列不动了」，看不出是哪一份文档导致的
     parse_timeout_s: float = 10 * 60
+    # DOCX 的 PDF 派生（ADR-0054）。关着时不再生成；已有派生物仍可读。
+    office_preview_enabled: bool = False
+    # 只收一个可执行名或绝对路径，不收命令行；调用端从不经 shell。
+    office_preview_command: str = "soffice"
+    office_preview_timeout_s: float = Field(default=5 * 60, gt=0)
     # ---- 外部解析服务 MinerU（ADR-0043）----
     # ⚠ 开关开着却不给地址 = 启动即失败，与语音那一路同一条规矩：
     # 「起来之后每次解析才报错」比起不来难查得多
@@ -278,6 +291,33 @@ class Settings(
         if not url.startswith(("http://", "https://")):
             raise ValueError(
                 "KNOWLEDGE_MINERU_BASE_URL 必须以 http:// 或 https:// 开头"
+            )
+        return self
+
+    @model_validator(mode="after")
+    def _office_preview_needs_a_command(self) -> Self:
+        """开了 DOCX 派生预览就必须给一个可执行名。
+
+        ⚠ 可执行文件是否存在由 worker 启动自检；这里只拦空配置。
+        """
+        if (
+            self.office_preview_enabled
+            and not self.office_preview_command.strip()
+        ):
+            raise ValueError(
+                "开了 DOCX 派生预览就必须配 KNOWLEDGE_OFFICE_PREVIEW_COMMAND"
+            )
+        return self
+
+    @model_validator(mode="after")
+    def _office_preview_fits_the_ingest_window(self) -> Self:
+        """DOCX 的两段串行预算必须装得进整份摄取总预算。"""
+        preview_s = (
+            self.office_preview_timeout_s if self.office_preview_enabled else 0
+        )
+        if preview_s + self.parse_timeout_s >= self.ingest_timeout_s:
+            raise ValueError(
+                "KNOWLEDGE_INGEST_TIMEOUT_S 必须大于 DOCX 预览与解析的总预算"
             )
         return self
 

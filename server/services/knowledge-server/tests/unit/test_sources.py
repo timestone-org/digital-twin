@@ -16,6 +16,7 @@ from knowledge_server.apps.knowledge.services.sources import (
     base_prefix,
     build_sources,
     document_key,
+    preview_key,
     source_for,
     source_kinds,
     staging_key,
@@ -61,6 +62,10 @@ def test_staging_is_outside_the_final_prefix() -> None:
     """⚠ 没验过的字节不许有一个本站链接：删库按正式前缀清，
     暂存件在那之外，所以两者不能互相覆盖。"""
     assert not staging_key(BASE, DOC, ".md").startswith(base_prefix(BASE))
+
+
+def test_docx_preview_lands_under_the_document_private_prefix() -> None:
+    assert preview_key(BASE, DOC) == f"knowledge/{BASE}/{DOC}/preview.pdf"
 
 
 class _Store:

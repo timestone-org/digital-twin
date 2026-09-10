@@ -14,7 +14,7 @@ import {
   paneLimits,
   readPaneWidths,
   writePaneWidths,
-} from '@/pages/DashboardEditor/scripts/paneWidths'
+} from '../../../src/components/EditorPanes/paneWidths'
 
 describe('取值域', () => {
   it('宽敞时上限就是容器的一半', () => {

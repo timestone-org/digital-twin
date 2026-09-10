@@ -3,29 +3,53 @@
  *
  * ⚠ 有一条盯的是「关掉再点同一份文档打不开」：`document` 没变的话侦听不触发，
  * 而那个空白弹窗看着像是接口坏了。
- * ⚠ 还有一条盯的是「下载又打一次接口」：字节已经在手上，再打一次是白花的
- * 一次往返，而在几十 MB 的手册上那一次要等好几秒。
+ * ⚠ 下载原件按需取：兼容预览复用手上的 DOCX，PDF 预览第一次下载后缓存原件，
+ * 都不许为同一次下载重复走接口。
  */
 import { flushPromises, mount } from '@vue/test-utils'
 import type { VueWrapper } from '@vue/test-utils'
 import { beforeEach, describe, expect, it, vi } from 'vitest'
+import { defineComponent } from 'vue'
 import type { KnowledgeDocument } from '@/api/knowledge'
 
 import KnowledgeDocumentPreview from '@/pages/Knowledge/components/KnowledgeDocumentPreview.vue'
 
-const api = vi.hoisted(() => ({ readDocumentRaw: vi.fn() }))
+const api = vi.hoisted(() => ({
+  readDocumentPreview: vi.fn(),
+  readDocumentRaw: vi.fn(),
+}))
 vi.mock('@/api/knowledge', () => api)
 
+const StageStub = defineComponent({
+  name: 'DocumentPreviewStage',
+  props: {
+    blob: { type: Blob, required: true },
+    kind: { type: String, required: true },
+    name: { type: String, required: true },
+    text: { type: String, required: true },
+  },
+  template: '<div data-test="preview-stage" />',
+})
+
 const clicked: { href: string; download: string }[] = []
+const objectUrlInputs: Blob[] = []
 
 beforeEach(() => {
   api.readDocumentRaw.mockReset()
   api.readDocumentRaw.mockResolvedValue(new Blob(['# 标题\n正文']))
+  api.readDocumentPreview.mockReset()
+  api.readDocumentPreview.mockResolvedValue(
+    new Blob(['%PDF-1.7'], { type: 'application/pdf' }),
+  )
   clicked.length = 0
+  objectUrlInputs.length = 0
   // happy-dom 没有 object URL，也不会真的下载：桩掉之后才数得出点了几次
   vi.stubGlobal('URL', {
     ...URL,
-    createObjectURL: () => 'blob:fake/raw',
+    createObjectURL: (blob: Blob) => {
+      objectUrlInputs.push(blob)
+      return 'blob:fake/raw'
+    },
     revokeObjectURL: () => undefined,
   })
   vi.spyOn(HTMLAnchorElement.prototype, 'click').mockImplementation(function (
@@ -55,14 +79,26 @@ async function render(
     modelValue: true,
     document: documentOf(),
   },
+  stubStage = false,
 ): Promise<VueWrapper> {
   const wrapper = mount(KnowledgeDocumentPreview, {
     props,
     attachTo: document.body,
-    global: { stubs: { Teleport: true } },
+    global: {
+      stubs: {
+        Teleport: true,
+        ...(stubStage ? { DocumentPreviewStage: StageStub } : {}),
+      },
+    },
   })
   await flushPromises()
   return wrapper
+}
+
+async function stagedText(wrapper: VueWrapper): Promise<string> {
+  const blob: unknown = wrapper.getComponent(StageStub).props('blob')
+  if (!(blob instanceof Blob)) throw new Error('预览画布没有收到 Blob')
+  return await blob.text()
 }
 
 describe('原件预览弹窗', () => {
@@ -71,6 +107,120 @@ describe('原件预览弹窗', () => {
 
     expect(api.readDocumentRaw.mock.calls[0]?.[0]).toBe('d1')
     expect(wrapper.text()).toContain('正文')
+  })
+
+  it('Word 优先画服务端的 PDF 派生预览，让文档图形不被浏览器渲染器跳过', async () => {
+    const derived = new Blob(['%PDF-1.7\nderived'], {
+      type: 'application/pdf',
+    })
+    api.readDocumentPreview.mockResolvedValue(derived)
+    const wrapper = await render(
+      {
+        modelValue: true,
+        document: documentOf({ title: '冷却水系统图.docx' }),
+      },
+      true,
+    )
+
+    expect(api.readDocumentPreview).toHaveBeenCalledWith(
+      'd1',
+      expect.any(AbortSignal),
+    )
+    const stage = wrapper.getComponent(StageStub)
+    expect(stage.props('kind')).toBe('pdf')
+    expect(await stagedText(wrapper)).toBe('%PDF-1.7\nderived')
+    expect(api.readDocumentRaw).not.toHaveBeenCalled()
+  })
+
+  it('服务端回兼容 DOCX 时直接显示且不重复下载原件', async () => {
+    const fallback = new Blob(['fallback-docx'], {
+      type: 'application/vnd.openxmlformats-officedocument.wordprocessingml.document',
+    })
+    api.readDocumentPreview.mockResolvedValue(fallback)
+
+    const wrapper = await render(
+      {
+        modelValue: true,
+        document: documentOf({ title: '冷却水系统图.docx' }),
+      },
+      true,
+    )
+
+    const stage = wrapper.getComponent(StageStub)
+    expect(stage.props('kind')).toBe('docx')
+    expect(await stagedText(wrapper)).toBe('fallback-docx')
+    expect(api.readDocumentRaw).not.toHaveBeenCalled()
+    expect(wrapper.text()).toContain('复杂图形可能显示不完整')
+  })
+
+  it('旧后端没有派生端点时退回原 DOCX', async () => {
+    api.readDocumentRaw.mockResolvedValue(
+      new Blob(['docx'], {
+        type: 'application/vnd.openxmlformats-officedocument.wordprocessingml.document',
+      }),
+    )
+    api.readDocumentPreview.mockRejectedValue(new Error('旧后端没有这个端点'))
+
+    const wrapper = await render(
+      {
+        modelValue: true,
+        document: documentOf({ title: '冷却水系统图.docx' }),
+      },
+      true,
+    )
+
+    expect(wrapper.getComponent(StageStub).props('kind')).toBe('docx')
+    expect(api.readDocumentRaw).toHaveBeenCalledTimes(1)
+    expect(wrapper.text()).toContain('复杂图形可能显示不完整')
+  })
+
+  it('Word 即使画的是 PDF，下载拿到的仍是原 DOCX', async () => {
+    api.readDocumentRaw.mockResolvedValue(
+      new Blob(['docx'], {
+        type: 'application/vnd.openxmlformats-officedocument.wordprocessingml.document',
+      }),
+    )
+    const wrapper = await render(
+      {
+        modelValue: true,
+        document: documentOf({ title: '冷却水系统图.docx' }),
+      },
+      true,
+    )
+
+    const download = wrapper
+      .findAll('button')
+      .find((one) => one.text().includes('下载原件'))
+    await download?.trigger('click')
+    await flushPromises()
+
+    expect(objectUrlInputs[0]?.type).toContain('wordprocessingml.document')
+    expect(clicked[0]?.download).toBe('冷却水系统图.docx')
+    expect(api.readDocumentRaw).toHaveBeenCalledTimes(1)
+
+    await download?.trigger('click')
+    expect(api.readDocumentRaw).toHaveBeenCalledTimes(1)
+  })
+
+  it('PDF 预览下载原件失败时保留预览并给出原因', async () => {
+    api.readDocumentRaw.mockRejectedValue(new Error('原件下载失败'))
+    const wrapper = await render(
+      {
+        modelValue: true,
+        document: documentOf({ title: '冷却水系统图.docx' }),
+      },
+      true,
+    )
+    const download = wrapper
+      .findAll('button')
+      .find((one) => one.text().includes('下载原件'))
+
+    await download?.trigger('click')
+    await flushPromises()
+
+    expect(wrapper.find('[data-test="preview-stage"]').exists()).toBe(true)
+    expect(wrapper.text()).toContain('原件下载失败')
+    expect(download?.attributes('aria-busy')).toBeUndefined()
   })
 
   it('关着的时候一个字节都不取', async () => {
@@ -114,6 +264,26 @@ describe('原件预览弹窗', () => {
 
   it('⚠ 关掉时把在飞的那次中止掉，它之后返回也不许再写状态', async () => {
     const wrapper = await render()
+    const signal = api.readDocumentRaw.mock.calls[0]?.[1] as AbortSignal
+
+    await wrapper.setProps({ modelValue: false })
+
+    expect(signal.aborted).toBe(true)
+  })
+
+  it('关掉 PDF 预览时也中止正在下载的原件', async () => {
+    api.readDocumentRaw.mockReturnValue(new Promise<Blob>(() => undefined))
+    const wrapper = await render(
+      {
+        modelValue: true,
+        document: documentOf({ title: '系统图.docx' }),
+      },
+      true,
+    )
+    const download = wrapper
+      .findAll('button')
+      .find((one) => one.text().includes('下载原件'))
+    await download?.trigger('click')
     const signal = api.readDocumentRaw.mock.calls[0]?.[1] as AbortSignal
 
     await wrapper.setProps({ modelValue: false })

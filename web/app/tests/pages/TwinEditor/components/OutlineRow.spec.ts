@@ -75,15 +75,25 @@ describe('渲染', () => {
     expect(badge.text()).toBe('3')
   })
 
-  it('meta 非空才画，空串不留一个空 span', () => {
-    expect(render().text()).toContain('℃')
+  it('名称独占正文，节点数和所属部件只放在悬停提示中', () => {
+    const wrapper = render({
+      row: { label: '送风机', meta: '7 节点 · 属于 动力中心-风机间' },
+    })
+    const button = wrapper.get('[data-test="row-select"]')
 
-    const bare = render({ row: { meta: '' } })
-    const spans = bare
-      .get('[data-test="row-select"]')
-      .findAll('span.text-3xs.text-text-disabled')
-    // 只剩序号那一枚；meta 的那枚没画
-    expect(spans).toHaveLength(1)
+    expect(button.text()).toContain('送风机')
+    expect(button.text()).not.toContain('7 节点')
+    expect(button.attributes('title')).toBe(
+      '送风机\n7 节点 · 属于 动力中心-风机间',
+    )
+  })
+
+  it('没有附加信息时悬停只显示完整名称', () => {
+    const wrapper = render({ row: { meta: '' } })
+
+    expect(wrapper.get('[data-test="row-select"]').attributes('title')).toBe(
+      '进水温度',
+    )
   })
 
   it('切片命中段包进 <mark>，前后段原样拼接', () => {

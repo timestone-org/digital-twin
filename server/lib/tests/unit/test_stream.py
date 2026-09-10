@@ -14,8 +14,8 @@ from lib.errors import DependencyUnavailable
 from lib.stream import (
     RedisStream,
     StreamGroup,
+    _claim_page,
     _entries,
-    _from_claim,
     _from_read,
 )
 
@@ -31,6 +31,7 @@ class FakeRedis:
         self.calls: list[tuple[str, tuple[Any, ...]]] = []
         self.read_reply: Any = []
         self.claim_reply: Any = []
+        self.touch_reply: int = 1
 
     def _record(self, name: str, *args: Any) -> None:
         self.calls.append((name, args))
@@ -66,6 +67,10 @@ class FakeRedis:
         self._record("xack", stream, group, entry_id)
         return 1
 
+    async def eval(self, script: str, keys: int, *args: str) -> int:
+        self._record("eval", script, keys, *args)
+        return self.touch_reply
+
     async def aclose(self) -> None:
         self._record("aclose")
 
@@ -95,12 +100,12 @@ def test_an_empty_read_reply_yields_nothing() -> None:
 def test_a_claim_reply_takes_the_middle_section() -> None:
     """XAUTOCLAIM 回的是「下一个游标 / 消息表 / 已删表」三段。"""
     reply = ("0-0", [("7-0", FIELDS)], [])
-    assert [item.entry_id for item in _from_claim(reply)] == ["7-0"]
+    assert [item.entry_id for item in _claim_page(reply)[1]] == ["7-0"]
 
 
 def test_a_short_claim_reply_yields_nothing() -> None:
     """形状不符的回包按空处理，不抛。"""
-    assert _from_claim(["0-0"]) == []
+    assert _claim_page(["0-0"])[1] == []
 
 
 @pytest.mark.parametrize(
@@ -176,11 +181,59 @@ async def test_claiming_passes_the_idle_threshold() -> None:
     assert fake.calls[0][1][3]["min_idle_time"] == 60000
 
 
+async def test_claiming_continues_from_the_returned_cursor() -> None:
+    """前缀消息仍活跃时，不能每轮都从头扫描而饿死后面的 stale 消息。"""
+    fake = FakeRedis()
+    stream = build_stream(fake)
+    fake.claim_reply = ("11-0", [], [])
+    assert await stream.claim_stale(TARGET, min_idle_ms=60_000, count=1) == []
+    fake.claim_reply = ("0-0", [("11-0", FIELDS)], [])
+    found = await stream.claim_stale(TARGET, min_idle_ms=60_000, count=1)
+
+    assert [item.entry_id for item in found] == ["11-0"]
+    first_options = fake.calls[0][1][3]
+    second_options = fake.calls[1][1][3]
+    assert first_options["start_id"] == "0-0"
+    assert second_options["start_id"] == "11-0"
+
+
 async def test_acking_names_the_stream_and_group() -> None:
     """确认要指明是哪条流哪个组的哪一条。"""
     fake = FakeRedis()
     await build_stream(fake).ack(TARGET, "1-0")
     assert fake.calls[0] == ("xack", ("s", "g", "1-0"))
+
+
+async def test_touching_resets_pending_idle_without_loading_the_body() -> None:
+    fake = FakeRedis()
+    assert await build_stream(fake).touch(TARGET, "1-0") is True
+    name, args = fake.calls[0]
+    assert name == "eval"
+    assert args[1:] == (1, "s", "g", "c", "1-0")
+    assert "XPENDING" in args[0]
+    assert "XCLAIM" in args[0]
+
+
+async def test_touching_reports_lost_ownership() -> None:
+    fake = FakeRedis()
+    fake.touch_reply = 0
+    assert await build_stream(fake).touch(TARGET, "1-0") is False
+
+
+async def test_owned_ack_checks_owner_and_acks_in_one_script() -> None:
+    fake = FakeRedis()
+    assert await build_stream(fake).ack_if_owned(TARGET, "1-0") is True
+    name, args = fake.calls[0]
+    assert name == "eval"
+    assert args[1:] == (1, "s", "g", "c", "1-0")
+    assert "XPENDING" in args[0]
+    assert "XACK" in args[0]
+
+
+async def test_owned_ack_reports_lost_ownership() -> None:
+    fake = FakeRedis()
+    fake.touch_reply = 0
+    assert await build_stream(fake).ack_if_owned(TARGET, "1-0") is False
 
 
 async def test_a_driver_error_becomes_dependency_unavailable() -> None:

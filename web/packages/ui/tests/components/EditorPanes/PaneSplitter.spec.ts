@@ -8,8 +8,8 @@ import { describe, expect, it } from 'vitest'
 import {
   NUDGE_COARSE_PX,
   NUDGE_PX,
-} from '@/pages/DashboardEditor/scripts/paneWidths'
-import PaneSplitter from '@/pages/DashboardEditor/components/PaneSplitter.vue'
+} from '../../../src/components/EditorPanes/paneWidths'
+import PaneSplitter from '../../../src/components/EditorPanes/PaneSplitter.vue'
 
 function render(width = 240) {
   return mount(PaneSplitter, {

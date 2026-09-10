@@ -2,7 +2,7 @@
  * @fileoverview 改宽用到的两个 DOM 接线：指针拖拽与容器尺寸观察。
  * 两者都往 window / ResizeObserver 上挂东西，卸载必须摘干净——编辑器一开就是几天。
  */
-import { onMounted, onUnmounted, ref } from 'vue'
+import { onUnmounted, ref, watch } from 'vue'
 import type { Ref } from 'vue'
 
 import type { PaneSide } from './paneWidths'
@@ -75,13 +75,19 @@ export function observeResize(
   onResize: () => void,
 ): void {
   let observer: ResizeObserver | null = null
-  onMounted(() => {
-    onResize()
-    const element = host.value
-    if (element === null || typeof ResizeObserver === 'undefined') return
-    observer = new ResizeObserver(onResize)
-    observer.observe(element)
-  })
+  watch(
+    host,
+    (element) => {
+      observer?.disconnect()
+      observer = null
+      if (element === null) return
+      onResize()
+      if (typeof ResizeObserver === 'undefined') return
+      observer = new ResizeObserver(onResize)
+      observer.observe(element)
+    },
+    { flush: 'post' },
+  )
   onUnmounted(() => {
     observer?.disconnect()
     observer = null

@@ -64,3 +64,6 @@ export {
   fromLocalMinuteInput,
   toLocalMinuteInput,
 } from './shared/datetime'
+
+export { default as EditorSplitter } from './components/EditorPanes/EditorSplitter.vue'
+export { useEditorPanes } from './components/EditorPanes/useEditorPanes'

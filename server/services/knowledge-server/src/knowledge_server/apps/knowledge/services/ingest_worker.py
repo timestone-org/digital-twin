@@ -34,6 +34,13 @@ from lib.stream import StreamEntry, StreamGroup, StreamLike
 
 _logger = get_logger("knowledge.ingest_worker")
 
+RENEW_DIVISOR = 3
+MIN_RENEW_INTERVAL_S = 0.01
+
+
+class _OwnershipLost(RuntimeError):
+    """这条 pending 消息已无法由当前消费者安全续期。"""
+
 
 @dataclass(frozen=True)
 class ConsumerOptions:
@@ -42,6 +49,8 @@ class ConsumerOptions:
     target: StreamGroup
     block_ms: int = 5_000
     batch: int = 1
+    # 从认领到落终态的总预算；运行中会按 claim_idle_ms 定期续期
+    timeout_s: float = 30 * 60
     # 一条消息滞留多久算掉队，由别的消费者认领
     claim_idle_ms: int = 5 * 60 * 1000
 
@@ -145,22 +154,79 @@ class IngestConsumer:
                     "读不懂的摄取任务，丢弃",
                     entry_id=entry.entry_id,
                 )
-                await self._ack(entry)
+                await self._ack_owned(entry)
                 return
-            await self._run_one(message.document_id, entry)
+            await self._run_one(message.document_id, message.generation, entry)
         finally:
             reset_log_context(token)
             self._idle.set()
 
     async def _run_one(
-        self, document_id: uuid.UUID, entry: StreamEntry
+        self,
+        document_id: uuid.UUID,
+        generation: uuid.UUID | None,
+        entry: StreamEntry,
     ) -> None:
         """跑一次管线，按收场决定确认与否。
 
-        Args: document_id, entry。
+        Args: document_id, generation, entry。
         """
         try:
-            await ingest(self._database.session, self._deps, document_id)
+            await self._touch(entry)
+        except _OwnershipLost as error:
+            _logger.warning(
+                "knowledge_ingest_ownership_lost",
+                "摄取任务开工前已失去所有权，未执行且不确认",
+                entry_id=entry.entry_id,
+                error=error,
+            )
+            return
+        work = asyncio.create_task(
+            self._finish(document_id, generation, entry),
+            name=f"ingest-work-{entry.entry_id}",
+        )
+        renewal = asyncio.create_task(
+            self._renew(entry), name=f"ingest-renew-{entry.entry_id}"
+        )
+        try:
+            done, _pending = await asyncio.wait(
+                (work, renewal), return_when=asyncio.FIRST_COMPLETED
+            )
+            if renewal in done:
+                work.cancel()
+                await asyncio.gather(work, return_exceptions=True)
+                await self._report_lost(renewal, entry)
+                return
+            should_ack = await work
+            renewal.cancel()
+            await asyncio.gather(renewal, return_exceptions=True)
+            if should_ack:
+                await self._ack_owned(entry)
+        finally:
+            work.cancel()
+            renewal.cancel()
+            await asyncio.gather(work, renewal, return_exceptions=True)
+
+    async def _finish(
+        self,
+        document_id: uuid.UUID,
+        generation: uuid.UUID | None,
+        entry: StreamEntry,
+    ) -> bool:
+        """在总预算内摄取，并按结果决定确认与否。
+
+        Args: document_id, generation, entry。
+        """
+        try:
+            async with asyncio.timeout(self._options.timeout_s):
+                await ingest(
+                    self._database.session,
+                    self._deps,
+                    document_id,
+                    generation,
+                )
+        except TimeoutError:
+            await self._fail(document_id, "摄取总耗时超过上限")
         except SourceUnavailable as error:
             # ⚠ 不确认：这一档重试有意义，让它被重新认领
             _logger.warning(
@@ -169,7 +235,7 @@ class IngestConsumer:
                 entry_id=entry.entry_id,
                 error=error,
             )
-            return
+            return False
         except IngestFailed as error:
             await self._fail(document_id, str(error))
         except Exception as error:
@@ -180,14 +246,64 @@ class IngestConsumer:
                 error=error,
             )
             await self._fail(document_id, "摄取时出了意料之外的错")
-        await self._ack(entry)
+        return True
+
+    async def _report_lost(
+        self, renewal: asyncio.Task[None], entry: StreamEntry
+    ) -> None:
+        """记录续期为何停止；消息不确认，交给当前 owner。
+
+        Args: renewal, entry。
+        """
+        try:
+            await renewal
+        except _OwnershipLost as error:
+            _logger.warning(
+                "knowledge_ingest_ownership_lost",
+                "摄取任务无法续期，已停止且不确认",
+                entry_id=entry.entry_id,
+                error=error,
+            )
+
+    async def _renew(self, entry: StreamEntry) -> None:
+        """处理期间周期刷新 pending idle，防止其它消费者提前认领。
+
+        Args: entry。
+        """
+        interval_s = max(
+            MIN_RENEW_INTERVAL_S,
+            self._options.claim_idle_ms / 1000 / RENEW_DIVISOR,
+        )
+        while True:
+            await asyncio.sleep(interval_s)
+            await self._touch(entry)
+
+    async def _touch(self, entry: StreamEntry) -> None:
+        """刷新 owner 租期；请求失败或 owner 改变都视为失主。
+
+        Args: entry。
+        """
+        try:
+            is_kept = await self._stream.touch(
+                self._options.target, entry.entry_id
+            )
+        except Exception as error:
+            raise _OwnershipLost("摄取任务续期请求失败") from error
+        if not is_kept:
+            raise _OwnershipLost("摄取任务所有权已经转移")
 
     async def _fail(self, document_id: uuid.UUID, reason: str) -> None:
         await mark_failed(self._database.session, document_id, reason)
 
-    async def _ack(self, entry: StreamEntry) -> None:
+    async def _ack_owned(self, entry: StreamEntry) -> None:
+        """仅仍归当前消费者的消息可确认。
+
+        Args: entry。
+        """
         try:
-            await self._stream.ack(self._options.target, entry.entry_id)
+            acked = await self._stream.ack_if_owned(
+                self._options.target, entry.entry_id
+            )
         except Exception as error:
             # 确认失败不致命：这条会被别人认领回去，而消费者是幂等的
             _logger.warning(
@@ -195,4 +311,11 @@ class IngestConsumer:
                 "摄取任务确认失败，会被重新认领",
                 entry_id=entry.entry_id,
                 error=error,
+            )
+            return
+        if not acked:
+            _logger.warning(
+                "knowledge_ingest_ack_ownership_lost",
+                "确认前消息所有权已转移，未确认",
+                entry_id=entry.entry_id,
             )

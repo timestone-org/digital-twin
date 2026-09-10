@@ -113,11 +113,13 @@ def _ingest_consumer(
             refresh=container.catalog.refresh,
             external_parsers=container.external_parsers,
             external_parse_timeout_s=settings.external_parse_timeout_s,
+            previewer=container.previewer,
         ),
         options=ConsumerOptions(
             target=container.ingest_group(),
             block_ms=settings.ingest_block_ms,
             batch=settings.ingest_batch,
+            timeout_s=settings.ingest_timeout_s,
             claim_idle_ms=settings.ingest_claim_idle_ms,
         ),
     )
@@ -178,6 +180,9 @@ async def run_worker(settings: Settings) -> None:
         log_format=settings.app_log_format,
     )
     container = build_container(settings)
+    if container.previewer is not None:
+        # ⚠ 开关开着却缺可执行文件要在接队列前失败，不能让每份 DOCX 都静默降级
+        await container.previewer.probe()
     # ⚠ 读事实排在装配之前：消费者在装配那一刻就要知道向量列是多少维，
     # 之后再读的话它手上那份索引比的仍是配置值
     await read_schema_facts(container.database, container.schema)

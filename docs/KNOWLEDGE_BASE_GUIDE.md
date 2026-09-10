@@ -90,7 +90,7 @@ server/services/knowledge-server/
 │       │       ├── assembly.py  capability.py  search_service.py
 │       ├── chat/              # 对话：会话、回合、工具、引用、标题
 │       └── speech/            # 语音输入：到 FunASR 的 WebSocket 中继
-├── migrations/versions/       # 7 份 alembic 迁移
+├── migrations/versions/       # 8 份 alembic 迁移
 └── tests/                     # unit / contract / integration，585 条
 ```
 
@@ -106,6 +106,7 @@ server/services/knowledge-server/
 | PostgreSQL + `vector` + `pg_trgm` | 两个角色 | **硬依赖**：装不上 = 迁移失败 = 整栈起不来（ADR-0045） |
 | Redis Stream | api 投递、worker 消费 | 投不进去 / 没人消费；就绪探针会红 |
 | 对象存储（RustFS/MinIO 口径） | 原件与插图字节 | 传不了文档、取不到图；**不进就绪探针**——它挂了不该让检索跟着不可用 |
+| LibreOffice Writer（ADR-0054） | worker 的 DOCX→PDF 派生 | DOCX 仍可检索并退回兼容预览，但复杂图形可能缺失 |
 | platform-server 内部面 | 模型目录、订阅账号登录态、`platform` 来源取数 | 退回环境变量那一档；拉不到不阻塞启动 |
 | 嵌入端点（经模型目录） | worker 摄取 | **摄不进任何文档**，每份文档判 `failed` 并说清缺什么 |
 | 对话端点（经模型目录） | 对话页、`agentic` 策略 | 对话页 409、`agentic` 如实不可用（不退化成 hybrid） |
@@ -129,6 +130,7 @@ server/services/knowledge-server/
 | [0043](adr/0043-解析后端可插拔且外部解析服务留口.md) | 解析后端两级扩展点，外部服务留口 |
 | [0044](adr/0044-对话检索范围钉在会话上.md) | 检索范围钉在会话上，`NULL` ≠ 空列表 |
 | [0045](adr/0045-向量与关键词索引改为硬依赖.md) | 向量与关键词改为硬依赖，无回退档 |
+| [0054](adr/0054-DOCX原件预览由worker派生PDF.md) | DOCX 结构仍本地解析，原件另派生私有 PDF 供预览 |
 
 ---
 
@@ -237,14 +239,24 @@ knowledge-worker  ← 消费 Redis Stream，跑摄取管线，状态写回文档
 Redis Stream `knowledge:ingest`，消费组 `knowledge-ingest-workers`。
 
 ```json
-{"envelope_version":"1","document_id":"…","base_id":"…","traceparent":"00-…"}
+{"envelope_version":"1","document_id":"…","base_id":"…","ingest_generation":"…","traceparent":"00-…"}
 ```
 
-- ⚠ **只带 `document_id`，不带「该走到哪一步」**：以库里那一行的 `status` 为准。
-  带步骤的话，「从头解析」与「只补嵌入」就成了两种消息，而状态本来就写在库里。
+- ⚠ `ingest_generation` 只做旧消息栅栏，**不带「该走到哪一步」**：步骤仍以库里
+  那一行的 `status` 为准。它是 v1 的可选扩展；无此字段的存量消息只匹配
+  generation 为空的存量行，旧 worker 则会安全忽略新字段。
+- ⚠ 首次引入 generation 要 reader-first 两次滚动：第一版保持
+  `KNOWLEDGE_INGEST_GENERATION_WRITE_ENABLED=false`，迁移并升级所有 API/worker；
+  确认旧 worker 清零后再改 `true` 做第二次滚动。旧 worker 不会丢信封，但不执行
+  栅栏，所以生产者必须等它们全部消失后才开始写新的重排 generation。
+- ⚠ 开关启用后回滚到旧镜像要先暂停写入口、排空并停掉全部新版 worker，再回滚
+  API/worker 后恢复写；数据库列不回滚。普通混合滚动会让新版 worker 确认掉旧 API
+  发出的无 generation 消息，文档会永久停在 `pending`。
 - ⚠ **信封里必须带 `traceparent`**：队列是异步的，不带它链路在这一跳齐断，
   而每一段单看都是完整的。
-- 滞留超过 `ingest_claim_idle_ms`（默认 5 min）的消息由别的消费者认领。
+- 滞留超过 `ingest_claim_idle_ms`（默认 5 min）的消息由别的消费者认领；进程级
+  consumer 名带随机后缀，开工前、续期与确认都核对 owner，认领扫描续用 Redis
+  返回的 cursor，不能让 PEL 前缀的长任务饿死后部消息。
 
 ### 4.3 状态机
 
@@ -261,7 +273,7 @@ pending ──→ parsing ──→ chunking ──→ embedding ──→ index
 
 | # | 做什么 | 关键判据 |
 |---|---|---|
-| 0 | `_claimed`：读那一行，已 `ready` 就跳过，否则推进 `parsing` | **判幂等看状态**，不是「先查再插」 |
+| 0 | `_claimed`：原子核对 generation；`ready` / `failed` 或旧期次就跳过，否则推进 `parsing` | **判幂等看状态与期次**，不是「先查再插」 |
 | 1 | `_embeddable`：先刷一次模型目录，再问「这套部署此刻算得出向量吗」 | 算不出就**当场** `failed`，排在取原件之前 |
 | 2 | `_raw_of`：按来源把原件取回来 | 先读来源配置再关事务，**事务里不做外部 IO** |
 | 3 | `_parsed`：挑一路后端解开 | 外部后端排在本地之前；两支不合成一个函数 |
@@ -779,7 +791,8 @@ schema `knowledge`，域前缀 `kb_`。主键 UUIDv7，时刻一律 `timestamptz
 | GET | `/documents/{id}` | use | 文档详情 |
 | POST | `/documents/{id}:reparse` | **write** | 重新解析 |
 | GET | `/documents/{id}/figures/{fid}` | use | 取一张图（**流字节**） |
-| GET | `/documents/{id}/raw` | use | 取原件（**流字节**），页面里的预览与下载都走它 |
+| GET | `/documents/{id}/preview` | use | 优先取 DOCX 的 PDF 派生预览，缺席时回原件且不缓存 |
+| GET | `/documents/{id}/raw` | use | 取原件（**流字节**），下载与预览回退走它 |
 | DELETE | `/documents/{id}` | **write** | 删文档 |
 | POST | `/sources/{id}:sync` | **write** | 跑一次来源同步 |
 | GET | `/chat-sessions` | use | 对话列表 |
@@ -920,8 +933,11 @@ schema `knowledge`，域前缀 `kb_`。主键 UUIDv7，时刻一律 `timestamptz
 | `KNOWLEDGE_MODEL_BREAKER_FAILURES` / `_RESET_S` | `5` / `30` | ⚠ 只有「下游此刻不行」计数；401/403/400 一律不计 |
 | `KNOWLEDGE_RERANK_TIMEOUT_S` | `15` | ⚠ 重排**只有目录一个来源**，没有环境变量那一档 |
 | `KNOWLEDGE_INGEST_STREAM` / `_GROUP` | `knowledge:ingest` / `knowledge-ingest-workers` | ⚠ 与 worker 侧读同一对 |
-| `KNOWLEDGE_INGEST_CLAIM_IDLE_MS` | `300000` | 多久算掉队 |
+| `KNOWLEDGE_INGEST_CLAIM_IDLE_MS` | `300000` | 多久算掉队；运行中每三分之一周期原子续期 |
+| `KNOWLEDGE_INGEST_TIMEOUT_S` | `1800` | 一份摄取从认领到终态的总预算 |
+| `KNOWLEDGE_INGEST_GENERATION_WRITE_ENABLED` | `false` | 首次升级的 reader-first 开关；全部新 worker 就位后改 `true` |
 | `KNOWLEDGE_PARSE_TIMEOUT_S` | `600` | 本地解析；必须有，否则「队列不动了」 |
+| `KNOWLEDGE_OFFICE_PREVIEW_ENABLED` / `_COMMAND` / `_TIMEOUT_S` | 开 / `soffice` / `300` | 只控制新 PDF 派生；已有派生物仍可读 |
 | `KNOWLEDGE_EXTERNAL_PARSE_TIMEOUT_S` | `180` | 外部解析投任务 + 轮询的总预算 |
 | `KNOWLEDGE_MINERU_ENABLED` / `_BASE_URL` / `_LANG` / `_FORMULA_ENABLED` / `_TABLE_ENABLED` | 关 / `http://mineru:8000` / `ch` / 开 / 开 | 开了不给地址 = 启动即失败 |
 | `KNOWLEDGE_ASR_ENABLED` / `_URL` / `_HOTWORDS` | 关 | 开了不给 `ws://`/`wss://` 地址 = 启动即失败 |
@@ -944,10 +960,11 @@ schema `knowledge`，域前缀 `kb_`。主键 UUIDv7，时刻一律 `timestamptz
 **逐字一致**由前端契约用例对着三份源码比对——服务之间不许互相 import，故只能复述。
 漂开的表现是「界面上分配了、这一侧却还在用环境变量那一档」，而三边代码单看都对。
 
-### 12.3 启动即失败的四条校验
+### 12.3 启动即失败的配置校验
 
 `embedding_enabled` / `model_enabled` / `asr_enabled` / `mineru_enabled` 只要开着，
-对应的地址、模型名、密钥就必须给全，否则**进程起不来**。
+对应的地址、模型名、密钥就必须给全；DOCX 派生开着还要有可执行命令，派生与解析
+的分段预算必须装得进整份摄取总预算。任一不满足都让**进程起不来**。
 
 ⚠ 不打 WARN 继续。留到第一次用才发现的话，服务已经接了流量，
 而表现是「文档状态一直停在 embedding」「第一次开麦才报错」「每一份 PDF 都解析失败，
@@ -1069,7 +1086,8 @@ arm64 上要先从 `download.pytorch.org/whl/cpu` 钉住 `torch` 再装 mineru�
 - ⚠ 引用里的图**取字节再转 object URL**，不把端点地址直接写进 `src`：
   `<img src>` 不带凭据，那条请求会被边缘挡掉。
 - 管理页点文档名或眼睛图标**在页面里预览原件**：PDF 走 pdf.js 逐页画进 canvas
-  （滚到哪画到哪）、Word 走 docx-preview 摊出真实版式、工作簿摊成 `DtTable`、
+  （滚到哪画到哪）；Word 由 worker 先派生私有 PDF，前端优先画它，尚未生成或
+  转换失败时才退回 docx-preview；工作簿摊成 `DtTable`、
   图走 object URL、md/txt/log/json 走 `DtMarkdown` 或 `<pre>`、HTML 关进沙箱 iframe；
   `.pptx` 如实说画不了并给下载。文档行上的 `has_raw` 决定摆不摆这个入口——
   ⚠ 别拿 `media_type` 去推，上传那一路登记时把它留成空串。
@@ -1079,6 +1097,9 @@ arm64 上要先从 `download.pytorch.org/whl/cpu` 钉住 `torch` 再装 mineru�
     `srcdoc` + `sandbox=""`（`blob:` 会继承本页的源）；后者是 .docx 里夹一整段
     HTML 的口子，docx-preview 默认把它画成一个**不带 sandbox 的 iframe**，
     必须显式 `renderAltChunks: false`。
+  - ⚠ DOCX 的 PDF 只是显示派生物，不替代本地 `DocxParser`，也不交给 MinerU。
+    形状、图表与 SmartArt 由 PDF 补齐；派生物缺席时要明确提示兼容预览不完整。
+    本功能上线前已有的 DOCX 点一次「重新解析」即可补派生物，不需要迁移数据。
   - ⚠ 预览入口**不进 `PermGuard`**：看原件要的是 `knowledge:use`，
     与重新解析、删除那两个写操作不是同一档。
 - ⚠ 管理页**必须自己能滚**：窄屏（<xl）时左栏、文档表、试验台竖着堆，

@@ -1,6 +1,7 @@
 """worker 的关停编排：停收新活 → drain → 收资源，不是启动顺序的逆序。"""
 
 import asyncio
+from dataclasses import replace
 from typing import Any, Self
 
 from knowledge_server.apps.knowledge.services.embedding import NullEmbedder
@@ -135,3 +136,17 @@ def test_consumers_are_an_explicit_tuple(settings: Settings) -> None:
     assert len(runtime.consumers) == 1
     assert runtime.pool is not None
     runtime.pool.shutdown(wait=False)
+
+
+def test_ingest_consumers_are_unique_even_when_instance_is_blank(
+    settings: Settings,
+) -> None:
+    """同名 owner 会让旧 worker 通过 Redis 的 owner 校验。"""
+    blank = settings.model_copy(update={"app_instance": ""})
+    first = replace(_runtime((), []).container, settings=blank)
+    second = replace(_runtime((), []).container, settings=blank)
+
+    first_name = first.ingest_group().consumer
+    second_name = second.ingest_group().consumer
+    assert first_name.startswith("knowledge-server:")
+    assert first_name != second_name

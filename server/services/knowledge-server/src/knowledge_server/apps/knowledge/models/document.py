@@ -82,6 +82,10 @@ class KnowledgeDocument(UuidPrimaryKeyMixin, TimestampMixin, Base):
     content_hash: Mapped[str] = mapped_column(
         String(HASH_LENGTH), nullable=False
     )
+    # 当前重排期次。可空兼容存量与首次摄取；开闸后的人工重排才写新 UUID。
+    ingest_generation: Mapped[uuid.UUID | None] = mapped_column(
+        UUID(as_uuid=True), nullable=True
+    )
     status: Mapped[str] = mapped_column(
         String(STATUS_MAX_LENGTH), nullable=False, server_default="pending"
     )

@@ -3,6 +3,8 @@
 from knowledge_server.apps.knowledge.services.sources.keys import (
     base_prefix,
     document_key,
+    document_prefix,
+    preview_key,
     staging_key,
     suffix_of,
 )
@@ -44,6 +46,8 @@ __all__ = [
     "base_prefix",
     "build_sources",
     "document_key",
+    "document_prefix",
+    "preview_key",
     "source_for",
     "source_kinds",
     "staging_key",

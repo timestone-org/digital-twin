@@ -1,6 +1,6 @@
 <script setup lang="ts">
 /**
- * @fileoverview 大纲树的一行：文档序号 + 名字 + meta + 红点，行内「眼睛 + ⋯」。
+ * @fileoverview 大纲树的一行：文档序号 + 名字 + 红点，附加信息通过悬停提示展示，行内「眼睛 + ⋯」。
  * 所有动作归成一个 `act` 事件抛给上层；删除的二次确认条也画在这里
  * （上层只在有连带影响时才把 `confirmText` 递进来）。
  */
@@ -32,6 +32,12 @@ const props = defineProps<{
 const emit = defineEmits<{
   act: [action: OutlineRowAction]
 }>()
+
+const tooltip = computed(() =>
+  props.row.meta === ''
+    ? props.row.label
+    : `${props.row.label}\n${props.row.meta}`,
+)
 
 const menu = computed(() =>
   outlineRowMenu({
@@ -80,6 +86,7 @@ function onMenu(item: DtMenuItem): void {
     <button
       type="button"
       class="flex min-w-0 flex-1 items-center gap-1.5 py-1 text-left"
+      :title="tooltip"
       data-test="row-select"
       @click="emit('act', { type: 'select' })"
     >
@@ -99,9 +106,6 @@ function onMenu(item: DtMenuItem): void {
           >{{ slices.after }}</template
         >
         <template v-else>{{ row.label }}</template>
-      </span>
-      <span v-if="row.meta !== ''" class="shrink-0 text-3xs text-text-disabled">
-        {{ row.meta }}
       </span>
       <span
         v-if="row.flagged"

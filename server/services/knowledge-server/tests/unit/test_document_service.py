@@ -1,16 +1,19 @@
 """文档服务里不碰库的那几步：格式与大小的闸、直传凭证、哈希与挪件。"""
 
 import uuid
+from dataclasses import dataclass
 
 import pytest
 
 from knowledge_server.apps.knowledge.errors import UnsupportedRawItem
 from knowledge_server.apps.knowledge.schemas import UploadTicketIn
 from knowledge_server.apps.knowledge.services import document_service
+from knowledge_server.apps.knowledge.services.sources import preview_key
 from knowledge_server.settings import MAX_RAW_BYTES
-from lib.objectstore import PresignedPost, UploadLimits
+from lib.objectstore import ObjectNotFound, PresignedPost, UploadLimits
 
 BASE = uuid.UUID("00000000-0000-7000-8000-000000000001")
+DOC = uuid.UUID("00000000-0000-7000-8000-000000000002")
 
 
 class _Store:
@@ -40,7 +43,10 @@ class _Store:
         )
 
     async def get_bytes(self, key: str) -> bytes:
-        return self.objects[key]
+        try:
+            return self.objects[key]
+        except KeyError as error:
+            raise ObjectNotFound(key) from error
 
     async def copy(self, source_key: str, target_key: str) -> None:
         self.copied.append((source_key, target_key))
@@ -154,3 +160,70 @@ async def test_the_same_bytes_always_hash_the_same() -> None:
         "b2",
     )
     assert first == second
+
+
+@dataclass(frozen=True)
+class _Document:
+    """预览读取只需要的文档行字段。"""
+
+    id: uuid.UUID = DOC
+    base_id: uuid.UUID = BASE
+    title: str = "系统图.docx"
+    object_key: str = f"knowledge/{BASE}/{DOC}.docx"
+    content_hash: str = "a" * 64
+
+
+def _document(monkeypatch: pytest.MonkeyPatch) -> None:
+    async def read(_session: object, _document_id: uuid.UUID) -> _Document:
+        return _Document()
+
+    monkeypatch.setattr(document_service, "read_document", read)
+
+
+async def test_preview_prefers_the_pdf_derivative(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    _document(monkeypatch)
+    store = _Store()
+    pdf = b"%PDF-1.7\nshape"
+    store.objects[preview_key(BASE, DOC)] = pdf
+
+    made = await document_service.read_preview(
+        None, store, DOC  # pyright: ignore[reportArgumentType]
+    )
+
+    assert made.content == pdf
+    assert made.media_type == "application/pdf"
+    assert made.filename == "系统图.pdf"
+    assert made.is_fallback is False
+
+
+async def test_preview_falls_back_to_the_original_without_a_derivative(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    _document(monkeypatch)
+    store = _Store()
+    store.objects[_Document().object_key] = b"docx"
+
+    made = await document_service.read_preview(
+        None, store, DOC  # pyright: ignore[reportArgumentType]
+    )
+
+    assert made.content == b"docx"
+    assert made.media_type.endswith("wordprocessingml.document")
+    assert made.is_fallback is True
+
+
+async def test_the_derivative_preview_endpoint_only_accepts_docx(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    async def read(_session: object, _document_id: uuid.UUID) -> _Document:
+        return _Document(
+            title="规程.md", object_key=f"knowledge/{BASE}/{DOC}.md"
+        )
+
+    monkeypatch.setattr(document_service, "read_document", read)
+    with pytest.raises(UnsupportedRawItem, match="DOCX"):
+        await document_service.read_preview(
+            None, _Store(), DOC  # pyright: ignore[reportArgumentType]
+        )

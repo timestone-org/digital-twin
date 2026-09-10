@@ -1,8 +1,7 @@
 """摄取任务的队列信封：编码、解码与投递。
 
-⚠ 消息只带 `document_id`，不带「该走到哪一步」：以库里那一行的 `status` 为准。
-带步骤的话，「从头解析」与「只补嵌入」就成了两种消息，而消费者要照顾两种分支——
-而状态本来就写在库里，读一次就有。
+⚠ 消息带 `document_id + generation`，不带「该走到哪一步」：步骤仍以库里那一行
+的 `status` 为准。generation 只做栅栏，防止确认失败的旧消息覆盖一次新重排。
 
 ⚠ 信封里必须带 `traceparent`（observability §4.2）：队列是异步的，
 不带它链路在这一跳齐断，而每一段单看都是完整的。
@@ -17,13 +16,15 @@ from lib.stream import StreamGroup, StreamLike
 
 _logger = get_logger("knowledge.ingest")
 
-# 信封版本。字段改形状时 +1，消费端据此拒掉读不懂的消息而不是猜
+# generation 是可选的向后兼容字段：旧 worker 会忽略它，故仍是 v1；只有不兼容
+# 的字段变化才升版本，否则滚动发布时旧 worker 会把新消息当坏信封确认丢弃。
 ENVELOPE_VERSION = "1"
 
 _FIELD_VERSION = "envelope_version"
 _FIELD_DOCUMENT = "document_id"
 _FIELD_BASE = "base_id"
 _FIELD_TRACEPARENT = "traceparent"
+_FIELD_GENERATION = "ingest_generation"
 
 
 @dataclass(frozen=True)
@@ -33,26 +34,35 @@ class IngestMessage:
     document_id: uuid.UUID
     base_id: uuid.UUID
     traceparent: str
+    generation: uuid.UUID | None = None
 
     def to_fields(self) -> dict[str, str]:
         """摊成扁平的字符串字段，便于用 redis-cli 直接看。"""
-        return {
+        fields = {
             _FIELD_VERSION: ENVELOPE_VERSION,
             _FIELD_DOCUMENT: str(self.document_id),
             _FIELD_BASE: str(self.base_id),
             _FIELD_TRACEPARENT: self.traceparent,
         }
+        if self.generation is not None:
+            fields[_FIELD_GENERATION] = str(self.generation)
+        return fields
 
 
-def new_message(document_id: uuid.UUID, base_id: uuid.UUID) -> IngestMessage:
+def new_message(
+    document_id: uuid.UUID,
+    base_id: uuid.UUID,
+    generation: uuid.UUID | None,
+) -> IngestMessage:
     """当前链路上的一条摄取任务。
 
-    Args: document_id, base_id。
+    Args: document_id, base_id, generation（None 仅兼容存量 v1 消息）。
     """
     return IngestMessage(
         document_id=document_id,
         base_id=base_id,
         traceparent=current_traceparent(),
+        generation=generation,
     )
 
 
@@ -80,8 +90,15 @@ def decode(fields: Mapping[str, str]) -> IngestMessage | None:
     traceparent = fields.get(_FIELD_TRACEPARENT)
     if document_id is None or base_id is None or not traceparent:
         return None
+    raw_generation = fields.get(_FIELD_GENERATION)
+    generation = _parsed(raw_generation)
+    if raw_generation and generation is None:
+        return None
     return IngestMessage(
-        document_id=document_id, base_id=base_id, traceparent=traceparent
+        document_id=document_id,
+        base_id=base_id,
+        traceparent=traceparent,
+        generation=generation,
     )
 
 

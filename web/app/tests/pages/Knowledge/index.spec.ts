@@ -318,6 +318,19 @@ describe('文档表', () => {
     expect(toastSuccess).toHaveBeenCalledWith('已重新排队解析')
   })
 
+  it('处理中不能开启另一个摄取期次', async () => {
+    api.listDocuments.mockResolvedValue([
+      documentOf({ id: 'd1', status: 'parsing' }),
+    ])
+    const wrapper = await render()
+    const reparse = buttonOf(wrapper, '重新解析')
+
+    expect(reparse?.attributes('disabled')).toBeDefined()
+    await reparse?.trigger('click')
+
+    expect(api.reparseDocument).not.toHaveBeenCalled()
+  })
+
   it('删除先问一句，取消就一个接口都不打', async () => {
     confirmSpy.mockResolvedValue(false)
     const wrapper = await render()

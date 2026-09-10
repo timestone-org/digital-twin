@@ -281,3 +281,18 @@ export async function readDocumentRaw(
     onKnowledge(signal ? { signal } : {}),
   )
 }
+
+/**
+ * 取 DOCX 的页面预览；有派生 PDF 时服务端会优先返回它。
+ * @param documentId 哪份文档
+ * @param signal 中止信号，调用方卸载时必须 abort
+ */
+export async function readDocumentPreview(
+  documentId: string,
+  signal?: AbortSignal,
+): Promise<Blob> {
+  return await requestBytes(
+    `${DOCUMENTS}/${documentId}/preview`,
+    onKnowledge(signal ? { signal } : {}),
+  )
+}

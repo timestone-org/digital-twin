@@ -25,10 +25,12 @@ class _Stream:
 
 def test_the_envelope_always_carries_a_traceparent() -> None:
     """⚠ 队列是异步的，不带它链路在这一跳齐断，而每一段单看都是完整的。"""
-    fields = ingest_queue.new_message(DOC, BASE).to_fields()
+    fields = ingest_queue.new_message(DOC, BASE, DOC).to_fields()
     assert "traceparent" in fields
     assert fields["document_id"] == str(DOC)
     assert fields["base_id"] == str(BASE)
+    assert fields["ingest_generation"] == str(DOC)
+    assert fields["envelope_version"] == "1"
 
 
 def test_a_round_trip_keeps_every_field() -> None:
@@ -36,6 +38,22 @@ def test_a_round_trip_keeps_every_field() -> None:
         document_id=DOC, base_id=BASE, traceparent="tp"
     )
     assert ingest_queue.decode(message.to_fields()) == message
+
+
+def test_a_generation_round_trip_keeps_the_fence() -> None:
+    message = ingest_queue.IngestMessage(
+        document_id=DOC,
+        base_id=BASE,
+        traceparent="tp",
+        generation=DOC,
+    )
+    assert ingest_queue.decode(message.to_fields()) == message
+
+
+def test_a_malformed_generation_is_refused() -> None:
+    fields = ingest_queue.IngestMessage(DOC, BASE, "tp").to_fields()
+    fields["ingest_generation"] = "不是 uuid"
+    assert ingest_queue.decode(fields) is None
 
 
 def test_an_older_envelope_version_is_refused() -> None:
@@ -62,7 +80,7 @@ async def test_dispatch_puts_the_message_on_the_stream() -> None:
     await ingest_queue.dispatch_ingest(
         stream,  # pyright: ignore[reportArgumentType]
         TARGET,
-        ingest_queue.new_message(DOC, BASE),
+        ingest_queue.new_message(DOC, BASE, DOC),
     )
     assert stream.sent[0][0] == "s"
 
@@ -75,6 +93,6 @@ async def test_a_failed_dispatch_never_raises() -> None:
     await ingest_queue.dispatch_ingest(
         stream,  # pyright: ignore[reportArgumentType]
         TARGET,
-        ingest_queue.new_message(DOC, BASE),
+        ingest_queue.new_message(DOC, BASE, DOC),
     )
     assert stream.sent == []

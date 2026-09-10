@@ -76,6 +76,12 @@ const INTENTS: Record<KnowledgeDocumentStatus, DtIntent> = {
   failed: 'danger',
 }
 
+const REPARSEABLE = new Set<KnowledgeDocumentStatus>([
+  'pending',
+  'ready',
+  'failed',
+])
+
 const view = useViewMode('knowledge-documents')
 
 const readyCount = computed(
@@ -85,6 +91,11 @@ const readyCount = computed(
 /** 标题下那一行：大小 · 上传时刻。 */
 function metaOf(row: KnowledgeDocument): string {
   return `${formatSize(row.sizeBytes)} · ${formatDateTime(row.createdAt)}`
+}
+
+/** 正在写块或索引时不能换摄取 generation。 */
+function isReparseDisabled(status: KnowledgeDocumentStatus): boolean {
+  return !REPARSEABLE.has(status)
 }
 </script>
 
@@ -157,7 +168,17 @@ function metaOf(row: KnowledgeDocument): string {
             @click="emit('preview', row)"
           />
           <PermGuard :codes="[PERMISSION_CODES.knowledgeWrite]">
-            <DtButton variant="ghost" size="sm" @click="emit('reparse', row)">
+            <DtButton
+              variant="ghost"
+              size="sm"
+              :disabled="isReparseDisabled(row.status)"
+              :title="
+                isReparseDisabled(row.status)
+                  ? '当前解析完成后才能重新解析'
+                  : undefined
+              "
+              @click="emit('reparse', row)"
+            >
               重新解析
             </DtButton>
             <DtButton

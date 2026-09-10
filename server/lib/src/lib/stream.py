@@ -29,6 +29,27 @@ _NEW_MESSAGES = ">"
 # 回包里 `(id, 字段)` 这一对的长度
 _PAIR = 2
 
+# 只给当前 owner 续 pending idle；所有权已转走时返回 0，绝不抢回来
+_TOUCH_SCRIPT = """
+local pending = redis.call('XPENDING', KEYS[1], ARGV[1], ARGV[3], ARGV[3], 1)
+if #pending == 0 or pending[1][2] ~= ARGV[2] then
+  return 0
+end
+local touched = redis.call(
+  'XCLAIM', KEYS[1], ARGV[1], ARGV[2], 0, ARGV[3], 'IDLE', 0, 'JUSTID'
+)
+return #touched
+"""
+
+# XACK 不看 owner；同一 Lua 原子段先核对，避免旧消费者确认新 owner 的活
+_ACK_IF_OWNED_SCRIPT = """
+local pending = redis.call('XPENDING', KEYS[1], ARGV[1], ARGV[3], ARGV[3], 1)
+if #pending == 0 or pending[1][2] ~= ARGV[2] then
+  return 0
+end
+return redis.call('XACK', KEYS[1], ARGV[1], ARGV[3])
+"""
+
 
 @dataclass(frozen=True)
 class StreamGroup:
@@ -62,6 +83,12 @@ class StreamLike(Protocol):
         self, target: StreamGroup, *, min_idle_ms: int, count: int
     ) -> list[StreamEntry]: ...
 
+    async def touch(self, target: StreamGroup, entry_id: str) -> bool: ...
+
+    async def ack_if_owned(
+        self, target: StreamGroup, entry_id: str
+    ) -> bool: ...
+
     async def ack(self, target: StreamGroup, entry_id: str) -> None: ...
 
     async def close(self) -> None: ...
@@ -80,6 +107,8 @@ class RedisStream:
                 socket_connect_timeout=timeout_s,
             )
         )
+        # 每个消费身份各自续扫 XAUTOCLAIM；扫到 0-0 才从头开始。
+        self._claim_cursors: dict[StreamGroup, str] = {}
 
     async def ping(self) -> bool:
         """连通性自检。不抛，供启动自检复用。"""
@@ -149,17 +178,20 @@ class RedisStream:
         at-least-once 就成了 at-most-once，而分片会静默地少跑一个。
         Args: target, min_idle_ms, count。
         """
+        start_id = self._claim_cursors.get(target, _CLAIM_START)
         raw = await self._run(
             self._client.xautoclaim(
                 target.stream,
                 target.group,
                 target.consumer,
                 min_idle_time=min_idle_ms,
-                start_id=_CLAIM_START,
+                start_id=start_id,
                 count=count,
             )
         )
-        return _from_claim(raw)
+        next_cursor, entries = _claim_page(raw)
+        self._claim_cursors[target] = next_cursor
+        return entries
 
     async def ack(self, target: StreamGroup, entry_id: str) -> None:
         """确认一条消息已处理完。
@@ -169,6 +201,40 @@ class RedisStream:
         await self._run(
             self._client.xack(target.stream, target.group, entry_id)
         )
+
+    async def touch(self, target: StreamGroup, entry_id: str) -> bool:
+        """仅当前 owner 可刷新 pending idle；所有权已丢失时给 False。
+
+        Args: target, entry_id。
+        """
+        touched = await self._run(
+            self._client.eval(
+                _TOUCH_SCRIPT,
+                1,
+                target.stream,
+                target.group,
+                target.consumer,
+                entry_id,
+            )
+        )
+        return bool(touched)
+
+    async def ack_if_owned(self, target: StreamGroup, entry_id: str) -> bool:
+        """仅当前 owner 可确认；所有权已转移时给 False。
+
+        Args: target, entry_id。
+        """
+        acked = await self._run(
+            self._client.eval(
+                _ACK_IF_OWNED_SCRIPT,
+                1,
+                target.stream,
+                target.group,
+                target.consumer,
+                entry_id,
+            )
+        )
+        return bool(acked)
 
     async def close(self) -> None:
         """关闭连接池。"""
@@ -209,13 +275,15 @@ def _from_read(raw: Any) -> list[StreamEntry]:
     return found
 
 
-def _from_claim(raw: Any) -> list[StreamEntry]:
-    """XAUTOCLAIM 的回包取中间那段消息表。
+def _claim_page(raw: Any) -> tuple[str, list[StreamEntry]]:
+    """XAUTOCLAIM 的回包保留下次扫描游标与消息表。
 
     Args: raw。
     """
     pair = _as_list(raw)
-    return _entries(pair[1]) if len(pair) >= _PAIR else []
+    if len(pair) < _PAIR:
+        return (_CLAIM_START, [])
+    return (str(pair[0]), _entries(pair[1]))
 
 
 def _entries(messages: Any) -> list[StreamEntry]:

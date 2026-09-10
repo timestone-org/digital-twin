@@ -208,7 +208,7 @@ WS 的 token 走 `Sec-WebSocket-Protocol` 子协议，而 `auth_request` 的子�
 `proxy_read_timeout`（300s）**，否则边缘先掐断，服务端这条超时与它的失败分档一次
 都轮不到，而现象是「助手转了半分钟然后什么都没发生」。
 
-### knowledge-server 的四处部署前置
+### knowledge-server 的五处部署前置
 
 **一份镜像两个角色，`KNOWLEDGE_APP_ROLE` 分叉，两个都要起。**
 `api` 只做读写与检索；解析、切块、嵌入、来源同步全在 `worker`
@@ -229,12 +229,21 @@ exist」，与「装没装扩展」这件事看着毫无关系。
 `knowledge/` 下，一律经 knowledge-server 的受管端点取字节。匿名可读的**只有**
 `models` / `images` / `icons` 那三个给现场大屏机取素材的前缀。
 
-**四组能力开关，每组都是「开着却不给地址/密钥 = 启动即失败」。**
+**DOCX 图形预览依赖 LibreOffice。** knowledge 镜像内置无 GUI Writer 与中文字体；
+worker 把 DOCX 派生为私有 PDF，浏览器优先画 PDF。关掉生成开关或单份转换失败时，
+正文照常摄取，前端退回兼容预览并提示复杂图形可能缺失（ADR-0054）。
+升级存量部署时先让 `KNOWLEDGE_INGEST_GENERATION_WRITE_ENABLED=false` 随新代码滚完；
+确认所有旧 knowledge worker 消失后再改 `true` 做第二次滚动。fresh install 可直接开。
+开闸后若回滚到旧镜像，先暂停知识库写入口并停完新版 worker，再回滚 API/worker；
+不能让旧 API 发出的无 generation 消息被仍在运行的新版 worker 消费。
+
+**五组能力开关，每组都是「开着却不给所需配置 = 启动即失败」。**
 
 | 开关 | 关着时 |
 |---|---|
 | `KNOWLEDGE_EMBEDDING_ENABLED` | 文档照常摄取，检索**如实**回「这个库还没建索引」——不是返回空表，空表与「确实没有相关内容」长得一模一样 |
 | `KNOWLEDGE_MODEL_ENABLED` | agentic 检索策略**如实不可用**，不悄悄退化成 naive |
+| `KNOWLEDGE_OFFICE_PREVIEW_ENABLED` | 不再生成新的 DOCX PDF；已有派生物仍可读，缺席时退回兼容预览 |
 | `KNOWLEDGE_MINERU_ENABLED` | 不收 PDF：上传面给的是一句点得出名字的错，而不是一份状态 ready 却检索不到的空文档 |
 | `KNOWLEDGE_ASR_ENABLED` | 对话页没有麦克风键 |
 

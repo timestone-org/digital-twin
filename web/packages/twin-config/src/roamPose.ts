@@ -1,6 +1,5 @@
 /**
- * @fileoverview 相机位姿与两个位姿之间的插值曲线：绕注视点做球面插值，再套一层
- * 缓入缓出。纯数学，无 Vue 无 three——运行态漫游与编辑器预览共用这一条曲线。
+ * @fileoverview 相机位姿与单次镜头过渡的球面插值、缓动函数。
  */
 import { clamp } from './sanitize'
 import type { Vec3 } from './types'

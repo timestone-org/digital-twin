@@ -15,6 +15,7 @@ import type {
   TwinOutlineFolderRowView,
   TwinOutlineSectionView,
 } from '../scripts/outlineFilter'
+import type { OutlinePlacement } from '../scripts/outlinePlacement'
 import type { OutlineRowAction } from '../scripts/outlineMenus'
 import {
   TWIN_SCENE_ENTRIES,
@@ -48,6 +49,8 @@ const props = withDefaults(
 const emit = defineEmits<{
   select: [TwinSelection]
   add: [TwinEntityKind]
+  addInFolder: [{ kind: TwinEntityKind; folderId: string }]
+  place: [OutlinePlacement]
   /** 从模型节点批量建部件。 */
   bulkAdd: []
   remove: [{ kind: TwinEntityKind; id: string }]
@@ -79,8 +82,9 @@ const view = computed(() =>
   ),
 )
 
-const drag = useOutlineDrag((folderId, id) =>
-  emit('moveIntoFolder', { folderId, id }),
+const drag = useOutlineDrag(
+  (folderId, id) => emit('moveIntoFolder', { folderId, id }),
+  (placement) => emit('place', placement),
 )
 
 watch(
@@ -159,6 +163,22 @@ function onRowRemoveOrFolder(
     emit('createFolderWithItem', { kind: row.kind, id: row.id })
 }
 
+function addInFolder(folder: TwinOutlineFolderRowView): void {
+  const next = new Set(collapsed.value)
+  next.delete(folder.folder.key)
+  collapsed.value = next
+  query.value = ''
+  emit('addInFolder', { kind: folder.folder.kind, folderId: folder.folder.id })
+}
+
+function rowDropStyle(row: TwinOutlineRow): Record<string, string> {
+  const target = drag.rowTarget.value
+  if (target?.id !== row.id) return {}
+  return {
+    boxShadow: `inset 0 ${target.position === 'before' ? '2px' : '-2px'} 0 var(--accent-primary)`,
+  }
+}
+
 function commitRename(id: string, name: string): void {
   renamingId.value = null
   emit('renameFolder', { id, name })
@@ -216,8 +236,8 @@ function commitRename(id: string, name: string): void {
               ? 'rounded-[var(--radius-sm)] ring-1 ring-inset ring-accent-primary'
               : ''
           "
-          @dragover="drag.over(folderView.folder, $event)"
-          @drop="drag.drop(folderView.folder)"
+          @dragover.stop="drag.over(folderView.folder, $event)"
+          @drop.stop.prevent="drag.drop(folderView.folder)"
         >
           <OutlineFolderRow
             :folder="folderView.folder"
@@ -225,6 +245,7 @@ function commitRename(id: string, name: string): void {
             :renaming="renamingId === folderView.folder.id"
             :slices="folderView.slices"
             :count-text="folderCount(folderView)"
+            @add="addInFolder(folderView)"
             @toggle="toggleCollapse(folderView.folder.key)"
             @rename-start="renamingId = folderView.folder.id"
             @rename-commit="commitRename(folderView.folder.id, $event)"
@@ -236,6 +257,9 @@ function commitRename(id: string, name: string): void {
               v-for="rowView in folderView.rows"
               :key="rowView.row.key"
               draggable="true"
+              :style="rowDropStyle(rowView.row)"
+              @dragover.stop="drag.overRow(rowView.row, $event)"
+              @drop.stop.prevent="drag.dropRow(rowView.row)"
               @dragstart="drag.start(rowView.row, folderView.folder.id)"
               @dragend="drag.end()"
             >
@@ -256,6 +280,9 @@ function commitRename(id: string, name: string): void {
           v-for="rowView in sectionView.rows"
           :key="rowView.row.key"
           draggable="true"
+          :style="rowDropStyle(rowView.row)"
+          @dragover.stop="drag.overRow(rowView.row, $event)"
+          @drop.stop.prevent="drag.dropRow(rowView.row)"
           @dragstart="drag.start(rowView.row, null)"
           @dragend="drag.end()"
         >

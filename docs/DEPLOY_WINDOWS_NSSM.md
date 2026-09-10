@@ -294,8 +294,8 @@ mkdir C:\DigitalTwin\data\minio
 ### 2.9 知识库的可选外部件
 
 **整套知识库是可缺席的**：不装 `dt-knowledge` / `dt-knowledge-worker`，前端探测
-不到就干净地不出现入口，别的功能一件不少。装了它，下面这几件（模型端点、MinerU、
-FunASR 三类）**各自还可以再缺席**，缺哪件就少哪一块能力——不会悄悄退化成一个
+不到就干净地不出现入口，别的功能一件不少。装了它，下面这几件（模型端点、
+LibreOffice、MinerU、FunASR 四类）**各自还可以再缺席**，缺哪件就少哪一块能力——不会悄悄退化成一个
 看着像在工作的假件。
 
 | 外部件 | 装在哪 | 缺席时 |
@@ -303,6 +303,7 @@ FunASR 三类）**各自还可以再缺席**，缺哪件就少哪一块能力—
 | 嵌入端点（OpenAI 兼容的 `/embeddings`）| 现场任意一台能跑推理的机器，或云上端点 | 文档照常摄取，检索**如实**回「这个库还没建索引」 |
 | 重排端点（[ADR-0042](adr/0042-重排是第三种模型种类且方言可插拔.md)）| 同上 | 检索照常，只是不重排。能力面分得清「没接」与「接了但排不成」 |
 | 对话档模型 | 同上 | agentic 检索策略如实不可用，**不悄悄退回 naive** |
+| LibreOffice Writer（[ADR-0054](adr/0054-DOCX原件预览由worker派生PDF.md)）| knowledge worker 同机 | DOCX 正文照常摄取，但形状、图表、SmartArt 只能兼容预览 |
 | MinerU（[ADR-0043](adr/0043-解析后端可插拔且外部解析服务留口.md)）| 见下 | 不收 PDF 与扫描件；Office 与纯文本仍由 worker 本进程解 |
 | FunASR（[ADR-0038](adr/0038-语音输入走自建FunASR经知识库服务中继.md)）| 现场任意一台机器 | 对话页没有麦克风键 |
 
@@ -320,6 +321,17 @@ FunASR 三类）**各自还可以再缺席**，缺哪件就少哪一块能力—
 ⚠ **`KNOWLEDGE_EMBEDDING_MAX_INPUT_TOKENS` 要照实填。** 切块上限由它折算而来，
 而端点对超窗的那一截**静默截断、不报错**——配大了只表现为「这一段明明有，就是
 搜不到」。本仓实测 `bge-large-zh-v1.5` 的窗口约合 520 个汉字。
+
+**DOCX 图形预览要装 LibreOffice Writer。** 用官方 x64 安装包，装完先验证：
+
+```powershell
+& 'C:\Program Files\LibreOffice\program\soffice.com' --headless --version
+```
+
+然后在 `knowledge-server\.env` 里设
+`KNOWLEDGE_OFFICE_PREVIEW_ENABLED=true`，并把
+`KNOWLEDGE_OFFICE_PREVIEW_COMMAND` 写成上面的 `soffice.com` 绝对路径。不要依赖
+nssm 的 PATH；开关为真而命令不存在时 worker 会在接队列前退出。
 
 **MinerU 在 Windows 上怎么办。** 本仓只给了容器构建（[`docker/mineru/Dockerfile`](../docker/mineru/Dockerfile)：
 CPU 那一档 `mineru[pipeline]==3.4.5`，镜像 2.4 GB、权重另有 2.4 GB），**没有在
@@ -685,7 +697,7 @@ icacls C:\DigitalTwin\app\server\services\*\.env /inheritance:r /grant "SYSTEM:(
 | `services\opcua-server\.env` | 35 | —— |
 | `services\realtime-hub\.env` | 39 | —— |
 | `services\ai-assistant\.env` | 62 | ——（接模型另见 §5.7）|
-| `services\knowledge-server\.env` | 81 | ——（接模型与解析另见 §5.8）|
+| `services\knowledge-server\.env` | 86 | LibreOffice 绝对路径（不用则关开关；其余见 §5.8）|
 
 没填的值都写成 `<说明>` 的样子，**逐个搜 `<` 就能找全**——留着不改的话服务会在
 第一秒响亮失败，而不是带着一个错值跑起来。
@@ -726,6 +738,10 @@ foreach ($d in Get-ChildItem $svc -Directory) {
 
 ⚠ 反过来的差集（`.env` 里有、`.env.example` 里没有）**不用管**：那是已经删掉的
 配置项，加载器会忽略。删它只是为了看着干净。
+
+⚠ 升级已运行的知识库时，第一次保留
+`KNOWLEDGE_INGEST_GENERATION_WRITE_ENABLED=false`，跑迁移并升级 API/worker；确认
+所有旧 worker 已退出后再改成 `true` 并重启。fresh install 可直接设成 `true`。
 
 已经替你定好、**不用再动**的取值：
 
@@ -769,7 +785,7 @@ knowledge-worker 消费不到摄取任务。
 
 ### 5.8 知识库接模型与解析（可缺席）
 
-`knowledge-server\.env` 里有三组开关，**每组都是「开关为真却不给地址/密钥 =
+`knowledge-server\.env` 里有五组开关，**每组都是「开关为真却不给所需配置 =
 启动即失败」**——刻意的，理由与助手那一路相同。全部留在 `false` 也起得来，
 只是各少一块能力（§2.9）。
 
@@ -778,6 +794,7 @@ knowledge-worker 消费不到摄取任务。
 | `KNOWLEDGE_EMBEDDING_ENABLED` | `_BASE_URL` / `_API_KEY` / `_MODEL` / `_DIMENSIONS` / `_MAX_INPUT_TOKENS` | 检索如实回「这个库还没建索引」 |
 | `KNOWLEDGE_MODEL_ENABLED` | `_BASE_URL` / `_API_KEY` / `_CHAT` / `_CONTEXT_TOKENS` | agentic 检索策略如实不可用 |
 | `KNOWLEDGE_MINERU_ENABLED` | `_BASE_URL` | 不收 PDF |
+| `KNOWLEDGE_OFFICE_PREVIEW_ENABLED` | `_COMMAND` / `_TIMEOUT_S` | DOCX 退回兼容预览，复杂图形可能缺失 |
 | `KNOWLEDGE_ASR_ENABLED` | `_URL` | 没有麦克风键 |
 
 ⚠ **`KNOWLEDGE_EMBEDDING_DIMENSIONS` 要在跑迁移之前定好**：它同时是库上向量列的
@@ -1438,6 +1455,7 @@ Restart-Service dt-auth, dt-platform, dt-realtime, dt-opcua, dt-assistant, dt-kn
 | 上传面**不收 PDF** | `KNOWLEDGE_MINERU_ENABLED=false` | **设计行为**。接了 MinerU 之后 accept 名单自动多出 `.pdf`（§2.9）|
 | PDF 收下了但**每一份都解析超时** | 开关开着却连不上 MinerU，或 `KNOWLEDGE_EXTERNAL_PARSE_TIMEOUT_S` 配小了（纯 CPU 上几十页按分钟算）| 先手工 `curl http://<mineru>/health`；连不通就把开关关回去 |
 | 知识库的 **PDF 预览一片空白**，那条请求却是 200 | nginx 少了 `.mjs` 的 media type，pdf.js 的 worker 被浏览器拒收 | §8.1 第 7 行；改完先清浏览器缓存再看 |
+| DOCX 正文能看，但**形状/图表/SmartArt 缺失** | worker 未生成 PDF 派生预览，或 LibreOffice 命令配置错误 | 查 `dt-knowledge-worker.err.log`；按 §2.9 验证 `soffice.com`，存量文档点一次重新解析 |
 | 对话页**没有麦克风键**，或按下去报「只在 HTTPS 或 localhost 页面上开放麦克风」 | 前者是 `KNOWLEDGE_ASR_ENABLED=false`；后者是浏览器的安全上下文要求 | 后者与本仓无关，要给边缘配 TLS（§12）|
 | 模型管理页整个 **503** | `PLATFORM_LLM_PROVIDER_SECRET` 没配 | 配上即恢复；留空的语义是「目录整个缺席」，两侧各用各的 `.env`（§5.2）|
 

@@ -125,7 +125,7 @@ E2E、a11y、变异测试不进 PR 闸门是 `testing-standard-*.md` §9 的明�
 | 同 §5.4 依赖漏洞 | `pip-audit --strict` · `pnpm audit --audit-level=high` |
 | 同 §1–§3 分支、提交、PR 范围 | `check_pr_policy.py`（PR 专用） |
 | 密钥不进版本库 | `gitleaks` + `.gitleaks.toml` |
-| docker-build §5 镜像内容断言 | `nightly.yml` 的 `images` 作业 |
+| docker-build §5 镜像内容/体积与 OS 包漏洞 | `nightly.yml` 的 `images` 作业（knowledge 另跑 DOCX 图形烟测） |
 | 服务只用自己声明的依赖 | `check_service_deps.py` |
 
 ⚠ **`check_service_deps.py` 守的是一个在单仓里看不见的洞。** 开发与测试跑在

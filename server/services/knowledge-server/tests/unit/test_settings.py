@@ -190,3 +190,32 @@ def test_mineru_off_by_default_and_configurable() -> None:
     assert (
         Settings(**_base()).mineru_enabled is False
     )  # pyright: ignore[reportArgumentType]
+
+
+def test_office_preview_is_optional_but_requires_a_command_when_enabled() -> (
+    None
+):
+    defaults = Settings(**_base())  # pyright: ignore[reportArgumentType]
+    assert defaults.office_preview_enabled is False
+    with pytest.raises(ValueError, match="KNOWLEDGE_OFFICE_PREVIEW_COMMAND"):
+        Settings(  # pyright: ignore[reportArgumentType]
+            **_base(), office_preview_enabled=True, office_preview_command=" "
+        )
+
+
+def test_office_preview_and_parse_must_fit_the_total_ingest_budget() -> None:
+    with pytest.raises(ValueError, match="KNOWLEDGE_INGEST_TIMEOUT_S"):
+        Settings(  # pyright: ignore[reportArgumentType]
+            **_base(),
+            office_preview_enabled=True,
+            ingest_timeout_s=900,
+        )
+
+
+def test_generation_writes_use_a_reader_first_rollout_switch() -> None:
+    defaults = Settings(**_base())  # pyright: ignore[reportArgumentType]
+    enabled = Settings(  # pyright: ignore[reportArgumentType]
+        **_base(), ingest_generation_write_enabled=True
+    )
+    assert defaults.ingest_generation_write_enabled is False
+    assert enabled.ingest_generation_write_enabled is True

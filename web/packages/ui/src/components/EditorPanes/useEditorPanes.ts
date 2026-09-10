@@ -30,8 +30,8 @@ export interface EditorPanes {
   reset: (side: PaneSide) => void
 }
 
-export function useEditorPanes(): EditorPanes {
-  const stored = readPaneWidths()
+export function useEditorPanes(storageKey?: string): EditorPanes {
+  const stored = readPaneWidths(storageKey)
   const hostRef = ref<HTMLElement | null>(null)
   const left = ref(stored.left)
   const right = ref(stored.right)
@@ -50,7 +50,7 @@ export function useEditorPanes(): EditorPanes {
   }
 
   const commit = (): void => {
-    writePaneWidths({ left: left.value, right: right.value })
+    writePaneWidths({ left: left.value, right: right.value }, storageKey)
   }
 
   const widthOf = (side: PaneSide): number =>

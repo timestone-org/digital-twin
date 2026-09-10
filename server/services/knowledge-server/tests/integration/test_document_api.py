@@ -3,12 +3,14 @@
 import hashlib
 import uuid
 from collections.abc import Callable
+from dataclasses import replace
 from typing import Any
 
 import httpx
 import pytest
 
 from knowledge_server.apps.knowledge import crud
+from knowledge_server.apps.knowledge.services.sources import preview_key
 from knowledge_server.settings import API_PREFIX
 from lib.objectstore import ObjectNotFound
 
@@ -156,6 +158,17 @@ async def test_reparse_puts_it_back_in_the_queue(
     db_stack: object, db_client: httpx.AsyncClient
 ) -> None:
     """⚠ 这是这条链路上唯一的重试入口，而且它由人按。"""
+    container = (
+        db_stack.app.state.container
+    )  # pyright: ignore[reportAttributeAccessIssue]
+    db_stack.app.state.container = (
+        replace(  # pyright: ignore[reportAttributeAccessIssue]
+            container,
+            settings=container.settings.model_copy(
+                update={"ingest_generation_write_enabled": True}
+            ),
+        )
+    )
     base_id = await _base(db_client)
     made = await _uploaded(db_client, base_id)
     response = await db_client.post(f"{DOCS}/{made['id']}:reparse")
@@ -164,6 +177,83 @@ async def test_reparse_puts_it_back_in_the_queue(
         db_stack.app.state.container.stream
     )  # pyright: ignore[reportAttributeAccessIssue]
     assert len(stream.sent) == 2
+    assert stream.sent[0].get("ingest_generation") is None
+    assert stream.sent[1].get("ingest_generation") is not None
+
+
+async def test_reader_first_rollout_keeps_the_existing_generation(
+    db_stack: object, db_client: httpx.AsyncClient
+) -> None:
+    """开关默认关，让所有旧 worker 先滚完再由生产者写新 generation。"""
+    base_id = await _base(db_client)
+    made = await _uploaded(db_client, base_id)
+    response = await db_client.post(f"{DOCS}/{made['id']}:reparse")
+    assert response.status_code == httpx.codes.OK
+    stream = (
+        db_stack.app.state.container.stream
+    )  # pyright: ignore[reportAttributeAccessIssue]
+    assert stream.sent[0].get("ingest_generation") is None
+    assert stream.sent[1].get("ingest_generation") is None
+
+
+async def test_a_reader_first_replica_cannot_republish_a_new_generation(
+    db_stack: object, db_client: httpx.AsyncClient
+) -> None:
+    """第二次滚动的 false 副本只拒绝，不能复制 true 副本刚开的期次。"""
+    container = (
+        db_stack.app.state.container
+    )  # pyright: ignore[reportAttributeAccessIssue]
+    enabled = replace(
+        container,
+        settings=container.settings.model_copy(
+            update={"ingest_generation_write_enabled": True}
+        ),
+    )
+    db_stack.app.state.container = (
+        enabled  # pyright: ignore[reportAttributeAccessIssue]
+    )
+    base_id = await _base(db_client)
+    made = await _uploaded(db_client, base_id)
+    first = await db_client.post(f"{DOCS}/{made['id']}:reparse")
+    assert first.status_code == httpx.codes.OK
+
+    db_stack.app.state.container = (
+        replace(  # pyright: ignore[reportAttributeAccessIssue]
+            enabled,
+            settings=enabled.settings.model_copy(
+                update={"ingest_generation_write_enabled": False}
+            ),
+        )
+    )
+    blocked = await db_client.post(f"{DOCS}/{made['id']}:reparse")
+
+    assert blocked.status_code == httpx.codes.CONFLICT
+    stream = enabled.stream
+    assert len(stream.sent) == 2  # pyright: ignore[reportAttributeAccessIssue]
+
+
+async def test_reparse_cannot_interrupt_an_inflight_generation(
+    db_stack: object, db_client: httpx.AsyncClient
+) -> None:
+    """处理中换 generation 会让旧任务覆盖新终态，必须当场拒绝。"""
+    base_id = await _base(db_client)
+    made = await _uploaded(db_client, base_id)
+    async with (
+        db_stack.sessions() as session
+    ):  # pyright: ignore[reportCallIssue]
+        await crud.document.mark_status(
+            session, uuid.UUID(made["id"]), "parsing"
+        )
+        await session.commit()
+
+    response = await db_client.post(f"{DOCS}/{made['id']}:reparse")
+
+    assert response.status_code == httpx.codes.CONFLICT
+    assert response.json()["code"] == 42313
+    stream = (
+        db_stack.app.state.container.stream
+    )  # pyright: ignore[reportAttributeAccessIssue]
+    assert len(stream.sent) == 1
 
 
 async def test_deleting_removes_the_row_then_the_bytes(
@@ -173,12 +263,15 @@ async def test_deleting_removes_the_row_then_the_bytes(
     原件，而它看起来是一份正常文档。"""
     base_id = await _base(db_client)
     made = await _uploaded(db_client, base_id)
-    dropped = await db_client.delete(f"{DOCS}/{made['id']}")
-    assert dropped.status_code == httpx.codes.NO_CONTENT
     store = (
         db_stack.app.state.container.objectstore
     )  # pyright: ignore[reportAttributeAccessIssue]
+    derived_key = preview_key(uuid.UUID(base_id), uuid.UUID(made["id"]))
+    store.objects[derived_key] = b"%PDF-1.7\npreview"
+    dropped = await db_client.delete(f"{DOCS}/{made['id']}")
+    assert dropped.status_code == httpx.codes.NO_CONTENT
     assert store.deleted
+    assert derived_key not in store.objects
     after = await db_client.get(f"{DOCS}/{made['id']}")
     assert after.status_code == httpx.codes.NOT_FOUND
 
@@ -233,6 +326,51 @@ async def test_reading_the_original_streams_it_with_a_content_etag(
     # ⚠ 只能是 private：原件是某个库里的内容，不许被共享缓存留下来
     assert response.headers["cache-control"].startswith("private")
     assert response.headers["content-disposition"].startswith("inline")
+
+
+async def test_docx_preview_prefers_the_private_pdf_derivative(
+    db_stack: Any, db_client: httpx.AsyncClient
+) -> None:
+    base_id = await _base(db_client)
+    made = await _uploaded(db_client, base_id, "系统图.docx")
+    pdf = b"%PDF-1.7\nword-shapes"
+    store = db_stack.app.state.container.objectstore
+    key = preview_key(uuid.UUID(base_id), uuid.UUID(made["id"]))
+    store.objects[key] = pdf
+
+    response = await db_client.get(f"{DOCS}/{made['id']}/preview")
+
+    assert response.content == pdf
+    assert response.headers["content-type"] == "application/pdf"
+    assert response.headers["etag"] == f'"{hashlib.sha256(pdf).hexdigest()}"'
+    assert response.headers["cache-control"].startswith("private, max-age=")
+
+
+async def test_docx_preview_falls_back_without_caching_before_worker_finishes(
+    db_client: httpx.AsyncClient,
+) -> None:
+    base_id = await _base(db_client)
+    made = await _uploaded(db_client, base_id, "系统图.docx")
+
+    response = await db_client.get(f"{DOCS}/{made['id']}/preview")
+
+    assert response.content == FAKE_UPLOAD_BYTES
+    assert response.headers["content-type"].startswith(
+        "application/vnd.openxmlformats-officedocument.wordprocessingml.document"
+    )
+    assert response.headers["cache-control"] == "private, no-store"
+
+
+async def test_page_preview_rejects_a_non_docx_original(
+    db_client: httpx.AsyncClient,
+) -> None:
+    base_id = await _base(db_client)
+    made = await _uploaded(db_client, base_id, "规程.md")
+
+    response = await db_client.get(f"{DOCS}/{made['id']}/preview")
+
+    assert response.status_code == httpx.codes.UNSUPPORTED_MEDIA_TYPE
+    assert response.json()["code"] == 42302
 
 
 async def test_the_original_carries_the_two_guard_headers(

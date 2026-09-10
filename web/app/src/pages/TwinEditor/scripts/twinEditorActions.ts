@@ -23,11 +23,14 @@ import {
   removeFromFolder,
   renameFolder,
 } from './folderOps'
+import { placeOutlineEntity } from './outlinePlacement'
+import type { OutlinePlacement } from './outlinePlacement'
 import type { TwinDoc } from './twinDoc'
 import type { TwinEntityKind, TwinSelection } from './types'
 
 export interface TwinEditorActions {
-  add: (kind: TwinEntityKind) => void
+  add: (kind: TwinEntityKind, folderId?: string) => void
+  place: (placement: OutlinePlacement) => void
   /** 新建一张信息牌，中心落在给定的世界坐标上（视口拾取的表面点）。 */
   addPanelAt: (position: Vec3) => void
   /** 按模型节点名批量建部件；选中最后建出来的那个。 */
@@ -137,11 +140,11 @@ export function createTwinEditorActions(
   return {
     ...createFolderActions(doc),
 
-    add: (kind) => {
-      const { config, id } = addEntity(doc.config.value, kind)
-      doc.commit(config)
-      select({ kind, id })
+    place: (placement) => {
+      doc.commit(placeOutlineEntity(doc.config.value, placement))
     },
+
+    ...createAddAction(doc, select),
 
     // 建牌 + 落点只 commit 一次：撤销一步就该回到「没这张牌」的状态
     addPanelAt: (position) => {
@@ -181,5 +184,27 @@ export function createTwinEditorActions(
 
     transformEntity: (change) => applyTransform(doc, change),
     endTransform: () => doc.endMerge(),
+  }
+}
+
+function createAddAction(
+  doc: TwinDoc,
+  select: (selection: TwinSelection) => void,
+): Pick<TwinEditorActions, 'add'> {
+  return {
+    add: (kind, folderId) => {
+      if (
+        folderId !== undefined &&
+        !doc.config.value.folders.some(
+          (folder) => folder.id === folderId && folder.kind === kind,
+        )
+      )
+        return
+      const { config, id } = addEntity(doc.config.value, kind)
+      doc.commit(
+        folderId === undefined ? config : moveIntoFolder(config, folderId, id),
+      )
+      select({ kind, id })
+    },
   }
 }

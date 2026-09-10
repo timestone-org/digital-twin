@@ -67,10 +67,10 @@ function readNumber(raw: unknown, fallback: number): number {
 }
 
 /** 读存档；没存过、存坏了、读不了都回出厂值。 */
-export function readPaneWidths(): PaneWidths {
+export function readPaneWidths(storageKey = STORAGE_KEY): PaneWidths {
   // ⚠ Safari 无痕模式下访问 localStorage 会抛，丢个偏好不该把编辑器带崩
   try {
-    const raw = localStorage.getItem(STORAGE_KEY)
+    const raw = localStorage.getItem(storageKey)
     if (raw === null) return { ...PANE_DEFAULTS }
     const parsed: unknown = JSON.parse(raw)
     if (typeof parsed !== 'object' || parsed === null) {
@@ -87,9 +87,12 @@ export function readPaneWidths(): PaneWidths {
 }
 
 /** 写存档。存不下就只在本次会话内有效。 */
-export function writePaneWidths(widths: PaneWidths): void {
+export function writePaneWidths(
+  widths: PaneWidths,
+  storageKey = STORAGE_KEY,
+): void {
   try {
-    localStorage.setItem(STORAGE_KEY, JSON.stringify(widths))
+    localStorage.setItem(storageKey, JSON.stringify(widths))
   } catch {
     /* 同上：无痕模式写入也会抛 */
   }

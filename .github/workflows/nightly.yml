@@ -75,6 +75,11 @@ jobs:
           docker build -t auth-server:ci \
             -f server/services/auth-server/Dockerfile server/
 
+      - name: 构建 knowledge-server 镜像
+        run: |
+          docker build -t knowledge-server:ci \
+            -f server/services/knowledge-server/Dockerfile server/
+
       - name: 镜像里只有这一个服务
         run: |
           services=$(docker run --rm auth-server:ci sh -c 'ls /src/services')
@@ -101,6 +106,42 @@ jobs:
           limit=$((400 * 1024 * 1024))
           echo "镜像 $((size / 1024 / 1024)) MB / $((limit / 1024 / 1024)) MB"
           test "$size" -le "$limit" || { echo '::error::镜像超出体积上限'; exit 1; }
+
+      - name: knowledge 镜像的 DOCX 图形预览与内容边界
+        run: |
+          services=$(docker run --rm knowledge-server:ci sh -c 'ls /src/services')
+          test "$services" = "knowledge-server" \
+            || { echo "::error::镜像里还有别的服务：$services"; exit 1; }
+          test "$(docker run --rm knowledge-server:ci id -u)" = "10001" \
+            || { echo '::error::镜像以 root 运行'; exit 1; }
+          docker run --rm knowledge-server:ci sh -c \
+            'test -f /usr/share/common-licenses/MPL-2.0 && test -f /usr/share/doc/fonts-noto-cjk/copyright'
+          docker run --rm knowledge-server:ci sh -c \
+            'test ! -d /src/services/knowledge-server/tests && test ! -d /src/services/knowledge-server/scripts && test ! -d /src/lib/tests && test ! -d /src/domain/llmcore/tests && ! find /src \( -name "*.env" -o -name ".env" -o -name ".pytest_cache" -o -name ".coverage" -o -name "coverage.xml" \) | grep -q .'
+          docker run --rm -i knowledge-server:ci python - \
+            < server/services/knowledge-server/scripts/probe_docx_preview.py \
+            > "$RUNNER_TEMP/docx-preview.pdf"
+          sudo apt-get update
+          sudo apt-get install -y --no-install-recommends poppler-utils python3-pil
+          pdftoppm -f 1 -singlefile -png -r 96 \
+            "$RUNNER_TEMP/docx-preview.pdf" "$RUNNER_TEMP/docx-preview"
+          PROBE_PAGE="$RUNNER_TEMP/docx-preview.png" python3 -c \
+            'import os; from PIL import Image; image=Image.open(os.environ["PROBE_PAGE"]).convert("RGB"); red=sum(r>180 and g<100 and b<100 for r,g,b in image.getdata()); raise SystemExit(red < 1000)'
+          size=$(docker image inspect knowledge-server:ci --format '{{.Size}}')
+          limit=$((400 * 1024 * 1024))
+          echo "knowledge 镜像 $((size / 1024 / 1024)) MB / $((limit / 1024 / 1024)) MB"
+          test "$size" -le "$limit" || { echo '::error::knowledge 镜像超出体积上限'; exit 1; }
+
+      - name: knowledge 镜像的 OS 包漏洞
+        uses: aquasecurity/trivy-action@ed142fd0673e97e23eac54620cfb913e5ce36c25 # v0.36.0
+        with:
+          image-ref: knowledge-server:ci
+          format: table
+          exit-code: '1'
+          ignore-unfixed: true
+          vuln-type: os
+          scanners: vuln
+          severity: CRITICAL,HIGH
 
   report:
     name: 失败即开 issue

@@ -1,8 +1,8 @@
 <script setup lang="ts">
 /**
- * @fileoverview 原件预览弹窗：把一份文档的原件取回来，按格式画出来，并给下载。
+ * @fileoverview 原件预览弹窗：取页面预览与原件，按格式画出来，并给下载。
  *
- * ⚠ 字节走**认人的接口**取回 Blob，不写进任何 `src`：浏览器给 `<img>`、
+ * ⚠ 两路字节都走**认人的接口**取回 Blob，不写进任何 `src`：浏览器给 `<img>`、
  * `<iframe>` 这类子资源请求带不上 `Authorization`，而知识库的原件不匿名可读。
  * 写进 src 的表现是一个空白框，且不报任何错。
  * ⚠ 也不发预签名 URL：那是一条「谁拿到谁能看」的链接，而库里可能有涉密图纸。
@@ -14,12 +14,13 @@
 import { computed, onUnmounted, ref, watch } from 'vue'
 import { DtButton, DtModal, DtNotice, DtSpinner } from '@dt/ui'
 
-import { readDocumentRaw } from '@/api/knowledge'
+import { readDocumentPreview, readDocumentRaw } from '@/api/knowledge'
 import type { KnowledgeDocument } from '@/api/knowledge'
 import { useRacedFetch } from '@/composables/useRacedFetch'
 import { downloadBytes } from '@/utils/downloadJson'
 import { formatSize } from '@/utils/filesize'
 import { previewKindOf } from '../scripts/documentPreview'
+import type { PreviewKind } from '../scripts/documentPreview'
 import DocumentPreviewStage from './DocumentPreviewStage.vue'
 
 /** 要先解成文字再画的那几种画法。 */
@@ -33,15 +34,21 @@ const props = defineProps<{
 const emit = defineEmits<{ 'update:modelValue': [value: boolean] }>()
 
 interface Loaded {
-  blob: Blob
+  raw: Blob | null
+  preview: Blob
+  previewKind: PreviewKind
   /** 文本族画法的正文；其余画法是空串。 */
   text: string
+  isCompatibilityDocx: boolean
 }
 
 const loaded = ref<Loaded | null>(null)
 const failure = ref('')
+const downloadFailure = ref('')
 const isLoading = ref(false)
+const isSaving = ref(false)
 const race = useRacedFetch()
+const downloadRace = useRacedFetch()
 
 const name = computed(() => props.document?.title ?? '')
 const kind = computed(() => previewKindOf(name.value))
@@ -52,27 +59,55 @@ const subtitle = computed(() =>
 function reset(): void {
   loaded.value = null
   failure.value = ''
+  downloadFailure.value = ''
   isLoading.value = false
+  isSaving.value = false
 }
 
 /**
- * 取回字节；文本族顺手解成文字。
+ * 取页面预览；普通格式读原件，DOCX 读派生端点，文本族顺手解成文字。
  * @param documentId 哪份文档
  * @param signal 中止信号
+ * @param requestedKind 文件名决定的画法
  */
 async function fetched(
   documentId: string,
   signal: AbortSignal,
+  requestedKind: PreviewKind,
 ): Promise<Loaded> {
-  const blob = await readDocumentRaw(documentId, signal)
-  const text = TEXTUAL.includes(kind.value) ? await blob.text() : ''
-  return { blob, text }
+  if (requestedKind !== 'docx') {
+    const raw = await readDocumentRaw(documentId, signal)
+    const text = TEXTUAL.includes(requestedKind) ? await raw.text() : ''
+    return {
+      raw,
+      preview: raw,
+      previewKind: requestedKind,
+      text,
+      isCompatibilityDocx: false,
+    }
+  }
+  let preview: Blob
+  try {
+    preview = await readDocumentPreview(documentId, signal)
+  } catch {
+    // 兼容滚动发布中的旧后端：它还没有 `/preview`，原件仍然可看
+    preview = await readDocumentRaw(documentId, signal)
+  }
+  const previewKind = preview.type === 'application/pdf' ? 'pdf' : 'docx'
+  return {
+    raw: previewKind === 'docx' ? preview : null,
+    preview,
+    previewKind,
+    text: '',
+    isCompatibilityDocx: previewKind === 'docx',
+  }
 }
 
 function open(documentId: string): void {
   reset()
   isLoading.value = true
-  void race.run((signal) => fetched(documentId, signal), {
+  const requestedKind = kind.value
+  void race.run((signal) => fetched(documentId, signal, requestedKind), {
     ok: (got) => (loaded.value = got),
     // ⚠ 把后端那句话原样摆出来：它是写给最终用户的（「这份文档来自外部系统，
     // 没有可看的原件」），换成一句通用话，用户就看不出到底出了什么事
@@ -88,14 +123,31 @@ function messageOf(caught: unknown): string {
 }
 
 function save(): void {
-  if (loaded.value === null) return
-  downloadBytes(loaded.value.blob, name.value)
+  const current = loaded.value
+  const documentId = props.document?.id ?? ''
+  const filename = name.value
+  if (current === null || documentId === '' || isSaving.value) return
+  if (current.raw !== null) {
+    downloadBytes(current.raw, filename)
+    return
+  }
+  isSaving.value = true
+  downloadFailure.value = ''
+  void downloadRace.run((signal) => readDocumentRaw(documentId, signal), {
+    ok: (raw) => {
+      if (loaded.value === current) loaded.value = { ...current, raw }
+      downloadBytes(raw, filename)
+    },
+    fail: (caught) => (downloadFailure.value = messageOf(caught)),
+    settled: () => (isSaving.value = false),
+  })
 }
 
 watch(
   () => [props.modelValue, props.document?.id ?? ''] as const,
   ([isOpen, documentId]) => {
     race.cancel()
+    downloadRace.cancel()
     if (!isOpen || documentId === '') {
       reset()
       return
@@ -105,7 +157,10 @@ watch(
   { immediate: true },
 )
 
-onUnmounted(() => race.cancel())
+onUnmounted(() => {
+  race.cancel()
+  downloadRace.cancel()
+})
 </script>
 
 <template>
@@ -123,11 +178,22 @@ onUnmounted(() => race.cancel())
       </DtNotice>
       <DocumentPreviewStage
         v-else-if="loaded !== null"
-        :blob="loaded.blob"
+        :blob="loaded.preview"
         :text="loaded.text"
-        :kind="kind"
+        :kind="loaded.previewKind"
         :name="name"
       />
+      <DtNotice
+        v-if="loaded?.isCompatibilityDocx"
+        class="mt-2"
+        intent="warning"
+      >
+        当前是兼容预览，复杂图形可能显示不完整。文档处理完成后可重新打开，
+        或下载原件用 Word 查看。
+      </DtNotice>
+      <DtNotice v-if="downloadFailure !== ''" class="mt-2" intent="danger">
+        原件下载失败：{{ downloadFailure }}
+      </DtNotice>
     </div>
 
     <template #footer>
@@ -135,6 +201,7 @@ onUnmounted(() => race.cancel())
         variant="outline"
         icon="download"
         :disabled="loaded === null"
+        :loading="isSaving"
         @click="save"
       >
         下载原件

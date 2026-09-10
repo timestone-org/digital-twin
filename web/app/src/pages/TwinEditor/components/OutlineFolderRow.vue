@@ -24,6 +24,7 @@ const props = defineProps<{
 }>()
 
 const emit = defineEmits<{
+  add: []
   toggle: []
   renameStart: []
   renameCommit: [name: string]
@@ -120,6 +121,16 @@ function onMenu(item: DtMenuItem): void {
     <span class="shrink-0 text-3xs text-text-disabled" data-test="folder-count">
       {{ countText }}
     </span>
+    <DtButton
+      size="xs"
+      variant="ghost"
+      intent="neutral"
+      icon="plus"
+      :aria-label="`在${folder.label}内新建`"
+      title="在此文件夹内新建"
+      data-test="folder-add"
+      @click="emit('add')"
+    />
     <DtDropdownMenu
       :items="OUTLINE_FOLDER_MENU"
       :label="`${folder.label}的文件夹操作`"

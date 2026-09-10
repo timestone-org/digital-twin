@@ -37,7 +37,10 @@ from dataclasses import dataclass
 from datetime import UTC, datetime
 
 from knowledge_server.apps.knowledge import crud
-from knowledge_server.apps.knowledge.services import ingest_figures
+from knowledge_server.apps.knowledge.services import (
+    docx_preview,
+    ingest_figures,
+)
 from knowledge_server.apps.knowledge.services.chunking import (
     Chunk,
     ChunkLimits,
@@ -125,6 +128,8 @@ class IngestDeps:
     external_parsers: tuple[ExternalParserBackend, ...] = ()
     # 外部那一路一次调用最多等多久
     external_parse_timeout_s: float = 180.0
+    # DOCX 的显示派生物；None 即明确走浏览器兼容预览
+    previewer: docx_preview.DocumentPreviewer | None = None
 
 
 @dataclass(frozen=True)
@@ -226,6 +231,21 @@ async def _parsed(deps: IngestDeps, raw: RawItem) -> ParsedDocument:
     return await _parsed_remotely(backend, deps, raw)
 
 
+async def _previewed(
+    deps: IngestDeps, document: _Pending, raw: RawItem
+) -> None:
+    """尽力存 DOCX 的 PDF 派生物，不改变摄取终态。
+
+    Args: deps, document, raw。
+    """
+    await docx_preview.generate_preview(
+        deps.previewer,
+        deps.store,
+        (document.base_id, document.document_id),
+        raw,
+    )
+
+
 def _batched(
     rows: Sequence[tuple[uuid.UUID, str]], size: int
 ) -> list[Sequence[tuple[uuid.UUID, str]]]:
@@ -311,20 +331,21 @@ def _chunked(
 
 
 async def _claimed(
-    sessions: Sessions, document_id: uuid.UUID
+    sessions: Sessions,
+    document_id: uuid.UUID,
+    generation: uuid.UUID | None,
 ) -> _Pending | None:
     """把这份文档推进 parsing 并带走要用的那几格；不该跑就给 `None`。
 
-    ⚠ 判幂等看的是**那一行的状态**：已经 ready 的直接跳过。「先查再插」不是
-    幂等，而队列是 at-least-once，重复投递是常态。
+    ⚠ generation 是旧消息的栅栏，ready / failed 是终态。旧 generation 或终态
+    直接跳过，避免 ACK 抖动把毒文档自动重跑，或覆盖一次新的人工重排。
 
-    Args: sessions, document_id。
+    Args: sessions, document_id, generation。
     """
     async with sessions() as session:
-        row = await crud.document.get_document(session, document_id)
-        if row is None or row.status == READY:
+        row = await crud.document.claim_ingest(session, document_id, generation)
+        if row is None:
             return None
-        await crud.document.mark_status(session, row.id, "parsing")
         return _Pending(
             document_id=row.id,
             base_id=row.base_id,
@@ -413,25 +434,30 @@ async def _saved_chunks(
 
 
 async def ingest(
-    sessions: Sessions, deps: IngestDeps, document_id: uuid.UUID
+    sessions: Sessions,
+    deps: IngestDeps,
+    document_id: uuid.UUID,
+    generation: uuid.UUID | None = None,
 ) -> str:
     """把一份文档从 pending 走到 ready，回它的终态。
 
     ⚠ 每一段自己一个事务：整条一个事务的话，中间那几次状态在提交之前谁都
     看不见——而「界面上看得见它停在哪」这句话就是假的。
 
-    Args: sessions, deps, document_id。
+    Args: sessions, deps, document_id, generation。
     """
-    document = await _claimed(sessions, document_id)
+    document = await _claimed(sessions, document_id, generation)
     if document is None:
         _logger.info(
             "ingest_skipped",
-            "文档已被删或已就绪，跳过",
+            "文档已被删、已到终态或消息期次已过，跳过",
             document_id=str(document_id),
         )
         return "skipped"
     await _embeddable(deps)
     raw = await _raw_of(sessions, deps, document)
+    # ⚠ 先落派生物再解析，避免 PDF 与带图的 ParsedDocument 同时占住内存
+    await _previewed(deps, document, raw)
     parsed = await _parsed(deps, raw)
     await _staged(sessions, document.document_id, "chunking")
     figure_ids = await _figures_of(sessions, deps, document, parsed)

@@ -10,7 +10,13 @@
  */
 import { collectTwinConfigIssues } from '@dt/twin-config'
 import type { TwinNavigationMode, Vec3 } from '@dt/twin-config'
-import { DtPageState, useConfirm, useToast } from '@dt/ui'
+import {
+  DtPageState,
+  EditorSplitter,
+  useEditorPanes,
+  useConfirm,
+  useToast,
+} from '@dt/ui'
 import { computed, ref } from 'vue'
 import { onBeforeRouteLeave, useRoute } from 'vue-router'
 
@@ -43,6 +49,9 @@ import { useUnsavedGuard } from '@/composables/useUnsavedGuard'
 // ⚠ 子编辑器也要装：直接刷新到这条路由时大屏那三页一个都没跑过，
 // 不装的话模型地址解析恒回空串，画面上是一句「模型地址解析失败」
 installDashboardModules()
+
+const panes = useEditorPanes('dt.twin-editor.panes')
+const gridRef = panes.hostRef
 
 const route = useRoute()
 const toast = useToast()
@@ -205,7 +214,7 @@ useUnsavedGuard(() => page.doc.value?.isDirty.value === true)
       />
     </template>
 
-    <div class="flex h-full flex-col">
+    <div class="flex h-full min-h-0 flex-col">
       <DtPageState
         v-if="
           page.loading.value || page.error.value !== null || config === null
@@ -214,15 +223,22 @@ useUnsavedGuard(() => page.doc.value?.isDirty.value === true)
         :error="page.error.value"
         :empty="false"
       />
-      <div v-else class="flex min-h-0 flex-1">
+      <div
+        v-else
+        ref="gridRef"
+        class="grid min-h-0 flex-1"
+        :style="panes.gridStyle.value"
+      >
         <TwinLeftPane
-          class="w-64 shrink-0 border-r border-border-subtle"
+          class="min-h-0 min-w-0 overflow-hidden"
           :config="hidden.config.value ?? config"
           :selection="selection"
           :flagged-ids="flaggedIds"
           :renaming-folder-id="renamingFolderId"
           @select="select"
           @add="addEntityOf"
+          @add-in-folder="actions?.add($event.kind, $event.folderId)"
+          @place="actions?.place($event)"
           @bulk-add="bulk.openBlank()"
           @remove="actions?.remove($event.kind, $event.id)"
           @duplicate="actions?.duplicate($event.kind, $event.id)"
@@ -238,7 +254,9 @@ useUnsavedGuard(() => page.doc.value?.isDirty.value === true)
           @create-folder-with-item="createFolderWith"
         />
 
-        <div class="flex min-w-0 flex-1 flex-col">
+        <EditorSplitter side="left" label="大纲栏宽度" :panes="panes" />
+
+        <div class="flex min-h-0 min-w-0 flex-col">
           <!-- 画中画钉在视口这一块上，诊断面板展开时不会被它压住 -->
           <div class="relative flex min-h-0 flex-1">
             <TwinViewport
@@ -282,9 +300,11 @@ useUnsavedGuard(() => page.doc.value?.isDirty.value === true)
           />
         </div>
 
+        <EditorSplitter side="right" label="配置栏宽度" :panes="panes" />
+
         <TwinRightPane
           v-model:gizmo-mode="gizmoMode"
-          class="w-80 shrink-0 border-l border-border-subtle"
+          class="min-h-0 min-w-0 overflow-hidden"
           :config="config"
           :selection="selection"
           :model-nodes="modelNodes"

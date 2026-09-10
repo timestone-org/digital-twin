@@ -129,3 +129,10 @@ class RawBytesGone(AppError):
 
     code = 42312
     http_status = 410
+
+
+class DocumentIngestInProgress(AppError):
+    """文档已经在一个摄取 generation 里运行。"""
+
+    code = 42313
+    http_status = 409
