@@ -10,6 +10,7 @@
 末尾多约一秒。
 """
 
+import asyncio
 import uuid
 from collections.abc import Callable
 from contextlib import AbstractAsyncContextManager
@@ -35,6 +36,7 @@ MAX_TITLE_CHARS = 16
 # 交给模型的问答各截多长。⚠ 有上限：起个名字不值得把整轮对话再发一遍
 MAX_QUESTION_CHARS = 200
 MAX_ANSWER_CHARS = 400
+TITLE_TIMEOUT_S = 5.0  # 标题生成总预算
 
 # 标题两端要剥掉的记号。⚠ 引号与句号**一起剥、两端都剥**：分两步剥的话，
 # 「冷却水参数」。 会先掉引号再掉句号，剩下一个孤零零的右引号
@@ -87,15 +89,22 @@ async def _asked(model: Responder, question: str, answer: str) -> str:
         f"答：{answer[:MAX_ANSWER_CHARS]}"
     )
     try:
-        reply = await model.respond(
-            choice=ModelChoice(kind="summary"),
-            messages=[
-                SystemMessage(content=_PROMPT),
-                HumanMessage(content=body),
-            ],
-            tools=(),
-        )
-    except (ModelDisabled, ModelUnavailable, ModelRejected) as error:
+        # ⚠ 标题不能沿用正文的长等待，否则连 turn.done 都会被拖住。
+        async with asyncio.timeout(TITLE_TIMEOUT_S):
+            reply = await model.respond(
+                choice=ModelChoice(kind="summary", effort="none"),
+                messages=[
+                    SystemMessage(content=_PROMPT),
+                    HumanMessage(content=body),
+                ],
+                tools=(),
+            )
+    except (
+        TimeoutError,
+        ModelDisabled,
+        ModelUnavailable,
+        ModelRejected,
+    ) as error:
         _logger.warning(
             "kb_chat_title_failed",
             "起标题没成，退回用户那句话的开头",

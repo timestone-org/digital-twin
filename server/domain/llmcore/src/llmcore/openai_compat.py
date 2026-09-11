@@ -10,6 +10,7 @@
 
 from collections.abc import Callable
 from dataclasses import dataclass
+from typing import Any
 
 from langchain_core.language_models import BaseChatModel
 
@@ -62,7 +63,7 @@ class OpenAiCompatAdapter:
             api_key=endpoint.api_key,
             model=endpoint.model,
             timeout=endpoint.timeout_s,
-            extra_body=endpoint.extra_body,
+            extra_body=_body_for(endpoint, choice),
             # ⚠ 这一层不重试：一条链路只有一层负责重试，而那一层是调用方的
             # 编排层。留着 SDK 自带的重试会让一次超时变成三次，把上游的预算
             # 悄悄用光
@@ -90,3 +91,21 @@ class OpenAiCompatAdapter:
             models=self.models if endpoint is None else (endpoint.model,),
             efforts=(),
         )
+
+
+def _body_for(
+    endpoint: ChatEndpoint, choice: ModelChoice
+) -> dict[str, Any] | None:
+    """按单次推理选择覆盖已配置的请求体方言；Args: endpoint, choice。"""
+    if choice.effort is None:
+        return endpoint.extra_body
+    body = {**(endpoint.extra_body or {}), "reasoning_effort": choice.effort}
+    if choice.effort != "none":
+        return body
+    if "enable_thinking" in body:
+        body["enable_thinking"] = False
+    template: object = body.get("chat_template_kwargs")
+    if isinstance(template, dict) and "enable_thinking" in template:
+        # ⚠ 复制嵌套配置，否则标题会把后续正文的思考也关掉。
+        body["chat_template_kwargs"] = {**template, "enable_thinking": False}
+    return body

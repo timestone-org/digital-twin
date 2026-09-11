@@ -4,6 +4,9 @@
 回来那句话的规矩，以及兜底那一条。
 """
 
+import asyncio
+from unittest.mock import AsyncMock, Mock
+
 import pytest
 from langchain_core.messages import AIMessage
 
@@ -13,6 +16,21 @@ from knowledge_server.apps.chat.services.title_service import (
     _cleaned,
     fallback_title,
 )
+from llmcore import ModelChoice
+
+
+async def test_title_generation_disables_reasoning() -> None:
+    model = Mock(respond=AsyncMock(return_value=AIMessage(content="水箱温度")))
+    assert await _asked(model, "水箱温度是多少", "30 ℃") == "水箱温度"
+    assert model.respond.await_args.kwargs["choice"] == ModelChoice(
+        kind="summary", effort="none"
+    )
+
+
+async def test_cancelling_the_turn_does_not_trigger_a_fallback_title() -> None:
+    model = Mock(respond=AsyncMock(side_effect=asyncio.CancelledError))
+    with pytest.raises(asyncio.CancelledError):
+        await _asked(model, "水箱温度是多少", "30 ℃")
 
 
 @pytest.mark.parametrize(

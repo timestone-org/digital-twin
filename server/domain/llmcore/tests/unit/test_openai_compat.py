@@ -1,5 +1,7 @@
 """对话那一路：每一档各自解各自的端点，解不出就是这一档没接。"""
 
+from dataclasses import replace
+
 import pytest
 from pydantic import SecretStr
 
@@ -51,6 +53,59 @@ async def test_the_dialect_body_is_passed_through() -> None:
     代码里不认厂商名，于是它只能是一格透传的取值。"""
     built = await _adapter({"chat": "chat-model"}).build(ModelChoice())
     assert built.extra_body == {"enable_thinking": True}
+
+
+@pytest.mark.parametrize("effort", ["none", "low"])
+async def test_per_call_effort_reaches_the_endpoint_without_changing_defaults(
+    effort: str,
+) -> None:
+    adapter = _adapter({"summary": "chat-model", "chat": "chat-model"})
+    summary = await adapter.build(ModelChoice(kind="summary", effort=effort))
+    chat = await adapter.build(ModelChoice())
+    assert summary.extra_body == {
+        "enable_thinking": effort != "none",
+        "reasoning_effort": effort,
+    }
+    assert chat.extra_body == {"enable_thinking": True}
+
+
+async def test_thinking_override_preserves_other_template_options() -> None:
+    endpoint = ChatEndpoint(
+        base_url="http://endpoint/v1",
+        api_key=SecretStr("key"),
+        model="chat-model",
+        timeout_s=30,
+        extra_body={
+            "chat_template_kwargs": {"enable_thinking": True, "keep": "value"}
+        },
+    )
+    adapter = OpenAiCompatAdapter(
+        resolve=lambda _kind: endpoint, label="端点", models=("chat-model",)
+    )
+    summary = await adapter.build(ModelChoice(kind="summary", effort="none"))
+    chat = await adapter.build(ModelChoice())
+    assert summary.extra_body == {
+        "chat_template_kwargs": {"enable_thinking": False, "keep": "value"},
+        "reasoning_effort": "none",
+    }
+    assert chat.extra_body == {
+        "chat_template_kwargs": {"enable_thinking": True, "keep": "value"}
+    }
+
+
+@pytest.mark.parametrize(
+    "body",
+    [None, {}, {"chat_template_kwargs": {}}, {"chat_template_kwargs": "raw"}],
+)
+async def test_unconfigured_dialects_only_receive_standard_effort(
+    body: dict[str, object] | None,
+) -> None:
+    endpoint = replace(_endpoint("chat-model"), extra_body=body)
+    adapter = OpenAiCompatAdapter(
+        resolve=lambda _kind: endpoint, label="端点", models=("chat-model",)
+    )
+    built = await adapter.build(ModelChoice(effort="none"))
+    assert built.extra_body == {**(body or {}), "reasoning_effort": "none"}
 
 
 async def test_this_layer_never_retries() -> None:
