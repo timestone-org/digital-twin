@@ -5,10 +5,7 @@
  * 是上一个对话的历史而标题是这一个的。走统一的 `useRacedFetch`。
  */
 import { computed, getCurrentScope, onScopeDispose, ref, shallowRef } from 'vue'
-import type {
-  KnowledgeChatScopeBase,
-  KnowledgeChatSession,
-} from '@dt/contracts'
+import type { KnowledgeChatScopeBase } from '@dt/contracts'
 
 import type { KnowledgeBase } from '@/api/knowledge'
 import { readSession } from '@/api/knowledgeChat'
@@ -18,11 +15,12 @@ import {
   type KnowledgeConversation,
 } from '@/composables/useKnowledgeConversation'
 import { scopeOfIds } from './chatScope'
+import { createChatSessionState } from './chatSessionState'
 
 /** 页面手上的全部状态。 */
 export function createState(chat?: KnowledgeConversation) {
-  const sessions = shallowRef<KnowledgeChatSession[]>([])
-  const selectedId = ref<string | null>(null)
+  const sessionState = createChatSessionState()
+  const { selectedId, current } = sessionState
   const error = ref('')
   const isLoading = ref(false)
   /** 这套部署接了语音识别。取不到当 false，只是少一枚麦克风键，不挡对话。 */
@@ -35,32 +33,22 @@ export function createState(chat?: KnowledgeConversation) {
    */
   const pendingScope = ref<string[] | null>(null)
   const replayRace = useRacedFetch()
-  /**
-   * 服务端自动起名之后就地改清单那一行。
-   * ⚠ 不重拉清单：重拉会把用户此刻的滚动位置与选中态一起抖一下，
-   * 而这一帧带的信息已经够改那一行了。
-   * ⚠ 换一份数组而不是就地改：`shallowRef` 只认引用变化。
-   */
-  const renameInPlace = (title: string, rowVersion: number): void => {
-    const id = selectedId.value
-    if (id === null) return
-    sessions.value = sessions.value.map((one) =>
-      one.id === id ? { ...one, title, row_version: rowVersion } : one,
-    )
-  }
   const conversation =
     chat ??
-    useKnowledgeConversation(() => selectedId.value, undefined, renameInPlace)
+    useKnowledgeConversation(
+      () => selectedId.value,
+      undefined,
+      sessionState.renameInPlace,
+      sessionState.publishPending,
+    )
 
   if (getCurrentScope() !== undefined) {
     onScopeDispose(() => {
       replayRace.cancel()
+      sessionState.cancelCreation()
     })
   }
 
-  const current = computed<KnowledgeChatSession | null>(
-    () => sessions.value.find((one) => one.id === selectedId.value) ?? null,
-  )
   /** 此刻这一页在用的范围：选中了会话就是它的，没选就是暂存的那份。 */
   const scope = computed<KnowledgeChatScopeBase[] | null>(() =>
     current.value === null
@@ -69,8 +57,7 @@ export function createState(chat?: KnowledgeConversation) {
   )
 
   return {
-    sessions,
-    selectedId,
+    ...sessionState,
     error,
     isLoading,
     isAsrEnabled,
@@ -79,7 +66,28 @@ export function createState(chat?: KnowledgeConversation) {
     current,
     scope,
     replayRace,
-    chat: conversation,
+    chat: withCreationControls(conversation, sessionState),
+  }
+}
+
+/** 建会话期间也禁用发送，并允许停止或清空取消迟到的创建结果。 */
+function withCreationControls(
+  conversation: KnowledgeConversation,
+  state: ReturnType<typeof createChatSessionState>,
+): KnowledgeConversation {
+  return {
+    ...conversation,
+    isRunning: computed(
+      () => state.isCreating.value || conversation.isRunning.value,
+    ),
+    stop: () => {
+      state.cancelCreation()
+      conversation.stop()
+    },
+    clear: () => {
+      state.cancelCreation()
+      conversation.clear()
+    },
   }
 }
 

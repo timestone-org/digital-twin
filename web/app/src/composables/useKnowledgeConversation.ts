@@ -54,11 +54,13 @@ export interface KnowledgeConversation {
  * @param sessionId 会话 id 的读取函数；还没选时给 null
  * @param advance 推进面；缺省打真接口，用例注假的进来
  * @param onTitled 服务端给这个会话自动起了标题；页面据它就地改清单那一行
+ * @param onCompleted 收到首轮或后续回合的完成事件
  */
 export function useKnowledgeConversation(
   sessionId: () => string | null,
   advance: KnowledgeAdvanceStream = advanceTurn,
   onTitled?: (title: string, rowVersion: number) => void,
+  onCompleted?: () => void,
 ): KnowledgeConversation {
   const log = ref<ConversationLog>(emptyLog())
   const isRunning = ref(false)
@@ -73,6 +75,7 @@ export function useKnowledgeConversation(
     sessionId,
     advance,
     onTitled,
+    onCompleted,
     state,
     isRunning,
     edit,

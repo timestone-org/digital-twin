@@ -15,6 +15,7 @@ import pytest
 from integration.conftest import CommittingSession, DbStack
 from sqlalchemy.ext.asyncio import AsyncSession
 
+from knowledge_server.apps.chat.models import ChatMessage
 from knowledge_server.apps.chat.services.citations import Ledger
 from knowledge_server.apps.chat.services.scope import (
     ALL_BASES,
@@ -113,11 +114,21 @@ async def test_a_new_session_defaults_to_every_base(
 
 async def test_a_scope_comes_back_with_the_base_names(
     db_client: httpx.AsyncClient,
+    db_sessions: Sessions,
 ) -> None:
     """⚠ 只回一串 uuid 的话前端显示不出人话，还要自己再查一遍。"""
     base_id = await _base(db_client, "手册库")
 
     made = await _create(db_client, base_scope_ids=[base_id])
+    async with db_sessions() as session:
+        session.add(
+            ChatMessage(
+                session_id=uuid.UUID(made["id"]),
+                seq=1,
+                role="user",
+                content_json={"text": "查看手册"},
+            )
+        )
     listed = await db_client.get(URL)
     detail = await db_client.get(f"{URL}/{made['id']}")
 

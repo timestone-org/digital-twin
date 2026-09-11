@@ -3,6 +3,19 @@
 前端是 Vue 3 + TypeScript 的 pnpm workspace。开发、检查与构建命令见
 [`CONTEXT.md`](CONTEXT.md#8-本地命令)。
 
+## 前端环境变量
+
+将 `app/.env.example` 复制为 `app/.env.local`，按需修改：
+
+```dotenv
+VITE_KNOWLEDGE_CHAT_MAX_ACTIVE_LIVE_CARDS=20
+```
+
+此项控制知识库对话中最近自动订阅的实时卡片数量，未设置默认 20，只接受正整数。
+逻辑与停止提示使用同一个值；非法配置会在开发服务器启动或构建时直接报错。
+环境变量在构建时写入前端，修改后需运行 `pnpm --dir web build` 并刷新页面；开发时
+重启 `pnpm --dir web dev`。只重启后端或修改 `docker/.env` 不会改变已构建的前端。
+
 ## 字体与授权
 
 本软件使用并随包分发 HarmonyOS Sans SC，字体版权归 Huawei Device Co., Ltd.；

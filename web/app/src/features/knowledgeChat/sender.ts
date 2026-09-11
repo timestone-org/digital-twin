@@ -31,6 +31,7 @@ export interface KnowledgeSenderParts {
   abort: () => void
   /** 服务端给这个会话自动起了标题。 */
   onTitled?: ((title: string, rowVersion: number) => void) | undefined
+  onCompleted?: (() => void) | undefined
 }
 
 /** 造出「发一句话」这个动作。 */
@@ -81,7 +82,10 @@ function sinkOf(parts: KnowledgeSenderParts): KnowledgeRunnerSink {
       parts.edit((log) => withDelta(log, channel, text)),
     onStep: (step) => parts.edit((log) => withStep(log, step)),
     onToolsRun: (steps) => parts.edit((log) => steps.reduce(withStep, log)),
-    onDone: (reply) => parts.edit((log) => withReply(log, reply)),
+    onDone: (reply) => {
+      parts.edit((log) => withReply(log, reply))
+      parts.onCompleted?.()
+    },
     onError: (message) => parts.edit((log) => withSaid(log, 'error', message)),
     onNote: (text) => parts.edit((log) => withSaid(log, 'note', text)),
   }
@@ -106,6 +110,9 @@ function guardedParts(
     },
     onTitled: (title, version) => {
       if (isCurrent()) parts.onTitled?.(title, version)
+    },
+    onCompleted: () => {
+      if (isCurrent()) parts.onCompleted?.()
     },
   }
 }

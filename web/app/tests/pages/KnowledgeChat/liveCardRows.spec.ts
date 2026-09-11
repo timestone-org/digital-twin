@@ -63,7 +63,7 @@ it('keeps the first row identity when another selected point arrives', () => {
   expect(liveCardRows([]).entries).toEqual([])
 })
 
-it('renders a single row with independent cards and enables only the newest six', async () => {
+it('renders a single row with independent cards and enables only the newest twenty', async () => {
   const entries = ref<readonly ChatEntry[]>([card('a'), card('b')])
   const chat: KnowledgeConversation = {
     entries,
@@ -89,19 +89,12 @@ it('renders a single row with independent cards and enables only the newest six'
   })
   expect(wrapper.findAll('.chat-panel__cards')).toHaveLength(1)
   expect(wrapper.findAllComponents(ChatLivePoint)).toHaveLength(2)
-  entries.value = ['a', 'b', 'c', 'd', 'e', 'f', 'g'].map((id) => card(id))
+  entries.value = Array.from({ length: 21 }, (_, index) => card(String(index)))
   await flushPromises()
   const cards = wrapper.findAllComponents(ChatLivePoint)
-  expect(cards).toHaveLength(7)
-  expect(cards.map((one) => one.props('enabled'))).toEqual([
-    false,
-    true,
-    true,
-    true,
-    true,
-    true,
-    true,
-  ])
+  expect(cards).toHaveLength(21)
+  expect(cards[0]?.props('enabled')).toBe(false)
+  expect(cards.slice(1).every((one) => one.props('enabled'))).toBe(true)
   expect(wrapper.findAll('.chat-panel__cards')).toHaveLength(1)
   wrapper.unmount()
 })

@@ -134,6 +134,10 @@ async def test_the_turn_is_persisted_with_its_steps(
 ) -> None:
     _install(db_stack, ScriptedChat(reply=AIMessage(content="好")))
     session_id = await _new_session(db_stack.client)
+    before = await db_stack.client.get(URL)
+    assert session_id not in [
+        one["id"] for one in before.json()["data"]["items"]
+    ]
     await _advance(db_stack.client, session_id, user_text="在吗")
 
     detail = await db_stack.client.get(f"{URL}/{session_id}")
@@ -141,6 +145,8 @@ async def test_the_turn_is_persisted_with_its_steps(
 
     assert [m["role"] for m in messages] == ["user", "assistant"]
     assert len(messages[-1]["steps"]) == 1
+    listed = await db_stack.client.get(URL)
+    assert session_id in [one["id"] for one in listed.json()["data"]["items"]]
 
 
 async def test_asking_the_user_stops_the_stream_and_is_recorded(

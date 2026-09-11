@@ -1,6 +1,11 @@
 /**
  * @fileoverview 应用级常量与后端前缀。地址一律相对路径，由边缘同域反代。
  */
+import { parseLiveCardLimit } from './liveCardLimit'
+
+export const MAX_ACTIVE_LIVE_CARDS = parseLiveCardLimit(
+  import.meta.env.VITE_KNOWLEDGE_CHAT_MAX_ACTIVE_LIVE_CARDS,
+)
 
 /** auth-server 的对外前缀，与 server/services/auth-server 的 API_PREFIX 同值。 */
 export const AUTH_BASE_URL = '/api/v1/auth'

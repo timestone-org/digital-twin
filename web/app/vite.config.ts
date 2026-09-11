@@ -2,7 +2,8 @@ import { fileURLToPath, URL } from 'node:url'
 
 import tailwind from '@tailwindcss/vite'
 import vue from '@vitejs/plugin-vue'
-import { defineConfig } from 'vite'
+import { defineConfig, loadEnv } from 'vite'
+import { parseLiveCardLimit } from './src/config/liveCardLimit'
 import { umoAssets } from './vite-plugins/umoAssets'
 
 /**
@@ -18,36 +19,44 @@ import { umoAssets } from './vite-plugins/umoAssets'
 const DEV_API_TARGET =
   process.env.VITE_DEV_API_TARGET ?? 'http://127.0.0.1:8080'
 
-export default defineConfig({
-  plugins: [vue(), tailwind(), umoAssets()],
-  resolve: {
-    alias: {
-      '@': fileURLToPath(new URL('./src', import.meta.url)),
+export default defineConfig(({ mode }) => {
+  const env = loadEnv(
+    mode,
+    fileURLToPath(new URL('.', import.meta.url)),
+    'VITE_',
+  )
+  parseLiveCardLimit(env.VITE_KNOWLEDGE_CHAT_MAX_ACTIVE_LIVE_CARDS)
+  return {
+    plugins: [vue(), tailwind(), umoAssets()],
+    resolve: {
+      alias: {
+        '@': fileURLToPath(new URL('./src', import.meta.url)),
+      },
     },
-  },
-  css: {
-    preprocessorOptions: {
-      scss: { api: 'modern-compiler' },
+    css: {
+      preprocessorOptions: {
+        scss: { api: 'modern-compiler' },
+      },
     },
-  },
-  server: {
-    port: 5173,
-    proxy: {
-      // ⚠ `ws` 不能省：少了它 vite 只代普通请求，`/api/v1/realtime/ws` 的
-      // Upgrade 根本不会转给边缘——它落到 vite 自己那条只认 `vite-hmr` 的
-      // 升级处理上，被静默丢掉。表现是开发期握手永远不完成、全部实时推送
-      // （大屏 / 采集配置页 / OPC UA 节点值）一起没有值，而 HTTP 面完全正常。
-      '/api': { target: DEV_API_TARGET, changeOrigin: true, ws: true },
-      '/oss': { target: DEV_API_TARGET, changeOrigin: true },
+    server: {
+      port: 5173,
+      proxy: {
+        // ⚠ `ws` 不能省：少了它 vite 只代普通请求，`/api/v1/realtime/ws` 的
+        // Upgrade 根本不会转给边缘——它落到 vite 自己那条只认 `vite-hmr` 的
+        // 升级处理上，被静默丢掉。表现是开发期握手永远不完成、全部实时推送
+        // （大屏 / 采集配置页 / OPC UA 节点值）一起没有值，而 HTTP 面完全正常。
+        '/api': { target: DEV_API_TARGET, changeOrigin: true, ws: true },
+        '/oss': { target: DEV_API_TARGET, changeOrigin: true },
+      },
     },
-  },
-  build: {
-    target: 'es2022',
-    sourcemap: true,
-    // ⚠ 抬过 rollup 那条 500 kB 的泛用提醒，不是放宽预算：真正的预算是
-    // `scripts/gates/check_bundle_budget.py` 判的**首屏 gzip**（JS 300 KB /
-    // CSS 100 KB），而这条提醒量的是任意分片压缩前的体积——唯一超它的是
-    // 懒加载的 three 那一块，首屏根本不下载。留着它只会让构建日志天天黄一行。
-    chunkSizeWarningLimit: 800,
-  },
+    build: {
+      target: 'es2022',
+      sourcemap: true,
+      // ⚠ 抬过 rollup 那条 500 kB 的泛用提醒，不是放宽预算：真正的预算是
+      // `scripts/gates/check_bundle_budget.py` 判的**首屏 gzip**（JS 300 KB /
+      // CSS 100 KB），而这条提醒量的是任意分片压缩前的体积——唯一超它的是
+      // 懒加载的 three 那一块，首屏根本不下载。留着它只会让构建日志天天黄一行。
+      chunkSizeWarningLimit: 800,
+    },
+  }
 })

@@ -16,6 +16,7 @@ import type {
 
 import type { KnowledgeCapability } from '@/api/knowledge'
 import KnowledgeChatPage from '@/pages/KnowledgeChat/index.vue'
+import ChatSessionList from '@/pages/KnowledgeChat/components/ChatSessionList.vue'
 import { useAuthStore } from '@/stores/auth'
 
 const api = vi.hoisted(() => ({
@@ -307,6 +308,135 @@ describe('切对话', () => {
 })
 
 describe('发一句', () => {
+  it('从历史会话回到新对话不创建空记录', async () => {
+    const wrapper = await render()
+    await wrapper.get('button[title="锅炉那几台"]').trigger('click')
+    await flushPromises()
+    await wrapper
+      .findAll('button')
+      .find((one) => one.text() === '新对话')
+      ?.trigger('click')
+    await flushPromises()
+    expect(api.createSession).not.toHaveBeenCalled()
+    expect(wrapper.get('.chat-panel__where').text()).toBe('新对话')
+    expect(wrapper.text()).not.toContain('早先问过')
+    expect(
+      wrapper
+        .getComponent(ChatSessionList)
+        .findAll('button[title="锅炉那几台"]'),
+    ).toHaveLength(1)
+  })
+
+  it('首轮失败不加入列表，再次发送复用同一会话', async () => {
+    api.listSessions.mockResolvedValue([])
+    api.createSession.mockResolvedValue(sessionOf('s9'))
+    api.advanceTurn.mockImplementationOnce(async function* () {
+      await Promise.resolve()
+      yield frame('error', { message: '模型暂时不可用' })
+    })
+    const wrapper = await render()
+    await wrapper.get('textarea').setValue('上限多少')
+    await wrapper.get('button[aria-label="发送"]').trigger('click')
+    await flushPromises()
+    expect(wrapper.text()).toContain('模型暂时不可用')
+    expect(wrapper.getComponent(ChatSessionList).text()).toContain('还没有对话')
+    await wrapper.get('textarea').setValue('请再试一次')
+    await wrapper.get('button[aria-label="发送"]').trigger('click')
+    await flushPromises()
+    expect(api.createSession).toHaveBeenCalledTimes(1)
+    expect(wrapper.getComponent(ChatSessionList).text()).toContain('未命名')
+  })
+
+  it('首轮过程中回到新对话，迟到的完成事件不能添加记录', async () => {
+    api.listSessions.mockResolvedValue([])
+    api.createSession.mockResolvedValue(sessionOf('s9'))
+    let finish: () => void = () => undefined
+    const done = new Promise<void>((resolve) => {
+      finish = resolve
+    })
+    api.advanceTurn.mockImplementation(async function* () {
+      await done
+      yield frame('session_titled', { title: '迟到标题', row_version: 2 })
+      yield frame('turn.done', { reply: '迟到答复' })
+    })
+    const wrapper = await render()
+    await wrapper.get('textarea').setValue('上限多少')
+    await wrapper.get('button[aria-label="发送"]').trigger('click')
+    await flushPromises()
+    await wrapper
+      .findAll('button')
+      .find((one) => one.text() === '新对话')
+      ?.trigger('click')
+    finish()
+    await flushPromises()
+    expect(wrapper.get('.chat-panel__where').text()).toBe('新对话')
+    expect(wrapper.getComponent(ChatSessionList).text()).toContain('还没有对话')
+    expect(wrapper.text()).not.toContain('迟到')
+  })
+
+  it('重复点击新对话只保持空白草稿，不创建记录', async () => {
+    api.listSessions.mockResolvedValue([])
+    api.createSession.mockResolvedValue(sessionOf('s9'))
+    const wrapper = await render()
+    await wrapper.get('textarea').setValue('尚未发送的问题')
+    const create = wrapper
+      .findAll('button')
+      .find((one) => one.text() === '新对话')
+    await create?.trigger('click')
+    await create?.trigger('click')
+    await flushPromises()
+    expect(api.createSession).not.toHaveBeenCalled()
+    expect(wrapper.getComponent(ChatSessionList).text()).toContain('还没有对话')
+    expect(wrapper.get('textarea').element.value).toBe('尚未发送的问题')
+  })
+
+  it('首轮完成才加入列表，之前收到的标题也保留下来', async () => {
+    api.listSessions.mockResolvedValue([])
+    api.createSession.mockResolvedValue(sessionOf('s9'))
+    let finish: () => void = () => undefined
+    const done = new Promise<void>((resolve) => {
+      finish = resolve
+    })
+    api.advanceTurn.mockImplementation(async function* () {
+      yield frame('session_titled', { title: '冷却水上限', row_version: 2 })
+      await done
+      yield frame('turn.done', { reply: '上限 65 ℃' })
+    })
+    const wrapper = await render()
+    await wrapper.get('textarea').setValue('上限多少')
+    await wrapper.get('button[aria-label="发送"]').trigger('click')
+    await flushPromises()
+    expect(wrapper.getComponent(ChatSessionList).text()).toContain('还没有对话')
+    finish()
+    await flushPromises()
+    expect(
+      wrapper
+        .getComponent(ChatSessionList)
+        .findAll('button[title="冷却水上限"]'),
+    ).toHaveLength(1)
+    expect(api.readSession).not.toHaveBeenCalled()
+  })
+
+  it('创建请求返回前切到旧会话，不发送迟到的首句', async () => {
+    let finish: (session: KnowledgeChatSession) => void = () => undefined
+    api.createSession.mockImplementation(
+      () =>
+        new Promise<KnowledgeChatSession>((resolve) => {
+          finish = resolve
+        }),
+    )
+    const wrapper = await render()
+    await wrapper.get('textarea').setValue('新的问题')
+    await wrapper.get('button[aria-label="发送"]').trigger('click')
+    await wrapper.get('button[title="锅炉那几台"]').trigger('click')
+    await flushPromises()
+    finish(sessionOf('s9'))
+    await flushPromises()
+    expect(api.advanceTurn).not.toHaveBeenCalled()
+    expect(wrapper.get('.chat-panel__where').text()).toBe('锅炉那几台')
+    expect(wrapper.text()).toContain('早先问过')
+  })
+
   it('没有对话时先自动建一个再发', async () => {
     api.listSessions.mockResolvedValue([])
     api.createSession.mockResolvedValue(sessionOf('s9'))
@@ -396,6 +526,8 @@ describe('管理对话', () => {
 
     const buttons = wrapper.findAll('button')
     await buttons.find((one) => one.text() === '新对话')?.trigger('click')
+    await wrapper.get('textarea').setValue('上限多少')
+    await wrapper.get('button[aria-label="发送"]').trigger('click')
     await flushPromises()
     expect(api.createSession).toHaveBeenCalledTimes(1)
 
@@ -424,10 +556,8 @@ describe('管理对话', () => {
     api.createSession.mockRejectedValue(new Error('这套部署没有接对话档'))
     const wrapper = await render()
 
-    await wrapper
-      .findAll('button')
-      .find((one) => one.text() === '新对话')
-      ?.trigger('click')
+    await wrapper.get('textarea').setValue('上限多少')
+    await wrapper.get('button[aria-label="发送"]').trigger('click')
     await flushPromises()
 
     expect(wrapper.text()).toContain('这套部署没有接对话档')

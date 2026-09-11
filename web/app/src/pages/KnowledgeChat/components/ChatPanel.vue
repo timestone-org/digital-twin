@@ -12,6 +12,7 @@ import { livePointOfStep } from '@/features/knowledgeChat/liveTools'
 import ChatToolStep from './ChatToolStep.vue'
 import ChatLivePoint from './ChatLivePoint.vue'
 import { liveCardRows } from '../scripts/liveCardRows'
+import { MAX_ACTIVE_LIVE_CARDS } from '@/config/app'
 import type { KnowledgeChatScopeBase } from '@dt/contracts'
 import { DtButton, DtCard, DtTag } from '@dt/ui'
 
@@ -45,7 +46,7 @@ const activeCards = computed(
     new Set(
       props.chat.entries.value
         .filter((one) => one.step && livePointOfStep(one.step))
-        .slice(-6)
+        .slice(-MAX_ACTIVE_LIVE_CARDS)
         .map((one) => one.id),
     ),
 )

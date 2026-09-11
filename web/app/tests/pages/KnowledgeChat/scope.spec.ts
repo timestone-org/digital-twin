@@ -199,6 +199,14 @@ describe('范围选择器', () => {
       .find((one) => one.text().includes('新对话'))
     await create?.trigger('click')
     await flushPromises()
+    expect(api.createSession).not.toHaveBeenCalled()
+    api.advanceTurn.mockImplementation(async function* () {
+      await Promise.resolve()
+      yield 'event: turn.done\ndata: {"reply":"好"}\n\n'
+    })
+    await wrapper.get('textarea').setValue('查看手册')
+    await wrapper.get('button[aria-label="发送"]').trigger('click')
+    await flushPromises()
 
     expect(api.createSession).toHaveBeenCalledWith('', ['b2'])
   })

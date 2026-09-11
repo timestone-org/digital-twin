@@ -6,6 +6,7 @@ import type { LivePoint } from '@/features/knowledgeChat/liveTools'
 import { formatTimestampMs } from '@/utils/datetime'
 import { formatLiveValue } from '../scripts/formatLiveValue'
 import { useLivePoint } from '../scripts/useLivePoint'
+import { MAX_ACTIVE_LIVE_CARDS } from '@/config/app'
 import ChatLivePointSettings from './ChatLivePointSettings.vue'
 
 const props = defineProps<{ point: LivePoint; enabled: boolean }>()
@@ -30,7 +31,8 @@ const quality = computed(() => {
   ]
 })
 const status = computed(() => {
-  if (!props.enabled) return '已停止 · 仅最近6张卡片自动订阅'
+  if (!props.enabled)
+    return `已停止 · 仅最近${MAX_ACTIVE_LIVE_CARDS}张卡片自动订阅`
   if (live.isPaused.value) return '已暂停 · 最后读数'
   if (live.error.value) return '数据不可用'
   if (live.isLoading.value) return '正在读取点位'

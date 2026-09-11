@@ -6,6 +6,7 @@ import httpx
 import pytest
 from integration.conftest import DbStack, HeaderFactory
 
+from knowledge_server.apps.chat.models import ChatMessage
 from knowledge_server.settings import API_PREFIX
 
 pytestmark = pytest.mark.requires_postgres
@@ -19,7 +20,7 @@ async def _create(client: httpx.AsyncClient, title: str = "") -> dict[str, str]:
     return response.json()["data"]
 
 
-async def test_create_lists_and_reads_back(
+async def test_empty_session_is_readable_but_not_listed(
     db_client: httpx.AsyncClient,
 ) -> None:
     made = await _create(db_client, "锅炉那几台")
@@ -28,10 +29,25 @@ async def test_create_lists_and_reads_back(
     detail = await db_client.get(f"{URL}/{made['id']}")
 
     assert listed.status_code == 200
-    assert made["id"] in [one["id"] for one in listed.json()["data"]["items"]]
+    assert made["id"] not in [
+        one["id"] for one in listed.json()["data"]["items"]
+    ]
     assert detail.status_code == 200
     assert detail.json()["data"]["title"] == "锅炉那几台"
     assert detail.json()["data"]["messages"] == []
+
+
+async def _add_message(stack: DbStack, session_id: str) -> None:
+    async with stack.sessions() as session:
+        session.add(
+            ChatMessage(
+                session_id=uuid.UUID(session_id),
+                seq=1,
+                role="user",
+                content_json={"text": "在吗"},
+            )
+        )
+        await session.commit()
 
 
 async def test_create_is_idempotent_under_the_same_key(
@@ -119,6 +135,8 @@ async def test_the_list_only_shows_my_own(
     theirs = await db_stack.client.post(
         URL, json={"title": "别人的"}, headers=sign()
     )
+    await _add_message(db_stack, mine["id"])
+    await _add_message(db_stack, theirs.json()["data"]["id"])
 
     listed = await db_stack.client.get(URL)
     ids = [one["id"] for one in listed.json()["data"]["items"]]

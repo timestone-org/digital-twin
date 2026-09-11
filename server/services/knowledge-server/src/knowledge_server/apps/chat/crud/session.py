@@ -36,7 +36,14 @@ class SessionCrud(CrudBase[ChatSession]):
 
         Args: owner_id, is_archived（None = 不过滤）。
         """
-        statement = select(ChatSession).where(ChatSession.user_id == owner_id)
+        has_messages = (
+            select(ChatMessage.id)
+            .where(ChatMessage.session_id == ChatSession.id)
+            .exists()
+        )
+        statement = select(ChatSession).where(
+            ChatSession.user_id == owner_id, has_messages
+        )
         if is_archived is not None:
             statement = statement.where(ChatSession.is_archived == is_archived)
         return statement.order_by(*DEFAULT_ORDER)

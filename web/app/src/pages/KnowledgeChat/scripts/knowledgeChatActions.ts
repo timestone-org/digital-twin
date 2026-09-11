@@ -13,7 +13,7 @@ import {
   renameSession,
   setSessionScope,
 } from '@/api/knowledgeChat'
-import { guarded, replaySelected } from './knowledgeChatState'
+import { guarded, messageOf, replaySelected } from './knowledgeChatState'
 import type { KnowledgeChatState } from './knowledgeChatState'
 
 /**
@@ -72,6 +72,7 @@ export async function select(
   sessionId: string | null,
 ): Promise<void> {
   state.chat.clear()
+  state.pendingSession.value = null
   state.selectedId.value = sessionId
   // 暂存的范围只服务「下一个新对话」；切过去之后由那条会话自己的范围说了算
   state.pendingScope.value = null
@@ -79,15 +80,12 @@ export async function select(
 }
 
 /**
- * 新建一个对话并切过去。
+ * 回到空白草稿；已经在空白草稿时保持原样。
  * @param state 页面状态
  */
 export async function create(state: KnowledgeChatState): Promise<void> {
-  await guarded(state, async () => {
-    const made = await createSession('', state.pendingScope.value)
-    state.sessions.value = [made, ...state.sessions.value]
-    await select(state, made.id)
-  })
+  if (state.selectedId.value === null && !state.isCreating.value) return
+  await select(state, null)
 }
 
 /**
@@ -113,6 +111,9 @@ export async function setScope(
         baseScopeIds,
         one.row_version,
       )
+      if (state.pendingSession.value?.id === updated.id) {
+        state.pendingSession.value = updated
+      }
       state.sessions.value = state.sessions.value.map((each) =>
         each.id === updated.id ? updated : each,
       )
@@ -189,12 +190,41 @@ export async function send(
   text: string,
 ): Promise<void> {
   const wanted = text.trim()
-  if (wanted === '') return
+  if (wanted === '' || state.chat.isRunning.value) return
   if (state.selectedId.value === null) {
-    await create(state)
-    if (state.selectedId.value === null) return
+    await startFirstTurn(state, wanted)
+    return
   }
   await state.chat.send(wanted)
+}
+
+/** 首句发送时创建会话，首轮完成前不放进清单。 */
+async function startFirstTurn(
+  state: KnowledgeChatState,
+  text: string,
+): Promise<void> {
+  state.error.value = ''
+  state.isCreating.value = true
+  let createdId: string | null = null
+  await state.creationRace.run(
+    () => createSession('', state.pendingScope.value),
+    {
+      ok: (made) => {
+        createdId = made.id
+        state.pendingSession.value = made
+        state.selectedId.value = made.id
+      },
+      fail: (cause) => {
+        state.error.value = messageOf(cause)
+      },
+      settled: () => {
+        state.isCreating.value = false
+      },
+    },
+  )
+  if (createdId !== null && state.selectedId.value === createdId) {
+    await state.chat.send(text)
+  }
 }
 
 async function dropFromList(
