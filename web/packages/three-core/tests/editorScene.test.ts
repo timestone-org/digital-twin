@@ -1159,3 +1159,19 @@ describe('量当前距离', () => {
     scene.dispose()
   })
 })
+it('临时隔离仅显示选中部件，退出后恢复未登记的模型节点', async () => {
+  const model = fakeModel('pump')
+  const wall = new THREE.Mesh(
+    new THREE.BoxGeometry(),
+    new THREE.MeshStandardMaterial(),
+  )
+  wall.name = 'wall'
+  model.add(wall)
+  const { scene } = createScene(twinConfig(), fixedSource(model))
+  await flushPromises()
+  scene.isolatePart('part-pump')
+  expect(wall.visible).toBe(false)
+  expect(model.getObjectByName('pump')?.visible).toBe(true)
+  scene.isolatePart(null)
+  expect(wall.visible).toBe(true)
+})

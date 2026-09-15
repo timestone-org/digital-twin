@@ -128,6 +128,7 @@ describe('每个槽应有几行', () => {
       arrowValues: 0,
       flowValues: 0,
       partFieldValues: 0,
+      animationValues: 0,
     })
   })
 

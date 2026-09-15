@@ -6,6 +6,7 @@
 import {
   EditorScene,
   type EditorSceneStatus,
+  type ModelAnimationEntry,
   type GizmoChange,
   type GizmoMode,
   type SceneLayerValues,
@@ -55,6 +56,7 @@ const emit = defineEmits<{
   pickNode: [string]
   pickPosition: [Vec3]
   modelNodes: [readonly string[]]
+  modelAnimations: [readonly ModelAnimationEntry[]]
   cameraChange: [TwinCameraPose]
   status: [EditorSceneStatus]
   /**
@@ -150,6 +152,7 @@ onMounted(() => {
       select: (value) => emit('select', value),
       pickNode: (value) => emit('pickNode', value),
       pickPosition: (value) => emit('pickPosition', value),
+      modelAnimations: (value) => emit('modelAnimations', value),
       modelNodes: (value) => emit('modelNodes', value),
       cameraChange: (value) => emit('cameraChange', value),
       status: applyStatus,
@@ -220,6 +223,8 @@ function stageEl(): HTMLElement | null {
 }
 
 defineExpose({
+  isolatePart: (id: string | null) => scene?.isolatePart(id),
+  restoreView: (pose: TwinCameraPose) => scene?.restoreView(pose),
   focus,
   snapshot,
   measureDistance,

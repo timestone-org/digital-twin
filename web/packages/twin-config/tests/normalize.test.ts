@@ -40,7 +40,7 @@ const EMPTY_MODEL: TwinModelRef = {
   background: '',
   showGroundGrid: false,
   originalMaterials: false,
-  animations: { enabled: false, clips: [], speed: 1 },
+  animations: { enabled: false, clips: [], speed: 1, controls: [] },
   sceneEffects: {
     starfield: { enabled: false, density: 1, speed: 1, nebula: false },
     pedestal: {

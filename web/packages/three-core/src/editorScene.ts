@@ -7,6 +7,11 @@
  * 漫游只在用户点「预览」时才飞（绝不自动开播）。
  * 实时值由宿主 `setValues` 喂进来，没喂就是一片占位符——绝不拿旧值冒充。
  */
+import { PreviewIsolation } from './previewIsolation'
+import {
+  modelAnimationCatalog,
+  type ModelAnimationEntry,
+} from './animationCatalog'
 import type {
   TwinConfig,
   TwinDistanceRef,
@@ -106,6 +111,7 @@ export interface EditorSceneCallbacks {
   select: (selection: TwinSceneSelection | null) => void
   pickNode: (nodeName: string) => void
   pickPosition: (position: Vec3) => void
+  modelAnimations?: (clips: readonly ModelAnimationEntry[]) => void
   modelNodes: (names: readonly string[]) => void
   cameraChange: (pose: TwinCameraPose) => void
   status: (status: EditorSceneStatus, message: string) => void
@@ -228,6 +234,8 @@ export class EditorScene {
 
   private config: TwinConfig
   /** 宿主最近一次喂进来的五路实时值；重建覆盖层时按它重放。 */
+  private readonly isolation = new PreviewIsolation()
+  private isolatedPartId: string | null = null
   private liveValues: SceneLayerValues = EMPTY_LAYER_VALUES
   private core: SceneCore | null = null
   private layers: SceneLayers | null = null
@@ -291,6 +299,17 @@ export class EditorScene {
    * 改一下配置就会把读数全刷回占位符，而下一帧数据到来之前它一直是那样。
    * @param values 缝合好的五路实时值
    */
+  isolatePart(id: string | null): void {
+    if (this.isolatedPartId === id) return
+    this.isolatedPartId = id
+    this.refresh()
+  }
+  restoreView(pose: TwinCameraPose): void {
+    if (this.core === null) return
+    this.stopRoamPreview()
+    this.flight.flyTo(this.core, pose, this.modelSpan)
+  }
+
   setValues(values: SceneLayerValues): void {
     this.liveValues = values
     this.layers?.setValues(values)
@@ -457,6 +476,7 @@ export class EditorScene {
 
   /** 卸载收口：在途装载、rAF、Observer、监听与全部 three 资源逐个释放。 */
   dispose(): void {
+    this.isolation.restore()
     // ⚠ 先让在途装载作废再释放：晚一步回来的那次会往已 dispose 的场景里挂模型
     this.loadSeq += 1
     this.roam = null
@@ -555,9 +575,19 @@ export class EditorScene {
     this.surface = null
   }
 
+  private applyIsolation(): void {
+    const part = this.config.parts.find(
+      (part) => part.id === this.isolatedPartId,
+    )
+    if (this.layers !== null) this.layers.root.visible = part === undefined
+    if (part !== undefined && this.modelObject !== null)
+      this.isolation.apply(this.modelObject, this.nodeIndex, part.nodes)
+  }
+
   /** 配置变了要重走的五件事：摆放、参考网格、部件显隐、覆盖层与拾取标记、选中高亮。 */
   private refresh(): void {
     if (this.core === null) return
+    this.isolation.restore()
     this.placeModel()
     // 网格与坐标轴跟着「地面网格」开关走：只在大屏上生效的话，用户关掉之后
     // 编辑视口里它还在，两边画面对不上
@@ -572,6 +602,7 @@ export class EditorScene {
     // 一转镜头就不见。但透明度与染色必须当场看得见，否则等于没法配
     this.layers?.parts.applyAppearance()
     this.picks?.build(this.config)
+    this.applyIsolation()
     this.applySelectionHighlight()
   }
 
@@ -735,7 +766,7 @@ export class EditorScene {
     try {
       // 编辑视口不播模型内置动画：镜头与配置一直在动，再叠一层自走的动画
       // 只会让「我刚改的东西生效了吗」变得看不出来
-      const { root } = await loadTwinModel(
+      const { root, clips } = await loadTwinModel(
         url,
         { signal: controller.signal },
         this.gltfSource,
@@ -746,6 +777,7 @@ export class EditorScene {
         return
       }
       this.mountModel(root)
+      this.on.modelAnimations?.(modelAnimationCatalog(clips))
     } catch (error) {
       if (mine !== this.loadSeq) return
       this.fail(error instanceof Error ? error.message : '模型加载失败')
@@ -789,6 +821,8 @@ export class EditorScene {
 
   /** 卸掉当前模型并释放它的 GPU 资源；索引、体量与选中框一并归零。 */
   private clearModel(): void {
+    this.isolation.restore()
+    this.on.modelAnimations?.([])
     if (this.core !== null) disposeSceneGraph(this.core.modelRoot)
     this.modelObject = null
     this.nodeIndex = EMPTY_NODE_INDEX

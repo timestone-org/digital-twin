@@ -21,16 +21,6 @@ Handler = Callable[[httpx.Request], httpx.Response]
 HEADERS = {"X-Auth-User-Id": "u1", "X-Auth-Sig": "s1"}
 
 
-def _row(code: str, name: str, unit: str | None = None) -> dict[str, object]:
-    return {
-        "node_key": f"src:{code}",
-        "code": code,
-        "name": name,
-        "unit": unit,
-        "data_type": "float",
-    }
-
-
 def _pages(batches: list[list[object]]) -> Handler:
     """按调用次序逐页作答，问完就一直给空页。"""
     served = iter(batches)
@@ -78,43 +68,6 @@ async def test_loading_an_unknown_skill_answers_instead_of_failing() -> None:
 async def test_an_unknown_tool_name_is_refused_loudly() -> None:
     with pytest.raises(UnknownServerTool):
         await ServerTools()("nothing.like_this", {})
-
-
-async def test_searching_points_ranks_and_explains() -> None:
-    tools = _tools(
-        _pages(
-            [
-                [
-                    _row("K1_TMT_OUT_T_PI", "1号机组出口温度", "℃"),
-                    _row("K1_PT_01", "进口压力", "kPa"),
-                ]
-            ]
-        )
-    )
-    got = await tools("points.search", {"keyword": "出口温度"})
-    assert isinstance(got, dict)
-    points = got["points"]
-    assert isinstance(points, list)
-    assert points[0]["name"] == "1号机组出口温度"
-    # `why` 直接交给模型判断该不该信这一条
-    assert points[0]["why"]
-
-
-async def test_searching_falls_back_to_paging_when_the_keyword_misses() -> None:
-    # 后端的 `q` 只对名字与编码做子串匹配，「温度」找不到 `K1_TMT_OUT_T_PI`
-    tools = _tools(_pages([[], [_row("K1_TMT_OUT_T_PI", "K1TMTOUTTPI")], []]))
-    got = await tools("points.search", {"keyword": "温度"})
-    assert isinstance(got, dict)
-    assert len(got["points"]) == 1
-
-
-async def test_a_search_that_finds_nothing_says_so_plainly() -> None:
-    tools = _tools(_pages([[], []]))
-    got = await tools("points.search", {"keyword": "毫不相干"})
-    assert isinstance(got, dict)
-    assert got["points"] == []
-    # 硬凑几个出来的话，模型会从里面挑一个
-    assert "真的没找到" in str(got["note"])
 
 
 async def test_a_search_without_a_keyword_is_refused_gently() -> None:

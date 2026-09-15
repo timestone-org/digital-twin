@@ -137,6 +137,17 @@ export class RoamTimeline {
     return this.phase
   }
 
+  /** 当前段的飞行与停留完成百分比。 */
+  get segmentProgress(): number {
+    const segment = this.segments[this.index]
+    if (segment === undefined) return 0
+    const total = segment.flyMs + segment.holdMs
+    if (total === 0 || this.phase === 'idle') return 100
+    const elapsed =
+      this.phase === 'holding' ? segment.flyMs + this.elapsedMs : this.elapsedMs
+    return Math.min(100, Math.round((elapsed / total) * 100))
+  }
+
   /** 开播；非循环走完之后再调是从头再来。 */
   play(): void {
     if (this.isEmpty) return

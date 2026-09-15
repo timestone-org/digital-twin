@@ -146,7 +146,8 @@ PROVIDER_KINDS: tuple[ProviderKindSpec, ...] = (
         label="Codex 订阅",
         description=(
             "用 ChatGPT 订阅账号直连 Codex 后端，不按 token 计费：不填密钥，"
-            "改为在这一行上走一次设备码登录。助手与知识库都接得了，但它不接图"
+            "改为在这一行上走一次设备码登录。助手与知识库都可使用；"
+            "助手看图需为支持图片的模型勾选「接图」"
         ),
         is_endpoint_required=False,
         is_login_required=True,

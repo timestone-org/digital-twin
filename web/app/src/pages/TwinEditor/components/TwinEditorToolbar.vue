@@ -10,6 +10,8 @@ import { DtButton, DtSegmented, DtTag } from '@dt/ui'
 import { computed } from 'vue'
 
 const props = defineProps<{
+  focusMode?: boolean
+  canBatch?: boolean
   isDirty: boolean
   isSaving: boolean
   canUndo: boolean
@@ -20,6 +22,8 @@ const props = defineProps<{
 
 const emit = defineEmits<{
   save: []
+  toggleFocus: []
+  batch: []
   undo: []
   redo: []
   toggleIssues: []
@@ -90,6 +94,16 @@ function onNavigationMode(value: string): void {
       {{ issueCount }}
     </DtButton>
 
+    <DtButton size="sm" variant="ghost" @click="emit('toggleFocus')">{{
+      focusMode ? '恢复导航' : '专注配置'
+    }}</DtButton>
+    <DtButton
+      size="sm"
+      variant="soft"
+      :disabled="!canBatch"
+      @click="emit('batch')"
+      >批量配置</DtButton
+    >
     <DtTag v-if="isDirty" size="sm" intent="warning">未保存</DtTag>
     <DtButton
       size="sm"
@@ -107,6 +121,8 @@ function onNavigationMode(value: string): void {
 <style scoped lang="scss">
 .dt-twin-bar {
   display: flex;
+  flex-wrap: wrap;
+  min-width: 0;
   gap: 4px;
   align-items: center;
 

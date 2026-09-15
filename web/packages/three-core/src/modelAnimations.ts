@@ -4,7 +4,12 @@
  * ⚠ 动画剪辑属于模型，换模型必须整层重建；只换配置则原地开关，
  * 重建会让动画从头跳一下。
  */
-import type { TwinModelAnimations } from '@dt/twin-config'
+import {
+  animationCondition,
+  type TwinAnimationControl,
+  type TwinAnimationValues,
+  type TwinModelAnimations,
+} from '@dt/twin-config'
 import * as THREE from 'three'
 
 /** 没配 clips 时播全部，这是「留空 = 全播」的落点。 */
@@ -22,6 +27,7 @@ function activeNames(
  */
 export class ModelAnimations {
   private readonly mixer: THREE.AnimationMixer | null
+  private readonly active = new Set<string>()
   private readonly actions = new Map<string, THREE.AnimationAction>()
 
   /**
@@ -60,19 +66,60 @@ export class ModelAnimations {
    * 每帧求值，十几段动画的模型上白烧一份 CPU。
    * @param config 归一化后的动画配置
    */
-  apply(config: TwinModelAnimations): void {
+  apply(config: TwinModelAnimations, values: TwinAnimationValues = {}): void {
     if (this.mixer === null) return
     const wanted = config.enabled
       ? activeNames(config, this.clipNames)
       : new Set<string>()
+    const controls = new Map(
+      config.controls.map((control) => [control.clip, control]),
+    )
     for (const [name, action] of this.actions) {
+      const control = controls.get(name)
+      if (control !== undefined) {
+        this.applyControl(action, control, values[name])
+        continue
+      }
       action.timeScale = config.speed
       if (wanted.has(name)) {
-        if (!action.isRunning()) action.reset().play()
-      } else if (action.isRunning()) {
+        if (!this.active.has(name)) action.reset().play()
+        action.paused = false
+        this.active.add(name)
+      } else {
         action.stop()
+        this.active.delete(name)
       }
     }
+  }
+
+  private applyControl(
+    action: THREE.AnimationAction,
+    control: TwinAnimationControl,
+    value: unknown,
+  ): void {
+    const matched =
+      control.mode === 'point'
+        ? animationCondition(control, value)
+        : control.mode === 'always'
+    action.timeScale = control.speed
+    action.setLoop(
+      control.loop === 'once' ? THREE.LoopOnce : THREE.LoopRepeat,
+      Infinity,
+    )
+    action.clampWhenFinished = control.loop === 'once'
+    if (matched === true) {
+      if (!this.active.has(control.clip)) {
+        if (control.restart || !action.isScheduled()) action.reset()
+        action.paused = false
+        action.play()
+      }
+      this.active.add(control.clip)
+      return
+    }
+    this.active.delete(control.clip)
+    const behavior = matched === null ? control.missing : control.stop
+    if (behavior === 'reset' || control.mode === 'off') action.stop()
+    else action.paused = true
   }
 
   /**
@@ -91,5 +138,6 @@ export class ModelAnimations {
       this.mixer?.uncacheAction(action.getClip())
     }
     this.actions.clear()
+    this.active.clear()
   }
 }

@@ -1,10 +1,4 @@
-/**
- * @fileoverview 运行态的自动漫游：把时间线接上渲染循环与相机，并管好「用户一动
- * 就停、闲置到点再开」这两条。
- *
- * ⚠ 计时器与轨道控制器的监听都成对装卸——大屏一开就是几天，漏一个就是一次
- * 持续累积的泄漏。
- */
+/** @fileoverview 运行态漫游的时间线、相机与可清理的交互监听。 */
 import {
   RoamTimeline,
   buildRoamSegments,
@@ -38,6 +32,7 @@ export interface RoamTourController {
   /** 运行态该不该画播放控件。 */
   showControls: ComputedRef<boolean>
   playing: Ref<boolean>
+  progress: Ref<{ segmentIndex: number; percent: number }>
   /** 场景内核装配好之后调一次：装监听、按配置决定要不要开播。 */
   attach: () => void
   /** 每帧推进；宿主把帧钟的时长换成毫秒喂进来。 */
@@ -54,6 +49,7 @@ export interface RoamTourController {
  */
 class RoamRunner {
   readonly playing = ref(false)
+  readonly progress = ref({ segmentIndex: 0, percent: 0 })
 
   private readonly deps: RoamTourDeps
   private readonly tour: ComputedRef<TwinRoamTour>
@@ -94,10 +90,21 @@ class RoamRunner {
 
   advance(deltaMs: number): void {
     this.applyPose(this.timeline.advance(deltaMs))
+    this.syncProgress()
     // 非循环轨迹会自己走到头，播放态得跟着回落，否则控件一直显示「暂停」
     if (this.playing.value !== this.timeline.isPlaying) {
       this.playing.value = this.timeline.isPlaying
     }
+  }
+
+  private syncProgress(): void {
+    const segmentIndex = this.timeline.segmentIndex
+    const percent = this.timeline.segmentProgress
+    if (
+      this.progress.value.segmentIndex !== segmentIndex ||
+      this.progress.value.percent !== percent
+    )
+      this.progress.value = { segmentIndex, percent }
   }
 
   play(): void {
@@ -127,7 +134,7 @@ class RoamRunner {
     const wasPlaying = this.timeline.isPlaying
     this.timeline = new RoamTimeline(segments, this.tour.value.loop)
     this.playing.value = false
-    if (wasPlaying) this.play()
+    if (wasPlaying && this.tour.value.enabled) this.play()
     else if (this.attached !== null) this.armIdleTimer()
   }
 
@@ -162,10 +169,7 @@ class RoamRunner {
   }
 }
 
-/**
- * 装上自动漫游。
- * @param deps 取场景内核与配置的两个口子
- */
+/** 装上自动漫游及其状态。 */
 export function useRoamTour(deps: RoamTourDeps): RoamTourController {
   const tour = computed(() => deps.config().roamTour)
   const segments = computed(() =>
@@ -185,6 +189,7 @@ export function useRoamTour(deps: RoamTourDeps): RoamTourController {
   return {
     showControls,
     playing: runner.playing,
+    progress: runner.progress,
     attach: () => runner.attach(),
     advance: (ms) => runner.advance(ms),
     toggle: () => runner.toggle(),

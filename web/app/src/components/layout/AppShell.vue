@@ -22,6 +22,7 @@ import { useEmbedContext } from '@/features/embed/context'
 const embed = useEmbedContext()
 
 defineProps<{
+  focusMode?: boolean
   title?: string | undefined
   subtitle?: string | undefined
   /** 给了才在标题左侧显示返回入口，取值是站内路径。 */
@@ -34,7 +35,7 @@ defineProps<{
   <div
     class="dt-grid-bg flex h-screen w-screen overflow-hidden bg-surface-base"
   >
-    <AppNavRail v-if="!embed.isEmbedded.value" />
+    <AppNavRail v-if="!embed.isEmbedded.value && !focusMode" />
 
     <slot name="sidebar" />
 
@@ -48,7 +49,10 @@ defineProps<{
         <template #actions><slot name="actions" /></template>
       </AppTopbar>
 
-      <main class="flex min-h-0 flex-1 flex-col overflow-hidden p-5">
+      <main
+        class="flex min-h-0 flex-1 flex-col overflow-hidden"
+        :class="focusMode ? 'p-2' : 'p-5'"
+      >
         <slot />
       </main>
     </div>

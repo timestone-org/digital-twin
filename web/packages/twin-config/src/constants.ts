@@ -6,6 +6,8 @@
 import type { BindingSpec } from '@dt/contracts'
 
 /** 节点 `configJson` 里孪生配置所在的键。 */
+export const TWIN_ANIMATION_BINDING_KEY = 'animationValues'
+
 export const TWIN_CONFIG_KEY = 'twin'
 
 /**
@@ -101,6 +103,14 @@ export function partFieldRowFieldKey(index: number): string {
  * 是「绑了没反应」，那比缺一个功能更难查。加槽必须与渲染层同一轮落地。
  */
 export const TWIN_VIEW_BINDINGS: readonly BindingSpec[] = [
+  {
+    key: TWIN_ANIMATION_BINDING_KEY,
+    label: '模型动画启停',
+    dataType: 'number',
+    isArray: true,
+    isEntityPinned: true,
+    arrayFields: [{ key: 'value', label: '运行状态', dataType: 'number' }],
+  },
   {
     key: TWIN_PART_BINDING_KEY,
     label: '部件状态染色',

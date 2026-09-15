@@ -9,6 +9,7 @@
 import type { BindingRowLabel } from '@dt/contracts'
 
 import {
+  TWIN_ANIMATION_BINDING_KEY,
   TWIN_ANCHOR_BINDING_KEY,
   TWIN_ARROW_BINDING_KEY,
   TWIN_FLOW_BINDING_KEY,
@@ -84,6 +85,14 @@ export function twinBindingRows(config: TwinConfig): TwinBindingRow[] {
     label: nameOr(item.name, item.id),
   }))
   return [
+    ...rowsOf(
+      TWIN_ANIMATION_BINDING_KEY,
+      config.model.animations.controls.map((item) => ({
+        id: item.clip,
+        label: nameOr(item.name, item.clip),
+      })),
+      'value',
+    ),
     ...rowsOf(TWIN_PART_BINDING_KEY, parts, 'value'),
     ...rowsOf(TWIN_ANCHOR_BINDING_KEY, anchors, 'value'),
     ...rowsOf(TWIN_PANEL_BINDING_KEY, panels, 'value'),
@@ -138,6 +147,7 @@ export function twinRowLabels(
  * ⚠ 部件占**两个槽**：状态染色一行，详情字段每个字段一行，所以它的值是一对。
  */
 const SLOTS_OF_KIND: Readonly<Record<string, readonly string[]>> = {
+  animations: [TWIN_ANIMATION_BINDING_KEY],
   parts: [TWIN_PART_BINDING_KEY, TWIN_PART_FIELD_BINDING_KEY],
   anchors: [TWIN_ANCHOR_BINDING_KEY],
   panels: [TWIN_PANEL_BINDING_KEY],
@@ -190,6 +200,7 @@ export function twinRowsOfEntity(
 /** 六个数组槽，重映射与行数统计逐个走一遍。 */
 const ARRAY_SLOTS = [
   TWIN_PART_BINDING_KEY,
+  TWIN_ANIMATION_BINDING_KEY,
   TWIN_ANCHOR_BINDING_KEY,
   TWIN_PANEL_BINDING_KEY,
   TWIN_ARROW_BINDING_KEY,

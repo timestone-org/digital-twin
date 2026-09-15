@@ -11,6 +11,7 @@ import type {
   ModuleSlotMeta,
 } from '@dt/contracts'
 import {
+  TWIN_ANIMATION_BINDING_KEY,
   TWIN_ANCHOR_BINDING_KEY,
   TWIN_ARROW_BINDING_KEY,
   TWIN_CONFIG_KEY,
@@ -95,6 +96,11 @@ const navigationMode = computed(() =>
  * 少列一个键的表现是「那一路读数永远不来」，两边都不报错。
  */
 const rows = computed(() => ({
+  [TWIN_ANIMATION_BINDING_KEY]:
+    props.meta?.connectionState !== undefined &&
+    props.meta.connectionState !== 'open'
+      ? undefined
+      : props.values[TWIN_ANIMATION_BINDING_KEY],
   [TWIN_PART_BINDING_KEY]: props.values[TWIN_PART_BINDING_KEY],
   [TWIN_ANCHOR_BINDING_KEY]: props.values[TWIN_ANCHOR_BINDING_KEY],
   [TWIN_PANEL_BINDING_KEY]: props.values[TWIN_PANEL_BINDING_KEY],

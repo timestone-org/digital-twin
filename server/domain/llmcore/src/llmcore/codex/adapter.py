@@ -1,14 +1,6 @@
-"""订阅账号那一形态的适配器：用订阅直连私有面，不按 token 计费。
+"""订阅账号适配器，按消费方提供的用途模型表声明能力并构造请求。
 
-目录里配出来的每一路各是一个适配器，两个消费方装的是同一个类型——差别只在
-「模型清单、推理档位与来路标识从哪儿来」，接法一模一样。
-
-⚠ **这一路不接图。** `supports("vision")` 恒假，由调用方据此如实拒绝——
-截图那条链路只在端点那一形态上验过。放行的话，图会被喂给一个自报不接图的
-模型，而它多半只回一句「我没看到图」：调用成功、照常计费、结论是错的。
-
-⚠ 登录态**不在目录里**：令牌要在每次调用前可续期，故它落在平台的凭据表上，
-按那一路供应商的 id 认行（ADR-0041）。这一层只认一个「领令牌」的口子。
+凭据归平台持有，见 ADR-0041。
 """
 
 from collections.abc import Mapping
@@ -19,6 +11,7 @@ from langchain_core.language_models import BaseChatModel
 
 from llmcore.codex.model import build_codex_model
 from llmcore.codex.tokens import StoredTokenProvider, TokenSource
+from llmcore.errors import ModelRejected
 from llmcore.ports import ModelChoice, ModelKind, ModelProfile
 
 # 推理档位配在形态自己那几格里。⚠ 与 platform-server 的
@@ -52,16 +45,18 @@ class CodexOAuthAdapter:
     originator: str
     # 界面上摆得出来的推理档位；空表示这一侧不给人选
     efforts: tuple[str, ...] = field(default=())
+    models_by_kind: Mapping[ModelKind, str] | None = None
+
+    def model_for(self, kind: ModelKind) -> str | None:
+        """取本路中适用的已登记模型。Args: kind。"""
+        if self.models_by_kind is not None:
+            model = self.models_by_kind.get(kind)
+            return model if model in self.models else None
+        return self.models[0] if self.models and kind in _KINDS else None
 
     def supports(self, kind: ModelKind) -> bool:
-        """吃对话档与摘要档，不吃视觉档。
-
-        ⚠ 一个模型都没登记的那一路**哪一档都不吃**：发一次空模型名过去是一条
-        400，而那条 400 里不会提到是「这一路上还没登记模型」。
-
-        Args: kind。
-        """
-        return bool(self.models) and kind in _KINDS
+        """是否有适用的已登记模型。Args: kind。"""
+        return self.model_for(kind) is not None
 
     async def build(self, choice: ModelChoice) -> BaseChatModel:
         """先领一次令牌，再造模型。
@@ -71,9 +66,12 @@ class CodexOAuthAdapter:
 
         Args: choice。
         """
+        model = self.model_for(choice.kind)
+        if model is None:
+            raise ModelRejected("这一路没有适用于当前用途的模型")
         seed = await self.tokens.usable(self.id)
         return build_codex_model(
-            model=self.models[0],
+            model=model,
             # ⚠ 刚领到的那一份直接当快照：上游把 api_key 焊成同步可调用件，
             # 第一次请求会从执行器线程回来要它
             token_provider=StoredTokenProvider(self.tokens, self.id, seed=seed),
@@ -89,8 +87,7 @@ class CodexOAuthAdapter:
             label=self.label,
             # ⚠ 装配得起来不代表登录过：真假由凭据面在能力端点上补
             is_ready=True,
-            # 这一路眼下不接图：截图那条链路只在端点那一形态上验过
-            has_vision=False,
+            has_vision=self.supports("vision"),
             models=self.models,
             efforts=self.efforts,
         )

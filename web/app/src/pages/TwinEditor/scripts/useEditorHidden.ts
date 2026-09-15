@@ -14,6 +14,7 @@ import {
 export interface TwinEditorHidden {
   /** 套上编辑态显隐的配置；还没读出来时是 null。 */
   config: ComputedRef<TwinConfig | null>
+  reset: () => void
   toggle: (target: EditorVisibilityTarget) => void
 }
 
@@ -34,6 +35,9 @@ export function useEditorHidden(
   })
 
   return {
+    reset: () => {
+      hidden.value = new Set()
+    },
     config: computed(() => {
       const current = config()
       return current === null

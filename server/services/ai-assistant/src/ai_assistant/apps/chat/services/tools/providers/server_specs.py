@@ -110,14 +110,27 @@ SERVER_SPECS: tuple[ToolSpec, ...] = (
     ToolSpec(
         name="points.search",
         description=(
-            "按关键词找采集点位。关键词会同时对中文名与编码做匹配，"
-            "并按单位与数据类型给候选打分。找不到就返回空表，不要猜。"
+            "按自然语言语义与关键词混合检索采集点位，精确编码优先。"
+            "保留设备编号、位置和测量量，如「动力换热2号阀门开度」。"
+            "返回名称、描述、数据源、单位、score与is_exact，按相关性排序。"
+            "读取mode、pending_count和note判断降级或索引未完成；"
+            "分数不是正确概率。候选有歧义时补充条件或询问用户，"
+            "绑定前用points.detail核对配置。"
         ),
         parameters=object_schema(
             {
-                "keyword": string_schema("要找的东西，如「1号机组出口温度」"),
-                "source_id": string_schema("限定在某个数据源内；不给则全库找"),
-                "limit": integer_schema("最多返回几条，缺省 20，上限 50"),
+                "keyword": {
+                    **string_schema("设备、位置、测量量或精确编码，最多300字"),
+                    "maxLength": 300,
+                },
+                "source_id": string_schema(
+                    "取自points.list_sources的真实id；未限定则省略"
+                ),
+                "limit": {
+                    **integer_schema("最多返回几条，缺省6，上限12"),
+                    "minimum": 1,
+                    "maximum": 12,
+                },
             },
             ["keyword"],
         ),

@@ -7,12 +7,15 @@
 的按量那一路挤没；以及每个异步入口先让目录刷新一次。
 """
 
+from dataclasses import dataclass, replace
 from typing import Any
 
 import pytest
+from langchain_core.messages import SystemMessage
 from pydantic import SecretStr
 
 from ai_assistant.apps.chat.services import model_profiles
+from ai_assistant.apps.chat.services.perception.vision import user_message
 from ai_assistant.llm import (
     DEFAULT_PROFILE,
     AdapterDeps,
@@ -38,6 +41,12 @@ CHAT = ModelSpec(name="catalog-chat", kind="chat", has_vision=True)
 BLIND = ModelSpec(name="blind-chat", kind="chat")
 EMBED = ModelSpec(name="catalog-embed", kind="embedding", dimensions=8)
 CODEX_MODEL = ModelSpec(name="gpt-5-codex", kind="chat")
+
+
+@dataclass(frozen=True)
+class _Token:
+    access_token: str = "test"
+    account_id: str | None = None
 
 
 class _Catalog:
@@ -231,6 +240,70 @@ def test_a_codex_route_reports_its_own_models_and_efforts() -> None:
     assert profile.models == ("gpt-5-codex",)
     assert profile.has_vision is False
     assert profile.efforts == ("low", "medium", "high", "xhigh")
+
+
+def test_codex_vision_capability_follows_the_registered_model() -> None:
+    provider = replace(
+        _codex_provider(), models=(replace(CODEX_MODEL, has_vision=True),)
+    )
+    registry = _registry(_catalog(provider), _settings())
+    assert registry.profiles()[0].has_vision is True
+    assert registry.supports("p2", "vision") is True
+
+
+async def test_codex_vision_selects_the_assigned_capable_model(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    provider = replace(
+        _codex_provider(),
+        models=(BLIND, CHAT, replace(CODEX_MODEL, has_vision=True)),
+    )
+    catalog = _catalog(
+        provider,
+        assignments=(Assignment("assistant.vision", "p2", CODEX_MODEL.name),),
+    )
+
+    async def usable(self: _Tokens, provider: str) -> _Token:
+        del self
+        assert provider == "p2"
+        return _Token()
+
+    monkeypatch.setattr(_Tokens, "usable", usable)
+    built = await _registry(catalog, _settings()).resolve(
+        ModelChoice(profile="p2", kind="vision")
+    )
+    assert built.model_name == CODEX_MODEL.name
+    uri = "data:image/png;base64,aW1hZ2U="
+    payload = built._get_request_payload(
+        [SystemMessage(content="识别图片"), user_message("图里是什么", [uri])]
+    )
+    assert payload["instructions"] == "识别图片"
+    assert payload["input"][0]["content"][1] == {
+        "type": "input_image",
+        "image_url": uri,
+    }
+
+
+def test_codex_vision_refreshes_when_the_catalog_changes() -> None:
+    provider = _codex_provider()
+    source = _Catalog(_catalog(provider))
+    registry = ModelRegistry(
+        AdapterDeps(settings=_settings(), tokens=_Tokens(), catalog=source)
+    )
+    assert not registry.supports("p2", "vision")
+    source.catalog = ModelCatalog(
+        providers=(replace(provider, models=(CHAT,)),),
+        assignments=(),
+        version="v2",
+    )
+    assert registry.supports("p2", "vision")
+    assert registry.profiles()[0].has_vision
+    source.catalog = ModelCatalog(
+        providers=(provider,),
+        assignments=(),
+        version="v3",
+    )
+    assert not registry.profiles()[0].has_vision
 
 
 def test_a_codex_route_needs_the_credential_face() -> None:

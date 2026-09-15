@@ -1,12 +1,6 @@
-"""订阅账号那一形态的适配器。
+"""订阅适配器的用途选模、能力声明和令牌领取契约。"""
 
-守的是三件运行期看不出的事：**不接图**（放行的话图会被喂给一个自报不接图的
-模型，它多半只回一句「我没看到图」，而调用照样成功、照样计费）；一个模型都
-没登记的那一路哪一档都不吃（空模型名是一条 400，那条 400 里不提这件事）；
-以及造模型之前**先领一次令牌**——没登录过要在这里失败，而不是等端点回 401。
-"""
-
-from dataclasses import dataclass
+from dataclasses import dataclass, replace
 
 import pytest
 
@@ -15,6 +9,7 @@ from llmcore.codex.adapter import (
     CodexOAuthAdapter,
     effort_of,
 )
+from llmcore.errors import ModelRejected
 from llmcore.ports import ModelChoice
 
 EFFORTS = ("low", "medium", "high", "xhigh")
@@ -53,7 +48,7 @@ def _adapter(
     )
 
 
-def test_it_eats_chat_and_summary_but_never_vision() -> None:
+def test_without_kind_configuration_only_text_is_supported() -> None:
     made = _adapter(_Source())
     assert made.supports("chat")
     assert made.supports("summary")
@@ -77,6 +72,26 @@ async def test_building_asks_for_this_lane_s_token_first() -> None:
     source = _Source()
     await _adapter(source).build(ModelChoice())
     assert source.asked == ["p1"]
+
+
+async def test_vision_uses_the_configured_model() -> None:
+    made = replace(
+        _adapter(_Source(), models=("text", "vision")),
+        models_by_kind={"chat": "text", "vision": "vision"},
+    )
+    assert made.supports("vision")
+    assert made.profile().has_vision
+    built = await made.build(ModelChoice(kind="vision"))
+    assert built.model_name == "vision"
+
+
+async def test_an_unregistered_kind_model_is_rejected_before_tokens() -> None:
+    source = _Source()
+    made = replace(_adapter(source), models_by_kind={"vision": "missing"})
+    assert not made.supports("vision")
+    with pytest.raises(ModelRejected):
+        await made.build(ModelChoice(kind="vision"))
+    assert source.asked == []
 
 
 async def test_a_lane_that_was_never_logged_in_fails_before_the_endpoint(

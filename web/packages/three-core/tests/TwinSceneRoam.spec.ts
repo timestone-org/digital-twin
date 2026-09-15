@@ -150,3 +150,20 @@ describe('按钮', () => {
     wrapper.unmount()
   })
 })
+it('退出漫游配置后停止播放，镜头交还配置预览', async () => {
+  const wrapper = mountScene({ enabled: true, showControls: true })
+  await flushPromises()
+  await wrapper.setProps({
+    previewAction: { sequence: 1, partId: '', kind: 'roam-play' },
+  })
+  expect(wrapper.emitted('roamProgress')?.at(-1)).toEqual([
+    { segmentIndex: 0, percent: 0, playing: true },
+  ])
+  await wrapper.setProps({
+    config: config({ enabled: false, showControls: false }),
+  })
+  expect(wrapper.emitted('roamProgress')?.at(-1)).toEqual([
+    { segmentIndex: 0, percent: 0, playing: false },
+  ])
+  wrapper.unmount()
+})

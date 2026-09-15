@@ -21,6 +21,8 @@ type CameraPose = { position: Vec3; target: Vec3; fov: number }
  * 取不到 `defineExpose` 的类型（会塌成 any），写错了 typecheck 与 lint 都不拦。
  */
 export interface TwinViewportHandle {
+  isolatePart?: (id: string | null) => void
+  restoreView?: (pose: CameraPose) => void
   focus: (selection: TwinSelection) => void
   snapshot: () => CameraPose
   measureDistance: (ref: TwinDistanceRef) => number | null

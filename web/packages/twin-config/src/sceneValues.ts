@@ -6,7 +6,9 @@
  * 漂开——漂开之后两边都有值、都不报错，只是编辑器里核对过的对应关系到了大屏上
  * 全是错的（见 `bindingRows.ts` 的文件头）。
  */
+import { animationValuesOf, type TwinAnimationValues } from './animationControl'
 import {
+  TWIN_ANIMATION_BINDING_KEY,
   TWIN_ANCHOR_BINDING_KEY,
   TWIN_ARROW_BINDING_KEY,
   TWIN_FLOW_BINDING_KEY,
@@ -36,6 +38,7 @@ import type {
 
 /** 缝合好的六路实时值，键都是实体自己的 id。 */
 export interface TwinSceneValues {
+  animations?: TwinAnimationValues
   /** 部件状态染色用；键是部件 id，只含配了染色的那些。 */
   parts: TwinPartValues
   anchors: TwinAnchorValues
@@ -56,6 +59,14 @@ export function twinSceneValues(
   values: Record<string, unknown>,
 ): TwinSceneValues {
   return {
+    ...(config.model.animations.controls.length > 0
+      ? {
+          animations: animationValuesOf(
+            config.model.animations.controls,
+            values[TWIN_ANIMATION_BINDING_KEY],
+          ),
+        }
+      : {}),
     // ⚠ 喂全部部件、由 `stitchPartValues` 自己过滤：先在这里过滤一遍会多出
     //   一处口径，而两处口径不一致就是「每一行都接错部件」
     parts: stitchPartValues(config.parts, values[TWIN_PART_BINDING_KEY]),

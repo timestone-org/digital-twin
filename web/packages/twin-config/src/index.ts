@@ -1,4 +1,14 @@
 export {
+  ANIMATION_OPERATORS,
+  animationCondition,
+  normalizeAnimationControls,
+} from './animationControl'
+export type {
+  TwinAnimationControl,
+  TwinAnimationValues,
+} from './animationControl'
+export {
+  TWIN_ANIMATION_BINDING_KEY,
   TWIN_ANCHOR_BINDING_KEY,
   TWIN_ANCHOR_ROW_SLOTS,
   TWIN_ARROW_BINDING_KEY,

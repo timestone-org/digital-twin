@@ -5,6 +5,7 @@
  * 形状就变了，而「往返之后少了一个键」这类差异在渲染层表现为某一项忽然回到缺省。
  * 缺省用具体值表达（空串 / 空数组 / null），不用「键不在」。
  */
+import type { TwinAnimationControl } from './animationTypes'
 import type { ModelVariant } from '@dt/contracts'
 
 /** 世界坐标 / 欧拉角三元组。 */
@@ -12,6 +13,7 @@ export type Vec3 = [number, number, number]
 
 /** GLB/GLTF 内置动画的播放配置。 */
 export interface TwinModelAnimations {
+  controls: TwinAnimationControl[]
   enabled: boolean
   /** 要播的 clip 名；空数组 = 全播。 */
   clips: string[]

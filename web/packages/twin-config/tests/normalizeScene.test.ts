@@ -53,7 +53,12 @@ describe('模型摆放', () => {
 describe('内置动画', () => {
   it('缺省不播，空 clips 表示全播', () => {
     const animations = normalizeModel({}).animations
-    expect(animations).toEqual({ enabled: false, clips: [], speed: 1 })
+    expect(animations).toEqual({
+      enabled: false,
+      clips: [],
+      speed: 1,
+      controls: [],
+    })
   })
 
   it('倒放是合法的，但速度有上下限', () => {

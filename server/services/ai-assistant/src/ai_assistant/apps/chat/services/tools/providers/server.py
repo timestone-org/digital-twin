@@ -27,11 +27,6 @@ from ai_assistant.apps.chat.services.tools.catalog.modules import (
     catalog_of,
     detail_of,
 )
-from ai_assistant.apps.chat.services.tools.points.recall import (
-    PointCandidate,
-    ScoredPoint,
-    rank,
-)
 from ai_assistant.apps.chat.services.tools.points.resolve import (
     resolve_points,
     split_node_key,
@@ -45,11 +40,7 @@ from llmcore.tools.shapes import ToolSpec
 
 # 一次检索最多回几条。再多模型也读不完，而每一条都在占上下文
 MAX_RESULTS = 20
-# 为了凑够候选最多翻几页。⚠ 有上限：一个源可能挂着上万个点位，
-# 无上限地翻会把一次工具调用变成几十次往返
-MAX_PAGES = 5
-
-
+MAX_POINT_QUERY_CHARS = 300
 # 一个工具的实现：收一袋参数，给一份结果
 ToolHandler = Callable[[dict[str, Any]], Awaitable[Any]]
 
@@ -153,53 +144,26 @@ class ServerTools:
         return {"sources": [_source_of(row) for row in rows]}
 
     async def _search_points(self, arguments: dict[str, Any]) -> Any:
-        """按关键词找点位。
-
-        ⚠ 先让后端按 `q` 缩一次，再在本地按名字/编码/单位打分排序。只靠后端的
-        话，`K1_TMT_HOT_T_PI` 这种编码永远匹配不上「温度」两个字。
-
-        Args: arguments。
-        """
-        keyword = str(arguments.get("keyword") or "").strip()
-        if not keyword:
-            return {"points": [], "note": "没给关键词"}
-        source_id = _text_or_none(arguments.get("source_id"))
-        limit = _limit_of(arguments.get("limit"))
-        found = rank(
-            await self._gather(keyword, source_id),
+        """按自然语言读取平台语义候选。Args: arguments。"""
+        keyword = _text_or_none(arguments.get("keyword"))
+        if keyword is None:
+            return {"points": [], "note": "请提供设备、位置与测量量"}
+        if len(keyword) > MAX_POINT_QUERY_CHARS:
+            raise ValueError("点位描述最多300字，请保留设备、位置与测量量")
+        given = arguments.get("limit")
+        limit = min(given, 12) if type(given) is int and given > 0 else 6
+        result = await self._upstream().match_points(
+            self.headers,
             keyword=keyword,
+            source_id=_text_or_none(arguments.get("source_id")),
             limit=limit,
         )
         return {
-            "points": [_hit_of(one) for one in found],
-            "note": "空表就是真的没找到，不要从别处硬凑一个",
+            "points": [point.model_dump() for point in result.items],
+            "mode": result.mode,
+            "pending_count": result.pending_count,
+            "note": result.note,
         }
-
-    async def _gather(
-        self, keyword: str, source_id: str | None
-    ) -> list[PointCandidate]:
-        """凑一批候选：先按关键词问一次，不够再不带关键词翻几页。
-
-        ⚠ 后端的 `q` 只对名字与编码做子串匹配，「出口温度」找不到
-        `K1_TMT_OUT_T_PI`。所以按词问不到时要退回全量翻页，由本地打分兜住。
-
-        Args: keyword, source_id。
-        """
-        client = self._upstream()
-        rows = await client.search_points(
-            self.headers, keyword=keyword, source_id=source_id
-        )
-        if rows:
-            return [_candidate_of(row) for row in rows]
-        found: list[PointCandidate] = []
-        for page in range(1, MAX_PAGES + 1):
-            batch = await client.search_points(
-                self.headers, source_id=source_id, page=page
-            )
-            if not batch:
-                break
-            found.extend(_candidate_of(row) for row in batch)
-        return found
 
     async def _formula_catalog(self, arguments: dict[str, Any]) -> Any:
         """给函数目录。不给关键词是名字与签名，给了才带样例。
@@ -384,24 +348,6 @@ def _load_skill(name: str) -> dict[str, Any]:
     }
 
 
-def _candidate_of(row: object) -> PointCandidate:
-    """把 platform 的一行收成候选。
-
-    ⚠ 逐字段窄化而不是整块透传：多一个字段不要紧，少一个字段会在打分里
-    崩成 None，而那时离真正的原因已经很远。
-
-    Args: row。
-    """
-    body = _as_body(row)
-    return PointCandidate(
-        node_key=str(body.get("node_key") or ""),
-        code=str(body.get("code") or ""),
-        name=str(body.get("name") or ""),
-        unit=_text_or_none(body.get("unit")),
-        data_type=str(body.get("data_type") or ""),
-    )
-
-
 def _source_of(row: object) -> dict[str, Any]:
     body = _as_body(row)
     return {
@@ -413,7 +359,6 @@ def _source_of(row: object) -> dict[str, Any]:
 
 
 def _dashboard_of(row: object) -> dict[str, Any]:
-    # 逐字段窄化的理由同 `_candidate_of`；名片只留认它与指路要用的四格
     body = _as_body(row)
     return {
         "id": body.get("id"),
@@ -540,18 +485,6 @@ def _as_body(row: object) -> dict[str, object]:
     # ⚠ 收窄一次而不是遍历重建：`isinstance` 从 `object` narrow 出来的是
     # `dict[Unknown, Unknown]`，遍历它的键值同样是未知的
     return cast("dict[str, object]", row)
-
-
-def _hit_of(hit: ScoredPoint) -> dict[str, Any]:
-    return {
-        "node_key": hit.point.node_key,
-        "code": hit.point.code,
-        "name": hit.point.name,
-        "unit": hit.point.unit,
-        "data_type": hit.point.data_type,
-        "score": hit.score,
-        "why": hit.why,
-    }
 
 
 def _limit_of(given: Any) -> int:

@@ -17,7 +17,7 @@ import { defineModule } from '../../registry'
 export default defineModule({
   type: 'twin-view',
   description:
-    '3D 数字孪生模块，用于在模型中呈现部件、锚点、信息牌、箭头和能量流。场景文档由孪生编辑器维护；属性面板仅配置标题及运行态工具，平面流程或接线图应选择 2D 孪生。六个实体钉定的数组绑定槽按归一化文档顺序关联数据，未绑定行不会改变后续实体索引。部件点击发送以稳定部件 id 为值的 `click` 事件。',
+    '3D 数字孪生模块，用于在模型中呈现部件、锚点、信息牌、箭头和能量流。场景文档由孪生编辑器维护；属性面板仅配置标题及运行态工具，平面流程或接线图应选择 2D 孪生。七个实体钉定的数组绑定槽按归一化文档顺序关联数据，未绑定行不会改变后续实体索引。部件点击发送以稳定部件 id 为值的 `click` 事件。',
   displayName: '数字孪生',
   category: '孪生',
   icon: 'building',
@@ -139,7 +139,7 @@ export default defineModule({
   ],
   // 点中部件时上抛 `{ event: 'click', value: 部件 id }`
   emitsInteractions: true,
-  // 六个实体钉定槽允许局部失败，不得遮住其余可用场景。
+  // 七个实体钉定槽允许局部失败，不得遮住其余可用场景。
   ownsStatusDisplay: true,
   // ⚠ `hostClickable` 刻意不开：3D 视口内部有拖拽手势，整块可点会让每次
   //   转完镜头松手都派发一次 click（清单里 `hostClickable` 的注释写了这条）

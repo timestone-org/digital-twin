@@ -18,6 +18,13 @@ import { computed, onBeforeUnmount, onMounted, provide, ref, watch } from 'vue'
 
 import { GroundGridLayer } from './groundGrid'
 import { GameNavigationControls } from './gameNavigationControls'
+import {
+  executePreviewAction,
+  previewTargetBox,
+  type TwinPreviewAction,
+} from './previewActions'
+import type { TwinSceneSelection } from './pickTargets'
+import { PreviewIsolation } from './previewIsolation'
 import { ModelAnimations } from './modelAnimations'
 import TwinPartModal from './TwinPartModal.vue'
 import TwinRoamControls from './TwinRoamControls.vue'
@@ -53,6 +60,10 @@ import {
 const props = defineProps<{
   /** ⚠ 必须是 `normalizeTwinConfig` 的输出：这里按引用比对，就地改字段不会重绘。 */
   config: TwinConfig
+  previewTarget?: TwinSceneSelection | null
+  previewAction?: TwinPreviewAction | null
+  /** 配置预览隔离的模型节点；缺省使用正常场景显隐。 */
+  previewNodes?: readonly string[] | undefined
   /**
    * 这一拍的六路实时值，`twinSceneValues` 缝出来的那一份；缺席的那几路补空引用。
    * ⚠ 收成一个 prop 而不是六个：它们本就是同一拍缝出来的一整份。
@@ -74,7 +85,11 @@ const props = defineProps<{
 }>()
 
 /** 点中了某个部件，且通过了距离门禁。 */
-const emit = defineEmits<{ partClick: [TwinPartClick] }>()
+const emit = defineEmits<{
+  partClick: [TwinPartClick]
+  previewResult: [string]
+  roamProgress: [{ segmentIndex: number; percent: number; playing: boolean }]
+}>()
 
 const containerRef = ref<HTMLDivElement | null>(null)
 
@@ -83,6 +98,9 @@ let layers: SceneLayers | null = null
 let groundGrid: GroundGridLayer | null = null
 let animations: ModelAnimations | null = null
 let gameNavigation: GameNavigationControls | null = null
+const isolation = new PreviewIsolation()
+let previewKey = ''
+let targetKey = ''
 let nodeIndex: NodeIndex = EMPTY_NODE_INDEX
 
 /** 模型包围盒对角线；相机、图层与剪裁面都按它定尺度。 */
@@ -104,14 +122,20 @@ const model = useTwinModelLoad({
   variant: () => props.config.model.variant,
   parts: () => props.config.parts,
   onReady: (asset, index) => {
+    isolation.restore()
+    targetKey = ''
+    previewKey = ''
     nodeIndex = index
     // 动画属于模型，换模型整层重建；只换配置走 refreshLayers 里的 apply
     animations?.dispose()
     animations = new ModelAnimations(asset.root, asset.clips)
-    animations.apply(props.config.model.animations)
+    animations.apply(props.config.model.animations, props.values?.animations)
     sceneCamera.applyInitial(asset.root)
     structure.rebuild()
     refreshLayers()
+    sceneCamera.applyView(props.focusView)
+    applyTargetPreview()
+    runPreviewAction()
     // ⚠ 换模型后弹窗里克隆的那份对象已经不在场上了：补这一下让它按新模型重建
     detail.sync(props.config.parts)
   },
@@ -213,7 +237,8 @@ const loop = useRenderLoop({
     flight.advance(deltaS * MS_PER_S)
     gameNavigation?.advance(deltaS)
     // ⚠ 每帧都要算：镜头一直在动，距离规则的成立与否随时在变
-    if (core !== null) layers?.applyDistanceRules(distanceContextOf(core))
+    if (core !== null && props.previewNodes === undefined)
+      layers?.applyDistanceRules(distanceContextOf(core))
   },
 })
 
@@ -229,14 +254,61 @@ const tintValues = computed(() => sceneValuesOf(props).parts)
 
 function refreshLayers(): void {
   if (core === null) return
+  isolation.restore()
   syncNavigationMode()
   // ⚠ 摆放要跟着配置重算：只在装载时应用的话，编辑器里改缩放/位移/旋转
   // 会一直到换模型才生效，中间那段是「调了没反应」
   placeModel()
-  animations?.apply(props.config.model.animations)
+  animations?.apply(props.config.model.animations, props.values?.animations)
   layers?.build(props.config, liveValues(), nodeIndex)
   // ⚠ 建完立刻按当前机位算一次：等下一帧的话，配了近距隐藏的元素会先露一帧
   layers?.applyDistanceRules(distanceContextOf(core))
+  applyPreview()
+  applyTargetPreview()
+}
+
+function applyPreview(): void {
+  const root = model.root()
+  if (root === null || core === null) return
+  const names = props.previewNodes
+  if (names === undefined) {
+    if (previewKey !== '') sceneCamera.applyInitial(root)
+    previewKey = ''
+    return
+  }
+  const box = isolation.apply(root, nodeIndex, names)
+  const key = JSON.stringify(names)
+  if (key !== previewKey && box !== null) flight.flyToBox(core, box)
+  previewKey = key
+}
+
+function applyTargetPreview(): void {
+  if (core === null || model.root() === null) return
+  const box = previewTargetBox(props.config, props.previewTarget, modelSpan())
+  if (box === null) {
+    targetKey = ''
+    return
+  }
+  const key = JSON.stringify([
+    props.previewTarget,
+    box.min.toArray(),
+    box.max.toArray(),
+  ])
+  if (key !== targetKey) flight.flyToBox(core, box)
+  targetKey = key
+}
+function runPreviewAction(): void {
+  executePreviewAction(props.previewAction, {
+    config: props.config,
+    core,
+    parts: layers?.parts ?? null,
+    ready: model.root() !== null,
+    near: onNearClick,
+    far: onFarClick,
+    detail: detail.open,
+    roam,
+    result: (message) => emit('previewResult', message),
+  })
 }
 
 /** 操作模式与模型自转共用 OrbitControls，任一变化都从这里对账。 */
@@ -301,6 +373,7 @@ function disposeLayers(): void {
 
 onBeforeUnmount(() => {
   // ⚠ 先让在途装载作废再释放：晚一步回来的那次会往已 dispose 的场景里挂模型
+  isolation.restore()
   model.abort()
   viewpoints.detach()
   flight.cancel()
@@ -314,10 +387,16 @@ onBeforeUnmount(() => {
 })
 
 watch(
-  () => props.config.model.asset,
+  [() => props.config.model.asset, () => props.config.model.variant],
   () => void model.load(),
 )
 watch(() => props.focusView, sceneCamera.applyView)
+watch(() => props.previewNodes, refreshLayers)
+watch(() => props.previewTarget, applyTargetPreview)
+watch(() => props.previewAction, runPreviewAction)
+watch([() => roam.progress.value, () => roam.playing.value], () =>
+  emit('roamProgress', { ...roam.progress.value, playing: roam.playing.value }),
+)
 watch(() => props.navigationMode, syncNavigationMode)
 watch(
   () => props.config,
@@ -329,6 +408,10 @@ watch(
   },
 )
 watch(liveValues, (values) => layers?.setValues(values))
+watch(
+  () => props.values?.animations,
+  (values) => animations?.apply(props.config.model.animations, values),
+)
 </script>
 
 <template>

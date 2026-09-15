@@ -8,11 +8,14 @@
 「领令牌」的口子；没接那个口子时这一路如实缺席，而不是装出一个点了报错的档位。
 """
 
-from ai_assistant.llm.ports import CODEX_EFFORTS
+from ai_assistant.llm.adapters.endpoint import model_for
+from ai_assistant.llm.ports import CODEX_EFFORTS, MODEL_KINDS
 from ai_assistant.settings import Settings
 from llmcore import (
+    EMPTY_CATALOG,
     MODEL_KIND_CHAT,
     CodexOAuthAdapter,
+    ModelCatalog,
     ProviderSpec,
     TokenSource,
     effort_of,
@@ -24,11 +27,14 @@ ORIGINATOR = "digitaltwin-assistant"
 
 
 def build_catalog_codex(
-    provider: ProviderSpec, settings: Settings, tokens: TokenSource | None
+    provider: ProviderSpec,
+    settings: Settings,
+    tokens: TokenSource | None,
+    catalog: ModelCatalog = EMPTY_CATALOG,
 ) -> CodexOAuthAdapter | None:
     """目录里的一路订阅账号。没接凭据面时给 `None`——那时令牌无处可领。
 
-    Args: provider, settings, tokens。
+    Args: provider, settings, tokens, catalog。
     """
     if tokens is None:
         return None
@@ -44,4 +50,9 @@ def build_catalog_codex(
         tokens=tokens,
         originator=ORIGINATOR,
         efforts=CODEX_EFFORTS,
+        models_by_kind={
+            kind: model.name
+            for kind in MODEL_KINDS
+            if (model := model_for(provider, kind, catalog)) is not None
+        },
     )

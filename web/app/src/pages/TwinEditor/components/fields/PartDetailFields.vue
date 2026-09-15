@@ -26,7 +26,9 @@ import {
   DtSelect,
   DtSwitch,
 } from '@dt/ui'
-import { computed } from 'vue'
+import { computed, inject } from 'vue'
+import { TWIN_PREVIEW_INTENT } from '../../scripts/previewIntent'
+const previewIntent = inject(TWIN_PREVIEW_INTENT, undefined)
 
 import { PANEL_VARIANT_OPTIONS } from '../../scripts/panelVariants'
 import PanelFieldList from './PanelFieldList.vue'
@@ -74,7 +76,7 @@ function writeFields(fields: TwinPanelField[]): void {
 </script>
 
 <template>
-  <div class="flex flex-col gap-3">
+  <div class="flex flex-col gap-3" @focusin="previewIntent?.('detail')">
     <DtInput
       :model-value="detail.title"
       label="标题"

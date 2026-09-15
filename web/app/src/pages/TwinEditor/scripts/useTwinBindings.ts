@@ -7,10 +7,11 @@
  */
 import type { BindingPayload, CollectPoint } from '@dt/contracts'
 import type { BindingValueReader } from '@dt/runtime'
-import type { SceneLayerValues } from '@dt/three-core'
-import type { TwinConfig } from '@dt/twin-config'
+import type { TwinSceneValues } from '@dt/twin-config'
+import { twinBindingRows, type TwinConfig } from '@dt/twin-config'
 import { computed, ref, type ComputedRef, type Ref } from 'vue'
 
+import { createBinding } from '@/features/dashboard/editorDoc'
 import type { ReadPointSample } from '@/runtime/bindingReader'
 
 import { createTwinBindingActions } from './twinBindingActions'
@@ -31,7 +32,7 @@ export interface TwinBindings {
   /** 弹窗的开关回传；关上时结束这一次挑点。 */
   closePicker: (isOpen: boolean) => void
   /** 缝合好的实时读数，喂给编辑视口；配置还没读出来时是 undefined。 */
-  liveValues: ComputedRef<SceneLayerValues | undefined>
+  liveValues: ComputedRef<TwinSceneValues | undefined>
   /** 取一个绑定读取器，运行态预览按它自己求值；每次求值都要重新调。 */
   readBinding: () => BindingValueReader
   /**
@@ -39,6 +40,38 @@ export interface TwinBindings {
    * ⚠ 助手的 `dashboard.read_values` 走它，与视口读的是同一份缓存。
    */
   readSample: ReadPointSample
+}
+
+/** 挑点完成后创建完整绑定；取消或已删除的行不落草稿。 */
+function applyPickedTwinPoint(
+  doc: TwinDoc | null,
+  nodeId: string,
+  fieldKey: string,
+  pointKey: string,
+): void {
+  if (doc === null) return
+  const current = doc.bindings.value.find((item) => item.fieldKey === fieldKey)
+  if (
+    current === undefined &&
+    !twinBindingRows(doc.config.value).some((row) => row.fieldKey === fieldKey)
+  )
+    return
+  const actions = createTwinBindingActions(doc, () => nodeId)
+  if (
+    current === undefined ||
+    current.sourceKind === 'static' ||
+    current.sourceKind === 'computed'
+  ) {
+    actions.write({
+      ...(current ?? createBinding(nodeId, fieldKey)),
+      sourceKind: 'opcua',
+      nodeKey: pointKey,
+      staticValueJson: null,
+      computeJson: null,
+    })
+    return
+  }
+  actions.applyPickedPoint(fieldKey, pointKey)
 }
 
 /**
@@ -79,7 +112,7 @@ export function useTwinBindings(
       const fieldKey = pickingFieldKey.value
       pickingFieldKey.value = null
       if (fieldKey === null) return
-      actions.value?.applyPickedPoint(fieldKey, point.node_key)
+      applyPickedTwinPoint(doc(), nodeId(), fieldKey, point.node_key)
     },
     closePicker: (isOpen) => {
       if (!isOpen) pickingFieldKey.value = null

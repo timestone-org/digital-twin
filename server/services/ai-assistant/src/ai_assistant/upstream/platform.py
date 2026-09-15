@@ -21,6 +21,7 @@ import httpx
 from pydantic import BaseModel, ValidationError
 
 from ai_assistant.upstream.identity import DelegatedIdentity
+from ai_assistant.upstream.point_matches import PointMatches
 from lib.errors import DependencyUnavailable
 from lib.logging import current_traceparent, get_logger
 
@@ -104,9 +105,6 @@ class PlatformClient:
     ) -> list[object]:
         """按关键词与数据源翻一页点位。
 
-        ⚠ 后端那侧的 `q` 只对**名字与编码**做子串匹配，且永远是顺序扫描。
-        真正的挑选在助手侧做（见 `tools/points/recall.py`），这里只负责取。
-
         Args: headers, keyword, source_id, page。
         """
         query: dict[str, Any] = {"page": page, "size": self._page_size}
@@ -115,6 +113,34 @@ class PlatformClient:
         if source_id:
             query["source_id"] = source_id
         return _items_of(await self._get(_POINTS, query, headers))
+
+    async def match_points(
+        self,
+        headers: dict[str, str],
+        *,
+        keyword: str,
+        source_id: str | None = None,
+        limit: int = 6,
+    ) -> PointMatches:
+        """读取平台语义候选并校验响应。
+
+        Args: headers, keyword, source_id, limit。
+        """
+        query: dict[str, object] = {"q": keyword, "limit": limit}
+        if source_id:
+            query["source_id"] = source_id
+        # ⚠ 平台嵌入最长8秒，另留目录和数据库查询预算；普通业务请求仍用原超时。
+        body = await self._call(
+            "GET",
+            "/api/v1/platform/collect-point-matches",
+            headers,
+            params=query,
+            timeout=15.0,
+        )
+        try:
+            return PointMatches.model_validate(body)
+        except ValidationError as error:
+            raise PlatformUnavailable("平台点位检索响应格式不正确") from error
 
     async def list_module_types(self, headers: dict[str, str]) -> object:
         """取整份模块清单。

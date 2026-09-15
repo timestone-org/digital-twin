@@ -184,10 +184,10 @@ describe('时长用秒不用毫秒', () => {
   })
 })
 
-describe('预览这条轨迹', () => {
+describe('预览漫游', () => {
   it('站点够了才点得动，点了发预览', async () => {
     const wrapper = mountInspector(makeTour({ items: ['c1', 'c2'] }))
-    const button = buttonByText(wrapper, '预览这条轨迹')
+    const button = buttonByText(wrapper, '预览漫游')
 
     await button.trigger('click')
 
@@ -198,7 +198,7 @@ describe('预览这条轨迹', () => {
     const wrapper = mountInspector(makeTour({ items: ['c1'] }))
 
     expect(
-      buttonByText(wrapper, '预览这条轨迹').attributes('disabled'),
+      buttonByText(wrapper, '预览漫游').attributes('disabled'),
     ).toBeDefined()
     expect(wrapper.text()).toContain('可用的站点还不够')
   })

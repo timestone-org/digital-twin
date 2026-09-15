@@ -4,9 +4,10 @@
  * 退化成「只能按关键字搜」，而不是把整个面板堵死。
  */
 import { afterEach, describe, expect, it, vi } from 'vitest'
-import type { Page } from '@dt/contracts'
+import type { Page, PointMatchesOut, PointMatchOut } from '@dt/contracts'
 
 import * as collectApi from '@/api/collect'
+import * as searchApi from '@/api/collectSearch'
 import type { CollectPoint, CollectSource } from '@dt/contracts'
 import { BizError } from '@/api/client'
 import { usePointPicker } from '@/composables/usePointPicker'
@@ -223,5 +224,139 @@ describe('列没列全', () => {
     await picker.search()
 
     expect(picker.hasMore.value).toBe(false)
+  })
+})
+
+function match(code = 'temp'): PointMatchOut {
+  return {
+    id: code,
+    node_key: `s1:${code}`,
+    code,
+    name: '余热水箱测温',
+    source_id: 's1',
+    source_name: '能源站',
+    description: '余热回收水箱温度',
+    unit: '℃',
+    is_enabled: true,
+    is_exact: false,
+    score: 0.9,
+  }
+}
+function matches(code = 'temp'): PointMatchesOut {
+  return { items: [match(code)], mode: 'hybrid', pending_count: 0 }
+}
+
+describe('语义搜索与候选核对', () => {
+  it('传递自然语言与数据源，返回相关性候选而不伪造总数', async () => {
+    const search = vi
+      .spyOn(searchApi, 'searchCollectPoints')
+      .mockResolvedValue({
+        ...matches(),
+        pending_count: 3,
+        note: '有3个点位正在等待语义索引',
+      })
+    const picker = usePointPicker(true)
+    picker.keyword.value = '  水箱温度  '
+    picker.sourceId.value = 's1'
+    await picker.search()
+    expect(search).toHaveBeenCalledWith(
+      '水箱温度',
+      's1',
+      expect.any(AbortSignal),
+    )
+    expect(picker.matches.value?.pending_count).toBe(3)
+    expect(picker.matches.value?.note).toContain('等待语义索引')
+    expect(picker.hasMore.value).toBe(false)
+  })
+
+  it('空输入走列表；切回关键词时旧语义响应不覆盖列表', async () => {
+    const slow = deferred<PointMatchesOut>()
+    vi.spyOn(searchApi, 'searchCollectPoints').mockReturnValue(slow.promise)
+    vi.spyOn(collectApi, 'listPoints').mockResolvedValue(page([point('new')]))
+    const picker = usePointPicker(true)
+    picker.keyword.value = '水箱温度'
+    const first = picker.search()
+    picker.keyword.value = '  '
+    await picker.search()
+    slow.resolve(matches('old'))
+    await first
+    expect(picker.matches.value).toBeNull()
+    expect(picker.items.value[0]?.code).toBe('new')
+  })
+
+  it('乱序语义响应不能覆盖最近结果与状态', async () => {
+    const slow = deferred<PointMatchesOut>()
+    vi.spyOn(searchApi, 'searchCollectPoints')
+      .mockReturnValueOnce(slow.promise)
+      .mockResolvedValueOnce(matches('new'))
+    const picker = usePointPicker(true)
+    picker.keyword.value = '旧设备'
+    const first = picker.search()
+    picker.keyword.value = '新设备'
+    await picker.search()
+    slow.resolve({ ...matches('old'), mode: 'keyword', note: '旧请求降级' })
+    await first
+    expect(picker.matches.value?.items[0]?.code).toBe('new')
+    expect(picker.matches.value?.mode).toBe('hybrid')
+  })
+
+  it('超长输入显示明确原因，不请求模型', async () => {
+    const search = vi.spyOn(searchApi, 'searchCollectPoints')
+    const picker = usePointPicker(true)
+    picker.keyword.value = '温'.repeat(301)
+    await picker.search()
+    expect(picker.error.value).toBe('点位描述请控制在300字以内')
+    expect(search).not.toHaveBeenCalled()
+  })
+
+  it('搜索被拒绝时清空候选并展示原因', async () => {
+    vi.spyOn(searchApi, 'searchCollectPoints')
+      .mockResolvedValueOnce(matches())
+      .mockRejectedValueOnce(new BizError(40300, '没有权限', 403, 't'))
+    const picker = usePointPicker(true)
+    picker.keyword.value = '温度'
+    await picker.search()
+    await picker.search()
+    expect(picker.matches.value).toBeNull()
+    expect(picker.error.value).toBe('没有权限')
+  })
+
+  it('核对完整配置时跳过相似编码并继续翻页精确匹配身份', async () => {
+    vi.spyOn(collectApi, 'listPoints')
+      .mockResolvedValueOnce({ ...page([point('temp1')], 201), size: 200 })
+      .mockResolvedValueOnce({
+        ...page([point('temp')], 201),
+        page: 2,
+        size: 200,
+      })
+    const picker = usePointPicker(true)
+    expect(await picker.resolve(match())).toEqual(point('temp'))
+    expect(collectApi.listPoints).toHaveBeenLastCalledWith(
+      expect.objectContaining({ page: 2, sourceId: 's1', q: 'temp' }),
+      expect.any(AbortSignal),
+    )
+  })
+
+  it('候选已删除时不回填相似点位', async () => {
+    vi.spyOn(collectApi, 'listPoints').mockResolvedValue(page([point('temp1')]))
+    const picker = usePointPicker(true)
+    expect(await picker.resolve(match())).toBeNull()
+    expect(picker.error.value).toBe('点位已不存在，请重新搜索')
+  })
+
+  it.each(['关闭', '重搜'])('%s时取消在途选择，不回填绑定', async (action) => {
+    const pending = deferred<Page<CollectPoint>>()
+    vi.spyOn(collectApi, 'listPoints')
+      .mockReturnValueOnce(pending.promise)
+      .mockResolvedValue(page([]))
+    const picker = usePointPicker(true)
+    const selection = picker.resolve(match())
+    expect(picker.selecting.value).toBe(true)
+    if (action === '关闭') picker.dispose()
+    else await picker.search()
+    pending.resolve(page([point('temp')]))
+    expect(await selection).toBeNull()
+    expect(picker.selecting.value).toBe(false)
+    expect(picker.error.value).toBeNull()
   })
 })

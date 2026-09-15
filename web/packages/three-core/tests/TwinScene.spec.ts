@@ -1161,3 +1161,174 @@ describe('远近两档的点击动作', () => {
     wrapper.unmount()
   })
 })
+
+describe('配置预览', () => {
+  it('加载完成仍隔离当前节点，退出隔离恢复整个模型', async () => {
+    const root = fakeModel('pump')
+    const wall = new THREE.Mesh(
+      new THREE.BoxGeometry(),
+      new THREE.MeshStandardMaterial(),
+    )
+    wall.name = 'wall'
+    root.add(wall)
+    const loaded = deferred<TwinModelAsset>()
+    seam.loadTwinModel.mockReturnValue(loaded.promise)
+    const wrapper = mountScene({ previewNodes: ['pump'] })
+    loaded.settle(assetOf(root))
+    await flushPromises()
+    expect(wall.visible).toBe(false)
+    expect(root.getObjectByName('pump')?.visible).toBe(true)
+    await wrapper.setProps({ previewNodes: undefined })
+    expect(wall.visible).toBe(true)
+    wrapper.unmount()
+  })
+  it('切换画质档重新加载模型', async () => {
+    const wrapper = mountScene()
+    await flushPromises()
+    const next = config()
+    await wrapper.setProps({
+      config: { ...next, model: { ...next.model, variant: 'high' } },
+    })
+    await flushPromises()
+    expect(seam.loadTwinModel).toHaveBeenCalledTimes(2)
+    wrapper.unmount()
+  })
+})
+
+it('调整外观不重新加载模型或重置动画', async () => {
+  const current = config()
+  const wrapper = mountScene({ config: current })
+  await flushPromises()
+  await wrapper.setProps({
+    config: { ...current, model: { ...current.model, background: '#123456' } },
+  })
+  await flushPromises()
+  expect(seam.loadTwinModel).toHaveBeenCalledTimes(1)
+  wrapper.unmount()
+})
+
+it('配置动作可打开真实详情，近距预演发事件，缺失分界给出说明', async () => {
+  const wrapper = mountScene()
+  await flushPromises()
+  await wrapper.setProps({
+    previewAction: { sequence: 1, partId: 'part-pump', kind: 'near' },
+  })
+  expect(wrapper.emitted('partClick')?.[0]).toEqual([
+    { partId: 'part-pump', partName: '泵' },
+  ])
+  await wrapper.setProps({
+    previewAction: { sequence: 2, partId: 'part-pump', kind: 'far' },
+  })
+  expect(wrapper.emitted('previewResult')?.flat().join(' ')).toContain(
+    '未配置远近分界',
+  )
+  await wrapper.setProps({
+    previewAction: { sequence: 3, partId: 'part-pump', kind: 'detail' },
+  })
+  expect(document.body.querySelector('[role="dialog"]')?.textContent).toContain(
+    '泵',
+  )
+  wrapper.unmount()
+})
+it('按当前视距测试沿用点击距离门禁', async () => {
+  const current = config({
+    parts: [
+      {
+        id: 'part-pump',
+        name: '泵',
+        nodes: ['pump'],
+        clickDistance: { min: { ref: 'orbit', value: 100000 } },
+      },
+    ],
+  })
+  const wrapper = mountScene({ config: current })
+  await flushPromises()
+  await wrapper.setProps({
+    previewAction: { sequence: 1, partId: 'part-pump', kind: 'click' },
+  })
+  expect(wrapper.emitted('partClick')).toBeUndefined()
+  expect(wrapper.emitted('previewResult')?.flat()).toContain(
+    '当前视距被点击距离限制拦截',
+  )
+  wrapper.unmount()
+})
+it('点击预览按近距配置弹详情，远距关闭和指定视点均有结果', async () => {
+  const current = config({
+    cameras: [{ id: 'c', position: [10, 10, 10] }],
+    parts: [
+      {
+        id: 'part-pump',
+        name: '泵',
+        nodes: ['pump'],
+        click: { near: 'detail', far: 'view', cameraId: 'c' },
+        clickDistance: { farThreshold: { ref: 'orbit', value: 100000 } },
+      },
+    ],
+  })
+  const wrapper = mountScene({ config: current })
+  await flushPromises()
+  await wrapper.setProps({
+    previewAction: { sequence: 1, partId: 'part-pump', kind: 'click' },
+  })
+  expect(wrapper.emitted('previewResult')?.flat()).toContain(
+    '近距动作：打开部件详情',
+  )
+  await wrapper.setProps({
+    previewAction: { sequence: 2, partId: 'part-pump', kind: 'far' },
+  })
+  expect(wrapper.emitted('previewResult')?.flat()).toContain(
+    '远距动作：飞到指定取景',
+  )
+  await wrapper.setProps({
+    config: config({
+      parts: [
+        {
+          id: 'part-pump',
+          nodes: ['pump'],
+          click: { far: 'none' },
+          clickDistance: { farThreshold: { ref: 'orbit', value: 1 } },
+        },
+      ],
+    }),
+    previewAction: { sequence: 3, partId: 'part-pump', kind: 'far' },
+  })
+  expect(wrapper.emitted('previewResult')?.flat()).toContain('远距动作：不响应')
+  await wrapper.setProps({
+    previewAction: { sequence: 4, partId: 'missing', kind: 'detail' },
+  })
+  expect(wrapper.emitted('previewResult')?.flat()).toContain(
+    '模型尚未就绪或部件已不存在',
+  )
+  wrapper.unmount()
+})
+it('模型未加载时漫游请求等待就绪，暂停命令可取消播放', async () => {
+  const loaded = deferred<TwinModelAsset>()
+  seam.loadTwinModel.mockReturnValue(loaded.promise)
+  const wrapper = mountScene({
+    config: config({
+      cameras: [
+        { id: 'a', position: [10, 0, 0] },
+        { id: 'b', position: [0, 10, 0] },
+      ],
+      roamTour: { enabled: true, items: ['a', 'b'] },
+    }),
+  })
+  await wrapper.setProps({
+    previewAction: { sequence: 1, partId: '', kind: 'roam-play' },
+  })
+  expect(wrapper.emitted('previewResult')?.flat()).toContain(
+    '模型加载完成后开始漫游预览',
+  )
+  loaded.settle(assetOf(fakeModel()))
+  await flushPromises()
+  expect(wrapper.emitted('roamProgress')?.at(-1)).toEqual([
+    { segmentIndex: 0, percent: 0, playing: true },
+  ])
+  await wrapper.setProps({
+    previewAction: { sequence: 2, partId: '', kind: 'roam-stop' },
+  })
+  expect(wrapper.emitted('roamProgress')?.at(-1)).toEqual([
+    { segmentIndex: 0, percent: 0, playing: false },
+  ])
+  wrapper.unmount()
+})

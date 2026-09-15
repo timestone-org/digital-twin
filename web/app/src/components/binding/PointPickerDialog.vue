@@ -1,11 +1,5 @@
 <script setup lang="ts">
-/**
- * @fileoverview 挑点位的弹窗：按数据源与关键字搜采集点位，选中的写回绑定。
- * ⚠ 关键字连着敲会连着发请求，取数在 `usePointPicker` 里防了竞态；
- * 这里只负责在打开时搜一次、关闭时把在途请求掐掉。
- * ⚠ 一页只列得下前几个，列不全时必须把总数说出来：不说的话，用户会以为
- * 看到的就是全部，然后在清单里找一个明明存在的点位怎么也找不到。
- */
+/** @fileoverview 配置点位选择弹窗：自然语言检索、数据源筛选与绑定回填。 */
 import {
   DtButton,
   DtEmpty,
@@ -15,11 +9,13 @@ import {
   DtNotice,
   DtSelect,
   DtSpinner,
-  DtTag,
+  DtSwitch,
 } from '@dt/ui'
-import { onUnmounted, watch } from 'vue'
+import { computed, onUnmounted, watch } from 'vue'
 
-import type { CollectPoint } from '@dt/contracts'
+import PointPickerItem from './PointPickerItem.vue'
+
+import type { CollectPoint, PointMatchOut } from '@dt/contracts'
 import {
   POINT_PICKER_PAGE_SIZE,
   usePointPicker,
@@ -44,7 +40,10 @@ const emit = defineEmits<{
   pick: [point: CollectPoint]
 }>()
 
-const picker = usePointPicker()
+const picker = usePointPicker(true)
+const candidates = computed(
+  () => picker.matches.value?.items ?? picker.items.value,
+)
 
 watch(
   () => props.modelValue,
@@ -67,8 +66,10 @@ function onSource(value: string): void {
   void picker.search()
 }
 
-function choose(point: CollectPoint): void {
-  emit('pick', point)
+async function choose(point: CollectPoint | PointMatchOut): Promise<void> {
+  const selected = await picker.resolve(point)
+  if (selected === null) return
+  emit('pick', selected)
   emit('update:modelValue', false)
 }
 </script>
@@ -83,24 +84,48 @@ function choose(point: CollectPoint): void {
     @update:model-value="emit('update:modelValue', $event)"
   >
     <div class="flex max-h-96 flex-col gap-3">
-      <div class="flex gap-2">
+      <div class="flex flex-wrap items-center gap-2">
+        <DtSwitch
+          v-model="picker.semantic.value"
+          size="sm"
+          label="智能检索"
+          @update:model-value="picker.search()"
+        />
+        <span class="text-xs text-text-secondary"
+          >支持设备、位置和测量量描述，例如“余热回收水箱温度”</span
+        >
+      </div>
+      <div class="flex flex-wrap gap-2">
         <DtSelect
           :model-value="picker.sourceId.value"
           :options="picker.sourceOptions.value"
           size="sm"
           aria-label="数据源"
-          class="w-56 shrink-0"
+          class="w-44 max-w-full"
           @update:model-value="onSource"
         />
         <DtInput
           v-model="picker.keyword.value"
           size="sm"
-          class="flex-1"
-          placeholder="按名称或编码搜索"
+          class="min-w-48 flex-1"
+          aria-label="搜索点位"
+          :maxlength="picker.semantic.value ? 300 : undefined"
+          :placeholder="
+            picker.semantic.value
+              ? '描述要找的点位，回车搜索'
+              : '按名称或编码搜索'
+          "
           @enter="picker.search()"
         >
           <template #leading><DtIcon name="search" :size="14" /></template>
         </DtInput>
+        <DtButton
+          size="sm"
+          icon="search"
+          :loading="picker.loading.value"
+          @click="picker.search()"
+          >搜索</DtButton
+        >
       </div>
 
       <DtNotice
@@ -108,36 +133,42 @@ function choose(point: CollectPoint): void {
         intent="warning"
         icon="alert-circle"
       >
-        数据源清单没取到（{{ picker.sourceError.value }}），只能按关键字搜。
+        数据源清单没取到（{{ picker.sourceError.value }}），仍可搜索点位。
       </DtNotice>
 
+      <DtNotice
+        v-if="picker.matches.value?.note"
+        intent="warning"
+        icon="alert-circle"
+      >
+        {{ picker.matches.value.note }}
+      </DtNotice>
+      <p v-if="picker.matches.value" class="text-xs text-text-secondary">
+        {{
+          picker.matches.value.mode === 'hybrid'
+            ? '已结合语义与关键词检索'
+            : '本次按关键词检索'
+        }}，按相关性显示候选；请核对名称、编码与数据源。
+      </p>
       <DtNotice v-if="picker.error.value" intent="danger" icon="alert-triangle">
         {{ picker.error.value }}
       </DtNotice>
       <DtSpinner v-else-if="picker.loading.value" />
       <DtEmpty
-        v-else-if="picker.items.value.length === 0"
+        v-else-if="candidates.length === 0"
         icon="search"
         title="没有匹配的点位"
-        hint="换个关键字试试"
+        hint="试试设备名、位置、测量量或准确编码"
       />
       <div v-else class="flex min-h-0 flex-1 flex-col gap-1 overflow-y-auto">
-        <button
-          v-for="point in picker.items.value"
+        <PointPickerItem
+          v-for="point in candidates"
           :key="point.id"
-          type="button"
-          class="dt-pick__item"
-          @click="choose(point)"
-        >
-          <span class="flex-1 truncate">{{ point.name }}</span>
-          <span
-            v-if="picker.sourceName(point.source_id) !== ''"
-            class="dt-pick__source"
-          >
-            {{ picker.sourceName(point.source_id) }}
-          </span>
-          <DtTag size="sm" intent="neutral">{{ point.code }}</DtTag>
-        </button>
+          :point="point"
+          :source-name="picker.sourceName(point.source_id)"
+          :disabled="picker.selecting.value"
+          @pick="choose(point)"
+        />
       </div>
 
       <p v-if="picker.hasMore.value" class="dt-pick__more">
@@ -155,32 +186,6 @@ function choose(point: CollectPoint): void {
 </template>
 
 <style scoped lang="scss">
-.dt-pick__item {
-  display: flex;
-  gap: 8px;
-  align-items: center;
-  padding: 6px 8px;
-  border: 1px solid var(--border-subtle);
-  border-radius: var(--radius-sm);
-  background: var(--surface-panel);
-  color: var(--text-primary);
-  text-align: left;
-  cursor: pointer;
-
-  &:hover {
-    border-color: var(--accent-primary);
-  }
-}
-
-.dt-pick__source {
-  flex-shrink: 0;
-  max-width: 10rem;
-  overflow: hidden;
-  white-space: nowrap;
-  text-overflow: ellipsis;
-  color: var(--text-secondary);
-}
-
 .dt-pick__more {
   color: var(--text-secondary);
 }

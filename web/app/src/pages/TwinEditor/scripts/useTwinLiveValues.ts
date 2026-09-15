@@ -9,7 +9,7 @@
  * 草稿它看不见。所以刚绑上的点位在保存之前一直是占位符（绑定页上已摆明）。
  */
 import type { BindingPayload } from '@dt/contracts'
-import type { SceneLayerValues } from '@dt/three-core'
+import type { TwinSceneValues } from '@dt/twin-config'
 import { computeModuleValues, type BindingValueReader } from '@dt/runtime'
 import {
   TWIN_VIEW_BINDINGS,
@@ -29,7 +29,7 @@ import { createPointSubscribe } from '@/runtime/pointStream'
 
 export interface TwinLiveValues {
   /** 缝合好的五路场景值；配置还没读出来时是 undefined。 */
-  scene: ComputedRef<SceneLayerValues | undefined>
+  scene: ComputedRef<TwinSceneValues | undefined>
   /**
    * 取一个绑定读取器。
    * ⚠ 每次求值都要重新调它：对快照缓存的响应式依赖由那一次调用建立，
@@ -57,8 +57,9 @@ export function useTwinLiveValues(
 ): TwinLiveValues {
   // ⚠ 历史序列不注入：编辑视口上没有任何时序图元，注了也没人读，
   //   而注一个取不到数的通道只会在诊断时多一条假线索
+  const channel = useRealtimeChannel()
   installDashboardDataSources({
-    subscribe: createPointSubscribe(useRealtimeChannel(), () => {
+    subscribe: createPointSubscribe(channel, () => {
       const id = dashboardId()
       return id === '' ? null : dashboardTopic(id)
     }),
@@ -69,8 +70,16 @@ export function useTwinLiveValues(
     dashboardId,
   )
 
-  const readBinding = (): BindingValueReader =>
-    createBindingReader(samples.read)
+  const readBinding = (): BindingValueReader => {
+    const read = createBindingReader(samples.read)
+    const disconnected =
+      channel.connectionState?.value !== undefined &&
+      channel.connectionState.value !== 'open'
+    return (binding, siblings) =>
+      binding.sourceKind === 'opcua' && disconnected
+        ? { state: 'error', message: '实时连接已断开，数据可能过期' }
+        : read(binding, siblings)
+  }
 
   // ⚠ 在 computed 里调用读取器：对快照缓存的响应式依赖由这次调用建立
   const values = computed(
@@ -86,13 +95,7 @@ export function useTwinLiveValues(
     const current = config()
     if (current === null) return undefined
     const stitched = twinSceneValues(current, values.value)
-    return {
-      parts: stitched.parts,
-      anchors: stitched.anchors,
-      arrows: stitched.arrows,
-      panels: stitched.panels,
-      flows: stitched.flows,
-    }
+    return stitched
   })
 
   return { scene, readBinding, read: samples.read }

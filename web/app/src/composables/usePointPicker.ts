@@ -1,82 +1,38 @@
-/**
- * @fileoverview 绑点面板的挑点状态：按关键字与数据源找采集点位。
- * ⚠ 关键字是被连着敲出来的，每一次都会发一个请求——不防竞态的话，
- * 先发后回的那次会把结果覆盖成上一个关键字的，且没有任何报错。
- * ⚠ 数据源清单只用来筛选与认人，取不到也不该挡住挑点：那时退化成
- * 「只能按关键字搜」，而不是整个面板空着。
- */
-
-import { computed, ref, type ComputedRef, type Ref } from 'vue'
-
-import type { CollectPoint, CollectSource, DtSelectOption } from '@dt/contracts'
-
-import { listPoints, listSources, type PointQuery } from '@/api/collect'
+/** @fileoverview 配置挑点状态：关键词列表与助手同源的语义候选，统一防竞态。 */
+import { computed, ref, type Ref } from 'vue'
+import type {
+  CollectPoint,
+  CollectSource,
+  DtSelectOption,
+  Page,
+  PointMatchesOut,
+  PointMatchOut,
+} from '@dt/contracts'
+import { BizError } from '@/api/client'
+import { listPoints, listSources } from '@/api/collect'
+import { searchCollectPoints, resolveCollectPoint } from '@/api/collectSearch'
 import { describeError } from '@/composables/useAsyncList'
-import { useRacedFetch } from '@/composables/useRacedFetch'
+import { useRacedFetch, type RacedFetch } from '@/composables/useRacedFetch'
 import { protocolLabel } from '@/features/collect/protocols'
 
-/**
- * 一次最多列这么多点位；再多就该靠关键字缩小范围。
- * ⚠ 导出是为了让界面能把「只列了前几个」说成一个具体的数：写成两份字面量时，
- * 改了这里而没改那句话，提示语会开始骗人。
- */
 export const POINT_PICKER_PAGE_SIZE = 50
-
-/** 数据源是业务级别的数量，一次拉够，不值得为它做翻页。 */
 const SOURCE_PAGE_SIZE = 200
-
-/** 数据源筛选里的「不限」那一档。 */
 export const ANY_SOURCE = ''
+export type PointPicker = ReturnType<typeof usePointPicker>
 
-export interface PointPicker {
-  keyword: Ref<string>
-  sourceId: Ref<string>
-  items: Ref<CollectPoint[]>
-  /**
-   * 符合条件的点位一共有多少个。
-   * ⚠ 它与 `items.length` 不是一回事：一页只列 `POINT_PICKER_PAGE_SIZE` 个，
-   * 两者对不上就是「还有没列出来的」。不摆出这个数，用户会以为看到的就是全部，
-   * 在清单里找一个明明存在的点位，怎么也找不到。
-   */
-  total: Ref<number>
-  /** 这一页有没有列全。 */
-  hasMore: ComputedRef<boolean>
-  loading: Ref<boolean>
-  error: Ref<string | null>
-  /** 数据源筛选的档位：「全部数据源」加每个源一档，档上带它跑的协议。 */
-  sourceOptions: ComputedRef<DtSelectOption[]>
-  /** 数据源清单没取到的原因；取到了是 null。 */
-  sourceError: Ref<string | null>
-  /** 按当前关键字与数据源重新找。 */
-  search: () => Promise<void>
-  /** 拉一次数据源清单：筛选与结果行上的归属都靠它。 */
-  loadSources: () => Promise<void>
-  /** 一个点位归哪个数据源；清单里没有这个源时给空串。 */
-  sourceName: (sourceId: string) => string
-  /** 卸载时掐掉在途请求。 */
-  dispose: () => void
-}
-
-/**
- * 数据源那一半：筛选的档位、结果行上的归属，以及拉不到时的原因。
- * ⚠ 与点位搜索分开：数据源清单是筛选与认人用的，不是挑点的前置条件，
- * 它失败时只该退化成「只能按关键字搜」。
- */
+/** 数据源筛选与名称；清单失败不阻断点位搜索。 */
 function useSourceList() {
   const sources = ref<readonly CollectSource[]>([])
   const sourceError = ref<string | null>(null)
-
   async function loadSources(): Promise<void> {
     sourceError.value = null
     try {
-      const page = await listSources({ size: SOURCE_PAGE_SIZE })
-      sources.value = page.items
+      sources.value = (await listSources({ size: SOURCE_PAGE_SIZE })).items
     } catch (caught) {
       sources.value = []
       sourceError.value = describeError(caught)
     }
   }
-
   return {
     sourceError,
     loadSources,
@@ -84,8 +40,6 @@ function useSourceList() {
       { value: ANY_SOURCE, label: '全部数据源' },
       ...sources.value.map((one) => ({
         value: one.id,
-        // 协议摆在档位上：以后同一套面板里会同时躺着几种协议的数据源，
-        // 只写名字的话，「这个源到底是从哪读的」就没地方看了
         label: `${one.name} · ${protocolLabel(one.protocol)}`,
       })),
     ]),
@@ -94,64 +48,114 @@ function useSourceList() {
   }
 }
 
-/**
- * 当前筛选条件 → 列点位的查询面。
- * ⚠ 没填的档一律给 `undefined`：把空串传下去是「筛一个叫空串的数据源」，
- * 后端老实照办，界面上表现为「一个点位都搜不到」而不是一个报错。
- * @param keyword 关键字
- * @param sourceId 数据源；`ANY_SOURCE` 表示不筛
- */
-function pointQuery(keyword: string, sourceId: string): PointQuery {
-  const trimmed = keyword.trim()
+function searchState(initialSemantic: boolean) {
   return {
-    q: trimmed === '' ? undefined : trimmed,
-    sourceId: sourceId === ANY_SOURCE ? undefined : sourceId,
-    page: 1,
-    size: POINT_PICKER_PAGE_SIZE,
+    semantic: ref(initialSemantic),
+    keyword: ref(''),
+    sourceId: ref(ANY_SOURCE),
+    matches: ref<PointMatchesOut | null>(null),
+    items: ref<CollectPoint[]>([]),
+    total: ref(0),
+    loading: ref(false),
+    error: ref<string | null>(null),
+  }
+}
+type SearchState = ReturnType<typeof searchState>
+
+/** 非空描述走语义检索，空查询仍浏览点位列表。 */
+function fetchPoints(
+  state: SearchState,
+  signal: AbortSignal,
+): Promise<Page<CollectPoint> | PointMatchesOut> {
+  const q = state.keyword.value.trim() || undefined
+  const sourceId = state.sourceId.value || undefined
+  if (state.semantic.value && q) {
+    if (q.length > 300)
+      throw new BizError(40001, '点位描述请控制在300字以内', 400, '')
+    return searchCollectPoints(q, sourceId, signal)
+  }
+  return listPoints(
+    { q, sourceId, page: 1, size: POINT_PICKER_PAGE_SIZE },
+    signal,
+  )
+}
+
+async function search(state: SearchState, raced: RacedFetch): Promise<void> {
+  state.loading.value = true
+  state.error.value = null
+  state.matches.value = null
+  state.total.value = 0
+  await raced.run((signal) => fetchPoints(state, signal), {
+    ok: (page) => {
+      if ('mode' in page) {
+        state.matches.value = page
+        state.items.value = []
+      } else {
+        state.items.value = page.items
+        state.total.value = page.total
+      }
+    },
+    fail: (caught) => {
+      state.error.value = describeError(caught)
+      state.items.value = []
+    },
+    settled: () => {
+      state.loading.value = false
+    },
+  })
+}
+
+/** 选中候选时读取真实配置；关闭或重搜后不再回填。 */
+function usePointSelection(error: Ref<string | null>) {
+  const selecting = ref(false)
+  const raced = useRacedFetch()
+  async function resolve(
+    point: CollectPoint | PointMatchOut,
+  ): Promise<CollectPoint | null> {
+    if ('address' in point) return point
+    selecting.value = true
+    error.value = null
+    let selected: CollectPoint | null = null
+    await raced.run((signal) => resolveCollectPoint(point, signal), {
+      ok: (result) => {
+        selected = result
+      },
+      fail: (caught) => {
+        error.value = describeError(caught)
+      },
+      settled: () => {
+        selecting.value = false
+      },
+    })
+    return selected
+  }
+  return {
+    selecting,
+    resolve,
+    cancel: () => {
+      raced.cancel()
+      selecting.value = false
+    },
   }
 }
 
-export function usePointPicker(): PointPicker {
-  const keyword = ref('')
-  const sourceId = ref(ANY_SOURCE)
-  const items = ref<CollectPoint[]>([])
-  const total = ref(0)
-  const loading = ref(false)
-  const error = ref<string | null>(null)
-
+export function usePointPicker(initialSemantic = false) {
+  const state = searchState(initialSemantic)
   const raced = useRacedFetch()
-  const sourceList = useSourceList()
-
-  async function search(): Promise<void> {
-    loading.value = true
-    error.value = null
-    await raced.run(
-      (signal) => listPoints(pointQuery(keyword.value, sourceId.value), signal),
-      {
-        ok: (page) => {
-          items.value = page.items
-          total.value = page.total
-        },
-        fail: (caught) => {
-          error.value = describeError(caught)
-          items.value = []
-          total.value = 0
-        },
-        settled: () => (loading.value = false),
-      },
-    )
-  }
-
+  const selection = usePointSelection(state.error)
   return {
-    keyword,
-    sourceId,
-    items,
-    total,
-    hasMore: computed(() => total.value > items.value.length),
-    loading,
-    error,
-    search,
-    dispose: raced.cancel,
-    ...sourceList,
+    ...state,
+    ...useSourceList(),
+    selecting: selection.selecting,
+    resolve: selection.resolve,
+    hasMore: computed(() => state.total.value > state.items.value.length),
+    search: () => {
+      selection.cancel()
+      return search(state, raced)
+    },
+    dispose: () => {
+      raced.cancel()
+      selection.cancel()
+    },
   }
 }

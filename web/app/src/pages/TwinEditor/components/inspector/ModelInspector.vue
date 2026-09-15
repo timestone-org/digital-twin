@@ -237,10 +237,13 @@ function toggleBackground(opaque: boolean): void {
       </p>
     </InspectorSection>
 
-    <InspectorSection title="内置动画">
+    <InspectorSection title="动画缺省行为">
+      <p class="text-xs text-text-disabled">
+        单个动画的点位控制和试播请在左侧「模型动画」中配置；这里仅影响未单独配置的动画。
+      </p>
       <DtSwitch
         :model-value="modelValue.animations.enabled"
-        label="播放模型动画"
+        label="默认播放未单独配置的动画"
         size="sm"
         @update:model-value="writeAnimationsEnabled"
       />

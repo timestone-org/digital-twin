@@ -711,3 +711,32 @@ it('异类实体、自己和已取消的拖动不能作为排序落点', async (
   expect(wrapper.emitted('place')).toBeUndefined()
   wrapper.unmount()
 })
+it('从其他位置选中对象时展开所属文件夹并清除不匹配搜索', async () => {
+  const wrapper = mountOutline()
+  await folderOf(wrapper, 'f1')
+    .get('[data-test="folder-toggle"]')
+    .trigger('click')
+  await search(wrapper, '不存在')
+  await wrapper.setProps({ selection: { kind: 'anchors', id: 'a2' } })
+  await flushPromises()
+  expect(rowOf(wrapper, 'a2').exists()).toBe(true)
+  expect(wrapper.emitted('resetFilters')).toBeDefined()
+  wrapper.unmount()
+})
+it('分类切换保留各列表的滚动位置', async () => {
+  const wrapper = mountOutline()
+  const area = wrapper.get(
+    '[data-test="outline-section-scroll"][data-kind="anchors"]',
+  ).element
+  area.scrollTop = 80
+  await wrapper
+    .get('[data-test="outline-section-scroll"][data-kind="anchors"]')
+    .trigger('scroll')
+  await wrapper.setProps({ kind: 'parts' })
+  await wrapper.setProps({ kind: 'anchors' })
+  expect(
+    wrapper.get('[data-test="outline-section-scroll"][data-kind="anchors"]')
+      .element.scrollTop,
+  ).toBe(80)
+  wrapper.unmount()
+})

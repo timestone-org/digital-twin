@@ -6,6 +6,12 @@
  * ⚠ 行上标的序号就是文档序，而文档序决定数组绑定的对齐（`anchorValues[2]`
  * 喂第 3 个锚点）——上移下移会连带改变相邻两行的取值来源，进出文件夹则不会。
  */
+import type { BindingPayload } from '@dt/contracts'
+import {
+  scopeOutline,
+  type OutlineKind,
+  type OutlineStatus,
+} from '../scripts/outlineScope'
 import type { TwinConfig } from '@dt/twin-config'
 import { DtButton, DtEmpty } from '@dt/ui'
 import { computed, ref, watch } from 'vue'
@@ -35,6 +41,9 @@ import OutlineSectionHeader from './OutlineSectionHeader.vue'
 const props = withDefaults(
   defineProps<{
     config: TwinConfig
+    kind?: OutlineKind
+    status?: OutlineStatus
+    bindings?: readonly BindingPayload[]
     selection: TwinSelection | null
     /** 有诊断问题的实体 id 集合，树上打红点。 */
     flaggedIds: ReadonlySet<string>
@@ -43,11 +52,12 @@ const props = withDefaults(
     /** 刚建出来的夹 id：上层置它，这里立刻进入就地重命名。 */
     renamingFolderId?: string | null | undefined
   }>(),
-  { renamingFolderId: null },
+  { renamingFolderId: null, kind: 'all', status: 'all', bindings: () => [] },
 )
 
 const emit = defineEmits<{
   select: [TwinSelection]
+  resetFilters: []
   add: [TwinEntityKind]
   addInFolder: [{ kind: TwinEntityKind; folderId: string }]
   place: [OutlinePlacement]
@@ -67,6 +77,9 @@ const emit = defineEmits<{
   createFolderWithItem: [{ kind: TwinEntityKind; id: string }]
 }>()
 
+const root = ref<HTMLElement | null>(null)
+const scrollPositions = new Map<string, number>()
+const revealCount = ref(0)
 const query = ref('')
 const collapsed = ref<ReadonlySet<string>>(new Set())
 /** 正在等二次确认的那一行；同一时刻只有一行。 */
@@ -75,12 +88,91 @@ const pendingRemoveKey = ref<string | null>(null)
 const renamingId = ref<string | null>(null)
 
 const view = computed(() =>
-  filterTwinOutline(
-    buildTwinOutline(props.config, props.flaggedIds),
-    TWIN_SCENE_ENTRIES,
-    query.value,
+  scopeOutline(
+    filterTwinOutline(
+      buildTwinOutline(props.config, props.flaggedIds),
+      TWIN_SCENE_ENTRIES,
+      query.value,
+    ),
+    props.config,
+    props.bindings,
+    props.kind,
+    props.status,
   ),
 )
+
+function rememberScroll(key: string, event: Event): void {
+  if (query.value !== '' || !(event.target instanceof HTMLElement)) return
+  scrollPositions.set(key, event.target.scrollTop)
+}
+function restoreScroll(): void {
+  if (query.value !== '') return
+  for (const element of root.value?.querySelectorAll<HTMLElement>(
+    '[data-scroll-key]',
+  ) ?? [])
+    element.scrollTop =
+      scrollPositions.get(element.dataset.scrollKey ?? '') ?? 0
+}
+watch([() => props.kind, query], restoreScroll, { flush: 'post' })
+function expandSelection(selection: TwinSelection | null): void {
+  if (selection === null || !('id' in selection)) return
+  const section = buildTwinOutline(props.config, props.flaggedIds).find(
+    (item) => item.kind === selection.kind,
+  )
+  if (section === undefined) return
+  const next = new Set(collapsed.value)
+  next.delete(section.key)
+  for (const folder of section.folders)
+    if (folder.rows.some((row) => row.id === selection.id))
+      next.delete(folder.key)
+  collapsed.value = next
+}
+watch(
+  () => props.selection,
+  (selection) => {
+    expandSelection(selection)
+    if (selection === null || !('id' in selection)) return
+    const visible = view.value.sections.some(
+      (item) =>
+        item.rows.some((row) => row.row.id === selection.id) ||
+        item.folders.some((folder) =>
+          folder.rows.some((row) => row.row.id === selection.id),
+        ),
+    )
+    if (!visible) {
+      query.value = ''
+      emit('resetFilters')
+    }
+  },
+)
+watch(
+  [() => props.selection, revealCount],
+  () => {
+    const selection = props.selection
+    if (selection === null || !('id' in selection)) return
+    const element = [
+      ...(root.value?.querySelectorAll<HTMLElement>('[data-id][data-kind]') ??
+        []),
+    ].find(
+      (item) =>
+        item.dataset.id === selection.id &&
+        item.dataset.kind === selection.kind,
+    )
+    element?.scrollIntoView?.({ block: 'nearest', inline: 'nearest' })
+  },
+  { flush: 'post' },
+)
+function clearFilters(): void {
+  query.value = ''
+  emit('resetFilters')
+}
+function revealSelected(): void {
+  query.value = ''
+  emit('resetFilters')
+  expandSelection(props.selection)
+  revealCount.value += 1
+}
+defineExpose({ revealSelected })
 
 const drag = useOutlineDrag(
   (folderId, id) => emit('moveIntoFolder', { folderId, id }),
@@ -186,7 +278,7 @@ function commitRename(id: string, name: string): void {
 </script>
 
 <template>
-  <div class="flex flex-col gap-1 pb-1" data-test="twin-outline">
+  <div ref="root" class="flex flex-col gap-1 pb-1" data-test="twin-outline">
     <OutlineSearchBox v-model="query" />
 
     <OutlineSceneList
@@ -257,6 +349,8 @@ function commitRename(id: string, name: string): void {
             class="max-h-[min(25dvh,200px)] overflow-y-auto overscroll-contain"
             data-test="outline-folder-scroll"
             :data-folder-id="folderView.folder.id"
+            :data-scroll-key="folderView.folder.key"
+            @scroll="rememberScroll(folderView.folder.key, $event)"
           >
             <div
               v-for="rowView in folderView.rows"
@@ -286,6 +380,8 @@ function commitRename(id: string, name: string): void {
           class="max-h-[min(40dvh,320px)] shrink-0 overflow-y-auto overscroll-contain"
           data-test="outline-section-scroll"
           :data-kind="sectionView.section.kind"
+          :data-scroll-key="sectionView.section.key"
+          @scroll="rememberScroll(sectionView.section.key, $event)"
         >
           <div
             v-for="rowView in sectionView.rows"
@@ -318,10 +414,14 @@ function commitRename(id: string, name: string): void {
       "
       icon="search"
       title="没有匹配的内容"
-      :hint="`没有找到「${query.trim()}」`"
+      :hint="
+        query.trim() ? `没有找到「${query.trim()}」` : '当前筛选下没有对象'
+      "
       data-test="outline-search-empty"
     >
-      <DtButton variant="soft" size="sm" @click="query = ''">清除搜索</DtButton>
+      <DtButton variant="soft" size="sm" @click="clearFilters">{{
+        status === 'all' ? '清除搜索' : '清除筛选'
+      }}</DtButton>
     </DtEmpty>
   </div>
 </template>

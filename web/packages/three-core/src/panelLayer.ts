@@ -1,15 +1,4 @@
-/**
- * @fileoverview 信息牌层：锚定在锚点或世界坐标上的一张卡片。
- *
- * ⚠ 卡片是 **CSS3D** 不是 CSS2D：后者是叠在屏幕上的 DOM，恒定像素大小、永远
- * 正对屏幕，于是「随模型缩放」与「钉死朝向」两件事都做不到。换成 CSS3D 之后
- * DOM 真进 3D 空间，代价是它与 WebGL 几何之间没有深度遮挡——牌永远画在模型
- * 之上，被挡住的牌也看得见。
- * ⚠ 本层不建任何 GPU 几何：卡片是 DOM。要清的只有 DOM，但它一定要清——
- * 从场景图上摘下对象带不走它的元素。
- * ⚠ 卡片长什么样全在 `panelCard` 与 `styles/panel.scss`：这里只管落点、朝向、
- * 尺寸与显隐这四样与三维有关的事。
- */
+/** @fileoverview 信息牌的落点、朝向、尺寸与距离显隐；牌面纹理见 panelSurface。 */
 import type {
   TwinAnchor,
   TwinBillboardMode,
@@ -22,6 +11,7 @@ import * as THREE from 'three'
 import { CSS3DObject } from 'three/examples/jsm/renderers/CSS3DRenderer.js'
 
 import { panelPositionOf } from './distanceBasis'
+import { PanelSurface } from './panelSurface'
 import { distanceResolver, type DistanceContext } from './distanceContext'
 import { resolveVisibility } from './distanceRules'
 import {
@@ -34,6 +24,7 @@ interface PanelEntry {
   panel: TwinPanel
   label: CSS3DObject
   fields: PanelFieldView[]
+  surface: PanelSurface
 }
 
 /** 牌的落点已经在 `label.position` 上，距离规则直接读它，不再算第二遍。 */
@@ -139,6 +130,7 @@ export class PanelLayer {
   faceCamera(camera: THREE.Camera): void {
     for (const entry of this.entries) {
       applyBillboard(entry.label, entry.panel.billboard, camera)
+      entry.surface.update()
     }
   }
 
@@ -168,13 +160,13 @@ export class PanelLayer {
       for (const view of entry.fields) {
         paintPanelField(view, values)
       }
+      entry.surface.invalidate()
     }
   }
 
   /**
    * 按这一帧的取景状态更新显隐与淡出。
-   * ⚠ 卡片是 DOM，靠 `object.visible` 隐藏（渲染器会跟着把元素 `display: none`）；
-   * 不透明度只能落在元素的 style 上，材质那条路这里没有。
+   * 牌面显隐随对象树，不透明度交给纹理材质。
    * @param context 这一帧的相机与轨道中心
    */
   applyDistance(context: DistanceContext): void {
@@ -184,7 +176,7 @@ export class PanelLayer {
         distanceResolver(context, entry.label.position, null),
       )
       entry.label.visible = state.visible
-      entry.label.element.style.opacity = String(state.opacity)
+      entry.surface.setOpacity(state.opacity)
     }
   }
 
@@ -205,13 +197,18 @@ export class PanelLayer {
     }
     label.scale.setScalar(this.baseScale * panel.style.scale)
     this.group.add(label)
-    return { panel, label, fields: card.fields }
+    const surface = new PanelSurface(
+      label,
+      panel.style.animate || panel.style.pulse || panel.style.scan,
+    )
+    return { panel, label, fields: card.fields, surface }
   }
 
   // ⚠ CSS3D 的 DOM 元素挂在标签层容器里，从场景图上摘下对象带不走它——
   // 漏了这一步，卸载后卡片还留在页面上飘着
   private clear(): void {
     for (const entry of this.entries) {
+      entry.surface.dispose()
       entry.label.element.remove()
       this.group.remove(entry.label)
     }

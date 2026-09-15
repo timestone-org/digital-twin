@@ -66,7 +66,7 @@ const idleSeconds = computed(() =>
 )
 
 const previewLabel = computed(() =>
-  props.previewing ? '停止预览' : '预览这条轨迹',
+  props.previewing ? '停止预览' : '预览漫游',
 )
 
 function write(patch: Partial<TwinRoamTour>): void {
@@ -167,6 +167,9 @@ function togglePreview(): void {
       >
         {{ previewLabel }}
       </DtButton>
+      <p class="text-xs text-text-secondary">
+        在预览小窗选择整条或单段；中央编辑视口保持不动。
+      </p>
       <p class="text-xs text-text-disabled">
         <template v-if="canFly">
           在编辑视口里按当前配置飞一遍，不用存了去大屏看。飞的时候一碰镜头就停。

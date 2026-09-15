@@ -2,6 +2,7 @@
  * @fileoverview 场景层的归一化：模型摆放、内置动画、场景特效、视点、切换控件与
  * 自动漫游轨迹。
  */
+import { normalizeAnimationControls } from './animationControl'
 import { MODEL_VARIANTS } from '@dt/contracts'
 import type { ModelVariant } from '@dt/contracts'
 
@@ -68,6 +69,7 @@ export const DEFAULT_CAMERA_FOV = 45
 function normalizeAnimations(raw: unknown): TwinModelAnimations {
   const source = isRecord(raw) ? raw : {}
   return {
+    controls: normalizeAnimationControls(source.controls),
     enabled: source.enabled === true,
     clips: stringList(source.clips),
     speed: clampedOr(source.speed, 1, MIN_ANIM_SPEED, MAX_ANIM_SPEED),

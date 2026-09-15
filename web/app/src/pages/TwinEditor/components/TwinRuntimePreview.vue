@@ -20,7 +20,14 @@ import {
 } from '@dt/runtime'
 import type { TwinConfig } from '@dt/twin-config'
 import { DtButton, DtNotice } from '@dt/ui'
-import { computed, ref, type CSSProperties } from 'vue'
+import {
+  computed,
+  ref,
+  watch,
+  onMounted,
+  onBeforeUnmount,
+  type CSSProperties,
+} from 'vue'
 
 import { twinRuntimePreviewOf } from '../scripts/runtimePreview'
 import {
@@ -31,6 +38,7 @@ import {
 
 const props = defineProps<{
   /** 被编辑的大屏节点；null = 还没读出来。 */
+  embedded?: boolean
   node: DashboardNodePayload | null
   /**
    * 编辑器内存里的这份配置。
@@ -47,7 +55,27 @@ const props = defineProps<{
 // 预览与编辑视口共用同一条取数：同一份绑定、同一个读取器、同一个订阅
 provideRuntimeData({ readBinding: () => props.readBinding() })
 
+const hostRef = ref<HTMLDivElement | null>(null)
+const embeddedWidth = ref(320)
+let observer: ResizeObserver | null = null
+onMounted(() => {
+  const host = hostRef.value
+  if (!props.embedded || host === null) return
+  observer = new ResizeObserver(() => {
+    if (host.clientWidth > 0) embeddedWidth.value = host.clientWidth
+  })
+  observer.observe(host)
+})
+onBeforeUnmount(() => observer?.disconnect())
+
 const open = ref(false)
+watch(
+  () => props.embedded,
+  (embedded) => {
+    if (embedded === true) open.value = true
+  },
+  { immediate: true },
+)
 const wide = ref(false)
 
 /** 画中画与放大档各自的上限框（像素）。 */
@@ -65,7 +93,14 @@ const target = computed<TwinTargetSize | undefined>(() =>
 const box = computed(() => {
   const size = target.value
   if (!isUsableTargetSize(size)) return null
-  return previewBoxOf(size, wide.value ? LIMITS.wide : LIMITS.pip)
+  return previewBoxOf(
+    size,
+    props.embedded
+      ? { width: embeddedWidth.value, height: LIMITS.wide.height }
+      : wide.value
+        ? LIMITS.wide
+        : LIMITS.pip,
+  )
 })
 
 const preview = computed(() =>
@@ -98,7 +133,11 @@ const sizeLabel = computed(() => {
 </script>
 
 <template>
-  <div class="twin-preview">
+  <div
+    ref="hostRef"
+    class="twin-preview"
+    :class="{ 'twin-preview--embedded': embedded }"
+  >
     <DtButton
       v-if="!open"
       size="sm"
@@ -116,6 +155,7 @@ const sizeLabel = computed(() => {
         <span class="twin-preview__name">运行态预览</span>
         <span class="twin-preview__size">{{ sizeLabel }}</span>
         <DtButton
+          v-if="!embedded"
           size="xs"
           variant="ghost"
           intent="neutral"
@@ -166,6 +206,11 @@ const sizeLabel = computed(() => {
   right: 12px;
   bottom: 12px;
   z-index: var(--z-sticky);
+
+  &--embedded {
+    position: relative;
+    inset: auto;
+  }
 
   &__panel {
     display: flex;

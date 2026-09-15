@@ -32,6 +32,7 @@ from ai_assistant.llm.ports import (
 )
 from ai_assistant.settings import Settings
 from llmcore import (
+    EMPTY_CATALOG,
     MODEL_KIND_CHAT,
     CatalogSource,
     ChatEndpoint,
@@ -92,7 +93,8 @@ def _endpoint(provider: ProviderSpec, deps: AdapterDeps) -> ModelAdapter:
 
 
 def _codex(provider: ProviderSpec, deps: AdapterDeps) -> ModelAdapter | None:
-    return build_catalog_codex(provider, deps.settings, deps.tokens)
+    catalog = deps.catalog.snapshot() if deps.catalog else EMPTY_CATALOG
+    return build_catalog_codex(provider, deps.settings, deps.tokens, catalog)
 
 
 # 形态 → 装配口子。⚠ 这张表就是「本服务接得了哪几种供应商」的全部答案

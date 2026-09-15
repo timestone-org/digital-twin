@@ -11,6 +11,8 @@ import { flushPromises, mount } from '@vue/test-utils'
 import type { Page } from '@dt/contracts'
 
 import * as collectApi from '@/api/collect'
+import * as searchApi from '@/api/collectSearch'
+import { DtSwitch } from '@dt/ui'
 import type { CollectPoint, CollectSource } from '@dt/contracts'
 import PointPickerDialog from '@/components/binding/PointPickerDialog.vue'
 
@@ -189,11 +191,11 @@ describe('按数据源筛', () => {
 
   // ⚠ 数据源清单只用来筛选与认人：它取不到时仍要挑得了点位，
   // 否则一次无关的失败会把整条绑定路堵死
-  it('数据源清单取不到也照样挑得到点位，只是说清只能按关键字搜', async () => {
+  it('数据源清单取不到也照样挑得到点位，只是说清仍可搜索点位', async () => {
     vi.spyOn(collectApi, 'listSources').mockRejectedValue(new Error('炸了'))
     const wrapper = await opened()
 
-    expect(wrapper.text()).toContain('只能按关键字搜')
+    expect(wrapper.text()).toContain('仍可搜索点位')
     expect(wrapper.text()).toContain('点位 temp')
   })
 })
@@ -237,5 +239,83 @@ describe('选中', () => {
       ?.trigger('click')
 
     expect(wrapper.emitted('update:modelValue')?.at(-1)).toEqual([false])
+  })
+})
+
+describe('智能检索', () => {
+  function matches() {
+    return {
+      items: [
+        {
+          id: 'temp',
+          node_key: 's1:temp',
+          code: 'temp',
+          name: '余热水箱测温',
+          source_id: 's1',
+          source_name: '能源站',
+          description: '余热回收水箱温度',
+          unit: '℃',
+          is_enabled: true,
+          is_exact: true,
+          score: 1,
+        },
+      ],
+      mode: 'hybrid' as const,
+      pending_count: 0,
+    }
+  }
+
+  it('输入自然语言并回车，展示候选信息，选中后回填完整的真实点位', async () => {
+    const search = vi
+      .spyOn(searchApi, 'searchCollectPoints')
+      .mockResolvedValue(matches())
+    const wrapper = await opened()
+    await wrapper
+      .get('input[aria-label="搜索点位"]')
+      .setValue('  余热回收水箱温度  ')
+    await wrapper
+      .get('input[aria-label="搜索点位"]')
+      .trigger('keydown', { key: 'Enter' })
+    await flushPromises()
+    expect(search).toHaveBeenCalledWith(
+      '余热回收水箱温度',
+      undefined,
+      expect.any(AbortSignal),
+    )
+    expect(wrapper.text()).toContain('已结合语义与关键词检索')
+    expect(wrapper.get('.dt-pick__item').text()).toContain('能源站')
+    expect(wrapper.get('.dt-pick__item').text()).toContain('余热回收水箱温度')
+    expect(wrapper.get('.dt-pick__item').text()).toContain('℃')
+    expect(wrapper.get('.dt-pick__item').text()).toContain('精确匹配')
+    await wrapper.get('.dt-pick__item').trigger('click')
+    await flushPromises()
+    expect(wrapper.emitted('pick')?.[0]?.[0]).toEqual(point('temp'))
+    wrapper.unmount()
+  })
+
+  it('点击搜索展示降级原因，关闭智能检索后恢复名称编码查询', async () => {
+    vi.spyOn(searchApi, 'searchCollectPoints').mockResolvedValue({
+      ...matches(),
+      mode: 'keyword',
+      note: '语义检索暂不可用，本次仅按关键词查找',
+      pending_count: 2,
+    })
+    const wrapper = await opened()
+    await wrapper.get('input[aria-label="搜索点位"]').setValue('水箱温度')
+    await wrapper
+      .findAll('button')
+      .find((one) => one.text() === '搜索')
+      ?.trigger('click')
+    await flushPromises()
+    expect(wrapper.text()).toContain('语义检索暂不可用')
+    expect(wrapper.text()).toContain('本次按关键词检索')
+    wrapper.getComponent(DtSwitch).vm.$emit('update:modelValue', false)
+    await flushPromises()
+    expect(collectApi.listPoints).toHaveBeenLastCalledWith(
+      expect.objectContaining({ q: '水箱温度' }),
+      expect.any(AbortSignal),
+    )
+    expect(wrapper.text()).not.toContain('语义检索暂不可用')
+    wrapper.unmount()
   })
 })

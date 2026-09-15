@@ -126,3 +126,11 @@ describe('AppShell', () => {
     wrapper.unmount()
   })
 })
+it('专注配置只隐藏当前页面导航，退出后恢复', async () => {
+  const wrapper = mount(AppShell, { props: { focusMode: true } })
+  expect(wrapper.find('aside').exists()).toBe(false)
+  expect(wrapper.get('main').classes()).toContain('p-2')
+  await wrapper.setProps({ focusMode: false })
+  expect(wrapper.find('aside').exists()).toBe(true)
+  wrapper.unmount()
+})

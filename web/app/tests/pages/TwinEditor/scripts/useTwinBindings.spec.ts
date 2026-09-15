@@ -150,3 +150,24 @@ describe('文档还没读出来', () => {
     expect(api.bindings.value).toEqual([])
   })
 })
+
+it('动画首次挑点直接创建完整绑定，取消不创建，撤销一次移除', () => {
+  const config = normalizeTwinConfig({
+    model: { animations: { controls: [{ clip: 'spin', mode: 'point' }] } },
+  })
+  const doc = createTwinDoc({ config, bindings: [] })
+  const { api, wrapper } = mountBindings(doc)
+  api.pickingFieldKey.value = 'animationValues[0].value'
+  api.closePicker(false)
+  expect(doc.bindings.value).toEqual([])
+  api.pickingFieldKey.value = 'animationValues[0].value'
+  api.pickPoint(POINT)
+  expect(doc.bindings.value[0]).toMatchObject({
+    fieldKey: 'animationValues[0].value',
+    nodeKey: 'ns=2;s=T1',
+    sourceKind: 'opcua',
+  })
+  doc.undo()
+  expect(doc.bindings.value).toEqual([])
+  wrapper.unmount()
+})

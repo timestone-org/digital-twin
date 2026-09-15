@@ -7,6 +7,7 @@ import type { BindingSpec } from '@dt/contracts'
 import { describe, expect, it } from 'vitest'
 
 import {
+  TWIN_ANIMATION_BINDING_KEY,
   TWIN_ANCHOR_BINDING_KEY,
   TWIN_ANCHOR_ROW_SLOTS,
   TWIN_ARROW_BINDING_KEY,
@@ -43,6 +44,7 @@ const CONFIG = normalizeTwinConfig({ anchors: [{ id: 'a1' }] })
 describe('绑定槽清单', () => {
   it('清单里的槽与槽键常量逐一对上', () => {
     expect(TWIN_VIEW_BINDINGS.map((spec) => spec.key)).toEqual([
+      TWIN_ANIMATION_BINDING_KEY,
       TWIN_PART_BINDING_KEY,
       TWIN_ANCHOR_BINDING_KEY,
       TWIN_PANEL_BINDING_KEY,
@@ -64,7 +66,7 @@ describe('绑定槽清单', () => {
   //   部件读数在 `PartsLayer` 的状态染色上），
   //   加第七个必须与渲染层同轮落地
   it('清单里的每个槽都有渲染层在消费', () => {
-    expect(TWIN_VIEW_BINDINGS).toHaveLength(6)
+    expect(TWIN_VIEW_BINDINGS).toHaveLength(7)
   })
 
   it('能量流那一行有强度与激活两个子槽', () => {

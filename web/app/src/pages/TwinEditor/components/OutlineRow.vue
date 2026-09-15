@@ -82,6 +82,7 @@ function onMenu(item: DtMenuItem): void {
     :style="{ paddingLeft: indentPx }"
     data-test="outline-row"
     :data-id="row.id"
+    :data-kind="row.kind"
   >
     <button
       type="button"

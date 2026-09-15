@@ -83,3 +83,9 @@ export { useRenderLoop } from './useRenderLoop'
 export type { RenderLoop, RenderLoopOptions } from './useRenderLoop'
 export { useRoamTour } from './useRoamTour'
 export type { RoamTourController, RoamTourDeps } from './useRoamTour'
+
+export type { ModelAnimationEntry } from './animationCatalog'
+
+export { default as TwinPanelPreview } from './TwinPanelPreview.vue'
+
+export type { TwinPreviewAction } from './previewActions'

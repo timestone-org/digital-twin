@@ -14,7 +14,9 @@ import type {
   TwinPartClick,
 } from '@dt/twin-config'
 import { DtButton, DtField, DtNotice, DtSelect } from '@dt/ui'
-import { computed } from 'vue'
+import { computed, inject } from 'vue'
+import { TWIN_PREVIEW_INTENT } from '../../scripts/previewIntent'
+const previewIntent = inject(TWIN_PREVIEW_INTENT, undefined)
 
 import DistanceField from './DistanceField.vue'
 
@@ -111,7 +113,7 @@ function writeMax(max: TwinDistanceRule | null): void {
 </script>
 
 <template>
-  <div class="flex flex-col gap-3">
+  <div class="flex flex-col gap-3" @focusin="previewIntent?.('click')">
     <DistanceField
       :model-value="distance.farThreshold"
       label="远近两档的分界"
