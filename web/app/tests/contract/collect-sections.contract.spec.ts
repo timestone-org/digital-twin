@@ -92,6 +92,7 @@ describe('弹窗的对外面', () => {
 
   it('写值弹窗收当前读数——核对现值是下发前唯一的一道人工防线', () => {
     expect(propNames(WriteValueDialog).sort()).toEqual([
+      'busy',
       'modelValue',
       'point',
       'sample',
@@ -153,7 +154,11 @@ describe('小件的对外面', () => {
   })
 
   it('当前值格收读数与单位', () => {
-    expect(propNames(PointValueCell).sort()).toEqual(['sample', 'unit'])
+    expect(propNames(PointValueCell).sort()).toEqual([
+      'sample',
+      'stale',
+      'unit',
+    ])
   })
 
   it('源条目收 source 与选中态，点击抛 select', () => {

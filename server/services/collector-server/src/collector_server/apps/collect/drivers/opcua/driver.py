@@ -68,6 +68,16 @@ def build_client(connection: DriverConnection) -> Client:
 
     Args: connection。
     """
+    if any(
+        connection.options.get(key, "None") != "None"
+        for key in (
+            "security_mode",
+            "security_policy",
+        )
+    ):
+        raise mapping.UnsupportedSecurity(
+            "当前采集驱动尚不支持证书安全连接，请勿将其作为加密连接使用"
+        )
     client = Client(
         url=connection.endpoint, timeout=connection.timeouts.request_s
     )

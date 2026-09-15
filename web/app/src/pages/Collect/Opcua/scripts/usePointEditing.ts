@@ -21,6 +21,7 @@ interface Ctx {
   writeOpen: Ref<boolean>
   writing: Ref<CollectPoint | null>
   exporting: Ref<boolean>
+  writeBusy: Ref<boolean>
 }
 
 export interface PointEditing {
@@ -30,6 +31,7 @@ export interface PointEditing {
   writing: Ref<CollectPoint | null>
   importOpen: Ref<boolean>
   exporting: Ref<boolean>
+  writeBusy: Ref<boolean>
   openCreate: () => void
   openEdit: (point: CollectPoint) => void
   openWrite: (point: CollectPoint) => void
@@ -58,8 +60,15 @@ async function write(
   payload: { value: unknown; key: string },
 ): Promise<void> {
   const target = ctx.writing.value
-  if (target === null) return
-  if (await ctx.ops.write(target, payload)) ctx.writeOpen.value = false
+  if (target === null || ctx.writeBusy.value) return
+  ctx.writeBusy.value = true
+  try {
+    if (await ctx.ops.write(target, payload)) {
+      if (ctx.writing.value?.id === target.id) ctx.writeOpen.value = false
+    }
+  } finally {
+    ctx.writeBusy.value = false
+  }
 }
 
 async function exportCsv(ctx: Ctx, sourceCode: string): Promise<void> {
@@ -89,6 +98,7 @@ export function usePointEditing(
     writeOpen: ref(false),
     writing: ref<CollectPoint | null>(null),
     exporting: ref(false),
+    writeBusy: ref(false),
   }
   return {
     formOpen: ctx.formOpen,
@@ -97,6 +107,7 @@ export function usePointEditing(
     writing: ctx.writing,
     importOpen: ref(false),
     exporting: ctx.exporting,
+    writeBusy: ctx.writeBusy,
     openCreate: () => {
       ctx.editing.value = null
       ctx.formOpen.value = true

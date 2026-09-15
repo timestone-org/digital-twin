@@ -9,12 +9,12 @@ import { describe, expect, it } from 'vitest'
 import DtButton from '../../src/components/DtButton/DtButton.vue'
 
 describe('DtButton', () => {
-  it('默认渲染 solid / primary / md 的 button', () => {
+  it('默认渲染 solid / primary / sm 的 button', () => {
     const wrapper = mount(DtButton, { slots: { default: '确定' } })
     const button = wrapper.find('button')
     expect(button.attributes('type')).toBe('button')
     expect(button.classes()).toContain('dt-btn--solid')
-    expect(button.classes()).toContain('dt-btn--md')
+    expect(button.classes()).toContain('dt-btn--sm')
     expect(button.text()).toBe('确定')
   })
 

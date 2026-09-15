@@ -178,8 +178,8 @@ function labelOf(day: number): string {
     display: inline-flex;
     align-items: center;
     justify-content: center;
-    width: var(--ctl-box-md);
-    height: var(--ctl-box-md);
+    width: var(--ctl-box-sm);
+    height: var(--ctl-box-sm);
     padding: 0;
     border: none;
     border-radius: var(--radius-sm);

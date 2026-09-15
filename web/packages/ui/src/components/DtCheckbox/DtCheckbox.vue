@@ -103,8 +103,8 @@ function onChange(event: Event): void {
 
   &__box {
     position: relative;
-    width: var(--ctl-box-md);
-    height: var(--ctl-box-md);
+    width: var(--ctl-box-sm);
+    height: var(--ctl-box-sm);
     flex-shrink: 0;
     border: 1px solid var(--border-default);
     border-radius: var(--radius-sm);
@@ -154,7 +154,7 @@ function onChange(event: Event): void {
   }
 
   &__label {
-    font-size: 13px;
+    font-size: var(--ctl-fs-sm);
     color: var(--text-secondary);
   }
 }

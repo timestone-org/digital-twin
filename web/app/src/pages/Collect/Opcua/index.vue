@@ -11,12 +11,13 @@
  * ⚠ 运行态按周期重取：它来自采集侧写的另一张表，没有推送通道，这一页上的
  * 状态最迟落后一个周期。
  */
-import { computed, onMounted, onUnmounted, ref } from 'vue'
+import { computed, onMounted, onUnmounted, ref, watch } from 'vue'
 import type { CollectSource, CollectSourceCreateInput } from '@dt/contracts'
 import { PERMISSION_CODES } from '@dt/contracts'
 import { DtButton, DtCard, DtEmpty, DtNotice, useToast } from '@dt/ui'
 
 import * as collect from '@/api/collect'
+import { BizError } from '@/api/client'
 import PermGuard from '@/components/PermGuard.vue'
 import { AppShell } from '@/components/layout'
 import { describeError } from '@/composables/useAsyncList'
@@ -43,13 +44,21 @@ const toast = useToast()
 const sources = ref<CollectSource[]>([])
 const sourcesLoading = ref(false)
 const sourcesError = ref<string | null>(null)
+const sourceKeyword = ref('')
+const sourceQuery = ref('')
+const sourcePage = ref(1)
+const sourceTotal = ref(0)
+const selectedDetail = ref<CollectSource | null>(null)
+const browseOpen = ref(false)
 // 选中哪个源同步在地址栏上：刷新不丢、链接可分享（见 useActiveSource）
 const { activeId, select: selectSource, reconcile } = useActiveSource()
 /** 乱序响应防护：只认最新一次加载。 */
 const raced = useRacedFetch()
 
 const activeSource = computed(
-  () => sources.value.find((one) => one.id === activeId.value) ?? null,
+  () =>
+    sources.value.find((one) => one.id === activeId.value) ??
+    (selectedDetail.value?.id === activeId.value ? selectedDetail.value : null),
 )
 
 /** 有几个源配了点位却没在采。它是「配了没人读」最外层的一道提示。 */
@@ -63,17 +72,53 @@ const stalledCount = computed(
 
 async function loadSources(): Promise<void> {
   sourcesLoading.value = true
-  await raced.run(() => collect.listSources({ size: LIST_SIZE }), {
-    ok: (page) => {
-      sources.value = page.items
-      sourcesError.value = null
-      // 地址栏指的源没了（被删或链接过期）就落到第一个，便于直接看到详情
-      reconcile(page.items.map((one) => one.id))
+  await raced.run(
+    async () => {
+      const page = await collect.listSources({
+        size: LIST_SIZE,
+        page: sourcePage.value,
+        q: sourceQuery.value || undefined,
+        protocol: 'opcua',
+      })
+      let detail = page.items.find((one) => one.id === activeId.value) ?? null
+      if (activeId.value !== null && detail === null) {
+        try {
+          detail = await collect.getSource(activeId.value)
+        } catch (caught) {
+          if (!(caught instanceof BizError && caught.status === 404))
+            throw caught
+        }
+      }
+      return { ...page, detail }
     },
-    fail: (caught) => (sourcesError.value = describeError(caught)),
-    settled: () => (sourcesLoading.value = false),
-  })
+    {
+      ok: (page) => {
+        sources.value = page.items
+        sourceTotal.value = page.total
+        selectedDetail.value = page.detail
+        sourcesError.value = null
+        // 地址栏指的源没了（被删或链接过期）就落到第一个，便于直接看到详情
+        if (page.detail === null) reconcile(page.items.map((one) => one.id))
+      },
+      fail: (caught) => (sourcesError.value = describeError(caught)),
+      settled: () => (sourcesLoading.value = false),
+    },
+  )
 }
+
+function searchSources(): void {
+  sourceQuery.value = sourceKeyword.value.trim()
+  sourcePage.value = 1
+  void loadSources()
+}
+function changeSourcePage(page: number): void {
+  sourcePage.value = page
+  void loadSources()
+}
+watch(activeId, (id) => {
+  if (id !== null && !sources.value.some((one) => one.id === id))
+    void loadSources()
+})
 
 /* ---------------- 源上的写动作（启停 / 测试 / 建改） ---------------- */
 const ops = useSourceOps(() => loadSources())
@@ -167,7 +212,7 @@ onUnmounted(() => {
         intent="warning"
         icon="alert-triangle"
       >
-        有 {{ stalledCount }}
+        当前列表中有 {{ stalledCount }}
         个已启用的数据源当前不在采集，它们的点位不会产生任何数据。
       </DtNotice>
 
@@ -179,10 +224,17 @@ onUnmounted(() => {
         <!-- 左栏：数据源列表 -->
         <aside class="flex h-80 min-w-0 shrink-0 flex-col xl:h-auto xl:min-h-0">
           <SourceListPanel
+            v-model:keyword="sourceKeyword"
+            :page="sourcePage"
+            :total="sourceTotal"
+            :size="LIST_SIZE"
+            :is-filtered="sourceQuery !== ''"
             :sources="sources"
             :loading="sourcesLoading"
             :error="sourcesError"
             :active-id="activeId"
+            @search="searchSources"
+            @page="changeSourcePage"
             @select="selectSource"
             @reload="loadSources"
             @create="ops.openCreate"
@@ -204,14 +256,26 @@ onUnmounted(() => {
               @remove="removal.ask(activeSource)"
             />
 
+            <DtButton
+              variant="outline"
+              size="sm"
+              :aria-expanded="browseOpen"
+              @click="browseOpen = !browseOpen"
+            >
+              {{ browseOpen ? '收起地址浏览' : '浏览并导入点位' }}
+            </DtButton>
             <!-- 浏览 + 点位表：<2xl 竖排固定高、交给外层滚；≥2xl 并排铺满内部滚动。
                  ⚠ 并排的门槛是 2xl 不是 xl：xl 那一档右区只剩八百多像素，点位表分到
                  五百像素时工具条要折三行、表体只剩两行，浏览树那边连「在线浏览」四个
                  字都竖着排——与知识库页同一条口径 -->
             <div
-              class="grid min-h-0 grid-cols-1 gap-4 2xl:flex-1 2xl:grid-cols-[minmax(0,2fr)_minmax(0,3fr)] 2xl:grid-rows-1"
+              class="grid min-h-0 grid-cols-1 gap-4 2xl:flex-1 2xl:grid-rows-1"
+              :class="{
+                '2xl:grid-cols-[minmax(0,2fr)_minmax(0,3fr)]': browseOpen,
+              }"
             >
               <BrowsePanel
+                v-if="browseOpen"
                 class="h-80 shrink-0 2xl:h-auto"
                 :source="activeSource"
                 @imported="onImported"

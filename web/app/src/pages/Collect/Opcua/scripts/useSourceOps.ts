@@ -51,7 +51,7 @@ async function setEnabled(
     ctx.toast.success(
       next
         ? `「${source.name}」已发起连接，采集器几秒内接手`
-        : `「${source.name}」已断开（停用采集）`,
+        : `「${source.name}」已请求停用，等待采集器断开连接`,
     )
     await ctx.reload()
   } catch (caught) {

@@ -21,6 +21,7 @@ interface Ctx {
   selected: Ref<Set<string>>
   batchBusy: Ref<boolean>
   rowBusy: Ref<Set<string>>
+  failures: Ref<Map<string, string>>
 }
 
 export interface ArchiveOps {
@@ -29,6 +30,7 @@ export interface ArchiveOps {
   batchBusy: Ref<boolean>
   /** 行内开关正忙的点位 id。 */
   rowBusy: Ref<Set<string>>
+  failures: Ref<Map<string, string>>
   toggleSelect: (id: string, isOn: boolean) => void
   selectAll: (ids: readonly string[]) => void
   clearSelection: () => void
@@ -62,7 +64,8 @@ async function toggleArchive(
 }
 
 async function batchArchive(ctx: Ctx, next: boolean): Promise<void> {
-  const ids = [...ctx.selected.value]
+  const selection = ctx.selected.value
+  const ids = [...selection]
   if (ids.length === 0 || ctx.batchBusy.value) return
   ctx.batchBusy.value = true
   try {
@@ -77,7 +80,18 @@ async function batchArchive(ctx: Ctx, next: boolean): Promise<void> {
     } else {
       ctx.toast.error(`${ids.length - failed} 个成功，${failed} 个失败`)
     }
-    ctx.selected.value = new Set()
+    if (ctx.selected.value !== selection) return
+    ctx.failures.value = new Map(
+      results.flatMap((result, index) => {
+        const id = ids[index]
+        return result.status === 'rejected' && id !== undefined
+          ? [[id, describeError(result.reason)]]
+          : []
+      }),
+    )
+    ctx.selected.value = new Set(
+      ids.filter((_, index) => results[index]?.status === 'rejected'),
+    )
     await ctx.reload()
   } finally {
     ctx.batchBusy.value = false
@@ -102,15 +116,20 @@ export function useArchiveOps(reload: () => Promise<void>): ArchiveOps {
     selected: ref(new Set<string>()),
     batchBusy: ref(false),
     rowBusy: ref(new Set<string>()),
+    failures: ref(new Map<string, string>()),
   }
   return {
     selected: ctx.selected,
     selectedCount: computed(() => ctx.selected.value.size),
     batchBusy: ctx.batchBusy,
     rowBusy: ctx.rowBusy,
+    failures: ctx.failures,
     toggleSelect: (id, isOn) => toggleSelect(ctx, id, isOn),
     selectAll: (ids) => (ctx.selected.value = new Set(ids)),
-    clearSelection: () => (ctx.selected.value = new Set()),
+    clearSelection: () => {
+      ctx.selected.value = new Set()
+      ctx.failures.value = new Map()
+    },
     toggleArchive: (point, next) => toggleArchive(ctx, point, next),
     batchArchive: (next) => batchArchive(ctx, next),
   }

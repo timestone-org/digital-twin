@@ -53,6 +53,28 @@ describe('登录页', () => {
     expect(wrapper.findAll('input')).toHaveLength(2)
   })
 
+  it('登录输入框和提交按钮使用中号尺寸', () => {
+    const wrapper = mountPage()
+    expect(wrapper.findAll('.dt-input--md')).toHaveLength(2)
+    expect(wrapper.find('button[type="submit"]').classes()).toContain(
+      'dt-btn--md',
+    )
+  })
+
+  it('显隐按钮跳过 Tab 且鼠标按下不夺取输入焦点', async () => {
+    const wrapper = mountPage()
+    const reveal = wrapper.find('button[aria-label="显示密码"]')
+    expect(reveal.attributes('tabindex')).toBe('-1')
+    const event = new MouseEvent('mousedown', { cancelable: true })
+    reveal.element.dispatchEvent(event)
+    expect(event.defaultPrevented).toBe(true)
+    await reveal.trigger('click')
+    expect(wrapper.find('input[name="password"]').attributes('type')).toBe(
+      'text',
+    )
+    expect(reveal.attributes('tabindex')).toBe('-1')
+  })
+
   it('未填写时提交按钮禁用', () => {
     const wrapper = mountPage()
     expect(wrapper.find('button[type="submit"]').attributes('disabled')).toBe(

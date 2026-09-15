@@ -243,7 +243,6 @@ function onChange(): void {
   &__unit {
     flex-shrink: 0;
     color: var(--text-secondary);
-    font-size: var(--ctl-hint-fs-md);
   }
 
   &__step {
@@ -276,6 +275,10 @@ function onChange(): void {
 }
 
 @each $size in ctl.$sizes {
+  .dt-number--#{$size} .dt-number__unit {
+    font-size: var(--ctl-hint-fs-#{$size});
+  }
+
   .dt-number--#{$size} {
     height: var(--ctl-h-#{$size});
     border-radius: var(--ctl-r-#{$size});

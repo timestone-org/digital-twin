@@ -109,6 +109,10 @@ async def test_discovery_strips_the_trailing_carriage_return_from_captions(
     app_client: httpx.AsyncClient, ac_source: FakeSource
 ) -> None:
     # ⚠ 厂商的文本字段带尾随回车符，不去掉就永远对不上设备号
+    ac_source.columns["KTInfo"] = {
+        "device_id": "varchar",
+        "Caption": "varchar",
+    }
     ac_source.captions.append({"device_id": "K01\r", "Caption": "一车间东\r"})
     response = await app_client.get(
         f"{PREFIX}/ac-datasets/{DATASET}/source-objects"

@@ -2,7 +2,7 @@
  * @fileoverview 数据源表单的选项常量与 options_json 的拆合。
  *
  * ⚠ 安全模式/安全策略存进 `options_json`（`security_mode` / `security_policy`
- * 两个键）：驱动按自身能力消费，暂不支持的取值只存不生效。表单接管这两个键，
+ * 两个键）：驱动按自身能力消费，暂不支持的取值禁止提交。表单接管这两个键，
  * 其余键留给通用的键值编辑器——拆合必须走这里，两处各拆一份就会互相覆盖。
  */
 import type { DtSelectOption } from '@dt/contracts'
@@ -17,7 +17,11 @@ export const SECURITY_MODES: readonly DtSelectOption[] = [
   'None',
   'Sign',
   'SignAndEncrypt',
-].map((value) => ({ value, label: value }))
+].map((value) => ({
+  value,
+  label: value === 'None' ? 'None' : `${value}（暂不支持）`,
+  disabled: value !== 'None',
+}))
 
 export const SECURITY_POLICIES: readonly DtSelectOption[] = [
   'None',
@@ -26,7 +30,11 @@ export const SECURITY_POLICIES: readonly DtSelectOption[] = [
   'Basic256Sha256',
   'Aes128_Sha256_RsaOaep',
   'Aes256_Sha256_RsaPss',
-].map((value) => ({ value, label: value }))
+].map((value) => ({
+  value,
+  label: value === 'None' ? 'None' : `${value}（暂不支持）`,
+  disabled: value !== 'None',
+}))
 
 /** options_json 里被表单接管的两个键。 */
 const MANAGED_OPTION_KEYS = ['security_mode', 'security_policy'] as const

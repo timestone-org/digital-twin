@@ -6,7 +6,7 @@
 export const DT_SIZES = ['sm', 'md', 'lg'] as const
 export type DtSize = (typeof DT_SIZES)[number]
 
-export const DT_CONTROL_DEFAULT_SIZE: DtSize = 'md'
+export const DT_CONTROL_DEFAULT_SIZE: DtSize = 'sm'
 
 export const DT_INTENTS = [
   'primary',

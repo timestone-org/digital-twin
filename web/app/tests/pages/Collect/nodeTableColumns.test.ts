@@ -33,8 +33,8 @@ describe('列配置', () => {
       .filter((width): width is string => width !== undefined)
       .reduce((total, width) => total + Number.parseFloat(width), 0)
 
-    // 表格 min-width 是 76rem（NodeTable.vue），差额就是寻址串的保底宽度。
+    // 表格 min-width 是 83rem（NodeTable.vue），差额就是寻址串的保底宽度。
     // 20rem 摆得下约 40 个等宽字符，够看出是哪个点位了
-    expect(76 - fixedRem).toBeGreaterThanOrEqual(20)
+    expect(83 - fixedRem).toBeGreaterThanOrEqual(20)
   })
 })

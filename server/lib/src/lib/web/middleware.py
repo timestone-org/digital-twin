@@ -18,6 +18,7 @@ from lib.logging.trace import new_span_id, new_trace_id, parse_traceparent
 TRACEPARENT_HEADER = "traceparent"
 
 SERVER_ERROR_STATUS = 500  # 5xx 起点
+CLIENT_ERROR_STATUS = 400  # 4xx 起点
 
 _logger = get_logger("lib.web.access")
 
@@ -71,5 +72,7 @@ class RequestContextMiddleware(BaseHTTPMiddleware):
         # 4xx 是调用方的问题，不是需要人介入的故障
         if response.status_code >= SERVER_ERROR_STATUS:
             _logger.error("http_request", "请求处理失败", **fields)
+        elif response.status_code >= CLIENT_ERROR_STATUS:
+            _logger.warning("http_request", "请求被拒绝", **fields)
         else:
-            _logger.info("http_request", "", **fields)
+            _logger.debug("http_request", "", **fields)

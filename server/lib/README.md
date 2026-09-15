@@ -34,6 +34,13 @@ web    fastapi / uvicorn
 auth   pyjwt / argon2-cffi
 ```
 
+## 日志级别
+
+默认 `INFO` 保留应用的启动、停止和状态变化事件，以及全部告警与错误。
+第三方库的普通通信日志和 HTTP 成功请求（2xx/3xx）只在 `DEBUG` 输出；
+HTTP 4xx 为 `WARNING`，5xx 为 `ERROR`。业务审计仍走原有持久化路径。
+排障时将对应服务的 `<前缀>_APP_LOG_LEVEL` 设为 `DEBUG` 并重启，结束后恢复 `INFO`。
+
 ## 本地命令
 
 ```bash

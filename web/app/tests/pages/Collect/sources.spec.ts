@@ -424,3 +424,35 @@ describe('运行态刷新', () => {
     expect(list.mock.calls.length).toBe(before)
   })
 })
+
+describe('数据源分页与查找', () => {
+  it('超过一页时可以访问下一页', async () => {
+    const wrapper = await render([source()])
+    vi.mocked(collectApi.listSources).mockResolvedValue({
+      items: [source()],
+      total: 101,
+      page: 1,
+      size: 100,
+    })
+    await wrapper.find('button[aria-label="刷新数据源列表"]').trigger('click')
+    await flushPromises()
+    await clickByText(wrapper, '下一页')
+    await flushPromises()
+    expect(collectApi.listSources).toHaveBeenLastCalledWith(
+      expect.objectContaining({ page: 2 }),
+    )
+  })
+  it('查询在服务端执行并回到第一页', async () => {
+    const wrapper = await render([source()])
+    await wrapper
+      .find('input[placeholder="搜索数据源名称或编码"]')
+      .setValue('二号')
+    await wrapper
+      .find('input[placeholder="搜索数据源名称或编码"]')
+      .trigger('keydown', { key: 'Enter' })
+    await flushPromises()
+    expect(collectApi.listSources).toHaveBeenLastCalledWith(
+      expect.objectContaining({ q: '二号', page: 1 }),
+    )
+  })
+})

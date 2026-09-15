@@ -26,6 +26,7 @@ import { newIdempotencyKey } from '@/api/idempotency'
 import { formatSample } from '../scripts/liveFormat'
 
 const props = defineProps<{
+  busy?: boolean
   modelValue: boolean
   point: CollectPoint | null
   /** 该点位此刻的读数，没有就是 undefined。 */
@@ -78,6 +79,7 @@ function parseValue(): { value: unknown } | { error: string } {
 }
 
 function submit(): void {
+  if (props.busy) return
   const result = parseValue()
   if ('error' in result) {
     error.value = result.error
@@ -93,7 +95,7 @@ function submit(): void {
     :model-value="modelValue"
     title="下发写值"
     width="30rem"
-    @update:model-value="emit('update:modelValue', $event)"
+    @update:model-value="!busy && emit('update:modelValue', $event)"
   >
     <div v-if="point" class="flex flex-col gap-3">
       <DtNotice intent="warning" icon="alert-triangle">
@@ -132,10 +134,16 @@ function submit(): void {
     </div>
 
     <template #footer>
-      <DtButton variant="ghost" @click="emit('update:modelValue', false)">
+      <DtButton
+        variant="ghost"
+        :disabled="busy ?? false"
+        @click="emit('update:modelValue', false)"
+      >
         取消
       </DtButton>
-      <DtButton intent="warning" @click="submit">下发</DtButton>
+      <DtButton intent="warning" :loading="busy ?? false" @click="submit"
+        >下发</DtButton
+      >
     </template>
   </DtModal>
 </template>

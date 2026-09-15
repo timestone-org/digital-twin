@@ -149,15 +149,18 @@ const stateUpdatedAt = computed(() =>
       <span class="text-text-secondary">
         读取方式
         <span class="text-text-primary">
-          {{ source.read_mode === 'poll' ? '轮询' : '订阅' }}
-          {{ source.poll_interval_ms }}ms
+          {{
+            source.read_mode === 'poll'
+              ? `轮询 ${source.poll_interval_ms}ms`
+              : '订阅（按点位采样间隔）'
+          }}
         </span>
       </span>
       <span v-if="source.username" class="text-text-secondary">
         账户 <span class="text-text-primary">{{ source.username }}</span>
       </span>
       <span class="text-text-secondary">
-        订阅点位
+        {{ source.read_mode === 'poll' ? '采集点位' : '订阅点位' }}
         <span class="text-text-primary">
           {{ source.runtime.point_count }} / {{ source.point_count }}
         </span>

@@ -69,6 +69,23 @@ class _TextFormatter(logging.Formatter):
         return f"{head} {message} {tail}".rstrip()
 
 
+class _NoiseFilter(logging.Filter):
+    """保留应用事件，第三方普通通信记录只在 DEBUG 输出。"""
+
+    def __init__(self, level: int) -> None:
+        super().__init__()
+        self._level = level
+
+    def filter(self, record: logging.LogRecord) -> bool:
+        if record.levelno < self._level:
+            return False
+        return (
+            self._level <= logging.DEBUG
+            or record.levelno >= logging.WARNING
+            or _payload_of(record) is not None
+        )
+
+
 def configure_logging(
     *,
     service: str,
@@ -91,6 +108,7 @@ def configure_logging(
     root = logging.getLogger()
     root.handlers = [handler]
     root.setLevel(level.upper())
+    handler.addFilter(_NoiseFilter(root.level))
 
 
 def _error_fields(error: BaseException) -> dict[str, str]:

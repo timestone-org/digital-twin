@@ -83,9 +83,9 @@ describe('DtSwitch', () => {
     expect(wrapper.find('button').classes()).toContain(`dt-switch--${size}`)
   })
 
-  it('缺省档位是 md', () => {
+  it('缺省档位是 sm', () => {
     const wrapper = mount(DtSwitch, { props: { modelValue: false } })
-    expect(wrapper.find('button').classes()).toContain('dt-switch--md')
+    expect(wrapper.find('button').classes()).toContain('dt-switch--sm')
   })
 
   it('type=button：放进表单里不许提交', () => {

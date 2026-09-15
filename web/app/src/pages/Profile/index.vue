@@ -122,15 +122,15 @@ async function onChangePassword(): Promise<void> {
             class="flex flex-col items-stretch gap-4"
             @submit.prevent="onSaveProfile"
           >
-            <DtInput v-model="profile.full_name" label="姓名" size="lg" />
+            <DtInput v-model="profile.full_name" label="姓名" size="sm" />
             <DtInput
               v-model="profile.email"
               label="邮箱"
               type="email"
-              size="lg"
+              size="sm"
               autocomplete="email"
             />
-            <DtInput v-model="profile.phone" label="手机号" size="lg" />
+            <DtInput v-model="profile.phone" label="手机号" size="sm" />
             <DtButton
               type="submit"
               class="self-start"
@@ -156,14 +156,14 @@ async function onChangePassword(): Promise<void> {
               v-model="passwords.current"
               label="当前密码"
               type="password"
-              size="lg"
+              size="sm"
               autocomplete="current-password"
             />
             <DtInput
               v-model="passwords.next"
               label="新密码"
               type="password"
-              size="lg"
+              size="sm"
               hint="至少 10 位，且同时包含字母与数字"
               autocomplete="new-password"
             />

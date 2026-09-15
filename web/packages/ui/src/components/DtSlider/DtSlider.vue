@@ -189,13 +189,16 @@ $thumb: 16px;
     min-width: 4ch;
     text-align: right;
     font-family: var(--font-mono);
-    font-size: var(--ctl-hint-fs-md);
     font-variant-numeric: tabular-nums;
     color: var(--text-title);
   }
 }
 
 @each $size, $rail in $rails {
+  .dt-slider--#{$size} .dt-slider__readout {
+    font-size: var(--ctl-hint-fs-#{$size});
+  }
+
   .dt-slider--#{$size} .dt-slider__el {
     height: $rail;
   }

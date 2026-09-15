@@ -38,8 +38,15 @@ _AUTH_ERRORS = (
     BadCertificateUntrusted,
     BadSecurityChecksFailed,
 )
+
+
+class UnsupportedSecurity(ValueError):
+    """请求了驱动尚不支持的安全连接。"""
+
+
 # 寻址串或数据类型配错了，要人去改配置，不是等它自己好
 _CONFIG_ERRORS = (
+    UnsupportedSecurity,
     BadNodeIdUnknown,
     BadNodeIdInvalid,
     BadAttributeIdInvalid,

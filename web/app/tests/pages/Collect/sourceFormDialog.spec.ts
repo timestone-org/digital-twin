@@ -28,8 +28,8 @@ function source(): CollectSource {
     username: 'operator',
     has_credential: true,
     options_json: {
-      security_mode: 'Sign',
-      security_policy: 'Basic256Sha256',
+      security_mode: 'None',
+      security_policy: 'None',
       cert_path: '/etc/certs/plc.pem',
     },
     read_mode: 'subscribe',
@@ -146,8 +146,8 @@ describe('编辑', () => {
     const payload = updatedPayload(wrapper)
     // ⚠ 其余连接参数（cert_path）不许被安全两键的写入顶掉
     expect(payload.options_json).toEqual({
-      security_mode: 'Sign',
-      security_policy: 'Basic256Sha256',
+      security_mode: 'None',
+      security_policy: 'None',
       cert_path: '/etc/certs/plc.pem',
     })
     expect(payload.username).toBe('operator')
@@ -196,4 +196,14 @@ describe('误关保护', () => {
     expect(wrapper.emitted('update:modelValue')).toBeUndefined()
     expect(wrapper.text()).toContain('有还没提交的内容')
   })
+})
+
+it('已有安全配置不可静默降级或继续提交', async () => {
+  const wrapper = await render({
+    ...source(),
+    options_json: { security_mode: 'Sign', security_policy: 'Basic256Sha256' },
+  })
+  await submit(wrapper, '保存')
+  expect(wrapper.emitted('update')).toBeUndefined()
+  expect(wrapper.text()).toContain('尚不支持证书安全连接')
 })

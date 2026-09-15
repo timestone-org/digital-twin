@@ -189,6 +189,9 @@ class AcSourceReader:
 
         ⚠ 它的文本字段带尾随回车符，不 strip 就会让「按设备号对上」永远失败。
         """
+        # ⚠ 厂商名称表可缺失，不能因此阻断结构齐备的测点视图。
+        if not await self.describe("KTInfo"):
+            return {}
         rows = await self._query(_CAPTIONS_SQL, {})
         return {
             str(row["device_id"]).strip(): str(row["Caption"]).strip()

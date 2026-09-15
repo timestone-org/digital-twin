@@ -87,7 +87,6 @@ const describedby = computed(() => {
   &__error {
     margin: 0;
     line-height: 1.3;
-    font-size: var(--ctl-hint-fs-md);
   }
 
   &__hint {
@@ -100,6 +99,11 @@ const describedby = computed(() => {
 }
 
 @each $size in ctl.$sizes {
+  .dt-field--#{$size} .dt-field__hint,
+  .dt-field--#{$size} .dt-field__error {
+    font-size: var(--ctl-hint-fs-#{$size});
+  }
+
   .dt-field--#{$size} .dt-field__label {
     font-size: var(--ctl-label-fs-#{$size});
   }

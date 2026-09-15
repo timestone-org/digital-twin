@@ -15,6 +15,7 @@ import { ref } from 'vue'
 import type { CollectPoint, CollectSource } from '@dt/contracts'
 
 import * as collectApi from '@/api/collect'
+import * as histories from '@/api/pointHistories'
 import { BizError } from '@/api/client'
 import NodeTable from '@/pages/Collect/Opcua/components/NodeTable.vue'
 import { useAuthStore } from '@/stores/auth'
@@ -140,7 +141,10 @@ async function render(
     props: { source: source(over) },
     attachTo: document.body,
     global: {
-      stubs: { RouterLink: { props: ['to'], template: '<a><slot /></a>' } },
+      stubs: {
+        RouterLink: { props: ['to'], template: '<a><slot /></a>' },
+        DtLineChart: true,
+      },
     },
   })
   await flushPromises()
@@ -587,5 +591,187 @@ describe('批量删除', () => {
     expect(wrapper.find('input[aria-label="选择 出口温度"]').exists()).toBe(
       false,
     )
+  })
+})
+
+describe('操作反馈与实时有效性', () => {
+  it('批量失败的点位在刷新后仍选中，只重试失败项', async () => {
+    const update = vi
+      .spyOn(collectApi, 'updatePoint')
+      .mockResolvedValueOnce({ point: point(), address_check: null })
+      .mockRejectedValueOnce(new Error('冲突'))
+      .mockResolvedValue({ point: point(), address_check: null })
+    const wrapper = await render([
+      point(),
+      point({ id: 'p2', name: '进口温度' }),
+    ])
+    await selectRow(wrapper, '出口温度')
+    await selectRow(wrapper, '进口温度')
+    await clickByText(wrapper, '批量关闭记录历史')
+    await flushPromises()
+    expect(wrapper.text()).toContain('已选 1 项')
+    await clickByText(wrapper, '批量关闭记录历史')
+    await flushPromises()
+    expect(update.mock.calls.map(([id]) => id)).toEqual(['p1', 'p2', 'p2'])
+  })
+
+  it('通道在线但点位超过心跳期限没有消息时标明陈旧', async () => {
+    vi.useFakeTimers()
+    try {
+      const wrapper = await render()
+      await push({
+        nodeKey: 's1:outlet_temp',
+        state: 'ok',
+        value: 36.5,
+        timestampMs: 1,
+        quality: 'good',
+      })
+      await vi.advanceTimersByTimeAsync(46_000)
+      expect(wrapper.text()).toContain('陈旧')
+      await push({
+        nodeKey: 's1:outlet_temp',
+        state: 'ok',
+        value: 36.5,
+        timestampMs: 1,
+        quality: 'good',
+      })
+      expect(wrapper.text()).not.toContain('陈旧')
+      wrapper.unmount()
+    } finally {
+      vi.useRealTimers()
+    }
+  })
+
+  it('写请求在途时重复点击只下发一次', async () => {
+    let finish: (() => void) | undefined
+    const write = vi.spyOn(collectApi, 'writePoint').mockImplementation(
+      () =>
+        new Promise((resolve) => {
+          finish = () =>
+            resolve({
+              point_id: 'p1',
+              node_key: 's1:outlet_temp',
+              is_written: true,
+            })
+        }),
+    )
+    const wrapper = await render()
+    await clickByText(wrapper, '写值')
+    await flushPromises()
+    await typeAndSubmit('42')
+    await typeAndSubmit('43')
+    expect(write).toHaveBeenCalledTimes(1)
+    finish?.()
+    await flushPromises()
+  })
+})
+
+describe('紧凑点位卡片', () => {
+  beforeEach(() => localStorage.setItem('dt.view-mode.collect-points', 'card'))
+  afterEach(() => localStorage.removeItem('dt.view-mode.collect-points'))
+
+  it('名称与读数优先，单位随值显示，配置字段不重复铺开', async () => {
+    const wrapper = await render()
+    await push({
+      nodeKey: 's1:outlet_temp',
+      state: 'ok',
+      value: 36.5,
+      timestampMs: 1,
+      quality: 'good',
+    })
+    const card = wrapper.find('.point-card')
+    expect(card.find('.point-card__name').text()).toBe('出口温度')
+    expect(card.find('.point-card__number').text()).toBe('36.50')
+    expect(card.find('.point-card__unit').text()).toBe('℃')
+    expect(card.text()).toContain('正常')
+    expect(card.find('dl').exists()).toBe(false)
+    expect(card.text()).not.toContain('寻址串')
+    expect(card.find('.point-card__code').attributes('title')).toBe(
+      'outlet_temp',
+    )
+  })
+
+  it('未上报、质量异常与断线陈旧仍明确可见', async () => {
+    const wrapper = await render()
+    expect(wrapper.find('.point-card').text()).toContain('未上报')
+    await push({
+      nodeKey: 's1:outlet_temp',
+      state: 'error',
+      errorMessage: '点位读取失败',
+    })
+    expect(wrapper.find('.point-card__error').text()).toBe('点位读取失败')
+    isConnected.value = false
+    await flushPromises()
+    expect(wrapper.find('.point-card__status').text()).toBe('陈旧')
+  })
+
+  it('勾选与历史开关转发到原有操作', async () => {
+    const update = vi
+      .spyOn(collectApi, 'updatePoint')
+      .mockResolvedValue({ point: point(), address_check: null })
+    const wrapper = await render()
+    await selectRow(wrapper, '出口温度')
+    expect(wrapper.find('.point-card').classes()).toContain('is-selected')
+    expect(wrapper.text()).toContain('已选 1 项')
+    await wrapper.find('.point-card [role="switch"]').trigger('click')
+    await flushPromises()
+    expect(update).toHaveBeenCalledWith('p1', { archive_enabled: false })
+  })
+
+  it('点击名称打开原有详情，完整寻址串仍可查到', async () => {
+    vi.spyOn(histories, 'fetchPointAggregate').mockResolvedValue({
+      items: [],
+      interval: '1m',
+      aggregate: 'avg',
+      timezone: 'UTC',
+      is_truncated: false,
+    })
+    const wrapper = await render()
+    await wrapper.find('.point-card__name').trigger('click')
+    await flushPromises()
+    expect(document.body.textContent).toContain('完整采样时间')
+    expect(document.body.textContent).toContain('ns=2;s=Plant1.OutletTemp')
+  })
+
+  it('卡片写值使用已有弹窗和下发流程', async () => {
+    const write = vi.spyOn(collectApi, 'writePoint').mockResolvedValue({
+      point_id: 'p1',
+      node_key: 's1:outlet_temp',
+      is_written: true,
+    })
+    const wrapper = await render()
+    await clickByText(wrapper, '写值')
+    await flushPromises()
+    await typeAndSubmit('42')
+    expect(write).toHaveBeenCalledWith('p1', 42, expect.any(String))
+  })
+
+  it('设置入口打开点位表单，删除入口仍先确认', async () => {
+    const remove = vi.spyOn(collectApi, 'deletePoint')
+    const wrapper = await render()
+    await wrapper
+      .find('.point-card button[aria-label="点位设置"]')
+      .trigger('click')
+    await flushPromises()
+    expect(document.body.textContent).toContain('编辑点位')
+    bodyButton('取消').click()
+    await flushPromises()
+    await wrapper
+      .find('.point-card button[aria-label="删除点位"]')
+      .trigger('click')
+    await flushPromises()
+    expect(document.body.textContent).toContain('已归档的历史会保留')
+    expect(remove).not.toHaveBeenCalled()
+  })
+
+  it('只读账号保留查看入口，但没有勾选、写值与配置操作', async () => {
+    signIn(['collect:view'])
+    const wrapper = await render()
+    const card = wrapper.find('.point-card')
+    expect(card.find('input[type="checkbox"]').exists()).toBe(false)
+    expect(card.text()).not.toContain('写值')
+    expect(card.find('button[aria-label="删除点位"]').exists()).toBe(false)
+    expect(card.find('[role="switch"]').attributes('disabled')).toBeDefined()
+    expect(card.find('.point-card__name').exists()).toBe(true)
   })
 })

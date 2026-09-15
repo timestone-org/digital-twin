@@ -49,6 +49,10 @@ export function validateSourceForm(
   if (!isEdit && !CODE_PATTERN.test(values.code.trim()))
     return '编码只能用字母、数字与 . _ -，且以字母或数字开头'
   if (values.endpoint.trim() === '') return '请填写 Endpoint 地址'
+  if (values.securityMode !== 'None' || values.securityPolicy !== 'None')
+    return '当前采集驱动尚不支持证书安全连接，请先确认设备的安全要求'
+  const endpointError = validateEndpoint(values.endpoint)
+  if (endpointError !== null) return endpointError
   if (values.pollIntervalMs < COLLECT_MIN_INTERVAL_MS)
     return `轮询周期不能小于 ${COLLECT_MIN_INTERVAL_MS} 毫秒`
   return null
@@ -105,4 +109,20 @@ export function toUpdateInput(
   if (values.credential !== '')
     return { ...shared(values), credential: values.credential }
   return shared(values)
+}
+
+function validateEndpoint(value: string): string | null {
+  try {
+    const endpoint = new URL(value.trim())
+    if (
+      endpoint.protocol !== 'opc.tcp:' ||
+      !endpoint.hostname ||
+      endpoint.username ||
+      endpoint.password
+    )
+      return '请填写 opc.tcp://主机:端口 格式的地址，账户和口令在下方填写'
+  } catch {
+    return 'Endpoint 地址格式不正确'
+  }
+  return null
 }

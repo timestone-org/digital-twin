@@ -13,6 +13,7 @@ defineProps<{
 }>()
 
 defineEmits<{
+  edit: []
   batch: [next: boolean]
   remove: []
   clear: []
@@ -24,6 +25,9 @@ defineEmits<{
     class="flex flex-wrap items-center gap-2 rounded-md border border-accent-primary/30 bg-accent-primary/10 px-3 py-2 text-xs"
   >
     <span class="text-text-secondary">已选 {{ count }} 项</span>
+    <DtButton variant="ghost" size="sm" :disabled="busy" @click="$emit('edit')"
+      >批量编辑</DtButton
+    >
     <span class="h-3.5 w-px bg-border-subtle" />
     <DtButton
       variant="ghost"

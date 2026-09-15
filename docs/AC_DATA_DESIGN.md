@@ -148,6 +148,8 @@ GET /ac-datasets/{dataset}/source-objects        权限：ac:manage
 `GROUP BY TABLE_NAME HAVING COUNT(DISTINCT COLUMN_NAME) = 20` 只返回**同时具备 `CT`
 与全部 19 个指标列**的对象；`caption` 从 `KTInfo` 按对象名末段的 `device_id` 关联取
 （取不到给 `null`），取用前 `strip()`。
+`KTInfo` 是可选的名称来源：表不存在时仍返回结构齐备的对象，`caption` 为 `null`；
+连接失败或已存在表的查询失败仍按外库不可用处理，不吞掉真实故障。
 ⚠ 不按 `KTStartData%` 过滤——见 §2.1 第 2 条。
 
 ⚠ `row_count_hint` **恒为 `null`**：可绑定的都是视图，SQL Server 不为视图存行数统计，

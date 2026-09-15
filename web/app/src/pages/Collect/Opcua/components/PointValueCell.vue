@@ -12,6 +12,7 @@ import { DtTag, DtTooltip } from '@dt/ui'
 import { formatSample } from '../scripts/liveFormat'
 
 const props = defineProps<{
+  stale?: boolean
   sample: PointSample | undefined
   unit: string | null
 }>()
@@ -23,6 +24,7 @@ const look = computed(() => formatSample(props.sample, props.unit))
   <div class="flex flex-col gap-0.5">
     <div class="flex items-center gap-1.5">
       <span class="font-mono">{{ look.text }}</span>
+      <DtTag v-if="stale && sample" intent="warning" size="sm">陈旧</DtTag>
       <DtTooltip v-if="look.reason" :content="look.reason">
         <DtTag :intent="look.intent" size="sm">{{ look.badge }}</DtTag>
       </DtTooltip>

@@ -21,7 +21,7 @@ export function nodeTableColumns(canManage: boolean): readonly DtDataColumn[] {
     ...(canManage
       ? [{ key: 'select', label: '', width: '2.5rem' } satisfies DtDataColumn]
       : []),
-    { key: 'name', label: '名称', width: '9rem', card: 'title' },
+    { key: 'name', label: '名称', width: '16rem', card: 'title' },
     // 13rem 是量出来的：`K01_START_TIME_FORECAST` 这类 23 字符编码在 12rem 上
     // 还差 8px，会被徽标截掉尾巴
     { key: 'code', label: '编码', width: '13rem' },

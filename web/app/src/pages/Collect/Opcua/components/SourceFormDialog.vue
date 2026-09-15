@@ -233,7 +233,7 @@ function submit(): void {
       <div class="grid grid-cols-1 gap-3 sm:grid-cols-2">
         <DtField
           label="安全模式"
-          hint="存进连接参数；驱动按自身能力消费，暂不支持的取值只存不生效。"
+          hint="当前仅支持 None；需要签名或加密的设备暂不能接入。"
         >
           <DtSelect v-model="securityMode" :options="SECURITY_MODES" />
         </DtField>

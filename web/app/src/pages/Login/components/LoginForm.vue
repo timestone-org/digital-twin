@@ -89,7 +89,7 @@ async function onSubmit(): Promise<void> {
         name="username"
         autocomplete="username"
         placeholder="请输入用户名"
-        size="lg"
+        size="md"
         @keystate="onCapsCheck"
       >
         <template #leading><DtIcon name="user" :size="16" /></template>
@@ -106,20 +106,24 @@ async function onSubmit(): Promise<void> {
           :type="showPassword ? 'text' : 'password'"
           autocomplete="current-password"
           placeholder="请输入密码"
-          size="lg"
+          size="md"
           @keystate="onCapsCheck"
         >
           <template #leading><DtIcon name="lock" :size="16" /></template>
           <template #trailing>
-            <button
+            <DtButton
               type="button"
+              variant="ghost"
+              intent="neutral"
+              size="sm"
               class="login-form__reveal"
+              :icon="showPassword ? 'eye-off' : 'eye'"
               :aria-label="showPassword ? '隐藏密码' : '显示密码'"
+              :aria-pressed="showPassword"
               tabindex="-1"
+              @mousedown.prevent
               @click="showPassword = !showPassword"
-            >
-              <DtIcon :name="showPassword ? 'eye-off' : 'eye'" :size="16" />
-            </button>
+            />
           </template>
         </DtInput>
         <span v-if="capsOn" class="login-form__caps">
@@ -135,7 +139,7 @@ async function onSubmit(): Promise<void> {
 
       <DtButton
         type="submit"
-        size="lg"
+        size="md"
         block
         :loading="loading"
         :disabled="!canSubmit"
@@ -212,18 +216,14 @@ async function onSubmit(): Promise<void> {
     gap: 6px;
   }
 
-  &__reveal {
-    display: inline-flex;
-    padding: 0;
-    border: none;
-    background: transparent;
-    color: var(--text-disabled);
-    cursor: pointer;
-    transition: color 0.18s ease;
+  &__password :deep(input[type='password']) {
+    font-family: Arial, sans-serif;
+    letter-spacing: 0;
+  }
 
-    &:hover {
-      color: var(--accent-primary);
-    }
+  &__reveal {
+    flex-shrink: 0;
+    border-radius: var(--radius-sm);
   }
 
   &__caps {

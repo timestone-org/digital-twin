@@ -5,10 +5,15 @@
 
 from datetime import UTC, datetime
 
+import pytest
 from asyncua import ua
 
 from collector_server.apps.collect.drivers.base import DriverConnection
 from collector_server.apps.collect.drivers.opcua.driver import build_client
+from collector_server.apps.collect.drivers.opcua.mapping import (
+    UnsupportedSecurity,
+    category_of,
+)
 from collector_server.apps.collect.drivers.opcua.notifier import (
     DataChangeNotifier,
 )
@@ -104,3 +109,25 @@ def test_client_carries_the_credentials_when_the_plan_has_them() -> None:
     )
     assert client._username == "operator"
     assert client._password == "s3cret"
+
+
+@pytest.mark.parametrize(
+    "options",
+    [
+        {"security_mode": "Sign"},
+        {"security_policy": "Basic256Sha256"},
+    ],
+)
+def test_unsupported_security_never_silently_creates_unsecured_client(
+    options: dict[str, str],
+) -> None:
+    with pytest.raises(ValueError, match="安全"):
+        build_client(
+            DriverConnection(
+                endpoint="opc.tcp://localhost:4840", options=options
+            )
+        )
+
+
+def test_unsupported_security_is_a_configuration_error() -> None:
+    assert category_of(UnsupportedSecurity("unsupported")) == "config"

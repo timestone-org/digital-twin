@@ -12,11 +12,15 @@ from zoneinfo import ZoneInfo
 import pytest
 
 from lib.errors import DependencyUnavailable
+from platform_server.apps.hvac.datasets import DATASET_RAW_MINUTE
 from platform_server.apps.hvac.errors import (
     SourceObjectShapeMismatch,
     SourceUnavailable,
 )
 from platform_server.apps.hvac.schemas import TimeWindow
+from platform_server.apps.hvac.services.ac_reading_service import (
+    list_source_objects,
+)
 from platform_server.apps.hvac.services.ac_source_reader import (
     AcSourceReader,
     build_extent_sql,
@@ -113,6 +117,8 @@ class StubSource:
         self.asked = (sql, dict(params))
         if self.failure is not None:
             raise self.failure
+        if "FROM [KTInfo]" in sql and not self.columns:
+            raise DependencyUnavailable("厂商名称表不存在")
         return list(self.rows)
 
     async def describe_columns(
@@ -141,6 +147,30 @@ def a_window() -> TimeWindow:
     """一个一天长的 UTC 区间。"""
     start = datetime(2026, 8, 12, 0, 0, tzinfo=UTC)
     return TimeWindow(start=start, end=start + timedelta(days=1))
+
+
+async def test_discovery_without_vendor_captions_keeps_bindable_views() -> None:
+    source = StubSource(rows=[{"object_name": OBJECT}])
+    result = await list_source_objects(
+        reader_over(source), dataset=DATASET_RAW_MINUTE
+    )
+    assert [(item.name, item.caption) for item in result.items] == [
+        (OBJECT, None)
+    ]
+
+
+async def test_vendor_captions_are_read_when_the_table_exists() -> None:
+    source = StubSource(
+        columns={"KTInfo": {"device_id": "varchar", "Caption": "varchar"}},
+        rows=[{"device_id": "K01\r", "Caption": "一车间东\r"}],
+    )
+    assert await reader_over(source).list_captions() == {"K01": "一车间东"}
+
+
+async def test_caption_discovery_does_not_hide_connection_failure() -> None:
+    source = StubSource(failure=DependencyUnavailable("外库挂了"))
+    with pytest.raises(SourceUnavailable):
+        await reader_over(source).list_captions()
 
 
 async def test_a_driver_outage_surfaces_as_a_source_level_error() -> None:
