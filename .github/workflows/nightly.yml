@@ -77,7 +77,9 @@ jobs:
           mkdir -p mutants
           cp -R src mutants/
           uv run --project .. --with mutmut==3.2.1 mutmut run
-          uv run --project .. --with mutmut==3.2.1 mutmut results
+          # mutmut 3.2.1 的 results 子命令未自行读取配置。
+          uv run --project .. --with mutmut==3.2.1 python -c \
+            'from mutmut.__main__ import cli, read_config; read_config(); cli(["results"])'
 
       # ⚠ 这一段是补偿控制，不是锦上添花：opcua-server 因 coverage 与 asyncua
       # 的病理性交互关掉了分支覆盖（ADR-0008），变异测试是它唯一的替代物。
@@ -89,7 +91,8 @@ jobs:
           cp -R src scripts migrations openapi.json alembic.ini pyproject.toml mutants/
           # 这些集成用例共用表并在结束时清表，变异进程必须串行。
           uv run --project ../.. --with mutmut==3.2.1 mutmut run --max-children 1
-          uv run --project ../.. --with mutmut==3.2.1 mutmut results
+          uv run --project ../.. --with mutmut==3.2.1 python -c \
+            'from mutmut.__main__ import cli, read_config; read_config(); cli(["results"])'
 
   a11y:
     name: 可访问性全站扫描

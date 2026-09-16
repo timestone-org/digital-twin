@@ -37,6 +37,7 @@ FROM python:3.12-slim-bookworm AS runtime
 # DOCX 原件预览由 worker 派生 PDF（ADR-0054）。同镜像跑 api/worker，故只装一份。
 # 只装 Writer 的 nogui 变体；中文字体决定现场手册会不会变成方框。
 RUN apt-get update \
+ && apt-get upgrade -y --no-install-recommends \
  && apt-get install -y --no-install-recommends \
       fonts-noto-cjk \
       libreoffice-writer-nogui \
