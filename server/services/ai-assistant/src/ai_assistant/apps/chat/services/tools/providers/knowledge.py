@@ -16,6 +16,10 @@ from collections.abc import Awaitable, Callable
 from dataclasses import dataclass, field
 from typing import Any, cast
 
+from ai_assistant.apps.chat.services.tools.pagination import (
+    ToolPage,
+    page_properties,
+)
 from ai_assistant.upstream import KnowledgeClient
 from llmcore.tools.ports import UnknownTool
 from llmcore.tools.shapes import (
@@ -41,7 +45,7 @@ KNOWLEDGE_SPECS: tuple[ToolSpec, ...] = (
             "这里来，凭印象填一个多半是 404。"
             "⚠ 一个都没有不等于这套部署没接知识库，也可能是这个人没有权限。"
         ),
-        parameters=object_schema({}, []),
+        parameters=object_schema(page_properties(), []),
         runs_on="server",
     ),
     ToolSpec(
@@ -115,8 +119,10 @@ class KnowledgeTools:
         return self.client
 
     async def _list_bases(self, arguments: dict[str, Any]) -> Any:
-        del arguments
-        made = await self._upstream().list_bases(self.headers)
+        page = ToolPage.parse(arguments)
+        made = await self._upstream().list_bases(
+            self.headers, page=page.page, size=page.limit
+        )
         rows = _items_of(made)
         return {
             "bases": [
@@ -126,10 +132,12 @@ class KnowledgeTools:
                     "description": str(one.get("description", "")),
                     "document_count": one.get("document_count", 0),
                 }
-                for one in rows
+                for one in rows[: page.limit]
             ],
+            **page.describe(_total_of(made, len(rows))),
             "note": (
-                "库 id 只能从这里来。一个都没有时，先问用户这套部署有没有"
+                "需要更多时使用next_page继续查询。库 id 只能从这里来。"
+                "一个都没有时，先问用户这套部署有没有"
                 "建过知识库，别自己编一个 id。"
             ),
         }
@@ -207,3 +215,11 @@ def _limit(given: object) -> int:
     if not isinstance(given, int) or given < 1:
         return DEFAULT_LIMIT
     return min(given, MAX_LIMIT)
+
+
+def _total_of(made: object, fallback: int) -> int:
+    if isinstance(made, dict):
+        total = cast("dict[str, object]", made).get("total")
+        if type(total) is int:
+            return total
+    return fallback

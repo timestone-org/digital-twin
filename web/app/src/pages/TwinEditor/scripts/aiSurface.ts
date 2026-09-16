@@ -89,6 +89,7 @@ function snapshotOf(deps: TwinSurfaceDeps): SurfaceSnapshot {
   const brief = briefOf(config, selection)
   return {
     is_ready: true,
+    selection_mode: 'single',
     node_id: deps.nodeId(),
     node_label: deps.nodeLabel(),
     part_count: config.parts.length,

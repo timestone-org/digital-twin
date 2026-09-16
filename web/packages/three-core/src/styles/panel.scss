@@ -27,23 +27,25 @@
     position: absolute;
     top: 0;
     left: 0;
-    transform: translate(-50%, -50%);
+    transform: translate(-50%, -50%) scaleX(var(--tp-reading-x, 1));
   }
 
   &[data-orient='top'] > .twin-panel {
-    transform: translate(-50%, calc(-100% - var(--tp-lead)));
+    transform: translate(-50%, calc(-100% - var(--tp-lead)))
+      scaleX(var(--tp-reading-x, 1));
   }
 
   &[data-orient='bottom'] > .twin-panel {
-    transform: translate(-50%, var(--tp-lead));
+    transform: translate(-50%, var(--tp-lead)) scaleX(var(--tp-reading-x, 1));
   }
 
   &[data-orient='left'] > .twin-panel {
-    transform: translate(calc(-100% - var(--tp-lead)), -50%);
+    transform: translate(calc(-100% - var(--tp-lead)), -50%)
+      scaleX(var(--tp-reading-x, 1));
   }
 
   &[data-orient='right'] > .twin-panel {
-    transform: translate(var(--tp-lead), -50%);
+    transform: translate(var(--tp-lead), -50%) scaleX(var(--tp-reading-x, 1));
   }
 }
 

@@ -1,0 +1,156 @@
+// 部件详情的容器布局与读数适配；不改变场景内信息牌的尺寸。
+.twin-part-modal {
+  --tp-accent: var(--accent-primary);
+  --tp-bg: var(--surface-overlay);
+  --tp-font-size: 12px;
+  --tp-preview-height: min(
+    var(--tp-stage-height, 260px),
+    max(160px, calc(100dvh - 250px))
+  );
+
+  container-type: inline-size;
+  min-width: 0;
+  color: var(--text-primary);
+  font-size: var(--tp-font-size);
+  line-height: 1.5;
+
+  &__grid {
+    display: grid;
+    gap: 16px;
+    align-items: start;
+    grid-template-columns: minmax(0, 1fr);
+
+    &.is-split {
+      grid-template-columns: 176px minmax(0, 1fr);
+    }
+  }
+
+  &__detail {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 16px;
+    align-items: flex-start;
+    min-width: 0;
+  }
+
+  &__preview,
+  &__readings {
+    min-width: 0;
+    max-width: 100%;
+    overflow: hidden;
+    border: 1px solid var(--border-subtle);
+    border-radius: var(--radius-lg);
+    background: var(--surface-sunken);
+  }
+
+  &__preview {
+    flex: 1.3 1 360px;
+  }
+
+  &__readings {
+    display: flex;
+    flex: 1 1 320px;
+    flex-direction: column;
+    max-height: calc(var(--tp-preview-height) + 45px);
+  }
+
+  &__stage {
+    position: relative;
+    height: var(--tp-preview-height);
+    overflow: hidden;
+    background: radial-gradient(
+      ellipse at 50% 65%,
+      color-mix(in srgb, var(--tp-accent) 9%, transparent),
+      transparent 70%
+    );
+  }
+
+  &__data {
+    min-width: 0;
+    min-height: 0;
+    padding: 12px;
+    overflow: auto;
+    overscroll-behavior: contain;
+    scrollbar-width: thin;
+    scrollbar-color: var(--border-default) transparent;
+
+    &:focus-visible {
+      outline: 2px solid var(--tp-accent);
+      outline-offset: -2px;
+    }
+
+    // ⚠ 命令式卡片没有 scoped 属性，必须经宿主 :deep 定位。
+    :deep(.twin-panel) {
+      width: 100%;
+      min-width: 0;
+      max-width: none;
+      padding: 10px;
+    }
+
+    :deep(.twin-panel__body) {
+      grid-template-columns: repeat(
+        auto-fit,
+        minmax(
+          min(
+            100%,
+            max(
+              150px,
+              calc((100% - (var(--tp-cols) - 1) * 10px) / var(--tp-cols))
+            )
+          ),
+          1fr
+        )
+      );
+      gap: 10px;
+    }
+
+    :deep(.twin-panel__row) {
+      padding: 10px;
+      border: 1px solid var(--border-subtle);
+      border-radius: var(--radius-sm);
+      background: color-mix(in srgb, var(--tp-tone) 4%, var(--surface-panel));
+    }
+
+    :deep(.twin-panel__line),
+    :deep(.twin-panel__hero) {
+      min-width: 0;
+      flex-wrap: wrap;
+      gap: 4px 10px;
+    }
+
+    :deep(.twin-panel__label),
+    :deep(.twin-panel__value),
+    :deep(.twin-panel__num),
+    :deep(.twin-panel__unit) {
+      min-width: 0;
+      max-width: 100%;
+      white-space: normal;
+      overflow-wrap: anywhere;
+    }
+
+    :deep(.twin-panel__value) {
+      margin-left: auto;
+      text-align: right;
+    }
+  }
+
+  &__blank {
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    margin: 0;
+    padding: 24px 16px;
+    color: var(--text-secondary);
+    text-align: center;
+  }
+}
+
+@container (max-width: 620px) {
+  .twin-part-modal__grid.is-split {
+    grid-template-columns: minmax(0, 1fr);
+  }
+
+  .twin-part-modal__stage {
+    height: min(var(--tp-preview-height), 36dvh);
+  }
+}

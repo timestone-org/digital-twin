@@ -29,6 +29,7 @@ from ai_assistant.apps.chat.services import advance_persist
 from ai_assistant.apps.chat.services.intent import select as tool_select
 from ai_assistant.apps.chat.services.memory import state_block
 from ai_assistant.apps.chat.services.memory.prompt import build_system_prompt
+from ai_assistant.apps.chat.services.model_retry import RetryingModel
 from ai_assistant.apps.chat.services.perception import vision
 from ai_assistant.apps.chat.services.planning import plan as plan_service
 from ai_assistant.apps.chat.services.tools.providers.mcp import (
@@ -364,7 +365,7 @@ async def advance(
         sessions=deps.sessions, chat_session_id=chat_session_id
     )
     turn = TurnDeps(
-        model=deps.model,
+        model=RetryingModel(deps.model),
         specs=tool_select.specs_for(
             payload.surface_kind,
             payload.client_tools,

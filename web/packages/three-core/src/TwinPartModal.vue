@@ -1,15 +1,7 @@
 <script setup lang="ts">
 /**
- * @fileoverview 部件详情弹窗：近距点击某个部件时弹出来的那一个。左边是装配栏
- * （这个部件收着的后代），右边是当前看的那一个的模型与读数。
- *
- * ⚠ 弹窗里那块 3D 是**另一套场景**，不是把主画布挪过来：它自己起渲染器、把部件
- * 克隆一份摆在原点。所以「只看这一个」不需要去动主场景的显隐与材质，关掉弹窗
- * 也就没有任何要还原的东西。
- * ⚠ 框级的两项（弹窗宽度、模型区高度）取**打开的那个部件**，内容级的取当前看的
- * 那一个：逐行换宽高会让对话框在屏幕上跳。
- * ⚠ 数据卡片由 `panelCard` 命令式建 DOM 而不是在模板里重画一遍：八种字段画法、
- * 阈值档与迷你图都长在那边，照着抄第二遍必然漂，而漂了以后两边都不报错。
+ * @fileoverview 部件详情弹窗：装配导航、独立模型预览与自适应读数卡片。
+ * 场景生命周期与字段契约见 docs/TWIN_PART_INTERACTION_DESIGN.md。
  */
 import type {
   TwinPart,
@@ -37,6 +29,7 @@ import {
 import { createPartPreview, type PartPreview } from './partPreview'
 import type { SceneRendererFactory } from './sceneCore'
 import TwinPartAssemblyRail from './TwinPartAssemblyRail.vue'
+import TwinPartSectionHead from './TwinPartSectionHead.vue'
 
 const props = defineProps<{
   /** 打开的那个部件，也是装配的顶；null = 弹窗关着。 */
@@ -236,105 +229,51 @@ onBeforeUnmount(() => {
           @select="emit('select', $event)"
         />
         <div class="twin-part-modal__detail">
-          <div
-            v-show="showModel && !stageEmpty"
-            ref="stageRef"
-            class="twin-part-modal__stage"
-            data-test="part-modal-stage"
-          />
-          <p
-            v-if="showModel && stageEmpty"
-            class="twin-part-modal__stage twin-part-modal__blank"
-            data-test="part-modal-stage-empty"
-          >
-            模型里找不到这个部件的节点
-          </p>
-          <div
-            v-show="!noFields"
-            ref="cardRef"
-            class="twin-part-modal__data"
-            data-test="part-modal-data"
-          />
-          <p
-            v-if="noFields"
-            class="twin-part-modal__data twin-part-modal__blank"
-            data-test="part-modal-no-fields"
-          >
-            这个部件没有配读数
-          </p>
+          <section v-show="showModel" class="twin-part-modal__preview">
+            <TwinPartSectionHead
+              title="部件模型"
+              :hint="stageEmpty ? '' : '拖动旋转 · 滚轮缩放'"
+            />
+            <div
+              v-show="!stageEmpty"
+              ref="stageRef"
+              class="twin-part-modal__stage"
+              data-test="part-modal-stage"
+            />
+            <p
+              v-if="stageEmpty"
+              class="twin-part-modal__stage twin-part-modal__blank"
+              data-test="part-modal-stage-empty"
+            >
+              模型里找不到这个部件的节点
+            </p>
+          </section>
+          <section class="twin-part-modal__readings">
+            <TwinPartSectionHead
+              title="部件读数"
+              :hint="`${current?.detail.fields.length ?? 0} 项参数`"
+            />
+            <div
+              v-show="!noFields"
+              ref="cardRef"
+              class="twin-part-modal__data"
+              data-test="part-modal-data"
+              role="region"
+              aria-label="部件读数"
+              :tabindex="noFields ? -1 : 0"
+            />
+            <p
+              v-if="noFields"
+              class="twin-part-modal__blank"
+              data-test="part-modal-no-fields"
+            >
+              这个部件没有配读数
+            </p>
+          </section>
         </div>
       </div>
     </div>
   </DtModal>
 </template>
 
-<style scoped lang="scss">
-// ⚠ 数据卡片的观感全在全局的 `styles/panel.scss` 里：它是命令式建出来的 DOM，
-// 不在本组件的 scoped 作用域内，写在这里一条都不生效。
-.twin-part-modal {
-  --tp-accent: var(--accent-primary);
-  --tp-bg: var(--surface-overlay);
-  --tp-font-size: 12px;
-
-  // 装配栏塌不塌成一条要看**弹窗自己**有多宽，不是看视口：弹窗宽度是配出来的，
-  // 一块 320px 的窄弹窗在大屏幕上照样摆不下左右两栏
-  container-type: inline-size;
-  color: var(--text-primary);
-  font-size: var(--tp-font-size);
-  line-height: 1.5;
-
-  &__grid {
-    display: grid;
-    gap: 16px;
-    align-items: start;
-
-    &.is-split {
-      grid-template-columns: 176px minmax(0, 1fr);
-    }
-  }
-
-  &__detail {
-    display: flex;
-    flex-wrap: wrap;
-    gap: 16px;
-    align-items: flex-start;
-    min-width: 0;
-  }
-
-  // ⚠ 富余的宽度全给舞台，读数卡只按内容取一个稳定宽度：反过来的话，把弹窗
-  //   调宽只是把卡片摊得更开，而设备大多是长条形的，缺的正是舞台的宽度
-  &__stage {
-    position: relative;
-    flex: 1 1 360px;
-    height: var(--tp-stage-height, 260px);
-    overflow: hidden;
-    border: 1px solid var(--border-subtle);
-    border-radius: var(--radius-md);
-    background: var(--surface-sunken);
-  }
-
-  &__data {
-    flex: 0 1 320px;
-    min-width: 240px;
-  }
-
-  &__blank {
-    display: flex;
-    align-items: center;
-    justify-content: center;
-    margin: 0;
-    padding: 20px 12px;
-    border: 1px dashed var(--border-default);
-    border-radius: var(--radius-md);
-    background: none;
-    color: var(--text-disabled);
-    text-align: center;
-  }
-}
-
-@container (max-width: 620px) {
-  .twin-part-modal__grid.is-split {
-    grid-template-columns: minmax(0, 1fr);
-  }
-}
-</style>
+<style scoped lang="scss" src="./styles/partModal.scss" />

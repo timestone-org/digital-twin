@@ -238,9 +238,6 @@ importers:
       '@dt/ui':
         specifier: workspace:*
         version: link:../ui
-      html-to-image:
-        specifier: ^1.11.13
-        version: 1.11.13
       three:
         specifier: ^0.184.0
         version: 0.184.0

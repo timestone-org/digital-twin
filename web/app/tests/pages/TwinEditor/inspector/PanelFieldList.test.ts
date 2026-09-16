@@ -147,6 +147,7 @@ describe('增删改与调序', () => {
 
     const next = written(wrapper)
     expect(next).toHaveLength(3)
+    expect(next[2]?.decimals).toBe(2)
     expect(new Set(next.map((field) => field.key)).size).toBe(3)
   })
 

@@ -251,10 +251,8 @@ describe('配置场景实体', () => {
     const listed = await run(surface, 'twin.read_config', {
       section: 'parts',
     })
-    expect(listed.folders).toEqual([
-      { id: 'cold-station', name: '冷站设备', item_count: 1 },
-      { id: 'spares', name: '备用设备', item_count: 0 },
-    ])
+    expect(listed.folder_count).toBe(2)
+    expect(listed.has_more).toBe(false)
     expect(listed.items).toEqual([
       {
         id: 'part-1',
@@ -804,3 +802,118 @@ describe('认不出的工具', () => {
     )
   })
 })
+
+describe('工具按需分页', () => {
+  it('实体目录可以连续翻页且无重复遗漏', async () => {
+    const { surface } = setup({
+      config: normalizeTwinConfig({
+        parts: Array.from({ length: 25 }, (_, index) => ({
+          id: `p${String(index)}`,
+          name: `设备${String(index)}`,
+        })),
+      }),
+    })
+    const first = await run(surface, 'twin.list_entities', { section: 'parts' })
+    expect(first.items).toHaveLength(20)
+    expect(first.next_page).toBe(2)
+    const second = await run(surface, 'twin.list_entities', {
+      section: 'parts',
+      page: first.next_page,
+    })
+    expect(second.items).toMatchObject([
+      { id: 'p20' },
+      { id: 'p21' },
+      { id: 'p22' },
+      { id: 'p23' },
+      { id: 'p24' },
+    ])
+    expect(second.has_more).toBe(false)
+    expect(second.next_page).toBeNull()
+  })
+
+  it('文件夹按分类和关键词过滤后分页', async () => {
+    const { surface } = setup()
+    const listed = await run(surface, 'twin.list_folders', {
+      section: 'parts',
+      keyword: '设备',
+      limit: 1,
+      page: 2,
+    })
+    expect(listed.folders).toMatchObject([{ folder_id: 'spares' }])
+    expect(listed.total).toBe(2)
+    expect(listed.has_more).toBe(false)
+  })
+})
+
+it('快照声明单选能力且不把选择状态当作批量操作范围', async () => {
+  const { surface } = setup({ selection: { kind: 'parts', id: 'part-1' } })
+  const shot = await run(surface, 'dashboard.read_canvas')
+  expect(shot.selection_mode).toBe('single')
+  expect(shot.selected_ids).toEqual(['part-1'])
+})
+
+it('按名称跨页收集多个目标后逐个改名，不依赖界面多选且不遗漏', async () => {
+  const { surface } = setup({
+    selection: { kind: 'parts', id: 'other' },
+    config: normalizeTwinConfig({
+      parts: [
+        ...Array.from({ length: 25 }, (_, index) => ({
+          id: `pump-${String(index)}`,
+          name: `循环泵${String(index)}`,
+        })),
+        { id: 'other', name: '进水阀' },
+      ],
+    }),
+  })
+  const first = await run(surface, 'twin.list_entities', {
+    section: 'parts',
+    keyword: '循环泵',
+  })
+  const last = await run(surface, 'twin.list_entities', {
+    section: 'parts',
+    keyword: '循环泵',
+    page: first.next_page,
+  })
+  const ids = [...targetIds(first.items), ...targetIds(last.items)]
+  expect(ids).toHaveLength(25)
+  expect(new Set(ids).size).toBe(25)
+  expect(last.has_more).toBe(false)
+  for (const id of ids) {
+    const detail = await run(surface, 'twin.read_entity', {
+      section: 'parts',
+      id,
+    })
+    expect(detail.id).toBe(id)
+    await run(surface, 'twin.patch_config', {
+      section: 'parts',
+      id,
+      patch: { name: `已处理-${id}` },
+    })
+  }
+  const changed = await run(surface, 'twin.list_entities', {
+    section: 'parts',
+    keyword: '已处理',
+  })
+  expect(changed.total).toBe(25)
+  const untouched = await run(surface, 'twin.read_entity', {
+    section: 'parts',
+    id: 'other',
+  })
+  expect(untouched.config).toMatchObject({ name: '进水阀' })
+  const shot = await run(surface, 'dashboard.read_canvas')
+  expect(shot.selected_ids).toEqual(['other'])
+})
+
+function targetIds(items: unknown): string[] {
+  if (!Array.isArray(items)) throw new Error('缺少工具名片数组')
+  return items.map((item: unknown) => {
+    if (
+      typeof item !== 'object' ||
+      item === null ||
+      !('id' in item) ||
+      typeof item.id !== 'string'
+    )
+      throw new Error('工具名片缺少真实 id')
+    return item.id
+  })
+}

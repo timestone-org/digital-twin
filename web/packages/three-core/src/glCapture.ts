@@ -12,6 +12,7 @@ import type { Camera, Object3D } from 'three'
  * 反向哪怕只有类型也会被依赖图闸判成环。
  */
 export interface SnapshotableCore {
+  readonly prepareSnapshot?: () => void
   readonly scene: Object3D
   readonly camera: Camera
   readonly renderer: {
@@ -109,7 +110,8 @@ export function snapshotSceneCore(
 ): HTMLCanvasElement | null {
   const gl = core.renderer.domElement
   try {
-    core.renderer.render(core.scene, core.camera)
+    if (core.prepareSnapshot) core.prepareSnapshot()
+    else core.renderer.render(core.scene, core.camera)
     if (gl.width === 0 || gl.height === 0) return null
     const copy = document.createElement('canvas')
     copy.width = gl.width

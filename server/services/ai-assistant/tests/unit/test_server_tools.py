@@ -183,7 +183,11 @@ async def test_the_nine_evaluation_rules_are_never_dropped() -> None:
     got = await tools("formula.catalog", {"table_id": "t1"})
     assert isinstance(got, dict)
     assert got["rules"] == ["四则运算里任一值为空，整条为空"]
-    assert got["columns"] == [{"key": "本期", "name": "本期值"}]
+    assert "columns" not in got
+    columns = await tools(
+        "formula.catalog", {"table_id": "t1", "section": "columns"}
+    )
+    assert columns["columns"] == [{"key": "本期", "name": "本期值"}]
 
 
 async def test_a_keyword_narrows_to_matches_and_adds_the_examples() -> None:

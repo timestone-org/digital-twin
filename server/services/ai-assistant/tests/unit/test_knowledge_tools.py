@@ -17,8 +17,10 @@ class _Client:
         self._answer = answer
         self.seen: list[tuple[str, dict[str, str], object]] = []
 
-    async def list_bases(self, headers: dict[str, str]) -> object:
-        self.seen.append(("list", headers, None))
+    async def list_bases(
+        self, headers: dict[str, str], *, page: int = 1, size: int = 20
+    ) -> object:
+        self.seen.append(("list", headers, (page, size)))
         return self._answer
 
     async def search(

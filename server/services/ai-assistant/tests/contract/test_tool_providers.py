@@ -163,7 +163,8 @@ def test_twin_folder_tools_keep_their_inputs_unambiguous() -> None:
     properties = entities["properties"]
 
     assert read["properties"]["section"]["enum"] == twin.SINGLETON_SECTIONS
-    assert folders["properties"] == {}
+    assert folders["properties"]["section"]["enum"] == twin.ENTITY_SECTIONS
+    assert folders["properties"]["limit"]["maximum"] == 20
     assert properties["section"]["enum"] == twin.ENTITY_SECTIONS
     assert entities["required"] == ["section"]
     assert detail["required"] == ["section", "id"]

@@ -572,22 +572,3 @@ describe('三种朝向', () => {
     layer.dispose()
   })
 })
-
-describe('牌面深度遮挡', () => {
-  it('牌面是真实的透明三维平面，参与深度测试', () => {
-    const layer = new PanelLayer()
-    layer.build([panel()], [])
-    const meshes: THREE.Mesh[] = []
-    layer.group.traverse((object) => {
-      if (object instanceof THREE.Mesh) meshes.push(object)
-    })
-    expect(meshes).toHaveLength(1)
-    const material: unknown = meshes[0]?.material
-    expect(material).toBeInstanceOf(THREE.MeshBasicMaterial)
-    if (!(material instanceof THREE.MeshBasicMaterial))
-      throw new Error('牌面材质缺失')
-    expect(material.depthTest).toBe(true)
-    expect(material.transparent).toBe(true)
-    layer.dispose()
-  })
-})

@@ -18,7 +18,6 @@
     "@dt/tokens": "workspace:*",
     "@dt/twin-config": "workspace:*",
     "@dt/ui": "workspace:*",
-    "html-to-image": "^1.11.13",
     "three": "^0.184.0"
   },
   "peerDependencies": {

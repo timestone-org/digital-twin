@@ -170,6 +170,43 @@ describe('弹窗本身', () => {
 })
 
 describe('数据卡片', () => {
+  it('多字段读数区可由键盘聚焦，完整保留长名称、读数与参数数量', () => {
+    const fields = Array.from({ length: 60 }, (_, index) => ({
+      key: `field-${index}`,
+      label: `冷却循环系统运行参数-${index}`,
+    }))
+    const wrapper = render(partOf({ detail: { columns: 4, fields } }), {
+      'p1::field-59': { value: '123456789012345678901234567890' },
+    })
+    const host = dataHost()
+
+    expect(host?.getAttribute('role')).toBe('region')
+    expect(host?.getAttribute('aria-label')).toBe('部件读数')
+    expect(host?.tabIndex).toBe(0)
+    host?.focus()
+    expect(document.activeElement).toBe(host)
+    expect(host?.querySelectorAll('.twin-panel__row')).toHaveLength(60)
+    expect(host?.textContent).toContain('冷却循环系统运行参数-59')
+    expect(host?.textContent).toContain('123456789012345678901234567890')
+    expect(modalText()).toContain('60 项参数')
+    wrapper.unmount()
+  })
+
+  it('聚焦读数区后按 Escape 仍可关闭弹窗', async () => {
+    const wrapper = render()
+    dataHost()?.focus()
+    dataHost()?.dispatchEvent(
+      new KeyboardEvent('keydown', {
+        key: 'Escape',
+        bubbles: true,
+      }),
+    )
+    await nextTick()
+
+    expect(wrapper.emitted('close')).toHaveLength(1)
+    wrapper.unmount()
+  })
+
   it('字段的标签、读数与单位都画出来', () => {
     render(partOf(), { 'p1::temp': { value: 7.2 } })
 
@@ -228,6 +265,7 @@ describe('数据卡片', () => {
       document.querySelector('[data-test="part-modal-no-fields"]'),
     ).not.toBeNull()
     expect(dataHost()?.firstElementChild).toBeFalsy()
+    expect(dataHost()?.tabIndex).toBe(-1)
   })
 })
 

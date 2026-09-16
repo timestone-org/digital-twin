@@ -27,6 +27,7 @@ from ai_assistant.apps.chat.services.tools.catalog.modules import (
     catalog_of,
     detail_of,
 )
+from ai_assistant.apps.chat.services.tools.pagination import ToolPage
 from ai_assistant.apps.chat.services.tools.points.resolve import (
     resolve_points,
     split_node_key,
@@ -38,8 +39,6 @@ from ai_assistant.apps.chat.skills import find_skill
 from ai_assistant.upstream import PlatformClient
 from llmcore.tools.shapes import ToolSpec
 
-# 一次检索最多回几条。再多模型也读不完，而每一条都在占上下文
-MAX_RESULTS = 20
 MAX_POINT_QUERY_CHARS = 300
 # 一个工具的实现：收一袋参数，给一份结果
 ToolHandler = Callable[[dict[str, Any]], Awaitable[Any]]
@@ -137,11 +136,22 @@ class ServerTools:
             body = await client.read_module_type(self.headers, wanted)
             return detail_of(body, _text_or_none(arguments.get("preset")))
         body = await client.list_module_types(self.headers)
-        return catalog_of(body, _text_or_none(arguments.get("keyword")))
+        return catalog_of(
+            body, _text_or_none(arguments.get("keyword")), arguments
+        )
 
-    async def _list_sources(self, _arguments: dict[str, Any]) -> Any:
-        rows = await self._upstream().list_sources(self.headers)
-        return {"sources": [_source_of(row) for row in rows]}
+    async def _list_sources(self, arguments: dict[str, Any]) -> Any:
+        page = ToolPage.parse(arguments)
+        query: dict[str, object] = {"page": page.page, "size": page.limit}
+        keyword = _text_or_none(arguments.get("keyword"))
+        if keyword:
+            query["q"] = keyword
+        body = await self._upstream().page_sources(self.headers, query)
+        rows, total = _page_of(body)
+        return {
+            "sources": [_source_of(row) for row in rows[: page.limit]],
+            **page.describe(total),
+        }
 
     async def _search_points(self, arguments: dict[str, Any]) -> Any:
         """按自然语言读取平台语义候选。Args: arguments。"""
@@ -173,7 +183,9 @@ class ServerTools:
         body = await self._upstream().formula_functions(
             self.headers, _required(arguments, "table_id")
         )
-        return formula_catalog_of(body, _text_or_none(arguments.get("keyword")))
+        return formula_catalog_of(
+            body, _text_or_none(arguments.get("keyword")), arguments
+        )
 
     async def _check_formula(self, arguments: dict[str, Any]) -> Any:
         """验一条公式的语法、依赖与环。
@@ -211,16 +223,21 @@ class ServerTools:
 
         Args: arguments。
         """
+        page = ToolPage.parse(arguments)
         body = await self._upstream().list_dashboards(
             self.headers,
             keyword=_text_or_none(arguments.get("keyword")),
             project_id=_text_or_none(arguments.get("project_id")),
+            window=(page.page, page.limit),
         )
         rows, total = _page_of(body)
-        shown = rows[: _limit_of(arguments.get("limit"))]
+        shown = rows[: page.limit]
         return {
             "dashboards": [_dashboard_of(row) for row in shown],
-            "note": _list_note(len(shown), total > len(shown), total),
+            **page.describe(total),
+            "note": _list_note(
+                len(shown), page.offset + len(shown) < total, total
+            ),
         }
 
     async def _list_tables(self, arguments: dict[str, Any]) -> Any:
@@ -228,41 +245,60 @@ class ServerTools:
 
         Args: arguments。
         """
+        page = ToolPage.parse(arguments)
         body = await self._upstream().list_dataset_tables(
-            self.headers, keyword=_text_or_none(arguments.get("keyword"))
+            self.headers,
+            keyword=_text_or_none(arguments.get("keyword")),
+            window=(page.page, page.limit),
         )
         rows, total = _page_of(body)
-        shown = rows[: _limit_of(arguments.get("limit"))]
+        shown = rows[: page.limit]
         return {
             "tables": [_table_of(row) for row in shown],
-            "note": _list_note(len(shown), total > len(shown), total),
+            **page.describe(total),
+            "note": _list_note(
+                len(shown), page.offset + len(shown) < total, total
+            ),
         }
 
     async def _read_saved_columns(self, arguments: dict[str, Any]) -> Any:
-        """读一张台账**已保存**的列。列集合有界，不截断。
+        """按页读一张台账已保存的列。
 
         Args: arguments。
         """
         rows = await self._upstream().list_dataset_columns(
             self.headers, _required(arguments, "table_id")
         )
-        return {"columns": [_column_of(row) for row in rows]}
+        page = ToolPage.parse(arguments)
+        columns = [_column_of(row) for row in rows]
+        keyword = _text_or_none(arguments.get("keyword"))
+        if keyword:
+            columns = [
+                row
+                for row in columns
+                if keyword.casefold()
+                in f"{row.get('key')} {row.get('name')}".casefold()
+            ]
+        return {"columns": page.select(columns), **page.describe(len(columns))}
 
     async def _search_assets(self, arguments: dict[str, Any]) -> Any:
         """搜素材。⚠ 上游不报总数，多要一条来判断有没有截断。
 
         Args: arguments。
         """
-        limit = _limit_of(arguments.get("limit"))
+        page = ToolPage.parse(arguments)
+        limit = page.limit
         rows = await self._upstream().list_assets(
             self.headers,
             keyword=_text_or_none(arguments.get("keyword")),
             kind=_text_or_none(arguments.get("kind")),
             limit=limit + 1,
+            offset=page.offset,
         )
         shown = rows[:limit]
         return {
             "assets": [_asset_of(row) for row in shown],
+            **page.metadata(has_more=len(rows) > limit),
             "note": _list_note(len(shown), len(rows) > limit),
         }
 
@@ -450,9 +486,16 @@ def _list_note(shown: int, is_clipped: bool, total: int | None = None) -> str:
     """
     if is_clipped:
         head = f"共 {total} 条" if total is not None else "还有更多"
-        return f"{head}，只列出前 {shown} 条；给关键词能缩小范围"
+        return (
+            f"{head}，本页列出前 {shown} 条；"
+            "需要更多时保持筛选与limit不变，使用next_page继续查询"
+        )
     if shown == 0:
-        return "空表就是真的没有，不要猜"
+        return "本页为空；第一页为空才表示当前筛选真的没有结果"
+    if total is None:
+        return f"本页 {shown} 条，已到末页"
+    if total != shown:
+        return f"共 {total} 条，本页 {shown} 条，已到末页"
     return f"共 {shown} 条，已全部列出"
 
 
@@ -485,12 +528,6 @@ def _as_body(row: object) -> dict[str, object]:
     # ⚠ 收窄一次而不是遍历重建：`isinstance` 从 `object` narrow 出来的是
     # `dict[Unknown, Unknown]`，遍历它的键值同样是未知的
     return cast("dict[str, object]", row)
-
-
-def _limit_of(given: Any) -> int:
-    if isinstance(given, int) and 0 < given <= MAX_RESULTS:
-        return given
-    return MAX_RESULTS
 
 
 def _text_or_none(given: Any) -> str | None:

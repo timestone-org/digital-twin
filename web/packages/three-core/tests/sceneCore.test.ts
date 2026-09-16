@@ -71,13 +71,14 @@ describe('三层画布的挂载位置', () => {
   })
 
   // 三层之间的先后不能颠倒：canvas 在最下，3D 的 DOM 层在最上
-  it('三层自己的先后是 canvas → 标签层 → 空间层', () => {
+  it('信息牌夹在场景底层和前景之间，标签保持在顶层', () => {
     const { core } = mount()
 
     expect([...container.children]).toEqual([
+      core.panelCompositor.element,
+      core.spatialRenderer.domElement,
       core.renderer.domElement,
       core.labelRenderer.domElement,
-      core.spatialRenderer.domElement,
     ])
   })
 })

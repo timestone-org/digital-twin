@@ -1,14 +1,9 @@
-"""服务端工具的规格：叫什么、收什么参数、在哪一侧执行。
+"""服务端工具规格；列表工具的输出约束见 docs/AI_ASSISTANT_DESIGN.md。
 
-⚠ 与实现（同目录的 `server.py`）分成两份文件，只因为并成一份会破 600 行的模块
-闸。**对外它们是同一个 `ToolProvider`**：`ServerTools.specs()` 交出这一份，
-`ServerTools.run()` 按同一批名字分派，两者对不上由契约测试当场拦下——所以「加一个
-工具要记得改两处」这件事不再靠人记。
-
-⚠ 这一份里的 `name` / `description` / `parameters` 是**喂给模型的提示词**，
-改一个字就是行为改动，不是重构。
+声明与实现必须同时支持过滤、条数上限及续查入口，由工具契约测试守护。
 """
 
+from ai_assistant.apps.chat.services.tools.pagination import page_properties
 from llmcore.tools.shapes import (
     ToolSpec,
     integer_schema,
@@ -78,7 +73,7 @@ SERVER_SPECS: tuple[ToolSpec, ...] = (
     ToolSpec(
         name="modules.catalog",
         description=(
-            "模块清单，**唯一的模块真源**。不给参数时列出全部模块的名片；"
+            "模块清单，**唯一的模块真源**。默认列出一页模块名片，按next_page继续；"
             "给 module_type 时把那一个展开——配置字段全表、绑定槽、"
             "每一档字段类型该写什么形状的值（field_types 图例）、"
             "出厂配置与现成观感预设的目录。"
@@ -88,6 +83,8 @@ SERVER_SPECS: tuple[ToolSpec, ...] = (
         ),
         parameters=object_schema(
             {
+                **page_properties(),
+                "category": string_schema("模块分类，精确匹配；不填则不限"),
                 "module_type": string_schema("要展开的模块类型，如 info-card"),
                 "keyword": string_schema(
                     "按中文名或别名筛名片表；展开时不用给"
@@ -103,8 +100,14 @@ SERVER_SPECS: tuple[ToolSpec, ...] = (
     ),
     ToolSpec(
         name="points.list_sources",
-        description="列出全部采集数据源。绑点之前先看有哪些源。",
-        parameters=object_schema({}, []),
+        description="按页列采集数据源。绑点之前先查；需要更多时用next_page继续。",
+        parameters=object_schema(
+            {
+                **page_properties(),
+                "keyword": string_schema("按名称或编码筛数据源"),
+            },
+            [],
+        ),
         runs_on="server",
     ),
     ToolSpec(
@@ -192,7 +195,7 @@ SERVER_SPECS: tuple[ToolSpec, ...] = (
                     "素材类型：model（三维模型）/ image（图片）/ icon（图标）；"
                     "不给则全类型找"
                 ),
-                "limit": integer_schema("最多返回几条，缺省与上限都是 20"),
+                **page_properties(),
             },
             [],
         ),
@@ -209,7 +212,7 @@ SERVER_SPECS: tuple[ToolSpec, ...] = (
             {
                 "keyword": string_schema("按大屏名字模糊筛"),
                 "project_id": string_schema("限定在某个项目内；不给则全部"),
-                "limit": integer_schema("最多返回几条，缺省与上限都是 20"),
+                **page_properties(),
             },
             [],
         ),
@@ -227,12 +230,20 @@ SERVER_SPECS: tuple[ToolSpec, ...] = (
         name="formula.catalog",
         description=(
             "公式的**唯一函数真源**：函数、运算符、时间窗写法、九条求值口径、"
-            "这张台账可引用的列与跨表、公式库条目。不给 keyword 时函数只给"
+            "按section分别读取列、跨表或公式库，默认只回一页函数。"
+            "不给 keyword 时函数只给"
             "名字与签名；给了才回匹配的那几个并带上样例。"
             "目录里没有的函数写出来是「未知函数」，不要凭记忆写。"
         ),
         parameters=object_schema(
             {
+                **page_properties(),
+                "section": {
+                    "type": "string",
+                    "enum": ["functions", "columns", "tables", "library"],
+                    "description": "目录分区，默认functions，按需切换",
+                },
+                "category": string_schema("函数分类，精确匹配"),
                 "table_id": string_schema("台账 id，取自当前工作面"),
                 "keyword": string_schema(
                     "按函数名或说明筛，如「同比」「PREV」"
@@ -292,7 +303,7 @@ SERVER_SPECS: tuple[ToolSpec, ...] = (
         parameters=object_schema(
             {
                 "keyword": string_schema("按台账名称或编码模糊筛"),
-                "limit": integer_schema("最多返回几条，缺省与上限都是 20"),
+                **page_properties(),
             },
             [],
         ),
@@ -308,7 +319,12 @@ SERVER_SPECS: tuple[ToolSpec, ...] = (
             "table_id 取自 datasets.list_tables。"
         ),
         parameters=object_schema(
-            {"table_id": string_schema("台账 id")}, ["table_id"]
+            {
+                **page_properties(),
+                "keyword": string_schema("按列名或key筛选"),
+                "table_id": string_schema("台账 id"),
+            },
+            ["table_id"],
         ),
         runs_on="server",
     ),

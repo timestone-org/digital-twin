@@ -9,6 +9,8 @@ import type { AssistantToolCall } from '@dt/contracts'
 
 import type { SurfaceSnapshot } from '@/features/ai/surfaces'
 
+import { pageItems } from './aiToolPage'
+
 import type { TwinSurfaceDeps } from './aiSurfaceTypes'
 import type { TwinEntityKind } from './types'
 
@@ -21,7 +23,6 @@ export const TWIN_CONFIG_TOOLS = [
   'twin.diagnose',
 ] as const
 
-const MAX_LIST_ITEMS = 100
 const TWIN_TOOL_SCHEMA_VERSION = 2
 const ENTITY_SECTIONS = [
   'parts',
@@ -40,7 +41,7 @@ export function runTwinConfigTool(
   call: AssistantToolCall,
 ): SurfaceSnapshot | null {
   if (call.name === 'twin.read_config') return readConfig(deps, call)
-  if (call.name === 'twin.list_folders') return listFolders(deps)
+  if (call.name === 'twin.list_folders') return listFolders(deps, call)
   if (call.name === 'twin.list_entities') return listEntities(deps, call)
   if (call.name === 'twin.read_entity') return readEntity(deps, call)
   if (call.name === 'twin.patch_config') return patchConfig(deps, call)
@@ -85,29 +86,40 @@ function readConfig(
       : config[section].filter((item) =>
           selectedFolder.itemIds.includes(item.id),
         )
+  const page = pageItems(items, call)
   return {
     section,
-    folders: folders.map((folder) => ({
-      ...folderBriefOf(folder),
-      item_count: folder.itemIds.length,
-    })),
-    items: items.slice(0, MAX_LIST_ITEMS).map((item) => ({
+    folder_count: folders.length,
+    items: page.items.map((item) => ({
       id: item.id,
       name: item.name,
       folder: folderOf(folders, item.id),
     })),
-    is_truncated: items.length > MAX_LIST_ITEMS,
+    ...page.metadata,
   }
 }
 
-function listFolders(deps: TwinSurfaceDeps): SurfaceSnapshot {
+function listFolders(
+  deps: TwinSurfaceDeps,
+  call: AssistantToolCall,
+): SurfaceSnapshot {
   const config = requireConfig(deps)
+  const section = optionalText(call, 'section')
+  if (section !== undefined && !isEntitySection(section))
+    throw new Error('section 必须是实体节')
+  const page = pageItems(
+    config.folders.filter(
+      (folder) => section === undefined || folder.kind === section,
+    ),
+    call,
+  )
   return {
     schema_version: TWIN_TOOL_SCHEMA_VERSION,
-    folders: config.folders.map((folder) => ({
+    folders: page.items.map((folder) => ({
       ...folderIdentityOf(folder),
       item_count: folder.itemIds.length,
     })),
+    ...page.metadata,
   }
 }
 
@@ -127,16 +139,17 @@ function listEntities(
     (item) =>
       selectedFolder === null || selectedFolder.itemIds.includes(item.id),
   )
+  const page = pageItems(items, call)
   return {
     schema_version: TWIN_TOOL_SCHEMA_VERSION,
     section,
     applied_folder_id: selectedFolder?.id ?? null,
-    items: items.slice(0, MAX_LIST_ITEMS).map((item) => ({
+    items: page.items.map((item) => ({
       id: item.id,
       name: item.name,
       folder: folderIdentityFor(folders, item.id),
     })),
-    is_truncated: items.length > MAX_LIST_ITEMS,
+    ...page.metadata,
   }
 }
 

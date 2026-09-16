@@ -72,13 +72,15 @@ class KnowledgeClient:
         if http is not None:
             await http.aclose()
 
-    async def list_bases(self, headers: dict[str, str]) -> object:
+    async def list_bases(
+        self, headers: dict[str, str], *, page: int = 1, size: int = 20
+    ) -> object:
         """列出这个人看得见的知识库。
 
         Args: headers。
         """
         return await self._call(
-            "GET", _BASES, headers, params={"page": 1, "size": 50}
+            "GET", _BASES, headers, params={"page": page, "size": size}
         )
 
     async def search(

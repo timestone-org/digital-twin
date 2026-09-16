@@ -132,7 +132,7 @@ function add(): void {
       label: `字段 ${props.panel.fields.length + 1}`,
       unit: '',
       prefix: '',
-      decimals: null,
+      decimals: 2,
       staticText: '',
       kind: 'text',
       min: 0,

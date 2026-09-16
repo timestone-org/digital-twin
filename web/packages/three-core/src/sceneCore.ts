@@ -17,6 +17,8 @@ import { CSS3DRenderer } from 'three/examples/jsm/renderers/CSS3DRenderer.js'
 
 // ⚠ glCapture 对本模块只有类型依赖，这条运行时依赖不构成环
 import { registerCoreSnapshot, unregisterCoreSnapshot } from './glCapture'
+import { PanelCompositor } from './panelCompositor'
+import { PanelSurface } from './panelSurface'
 
 /** WebGL 不可用时的统一文案，降级提示由宿主渲染。 */
 export const WEBGL_UNAVAILABLE_MESSAGE =
@@ -62,6 +64,7 @@ const FILL_LIGHT_INTENSITY = 0.9
  */
 export interface SceneRenderer {
   readonly domElement: HTMLCanvasElement
+  autoClear: boolean
   /**
    * 全局剖切面；空数组 = 不剖切。
    * ⚠ 是可写属性不是方法：three 的 `WebGLRenderer` 就是这么用的，包一层 setter
@@ -80,6 +83,8 @@ export interface SceneRenderer {
 export type SceneRendererFactory = () => SceneRenderer | null
 
 export interface SceneCore {
+  readonly panelCompositor: PanelCompositor
+  readonly prepareSnapshot: () => void
   readonly scene: THREE.Scene
   readonly camera: THREE.PerspectiveCamera
   readonly renderer: SceneRenderer
@@ -176,7 +181,7 @@ function createLighting(): THREE.Group {
 }
 
 /**
- * 装配一套可渲染的场景，并把两层画布挂进宿主元素。
+ * 装配场景，并挂载模型、原生卡片与标签的合成层。
  * @param options 宿主元素与已造好的渲染器
  */
 export function createSceneCore(options: SceneCoreOptions): SceneCore {
@@ -194,13 +199,16 @@ export function createSceneCore(options: SceneCoreOptions): SceneCore {
   renderer.setClearColor(0x000000, 0)
   const labelRenderer = new CSS2DRenderer()
   const spatialRenderer = new CSS3DRenderer()
+  const panelCompositor = new PanelCompositor(renderer)
+  fillContainer(panelCompositor.element, false)
   fillContainer(renderer.domElement, true)
   fillContainer(labelRenderer.domElement, false)
   fillContainer(spatialRenderer.domElement, false)
   stackUnderContent(container, [
+    panelCompositor.element,
+    spatialRenderer.domElement,
     renderer.domElement,
     labelRenderer.domElement,
-    spatialRenderer.domElement,
   ])
 
   const controls = new OrbitControls(camera, renderer.domElement)
@@ -211,6 +219,8 @@ export function createSceneCore(options: SceneCoreOptions): SceneCore {
   scene.add(createLighting(), modelRoot)
 
   const core: SceneCore = {
+    panelCompositor,
+    prepareSnapshot: () => renderScene(core),
     scene,
     camera,
     renderer,
@@ -245,6 +255,7 @@ export function resizeScene(
   core.renderer.setSize(w, h)
   core.labelRenderer.setSize(w, h)
   core.spatialRenderer.setSize(w, h)
+  core.panelCompositor.resize(w, h)
 }
 
 /**
@@ -262,10 +273,10 @@ export function renderScene(
   overlayRoot: THREE.Scene | null = null,
 ): void {
   core.controls.update()
-  core.renderer.render(core.scene, core.camera)
   const labels = overlayRoot ?? core.scene
   core.labelRenderer.render(labels, core.camera)
   core.spatialRenderer.render(labels, core.camera)
+  core.panelCompositor.render(core.scene, labels, core.camera, core.modelRoot)
 }
 
 /**
@@ -502,6 +513,10 @@ function disposeIfTexture(value: THREE.Texture | THREE.Color | null): void {
 export function disposeScene(core: SceneCore): void {
   unregisterCoreSnapshot(core)
   core.controls.dispose()
+  core.panelCompositor.dispose()
+  core.scene.traverse((node) => {
+    if (node instanceof PanelSurface) node.dispose()
+  })
   core.labelRenderer.domElement.remove()
   core.spatialRenderer.domElement.remove()
   disposeIfTexture(core.scene.environment)

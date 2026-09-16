@@ -54,6 +54,12 @@ _BASE = """你是这套工业数字孪生平台的助手。
   在那里你只提议，由用户确认。
 - 工具失败时如实说失败了，不要装作做成了。
 
+## 按需读取
+
+- 先筛选，按需读详情。保持筛选和limit，用next_page翻页；够用即停，
+  全量任务翻至has_more=false，未完如实说明。
+- 公式按section分区；top-k换词续查，首页非全集。
+
 ## 计划纪律
 
 - 需要 3 步以上、或要动多个对象的任务，先用 `plan.write` 列出计划再动手；
@@ -72,6 +78,10 @@ _WHERE_STATE_LIVES = """## 实时状态在哪
 刷新一份。一律以**最后那一份**为准——更早的快照、以及你自己用读取工具拿到的
 那些，都可能已经被你自己改过了。"""
 
+_TWIN_TARGETS = """三维孪生界面仅支持单选，不要求用户多选。
+按名称、编号或文件夹描述的多个目标由你自行查询，不受当前选中项限制；
+先加载 twin-configure，按其目标解析流程执行。"""
+
 _NO_SKILLS = "这一页上没有可用的技能，你只能解读与回答问题。"
 
 
@@ -84,6 +94,7 @@ def build_system_prompt(surface_kind: str, *, surface_label: str = "") -> str:
     parts = [
         _BASE.strip(),
         f"## 当前位置\n\n用户正在**{where}**。",
+        _TWIN_TARGETS if surface_kind == "twin-editor" else "",
         _roster(skills_for(surface_kind)),
         _WHERE_STATE_LIVES,
     ]

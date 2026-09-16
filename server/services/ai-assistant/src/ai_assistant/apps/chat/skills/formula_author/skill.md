@@ -4,8 +4,10 @@
 
 ## 唯一的函数真源
 
-`formula.catalog` 给出这张表能用的函数、运算符、可引用的列与跨表、公式库条目，
-以及九条求值口径。它收一个 `table_id`——从工作面快照里取。
+`formula.catalog` 默认给出一页函数和求值口径。`table_id` 从工作面快照里取。
+需要引用本表列、跨表或公式库时，分别指定 `section=columns`、`tables`、`library`。
+按 `category` 或 `keyword` 缩小范围；需要更多时保持筛选和 `limit` 不变，
+使用 `next_page` 自行继续，找到目标就停止。
 
 不给 `keyword` 时函数只有名字、签名与一句话；想看样例与参数名，就带上
 `keyword` 再要一次（「同比」「PREV」都行），它只回匹配的那几个并展开。

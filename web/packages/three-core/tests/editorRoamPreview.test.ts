@@ -18,6 +18,7 @@ const ASSET = 'asset:0192f0aa-0000-7000-8000-000000000001'
 
 interface Harness {
   container: HTMLDivElement
+  viewport: HTMLCanvasElement
   scene: EditorScene
   roamPreview: ReturnType<typeof vi.fn>
 }
@@ -63,14 +64,20 @@ async function ready(roamTour: Record<string, unknown> = {}): Promise<Harness> {
   const container = document.createElement('div')
   document.body.append(container)
   const roamPreview = vi.fn()
+  const renderer = createHeadlessRenderer()
   const scene = new EditorScene({
     container,
     config: twinConfig(roamTour),
     on: callbacks(roamPreview),
-    createRenderer: () => createHeadlessRenderer(),
+    createRenderer: () => renderer,
     gltfSource: fakeSource(),
   })
-  const harness: Harness = { container, scene, roamPreview }
+  const harness: Harness = {
+    container,
+    viewport: renderer.domElement,
+    scene,
+    roamPreview,
+  }
   mounted.push(harness)
   await flushPromises()
   return harness
@@ -139,9 +146,9 @@ describe('预览这条轨迹', () => {
     const harness = await ready({ enabled: true })
     harness.scene.playRoamPreview()
 
-    harness.container
-      .querySelector('canvas')
-      ?.dispatchEvent(new PointerEvent('pointerdown', { button: 0 }))
+    harness.viewport.dispatchEvent(
+      new PointerEvent('pointerdown', { button: 0 }),
+    )
 
     expect(harness.roamPreview).toHaveBeenLastCalledWith(false)
   })

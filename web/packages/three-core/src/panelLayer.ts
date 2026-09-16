@@ -1,4 +1,4 @@
-/** @fileoverview 信息牌的落点、朝向、尺寸与距离显隐；牌面纹理见 panelSurface。 */
+/** @fileoverview 信息牌的落点、朝向、尺寸与距离显隐；原生牌面与深度代理见 panelSurface。 */
 import type {
   TwinAnchor,
   TwinBillboardMode,
@@ -8,7 +8,6 @@ import type {
 import { EMPTY_PANEL_VALUES } from '@dt/twin-config'
 import type { TwinPanelValues } from '@dt/twin-config'
 import * as THREE from 'three'
-import { CSS3DObject } from 'three/examples/jsm/renderers/CSS3DRenderer.js'
 
 import { panelPositionOf } from './distanceBasis'
 import { PanelSurface } from './panelSurface'
@@ -22,9 +21,8 @@ import {
 
 interface PanelEntry {
   panel: TwinPanel
-  label: CSS3DObject
+  label: PanelSurface
   fields: PanelFieldView[]
-  surface: PanelSurface
 }
 
 /** 牌的落点已经在 `label.position` 上，距离规则直接读它，不再算第二遍。 */
@@ -130,7 +128,8 @@ export class PanelLayer {
   faceCamera(camera: THREE.Camera): void {
     for (const entry of this.entries) {
       applyBillboard(entry.label, entry.panel.billboard, camera)
-      entry.surface.update()
+      if (entry.panel.billboard === 'fixed')
+        entry.label.updateReadingSide(camera)
     }
   }
 
@@ -157,16 +156,18 @@ export class PanelLayer {
    */
   setValues(values: TwinPanelValues): void {
     for (const entry of this.entries) {
+      const before = entry.label.element.textContent
       for (const view of entry.fields) {
         paintPanelField(view, values)
       }
-      entry.surface.invalidate()
+      if (before !== entry.label.element.textContent)
+        entry.label.invalidateBounds()
     }
   }
 
   /**
    * 按这一帧的取景状态更新显隐与淡出。
-   * 牌面显隐随对象树，不透明度交给纹理材质。
+   * 牌面显隐随对象树，不透明度由原生元素承载。
    * @param context 这一帧的相机与轨道中心
    */
   applyDistance(context: DistanceContext): void {
@@ -176,7 +177,7 @@ export class PanelLayer {
         distanceResolver(context, entry.label.position, null),
       )
       entry.label.visible = state.visible
-      entry.surface.setOpacity(state.opacity)
+      entry.label.element.style.opacity = String(state.opacity)
     }
   }
 
@@ -189,7 +190,7 @@ export class PanelLayer {
     anchors: readonly TwinAnchor[],
   ): PanelEntry {
     const card = buildPanelCard(panel)
-    const label = new CSS3DObject(card.mount)
+    const label = new PanelSurface(card.mount)
     label.position.set(...panelPositionOf(panel, anchors))
     // 只有 fixed 档吃配置的旋转：另两档的朝向每帧被相机接管，套了也会被盖掉
     if (panel.billboard === 'fixed') {
@@ -197,18 +198,14 @@ export class PanelLayer {
     }
     label.scale.setScalar(this.baseScale * panel.style.scale)
     this.group.add(label)
-    const surface = new PanelSurface(
-      label,
-      panel.style.animate || panel.style.pulse || panel.style.scan,
-    )
-    return { panel, label, fields: card.fields, surface }
+    return { panel, label, fields: card.fields }
   }
 
   // ⚠ CSS3D 的 DOM 元素挂在标签层容器里，从场景图上摘下对象带不走它——
   // 漏了这一步，卸载后卡片还留在页面上飘着
   private clear(): void {
     for (const entry of this.entries) {
-      entry.surface.dispose()
+      entry.label.dispose()
       entry.label.element.remove()
       this.group.remove(entry.label)
     }

@@ -87,3 +87,15 @@ def test_the_plan_discipline_is_resident() -> None:
     body = build_system_prompt("dashboard-editor")
     assert "plan.write" in body
     assert "截图自检" in body
+
+
+def test_twin_targets_are_resolved_by_name_without_editor_multiselection() -> (
+    None
+):
+    prompt = build_system_prompt("twin-editor")
+    assert "界面仅支持单选" in prompt
+    assert "名称" in prompt
+    assert "自行" in prompt
+    assert "不要求用户多选" in prompt
+    assert "twin-configure" in prompt
+    assert "界面仅支持单选" not in build_system_prompt("dashboard-editor")

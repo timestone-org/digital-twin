@@ -74,7 +74,7 @@ function blank(
 
 /** 信息牌上一个空字段。 */
 export function blankPanelField(index: number): Partial<TwinPanelField> {
-  return { key: `f${index + 1}`, label: `字段 ${index + 1}` }
+  return { key: `f${index + 1}`, label: `字段 ${index + 1}`, decimals: 2 }
 }
 
 /** 归一化收口：所有写操作都从这里出去，缺省值只有一处定义。 */

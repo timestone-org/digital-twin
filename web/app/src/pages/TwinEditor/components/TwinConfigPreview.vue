@@ -187,10 +187,19 @@ watch(
 )
 </script>
 <template>
-  <div class="config-preview" :class="{ 'config-preview--wide': wide }">
-    <DtButton v-if="!open" size="sm" @click="open = true">
-      打开配置预览
-    </DtButton>
+  <div
+    class="config-preview"
+    :class="{ 'config-preview--wide': wide, 'config-preview--closed': !open }"
+  >
+    <DtButton
+      v-if="!open"
+      size="sm"
+      variant="soft"
+      icon="eye"
+      aria-label="打开配置预览"
+      title="打开配置预览"
+      @click="open = true"
+    />
     <section v-else class="config-preview__panel" aria-label="配置预览">
       <header class="flex items-center gap-1 border-b border-border-subtle p-1">
         <span class="min-w-0 flex-1 truncate text-xs" :title="preview.title">{{
@@ -314,6 +323,10 @@ watch(
   z-index: var(--z-sticky);
   &--wide {
     width: min(760px, calc(100% - 24px));
+  }
+  &--closed {
+    width: auto;
+    overflow: visible;
   }
   &__panel {
     display: flex;

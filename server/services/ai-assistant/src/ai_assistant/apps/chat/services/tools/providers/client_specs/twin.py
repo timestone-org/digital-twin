@@ -1,5 +1,6 @@
 """三维孪生配置的客户端工具规格。"""
 
+from ai_assistant.apps.chat.services.tools.pagination import page_properties
 from llmcore.tools.shapes import ToolSpec, object_schema, string_schema
 
 ENTITY_SECTIONS = (
@@ -17,25 +18,38 @@ TWIN_SPECS: tuple[ToolSpec, ...] = (
     ToolSpec(
         name="twin.list_folders",
         description=(
-            "一次读取当前未保存三维孪生中六类实体的全局文件夹目录。"
+            "按页读取当前未保存三维孪生文件夹，可按section和keyword筛选。"
             "返回 schema_version，以及 folders；每个目录项是 "
             "{section,folder_id,name,item_count}。文件夹的稳定身份是 "
             "section 与 folder_id 的组合。问题涉及『某一类』时必须先调用"
             "本工具，不能从文件夹名字猜 id。"
         ),
-        parameters=object_schema({}, []),
+        parameters=object_schema(
+            {
+                **page_properties(),
+                "section": {"type": "string", "enum": ENTITY_SECTIONS},
+                "keyword": string_schema("按文件夹名称或id筛选"),
+            },
+            [],
+        ),
         runs_on="client",
     ),
     ToolSpec(
         name="twin.list_entities",
         description=(
-            "列出当前未保存三维孪生中一个实体节的名片，可按文件夹筛选。"
-            "返回 schema_version、section、applied_folder_id、最多 100 条 "
+            "列出当前未保存三维孪生实体名片，可按名称和文件夹定位多个目标。"
+            "返回 schema_version、section、applied_folder_id、最多 20 条 "
             "items 与 is_truncated；每项是 {id,name,folder}，其中 folder 为 "
-            "{section,folder_id,name} 或 null。筛选发生在 100 条上限之前。"
+            "{section,folder_id,name} 或 null。先筛选再分页；"
+            "需要更多时保持筛选与limit不变，按next_page继续。"
+            "不依赖界面选中；查询所有匹配目标时翻至has_more=false。"
         ),
         parameters=object_schema(
             {
+                **page_properties(),
+                "keyword": string_schema(
+                    "按名称或id字面包含筛选；用短关键词，语义由你结合名片判断"
+                ),
                 "section": {
                     "type": "string",
                     "enum": ENTITY_SECTIONS,

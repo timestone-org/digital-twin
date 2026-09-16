@@ -46,6 +46,7 @@ describe('新增', () => {
     const added = addEntity(EMPTY, 'panels', sequence())
 
     expect(added.config.panels[0]?.fields).toHaveLength(1)
+    expect(added.config.panels[0]?.fields[0]?.decimals).toBe(2)
   })
 
   // ⚠ 重名会让两个实体抢同一份实时值，界面上看不出是重名造成的

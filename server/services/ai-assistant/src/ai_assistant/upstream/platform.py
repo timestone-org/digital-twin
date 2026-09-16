@@ -95,6 +95,12 @@ class PlatformClient:
         body = await self._get(_SOURCES, {"size": 200}, headers)
         return _items_of(body)
 
+    async def page_sources(
+        self, headers: dict[str, str], query: dict[str, object]
+    ) -> object:
+        """按页读取数据源；Args: headers, query。"""
+        return await self._get(_SOURCES, query, headers)
+
     async def search_points(
         self,
         headers: dict[str, str],
@@ -204,12 +210,13 @@ class PlatformClient:
         *,
         keyword: str | None = None,
         project_id: str | None = None,
+        window: tuple[int, int] = (1, 20),
     ) -> object:
-        """翻第一页大屏清单。回整个分页体，`total` 留给调用方做截断说明。
+        """按窗口读取一页大屏清单。
 
         Args: headers, keyword（按名字模糊筛）, project_id（限定项目）。
         """
-        query: dict[str, Any] = {"page": 1, "size": self._page_size}
+        query: dict[str, Any] = {"page": window[0], "size": window[1]}
         if keyword:
             query["q"] = keyword
         if project_id:
@@ -217,13 +224,17 @@ class PlatformClient:
         return await self._get(_DASHBOARDS, query, headers)
 
     async def list_dataset_tables(
-        self, headers: dict[str, str], *, keyword: str | None = None
+        self,
+        headers: dict[str, str],
+        *,
+        keyword: str | None = None,
+        window: tuple[int, int] = (1, 20),
     ) -> object:
-        """翻第一页台账清单。回整个分页体，`total` 留给调用方做截断说明。
+        """按窗口读取一页台账清单。
 
         Args: headers, keyword（按名称与编码模糊筛）。
         """
-        query: dict[str, Any] = {"page": 1, "size": self._page_size}
+        query: dict[str, Any] = {"page": window[0], "size": window[1]}
         if keyword:
             query["q"] = keyword
         return await self._get(_TABLES, query, headers)
@@ -245,12 +256,13 @@ class PlatformClient:
         keyword: str | None = None,
         kind: str | None = None,
         limit: int = 50,
+        offset: int = 0,
     ) -> list[object]:
         """按关键词与类型列素材，新的在前。上游不给总数，只给这一窗。
 
         Args: headers, keyword（按名字模糊筛）, kind（素材类型）, limit。
         """
-        query: dict[str, Any] = {"limit": limit, "offset": 0}
+        query: dict[str, Any] = {"limit": limit, "offset": offset}
         if keyword:
             query["q"] = keyword
         if kind:

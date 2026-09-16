@@ -1,18 +1,8 @@
-"""函数目录的收窄：函数一次全给太重，说明与样例按需展开。
-
-⚠ 这份目录是**唯一的函数真源**。目录里没有的函数名写出来是「未知函数」，
-而用户看到的只是一条报错，不知道那是模型编的。所以宁可少给样例，
-也不能少给函数名与签名——那两样决定它写不写得对。
-
-⚠ 九条求值口径（`rules`）**一条都不许省**。它们全是「错了不报错、只是算出来
-的数不对」那一类：四则运算遇空整条为空、聚合跳过缺失、`PREV` 不含当前行而
-`*_OVER` 含。省掉之后模型照样写得出公式，只是数是错的。
-"""
+"""公式目录按分区渐进披露，求值规则始终保留。"""
 
 from typing import Any, cast
 
-# 一次最多回几个函数。带上样例的那种更沉，故按词筛之后才给全
-MAX_FUNCTIONS = 80
+from ai_assistant.apps.chat.services.tools.pagination import ToolPage
 
 # 这几格无论如何都原样带上：它们是「这张台账能引用什么」与「怎么算」的全部
 _PASS_THROUGH = (
@@ -20,47 +10,50 @@ _PASS_THROUGH = (
     "operators",
     "window_units",
     "rules",
-    "columns",
-    "tables",
-    "library",
 )
 
 
-def catalog_of(body: object, keyword: str | None) -> dict[str, Any]:
-    """把函数目录收成一份能进上下文的形状。
-
-    不给关键词时函数只给名字、签名与一句话；给了就只回匹配的那几个，
-    并带上样例与参数名。
-
-    Args: body, keyword。
-    """
+def catalog_of(
+    body: object, keyword: str | None, arguments: dict[str, Any] | None = None
+) -> dict[str, Any]:
+    """按分区和分类分页读公式目录；Args: body, keyword, arguments。"""
+    given = arguments or {}
+    window = ToolPage.parse(given)
     page = _as_body(body)
-    functions = [_as_body(one) for one in _list_of(page.get("functions"))]
-    matched = _matching(functions, keyword) if keyword else None
-    listed = (matched if matched is not None else functions)[:MAX_FUNCTIONS]
-    shape = _full_of if matched is not None else _brief_of
+    section = given.get("section", "functions")
+    if section not in ("functions", "columns", "tables", "library"):
+        raise ValueError("section 必须是 functions、columns、tables 或 library")
+    rows = _list_of(page.get(section))
+    category = given.get("category")
+    if category:
+        rows = [
+            one for one in rows if _as_body(one).get("category") == category
+        ]
+    if keyword:
+        rows = [
+            one for one in rows if keyword.casefold() in str(one).casefold()
+        ]
+    listed = window.select(rows)
+    shape = _full_of if keyword else _brief_of
     out: dict[str, Any] = {key: page.get(key) for key in _PASS_THROUGH}
-    out["functions"] = [shape(one) for one in listed]
-    out["function_total"] = len(functions)
-    if matched is not None and not matched:
-        out["note"] = f"没有名字或说明里带「{keyword}」的函数，不要自己编一个"
+    out.update(window.describe(len(rows)))
+    out["section"] = section
+    out[str(section)] = (
+        [shape(_as_body(one)) for one in listed]
+        if section == "functions"
+        else listed
+    )
+    out["function_total"] = len(_list_of(page.get("functions")))
+    out["section_counts"] = {
+        key: len(_list_of(page.get(key)))
+        for key in ("functions", "columns", "tables", "library")
+    }
+    out["note"] = (
+        "按section选择分区，按category或keyword缩小范围；需要更多时用next_page继续。"
+    )
+    if keyword and not rows:
+        out["note"] = f"没有名字或说明里带「{keyword}」的条目，不要自己编一个"
     return out
-
-
-def _matching(
-    functions: list[dict[str, object]], keyword: str
-) -> list[dict[str, object]]:
-    needle = keyword.strip().lower()
-    return [one for one in functions if needle in _searchable(one)]
-
-
-def _searchable(function: dict[str, object]) -> str:
-    parts = [
-        str(function.get("name") or ""),
-        str(function.get("description") or ""),
-        str(function.get("signature") or ""),
-    ]
-    return " ".join(parts).lower()
 
 
 def _brief_of(function: dict[str, object]) -> dict[str, Any]:
