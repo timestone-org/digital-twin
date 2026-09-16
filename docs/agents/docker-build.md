@@ -233,6 +233,12 @@ docker image inspect auth-server:latest --format '{{.Size}}'
 
 第 2、3、4 条应当写成 CI 里的硬断言。镜像体积设上限阈值，超限即失败——没有闸门，镜像只会越来越大。
 
+体积预算按服务的运行依赖分别设定：auth-server 为 400 MiB；knowledge-server
+为 800 MiB。后者按 ADR-0054 同时承载 API 与 worker，包含无界面 LibreOffice
+Writer 和中文字体，amd64 运行镜像实测约 750 MiB；不能沿用不含文档转换器的
+400 MiB 预算。两者均按 Docker 的未压缩镜像大小判定，DOCX 图形预览、非 root、
+内容边界及 OS 高危漏洞检查仍独立执行。
+
 ## 6. 不许进镜像的东西
 
 - **`.env` 与任何真实凭据**。配置经环境变量或密钥管理注入运行时，不烘进镜像层。**镜像层是不可删除的**——某一层 `COPY` 进来、后一层 `rm` 掉，文件仍留在历史层里可被提取。

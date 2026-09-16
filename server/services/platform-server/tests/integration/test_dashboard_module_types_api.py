@@ -64,6 +64,7 @@ async def test_a_single_module_carries_its_config_and_slots(
     }
     # 逐字列全：槽多一个少一个都得在这里改，免得清单悄悄漂了没人知道
     assert [spec["key"] for spec in module["bindings"]] == [
+        "animationValues",
         "partValues",
         "anchorValues",
         "panelValues",
