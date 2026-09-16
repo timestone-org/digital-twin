@@ -20,7 +20,7 @@
     "@dt/twin-config": "workspace:*",
     "@dt/twin2d": "workspace:*",
     "@dt/ui": "workspace:*",
-    "@tiptap/core": "3.20.0",
+    "@tiptap/core": "3.31.3",
     "@umoteam/editor": "11.1.1",
     "@umoteam/editor-external": "10.1.0",
     "docx-preview": "0.4.0",
