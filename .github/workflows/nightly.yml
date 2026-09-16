@@ -43,6 +43,8 @@ jobs:
           --health-retries 20
 
     env:
+      # 保留 mutmut 按耗时排列的测试顺序。
+      PYTEST_ADDOPTS: --randomly-dont-reorganize
       LIB_TEST_POSTGRES_DSN: "postgresql+asyncpg://dt:dt@localhost:55432/dt"
       LIB_TEST_REDIS_URL: "redis://localhost:56379/0"
       OPCUA_POSTGRES_HOST: "localhost"
