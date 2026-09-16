@@ -44,7 +44,7 @@ BRANCH = re.compile(rf"^(?:{'|'.join(COMMIT_TYPES)})/[\w./-]+$")
 MECHANICAL = re.compile(r"\[(?:机械|mechanical)]", re.IGNORECASE)
 LOCKFILES = frozenset({"server/uv.lock", "web/pnpm-lock.yaml"})
 # 锁文件的变更由清单文件引起，两者必须一起评审才看得懂
-MANIFESTS = frozenset({"pyproject.toml", "package.json"})
+MANIFESTS = frozenset({"pyproject.toml", "package.json", "pnpm-workspace.yaml"})
 # 生成物不计入可评审文件数
 GENERATED = ("openapi.json", "/dist/", "/coverage/")
 # `server/services/<svc>/…` —— 取服务名要有三段以上

@@ -7,6 +7,7 @@
 import type { BindingSpec, ConfigField } from '@dt/contracts'
 import { INTERACTION_EVENTS, isChromeKey } from '@dt/contracts'
 import {
+  TWIN_ANIMATION_BINDING_KEY,
   TWIN_ANCHOR_BINDING_KEY,
   TWIN_ARROW_BINDING_KEY,
   TWIN_CONFIG_KEY,
@@ -103,6 +104,7 @@ const KEY_CONSTANTS: Record<string, string> = {
   TWIN_2D_NODE_BINDING_KEY,
   TWIN_2D_STATUS_BINDING_KEY,
   TWIN_ANCHOR_BINDING_KEY,
+  TWIN_ANIMATION_BINDING_KEY,
   TWIN_ARROW_BINDING_KEY,
   TWIN_CONFIG_KEY,
   TWIN_FLOW_BINDING_KEY,

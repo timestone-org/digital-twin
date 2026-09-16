@@ -27,7 +27,10 @@ const COMPONENTS = join(
 /** 每个契约接口由哪个（或哪几个）文件负责让人改。 */
 const OWNERS: Readonly<Record<string, readonly string[]>> = {
   TwinModelRef: ['inspector/ModelInspector.vue'],
-  TwinModelAnimations: ['inspector/ModelInspector.vue'],
+  TwinModelAnimations: [
+    'inspector/ModelInspector.vue',
+    'TwinAnimationInspector.vue',
+  ],
   TwinStarfield: ['fields/SceneEffectsFields.vue'],
   TwinPedestal: ['fields/SceneEffectsFields.vue'],
   TwinLightColumn: ['fields/SceneEffectsFields.vue'],

@@ -20,9 +20,52 @@ jobs:
   mutation:
     name: 变异测试（核心域逻辑）
     runs-on: ubuntu-24.04
+    services:
+      postgres:
+        image: timescale/timescaledb:2.17.2-pg16
+        env:
+          POSTGRES_USER: dt
+          POSTGRES_PASSWORD: dt
+          POSTGRES_DB: dt
+        ports: ['55432:5432']
+        options: >-
+          --health-cmd "pg_isready -U dt"
+          --health-interval 5s
+          --health-timeout 3s
+          --health-retries 20
+      redis:
+        image: redis:7.4-alpine
+        ports: ['56379:6379']
+        options: >-
+          --health-cmd "redis-cli ping"
+          --health-interval 5s
+          --health-timeout 3s
+          --health-retries 20
+
+    env:
+      LIB_TEST_POSTGRES_DSN: "postgresql+asyncpg://dt:dt@localhost:55432/dt"
+      LIB_TEST_REDIS_URL: "redis://localhost:56379/0"
+      OPCUA_POSTGRES_HOST: "localhost"
+      OPCUA_POSTGRES_PORT: "55432"
+      OPCUA_POSTGRES_USER: "dt"
+      OPCUA_POSTGRES_PASSWORD: "dt"
+      OPCUA_POSTGRES_DB: "dt"
+      OPCUA_POSTGRES_SCHEMA: "opcua"
+      OPCUA_REDIS_HOST: "localhost"
+      OPCUA_REDIS_PORT: "56379"
+      OPCUA_PKI_DIR: "/tmp/opcua-pki-ci"
+      OPCUA_EDGE_SIGNING_SECRET: "ci-only-edge-signing-0123456789abcdef"
+      OPCUA_EDGE_SERVICE_KEY: "ci-only-edge-service-0123456789abcdef"
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
       - uses: ./.github/actions/setup-server
+
+      - name: 等依赖就绪
+        run: uv run --project server python scripts/wait_for_deps.py "$LIB_TEST_POSTGRES_DSN" "$LIB_TEST_REDIS_URL"
+
+      - name: OPC UA 测试库迁移
+        working-directory: server/services/opcua-server
+        run: uv run alembic upgrade head
 
       # ⚠ 安全铁律：变异流程绝不允许用 git checkout / restore / stash / reset
       # 还原变异体——工作区常年有未提交改动，那会直接抹掉别人的工作。
@@ -30,6 +73,9 @@ jobs:
       - name: 变异 lib.auth 与 lib.web（覆盖率最高档的那部分）
         working-directory: server/lib
         run: |
+          # 父包必须存在于副本，否则 editable 安装会遮蔽待变异的子包。
+          mkdir -p mutants
+          cp -R src mutants/
           uv run --project .. --with mutmut==3.2.1 mutmut run
           uv run --project .. --with mutmut==3.2.1 mutmut results
 
@@ -39,7 +85,10 @@ jobs:
       - name: 变异 opcua-server 的运行时层（分支覆盖的替代物）
         working-directory: server/services/opcua-server
         run: |
-          uv run --project ../.. --with mutmut==3.2.1 mutmut run
+          mkdir -p mutants
+          cp -R src scripts migrations openapi.json alembic.ini pyproject.toml mutants/
+          # 这些集成用例共用表并在结束时清表，变异进程必须串行。
+          uv run --project ../.. --with mutmut==3.2.1 mutmut run --max-children 1
           uv run --project ../.. --with mutmut==3.2.1 mutmut results
 
   a11y:
@@ -93,11 +142,13 @@ jobs:
 
       - name: 没有测试代码与重依赖混入
         run: |
-          docker run --rm auth-server:ci sh -c \
-            'ls /src/.venv/lib/python3.12/site-packages | grep -Ei "sklearn|scikit|matplotlib|torch|pytest"' \
-            && { echo '::error::重依赖或测试依赖进了运行镜像'; exit 1; } || true
-          docker run --rm auth-server:ci sh -c 'find /src -name "*.env" -o -name ".env"' \
-            | grep -q . && { echo '::error::镜像里出现 .env'; exit 1; } || true
+          packages=$(docker run --rm auth-server:ci sh -c 'ls /src/.venv/lib/python3.12/site-packages')
+          if printf '%s\n' "$packages" | grep -Ei "sklearn|scikit|matplotlib|torch|pytest"; then
+            echo '::error::重依赖或测试依赖进了运行镜像'
+            exit 1
+          fi
+          env_files=$(docker run --rm auth-server:ci sh -c 'find /src -name "*.env" -o -name ".env"')
+          test -z "$env_files" || { echo '::error::镜像里出现 .env'; exit 1; }
 
       # 没有闸门，镜像只会越来越大
       - name: 体积上限 400MB
@@ -128,7 +179,8 @@ jobs:
           PROBE_PAGE="$RUNNER_TEMP/docx-preview.png" python3 -c \
             'import os; from PIL import Image; image=Image.open(os.environ["PROBE_PAGE"]).convert("RGB"); red=sum(r>180 and g<100 and b<100 for r,g,b in image.getdata()); raise SystemExit(red < 1000)'
           size=$(docker image inspect knowledge-server:ci --format '{{.Size}}')
-          limit=$((400 * 1024 * 1024))
+          # ADR-0054 的 Writer 与中文字体随 api/worker 共用镜像发布。
+          limit=$((800 * 1024 * 1024))
           echo "knowledge 镜像 $((size / 1024 / 1024)) MB / $((limit / 1024 / 1024)) MB"
           test "$size" -le "$limit" || { echo '::error::knowledge 镜像超出体积上限'; exit 1; }
 
