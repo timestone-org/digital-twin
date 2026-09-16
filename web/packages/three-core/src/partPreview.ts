@@ -14,6 +14,11 @@
  */
 import * as THREE from 'three'
 import { OrbitControls } from 'three/examples/jsm/controls/OrbitControls.js'
+import {
+  attachStudioEnvironment,
+  configureStudioColor,
+  loadStudioEnvironment,
+} from './studioEnvironment'
 
 import {
   clampPixelRatio,
@@ -180,9 +185,14 @@ export function createPartPreview(
     options.renderer ?? createWebGLRenderer
   )()
   if (renderer === null) return null
+  configureStudioColor(renderer)
 
   const scene = new THREE.Scene()
   const lighting = createLighting()
+  const cancelEnvironment =
+    renderer instanceof THREE.WebGLRenderer
+      ? attachStudioEnvironment(scene, lighting, loadStudioEnvironment)
+      : () => {}
   const stage = new THREE.Group()
   for (const object of dropNestedObjects(options.objects)) {
     stage.add(bakedClone(object))
@@ -210,6 +220,7 @@ export function createPartPreview(
   frameBox(camera, controls, box)
 
   const handle = makeHandle({
+    cancelEnvironment,
     renderer,
     scene,
     camera,
@@ -228,6 +239,7 @@ export function createPartPreview(
 
 /** 造好之后能对外做的三件事：量尺寸、推一帧、释放。 */
 interface HandleParts {
+  cancelEnvironment: () => void
   renderer: SceneRenderer
   scene: THREE.Scene
   camera: THREE.PerspectiveCamera
@@ -278,6 +290,9 @@ function makeHandle(parts: HandleParts): PartPreview {
     },
 
     dispose: () => {
+      parts.cancelEnvironment()
+      scene.environment?.dispose()
+      scene.environment = null
       controls.removeEventListener('start', releaseFraming)
       controls.dispose()
       // ⚠ 只收自己造的灯：几何与材质是与主场景共用的，在这里 dispose 会让

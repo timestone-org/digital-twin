@@ -19,6 +19,12 @@ import { CSS3DRenderer } from 'three/examples/jsm/renderers/CSS3DRenderer.js'
 import { registerCoreSnapshot, unregisterCoreSnapshot } from './glCapture'
 import { PanelCompositor } from './panelCompositor'
 import { PanelSurface } from './panelSurface'
+import {
+  attachStudioEnvironment,
+  configureStudioColor,
+  loadStudioEnvironment,
+  type EnvironmentLoader,
+} from './studioEnvironment'
 
 /** WebGL 不可用时的统一文案，降级提示由宿主渲染。 */
 export const WEBGL_UNAVAILABLE_MESSAGE =
@@ -63,6 +69,9 @@ const FILL_LIGHT_INTENSITY = 0.9
  * 的漂移由类型双向兜住，测试里那份不会悄悄少实现一个方法。
  */
 export interface SceneRenderer {
+  toneMapping: THREE.ToneMapping
+  toneMappingExposure: number
+  outputColorSpace: string
   readonly domElement: HTMLCanvasElement
   autoClear: boolean
   /**
@@ -83,6 +92,7 @@ export interface SceneRenderer {
 export type SceneRendererFactory = () => SceneRenderer | null
 
 export interface SceneCore {
+  readonly cancelEnvironment: () => void
   readonly panelCompositor: PanelCompositor
   readonly prepareSnapshot: () => void
   readonly scene: THREE.Scene
@@ -101,6 +111,7 @@ export interface SceneCore {
 }
 
 export interface SceneCoreOptions {
+  environmentLoader?: EnvironmentLoader
   /** canvas 与 CSS2D 标签层的宿主元素。 */
   container: HTMLElement
   renderer: SceneRenderer
@@ -180,12 +191,29 @@ function createLighting(): THREE.Group {
   return group
 }
 
+function setupLighting(
+  scene: THREE.Scene,
+  options: SceneCoreOptions,
+): () => void {
+  const lighting = createLighting()
+  scene.add(lighting)
+  const load =
+    options.environmentLoader ??
+    (options.renderer instanceof THREE.WebGLRenderer
+      ? loadStudioEnvironment
+      : null)
+  return load === null
+    ? () => {}
+    : attachStudioEnvironment(scene, lighting, load)
+}
+
 /**
  * 装配场景，并挂载模型、原生卡片与标签的合成层。
  * @param options 宿主元素与已造好的渲染器
  */
 export function createSceneCore(options: SceneCoreOptions): SceneCore {
   const { container, renderer } = options
+  configureStudioColor(renderer)
   const scene = new THREE.Scene()
   const camera = new THREE.PerspectiveCamera(
     CAMERA_FOV_DEG,
@@ -216,9 +244,11 @@ export function createSceneCore(options: SceneCoreOptions): SceneCore {
 
   const modelRoot = new THREE.Group()
   modelRoot.name = 'twin-model-root'
-  scene.add(createLighting(), modelRoot)
+  scene.add(modelRoot)
+  const cancelEnvironment = setupLighting(scene, options)
 
   const core: SceneCore = {
+    cancelEnvironment,
     panelCompositor,
     prepareSnapshot: () => renderScene(core),
     scene,
@@ -511,6 +541,7 @@ function disposeIfTexture(value: THREE.Texture | THREE.Color | null): void {
  * @param core 场景内核
  */
 export function disposeScene(core: SceneCore): void {
+  core.cancelEnvironment()
   unregisterCoreSnapshot(core)
   core.controls.dispose()
   core.panelCompositor.dispose()

@@ -2,7 +2,7 @@
  * @fileoverview `SceneRenderer` 的 headless 适配器：happy-dom 里没有 WebGL，
  * 装配与销毁的用例靠它跑完整条路径，只记账不碰 GPU。
  */
-import type * as THREE from 'three'
+import * as THREE from 'three'
 
 import type { SceneRenderer } from '../sceneCore'
 
@@ -23,6 +23,9 @@ export interface HeadlessRenderer extends SceneRenderer {
 export function createHeadlessRenderer(): HeadlessRenderer {
   const canvas = document.createElement('canvas')
   return {
+    toneMapping: THREE.NoToneMapping,
+    toneMappingExposure: 1,
+    outputColorSpace: THREE.SRGBColorSpace,
     domElement: canvas,
     autoClear: true,
     clippingPlanes: [],

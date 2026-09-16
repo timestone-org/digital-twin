@@ -103,6 +103,26 @@ describe('渲染器工厂', () => {
 })
 
 describe('场景装配', () => {
+  it('模型使用 AgX 色彩变换和线性曝光 1', () => {
+    const { core, renderer } = mount()
+    expect(Reflect.get(renderer, 'toneMapping')).toBe(THREE.AgXToneMapping)
+    expect(Reflect.get(renderer, 'toneMappingExposure')).toBe(1)
+    disposeScene(core)
+  })
+
+  it('环境光加载后提供金属反射并关闭额外补光', async () => {
+    const texture = new THREE.Texture()
+    const core = createSceneCore({
+      container,
+      renderer: createHeadlessRenderer(),
+      environmentLoader: () => Promise.resolve(texture),
+    })
+    await vi.waitFor(() => expect(core.scene.environment).toBe(texture))
+    expect(texture.mapping).toBe(THREE.EquirectangularReflectionMapping)
+    expect(core.scene.getObjectByName('twin-lighting')?.visible).toBe(false)
+    disposeScene(core)
+  })
+
   it('两层画布都挂进宿主，标签层不吃指针事件', () => {
     const { core } = mount()
 
