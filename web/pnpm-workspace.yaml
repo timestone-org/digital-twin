@@ -2,6 +2,11 @@ packages:
   - 'packages/*'
   - 'app'
 
+# Umo 固定旧 core，传递依赖也必须落到安全版本。
+overrides:
+  '@tiptap/core': '3.31.3'
+  'js-yaml@^4': '4.3.2'
+
 # 安装脚本必须逐个表态：没表态的包在干净检出上会让 `--frozen-lockfile` 直接
 # 失败（ERR_PNPM_IGNORED_BUILDS），而本地因为决定被缓存着，一切照常。
 allowBuilds:
