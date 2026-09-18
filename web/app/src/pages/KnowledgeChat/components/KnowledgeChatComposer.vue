@@ -171,7 +171,7 @@ function onKeydown(event: KeyboardEvent): void {
           v-if="isRecording || isFinishing"
           variant="ghost"
           size="xs"
-          icon="x"
+          icon="close"
           aria-label="取消语音输入"
           title="取消这次语音输入"
           @click="speech.cancel"
