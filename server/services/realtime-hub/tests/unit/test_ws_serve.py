@@ -22,9 +22,6 @@ from realtime_hub.container import Container
 
 from lib.utils.timeutils import utcnow
 
-# 等 shield 那一步跑完最多让出几次调度
-_SCHEDULER_TURNS = 10
-
 
 class SlowSession:
     """摘除要过一次 await 才做完的会话，替下真的 SessionService。
@@ -97,9 +94,4 @@ async def test_a_cancelled_connection_still_gets_swept() -> None:
     with anyio.move_on_after(0.01):
         await _serve(cast("WebSocket", SilentSocket()), container, _handshake())
 
-    # shield 里那一步是另起的任务，给它一次调度
-    for _ in range(_SCHEDULER_TURNS):
-        if session.closed:
-            break
-        await asyncio.sleep(0)
     assert len(session.closed) == 1
