@@ -13,6 +13,7 @@ import {
   REALTIME_HANDSHAKE_REJECTED_CLOSE_CODE,
 } from '@dt/contracts'
 
+import { createSpeechActivity, type SpeechActivity } from './speechActivity'
 import { createFrameQueue, type FrameQueue } from './frameQueue'
 import { startPcmCapture, type PcmCapture } from './pcmCapture'
 import {
@@ -36,10 +37,12 @@ export interface SpeechSession {
   queue: FrameQueue
   socket: WebSocket | null
   capture: PcmCapture | null
+  activity: SpeechActivity | null
   isReady: boolean
   /** ready 还没到就按了 stop：等攒的帧送完再说 stop。 */
   stopWanted: boolean
   finishTimer: ReturnType<typeof setTimeout> | null
+  connectTimer: ReturnType<typeof setTimeout> | null
 }
 
 /** ready 之前最多攒 5 s：16000 × 2 × 5。 */
@@ -71,9 +74,11 @@ export function createSession(
     queue: createFrameQueue(QUEUE_MAX_BYTES),
     socket: null,
     capture: null,
+    activity: null,
     isReady: false,
     stopWanted: false,
     finishTimer: null,
+    connectTimer: null,
   }
 }
 
@@ -94,12 +99,16 @@ function sendAction(session: SpeechSession, action: string): void {
 }
 
 function releaseMicrophone(session: SpeechSession): void {
+  session.activity?.dispose()
+  session.activity = null
   const mic = session.capture
   session.capture = null
   void mic?.stop()
 }
 
 function release(session: SpeechSession): void {
+  if (session.connectTimer !== null) clearTimeout(session.connectTimer)
+  session.connectTimer = null
   if (session.finishTimer !== null) clearTimeout(session.finishTimer)
   session.finishTimer = null
   session.isReady = false
@@ -124,7 +133,17 @@ function finish(session: SpeechSession): void {
 }
 
 function onFrame(session: SpeechSession, frame: ArrayBuffer): void {
+  if (
+    session.status.value !== 'connecting' &&
+    session.status.value !== 'listening'
+  )
+    return
+  session.activity?.accept(frame)
   if (session.isReady && session.socket?.readyState === WebSocket.OPEN) {
+    if (session.socket.bufferedAmount + frame.byteLength > QUEUE_MAX_BYTES) {
+      fail(session, '网络发送太慢，语音输入已停止，请稍后重试')
+      return
+    }
     session.socket.send(frame)
   } else {
     session.queue.push(frame)
@@ -132,6 +151,8 @@ function onFrame(session: SpeechSession, frame: ArrayBuffer): void {
 }
 
 function onReady(session: SpeechSession): void {
+  if (session.connectTimer !== null) clearTimeout(session.connectTimer)
+  session.connectTimer = null
   session.isReady = true
   for (const frame of session.queue.drain()) session.socket?.send(frame)
   if (session.stopWanted) sendAction(session, ACTION_STOP)
@@ -159,25 +180,45 @@ function onClose(
   else fail(session, CLOSE_MESSAGES[code] ?? '语音识别连接断了')
 }
 
-function connect(session: SpeechSession, token: string): void {
+function connect(session: SpeechSession, token: string): WebSocket {
   const opened = new WebSocket(speechUrl(), [REALTIME_AUTH_SUBPROTOCOL, token])
   session.socket = opened
+  session.connectTimer = setTimeout(
+    () => fail(session, '语音连接超时，请稍后重试'),
+    10_000,
+  )
   opened.addEventListener('message', (event: MessageEvent<string>) => {
     if (opened === session.socket) onMessage(session, event.data)
   })
   opened.addEventListener('close', (event: CloseEvent) => {
     onClose(session, opened, event.code)
   })
+  return opened
 }
 
-async function openMicrophone(session: SpeechSession): Promise<void> {
+async function openMicrophone(
+  session: SpeechSession,
+  socket: WebSocket,
+): Promise<void> {
+  const isCurrent = () => session.socket === socket
   try {
-    const opened = await startPcmCapture((frame) => onFrame(session, frame))
-    // 等麦克风授权的这段时间里用户可能已经取消了
-    if (session.socket === null) void opened.stop()
-    else session.capture = opened
+    const opened = await startPcmCapture((frame) => {
+      if (isCurrent()) onFrame(session, frame)
+    })
+    // ⚠ 授权迟到时必须认连接身份，不能把旧麦克风挂到下一次录音。
+    if (!isCurrent() || session.status.value === 'finishing') void opened.stop()
+    else {
+      session.capture = opened
+      session.activity = createSpeechActivity((reason) => {
+        if (!isCurrent()) return
+        if (reason === 'no-speech') {
+          sendAction(session, ACTION_CANCEL)
+          fail(session, '没有听到声音，请再试一次')
+        } else stopSession(session)
+      })
+    }
   } catch (cause) {
-    if (session.socket !== null) fail(session, messageOf(cause))
+    if (isCurrent()) fail(session, messageOf(cause))
   }
 }
 
@@ -199,8 +240,12 @@ export async function startSession(
     return
   }
   status.value = 'connecting'
-  connect(session, accessToken)
-  await openMicrophone(session)
+  try {
+    const socket = connect(session, accessToken)
+    await openMicrophone(session, socket)
+  } catch (cause) {
+    fail(session, messageOf(cause))
+  }
 }
 
 /**

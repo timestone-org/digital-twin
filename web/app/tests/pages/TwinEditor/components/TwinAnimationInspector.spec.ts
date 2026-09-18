@@ -8,13 +8,22 @@ import TwinAnimationList from '@/pages/TwinEditor/components/TwinAnimationList.v
 const config = normalizeTwinConfig({
   model: { animations: { controls: [{ clip: 'pump', mode: 'point' }] } },
 })
-it('目录展示动画并选中，保留缺失的动画配置', async () => {
+it('缺失动画不显示，加载成功后统一提示下次保存清理', async () => {
   const wrapper = mount(TwinAnimationList, {
-    props: { config: config.model.animations, clips: [], selected: null },
+    props: {
+      config: config.model.animations,
+      clips: [],
+      selected: null,
+      status: 'loading',
+    },
   })
-  expect(wrapper.text()).toContain('模型中已缺失')
-  await wrapper.get('button').trigger('click')
-  expect(wrapper.emitted('select')).toEqual([['pump']])
+  expect(wrapper.find('[data-animation-name="pump"]').exists()).toBe(false)
+  expect(wrapper.find('[role="alert"]').exists()).toBe(false)
+  await wrapper.setProps({ status: 'error' })
+  expect(wrapper.find('[role="alert"]').exists()).toBe(false)
+  await wrapper.setProps({ status: 'ready' })
+  expect(wrapper.get('[role="alert"]').text()).toContain('1 个动画已缺失')
+  expect(wrapper.text()).toContain('下次保存时移除')
   wrapper.unmount()
 })
 it('直接选择当前动画点位，试播不写配置，规则变更通过patch', async () => {

@@ -1,14 +1,12 @@
 <script setup lang="ts">
 /**
- * @fileoverview 大纲实体段的段头：降档标题 + 计数 + hover 显现的「+ / ⋯」，
- * sticky 钉在搜索框下沿。parts 段没有独立「+」，新增/批量建并进「⋯」菜单。
+ * @fileoverview 大纲类别标题、计数与常驻的新增和菜单入口，固定在搜索框下沿。
  */
 import type { DtMenuItem } from '@dt/contracts'
 import { DtButton, DtDropdownMenu, DtIcon } from '@dt/ui'
 import { computed } from 'vue'
 
 import { outlineSectionMenu } from '../scripts/outlineMenus'
-import { OUTLINE_ACT_HIDDEN } from '../scripts/outlineStyles'
 import type { TwinTextSlices } from '../scripts/outlineFilter'
 import type { TwinEntityKind } from '../scripts/types'
 
@@ -70,12 +68,10 @@ function onMenu(item: DtMenuItem): void {
       <span class="text-3xs" data-test="section-count">{{ countText }}</span>
     </button>
     <DtButton
-      v-if="kind !== 'parts'"
       size="xs"
       variant="ghost"
       intent="neutral"
       icon="plus"
-      :class="OUTLINE_ACT_HIDDEN"
       :aria-label="`新增${title}`"
       data-test="section-add"
       @click="emit('add')"
@@ -87,7 +83,6 @@ function onMenu(item: DtMenuItem): void {
           variant="ghost"
           intent="neutral"
           icon="more-horizontal"
-          :class="isOpen ? '' : OUTLINE_ACT_HIDDEN"
           :aria-label="`${title}的段操作`"
           aria-haspopup="menu"
           :aria-expanded="isOpen"

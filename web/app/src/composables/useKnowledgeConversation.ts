@@ -14,13 +14,14 @@ import type {
   KnowledgeChatSessionDetail,
 } from '@dt/contracts'
 
+import { createBufferedLog } from '@/features/knowledgeChat/bufferedLog'
+
 import { advanceTurn } from '@/api/knowledgeChat'
 import { createAskQueue, type AskQueue } from '@/features/ai/askQueue'
 import {
   emptyLog,
   withSaid,
   type ChatEntry,
-  type ConversationLog,
 } from '@/features/ai/conversationLog'
 import type { RunState } from '@/features/ai/conversationSender'
 import { replayKnowledgeLog } from '@/features/knowledgeChat/liveReplay'
@@ -62,13 +63,10 @@ export function useKnowledgeConversation(
   onTitled?: (title: string, rowVersion: number) => void,
   onCompleted?: () => void,
 ): KnowledgeConversation {
-  const log = ref<ConversationLog>(emptyLog())
+  const { log, edit, flush, dispose } = createBufferedLog()
   const isRunning = ref(false)
   const isAsking = ref(false)
   const state: RunState = { running: null }
-  const edit = (next: (given: ConversationLog) => ConversationLog): void => {
-    log.value = next(log.value)
-  }
   const asks = createAskQueue({ edit, isAsking })
 
   const parts: KnowledgeSenderParts = {
@@ -88,6 +86,7 @@ export function useKnowledgeConversation(
   }
 
   onScopeDispose(() => {
+    dispose()
     parts.abort()
     asks.detach()
   })
@@ -96,7 +95,13 @@ export function useKnowledgeConversation(
     entries: computed(() => log.value.entries),
     isRunning,
     isAsking,
-    send: createKnowledgeSender(parts),
+    send: async (text) => {
+      try {
+        await createKnowledgeSender(parts)(text)
+      } finally {
+        flush()
+      }
+    },
     ...controlsOf(parts, asks),
   }
 }

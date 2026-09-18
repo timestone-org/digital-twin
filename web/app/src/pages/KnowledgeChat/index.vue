@@ -91,6 +91,7 @@ onMounted(() => void page.reload())
 
         <section class="flex min-h-0 min-w-0 flex-col">
           <ChatPanel
+            :key="page.selectedId.value ?? 'new'"
             :chat="page.chat"
             :title="selectedLabel"
             :starters="STARTERS"

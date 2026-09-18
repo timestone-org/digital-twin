@@ -1,6 +1,5 @@
 /**
- * @fileoverview 段头组件的契约：parts 段没有独立「+」（新增/批量建并进「⋯」菜单）、
- * 其余段「+」直出，折叠开关带 aria-expanded，标题命中走 <mark> 切片。
+ * @fileoverview 类别新增与菜单常驻，折叠开关带 aria-expanded，标题命中走 <mark> 切片。
  */
 import { flushPromises, mount } from '@vue/test-utils'
 import { afterEach, describe, expect, it } from 'vitest'
@@ -83,13 +82,14 @@ describe('新增入口', () => {
     expect(wrapper.emitted('add')).toHaveLength(1)
   })
 
-  // parts 的新增有单个与批量两条路，都并进「⋯」菜单
-  it('parts 段没有独立「+」', () => {
-    expect(
-      render({ kind: 'parts', title: '部件' })
-        .find('[data-test="section-add"]')
-        .exists(),
-    ).toBe(false)
+  it('部件也显示新增入口，两个操作按钮不依赖悬停', async () => {
+    const wrapper = render({ kind: 'parts', title: '部件' })
+    const add = wrapper.get('[data-test="section-add"]')
+    const menu = wrapper.get('[data-test="section-menu"]')
+    expect(add.classes()).not.toContain('opacity-0')
+    expect(menu.classes()).not.toContain('opacity-0')
+    await add.trigger('click')
+    expect(wrapper.emitted('add')).toHaveLength(1)
   })
 })
 

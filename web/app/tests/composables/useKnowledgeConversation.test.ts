@@ -3,7 +3,7 @@
  * 回放整份替换且正跑着时不动。
  */
 import { afterEach, describe, expect, it, vi } from 'vitest'
-import { effectScope, type EffectScope } from 'vue'
+import { effectScope, isReactive, watch, type EffectScope } from 'vue'
 import {
   ASSISTANT_ASK_TOOL,
   type KnowledgeChatSessionDetail,
@@ -186,4 +186,20 @@ describe('知识库对话的运行态', () => {
     release()
     await sending
   })
+})
+
+it('密集流式增量合批发布，完整答案不丢字且历史不建深层代理', async () => {
+  const chunks = Array.from({ length: 500 }, () =>
+    frame('message.delta', { channel: 'text', text: '字' }),
+  )
+  const chat = conversation(
+    advanceOf([[...chunks, frame('turn.done', { reply: '字'.repeat(500) })]]),
+  )
+  const observed = vi.fn()
+  const stop = watch(chat.entries, observed, { flush: 'sync' })
+  await chat.send('性能检查')
+  expect(chat.entries.value.at(-1)?.text).toBe('字'.repeat(500))
+  expect(observed.mock.calls.length).toBeLessThanOrEqual(4)
+  expect(isReactive(chat.entries.value)).toBe(false)
+  stop()
 })

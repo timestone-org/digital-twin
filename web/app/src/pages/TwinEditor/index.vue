@@ -1,13 +1,5 @@
 <script setup lang="ts">
-/**
- * @fileoverview 孪生子编辑器：大纲（左）/ 3D 视口（中）/ 检查器（右）。
- * 编辑的是某张大屏上某个节点的那段孪生配置，落库走大屏的整树替换。
- *
- * ⚠ 这一页对「自己在编 twin-view」一无所知，也不该知道：是大屏编辑器按
- * 清单上的 `subEditor` 声明跳进来的，路由参数只有 `dashboardId` + `nodeId`。
- * ⚠ 视口里不套距离派生的显隐；左栏眼睛管本次编辑显隐，
- * 右栏「初始可见」只进持久化配置，两者不共用状态。
- */
+/** @fileoverview 孪生场景子编辑器，承载配置草稿、动画与视口交互。 */
 import type { BindingPayload } from '@dt/contracts'
 import { collectTwinConfigIssues } from '@dt/twin-config'
 import type { TwinConfig, TwinNavigationMode, Vec3 } from '@dt/twin-config'
@@ -68,9 +60,18 @@ const confirm = useConfirm()
 const dashboardId = computed(() => String(route.params.dashboardId ?? ''))
 const nodeId = computed(() => String(route.params.nodeId ?? ''))
 
+import {
+  missingAnimationNames,
+  removeMissingAnimations,
+} from './scripts/missingAnimations'
+
 const page = useTwinEditorPage(
   () => dashboardId.value,
   () => nodeId.value,
+  (doc) =>
+    doc.commit(
+      removeMissingAnimations(doc.config.value, missingAnimations.value),
+    ),
 )
 
 const selection = ref<TwinSelection>(TWIN_SELECT_MODEL)
@@ -109,13 +110,37 @@ const renamingFolderId = ref<string | null>(null)
 const modelNodes = ref<readonly string[]>([])
 /** 视口里正在飞漫游预览；它会被用户一碰镜头就停，所以由视口回传而不是这里说了算。 */
 const roamPreviewing = ref(false)
-/**
- * 当前坐标基准的原点（世界坐标）。
- * ⚠ 由视口回传而不是这里算：「模型中心」那一档取的是模型世界包围盒的中心，
- * 配置里没有这个数——右栏的坐标框与视口里的参考轴必须同源，否则两处的 0 不在一处。
- */
+/** 视口回传的世界坐标基准原点。 */
 const frameOrigin = ref<Vec3>([0, 0, 0])
 const config = computed(() => page.doc.value?.config.value ?? null)
+const missingAnimations = computed(() =>
+  config.value === null
+    ? new Set<string>()
+    : missingAnimationNames(
+        config.value.model.animations,
+        animationClips.value,
+        modelStatus.value,
+      ),
+)
+watch(
+  [() => config.value?.model.asset, () => config.value?.model.variant],
+  () => {
+    modelStatus.value = 'loading'
+    animationClips.value = []
+  },
+  { flush: 'sync' },
+)
+watch(missingAnimations, (missing) => {
+  if (selectedAnimation.value !== null && missing.has(selectedAnimation.value))
+    selectedAnimation.value = null
+})
+
+const isDirty = computed(
+  () =>
+    (page.doc.value?.isDirty.value ?? false) ||
+    missingAnimations.value.size > 0,
+)
+
 const hidden = useEditorHidden(
   () => config.value,
   () => `${dashboardId.value}/${nodeId.value}`,
@@ -186,8 +211,6 @@ function select(next: TwinSelection): void {
   selectedAnimation.value = null
   animationTest.value = 'live'
   selection.value = next
-  // 选中即取景：在大纲里点一个锚点，视口该把镜头带过去
-  navigation.focus(next)
 }
 
 /** 信息牌走「先点位置再落牌」：进入拾取，等视口回传表面点；其余实体直接建。 */
@@ -267,7 +290,7 @@ useUnsavedGuard(() => page.doc.value?.isDirty.value === true)
   >
     <template #actions>
       <TwinEditorToolbar
-        :is-dirty="page.doc.value?.isDirty.value ?? false"
+        :is-dirty="isDirty"
         :focus-mode="focusMode"
         :can-batch="config !== null"
         :is-saving="page.saving.value"
@@ -312,6 +335,7 @@ useUnsavedGuard(() => page.doc.value?.isDirty.value === true)
           :selection="selectedAnimation === null ? selection : null"
           :flagged-ids="flaggedIds"
           :renaming-folder-id="renamingFolderId"
+          @focus="navigation.focus($event)"
           @select-animation="selectAnimation"
           @select="select"
           @add="addEntityOf"
@@ -405,6 +429,7 @@ useUnsavedGuard(() => page.doc.value?.isDirty.value === true)
             :clips="animationClips"
             :animation="selectedAnimation"
             @select="select"
+            @focus="navigation.focus($event)"
             @select-animation="selectAnimation"
           />
           <TwinAnimationInspector
@@ -415,7 +440,7 @@ useUnsavedGuard(() => page.doc.value?.isDirty.value === true)
             :bindings="binding.bindings.value"
             :value="binding.liveValues.value?.animations?.[selectedAnimation]"
             :available="currentAnimation !== null"
-            :is-dirty="page.doc.value?.isDirty.value ?? false"
+            :is-dirty="isDirty"
             :test-mode="animationTest"
             @patch="actions?.patchConfig($event)"
             @pick="binding.pickingFieldKey.value = $event"
@@ -433,7 +458,7 @@ useUnsavedGuard(() => page.doc.value?.isDirty.value === true)
             :roam-previewing="roamPreviewing"
             :frame-origin="frameOrigin"
             :bindings="binding.bindings.value"
-            :is-dirty="page.doc.value?.isDirty.value ?? false"
+            :is-dirty="isDirty"
             @patch="actions?.patchConfig($event)"
             @request-pick="viewport.requestPick"
             @cancel-pick="viewport.cancelPick"

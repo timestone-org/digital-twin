@@ -41,6 +41,7 @@ const props = withDefaults(
 )
 
 const emit = defineEmits<{
+  focus: [TwinSelection]
   select: [TwinSelection]
   selectAnimation: [string]
   add: [TwinEntityKind]
@@ -110,7 +111,10 @@ function reveal(): void {
   resetFilters()
   if (props.animations?.selected != null)
     void nextTick(() => animationList.value?.reveal())
-  else outline.value?.revealSelected()
+  else {
+    outline.value?.revealSelected()
+    if (props.selection !== null) emit('focus', props.selection)
+  }
 }
 </script>
 
@@ -137,18 +141,9 @@ function reveal(): void {
         <DtButton size="xs" variant="ghost" @click="reveal">定位选中</DtButton>
       </div>
     </div>
-    <TwinAnimationList
-      v-if="animations"
-      v-show="kind === 'all' || kind === 'animations'"
-      ref="animationList"
-      :clips="animations.clips"
-      :config="config.model.animations"
-      :selected="animations.selected"
-      :status="animations.status"
-      @select="emit('selectAnimation', $event)"
-    />
-    <div v-show="kind !== 'animations'" class="min-h-0 flex-1 overflow-y-auto">
+    <div class="min-h-0 flex-1 overflow-y-auto">
       <TwinOutline
+        v-show="kind !== 'animations'"
         ref="outline"
         :kind="kind"
         :status="kind === 'scene' ? 'all' : status"
@@ -173,6 +168,16 @@ function reveal(): void {
         @move-into-folder="emit('moveIntoFolder', $event)"
         @remove-from-folder="emit('removeFromFolder', $event)"
         @create-folder-with-item="emit('createFolderWithItem', $event)"
+      />
+      <TwinAnimationList
+        v-if="animations"
+        v-show="kind === 'all' || kind === 'animations'"
+        ref="animationList"
+        :clips="animations.clips"
+        :config="config.model.animations"
+        :selected="animations.selected"
+        :status="animations.status"
+        @select="emit('selectAnimation', $event)"
       />
     </div>
   </div>

@@ -114,6 +114,7 @@ async function saveTwin(
 export function useTwinEditorPage(
   dashboardId: () => string,
   nodeId: () => string,
+  beforeSave?: (doc: TwinDoc) => void,
 ): TwinEditorPage {
   const file = useDashboardDoc()
   // ⚠ 文档态与「哪个节点」绑死：切了节点必须整份重建，沿用旧的会把 A 的
@@ -143,7 +144,10 @@ export function useTwinEditorPage(
 
   return {
     doc: computed(() => doc.value),
-    save: () => saveTwin(file, doc.value, nodeId()),
+    save: () => {
+      if (doc.value !== null) beforeSave?.(doc.value)
+      return saveTwin(file, doc.value, nodeId())
+    },
     dashboard: file.dashboard,
     node,
     targetSize: computed(() => {

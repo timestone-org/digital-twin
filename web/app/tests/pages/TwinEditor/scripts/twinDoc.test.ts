@@ -5,6 +5,10 @@
  * 改喂前一个实体——界面上一切正常、读数照常刷新，只是全接错了对象。
  */
 import type { BindingPayload } from '@dt/contracts'
+import {
+  missingAnimationNames,
+  removeMissingAnimations,
+} from '@/pages/TwinEditor/scripts/missingAnimations'
 import { normalizeTwinConfig } from '@dt/twin-config'
 import { describe, expect, it } from 'vitest'
 
@@ -318,4 +322,47 @@ describe('绑定写入的并帧', () => {
     doc.undo()
     expect(doc.config.value.anchors).toHaveLength(3)
   })
+})
+
+it('保存前清理缺失动画，同时删除并重排绑定，支持撤销', () => {
+  const config = normalizeTwinConfig({
+    model: {
+      animations: {
+        controls: [
+          { clip: 'gone', mode: 'point' },
+          { clip: 'keep', mode: 'point' },
+        ],
+      },
+    },
+  })
+  const doc = createTwinDoc({
+    config,
+    bindings: [
+      binding('animationValues[0].value'),
+      binding('animationValues[1].value'),
+    ],
+  })
+  for (const status of ['loading', 'error', 'empty']) {
+    const missing = missingAnimationNames(config.model.animations, [], status)
+    expect(removeMissingAnimations(config, missing)).toBe(config)
+  }
+  const missing = missingAnimationNames(
+    config.model.animations,
+    [{ name: 'keep' }],
+    'ready',
+  )
+  expect(doc.config.value.model.animations.controls).toHaveLength(2)
+  doc.commit(removeMissingAnimations(config, missing))
+  expect(
+    doc.config.value.model.animations.controls.map((control) => control.clip),
+  ).toEqual(['keep'])
+  expect(doc.bindings.value.map((item) => [item.id, item.fieldKey])).toEqual([
+    ['animationValues[1].value', 'animationValues[0].value'],
+  ])
+  doc.undo()
+  expect(doc.config.value.model.animations.controls).toHaveLength(2)
+  expect(doc.bindings.value).toHaveLength(2)
+  expect(missingAnimationNames(config.model.animations, [], 'ready').size).toBe(
+    2,
+  )
 })

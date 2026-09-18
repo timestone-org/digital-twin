@@ -25,6 +25,7 @@ class FakeSocket {
   readyState = FakeSocket.OPEN
   sent: (string | ArrayBuffer)[] = []
   closed = false
+  bufferedAmount = 0
   private listeners = new Map<string, Listener[]>()
 
   constructor(
@@ -121,6 +122,7 @@ async function started(): Promise<SpeechInput> {
 }
 
 beforeEach(() => {
+  vi.useFakeTimers()
   setActivePinia(createPinia())
   useAuthStore().accessToken = 'tok-1'
   FakeSocket.instances = []
@@ -377,4 +379,144 @@ describe('作废', () => {
     expect(speech.status.value).toBe('idle')
     expect(latest().closed).toBe(true)
   })
+})
+
+describe('资源边界', () => {
+  it('网络积压超过上限时停麦并释放连接', async () => {
+    const speech = await started()
+    hear(READY)
+    latest().bufferedAmount = 160_000
+    speak(1920)
+    expect(speech.status.value).toBe('error')
+    expect(latest().closed).toBe(true)
+    expect(mic.stop).toHaveBeenCalledTimes(1)
+    expect(latest().binaryLengths()).toEqual([])
+  })
+
+  it('ready 超时后释放连接与麦克风', async () => {
+    vi.useFakeTimers()
+    const speech = await started()
+    vi.advanceTimersByTime(10_000)
+    expect(speech.status.value).toBe('error')
+    expect(latest().closed).toBe(true)
+    expect(mic.stop).toHaveBeenCalledTimes(1)
+    expect(vi.getTimerCount()).toBe(0)
+  })
+
+  it('停止后迟到的音频帧不会继续发送', async () => {
+    const speech = await started()
+    hear(READY)
+    speech.stop()
+    speak(1920)
+    expect(latest().binaryLengths()).toEqual([])
+    speech.cancel()
+  })
+
+  it('旧麦克风授权迟到不会接入新一轮录音', async () => {
+    const speech = useSpeechInput()
+    const first = speech.start()
+    speech.cancel()
+    const second = speech.start()
+    await Promise.all([first, second])
+    expect(mic.stop).toHaveBeenCalledTimes(1)
+    speech.cancel()
+    expect(mic.stop).toHaveBeenCalledTimes(2)
+  })
+})
+
+function voice(): void {
+  const pcm = new Int16Array(960)
+  for (let i = 0; i < pcm.length; i += 1) pcm[i] = i % 2 === 0 ? 2000 : -2000
+  mic.onFrame?.(pcm.buffer)
+}
+
+describe('自动停止', () => {
+  it('开麦 8 秒未说话会关闭并提示，保留手动重开能力', async () => {
+    const speech = await started()
+    hear(READY)
+    vi.advanceTimersByTime(7999)
+    expect(speech.status.value).toBe('listening')
+    vi.advanceTimersByTime(1)
+    expect(speech.error.value).toContain('没有听到声音')
+    expect(latest().closed).toBe(true)
+    expect(mic.stop).toHaveBeenCalledTimes(1)
+    expect(vi.getTimerCount()).toBe(0)
+    await speech.start()
+    expect(speech.status.value).toBe('connecting')
+    speech.cancel()
+  })
+
+  it('说话后静音 2 秒自动停麦并等待终稿，转写延迟不影响判断', async () => {
+    const speech = await started()
+    hear(READY)
+    voice()
+    voice()
+    vi.advanceTimersByTime(1999)
+    hear(partial('文字迟到'))
+    expect(speech.status.value).toBe('listening')
+    vi.advanceTimersByTime(1)
+    expect(speech.status.value).toBe('finishing')
+    expect(latest().actions()).toEqual(['stop'])
+    expect(mic.stop).toHaveBeenCalledTimes(1)
+    hear(final('最终文字。'))
+    hear(DONE)
+    expect(speech.transcript.value).toBe('最终文字。')
+    expect(vi.getTimerCount()).toBe(0)
+  })
+
+  it('短暂停顿后继续说话重新计算两秒静音', async () => {
+    const speech = await started()
+    hear(READY)
+    voice()
+    voice()
+    vi.advanceTimersByTime(1500)
+    voice()
+    vi.advanceTimersByTime(1500)
+    expect(speech.status.value).toBe('listening')
+    vi.advanceTimersByTime(500)
+    expect(speech.status.value).toBe('finishing')
+    speech.cancel()
+  })
+
+  it('持续说话最多录制 60 秒', async () => {
+    const speech = await started()
+    hear(READY)
+    voice()
+    voice()
+    for (let seconds = 0; seconds < 59; seconds += 1) {
+      vi.advanceTimersByTime(1000)
+      voice()
+    }
+    expect(speech.status.value).toBe('listening')
+    vi.advanceTimersByTime(1000)
+    expect(speech.status.value).toBe('finishing')
+    expect(latest().actions()).toEqual(['stop'])
+    speech.cancel()
+  })
+
+  it('单个响声不算开始说话，取消后没有自动停止计时器', async () => {
+    const speech = await started()
+    hear(READY)
+    voice()
+    speak(1920)
+    vi.advanceTimersByTime(2500)
+    expect(speech.status.value).toBe('listening')
+    speech.cancel()
+    expect(vi.getTimerCount()).toBe(0)
+    vi.advanceTimersByTime(60_000)
+    expect(speech.status.value).toBe('idle')
+  })
+})
+
+it('无声计时从麦克风就绪开始，不消耗在等待授权期间', async () => {
+  const speech = useSpeechInput()
+  const opening = speech.start()
+  hear(READY)
+  vi.advanceTimersByTime(7999)
+  await opening
+  vi.advanceTimersByTime(7999)
+  expect(speech.status.value).toBe('listening')
+  vi.advanceTimersByTime(1)
+  expect(speech.error.value).toContain('没有听到声音')
+  expect(vi.getTimerCount()).toBe(0)
 })

@@ -1,21 +1,5 @@
 <script setup lang="ts">
-/**
- * @fileoverview 输入区：一个文本框、发送与停止，壳用共用的 AiInputBox；接了语音
- * 识别的部署多一枚麦克风键，转写接在草稿后面（`features/speech`，ADR-0038）。
- *
- * ⚠ 不复用助手的 `AiComposer`：那一件焊死了附件与助手的解析接口，而知识库
- * 那边的入参是 `extra="forbid"`，多一格 `user_images` 整个回合就是 400。
- * 这一页的输入是问题，不是资料——要加资料走「知识库管理」的上传。
- *
- * ⚠ 正等着用户在卡片上回答时输入框上锁：不锁的话新消息会与正跑的回合抢同一条
- * 时间线。麦克风同一条理由一起禁。
- *
- * ⚠ Enter 不自己判，走 `features/ai/composeKeys.ts` 与助手同一套：IME 选字那一下
- * 也是 Enter，自己判会把半截拼音发出去。
- *
- * ⚠ 录音中文本框不锁，用户可以顺手改；但每帧转写回来都按「开始录音那一刻的草稿
- * + 整段转写」整体覆盖，改在转写那一截里的字会被下一帧冲掉。
- */
+/** @fileoverview 知识库输入区与语音转写，协议见 ADR-0038。 */
 import { computed, ref, watch } from 'vue'
 import type { KnowledgeChatScopeBase } from '@dt/contracts'
 import { DtButton, DtNotice, DtTextarea } from '@dt/ui'
@@ -51,18 +35,26 @@ const box = ref<{ textareaEl: HTMLTextAreaElement | null } | null>(null)
 let base = ''
 
 const canSend = computed(
-  () => !props.running && !props.asking && draft.value.trim() !== '',
+  () =>
+    !props.running &&
+    !props.asking &&
+    !isRecording.value &&
+    !isFinishing.value &&
+    draft.value.trim() !== '',
 )
 const isRecording = computed(
   () =>
     speech.status.value === 'connecting' || speech.status.value === 'listening',
 )
+const isConnecting = computed(() => speech.status.value === 'connecting')
 const isFinishing = computed(() => speech.status.value === 'finishing')
 const micLabel = computed(() =>
   isRecording.value ? '结束语音输入' : '开始语音输入',
 )
 const micTitle = computed(() =>
-  isRecording.value ? '说完再点一下' : '按一下开始说话，说完再点一下',
+  isRecording.value
+    ? '静音 2 秒自动结束，也可点击停止'
+    : '点击说话，静音 2 秒自动结束（最长 60 秒）',
 )
 
 /** 转写接在已有草稿后面：末尾没有空白就补一个空格。 */
@@ -76,6 +68,7 @@ function toggleSpeech(): void {
     return
   }
   if (isFinishing.value) return
+  if (props.running || props.asking) return
   base = joinable(draft.value)
   void speech.start()
 }
@@ -126,6 +119,10 @@ function onKeydown(event: KeyboardEvent): void {
     <AiInputBox
       :running="props.running"
       :can-send="canSend"
+      :keys-hint="
+        isRecording || isFinishing ? 'Esc 取消 · 完成后可编辑' : undefined
+      "
+      :class="{ 'kb-compose__active': isRecording || isFinishing }"
       stop-label="停止"
       @send="send"
       @stop="emit('stop')"
@@ -135,6 +132,7 @@ function onKeydown(event: KeyboardEvent): void {
         v-model="draft"
         autosize
         :disabled="props.asking"
+        :readonly="isRecording || isFinishing"
         :placeholder="props.asking ? '先回答上面的问题' : '问一句资料里的事…'"
         aria-label="问知识库"
         @keydown="onKeydown"
@@ -144,9 +142,10 @@ function onKeydown(event: KeyboardEvent): void {
         <!-- pressed 一给，外观就由它定（DtButton），所以不再写 variant / intent -->
         <DtButton
           size="sm"
-          icon="mic"
+          class="kb-compose__mic"
+          :icon="isRecording ? 'square' : 'mic'"
           :pressed="isRecording"
-          :disabled="props.asking || isFinishing"
+          :disabled="props.running || props.asking || isFinishing"
           :aria-label="micLabel"
           :title="micTitle"
           @click="toggleSpeech"
@@ -160,8 +159,23 @@ function onKeydown(event: KeyboardEvent): void {
             class="kb-compose__dot motion-safe:animate-pulse"
             aria-hidden="true"
           />
-          {{ isFinishing ? '整理中…' : '正在听…' }}
+          {{
+            isFinishing
+              ? '整理中…'
+              : isConnecting
+                ? '连接中…'
+                : '正在听 · 静音 2 秒结束'
+          }}
         </span>
+        <DtButton
+          v-if="isRecording || isFinishing"
+          variant="ghost"
+          size="xs"
+          icon="x"
+          aria-label="取消语音输入"
+          title="取消这次语音输入"
+          @click="speech.cancel"
+        />
       </template>
     </AiInputBox>
   </div>
@@ -191,6 +205,16 @@ function onKeydown(event: KeyboardEvent): void {
 .kb-compose :deep(.dt-notice) {
   max-width: 56rem;
   margin-inline: auto;
+}
+
+.kb-compose__mic {
+  border-radius: 50%;
+  flex-shrink: 0;
+}
+
+.kb-compose__active {
+  border-color: var(--accent-primary);
+  box-shadow: 0 0 0 3px rgba(var(--accent-primary-rgb), 0.12);
 }
 
 .kb-compose__listening {

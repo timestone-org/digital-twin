@@ -194,14 +194,14 @@ describe('键盘', () => {
     expect(fake.cancel).toHaveBeenCalledTimes(1)
   })
 
-  it('录着时 Enter 照样能把手上的草稿发出去', async () => {
+  it('录音时 Enter 不发送未完成的转写', async () => {
     const wrapper = render()
     status.value = 'listening'
     await wrapper.find('textarea').setValue('上限多少')
 
     await wrapper.find('textarea').trigger('keydown', { key: 'Enter' })
 
-    expect(wrapper.emitted('send')?.[0]).toEqual(['上限多少'])
+    expect(wrapper.emitted('send')).toBeUndefined()
   })
 })
 
@@ -222,4 +222,19 @@ describe('出错', () => {
 
     expect(wrapper.find('[role="alert"]').exists()).toBe(false)
   })
+})
+
+it('回答期间不能开始录音', () => {
+  const wrapper = render({ running: true })
+  expect(mic(wrapper).attributes('disabled')).toBeDefined()
+})
+
+it('连接与录音期间草稿只读，取消按钮可终止本次输入', async () => {
+  const wrapper = render()
+  status.value = 'connecting'
+  await nextTick()
+  expect(wrapper.text()).toContain('连接中')
+  expect(wrapper.find('textarea').attributes('readonly')).toBeDefined()
+  await wrapper.find('button[aria-label="取消语音输入"]').trigger('click')
+  expect(fake.cancel).toHaveBeenCalledTimes(1)
 })

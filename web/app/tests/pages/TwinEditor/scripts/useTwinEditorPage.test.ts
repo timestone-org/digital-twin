@@ -5,6 +5,7 @@
  * 漏一个就是把它删了，而界面上只会显示「保存成功」。
  */
 import type { DashboardNodePayload, DashboardPayload } from '@dt/contracts'
+import { removeMissingAnimations } from '@/pages/TwinEditor/scripts/missingAnimations'
 import { TWIN_CONFIG_KEY } from '@dt/twin-config'
 import { flushPromises } from '@vue/test-utils'
 import { beforeEach, describe, expect, it, vi } from 'vitest'
@@ -165,4 +166,29 @@ describe('落库', () => {
     expect(ok).toBe(false)
     expect(doc?.isDirty.value).toBe(true)
   })
+})
+
+it('保存入口先清理缺失动画，实际请求携带清理后的配置', async () => {
+  getMock.mockResolvedValue(
+    payload([
+      node('n1', { model: { animations: { controls: [{ clip: 'gone' }] } } }),
+    ]),
+  )
+  saveMock.mockResolvedValue(payload([node('n1')]))
+  const page = useTwinEditorPage(
+    () => 'd1',
+    () => 'n1',
+    (doc) => {
+      doc.commit(removeMissingAnimations(doc.config.value, new Set(['gone'])))
+    },
+  )
+  await flushPromises()
+  expect(page.doc.value?.config.value.model.animations.controls).toHaveLength(1)
+  expect(saveMock).not.toHaveBeenCalled()
+  expect(await page.save()).toBe(true)
+  const [, input] = saveMock.mock.calls[0] ?? []
+  expect(input?.nodes[0]?.config_json[TWIN_CONFIG_KEY]).toMatchObject({
+    model: { animations: { controls: [] } },
+  })
+  expect(page.doc.value?.isDirty.value).toBe(false)
 })

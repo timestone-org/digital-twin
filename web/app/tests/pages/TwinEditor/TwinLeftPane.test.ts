@@ -111,3 +111,25 @@ describe('事件透传', () => {
     ])
   })
 })
+
+it('动画位于能量流后，支持折叠，只有定位选中才请求取景', async () => {
+  const wrapper = render()
+  await wrapper.setProps({
+    selection: { kind: 'anchors', id: 'a1' },
+    animations: { clips: [], selected: null, status: 'ready' },
+  })
+  expect(wrapper.html().indexOf('data-key="flows"')).toBeLessThan(
+    wrapper.html().indexOf('aria-label="模型动画"'),
+  )
+  const toggle = wrapper.get('[aria-label="展开或折叠模型动画"]')
+  await toggle.trigger('click')
+  expect(toggle.attributes('aria-expanded')).toBe('false')
+  await wrapper.get('[data-test="row-select"]').trigger('click')
+  expect(wrapper.emitted('focus')).toBeUndefined()
+  const locate = wrapper
+    .findAll('button')
+    .find((button) => button.text() === '定位选中')
+  await locate?.trigger('click')
+  expect(wrapper.emitted('focus')).toEqual([[{ kind: 'anchors', id: 'a1' }]])
+  wrapper.unmount()
+})
