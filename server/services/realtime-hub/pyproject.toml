@@ -16,6 +16,7 @@ dependencies = [
     # （ADR-0007 §决策 4）。⚠ 必须自己声明：httpx 在工作区根的 dev 组里，
     # 本地与全部用例都 import 得到，只有按自己声明的依赖装的镜像会崩。
     "httpx>=0.28",
+    "anyio>=4.0",
 ]
 
 [project.scripts]
