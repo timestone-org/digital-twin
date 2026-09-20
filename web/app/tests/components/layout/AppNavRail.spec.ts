@@ -29,6 +29,16 @@ vi.mock('vue-router', () => ({
 
 const STORAGE_KEY = 'dt.sidebar.collapsed'
 
+it('菜单形态显示完整导航且不改变桌面折叠偏好', () => {
+  localStorage.setItem(STORAGE_KEY, '1')
+  signIn([PERMISSION_CODES.userView])
+  const wrapper = mount(AppNavRail, { props: { menu: true } })
+  expect(wrapper.get('aside').text()).toContain('系统管理')
+  expect(wrapper.find('[aria-label="展开侧栏"]').exists()).toBe(false)
+  expect(localStorage.getItem(STORAGE_KEY)).toBe('1')
+  wrapper.unmount()
+})
+
 function signIn(codes: string[], fullName = '管理员'): void {
   const auth = useAuthStore()
   auth.user = {

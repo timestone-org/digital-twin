@@ -16,10 +16,13 @@
  * 顶栏与导航就开始各走各的。不传插槽时 DOM 与不带侧栏时完全一致。
  */
 import AppNavRail from './AppNavRail.vue'
+import AppCompactNav from './AppCompactNav.vue'
 import AppTopbar from './AppTopbar.vue'
 import { useEmbedContext } from '@/features/embed/context'
+import { useCompactNavigation } from '@/composables/useCompactNavigation'
 
 const embed = useEmbedContext()
+const isCompact = useCompactNavigation()
 
 defineProps<{
   focusMode?: boolean
@@ -32,26 +35,30 @@ defineProps<{
 </script>
 
 <template>
-  <div
-    class="dt-grid-bg flex h-screen w-screen overflow-hidden bg-surface-base"
-  >
-    <AppNavRail v-if="!embed.isEmbedded.value && !focusMode" />
+  <div class="dt-grid-bg flex h-dvh w-full overflow-hidden bg-surface-base">
+    <AppNavRail v-if="!embed.isEmbedded.value && !focusMode && !isCompact" />
 
     <slot name="sidebar" />
 
     <div class="flex min-w-0 flex-1 flex-col">
       <AppTopbar
+        :compact="isCompact"
         :title="title"
         :subtitle="subtitle"
         :back-to="backTo"
         :back-label="backLabel"
       >
+        <template #navigation>
+          <AppCompactNav
+            v-if="isCompact && !embed.isEmbedded.value && !focusMode"
+          />
+        </template>
         <template #actions><slot name="actions" /></template>
       </AppTopbar>
 
       <main
-        class="flex min-h-0 flex-1 flex-col overflow-hidden"
-        :class="focusMode ? 'p-2' : 'p-5'"
+        class="flex min-h-0 min-w-0 flex-1 flex-col overflow-hidden"
+        :class="focusMode ? 'p-2' : isCompact ? 'p-3' : 'p-5'"
       >
         <slot />
       </main>
