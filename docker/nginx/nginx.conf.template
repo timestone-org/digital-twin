@@ -101,7 +101,7 @@ http {
   # 原有公开大屏的凭据在 path 里，顺手把两个对外路径收敛成稳定模板。
   map $original_path $dt_access_path {
     default                                      $original_path;
-    "~^/public/"                                "/public/<redacted>";
+    "~^/(?:ai/)?public/"                          "/public/<redacted>";
     "~^/api/v1/platform/public-dashboards/"     "/api/v1/platform/public-dashboards/<redacted>";
   }
   log_format json escape=json '{"ts":"$time_iso8601","status":$status,'
@@ -126,7 +126,7 @@ http {
   }
   map "$original_path:$dt_embed_from_token:$dt_embed_from_flag" $dt_embed_mode {
     default       0;
-    "~^/public/" 1;
+    "~^/ai/public/" 1;
     "~:1:"       1;
     "~:1$"       1;
   }
@@ -525,7 +525,12 @@ http {
       proxy_read_timeout    500ms;
     }
 
-    location / {
+    location = /ai { absolute_redirect off; return 302 /ai/$is_args$args; }
+
+    location / { absolute_redirect off; return 302 /ai$request_uri; }
+
+    location /ai/ {
+      rewrite ^/ai/(.*)$ /$1 break;
       root /usr/share/nginx/html;
       # 普通页防外域点击劫持；带 token 的嵌入入口有意允许外域 frame。
       # 本方案没有父页 origin 清单，因此 `*` 是已接受的内网风险，
@@ -537,7 +542,7 @@ http {
       # 一条 `/assets` 路由（素材库）。试目录的话 nginx 会先 301 到 `/assets/`
       # 再因为没有索引页回 403——直接输地址与刷新页面都进不去，而站内点导航
       # 却是好的，于是看着像「只有刷新会坏」。单页应用没有目录索引可言。
-      try_files $uri /index.html;
+      try_files $uri /ai/index.html;
     }
   }
 }
