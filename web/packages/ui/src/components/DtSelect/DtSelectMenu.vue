@@ -88,6 +88,9 @@ defineExpose({ el, focusSearch, scrollActiveIntoView })
         />
       </div>
 
+      <div v-if="$slots.actions" class="dt-select-menu__actions">
+        <slot name="actions" />
+      </div>
       <ul
         :id="id"
         class="dt-select-menu__list"
@@ -147,6 +150,12 @@ defineExpose({ el, focusSearch, scrollActiveIntoView })
     padding: 8px 10px;
     border-bottom: 1px solid var(--border-subtle);
     color: var(--text-disabled);
+  }
+
+  &__actions {
+    flex-shrink: 0;
+    padding: 8px 10px;
+    border-bottom: 1px solid var(--border-subtle);
   }
 
   &__input {

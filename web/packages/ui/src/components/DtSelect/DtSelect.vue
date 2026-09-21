@@ -33,6 +33,7 @@ import {
  * 转换，没传时拿到的是 `false` 而不是 `undefined`。
  */
 export interface DtSelectDisplay {
+  closeOnSelect?: boolean
   placeholder?: string
   /** 要不要搜索框。`'auto'`（缺省）按选项数量决定，≥8 才给。 */
   searchable?: boolean | 'auto'
@@ -65,6 +66,7 @@ const props = withDefaults(
 )
 
 const DISPLAY_DEFAULTS = {
+  closeOnSelect: true,
   placeholder: '请选择',
   searchable: 'auto',
   searchPlaceholder: '搜索…',
@@ -132,6 +134,11 @@ function openMenu(): void {
 function pick(option: DtSelectOption): void {
   if (option.disabled === true) return
   emit('update:modelValue', option.value)
+  if (!display.value.closeOnSelect) {
+    if (showSearch.value) menu.value?.focusSearch()
+    else trigger.value?.focus()
+    return
+  }
   close()
   // 点 li 之后焦点会落到 body，Tab 顺序就断了；还给触发器
   trigger.value?.focus()
@@ -276,7 +283,11 @@ watch(
           @hover="activeIndex = $event"
           @update:query="query = $event"
           @keydown="onKeydown"
-        />
+        >
+          <template v-if="$slots['menu-actions']" #actions>
+            <slot name="menu-actions" :options="visible" :query="query" />
+          </template>
+        </DtSelectMenu>
       </div>
     </template>
   </DtField>
