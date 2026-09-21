@@ -13,6 +13,7 @@ import { useEmbedContext } from '@/features/embed/context'
 import ThemeSwitcher from './ThemeSwitcher.vue'
 
 const props = defineProps<{
+  compact?: boolean
   title?: string | undefined
   subtitle?: string | undefined
   /** 给了才显示返回入口；取值是站内路径，如 `/system/users`。 */
@@ -42,7 +43,8 @@ onBeforeUnmount(() => {
 
 <template>
   <header
-    class="relative z-30 flex h-16 shrink-0 items-center gap-4 border-b border-border-subtle bg-surface-panel/40 px-5 backdrop-blur-md"
+    class="relative z-30 flex shrink-0 items-center border-b border-border-subtle bg-surface-panel/40 backdrop-blur-md"
+    :class="compact ? 'min-h-12 flex-wrap gap-2 px-3 py-2' : 'h-16 gap-4 px-5'"
   >
     <!-- 扫描光带单独套一层 overflow-hidden，避免裁掉右侧可能出现的下拉面板 -->
     <span class="pointer-events-none absolute inset-0 overflow-hidden">
@@ -56,9 +58,10 @@ onBeforeUnmount(() => {
       到底（min-w-0）之后才轮到 actions 收缩，那时工具条自己的横向滚动才接手。
     -->
     <div
-      class="relative z-10 flex min-w-0 shrink-[1000] items-center gap-3"
-      :class="{ 'min-w-8': backTo }"
+      class="relative z-10 flex min-w-0 items-center gap-3"
+      :class="[compact ? 'flex-1' : 'shrink-[1000]', { 'min-w-8': backTo }]"
     >
+      <slot name="navigation" />
       <!--
         用 RouterLink 而不是按钮：返回是导航、地址会变，中键新标签打开与复制链接
         都该照常可用。同理不用 router.back()——那条路径在直接进子页面时会退出站外。
@@ -91,11 +94,15 @@ onBeforeUnmount(() => {
       这一半就永远按内容宽度撑着，工具条自己的横向滚动一次也不会触发，而是
       整条顶栏被顶出可视区。
     -->
-    <div class="relative z-10 ml-auto flex min-w-0 items-center gap-4">
+    <div
+      class="relative z-10 ml-auto flex min-w-0 items-center"
+      :class="compact ? 'max-w-full flex-wrap gap-2' : 'gap-4'"
+    >
       <slot name="actions" />
       <!-- 换肤是外壳常驻功能，不走 actions 槽——那个槽归页面自己 -->
       <ThemeSwitcher v-if="!embed.isEmbedded.value" />
       <div
+        v-if="!compact"
         class="hidden shrink-0 items-center gap-2 text-text-secondary sm:flex"
       >
         <DtIcon name="activity" :size="14" class="text-accent-on-surface/70" />

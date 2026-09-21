@@ -43,6 +43,41 @@ afterEach(() => {
 })
 
 describe('AppShell', () => {
+  it('小视口使用可展开导航，扩大窗口后恢复桌面折叠偏好', async () => {
+    const query = window.matchMedia('(max-width: 1023px)')
+    const matches = vi.spyOn(query, 'matches', 'get').mockReturnValue(true)
+    vi.spyOn(window, 'matchMedia').mockReturnValue(query)
+    localStorage.setItem('dt.sidebar.collapsed', '1')
+    const wrapper = mount(AppShell, { global: { stubs: { teleport: true } } })
+    expect(wrapper.find('aside').exists()).toBe(false)
+    await wrapper.get('[aria-label="打开主导航"]').trigger('click')
+    expect(wrapper.get('[role="dialog"]').text()).toContain('工作台')
+    expect(wrapper.find('.nav-toggle').exists()).toBe(false)
+    await wrapper.get('[aria-label="关闭"]').trigger('click')
+    expect(wrapper.find('[role="dialog"]').exists()).toBe(false)
+
+    matches.mockReturnValue(false)
+    query.dispatchEvent(new Event('change'))
+    await wrapper.vm.$nextTick()
+    expect(wrapper.find('[aria-label="打开主导航"]').exists()).toBe(false)
+    expect(wrapper.get('aside').classes()).toContain('w-[60px]')
+    expect(localStorage.getItem('dt.sidebar.collapsed')).toBe('1')
+    wrapper.unmount()
+  })
+
+  it('小视口的嵌入和专注模式不显示主导航入口', () => {
+    const query = window.matchMedia('(max-width: 1023px)')
+    vi.spyOn(query, 'matches', 'get').mockReturnValue(true)
+    vi.spyOn(window, 'matchMedia').mockReturnValue(query)
+    const focused = mount(AppShell, { props: { focusMode: true } })
+    expect(focused.find('[aria-label="打开主导航"]').exists()).toBe(false)
+    focused.unmount()
+    activateEmbed('emerald')
+    const embedded = mount(AppShell)
+    expect(embedded.find('[aria-label="打开主导航"]').exists()).toBe(false)
+    embedded.unmount()
+  })
+
   it('main 是 flex 列且自己不滚——滚动归页面里的数据视图', () => {
     const classes = mount(AppShell).get('main').classes()
     expect(classes).toContain('flex')
