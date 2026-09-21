@@ -21,6 +21,7 @@ import type {
   KnowledgeRerankLane,
   KnowledgeSearchResult,
 } from '@/api/knowledge'
+import KnowledgeMascot from '@/features/knowledge/components/KnowledgeMascot.vue'
 import KnowledgeHitCard from './KnowledgeHitCard.vue'
 
 const props = defineProps<{
@@ -93,12 +94,31 @@ const emit = defineEmits<{
 
       <div class="relative min-h-0 flex-1">
         <div class="absolute inset-0 overflow-y-auto">
-          <DtEmpty
-            v-if="props.result !== null && props.result.hits.length === 0"
-            size="inline"
-            title="这个库里没查到"
-            hint="换个说法再试一次，或者确认资料已经传进来并且状态是「已就绪」"
-          />
+          <div
+            v-if="props.isSearching"
+            class="knowledge-search-state"
+            role="status"
+          >
+            <KnowledgeMascot scene="search" active />
+            <p>正在查找相关资料…</p>
+            <span>从知识库中寻找与你的问题相关的内容</span>
+          </div>
+          <div v-else-if="props.result === null" class="knowledge-search-state">
+            <KnowledgeMascot scene="search" />
+            <p>好问题，是发现知识的开始</p>
+            <span>输入设备名称、操作问题或规程关键词，试试能找到什么。</span>
+          </div>
+          <div
+            v-else-if="props.result.hits.length === 0"
+            class="knowledge-search-state"
+          >
+            <KnowledgeMascot scene="search" />
+            <DtEmpty
+              size="inline"
+              title="这个库里没查到"
+              hint="换个说法再试一次，或者确认资料已经传进来并且状态是「已就绪」"
+            />
+          </div>
           <ol
             v-else-if="props.result !== null"
             class="m-0 flex list-none flex-col gap-2 p-0"
@@ -118,6 +138,32 @@ const emit = defineEmits<{
 </template>
 
 <style scoped lang="scss">
+.knowledge-search-state {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  min-height: 100%;
+  padding: 1rem;
+  text-align: center;
+  :deep(.knowledge-mascot) {
+    width: 9rem;
+  }
+  p {
+    margin: 0.5rem 0;
+    color: var(--text-primary);
+    font-size: 0.875rem;
+  }
+  span {
+    color: var(--text-secondary);
+    font-size: 0.75rem;
+    line-height: 1.7;
+  }
+  :deep(.dt-empty--inline) {
+    flex-direction: column;
+  }
+}
+
 .rerank-lane {
   display: flex;
   gap: 0.375rem;

@@ -592,10 +592,14 @@ describe('面板标题栏', () => {
     await wrapper.find('button[aria-label="发送"]').trigger('click')
     await flushPromises()
     expect(wrapper.text()).toContain('回答中')
+    expect(wrapper.get('.chat-panel__working[role="status"]').text()).toContain(
+      '正在处理你的问题',
+    )
 
     release()
     await flushPromises()
     expect(wrapper.text()).not.toContain('回答中')
+    expect(wrapper.find('.chat-panel__working').exists()).toBe(false)
   })
 
   it('清空键没内容时禁着，答完一轮点它就清掉这一屏', async () => {

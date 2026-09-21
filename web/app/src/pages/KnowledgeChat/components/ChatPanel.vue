@@ -20,6 +20,8 @@ import type { KnowledgeBase } from '@/api/knowledge'
 import AiCoreIcon from '@/components/ai/AiCoreIcon.vue'
 import AiTimeline from '@/components/ai/AiTimeline.vue'
 import type { KnowledgeConversation } from '@/composables/useKnowledgeConversation'
+import KnowledgeWelcome from './KnowledgeWelcome.vue'
+import KnowledgeMascot from '@/features/knowledge/components/KnowledgeMascot.vue'
 import KnowledgeChatComposer from './KnowledgeChatComposer.vue'
 
 const props = defineProps<{
@@ -91,6 +93,12 @@ defineEmits<{
       @starter="$emit('send', $event)"
       @answer="chat.answerAsk"
     >
+      <template #empty>
+        <KnowledgeWelcome
+          :starters="starters"
+          @starter="$emit('send', $event)"
+        />
+      </template>
       <template #tool="{ step, entryId }">
         <li v-if="cardRows.rows.has(entryId)" class="chat-panel__card-row">
           <ul class="chat-panel__cards" aria-label="实时数值卡片">
@@ -105,6 +113,15 @@ defineEmits<{
         <ChatToolStep v-else :step="step" :enabled="false" />
       </template>
     </AiTimeline>
+
+    <div
+      v-if="chat.isRunning.value && !chat.isAsking.value"
+      class="chat-panel__working"
+      role="status"
+    >
+      <KnowledgeMascot scene="search" compact active />
+      <span>正在处理你的问题…</span>
+    </div>
 
     <KnowledgeChatComposer
       :running="chat.isRunning.value"
@@ -121,6 +138,13 @@ defineEmits<{
 
 <style scoped lang="scss">
 .chat-panel {
+  background:
+    radial-gradient(
+      ellipse at 50% 15%,
+      rgba(var(--accent-primary-rgb), 0.065),
+      transparent 60%
+    ),
+    var(--surface-panel);
   /* 两条发光分隔线共用的一笔。⚠ 用强调色的 rgb 伴生变量拼出来，
      换主题时跟着全局强调色走，不携带任何一种固定色相 */
   --ai-edge: linear-gradient(
@@ -130,6 +154,19 @@ defineEmits<{
     rgba(var(--accent-secondary-rgb), 0.35),
     transparent
   );
+}
+
+.chat-panel__working {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 0.5rem;
+  flex-shrink: 0;
+  color: var(--text-secondary);
+  font-size: 0.75rem;
+  :deep(.knowledge-mascot) {
+    width: 3rem;
+  }
 }
 
 .chat-panel__card-row {
