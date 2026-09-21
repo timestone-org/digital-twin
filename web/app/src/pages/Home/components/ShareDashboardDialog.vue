@@ -51,7 +51,9 @@ const raced = useRacedFetch()
 
 /** ⚠ 公开面的路径是 `/public/<token>`，与登录态的 `/dashboards/:id` 不是同一条。 */
 const link = computed(() =>
-  token.value === null ? '' : `${location.origin}/public/${token.value}`,
+  token.value === null
+    ? ''
+    : `${location.origin}${import.meta.env.BASE_URL}public/${token.value}`,
 )
 
 /**

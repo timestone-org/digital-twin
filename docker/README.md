@@ -295,3 +295,10 @@ docker compose run --rm --no-deps auth-migrate
 
 ⚠ 迁移**自动应用**意味着人工闸门只剩评审那一道。破坏性变更必须按扩展—收缩两次
 发布（engineering-workflow §4），否则一次 `up` 就把它推上去了。
+
+### 前端页面路径
+
+前端统一从 `/ai/` 访问；容器与 Windows Nginx 配置将该前缀映射到现有
+`dist` 根目录，并回退到 `/ai/index.html` 支持深层页面刷新。旧页面地址重定向
+到 `/ai` 下并保留查询参数；API `/api/` 与素材 `/oss/` 不变。更新时需重新
+构建前端并重载对应 Nginx 配置。

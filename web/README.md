@@ -34,7 +34,7 @@ VITE_KNOWLEDGE_CHAT_MAX_ACTIVE_LIVE_CARDS=20
 
 ```html
 <iframe
-  src="http://twin.example.com/dashboards/019...?token=dtk_xxx_xxx&theme=emerald"
+  src="http://twin.example.com/ai/dashboards/019...?token=dtk_xxx_xxx&theme=emerald"
   title="数字孪生页面"
   width="1440"
   height="900"
