@@ -2,8 +2,8 @@
 
 from fastapi import APIRouter
 
-from platform_server.apps.assets.api import assets
+from platform_server.apps.assets.api import assets, replacement
 
-ROUTERS: tuple[APIRouter, ...] = (assets.router,)
+ROUTERS: tuple[APIRouter, ...] = (assets.router, replacement.router)
 
 __all__ = ["ROUTERS"]

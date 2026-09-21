@@ -223,6 +223,7 @@ onMounted(() => void library.reload(page.kind.value))
       @update:model-value="page.closeDetail"
       @recompress="page.recompressDetail"
       @rename="page.rename"
+      @replaced="page.replaced"
       @copy="page.copyDetail"
       @download="page.downloadDetail"
       @remove="page.removeDetail"

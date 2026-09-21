@@ -29,6 +29,7 @@ export interface AssetsActions {
   /** 重压请求在途。 */
   isRecompressing: Ref<boolean>
   recompressDetail: () => void
+  replaced: (asset: Asset) => void
 }
 
 /**
@@ -86,6 +87,7 @@ export function createAssetsActions(
   }
 
   return {
+    replaced: (asset) => acceptReplacement(library, detail, toast, asset),
     copyRef,
     download,
     rename,
@@ -147,4 +149,18 @@ async function recompressOne(deps: RecompressDeps, row: Asset): Promise<void> {
   } finally {
     deps.isRecompressing.value = false
   }
+}
+
+/** 更新素材列表和当前详情，保留已有分页。 */
+function acceptReplacement(
+  library: AssetLibrary,
+  detail: Ref<Asset | null>,
+  toast: ReturnType<typeof useToast>,
+  asset: Asset,
+): void {
+  library.assets.value = library.assets.value.map((item) =>
+    item.id === asset.id ? asset : item,
+  )
+  if (detail.value?.id === asset.id) detail.value = asset
+  toast.success('模型已替换，名称与引用保持不变')
 }

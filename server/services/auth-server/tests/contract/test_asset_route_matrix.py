@@ -32,12 +32,14 @@ EXPECTED: tuple[tuple[str, str, frozenset[str]], ...] = (
     (f"{ASSETS}:presign-upload", "POST", MANAGE),
     (f"{ASSET}:finalize", "POST", MANAGE),
     (f"{ASSET}:recompress", "POST", MANAGE),
+    (f"{ASSET}:presign-replacement", "POST", MANAGE),
+    (f"{ASSET}:replace", "POST", MANAGE),
     (ASSET, "PATCH", MANAGE),
     (ASSET, "DELETE", MANAGE),
 )
 
 # 素材面对外端点的条数。写死是为了让「加了端点没加规则」在这里红
-ASSET_ROUTE_COUNT = 8
+ASSET_ROUTE_COUNT = 10
 
 
 def test_the_documented_face_covers_every_asset_route() -> None:

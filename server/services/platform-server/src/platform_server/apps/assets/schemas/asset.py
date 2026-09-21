@@ -113,3 +113,10 @@ class AssetUpdateIn(InputModel):
     """
 
     name: AssetName
+
+
+class ReplaceUploadIn(InputModel):
+    """确认替换当前内容，名字和素材身份不允许修改。"""
+
+    upload_id: uuid.UUID
+    expected_checksum: str = Field(min_length=1, max_length=256)

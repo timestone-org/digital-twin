@@ -302,3 +302,12 @@ docker compose run --rm --no-deps auth-migrate
 `dist` 根目录，并回退到 `/ai/index.html` 支持深层页面刷新。旧页面地址重定向
 到 `/ai` 下并保留查询参数；API `/api/` 与素材 `/oss/` 不变。更新时需重新
 构建前端并重载对应 Nginx 配置。
+
+### 模型素材重新上传
+
+先执行 platform 数据库迁移，再排空并升级旧 `platform-worker`，随后更新
+platform API 与 Nginx，最后发布前端。旧 worker 不识别内容版本，不能与新的
+重新上传入口并行使用。模型取回经过 `/oss/resolve/models/`，因此不能只更新前端。
+
+已有 `asset:<uuid>` 引用和大屏配置无需迁移；素材名称、ID 与创建信息保持不变。
+新压缩档就绪前读取当前版本原件。旧内容版本保留至删除该素材时一并清理。

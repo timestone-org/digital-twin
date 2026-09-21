@@ -62,3 +62,10 @@ class AssetStoreUnavailable(AppError):
 
     code = 51501
     http_status = 503
+
+
+class AssetReplaceConflict(AppError):
+    """素材内容已被另一次上传更新。"""
+
+    code = 41507
+    http_status = 409

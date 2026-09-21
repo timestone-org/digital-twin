@@ -205,3 +205,37 @@ export function assetBaseUrl(): string {
 function contentTypeOf(file: File): string {
   return file.type === '' ? 'application/octet-stream' : file.type
 }
+
+/** 重新上传模型内容，确认时保留现有名称和引用。 */
+export async function replaceAssetFile(
+  asset: Asset,
+  file: File,
+  options: UploadOptions = {},
+): Promise<Asset> {
+  const ticket = toUploadTicket(
+    await requestData<unknown>(
+      `${ASSETS_PATH}/${asset.id}:presign-replacement`,
+      onPlatform({
+        method: 'POST',
+        body: {
+          kind: asset.kind,
+          content_type: contentTypeOf(file),
+          size_bytes: file.size,
+        },
+      }),
+    ),
+  )
+  await putAssetBytes(ticket, file, options)
+  return toAsset(
+    await requestData<unknown>(
+      `${ASSETS_PATH}/${asset.id}:replace`,
+      onPlatform({
+        method: 'POST',
+        body: {
+          upload_id: ticket.assetId,
+          expected_checksum: asset.checksum,
+        },
+      }),
+    ),
+  )
+}

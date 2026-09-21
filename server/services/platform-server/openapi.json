@@ -18188,6 +18188,29 @@
         "title": "ReplaceLayoutIn",
         "type": "object"
       },
+      "ReplaceUploadIn": {
+        "additionalProperties": false,
+        "description": "确认替换当前内容，名字和素材身份不允许修改。",
+        "properties": {
+          "expected_checksum": {
+            "maxLength": 256,
+            "minLength": 1,
+            "title": "Expected Checksum",
+            "type": "string"
+          },
+          "upload_id": {
+            "format": "uuid",
+            "title": "Upload Id",
+            "type": "string"
+          }
+        },
+        "required": [
+          "upload_id",
+          "expected_checksum"
+        ],
+        "title": "ReplaceUploadIn",
+        "type": "object"
+      },
       "ReportRuntimeOut": {
         "description": "真实生效的调度配置。",
         "properties": {
@@ -23381,6 +23404,60 @@
         ]
       }
     },
+    "/api/v1/platform/assets/{asset_id}:presign-replacement": {
+      "post": {
+        "description": "申请重新上传凭证。\n\nArgs: sessions, store, _actor, asset_id, body。",
+        "operationId": "presign_api_v1_platform_assets__asset_id__presign_replacement_post",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "asset_id",
+            "required": true,
+            "schema": {
+              "format": "uuid",
+              "title": "Asset Id",
+              "type": "string"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/PresignUploadIn"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "201": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiResponse_UploadTicketOut_"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Presign",
+        "tags": [
+          "asset"
+        ]
+      }
+    },
     "/api/v1/platform/assets/{asset_id}:recompress": {
       "post": {
         "description": "把这个模型的各档打回待压缩并重新排队。\n\n⚠ 这是**唯一的重试入口**：worker 压不动时不自动重试（一个压不动的模型\n重试一万次也压不动，而自动重试会把 worker 占满），由人在界面上按这一下。\nArgs: session, actor, dispatcher, asset_id。",
@@ -23420,6 +23497,60 @@
           }
         },
         "summary": "重压压缩档",
+        "tags": [
+          "asset"
+        ]
+      }
+    },
+    "/api/v1/platform/assets/{asset_id}:replace": {
+      "post": {
+        "description": "确认替换，保留名称和引用。\n\nArgs: sessions, store, _actor, dispatcher, asset_id, body。",
+        "operationId": "replace_api_v1_platform_assets__asset_id__replace_post",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "asset_id",
+            "required": true,
+            "schema": {
+              "format": "uuid",
+              "title": "Asset Id",
+              "type": "string"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/ReplaceUploadIn"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiResponse_AssetOut_"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Replace",
         "tags": [
           "asset"
         ]
@@ -31917,6 +32048,52 @@
         "summary": "历史分桶聚合",
         "tags": [
           "point-history"
+        ]
+      }
+    },
+    "/api/v1/platform/public-assets/{asset_id}/{variant}": {
+      "get": {
+        "description": "只解析公开模型字节，不返回素材元数据。\n\nArgs: session, asset_id, variant, public_base。",
+        "operationId": "content_api_v1_platform_public_assets__asset_id___variant__get",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "asset_id",
+            "required": true,
+            "schema": {
+              "format": "uuid",
+              "title": "Asset Id",
+              "type": "string"
+            }
+          },
+          {
+            "in": "path",
+            "name": "variant",
+            "required": true,
+            "schema": {
+              "title": "Variant",
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "307": {
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Content",
+        "tags": [
+          "asset"
         ]
       }
     },

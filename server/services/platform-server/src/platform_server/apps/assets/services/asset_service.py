@@ -65,7 +65,9 @@ class FinalizeRequest:
     actor: str
 
 
-def _checked_spec(kind: str, content_type: str, size_bytes: int) -> KindSpec:
+def checked_upload_spec(
+    kind: str, content_type: str, size_bytes: int
+) -> KindSpec:
     """按素材类型逐条过闸；过不了当场拒，不签凭证。
 
     Args: kind, content_type, size_bytes。
@@ -109,7 +111,9 @@ async def presign_upload(
     传到一个 id 下、再拿另一个 id 来确认。
     Args: store, request。
     """
-    spec = _checked_spec(request.kind, request.content_type, request.size_bytes)
+    spec = checked_upload_spec(
+        request.kind, request.content_type, request.size_bytes
+    )
     asset_id = uuid7()
     ticket = await _presign(store, asset_id, request, spec)
     return UploadTicketOut(

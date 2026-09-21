@@ -23,14 +23,18 @@ const props = defineProps<{ asset: Asset }>()
 
 const failed = ref(false)
 
-const src = computed(() =>
-  assetUrl(ASSET_BASE_URL, props.asset.kind, props.asset.ref),
+const src = computed(
+  () =>
+    assetUrl(ASSET_BASE_URL, props.asset.kind, props.asset.ref) +
+    (props.asset.kind === 'model'
+      ? `?v=${encodeURIComponent(props.asset.checksum)}`
+      : ''),
 )
 const isModel = computed(() => props.asset.kind === 'model')
 
 // 换一个素材时把上一个的失败态清掉，否则它会跟着传染到下一个身上
 watch(
-  () => props.asset.id,
+  () => src.value,
   () => (failed.value = false),
 )
 </script>
@@ -39,7 +43,7 @@ watch(
   <div class="dt-asset-stage" :class="{ 'is-model': isModel }">
     <!-- ⚠ `:key` 挂素材 id：不换 key 的话切到另一个模型时 Vue 会复用同一个
          查看器实例，而它的场景是在 onMounted 里装的——画面停在上一个模型上 -->
-    <AssetModelViewer v-if="isModel" :key="asset.id" :url="src" />
+    <AssetModelViewer v-if="isModel" :key="src" :url="src" />
     <DtEmpty
       v-else-if="failed"
       icon="image"

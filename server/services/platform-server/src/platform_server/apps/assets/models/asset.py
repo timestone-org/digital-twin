@@ -36,6 +36,12 @@ class Asset(TimestampMixin, Base):
     size_bytes: Mapped[int] = mapped_column(BigInteger, nullable=False)
     # 存储端算的 etag，用于「同一份文件重复上传」的提示与完整性核对
     checksum: Mapped[str] = mapped_column(Text, nullable=False)
+    content_upload_id: Mapped[uuid.UUID | None] = mapped_column(
+        UUID(as_uuid=True), nullable=True
+    )
+    content_revision: Mapped[uuid.UUID | None] = mapped_column(
+        UUID(as_uuid=True), nullable=True
+    )
     created_by: Mapped[str] = mapped_column(
         Text, nullable=False, server_default=""
     )

@@ -12,6 +12,7 @@ import {
   assetRef,
   assetUrl,
   parseAssetRef,
+  modelVariantUrl,
 } from '../src/asset'
 
 const ID = '0192f0aa-0000-7000-8000-000000000001'
@@ -58,14 +59,14 @@ describe('对象键', () => {
 describe('取回地址', () => {
   it('前缀 + 对象键', () => {
     expect(assetUrl('/oss/', 'model', assetRef(ID))).toBe(
-      `/oss/models/${ID}/original`,
+      `/oss/resolve/models/${ID}/original`,
     )
   })
 
   // ⚠ 少一个斜杠拼出来的是 /ossmodels/…，那是一条谁都解释不了的 404
   it('前缀没带斜杠时自己补上', () => {
     expect(assetUrl('/oss', 'model', assetRef(ID))).toBe(
-      `/oss/models/${ID}/original`,
+      `/oss/resolve/models/${ID}/original`,
     )
   })
 
@@ -73,4 +74,13 @@ describe('取回地址', () => {
     expect(assetUrl('/oss/', 'model', 'nonsense')).toBe('')
     expect(assetUrl('/oss/', 'model', '')).toBe('')
   })
+})
+
+it('原件和各压缩档都按稳定引用解析当前内容版本', () => {
+  for (const variant of ['original', 'high', 'medium', 'low'] as const) {
+    expect(modelVariantUrl('/oss/', assetRef(ID), variant)).toBe(
+      `/oss/resolve/models/${ID}/${variant}`,
+    )
+  }
+  expect(modelVariantUrl('/oss/', 'invalid', 'high')).toBe('')
 })

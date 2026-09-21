@@ -7,7 +7,8 @@ from sqlalchemy import delete, select, update
 from sqlalchemy.dialects.postgresql import insert
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from platform_server.apps.assets.models import Asset
+from lib.objectstore import ObjectStat
+from platform_server.apps.assets.models import Asset, AssetModelVariant
 
 
 @dataclass(frozen=True)
@@ -119,3 +120,79 @@ async def rename(session: AsyncSession, asset_id: uuid.UUID, name: str) -> None:
     await session.execute(
         update(Asset).where(Asset.id == asset_id).values(name=name)
     )
+
+
+@dataclass(frozen=True)
+class ContentWrite:
+    """一次独立拷贝的内容版本与上传凭证身份。"""
+
+    upload_id: uuid.UUID
+    revision: uuid.UUID
+    stat: ObjectStat
+
+
+async def switch_content(
+    session: AsyncSession,
+    asset_id: uuid.UUID,
+    expected: str,
+    write: ContentWrite,
+) -> bool:
+    """按原校验和切换版本，拒绝覆盖另一人的更新。
+
+    Args: session, asset_id, expected, write。
+    """
+    result = await session.execute(
+        update(Asset)
+        .where(Asset.id == asset_id, Asset.checksum == expected)
+        .values(
+            content_revision=write.revision,
+            content_upload_id=write.upload_id,
+            content_type=write.stat.content_type,
+            size_bytes=write.stat.size_bytes,
+            checksum=write.stat.etag,
+        )
+        .returning(Asset.id)
+    )
+    return result.scalar_one_or_none() is not None
+
+
+async def lock_revision(
+    session: AsyncSession,
+    asset_id: uuid.UUID,
+    revision: uuid.UUID | None,
+) -> bool:
+    """发布压缩结果前锁定仍然有效的版本，仅覆盖短数据库事务。
+
+    Args: session, asset_id, revision。
+    """
+    result = await session.execute(
+        select(Asset.id)
+        .where(Asset.id == asset_id, Asset.content_revision == revision)
+        .with_for_update()
+    )
+    return result.scalar_one_or_none() is not None
+
+
+async def model_content(
+    session: AsyncSession,
+    asset_id: uuid.UUID,
+    variant: str,
+) -> tuple[uuid.UUID | None, bool] | None:
+    """在同一数据库快照内读取版本与档位状态。
+
+    Args: session, asset_id, variant。
+    """
+    result = await session.execute(
+        select(Asset.content_revision, AssetModelVariant.status)
+        .outerjoin(
+            AssetModelVariant,
+            (AssetModelVariant.asset_id == Asset.id)
+            & (AssetModelVariant.variant == variant),
+        )
+        .where(Asset.id == asset_id, Asset.kind == "model")
+    )
+    row = result.tuples().one_or_none()
+    if row is None:
+        return None
+    revision, status = row
+    return revision, status == "ready"

@@ -21,6 +21,7 @@ import {
   DtSwitch,
 } from '@dt/ui'
 import { computed, ref } from 'vue'
+import { useAssetName } from '@/features/assets/useAssetName'
 
 import AssetPickerDialog from '@/components/assets/AssetPickerDialog.vue'
 
@@ -51,25 +52,17 @@ const ROTATION_STEP = 5
 const SPEED_RANGE = { min: -4, max: 4, step: 0.05 } as const
 
 const pickerOpen = ref(false)
-/** 刚挑过的素材名，纯显示用；只有引用能落库。 */
-const pickedName = ref('')
-
-const assetLabel = computed(() => {
-  if (props.modelValue.asset === '') return '未选择模型'
-  return pickedName.value === '' ? props.modelValue.asset : pickedName.value
-})
+const assetLabel = useAssetName(() => props.modelValue.asset)
 
 function write(patch: Partial<TwinModelRef>): void {
   emit('update:modelValue', { ...props.modelValue, ...patch })
 }
 
-function onPick(assetRef: string, asset: { name: string }): void {
-  pickedName.value = asset.name
+function onPick(assetRef: string): void {
   write({ asset: assetRef })
 }
 
 function clearAsset(): void {
-  pickedName.value = ''
   write({ asset: '' })
 }
 
