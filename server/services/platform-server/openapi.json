@@ -15825,6 +15825,14 @@
             "title": "Source Name",
             "type": "string"
           },
+          "source_protocol": {
+            "enum": [
+              "modbus_tcp",
+              "opcua"
+            ],
+            "title": "Source Protocol",
+            "type": "string"
+          },
           "unit": {
             "anyOf": [
               {
@@ -15846,6 +15854,7 @@
           "description",
           "unit",
           "source_name",
+          "source_protocol",
           "is_enabled",
           "is_exact",
           "score"
@@ -19492,7 +19501,10 @@
             "type": "integer"
           },
           "protocol": {
-            "const": "opcua",
+            "enum": [
+              "modbus_tcp",
+              "opcua"
+            ],
             "title": "Protocol",
             "type": "string"
           },
@@ -19647,7 +19659,10 @@
             "type": "integer"
           },
           "protocol": {
-            "const": "opcua",
+            "enum": [
+              "modbus_tcp",
+              "opcua"
+            ],
             "title": "Protocol",
             "type": "string"
           },

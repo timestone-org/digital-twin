@@ -93,7 +93,7 @@ const nextDisabled = computed(
           :hint="
             isFiltered
               ? '请调整搜索关键词。'
-              : '新增一个 OPC UA 数据源，连接后即可浏览并导入点位。'
+              : '新增 OPC UA 或只读 Modbus TCP 数据源，随后配置采集点位。'
           "
         >
           <PermGuard :codes="[PERMISSION_CODES.collectManage]">

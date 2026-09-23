@@ -19,6 +19,9 @@ dependencies = [
     # 两处写不同范围只会让升级时其中一个静默变版本。本服务只用文档化的
     # `Client` 面，且 asyncua **只允许出现在 drivers/opcua/ 下**（CONTEXT.md §3）。
     "asyncua==1.1.8",
+    # PLC 直连首版只支持只读 Modbus TCP。钉死 minor API 边界；pymodbus 不遵循
+    # semver，次版本也可能改调用签名。第三方 import 只允许留在 drivers/modbus_tcp/。
+    "pymodbus==3.15.0",
     # 拉采集计划：platform 的 /internal/v1/platform/collect-plan。
     # ⚠ 必须自己声明：httpx 在工作区根的 dev 组里，本地与全部用例都 import
     # 得到，只有按自己声明的依赖装的镜像会启动即崩。

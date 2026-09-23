@@ -9,8 +9,11 @@ import ast
 from pathlib import Path
 
 SOURCE_ROOT = Path(__file__).resolve().parents[2] / "src" / "collector_server"
-DRIVER_DIR = SOURCE_ROOT / "apps" / "collect" / "drivers" / "opcua"
-PROTOCOL_PACKAGES = ("asyncua",)
+DRIVERS_ROOT = SOURCE_ROOT / "apps" / "collect" / "drivers"
+PROTOCOL_PACKAGES = {
+    "asyncua": DRIVERS_ROOT / "opcua",
+    "pymodbus": DRIVERS_ROOT / "modbus_tcp",
+}
 
 
 def _imports(path: Path) -> set[str]:
@@ -28,9 +31,9 @@ def _offenders() -> list[str]:
     return [
         f"{path.name}:{module}"
         for path in sorted(SOURCE_ROOT.rglob("*.py"))
-        if DRIVER_DIR not in path.parents
         for module in _imports(path)
-        if module.split(".")[0] in PROTOCOL_PACKAGES
+        if (root := module.split(".")[0]) in PROTOCOL_PACKAGES
+        if PROTOCOL_PACKAGES[root] not in path.parents
     ]
 
 
@@ -39,10 +42,11 @@ def test_protocol_library_stays_inside_its_driver_directory() -> None:
 
 
 def test_the_driver_directory_is_where_the_protocol_lives() -> None:
-    inside = {
-        module
-        for path in sorted(DRIVER_DIR.rglob("*.py"))
-        for module in _imports(path)
-        if module.split(".")[0] in PROTOCOL_PACKAGES
-    }
-    assert inside
+    for package, driver_dir in PROTOCOL_PACKAGES.items():
+        inside = {
+            module
+            for path in sorted(driver_dir.rglob("*.py"))
+            for module in _imports(path)
+            if module.split(".")[0] == package
+        }
+        assert inside

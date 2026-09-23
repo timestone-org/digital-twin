@@ -440,6 +440,13 @@ describe('权限', () => {
   })
 })
 
+describe('只读 Modbus TCP', () => {
+  it('不渲染任何写值入口', async () => {
+    const wrapper = await render(undefined, { protocol: 'modbus_tcp' })
+    expect(wrapper.text()).not.toContain('写值')
+  })
+})
+
 describe('两种空态', () => {
   it('一个点位都没导过时，引导去浏览树里勾选', async () => {
     const wrapper = await render([])

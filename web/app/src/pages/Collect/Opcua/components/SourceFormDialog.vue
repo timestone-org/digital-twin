@@ -1,7 +1,6 @@
 <script setup lang="ts">
 /**
- * @fileoverview 新建 / 编辑 OPC UA 数据源表单。页面只管 OPC UA 一种协议，
- * 表单里没有协议字段。
+ * @fileoverview 新建 / 编辑采集数据源表单，支持 OPC UA 与只读 Modbus TCP。
  *
  * ⚠ 编码只在新建时定：它是数据源的身份，点位身份 `{source_id}:{code}` 与归档
  * 表的压缩段键都挂在它上面（docs/COLLECT_DESIGN.md §2）。
@@ -14,12 +13,13 @@
 import { computed, ref, watch } from 'vue'
 import type {
   CollectReadMode,
+  CollectProtocol,
   CollectSource,
   CollectSourceCreateInput,
   CollectSourceUpdateInput,
   DtNumberRange,
 } from '@dt/contracts'
-import { COLLECT_MIN_INTERVAL_MS } from '@dt/contracts'
+import { COLLECT_MIN_INTERVAL_MS, COLLECT_PROTOCOLS } from '@dt/contracts'
 import {
   DtButton,
   DtField,
@@ -65,6 +65,7 @@ const INTERVAL_RANGE: DtNumberRange = {
 
 const isEdit = computed(() => props.source !== null)
 
+const protocol = ref<CollectProtocol>('opcua')
 const name = ref('')
 const code = ref('')
 const description = ref('')
@@ -87,6 +88,7 @@ const error = ref<string | null>(null)
 // ⚠ 这一屏十几个字段，误点一下遮罩就全没了；脏着时由 DtModal 拦下误关
 const { isDirty } = useFormDirty(
   [
+    protocol,
     name,
     code,
     description,
@@ -109,6 +111,7 @@ function reset(target: CollectSource | null): void {
   credential.value = ''
   isCredentialCleared.value = false
   if (target === null) {
+    protocol.value = 'opcua'
     name.value = ''
     code.value = ''
     description.value = ''
@@ -123,6 +126,7 @@ function reset(target: CollectSource | null): void {
     return
   }
   const split = splitOptions(target.options_json)
+  protocol.value = target.protocol
   name.value = target.name
   code.value = target.code
   description.value = target.description ?? ''
@@ -155,9 +159,30 @@ const readModeValue = computed<string>({
   },
 })
 
+const protocolValue = computed<string>({
+  get: () => protocol.value,
+  set: (next) => {
+    protocol.value =
+      COLLECT_PROTOCOLS.find((candidate) => candidate === next) ?? 'opcua'
+    if (protocol.value === 'modbus_tcp') {
+      readMode.value = 'poll'
+      isEnabled.value = false
+      username.value = ''
+      credential.value = ''
+      isCredentialCleared.value = false
+    }
+  },
+})
+
+const PROTOCOL_OPTIONS = [
+  { value: 'opcua', label: 'OPC UA' },
+  { value: 'modbus_tcp', label: 'Modbus TCP（只读）' },
+]
+
 /** 表单此刻的取值，交给纯函数去校验与组装请求体。 */
 function values(): SourceFormValues {
   return {
+    protocol: protocol.value,
     name: name.value,
     code: code.value,
     description: description.value,
@@ -197,14 +222,27 @@ function submit(): void {
       </DtNotice>
 
       <div class="grid grid-cols-1 gap-3 sm:grid-cols-2">
-        <DtField label="名称" required>
-          <DtInput v-model="name" placeholder="如：1号生产线 OPC UA" />
+        <DtField label="协议" required>
+          <DtSelect
+            v-model="protocolValue"
+            :options="PROTOCOL_OPTIONS"
+            :disabled="isEdit"
+          />
         </DtField>
+        <DtField label="名称" required>
+          <DtInput v-model="name" placeholder="如：1号生产线 PLC" />
+        </DtField>
+      </div>
+      <div class="grid grid-cols-1 gap-3 sm:grid-cols-2">
         <DtField label="Endpoint" required>
           <DtInput
             v-model="endpoint"
             class="font-mono"
-            placeholder="opc.tcp://host:4840"
+            :placeholder="
+              protocol === 'opcua'
+                ? 'opc.tcp://host:4840'
+                : 'modbus.tcp://host:502'
+            "
           />
         </DtField>
       </div>
@@ -230,7 +268,10 @@ function submit(): void {
         <DtInput v-model="description" placeholder="可选，用于备注用途" />
       </DtField>
 
-      <div class="grid grid-cols-1 gap-3 sm:grid-cols-2">
+      <div
+        v-if="protocol === 'opcua'"
+        class="grid grid-cols-1 gap-3 sm:grid-cols-2"
+      >
         <DtField
           label="安全模式"
           hint="当前仅支持 None；需要签名或加密的设备暂不能接入。"
@@ -244,18 +285,27 @@ function submit(): void {
 
       <div class="grid grid-cols-1 gap-3 sm:grid-cols-2">
         <DtField label="采集模式">
-          <DtSelect v-model="readModeValue" :options="READ_MODES" />
+          <DtSelect
+            v-model="readModeValue"
+            :options="READ_MODES"
+            :disabled="protocol === 'modbus_tcp'"
+          />
         </DtField>
         <DtField
           v-if="readMode === 'poll'"
           label="轮询间隔（毫秒）"
-          hint="仅轮询模式生效，最小 50ms。"
+          :hint="
+            protocol === 'modbus_tcp'
+              ? '仅轮询模式生效，安全下限 1000ms。'
+              : '仅轮询模式生效，最小 50ms。'
+          "
         >
           <DtNumberInput v-model="pollIntervalMs" :range="INTERVAL_RANGE" />
         </DtField>
       </div>
 
       <SourceCredentialFields
+        v-if="protocol === 'opcua'"
         v-model:username="username"
         v-model:credential="credential"
         v-model:is-cleared="isCredentialCleared"
@@ -265,7 +315,11 @@ function submit(): void {
 
       <DtField
         label="其它连接参数"
-        hint="驱动特有的旁路配置，如证书路径。不清楚就留空。"
+        :hint="
+          protocol === 'opcua'
+            ? '驱动特有的旁路配置，如证书路径。不清楚就留空。'
+            : '可配置 device_id、byte_order、word_order、max_registers_per_request、max_bits_per_request；不清楚就留空。'
+        "
       >
         <OptionsEditor v-model="extraOptions" />
       </DtField>

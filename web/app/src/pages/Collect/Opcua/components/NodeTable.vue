@@ -248,6 +248,7 @@ watch(list.items, (rows) => {
             "
             :selected="archive.selected.value.has(row.id)"
             :archive-busy="archive.rowBusy.value.has(row.id)"
+            :can-write="source.protocol === 'opcua'"
             :error="archive.failures.value.get(row.id)"
             @detail="detail = row"
             @select="archive.toggleSelect(row.id, $event)"
@@ -346,7 +347,10 @@ watch(list.items, (rows) => {
 
         <template #cell-actions="{ row }">
           <div class="flex items-center justify-end gap-1">
-            <PermGuard :codes="[PERMISSION_CODES.collectOperate]">
+            <PermGuard
+              v-if="source.protocol === 'opcua'"
+              :codes="[PERMISSION_CODES.collectOperate]"
+            >
               <DtButton
                 variant="ghost"
                 size="sm"
@@ -393,6 +397,7 @@ watch(list.items, (rows) => {
     <PointFormDialog
       v-model="editing.formOpen.value"
       :point="editing.editing.value"
+      :protocol="source.protocol"
       @create="editing.create"
       @update="editing.update"
     />

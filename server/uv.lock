@@ -605,6 +605,7 @@ dependencies = [
     { name = "collectwire" },
     { name = "httpx" },
     { name = "lib", extra = ["db", "redis", "web"] },
+    { name = "pymodbus" },
     { name = "timeseries" },
 ]
 
@@ -614,6 +615,7 @@ requires-dist = [
     { name = "collectwire", editable = "domain/collectwire" },
     { name = "httpx", specifier = ">=0.28" },
     { name = "lib", extras = ["db", "redis", "web"], editable = "lib" },
+    { name = "pymodbus", specifier = "==3.15.0" },
     { name = "timeseries", editable = "domain/timeseries" },
 ]
 
@@ -2444,6 +2446,15 @@ source = { registry = "https://pypi.org/simple" }
 sdist = { url = "https://files.pythonhosted.org/packages/3b/81/58d0ac84e1ef3a3843791d6954d94c0b33d526c75eeb1efbce9d0a4c4077/pyjwt-2.13.0.tar.gz", hash = "sha256:41571c89ca91598c79e8ef18a2d07367d4810fbbd6f637794879baf1b7703423", size = 107515, upload-time = "2026-05-21T19:54:36.618Z" }
 wheels = [
     { url = "https://files.pythonhosted.org/packages/a3/5e/ecf12fdb62546d64385c158514e9b2b671f7832108ef2ecd2020ce0af2d1/pyjwt-2.13.0-py3-none-any.whl", hash = "sha256:66adcc2aff09b3f1bbd95fc1e1577df8ac8723c978552fd43304c8a290ac5728", size = 31274, upload-time = "2026-05-21T19:54:35.362Z" },
+]
+
+[[package]]
+name = "pymodbus"
+version = "3.15.0"
+source = { registry = "https://pypi.org/simple" }
+sdist = { url = "https://files.pythonhosted.org/packages/e5/b8/03dace16e0e5d1c3eb16e8b9bcce9885f5e8a38db34345ec375cd70ed2e2/pymodbus-3.15.0.tar.gz", hash = "sha256:4c5f715128bfeba59f4c9fb3542b0c32a8afd4b90081111e39c12f7af0c89aae", size = 168238, upload-time = "2026-08-13T09:33:33.049Z" }
+wheels = [
+    { url = "https://files.pythonhosted.org/packages/27/7b/fa75ca74270ad3786234c6573f3c6c524441d3eb686882e280c717ce6d04/pymodbus-3.15.0-py3-none-any.whl", hash = "sha256:74d8dee961f23845f18a8481253183504dca05c4fcd102890cd28f4d7ce09267", size = 167602, upload-time = "2026-08-13T09:33:31.474Z" },
 ]
 
 [[package]]

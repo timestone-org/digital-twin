@@ -8,6 +8,7 @@ from collector_server.apps.collect.drivers.base import (
     DriverConnection,
     DriverTimeouts,
     PointSpec,
+    RequestLimiter,
 )
 from collectwire import PlanPoint, PlanSource
 
@@ -21,6 +22,7 @@ def to_spec(point: PlanPoint) -> PointSpec:
         point_code=point.point_code,
         address=point.address,
         sampling_interval_ms=point.sampling_interval_ms,
+        data_type=point.data_type,
     )
 
 
@@ -33,7 +35,11 @@ def specs_of(source: PlanSource) -> tuple[PointSpec, ...]:
 
 
 def to_connection(
-    source: PlanSource, timeouts: DriverTimeouts
+    source: PlanSource,
+    timeouts: DriverTimeouts,
+    request_limiter: RequestLimiter | None = None,
+    is_network_access_enabled: bool = False,
+    allowed_endpoints: frozenset[str] = frozenset(),
 ) -> DriverConnection:
     """建一次会话要的连接参数。
 
@@ -45,6 +51,9 @@ def to_connection(
         username=source.username,
         password=source.password,
         timeouts=timeouts,
+        request_limiter=request_limiter,
+        is_network_access_enabled=is_network_access_enabled,
+        allowed_endpoints=allowed_endpoints,
     )
 
 

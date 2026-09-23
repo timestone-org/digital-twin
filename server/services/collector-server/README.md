@@ -21,7 +21,7 @@ src/collector_server/
 ├── commands.py      命令总线的传输面（Redis list RPC）
 └── apps/collect/
     ├── errors.py    领域异常，`reason` 是发给 platform 的稳定字面量
-    ├── drivers/     base.py（Driver 协议）/ registry.py / opcua/
+    ├── drivers/     base.py（Driver 协议）/ registry.py / opcua/ / modbus_tcp/
     ├── runtime/     supervisor / session / poller / sink / reachability
     ├── archive/     buffer（准入 + 有界缓冲 + 落 Stream）/ writer（Stream → 库）
     ├── plan/        client（拉全量）/ store（版本比对）
@@ -51,6 +51,8 @@ tests/{unit,integration,contract,e2e}
 
 `asyncua` **钉死在 1.1.8**：workspace 共用一个锁文件，`opcua-server` 也钉在这个版本，两处写不同范围只会让升级时其中一个静默变版本。本服务只用它文档化的 `Client` 面，且**只允许在 `drivers/opcua/` 下 import**。
 
+`pymodbus` **钉死在 3.15.0**：该项目明确说明次版本也可能调整 API。采集侧禁用它的内部重试，只使用异步 TCP 客户端，且 import 只允许在 `drivers/modbus_tcp/` 下；安全边界与点位语法见 `docs/PLC_COLLECTION.md`。
+
 ## 配置
 
 | 变量 | 说明 |
@@ -66,6 +68,9 @@ tests/{unit,integration,contract,e2e}
 | `COLLECT_ARCHIVE_STREAM_MAXLEN` | Stream 的条目上限，落库长期落后时的最后一道背压 |
 | `COLLECT_HEARTBEAT_INTERVAL_S` | 会话心跳周期，探不到即判断线 |
 | `COLLECT_RECONNECT_MAX_BACKOFF_S` | 断线重连的退避上限 |
+| `COLLECT_PLC_MAX_CONCURRENT_REQUESTS` | 全部 PLC 数据源共享的在途协议请求上限 |
+| `COLLECT_PLC_READ_ENABLED` | 是否允许采集进程建立 PLC 只读连接，默认关闭 |
+| `COLLECT_PLC_ALLOWED_ENDPOINTS` | 允许读取的 PLC `IP:端口` 清单，逗号分隔 |
 
 完整清单见 [`.env.example`](.env.example)。
 

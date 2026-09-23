@@ -17,8 +17,10 @@ const SOURCE_ID =
 export interface LivePoint {
   kind: 'collect.live.v1'
   node_key: string
+  source_id: string
   name: string
   source_name: string
+  source_protocol: string | null
   unit: string | null
 }
 
@@ -31,6 +33,7 @@ export async function resolveLivePoint(
   const [sourceId = '', code = ''] = nodeKey.split(':')
   const source = await getSource(sourceId, signal)
   signal?.throwIfAborted()
+  requireSourceIdentity(source.id, sourceId)
   // 编码过滤可命中多个前缀，分页有界扫描到精确身份。
   const pages = Math.min(10, Math.ceil(source.point_count / 200))
   for (let page = 1; page <= Math.max(1, pages); page += 1) {
@@ -41,19 +44,31 @@ export async function resolveLivePoint(
     signal?.throwIfAborted()
     const point = found.items.find((one) => one.node_key === nodeKey)
     if (point !== undefined) {
+      requirePointSource(point.source_id, sourceId)
       if (!source.is_enabled)
         throw new Error('这个数据源尚未启用，请先在采集配置中启用')
       return {
         kind: 'collect.live.v1',
         node_key: nodeKey,
+        source_id: source.id,
         name: point.name,
         source_name: source.name,
+        source_protocol: source.protocol,
         unit: point.unit,
       }
     }
     if (page * found.size >= found.total) break
   }
   throw new Error('点位已不存在，请重新查找')
+}
+
+function requireSourceIdentity(actual: string, expected: string): void {
+  if (actual !== expected) throw new Error('数据源身份与点位不一致，请重新查找')
+}
+
+function requirePointSource(actual: string, expected: string): void {
+  if (actual !== expected)
+    throw new Error('点位所属数据源与身份不一致，请重新查找')
 }
 
 /** 运行只读工具，持续读数不回填给模型。 */
@@ -120,12 +135,39 @@ function pointFromRecord(row: Record<string, unknown>): LivePoint | null {
   if (typeof row.name !== 'string' || typeof row.source_name !== 'string')
     return null
   if (row.unit !== null && typeof row.unit !== 'string') return null
+  const source = receiptSource(row, row.node_key)
+  if (source === null) return null
   return {
     kind: 'collect.live.v1',
     node_key: row.node_key,
+    source_id: source.id,
     name: row.name,
     source_name: row.source_name,
+    source_protocol: source.protocol,
     unit: row.unit,
+  }
+}
+
+function receiptSource(
+  row: Record<string, unknown>,
+  nodeKey: string,
+): { id: string; protocol: string | null } | null {
+  const sourceId = nodeKey.split(':')[0]
+  if (
+    sourceId === undefined ||
+    (row.source_id !== undefined && row.source_id !== sourceId)
+  )
+    return null
+  const protocol = row.source_protocol
+  if (
+    protocol !== undefined &&
+    protocol !== null &&
+    typeof protocol !== 'string'
+  )
+    return null
+  return {
+    id: sourceId,
+    protocol: typeof protocol === 'string' ? protocol : null,
   }
 }
 

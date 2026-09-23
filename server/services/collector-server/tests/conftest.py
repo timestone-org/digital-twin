@@ -339,8 +339,9 @@ class FakeDriver:
         # 用事件而不是轮询等：慢机器上「睡一小会儿再看」必然偶发失败
         self.has_polled = asyncio.Event()
 
-    def load_points(self, points: list[PointSpec]) -> None:
+    def load_points(self, points: list[PointSpec]) -> int:
         self.loaded = [point.point_code for point in points]
+        return len(self.loaded)
 
     async def connect(self) -> None:
         if self.connect_error is not None:

@@ -128,6 +128,7 @@ async function start(state: State): Promise<void> {
         armTimeout(state)
         state.detach = state.sources.subscribe(
           state.channel,
+          found.source_id,
           found.node_key,
           (next, issue) => {
             if (issue) state.error.value = issue

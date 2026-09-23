@@ -49,8 +49,10 @@ export const SOURCE: CollectSource = {
 export const LIVE_POINT: LivePoint = {
   kind: 'collect.live.v1',
   node_key: POINT.node_key,
+  source_id: SOURCE.id,
   name: POINT.name,
   source_name: SOURCE.name,
+  source_protocol: SOURCE.protocol,
   unit: POINT.unit,
 }
 export const POINT_PAGE = { items: [POINT], total: 1, page: 1, size: 200 }

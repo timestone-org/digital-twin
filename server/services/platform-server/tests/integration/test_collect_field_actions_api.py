@@ -21,6 +21,7 @@ from integration.collect_helpers import (
     create_source,
     envelope,
     payload,
+    point_item,
 )
 
 pytestmark = pytest.mark.requires_postgres
@@ -114,6 +115,23 @@ async def test_browsing_an_unsupported_protocol_is_not_an_empty_tree(
     assert envelope(response)["code"] == 41112
 
 
+async def test_modbus_browse_is_rejected_before_command_enqueue(
+    app_client: httpx.AsyncClient, collect_fakes: CollectFakes
+) -> None:
+    source = await create_source(
+        app_client,
+        protocol="modbus_tcp",
+        endpoint="modbus.tcp://127.0.0.1:1502",
+        read_mode="poll",
+        is_enabled=False,
+    )
+    response = await app_client.post(
+        f"{SOURCES}/{source['id']}:browse", json={}
+    )
+    assert response.status_code == 400
+    assert collect_fakes.bus.envelopes_of(ACTION_BROWSE) == []
+
+
 async def test_browsing_a_silent_collector_answers_503(
     app_client: httpx.AsyncClient,
 ) -> None:
@@ -182,6 +200,31 @@ async def test_a_truncated_subtree_says_so_instead_of_looking_complete(
         f"{SOURCES}/{source['id']}:browse-subtree", json={}
     )
     assert payload(response)["is_truncated"] is True
+
+
+async def test_modbus_write_is_rejected_before_command_enqueue(
+    app_client: httpx.AsyncClient, collect_fakes: CollectFakes
+) -> None:
+    source = await create_source(
+        app_client,
+        protocol="modbus_tcp",
+        endpoint="modbus.tcp://127.0.0.1:1502",
+        read_mode="poll",
+        is_enabled=False,
+    )
+    points = await create_points(
+        app_client,
+        source["id"],
+        point_item(address="holding:0:uint16", data_type="int"),
+    )
+    point_id = points["items"][0]["id"]
+    response = await app_client.post(
+        f"{POINTS}/{point_id}:write",
+        json={"value": 9},
+        headers=WRITE_KEY,
+    )
+    assert response.status_code == 400
+    assert collect_fakes.bus.envelopes_of(ACTION_WRITE) == []
 
 
 async def test_a_subtree_on_a_silent_collector_answers_503(

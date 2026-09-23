@@ -18,7 +18,12 @@ interface Source {
   resume: () => void
 }
 export interface LiveSources {
-  subscribe: (channel: Channel, key: string, listener: Listener) => () => void
+  subscribe: (
+    channel: Channel,
+    sourceId: string,
+    key: string,
+    listener: Listener,
+  ) => () => void
   clearSamples: () => void
   dispose: () => void
 }
@@ -29,8 +34,9 @@ const MAX_CACHED_POINTS = 2000
 export function createLiveSources(): LiveSources {
   const sources = new Map<string, Source>()
   return {
-    subscribe(channel, key, listener) {
-      const sourceId = key.split(':')[0] ?? ''
+    subscribe(channel, sourceId, key, listener) {
+      if (!key.startsWith(`${sourceId}:`))
+        throw new Error('点位身份与数据源不一致')
       const entry = sources.get(sourceId) ?? createSource(channel, sourceId)
       sources.set(sourceId, entry)
       entry.resume()

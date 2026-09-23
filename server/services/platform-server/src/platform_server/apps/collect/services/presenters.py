@@ -152,6 +152,7 @@ def to_plan_source(
             PlanPoint(
                 point_code=point.code,
                 address=point.address,
+                data_type=as_data_type(point.data_type),
                 sampling_interval_ms=point.sampling_interval_ms,
                 archive_enabled=point.archive_enabled,
                 deadband=point.deadband,

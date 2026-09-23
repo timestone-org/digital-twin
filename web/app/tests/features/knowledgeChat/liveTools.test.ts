@@ -41,6 +41,24 @@ it('opens a real point without forwarding endpoint or credentials', async () => 
   expect(raw).not.toContain('private-')
   expect(raw).not.toContain('value')
 })
+it('opens a PLC point with its source identity and protocol', async () => {
+  vi.mocked(collect.getSource).mockResolvedValue({
+    ...SOURCE,
+    protocol: 'modbus_tcp',
+    endpoint: 'modbus.tcp://private-device:502',
+  })
+  const raw = await runLiveTool({
+    call_id: 'plc',
+    name: WATCH_POINT,
+    arguments: { node_key: POINT.node_key },
+  })
+  expect(parseLivePoint(raw)).toMatchObject({
+    source_id: SOURCE_ID,
+    source_name: SOURCE.name,
+    source_protocol: 'modbus_tcp',
+  })
+  expect(raw).not.toContain('private-device')
+})
 it.each(['', '../../internal', `${SOURCE_ID}:../x`])(
   'rejects invalid point identity %s before HTTP',
   async (key) => {
@@ -54,6 +72,13 @@ it('does not confuse a keyword candidate with the exact identity', async () => {
     items: [{ ...POINT, node_key: `${SOURCE_ID}:temp2` }],
   })
   await expect(resolveLivePoint(POINT.node_key)).rejects.toThrow('不存在')
+})
+it('rejects a source response that does not own the requested point', async () => {
+  vi.mocked(collect.getSource).mockResolvedValue({
+    ...SOURCE,
+    id: '00000000-0000-4000-8000-000000000099',
+  })
+  await expect(resolveLivePoint(POINT.node_key)).rejects.toThrow('数据源身份')
 })
 it('stops if the source is disabled or permission is denied', async () => {
   vi.mocked(collect.getSource).mockResolvedValue({
@@ -101,6 +126,64 @@ it('returns semantic candidates and the explicit degradation note', async () => 
     SOURCE_ID,
     undefined,
   )
+})
+it('searches every source when no source filter is requested', async () => {
+  vi.mocked(search.searchCollectPoints).mockResolvedValue({
+    items: [
+      {
+        id: POINT.id,
+        node_key: POINT.node_key,
+        code: POINT.code,
+        name: POINT.name,
+        description: POINT.description ?? null,
+        unit: POINT.unit,
+        source_id: SOURCE_ID,
+        source_name: SOURCE.name,
+        source_protocol: 'modbus_tcp',
+        is_enabled: true,
+        is_exact: false,
+        score: 0.8,
+      },
+    ],
+    mode: 'keyword',
+    pending_count: 0,
+  })
+  const raw = await runLiveTool({
+    call_id: 'all',
+    name: SEARCH_POINTS,
+    arguments: { query: '出口温度' },
+  })
+  expect(search.searchCollectPoints).toHaveBeenCalledWith(
+    '出口温度',
+    undefined,
+    undefined,
+  )
+  expect(JSON.parse(raw)).toMatchObject({
+    items: [{ source_id: SOURCE_ID, source_protocol: 'modbus_tcp' }],
+  })
+})
+it('rejects a card receipt whose source contradicts its point identity', () => {
+  expect(
+    parseLivePoint(
+      JSON.stringify({
+        ...LIVE_POINT,
+        source_id: '00000000-0000-4000-8000-000000000099',
+      }),
+    ),
+  ).toBeNull()
+})
+it('restores older card receipts and refreshes source metadata before watching', () => {
+  const legacy = JSON.stringify({
+    kind: 'collect.live.v1',
+    node_key: POINT.node_key,
+    name: POINT.name,
+    source_name: SOURCE.name,
+    unit: POINT.unit,
+  })
+  expect(parseLivePoint(legacy)).toMatchObject({
+    source_id: SOURCE_ID,
+    source_protocol: null,
+  })
 })
 it.each([
   { query: '' },

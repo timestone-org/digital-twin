@@ -18,6 +18,7 @@ def receipt(count: int = 6, note: str | None = None) -> str:
                     "name": f"水箱{index}温度",
                     "source_id": "00000000-0000-4000-8000-000000000001",
                     "source_name": "采集源",
+                    "source_protocol": "modbus_tcp",
                     "is_enabled": False,
                 }
                 for index in range(count)
@@ -43,7 +44,23 @@ def test_sources_are_deduplicated_and_disabled_state_is_preserved() -> None:
     result = json.loads(compact_search_receipts([receipt()])[0])
     assert len(result["sources"]) == 1
     assert result["sources"][0]["is_enabled"] is False
+    assert result["sources"][0]["protocol"] == "modbus_tcp"
     assert result["items"][0]["node_key"].endswith(":temperature0")
+
+
+def test_mixed_source_protocols_remain_distinguishable() -> None:
+    parsed = json.loads(receipt(1))
+    second = dict(parsed["items"][0])
+    second["source_id"] = "00000000-0000-4000-8000-000000000002"
+    second["node_key"] = f"{second['source_id']}:temperature1"
+    second["source_name"] = "PLC二号线"
+    second["source_protocol"] = "opcua"
+    parsed["items"].append(second)
+    result = json.loads(compact_search_receipts([json.dumps(parsed)])[0])
+    assert {one["protocol"] for one in result["sources"]} == {
+        "modbus_tcp",
+        "opcua",
+    }
 
 
 def test_multiple_searches_share_the_total_budget() -> None:

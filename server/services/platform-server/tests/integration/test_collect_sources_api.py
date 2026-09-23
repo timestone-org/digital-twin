@@ -59,8 +59,40 @@ async def test_a_duplicate_code_is_a_conflict(
 async def test_an_unknown_protocol_is_refused_by_the_schema(
     app_client: httpx.AsyncClient,
 ) -> None:
+    response = await app_client.post(SOURCES, json=source_body(protocol="s7"))
+    assert response.status_code == 400
+
+
+async def test_a_modbus_tcp_source_round_trips_disabled(
+    app_client: httpx.AsyncClient,
+) -> None:
     response = await app_client.post(
-        SOURCES, json=source_body(protocol="modbus")
+        SOURCES,
+        json=source_body(
+            protocol="modbus_tcp",
+            endpoint="modbus.tcp://127.0.0.1:1502",
+            read_mode="poll",
+            is_enabled=False,
+        ),
+    )
+    assert response.status_code == 201
+    created = payload(response)
+    assert created["protocol"] == "modbus_tcp"
+    assert created["is_enabled"] is False
+
+
+async def test_a_modbus_source_cannot_exceed_the_polling_safety_floor(
+    app_client: httpx.AsyncClient,
+) -> None:
+    response = await app_client.post(
+        SOURCES,
+        json=source_body(
+            protocol="modbus_tcp",
+            endpoint="modbus.tcp://127.0.0.1:1502",
+            read_mode="poll",
+            poll_interval_ms=100,
+            is_enabled=False,
+        ),
     )
     assert response.status_code == 400
 

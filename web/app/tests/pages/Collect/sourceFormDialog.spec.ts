@@ -14,6 +14,7 @@ import type {
   CollectSourceCreateInput,
   CollectSourceUpdateInput,
 } from '@dt/contracts'
+import { DtSelect } from '@dt/ui'
 
 import SourceFormDialog from '@/pages/Collect/Opcua/components/SourceFormDialog.vue'
 
@@ -131,6 +132,28 @@ describe('新建', () => {
 
     expect(wrapper.emitted('create')).toBeUndefined()
     expect(wrapper.text()).toContain('编码只能用')
+  })
+
+  it('Modbus TCP 默认只读轮询且先以停用状态保存', async () => {
+    const wrapper = await render(null)
+    wrapper
+      .findAllComponents(DtSelect)[0]
+      ?.vm.$emit('update:modelValue', 'modbus_tcp')
+    await flushPromises()
+    await fill(wrapper, '1号生产线', '二号线 PLC')
+    await fill(wrapper, 'modbus.tcp://host:502', 'modbus.tcp://10.0.0.9:502')
+    await fill(wrapper, 'plant1_plc', 'line2_modbus')
+    await submit(wrapper, '创建')
+
+    const payload = createdPayload(wrapper)
+    expect(payload).toMatchObject({
+      protocol: 'modbus_tcp',
+      read_mode: 'poll',
+      is_enabled: false,
+      options_json: {},
+    })
+    expect(payload.username).toBeUndefined()
+    expect(payload.credential).toBeUndefined()
   })
 })
 

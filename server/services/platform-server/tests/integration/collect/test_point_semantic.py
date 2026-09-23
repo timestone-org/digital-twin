@@ -163,6 +163,44 @@ async def test_missing_model_explicitly_returns_keyword_mode(
     assert [one.code for one in result.items] == ["temp"]
 
 
+async def test_one_search_finds_opcua_and_plc_with_distinct_sources(
+    app_context: AppContext,
+) -> None:
+    opcua_id, _ = await seeded(app_context)
+    plc = await create_source(
+        app_context.client,
+        code="line-plc",
+        name="二号线 PLC",
+        protocol="modbus_tcp",
+        endpoint="modbus.tcp://127.0.0.1:1502",
+        read_mode="poll",
+        is_enabled=False,
+    )
+    await create_points(
+        app_context.client,
+        plc["id"],
+        point_item(
+            "temp",
+            name="出风口温度",
+            address="holding:0:float32",
+            data_type="float",
+        ),
+    )
+    found = await PointSearch(app_context.sessions, None).search(
+        "出风口温度", None, 6
+    )
+    sources = {one.source_id: one.source_protocol for one in found.items}
+    assert sources == {
+        uuid.UUID(opcua_id): "opcua",
+        uuid.UUID(plc["id"]): "modbus_tcp",
+    }
+    assert len({one.node_key for one in found.items}) == 2
+    plc_only = await PointSearch(app_context.sessions, None).search(
+        "modbus_tcp", None, 6
+    )
+    assert [one.source_id for one in plc_only.items] == [uuid.UUID(plc["id"])]
+
+
 async def test_description_roundtrips_and_explicit_null_clears(
     app_context: AppContext,
 ) -> None:

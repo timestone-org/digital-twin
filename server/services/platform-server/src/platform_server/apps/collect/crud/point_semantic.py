@@ -13,12 +13,16 @@ CANDIDATE_LIMIT = 40
 _CATALOG = """
 WITH catalog AS (
  SELECT p.id, p.source_id, p.code, p.name, p.description, p.unit,
-        s.name AS source_name, s.is_enabled,
+        s.name AS source_name, s.protocol AS source_protocol, s.is_enabled,
         p.source_id::text || ':' || p.code AS node_key,
         concat_ws(E'\\n', p.code, p.name, p.description, s.name,
- s.description, p.unit) AS content,
+ s.description, p.unit, s.protocol,
+ CASE WHEN s.protocol = 'modbus_tcp' THEN 'PLC Modbus TCP'
+ ELSE 'OPC UA' END) AS content,
         md5(concat_ws(E'\\n', p.code, p.name, p.description, s.name,
- s.description, p.unit)) AS content_hash
+ s.description, p.unit, s.protocol,
+ CASE WHEN s.protocol = 'modbus_tcp' THEN 'PLC Modbus TCP'
+ ELSE 'OPC UA' END)) AS content_hash
  FROM platform.collect_points p
  JOIN platform.collect_sources s ON s.id = p.source_id
 )
@@ -99,7 +103,8 @@ _SEARCH = text(
  ) both_lanes GROUP BY id
 )
 SELECT c.id, c.source_id, c.node_key, c.code, c.name, c.description, c.unit,
- c.source_name, c.is_enabled, (lower(c.code) = lower(:query)) AS is_exact,
+ c.source_name, c.source_protocol, c.is_enabled,
+ (lower(c.code) = lower(:query)) AS is_exact,
  r.score, (SELECT count(*) FROM current_points WHERE NOT
  coalesce(is_indexed, false)) AS pending_count
 FROM ranked r JOIN current_points c ON c.id = r.id

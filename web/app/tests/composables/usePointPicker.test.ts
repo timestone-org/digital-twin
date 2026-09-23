@@ -235,6 +235,7 @@ function match(code = 'temp'): PointMatchOut {
     name: '余热水箱测温',
     source_id: 's1',
     source_name: '能源站',
+    source_protocol: 'modbus_tcp',
     description: '余热回收水箱温度',
     unit: '℃',
     is_enabled: true,

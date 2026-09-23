@@ -14,6 +14,7 @@ import type {
   CollectPoint,
   CollectPointItemInput,
   CollectPointUpdateInput,
+  CollectProtocol,
   DtNumberRange,
   DtSelectOption,
 } from '@dt/contracts'
@@ -33,6 +34,7 @@ import { useFormDirty } from '@/composables/useFormDirty'
 const props = defineProps<{
   modelValue: boolean
   point: CollectPoint | null
+  protocol?: CollectProtocol | undefined
   /** 新建时预填的寻址串，从地址空间挑来的那条。 */
   presetAddress?: string | undefined
 }>()
@@ -255,12 +257,20 @@ function submit(): void {
       <DtField
         label="寻址串"
         required
-        hint="协议地址，可以改——换协议时只改这里，历史曲线是连续的一条。"
+        :hint="
+          protocol === 'modbus_tcp'
+            ? '零基偏移：holding|input:偏移:uint16|int16|uint32|int32|float32|float64，或 coil|discrete:偏移:bool。'
+            : 'OPC UA NodeId，可以改；点位身份与历史不变。'
+        "
       >
         <DtInput
           v-model="address"
           class="font-mono"
-          placeholder="ns=2;s=Plant1.OutletTemp"
+          :placeholder="
+            protocol === 'modbus_tcp'
+              ? 'holding:0:float32'
+              : 'ns=2;s=Plant1.OutletTemp'
+          "
         />
       </DtField>
 

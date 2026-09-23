@@ -2,7 +2,8 @@
 
 > 采集运行时在 `collector-server`，配置面在 `platform-server/apps/collect`（[ADR-0001](adr/0001-采集运行时独立成服务而配置面留在平台.md)）。
 > 多协议靠驱动适配器，归档在协议无关侧（[ADR-0011](adr/0011-采集按驱动适配器分协议而采集计划保持协议无关.md)）。
-> 一期只实现 OPC UA 驱动。
+> 已实现 OPC UA 与只读 Modbus TCP；PLC 直连边界见 ADR-0056 与
+> [PLC_COLLECTION.md](PLC_COLLECTION.md)。
 
 ---
 
@@ -32,7 +33,7 @@ node_key = "{source_id}:{point_code}"
 - `point_code` 是用户在该数据源下指定的稳定标识（如 `outlet_temp`），`(source_id, point_code)` 唯一。
 
 **`point_code` 不是协议寻址串。** 协议寻址串是点位的 `address` 字段（OPC UA 的 `ns=2;s=Temp1`、
-Modbus 的 `holding:40001`），它是**可改的配置**；`point_code` 是**不可改的身份**。
+Modbus 的 `holding:0:uint16`），它是**可改的配置**；`point_code` 是**不可改的身份**。
 
 这条区分是整个设计的支点，理由有三：
 
@@ -84,6 +85,10 @@ collector-server 的迁移里，读侧的查询在 platform 里，两边引用�
 
 ## 4. `collector-server`
 
+PLC 直连的只读与负载边界见 [PLC_COLLECTION.md](PLC_COLLECTION.md)：Modbus TCP
+按数据源独立建会话，按点位周期调度、连续地址合批，并在进程级限制总在途请求数。
+`COLLECT_PLC_READ_ENABLED` 默认关闭，现场目标须精确列入允许清单。
+
 新代码单元。端口 **8007**，schema **`collect`**，环境变量前缀 **`COLLECT_`**，
 无业务 HTTP 面（只有 `/health` 与 `/ready` 探针）。骨架照 `opcua-server` 抄
 （`settings.py` / `container.py` / `app.py` / `__main__.py` 四件套）。
@@ -132,7 +137,8 @@ apps/collect/
 ├── drivers/
 │   ├── base.py          Driver 协议、Sample、BrowseItem、DriverCapabilities、异常
 │   ├── registry.py      protocol -> 驱动工厂；新增协议只在这里加一行
-│   └── opcua/           一期唯一实现（asyncua 只许出现在这个目录里）
+│   ├── opcua/           OPC UA 驱动（asyncua 只许出现在这个目录里）
+│   └── modbus_tcp/      只读 PLC 驱动（pymodbus 只许出现在这个目录里）
 ├── runtime/
 │   ├── supervisor.py    租约选主 + 计划比对 + 收敛（哪些连接该活着）
 │   ├── session.py       单个数据源的一生：连→订阅/轮询→心跳→退避→拆
@@ -490,7 +496,7 @@ CSV，而带 BOM 的 UTF-8 CSV 在 Excel 里双击就能开、改完另存回 CS
 
 ## 10. 一期不做
 
-- OPC UA 之外的驱动（接口留好，第二个驱动进来时按实测差异调整接口，
+- Modbus TCP 之外的新 PLC 驱动（第二个驱动已按实测差异调整接口，
   那时有两个实现可以互相校验——现在预留字段是在猜）。
 - 归档的 continuous aggregate（先让原始表跑起来，聚合查询直接扫原始表）。
 - 采集侧的 consumer group（单活租约已经保证单消费者）。

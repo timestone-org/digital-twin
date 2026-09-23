@@ -142,7 +142,7 @@ export const routes: RouteRecordRaw[] = [
     name: 'collect-opcua',
     component: () => import('@/pages/Collect/Opcua/index.vue'),
     meta: {
-      title: 'OPC UA 采集',
+      title: '工业数据采集',
       permissions: [PERMISSION_CODES.collectView],
     },
   },
