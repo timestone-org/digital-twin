@@ -44,6 +44,7 @@ async def persist(
     Args: sessions, chat_session_id, incoming, outcome, steps。
     """
     async with sessions() as session:
+        await session_crud.lock_session(session, chat_session_id)
         rows = await session_crud.messages_of(session, chat_session_id)
         seq = max((row.seq for row in rows), default=0)
         written: list[ChatMessage] = []
@@ -86,24 +87,18 @@ def _attach_steps(
     for step in steps:
         order += 1
         session.add(_row_of(last, order, step))
-    if outcome.is_waiting:
+    for call in outcome.pending:
         order += 1
         session.add(
             ChatStep(
                 message_id=last,
                 seq=order,
                 kind="client_tool",
-                name=outcome.pending[0].name,
+                name=call.name,
                 state="awaiting_client",
                 input_json={
-                    "calls": [
-                        {
-                            "call_id": call.call_id,
-                            "name": call.name,
-                            "arguments": call.arguments,
-                        }
-                        for call in outcome.pending
-                    ]
+                    "call_id": call.call_id,
+                    "arguments": call.arguments,
                 },
             )
         )

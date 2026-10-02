@@ -8,7 +8,6 @@
 回来，而它要能在库里找到自己接的是哪一步。
 """
 
-import json
 import uuid
 from collections.abc import AsyncIterator, Callable, Sequence
 from contextlib import AbstractAsyncContextManager
@@ -25,7 +24,8 @@ from sqlalchemy.ext.asyncio import AsyncSession
 
 from ai_assistant.apps.chat.crud import session_crud
 from ai_assistant.apps.chat.models import ChatMessage, ChatSession
-from ai_assistant.apps.chat.services import advance_persist
+from ai_assistant.apps.chat.services import advance_persist, client_receipts
+from ai_assistant.apps.chat.services.client_result import ClientToolResult
 from ai_assistant.apps.chat.services.intent import select as tool_select
 from ai_assistant.apps.chat.services.memory import state_block
 from ai_assistant.apps.chat.services.memory.prompt import build_system_prompt
@@ -47,7 +47,7 @@ from ai_assistant.llm import (
     ModelDisabled,
     ModelKind,
 )
-from ai_assistant.settings import MAX_HISTORY_MESSAGES, MAX_TOOL_RESULT_CHARS
+from ai_assistant.settings import MAX_HISTORY_MESSAGES
 from lib.logging import get_logger
 from llmcore.memory import (
     HistoryRow,
@@ -155,57 +155,6 @@ def _summarizer_factory(model: GuardedModel) -> SummarizerFactory:
 
 
 @dataclass(frozen=True)
-class ClientToolResult:
-    """浏览器跑完一个客户端工具之后带回来的东西。"""
-
-    call_id: str
-    # 成功时的产出；失败时给 None 并填 error
-    output: Any = None
-    error: str | None = None
-
-    def as_text(self) -> str:
-        """摊成模型认的一段工具输出。"""
-        if self.error is not None:
-            return f"失败：{self.error}"
-        # ⚠ 图不放在工具消息里：那一层只认文字，塞进去多半被整条丢掉，
-        # 表现是模型说「我没看到图」而调用明明成功了
-        if vision.is_image(self.output):
-            return vision.HANDOFF
-        if isinstance(self.output, str):
-            body, is_json = self.output, False
-        else:
-            body, is_json = _json_text(self.output), True
-        if len(body) <= MAX_TOOL_RESULT_CHARS:
-            return body
-        if is_json:
-            return _truncated_json(body)
-        return (
-            f"{body[:MAX_TOOL_RESULT_CHARS]}\n"
-            f"……（产出太大已截断，共 {len(body)} 字）"
-        )
-
-    def image(self) -> str | None:
-        """这一条带回来的图；没有就是 None。"""
-        if not vision.is_image(self.output):
-            return None
-        return str(self.output)
-
-
-def _json_text(output: object) -> str:
-    return json.dumps(output, ensure_ascii=False, default=str)
-
-
-def _truncated_json(body: str) -> str:
-    return _json_text(
-        {
-            "is_truncated": True,
-            "preview": body[: MAX_TOOL_RESULT_CHARS // 3],
-            "total_chars": len(body),
-        }
-    )
-
-
-@dataclass(frozen=True)
 class AdvanceInput:
     """推进一次要的输入。用户发话与工具回填**二选一**。"""
 
@@ -284,7 +233,7 @@ def assemble(
         )
     )
     past = history.replay(recent)
-    incoming = incoming_messages(payload)
+    incoming = _unrecorded_messages(payload, recent)
     orphans = history.unanswered([*past, *incoming])
     return [
         system,
@@ -293,6 +242,26 @@ def assemble(
         *history.fillers(orphans),
         *incoming,
         *state_block.messages_of(payload.surface_context, plan),
+    ]
+
+
+def _unrecorded_messages(
+    payload: AdvanceInput, recent: Sequence[HistoryRow]
+) -> list[BaseMessage]:
+    """已由回执接口落库的工具文字不重复喂模型，实际截图仍只活这一轮。
+
+    Args: payload, recent。
+    """
+    answered = {
+        row.content_json.get("tool_call_id")
+        for row in recent
+        if row.role == "tool"
+    }
+    return [
+        message
+        for message in incoming_messages(payload)
+        if not isinstance(message, ToolMessage)
+        or message.tool_call_id not in answered
     ]
 
 
@@ -388,14 +357,30 @@ async def advance(
         if _wrote_plan(item) and plans.latest is not None:
             yield plan_service.PlanUpdate(plan=plans.latest)
     if outcome is not None:
-        await advance_persist.persist(
-            deps.sessions,
-            chat_session_id=chat_session_id,
-            incoming=incoming_messages(payload),
-            outcome=outcome,
-            steps=produced,
-        )
+        await _persist_turn(deps, chat_session_id, payload, outcome, produced)
         yield outcome
+
+
+async def _persist_turn(
+    deps: AdvanceDeps,
+    chat_session_id: uuid.UUID,
+    payload: AdvanceInput,
+    outcome: TurnOutcome,
+    produced: list[TurnStep],
+) -> None:
+    """工具回执已经在模型调用前落库；这里只落本回合新输入与产出。
+
+    Args: deps, chat_session_id, payload, outcome, produced。
+    """
+    await advance_persist.persist(
+        deps.sessions,
+        chat_session_id=chat_session_id,
+        incoming=(
+            incoming_messages(payload) if payload.user_text is not None else []
+        ),
+        outcome=outcome,
+        steps=produced,
+    )
 
 
 async def _opened(
@@ -413,6 +398,10 @@ async def _opened(
     Args: deps, chat_session_id, payload。
     """
     async with deps.sessions() as session:
+        if payload.tool_results:
+            await client_receipts.record(
+                session, chat_session_id, payload.tool_results
+            )
         loaded = await load_context(
             session, chat_session_id=chat_session_id, payload=payload
         )
