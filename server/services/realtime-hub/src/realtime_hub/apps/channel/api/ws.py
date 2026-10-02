@@ -20,6 +20,7 @@ from collections.abc import Awaitable, Callable
 from datetime import timedelta
 from typing import Annotated, cast
 
+from anyio import CancelScope
 from fastapi import APIRouter, Depends, WebSocket, WebSocketDisconnect
 
 from lib.logging import get_logger
@@ -120,10 +121,9 @@ async def _serve(
     except WebSocketDisconnect:
         pass
     finally:
-        # ⚠ shield：连接是被**取消**掉的时候（进程关停、上游把这条任务撤了）
-        # 摘除本身也在取消范围内，第一个 await 就断，于是索引与订阅行都留着
-        # 一条已死的连接。shield 让摘除跑完，取消照旧往外抛
-        await asyncio.shield(session.close(connection.id))
+        # ⚠ 退出前完成清理，不能留下仍持有数据库事务的后台任务。
+        with CancelScope(shield=True):
+            await session.close(connection.id)
 
 
 async def _handshake(
@@ -213,9 +213,10 @@ async def _pump(
         for task in done:
             task.result()
     finally:
-        for task in tasks:
-            task.cancel()
-        await asyncio.gather(*tasks, return_exceptions=True)
+        with CancelScope(shield=True):
+            for task in tasks:
+                task.cancel()
+            await asyncio.gather(*tasks, return_exceptions=True)
 
 
 async def _receive_frames(
