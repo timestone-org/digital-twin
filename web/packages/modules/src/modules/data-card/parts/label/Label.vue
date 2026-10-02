@@ -42,7 +42,7 @@ const style = computed<CSSProperties>(() => ({
   </span>
 </template>
 
-<style scoped>
+<style scoped lang="scss">
 .dc-label {
   display: block;
   overflow: hidden;

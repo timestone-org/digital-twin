@@ -41,7 +41,7 @@ const style = computed<CSSProperties>(() => {
   </span>
 </template>
 
-<style scoped>
+<style scoped lang="scss">
 .dc-icon {
   display: inline-flex;
   flex: none;

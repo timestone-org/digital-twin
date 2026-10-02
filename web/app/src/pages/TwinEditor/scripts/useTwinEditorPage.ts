@@ -102,12 +102,17 @@ async function saveTwin(
 ): Promise<boolean> {
   const current = file.dashboard.value
   if (current === null || editing === null) return false
+  editing.endMerge()
+  const snapshot = {
+    config: editing.config.value,
+    bindings: editing.bindings.value,
+  }
   const saved = await file.save({
     expectedVersion: current.rowVersion,
     nodes: toLayoutInput(nodesWithTwin(current, nodeId, editing)),
   })
   if (saved === null) return false
-  editing.markSaved()
+  editing.markSaved(snapshot)
   return true
 }
 

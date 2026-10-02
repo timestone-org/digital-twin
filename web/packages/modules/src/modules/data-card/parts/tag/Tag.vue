@@ -38,7 +38,7 @@ const style = computed<CSSProperties>(() => {
   >
 </template>
 
-<style scoped>
+<style scoped lang="scss">
 .dc-tag {
   display: inline-flex;
   flex: none;

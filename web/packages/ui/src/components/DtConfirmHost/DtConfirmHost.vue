@@ -46,6 +46,7 @@ const open = computed(() => pending.value !== null)
 <style scoped lang="scss">
 .dt-confirm__message {
   margin: 0;
+  overflow-wrap: anywhere;
   font-size: 13px;
   line-height: 1.7;
   color: var(--text-secondary);

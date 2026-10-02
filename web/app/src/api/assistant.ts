@@ -12,6 +12,8 @@ import type {
   AssistantSession,
   AssistantSessionDetail,
   AssistantSurfaceKind,
+  AssistantToolResult,
+  AssistantReceiptsAck,
   Page,
 } from '@dt/contracts'
 
@@ -131,11 +133,7 @@ export interface AdvanceBody {
    * 中间插一条带图的用户消息会把它们拆开。
    */
   user_images?: string[]
-  tool_results?: {
-    call_id: string
-    output?: unknown
-    error?: string | null
-  }[]
+  tool_results?: AssistantToolResult[]
 }
 
 /**
@@ -176,4 +174,19 @@ export async function parseAttachment(
       body: { filename, content_base64: contentBase64 },
     }),
   )
+}
+
+/** 保存实际回执；不用回合的 abort 信号，停止时也必须能记录已执行结果。 */
+export async function saveToolReceipts(
+  sessionId: string,
+  results: readonly AssistantToolResult[],
+): Promise<void> {
+  const ack = await requestData<AssistantReceiptsAck>(
+    `/sessions/${sessionId}:receipts`,
+    onAssistant({ method: 'POST', body: { tool_results: results } }),
+  )
+  const accepted = new Set(ack.accepted_call_ids)
+  if (results.some((result) => !accepted.has(result.call_id))) {
+    throw new Error('服务端未确认全部工具回执')
+  }
 }

@@ -42,6 +42,7 @@ const SPEC_FILES = [
   'core.py',
   'report.py',
   'twin.py',
+  'twin2d.py',
   'interaction.py',
   'look.py',
 ]

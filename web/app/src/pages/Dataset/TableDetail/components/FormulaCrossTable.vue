@@ -112,7 +112,7 @@ function insert(column: DatasetColumn): void {
   </section>
 </template>
 
-<style scoped>
+<style scoped lang="scss">
 .ftb-chip {
   display: inline-flex;
   align-items: baseline;

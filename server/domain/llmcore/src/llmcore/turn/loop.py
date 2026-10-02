@@ -29,6 +29,7 @@ import operator
 from collections.abc import AsyncIterator, Awaitable, Callable, Sequence
 from dataclasses import dataclass, field, replace
 from typing import Annotated, Any, Protocol, TypedDict
+from uuid import uuid4
 
 from langchain_core.messages import AIMessage, BaseMessage, ToolMessage
 from langchain_core.messages.tool import ToolCall
@@ -335,10 +336,16 @@ def _salvaged(reply: AIMessage, offered: frozenset[str]) -> AIMessage:
     )
     # ⚠ 用量与端点元数据要原样带过去：换一条消息不该顺手把这一次调用的账
     # 也丢掉（`guard.usage_of` 读的就是这几格）
+    # ⚠ 回执按会话内调用 id 匹配；每轮不能重新从同一个 salvaged-1 开始
+    batch_id = uuid4().hex
     return AIMessage(
         content=made.text,
         tool_calls=[
-            ToolCall(id=f"salvaged-{at}", name=one.name, args=one.arguments)
+            ToolCall(
+                id=f"salvaged-{batch_id}-{at}",
+                name=one.name,
+                args=one.arguments,
+            )
             for at, one in enumerate(made.calls, start=1)
         ],
         additional_kwargs=reply.additional_kwargs,

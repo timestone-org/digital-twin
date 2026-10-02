@@ -27,7 +27,7 @@ import {
   isBuiltinTool,
   runBuiltinTool,
 } from './builtinTools'
-import type { AdvanceStream } from './ports'
+import type { AdvanceStream, AiAssistantPorts } from './ports'
 import { activeSurface, runClientTool } from './surfaces'
 import { readObject, readText, runLoop, type LoopSink } from './turnLoop'
 
@@ -58,6 +58,7 @@ export interface RunnerSink extends LoopSink {
 
 export interface RunnerInput {
   advance: AdvanceStream
+  saveReceipts?: AiAssistantPorts['saveReceipts']
   sessionId: string
   surfaceKind: AssistantSurfaceKind
   surfaceLabel: string
@@ -83,6 +84,7 @@ export async function runTurn(
   await runLoop<AdvanceBody>(
     {
       advance: input.advance,
+      saveReceipts: input.saveReceipts,
       sessionId: input.sessionId,
       envelope: () => envelope(input),
       userText: input.userText,

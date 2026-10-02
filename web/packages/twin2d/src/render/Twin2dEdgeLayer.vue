@@ -151,7 +151,7 @@ function edgeCssOf(view: Twin2dEdgeView): Record<string, string> {
   </svg>
 </template>
 
-<style scoped>
+<style scoped lang="scss">
 /* 边色注在组上的 --t2-accent 里，描边与箭头都靠 currentColor 取它。
    .t2-edges 的定位与 .t2-anim-dash 的动画都在 twin2d.scss，这里不重写第二份 */
 .t2-edge {

@@ -256,7 +256,7 @@ onMounted(() => {
   </div>
 </template>
 
-<style scoped>
+<style scoped lang="scss">
 /* 分段面下把拼出来的那一行如实显示：落库的是它，不是各档 */
 .fe-composed {
   overflow-x: auto;

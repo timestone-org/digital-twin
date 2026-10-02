@@ -138,6 +138,49 @@ describe('撤销与重做', () => {
 })
 
 describe('脏标记', () => {
+  it('已保存的未来帧被新分支替换后仍为未保存', () => {
+    const doc = docWithThreeAnchors()
+    doc.commit(normalizeTwinConfig({ anchors: [{ id: 'saved' }] }))
+    doc.markSaved()
+    doc.undo()
+    doc.commit(normalizeTwinConfig({ anchors: [{ id: 'branch' }] }))
+
+    expect(doc.isDirty.value).toBe(true)
+    expect(doc.canRedo.value).toBe(false)
+    doc.undo()
+    expect(doc.isDirty.value).toBe(true)
+  })
+
+  it('保存结束配置合并段，后续同 key 修改可独立撤销回已保存帧', () => {
+    const doc = docWithThreeAnchors()
+    doc.commitMerged(
+      normalizeTwinConfig({ anchors: [{ id: 'saved' }] }),
+      'gizmo',
+    )
+    doc.markSaved()
+    doc.commitMerged(
+      normalizeTwinConfig({ anchors: [{ id: 'next' }] }),
+      'gizmo',
+    )
+
+    expect(doc.isDirty.value).toBe(true)
+    doc.undo()
+    expect(doc.config.value.anchors[0]?.id).toBe('saved')
+    expect(doc.isDirty.value).toBe(false)
+  })
+
+  it('保存结束绑定合并段，后续绑定可撤销回已保存帧', () => {
+    const doc = docWithThreeAnchors()
+    doc.commitBindings([binding('anchorValues[0].value')], 'binding:n1:slot')
+    doc.markSaved()
+    doc.commitBindings([], 'binding:n1:slot')
+
+    expect(doc.isDirty.value).toBe(true)
+    doc.undo()
+    expect(doc.bindings.value).toHaveLength(1)
+    expect(doc.isDirty.value).toBe(false)
+  })
+
   it('写一次就脏，撤销回已保存那一帧就不脏', () => {
     const doc = docWithThreeAnchors()
     doc.commit(normalizeTwinConfig({ anchors: [{ id: 'a1' }] }))
@@ -205,6 +248,56 @@ describe('只改绑定', () => {
 })
 
 describe('连续动作的并帧', () => {
+  it('撤销打断合并段，再写同 key 不会吞掉初始帧', () => {
+    const doc = docWithThreeAnchors()
+    doc.commitMerged(
+      normalizeTwinConfig({ anchors: [{ id: 'first' }] }),
+      'gizmo',
+    )
+    doc.undo()
+    doc.commitMerged(
+      normalizeTwinConfig({ anchors: [{ id: 'branch' }] }),
+      'gizmo',
+    )
+
+    expect(doc.isDirty.value).toBe(true)
+    expect(doc.canUndo.value).toBe(true)
+    doc.undo()
+    expect(doc.config.value).toBe(CONFIG)
+    expect(doc.bindings.value).toHaveLength(3)
+  })
+
+  it('重做打断合并段，后续同 key 写入可撤销回重做帧', () => {
+    const doc = docWithThreeAnchors()
+    doc.commitMerged(
+      normalizeTwinConfig({ anchors: [{ id: 'first' }] }),
+      'gizmo',
+    )
+    doc.undo()
+    doc.redo()
+    doc.commitMerged(
+      normalizeTwinConfig({ anchors: [{ id: 'next' }] }),
+      'gizmo',
+    )
+
+    doc.undo()
+    expect(doc.config.value.anchors[0]?.id).toBe('first')
+    doc.undo()
+    expect(doc.config.value).toBe(CONFIG)
+  })
+
+  it('撤销打断绑定合并段，新绑定保留可撤销的起点', () => {
+    const doc = docWithThreeAnchors()
+    doc.commitBindings([], 'binding:n1:slot')
+    doc.undo()
+    doc.commitBindings([binding('anchorValues[0].value')], 'binding:n1:slot')
+
+    expect(doc.isDirty.value).toBe(true)
+    expect(doc.canUndo.value).toBe(true)
+    doc.undo()
+    expect(doc.bindings.value).toHaveLength(3)
+  })
+
   it('同 key 的 commitMerged 替换当前帧，一次撤销回到拖动前', () => {
     const doc = docWithThreeAnchors()
 

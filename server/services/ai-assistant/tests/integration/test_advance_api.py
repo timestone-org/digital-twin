@@ -7,106 +7,107 @@
 
 import json
 import uuid
-from collections.abc import AsyncIterator
-from contextlib import asynccontextmanager
+from collections.abc import Sequence
 from typing import Any
 
-import httpx
 import pytest
-from langchain_core.language_models import BaseChatModel
-from langchain_core.messages import AIMessage
-from sqlalchemy.ext.asyncio import AsyncSession
+from langchain_core.messages import AIMessage, BaseMessage, ToolMessage
 
 from ai_assistant.apps.chat.catalog import ASSISTANT_USE
-from ai_assistant.apps.chat.deps import get_advance_deps
-from ai_assistant.apps.chat.services.advance_service import AdvanceDeps
-from ai_assistant.apps.chat.services.memory import NullSummarizer
 from ai_assistant.apps.chat.services.perception import vision
-from ai_assistant.apps.chat.services.tools.providers.server import ServerTools
-from ai_assistant.llm import GuardedModel
-from ai_assistant.llm.ports import ModelChoice, ModelKind
+from ai_assistant.llm.ports import ModelKind
+from integration.advance_support import (
+    SESSIONS_URL,
+)
+from integration.advance_support import (
+    advance as _advance,
+)
+from integration.advance_support import (
+    asks as _asks,
+)
+from integration.advance_support import (
+    install as _install,
+)
+from integration.advance_support import (
+    new_session as _new_session,
+)
 from integration.conftest import DbStack
-from lib.resilience import CircuitBreaker
-from llmcore.testing import ScriptedChat, StreamingChat, tool_call
+from llmcore.testing import ScriptedChat, StreamingChat
 
 pytestmark = pytest.mark.requires_postgres
 
-SESSIONS_URL = "/api/v1/assistant/sessions"
 PNG = "data:image/png;base64,iVBORw0KGgo="
 
 
-def _asks(tool: str, call_id: str, /, **arguments: Any) -> AIMessage:
-    return AIMessage(
-        content="", tool_calls=[tool_call(tool, call_id, **arguments)]
-    )
-
-
-def _install(
-    stack: DbStack, model: BaseChatModel, asked: list[ModelKind] | None = None
+async def test_late_partial_receipt_replays_adjacent_preserving_database_order(
+    db_stack: DbStack,
 ) -> None:
-    """把假模型与用例那条连接装进推进依赖。
-
-    Args: stack, model, asked（记下每次要的是哪一档模型）。
-    """
-
-    async def source(choice: ModelChoice) -> BaseChatModel:
-        if asked is not None:
-            asked.append(choice.kind)
-        return model
-
-    @asynccontextmanager
-    async def sessions() -> AsyncIterator[AsyncSession]:
-        async with stack.sessions() as session:
-            yield session
-            await session.commit()
-
-    stack.app.dependency_overrides[get_advance_deps] = lambda: AdvanceDeps(
-        sessions=sessions,
-        model=GuardedModel(source=source, breaker=CircuitBreaker(name="model")),
-        server_tools=ServerTools(),
-        # ⚠ 这里装的是「不折」那一路：折叠会多打一次模型，而这些用例数的是
-        # 模型被调了几次、按哪一档调的
-        summarizer=lambda _profile: NullSummarizer(),
+    first = AIMessage(
+        content="",
+        tool_calls=[
+            {"id": "a", "name": "dashboard.write_binding", "args": {}},
+            {"id": "b", "name": "dashboard.write_binding", "args": {}},
+        ],
     )
-
-
-async def _new_session(client: httpx.AsyncClient) -> str:
-    response = await client.post(
-        SESSIONS_URL,
-        json={"surface_kind": "dashboard-editor", "title": "绑点"},
+    model = ScriptedChat(
+        script=[
+            first,
+            AIMessage(content="新回复"),
+            AIMessage(content="继续回复"),
+        ]
     )
-    assert response.status_code == 201
-    return str(response.json()["data"]["id"])
-
-
-def _events(body: str) -> list[tuple[str, dict[str, Any]]]:
-    """把事件流拆成 `(事件名, 载荷)`。
-
-    Args: body。
-    """
-    found: list[tuple[str, dict[str, Any]]] = []
-    for chunk in body.strip().split("\n\n"):
-        lines = chunk.splitlines()
-        name = next(
-            x.removeprefix("event: ") for x in lines if x.startswith("event: ")
-        )
-        data = next(
-            x.removeprefix("data: ") for x in lines if x.startswith("data: ")
-        )
-        found.append((name, json.loads(data)))
-    return found
-
-
-async def _advance(
-    client: httpx.AsyncClient, session_id: str, **body: Any
-) -> list[tuple[str, dict[str, Any]]]:
-    response = await client.post(
-        f"{SESSIONS_URL}/{session_id}:advance",
-        json={"surface_kind": "dashboard-editor", **body},
+    _install(db_stack, model)
+    session_id = await _new_session(db_stack.client)
+    await _advance(db_stack.client, session_id, user_text="旧要求")
+    await _advance(db_stack.client, session_id, user_text="新要求")
+    response = await db_stack.client.post(
+        f"{SESSIONS_URL}/{session_id}:receipts",
+        json={"tool_results": [{"call_id": "a", "output": "实际草稿结果"}]},
     )
     assert response.status_code == 200
-    assert response.headers["content-type"].startswith("text/event-stream")
-    return _events(response.text)
+    await _advance(db_stack.client, session_id, user_text="继续")
+    _assert_adjacent_partial_replies(model.seen[-1])
+    detail = await db_stack.client.get(f"{SESSIONS_URL}/{session_id}")
+    messages = detail.json()["data"]["messages"]
+    assert [message["role"] for message in messages] == [
+        "user",
+        "assistant",
+        "user",
+        "assistant",
+        "tool",
+        "user",
+        "assistant",
+    ]
+    steps = [
+        step
+        for message in messages
+        for step in message["steps"]
+        if step["kind"] == "client_tool"
+    ]
+    assert [step["state"] for step in steps] == ["succeeded", "awaiting_client"]
+    assert "执行状态未知" not in json.dumps(messages, ensure_ascii=False)
+
+
+def _assert_adjacent_partial_replies(seen: Sequence[BaseMessage]) -> None:
+    """断言实际回执与未知占位邻接且不重复。Args: seen。"""
+    call_at = next(
+        index
+        for index, message in enumerate(seen)
+        if isinstance(message, AIMessage) and message.tool_calls
+    )
+    answers = seen[call_at + 1 : call_at + 3]
+    assert all(isinstance(message, ToolMessage) for message in answers)
+    assert [message.content for message in answers] == [
+        "实际草稿结果",
+        "这一步尚无实际回执，执行状态未知；不要自动重试。",
+    ]
+    assert (
+        sum(
+            isinstance(message, ToolMessage) and message.tool_call_id == "a"
+            for message in seen
+        )
+        == 1
+    )
 
 
 async def test_a_plain_answer_streams_a_step_then_done(

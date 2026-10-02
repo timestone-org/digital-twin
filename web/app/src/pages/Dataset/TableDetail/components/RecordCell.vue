@@ -122,7 +122,7 @@ const badge = computed(() => {
   </span>
 </template>
 
-<style scoped>
+<style scoped lang="scss">
 /* 靠右的数值列把角标翻到数字左边：数字的右缘才能逐行对齐，带角标的行不会被顶开 24px */
 td.is-right .record-cell {
   flex-direction: row-reverse;
