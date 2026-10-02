@@ -76,7 +76,8 @@ async def test_partial_cancelled_batch_records_only_actual_result_without_model(
         if step["kind"] == "client_tool"
     ]
     assert [step["state"] for step in steps] == ["succeeded", "awaiting_client"]
-    assert steps[0]["output_json"] == {"body": '{"is_saved": false}'}
+    assert steps[0]["output_json"]["body"] == '{"is_saved": false}'
+    assert len(steps[0]["output_json"]["receipt_sha256"]) == 64
     assert messages[-1]["content_json"]["tool_call_id"] == "a"
 
 
@@ -116,6 +117,28 @@ async def test_unknown_duplicate_conflict_rejected_atomically(
     ]
     assert steps[0]["state"] == "failed"
     assert steps[0]["error"] == "版本冲突"
+
+
+async def test_fingerprint_conflict_rolls_back_the_whole_batch(
+    db_stack: DbStack,
+) -> None:
+    session_id = await _pending(db_stack)
+    url = f"{SESSIONS_URL}/{session_id}:receipts"
+    first = {"call_id": "a", "output": "x" * 20000 + "A"}
+    response = await db_stack.client.post(url, json={"tool_results": [first]})
+    assert response.status_code == 200
+    before = await _messages(db_stack, session_id)
+    response = await db_stack.client.post(
+        url,
+        json={
+            "tool_results": [
+                {"call_id": "b", "output": "actual"},
+                {"call_id": "a", "output": "x" * 20000 + "B"},
+            ]
+        },
+    )
+    assert response.status_code == 400
+    assert await _messages(db_stack, session_id) == before
 
 
 async def test_foreign_session_and_missing_permission_cannot_report_results(

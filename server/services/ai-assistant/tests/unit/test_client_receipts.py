@@ -30,7 +30,9 @@ def test_each_actual_receipt_settles_its_exact_call_and_preserves_missing() -> (
     client_receipts.settle(matched)
     assert steps[0].state == "awaiting_client"
     assert steps[1].state == "succeeded"
-    assert steps[1].output_json == {"body": '{"is_saved": false}'}
+    assert steps[1].output_json is not None
+    assert steps[1].output_json["body"] == '{"is_saved": false}'
+    assert len(steps[1].output_json["receipt_sha256"]) == 64
     assert steps[1].ended_at is not None
 
 
@@ -60,6 +62,98 @@ def test_same_receipt_is_idempotent_but_conflicting_receipt_is_rejected() -> (
         )
 
 
+@pytest.mark.parametrize(
+    ("first", "second"),
+    [
+        ("x" * 20000 + "A", "x" * 20000 + "B"),
+        ("data:image/png;base64,first", "data:image/png;base64,second"),
+    ],
+    ids=["different-long-tail", "different-image"],
+)
+def test_same_preview_does_not_hide_conflicting_actual_results(
+    first: str, second: str
+) -> None:
+    step = _pending()
+    client_receipts.settle(
+        client_receipts.match_results(
+            [step], [ClientToolResult(call_id="a", output=first)]
+        )
+    )
+    with pytest.raises(ValidationFailed):
+        client_receipts.match_results(
+            [step], [ClientToolResult(call_id="a", output=second)]
+        )
+
+
+def test_json_key_order_does_not_make_the_same_result_conflict() -> None:
+    step = _pending()
+    client_receipts.settle(
+        client_receipts.match_results(
+            [step],
+            [ClientToolResult(call_id="a", output={"ok": True, "count": 2})],
+        )
+    )
+    assert (
+        client_receipts.match_results(
+            [step],
+            [ClientToolResult(call_id="a", output={"count": 2, "ok": True})],
+        )
+        == []
+    )
+
+
+@pytest.mark.parametrize(
+    "result",
+    [
+        ClientToolResult(call_id="a", output="data:image/png;base64,one"),
+        ClientToolResult(call_id="a", output={"nested": {"b": 2, "a": 1}}),
+        ClientToolResult(call_id="a", error="保存失败"),
+    ],
+    ids=["image", "nested-json", "error"],
+)
+def test_identical_full_receipt_is_idempotent(result: ClientToolResult) -> None:
+    step = _pending()
+    client_receipts.settle(client_receipts.match_results([step], [result]))
+    assert client_receipts.match_results([step], [result]) == []
+
+
+@pytest.mark.parametrize("body", ["saved", "[图片]", "truncated preview"])
+def test_settled_legacy_rows_without_fingerprint_reject_repeat(
+    body: str,
+) -> None:
+    old, pending = _pending("a"), _pending("b")
+    old.state, old.output_json = "succeeded", {"body": body}
+    with pytest.raises(ValidationFailed, match="不要重新执行"):
+        client_receipts.match_results(
+            [old, pending],
+            [
+                ClientToolResult(call_id="b", output="new"),
+                ClientToolResult(call_id="a", output=body),
+            ],
+        )
+    assert pending.state == "awaiting_client"
+    assert old.output_json == {"body": body}
+
+
+def test_fingerprint_distinguishes_output_type_and_error_payload() -> None:
+    step = _pending()
+    client_receipts.settle(
+        [(step, ClientToolResult(call_id="a", output={"ok": True}))]
+    )
+    with pytest.raises(ValidationFailed):
+        client_receipts.match_results(
+            [step], [ClientToolResult(call_id="a", output='{"ok": true}')]
+        )
+    failed = _pending("f")
+    client_receipts.settle(
+        [(failed, ClientToolResult(call_id="f", error="failed", output=1))]
+    )
+    with pytest.raises(ValidationFailed):
+        client_receipts.match_results(
+            [failed], [ClientToolResult(call_id="f", error="failed", output=2)]
+        )
+
+
 def test_error_ask_cancel_and_image_are_truthful_without_image_storage() -> (
     None
 ):
@@ -72,7 +166,9 @@ def test_error_ask_cancel_and_image_are_truthful_without_image_storage() -> (
     client_receipts.settle(client_receipts.match_results(steps, results))
     assert [step.state for step in steps] == ["failed", "aborted", "succeeded"]
     assert steps[0].error == "保存失败"
-    assert steps[2].output_json == {"body": "[图片]"}
+    assert steps[2].output_json is not None
+    assert steps[2].output_json["body"] == "[图片]"
+    assert len(steps[2].output_json["receipt_sha256"]) == 64
 
 
 def test_legacy_batch_expands_all_calls_without_losing_arguments() -> None:
