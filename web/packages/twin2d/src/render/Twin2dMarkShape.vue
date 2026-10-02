@@ -211,7 +211,7 @@ const labelStyle = computed(() => fontCss(props.mark.font))
   </g>
 </template>
 
-<style scoped>
+<style scoped lang="scss">
 .t2m-shape {
   stroke-linejoin: round;
   stroke-linecap: round;

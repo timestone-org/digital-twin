@@ -64,7 +64,7 @@ const props = defineProps<{
   </div>
 </template>
 
-<style scoped>
+<style scoped lang="scss">
 /* 式子居中，超宽时框内横向滚动——长公式不许把整个弹窗撑宽 */
 .fe-math {
   display: flex;

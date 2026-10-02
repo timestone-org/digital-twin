@@ -17,7 +17,7 @@ import iconSprite from './icons.svg?raw'
   <div class="twin2d-icon-sprite" aria-hidden="true" v-html="iconSprite" />
 </template>
 
-<style scoped>
+<style scoped lang="scss">
 /* 只当 symbol 的容器，零尺寸且脱离文档流，绝不参与布局 */
 .twin2d-icon-sprite {
   position: absolute;
