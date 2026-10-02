@@ -69,7 +69,7 @@ describe('二维配置工具', () => {
     expect(doc.canUndo.value).toBe(false)
   })
 
-  it('既有悬空槽警告不妨碍逐项修复并可撤销', async () => {
+  it('悬空槽警告允许分步修改与撤销', async () => {
     const { doc, run } = setup(slotConfig('MISSING'))
     const before = doc.config.value
     await expect(
