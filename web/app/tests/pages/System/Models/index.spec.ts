@@ -342,6 +342,7 @@ describe('模型管理页', () => {
       isAsrEnabled: false,
       strategies: ['naive', 'hybrid', 'agentic'],
       readyStrategies: ['naive', 'hybrid'],
+      sourceKinds: ['upload', 'platform'],
       acceptedSuffixes: ['.md'],
       index: { vector: 'pgvector', keyword: 'trgm', reason: '' },
       rerank: {

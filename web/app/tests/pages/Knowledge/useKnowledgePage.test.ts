@@ -53,6 +53,7 @@ beforeEach(() => {
     isAsrEnabled: false,
     strategies: ['naive', 'hybrid', 'agentic'],
     readyStrategies: ['naive', 'hybrid'],
+    sourceKinds: ['upload', 'platform'],
     acceptedSuffixes: ['.md', '.docx'],
     index: { vector: 'pgvector', keyword: 'trgm', reason: '' },
     rerank: {
@@ -398,6 +399,7 @@ describe('首屏', () => {
       isAsrEnabled: false,
       strategies: ['naive'],
       readyStrategies: [],
+      sourceKinds: ['upload', 'platform'],
       acceptedSuffixes: [],
       index: {
         vector: 'pgvector',

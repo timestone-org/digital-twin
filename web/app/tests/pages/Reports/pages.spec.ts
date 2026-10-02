@@ -303,6 +303,112 @@ it('定时规则能创建、停用和删除', async () => {
   wrapper.unmount()
 })
 
+describe('定时规则创建提交', () => {
+  async function openCreate() {
+    signIn(['report:view', 'report:schedule'])
+    vi.spyOn(api, 'listReportSchedules').mockResolvedValue({
+      items: [],
+      page: 1,
+      size: 20,
+      total: 0,
+    })
+    vi.spyOn(api, 'reportRuntime').mockResolvedValue({
+      is_schedule_enabled: false,
+      timezone: 'UTC',
+    })
+    const wrapper = mount(Schedules, { global: { stubs: { teleport: true } } })
+    await flushPromises()
+    await wrapper
+      .findAllComponents(DtButton)
+      .find((button) => button.text() === '新建规则')
+      ?.trigger('click')
+    const modal = wrapper.findComponent(DtModal)
+    modal
+      .findAllComponents(DtInput)
+      .find((input) => input.props('label') === '规则名称')
+      ?.vm.$emit('update:modelValue', '月报')
+    modal.findComponent(DtSelect).vm.$emit('update:modelValue', 'r1')
+    await flushPromises()
+    const submit = () => {
+      const button = modal
+        .findAllComponents(DtButton)
+        .find((item) => item.text() === '创建规则')
+      if (!button) throw new Error('缺少创建规则按钮')
+      return button
+    }
+    return { wrapper, modal, submit }
+  }
+
+  it('请求未完成时只提交一次，按钮显示忙碌；成功关闭并刷新', async () => {
+    let finish: (() => void) | undefined
+    const request = vi.spyOn(api, 'createReportSchedule').mockImplementation(
+      () =>
+        new Promise((resolve) => {
+          finish = () =>
+            resolve({
+              id: 's1',
+              template_id: 'r1',
+              name: '月报',
+              granularity: 'month',
+              delay_hours: 24,
+              is_enabled: true,
+              row_version: 1,
+              last_run_period: null,
+              created_at: stamp,
+              updated_at: stamp,
+            })
+        }),
+    )
+    const { wrapper, modal, submit } = await openCreate()
+    try {
+      submit().vm.$emit('click', new MouseEvent('click'))
+      submit().vm.$emit('click', new MouseEvent('click'))
+      await flushPromises()
+      expect(request).toHaveBeenCalledTimes(1)
+      expect(submit().props('loading')).toBe(true)
+      expect(submit().attributes('disabled')).toBeDefined()
+      modal.vm.$emit('update:modelValue', false)
+      await flushPromises()
+      expect(modal.props('modelValue')).toBe(true)
+      expect(modal.findComponent(DtInput).props('disabled')).toBe(true)
+      finish?.()
+      await flushPromises()
+      expect(modal.props('modelValue')).toBe(false)
+      expect(api.listReportSchedules).toHaveBeenCalledTimes(2)
+    } finally {
+      finish?.()
+      await flushPromises()
+      wrapper.unmount()
+    }
+  })
+
+  it('失败信息在弹窗内可见并可重试，关闭再打开清除旧错误', async () => {
+    const request = vi
+      .spyOn(api, 'createReportSchedule')
+      .mockRejectedValue(new BizError(41302, '规则名称重复', 409, 'trace'))
+    const { wrapper, modal, submit } = await openCreate()
+    try {
+      await submit().trigger('click')
+      await flushPromises()
+      expect(modal.text()).toContain('规则名称重复')
+      expect(modal.props('modelValue')).toBe(true)
+      expect(submit().props('loading')).toBe(false)
+      await submit().trigger('click')
+      await flushPromises()
+      expect(request).toHaveBeenCalledTimes(2)
+      modal.vm.$emit('update:modelValue', false)
+      await wrapper
+        .findAllComponents(DtButton)
+        .find((button) => button.text() === '新建规则')
+        ?.trigger('click')
+      expect(modal.text()).not.toContain('规则名称重复')
+      expect(modal.findComponent(DtInput).props('modelValue')).toBe('月报')
+    } finally {
+      wrapper.unmount()
+    }
+  })
+})
+
 it('模板删除经过确认，创建失败和模态关闭可恢复', async () => {
   signIn(['report:view', 'report:manage'])
   vi.spyOn(api, 'listReports').mockResolvedValue({
