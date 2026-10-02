@@ -1,6 +1,5 @@
 /**
- * @fileoverview 2D 孪生编辑器作为助手的工作面：读画布、读绑定、写绑定、
- * 照抄绑定、读实时读数、落库。
+ * @fileoverview 2D 孪生编辑器的助手工作面：配置草稿、诊断、读写绑定与实时读数。
  *
  * ⚠ **不给 `dashboard.capture`**：这一页的舞台是 SVG/DOM，截图那条链路只在
  * 大屏与 3D 替身上验过。没验过的工具摆出来就是每次调都失败，而模型看得见它，
@@ -27,6 +26,7 @@ import {
   TWIN_2D_BINDING_TOOLS,
 } from './aiSurfaceBindings'
 import type { Twin2dSurfaceDeps } from './aiSurfaceTypes'
+import { runTwin2dConfigTool, TWIN_2D_CONFIG_TOOLS } from './aiSurfaceConfig'
 import type { Twin2dPick, Twin2dPickKind } from './editorSelection'
 import { twin2dOutlineRows } from './outlineRows'
 
@@ -38,6 +38,7 @@ export const TWIN_2D_TOOLS = [
   'dashboard.write_binding',
   'dashboard.remove_binding',
   ...TWIN_2D_BINDING_TOOLS,
+  ...TWIN_2D_CONFIG_TOOLS,
 ] as const
 
 /**
@@ -143,6 +144,8 @@ function dispatch(deps: Twin2dSurfaceDeps, call: AssistantToolCall): unknown {
   if (call.name === 'dashboard.remove_binding') return dropBinding(deps, call)
   const bound = runTwin2dBindingTool(deps, call)
   if (bound !== null) return bound
+  const configured = runTwin2dConfigTool(deps, call)
+  if (configured !== null) return configured
   throw new Error(`当前页面没有实现 ${call.name}`)
 }
 
