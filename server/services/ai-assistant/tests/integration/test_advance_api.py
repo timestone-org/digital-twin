@@ -10,7 +10,7 @@ import uuid
 from typing import Any
 
 import pytest
-from langchain_core.messages import AIMessage
+from langchain_core.messages import AIMessage, ToolMessage
 
 from ai_assistant.apps.chat.catalog import ASSISTANT_USE
 from ai_assistant.apps.chat.services.perception import vision
@@ -36,6 +36,73 @@ from llmcore.testing import ScriptedChat, StreamingChat
 pytestmark = pytest.mark.requires_postgres
 
 PNG = "data:image/png;base64,iVBORw0KGgo="
+
+
+async def test_late_partial_receipt_replays_adjacent_preserving_database_order(
+    db_stack: DbStack,
+) -> None:
+    first = AIMessage(
+        content="",
+        tool_calls=[
+            {"id": "a", "name": "dashboard.write_binding", "args": {}},
+            {"id": "b", "name": "dashboard.write_binding", "args": {}},
+        ],
+    )
+    model = ScriptedChat(
+        script=[
+            first,
+            AIMessage(content="新回复"),
+            AIMessage(content="继续回复"),
+        ]
+    )
+    _install(db_stack, model)
+    session_id = await _new_session(db_stack.client)
+    await _advance(db_stack.client, session_id, user_text="旧要求")
+    await _advance(db_stack.client, session_id, user_text="新要求")
+    response = await db_stack.client.post(
+        f"{SESSIONS_URL}/{session_id}:receipts",
+        json={"tool_results": [{"call_id": "a", "output": "实际草稿结果"}]},
+    )
+    assert response.status_code == 200
+    await _advance(db_stack.client, session_id, user_text="继续")
+    seen = model.seen[-1]
+    call_at = next(
+        index
+        for index, message in enumerate(seen)
+        if isinstance(message, AIMessage) and message.tool_calls
+    )
+    answers = seen[call_at + 1 : call_at + 3]
+    assert all(isinstance(message, ToolMessage) for message in answers)
+    assert [message.content for message in answers] == [
+        "实际草稿结果",
+        "这一步尚无实际回执，执行状态未知；不要自动重试。",
+    ]
+    assert (
+        sum(
+            isinstance(message, ToolMessage) and message.tool_call_id == "a"
+            for message in seen
+        )
+        == 1
+    )
+    detail = await db_stack.client.get(f"{SESSIONS_URL}/{session_id}")
+    messages = detail.json()["data"]["messages"]
+    assert [message["role"] for message in messages] == [
+        "user",
+        "assistant",
+        "user",
+        "assistant",
+        "tool",
+        "user",
+        "assistant",
+    ]
+    steps = [
+        step
+        for message in messages
+        for step in message["steps"]
+        if step["kind"] == "client_tool"
+    ]
+    assert [step["state"] for step in steps] == ["succeeded", "awaiting_client"]
+    assert "执行状态未知" not in json.dumps(messages, ensure_ascii=False)
 
 
 async def test_a_plain_answer_streams_a_step_then_done(
