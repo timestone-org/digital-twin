@@ -8,7 +8,7 @@
  * ⚠ 与 `installDashboardModules` 一样带幂等守卫：重复调不会出错，但会把同一份
  * 口子反复覆盖，而那让「到底装的是哪一份」在多入口的页面上说不清。
  */
-import { advanceTurn, probeCapability } from '@/api/assistant'
+import { advanceTurn, probeCapability, saveToolReceipts } from '@/api/assistant'
 import { setAiPorts } from '@/features/ai/ports'
 
 let installed = false
@@ -17,7 +17,11 @@ let installed = false
 export function installAiAssistant(): void {
   if (installed) return
   installed = true
-  setAiPorts({ probe: probeCapability, advance: advanceTurn })
+  setAiPorts({
+    probe: probeCapability,
+    advance: advanceTurn,
+    saveReceipts: saveToolReceipts,
+  })
 }
 
 /** 只给测试用：让「只装一次」这条判定回到初始状态。 */
