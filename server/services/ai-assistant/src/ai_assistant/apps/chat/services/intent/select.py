@@ -30,7 +30,14 @@ CORE_SERVER_TOOLS = ("skills.load", "plan.write")
 BUILTIN_CLIENT_TOOLS = ("user.ask",)
 # 新名字就是能力版本；老页面没自报清单时不能靠技能清单猜它已实现
 REPORTED_ONLY_CLIENT_TOOLS = frozenset(
-    {"twin.list_folders", "twin.list_entities", "twin.read_entity"}
+    {
+        "twin.list_folders",
+        "twin.list_entities",
+        "twin.read_entity",
+        "twin2d.read_config",
+        "twin2d.patch_config",
+        "twin2d.diagnose",
+    }
 )
 
 # 长期记忆档：助手自己的记忆，不碰任何业务数据，故不受工作面约束

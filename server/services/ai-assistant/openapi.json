@@ -225,6 +225,51 @@
         "title": "ApiResponse[Page[SessionOut]]",
         "type": "object"
       },
+      "ApiResponse_ReceiptsOut_": {
+        "properties": {
+          "code": {
+            "default": 0,
+            "title": "Code",
+            "type": "integer"
+          },
+          "data": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/ReceiptsOut"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "details": {
+            "anyOf": [
+              {
+                "items": {
+                  "$ref": "#/components/schemas/FieldErrorOut"
+                },
+                "type": "array"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Details"
+          },
+          "message": {
+            "default": "ok",
+            "title": "Message",
+            "type": "string"
+          },
+          "trace_id": {
+            "default": "",
+            "title": "Trace Id",
+            "type": "string"
+          }
+        },
+        "title": "ApiResponse[ReceiptsOut]",
+        "type": "object"
+      },
       "ApiResponse_SessionDetailOut_": {
         "properties": {
           "code": {
@@ -581,6 +626,43 @@
           "total"
         ],
         "title": "Page[SessionOut]",
+        "type": "object"
+      },
+      "ReceiptsIn": {
+        "additionalProperties": false,
+        "description": "客户端实际执行的非空结果；未执行项不补交。",
+        "properties": {
+          "tool_results": {
+            "items": {
+              "$ref": "#/components/schemas/ToolResultIn"
+            },
+            "maxItems": 128,
+            "minItems": 1,
+            "title": "Tool Results",
+            "type": "array"
+          }
+        },
+        "required": [
+          "tool_results"
+        ],
+        "title": "ReceiptsIn",
+        "type": "object"
+      },
+      "ReceiptsOut": {
+        "description": "已记录或同值重复的调用 id。",
+        "properties": {
+          "accepted_call_ids": {
+            "items": {
+              "type": "string"
+            },
+            "title": "Accepted Call Ids",
+            "type": "array"
+          }
+        },
+        "required": [
+          "accepted_call_ids"
+        ],
+        "title": "ReceiptsOut",
         "type": "object"
       },
       "SessionCreateIn": {
@@ -1570,6 +1652,60 @@
           }
         },
         "summary": "推进一个回合（事件流）",
+        "tags": [
+          "turn"
+        ]
+      }
+    },
+    "/api/v1/assistant/sessions/{session_id}:receipts": {
+      "post": {
+        "description": "只结算调用者已有调用。Args: session_id, payload, session, caller。",
+        "operationId": "save_receipts_api_v1_assistant_sessions__session_id__receipts_post",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "session_id",
+            "required": true,
+            "schema": {
+              "format": "uuid",
+              "title": "Session Id",
+              "type": "string"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/ReceiptsIn"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiResponse_ReceiptsOut_"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "记录客户端工具回执（不推进）",
         "tags": [
           "turn"
         ]

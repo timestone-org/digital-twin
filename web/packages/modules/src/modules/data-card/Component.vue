@@ -293,7 +293,7 @@ const scroll = computed(() =>
   </ModulePanel>
 </template>
 
-<style scoped>
+<style scoped lang="scss">
 /* 页签条：贴在内容之上，横向可滚，组多时不挤压卡片本体 */
 .dc-tabs {
   display: flex;

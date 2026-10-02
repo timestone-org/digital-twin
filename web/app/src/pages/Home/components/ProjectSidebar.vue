@@ -155,7 +155,7 @@ function onRenamed(projectId: string, name: string): void {
   </aside>
 </template>
 
-<style scoped>
+<style scoped lang="scss">
 /* 新建/删除项目时让那一行滑进滑出，而不是整列表瞬间重排 */
 .project-row-enter-active,
 .project-row-leave-active {

@@ -11,7 +11,7 @@
  * ⚠ 不用环境变量：本仓明令「环境差异只能是取值不能是行为」，而 ports 缺省
  * 本来就是这个仓表达可选能力的方式。
  */
-import type { AssistantCapability } from '@dt/contracts'
+import type { AssistantCapability, AssistantToolResult } from '@dt/contracts'
 
 import type { AdvanceBody } from '@/api/assistant'
 
@@ -34,6 +34,11 @@ export interface AiAssistantPorts {
    * 这是刻意的一档，不是没做完——只读那一档在排查现场问题时很有用。
    */
   advance?: AdvanceStream
+  /** 只保存实际客户端回执，停止回合也能调用。 */
+  saveReceipts?: (
+    sessionId: string,
+    results: readonly AssistantToolResult[],
+  ) => Promise<void>
 }
 
 let installed: AiAssistantPorts | null = null

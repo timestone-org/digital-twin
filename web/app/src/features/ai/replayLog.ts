@@ -24,6 +24,7 @@ import {
   type ConversationLog,
 } from './conversationLog'
 import { inputPreview, outputPreview } from './stepPreview'
+import { followingReceipts, replayClientSteps } from './replayClientSteps'
 import type { RunnerStep } from './turnRunner'
 
 /** 循环代发的催促消息的开头（turnRunner 的 PLAN_CONTINUE_TEXT 以它起头）。 */
@@ -54,7 +55,17 @@ export interface Replayable {
  * @param detail 库里的会话详情，消息与步骤已按 seq 升序
  */
 export function replayedLog(detail: Replayable): ConversationLog {
-  return detail.messages.reduce(replayed, emptyLog())
+  return detail.messages.reduce(
+    (log, message, index) =>
+      replayed(log, {
+        ...message,
+        steps: replayClientSteps(
+          message.steps,
+          followingReceipts(detail.messages, index),
+        ),
+      }),
+    emptyLog(),
+  )
 }
 
 function replayed(
@@ -102,7 +113,11 @@ function withAssistantSaid(
  * 那几步永远没有缩略图。卡片上就此说一句人话，不留一个点不开的空框。
  */
 function runnerStepOf(step: AssistantStep): RunnerStep {
-  const input = inputPreview(step.input_json)
+  const input = inputPreview(
+    step.kind === 'client_tool' && typeof step.input_json?.call_id === 'string'
+      ? step.input_json.arguments
+      : step.input_json,
+  )
   const output = outputPreview(step.output_json)
   return {
     kind: step.kind,

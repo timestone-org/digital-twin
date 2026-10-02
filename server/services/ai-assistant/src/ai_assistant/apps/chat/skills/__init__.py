@@ -18,6 +18,7 @@ from ai_assistant.apps.chat.skills.manifest import (
 from ai_assistant.apps.chat.skills.report_template_author import (
     REPORT_TEMPLATE_AUTHOR,
 )
+from ai_assistant.apps.chat.skills.twin2d_configure import TWIN2D_CONFIGURE
 from ai_assistant.apps.chat.skills.twin_configure import TWIN_CONFIGURE
 
 SKILLS: tuple[SkillManifest, ...] = (
@@ -29,6 +30,7 @@ SKILLS: tuple[SkillManifest, ...] = (
     KNOWLEDGE_QA,
     REPORT_TEMPLATE_AUTHOR,
     TWIN_CONFIGURE,
+    TWIN2D_CONFIGURE,
 )
 
 

@@ -13,6 +13,8 @@ import type { Twin2dEditorSelection } from './editorSelection'
 export interface Twin2dSurfaceDeps {
   /** 归一化后的 2D 孪生配置；还没读出来时给 null。 */
   config: () => Twin2dConfig | null
+  /** 写配置复用文档 commit：配置与重派后的绑定一起进入撤销栈。 */
+  patchConfig: (next: Twin2dConfig) => void
   /** 当前这一份绑定，含还没保存的草稿。 */
   bindings: () => readonly BindingPayload[]
   /** 写一条绑定。⚠ 走页面那一支：它按 fieldKey 原地替换并沿用旧的绑定 id。 */

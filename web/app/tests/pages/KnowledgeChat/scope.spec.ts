@@ -59,6 +59,7 @@ function capability(): KnowledgeCapability {
     isEmbeddingEnabled: true,
     isModelEnabled: true,
     isAsrEnabled: false,
+    sourceKinds: [],
     strategies: ['hybrid'],
     readyStrategies: ['hybrid'],
     acceptedSuffixes: ['.md'],

@@ -114,7 +114,7 @@ const layers = computed<Twin2dSvgLayer[]>(() => {
   </svg>
 </template>
 
-<style scoped>
+<style scoped lang="scss">
 /* ⚠ `<svg>` 的 UA 缺省是行内元素，基线会在盒底留一条缝，看着像「图元没对齐」 */
 .t2-vec {
   display: block;

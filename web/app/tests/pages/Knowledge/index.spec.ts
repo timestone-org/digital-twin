@@ -26,6 +26,9 @@ const api = vi.hoisted(() => ({
   readDocumentRaw: vi.fn(),
   listBases: vi.fn(),
   listDocuments: vi.fn(),
+  listSources: vi.fn(),
+  createSource: vi.fn(),
+  syncSource: vi.fn(),
   createBase: vi.fn(),
   deleteBase: vi.fn(),
   uploadDocument: vi.fn(),
@@ -62,6 +65,7 @@ const READY: KnowledgeCapability = {
   isEmbeddingEnabled: true,
   isModelEnabled: true,
   isAsrEnabled: false,
+  sourceKinds: [],
   strategies: ['naive', 'hybrid', 'agentic'],
   readyStrategies: ['naive', 'hybrid', 'agentic'],
   acceptedSuffixes: ['.md', '.txt', '.docx', '.xlsx', '.pptx'],
@@ -122,7 +126,11 @@ function signIn(codes: string[]): void {
 beforeEach(() => {
   setActivePinia(createPinia())
   vi.resetAllMocks()
-  api.readCapability.mockResolvedValue(READY)
+  api.readCapability.mockResolvedValue({
+    ...READY,
+    sourceKinds: ['upload', 'platform'],
+  })
+  api.listSources.mockResolvedValue([])
   api.listBases.mockResolvedValue([BASE])
   api.listDocuments.mockResolvedValue([documentOf({})])
 })
@@ -458,7 +466,12 @@ describe('检索试验台', () => {
 
     await search(wrapper, '主蒸汽压力')
 
-    expect(api.searchBase).toHaveBeenCalledWith('b1', '主蒸汽压力')
+    expect(api.searchBase).toHaveBeenCalledWith(
+      'b1',
+      '主蒸汽压力',
+      '',
+      expect.any(AbortSignal),
+    )
     expect(wrapper.text()).toContain('[1]')
     expect(wrapper.text()).toContain('一号机组.xlsx')
     expect(wrapper.text()).toContain('1月 · 第 3 行')
@@ -710,5 +723,46 @@ describe('权限', () => {
     const wrapper = await render()
     expect(wrapper.text()).toContain('未接重排')
     expect(wrapper.text()).toContain('还没给「知识库重排」分配模型')
+  })
+})
+
+describe('知识来源入口', () => {
+  it('提供来源配置入口并解释同步后的资料可见范围', async () => {
+    const wrapper = await render()
+    const entry = buttonOf(wrapper, '来源配置')
+    expect(entry?.exists()).toBe(true)
+    await entry?.trigger('click')
+    await flushPromises()
+    expect(api.listSources).toHaveBeenCalledWith('b1', expect.any(AbortSignal))
+    expect(document.body.textContent).toContain('knowledge:use')
+    expect(document.body.textContent).toContain('不保存凭据')
+  })
+
+  it('只读账号可查看来源但没有添加和同步入口', async () => {
+    api.listSources.mockResolvedValue([
+      {
+        id: 's1',
+        baseId: 'b1',
+        kind: 'platform',
+        name: '台账来源',
+        config: {},
+        lastSyncedAt: null,
+        lastError: '',
+      },
+    ])
+    const wrapper = await render(['knowledge:use'])
+    await buttonOf(wrapper, '来源配置')?.trigger('click')
+    await flushPromises()
+    expect(document.body.textContent).toContain('台账来源')
+    expect(document.body.textContent).not.toContain('添加来源')
+    expect(
+      document.body.querySelector('button[aria-label="同步台账来源"]'),
+    ).toBeNull()
+  })
+
+  it('未选库不能配置来源，避免把来源挂错库', async () => {
+    api.listBases.mockResolvedValue([])
+    const wrapper = await render()
+    expect(buttonOf(wrapper, '来源配置')?.attributes('disabled')).toBeDefined()
   })
 })

@@ -191,7 +191,7 @@ const medians = computed(() => sampleMedians(props.columns, props.rows))
   </div>
 </template>
 
-<style scoped>
+<style scoped lang="scss">
 /* 列名由用户自定且带单位，定宽列里不换行会盖到相邻表头上 */
 .record-table :deep(.dt-table thead th) {
   white-space: normal;

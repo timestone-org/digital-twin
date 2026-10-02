@@ -79,7 +79,7 @@ const style = computed<CSSProperties>(() => {
   </span>
 </template>
 
-<style scoped>
+<style scoped lang="scss">
 .dc-extra {
   display: inline-flex;
   align-items: baseline;

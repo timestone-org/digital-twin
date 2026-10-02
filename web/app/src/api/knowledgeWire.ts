@@ -35,6 +35,7 @@ export interface KnowledgeSource {
   baseId: string
   kind: string
   name: string
+  config: Record<string, unknown>
   lastSyncedAt: string | null
   /** 上一次同步失败的原因；成功过就是空串。 */
   lastError: string
@@ -114,6 +115,7 @@ export interface KnowledgeCapability {
   isAsrEnabled: boolean
   strategies: string[]
   readyStrategies: string[]
+  sourceKinds: string[]
   acceptedSuffixes: string[]
   index: KnowledgeIndexLanes
   /**
@@ -198,6 +200,7 @@ export function toSource(value: unknown): KnowledgeSource {
     kind: text(row.kind),
     name: text(row.name),
     lastSyncedAt: nullableText(row.last_synced_at),
+    config: isRecord(row.config) ? row.config : {},
     lastError: text(row.last_error),
   }
 }
@@ -269,6 +272,7 @@ export function toCapability(value: unknown): KnowledgeCapability {
     isAsrEnabled: row.is_asr_enabled === true,
     strategies: strings(row.strategies),
     readyStrategies: strings(row.ready_strategies),
+    sourceKinds: strings(row.source_kinds),
     acceptedSuffixes: strings(row.accepted_suffixes),
     index: {
       vector: text(index.vector),

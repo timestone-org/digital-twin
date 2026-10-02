@@ -311,3 +311,110 @@ describe('依据要跟着回放', () => {
     expect(log.entries.map((one) => one.role)).toEqual(['assistant'])
   })
 })
+
+describe('客户端实际批次回执历史', () => {
+  function batch(): AssistantMessage {
+    return messageOf({
+      role: 'assistant',
+      content_json: {},
+      steps: [
+        stepOf({
+          kind: 'client_tool',
+          name: 'dashboard.save',
+          state: 'awaiting_client',
+          input_json: {
+            calls: [
+              {
+                call_id: 'a',
+                name: 'dashboard.save',
+                arguments: { draft: true },
+              },
+              { call_id: 'b', name: 'dashboard.capture', arguments: {} },
+              { call_id: 'c', name: 'user.ask', arguments: {} },
+            ],
+          },
+        }),
+      ],
+    })
+  }
+
+  it('旧批次按call_id回放每项真实结果，无回执项保持未完成', () => {
+    const log = replayedLog(
+      detailOf([
+        batch(),
+        messageOf({
+          role: 'tool',
+          content_json: { tool_call_id: 'b', text: '[图片]' },
+        }),
+        messageOf({
+          role: 'tool',
+          content_json: { tool_call_id: 'c', text: '{"is_cancelled":true}' },
+        }),
+      ]),
+    )
+    expect(
+      log.entries.map((entry) => [entry.step?.name, entry.step?.state]),
+    ).toEqual([
+      ['dashboard.save', 'awaiting_client'],
+      ['dashboard.capture', 'succeeded'],
+      ['user.ask', 'aborted'],
+    ])
+    expect(log.entries[0]?.step?.input).toEqual({ draft: 'true' })
+    expect(log.entries[1]?.step?.output).toBe('[图片]')
+  })
+
+  it('未知回执不能结算已有动作，下一次用户发话之后的回执也不跨轮匹配', () => {
+    const log = replayedLog(
+      detailOf([
+        batch(),
+        messageOf({
+          role: 'tool',
+          content_json: { tool_call_id: 'fake', text: 'saved' },
+        }),
+        messageOf({ role: 'user', content_json: { text: '继续' } }),
+        messageOf({
+          role: 'tool',
+          content_json: { tool_call_id: 'a', text: 'saved' },
+        }),
+      ]),
+    )
+    expect(log.entries.slice(0, 3).map((entry) => entry.step?.state)).toEqual([
+      'awaiting_client',
+      'awaiting_client',
+      'awaiting_client',
+    ])
+  })
+
+  it('旧失败回执与新持久化失败保留原因，不覆盖已结算状态', () => {
+    const log = replayedLog(
+      detailOf([
+        batch(),
+        messageOf({
+          role: 'tool',
+          content_json: { tool_call_id: 'a', text: '失败：保存冲突' },
+        }),
+        messageOf({
+          role: 'assistant',
+          content_json: {},
+          steps: [
+            stepOf({
+              kind: 'client_tool',
+              name: 'dashboard.save',
+              state: 'failed',
+              error: '版本冲突',
+              input_json: { call_id: 'd', arguments: {} },
+              output_json: { body: '失败：版本冲突' },
+            }),
+          ],
+        }),
+        messageOf({
+          role: 'tool',
+          content_json: { tool_call_id: 'd', text: 'saved' },
+        }),
+      ]),
+    )
+    expect(log.entries[0]?.step?.error).toBe('保存冲突')
+    expect(log.entries[3]?.step?.error).toBe('版本冲突')
+    expect(log.entries[3]?.step?.state).toBe('failed')
+  })
+})

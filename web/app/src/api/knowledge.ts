@@ -113,12 +113,37 @@ export async function deleteBase(baseId: string): Promise<void> {
 }
 
 /** 一个库下的来源。 */
-export async function listSources(baseId: string): Promise<KnowledgeSource[]> {
+export async function listSources(
+  baseId: string,
+  signal?: AbortSignal,
+): Promise<KnowledgeSource[]> {
   const rows = await requestData<unknown[]>(
     `${BASES}/${baseId}/sources`,
-    onKnowledge(),
+    onKnowledge({ signal }),
   )
   return rows.map(toSource)
+}
+
+/** 已注册平台来源的配置；不存调用者凭据。 */
+export interface PlatformSourceConfig {
+  path: string
+  id_field: string
+  title_field: string
+  page_param: string
+  size_param: string
+}
+
+/** 给库添加已注册的平台来源。 */
+export async function createSource(
+  baseId: string,
+  body: { kind: 'platform'; name: string; config: PlatformSourceConfig },
+): Promise<KnowledgeSource> {
+  return toSource(
+    await requestData<unknown>(
+      `${BASES}/${baseId}/sources`,
+      onKnowledge({ method: 'POST', body }),
+    ),
+  )
 }
 
 /** 跑一次来源同步。回这一次登记了几条、跳过几条、还有没有更多。 */
@@ -225,6 +250,7 @@ export async function searchBase(
   baseId: string,
   query: string,
   strategy = '',
+  signal?: AbortSignal,
 ): Promise<KnowledgeSearchResult> {
   return toSearchResult(
     await requestData<unknown>(
@@ -232,6 +258,7 @@ export async function searchBase(
       onKnowledge({
         method: 'POST',
         body: { query, limit: 8, strategy },
+        signal,
       }),
     ),
   )
