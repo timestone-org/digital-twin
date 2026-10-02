@@ -95,6 +95,7 @@ function setup(options: SetupOptions = {}) {
   }
   const deps: Twin2dSurfaceDeps = {
     config: () => ('config' in options ? options.config : CONFIG) ?? null,
+    patchConfig: () => undefined,
     bindings: () => bindings,
     write,
     drop,

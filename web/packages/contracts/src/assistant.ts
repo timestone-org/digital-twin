@@ -294,3 +294,20 @@ export interface AssistantAskAnswer {
   free_text: string | null
   is_cancelled: boolean
 }
+
+/** 实际客户端工具回执；只能匹配会话里已下发的调用。 */
+export interface AssistantToolResult {
+  call_id: string
+  output?: unknown
+  error?: string | null
+}
+
+/** 只保存回执，不推进模型或执行任何工具。 */
+export interface AssistantReceipts {
+  tool_results: AssistantToolResult[]
+}
+
+/** 已保存或同值重复的调用 id。 */
+export interface AssistantReceiptsAck {
+  accepted_call_ids: string[]
+}

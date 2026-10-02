@@ -48,6 +48,19 @@ class SessionCrud(CrudBase[ChatSession]):
             statement = statement.where(ChatSession.is_archived == is_archived)
         return statement.order_by(*DEFAULT_ORDER)
 
+    async def lock_session(
+        self, session: AsyncSession, chat_session_id: uuid.UUID
+    ) -> None:
+        """同会话回执和消息序号的分配串行化；不跨外部 IO 持锁。
+
+        Args: session, chat_session_id。
+        """
+        await session.execute(
+            select(ChatSession.id)
+            .where(ChatSession.id == chat_session_id)
+            .with_for_update()
+        )
+
     async def messages_of(
         self, session: AsyncSession, chat_session_id: uuid.UUID
     ) -> list[ChatMessage]:

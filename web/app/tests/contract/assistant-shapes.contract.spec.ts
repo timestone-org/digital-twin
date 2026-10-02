@@ -24,6 +24,9 @@ import type {
   AssistantSessionDetail,
   AssistantSkill,
   AssistantStep,
+  AssistantReceiptsAck,
+  AssistantReceipts,
+  AssistantToolResult,
 } from '@dt/contracts'
 import {
   ASSISTANT_ASK_TOOL,
@@ -103,6 +106,13 @@ const CLIENT_SPECS_PATH = join(
 type Keys<T> = Record<keyof T, true>
 
 const SHAPES: Record<string, Record<string, true>> = {
+  ReceiptsIn: { tool_results: true } satisfies Keys<AssistantReceipts>,
+  ToolResultIn: {
+    call_id: true,
+    output: true,
+    error: true,
+  } satisfies Keys<AssistantToolResult>,
+  ReceiptsOut: { accepted_call_ids: true } satisfies Keys<AssistantReceiptsAck>,
   CapabilityOut: {
     is_model_enabled: true,
     skills: true,
