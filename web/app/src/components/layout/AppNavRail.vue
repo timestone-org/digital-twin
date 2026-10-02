@@ -20,7 +20,9 @@ import { isPathActive, visibleNavItems } from './navTree'
 const route = useRoute()
 const router = useRouter()
 const auth = useAuthStore()
-const { isCollapsed, toggle } = useSidebar()
+const props = defineProps<{ menu?: boolean }>()
+const { isCollapsed: preferredCollapsed, toggle } = useSidebar()
+const isCollapsed = computed(() => !props.menu && preferredCollapsed.value)
 
 const items = computed(() =>
   visibleNavItems(NAV_ITEMS, (codes) => auth.can(codes, 'any')),
@@ -53,8 +55,15 @@ async function onLogout(): Promise<void> {
 
 <template>
   <aside
-    class="nav-rail relative z-40 flex h-full shrink-0 flex-col border-r border-border-subtle bg-surface-panel/60 backdrop-blur-md transition-[width] duration-200"
-    :class="isCollapsed ? 'w-[60px] items-center' : 'w-[216px]'"
+    class="nav-rail relative z-40 flex shrink-0 flex-col border-r border-border-subtle bg-surface-panel/60 backdrop-blur-md transition-[width] duration-200"
+    :class="[
+      menu ? 'w-full' : 'h-full',
+      menu
+        ? 'nav-rail--menu'
+        : isCollapsed
+          ? 'w-[60px] items-center'
+          : 'w-[216px]',
+    ]"
   >
     <RouterLink
       to="/"
@@ -165,7 +174,7 @@ async function onLogout(): Promise<void> {
     </div>
 
     <!-- 骑在侧栏与内容的分界线上，两态之间切换 -->
-    <span class="nav-toggle">
+    <span v-if="!menu" class="nav-toggle">
       <DtButton
         variant="soft"
         intent="primary"
@@ -183,6 +192,11 @@ async function onLogout(): Promise<void> {
 
 <style scoped lang="scss">
 @use '@/styles/tokens-bridge' as t;
+
+.nav-rail--menu {
+  border: 0;
+  background: transparent;
+}
 
 // 骑在边界上的小圆钮。视觉 20px（xs 档），点击面用伪元素外扩到 24px——
 // 那是 WCAG 2.5.8 给的点击目标下限，钮身可以更小，点击面不要再往下调；

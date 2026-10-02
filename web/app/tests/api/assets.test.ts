@@ -11,6 +11,7 @@ import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 
 import * as assets from '@/api/assets'
 import * as client from '@/api/client'
+import * as upload from '@/api/upload'
 
 const PLATFORM_PREFIX = '/api/v1/platform'
 
@@ -143,4 +144,70 @@ describe('素材面的前缀', () => {
 
     expect(lastCall(request)[1].method).toBe('DELETE')
   })
+})
+
+it('重新上传先直传再确认原 ID，确认不发送新文件名', async () => {
+  requestData.mockResolvedValue({ ...ASSET_WIRE, kind: 'model', variants: [] })
+  const original = await assets.getAsset('a1')
+  requestData.mockReset()
+  requestData.mockResolvedValueOnce({
+    asset_id: 'upload1',
+    url: '/oss/',
+    fields: { key: 'staging/replacements/a1/upload1' },
+    expires_seconds: 900,
+  })
+  requestData.mockResolvedValueOnce({
+    ...ASSET_WIRE,
+    kind: 'model',
+    checksum: 'new',
+    variants: [],
+  })
+  const bytes = vi.spyOn(upload, 'postUploadForm').mockResolvedValue()
+  const file = new File(['new'], 'different.glb')
+  const saved = await assets.replaceAssetFile(original, file)
+  expect(requestData.mock.calls[0]).toEqual([
+    '/assets/a1:presign-replacement',
+    {
+      baseUrl: PLATFORM_PREFIX,
+      method: 'POST',
+      body: {
+        kind: 'model',
+        content_type: 'application/octet-stream',
+        size_bytes: 3,
+      },
+    },
+  ])
+  expect(bytes).toHaveBeenCalledWith(
+    '/oss/',
+    { key: 'staging/replacements/a1/upload1' },
+    file,
+    {},
+  )
+  expect(requestData.mock.calls[1]).toEqual([
+    '/assets/a1:replace',
+    {
+      baseUrl: PLATFORM_PREFIX,
+      method: 'POST',
+      body: { upload_id: 'upload1', expected_checksum: 'x' },
+    },
+  ])
+  expect(saved.id).toBe(original.id)
+  expect(saved.name).toBe(original.name)
+})
+
+it('直传失败时不确认替换', async () => {
+  requestData.mockResolvedValue({ ...ASSET_WIRE, kind: 'model', variants: [] })
+  const original = await assets.getAsset('a1')
+  requestData.mockReset()
+  requestData.mockResolvedValue({
+    asset_id: 'upload1',
+    url: '/oss/',
+    fields: {},
+    expires_seconds: 900,
+  })
+  vi.spyOn(upload, 'postUploadForm').mockRejectedValue(new Error('网络中断'))
+  await expect(
+    assets.replaceAssetFile(original, new File(['new'], 'different.glb')),
+  ).rejects.toThrow('网络中断')
+  expect(requestData).toHaveBeenCalledTimes(1)
 })

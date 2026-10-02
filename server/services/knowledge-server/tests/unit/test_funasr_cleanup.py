@@ -1,103 +1,110 @@
-"""语音上游关闭被取消时仍须释放 TCP 连接。"""
+"""纯连接假件验证 FunASR 初始化与关闭的异常传播和资源释放。"""
 
 import asyncio
+from typing import cast
+from unittest.mock import AsyncMock, MagicMock
 
 import pytest
-from unit.funasr_fakes import BINARY, FakeFunAsr
-from websockets.asyncio.client import ClientConnection, connect
+from websockets.asyncio.client import ClientConnection
 
 from knowledge_server.apps.speech.errors import AsrUnavailable
 from knowledge_server.apps.speech.services import funasr
-from knowledge_server.apps.speech.services.funasr import FunAsrLeg
 
 
-async def test_cancelled_close_aborts_the_upstream_transport(
+def connection_fake() -> MagicMock:
+    connection = MagicMock(spec=ClientConnection)
+    connection.send = AsyncMock()
+    connection.close = AsyncMock()
+    connection.transport = MagicMock()
+    return connection
+
+
+async def test_normal_close_keeps_the_graceful_handshake() -> None:
+    connection = connection_fake()
+    leg = funasr.FunAsrLeg(cast("ClientConnection", connection))
+
+    await leg.aclose()
+
+    connection.close.assert_awaited_once()
+    connection.transport.abort.assert_not_called()
+
+
+@pytest.mark.parametrize(
+    "is_cancelled", [False, True], ids=["failed", "cancelled"]
+)
+async def test_close_failure_aborts_and_preserves_the_exception(
+    is_cancelled: bool,
+) -> None:
+    connection = connection_fake()
+    failure = asyncio.CancelledError() if is_cancelled else OSError("关闭失败")
+    connection.close.side_effect = failure
+    leg = funasr.FunAsrLeg(cast("ClientConnection", connection))
+
+    with pytest.raises(type(failure)) as caught:
+        await leg.aclose()
+
+    assert caught.value is failure
+    connection.transport.abort.assert_called_once()
+
+
+@pytest.mark.parametrize(
+    "is_cancelled", [False, True], ids=["failed", "cancelled"]
+)
+async def test_init_failure_closes_the_connection_and_preserves_the_exception(
     monkeypatch: pytest.MonkeyPatch,
+    is_cancelled: bool,
 ) -> None:
-    entered_close = asyncio.Event()
-
-    async def blocked_close() -> None:
-        entered_close.set()
-        await asyncio.Future[None]()
-
-    async with (
-        FakeFunAsr().serving() as url,
-        connect(url, subprotocols=[BINARY]) as connection,
-    ):
-        leg = FunAsrLeg(connection)
-        with monkeypatch.context() as patch:
-            patch.setattr(connection, "close", blocked_close)
-            closing = asyncio.create_task(leg.aclose())
-            await entered_close.wait()
-            closing.cancel()
-            with pytest.raises(asyncio.CancelledError):
-                await closing
-            is_closing = connection.transport.is_closing()
-    assert is_closing, "取消关闭操作后，上游 TCP 仍然处于打开状态"
-
-
-@pytest.mark.parametrize("is_cancelled", [False, True])
-async def test_failed_init_releases_the_connected_transport(
-    monkeypatch: pytest.MonkeyPatch, is_cancelled: bool
-) -> None:
+    connection = connection_fake()
     failure = (
         asyncio.CancelledError()
         if is_cancelled
-        else AsrUnavailable("init failed")
+        else AsrUnavailable("初始化失败")
     )
+    connection.send.side_effect = failure
+    monkeypatch.setattr(funasr, "connect", AsyncMock(return_value=connection))
 
-    async def failed_send(_leg: FunAsrLeg, _text: str) -> None:
-        raise failure
+    with pytest.raises(type(failure)) as caught:
+        await funasr.open_leg(
+            funasr.FunAsrConfig("ws://unused"), wav_name="测试"
+        )
 
-    async with (
-        FakeFunAsr().serving() as url,
-        connect(url, subprotocols=[BINARY]) as connection,
-    ):
-
-        async def connected(
-            *_args: object, **_kwargs: object
-        ) -> ClientConnection:
-            return connection
-
-        with monkeypatch.context() as patch:
-            patch.setattr(funasr, "connect", connected)
-            patch.setattr(FunAsrLeg, "send_text", failed_send)
-            with pytest.raises(type(failure)):
-                await funasr.open_leg(
-                    funasr.FunAsrConfig(url=url), wav_name="init"
-                )
-            is_closing = connection.transport.is_closing()
-    assert is_closing, "初始化失败后，上游 TCP 仍然处于打开状态"
+    assert caught.value is failure
+    connection.close.assert_awaited_once()
+    connection.transport.abort.assert_not_called()
 
 
-async def test_failed_init_preserves_the_send_error_when_close_fails(
+@pytest.mark.parametrize(
+    "is_cancelled", [False, True], ids=["init-failed", "init-cancelled"]
+)
+@pytest.mark.parametrize(
+    "is_cleanup_cancelled",
+    [False, True],
+    ids=["close-failed", "close-cancelled"],
+)
+async def test_failed_cleanup_keeps_the_initialization_exception(
     monkeypatch: pytest.MonkeyPatch,
+    is_cancelled: bool,
+    is_cleanup_cancelled: bool,
 ) -> None:
-    send_error = AsrUnavailable("init failed")
+    connection = connection_fake()
+    failure = (
+        asyncio.CancelledError()
+        if is_cancelled
+        else AsrUnavailable("初始化失败")
+    )
+    connection.send.side_effect = failure
+    connection.close.side_effect = (
+        asyncio.CancelledError()
+        if is_cleanup_cancelled
+        else OSError("关闭失败")
+    )
+    monkeypatch.setattr(funasr, "connect", AsyncMock(return_value=connection))
 
-    async def failed_send(_leg: FunAsrLeg, _text: str) -> None:
-        raise send_error
+    with pytest.raises(type(failure)) as caught:
+        await funasr.open_leg(
+            funasr.FunAsrConfig("ws://unused"), wav_name="测试"
+        )
 
-    async def failed_close() -> None:
-        raise OSError("close failed")
-
-    async with (
-        FakeFunAsr().serving() as url,
-        connect(url, subprotocols=[BINARY]) as connection,
-    ):
-
-        async def connected(
-            *_args: object, **_kwargs: object
-        ) -> ClientConnection:
-            return connection
-
-        with monkeypatch.context() as patch:
-            patch.setattr(funasr, "connect", connected)
-            patch.setattr(FunAsrLeg, "send_text", failed_send)
-            patch.setattr(connection, "close", failed_close)
-            with pytest.raises(AsrUnavailable) as caught:
-                await funasr.open_leg(
-                    funasr.FunAsrConfig(url=url), wav_name="init"
-                )
-            assert caught.value is send_error
-            assert connection.transport.is_closing()
+    assert caught.value is failure
+    connection.close.assert_awaited_once()
+    connection.transport.abort.assert_called_once()

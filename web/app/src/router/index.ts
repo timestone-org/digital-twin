@@ -142,7 +142,7 @@ export const routes: RouteRecordRaw[] = [
     name: 'collect-opcua',
     component: () => import('@/pages/Collect/Opcua/index.vue'),
     meta: {
-      title: 'OPC UA 采集',
+      title: '工业数据采集',
       permissions: [PERMISSION_CODES.collectView],
     },
   },
@@ -501,7 +501,7 @@ export const routes: RouteRecordRaw[] = [
 ]
 
 export const router = createRouter({
-  history: createWebHistory(),
+  history: createWebHistory(import.meta.env.BASE_URL),
   routes,
 })
 

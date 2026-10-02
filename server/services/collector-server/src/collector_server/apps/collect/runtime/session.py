@@ -28,6 +28,7 @@ from collectwire import (
     PlanSource,
 )
 from lib.logging import get_logger
+from timeseries import Quality
 
 _logger = get_logger("collect.session")
 
@@ -112,7 +113,9 @@ class SourceSession:
         self._poller: PollLoop | None = None
         # ⚠ 强引用：事件循环只持有任务的弱引用，丢了引用的任务可能随时消失
         self._poll_task: asyncio.Task[None] | None = None
+        self._poll_generation = 0
         self._is_online = False
+        self._loaded_count = 0
 
     @property
     def source_id(self) -> UUID:
@@ -158,8 +161,17 @@ class SourceSession:
 
     async def stop(self) -> None:
         """叫停并拆掉会话。"""
-        self._stopped.set()
+        self.revoke()
         await self._close()
+
+    def revoke(self) -> None:
+        """租约失效时同步撤销读数出口与驱动发请求的权利。"""
+        self._stopped.set()
+        self._poll_generation += 1
+        self._is_online = False
+        revoke = getattr(self._driver, "revoke", None)
+        if callable(revoke):
+            revoke()
 
     async def apply(self, source: PlanSource) -> None:
         """点位变了：退掉不要的、订上新增的，**不重连**。
@@ -169,6 +181,9 @@ class SourceSession:
 
         Args: source。
         """
+        if self._is_online and not self._wants_subscribe():
+            self._poll_generation += 1
+            await self._stop_polling()
         wanted = {point.point_code for point in source.points}
         removed = sorted(self._subscribed - wanted)
         self._source = source
@@ -185,6 +200,12 @@ class SourceSession:
     async def _open(self) -> None:
         """建连并挂上取数。"""
         await self._reporter.report(self._status(STATE_CONNECTING))
+        self._loaded_count = self._driver.load_points(specs_of(self._source))
+        is_empty_allowed = (
+            self._driver.capabilities.is_empty_source_connection_supported
+        )
+        if self._loaded_count == 0 and not is_empty_allowed:
+            raise ValueError("这个数据源没有可读取的有效点位")
         await self._driver.connect()
         self._is_online = True
         await self._attach()
@@ -197,7 +218,7 @@ class SourceSession:
         几次，也不要静默变成一个不产值的会话（COLLECT_DESIGN.md §4.1）。
         """
         specs = specs_of(self._source)
-        self._driver.load_points(specs)
+        self._loaded_count = self._driver.load_points(specs)
         if self._wants_subscribe():
             await self._subscribe(
                 [
@@ -236,15 +257,29 @@ class SourceSession:
 
     async def _start_polling(self) -> None:
         """起轮询循环。"""
-        await self._stop_polling()
+        generation = self._poll_generation
+
+        def current_sink(
+            point_code: str, value: object, ts_ms: int, quality: Quality
+        ) -> None:
+            if generation == self._poll_generation and self._is_online:
+                self._sink(point_code, value, ts_ms, quality)
+
         self._poller = PollLoop(
             driver=self._driver,
-            sink=self._sink,
+            sink=current_sink,
             options=PollOptions(
                 point_codes=tuple(
                     point.point_code for point in self._source.points
                 ),
-                interval_ms=self._source.poll_interval_ms,
+                interval_ms=max(
+                    self._source.poll_interval_ms,
+                    self._driver.capabilities.minimum_poll_interval_ms,
+                ),
+                point_period_ms={
+                    point.point_code: point.sampling_interval_ms
+                    for point in self._source.points
+                },
             ),
         )
         self._poll_task = asyncio.create_task(self._poller.run())
@@ -298,11 +333,11 @@ class SourceSession:
 
     async def _close(self) -> None:
         """拆掉取数与连接。"""
+        self._poll_generation += 1
         await self._stop_polling()
         self._subscribed.clear()
-        if self._is_online:
-            self._is_online = False
-            await self._driver.disconnect()
+        self._is_online = False
+        await self._driver.disconnect()
 
     async def _pause(self, delay_s: float) -> None:
         """等一段时间，被叫停就提前醒。
@@ -347,4 +382,4 @@ class SourceSession:
         """
         if self._wants_subscribe():
             return len(self._subscribed)
-        return len(self._source.points)
+        return self._loaded_count

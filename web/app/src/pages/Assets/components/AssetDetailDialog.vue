@@ -19,6 +19,7 @@ import { formatDateTime } from '@/utils/datetime'
 import { formatSize } from '@/utils/filesize'
 import AssetPreviewStage from './AssetPreviewStage.vue'
 import AssetVariantList from './AssetVariantList.vue'
+import AssetReplaceUpload from './AssetReplaceUpload.vue'
 
 /** 显示名的长度上限。⚠ 与服务端 `AssetName` 的 128 同值，两边分叉就是「存不进去却不说为什么」。 */
 const MAX_NAME_LEN = 128
@@ -42,6 +43,7 @@ const emit = defineEmits<{
   download: []
   remove: []
   recompress: []
+  replaced: [asset: Asset]
 }>()
 
 const draft = ref('')
@@ -110,6 +112,12 @@ watch(
           />
         </template>
       </DtInput>
+
+      <AssetReplaceUpload
+        v-if="canManage && asset.kind === 'model'"
+        :asset="asset"
+        @replaced="emit('replaced', $event)"
+      />
 
       <AssetVariantList
         v-if="asset.kind === 'model'"

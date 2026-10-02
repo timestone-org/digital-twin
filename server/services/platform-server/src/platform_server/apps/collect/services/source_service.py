@@ -20,6 +20,7 @@ from platform_server.apps.collect.crud import (
 from platform_server.apps.collect.crud.source import DEFAULT_ORDER, SORTABLE
 from platform_server.apps.collect.errors import (
     SourceCodeTaken,
+    SourceInvalid,
     SourceNotEmpty,
     SourceNotFound,
 )
@@ -44,6 +45,7 @@ from platform_server.apps.collect.services.transactions import (
 )
 
 _logger = get_logger("platform.collect.source")
+MIN_MODBUS_POLL_INTERVAL_MS = 1000
 
 
 @dataclass(frozen=True)
@@ -144,6 +146,13 @@ async def create_source(
     """
     if await source_crud.get_by_code(session, payload.code) is not None:
         raise SourceCodeTaken(f"数据源编码已被占用：{payload.code}")
+    _validate_modbus_profile(
+        payload.protocol,
+        payload.read_mode,
+        payload.poll_interval_ms,
+        payload.username,
+        payload.credential is not None,
+    )
     source = CollectSource(
         name=payload.name,
         code=payload.code,
@@ -184,6 +193,13 @@ async def update_source(
     if "credential" in payload.model_fields_set:
         changes["credential_enc"] = _encrypted(context.cipher, credential)
     source_crud.apply_changes(source, changes)
+    _validate_modbus_profile(
+        source.protocol,
+        source.read_mode,
+        source.poll_interval_ms,
+        source.username,
+        source.credential_enc is not None,
+    )
     await session.flush()
     presented = await _present(session, source, context)
     await _commit(session)
@@ -230,6 +246,25 @@ async def require_source(
     if source is None:
         raise SourceNotFound("数据源不存在")
     return source
+
+
+def _validate_modbus_profile(
+    protocol: str,
+    read_mode: str,
+    poll_interval_ms: int,
+    username: str | None,
+    has_credential: bool,
+) -> None:
+    """拒绝会误导现场或超过 PLC 安全下限的配置。
+
+    Args: protocol, read_mode, poll_interval_ms, username, has_credential。
+    """
+    if protocol != "modbus_tcp":
+        return
+    if read_mode != "poll" or poll_interval_ms < MIN_MODBUS_POLL_INTERVAL_MS:
+        raise SourceInvalid("Modbus TCP 必须轮询，周期不得小于 1000ms")
+    if username is not None or has_credential:
+        raise SourceInvalid("Modbus TCP 不接受账号与口令")
 
 
 async def _commit(session: AsyncSession) -> None:

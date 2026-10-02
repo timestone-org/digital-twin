@@ -10,7 +10,7 @@
  */
 
 /** 已实现的采集协议。第二个驱动进来时后端与这里同时加一项。 */
-export const COLLECT_PROTOCOLS = ['opcua'] as const
+export const COLLECT_PROTOCOLS = ['modbus_tcp', 'opcua'] as const
 export type CollectProtocol = (typeof COLLECT_PROTOCOLS)[number]
 
 /** 订阅还是轮询。驱动不支持订阅时采集运行时自动降级，配置面照原样存。 */

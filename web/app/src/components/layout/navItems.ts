@@ -66,7 +66,7 @@ export const NAV_ITEMS: readonly NavItem[] = [
     children: [
       {
         key: 'collect-opcua',
-        label: 'OPC UA',
+        label: '工业采集',
         icon: 'activity',
         to: '/collect/opcua',
         permission: [PERMISSION_CODES.collectView],

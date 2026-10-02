@@ -94,3 +94,20 @@ def is_public(key: str) -> bool:
     Args: key。
     """
     return key.startswith(PUBLIC_PREFIXES)
+
+
+def revision_key(
+    asset_id: uuid.UUID, revision: uuid.UUID | None, variant: str = "original"
+) -> str:
+    """指定模型内容版本的对象键；空版本兼容已上传的素材。
+
+    Args: asset_id, revision, variant。
+    """
+    if revision is None:
+        return model_variant_key(asset_id, variant)
+    return f"{model_prefix(asset_id)}revisions/{revision}/{variant}"
+
+
+def replacement_key(asset_id: uuid.UUID, upload_id: uuid.UUID) -> str:
+    """绑定目标素材的私有替换暂存键。Args: asset_id, upload_id。"""
+    return f"staging/replacements/{asset_id}/{upload_id}"

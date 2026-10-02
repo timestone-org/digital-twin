@@ -18,6 +18,7 @@ import type { Vec3 } from '@dt/twin-config'
 const ORIGIN: Vec3 = [0, 0, 0]
 
 const api = vi.hoisted(() => ({
+  getAsset: vi.fn(),
   listAssets: vi.fn(),
   listAssetKinds: vi.fn(),
   uploadAsset: vi.fn(),
@@ -99,6 +100,7 @@ beforeEach(() => {
     },
   ])
   api.listAssets.mockResolvedValue([ASSET])
+  api.getAsset.mockResolvedValue({ ...ASSET, variants: [] })
 })
 
 describe('坐标基准', () => {
@@ -280,4 +282,43 @@ describe('摆放', () => {
     expect(lastModel(wrapper).autoRotate).toBe(true)
     expect(model.autoRotate).toBe(false)
   })
+})
+
+it('重新打开已配置模型时显示名称而不是素材引用', async () => {
+  const wrapper = mountModel(makeModel({ asset: ASSET.ref }))
+  await flushPromises()
+  expect(wrapper.text()).toContain('机组.glb')
+  expect(wrapper.text()).not.toContain(ASSET.ref)
+  expect(wrapper.emitted('update:modelValue')).toBeUndefined()
+})
+
+it('切换模型时迟到的名称不会盖过当前模型', async () => {
+  let finish: ((asset: typeof ASSET) => void) | undefined
+  api.getAsset.mockImplementation((id: string) =>
+    id === ID
+      ? new Promise<typeof ASSET>((resolve) => {
+          finish = resolve
+        })
+      : Promise.resolve({ ...ASSET, name: '新模型.glb', variants: [] }),
+  )
+  const wrapper = mountModel(makeModel({ asset: ASSET.ref }))
+  await wrapper.setProps({
+    modelValue: makeModel({
+      asset: 'asset:0192f0aa-0000-7000-8000-000000000002',
+    }),
+  })
+  await flushPromises()
+  finish?.(ASSET)
+  await flushPromises()
+  expect(wrapper.text()).toContain('新模型.glb')
+  expect(wrapper.text()).not.toContain('机组.glb')
+})
+
+it('素材名称查询失败时显示可理解的状态，保留引用不改配置', async () => {
+  api.getAsset.mockRejectedValue(new Error('404'))
+  const wrapper = mountModel(makeModel({ asset: ASSET.ref }))
+  await flushPromises()
+  expect(wrapper.text()).toContain('模型名称暂不可用')
+  expect(wrapper.text()).not.toContain(ASSET.ref)
+  expect(wrapper.emitted('update:modelValue')).toBeUndefined()
 })

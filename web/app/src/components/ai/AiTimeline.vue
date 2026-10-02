@@ -58,27 +58,31 @@ watch(
 <template>
   <div ref="scroller" class="ai-stream">
     <!-- 空态不走 DtEmpty：它的 icon 只收注册名，塞不进这个会动的图标 -->
-    <div v-if="entries.length === 0" class="ai-stream__empty">
-      <AiCoreIcon :size="72" />
-      <p class="ai-stream__empty-title">{{ emptyTitle ?? '说说你想做什么' }}</p>
-      <p
-        v-if="starters === undefined || starters.length === 0"
-        class="ai-stream__empty-hint"
-      >
-        比如「把 1 号机组的温度绑到这个数值卡上」
-      </p>
-      <ul v-else class="ai-stream__starters">
-        <li v-for="one in starters" :key="one">
-          <button
-            type="button"
-            class="ai-stream__starter"
-            @click="emit('starter', one)"
-          >
-            {{ one }}
-          </button>
-        </li>
-      </ul>
-    </div>
+    <slot v-if="entries.length === 0" name="empty">
+      <div class="ai-stream__empty">
+        <AiCoreIcon :size="72" />
+        <p class="ai-stream__empty-title">
+          {{ emptyTitle ?? '说说你想做什么' }}
+        </p>
+        <p
+          v-if="starters === undefined || starters.length === 0"
+          class="ai-stream__empty-hint"
+        >
+          比如「把 1 号机组的温度绑到这个数值卡上」
+        </p>
+        <ul v-else class="ai-stream__starters">
+          <li v-for="one in starters" :key="one">
+            <button
+              type="button"
+              class="ai-stream__starter"
+              @click="emit('starter', one)"
+            >
+              {{ one }}
+            </button>
+          </li>
+        </ul>
+      </div>
+    </slot>
     <ul v-else class="ai-stream__list">
       <template v-for="entry in entries" :key="entry.id">
         <li v-if="entry.role === 'user'" class="ai-said ai-said--mine">

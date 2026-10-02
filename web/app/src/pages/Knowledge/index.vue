@@ -23,6 +23,8 @@ import {
 
 import type { KnowledgeBase, KnowledgeDocument } from '@/api/knowledge'
 import { AppShell } from '@/components/layout'
+import KnowledgeGuide from '@/features/knowledge/components/KnowledgeGuide.vue'
+import KnowledgeMascot from '@/features/knowledge/components/KnowledgeMascot.vue'
 import PermGuard from '@/components/PermGuard.vue'
 import KnowledgeBaseFormDialog from './components/KnowledgeBaseFormDialog.vue'
 import KnowledgeBaseHeader from './components/KnowledgeBaseHeader.vue'
@@ -134,6 +136,7 @@ async function removeDocument(doc: KnowledgeDocument): Promise<void> {
     <!-- ⚠ 这一页必须自己能滚：窄屏（<xl）时左栏、文档表、试验台是竖着堆的，加起来
          必然高过视口，而 AppShell 的 `<main>` 是 overflow-hidden、自己不滚 -->
     <div class="flex h-full min-h-0 flex-col gap-4 overflow-y-auto">
+      <KnowledgeGuide />
       <DtNotice v-if="page.error.value !== ''" intent="danger">
         {{ page.error.value }}
       </DtNotice>
@@ -217,6 +220,7 @@ async function removeDocument(doc: KnowledgeDocument): Promise<void> {
 
           <!-- 未选中库（新建入口在左栏与顶栏，这里只指路） -->
           <DtCard v-else class="flex min-h-0 flex-1 flex-col justify-center">
+            <KnowledgeMascot scene="library" class="mx-auto" />
             <DtEmpty
               icon="folder-open"
               title="选择一个知识库"

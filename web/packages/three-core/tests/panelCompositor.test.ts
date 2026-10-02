@@ -41,6 +41,29 @@ function fixture() {
 afterEach(() => {
   document.body.replaceChildren()
   vi.restoreAllMocks()
+  vi.unstubAllGlobals()
+})
+
+it('没有 randomUUID 时仍能渲染，多个视口的裁剪引用互不干扰', () => {
+  vi.stubGlobal('crypto', {})
+  const first = fixture()
+  const second = fixture()
+  try {
+    first.render()
+    second.render()
+    const firstId = first.compositor.element.querySelector('clipPath')?.id
+    const secondId = second.compositor.element.querySelector('clipPath')?.id
+    expect(firstId).toBeTruthy()
+    expect(secondId).toBeTruthy()
+    expect(firstId).not.toBe(secondId)
+    expect(first.compositor.canvas.style.clipPath).toBe(`url(#${firstId})`)
+    expect(second.compositor.canvas.style.clipPath).toBe(`url(#${secondId})`)
+    expect(first.renderer.renders[0]?.scene).toBe(first.scene)
+    expect(second.renderer.renders[0]?.scene).toBe(second.scene)
+  } finally {
+    first.dispose()
+    second.dispose()
+  }
 })
 
 it('模型只渲染一遍，复制场景缓冲后单独绘制透明深度代理', () => {

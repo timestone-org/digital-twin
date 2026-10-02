@@ -15,12 +15,14 @@ from platform_server.apps.assets.services.compress_queue import (
     CompressMessage,
     dispatch_compression,
 )
+from platform_server.apps.assets.services.replacement import Sessions
 from platform_server.container import Container
 from platform_server.deps import (
     get_caller,
     get_container,
     get_object_store,
     get_session,
+    get_stream,
     require,
 )
 
@@ -65,14 +67,15 @@ class CompressDispatcher:
 def get_compress_dispatcher(
     container: Annotated[Container, Depends(get_container)],
     tasks: BackgroundTasks,
+    stream: Annotated[StreamLike, Depends(get_stream)],
 ) -> CompressDispatcher:
     """装出提交后投递用的那只手。测试用 `dependency_overrides` 换成假件。
 
-    Args: container, tasks。
+    Args: container, tasks, stream。
     """
     settings = container.settings
     return CompressDispatcher(
-        stream=container.stream,
+        stream=stream,
         target=StreamGroup(
             stream=settings.assetcompress_stream,
             group=settings.assetcompress_group,
@@ -81,3 +84,17 @@ def get_compress_dispatcher(
         database=container.database,
         tasks=tasks,
     )
+
+
+def get_asset_sessions(
+    container: Annotated[Container, Depends(get_container)],
+) -> Sessions:
+    """模型替换的短事务入口。Args: container。"""
+    return container.database
+
+
+def get_asset_public_base(
+    container: Annotated[Container, Depends(get_container)],
+) -> str:
+    """浏览器可访问的对象存储前缀。Args: container。"""
+    return container.settings.objectstore_public_base

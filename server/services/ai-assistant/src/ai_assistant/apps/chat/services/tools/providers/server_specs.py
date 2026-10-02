@@ -115,7 +115,7 @@ SERVER_SPECS: tuple[ToolSpec, ...] = (
         description=(
             "按自然语言语义与关键词混合检索采集点位，精确编码优先。"
             "保留设备编号、位置和测量量，如「动力换热2号阀门开度」。"
-            "返回名称、描述、数据源、单位、score与is_exact，按相关性排序。"
+            "返回名称、描述、数据源及协议、单位、score与is_exact，按相关性排序。"
             "读取mode、pending_count和note判断降级或索引未完成；"
             "分数不是正确概率。候选有歧义时补充条件或询问用户，"
             "绑定前用points.detail核对配置。"
