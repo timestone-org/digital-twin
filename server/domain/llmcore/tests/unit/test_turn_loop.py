@@ -484,3 +484,43 @@ async def test_a_written_call_is_not_salvaged_once_the_room_is_gone() -> None:
     # 没跑任何工具，且那一段原样留着——它此刻是模型说的话，不是一次调用
     assert not [one for one in got.steps if one.kind == "server_tool"]
     assert "<tool_call>" in got.reply
+
+
+async def test_salvaged_client_calls_across_turns_have_distinct_ids() -> None:
+    written = AIMessage(
+        content=(
+            "<tool_call><function=user.ask><parameter=question>继续吗？</parameter>"
+            "</function></tool_call>"
+        )
+    )
+    responder = ScriptedResponder(
+        [written, written, AIMessage(content="已完成")]
+    )
+    deps = _deps(responder)
+    first = await run_turn(deps, [])
+    first_id = first.pending[0].call_id
+    first_result = ToolMessage(
+        content='{"picked":["yes"]}', tool_call_id=first_id
+    )
+    second = await run_turn(deps, [*first.messages, first_result])
+    second_id = second.pending[0].call_id
+    assert first_id != second_id
+    second_result = ToolMessage(
+        content='{"picked":["no"]}', tool_call_id=second_id
+    )
+    last = await run_turn(
+        deps, [*first.messages, first_result, *second.messages, second_result]
+    )
+    assert last.reply == "已完成"
+    assert last.pending == ()
+    actual_results = [
+        message
+        for message in responder.asked[-1]
+        if isinstance(message, ToolMessage)
+    ]
+    assert [
+        (message.tool_call_id, message.content) for message in actual_results
+    ] == [
+        (first_id, '{"picked":["yes"]}'),
+        (second_id, '{"picked":["no"]}'),
+    ]
