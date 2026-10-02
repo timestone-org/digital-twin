@@ -15,6 +15,7 @@ from dataclasses import dataclass, field
 from typing import Any
 
 from langchain_core.messages import (
+    AIMessage,
     BaseMessage,
     SystemMessage,
     ToolMessage,
@@ -48,6 +49,7 @@ from ai_assistant.llm import (
     ModelKind,
 )
 from ai_assistant.settings import MAX_HISTORY_MESSAGES
+from lib.errors import ValidationFailed
 from lib.logging import get_logger
 from llmcore.memory import (
     HistoryRow,
@@ -219,10 +221,7 @@ def assemble(
     它与历史窗口锚在同一个台阶上，同一个台阶内两者都逐字不变——挪到别处或者
     每轮现折，它就成了第五个前缀断点（`memory/summarize.py`）。
 
-    ⚠ 尾部**没等到回执的调用要就地补一条失败回执**：上一轮被掐掉、页面被关掉、
-    回执整批被判不合法，都会留下这样一批孤儿，而端点对「有调用没回应」的一段
-    历史一律判 400——不补的话这个会话从此一句都发不出去（`history` 文件头）。
-    补在历史与这一次的输入**之间**：这一次带回来的回执要先认，剩下的才算孤儿。
+    ⚠ 实际回执紧邻所属调用；未收回执只补未知占位，见服务 CONTEXT。
 
     Args: payload, rows（这个会话的全部消息）, plan（会话上的当前计划）。
     """
@@ -232,37 +231,49 @@ def assemble(
             payload.surface_kind, surface_label=payload.surface_label
         )
     )
-    past = history.replay(recent)
-    incoming = _unrecorded_messages(payload, recent)
-    orphans = history.unanswered([*past, *incoming])
+    messages = _adjacent_replies(
+        [*history.replay(recent), *incoming_messages(payload)]
+    )
     return [
         system,
         *summarize.messages_of(summary),
-        *past,
-        *history.fillers(orphans),
-        *incoming,
+        *messages,
         *state_block.messages_of(payload.surface_context, plan),
     ]
 
 
-def _unrecorded_messages(
-    payload: AdvanceInput, recent: Sequence[HistoryRow]
-) -> list[BaseMessage]:
-    """已由回执接口落库的工具文字不重复喂模型，实际截图仍只活这一轮。
+def _adjacent_replies(messages: Sequence[BaseMessage]) -> list[BaseMessage]:
+    """模型视图按调用归属放回执，保留其它消息与截图顺序。
 
-    Args: payload, recent。
+    Args: messages。
     """
-    answered = {
-        row.content_json.get("tool_call_id")
-        for row in recent
-        if row.role == "tool"
-    }
-    return [
-        message
-        for message in incoming_messages(payload)
-        if not isinstance(message, ToolMessage)
-        or message.tool_call_id not in answered
-    ]
+    replies: dict[str, ToolMessage] = {}
+    for message in messages:
+        if isinstance(message, ToolMessage):
+            replies.setdefault(message.tool_call_id, message)
+    ordered: list[BaseMessage] = []
+    seen: set[str] = set()
+    for message in messages:
+        if isinstance(message, ToolMessage):
+            continue
+        ordered.append(message)
+        if not isinstance(message, AIMessage):
+            continue
+        for call in message.tool_calls:
+            call_id = str(call.get("id") or "")
+            if not call_id or call_id in seen:
+                raise ValidationFailed(
+                    "历史工具调用 id 缺失或不唯一，无法安全重放回执"
+                )
+            seen.add(call_id)
+            ordered.append(
+                replies.get(call_id)
+                or ToolMessage(
+                    content="这一步尚无实际回执，执行状态未知；不要自动重试。",
+                    tool_call_id=call_id,
+                )
+            )
+    return ordered
 
 
 @dataclass(frozen=True)

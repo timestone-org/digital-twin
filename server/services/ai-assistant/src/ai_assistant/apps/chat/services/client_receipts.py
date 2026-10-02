@@ -1,5 +1,7 @@
 """实际客户端回执按既有调用 id 结算；不调用模型或执行工具。"""
 
+import hashlib
+import json
 import uuid
 from collections.abc import Sequence
 from datetime import UTC, datetime
@@ -122,8 +124,15 @@ def match_results(
         step = targets[result.call_id]
         if step.state == "awaiting_client":
             matched.append((step, result))
-        elif step.output_json != _output(result) or step.error != result.error:
-            raise ValidationFailed("该调用已有不同回执，不能覆盖实际结果")
+        else:
+            stored = (step.output_json or {}).get("receipt_sha256")
+            if not isinstance(stored, str):
+                raise ValidationFailed(
+                    "该调用已有旧版回执，无法验证完整结果是否相同；"
+                    "请查看历史，不要重新执行操作"
+                )
+            if stored != _fingerprint(result):
+                raise ValidationFailed("该调用已有不同回执，不能覆盖实际结果")
     return matched
 
 
@@ -145,8 +154,20 @@ def _output(result: ClientToolResult) -> dict[str, str]:
             vision.PLACEHOLDER
             if vision.is_image(result.output)
             else result.as_text()
-        )
+        ),
+        "receipt_sha256": _fingerprint(result),
     }
+
+
+def _fingerprint(result: ClientToolResult) -> str:
+    body = json.dumps(
+        {"output": result.output, "error": result.error},
+        ensure_ascii=False,
+        sort_keys=True,
+        separators=(",", ":"),
+        default=str,
+    )
+    return hashlib.sha256(body.encode("utf-8")).hexdigest()
 
 
 def _state(name: str, result: ClientToolResult) -> str:

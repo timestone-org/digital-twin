@@ -10,6 +10,7 @@ import json
 import uuid
 from typing import Any
 
+import pytest
 from langchain_core.messages import (
     HumanMessage,
     SystemMessage,
@@ -25,7 +26,8 @@ from ai_assistant.apps.chat.services.advance_service import (
 )
 from ai_assistant.apps.chat.services.memory import state_block
 from ai_assistant.settings import MAX_TOOL_RESULT_CHARS
-from llmcore.memory import history
+from lib.errors import ValidationFailed
+from llmcore.memory import HistoryRow
 
 SURFACE = "dashboard-editor"
 
@@ -99,10 +101,10 @@ def test_the_block_is_the_last_message_when_tools_report_back() -> None:
     ⚠ 中间插不得：那一批工具消息与它们的调用必须相邻，拆开之后端点直接判
     请求不合法，报出来的 400 与真实原因毫无关系。
     """
-    messages = assemble(payload=_reports(), rows=_rows(4), plan=PLAN)
+    messages = assemble(payload=_reports(), rows=_orphan_rows(), plan=PLAN)
 
     assert "<当前状态" in str(messages[-1].content)
-    assert "绑好了" in str(messages[-2].content)
+    assert any("绑好了" in str(message.content) for message in messages)
 
 
 def test_structured_client_results_are_bounded_json() -> None:
@@ -161,18 +163,13 @@ def _orphan_rows() -> list[ChatMessage]:
 
 
 def test_calls_left_without_an_answer_get_one_before_the_next_turn() -> None:
-    """尾部的孤儿调用补上失败回执，否则这个会话再也发不出一句。
-
-    ⚠ 端点对「有调用没回应」的一段历史一律判 400，而那条 400 与真实原因隔得
-    极远：新开的会话好好的，只有这一个会话怎么发都不行。
-    """
+    """无回执项只在模型视图中补未知占位，不能伪造失败或触发重试。"""
     said = assemble(payload=_speaks("继续"), rows=_orphan_rows(), plan=None)
 
     filled = [
         one
         for one in said
-        if isinstance(one, ToolMessage)
-        and str(one.content) == history.NO_REPLY_TEXT
+        if isinstance(one, ToolMessage) and "执行状态未知" in str(one.content)
     ]
     assert [one.tool_call_id for one in filled] == ["c1", "c3"]
     # 补的那两条要排在这一次的发话**前面**：夹在后面等于调用与回应被隔开
@@ -199,7 +196,157 @@ def test_the_answers_carried_by_this_very_request_are_not_orphans() -> None:
     said = assemble(payload=payload, rows=_orphan_rows(), plan=None)
 
     assert all(
-        str(one.content) != history.NO_REPLY_TEXT
+        "执行状态未知" not in str(one.content)
         for one in said
         if isinstance(one, ToolMessage)
     )
+
+
+def test_late_receipts_follow_the_original_call_in_model_history() -> None:
+    rows = [
+        HistoryRow(role="user", seq=1, content_json={"text": "旧要求"}),
+        HistoryRow(
+            role="assistant",
+            seq=2,
+            content_json={
+                "text": "",
+                "tool_calls": [
+                    {"id": "old-call", "name": "dashboard.save", "args": {}}
+                ],
+            },
+        ),
+        HistoryRow(role="user", seq=3, content_json={"text": "新要求"}),
+        HistoryRow(role="assistant", seq=4, content_json={"text": "新回复"}),
+        HistoryRow(
+            role="tool",
+            seq=5,
+            content_json={"tool_call_id": "old-call", "text": "实际保存结果"},
+        ),
+    ]
+    messages = assemble(
+        payload=AdvanceInput(surface_kind="dashboard-editor", user_text="继续"),
+        rows=rows,
+        plan=None,
+    )
+    assert [(message.type, message.content) for message in messages[1:]] == [
+        ("human", "旧要求"),
+        ("ai", ""),
+        ("tool", "实际保存结果"),
+        ("human", "新要求"),
+        ("ai", "新回复"),
+        ("human", "继续"),
+    ]
+    assert isinstance(messages[3], ToolMessage)
+    assert messages[3].tool_call_id == "old-call"
+
+
+def test_window_excludes_receipts_whose_call_is_no_longer_in_view(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    monkeypatch.setattr(
+        "ai_assistant.apps.chat.services.advance_service.MAX_HISTORY_MESSAGES",
+        2,
+    )
+    rows = [
+        HistoryRow(
+            role="assistant",
+            seq=1,
+            content_json={
+                "text": "",
+                "tool_calls": [
+                    {"id": "old", "name": "dashboard.save", "args": {}}
+                ],
+            },
+        ),
+        HistoryRow(role="user", seq=2, content_json={"text": "新要求"}),
+        HistoryRow(role="assistant", seq=3, content_json={"text": "新回复"}),
+        HistoryRow(
+            role="tool",
+            seq=4,
+            content_json={"tool_call_id": "old", "text": "实际结果"},
+        ),
+    ]
+    messages = assemble(
+        payload=AdvanceInput(surface_kind="dashboard-editor", user_text="继续"),
+        rows=rows,
+        plan=None,
+    )
+    assert not any(isinstance(message, ToolMessage) for message in messages)
+    assert messages[-1].content == "继续"
+
+
+@pytest.mark.parametrize("ids", [("",), ("a", "a")])
+def test_ambiguous_call_ownership_cannot_replay_a_receipt(
+    ids: tuple[str, ...],
+) -> None:
+    rows = [
+        HistoryRow(
+            role="assistant",
+            seq=index,
+            content_json={
+                "text": "",
+                "tool_calls": [
+                    {"id": call_id, "name": "dashboard.save", "args": {}}
+                ],
+            },
+        )
+        for index, call_id in enumerate(ids, start=1)
+    ]
+    with pytest.raises(ValidationFailed, match="无法安全重放"):
+        assemble(
+            payload=AdvanceInput(
+                surface_kind="dashboard-editor", user_text="继续"
+            ),
+            rows=rows,
+            plan=None,
+        )
+
+
+def test_multiple_batches_attach_incoming_results_to_their_own_call() -> None:
+    rows = [
+        HistoryRow(
+            role="assistant",
+            seq=1,
+            content_json={
+                "text": "第一批",
+                "tool_calls": [
+                    {"id": one, "name": "dashboard.save", "args": {}}
+                    for one in ("a", "b")
+                ],
+            },
+        ),
+        HistoryRow(role="user", seq=2, content_json={"text": "下一批"}),
+        HistoryRow(
+            role="assistant",
+            seq=3,
+            content_json={
+                "text": "第二批",
+                "tool_calls": [
+                    {"id": "c", "name": "dashboard.save", "args": {}}
+                ],
+            },
+        ),
+        HistoryRow(
+            role="tool",
+            seq=4,
+            content_json={"tool_call_id": "c", "text": "第三项"},
+        ),
+        HistoryRow(
+            role="tool",
+            seq=5,
+            content_json={"tool_call_id": "a", "text": "第一项"},
+        ),
+    ]
+    payload = AdvanceInput(
+        surface_kind="dashboard-editor",
+        tool_results=[ClientToolResult(call_id="b", output="第二项")],
+    )
+    messages = assemble(payload=payload, rows=rows, plan=None)
+    assert [(message.type, message.content) for message in messages[1:]] == [
+        ("ai", "第一批"),
+        ("tool", "第一项"),
+        ("tool", "第二项"),
+        ("human", "下一批"),
+        ("ai", "第二批"),
+        ("tool", "第三项"),
+    ]
