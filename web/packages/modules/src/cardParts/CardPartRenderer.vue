@@ -115,7 +115,7 @@ const excuse = computed<string | null>(() => {
   />
 </template>
 
-<style scoped>
+<style scoped lang="scss">
 .cp-fallback {
   display: inline-flex;
   align-items: center;

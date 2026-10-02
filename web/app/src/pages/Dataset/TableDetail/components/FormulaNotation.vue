@@ -170,7 +170,7 @@ const refTitle = computed(() => {
   <span v-else class="nt-hole" title="这个记号本界面还认不出来">?</span>
 </template>
 
-<style scoped>
+<style scoped lang="scss">
 /* 全部 inline-flex 垂直居中：分式、聚合这类「高块」出现时兄弟项对齐到它的
    中线，整条式子始终像一行数学式而不是错位的文字流 */
 .nt-row {

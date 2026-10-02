@@ -189,7 +189,7 @@ function briefOf(fn: DatasetCatalogFunction): string {
   </details>
 </template>
 
-<style scoped>
+<style scoped lang="scss">
 /* 抬头写成类名而不是一串工具类：理由见 FormulaToolbox 里同名的那一条 */
 .ftb-head {
   color: var(--text-disabled);

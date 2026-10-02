@@ -44,7 +44,7 @@ const style = computed<CSSProperties>(() => {
   />
 </template>
 
-<style scoped>
+<style scoped lang="scss">
 .dc-rule {
   display: block;
   width: 100%;

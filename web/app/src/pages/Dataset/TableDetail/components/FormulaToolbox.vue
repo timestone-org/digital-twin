@@ -183,7 +183,7 @@ function insertColumn(key: string): void {
   </div>
 </template>
 
-<style scoped>
+<style scoped lang="scss">
 /* 栏目抬头写成类名而不是一串工具类：一行装不下时 prettier 会把闭合尖括号折到
    下一行，而结构闸的闭合标签正则认不出那种写法 */
 .ftb-head {

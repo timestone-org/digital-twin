@@ -186,7 +186,7 @@ const paint = computed(() => paintIco(props.prim, props.ctx))
   </svg>
 </template>
 
-<style scoped>
+<style scoped lang="scss">
 /* ⚠ `<svg>` 与 `<img>` 的 UA 缺省是行内元素，基线会在盒底留一条缝，看着像「图标没对齐」 */
 .t2-glyph {
   display: block;
