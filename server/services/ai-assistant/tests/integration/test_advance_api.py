@@ -7,10 +7,11 @@
 
 import json
 import uuid
+from collections.abc import Sequence
 from typing import Any
 
 import pytest
-from langchain_core.messages import AIMessage, ToolMessage
+from langchain_core.messages import AIMessage, BaseMessage, ToolMessage
 
 from ai_assistant.apps.chat.catalog import ASSISTANT_USE
 from ai_assistant.apps.chat.services.perception import vision
@@ -65,25 +66,7 @@ async def test_late_partial_receipt_replays_adjacent_preserving_database_order(
     )
     assert response.status_code == 200
     await _advance(db_stack.client, session_id, user_text="继续")
-    seen = model.seen[-1]
-    call_at = next(
-        index
-        for index, message in enumerate(seen)
-        if isinstance(message, AIMessage) and message.tool_calls
-    )
-    answers = seen[call_at + 1 : call_at + 3]
-    assert all(isinstance(message, ToolMessage) for message in answers)
-    assert [message.content for message in answers] == [
-        "实际草稿结果",
-        "这一步尚无实际回执，执行状态未知；不要自动重试。",
-    ]
-    assert (
-        sum(
-            isinstance(message, ToolMessage) and message.tool_call_id == "a"
-            for message in seen
-        )
-        == 1
-    )
+    _assert_adjacent_partial_replies(model.seen[-1])
     detail = await db_stack.client.get(f"{SESSIONS_URL}/{session_id}")
     messages = detail.json()["data"]["messages"]
     assert [message["role"] for message in messages] == [
@@ -103,6 +86,28 @@ async def test_late_partial_receipt_replays_adjacent_preserving_database_order(
     ]
     assert [step["state"] for step in steps] == ["succeeded", "awaiting_client"]
     assert "执行状态未知" not in json.dumps(messages, ensure_ascii=False)
+
+
+def _assert_adjacent_partial_replies(seen: Sequence[BaseMessage]) -> None:
+    """断言实际回执与未知占位邻接且不重复。Args: seen。"""
+    call_at = next(
+        index
+        for index, message in enumerate(seen)
+        if isinstance(message, AIMessage) and message.tool_calls
+    )
+    answers = seen[call_at + 1 : call_at + 3]
+    assert all(isinstance(message, ToolMessage) for message in answers)
+    assert [message.content for message in answers] == [
+        "实际草稿结果",
+        "这一步尚无实际回执，执行状态未知；不要自动重试。",
+    ]
+    assert (
+        sum(
+            isinstance(message, ToolMessage) and message.tool_call_id == "a"
+            for message in seen
+        )
+        == 1
+    )
 
 
 async def test_a_plain_answer_streams_a_step_then_done(
