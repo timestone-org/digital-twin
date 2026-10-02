@@ -36,6 +36,7 @@ import RunControls from './components/RunControls.vue'
 import RunHistory from './components/RunHistory.vue'
 import ShortcutsHelp from './components/ShortcutsHelp.vue'
 import { cascadeFrom } from './scripts/nodeLayout'
+import { confirmReplay } from './scripts/confirmReplay'
 import { progressOf } from './scripts/runProgress'
 import type { CanvasPoint } from './scripts/useCanvasViewport'
 import { defaultsOf, fieldsOf } from './scripts/schemaForm'
@@ -187,6 +188,8 @@ async function runOnce(): Promise<void> {
  * 而刷新一下就回到编辑态了。
  */
 async function pickRun(runId: string): Promise<void> {
+  if (!(await confirmReplay(page.graph.isDirty.value, page.isReplaying.value)))
+    return
   isHistoryOpen.value = false
   await router.replace({ query: { ...route.query, run_id: runId } })
   await page.replay(runId)

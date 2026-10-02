@@ -17,10 +17,14 @@
  *
  * ⚠ `user.ask` 必须**单独成一批**，理由见 `ASK_MUST_BE_ALONE`。
  */
-import type { AssistantDeltaChannel, AssistantToolCall } from '@dt/contracts'
+import type {
+  AssistantDeltaChannel,
+  AssistantToolCall,
+  AssistantToolResult,
+} from '@dt/contracts'
 import { ASSISTANT_ASK_TOOL } from '@dt/contracts'
 
-import { createFrameReader } from './sseFrames'
+import { createFrameReader, type FrameReader } from './sseFrames'
 import { inputPreview, isImageOutput, outputPreview } from './stepPreview'
 
 /**
@@ -69,11 +73,7 @@ export interface LoopSink {
 }
 
 /** 一次回填的一条结果。 */
-export interface ToolResult {
-  call_id: string
-  output?: unknown
-  error?: string | null
-}
+export type ToolResult = AssistantToolResult
 
 /** 任何门面的请求体都至少有这三格：发话、随话的图、回填。 */
 export interface LoopBody {
@@ -94,6 +94,10 @@ export interface LoopInput<Body extends LoopBody> {
     body: Body,
     signal?: AbortSignal,
   ) => AsyncGenerator<string>
+  /** 单独保存已执行回执，不续推模型；缺席时沿用旧协议。 */
+  saveReceipts?:
+    | ((sessionId: string, results: readonly ToolResult[]) => Promise<void>)
+    | undefined
   sessionId: string
   /**
    * 每一轮都要带的那几格（在哪一页、自报了哪些工具……），不含发话与回填。
@@ -126,28 +130,82 @@ export async function runLoop<Body extends LoopBody>(
   input: LoopInput<Body>,
   sink: LoopSink,
 ): Promise<void> {
+  if (isCancelled(input.signal)) return
   // ⚠ 图只随第一帧走：后面每一帧都是工具回填，而回填不许夹带图
-  let body: Body = {
-    ...input.envelope(),
-    user_text: input.userText,
-    ...(input.userImages?.length ? { user_images: input.userImages } : {}),
-  }
+  let body = firstBody(input)
   for (let round = 0; round < input.maxRounds; round += 1) {
-    const outcome = await pump(input, body, sink)
-    if (outcome.kind === 'error') return
+    if (isCancelled(input.signal)) return
+    const outcome = await pumpUnlessCancelled(input, body, sink)
+    if (outcome.kind === 'error' || isCancelled(input.signal)) return
     if (outcome.kind === 'pending') {
-      const results = await runAll(outcome.calls, input.dispatch, sink)
+      const results = await runAll(
+        outcome.calls,
+        input.dispatch,
+        sink,
+        input.signal,
+      )
+      if (!(await saveActualReceipts(input, results, sink))) return
+      if (isCancelled(input.signal)) return
       body = { ...input.envelope(), tool_results: results }
       continue
     }
-    const nudge = input.nudge?.() ?? null
-    if (nudge === null) return
-    sink.onNote(nudge.note)
-    body = { ...input.envelope(), user_text: nudge.text }
+    const next = nudgeBody(input, sink)
+    if (next === null) return
+    body = next
   }
   sink.onError(
     `助手来回了 ${input.maxRounds} 轮还没做完，先停下了。说一句「继续」就接着做。`,
   )
+}
+
+async function saveActualReceipts<Body extends LoopBody>(
+  input: LoopInput<Body>,
+  results: readonly ToolResult[],
+  sink: LoopSink,
+): Promise<boolean> {
+  if (results.length === 0 || input.saveReceipts === undefined) return true
+  try {
+    await input.saveReceipts(input.sessionId, results)
+    return true
+  } catch {
+    sink.onError('执行结果未保存到历史，请检查连接；已执行的操作不会自动重试。')
+    return false
+  }
+}
+
+function isCancelled(signal?: AbortSignal): boolean {
+  return signal?.aborted === true
+}
+
+function firstBody<Body extends LoopBody>(input: LoopInput<Body>): Body {
+  return {
+    ...input.envelope(),
+    user_text: input.userText,
+    ...(input.userImages?.length ? { user_images: input.userImages } : {}),
+  }
+}
+
+function nudgeBody<Body extends LoopBody>(
+  input: LoopInput<Body>,
+  sink: LoopSink,
+): Body | null {
+  const nudge = input.nudge?.() ?? null
+  if (nudge === null) return null
+  sink.onNote(nudge.note)
+  return { ...input.envelope(), user_text: nudge.text }
+}
+
+async function pumpUnlessCancelled<Body extends LoopBody>(
+  input: LoopInput<Body>,
+  body: Body,
+  sink: LoopSink,
+): Promise<PumpOutcome> {
+  try {
+    return await pump(input, body, sink)
+  } catch (error) {
+    if (isCancelled(input.signal)) return { kind: 'error' }
+    throw error
+  }
 }
 
 /** 一次收流的结果。 */
@@ -166,18 +224,29 @@ async function pump<Body extends LoopBody>(
   let pending: readonly AssistantToolCall[] | null = null
   const stream = input.advance(input.sessionId, body, input.signal)
   for await (const chunk of stream) {
+    if (isCancelled(input.signal)) return { kind: 'error' }
     for (const frame of reader.push(chunk)) {
+      if (isCancelled(input.signal)) return { kind: 'error' }
       pending = handle(frame.name, frame.data, sink, input) ?? pending
       if (frame.name === 'turn.done') return { kind: 'done' }
       if (frame.name === 'error') return { kind: 'error' }
     }
   }
+  return flushPump(input, reader, sink, pending)
+}
+
+function flushPump<Body extends LoopBody>(
+  input: LoopInput<Body>,
+  reader: FrameReader,
+  sink: LoopSink,
+  pending: readonly AssistantToolCall[] | null,
+): PumpOutcome {
+  let calls = pending
   for (const frame of reader.flush()) {
-    pending = handle(frame.name, frame.data, sink, input) ?? pending
+    if (isCancelled(input.signal)) return { kind: 'error' }
+    calls = handle(frame.name, frame.data, sink, input) ?? calls
   }
-  return pending === null
-    ? { kind: 'done' }
-    : { kind: 'pending', calls: pending }
+  return calls === null ? { kind: 'done' } : { kind: 'pending', calls }
 }
 
 function handle<Body extends LoopBody>(
@@ -218,11 +287,14 @@ async function runAll(
   calls: readonly AssistantToolCall[],
   dispatch: (call: AssistantToolCall) => Promise<unknown>,
   sink: LoopSink,
+  signal?: AbortSignal,
 ): Promise<ToolResult[]> {
   const results: ToolResult[] = []
   const steps: RunnerStep[] = []
   const isMixedBatch = calls.some(isAsk) && calls.length > 1
   for (const call of calls) {
+    // ⚠ 取消无法撤回已执行工具，但必须拦住后续工具并保留实际回执。
+    if (isCancelled(signal)) break
     if (isMixedBatch && !isAsk(call)) {
       results.push({ call_id: call.call_id, error: ASK_MUST_BE_ALONE })
       steps.push(stepOf(call, undefined, ASK_MUST_BE_ALONE))

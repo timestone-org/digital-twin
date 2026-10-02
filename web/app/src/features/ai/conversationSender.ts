@@ -80,6 +80,7 @@ function inputOf(
   const where = parts.surface()
   return {
     advance,
+    saveReceipts: aiPorts()?.saveReceipts,
     sessionId,
     surfaceKind: where.kind,
     surfaceLabel: where.label,

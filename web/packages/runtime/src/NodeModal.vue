@@ -121,7 +121,7 @@ function onKeydown(event: KeyboardEvent): void {
   </div>
 </template>
 
-<style scoped>
+<style scoped lang="scss">
 /* 浮层铺满舞台（舞台是定位上下文）；z-index 只需压过节点的 zIndex 量级 */
 .dt-node-modal {
   position: absolute;

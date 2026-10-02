@@ -23,6 +23,7 @@ export const TWIN_2D_AI_STARTERS: readonly string[] = [
   '把我选中的这几个节点接到对应的点位',
   '照着这一台，把另一台的点位接一遍',
   '这张图现在有几行没接上？都在等什么',
+  '把1号水箱的标题改成冷水箱，并检查配置',
 ]
 
 /**
@@ -41,6 +42,11 @@ export function useTwin2dAi(
     surface: () =>
       createTwin2dSurface({
         config: () => page.doc.value?.config.value ?? null,
+        patchConfig: (next) => {
+          const doc = page.doc.value
+          if (doc === null) throw new Error('二维孪生配置还没读出来')
+          doc.commit(next)
+        },
         bindings: () => binding.bindings.value,
         write: binding.write,
         drop: binding.drop,

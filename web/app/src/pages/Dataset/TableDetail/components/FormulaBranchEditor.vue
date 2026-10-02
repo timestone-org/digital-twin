@@ -253,7 +253,7 @@ function moveArm(at: number, delta: -1 | 1): void {
   </div>
 </template>
 
-<style scoped>
+<style scoped lang="scss">
 /* 抬头与「当 / 取」写成类名而不是一串工具类：一行装不下时 prettier 会把闭合
    尖括号折到下一行，而结构闸的闭合标签正则认不出那种写法 */
 .fb-head {

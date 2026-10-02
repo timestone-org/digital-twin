@@ -75,7 +75,7 @@ const boxStyle = computed(() => ({
   </div>
 </template>
 
-<style scoped>
+<style scoped lang="scss">
 .ce-stage--screen {
   background: var(--surface-base);
 }

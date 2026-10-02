@@ -117,6 +117,12 @@ const dialectHint = computed(
 
 /** 端点那几格只在这一形态真要它们时才摆。 */
 const hasEndpoint = computed(() => kind.value?.is_endpoint_required !== false)
+const mustSaveBeforeProbe = computed(
+  () =>
+    props.provider !== null &&
+    form.value.apiKey.trim() === '' &&
+    form.value.baseUrl.trim() !== (props.provider.base_url ?? '').trim(),
+)
 // ⚠ 摆不摆的判断写成 computed 而不是模板里的表达式：模板里出现 `>` 会把
 // 嵌套层数那道闸的标签匹配截断，报出来的是一句「嵌套 7 层」，指不回这里
 const hasPresets = computed(
@@ -182,6 +188,7 @@ function setKind(index: number, kind: string): void {
 }
 
 async function onProbe(): Promise<void> {
+  if (mustSaveBeforeProbe.value) return
   probing.value = true
   probe.value = null
   error.value = null
@@ -317,12 +324,16 @@ async function onSubmit(): Promise<void> {
           intent="neutral"
           size="sm"
           :loading="probing"
+          :disabled="mustSaveBeforeProbe"
           @click="onProbe"
         >
           测试连接
         </DtButton>
         <DtSwitch v-model="form.isEnabled" label="启用" size="sm" />
       </div>
+      <DtNotice v-if="hasEndpoint && mustSaveBeforeProbe" intent="info">
+        端点地址已修改，请先保存后再测试连接；也可填写新密钥测试当前表单。
+      </DtNotice>
       <DtNotice v-if="probe" :intent="probe.isOk ? 'success' : 'warning'">
         {{ probe.message }}
       </DtNotice>

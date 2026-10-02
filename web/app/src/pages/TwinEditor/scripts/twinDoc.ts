@@ -51,8 +51,8 @@ export interface TwinDoc {
   commitBindings: (next: readonly BindingPayload[], mergeKey?: string) => void
   undo: () => void
   redo: () => void
-  /** 保存成功后调；当前这一帧成为新的「干净」基准。 */
-  markSaved: () => void
+  /** 保存成功后调；以实际发送的帧为基准，省略时使用当前帧。 */
+  markSaved: (snapshot?: TwinFrame) => void
 }
 
 /**
@@ -62,6 +62,8 @@ export interface TwinDoc {
  */
 function pushFrame(history: History, frame: TwinFrame): void {
   const { frames, index, savedIndex } = history
+  // 已保存帧若在被丢弃的重做分支里，同下标的新帧仍是未保存的。
+  if (savedIndex.value > index.value) savedIndex.value = -1
   const kept = frames.value.slice(0, index.value + 1)
   kept.push(frame)
   const overflow = Math.max(0, kept.length - TWIN_HISTORY_LIMIT)
@@ -118,6 +120,24 @@ function frameOf(previous: TwinFrame, next: TwinConfig): TwinFrame {
   }
 }
 
+/** 切换历史帧，并结束当前连续动作。 */
+function moveHistory(history: History, delta: number): void {
+  history.mergeKey = null
+  history.index.value = Math.max(
+    0,
+    Math.min(history.frames.value.length - 1, history.index.value + delta),
+  )
+}
+
+/** 保存的是发送时的帧；等待期间的新改动仍保持未保存。 */
+function markSavedFrame(history: History, snapshot: TwinFrame): void {
+  history.mergeKey = null
+  history.savedIndex.value = history.frames.value.findIndex(
+    (frame) =>
+      frame.config === snapshot.config && frame.bindings === snapshot.bindings,
+  )
+}
+
 /**
  * 造一份文档态。
  * @param initial 从节点上读出来的配置与绑定
@@ -138,7 +158,7 @@ export function createTwinDoc(initial: TwinFrame): TwinDoc {
   return {
     config: computed(() => current.value.config),
     bindings: computed(() => current.value.bindings),
-    // savedIndex 为负 = 那一帧已被撤销栈挤掉，此后一律算脏
+    // savedIndex 为负 = 已保存帧不在撤销栈里，此后一律算脏
     isDirty: computed(() => index.value !== savedIndex.value),
     canUndo: computed(() => index.value > 0),
     canRedo: computed(() => index.value < frames.value.length - 1),
@@ -171,16 +191,10 @@ export function createTwinDoc(initial: TwinFrame): TwinDoc {
       )
     },
 
-    undo: () => {
-      if (index.value > 0) index.value -= 1
-    },
+    undo: () => moveHistory(history, -1),
 
-    redo: () => {
-      if (index.value < frames.value.length - 1) index.value += 1
-    },
+    redo: () => moveHistory(history, 1),
 
-    markSaved: () => {
-      savedIndex.value = index.value
-    },
+    markSaved: (snapshot = current.value) => markSavedFrame(history, snapshot),
   }
 }

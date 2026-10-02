@@ -125,3 +125,28 @@ describe('能力探测', () => {
     await expect(assistant.probeCapability()).resolves.toBeNull()
   })
 })
+
+describe('真实客户端回执单独提交', () => {
+  it('使用助手非流式接口且不绑定已取消的回合信号', async () => {
+    requestMock.mockResolvedValue({ accepted_call_ids: ['a'] })
+    await assistant.saveToolReceipts('s1', [
+      { call_id: 'a', output: { is_saved: false } },
+    ])
+    const [path, options] = call()
+    expect(path).toBe('/sessions/s1:receipts')
+    expect(options.baseUrl).toBe(ASSISTANT_BASE_URL)
+    expect(options.method).toBe('POST')
+    expect(options.body).toEqual({
+      tool_results: [{ call_id: 'a', output: { is_saved: false } }],
+    })
+    expect(options.signal).toBeUndefined()
+    expect(streamMock).not.toHaveBeenCalled()
+  })
+
+  it('服务端没有确认所有call_id则拒绝宣称已保存', async () => {
+    requestMock.mockResolvedValue({ accepted_call_ids: [] })
+    await expect(
+      assistant.saveToolReceipts('s1', [{ call_id: 'a', error: '保存冲突' }]),
+    ).rejects.toThrow('未确认全部工具回执')
+  })
+})

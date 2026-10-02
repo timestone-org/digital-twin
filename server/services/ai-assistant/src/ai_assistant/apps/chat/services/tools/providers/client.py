@@ -15,6 +15,7 @@ from ai_assistant.apps.chat.services.tools.providers.client_specs import (
     look,
     report,
     twin,
+    twin2d,
 )
 from llmcore.tools.ports import RunsElsewhere
 from llmcore.tools.shapes import ToolSpec
@@ -37,6 +38,7 @@ class ClientTools:
             + twin.TWIN_SPECS
             + interaction.INTERACTION_SPECS
             + look.LOOK_SPECS
+            + twin2d.TWIN2D_SPECS
         )
 
     async def run(self, name: str, arguments: dict[str, Any]) -> Any:

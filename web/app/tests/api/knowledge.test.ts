@@ -130,6 +130,23 @@ describe('知识库面的前缀', () => {
   })
 })
 
+describe('检索取消', () => {
+  it('检索透传取消信号，保留原请求路径与策略', async () => {
+    const controller = new AbortController()
+    requestData.mockResolvedValue({ hits: [], strategy: 'hybrid', note: '' })
+    await knowledge.searchBase('b1', '锅炉', 'hybrid', controller.signal)
+    expect(lastCall(requestData)).toEqual([
+      '/knowledge-bases/b1:search',
+      expect.objectContaining({
+        baseUrl: KNOWLEDGE_PREFIX,
+        method: 'POST',
+        body: { query: '锅炉', limit: 8, strategy: 'hybrid' },
+        signal: controller.signal,
+      }),
+    ])
+  })
+})
+
 describe('两个 204 的端点', () => {
   it('删库走 request 而不是 requestData', async () => {
     // ⚠ 204 没有响应体，`requestData` 见 null 就抛「服务端未返回数据」——
@@ -250,5 +267,45 @@ describe('取原件', () => {
     expect(lastCall(requestBytes)[0]).toBe('/documents/d1/preview')
     expect(lastCall(requestBytes)[1].baseUrl).toBe(KNOWLEDGE_PREFIX)
     expect(lastCall(requestBytes)[1].signal).toBe(controller.signal)
+  })
+})
+
+describe('来源创建与竞态信号', () => {
+  it('创建仅提交已声明的平台配置字段到所属库', async () => {
+    requestData.mockResolvedValue({
+      id: 's1',
+      base_id: 'b1',
+      kind: 'platform',
+      name: '台账',
+      config: { path: '/api/v1/platform/tables' },
+    })
+    const config = {
+      path: '/api/v1/platform/tables',
+      id_field: 'row_id',
+      title_field: '',
+      page_param: 'page',
+      size_param: 'size',
+    }
+    const made = await knowledge.createSource('b1', {
+      kind: 'platform',
+      name: '台账',
+      config,
+    })
+    expect(lastCall(requestData)).toEqual([
+      '/knowledge-bases/b1/sources',
+      {
+        baseUrl: KNOWLEDGE_PREFIX,
+        method: 'POST',
+        body: { kind: 'platform', name: '台账', config },
+      },
+    ])
+    expect(made.config.path).toBe(config.path)
+  })
+
+  it('来源列表透传中止信号', async () => {
+    requestData.mockResolvedValue([])
+    const signal = new AbortController().signal
+    await knowledge.listSources('b1', signal)
+    expect(lastCall(requestData)[1].signal).toBe(signal)
   })
 })

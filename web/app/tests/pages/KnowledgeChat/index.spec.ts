@@ -95,6 +95,7 @@ function capabilityOf(isAsrEnabled: boolean): KnowledgeCapability {
     isEmbeddingEnabled: true,
     isModelEnabled: true,
     isAsrEnabled,
+    sourceKinds: [],
     strategies: ['naive', 'hybrid', 'agentic'],
     readyStrategies: ['naive', 'hybrid', 'agentic'],
     acceptedSuffixes: ['.md', '.docx'],

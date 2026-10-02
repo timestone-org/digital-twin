@@ -70,21 +70,45 @@ defineEmits<{
     }"
   >
     <template #toolbar><slot name="toolbar" /></template>
-    <template #cell-name="{ row }">{{ row.name }}</template>
+    <template #cell-name="{ row }">
+      <span class="block truncate" :title="row.name">{{ row.name }}</span>
+    </template>
     <template #cell-code="{ row }">
       <code class="dt-ml-deploys__code" :title="row.code">{{ row.code }}</code>
     </template>
     <template #cell-model="{ row }">
-      {{ row.model_name }} v{{ row.model_version }}
+      <span
+        class="block truncate"
+        :title="`${row.model_name} v${row.model_version}`"
+      >
+        {{ row.model_name }} v{{ row.model_version }}
+      </span>
     </template>
     <template #cell-state="{ row }">
-      <span class="dt-ml-deploys__state">
-        <DtTag v-if="!row.is_enabled" intent="neutral" size="sm">已停用</DtTag>
-        <DtTag v-else-if="row.is_servable" intent="success" size="sm">
+      <span class="dt-ml-deploys__state max-w-full">
+        <DtTag
+          v-if="!row.is_enabled"
+          class="shrink-0"
+          intent="neutral"
+          size="sm"
+        >
+          已停用
+        </DtTag>
+        <DtTag
+          v-else-if="row.is_servable"
+          class="shrink-0"
+          intent="success"
+          size="sm"
+        >
           在服务
         </DtTag>
-        <DtTag v-else intent="danger" size="sm">版本不可用</DtTag>
-        <span v-if="!row.is_servable" class="dt-ml-deploys__why">
+        <DtTag v-else class="shrink-0" intent="danger" size="sm"
+          >版本不可用</DtTag
+        >
+        <span
+          v-if="!row.is_servable"
+          class="dt-ml-deploys__why min-w-0 [overflow-wrap:anywhere]"
+        >
           {{ row.unservable_reason }}
         </span>
       </span>
