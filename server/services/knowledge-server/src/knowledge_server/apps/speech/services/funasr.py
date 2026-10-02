@@ -164,7 +164,18 @@ async def open_leg(config: FunAsrConfig, *, wav_name: str) -> "FunAsrLeg":
         )
         raise AsrUnavailable(ASR_UNREACHABLE) from error
     leg = FunAsrLeg(connection, tail_silence_s=config.tail_silence_s)
-    await leg.send_text(json.dumps(init_message(config, wav_name)))
+    try:
+        await leg.send_text(json.dumps(init_message(config, wav_name)))
+    except BaseException:
+        try:
+            await leg.aclose()
+        except BaseException as cleanup_error:
+            _logger.warning(
+                "speech_asr_init_cleanup_failed",
+                "语音连接初始化失败后的关闭也失败",
+                error_type=type(cleanup_error).__name__,
+            )
+        raise
     return leg
 
 
@@ -222,7 +233,12 @@ class FunAsrLeg:
         return self._stitcher.text()
 
     async def aclose(self) -> None:
-        await self._connection.close()
+        try:
+            await self._connection.close()
+        except BaseException:
+            # ⚠ 取消会打断关闭握手，须同步终止 transport 释放 socket。
+            self._connection.transport.abort()
+            raise
 
     async def _next(self) -> Transcript:
         while True:
