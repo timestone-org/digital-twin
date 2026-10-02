@@ -21,10 +21,16 @@ import { AppShell } from '@/components/layout'
 import PermGuard from '@/components/PermGuard.vue'
 import { useAsyncList, describeError } from '@/composables/useAsyncList'
 import { useViewMode } from '@/composables/useViewMode'
+import EditScheduleDialog from './components/EditScheduleDialog.vue'
+import {
+  emptyScheduleErrors,
+  validateScheduleFields,
+} from './scripts/scheduleForm'
 
 const COLUMNS: readonly DtDataColumn[] = [
   { key: 'name', label: '规则名称', card: 'title' },
   { key: 'granularity', label: '周期' },
+  { key: 'delay', label: '期末延迟' },
   { key: 'enabled', label: '状态' },
   { key: 'last', label: '已生成至' },
   { key: 'actions', label: '操作', card: 'actions' },
@@ -35,11 +41,17 @@ const list = useAsyncList<ReportSchedule>((query) =>
 const view = useViewMode('report-schedules')
 const runtime = ref<boolean | null>(null)
 const isOpen = ref(false)
+const isCreating = ref(false)
+const createError = ref('')
+const fieldErrors = ref(emptyScheduleErrors())
+const editing = ref<ReportSchedule | null>(null)
+const isEditOpen = ref(false)
 const name = ref('')
 const templateId = ref('')
 const delay = ref('24')
 const templates = ref<ReportTemplateSummary[]>([])
 const error = ref('')
+const busyIds = ref<string[]>([])
 const confirm = useConfirm()
 const CREATE_LABEL = '新建规则'
 const options = computed(() =>
@@ -56,22 +68,48 @@ onMounted(async () => {
 })
 async function create(): Promise<void> {
   const template = templates.value.find((row) => row.id === templateId.value)
-  if (!template) return
+  if (isCreating.value || !template) return
+  const checked = validateScheduleFields(name.value, delay.value)
+  fieldErrors.value = checked.errors
+  createError.value = ''
+  if (!checked.fields) return
+  isCreating.value = true
   try {
     await api.createReportSchedule({
       template_id: template.id,
-      name: name.value,
+      ...checked.fields,
       granularity: template.granularity,
-      delay_hours: Number(delay.value),
       is_enabled: true,
     })
     isOpen.value = false
     await list.reload()
   } catch (caught) {
-    error.value = describeError(caught)
+    createError.value = describeError(caught)
+  } finally {
+    isCreating.value = false
   }
 }
+function openCreate(): void {
+  createError.value = ''
+  fieldErrors.value = emptyScheduleErrors()
+  isOpen.value = true
+}
+function openEdit(row: ReportSchedule): void {
+  if (busyIds.value.includes(row.id)) return
+  editing.value = row
+  isEditOpen.value = true
+}
+function beginAction(id: string): boolean {
+  if (busyIds.value.includes(id)) return false
+  busyIds.value = [...busyIds.value, id]
+  error.value = ''
+  return true
+}
+function finishAction(id: string): void {
+  busyIds.value = busyIds.value.filter((busyId) => busyId !== id)
+}
 async function toggle(row: ReportSchedule): Promise<void> {
+  if (!beginAction(row.id)) return
   try {
     await api.saveReportSchedule(row.id, {
       name: row.name,
@@ -83,22 +121,27 @@ async function toggle(row: ReportSchedule): Promise<void> {
     await list.reload()
   } catch (caught) {
     error.value = describeError(caught)
+  } finally {
+    finishAction(row.id)
   }
 }
 async function remove(id: string): Promise<void> {
-  if (
-    !(await confirm.ask({
-      title: '删除定时规则',
-      message: '删除后规则无法恢复。已有生成历史的规则请停用。',
-      danger: true,
-    }))
-  )
-    return
+  if (!beginAction(id)) return
   try {
+    if (
+      !(await confirm.ask({
+        title: '删除定时规则',
+        message: '删除后规则无法恢复。已有生成历史的规则请停用。',
+        danger: true,
+      }))
+    )
+      return
     await api.deleteReportSchedule(id)
     await list.reload()
   } catch (caught) {
     error.value = describeError(caught)
+  } finally {
+    finishAction(id)
   }
 }
 </script>
@@ -109,8 +152,21 @@ async function remove(id: string): Promise<void> {
     subtitle="报告期结束后延迟生成，等待台账数据齐备"
   >
     <template #actions>
+      <DtButton
+        variant="ghost"
+        size="sm"
+        icon="refresh-cw"
+        @click="list.reload"
+      >
+        刷新
+      </DtButton>
       <PermGuard :codes="['report:schedule']">
-        <DtButton size="sm" icon="plus" @click="isOpen = true">
+        <DtButton
+          size="sm"
+          icon="plus"
+          :disabled="isCreating"
+          @click="openCreate"
+        >
           {{ CREATE_LABEL }}
         </DtButton>
       </PermGuard>
@@ -144,6 +200,7 @@ async function remove(id: string): Promise<void> {
         <template #cell-granularity="{ row }">
           <DtTag intent="info">{{ row.granularity }}</DtTag>
         </template>
+        <template #cell-delay="{ row }">{{ row.delay_hours }} 小时</template>
         <template #cell-enabled="{ row }">
           <DtTag :intent="row.is_enabled ? 'success' : 'neutral'">
             {{ row.is_enabled ? '已启用' : '已停用' }}
@@ -157,7 +214,17 @@ async function remove(id: string): Promise<void> {
             <DtButton
               size="sm"
               variant="ghost"
+              icon="pencil"
+              :disabled="busyIds.includes(row.id)"
+              @click="openEdit(row)"
+            >
+              编辑
+            </DtButton>
+            <DtButton
+              size="sm"
+              variant="ghost"
               :icon="row.is_enabled ? 'toggle-left' : 'toggle-right'"
+              :disabled="busyIds.includes(row.id)"
               @click="toggle(row)"
             >
               {{ row.is_enabled ? '停用' : '启用' }}
@@ -167,6 +234,7 @@ async function remove(id: string): Promise<void> {
               variant="ghost"
               intent="danger"
               icon="trash"
+              :disabled="busyIds.includes(row.id)"
               @click="remove(row.id)"
             >
               删除
@@ -175,25 +243,44 @@ async function remove(id: string): Promise<void> {
         </template>
       </DtDataView>
     </div>
-    <DtModal v-model="isOpen" title="新建定时规则">
+    <DtModal
+      :model-value="isOpen"
+      title="新建定时规则"
+      :close-on-backdrop="!isCreating"
+      @update:model-value="!isCreating && (isOpen = $event)"
+    >
       <div class="flex flex-col gap-3">
-        <DtInput v-model="name" label="规则名称" size="sm" />
+        <DtNotice v-if="createError" intent="danger">{{
+          createError
+        }}</DtNotice>
+        <DtInput
+          v-model="name"
+          label="规则名称"
+          size="sm"
+          :disabled="isCreating"
+          :error="fieldErrors.name"
+        />
         <DtSelect
           v-model="templateId"
           :options="options"
           label="报告模板"
           size="sm"
+          :disabled="isCreating"
         />
         <DtInput
           v-model="delay"
           label="期末延迟小时数"
           size="sm"
-          hint="例如 24 表示月末结束后等待一天"
+          hint="0～720 的整数；24 表示报告期结束后等待一天"
+          :disabled="isCreating"
+          :error="fieldErrors.delayHours"
+          inputmode="numeric"
         />
       </div>
       <template #footer>
         <DtButton
           :disabled="!name || !templateId"
+          :loading="isCreating"
           size="sm"
           icon="plus"
           @click="create"
@@ -202,5 +289,11 @@ async function remove(id: string): Promise<void> {
         </DtButton>
       </template>
     </DtModal>
+    <EditScheduleDialog
+      v-model="isEditOpen"
+      :record="editing"
+      :templates="templates"
+      @saved="list.reload"
+    />
   </AppShell>
 </template>
