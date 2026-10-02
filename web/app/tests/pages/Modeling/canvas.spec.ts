@@ -9,7 +9,7 @@ import type {
   ModelingPipeline,
   ModelingRun,
 } from '@dt/contracts'
-import { DtSelect } from '@dt/ui'
+import { DtSelect, useConfirm } from '@dt/ui'
 import { flushPromises, mount } from '@vue/test-utils'
 import { createPinia, setActivePinia } from 'pinia'
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
@@ -219,10 +219,67 @@ beforeEach(() => {
 })
 
 afterEach(() => {
+  useConfirm().resolve(false)
   // ⚠ 必须卸载：画布页开着每秒一次的走字计时器与运行轮询，留着的话它们会跨
   // 文件一直打请求，整套用例跑完了进程也停不下来
   while (mounted.length > 0) mounted.pop()?.unmount()
   vi.restoreAllMocks()
+})
+
+describe('未保存画布回看历史', () => {
+  async function pickWithDraft() {
+    stubApi()
+    vi.mocked(modeling.listModelingRuns).mockResolvedValue({
+      items: [runOf('succeeded')],
+      page: 1,
+      size: 50,
+      total: 1,
+    })
+    const fetchRun = vi
+      .spyOn(modeling, 'getModelingRun')
+      .mockResolvedValue(runOf('succeeded'))
+    signIn(WRITER)
+    const wrapper = open()
+    await flushPromises()
+    await wrapper.find('.dt-ml-palette__item').trigger('click')
+    await wrapper
+      .findAll('button')
+      .find((button) => button.text() === '运行历史')
+      ?.trigger('click')
+    await wrapper.find('.dt-ml-runs__item').trigger('click')
+    await flushPromises()
+    return { wrapper, fetchRun }
+  }
+
+  it('确认前不覆盖草稿；取消保留图和历史列表，也不改地址', async () => {
+    const { wrapper, fetchRun } = await pickWithDraft()
+    expect(useConfirm().pending.value?.message).toContain('未保存')
+    expect(fetchRun).not.toHaveBeenCalled()
+    expect(replace).not.toHaveBeenCalled()
+    expect(wrapper.find('.dt-ml-node').exists()).toBe(true)
+    useConfirm().resolve(false)
+    await flushPromises()
+    expect(wrapper.find('.dt-ml-node').exists()).toBe(true)
+    expect(wrapper.find('.dt-ml-runs__item').exists()).toBe(true)
+    expect(fetchRun).not.toHaveBeenCalled()
+  })
+
+  it('明确放弃后回看历史，返回编辑时恢复已保存图', async () => {
+    const { wrapper, fetchRun } = await pickWithDraft()
+    expect(useConfirm().pending.value?.confirmText).toContain('放弃')
+    useConfirm().resolve(true)
+    await flushPromises()
+    expect(fetchRun).toHaveBeenCalledWith('r1')
+    expect(wrapper.text()).toContain('正在回看历史运行')
+    await wrapper
+      .findAll('button')
+      .find((button) => button.text() === '回到编辑')
+      ?.trigger('click')
+    await flushPromises()
+    expect(wrapper.text()).not.toContain('正在回看历史运行')
+    expect(wrapper.find('.dt-ml-node').exists()).toBe(false)
+    expect(replace).toHaveBeenLastCalledWith({ query: {} })
+  })
 })
 
 describe('画布页', () => {
