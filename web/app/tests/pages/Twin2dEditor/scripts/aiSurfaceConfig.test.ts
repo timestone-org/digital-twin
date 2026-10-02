@@ -8,15 +8,17 @@ import { createTwin2dSurface } from '@/pages/Twin2dEditor/scripts/aiSurface'
 import { createTwin2dSelection } from '@/pages/Twin2dEditor/scripts/editorSelection'
 import { createTwin2dDoc } from '@/pages/Twin2dEditor/scripts/twin2dDoc'
 
-function setup() {
-  const config = normalizeTwin2dConfig({
-    canvas: { width: 1920, height: 1080 },
-    nodes: [
-      { id: 'n1', styleId: 'water-tank', label: '1号水箱', x: 10, y: 10 },
-      { id: 'n2', styleId: 'water-tank', label: '2号水箱', x: 300, y: 10 },
-    ],
-    edges: [{ id: 'e1', from: { nodeId: 'n1' }, to: { nodeId: 'n2' } }],
-  })
+function setup(input?: unknown) {
+  const config = normalizeTwin2dConfig(
+    input ?? {
+      canvas: { width: 1920, height: 1080 },
+      nodes: [
+        { id: 'n1', styleId: 'water-tank', label: '1号水箱', x: 10, y: 10 },
+        { id: 'n2', styleId: 'water-tank', label: '2号水箱', x: 300, y: 10 },
+      ],
+      edges: [{ id: 'e1', from: { nodeId: 'n1' }, to: { nodeId: 'n2' } }],
+    },
+  )
   const binding = {
     ...createBinding('host', 'nodeValues[0].value'),
     sourceKind: 'static' as const,
@@ -49,6 +51,51 @@ function setup() {
 }
 
 describe('二维配置工具', () => {
+  it('拒绝新增悬空图元槽引用且不新增撤销帧', async () => {
+    const { doc, run } = setup(slotConfig('value'))
+    const before = doc.config.value
+    const layer = before.nodes[0]?.layers[0]
+    expect(layer?.kind).toBe('txt')
+    await expect(
+      run('twin2d.patch_config', {
+        section: 'nodes',
+        id: 'n1',
+        patch: {
+          layers: [{ ...layer, src: { kind: 'slot', slot: 'DOES_NOT_EXIST' } }],
+        },
+      }),
+    ).rejects.toThrow(/修改未应用/)
+    expect(doc.config.value).toBe(before)
+    expect(doc.canUndo.value).toBe(false)
+  })
+
+  it('既有悬空槽警告不妨碍逐项修复并可撤销', async () => {
+    const { doc, run } = setup(slotConfig('MISSING'))
+    const before = doc.config.value
+    await expect(
+      run('twin2d.patch_config', {
+        section: 'nodes',
+        id: 'n1',
+        patch: { label: '先改标题' },
+      }),
+    ).resolves.toMatchObject({ changed: true, is_saved: false })
+    expect(doc.config.value.nodes[0]?.label).toBe('先改标题')
+    doc.undo()
+    expect(doc.config.value).toEqual(before)
+    const layer = before.nodes[0]?.layers[0]
+    await expect(
+      run('twin2d.patch_config', {
+        section: 'nodes',
+        id: 'n1',
+        patch: { layers: [{ ...layer, src: { kind: 'slot', slot: 'value' } }] },
+      }),
+    ).resolves.toMatchObject({
+      changed: true,
+      issues: expect.not.arrayContaining([
+        expect.objectContaining({ code: 'dangling-slot' }),
+      ]),
+    })
+  })
   it('声明读配置、修改与诊断三个真实执行工具', () => {
     expect(setup().surface.tools).toEqual(
       expect.arrayContaining([
@@ -211,3 +258,16 @@ describe('二维配置工具', () => {
     await expect(setup().run(name, args)).rejects.toThrow()
   })
 })
+
+function slotConfig(slot: string) {
+  return {
+    nodes: [
+      {
+        id: 'n1',
+        styleId: 'water-tank',
+        slots: [{ key: 'value', name: '值', kind: 'number' }],
+        layers: [{ id: 'txt1', kind: 'txt', src: { kind: 'slot', slot } }],
+      },
+    ],
+  }
+}

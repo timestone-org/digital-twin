@@ -123,6 +123,7 @@ function validatedScan(config: Twin2dConfig, candidate: unknown) {
     (issue) =>
       !existing.has(issueKey(issue)) &&
       (issue.level === 'error' ||
+        issue.code.startsWith('dangling-') ||
         issue.code.startsWith('dropped-') ||
         issue.code === 'prim-too-deep'),
   )
