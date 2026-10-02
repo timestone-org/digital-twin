@@ -175,7 +175,7 @@ watch(
   </svg>
 </template>
 
-<style scoped>
+<style scoped lang="scss">
 .t2-marquee {
   position: absolute;
   inset: 0;

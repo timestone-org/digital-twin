@@ -180,7 +180,7 @@ function grabEndpoint(index: number, event: PointerEvent): void {
   </g>
 </template>
 
-<style scoped>
+<style scoped lang="scss">
 .t2m-outline {
   fill: none;
   stroke: var(--accent-primary);

@@ -123,7 +123,7 @@ const unitStyle = computed<CSSProperties>(() => ({
   </span>
 </template>
 
-<style scoped>
+<style scoped lang="scss">
 .dc-value {
   display: flex;
   align-items: baseline;

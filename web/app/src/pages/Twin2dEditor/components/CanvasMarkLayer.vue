@@ -398,7 +398,7 @@ function isFilled(mark: Twin2dMark): boolean {
   </svg>
 </template>
 
-<style scoped>
+<style scoped lang="scss">
 /* 空白处不吃指针，只有命中面与把手接管；两层各铺满整块画布 */
 .t2m-layer {
   position: absolute;

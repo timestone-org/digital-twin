@@ -112,7 +112,7 @@ const emit = defineEmits<{
   </div>
 </template>
 
-<style scoped>
+<style scoped lang="scss">
 .ce-tree__head {
   margin: 0 0 2px;
   color: var(--text-disabled);
