@@ -6,7 +6,7 @@
  */
 import type { DashboardNodePayload, DashboardPayload } from '@dt/contracts'
 import { removeMissingAnimations } from '@/pages/TwinEditor/scripts/missingAnimations'
-import { TWIN_CONFIG_KEY } from '@dt/twin-config'
+import { TWIN_CONFIG_KEY, normalizeTwinConfig } from '@dt/twin-config'
 import { flushPromises } from '@vue/test-utils'
 import { beforeEach, describe, expect, it, vi } from 'vitest'
 
@@ -16,6 +16,7 @@ vi.mock('@/api/dashboard', () => ({
 }))
 
 import { getDashboard, replaceLayout } from '@/api/dashboard'
+import { createBinding } from '@/features/dashboard/editorDoc'
 import { useTwinEditorPage } from '@/pages/TwinEditor/scripts/useTwinEditorPage'
 
 function node(id: string, twin?: unknown): DashboardNodePayload {
@@ -113,6 +114,59 @@ describe('取数', () => {
 })
 
 describe('落库', () => {
+  it.each(['config', 'binding', 'undo'] as const)(
+    '保存等待期间的 %s 操作不会被标记为已保存',
+    async (operation) => {
+      getMock.mockResolvedValue(payload([node('n1')]))
+      let finishSave: (value: DashboardPayload) => void = () => {
+        throw new Error('保存尚未发起')
+      }
+      saveMock.mockImplementation(
+        () => new Promise((resolve) => (finishSave = resolve)),
+      )
+      const page = useTwinEditorPage(
+        () => 'd1',
+        () => 'n1',
+      )
+      await flushPromises()
+      const doc = page.doc.value
+      if (doc === null) throw new Error('文档未加载')
+      const sent = normalizeTwinConfig({ anchors: [{ id: 'sent' }] })
+      doc.commitMerged(sent, 'gizmo')
+      const pending = page.save()
+
+      if (operation === 'config') {
+        doc.commitMerged(
+          normalizeTwinConfig({ anchors: [{ id: 'later' }] }),
+          'gizmo',
+        )
+      } else if (operation === 'binding') {
+        doc.commitBindings([
+          {
+            ...createBinding('n1', 'anchorValues[0].value'),
+            staticValueJson: 42,
+          },
+        ])
+      } else {
+        doc.undo()
+      }
+      finishSave(payload([node('n1', sent)]))
+
+      expect(await pending).toBe(true)
+      const [, input] = saveMock.mock.calls[0] ?? []
+      expect(input?.nodes[0]?.config_json[TWIN_CONFIG_KEY]).toMatchObject({
+        anchors: [{ id: 'sent' }],
+      })
+      expect(doc.isDirty.value).toBe(true)
+      if (operation === 'binding') expect(doc.bindings.value).toHaveLength(1)
+      if (operation === 'undo') doc.redo()
+      else doc.undo()
+      expect(doc.config.value).toBe(sent)
+      expect(doc.bindings.value).toEqual([])
+      expect(doc.isDirty.value).toBe(false)
+    },
+  )
+
   it('把改动写回这个节点，其余节点原样带上', async () => {
     getMock.mockResolvedValue(payload([node('n1'), node('n2')]))
     saveMock.mockResolvedValue(payload([node('n1'), node('n2')]))
