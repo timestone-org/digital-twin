@@ -48,7 +48,9 @@ function stateOf(key: ModelApiKey): { text: string; intent: DtIntent } {
     :empty="EMPTY"
     :layout="{ fixedLayout: true, minWidth: '38rem' }"
   >
-    <template #cell-name="{ row }">{{ row.name }}</template>
+    <template #cell-name="{ row }">
+      <span class="block truncate" :title="row.name">{{ row.name }}</span>
+    </template>
     <template #cell-key_prefix="{ row }">
       <code>{{ row.key_prefix }}…</code>
     </template>

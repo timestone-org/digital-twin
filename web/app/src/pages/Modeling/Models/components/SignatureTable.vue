@@ -44,15 +44,27 @@ const listed = computed(() =>
     :empty="EMPTY"
     :layout="{ fixedLayout: true, minWidth: '44rem' }"
   >
-    <template #cell-label="{ row }">{{ row.label }}</template>
-    <template #cell-key="{ row }">
-      <code>{{ row.key }}</code>
+    <template #cell-label="{ row }">
+      <span class="block truncate" :title="row.label">{{ row.label }}</span>
     </template>
-    <template #cell-dtype="{ row }">{{ row.dtype }}</template>
-    <template #cell-unit="{ row }">{{ row.unit || '—' }}</template>
+    <template #cell-key="{ row }">
+      <code class="block truncate" :title="row.key">{{ row.key }}</code>
+    </template>
+    <template #cell-dtype="{ row }">
+      <span class="block truncate" :title="row.dtype">{{ row.dtype }}</span>
+    </template>
+    <template #cell-unit="{ row }">
+      <span class="block truncate" :title="row.unit || '—'">
+        {{ row.unit || '—' }}
+      </span>
+    </template>
     <template #cell-required="{ row }">
       <DtTag v-if="row.is_required" intent="warning" size="sm">必填</DtTag>
-      <span v-else class="dt-ml-sig__fill">
+      <span
+        v-else
+        class="dt-ml-sig__fill block truncate"
+        :title="`可缺省 → ${row.default_on_missing}`"
+      >
         可缺省 → {{ row.default_on_missing }}
       </span>
     </template>
