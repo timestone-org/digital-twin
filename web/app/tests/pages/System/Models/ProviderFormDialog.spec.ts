@@ -196,6 +196,39 @@ describe('供应商弹窗', () => {
     expect(llm.probeDraft).not.toHaveBeenCalled()
     expect(wrapper.text()).toContain('拒绝了这把密钥')
   })
+
+  it('编辑端点但未填新密钥时禁用测试并提示先保存', async () => {
+    const wrapper = render(provider())
+    await inputOf(wrapper, '端点地址').setValue('https://changed/v1')
+    const button = wrapper
+      .findAll('button')
+      .find((node) => node.text().includes('测试连接'))
+    expect(button?.attributes('disabled')).toBeDefined()
+    expect(wrapper.text()).toContain('端点地址已修改，请先保存后再测试连接')
+    await clickButton(wrapper, '测试连接')
+    expect(llm.probeProvider).not.toHaveBeenCalled()
+    expect(llm.probeDraft).not.toHaveBeenCalled()
+  })
+
+  it('编辑端点并填新密钥时测试当前表单', async () => {
+    const wrapper = render(provider())
+    await inputOf(wrapper, '端点地址').setValue('https://changed/v1')
+    await inputOf(wrapper, 'API 密钥').setValue('sk-new')
+    await clickButton(wrapper, '测试连接')
+    expect(llm.probeDraft).toHaveBeenCalledWith({
+      base_url: 'https://changed/v1',
+      api_key: 'sk-new',
+    })
+    expect(llm.probeProvider).not.toHaveBeenCalled()
+  })
+
+  it('端点改回原值或仅增加空白时仍可测试存储的密钥', async () => {
+    const wrapper = render(provider())
+    await inputOf(wrapper, '端点地址').setValue('https://changed/v1')
+    await inputOf(wrapper, '端点地址').setValue(' https://endpoint/v1 ')
+    await clickButton(wrapper, '测试连接')
+    expect(llm.probeProvider).toHaveBeenCalledWith('p1')
+  })
 })
 
 describe('按类型摆格子', () => {
