@@ -12,7 +12,12 @@ import {
   searchBase,
   uploadDocument,
 } from '@/api/knowledge'
-import { guarded, refreshDocuments } from './knowledgeState'
+import {
+  cancelSearch,
+  guarded,
+  messageOf,
+  refreshDocuments,
+} from './knowledgeState'
 import type { KnowledgeState } from './knowledgeState'
 
 /** 建库时固定用的检索策略：关键词与向量两路一起召回。 */
@@ -49,9 +54,8 @@ export async function select(
   state: KnowledgeState,
   baseId: string,
 ): Promise<void> {
+  cancelSearch(state)
   state.selectedId.value = baseId
-  state.result.value = null
-  state.searched.value = ''
   await guarded(state, () => refreshDocuments(state))
 }
 
@@ -86,8 +90,7 @@ export async function drop(
     await deleteBase(baseId)
     state.bases.value = state.bases.value.filter((one) => one.id !== baseId)
     if (state.selectedId.value === baseId) {
-      state.selectedId.value = ''
-      state.documents.value = []
+      await select(state, '')
     }
   })
 }
@@ -163,13 +166,21 @@ export async function search(state: KnowledgeState): Promise<void> {
   const baseId = state.selectedId.value
   const wanted = state.query.value.trim()
   if (baseId === '' || wanted === '') return
-  await guarded(state, async () => {
-    state.isSearching.value = true
-    state.searched.value = wanted
-    try {
-      state.result.value = await searchBase(baseId, wanted)
-    } finally {
-      state.isSearching.value = false
-    }
-  })
+  state.error.value = ''
+  state.isSearching.value = true
+  await state.searchesRace.run(
+    (signal) => searchBase(baseId, wanted, '', signal),
+    {
+      ok: (result) => {
+        state.result.value = result
+        state.searched.value = wanted
+      },
+      fail: (cause) => {
+        state.error.value = messageOf(cause)
+      },
+      settled: () => {
+        state.isSearching.value = false
+      },
+    },
+  )
 }

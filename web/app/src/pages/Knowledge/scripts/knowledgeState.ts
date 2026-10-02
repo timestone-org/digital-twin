@@ -37,6 +37,7 @@ export function createState() {
   const isRefreshing = ref(false)
   const isSearching = ref(false)
   const documentsRace = useRacedFetch()
+  const searchesRace = useRacedFetch()
 
   const selected = computed<KnowledgeBase | null>(
     () => bases.value.find((one) => one.id === selectedId.value) ?? null,
@@ -51,6 +52,7 @@ export function createState() {
   if (getCurrentScope() !== undefined) {
     onScopeDispose(() => {
       documentsRace.cancel()
+      searchesRace.cancel()
     })
   }
 
@@ -68,6 +70,7 @@ export function createState() {
     isRefreshing,
     isSearching,
     documentsRace,
+    searchesRace,
     selected,
     accept,
     indexHint,
@@ -76,6 +79,13 @@ export function createState() {
 
 /** 页面状态的类型。 */
 export type KnowledgeState = ReturnType<typeof createState>
+
+export function cancelSearch(state: KnowledgeState): void {
+  state.searchesRace.cancel()
+  state.result.value = null
+  state.searched.value = ''
+  state.isSearching.value = false
+}
 
 /**
  * 跑一个动作，出错时把**后端那句原话**显示出来；跑完没炸才回 true。

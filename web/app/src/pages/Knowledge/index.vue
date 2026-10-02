@@ -32,6 +32,7 @@ import KnowledgeBaseList from './components/KnowledgeBaseList.vue'
 import KnowledgeDocumentPreview from './components/KnowledgeDocumentPreview.vue'
 import KnowledgeDocumentTable from './components/KnowledgeDocumentTable.vue'
 import KnowledgeSearchPanel from './components/KnowledgeSearchPanel.vue'
+import KnowledgeSourcesDialog from './components/KnowledgeSourcesDialog.vue'
 import { useIngestPolling } from './scripts/useIngestPolling'
 import { useKnowledgePage } from './scripts/useKnowledgePage'
 
@@ -44,6 +45,7 @@ useIngestPolling(page.documents, page.refreshDocuments)
 const isCreating = ref(false)
 const isSubmitting = ref(false)
 const createError = ref('')
+const isSourcesOpen = ref(false)
 /** 正在预览的那一份；为空即弹窗关着。 */
 const previewing = ref<KnowledgeDocument | null>(null)
 
@@ -115,6 +117,13 @@ async function removeDocument(doc: KnowledgeDocument): Promise<void> {
 <template>
   <AppShell title="知识库管理" subtitle="手册、规程与外部系统资料的检索底座">
     <template #actions>
+      <DtButton
+        size="sm"
+        :disabled="page.selected.value === null"
+        @click="isSourcesOpen = true"
+      >
+        来源配置
+      </DtButton>
       <!-- explain：只读账号看不到写入口，这里如实说明原因，免得以为功能没做 -->
       <PermGuard :codes="[PERMISSION_CODES.knowledgeWrite]" explain>
         <DtFilePicker
@@ -242,6 +251,12 @@ async function removeDocument(doc: KnowledgeDocument): Promise<void> {
       :model-value="previewing !== null"
       :document="previewing"
       @update:model-value="onPreviewOpen"
+    />
+    <KnowledgeSourcesDialog
+      v-model="isSourcesOpen"
+      :base="page.selected.value"
+      :source-kinds="page.capability.value?.sourceKinds ?? []"
+      @synced="page.refreshDocuments"
     />
   </AppShell>
 </template>
