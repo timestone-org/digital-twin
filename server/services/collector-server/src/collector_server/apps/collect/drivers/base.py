@@ -66,6 +66,8 @@ class DriverCapabilities:
     is_subscribe_supported: bool
     is_browse_supported: bool
     is_write_supported: bool
+    minimum_poll_interval_ms: int = 50
+    is_empty_source_connection_supported: bool = True
 
 
 @dataclass(frozen=True)
@@ -75,6 +77,14 @@ class DriverTimeouts:
     connect_s: float = 5.0
     request_s: float = 3.0
     browse_s: float = 10.0
+
+
+class RequestLimiter(Protocol):
+    """跨数据源共享的在途请求上限。"""
+
+    async def acquire(self) -> bool: ...
+
+    def release(self) -> None: ...
 
 
 @dataclass(frozen=True)
@@ -87,6 +97,9 @@ class DriverConnection:
     username: str | None = None
     password: str | None = None
     timeouts: DriverTimeouts = field(default_factory=DriverTimeouts)
+    request_limiter: RequestLimiter | None = None
+    is_network_access_enabled: bool = False
+    allowed_endpoints: frozenset[str] = frozenset()
 
 
 @dataclass(frozen=True)
@@ -100,6 +113,7 @@ class PointSpec:
     point_code: str
     address: str
     sampling_interval_ms: int
+    data_type: DataType | None = None
 
 
 @dataclass(frozen=True)
@@ -142,13 +156,13 @@ class Driver(Protocol):
     @property
     def capabilities(self) -> DriverCapabilities: ...
 
-    def load_points(self, points: Sequence[PointSpec]) -> None:
+    def load_points(self, points: Sequence[PointSpec]) -> int:
         """登记 point_code → 协议寻址串。
 
         ⚠ `read_many` / `write` 只认已登记的 point_code：轮询模式不订阅，
         会话必须先调这一句，否则读写会以 PointNotLoaded 失败。
 
-        Args: points。
+        Args: points。返回可读取的点位数。
         """
         ...
 

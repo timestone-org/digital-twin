@@ -14,6 +14,8 @@ import { DtConfirmHost, DtToastHost, useConfirm, useToast } from '@dt/ui'
 
 import type { Asset, AssetKindSpec } from '@/api/assets'
 import AssetsPage from '@/pages/Assets/index.vue'
+import AssetReplaceUpload from '@/pages/Assets/components/AssetReplaceUpload.vue'
+import { DtFilePicker } from '@dt/ui'
 import { useAuthStore } from '@/stores/auth'
 import * as clipboard from '@/utils/clipboard'
 import * as download from '@/utils/downloadJson'
@@ -24,6 +26,7 @@ const api = vi.hoisted(() => ({
   uploadAsset: vi.fn(),
   deleteAsset: vi.fn(),
   renameAsset: vi.fn(),
+  replaceAssetFile: vi.fn(),
 }))
 
 vi.mock('@/api/assets', () => api)
@@ -500,4 +503,35 @@ describe('上传与下载', () => {
     // 删掉之后详情面必须跟着关：留着的话它显示的是一个已经不存在的素材
     expect(document.body.textContent).not.toContain('校验和')
   })
+})
+
+it('详情重新上传后更新同一行，标题和引用不变', async () => {
+  const original = asset({ kind: 'model', name: '主厂房.glb' })
+  api.listAssets.mockResolvedValue([original])
+  api.replaceAssetFile.mockResolvedValue({
+    ...original,
+    checksum: 'updated',
+    sizeBytes: 1024,
+  })
+  const wrapper = await renderWithHosts()
+  await wrapper.find('[aria-label="预览"]').trigger('click')
+  await flushPromises()
+  wrapper
+    .findComponent(AssetReplaceUpload)
+    .findComponent(DtFilePicker)
+    .vm.$emit('select', [new File(['new'], '新版本.glb')])
+  await flushPromises()
+  await clickInConfirm('确认替换')
+  expect(wrapper.text()).toContain('主厂房.glb')
+  expect(document.body.textContent).toContain('updated')
+  expect(document.body.textContent).toContain('模型已替换，名称与引用保持不变')
+  expect(api.listAssets).toHaveBeenCalledTimes(1)
+})
+
+it('只读用户没有模型重新上传入口', async () => {
+  api.listAssets.mockResolvedValue([asset({ kind: 'model' })])
+  const wrapper = await render(['asset:view'])
+  await wrapper.find('[aria-label="预览"]').trigger('click')
+  await flushPromises()
+  expect(document.body.textContent).not.toContain('重新上传模型')
 })

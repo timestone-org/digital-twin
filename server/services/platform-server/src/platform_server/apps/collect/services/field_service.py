@@ -9,6 +9,10 @@ import uuid
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from lib.logging import get_logger
+from platform_server.apps.collect.errors import (
+    BrowseUnsupported,
+    WriteUnsupported,
+)
 from platform_server.apps.collect.schemas import (
     BrowseOut,
     ConnectivityOut,
@@ -68,6 +72,8 @@ async def browse_source(
     Args: session, bus, source_id, parent。
     """
     source = await source_service.require_source(session, source_id)
+    if source.protocol == "modbus_tcp":
+        raise BrowseUnsupported("Modbus TCP 没有可浏览的地址空间")
     resolved = source.id
     await release_read_transaction(session)
     entries = await bus.browse(resolved, parent)
@@ -88,6 +94,8 @@ async def browse_subtree(
     Args: session, bus, source_id, parent。
     """
     source = await source_service.require_source(session, source_id)
+    if source.protocol == "modbus_tcp":
+        raise BrowseUnsupported("Modbus TCP 没有可浏览的地址空间")
     resolved = source.id
     await release_read_transaction(session)
     outcome = await bus.browse_subtree(resolved, parent)
@@ -119,6 +127,9 @@ async def write_point(
     Args: session, bus, point_id, value。
     """
     point = await point_service.require_point(session, point_id)
+    source = await source_service.require_source(session, point.source_id)
+    if source.protocol == "modbus_tcp":
+        raise WriteUnsupported("Modbus TCP 采集驱动只读")
     source_id, code = point.source_id, point.code
     await release_read_transaction(session)
     node_key = compose_node_key(source_id, code)

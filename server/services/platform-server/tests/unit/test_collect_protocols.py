@@ -18,7 +18,7 @@ from platform_server.apps.collect.protocols import (
 
 
 def test_the_closed_sets_are_sorted_and_complete() -> None:
-    assert PROTOCOLS == ("opcua",)
+    assert PROTOCOLS == ("modbus_tcp", "opcua")
     assert READ_MODES == ("poll", "subscribe")
     assert DATA_TYPES == ("bool", "float", "int", "string")
 
@@ -29,11 +29,12 @@ def test_a_check_constraint_list_quotes_every_value() -> None:
 
 def test_a_known_protocol_narrows() -> None:
     assert as_protocol("opcua") == "opcua"
+    assert as_protocol("modbus_tcp") == "modbus_tcp"
 
 
 def test_an_unknown_protocol_is_refused() -> None:
     with pytest.raises(UnknownLiteral):
-        as_protocol("modbus")
+        as_protocol("s7")
 
 
 def test_both_read_modes_narrow() -> None:

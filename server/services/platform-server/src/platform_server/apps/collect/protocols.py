@@ -8,8 +8,7 @@ from typing import Literal, get_args
 
 from collectwire import DataType
 
-# 一期只实现 OPC UA 驱动；第二个协议进来时这里加一项，迁移里跟一条 CHECK
-Protocol = Literal["opcua"]
+Protocol = Literal["modbus_tcp", "opcua"]
 
 PROTOCOLS: tuple[str, ...] = tuple(sorted(get_args(Protocol)))
 
@@ -45,6 +44,8 @@ def as_protocol(value: str) -> Protocol:
     """
     if value not in PROTOCOLS:
         raise UnknownLiteral(f"未知协议：{value!r}")
+    if value == "modbus_tcp":
+        return "modbus_tcp"
     return "opcua"
 
 

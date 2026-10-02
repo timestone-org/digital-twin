@@ -23,6 +23,7 @@ from lib.logging import get_logger
 from lib.objectstore import ObjectStore, ObjectStoreError
 from lib.stream import StreamEntry, StreamGroup, StreamLike
 from platform_server.apps.assets import crud, keys, variants
+from platform_server.apps.assets.crud.asset import lock_revision
 from platform_server.apps.assets.crud.asset_variant import VariantResult
 from platform_server.apps.assets.services.compress_queue import decode
 
@@ -88,6 +89,14 @@ async def _write_file(path: Path, data: bytes) -> None:
     await asyncio.to_thread(path.write_bytes, data)
 
 
+@dataclass(frozen=True)
+class ContentVersion:
+    """压缩任务读取的素材版本快照。"""
+
+    asset_id: uuid.UUID
+    revision: uuid.UUID | None
+
+
 class ModelCompressor:
     """把一个素材的各档压出来并落行。"""
 
@@ -107,7 +116,7 @@ class ModelCompressor:
 
         Args: asset_id。
         """
-        pending = await self._pending_variants(asset_id)
+        version, pending = await self._pending_variants(asset_id)
         if not pending:
             return
         # ⚠ 原件与派生件都可能是几百 MB，全部落临时目录而不是内存：
@@ -118,27 +127,34 @@ class ModelCompressor:
             try:
                 await _write_file(
                     source,
-                    await self._store.get_bytes(keys.model_key(asset_id)),
+                    await self._store.get_bytes(
+                        keys.revision_key(asset_id, version.revision)
+                    ),
                 )
             except ObjectStoreError as error:
-                await self._fail_all(asset_id, pending, f"取不到原件：{error}")
+                await self._fail_all(version, pending, f"取不到原件：{error}")
                 return
             for name in pending:
-                await self._one(asset_id, name, source, root)
+                await self._one(version, name, source, root)
 
-    async def _pending_variants(self, asset_id: uuid.UUID) -> tuple[str, ...]:
+    async def _pending_variants(
+        self, asset_id: uuid.UUID
+    ) -> tuple[ContentVersion, tuple[str, ...]]:
         """这个素材还没压好的档。已经 `ready` 的不重压——那是幂等的落点。"""
         async with self._database.session() as session:
             asset = await crud.get(session, asset_id)
             # 素材在消息在路上的时候被删掉了：不是错误，安静收工
             if asset is None or asset.kind != "model":
-                return ()
+                return ContentVersion(asset_id, None), ()
+            version = ContentVersion(asset_id, asset.content_revision)
             rows = await crud.asset_variant.list_for_asset(session, asset_id)
         done = {row.variant for row in rows if row.status == "ready"}
-        return tuple(name for name in variants.derived() if name not in done)
+        return version, tuple(
+            name for name in variants.derived() if name not in done
+        )
 
     async def _one(
-        self, asset_id: uuid.UUID, name: str, source: Path, root: Path
+        self, version: ContentVersion, name: str, source: Path, root: Path
     ) -> None:
         """压一档并落行。一档失败不影响后面几档。"""
         spec = variants.spec_of(name)
@@ -153,24 +169,24 @@ class ModelCompressor:
                 output=output,
                 ratio=spec.simplify_ratio,
             )
-            stat = await self._upload(asset_id, name, output)
+            stat = await self._upload(version, name, output)
         except (RuntimeError, ObjectStoreError, OSError) as error:
             _logger.warning(
                 "asset_variant_failed",
                 "一档压不出来，其余档继续",
-                asset_id=str(asset_id),
+                asset_id=str(version.asset_id),
                 variant=name,
                 error=error,
             )
-            await self._write(asset_id, name, None, str(error))
+            await self._write(version, name, None, str(error))
             return
-        await self._write(asset_id, name, stat, "")
+        await self._write(version, name, stat, "")
 
     async def _upload(
-        self, asset_id: uuid.UUID, name: str, output: Path
+        self, version: ContentVersion, name: str, output: Path
     ) -> VariantResult:
         """把压好的字节传上去，并以**存储端读到的**为准回报大小与校验和。"""
-        key = keys.model_variant_key(asset_id, name)
+        key = keys.revision_key(version.asset_id, version.revision, name)
         await self._store.put_bytes(
             key, await _read_file(output), content_type="model/gltf-binary"
         )
@@ -181,27 +197,31 @@ class ModelCompressor:
 
     async def _write(
         self,
-        asset_id: uuid.UUID,
+        version: ContentVersion,
         name: str,
         stat: VariantResult | None,
         reason: str,
     ) -> None:
         """把一档的结果落库。⚠ 每档一个事务：压第三档时失败，前两档已经算数。"""
         async with self._database.session() as session:
+            if not await lock_revision(
+                session, version.asset_id, version.revision
+            ):
+                return
             if stat is None:
                 await crud.asset_variant.mark_failed(
-                    session, asset_id, name, reason
+                    session, version.asset_id, name, reason
                 )
             else:
                 await crud.asset_variant.mark_ready(
-                    session, asset_id, name, stat
+                    session, version.asset_id, name, stat
                 )
 
     async def _fail_all(
-        self, asset_id: uuid.UUID, names: tuple[str, ...], reason: str
+        self, version: ContentVersion, names: tuple[str, ...], reason: str
     ) -> None:
         for name in names:
-            await self._write(asset_id, name, None, reason)
+            await self._write(version, name, None, reason)
 
 
 class CompressConsumer:

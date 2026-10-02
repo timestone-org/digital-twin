@@ -1,6 +1,6 @@
 <script setup lang="ts">
 /**
- * @fileoverview OPC UA 采集的主从单页：左侧数据源列表，右侧详情 + 在线浏览 +
+ * @fileoverview 工业数据采集主从单页：左侧数据源列表，右侧详情 + 在线浏览 +
  * 已导入点位表。一个协议一个页面，配置里不再选协议。
  *
  * ⚠ 「连接 / 断开」按钮改的是 `is_enabled`：本架构没有手动会话动作，采集器按
@@ -78,7 +78,6 @@ async function loadSources(): Promise<void> {
         size: LIST_SIZE,
         page: sourcePage.value,
         q: sourceQuery.value || undefined,
-        protocol: 'opcua',
       })
       let detail = page.items.find((one) => one.id === activeId.value) ?? null
       if (activeId.value !== null && detail === null) {
@@ -169,7 +168,7 @@ onUnmounted(() => {
 </script>
 
 <template>
-  <AppShell title="OPC UA 采集" subtitle="去连现场设备的数据源与点位">
+  <AppShell title="工业数据采集" subtitle="OPC UA 与只读 Modbus TCP 数据源">
     <template #actions>
       <!-- 运行参数：只读账号也进得来（看得见节拍不等于能改），保存按钮由弹窗自己判写码 -->
       <PermGuard :codes="[PERMISSION_CODES.collectView]">
@@ -257,6 +256,7 @@ onUnmounted(() => {
             />
 
             <DtButton
+              v-if="activeSource.protocol === 'opcua'"
               variant="outline"
               size="sm"
               :aria-expanded="browseOpen"
@@ -275,7 +275,7 @@ onUnmounted(() => {
               }"
             >
               <BrowsePanel
-                v-if="browseOpen"
+                v-if="browseOpen && activeSource.protocol === 'opcua'"
                 class="h-80 shrink-0 2xl:h-auto"
                 :source="activeSource"
                 @imported="onImported"
@@ -321,7 +321,7 @@ onUnmounted(() => {
     <RuntimeParamsDialog
       v-model="collectParamsOpen"
       section="collect"
-      title="运行参数 · OPC UA 采集"
+      title="运行参数 · 工业数据采集"
       intro="环境变量给的是默认值，这里改过的项会压过它。改动随采集计划下发，最迟半分钟生效；每项旁边的徽标说明它多久生效。"
     />
     <RuntimeParamsDialog

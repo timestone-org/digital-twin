@@ -12,6 +12,7 @@ import { COLLECT_PROTOCOLS } from '@dt/contracts'
 import type { CollectProtocol } from '@dt/contracts'
 
 const PROTOCOL_LABELS: Record<CollectProtocol, string> = {
+  modbus_tcp: 'Modbus TCP',
   opcua: 'OPC UA',
 }
 

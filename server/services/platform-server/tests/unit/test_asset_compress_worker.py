@@ -54,6 +54,7 @@ class FakeAsset:
     """`assets` 的一行，只留 kind。"""
 
     kind: str = "model"
+    content_revision: uuid.UUID | None = None
 
 
 @dataclass
@@ -91,6 +92,12 @@ def install_fakes(
     ) -> None:
         recorder.failed.append((variant, reason))
 
+    async def locked(
+        _session: Any, _asset_id: uuid.UUID, revision: uuid.UUID | None
+    ) -> bool:
+        return asset is not None and asset.content_revision == revision
+
+    monkeypatch.setattr(compress_worker, "lock_revision", locked)
     monkeypatch.setattr(compress_worker.crud, "get", get)
     monkeypatch.setattr(
         compress_worker.crud.asset_variant, "list_for_asset", list_for_asset
@@ -429,3 +436,58 @@ async def test_drain_returns_once_the_loop_is_idle() -> None:
 
     # 手上没活就该立刻回；等满 5s 的话关停会白白拖长那么久
     assert asyncio.get_running_loop().time() - started < 1.0
+
+
+async def test_late_compression_does_not_publish_into_a_replaced_model(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    asset = FakeAsset()
+    recorder = install_fakes(monkeypatch, asset=asset, rows=[])
+    store = await store_with_original()
+    revision = uuid.UUID("0192f0aa-0000-7000-8000-000000000002")
+    await store.put_bytes(
+        keys.revision_key(ASSET_ID, revision),
+        b"new",
+        content_type="model/gltf-binary",
+    )
+
+    async def finish_old(
+        *, script: Path, node: str, source: Path, output: Path, ratio: float
+    ) -> None:
+        del script, node, source, ratio
+        asset.content_revision = revision
+        await asyncio.to_thread(output.write_bytes, b"old compressed")
+
+    monkeypatch.setattr(compress_worker, "run_compressor", finish_old)
+    await build(store).compress(ASSET_ID)
+    assert recorder.ready == []
+    assert recorder.failed == []
+    assert (
+        await store.stat(keys.revision_key(ASSET_ID, revision, "high")) is None
+    )
+    assert (
+        await store.get_bytes(keys.revision_key(ASSET_ID, revision)) == b"new"
+    )
+
+
+async def test_new_content_compression_reads_and_writes_its_own_version(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    revision = uuid.UUID("0192f0aa-0000-7000-8000-000000000002")
+    recorder = install_fakes(
+        monkeypatch, asset=FakeAsset(content_revision=revision), rows=[]
+    )
+    fake_compressor(monkeypatch)
+    store = FakeObjectStore()
+    await store.put_bytes(
+        keys.revision_key(ASSET_ID, revision),
+        GLB,
+        content_type="model/gltf-binary",
+    )
+    await build(store).compress(ASSET_ID)
+    assert len(recorder.ready) == 3
+    assert (
+        await store.stat(keys.revision_key(ASSET_ID, revision, "high"))
+        is not None
+    )
+    assert await store.stat(keys.model_variant_key(ASSET_ID, "high")) is None

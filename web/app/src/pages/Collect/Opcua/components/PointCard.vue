@@ -9,14 +9,18 @@ import { useAuthStore } from '@/stores/auth'
 import { formatTimestampMs } from '@/utils/datetime'
 import { formatSample } from '../scripts/liveFormat'
 
-const props = defineProps<{
-  point: CollectPoint
-  sample: PointSample | undefined
-  stale: boolean
-  selected: boolean
-  archiveBusy: boolean
-  error?: string | undefined
-}>()
+const props = withDefaults(
+  defineProps<{
+    point: CollectPoint
+    sample: PointSample | undefined
+    stale: boolean
+    selected: boolean
+    archiveBusy: boolean
+    canWrite?: boolean
+    error?: string | undefined
+  }>(),
+  { canWrite: true },
+)
 const emit = defineEmits<{
   detail: []
   select: [selected: boolean]
@@ -107,7 +111,7 @@ const fullTime = computed(() =>
         <span>历史</span>
       </div>
       <div class="point-card__actions">
-        <PermGuard :codes="[PERMISSION_CODES.collectOperate]">
+        <PermGuard v-if="canWrite" :codes="[PERMISSION_CODES.collectOperate]">
           <DtButton variant="ghost" size="xs" @click="emit('write')"
             >写值</DtButton
           >

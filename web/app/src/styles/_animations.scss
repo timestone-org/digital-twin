@@ -8,6 +8,51 @@
 // @layer，页面上的工具类会被这些类名压住。放进 components 层后，
 // 工具类（utilities 层在其后）才能就地改写这里的取值。
 @layer components {
+  @keyframes dt-mascot-greet {
+    0%,
+    100% {
+      transform: translateY(0) rotate(0);
+    }
+    25% {
+      transform: translateY(-5px) rotate(-3deg);
+    }
+    60% {
+      transform: translateY(-2px) rotate(2deg);
+    }
+  }
+
+  @keyframes dt-mascot-read {
+    0%,
+    100% {
+      transform: translateY(0);
+    }
+    50% {
+      transform: translateY(-4px) rotate(-1deg);
+    }
+  }
+
+  @keyframes dt-mascot-search {
+    0%,
+    100% {
+      transform: translateX(-3px) rotate(-2deg);
+    }
+    50% {
+      transform: translateX(3px) rotate(2deg);
+    }
+  }
+
+  @keyframes dt-mascot-spark {
+    0%,
+    100% {
+      opacity: 0.45;
+      transform: scale(0.8);
+    }
+    50% {
+      opacity: 1;
+      transform: scale(1.1);
+    }
+  }
+
   @keyframes dt-fade-up {
     from {
       opacity: 0;

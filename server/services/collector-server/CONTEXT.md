@@ -25,7 +25,7 @@
 ## 2. 不变式
 
 1. **协议知识只在 `apps/collect/drivers/<协议>/` 里。** 缝在 `ValueSink` 上：值一旦离开驱动就是协议无关的四元组 `(point_code, value, ts_ms, quality)`。
-2. **`asyncua` 只允许出现在 `drivers/opcua/` 下。** 这是「协议知识不外泄」唯一可机器执行的表述，由 `tests/contract/test_driver_isolation.py` 守住。
+2. **`asyncua` / `pymodbus` 只允许出现在各自的 `drivers/opcua/` / `drivers/modbus_tcp/` 下。** 这是「协议知识不外泄」唯一可机器执行的表述，由 `tests/contract/test_driver_isolation.py` 守住。
 3. **`ValueSink` 是纯同步、零 `await` 的回调。** 它跑在协议库的回调里，两万个点位的回调里有一个 `await` 就会压垮事件循环。也正因为零 await，缓冲的原子交换不需要锁。
 4. **`browse` 不支持时抛 `BrowseNotSupported`，绝不返回空列表**——空列表与「这台设备确实没有点位」分不开。
 5. **拿不到计划就空转并响亮告警，不许用过期缓存猜。** 计划只在进程内存里，不落盘。
@@ -90,7 +90,7 @@
 
 | 不做 | 原因 |
 |---|---|
-| OPC UA 之外的驱动 | 一期只有一个协议。接口留形状不留字段（ADR-0001） |
+| Modbus TCP 之外的新 PLC 驱动 | 首个 PLC 直连协议限定为只读 Modbus TCP（ADR-0056） |
 | 业务 HTTP 面 | 配置面留在 platform，这里只有探针 |
 | 归档的 continuous aggregate | 先让原始表跑起来，聚合查询直接扫原始表（COLLECT_DESIGN §8） |
 | 按点位的保留期执行 | 全局压缩策略在迁移里，按点位的清理归 `platform-worker` 夜间批处理——迁移里禁止回填与删数据 |

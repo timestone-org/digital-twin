@@ -69,6 +69,14 @@ def test_changing_an_address_changes_the_version() -> None:
     assert plan_version([changed], {}) != before
 
 
+def test_changing_the_expected_data_type_changes_the_version() -> None:
+    before = plan_version([build_source("outlet_temp")], {})
+    source = build_source("outlet_temp")
+    changed_point = source.points[0].model_copy(update={"data_type": "float"})
+    changed = source.model_copy(update={"points": (changed_point,)})
+    assert plan_version([changed], {}) != before
+
+
 def test_an_empty_plan_still_has_a_version() -> None:
     assert len(plan_version([], {})) == 64
 

@@ -1,6 +1,6 @@
 /**
  * @fileoverview 契约：分享弹窗自己发布 / 撤回，链接形状是
- * `<origin>/public/<token>`，重新发布与撤回都要先过二次确认——「再点一次发布」
+ * `<origin>/ai/public/<token>`，重新发布与撤回都要先过二次确认——「再点一次发布」
  * 不是幂等的，它会把已经发出去的链接全废掉。
  *
  * ⚠ 当前链接必须从**发布面**取（`getDashboardPublication`）：大屏详情不带
@@ -52,6 +52,7 @@ async function clickText(
 }
 
 beforeEach(() => {
+  vi.stubEnv('BASE_URL', '/ai/')
   vi.spyOn(shareApi, 'publishDashboard').mockResolvedValue({
     dashboardId: 'd1',
     isPublic: true,
@@ -65,6 +66,7 @@ beforeEach(() => {
 })
 
 afterEach(() => {
+  vi.unstubAllEnvs()
   vi.restoreAllMocks()
   useConfirm().resolve(false)
 })
@@ -88,7 +90,7 @@ describe('未公开', () => {
       [{ dashboardId: 'd1', isPublic: true, publicToken: 'tok-new' }],
     ])
     expect(wrapper.find('input').element.value).toBe(
-      `${location.origin}/public/tok-new`,
+      `${location.origin}/ai/public/tok-new`,
     )
   })
 
@@ -106,6 +108,7 @@ describe('未公开', () => {
 
 describe('已公开', () => {
   beforeEach(() => {
+    vi.stubEnv('BASE_URL', '/ai/')
     vi.spyOn(shareApi, 'getDashboardPublication').mockResolvedValue({
       dashboardId: 'd1',
       isPublic: true,
@@ -118,7 +121,7 @@ describe('已公开', () => {
     await flushPromises()
 
     expect(wrapper.find('input').element.value).toBe(
-      `${location.origin}/public/tok-old`,
+      `${location.origin}/ai/public/tok-old`,
     )
   })
 
@@ -151,7 +154,7 @@ describe('已公开', () => {
 
     expect(shareApi.publishDashboard).toHaveBeenCalledWith('d1')
     expect(wrapper.find('input').element.value).toBe(
-      `${location.origin}/public/tok-new`,
+      `${location.origin}/ai/public/tok-new`,
     )
   })
 
@@ -173,6 +176,7 @@ describe('已公开', () => {
 
 describe('问确认的过程中弹窗被关掉', () => {
   beforeEach(() => {
+    vi.stubEnv('BASE_URL', '/ai/')
     vi.spyOn(shareApi, 'getDashboardPublication').mockResolvedValue({
       dashboardId: 'd1',
       isPublic: true,
@@ -224,7 +228,7 @@ describe('取当前链接与发布抢着写', () => {
     await flushPromises()
 
     expect(wrapper.find('input').element.value).toBe(
-      `${location.origin}/public/tok-new`,
+      `${location.origin}/ai/public/tok-new`,
     )
   })
 
@@ -242,6 +246,7 @@ describe('取当前链接与发布抢着写', () => {
 
 describe('复制链接', () => {
   beforeEach(() => {
+    vi.stubEnv('BASE_URL', '/ai/')
     vi.spyOn(shareApi, 'getDashboardPublication').mockResolvedValue({
       dashboardId: 'd1',
       isPublic: true,
@@ -256,7 +261,7 @@ describe('复制链接', () => {
 
     await clickText(wrapper, '复制链接')
 
-    expect(copy).toHaveBeenCalledWith(`${location.origin}/public/tok-old`)
+    expect(copy).toHaveBeenCalledWith(`${location.origin}/ai/public/tok-old`)
   })
 
   it('复制失败时告诉人手动选中，而不是假装成功', async () => {

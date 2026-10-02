@@ -201,11 +201,17 @@ onBeforeUnmount(() => {
 
   &__head {
     display: flex;
+    flex-shrink: 0;
     align-items: flex-start;
     justify-content: space-between;
     gap: 16px;
     padding: 18px 20px 12px;
     border-bottom: 1px solid var(--border-subtle);
+
+    > div {
+      min-width: 0;
+      overflow-wrap: anywhere;
+    }
   }
 
   &__title {
@@ -223,6 +229,7 @@ onBeforeUnmount(() => {
   }
 
   &__guard {
+    flex-shrink: 0;
     margin: 0;
     padding: 8px 20px;
     border-bottom: 1px solid var(--border-subtle);
@@ -240,10 +247,22 @@ onBeforeUnmount(() => {
 
   &__foot {
     display: flex;
+    flex-shrink: 0;
+    flex-wrap: wrap;
     justify-content: flex-end;
     gap: 8px;
     padding: 12px 20px 18px;
     border-top: 1px solid var(--border-subtle);
+  }
+
+  @media (max-width: 640px), (max-height: 600px) {
+    padding: 12px;
+
+    &__head,
+    &__body,
+    &__foot {
+      padding: 12px;
+    }
   }
 }
 </style>

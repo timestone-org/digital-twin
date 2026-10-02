@@ -1,4 +1,6 @@
 /** @fileoverview 从 platform OpenAPI 生成的点位语义检索契约。 */
+import type { CollectProtocol } from './collect'
+
 export type PointMatchOut = {
   code: string
   description: string | null
@@ -10,6 +12,7 @@ export type PointMatchOut = {
   score: number
   source_id: string
   source_name: string
+  source_protocol: CollectProtocol
   unit: string | null
 }
 

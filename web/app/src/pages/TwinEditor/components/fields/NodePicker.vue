@@ -7,6 +7,7 @@
  * 什么都不再命中，界面上不说的话，用户看到的只是「配了但没反应」。
  * ⚠ 候选为空不等于「都不存在」，那是「还不知道」（模型没加载），此时不判定缺失。
  */
+import type { DtSelectOption } from '@dt/contracts'
 import { DtButton, DtEmpty, DtIcon, DtInput, DtSelect } from '@dt/ui'
 import { computed, ref } from 'vue'
 
@@ -53,6 +54,14 @@ function add(name: string): void {
   emit('update:modelValue', [...props.modelValue, trimmed])
 }
 
+function addAll(options: readonly DtSelectOption[]): void {
+  const names = options
+    .filter((option) => option.disabled !== true)
+    .map((option) => option.value)
+  const next = [...new Set([...props.modelValue, ...names])]
+  if (next.length !== props.modelValue.length) emit('update:modelValue', next)
+}
+
 function addDraft(): void {
   add(draft.value)
   draft.value = ''
@@ -68,6 +77,18 @@ function remove(name: string): void {
 
 <template>
   <div class="flex flex-col gap-2">
+    <div class="flex flex-wrap items-center justify-between gap-2">
+      <span class="text-xs text-text-secondary" aria-live="polite"
+        >已选 {{ modelValue.length }} 项</span
+      >
+      <DtButton
+        size="sm"
+        variant="ghost"
+        :disabled="modelValue.length === 0"
+        @click="emit('update:modelValue', [])"
+        >清空已选</DtButton
+      >
+    </div>
     <ul
       v-if="modelValue.length > 0"
       aria-label="已选择的名字"
@@ -110,11 +131,29 @@ function remove(name: string): void {
       v-if="options.length > 0"
       model-value=""
       :options="options"
-      :display="{ placeholder: '从候选里挑…' }"
+      :display="{
+        placeholder: '从候选里挑（可多选）…',
+        searchable: true,
+        closeOnSelect: false,
+      }"
       aria-label="从候选里挑"
       size="sm"
       @update:model-value="add"
-    />
+    >
+      <template #menu-actions="{ options: matchedOptions, query }">
+        <DtButton
+          size="sm"
+          variant="soft"
+          block
+          :disabled="matchedOptions.length === 0"
+          @click="addAll(matchedOptions)"
+        >
+          {{ query.trim() ? '全选搜索结果' : '全选全部候选' }}（{{
+            matchedOptions.length
+          }}）
+        </DtButton>
+      </template>
+    </DtSelect>
     <p
       v-else-if="candidates.length === 0 && emptyText !== ''"
       class="text-xs text-text-disabled"

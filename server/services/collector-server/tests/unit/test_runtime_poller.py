@@ -7,6 +7,7 @@ from collector_server.apps.collect.runtime.poller import (
     MIN_POLL_INTERVAL_MS,
     PollLoop,
     PollOptions,
+    next_deadline,
 )
 
 TS_MS = 1_767_323_045_000
@@ -73,7 +74,22 @@ async def test_read_failure_skips_the_round_without_raising() -> None:
         options=PollOptions(point_codes=("a",), interval_ms=1000),
     )
     await loop.tick()
-    assert seen == []
+    assert len(seen) == 1
+    assert seen[0][0] == "a"
+    assert seen[0][1] is None
+    assert seen[0][3] == "bad"
+
+
+async def test_short_result_is_dropped_instead_of_shifting_values() -> None:
+    seen, sink = _collector()
+    loop = PollLoop(
+        driver=StubDriver([(1.0, TS_MS, "good")]),
+        sink=sink,
+        options=PollOptions(point_codes=("a", "b"), interval_ms=1000),
+    )
+    await loop.tick()
+    assert [entry[0] for entry in seen] == ["a", "b"]
+    assert all(entry[3] == "bad" for entry in seen)
 
 
 async def test_stop_ends_the_loop_without_waiting_a_full_period() -> None:
@@ -115,3 +131,21 @@ def test_poll_interval_never_goes_below_the_floor() -> None:
     )
     # 下限没有公开面，只能读内部
     assert loop._interval_s == MIN_POLL_INTERVAL_MS / 1000
+
+
+def test_point_periods_respect_source_floor() -> None:
+    loop = PollLoop(
+        driver=StubDriver([]),
+        sink=lambda *_: None,
+        options=PollOptions(
+            point_codes=("fast", "slow"),
+            interval_ms=1000,
+            point_period_ms={"fast": 100, "slow": 5000},
+        ),
+    )
+    assert loop._period_s == {"fast": 1.0, "slow": 5.0}
+
+
+def test_overrun_skips_missed_deadlines_without_catchup() -> None:
+    assert next_deadline(10.0, 1.0, 12.3) == 13.0
+    assert next_deadline(10.0, 1.0, 10.2) == 11.0

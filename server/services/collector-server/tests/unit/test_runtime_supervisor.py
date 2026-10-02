@@ -81,6 +81,10 @@ class FakeSession:
         self.is_stopped = True
         self._forever.set()
 
+    def revoke(self) -> None:
+        self.is_online = False
+        self.is_stopped = True
+
     async def apply(self, source: Any) -> None:
         self.applied.append(source)
 
@@ -160,6 +164,34 @@ async def test_taking_the_lease_converges_the_whole_plan(
     await supervisor.stop()
 
 
+async def test_one_invalid_source_does_not_block_other_sessions(
+    build_plan: Any, build_source: Any
+) -> None:
+    invalid = build_source(uuid4())
+    healthy = build_source(uuid4())
+    built: list[FakeSession] = []
+
+    def builder(source: Any) -> FakeSession:
+        if source.source_id == invalid.source_id:
+            raise ValueError("invalid source")
+        session = FakeSession(source)
+        built.append(session)
+        return session
+
+    supervisor = CollectSupervisor(
+        lease=FakeLease(),
+        plan=PlanStore(
+            fetcher=FakeFetcher([build_plan(sources=(invalid, healthy))])
+        ),
+        builder=builder,
+        options=SupervisorOptions(plan_refresh_interval_s=0.0),
+        clock=lambda: 0,
+    )
+    await supervisor.tick()
+    assert [session.source_id for session in built] == [healthy.source_id]
+    await supervisor.stop()
+
+
 async def test_losing_the_lease_stops_every_session(build_plan: Any) -> None:
     lease = FakeLease(answers=[True, False])
     supervisor, built = _supervisor(lease, FakeFetcher([build_plan()]))
@@ -167,6 +199,31 @@ async def test_losing_the_lease_stops_every_session(build_plan: Any) -> None:
     await supervisor.tick()
     assert built[0].is_stopped is True
     assert supervisor.is_leader is False
+
+
+async def test_lease_loss_revokes_all_sources_before_slow_teardown(
+    build_plan: Any, build_source: Any
+) -> None:
+    first = build_source(uuid4())
+    second = build_source(uuid4())
+    lease = FakeLease(answers=[True, False])
+    plan = build_plan(sources=(first, second))
+    supervisor, built = _supervisor(lease, FakeFetcher([plan]))
+    await supervisor.tick()
+    entered = asyncio.Event()
+    release = asyncio.Event()
+
+    async def slow_stop() -> None:
+        entered.set()
+        await release.wait()
+
+    built[0].stop = slow_stop
+    dropping = asyncio.create_task(supervisor.tick())
+    await asyncio.wait_for(entered.wait(), timeout=1)
+    assert built[1].is_stopped is True
+    assert built[1].is_online is False
+    release.set()
+    await asyncio.wait_for(dropping, timeout=1)
 
 
 async def test_subscribing_is_answered_by_the_live_session(

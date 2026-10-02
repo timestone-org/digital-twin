@@ -71,6 +71,7 @@ const SHAPES: Record<string, Record<string, true>> = {
     description: true,
     unit: true,
     source_name: true,
+    source_protocol: true,
     is_enabled: true,
     is_exact: true,
     score: true,

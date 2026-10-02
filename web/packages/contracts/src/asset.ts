@@ -18,8 +18,8 @@ export type AssetKind = (typeof ASSET_KINDS)[number]
  *
  * ⚠ 排的是**画质**不是压缩率：`high` = 高画质（不减面，只做 Draco 无损几何压缩），
  * 不是「高压缩」。反过来命名每次读都要在脑子里翻译一次，而翻译错的那次没有任何提示。
- * ⚠ `original` 是用户传上来的那份字节，永远保留且永不改写——它是压缩失败时唯一的
- * 退路，也是重压的输入。
+ * `original` 是当前内容版本的上传原件，压缩任务不改写它。
+ * 重新上传切换内容版本；压缩失败仍可读取当前原件。
  */
 export const MODEL_VARIANTS = ['original', 'high', 'medium', 'low'] as const
 export type ModelVariant = (typeof MODEL_VARIANTS)[number]
@@ -98,7 +98,7 @@ export function modelVariantUrl(
 ): string {
   const id = parseAssetRef(ref)
   if (id === null) return ''
-  return `${withSlash(base)}${modelVariantKey(id, variant)}`
+  return `${withSlash(base)}resolve/models/${id}/${variant}`
 }
 
 /**
@@ -110,6 +110,7 @@ export function modelVariantUrl(
 export function assetUrl(base: string, kind: AssetKind, ref: string): string {
   const id = parseAssetRef(ref)
   if (id === null) return ''
+  if (kind === 'model') return modelVariantUrl(base, ref, 'original')
   return `${withSlash(base)}${assetObjectKey(kind, id)}`
 }
 
