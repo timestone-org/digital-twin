@@ -167,7 +167,14 @@ async def open_leg(config: FunAsrConfig, *, wav_name: str) -> "FunAsrLeg":
     try:
         await leg.send_text(json.dumps(init_message(config, wav_name)))
     except BaseException:
-        await leg.aclose()
+        try:
+            await leg.aclose()
+        except BaseException as cleanup_error:
+            _logger.warning(
+                "speech_asr_init_cleanup_failed",
+                "语音连接初始化失败后的关闭也失败",
+                error_type=type(cleanup_error).__name__,
+            )
         raise
     return leg
 

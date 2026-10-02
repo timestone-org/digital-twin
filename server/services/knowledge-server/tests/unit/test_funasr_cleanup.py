@@ -68,3 +68,36 @@ async def test_failed_init_releases_the_connected_transport(
                 )
             is_closing = connection.transport.is_closing()
     assert is_closing, "初始化失败后，上游 TCP 仍然处于打开状态"
+
+
+async def test_failed_init_preserves_the_send_error_when_close_fails(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    send_error = AsrUnavailable("init failed")
+
+    async def failed_send(_leg: FunAsrLeg, _text: str) -> None:
+        raise send_error
+
+    async def failed_close() -> None:
+        raise OSError("close failed")
+
+    async with (
+        FakeFunAsr().serving() as url,
+        connect(url, subprotocols=[BINARY]) as connection,
+    ):
+
+        async def connected(
+            *_args: object, **_kwargs: object
+        ) -> ClientConnection:
+            return connection
+
+        with monkeypatch.context() as patch:
+            patch.setattr(funasr, "connect", connected)
+            patch.setattr(FunAsrLeg, "send_text", failed_send)
+            patch.setattr(connection, "close", failed_close)
+            with pytest.raises(AsrUnavailable) as caught:
+                await funasr.open_leg(
+                    funasr.FunAsrConfig(url=url), wav_name="init"
+                )
+            assert caught.value is send_error
+            assert connection.transport.is_closing()
