@@ -17,6 +17,7 @@ from ai_assistant.apps.chat.services.tools.providers.client_specs import (
     look,
     report,
     twin,
+    twin2d,
 )
 from ai_assistant.apps.chat.services.tools.providers.knowledge import (
     KNOWLEDGE_SPECS,
@@ -66,6 +67,7 @@ def test_the_registry_keeps_the_declared_order() -> None:
         + twin.TWIN_SPECS
         + interaction.INTERACTION_SPECS
         + look.LOOK_SPECS
+        + twin2d.TWIN2D_SPECS
     )
     assert [spec.name for spec in all_specs()] == [
         spec.name for spec in expected
