@@ -153,6 +153,8 @@ const freeTextLabel = computed(
 .ai-ask {
   display: flex;
   flex-direction: column;
+  min-width: 0;
+  overflow-wrap: anywhere;
   gap: 0.5rem;
   padding: 0.625rem 0.75rem;
   border: 1px solid var(--accent-primary);

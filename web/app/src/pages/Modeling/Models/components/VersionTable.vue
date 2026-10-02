@@ -74,7 +74,9 @@ defineEmits<{
     }"
   >
     <template #toolbar><slot name="toolbar" /></template>
-    <template #cell-name="{ row }">{{ row.name }}</template>
+    <template #cell-name="{ row }">
+      <span class="block truncate" :title="row.name">{{ row.name }}</span>
+    </template>
     <template #cell-version="{ row }">v{{ row.version }}</template>
     <template #cell-algo="{ row }">
       <code class="dt-ml-versions__code" :title="row.algo">{{ row.algo }}</code>
@@ -86,9 +88,14 @@ defineEmits<{
     </template>
     <template #cell-servable="{ row }">
       <DtTag v-if="row.is_servable" intent="success" size="sm">可用</DtTag>
-      <span v-else class="dt-ml-versions__why">
-        <DtTag intent="danger" size="sm">不可用</DtTag>
-        {{ row.unservable_reason }}
+      <span v-else class="dt-ml-versions__why max-w-full">
+        <DtTag class="shrink-0" intent="danger" size="sm">不可用</DtTag>
+        <span
+          class="min-w-0 [overflow-wrap:anywhere]"
+          :title="row.unservable_reason ?? ''"
+        >
+          {{ row.unservable_reason }}
+        </span>
       </span>
     </template>
     <template #cell-created_at="{ row }">

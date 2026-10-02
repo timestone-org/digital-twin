@@ -105,8 +105,9 @@ function duration(ms: number | null): string {
     <template #toolbar><slot name="toolbar" /></template>
     <template #cell-pipeline="{ row }">
       <RouterLink
-        class="dt-ml-runs__link"
+        class="dt-ml-runs__link block truncate"
         :to="`/modeling/pipelines/${row.pipeline_id}?run_id=${row.id}`"
+        :title="props.pipelineNames.get(row.pipeline_id) ?? row.pipeline_id"
       >
         {{ props.pipelineNames.get(row.pipeline_id) ?? row.pipeline_id }}
       </RouterLink>

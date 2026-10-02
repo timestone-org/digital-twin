@@ -94,7 +94,7 @@ export function useDeploymentOps(onDone: () => void) {
   async function remove(deployment: ModelDeployment): Promise<void> {
     if (!(await confirm.ask(removeAsk(deployment)))) return
     const done = await run(() => modeling.deleteModelDeployment(deployment.id))
-    if (done !== undefined) toast.success('已删除')
+    if (done !== null) toast.success('已删除')
   }
 
   /** 撤销一把钥匙。立刻生效，没法恢复。 */
