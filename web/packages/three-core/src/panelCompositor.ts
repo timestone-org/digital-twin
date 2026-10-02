@@ -37,7 +37,8 @@ export class PanelCompositor {
     this.canvas.style.cssText = 'width:100%;height:100%;display:block'
     const svg = document.createElementNS('http://www.w3.org/2000/svg', 'svg')
     svg.style.cssText = 'position:absolute;width:0;height:0;overflow:visible'
-    this.clip.id = `panel-clip-${crypto.randomUUID()}`
+    // ⚠ HTTP 内网没有 crypto.randomUUID，裁剪标识复用场景自身的 UUID。
+    this.clip.id = `panel-clip-${this.holes.uuid}`
     this.clip.setAttribute('clipPathUnits', 'userSpaceOnUse')
     svg.append(this.clip)
     this.canvas.style.clipPath = `url(#${this.clip.id})`

@@ -219,6 +219,7 @@ UNGUARDED = frozenset(
         f"{API_PREFIX}/redoc",
         f"{API_PREFIX}/openapi.json",
         PUBLIC_DASHBOARD_PATH,
+        f"{API_PREFIX}/public-assets/{{asset_id}}/{{variant}}",
     }
 )
 
@@ -412,13 +413,8 @@ def test_no_public_route_is_left_unguarded() -> None:
     assert unguarded == []
 
 
-def test_the_anonymous_business_surface_is_exactly_one_route() -> None:
-    """⚠ 免认证的业务端点只许有公开大屏这一条（ADR-0014）。
-
-    `UNGUARDED` 是一张手写的豁免名单，往里加一行就能让任何端点绕开上面全部
-    契约——加的人多半只是想让红灯变绿。这条把名单本身钉住：探针与文档之外，
-    匿名可达的只能是公开大屏。要再开一条，先写 ADR 说明配额与凭据怎么办。
-    """
+def test_anonymous_routes_only_expose_dashboards_and_model_bytes() -> None:
+    """ADR-0014 与 ADR-0015 仅开放公开大屏和已有公开模型的字节寻址。"""
     probes = {
         f"{API_PREFIX}/health",
         f"{API_PREFIX}/ready",
@@ -427,7 +423,10 @@ def test_the_anonymous_business_surface_is_exactly_one_route() -> None:
         f"{API_PREFIX}/openapi.json",
     }
 
-    assert UNGUARDED - probes == {PUBLIC_DASHBOARD_PATH}
+    assert UNGUARDED - probes == {
+        PUBLIC_DASHBOARD_PATH,
+        f"{API_PREFIX}/public-assets/{{asset_id}}/{{variant}}",
+    }
 
 
 def test_the_public_dashboard_route_really_exists() -> None:

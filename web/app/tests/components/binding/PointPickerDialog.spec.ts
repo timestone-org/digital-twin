@@ -8,7 +8,7 @@
  */
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 import { flushPromises, mount } from '@vue/test-utils'
-import type { Page } from '@dt/contracts'
+import type { Page, PointMatchesOut } from '@dt/contracts'
 
 import * as collectApi from '@/api/collect'
 import * as searchApi from '@/api/collectSearch'
@@ -243,7 +243,7 @@ describe('选中', () => {
 })
 
 describe('智能检索', () => {
-  function matches() {
+  function matches(): PointMatchesOut {
     return {
       items: [
         {
@@ -253,6 +253,7 @@ describe('智能检索', () => {
           name: '余热水箱测温',
           source_id: 's1',
           source_name: '能源站',
+          source_protocol: 'modbus_tcp',
           description: '余热回收水箱温度',
           unit: '℃',
           is_enabled: true,

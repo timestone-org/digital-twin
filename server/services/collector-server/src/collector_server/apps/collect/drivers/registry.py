@@ -6,6 +6,9 @@
 from collections.abc import Callable, Mapping
 
 from collector_server.apps.collect.drivers.base import Driver, DriverConnection
+from collector_server.apps.collect.drivers.modbus_tcp.driver import (
+    ModbusTcpDriver,
+)
 from collector_server.apps.collect.drivers.opcua.driver import OpcuaDriver
 from collector_server.apps.collect.errors import UnknownProtocol
 
@@ -13,13 +16,21 @@ DriverFactory = Callable[[DriverConnection], Driver]
 
 # ⚠ 取值是字符串常量，与计划里的 `protocol` 逐字一致（禁数字枚举）
 PROTOCOL_OPCUA = "opcua"
+PROTOCOL_MODBUS_TCP = "modbus_tcp"
 
 
 def _build_opcua(connection: DriverConnection) -> Driver:
     return OpcuaDriver(connection=connection)
 
 
-_FACTORIES: Mapping[str, DriverFactory] = {PROTOCOL_OPCUA: _build_opcua}
+def _build_modbus_tcp(connection: DriverConnection) -> Driver:
+    return ModbusTcpDriver(connection=connection)
+
+
+_FACTORIES: Mapping[str, DriverFactory] = {
+    PROTOCOL_MODBUS_TCP: _build_modbus_tcp,
+    PROTOCOL_OPCUA: _build_opcua,
+}
 
 
 def supported_protocols() -> tuple[str, ...]:

@@ -20,6 +20,7 @@ def match(code: str, score: float) -> dict[str, object]:
         "description": "热回收蓄水罐的测温探头",
         "source_id": "source",
         "source_name": "能源站",
+        "source_protocol": "modbus_tcp",
         "unit": "℃",
         "is_enabled": True,
         "is_exact": False,
@@ -69,6 +70,7 @@ async def test_semantic_search_keeps_platform_ranking() -> None:
     assert [point["code"] for point in got["points"]] == ["z", "a"]
     assert got["points"][0]["description"] == "热回收蓄水罐的测温探头"
     assert got["points"][0]["source_name"] == "能源站"
+    assert got["points"][0]["source_protocol"] == "modbus_tcp"
     assert got["mode"] == "hybrid"
 
 

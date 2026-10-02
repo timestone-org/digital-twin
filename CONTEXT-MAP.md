@@ -46,8 +46,8 @@
    以及直读现场 EMS 库的空调数据面——数据集目录、数据源绑定、达标范围、
    原始数据表格与聚合序列；`apps/dashboard`：大屏组态的配置面；
    `apps/collect`：数据源与点位配置、采集计划下发、命令总线发起端、点位历史读侧）
-6. 🟡 `collector-server`（骨架、驱动适配器层与 OPC UA 驱动、单活与计划、命令总线、
-   归档管道已建；**尚未接过真实 PLC**，一期用 `opcua-server` 当可控假件验证）
+6. 🟡 `collector-server`（骨架、OPC UA 与只读 Modbus TCP 驱动、单活与计划、命令总线、
+   归档管道已建；Modbus TCP 已用协议假件验证，**尚未接过真实 PLC**）
 7. ⬜ `platform-worker`（按点位保留期的夜间批处理仍未落地，见 `COLLECT_DESIGN.md` §6）
 8. 🟡 `ai-assistant`（服务、四个技能、服务端与客户端两侧工具、大屏编辑器与台账页
    两个工作面已建；**尚未在现场跑过真模型**，本地只用假件验过编排）

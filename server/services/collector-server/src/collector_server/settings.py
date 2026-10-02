@@ -95,3 +95,8 @@ class Settings(AppSettings, PostgresSettings, RedisSettings):
     reconnect_max_backoff_s: float = Field(default=60.0, gt=0)
     # 心跳探针周期：探不到就判断线并进重连
     heartbeat_interval_s: float = Field(default=10.0, gt=0)
+    # 所有 PLC 数据源合计最多几个在途协议请求；每条连接内部仍保持单飞。
+    plc_max_concurrent_requests: int = Field(default=8, ge=1, le=256)
+    # 默认不向任何 PLC 发网络请求；允许目标必须精确到 IP 与端口。
+    plc_read_enabled: bool = False
+    plc_allowed_endpoints: str = ""

@@ -82,6 +82,7 @@ describe('弹窗的对外面', () => {
       'modelValue',
       'point',
       'presetAddress',
+      'protocol',
     ])
     expect(emitNames(PointFormDialog).sort()).toEqual([
       'create',

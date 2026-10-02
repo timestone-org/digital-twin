@@ -169,7 +169,15 @@ class CollectSupervisor:
             if source_id not in wanted:
                 await self._drop(source_id)
         for source in wanted.values():
-            await self._ensure(source)
+            try:
+                await self._ensure(source)
+            except Exception as error:
+                _logger.error(
+                    "source_converge_failed",
+                    "数据源会话收敛失败，其余数据源继续处理",
+                    source_id=str(source.source_id),
+                    error_type=type(error).__name__,
+                )
 
     async def _ensure(self, source: PlanSource) -> None:
         """按计划里的一个数据源收敛出一条会话。
@@ -230,6 +238,8 @@ class CollectSupervisor:
 
     async def _stand_down(self) -> None:
         """拆掉全部会话。丢主与关停都走这里。"""
+        for session in self._sessions.values():
+            session.revoke()
         for source_id in list(self._sessions):
             await self._drop(source_id)
 

@@ -1,5 +1,6 @@
 """组合根：把配置拧成各个协作对象。装配只在这里发生，模块顶层不做副作用。"""
 
+import asyncio
 from dataclasses import dataclass
 
 from collector_server.apps.collect import tuning
@@ -108,11 +109,24 @@ def _build_session_builder(
     Args: settings, plan, sink, archive, state。
     """
 
+    request_limiter = asyncio.Semaphore(settings.plc_max_concurrent_requests)
+
     def build(source: PlanSource) -> SourceSession:
         return SourceSession(
             source=source,
             driver=create_driver(
-                source.protocol, to_connection(source, DRIVER_TIMEOUTS)
+                source.protocol,
+                to_connection(
+                    source,
+                    DRIVER_TIMEOUTS,
+                    request_limiter,
+                    is_network_access_enabled=settings.plc_read_enabled,
+                    allowed_endpoints=frozenset(
+                        target.strip()
+                        for target in settings.plc_allowed_endpoints.split(",")
+                        if target.strip()
+                    ),
+                ),
             ),
             # 一条读数并联进快照与归档两条支线（COLLECT_DESIGN.md §4.3 的 ②③）
             sink=fan_out(

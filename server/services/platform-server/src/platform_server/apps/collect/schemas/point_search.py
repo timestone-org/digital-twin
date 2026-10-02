@@ -5,6 +5,7 @@ from typing import Literal
 
 from pydantic import Field
 
+from platform_server.apps.collect.protocols import Protocol
 from platform_server.apps.collect.schemas.common import OutputModel
 
 
@@ -19,6 +20,7 @@ class PointMatchOut(OutputModel):
     description: str | None
     unit: str | None
     source_name: str
+    source_protocol: Protocol
     is_enabled: bool
     is_exact: bool
     score: float

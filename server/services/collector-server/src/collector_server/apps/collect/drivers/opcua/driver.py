@@ -295,12 +295,13 @@ class OpcuaDriver:
         """OPC UA 三样都支持。"""
         return CAPABILITIES
 
-    def load_points(self, points: Sequence[PointSpec]) -> None:
+    def load_points(self, points: Sequence[PointSpec]) -> int:
         """登记 point_code → 寻址串，**整表替换**。
 
         Args: points。
         """
         self._points = {point.point_code: point for point in points}
+        return len(self._points)
 
     def _remember(self, points: Sequence[PointSpec]) -> None:
         """把这批点位**并入**点位表。

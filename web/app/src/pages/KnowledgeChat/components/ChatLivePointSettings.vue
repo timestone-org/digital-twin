@@ -1,8 +1,14 @@
 <script setup lang="ts">
 /** @fileoverview 实时卡片的小数位与采样信息设置浮层。 */
 import { DtButton, DtNumberInput, DtPopover } from '@dt/ui'
+import { protocolLabel } from '@/features/collect/protocols'
 
-defineProps<{ sourceName: string; sampledAt: string; quality: string }>()
+defineProps<{
+  sourceName: string
+  sourceProtocol: string | null
+  sampledAt: string
+  quality: string
+}>()
 const decimals = defineModel<number | undefined>()
 </script>
 
@@ -28,7 +34,12 @@ const decimals = defineModel<number | undefined>()
           size="sm"
           :range="{ min: 0, max: 10, step: 1, precision: 0 }"
         />
-        <span>{{ sourceName }}</span>
+        <span>
+          数据源：{{ sourceName }}
+          <template v-if="sourceProtocol"
+            >· {{ protocolLabel(sourceProtocol) }}</template
+          >
+        </span>
         <span>采样时间：{{ sampledAt }}</span>
         <span>{{ quality || '尚无读数' }}</span>
       </div>

@@ -2,6 +2,8 @@
 import { afterEach, beforeEach, expect, it, vi } from 'vitest'
 import { mount, flushPromises } from '@vue/test-utils'
 import { computed, ref } from 'vue'
+import type { CollectSource } from '@dt/contracts'
+import type { LivePoint } from '@/features/knowledgeChat/liveTools'
 import * as collect from '@/api/collect'
 import ChatLivePoint from '@/pages/KnowledgeChat/components/ChatLivePoint.vue'
 import {
@@ -35,9 +37,9 @@ function push(value: unknown, quality = 'good') {
     ],
   })
 }
-function open(sources = createLiveSources()) {
+function open(sources = createLiveSources(), point: LivePoint = LIVE_POINT) {
   const wrapper = mount(ChatLivePoint, {
-    props: { point: LIVE_POINT, enabled: true },
+    props: { point, enabled: true },
     global: { provide: { [LIVE_SOURCES]: sources }, stubs: { teleport: true } },
   })
   wrappers.push(wrapper)
@@ -85,6 +87,67 @@ it('renders streamed zero and false values, quality and sampling time', async ()
   await flushPromises()
   expect(wrapper.find('.chat-live-point__value').text()).toContain('false')
   expect(wrapper.text()).toContain('质量不可用')
+})
+it('uses the PLC source topic and shows its protocol with the source name', async () => {
+  vi.mocked(collect.getSource).mockResolvedValue({
+    ...SOURCE,
+    protocol: 'modbus_tcp',
+  })
+  const wrapper = open()
+  await flushPromises()
+  expect(subscriptions).toEqual([`collect:${SOURCE.id}`])
+  await wrapper.get('button[aria-label="数值卡片设置"]').trigger('click')
+  expect(wrapper.text()).toContain('数据源：一号机 · Modbus TCP')
+  push(12.5)
+  await flushPromises()
+  expect(wrapper.get('.chat-live-point__value').text()).toBe('12.50 ℃')
+})
+it('keeps OPC UA and PLC points with the same code on separate source topics', async () => {
+  const secondId = '00000000-0000-4000-8000-000000000003'
+  const secondSource: CollectSource = {
+    ...SOURCE,
+    id: secondId,
+    name: '二号线 PLC',
+    protocol: 'modbus_tcp',
+  }
+  const secondPoint = {
+    ...POINT,
+    source_id: secondId,
+    node_key: `${secondId}:temp`,
+  }
+  vi.mocked(collect.getSource).mockImplementation((sourceId) =>
+    Promise.resolve(sourceId === secondId ? secondSource : SOURCE),
+  )
+  vi.mocked(collect.listPoints).mockImplementation((query) =>
+    Promise.resolve({
+      ...POINT_PAGE,
+      items: query?.sourceId === secondId ? [secondPoint] : [POINT],
+    }),
+  )
+  const shared = createLiveSources()
+  const first = open(shared)
+  const second = open(shared, {
+    ...LIVE_POINT,
+    source_id: secondId,
+    node_key: secondPoint.node_key,
+  })
+  await flushPromises()
+  expect(subscriptions).toEqual([`collect:${SOURCE.id}`, `collect:${secondId}`])
+  push(21)
+  handlers.get(`collect:${secondId}`)?.({
+    items: [
+      {
+        nodeKey: secondPoint.node_key,
+        state: 'ok',
+        value: 32,
+        timestampMs: Date.UTC(2026, 8, 10),
+        quality: 'good',
+      },
+    ],
+  })
+  await flushPromises()
+  expect(first.get('.chat-live-point__value').text()).toBe('21.00 ℃')
+  expect(second.get('.chat-live-point__value').text()).toBe('32.00 ℃')
 })
 it('marks old values stale through disconnect and until a new frame arrives', async () => {
   const wrapper = open()

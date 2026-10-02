@@ -10,6 +10,8 @@ from uuid import UUID
 
 from pydantic import BaseModel, ConfigDict, Field
 
+from collectwire.datatypes import DataType
+
 # 取值是字符串，禁数字枚举（api-contract §6）
 READ_MODE_SUBSCRIBE = "subscribe"
 READ_MODE_POLL = "poll"
@@ -29,6 +31,8 @@ class PlanPoint(BaseModel):
 
     point_code: str = Field(min_length=1)
     address: str = Field(min_length=1)
+    # 可选是为了兼容升级期间由旧 platform 下发的计划；新平台始终填写。
+    data_type: DataType | None = None
     sampling_interval_ms: int = Field(ge=MIN_SAMPLING_INTERVAL_MS)
     # 归档三件套：开关、死区、心跳。准入规则在采集侧的 archive/buffer.py
     archive_enabled: bool = True

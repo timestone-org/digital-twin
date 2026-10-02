@@ -46,7 +46,10 @@ const status = computed(() => {
 <template>
   <li class="chat-live-point">
     <DtCard padding="sm">
-      <strong class="chat-live-point__name" :title="live.current.value.name">
+      <strong
+        class="chat-live-point__name"
+        :title="`${live.current.value.source_name} · ${live.current.value.name}`"
+      >
         {{ live.current.value.name }}
       </strong>
       <div class="chat-live-point__reading">
@@ -62,6 +65,7 @@ const status = computed(() => {
         <ChatLivePointSettings
           v-model="decimals"
           :source-name="live.current.value.source_name"
+          :source-protocol="live.current.value.source_protocol"
           :sampled-at="sampledAt"
           :quality="quality"
         />

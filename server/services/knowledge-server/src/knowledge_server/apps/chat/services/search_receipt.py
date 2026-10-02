@@ -16,6 +16,7 @@ class PointCandidate(BaseModel):
     name: str
     source_id: str
     source_name: str
+    source_protocol: str | None = None
     is_enabled: bool = True
 
 
@@ -62,6 +63,7 @@ def _render(receipt: SearchReceipt, kept: int) -> str:
         one.source_id: {
             "source_id": one.source_id,
             "name": one.source_name,
+            "protocol": one.source_protocol,
             "is_enabled": one.is_enabled,
         }
         for one in points
