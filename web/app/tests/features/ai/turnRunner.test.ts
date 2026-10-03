@@ -9,7 +9,11 @@
  * 没有答复，下一轮请求会被端点判成不合法。
  */
 import { afterEach, describe, expect, it, vi } from 'vitest'
-import { ASSISTANT_ASK_TOOL, type AssistantPlan } from '@dt/contracts'
+import {
+  ASSISTANT_ASK_TOOL,
+  ASSISTANT_MCP_CONFIRM_TOOL,
+  type AssistantPlan,
+} from '@dt/contracts'
 import type { AdvanceBody } from '@/api/assistant'
 import {
   ASK_MUST_BE_ALONE,
@@ -137,6 +141,15 @@ function writingSurface(run = vi.fn().mockResolvedValue({ ok: true })) {
 }
 
 describe('回合循环', () => {
+  it('每次推进都声明可信MCP写确认能力', async () => {
+    const { advance, bodies } = advanceOf([
+      [frame('turn.done', { reply: '好了' })],
+    ])
+    const { sink } = sinkOf()
+    await runTurn(inputOf(advance), sink)
+    expect(bodies[0]?.client_tools).toContain('mcp.confirm_write')
+  })
+
   it('一问一答就结束', async () => {
     const { advance } = advanceOf([
       [STEP, frame('turn.done', { reply: '好了' })],
@@ -588,6 +601,7 @@ describe('计划', () => {
 
     expect(bodies[0]?.client_tools).toEqual([
       ASSISTANT_ASK_TOOL,
+      ASSISTANT_MCP_CONFIRM_TOOL,
       'dashboard.read_canvas',
     ])
   })
@@ -600,7 +614,10 @@ describe('计划', () => {
     const { sink } = sinkOf()
     await runTurn(inputOf(advance), sink)
 
-    expect(bodies[0]?.client_tools).toEqual([ASSISTANT_ASK_TOOL])
+    expect(bodies[0]?.client_tools).toEqual([
+      ASSISTANT_ASK_TOOL,
+      ASSISTANT_MCP_CONFIRM_TOOL,
+    ])
   })
 })
 

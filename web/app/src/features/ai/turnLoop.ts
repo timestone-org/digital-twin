@@ -26,6 +26,10 @@ import { ASSISTANT_ASK_TOOL } from '@dt/contracts'
 
 import { createFrameReader, type FrameReader } from './sseFrames'
 import { inputPreview, isImageOutput, outputPreview } from './stepPreview'
+import {
+  ActualToolReceiptError,
+  ToolReceiptUnavailableError,
+} from './toolReceipts'
 
 /**
  * 一批里混了 `user.ask` 与别的调用时，退给那几个的失败话术。
@@ -138,15 +142,15 @@ export async function runLoop<Body extends LoopBody>(
     const outcome = await pumpUnlessCancelled(input, body, sink)
     if (outcome.kind === 'error' || isCancelled(input.signal)) return
     if (outcome.kind === 'pending') {
-      const results = await runAll(
+      const batch = await runAll(
         outcome.calls,
         input.dispatch,
         sink,
         input.signal,
       )
-      if (!(await saveActualReceipts(input, results, sink))) return
-      if (isCancelled(input.signal)) return
-      body = { ...input.envelope(), tool_results: results }
+      if (!(await saveActualReceipts(input, batch.results, sink))) return
+      if (shouldStopBatch(batch.hasUnknown, input.signal)) return
+      body = { ...input.envelope(), tool_results: batch.results }
       continue
     }
     const next = nudgeBody(input, sink)
@@ -171,6 +175,10 @@ async function saveActualReceipts<Body extends LoopBody>(
     sink.onError('执行结果未保存到历史，请检查连接；已执行的操作不会自动重试。')
     return false
   }
+}
+
+function shouldStopBatch(hasUnknown: boolean, signal?: AbortSignal): boolean {
+  return hasUnknown || isCancelled(signal)
 }
 
 function isCancelled(signal?: AbortSignal): boolean {
@@ -288,9 +296,10 @@ async function runAll(
   dispatch: (call: AssistantToolCall) => Promise<unknown>,
   sink: LoopSink,
   signal?: AbortSignal,
-): Promise<ToolResult[]> {
+): Promise<{ results: ToolResult[]; hasUnknown: boolean }> {
   const results: ToolResult[] = []
   const steps: RunnerStep[] = []
+  let hasUnknown = false
   const isMixedBatch = calls.some(isAsk) && calls.length > 1
   for (const call of calls) {
     // ⚠ 取消无法撤回已执行工具，但必须拦住后续工具并保留实际回执。
@@ -305,14 +314,27 @@ async function runAll(
       results.push({ call_id: call.call_id, output })
       if (!isAsk(call)) steps.push(stepOf(call, output, null))
     } catch (error) {
-      // 失败也要送回去，而且要说清——不送的话那次调用永远没有答复
       const reason = describe(error)
-      results.push({ call_id: call.call_id, error: reason })
-      steps.push(stepOf(call, undefined, reason))
+      if (error instanceof ToolReceiptUnavailableError) {
+        steps.push({
+          ...stepOf(call, undefined, reason),
+          state: 'unknown',
+          title: `${call.name} 执行状态未确认`,
+        })
+        sink.onError(reason)
+        hasUnknown = true
+        break
+      }
+      const result =
+        error instanceof ActualToolReceiptError
+          ? error.result
+          : { call_id: call.call_id, error: reason }
+      results.push(result)
+      steps.push(stepOf(call, result.output, reason))
     }
   }
   sink.onToolsRun(steps)
-  return results
+  return { results, hasUnknown }
 }
 
 function isAsk(call: AssistantToolCall): boolean {

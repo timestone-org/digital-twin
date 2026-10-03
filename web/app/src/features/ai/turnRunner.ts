@@ -19,7 +19,10 @@ import type {
   AssistantSurfaceKind,
   AssistantToolCall,
 } from '@dt/contracts'
-import { ASSISTANT_PLAN_STATUSES } from '@dt/contracts'
+import {
+  ASSISTANT_MCP_CONFIRM_TOOL,
+  ASSISTANT_PLAN_STATUSES,
+} from '@dt/contracts'
 
 import type { AdvanceBody } from '@/api/assistant'
 import {
@@ -30,6 +33,7 @@ import {
 import type { AdvanceStream, AiAssistantPorts } from './ports'
 import { activeSurface, runClientTool } from './surfaces'
 import { readObject, readText, runLoop, type LoopSink } from './turnLoop'
+import { runMcpWrite } from './mcpWriteBridge'
 
 export { ASK_MUST_BE_ALONE, type RunnerStep } from './turnLoop'
 
@@ -90,7 +94,7 @@ export async function runTurn(
       userText: input.userText,
       userImages: input.userImages,
       signal: input.signal,
-      dispatch,
+      dispatch: (call) => dispatch(input, call),
       onFrame: (name, data) => {
         if (name !== 'plan') return
         const plan = readPlan(data.plan)
@@ -133,12 +137,22 @@ function envelope(input: RunnerInput): AdvanceBody {
     // 页面自报实现了哪些客户端工具：内建那几个每一页都有，工作面的按登记来。
     // ⚠ 没有工作面时也**不是空**——提问不归任何一页，一个工作面都没登记的
     // 页面（纯看板、纯列表页）照样要能问
-    client_tools: [...BUILTIN_CLIENT_TOOLS, ...(surface?.tools ?? [])],
+    client_tools: [
+      ...BUILTIN_CLIENT_TOOLS,
+      ASSISTANT_MCP_CONFIRM_TOOL,
+      ...(surface?.tools ?? []),
+    ],
   }
 }
 
 /** 先看内建表，再落到工作面。 */
-async function dispatch(call: AssistantToolCall): Promise<unknown> {
+async function dispatch(
+  input: RunnerInput,
+  call: AssistantToolCall,
+): Promise<unknown> {
+  if (call.name.startsWith('mcp.')) {
+    return runMcpWrite(input.sessionId, call, input.signal)
+  }
   if (isBuiltinTool(call.name)) return runBuiltinTool(call)
   return runClientTool(call)
 }

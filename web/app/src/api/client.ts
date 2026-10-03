@@ -80,6 +80,8 @@ export interface RequestOptions {
   /** 跳过令牌注入与 401 重试（登录、刷新自己走这条）。 */
   anonymous?: boolean | undefined
   signal?: AbortSignal | undefined
+  /** 固定调用预算覆盖默认超时；不会启用重试。 */
+  timeoutMs?: number | undefined
   /** 附加请求头，如 `Idempotency-Key`。不许在这里塞 Authorization。 */
   headers?: Record<string, string> | undefined
   /**
@@ -155,7 +157,7 @@ async function send(
   }
   if (token !== null) headers.Authorization = `Bearer ${token}`
   // ⚠ 每个跨进程调用都要有超时：没有超时的请求会在下游卡住时永远挂着
-  const timeout = AbortSignal.timeout(REQUEST_TIMEOUT_MS)
+  const timeout = AbortSignal.timeout(options.timeoutMs ?? REQUEST_TIMEOUT_MS)
   const signal = options.signal
     ? AbortSignal.any([options.signal, timeout])
     : timeout

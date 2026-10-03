@@ -150,3 +150,38 @@ describe('真实客户端回执单独提交', () => {
     ).rejects.toThrow('未确认全部工具回执')
   })
 })
+
+describe('MCP写确认接口', () => {
+  it('prepare只提交调用标识和空对象，不绑定中止信号', async () => {
+    await assistant.prepareMcpWrite('s1', 'call/1')
+    const [path, options] = call()
+    expect(path).toBe('/sessions/s1/mcp-writes/call%2F1:prepare')
+    expect(options).toMatchObject({
+      baseUrl: ASSISTANT_BASE_URL,
+      method: 'POST',
+      timeoutMs: 45_000,
+      body: {},
+    })
+    expect(options.signal).toBeUndefined()
+  })
+
+  it('decide只提交票据与用户决定，不转发工具或参数', async () => {
+    const decision = {
+      ticket: 'ticket-1',
+      confirm: false,
+      tool_name: 'mcp.fake.write',
+      arguments: { changed: true },
+    }
+    await assistant.decideMcpWrite('s1', 'call-1', decision)
+    const [path, options] = call()
+    expect(path).toBe('/sessions/s1/mcp-writes/call-1:decide')
+    expect(options).toMatchObject({
+      baseUrl: ASSISTANT_BASE_URL,
+      method: 'POST',
+      timeoutMs: 45_000,
+      body: { ticket: 'ticket-1', confirm: false },
+    })
+    expect(options.signal).toBeUndefined()
+    expect(streamMock).not.toHaveBeenCalled()
+  })
+})

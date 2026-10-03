@@ -59,6 +59,17 @@ describe('request', () => {
     await expect(request('/x')).resolves.toEqual({ id: 1 })
   })
 
+  it('默认使用20秒预算，显式MCP预算45秒不会重试', async () => {
+    const timeout = vi.spyOn(AbortSignal, 'timeout')
+    fetchMock.mockResolvedValue(envelope(ok))
+    await request('/x')
+    expect(timeout).toHaveBeenLastCalledWith(20_000)
+    fetchMock.mockResolvedValue(envelope(ok))
+    await request('/x', { timeoutMs: 45_000 })
+    expect(timeout).toHaveBeenLastCalledWith(45_000)
+    expect(fetchMock).toHaveBeenCalledTimes(2)
+  })
+
   it('请求打到 auth 前缀上', async () => {
     fetchMock.mockResolvedValue(envelope(ok))
     await request('/sessions')
