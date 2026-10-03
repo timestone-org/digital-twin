@@ -8,12 +8,14 @@
 注册表本身也按请求造。
 """
 
-from dataclasses import dataclass
+from collections.abc import Mapping
+from dataclasses import dataclass, field
 
 from ai_assistant.apps.chat.services.memory.longterm import (
     PgLongTermStore,
     SessionFactory,
 )
+from ai_assistant.apps.chat.services.tools.mcp_policy import McpWritePolicy
 from ai_assistant.apps.chat.services.tools.providers.client import ClientTools
 from ai_assistant.apps.chat.services.tools.providers.knowledge import (
     KnowledgeTools,
@@ -43,6 +45,10 @@ class ProviderDeps:
     # 外部工具目录；不给即这一路缺席
     mcp: McpCatalog | None = None
     write_allowed: frozenset[str] = frozenset()
+    write_policies: Mapping[str, McpWritePolicy] = field(
+        default_factory=dict[str, McpWritePolicy]
+    )
+    codes: frozenset[str] | None = None
     # 长期记忆的仓储与嵌入档
     sessions: SessionFactory | None = None
     embedder: EmbeddingAdapter | None = None
@@ -91,11 +97,22 @@ def build_registry(deps: ProviderDeps | None = None) -> ToolRegistry:
     ]
     # ⚠ MCP 排在最后：它的规格逐轮才知道，而工具声明属于前缀缓存唯一能命中的
     # 那一段（ADR-0025 的 B 层）——排在前面会让后面所有内建工具的声明整体位移
-    if given.mcp is not None and given.mcp.servers:
-        providers.append(
-            McpTools(catalog=given.mcp, write_allowed=given.write_allowed)
-        )
+    providers.extend(_mcp_providers(given))
     return registry_of(tuple(providers))
+
+
+def _mcp_providers(deps: ProviderDeps) -> tuple[McpTools, ...]:
+    """按请求提供带业务权限的外部目录。Args: deps。"""
+    if deps.mcp is None or not deps.mcp.servers:
+        return ()
+    return (
+        McpTools(
+            catalog=deps.mcp,
+            write_allowed=deps.write_allowed,
+            write_policies=deps.write_policies,
+            codes=deps.codes,
+        ),
+    )
 
 
 def all_specs() -> tuple[ToolSpec, ...]:

@@ -9,6 +9,7 @@ from typing import Any, Self, cast
 from pydantic import Field, SecretStr, field_validator, model_validator
 from pydantic_settings import SettingsConfigDict
 
+from ai_assistant.mcp_settings import parse_write_policies
 from lib.config import AppSettings, PostgresSettings, RedisSettings
 from llmcore import ChatEndpoint, EmbeddingEndpoint
 
@@ -277,6 +278,7 @@ class Settings(AppSettings, PostgresSettings, RedisSettings):
     # ⚠ 默认空：MCP 的 `readOnlyHint` 是可选的，缺了那一格的工具可能删东西，
     # 所以说不清就当写操作、不下发。放行的代价不可逆，拦下的只是补一行
     mcp_write_allowed: str = ""
+    mcp_write_policies: str = ""
     mcp_timeout_s: float = Field(default=10.0, gt=0)
     mcp_breaker_failures: int = Field(default=3, ge=1)
     mcp_breaker_reset_s: float = Field(default=60.0, gt=0)
@@ -451,6 +453,16 @@ class Settings(AppSettings, PostgresSettings, RedisSettings):
             raise ValueError(
                 "ASSISTANT_MCP_WRITE_ALLOWED 必须是一段 JSON 字符串列表"
             )
+        return given
+
+    @field_validator("mcp_write_policies")
+    @classmethod
+    def _mcp_write_policies_must_be_known(cls, given: str) -> str:
+        """配置未知业务动作时拒绝启动。
+
+        Args: given。
+        """
+        parse_write_policies(given)
         return given
 
     @model_validator(mode="after")

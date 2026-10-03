@@ -19,6 +19,9 @@
 from collections.abc import Sequence
 
 from ai_assistant.apps.chat.services.intent.registry import narrow_all
+from ai_assistant.apps.chat.services.tools.mcp_policy import (
+    CONFIRMATION_CAPABILITY,
+)
 from ai_assistant.apps.chat.services.tools.specs import TOOL_SPECS
 from ai_assistant.apps.chat.skills import skills_for
 from llmcore.intent.ports import Allowed, TurnContext
@@ -138,4 +141,12 @@ def specs_for(
             codes=codes,
         )
     )
-    return specs_named(TOOL_SPECS, allowed.tools) + tuple(extra)
+    confirmation_enabled = (
+        client_tools is not None and CONFIRMATION_CAPABILITY in client_tools
+    )
+    supported = tuple(
+        spec
+        for spec in extra
+        if spec.runs_on == "server" or confirmation_enabled
+    )
+    return specs_named(TOOL_SPECS, allowed.tools) + supported
