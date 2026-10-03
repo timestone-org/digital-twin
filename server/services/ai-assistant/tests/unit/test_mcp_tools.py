@@ -11,6 +11,10 @@ import httpx
 import pytest
 
 from ai_assistant.apps.chat.services.intent.select import specs_for
+from ai_assistant.apps.chat.services.tools.mcp_policy import (
+    CONFIRMATION_CAPABILITY,
+    McpWritePolicy,
+)
 from ai_assistant.apps.chat.services.tools.providers.mcp import (
     BadToolName,
     McpTools,
@@ -85,7 +89,131 @@ async def test_a_write_tool_stays_out_of_the_listing_until_allowed() -> None:
     allowed = McpTools(
         catalog=catalog, write_allowed=frozenset({"mcp.weather.set_alert"})
     )
-    assert [one.name for one in allowed.specs()] == ["mcp.weather.set_alert"]
+    assert allowed.specs() == ()
+
+
+async def test_allowlisted_write_cannot_execute_without_user_confirmation() -> (
+    None
+):
+    dispatched: list[str] = []
+
+    def handler(request: httpx.Request) -> httpx.Response:
+        if b"tools/call" in request.content:
+            dispatched.append("write")
+            return httpx.Response(200, json={"result": {"ok": True}})
+        return _reply([_tool("set_alert", is_read_only=False)])
+
+    catalog = _catalog(handler)
+    await catalog.refresh()
+    tools = McpTools(
+        catalog=catalog, write_allowed=frozenset({"mcp.weather.set_alert"})
+    )
+    with pytest.raises(LookupError):
+        await tools.run("mcp.weather.set_alert", {})
+    assert dispatched == []
+
+
+def _authorized_tools(catalog: McpCatalog, codes: frozenset[str]) -> McpTools:
+    return McpTools(
+        catalog=catalog,
+        write_allowed=frozenset({"mcp.weather.set_alert"}),
+        write_policies={
+            "mcp.weather.set_alert": McpWritePolicy(
+                required_codes=frozenset({"dashboard:view", "dashboard:edit"}),
+                target_parameter="dashboard_id",
+                impact="更新指定大屏的测试标签",
+            )
+        },
+        codes=codes,
+    )
+
+
+@pytest.mark.parametrize(
+    "codes",
+    [
+        frozenset(),
+        frozenset({"assistant:use"}),
+        frozenset({"assistant:manage"}),
+        frozenset({"llm:manage"}),
+        frozenset({"dashboard:edit"}),
+    ],
+)
+async def test_deployment_policy_does_not_grant_missing_business_permissions(
+    codes: frozenset[str],
+) -> None:
+    catalog = _catalog(
+        lambda _request: _reply([_tool("set_alert", is_read_only=False)])
+    )
+    await catalog.refresh()
+    assert _authorized_tools(catalog, codes).specs() == ()
+
+
+@pytest.mark.parametrize("reported", [None, [], ["mcp.weather.set_alert"]])
+async def test_old_clients_cannot_receive_mcp_write_calls(
+    reported: list[str] | None,
+) -> None:
+    catalog = _catalog(
+        lambda _request: _reply([_tool("set_alert", is_read_only=False)])
+    )
+    await catalog.refresh()
+    extra = _authorized_tools(
+        catalog, frozenset({"dashboard:view", "dashboard:edit"})
+    ).specs()
+    assert not any(
+        one.name == "mcp.weather.set_alert"
+        for one in specs_for("unknown", reported, extra=extra)
+    )
+
+
+async def test_authorized_write_waits_for_exclusive_trusted_confirmation() -> (
+    None
+):
+    catalog = _catalog(
+        lambda _request: _reply([_tool("set_alert", is_read_only=False)])
+    )
+    await catalog.refresh()
+    extra = _authorized_tools(
+        catalog, frozenset({"dashboard:view", "dashboard:edit"})
+    ).specs()
+    selected = specs_for("unknown", [CONFIRMATION_CAPABILITY], extra=extra)
+    assert selected[-1].runs_on == "client"
+    assert selected[-1].is_exclusive is True
+    with pytest.raises(LookupError):
+        await _authorized_tools(
+            catalog, frozenset({"dashboard:view", "dashboard:edit"})
+        ).run("mcp.weather.set_alert", {})
+
+
+async def test_remote_read_only_hint_cannot_demote_a_declared_write() -> None:
+    catalog = _catalog(lambda _request: _reply([_tool("set_alert")]))
+    await catalog.refresh()
+    tools = _authorized_tools(
+        catalog, frozenset({"dashboard:view", "dashboard:edit"})
+    )
+    assert tools.specs()[0].runs_on == "client"
+    with pytest.raises(LookupError):
+        await tools.run("mcp.weather.set_alert", {})
+
+
+async def test_read_only_execution_is_preserved() -> None:
+    dispatched: list[str] = []
+
+    def handler(request: httpx.Request) -> httpx.Response:
+        if b"tools/call" in request.content:
+            dispatched.append("read")
+            return httpx.Response(
+                200,
+                json={
+                    "result": {"content": [{"type": "text", "text": "read-ok"}]}
+                },
+            )
+        return _reply([_tool("forecast")])
+
+    catalog = _catalog(handler)
+    await catalog.refresh()
+    result = await McpTools(catalog=catalog).run("mcp.weather.forecast", {})
+    assert "read-ok" in str(result)
+    assert dispatched == ["read"]
 
 
 async def test_a_tool_without_the_read_only_hint_counts_as_a_write() -> None:

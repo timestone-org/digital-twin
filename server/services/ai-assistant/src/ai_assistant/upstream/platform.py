@@ -15,11 +15,13 @@
 调用方拿着入站那组头一路传就行（`upstream/identity.py` 的文件头记着为什么）。
 """
 
+import uuid
 from typing import Any, cast
 
 import httpx
 from pydantic import BaseModel, ValidationError
 
+from ai_assistant.mcp_settings import ResourceKind
 from ai_assistant.upstream.identity import DelegatedIdentity
 from ai_assistant.upstream.point_matches import PointMatches
 from lib.errors import DependencyUnavailable
@@ -222,6 +224,24 @@ class PlatformClient:
         if project_id:
             query["project_id"] = project_id
         return await self._get(_DASHBOARDS, query, headers)
+
+    async def read_mcp_target(
+        self,
+        headers: dict[str, str],
+        resource_kind: ResourceKind,
+        target_id: str,
+    ) -> object:
+        """使用实际调用者身份验证已支持的 MCP 写目标。
+
+        Args: headers, resource_kind, target_id。
+        """
+        paths = {
+            "dashboard": _DASHBOARDS,
+            "dataset": _TABLES,
+            "report": "/api/v1/platform/report-templates",
+        }
+        target = uuid.UUID(target_id)
+        return await self._get(f"{paths[resource_kind]}/{target}", {}, headers)
 
     async def list_dataset_tables(
         self,

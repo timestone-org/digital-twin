@@ -1,7 +1,7 @@
 """外部 MCP server 那一路来源（ADR-0031）。
 
-MCP 工具是**服务端工具**：跑在本进程里，与浏览器侧那批井水不犯河水。所以
-「MCP 与客户端工具怎么共存」不是问题，问题全在 ADR 的那六条边界上。
+MCP 实际调用在服务端执行。写工具先作为持久化客户端待续调用，交可信 UI
+明确确认后，再由服务端独立校验业务权限、原子领取并执行。
 
 ⚠ **名字用点号 `mcp.<server>.<tool>`，不用 `mcp__server__tool`。**
 ADR-0031 决策三原话是「不能用点号」，那一句是错的：订阅账号那一路的
@@ -18,9 +18,15 @@ ADR-0031 决策三原话是「不能用点号」，那一句是错的：订阅�
 """
 
 import re
-from dataclasses import dataclass
+from collections.abc import Mapping
+from dataclasses import dataclass, field
 from typing import Any
 
+from ai_assistant.apps.chat.services.tools.mcp_policy import (
+    McpWritePolicy,
+    authorize,
+)
+from ai_assistant.mcp_settings import MAX_TOOL_NAME_LENGTH
 from ai_assistant.upstream.mcp import McpCatalog, McpToolInfo
 from llmcore.tools.ports import UnknownTool
 from llmcore.tools.shapes import ToolSpec
@@ -54,7 +60,10 @@ def canonical_name(server: str, tool: str) -> str:
             raise BadToolName(
                 f"MCP 名字里不许出现点号或连续下划线：{server}/{tool}"
             )
-    return f"{PREFIX}{_DOT}{server}{_DOT}{tool}"
+    name = f"{PREFIX}{_DOT}{server}{_DOT}{tool}"
+    if len(name) > MAX_TOOL_NAME_LENGTH:
+        raise BadToolName("MCP 规范工具名超过允许长度")
+    return name
 
 
 def split_name(name: str) -> tuple[str, str] | None:
@@ -82,6 +91,10 @@ class McpTools:
     # 不是「下发了再拦」：模型看得见就会调，拦一次换一次往返，而那次往返里
     # 它多半会换个说法再试一遍
     write_allowed: frozenset[str] = frozenset()
+    write_policies: Mapping[str, McpWritePolicy] = field(
+        default_factory=dict[str, McpWritePolicy]
+    )
+    codes: frozenset[str] | None = None
 
     @property
     def name(self) -> str:
@@ -112,7 +125,16 @@ class McpTools:
         info = self.catalog.find(server, tool)
         if info is None or self._spec_of(info) is None:
             raise UnknownTool(f"这一轮没有这个 MCP 工具：{name}")
+        if self._is_write(info, name):
+            raise UnknownTool("MCP 写操作必须通过本次调用的业务授权与明确确认")
         return await self.catalog.call(server, tool, arguments)
+
+    def _is_write(self, info: McpToolInfo, name: str) -> bool:
+        return (
+            not info.is_read_only
+            or name in self.write_allowed
+            or name in self.write_policies
+        )
 
     def _spec_of(self, info: McpToolInfo) -> ToolSpec | None:
         """一条目录项 → 一份工具规格；不许下发的给 `None`。
@@ -124,13 +146,18 @@ class McpTools:
         except BadToolName:
             # 名字不合法的那一个丢掉，其余照常——一个坏名字不该让整路缺席
             return None
-        if not info.is_read_only and name not in self.write_allowed:
+        is_write = self._is_write(info, name)
+        if is_write and (
+            name not in self.write_allowed
+            or not authorize(self.write_policies.get(name), self.codes)
+        ):
             return None
         return ToolSpec(
             name=name,
             description=info.description,
             parameters=_object_schema(info.input_schema),
-            runs_on="server",
+            runs_on="client" if is_write else "server",
+            is_exclusive=is_write,
         )
 
 

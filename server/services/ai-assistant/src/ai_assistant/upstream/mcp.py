@@ -165,7 +165,7 @@ class McpClient:
             raise McpUnavailable(f"{server.name} 回了一条错误")
         result = envelope.get("result")
         if not isinstance(result, dict):
-            return {}
+            raise McpUnavailable(f"{server.name} 没有返回有效执行结果")
         return cast("dict[str, Any]", result)
 
     def _client(self) -> httpx.AsyncClient:
@@ -201,6 +201,14 @@ class McpCatalog:
         """
         for server in self.servers:
             self._found[server.name] = await self._ask(server)
+
+    async def refresh_server(self, name: str) -> None:
+        """仅复核当前调用的服务器，不等待其他独立依赖。
+
+        Args: name。
+        """
+        server = next((one for one in self.servers if one.name == name), None)
+        self._found[name] = () if server is None else await self._ask(server)
 
     def tools(self) -> tuple[McpToolInfo, ...]:
         """此刻问得到的全部工具，按配置里的 server 次序。"""
