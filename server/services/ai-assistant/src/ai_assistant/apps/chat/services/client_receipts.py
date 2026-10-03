@@ -123,6 +123,8 @@ def match_results(
         seen.add(result.call_id)
         step = targets[result.call_id]
         if step.state == "awaiting_client":
+            if step.name.startswith("mcp."):
+                raise ValidationFailed("MCP 写操作必须通过服务端逐次确认")
             matched.append((step, result))
         else:
             stored = (step.output_json or {}).get("receipt_sha256")

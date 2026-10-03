@@ -10,6 +10,7 @@ from dataclasses import dataclass
 
 from sqlalchemy.ext.asyncio import AsyncSession
 
+from ai_assistant.apps.chat.crud import mcp_writes as mcp_write_crud
 from ai_assistant.apps.chat.crud import session_crud
 from ai_assistant.apps.chat.errors import SessionNotFound, UnknownModelProfile
 from ai_assistant.apps.chat.models import ChatMessage, ChatSession, ChatStep
@@ -23,6 +24,7 @@ from ai_assistant.apps.chat.schemas import (
 )
 from ai_assistant.apps.chat.services.model_profiles import ModelDefaults
 from lib.auth import CallerContext
+from lib.errors import Conflict
 from lib.logging import get_logger
 from lib.web import Page, PageParams
 
@@ -189,9 +191,12 @@ async def delete_session(
 
     Args: session, chat_session_id, caller。
     """
+    await session_crud.lock_session(session, chat_session_id)
     chat_session = await require_session(
         session, chat_session_id=chat_session_id, caller=caller
     )
+    if await mcp_write_crud.has_running(session, chat_session_id):
+        raise Conflict("MCP 写操作正在执行，结果保存后才能删除会话")
     _logger.info(
         "chat_session_deleted", "会话已删除", session_id=str(chat_session.id)
     )

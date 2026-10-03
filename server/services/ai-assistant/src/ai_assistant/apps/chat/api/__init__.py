@@ -8,6 +8,7 @@ from ai_assistant.apps.chat.api import (
     advance,
     attachments,
     capabilities,
+    mcp_writes,
     receipts,
     sessions,
 )
@@ -17,6 +18,7 @@ ROUTERS = (
     sessions.router,
     advance.router,
     receipts.router,
+    mcp_writes.router,
     attachments.router,
 )
 
