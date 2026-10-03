@@ -311,3 +311,30 @@ export interface AssistantReceipts {
 export interface AssistantReceiptsAck {
   accepted_call_ids: string[]
 }
+
+/** 浏览器支持服务端票据绑定的逐次 MCP 写确认。 */
+export const ASSISTANT_MCP_CONFIRM_TOOL = 'mcp.confirm_write'
+
+/** 服务端已保存调用的确认内容；票据不显示在界面。 */
+export interface AssistantMcpWritePrepare {
+  call_id: string
+  tool_name: string
+  arguments: Record<string, unknown>
+  target: string
+  impact: string
+  ticket: string
+  expires_at: string
+}
+
+/** 只提交服务端票据与用户决定，不能指定工具或参数。 */
+export interface AssistantMcpWriteDecision {
+  ticket: string
+  confirm: boolean
+}
+
+/** 服务端实际执行或拒绝的结果。 */
+export interface AssistantMcpWriteResult {
+  call_id: string
+  output: unknown
+  error: string | null
+}

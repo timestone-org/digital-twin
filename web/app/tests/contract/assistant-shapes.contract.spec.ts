@@ -18,6 +18,9 @@ import type {
   AssistantAskRequest,
   AssistantCapability,
   AssistantModelProfile,
+  AssistantMcpWritePrepare,
+  AssistantMcpWriteDecision,
+  AssistantMcpWriteResult,
   AssistantMessage,
   AssistantParsedAttachment,
   AssistantSession,
@@ -106,6 +109,24 @@ const CLIENT_SPECS_PATH = join(
 type Keys<T> = Record<keyof T, true>
 
 const SHAPES: Record<string, Record<string, true>> = {
+  McpWritePrepareOut: {
+    call_id: true,
+    tool_name: true,
+    arguments: true,
+    target: true,
+    impact: true,
+    ticket: true,
+    expires_at: true,
+  } satisfies Keys<AssistantMcpWritePrepare>,
+  McpWriteDecisionIn: {
+    ticket: true,
+    confirm: true,
+  } satisfies Keys<AssistantMcpWriteDecision>,
+  McpWriteResultOut: {
+    call_id: true,
+    output: true,
+    error: true,
+  } satisfies Keys<AssistantMcpWriteResult>,
   ReceiptsIn: { tool_results: true } satisfies Keys<AssistantReceipts>,
   ToolResultIn: {
     call_id: true,
