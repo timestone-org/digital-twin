@@ -25,7 +25,11 @@ from sqlalchemy.ext.asyncio import AsyncSession
 
 from ai_assistant.apps.chat.crud import session_crud
 from ai_assistant.apps.chat.models import ChatMessage, ChatSession
-from ai_assistant.apps.chat.services import advance_persist, client_receipts
+from ai_assistant.apps.chat.services import (
+    advance_persist,
+    client_receipts,
+    mcp_writes,
+)
 from ai_assistant.apps.chat.services.client_result import ClientToolResult
 from ai_assistant.apps.chat.services.intent import select as tool_select
 from ai_assistant.apps.chat.services.memory import state_block
@@ -33,6 +37,7 @@ from ai_assistant.apps.chat.services.memory.prompt import build_system_prompt
 from ai_assistant.apps.chat.services.model_retry import RetryingModel
 from ai_assistant.apps.chat.services.perception import vision
 from ai_assistant.apps.chat.services.planning import plan as plan_service
+from ai_assistant.apps.chat.services.tools.mcp_policy import policies_of
 from ai_assistant.apps.chat.services.tools.providers.mcp import (
     PROVIDER as MCP_PROVIDER,
 )
@@ -122,6 +127,8 @@ def deps_of(
             headers=headers,
             mcp=container.mcp,
             write_allowed=container.settings.mcp_write_names(),
+            write_policies=policies_of(container.settings),
+            codes=codes,
             # ⚠ 这两样不接上，长期记忆那两个工具就只能回一句「还没接上仓储」
             # ——而模型看得见它们，于是每次都会先调一次再改口
             sessions=container.database.session,
@@ -409,6 +416,8 @@ async def _opened(
     Args: deps, chat_session_id, payload。
     """
     async with deps.sessions() as session:
+        if payload.user_text is not None:
+            await mcp_writes.invalidate_pending(session, chat_session_id)
         if payload.tool_results:
             await client_receipts.record(
                 session, chat_session_id, payload.tool_results

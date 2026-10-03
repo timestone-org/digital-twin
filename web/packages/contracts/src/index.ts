@@ -530,6 +530,9 @@ export type {
   AssistantMessage,
   AssistantMessageRole,
   AssistantModelProfile,
+  AssistantMcpWritePrepare,
+  AssistantMcpWriteDecision,
+  AssistantMcpWriteResult,
   AssistantParsedAttachment,
   AssistantPlan,
   AssistantPlanItem,
@@ -544,6 +547,7 @@ export type {
 } from './assistant'
 export {
   ASSISTANT_ASK_TOOL,
+  ASSISTANT_MCP_CONFIRM_TOOL,
   ASSISTANT_DELTA_CHANNELS,
   ASSISTANT_EVENT_NAMES,
   ASSISTANT_MESSAGE_ROLES,

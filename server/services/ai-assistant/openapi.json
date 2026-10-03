@@ -180,6 +180,96 @@
         "title": "ApiResponse[CapabilityOut]",
         "type": "object"
       },
+      "ApiResponse_McpWritePrepareOut_": {
+        "properties": {
+          "code": {
+            "default": 0,
+            "title": "Code",
+            "type": "integer"
+          },
+          "data": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/McpWritePrepareOut"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "details": {
+            "anyOf": [
+              {
+                "items": {
+                  "$ref": "#/components/schemas/FieldErrorOut"
+                },
+                "type": "array"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Details"
+          },
+          "message": {
+            "default": "ok",
+            "title": "Message",
+            "type": "string"
+          },
+          "trace_id": {
+            "default": "",
+            "title": "Trace Id",
+            "type": "string"
+          }
+        },
+        "title": "ApiResponse[McpWritePrepareOut]",
+        "type": "object"
+      },
+      "ApiResponse_McpWriteResultOut_": {
+        "properties": {
+          "code": {
+            "default": 0,
+            "title": "Code",
+            "type": "integer"
+          },
+          "data": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/McpWriteResultOut"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "details": {
+            "anyOf": [
+              {
+                "items": {
+                  "$ref": "#/components/schemas/FieldErrorOut"
+                },
+                "type": "array"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Details"
+          },
+          "message": {
+            "default": "ok",
+            "title": "Message",
+            "type": "string"
+          },
+          "trace_id": {
+            "default": "",
+            "title": "Trace Id",
+            "type": "string"
+          }
+        },
+        "title": "ApiResponse[McpWriteResultOut]",
+        "type": "object"
+      },
       "ApiResponse_Page_SessionOut__": {
         "properties": {
           "code": {
@@ -489,6 +579,109 @@
           }
         },
         "title": "HTTPValidationError",
+        "type": "object"
+      },
+      "McpWriteDecisionIn": {
+        "additionalProperties": false,
+        "description": "确认或取消同一张票据；不允许客户端改变调用。",
+        "properties": {
+          "confirm": {
+            "title": "Confirm",
+            "type": "boolean"
+          },
+          "ticket": {
+            "maxLength": 256,
+            "minLength": 32,
+            "title": "Ticket",
+            "type": "string"
+          }
+        },
+        "required": [
+          "ticket",
+          "confirm"
+        ],
+        "title": "McpWriteDecisionIn",
+        "type": "object"
+      },
+      "McpWritePrepareIn": {
+        "additionalProperties": false,
+        "description": "允许空请求体；任何工具名或入参字段都会被拒绝。",
+        "properties": {},
+        "title": "McpWritePrepareIn",
+        "type": "object"
+      },
+      "McpWritePrepareOut": {
+        "description": "服务端准备的真实操作摘要及短期、单次确认票据。",
+        "properties": {
+          "arguments": {
+            "additionalProperties": true,
+            "title": "Arguments",
+            "type": "object"
+          },
+          "call_id": {
+            "title": "Call Id",
+            "type": "string"
+          },
+          "expires_at": {
+            "format": "date-time",
+            "title": "Expires At",
+            "type": "string"
+          },
+          "impact": {
+            "title": "Impact",
+            "type": "string"
+          },
+          "target": {
+            "title": "Target",
+            "type": "string"
+          },
+          "ticket": {
+            "title": "Ticket",
+            "type": "string"
+          },
+          "tool_name": {
+            "title": "Tool Name",
+            "type": "string"
+          }
+        },
+        "required": [
+          "call_id",
+          "tool_name",
+          "arguments",
+          "target",
+          "impact",
+          "ticket",
+          "expires_at"
+        ],
+        "title": "McpWritePrepareOut",
+        "type": "object"
+      },
+      "McpWriteResultOut": {
+        "description": "实际派发结果或取消回执，供模型续跑使用。",
+        "properties": {
+          "call_id": {
+            "title": "Call Id",
+            "type": "string"
+          },
+          "error": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Error"
+          },
+          "output": {
+            "title": "Output"
+          }
+        },
+        "required": [
+          "call_id"
+        ],
+        "title": "McpWriteResultOut",
         "type": "object"
       },
       "MessageOut": {
@@ -1602,6 +1795,139 @@
         "summary": "更新会话",
         "tags": [
           "chat-session"
+        ]
+      }
+    },
+    "/api/v1/assistant/sessions/{session_id}/mcp-writes/{call_id}:decide": {
+      "post": {
+        "description": "服务端派发并记录实际回执。\n\nArgs: session_id, call_id, payload, service, caller。",
+        "operationId": "decide_mcp_write_api_v1_assistant_sessions__session_id__mcp_writes__call_id__decide_post",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "session_id",
+            "required": true,
+            "schema": {
+              "format": "uuid",
+              "title": "Session Id",
+              "type": "string"
+            }
+          },
+          {
+            "in": "path",
+            "name": "call_id",
+            "required": true,
+            "schema": {
+              "title": "Call Id",
+              "type": "string"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/McpWriteDecisionIn"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiResponse_McpWriteResultOut_"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "确认或取消 MCP 写操作",
+        "tags": [
+          "turn"
+        ]
+      }
+    },
+    "/api/v1/assistant/sessions/{session_id}/mcp-writes/{call_id}:prepare": {
+      "post": {
+        "description": "摘要只从已存调用读取。\n\nArgs: session_id, call_id, service, caller, payload。",
+        "operationId": "prepare_mcp_write_api_v1_assistant_sessions__session_id__mcp_writes__call_id__prepare_post",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "session_id",
+            "required": true,
+            "schema": {
+              "format": "uuid",
+              "title": "Session Id",
+              "type": "string"
+            }
+          },
+          {
+            "in": "path",
+            "name": "call_id",
+            "required": true,
+            "schema": {
+              "title": "Call Id",
+              "type": "string"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "anyOf": [
+                  {
+                    "$ref": "#/components/schemas/McpWritePrepareIn"
+                  },
+                  {
+                    "type": "null"
+                  }
+                ],
+                "title": "Payload"
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiResponse_McpWritePrepareOut_"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "准备 MCP 写确认",
+        "tags": [
+          "turn"
         ]
       }
     },

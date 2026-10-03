@@ -26,3 +26,10 @@ class UnknownModelProfile(AppError):
 
     code = 42202
     http_status = 400
+
+
+class McpWriteDeadlineExpired(AppError):
+    """写验证预算耗尽；确认调用不能自动重试。"""
+
+    code = 52214
+    http_status = 504

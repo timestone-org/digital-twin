@@ -99,6 +99,11 @@ def _attach_steps(
                 input_json={
                     "call_id": call.call_id,
                     "arguments": call.arguments,
+                    **(
+                        {"_mcp_confirmation_protocol": 1}
+                        if call.name.startswith("mcp.")
+                        else {}
+                    ),
                 },
             )
         )
