@@ -2,6 +2,7 @@
 import { describe, expect, it, vi } from 'vitest'
 
 import { runLoop, type LoopBody, type LoopSink } from '@/features/ai/turnLoop'
+import { ToolReceiptUnavailableError } from '@/features/ai/toolReceipts'
 
 function frame(name: string, body: unknown): string {
   return `event: ${name}\ndata: ${JSON.stringify(body)}\n\n`
@@ -259,5 +260,31 @@ describe('正常回合回执先于续推', () => {
     expect(order).toEqual(['advance', 'receipts', 'advance'])
     expect(saveReceipts).toHaveBeenCalledOnce()
     expect(input.dispatch).toHaveBeenCalledTimes(2)
+  })
+  it('一批中回执状态未知时先保存已执行结果，停止后续工具和续推', async () => {
+    const input = inputOf(new AbortController())
+    const advance = vi.fn(async function* () {
+      await Promise.resolve()
+      yield frame('client_tool.request', {
+        calls: [
+          { call_id: 'w1', name: 'dashboard.write_binding', arguments: {} },
+          { call_id: 'w2', name: 'mcp.test.write', arguments: {} },
+          { call_id: 'w3', name: 'dashboard.write_binding', arguments: {} },
+        ],
+      })
+    })
+    input.dispatch
+      .mockResolvedValueOnce({ saved: true })
+      .mockRejectedValueOnce(new ToolReceiptUnavailableError('执行状态未确认'))
+    const saveReceipts = vi.fn().mockResolvedValue(undefined)
+    const sink = sinkOf()
+    await runLoop({ ...input, advance, saveReceipts }, sink)
+    expect(input.dispatch).toHaveBeenCalledTimes(2)
+    expect(saveReceipts).toHaveBeenCalledExactlyOnceWith('test-session', [
+      { call_id: 'w1', output: { saved: true } },
+    ])
+    expect(advance).toHaveBeenCalledOnce()
+    expect(input.nudge).not.toHaveBeenCalled()
+    expect(sink.onError).toHaveBeenCalledWith('执行状态未确认')
   })
 })

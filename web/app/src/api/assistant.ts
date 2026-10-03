@@ -8,6 +8,9 @@
  */
 import type {
   AssistantCapability,
+  AssistantMcpWritePrepare,
+  AssistantMcpWriteDecision,
+  AssistantMcpWriteResult,
   AssistantParsedAttachment,
   AssistantSession,
   AssistantSessionDetail,
@@ -24,6 +27,9 @@ import { newIdempotencyKey } from './idempotency'
 function onAssistant(options: RequestOptions = {}): RequestOptions {
   return { ...options, baseUrl: ASSISTANT_BASE_URL }
 }
+
+/** 覆盖服务端权限校验与外部执行预算，仍小于网关 60 秒超时。 */
+const MCP_WRITE_TIMEOUT_MS = 45_000
 
 /**
  * 探一次助手能力。
@@ -189,4 +195,39 @@ export async function saveToolReceipts(
   if (results.some((result) => !accepted.has(result.call_id))) {
     throw new Error('服务端未确认全部工具回执')
   }
+}
+
+/** 获取已保存调用的可信确认内容；停止时仍须拿到票据并拒绝它。 */
+export async function prepareMcpWrite(
+  sessionId: string,
+  callId: string,
+): Promise<AssistantMcpWritePrepare> {
+  return requestData<AssistantMcpWritePrepare>(
+    mcpWritePath(sessionId, callId, 'prepare'),
+    onAssistant({ method: 'POST', body: {}, timeoutMs: MCP_WRITE_TIMEOUT_MS }),
+  )
+}
+
+/** 提交一次用户决定；不绑定回合中止信号，以保留真实执行结果。 */
+export async function decideMcpWrite(
+  sessionId: string,
+  callId: string,
+  decision: AssistantMcpWriteDecision,
+): Promise<AssistantMcpWriteResult> {
+  return requestData<AssistantMcpWriteResult>(
+    mcpWritePath(sessionId, callId, 'decide'),
+    onAssistant({
+      method: 'POST',
+      body: { ticket: decision.ticket, confirm: decision.confirm },
+      timeoutMs: MCP_WRITE_TIMEOUT_MS,
+    }),
+  )
+}
+
+function mcpWritePath(
+  sessionId: string,
+  callId: string,
+  action: 'prepare' | 'decide',
+): string {
+  return `/sessions/${encodeURIComponent(sessionId)}/mcp-writes/${encodeURIComponent(callId)}:${action}`
 }
