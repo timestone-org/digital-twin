@@ -4,7 +4,7 @@
  * 元信息行。
  *
  * ⚠ 「连接 / 断开」按钮改的是 `is_enabled`（采集器按计划自动收敛），旁边的
- * 状态徽标显示真实运行态——「配置说它该采」与「它此刻真在采」分开呈现。
+ * 状态徽标显示最后上报的运行态，停用时标出历史状态。
  */
 import { computed } from 'vue'
 import type { CollectSource } from '@dt/contracts'
@@ -33,11 +33,18 @@ defineEmits<{
   remove: []
 }>()
 
-const reason = computed(() => errorSummary(props.source.runtime))
+const historical = computed(
+  () => !props.source.is_enabled && props.source.runtime.updated_at !== null,
+)
+const reason = computed(() =>
+  historical.value ? null : errorSummary(props.source.runtime),
+)
 
 /** 配了却没订上的点位差额；对得上是 null。 */
 const missingGap = computed(() =>
-  missingPoints(props.source.point_count, props.source.runtime),
+  historical.value
+    ? null
+    : missingPoints(props.source.point_count, props.source.runtime),
 )
 
 const stateUpdatedAt = computed(() =>
@@ -160,7 +167,13 @@ const stateUpdatedAt = computed(() =>
         账户 <span class="text-text-primary">{{ source.username }}</span>
       </span>
       <span class="text-text-secondary">
-        {{ source.read_mode === 'poll' ? '采集点位' : '订阅点位' }}
+        {{
+          historical
+            ? '上次上报点位'
+            : source.read_mode === 'poll'
+              ? '采集点位'
+              : '订阅点位'
+        }}
         <span class="text-text-primary">
           {{ source.runtime.point_count }} / {{ source.point_count }}
         </span>
