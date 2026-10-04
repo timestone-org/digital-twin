@@ -109,6 +109,7 @@ def build_settings(
     Args: role, instance。
     """
     return Settings(
+        _env_file=None,
         app_role=role,
         app_instance=instance,
         postgres_host=PLACEHOLDER,
