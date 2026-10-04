@@ -5,11 +5,10 @@
  *
  * ⚠ 「连接 / 断开」按钮改的是 `is_enabled`：本架构没有手动会话动作，采集器按
  * 计划自动收敛（docs/COLLECT_DESIGN.md §4.4），点下去几秒内生效。按钮旁的
- * 状态徽标显示的是**真实运行态**——「配置说它该采」与「它此刻真在采」必须
+ * 状态徽标显示的是**最后上报的运行态**——「配置说它该采」与「它最近是否在采」必须
  * 分开呈现（§9.2）。
  *
- * ⚠ 运行态按周期重取：它来自采集侧写的另一张表，没有推送通道，这一页上的
- * 状态最迟落后一个周期。
+ * ⚠ 页面按周期重取运行态，但采集侧只在状态变化时写库；停用后旧状态标为历史。
  */
 import { computed, onMounted, onUnmounted, ref, watch } from 'vue'
 import type { CollectSource, CollectSourceCreateInput } from '@dt/contracts'

@@ -223,6 +223,14 @@ describe('主从布局', () => {
 })
 
 describe('状态口径', () => {
+  it('停用后的在线上报明确标为历史状态', async () => {
+    const text = (await render([source({ is_enabled: false })])).text()
+    expect(text).toContain('已停用')
+    expect(text).toContain('上次采集中')
+    expect(text).not.toContain('已停用采集中')
+    expect(text).toContain('上次上报点位')
+  })
+
   it('采集中与已断开分别成一档', async () => {
     expect((await render([source()])).text()).toContain('采集中')
     const offline = await render([

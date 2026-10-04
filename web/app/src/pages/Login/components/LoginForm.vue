@@ -23,6 +23,7 @@ const showPassword = ref(false)
 const loading = ref(false)
 const error = ref<string | null>(null)
 const capsOn = ref(false)
+const isSecureConnection = window.location.protocol === 'https:'
 
 const canSubmit = computed(
   () =>
@@ -155,9 +156,15 @@ async function onSubmit(): Promise<void> {
       class="login-form__foot dt-animate-fade-up login-form__field"
       style="--i: 4"
     >
-      <span class="login-form__foot-safe">
-        <DtIcon name="shield" :size="13" />
-        安全加密连接
+      <span
+        class="login-form__foot-safe"
+        :class="{ 'is-insecure': !isSecureConnection }"
+      >
+        <DtIcon
+          :name="isSecureConnection ? 'shield' : 'alert-triangle'"
+          :size="13"
+        />
+        {{ isSecureConnection ? '安全加密连接' : '当前连接未加密' }}
       </span>
       <span>© {{ appConfig.name }}</span>
     </footer>
@@ -268,6 +275,10 @@ async function onSubmit(): Promise<void> {
     align-items: center;
     gap: 6px;
     color: rgba(var(--accent-primary-rgb), 0.6);
+
+    &.is-insecure {
+      color: var(--state-warning);
+    }
   }
 }
 </style>

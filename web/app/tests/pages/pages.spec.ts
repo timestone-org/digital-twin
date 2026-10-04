@@ -1,6 +1,6 @@
 /**
  * @fileoverview 其余页面的渲染与关键交互契约：个人资料的身份/权限一览与两个
- * 表单、403/404 的返回入口、登录页遥测面板的定时器清理。
+ * 表单、403/404 的返回入口、登录页时钟的定时器清理。
  * 工作台自己的取数与交互在 `app/tests/pages/home/` 下。
  */
 import { createPinia, setActivePinia } from 'pinia'
@@ -11,7 +11,7 @@ import * as authApi from '@/api/auth'
 import { BizError } from '@/api/client'
 import ForbiddenPage from '@/pages/Forbidden/index.vue'
 import HomePage from '@/pages/Home/index.vue'
-import LoginTelemetry from '@/pages/Login/components/LoginTelemetry.vue'
+import LoginClock from '@/pages/Login/components/LoginClock.vue'
 import NotFoundPage from '@/pages/NotFound/index.vue'
 import ProfilePage from '@/pages/Profile/index.vue'
 import { useAuthStore } from '@/stores/auth'
@@ -178,18 +178,20 @@ describe('错误页', () => {
   })
 })
 
-describe('登录页遥测面板', () => {
-  it('渲染时钟与遥测读数', () => {
-    const wrapper = mount(LoginTelemetry)
-    expect(wrapper.text()).toContain('SYSTEM')
+describe('登录页时钟', () => {
+  it('渲染时钟且不展示虚构的运行指标', () => {
+    const wrapper = mount(LoginClock)
+    expect(wrapper.text()).not.toContain('1.2K')
+    expect(wrapper.text()).not.toContain('99.9%')
+    expect(wrapper.text()).not.toContain('ONLINE')
     // 首帧就要有值：只在 onMounted 里赋值的话时钟位置会空一帧
-    expect(wrapper.find('.telemetry__clock-now').text()).not.toBe('')
+    expect(wrapper.find('.login-clock__now').text()).not.toBe('')
   })
 
-  it('卸载时清掉定时器——大屏一开几天，漏一个就持续累积', () => {
+  it('卸载时清掉时钟定时器', () => {
     vi.useFakeTimers()
     const clearSpy = vi.spyOn(globalThis, 'clearInterval')
-    const wrapper = mount(LoginTelemetry)
+    const wrapper = mount(LoginClock)
     wrapper.unmount()
     expect(clearSpy).toHaveBeenCalled()
     vi.useRealTimers()

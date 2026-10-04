@@ -1,13 +1,13 @@
 <script setup lang="ts">
 /**
  * @fileoverview 登录页左侧品牌 / HUD 面板：旋转瞄准环 + 扫描线，营造控制室
- * 氛围。纯展示、无交互，小屏隐藏。底部的遥测与时钟见 LoginTelemetry.vue。
+ * 氛围。纯展示、无交互，小屏隐藏。底部时钟见 LoginClock.vue。
  */
 
 import { AppLogo } from '@/components/brand'
 
 import { appConfig } from '@/config/app'
-import LoginTelemetry from './LoginTelemetry.vue'
+import LoginClock from './LoginClock.vue'
 </script>
 
 <template>
@@ -87,7 +87,7 @@ import LoginTelemetry from './LoginTelemetry.vue'
       </p>
     </div>
 
-    <LoginTelemetry />
+    <LoginClock />
   </aside>
 </template>
 

@@ -48,6 +48,13 @@ afterEach(() => {
 })
 
 describe('登录页', () => {
+  it('HTTP 页面不宣称连接已加密', () => {
+    const wrapper = mountPage()
+    expect(window.location.protocol).toBe('http:')
+    expect(wrapper.text()).toContain('当前连接未加密')
+    expect(wrapper.text()).not.toContain('安全加密连接')
+  })
+
   it('渲染用户名与密码两个输入框', () => {
     const wrapper = mountPage()
     expect(wrapper.findAll('input')).toHaveLength(2)
