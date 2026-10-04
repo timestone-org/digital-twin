@@ -14,6 +14,7 @@ PLACEHOLDER = "knowledge-test"
 
 def _base() -> dict[str, object]:
     return {
+        "_env_file": None,
         "postgres_host": PLACEHOLDER,
         "postgres_user": PLACEHOLDER,
         "postgres_password": SecretStr(PLACEHOLDER),
