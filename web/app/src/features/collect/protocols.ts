@@ -8,10 +8,11 @@
  * `{source_id}:{point_code}` 与它背后跑的是哪种协议无关（ADR-0011）。
  */
 
-import { COLLECT_PROTOCOLS } from '@dt/contracts'
-import type { CollectProtocol } from '@dt/contracts'
+import { COLLECT_READABLE_PROTOCOLS } from '@dt/contracts'
+import type { CollectReadableProtocol } from '@dt/contracts'
 
-const PROTOCOL_LABELS: Record<CollectProtocol, string> = {
+const PROTOCOL_LABELS: Record<CollectReadableProtocol, string> = {
+  http: 'HTTP',
   modbus_tcp: 'Modbus TCP',
   opcua: 'OPC UA',
 }
@@ -21,6 +22,6 @@ const PROTOCOL_LABELS: Record<CollectProtocol, string> = {
  * @param protocol 后端给的协议取值
  */
 export function protocolLabel(protocol: string): string {
-  const known = COLLECT_PROTOCOLS.find((one) => one === protocol)
+  const known = COLLECT_READABLE_PROTOCOLS.find((one) => one === protocol)
   return known === undefined ? protocol : PROTOCOL_LABELS[known]
 }

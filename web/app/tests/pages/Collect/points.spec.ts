@@ -447,6 +447,36 @@ describe('只读 Modbus TCP', () => {
   })
 })
 
+describe('HTTP 兼容读取', () => {
+  it('保留查看导出与删除，拒绝所有点位修改入口', async () => {
+    const wrapper = await render(undefined, { protocol: 'http' })
+    expect(wrapper.text()).toContain('导出 CSV')
+    expect(wrapper.find('button[aria-label="删除点位"]').exists()).toBe(true)
+    expect(wrapper.text()).not.toContain('新建点位')
+    expect(wrapper.text()).not.toContain('批量导入')
+    expect(wrapper.text()).not.toContain('写值')
+    expect(wrapper.find('button[aria-label^="点位设置"]').exists()).toBe(false)
+    expect(wrapper.find('[role="switch"]').attributes('disabled')).toBeDefined()
+    await selectRow(wrapper, '出口温度')
+    expect(wrapper.text()).toContain('批量删除')
+    expect(wrapper.text()).not.toContain('批量编辑')
+    expect(wrapper.text()).not.toContain('批量开启记录历史')
+  })
+
+  it('卡片视图也保留删除并关闭修改', async () => {
+    localStorage.setItem('dt.view-mode.collect-points', 'card')
+    try {
+      const wrapper = await render(undefined, { protocol: 'http' })
+      const card = wrapper.find('.point-card')
+      expect(card.find('button[aria-label="删除点位"]').exists()).toBe(true)
+      expect(card.find('button[aria-label="点位设置"]').exists()).toBe(false)
+      expect(card.find('[role="switch"]').attributes('disabled')).toBeDefined()
+    } finally {
+      localStorage.removeItem('dt.view-mode.collect-points')
+    }
+  })
+})
+
 describe('两种空态', () => {
   it('一个点位都没导过时，引导去浏览树里勾选', async () => {
     const wrapper = await render([])

@@ -1,5 +1,5 @@
 /** @fileoverview 从 platform OpenAPI 生成的点位语义检索契约。 */
-import type { CollectProtocol } from './collect'
+import type { CollectReadableProtocol } from './collect'
 
 export type PointMatchOut = {
   code: string
@@ -12,7 +12,7 @@ export type PointMatchOut = {
   score: number
   source_id: string
   source_name: string
-  source_protocol: CollectProtocol
+  source_protocol: CollectReadableProtocol
   unit: string | null
 }
 

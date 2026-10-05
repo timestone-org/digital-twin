@@ -421,6 +421,7 @@ export type {
   CollectPointSaved,
   CollectPointUpdateInput,
   CollectProtocol,
+  CollectReadableProtocol,
   CollectReadMode,
   CollectSource,
   CollectSourceCreateInput,
@@ -440,6 +441,7 @@ export {
   COLLECT_POINT_BATCH_MAX,
   COLLECT_POINT_DELETE_BATCH_MAX,
   COLLECT_PROTOCOLS,
+  COLLECT_READABLE_PROTOCOLS,
   COLLECT_READ_MODES,
   COLLECT_SOURCE_STATES,
 } from './collect'

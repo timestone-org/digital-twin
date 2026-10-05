@@ -110,6 +110,10 @@ function reset(target: CollectSource | null): void {
   error.value = null
   credential.value = ''
   isCredentialCleared.value = false
+  if (target?.protocol === 'http') {
+    error.value = '当前版本只支持读取、停用和删除 HTTP 数据源'
+    return
+  }
   if (target === null) {
     protocol.value = 'opcua'
     name.value = ''
@@ -200,6 +204,10 @@ function values(): SourceFormValues {
 }
 
 function submit(): void {
+  if (props.source?.protocol === 'http') {
+    error.value = '当前版本只支持读取、停用和删除 HTTP 数据源'
+    return
+  }
   const current = values()
   error.value = validateSourceForm(current, isEdit.value)
   if (error.value !== null) return
@@ -221,115 +229,117 @@ function submit(): void {
         {{ error }}
       </DtNotice>
 
-      <div class="grid grid-cols-1 gap-3 sm:grid-cols-2">
-        <DtField label="协议" required>
-          <DtSelect
-            v-model="protocolValue"
-            :options="PROTOCOL_OPTIONS"
-            :disabled="isEdit"
-          />
-        </DtField>
-        <DtField label="名称" required>
-          <DtInput v-model="name" placeholder="如：1号生产线 PLC" />
-        </DtField>
-      </div>
-      <div class="grid grid-cols-1 gap-3 sm:grid-cols-2">
-        <DtField label="Endpoint" required>
-          <DtInput
-            v-model="endpoint"
-            class="font-mono"
-            :placeholder="
-              protocol === 'opcua'
-                ? 'opc.tcp://host:4840'
-                : 'modbus.tcp://host:502'
-            "
-          />
-        </DtField>
-      </div>
+      <template v-if="source?.protocol !== 'http'">
+        <div class="grid grid-cols-1 gap-3 sm:grid-cols-2">
+          <DtField label="协议" required>
+            <DtSelect
+              v-model="protocolValue"
+              :options="PROTOCOL_OPTIONS"
+              :disabled="isEdit"
+            />
+          </DtField>
+          <DtField label="名称" required>
+            <DtInput v-model="name" placeholder="如：1号生产线 PLC" />
+          </DtField>
+        </div>
+        <div class="grid grid-cols-1 gap-3 sm:grid-cols-2">
+          <DtField label="Endpoint" required>
+            <DtInput
+              v-model="endpoint"
+              class="font-mono"
+              :placeholder="
+                protocol === 'opcua'
+                  ? 'opc.tcp://host:4840'
+                  : 'modbus.tcp://host:502'
+              "
+            />
+          </DtField>
+        </div>
 
-      <DtField
-        label="编码"
-        required
-        :hint="
-          isEdit
-            ? '编码是数据源的身份，建好之后不可更改。'
-            : '点位身份与历史归档都挂在它上面，建好之后不可更改。'
-        "
-      >
-        <DtInput
-          v-model="code"
-          class="font-mono"
-          :disabled="isEdit"
-          placeholder="如：plant1_plc"
-        />
-      </DtField>
-
-      <DtField label="描述">
-        <DtInput v-model="description" placeholder="可选，用于备注用途" />
-      </DtField>
-
-      <div
-        v-if="protocol === 'opcua'"
-        class="grid grid-cols-1 gap-3 sm:grid-cols-2"
-      >
         <DtField
-          label="安全模式"
-          hint="当前仅支持 None；需要签名或加密的设备暂不能接入。"
-        >
-          <DtSelect v-model="securityMode" :options="SECURITY_MODES" />
-        </DtField>
-        <DtField label="安全策略">
-          <DtSelect v-model="securityPolicy" :options="SECURITY_POLICIES" />
-        </DtField>
-      </div>
-
-      <div class="grid grid-cols-1 gap-3 sm:grid-cols-2">
-        <DtField label="采集模式">
-          <DtSelect
-            v-model="readModeValue"
-            :options="READ_MODES"
-            :disabled="protocol === 'modbus_tcp'"
-          />
-        </DtField>
-        <DtField
-          v-if="readMode === 'poll'"
-          label="轮询间隔（毫秒）"
+          label="编码"
+          required
           :hint="
-            protocol === 'modbus_tcp'
-              ? '仅轮询模式生效，安全下限 1000ms。'
-              : '仅轮询模式生效，最小 50ms。'
+            isEdit
+              ? '编码是数据源的身份，建好之后不可更改。'
+              : '点位身份与历史归档都挂在它上面，建好之后不可更改。'
           "
         >
-          <DtNumberInput v-model="pollIntervalMs" :range="INTERVAL_RANGE" />
+          <DtInput
+            v-model="code"
+            class="font-mono"
+            :disabled="isEdit"
+            placeholder="如：plant1_plc"
+          />
         </DtField>
-      </div>
 
-      <SourceCredentialFields
-        v-if="protocol === 'opcua'"
-        v-model:username="username"
-        v-model:credential="credential"
-        v-model:is-cleared="isCredentialCleared"
-        :is-edit="isEdit"
-        :has-credential="source?.has_credential ?? false"
-      />
+        <DtField label="描述">
+          <DtInput v-model="description" placeholder="可选，用于备注用途" />
+        </DtField>
 
-      <DtField
-        label="其它连接参数"
-        :hint="
-          protocol === 'opcua'
-            ? '驱动特有的旁路配置，如证书路径。不清楚就留空。'
-            : '可配置 device_id、byte_order、word_order、max_registers_per_request、max_bits_per_request；不清楚就留空。'
-        "
-      >
-        <OptionsEditor v-model="extraOptions" />
-      </DtField>
+        <div
+          v-if="protocol === 'opcua'"
+          class="grid grid-cols-1 gap-3 sm:grid-cols-2"
+        >
+          <DtField
+            label="安全模式"
+            hint="当前仅支持 None；需要签名或加密的设备暂不能接入。"
+          >
+            <DtSelect v-model="securityMode" :options="SECURITY_MODES" />
+          </DtField>
+          <DtField label="安全策略">
+            <DtSelect v-model="securityPolicy" :options="SECURITY_POLICIES" />
+          </DtField>
+        </div>
 
-      <label
-        class="flex items-center justify-between rounded-md border border-border-subtle bg-surface-sunken/40 px-3 py-2.5"
-      >
-        <span class="text-sm text-text-secondary">启用该数据源</span>
-        <DtSwitch v-model="isEnabled" aria-label="启用该数据源" />
-      </label>
+        <div class="grid grid-cols-1 gap-3 sm:grid-cols-2">
+          <DtField label="采集模式">
+            <DtSelect
+              v-model="readModeValue"
+              :options="READ_MODES"
+              :disabled="protocol === 'modbus_tcp'"
+            />
+          </DtField>
+          <DtField
+            v-if="readMode === 'poll'"
+            label="轮询间隔（毫秒）"
+            :hint="
+              protocol === 'modbus_tcp'
+                ? '仅轮询模式生效，安全下限 1000ms。'
+                : '仅轮询模式生效，最小 50ms。'
+            "
+          >
+            <DtNumberInput v-model="pollIntervalMs" :range="INTERVAL_RANGE" />
+          </DtField>
+        </div>
+
+        <SourceCredentialFields
+          v-if="protocol === 'opcua'"
+          v-model:username="username"
+          v-model:credential="credential"
+          v-model:is-cleared="isCredentialCleared"
+          :is-edit="isEdit"
+          :has-credential="source?.has_credential ?? false"
+        />
+
+        <DtField
+          label="其它连接参数"
+          :hint="
+            protocol === 'opcua'
+              ? '驱动特有的旁路配置，如证书路径。不清楚就留空。'
+              : '可配置 device_id、byte_order、word_order、max_registers_per_request、max_bits_per_request；不清楚就留空。'
+          "
+        >
+          <OptionsEditor v-model="extraOptions" />
+        </DtField>
+
+        <label
+          class="flex items-center justify-between rounded-md border border-border-subtle bg-surface-sunken/40 px-3 py-2.5"
+        >
+          <span class="text-sm text-text-secondary">启用该数据源</span>
+          <DtSwitch v-model="isEnabled" aria-label="启用该数据源" />
+        </label>
+      </template>
     </div>
 
     <template #footer>
