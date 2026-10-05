@@ -1,5 +1,6 @@
 /** @fileoverview MCP 写确认只信保存的调用；停止、错误和缺确认宿主均不得静默执行。 */
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
+import { CancelledToolReceipt } from '@/features/ai/toolReceipts'
 import type { AssistantMcpWritePrepare, AssistantToolCall } from '@dt/contracts'
 
 import * as api from '@/api/assistant'
@@ -202,4 +203,31 @@ describe('可信MCP写确认桥', () => {
     )
     expect(api.decideMcpWrite).toHaveBeenCalledTimes(1)
   })
+})
+
+it('确认成功的外部取消字段不变成可信取消状态', async () => {
+  present(true)
+  vi.mocked(api.decideMcpWrite).mockResolvedValue({
+    call_id: 'w1',
+    output: { is_cancelled: true, changed: 1 },
+    error: null,
+  })
+  await expect(runMcpWrite('s1', CALL)).resolves.toEqual({
+    is_cancelled: true,
+    changed: 1,
+  })
+})
+
+it('拒绝确认的实际产出原样包在可信取消标记内', async () => {
+  present(false)
+  vi.mocked(api.decideMcpWrite).mockResolvedValue({
+    call_id: 'w1',
+    output: { note: '未执行' },
+    error: null,
+  })
+  const receipt = await runMcpWrite('s1', CALL)
+  expect(receipt).toBeInstanceOf(CancelledToolReceipt)
+  if (!(receipt instanceof CancelledToolReceipt))
+    throw new Error('取消标记缺失')
+  expect(receipt.output).toEqual({ note: '未执行' })
 })

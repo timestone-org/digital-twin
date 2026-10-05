@@ -7,6 +7,7 @@ import type { AssistantMcpWritePrepare, AssistantToolCall } from '@dt/contracts'
 import { decideMcpWrite, prepareMcpWrite } from '@/api/assistant'
 import {
   ActualToolReceiptError,
+  CancelledToolReceipt,
   ToolReceiptUnavailableError,
 } from './toolReceipts'
 
@@ -74,7 +75,7 @@ async function finishWrite(
     }
     if (result.error !== null) throw new ActualToolReceiptError(result)
     presentation?.complete(null)
-    return result.output
+    return receiptOutput(result.output, confirmed)
   } catch (error) {
     const failure =
       error instanceof ActualToolReceiptError ||
@@ -88,6 +89,10 @@ async function finishWrite(
     )
     throw failure
   }
+}
+
+function receiptOutput(output: unknown, confirmed: boolean): unknown {
+  return confirmed ? output : new CancelledToolReceipt(output)
 }
 
 async function prepareWrite(

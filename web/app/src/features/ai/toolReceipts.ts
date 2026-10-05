@@ -16,3 +16,8 @@ export class ToolReceiptUnavailableError extends Error {
     this.name = 'ToolReceiptUnavailableError'
   }
 }
+
+/** 本地确认桥已拒绝写入且收到实际回执；外部产出字段不能冒充此状态。 */
+export class CancelledToolReceipt {
+  constructor(readonly output: unknown) {}
+}

@@ -7,6 +7,7 @@
  */
 import { mount } from '@vue/test-utils'
 import { describe, expect, it } from 'vitest'
+import { DtIcon } from '@dt/ui'
 
 import AiToolCard from '@/components/ai/AiToolCard.vue'
 import type { RunnerStep } from '@/features/ai/turnRunner'
@@ -105,4 +106,41 @@ describe('步骤卡', () => {
     expect(wrapper.text()).toContain('截图已释放')
     expect(wrapper.find('.ai-step__shot-btn').exists()).toBe(false)
   })
+})
+
+describe('步骤卡终态标记', () => {
+  it.each(['aborted', 'cancelled'])('%s明确停止且不能显示成功勾号', (state) => {
+    const wrapper = mount(AiToolCard, {
+      props: { step: step({ state, title: '工具停下了' }) },
+    })
+    expect(wrapper.text()).toContain('已停止')
+    expect(
+      wrapper.findAllComponents(DtIcon).map((icon) => icon.props('name')),
+    ).not.toContain('check')
+    expect(wrapper.find('.ai-step--stopped').exists()).toBe(true)
+  })
+  it.each(['unknown', 'new-state'])(
+    '%s明确未确认且不能显示成功勾号',
+    (state) => {
+      const wrapper = mount(AiToolCard, { props: { step: step({ state }) } })
+      expect(wrapper.text()).toContain('状态未确认')
+      expect(
+        wrapper.findAllComponents(DtIcon).map((icon) => icon.props('name')),
+      ).not.toContain('check')
+    },
+  )
+})
+
+it('只有成功终态显示勾号，运行中的步骤保持执行提示', () => {
+  const succeeded = mount(AiToolCard, { props: { step: step() } })
+  expect(
+    succeeded.findAllComponents(DtIcon).map((icon) => icon.props('name')),
+  ).toContain('check')
+  const running = mount(AiToolCard, {
+    props: { step: step({ state: 'running' }) },
+  })
+  expect(running.text()).toContain('执行中')
+  expect(
+    running.findAllComponents(DtIcon).map((icon) => icon.props('name')),
+  ).not.toContain('check')
 })

@@ -29,6 +29,11 @@ const icon = computed<IconName>(() => KIND_ICONS[props.step.kind] ?? 'activity')
 
 const isFailed = computed(() => props.step.state === 'failed')
 const isWaiting = computed(() => props.step.state === 'awaiting_client')
+const isStopped = computed(() =>
+  ['aborted', 'cancelled'].includes(props.step.state),
+)
+const isSucceeded = computed(() => props.step.state === 'succeeded')
+const isRunning = computed(() => props.step.state === 'running')
 
 const args = computed(() => Object.entries(props.step.input ?? {}))
 
@@ -50,7 +55,10 @@ function toggle(): void {
 </script>
 
 <template>
-  <li class="ai-step" :class="{ 'ai-step--failed': isFailed }">
+  <li
+    class="ai-step"
+    :class="{ 'ai-step--failed': isFailed, 'ai-step--stopped': isStopped }"
+  >
     <!-- ⚠ 没东西可展开时禁用而不是换成 div：换标签的话，同一行在两种状态下
          的可聚焦性不一样，键盘走位会时有时无 -->
     <button
@@ -75,7 +83,15 @@ function toggle(): void {
         :size="14"
         class="ai-step__mark"
       />
-      <DtIcon v-else name="check" :size="14" class="ai-step__mark" />
+      <DtTag v-else-if="isStopped" intent="neutral" size="sm">已停止</DtTag>
+      <DtTag v-else-if="isRunning" intent="info" size="sm">执行中</DtTag>
+      <DtIcon
+        v-else-if="isSucceeded"
+        name="check"
+        :size="14"
+        class="ai-step__mark"
+      />
+      <DtTag v-else intent="warning" size="sm">状态未确认</DtTag>
       <DtIcon
         v-if="hasDetail"
         :name="isOpen ? 'chevron-down' : 'chevron-right'"
@@ -161,6 +177,10 @@ function toggle(): void {
 
 .ai-step--failed {
   color: var(--state-danger);
+}
+
+.ai-step--stopped {
+  color: var(--text-disabled);
 }
 
 .ai-step__icon {

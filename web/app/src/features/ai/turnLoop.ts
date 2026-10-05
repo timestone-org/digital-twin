@@ -28,6 +28,7 @@ import { createFrameReader, type FrameReader } from './sseFrames'
 import { inputPreview, isImageOutput, outputPreview } from './stepPreview'
 import {
   ActualToolReceiptError,
+  CancelledToolReceipt,
   ToolReceiptUnavailableError,
 } from './toolReceipts'
 
@@ -310,9 +311,11 @@ async function runAll(
       continue
     }
     try {
-      const output = await dispatch(call)
+      const receipt = await dispatch(call)
+      const isAborted = receipt instanceof CancelledToolReceipt
+      const output = actualOutput(receipt)
       results.push({ call_id: call.call_id, output })
-      if (!isAsk(call)) steps.push(stepOf(call, output, null))
+      if (!isAsk(call)) steps.push(stepOf(call, output, null, isAborted))
     } catch (error) {
       const reason = describe(error)
       if (error instanceof ToolReceiptUnavailableError) {
@@ -337,6 +340,10 @@ async function runAll(
   return { results, hasUnknown }
 }
 
+function actualOutput(receipt: unknown): unknown {
+  return receipt instanceof CancelledToolReceipt ? receipt.output : receipt
+}
+
 function isAsk(call: AssistantToolCall): boolean {
   return call.name === ASSISTANT_ASK_TOOL
 }
@@ -351,14 +358,17 @@ function stepOf(
   call: AssistantToolCall,
   output: unknown,
   error: string | null,
+  isAborted = false,
 ): RunnerStep {
   const input = inputPreview(call.arguments)
   const text = outputPreview(output)
+  const state = error !== null ? 'failed' : isAborted ? 'aborted' : 'succeeded'
+  const title = error !== null ? '没做成' : isAborted ? '停下了' : '做完了'
   return {
     kind: 'client_tool',
     name: call.name,
-    state: error === null ? 'succeeded' : 'failed',
-    title: error === null ? `${call.name} 做完了` : `${call.name} 没做成`,
+    state,
+    title: `${call.name} ${title}`,
     error,
     ...(input === null ? {} : { input }),
     ...(text === null ? {} : { output: text }),
