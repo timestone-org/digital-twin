@@ -13,6 +13,14 @@
 export const COLLECT_PROTOCOLS = ['modbus_tcp', 'opcua'] as const
 export type CollectProtocol = (typeof COLLECT_PROTOCOLS)[number]
 
+/** 先接受未来版本的 HTTP 出参，创建输入仍只使用 CollectProtocol。 */
+export const COLLECT_READABLE_PROTOCOLS = [
+  'http',
+  ...COLLECT_PROTOCOLS,
+] as const
+export type CollectReadableProtocol =
+  (typeof COLLECT_READABLE_PROTOCOLS)[number]
+
 /** 订阅还是轮询。驱动不支持订阅时采集运行时自动降级，配置面照原样存。 */
 export const COLLECT_READ_MODES = ['subscribe', 'poll'] as const
 export type CollectReadMode = (typeof COLLECT_READ_MODES)[number]
@@ -73,7 +81,7 @@ export interface CollectSource {
   code: string
   /** 备注用途；没填是 null。 */
   description: string | null
-  protocol: CollectProtocol
+  protocol: CollectReadableProtocol
   endpoint: string
   /** 连接现场设备的账号名；匿名连接是 null。口令不回，只回 has_credential。 */
   username: string | null

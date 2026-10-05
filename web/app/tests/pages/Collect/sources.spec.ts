@@ -17,6 +17,7 @@ import type { CollectSource, CollectSourceRuntime } from '@dt/contracts'
 import { BizError } from '@/api/client'
 import * as collectApi from '@/api/collect'
 import CollectOpcuaPage from '@/pages/Collect/Opcua/index.vue'
+import { useSourceOps } from '@/pages/Collect/Opcua/scripts/useSourceOps'
 import { useAuthStore } from '@/stores/auth'
 
 // ⚠ 共用一份 spy 而不是每次 useRouter() 现造一个：现造的那个拿不到手，
@@ -143,6 +144,49 @@ function bodyButton(label: string): HTMLButtonElement {
 }
 
 enableAutoUnmount(afterEach)
+
+describe('HTTP 兼容读取', () => {
+  it('操作函数在 HTTP 源上也拒绝编辑、启用、测试与提交', async () => {
+    const update = vi.spyOn(collectApi, 'updateSource')
+    const probe = vi.spyOn(collectApi, 'testSource')
+    const ops = useSourceOps(() => Promise.resolve())
+    const target = source({ protocol: 'http' })
+    ops.openEdit(target)
+    expect(ops.formOpen.value).toBe(false)
+    await ops.setEnabled(target, true)
+    await ops.test(target)
+    ops.formSource.value = target
+    await ops.update({ endpoint: 'http://other.test/data' })
+    expect(update).not.toHaveBeenCalled()
+    expect(probe).not.toHaveBeenCalled()
+    expect(toastError).toHaveBeenCalledTimes(4)
+  })
+
+  it('混合列表可查看 HTTP，停用保留，编辑与连通性测试关闭', async () => {
+    const update = vi
+      .spyOn(collectApi, 'updateSource')
+      .mockResolvedValue(source({ protocol: 'http', is_enabled: false }))
+    const wrapper = await render([
+      source({ protocol: 'http', endpoint: 'http://data.test/data' }),
+      source({ id: 's2', name: '旧协议源' }),
+    ])
+    expect(wrapper.text()).toContain('旧协议源')
+    expect(wrapper.text()).not.toContain('连通性测试')
+    expect(wrapper.find('button[aria-label="编辑"]').exists()).toBe(false)
+    expect(wrapper.find('button[aria-label="删除"]').exists()).toBe(true)
+    await clickByText(wrapper, '断开')
+    await flushPromises()
+    expect(update).toHaveBeenCalledWith('s1', { is_enabled: false })
+  })
+
+  it('停用的 HTTP 源不提供重新连接', async () => {
+    const wrapper = await render([
+      source({ protocol: 'http', is_enabled: false }),
+    ])
+    expect(wrapper.find('[data-test="connect-source"]').exists()).toBe(false)
+    expect(wrapper.find('[data-test="disconnect-source"]').exists()).toBe(false)
+  })
+})
 
 beforeEach(() => {
   setActivePinia(createPinia())

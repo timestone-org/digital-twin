@@ -8,11 +8,15 @@ import { DtButton, DtIcon, DtInput } from '@dt/ui'
 
 import PermGuard from '@/components/PermGuard.vue'
 
-defineProps<{
-  keyword: string
-  hasRows: boolean
-  exporting: boolean
-}>()
+withDefaults(
+  defineProps<{
+    keyword: string
+    hasRows: boolean
+    exporting: boolean
+    canEdit?: boolean
+  }>(),
+  { canEdit: true },
+)
 
 defineEmits<{
   'update:keyword': [value: string]
@@ -47,10 +51,11 @@ defineEmits<{
     >
       全选本页
     </DtButton>
-    <DtButton size="sm" icon="plus" @click="$emit('create')">
+    <DtButton v-if="canEdit" size="sm" icon="plus" @click="$emit('create')">
       新建点位
     </DtButton>
     <DtButton
+      v-if="canEdit"
       variant="outline"
       size="sm"
       icon="upload"

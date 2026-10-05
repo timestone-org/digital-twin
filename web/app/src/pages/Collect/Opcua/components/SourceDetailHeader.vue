@@ -88,7 +88,7 @@ const stateUpdatedAt = computed(() =>
              与「编辑/删除配置」同为 collect:manage -->
         <PermGuard :codes="[PERMISSION_CODES.collectManage]">
           <DtButton
-            v-if="!source.is_enabled"
+            v-if="!source.is_enabled && source.protocol !== 'http'"
             size="sm"
             icon="power"
             :loading="busy"
@@ -98,7 +98,7 @@ const stateUpdatedAt = computed(() =>
             连接
           </DtButton>
           <DtButton
-            v-else
+            v-else-if="source.is_enabled"
             variant="outline"
             size="sm"
             icon="power-off"
@@ -110,7 +110,10 @@ const stateUpdatedAt = computed(() =>
           </DtButton>
         </PermGuard>
         <!-- 连通性测试会走命令总线让采集进程真连一次现场 -->
-        <PermGuard :codes="[PERMISSION_CODES.collectOperate]">
+        <PermGuard
+          v-if="source.protocol !== 'http'"
+          :codes="[PERMISSION_CODES.collectOperate]"
+        >
           <DtButton
             variant="ghost"
             size="sm"
@@ -132,6 +135,7 @@ const stateUpdatedAt = computed(() =>
         />
         <PermGuard :codes="[PERMISSION_CODES.collectManage]">
           <DtButton
+            v-if="source.protocol !== 'http'"
             variant="ghost"
             size="sm"
             icon="pencil"

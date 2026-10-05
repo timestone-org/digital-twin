@@ -15,6 +15,8 @@ describe('协议标签', () => {
       expect(protocolLabel(protocol)).not.toBe(protocol)
     }
     expect(protocolLabel('opcua')).toBe('OPC UA')
+    expect(protocolLabel('http')).toBe('HTTP')
+    expect(COLLECT_PROTOCOLS).toEqual(['modbus_tcp', 'opcua'])
   })
 
   it('认不出的协议原样回，不吞成空白', () => {
