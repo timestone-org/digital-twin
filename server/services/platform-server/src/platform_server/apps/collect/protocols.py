@@ -9,6 +9,9 @@ from typing import Literal, get_args
 from collectwire import DataType
 
 Protocol = Literal["modbus_tcp", "opcua"]
+# 先兼容以后版本保存的 HTTP 行，创建输入与 CHECK 仍只用 Protocol。
+# 完整驱动上线前这里只开放读取，见本上下文 ADR-0002。
+ReadableProtocol = Literal["http", "modbus_tcp", "opcua"]
 
 PROTOCOLS: tuple[str, ...] = tuple(sorted(get_args(Protocol)))
 
@@ -37,16 +40,18 @@ class UnknownLiteral(ValueError):
     """
 
 
-def as_protocol(value: str) -> Protocol:
+def as_protocol(value: str) -> ReadableProtocol:
     """把库里的字符串收窄成协议字面量。
 
     Args: value。
     """
-    if value not in PROTOCOLS:
-        raise UnknownLiteral(f"未知协议：{value!r}")
+    if value == "http":
+        return "http"
     if value == "modbus_tcp":
         return "modbus_tcp"
-    return "opcua"
+    if value == "opcua":
+        return "opcua"
+    raise UnknownLiteral(f"未知协议：{value!r}")
 
 
 def as_read_mode(value: str) -> ReadMode:

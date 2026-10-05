@@ -83,6 +83,8 @@ async def create_points(
     Args: session, bus, payload。
     """
     source = await source_service.require_source(session, payload.source_id)
+    if source.protocol == "http":
+        raise PointInvalid("当前版本不支持新建或修改 HTTP 点位")
     source_id = source.id
     await release_read_transaction(session)
     checks = await check_addresses(
@@ -112,6 +114,9 @@ async def update_point(
     """
     point = await require_point(session, point_id)
     source_id, address = point.source_id, payload.address
+    source = await source_service.require_source(session, source_id)
+    if source.protocol == "http":
+        raise PointInvalid("当前版本不支持新建或修改 HTTP 点位")
     check = await _recheck(session, bus, source_id=source_id, address=address)
     point = await require_point(session, point_id)
     point_crud.apply_changes(point, given_changes(payload))

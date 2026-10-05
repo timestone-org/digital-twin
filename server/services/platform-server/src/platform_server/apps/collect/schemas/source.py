@@ -7,7 +7,11 @@ from pydantic import Field, SecretStr
 
 from collectwire import DataType
 from platform_server.apps.collect.models import MIN_INTERVAL_MS
-from platform_server.apps.collect.protocols import Protocol, ReadMode
+from platform_server.apps.collect.protocols import (
+    Protocol,
+    ReadableProtocol,
+    ReadMode,
+)
 from platform_server.apps.collect.schemas.common import (
     Address,
     Code,
@@ -55,7 +59,7 @@ class SourceOut(OutputModel):
     name: str
     code: str
     description: str | None
-    protocol: Protocol
+    protocol: ReadableProtocol
     endpoint: str
     # 连接现场设备的账号名。⚠ 只回账号名，口令任何出参都不回
     username: str | None
