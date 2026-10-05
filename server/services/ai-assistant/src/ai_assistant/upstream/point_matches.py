@@ -17,7 +17,7 @@ class PointMatch(BaseModel):
     description: str | None
     source_id: str
     source_name: str
-    source_protocol: Literal["modbus_tcp", "opcua"]
+    source_protocol: Literal["http", "modbus_tcp", "opcua"]
     unit: str | None
     is_enabled: bool
     is_exact: bool
