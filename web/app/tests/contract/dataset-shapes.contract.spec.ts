@@ -10,6 +10,7 @@
 import { readFileSync } from 'node:fs'
 import { join } from 'node:path'
 import { describe, expect, it } from 'vitest'
+import type { DatasetBackfillInput } from '@/api/dataset'
 
 import type {
   DatasetAggFunc,
@@ -379,6 +380,9 @@ const SHAPES: Record<string, Record<string, true>> = {
   FormulaDefWithUsagesOut: { ...FORMULA_DEF_WITH_USAGES_KEYS },
   RecomputeOut: { ...RECOMPUTE_KEYS },
   BackfillJobOut: { ...BACKFILL_JOB_KEYS },
+  BackfillStartIn: {
+    ...({ since: true, until: true } satisfies Keys<DatasetBackfillInput>),
+  },
 }
 
 describe('台账线形与 openapi 一致', () => {

@@ -191,6 +191,14 @@ function button(wrapper: ReturnType<typeof mount>, text: string) {
 }
 
 describe('取数', () => {
+  it('回填后只读账号也能主动刷新数据，仍从真实记录列表读取', async () => {
+    const wrapper = await render(['dataset:view'])
+    const refresh = button(wrapper, '刷新数据')
+    expect(refresh).toBeDefined()
+    await refresh?.trigger('click')
+    await flushPromises()
+    expect(dataset.listDatasetRecords).toHaveBeenCalledTimes(2)
+  })
   it('挂载就取第一页，按游标不按页码', async () => {
     await render(['dataset:view'])
     expect(dataset.listDatasetRecords).toHaveBeenCalledWith('t1', {
