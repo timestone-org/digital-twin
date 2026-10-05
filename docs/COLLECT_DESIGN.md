@@ -2,8 +2,9 @@
 
 > 采集运行时在 `collector-server`，配置面在 `platform-server/apps/collect`（[ADR-0001](adr/0001-采集运行时独立成服务而配置面留在平台.md)）。
 > 多协议靠驱动适配器，归档在协议无关侧（[ADR-0011](adr/0011-采集按驱动适配器分协议而采集计划保持协议无关.md)）。
-> 已实现 OPC UA 与只读 Modbus TCP；PLC 直连边界见 ADR-0056 与
+> 已实现 OPC UA、只读 Modbus TCP 与 HTTP JSON；PLC 直连边界见 ADR-0056 与
 > [PLC_COLLECTION.md](PLC_COLLECTION.md)。
+> HTTP 接口的接入步骤与运行时允许清单见 [HTTP_COLLECT_GUIDE.md](HTTP_COLLECT_GUIDE.md)。
 
 ---
 
@@ -33,7 +34,7 @@ node_key = "{source_id}:{point_code}"
 - `point_code` 是用户在该数据源下指定的稳定标识（如 `outlet_temp`），`(source_id, point_code)` 唯一。
 
 **`point_code` 不是协议寻址串。** 协议寻址串是点位的 `address` 字段（OPC UA 的 `ns=2;s=Temp1`、
-Modbus 的 `holding:0:uint16`），它是**可改的配置**；`point_code` 是**不可改的身份**。
+Modbus 的 `holding:0:uint16`、HTTP 的 `/data/items/0/temperature`），它是**可改的配置**；`point_code` 是**不可改的身份**。
 
 这条区分是整个设计的支点，理由有三：
 
@@ -255,6 +256,45 @@ HTTP 下发——不经 Redis、不进日志、不进任何对外出参。解不
 `archive_retention_days`、时间戳。唯一约束 `uq_collect_points_source_id_code`。
 
 **`protocol` 与 `read_mode` 用 CHECK 约束的字符串**，不用原生 ENUM（database-standard）。
+
+### 5.1.1 HTTP JSON 数据源与多点位映射
+
+`protocol="http"` 表示一个返回 JSON 的接口。源读取模式固定 `poll`，
+`poll_interval_ms >= 1000`。同一次响应可映射成多个独立点位，每个点位保留原有
+类型、单位、采样周期、死区、归档开关、归档心跳和保留期。
+
+`options_json` 仍是字符串键值映射，结构由 `collectwire.http.HttpOptions`
+校验；不新增 HTTP 专用快照、归档表或数据消费入口。
+
+| 键 | 口径 |
+|---|---|
+| `method` | `GET`（默认）或 `POST`；POST 仅用于只读查询接口 |
+| `auth_type` | `none`（默认）、`basic`、`digest`、`bearer`、`api_key`、`oauth2_client_credentials` |
+| `auth_header` | API key 的请求头名称，默认 `X-API-Key`；密钥不放 URL |
+| `headers_json` / `query_json` | JSON 字符串，内容为字符串键值对象；认证信息使用凭据字段 |
+| `body_json` | JSON 字符串，仅 POST 可用；允许对象、数组或标量 |
+| `timeout_s` | 默认 `5`，范围 `0 < timeout_s <= 10` |
+| `max_response_bytes` | 默认 `1048576`，上限 `4194304` |
+| `token_endpoint` / `scope` | OAuth 客户端凭据认证的令牌地址与可选范围 |
+
+Basic/Digest 的用户名、OAuth 的 client_id 使用 `username`；对应密码、静态
+Bearer、API key 和 OAuth client_secret 使用 `credential`，写入后以 Fernet 密文保存。
+对外接口仅返回 `has_credential`。PATCH 不带 `credential` 表示保留，显式 `null`
+表示清空；仍选需要密钥的认证方式时拒绝清空。API key 只允许请求头传递。
+禁止 URL 的 userinfo/fragment、秘密 query 参数，以及在 headers/query/body 的
+公开选项里绕过凭据入口保存常见认证秘密。
+
+点位 `address` 使用 RFC 6901 JSON Pointer：`/data/items/0/temperature` 读取
+数组第 0 项的温度，`/a~1b/~0key` 读取含 `/` 和 `~` 的对象键；`$` 代表响应根值。
+一个接口返回 `{"data":{"temperature":23.5,"running":true}}` 时，可创建
+`temperature` 点位（`address=/data/temperature`、`data_type=float`）与
+`running` 点位（`address=/data/running`、`data_type=bool`）。数据离开驱动后
+仍是统一四元组，现有大屏实时绑定、历史查询、台账聚合、报告与分析建模直接消费
+这些点位的稳定身份。前端可从粘贴的 JSON 样例选择多个叶子并批量建点。
+
+平台保存前验证配置与 Pointer 语法，不向上游发 HTTP。点位真实存在性仍经命令
+总线由 collector 校验；未获取现场结论时保留 `unverified`。HTTP 数据源不提供
+地址空间浏览和点位写值，这两类操作明确返回不支持。
 
 ### 5.2 接口
 
