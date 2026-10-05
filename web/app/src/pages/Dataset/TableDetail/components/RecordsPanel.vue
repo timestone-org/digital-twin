@@ -99,6 +99,15 @@ function onRevoke(column: DatasetColumn, row: RecordRow): void {
       </span>
 
       <div class="ml-auto flex items-center gap-2">
+        <DtButton
+          variant="ghost"
+          intent="neutral"
+          size="sm"
+          icon="refresh-cw"
+          :disabled="isBusy"
+          @click="records.refresh()"
+          >刷新数据</DtButton
+        >
         <PermGuard :codes="[PERMISSION_CODES.datasetOverride]">
           <DtButton
             variant="ghost"

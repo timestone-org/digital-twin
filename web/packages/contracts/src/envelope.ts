@@ -79,6 +79,10 @@ export const ERROR_CODES = {
    * 这一条问「那几条公式就此算不出数，仍然删吗」，两句话的后果完全不同。
    */
   datasetColumnInUse: 41206,
+  /** 已有历史桶回填任务，读取实际进度；不重试开始请求。 */
+  datasetBackfillBusy: 41231,
+  /** 取消时任务已不在运行，读取实际终态。 */
+  datasetBackfillNotRunning: 41232,
   /**
    * 库公式写不通：语法、未知列或成环。表单据此把后端那句话落到「公式体」那一格。
    * ⚠ 校验端点不用它——那里是 200 + `is_ok=false`（docs/DATASET_DESIGN.md §6.1）。

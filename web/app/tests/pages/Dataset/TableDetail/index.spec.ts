@@ -94,6 +94,7 @@ beforeEach(() => {
   setActivePinia(createPinia())
   localStorage.clear()
   vi.spyOn(dataset, 'getDatasetTable').mockResolvedValue(table())
+  vi.spyOn(dataset, 'getDatasetBackfill').mockResolvedValue(null)
 })
 
 enableAutoUnmount(afterEach)
@@ -148,6 +149,27 @@ describe('身份条', () => {
 })
 
 describe('闸 3：写入口', () => {
+  it('汇总台账的历史桶回填入口只给 dataset:backfill', async () => {
+    const writer = await render(['dataset:view', 'dataset:backfill'])
+    expect(writer.text()).toContain('历史桶回填')
+    writer.unmount()
+    const reader = await render(['dataset:view', 'dataset:manage'])
+    expect(reader.find('button[data-test="backfill-open"]').exists()).toBe(
+      false,
+    )
+  })
+
+  it('手动录入台账明确不支持历史桶回填', async () => {
+    vi.mocked(dataset.getDatasetTable).mockResolvedValue(
+      table({ collect_mode: 'manual' }),
+    )
+    const wrapper = await render(['dataset:view', 'dataset:backfill'])
+    expect(wrapper.text()).toContain('手动录入台账不支持历史桶回填')
+    expect(wrapper.find('button[data-test="backfill-open"]').exists()).toBe(
+      false,
+    )
+  })
+
   it('⚠ 只读账号看到「只读」，且整页只摆这一处——每行一句是纯噪音', async () => {
     const wrapper = await render(['dataset:view'])
     expect(wrapper.text()).not.toContain('新增列')

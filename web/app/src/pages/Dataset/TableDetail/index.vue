@@ -19,6 +19,7 @@ import PermGuard from '@/components/PermGuard.vue'
 import type { AppTabItem } from '@/components/layout'
 import { AppShell, AppTabNav } from '@/components/layout'
 import ColumnFormDialog from './components/ColumnFormDialog.vue'
+import DatasetBackfill from './components/DatasetBackfill.vue'
 import FormulaProposalCard from './components/FormulaProposalCard.vue'
 import { collectSummary } from '../scripts/collectSummary'
 import { useColumnOps } from './scripts/useColumnOps'
@@ -152,6 +153,8 @@ onMounted(() => {
               · {{ collect.label }}
             </span>
           </div>
+
+          <DatasetBackfill :table="detail.table.value" />
 
           <AppTabNav :items="tabs" label="台账详情分区" />
 

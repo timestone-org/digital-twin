@@ -1,6 +1,5 @@
 /**
  * @fileoverview 数据台账（`dataset`）的接口封装：台账、列、数据行与人工修正。
- * 回填随后续各期落地，届时加在这个文件里。
  *
  * ⚠ 这一组打的是 platform-server，不是 auth-server：每个函数都要给 `baseUrl`。
  * 漏给就会打到 `/api/v1/auth/...`，边缘按前缀反代，拿回来的是一个 404 信封。
@@ -11,6 +10,7 @@
 import type {
   CursorPage,
   DatasetAggFunc,
+  DatasetBackfillJob,
   DatasetCollectMode,
   DatasetColumn,
   DatasetColumnSource,
@@ -43,6 +43,50 @@ function onPlatform(options: RequestOptions = {}): RequestOptions {
 /** 写操作的幂等头。 */
 function idempotent(key: string): Record<'Idempotency-Key', string> {
   return { 'Idempotency-Key': key }
+}
+
+/** 历史桶起始时刻的范围；两端均为 UTC RFC3339，包含结束桶。 */
+export interface DatasetBackfillInput {
+  since: string
+  until: string
+}
+
+/** 发起历史桶回填。实际对齐、裁剪范围由任务回执给出。 */
+export function startDatasetBackfill(
+  tableId: string,
+  input: DatasetBackfillInput,
+  key = newIdempotencyKey(),
+): Promise<DatasetBackfillJob> {
+  return requestData(
+    `/dataset-tables/${tableId}/backfill`,
+    onPlatform({
+      method: 'POST',
+      body: input,
+      headers: idempotent(key),
+    }),
+  )
+}
+
+/** 没有保留的任务时 GET 正常返回 null；不能使用 requestData。 */
+export function getDatasetBackfill(
+  tableId: string,
+  signal?: AbortSignal,
+): Promise<DatasetBackfillJob | null> {
+  return request(`/dataset-tables/${tableId}/backfill`, onPlatform({ signal }))
+}
+
+/** 协作式取消：回执可能仍 running，必须继续读取实际终态。 */
+export function cancelDatasetBackfill(
+  tableId: string,
+  key = newIdempotencyKey(),
+): Promise<DatasetBackfillJob> {
+  return requestData(
+    `/dataset-tables/${tableId}/backfill`,
+    onPlatform({
+      method: 'DELETE',
+      headers: idempotent(key),
+    }),
+  )
 }
 
 /** 台账列表的翻页参数。后端 `size` 上限 200。 */
