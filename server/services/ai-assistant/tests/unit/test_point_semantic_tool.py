@@ -152,3 +152,41 @@ async def test_long_query_is_rejected_before_request() -> None:
 
     with pytest.raises(ValueError, match="300"):
         await tools_for(handler)("points.search", {"keyword": "温" * 301})
+
+
+@pytest.mark.parametrize("protocol", ["http", "modbus_tcp", "opcua"])
+async def test_search_decodes_all_supported_source_protocols(
+    protocol: str,
+) -> None:
+    def handler(request: httpx.Request) -> httpx.Response:
+        assert request.url.path == "/api/v1/platform/collect-point-matches"
+        for key, value in HEADERS.items():
+            assert request.headers[key] == value
+        point = match("temperature", 0.9)
+        point["source_protocol"] = protocol
+        return response(
+            {"items": [point], "mode": "hybrid", "pending_count": 0}
+        )
+
+    got = await tools_for(handler)("points.search", {"keyword": "温度"})
+    assert got["points"][0]["source_protocol"] == protocol
+    assert got["points"][0]["node_key"] == "source:temperature"
+
+
+@pytest.mark.parametrize("protocol", ["mqtt", "s7", None, True])
+async def test_search_rejects_unknown_source_protocols(
+    protocol: object,
+) -> None:
+    seen: list[str] = []
+
+    def handler(request: httpx.Request) -> httpx.Response:
+        seen.append(request.url.path)
+        point = match("temperature", 0.9)
+        point["source_protocol"] = protocol
+        return response(
+            {"items": [point], "mode": "hybrid", "pending_count": 0}
+        )
+
+    with pytest.raises(PlatformUnavailable, match="格式不正确"):
+        await tools_for(handler)("points.search", {"keyword": "温度"})
+    assert seen == ["/api/v1/platform/collect-point-matches"]
