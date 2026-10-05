@@ -15,10 +15,14 @@ import type {
   OpcuaNode,
   OpcuaNodeCreateInput,
 } from '@dt/contracts'
-import { OPCUA_CREATABLE_NODE_CLASSES, OPCUA_DATA_TYPES } from '@dt/contracts'
+import { OPCUA_CREATABLE_NODE_CLASSES } from '@dt/contracts'
 import { DtButton, DtField, DtInput, DtModal, DtNotice, DtSelect } from '@dt/ui'
 
 import { useFormDirty } from '@/composables/useFormDirty'
+import {
+  CREATABLE_DATA_TYPES,
+  parseInitialValue,
+} from '@/pages/Tools/OpcuaServerDetail/scripts/nodeInitialValue'
 
 const props = defineProps<{
   modelValue: boolean
@@ -65,7 +69,7 @@ const classOptions = computed(() =>
   OPCUA_CREATABLE_NODE_CLASSES.map((value) => ({ value, label: value })),
 )
 const typeOptions = computed(() =>
-  OPCUA_DATA_TYPES.map((value) => ({ value, label: value })),
+  CREATABLE_DATA_TYPES.map((value) => ({ value, label: value })),
 )
 const parentOptions = computed(() => [
   { value: '', label: '（挂在根下）' },
@@ -83,8 +87,14 @@ const accessHint = computed(() =>
 )
 
 const isVariable = computed(() => nodeClass.value !== 'object')
+const parsedInitial = computed(() =>
+  parseInitialValue(initialValue.value, dataType.value),
+)
 const canSubmit = computed(
-  () => identifier.value.trim() !== '' && browseName.value.trim() !== '',
+  () =>
+    identifier.value.trim() !== '' &&
+    browseName.value.trim() !== '' &&
+    (!isVariable.value || parsedInitial.value.error === null),
 )
 
 function submit(): void {
@@ -99,7 +109,8 @@ function submit(): void {
     input.data_type = dataType.value
     // 总是显式带上：省略时后端缺省为只读，节点会静默建成不可写
     input.access_level = ACCESS_LEVELS[access.value]
-    if (initialValue.value !== '') input.initial_value = initialValue.value
+    if (parsedInitial.value.value !== undefined)
+      input.initial_value = parsedInitial.value.value
   }
   emit('create', input)
 }
@@ -133,7 +144,11 @@ function submit(): void {
         <DtSelect v-model="parentId" :options="parentOptions" />
       </DtField>
 
-      <DtField v-if="isVariable" label="数据类型">
+      <DtField
+        v-if="isVariable"
+        label="数据类型"
+        hint="本部署支持布尔、int32/int64、float/double、字符串与字节串"
+      >
         <DtSelect v-model="dataType" :options="typeOptions" />
       </DtField>
 
@@ -141,7 +156,12 @@ function submit(): void {
         <DtSelect v-model="access" :options="accessOptions" />
       </DtField>
 
-      <DtField v-if="isVariable" label="初值" hint="留空则用类型的零值">
+      <DtField
+        v-if="isVariable"
+        label="初值"
+        :error="parsedInitial.error ?? undefined"
+        hint="留空使用类型零值；布尔填 true/false；整数与 float 均检查类型范围"
+      >
         <DtInput v-model="initialValue" />
       </DtField>
     </div>
