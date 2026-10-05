@@ -98,6 +98,65 @@ afterEach(() => {
 })
 
 describe('MCP实际回执与回合停止', () => {
+  it('可信取消回执显示停下且原样保存，不宣称做完', async () => {
+    installed = () => ({ decision: Promise.resolve(false), complete: vi.fn() })
+    setMcpWriteConfirmHandler(installed)
+    vi.mocked(api.decideMcpWrite).mockResolvedValue({
+      call_id: 'w1',
+      output: { is_cancelled: true },
+      error: null,
+    })
+    const { input, sink, onToolsRun, saveReceipts } = scene()
+    await runTurn(input, sink)
+    expect(onToolsRun).toHaveBeenCalledWith([
+      expect.objectContaining({
+        state: 'aborted',
+        title: 'mcp.test.write 停下了',
+        output: '{"is_cancelled":true}',
+      }),
+    ])
+    expect(saveReceipts).toHaveBeenCalledExactlyOnceWith('s1', [
+      { call_id: 'w1', output: { is_cancelled: true } },
+    ])
+    expect(api.decideMcpWrite).toHaveBeenCalledExactlyOnceWith('s1', 'w1', {
+      ticket: 'ticket-1',
+      confirm: false,
+    })
+  })
+
+  it.each([true, false, 'true', null, undefined])(
+    '已确认成功回执的业务字段%s不能冒充可信取消',
+    async (is_cancelled) => {
+      vi.mocked(api.decideMcpWrite).mockResolvedValue({
+        call_id: 'w1',
+        output: { is_cancelled, changed: 1 },
+        error: null,
+      })
+      const { input, sink, onToolsRun } = scene()
+      await runTurn(input, sink)
+      expect(onToolsRun).toHaveBeenCalledWith([
+        expect.objectContaining({
+          state: 'succeeded',
+          title: 'mcp.test.write 做完了',
+        }),
+      ])
+    },
+  )
+
+  it('错误回执优先显示失败，不能被取消字段掩盖', async () => {
+    vi.mocked(api.decideMcpWrite).mockResolvedValue({
+      call_id: 'w1',
+      output: { is_cancelled: true },
+      error: '确认票据已过期',
+    })
+    const { input, sink, onToolsRun } = scene()
+    await runTurn(input, sink)
+    expect(onToolsRun).toHaveBeenCalledWith([
+      expect.objectContaining({ state: 'failed', error: '确认票据已过期' }),
+    ])
+    expect(api.decideMcpWrite).toHaveBeenCalledTimes(1)
+  })
+
   it('保存真实返回值并在每个推进信封声明确认能力', async () => {
     const { input, sink, advance, saveReceipts } = scene()
     await runTurn(input, sink)
@@ -156,6 +215,9 @@ describe('MCP实际回执与回合停止', () => {
     ])
     expect(advance).toHaveBeenCalledTimes(1)
     expect(api.decideMcpWrite).toHaveBeenCalledTimes(1)
+    expect(sink.onToolsRun).toHaveBeenCalledWith([
+      expect.objectContaining({ state: 'succeeded' }),
+    ])
   })
 
   it('失败回执如实写历史和时间线，不重试写操作', async () => {
