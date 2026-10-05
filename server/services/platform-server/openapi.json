@@ -15827,6 +15827,7 @@
           },
           "source_protocol": {
             "enum": [
+              "http",
               "modbus_tcp",
               "opcua"
             ],
@@ -19660,6 +19661,7 @@
           },
           "protocol": {
             "enum": [
+              "http",
               "modbus_tcp",
               "opcua"
             ],

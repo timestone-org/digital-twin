@@ -32,6 +32,11 @@ def test_a_known_protocol_narrows() -> None:
     assert as_protocol("modbus_tcp") == "modbus_tcp"
 
 
+def test_http_is_readable_without_expanding_the_writable_set() -> None:
+    assert as_protocol("http") == "http"
+    assert PROTOCOLS == ("modbus_tcp", "opcua")
+
+
 def test_an_unknown_protocol_is_refused() -> None:
     with pytest.raises(UnknownLiteral):
         as_protocol("s7")
