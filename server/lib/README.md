@@ -20,6 +20,7 @@
 | `auth` | JWT 签发与校验、口令散列、调用者身份载体、签名头编解码与解身份 |
 | `idempotency` | 幂等键的占坑与结果回放，命名空间按服务注入 |
 | `stream` | Redis Stream 的发布、消费组、陈旧认领与 owner 原子续期/确认 |
+| `objectstore` | S3 字节访问、直传凭证与明确的读取错误可重试标记 |
 | `lifespan` | 启动/关停钩子编排 |
 | `utils` | 无状态纯函数：时间、标识、文本。**叶子包，不许 import 其它子包** |
 | `testing` | 共享测试假件，排除出覆盖率统计 |
@@ -32,7 +33,15 @@ mssql  pymssql（外部只读 SQL 源，自带 FreeTDS，不依赖系统 ODBC）
 redis  redis
 web    fastapi / uvicorn
 auth   pyjwt / argon2-cffi
+s3     boto3（S3 兼容字节面）
 ```
+
+## 对象存储错误
+
+`ObjectStoreError.is_retryable` 默认 `false`，包括权限、凭据、未知故障及结果不确定的
+写操作失败。`ObjectStoreUnavailable` 是其兼容子类，只用于明确可恢复的读取故障，
+标记为 `true`；对象不存在仍使用不可重试的 `ObjectNotFound`。调用方读取这份元数据，
+不解释 SDK 异常、响应或消息。此标记不发起重试，也不改变 SDK 配置。
 
 ## 日志级别
 

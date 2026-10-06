@@ -13,7 +13,11 @@ from collector_server.apps.collect.archive.writer import (
     WriterOptions,
 )
 from collector_server.apps.collect.bus.consumer import CommandConsumer
-from collector_server.apps.collect.drivers.base import DriverTimeouts
+from collector_server.apps.collect.drivers.base import (
+    DriverConnection,
+    DriverTimeouts,
+    RequestLimiter,
+)
 from collector_server.apps.collect.drivers.registry import create_driver
 from collector_server.apps.collect.plan.adapt import to_connection
 from collector_server.apps.collect.plan.client import PlanClient
@@ -109,24 +113,17 @@ def _build_session_builder(
     Args: settings, plan, sink, archive, state。
     """
 
-    request_limiter = asyncio.Semaphore(settings.plc_max_concurrent_requests)
+    limiters: dict[str, RequestLimiter] = {
+        "http": asyncio.Semaphore(settings.http_max_concurrent_requests),
+        "plc": asyncio.Semaphore(settings.plc_max_concurrent_requests),
+    }
 
     def build(source: PlanSource) -> SourceSession:
         return SourceSession(
             source=source,
             driver=create_driver(
                 source.protocol,
-                to_connection(
-                    source,
-                    DRIVER_TIMEOUTS,
-                    request_limiter,
-                    is_network_access_enabled=settings.plc_read_enabled,
-                    allowed_endpoints=frozenset(
-                        target.strip()
-                        for target in settings.plc_allowed_endpoints.split(",")
-                        if target.strip()
-                    ),
-                ),
+                _connection_of(source, settings, limiters),
             ),
             # 一条读数并联进快照与归档两条支线（COLLECT_DESIGN.md §4.3 的 ②③）
             sink=fan_out(
@@ -140,6 +137,28 @@ def _build_session_builder(
         )
 
     return build
+
+
+def _connection_of(
+    source: PlanSource, settings: Settings, limiters: dict[str, RequestLimiter]
+) -> DriverConnection:
+    is_http = source.protocol == "http"
+    endpoints = (
+        settings.http_allowed_endpoints
+        if is_http
+        else settings.plc_allowed_endpoints
+    )
+    return to_connection(
+        source,
+        DRIVER_TIMEOUTS,
+        limiters["http" if is_http else "plc"],
+        is_network_access_enabled=(
+            settings.http_read_enabled if is_http else settings.plc_read_enabled
+        ),
+        allowed_endpoints=frozenset(
+            target.strip() for target in endpoints.split(",") if target.strip()
+        ),
+    )
 
 
 def _session_options(settings: Settings, plan: PlanStore) -> SessionOptions:

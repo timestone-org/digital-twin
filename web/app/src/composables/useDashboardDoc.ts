@@ -19,6 +19,8 @@ import {
 export { VERSION_CONFLICT_MESSAGE }
 
 export interface DashboardDoc {
+  /** 每次加载推进；保存编排用它识别已切换或重载的编辑资源。 */
+  readonly resourceVersion: number
   dashboard: Ref<DashboardPayload | null>
   loading: Ref<boolean>
   saving: Ref<boolean>
@@ -52,6 +54,9 @@ export function useDashboardDoc(): DashboardDoc {
   const { load, dispose } = createLoader(state)
   return {
     ...state,
+    get resourceVersion() {
+      return state.loadGeneration ?? 0
+    },
     load,
     save: createSaver(state),
     saveMeta: createMetaSaver(state),

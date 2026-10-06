@@ -12,7 +12,15 @@ from typing import Protocol
 
 
 class ObjectStoreError(RuntimeError):
-    """对象存储不可用或拒绝了一次操作。"""
+    """对象存储操作失败；永久或不确定的故障不可重试。"""
+
+    is_retryable: bool = False
+
+
+class ObjectStoreUnavailable(ObjectStoreError):
+    """对象存储读取暂时失败，重新读取有意义。"""
+
+    is_retryable = True
 
 
 class ObjectNotFound(ObjectStoreError):

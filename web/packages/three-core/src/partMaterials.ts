@@ -13,6 +13,8 @@
  */
 import * as THREE from 'three'
 
+import { TransparentGeometry } from './transparentGeometry'
+
 /** 低于它就当成需要透明通道；浮点误差下 1 未必等于 1。 */
 const NEARLY_OPAQUE = 0.999
 
@@ -58,6 +60,8 @@ interface Baseline {
   opacity: number
   transparent: boolean
   depthWrite: boolean
+  forceSinglePass: boolean
+  canSortOpacity: boolean
   color: THREE.Color | null
   emissive: THREE.Color | null
   emissiveIntensity: number
@@ -67,21 +71,72 @@ interface Baseline {
 interface Owner {
   mesh: THREE.Mesh
   original: THREE.Material | THREE.Material[]
+  sorting: TransparentGeometry | null
+  canSortOpacity: boolean
+  materials: readonly THREE.Material[]
 }
 
 function materialsOf(mesh: THREE.Mesh): THREE.Material[] {
   return Array.isArray(mesh.material) ? mesh.material : [mesh.material]
 }
 
-function baselineOf(material: THREE.Material): Baseline {
+function baselineOf(
+  material: THREE.Material,
+  canSortGeometry: boolean,
+): Baseline {
   return {
     material,
     opacity: material.opacity,
     transparent: material.transparent,
     depthWrite: material.depthWrite,
+    forceSinglePass: material.forceSinglePass,
+    canSortOpacity: canSortGeometry && canSortOpacity(material),
     color: isColored(material) ? material.color.clone() : null,
     emissive: isGlowing(material) ? material.emissive.clone() : null,
     emissiveIntensity: isGlowing(material) ? material.emissiveIntensity : 1,
+  }
+}
+
+function isNativeMaterial(material: THREE.Material): boolean {
+  return (
+    material instanceof THREE.MeshBasicMaterial ||
+    material instanceof THREE.MeshStandardMaterial ||
+    material instanceof THREE.MeshLambertMaterial ||
+    material instanceof THREE.MeshPhongMaterial ||
+    material instanceof THREE.MeshToonMaterial ||
+    material instanceof THREE.MeshMatcapMaterial
+  )
+}
+
+function canSortOpacity(material: THREE.Material): boolean {
+  return (
+    isNativeMaterial(material) &&
+    !material.transparent &&
+    material.depthWrite &&
+    material.depthTest &&
+    material.blending === THREE.NormalBlending &&
+    material.alphaTest === 0 &&
+    !material.alphaHash &&
+    !material.alphaToCoverage &&
+    !(
+      material instanceof THREE.MeshPhysicalMaterial &&
+      material.transmission > 0
+    )
+  )
+}
+
+function syncSorting(owner: Owner): void {
+  const current = materialsOf(owner.mesh)
+  // ⚠ 后建部件覆盖材质后，先建部件不能再给同一网格叠装排序资源。
+  if (current.some((material) => !owner.materials.includes(material))) return
+  const needsSorting = current.some(
+    (material) => material.transparent && material.forceSinglePass,
+  )
+  if (needsSorting && owner.canSortOpacity) {
+    owner.sorting ??= new TransparentGeometry(owner.mesh)
+  } else {
+    owner.sorting?.dispose()
+    owner.sorting = null
   }
 }
 
@@ -111,14 +166,23 @@ export class PartMaterials {
 
   constructor(meshes: readonly THREE.Mesh[]) {
     for (const mesh of meshes) {
-      this.owners.push({ mesh, original: mesh.material })
+      const original = mesh.material
       const clones = materialsOf(mesh).map((material) => material.clone())
+      const canSortGeometry = TransparentGeometry.supports(mesh)
+      this.owners.push({
+        mesh,
+        original,
+        sorting: null,
+        canSortOpacity: canSortGeometry && clones.some(canSortOpacity),
+        materials: clones,
+      })
       const single = clones[0]
       // ⚠ 单材质的 mesh 要还原成单个而不是长度 1 的数组：three 按数组材质走
       //   分组绘制，几何上没有分组时整块网格会直接不画
       mesh.material =
         clones.length === 1 && single !== undefined ? single : clones
-      for (const clone of clones) this.baselines.push(baselineOf(clone))
+      for (const clone of clones)
+        this.baselines.push(baselineOf(clone, canSortGeometry))
     }
   }
 
@@ -133,6 +197,7 @@ export class PartMaterials {
       applyOpacity(base, look.opacity)
       applyColor(base, look)
     }
+    for (const owner of this.owners) syncSorting(owner)
   }
 
   /**
@@ -141,7 +206,10 @@ export class PartMaterials {
    * 释放掉的材质；而克隆件本身没人替我们收——模型卸载时释放的是原始那一份。
    */
   dispose(): void {
-    for (const owner of this.owners) owner.mesh.material = owner.original
+    for (const owner of this.owners) {
+      owner.sorting?.dispose()
+      owner.mesh.material = owner.original
+    }
     this.owners.length = 0
     for (const base of this.baselines) base.material.dispose()
     this.baselines.length = 0
@@ -156,13 +224,18 @@ function applyOpacity(base: Baseline, factor: number): void {
   const transparent = base.transparent || material.opacity < NEARLY_OPAQUE
   // ⚠ 半透明还写深度会让自己挡住自己，表现是「透明部件里面是空的」
   const depthWrite = base.depthWrite && material.opacity >= NEARLY_OPAQUE
+  // ⚠ 已按三角形深度排序时，双面必须在同一通道绘制，不能再拆成背面与正面两遍。
+  const forceSinglePass =
+    base.forceSinglePass || (base.canSortOpacity && transparent)
   if (
     material.transparent === transparent &&
-    material.depthWrite === depthWrite
+    material.depthWrite === depthWrite &&
+    material.forceSinglePass === forceSinglePass
   )
     return
   material.transparent = transparent
   material.depthWrite = depthWrite
+  material.forceSinglePass = forceSinglePass
   material.needsUpdate = true
 }
 

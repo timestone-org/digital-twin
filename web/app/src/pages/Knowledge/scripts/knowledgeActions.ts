@@ -6,7 +6,6 @@ import {
   createBase,
   deleteBase,
   deleteDocument,
-  listBases,
   readCapability,
   reparseDocument,
   searchBase,
@@ -17,6 +16,8 @@ import {
   guarded,
   messageOf,
   refreshDocuments,
+  refreshLibrary,
+  refreshBases,
 } from './knowledgeState'
 import type { KnowledgeState } from './knowledgeState'
 
@@ -28,20 +29,37 @@ const DEFAULT_STRATEGY = 'hybrid'
  * @param state 页面状态
  */
 export async function reload(state: KnowledgeState): Promise<void> {
-  await guarded(state, async () => {
-    state.isLoading.value = true
-    try {
-      state.capability.value = await readCapability()
-      state.bases.value = await listBases()
-      const first = state.bases.value[0]
-      if (state.selectedId.value === '' && first !== undefined) {
-        state.selectedId.value = first.id
-        await refreshDocuments(state)
-      }
-    } finally {
-      state.isLoading.value = false
-    }
-  })
+  if (state.isDisposed.value) return
+  state.error.value = ''
+  state.isLoading.value = true
+  let isCurrent = false
+  await state.reloadRace.run(
+    async (signal) => {
+      const capability = await readCapability(signal)
+      signal.throwIfAborted()
+      await refreshBases(state)
+      signal.throwIfAborted()
+      return capability
+    },
+    {
+      ok: (capability) => {
+        isCurrent = true
+        state.capability.value = capability
+      },
+      fail: (cause) => {
+        state.error.value = messageOf(cause)
+      },
+      settled: () => {
+        state.isLoading.value = false
+      },
+    },
+  )
+  if (!isCurrent || state.isDisposed.value) return
+  const first = state.bases.value[0]
+  if (state.selectedId.value === '' && first !== undefined) {
+    state.selectedId.value = first.id
+    await refreshDocuments(state)
+  }
 }
 
 /**
@@ -72,6 +90,7 @@ export async function create(
 ): Promise<boolean> {
   return guarded(state, async () => {
     const made = await createBase(name, description, DEFAULT_STRATEGY)
+    state.countsRace.cancel()
     state.bases.value = [made, ...state.bases.value]
     await select(state, made.id)
   })
@@ -88,6 +107,7 @@ export async function drop(
 ): Promise<boolean> {
   return guarded(state, async () => {
     await deleteBase(baseId)
+    state.countsRace.cancel()
     state.bases.value = state.bases.value.filter((one) => one.id !== baseId)
     if (state.selectedId.value === baseId) {
       await select(state, '')
@@ -110,19 +130,22 @@ export async function addFiles(
   if (baseId === '') return 0
   let uploaded = 0
   await guarded(state, async () => {
-    for (const file of files) {
-      state.upload.value = { name: file.name, ratio: 0 }
-      await uploadDocument(baseId, file, {
-        onProgress: (progress) => {
-          state.upload.value = {
-            name: file.name,
-            ratio: progress.total > 0 ? progress.loaded / progress.total : 0,
-          }
-        },
-      })
-      uploaded += 1
+    try {
+      for (const file of files) {
+        state.upload.value = { name: file.name, ratio: 0 }
+        await uploadDocument(baseId, file, {
+          onProgress: (progress) => {
+            state.upload.value = {
+              name: file.name,
+              ratio: progress.total > 0 ? progress.loaded / progress.total : 0,
+            }
+          },
+        })
+        uploaded += 1
+      }
+    } finally {
+      if (uploaded > 0) await refreshLibrary(state, [baseId])
     }
-    await refreshDocuments(state)
   })
   state.upload.value = null
   return uploaded
@@ -152,9 +175,10 @@ export async function removeDocument(
   state: KnowledgeState,
   documentId: string,
 ): Promise<boolean> {
+  const baseId = state.selectedId.value
   return guarded(state, async () => {
     await deleteDocument(documentId)
-    await refreshDocuments(state)
+    await refreshLibrary(state, [baseId])
   })
 }
 

@@ -59,6 +59,42 @@ function setup(autoRotate = false) {
 }
 
 describe('装配', () => {
+  it('半透明部件预览独占墙面排序几何，关闭时保留主场景资源', () => {
+    const { pump, material } = buildModel()
+    material.transparent = true
+    material.opacity = 0.75
+    material.depthWrite = false
+    material.forceSinglePass = true
+    const renderer = createHeadlessRenderer()
+    const preview = createPartPreview({
+      container: document.createElement('div'),
+      objects: [pump],
+      autoRotate: true,
+      renderer: () => renderer,
+    })
+    if (preview === null) throw new Error('预览没造出来')
+    preview.measure(300, 200)
+    preview.frame(0)
+    const clone = renderer.renders[0]?.scene.getObjectByName('pump')
+    if (clone === undefined || !isMesh(clone)) throw new Error('没有部件克隆')
+    expect(clone.geometry).not.toBe(pump.geometry)
+    expect(clone.material).toBe(material)
+    expect(clone.onBeforeRender === pump.onBeforeRender).toBe(false)
+    let sharedDisposed = 0
+    let cloneDisposed = 0
+    pump.geometry.addEventListener('dispose', () => {
+      sharedDisposed += 1
+    })
+    clone.geometry.addEventListener('dispose', () => {
+      cloneDisposed += 1
+    })
+
+    preview.dispose()
+
+    expect(sharedDisposed).toBe(0)
+    expect(cloneDisposed).toBe(1)
+  })
+
   it('画布挂进宿主并铺满', () => {
     const { container, renderer } = setup()
 

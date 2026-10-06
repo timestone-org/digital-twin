@@ -155,18 +155,22 @@ class CommandBus:
             is_truncated=bool(outcome.data.get("is_truncated", False)),
         )
 
-    async def probe(self, source_id: uuid.UUID) -> str | None:
+    async def probe(
+        self, source_id: uuid.UUID, *, timeout_s: float | None = None
+    ) -> str | None:
         """连通性测试：能答上话就返回 None，否则给一句不可达的原因。
 
         ⚠ 不可达不抛异常：测试端点要能把「没有活会话」如实报出来，抛异常会让
         它与「总线坏了」在页面上长得一模一样。
-        Args: source_id。
+        Args: source_id, timeout_s（不给则沿用命令默认预算）。
         """
         try:
             outcome = await self._call(
                 action=ACTION_READ,
                 source_id=source_id,
-                timeout_s=self.command_timeout_s,
+                timeout_s=(
+                    self.command_timeout_s if timeout_s is None else timeout_s
+                ),
                 fields={"point_codes": []},
             )
         except CollectorUnreachable:

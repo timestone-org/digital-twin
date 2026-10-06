@@ -273,7 +273,8 @@ export function installAuthGuard(router: Router): void {
   })
 
   router.afterEach((to, _from, failure) => {
-    if (failure === undefined) persistEmbedAddress(useEmbedContext())
+    if (failure !== undefined) return
+    persistEmbedAddress(useEmbedContext())
     const title = to.meta.title
     document.title = title ? `${title} · 数字孪生平台` : '数字孪生平台'
   })

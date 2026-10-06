@@ -447,33 +447,38 @@ describe('只读 Modbus TCP', () => {
   })
 })
 
-describe('HTTP 兼容读取', () => {
-  it('保留查看导出与删除，拒绝所有点位修改入口', async () => {
-    const wrapper = await render(undefined, { protocol: 'http' })
-    expect(wrapper.text()).toContain('导出 CSV')
-    expect(wrapper.find('button[aria-label="删除点位"]').exists()).toBe(true)
-    expect(wrapper.text()).not.toContain('新建点位')
-    expect(wrapper.text()).not.toContain('批量导入')
+describe('HTTP 接口点位', () => {
+  it('复用相同实时主题和历史开关，提供 JSON 映射入口并移除写值', async () => {
+    const wrapper = await render([point({ address: '/data/temperature' })], {
+      protocol: 'http',
+      read_mode: 'poll',
+      endpoint: 'https://api.example.com/metrics',
+    })
+    expect(subscribed).toEqual(['collect:s1'])
+    await push({
+      nodeKey: 's1:outlet_temp',
+      state: 'ok',
+      value: 23.5,
+      timestampMs: Date.UTC(2026, 9, 5),
+      quality: 'good',
+    })
+    expect(wrapper.text()).toContain('23.50 ℃')
+    expect(wrapper.find('[aria-label="正在记录历史：出口温度"]').exists()).toBe(
+      true,
+    )
     expect(wrapper.text()).not.toContain('写值')
-    expect(wrapper.find('button[aria-label^="点位设置"]').exists()).toBe(false)
-    expect(wrapper.find('[role="switch"]').attributes('disabled')).toBeDefined()
-    await selectRow(wrapper, '出口温度')
-    expect(wrapper.text()).toContain('批量删除')
-    expect(wrapper.text()).not.toContain('批量编辑')
-    expect(wrapper.text()).not.toContain('批量开启记录历史')
+    await clickByText(wrapper, '从 JSON 生成点位')
+    await flushPromises()
+    expect(document.body.textContent).toContain('从 JSON 响应生成点位')
   })
-
-  it('卡片视图也保留删除并关闭修改', async () => {
-    localStorage.setItem('dt.view-mode.collect-points', 'card')
-    try {
-      const wrapper = await render(undefined, { protocol: 'http' })
-      const card = wrapper.find('.point-card')
-      expect(card.find('button[aria-label="删除点位"]').exists()).toBe(true)
-      expect(card.find('button[aria-label="点位设置"]').exists()).toBe(false)
-      expect(card.find('[role="switch"]').attributes('disabled')).toBeDefined()
-    } finally {
-      localStorage.removeItem('dt.view-mode.collect-points')
-    }
+  it('只读账号看得到 HTTP 实时值而不能创建解析映射', async () => {
+    signIn(['collect:view'])
+    const wrapper = await render([point({ address: '/data/temperature' })], {
+      protocol: 'http',
+      read_mode: 'poll',
+    })
+    expect(wrapper.text()).not.toContain('从 JSON 生成点位')
+    expect(wrapper.text()).not.toContain('写值')
   })
 })
 

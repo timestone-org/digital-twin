@@ -11,7 +11,7 @@ import { createPinia, setActivePinia } from 'pinia'
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 import { enableAutoUnmount, flushPromises, mount } from '@vue/test-utils'
 import type { VueWrapper } from '@vue/test-utils'
-import { DtFilePicker } from '@dt/ui'
+import { DtFilePicker, DtPagination } from '@dt/ui'
 
 import type {
   KnowledgeBase,
@@ -25,6 +25,7 @@ const api = vi.hoisted(() => ({
   readCapability: vi.fn(),
   readDocumentRaw: vi.fn(),
   listBases: vi.fn(),
+  readBase: vi.fn(),
   listDocuments: vi.fn(),
   listSources: vi.fn(),
   createSource: vi.fn(),
@@ -132,6 +133,7 @@ beforeEach(() => {
   })
   api.listSources.mockResolvedValue([])
   api.listBases.mockResolvedValue([BASE])
+  api.readBase.mockResolvedValue(BASE)
   api.listDocuments.mockResolvedValue([documentOf({})])
 })
 
@@ -274,6 +276,70 @@ describe('如实报索引的毛病', () => {
 })
 
 describe('文档表', () => {
+  it('已选库落出第一页后上传，左栏仍显示真实计数', async () => {
+    const firstPage = Array.from({ length: 100 }, (_, i) => ({
+      ...BASE,
+      id: `b${i + 1}`,
+      name: `库${i + 1}`,
+      documentCount: 0,
+    }))
+    firstPage[0] = { ...BASE, documentCount: 0 }
+    api.listBases
+      .mockResolvedValueOnce(firstPage)
+      .mockResolvedValue(firstPage.slice(1))
+    api.readBase.mockResolvedValue({ ...BASE, documentCount: 5 })
+    api.uploadDocument.mockResolvedValue(documentOf({}))
+    const wrapper = await render()
+
+    wrapper
+      .findComponent(DtFilePicker)
+      .vm.$emit('select', [new File(['a'], 'a.md')])
+    await flushPromises()
+
+    expect(wrapper.find('button[aria-current="true"]').text()).toContain(
+      '5 份文档',
+    )
+    expect(api.readBase).toHaveBeenCalledWith(BASE.id, expect.any(AbortSignal))
+  })
+
+  it('上传成功后左栏立即显示服务端文档数', async () => {
+    api.readBase.mockResolvedValue({ ...BASE, documentCount: 1 })
+    api.listBases
+      .mockResolvedValueOnce([{ ...BASE, documentCount: 0 }])
+      .mockResolvedValue([{ ...BASE, documentCount: 1 }])
+    api.uploadDocument.mockResolvedValue(documentOf({}))
+    const wrapper = await render()
+    expect(wrapper.find('button[aria-current="true"]').text()).toContain(
+      '0 份文档',
+    )
+
+    wrapper
+      .findComponent(DtFilePicker)
+      .vm.$emit('select', [new File(['测试'], '测试.md')])
+    await flushPromises()
+
+    expect(wrapper.find('button[aria-current="true"]').text()).toContain(
+      '1 份文档',
+    )
+  })
+
+  it('删除成功后左栏显示减少的文档数', async () => {
+    api.readBase.mockResolvedValue({ ...BASE, documentCount: 1 })
+    confirmSpy.mockResolvedValue(true)
+    api.deleteDocument.mockResolvedValue(undefined)
+    api.listBases
+      .mockResolvedValueOnce([BASE])
+      .mockResolvedValue([{ ...BASE, documentCount: 1 }])
+    const wrapper = await render()
+
+    await wrapper.find('button[aria-label="删除文档"]').trigger('click')
+    await flushPromises()
+
+    expect(wrapper.find('button[aria-current="true"]').text()).toContain(
+      '1 份文档',
+    )
+  })
+
   it('失败原因直接显示在行里', async () => {
     // ⚠ 藏进详情的话，用户只看得到一个红色的「失败」
     api.listDocuments.mockResolvedValue([
@@ -765,4 +831,37 @@ describe('知识来源入口', () => {
     const wrapper = await render()
     expect(buttonOf(wrapper, '来源配置')?.attributes('disabled')).toBeDefined()
   })
+})
+
+it('101库清单提供最早库的选择按钮，刷新后仍选中', async () => {
+  api.listBases.mockResolvedValue([
+    ...Array.from({ length: 100 }, (_, id) => ({
+      ...BASE,
+      id: `b${id}`,
+      name: `库${id}`,
+    })),
+    { ...BASE, id: 'oldest', name: '最早库' },
+  ])
+  const wrapper = await render(['knowledge:use'])
+  await flushPromises()
+  const pagination = wrapper.getComponent(DtPagination)
+  const lastPage = pagination
+    .findAll('button')
+    .find((button) => button.text() === '6')
+  if (lastPage === undefined) throw new Error('第6页入口缺失')
+  await lastPage.trigger('click')
+  await flushPromises()
+  const oldest = wrapper
+    .findAll('button')
+    .find((button) => button.text().includes('最早库'))
+  if (oldest === undefined) throw new Error('最早库选择入口缺失')
+  await oldest.trigger('click')
+  await flushPromises()
+  expect(api.listDocuments).toHaveBeenLastCalledWith(
+    'oldest',
+    expect.any(AbortSignal),
+  )
+  await wrapper.get('button[aria-label="刷新知识库列表"]').trigger('click')
+  await flushPromises()
+  expect(wrapper.text()).toContain('最早库')
 })

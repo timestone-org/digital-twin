@@ -1,9 +1,8 @@
 # 业务平台上下文
 
-HTTP 的读取兼容阶段接受未来版本保存的 HTTP 源与点位搜索结果，但创建输入和
-数据库 CHECK 保持 OPC UA / Modbus。HTTP 源仅可读取、停用、删除，点位仅可
-读取、删除；其他操作在投总线前拒绝。完整写面须等所有旧读者退出后另批发布，
-见 [ADR-0002](docs/adr/0002-HTTP先兼容读取再开放创建.md)。
+HTTP 的完整写面须在先行读取兼容版本交付、全部旧读者退出后发布。出参保留
+`ReadableProtocol`，完整版本的输入 `Protocol` 已包括 HTTP；先行版本与安全
+回滚下限见 [ADR-0002](docs/adr/0002-HTTP先兼容读取再开放创建.md)。
 
 本服务是系统的业务主体，当前承载**全场空调台账**、**空间配置**、**空调数据面**
 （查看现场能源管理系统里的原始数据）、**大屏组态**（项目、大屏、画布节点、
@@ -56,7 +55,7 @@ HTTP 的读取兼容阶段接受未来版本保存的 HTTP 源与点位搜索结
 | **点位** `collect_point` | 数据源下的一个测点 | 不叫节点（大屏那边的 node 是画布节点） |
 | **点位描述** `description` | 测点的设备、位置、用途和常用叫法 | 不是采样值或协议地址 |
 | **点位身份** `node_key` | `{source_id}:{point_code}`，全系统指代一个点位 | 不含协议名 |
-| **寻址串** `address` | 协议特有的地址，如 `ns=2;s=Temp1` | 不是身份，是**可改的配置** |
+| **寻址串** `address` | 协议特有的地址，如 `ns=2;s=Temp1`、`holding:0:uint16` 或 HTTP 的 `/data/temperature` | 不是身份，是**可改的配置** |
 | **采集计划** `plan` | 下发给 collector 的全量配置 + 内容摘要版本号 | 不叫配置快照 |
 
 ⚠ **`code` 是身份、`address` 是配置**：换协议只改 `address`，历史曲线是连续的
@@ -356,6 +355,14 @@ apps/collect/
 密文不出库、明文不进日志。解不开就按未配置下发并响亮记日志——静默回退成匿名
 连接会让现场以为口令还在生效。
 
+HTTP 数据源的协议字面量为 `http`，仅轮询、源周期至少 1 秒。请求与认证选项使用
+`collectwire.http` 的共享纯校验形状；运行时连接仍归 collector。账号/client_id 存
+`username`，密码、Bearer、API key 与 client_secret 共用 `credential_enc`；
+`options_json` 只存非秘密参数。PATCH 未带凭据保持原密文，显式清空须与认证方式
+同步改成匿名。HTTP 点位通过 RFC 6901 JSON Pointer 从同一份响应提取多个值，
+身份、Redis 快照、归档参数、点位搜索以及大屏/台账/报告/分析读取面沿用统一契约。
+HTTP 浏览与点位写值返回明确的不支持，且不向命令总线投递请求。
+
 ⚠ 计划、命令信封、快照键与运行态列名统一取自 `domain/collectwire`；两个服务
 各自只保留传输、ORM 与事务。运行态 ORM 属性名仍由反射契约测试核对，因为共享列名
 常量拦不住属性被单边改名。
@@ -440,9 +447,6 @@ apps/dashboard/crud/publish   三条只读查询：大屏清单、行版本、�
 - **`archive` 绑定不走推送**：它要的是历史序列，走 `/point-histories` 的读面。
 - **推送侧的观测指标**：只有结构化日志（`dashboard_values_published` /
   `dashboard_frame_dropped` / `publisher_lease_*`），没有 Prometheus 指标。
-- **凭据的加密与轮换**：`collect_sources.credential_enc` 建了列，但一期只存一个
-  「配过没配过」的标记，采集计划里**不下发凭据**。存明文一旦上线就再也收不回来，
-  而下发一个假的比不下发更糟。
 - **按点位保留期的执行**：`archive_retention_days` 收在配置里，夜间批处理归
   `platform-worker`，本期不做（迁移里禁止回填数据）。
 

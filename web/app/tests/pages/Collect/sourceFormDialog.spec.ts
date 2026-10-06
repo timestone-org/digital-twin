@@ -158,14 +158,6 @@ describe('新建', () => {
 })
 
 describe('编辑', () => {
-  it('直接收到 HTTP 源也明确拒绝提交配置', async () => {
-    const wrapper = await render({ ...source(), protocol: 'http' })
-    await submit(wrapper, '保存')
-    expect(wrapper.emitted('update')).toBeUndefined()
-    expect(wrapper.text()).toContain(
-      '当前版本只支持读取、停用和删除 HTTP 数据源',
-    )
-  })
   it('回填安全两键与其余连接参数各归各位，编码只读', async () => {
     const wrapper = await render(source())
     const code = wrapper

@@ -37,6 +37,9 @@ from platform_server.apps.collect.services.address_check import (
 )
 from platform_server.apps.collect.services.changes import given_changes
 from platform_server.apps.collect.services.command_bus import CommandBus
+from platform_server.apps.collect.services.http_profile import (
+    validate_http_address,
+)
 from platform_server.apps.collect.services.presenters import to_point_out
 from platform_server.apps.collect.services.transactions import (
     release_read_transaction,
@@ -83,8 +86,10 @@ async def create_points(
     Args: session, bus, payload。
     """
     source = await source_service.require_source(session, payload.source_id)
-    if source.protocol == "http":
-        raise PointInvalid("当前版本不支持新建或修改 HTTP 点位")
+    for position, item in enumerate(payload.items):
+        validate_http_address(
+            source.protocol, item.address, field=f"items[{position}].address"
+        )
     source_id = source.id
     await release_read_transaction(session)
     checks = await check_addresses(
@@ -114,9 +119,9 @@ async def update_point(
     """
     point = await require_point(session, point_id)
     source_id, address = point.source_id, payload.address
-    source = await source_service.require_source(session, source_id)
-    if source.protocol == "http":
-        raise PointInvalid("当前版本不支持新建或修改 HTTP 点位")
+    if address is not None:
+        source = await source_service.require_source(session, source_id)
+        validate_http_address(source.protocol, address, field="address")
     check = await _recheck(session, bus, source_id=source_id, address=address)
     point = await require_point(session, point_id)
     point_crud.apply_changes(point, given_changes(payload))

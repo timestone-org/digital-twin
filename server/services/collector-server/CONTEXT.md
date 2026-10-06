@@ -26,6 +26,7 @@
 
 1. **协议知识只在 `apps/collect/drivers/<协议>/` 里。** 缝在 `ValueSink` 上：值一旦离开驱动就是协议无关的四元组 `(point_code, value, ts_ms, quality)`。
 2. **`asyncua` / `pymodbus` 只允许出现在各自的 `drivers/opcua/` / `drivers/modbus_tcp/` 下。** 这是「协议知识不外泄」唯一可机器执行的表述，由 `tests/contract/test_driver_isolation.py` 守住。
+   HTTP 认证、受限请求与响应解析只在 `drivers/http/`；共享静态配置形状在 `collectwire.http`，见 ADR-0057。
 3. **`ValueSink` 是纯同步、零 `await` 的回调。** 它跑在协议库的回调里，两万个点位的回调里有一个 `await` 就会压垮事件循环。也正因为零 await，缓冲的原子交换不需要锁。
 4. **`browse` 不支持时抛 `BrowseNotSupported`，绝不返回空列表**——空列表与「这台设备确实没有点位」分不开。
 5. **拿不到计划就空转并响亮告警，不许用过期缓存猜。** 计划只在进程内存里，不落盘。
@@ -87,6 +88,9 @@
 - **超期请求直接丢弃、不应答。** 请求体里带的是**绝对墙钟** `deadline_ms`；发起方早已超时走人，这时再问现场只是白白占一次设备往返。
 
 ## 7. 非目标
+
+HTTP 为只读 JSON 采集，支持常用认证与同响应多个 JSON Pointer 点位；沿用快照与归档四元组。
+网络默认关闭，由精确 origin 清单授权，规则见 [HTTP 采集指南](../../../docs/HTTP_COLLECT_GUIDE.md)。
 
 | 不做 | 原因 |
 |---|---|

@@ -12,6 +12,8 @@ import BrowsePanel from '@/pages/Collect/Opcua/components/BrowsePanel.vue'
 import ForceDeleteDialog from '@/pages/Collect/Opcua/components/ForceDeleteDialog.vue'
 import ImportNodesDialog from '@/pages/Collect/Opcua/components/ImportNodesDialog.vue'
 import ImportPointsDialog from '@/pages/Collect/Opcua/components/ImportPointsDialog.vue'
+import HttpPointMappingDialog from '@/pages/Collect/Opcua/components/HttpPointMappingDialog.vue'
+import HttpSourceFields from '@/pages/Collect/Opcua/components/HttpSourceFields.vue'
 import NodeTable from '@/pages/Collect/Opcua/components/NodeTable.vue'
 import PointFormDialog from '@/pages/Collect/Opcua/components/PointFormDialog.vue'
 import PointValueCell from '@/pages/Collect/Opcua/components/PointValueCell.vue'
@@ -68,6 +70,35 @@ describe('主从单页挂在路由上', () => {
 })
 
 describe('弹窗的对外面', () => {
+  it('HTTP 样例映射只收来源身份，创建后通知通用点位表刷新', () => {
+    expect(propNames(HttpPointMappingDialog).sort()).toEqual([
+      'modelValue',
+      'sourceId',
+    ])
+    expect(emitNames(HttpPointMappingDialog).sort()).toEqual([
+      'imported',
+      'update:modelValue',
+    ])
+  })
+
+  it('HTTP 认证秘密使用独立字段并保留清空状态', () => {
+    expect(propNames(HttpSourceFields)).toEqual(
+      expect.arrayContaining([
+        'modelValue',
+        'username',
+        'credential',
+        'isCleared',
+        'hasCredential',
+        'isEdit',
+      ]),
+    )
+    expect(emitNames(HttpSourceFields).sort()).toEqual([
+      'update:credential',
+      'update:isCleared',
+      'update:modelValue',
+      'update:username',
+    ])
+  })
   it('数据源表单收 source（编辑态），抛建与改两种意图', () => {
     expect(propNames(SourceFormDialog).sort()).toEqual(['modelValue', 'source'])
     expect(emitNames(SourceFormDialog).sort()).toEqual([

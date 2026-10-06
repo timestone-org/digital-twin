@@ -9,10 +9,18 @@ import { flushPromises, mount } from '@vue/test-utils'
 import type { VueWrapper } from '@vue/test-utils'
 
 import PointFormDialog from '@/pages/Collect/Opcua/components/PointFormDialog.vue'
+import type { CollectProtocol } from '@dt/contracts'
 
-async function render(): Promise<VueWrapper> {
+async function render(
+  protocol: CollectProtocol = 'opcua',
+): Promise<VueWrapper> {
   const wrapper = mount(PointFormDialog, {
-    props: { modelValue: true, point: null, presetAddress: undefined },
+    props: {
+      modelValue: true,
+      point: null,
+      presetAddress: undefined,
+      protocol,
+    },
     attachTo: document.body,
     global: { stubs: { Teleport: true } },
   })
@@ -47,6 +55,44 @@ describe('误关保护', () => {
     expect(wrapper.emitted('update:modelValue')).toBeUndefined()
     expect(wrapper.text()).toContain('有还没提交的内容')
   })
+})
+
+it('HTTP 显示 JSON Pointer 配置，并保留相同的点位归档参数', async () => {
+  const wrapper = await render('http')
+  await wrapper.find('input[placeholder="如：outlet_temp"]').setValue('temp')
+  await wrapper.find('input[placeholder="如：出口温度"]').setValue('接口温度')
+  await wrapper
+    .find('input[placeholder="/data/0/value"]')
+    .setValue('/data/items/0/temp')
+  expect(wrapper.text()).toContain('多个点位共享同一次接口响应')
+  const save = wrapper
+    .findAll('button')
+    .find((one) => /保存|创建|添加/.test(one.text()))
+  await save?.trigger('click')
+  expect(wrapper.emitted('create')?.[0]?.[0]).toMatchObject({
+    code: 'temp',
+    address: '/data/items/0/temp',
+    archive_enabled: true,
+    archive_max_interval_ms: 60_000,
+    archive_retention_days: null,
+  })
+  wrapper.unmount()
+})
+
+it('HTTP 无效路径在提交前说明，避免保存后静默没有实时值', async () => {
+  const wrapper = await render('http')
+  await wrapper.find('input[placeholder="如：outlet_temp"]').setValue('temp')
+  await wrapper.find('input[placeholder="如：出口温度"]').setValue('接口温度')
+  await wrapper
+    .find('input[placeholder="/data/0/value"]')
+    .setValue('data.items[0].temp')
+  const save = wrapper
+    .findAll('button')
+    .find((one) => /保存|创建|添加/.test(one.text()))
+  await save?.trigger('click')
+  expect(wrapper.emitted('create')).toBeUndefined()
+  expect(wrapper.text()).toContain('HTTP 寻址串应为 JSON Pointer')
+  wrapper.unmount()
 })
 
 it('saves a point description with the other metadata', async () => {

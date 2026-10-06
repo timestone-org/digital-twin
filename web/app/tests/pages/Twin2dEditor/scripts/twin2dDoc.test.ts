@@ -249,6 +249,15 @@ describe('撤销与重做', () => {
 })
 
 describe('脏标记', () => {
+  it('已保存分支被撤销后替换，同索引的新帧仍是未保存', () => {
+    const doc = docWithThreeNodes()
+    doc.commit(configWith(['n1']))
+    doc.markSaved()
+    doc.undo()
+    doc.commit(configWith(['n2']))
+    expect(doc.isDirty.value).toBe(true)
+  })
+
   it('存过之后当前这一帧成为干净基准', () => {
     const doc = docWithThreeNodes()
     doc.commit(configWith(['n1']))

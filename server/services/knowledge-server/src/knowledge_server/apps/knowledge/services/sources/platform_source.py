@@ -20,16 +20,23 @@
 import json
 from collections.abc import Mapping, Sequence
 from dataclasses import dataclass
+from http import HTTPStatus
 from typing import Any, cast
 
 import httpx
 
+from knowledge_server.apps.knowledge.errors import (
+    SourceAccessDenied,
+    SourceIdentityExpired,
+    SourceReadFailed,
+)
 from knowledge_server.apps.knowledge.services.parsing import RawItem
 from knowledge_server.apps.knowledge.services.sources.ports import (
     DiscoveredItem,
     DiscoveredPage,
     SourceUnavailable,
 )
+from lib.errors import ValidationFailed
 
 PLATFORM_KIND = "platform"
 
@@ -37,6 +44,14 @@ PLATFORM_KIND = "platform"
 PAGE_SIZE = 50
 # 单条记录渲染成正文的字符上限。⚠ 有上限：一行里塞进一整篇说明书是现场常事
 MAX_ITEM_CHARS = 20_000
+TEMPORARY_HTTP_STATUSES = (
+    HTTPStatus.REQUEST_TIMEOUT,
+    HTTPStatus.TOO_MANY_REQUESTS,
+    HTTPStatus.INTERNAL_SERVER_ERROR,
+    HTTPStatus.BAD_GATEWAY,
+    HTTPStatus.SERVICE_UNAVAILABLE,
+    HTTPStatus.GATEWAY_TIMEOUT,
+)
 
 _SCHEMA: Mapping[str, Any] = {
     "type": "object",
@@ -151,9 +166,7 @@ class PlatformSource:
     ) -> list[Mapping[str, Any]]:
         path = _config(config, "path", "")
         if not path.startswith("/"):
-            raise SourceUnavailable(
-                "这一路来源的路径没配，或者不是一条平台路径"
-            )
+            raise ValidationFailed("这一路来源的路径没配，或者不是一条平台路径")
         params = {
             _config(config, "page_param", "page"): str(page),
             _config(config, "size_param", "size"): str(PAGE_SIZE),
@@ -163,8 +176,19 @@ class PlatformSource:
                 path, params=params, headers=dict(self.headers)
             )
             answer.raise_for_status()
-        except httpx.HTTPError as error:
-            raise SourceUnavailable(f"拉不到 {path}") from error
+        except httpx.HTTPStatusError as error:
+            _reject_status(error.response.status_code)
+            raise SourceUnavailable("来源暂时不可用，请稍后重新同步") from error
+        except (
+            httpx.TimeoutException,
+            httpx.NetworkError,
+            httpx.RemoteProtocolError,
+        ) as error:
+            raise SourceUnavailable("来源暂时不可用，请稍后重新同步") from error
+        except (httpx.HTTPError, httpx.InvalidURL) as error:
+            raise SourceReadFailed(
+                "无法读取来源，请检查来源配置后重新同步"
+            ) from error
         return _rows(answer.json())
 
     async def fetch(self, config: Mapping[str, Any], ref: str) -> RawItem:
@@ -175,10 +199,8 @@ class PlatformSource:
 
         Args: config, ref。
         """
-        del config
-        raise SourceUnavailable(
-            f"{PLATFORM_KIND} 的内容随 discover 一起回来，取不了单条：{ref}"
-        )
+        del config, ref
+        raise SourceReadFailed("这一路来源不支持单独读取原件，请重新同步来源")
 
 
 def _item(config: Mapping[str, Any], row: Mapping[str, Any]) -> DiscoveredItem:
@@ -198,6 +220,16 @@ def _item(config: Mapping[str, Any], row: Mapping[str, Any]) -> DiscoveredItem:
         byte_size=len(content),
         content=content,
     )
+
+
+def _reject_status(status: int) -> None:
+    """将不可恢复的上游拒绝转换为安全的领域错误。Args: status。"""
+    if status == HTTPStatus.UNAUTHORIZED:
+        raise SourceIdentityExpired("来源读取身份已失效，请重新登录后同步")
+    if status == HTTPStatus.FORBIDDEN:
+        raise SourceAccessDenied("没有读取平台来源的权限，请联系管理员授权")
+    if status not in TEMPORARY_HTTP_STATUSES:
+        raise SourceReadFailed("无法读取来源，请检查来源配置后重新同步")
 
 
 def rows_of(page: DiscoveredPage) -> Sequence[DiscoveredItem]:

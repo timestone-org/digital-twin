@@ -174,7 +174,9 @@ class CommandConsumer:
             )
             return
         try:
-            data = await self._dispatch(request)
+            remaining_s = (request.deadline_ms - self._clock()) / 1000
+            async with asyncio.timeout(remaining_s):
+                data = await self._dispatch(request)
         except CollectError as error:
             await self._reply_error(request, error.reason, type(error).__name__)
             return

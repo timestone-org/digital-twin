@@ -93,6 +93,63 @@ beforeEach(() => {
   saveMock.mockReset()
 })
 
+describe('保存资源隔离', () => {
+  it('同大屏保存A期间编辑B，响应仅推进版本且保持B脏，第二次保存提交B', async () => {
+    getMock.mockResolvedValue(payload([node('n1')]))
+    const first = deferred()
+    saveMock.mockReturnValue(first.promise)
+    const editor = page()
+    await editor.load()
+    editor.setConfig({ title: 'A' })
+    const saving = editor.save()
+    const duplicate = editor.save()
+    expect(saveMock).toHaveBeenCalledTimes(1)
+    editor.setConfig({ title: 'B' })
+    first.settle({ ...payload([node('n1', { title: 'A' })]), rowVersion: 8 })
+    expect(await saving).toBe(true)
+    expect(await duplicate).toBe(false)
+    expect(editor.node.value?.configJson).toEqual({ title: 'B' })
+    expect(editor.isDirty.value).toBe(true)
+    saveMock.mockResolvedValueOnce({
+      ...payload([node('n1', { title: 'B' })]),
+      rowVersion: 9,
+    })
+    expect(await editor.save()).toBe(true)
+    expect(saveMock).toHaveBeenCalledTimes(2)
+    expect(saveMock.mock.calls[1]?.[1]).toMatchObject({
+      expectedVersion: 8,
+      nodes: [{ config_json: { title: 'B' } }],
+    })
+    expect(editor.isDirty.value).toBe(false)
+  })
+
+  it('加载新大屏后旧保存如实成功，但不回填或清新草稿', async () => {
+    const id = ref('d1')
+    getMock.mockResolvedValueOnce(payload([node('n1')]))
+    const first = deferred()
+    saveMock.mockReturnValueOnce(first.promise)
+    const editor = useCardEditorPage(
+      () => id.value,
+      () => 'n1',
+    )
+    await editor.load()
+    editor.setConfig({ title: 'A' })
+    const saving = editor.save()
+    id.value = 'd2'
+    getMock.mockResolvedValueOnce({
+      ...payload([{ ...node('n1'), dashboardId: 'd2' }]),
+      id: 'd2',
+    })
+    await editor.load()
+    editor.setConfig({ title: 'B' })
+    first.settle({ ...payload([node('n1', { title: 'A' })]), rowVersion: 8 })
+    expect(await saving).toBe(true)
+    expect(editor.node.value?.dashboardId).toBe('d2')
+    expect(editor.node.value?.configJson).toEqual({ title: 'B' })
+    expect(editor.isDirty.value).toBe(true)
+  })
+})
+
 describe('取数', () => {
   it('取出这个节点，配置原样在手上', async () => {
     getMock.mockResolvedValue(payload([node('n1', { title: '甲' })]))

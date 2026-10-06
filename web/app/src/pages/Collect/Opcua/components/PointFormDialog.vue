@@ -30,6 +30,7 @@ import {
   DtSwitch,
 } from '@dt/ui'
 import { useFormDirty } from '@/composables/useFormDirty'
+import { validateHttpPointer } from '../scripts/httpPointMapping'
 
 const props = defineProps<{
   modelValue: boolean
@@ -186,6 +187,10 @@ function validate(): string | null {
     return '点位编码只能用字母、数字与 . _ -，且以字母或数字开头'
   if (name.value.trim() === '') return '请填写名称'
   if (address.value.trim() === '') return '请填写寻址串'
+  if (props.protocol === 'http') {
+    const problem = validateHttpPointer(address.value.trim())
+    if (problem !== null) return problem
+  }
   if (samplingIntervalMs.value < COLLECT_MIN_INTERVAL_MS)
     return `采样周期不能小于 ${COLLECT_MIN_INTERVAL_MS} 毫秒`
   return null
@@ -260,7 +265,9 @@ function submit(): void {
         :hint="
           protocol === 'modbus_tcp'
             ? '零基偏移：holding|input:偏移:uint16|int16|uint32|int32|float32|float64，或 coil|discrete:偏移:bool。'
-            : 'OPC UA NodeId，可以改；点位身份与历史不变。'
+            : protocol === 'http'
+              ? 'JSON Pointer：/data/0/value；~0 表示 ~，~1 表示 /；根标量用 $。多个点位共享同一次接口响应。'
+              : 'OPC UA NodeId，可以改；点位身份与历史不变。'
         "
       >
         <DtInput
@@ -269,7 +276,9 @@ function submit(): void {
           :placeholder="
             protocol === 'modbus_tcp'
               ? 'holding:0:float32'
-              : 'ns=2;s=Plant1.OutletTemp'
+              : protocol === 'http'
+                ? '/data/0/value'
+                : 'ns=2;s=Plant1.OutletTemp'
           "
         />
       </DtField>

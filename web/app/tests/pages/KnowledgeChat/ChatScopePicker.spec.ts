@@ -153,3 +153,49 @@ describe('面板里勾选', () => {
     expect(document.body.textContent).toContain('这套部署还没有知识库')
   })
 })
+
+describe('首次跨页范围选择', () => {
+  it('101库只渲染20个，点击第6页可选择最早库而不改变其它库范围', async () => {
+    const bases = Array.from({ length: 101 }, (_, id) =>
+      baseOf(`b${id}`, `库${id}`),
+    )
+    const wrapper = mount(ChatScopePicker, {
+      props: {
+        bases,
+        scope: [{ base_id: 'b0', name: '库0', is_missing: false }],
+        disabled: false,
+      },
+      attachTo: document.body,
+    })
+    await open(wrapper)
+    expect(document.querySelectorAll('.chat-scope__list li')).toHaveLength(20)
+    const lastPage = [...document.querySelectorAll('button')].find(
+      (button) => button.textContent?.trim() === '6',
+    )
+    if (lastPage === undefined) throw new Error('第6页入口缺失')
+    lastPage.click()
+    await wrapper.vm.$nextTick()
+    expect(document.querySelectorAll('.chat-scope__list li')).toHaveLength(1)
+    boxByLabel('库100').click()
+    expect(emitted(wrapper)).toEqual([[['b0', 'b100']]])
+  })
+  it('5000库保持有界渲染，减少库数后夹回有效页', async () => {
+    const bases = Array.from({ length: 5000 }, (_, id) =>
+      baseOf(`b${id}`, `库${id}`),
+    )
+    const wrapper = mount(ChatScopePicker, {
+      props: { bases, scope: null, disabled: false },
+      attachTo: document.body,
+    })
+    await open(wrapper)
+    expect(document.querySelectorAll('.chat-scope__list li')).toHaveLength(20)
+    const lastPage = [...document.querySelectorAll('button')].find(
+      (button) => button.textContent?.trim() === '250',
+    )
+    if (lastPage === undefined) throw new Error('末页入口缺失')
+    lastPage.click()
+    await wrapper.vm.$nextTick()
+    await wrapper.setProps({ bases: BASES })
+    expect(document.querySelectorAll('.chat-scope__list li')).toHaveLength(2)
+  })
+})

@@ -96,6 +96,7 @@ function fakeDoc(): DashboardDoc {
     dashboard: shallowRef<DashboardPayload | null>(payload()),
     loading: ref(false),
     saving: ref(false),
+    resourceVersion: 0,
     error: ref<string | null>(null),
     conflict: ref<string | null>(null),
     load: vi.fn(() => Promise.resolve(null)),

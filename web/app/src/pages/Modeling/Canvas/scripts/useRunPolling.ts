@@ -3,10 +3,9 @@
  *
  * ⚠ 轮询必须**在终态停下**：跑完了还每秒打一次，一个开着的画布就能在一夜里
  * 打出几万次请求（MODELING_DESIGN §9.5）。
- * ⚠ 每一轮都带 `AbortSignal`：换一条运行看时上一轮的回包会晚到，不取消的话
- * 它会把新选中那次的状态盖回去。
- * ⚠ 停表之后**不许再排下一拍**：停表是 abort 在飞的那次，而 abort 让它落进
- * 「一次问失败」那条分支，径直往下排的话，卸载只是让计时器换了个来源。
+ * ⚠ 读取统一走useRacedFetch：换运行或卸载取消在飞读取及其回调。
+ * ⚠ 停表之后不许再排下一拍：即便传输忽略AbortSignal，作废的回调也不调度。
+ * 写入的start/cancel回执另用生命周期代次，已经发送的写入不自动重试。
  */
 import type { ModelingNodeRun, ModelingRun } from '@dt/contracts'
 import { useToast } from '@dt/ui'
@@ -15,6 +14,8 @@ import { onBeforeUnmount, ref, shallowRef } from 'vue'
 
 import * as modeling from '@/api/modeling'
 import { describeError } from '@/composables/useAsyncList'
+import { useRacedFetch } from '@/composables/useRacedFetch'
+import type { RacedFetch } from '@/composables/useRacedFetch'
 
 /** 轮询间隔。运行是秒级的，再密只是多打请求。 */
 const POLL_MS = 1000
@@ -23,16 +24,21 @@ const POLL_MS = 1000
 const SETTLED = new Set(['succeeded', 'failed', 'cancelled'])
 
 interface PollState {
+  generation: number
   run: ShallowRef<ModelingRun | null>
   timer: ShallowRef<ReturnType<typeof setTimeout> | null>
-  inflight: ShallowRef<AbortController | null>
+  polling: RacedFetch
+  previewLoads: Map<string, RacedFetch>
+  isDisposed: boolean
 }
 
 function stopPolling(state: PollState): void {
+  state.generation += 1
   if (state.timer.value !== null) clearTimeout(state.timer.value)
   state.timer.value = null
-  state.inflight.value?.abort()
-  state.inflight.value = null
+  state.polling.cancel()
+  for (const request of state.previewLoads.values()) request.cancel()
+  state.previewLoads.clear()
 }
 
 function schedule(runId: string, state: PollState): void {
@@ -40,21 +46,18 @@ function schedule(runId: string, state: PollState): void {
 }
 
 async function tick(runId: string, state: PollState): Promise<void> {
-  const controller = new AbortController()
-  state.inflight.value = controller
-  try {
-    const next = await modeling.getModelingRun(runId, controller.signal)
-    // 换过一次运行之后旧的回包才到，丢掉它
-    if (state.run.value !== null && state.run.value.id !== runId) return
-    state.run.value = next
-    if (SETTLED.has(next.status)) return stopPolling(state)
-  } catch {
-    // 轮询失败不打断用户：下一拍再试，真出事了会在运行详情里显示
-  }
-  // ⚠ 被掐掉之后不许再排下一拍：停表走的是 abort，而 abort 让上面那次请求落进
-  // catch，径直往下排的话，页面已经卸了轮询还在一秒一次地打，直到刷新为止
-  if (controller.signal.aborted) return
-  schedule(runId, state)
+  await state.polling.run((signal) => modeling.getModelingRun(runId, signal), {
+    ok: (next) => {
+      state.run.value = next
+      if (SETTLED.has(next.status)) stopPolling(state)
+    },
+    fail: () => undefined,
+    // cancel作废回调后不会再排一拍，包括忽略signal而迟到的成功回包。
+    settled: () => {
+      if (state.run.value?.id === runId && !SETTLED.has(state.run.value.status))
+        schedule(runId, state)
+    },
+  })
 }
 
 type Toast = ReturnType<typeof useToast>
@@ -80,56 +83,89 @@ async function loadPreview(
   toast: Toast,
 ): Promise<void> {
   const current = state.run.value
-  if (current === null || previews.value.has(nodeId)) return
-  const detail = await attempt(
-    () => modeling.getModelingNodeRun(current.id, nodeId),
-    toast,
+  if (
+    state.isDisposed ||
+    current === null ||
+    previews.value.has(nodeId) ||
+    state.previewLoads.has(nodeId)
   )
-  if (detail !== null) {
-    previews.value = new Map(previews.value).set(nodeId, detail)
-  }
+    return
+  // 不同节点可并发；每个节点各用一份守卫，换运行统一取消。
+  const request = useRacedFetch()
+  state.previewLoads.set(nodeId, request)
+  await request.run(
+    (signal) => modeling.getModelingNodeRun(current.id, nodeId, signal),
+    {
+      ok: (detail) => {
+        previews.value = new Map(previews.value).set(nodeId, detail)
+      },
+      fail: (caught) => toast.error(describeError(caught)),
+      settled: () => {
+        state.previewLoads.delete(nodeId)
+      },
+    },
+  )
 }
 
 /** 请求取消。回执只是「已受理」，故轮询继续，等它真停。 */
 async function cancel(state: PollState, toast: Toast): Promise<void> {
   const current = state.run.value
   if (current === null) return
+  const generation = state.generation
   const next = await attempt(
     () => modeling.cancelModelingRun(current.id),
     toast,
   )
-  if (next !== null) {
+  if (next !== null && generation === state.generation) {
     state.run.value = next
     toast.info('已请求取消，当前这一步跑完就会停')
   }
 }
 
-export function useRunPolling() {
-  const state: PollState = {
+/** 各节点预览独立读取，停表统一释放。 */
+function createPollState(): PollState {
+  return {
+    generation: 0,
     run: shallowRef<ModelingRun | null>(null),
     timer: shallowRef<ReturnType<typeof setTimeout> | null>(null),
-    inflight: shallowRef<AbortController | null>(null),
+    polling: useRacedFetch(),
+    previewLoads: new Map(),
+    isDisposed: false,
   }
+}
+
+export function useRunPolling() {
+  const state = createPollState()
   const previews = ref(new Map<string, ModelingNodeRun>())
   const isStarting = ref(false)
   const toast = useToast()
 
   /** 看某一次运行（发起后、或从历史里选中）。 */
   function watchRun(next: ModelingRun): void {
+    if (state.isDisposed) return
     stopPolling(state)
+    isStarting.value = false
     state.run.value = next
     previews.value = new Map()
     if (!SETTLED.has(next.status)) schedule(next.id, state)
   }
 
-  onBeforeUnmount(() => stopPolling(state))
+  function stop(): void {
+    stopPolling(state)
+    isStarting.value = false
+  }
+
+  onBeforeUnmount(() => {
+    state.isDisposed = true
+    stop()
+  })
 
   return {
     run: state.run,
     previews,
     isStarting,
     watchRun,
-    stop: () => stopPolling(state),
+    stop,
     loadPreview: (nodeId: string) =>
       loadPreview(nodeId, state, previews, toast),
     /**
@@ -139,11 +175,14 @@ export function useRunPolling() {
      * 而绝大多数运行只是在调参数（docs/MODELING_PLATFORM_DESIGN.md D12）。
      */
     start: async (pipelineId: string, isKeepingFrames = false) => {
+      if (state.isDisposed) return
+      const generation = state.generation
       isStarting.value = true
       const started = await attempt(
         () => modeling.startModelingRun(pipelineId, 'manual', isKeepingFrames),
         toast,
       )
+      if (generation !== state.generation) return
       isStarting.value = false
       if (started !== null) watchRun(started)
     },

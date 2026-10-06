@@ -113,7 +113,8 @@ export function useModelingGraph() {
   const graph = shallowRef<ModelingGraph>(structuredClone(EMPTY_GRAPH))
   const history = shallowRef<ModelingGraph[]>([])
   const future = shallowRef<ModelingGraph[]>([])
-  const isDirty = shallowRef(false)
+  const savedGraph = shallowRef(graph.value)
+  const isDirty = computed(() => graph.value !== savedGraph.value)
 
   const nodeIds = computed(() => graph.value.nodes.map((item) => item.id))
   const edgeIds = computed(() => graph.value.edges.map((item) => item.id))
@@ -131,7 +132,6 @@ export function useModelingGraph() {
     history.value = pushHistory(history.value, graph.value)
     future.value = []
     graph.value = next
-    isDirty.value = true
   }
 
   /** 在两个栈之间挪一步。方向由传进来的这两个栈决定。 */
@@ -141,7 +141,6 @@ export function useModelingGraph() {
     from.value = from.value.slice(0, -1)
     to.value = [...to.value, graph.value]
     graph.value = previous
-    isDirty.value = true
   }
 
   return {
@@ -159,15 +158,15 @@ export function useModelingGraph() {
       graph.value = structuredClone(next ?? EMPTY_GRAPH)
       history.value = []
       future.value = []
-      isDirty.value = false
+      savedGraph.value = graph.value
     },
     /** 退回上一步。 */
     undo: () => step(history, future),
     /** 把撤销掉的那一步再做一遍。 */
     redo: () => step(future, history),
-    /** 存盘之后调，把「有未保存改动」清掉。 */
-    markSaved: () => {
-      isDirty.value = false
+    /** 存盘之后只更新已发送快照的基准，后续草稿与撤销栈保持不变。 */
+    markSaved: (snapshot = graph.value) => {
+      savedGraph.value = snapshot
     },
   }
 }

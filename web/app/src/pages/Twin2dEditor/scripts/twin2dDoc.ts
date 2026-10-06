@@ -55,8 +55,8 @@ export interface Twin2dDoc {
   commitBindings: (next: readonly BindingPayload[], mergeKey?: string) => void
   undo: () => void
   redo: () => void
-  /** 保存成功后调；当前这一帧成为新的「干净」基准。 */
-  markSaved: () => void
+  /** 保存成功后只标记已发送的帧；省略快照时使用当前帧。 */
+  markSaved: (snapshot?: Twin2dFrame) => void
 }
 
 /** 撤销栈的三件套；收成一个对象是为了让下面几支不必逐个传。 */
@@ -77,6 +77,7 @@ interface History {
  */
 function pushFrame(history: History, frame: Twin2dFrame): void {
   const { frames, index, savedIndex } = history
+  if (savedIndex.value > index.value) savedIndex.value = -1
   const kept = frames.value.slice(0, index.value + 1)
   kept.push(frame)
   const overflow = Math.max(0, kept.length - TWIN_2D_HISTORY_LIMIT)
@@ -143,6 +144,19 @@ function pushBindingsFrame(
 }
 
 /**
+ * 将已发送快照设为基准；快照已被历史丢弃时保持脏标记。
+ * @param history 撤销栈
+ * @param snapshot 已落库的配置与绑定
+ */
+function markSavedFrame(history: History, snapshot: Twin2dFrame): void {
+  history.mergeKey = null
+  history.savedIndex.value = history.frames.value.findIndex(
+    (frame) =>
+      frame.config === snapshot.config && frame.bindings === snapshot.bindings,
+  )
+}
+
+/**
  * 造一份文档态。
  * @param initial 从节点上读出来的配置与绑定
  */
@@ -203,8 +217,6 @@ export function createTwin2dDoc(initial: Twin2dFrame): Twin2dDoc {
       if (index.value < frames.value.length - 1) index.value += 1
     },
 
-    markSaved: () => {
-      savedIndex.value = index.value
-    },
+    markSaved: (snapshot = current.value) => markSavedFrame(history, snapshot),
   }
 }

@@ -39,8 +39,9 @@ def caller_headers(given: Mapping[str, str]) -> dict[str, str]:
 
     Args: given。
     """
+    headers = {name.lower(): value for name, value in given.items()}
     return {
-        name: given[name]
+        name: headers[name.lower()]
         for name in FORWARDED
-        if given.get(name) not in (None, "")
+        if headers.get(name.lower()) not in (None, "")
     }

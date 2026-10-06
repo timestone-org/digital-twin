@@ -8,12 +8,19 @@ import uuid
 
 from sqlalchemy.ext.asyncio import AsyncSession
 
+from collectwire.commands import (
+    REASON_HTTP_AUTH_REJECTED,
+    REASON_HTTP_CONFIG_INVALID,
+    REASON_HTTP_REQUEST_FAILED,
+    REASON_HTTP_RESPONSE_INVALID,
+)
+from collectwire.http import HttpOptions
 from lib.logging import get_logger
 from platform_server.apps.collect.errors import (
     BrowseUnsupported,
-    SourceInvalid,
     WriteUnsupported,
 )
+from platform_server.apps.collect.models import CollectSource
 from platform_server.apps.collect.schemas import (
     BrowseOut,
     ConnectivityOut,
@@ -35,6 +42,7 @@ from platform_server.apps.collect.services.transactions import (
 from timeseries import compose_node_key
 
 _logger = get_logger("platform.collect.field")
+HTTP_PROBE_RESERVE_S = 1.0
 
 
 async def test_source(
@@ -45,11 +53,14 @@ async def test_source(
     Args: session, bus, source_id。
     """
     source = await source_service.require_source(session, source_id)
-    if source.protocol == "http":
-        raise SourceInvalid("当前版本不支持测试 HTTP 数据源连接")
     resolved = source.id
+    timeout_s = _http_probe_budget(source, bus)
     await release_read_transaction(session)
-    reason = await bus.probe(resolved)
+    reason = (
+        await bus.probe(resolved)
+        if timeout_s is None
+        else await bus.probe(resolved, timeout_s=timeout_s)
+    )
     _logger.info(
         "collect_source_probed",
         "连通性测试完成",
@@ -61,6 +72,16 @@ async def test_source(
         is_reachable=reason is None,
         detail=None if reason is None else _reachability_detail(reason),
     )
+
+
+def _http_probe_budget(source: CollectSource, bus: CommandBus) -> float | None:
+    """为 HTTP 上游请求与命令传输留足预算。Args: source, bus。"""
+    if source.protocol != "http":
+        return None
+    options = HttpOptions.from_options(
+        {str(key): str(value) for key, value in source.options_json.items()}
+    )
+    return max(bus.command_timeout_s, options.timeout_s + HTTP_PROBE_RESERVE_S)
 
 
 async def browse_source(
@@ -75,10 +96,12 @@ async def browse_source(
     Args: session, bus, source_id, parent。
     """
     source = await source_service.require_source(session, source_id)
-    if source.protocol == "http":
-        raise BrowseUnsupported("HTTP 没有可浏览的地址空间")
     if source.protocol == "modbus_tcp":
         raise BrowseUnsupported("Modbus TCP 没有可浏览的地址空间")
+    if source.protocol == "http":
+        raise BrowseUnsupported(
+            "HTTP 点位使用 JSON Pointer，不提供地址空间浏览"
+        )
     resolved = source.id
     await release_read_transaction(session)
     entries = await bus.browse(resolved, parent)
@@ -99,10 +122,12 @@ async def browse_subtree(
     Args: session, bus, source_id, parent。
     """
     source = await source_service.require_source(session, source_id)
-    if source.protocol == "http":
-        raise BrowseUnsupported("HTTP 没有可浏览的地址空间")
     if source.protocol == "modbus_tcp":
         raise BrowseUnsupported("Modbus TCP 没有可浏览的地址空间")
+    if source.protocol == "http":
+        raise BrowseUnsupported(
+            "HTTP 点位使用 JSON Pointer，不提供地址空间浏览"
+        )
     resolved = source.id
     await release_read_transaction(session)
     outcome = await bus.browse_subtree(resolved, parent)
@@ -135,10 +160,10 @@ async def write_point(
     """
     point = await point_service.require_point(session, point_id)
     source = await source_service.require_source(session, point.source_id)
-    if source.protocol == "http":
-        raise WriteUnsupported("HTTP 采集驱动只读")
     if source.protocol == "modbus_tcp":
         raise WriteUnsupported("Modbus TCP 采集驱动只读")
+    if source.protocol == "http":
+        raise WriteUnsupported("HTTP 采集驱动只读")
     source_id, code = point.source_id, point.code
     await release_read_transaction(session)
     node_key = compose_node_key(source_id, code)
@@ -159,5 +184,15 @@ def _reachability_detail(reason: str) -> str:
         "unknown_protocol": "采集侧没有这个协议的驱动",
         "driver_failed": "驱动连接现场时失败",
         "collector_unreachable": "采集侧没有答复，请先确认采集进程在运行",
+        REASON_HTTP_AUTH_REJECTED: (
+            "HTTP 接口认证或权限被拒绝，请检查凭据和上游账号权限"
+        ),
+        REASON_HTTP_CONFIG_INVALID: (
+            "HTTP 接口配置或请求被拒绝，请检查地址与请求参数"
+        ),
+        REASON_HTTP_RESPONSE_INVALID: (
+            "HTTP 接口返回的数据不是可用的 JSON，或超过响应限制"
+        ),
+        REASON_HTTP_REQUEST_FAILED: "HTTP 接口请求未完成，请检查网络与超时",
     }
     return known.get(reason, "采集侧无法访问这个数据源")

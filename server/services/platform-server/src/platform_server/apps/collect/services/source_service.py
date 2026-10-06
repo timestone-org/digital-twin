@@ -32,6 +32,9 @@ from platform_server.apps.collect.schemas import (
 )
 from platform_server.apps.collect.services.changes import given_changes
 from platform_server.apps.collect.services.credentials import CredentialCipher
+from platform_server.apps.collect.services.http_profile import (
+    validate_http_source,
+)
 from platform_server.apps.collect.services.presenters import (
     to_runtime_out,
     to_source_out,
@@ -166,6 +169,7 @@ async def create_source(
         poll_interval_ms=payload.poll_interval_ms,
         is_enabled=payload.is_enabled,
     )
+    validate_http_source(source, context.cipher)
     source_crud.add(session, source)
     await session.flush()
     presented = await _present(session, source, context)
@@ -189,8 +193,6 @@ async def update_source(
     """
     source = await require_source(session, source_id)
     changes = given_changes(payload)
-    if source.protocol == "http" and changes != {"is_enabled": False}:
-        raise SourceInvalid("当前版本只支持读取、停用和删除 HTTP 数据源")
     credential = changes.pop("credential", None)
     if "credential" in payload.model_fields_set:
         changes["credential_enc"] = _encrypted(context.cipher, credential)
@@ -202,6 +204,7 @@ async def update_source(
         source.username,
         source.credential_enc is not None,
     )
+    validate_http_source(source, context.cipher)
     await session.flush()
     presented = await _present(session, source, context)
     await _commit(session)

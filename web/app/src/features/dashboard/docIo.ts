@@ -30,6 +30,18 @@ export interface DocState {
   saving: Ref<boolean>
   error: Ref<string | null>
   conflict: Ref<string | null>
+  /** 加载/重载时推进；旧保存回执只能返回调用方，不得回填新资源状态。 */
+  loadGeneration?: number
+  isDisposed?: boolean
+}
+
+/** 卸载时作废已发送回执；重新加载可再次建立可用资源。 */
+export function disposeDoc(state: DocState, cancel: () => void): void {
+  state.loadGeneration = (state.loadGeneration ?? 0) + 1
+  state.isDisposed = true
+  state.saving.value = false
+  state.loading.value = false
+  cancel()
 }
 
 export interface DashboardLoadOptions {
@@ -63,6 +75,9 @@ export function createLoader(state: DocState): {
     dashboardId: string,
     options: DashboardLoadOptions = {},
   ): Promise<DashboardPayload | null> {
+    state.loadGeneration = (state.loadGeneration ?? 0) + 1
+    state.isDisposed = false
+    state.saving.value = false
     state.loading.value = true
     state.error.value = null
     state.conflict.value = null
@@ -82,7 +97,7 @@ export function createLoader(state: DocState): {
     return settled
   }
 
-  return { load, dispose: raced.cancel }
+  return { load, dispose: () => disposeDoc(state, raced.cancel) }
 }
 
 /** 一次保存动作的公共外壳：忙碌态、409 与其余错误的口径都在这里。 */
@@ -90,14 +105,24 @@ async function guarded(
   state: DocState,
   action: () => Promise<DashboardPayload>,
 ): Promise<DashboardPayload | null> {
+  if (state.isDisposed === true) return null
+  const generation = state.loadGeneration ?? 0
+  const current = state.dashboard.value
+  const isCurrent = () =>
+    generation === (state.loadGeneration ?? 0) &&
+    state.isDisposed !== true &&
+    state.dashboard.value?.id === current?.id
   state.saving.value = true
   state.error.value = null
   try {
     const saved = await action()
-    state.dashboard.value = saved
-    state.conflict.value = null
+    if (isCurrent() && state.dashboard.value === current) {
+      state.dashboard.value = saved
+      state.conflict.value = null
+    }
     return saved
   } catch (caught) {
+    if (!isCurrent()) return null
     if (isVersionConflict(caught)) {
       state.conflict.value = VERSION_CONFLICT_MESSAGE
     } else {
@@ -105,7 +130,7 @@ async function guarded(
     }
     return null
   } finally {
-    state.saving.value = false
+    if (isCurrent()) state.saving.value = false
   }
 }
 

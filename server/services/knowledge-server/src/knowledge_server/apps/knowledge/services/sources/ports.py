@@ -18,6 +18,7 @@ from dataclasses import dataclass
 from typing import Any, Protocol, runtime_checkable
 
 from knowledge_server.apps.knowledge.services.parsing import RawItem
+from lib.errors import AppError
 
 
 @dataclass(frozen=True)
@@ -51,11 +52,15 @@ class DiscoveredPage:
     cursor: str | None = None
 
 
-class SourceUnavailable(RuntimeError):
-    """这一路来源此刻拿不到东西（对方不可达 / 配置不对）。
+class SourceUnavailable(AppError):
+    """这一路来源暂时拿不到东西（连接超时或对方暂时不可用）。
 
     ⚠ 与「认不出这份原件」分开：前者重试有意义，后者重试一万次也一样。
     """
+
+    code = 52301
+    http_status = 502
+    is_retryable = True
 
 
 @runtime_checkable

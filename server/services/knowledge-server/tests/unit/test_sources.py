@@ -22,7 +22,13 @@ from knowledge_server.apps.knowledge.services.sources import (
     staging_key,
     suffix_of,
 )
-from lib.objectstore import ObjectNotFound, ObjectStat, ObjectStoreError
+from lib.errors import AppError
+from lib.objectstore import (
+    ObjectNotFound,
+    ObjectStat,
+    ObjectStoreError,
+    ObjectStoreUnavailable,
+)
 
 BASE = uuid.UUID("00000000-0000-7000-8000-000000000001")
 DOC = uuid.UUID("00000000-0000-7000-8000-000000000002")
@@ -119,9 +125,20 @@ async def test_a_missing_object_is_not_retryable() -> None:
 
 async def test_a_flaky_store_is_retryable() -> None:
     store = _Store(b"x")
-    store.error = ObjectStoreError("抖了一下")
-    with pytest.raises(SourceUnavailable):
+    store.error = ObjectStoreUnavailable("抖了一下")
+    with pytest.raises(SourceUnavailable) as caught:
         await _upload(store).fetch({}, "k")
+    assert caught.value.is_retryable is True
+
+
+async def test_an_unknown_store_error_is_not_retryable() -> None:
+    store = _Store(b"x")
+    store.error = ObjectStoreError("private-store-details")
+    with pytest.raises(AppError) as caught:
+        await _upload(store).fetch({}, "private-object-key")
+    assert caught.value.code == 52302
+    assert caught.value.is_retryable is False
+    assert "private-" not in str(caught.value)
 
 
 async def test_upload_discovers_nothing_on_purpose() -> None:

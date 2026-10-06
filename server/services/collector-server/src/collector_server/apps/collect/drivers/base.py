@@ -87,7 +87,7 @@ class RequestLimiter(Protocol):
     def release(self) -> None: ...
 
 
-@dataclass(frozen=True)
+@dataclass(frozen=True, repr=False)
 class DriverConnection:
     """建一次会话要的全部输入。凭据在这里，**不进日志、不进快照**。"""
 

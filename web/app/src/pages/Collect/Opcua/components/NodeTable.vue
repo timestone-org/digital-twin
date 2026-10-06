@@ -41,6 +41,8 @@ import BatchEditDialog from './BatchEditDialog.vue'
 import BatchActionBar from './BatchActionBar.vue'
 import ForceDeleteDialog from './ForceDeleteDialog.vue'
 import ImportPointsDialog from './ImportPointsDialog.vue'
+import HttpPointMappingDialog from './HttpPointMappingDialog.vue'
+import HttpPointMappingButton from './HttpPointMappingButton.vue'
 import NodeTableNotices from './NodeTableNotices.vue'
 import NodeTableToolbar from './NodeTableToolbar.vue'
 import PointCard from './PointCard.vue'
@@ -52,6 +54,7 @@ import WriteValueDialog from './WriteValueDialog.vue'
 const props = defineProps<{ source: CollectSource }>()
 
 const batchEditing = ref<CollectPoint[] | null>(null)
+const httpMappingOpen = ref(false)
 const detail = ref<CollectPoint | null>(null)
 const detailSample = computed(() =>
   detail.value === null
@@ -67,7 +70,6 @@ const detailStale = computed(
 )
 
 const auth = useAuthStore()
-const canEdit = computed(() => props.source.protocol !== 'http')
 const canManage = computed(() =>
   auth.can([PERMISSION_CODES.collectManage], 'all'),
 )
@@ -189,7 +191,6 @@ watch(list.items, (rows) => {
         v-if="hasSelection"
         :count="archive.selectedCount.value"
         :busy="archive.batchBusy.value"
-        :can-edit="canEdit"
         @edit="openBatchEdit"
         @batch="archive.batchArchive"
         @remove="batchRemoval.ask([...archive.selected.value])"
@@ -226,12 +227,15 @@ watch(list.items, (rows) => {
             v-model:keyword="keyword"
             :has-rows="hasRows"
             :exporting="editing.exporting.value"
-            :can-edit="canEdit"
             @search="list.reloadFromFirstPage()"
             @select-page="selectPage"
             @create="editing.openCreate"
             @import-csv="editing.importOpen.value = true"
             @export-csv="editing.exportCsv(source.code)"
+          />
+          <HttpPointMappingButton
+            v-if="source.protocol === 'http'"
+            @open="httpMappingOpen = true"
           />
         </template>
 
@@ -252,7 +256,6 @@ watch(list.items, (rows) => {
             :selected="archive.selected.value.has(row.id)"
             :archive-busy="archive.rowBusy.value.has(row.id)"
             :can-write="source.protocol === 'opcua'"
-            :can-edit="canEdit"
             :error="archive.failures.value.get(row.id)"
             @detail="detail = row"
             @select="archive.toggleSelect(row.id, $event)"
@@ -339,9 +342,7 @@ watch(list.items, (rows) => {
           <DtSwitch
             size="sm"
             :model-value="row.archive_enabled"
-            :disabled="
-              archive.rowBusy.value.has(row.id) || !canManage || !canEdit
-            "
+            :disabled="archive.rowBusy.value.has(row.id) || !canManage"
             :aria-label="
               row.archive_enabled
                 ? `正在记录历史：${row.name}`
@@ -367,7 +368,6 @@ watch(list.items, (rows) => {
             </PermGuard>
             <PermGuard :codes="[PERMISSION_CODES.collectManage]">
               <DtButton
-                v-if="canEdit"
                 variant="ghost"
                 size="sm"
                 icon="settings-2"
@@ -389,7 +389,7 @@ watch(list.items, (rows) => {
     </div>
 
     <BatchEditDialog
-      v-if="batchEditing && canEdit"
+      v-if="batchEditing"
       :points="batchEditing"
       @close="batchEditing = null"
       @saved="list.reload()"
@@ -402,7 +402,6 @@ watch(list.items, (rows) => {
     />
 
     <PointFormDialog
-      v-if="source.protocol !== 'http'"
       v-model="editing.formOpen.value"
       :point="editing.editing.value"
       :protocol="source.protocol"
@@ -419,8 +418,13 @@ watch(list.items, (rows) => {
     />
 
     <ImportPointsDialog
-      v-if="canEdit"
       v-model="editing.importOpen.value"
+      :source-id="source.id"
+      @imported="afterImport"
+    />
+    <HttpPointMappingDialog
+      v-if="source.protocol === 'http'"
+      v-model="httpMappingOpen"
       :source-id="source.id"
       @imported="afterImport"
     />

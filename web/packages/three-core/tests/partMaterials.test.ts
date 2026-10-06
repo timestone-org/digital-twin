@@ -5,7 +5,7 @@
  * 「放着不动颜色越来越深」，每帧写 `needsUpdate` 就是「部件一多就掉帧」。
  */
 import * as THREE from 'three'
-import { describe, expect, it } from 'vitest'
+import { describe, expect, it, vi } from 'vitest'
 
 import { PartMaterials, type PartLook } from '../src/partMaterials'
 
@@ -79,6 +79,94 @@ describe('材质克隆', () => {
 })
 
 describe('套外观', () => {
+  it.each([
+    THREE.MeshBasicMaterial,
+    THREE.MeshStandardMaterial,
+    THREE.MeshLambertMaterial,
+    THREE.MeshPhongMaterial,
+    THREE.MeshToonMaterial,
+    THREE.MeshMatcapMaterial,
+  ])('普通材质 %p 的半透明绘制保持平滑', (Material) => {
+    const mesh = new THREE.Mesh(new THREE.BoxGeometry(), new Material())
+    const layer = new PartMaterials([mesh])
+
+    layer.apply(look({ opacity: 0.75 }))
+
+    const material = mesh.material
+    if (Array.isArray(material)) throw new Error('单材质被改成了数组')
+    expect(material.forceSinglePass).toBe(true)
+    expect(material.alphaHash).toBe(false)
+    expect(material.opacity).toBe(0.75)
+    layer.dispose()
+  })
+
+  it.each([
+    ['原生透明', () => new THREE.MeshStandardMaterial({ transparent: true })],
+    ['无深度写入', () => new THREE.MeshStandardMaterial({ depthWrite: false })],
+    ['无深度测试', () => new THREE.MeshStandardMaterial({ depthTest: false })],
+    [
+      '加法混合',
+      () => new THREE.MeshBasicMaterial({ blending: THREE.AdditiveBlending }),
+    ],
+    ['透明裁剪', () => new THREE.MeshBasicMaterial({ alphaTest: 0.5 })],
+    ['哈希覆盖', () => new THREE.MeshBasicMaterial({ alphaHash: true })],
+    [
+      '多重采样覆盖',
+      () => new THREE.MeshBasicMaterial({ alphaToCoverage: true }),
+    ],
+    ['物理透射', () => new THREE.MeshPhysicalMaterial({ transmission: 1 })],
+    ['自定义着色器', () => new THREE.ShaderMaterial()],
+  ] satisfies [string, () => THREE.Material][])(
+    '%s 材质保留自身绘制方式',
+    (_name, create) => {
+      const material = create()
+      const mesh = new THREE.Mesh(new THREE.BoxGeometry(), material)
+      const geometry = mesh.geometry
+      const beforeRender = vi.fn()
+      mesh.onBeforeRender = beforeRender
+      const layer = new PartMaterials([mesh])
+
+      layer.apply(look({ opacity: 0.75 }))
+
+      const clone = mesh.material
+      if (Array.isArray(clone)) throw new Error('单材质被改成了数组')
+      expect(mesh.geometry).toBe(geometry)
+      expect(mesh.onBeforeRender === beforeRender).toBe(true)
+      expect(clone.forceSinglePass).toBe(material.forceSinglePass)
+      layer.dispose()
+    },
+  )
+
+  it('配置半透明外壳按墙面深度排序，并在还原时释放独占几何', () => {
+    const { mine, material } = shared()
+    const originalGeometry = mine.geometry
+    const originalRender = vi.fn()
+    mine.onBeforeRender = originalRender
+    const layer = new PartMaterials([mine])
+
+    layer.apply(look({ opacity: 0.75 }))
+
+    const clone = mine.material
+    if (Array.isArray(clone)) throw new Error('单材质被改成了数组')
+    expect(clone.transparent).toBe(true)
+    expect(clone.alphaHash).toBe(false)
+    expect(clone.forceSinglePass).toBe(true)
+    expect(mine.geometry).not.toBe(originalGeometry)
+    const geometry = mine.geometry
+    let disposed = 0
+    geometry.addEventListener('dispose', () => {
+      disposed += 1
+    })
+
+    layer.apply(look())
+
+    expect(clone.forceSinglePass).toBe(material.forceSinglePass)
+    expect(mine.geometry).toBe(originalGeometry)
+    expect(mine.onBeforeRender === originalRender).toBe(true)
+    expect(disposed).toBe(1)
+    layer.dispose()
+  })
+
   it('不透明度按基线成比例缩，并打开透明通道', () => {
     const mesh = new THREE.Mesh(
       new THREE.BoxGeometry(),

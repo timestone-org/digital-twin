@@ -51,7 +51,9 @@ const TICKET_WIRE = {
 }
 
 beforeEach(() => {
-  requestData = vi.fn().mockResolvedValue({ items: [] })
+  requestData = vi
+    .fn()
+    .mockResolvedValue({ items: [], page: 1, size: 100, total: 0 })
   request = vi.fn().mockResolvedValue(null)
   requestBytes = vi.fn().mockResolvedValue(new Blob(['x']))
   postUploadForm = vi.fn().mockResolvedValue(undefined)
@@ -93,7 +95,12 @@ describe('知识库面的前缀', () => {
     expect(lastCall(requestData)[0]).toBe('/capabilities')
     expect(lastCall(requestData)[1].baseUrl).toBe(KNOWLEDGE_PREFIX)
 
-    requestData.mockResolvedValue({ items: [BASE_WIRE] })
+    requestData.mockResolvedValue({
+      items: [BASE_WIRE],
+      page: 1,
+      size: 100,
+      total: 1,
+    })
     await knowledge.listBases()
     expect(lastCall(requestData)[0]).toBe('/knowledge-bases')
     expect(lastCall(requestData)[1].baseUrl).toBe(KNOWLEDGE_PREFIX)
@@ -131,6 +138,19 @@ describe('知识库面的前缀', () => {
 })
 
 describe('检索取消', () => {
+  it('单库读取使用既有知识库GET，返回真实文档数并透传取消信号', async () => {
+    const signal = new AbortController().signal
+    requestData.mockResolvedValue(BASE_WIRE)
+
+    const base = await knowledge.readBase('b1', signal)
+
+    expect(base.documentCount).toBe(3)
+    expect(lastCall(requestData)).toEqual([
+      '/knowledge-bases/b1',
+      { baseUrl: KNOWLEDGE_PREFIX, signal },
+    ])
+  })
+
   it('检索透传取消信号，保留原请求路径与策略', async () => {
     const controller = new AbortController()
     requestData.mockResolvedValue({ hits: [], strategy: 'hybrid', note: '' })
@@ -308,4 +328,172 @@ describe('来源创建与竞态信号', () => {
     await knowledge.listSources('b1', signal)
     expect(lastCall(requestData)[1].signal).toBe(signal)
   })
+})
+
+describe('首次知识库分页', () => {
+  it('首次101库继续读第二页，让最早的库可以浏览选择', async () => {
+    requestData
+      .mockResolvedValueOnce({
+        items: Array.from({ length: 100 }, (_, id) => ({
+          ...BASE_WIRE,
+          id: `b${id}`,
+        })),
+        page: 1,
+        size: 100,
+        total: 101,
+      })
+      .mockResolvedValueOnce({
+        items: [{ ...BASE_WIRE, id: 'oldest' }],
+        page: 2,
+        size: 100,
+        total: 101,
+      })
+    const rows = await knowledge.listBases()
+    expect(rows).toHaveLength(101)
+    expect(rows.at(-1)?.id).toBe('oldest')
+    expect(callAt(requestData, 1)[1].query).toEqual({ page: 2, size: 100 })
+  })
+
+  it('分页边界100库不发多余第二页请求', async () => {
+    requestData.mockResolvedValue({
+      items: Array.from({ length: 100 }, (_, id) => ({
+        ...BASE_WIRE,
+        id: `b${id}`,
+      })),
+      page: 1,
+      size: 100,
+      total: 100,
+    })
+    expect(await knowledge.listBases()).toHaveLength(100)
+    expect(requestData).toHaveBeenCalledOnce()
+  })
+
+  it('第一页面返回前取消不继续加载后页', async () => {
+    const controller = new AbortController()
+    requestData.mockImplementation(() => {
+      controller.abort()
+      return Promise.resolve({
+        items: [BASE_WIRE],
+        page: 1,
+        size: 100,
+        total: 101,
+      })
+    })
+    await expect(knowledge.listBases(controller.signal)).rejects.toMatchObject({
+      name: 'AbortError',
+    })
+    expect(requestData).toHaveBeenCalledOnce()
+  })
+
+  it('分页间数据移动去重，不把同一个库渲染两次', async () => {
+    requestData
+      .mockResolvedValueOnce({
+        items: [BASE_WIRE],
+        page: 1,
+        size: 100,
+        total: 201,
+      })
+      .mockResolvedValueOnce({
+        items: [BASE_WIRE, { ...BASE_WIRE, id: 'b2' }],
+        page: 2,
+        size: 100,
+        total: 201,
+      })
+      .mockResolvedValueOnce({
+        items: [BASE_WIRE],
+        page: 3,
+        size: 100,
+        total: 201,
+      })
+    expect((await knowledge.listBases()).map((row) => row.id)).toEqual([
+      'b1',
+      'b2',
+    ])
+  })
+
+  it('第二页失败不返回看似完整的首100库', async () => {
+    requestData
+      .mockResolvedValueOnce({
+        items: [BASE_WIRE],
+        page: 1,
+        size: 100,
+        total: 101,
+      })
+      .mockRejectedValueOnce(new Error('第二页读取失败'))
+    await expect(knowledge.listBases()).rejects.toThrow('第二页读取失败')
+  })
+})
+
+it.each([-1, NaN, Infinity, 1.5])(
+  '分页总数%s异常时拒绝伪完整列表',
+  async (total) => {
+    requestData.mockResolvedValue({
+      items: [BASE_WIRE],
+      page: 1,
+      size: 100,
+      total,
+    })
+    await expect(knowledge.listBases()).rejects.toThrow('知识库分页总数异常')
+  },
+)
+
+it('首次空库立即返回，预取消不发请求', async () => {
+  requestData.mockResolvedValue({ items: [], page: 1, size: 100, total: 0 })
+  expect(await knowledge.listBases()).toEqual([])
+  requestData.mockClear()
+  const controller = new AbortController()
+  controller.abort()
+  await expect(knowledge.listBases(controller.signal)).rejects.toMatchObject({
+    name: 'AbortError',
+  })
+  expect(requestData).not.toHaveBeenCalled()
+})
+
+it('以首次有限total确定终点，不被后页增长持续追赶', async () => {
+  requestData
+    .mockResolvedValueOnce({
+      items: [BASE_WIRE],
+      page: 1,
+      size: 100,
+      total: 101,
+    })
+    .mockResolvedValueOnce({
+      items: [{ ...BASE_WIRE, id: 'b2' }],
+      page: 2,
+      size: 100,
+      total: 1000000,
+    })
+  expect((await knowledge.listBases()).map((row) => row.id)).toEqual([
+    'b1',
+    'b2',
+  ])
+  expect(requestData).toHaveBeenCalledTimes(2)
+})
+
+it.each([null, undefined])(
+  '缺失或null的必需分页total拒绝伪完整列表（%s）',
+  async (total) => {
+    requestData.mockResolvedValue({
+      items: Array.from({ length: 100 }, () => BASE_WIRE),
+      page: 1,
+      size: 100,
+      total,
+    })
+    await expect(knowledge.listBases()).rejects.toThrow('知识库分页总数异常')
+  },
+)
+
+it('非零总数的中途空页拒绝伪完整列表，用户可重试', async () => {
+  requestData
+    .mockResolvedValueOnce({
+      items: [BASE_WIRE],
+      page: 1,
+      size: 100,
+      total: 101,
+    })
+    .mockResolvedValueOnce({ items: [], page: 2, size: 100, total: 101 })
+  await expect(knowledge.listBases()).rejects.toThrow(
+    '知识库分页为空，请刷新重试',
+  )
+  expect(requestData).toHaveBeenCalledTimes(2)
 })

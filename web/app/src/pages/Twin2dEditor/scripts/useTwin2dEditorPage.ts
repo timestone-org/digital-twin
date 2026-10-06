@@ -18,7 +18,7 @@ import { getDashboard } from '@/api/dashboard'
 import { describeError } from '@/composables/useAsyncList'
 import { useRacedFetch } from '@/composables/useRacedFetch'
 import type { RacedFetch } from '@/composables/useRacedFetch'
-import { createSaver } from '@/features/dashboard/docIo'
+import { createSaver, disposeDoc } from '@/features/dashboard/docIo'
 import type { DocState } from '@/features/dashboard/docIo'
 import { toLayoutInput } from '@/features/dashboard/editorDoc'
 
@@ -90,6 +90,9 @@ function createReload(
   }
   return async () => {
     const forNode = nodeId()
+    file.loadGeneration = (file.loadGeneration ?? 0) + 1
+    file.isDisposed = false
+    file.saving.value = false
     page.doc.value = null
     page.missing.value = false
     file.loading.value = true
@@ -119,15 +122,26 @@ function createSave(
 ): () => Promise<boolean> {
   const replace = createSaver(page.file)
   return async () => {
+    if (page.file.saving.value) return false
     const current = page.file.dashboard.value
     const editing = page.doc.value
     if (current === null || editing === null) return false
+    editing.endMerge()
+    const generation = page.file.loadGeneration ?? 0
+    const snapshot = {
+      config: editing.config.value,
+      bindings: editing.bindings.value,
+    }
     const saved = await replace({
       expectedVersion: current.rowVersion,
       nodes: toLayoutInput(nodesWithTwin2d(current, nodeId(), editing)),
     })
     if (saved === null) return false
-    editing.markSaved()
+    if (
+      generation === (page.file.loadGeneration ?? 0) &&
+      page.doc.value === editing
+    )
+      editing.markSaved(snapshot)
     return true
   }
 }
@@ -178,6 +192,6 @@ export function useTwin2dEditorPage(
     conflict: page.file.conflict,
     save: createSave(page, nodeId),
     reload,
-    dispose: raced.cancel,
+    dispose: () => disposeDoc(page.file, raced.cancel),
   }
 }

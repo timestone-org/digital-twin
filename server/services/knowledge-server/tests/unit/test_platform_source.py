@@ -1,6 +1,6 @@
 """外部系统来源：只收平台路径、认统一信封、内容随 discover 一起回来。"""
 
-from collections.abc import Mapping
+from collections.abc import Callable, Mapping
 from typing import Any
 
 import httpx
@@ -15,14 +15,15 @@ from knowledge_server.apps.knowledge.services.sources import (
 from knowledge_server.apps.knowledge.services.sources.platform_source import (
     PAGE_SIZE,
 )
+from lib.errors import AppError
 
 
-def _client(handler: object) -> httpx.AsyncClient:
+def _client(
+    handler: Callable[[httpx.Request], httpx.Response],
+) -> httpx.AsyncClient:
     return httpx.AsyncClient(
         base_url="http://platform",
-        transport=httpx.MockTransport(
-            handler
-        ),  # pyright: ignore[reportArgumentType]
+        transport=httpx.MockTransport(handler),
     )
 
 
@@ -33,7 +34,8 @@ def _enveloped(rows: list[dict[str, Any]]) -> httpx.Response:
 
 
 def _source(
-    handler: object, headers: Mapping[str, str] | None = None
+    handler: Callable[[httpx.Request], httpx.Response],
+    headers: Mapping[str, str] | None = None,
 ) -> PlatformSource:
     return PlatformSource(client=_client(handler), headers=headers or {})
 
@@ -95,10 +97,13 @@ async def test_a_full_url_is_refused() -> None:
         del request
         return _enveloped([])
 
-    with pytest.raises(SourceUnavailable, match="平台路径"):
+    with pytest.raises(AppError, match="平台路径") as caught:
         await _source(handler).discover(
             {"path": "http://192.168.0.1/admin"}, None
         )
+    assert caught.value.code == 40001
+    assert caught.value.http_status == 400
+    assert caught.value.is_retryable is False
 
 
 async def test_an_upstream_error_is_retryable() -> None:
@@ -106,8 +111,9 @@ async def test_an_upstream_error_is_retryable() -> None:
         del request
         return httpx.Response(503)
 
-    with pytest.raises(SourceUnavailable):
+    with pytest.raises(SourceUnavailable) as caught:
         await _source(handler).discover({"path": "/x"}, None)
+    assert caught.value.is_retryable is True
 
 
 async def test_the_identity_headers_are_forwarded_verbatim() -> None:
@@ -150,8 +156,11 @@ async def test_fetch_refuses_instead_of_returning_nothing() -> None:
         del request
         return _enveloped([])
 
-    with pytest.raises(SourceUnavailable):
-        await _source(handler).fetch({}, "1")
+    with pytest.raises(AppError) as caught:
+        await _source(handler).fetch({}, "private-item-ref")
+    assert caught.value.code == 52302
+    assert caught.value.is_retryable is False
+    assert "private-" not in str(caught.value)
 
 
 def test_it_satisfies_the_source_protocol() -> None:
@@ -163,3 +172,97 @@ def test_it_satisfies_the_source_protocol() -> None:
     assert isinstance(made, KnowledgeSource)
     assert made.kind == PLATFORM_KIND
     assert made.config_schema()["required"] == ["path"]
+
+
+@pytest.mark.parametrize(
+    ("status", "expected_status", "expected_code", "is_retryable"),
+    [
+        (401, 401, 42315, False),
+        (403, 403, 42314, False),
+        (400, 502, 52302, False),
+        (404, 502, 52302, False),
+        (410, 502, 52302, False),
+        (422, 502, 52302, False),
+        (501, 502, 52302, False),
+        (505, 502, 52302, False),
+        (408, 502, 52301, True),
+        (429, 502, 52301, True),
+        (500, 502, 52301, True),
+        (502, 502, 52301, True),
+        (503, 502, 52301, True),
+        (504, 502, 52301, True),
+    ],
+)
+async def test_upstream_errors_are_safe_domain_responses(
+    status: int, expected_status: int, expected_code: int, is_retryable: bool
+) -> None:
+    def handler(_request: httpx.Request) -> httpx.Response:
+        return httpx.Response(status, text="private-upstream-body")
+
+    async with _client(handler) as client:
+        source = PlatformSource(client=client, headers={})
+        with pytest.raises(AppError) as caught:
+            await source.discover({"path": "/private-platform-path"}, None)
+    assert caught.value.http_status == expected_status
+    assert caught.value.code == expected_code
+    assert caught.value.is_retryable is is_retryable
+    assert "private-" not in str(caught.value)
+
+
+@pytest.mark.parametrize(
+    "error_type",
+    [
+        httpx.ReadTimeout,
+        httpx.ConnectError,
+        httpx.ReadError,
+        httpx.RemoteProtocolError,
+    ],
+)
+async def test_transport_failure_is_safe_without_retrying(
+    error_type: type[httpx.TransportError],
+) -> None:
+    requests: list[httpx.Request] = []
+
+    def handler(request: httpx.Request) -> httpx.Response:
+        requests.append(request)
+        raise error_type("private-transport-details", request=request)
+
+    async with _client(handler) as client:
+        source = PlatformSource(client=client, headers={})
+        with pytest.raises(SourceUnavailable) as caught:
+            await source.discover({"path": "/private-platform-path"}, None)
+    assert len(requests) == 1
+    assert caught.value.http_status == 502
+    assert caught.value.is_retryable is True
+    assert "private-" not in str(caught.value)
+
+
+async def test_an_invalid_upstream_url_is_not_retryable() -> None:
+    def handler(_request: httpx.Request) -> httpx.Response:
+        raise httpx.InvalidURL("private-invalid-url-details")
+
+    async with _client(handler) as client:
+        source = PlatformSource(client=client, headers={})
+        with pytest.raises(AppError) as caught:
+            await source.discover({"path": "/private-platform-path"}, None)
+    assert caught.value.code == 52302
+    assert caught.value.is_retryable is False
+    assert "private-" not in str(caught.value)
+
+
+@pytest.mark.parametrize(
+    "error_type", [httpx.UnsupportedProtocol, httpx.LocalProtocolError]
+)
+async def test_a_permanent_transport_error_is_not_retryable(
+    error_type: type[httpx.TransportError],
+) -> None:
+    def handler(request: httpx.Request) -> httpx.Response:
+        raise error_type("private-protocol-details", request=request)
+
+    async with _client(handler) as client:
+        source = PlatformSource(client=client, headers={})
+        with pytest.raises(AppError) as caught:
+            await source.discover({"path": "/private-platform-path"}, None)
+    assert caught.value.code == 52302
+    assert caught.value.is_retryable is False
+    assert "private-" not in str(caught.value)

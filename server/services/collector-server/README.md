@@ -21,7 +21,7 @@ src/collector_server/
 ├── commands.py      命令总线的传输面（Redis list RPC）
 └── apps/collect/
     ├── errors.py    领域异常，`reason` 是发给 platform 的稳定字面量
-    ├── drivers/     base.py（Driver 协议）/ registry.py / opcua/ / modbus_tcp/
+    ├── drivers/     base.py（Driver 协议）/ registry.py / opcua/ / modbus_tcp/ / http/
     ├── runtime/     supervisor / session / poller / sink / reachability
     ├── archive/     buffer（准入 + 有界缓冲 + 落 Stream）/ writer（Stream → 库）
     ├── plan/        client（拉全量）/ store（版本比对）
@@ -71,8 +71,12 @@ tests/{unit,integration,contract,e2e}
 | `COLLECT_PLC_MAX_CONCURRENT_REQUESTS` | 全部 PLC 数据源共享的在途协议请求上限 |
 | `COLLECT_PLC_READ_ENABLED` | 是否允许采集进程建立 PLC 只读连接，默认关闭 |
 | `COLLECT_PLC_ALLOWED_ENDPOINTS` | 允许读取的 PLC `IP:端口` 清单，逗号分隔 |
+| `COLLECT_HTTP_READ_ENABLED` | HTTP 只读采集开关，默认关闭 |
+| `COLLECT_HTTP_ALLOWED_ENDPOINTS` | 数据与 OAuth2 端点的 HTTP(S) origin 允许清单，逗号分隔 |
+| `COLLECT_HTTP_MAX_CONCURRENT_REQUESTS` | 全部 HTTP 数据源共享的在途请求上限，默认 8 |
 
 完整清单见 [`.env.example`](.env.example)。
+HTTP 认证、多点位映射与下游绑定见 [`HTTP_COLLECT_GUIDE.md`](../../../docs/HTTP_COLLECT_GUIDE.md)。
 
 ## 部署前置条件
 

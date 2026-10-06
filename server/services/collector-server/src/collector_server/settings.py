@@ -4,9 +4,13 @@
 本服务**无业务 HTTP 面**：`app_http_port` 只服务 `/health` 与 `/ready`。
 """
 
-from pydantic import Field, SecretStr
+from typing import Self
+from urllib.parse import urlsplit
+
+from pydantic import Field, SecretStr, model_validator
 from pydantic_settings import SettingsConfigDict
 
+from collectwire.http import http_origin
 from lib.config import AppSettings, PostgresSettings, RedisSettings
 
 SERVICE_NAME = "collector-server"
@@ -100,3 +104,24 @@ class Settings(AppSettings, PostgresSettings, RedisSettings):
     # 默认不向任何 PLC 发网络请求；允许目标必须精确到 IP 与端口。
     plc_read_enabled: bool = False
     plc_allowed_endpoints: str = ""
+    http_read_enabled: bool = False
+    http_allowed_endpoints: str = ""
+    http_max_concurrent_requests: int = Field(default=8, ge=1, le=256)
+
+    @model_validator(mode="after")
+    def validate_http_access(self) -> Self:
+        targets = [
+            target.strip()
+            for target in self.http_allowed_endpoints.split(",")
+            if target.strip()
+        ]
+        if self.http_read_enabled and not targets:
+            raise ValueError("HTTP 采集启用时必须配置允许的 origin 清单")
+        for target in targets:
+            http_origin(target)
+            endpoint = urlsplit(target)
+            if endpoint.path not in ("", "/") or endpoint.query:
+                raise ValueError(
+                    "HTTP 允许清单仅接受 origin，不含路径和查询参数"
+                )
+        return self

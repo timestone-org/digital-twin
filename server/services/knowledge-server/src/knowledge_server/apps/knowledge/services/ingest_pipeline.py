@@ -63,6 +63,8 @@ from knowledge_server.apps.knowledge.services.parsing import (
     parse_local,
 )
 from knowledge_server.apps.knowledge.services.sources import (
+    PLATFORM_KIND,
+    UPLOAD_KIND,
     KnowledgeSource,
     UnknownSource,
     source_for,
@@ -71,6 +73,7 @@ from knowledge_server.settings import (
     DEFAULT_CHUNK_MIN_TOKENS,
     DEFAULT_CHUNK_OVERLAP_CHARS,
 )
+from lib.errors import AppError
 from lib.logging import get_logger
 from lib.objectstore import ObjectStore
 
@@ -145,6 +148,7 @@ class _Pending:
     base_id: uuid.UUID
     source_id: uuid.UUID
     external_ref: str
+    object_key: str
 
 
 async def _raw_of(
@@ -164,6 +168,8 @@ async def _raw_of(
         kind = source.kind
         config = dict(source.config_json)
     try:
+        if kind == PLATFORM_KIND:
+            return await _snapshot_of(deps, document)
         return await source_for(kind, deps.sources).fetch(
             config, document.external_ref
         )
@@ -171,6 +177,22 @@ async def _raw_of(
         raise IngestFailed(str(error)) from error
     except FileNotFoundError as error:
         raise IngestFailed("原件已经不在对象存储里了") from error
+    except AppError as error:
+        if error.is_retryable:
+            raise
+        raise IngestFailed(error.message) from error
+
+
+async def _snapshot_of(deps: IngestDeps, document: _Pending) -> RawItem:
+    """读取同步登记的原件快照，不再次代表用户调用平台。Args: deps, document。"""
+    if not document.object_key:
+        raise IngestFailed("平台来源的原件快照未登记")
+    raw = await source_for(UPLOAD_KIND, deps.sources).fetch(
+        {}, document.object_key
+    )
+    if not raw.content:
+        raise IngestFailed("平台来源的原件快照为空")
+    return raw
 
 
 async def _parsed_locally(deps: IngestDeps, raw: RawItem) -> ParsedDocument:
@@ -351,6 +373,7 @@ async def _claimed(
             base_id=row.base_id,
             source_id=row.source_id,
             external_ref=row.external_ref,
+            object_key=row.object_key,
         )
 
 

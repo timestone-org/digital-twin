@@ -39,6 +39,8 @@ const query: Record<string, string> = {}
 const replace = vi.fn()
 
 vi.mock('vue-router', () => ({
+  onBeforeRouteLeave: vi.fn(),
+  onBeforeRouteUpdate: vi.fn(),
   useRouter: () => ({ replace, push: vi.fn() }),
   useRoute: () => ({
     path: '/modeling/pipelines/p1',
@@ -269,7 +271,7 @@ describe('未保存画布回看历史', () => {
     expect(useConfirm().pending.value?.confirmText).toContain('放弃')
     useConfirm().resolve(true)
     await flushPromises()
-    expect(fetchRun).toHaveBeenCalledWith('r1')
+    expect(fetchRun).toHaveBeenCalledWith('r1', expect.any(AbortSignal))
     expect(wrapper.text()).toContain('正在回看历史运行')
     await wrapper
       .findAll('button')
@@ -283,6 +285,150 @@ describe('未保存画布回看历史', () => {
 })
 
 describe('画布页', () => {
+  it('保存失败保留新增节点和撤销栈，不自动重试或运行', async () => {
+    stubApi()
+    signIn(WRITER)
+    let reject: (error: unknown) => void = () => undefined
+    const save = vi
+      .spyOn(modeling, 'updateModelingPipeline')
+      .mockImplementationOnce(
+        () =>
+          new Promise((_resolve, fail) => {
+            reject = fail
+          }),
+      )
+    const start = vi.spyOn(modeling, 'startModelingRun')
+    const wrapper = open()
+    await flushPromises()
+    await wrapper.find('.dt-ml-palette__item').trigger('click')
+    await wrapper
+      .findAll('button')
+      .find((button) => button.text() === '保存')
+      ?.trigger('click')
+    await wrapper.find('.dt-ml-palette__item').trigger('click')
+    reject(new Error('服务不可用'))
+    await flushPromises()
+    expect(save).toHaveBeenCalledTimes(1)
+    expect(start).not.toHaveBeenCalled()
+    expect(wrapper.findAll('.dt-ml-node')).toHaveLength(2)
+    expect(
+      wrapper
+        .findAll('button')
+        .find((button) => button.text() === '保存')
+        ?.attributes('disabled'),
+    ).toBeUndefined()
+    await wrapper
+      .findAll('button')
+      .find((button) => button.text() === '撤销')
+      ?.trigger('click')
+    expect(wrapper.findAll('.dt-ml-node')).toHaveLength(1)
+    await wrapper
+      .findAll('button')
+      .find((button) => button.text() === '重做')
+      ?.trigger('click')
+    expect(wrapper.findAll('.dt-ml-node')).toHaveLength(2)
+  })
+
+  it('手动保存期间运行不重复提交；运行保存期间新增节点仍可保存', async () => {
+    stubApi()
+    signIn(WRITER)
+    let finish: (value: ModelingPipeline) => void = () => undefined
+    const save = vi
+      .spyOn(modeling, 'updateModelingPipeline')
+      .mockImplementationOnce(
+        () =>
+          new Promise((resolve) => {
+            finish = resolve
+          }),
+      )
+    const start = vi
+      .spyOn(modeling, 'startModelingRun')
+      .mockResolvedValue(runOf('succeeded'))
+    const wrapper = open()
+    await flushPromises()
+    await wrapper.find('.dt-ml-palette__item').trigger('click')
+    await wrapper
+      .findAll('button')
+      .find((button) => button.text() === '保存')
+      ?.trigger('click')
+    await wrapper
+      .findAll('button')
+      .find((button) => button.text() === '运行')
+      ?.trigger('click')
+    expect(save).toHaveBeenCalledTimes(1)
+    expect(start).not.toHaveBeenCalled()
+    finish({
+      ...pipeline(),
+      graph: save.mock.calls[0]?.[1].graph ?? pipeline().graph,
+    })
+    await flushPromises()
+    await wrapper.find('.dt-ml-palette__item').trigger('click')
+    save.mockImplementationOnce(
+      () =>
+        new Promise((resolve) => {
+          finish = resolve
+        }),
+    )
+    await wrapper
+      .findAll('button')
+      .find((button) => button.text() === '运行')
+      ?.trigger('click')
+    await wrapper.find('.dt-ml-palette__item').trigger('click')
+    const sent = save.mock.calls[1]?.[1].graph
+    finish({ ...pipeline(), graph: sent ?? pipeline().graph })
+    await flushPromises()
+    expect(start).toHaveBeenCalledTimes(1)
+    expect(modeling.validateModelingGraph).toHaveBeenLastCalledWith(
+      'p1',
+      sent,
+      expect.any(AbortSignal),
+    )
+    expect(wrapper.findAll('.dt-ml-node')).toHaveLength(3)
+    expect(
+      wrapper
+        .findAll('button')
+        .find((button) => button.text() === '保存')
+        ?.attributes('disabled'),
+    ).toBeUndefined()
+  })
+
+  it('保存期间新增节点保留草稿，第二次保存提交完整新图', async () => {
+    stubApi()
+    signIn(WRITER)
+    let finish: (value: ModelingPipeline) => void = () => undefined
+    const save = vi
+      .spyOn(modeling, 'updateModelingPipeline')
+      .mockImplementationOnce(
+        () =>
+          new Promise((resolve) => {
+            finish = resolve
+          }),
+      )
+    const wrapper = open()
+    await flushPromises()
+    await wrapper.find('.dt-ml-palette__item').trigger('click')
+    const saveButton = () =>
+      wrapper.findAll('button').find((button) => button.text() === '保存')
+    await saveButton()?.trigger('click')
+    const sent = save.mock.calls[0]?.[1].graph
+    expect(sent?.nodes).toHaveLength(1)
+    await wrapper.find('.dt-ml-palette__item').trigger('click')
+    finish({ ...pipeline(), graph: sent ?? pipeline().graph })
+    await flushPromises()
+    expect(wrapper.findAll('.dt-ml-node')).toHaveLength(2)
+    expect(saveButton()?.attributes('disabled')).toBeUndefined()
+    save.mockImplementationOnce((_id, patch) =>
+      Promise.resolve({
+        ...pipeline(),
+        graph: patch.graph ?? pipeline().graph,
+      }),
+    )
+    await saveButton()?.trigger('click')
+    await flushPromises()
+    expect(save.mock.calls[1]?.[1].graph?.nodes).toHaveLength(2)
+    expect(saveButton()?.attributes('disabled')).toBeDefined()
+  })
+
   it('算子面板整份来自后端目录，加一个算子不用改前端', async () => {
     stubApi({
       operators: [

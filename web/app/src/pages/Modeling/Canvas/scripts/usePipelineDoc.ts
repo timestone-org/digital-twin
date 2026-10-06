@@ -14,12 +14,14 @@ import type {
 } from '@dt/contracts'
 import { useToast } from '@dt/ui'
 import type { Ref, ShallowRef } from 'vue'
-import { ref, shallowRef } from 'vue'
+import { onBeforeUnmount, ref, shallowRef } from 'vue'
 
 import * as modeling from '@/api/modeling'
 import { describeError } from '@/composables/useAsyncList'
 import type { RacedFetch } from '@/composables/useRacedFetch'
 import { useRacedFetch } from '@/composables/useRacedFetch'
+
+import { createPipelineLoader } from './pipelineReads'
 
 /** 跑一次校验要碰的那几摊状态。 */
 interface CheckDeps {
@@ -69,33 +71,48 @@ async function putGraph(
   pipelineId: string,
   graph: ModelingGraph,
   toast: ReturnType<typeof useToast>,
+  isCurrent: () => boolean,
 ): Promise<ModelingPipeline | null> {
   try {
     const next = await modeling.updateModelingPipeline(pipelineId, { graph })
-    toast.success('已保存')
+    if (isCurrent()) toast.success('已保存')
     return next
   } catch (caught) {
-    toast.error(describeError(caught))
+    if (isCurrent()) toast.error(describeError(caught))
     return null
   }
 }
 
-/** 拉一条流水线。拉不到时把原因留在 `error` 上，不抛。 */
-async function fetchPipeline(
-  pipelineId: string,
-  isLoading: Ref<boolean>,
-  error: Ref<string | null>,
-): Promise<ModelingPipeline | null> {
-  isLoading.value = true
-  error.value = null
-  try {
-    return await modeling.getModelingPipeline(pipelineId)
-  } catch (caught) {
-    error.value = describeError(caught)
-    return null
-  } finally {
-    isLoading.value = false
+interface SaveDeps {
+  pipeline: ShallowRef<ModelingPipeline | null>
+  isSaving: Ref<boolean>
+  toast: ReturnType<typeof useToast>
+  generation: () => number
+}
+
+/** 迟到回执仍如实返回，只回填当前资源并结束当前保存状态。 */
+function createSave(deps: SaveDeps) {
+  return async (graph: ModelingGraph) => {
+    const current = deps.pipeline.value
+    if (current === null || deps.isSaving.value) return false
+    const token = deps.generation()
+    const isCurrent = () => token === deps.generation()
+    deps.isSaving.value = true
+    const next = await putGraph(current.id, graph, deps.toast, isCurrent)
+    if (isCurrent()) deps.isSaving.value = false
+    if (next === null) return false
+    if (isCurrent()) deps.pipeline.value = next
+    return true
   }
+}
+
+/** 回看历史时只清当前编辑校验状态。 */
+function clearCheck(
+  issues: Ref<readonly ModelingGraphIssue[]>,
+  knownColumns: Ref<Readonly<Record<string, string[] | null>>>,
+): void {
+  issues.value = []
+  knownColumns.value = {}
 }
 
 export function usePipelineDoc() {
@@ -108,6 +125,13 @@ export function usePipelineDoc() {
   const toast = useToast()
   // 边改边校验：慢的那次后返回不许盖掉快的那次，否则问题清单会退回上一版图的
   const checking = useRacedFetch()
+  const loading = useRacedFetch()
+  let generation = 0
+  onBeforeUnmount(() => {
+    generation += 1
+    checking.cancel()
+    loading.cancel()
+  })
 
   return {
     pipeline,
@@ -116,21 +140,21 @@ export function usePipelineDoc() {
     isLoading,
     isSaving,
     error,
-    load: async (pipelineId: string) => {
-      const next = await fetchPipeline(pipelineId, isLoading, error)
-      if (next !== null) pipeline.value = next
-      return next
-    },
-    save: async (graph: ModelingGraph) => {
-      const current = pipeline.value
-      if (current === null) return false
-      isSaving.value = true
-      const next = await putGraph(current.id, graph, toast)
-      isSaving.value = false
-      if (next === null) return false
-      pipeline.value = next
-      return true
-    },
+    load: createPipelineLoader({
+      pipeline,
+      isSaving,
+      isLoading,
+      error,
+      checking,
+      loading,
+      advance: () => ++generation,
+    }),
+    save: createSave({
+      pipeline,
+      isSaving,
+      toast,
+      generation: () => generation,
+    }),
     validate: (graph: ModelingGraph, isQuiet = false) =>
       runCheck(
         { pipeline, issues, knownColumns, toast, raced: checking },
@@ -138,10 +162,7 @@ export function usePipelineDoc() {
         isQuiet,
       ),
     /** 回看历史时清空：问题清单与列候选都是「正在编辑那张图」的。 */
-    clearCheck: () => {
-      issues.value = []
-      knownColumns.value = {}
-    },
+    clearCheck: () => clearCheck(issues, knownColumns),
     /** 离开画布时作废在飞的那一次校验。 */
     stopChecking: () => checking.cancel(),
   }

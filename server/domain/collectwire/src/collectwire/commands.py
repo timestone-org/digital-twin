@@ -51,6 +51,10 @@ REASON_PLAN_UNAVAILABLE = "plan_unavailable"
 REASON_COLLECT_FAILED = "collect_failed"
 # 驱动抛了一个非领域异常：形状未知，只能如实说「执行失败」
 REASON_DRIVER_FAILED = "driver_failed"
+REASON_HTTP_CONFIG_INVALID = "http_config_invalid"
+REASON_HTTP_AUTH_REJECTED = "http_auth_rejected"
+REASON_HTTP_REQUEST_FAILED = "http_request_failed"
+REASON_HTTP_RESPONSE_INVALID = "http_response_invalid"
 
 # 发起方自造的两条：应答里根本没有 status 字段 / 采集侧一句话都没回。
 # ⚠ 它们不会出现在采集侧的应答里，只用于把「没有结论」表达成一个 reason
