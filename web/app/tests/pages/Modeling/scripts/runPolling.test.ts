@@ -56,6 +56,44 @@ afterEach(() => {
 })
 
 describe('盯着一次运行', () => {
+  it('停表后同一运行的迟到成功回包不能恢复状态或轮询', async () => {
+    let finish: ((value: ModelingRun) => void) | undefined
+    const get = vi.spyOn(modeling, 'getModelingRun').mockImplementation(
+      () =>
+        new Promise((resolve) => {
+          finish = resolve
+        }),
+    )
+    const { runner, wrapper } = setup()
+    runner.watchRun(run())
+    await vi.advanceTimersByTimeAsync(1000)
+    runner.stop()
+    runner.run.value = null
+    finish?.(run())
+    await vi.advanceTimersByTimeAsync(5000)
+    expect(runner.run.value).toBeNull()
+    expect(get).toHaveBeenCalledTimes(1)
+    wrapper.unmount()
+  })
+
+  it('切换运行后迟到取消回执不替换当前运行', async () => {
+    let finish: ((value: ModelingRun) => void) | undefined
+    vi.spyOn(modeling, 'cancelModelingRun').mockImplementation(
+      () =>
+        new Promise((resolve) => {
+          finish = resolve
+        }),
+    )
+    const { runner, wrapper } = setup()
+    runner.watchRun(run())
+    const cancelling = runner.cancel()
+    runner.watchRun(run({ id: 'r2', status: 'succeeded' }))
+    finish?.(run({ status: 'cancelled' }))
+    await cancelling
+    expect(runner.run.value?.id).toBe('r2')
+    wrapper.unmount()
+  })
+
   it('还在跑就一拍一拍地问', async () => {
     const get = vi
       .spyOn(modeling, 'getModelingRun')
@@ -201,6 +239,47 @@ describe('节点结果', () => {
     await runner.loadPreview('n1')
 
     expect(get).not.toHaveBeenCalled()
+  })
+
+  it('切换运行后迟到节点预览不写入新运行缓存', async () => {
+    let finish: ((value: ModelingNodeRun) => void) | undefined
+    vi.spyOn(modeling, 'getModelingNodeRun').mockImplementation(
+      () =>
+        new Promise((resolve) => {
+          finish = resolve
+        }),
+    )
+    const { runner, wrapper } = setup()
+    runner.watchRun(run({ status: 'succeeded' }))
+    const loading = runner.loadPreview('n1')
+    runner.watchRun(run({ id: 'r2', status: 'succeeded' }))
+    finish?.(nodeRun())
+    await loading
+    expect(runner.previews.value.size).toBe(0)
+    wrapper.unmount()
+  })
+
+  it('不同节点预览并发读取，取消时逐一中止且不回填', async () => {
+    const finishes: ((value: ModelingNodeRun) => void)[] = []
+    const get = vi.spyOn(modeling, 'getModelingNodeRun').mockImplementation(
+      () =>
+        new Promise((resolve) => {
+          finishes.push(resolve)
+        }),
+    )
+    const { runner, wrapper } = setup()
+    runner.watchRun(run({ status: 'succeeded' }))
+    const first = runner.loadPreview('n1')
+    const second = runner.loadPreview('n2')
+    const signals = get.mock.calls.map((call) => call[2])
+    expect(signals.map((signal) => signal?.aborted)).toEqual([false, false])
+    runner.watchRun(run({ id: 'r2', status: 'succeeded' }))
+    expect(signals.map((signal) => signal?.aborted)).toEqual([true, true])
+    finishes[0]?.(nodeRun())
+    finishes[1]?.({ ...nodeRun(), node_id: 'n2' })
+    await Promise.all([first, second])
+    expect(runner.previews.value.size).toBe(0)
+    wrapper.unmount()
   })
 
   it('换一次运行看，缓存跟着清掉', async () => {

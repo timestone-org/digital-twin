@@ -167,7 +167,10 @@ onUnmounted(() => {
 </script>
 
 <template>
-  <AppShell title="工业数据采集" subtitle="OPC UA 与只读 Modbus TCP 数据源">
+  <AppShell
+    title="工业数据采集"
+    subtitle="OPC UA、只读 Modbus TCP 与 HTTP / HTTPS 数据源"
+  >
     <template #actions>
       <!-- 运行参数：只读账号也进得来（看得见节拍不等于能改），保存按钮由弹窗自己判写码 -->
       <PermGuard :codes="[PERMISSION_CODES.collectView]">

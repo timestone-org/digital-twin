@@ -19503,6 +19503,7 @@
           },
           "protocol": {
             "enum": [
+              "http",
               "modbus_tcp",
               "opcua"
             ],

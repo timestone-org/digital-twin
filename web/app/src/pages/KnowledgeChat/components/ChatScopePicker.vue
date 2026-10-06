@@ -9,9 +9,9 @@
  * ⚠ 已经被删掉的库照样列出来并标一句：从范围里抹掉等于替用户把边界改宽，
  * 而他从界面上看不出来。
  */
-import { computed } from 'vue'
+import { computed, ref } from 'vue'
 import type { KnowledgeChatScopeBase } from '@dt/contracts'
-import { DtCheckbox, DtIcon, DtPopover, DtTag } from '@dt/ui'
+import { DtCheckbox, DtIcon, DtPagination, DtPopover, DtTag } from '@dt/ui'
 
 import type { KnowledgeBase } from '@/api/knowledge'
 import { idsOf, scopeLabel, toggled } from '../scripts/chatScope'
@@ -26,6 +26,17 @@ const props = defineProps<{
 }>()
 
 const emit = defineEmits<{ change: [ids: string[] | null] }>()
+
+const page = ref(1)
+const PAGE_SIZE = 20
+const hasPages = computed(() => props.bases.length > PAGE_SIZE)
+const visibleBases = computed(() => {
+  const current = Math.max(
+    1,
+    Math.min(page.value, Math.ceil(props.bases.length / PAGE_SIZE)),
+  )
+  return props.bases.slice((current - 1) * PAGE_SIZE, current * PAGE_SIZE)
+})
 
 const label = computed(() => scopeLabel(props.scope))
 const picked = computed(() => idsOf(props.scope))
@@ -78,7 +89,7 @@ function toggle(baseId: string): void {
           />
 
           <ul class="chat-scope__list">
-            <li v-for="one in bases" :key="one.id">
+            <li v-for="one in visibleBases" :key="one.id">
               <DtCheckbox
                 :model-value="isPicked(one.id)"
                 :disabled="isLast && isPicked(one.id)"
@@ -87,6 +98,15 @@ function toggle(baseId: string): void {
               />
             </li>
           </ul>
+
+          <DtPagination
+            v-if="hasPages"
+            v-model:page="page"
+            :size="PAGE_SIZE"
+            :total="bases.length"
+            :size-options="[PAGE_SIZE]"
+            aria-label="检索范围知识库分页"
+          />
 
           <p v-if="bases.length === 0" class="chat-scope__empty">
             这套部署还没有知识库

@@ -10,14 +10,11 @@
  */
 
 /** 已实现的采集协议。第二个驱动进来时后端与这里同时加一项。 */
-export const COLLECT_PROTOCOLS = ['modbus_tcp', 'opcua'] as const
+export const COLLECT_PROTOCOLS = ['http', 'modbus_tcp', 'opcua'] as const
 export type CollectProtocol = (typeof COLLECT_PROTOCOLS)[number]
 
-/** 先接受未来版本的 HTTP 出参，创建输入仍只使用 CollectProtocol。 */
-export const COLLECT_READABLE_PROTOCOLS = [
-  'http',
-  ...COLLECT_PROTOCOLS,
-] as const
+/** 保留先行 reader 公开面；完整版本的创建协议已覆盖整个读取集合。 */
+export const COLLECT_READABLE_PROTOCOLS = COLLECT_PROTOCOLS
 export type CollectReadableProtocol =
   (typeof COLLECT_READABLE_PROTOCOLS)[number]
 

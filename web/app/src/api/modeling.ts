@@ -65,10 +65,12 @@ export interface ModelingPipelinePatchInput {
 }
 
 /** 算子目录。前端的算子面板与参数表单都由它驱动。 */
-export async function listModelingOperators(): Promise<ModelingOperator[]> {
+export async function listModelingOperators(
+  signal?: AbortSignal,
+): Promise<ModelingOperator[]> {
   return await requestData<ModelingOperator[]>(
     '/modeling-operators',
-    onPlatform(),
+    onPlatform(signal === undefined ? {} : { signal }),
   )
 }
 
@@ -84,10 +86,11 @@ export async function listModelingPipelines(
 
 export async function getModelingPipeline(
   pipelineId: string,
+  signal?: AbortSignal,
 ): Promise<ModelingPipeline> {
   return await requestData<ModelingPipeline>(
     `/modeling-pipelines/${pipelineId}`,
-    onPlatform(),
+    onPlatform(signal === undefined ? {} : { signal }),
   )
 }
 
@@ -186,10 +189,12 @@ export function modelingFrameUrl(
 export async function listModelingRuns(
   pipelineId: string | null,
   query: ModelingPageQuery = {},
+  signal?: AbortSignal,
 ): Promise<Page<ModelingRunSummary>> {
   return await requestData<Page<ModelingRunSummary>>(
     '/modeling-runs',
     onPlatform({
+      ...(signal === undefined ? {} : { signal }),
       query: {
         ...(pipelineId === null ? {} : { pipeline_id: pipelineId }),
         page: query.page,
@@ -217,10 +222,11 @@ export async function getModelingRun(
 export async function getModelingNodeRun(
   runId: string,
   nodeId: string,
+  signal?: AbortSignal,
 ): Promise<ModelingNodeRun> {
   return await requestData<ModelingNodeRun>(
     `/modeling-runs/${runId}/nodes/${nodeId}`,
-    onPlatform(),
+    onPlatform(signal === undefined ? {} : { signal }),
   )
 }
 

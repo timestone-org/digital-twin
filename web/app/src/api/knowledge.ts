@@ -7,6 +7,8 @@
  * 把整条 `/api/v1/knowledge/...` 当 path 传，客户端会再拼一次缺省的 auth 前缀，
  * 拿回来的是一个 403 的 HTML 页，前端只说得出「服务端响应格式异常」。
  */
+import type { Page } from '@dt/contracts'
+
 import { KNOWLEDGE_BASE_URL } from '@/config/app'
 import { request, requestBytes, requestData } from './client'
 import type { RequestOptions } from './client'
@@ -63,19 +65,58 @@ function itemsOf(value: unknown): unknown[] {
 }
 
 /** 这套部署此刻的知识库能力。 */
-export async function readCapability(): Promise<KnowledgeCapability> {
+export async function readCapability(
+  signal?: AbortSignal,
+): Promise<KnowledgeCapability> {
   return toCapability(
-    await requestData<unknown>('/capabilities', onKnowledge()),
+    await requestData<unknown>('/capabilities', onKnowledge({ signal })),
   )
 }
 
-/** 列知识库。 */
-export async function listBases(): Promise<KnowledgeBase[]> {
-  const page = await requestData<unknown>(
-    BASES,
-    onKnowledge({ query: { page: 1, size: 100 } }),
+/** 顺序读取有限知识库列表的全部页，同一次中止信号贯穿各页。 */
+export async function listBases(
+  signal?: AbortSignal,
+): Promise<KnowledgeBase[]> {
+  const size = 100
+  const rows = new Map<string, KnowledgeBase>()
+  let pages = 1
+  for (let page = 1; page <= pages; page += 1) {
+    signal?.throwIfAborted()
+    const result = await requestData<Page<unknown>>(
+      BASES,
+      onKnowledge({ query: { page, size }, signal }),
+    )
+    signal?.throwIfAborted()
+    const items = itemsOf(result).map(toBase)
+    if (page === 1) pages = basePageCount(result.total, size)
+    if (items.length === 0 && (page !== 1 || result.total !== 0)) {
+      throw new Error('知识库分页为空，请刷新重试')
+    }
+    for (const base of items) {
+      if (!rows.has(base.id)) rows.set(base.id, base)
+    }
+  }
+  return [...rows.values()]
+}
+
+function basePageCount(total: unknown, size: number): number {
+  if (typeof total !== 'number' || !Number.isSafeInteger(total) || total < 0) {
+    throw new Error('知识库分页总数异常，请刷新重试')
+  }
+  return Math.max(1, Math.ceil(total / size))
+}
+
+/** 读取一个知识库及其真实文档数。 */
+export async function readBase(
+  baseId: string,
+  signal?: AbortSignal,
+): Promise<KnowledgeBase> {
+  return toBase(
+    await requestData<unknown>(
+      `${BASES}/${encodeURIComponent(baseId)}`,
+      onKnowledge({ signal }),
+    ),
   )
-  return itemsOf(page).map(toBase)
 }
 
 /** 建一个知识库。 */

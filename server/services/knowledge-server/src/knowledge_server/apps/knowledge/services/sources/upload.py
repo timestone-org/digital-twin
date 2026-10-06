@@ -13,6 +13,7 @@ from collections.abc import Mapping
 from dataclasses import dataclass
 from typing import Any
 
+from knowledge_server.apps.knowledge.errors import SourceReadFailed
 from knowledge_server.apps.knowledge.services.parsing import RawItem
 from knowledge_server.apps.knowledge.services.sources.ports import (
     DiscoveredPage,
@@ -52,9 +53,7 @@ class UploadSource:
     async def fetch(self, config: Mapping[str, Any], ref: str) -> RawItem:
         """按对象键把字节取回来。
 
-        ⚠ 取不到分两档：键不存在是「这份文档的原件没了」（不可重试，
-        多半是有人清了桶），别的存储错是「此刻拿不到」（重试有意义）。
-        混成一档的话，前者会被无限重试。
+        ⚠ 只按存储端口的可重试标记分类；未知错误不能自动重新认领。
 
         Args: config, ref（对象键）。
         """
@@ -65,7 +64,11 @@ class UploadSource:
         except ObjectNotFound as error:
             raise FileNotFoundError(f"原件已不在对象存储里：{ref}") from error
         except ObjectStoreError as error:
-            raise SourceUnavailable("对象存储暂时不可用") from error
+            if error.is_retryable:
+                raise SourceUnavailable("对象存储暂时不可用") from error
+            raise SourceReadFailed(
+                "无法读取原件，请检查对象存储配置或权限后重新解析"
+            ) from error
         return RawItem(
             # ⚠ 键的最后一段带着净化过的后缀（`keys.py`），而后缀是解析器分派
             # 的唯一判据。用文档行上的显示名反而不安全：那是用户给的字符串

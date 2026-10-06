@@ -136,3 +136,24 @@ class DocumentIngestInProgress(AppError):
 
     code = 42313
     http_status = 409
+
+
+class SourceAccessDenied(AppError):
+    """调用者无权读取来源的数据。"""
+
+    code = 42314
+    http_status = 403
+
+
+class SourceIdentityExpired(AppError):
+    """来源读取所用的调用者身份已失效。"""
+
+    code = 42315
+    http_status = 401
+
+
+class SourceReadFailed(AppError):
+    """来源读取失败，需修正配置或重新同步，重试没有意义。"""
+
+    code = 52302
+    http_status = 502

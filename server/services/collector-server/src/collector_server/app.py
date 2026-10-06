@@ -6,6 +6,9 @@
 
 from fastapi import FastAPI
 
+from collector_server.apps.collect.drivers.registry import (
+    supports_startup_tcp_probe,
+)
 from collector_server.apps.collect.runtime.reachability import (
     unreachable_codes,
 )
@@ -198,12 +201,17 @@ async def _probe_plant(container: Container) -> None:
             "plan_missing", "启动时拿不到采集计划，采集将空转直到拿到为止"
         )
         return
-    unreachable = await unreachable_codes(plan.sources)
+    sources = tuple(
+        source
+        for source in plan.sources
+        if supports_startup_tcp_probe(source.protocol)
+    )
+    unreachable = await unreachable_codes(sources)
     if unreachable:
         _logger.error(
             "plant_unreachable",
             "有数据源在工控网上连不通，检查网卡与路由",
             source_codes=sorted(unreachable),
             unreachable_count=len(unreachable),
-            source_count=len(plan.sources),
+            source_count=len(sources),
         )

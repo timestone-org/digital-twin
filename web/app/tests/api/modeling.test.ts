@@ -307,3 +307,18 @@ describe('204 的那两条走 request 而不是 requestData', () => {
     expect(data).not.toHaveBeenCalled()
   })
 })
+
+describe('读取取消信号', () => {
+  const reads: [string, (signal: AbortSignal) => Promise<unknown>][] = [
+    ['算子目录', (signal) => modeling.listModelingOperators(signal)],
+    ['流水线', (signal) => modeling.getModelingPipeline('p1', signal)],
+    ['运行历史', (signal) => modeling.listModelingRuns('p1', {}, signal)],
+    ['节点预览', (signal) => modeling.getModelingNodeRun('r1', 'n1', signal)],
+  ]
+  it.each(reads)('%s传递相同信号到统一请求层', async (_name, read) => {
+    const controller = new AbortController()
+    await read(controller.signal)
+    expect(call()[1]['signal']).toBe(controller.signal)
+    expect(call()[1]['baseUrl']).toBe(PLATFORM_BASE_URL)
+  })
+})

@@ -5,6 +5,7 @@ from lib.objectstore.base import (
     ObjectStat,
     ObjectStore,
     ObjectStoreError,
+    ObjectStoreUnavailable,
     PresignedPost,
     UploadLimits,
 )
@@ -17,6 +18,7 @@ __all__ = [
     "ObjectStore",
     "ObjectStoreError",
     "ObjectStoreSettings",
+    "ObjectStoreUnavailable",
     "PresignedPost",
     "S3ObjectStore",
     "UploadLimits",

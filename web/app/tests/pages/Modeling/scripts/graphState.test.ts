@@ -39,6 +39,19 @@ function loaded(): ModelingGraph {
 }
 
 describe('画布上的图状态', () => {
+  it('保存响应期间撤销到已发送快照即干净，重做后仍脏', () => {
+    const graph = useModelingGraph()
+    graph.reset(loaded())
+    graph.addNode('src', { left: 200, top: 0 })
+    const sent = graph.graph.value
+    graph.addNode('mid', { left: 300, top: 0 })
+    graph.undo()
+    graph.markSaved(sent)
+    expect(graph.isDirty.value).toBe(false)
+    graph.redo()
+    expect(graph.isDirty.value).toBe(true)
+  })
+
   it('载图不算一次改动，也不进撤销栈', () => {
     const graph = useModelingGraph()
 

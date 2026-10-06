@@ -18,7 +18,7 @@ from platform_server.apps.collect.protocols import (
 
 
 def test_the_closed_sets_are_sorted_and_complete() -> None:
-    assert PROTOCOLS == ("modbus_tcp", "opcua")
+    assert PROTOCOLS == ("http", "modbus_tcp", "opcua")
     assert READ_MODES == ("poll", "subscribe")
     assert DATA_TYPES == ("bool", "float", "int", "string")
 
@@ -30,11 +30,7 @@ def test_a_check_constraint_list_quotes_every_value() -> None:
 def test_a_known_protocol_narrows() -> None:
     assert as_protocol("opcua") == "opcua"
     assert as_protocol("modbus_tcp") == "modbus_tcp"
-
-
-def test_http_is_readable_without_expanding_the_writable_set() -> None:
     assert as_protocol("http") == "http"
-    assert PROTOCOLS == ("modbus_tcp", "opcua")
 
 
 def test_an_unknown_protocol_is_refused() -> None:

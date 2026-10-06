@@ -217,7 +217,8 @@ export class PartsLayer {
   }
 
   private clear(): void {
-    for (const entry of this.entries) entry.materials?.dispose()
+    // ⚠ 重叠部件的材质与几何形成借用栈，必须先释放后建部件再还原原件。
+    for (const entry of [...this.entries].reverse()) entry.materials?.dispose()
     this.entries = []
   }
 }

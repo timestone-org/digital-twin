@@ -32,9 +32,29 @@ from collectwire import (
     reply_key,
     snapshot_key,
 )
+from collectwire.commands import (
+    REASON_HTTP_AUTH_REJECTED,
+    REASON_HTTP_CONFIG_INVALID,
+    REASON_HTTP_REQUEST_FAILED,
+    REASON_HTTP_RESPONSE_INVALID,
+)
 
 SOURCE_ID = UUID("0192f000-0000-7000-8000-000000000001")
 REQUEST_ID = "0192f111-0000-7000-8000-00000000000a"
+
+
+def test_http_command_reasons_are_stable() -> None:
+    assert (
+        REASON_HTTP_CONFIG_INVALID,
+        REASON_HTTP_AUTH_REJECTED,
+        REASON_HTTP_REQUEST_FAILED,
+        REASON_HTTP_RESPONSE_INVALID,
+    ) == (
+        "http_config_invalid",
+        "http_auth_rejected",
+        "http_request_failed",
+        "http_response_invalid",
+    )
 
 
 def test_the_command_keys_are_the_ones_in_redis() -> None:

@@ -236,6 +236,15 @@ async def test_probe_returns_none_when_the_source_answers() -> None:
         replies={ACTION_READ: {"status": "ok", "data": {"samples": []}}}
     )
     assert await build_bus(transport).probe(SOURCE_ID) is None
+    assert transport.budgets == [COMMAND_TIMEOUT_S]
+
+
+async def test_probe_can_override_the_default_transport_budget() -> None:
+    transport = FakeCommandTransport(
+        replies={ACTION_READ: {"status": "ok", "data": {"samples": []}}}
+    )
+    assert await build_bus(transport).probe(SOURCE_ID, timeout_s=11.0) is None
+    assert transport.budgets == [11.0]
 
 
 async def test_probe_returns_the_reason_when_the_source_is_offline() -> None:

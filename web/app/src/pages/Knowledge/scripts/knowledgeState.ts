@@ -6,8 +6,9 @@
  * `useRacedFetch`——手搓一份序号的话，漏掉某条路径不会有任何报错。
  */
 import { computed, getCurrentScope, onScopeDispose, ref, shallowRef } from 'vue'
+import type { Ref } from 'vue'
 
-import { listDocuments } from '@/api/knowledge'
+import { listBases, listDocuments, readBase } from '@/api/knowledge'
 import type {
   KnowledgeBase,
   KnowledgeCapability,
@@ -15,6 +16,7 @@ import type {
   KnowledgeSearchResult,
 } from '@/api/knowledge'
 import { useRacedFetch } from '@/composables/useRacedFetch'
+import type { RacedFetch } from '@/composables/useRacedFetch'
 
 /** 一次上传的进度（0–1）。总字节为 0 时浏览器给不出长度。 */
 export interface UploadState {
@@ -36,8 +38,8 @@ export function createState() {
   const isLoading = ref(false)
   const isRefreshing = ref(false)
   const isSearching = ref(false)
-  const documentsRace = useRacedFetch()
-  const searchesRace = useRacedFetch()
+  const isDisposed = ref(false)
+  const races = createRaces(isDisposed)
 
   const selected = computed<KnowledgeBase | null>(
     () => bases.value.find((one) => one.id === selectedId.value) ?? null,
@@ -46,15 +48,6 @@ export function createState() {
     (capability.value?.acceptedSuffixes ?? []).join(','),
   )
   const indexHint = computed(() => capability.value?.index.reason ?? '')
-
-  // ⚠ 离开这一页要作废在飞的那一次：不作废的话，之后才返回的那一次照样会写进
-  // 一个已经没人看的状态，请求本身也白占一条连接
-  if (getCurrentScope() !== undefined) {
-    onScopeDispose(() => {
-      documentsRace.cancel()
-      searchesRace.cancel()
-    })
-  }
 
   return {
     bases,
@@ -69,12 +62,34 @@ export function createState() {
     isLoading,
     isRefreshing,
     isSearching,
-    documentsRace,
-    searchesRace,
+    isDisposed,
+    ...races,
     selected,
     accept,
     indexHint,
   }
+}
+
+function createRaces(isDisposed: Ref<boolean>) {
+  const races = {
+    documentsRace: useRacedFetch(),
+    searchesRace: useRacedFetch(),
+    countsRace: useRacedFetch(),
+    reloadRace: useRacedFetch(),
+  }
+  cancelOnDispose(isDisposed, Object.values(races))
+  return races
+}
+
+function cancelOnDispose(
+  isDisposed: Ref<boolean>,
+  races: readonly RacedFetch[],
+): void {
+  if (getCurrentScope() === undefined) return
+  onScopeDispose(() => {
+    isDisposed.value = true
+    races.forEach((race) => race.cancel())
+  })
 }
 
 /** 页面状态的类型。 */
@@ -145,4 +160,97 @@ export async function refreshDocuments(state: KnowledgeState): Promise<void> {
       state.isRefreshing.value = false
     },
   })
+}
+
+/** 重取文档与服务端库统计，保留选库及新建、删除后的本地清单。 */
+export async function refreshLibrary(
+  state: KnowledgeState,
+  changedIds: readonly string[] = [],
+): Promise<void> {
+  if (state.isDisposed.value) return
+  if (state.isLoading.value && changedIds.length === 0) return
+  state.error.value = ''
+  await Promise.all([refreshDocuments(state), refreshCounts(state, changedIds)])
+}
+
+async function refreshCounts(
+  state: KnowledgeState,
+  changedIds: readonly string[],
+): Promise<void> {
+  const ids = [...new Set([state.selectedId.value, ...changedIds])].filter(
+    (id) => id !== '',
+  )
+  if (ids.length === 0) return
+  await state.countsRace.run((signal) => readCounts(ids, signal), {
+    ok: (rows) => {
+      const counts = new Map(rows.map((one) => [one.id, one.documentCount]))
+      state.bases.value = state.bases.value.map((base) => {
+        const count = counts.get(base.id)
+        return count === undefined ? base : { ...base, documentCount: count }
+      })
+    },
+    fail: (cause) => {
+      state.error.value = `文档数未刷新：${messageOf(cause)}`
+    },
+    settled: () => {},
+  })
+}
+
+async function readCounts(
+  ids: readonly string[],
+  signal: AbortSignal,
+): Promise<KnowledgeBase[]> {
+  const rows: KnowledgeBase[] = []
+  for (const id of ids) {
+    signal.throwIfAborted()
+    rows.push(await readBase(id, signal))
+  }
+  return rows
+}
+
+/** 整体重载与文档写后统计共用竞态守卫，旧清单不能覆盖新计数。 */
+export async function refreshBases(state: KnowledgeState): Promise<void> {
+  const selectedId = state.selectedId.value
+  await readBases(state, selectedId === '' ? [] : [selectedId], (rows) => {
+    const current = state.selected.value
+    if (current !== null && !rows.some((base) => base.id === current.id)) {
+      state.bases.value = [...rows, current]
+      state.error.value = '选中库文档数未刷新，请重试'
+    } else {
+      state.bases.value = rows
+    }
+  })
+}
+
+async function readBases(
+  state: KnowledgeState,
+  requiredIds: readonly string[],
+  accept: (rows: KnowledgeBase[]) => void,
+): Promise<void> {
+  if (state.isDisposed.value) return
+  await state.countsRace.run(
+    (signal) => readVisibleBases(requiredIds, signal),
+    {
+      ok: accept,
+      fail: (cause) => {
+        state.error.value = `文档数未刷新：${messageOf(cause)}`
+      },
+      settled: () => {},
+    },
+  )
+}
+
+/** 列表页外只补读已显示的有限ID；同一次取消中止余下串行请求。 */
+async function readVisibleBases(
+  requiredIds: readonly string[],
+  signal: AbortSignal,
+): Promise<KnowledgeBase[]> {
+  const rows = [...(await listBases(signal))]
+  const included = new Set(rows.map((base) => base.id))
+  for (const id of new Set(requiredIds)) {
+    if (included.has(id)) continue
+    signal.throwIfAborted()
+    rows.push(await readBase(id, signal))
+  }
+  return rows
 }

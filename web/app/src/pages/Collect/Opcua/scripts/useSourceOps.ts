@@ -45,10 +45,6 @@ async function setEnabled(
   source: CollectSource,
   next: boolean,
 ): Promise<void> {
-  if (source.protocol === 'http' && next) {
-    ctx.toast.error('当前版本不支持启用 HTTP 数据源')
-    return
-  }
   ctx.busyId.value = source.id
   try {
     await collect.updateSource(source.id, { is_enabled: next })
@@ -66,10 +62,6 @@ async function setEnabled(
 }
 
 async function test(ctx: Ctx, source: CollectSource): Promise<void> {
-  if (source.protocol === 'http') {
-    ctx.toast.error('当前版本不支持测试 HTTP 数据源连接')
-    return
-  }
   ctx.busyId.value = source.id
   try {
     const result = await collect.testSource(source.id)
@@ -104,10 +96,6 @@ async function update(
 ): Promise<void> {
   const target = ctx.formSource.value
   if (target === null) return
-  if (target.protocol === 'http') {
-    ctx.toast.error('当前版本只支持读取、停用和删除 HTTP 数据源')
-    return
-  }
   try {
     await collect.updateSource(target.id, input)
     ctx.formOpen.value = false
@@ -139,10 +127,6 @@ export function useSourceOps(reload: () => Promise<void>): SourceOps {
       ctx.formOpen.value = true
     },
     openEdit: (source) => {
-      if (source.protocol === 'http') {
-        ctx.toast.error('当前版本只支持读取、停用和删除 HTTP 数据源')
-        return
-      }
       ctx.formSource.value = source
       ctx.formOpen.value = true
     },

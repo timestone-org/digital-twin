@@ -11,12 +11,22 @@ from typing import TYPE_CHECKING, Any, cast
 
 import boto3
 from botocore.client import Config as BotoConfig
-from botocore.exceptions import BotoCoreError, ClientError
+from botocore.exceptions import (
+    BotoCoreError,
+    ClientError,
+    ConnectionClosedError,
+    ConnectTimeoutError,
+    EndpointConnectionError,
+    IncompleteReadError,
+    ReadTimeoutError,
+    ResponseStreamingError,
+)
 
 from lib.objectstore.base import (
     ObjectNotFound,
     ObjectStat,
     ObjectStoreError,
+    ObjectStoreUnavailable,
     PresignedPost,
     UploadLimits,
 )
@@ -29,6 +39,24 @@ if TYPE_CHECKING:  # pragma: no cover - 仅类型检查期，运行期不装这�
 _MISSING_CODES = frozenset({"404", "NoSuchKey", "NotFound"})
 # 一次 list 的上限，超过要翻页
 _PAGE_SIZE = 1000
+_TEMPORARY_CODES = frozenset(
+    {
+        "SlowDown",
+        "RequestTimeout",
+        "InternalError",
+        "ServiceUnavailable",
+        "Throttling",
+    }
+)
+_TEMPORARY_STATUSES = frozenset({"408", "429", "500", "502", "503", "504"})
+_TEMPORARY_ERRORS = (
+    ConnectTimeoutError,
+    ReadTimeoutError,
+    EndpointConnectionError,
+    ConnectionClosedError,
+    IncompleteReadError,
+    ResponseStreamingError,
+)
 
 
 def _is_missing(error: ClientError) -> bool:
@@ -37,6 +65,17 @@ def _is_missing(error: ClientError) -> bool:
         error.response.get("ResponseMetadata", {}).get("HTTPStatusCode", "")
     )
     return code in _MISSING_CODES or status == "404"
+
+
+def _is_temporary(error: ClientError) -> bool:
+    """只认明确的瞬时服务端故障，身份拒绝保持永久。Args: error。"""
+    status = str(
+        error.response.get("ResponseMetadata", {}).get("HTTPStatusCode", "")
+    )
+    if status in ("401", "403"):
+        return False
+    code = str(error.response.get("Error", {}).get("Code", ""))
+    return code in _TEMPORARY_CODES or status in _TEMPORARY_STATUSES
 
 
 class S3ObjectStore:
@@ -65,16 +104,24 @@ class S3ObjectStore:
     async def get_bytes(self, key: str) -> bytes:
         """读一个对象；不存在抛 `ObjectNotFound`。"""
         response = await self._call(
-            self._client.get_object, Bucket=self._bucket, Key=key, key=key
+            self._client.get_object,
+            Bucket=self._bucket,
+            Key=key,
+            key=key,
+            is_read=True,
         )
         body = cast(dict[str, Any], response)["Body"]
-        return cast(bytes, await asyncio.to_thread(body.read))
+        return cast(bytes, await self._call(body.read, is_read=True))
 
     async def stat(self, key: str) -> ObjectStat | None:
         """取元信息；不存在给 None。"""
         try:
             head = await self._call(
-                self._client.head_object, Bucket=self._bucket, Key=key, key=key
+                self._client.head_object,
+                Bucket=self._bucket,
+                Key=key,
+                key=key,
+                is_read=True,
             )
         except ObjectNotFound:
             return None
@@ -126,6 +173,7 @@ class S3ObjectStore:
                     Bucket=self._bucket,
                     Prefix=prefix,
                     MaxKeys=_PAGE_SIZE,
+                    is_read=True,
                     **extra,
                 ),
             )
@@ -167,9 +215,14 @@ class S3ObjectStore:
         )
 
     async def _call(
-        self, fn: Any, *, key: str | None = None, **kwargs: Any
+        self,
+        fn: Any,
+        *,
+        key: str | None = None,
+        is_read: bool = False,
+        **kwargs: Any,
     ) -> Any:
-        """把一次同步调用挪进线程，并把底层异常收敛成本模块的两种。
+        """把同步调用挪进线程并显式分类；只有明确的瞬时读故障可重试。
 
         @param key 供「不存在」判定用；不传表示该操作不区分缺失
         """
@@ -178,9 +231,13 @@ class S3ObjectStore:
         except ClientError as error:
             if key is not None and _is_missing(error):
                 raise ObjectNotFound(f"对象不存在：{key}") from error
+            if is_read and _is_temporary(error):
+                raise ObjectStoreUnavailable("对象存储暂时不可用") from error
             raise ObjectStoreError("对象存储拒绝了一次操作") from error
         except BotoCoreError as error:
-            raise ObjectStoreError("对象存储不可达") from error
+            if is_read and isinstance(error, _TEMPORARY_ERRORS):
+                raise ObjectStoreUnavailable("对象存储暂时不可用") from error
+            raise ObjectStoreError("对象存储操作失败") from error
 
 
 def create_object_store(settings: ObjectStoreSettings) -> S3ObjectStore:

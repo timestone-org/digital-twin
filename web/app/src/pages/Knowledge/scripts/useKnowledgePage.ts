@@ -5,7 +5,7 @@
  * 动作那一堆逐个都要拿到整份状态，写在一个闭包里会顶破函数行数上限。
  */
 import * as actions from './knowledgeActions'
-import { createState, refreshDocuments } from './knowledgeState'
+import { createState, refreshLibrary } from './knowledgeState'
 
 export type { UploadState } from './knowledgeState'
 
@@ -15,7 +15,7 @@ export function useKnowledgePage() {
     ...state,
     reload: () => actions.reload(state),
     select: (baseId: string) => actions.select(state, baseId),
-    refreshDocuments: () => refreshDocuments(state),
+    refreshDocuments: () => refreshLibrary(state),
     create: (name: string, description: string) =>
       actions.create(state, name, description),
     drop: (baseId: string) => actions.drop(state, baseId),

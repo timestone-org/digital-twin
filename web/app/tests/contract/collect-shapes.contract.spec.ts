@@ -37,7 +37,6 @@ import {
   COLLECT_MIN_INTERVAL_MS,
   COLLECT_POINT_BATCH_MAX,
   COLLECT_PROTOCOLS,
-  COLLECT_READABLE_PROTOCOLS,
   COLLECT_READ_MODES,
 } from '@dt/contracts'
 
@@ -219,17 +218,18 @@ describe('@dt/contracts 的采集类型与 openapi.json 的字段一致', () => 
 })
 
 /** 从 openapi 里取一个字段的枚举 / const 取值集合。 */
-function literalsOf(schemaName: string, field: string): unknown[] {
+function literalsOf(schemaName: string, field: string): string[] {
   const property = schemas[schemaName]?.properties?.[field]
-  const found: unknown[] = []
+  const found: string[] = []
   const walk = (node: unknown): void => {
     if (typeof node !== 'object' || node === null) return
     const shape: Record<string, unknown> = { ...node }
     if (Array.isArray(shape.enum)) {
-      const values: unknown[] = shape.enum
-      found.push(...values)
+      for (const value of shape.enum) {
+        if (typeof value === 'string') found.push(value)
+      }
     }
-    if (Object.hasOwn(shape, 'const')) found.push(shape.const)
+    if (typeof shape.const === 'string') found.push(shape.const)
     for (const value of Object.values(shape)) {
       if (Array.isArray(value)) value.forEach(walk)
       else walk(value)
@@ -239,16 +239,6 @@ function literalsOf(schemaName: string, field: string): unknown[] {
   return [...new Set(found)].sort()
 }
 
-/** 兼容阶段的创建面必须保留旧协议，且不能超出已知读取集合。 */
-function isCompatibleProtocolProducer(protocols: readonly unknown[]): boolean {
-  return (
-    COLLECT_PROTOCOLS.every((protocol) => protocols.includes(protocol)) &&
-    protocols.every((protocol) =>
-      COLLECT_READABLE_PROTOCOLS.some((reader) => reader === protocol),
-    )
-  )
-}
-
 /** 从 openapi 里取一个字段的数值约束。 */
 function constraintOf(schemaName: string, field: string, key: string): unknown {
   const property = schemas[schemaName]?.properties?.[field]
@@ -256,49 +246,11 @@ function constraintOf(schemaName: string, field: string, key: string): unknown {
   return Reflect.get(property, key)
 }
 
-describe('const 联合与后端的兼容闭合集合一致', () => {
+describe('const 联合与后端的闭合集合一致', () => {
   it('协议', () => {
-    expect(
-      isCompatibleProtocolProducer(literalsOf('SourceCreateIn', 'protocol')),
-    ).toBe(true)
-  })
-
-  it('前端创建集合保持旧两协议，读取集合只有已知三协议', () => {
-    expect([...COLLECT_PROTOCOLS].sort()).toEqual(['modbus_tcp', 'opcua'])
-    expect([...COLLECT_READABLE_PROTOCOLS].sort()).toEqual([
-      'http',
-      'modbus_tcp',
-      'opcua',
-    ])
-  })
-
-  it.each([
-    { name: '旧两协议', protocols: ['modbus_tcp', 'opcua'], allowed: true },
-    {
-      name: '已知三协议',
-      protocols: ['http', 'modbus_tcp', 'opcua'],
-      allowed: true,
-    },
-    {
-      name: '未知协议',
-      protocols: ['mqtt', 'modbus_tcp', 'opcua'],
-      allowed: false,
-    },
-    { name: '缺少 Modbus', protocols: ['http', 'opcua'], allowed: false },
-    { name: '缺少 OPC UA', protocols: ['http', 'modbus_tcp'], allowed: false },
-    { name: '数字取值', protocols: ['modbus_tcp', 'opcua', 3], allowed: false },
-    {
-      name: '空取值',
-      protocols: ['modbus_tcp', 'opcua', null],
-      allowed: false,
-    },
-    {
-      name: '布尔取值',
-      protocols: ['modbus_tcp', 'opcua', true],
-      allowed: false,
-    },
-  ])('$name 的后端创建集合按闭合边界判定', ({ protocols, allowed }) => {
-    expect(isCompatibleProtocolProducer(protocols)).toBe(allowed)
+    expect([...COLLECT_PROTOCOLS].sort()).toEqual(
+      literalsOf('SourceCreateIn', 'protocol'),
+    )
   })
 
   it('读取方式', () => {

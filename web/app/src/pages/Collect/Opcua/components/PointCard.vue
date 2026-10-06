@@ -17,10 +17,9 @@ const props = withDefaults(
     selected: boolean
     archiveBusy: boolean
     canWrite?: boolean
-    canEdit?: boolean
     error?: string | undefined
   }>(),
-  { canWrite: true, canEdit: true },
+  { canWrite: true },
 )
 const emit = defineEmits<{
   detail: []
@@ -105,7 +104,7 @@ const fullTime = computed(() =>
         <DtSwitch
           size="sm"
           :model-value="point.archive_enabled"
-          :disabled="archiveBusy || !canManage || !canEdit"
+          :disabled="archiveBusy || !canManage"
           :aria-label="`记录历史：${point.name}`"
           @update:model-value="emit('archive', $event)"
         />
@@ -119,7 +118,6 @@ const fullTime = computed(() =>
         </PermGuard>
         <PermGuard :codes="[PERMISSION_CODES.collectManage]">
           <DtButton
-            v-if="canEdit"
             variant="ghost"
             intent="neutral"
             size="xs"

@@ -7,7 +7,7 @@
  */
 import { normalizeTwinConfig, type TwinPart } from '@dt/twin-config'
 import * as THREE from 'three'
-import { describe, expect, it } from 'vitest'
+import { describe, expect, it, vi } from 'vitest'
 
 import type { DistanceContext } from '../src/distanceContext'
 import { buildNodeIndex } from '../src/nodeIndex'
@@ -429,6 +429,48 @@ describe('状态染色', () => {
 })
 
 describe('重建', () => {
+  it('重叠透明部件只让最后一个部件持有排序，重建时还原所有资源', () => {
+    const { root, inside, shared } = model()
+    const geometry = inside.geometry
+    const beforeRender = vi.fn()
+    inside.onBeforeRender = beforeRender
+    const config = normalizeTwinConfig({
+      parts: [
+        {
+          id: 'first',
+          nodes: ['pump'],
+          look: { opacity: 0.5 },
+          visibility: {
+            fade: {
+              at: { ref: 'orbit', value: 20 },
+              direction: 'above',
+              opacity: 0.25,
+            },
+          },
+        },
+        { id: 'last', nodes: ['pump'], look: { opacity: 0.75 } },
+      ],
+    }).parts
+    const layer = new PartsLayer()
+    layer.build(buildNodeIndex(root), config)
+    layer.apply(context(10))
+    const sorted = inside.geometry
+    let disposed = 0
+    sorted.addEventListener('dispose', () => {
+      disposed += 1
+    })
+
+    layer.apply(context(50))
+
+    expect(inside.geometry).toBe(sorted)
+    layer.build(buildNodeIndex(root), [])
+    expect(inside.geometry).toBe(geometry)
+    expect(inside.material).toBe(shared)
+    expect(inside.onBeforeRender === beforeRender).toBe(true)
+    expect(disposed).toBe(1)
+    layer.dispose()
+  })
+
   // ⚠ 编辑器每改一次配置都会重建这一层：不把原材质装回去的话，克隆的是上一次
   //   改过的那一份，透明度每重建一次就更暗一层，而且没有任何报错
   it('反复重建不让透明度一路往下漂', () => {

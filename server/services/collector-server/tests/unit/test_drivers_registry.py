@@ -6,6 +6,7 @@
 import pytest
 
 from collector_server.apps.collect.drivers.base import DriverConnection
+from collector_server.apps.collect.drivers.http.driver import HttpDriver
 from collector_server.apps.collect.drivers.modbus_tcp.driver import (
     ModbusTcpDriver,
 )
@@ -22,7 +23,7 @@ CONNECTION = DriverConnection(endpoint="opc.tcp://127.0.0.1:4840/x")
 
 
 def test_supported_protocols_are_explicit() -> None:
-    assert supported_protocols() == ("modbus_tcp", "opcua")
+    assert supported_protocols() == ("http", "modbus_tcp", "opcua")
 
 
 def test_opcua_protocol_builds_the_opcua_driver() -> None:
@@ -40,3 +41,8 @@ def test_unknown_protocol_is_refused() -> None:
     with pytest.raises(UnknownProtocol) as raised:
         create_driver("s7", CONNECTION)
     assert raised.value.reason == "unknown_protocol"
+
+
+def test_http_protocol_builds_a_read_only_poll_driver() -> None:
+    connection = DriverConnection(endpoint="http://127.0.0.1:18080/data")
+    assert isinstance(create_driver("http", connection), HttpDriver)

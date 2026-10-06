@@ -18,7 +18,7 @@ import {
   DtTag,
   useToast,
 } from '@dt/ui'
-import { computed, onBeforeUnmount, onMounted, ref } from 'vue'
+import { computed, onBeforeUnmount, onMounted, ref, watch } from 'vue'
 import { useRoute, useRouter } from 'vue-router'
 
 import PermGuard from '@/components/PermGuard.vue'
@@ -46,6 +46,8 @@ import { useConfigPanel } from './scripts/useConfigPanel'
 import { edgeOf } from './scripts/useCanvasWiring'
 import { useCanvasMenu } from './scripts/useCanvasMenu'
 import { useCanvasPage } from './scripts/useCanvasPage'
+import { useCanvasSaving } from './scripts/useCanvasSaving'
+import { useCanvasLeaveGuard } from './scripts/useCanvasLeaveGuard'
 import { useCanvasShortcuts } from './scripts/useCanvasShortcuts'
 import { useResultPanel } from './scripts/useResultPanel'
 
@@ -74,10 +76,17 @@ const pipelineId = computed(() => String(route.params['pipelineId'] ?? ''))
 // 那颗按钮，没有写权限时给的是 PermGuard 的那句说明
 // 这次运行要不要留全量结果。⚠ 默认关，理由见上面那条注释
 const isKeepingFrames = ref(false)
+const saving = useCanvasSaving(
+  page,
+  () => pipelineId.value,
+  () => isKeepingFrames.value,
+)
+useCanvasLeaveGuard(() => page.graph.isDirty.value, saving.cancel)
 
 const isReadonly = computed(
   () =>
     page.isReplaying.value ||
+    page.isOpening.value ||
     !auth.can([PERMISSION_CODES.modelingManage], 'all'),
 )
 
@@ -153,34 +162,6 @@ function applyRename(): void {
   renameNodeId.value = null
 }
 
-async function saveGraph(): Promise<void> {
-  if (await page.doc.save(page.graph.graph.value)) page.graph.markSaved()
-}
-
-/**
- * 存图 → 校验 → 起一次运行。
- *
- * ⚠ 校验要在前端这一步拦下来：后端那条 400 只带一句「流水线还有问题」，逐条
- * 定位信息在信封的 details 里，而 `describeError` 只取 message。
- */
-async function runOnce(): Promise<void> {
-  if (
-    page.graph.isDirty.value &&
-    !(await page.doc.save(page.graph.graph.value))
-  )
-    return
-  page.graph.markSaved()
-  page.stopChecking()
-  if (!(await page.doc.validate(page.graph.graph.value))) {
-    toast.warning(
-      page.issueViews.value[0]?.message ?? '流水线还有问题，先改好再运行',
-    )
-    return
-  }
-  await page.runner.start(pipelineId.value, isKeepingFrames.value)
-  await page.loadRuns(pipelineId.value)
-}
-
 /**
  * 回看某一次运行。
  *
@@ -233,14 +214,21 @@ onBeforeUnmount(() => {
   if (clock.value !== null) clearInterval(clock.value)
 })
 
-onMounted(async () => {
+onMounted(() => {
   clock.value = setInterval(() => (tick.value = nowStamp()), 1000)
   void config.loadTables()
-  await page.open(pipelineId.value)
-  // 带着 ?run_id= 进来的（同事发过来的链接、或刷新）直接落到只读回看
-  const wanted = route.query['run_id']
-  if (typeof wanted === 'string' && wanted !== '') await page.replay(wanted)
 })
+
+watch(
+  pipelineId,
+  async (id) => {
+    const wanted = route.query['run_id']
+    if (!(await page.open(id)) || pipelineId.value !== id) return
+    // 带着 ?run_id= 进来的（同事发过来的链接、或刷新）直接落到只读回看
+    if (typeof wanted === 'string' && wanted !== '') await page.replay(wanted)
+  },
+  { immediate: true },
+)
 </script>
 
 <template>
@@ -279,6 +267,7 @@ onMounted(async () => {
         size="sm"
         icon="list-checks"
         title="运行历史"
+        :disabled="page.isOpening.value"
         @click="isHistoryOpen = true"
       >
         运行历史
@@ -312,9 +301,13 @@ onMounted(async () => {
           size="sm"
           icon="save"
           title="保存"
-          :disabled="isReadonly || !page.graph.isDirty.value"
+          :disabled="
+            isReadonly ||
+            !page.graph.isDirty.value ||
+            saving.isPreparingRun.value
+          "
           :loading="page.doc.isSaving.value"
-          @click="void saveGraph()"
+          @click="void saving.save()"
         >
           保存
         </DtButton>
@@ -324,16 +317,20 @@ onMounted(async () => {
           v-model:is-keeping-frames="isKeepingFrames"
           :is-running="page.runner.run.value?.status === 'running'"
           :is-readonly="isReadonly"
-          :is-starting="page.runner.isStarting.value"
-          @run="void runOnce()"
+          :is-starting="
+            page.runner.isStarting.value ||
+            saving.isPreparingRun.value ||
+            page.doc.isSaving.value
+          "
+          @run="void saving.run()"
           @cancel="void page.runner.cancel()"
         />
       </PermGuard>
     </template>
 
     <DtPageState
-      v-if="page.doc.isLoading.value || page.doc.error.value"
-      :loading="page.doc.isLoading.value"
+      v-if="page.isOpening.value || page.doc.error.value"
+      :loading="page.isOpening.value"
       :error="page.doc.error.value"
       :empty="false"
     />

@@ -9,16 +9,20 @@ import type {
   ModelingNodeRun,
   ModelingNodeRunSummary,
   ModelingOperator,
-  ModelingRun,
   ModelingRunSummary,
 } from '@dt/contracts'
 import { useToast } from '@dt/ui'
-import type { Ref, ShallowRef } from 'vue'
-import { computed, ref, shallowRef, watch } from 'vue'
+import { computed, onBeforeUnmount, ref, shallowRef, watch } from 'vue'
 
-import * as modeling from '@/api/modeling'
-import { describeError } from '@/composables/useAsyncList'
+import { useRacedFetch } from '@/composables/useRacedFetch'
 
+import {
+  backToEditing,
+  loadCanvasRuns,
+  openCanvasPage,
+  replayCanvasRun,
+} from './canvasPageReads'
+import type { PageState } from './canvasPageReads'
 import { headlineFromPayload } from './nodeHeadline'
 import type { NodeRuntime } from './nodeState'
 import { stateOf } from './nodeState'
@@ -28,9 +32,6 @@ import { useModelingGraph } from './useModelingGraph'
 import { usePipelineDoc } from './usePipelineDoc'
 import { useRunPolling } from './useRunPolling'
 
-/** 运行历史一次取这么多。够翻半天了，再多就该做分页了。 */
-const RUN_PAGE_SIZE = 50
-
 /**
  * 一轮运行最多替用户预取这么多份结果摘要。
  *
@@ -38,6 +39,13 @@ const RUN_PAGE_SIZE = 50
  * 几十个节点的流水线全预取会一口气拉下十几兆。
  */
 const MAX_PREFETCH = 24
+
+/** 算子目录按代码索引供参数面板查找。 */
+function operatorsOf(
+  operators: readonly ModelingOperator[],
+): ReadonlyMap<string, ModelingOperator> {
+  return new Map(operators.map((item) => [item.code, item]))
+}
 
 /** 把节点的运行状态摊成画布要的表，顺带算出卡片上那行数字。 */
 function runtimeOf(
@@ -70,85 +78,9 @@ function prefetchPreviews(state: PageState): void {
   }
 }
 
-/** 拉一页运行历史。出错时弹一次并给空。 */
-async function fetchRuns(
-  pipelineId: string,
-  toast: ReturnType<typeof useToast>,
-): Promise<readonly ModelingRunSummary[]> {
-  try {
-    const page = await modeling.listModelingRuns(pipelineId, {
-      size: RUN_PAGE_SIZE,
-    })
-    return page.items
-  } catch (caught) {
-    toast.error(describeError(caught))
-    return []
-  }
-}
-
-/** 取一次运行的详情（含当时那份图）。出错时弹一次并给 null。 */
-async function fetchRun(
-  runId: string,
-  toast: ReturnType<typeof useToast>,
-): Promise<ModelingRun | null> {
-  try {
-    return await modeling.getModelingRun(runId)
-  } catch (caught) {
-    toast.error(describeError(caught))
-    return null
-  }
-}
-
-/** 页面手上那几摊状态，三个动作都在它上面操作。 */
-interface PageState {
-  doc: ReturnType<typeof usePipelineDoc>
-  graph: ReturnType<typeof useModelingGraph>
-  selection: ReturnType<typeof useCanvasSelection>
-  runner: ReturnType<typeof useRunPolling>
-  operators: ShallowRef<readonly ModelingOperator[]>
-  runs: Ref<readonly ModelingRunSummary[]>
-  isReplaying: Ref<boolean>
-  toast: ReturnType<typeof useToast>
-}
-
-/** 进页面：算子目录、流水线、历史三样一起拉。 */
-async function open(state: PageState, pipelineId: string): Promise<void> {
-  const [catalog, loaded, history] = await Promise.all([
-    modeling.listModelingOperators().catch(() => []),
-    state.doc.load(pipelineId),
-    fetchRuns(pipelineId, state.toast),
-  ])
-  state.operators.value = catalog
-  state.runs.value = history
-  if (loaded === null) return
-  state.graph.reset(loaded.graph)
-  // ⚠ 进页面就校一次不等防抖：列候选也来自这一趟，晚 400 毫秒就是「刚打开时
-  // 参数面板把台账全部的列都列出来」
-  void state.doc.validate(loaded.graph, true)
-}
-
-/** 回看一次历史运行：画布换成当时那份图，并切成只读。 */
-async function replay(state: PageState, runId: string): Promise<void> {
-  const picked = await fetchRun(runId, state.toast)
-  if (picked === null) return
-  state.selection.clear()
-  state.isReplaying.value = true
-  state.doc.clearCheck()
-  state.graph.reset(picked.graph)
-  state.runner.watchRun(picked)
-}
-
-/** 回到「在编辑当前这版图」的状态。 */
-function backToEditing(state: PageState, current: ModelingGraph | null): void {
-  state.runner.stop()
-  state.runner.run.value = null
-  state.isReplaying.value = false
-  state.selection.clear()
-  state.graph.reset(current)
-}
-
-export function useCanvasPage() {
-  const state: PageState = {
+/** GET各路径独立竞态闸，写动作仍使用各自生命周期。 */
+function createPageState(): PageState {
+  return {
     doc: usePipelineDoc(),
     graph: useModelingGraph(),
     selection: useCanvasSelection(),
@@ -156,12 +88,27 @@ export function useCanvasPage() {
     operators: shallowRef<readonly ModelingOperator[]>([]),
     runs: ref<readonly ModelingRunSummary[]>([]),
     isReplaying: ref(false),
+    isOpening: ref(false),
     toast: useToast(),
+    loading: useRacedFetch(),
+    replaying: useRacedFetch(),
+    history: useRacedFetch(),
+    isDisposed: false,
   }
+}
 
-  const operatorMap = computed(
-    () => new Map(state.operators.value.map((item) => [item.code, item])),
-  )
+function disposePage(state: PageState): void {
+  state.isDisposed = true
+  state.loading.cancel()
+  state.replaying.cancel()
+  state.history.cancel()
+}
+
+export function useCanvasPage() {
+  const state = createPageState()
+  onBeforeUnmount(() => disposePage(state))
+
+  const operatorMap = computed(() => operatorsOf(state.operators.value))
   const runtime = computed(() =>
     runtimeOf(state.runner.run.value?.nodes ?? [], state.runner.previews.value),
   )
@@ -184,11 +131,9 @@ export function useCanvasPage() {
     ...state,
     operatorMap,
     runtime,
-    loadRuns: async (pipelineId: string) => {
-      state.runs.value = await fetchRuns(pipelineId, state.toast)
-    },
-    open: (pipelineId: string) => open(state, pipelineId),
-    replay: (runId: string) => replay(state, runId),
+    loadRuns: (pipelineId: string) => loadCanvasRuns(state, pipelineId),
+    open: (pipelineId: string) => openCanvasPage(state, pipelineId),
+    replay: (runId: string) => replayCanvasRun(state, runId),
     backToEditing: (current: ModelingGraph | null) =>
       backToEditing(state, current),
     /** 问题清单在界面上的样子。 */

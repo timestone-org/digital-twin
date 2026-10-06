@@ -20,7 +20,8 @@ export function pushHistory(
   history: readonly ModelingGraph[],
   current: ModelingGraph,
 ): ModelingGraph[] {
-  return [...history, structuredClone(current)].slice(-MAX_HISTORY)
+  // ⚠ advance 只改拷贝；保留帧引用才能在撤销时识别已保存快照。
+  return [...history, current].slice(-MAX_HISTORY)
 }
 
 /** 在一份拷贝上改，改完把新的那份给回来。原图不动。 */

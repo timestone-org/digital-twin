@@ -14,6 +14,7 @@
  */
 import * as THREE from 'three'
 import { OrbitControls } from 'three/examples/jsm/controls/OrbitControls.js'
+import { TransparentGeometry } from './transparentGeometry'
 import {
   attachStudioEnvironment,
   configureStudioColor,
@@ -86,6 +87,33 @@ function bakedClone(source: THREE.Object3D): THREE.Object3D {
   source.updateWorldMatrix(true, false)
   clone.applyMatrix4(source.matrixWorld)
   return clone
+}
+
+function isMesh(object: THREE.Object3D): object is THREE.Mesh {
+  return object instanceof THREE.Mesh
+}
+
+function createStage(objects: readonly THREE.Object3D[]): THREE.Group {
+  const stage = new THREE.Group()
+  for (const object of dropNestedObjects(objects)) stage.add(bakedClone(object))
+  return stage
+}
+
+function sortPreviewGeometry(root: THREE.Object3D): TransparentGeometry[] {
+  const sorting: TransparentGeometry[] = []
+  root.traverse((object) => {
+    if (!isMesh(object)) return
+    const mesh = object
+    const materials = Array.isArray(mesh.material)
+      ? mesh.material
+      : [mesh.material]
+    const needsSorting = materials.some(
+      (material) => material.transparent && material.forceSinglePass,
+    )
+    if (needsSorting && TransparentGeometry.supports(mesh))
+      sorting.push(new TransparentGeometry(mesh))
+  })
+  return sorting
 }
 
 /** 这个对象的某个祖先也在清单里吗。 */
@@ -193,11 +221,9 @@ export function createPartPreview(
     renderer instanceof THREE.WebGLRenderer
       ? attachStudioEnvironment(scene, lighting, loadStudioEnvironment)
       : () => {}
-  const stage = new THREE.Group()
-  for (const object of dropNestedObjects(options.objects)) {
-    stage.add(bakedClone(object))
-  }
+  const stage = createStage(options.objects)
   const box = centerAt(stage)
+  const sorting = sortPreviewGeometry(stage)
   scene.add(lighting, stage)
 
   const camera = new THREE.PerspectiveCamera(PREVIEW_FOV_DEG, 1, MIN_NEAR, 1)
@@ -228,6 +254,7 @@ export function createPartPreview(
     canvas,
     stage,
     lighting,
+    sorting,
     box,
     span: box.isEmpty() ? 1 : box.getSize(new THREE.Vector3()).length(),
     autoRotate: options.autoRotate,
@@ -239,6 +266,7 @@ export function createPartPreview(
 
 /** 造好之后能对外做的三件事：量尺寸、推一帧、释放。 */
 interface HandleParts {
+  sorting: readonly TransparentGeometry[]
   cancelEnvironment: () => void
   renderer: SceneRenderer
   scene: THREE.Scene
@@ -290,6 +318,7 @@ function makeHandle(parts: HandleParts): PartPreview {
     },
 
     dispose: () => {
+      for (const sorting of parts.sorting) sorting.dispose()
       parts.cancelEnvironment()
       scene.environment?.dispose()
       scene.environment = null

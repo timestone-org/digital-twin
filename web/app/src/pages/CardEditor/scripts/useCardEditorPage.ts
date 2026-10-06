@@ -52,7 +52,6 @@ interface CardPageState {
 
 /**
  * 整份重取。
- * @param state 状态袋
  * @param dashboardId 取哪张屏
  */
 async function loadInto(
@@ -61,6 +60,8 @@ async function loadInto(
 ): Promise<void> {
   if (dashboardId === '') return
   const { doc } = state
+  doc.loadGeneration = (doc.loadGeneration ?? 0) + 1
+  doc.saving.value = false
   doc.loading.value = true
   doc.error.value = null
   doc.conflict.value = null
@@ -86,8 +87,6 @@ async function loadInto(
  * 改这个节点的整份 config。
  * ⚠ 换出一份新的 `dashboard` 而不是就地改：`shallowRef` 只认引用变化，就地改的话
  * 预览与表单都不会重算，用户看到的是「拖了没反应」。
- * @param state 状态袋
- * @param next 新的整份配置
  */
 function setConfigOn(
   state: CardPageState,
@@ -104,9 +103,30 @@ function setConfigOn(
   state.isDirty.value = true
 }
 
+/** 回填当前资源的保存版本，同时保留请求期间新增的草稿。 */
+function acceptSavedCard(
+  state: CardPageState,
+  current: DashboardPayload,
+  saved: DashboardPayload,
+  generation: number,
+): void {
+  if (generation !== (state.doc.loadGeneration ?? 0)) return
+  const draft = state.doc.dashboard.value
+  if (draft === null || draft.id !== current.id) return
+  if (draft === current || draft === saved) {
+    state.doc.dashboard.value = saved
+    state.isDirty.value = false
+  } else {
+    state.doc.dashboard.value = {
+      ...draft,
+      rowVersion: saved.rowVersion,
+      updatedAt: saved.updatedAt,
+    }
+  }
+}
+
 /**
  * 整树替换落库。
- * @param state 状态袋
  * @param save0 借 `docIo` 那份 409 口径
  */
 async function saveFrom(
@@ -114,15 +134,16 @@ async function saveFrom(
   save0: (input: ReplaceLayoutInput) => Promise<DashboardPayload | null>,
 ): Promise<boolean> {
   const current = state.doc.dashboard.value
-  if (current === null) return false
+  if (current === null || state.doc.saving.value || state.doc.loading.value)
+    return false
+  const generation = state.doc.loadGeneration ?? 0
   const saved = await save0({
     // ⚠ 带上当前行版本：不带就成了「无条件覆盖」，别人在这期间改过的会被静默抹掉
     expectedVersion: current.rowVersion,
     nodes: toLayoutInput(current.nodes),
   })
   if (saved === null) return false
-  state.doc.dashboard.value = saved
-  state.isDirty.value = false
+  acceptSavedCard(state, current, saved, generation)
   return true
 }
 
@@ -170,6 +191,9 @@ export function useCardEditorPage(
     setConfig: (next) => setConfigOn(state, next),
     load: () => loadInto(state, dashboardId()),
     save: () => saveFrom(state, save0),
-    dispose: state.raced.cancel,
+    dispose: () => {
+      doc.loadGeneration = (doc.loadGeneration ?? 0) + 1
+      state.raced.cancel()
+    },
   }
 }

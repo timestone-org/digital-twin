@@ -14,6 +14,11 @@ import type {
 } from '@dt/contracts'
 
 import { mergeOptions } from './sourceFormOptions'
+import {
+  validateHttpAuth,
+  validateHttpEndpoint,
+  validateHttpOptions,
+} from './httpSourceOptions'
 
 /** 编码只能用字母数字与 . _ -，且以字母或数字开头。它是数据源的身份。 */
 const CODE_PATTERN = /^[A-Za-z0-9][A-Za-z0-9._-]*$/
@@ -36,6 +41,7 @@ export interface SourceFormValues {
   isCredentialCleared: boolean
   isEnabled: boolean
   extraOptions: Record<string, string>
+  hasCredential?: boolean
 }
 
 /**
@@ -51,11 +57,28 @@ export function validateSourceForm(
   if (!isEdit && !CODE_PATTERN.test(values.code.trim()))
     return '编码只能用字母、数字与 . _ -，且以字母或数字开头'
   if (values.endpoint.trim() === '') return '请填写 Endpoint 地址'
-  const securityError = validateSecurity(values)
-  if (securityError !== null) return securityError
-  const endpointError = validateEndpoint(values.endpoint, values.protocol)
-  if (endpointError !== null) return endpointError
-  return validatePollInterval(values)
+  return (
+    validateSecurity(values) ??
+    validateEndpoint(values.endpoint, values.protocol) ??
+    validateHttpForm(values, isEdit) ??
+    validatePollInterval(values)
+  )
+}
+
+function validateHttpForm(
+  values: SourceFormValues,
+  isEdit: boolean,
+): string | null {
+  if (values.protocol !== 'http') return null
+  return (
+    validateHttpOptions(values.extraOptions) ??
+    validateHttpAuth(
+      values.extraOptions,
+      values.username,
+      !values.isCredentialCleared &&
+        (values.credential !== '' || (isEdit && values.hasCredential === true)),
+    )
+  )
 }
 
 function validateSecurity(values: SourceFormValues): string | null {
@@ -70,8 +93,8 @@ function validateSecurity(values: SourceFormValues): string | null {
 function validatePollInterval(values: SourceFormValues): string | null {
   if (values.pollIntervalMs < COLLECT_MIN_INTERVAL_MS)
     return `轮询周期不能小于 ${COLLECT_MIN_INTERVAL_MS} 毫秒`
-  if (values.protocol === 'modbus_tcp' && values.pollIntervalMs < 1000)
-    return 'Modbus TCP 的轮询周期不能小于 1000 毫秒'
+  if (values.protocol !== 'opcua' && values.pollIntervalMs < 1000)
+    return `${values.protocol === 'http' ? 'HTTP' : 'Modbus TCP'} 的轮询周期不能小于 1000 毫秒`
   return null
 }
 
@@ -93,9 +116,15 @@ function shared(values: SourceFormValues) {
     name: values.name.trim(),
     description: trimmed(values.description),
     endpoint: values.endpoint.trim(),
-    username: trimmed(values.username),
+    username:
+      values.protocol === 'http' &&
+      !['basic', 'digest', 'oauth2_client_credentials'].includes(
+        values.extraOptions['auth_type'] ?? 'none',
+      )
+        ? null
+        : trimmed(values.username),
     options_json: options,
-    read_mode: values.readMode,
+    read_mode: values.protocol === 'http' ? 'poll' : values.readMode,
     poll_interval_ms: values.pollIntervalMs,
     is_enabled: values.isEnabled,
   }
@@ -115,7 +144,12 @@ export function toCreateInput(
     protocol: values.protocol,
     description: base.description ?? undefined,
     username: base.username ?? undefined,
-    credential: values.credential === '' ? undefined : values.credential,
+    credential:
+      values.credential === '' ||
+      (values.protocol === 'http' &&
+        (values.extraOptions['auth_type'] ?? 'none') === 'none')
+        ? undefined
+        : values.credential,
   }
 }
 
@@ -126,6 +160,11 @@ export function toCreateInput(
 export function toUpdateInput(
   values: SourceFormValues,
 ): CollectSourceUpdateInput {
+  if (
+    values.protocol === 'http' &&
+    (values.extraOptions['auth_type'] ?? 'none') === 'none'
+  )
+    return { ...shared(values), credential: null }
   if (values.isCredentialCleared) return { ...shared(values), credential: null }
   if (values.credential !== '')
     return { ...shared(values), credential: values.credential }
@@ -138,6 +177,7 @@ function validateEndpoint(
 ): string | null {
   try {
     const endpoint = new URL(value.trim())
+    if (protocol === 'http') return validateHttpEndpoint(endpoint)
     const expected = protocol === 'opcua' ? 'opc.tcp:' : 'modbus.tcp:'
     if (
       endpoint.protocol !== expected ||

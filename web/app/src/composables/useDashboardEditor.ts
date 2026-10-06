@@ -39,6 +39,11 @@ export interface DashboardEditor extends EditorMutations {
   flush: () => void
   undo: () => void
   redo: () => void
+  /** 只把已发送节点设为保存基准；响应期间的后续编辑保留在撤销栈中。 */
+  markSaved: (
+    sent: readonly DashboardNodePayload[],
+    received: readonly DashboardNodePayload[],
+  ) => void
 }
 
 /**
@@ -74,6 +79,7 @@ export function useDashboardEditor(
   const layout = computed(() => layoutFrames(nodes.value, getManifest))
 
   const isDirty = computed(() => nodes.value !== baseline.value)
+  const mutations = editorMutations({ history, baseline, selection })
 
   return {
     nodes,
@@ -88,6 +94,10 @@ export function useDashboardEditor(
     flush: history.flush,
     undo: history.undo,
     redo: history.redo,
-    ...editorMutations({ history, baseline, selection }),
+    markSaved: (sent, received) => {
+      if (nodes.value === sent) mutations.reset(received)
+      else baseline.value = sent
+    },
+    ...mutations,
   }
 }

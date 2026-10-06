@@ -46,6 +46,83 @@ afterEach(() => {
 })
 
 describe('加载', () => {
+  it('dispose后重新加载可保存新资源，旧回执不结束新资源的忙态', async () => {
+    vi.spyOn(dashboardApi, 'getDashboard').mockImplementation((id) =>
+      Promise.resolve(payload(id)),
+    )
+    const first = deferred<DashboardPayload>()
+    const second = deferred<DashboardPayload>()
+    vi.spyOn(dashboardApi, 'replaceLayout')
+      .mockReturnValueOnce(first.promise)
+      .mockReturnValueOnce(second.promise)
+    const doc = useDashboardDoc()
+    await doc.load('d1')
+    const savingA = doc.save({ expectedVersion: 1, nodes: [] })
+    doc.dispose()
+    expect(doc.saving.value).toBe(false)
+    await doc.load('d2')
+    const savingB = doc.save({ expectedVersion: 1, nodes: [] })
+    first.resolve(payload('d1', 2))
+    expect((await savingA)?.id).toBe('d1')
+    expect(doc.dashboard.value?.id).toBe('d2')
+    expect(doc.saving.value).toBe(true)
+    second.resolve(payload('d2', 2))
+    expect((await savingB)?.id).toBe('d2')
+    expect(doc.saving.value).toBe(false)
+  })
+
+  it('旧资源保存失败不写入新资源的冲突或清除新请求忙碌态', async () => {
+    vi.spyOn(dashboardApi, 'getDashboard').mockImplementation((id) =>
+      Promise.resolve(payload(id)),
+    )
+    let reject: (error: unknown) => void = () => undefined
+    const b = deferred<DashboardPayload>()
+    vi.spyOn(dashboardApi, 'replaceLayout')
+      .mockReturnValueOnce(
+        new Promise((_resolve, fail) => {
+          reject = fail
+        }),
+      )
+      .mockReturnValueOnce(b.promise)
+    const doc = useDashboardDoc()
+    await doc.load('d1')
+    const savingA = doc.save({ expectedVersion: 1, nodes: [] })
+    await doc.load('d2')
+    const savingB = doc.save({ expectedVersion: 1, nodes: [] })
+    reject(
+      new BizError(
+        dashboardApi.DASHBOARD_VERSION_CONFLICT_CODE,
+        '旧版本',
+        409,
+        'test',
+      ),
+    )
+    expect(await savingA).toBeNull()
+    expect(doc.dashboard.value?.id).toBe('d2')
+    expect(doc.saving.value).toBe(true)
+    expect(doc.conflict.value).toBeNull()
+    b.resolve(payload('d2', 2))
+    expect((await savingB)?.id).toBe('d2')
+    expect(doc.saving.value).toBe(false)
+  })
+
+  it('同资源重载后的新版本不被旧保存倒退，但旧调用仍收到实际成功回执', async () => {
+    vi.spyOn(dashboardApi, 'getDashboard')
+      .mockResolvedValueOnce(payload('d1', 1))
+      .mockResolvedValueOnce(payload('d1', 4))
+    const first = deferred<DashboardPayload>()
+    vi.spyOn(dashboardApi, 'replaceLayout').mockReturnValueOnce(first.promise)
+    const doc = useDashboardDoc()
+    await doc.load('d1')
+    const version = doc.resourceVersion
+    const saving = doc.save({ expectedVersion: 1, nodes: [] })
+    await doc.load('d1')
+    first.resolve(payload('d1', 2))
+    expect((await saving)?.rowVersion).toBe(2)
+    expect(doc.dashboard.value?.rowVersion).toBe(4)
+    expect(doc.resourceVersion).toBeGreaterThan(version)
+  })
+
   it('取到的大屏写进状态', async () => {
     vi.spyOn(dashboardApi, 'getDashboard').mockResolvedValue(payload('d1'))
     const doc = useDashboardDoc()

@@ -6,6 +6,7 @@
 import pytest
 from pydantic import SecretStr
 
+from collector_server.apps.collect.drivers.base import DriverConnection
 from collector_server.settings import (
     API_PREFIX,
     DB_SCHEMA,
@@ -89,3 +90,59 @@ def test_flush_window_has_a_floor() -> None:
             edge_service_key=SecretStr("x" * 32),
             flush_interval_ms=1,
         )
+
+
+def test_http_network_policy_defaults_to_disabled(settings: Settings) -> None:
+    assert settings.http_read_enabled is False
+    assert settings.http_allowed_endpoints == ""
+    assert settings.http_max_concurrent_requests == 8
+
+
+@pytest.mark.parametrize("limit", [0, -1, 257])
+def test_http_global_concurrency_has_a_valid_range(limit: int) -> None:
+    with pytest.raises(ValueError, match="http_max_concurrent_requests"):
+        Settings(
+            **REQUIRED,
+            edge_service_key=SecretStr("x" * 32),
+            http_max_concurrent_requests=limit,
+        )
+
+
+@pytest.mark.parametrize(
+    "origin",
+    [
+        "",
+        "http://169.254.169.254",
+        "ftp://127.0.0.1",
+        "http://127.0.0.1:18080/data",
+        "http://127.0.0.1:18080?site=1",
+        "http://user:secret@127.0.0.1:18080",
+    ],
+)
+def test_http_startup_rejects_missing_or_invalid_origins(origin: str) -> None:
+    with pytest.raises(ValueError, match="HTTP"):
+        Settings(
+            **REQUIRED,
+            edge_service_key=SecretStr("x" * 32),
+            http_read_enabled=True,
+            http_allowed_endpoints=origin,
+        )
+
+
+def test_http_startup_accepts_explicit_normalized_origins() -> None:
+    configured = Settings(
+        **REQUIRED,
+        edge_service_key=SecretStr("x" * 32),
+        http_read_enabled=True,
+        http_allowed_endpoints=(
+            " http://127.0.0.1:18080 , https://api.example.test "
+        ),
+    )
+    assert configured.http_read_enabled is True
+
+
+def test_driver_connection_repr_does_not_include_credentials() -> None:
+    connection = DriverConnection(
+        endpoint="http://127.0.0.1:18080", password="sensitive-test-credential"
+    )
+    assert "sensitive-test-credential" not in repr(connection)

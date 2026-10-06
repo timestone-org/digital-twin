@@ -6,6 +6,7 @@
 from collections.abc import Callable, Mapping
 
 from collector_server.apps.collect.drivers.base import Driver, DriverConnection
+from collector_server.apps.collect.drivers.http.driver import HttpDriver
 from collector_server.apps.collect.drivers.modbus_tcp.driver import (
     ModbusTcpDriver,
 )
@@ -17,6 +18,7 @@ DriverFactory = Callable[[DriverConnection], Driver]
 # ⚠ 取值是字符串常量，与计划里的 `protocol` 逐字一致（禁数字枚举）
 PROTOCOL_OPCUA = "opcua"
 PROTOCOL_MODBUS_TCP = "modbus_tcp"
+PROTOCOL_HTTP = "http"
 
 
 def _build_opcua(connection: DriverConnection) -> Driver:
@@ -27,7 +29,12 @@ def _build_modbus_tcp(connection: DriverConnection) -> Driver:
     return ModbusTcpDriver(connection=connection)
 
 
+def _build_http(connection: DriverConnection) -> Driver:
+    return HttpDriver(connection=connection)
+
+
 _FACTORIES: Mapping[str, DriverFactory] = {
+    PROTOCOL_HTTP: _build_http,
     PROTOCOL_MODBUS_TCP: _build_modbus_tcp,
     PROTOCOL_OPCUA: _build_opcua,
 }
@@ -36,6 +43,14 @@ _FACTORIES: Mapping[str, DriverFactory] = {
 def supported_protocols() -> tuple[str, ...]:
     """已实现的协议名，按字典序。"""
     return tuple(sorted(_FACTORIES))
+
+
+def supports_startup_tcp_probe(protocol: str) -> bool:
+    """受网络授权约束的协议只由驱动自己探测。
+
+    Args: protocol。
+    """
+    return protocol == PROTOCOL_OPCUA
 
 
 def create_driver(protocol: str, connection: DriverConnection) -> Driver:

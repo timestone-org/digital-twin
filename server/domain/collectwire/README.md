@@ -37,7 +37,7 @@ platform 与 collector 之间有四条真实的缝。它们不能靠 import 彼�
 - **不许出现服务名**：它知道"采集计划"是什么，不知道"谁在跑它"。
 - **不许 import 别的 `domain/*` 与任何服务**，保持扁平。本包因此只给不带 schema
   前缀的表名——schema 名是各服务自己的配置，点位历史的口径在 `domain/timeseries`。
-- **不为未来协议预留字段**（ADR-0001）：形状只覆盖 OPC UA 今天需要的能力。
+- **不为未来协议预留字段**（ADR-0001）：形状只覆盖已实现驱动真实消费的能力。
 
 ## 内容
 
@@ -47,6 +47,7 @@ platform 与 collector 之间有四条真实的缝。它们不能靠 import 彼�
 | `commands` | 请求与应答键、`reply_key`、动作与状态字面量、采集侧回的稳定 `reason` |
 | `snapshot` | 快照键前缀、`snapshot_key`、哈希值里的三个字段名 |
 | `state` | 运行态表名与列名、三档状态、三档错误分类 |
+| `http` | HTTP 非秘密配置形状、端点与 JSON Pointer 静态校验（平台与采集两侧共用） |
 
 设计口径见 [`docs/COLLECT_DESIGN.md`](../../../docs/COLLECT_DESIGN.md) §4、§5，
 质量水位见 [`project-structure-python.md`](../../../docs/agents/project-structure-python.md) §9

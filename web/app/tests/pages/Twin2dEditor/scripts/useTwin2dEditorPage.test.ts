@@ -7,9 +7,9 @@
  */
 import type { DashboardNodePayload, DashboardPayload } from '@dt/contracts'
 import { TWIN_2D_CONFIG_KEY, TWIN_2D_DEFAULT_CANVAS_HEIGHT } from '@dt/twin2d'
-import { flushPromises } from '@vue/test-utils'
+import { flushPromises, mount } from '@vue/test-utils'
 import { beforeEach, describe, expect, it, vi } from 'vitest'
-import { nextTick, ref } from 'vue'
+import { defineComponent, h, nextTick, onUnmounted, ref } from 'vue'
 
 vi.mock('@/api/dashboard', async () => {
   const actual =
@@ -240,6 +240,154 @@ describe('切节点', () => {
 })
 
 describe('落库', () => {
+  it('跨大屏加载B后迟到的A保存不覆盖B，下一次保存仍写B', async () => {
+    const id = ref('d1')
+    const first = deferred()
+    getMock.mockResolvedValueOnce(payload([node('n1')]))
+    saveMock.mockReturnValueOnce(first.promise)
+    const editor = useTwin2dEditorPage(
+      () => id.value,
+      () => 'n1',
+    )
+    await flushPromises()
+    const a = editor.doc.value
+    if (a === null) throw new Error('A未加载')
+    a.commit({
+      ...a.config.value,
+      canvas: { ...a.config.value.canvas, width: 800 },
+    })
+    const savingA = editor.save()
+    getMock.mockResolvedValueOnce({
+      ...payload([{ ...node('n1'), dashboardId: 'd2' }]),
+      id: 'd2',
+    })
+    id.value = 'd2'
+    await flushPromises()
+    const b = editor.doc.value
+    if (b === null) throw new Error('B未加载')
+    b.commit({
+      ...b.config.value,
+      canvas: { ...b.config.value.canvas, width: 900 },
+    })
+    first.settle({ ...payload([node('n1')]), rowVersion: 8 })
+    expect(await savingA).toBe(true)
+    expect(editor.dashboard.value?.id).toBe('d2')
+    expect(b.isDirty.value).toBe(true)
+    saveMock.mockResolvedValueOnce({
+      ...payload([{ ...node('n1'), dashboardId: 'd2' }]),
+      id: 'd2',
+      rowVersion: 8,
+    })
+    expect(await editor.save()).toBe(true)
+    expect(saveMock.mock.calls[1]?.[0]).toBe('d2')
+    expect(
+      saveMock.mock.calls[1]?.[1].nodes[0]?.config_json[TWIN_2D_CONFIG_KEY],
+    ).toMatchObject({ canvas: { width: 900 } })
+    expect(b.isDirty.value).toBe(false)
+  })
+
+  it.each([
+    new BizError(DASHBOARD_VERSION_CONFLICT_CODE, '旧版本', 409, 'test'),
+    new Error('服务不可用'),
+  ])('保存失败保留期间的新编辑且不重试：%s', async (failure) => {
+    getMock.mockResolvedValue(payload([node('n1')]))
+    let reject: (error: unknown) => void = () => undefined
+    saveMock.mockReturnValueOnce(
+      new Promise((_resolve, fail) => {
+        reject = fail
+      }),
+    )
+    const editor = page()
+    await flushPromises()
+    const doc = editor.doc.value
+    if (doc === null) throw new Error('文档未加载')
+    doc.commit({
+      ...doc.config.value,
+      canvas: { ...doc.config.value.canvas, width: 800 },
+    })
+    const saving = editor.save()
+    doc.commit({
+      ...doc.config.value,
+      canvas: { ...doc.config.value.canvas, width: 900 },
+    })
+    reject(failure)
+    expect(await saving).toBe(false)
+    expect(saveMock).toHaveBeenCalledTimes(1)
+    expect(doc.config.value.canvas.width).toBe(900)
+    expect(doc.isDirty.value).toBe(true)
+    expect(editor.saving.value).toBe(false)
+    doc.undo()
+    expect(doc.config.value.canvas.width).toBe(800)
+    expect(doc.isDirty.value).toBe(true)
+    doc.redo()
+    expect(doc.config.value.canvas.width).toBe(900)
+  })
+
+  it('保存未结束时重复保存只发一次，撤销和重做仍按已发送帧判脏', async () => {
+    getMock.mockResolvedValue(payload([node('n1')]))
+    const first = deferred()
+    saveMock.mockReturnValue(first.promise)
+    const editor = page()
+    await flushPromises()
+    const doc = editor.doc.value
+    if (doc === null) throw new Error('文档未加载')
+    doc.commit({
+      ...doc.config.value,
+      canvas: { ...doc.config.value.canvas, width: 800 },
+    })
+    const saving = editor.save()
+    const duplicate = editor.save()
+    expect(saveMock).toHaveBeenCalledTimes(1)
+    doc.commit({
+      ...doc.config.value,
+      canvas: { ...doc.config.value.canvas, width: 900 },
+    })
+    doc.undo()
+    first.settle({ ...payload([node('n1')]), rowVersion: 8 })
+    expect(await saving).toBe(true)
+    expect(await duplicate).toBe(false)
+    expect(doc.isDirty.value).toBe(false)
+    doc.redo()
+    expect(doc.config.value.canvas.width).toBe(900)
+    expect(doc.isDirty.value).toBe(true)
+  })
+
+  it('保存期间继续编辑同一字段，后续草稿仍脏且可再次保存', async () => {
+    getMock.mockResolvedValue(payload([node('n1')]))
+    const first = deferred()
+    saveMock.mockReturnValueOnce(first.promise)
+    const editor = page()
+    await flushPromises()
+    const doc = editor.doc.value
+    if (doc === null) throw new Error('文档未加载')
+    doc.commitMerged(
+      {
+        ...doc.config.value,
+        canvas: { ...doc.config.value.canvas, width: 800 },
+      },
+      'width',
+    )
+    const saving = editor.save()
+    doc.commitMerged(
+      {
+        ...doc.config.value,
+        canvas: { ...doc.config.value.canvas, width: 900 },
+      },
+      'width',
+    )
+    first.settle({ ...payload([node('n1')]), rowVersion: 8 })
+    expect(await saving).toBe(true)
+    expect(doc.config.value.canvas.width).toBe(900)
+    expect(doc.isDirty.value).toBe(true)
+    saveMock.mockResolvedValue({ ...payload([node('n1')]), rowVersion: 9 })
+    expect(await editor.save()).toBe(true)
+    expect(saveMock.mock.calls[1]?.[1].expectedVersion).toBe(8)
+    expect(
+      saveMock.mock.calls[1]?.[1].nodes[0]?.config_json[TWIN_2D_CONFIG_KEY],
+    ).toMatchObject({ canvas: { width: 900 } })
+    expect(doc.isDirty.value).toBe(false)
+  })
+
   it('把改动写回这个节点，其余节点原样带上', async () => {
     getMock.mockResolvedValue(payload([node('n1'), node('n2'), node('n3')]))
     saveMock.mockResolvedValue(payload([node('n1'), node('n2'), node('n3')]))
@@ -311,6 +459,50 @@ describe('落库', () => {
     expect(await editor.save()).toBe(false)
     expect(saveMock).not.toHaveBeenCalled()
   })
+})
+
+describe('保存期间卸载', () => {
+  it.each(['success', 'failure'])(
+    '整树迟到%s不回填文档或清除卸载前草稿',
+    async (result) => {
+      getMock.mockResolvedValue(payload([node('n1')]))
+      let finish: (value: DashboardPayload) => void = () => undefined
+      let fail: (error: Error) => void = () => undefined
+      saveMock.mockReturnValue(
+        new Promise((resolve, reject) => {
+          finish = resolve
+          fail = reject
+        }),
+      )
+      const editor = page()
+      await flushPromises()
+      const doc = editor.doc.value
+      if (doc === null) throw new Error('缺少2D测试文档')
+      doc.commit({
+        ...doc.config.value,
+        canvas: { ...doc.config.value.canvas, width: 800 },
+      })
+      const host = mount(
+        defineComponent({
+          setup() {
+            onUnmounted(editor.dispose)
+            return () => h('div')
+          },
+        }),
+      )
+      const saving = editor.save()
+      host.unmount()
+      const dashboard = editor.dashboard.value
+      if (result === 'success')
+        finish({ ...payload([node('n1')]), rowVersion: 8 })
+      else fail(new Error('旧请求失败'))
+      expect(await saving).toBe(result === 'success')
+      expect(editor.dashboard.value).toBe(dashboard)
+      expect(doc.isDirty.value).toBe(true)
+      expect(editor.error.value).toBeNull()
+      expect(editor.saving.value).toBe(false)
+    },
+  )
 })
 
 describe('版本冲突', () => {
