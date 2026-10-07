@@ -12,8 +12,8 @@ import check_config_secrets as gate
 import _report
 
 
-class ConfigSecretsTests(unittest.TestCase):
-    """用最小仓库复现配置遗漏和跨服务回退分叉。"""
+class ConfigSecretsFixture(unittest.TestCase):
+    """配置检查共享的最小仓库夹具。"""
 
     def setUp(self) -> None:
         self.directory = tempfile.TemporaryDirectory()
@@ -59,6 +59,10 @@ class ConfigSecretsTests(unittest.TestCase):
         path = self.service / "src" / "auth_server" / "settings.py"
         path.write_text(content, encoding="utf-8")
         return path
+
+
+class ConfigDefaultsTests(ConfigSecretsFixture):
+    """声明默认值与源码扫描的契约。"""
 
     def test_secret_defaults_distinguish_constraints_and_numeric_budgets(
         self,
@@ -107,6 +111,7 @@ class ConfigSecretsTests(unittest.TestCase):
         ):
             assert gate.check_secrets_have_no_default() == []
             assert gate.check_no_environment_branch() == []
+            assert gate.check_no_dangerous_defaults() == []
 
     def test_environment_comparisons_reject_names_and_attributes_only(
         self,
@@ -158,6 +163,130 @@ class ConfigSecretsTests(unittest.TestCase):
         )
         with patch.object(gate, "python_sources", return_value=[path]):
             assert gate.check_no_dangerous_defaults() == []
+
+    def test_dangerous_defaults_ignore_literal_fixtures_and_comments(
+        self,
+    ) -> None:
+        path = self.root / "fixture_catalog.py"
+        path.write_text(
+            '"""cors_origins = [\'*\']; debug: bool = True\n'
+            'verify: bool = False; auto_create_schema: bool = True"""\n'
+            "# debug: bool = True; verify: bool = False\n"
+            "# cors_origins = ['*']; auto_create_schema: bool = True\n"
+            "sample: str = 'debug: bool = True'\n"
+            "fixture = \"cors_origins = ['*']\"\n"
+            "nested = {'code': 'verify: bool = False'}\n"
+            "write_text('auto_create_schema: bool = True')\n",
+            encoding="utf-8",
+        )
+        with patch.object(gate, "python_sources", return_value=[path]):
+            assert gate.check_no_dangerous_defaults() == []
+
+    def test_arbitrary_runtime_classes_and_scripts_keep_security_checks(
+        self,
+    ) -> None:
+        path = self.root / "runtime_policy.py"
+        path.write_text(
+            "class WebPolicy:\n"
+            "    cors_origins = ['*']\n"
+            "    app_debug: bool = True\n"
+            "    tls_verify: bool = False\n"
+            "    db_auto_create_tables: bool = True\n"
+            "runtime.cors_origins = '*'\n"
+            "runtime.debug: bool = True\n",
+            encoding="utf-8",
+        )
+        with patch.object(gate, "python_sources", return_value=[path]):
+            violations = gate.check_no_dangerous_defaults()
+        assert {item.detail for item in violations} == {
+            "CORS 放开全部来源",
+            "DEBUG 默认开",
+            "TLS 校验默认关",
+            "自动建表默认开",
+        }
+        assert len(violations) == 4
+        assert all(item.where == "runtime_policy.py" for item in violations)
+
+    def test_multi_target_and_multiline_defaults_remain_dangerous(
+        self,
+    ) -> None:
+        path = self.root / "startup.py"
+        path.write_text(
+            "说明 = cors_origins = (\n    ['*']\n)\n"
+            "说明 = ['*']; runtime.cors_origins = ['*']\n"
+            "debug: bool = (\n    True\n)\n"
+            "verify: bool = (False)\n"
+            "auto_create_tables: bool\n",
+            encoding="utf-8",
+        )
+        with patch.object(gate, "python_sources", return_value=[path]):
+            violations = gate.check_no_dangerous_defaults()
+        assert {item.detail for item in violations} == {
+            "CORS 放开全部来源",
+            "DEBUG 默认开",
+            "TLS 校验默认关",
+        }
+
+    def test_function_parameter_defaults_keep_security_checks(self) -> None:
+        parameters = (
+            "cors_origins: list[str] = ['*'], debug: bool = True, "
+            "verify: bool = False, auto_create_schema: bool = True"
+        )
+        signatures = (
+            f"{parameters}, /",
+            f"required: int, {parameters}",
+            f"required: int, *, {parameters}",
+        )
+        path = self.root / "policy_factory.py"
+        for signature in signatures:
+            with self.subTest(signature=signature):
+                path.write_text(
+                    f"def build_policy({signature}):\n    return None\n",
+                    encoding="utf-8",
+                )
+                with patch.object(gate, "python_sources", return_value=[path]):
+                    violations = gate.check_no_dangerous_defaults()
+                assert {item.detail for item in violations} == {
+                    "CORS 放开全部来源",
+                    "DEBUG 默认开",
+                    "TLS 校验默认关",
+                    "自动建表默认开",
+                }
+                assert len(violations) == 4
+
+    def test_runtime_cors_bindings_keep_security_checks(self) -> None:
+        bindings = (
+            "factory = lambda cors_origins=['*']: cors_origins\n",
+            "policy = Policy(cors_origins=['*'])\n",
+            "说明 = 1; policy = (cors_origins := ['*'])\n",
+        )
+        path = self.root / "runtime_binding.py"
+        for content in bindings:
+            with self.subTest(content=content):
+                path.write_text(content, encoding="utf-8")
+                with patch.object(gate, "python_sources", return_value=[path]):
+                    violations = gate.check_no_dangerous_defaults()
+                assert [item.detail for item in violations] == [
+                    "CORS 放开全部来源"
+                ]
+
+    def test_parameter_annotations_and_keyword_data_are_not_defaults(
+        self,
+    ) -> None:
+        path = self.root / "parameter_docs.py"
+        path.write_text(
+            'def document(code: "debug: bool = True" = None, /, *, '
+            'sample: "verify: bool = False" = None, debug: bool):\n'
+            "    return code, sample\n"
+            "policy = Policy(description=\"cors_origins = ['*']\", **extras)\n",
+            encoding="utf-8",
+        )
+        with patch.object(gate, "python_sources", return_value=[path]):
+            assert gate.check_no_dangerous_defaults() == []
+
+
+class ConfigSecretsTests(ConfigSecretsFixture):
+    """根模板与编排配置的契约。"""
 
     def test_settings_without_prefix_keep_exact_unprefixed_names(
         self,
