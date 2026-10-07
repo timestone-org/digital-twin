@@ -83,6 +83,10 @@ async function load(blob: Blob): Promise<void> {
     if (!isAlive) return
     sheets.value = made
     picked.value = made[0]?.sheet ?? ''
+    // ⚠ 空工作簿不会抛错，必须显式提示，避免留下空白预览。
+    if (made.length === 0) {
+      failure.value = '这份工作簿里没有工作表，可以下载原件后用 Excel 打开。'
+    }
   } catch {
     // ⚠ 不摆库里那句英文原文：用户能做的只有一件事——下载下来用 Excel 打开
     failure.value = '这份工作簿画不出来，可以下载原件后用 Excel 打开。'
@@ -129,7 +133,7 @@ onUnmounted(() => {
       :options="tabs"
     />
     <DtTable
-      v-if="current !== null"
+      v-if="current !== null && head.length > 0"
       :columns="columns"
       :rows="rows"
       min-width="0"
@@ -144,6 +148,9 @@ onUnmounted(() => {
         {{ row[column.key] ?? '' }}
       </template>
     </DtTable>
+    <p v-else-if="current !== null && !isLoading" class="doc-sheet__note">
+      这张工作表是空的，一行数据都没有。
+    </p>
     <p v-if="hidden > 0" class="doc-sheet__note">
       这张表还有 {{ hidden }} 行没画出来，下载原件可以看全。
     </p>

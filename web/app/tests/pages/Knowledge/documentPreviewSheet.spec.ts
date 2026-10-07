@@ -111,6 +111,27 @@ describe('工作簿原件的画法', () => {
     expect(wrapper.find('.doc-sheet__tabs').exists()).toBe(false)
   })
 
+  it('⚠ 一张工作表都没有时要说一句，而不是留一片空白', async () => {
+    // ⚠ 空数组是正常解析结果，不能靠 catch 提示。
+    excel.default.mockResolvedValue([])
+
+    const wrapper = await render()
+
+    expect(wrapper.text()).toContain('这份工作簿里没有工作表')
+    expect(wrapper.find('.dt-spinner').exists()).toBe(false)
+  })
+
+  it('⚠ 工作表在、但一行都没有时也要说一句', async () => {
+    excel.default.mockResolvedValue([{ sheet: '待填', data: [] }, SHEETS[1]])
+
+    const wrapper = await render()
+
+    expect(wrapper.text()).toContain('这张工作表是空的')
+    // 页签还在：另一张表有内容，得能切过去
+    expect(wrapper.find('.doc-sheet__tabs').exists()).toBe(true)
+    expect(wrapper.find('table').exists()).toBe(false)
+  })
+
   it('读不出来时说一句人话，而不是停在加载态', async () => {
     excel.default.mockRejectedValue(new Error('not a zip'))
 

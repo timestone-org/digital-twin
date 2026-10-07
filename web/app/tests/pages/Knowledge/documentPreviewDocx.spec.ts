@@ -42,6 +42,27 @@ describe('Word 原件的画法', () => {
     expect(wrapper.find('.dt-spinner').exists()).toBe(false)
   })
 
+  it('⚠ 第一次侦听时容器还没挂上，仍要等到它挂上再画', async () => {
+    // ⚠ immediate 侦听早于 DOM 挂载，渲染必须等到容器可用。
+    const wrapper = await render()
+
+    const box: unknown = docx.renderAsync.mock.calls[0]?.[1]
+    expect(box).toBeInstanceOf(HTMLElement)
+    if (!(box instanceof HTMLElement)) throw new Error('缺少渲染容器')
+    expect(box.isConnected).toBe(true)
+    expect(wrapper.find('.doc-docx__paper').element).toBe(box)
+  })
+
+  it('⚠ 换一份文档先清空容器，否则第二份直接接在第一份后面', async () => {
+    // ⚠ 渲染器只追加节点，切换原件必须清空旧内容。
+    const wrapper = await render()
+    await wrapper.setProps({ blob: new Blob(['docx2']) })
+    await flushPromises()
+
+    expect(docx.renderAsync).toHaveBeenCalledTimes(2)
+    expect(wrapper.find('.doc-docx__paper').element.children).toHaveLength(1)
+  })
+
   it('⚠ altChunk 一律不画：那是 .docx 往本站源里塞 HTML 的口子', async () => {
     await render()
 
