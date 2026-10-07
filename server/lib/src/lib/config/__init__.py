@@ -3,6 +3,7 @@
 from lib.config.base import (
     AppSettings,
     ConfigError,
+    EnvSettings,
     PostgresSettings,
     RedisSettings,
     SqlServerSettings,
@@ -13,6 +14,7 @@ from lib.config.base import (
 __all__ = [
     "AppSettings",
     "ConfigError",
+    "EnvSettings",
     "PostgresSettings",
     "RedisSettings",
     "SqlServerSettings",

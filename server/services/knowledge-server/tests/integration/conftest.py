@@ -7,6 +7,7 @@ L2 打真实 Postgres——SQLite 上全绿的迁移与查询可以在生产直�
 配置，同名覆盖会把它们一起拖进「必须有真库」。
 """
 
+import os
 import socket
 from collections.abc import AsyncIterator, Callable
 from dataclasses import dataclass, replace
@@ -172,6 +173,16 @@ def db_settings(settings: Settings) -> Settings:
             "edge_service_key": settings.edge_service_key,
         }
     )
+
+
+@pytest.fixture
+def redis_settings(settings: Settings) -> Settings:
+    """只连接测试 Redis，保留其它依赖的占位配置。"""
+    host = os.environ.get("KNOWLEDGE_REDIS_HOST", "")
+    port = int(os.environ.get("KNOWLEDGE_REDIS_PORT", "6379"))
+    if not host or not _reachable(host, port):
+        pytest.skip("本机连不到测试 Redis")
+    return settings.model_copy(update={"redis_host": host, "redis_port": port})
 
 
 @dataclass(frozen=True)

@@ -64,6 +64,31 @@ def test_redis_url_without_password_has_no_credentials_section() -> None:
     assert make().url() == "redis://cache.internal:6379/0"
 
 
+def test_null_env_value_disables_an_optional_secret(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    monkeypatch.setenv("SAMPLE_REDIS_PASSWORD", "null")
+    assert make().redis_password is None
+
+
+def test_null_env_value_cannot_replace_a_required_secret(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    monkeypatch.setenv("SAMPLE_POSTGRES_PASSWORD", "null")
+    given = make().model_dump(exclude={"postgres_password"})
+    with pytest.raises(ValidationError):
+        Sample(**given)
+
+
+def test_empty_env_value_keeps_its_string_semantics(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    monkeypatch.setenv("SAMPLE_REDIS_PASSWORD", "")
+    password = make().redis_password
+    assert password is not None
+    assert password.get_secret_value() == ""
+
+
 def test_sqlserver_dsn_percent_encodes_credentials() -> None:
     assert make().sqlserver_dsn() == (
         "mssql+pymssql://reader:r%40w%3Apass%2Fword"

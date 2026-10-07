@@ -23,7 +23,13 @@ def _default_instance() -> str:
     return socket.gethostname()
 
 
-class AppSettings(BaseSettings):
+class EnvSettings(BaseSettings):
+    """环境变量用 null 表达可空值，空字符串仍按字段本身校验。"""
+
+    model_config = SettingsConfigDict(env_parse_none_str="null")
+
+
+class AppSettings(EnvSettings):
     """全服务通用的进程级配置。服务侧继承它并追加自己的字段。"""
 
     model_config = SettingsConfigDict(
@@ -45,7 +51,7 @@ class AppSettings(BaseSettings):
     app_trace_sample_ratio: float = Field(default=0.1, ge=0.0, le=1.0)
 
 
-class PostgresSettings(BaseSettings):
+class PostgresSettings(EnvSettings):
     """数据库连接组。密码无默认值。"""
 
     postgres_host: str
@@ -86,7 +92,7 @@ class PostgresSettings(BaseSettings):
         )
 
 
-class SqlServerSettings(BaseSettings):
+class SqlServerSettings(EnvSettings):
     """只读 SQL Server 连接组。密码无默认值。"""
 
     sqlserver_host: str
@@ -129,7 +135,7 @@ class SqlServerSettings(BaseSettings):
         )
 
 
-class RedisSettings(BaseSettings):
+class RedisSettings(EnvSettings):
     """Redis 连接组。口令可为空（本地无密码实例），但不给弱默认值。"""
 
     redis_host: str

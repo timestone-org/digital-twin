@@ -479,6 +479,19 @@ jobs:
             --junitxml=../../../knowledge-junit.xml 2>&1 \
             | tee ../../../knowledge-pytest.log
 
+      - name: 部署迁移与配置闸契约
+        env:
+          PYTHONPATH: server:scripts/gates
+        run: |
+          set -o pipefail
+          uv run --project server pytest server/deploy/tests scripts/gates/tests \
+            -q -W error --cov-config=server/pyproject.toml \
+            --cov=deploy.migrate --cov=check_config_secrets \
+            --cov=_compose_config --cov-branch \
+            --cov-report=xml:deployment-coverage.xml \
+            --junitxml=deployment-junit.xml 2>&1 \
+            | tee deployment-pytest.log
+
       # CI 里 skip 掉的用例等于没跑：环境能力由服务容器保证，缺了就该红
       - name: 运行结果自检（无 skip、无外网、覆盖率口径）
         run: |
@@ -504,6 +517,8 @@ jobs:
             assistant-junit.xml assistant-pytest.log
           uv run --project server python scripts/gates/check_pytest_run.py \
             knowledge-junit.xml knowledge-pytest.log
+          uv run --project server python scripts/gates/check_pytest_run.py \
+            deployment-junit.xml deployment-pytest.log
 
       # 整体覆盖率不许低于基线——哪怕仍在阈值之上
       - name: 覆盖率棘轮
@@ -552,6 +567,7 @@ jobs:
             platform-coverage.xml opcua-coverage.xml \
             collector-coverage.xml realtime-coverage.xml \
             assistant-coverage.xml knowledge-coverage.xml \
+            deployment-coverage.xml \
             --compare-branch "${BASELINE}" --fail-under=85
 
       - uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7
