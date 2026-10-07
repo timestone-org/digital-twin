@@ -45,18 +45,18 @@ async def a_table(
     context: AppContext,
     archive: ArchiveWriter,
     width: timedelta,
-    enabled: bool = True,
+    is_enabled: bool = True,
 ) -> dict[str, Any]:
     """建带点位列与公式列的独占台账。
 
-    Args: context, archive, width, enabled。
+    Args: context, archive, width, is_enabled。
     """
     table = await create_table(
         context.client,
         code="qa_dst_ind_" + uuid.uuid4().hex,
         collect_mode="aggregate",
         collect_interval_ms=int(width.total_seconds() * 1000),
-        is_enabled=enabled,
+        is_enabled=is_enabled,
     )
     await create_column(
         context.client,

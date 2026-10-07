@@ -364,6 +364,14 @@ def test_large_regular_counts_and_selections_use_compact_runs() -> None:
     assert grid.shift(last, -200_000) == first
 
 
+def test_a_long_shift_accounts_for_every_repeated_autumn_hour() -> None:
+    grid = BucketGrid(HOUR, NEW_YORK)
+    first = datetime(2026, 1, 1, tzinfo=UTC)
+    expected = first + timedelta(hours=1_000_114)
+    assert grid.shift(first, 1_000_000) == expected
+    assert grid.shift(expected, -1_000_000) == first
+
+
 def test_identity_navigation_keeps_a_gap_projection_without_realigning() -> (
     None
 ):

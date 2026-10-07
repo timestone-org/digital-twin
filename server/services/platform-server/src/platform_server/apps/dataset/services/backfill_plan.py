@@ -8,8 +8,10 @@
 一个月」，而界面上看不出少了哪一段。
 """
 
+from collections.abc import Iterator
 from dataclasses import dataclass
 from datetime import UTC, datetime, timedelta
+from itertools import islice
 
 from lib.utils.timeutils import format_rfc3339, to_utc
 from platform_server.apps.dataset.errors import DatasetBackfillInvalid
@@ -282,26 +284,23 @@ def count_buckets(
     return grid.count(first, last, ceiling)
 
 
-def slice_batches(plan: BackfillPlan) -> tuple[BackfillBatch, ...]:
+def slice_batches(plan: BackfillPlan) -> Iterator[BackfillBatch]:
     """把整段切成一批批，每批 `BATCH_BUCKETS` 个桶。
 
     Args: plan。
     """
     grid = BucketGrid(interval=plan.interval, timezone=plan.timezone)
     selected = plan.selection or grid.selection(plan.first, plan.last)
-    found: list[BackfillBatch] = []
-    for offset in range(0, selected.count, BATCH_BUCKETS):
-        end = min(offset + BATCH_BUCKETS, selected.count) - 1
-        chunk = selected.between(selected.at(offset), selected.at(end))
-        found.append(
-            BackfillBatch(
-                first=chunk.first,
-                last=chunk.last,
-                count=chunk.count,
-                selection=chunk,
-            )
+    pending = selected.iterate()
+    # 每批只恢复至多 240 个身份；yield 后生产 forloop 会 await 该批的事务。
+    while starts := tuple(islice(pending, BATCH_BUCKETS)):
+        chunk = selected.between(starts[0], starts[-1])
+        yield BackfillBatch(
+            first=chunk.first,
+            last=chunk.last,
+            count=len(starts),
+            selection=chunk,
         )
-    return tuple(found)
 
 
 def batch_window(plan: BackfillPlan, batch: BackfillBatch) -> BucketWindow:

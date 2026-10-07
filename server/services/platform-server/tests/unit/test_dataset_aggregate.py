@@ -187,7 +187,8 @@ def test_the_lookback_is_clamped_on_both_sides(
 def test_the_subtrahend_query_has_a_floor() -> None:
     sql, params = build_previous_end_query([column("delta")], window=window())
     assert "ts >= :range_start AND ts < :range_end" in sql
-    assert "bucket_start - CAST(:lookback_span AS interval)" in sql
+    assert "bucket_start AT TIME ZONE 'UTC'" in sql
+    assert "- CAST(:lookback_span AS interval)) AT TIME ZONE 'UTC'" in sql
     assert params["lookback_start"] == FIRST - timedelta(days=1)
 
 

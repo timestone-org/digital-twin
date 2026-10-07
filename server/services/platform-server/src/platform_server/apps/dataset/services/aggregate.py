@@ -238,7 +238,8 @@ def build_previous_end_query(
         " WINDOW ordered AS (PARTITION BY source_id, point_code"
         " ORDER BY bucket_start))"
         " SELECT bucket_start, source_id, point_code, CASE WHEN"
-        " previous_bucket >= bucket_start - CAST(:lookback_span AS interval)"
+        " previous_bucket >= ((bucket_start AT TIME ZONE 'UTC')"
+        " - CAST(:lookback_span AS interval)) AT TIME ZONE 'UTC'"
         " THEN value_num END AS value_num FROM predecessors"
         " WHERE bucket_start = ANY(CAST(:bucket_starts AS timestamptz[]))"
     )
@@ -418,7 +419,7 @@ def _column_cells(
 ) -> dict[datetime, Cell]:
     """一列在它那串桶上的取值。
 
-    Args: column, series（按桶升序）, seed（`delta` 的第一个减数）。
+    Args: column, series（按桶升序）, seeds（每个目标身份的前驱末值）。
     """
     if column.agg == AGG_DELTA:
         return _delta_cells(series, seeds)
@@ -452,9 +453,9 @@ def _delta_cells(
 ) -> dict[datetime, Cell]:
     """`delta` 的跨桶接力：`本桶末值 − 上一桶末值`（§4.4）。
 
-    ⚠ 中间的空桶不打断接力——它们压根不在 `series` 里，而 `previous` 一直留着，
-    末值有效到下次变化为止。
-    Args: series（按桶升序）, seed。
+    ⚠ seeds 已经过完整 context 的身份排序，空桶不打断接力，稀疏请求不跳过
+    中间的非请求非空桶。
+    Args: series（按桶升序）, seeds（每个目标身份的前驱末值）。
     """
     found: dict[datetime, Cell] = {}
     for bucket, row in series:

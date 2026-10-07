@@ -6,37 +6,27 @@
 from __future__ import annotations
 
 import heapq
-from collections.abc import Callable, Iterator, Sequence
+from collections.abc import Iterator, Sequence
 from dataclasses import dataclass
 from datetime import UTC, datetime, timedelta
-from functools import wraps
 from zoneinfo import ZoneInfo
 
 from lib.utils.timeutils import to_utc
+from platform_server.apps.dataset.services.bucket_offsets import (
+    OffsetSegment as _OffsetSegment,
+)
+from platform_server.apps.dataset.services.bucket_offsets import (
+    datetime_boundary as _datetime_boundary,
+)
+from platform_server.apps.dataset.services.bucket_offsets import (
+    offset_segments as _segments,
+)
 
 BUCKET_ORIGIN = datetime(2000, 1, 3)  # noqa: DTZ001
 _UTC_ORIGIN = BUCKET_ORIGIN.replace(tzinfo=UTC)
 _EPSILON = timedelta(microseconds=1)
 # IANA 的最大日期跳变为一整天；两侧各留两天恢复 nominal label。
 _MARGIN = timedelta(days=2)
-# IANA 相邻时区跳变之间超过半天，探测后精确二分到微秒边界。
-_PROBE = timedelta(hours=12)
-
-
-def _datetime_boundary[**P, R](function: Callable[P, R]) -> Callable[P, R]:
-    """把无法表示的日期或完整 preimage 边界转成校验错误。
-
-    Args: function。
-    """
-
-    @wraps(function)
-    def checked(*args: P.args, **kwargs: P.kwargs) -> R:
-        try:
-            return function(*args, **kwargs)
-        except OverflowError as exc:
-            raise ValueError("日期边界无法表示完整桶区间") from exc
-
-    return checked
 
 
 @dataclass(frozen=True)
@@ -46,13 +36,6 @@ class BucketDescriptor:
     identity: datetime
     source_start: datetime
     close_at: datetime
-
-
-@dataclass(frozen=True)
-class _OffsetSegment:
-    since: datetime
-    until: datetime
-    offset: timedelta
 
 
 @dataclass(frozen=True)
@@ -284,13 +267,18 @@ class BucketGrid:
         """
         identity = to_utc(identity)
         edge = identity + steps * self.interval
-        selected = self.selection(
-            min(identity, edge) - _MARGIN,
-            max(identity, edge) + _MARGIN,
-        )
-        if not selected.between(identity, identity).count:
-            raise ValueError("时刻不是可达桶身份")
-        return selected.at(selected.rank(identity) - 1 + steps)
+        margin = _MARGIN
+        while True:
+            selected = self.selection(
+                min(identity, edge) - margin,
+                max(identity, edge) + margin,
+            )
+            if not selected.between(identity, identity).count:
+                raise ValueError("时刻不是可达桶身份")
+            target = selected.rank(identity) - 1 + steps
+            if 0 <= target < selected.count:
+                return selected.at(target)
+            margin *= 2
 
     def sequence(self, first: datetime, last: datetime) -> tuple[datetime, ...]:
         return self.selection(first, last).sequence()
@@ -407,55 +395,6 @@ def _project(local: datetime, zone: ZoneInfo) -> datetime:
 
 def _label(index: int, interval: timedelta) -> datetime:
     return BUCKET_ORIGIN + index * interval
-
-
-def _offset(moment: datetime, zone: ZoneInfo) -> timedelta:
-    """一个真实 UTC 时刻的当地偏移。
-
-    Args: moment, zone。
-    """
-    offset = moment.astimezone(zone).utcoffset()
-    if offset is None:
-        raise ValueError("时区没有 UTC 偏移")
-    return offset
-
-
-def _transition(left: datetime, right: datetime, zone: ZoneInfo) -> datetime:
-    """在偏移不同的两端之间定位跳变右开界。
-
-    Args: left, right, zone。
-    """
-    before = _offset(left, zone)
-    while right - left > _EPSILON:
-        middle = left + ((right - left) // _EPSILON // 2) * _EPSILON
-        if _offset(middle, zone) == before:
-            left = middle
-        else:
-            right = middle
-    return right
-
-
-def _segments(
-    since: datetime, until: datetime, zone: ZoneInfo
-) -> tuple[_OffsetSegment, ...]:
-    """按真实 UTC 偏移拆分区间。
-
-    Args: since, until, zone。
-    """
-    since, until = to_utc(since), to_utc(until)
-    found: list[_OffsetSegment] = []
-    cursor, begin, offset = since, since, _offset(since, zone)
-    while cursor < until:
-        probe = min(cursor + _PROBE, until)
-        following = _offset(probe, zone)
-        if following != offset:
-            edge = _transition(cursor, probe, zone)
-            found.append(_OffsetSegment(begin, edge, offset))
-            begin, offset = edge, following
-        cursor = probe
-    if begin < until:
-        found.append(_OffsetSegment(begin, until, offset))
-    return tuple(found)
 
 
 def _reachable_indexes(

@@ -6,9 +6,13 @@
 自己再实现一遍。
 """
 
+from collections.abc import Mapping
+from dataclasses import dataclass
 from datetime import UTC, datetime, timedelta
 
 import pytest
+from sqlalchemy import text
+from sqlalchemy.ext.asyncio import AsyncSession
 
 from integration.dataset_helpers import ArchiveWriter, Sample
 from platform_server.apps.collect.services import ReadOnlyHistorySource
@@ -237,3 +241,96 @@ def delta_case(
         for hour, minute, value in readings
     ]
     return samples, starts, width
+
+
+@dataclass(frozen=True)
+class TransactionHistory:
+    """同一只读事务里执行生产查询，验证 session 时区不会改变回看边界。"""
+
+    session: AsyncSession
+
+    async def fetch_all(
+        self, sql: str, params: Mapping[str, object]
+    ) -> list[dict[str, object]]:
+        result = await self.session.execute(text(sql), params)
+        return [dict(row) for row in result.mappings()]
+
+
+@pytest.mark.parametrize("session_timezone", ["UTC", "America/New_York"])
+@pytest.mark.parametrize(
+    "case", ["spring-day", "fall-day", "spring-two-days", "fall-two-days"]
+)
+async def test_delta_lookback_is_absolute_in_each_database_session_timezone(
+    archive: ArchiveWriter, session_timezone: str, case: str
+) -> None:
+    samples, starts, width, expected = lookback_case(case)
+    point_code = "dst_lookback"
+    await archive.write(point_code, samples)
+    column = PointColumn(
+        key="counter",
+        node_key=archive.node_key(point_code),
+        agg="delta",
+        source_id=archive.source_id,
+        point_code=point_code,
+    )
+    async with archive.database.session() as session:
+        await session.execute(text("SET TRANSACTION READ ONLY"))
+        await session.execute(
+            text("SELECT set_config('TimeZone', :timezone, true)"),
+            {"timezone": session_timezone},
+        )
+        found = await aggregate_cells(
+            TransactionHistory(session),
+            columns=[column],
+            window=BucketWindow(
+                starts=starts, interval=width, timezone="America/New_York"
+            ),
+        )
+    assert list(found) == [starts[-1]]
+    assert found[starts[-1]]["counter"].value == expected
+
+
+def lookback_case(
+    case: str,
+) -> tuple[list[Sample], tuple[datetime, ...], timedelta, float | None]:
+    """24/48 小时的字面量前驱；秋季超时前驱即使 context 读到也不可接力。
+
+    Args: case。
+    """
+    if case == "spring-day":
+        target = datetime(2026, 3, 8, 7, tzinfo=UTC)
+        previous, width, expected = (
+            target - timedelta(days=1),
+            timedelta(hours=1),
+            10.0,
+        )
+        starts = (target,)
+    elif case == "fall-day":
+        target = datetime(2026, 11, 1, 6, tzinfo=UTC)
+        previous, width, expected = (
+            target - timedelta(hours=25),
+            timedelta(hours=1),
+            None,
+        )
+        starts = (target - timedelta(hours=2), target)
+    elif case == "spring-two-days":
+        target = datetime(2026, 3, 8, 8, tzinfo=UTC)
+        previous, width, expected = (
+            target - timedelta(hours=47),
+            timedelta(hours=2),
+            10.0,
+        )
+        starts = (target,)
+    else:
+        target = datetime(2026, 11, 2, 9, tzinfo=UTC)
+        previous, width, expected = (
+            target - timedelta(hours=49),
+            timedelta(hours=2),
+            None,
+        )
+        starts = (target - timedelta(hours=2), target)
+    samples = [
+        Sample(previous + timedelta(minutes=1), 40.0),
+        Sample(target + timedelta(minutes=1), 50.0),
+    ]
+    return samples, starts, width, expected

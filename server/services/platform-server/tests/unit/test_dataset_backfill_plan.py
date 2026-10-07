@@ -263,7 +263,7 @@ def test_batches_tile_the_whole_range_without_gap_or_overlap() -> None:
         limits=limits(),
     )
 
-    batches = slice_batches(plan)
+    batches = tuple(slice_batches(plan))
 
     assert sum(batch.count for batch in batches) == plan.total_buckets
     assert batches[0].first == plan.first
@@ -281,7 +281,7 @@ def test_a_single_short_batch_counts_its_own_buckets() -> None:
         limits=limits(),
     )
 
-    batches = slice_batches(plan)
+    batches = tuple(slice_batches(plan))
 
     assert len(batches) == 1
     assert batches[0].count == 5
@@ -335,7 +335,7 @@ def test_spring_batch_counts_match_distinct_ordered_windows() -> None:
             recompute_tail_buckets=0,
         ),
     )
-    batches = slice_batches(plan)
+    batches = tuple(slice_batches(plan))
     windows = [batch_window(plan, batch).starts for batch in batches]
     found = tuple(bucket for starts in windows for bucket in starts)
     assert found == tuple(sorted(set(found)))
@@ -432,3 +432,23 @@ def test_bounded_request_keeps_the_tail_before_a_stale_guard() -> None:
     assert plan.last == watermark - timedelta(seconds=2)
     assert plan.first == plan.last - timedelta(seconds=3)
     assert any("向前采集器" in note for note in plan.notes)
+
+
+def test_large_calendar_batches_are_lazy_and_keep_exact_counts() -> None:
+    now = datetime(2026, 10, 7, tzinfo=UTC)
+    plan = plan_backfill(
+        a_table(collect_mode="manual", collect_interval_ms=86_400_000),
+        since=datetime.min.replace(tzinfo=UTC),
+        until=now,
+        now=now,
+        limits=limits(timezone="America/New_York"),
+    )
+    batches = slice_batches(plan)
+    assert iter(batches) is batches
+    first = next(batches)
+    assert first.count == BATCH_BUCKETS
+    remaining = tuple(batches)
+    assert len(remaining) + 1 == 834
+    assert first.count + sum(batch.count for batch in remaining) == 200_000
+    assert first.first == plan.first
+    assert remaining[-1].last == plan.last

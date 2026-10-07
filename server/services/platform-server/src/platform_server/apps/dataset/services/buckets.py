@@ -10,11 +10,7 @@ from lib.utils.timeutils import to_utc
 from platform_server.apps.dataset.services.bucket_grid import (
     BUCKET_ORIGIN as WALL_ORIGIN,
 )
-from platform_server.apps.dataset.services.bucket_grid import (
-    BucketDescriptor,
-    BucketGrid,
-    BucketSelection,
-)
+from platform_server.apps.dataset.services.bucket_grid import BucketGrid
 
 BUCKET_ORIGIN = WALL_ORIGIN
 
@@ -74,16 +70,6 @@ def bucket_sequence(
     return BucketGrid(interval, timezone).sequence(first, last)
 
 
-def describe_bucket(
-    bucket: datetime, *, interval: timedelta, timezone: str
-) -> BucketDescriptor:
-    """一个身份的完整真实样本边界。
-
-    Args: bucket, interval, timezone。
-    """
-    return BucketGrid(interval, timezone).describe(bucket)
-
-
 def last_closed_bucket(
     now: datetime, *, interval: timedelta, timezone: str
 ) -> datetime:
@@ -92,51 +78,6 @@ def last_closed_bucket(
     Args: now, interval, timezone。
     """
     return BucketGrid(interval, timezone).last_closed(now)
-
-
-def identity_floor(
-    key: datetime, *, interval: timedelta, timezone: str
-) -> datetime:
-    """不晚于身份键的最后一个可达桶。
-
-    Args: key, interval, timezone。
-    """
-    return BucketGrid(interval, timezone).floor(key)
-
-
-def identity_ceil(
-    key: datetime, *, interval: timedelta, timezone: str
-) -> datetime:
-    """不早于身份键的第一个可达桶。
-
-    Args: key, interval, timezone。
-    """
-    return BucketGrid(interval, timezone).ceil(key)
-
-
-def identities_for_span(
-    since: datetime, until: datetime, *, interval: timedelta, timezone: str
-) -> BucketSelection:
-    """与真实 UTC 请求闭区间相交的紧凑桶身份集合。
-
-    Args: since, until, interval, timezone。
-    """
-    return BucketGrid(interval, timezone).identities_for_span(since, until)
-
-
-def count_buckets(
-    first: datetime,
-    last: datetime,
-    *,
-    interval: timedelta,
-    timezone: str,
-    ceiling: int,
-) -> int:
-    """身份闭区间的桶数，最多返回 ceiling + 1。
-
-    Args: first, last, interval, timezone, ceiling。
-    """
-    return BucketGrid(interval, timezone).count(first, last, ceiling)
 
 
 def collected_row_id(table_id: uuid.UUID, bucket: datetime) -> uuid.UUID:
