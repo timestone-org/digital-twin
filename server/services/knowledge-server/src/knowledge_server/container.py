@@ -44,7 +44,7 @@ from knowledge_server.apps.knowledge.services.sources import (
 from knowledge_server.llm_adapters import AdapterDeps, CatalogChatAdapter
 from knowledge_server.llm_purposes import PURPOSE_EMBEDDING, PURPOSE_RERANK
 from knowledge_server.schema import SchemaFacts
-from knowledge_server.settings import SERVICE_NAME, Settings
+from knowledge_server.settings import ROLE_WORKER, SERVICE_NAME, Settings
 from lib.cache import Cache
 from lib.db import Database, PoolProfile
 from lib.idempotency import IdempotencyStore
@@ -68,6 +68,7 @@ from llmcore.guard import GuardedModel
 # 幂等键的命名空间。⚠ 必须带服务名：共用一个 Redis 的两个服务，同一个端点名
 # 撞上同一个幂等键时会互相返回对方的结果
 IDEMPOTENCY_NAMESPACE = SERVICE_NAME
+STREAM_READ_MARGIN_S = 2.0
 
 
 @dataclass(frozen=True)
@@ -190,9 +191,7 @@ def build_container(settings: Settings) -> Container:
             cache=cache, namespace=IDEMPOTENCY_NAMESPACE
         ),
         objectstore=store,
-        stream=RedisStream(
-            url=settings.url(), timeout_s=settings.redis_timeout_s
-        ),
+        stream=_build_stream(settings),
         platform=platform,
         # ⚠ 这一份是**不带身份头**的：能力面报「接了哪几路来源」用得着它，
         # 而真要代表用户去拉数据时，api 侧会按请求另造一份带头的
@@ -213,6 +212,20 @@ def build_container(settings: Settings) -> Container:
             settings.office_preview_timeout_s,
         ),
     )
+
+
+def _build_stream(settings: Settings) -> RedisStream:
+    """按角色装配摄取队列的读取预算。
+
+    Args: settings。
+    """
+    timeout_s = settings.redis_timeout_s
+    if settings.app_role == ROLE_WORKER:
+        # ⚠ 空队列会正常阻塞，套接字预算必须覆盖 BLOCK 并留通信余量。
+        timeout_s = max(
+            timeout_s, settings.ingest_block_ms / 1000 + STREAM_READ_MARGIN_S
+        )
+    return RedisStream(url=settings.url(), timeout_s=timeout_s)
 
 
 def _build_embedder(settings: Settings, catalog: CatalogCache) -> Embedder:
