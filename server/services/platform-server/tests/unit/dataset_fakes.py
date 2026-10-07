@@ -162,8 +162,12 @@ class HalfBrokenStore:
     async def renew_if_owner(self, key: str, value: str, *, ttl_s: int) -> bool:
         return await self.cache.renew_if_owner(key, value, ttl_s=ttl_s)
 
-    async def delete_if_owner(self, key: str, value: str) -> bool:
-        return await self.cache.delete_if_owner(key, value)
+    async def delete_if_owner(
+        self, key: str, value: str, *, related_key: str | None = None
+    ) -> bool:
+        return await self.cache.delete_if_owner(
+            key, value, related_key=related_key
+        )
 
     async def delete(self, key: str) -> None:
         await self.cache.delete(key)

@@ -1,28 +1,21 @@
-"""跑一次来源同步：把外部系统的记录摄成这个库的文档。
+"""来源分页与快照在事务外准备，文档和游标统一提交，失败另存安全说明。"""
 
-⚠ 同步**在用户按下那一刻、用用户自己的身份**跑（api 角色）。不存任何凭据：
-存了的话，一次配置泄露等于把那个人的权限交出去，而无人值守的 worker 会拿着
-它不停地读。
-
-⚠ 一次调用**有页数上限**。没有上限的话，一个几十万行的外部表会把这一次请求
-拖上几十分钟——而请求超时之后，已经登记的那些文档还在，游标却没存下来。
-到顶就把游标存好并如实回「还有更多」，由人（或界面）再按一次。
-
-⚠ 内容在同步这一刻就落成**我们自己的原件**（写进对象存储），之后走的是与
-上传完全相同的那条管线。这样 worker 永远只读我们自己的存储：它跑起来时那个
-用户早就走了，再去打外部系统就只能用服务级密钥——而那正是「知识库当越权通道」
-的开端。
-"""
-
+import asyncio
 import hashlib
 import uuid
+from collections.abc import Callable, Mapping, Sequence
+from contextlib import AbstractAsyncContextManager
 from dataclasses import dataclass
+from datetime import datetime
 
 from sqlalchemy.exc import IntegrityError
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from knowledge_server.apps.knowledge import crud
-from knowledge_server.apps.knowledge.errors import SourceNotFound
+from knowledge_server.apps.knowledge.errors import (
+    SourceNotFound,
+    SourceSyncConflict,
+)
 from knowledge_server.apps.knowledge.schemas import SyncOut
 from knowledge_server.apps.knowledge.services import document_service
 from knowledge_server.apps.knowledge.services.sources import (
@@ -32,21 +25,21 @@ from knowledge_server.apps.knowledge.services.sources import (
     source_for,
     suffix_of,
 )
+from lib.errors import AppError
 from lib.logging import get_logger
-from lib.objectstore import ObjectStore, ObjectStoreError
+from lib.objectstore import ObjectStore
 from lib.stream import StreamGroup, StreamLike
 from lib.utils.ids import uuid7
 from lib.utils.timeutils import utcnow
 
 _logger = get_logger("knowledge.sync")
-
-# 一次同步最多拉几页
 MAX_PAGES = 20
+Sessions = Callable[[], AbstractAsyncContextManager[AsyncSession]]
 
 
 @dataclass(frozen=True)
 class SyncOutcome:
-    """一次同步的结果。"""
+    """一次来源同步的结果。"""
 
     registered: int
     skipped: int
@@ -56,10 +49,7 @@ class SyncOutcome:
 
 @dataclass(frozen=True)
 class SyncDeps:
-    """跑一次同步要的那几样。
-
-    ⚠ 打成一包而不是逐个形参：调用面的形参上限是 5。
-    """
+    """来源同步的外部依赖与分页上限。"""
 
     sources: tuple[KnowledgeSource, ...]
     store: ObjectStore
@@ -68,134 +58,250 @@ class SyncDeps:
     max_pages: int = MAX_PAGES
 
 
-async def _stored(
-    store: ObjectStore,
-    base_id: uuid.UUID,
-    document_id: uuid.UUID,
-    item: DiscoveredItem,
-) -> str:
-    """把一条外部记录落成我们自己的原件，回它的对象键。
-
-    Args: store, base_id, document_id, item。
-    """
-    key = document_key(base_id, document_id, suffix_of(item.title) or ".md")
-    await store.put_bytes(
-        key, item.content, content_type=item.media_type or "text/markdown"
-    )
-    return key
+@dataclass(frozen=True)
+class _SourceState:
+    id: uuid.UUID
+    base_id: uuid.UUID
+    kind: str
+    config: Mapping[str, object]
+    cursor: str | None
+    synced_at: datetime | None
 
 
-async def _registered(
-    session: AsyncSession,
-    deps: SyncDeps,
-    source: crud.source.KnowledgeSource,
-    item: DiscoveredItem,
-) -> bool:
-    """登记一条；内容重复就跳过，回它有没有真的登记进去。
+@dataclass(frozen=True)
+class _Batch:
+    documents: tuple[crud.document.DocumentWrite, ...]
+    cursor: str | None
 
-    ⚠ 重复靠 `(base_id, content_hash)` 那条唯一键拦住——外部系统的同一行被
-    同步两次是常态（游标重叠、有人手按），而重复的表现是同一段话在检索里
-    出现两次。
 
-    Args: session, deps, source, item。
-    """
+async def _read_state(sessions: Sessions, source_id: uuid.UUID) -> _SourceState:
+    async with sessions() as session:
+        source = await crud.source.get_source(session, source_id)
+        if source is None:
+            raise SourceNotFound("这一路来源不存在")
+        return _SourceState(
+            source.id,
+            source.base_id,
+            source.kind,
+            dict(source.config_json),
+            source.sync_cursor,
+            source.last_synced_at,
+        )
+
+
+def _document_write(
+    source: _SourceState, item: DiscoveredItem
+) -> crud.document.DocumentWrite:
     document_id = uuid7()
-    digest = hashlib.sha256(item.content).hexdigest()
-    key = await _stored(deps.store, source.base_id, document_id, item)
-    try:
-        # ⚠ 圈一个保存点：撞唯一键之后那一次 flush 已经失败，不回滚的话整个
-        # 会话被毒住——同一批里后面每一条都会撞上一句
-        # 「transaction has been rolled back」，而真正的原因是第一条重复
-        async with session.begin_nested():
-            await crud.document.insert_document(
-                session,
-                crud.document.DocumentWrite(
-                    document_id=document_id,
-                    base_id=source.base_id,
-                    source_id=source.id,
-                    external_ref=key,
-                    title=item.title,
-                    media_type=item.media_type,
-                    object_key=key,
-                    byte_size=item.byte_size,
-                    content_hash=digest,
-                ),
+    key = document_key(
+        source.base_id, document_id, suffix_of(item.title) or ".md"
+    )
+    return crud.document.DocumentWrite(
+        document_id=document_id,
+        base_id=source.base_id,
+        source_id=source.id,
+        external_ref=key,
+        title=item.title,
+        media_type=item.media_type,
+        object_key=key,
+        byte_size=item.byte_size,
+        content_hash=hashlib.sha256(item.content).hexdigest(),
+    )
+
+
+async def _prepare(
+    deps: SyncDeps, source: _SourceState, keys: list[str]
+) -> _Batch:
+    picked = source_for(source.kind, deps.sources)
+    cursor = source.cursor
+    documents: list[crud.document.DocumentWrite] = []
+    for _ in range(deps.max_pages):
+        page = await picked.discover(source.config, cursor)
+        for item in page.items:
+            write = _document_write(source, item)
+            # ⚠ 写结果未知时也要核对归属，键必须在上传前登记。
+            keys.append(write.object_key)
+            await deps.store.put_bytes(
+                write.object_key,
+                item.content,
+                content_type=item.media_type or "text/markdown",
             )
+            documents.append(write)
+        cursor = page.cursor
+        if cursor is None:
+            break
+    return _Batch(tuple(documents), cursor)
+
+
+async def _register(
+    session: AsyncSession, deps: SyncDeps, write: crud.document.DocumentWrite
+) -> bool:
+    try:
+        async with session.begin_nested():
+            await crud.document.insert_document(session, write)
     except IntegrityError:
-        # ⚠ 撞唯一键就是「这一条已经在库里了」，不是错误。顺手把刚写进去的
-        # 那份字节清掉——留着的话，每同步一次就多一份没人引用的副本
-        await _swept(deps.store, key)
+        if not await crud.document.has_content_hash(
+            session, write.base_id, write.content_hash
+        ):
+            raise
         return False
+    row = await crud.document.get_document(session, write.document_id)
+    if row is None:
+        raise RuntimeError("文档刚登记就取不到了")
     document_service.queue_ingest(
-        session,
-        deps.stream,
-        deps.group,
-        document_service.document_out(await _reloaded(session, document_id)),
+        session, deps.stream, deps.group, document_service.document_out(row)
     )
     return True
 
 
-async def _reloaded(
-    session: AsyncSession, document_id: uuid.UUID
-) -> crud.document.KnowledgeDocument:
-    row = await crud.document.get_document(session, document_id)
-    # pragma 理由：刚 flush 进去的行，取不到即数据库出了别的问题
-    if row is None:  # pragma: no cover
-        raise RuntimeError("文档刚登记就取不到了")
-    return row
+def _matches(
+    current: crud.source.KnowledgeSource, expected: _SourceState
+) -> bool:
+    return (
+        current.base_id,
+        current.kind,
+        current.config_json,
+        current.sync_cursor,
+        current.last_synced_at,
+    ) == (
+        expected.base_id,
+        expected.kind,
+        expected.config,
+        expected.cursor,
+        expected.synced_at,
+    )
 
 
-async def _swept(store: ObjectStore, key: str) -> None:
+async def _save(
+    sessions: Sessions, deps: SyncDeps, source: _SourceState, batch: _Batch
+) -> SyncOutcome:
+    async with sessions() as session:
+        current = await crud.source.get_source(
+            session, source.id, is_locked=True
+        )
+        if current is None:
+            raise SourceNotFound("这一路来源不存在")
+        if not _matches(current, source):
+            raise SourceSyncConflict(
+                "这一路来源的配置或同步结果已更新，请刷新后重新同步"
+            )
+        registered = 0
+        for write in batch.documents:
+            if await _register(session, deps, write):
+                registered += 1
+        await crud.source.mark_synced(
+            session, source.id, batch.cursor, utcnow()
+        )
+    return SyncOutcome(
+        registered, len(batch.documents) - registered, batch.cursor is not None
+    )
+
+
+async def _cleanup(
+    sessions: Sessions, store: ObjectStore, keys: Sequence[str]
+) -> None:
+    if not keys:
+        return
     try:
-        await store.delete(key)
-    except ObjectStoreError as error:
+        async with sessions() as session:
+            owned = await crud.document.owned_object_keys(session, keys)
+    except Exception as error:
         _logger.warning(
-            "sync_orphan_left",
-            "重复条目的字节没清掉，留了一份没人引用的副本",
-            key=key,
-            error=error,
+            "sync_cleanup_unconfirmed",
+            "无法核对原件归属，保留快照待清理",
+            error_type=type(error).__name__,
+        )
+        return
+    for key in keys:
+        if key in owned:
+            continue
+        try:
+            await store.delete(key)
+        except Exception as error:
+            _logger.warning(
+                "sync_orphan_left",
+                "未登记的来源原件清理失败",
+                key=key,
+                error_type=type(error).__name__,
+            )
+
+
+def _failure_reason(error: Exception | asyncio.CancelledError) -> str:
+    if isinstance(error, asyncio.CancelledError):
+        return "来源同步已取消，请重新同步"
+    if isinstance(error, AppError):
+        return error.message[:500]
+    return "来源同步未完成，请稍后重新同步"
+
+
+async def _finish(
+    sessions: Sessions,
+    deps: SyncDeps,
+    source: _SourceState,
+    keys: Sequence[str],
+    reason: str,
+) -> None:
+    await _cleanup(sessions, deps.store, keys)
+    if not reason:
+        return
+    try:
+        async with sessions() as session:
+            current = await crud.source.get_source(
+                session, source.id, is_locked=True
+            )
+            if current is not None and _matches(current, source):
+                await crud.source.mark_sync_failed(
+                    session, source.id, reason, source.synced_at
+                )
+    except Exception as error:
+        _logger.warning(
+            "sync_failure_record_failed",
+            "来源同步失败说明未能落库",
+            source_id=str(source.id),
+            error_type=type(error).__name__,
         )
 
 
-def sync_out(made: SyncOutcome) -> SyncOut:
-    """一次同步的结果摊成出参。
+async def _settle(
+    sessions: Sessions,
+    deps: SyncDeps,
+    source: _SourceState,
+    keys: Sequence[str],
+    reason: str = "",
+) -> None:
+    # ⚠ 请求取消不能中断原件补偿；保留强引用并等清理任务完成。
+    cleanup = asyncio.create_task(_finish(sessions, deps, source, keys, reason))
+    is_cancelled = False
+    while not cleanup.done():
+        try:
+            await asyncio.shield(cleanup)
+        except asyncio.CancelledError:
+            is_cancelled = True
+    cleanup.result()
+    if is_cancelled:
+        raise asyncio.CancelledError
 
-    Args: made。
-    """
+
+def sync_out(made: SyncOutcome) -> SyncOut:
     return SyncOut(
-        registered=made.registered,
-        skipped=made.skipped,
-        has_more=made.has_more,
+        registered=made.registered, skipped=made.skipped, has_more=made.has_more
     )
 
 
 async def sync_source(
-    session: AsyncSession, deps: SyncDeps, source_id: uuid.UUID
+    sessions: Sessions, deps: SyncDeps, source_id: uuid.UUID
 ) -> SyncOutcome:
-    """把一路来源里的新条目摄进来，回这一次登记了几条。
+    """事务外准备原件，统一登记并补偿未提交快照。
 
-    Args: session, deps, source_id。
+    Args: sessions, deps, source_id。
     """
-    source = await crud.source.get_source(session, source_id)
-    if source is None:
-        raise SourceNotFound("这一路来源不存在")
-    picked = source_for(source.kind, deps.sources)
-    cursor = source.sync_cursor
-    registered = 0
-    skipped = 0
-    pages = 0
-    while pages < deps.max_pages:
-        pages += 1
-        page = await picked.discover(dict(source.config_json), cursor)
-        for item in page.items:
-            if await _registered(session, deps, source, item):
-                registered += 1
-            else:
-                skipped += 1
-        cursor = page.cursor
-        if cursor is None:
-            break
-    await crud.source.mark_synced(session, source_id, cursor, utcnow())
-    return SyncOutcome(
-        registered=registered, skipped=skipped, has_more=cursor is not None
-    )
+    source = await _read_state(sessions, source_id)
+    keys: list[str] = []
+    try:
+        batch = await _prepare(deps, source, keys)
+        made = await _save(sessions, deps, source, batch)
+    except (Exception, asyncio.CancelledError) as error:
+        await _settle(sessions, deps, source, keys, _failure_reason(error))
+        raise
+    await _settle(sessions, deps, source, keys)
+    return made

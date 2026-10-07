@@ -11,11 +11,12 @@ import { getCardPart, getModule, readText } from '@dt/modules'
 import type { GetModuleManifest } from '@dt/runtime'
 import { DtButton, DtNotice, DtSpinner, useConfirm, useToast } from '@dt/ui'
 import { computed, onBeforeUnmount, onMounted, ref, watch } from 'vue'
-import { onBeforeRouteLeave, useRoute, useRouter } from 'vue-router'
+import { useRoute, useRouter } from 'vue-router'
 
 import { installDashboardModules } from '@/bootstrap/dashboard'
 import { AppShell } from '@/components/layout'
 import { useUnsavedGuard } from '@/composables/useUnsavedGuard'
+import { useSubEditorRouteGuard } from '@/features/dashboard/useSubEditorRouteGuard'
 import CardPreviewStage from './components/CardPreviewStage.vue'
 import FieldsPane from './components/FieldsPane.vue'
 import StructurePane from './components/StructurePane.vue'
@@ -202,14 +203,11 @@ watch([dashboardId, nodeId], () => void page.load())
 onMounted(() => void page.load())
 onBeforeUnmount(page.dispose)
 useUnsavedGuard(() => page.isDirty.value)
-onBeforeRouteLeave(async () => {
-  if (!page.isDirty.value) return true
-  return confirm.ask({
-    title: '还有没保存的改动',
-    message: '离开这一页会丢掉它们。',
-    confirmText: '离开',
-    danger: true,
-  })
+useSubEditorRouteGuard(() => page.isDirty.value, {
+  title: '还有没保存的改动',
+  message: '离开这一页会丢掉它们。',
+  confirmText: '离开',
+  danger: true,
 })
 </script>
 

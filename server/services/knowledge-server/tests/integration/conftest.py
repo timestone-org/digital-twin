@@ -23,7 +23,7 @@ from sqlalchemy.ext.asyncio import (
 
 from knowledge_server.app import build_app
 from knowledge_server.container import IDEMPOTENCY_NAMESPACE, Container
-from knowledge_server.deps import get_session
+from knowledge_server.deps import get_session, get_sync_sessions
 from knowledge_server.settings import Settings
 from lib.config import load_settings
 from lib.db import run_after_commit_hooks
@@ -146,6 +146,9 @@ def _wire(application: FastAPI, connection: AsyncConnection) -> SessionMaker:
         join_transaction_mode="create_savepoint",
     )
     application.dependency_overrides[get_session] = _session_override(maker)
+    application.dependency_overrides[get_sync_sessions] = lambda: (
+        lambda: CommittingSession(maker)
+    )
     application.state.container = replace(
         built,
         idempotency=IdempotencyStore(
@@ -257,14 +260,17 @@ class CommittingSession:
         opened = self._opened
         if opened is None:  # pragma: no cover - 进得来就一定开过
             return
-        if kind is None:
-            await opened.commit()
-            # ⚠ 钩子也要跑：投队列挂在 after-commit 上，不跑的话用例看到的是
-            # 「一条消息都没投」，而生产那一侧投了
-            await run_after_commit_hooks(opened)
-        else:
+        try:
+            if kind is None:
+                await opened.commit()
+                await run_after_commit_hooks(opened)
+            else:
+                await opened.rollback()
+        except BaseException:
             await opened.rollback()
-        await opened.close()
+            raise
+        finally:
+            await opened.close()
 
 
 @pytest.fixture

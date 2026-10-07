@@ -31,6 +31,7 @@ vi.mock('vue-router', () => ({
   onBeforeRouteLeave: (fn: () => Promise<boolean>) => {
     guard.leave = fn
   },
+  onBeforeRouteUpdate: vi.fn(),
   RouterLink: { props: ['to'], template: '<a :href="to"><slot /></a>' },
 }))
 

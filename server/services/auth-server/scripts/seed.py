@@ -8,8 +8,14 @@ import asyncio
 import sys
 import uuid
 
-from pydantic import EmailStr, SecretStr
-from pydantic_settings import BaseSettings, SettingsConfigDict
+from pydantic import (
+    EmailStr,
+    SecretStr,
+    TypeAdapter,
+    ValidationError,
+    field_validator,
+)
+from pydantic_settings import SettingsConfigDict
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from auth_server.apps.auth import catalog
@@ -20,10 +26,11 @@ from auth_server.apps.auth.crud import (
     user_crud,
 )
 from auth_server.apps.auth.models import Permission, Role, RouteRule, User
+from auth_server.apps.auth.schemas.password import RawPassword
 from auth_server.apps.auth.services.matching import RuleView, is_redundant
 from auth_server.settings import Settings
 from lib.auth import PasswordHasher
-from lib.config import load_settings_or_exit
+from lib.config import EnvSettings, load_settings_or_exit
 from lib.db import Database
 from lib.logging import configure_logging, get_logger
 from lib.utils.ids import uuid5_of
@@ -34,7 +41,7 @@ _logger = get_logger("auth.seed")
 NAMESPACE = uuid.UUID("6f9d6a24-1a5b-5a4f-9a5e-0f1a2b3c4d5e")
 
 
-class SeedSettings(BaseSettings):
+class SeedSettings(EnvSettings):
     """种子账号配置。密码无默认值——弱默认的管理员口令等于没有口令。"""
 
     model_config = SettingsConfigDict(
@@ -48,6 +55,30 @@ class SeedSettings(BaseSettings):
     admin_username: str = "admin"
     admin_email: EmailStr = "admin@example.com"
     admin_password: SecretStr
+
+    @field_validator("admin_password")
+    @classmethod
+    def _validate_admin_password(cls, value: SecretStr) -> SecretStr:
+        """种子管理员复用账号口令强度政策。Args: value。"""
+        is_valid = True
+        try:
+            TypeAdapter(RawPassword).validate_python(value.get_secret_value())
+        except ValidationError:
+            is_valid = False
+        # ⚠ 在捕获块外抛出脱敏错误，避免留下包含明文输入的异常链。
+        if not is_valid:
+            raise ValidationError.from_exception_data(
+                cls.__name__,
+                [
+                    {
+                        "type": "value_error",
+                        "loc": (),
+                        "input": value,
+                        "ctx": {"error": ValueError("口令强度不符合账号政策")},
+                    }
+                ],
+            )
+        return value
 
 
 def check_catalog() -> list[str]:

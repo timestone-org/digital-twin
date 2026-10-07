@@ -61,7 +61,9 @@ class JobStore(Protocol):
         self, key: str, value: str, *, ttl_s: int
     ) -> bool: ...
 
-    async def delete_if_owner(self, key: str, value: str) -> bool: ...
+    async def delete_if_owner(
+        self, key: str, value: str, *, related_key: str | None = None
+    ) -> bool: ...
 
     async def delete(self, key: str) -> None: ...
 
@@ -210,8 +212,9 @@ class BackfillJobs:
         靠 TTL 自己过期。
         Args: table_id, token。
         """
-        if await self.store.delete_if_owner(_lock_key(table_id), token):
-            await self.store.delete(_cancel_key(table_id))
+        await self.store.delete_if_owner(
+            _lock_key(table_id), token, related_key=_cancel_key(table_id)
+        )
 
     async def request_cancel(self, table_id: uuid.UUID) -> None:
         """按下取消。worker 在下一个批边界读到它就停。

@@ -4,7 +4,8 @@
 会静默改变全部已存数据的含义（api-contract.md §6）。
 """
 
-from typing import Literal, get_args
+from math import isfinite
+from typing import Literal, cast, get_args
 
 from asyncua import ua
 
@@ -37,6 +38,8 @@ INTEGER_RANGES: dict[str, tuple[int, int]] = {
     "int32": (-(2**31), 2**31 - 1),
     "int64": (-(2**63), 2**63 - 1),
 }
+
+FLOAT32_MAX = 3.4028234663852886e38
 
 DEFAULT_VALUES: dict[str, object] = {
     "boolean": False,
@@ -93,6 +96,19 @@ def coerce(value: object, data_type: str) -> object:
     return _coerce_bytes(value)
 
 
+def require_finite_json(value: object) -> None:
+    """初值的任意 JSON 层级都不能含非有限浮点。Args: value。"""
+    pending = [value]
+    while pending:
+        current = pending.pop()
+        if isinstance(current, float) and not isfinite(current):
+            raise NodeValueRejected("节点值只接受有限数值")
+        if isinstance(current, dict):
+            pending.extend(cast(dict[str, object], current).values())
+        elif isinstance(current, list | tuple):
+            pending.extend(cast(list[object] | tuple[object, ...], current))
+
+
 def _coerce_integer(value: object, data_type: str) -> int:
     """整数：拒绝 bool、拒绝浮点、越界即抛。
 
@@ -115,7 +131,15 @@ def _coerce_real(value: object, data_type: str) -> float:
     """
     if isinstance(value, bool) or not isinstance(value, int | float):
         raise NodeValueRejected(f"{data_type} 只接受数值")
-    return float(value)
+    try:
+        real = float(value)
+    except OverflowError as error:
+        raise NodeValueRejected(f"{data_type} 的取值超出范围") from error
+    if not isfinite(real):
+        raise NodeValueRejected(f"{data_type} 只接受有限数值")
+    if data_type == "float" and abs(real) > FLOAT32_MAX:
+        raise NodeValueRejected("float 的取值超出 Float32 范围")
+    return real
 
 
 def _coerce_boolean(value: object) -> bool:

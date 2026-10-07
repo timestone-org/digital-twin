@@ -22,15 +22,18 @@ from opcua_server.apps.instance.errors import (
     NodeDeleteFailed,
     NodeIdentifierTaken,
     NodeNotFound,
+    NodeValueRejected,
 )
 from opcua_server.apps.instance.runtime.datatypes import (
     coerce,
     default_value,
+    require_finite_json,
     variant_type,
 )
 
 # 自定义命名空间恒为 2：0 是 OPC UA 标准空间，1 是服务器的 ApplicationUri
 CUSTOM_NAMESPACE_INDEX = 2
+NUMERIC_IDENTIFIER_MAX = 2**32 - 1
 
 NODE_CLASS_OBJECT = "object"
 NODE_CLASS_VARIABLE = "variable"
@@ -59,10 +62,13 @@ class NodeDefinition:
     node_class: str = NODE_CLASS_VARIABLE
     # 父节点的标识。留空表示直接挂在 Objects 根下。
     parent_identifier: str | None = None
+    identifier_kind: str = "string"
 
     def node_id(self) -> str:
-        """完整的字符串型 NodeId，索引恒为 2。"""
-        return f"ns={CUSTOM_NAMESPACE_INDEX};s={self.identifier}"
+        """按标识种类返回完整 NodeId，索引恒为 2。"""
+        return format_node_id(
+            self.identifier, self.identifier_kind, is_canonical=False
+        )
 
     def qualified_name(self) -> str:
         """带命名空间的 BrowseName。
@@ -84,6 +90,42 @@ class BuiltNode:
 
     definition: NodeDefinition
     handle: Any
+
+
+def format_node_id(
+    identifier: str, identifier_kind: str, *, is_canonical: bool = True
+) -> str:
+    """校验标识种类并组成 NodeId。Args: identifier, identifier_kind。"""
+    if identifier_kind == "string":
+        return f"ns={CUSTOM_NAMESPACE_INDEX};s={identifier}"
+    if identifier_kind != "numeric":
+        raise NodeValueRejected("不支持的节点标识种类")
+    if not identifier.isascii() or not identifier.isdecimal():
+        raise NodeValueRejected("numeric 标识必须是 UInt32 十进制整数")
+    try:
+        number = int(identifier)
+    except ValueError as error:
+        raise NodeValueRejected(
+            "numeric 标识必须是 UInt32 十进制整数"
+        ) from error
+    if not 0 <= number <= NUMERIC_IDENTIFIER_MAX:
+        raise NodeValueRejected("numeric 标识必须在 UInt32 范围内")
+    if is_canonical and str(number) != identifier:
+        raise NodeValueRejected("numeric 标识必须在 UInt32 范围内且不带前导零")
+    return f"ns={CUSTOM_NAMESPACE_INDEX};i={number}"
+
+
+def validate_initial_value(
+    value: object | None, data_type: str | None, node_class: str
+) -> None:
+    """保存前校验初值与运行时类型。Args: value, data_type, node_class。"""
+    require_finite_json(value)
+    if node_class not in VALUED_CLASSES:
+        return
+    effective_type = data_type or FALLBACK_DATA_TYPE
+    variant_type(effective_type)
+    if value is not None:
+        coerce(value, effective_type)
 
 
 async def register_custom_namespace(server: Server, uri: str) -> int:
@@ -152,11 +194,12 @@ async def build_nodes(
     """
     seen: set[str] = set()
     for definition in definitions:
-        if definition.identifier in seen:
+        node_id = definition.node_id()
+        if node_id in seen:
             raise NodeIdentifierTaken(
                 f"标识 {definition.identifier} 在本实例内重复"
             )
-        seen.add(definition.identifier)
+        seen.add(node_id)
     built: dict[str, BuiltNode] = {}
     root = server.get_objects_node()
     for definition in order_by_depth(definitions):

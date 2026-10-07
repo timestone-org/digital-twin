@@ -14,13 +14,13 @@ from dataclasses import dataclass
 from pathlib import Path
 
 from pydantic import Field, SecretStr
-from pydantic_settings import BaseSettings, SettingsConfigDict
+from pydantic_settings import SettingsConfigDict
 from sqlalchemy import URL, text
 from sqlalchemy.exc import SQLAlchemyError
 from sqlalchemy.ext.asyncio import AsyncConnection, create_async_engine
 from sqlalchemy.pool import NullPool
 
-from lib.config import load_settings_or_exit
+from lib.config import EnvSettings, load_settings_or_exit
 from lib.logging import configure_logging, get_logger
 
 SERVICES: tuple[str, ...] = (
@@ -78,7 +78,7 @@ class DeploymentFailed(RuntimeError):
     """部署前置条件或属主命令失败。"""
 
 
-class RunnerSettings(BaseSettings):
+class RunnerSettings(EnvSettings):
     """迁移连接与执行预算。"""
 
     model_config = SettingsConfigDict(
@@ -92,11 +92,13 @@ class RunnerSettings(BaseSettings):
     database_wait_timeout_s: float = Field(
         default=120.0,
         gt=0,
+        allow_inf_nan=False,
         validation_alias="MIGRATION_DATABASE_WAIT_TIMEOUT_S",
     )
     command_timeout_s: float = Field(
         default=600.0,
         gt=0,
+        allow_inf_nan=False,
         validation_alias="MIGRATION_COMMAND_TIMEOUT_S",
     )
 

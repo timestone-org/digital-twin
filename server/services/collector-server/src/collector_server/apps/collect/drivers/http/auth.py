@@ -1,7 +1,7 @@
 """HTTP 认证及仅驻留会话内存的 OAuth2 client_credentials 令牌。"""
 
 import time
-from collections.abc import Callable
+from collections.abc import Callable, Generator
 from urllib.parse import quote_plus
 
 import httpx
@@ -31,6 +31,26 @@ class OAuthToken(BaseModel):
     access_token: SecretStr = Field(min_length=1)
     token_type: str
     expires_in: float = Field(default=60, gt=0, allow_inf_nan=False)
+
+
+class BoundedDigestAuth(httpx.DigestAuth):
+    """把不合法或未支持的 Digest 挑战收敛成认证拒绝。"""
+
+    def auth_flow(
+        self, request: httpx.Request
+    ) -> Generator[httpx.Request, httpx.Response, None]:
+        """以固定错误口径完成挑战协商。Args: request。"""
+        try:
+            yield from super().auth_flow(request)
+        except (
+            KeyError,
+            ValueError,
+            NotImplementedError,
+            httpx.ProtocolError,
+        ) as error:
+            raise HttpAuthenticationRejected(
+                "HTTP Digest 认证挑战不合法或不受支持"
+            ) from error
 
 
 class HttpAuthentication:
@@ -74,7 +94,7 @@ class HttpAuthentication:
         if self._options.auth_type == "basic":
             return httpx.BasicAuth(username, password)
         if self._options.auth_type == "digest":
-            return httpx.DigestAuth(username, password)
+            return BoundedDigestAuth(username, password)
         return None
 
     async def headers(self, client: httpx.AsyncClient) -> dict[str, str]:

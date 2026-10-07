@@ -13,6 +13,7 @@ from opcua_server.apps.instance.runtime.datatypes import (
     DATA_TYPE_NAMES,
     coerce,
     default_value,
+    require_finite_json,
     variant_type,
 )
 
@@ -146,3 +147,43 @@ def test_empty_string_is_a_valid_value() -> None:
 
 def test_zero_is_a_valid_integer() -> None:
     assert coerce(0, "int32") == 0
+
+
+@pytest.mark.parametrize("data_type", ["float", "double"])
+@pytest.mark.parametrize(
+    "value", [float("nan"), float("inf"), float("-inf"), 10**400]
+)
+def test_nonfinite_or_unrepresentable_reals_are_rejected(
+    data_type: str, value: object
+) -> None:
+    with pytest.raises(NodeValueRejected):
+        coerce(value, data_type)
+
+
+@pytest.mark.parametrize("value", [1e40, -1e40])
+def test_float_values_outside_float32_range_are_rejected(value: float) -> None:
+    with pytest.raises(NodeValueRejected):
+        coerce(value, "float")
+
+
+@pytest.mark.parametrize(
+    "value", [3.4028234663852886e38, -3.4028234663852886e38]
+)
+def test_float32_range_boundaries_are_accepted(value: float) -> None:
+    assert coerce(value, "float") == value
+
+
+@pytest.mark.parametrize(
+    "value", [float("nan"), {"nested": [float("inf")]}, (float("-inf"),)]
+)
+def test_json_initial_values_reject_nonfinite_values_at_any_depth(
+    value: object,
+) -> None:
+    with pytest.raises(NodeValueRejected):
+        require_finite_json(value)
+
+
+def test_json_initial_values_keep_finite_values_and_strings() -> None:
+    value = {"nested": [2.5, "NaN", None, (True,)]}
+    require_finite_json(value)
+    assert value == {"nested": [2.5, "NaN", None, (True,)]}

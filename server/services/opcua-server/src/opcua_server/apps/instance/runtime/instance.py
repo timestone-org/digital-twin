@@ -353,7 +353,11 @@ class RunningInstance:
         """
         async with self._structure_lock:
             server = self._require_running()
-            if definition.identifier in self._nodes:
+            node_id = definition.node_id()
+            if definition.identifier in self._nodes or any(
+                existing.definition.node_id() == node_id
+                for existing in self._nodes.values()
+            ):
                 raise NodeIdentifierTaken(
                     f"标识 {definition.identifier} 在本实例内已存在"
                 )

@@ -25,7 +25,7 @@ return 0
 # 值等于自己才删。否则会删掉接任者的那一份，而它正以为自己独占着
 _DELETE_SCRIPT = """
 if redis.call('get', KEYS[1]) == ARGV[1] then
-    return redis.call('del', KEYS[1])
+    return redis.call('del', unpack(KEYS))
 end
 return 0
 """
@@ -102,17 +102,20 @@ class Cache:
             )
         )
 
-    async def delete_if_owner(self, key: str, value: str) -> bool:
+    async def delete_if_owner(
+        self, key: str, value: str, *, related_key: str | None = None
+    ) -> bool:
         """值还等于 `value` 才删，删掉返回 True。
 
         ⚠ 放锁必须是 CAS：自己那把锁可能早已过期并被别人抢走，无条件删就是
         把接任者的锁一起删掉——而它正以为自己独占着，两边同时在写。
-        Args: key, value。
+        Args: key, value, related_key（随 owner 键原子清理的关联键）。
         """
+        keys = (key,) if related_key is None else (key, related_key)
         return bool(
             await self._run(
                 self._client.eval(  # pyright: ignore[reportUnknownMemberType]
-                    _DELETE_SCRIPT, 1, key, value
+                    _DELETE_SCRIPT, len(keys), *keys, value
                 )
             )
         )

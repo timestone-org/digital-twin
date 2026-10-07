@@ -239,3 +239,30 @@ async def delete_document(session: AsyncSession, document_id: uuid.UUID) -> int:
     # cast 的理由 —— DML 的 execute 运行期返回 CursorResult，而 AsyncSession
     # 的静态签名只承诺 Result，`rowcount` 在后者上不存在
     return max(0, cast("CursorResult[Any]", done).rowcount)
+
+
+async def owned_object_keys(
+    session: AsyncSession, keys: Sequence[str]
+) -> set[str]:
+    """核对已提交文档引用的原件键。Args: session, keys。"""
+    found = await session.execute(
+        select(KnowledgeDocument.object_key).where(
+            KnowledgeDocument.object_key.in_(keys)
+        )
+    )
+    return set(found.scalars())
+
+
+async def has_content_hash(
+    session: AsyncSession, base_id: uuid.UUID, digest: str
+) -> bool:
+    """确认唯一键冲突确实来自重复正文。Args: session, base_id, digest。"""
+    found = await session.execute(
+        select(KnowledgeDocument.id)
+        .where(
+            KnowledgeDocument.base_id == base_id,
+            KnowledgeDocument.content_hash == digest,
+        )
+        .limit(1)
+    )
+    return found.scalar_one_or_none() is not None

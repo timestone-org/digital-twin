@@ -64,6 +64,25 @@ class ConfigSecretsFixture(unittest.TestCase):
 class ConfigDefaultsTests(ConfigSecretsFixture):
     """声明默认值与源码扫描的契约。"""
 
+    def test_field_defaults_and_untyped_bindings_keep_security_checks(
+        self,
+    ) -> None:
+        sources = (
+            "debug: bool = Field(default=True)",
+            "verify: bool = Field(default=False)",
+            "auto_create_tables: bool = Field(default=True)",
+            "debug: bool = Field(True)",
+            "verify: bool = pydantic.Field(False)",
+            "verify = False",
+            "options = dict(verify=False)",
+            "def call(verify=False): pass",
+        )
+        for source in sources:
+            with self.subTest(source=source):
+                path = self._write_settings(source + "\n")
+                with patch.object(gate, "python_sources", return_value=[path]):
+                    assert gate.check_no_dangerous_defaults()
+
     def test_secret_defaults_distinguish_constraints_and_numeric_budgets(
         self,
     ) -> None:

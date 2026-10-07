@@ -52,6 +52,7 @@ import SourceCredentialFields from './SourceCredentialFields.vue'
 const props = defineProps<{
   modelValue: boolean
   source: CollectSource | null
+  loading?: boolean
 }>()
 const emit = defineEmits<{
   'update:modelValue': [value: boolean]
@@ -212,6 +213,7 @@ function values(): SourceFormValues {
 }
 
 function submit(): void {
+  if (props.loading === true) return
   const current = values()
   error.value = validateSourceForm(current, isEdit.value)
   if (error.value !== null) return
@@ -226,7 +228,7 @@ function submit(): void {
     :title="isEdit ? '编辑数据源' : '新增数据源'"
     width="36rem"
     :dirty="isDirty"
-    @update:model-value="emit('update:modelValue', $event)"
+    @update:model-value="!loading && emit('update:modelValue', $event)"
   >
     <div class="flex flex-col gap-3">
       <DtNotice v-if="error" intent="danger" icon="alert-circle">
@@ -234,13 +236,13 @@ function submit(): void {
       </DtNotice>
 
       <div class="grid grid-cols-1 gap-3 sm:grid-cols-2">
-        <DtField label="协议" required>
-          <DtSelect
-            v-model="protocolValue"
-            :options="PROTOCOL_OPTIONS"
-            :disabled="isEdit"
-          />
-        </DtField>
+        <DtSelect
+          v-model="protocolValue"
+          label="协议"
+          required
+          :options="PROTOCOL_OPTIONS"
+          :disabled="isEdit"
+        />
         <DtField label="名称" required>
           <DtInput v-model="name" placeholder="如：1号生产线 PLC" />
         </DtField>
@@ -298,24 +300,23 @@ function submit(): void {
       </div>
 
       <div class="grid grid-cols-1 gap-3 sm:grid-cols-2">
-        <DtField label="采集模式">
-          <DtSelect
-            v-model="readModeValue"
-            :options="READ_MODES"
-            :disabled="protocol !== 'opcua'"
-          />
-        </DtField>
-        <DtField
+        <DtSelect
+          v-model="readModeValue"
+          label="采集模式"
+          :options="READ_MODES"
+          :disabled="protocol !== 'opcua'"
+        />
+        <DtNumberInput
           v-if="readMode === 'poll'"
+          v-model="pollIntervalMs"
+          :range="INTERVAL_RANGE"
           label="轮询间隔（毫秒）"
           :hint="
             protocol !== 'opcua'
               ? '仅轮询模式生效，安全下限 1000ms。'
               : '仅轮询模式生效，最小 50ms。'
           "
-        >
-          <DtNumberInput v-model="pollIntervalMs" :range="INTERVAL_RANGE" />
-        </DtField>
+        />
       </div>
 
       <SourceCredentialFields
@@ -358,10 +359,18 @@ function submit(): void {
     </div>
 
     <template #footer>
-      <DtButton variant="ghost" @click="emit('update:modelValue', false)">
+      <DtButton
+        variant="ghost"
+        :disabled="loading"
+        @click="emit('update:modelValue', false)"
+      >
         取消
       </DtButton>
-      <DtButton :icon="isEdit ? 'save' : 'plus'" @click="submit">
+      <DtButton
+        :icon="isEdit ? 'save' : 'plus'"
+        :loading="loading === true"
+        @click="submit"
+      >
         {{ isEdit ? '保存' : '创建' }}
       </DtButton>
     </template>

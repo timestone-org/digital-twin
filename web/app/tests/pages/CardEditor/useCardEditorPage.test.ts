@@ -367,3 +367,70 @@ describe('版本冲突', () => {
     expect(editor.isDirty.value).toBe(false)
   })
 })
+
+describe('加载失败的资源归属', () => {
+  it('跨大屏加载失败后不保存已经离开的旧屏', async () => {
+    const id = ref('d1')
+    const nodeId = ref('n1')
+    getMock
+      .mockResolvedValueOnce(payload([node('n1')]))
+      .mockRejectedValueOnce(new Error('读取失败'))
+    saveMock.mockResolvedValue(payload([node('n1')]))
+    const editor = useCardEditorPage(
+      () => id.value,
+      () => nodeId.value,
+    )
+    await editor.load()
+    editor.setConfig({ title: '甲草稿' })
+    id.value = 'd2'
+    nodeId.value = 'n2'
+    await editor.load()
+    expect(editor.node.value).toBeNull()
+    expect(await editor.save()).toBe(false)
+    expect(saveMock).not.toHaveBeenCalled()
+  })
+
+  it('同屏切节点失败不把旧节点草稿接到新节点', async () => {
+    const nodeId = ref('n1')
+    getMock
+      .mockResolvedValueOnce(payload([node('n1'), node('n2')]))
+      .mockRejectedValueOnce(new Error('读取失败'))
+    saveMock.mockResolvedValue(payload([node('n1'), node('n2')]))
+    const editor = useCardEditorPage(
+      () => 'd1',
+      () => nodeId.value,
+    )
+    await editor.load()
+    editor.setConfig({ title: '甲草稿' })
+    nodeId.value = 'n2'
+    await editor.load()
+    expect(editor.node.value).toBeNull()
+    expect(await editor.save()).toBe(false)
+    expect(saveMock).not.toHaveBeenCalled()
+  })
+
+  it('同一节点重载失败保留当前草稿供明确保存', async () => {
+    getMock
+      .mockResolvedValueOnce(payload([node('n1')]))
+      .mockRejectedValueOnce(new Error('读取失败'))
+    saveMock.mockResolvedValue(payload([node('n1', { title: '甲草稿' })]))
+    const editor = page()
+    await editor.load()
+    editor.setConfig({ title: '甲草稿' })
+    await editor.load()
+    expect(editor.node.value?.configJson).toEqual({ title: '甲草稿' })
+    expect(editor.isDirty.value).toBe(true)
+    expect(await editor.save()).toBe(true)
+  })
+
+  it('已卸载文档不再接受保存', async () => {
+    getMock.mockResolvedValue(payload([node('n1')]))
+    saveMock.mockResolvedValue(payload([node('n1')]))
+    const editor = page()
+    await editor.load()
+    editor.setConfig({ title: '甲草稿' })
+    editor.dispose()
+    expect(await editor.save()).toBe(false)
+    expect(saveMock).not.toHaveBeenCalled()
+  })
+})

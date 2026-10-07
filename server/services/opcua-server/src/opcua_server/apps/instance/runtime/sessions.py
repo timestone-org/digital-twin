@@ -16,16 +16,18 @@ Unknown。本模块在调用点用 `cast(Any, ...)` 把边界收敛掉，再用�
 变量收回具体类型——不使用 `type: ignore`，且收敛点只出现在这一个文件里。
 """
 
-from dataclasses import dataclass
+from dataclasses import dataclass, replace
 from datetime import datetime
 from typing import Any, cast
 
+from asyncua import ua
 from asyncua.crypto.permission_rules import User, UserRole
 from asyncua.server.internal_server import InternalServer
 from asyncua.server.internal_session import InternalSession
 from asyncua.server.user_managers import UserManager
 
 from lib.utils.timeutils import Clock, utcnow
+from opcua_server.apps.instance.runtime.native_values import NativeValuePolicy
 
 
 @dataclass(frozen=True)
@@ -134,6 +136,43 @@ class TrackedSession(InternalSession):
         self.registry.closed(str(cast(object, own.session_id)))
         parent = cast(Any, super())
         await parent.close_session(delete_subs)
+
+    async def write(self, params: Any) -> list[ua.StatusCode]:
+        """限制自定义浮点值并保留逐项权限结果。Args: params。"""
+        bounded = cast(ua.WriteParameters, params)
+        user = cast(User | None, cast(Any, self).user)
+        policy = NativeValuePolicy(self._read_attribute)
+        rejected = [
+            policy.rejection(item, user) for item in bounded.NodesToWrite
+        ]
+        accepted = [
+            item
+            for item, rejection in zip(
+                bounded.NodesToWrite, rejected, strict=True
+            )
+            if rejection is None
+        ]
+        parent = cast(Any, super())
+        written = iter(
+            cast(
+                list[ua.StatusCode],
+                await parent.write(replace(bounded, NodesToWrite=accepted)),
+            )
+        )
+        return [
+            result if result is not None else next(written)
+            for result in rejected
+        ]
+
+    def _read_attribute(
+        self, node_id: ua.NodeId, attribute: ua.AttributeIds
+    ) -> ua.DataValue:
+        return cast(
+            ua.DataValue,
+            cast(Any, self).iserver.aspace.read_attribute_value(
+                node_id, attribute
+            ),
+        )
 
 
 class TrackingInternalServer(InternalServer):

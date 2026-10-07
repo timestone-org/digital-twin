@@ -56,6 +56,8 @@ class TlsEndpoint:
     port: int = 0
     sni_names: list[str | None] = field(default_factory=list)
     requests: list[tuple[str, str]] = field(default_factory=list)
+    request_headers: list[dict[str, str]] = field(default_factory=list)
+    cookie_header: str | None = None
 
     def endpoint(self, hostname: str, path: str) -> str:
         return f"https://{hostname}:{self.port}{path}"
@@ -89,7 +91,8 @@ class TlsEndpoint:
                         await reader.readexactly(count)
                     path = lines[0].split()[1]
                     self.requests.append((headers["host"], path))
-                    writer.write(_response(path))
+                    self.request_headers.append(headers)
+                    writer.write(_response(path, self.cookie_header))
                     await writer.drain()
         except (asyncio.IncompleteReadError, ConnectionError, TimeoutError):
             return
@@ -98,24 +101,33 @@ class TlsEndpoint:
             await writer.wait_closed()
 
 
-def _response(path: str) -> bytes:
+def _response(path: str, cookie_header: str | None = None) -> bytes:
     body = (
         {"access_token": "test-token", "token_type": "Bearer"}
         if path == "/token"
         else {"value": 42}
     )
     payload = json.dumps(body).encode()
+    cookie = (
+        f"Set-Cookie: {cookie_header}\r\n".encode("ascii")
+        if path == "/token" and cookie_header is not None
+        else b""
+    )
     return (
         b"HTTP/1.1 200 OK\r\nContent-Type: application/json\r\nContent-Length: "
         + str(len(payload)).encode()
-        + b"\r\n\r\n"
+        + b"\r\n"
+        + cookie
+        + b"\r\n"
         + payload
     )
 
 
 @asynccontextmanager
-async def local_tls(context: ssl.SSLContext) -> AsyncIterator[TlsEndpoint]:
-    endpoint = TlsEndpoint()
+async def local_tls(
+    context: ssl.SSLContext, *, cookie_header: str | None = None
+) -> AsyncIterator[TlsEndpoint]:
+    endpoint = TlsEndpoint(cookie_header=cookie_header)
     context.set_servername_callback(endpoint.observe_sni)
     tasks: set[asyncio.Task[None]] = set()
 

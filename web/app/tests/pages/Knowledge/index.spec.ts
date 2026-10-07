@@ -865,3 +865,38 @@ it('101库清单提供最早库的选择按钮，刷新后仍选中', async () =
   await flushPromises()
   expect(wrapper.text()).toContain('最早库')
 })
+describe('切库失败的整页业务隔离', () => {
+  async function failedSwitch() {
+    api.listBases.mockResolvedValue([BASE, { ...BASE, id: 'b2', name: 'B库' }])
+    api.listDocuments
+      .mockResolvedValueOnce([
+        documentOf({ id: 'doc-A', title: 'A库独有文档.md' }),
+      ])
+      .mockRejectedValue(new Error('B库服务不可用'))
+    const wrapper = await render()
+    const b = wrapper
+      .findAll('button')
+      .find((item) => item.text().includes('B库'))
+    if (!b) throw new Error('B库选择按钮缺失')
+    await b.trigger('click')
+    await flushPromises()
+    return wrapper
+  }
+  it('B库读取失败后表格不再显示A库文档与其操作', async () => {
+    const wrapper = await failedSwitch()
+    expect(wrapper.find('[aria-current="true"]').text()).toContain('B库')
+    expect(wrapper.text()).toContain('B库服务不可用')
+    expect(wrapper.text()).not.toContain('A库独有文档.md')
+    expect(wrapper.find('button[aria-label="删除文档"]').exists()).toBe(false)
+  })
+  it('B库加载失败时旧A库文档不允许误触重新解析', async () => {
+    const wrapper = await failedSwitch()
+    api.reparseDocument.mockResolvedValue(undefined)
+    const reparse = wrapper
+      .findAll('button')
+      .find((item) => item.text() === '重新解析')
+    if (reparse) await reparse.trigger('click')
+    await flushPromises()
+    expect(api.reparseDocument).not.toHaveBeenCalled()
+  })
+})

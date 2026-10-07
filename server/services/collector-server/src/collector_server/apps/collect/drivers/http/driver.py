@@ -4,6 +4,7 @@ import asyncio
 import hashlib
 import time
 from collections.abc import Callable, Sequence
+from http.cookiejar import CookieJar, DefaultCookiePolicy
 
 import httpx
 from pydantic import JsonValue
@@ -104,6 +105,9 @@ class HttpDriver:
             transport=self._transport,
             follow_redirects=False,
             trust_env=False,
+            cookies=CookieJar(
+                policy=DefaultCookiePolicy(netscape=False, rfc2965=False)
+            ),
             headers={
                 "Accept": "application/json",
                 "Accept-Encoding": "identity",

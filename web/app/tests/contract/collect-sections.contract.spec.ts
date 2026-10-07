@@ -6,6 +6,7 @@
  * prop 改名成别的，编译一路绿，运行时那个分区收到 undefined，页面白掉——
  * 没有任何一道现成的闸门会响。
  */
+import { mount } from '@vue/test-utils'
 import { describe, expect, it } from 'vitest'
 
 import BrowsePanel from '@/pages/Collect/Opcua/components/BrowsePanel.vue'
@@ -99,13 +100,38 @@ describe('弹窗的对外面', () => {
       'update:username',
     ])
   })
-  it('数据源表单收 source（编辑态），抛建与改两种意图', () => {
-    expect(propNames(SourceFormDialog).sort()).toEqual(['modelValue', 'source'])
+  it('数据源表单收 source（编辑态）与在途 loading，抛建与改两种意图', () => {
+    expect(propNames(SourceFormDialog).sort()).toEqual([
+      'loading',
+      'modelValue',
+      'source',
+    ])
     expect(emitNames(SourceFormDialog).sort()).toEqual([
       'create',
       'update',
       'update:modelValue',
     ])
+  })
+
+  it('旧调用方省略 loading 时默认空闲，创建与取消仍可操作', async () => {
+    const wrapper = mount(SourceFormDialog, {
+      props: { modelValue: true, source: null },
+      global: { stubs: { Teleport: true } },
+    })
+    try {
+      expect(wrapper.props('loading')).toBe(false)
+      const buttons = wrapper.findAll('button')
+      const create = buttons.find((button) => button.text() === '创建')
+      const cancel = buttons.find((button) => button.text() === '取消')
+      expect(create?.attributes('disabled')).toBeUndefined()
+      expect(cancel?.attributes('disabled')).toBeUndefined()
+      expect(create).toBeDefined()
+      expect(cancel).toBeDefined()
+      await cancel?.trigger('click')
+      expect(wrapper.emitted('update:modelValue')).toEqual([[false]])
+    } finally {
+      wrapper.unmount()
+    }
   })
 
   it('点位表单收 point 与预填的寻址串，抛建与改两种意图', () => {

@@ -52,10 +52,15 @@ class InMemoryCache:
         self.ttl_s[key] = ttl_s
         return True
 
-    async def delete_if_owner(self, key: str, value: str) -> bool:
+    async def delete_if_owner(
+        self, key: str, value: str, *, related_key: str | None = None
+    ) -> bool:
         if self.store.get(key) != value:
             return False
-        await self.delete(key)
+        keys = (key,) if related_key is None else (key, related_key)
+        for owned_key in keys:
+            self.store.pop(owned_key, None)
+            self.ttl_s.pop(owned_key, None)
         return True
 
     async def delete(self, key: str) -> None:
@@ -102,7 +107,9 @@ class UnavailableCache:
     async def renew_if_owner(self, key: str, value: str, *, ttl_s: int) -> bool:
         raise self._error()
 
-    async def delete_if_owner(self, key: str, value: str) -> bool:
+    async def delete_if_owner(
+        self, key: str, value: str, *, related_key: str | None = None
+    ) -> bool:
         raise self._error()
 
     async def delete(self, key: str) -> None:

@@ -13,12 +13,14 @@ from asyncua import ua
 from opcua_server.apps.instance.errors import (
     InstanceStartFailed,
     NodeDeleteFailed,
+    NodeValueRejected,
 )
 from opcua_server.apps.instance.runtime.addressspace import (
     CUSTOM_NAMESPACE_INDEX,
     BuiltNode,
     NodeDefinition,
     delete_node,
+    format_node_id,
     register_custom_namespace,
 )
 
@@ -83,3 +85,39 @@ async def test_unexpected_namespace_index_fails_loudly() -> None:
     """索引不是 2 时静默接受，会让全部 NodeId 指错节点。"""
     with pytest.raises(InstanceStartFailed, match="索引应为 2"):
         await register_custom_namespace(_server(namespace_index=3), "urn:x")
+
+
+@pytest.mark.parametrize("identifier", ["0", "1001", "4294967295"])
+def test_numeric_definition_uses_a_numeric_node_id(identifier: str) -> None:
+    definition = NodeDefinition(
+        identifier=identifier, browse_name="Number", identifier_kind="numeric"
+    )
+    assert definition.node_id() == f"ns=2;i={identifier}"
+
+
+@pytest.mark.parametrize("identifier", ["abc", "-1", "4294967296", "١"])
+def test_numeric_definition_rejects_invalid_or_ambiguous_identifiers(
+    identifier: str,
+) -> None:
+    definition = NodeDefinition(
+        identifier=identifier, browse_name="Number", identifier_kind="numeric"
+    )
+    with pytest.raises(NodeValueRejected):
+        definition.node_id()
+
+
+def test_unknown_identifier_kind_is_rejected() -> None:
+    with pytest.raises(NodeValueRejected):
+        format_node_id("1001", "guid")
+
+
+@pytest.mark.parametrize("identifier", ["01001", "001001"])
+def test_legacy_numeric_definition_preserves_its_numeric_identity(
+    identifier: str,
+) -> None:
+    definition = NodeDefinition(
+        identifier=identifier, browse_name="Legacy", identifier_kind="numeric"
+    )
+    assert definition.node_id() == "ns=2;i=1001"
+    with pytest.raises(NodeValueRejected):
+        format_node_id(identifier, "numeric")

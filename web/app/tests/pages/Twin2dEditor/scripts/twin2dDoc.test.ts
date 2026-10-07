@@ -304,3 +304,40 @@ describe('脏标记', () => {
     expect(depth).toBe(TWIN_2D_HISTORY_LIMIT - 1)
   })
 })
+
+describe('撤销重做终止绑定合并', () => {
+  it('撤销后继续编辑同槽仍是未保存新帧且可撤销', () => {
+    const doc = docWithThreeNodes()
+    const original = doc.bindings.value
+    doc.commitBindings(
+      [{ ...binding(statusRowFieldKey(0)), nodeKey: 'source:A' }],
+      'binding:n1:value',
+    )
+    doc.undo()
+    expect(doc.isDirty.value).toBe(false)
+    doc.commitBindings(
+      [{ ...binding(statusRowFieldKey(0)), nodeKey: 'source:B' }],
+      'binding:n1:value',
+    )
+    expect(doc.isDirty.value).toBe(true)
+    expect(doc.canUndo.value).toBe(true)
+    doc.undo()
+    expect(doc.bindings.value).toEqual(original)
+  })
+
+  it('重做后同槽再次编辑独立于已重做的旧帧', () => {
+    const doc = docWithThreeNodes()
+    doc.commitBindings(
+      [{ ...binding(statusRowFieldKey(0)), nodeKey: 'source:A' }],
+      'binding:n1:value',
+    )
+    doc.undo()
+    doc.redo()
+    doc.commitBindings(
+      [{ ...binding(statusRowFieldKey(0)), nodeKey: 'source:B' }],
+      'binding:n1:value',
+    )
+    doc.undo()
+    expect(doc.bindings.value[0]?.nodeKey).toBe('source:A')
+  })
+})
