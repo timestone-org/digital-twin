@@ -127,12 +127,14 @@ def test_the_last_and_first_modes_filter_out_the_empty_readings() -> None:
 
 
 def test_the_bucket_query_carries_the_dataset_timezone() -> None:
-    # ⚠ 不带 `timezone =>` 时 time_bucket 按 UNIX 纪元对齐，东八区的日桶从当地
-    # 08:00 开始；而带错时区就是整批行落进隔壁那一格，两样都不报错
+    # ⚠ 先转墙钟再取整；取整后的歧义与缺口由 PG 的 AT TIME ZONE 解析。
     sql, params = build_bucket_query(
         [column("avg")], aggs=["avg"], window=window()
     )
-    assert "timezone => :bucket_timezone" in sql
+    assert (
+        "time_bucket(CAST(:bucket_width AS interval),"
+        " ts AT TIME ZONE :bucket_timezone) AT TIME ZONE :bucket_timezone"
+    ) in sql
     assert params["bucket_timezone"] == SHANGHAI
     # ⚠ 绑的是 timedelta 而不是字符串：`CAST($1 AS interval)` 让驱动把这个参数
     # 认成 interval，喂 `'1 hour'` 是当场 DataError——而这一层假件看不出来，
@@ -184,7 +186,9 @@ def test_the_lookback_is_clamped_on_both_sides(
 
 def test_the_subtrahend_query_has_a_floor() -> None:
     sql, params = build_previous_end_query([column("delta")], window=window())
-    assert "ts >= :lookback_start AND ts < :range_start" in sql
+    assert "ts >= :range_start AND ts < :range_end" in sql
+    assert "bucket_start AT TIME ZONE 'UTC'" in sql
+    assert "- CAST(:lookback_span AS interval)) AT TIME ZONE 'UTC'" in sql
     assert params["lookback_start"] == FIRST - timedelta(days=1)
 
 

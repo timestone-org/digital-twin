@@ -464,3 +464,119 @@ describe('数据源分页与查找', () => {
     )
   })
 })
+
+describe('HTTP 数据源提交', () => {
+  it('慢编辑的连续保存也只写一次，完成后关闭原资源表单', async () => {
+    let complete: ((updated: CollectSource) => void) | undefined
+    const target = source({
+      protocol: 'http',
+      read_mode: 'poll',
+      endpoint: 'https://api.example.com/metrics',
+    })
+    const update = vi.spyOn(collectApi, 'updateSource').mockImplementation(
+      () =>
+        new Promise<CollectSource>((resolve) => {
+          complete = resolve
+        }),
+    )
+    const wrapper = await render([target])
+    await wrapper.get('button[aria-label="编辑"]').trigger('click')
+    await flushPromises()
+    const submit = bodyButton('保存')
+    submit.click()
+    submit.click()
+    await flushPromises()
+    expect(update).toHaveBeenCalledTimes(1)
+    expect(submit.disabled).toBe(true)
+    complete?.(target)
+    await flushPromises()
+    expect(document.body.querySelector('[role="dialog"]')).toBeNull()
+  })
+  async function openHttpCreate(
+    wrapper: VueWrapper,
+  ): Promise<HTMLButtonElement> {
+    await clickByText(wrapper, '新增数据源')
+    await flushPromises()
+    document.body.querySelector<HTMLButtonElement>('[role="combobox"]')?.click()
+    await flushPromises()
+    const option = [
+      ...document.body.querySelectorAll<HTMLElement>('[role="option"]'),
+    ].find((node) => node.textContent?.trim() === 'HTTP / HTTPS')
+    if (option === undefined) throw new Error('没有 HTTP 协议选项')
+    option.click()
+    await flushPromises()
+    for (const [placeholder, value] of [
+      ['如：1号生产线 PLC', 'HTTP 测试接口'],
+      ['如：plant1_plc', 'http_test'],
+      ['https://api.example.com/metrics', 'https://api.example.com/metrics'],
+    ]) {
+      const input = document.body.querySelector<HTMLInputElement>(
+        `input[placeholder="${placeholder ?? ''}"]`,
+      )
+      if (input === null) throw new Error('缺少源配置输入框')
+      input.value = value ?? ''
+      input.dispatchEvent(new Event('input', { bubbles: true }))
+    }
+    await flushPromises()
+    return bodyButton('创建')
+  }
+
+  it('慢创建的连续点击只发一次写请求并锁定按钮，完成后关闭表单', async () => {
+    const created = source({
+      id: 'http-created',
+      protocol: 'http',
+      read_mode: 'poll',
+    })
+    vi.spyOn(collectApi, 'getSource').mockImplementation((id) => {
+      expect(id).toBe(created.id)
+      return Promise.resolve(created)
+    })
+    let complete: ((created: CollectSource) => void) | undefined
+    const create = vi.spyOn(collectApi, 'createSource').mockImplementation(
+      () =>
+        new Promise<CollectSource>((resolve) => {
+          complete = resolve
+        }),
+    )
+    const wrapper = await render([])
+    const submit = await openHttpCreate(wrapper)
+    submit.click()
+    submit.click()
+    await flushPromises()
+    expect(create).toHaveBeenCalledTimes(1)
+    expect(submit.disabled).toBe(true)
+    complete?.(created)
+    await flushPromises()
+    expect(document.body.querySelector('[role="dialog"]')).toBeNull()
+  })
+
+  it('创建失败保留字段、解锁按钮并允许用户再次提交', async () => {
+    const created = source({
+      id: 'http-created',
+      protocol: 'http',
+      read_mode: 'poll',
+    })
+    vi.spyOn(collectApi, 'getSource').mockImplementation((id) => {
+      expect(id).toBe(created.id)
+      return Promise.resolve(created)
+    })
+    const create = vi
+      .spyOn(collectApi, 'createSource')
+      .mockRejectedValueOnce(new Error('请求失败'))
+      .mockResolvedValueOnce(created)
+    const wrapper = await render([])
+    const submit = await openHttpCreate(wrapper)
+    submit.click()
+    await flushPromises()
+    expect(submit.disabled).toBe(false)
+    expect(
+      document.body.querySelector<HTMLInputElement>(
+        'input[placeholder="如：1号生产线 PLC"]',
+      )?.value,
+    ).toBe('HTTP 测试接口')
+    submit.click()
+    await flushPromises()
+    expect(create).toHaveBeenCalledTimes(2)
+    expect(document.body.querySelector('[role="dialog"]')).toBeNull()
+  })
+})

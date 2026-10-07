@@ -306,6 +306,7 @@ onUnmounted(() => {
     <SourceFormDialog
       v-model="ops.formOpen.value"
       :source="ops.formSource.value"
+      :loading="ops.formSaving.value"
       @create="create"
       @update="ops.update"
     />

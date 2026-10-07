@@ -73,6 +73,7 @@ export async function select(
   baseId: string,
 ): Promise<void> {
   cancelSearch(state)
+  if (state.selectedId.value !== baseId) state.documents.value = []
   state.selectedId.value = baseId
   await guarded(state, () => refreshDocuments(state))
 }

@@ -13,6 +13,7 @@ from importlib.metadata import version
 from asyncua import Server, ua
 from asyncua.common import manage_nodes
 from asyncua.common.node import Node
+from asyncua.server.address_space import AttributeService
 from asyncua.server.internal_server import InternalServer
 from asyncua.server.internal_session import InternalSession
 from asyncua.server.uaprocessor import UaProcessor
@@ -144,3 +145,15 @@ def test_set_writable_toggles_current_write_on_both_access_attributes() -> None:
         bit = f"ua.AttributeIds.{attribute}, ua.AccessLevel.CurrentWrite"
         assert f"set_attr_bit({bit})" in source
         assert f"unset_attr_bit({bit})" in source
+
+
+def test_write_extension_preserves_signature_and_permissions() -> None:
+    signature = inspect.signature(InternalSession.write)
+    assert list(signature.parameters) == ["self", "params"]
+    assert inspect.iscoroutinefunction(InternalSession.write)
+    source = inspect.getsource(AttributeService.write)
+    permission = source.index("if user.role != UserRole.Admin:")
+    mutation = source.index("self._aspace.write_attribute_value")
+    assert permission < mutation
+    assert "ua.AttributeIds.AccessLevel" in source
+    assert "ua.AttributeIds.UserAccessLevel" in source

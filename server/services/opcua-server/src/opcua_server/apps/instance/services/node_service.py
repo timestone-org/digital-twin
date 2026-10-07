@@ -30,7 +30,12 @@ from opcua_server.apps.instance.errors import (
     NodeNotFound,
 )
 from opcua_server.apps.instance.models import Instance, Node
-from opcua_server.apps.instance.runtime.addressspace import NodeDefinition
+from opcua_server.apps.instance.runtime.addressspace import (
+    NodeDefinition,
+    format_node_id,
+    validate_initial_value,
+)
+from opcua_server.apps.instance.runtime.datatypes import require_finite_json
 from opcua_server.apps.instance.runtime.supervisor import InstanceSupervisor
 from opcua_server.apps.instance.schemas import (
     NodeCreateIn,
@@ -124,15 +129,14 @@ class NodeService:
 
         Args: instance_id, payload。
         """
-        if payload.node_class == NODE_CLASS_METHOD:
-            raise ValidationFailed(
-                "方法节点需要绑定服务端回调，本服务不提供可绑定的用户代码，"
-                "因此不支持 node_class=method"
-            )
+        _validate_node_create(payload)
         async with self._database.session() as session:
             await self._require_instance(session, instance_id)
             await self._guard_identifier(
-                session, instance_id, payload.identifier
+                session,
+                instance_id,
+                payload.identifier,
+                payload.identifier_kind,
             )
             parent = await self._parent_identifier(
                 session, instance_id, payload.parent_id
@@ -240,10 +244,12 @@ class NodeService:
                 data_type=data_type,
                 is_live=False,
             )
+        live_value = await running.read_value(identifier)
+        require_finite_json(live_value)
         return NodeValueOut(
             identifier=identifier,
             node_id=node_id_text,
-            value=await running.read_value(identifier),
+            value=live_value,
             data_type=data_type,
             is_live=True,
         )
@@ -301,13 +307,21 @@ class NodeService:
 
     @staticmethod
     async def _guard_identifier(
-        session: AsyncSession, instance_id: uuid.UUID, identifier: str
+        session: AsyncSession,
+        instance_id: uuid.UUID,
+        identifier: str,
+        identifier_kind: str,
     ) -> None:
         existing = await node_crud.get_by_identifier(
             session, instance_id=instance_id, identifier=identifier
         )
         if existing is not None:
             raise NodeIdentifierTaken(f"标识 {identifier} 在本实例已被占用")
+        if identifier_kind == "numeric":
+            target = format_node_id(identifier, identifier_kind)
+            nodes = await node_crud.list_of_instance(session, instance_id)
+            if any(node_id_of(node) == target for node in nodes):
+                raise NodeIdentifierTaken("该 numeric NodeId 在本实例已被占用")
 
     @staticmethod
     async def _require_instance(
@@ -333,6 +347,14 @@ def _apply_node_update(row: Node, payload: NodeUpdateIn) -> frozenset[str]:
 
     Args: row, payload。
     """
+    initial = (
+        unwrap_value(row.initial_value)
+        if payload.initial_value is None
+        else payload.initial_value
+    )
+    validate_initial_value(
+        initial, payload.data_type or row.data_type, row.node_class
+    )
     changed: set[str] = set()
     fields = payload.model_dump(exclude_unset=True)
     for name, value in fields.items():
@@ -352,6 +374,19 @@ def _apply_node_update(row: Node, payload: NodeUpdateIn) -> frozenset[str]:
         )
         changed.add(name)
     return frozenset(changed)
+
+
+def _validate_node_create(payload: NodeCreateIn) -> None:
+    """创建前校验可构建类别、标识与初值。Args: payload。"""
+    if payload.node_class == NODE_CLASS_METHOD:
+        raise ValidationFailed(
+            "方法节点需要绑定服务端回调，本服务不提供可绑定的用户代码，"
+            "因此不支持 node_class=method"
+        )
+    format_node_id(payload.identifier, payload.identifier_kind)
+    validate_initial_value(
+        payload.initial_value, payload.data_type, payload.node_class
+    )
 
 
 class NodeRuntimeSync:

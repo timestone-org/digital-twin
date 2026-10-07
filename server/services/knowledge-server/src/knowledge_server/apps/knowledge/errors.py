@@ -157,3 +157,10 @@ class SourceReadFailed(AppError):
 
     code = 52302
     http_status = 502
+
+
+class SourceSyncConflict(AppError):
+    """另一次来源同步已推进当前游标。"""
+
+    code = 42316
+    http_status = 409

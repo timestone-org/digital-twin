@@ -55,10 +55,13 @@ TEMPORARY_HTTP_STATUSES = (
 
 _SCHEMA: Mapping[str, Any] = {
     "type": "object",
+    "additionalProperties": False,
     "required": ["path"],
     "properties": {
         "path": {
             "type": "string",
+            "minLength": 1,
+            "pattern": "^/(?!/)",
             "title": "平台路径",
             "description": "只收路径不收完整 URL",
         },
@@ -96,18 +99,20 @@ def _rows(body: object) -> list[Mapping[str, Any]]:
     Args: body。
     """
     if not isinstance(body, dict):
-        return []
+        raise SourceReadFailed("来源响应格式无效，请检查平台路径后重新同步")
     data = cast("dict[str, object]", body).get("data")
     if isinstance(data, list):
-        return [
-            one for one in cast("list[object]", data) if isinstance(one, dict)
-        ]
-    if not isinstance(data, dict):
-        return []
-    items = cast("dict[str, object]", data).get("items")
+        items = cast("list[object]", data)
+    elif isinstance(data, dict):
+        items = cast("dict[str, object]", data).get("items")
+    else:
+        raise SourceReadFailed("来源响应格式无效，请检查平台路径后重新同步")
     if not isinstance(items, list):
-        return []
-    return [one for one in cast("list[object]", items) if isinstance(one, dict)]
+        raise SourceReadFailed("来源记录格式无效，请检查平台路径后重新同步")
+    given = cast("list[object]", items)
+    if any(not isinstance(one, dict) for one in given):
+        raise SourceReadFailed("来源记录格式无效，请检查平台路径后重新同步")
+    return cast("list[Mapping[str, Any]]", given)
 
 
 def _rendered(row: Mapping[str, Any]) -> bytes:
@@ -189,7 +194,12 @@ class PlatformSource:
             raise SourceReadFailed(
                 "无法读取来源，请检查来源配置后重新同步"
             ) from error
-        return _rows(answer.json())
+        try:
+            return _rows(answer.json())
+        except ValueError as error:
+            raise SourceReadFailed(
+                "来源响应不是有效 JSON，请检查平台路径后重新同步"
+            ) from error
 
     async def fetch(self, config: Mapping[str, Any], ref: str) -> RawItem:
         """这一路的内容在 `discover` 就带回来了，不再单独取。
@@ -208,7 +218,7 @@ def _item(config: Mapping[str, Any], row: Mapping[str, Any]) -> DiscoveredItem:
 
     Args: config, row。
     """
-    identity = str(row.get(_config(config, "id_field", "row_id"), ""))
+    identity = _identity_of(row.get(_config(config, "id_field", "row_id")))
     title_field = _config(config, "title_field", "")
     title = str(row.get(title_field, "")) if title_field else ""
     content = _rendered(row)
@@ -219,6 +229,17 @@ def _item(config: Mapping[str, Any], row: Mapping[str, Any]) -> DiscoveredItem:
         media_type="text/markdown",
         byte_size=len(content),
         content=content,
+    )
+
+
+def _identity_of(value: object) -> str:
+    """拒绝缺失或不能稳定辨识记录的行标识。Args: value。"""
+    if isinstance(value, str) and value.strip():
+        return value
+    if isinstance(value, int) and not isinstance(value, bool):
+        return str(value)
+    raise SourceReadFailed(
+        "来源记录缺少有效的行标识，请检查行标识字段配置后重新同步"
     )
 
 

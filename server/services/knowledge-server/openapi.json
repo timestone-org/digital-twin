@@ -3411,7 +3411,7 @@
     },
     "/api/v1/knowledge/sources/{source_id}:sync": {
       "post": {
-        "description": "把这一路来源里的新条目摄进来。\n\n⚠ **用调用者自己的身份**去打上游，不存任何凭据：存了的话，一次配置泄露\n等于把那个人的权限交出去，而无人值守的 worker 会拿着它不停地读。\n\n⚠ 一次调用有页数上限；到顶就把游标存好并如实回 `has_more`。\n\nArgs: session, container, _actor, source_id, sources。",
+        "description": "把这一路来源里的新条目摄进来。\n\n⚠ **用调用者自己的身份**去打上游，不存任何凭据：存了的话，一次配置泄露\n等于把那个人的权限交出去，而无人值守的 worker 会拿着它不停地读。\n\n⚠ 一次调用有页数上限；到顶就把游标存好并如实回 `has_more`。\n\nArgs: sessions, container, _actor, source_id, sources。",
         "operationId": "sync_api_v1_knowledge_sources__source_id__sync_post",
         "parameters": [
           {

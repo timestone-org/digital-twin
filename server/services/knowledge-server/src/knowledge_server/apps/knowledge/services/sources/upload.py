@@ -26,7 +26,11 @@ UPLOAD_KIND = "upload"
 
 # 配置里认得的键。⚠ 上传这一路没有可配的东西——留一个空 schema 而不是不实现，
 # 是为了让「这一路要配什么」在界面上有一个统一的问法
-_SCHEMA: Mapping[str, Any] = {"type": "object", "properties": {}}
+_SCHEMA: Mapping[str, Any] = {
+    "type": "object",
+    "properties": {},
+    "additionalProperties": False,
+}
 
 
 @dataclass(frozen=True)

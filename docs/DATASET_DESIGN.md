@@ -331,16 +331,24 @@ AGG_FUNCS = ("avg", "min", "max", "last", "first", "sum", "count", "delta")
 理由：它跑在 leader 的后台 loop 里，一列配错不该让整张表的采集永久中断。
 但**未知的 `agg` 值直接抛错**——那是配置写坏了，不是数据的问题。
 
-### 4.5 桶对齐：`time_bucket` **必须**带 timezone
+### 4.5 桶对齐：在业务时区的墙钟上取整
 
 ```sql
-time_bucket(CAST(:bucket_width AS interval), ts, timezone => :bucket_timezone)
+time_bucket(CAST(:bucket_width AS interval), ts AT TIME ZONE :bucket_timezone)
+AT TIME ZONE :bucket_timezone
 ```
 
-不带它 `time_bucket` 按 UNIX 纪元对齐，东八区的日桶会从当地 08:00 开始，07:00 的数据落进前一天。
-平台侧已有的 `build_aggregate_query`（`apps/collect/crud/history.py`）本来就是这么写的。
+台账先将 UTC 时刻转换为业务时区的墙钟，调用 `timestamp without time zone`
+重载取整，再用 PostgreSQL 的 `AT TIME ZONE` 解析桶起点。直接对 UTC 时刻取整，
+东八区的日桶会从当地 08:00 开始，07:00 的数据落进前一天。
 
-Python 侧的 `bucket_start()` 必须与它**同口径**——PG 的算法是「换成该时区的**墙钟**时刻 →
+该表达式由 `apps/dataset/services/buckets.py` 的 `build_bucket_expression()`
+统一提供，生产聚合查询与真库对齐测试共用。TimescaleDB 2.25 起的
+`timestamptz` + `timezone` 重载会在解析后将晚于输入的桶起点逐步提前；台账的
+墙钟桶身份显式保留 PostgreSQL 的解析结果，不能随扩展版本改变，否则行标识与
+水位会漂移。点位历史读侧有独立的时区配置和查询契约，不复用台账表达式。
+
+Python 侧的 `bucket_start()` 必须与它**同口径**——算法是「换成该时区的**墙钟**时刻 →
 在墙钟上按原点取整 → 换回 UTC」，照抄即可：
 
 ```python
@@ -348,7 +356,8 @@ zone   = ZoneInfo(tz)
 local  = ts.astimezone(zone).replace(tzinfo=None)     # 墙钟，不带时区
 origin = datetime(2000, 1, 3)                         # ⚠ 见下
 bucket = origin + ((local - origin) // interval) * interval
-return bucket.replace(tzinfo=zone, fold=1).astimezone(UTC)
+return max(bucket.replace(tzinfo=zone, fold=fold).astimezone(UTC)
+           for fold in (0, 1))
 ```
 
 三处都不能省，每一处写错都**不报错**，只是把数记进隔壁那一格：
@@ -358,8 +367,29 @@ return bucket.replace(tzinfo=zone, fold=1).astimezone(UTC)
    ——只有 7 分钟、7 小时、11 秒这类不整除的桶宽会整体错开一段固定的量。
    实测见 `tests/integration/test_dataset_bucket_alignment.py`（4 个时区 × 10 种桶宽 × 4 个时刻逐格比对）。
 2. **减法用不带时区的墙钟时刻。** 拿带时区的时刻相减算的是绝对时长，跨夏令时会与 PG 差一小时。
-3. **`fold=1`。** 秋季回拨那一小时的本地时刻出现两次，PG 的 `AT TIME ZONE` 取的是**后一次**
-   （回拨之后的标准时），而 Python 默认 `fold=0` 取前一次。一年只错一小时，而那一小时的数看起来完全正常。
+3. **歧义与缺口均按 PostgreSQL 解析。** 秋季回拨的重复时刻取跳变后的偏移
+   （纽约为标准时，对应 `fold=1`）；春季前跳中不存在的时刻取跳变前的偏移
+   （纽约对应 `fold=0`）。两者均取两个 UTC 候选中较晚者。非整除桶宽可能把
+   合法输入取整到春季缺口，故不能始终指定 `fold=1`。桶起点可能晚于原输入，
+   这是墙钟桶身份与 PostgreSQL 解析的既定口径。
+
+官方依据：[PostgreSQL 的歧义／无效时间规则](https://www.postgresql.org/docs/17/datetime-invalid-input.html)、
+[TimescaleDB 2.25 的 timezone 桶修正](https://github.com/timescale/timescaledb/pull/9129)。
+真库用例同时覆盖原有 4 时区 × 10 桶宽 × 4 时刻、回拨的两次输入和春季缺口，
+并通过生产 `build_bucket_query` 查询真实归档读数。
+
+桶身份与样本时间分开：`bucket_grid.py` 将真实可达的墙钟格映射为升序、去重的
+UTC 身份网格，并为每个身份恢复全部真实样本的 `source_start` 与 `close_at`。
+整个格都落在春季缺口时没有身份；非整除宽度的格若跨到缺口后，则仍保留 PG
+生成的身份。例如纽约 11 秒桶在 `2026-03-08T07:00:00Z` 产生 `07:59:50Z`
+身份，真实样本范围却是 `[07:00:00Z, 07:00:01Z)`。身份不能再次作为原始时间
+对齐，也不能直接当 SQL 的取数起点。秋季同一身份可能有两段真实样本，关闭时刻
+必须覆盖两段的最终右界。
+
+采集只推进**已关闭的有序前缀**：一个身份自身关闭还不足以推水位，它前面的所有
+身份也必须关闭。移动、计数、切批和水位均使用同一网格；紧凑等差段在每拍及回填
+上限之前不展开逐桶列表。所有公开时刻按现有 `to_utc` 规则处理，naive 视为 UTC；
+无法表示完整桶计算的日期边界返回既有回填参数错误，不产生服务 500。
 
 > 实现在 `apps/dataset/services/buckets.py`。⚠ **`collect_interval_ms` 的 1 天上界仍然保留**：
 > 周宽及以上的桶还没在真库上逐格验过（`time_bucket` 对 `interval` 里带月/年的宽度另有一套规则），
@@ -1049,10 +1079,10 @@ Dataset/TableDetail/
 ### 12.3 单表这一拍算哪几个桶
 
 ```
-current      = bucket_start(now)                       # 还开着，绝不算
-last_closed  = current − 1 桶                           # 这一拍的右界
-first        = 水位 + 1 − RECOMPUTE_TAIL_BUCKETS        # 水位为空时 = last_closed
-右界再压到   min(last_closed, first + MAX_BUCKETS_PER_TICK − 1)
+last_closed  = 最小尚未关闭身份的前一格                 # 已关闭有序前缀
+first        = 水位在身份网格上移动 1 − RECOMPUTE_TAIL_BUCKETS 格
+               # 水位为空时 = last_closed；持久化水位不重新对齐
+右界再压到   min(last_closed, first 在网格上移动 MAX_BUCKETS_PER_TICK − 1 格)
 ```
 
 四条边界，每条都有理由：
@@ -1080,16 +1110,22 @@ first        = 水位 + 1 − RECOMPUTE_TAIL_BUCKETS        # 水位为空时 = 
 
 ```sql
 SELECT source_id, point_code,
-       time_bucket(CAST(:bucket_width AS interval), ts, timezone => :bucket_timezone) AS bucket_start,
+       time_bucket(CAST(:bucket_width AS interval), ts AT TIME ZONE :bucket_timezone)
+         AT TIME ZONE :bucket_timezone AS bucket_start,
        count(value_num) AS num_count,
        count(value_text) AS text_count,
        <按需渲染的档位…>
   FROM collect.point_history
  WHERE (source_id, point_code) IN (…) AND ts >= :range_start AND ts < :range_end
+   AND (<同一桶身份表达式>) = ANY(CAST(:bucket_starts AS timestamptz[]))
  GROUP BY source_id, point_code, bucket_start
  ORDER BY bucket_start ASC, source_id ASC, point_code ASC
  LIMIT :row_limit
 ```
+
+`range_start` / `range_end` 是所有请求身份真实样本区间的包络，不是首末身份。
+身份白名单在 `GROUP BY` 与 `LIMIT` **之前**过滤，秋季额外读取第一轮样本时也不会
+写出计划外桶；`row_limit` 仍等于去重请求身份数乘点位数。
 
 | agg | 渲染出来的表达式 |
 |---|---|
@@ -1107,15 +1143,21 @@ SELECT source_id, point_code,
 
 ### 12.6 `delta` 的减数与三条边界
 
-减数单独一条查询，**必须有回看窗口下界** `clamp(桶宽 × 24, 6h, 2d)`：
+减数单独一条查询，**必须有回看窗口下界** `clamp(桶宽 × 24, 6h, 2d)`。
+回看按桶身份顺序定义：一次聚合有界 context 内每个非空数值桶的末值，再以
+`LAG` 按点位、身份升序取得前驱，最终只返回请求身份。每个目标再次检查其前驱
+身份不早于 `目标 − 回看时长`，减法显式在 UTC 的无时区 timestamp 上执行，
+避免数据库 session 时区将 1/2 天 interval 解释为 DST 日历日。context 的物理
+读取包络由网格紧凑段恢复，完整
+包含 DST 的双重样本或未来身份；不逐秒展开回看桶，也不为每个目标重复扫描原表。
 
-```sql
-SELECT DISTINCT ON (source_id, point_code) source_id, point_code, value_num
-  FROM collect.point_history
- WHERE (source_id, point_code) IN (…)
-   AND ts >= :lookback_start AND ts < :range_start AND value_num IS NOT NULL
- ORDER BY source_id ASC, point_code ASC, ts DESC
-```
+不能用 `ts < 首个身份` 或 `ts < 最早样本` 代替身份前驱：纽约回拨的 `06:30Z`
+分钟桶包含 `05:30Z` 与 `06:30Z` 两轮样本，其前驱 `06:29Z` 的末值可能在第二轮
+`06:29Z`。春季稀疏请求之间的非请求非空桶仍参与前驱选择，不能只在所选桶之间接力。
+
+这一界限明确按**前驱桶身份**判断，区别于旧实现只比较原始末样本时间：末样本
+仍在回看时长内、但所属桶身份已经更早的边界情况现在返回空。此修复统一 DST
+与稀疏请求的前驱规则，不迁移历史记录；显式重算这类边界数据可能改变 delta。
 
 拿到减数之后按桶升序接力，三条规则见 §4.4，实现只有四行：
 
@@ -1322,7 +1364,11 @@ POST → 取运行参数有效值 + 保留期下界 → 定计划（三道 clamp
   比较。宁可让保留期长的那几列少补一段，也不要留下一格半桶算出来的错数；
 - 尾部避让只看台账自己的 `collect_mode` 与 `is_enabled`，**不看采集总开关**：
   那个开关随时会被打开，而回填这时已经跑在半路上了；
-- 区间是**桶闭区间**：两端各自落到自己那个桶上，两端同桶就是「只补这一个桶」。
+- 请求是**原始 UTC 时刻闭区间**：选取真实样本范围与请求相交的全部桶身份，
+  两端同桶就是「只补这一个桶」。DST 时结果可能稀疏或端点身份反序，不能用
+  对齐后的两个端点补成连续区间；计数、最后 N 桶裁剪与每批窗口共用同一集合。
+  保留期按全部真实样本的最早起点判定，半桶缺失的身份必须剔除。
+  探测跳变之前先根据保留期、采集 guard 与桶数上限约束原始扫描，百年请求也有界。
 
 ### 14.4 取数路径：本仓只有原始表
 
@@ -1332,6 +1378,9 @@ POST → 取运行参数有效值 + 保留期下界 → 定计划（三道 clamp
 长期显示一个不存在的加速选项。
 
 ### 14.5 一批 = 一次 upsert = 一个事务
+
+切批是惰性迭代：每次仅恢复下一批最多 240 个身份，然后等待该批事务完成；
+不在首次 await 前算完全部 834 个批边界。
 
 取消只在**批边界**生效：半个批次提交出去的是一段谁也解释不清的历史。一批的
 预算沿用「单表一拍」那一档（`PLATFORM_DATASET_TABLE_TIMEOUT_S`）——回填的一批

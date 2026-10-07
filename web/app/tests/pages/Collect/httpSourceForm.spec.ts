@@ -85,6 +85,52 @@ function httpSource(): CollectSource {
 }
 
 describe('HTTP 请求配置', () => {
+  it('轮询间隔输入提交新值，创建请求采用控件中的周期', async () => {
+    const wrapper = await httpForm()
+    const label = wrapper
+      .findAll('label')
+      .find((one) => one.text() === '轮询间隔（毫秒）')
+    const interval = wrapper.get(`[id="${label?.attributes('for') ?? ''}"]`)
+    await interval.setValue('1500')
+    await interval.trigger('change')
+    await press(wrapper, '创建')
+    expect(wrapper.emitted('create')?.[0]?.[0]).toMatchObject({
+      poll_interval_ms: 1500,
+    })
+  })
+
+  it('提交中不关闭表单，解除加载后取消按钮可关闭', async () => {
+    const wrapper = await httpForm()
+    await wrapper.setProps({ loading: true })
+    expect(
+      wrapper
+        .findAll('button')
+        .find((one) => one.text() === '取消')
+        ?.attributes('disabled'),
+    ).toBeDefined()
+    await wrapper.get('button[aria-label="关闭"]').trigger('click')
+    await wrapper.get('button[aria-label="关闭"]').trigger('click')
+    expect(wrapper.emitted('update:modelValue')).toBeUndefined()
+    await wrapper.setProps({ loading: false })
+    await press(wrapper, '取消')
+    expect(wrapper.emitted('update:modelValue')?.[0]).toEqual([false])
+  })
+  it.each(['协议', '采集模式', '轮询间隔（毫秒）'])(
+    '%s 的可见标签关联真实控件',
+    async (label) => {
+      const wrapper = await httpForm()
+      const visible = wrapper
+        .findAll('label')
+        .find((node) => node.text().replace('*', '').trim() === label)
+      expect(visible, label).toBeDefined()
+      const controlId = visible?.attributes('for')
+      const control = wrapper.find(`[id="${controlId ?? ''}"]`)
+      expect(control.exists(), label).toBe(true)
+      expect(control.attributes('role')).toBe(
+        label === '轮询间隔（毫秒）' ? 'spinbutton' : 'combobox',
+      )
+    },
+  )
   it('协议可从真实下拉选中，固定轮询并提交 GET 默认配置', async () => {
     const wrapper = await httpForm()
     expect(wrapper.text()).toContain('认证方式')

@@ -16,7 +16,10 @@ from types import MappingProxyType
 from typing import Protocol
 
 from lib.utils.timeutils import to_utc
-from platform_server.apps.dataset.services.buckets import shift_bucket
+from platform_server.apps.dataset.services.bucket_grid import BucketGrid
+from platform_server.apps.dataset.services.buckets import (
+    build_bucket_expression,
+)
 from timeseries import HISTORY_SCHEMA, HISTORY_TABLE
 
 # 完全限定的表名。⚠ 不靠 search_path：只读连接万一没设对，未限定的表名会静默
@@ -112,18 +115,18 @@ class BucketWindow:
 
     @property
     def range_start(self) -> datetime:
-        """第一个桶的起点。"""
-        return self.starts[0]
+        """全部桶真实样本的最早起点。"""
+        return self.grid.bounds(self.starts)[0]
 
     @property
     def range_end(self) -> datetime:
-        """最后一个桶的右开界。"""
-        return shift_bucket(
-            self.starts[-1],
-            steps=1,
-            interval=self.interval,
-            timezone=self.timezone,
-        )
+        """全部桶真实样本的最终右开界。"""
+        return self.grid.bounds(self.starts)[1]
+
+    @property
+    def grid(self) -> BucketGrid:
+        """身份及物理样本范围共用的网格。"""
+        return BucketGrid(self.interval, self.timezone)
 
 
 @dataclass(frozen=True)
@@ -166,8 +169,7 @@ def build_bucket_query(
 ) -> tuple[str, dict[str, object]]:
     """构造这批点位在这段桶序列上的分桶聚合查询。
 
-    ⚠ `timezone =>` 不能省：不带它 `time_bucket` 按 UNIX 纪元对齐，东八区的日桶
-    会从当地 08:00 开始，07:00 的数据落进前一天（§4.5）。
+    ⚠ SQL 与 Python 共用台账墙钟桶身份及 PostgreSQL 的 DST 解析（§4.5）。
     Args: columns, aggs（已过白名单）, window。
     """
     params = _window_params(columns, window)
@@ -180,10 +182,7 @@ def build_bucket_query(
     # ⚠ 恰好等于「桶数 × 点位数」，也就是 GROUP BY 能产出的行数上限：它拦的是
     # 「桶序列算错、扫出一片计划外的桶」，正常路径上一行都截不掉
     params["row_limit"] = len(window.starts) * len(_points_of(columns))
-    bucket = (
-        "time_bucket(CAST(:bucket_width AS interval), ts,"
-        " timezone => :bucket_timezone)"
-    )
+    bucket = build_bucket_expression()
     sql = (
         # 理由：拼进这段 SQL 的只有本模块的白名单表达式与常量，全部外部输入
         # （点位、区间、桶宽、时区、条数）一律走绑定参数
@@ -191,6 +190,7 @@ def build_bucket_query(
         f" {_select_list(aggs)}"
         f" FROM {TABLE}"
         f" WHERE {predicate} AND ts >= :range_start AND ts < :range_end"
+        f" AND ({bucket}) = ANY(CAST(:bucket_starts AS timestamptz[]))"
         " GROUP BY source_id, point_code, bucket_start"
         " ORDER BY bucket_start ASC, source_id ASC, point_code ASC"
         " LIMIT :row_limit"
@@ -201,27 +201,47 @@ def build_bucket_query(
 def build_previous_end_query(
     columns: Sequence[PointColumn], *, window: BucketWindow
 ) -> tuple[str, dict[str, object]]:
-    """构造 `delta` 减数的查询：每个点位在区间之前最近的一个数值末值。
+    """每个请求身份的上一非空桶末值，按身份顺序而非原始时间。
 
-    ⚠ 下界不能省，理由见 `lookback_span`。⚠ 也不按桶取：中间的空桶不打断接力，
-    末值一直有效到下次变化为止（§4.4）。
+    ⚠ 一次聚合有界 context，再按身份排序取前驱；稀疏请求不跳过中间桶。
     Args: columns, window。
     """
-    points = _points_of(columns)
-    predicate, params = _point_predicate(points)
+    predicate, params = _point_predicate(_points_of(columns))
     merged: dict[str, object] = dict(params)
-    merged["range_start"] = window.range_start
-    merged["lookback_start"] = window.range_start - lookback_span(
-        window.interval
+    span = lookback_span(window.interval)
+    lower = window.starts[0] - span
+    selected = window.grid.selection(lower, window.starts[-1])
+    merged["range_start"], merged["range_end"] = window.grid.selection_bounds(
+        selected
     )
+    merged.update(
+        bucket_width=window.interval,
+        bucket_timezone=window.timezone,
+        bucket_starts=list(window.starts),
+        lookback_start=lower,
+        lookback_span=span,
+        context_end=window.starts[-1],
+    )
+    bucket = build_bucket_expression()
     sql = (
-        # 理由同上：拼进来的只有本模块常量与占位符名
-        "SELECT DISTINCT ON (source_id, point_code)"  # noqa: S608
-        " source_id, point_code, value_num"
-        f" FROM {TABLE}"
-        f" WHERE {predicate} AND ts >= :lookback_start AND ts < :range_start"
+        # 理由：仅常量、白名单表达式与绑定占位符进入 SQL。
+        "WITH ends AS (SELECT source_id, point_code,"  # noqa: S608
+        f" {bucket} AS bucket_start, last(value_num, ts) AS value_num"
+        f" FROM {TABLE} WHERE {predicate}"
+        " AND ts >= :range_start AND ts < :range_end"
+        f" AND ({bucket}) >= :lookback_start AND ({bucket}) <= :context_end"
         " AND value_num IS NOT NULL"
-        " ORDER BY source_id ASC, point_code ASC, ts DESC"
+        " GROUP BY source_id, point_code, bucket_start), predecessors AS ("
+        " SELECT bucket_start, source_id, point_code,"
+        " lag(bucket_start) OVER ordered AS previous_bucket,"
+        " lag(value_num) OVER ordered AS value_num FROM ends"
+        " WINDOW ordered AS (PARTITION BY source_id, point_code"
+        " ORDER BY bucket_start))"
+        " SELECT bucket_start, source_id, point_code, CASE WHEN"
+        " previous_bucket >= ((bucket_start AT TIME ZONE 'UTC')"
+        " - CAST(:lookback_span AS interval)) AT TIME ZONE 'UTC'"
+        " THEN value_num END AS value_num FROM predecessors"
+        " WHERE bucket_start = ANY(CAST(:bucket_starts AS timestamptz[]))"
     )
     return sql, merged
 
@@ -252,7 +272,7 @@ async def aggregate_cells(
     cells: dict[datetime, dict[str, Cell]] = {}
     for column in columns:
         series = grouped.get(column.node_key, [])
-        found = _column_cells(column, series, seeds.get(column.node_key))
+        found = _column_cells(column, series, seeds.get(column.node_key, {}))
         for bucket, cell in found.items():
             cells.setdefault(bucket, {})[column.key] = cell
     return cells
@@ -324,6 +344,7 @@ def _window_params(
     merged["predicate"] = predicate
     merged["range_start"] = window.range_start
     merged["range_end"] = window.range_end
+    merged["bucket_starts"] = list(window.starts)
     return merged
 
 
@@ -331,8 +352,8 @@ async def _previous_ends(
     reader: HistoryReader,
     columns: Sequence[PointColumn],
     window: BucketWindow,
-) -> dict[str, float]:
-    """每个点位在区间之前的最后一个数值末值，`{node_key: 值}`。
+) -> dict[str, dict[datetime, float]]:
+    """每个点位、每个请求身份的上一非空桶末值。
 
     Args: reader, columns, window。
     """
@@ -340,12 +361,17 @@ async def _previous_ends(
         *build_previous_end_query(columns, window=window)
     )
     index = _point_index(columns)
-    found: dict[str, float] = {}
+    found: dict[str, dict[datetime, float]] = {}
     for row in rows:
         node_key = index.get(_row_point(row))
         value = _as_number(row.get("value_num"))
-        if node_key is not None and value is not None:
-            found[node_key] = float(value)
+        bucket = row.get("bucket_start")
+        if (
+            node_key is not None
+            and value is not None
+            and isinstance(bucket, datetime)
+        ):
+            found.setdefault(node_key, {})[to_utc(bucket)] = float(value)
     return found
 
 
@@ -389,14 +415,14 @@ def _group_by_point(
 def _column_cells(
     column: PointColumn,
     series: Sequence[tuple[datetime, Mapping[str, object]]],
-    seed: float | None,
+    seeds: Mapping[datetime, float],
 ) -> dict[datetime, Cell]:
     """一列在它那串桶上的取值。
 
-    Args: column, series（按桶升序）, seed（`delta` 的第一个减数）。
+    Args: column, series（按桶升序）, seeds（每个目标身份的前驱末值）。
     """
     if column.agg == AGG_DELTA:
-        return _delta_cells(series, seed)
+        return _delta_cells(series, seeds)
     return {bucket: _plain_cell(column.agg, row) for bucket, row in series}
 
 
@@ -423,24 +449,24 @@ def _plain_cell(agg: str, row: Mapping[str, object]) -> Cell:
 
 def _delta_cells(
     series: Sequence[tuple[datetime, Mapping[str, object]]],
-    seed: float | None,
+    seeds: Mapping[datetime, float],
 ) -> dict[datetime, Cell]:
     """`delta` 的跨桶接力：`本桶末值 − 上一桶末值`（§4.4）。
 
-    ⚠ 中间的空桶不打断接力——它们压根不在 `series` 里，而 `previous` 一直留着，
-    末值有效到下次变化为止。
-    Args: series（按桶升序）, seed。
+    ⚠ seeds 已经过完整 context 的身份排序，空桶不打断接力，稀疏请求不跳过
+    中间的非请求非空桶。
+    Args: series（按桶升序）, seeds（每个目标身份的前驱末值）。
     """
     found: dict[datetime, Cell] = {}
-    previous = seed
     for bucket, row in series:
         samples = _as_count(row.get(NUM_COUNT))
         end = _as_number(row.get(f"{AGG_DELTA}_value"))
         if end is None:
             found[bucket] = Cell(value=None, samples=samples)
             continue
-        found[bucket] = Cell(value=_increment(previous, end), samples=samples)
-        previous = float(end)
+        found[bucket] = Cell(
+            value=_increment(seeds.get(bucket), end), samples=samples
+        )
     return found
 
 

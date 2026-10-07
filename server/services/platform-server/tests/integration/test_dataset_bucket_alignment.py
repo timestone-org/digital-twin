@@ -6,12 +6,26 @@
 自己再实现一遍。
 """
 
+from collections.abc import Mapping
+from dataclasses import dataclass
 from datetime import UTC, datetime, timedelta
 
 import pytest
+from sqlalchemy import text
+from sqlalchemy.ext.asyncio import AsyncSession
 
+from integration.dataset_helpers import ArchiveWriter, Sample
 from platform_server.apps.collect.services import ReadOnlyHistorySource
-from platform_server.apps.dataset.services.buckets import bucket_start
+from platform_server.apps.dataset.services.aggregate import (
+    BucketWindow,
+    PointColumn,
+    aggregate_cells,
+    build_bucket_query,
+)
+from platform_server.apps.dataset.services.buckets import (
+    bucket_start,
+    build_bucket_expression,
+)
 
 pytestmark = pytest.mark.requires_postgres
 
@@ -53,9 +67,12 @@ async def bucket_in_sql(
     Args: history_source, moment, width, zone。
     """
     rows = await history_source.fetch_all(
-        "SELECT time_bucket(CAST(:width AS interval), CAST(:moment AS"
-        " timestamptz), timezone => :zone) AS bucket_start",
-        {"width": width, "moment": moment, "zone": zone},
+        # SQL 表达式来自生产常量；时刻、桶宽与时区全部绑定。
+        "SELECT "  # noqa: S608
+        + build_bucket_expression()
+        + " AS bucket_start FROM (SELECT CAST(:moment AS timestamptz) AS ts)"
+        " AS sample",
+        {"bucket_width": width, "moment": moment, "bucket_timezone": zone},
     )
     found = rows[0]["bucket_start"]
     assert isinstance(found, datetime)
@@ -101,3 +118,219 @@ async def test_the_seven_minute_width_would_catch_a_wrong_origin(
         == in_sql
         != wrong_origin_would_give
     )
+
+
+@pytest.mark.parametrize(
+    "case",
+    [
+        (
+            datetime(2026, 11, 1, 5, 45, tzinfo=UTC),
+            timedelta(seconds=1),
+            datetime(2026, 11, 1, 6, 45, tzinfo=UTC),
+        ),
+        (
+            datetime(2026, 11, 1, 6, 45, tzinfo=UTC),
+            timedelta(seconds=1),
+            datetime(2026, 11, 1, 6, 45, tzinfo=UTC),
+        ),
+        (
+            datetime(2026, 3, 8, 7, 0, tzinfo=UTC),
+            timedelta(seconds=11),
+            datetime(2026, 3, 8, 7, 59, 50, tzinfo=UTC),
+        ),
+        (
+            datetime(2026, 3, 8, 7, 0, tzinfo=UTC),
+            timedelta(minutes=13),
+            datetime(2026, 3, 8, 7, 54, tzinfo=UTC),
+        ),
+    ],
+    ids=(
+        "autumn-first",
+        "autumn-second",
+        "spring-eleven-seconds",
+        "spring-thirteen-minutes",
+    ),
+)
+async def test_the_production_query_keeps_postgres_wall_clock_bucket_identity(
+    history_source: ReadOnlyHistorySource,
+    archive: ArchiveWriter,
+    case: tuple[datetime, timedelta, datetime],
+) -> None:
+    moment, width, expected = case
+    zone = "America/New_York"
+    point_code = "dst_temperature"
+    await archive.write(point_code, [Sample(ts=moment, value_num=12.0)])
+    starts = (expected,)
+    column = PointColumn(
+        key="temperature",
+        node_key=archive.node_key(point_code),
+        agg="avg",
+        source_id=archive.source_id,
+        point_code=point_code,
+    )
+    rows = await history_source.fetch_all(
+        *build_bucket_query(
+            [column],
+            aggs=["avg"],
+            window=BucketWindow(starts=starts, interval=width, timezone=zone),
+        )
+    )
+    assert [row["bucket_start"] for row in rows] == [expected]
+    assert rows[0]["avg_value"] == 12.0
+    assert bucket_start(moment, interval=width, timezone=zone) == expected
+
+
+@pytest.mark.parametrize("case", ["autumn", "spring", "sparse"])
+async def test_delta_uses_the_previous_nonempty_identity_in_real_history(
+    history_source: ReadOnlyHistorySource,
+    archive: ArchiveWriter,
+    case: str,
+) -> None:
+    """前驱身份的末值可能晚于目标的最早样本，稀疏请求仍须经过中间桶。"""
+    samples, starts, width = delta_case(case)
+    point_code = "dst_counter"
+    await archive.write(point_code, samples)
+    column = PointColumn(
+        key="counter",
+        node_key=archive.node_key(point_code),
+        agg="delta",
+        source_id=archive.source_id,
+        point_code=point_code,
+    )
+    found = await aggregate_cells(
+        history_source,
+        columns=[column],
+        window=BucketWindow(
+            starts=starts, interval=width, timezone="America/New_York"
+        ),
+    )
+    assert {
+        bucket: row["counter"].value for bucket, row in found.items()
+    } == dict.fromkeys(starts, 10.0)
+
+
+def delta_case(
+    case: str,
+) -> tuple[list[Sample], tuple[datetime, ...], timedelta]:
+    """独立字面量输入，不用生产分桶函数生成期望。
+
+    Args: case。
+    """
+    if case == "autumn":
+        day = datetime(2026, 11, 1, tzinfo=UTC)
+        readings = [(5, 29, 10.0), (5, 30, 50.0), (6, 29, 40.0)]
+        starts, width = (day + timedelta(hours=6, minutes=30),), timedelta(
+            minutes=1
+        )
+    else:
+        day = datetime(2026, 3, 8, tzinfo=UTC)
+        readings = [(7, 0, 50.0), (7, 58, 40.0)]
+        starts, width = (day + timedelta(hours=7, minutes=54),), timedelta(
+            minutes=13
+        )
+        if case == "sparse":
+            readings = [
+                (6, 50, 10.0),
+                (7, 0, 50.0),
+                (7, 8, 20.0),
+                (7, 21, 40.0),
+            ]
+            starts = (day + timedelta(hours=7, minutes=7), *starts)
+    samples = [
+        Sample(ts=day + timedelta(hours=hour, minutes=minute), value_num=value)
+        for hour, minute, value in readings
+    ]
+    return samples, starts, width
+
+
+@dataclass(frozen=True)
+class TransactionHistory:
+    """同一只读事务里执行生产查询，验证 session 时区不会改变回看边界。"""
+
+    session: AsyncSession
+
+    async def fetch_all(
+        self, sql: str, params: Mapping[str, object]
+    ) -> list[dict[str, object]]:
+        result = await self.session.execute(text(sql), params)
+        return [dict(row) for row in result.mappings()]
+
+
+@pytest.mark.parametrize("session_timezone", ["UTC", "America/New_York"])
+@pytest.mark.parametrize(
+    "case", ["spring-day", "fall-day", "spring-two-days", "fall-two-days"]
+)
+async def test_delta_lookback_is_absolute_in_each_database_session_timezone(
+    archive: ArchiveWriter, session_timezone: str, case: str
+) -> None:
+    samples, starts, width, expected = lookback_case(case)
+    point_code = "dst_lookback"
+    await archive.write(point_code, samples)
+    column = PointColumn(
+        key="counter",
+        node_key=archive.node_key(point_code),
+        agg="delta",
+        source_id=archive.source_id,
+        point_code=point_code,
+    )
+    async with archive.database.session() as session:
+        await session.execute(text("SET TRANSACTION READ ONLY"))
+        await session.execute(
+            text("SELECT set_config('TimeZone', :timezone, true)"),
+            {"timezone": session_timezone},
+        )
+        found = await aggregate_cells(
+            TransactionHistory(session),
+            columns=[column],
+            window=BucketWindow(
+                starts=starts, interval=width, timezone="America/New_York"
+            ),
+        )
+    assert list(found) == [starts[-1]]
+    assert found[starts[-1]]["counter"].value == expected
+
+
+def lookback_case(
+    case: str,
+) -> tuple[list[Sample], tuple[datetime, ...], timedelta, float | None]:
+    """24/48 小时的字面量前驱；秋季超时前驱即使 context 读到也不可接力。
+
+    Args: case。
+    """
+    if case == "spring-day":
+        target = datetime(2026, 3, 8, 7, tzinfo=UTC)
+        previous, width, expected = (
+            target - timedelta(days=1),
+            timedelta(hours=1),
+            10.0,
+        )
+        starts = (target,)
+    elif case == "fall-day":
+        target = datetime(2026, 11, 1, 6, tzinfo=UTC)
+        previous, width, expected = (
+            target - timedelta(hours=25),
+            timedelta(hours=1),
+            None,
+        )
+        starts = (target - timedelta(hours=2), target)
+    elif case == "spring-two-days":
+        target = datetime(2026, 3, 8, 8, tzinfo=UTC)
+        previous, width, expected = (
+            target - timedelta(hours=47),
+            timedelta(hours=2),
+            10.0,
+        )
+        starts = (target,)
+    else:
+        target = datetime(2026, 11, 2, 9, tzinfo=UTC)
+        previous, width, expected = (
+            target - timedelta(hours=49),
+            timedelta(hours=2),
+            None,
+        )
+        starts = (target - timedelta(hours=2), target)
+    samples = [
+        Sample(previous + timedelta(minutes=1), 40.0),
+        Sample(target + timedelta(minutes=1), 50.0),
+    ]
+    return samples, starts, width, expected

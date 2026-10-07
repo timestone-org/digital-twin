@@ -90,7 +90,7 @@ def _item(text: str, name: str = "记录") -> DiscoveredItem:
     )
 
 
-async def _source_row(db_sessions: object) -> uuid.UUID:
+async def _source_row(db_sessions: sync_service.Sessions) -> uuid.UUID:
     async with db_sessions() as session:  # pyright: ignore[reportCallIssue]
         base = await crud.knowledge_base.insert_base(
             session,
@@ -119,25 +119,28 @@ def _deps(pull: _Pull, store: _Store, stream: _Stream) -> object:
     )
 
 
-async def test_pulled_rows_become_documents(db_sessions: object) -> None:
+async def test_pulled_rows_become_documents(
+    db_sessions: sync_service.Sessions,
+) -> None:
     """⚠ 内容在同步这一刻就落成**我们自己的原件**，之后走的是与上传完全相同
     的那条管线——worker 于是永远只读我们自己的存储。"""
     source_id = await _source_row(db_sessions)
     pull = _Pull(pages=[((_item("出口温度：65", "甲"),), None)])
     store, stream = _Store(), _Stream()
-    async with db_sessions() as session:  # pyright: ignore[reportCallIssue]
-        made = await sync_service.sync_source(
-            session,
-            _deps(pull, store, stream),  # pyright: ignore[reportArgumentType]
-            source_id,
-        )
+    made = await sync_service.sync_source(
+        db_sessions,
+        _deps(pull, store, stream),  # pyright: ignore[reportArgumentType]
+        source_id,
+    )
     assert made.registered == 1
     assert made.has_more is False
     assert len(store.objects) == 1
     assert len(stream.sent) == 1
 
 
-async def test_the_same_row_twice_is_skipped(db_sessions: object) -> None:
+async def test_the_same_row_twice_is_skipped(
+    db_sessions: sync_service.Sessions,
+) -> None:
     """⚠ 外部系统的同一行被同步两次是常态（游标重叠、有人手按），
     而重复的表现是同一段话在检索里出现两次。"""
     source_id = await _source_row(db_sessions)
@@ -145,34 +148,31 @@ async def test_the_same_row_twice_is_skipped(db_sessions: object) -> None:
     store, stream = _Store(), _Stream()
     for _ in range(2):
         pull = _Pull(pages=[((same,), None)])
-        async with db_sessions() as session:  # pyright: ignore[reportCallIssue]
-            made = await sync_service.sync_source(
-                session,
-                _deps(
-                    pull, store, stream
-                ),  # pyright: ignore[reportArgumentType]
-                source_id,
-            )
+        made = await sync_service.sync_source(
+            db_sessions,
+            _deps(pull, store, stream),  # pyright: ignore[reportArgumentType]
+            source_id,
+        )
     assert made.registered == 0
     assert made.skipped == 1
     # ⚠ 重复条目的字节要清掉：留着的话，每同步一次就多一份没人引用的副本
     assert store.deleted
 
 
-async def test_the_cursor_is_remembered(db_sessions: object) -> None:
+async def test_the_cursor_is_remembered(
+    db_sessions: sync_service.Sessions,
+) -> None:
     """⚠ 丢了游标就是全量重扫，而全量重扫在外部系统那一侧可能是几十万次分页。"""
     source_id = await _source_row(db_sessions)
     pull = _Pull(
         pages=[((_item("甲", "a"),), "2"), ((_item("乙", "b"),), None)]
     )
-    async with db_sessions() as session:  # pyright: ignore[reportCallIssue]
-        await sync_service.sync_source(
-            session,
-            _deps(
-                pull, _Store(), _Stream()
-            ),  # pyright: ignore[reportArgumentType]
-            source_id,
-        )
+    await sync_service.sync_source(
+        db_sessions,
+        _deps(pull, _Store(), _Stream()),  # pyright: ignore[reportArgumentType]
+        source_id,
+    )
+    async with db_sessions() as session:
         row = await crud.source.get_source(session, source_id)
     assert row is not None
     assert row.last_synced_at is not None
@@ -180,7 +180,7 @@ async def test_the_cursor_is_remembered(db_sessions: object) -> None:
 
 
 async def test_hitting_the_page_ceiling_says_so(
-    db_sessions: object,
+    db_sessions: sync_service.Sessions,
 ) -> None:
     """⚠ 装作拉完了的话，用户不会再按第二次，而剩下的记录永远进不来。"""
     source_id = await _source_row(db_sessions)
@@ -190,20 +190,17 @@ async def test_hitting_the_page_ceiling_says_so(
             for one in range(5)
         ]
     )
-    async with db_sessions() as session:  # pyright: ignore[reportCallIssue]
-        made = await sync_service.sync_source(
-            session,
-            _deps(
-                pull, _Store(), _Stream()
-            ),  # pyright: ignore[reportArgumentType]
-            source_id,
-        )
+    made = await sync_service.sync_source(
+        db_sessions,
+        _deps(pull, _Store(), _Stream()),  # pyright: ignore[reportArgumentType]
+        source_id,
+    )
     assert made.has_more is True
     assert pull.calls == 3
 
 
 async def test_syncing_an_upload_source_is_a_no_op(
-    db_sessions: object,
+    db_sessions: sync_service.Sessions,
 ) -> None:
     """上传那一路的 `discover` 恒空——同步它不报错，只是什么都不做。"""
     async with db_sessions() as session:  # pyright: ignore[reportCallIssue]
@@ -223,14 +220,11 @@ async def test_syncing_an_upload_source_is_a_no_op(
         )
         source_id = row.id
     pull = _Pull(kind=UPLOAD_KIND, pages=[((), None)])
-    async with db_sessions() as session:  # pyright: ignore[reportCallIssue]
-        made = await sync_service.sync_source(
-            session,
-            _deps(
-                pull, _Store(), _Stream()
-            ),  # pyright: ignore[reportArgumentType]
-            source_id,
-        )
+    made = await sync_service.sync_source(
+        db_sessions,
+        _deps(pull, _Store(), _Stream()),  # pyright: ignore[reportArgumentType]
+        source_id,
+    )
     assert made.registered == 0
 
 

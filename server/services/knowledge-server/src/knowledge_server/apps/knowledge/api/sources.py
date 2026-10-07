@@ -9,7 +9,6 @@ import uuid
 from typing import Annotated
 
 from fastapi import APIRouter, Depends
-from sqlalchemy.ext.asyncio import AsyncSession
 
 from knowledge_server.apps.knowledge.schemas import SyncOut
 from knowledge_server.apps.knowledge.services import sync_service
@@ -18,7 +17,7 @@ from knowledge_server.catalog import KNOWLEDGE_WRITE
 from knowledge_server.container import Container
 from knowledge_server.deps import (
     get_container,
-    get_session,
+    get_sync_sessions,
     request_sources,
     require,
 )
@@ -28,7 +27,7 @@ from lib.web import ApiResponse, ok
 
 router = APIRouter(prefix=f"{API_PREFIX}/sources", tags=["source"])
 
-SessionDep = Annotated[AsyncSession, Depends(get_session)]
+SessionsDep = Annotated[sync_service.Sessions, Depends(get_sync_sessions)]
 ContainerDep = Annotated[Container, Depends(get_container)]
 WriteDep = Annotated[CallerContext, Depends(require(KNOWLEDGE_WRITE))]
 # ⚠ 按请求造：来源集里握着这一次要转发的签名身份头
@@ -41,7 +40,7 @@ SourcesDep = Annotated[tuple[KnowledgeSource, ...], Depends(request_sources)]
     summary="跑一次来源同步",
 )
 async def sync(
-    session: SessionDep,
+    sessions: SessionsDep,
     container: ContainerDep,
     _actor: WriteDep,
     source_id: uuid.UUID,
@@ -54,10 +53,10 @@ async def sync(
 
     ⚠ 一次调用有页数上限；到顶就把游标存好并如实回 `has_more`。
 
-    Args: session, container, _actor, source_id, sources。
+    Args: sessions, container, _actor, source_id, sources。
     """
     deps = _deps(container, sources)
-    made = await sync_service.sync_source(session, deps, source_id)
+    made = await sync_service.sync_source(sessions, deps, source_id)
     return ok(sync_service.sync_out(made))
 
 

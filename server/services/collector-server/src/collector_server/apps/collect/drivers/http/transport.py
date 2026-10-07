@@ -44,6 +44,10 @@ async def bound_response(response: httpx.Response) -> None:
 
     Args: response。
     """
+    # ⚠ Digest 会复制挑战响应的 Cookie；固定 IP 后不能按原域名隔离。
+    response.headers.pop("Set-Cookie", None)
+    response.headers.pop("Set-Cookie2", None)
+    response.cookies.clear()
     maximum = response.request.extensions.get(RESPONSE_LIMIT_KEY)
     if not isinstance(maximum, int):
         raise HttpResponseInvalid("HTTP 响应缺少大小预算")

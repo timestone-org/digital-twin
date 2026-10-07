@@ -8,10 +8,11 @@
 把它存下来反而会长出第三份真相，与库和运行时都可能不一致。
 """
 
+from opcua_server.apps.instance.errors import NodeValueRejected
 from opcua_server.apps.instance.models import Instance, Node
 from opcua_server.apps.instance.runtime.addressspace import (
-    CUSTOM_NAMESPACE_INDEX,
     NodeDefinition,
+    format_node_id,
 )
 from opcua_server.apps.instance.runtime.instance import RunningInstance
 from opcua_server.apps.instance.schemas import (
@@ -79,8 +80,13 @@ def node_id_of(node: Node) -> str:
 
     Args: node。
     """
-    kind = "i" if node.identifier_kind == "numeric" else "s"
-    return f"ns={CUSTOM_NAMESPACE_INDEX};{kind}={node.identifier}"
+    try:
+        return format_node_id(
+            node.identifier, node.identifier_kind, is_canonical=False
+        )
+    except NodeValueRejected:
+        kind = "i" if node.identifier_kind == "numeric" else "s"
+        return f"ns=2;{kind}={node.identifier}"
 
 
 def to_node_out(node: Node) -> NodeOut:
@@ -177,4 +183,5 @@ def definition_of(node: Node, parent_identifier: str | None) -> NodeDefinition:
         is_writable=bool(node.access_level & ACCESS_LEVEL_WRITE),
         node_class=node.node_class,
         parent_identifier=parent_identifier,
+        identifier_kind=node.identifier_kind,
     )

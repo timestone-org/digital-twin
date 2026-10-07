@@ -16,10 +16,14 @@ import { getDashboard } from '@/api/dashboard'
 import type { ReplaceLayoutInput } from '@/api/dashboard'
 import { describeError } from '@/composables/useAsyncList'
 import { useRacedFetch } from '@/composables/useRacedFetch'
-import type { RacedFetch } from '@/composables/useRacedFetch'
-import { createSaver } from '@/features/dashboard/docIo'
+import { createSaver, disposeDoc } from '@/features/dashboard/docIo'
 import type { DocState } from '@/features/dashboard/docIo'
 import { toLayoutInput } from '@/features/dashboard/editorDoc'
+import {
+  cardSaveSnapshot,
+  prepareCardLoad,
+  type CardPageState,
+} from './cardEditorResource'
 
 /** 这张屏读出来了，但里面没有这个节点。 */
 export const CARD_MISSING_NODE_MESSAGE = '这张大屏上没有这个卡片节点'
@@ -41,15 +45,6 @@ export interface CardEditorPage {
   dispose: () => void
 }
 
-/** 一页的可变状态；取数与落库两支动作都写它。 */
-interface CardPageState {
-  doc: DocState
-  missing: Ref<boolean>
-  isDirty: Ref<boolean>
-  raced: RacedFetch
-  nodeId: () => string
-}
-
 /**
  * 整份重取。
  * @param dashboardId 取哪张屏
@@ -60,7 +55,9 @@ async function loadInto(
 ): Promise<void> {
   if (dashboardId === '') return
   const { doc } = state
+  const forNode = prepareCardLoad(state, dashboardId)
   doc.loadGeneration = (doc.loadGeneration ?? 0) + 1
+  doc.isDisposed = false
   doc.saving.value = false
   doc.loading.value = true
   doc.error.value = null
@@ -69,9 +66,8 @@ async function loadInto(
   await state.raced.run((signal) => getDashboard(dashboardId, signal), {
     ok: (payload) => {
       doc.dashboard.value = payload
-      state.missing.value = !payload.nodes.some(
-        (one) => one.id === state.nodeId(),
-      )
+      state.loadedNodeId = forNode
+      state.missing.value = !payload.nodes.some((one) => one.id === forNode)
       state.isDirty.value = false
     },
     fail: (caught) => {
@@ -133,9 +129,8 @@ async function saveFrom(
   state: CardPageState,
   save0: (input: ReplaceLayoutInput) => Promise<DashboardPayload | null>,
 ): Promise<boolean> {
-  const current = state.doc.dashboard.value
-  if (current === null || state.doc.saving.value || state.doc.loading.value)
-    return false
+  const current = cardSaveSnapshot(state)
+  if (current === null) return false
   const generation = state.doc.loadGeneration ?? 0
   const saved = await save0({
     // ⚠ 带上当前行版本：不带就成了「无条件覆盖」，别人在这期间改过的会被静默抹掉
@@ -169,7 +164,9 @@ export function useCardEditorPage(
     missing: ref(false),
     isDirty: ref(false),
     raced: useRacedFetch(),
+    dashboardId,
     nodeId,
+    loadedNodeId: null,
   }
   const save0 = createSaver(doc)
 
@@ -191,9 +188,6 @@ export function useCardEditorPage(
     setConfig: (next) => setConfigOn(state, next),
     load: () => loadInto(state, dashboardId()),
     save: () => saveFrom(state, save0),
-    dispose: () => {
-      doc.loadGeneration = (doc.loadGeneration ?? 0) + 1
-      state.raced.cancel()
-    },
+    dispose: () => disposeDoc(doc, state.raced.cancel),
   }
 }

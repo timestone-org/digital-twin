@@ -25,6 +25,9 @@ from knowledge_server.apps.knowledge.schemas import (
     SourceIn,
     SourceOut,
 )
+from knowledge_server.apps.knowledge.schemas.source_config import (
+    validate_source_config,
+)
 from knowledge_server.apps.knowledge.services.sources import (
     UPLOAD_KIND,
     base_prefix,
@@ -225,6 +228,7 @@ async def add_source(
     Args: session, base_id, body。
     """
     await read_base(session, base_id)
+    validate_source_config(body.kind, body.config)
     row = await crud.source.insert_source(
         session, base_id, body.kind, body.name, body.config
     )

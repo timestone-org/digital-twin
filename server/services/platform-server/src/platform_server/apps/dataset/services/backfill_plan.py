@@ -8,19 +8,20 @@
 一个月」，而界面上看不出少了哪一段。
 """
 
+from collections.abc import Iterator
 from dataclasses import dataclass
-from datetime import datetime, timedelta
+from datetime import UTC, datetime, timedelta
+from itertools import islice
 
-from lib.utils.timeutils import format_rfc3339
+from lib.utils.timeutils import format_rfc3339, to_utc
 from platform_server.apps.dataset.errors import DatasetBackfillInvalid
 from platform_server.apps.dataset.models import DatasetTable
 from platform_server.apps.dataset.services.aggregate import BucketWindow
-from platform_server.apps.dataset.services.buckets import (
-    bucket_interval,
-    bucket_sequence,
-    bucket_start,
-    shift_bucket,
+from platform_server.apps.dataset.services.bucket_grid import (
+    BucketGrid,
+    BucketSelection,
 )
+from platform_server.apps.dataset.services.buckets import bucket_interval
 from platform_server.apps.dataset.services.record_compute import (
     MAX_RECOMPUTE_ROWS,
 )
@@ -64,6 +65,7 @@ class BackfillBatch:
     first: datetime
     last: datetime
     count: int
+    selection: BucketSelection | None = None
 
 
 @dataclass(frozen=True)
@@ -77,44 +79,7 @@ class BackfillPlan:
     total_buckets: int
     is_clamped: bool
     notes: tuple[str, ...]
-
-
-@dataclass(frozen=True)
-class BucketGrid:
-    """桶网格：把 `services/buckets.py` 那三个函数收成一件。
-
-    省掉逐处传「桶宽 + 时区」这一对，两者在这条链路上从来是一起走的。
-    """
-
-    interval: timedelta
-    timezone: str
-
-    def align(self, moment: datetime) -> datetime:
-        """这一刻落在哪个桶里。
-
-        Args: moment。
-        """
-        return bucket_start(
-            moment, interval=self.interval, timezone=self.timezone
-        )
-
-    def shift(self, bucket: datetime, steps: int) -> datetime:
-        """往前或往后数 `steps` 个桶。
-
-        Args: bucket, steps。
-        """
-        return shift_bucket(
-            bucket, steps=steps, interval=self.interval, timezone=self.timezone
-        )
-
-    def sequence(self, first: datetime, last: datetime) -> tuple[datetime, ...]:
-        """闭区间里的全部桶起点，升序。
-
-        Args: first, last。
-        """
-        return bucket_sequence(
-            first, last, interval=self.interval, timezone=self.timezone
-        )
+    selection: BucketSelection | None = None
 
 
 def grid_of(table: DatasetTable, timezone: str) -> BucketGrid:
@@ -139,64 +104,137 @@ def plan_backfill(
 
     Args: table, since, until, now, limits。
     """
-    # ⚠ 区间是**桶闭区间**：两端各自落到自己那个桶上，两端同桶就是「只补这
-    # 一个桶」。要求 `until` 严格晚于 `since` 的话，想补一个桶的人得写出
-    # 「桶起点 + 1 毫秒」，而写错一位就静默变成补两个桶
+    try:
+        return _plan_request(
+            table, since=since, until=until, now=now, limits=limits
+        )
+    except (ValueError, OverflowError) as exc:
+        raise DatasetBackfillInvalid("所选时间超出可计算的桶范围") from exc
+
+
+def _plan_request(
+    table: DatasetTable,
+    *,
+    since: datetime,
+    until: datetime,
+    now: datetime,
+    limits: PlanLimits,
+) -> BackfillPlan:
+    """把请求的区间对齐到桶网格并做完三道 clamp；一个桶都不剩就抛。
+
+    Args: table, since, until, now, limits。
+    """
+    since, until, now = to_utc(since), to_utc(until), to_utc(now)
     if until < since:
         raise DatasetBackfillInvalid("结束时间不能早于开始时间")
     grid = grid_of(table, limits.timezone)
     notes: list[str] = []
-    first = grid.align(since)
-    last = grid.align(until)
-    floor = retention_floor(grid, now=now, retention_days=limits.retention_days)
-    if floor is not None and first < floor:
-        notes.append(_floor_note(floor, limits.retention_days))
-        first = floor
     guard = guard_bucket(
         grid, table, now=now, tail=limits.recompute_tail_buckets
     )
-    if last > guard:
-        notes.append(_guard_note(guard))
-        last = guard
-    if last < first:
+    selected, is_truncated = _request_selection(
+        grid, (since, until, now), limits, notes, guard
+    )
+    selected = _retained_selection(grid, selected, now, limits, notes)
+    if selected.count and selected.last > guard:
+        if _guard_note(guard) not in notes:
+            notes.append(_guard_note(guard))
+        selected = selected.between(selected.first, guard)
+    if not selected.count:
         raise DatasetBackfillInvalid(
             "所选区间里没有可回填的桶——整段要么早于点位历史的保留期，"
             "要么落在向前采集器仍会重写的那一截上"
         )
-    total = count_buckets(grid, first, last, ceiling=limits.max_buckets)
-    if total > limits.max_buckets:
-        first = grid.shift(last, -(limits.max_buckets - 1))
-        total = limits.max_buckets
-        notes.append(_count_note(first, limits.max_buckets))
-    return _plan_of(grid, (first, last), total, notes)
+    if selected.count > limits.max_buckets or is_truncated:
+        selected = selected.tail(limits.max_buckets)
+        notes.append(_count_note(selected.first, limits.max_buckets))
+    return _plan_of(grid, selected, notes)
+
+
+def _request_selection(
+    grid: BucketGrid,
+    times: tuple[datetime, datetime, datetime],
+    limits: PlanLimits,
+    notes: list[str],
+    guard: datetime,
+) -> tuple[BucketSelection, bool]:
+    """先约束原始扫描，再探测时区跳变；百年请求也不逐日遍历全部历史。
+
+    Args: grid, times（请求首末与此刻）, limits, notes, guard。
+    """
+    since, until, now = times
+    if limits.retention_days is not None:
+        cutoff = now - timedelta(days=limits.retention_days)
+        if since < cutoff:
+            since = cutoff
+            notes.append(_floor_note(cutoff, limits.retention_days))
+    # guard 是身份键；两天物理余量覆盖跳变后的前驱桶样本，之后再精确按身份裁剪。
+    margin = min(timedelta(days=2), datetime.max.replace(tzinfo=UTC) - guard)
+    if until > guard + margin:
+        notes.append(_guard_note(guard))
+    until = min(until, now, guard + margin)
+    # 两侧各两天恢复 UTC/墙钟映射，桶数裁剪仍按最终身份集合计数。
+    span = grid.interval * (limits.max_buckets + 2) + timedelta(days=4)
+    distance = until - datetime.min.replace(tzinfo=UTC)
+    bounded = until - min(span, distance)
+    is_truncated = since < bounded
+    since = max(since, bounded)
+    try:
+        return grid.identities_for_span(since, until), is_truncated
+    except (ValueError, OverflowError) as exc:
+        raise DatasetBackfillInvalid("所选时间超出可计算的桶范围") from exc
+
+
+def _retained_selection(
+    grid: BucketGrid,
+    selected: BucketSelection,
+    now: datetime,
+    limits: PlanLimits,
+    notes: list[str],
+) -> BucketSelection:
+    """只保留真实样本区间完整留存的身份，不把身份当采样时间。
+
+    Args: grid, selected, now, limits, notes。
+    """
+    if limits.retention_days is None:
+        return selected
+    cutoff = now - timedelta(days=limits.retention_days)
+    retained = grid.retained(selected, cutoff)
+    if retained.count != selected.count and not any(
+        "保留期" in note for note in notes
+    ):
+        floor = retention_floor(
+            grid, now=now, retention_days=limits.retention_days
+        )
+        notes.append(_floor_note(floor or cutoff, limits.retention_days))
+    return retained
 
 
 def _plan_of(
     grid: BucketGrid,
-    span: tuple[datetime, datetime],
-    total: int,
+    selected: BucketSelection,
     notes: list[str],
 ) -> BackfillPlan:
     """拼出计划本身，并在末尾补一条「走的是哪条取数路径」。
 
     ⚠ `is_clamped` 在补这一条**之前**定：取数路径不是裁剪，混进去会让每一次
     回填都自称被裁过，而界面据此常亮一个警告——警告常亮等于没有警告。
-    Args: grid, span（首末桶）, total, notes。
+    Args: grid, selected, notes。
     """
-    first, last = span
     is_clamped = bool(notes)
     notes.append(
         "取数走点位历史原始表：本仓没有 1 小时连续聚合视图，"
         "区间越长越慢，建议分段回填"
     )
     return BackfillPlan(
-        first=first,
-        last=last,
+        first=selected.first,
+        last=selected.last,
         interval=grid.interval,
         timezone=grid.timezone,
-        total_buckets=total,
+        total_buckets=selected.count,
         is_clamped=is_clamped,
         notes=tuple(notes),
+        selection=selected,
     )
 
 
@@ -211,9 +249,9 @@ def retention_floor(
     """
     if retention_days is None:
         return None
-    floor = now - timedelta(days=retention_days)
-    aligned = grid.align(floor)
-    return aligned if aligned == floor else grid.shift(aligned, 1)
+    cutoff = now - timedelta(days=retention_days)
+    selected = grid.identities_for_span(cutoff, cutoff + timedelta(days=2))
+    return grid.retained(selected, cutoff).first
 
 
 def guard_bucket(
@@ -228,7 +266,7 @@ def guard_bucket(
     已经跑在半路上了。
     Args: grid, table, now, tail。
     """
-    last_closed = grid.shift(grid.align(now), -1)
+    last_closed = grid.last_closed(now)
     if table.collect_mode != "aggregate" or not table.is_enabled:
         return last_closed
     reach = min(last_closed, _collector_first(grid, table, now=now, tail=tail))
@@ -240,43 +278,29 @@ def count_buckets(
 ) -> int:
     """闭区间里有多少个桶；数过 `ceiling` 就不再往下数。
 
-    ⚠ 按批跨步数而不是逐桶走：一次最多 20 万个桶，逐桶展开只为了数个数，那一
-    串在算出上限之前就已经占住内存了。只有最后一批要真的展开——前面每一批按
-    构造恰好是满的。
+    ⚠ 紧凑身份段直接计数，不为计数展开最多 20 万个桶。
     Args: grid, first, last, ceiling。
     """
-    total = 0
-    cursor = first
-    while cursor <= last:
-        edge = grid.shift(cursor, BATCH_BUCKETS - 1)
-        if edge > last:
-            return total + len(grid.sequence(cursor, last))
-        total += BATCH_BUCKETS
-        if total > ceiling:
-            return total
-        cursor = grid.shift(edge, 1)
-    return total
+    return grid.count(first, last, ceiling)
 
 
-def slice_batches(plan: BackfillPlan) -> tuple[BackfillBatch, ...]:
+def slice_batches(plan: BackfillPlan) -> Iterator[BackfillBatch]:
     """把整段切成一批批，每批 `BATCH_BUCKETS` 个桶。
 
     Args: plan。
     """
     grid = BucketGrid(interval=plan.interval, timezone=plan.timezone)
-    found: list[BackfillBatch] = []
-    cursor = plan.first
-    while cursor <= plan.last:
-        edge = grid.shift(cursor, BATCH_BUCKETS - 1)
-        last = min(plan.last, edge)
-        count = (
-            BATCH_BUCKETS
-            if edge <= plan.last
-            else len(grid.sequence(cursor, last))
+    selected = plan.selection or grid.selection(plan.first, plan.last)
+    pending = selected.iterate()
+    # 每批只恢复至多 240 个身份；yield 后生产 forloop 会 await 该批的事务。
+    while starts := tuple(islice(pending, BATCH_BUCKETS)):
+        chunk = selected.between(starts[0], starts[-1])
+        yield BackfillBatch(
+            first=chunk.first,
+            last=chunk.last,
+            count=len(starts),
+            selection=chunk,
         )
-        found.append(BackfillBatch(first=cursor, last=last, count=count))
-        cursor = grid.shift(last, 1)
-    return tuple(found)
 
 
 def batch_window(plan: BackfillPlan, batch: BackfillBatch) -> BucketWindow:
@@ -286,7 +310,9 @@ def batch_window(plan: BackfillPlan, batch: BackfillBatch) -> BucketWindow:
     """
     grid = BucketGrid(interval=plan.interval, timezone=plan.timezone)
     return BucketWindow(
-        starts=grid.sequence(batch.first, batch.last),
+        starts=(
+            batch.selection or grid.selection(batch.first, batch.last)
+        ).sequence(),
         interval=plan.interval,
         timezone=plan.timezone,
     )
@@ -301,8 +327,8 @@ def _collector_first(
     """
     watermark = table.last_collected_ts
     if watermark is None:
-        return grid.shift(grid.align(now), -1)
-    return grid.shift(grid.align(watermark), 1 - tail)
+        return grid.last_closed(now)
+    return grid.shift(watermark, 1 - tail)
 
 
 def _floor_note(floor: datetime, retention_days: int | None) -> str:

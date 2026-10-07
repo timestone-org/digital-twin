@@ -812,3 +812,43 @@ it('全清单重载期间的文档轮询不能中止分页或擦掉新清单', a
     'oldest',
   ])
 })
+
+describe('切库失败的文档隔离', () => {
+  it('新库请求失败后不把上一库文档留在新库名下', async () => {
+    vi.mocked(api.listDocuments)
+      .mockResolvedValueOnce([documentOf('a-only')])
+      .mockRejectedValueOnce(new Error('新库读取失败'))
+    const page = useKnowledgePage()
+    page.bases.value = [baseOf('a', '甲'), baseOf('b', '乙')]
+    await page.select('a')
+    await page.select('b')
+    expect(page.selected.value?.id).toBe('b')
+    expect(page.error.value).toBe('新库读取失败')
+    expect(page.documents.value).toEqual([])
+  })
+
+  it('同一库刷新失败保留已读取文档并提示失败', async () => {
+    vi.mocked(api.listDocuments)
+      .mockResolvedValueOnce([documentOf('a-only')])
+      .mockRejectedValueOnce(new Error('刷新失败'))
+    const page = useKnowledgePage()
+    await page.select('a')
+    await page.select('a')
+    expect(page.documents.value.map((one) => one.id)).toEqual(['a-only'])
+    expect(page.error.value).toBe('刷新失败')
+  })
+
+  it('切库后等待请求期间立即清除旧文档，旧库迟到不回填', async () => {
+    const slow = deferred<KnowledgeDocument[]>()
+    vi.mocked(api.listDocuments)
+      .mockResolvedValueOnce([documentOf('a-only')])
+      .mockReturnValueOnce(slow.promise)
+    const page = useKnowledgePage()
+    await page.select('a')
+    const switching = page.select('b')
+    expect(page.documents.value).toEqual([])
+    slow.settle([documentOf('b-only')])
+    await switching
+    expect(page.documents.value.map((one) => one.id)).toEqual(['b-only'])
+  })
+})

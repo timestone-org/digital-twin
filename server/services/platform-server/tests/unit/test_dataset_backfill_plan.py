@@ -263,7 +263,7 @@ def test_batches_tile_the_whole_range_without_gap_or_overlap() -> None:
         limits=limits(),
     )
 
-    batches = slice_batches(plan)
+    batches = tuple(slice_batches(plan))
 
     assert sum(batch.count for batch in batches) == plan.total_buckets
     assert batches[0].first == plan.first
@@ -281,7 +281,7 @@ def test_a_single_short_batch_counts_its_own_buckets() -> None:
         limits=limits(),
     )
 
-    batches = slice_batches(plan)
+    batches = tuple(slice_batches(plan))
 
     assert len(batches) == 1
     assert batches[0].count == 5
@@ -292,3 +292,163 @@ def test_a_single_short_batch_counts_its_own_buckets() -> None:
         CLOSED - 6 * HOUR,
         CLOSED - 5 * HOUR,
     )
+
+
+def test_a_spring_span_keeps_its_sparse_reachable_identities() -> None:
+    plan = plan_backfill(
+        a_table(collect_mode="manual", collect_interval_ms=11_000),
+        since=datetime(2026, 3, 8, 7, 0, tzinfo=UTC),
+        until=datetime(2026, 3, 8, 7, 1, tzinfo=UTC),
+        now=datetime(2026, 3, 8, 9, 0, tzinfo=UTC),
+        limits=PlanLimits(
+            timezone="America/New_York",
+            retention_days=None,
+            recompute_tail_buckets=0,
+        ),
+    )
+    found = tuple(
+        bucket
+        for batch in slice_batches(plan)
+        for bucket in batch_window(plan, batch).starts
+    )
+    assert found == (
+        datetime(2026, 3, 8, 7, 0, 1, tzinfo=UTC),
+        datetime(2026, 3, 8, 7, 0, 12, tzinfo=UTC),
+        datetime(2026, 3, 8, 7, 0, 23, tzinfo=UTC),
+        datetime(2026, 3, 8, 7, 0, 34, tzinfo=UTC),
+        datetime(2026, 3, 8, 7, 0, 45, tzinfo=UTC),
+        datetime(2026, 3, 8, 7, 0, 56, tzinfo=UTC),
+        datetime(2026, 3, 8, 7, 59, 50, tzinfo=UTC),
+    )
+    assert plan.total_buckets == len(found)
+
+
+def test_spring_batch_counts_match_distinct_ordered_windows() -> None:
+    plan = plan_backfill(
+        a_table(collect_mode="manual", collect_interval_ms=11_000),
+        since=datetime(2026, 3, 8, 6, 0, tzinfo=UTC),
+        until=datetime(2026, 3, 8, 8, 0, tzinfo=UTC),
+        now=datetime(2026, 3, 8, 9, 0, tzinfo=UTC),
+        limits=PlanLimits(
+            timezone="America/New_York",
+            retention_days=None,
+            recompute_tail_buckets=0,
+        ),
+    )
+    batches = tuple(slice_batches(plan))
+    windows = [batch_window(plan, batch).starts for batch in batches]
+    found = tuple(bucket for starts in windows for bucket in starts)
+    assert found == tuple(sorted(set(found)))
+    assert (
+        sum(batch.count for batch in batches)
+        == len(found)
+        == plan.total_buckets
+    )
+    assert all(
+        batch.count == len(starts)
+        for batch, starts in zip(batches, windows, strict=True)
+    )
+
+
+def test_retention_keeps_complete_spring_cells_and_excludes_partial_ghost() -> (
+    None
+):
+    cutoff = datetime(2026, 3, 8, 7, 0, 0, 500_000, tzinfo=UTC)
+    plan = plan_backfill(
+        a_table(collect_mode="manual", collect_interval_ms=11_000),
+        since=cutoff,
+        until=datetime(2026, 3, 8, 7, 1, tzinfo=UTC),
+        now=cutoff + timedelta(days=1),
+        limits=PlanLimits(
+            timezone="America/New_York",
+            retention_days=1,
+            recompute_tail_buckets=0,
+        ),
+    )
+    found = tuple(
+        bucket
+        for batch in slice_batches(plan)
+        for bucket in batch_window(plan, batch).starts
+    )
+    assert plan.first == datetime(2026, 3, 8, 7, 0, 1, tzinfo=UTC)
+    assert datetime(2026, 3, 8, 7, 59, 50, tzinfo=UTC) not in found
+    assert plan.total_buckets == 6
+    assert plan.is_clamped
+
+
+def test_retention_requires_both_autumn_occurrences_to_be_complete() -> None:
+    cutoff = datetime(2026, 11, 1, 5, 30, tzinfo=UTC)
+    plan = plan_backfill(
+        a_table(collect_mode="manual", collect_interval_ms=60_000),
+        since=datetime(2026, 11, 1, 6, 29, tzinfo=UTC),
+        until=datetime(2026, 11, 1, 6, 30, tzinfo=UTC),
+        now=cutoff + timedelta(days=1),
+        limits=PlanLimits(
+            timezone="America/New_York",
+            retention_days=1,
+            recompute_tail_buckets=0,
+        ),
+    )
+    assert plan.first == plan.last == datetime(2026, 11, 1, 6, 30, tzinfo=UTC)
+    assert plan.total_buckets == 1
+    assert plan.is_clamped
+
+
+def test_naive_backfill_request_keeps_the_existing_utc_interpretation() -> None:
+    plan = plan_backfill(
+        a_table(collect_mode="manual"),
+        since=CLOSED.replace(tzinfo=None),
+        until=CLOSED.replace(tzinfo=None),
+        now=NOW.replace(tzinfo=None),
+        limits=limits(),
+    )
+    assert plan.first == plan.last == CLOSED
+
+
+def test_extreme_request_is_limited_before_transition_scanning() -> None:
+    plan = plan_backfill(
+        a_table(collect_mode="manual", collect_interval_ms=1000),
+        since=datetime.min.replace(tzinfo=UTC),
+        until=datetime.max.replace(tzinfo=UTC),
+        now=NOW,
+        limits=limits(max_buckets=4),
+    )
+    assert plan.total_buckets == 4
+    assert plan.last == datetime(2026, 8, 24, 5, 29, 59, tzinfo=UTC)
+    assert plan.first == plan.last - timedelta(seconds=3)
+    assert any("最多 4 个桶" in note for note in plan.notes)
+
+
+def test_bounded_request_keeps_the_tail_before_a_stale_guard() -> None:
+    watermark = datetime(2020, 1, 1, tzinfo=UTC)
+    plan = plan_backfill(
+        a_table(collect_interval_ms=1000, last_collected_ts=watermark),
+        since=datetime(2019, 12, 1, tzinfo=UTC),
+        until=datetime(2026, 3, 8, tzinfo=UTC),
+        now=datetime(2026, 3, 9, tzinfo=UTC),
+        limits=limits(max_buckets=4),
+    )
+    assert plan.total_buckets == 4
+    assert plan.last == watermark - timedelta(seconds=2)
+    assert plan.first == plan.last - timedelta(seconds=3)
+    assert any("向前采集器" in note for note in plan.notes)
+
+
+def test_large_calendar_batches_are_lazy_and_keep_exact_counts() -> None:
+    now = datetime(2026, 10, 7, tzinfo=UTC)
+    plan = plan_backfill(
+        a_table(collect_mode="manual", collect_interval_ms=86_400_000),
+        since=datetime.min.replace(tzinfo=UTC),
+        until=now,
+        now=now,
+        limits=limits(timezone="America/New_York"),
+    )
+    batches = slice_batches(plan)
+    assert iter(batches) is batches
+    first = next(batches)
+    assert first.count == BATCH_BUCKETS
+    remaining = tuple(batches)
+    assert len(remaining) + 1 == 834
+    assert first.count + sum(batch.count for batch in remaining) == 200_000
+    assert first.first == plan.first
+    assert remaining[-1].last == plan.last

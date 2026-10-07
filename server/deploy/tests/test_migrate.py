@@ -286,6 +286,29 @@ def test_zero_timeout_is_rejected(field: str) -> None:
         make_settings(**{field: 0})
 
 
+@pytest.mark.parametrize(
+    "field", ["database_wait_timeout_s", "command_timeout_s"]
+)
+@pytest.mark.parametrize("value", [float("inf"), float("-inf"), float("nan")])
+def test_nonfinite_timeout_is_rejected(field: str, value: float) -> None:
+    with pytest.raises(ValidationError):
+        make_settings(**{field: value})
+
+
+def test_null_environment_cannot_replace_migration_password(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    for key, value in (
+        ("POSTGRES_HOST", "database.test"),
+        ("POSTGRES_USER", "owner"),
+        ("POSTGRES_PASSWORD", "null"),
+        ("POSTGRES_DB", "digitaltwin_test"),
+    ):
+        monkeypatch.setenv(key, value)
+    with pytest.raises(ValidationError):
+        migrate.RunnerSettings()
+
+
 @pytest.mark.asyncio
 async def test_invalidated_lock_session_cannot_reconnect_and_continue() -> None:
     connection = AsyncMock()

@@ -32,8 +32,8 @@ from platform_server.apps.dataset.services.aggregate import (
 from platform_server.apps.dataset.services.buckets import (
     bucket_interval,
     bucket_sequence,
-    bucket_start,
     collected_row_id,
+    last_closed_bucket,
     shift_bucket,
 )
 from platform_server.apps.dataset.services.dirty import (
@@ -307,10 +307,7 @@ def _window_of(
     Args: table, now, timezone, limits。
     """
     interval = bucket_interval(table.collect_interval_ms)
-    current = bucket_start(now, interval=interval, timezone=timezone)
-    last_closed = shift_bucket(
-        current, steps=-1, interval=interval, timezone=timezone
-    )
+    last_closed = last_closed_bucket(now, interval=interval, timezone=timezone)
     first = _first_bucket(
         table, last_closed, interval=interval, timezone=timezone, limits=limits
     )
@@ -350,9 +347,9 @@ def _first_bucket(
     watermark = table.last_collected_ts
     if watermark is None:
         return last_closed
-    aligned = bucket_start(watermark, interval=interval, timezone=timezone)
+    # 水位已经是持久化身份；春季缺口的身份不保证再次对齐后仍是自身。
     return shift_bucket(
-        aligned,
+        watermark,
         steps=1 - limits.recompute_tail_buckets,
         interval=interval,
         timezone=timezone,

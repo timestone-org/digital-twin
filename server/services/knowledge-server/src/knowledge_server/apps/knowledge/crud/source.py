@@ -31,14 +31,15 @@ async def insert_source(
 
 
 async def get_source(
-    session: AsyncSession, source_id: uuid.UUID
+    session: AsyncSession, source_id: uuid.UUID, *, is_locked: bool = False
 ) -> KnowledgeSource | None:
     """按 id 取一路来源。
 
     Args: session, source_id。
     """
+    query = select(KnowledgeSource).where(KnowledgeSource.id == source_id)
     found = await session.execute(
-        select(KnowledgeSource).where(KnowledgeSource.id == source_id)
+        query.with_for_update() if is_locked else query
     )
     return found.scalar_one_or_none()
 
@@ -117,7 +118,10 @@ async def mark_synced(
 
 
 async def mark_sync_failed(
-    session: AsyncSession, source_id: uuid.UUID, reason: str
+    session: AsyncSession,
+    source_id: uuid.UUID,
+    reason: str,
+    expected_when: datetime | None = None,
 ) -> int:
     """记下这一路同步失败了。
 
@@ -129,6 +133,7 @@ async def mark_sync_failed(
     done = await session.execute(
         update(KnowledgeSource)
         .where(KnowledgeSource.id == source_id)
+        .where(KnowledgeSource.last_synced_at == expected_when)
         .values(last_error=reason)
     )
     return max(0, cast("CursorResult[Any]", done).rowcount)

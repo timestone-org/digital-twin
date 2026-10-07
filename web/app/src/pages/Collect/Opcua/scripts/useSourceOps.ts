@@ -23,6 +23,7 @@ interface Ctx {
   reload: () => Promise<void>
   busyId: Ref<string | null>
   formOpen: Ref<boolean>
+  formSaving: Ref<boolean>
   formSource: Ref<CollectSource | null>
 }
 
@@ -30,6 +31,7 @@ export interface SourceOps {
   /** 正在做启停 / 连通性测试的源 id（按钮 loading）。 */
   busyId: Ref<string | null>
   formOpen: Ref<boolean>
+  formSaving: Ref<boolean>
   formSource: Ref<CollectSource | null>
   openCreate: () => void
   openEdit: (source: CollectSource) => void
@@ -78,6 +80,8 @@ async function create(
   ctx: Ctx,
   input: CollectSourceCreateInput,
 ): Promise<string | null> {
+  if (ctx.formSaving.value) return null
+  ctx.formSaving.value = true
   try {
     const created = await collect.createSource(input)
     ctx.formOpen.value = false
@@ -87,6 +91,8 @@ async function create(
   } catch (caught) {
     ctx.toast.error(describeError(caught))
     return null
+  } finally {
+    ctx.formSaving.value = false
   }
 }
 
@@ -95,7 +101,8 @@ async function update(
   input: CollectSourceUpdateInput,
 ): Promise<void> {
   const target = ctx.formSource.value
-  if (target === null) return
+  if (target === null || ctx.formSaving.value) return
+  ctx.formSaving.value = true
   try {
     await collect.updateSource(target.id, input)
     ctx.formOpen.value = false
@@ -103,6 +110,8 @@ async function update(
     await ctx.reload()
   } catch (caught) {
     ctx.toast.error(describeError(caught))
+  } finally {
+    ctx.formSaving.value = false
   }
 }
 
@@ -116,17 +125,21 @@ export function useSourceOps(reload: () => Promise<void>): SourceOps {
     reload,
     busyId: ref<string | null>(null),
     formOpen: ref(false),
+    formSaving: ref(false),
     formSource: ref<CollectSource | null>(null),
   }
   return {
     busyId: ctx.busyId,
     formOpen: ctx.formOpen,
+    formSaving: ctx.formSaving,
     formSource: ctx.formSource,
     openCreate: () => {
+      if (ctx.formSaving.value) return
       ctx.formSource.value = null
       ctx.formOpen.value = true
     },
     openEdit: (source) => {
+      if (ctx.formSaving.value) return
       ctx.formSource.value = source
       ctx.formOpen.value = true
     },

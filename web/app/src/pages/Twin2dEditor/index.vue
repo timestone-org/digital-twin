@@ -6,7 +6,7 @@
  * ⚠ 这一页对「自己在编 twin-2d-view」一无所知，也不该知道：是大屏编辑器按清单上的
  * `subEditor` 声明跳进来的，路由参数只有 `dashboardId` + `nodeId`。
  * ⚠ 未保存的改动只在内存里，没有本地草稿可恢复，所以两道守卫缺一不可：站内跳转
- * 拦在 `onBeforeRouteLeave`，关标签页 / 刷新拦在 `useUnsavedGuard`。
+ * 拦在 `useSubEditorRouteGuard`，关标签页 / 刷新拦在 `useUnsavedGuard`。
  * ⚠ 键盘手势装在这一层而不是画布层：撤销、粘贴、保存都要落到文档态上，装在画布里
  * 的话焦点一离开画布这几个键就整片失灵，而这一步零报错。让位表单的判定归
  * `isTwin2dFormFocused`（按最近可交互祖先判，见 `shortcuts.ts`）。
@@ -18,15 +18,16 @@
  * 一无所知——模块类型来自节点行、草稿注回的键来自清单，一个都不写死。
  */
 import type { Twin2dConfig } from '@dt/twin2d'
-import { DtButton, DtNotice, DtPageState, useConfirm, useToast } from '@dt/ui'
+import { DtButton, DtNotice, DtPageState, useToast } from '@dt/ui'
 import { computed, onBeforeUnmount, ref, watch } from 'vue'
-import { onBeforeRouteLeave, useRoute } from 'vue-router'
+import { useRoute } from 'vue-router'
 
 import { installDashboardModules } from '@/bootstrap/dashboard'
 import AiDock from '@/components/ai/AiDock.vue'
 import PointPickerDialog from '@/components/binding/PointPickerDialog.vue'
 import { AppShell } from '@/components/layout'
 import { useUnsavedGuard } from '@/composables/useUnsavedGuard'
+import { useSubEditorRouteGuard } from '@/features/dashboard/useSubEditorRouteGuard'
 
 import EditorStage from './components/EditorStage.vue'
 import NodePalette from './components/NodePalette.vue'
@@ -54,7 +55,6 @@ installDashboardModules()
 
 const route = useRoute()
 const toast = useToast()
-const confirm = useConfirm()
 
 const dashboardId = computed(() => String(route.params.dashboardId ?? ''))
 const nodeId = computed(() => String(route.params.nodeId ?? ''))
@@ -262,14 +262,11 @@ function reload(): void {
   void page.reload()
 }
 
-onBeforeRouteLeave(async () => {
-  if (page.doc.value?.isDirty.value !== true) return true
-  return await confirm.ask({
-    title: '放弃未保存的改动',
-    message: '这张 2D 孪生图有改动还没保存，离开就会丢失。',
-    confirmText: '离开',
-    danger: true,
-  })
+useSubEditorRouteGuard(() => page.doc.value?.isDirty.value === true, {
+  title: '放弃未保存的改动',
+  message: '这张 2D 孪生图有改动还没保存，离开就会丢失。',
+  confirmText: '离开',
+  danger: true,
 })
 
 useUnsavedGuard(() => page.doc.value?.isDirty.value === true)

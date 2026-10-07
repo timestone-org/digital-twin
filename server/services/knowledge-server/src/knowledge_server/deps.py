@@ -17,6 +17,7 @@ from knowledge_server.apps.knowledge.services.sources import (
     SourceDeps,
     build_sources,
 )
+from knowledge_server.apps.knowledge.services.sync_service import Sessions
 from knowledge_server.container import Container
 from lib.web.authdeps import build_auth_deps
 
@@ -47,6 +48,13 @@ async def get_session(
     """
     async with container.database.session() as session:
         yield session
+
+
+def get_sync_sessions(
+    container: Annotated[Container, Depends(get_container)],
+) -> Sessions:
+    """提供来源同步独立开启与结束会话的边界。Args: container。"""
+    return container.database.session
 
 
 def get_idempotency_key(

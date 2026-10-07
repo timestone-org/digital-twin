@@ -12,6 +12,7 @@ import re
 from pathlib import Path
 
 from _compose_config import compose_environments, fallback_shape, interpolations
+from _config_defaults import dangerous_default_reasons
 
 from _report import (
     ROOT,
@@ -38,13 +39,6 @@ SECRET_WORDS = re.compile(
 ENV_NAMES = frozenset({"env", "environment", "stage", "profile", "mode"})
 ENV_VALUES = frozenset(
     {"prod", "production", "dev", "development", "test", "staging"}
-)
-# 让本地开发轻松的方式若是「少一道安全检查」，它就不该是默认值
-DANGEROUS_DEFAULTS = (
-    (re.compile(r"""cors_origins\s*[:=].*\*"""), "CORS 放开全部来源"),
-    (re.compile(r"""debug\s*:\s*bool\s*=\s*True"""), "DEBUG 默认开"),
-    (re.compile(r"""verify\s*:\s*bool\s*=\s*False"""), "TLS 校验默认关"),
-    (re.compile(r"""auto_create\w*\s*:\s*bool\s*=\s*True"""), "自动建表默认开"),
 )
 ENV_VARIABLE = re.compile(r"^\s*#?\s*([A-Z][A-Z0-9_]*)=")
 CHINESE_COMMENT = re.compile(r"[\u4e00-\u9fff]")
@@ -205,37 +199,6 @@ def check_no_environment_branch() -> list[Violation]:
     return found
 
 
-def _parameter_defaults(node: ast.arguments) -> list[tuple[str, str]]:
-    positional = [*node.posonlyargs, *node.args]
-    start = len(positional) - len(node.defaults)
-    pairs = [
-        *zip(positional[start:], node.defaults, strict=True),
-        *zip(node.kwonlyargs, node.kw_defaults, strict=True),
-    ]
-    return [
-        (argument.arg, f"{ast.unparse(argument)} = {ast.unparse(value)}")
-        for argument, value in pairs
-        if value is not None
-    ]
-
-
-def _configuration_defaults(node: ast.AST) -> list[tuple[str, str]]:
-    if isinstance(node, ast.AnnAssign) and node.value is not None:
-        return [(ast.unparse(node.target), ast.unparse(node))]
-    if isinstance(node, ast.Assign):
-        value = ast.unparse(node.value)
-        names = [ast.unparse(target) for target in node.targets]
-        return [(name, f"{name} = {value}") for name in names]
-    if isinstance(node, ast.arguments):
-        return _parameter_defaults(node)
-    if isinstance(node, ast.keyword) and node.arg is not None:
-        return [(node.arg, f"{node.arg} = {ast.unparse(node.value)}")]
-    if isinstance(node, ast.NamedExpr):
-        name = ast.unparse(node.target)
-        return [(name, f"{name} = {ast.unparse(node.value)}")]
-    return []
-
-
 def check_no_dangerous_defaults() -> list[Violation]:
     """危险的默认值正是「看起来最方便」的那个。"""
     found: list[Violation] = []
@@ -243,19 +206,10 @@ def check_no_dangerous_defaults() -> list[Violation]:
         tree = parse(path)
         if tree is None:
             continue
-        defaults = [
-            item
-            for node in ast.walk(tree)
-            for item in _configuration_defaults(node)
-        ]
-        for pattern, reason in DANGEROUS_DEFAULTS:
-            # ⚠ 规则必须起于真实目标；默认字符串中的负向夹具只是数据。
-            if any(
-                (match := pattern.search(text)) is not None
-                and match.start() < len(target)
-                for target, text in defaults
-            ):
-                found.append(Violation("危险的默认值", at(path), reason))
+        found.extend(
+            Violation("危险的默认值", at(path), reason)
+            for reason in dangerous_default_reasons(tree)
+        )
     return found
 
 

@@ -19,6 +19,16 @@ import * as modeling from '@/api/modeling'
 import CanvasPage from '@/pages/Modeling/Canvas/index.vue'
 import { useAuthStore } from '@/stores/auth'
 
+// 台账读取是进程外边界：只桩这两条 API，其余未知请求仍由测试环境报错。
+vi.mock('@/api/dataset', async () => {
+  const actual = await vi.importActual<typeof dataset>('@/api/dataset')
+  return {
+    ...actual,
+    listDatasetTables: vi.fn(),
+    listDatasetColumns: vi.fn(),
+  }
+})
+
 /** 这一条用例挂起来的页面，跑完逐个卸载。 */
 const mounted: { unmount: () => void }[] = []
 
@@ -218,13 +228,15 @@ beforeEach(() => {
   setActivePinia(createPinia())
   for (const key of Object.keys(query)) delete query[key]
   replace.mockReset()
+  stubLedger([])
 })
 
-afterEach(() => {
+afterEach(async () => {
   useConfirm().resolve(false)
   // ⚠ 必须卸载：画布页开着每秒一次的走字计时器与运行轮询，留着的话它们会跨
   // 文件一直打请求，整套用例跑完了进程也停不下来
   while (mounted.length > 0) mounted.pop()?.unmount()
+  await flushPromises()
   vi.restoreAllMocks()
 })
 

@@ -210,10 +210,12 @@ export function createTwin2dDoc(initial: Twin2dFrame): Twin2dDoc {
     },
 
     undo: () => {
+      history.mergeKey = null
       if (index.value > 0) index.value -= 1
     },
 
     redo: () => {
+      history.mergeKey = null
       if (index.value < frames.value.length - 1) index.value += 1
     },
 
