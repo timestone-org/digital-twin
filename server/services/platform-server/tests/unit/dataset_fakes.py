@@ -2,7 +2,7 @@
 
 from collections.abc import Mapping
 from dataclasses import dataclass, field
-from datetime import UTC
+from datetime import UTC, datetime
 from typing import Any
 
 from lib.errors import DependencyUnavailable
@@ -20,7 +20,7 @@ from platform_server.settings import Settings
 
 # 减数查询的判别标志。⚠ 认这一段而不是整条 SQL：改了措辞用例仍该照常分流，
 # 而两条查询答错对方那一份的表现是「delta 全空」或「所有桶都是同一个数」
-PREVIOUS_END_MARKER = "DISTINCT ON"
+PREVIOUS_END_MARKER = "WITH ends AS"
 
 
 @dataclass
@@ -75,8 +75,45 @@ class FakeHistory:
         """
         self.queries.append((sql, dict(params)))
         if PREVIOUS_END_MARKER in sql:
-            return list(self.previous)
+            return self._previous_targets(params)
         return list(self.buckets)
+
+    def _previous_targets(
+        self, params: Mapping[str, object]
+    ) -> list[dict[str, object]]:
+        """把旧全局 seed 与预置桶序列转换成真实每目标身份的前驱形状。
+
+        Args: params。
+        """
+        targets = params.get("bucket_starts")
+        if not isinstance(targets, list):
+            return list(self.previous)
+        found: list[dict[str, object]] = []
+        for target in targets:
+            if isinstance(target, datetime):
+                found.extend(self._target_previous(target))
+        return found
+
+    def _target_previous(self, target: datetime) -> list[dict[str, object]]:
+        """假件按预置数值桶接力；不重实现生产 SQL 的物理区间。
+
+        Args: target。
+        """
+        previous = {
+            (str(row.get("source_id")), str(row.get("point_code"))): row
+            for row in self.previous
+        }
+        for row in self.buckets:
+            bucket, end = row.get("bucket_start"), row.get("delta_value")
+            if (
+                isinstance(bucket, datetime)
+                and bucket < target
+                and end is not None
+            ):
+                previous[
+                    (str(row.get("source_id")), str(row.get("point_code")))
+                ] = {**row, "value_num": end}
+        return [{**row, "bucket_start": target} for row in previous.values()]
 
     def sql_of(self, marker: str) -> str:
         """跑过的查询里第一条含这一段的 SQL。

@@ -7,9 +7,14 @@
 
 import uuid
 from datetime import UTC, datetime, timedelta, timezone
+from time import tzset
 
 import pytest
 
+from platform_server.apps.dataset.services.bucket_grid import (
+    BucketDescriptor,
+    BucketGrid,
+)
 from platform_server.apps.dataset.services.buckets import (
     BUCKET_ORIGIN,
     ROW_NAMESPACE,
@@ -142,7 +147,357 @@ def test_the_repeated_autumn_hour_resolves_the_way_postgres_does() -> None:
     assert found == datetime(2026, 11, 1, 6, 45, tzinfo=UTC)
 
 
+@pytest.mark.parametrize(
+    ("interval", "expected"),
+    [
+        (timedelta(seconds=11), datetime(2026, 3, 8, 7, 59, 50, tzinfo=UTC)),
+        (timedelta(minutes=13), datetime(2026, 3, 8, 7, 54, tzinfo=UTC)),
+    ],
+)
+def test_a_bucket_in_the_spring_gap_uses_the_pre_transition_offset(
+    interval: timedelta, expected: datetime
+) -> None:
+    found = bucket_start(
+        datetime(2026, 3, 8, 7, 0, tzinfo=UTC),
+        interval=interval,
+        timezone=NEW_YORK,
+    )
+    assert found == expected
+
+
+def test_stepping_over_the_spring_gap_uses_distinct_reachable_identities() -> (
+    None
+):
+    found = shift_bucket(
+        datetime(2026, 3, 8, 6, tzinfo=UTC),
+        steps=1,
+        interval=HOUR,
+        timezone=NEW_YORK,
+    )
+    assert found == datetime(2026, 3, 8, 7, tzinfo=UTC)
+
+
 def test_two_tables_never_share_a_row_id_for_the_same_bucket() -> None:
     bucket = datetime(2026, 8, 24, 3, 0, tzinfo=UTC)
     other = uuid.UUID("0192f0c0-0000-7000-8000-0000000000bb")
     assert collected_row_id(TABLE_ID, bucket) != collected_row_id(other, bucket)
+
+
+def test_the_previous_hour_skips_the_empty_spring_cell() -> None:
+    found = shift_bucket(
+        datetime(2026, 3, 8, 7, tzinfo=UTC),
+        steps=-1,
+        interval=HOUR,
+        timezone=NEW_YORK,
+    )
+    assert found == datetime(2026, 3, 8, 6, tzinfo=UTC)
+
+
+def test_the_spring_hour_sequence_has_only_distinct_identities() -> None:
+    found = bucket_sequence(
+        datetime(2026, 3, 8, 6, tzinfo=UTC),
+        datetime(2026, 3, 8, 8, tzinfo=UTC),
+        interval=HOUR,
+        timezone=NEW_YORK,
+    )
+    assert found == tuple(
+        datetime(2026, 3, 8, hour, tzinfo=UTC) for hour in (6, 7, 8)
+    )
+
+
+def test_an_odd_width_sequence_is_strictly_ordered_across_the_gap() -> None:
+    found = bucket_sequence(
+        datetime(2026, 3, 8, 6, 55, 1, tzinfo=UTC),
+        datetime(2026, 3, 8, 8, 5, 9, tzinfo=UTC),
+        interval=timedelta(seconds=11),
+        timezone=NEW_YORK,
+    )
+    assert found == tuple(sorted(set(found)))
+    assert datetime(2026, 3, 8, 7, 59, 50, tzinfo=UTC) in found
+
+
+def test_a_gap_projection_steps_from_its_original_wall_label() -> None:
+    found = shift_bucket(
+        datetime(2026, 3, 8, 7, 59, 50, tzinfo=UTC),
+        steps=-1,
+        interval=timedelta(seconds=11),
+        timezone=NEW_YORK,
+    )
+    assert found == datetime(2026, 3, 8, 7, 59, 47, tzinfo=UTC)
+
+
+@pytest.mark.parametrize(
+    ("seconds", "identity", "source_start", "close_at"),
+    [
+        (
+            11,
+            "2026-03-08T07:59:50Z",
+            "2026-03-08T07:00:00Z",
+            "2026-03-08T07:00:01Z",
+        ),
+        (
+            780,
+            "2026-03-08T07:54:00Z",
+            "2026-03-08T07:00:00Z",
+            "2026-03-08T07:07:00Z",
+        ),
+        (
+            3600,
+            "2026-11-01T06:00:00Z",
+            "2026-11-01T05:00:00Z",
+            "2026-11-01T07:00:00Z",
+        ),
+        (
+            11,
+            "2026-11-01T04:59:58Z",
+            "2026-11-01T04:59:58Z",
+            "2026-11-01T06:00:09Z",
+        ),
+    ],
+)
+def test_a_descriptor_covers_the_complete_real_sample_preimage(
+    seconds: int, identity: str, source_start: str, close_at: str
+) -> None:
+    grid = BucketGrid(timedelta(seconds=seconds), NEW_YORK)
+    assert grid.describe(datetime.fromisoformat(identity)) == BucketDescriptor(
+        datetime.fromisoformat(identity),
+        datetime.fromisoformat(source_start),
+        datetime.fromisoformat(close_at),
+    )
+
+
+@pytest.mark.parametrize(
+    ("seconds", "now", "expected"),
+    [
+        (3600, "2026-03-08T07:05:00Z", "2026-03-08T06:00:00Z"),
+        (3600, "2026-11-01T05:45:00Z", "2026-11-01T04:00:00Z"),
+        (11, "2026-03-08T07:59:52Z", "2026-03-08T07:59:36Z"),
+        (11, "2026-03-08T07:59:58Z", "2026-03-08T07:59:50Z"),
+        (11, "2026-11-01T05:30:00Z", "2026-11-01T04:59:47Z"),
+    ],
+)
+def test_the_closed_frontier_precedes_every_still_open_identity(
+    seconds: int, now: str, expected: str
+) -> None:
+    grid = BucketGrid(timedelta(seconds=seconds), NEW_YORK)
+    assert grid.last_closed(
+        datetime.fromisoformat(now)
+    ) == datetime.fromisoformat(expected)
+
+
+def test_a_raw_spring_span_keeps_its_sparse_future_projection() -> None:
+    grid = BucketGrid(timedelta(seconds=11), NEW_YORK)
+    selected = grid.identities_for_span(
+        datetime(2026, 3, 8, 7, tzinfo=UTC),
+        datetime(2026, 3, 8, 7, 1, tzinfo=UTC),
+    )
+    expected = (
+        *(
+            datetime(2026, 3, 8, 7, 0, second, tzinfo=UTC)
+            for second in (1, 12, 23, 34, 45, 56)
+        ),
+        datetime(2026, 3, 8, 7, 59, 50, tzinfo=UTC),
+    )
+    assert selected.sequence() == expected
+    assert selected.count == 7
+    assert selected.take(2).sequence() == expected[:2]
+    assert selected.tail(2).sequence() == expected[-2:]
+
+
+def test_retention_removes_a_partial_gap_projection_even_at_the_last_id() -> (
+    None
+):
+    grid = BucketGrid(timedelta(seconds=11), NEW_YORK)
+    selected = grid.identities_for_span(
+        datetime(2026, 3, 8, 7, tzinfo=UTC),
+        datetime(2026, 3, 8, 7, 1, tzinfo=UTC),
+    )
+    retained = grid.retained(
+        selected, datetime(2026, 3, 8, 7, 0, 0, 500_000, tzinfo=UTC)
+    )
+    assert retained.count == 6
+    assert retained.last == datetime(2026, 3, 8, 7, 0, 56, tzinfo=UTC)
+    assert (
+        grid.retained(selected, datetime(2026, 3, 8, 7, tzinfo=UTC)).count == 7
+    )
+
+
+def test_a_merged_sample_window_uses_real_sample_bounds() -> None:
+    grid = BucketGrid(timedelta(seconds=11), NEW_YORK)
+    starts = (
+        datetime(2026, 3, 8, 7, 0, 1, tzinfo=UTC),
+        datetime(2026, 3, 8, 7, 59, 50, tzinfo=UTC),
+    )
+    assert grid.bounds(starts) == (
+        datetime(2026, 3, 8, 7, tzinfo=UTC),
+        datetime(2026, 3, 8, 7, 0, 12, tzinfo=UTC),
+    )
+
+
+def test_compact_context_bounds_include_an_interior_gap_projection() -> None:
+    grid = BucketGrid(timedelta(seconds=11), NEW_YORK)
+    selected = grid.selection(
+        datetime(2026, 3, 8, 7, 50, tzinfo=UTC),
+        datetime(2026, 3, 8, 8, 5, tzinfo=UTC),
+    )
+    assert grid.selection_bounds(selected) == (
+        datetime(2026, 3, 8, 7, tzinfo=UTC),
+        datetime(2026, 3, 8, 8, 5, 6, tzinfo=UTC),
+    )
+
+
+def test_large_regular_counts_and_selections_use_compact_runs() -> None:
+    first = datetime(2026, 8, 1, tzinfo=UTC)
+    last = first + timedelta(seconds=200_000)
+    grid = BucketGrid(timedelta(seconds=1), "UTC")
+    selected = grid.selection(first, last)
+    assert selected.count == 200_001
+    assert len(selected.runs) == 1
+    assert selected.at(199_999) == first + timedelta(seconds=199_999)
+    assert grid.selection_bounds(selected) == (
+        first,
+        last + timedelta(seconds=1),
+    )
+    assert grid.count(first, last, 200_000) == 200_001
+    assert grid.count(first, last, 240) == 241
+    assert grid.shift(first, 200_000) == last
+    assert grid.shift(last, -200_000) == first
+
+
+def test_identity_navigation_keeps_a_gap_projection_without_realigning() -> (
+    None
+):
+    grid = BucketGrid(timedelta(minutes=13), NEW_YORK)
+    identity = datetime(2026, 3, 8, 7, 54, tzinfo=UTC)
+    assert grid.shift(identity, -1) == datetime(2026, 3, 8, 7, 46, tzinfo=UTC)
+    assert grid.shift(identity, 1) == datetime(2026, 3, 8, 7, 59, tzinfo=UTC)
+    assert grid.shift(identity, 0) == identity
+    assert grid.floor(identity) == identity == grid.ceil(identity)
+
+
+def test_identity_floor_and_ceil_do_not_wall_clock_realign_a_key() -> None:
+    grid = BucketGrid(timedelta(seconds=11), NEW_YORK)
+    key = datetime(2026, 3, 8, 7, 59, 51, tzinfo=UTC)
+    assert grid.floor(key) == datetime(2026, 3, 8, 7, 59, 50, tzinfo=UTC)
+    assert grid.ceil(key) == datetime(2026, 3, 8, 7, 59, 58, tzinfo=UTC)
+
+
+def test_empty_selections_remain_empty_when_bounded_or_retained() -> None:
+    grid = BucketGrid(HOUR, "UTC")
+    first = datetime(2026, 8, 1, tzinfo=UTC)
+    selected = grid.selection(first, first - HOUR)
+    assert selected.count == 0
+    assert selected.sequence() == ()
+    assert selected.take(1).count == selected.tail(1).count == 0
+    assert grid.retained(selected, first).count == 0
+    with pytest.raises(ValueError, match="为空"):
+        _ = selected.first
+    with pytest.raises(ValueError, match="为空"):
+        _ = selected.last
+    with pytest.raises(ValueError, match="为空"):
+        grid.selection_bounds(selected)
+    with pytest.raises(IndexError):
+        selected.at(0)
+
+
+def test_unreachable_and_off_grid_keys_are_rejected_as_identities() -> None:
+    grid = BucketGrid(HOUR, NEW_YORK)
+    key = datetime(2026, 11, 1, 5, tzinfo=UTC)
+    with pytest.raises(ValueError, match="不是可达桶身份"):
+        grid.describe(key)
+    with pytest.raises(ValueError, match="不是可达桶身份"):
+        grid.shift(key, 1)
+    with pytest.raises(ValueError, match="为空"):
+        grid.bounds(())
+
+
+def test_invalid_widths_spans_and_mixed_grid_subtraction_are_rejected() -> None:
+    with pytest.raises(ValueError, match="必须为正"):
+        BucketGrid(timedelta(0), "UTC")
+    first = datetime(2026, 8, 1, tzinfo=UTC)
+    grid = BucketGrid(HOUR, "UTC")
+    with pytest.raises(ValueError, match="早于"):
+        grid.identities_for_span(first, first - HOUR)
+    hourly = grid.selection(first, first + HOUR)
+    minute = BucketGrid(timedelta(minutes=1), "UTC").selection(first, first)
+    with pytest.raises(ValueError, match="桶宽不一致"):
+        hourly.without(minute)
+
+
+def test_offset_representations_keep_the_same_identity_and_sample_window() -> (
+    None
+):
+    grid = BucketGrid(timedelta(seconds=11), NEW_YORK)
+    local_zone = timezone(timedelta(hours=8))
+    since = datetime(2026, 3, 8, 7, tzinfo=UTC)
+    until = since + timedelta(minutes=1)
+    selected = grid.identities_for_span(
+        since.astimezone(local_zone), until.astimezone(local_zone)
+    )
+    assert selected.count == 7
+    identity = datetime(2026, 3, 8, 7, 59, 50, tzinfo=UTC)
+    descriptor = grid.describe(identity.astimezone(local_zone))
+    assert descriptor.identity == identity
+    assert descriptor.identity.tzinfo is UTC
+    assert descriptor.source_start == since
+
+
+@pytest.mark.parametrize(
+    "host_timezone", ["Asia/Shanghai", "America/Los_Angeles"]
+)
+def test_naive_inputs_are_utc_independently_of_the_host_timezone(
+    host_timezone: str, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    grid = BucketGrid(timedelta(seconds=11), NEW_YORK)
+    since = datetime(2026, 3, 8, 7, tzinfo=UTC)
+    until = since + timedelta(minutes=1)
+    naive = since.replace(tzinfo=None)
+    with monkeypatch.context() as patch:
+        patch.setenv("TZ", host_timezone)
+        tzset()
+        try:
+            assert grid.align(naive) == grid.align(since)
+            assert grid.identities_for_span(naive, until).sequence() == (
+                grid.identities_for_span(since, until).sequence()
+            )
+            assert collected_row_id(TABLE_ID, naive) == collected_row_id(
+                TABLE_ID, since
+            )
+        finally:
+            patch.undo()
+            tzset()
+
+
+def test_public_identity_operations_accept_mixed_naive_and_aware_inputs() -> (
+    None
+):
+    grid = BucketGrid(HOUR, "UTC")
+    first = datetime(2026, 8, 1, tzinfo=UTC)
+    naive = first.replace(tzinfo=None)
+    last = first + HOUR
+    selected = grid.selection(naive, last)
+    assert selected.count == grid.count(naive, last, 2) == 2
+    assert selected.rank(naive) == selected.between(naive, naive).count == 1
+    assert grid.sequence(naive, last) == (first, last)
+    assert grid.floor(naive) == grid.ceil(naive) == first
+    assert grid.shift(naive, 1) == last
+    assert grid.describe(naive).identity == first
+    assert grid.bounds((naive, last)) == (first, last + HOUR)
+    assert grid.retained(selected, naive).count == 2
+    assert grid.last_closed(naive) == first - HOUR
+
+
+@pytest.mark.parametrize(
+    "boundary",
+    [datetime.min.replace(tzinfo=UTC), datetime.max.replace(tzinfo=UTC)],
+)
+def test_unrepresentable_preimage_boundaries_raise_a_validation_error(
+    boundary: datetime,
+) -> None:
+    grid = BucketGrid(HOUR, "UTC")
+    with pytest.raises(ValueError, match="日期边界"):
+        grid.identities_for_span(boundary, boundary)
+    with pytest.raises(ValueError, match="日期边界"):
+        grid.selection(boundary, boundary)
+    with pytest.raises(ValueError, match="日期边界"):
+        grid.describe(boundary)
