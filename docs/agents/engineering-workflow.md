@@ -2,6 +2,9 @@
 
 分支、提交、评审、依赖、发布。议题流程见 [`issue-tracker.md`](issue-tracker.md)，分诊标签见 [`triage-labels.md`](triage-labels.md)。
 
+分支命名、提交格式、PR 范围、锁文件分批与描述结构用于人工组织和评审，流水线不检查这些约定。
+PR 自动检查只保留抽取逻辑版本一致性；main 的测试、覆盖率、构建与安全闸门继续执行，见 [`ci-gates.md`](ci-gates.md)。
+
 ---
 
 ## 1. 分支

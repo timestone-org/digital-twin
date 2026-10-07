@@ -1,0 +1,34 @@
+# 抽取引擎的行为与 LOGIC_VERSION 必须同步，防止旧批次被当成当前结果。
+# 与 PR 的基线比较，只检查代码版本一致性。
+
+name: 抽取逻辑版本
+
+on:
+  pull_request:
+    types: [opened, synchronize, reopened, edited]
+
+concurrency:
+  group: logic-version-${{ github.event.pull_request.number }}
+  cancel-in-progress: true
+
+permissions:
+  contents: read
+
+jobs:
+  logic-version:
+    name: 抽取逻辑版本
+    runs-on: ubuntu-24.04
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
+        with:
+          # 要与基线逐文件比，浅克隆不够
+          fetch-depth: 0
+      - uses: ./.github/actions/setup-gates
+
+      - name: 检查
+        env:
+          PR_BASE_REF: origin/${{ github.base_ref }}
+          PR_HEAD_REF: ${{ github.event.pull_request.head.sha }}
+        run: |
+          git fetch --no-tags origin "${{ github.base_ref }}"
+          uv run --python 3.12 --no-project python scripts/gates/check_logic_version.py

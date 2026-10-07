@@ -29,16 +29,19 @@
 
 | 文件 | 触发 | 管什么 |
 |---|---|---|
-| `pr-policy.yml` | 只在 PR | 范围 ≤20 文件 / ≤1 服务（三类文件数豁免见 [engineering-workflow §3.1](engineering-workflow.md)）、提交信息、分支名、锁文件单独成 PR、PR 描述、抽取逻辑版本；不限制变更行数 |
+| `logic-version.yml` | 只在 PR | 抽取逻辑与 `LOGIC_VERSION` 的代码版本一致性 |
 | `nightly.yml` | 每日定时 | 变异测试、可访问性全站扫描、镜像内容断言。**失败开 issue，不阻断合并** |
+
+流水线不检查 PR 文件数、服务数、提交格式、分支命名、锁文件是否单独成 PR 或描述结构。
+测试、覆盖率、构建、契约与安全检查仍由主流水线执行。
 
 E2E、a11y、变异测试不进 PR 闸门是 `testing-standard-*.md` §9 的明确要求——它们太慢，
 每个 PR 都等十几分钟的代价大于收益。
 
 ### 1.1 ⚠ 开发期不等 GitHub 的 CI
 
-**功能分支推上去不会有任何流水线结果，PR 页面上也不会有**——那不是 CI 坏了，
-是它按设计只在 main 的 push 上跑。
+**功能分支与 PR 上没有完整主流水线结果**，完整流水线按设计只在 main 的 push 上跑。
+PR 上另有 `logic-version.yml` 检查抽取逻辑版本一致性。
 
 于是日常规矩是两条：
 
@@ -123,7 +126,6 @@ E2E、a11y、变异测试不进 PR 闸门是 `testing-standard-*.md` §9 的明�
 | engineering-workflow §5.4 Action 按 SHA 固定、§6.1 禁 `latest`、锁文件在仓 | `check_ci_hygiene.py` |
 | 同 §5.3 许可证（GPL/AGPL 阻断） | `check_licenses.py` + `licenses-reviewed.json` |
 | 同 §5.4 依赖漏洞 | `pip-audit --strict` · `pnpm audit --audit-level=high` |
-| 同 §1–§3 分支、提交、PR 范围 | `check_pr_policy.py`（PR 专用） |
 | 密钥不进版本库 | `gitleaks` + `.gitleaks.toml` |
 | docker-build §5 镜像内容/体积与 OS 包漏洞 | `nightly.yml` 的 `images` 作业（knowledge 另跑 DOCX 图形烟测） |
 | 服务只用自己声明的依赖 | `check_service_deps.py` |
@@ -145,7 +147,7 @@ import 成功、pyright 通过、全部用例绿，只有按自己声明的依�
 
 | 规范 | 闸门 |
 |---|---|
-| AC_STARTUP_DESIGN §5 改抽取逻辑必须手动 +1 `LOGIC_VERSION` | `check_logic_version.py`（PR 专用） |
+| AC_STARTUP_DESIGN §5 改抽取逻辑必须手动 +1 `LOGIC_VERSION` | `check_logic_version.py`（`logic-version.yml` 与本地 `--fast`） |
 
 ⚠ 这条闸比的是「抽取引擎那两个文件**去掉 `#` 注释之后**的内容在基线与头之间
 差没差」对「`LOGIC_VERSION` 的取值差没差」，**不对源码求哈希**：哈希一次格式化
@@ -153,9 +155,8 @@ import 成功、pyright 通过、全部用例绿，只有按自己声明的依�
 注释付这个代价，这条闸很快就会被绕过。注释改不了抽取行为，去掉它不会漏报；
 docstring 不去，它可能被程序读走。
 
-⚠ **这条闸目前只报不拦**：按 §5，分支保护里唯一必需的检查是 `5·全部闸门`，
-而 `pr-policy.yml` 的作业都不在其列。红了照样合得进去——把它设成必需检查
-之前，别把它当成在拦。
+⚠ **是否阻断合并取决于分支保护配置**：`logic-version.yml` 的作业只有被设为
+必需检查后才会阻断合并。本地 `--fast` 也执行这条闸，失败时退出码非零。
 
 ---
 
@@ -182,8 +183,8 @@ docstring 不去，它可能被程序读走。
 
 ## 4. 本地怎么跑
 
-**开发期的每一次验证都在这里**（§1.1）：GitHub 上只有 main 的 push 会触发流水线，
-分支上没有 CI 可等。
+**开发期的完整验证在本地执行**（§1.1）：GitHub 主流水线只在 main 的 push 上跑；
+PR 上仅检查抽取逻辑版本一致性。
 
 ```bash
 scripts/ci-local.sh --fast          # 第 1–2 段的全部静态检查，约 5 分钟，不起容器
@@ -237,9 +238,9 @@ node 的 PATH（否则 JS action 的 post 步骤会把一个全绿的作业报�
 
 仍然要配的：禁止直推 `main`、禁止管理员绕过、要求分支为最新再合并。
 
-⚠ **`pr-policy.yml` 的三个作业照常在 PR 上跑**（都是秒级的，不用等），
-**但红了不拦合并**，包括 §2「领域不变量」那条 `check_logic_version.py`——
-一条不拦的闸只有在被人看的时候才有用，别把它当成在拦。
+`logic-version.yml` 在 PR 上执行 §2「领域不变量」的 `check_logic_version.py`。
+若要让它阻断合并，需要在分支保护中将「抽取逻辑版本」设为必需检查；
+它不检查 PR 的命名、范围或描述。
 
 ---
 

@@ -13,8 +13,8 @@
 ⚠ 只去 `#` 注释，**不去 docstring**：docstring 会被程序读走（帮助文本、契约
 描述），把它当成散文一并抹掉就是一处静默的假阴性。
 
-用法：`check_logic_version.py [<base-ref> [<head-ref>]]`，取基线同
-`check_pr_policy.py`：命令行参数 > `PR_BASE_REF`/`PR_HEAD_REF` > `origin/main`。
+用法：`check_logic_version.py [<base-ref> [<head-ref>]]`。
+比较基线与头的取值：命令行参数 > `PR_BASE_REF`/`PR_HEAD_REF` > `origin/main`。
 """
 
 from __future__ import annotations
