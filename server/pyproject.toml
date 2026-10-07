@@ -89,6 +89,7 @@ known-first-party = [
     "collector_server",
     "opcua_server",
     "platform_server",
+    "deploy",
     "scripts",
     "_report",
 ]
@@ -129,5 +130,20 @@ include = [
     "domain/**/src",
     "services/**/src",
     "services/**/scripts",
+    "deploy",
 ]
-exclude = ["**/__pycache__", "**/.venv", "**/migrations/versions"]
+exclude = [
+    "**/__pycache__",
+    "**/.venv",
+    "**/migrations/versions",
+    "deploy/tests",
+]
+
+[tool.coverage.run]
+branch = true
+source = ["deploy"]
+omit = ["*/deploy/tests/*"]
+
+[tool.coverage.report]
+fail_under = 85
+show_missing = true

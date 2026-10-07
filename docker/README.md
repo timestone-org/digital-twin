@@ -75,7 +75,7 @@ HTTP/WS 与 HTTPS/WSS 都是受支持的部署形态。
 
 ```bash
 cd docker
-cp ../.env.example .env   # 填数据库、Redis、对象存储、外部 EMS 库与几个密钥
+cp ../.env.template .env   # 填数据库、Redis、对象存储、外部 EMS 库与几个密钥
 docker compose up -d --build
 
 # 要 MinerU（PDF 与扫描件的解析后端，ADR-0043）才加这个 profile：
@@ -99,7 +99,7 @@ docker compose --profile mineru up -d --build
 | `OSS_ENDPOINT` `OSS_ACCESS_KEY` `OSS_SECRET_KEY` | `minio-init` / platform ×3 / knowledge ×2 | 对象存储在本编排之外（ADR-0015）。`OSS_UPSTREAM` 另给边缘，**只能是 `host:port`、不带 scheme**——带了 nginx 直接起不来 |
 | `COLLECT_CREDENTIAL_SECRET` | platform ×3 | 数据源口令的加密密钥（≥32 字符）。换钥后旧密文解不开，界面上重填即恢复 |
 | `LLM_PROVIDER_SECRET` | platform ×3 | 模型供应商目录与凭据的加密密钥（ADR-0041）。留空即目录整个缺席 |
-| `AUTH_SEED_ADMIN_PASSWORD` | `auth-migrate` | **绝不给默认值**——弱默认的管理员口令等于没有口令 |
+| `AUTH_SEED_ADMIN_PASSWORD` | `database-migrate` | **绝不给默认值**——弱默认的管理员口令等于没有口令 |
 | `ACSOURCE_HOST` `ACSOURCE_USER` `ACSOURCE_PASSWORD` `ACSOURCE_DB` | platform | 现场 EMS 的 SQL Server，**只读**；compose 把它们转成 `PLATFORM_SQLSERVER_*` |
 | `ACSOURCE_PORT`（默认 1433）`ACSOURCE_TIMEZONE`（默认 `Asia/Shanghai`） | platform | 有默认值，取值差异不是行为差异 |
 
@@ -111,41 +111,10 @@ docker compose --profile mineru up -d --build
 
 ### 迁移与种子
 
-容器起来**不会**自己建表。每个服务各有一条迁移链，各自只碰自己的 schema：
-
-```bash
-docker compose run --rm auth-server      alembic upgrade head
-docker compose run --rm auth-server      python -m scripts.seed
-docker compose run --rm platform-server  alembic upgrade head
-docker compose run --rm platform-server  python -m scripts.seed
-docker compose run --rm opcua-server     alembic upgrade head
-docker compose run --rm realtime-hub     alembic upgrade head
-docker compose run --rm collector-server alembic upgrade head
-docker compose run --rm ai-assistant     alembic upgrade head
-docker compose run --rm knowledge-server alembic upgrade head
-```
-
-⚠ **`collector-server` 那条别漏。** 它建的是独立的 `collect` schema 与点位历史超表，
-建表时会 `CREATE EXTENSION timescaledb`；漏跑的表现是采集容器健康、日志也不报错，
-但一条历史都落不进去。
-
-⚠ **`knowledge-server` 那条要库上装得了 pgvector。** 它建 `vector` 与 `pg_trgm`
-两个扩展（**装进 `knowledge` 这个 schema，不是 `public`**）、建向量表与三个索引
-（[ADR-0045](../docs/adr/0045-向量与关键词索引改为硬依赖.md)）。装不上就**响亮
-失败**——没有「退化成不带索引也能跑」那一档，因为那种退化在界面上与真检索长得
-一模一样。
-
-⚠ **`KNOWLEDGE_EMBEDDING_DIMENSIONS` 在跑迁移那一刻定死**：建的是 `vector(N)`，
-N 取自这一格，所以迁移作业的 `environment` 里也列了它。它必须等于模型管理页上
-分配给「知识库嵌入」的那个模型的维数，否则一份文档都摄不进来，撞的是一条
-「expected N dimensions」——而那条错不会提到你配的是哪个模型。改维数要重跑一次
-迁移、并把已有文档全部重新解析，**所以先定好再灌数据**。
-
-⚠ **每次上新功能都要重跑种子。** 权限码与路由规则表（闸 1）存在**数据库里**，
-由 auth-server 的种子脚本全量覆盖（可重复执行；人工新建的规则不受影响）。
-新服务、新端点上线后不跑，边缘查不到规则，而 auth-server 的口径是**无规则一律
-拒绝**——表现是那一片接口**全部 403**，而直连服务端口却是好的，于是现象看起来
-像「前端坏了」。
+迁移随 `docker compose up` 自动执行，操作方法见下方「迁移与种子（自动）」。
+数据库必须支持 TimescaleDB、pgvector 与 pg_trgm；知识库扩展安装在 `knowledge`
+schema，`KNOWLEDGE_EMBEDDING_DIMENSIONS` 必须与所用嵌入模型维数一致。
+维数变更需要专门迁移及重新解析已有文档，不能仅改环境变量。
 
 ### realtime-hub 的两处部署前置
 
@@ -193,10 +162,12 @@ WS 的 token 走 `Sec-WebSocket-Protocol` 子协议，而 `auth_request` 的子�
 知识库的 `KNOWLEDGE_*` 按**用途分配**让位，该用途未分配时才回退。存量部署在目录
 为空时一行不改照常跑。
 
-⚠ **宿主 `.env` 里配了不等于容器里有。** compose 不给服务挂 `env_file`，每个变量
-都要在 `ai-assistant` 的 `environment` 里逐条列出来；漏列的表现是页面上那一路
-始终「未启用」，而 `.env` 单看是配好的、两边都不报错。加新配置项时记得同时改
-`compose.yml`、根目录的 `.env.example`，还有这张表。
+环境变量清单统一维护在根 `.env.template`，`.env.example` 是相同内容的兼容副本。
+必填项留空，每项用一行说明；可选项默认注释。Compose 按服务白名单透传，
+各角色复用同一份配置；共享数据库、Redis、对象存储和身份密钥使用模板里的公共变量。
+可空配置填 `null` 表示未配置，空字符串保留原有语义；容器实例名未设时自动取 hostname。
+固定角色、schema、监听地址、端口和卷路径由 Compose 管理，模板中已注明。
+前端 `VITE_*` 是构建参数，需要传给前端构建命令，修改后重新构建 `web/app/dist`。
 
 ⚠ **订阅那一路配好之后还要登录一次。** 去 系统管理 → 模型管理 页面，在那一路
 供应商下面走设备码登录（需要 `llm:manage`）；不登录的话面板上这一路是灰的，
@@ -218,7 +189,7 @@ WS 的 token 走 `Sec-WebSocket-Protocol` 子协议，而 `auth_request` 的子�
 哪怕 worker 一个字节都不读——`compose.yml` 里那两段是逐条抄齐的，改一处要改两处。
 ⚠ worker **可以多副本**（消费组自动分活），这与 publisher 那种单活租约不是一回事。
 
-**pgvector 是硬依赖。** `knowledge-migrate` 装 `vector` 与 `pg_trgm` 并建三个索引
+**pgvector 是硬依赖。** `database-migrate` 装 `vector` 与 `pg_trgm` 并建三个索引
 （[ADR-0045](../docs/adr/0045-向量与关键词索引改为硬依赖.md)）。库上装不了 = 迁移
 失败 = 知识库整个起不来。**这是有意的**：如果留一条「装不上就不建索引也照跑」的
 回退档，它在界面上与真检索长得一模一样，坏了没人看得出来。⚠ 扩展装进 `knowledge` 这个 schema 而不是 `public`——应用连库时
@@ -258,43 +229,41 @@ worker 把 DOCX 派生为私有 PDF，浏览器优先画 PDF。关掉生成开�
 
 ## 迁移与种子（自动）
 
-`docker compose up` 会先把七个一次性作业跑完，再放真服务进来：
+一个 `database-migrate` 作业依次调用七个服务原有的 Alembic 链，并执行 auth/platform
+种子；全部成功后才启动后端角色。各 schema 的版本表与迁移归属保持独立，
+任一步失败立即退出，已经成功的链不会回滚；排除故障后再运行可继续推进。
+设计取舍见 [ADR-0058](../docs/adr/0058-数据库迁移由单一部署作业调度.md)。
 
-| 作业 | 做什么 |
-|---|---|
-| `auth-migrate` / `platform-migrate` | `alembic upgrade head` + `python -m scripts.seed` |
-| `opcua-migrate` / `collect-migrate` / `realtime-migrate` / `assistant-migrate` / `knowledge-migrate` | 各自 `alembic upgrade head` |
-
-⚠ **一个代码单元一个作业，各用自己的镜像**：七套迁移分属七个 schema，合成一个
-作业就要求某一个镜像装得下全部七份代码。
-
-另有两个跑完即退出的作业，与迁移同档：`minio-init`（建桶并把 `models` / `images`
-/ `icons` 三个前缀设成匿名可读；⚠ `staging/` 与 `knowledge/` **刻意不在列**）、
-`mineru-models`（下 2.4 GB 权重，只在 `--profile mineru` 下起）。
-
-真服务用 `depends_on: {condition: service_completed_successfully}` 等它们，
-这正是「迁移先行」那条规矩——代码可回滚、数据库不回滚，故必须先让新结构就位。
-**改了表结构直接 `docker compose up -d --build` 即可**，不用再手动跑 alembic。
-
-⚠ **种子必须跟着自动跑**：权限码目录与路由规则是**代码里的真源**，加了新端点却
-没重跑种子，那个端点在边缘一律 403，而两边代码单看都对。
-
-⚠ 种子对**已存在的管理员一个字段都不动**（`ensure_admin` 只在缺失时创建），
-故重开机不会把密码改回 `AUTH_SEED_ADMIN_PASSWORD`。那个变量仍然必填——弱默认的
-管理员口令等于没有口令。
-
-⚠ 作业自己先等库：Postgres 与对象存储都在本编排之外，compose 没法给它们挂
-healthcheck。主机重启时 Docker 常比 Postgres 先起来，不等就迁移会让**整栈拒绝启动**。
-等待上限 120s（60 次 × 2s），超时即失败退出而不是无限重试。
-
-只想单独跑某一个（不动正在跑的服务）：
+专用迁移镜像不安装 Node、LibreOffice 或业务模型工具，运行账号为非 root。
+platform API/worker/publisher 共用一个服务镜像，knowledge API/worker 共用另一个；
+Compose 各角色引用同一份构建定义，单独启动 worker 时也能构建所需镜像。`IMAGE_TAG` 建议填版本与 Git SHA。
 
 ```bash
-docker compose run --rm --no-deps auth-migrate
+# 改动后构建迁移与应用镜像，迁移先行。
+docker compose up -d --build
+
+# 单独执行完整迁移，不启动应用。
+docker compose run --rm --no-deps database-migrate
+
+# 只执行一个属主迁移与其种子，不改正在运行的应用。
+docker compose run --rm --no-deps database-migrate --service auth-server
 ```
 
-⚠ 迁移**自动应用**意味着人工闸门只剩评审那一道。破坏性变更必须按扩展—收缩两次
-发布（engineering-workflow §4），否则一次 `up` 就把它推上去了。
+`MIGRATION_POSTGRES_USER` / `MIGRATION_POSTGRES_PASSWORD` 可配置具有 DDL/扩展权限的
+独立账号，不配置时沿用 `POSTGRES_USER` / `POSTGRES_PASSWORD`；业务容器只接收
+业务账号。启用独立账号前，数据库管理员须为业务账号配置目标 schema 的使用权限、
+已有表/序列的读写权限及迁移账号新建对象的默认权限；作业不会自动授权。
+迁移开始前等待数据库真正可查询，默认上限 120 秒；每条迁移/种子命令
+默认上限 600 秒，两者分别由 `MIGRATION_DATABASE_WAIT_TIMEOUT_S` 与
+`MIGRATION_COMMAND_TIMEOUT_S` 调整。
+
+作业持有数据库会话锁：另一个部署正在迁移时立即拒绝；连接丢失时终止正在执行的
+命令。超时或写失败不会自动重试。迁移只能包含扩展步，破坏性变更仍需遵循
+扩展—收缩两次发布规则；回滚应用镜像不回滚数据库结构。
+
+种子每次执行，用于同步内置权限码、路由规则及平台预设；已有管理员账号不会被
+重设密码，`AUTH_SEED_ADMIN_PASSWORD` 仅在管理员缺失时使用。对象存储初始化
+仍由 `minio-init` 负责；MinerU 权重初始化仍只在 `mineru` profile 下执行。
 
 ### 前端页面路径
 

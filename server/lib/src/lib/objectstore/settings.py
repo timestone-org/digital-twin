@@ -1,10 +1,11 @@
 """对象存储连接组。与其它连接组一样：密钥无默认值，缺失即拒绝启动。"""
 
 from pydantic import Field, SecretStr
-from pydantic_settings import BaseSettings
+
+from lib.config import EnvSettings
 
 
-class ObjectStoreSettings(BaseSettings):
+class ObjectStoreSettings(EnvSettings):
     """S3 兼容对象存储的连接组。"""
 
     # 服务端到存储的地址（容器网络内），例 http://minio:9000

@@ -11,6 +11,8 @@ import ast
 import re
 from pathlib import Path
 
+from _compose_config import compose_environments, fallback_shape, interpolations
+
 from _report import (
     ROOT,
     Violation,
@@ -27,6 +29,7 @@ from _report import (
 LIB_ROOT = ROOT / "server" / "lib" / "src" / "lib"
 COMPOSE = ROOT / "docker" / "compose.yml"
 ROOT_ENV_EXAMPLE = ROOT / ".env.example"
+ROOT_ENV_TEMPLATE = ROOT / ".env.template"
 
 SECRET_WORDS = re.compile(
     r"secret|password|passwd|token|_key$|^key$|credential"
@@ -43,8 +46,18 @@ DANGEROUS_DEFAULTS = (
     (re.compile(r"""verify\s*:\s*bool\s*=\s*False"""), "TLS 校验默认关"),
     (re.compile(r"""auto_create\w*\s*:\s*bool\s*=\s*True"""), "自动建表默认开"),
 )
-COMPOSE_VAR = re.compile(
-    r"\$\{(?P<name>[A-Z0-9_]+)(?P<fallback>[:\-?][^}]*)?\}"
+ENV_VARIABLE = re.compile(r"^\s*#?\s*([A-Z][A-Z0-9_]*)=")
+CHINESE_COMMENT = re.compile(r"[\u4e00-\u9fff]")
+# 固定拓扑：角色、探针与网关端口、schema 所有权、证书挂载路径。
+FIXED_COMPOSE_FIELDS = frozenset(
+    {
+        "app_name",
+        "app_role",
+        "app_http_host",
+        "app_http_port",
+        "postgres_schema",
+        "pki_dir",
+    }
 )
 
 
@@ -214,27 +227,47 @@ def _settings_fields(service: Path) -> tuple[str, list[str]] | None:
     tree = parse(matches[0])
     if tree is None:
         return None
-    own = _class_fields(tree)
-    shared = _lib_class_fields()
-    names = [name for name, _ in own.get("Settings", [])]
-    for base in _base_names(tree, "Settings"):
-        names.extend(name for name, _ in shared.get(base, []))
-    return _env_prefix(tree), sorted(set(names))
+    classes, bases = _settings_classes()
+    classes.update(_class_fields(tree))
+    bases.update(_class_bases(tree))
+    return _env_prefix(tree), sorted(
+        _inherited_fields("Settings", classes, bases)
+    )
 
 
-def _lib_class_fields() -> dict[str, list[tuple[str, ast.expr | None]]]:
-    """lib 里全部配置组的字段，按类名索引。
+def _class_bases(tree: ast.Module) -> dict[str, list[str]]:
+    return {
+        node.name: _base_names(tree, node.name)
+        for node in tree.body
+        if isinstance(node, ast.ClassDef)
+    }
 
-    ⚠ 不能只读 base.py：服务的 Settings 会继承别处的组（如
-    `lib.objectstore.ObjectStoreSettings`），漏掉那些文件等于那一组字段
-    对本闸隐形——模板少了几行也照样绿。
-    """
-    shared: dict[str, list[tuple[str, ast.expr | None]]] = {}
+
+def _settings_classes() -> (
+    tuple[dict[str, list[tuple[str, ast.expr | None]]], dict[str, list[str]]]
+):
+    classes: dict[str, list[tuple[str, ast.expr | None]]] = {}
+    bases: dict[str, list[str]] = {}
     for path in sorted(LIB_ROOT.rglob("*.py")):
         tree = parse(path)
         if tree is not None:
-            shared.update(_class_fields(tree))
-    return shared
+            classes.update(_class_fields(tree))
+            bases.update(_class_bases(tree))
+    return classes, bases
+
+
+def _inherited_fields(
+    name: str,
+    classes: dict[str, list[tuple[str, ast.expr | None]]],
+    bases: dict[str, list[str]],
+    visited: frozenset[str] = frozenset(),
+) -> set[str]:
+    if name in visited:
+        return set()
+    names = {field for field, _ in classes.get(name, [])}
+    for base in bases.get(name, []):
+        names.update(_inherited_fields(base, classes, bases, visited | {name}))
+    return names
 
 
 def _env_prefix(tree: ast.Module) -> str:
@@ -257,10 +290,10 @@ def check_env_example_lists_every_variable() -> list[Violation]:
         if resolved is None or not template.is_file():
             continue
         prefix, names = resolved
-        text = read(template)
+        documented = _template_variables(template)
         for name in names:
             variable = f"{prefix}{name}".upper()
-            if f"{variable}=" not in text:
+            if variable not in documented:
                 found.append(
                     Violation(
                         ".env.example 必须列出全部变量",
@@ -271,26 +304,13 @@ def check_env_example_lists_every_variable() -> list[Violation]:
     return found
 
 
-def _fallback_shape(raw: str | None) -> str:
-    """把 `${K:?说明}` 归一成语义形态——提示文案不同不算回退链分叉。
-
-    Args: raw。
-    """
-    if not raw:
-        return "直取"
-    if raw.startswith((":?", "?")):
-        return "必填"
-    return f"默认={raw.lstrip(':-')}"
-
-
-def _compose_variables() -> dict[str, set[str]]:
+def compose_variables() -> dict[str, set[str]]:
+    """取全部 Compose 输入变量及完整回退链，包含嵌套引用。"""
     if not COMPOSE.is_file():
         return {}
     found: dict[str, set[str]] = {}
-    for match in COMPOSE_VAR.finditer(read(COMPOSE)):
-        name = match.group("name")
-        shape = _fallback_shape(match.group("fallback"))
-        found.setdefault(name, set()).add(shape)
+    for item in interpolations(read(COMPOSE)):
+        found.setdefault(item.name, set()).add(fallback_shape(item.fallback))
     return found
 
 
@@ -302,25 +322,163 @@ def check_fallback_chains_are_uniform() -> list[Violation]:
             at(COMPOSE),
             f"{name} 写了 {len(shapes)} 种回退：{sorted(shapes)}",
         )
-        for name, shapes in _compose_variables().items()
+        for name, shapes in compose_variables().items()
         if len(shapes) > 1
     ]
 
 
 def check_compose_variables_are_documented() -> list[Violation]:
-    """编排引用的每个变量都要在根 `.env.example` 里有一行。"""
-    if not ROOT_ENV_EXAMPLE.is_file():
+    """编排引用的每个变量都要在根 `.env.template` 里有一行。"""
+    if not ROOT_ENV_TEMPLATE.is_file():
         return []
-    text = read(ROOT_ENV_EXAMPLE)
+    documented = _template_variables(ROOT_ENV_TEMPLATE)
     return [
         Violation(
-            "编排变量必须进根 .env.example",
-            at(ROOT_ENV_EXAMPLE),
+            "编排变量必须进根 .env.template",
+            at(ROOT_ENV_TEMPLATE),
             name,
         )
-        for name in sorted(_compose_variables())
-        if f"{name}=" not in text
+        for name in sorted(compose_variables())
+        if name not in documented
     ]
+
+
+def _template_variables(path: Path) -> set[str]:
+    if not path.is_file():
+        return set()
+    return {
+        match[1]
+        for line in read(path).splitlines()
+        if (match := ENV_VARIABLE.match(line)) is not None
+    }
+
+
+def check_root_template_lists_every_variable() -> list[Violation]:
+    """根模板列全各服务的 Settings 字段，包括继承与固定拓扑项。"""
+    documented = _template_variables(ROOT_ENV_TEMPLATE)
+    found: list[Violation] = []
+    for service in service_dirs():
+        resolved = _settings_fields(service)
+        if resolved is None:
+            continue
+        prefix, names = resolved
+        found.extend(
+            Violation(
+                "根 .env.template 必须列出全部配置",
+                at(ROOT_ENV_TEMPLATE),
+                variable,
+            )
+            for name in names
+            if (variable := f"{prefix}{name}".upper()) not in documented
+        )
+    return found
+
+
+def check_root_template_comments() -> list[Violation]:
+    """每个变量的前一行都要有独立的中文说明。"""
+    if not ROOT_ENV_TEMPLATE.is_file():
+        return []
+    lines = read(ROOT_ENV_TEMPLATE).splitlines()
+    found: list[Violation] = []
+    for number, line in enumerate(lines):
+        match = ENV_VARIABLE.match(line)
+        if match is None:
+            continue
+        previous = lines[number - 1].strip() if number else ""
+        has_comment = (
+            previous.startswith("#")
+            and ENV_VARIABLE.match(previous) is None
+            and CHINESE_COMMENT.search(previous) is not None
+        )
+        if not has_comment:
+            found.append(
+                Violation(
+                    "环境变量需要紧邻一行中文说明",
+                    at(ROOT_ENV_TEMPLATE, number + 1),
+                    match[1],
+                )
+            )
+    return found
+
+
+def check_root_templates_are_synchronized() -> list[Violation]:
+    """兼容入口 .env.example 与主模板 .env.template 保持逐字一致。"""
+    missing = [
+        Violation("根环境变量模板必须存在", at(path), path.name)
+        for path in (ROOT_ENV_TEMPLATE, ROOT_ENV_EXAMPLE)
+        if not path.is_file()
+    ]
+    if missing:
+        return missing
+    if read(ROOT_ENV_TEMPLATE) == read(ROOT_ENV_EXAMPLE):
+        return []
+    return [
+        Violation(
+            "根环境变量模板必须同步", at(ROOT_ENV_EXAMPLE), ".env.template"
+        )
+    ]
+
+
+def _runtime_units(service: Path) -> tuple[str, ...]:
+    if service.name == "platform-server":
+        return "platform-server", "platform-worker", "platform-publisher"
+    if service.name == "knowledge-server":
+        return "knowledge-server", "knowledge-worker"
+    return (service.name,)
+
+
+def check_compose_passes_every_setting() -> list[Violation]:
+    """所有可调 Settings 都要透传到每个运行角色，固定拓扑项除外。"""
+    environments = compose_environments(read(COMPOSE))
+    found: list[Violation] = []
+    for service in service_dirs():
+        resolved = _settings_fields(service)
+        if resolved is None:
+            continue
+        prefix, names = resolved
+        for unit in _runtime_units(service):
+            entries = environments.get(unit, {})
+            for name in names:
+                if name in FIXED_COMPOSE_FIELDS:
+                    continue
+                variable = f"{prefix}{name}".upper()
+                value = entries.get(variable)
+                if value is None or (value and not list(interpolations(value))):
+                    found.append(
+                        Violation(
+                            f"{unit} 必须透传可调配置",
+                            at(COMPOSE),
+                            variable,
+                        )
+                    )
+    return found
+
+
+def check_migration_credentials_are_isolated() -> list[Violation]:
+    """迁移账号只给部署作业，未配置时回退应用数据库账号。"""
+    found: list[Violation] = []
+    for service, entries in compose_environments(read(COMPOSE)).items():
+        if service == "database-migrate":
+            continue
+        for value in entries.values():
+            found.extend(
+                Violation(
+                    "迁移配置只能注入 database-migrate", at(COMPOSE), item.name
+                )
+                for item in interpolations(value)
+                if item.name.startswith("MIGRATION_")
+            )
+    shapes = compose_variables()
+    for suffix in ("USER", "PASSWORD"):
+        variable = f"MIGRATION_POSTGRES_{suffix}"
+        expected = fallback_shape(f":-${{POSTGRES_{suffix}:?必填}}")
+        if variable in shapes and shapes[variable] != {expected}:
+            found.append(
+                Violation(
+                    "迁移账号必须回退普通数据库账号", at(COMPOSE), variable
+                )
+            )
+    return found
 
 
 CHECKS = (
@@ -330,6 +488,11 @@ CHECKS = (
     check_env_example_lists_every_variable,
     check_fallback_chains_are_uniform,
     check_compose_variables_are_documented,
+    check_root_template_lists_every_variable,
+    check_root_template_comments,
+    check_root_templates_are_synchronized,
+    check_compose_passes_every_setting,
+    check_migration_credentials_are_isolated,
 )
 
 

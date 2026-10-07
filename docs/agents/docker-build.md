@@ -37,6 +37,7 @@ Python 服务的构建上下文取 **`server/`**（workspace 根，构建要能�
 !lib/
 !domain/
 !services/
+!deploy/
 
 # ---- 放行内再排除（!规则不能撤销父目录的排除，故需逐条剔除）----
 **/.venv
@@ -48,6 +49,7 @@ Python 服务的构建上下文取 **`server/`**（workspace 根，构建要能�
 **/tests/
 **/docs/
 **/*.md
+!services/ai-assistant/src/ai_assistant/apps/chat/skills/**/skill.md
 **/.env
 **/.env.*
 **/logs
@@ -55,6 +57,10 @@ Python 服务的构建上下文取 **`server/`**（workspace 根，构建要能�
 ```
 
 `web/`、`docs/`、`.git/`、`node_modules/` 根本不在 `server/` 内，无需规则即已排除。这份 `.dockerignore` 处理的是 `server/` **内部**的噪音：`.venv`、`__pycache__`、测试与文档。
+
+助手的 `apps/chat/skills/<name>/skill.md` 是运行时指令正文，属于源码资源，必须在
+Markdown 排除规则之后精确放行。构建上下文与运行镜像都要保留这些文件；其它
+Markdown 文档仍排除。
 
 > ⚠ `.dockerignore` 的 `!` **无法把已被排除的父目录里的文件重新放行**。写了 `**/tests/` 之后再写 `!libs/dt-core/tests/` 是无效的。需要例外时，调整排除规则本身，别指望 `!` 兜底。
 
@@ -255,3 +261,13 @@ Writer 和中文字体，amd64 运行镜像实测约 750 MiB；不能沿用不�
 2. **`--no-install-workspace` 的行为**（uv 版本间差异较大）：它应当只装第三方依赖、不装 workspace 成员本身，让源码层的第二次 `uv sync` 来装。
 
 验证通过后，§5 的五条检查全部进 CI，此后镜像内容由断言守住，不再靠肉眼。
+
+## 8. 部署迁移镜像
+
+数据库迁移统一由 `server/deploy/Dockerfile` 构建的部署镜像执行，决策见
+[ADR-0058](../adr/0058-数据库迁移由单一部署作业调度.md)。它是 §6「其他服务源码」
+规则的显式例外：调用各属主原有迁移链及种子需要这些源码，但只安装迁移所需的
+锁定依赖，不安装业务重依赖或测试依赖。它不运行 HTTP 服务，也不进入业务镜像。
+
+Compose 中同一代码单元的 API、worker、publisher 角色复用构建定义、镜像名与 tag；
+单独启动任一角色仍可构建所需镜像，不在应用入口执行数据库迁移。
