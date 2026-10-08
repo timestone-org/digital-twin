@@ -64,7 +64,9 @@ describe('原件的画法', () => {
   it('文本族各自走各自的画法', () => {
     expect(previewKindOf('说明.md')).toBe('markdown')
     expect(previewKindOf('运行.log')).toBe('text')
-    expect(previewKindOf('配置.json')).toBe('text')
+    // ⚠ 独立 JSON 画法避免改写纯文本与日志内容。
+    expect(previewKindOf('配置.json')).toBe('json')
+    expect(previewKindOf('说明.txt')).toBe('text')
     // ⚠ HTML 单独一档：它要关进沙箱 iframe 才能画，与纯文本不是一条路
     expect(previewKindOf('页面.html')).toBe('html')
   })

@@ -4,12 +4,47 @@
  * ⚠ HTML 那两条是**安全边界**，不是版式偏好：沙箱一松，用户传上来的那份 HTML
  * 就跑在本站源上，能读这个源的存储、能替用户调接口。
  */
-import { mount } from '@vue/test-utils'
+import { flushPromises, mount } from '@vue/test-utils'
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 
 import DocumentPreviewHtml from '@/pages/Knowledge/components/DocumentPreviewHtml.vue'
 import DocumentPreviewImage from '@/pages/Knowledge/components/DocumentPreviewImage.vue'
 import DocumentPreviewText from '@/pages/Knowledge/components/DocumentPreviewText.vue'
+import KnowledgeDocumentPreview from '@/pages/Knowledge/components/KnowledgeDocumentPreview.vue'
+
+const api = vi.hoisted(() => ({ readDocumentRaw: vi.fn() }))
+vi.mock('@/api/knowledge', () => api)
+
+describe('文本原件的完整预览', () => {
+  it.each([
+    ['json', '{\n  "a": 1\n}'],
+    ['txt', '{"a":1}'],
+    ['log', '{"a":1}'],
+  ])('%s 从原件读取到画布保留对应格式', async (suffix, expected) => {
+    api.readDocumentRaw.mockResolvedValue(new Blob(['{"a":1}']))
+    const wrapper = mount(KnowledgeDocumentPreview, {
+      props: {
+        modelValue: true,
+        document: {
+          id: 'd1',
+          title: `配置.${suffix}`,
+          status: 'ready',
+          failureReason: '',
+          chunkCount: 1,
+          sizeBytes: 7,
+          hasRaw: true,
+          createdAt: '2026-09-01T00:00:00.000Z',
+          readyAt: '2026-09-01T00:01:00.000Z',
+        },
+      },
+      global: { stubs: { Teleport: true } },
+    })
+    await flushPromises()
+
+    expect(wrapper.get('pre').text()).toBe(expected)
+    wrapper.unmount()
+  })
+})
 
 describe('文本原件的画法', () => {
   it('markdown 走真实节点，标题与表格都摆出来', () => {
@@ -28,9 +63,9 @@ describe('文本原件的画法', () => {
     expect(wrapper.find('pre').exists()).toBe(false)
   })
 
-  it('⚠ 是 JSON 就排一次版：一行几万字摊在 pre 里，横滚条拖不动', () => {
+  it('⚠ .json 排一次版：一行几万字摊在 pre 里，横滚条拖不动', () => {
     const wrapper = mount(DocumentPreviewText, {
-      props: { kind: 'text', text: '{"a":1,"b":[2,3]}' },
+      props: { kind: 'json', text: '{"a":1,"b":[2,3]}' },
     })
 
     expect(wrapper.find('pre').text()).toBe(
@@ -38,9 +73,19 @@ describe('文本原件的画法', () => {
     )
   })
 
-  it('排不出版就原样摆，不报错——那不是错，只是它不是 JSON', () => {
+  it('⚠ .txt / .log 一个字都不许改，哪怕整段恰好是合法 JSON', () => {
+    const line = '{"ts":"2026-09-04T10:00:00Z","msg":"泵 A 启动"}'
+
     const wrapper = mount(DocumentPreviewText, {
-      props: { kind: 'text', text: '2026-09-04 10:00 泵 A 启动\n{ 不是 JSON' },
+      props: { kind: 'text', text: line },
+    })
+
+    expect(wrapper.find('pre').text()).toBe(line)
+  })
+
+  it('排不出版就原样摆，不报错——那只是这份 .json 本身是坏的', () => {
+    const wrapper = mount(DocumentPreviewText, {
+      props: { kind: 'json', text: '2026-09-04 10:00 泵 A 启动\n{ 不是 JSON' },
     })
 
     expect(wrapper.find('pre').text()).toContain('泵 A 启动')

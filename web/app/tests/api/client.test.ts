@@ -360,4 +360,44 @@ describe('取字节', () => {
 
     await expect(requestBytes('/x')).rejects.toBeInstanceOf(TransportError)
   })
+
+  it('⚠ 拒绝里带信封时，把后端写给用户的那句话原样抛上去', async () => {
+    fetchMock.mockResolvedValue(
+      envelope(
+        {
+          code: 42303,
+          message: '这份文档来自外部系统，没有可看的原件',
+          data: null,
+          trace_id: 't9',
+        },
+        404,
+      ),
+    )
+
+    const caught = await requestBytes('/documents/d1/raw').catch(
+      (error: unknown) => error,
+    )
+
+    expect(caught).toBeInstanceOf(BizError)
+    if (!(caught instanceof BizError)) throw new Error('缺少业务错误')
+    expect(caught.code).toBe(42303)
+    expect(caught.message).toBe('这份文档来自外部系统，没有可看的原件')
+    expect(caught.status).toBe(404)
+    expect(caught.traceId).toBe('t9')
+  })
+
+  it('body 不是信封时退回通用话，而不是把网关的错误页当成正文', async () => {
+    fetchMock.mockResolvedValue(
+      new Response(JSON.stringify({ detail: 'nginx' }), {
+        status: 502,
+        headers: { 'Content-Type': 'application/json' },
+      }),
+    )
+
+    const caught = await requestBytes('/x').catch((error: unknown) => error)
+
+    expect(caught).toBeInstanceOf(TransportError)
+    if (!(caught instanceof TransportError)) throw new Error('缺少传输错误')
+    expect(caught.message).toBe('这个文件取不回来')
+  })
 })

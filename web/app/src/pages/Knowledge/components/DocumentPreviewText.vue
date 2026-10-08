@@ -4,22 +4,25 @@
  *
  * ⚠ 一处 `v-html` 都没有：Markdown 交给 `DtMarkdown`（它整棵树都是文本节点），
  * 其余进 `<pre>`。原件是用户传上来的，摊开它的任何一条路都不许经过 innerHTML。
- * ⚠ JSON 排一次版再摆：一行几万字的 JSON 摊在 `<pre>` 里，横滚条会长到
- * 拖不动，而那与「这份文件是坏的」长得很像。排不出版就原样摆，不报错——
- * 排不出版本身不是错，只是它不是合法 JSON。
  */
 import { computed } from 'vue'
 import { DtMarkdown } from '@dt/ui'
 
-const props = defineProps<{ text: string; kind: 'markdown' | 'text' }>()
+const props = defineProps<{
+  text: string
+  kind: 'markdown' | 'text' | 'json'
+}>()
 
 /** JSON 缩进的空格数。 */
 const JSON_INDENT = 2
 
-const shown = computed(() => prettyJson(props.text))
+// ⚠ 仅 JSON 文件排版，日志和纯文本即使是合法 JSON 也保留原文。
+const shown = computed(() =>
+  props.kind === 'json' ? prettyJson(props.text) : props.text,
+)
 
 /**
- * 是 JSON 就排一次版，不是就原样回。
+ * 排一次版；排不出来就原样回。
  * @param text 原文
  */
 function prettyJson(text: string): string {

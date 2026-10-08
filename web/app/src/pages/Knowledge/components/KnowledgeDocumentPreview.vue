@@ -24,7 +24,7 @@ import type { PreviewKind } from '../scripts/documentPreview'
 import DocumentPreviewStage from './DocumentPreviewStage.vue'
 
 /** 要先解成文字再画的那几种画法。 */
-const TEXTUAL = ['markdown', 'text', 'html']
+const TEXTUAL: readonly PreviewKind[] = ['markdown', 'text', 'json', 'html']
 
 const props = defineProps<{
   modelValue: boolean

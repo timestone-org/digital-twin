@@ -12,7 +12,15 @@
 
 /** 一种画法。`none` 是「这个格式没有画法」，界面上退到只给下载。 */
 export type PreviewKind =
-  'pdf' | 'image' | 'docx' | 'sheet' | 'markdown' | 'html' | 'text' | 'none'
+  | 'pdf'
+  | 'image'
+  | 'docx'
+  | 'sheet'
+  | 'markdown'
+  | 'html'
+  | 'text'
+  | 'json'
+  | 'none'
 
 // 后缀 → 画法。⚠ 与后端 `parsing/` 各路后端声明的 `suffixes` 同源：
 // 那边收得进来、这边查不到的后缀会一路掉进「只给下载」，而两边单看都对
@@ -29,7 +37,7 @@ const BY_SUFFIX: Readonly<Record<string, PreviewKind>> = {
   '.txt': 'text',
   '.text': 'text',
   '.log': 'text',
-  '.json': 'text',
+  '.json': 'json',
   '.html': 'html',
   '.htm': 'html',
 }

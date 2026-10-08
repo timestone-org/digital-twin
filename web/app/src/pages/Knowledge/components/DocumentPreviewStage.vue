@@ -60,7 +60,11 @@ const props = defineProps<{
       :name="props.name"
     />
     <DocumentPreviewText
-      v-else-if="props.kind === 'markdown' || props.kind === 'text'"
+      v-else-if="
+        props.kind === 'markdown' ||
+        props.kind === 'text' ||
+        props.kind === 'json'
+      "
       :text="props.text"
       :kind="props.kind"
     />
