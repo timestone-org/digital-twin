@@ -1,16 +1,7 @@
 <script setup lang="ts">
 /**
- * @fileoverview 已导入节点表：配置 + 实时读写 + 记录历史开关 + 批量导入导出。
- *
- * ⚠ 实时值来自 WS 主题 `collect:{sourceId}`，不是这张表自己轮询出来的：
- * 首帧由 publisher 补全量，之后只推变化的那些（COLLECT_DESIGN §9）。通道断了
- * 要在界面上说出来——不说的话，最后一批值会一直挂着冒充现值。
- *
- * ⚠ 「配了多少个点位」与「实时值覆盖多少个」不是一回事：推送按编码升序取前
- * `live_point_limit` 个，超出的那些只有配置没有实时值。
- *
- * 多选的口径在 `useArchiveOps`，单条删与批量删都走 `useForceDelete` 的两级
- * 确认——批量那一路整批全删或全不删，一个点位被绑着就一个都不删。
+ * @fileoverview 已导入点位表：配置、分片实时值、历史记录开关与批量操作。
+ * 整源订阅与断线陈旧口径见 docs/COLLECT_DESIGN.md §9。
  */
 import { computed, ref, watch } from 'vue'
 import type { CollectPoint, CollectSource } from '@dt/contracts'

@@ -89,7 +89,7 @@ export interface CollectSource {
   is_enabled: boolean
   /** 配了多少个点位。 */
   point_count: number
-  /** 实时值最多覆盖多少个点位（按 code 升序取前 N）。 */
+  /** 兼容的实时覆盖数量；全量发布时与 point_count 一致。 */
   live_point_limit: number
   runtime: CollectSourceRuntime
   created_at: string

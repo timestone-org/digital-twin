@@ -385,7 +385,7 @@ apps/collect/services/       —— 采集配置页那条链路 + 两者共用�
 ├── snapshot_source          点位当前值的读侧（Redis HMGET，⚠ 绝不 HGETALL）
 ├── topics                   `collect:{id}` 的命名与解析、它要求的权限码
 ├── watchers                 活跃数据源（同一张订阅表，另一个主题前缀）
-├── live_plan                一个数据源要推哪些点位（TTL 重读 + 逐条比对）
+├── live_plan                一个数据源的全部点位（游标分批读取、TTL 重读 + 逐条比对）
 ├── live_publisher           一拍：活跃集 → 清单 → 取值 → 批推
 └── topic_reconcile          采集主题登记的周期对账
 apps/dashboard/crud/publish   三条只读查询：大屏清单、行版本、实时绑定的点位身份
@@ -397,6 +397,9 @@ apps/dashboard/crud/publish   三条只读查询：大屏清单、行版本、�
 
 ⚠ **采集点位表没有行版本可比**，故 `live_plan` 靠周期重读 + 逐条比对收敛。
 到期重读**不等于**清单变了：不比对就会每个 TTL 推一帧全量。
+采集实时发布不截断数据源点位清单；数据库与快照按批读取，hub 消息仍按帧分片。
+`collect_live_max_points` 保留兼容配置名，只表示读取批大小；`live_point_limit`
+保留兼容出参名，等于当前数据源的 `point_count`。
 
 **活跃大屏怎么来，以及它为什么没让 hub 长出业务知识**：hub 的
 `realtime.subscription` 里只有「连接 × 主题」两列，主题对它是不透明键；本服务

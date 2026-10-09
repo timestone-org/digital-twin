@@ -23,7 +23,7 @@
 2. **没有 `depends_on` 与健康探针编排**。Windows 服务的依赖只保证「被依赖的服务
    已启动」，不保证「已经能应答」。所以每个服务都要能在依赖没就绪时**退出并被
    重启**，这靠 nssm 的 `AppExit Restart` 兜（§7.1）。
-3. **迁移与种子不会自己跑**。容器里那七个一次性作业在这里是**人跑的命令**（§6），
+3. **迁移与种子不会自己跑**。Docker 的单一迁移作业在这里是**人跑的命令**（§6），
    漏跑的现象与原因隔得极远（新端点全 403、历史一条也落不进去）。
 
 ---
@@ -498,7 +498,7 @@ platform-server **必填**这一组（`PLATFORM_SQLSERVER_*`），缺一项就�
 ### 4.4 对象存储：起服务、建桶、放开三个前缀
 
 先用 nssm 把 MinIO 装成服务。⚠ 这里的 root 凭据必须与 `platform-server\.env` 里的
-`PLATFORM_OBJECTSTORE_ACCESS_KEY` / `_SECRET_KEY` **逐字相同**（§5.6 里已经生成好了）：
+`PLATFORM_OBJECTSTORE_ACCESS_KEY` / `_SECRET_KEY` **逐字相同**（按 §5.6 填写实际凭据）：
 分叉的表现是直传凭证签得出来、浏览器一传就 403，而两边的配置单看都对。
 
 ```powershell
@@ -514,10 +514,9 @@ $nssm = 'C:\DigitalTwin\tools\nssm\nssm.exe'
 Start-Service dt-minio
 ```
 
-⚠ 本部署沿用 MinIO 的**出厂凭据**（`minioadmin`，见 `platform-server\.env`）。
-那是一对众所周知的默认值：只有在 9000 端口**仅监听回环**时才勉强可接受，
-一旦要让别的机器直连对象存储，先换掉它——换的时候记得 MinIO 服务的
-`MINIO_ROOT_USER/PASSWORD` 与 platform 的两项要一起改。
+对象存储凭据须自行生成并填写，不使用出厂默认值。轮换时同步修改 MinIO 服务的
+`MINIO_ROOT_USER/PASSWORD`、platform 的两项对象存储凭据，以及 knowledge 的
+`KNOWLEDGE_OBJECTSTORE_ACCESS_KEY` / `KNOWLEDGE_OBJECTSTORE_SECRET_KEY`。
 
 再建桶并把三个前缀设成匿名可读（这一步等价于 compose 里的 `minio-init` 作业）：
 
@@ -557,8 +556,8 @@ curl.exe -s -o NUL -w "%{http_code}`n" http://127.0.0.1:9000/digitaltwin/models/
 
 ### 5.1 生成密钥
 
-> 沿用已经生成好的那几份 `.env`（§5.6）时跳过本节——里面的密钥已经生成过，
-> 且各份取值一致。本节留给**轮换**，以及在 Windows 上从 `.env.example` 从头配的场合。
+> 新部署从各服务的 `.env.example` 复制，必填密钥与密码均留空，需要自行填写。
+> 已部署的实例沿用现有密钥；轮换时按 §5.2 保持所有消费方一致。
 
 ```powershell
 function New-Hex32 {
@@ -654,15 +653,17 @@ platform-server 已经把 `tzdata` 声明成依赖，`uv sync` 会带上；**若
 $svc = 'C:\DigitalTwin\app\server\services'
 foreach ($s in 'auth-server','platform-server','collector-server',
                 'opcua-server','realtime-hub','ai-assistant','knowledge-server') {
-  Copy-Item "$svc\$s\.env.example" "$svc\$s\.env"
+  if (-not (Test-Path "$svc\$s\.env")) {
+    Copy-Item "$svc\$s\.env.example" "$svc\$s\.env"
+  }
 }
 ```
 
 ⚠ **一个代码单元只有一份 `.env`**：platform 的三个角色共用 `platform-server\.env`、
 knowledge 的两个角色共用 `knowledge-server\.env`，角色由 nssm 的环境变量顶掉
-（§7.2）。所以是**七份文件、十一个进程**。
+（§7.2）。所以后端是**七份文件、十个 Python 进程**，边缘 nginx 另行部署。
 
-现成的、已经按 compose 口径填好取值的那几份见 §5.6——那条路省掉逐项对照。
+模板已经给出单机 Windows 地址与路径；按 §5.6 填写必填项，安装目录不同时修改路径。
 
 ⚠ **`.env` 必须是无 BOM 的 UTF-8。** 记事本另存为「UTF-8」会带 BOM，于是**第一个
 变量名前面多一个不可见字符**——那一项静默变成「没配」，而文件看起来完全正常。
@@ -673,9 +674,14 @@ knowledge 的两个角色共用 `knowledge-server\.env`，角色由 nssm 的环�
 [System.IO.File]::WriteAllText($path, $text, (New-Object System.Text.UTF8Encoding($false)))
 ```
 
-⚠ **`.env` 里不要给值加引号**，也不要在值后面写行尾注释——它们会被逐字读进去。
-Windows 路径尤其**不能**用双引号包起来：双引号里的 `\` 会被当成转义序列处理，
-`C:\DigitalTwin\...` 于是变成一个谁也认不出来的字符串。不加引号直接写就是对的。
+`.env` 由应用的 python-dotenv 解析，支持引号与注释。模板统一把说明放在独立注释行，
+Windows 路径使用正斜杠（如 `C:/Program Files/LibreOffice/program/soffice.com`），
+避免反斜杠的转义问题；密码含空格或 `#` 时可用单引号包住。
+
+**可空值写字面量 `null`，不是空字符串。** 无密码 Redis、未启用的可选模型密钥和
+轮换结束后的旧 JWT 密钥都用 `null`；必填密码与密钥的空值必须填写。
+NSSM 的 `AppEnvironmentExtra` 则直接接收 `KEY=VALUE`，没有 dotenv 的去引号步骤，
+不要把 `.env` 的注释或包裹引号一并复制进去（[NSSM 参数说明](https://nssm.cc/commands)）。
 
 ⚠ `.env` 里有明文密钥。收紧 ACL：
 
@@ -683,29 +689,29 @@ Windows 路径尤其**不能**用双引号包起来：双引号里的 `\` 会被
 icacls C:\DigitalTwin\app\server\services\*\.env /inheritance:r /grant "SYSTEM:(R)" /grant "Administrators:(F)"
 ```
 
-### 5.6 七份完整 `.env`
+### 5.6 七份独立 `.env.example`
 
-每个代码单元一份，取值口径就是 `docker/compose.yml`，Windows 该改的地方
-（回环地址、Windows 路径、角色）都要改过。**变量数以仓库里的 `.env.example`
-为准**（它列全了那个服务的全部变量）：
+每个代码单元一份，覆盖该服务当前 Settings 的全部字段；auth 另含初始化管理员的
+三项配置。模板使用回环地址、独立实例名和 Windows 路径，可按 §5.5 复制。
+数据库用户 `postgres`、库名 `dt_db` 是与本手册一致的示例，按实际部署修改。
 
-| 文件 | 变量数 | 还要你填 |
+| 模板 | 变量数 | 必须填写或确认 |
 |---|---|---|
-| `services\auth-server\.env` | 44 | `AUTH_SEED_ADMIN_PASSWORD`（首次建管理员）|
-| `services\platform-server\.env` | 119 | 现场 EMS 四项（`PLATFORM_SQLSERVER_*`）|
-| `services\collector-server\.env` | 40 | —— |
-| `services\opcua-server\.env` | 35 | —— |
-| `services\realtime-hub\.env` | 39 | —— |
-| `services\ai-assistant\.env` | 62 | ——（接模型另见 §5.7）|
-| `services\knowledge-server\.env` | 86 | LibreOffice 绝对路径（不用则关开关；其余见 §5.8）|
+| [auth-server](../server/services/auth-server/.env.example) | 44 | 数据库密码、JWT 与两个边缘密钥、首次初始化的管理员密码 |
+| [platform-server](../server/services/platform-server/.env.example) | 120 | 数据库与 EMS 配置、两个边缘密钥、采集口令加密密钥、对象存储凭据；启用模型目录时填写供应商加密密钥 |
+| [collector-server](../server/services/collector-server/.env.example) | 46 | 数据库密码、与平台一致的服务级密钥；按实际需要配置 PLC/HTTP 允许清单 |
+| [opcua-server](../server/services/opcua-server/.env.example) | 35 | 数据库密码、两个边缘密钥、PKI 目录与 opc.tcp 端口段 |
+| [realtime-hub](../server/services/realtime-hub/.env.example) | 39 | 数据库密码、与 auth 一致的 JWT 与两个边缘密钥 |
+| [ai-assistant](../server/services/ai-assistant/.env.example) | 65 | 数据库密码、两个边缘密钥；接模型见 §5.7 |
+| [knowledge-server](../server/services/knowledge-server/.env.example) | 86 | 数据库密码、两个边缘密钥、对象存储凭据、LibreOffice 路径；模型与解析见 §5.8 |
 
-没填的值都写成 `<说明>` 的样子，**逐个搜 `<` 就能找全**——留着不改的话服务会在
-第一秒响亮失败，而不是带着一个错值跑起来。
+必填密码与密钥留空，不提供共用的开发密码；按注释逐项填写。可选密钥写 `null`
+表示未配置，启用对应能力时改成真实值。有密码的 Redis 必须把每份
+`*_REDIS_PASSWORD=null` 改为实际密码。
 
-⚠ **`.env` 不在版本库里**（`.gitignore` 挡着，这是对的）。所以 Windows 机器上
-`git clone` 出来的检出**不会有这七份文件**：要么从生成它们的机器上拷过去，
-要么在 Windows 上照 §5.5 从 `.env.example` 复制、再照 §5.1 生成密钥自己填。
-拷过去之后确认编码没被改成带 BOM 的 UTF-8 或 UTF-16。
+`.env.example` 提交进仓，实际 `.env` 被 `.gitignore` 排除；克隆后按 §5.5 创建配置，
+再按 §5.1 生成密钥。升级时保留已有 `.env` 的值，对照模板补配置，并确认编码仍是
+无 BOM 的 UTF-8。
 
 ⚠ **从旧机器拷过来的那几份会缺项。** 加载器是 `extra="ignore"`，所以**多出来的
 过期变量无害**，缺项才要命——缺的那些走代码默认值，而代码默认值是**容器口径**。
@@ -743,21 +749,21 @@ foreach ($d in Get-ChildItem $svc -Directory) {
 `KNOWLEDGE_INGEST_GENERATION_WRITE_ENABLED=false`，跑迁移并升级 API/worker；确认
 所有旧 worker 已退出后再改成 `true` 并重启。fresh install 可直接设成 `true`。
 
-已经替你定好、**不用再动**的取值：
+模板提供的单机部署取值（主机、安装目录或凭据不同时按实际修改）：
 
 | 项 | 取值 | 依据 |
 |---|---|---|
 | 七处 `*_POSTGRES_HOST/PORT/USER/DB` | `127.0.0.1:5432`、`postgres`、`dt_db` | §4.1 |
-| 七处 `*_POSTGRES_PASSWORD`、`*_REDIS_PASSWORD` | 现场口令，**七份一致** | §4.1 / §4.2 |
+| 七处 `*_POSTGRES_PASSWORD`、`*_REDIS_PASSWORD` | 数据库密码必填；Redis 无密码用 `null`、有密码填实际值 | §4.1 / §4.2 |
 | 七处 `*_REDIS_HOST/PORT` | `127.0.0.1:6379`（同实例同 `db`）| §4.2 |
 | 七处 `*_APP_HTTP_HOST` | `127.0.0.1` | §1.1 |
 | 九处跨服务地址（`*_BASE_URL`）| `http://127.0.0.1:<端口>` | §5.3 |
-| 三个共享密钥（JWT / 边缘签名 / 服务级）| 随机 32 字节，**各份取值一致** | §5.2 |
+| 三个共享密钥（JWT / 边缘签名 / 服务级）| 按 §5.1 生成，**各消费方取值一致** | §5.2 |
 | `PLATFORM_OBJECTSTORE_ENDPOINT`、`KNOWLEDGE_OBJECTSTORE_ENDPOINT` | `http://127.0.0.1:9000` | §4.4 |
-| `PLATFORM_OBJECTSTORE_ACCESS_KEY` / `_SECRET_KEY`（`KNOWLEDGE_` 那对同值）| MinIO 出厂凭据 —— ⚠ 装 MinIO 时的 root 凭据要用**同一对**（§4.4）| §5.2 |
-| `PLATFORM_COLLECT_CREDENTIAL_SECRET`、`PLATFORM_LLM_PROVIDER_SECRET` | 随机 32 字节 | §5.2 |
+| `PLATFORM_OBJECTSTORE_ACCESS_KEY` / `_SECRET_KEY`（`KNOWLEDGE_` 那对同值）| 实际 MinIO 凭据，模板留空，按 §4.4 配置 | §5.2 |
+| `PLATFORM_COLLECT_CREDENTIAL_SECRET`、`PLATFORM_LLM_PROVIDER_SECRET` | 前者必填；后者为 `null` 时关闭模型目录，启用时填随机密钥 | §5.2 |
 | `PLATFORM_ASSETCOMPRESS_NODE` / `_SCRIPT`、`OPCUA_PKI_DIR` | Windows 路径 | §5.4 |
-| `PLATFORM_SQLSERVER_CHARSET` | `CP936` | §4.3 |
+| `PLATFORM_SQLSERVER_CHARSET` | 模板为 `UTF-8`；现场旧库的 varchar 为 CP936 时改为 `CP936` | §4.3 |
 
 ⚠ **库与 Redis 那几项七份必须一模一样**（同一个库、同一个账号、同一个 Redis
 实例与 `db`，七个 schema）。改一份忘一份的表现是那一个服务起不来，而别的六个都好；
@@ -782,6 +788,12 @@ knowledge-worker 消费不到摄取任务。
 对话才报错」比起不来难查得多。
 ⚠ `ASSISTANT_MODEL_TIMEOUT_S` 要小于边缘那条事件流 location 的
 `proxy_read_timeout`（300s），否则边缘先掐断，服务端的超时分档一次都轮不到。
+
+Windows 模板将 `ASSISTANT_VISION_TIMEOUT_S` 与 `ASSISTANT_EMBEDDING_TIMEOUT_S`
+显式设为 `120` 秒，兼容尚未支持 `null` 的配置加载器。它们是独立覆盖值；需要继承
+对话超时时可删除对应配置行。NSSM Environment 中已有同名变量时，应填写正数或
+删除覆盖项，空字符串及直接带包裹引号的值会优先于 `.env` 并造成数字解析错误。
+部署前确认完整 `server/` 代码与依赖已同步，尤其共享 `lib/config` 的 `null` 解析支持。
 
 ### 5.8 知识库接模型与解析（可缺席）
 
@@ -813,9 +825,9 @@ knowledge-worker 消费不到摄取任务。
 
 ## 6. 迁移与种子（服务起之前）
 
-容器里这是七个一次性作业，这里是**人跑的七条命令**。顺序无所谓，但**必须在起
-服务之前跑完**：代码可回滚、数据库不回滚，所以永远是「新结构先就位，再放新代码
-进来」。
+Docker 由一个部署作业顺序执行七个属主的迁移与种子（ADR-0058）；Windows 在
+管理员终端按下面的顺序执行，全部成功后再启动服务。代码可回滚、数据库不回滚，
+所以永远是「新结构先就位，再放新代码进来」。
 
 每条命令都要**先 `cd` 到服务目录**——`alembic.ini` 与 `scripts\` 都按 CWD 找，
 `.env` 也是。
@@ -923,14 +935,14 @@ $deps = @(
 $units = @(
   @{ n='dt-auth';                d="$svc\auth-server";      m='auth_server';      e=@();                              t='auth-server' }
   @{ n='dt-realtime';            d="$svc\realtime-hub";     m='realtime_hub';     e=@();                              t='realtime-hub' }
-  @{ n='dt-platform';            d="$svc\platform-server";  m='platform_server';  e=@('PLATFORM_APP_ROLE=api');       t='platform-server (api)' }
-  @{ n='dt-platform-worker';     d="$svc\platform-server";  m='platform_server';  e=@('PLATFORM_APP_ROLE=worker');    t='platform-server (worker)' }
-  @{ n='dt-platform-publisher';  d="$svc\platform-server";  m='platform_server';  e=@('PLATFORM_APP_ROLE=publisher'); t='platform-server (publisher)' }
+  @{ n='dt-platform';            d="$svc\platform-server";  m='platform_server';  e=@('PLATFORM_APP_ROLE=api','PLATFORM_APP_INSTANCE=dt-platform');             t='platform-server (api)' }
+  @{ n='dt-platform-worker';     d="$svc\platform-server";  m='platform_server';  e=@('PLATFORM_APP_ROLE=worker','PLATFORM_APP_INSTANCE=dt-platform-worker');   t='platform-server (worker)' }
+  @{ n='dt-platform-publisher';  d="$svc\platform-server";  m='platform_server';  e=@('PLATFORM_APP_ROLE=publisher','PLATFORM_APP_INSTANCE=dt-platform-publisher'); t='platform-server (publisher)' }
   @{ n='dt-opcua';               d="$svc\opcua-server";     m='opcua_server';     e=@();                              t='opcua-server' }
   @{ n='dt-collector';           d="$svc\collector-server"; m='collector_server'; e=@();                              t='collector-server' }
   @{ n='dt-assistant';           d="$svc\ai-assistant";     m='ai_assistant';     e=@();                              t='ai-assistant' }
-  @{ n='dt-knowledge';           d="$svc\knowledge-server"; m='knowledge_server'; e=@('KNOWLEDGE_APP_ROLE=api');      t='knowledge-server (api)' }
-  @{ n='dt-knowledge-worker';    d="$svc\knowledge-server"; m='knowledge_server'; e=@('KNOWLEDGE_APP_ROLE=worker');   t='knowledge-server (worker)' }
+  @{ n='dt-knowledge';           d="$svc\knowledge-server"; m='knowledge_server'; e=@('KNOWLEDGE_APP_ROLE=api','KNOWLEDGE_APP_INSTANCE=dt-knowledge');          t='knowledge-server (api)' }
+  @{ n='dt-knowledge-worker';    d="$svc\knowledge-server"; m='knowledge_server'; e=@('KNOWLEDGE_APP_ROLE=worker','KNOWLEDGE_APP_INSTANCE=dt-knowledge-worker'); t='knowledge-server (worker)' }
 )
 
 foreach ($u in $units) {
@@ -952,6 +964,9 @@ foreach ($u in $units) {
   & $nssm set $u.n DisplayName "DigitalTwin $($u.t)"
 }
 ```
+
+平台和知识库的后台角色通过 `AppEnvironmentExtra` 同时覆盖角色与实例名，仍共用
+各自服务目录中的 `.env`；这些 worker/publisher 不监听 HTTP，无需另设 HTTP 端口。
 
 跑完这一段，输出里有两条**看着像错、其实不是**的：
 

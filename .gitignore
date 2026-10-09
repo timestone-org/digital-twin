@@ -29,6 +29,9 @@ requirements-audit.txt
 !.env.example
 !.env.template
 
+# 北京现场网关配置含实际服务密钥。
+docker/nginx/*.bj.conf
+
 # 系统
 .DS_Store
 

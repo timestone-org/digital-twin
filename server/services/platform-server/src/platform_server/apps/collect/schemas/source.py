@@ -69,8 +69,7 @@ class SourceOut(OutputModel):
     poll_interval_ms: int
     is_enabled: bool
     point_count: int
-    # 实时值最多覆盖多少个点位。⚠ 由服务端回而不是前端写死一份：两处各写一个
-    # 数字，调大配置之后界面还在按旧数字提示「只覆盖前 N 个」
+    # 兼容字段，覆盖全部已配置点位，与 point_count 一致。
     live_point_limit: int
     runtime: SourceRuntimeOut
     created_at: Utc

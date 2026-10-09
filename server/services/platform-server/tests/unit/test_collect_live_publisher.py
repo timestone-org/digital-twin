@@ -5,7 +5,10 @@
 """
 
 import uuid
+from collections.abc import Sequence
 from dataclasses import dataclass
+
+import pytest
 
 from lib.errors import DependencyUnavailable
 from platform_server.apps.collect.services.live_plan import LivePlan
@@ -40,9 +43,9 @@ class FakeLivePlanSource:
     calls: int = 0
 
     async def load(
-        self, source_id: uuid.UUID, *, limit: int
+        self, source_id: uuid.UUID, *, batch_size: int
     ) -> LivePlan | None:
-        del source_id, limit
+        del source_id, batch_size
         self.calls += 1
         return self.plan
 
@@ -83,17 +86,16 @@ def build_harness(
     subscriptions: tuple[uuid.UUID, ...] = (SUBSCRIPTION_1,),
     max_items: int = 200,
     plan_ttl_s: float = 10.0,
+    batch_points: int = 1000,
 ) -> Harness:
     """装一套发布器。
 
-    Args: node_keys, subscriptions, max_items, plan_ttl_s。
+    Args: node_keys, subscriptions, max_items, plan_ttl_s, batch_points。
     """
     snapshots = FakeSnapshotSource(
         readings={key: reading(1.0) for key in node_keys}
     )
-    plans = FakeLivePlanSource(
-        plan=LivePlan(node_keys=node_keys, is_truncated=False)
-    )
+    plans = FakeLivePlanSource(plan=LivePlan(node_keys=node_keys))
     viewers = FakeViewerSource(
         rows=[
             subscription_row(topic_of(SOURCE_ID), subscription_id)
@@ -108,7 +110,9 @@ def build_harness(
         snapshots=snapshots,
         realtime=realtime,
         options=LiveOptions(
-            max_items=max_items, max_points=1000, plan_ttl_s=plan_ttl_s
+            max_items=max_items,
+            batch_points=batch_points,
+            plan_ttl_s=plan_ttl_s,
         ),
         ticker=ticker,
     )
@@ -181,7 +185,7 @@ async def test_a_remount_on_the_same_connection_gets_a_full_frame() -> None:
 async def test_a_new_point_arrives_as_a_full_frame() -> None:
     harness = build_harness(node_keys=(KEY_A,), plan_ttl_s=0.0)
     await harness.publisher.publish_once()
-    harness.plans.plan = LivePlan(node_keys=(KEY_A, KEY_B), is_truncated=False)
+    harness.plans.plan = LivePlan(node_keys=(KEY_A, KEY_B))
     harness.snapshots.readings[KEY_B] = reading(3.0)
     await harness.publisher.publish_once()
     _, items, _ = harness.realtime.published[1]
@@ -266,3 +270,65 @@ async def test_heartbeat_republishes_unchanged_points() -> None:
     assert report.items == 2
     assert len(harness.realtime.published) == 2
     assert harness.realtime.published[-1][1][0]["timestampMs"] == NOW_MS
+
+
+async def test_snapshot_reads_cover_the_whole_source_in_bounded_batches() -> (
+    None
+):
+    node_keys = tuple(f"{SOURCE_ID}:point-{index:04d}" for index in range(1119))
+    harness = build_harness(node_keys=node_keys)
+
+    report = await harness.publisher.publish_once()
+
+    assert [len(batch) for batch in harness.snapshots.asked] == [1000, 119]
+    assert report.items == 1119
+    assert harness.realtime.published[-1][1][-1]["nodeKey"] == node_keys[-1]
+
+
+async def test_heartbeat_refreshes_the_tail_of_a_large_source() -> None:
+    node_keys = tuple(f"{SOURCE_ID}:point-{index:04d}" for index in range(1119))
+    harness = build_harness(node_keys=node_keys)
+    await harness.publisher.publish_once()
+    harness.ticker.now_s = 15.0
+
+    report = await harness.publisher.publish_once()
+
+    assert report.items == 1119
+    assert [len(batch) for batch in harness.snapshots.asked] == [
+        1000,
+        119,
+        1000,
+        119,
+    ]
+    assert harness.realtime.published[-1][1][-1]["nodeKey"] == node_keys[-1]
+
+
+@dataclass
+class PartlyUnavailableSnapshots(FakeSnapshotSource):
+    """第二个点位的快照不可读，其余读数照常可用。"""
+
+    async def read(self, node_keys: Sequence[str]) -> dict[str, PointReading]:
+        if KEY_B in node_keys:
+            raise DependencyUnavailable("Redis 暂时不可达")
+        return await super().read(node_keys)
+
+
+async def test_a_failed_read_batch_keeps_other_batches_available() -> None:
+    harness = build_harness(batch_points=1)
+    harness.publisher.snapshots = PartlyUnavailableSnapshots(
+        readings=harness.snapshots.readings
+    )
+
+    await harness.publisher.publish_once()
+
+    _, items, _ = harness.realtime.published[0]
+    assert [(item["nodeKey"], item["state"]) for item in items] == [
+        (KEY_A, "ok"),
+        (KEY_B, "error"),
+    ]
+
+
+@pytest.mark.parametrize("batch_points", [0, -1], ids=["zero", "negative"])
+def test_read_batches_must_have_a_positive_size(batch_points: int) -> None:
+    with pytest.raises(ValueError, match="批大小必须大于零"):
+        LiveOptions(max_items=200, batch_points=batch_points, plan_ttl_s=10.0)

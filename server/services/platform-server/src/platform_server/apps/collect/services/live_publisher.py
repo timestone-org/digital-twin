@@ -48,11 +48,15 @@ LIVE_HEARTBEAT_S = 15.0
 
 @dataclass(frozen=True)
 class LiveOptions:
-    """一拍的节流与截断参数。窗口本身归调用方的循环。"""
+    """一拍的读取批大小与推送分片参数。"""
 
     max_items: int
-    max_points: int
+    batch_points: int
     plan_ttl_s: float
+
+    def __post_init__(self) -> None:
+        if self.batch_points < 1:
+            raise ValueError("点位读取批大小必须大于零")
 
 
 @dataclass(frozen=True)
@@ -143,7 +147,24 @@ class SourceLivePublisher:
     async def _items_of(
         self, source_id: uuid.UUID, node_keys: tuple[str, ...]
     ) -> list[Item]:
-        """取一批点位的值并装成条目。快照读不到就整批标成取不到。
+        """分批读取全部点位，读取失败只标记对应批次。
+
+        Args: source_id, node_keys。
+        """
+        items: list[Item] = []
+        size = self.options.batch_points
+        for start in range(0, len(node_keys), size):
+            items.extend(
+                await self._read_items(
+                    source_id, node_keys[start : start + size]
+                )
+            )
+        return items
+
+    async def _read_items(
+        self, source_id: uuid.UUID, node_keys: tuple[str, ...]
+    ) -> list[Item]:
+        """读取一批快照并组装条目，读不到时整批标为取不到。
 
         Args: source_id, node_keys。
         """
@@ -152,7 +173,7 @@ class SourceLivePublisher:
         except DependencyUnavailable:
             _logger.error(
                 "snapshot_read_failed",
-                "读点位快照失败，本数据源整批标为取不到",
+                "读点位快照失败，本批点位标为取不到",
                 source_id=str(source_id),
                 points=len(node_keys),
             )
@@ -199,7 +220,9 @@ class SourceLivePublisher:
         cached = self._cache.get(source_id)
         if cached is not None and not self._is_stale(cached):
             return cached, False
-        plan = await self.plans.load(source_id, limit=self.options.max_points)
+        plan = await self.plans.load(
+            source_id, batch_size=self.options.batch_points
+        )
         if plan is None:
             # 数据源没了：主题对账那一支会把它的主题注销掉
             self._forget(source_id)

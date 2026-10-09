@@ -303,7 +303,7 @@ def _collect_lane(container: Container) -> Lane:
         realtime=container.realtime,
         options=LiveOptions(
             max_items=settings.publish_max_items,
-            max_points=settings.collect_live_max_points,
+            batch_points=settings.collect_live_max_points,
             plan_ttl_s=settings.collect_live_plan_ttl_s,
         ),
     )

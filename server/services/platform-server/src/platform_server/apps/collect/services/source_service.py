@@ -53,14 +53,9 @@ MIN_MODBUS_POLL_INTERVAL_MS = 1000
 
 @dataclass(frozen=True)
 class SourceContext:
-    """数据源面的旁路依赖：运行态读侧、实时值点位上限与口令加解密器。
-
-    ⚠ 打成一包不是为了好看：函数形参上限是 5，而列表面本来就已经有
-    「过滤 / 分页 / 排序」三件。
-    """
+    """数据源面的旁路依赖：运行态读侧与口令加解密器。"""
 
     states: SourceStateSource
-    live_point_limit: int
     cipher: CredentialCipher
 
 
@@ -95,7 +90,6 @@ async def list_sources(
         to_source_out(
             row,
             point_count=counts.get(row.id, 0),
-            live_point_limit=context.live_point_limit,
         )
         for row in rows
     ]
@@ -116,7 +110,7 @@ async def get_source(
     Args: session, context, source_id。
     """
     source = await require_source(session, source_id)
-    presented = await _present(session, source, context)
+    presented = await _present(session, source)
     await release_read_transaction(session)
     return (await attach_runtime(context.states, [presented]))[0]
 
@@ -172,7 +166,7 @@ async def create_source(
     validate_http_source(source, context.cipher)
     source_crud.add(session, source)
     await session.flush()
-    presented = await _present(session, source, context)
+    presented = await _present(session, source)
     await _commit(session)
     _logger.info(
         "collect_source_created", "数据源已创建", source_id=str(source.id)
@@ -206,7 +200,7 @@ async def update_source(
     )
     validate_http_source(source, context.cipher)
     await session.flush()
-    presented = await _present(session, source, context)
+    presented = await _present(session, source)
     await _commit(session)
     _logger.info(
         "collect_source_updated", "数据源已更新", source_id=str(source.id)
@@ -293,12 +287,9 @@ def _encrypted(cipher: CredentialCipher, credential: object) -> str | None:
     return cipher.encrypt(credential.get_secret_value())
 
 
-async def _present(
-    session: AsyncSession, source: CollectSource, context: SourceContext
-) -> SourceOut:
+async def _present(session: AsyncSession, source: CollectSource) -> SourceOut:
     counts = await source_crud.point_counts(session, frozenset({source.id}))
     return to_source_out(
         source,
         point_count=counts.get(source.id, 0),
-        live_point_limit=context.live_point_limit,
     )

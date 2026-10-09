@@ -1,12 +1,6 @@
-"""一个数据源当前要推哪些点位。
+"""分批读取一个数据源的全部实时点位身份，TTL 重读后逐条比对。
 
-与大屏那侧不同，采集点位表**没有行版本**可比：一次建点只动 `collect_points`，
-没有任何计数器会被推进。故这里靠**周期重读 + 逐条比对**收敛——重读周期
-（`collect_live_plan_ttl_s`）同时是「新建的点位多久之后开始有实时值」的上界，
-比对结果决定要不要补一帧全量。
-
-⚠ 取前 N 个而不是全量：一台设备挂上万个点位时，配置页一屏只看得见几十行。
-截断与否如实回给界面（`is_truncated`），静默截断会让人以为「这些点位没值」。
+设计见 docs/COLLECT_DESIGN.md §9。
 """
 
 import uuid
@@ -23,15 +17,13 @@ class LivePlan:
     """一个数据源当前推的点位清单。"""
 
     node_keys: tuple[str, ...]
-    # 该数据源的点位比上限多，清单只是前 N 个
-    is_truncated: bool
 
 
 class LivePlanSource(Protocol):
     """点位清单的最小查询面。真实现打库，测试用进程内假件。"""
 
     async def load(
-        self, source_id: uuid.UUID, *, limit: int
+        self, source_id: uuid.UUID, *, batch_size: int
     ) -> LivePlan | None: ...
 
 
@@ -42,23 +34,20 @@ class DatabaseLivePlanSource:
     database: Database
 
     async def load(
-        self, source_id: uuid.UUID, *, limit: int
+        self, source_id: uuid.UUID, *, batch_size: int
     ) -> LivePlan | None:
-        """取一个数据源的点位清单；数据源已经不在时返回 None。
+        """分批取一个数据源的全部点位身份，数据源已删除时返回 None。
 
-        ⚠ 多取一条来判断有没有截断：拿 `count(*)` 另问一次的话，两次查询
-        中间的一次建点会让「清单」与「总数」对不上。
-        Args: source_id, limit。
+        Args: source_id, batch_size。
         """
         async with self.database.session() as session:
             if await source_crud.get(session, source_id) is None:
                 return None
             codes = await point_crud.codes_of(
-                session, source_id, limit=limit + 1
+                session, source_id, batch_size=batch_size
             )
         return LivePlan(
             node_keys=tuple(
-                compose_node_key(source_id, code) for code in codes[:limit]
+                compose_node_key(source_id, code) for code in codes
             ),
-            is_truncated=len(codes) > limit,
         )

@@ -1,10 +1,4 @@
-"""数据源出参里的采集运行态与实时值上限。
-
-⚠ 「配置说它该采」（`is_enabled`）与「它此刻真在采」（`runtime.state`）是两件
-事，接口必须同时回，界面才分得开。
-⚠ 运行态来自另一个服务写的表，读不到时**降级为 unknown**，绝不让整页 503：
-collector 没起来时配置本身照样要能看、能改。
-"""
+"""数据源出参里的采集运行态与全部配置点位的实时覆盖数量。"""
 
 import httpx
 import pytest
@@ -12,8 +6,10 @@ from conftest import CollectFakes
 
 from integration.collect_helpers import (
     SOURCES,
+    create_points,
     create_source,
     payload,
+    point_item,
 )
 from platform_server.apps.collect.errors import HistoryUnavailable
 
@@ -90,9 +86,34 @@ async def test_an_unreadable_runtime_degrades_instead_of_failing(
     assert payload(response)["items"][0]["runtime"]["state"] == "unknown"
 
 
-async def test_the_live_point_limit_comes_from_the_server(
+async def test_an_empty_source_has_no_realtime_coverage_limit(
     app_client: httpx.AsyncClient,
 ) -> None:
-    # ⚠ 前端不许另存一份：两处各写一个数字，调大配置之后界面还按旧数字提示
     created = await create_source(app_client)
-    assert created["live_point_limit"] > 0
+    assert (created["point_count"], created["live_point_limit"]) == (0, 0)
+
+
+async def test_realtime_coverage_matches_all_configured_points(
+    app_client: httpx.AsyncClient,
+) -> None:
+    created = await create_source(app_client)
+    await create_points(
+        app_client, created["id"], point_item("a"), point_item("b")
+    )
+
+    detail = await app_client.get(f"{SOURCES}/{created['id']}")
+    listed = await app_client.get(SOURCES)
+    updated = await app_client.patch(
+        f"{SOURCES}/{created['id']}", json={"name": "实时覆盖源"}
+    )
+
+    assert payload(detail)["live_point_limit"] == 2
+    row = next(
+        item for item in payload(listed)["items"] if item["id"] == created["id"]
+    )
+    assert row["live_point_limit"] == row["point_count"] == 2
+    assert (
+        payload(updated)["live_point_limit"]
+        == payload(updated)["point_count"]
+        == 2
+    )

@@ -155,10 +155,7 @@ class Settings(
     dataset_retention_lease_ttl_s: int = Field(
         default=90_000, ge=LEASE_TTL_FLOOR_S
     )
-    # 采集配置页的实时值：一个数据源最多推多少个点位（按 code 升序取前 N）。
-    # ⚠ 有上限不是省流量：一台设备挂上万个点位时，配置页一屏只看得见几十行，
-    # 而全量推会把整条 WS 通道占满。超出的部分由 `SourceOut.live_point_limit`
-    # 如实告诉界面，让它说「实时值只覆盖前 N 个点位」——静默截断才是坑
+    # 点位清单和 Redis 快照的读取批大小；兼容配置名不限制数据源点位总数。
     collect_live_max_points: int = Field(default=1000, ge=1)
     # 点位清单的重读周期。它同时是「新建的点位多久之后开始有实时值」的上界
     collect_live_plan_ttl_s: float = Field(default=10.0, gt=0)

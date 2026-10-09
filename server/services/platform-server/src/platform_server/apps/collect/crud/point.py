@@ -110,21 +110,28 @@ class PointCrud(CrudBase[CollectPoint]):
         return list(rows.scalars().all())
 
     async def codes_of(
-        self, session: AsyncSession, source_id: uuid.UUID, *, limit: int
+        self, session: AsyncSession, source_id: uuid.UUID, *, batch_size: int
     ) -> list[str]:
-        """一个数据源下前 `limit` 个点位编码，按编码升序。
+        """用分批游标读取一个数据源的全部点位编码，按编码升序。
 
-        ⚠ 排序必须写死：实时推送按这个顺序取前 N 个点位，顺序不定就等于
-        「每次重读换一批点位有实时值」，而界面上看不出任何原因。
-        Args: session, source_id, limit。
+        Args: session, source_id, batch_size。
         """
-        rows = await session.execute(
+        if batch_size < 1:
+            raise ValueError("点位读取批大小必须大于零")
+        # ⚠ 一个 SELECT 游标的各批共享快照，点位增删不会让分页重复或漏行。
+        rows = await session.stream(
             select(CollectPoint.code)
             .where(CollectPoint.source_id == source_id)
             .order_by(CollectPoint.code.asc(), CollectPoint.id.asc())
-            .limit(limit)
+            .execution_options(yield_per=batch_size)
         )
-        return list(rows.scalars().all())
+        codes: list[str] = []
+        try:
+            async for batch in rows.scalars().partitions(batch_size):
+                codes.extend(batch)
+        finally:
+            await rows.close()
+        return codes
 
     async def count_by_source(
         self, session: AsyncSession, source_id: uuid.UUID

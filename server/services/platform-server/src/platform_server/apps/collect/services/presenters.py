@@ -27,16 +27,14 @@ from platform_server.apps.collect.services.state_source import (
 from timeseries import compose_node_key
 
 
-def to_source_out(
-    source: CollectSource, *, point_count: int, live_point_limit: int
-) -> SourceOut:
+def to_source_out(source: CollectSource, *, point_count: int) -> SourceOut:
     """一个数据源的对外形态。
 
     ⚠ 凭据只回一个「配没配过」的布尔：密文与明文都不出这个函数。
     ⚠ 运行态先按「还不知道」填：它来自另一个 schema 的只读连接，读它属于
     外部 IO，不许在业务事务里做（database-standard §6）。真值由
     `attach_runtime` 在事务外补上。
-    Args: source, point_count, live_point_limit。
+    Args: source, point_count。
     """
     return SourceOut(
         id=source.id,
@@ -52,7 +50,7 @@ def to_source_out(
         poll_interval_ms=source.poll_interval_ms,
         is_enabled=source.is_enabled,
         point_count=point_count,
-        live_point_limit=live_point_limit,
+        live_point_limit=point_count,
         runtime=to_runtime_out(UNKNOWN),
         created_at=source.created_at,
         updated_at=source.updated_at,
