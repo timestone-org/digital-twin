@@ -15,12 +15,14 @@ import {
   TWIN_FLOW_BINDING_KEY,
   TWIN_PANEL_BINDING_KEY,
   TWIN_PART_BINDING_KEY,
+  TWIN_PART_EFFECT_BINDING_KEY,
   TWIN_PART_FIELD_BINDING_KEY,
   arrayRowFieldKey,
 } from './constants'
 import { flattenPanelFields } from './normalizeElements'
 import { flattenPartFields } from './partFields'
 import { tintedParts } from './partTint'
+import { effectParts } from './partEffect'
 import type { TwinConfig } from './types'
 
 /** 一个数组绑定行落在哪个实体上。 */
@@ -94,6 +96,14 @@ export function twinBindingRows(config: TwinConfig): TwinBindingRow[] {
       'value',
     ),
     ...rowsOf(TWIN_PART_BINDING_KEY, parts, 'value'),
+    ...rowsOf(
+      TWIN_PART_EFFECT_BINDING_KEY,
+      effectParts(config.parts).map((item) => ({
+        id: item.id,
+        label: `${nameOr(item.name, item.id)} · 状态效果`,
+      })),
+      'value',
+    ),
     ...rowsOf(TWIN_ANCHOR_BINDING_KEY, anchors, 'value'),
     ...rowsOf(TWIN_PANEL_BINDING_KEY, panels, 'value'),
     ...rowsOf(TWIN_ARROW_BINDING_KEY, arrows, 'value'),
@@ -144,11 +154,15 @@ export function twinRowLabels(
 /**
  * 有绑定的五类实体各自落在哪个数组槽。键是 `TwinConfig` 上的数组字段名。
  * ⚠ 视点**不在表里**：它不取数，选中它时没有「只看这一个」可言。
- * ⚠ 部件占**两个槽**：状态染色一行，详情字段每个字段一行，所以它的值是一对。
+ * 部件分别占染色、效果与详情字段槽，各自按文档序计算行号。
  */
 const SLOTS_OF_KIND: Readonly<Record<string, readonly string[]>> = {
   animations: [TWIN_ANIMATION_BINDING_KEY],
-  parts: [TWIN_PART_BINDING_KEY, TWIN_PART_FIELD_BINDING_KEY],
+  parts: [
+    TWIN_PART_BINDING_KEY,
+    TWIN_PART_EFFECT_BINDING_KEY,
+    TWIN_PART_FIELD_BINDING_KEY,
+  ],
   anchors: [TWIN_ANCHOR_BINDING_KEY],
   panels: [TWIN_PANEL_BINDING_KEY],
   arrows: [TWIN_ARROW_BINDING_KEY],
@@ -197,9 +211,10 @@ export function twinRowsOfEntity(
   return out
 }
 
-/** 六个数组槽，重映射与行数统计逐个走一遍。 */
+/** 数组槽，重映射与行数统计逐个走一遍。 */
 const ARRAY_SLOTS = [
   TWIN_PART_BINDING_KEY,
+  TWIN_PART_EFFECT_BINDING_KEY,
   TWIN_ANIMATION_BINDING_KEY,
   TWIN_ANCHOR_BINDING_KEY,
   TWIN_PANEL_BINDING_KEY,
@@ -209,7 +224,7 @@ const ARRAY_SLOTS = [
 ] as const
 
 /**
- * 六个数组槽各应有几行，键是槽键。绑点面板据它把行钉在实体上。
+ * 数组槽各应有几行，键是槽键。绑点面板据它把行钉在实体上。
  * ⚠ 一个实体都没有的槽也要出现在表里、值为 0：漏掉的槽会被面板当成
  * 「行数由用户手工增删」，于是摆出一个加了也喂不到任何东西的「新增一行」。
  */
@@ -230,7 +245,7 @@ function entityIdsOf(config: TwinConfig, slotKey: string): string[] {
 }
 
 /**
- * 配置改动前后对比，把六个槽的绑定一次全搬到位。
+ * 配置改动前后对比，把各槽的绑定一次全搬到位。
  *
  * ⚠ 编辑器每一次写配置都要过这里，别挑「看起来会影响绑定」的那几个动作调用——
  * 会影响的动作比直觉多：给某张信息牌插一个字段，会让**后面每一张牌**的每一行

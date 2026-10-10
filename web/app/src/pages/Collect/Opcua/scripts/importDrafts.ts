@@ -1,20 +1,9 @@
-/**
- * @fileoverview 勾中的节点 → 待建点位的草稿：推编码、挑类型、逐条判合法。
- *
- * ⚠ 编码是**必填**且只能是 ASCII 标识串（后端 `Code` 约束）。推不出来的不许
- * 悄悄跳过：现场用中文命名标记是常态，跳过等于让人回点位表一个个手敲，而那
- * 里的编码字段是同一套约束，一点没省事。
- *
- * ⚠ 判重要同时看**本批**与**库里已有**：只判一边的表现是整批 409 被拒，而
- * 后端一批是原子的，用户看到的是「一条都没进去」。
- */
+/** @fileoverview 勾中的节点转成点位草稿，编码校验见 docs/COLLECT_DESIGN.md §2。 */
 import type { CollectDataType, CollectPointItemInput } from '@dt/contracts'
 import type { Romanize, TreeNode } from './browseTree'
 import { suggestCode } from './browseTree'
+import { pointCodeProblem } from './pointCode'
 
-/** 后端 `Code` 的字面约束（platform 的 schemas/common.py）。 */
-const CODE_PATTERN = /^[A-Za-z0-9][A-Za-z0-9._-]*$/
-const CODE_MAX_LENGTH = 64
 /** 一条待建点位。`code` 可以是空串，那是「等人填」。 */
 export interface ImportDraft {
   address: string
@@ -84,9 +73,8 @@ export function codeProblems(
 
 function problemOf(code: string, taken: ReadonlySet<string>): string | null {
   if (code === '') return '编码必填，现场的中文名推不出编码'
-  if (code.length > CODE_MAX_LENGTH) return `不许超过 ${CODE_MAX_LENGTH} 个字符`
-  if (!CODE_PATTERN.test(code))
-    return '只能用字母、数字与 . _ -，且以字母或数字开头'
+  const problem = pointCodeProblem(code)
+  if (problem !== null) return problem
   if (taken.has(code)) return '这个编码在本数据源下已经有点位用了'
   return null
 }

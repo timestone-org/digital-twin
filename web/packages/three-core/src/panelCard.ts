@@ -1,5 +1,5 @@
 /**
- * @fileoverview 一张信息牌的 DOM：外壳（挂点 / 引线 / 卡片 / 页眉页脚）与八种字段画法。
+ * @fileoverview 信息牌的原生 DOM 外壳与字段画法。
  *
  * ⚠ 全部文本走 `textContent`——牌名、副标题、字段标签、单位与静态文案都是用户可控
  * 文本，拼进 `innerHTML` 就是一个注入点（code-style-typescript §10）。
@@ -20,6 +20,8 @@ import {
   formatValueText,
   panelFieldRatio,
   panelFieldTone,
+  panelFieldState,
+  panelKindUsesState,
   panelKindUsesSeries,
   toFiniteNumber,
 } from '@dt/twin-config'
@@ -186,6 +188,26 @@ function buildLine(field: TwinPanelField): {
   return { line, valueEl }
 }
 
+/** 状态徽标与只读开关指示。 */
+function buildState(field: TwinPanelField): {
+  row: HTMLElement
+  valueEl: HTMLElement
+} {
+  const row = div('twin-panel__row')
+  row.dataset.kind = field.kind
+  row.setAttribute('role', 'status')
+  const line = div('twin-panel__line')
+  line.append(span('twin-panel__label', field.label))
+  const badge = span('twin-panel__state')
+  const mark = span('twin-panel__state-mark')
+  mark.setAttribute('aria-hidden', 'true')
+  const valueEl = span('twin-panel__state-text')
+  badge.append(mark, valueEl)
+  line.append(badge)
+  row.append(line)
+  return { row, valueEl }
+}
+
 /** 数值与单位分开成节点的那两档共用的落点。 */
 interface SplitRow {
   row: HTMLElement
@@ -271,6 +293,9 @@ function buildFieldView(
 ): PanelFieldView {
   const valueKey = `${panelId}::${field.key}`
   const shared = { field, valueKey, chart: null, deltaEl: null, last: null }
+  if (panelKindUsesState(field.kind)) {
+    return { ...shared, ...buildState(field), unitEl: null }
+  }
   if (field.kind === 'hero') return { ...shared, ...buildHero(field) }
   if (field.kind === 'gauge') return { ...shared, ...buildGauge(field) }
   const { element, chart } = extraOf(field)
@@ -382,6 +407,18 @@ function paintDelta(view: PanelFieldView, reading: Reading): void {
   if (now !== null) view.last = now
 }
 
+/** 状态值缺失或未匹配时清除上一轮的激活显示。 */
+function paintState(view: PanelFieldView, values: TwinPanelValues): void {
+  const state = panelFieldState(view.field.state, values[view.valueKey]?.value)
+  view.row.dataset.state = state.state
+  view.row.dataset.tone = state.tone
+  view.valueEl.textContent = state.label
+  view.valueEl.title = state.label
+  view.row.setAttribute('aria-label', `${view.field.label}：${state.label}`)
+  if (state.state === 'unknown') view.row.dataset.empty = 'on'
+  else delete view.row.dataset.empty
+}
+
 /**
  * 把一路读数刷到它那一行上：文本、色档、量程占比与迷你图。
  * @param view 这一行的落点
@@ -391,6 +428,10 @@ export function paintPanelField(
   view: PanelFieldView,
   values: TwinPanelValues,
 ): void {
+  if (panelKindUsesState(view.field.kind)) {
+    paintState(view, values)
+    return
+  }
   const reading = readingOf(view, values)
   if (view.unitEl === null) {
     view.valueEl.textContent = reading.text

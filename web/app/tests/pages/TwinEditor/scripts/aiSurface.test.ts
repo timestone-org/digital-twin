@@ -210,6 +210,91 @@ describe('读场景', () => {
 })
 
 describe('配置场景实体', () => {
+  it.each(['', null])('根目录部件允许空目录筛选 %s', async (folderId) => {
+    const { surface } = setup({
+      config: normalizeTwinConfig({
+        parts: [{ id: 'compressor-1', name: '空压机1' }],
+      }),
+    })
+
+    const folders = await run(surface, 'twin.list_folders', {
+      section: 'parts',
+    })
+    expect(folders.folders).toEqual([])
+    const listed = await run(surface, 'twin.list_entities', {
+      section: 'parts',
+      keyword: '空压机1',
+      folder_id: folderId,
+    })
+
+    expect(listed).toMatchObject({
+      applied_folder_id: null,
+      items: [{ id: 'compressor-1', name: '空压机1', folder: null }],
+      total: 1,
+      has_more: false,
+    })
+  })
+
+  it.each(['', null, undefined])(
+    '未限定目录 %s 时保留文件夹内及根目录实体',
+    async (folderId) => {
+      const { surface } = setup()
+
+      const listed = await run(surface, 'twin.list_entities', {
+        section: 'anchors',
+        folder_id: folderId,
+      })
+
+      expect(listed).toMatchObject({
+        applied_folder_id: null,
+        total: 2,
+        items: [
+          { id: 'a1', folder: { folder_id: 'outlets' } },
+          { id: 'a2', folder: null },
+        ],
+      })
+    },
+  )
+
+  it.each([
+    { folderId: 0 },
+    { folderId: false },
+    { folderId: [] },
+    { folderId: {} },
+  ])('目录筛选拒绝错误类型 $folderId', async ({ folderId }) => {
+    const { surface } = setup()
+
+    await expect(
+      surface.run(
+        call('twin.list_entities', { section: 'parts', folder_id: folderId }),
+      ),
+    ).rejects.toThrow(/folder_id/)
+  })
+
+  it('未知目录提示省略筛选继续查找实体', async () => {
+    const { surface } = setup()
+
+    await expect(
+      surface.run(
+        call('twin.list_entities', {
+          section: 'parts',
+          folder_id: '__unfiled__',
+        }),
+      ),
+    ).rejects.toThrow(/省略 folder_id/)
+  })
+
+  it('目录空值兼容不放宽必填实体身份和类别', async () => {
+    const { surface } = setup()
+
+    await expect(
+      surface.run(call('twin.read_entity', { section: 'parts', id: '' })),
+    ).rejects.toThrow(/id 必须是非空文本/)
+    await expect(
+      surface.run(call('twin.list_entities', { section: '', folder_id: '' })),
+    ).rejects.toThrow(/section/)
+  })
+
   it('一次列出六类文件夹的可复用身份与成员数', async () => {
     const { surface } = setup()
 
@@ -804,32 +889,39 @@ describe('认不出的工具', () => {
 })
 
 describe('工具按需分页', () => {
-  it('实体目录可以连续翻页且无重复遗漏', async () => {
-    const { surface } = setup({
-      config: normalizeTwinConfig({
-        parts: Array.from({ length: 25 }, (_, index) => ({
-          id: `p${String(index)}`,
-          name: `设备${String(index)}`,
-        })),
-      }),
-    })
-    const first = await run(surface, 'twin.list_entities', { section: 'parts' })
-    expect(first.items).toHaveLength(20)
-    expect(first.next_page).toBe(2)
-    const second = await run(surface, 'twin.list_entities', {
-      section: 'parts',
-      page: first.next_page,
-    })
-    expect(second.items).toMatchObject([
-      { id: 'p20' },
-      { id: 'p21' },
-      { id: 'p22' },
-      { id: 'p23' },
-      { id: 'p24' },
-    ])
-    expect(second.has_more).toBe(false)
-    expect(second.next_page).toBeNull()
-  })
+  it.each(['', null, undefined])(
+    '根目录筛选 %s 可连续翻页',
+    async (folderId) => {
+      const { surface } = setup({
+        config: normalizeTwinConfig({
+          parts: Array.from({ length: 25 }, (_, index) => ({
+            id: `p${String(index)}`,
+            name: `设备${String(index)}`,
+          })),
+        }),
+      })
+      const first = await run(surface, 'twin.list_entities', {
+        section: 'parts',
+        folder_id: folderId,
+      })
+      expect(first.items).toHaveLength(20)
+      expect(first.next_page).toBe(2)
+      const second = await run(surface, 'twin.list_entities', {
+        section: 'parts',
+        folder_id: folderId,
+        page: first.next_page,
+      })
+      expect(second.items).toMatchObject([
+        { id: 'p20' },
+        { id: 'p21' },
+        { id: 'p22' },
+        { id: 'p23' },
+        { id: 'p24' },
+      ])
+      expect(second.has_more).toBe(false)
+      expect(second.next_page).toBeNull()
+    },
+  )
 
   it('文件夹按分类和关键词过滤后分页', async () => {
     const { surface } = setup()

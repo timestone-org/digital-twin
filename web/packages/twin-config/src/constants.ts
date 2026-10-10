@@ -18,6 +18,8 @@ export const TWIN_CONFIG_VERSION = 1
 
 /** 部件状态染色读数的数组绑定槽键。 */
 export const TWIN_PART_BINDING_KEY = 'partValues'
+/** 部件状态效果触发值的独立数组绑定槽。 */
+export const TWIN_PART_EFFECT_BINDING_KEY = 'partEffectValues'
 /** 锚点读数的数组绑定槽键。 */
 export const TWIN_ANCHOR_BINDING_KEY = 'anchorValues'
 /** 信息牌字段读数的数组绑定槽键。 */
@@ -69,6 +71,11 @@ export function partRowFieldKey(index: number): string {
   return arrayRowFieldKey(TWIN_PART_BINDING_KEY, index, 'value')
 }
 
+/** 配置状态效果的部件里第 index 个的 fieldKey。 */
+export function partEffectRowFieldKey(index: number): string {
+  return arrayRowFieldKey(TWIN_PART_EFFECT_BINDING_KEY, index, 'value')
+}
+
 /** 第 index 个锚点读数的 fieldKey。 */
 export function anchorRowFieldKey(index: number): string {
   return arrayRowFieldKey(TWIN_ANCHOR_BINDING_KEY, index, 'value')
@@ -118,6 +125,14 @@ export const TWIN_VIEW_BINDINGS: readonly BindingSpec[] = [
     isArray: true,
     isEntityPinned: true,
     arrayFields: [{ key: 'value', label: '数值 / 状态', dataType: 'number' }],
+  },
+  {
+    key: TWIN_PART_EFFECT_BINDING_KEY,
+    label: '部件状态效果',
+    dataType: 'number',
+    isArray: true,
+    isEntityPinned: true,
+    arrayFields: [{ key: 'value', label: '开关 / 状态', dataType: 'number' }],
   },
   {
     key: TWIN_ANCHOR_BINDING_KEY,

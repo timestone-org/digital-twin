@@ -8,7 +8,7 @@ import {
   type TwinPart,
 } from '@dt/twin-config'
 export type CopySetting =
-  'look' | 'tint' | 'detailStyle' | 'detailFields' | 'click'
+  'look' | 'tint' | 'effect' | 'detailStyle' | 'detailFields' | 'click'
 export type BatchKind =
   'parts' | 'panels' | 'anchors' | 'arrows' | 'flows' | 'animations'
 export interface PointReplacement {
@@ -21,6 +21,7 @@ export interface PointReplacement {
 export const COPY_SETTINGS: readonly { value: CopySetting; label: string }[] = [
   { value: 'look', label: '常态外观' },
   { value: 'tint', label: '状态染色规则' },
+  { value: 'effect', label: '状态效果规则' },
   { value: 'detailStyle', label: '详情样式' },
   { value: 'detailFields', label: '详情字段' },
   { value: 'click', label: '点击行为与距离限制' },
@@ -33,6 +34,7 @@ function copiedPart(
   const next = { ...target }
   if (settings.includes('look')) next.look = { ...source.look }
   if (settings.includes('tint')) next.tint = source.tint
+  if (settings.includes('effect')) next.effect = source.effect ?? null
   if (settings.includes('detailStyle'))
     next.detail = {
       ...source.detail,

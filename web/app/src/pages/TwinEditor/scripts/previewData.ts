@@ -12,6 +12,7 @@ export interface PreviewDataRow {
   label: string
   slot:
     | 'parts'
+    | 'effectParts'
     | 'anchors'
     | 'panels'
     | 'arrows'
@@ -22,6 +23,7 @@ export interface PreviewDataRow {
 }
 const SLOTS: Readonly<Record<string, PreviewDataRow['slot']>> = {
   partValues: 'parts',
+  partEffectValues: 'effectParts',
   anchorValues: 'anchors',
   panelValues: 'panels',
   arrowValues: 'arrows',
@@ -74,7 +76,7 @@ export function rowSample(
 ): unknown {
   if (row.slot === 'animations') return values.animations?.[row.entityId]
   if (row.slot === 'flows') return values.flows[row.entityId]?.intensity
-  return values[row.slot][row.entityId]?.value
+  return values[row.slot]?.[row.entityId]?.value
 }
 export function applyPreviewData(
   values: TwinSceneValues,

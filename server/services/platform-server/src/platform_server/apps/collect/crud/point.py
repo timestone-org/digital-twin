@@ -159,10 +159,9 @@ class PointCrud(CrudBase[CollectPoint]):
         if source_id is not None:
             statement = statement.where(CollectPoint.source_id == source_id)
         if keyword:
-            pattern = f"%{keyword.lower()}%"
             statement = statement.where(
-                func.lower(CollectPoint.name).like(pattern)
-                | func.lower(CollectPoint.code).like(pattern)
+                CollectPoint.name.icontains(keyword, autoescape=True)
+                | CollectPoint.code.icontains(keyword, autoescape=True)
             )
         return statement
 

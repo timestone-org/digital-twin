@@ -1,12 +1,5 @@
 /**
- * @fileoverview 契约：信息牌字段的画法组把三件不写就看不出来的事摆在明面上。
- *
- * 一是**换画法不改行号**——八种画法都只吃一个值，绑定不会跟着错位，不写明用户不敢动；
- * 二是趋势线攒的是本次会话内收到的读数、不查历史库，不写明「刚打开时图是空的」会被
- * 当成绑定没生效；三是量程颠倒时图形退回纯文本，必须当场说，否则就是「配了没反应」。
- *
- * 另锁住：只有吃量程的画法才给量程输入——给不吃量程的画法摆一个改了没反应的输入框，
- * 比不给更糟。
+ * @fileoverview 信息牌画法的绑定提示、量程诊断、趋势与阈值配置契约。
  */
 import type { TwinPanelField } from '@dt/twin-config'
 import { DtNumberInput, DtSelect } from '@dt/ui'
@@ -78,10 +71,10 @@ async function typeNumber(
 }
 
 describe('画法', () => {
-  it('八种画法都列在下拉里', () => {
+  it('十种画法都列在下拉里', () => {
     const wrapper = mountGraph(fieldOf())
 
-    expect(selectByLabel(wrapper, '画法').props('options')).toHaveLength(8)
+    expect(selectByLabel(wrapper, '画法').props('options')).toHaveLength(10)
   })
 
   it('选一档写回 kind', async () => {

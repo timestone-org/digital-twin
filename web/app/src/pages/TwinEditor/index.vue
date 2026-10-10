@@ -35,11 +35,8 @@ import { provideTwinMeasure } from './scripts/twinMeasure'
 import { useEditorHidden } from './scripts/useEditorHidden'
 import { createTwinViewportOps } from './scripts/twinViewportOps'
 import { useTwinBindings } from './scripts/useTwinBindings'
-import {
-  TWIN_SELECT_MODEL,
-  type TwinEntityKind,
-  type TwinSelection,
-} from './scripts/types'
+import { TWIN_SELECT_MODEL } from './scripts/types'
+import type { TwinEntityKind, TwinSelection } from './scripts/types'
 import { useBulkParts } from './scripts/useBulkParts'
 import { useGizmoMode } from './scripts/useGizmoMode'
 import { useTwinAi } from './scripts/useTwinAi'
@@ -410,6 +407,7 @@ useUnsavedGuard(() => page.doc.value?.isDirty.value === true)
               :bindings="binding.bindings.value"
               :read-binding="binding.readBinding"
               @roam-playing="roamPreviewing = $event"
+              @part-detail-view="viewport.savePartDetailView"
             />
           </div>
           <TwinDiagnosticsPanel
@@ -464,6 +462,9 @@ useUnsavedGuard(() => page.doc.value?.isDirty.value === true)
             @cancel-pick="viewport.cancelPick"
             @capture-camera="viewport.captureCamera"
             @capture-part-view="viewport.capturePartView"
+            @edit-part-detail-view="
+              configPreviewRef?.editPartDetailView($event)
+            "
             @select-part="select({ kind: 'parts', id: $event })"
             @preview-roam="configPreviewRef?.playRoam()"
             @stop-roam-preview="configPreviewRef?.stopRoam()"

@@ -14,6 +14,7 @@ import {
   TWIN_FLOW_BINDING_KEY,
   TWIN_PANEL_BINDING_KEY,
   TWIN_PART_BINDING_KEY,
+  TWIN_PART_EFFECT_BINDING_KEY,
   TWIN_PART_FIELD_BINDING_KEY,
 } from './constants'
 import { flattenPanelFields } from './normalizeElements'
@@ -25,6 +26,7 @@ import {
   stitchPanelValues,
   stitchPartFieldValues,
   stitchPartValues,
+  stitchPartEffectValues,
 } from './twinMath'
 import type { TwinConfig } from './types'
 import type {
@@ -34,6 +36,7 @@ import type {
   TwinPanelValues,
   TwinPartFieldValues,
   TwinPartValues,
+  TwinPartEffectValues,
 } from './types'
 
 /** 缝合好的六路实时值，键都是实体自己的 id。 */
@@ -41,6 +44,8 @@ export interface TwinSceneValues {
   animations?: TwinAnimationValues
   /** 部件状态染色用；键是部件 id，只含配了染色的那些。 */
   parts: TwinPartValues
+  /** 效果触发值，独立于染色与详情字段。 */
+  effectParts?: TwinPartEffectValues
   anchors: TwinAnchorValues
   arrows: TwinArrowValues
   panels: TwinPanelValues
@@ -70,6 +75,10 @@ export function twinSceneValues(
     // ⚠ 喂全部部件、由 `stitchPartValues` 自己过滤：先在这里过滤一遍会多出
     //   一处口径，而两处口径不一致就是「每一行都接错部件」
     parts: stitchPartValues(config.parts, values[TWIN_PART_BINDING_KEY]),
+    effectParts: stitchPartEffectValues(
+      config.parts,
+      values[TWIN_PART_EFFECT_BINDING_KEY],
+    ),
     anchors: stitchAnchorValues(
       config.anchors,
       values[TWIN_ANCHOR_BINDING_KEY],

@@ -31,9 +31,9 @@ it('近远动作和当前视距验证分别发出命令', async () => {
   await wrapper.setProps({ partMode: 'detail', result: '已打开完整详情' })
   await wrapper
     .findAll('button')
-    .find((button) => button.text() === '打开完整详情弹窗')
+    .find((button) => button.text() === '编辑弹窗视角')
     ?.trigger('click')
-  expect(wrapper.emitted('action')?.at(-1)).toEqual(['detail'])
+  expect(wrapper.emitted('action')?.at(-1)).toEqual(['detail-edit'])
   expect(wrapper.text()).toContain('已打开完整详情')
   wrapper.unmount()
 })

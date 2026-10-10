@@ -6,6 +6,7 @@ import type { TwinRowSlot } from './constants'
 import type { FlatPanelField } from './normalizeElements'
 import type { FlatPartField } from './partFields'
 import { tintedParts } from './partTint'
+import { effectParts } from './partEffect'
 import { finiteValue, isRecord, toArray, toFiniteNumber } from './sanitize'
 import type {
   TwinAnchor,
@@ -24,6 +25,7 @@ import type {
   TwinPartFieldValues,
   TwinPartValue,
   TwinPartValues,
+  TwinPartEffectValues,
 } from './types'
 
 /**
@@ -37,6 +39,7 @@ export const EMPTY_ARROW_VALUES: TwinArrowValues = Object.freeze({})
 export const EMPTY_FLOW_VALUES: TwinFlowValues = Object.freeze({})
 export const EMPTY_PART_FIELD_VALUES: TwinPartFieldValues = Object.freeze({})
 export const EMPTY_PART_VALUES: TwinPartValues = Object.freeze({})
+export const EMPTY_PART_EFFECT_VALUES: TwinPartEffectValues = Object.freeze({})
 
 /** 第 index 行的 sub 子槽；行不是对象一律按无值处理。 */
 function readRowSlot(rows: unknown, index: number, sub: TwinRowSlot): unknown {
@@ -62,6 +65,19 @@ export function stitchPartValues(
     out[part.id] = { value }
   })
   return Object.keys(out).length === 0 ? EMPTY_PART_VALUES : out
+}
+
+/** 配置效果的部件按独立槽文档序缝合，关闭配置仍保留行。 */
+export function stitchPartEffectValues(
+  parts: readonly TwinPart[] | undefined,
+  rows: unknown,
+): TwinPartEffectValues {
+  const out: Record<string, TwinPartValue> = {}
+  effectParts(parts ?? []).forEach((part, index) => {
+    const value = readRowSlot(rows, index, 'value')
+    if (value !== undefined) out[part.id] = { value }
+  })
+  return Object.keys(out).length === 0 ? EMPTY_PART_EFFECT_VALUES : out
 }
 
 /**

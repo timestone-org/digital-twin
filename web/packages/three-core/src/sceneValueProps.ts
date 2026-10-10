@@ -15,6 +15,7 @@ import {
   EMPTY_PANEL_VALUES,
   EMPTY_PART_FIELD_VALUES,
   EMPTY_PART_VALUES,
+  EMPTY_PART_EFFECT_VALUES,
   type TwinPartFieldValues,
   type TwinSceneValues,
 } from '@dt/twin-config'
@@ -35,6 +36,7 @@ export function sceneValuesOf(props: SceneValueProps): SceneLayerValues {
   const values = props.values ?? {}
   return {
     parts: values.parts ?? EMPTY_PART_VALUES,
+    effectParts: values.effectParts ?? EMPTY_PART_EFFECT_VALUES,
     anchors: values.anchors ?? EMPTY_ANCHOR_VALUES,
     arrows: values.arrows ?? EMPTY_ARROW_VALUES,
     panels: values.panels ?? EMPTY_PANEL_VALUES,

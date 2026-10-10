@@ -76,6 +76,45 @@ describe('标题与风格', () => {
 })
 
 describe('弹窗里那块 3D', () => {
+  it('一键打开独立部件视角编辑，不要求先调整主视口', async () => {
+    const wrapper = render()
+
+    await wrapper.get('[data-test="part-detail-edit-view"]').trigger('click')
+
+    expect(wrapper.emitted('editView')).toEqual([[]])
+    expect(wrapper.text()).not.toContain('在主视口')
+    expect(wrapper.emitted('update:modelValue')).toBeUndefined()
+  })
+
+  it('恢复默认视角只清除详情取景，保留读数和弹窗尺寸', async () => {
+    const wrapper = render({
+      detail: {
+        view: { position: [10, 2, 3], target: [10, 0, 0], fov: 50 },
+        fields: [{ key: 'temp', label: '温度' }],
+        width: 900,
+      },
+    })
+
+    await wrapper.get('[data-test="part-detail-clear-view"]').trigger('click')
+
+    expect(lastDetail(wrapper)).toMatchObject({
+      view: null,
+      width: 900,
+      fields: [{ key: 'temp', label: '温度' }],
+    })
+  })
+
+  it('隐藏模型时收起视角配置', () => {
+    const wrapper = render({ detail: { showModel: false } })
+
+    expect(wrapper.find('[data-test="part-detail-edit-view"]').exists()).toBe(
+      false,
+    )
+    expect(wrapper.find('[data-test="part-detail-clear-view"]').exists()).toBe(
+      false,
+    )
+  })
+
   it('缺省画模型、自转默认关闭', () => {
     const wrapper = render()
 

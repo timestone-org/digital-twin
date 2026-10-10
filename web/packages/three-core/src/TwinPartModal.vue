@@ -7,9 +7,10 @@ import type {
   TwinPart,
   TwinPartFieldValues,
   TwinPartValues,
+  TwinFocusView,
 } from '@dt/twin-config'
 import { detailPanelOf, partAssembly } from '@dt/twin-config'
-import { DtModal } from '@dt/ui'
+import { DtButton, DtModal } from '@dt/ui'
 import type * as THREE from 'three'
 import {
   computed,
@@ -46,9 +47,15 @@ const props = defineProps<{
   objectsOf: (partId: string) => readonly THREE.Object3D[]
   /** 渲染器工厂；测试里换成 headless 替身。 */
   rendererFactory?: SceneRendererFactory
+  /** 在编辑器里直接调整并应用独立模型视角。 */
+  editable?: boolean
 }>()
 
-const emit = defineEmits<{ close: []; select: [partId: string] }>()
+const emit = defineEmits<{
+  close: []
+  select: [partId: string]
+  viewChange: [{ partId: string; view: TwinFocusView | null }]
+}>()
 
 const stageRef = ref<HTMLDivElement | null>(null)
 const cardRef = ref<HTMLDivElement | null>(null)
@@ -60,6 +67,7 @@ let frameHandle = 0
 const clock = createFrameClock()
 /** 说要画模型，模型里却一个对应节点都找不到。 */
 const stageEmpty = ref(false)
+const previewReady = ref(false)
 
 const isOpen = computed(() => props.part !== null)
 
@@ -155,6 +163,7 @@ function stopPreview(): void {
   observer = null
   preview?.dispose()
   preview = null
+  previewReady.value = false
   stageEmpty.value = false
 }
 
@@ -168,11 +177,14 @@ function startPreview(): void {
   preview = createPartPreview({
     container: stage,
     objects,
-    autoRotate: part.detail.autoRotate,
+    autoRotate: props.editable !== true && part.detail.autoRotate,
+    allowPan: props.editable === true,
+    view: part.detail.view,
     ...(props.rendererFactory === undefined
       ? {}
       : { renderer: props.rendererFactory }),
   })
+  previewReady.value = preview !== null
   if (preview === null) return
   observer = new ResizeObserver(measure)
   observer.observe(stage)
@@ -194,7 +206,20 @@ function rebuild(): void {
   startPreview()
 }
 
-watch(current, rebuild, { flush: 'post' })
+function useCurrentView(): void {
+  const part = current.value
+  if (props.editable !== true || preview === null || part === null) return
+  emit('viewChange', { partId: part.id, view: preview.snapshot() })
+}
+
+function restoreDefaultView(): void {
+  const part = current.value
+  if (props.editable !== true || preview === null || part === null) return
+  preview.frameDefault()
+  emit('viewChange', { partId: part.id, view: null })
+}
+
+watch([current, () => props.editable], rebuild, { flush: 'post' })
 watch(() => props.values, paint)
 
 // ⚠ 不用 `immediate: true` 代替这一句：那一档是在 setup 里同步跑的，那时弹窗的
@@ -229,10 +254,40 @@ onBeforeUnmount(() => {
           @select="emit('select', $event)"
         />
         <div class="twin-part-modal__detail">
+          <div
+            v-if="editable && showModel"
+            class="twin-part-modal__view-actions"
+          >
+            <DtButton
+              size="sm"
+              variant="soft"
+              :disabled="!previewReady"
+              data-test="part-view-save"
+              @click="useCurrentView"
+            >
+              使用当前视角
+            </DtButton>
+            <DtButton
+              size="sm"
+              variant="ghost"
+              :disabled="!previewReady"
+              data-test="part-view-reset"
+              @click="restoreDefaultView"
+            >
+              恢复默认视角
+            </DtButton>
+            <p>应用到草稿后，保存场景生效</p>
+          </div>
           <section v-show="showModel" class="twin-part-modal__preview">
             <TwinPartSectionHead
               title="部件模型"
-              :hint="stageEmpty ? '' : '拖动旋转 · 滚轮缩放'"
+              :hint="
+                stageEmpty
+                  ? ''
+                  : editable
+                    ? '拖动旋转 · 右键平移 · 滚轮缩放'
+                    : '拖动旋转 · 滚轮缩放'
+              "
             />
             <div
               v-show="!stageEmpty"

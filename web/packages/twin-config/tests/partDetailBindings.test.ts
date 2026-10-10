@@ -89,6 +89,7 @@ describe('部件详情绑定行', () => {
 
     expect(twinRowsOfEntity(config, 'parts', 'b')).toEqual({
       partValues: [],
+      partEffectValues: [],
       partFieldValues: [1],
     })
   })

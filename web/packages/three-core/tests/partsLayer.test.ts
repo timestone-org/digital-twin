@@ -428,6 +428,218 @@ describe('状态染色', () => {
   })
 })
 
+describe('条件效果', () => {
+  const EFFECT = {
+    mode: 'point',
+    operator: 'eq',
+    threshold: 1,
+    pattern: 'blink',
+    color: '#00ff00',
+    blend: 1,
+    glow: 2,
+    periodMs: 1000,
+  }
+
+  function materialOf(mesh: THREE.Mesh): THREE.MeshStandardMaterial {
+    if (!(mesh.material instanceof THREE.MeshStandardMaterial)) {
+      throw new Error('缺少标准材质')
+    }
+    return mesh.material
+  }
+
+  it('开关量开启时闪烁，条件关闭或无值时恢复实时染色', () => {
+    const { root, inside, outside } = model()
+    const layer = new PartsLayer()
+    layer.build(
+      buildNodeIndex(root),
+      parts({
+        look: { blend: 1 },
+        tint: { stops: [{ equals: '7', color: '#0000ff' }] },
+        effect: EFFECT,
+      }),
+    )
+    layer.setValues({ p1: { value: 7 } })
+    layer.setEffectValues({ p1: { value: true } })
+    layer.applyAppearance()
+    const material = materialOf(inside)
+
+    expect(material.color.getHexString()).toBe('00ff00')
+    expect(materialOf(outside).color.getHexString()).toBe('ff0000')
+    layer.update(0.5)
+    expect(material.color.getHexString()).toBe('0000ff')
+    layer.update(0.5)
+    expect(material.color.getHexString()).toBe('00ff00')
+
+    layer.setEffectValues({ p1: { value: false } })
+    layer.update(0)
+    expect(material.color.getHexString()).toBe('0000ff')
+    layer.setEffectValues({ p1: { value: 1 } })
+    layer.update(0)
+    expect(material.color.getHexString()).toBe('00ff00')
+    layer.setEffectValues({})
+    layer.update(0)
+    expect(material.color.getHexString()).toBe('0000ff')
+    layer.dispose()
+  })
+
+  it('连续开启读数不重置闪烁相位，重新触发从亮相位开始', () => {
+    const { root, inside } = model()
+    const layer = new PartsLayer()
+    layer.build(buildNodeIndex(root), parts({ effect: EFFECT }))
+    layer.setEffectValues({ p1: { value: 1 } })
+    layer.applyAppearance()
+    layer.update(0.5)
+
+    layer.setEffectValues({ p1: { value: '1' } })
+    layer.update(0)
+
+    expect(materialOf(inside).color.getHexString()).toBe('ff0000')
+    layer.setEffectValues({ p1: { value: 0 } })
+    layer.update(0)
+    layer.setEffectValues({ p1: { value: 1 } })
+    layer.update(0)
+    expect(materialOf(inside).color.getHexString()).toBe('00ff00')
+    layer.dispose()
+  })
+
+  it('持续效果保留距离淡出，更新帧不打开隐藏对象', () => {
+    const { root, inside } = model()
+    const layer = new PartsLayer()
+    layer.build(
+      buildNodeIndex(root),
+      parts({
+        effect: { ...EFFECT, mode: 'always', pattern: 'steady' },
+        look: { opacity: 0.5 },
+        visibility: {
+          fade: {
+            at: { ref: 'orbit', value: 5 },
+            direction: 'above',
+            opacity: 0.4,
+          },
+        },
+      }),
+    )
+    layer.apply(context(50))
+    const holder = root.getObjectByName('pump')
+    if (holder === undefined) throw new Error('找不到部件')
+    holder.visible = false
+
+    layer.update(0.5)
+
+    expect(root.getObjectByName('pump')?.visible).toBe(false)
+    expect(materialOf(inside).opacity).toBeCloseTo(0.2)
+    expect(materialOf(inside).color.getHexString()).toBe('00ff00')
+    layer.applyAppearance()
+    layer.update(0.5)
+    expect(materialOf(inside).opacity).toBeCloseTo(0.5)
+    expect(root.getObjectByName('pump')?.visible).toBe(false)
+    layer.dispose()
+  })
+
+  it('效果未开启也先克隆材质，重建后恢复原始所有权', () => {
+    const { root, inside, shared } = model()
+    const layer = new PartsLayer()
+    const config = parts({ effect: EFFECT })
+    layer.build(buildNodeIndex(root), config)
+    expect(inside.material).not.toBe(shared)
+    layer.setEffectValues({ p1: { value: 1 } })
+    layer.applyAppearance()
+
+    layer.build(buildNodeIndex(root), config)
+    layer.setEffectValues({})
+    layer.applyAppearance()
+
+    expect(materialOf(inside).color.getHexString()).toBe('ff0000')
+    layer.dispose()
+    expect(inside.material).toBe(shared)
+  })
+
+  it('呼吸效果半周期恢复常态，全周期重新高亮', () => {
+    const { root, inside } = model()
+    const layer = new PartsLayer()
+    layer.build(
+      buildNodeIndex(root),
+      parts({ effect: { ...EFFECT, mode: 'always', pattern: 'pulse' } }),
+    )
+    layer.applyAppearance()
+    layer.update(0.25)
+
+    expect(materialOf(inside).color.r).toBeCloseTo(0.5)
+    expect(materialOf(inside).color.g).toBeCloseTo(0.5)
+    layer.update(0.25)
+    expect(materialOf(inside).color.getHexString()).toBe('ff0000')
+    layer.update(0.5)
+    expect(materialOf(inside).color.getHexString()).toBe('00ff00')
+    layer.dispose()
+  })
+
+  it('关闭效果保留常态材质，更新时不触发高亮', () => {
+    const { root, inside } = model()
+    const layer = new PartsLayer()
+    layer.build(
+      buildNodeIndex(root),
+      parts({ effect: { ...EFFECT, enabled: false, mode: 'always' } }),
+    )
+
+    layer.applyAppearance()
+    layer.update(0.25)
+
+    expect(materialOf(inside).color.getHexString()).toBe('ff0000')
+    expect(materialOf(inside).emissive.getHexString()).toBe('000000')
+    layer.dispose()
+  })
+
+  it('后建部件的材质优先，先建部件的闪烁不抢所有权', () => {
+    const { root, inside, shared } = model()
+    const layer = new PartsLayer()
+    const config = normalizeTwinConfig({
+      parts: [
+        { id: 'first', nodes: ['pump'], effect: { ...EFFECT, mode: 'always' } },
+        {
+          id: 'last',
+          nodes: ['pump'],
+          look: { color: '#0000ff', blend: 1, opacity: 0.5 },
+        },
+      ],
+    }).parts
+    layer.build(buildNodeIndex(root), config)
+    layer.applyAppearance()
+    const material = inside.material
+
+    layer.update(0.5)
+    layer.update(0.5)
+
+    expect(inside.material).toBe(material)
+    expect(materialOf(inside).color.getHexString()).toBe('0000ff')
+    expect(materialOf(inside).opacity).toBe(0.5)
+    layer.build(buildNodeIndex(root), [])
+    expect(inside.material).toBe(shared)
+    layer.dispose()
+  })
+
+  it('效果主题色从宿主解析，透明度和材质原件保持隔离', () => {
+    const { root, inside, shared } = model()
+    const host = document.createElement('div')
+    host.style.setProperty('--state-warning', '#00ff00')
+    document.body.append(host)
+    const layer = new PartsLayer(host)
+    layer.build(
+      buildNodeIndex(root),
+      parts({
+        effect: { ...EFFECT, mode: 'always', color: '--state-warning' },
+      }),
+    )
+
+    layer.applyAppearance()
+
+    expect(materialOf(inside).color.getHexString()).toBe('00ff00')
+    expect(shared.color.getHexString()).toBe('ff0000')
+    expect(shared.opacity).toBe(1)
+    layer.dispose()
+    host.remove()
+  })
+})
+
 describe('重建', () => {
   it('重叠透明部件只让最后一个部件持有排序，重建时还原所有资源', () => {
     const { root, inside, shared } = model()

@@ -26,6 +26,7 @@ import {
   EMPTY_FLOW_VALUES,
   EMPTY_PANEL_VALUES,
   EMPTY_PART_VALUES,
+  EMPTY_PART_EFFECT_VALUES,
   RoamTimeline,
   buildRoamSegments,
   defaultCameraOf,
@@ -168,6 +169,7 @@ const GROUND_NORMAL = new THREE.Vector3(0, 1, 0)
 // 宿主没喂实时值时的那一份：读数位置显示占位符，而不是拿旧值冒充
 const EMPTY_LAYER_VALUES: SceneLayerValues = {
   parts: EMPTY_PART_VALUES,
+  effectParts: EMPTY_PART_EFFECT_VALUES,
   anchors: EMPTY_ANCHOR_VALUES,
   arrows: EMPTY_ARROW_VALUES,
   panels: EMPTY_PANEL_VALUES,

@@ -22,6 +22,8 @@ import type {
 } from '@dt/twin-config'
 import {
   TWIN_PART_BINDING_KEY,
+  TWIN_PART_EFFECT_BINDING_KEY,
+  arrayRowFieldKey,
   flattenPartFields,
   partRowFieldKey,
   twinRowsOfEntity,
@@ -65,6 +67,7 @@ const emit = defineEmits<{
   cancelPick: []
   captureCamera: [string]
   capturePartView: [string]
+  editPartDetailView: [string]
   previewRoam: []
   stopRoamPreview: []
   'update:gizmoMode': [GizmoMode]
@@ -102,6 +105,22 @@ const partTintBound = computed(() => {
   const keys = new Set(props.bindings.map((item) => item.fieldKey))
   return (rows?.[TWIN_PART_BINDING_KEY] ?? []).some((row) =>
     keys.has(partRowFieldKey(row)),
+  )
+})
+
+/** 状态效果的点位绑定按它自己的文档序行号查找。 */
+const partEffectBound = computed(() => {
+  const current = part.value
+  if (
+    current === null ||
+    current.effect === null ||
+    current.effect === undefined
+  )
+    return false
+  const rows = twinRowsOfEntity(props.config, 'parts', current.id)
+  const keys = new Set(props.bindings.map((item) => item.fieldKey))
+  return (rows?.[TWIN_PART_EFFECT_BINDING_KEY] ?? []).some((row) =>
+    keys.has(arrayRowFieldKey(TWIN_PART_EFFECT_BINDING_KEY, row, 'value')),
   )
 })
 
@@ -205,10 +224,12 @@ function writeFlow(next: TwinFlowLink): void {
       :field-row-offset="partFieldRowOffset"
       :picking="picking"
       :tint-bound="partTintBound"
+      :effect-bound="partEffectBound"
       @update:model-value="writePart"
       @request-pick-node="emit('requestPick', 'node')"
       @cancel-pick="emit('cancelPick')"
       @capture-view="emit('capturePartView', part.id)"
+      @edit-detail-view="emit('editPartDetailView', part.id)"
       @select-part="emit('selectPart', $event)"
     />
     <AnchorInspector

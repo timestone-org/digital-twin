@@ -254,8 +254,15 @@ function flushPump<Body extends LoopBody>(
   for (const frame of reader.flush()) {
     if (isCancelled(input.signal)) return { kind: 'error' }
     calls = handle(frame.name, frame.data, sink, input) ?? calls
+    if (frame.name === 'turn.done') return { kind: 'done' }
+    if (frame.name === 'error') return { kind: 'error' }
   }
-  return calls === null ? { kind: 'done' } : { kind: 'pending', calls }
+  if (isCancelled(input.signal)) return { kind: 'error' }
+  if (calls !== null) return { kind: 'pending', calls }
+  sink.onError(
+    '助手事件流中断，未收到回合完成结果。已执行的操作不会自动重试；请检查连接后说一句「继续」。',
+  )
+  return { kind: 'error' }
 }
 
 function handle<Body extends LoopBody>(

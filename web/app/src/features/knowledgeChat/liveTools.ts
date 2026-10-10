@@ -1,5 +1,6 @@
 /** @fileoverview 点位工具的参数校验、真实配置解析与卡片回执。 */
 import type { AssistantToolCall } from '@dt/contracts'
+import { isCollectPointCode } from '@dt/contracts'
 import { getSource, listPoints } from '@/api/collect'
 import { BizError } from '@/api/client'
 import { searchCollectPoints } from '@/api/collectSearch'
@@ -9,8 +10,6 @@ export const POINT_QUERY_MAX_CHARS = 80
 export const SEARCH_POINTS = 'collect.search_points'
 export const WATCH_POINT = 'collect.watch_point'
 export const LIVE_TOOLS = [SEARCH_POINTS, WATCH_POINT] as const
-const NODE_KEY =
-  /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}:[A-Za-z0-9][A-Za-z0-9._-]{0,63}$/
 const SOURCE_ID =
   /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/
 
@@ -24,13 +23,26 @@ export interface LivePoint {
   unit: string | null
 }
 
+function pointIdentity(
+  nodeKey: string,
+): { sourceId: string; code: string } | null {
+  const separator = nodeKey.indexOf(':')
+  if (separator < 1) return null
+  const sourceId = nodeKey.slice(0, separator)
+  const code = nodeKey.slice(separator + 1)
+  return SOURCE_ID.test(sourceId) && isCollectPointCode(code)
+    ? { sourceId, code }
+    : null
+}
+
 /** 重新读取配置，点位身份只能精确匹配。 */
 export async function resolveLivePoint(
   nodeKey: string,
   signal?: AbortSignal,
 ): Promise<LivePoint> {
-  if (!NODE_KEY.test(nodeKey)) throw new Error('点位身份格式不正确，请重新查找')
-  const [sourceId = '', code = ''] = nodeKey.split(':')
+  const identity = pointIdentity(nodeKey)
+  if (identity === null) throw new Error('点位身份格式不正确，请重新查找')
+  const { sourceId, code } = identity
   const source = await getSource(sourceId, signal)
   signal?.throwIfAborted()
   requireSourceIdentity(source.id, sourceId)
@@ -126,16 +138,14 @@ function searchArguments(arguments_: Record<string, unknown>) {
 }
 
 function pointFromRecord(row: Record<string, unknown>): LivePoint | null {
-  if (
-    row.kind !== 'collect.live.v1' ||
-    typeof row.node_key !== 'string' ||
-    !NODE_KEY.test(row.node_key)
-  )
+  if (row.kind !== 'collect.live.v1' || typeof row.node_key !== 'string')
     return null
+  const identity = pointIdentity(row.node_key)
+  if (identity === null) return null
   if (typeof row.name !== 'string' || typeof row.source_name !== 'string')
     return null
   if (row.unit !== null && typeof row.unit !== 'string') return null
-  const source = receiptSource(row, row.node_key)
+  const source = receiptSource(row, identity.sourceId)
   if (source === null) return null
   return {
     kind: 'collect.live.v1',
@@ -150,14 +160,9 @@ function pointFromRecord(row: Record<string, unknown>): LivePoint | null {
 
 function receiptSource(
   row: Record<string, unknown>,
-  nodeKey: string,
+  sourceId: string,
 ): { id: string; protocol: string | null } | null {
-  const sourceId = nodeKey.split(':')[0]
-  if (
-    sourceId === undefined ||
-    (row.source_id !== undefined && row.source_id !== sourceId)
-  )
-    return null
+  if (row.source_id !== undefined && row.source_id !== sourceId) return null
   const protocol = row.source_protocol
   if (
     protocol !== undefined &&

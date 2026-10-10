@@ -4,7 +4,11 @@
  * ⚠ 只预填展示口径，**不碰取数**——点位仍要自己绑，预设猜不出该接哪个点。
  * ⚠ 量程是**行业常见档**不是真实量程：现场的表跨度差得远，配完要按本项目改。
  */
-import type { TwinPanelFieldKind } from '@dt/twin-config'
+import {
+  DEFAULT_PANEL_STATE,
+  type TwinPanelFieldKind,
+  type TwinPanelState,
+} from '@dt/twin-config'
 
 /** 一种常用测点的展示口径。 */
 export interface PanelFieldPreset {
@@ -17,6 +21,7 @@ export interface PanelFieldPreset {
   kind: TwinPanelFieldKind
   min: number
   max: number
+  state?: TwinPanelState
 }
 
 /**
@@ -125,11 +130,38 @@ export const PANEL_FIELD_PRESETS: readonly PanelFieldPreset[] = [
   },
   {
     id: 'status',
-    label: '状态',
+    label: '运行状态',
     unit: '',
     decimals: null,
-    kind: 'dot',
+    kind: 'status',
     min: 0,
     max: 1,
+    state: { ...DEFAULT_PANEL_STATE, onLabel: '运行', offLabel: '停止' },
+  },
+  {
+    id: 'switch',
+    label: '开关状态',
+    unit: '',
+    decimals: null,
+    kind: 'switch',
+    min: 0,
+    max: 1,
+    state: { ...DEFAULT_PANEL_STATE },
+  },
+  {
+    id: 'fault',
+    label: '故障状态',
+    unit: '',
+    decimals: null,
+    kind: 'status',
+    min: 0,
+    max: 1,
+    state: {
+      ...DEFAULT_PANEL_STATE,
+      onLabel: '故障',
+      offLabel: '正常',
+      onTone: 'danger',
+      offTone: 'success',
+    },
   },
 ]

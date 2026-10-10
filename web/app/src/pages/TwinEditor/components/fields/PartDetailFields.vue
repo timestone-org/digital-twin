@@ -19,6 +19,7 @@ import {
   type TwinPart,
 } from '@dt/twin-config'
 import {
+  DtButton,
   DtColorInput,
   DtField,
   DtInput,
@@ -40,7 +41,10 @@ const props = defineProps<{
   rowOffset: number
 }>()
 
-const emit = defineEmits<{ 'update:modelValue': [TwinPartDetail] }>()
+const emit = defineEmits<{
+  'update:modelValue': [TwinPartDetail]
+  editView: []
+}>()
 
 const COLUMN_RANGE = { min: 1, max: 4, step: 1 }
 // ⚠ 两条区间必须与 `normalizePartDetail` 的夹取区间一致：给得出、收得回，
@@ -125,6 +129,36 @@ function writeFields(fields: TwinPanelField[]): void {
     <p class="text-xs text-text-disabled">
       弹窗里那块 3D 只装这一个部件，自己一套场景，能单独转着看。
     </p>
+    <div v-if="detail.showModel" class="flex flex-col gap-2">
+      <DtField label="弹窗初始视角" size="sm">
+        <p class="text-xs text-text-secondary" role="status">
+          {{ detail.view === null ? '默认视角' : '已配置独立视角' }}
+        </p>
+      </DtField>
+      <p class="text-xs text-text-disabled">
+        在独立窗口里拖动旋转、滚轮缩放，使用当前视角后保存场景即可。
+      </p>
+      <DtButton
+        variant="soft"
+        size="sm"
+        icon="eye"
+        block
+        data-test="part-detail-edit-view"
+        @click="emit('editView')"
+      >
+        编辑弹窗视角
+      </DtButton>
+      <DtButton
+        v-if="detail.view !== null"
+        variant="ghost"
+        size="sm"
+        block
+        data-test="part-detail-clear-view"
+        @click="write({ view: null })"
+      >
+        恢复默认视角
+      </DtButton>
+    </div>
     <DtSwitch
       v-if="detail.showModel"
       :model-value="detail.autoRotate"

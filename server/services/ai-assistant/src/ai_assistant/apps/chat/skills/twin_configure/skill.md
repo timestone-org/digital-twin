@@ -7,8 +7,9 @@
 
 1. 明确目标范围：“这个部件”按 `selected` 定位；按名称、编号或类别描述的目标
    按下方“自行解析多个目标”查找，不受当前选中项限制。
-2. 类别先用 `twin.list_folders` 查，再将同一 `section` 的 `folder_id` 原样交给
-   `twin.list_entities`；单例用 `twin.read_config`，实体详情用 `twin.read_entity`。
+2. 按名称、编号查找或未限定文件夹时，直接用 `twin.list_entities`；用户限定文件夹时
+   先用 `twin.list_folders` 查，再将同一 `section` 的 `folder_id` 原样交给实体列表。
+   单例用 `twin.read_config`，实体详情用 `twin.read_entity`。
 3. 用 `twin.patch_config` 只给要改的字段。它会深合并对象、整段替换数组，并返回
    归一化后的真实配置；范围外数字可能被夹取，非法值可能回落缺省，以回执为准。
 4. 每批修改后调用 `twin.diagnose`。修完阻断配置含义的问题再结束。
@@ -49,9 +50,12 @@
   `schema_version`，每项是 `{section,folder_id,name,item_count}`；文件夹身份是
   `section + folder_id`，不是一段可凭名字构造的文本。
 - `twin.list_entities` 的 `section` 只可取 `parts`、`anchors`、`cameras`、
-  `panels`、`arrows`、`flows`。需要筛选时，`folder_id` 只能逐字复制
-  `twin.list_folders` 中同一 `section` 的结果；不能填文件夹名字、实体 id、素材 id
-  或 `asset:<uuid>`。名片的 `id` 可直接传给详情与修改工具，所属目录为
+  `panels`、`arrows`、`flows`。省略 `folder_id`、传空字符串或 `null` 均表示不限定
+  文件夹，包含根目录与各文件夹中的实体；例如按名称查根目录里的空压机，直接调用
+  `{"section":"parts","keyword":"空压机"}`。空文件夹列表也继续这样查实体。
+  非空 `folder_id` 只能逐字复制 `twin.list_folders` 中同一 `section` 的结果；
+  根目录实体沿用未限定查询，不构造 `root` 或 `__unfiled__` 之类的目录 id。
+  名片的 `id` 可直接传给详情与修改工具，所属目录为
   `{section,folder_id,name}` 或 `null`；先筛选再分页，每页最多 20 条。
   文件夹目录可按 `section`、`keyword` 筛选；实体可按 `folder_id`、`keyword` 筛选。
   保持筛选和 `limit` 不变，用 `next_page` 继续；按上方目标范围决定何时结束。

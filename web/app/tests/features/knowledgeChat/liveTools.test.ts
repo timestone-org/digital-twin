@@ -31,6 +31,41 @@ beforeEach(() => {
 })
 afterEach(() => vi.resetAllMocks())
 
+const SPECIAL_POINT_CODES = [
+  'RS_HYGS_DLZX_1#PRESSUREPUMP_FREQ',
+  'ns=2;s=RS_HYGS_DLZX_1#PRESSUREPUMP_FREQ',
+  'Plant/Pump[1]?frequency=actual',
+  '#pressure',
+  '../x',
+]
+
+it.each(SPECIAL_POINT_CODES)(
+  'resolves a point with its complete special-character code: %s',
+  async (code) => {
+    const nodeKey = `${SOURCE_ID}:${code}`
+    vi.mocked(collect.listPoints).mockResolvedValue({
+      ...POINT_PAGE,
+      items: [{ ...POINT, code, node_key: nodeKey }],
+    })
+    expect(await resolveLivePoint(nodeKey)).toEqual({
+      ...LIVE_POINT,
+      node_key: nodeKey,
+    })
+    expect(collect.listPoints).toHaveBeenCalledWith(
+      { sourceId: SOURCE_ID, q: code, page: 1, size: 200 },
+      undefined,
+    )
+  },
+)
+
+it.each(SPECIAL_POINT_CODES)(
+  'restores a card receipt with its complete special-character code: %s',
+  (code) => {
+    const receipt = { ...LIVE_POINT, node_key: `${SOURCE_ID}:${code}` }
+    expect(parseLivePoint(JSON.stringify(receipt))).toEqual(receipt)
+  },
+)
+
 it('opens a real point without forwarding endpoint or credentials', async () => {
   const raw = await runLiveTool({
     call_id: '1',
@@ -59,13 +94,19 @@ it('opens a PLC point with its source identity and protocol', async () => {
   })
   expect(raw).not.toContain('private-device')
 })
-it.each(['', '../../internal', `${SOURCE_ID}:../x`])(
-  'rejects invalid point identity %s before HTTP',
-  async (key) => {
-    await expect(resolveLivePoint(key)).rejects.toThrow('身份')
-    expect(collect.getSource).not.toHaveBeenCalled()
-  },
-)
+it.each([
+  '',
+  '../../internal',
+  `${SOURCE_ID}:`,
+  `${SOURCE_ID}:temperature:raw`,
+  `${SOURCE_ID}:with space`,
+  `${SOURCE_ID}:with\nnewline`,
+  `${SOURCE_ID}:temperature\u007f`,
+  `${SOURCE_ID}:${'x'.repeat(65)}`,
+])('rejects invalid point identity %s before HTTP', async (key) => {
+  await expect(resolveLivePoint(key)).rejects.toThrow('身份')
+  expect(collect.getSource).not.toHaveBeenCalled()
+})
 it('does not confuse a keyword candidate with the exact identity', async () => {
   vi.mocked(collect.listPoints).mockResolvedValue({
     ...POINT_PAGE,
@@ -202,6 +243,9 @@ it.each([
   '{',
   JSON.stringify({ ...LIVE_POINT, unit: 12 }),
   JSON.stringify({ ...LIVE_POINT, node_key: '../x' }),
+  JSON.stringify({ ...LIVE_POINT, node_key: `${SOURCE_ID}:with space` }),
+  JSON.stringify({ ...LIVE_POINT, node_key: `${SOURCE_ID}:temperature:raw` }),
+  JSON.stringify({ ...LIVE_POINT, node_key: `${SOURCE_ID}:temperature\u007f` }),
 ])('rejects malformed card receipts', (value) => {
   expect(parseLivePoint(value)).toBeNull()
 })

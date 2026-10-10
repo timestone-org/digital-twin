@@ -445,6 +445,11 @@ export {
   COLLECT_READ_MODES,
   COLLECT_SOURCE_STATES,
 } from './collect'
+export {
+  COLLECT_POINT_CODE_MAX_LENGTH,
+  COLLECT_POINT_CODE_PATTERN,
+  isCollectPointCode,
+} from './collectPointCode'
 export type {
   ClientAction,
   ClientMessage,

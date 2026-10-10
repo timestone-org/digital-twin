@@ -38,6 +38,29 @@ describe('预设清单', () => {
   })
 })
 
+describe('布局保留', () => {
+  it.each(TWIN_PANEL_PRESETS)('套用 $label 保留单列和自适应尺寸', (preset) => {
+    const applied: TwinPanelStyle = { ...baseStyle(), ...preset.patch }
+
+    expect(applied).toMatchObject({ columns: 1, width: 0, height: 0 })
+  })
+
+  it.each(TWIN_PANEL_PRESETS)(
+    '套用 $label 保留用户设置的列数和尺寸',
+    (preset) => {
+      const current: TwinPanelStyle = {
+        ...baseStyle(),
+        columns: 3,
+        width: 360,
+        height: 180,
+      }
+      const applied: TwinPanelStyle = { ...current, ...preset.patch }
+
+      expect(applied).toMatchObject({ columns: 3, width: 360, height: 180 })
+    },
+  )
+})
+
 describe('命中判定', () => {
   it('套上一套预设后能认出是哪一套', () => {
     const preset = TWIN_PANEL_PRESETS[1]

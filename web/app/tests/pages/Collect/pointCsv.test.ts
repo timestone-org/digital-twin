@@ -72,6 +72,34 @@ describe('表头', () => {
 })
 
 describe('逐行解析', () => {
+  it.each([
+    'RS_HYGS_DLZX_1#PRESSUREPUMP_FREQ',
+    'ns=2;s=RS_HYGS_DLZX_1#PRESSUREPUMP_FREQ',
+    '_Pump[1]/Pressure+Setpoint',
+  ])('保留包含现场符号的点位编码 %s 与寻址串', (code) => {
+    const address = 'ns=2;s=RS_HYGS_DLZX_1#PRESSUREPUMP_FREQ'
+    const row = parsePointCsv(csv(`${code},压力泵频率,${address}`)).rows[0]
+    expect(row?.error).toBeNull()
+    expect(row?.item).toMatchObject({ code, address, name: '压力泵频率' })
+  })
+
+  it('包含逗号和双引号的编码按 CSV 转义原样解析', () => {
+    const row = parsePointCsv(
+      csv('"Pump[1],""Pressure""",压力,ns=2;s=Pressure'),
+    ).rows[0]
+    expect(row?.item?.code).toBe('Pump[1],"Pressure"')
+    expect(row?.error).toBeNull()
+  })
+
+  it.each(['pump:freq', 'pump freq', 'pump\u0000freq', 'a'.repeat(65)])(
+    '在提交前拒绝不合规的点位编码 %s',
+    (code) => {
+      const row = parsePointCsv(csv(`${code},频率,ns=2;s=Freq`)).rows[0]
+      expect(row?.item).toBeNull()
+      expect(row?.error).toContain('点位编码')
+    },
+  )
+
   it('缺省列走默认值，不逼用户填满一整行', () => {
     const item = parsePointCsv('code,name,address\nt1,温度,ns=2;s=T1').rows[0]
       ?.item

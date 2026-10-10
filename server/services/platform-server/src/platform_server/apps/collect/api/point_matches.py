@@ -27,7 +27,7 @@ async def list_matches(
     _viewer: Annotated[CallerContext, Depends(require(COLLECT_VIEW))],
     q: Annotated[str, Query(min_length=1, max_length=300, pattern=r".*\S.*")],
     source_id: uuid.UUID | None = None,
-    limit: Annotated[int, Query(ge=1, le=12)] = 6,
+    limit: Annotated[int, Query(ge=1, le=100)] = 6,
 ) -> ApiResponse[PointMatchesOut]:
     """搜索可绑定点位并回显降级状态。
 

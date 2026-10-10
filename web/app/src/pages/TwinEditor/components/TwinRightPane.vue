@@ -34,6 +34,7 @@ const emit = defineEmits<{
   cancelPick: []
   captureCamera: [string]
   capturePartView: [string]
+  editPartDetailView: [string]
   previewRoam: []
   stopRoamPreview: []
   'update:gizmoMode': [GizmoMode]
@@ -92,6 +93,7 @@ function onTab(value: string): void {
       @cancel-pick="emit('cancelPick')"
       @capture-camera="emit('captureCamera', $event)"
       @capture-part-view="emit('capturePartView', $event)"
+      @edit-part-detail-view="emit('editPartDetailView', $event)"
       @preview-roam="emit('previewRoam')"
       @stop-roam-preview="emit('stopRoamPreview')"
       @update:gizmo-mode="emit('update:gizmoMode', $event)"

@@ -224,6 +224,67 @@ describe('Shift 连续选择部件节点', () => {
 })
 
 describe('取当前机位', () => {
+  it('独立弹窗机位直接保存，不读取全局主视口，保留详情和点击动作', () => {
+    const { ops, patchConfig, handle } = setup()
+    ops.viewportRef.value = null
+
+    ops.savePartDetailView({ partId: 'part-1', view: pose() })
+
+    expect(patchConfig).toHaveBeenCalledWith({
+      parts: [
+        expect.objectContaining({
+          id: 'part-1',
+          click: CONFIG.parts[0]?.click,
+          detail: { ...CONFIG.parts[0]?.detail, view: pose() },
+        }),
+      ],
+    })
+    expect(handle.snapshot).not.toHaveBeenCalled()
+  })
+
+  it('部件不存在时不写入详情取景', () => {
+    const { ops, patchConfig } = setup()
+
+    ops.savePartDetailView({ partId: 'missing', view: pose() })
+
+    expect(patchConfig).not.toHaveBeenCalled()
+  })
+
+  it('装配子件的视角写入子件，页面选中的父件保持原样', () => {
+    const { ops, patchConfig, config } = setup()
+    config.value = normalizeTwinConfig({
+      parts: [{ id: 'part-1' }, { id: 'child', parentId: 'part-1' }],
+    })
+    const root = config.value.parts[0]
+
+    ops.savePartDetailView({ partId: 'child', view: pose() })
+
+    expect(patchConfig).toHaveBeenCalledWith({
+      parts: [
+        root,
+        expect.objectContaining({
+          id: 'child',
+          detail: expect.objectContaining({ view: pose() }),
+        }),
+      ],
+    })
+  })
+
+  it('独立弹窗恢复默认只清除对应部件视角', () => {
+    const { ops, patchConfig } = setup()
+
+    ops.savePartDetailView({ partId: 'part-1', view: null })
+
+    expect(patchConfig).toHaveBeenCalledWith({
+      parts: [
+        expect.objectContaining({
+          detail: { ...CONFIG.parts[0]?.detail, view: null },
+          click: CONFIG.parts[0]?.click,
+        }),
+      ],
+    })
+  })
+
   it('存进视点', () => {
     const { ops, patchConfig } = setup()
 

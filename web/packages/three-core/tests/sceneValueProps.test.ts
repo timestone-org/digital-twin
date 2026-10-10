@@ -10,6 +10,7 @@ import {
   EMPTY_FLOW_VALUES,
   EMPTY_PANEL_VALUES,
   EMPTY_PART_VALUES,
+  EMPTY_PART_EFFECT_VALUES,
 } from '@dt/twin-config'
 import { describe, expect, it } from 'vitest'
 
@@ -19,6 +20,7 @@ describe('实时值 prop 的补齐', () => {
   it('一路都没给时六路各自是那一份稳定空引用', () => {
     expect(sceneValuesOf({})).toEqual({
       parts: EMPTY_PART_VALUES,
+      effectParts: EMPTY_PART_EFFECT_VALUES,
       anchors: EMPTY_ANCHOR_VALUES,
       arrows: EMPTY_ARROW_VALUES,
       panels: EMPTY_PANEL_VALUES,
@@ -28,6 +30,7 @@ describe('实时值 prop 的补齐', () => {
 
   it('两次调用给回同一批空引用，不每次新建对象', () => {
     expect(sceneValuesOf({}).parts).toBe(sceneValuesOf({}).parts)
+    expect(sceneValuesOf({}).effectParts).toBe(sceneValuesOf({}).effectParts)
   })
 
   it('给了的那一路原样带过去', () => {

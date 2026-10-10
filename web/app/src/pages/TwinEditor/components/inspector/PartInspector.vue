@@ -7,7 +7,7 @@
  * 静默地什么都不再命中。所以拿得到节点清单时必须把对不上的那几条标出来。
  * ⚠ 「从属」一节摆在名字与关联节点之间：它讲的是这个部件在装配里的位置，
  * 属于身份，不属于外观。
- * ⚠ 部件占**两个绑定槽**：状态染色一行，详情字段每个字段一行，行号各数各的。
+ * ⚠ 染色、状态效果和详情字段分别占绑定槽，行号各数各的。
  */
 import type {
   TwinCamera,
@@ -15,6 +15,7 @@ import type {
   TwinPart,
   TwinPartClick,
   TwinPartDetail,
+  TwinPartEffect,
   TwinPartLook,
   TwinPartTint,
   TwinVisibilityRule,
@@ -26,6 +27,7 @@ import NodePicker from '../fields/NodePicker.vue'
 import PartClickFields from '../fields/PartClickFields.vue'
 import PartParentFields from '../fields/PartParentFields.vue'
 import PartDetailFields from '../fields/PartDetailFields.vue'
+import PartEffectFields from '../fields/PartEffectFields.vue'
 import PartLookFields from '../fields/PartLookFields.vue'
 import PartTintFields from '../fields/PartTintFields.vue'
 import VisibilityFields from '../fields/VisibilityFields.vue'
@@ -44,6 +46,8 @@ const props = defineProps<{
   picking: boolean
   /** 这个部件在绑定页上已经挑好点位了吗；染色面板据它提醒。 */
   tintBound: boolean
+  /** 状态效果独立绑定槽中的点位是否已配置。 */
+  effectBound: boolean
 }>()
 
 const emit = defineEmits<{
@@ -51,6 +55,7 @@ const emit = defineEmits<{
   requestPickNode: []
   cancelPick: []
   captureView: []
+  editDetailView: []
   /** 跳到另一个部件。 */
   selectPart: [partId: string]
 }>()
@@ -69,6 +74,10 @@ function writeLook(look: TwinPartLook): void {
 
 function writeTint(tint: TwinPartTint | null): void {
   write({ tint })
+}
+
+function writeEffect(effect: TwinPartEffect | null): void {
+  write({ effect })
 }
 
 function writeClick(click: TwinPartClick): void {
@@ -159,6 +168,14 @@ function togglePick(): void {
       />
     </InspectorSection>
 
+    <InspectorSection title="状态效果">
+      <PartEffectFields
+        :model-value="modelValue.effect ?? null"
+        :bound="effectBound"
+        @update:model-value="writeEffect"
+      />
+    </InspectorSection>
+
     <InspectorSection title="显隐">
       <VisibilityFields
         :model-value="modelValue.visibility"
@@ -182,6 +199,7 @@ function togglePick(): void {
         :part="modelValue"
         :row-offset="fieldRowOffset"
         @update:model-value="writeDetail"
+        @edit-view="emit('editDetailView')"
       />
     </InspectorSection>
   </div>

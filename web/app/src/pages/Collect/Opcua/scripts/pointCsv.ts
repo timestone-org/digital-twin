@@ -19,6 +19,7 @@ import type {
   CollectPointItemInput,
 } from '@dt/contracts'
 import { COLLECT_DATA_TYPES, COLLECT_MIN_INTERVAL_MS } from '@dt/contracts'
+import { pointCodeProblem } from './pointCode'
 
 /** UTF-8 BOM。写出去让 Excel 认出编码，读进来先剥掉。 */
 const BOM = '\uFEFF'
@@ -189,11 +190,8 @@ function parseRow(
 
 function buildItem(values: Map<ColumnKey, string>): CollectPointItemInput {
   const code = required(values, 'code', '点位编码')
-  if (!/^[A-Za-z0-9][A-Za-z0-9._-]*$/.test(code)) {
-    throw new Error(`点位编码「${code}」只能用字母、数字与 . _ -`)
-  }
-  // ⚠ 编码里不许有冒号：点位身份按第一个冒号切分，带冒号的编码会让身份解析
-  // 出一个不存在的数据源（docs/COLLECT_DESIGN.md §2）
+  const problem = pointCodeProblem(code)
+  if (problem !== null) throw new Error(`点位编码「${code}」：${problem}`)
   const unit = values.get('unit') ?? ''
   return {
     code,

@@ -130,11 +130,7 @@ function listEntities(
   const config = requireConfig(deps)
   const section = entitySectionArg(call)
   const folders = foldersOf(config, section)
-  const selectedFolder = selectFolder(
-    folders,
-    section,
-    optionalText(call, 'folder_id'),
-  )
+  const selectedFolder = selectFolder(folders, section, folderFilterArg(call))
   const items = config[section].filter(
     (item) =>
       selectedFolder === null || selectedFolder.itemIds.includes(item.id),
@@ -185,7 +181,9 @@ function selectFolder(
   if (folderId === undefined) return null
   const folder = folders.find((item) => item.id === folderId)
   if (folder === undefined)
-    throw new Error(`${section} 里找不到文件夹 ${folderId}`)
+    throw new Error(
+      `${section} 里找不到文件夹 ${folderId}；不限定文件夹（含根目录）时请省略 folder_id`,
+    )
   return folder
 }
 
@@ -359,6 +357,12 @@ function optionalText(
   if (typeof value !== 'string' || value === '')
     throw new Error(`${call.name} 的 ${name} 必须是非空文本`)
   return value
+}
+
+function folderFilterArg(call: AssistantToolCall): string | undefined {
+  const value = call.arguments['folder_id']
+  if (value === null || value === '') return undefined
+  return optionalText(call, 'folder_id')
 }
 
 function requiredText(call: AssistantToolCall, name: string): string {

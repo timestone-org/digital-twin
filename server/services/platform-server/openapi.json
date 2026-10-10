@@ -15707,7 +15707,7 @@
           "code": {
             "maxLength": 64,
             "minLength": 1,
-            "pattern": "^[A-Za-z0-9][A-Za-z0-9._-]*$",
+            "pattern": "^[\\x21-\\x39\\x3b-\\x7e]+$",
             "title": "Code",
             "type": "string"
           },
@@ -23656,7 +23656,7 @@
             "required": false,
             "schema": {
               "default": 6,
-              "maximum": 12,
+              "maximum": 100,
               "minimum": 1,
               "title": "Limit",
               "type": "integer"

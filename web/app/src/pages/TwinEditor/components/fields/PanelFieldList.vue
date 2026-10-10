@@ -11,6 +11,7 @@ import {
   type TwinPanel,
   type TwinPanelField,
   flattenPanelFields,
+  panelKindUsesState,
 } from '@dt/twin-config'
 import {
   DtDropdownMenu,
@@ -53,7 +54,12 @@ const rows = computed(() =>
     valueKey: entry.valueKey,
     index,
     row: (props.rowOffset ?? 0) + index + 1,
+    usesState: panelKindUsesState(entry.field.kind),
   })),
+)
+
+const hasFormattedFields = computed(() =>
+  rows.value.some((row) => !row.usesState),
 )
 
 const rowLabel = computed(() =>
@@ -120,6 +126,7 @@ function addPreset(item: DtMenuItem): void {
       min: preset.min,
       max: preset.max,
       levels: [],
+      ...(preset.state === undefined ? {} : { state: { ...preset.state } }),
     },
   ])
 }
@@ -240,23 +247,25 @@ function toggleDecimals(index: number, on: boolean): void {
           size="sm"
           @update:model-value="patch(row.index, { label: $event })"
         />
-        <DtInput
-          :model-value="row.field.prefix"
-          aria-label="数值前缀"
-          placeholder="前缀"
-          size="sm"
-          @update:model-value="patch(row.index, { prefix: $event })"
-        />
-        <DtInput
-          :model-value="row.field.unit"
-          aria-label="单位"
-          placeholder="单位"
-          size="sm"
-          @update:model-value="patch(row.index, { unit: $event })"
-        />
+        <template v-if="!row.usesState">
+          <DtInput
+            :model-value="row.field.prefix"
+            aria-label="数值前缀"
+            placeholder="前缀"
+            size="sm"
+            @update:model-value="patch(row.index, { prefix: $event })"
+          />
+          <DtInput
+            :model-value="row.field.unit"
+            aria-label="单位"
+            placeholder="单位"
+            size="sm"
+            @update:model-value="patch(row.index, { unit: $event })"
+          />
+        </template>
       </div>
 
-      <div class="flex items-center gap-1.5">
+      <div v-if="!row.usesState" class="flex items-center gap-1.5">
         <DtSwitch
           :model-value="row.field.decimals !== null"
           aria-label="指定小数位"
@@ -280,6 +289,7 @@ function toggleDecimals(index: number, on: boolean): void {
       </div>
 
       <DtInput
+        v-if="!row.usesState"
         :model-value="row.field.staticText"
         aria-label="静态文本"
         placeholder="静态文本（没有实时值时显示）"
@@ -295,7 +305,7 @@ function toggleDecimals(index: number, on: boolean): void {
       size="inline"
       :title="`这个${owner}上还没有字段，画出来是一张空卡片。`"
     />
-    <p v-else class="text-xs text-text-disabled">
+    <p v-else-if="hasFormattedFields" class="text-xs text-text-disabled">
       静态文本纯展示、不进求值，与「常量绑定」不是一回事。
     </p>
 

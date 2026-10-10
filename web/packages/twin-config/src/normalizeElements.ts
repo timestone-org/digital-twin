@@ -13,6 +13,7 @@ import {
   ORIGIN,
 } from './normalizeShared'
 import { normalizeVisibility } from './normalizeRules'
+import { normalizePanelState, panelKindUsesState } from './panelState'
 import {
   finiteOr,
   isRecord,
@@ -121,6 +122,7 @@ export function normalizePanelField(
   index: number,
 ): TwinPanelField | null {
   if (!isRecord(raw)) return null
+  const kind = oneOf(raw.kind, TWIN_PANEL_FIELD_KINDS, 'text')
   return {
     key: entityId(raw.key, 'field', index),
     label: trimmedString(raw.label),
@@ -128,10 +130,13 @@ export function normalizePanelField(
     prefix: trimmedString(raw.prefix),
     decimals: decimalsOf(raw.decimals),
     staticText: trimmedString(raw.staticText),
-    kind: oneOf(raw.kind, TWIN_PANEL_FIELD_KINDS, 'text'),
+    kind,
     min: finiteOr(raw.min, 0),
     max: finiteOr(raw.max, DEFAULT_RANGE_MAX),
     levels: normalizeLevels(raw.levels),
+    ...(panelKindUsesState(kind) || isRecord(raw.state)
+      ? { state: normalizePanelState(raw.state) }
+      : {}),
   }
 }
 

@@ -171,3 +171,31 @@ def test_twin_folder_tools_keep_their_inputs_unambiguous() -> None:
     assert entities["required"] == ["section"]
     assert detail["required"] == ["section", "id"]
     assert "twin.list_folders" in properties["folder_id"]["description"]
+
+
+def test_twin_unrestricted_folder_inputs_include_root_entities() -> None:
+    """目录筛选可省略、留空或为 null，模型仍能读取根目录实体。"""
+    spec = next(
+        spec
+        for spec in ClientTools().specs()
+        if spec.name == "twin.list_entities"
+    )
+    folder = spec.parameters["properties"]["folder_id"]
+
+    assert folder["type"] == ["string", "null"]
+    assert "folder_id" not in spec.parameters["required"]
+    assert "minLength" not in folder
+    assert "根目录" in spec.description
+    for meaning in ("省略", "空字符串", "null", "不限定文件夹"):
+        assert meaning in folder["description"]
+
+
+def test_twin_entity_identity_remains_required_text() -> None:
+    """目录的空值兼容不放宽实体类型与稳定身份。"""
+    specs = {spec.name: spec for spec in twin.TWIN_SPECS}
+    entities = specs["twin.list_entities"].parameters
+    detail = specs["twin.read_entity"].parameters
+
+    assert entities["properties"]["section"]["type"] == "string"
+    assert detail["properties"]["id"]["type"] == "string"
+    assert detail["required"] == ["section", "id"]

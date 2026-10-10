@@ -221,6 +221,15 @@ describe('往上转发的动作', () => {
     expect(wrapper.emitted('capturePartView')?.[0]).toEqual(['pt2'])
   })
 
+  it('独立视角编辑事件携带当前部件 id，和远距取景分别转发', async () => {
+    const wrapper = mountInspector({ kind: 'parts', id: 'pt2' })
+
+    await wrapper.get('[data-test="part-detail-edit-view"]').trigger('click')
+
+    expect(wrapper.emitted('editPartDetailView')?.[0]).toEqual(['pt2'])
+    expect(wrapper.emitted('capturePartView')).toBeUndefined()
+  })
+
   it('部件检查器拿得到全部部件，从属一节才列得出候选', () => {
     const wrapper = mountInspector({ kind: 'parts', id: 'pt1' })
 
@@ -317,5 +326,112 @@ describe('部件染色的「有没有挑点位」', () => {
     const wrapper = mountWith('plain', ['partValues[0].value'])
 
     expect(wrapper.findComponent(PartInspector).props('tintBound')).toBe(false)
+  })
+})
+
+describe('状态效果独立绑定与写回', () => {
+  const EFFECTS = normalizeTwinConfig({
+    parts: [
+      { id: 'plain', name: '外壳' },
+      { id: 'tinted', name: '温度染色', tint: { mode: 'stops' } },
+      { id: 'paused', name: '暂停效果', effect: { enabled: false } },
+      {
+        id: 'always',
+        name: '始终显示',
+        tint: { mode: 'stops' },
+        effect: { mode: 'always' },
+      },
+      { id: 'point', name: '开关控制', effect: { threshold: 0 } },
+    ],
+  })
+
+  function mountWith(id: string, fieldKeys: readonly string[]) {
+    return mount(TwinInspector, {
+      props: {
+        config: EFFECTS,
+        selection: { kind: 'parts', id },
+        modelNodes: [],
+        picking: false,
+        roamPreviewing: false,
+        gizmoMode: 'translate',
+        frameOrigin: ORIGIN,
+        bindings: fieldKeys.map((fieldKey) => ({
+          id: fieldKey,
+          nodeId: 'n1',
+          fieldKey,
+          sourceKind: 'opcua' as const,
+          nodeKey: null,
+          staticValueJson: null,
+          computeJson: null,
+          transformJson: null,
+          detailJson: null,
+          createdAt: '',
+          updatedAt: '',
+        })),
+      },
+    })
+  }
+
+  it('效果行跳过未配置部件，暂停和始终触发仍占原行', () => {
+    const paused = mountWith('paused', ['partEffectValues[0].value'])
+    const always = mountWith('always', ['partEffectValues[1].value'])
+    const point = mountWith('point', ['partEffectValues[2].value'])
+
+    expect(paused.findComponent(PartInspector).props('effectBound')).toBe(true)
+    expect(always.findComponent(PartInspector).props('effectBound')).toBe(true)
+    expect(point.findComponent(PartInspector).props('effectBound')).toBe(true)
+    expect(point.text()).not.toContain('尚未绑定状态点位')
+  })
+
+  it('染色槽和其他部件的效果槽不能当作当前部件的绑定', () => {
+    const wrapper = mountWith('point', [
+      'partValues[2].value',
+      'partEffectValues[1].value',
+    ])
+
+    expect(wrapper.findComponent(PartInspector).props('effectBound')).toBe(
+      false,
+    )
+    expect(wrapper.text()).toContain('尚未绑定状态点位')
+  })
+
+  it('没有效果规则时不认为已绑定', () => {
+    const wrapper = mountWith('plain', ['partEffectValues[0].value'])
+
+    expect(wrapper.findComponent(PartInspector).props('effectBound')).toBe(
+      false,
+    )
+  })
+
+  it('状态染色和状态效果可分别检测同一部件的绑定', () => {
+    const wrapper = mountWith('always', [
+      'partValues[1].value',
+      'partEffectValues[1].value',
+    ])
+
+    expect(wrapper.findComponent(PartInspector).props()).toMatchObject({
+      tintBound: true,
+      effectBound: true,
+    })
+  })
+
+  it('从真实预设按钮写回当前部件效果，其余部件和染色原样保留', async () => {
+    const wrapper = mountWith('always', ['partEffectValues[1].value'])
+    const preset = wrapper
+      .findAll('button')
+      .find((button) => button.text() === '故障闪烁')
+    if (!preset) throw new Error('没有故障预设')
+
+    await preset.trigger('click')
+
+    const parts = lastPatch(wrapper).parts
+    expect(parts).toHaveLength(5)
+    expect(parts?.find((part) => part.id === 'always')).toMatchObject({
+      effect: { mode: 'always', pattern: 'blink', color: '--state-danger' },
+      tint: EFFECTS.parts.find((part) => part.id === 'always')?.tint,
+    })
+    expect(parts?.filter((part) => part.id !== 'always')).toEqual(
+      EFFECTS.parts.filter((part) => part.id !== 'always'),
+    )
   })
 })

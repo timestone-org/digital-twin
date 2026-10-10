@@ -30,8 +30,7 @@ Utc = Annotated[
 Label = Annotated[
     str, StringConstraints(strip_whitespace=True, min_length=1, max_length=64)
 ]
-# 数据源与点位的编码：它是**身份**，人和 Agent 都按它指认，故限成 ASCII 标识串。
-# ⚠ 不许含冒号：node_key 按第一个冒号切分（docs/COLLECT_DESIGN.md §2）
+# 数据源编码
 Code = Annotated[
     str,
     StringConstraints(
@@ -39,6 +38,16 @@ Code = Annotated[
         min_length=1,
         max_length=64,
         pattern=r"^[A-Za-z0-9][A-Za-z0-9._-]*$",
+    ),
+]
+# ⚠ 点位编码保留现场符号，冒号是 node_key 分隔符（docs/COLLECT_DESIGN.md §2）。
+PointCode = Annotated[
+    str,
+    StringConstraints(
+        strip_whitespace=True,
+        min_length=1,
+        max_length=64,
+        pattern=r"^[\x21-\x39\x3b-\x7e]+$",
     ),
 ]
 # 协议寻址串。对平台不透明，只有对应驱动解析它

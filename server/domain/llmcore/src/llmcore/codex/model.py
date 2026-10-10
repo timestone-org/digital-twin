@@ -12,7 +12,8 @@
 from typing import Any
 
 from langchain_core.language_models import BaseChatModel
-from langchain_openai.chat_models import codex as upstream
+
+from llmcore.codex.streaming import CodexChatModel
 
 
 def build_codex_model(
@@ -40,7 +41,7 @@ def build_codex_model(
         # 与 store=false 配套：不带它的话，多轮之间模型看不见自己上一轮想过什么
         "include": ["reasoning.encrypted_content"],
     }
-    return upstream._ChatOpenAICodex(  # noqa: SLF001  # pyright: ignore[reportPrivateUsage]  # 理由：见文件头
+    return CodexChatModel(
         model=model,
         timeout=timeout_s,
         max_retries=0,

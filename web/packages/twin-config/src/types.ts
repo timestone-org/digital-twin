@@ -297,7 +297,7 @@ export interface TwinPartClick {
  *
  * ⚠ 弹窗里那块 3D **只装这一个部件**：它自己起一套场景与相机，把部件的对象克隆
  * 一份摆进去，与画布上那棵模型树互不干扰。所以「只看这一个」不需要去动主场景。
- * ⚠ 字段用的是信息牌那一套 `TwinPanelField`，八种画法与阈值档全通用；但它走的是
+ * ⚠ 字段用的是信息牌那一套 `TwinPanelField`，画法与阈值档全通用；但它走的是
  * **另一个绑定槽**（`partFieldValues`），与信息牌的行互不干扰。
  * ⚠ 字段一律占绑定行，与 `near` 配成什么无关：按动作过滤会让用户在下拉里翻一下
  * 就把这个部件已经绑好的点位整片丢掉。配了字段却不弹窗由诊断报出来。
@@ -312,6 +312,8 @@ export interface TwinPartDetail {
   showModel: boolean
   /** 模型在弹窗里自转。 */
   autoRotate: boolean
+  /** 弹窗模型的世界坐标取景快照；null = 自动框住部件。 */
+  view: TwinFocusView | null
   /** 模型那一块的高度 px。 */
   modelHeight: number
   /** 弹窗宽度 px。 */
@@ -324,11 +326,23 @@ export interface TwinPartDetail {
   columns: number
 }
 
-/**
- * 部件：模型内一组节点的唯一可寻址单元，显隐、外观与染色都指向它。
- * ⚠ `nodes` 是模型文件里的对象名，本包看不见模型——模型里改了名字，
- * 这个部件就静默地什么都不再命中。
- */
+export const TWIN_PART_EFFECT_MODES = ['point', 'always'] as const
+export const TWIN_PART_EFFECT_PATTERNS = ['steady', 'pulse', 'blink'] as const
+
+/** 部件临时状态效果，触发条件与单动画控制共用比较口径。 */
+export interface TwinPartEffect {
+  enabled: boolean
+  mode: (typeof TWIN_PART_EFFECT_MODES)[number]
+  operator: TwinAnimationControl['operator']
+  threshold: number
+  pattern: (typeof TWIN_PART_EFFECT_PATTERNS)[number]
+  color: string
+  blend: number
+  glow: number
+  periodMs: number
+}
+
+/** 部件的模型节点、外观、状态与点击配置。 */
 export interface TwinPart {
   id: string
   name: string
@@ -346,6 +360,8 @@ export interface TwinPart {
   look: TwinPartLook
   /** 按实时值取色；null = 不取数，也不占绑定行。 */
   tint: TwinPartTint | null
+  /** 临时状态效果；关闭保留规则和独立绑定。 */
+  effect?: TwinPartEffect | null
   clickDistance: TwinClickDistanceRule
   /** 远近两档点击各做什么。 */
   click: TwinPartClick
@@ -471,6 +487,8 @@ export interface TwinPanelStyle {
  * - `bars` 迷你柱群，与趋势线同一份序列，看节拍比看走势清楚
  * - `dot` 状态灯，配阈值档时最有用
  * - `delta` 读数带一个与上一次相比的升降角标
+ * - `status` 带状态灯的文案徽标
+ * - `switch` 只读开关指示，未知状态居中显示
  */
 export const TWIN_PANEL_FIELD_KINDS = [
   'text',
@@ -481,6 +499,8 @@ export const TWIN_PANEL_FIELD_KINDS = [
   'bars',
   'dot',
   'delta',
+  'status',
+  'switch',
 ] as const
 export type TwinPanelFieldKind = (typeof TWIN_PANEL_FIELD_KINDS)[number]
 
@@ -492,6 +512,21 @@ export const TWIN_PANEL_TONES = [
   'danger',
 ] as const
 export type TwinPanelTone = (typeof TWIN_PANEL_TONES)[number]
+
+/** 开关状态色轴。 */
+export const TWIN_PANEL_STATE_TONES = ['neutral', ...TWIN_PANEL_TONES] as const
+export type TwinPanelStateTone = (typeof TWIN_PANEL_STATE_TONES)[number]
+
+/** 开关两态的取值、文案与配色。 */
+export interface TwinPanelState {
+  onValue: string
+  offValue: string
+  onLabel: string
+  offLabel: string
+  unknownLabel: string
+  onTone: TwinPanelStateTone
+  offTone: TwinPanelStateTone
+}
 
 /**
  * 一个阈值档：读数 ≥ `at` 就进这一档。
@@ -511,7 +546,7 @@ export interface TwinPanelLevel {
  * ⚠ 值来自数组绑定，按**扁平化后的文档序**对齐：第 i 行喂给「把所有信息牌的
  * 字段按顺序摊平之后」的第 i 个字段。插一个字段会让它之后的每一行整体后移一格，
  * 这正是编辑器改完必须重派绑定行的原因。
- * ⚠ 换画法**不改行数**：八种画法都只吃一个值，所以既有绑定不会因为把某一行
+ * ⚠ 换画法**不改行数**：所有画法都只吃一个值，所以既有绑定不会因为把某一行
  * 改成仪表盘而整体错位。
  */
 export interface TwinPanelField {
@@ -532,6 +567,8 @@ export interface TwinPanelField {
   max: number
   /** 阈值档；空数组 = 不按读数换色，一律用牌的主题色。 */
   levels: TwinPanelLevel[]
+  /** 状态徽标与开关指示的映射；缺省使用 1/0。 */
+  state?: TwinPanelState
 }
 
 /**
@@ -741,6 +778,9 @@ export interface TwinPartValue {
 
 /** 部件实时值，按部件 id 索引。 */
 export type TwinPartValues = Readonly<Record<string, TwinPartValue>>
+
+/** 状态效果的独立实时值，按部件 id 索引。 */
+export type TwinPartEffectValues = TwinPartValues
 
 /** 一个锚点的实时值。 */
 export interface TwinAnchorValue {

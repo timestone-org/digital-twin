@@ -228,7 +228,9 @@ async def test_description_roundtrips_and_explicit_null_clears(
         {"q": ""},
         {"q": " "},
         {"q": "x" * 301},
-        {"q": "温度", "limit": 13},
+        {"q": "温度", "limit": 101},
+        {"q": "温度", "limit": 0},
+        {"q": "温度", "limit": -1},
         {"q": "温度", "source_id": "../x"},
     ],
 )

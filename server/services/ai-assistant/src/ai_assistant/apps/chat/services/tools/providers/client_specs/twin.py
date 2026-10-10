@@ -21,8 +21,9 @@ TWIN_SPECS: tuple[ToolSpec, ...] = (
             "按页读取当前未保存三维孪生文件夹，可按section和keyword筛选。"
             "返回 schema_version，以及 folders；每个目录项是 "
             "{section,folder_id,name,item_count}。文件夹的稳定身份是 "
-            "section 与 folder_id 的组合。问题涉及『某一类』时必须先调用"
-            "本工具，不能从文件夹名字猜 id。"
+            "section 与 folder_id 的组合。用户限定文件夹时先调用本工具取得 id；"
+            "按实体名称或编号可直接调用 twin.list_entities。目录为空时仍可"
+            "查询实体，根目录没有需要复制的文件夹 id。"
         ),
         parameters=object_schema(
             {
@@ -43,6 +44,7 @@ TWIN_SPECS: tuple[ToolSpec, ...] = (
             "{section,folder_id,name} 或 null。先筛选再分页；"
             "需要更多时保持筛选与limit不变，按next_page继续。"
             "不依赖界面选中；查询所有匹配目标时翻至has_more=false。"
+            "未限定文件夹时包含根目录实体，按名称或编号查询可直接调用本工具。"
         ),
         parameters=object_schema(
             {
@@ -55,10 +57,14 @@ TWIN_SPECS: tuple[ToolSpec, ...] = (
                     "enum": ENTITY_SECTIONS,
                     "description": "实体节；只接受这六类，不接受单例配置节",
                 },
-                "folder_id": string_schema(
-                    "只能逐字复制 twin.list_folders 返回中同一 section 的 "
-                    "folder_id；不能填文件夹名字、实体 id 或 asset id"
-                ),
+                "folder_id": {
+                    "type": ["string", "null"],
+                    "description": (
+                        "省略、空字符串或 null 表示不限定文件夹，包含根目录与各"
+                        "文件夹中的实体；非空值只能逐字复制 twin.list_folders "
+                        "返回中同一 section 的 folder_id。根目录无需构造 id"
+                    ),
+                },
             },
             ["section"],
         ),

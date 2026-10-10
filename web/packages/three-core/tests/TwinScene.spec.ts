@@ -3,7 +3,11 @@
  * 取不到模型地址就说取不到、快速切模型时慢的那次结果被丢弃且资源被释放、
  * 卸载后 RAF 与 ResizeObserver 都停掉、渲染上下文被丢。
  */
-import { normalizeTwinConfig, type TwinConfig } from '@dt/twin-config'
+import {
+  normalizeTwinConfig,
+  type TwinConfig,
+  type TwinFocusView,
+} from '@dt/twin-config'
 import { flushPromises, mount } from '@vue/test-utils'
 import * as THREE from 'three'
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
@@ -84,6 +88,30 @@ function mountScene(props: Record<string, unknown> = {}) {
     props: { config: config(), ...props },
     attachTo: document.body,
   })
+}
+
+function clickDetailButton(selector: string): void {
+  const button = document.querySelector<HTMLButtonElement>(selector)
+  if (button === null) throw new Error(`没有详情按钮 ${selector}`)
+  button.click()
+}
+
+function detailViewPayload(
+  wrapper: ReturnType<typeof mountScene>,
+  index: number,
+): unknown {
+  return wrapper.emitted('partDetailView')?.[index]?.[0]
+}
+
+function detailViewUpdate(
+  wrapper: ReturnType<typeof mountScene>,
+  index: number,
+): TwinFocusView {
+  const view = normalizeTwinConfig({
+    parts: [{ detail: detailViewPayload(wrapper, index) }],
+  }).parts[0]?.detail.view
+  if (view == null) throw new Error('没有重新应用的取景')
+  return view
 }
 
 beforeEach(() => {
@@ -639,6 +667,44 @@ describe('外部取景', () => {
     }
     return last
   }
+
+  it('首次隔离预览加载后仍使用配置机位，不被默认框选覆盖', async () => {
+    const pending = deferred<TwinModelAsset>()
+    seam.loadTwinModel.mockReturnValue(pending.promise)
+    let nextFrame: FrameRequestCallback = () => undefined
+    vi.spyOn(globalThis, 'requestAnimationFrame').mockImplementation(
+      (callback) => {
+        nextFrame = callback
+        return 1
+      },
+    )
+    vi.spyOn(globalThis, 'cancelAnimationFrame').mockImplementation(
+      () => undefined,
+    )
+    const wrapper = mountScene({
+      previewNodes: ['pump'],
+      focusView: { position: [3, 4, 5], target: [1, 1, 1], fov: 30 },
+    })
+    await flushPromises()
+    expect(wrapper.text()).toContain('模型加载中')
+
+    pending.settle(assetOf(fakeModel()))
+    await flushPromises()
+    for (let timeMs = 100; timeMs <= 900; timeMs += 100) nextFrame(timeMs)
+
+    expect(wrapper.text()).not.toContain('模型加载中')
+    const camera = cameraOf()
+    expect(camera.position.distanceTo(new THREE.Vector3(3, 4, 5))).toBeLessThan(
+      1e-6,
+    )
+    expect(
+      camera
+        .getWorldDirection(new THREE.Vector3())
+        .distanceTo(new THREE.Vector3(-2, -3, -4).normalize()),
+    ).toBeLessThan(1e-6)
+    expect(camera.fov).toBe(30)
+    wrapper.unmount()
+  })
 
   it('给了取景就把机位、注视点与视野一次搬过去', async () => {
     const wrapper = mountScene()
@@ -1228,6 +1294,94 @@ it('配置动作可打开真实详情，近距预演发事件，缺失分界给�
   expect(document.body.querySelector('[role="dialog"]')?.textContent).toContain(
     '泵',
   )
+  wrapper.unmount()
+})
+
+it('视角编辑动作打开真实独立预览，并把保存与恢复默认转发给编辑器', async () => {
+  seam.createWebGLRenderer
+    .mockReturnValueOnce(renderer)
+    .mockImplementation(() => createHeadlessRenderer())
+  const wrapper = mountScene({
+    previewAction: { sequence: 1, partId: 'part-pump', kind: 'detail-edit' },
+  })
+  await flushPromises()
+  const save = document.querySelector<HTMLButtonElement>(
+    '[data-test="part-view-save"]',
+  )
+  expect(save?.disabled).toBe(false)
+  save?.click()
+
+  expect(wrapper.emitted('partDetailView')?.[0]).toEqual([
+    {
+      partId: 'part-pump',
+      view: expect.objectContaining({
+        position: expect.any(Array),
+        target: [0, 0, 0],
+        fov: 45,
+      }),
+    },
+  ])
+  document
+    .querySelector<HTMLButtonElement>('[data-test="part-view-reset"]')
+    ?.click()
+  expect(wrapper.emitted('partDetailView')?.[1]).toEqual([
+    { partId: 'part-pump', view: null },
+  ])
+  expect(wrapper.emitted('previewResult')?.flat().join(' ')).toContain(
+    '已打开部件视角编辑',
+  )
+  document
+    .querySelector<HTMLButtonElement>('.dt-modal button[aria-label="关闭"]')
+    ?.click()
+  expect(wrapper.emitted('partDetailClose')).toEqual([[]])
+  wrapper.unmount()
+})
+
+it('应用子件取景后配置重建仍停留当前子件，并保留已应用的独立视角', async () => {
+  seam.createWebGLRenderer
+    .mockReturnValueOnce(renderer)
+    .mockImplementation(() => createHeadlessRenderer())
+  const current = config({
+    parts: [
+      { id: 'unit', name: '机组' },
+      { id: 'part-pump', name: '电机', parentId: 'unit', nodes: ['pump'] },
+    ],
+  })
+  const wrapper = mountScene({
+    config: current,
+    previewAction: { sequence: 1, partId: 'unit', kind: 'detail-edit' },
+  })
+  await flushPromises()
+  clickDetailButton('[data-test="assembly-row-part-pump"]')
+  await flushPromises()
+  clickDetailButton('[data-test="part-view-save"]')
+  const first = detailViewUpdate(wrapper, 0)
+  expect(detailViewPayload(wrapper, 0)).toMatchObject({ partId: 'part-pump' })
+  const saved = normalizeTwinConfig({
+    ...current,
+    parts: current.parts.map((part) => ({
+      ...part,
+      detail: {
+        ...part.detail,
+        view: part.id === 'part-pump' ? first : part.detail.view,
+      },
+    })),
+  })
+
+  await wrapper.setProps({ config: saved })
+  await flushPromises()
+  expect(document.querySelector('.dt-modal__title')?.textContent).toBe('电机')
+  clickDetailButton('[data-test="part-view-save"]')
+
+  expect(detailViewPayload(wrapper, 1)).toMatchObject({ partId: 'part-pump' })
+  const actualView = detailViewUpdate(wrapper, 1)
+  expect(
+    new THREE.Vector3(...actualView.position).distanceTo(
+      new THREE.Vector3(...first.position),
+    ),
+  ).toBeLessThan(1e-6)
+  expect(actualView.target).toEqual(first.target)
+  expect(actualView.fov).toBe(first.fov)
   wrapper.unmount()
 })
 it('按当前视距测试沿用点击距离门禁', async () => {

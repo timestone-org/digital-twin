@@ -10,7 +10,7 @@ import {
   type TwinPanel,
   type TwinPanelField,
 } from '@dt/twin-config'
-import { mount } from '@vue/test-utils'
+import { flushPromises, mount } from '@vue/test-utils'
 import { describe, expect, it } from 'vitest'
 
 import PanelFieldList from '@/pages/TwinEditor/components/fields/PanelFieldList.vue'
@@ -85,6 +85,24 @@ function rowButton(wrapper: Wrapper, label: string, index: number) {
   const found = wrapper.findAll(`button[aria-label="${label}"]`)[index]
   if (!found) throw new Error(`未找到第 ${index} 个「${label}」`)
   return found
+}
+
+async function pickPreset(wrapper: Wrapper, label: string): Promise<void> {
+  await wrapper
+    .get('[data-test="panel-field-presets"] button[aria-haspopup="menu"]')
+    .trigger('click')
+  const item = [...document.body.querySelectorAll('[role="menuitem"]')].find(
+    (entry) => entry.textContent?.trim() === label,
+  )
+  if (item === undefined) throw new Error(`缺少常用测点：${label}`)
+  item.dispatchEvent(new MouseEvent('click', { bubbles: true }))
+  await flushPromises()
+}
+
+function lastWritten(wrapper: Wrapper): TwinPanelField[] {
+  const event = wrapper.emitted<[TwinPanelField[]]>('update:fields')?.at(-1)
+  if (event === undefined) throw new Error('没有写回字段')
+  return event[0]
 }
 
 describe('行号', () => {
@@ -236,5 +254,146 @@ describe('看不见的坑写在面板上', () => {
     const wrapper = mountList(panelOf([]))
 
     expect(wrapper.text()).toContain('空卡片')
+  })
+})
+
+describe('状态测点预设', () => {
+  it.each([
+    {
+      label: '运行状态',
+      kind: 'status',
+      onLabel: '运行',
+      offLabel: '停止',
+      onTone: 'success',
+      offTone: 'neutral',
+    },
+    {
+      label: '开关状态',
+      kind: 'switch',
+      onLabel: '开启',
+      offLabel: '关闭',
+      onTone: 'success',
+      offTone: 'neutral',
+    },
+    {
+      label: '故障状态',
+      kind: 'status',
+      onLabel: '故障',
+      offLabel: '正常',
+      onTone: 'danger',
+      offTone: 'success',
+    },
+  ])(
+    '选择$label立即生成对应的状态字段',
+    async ({ label, kind, onLabel, offLabel, onTone, offTone }) => {
+      const wrapper = mountList(panelOf([]))
+
+      await pickPreset(wrapper, label)
+
+      expect(lastWritten(wrapper)[0]).toMatchObject({
+        label,
+        kind,
+        state: {
+          onValue: '1',
+          offValue: '0',
+          onLabel,
+          offLabel,
+          unknownLabel: '未知',
+          onTone,
+          offTone,
+        },
+      })
+      wrapper.unmount()
+    },
+  )
+
+  it('重复添加的状态测点可分别配置，编辑一项保留另一项', async () => {
+    const wrapper = mountList(panelOf([]))
+    await pickPreset(wrapper, '运行状态')
+    await wrapper.setProps({ panel: panelOf(lastWritten(wrapper)) })
+    await pickPreset(wrapper, '运行状态')
+    await wrapper.setProps({ panel: panelOf(lastWritten(wrapper)) })
+
+    await wrapper.get('input[aria-label="开启文案"]').setValue('主机运行')
+
+    const fields = lastWritten(wrapper)
+    expect(fields[0]?.state?.onLabel).toBe('主机运行')
+    expect(fields[1]?.state?.onLabel).toBe('运行')
+    wrapper.unmount()
+  })
+})
+
+describe('状态画法的有效配置', () => {
+  it.each(['status', 'switch'] as const)(
+    '%s仅展示字段标识、画法与状态配置',
+    (kind) => {
+      const wrapper = mountList(panelOf([fieldOf('run', { kind })]))
+
+      expect(wrapper.find('input[aria-label="字段键"]').exists()).toBe(true)
+      expect(wrapper.find('input[aria-label="标签"]').exists()).toBe(true)
+      expect(wrapper.find('button[aria-label="画法"]').exists()).toBe(true)
+      expect(wrapper.find('input[aria-label="开启值"]').exists()).toBe(true)
+      expect(wrapper.find('input[aria-label="数值前缀"]').exists()).toBe(false)
+      expect(wrapper.find('input[aria-label="单位"]').exists()).toBe(false)
+      expect(wrapper.find('button[aria-label="指定小数位"]').exists()).toBe(
+        false,
+      )
+      expect(wrapper.find('input[aria-label="静态文本"]').exists()).toBe(false)
+      expect(wrapper.text()).not.toContain('静态文本纯展示')
+      wrapper.unmount()
+    },
+  )
+
+  it('切回文本恢复原有格式配置与静态文本', async () => {
+    const wrapper = mountList(
+      panelOf([
+        fieldOf('run', {
+          kind: 'status',
+          prefix: '≈',
+          unit: 'kW',
+          decimals: 2,
+          staticText: '备用',
+        }),
+      ]),
+    )
+    expect(wrapper.find('input[aria-label="单位"]').exists()).toBe(false)
+    await wrapper.get('button[aria-label="画法"]').trigger('click')
+    const option = [...document.querySelectorAll('[role="option"]')].find(
+      (item) => item.textContent?.trim() === '文本',
+    )
+    if (option === undefined) throw new Error('缺少文本画法')
+    option.dispatchEvent(new MouseEvent('click', { bubbles: true }))
+    await flushPromises()
+    await wrapper.setProps({ panel: panelOf(lastWritten(wrapper)) })
+
+    expect(
+      wrapper.get<HTMLInputElement>('input[aria-label="数值前缀"]').element
+        .value,
+    ).toBe('≈')
+    expect(
+      wrapper.get<HTMLInputElement>('input[aria-label="单位"]').element.value,
+    ).toBe('kW')
+    expect(
+      wrapper.get<HTMLInputElement>('input[aria-label="小数位"]').element.value,
+    ).toBe('2')
+    expect(
+      wrapper.get<HTMLInputElement>('input[aria-label="静态文本"]').element
+        .value,
+    ).toBe('备用')
+    expect(wrapper.text()).toContain('静态文本纯展示')
+    wrapper.unmount()
+  })
+
+  it('混合字段只为普通字段展示数值格式和静态文本说明', () => {
+    const wrapper = mountList(
+      panelOf([fieldOf('run', { kind: 'switch' }), fieldOf('power')]),
+    )
+
+    expect(wrapper.findAll('input[aria-label="单位"]')).toHaveLength(1)
+    expect(wrapper.findAll('input[aria-label="数值前缀"]')).toHaveLength(1)
+    expect(wrapper.findAll('input[aria-label="静态文本"]')).toHaveLength(1)
+    expect(wrapper.findAll('button[aria-label="指定小数位"]')).toHaveLength(1)
+    expect(wrapper.text()).toContain('静态文本纯展示')
+    wrapper.unmount()
   })
 })

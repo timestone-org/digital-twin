@@ -39,4 +39,51 @@ describe('预设清单', () => {
     expect(temp?.unit).toBe('℃')
     expect(temp?.decimals).toBe(1)
   })
+
+  it.each([
+    {
+      id: 'status',
+      kind: 'status',
+      onLabel: '运行',
+      offLabel: '停止',
+      onTone: 'success',
+      offTone: 'neutral',
+    },
+    {
+      id: 'switch',
+      kind: 'switch',
+      onLabel: '开启',
+      offLabel: '关闭',
+      onTone: 'success',
+      offTone: 'neutral',
+    },
+    {
+      id: 'fault',
+      kind: 'status',
+      onLabel: '故障',
+      offLabel: '正常',
+      onTone: 'danger',
+      offTone: 'success',
+    },
+  ])(
+    '$id预设带有完整状态映射',
+    ({ id, kind, onLabel, offLabel, onTone, offTone }) => {
+      const preset = PANEL_FIELD_PRESETS.find((item) => item.id === id)
+
+      expect(preset).toMatchObject({
+        kind,
+        unit: '',
+        decimals: null,
+        state: {
+          onValue: '1',
+          offValue: '0',
+          onLabel,
+          offLabel,
+          unknownLabel: '未知',
+          onTone,
+          offTone,
+        },
+      })
+    },
+  )
 })

@@ -36,8 +36,11 @@ import {
   COLLECT_DATA_TYPES,
   COLLECT_MIN_INTERVAL_MS,
   COLLECT_POINT_BATCH_MAX,
+  COLLECT_POINT_CODE_MAX_LENGTH,
+  COLLECT_POINT_CODE_PATTERN,
   COLLECT_PROTOCOLS,
   COLLECT_READ_MODES,
+  isCollectPointCode,
 } from '@dt/contracts'
 
 interface OpenApiSchema {
@@ -279,5 +282,40 @@ describe('两处前后端各存一份的数字', () => {
     expect(constraintOf('PointItemIn', 'sampling_interval_ms', 'minimum')).toBe(
       COLLECT_MIN_INTERVAL_MS,
     )
+  })
+})
+
+describe('点位编码的前后端约束一致', () => {
+  it('共享点位编码字符集与长度，不放宽数据源编码', () => {
+    expect(constraintOf('PointItemIn', 'code', 'pattern')).toBe(
+      COLLECT_POINT_CODE_PATTERN.source,
+    )
+    expect(constraintOf('PointItemIn', 'code', 'minLength')).toBe(1)
+    expect(constraintOf('PointItemIn', 'code', 'maxLength')).toBe(
+      COLLECT_POINT_CODE_MAX_LENGTH,
+    )
+    expect(constraintOf('SourceCreateIn', 'code', 'pattern')).toBe(
+      '^[A-Za-z0-9][A-Za-z0-9._-]*$',
+    )
+  })
+
+  it('接受可见 ASCII 符号，排除冒号与控制字符', () => {
+    for (let value = 0; value < 128; value += 1) {
+      const code = String.fromCharCode(value)
+      expect(isCollectPointCode(code)).toBe(
+        value >= 33 && value <= 126 && value !== 58,
+      )
+    }
+  })
+
+  it.each(['', '温度点', 'pump:freq', 'pump freq', 'a'.repeat(65)])(
+    '拒绝非 ASCII、空白、冒号和超长编码 %s',
+    (code) => {
+      expect(isCollectPointCode(code)).toBe(false)
+    },
+  )
+
+  it('允许 64 个字符的点位编码', () => {
+    expect(isCollectPointCode('#'.repeat(64))).toBe(true)
   })
 })

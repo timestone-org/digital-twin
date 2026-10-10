@@ -1,7 +1,7 @@
 /**
  * @fileoverview 信息牌的整套外观预设：外观那三组有十几个开关，逐个试出一副协调的
  * 样子很费劲，预设把「一整套」变成一次点击。
- * ⚠ 预设只覆盖它列出的键，没列的原样留着——用户调过的宽度不该被换个风格抹掉。
+ * ⚠ 预设保留配色、列数与尺寸，切换外观只调整风格和装饰。
  */
 import type { TwinPanelStyle } from '@dt/twin-config'
 
@@ -69,11 +69,10 @@ export const TWIN_PANEL_PRESETS: readonly TwinPanelPreset[] = [
   {
     id: 'mini-tag',
     label: '小标签',
-    hint: '宽度自适应的小字标签，适合标很多点',
+    hint: '紧凑小字标签，适合标很多点',
     patch: {
       variant: 'tag',
       orient: 'top',
-      width: 0,
       density: 'compact',
       fontScale: 0.85,
       scan: false,
@@ -90,9 +89,7 @@ export const TWIN_PANEL_PRESETS: readonly TwinPanelPreset[] = [
     patch: {
       variant: 'precision',
       orient: 'top',
-      width: 260,
       density: 'normal',
-      columns: 2,
       scan: true,
       corners: true,
       grid: true,
@@ -107,9 +104,7 @@ export const TWIN_PANEL_PRESETS: readonly TwinPanelPreset[] = [
     patch: {
       variant: 'forge',
       orient: 'right',
-      width: 240,
       density: 'normal',
-      columns: 1,
       scan: false,
       corners: false,
       grid: true,
@@ -124,9 +119,7 @@ export const TWIN_PANEL_PRESETS: readonly TwinPanelPreset[] = [
     patch: {
       variant: 'matrix',
       orient: 'top',
-      width: 250,
       density: 'compact',
-      columns: 2,
       scan: true,
       corners: true,
       grid: false,
@@ -137,14 +130,11 @@ export const TWIN_PANEL_PRESETS: readonly TwinPanelPreset[] = [
   {
     id: 'command-wall',
     label: '指挥大屏',
-    hint: '宽体两列 + 满装饰，一张牌顶一块副屏',
+    hint: '宽松版式配完整装饰，适合重点设备监控',
     patch: {
       variant: 'precision',
       orient: 'center',
-      width: 420,
-      height: 220,
       density: 'loose',
-      columns: 2,
       fontScale: 1.1,
       scan: true,
       corners: true,

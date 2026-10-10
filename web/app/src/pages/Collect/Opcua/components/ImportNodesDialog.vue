@@ -128,8 +128,9 @@ function confirm(): void {
   >
     <div class="flex flex-col gap-3">
       <DtNotice v-if="problems.size > 0" intent="warning" icon="alert-triangle">
-        有 {{ problems.size }} 行的编码要改。编码是点位的身份，只能用字母、
-        数字与 . _ -；中文名已按拼音推了一个，可以直接改。
+        有 {{ problems.size }} 行的编码要改。编码支持 #、=、; 等英文符号，最多
+        64
+        个字符，不能含空白、控制字符或冒号；中文名已按拼音推了一个，可以直接改。
       </DtNotice>
 
       <p class="m-0 text-sm text-text-secondary">

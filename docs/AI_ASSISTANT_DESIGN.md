@@ -94,6 +94,15 @@ END——那一步没人执行；而那坨尖括号原样成了给用户的答�
 `turn.done` / `error`。两侧的一致由
 `web/app/tests/contract/assistant-shapes.contract.spec.ts` 对着 `events.py` 锁死。
 
+浏览器只在收到 `turn.done` 时认定回合完成；收到 `client_tool.request` 后结束流是正常待续。
+其余正常 EOF 均提示事件流中断，末帧 `error` 同样停止，不自动重发结果未知的操作。
+用户主动取消不显示断流错误。
+
+订阅模型的 Responses 流同时核对 `output_item.done` 和响应终态，终态 `output` 缺项时
+保留已经完成的输出项。工具只在收到完整响应终态后统一结算，完整参数与调用身份必须一致，
+重复完成事件不重复执行；缺少终态或响应未完成时不执行工具。正文与思考以已流出内容为前缀
+补齐缺失部分，避免仅在完成事件返回的内容被误判为空答复。
+
 ⚠ **`langchain-openai` 会丢掉思考过程**：它明说自己只认官方 OpenAI 规范，
 第三方端点加的 `reasoning_content` 一律不提取。`llm/reasoning.py` 覆写它的一个
 私有接缝把那一格捡回来——这是本服务唯一一处踩在库的私有 API 上，因为再往上一层
@@ -158,7 +167,7 @@ END——那一步没人执行；而那坨尖括号原样成了给用户的答�
 专属提示词。快照走第六个 SSE 事件 `plan`（整份下发），前端渲染成逐项打勾的清单。
 
 - `turn.done` 到达而计划未完时，**前端**代用户催一句「按计划继续」，最多 3 次
-  （`turnRunner.MAX_PLAN_NUDGES`）；到顶交还给人。催那句以「（自动继续）」开头
+  （`turnRunner.MAX_PLAN_NUDGES`）；到顶显示尚未完成的项目及继续方式，再交还给人。催那句以「（自动继续）」开头
   落库为用户消息，回放时按界面说明渲染。
 - 布局/外观类计划的收尾项固定是「截图自检」：`dashboard.capture` 看过图、
   不满意就把修正项补进计划，看过才许收尾（compose 技能正文）。
@@ -192,8 +201,11 @@ END——那一步没人执行；而那坨尖括号原样成了给用户的答�
 
 六类实体的目录、名片与详情分成三个无歧义工具。`twin.list_folders` 按分类和关键词分页读取
 目录，每项用 `{section,folder_id,name,item_count}` 表达完整身份；
-`twin.list_entities` 只接受六个实体 `section`，可选的 `folder_id` 必须逐字复制同一
-`section` 的目录结果，返回名片、`applied_folder_id` 与截断标记；
+`twin.list_entities` 只接受六个实体 `section`；省略 `folder_id`、传空字符串或 `null`
+均表示不限定文件夹，包含根目录与各文件夹中的实体。非空 `folder_id` 必须逐字复制同一
+`section` 的目录结果；回执保留 `schema_version=2`，返回名片、`applied_folder_id`
+与截断标记。未限定文件夹时 `applied_folder_id=null`，根目录实体的名片 `folder=null`。
+按名称或编号查询时可直接调用实体列表；空文件夹目录不代表没有实体，也无需构造根目录 id；
 `twin.read_entity` 要求实体 `section + id`，`twin.read_config` 只读三个单例。
 筛选发生在每页 20 条名片上限之前，仍保持实体文档序；文件夹只是展示分组，不等于部件
 的 `parentId` 装配层级，也不改变数组绑定的行号。三个新工具名同时承担页面能力版本

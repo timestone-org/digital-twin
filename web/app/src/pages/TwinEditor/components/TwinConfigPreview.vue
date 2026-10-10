@@ -8,6 +8,7 @@ import {
   detailPanelOf,
   twinSceneValues,
   type TwinConfig,
+  type TwinFocusView,
 } from '@dt/twin-config'
 import { DtButton, DtSegmented } from '@dt/ui'
 import { computed, defineAsyncComponent, ref, watch } from 'vue'
@@ -34,7 +35,10 @@ const props = defineProps<{
 const Scene = defineAsyncComponent(
   async () => (await import('@dt/three-core')).TwinScene,
 )
-const emit = defineEmits<{ roamPlaying: [boolean] }>()
+const emit = defineEmits<{
+  roamPlaying: [boolean]
+  partDetailView: [change: { partId: string; view: TwinFocusView | null }]
+}>()
 const PanelPreview = defineAsyncComponent(
   async () => (await import('@dt/three-core')).TwinPanelPreview,
 )
@@ -69,6 +73,16 @@ const card = computed(() => {
 })
 const nodes = computed(() =>
   partMode.value === 'click' ? undefined : preview.value.nodes,
+)
+const focusView = computed(() =>
+  partMode.value === 'detail' && part.value !== undefined
+    ? part.value.detail.view
+    : preview.value.view,
+)
+// 编辑期间保留弹窗；普通预览清除取景时重新框住部件。
+const sceneKey = computed(
+  () =>
+    `${simulation.value}:${partMode.value}:${request.value?.kind === 'detail-edit' ? 'view-editor' : partMode.value === 'detail' && focusView.value !== null}`,
 )
 const testLabel = computed(
   () =>
@@ -110,8 +124,19 @@ function showPartMode(value: 'detail' | 'click'): void {
   open.value = true
   mode.value = 'configure'
 }
+function editPartDetailView(id: string): void {
+  if (part.value?.id !== id) return
+  showPartMode('detail')
+  issue('detail-edit')
+}
+function closePartDetailEdit(): void {
+  if (request.value?.kind !== 'detail-edit') return
+  request.value = null
+  result.value = ''
+}
 defineExpose({
   showPartMode,
+  editPartDetailView,
   playRoam: () => issue('roam-play'),
   stopRoam: () => issue('roam-stop'),
 })
@@ -255,14 +280,16 @@ watch(
         :style="{ aspectRatio: `${node?.w || 16} / ${node?.h || 9}` }"
       >
         <Scene
-          :key="simulation ? 'simulation' : 'realtime'"
+          :key="sceneKey"
           :config="config"
           :values="sceneValues"
           :preview-nodes="nodes"
           :preview-target="preview.target ?? null"
           :preview-action="request"
-          :focus-view="preview.view"
+          :focus-view="focusView"
           @preview-result="result = $event"
+          @part-detail-view="emit('partDetailView', $event)"
+          @part-detail-close="closePartDetailEdit"
           @roam-progress="onProgress"
         />
       </div>

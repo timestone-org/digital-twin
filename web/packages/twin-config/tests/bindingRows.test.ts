@@ -123,6 +123,7 @@ describe('每个槽应有几行', () => {
   it('一个实体都没有的槽也出现在表里、值为 0', () => {
     expect(twinRowCounts(normalizeTwinConfig({}))).toEqual({
       partValues: 0,
+      partEffectValues: 0,
       anchorValues: 0,
       panelValues: 0,
       arrowValues: 0,
@@ -437,10 +438,12 @@ describe('某个实体占了哪几行', () => {
 
     expect(twinRowsOfEntity(mixed, 'parts', 'plain')).toEqual({
       partValues: [],
+      partEffectValues: [],
       partFieldValues: [],
     })
     expect(twinRowsOfEntity(mixed, 'parts', 'tinted')).toEqual({
       partValues: [0],
+      partEffectValues: [],
       partFieldValues: [],
     })
   })

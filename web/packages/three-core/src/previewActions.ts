@@ -10,7 +10,24 @@ import { entityPickPoints, type TwinSceneSelection } from './pickTargets'
 export interface TwinPreviewAction {
   sequence: number
   partId: string
-  kind: 'detail' | 'near' | 'far' | 'click' | 'roam-play' | 'roam-stop'
+  kind:
+    | 'detail'
+    | 'detail-edit'
+    | 'near'
+    | 'far'
+    | 'click'
+    | 'roam-play'
+    | 'roam-stop'
+}
+const DETAIL_PREVIEW_MESSAGES = Object.freeze({
+  detail: '已打开完整详情',
+  'detail-edit': '已打开部件视角编辑',
+})
+
+function isDetailPreview(
+  kind: TwinPreviewAction['kind'],
+): kind is keyof typeof DETAIL_PREVIEW_MESSAGES {
+  return kind === 'detail' || kind === 'detail-edit'
 }
 export function previewTargetBox(
   config: TwinConfig,
@@ -70,9 +87,9 @@ export function executePreviewAction(
     deps.result('模型尚未就绪或部件已不存在')
     return
   }
-  if (action.kind === 'detail') {
+  if (isDetailPreview(action.kind)) {
     deps.detail(part)
-    deps.result('已打开完整详情')
+    deps.result(DETAIL_PREVIEW_MESSAGES[action.kind])
     return
   }
   if (action.kind === 'click') {

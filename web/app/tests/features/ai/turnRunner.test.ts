@@ -543,19 +543,32 @@ describe('计划', () => {
     expect(seen.notes).toEqual(['计划还没走完，自动继续。'])
   })
 
-  it('催有上限，到顶就停', async () => {
+  it('催有上限，到顶就停并报告剩余项与继续方式', async () => {
     const stall = [
-      frame('plan', { plan: activePlan }),
+      frame('plan', {
+        plan: {
+          ...activePlan,
+          items: [
+            ...activePlan.items,
+            { title: '核对绑定', status: 'pending', note: '' },
+            { title: '可选装饰', status: 'skipped', note: '' },
+            { title: '不可用点位', status: 'failed', note: '' },
+          ],
+        },
+      }),
       frame('turn.done', { reply: '再想想' }),
     ]
     const { advance, bodies } = advanceOf(
       Array.from({ length: MAX_PLAN_NUDGES + 2 }, () => stall),
     )
-    const { sink } = sinkOf()
+    const { sink, seen } = sinkOf()
     await runTurn(inputOf(advance), sink)
 
     // 首轮 + 最多 MAX_PLAN_NUDGES 次催，之后交还给人
     expect(bodies).toHaveLength(1 + MAX_PLAN_NUDGES)
+    expect(seen.notes.at(-1)).toBe(
+      '自动继续已达 3 次上限，任务尚未完成，已停下。剩余：绑温度槽、核对绑定。说一句「继续」可接着处理。',
+    )
   })
 
   it('计划完结时不催', async () => {

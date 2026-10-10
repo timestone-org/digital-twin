@@ -258,6 +258,42 @@ describe('坐标基准的原点', () => {
 })
 
 describe('喂值与释放仍各只有一处', () => {
+  it('镜头与读数静止时仍推进部件闪烁，首帧时长为零也套效果', () => {
+    const { layers, root } = layersOf(
+      normalizeTwinConfig({
+        parts: [
+          {
+            id: 'pt1',
+            nodes: ['pump'],
+            effect: {
+              pattern: 'blink',
+              color: '#00ff00',
+              blend: 1,
+              periodMs: 1000,
+            },
+          },
+        ],
+      }),
+    )
+    const pump = root.getObjectByName('pump')
+    if (!(pump instanceof THREE.Mesh)) throw new Error('找不到泵')
+    const material = pump.material
+    if (!(material instanceof THREE.MeshBasicMaterial)) {
+      throw new Error('缺少基础材质')
+    }
+    layers.setValues({ ...EMPTY_VALUES, effectParts: { pt1: { value: 1 } } })
+
+    layers.update(0, new THREE.PerspectiveCamera())
+    expect(material.color.getHexString()).toBe('00ff00')
+    layers.applyDistanceRules(nearby())
+    layers.update(0.5, new THREE.PerspectiveCamera())
+    layers.applyDistanceRules(nearby())
+    expect(material.color.getHexString()).toBe('ffffff')
+    layers.update(0.5, new THREE.PerspectiveCamera())
+    layers.applyDistanceRules(nearby())
+    expect(material.color.getHexString()).toBe('00ff00')
+  })
+
   it('setValues 不会把距离规则算出来的显隐冲掉', () => {
     const { layers } = layersOf(everything())
     layers.applyDistanceRules(farAway())

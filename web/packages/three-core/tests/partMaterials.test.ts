@@ -291,6 +291,190 @@ describe('套外观', () => {
   })
 })
 
+describe('条件效果叠加', () => {
+  it.each([0.2, 0.6])('黑色自发光基线按配置强度 %s 高亮', (glow) => {
+    const { mine } = shared()
+    const layer = new PartMaterials([mine])
+    const material = mine.material
+    if (!(material instanceof THREE.MeshStandardMaterial)) {
+      throw new Error('缺少标准材质')
+    }
+
+    layer.apply({
+      ...look(),
+      effect: { color: RED, blend: 1, glow, intensity: 1 },
+    })
+
+    expect(material.emissive.getHexString()).toBe('ff0000')
+    expect(material.emissiveIntensity).toBe(glow)
+    layer.apply({
+      ...look(),
+      effect: { color: RED, blend: 1, glow, intensity: 0 },
+    })
+    expect(material.emissive.getHexString()).toBe('000000')
+    expect(material.emissiveIntensity).toBe(1)
+    layer.dispose()
+  })
+
+  it('原材质有非零自发光时保留更强的强度，效果解除后完整恢复', () => {
+    const mesh = new THREE.Mesh(
+      new THREE.BoxGeometry(),
+      new THREE.MeshStandardMaterial({
+        emissive: '#00ff00',
+        emissiveIntensity: 4,
+      }),
+    )
+    const layer = new PartMaterials([mesh])
+    const material = mesh.material
+    if (!(material instanceof THREE.MeshStandardMaterial)) {
+      throw new Error('缺少标准材质')
+    }
+    const effect = { color: RED, blend: 1, glow: 0.6, intensity: 1 }
+
+    layer.apply({ ...look(), effect })
+
+    expect(material.emissive.getHexString()).toBe('ff0000')
+    expect(material.emissiveIntensity).toBe(4)
+    layer.apply({ ...look(), effect: { ...effect, intensity: 0 } })
+    expect(material.emissive.getHexString()).toBe('00ff00')
+    expect(material.emissiveIntensity).toBe(4)
+    layer.dispose()
+  })
+
+  it('在实时染色上叠加效果，关闭后恢复原染色与自发光', () => {
+    const { mine, other } = shared()
+    const layer = new PartMaterials([mine])
+    const material = mine.material
+    if (!(material instanceof THREE.MeshStandardMaterial)) {
+      throw new Error('缺少标准材质')
+    }
+    const base = look({ opacity: 0.5, color: RED, glow: 2 })
+    const effect = {
+      color: new THREE.Color('#00ff00'),
+      blend: 1,
+      glow: 1,
+      intensity: 1,
+    }
+
+    layer.apply({ ...base, effect })
+
+    expect(material.color.getHexString()).toBe('00ff00')
+    expect(material.emissive.getHexString()).toBe('00ff00')
+    expect(material.emissiveIntensity).toBe(2)
+    expect(material.opacity).toBe(0.5)
+    expect(colorOf(other).getHexString()).toBe('0000ff')
+
+    layer.apply({ ...base, effect: { ...effect, intensity: 0 } })
+
+    expect(material.color.getHexString()).toBe('ff0000')
+    expect(material.emissive.getHexString()).toBe('ff0000')
+    expect(material.emissiveIntensity).toBe(2)
+    layer.dispose()
+  })
+
+  it('效果不指定颜色时保持当前颜色并沿用它高亮', () => {
+    const { mine } = shared()
+    const layer = new PartMaterials([mine])
+    const material = mine.material
+    if (!(material instanceof THREE.MeshStandardMaterial)) {
+      throw new Error('缺少标准材质')
+    }
+
+    layer.apply({
+      ...look({ color: RED }),
+      effect: { color: null, blend: 1, glow: 3, intensity: 1 },
+    })
+
+    expect(material.color.getHexString()).toBe('ff0000')
+    expect(material.emissive.getHexString()).toBe('ff0000')
+    expect(material.emissiveIntensity).toBe(3)
+    layer.apply(look())
+    expect(material.color.getHexString()).toBe('0000ff')
+    expect(material.emissive.getHexString()).toBe('000000')
+    layer.dispose()
+  })
+
+  it('复用并修改效果颜色时识别新颜色，反复应用不累积染色', () => {
+    const { mine } = shared()
+    const layer = new PartMaterials([mine])
+    const color = new THREE.Color('#ff0000')
+    const effect = { color, blend: 0.5, glow: 0, intensity: 1 }
+    layer.apply({ ...look(), effect })
+    const first = colorOf(mine).getHexString()
+    color.set('#00ff00')
+
+    layer.apply({ ...look(), effect })
+
+    expect(colorOf(mine).getHexString()).not.toBe(first)
+    color.set('#ff0000')
+    layer.apply({ ...look(), effect })
+    expect(colorOf(mine).getHexString()).toBe(first)
+    layer.dispose()
+  })
+
+  it('基础材质没有自发光通道时仍能显示条件变色', () => {
+    const mesh = new THREE.Mesh(
+      new THREE.BoxGeometry(),
+      new THREE.MeshBasicMaterial({ color: '#0000ff' }),
+    )
+    const layer = new PartMaterials([mesh])
+
+    layer.apply({
+      ...look(),
+      effect: { color: RED, blend: 1, glow: 3, intensity: 1 },
+    })
+
+    expect(colorOf(mesh).getHexString()).toBe('ff0000')
+    layer.dispose()
+  })
+
+  it('部分强度从当前染色平滑混合，重复帧保持相同外观', () => {
+    const { mine } = shared()
+    const layer = new PartMaterials([mine])
+    const material = mine.material
+    if (!(material instanceof THREE.MeshStandardMaterial)) {
+      throw new Error('缺少标准材质')
+    }
+    const frame = {
+      ...look({ color: RED }),
+      effect: {
+        color: new THREE.Color('#00ff00'),
+        blend: 1,
+        glow: 2,
+        intensity: 0.5,
+      },
+    }
+
+    layer.apply(frame)
+    const version = material.version
+    layer.apply(frame)
+
+    expect(material.color.r).toBeCloseTo(0.5)
+    expect(material.color.g).toBeCloseTo(0.5)
+    expect(material.color.b).toBe(0)
+    expect(material.emissive.g).toBeCloseTo(0.5)
+    expect(material.emissiveIntensity).toBe(1)
+    expect(material.version).toBe(version)
+    layer.dispose()
+  })
+
+  it('没有颜色和自发光通道的自定义材质保留自身外观', () => {
+    const mesh = new THREE.Mesh(
+      new THREE.BoxGeometry(),
+      new THREE.ShaderMaterial(),
+    )
+    const layer = new PartMaterials([mesh])
+
+    expect(() =>
+      layer.apply({
+        ...look(),
+        effect: { color: null, blend: 1, glow: 3, intensity: 1 },
+      }),
+    ).not.toThrow()
+    layer.dispose()
+  })
+})
+
 describe('释放', () => {
   // ⚠ 克隆件没人替我们收：模型卸载时释放的是它自己那份原始材质
   it('把克隆出来的材质逐个 dispose', () => {

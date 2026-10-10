@@ -153,14 +153,17 @@ async function choose(point: CollectPoint | PointMatchOut): Promise<void> {
       <DtNotice v-if="picker.error.value" intent="danger" icon="alert-triangle">
         {{ picker.error.value }}
       </DtNotice>
-      <DtSpinner v-else-if="picker.loading.value" />
+      <DtSpinner v-if="picker.loading.value && candidates.length === 0" />
       <DtEmpty
-        v-else-if="candidates.length === 0"
+        v-else-if="!picker.error.value && candidates.length === 0"
         icon="search"
         title="没有匹配的点位"
         hint="试试设备名、位置、测量量或准确编码"
       />
-      <div v-else class="flex min-h-0 flex-1 flex-col gap-1 overflow-y-auto">
+      <div
+        v-else-if="candidates.length"
+        class="flex min-h-0 flex-1 flex-col gap-1 overflow-y-auto"
+      >
         <PointPickerItem
           v-for="point in candidates"
           :key="point.id"
@@ -169,6 +172,29 @@ async function choose(point: CollectPoint | PointMatchOut): Promise<void> {
           :disabled="picker.selecting.value"
           @pick="choose(point)"
         />
+      </div>
+
+      <div
+        v-if="picker.matches.value"
+        class="flex shrink-0 items-center justify-between gap-2"
+      >
+        <p class="text-xs text-text-secondary" role="status">
+          已显示 {{ candidates.length }} 个相关点位{{
+            picker.isSearchLimitReached.value
+              ? '；已达显示上限，请用数据源或更具体的描述缩小范围。'
+              : ''
+          }}
+        </p>
+        <DtButton
+          v-if="picker.canLoadMore.value"
+          size="sm"
+          class="shrink-0"
+          variant="ghost"
+          :loading="picker.loading.value"
+          :disabled="picker.selecting.value"
+          @click="picker.loadMore()"
+          >显示更多</DtButton
+        >
       </div>
 
       <p v-if="picker.hasMore.value" class="dt-pick__more">

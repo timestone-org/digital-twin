@@ -9,11 +9,15 @@
 import { normalizeTwinConfig, type TwinPart } from '@dt/twin-config'
 import { mount } from '@vue/test-utils'
 import * as THREE from 'three'
-import { afterEach, describe, expect, it } from 'vitest'
+import { afterEach, describe, expect, it, vi } from 'vitest'
 import { nextTick } from 'vue'
 
-import { createHeadlessRenderer } from '../src/testing/createHeadlessRenderer'
+import {
+  createHeadlessRenderer,
+  type HeadlessRenderer,
+} from '../src/testing/createHeadlessRenderer'
 import TwinPartModal from '../src/TwinPartModal.vue'
+import type { SceneRendererFactory } from '../src/sceneCore'
 
 function partsOf(raw: Record<string, unknown>[]): TwinPart[] {
   return normalizeTwinConfig({ parts: raw }).parts
@@ -74,6 +78,8 @@ interface RenderOver {
   parts?: readonly TwinPart[]
   currentId?: string
   objects?: Record<string, THREE.Object3D[]>
+  rendererFactory?: SceneRendererFactory
+  editable?: boolean
 }
 
 function render(
@@ -97,7 +103,8 @@ function render(
       values,
       partValues: {},
       objectsOf,
-      rendererFactory: () => createHeadlessRenderer(),
+      rendererFactory: over.rendererFactory ?? (() => createHeadlessRenderer()),
+      editable: over.editable ?? false,
     },
     attachTo: document.body,
   })
@@ -121,8 +128,27 @@ function railRows(): string[] {
   ).map((row) => row.textContent?.trim() ?? '')
 }
 
+function controlledFrames(): (timeMs?: number) => void {
+  let onFrame: FrameRequestCallback | undefined
+  vi.spyOn(globalThis, 'requestAnimationFrame').mockImplementation(
+    (callback) => {
+      onFrame = callback
+      return 1
+    },
+  )
+  return (timeMs = 0) => onFrame?.(timeMs)
+}
+
+function cameraOf(renderer: HeadlessRenderer): THREE.PerspectiveCamera {
+  const camera = renderer.renders[0]?.camera
+  if (!(camera instanceof THREE.PerspectiveCamera))
+    throw new Error('没有透视相机')
+  return camera
+}
+
 afterEach(() => {
   document.body.innerHTML = ''
+  vi.restoreAllMocks()
 })
 
 describe('弹窗本身', () => {
@@ -339,6 +365,113 @@ describe('装配栏', () => {
 })
 
 describe('弹窗里那块 3D', () => {
+  it('保存后重新读取的详情机位真正应用到弹窗相机', () => {
+    const frame = controlledFrames()
+    const config = normalizeTwinConfig({
+      parts: [
+        {
+          id: 'pump',
+          detail: {
+            view: {
+              position: [13, 4, 12],
+              target: [11, 1, -2],
+              fov: 67,
+            },
+          },
+        },
+      ],
+    })
+    const saved: unknown = JSON.parse(JSON.stringify(config))
+    const part = normalizeTwinConfig(saved).parts[0]
+    if (part === undefined) throw new Error('没有保存的部件')
+    const mesh = meshNamed('pump')
+    mesh.position.set(10, 0, 0)
+    const renderer = createHeadlessRenderer()
+    const wrapper = render(
+      part,
+      {},
+      {
+        objects: { pump: [mesh] },
+        rendererFactory: () => renderer,
+      },
+    )
+
+    frame()
+
+    const camera = cameraOf(renderer)
+    expect(
+      camera.position.distanceTo(new THREE.Vector3(3, 4, 12)),
+    ).toBeLessThan(1e-6)
+    expect(camera.fov).toBe(67)
+    wrapper.unmount()
+  })
+
+  it('装配栏换到子件后应用子件自己的机位，父件预览资源及时释放', async () => {
+    const frame = controlledFrames()
+    const parts = partsOf([
+      {
+        id: 'unit',
+        detail: {
+          view: {
+            position: [18, 4, 5],
+            target: [16, 1, 0],
+            fov: 55,
+          },
+        },
+      },
+      {
+        id: 'motor',
+        parentId: 'unit',
+        detail: {
+          view: {
+            position: [18, 3, 8],
+            target: [21, 0, 0],
+            fov: 67,
+          },
+        },
+      },
+    ])
+    const root = parts[0]
+    if (root === undefined) throw new Error('没有父件')
+    const unit = meshNamed('unit')
+    const motor = meshNamed('motor')
+    unit.position.set(10, 0, 0)
+    motor.position.set(20, 0, 0)
+    const renderers: HeadlessRenderer[] = []
+    const wrapper = render(
+      root,
+      {},
+      {
+        parts,
+        objects: { unit: [unit], motor: [motor] },
+        rendererFactory: () => {
+          const renderer = createHeadlessRenderer()
+          renderers.push(renderer)
+          return renderer
+        },
+      },
+    )
+    frame()
+    const first = renderers[0]
+    if (first === undefined) throw new Error('没有父件渲染器')
+    expect(
+      cameraOf(first).position.distanceTo(new THREE.Vector3(3, 4, 5)),
+    ).toBeLessThan(1e-6)
+    expect(cameraOf(first).fov).toBe(55)
+
+    await wrapper.setProps({ currentId: 'motor' })
+    frame()
+
+    const second = renderers[1]
+    if (second === undefined) throw new Error('没有子件渲染器')
+    expect(
+      cameraOf(second).position.distanceTo(new THREE.Vector3(-2, 3, 8)),
+    ).toBeLessThan(1e-6)
+    expect(cameraOf(second).fov).toBe(67)
+    expect(first.forceContextLossCount).toBe(1)
+    wrapper.unmount()
+  })
+
   it('开着时画布挂进去了', () => {
     render()
 
@@ -399,5 +532,144 @@ describe('弹窗里那块 3D', () => {
     wrapper.unmount()
 
     expect(document.querySelector('.dt-modal')).toBeNull()
+  })
+})
+
+function viewButton(name: string): HTMLButtonElement {
+  const button = document.querySelector<HTMLButtonElement>(
+    `[data-test="${name}"]`,
+  )
+  if (button === null) throw new Error(`没有 ${name} 按钮`)
+  return button
+}
+
+describe('在独立弹窗配置视角', () => {
+  it('运行态不显示视角写入按钮', () => {
+    const wrapper = render()
+
+    expect(modalText()).not.toContain('使用当前视角')
+    expect(modalText()).not.toContain('恢复默认视角')
+    wrapper.unmount()
+  })
+
+  it('隐藏模型时不显示视角写入操作', () => {
+    const wrapper = render(
+      partOf({ detail: { showModel: false } }),
+      {},
+      { editable: true },
+    )
+
+    expect(document.querySelector('[data-test="part-view-save"]')).toBeNull()
+    expect(wrapper.emitted('viewChange')).toBeUndefined()
+    wrapper.unmount()
+  })
+
+  it('编辑模式保存实际当前子件的独立相机，恢复默认上抛空取景', async () => {
+    const frame = controlledFrames()
+    const parts = partsOf([
+      { id: 'unit' },
+      {
+        id: 'motor',
+        parentId: 'unit',
+        detail: {
+          view: {
+            position: [13, 4, 12],
+            target: [11, 1, -2],
+            fov: 67,
+          },
+        },
+      },
+    ])
+    const root = parts[0]
+    if (root === undefined) throw new Error('没有父件')
+    const mesh = meshNamed('motor')
+    mesh.position.set(10, 0, 0)
+    const renderer = createHeadlessRenderer()
+    const wrapper = render(
+      root,
+      {},
+      {
+        editable: true,
+        parts,
+        currentId: 'motor',
+        objects: { motor: [mesh] },
+        rendererFactory: () => renderer,
+      },
+    )
+    await nextTick()
+    frame()
+    expect(viewButton('part-view-save').disabled).toBe(false)
+    viewButton('part-view-save').click()
+
+    expect(wrapper.emitted('viewChange')?.[0]).toEqual([
+      {
+        partId: 'motor',
+        view: {
+          position: [
+            expect.closeTo(13, 5),
+            expect.closeTo(4, 5),
+            expect.closeTo(12, 5),
+          ],
+          target: [11, 1, -2],
+          fov: 67,
+        },
+      },
+    ])
+    viewButton('part-view-reset').click()
+    expect(wrapper.emitted('viewChange')?.[1]).toEqual([
+      { partId: 'motor', view: null },
+    ])
+    frame()
+    expect(cameraOf(renderer).fov).toBe(45)
+    wrapper.unmount()
+  })
+
+  it.each([
+    { objects: {} },
+    { rendererFactory: () => null },
+  ] satisfies RenderOver[])('预览不可用时禁用写入按钮 %j', async (over) => {
+    const wrapper = render(partOf(), {}, { ...over, editable: true })
+    await nextTick()
+
+    expect(viewButton('part-view-save').disabled).toBe(true)
+    expect(viewButton('part-view-reset').disabled).toBe(true)
+    viewButton('part-view-save').click()
+    expect(wrapper.emitted('viewChange')).toBeUndefined()
+    wrapper.unmount()
+  })
+
+  it('同一个部件进入编辑模式时暂停自转，保留自转配置', async () => {
+    const frame = controlledFrames()
+    const renderers: HeadlessRenderer[] = []
+    const part = partOf({ detail: { autoRotate: true } })
+    const wrapper = render(
+      part,
+      {},
+      {
+        rendererFactory: () => {
+          const renderer = createHeadlessRenderer()
+          renderers.push(renderer)
+          return renderer
+        },
+      },
+    )
+    frame(1)
+    frame(1000)
+    const normal = renderers[0]?.renders[0]?.scene.children.find((item) =>
+      item.getObjectByName('p1'),
+    )
+    expect(normal?.rotation.y).toBeGreaterThan(0)
+
+    await wrapper.setProps({ editable: true })
+    frame(2000)
+    frame(3000)
+
+    const editing = renderers[1]?.renders[0]?.scene.children.find((item) =>
+      item.getObjectByName('p1'),
+    )
+    expect(editing?.rotation.y).toBe(0)
+    expect(part.detail.autoRotate).toBe(true)
+    expect(renderers[0]?.forceContextLossCount).toBe(1)
+    wrapper.unmount()
   })
 })

@@ -30,6 +30,7 @@ import {
 } from './normalizeShared'
 import { isRecord, stringList, toFiniteNumber, trimmedString } from './sanitize'
 import type { TwinAnchor, TwinConfig, TwinPart } from './types'
+import { normalizePartEffect } from './partEffect'
 
 const MAX_DECIMALS = 10
 
@@ -45,6 +46,7 @@ function normalizePart(raw: unknown, index: number): TwinPart | null {
     visibility: normalizeVisibility(raw.visibility, raw.visible),
     look: normalizePartLook(raw.look),
     tint: normalizePartTint(raw.tint),
+    effect: normalizePartEffect(raw.effect),
     clickDistance: normalizeClickDistance(raw.clickDistance),
     click: normalizePartClick(raw.click),
     detail: normalizePartDetail(raw.detail),

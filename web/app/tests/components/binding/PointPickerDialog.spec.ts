@@ -12,6 +12,7 @@ import type { Page, PointMatchesOut } from '@dt/contracts'
 
 import * as collectApi from '@/api/collect'
 import * as searchApi from '@/api/collectSearch'
+import * as client from '@/api/client'
 import { DtSwitch } from '@dt/ui'
 import type { CollectPoint, CollectSource } from '@dt/contracts'
 import PointPickerDialog from '@/components/binding/PointPickerDialog.vue'
@@ -266,6 +267,121 @@ describe('智能检索', () => {
     }
   }
 
+  function manyMatches(count: number): PointMatchesOut {
+    const result = matches()
+    const first = result.items[0]
+    if (!first) throw new Error('缺少候选假件')
+    result.items = Array.from({ length: count }, (_, index) => ({
+      ...first,
+      id: `temp-${index}`,
+      node_key: `s1:temp-${index}`,
+      code: `temp-${index}`,
+    }))
+    return result
+  }
+
+  async function submitSearch(wrapper: Awaited<ReturnType<typeof opened>>) {
+    await wrapper.get('input[aria-label="搜索点位"]').setValue('水箱温度')
+    await wrapper
+      .get('input[aria-label="搜索点位"]')
+      .trigger('keydown', { key: 'Enter' })
+    await flushPromises()
+  }
+
+  function moreButton(wrapper: Awaited<ReturnType<typeof opened>>) {
+    return wrapper
+      .findAll('button')
+      .find((button) => button.text() === '显示更多')
+  }
+
+  it('首批请求并展示20个相关性候选', async () => {
+    const request = vi
+      .spyOn(client, 'requestData')
+      .mockResolvedValue(manyMatches(20))
+    const wrapper = await opened()
+    await submitSearch(wrapper)
+
+    expect(request).toHaveBeenCalledWith(
+      '/collect-point-matches',
+      expect.objectContaining({
+        query: { q: '水箱温度', source_id: undefined, limit: 20 },
+      }),
+    )
+    expect(wrapper.findAll('.dt-pick__item')).toHaveLength(20)
+    expect(wrapper.text()).toContain('已显示 20 个相关点位')
+    expect(moreButton(wrapper)).toBeDefined()
+    wrapper.unmount()
+  })
+
+  it('显示更多扩展到40个，首批以外的候选可核对身份后选中', async () => {
+    const request = vi
+      .spyOn(client, 'requestData')
+      .mockResolvedValueOnce(manyMatches(20))
+      .mockResolvedValueOnce(manyMatches(40))
+    const wrapper = await opened()
+    await submitSearch(wrapper)
+    await moreButton(wrapper)?.trigger('click')
+    await flushPromises()
+
+    expect(request).toHaveBeenLastCalledWith(
+      '/collect-point-matches',
+      expect.objectContaining({
+        query: { q: '水箱温度', source_id: undefined, limit: 40 },
+      }),
+    )
+    expect(wrapper.findAll('.dt-pick__item')).toHaveLength(40)
+    expect(wrapper.text()).toContain('已显示 40 个相关点位')
+    vi.mocked(collectApi.listPoints).mockResolvedValue(page([point('temp-39')]))
+    await wrapper.findAll('.dt-pick__item').at(-1)?.trigger('click')
+    await flushPromises()
+    expect(wrapper.emitted('pick')?.[0]?.[0]).toEqual(point('temp-39'))
+    wrapper.unmount()
+  })
+
+  it.each([0, 7])('只有%d个候选时不显示更多按钮', async (count) => {
+    vi.spyOn(client, 'requestData').mockResolvedValue(manyMatches(count))
+    const wrapper = await opened()
+    await submitSearch(wrapper)
+    expect(moreButton(wrapper)).toBeUndefined()
+    if (count === 0) expect(wrapper.text()).toContain('没有匹配的点位')
+    else expect(wrapper.findAll('.dt-pick__item')).toHaveLength(count)
+    wrapper.unmount()
+  })
+
+  it('扩展失败保留候选并显示错误，再次点击可继续加载', async () => {
+    vi.spyOn(client, 'requestData')
+      .mockResolvedValueOnce(manyMatches(20))
+      .mockRejectedValueOnce(new Error('断网'))
+      .mockResolvedValueOnce(manyMatches(40))
+    const wrapper = await opened()
+    await submitSearch(wrapper)
+    await moreButton(wrapper)?.trigger('click')
+    await flushPromises()
+    expect(wrapper.text()).toContain('请求失败')
+    expect(wrapper.findAll('.dt-pick__item')).toHaveLength(20)
+    await moreButton(wrapper)?.trigger('click')
+    await flushPromises()
+    expect(wrapper.findAll('.dt-pick__item')).toHaveLength(40)
+    expect(wrapper.text()).not.toContain('请求失败')
+    wrapper.unmount()
+  })
+
+  it('达到100个显示上限时说明缩小范围并隐藏更多按钮', async () => {
+    const request = vi.spyOn(client, 'requestData')
+    for (const count of [20, 40, 60, 80, 100])
+      request.mockResolvedValueOnce(manyMatches(count))
+    const wrapper = await opened()
+    await submitSearch(wrapper)
+    for (let index = 0; index < 4; index += 1) {
+      await moreButton(wrapper)?.trigger('click')
+      await flushPromises()
+    }
+    expect(wrapper.findAll('.dt-pick__item')).toHaveLength(100)
+    expect(wrapper.text()).toContain('已达显示上限')
+    expect(moreButton(wrapper)).toBeUndefined()
+    wrapper.unmount()
+  })
+
   it('输入自然语言并回车，展示候选信息，选中后回填完整的真实点位', async () => {
     const search = vi
       .spyOn(searchApi, 'searchCollectPoints')
@@ -282,6 +398,7 @@ describe('智能检索', () => {
       '余热回收水箱温度',
       undefined,
       expect.any(AbortSignal),
+      20,
     )
     expect(wrapper.text()).toContain('已结合语义与关键词检索')
     expect(wrapper.get('.dt-pick__item').text()).toContain('能源站')

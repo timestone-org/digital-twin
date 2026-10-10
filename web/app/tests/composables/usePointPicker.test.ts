@@ -264,6 +264,7 @@ describe('语义搜索与候选核对', () => {
       '水箱温度',
       's1',
       expect.any(AbortSignal),
+      20,
     )
     expect(picker.matches.value?.pending_count).toBe(3)
     expect(picker.matches.value?.note).toContain('等待语义索引')

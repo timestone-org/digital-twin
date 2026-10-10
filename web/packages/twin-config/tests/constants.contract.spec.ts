@@ -15,6 +15,7 @@ import {
   TWIN_FLOW_ROW_SLOTS,
   TWIN_PANEL_BINDING_KEY,
   TWIN_PART_BINDING_KEY,
+  TWIN_PART_EFFECT_BINDING_KEY,
   TWIN_PART_FIELD_BINDING_KEY,
   TWIN_VIEW_BINDINGS,
   anchorRowFieldKey,
@@ -23,6 +24,7 @@ import {
   flowRowFieldKey,
   panelRowFieldKey,
   partRowFieldKey,
+  partEffectRowFieldKey,
 } from '../src/constants'
 import { stitchAnchorValues } from '../src/twinMath'
 import { normalizeTwinConfig } from '../src/normalize'
@@ -46,6 +48,7 @@ describe('绑定槽清单', () => {
     expect(TWIN_VIEW_BINDINGS.map((spec) => spec.key)).toEqual([
       TWIN_ANIMATION_BINDING_KEY,
       TWIN_PART_BINDING_KEY,
+      TWIN_PART_EFFECT_BINDING_KEY,
       TWIN_ANCHOR_BINDING_KEY,
       TWIN_PANEL_BINDING_KEY,
       TWIN_ARROW_BINDING_KEY,
@@ -66,7 +69,7 @@ describe('绑定槽清单', () => {
   //   部件读数在 `PartsLayer` 的状态染色上），
   //   加第七个必须与渲染层同轮落地
   it('清单里的每个槽都有渲染层在消费', () => {
-    expect(TWIN_VIEW_BINDINGS).toHaveLength(7)
+    expect(TWIN_VIEW_BINDINGS).toHaveLength(8)
   })
 
   it('能量流那一行有强度与激活两个子槽', () => {
@@ -93,6 +96,7 @@ describe('数组行 fieldKey', () => {
 
   it('四类的构造函数走同一套形状', () => {
     expect(partRowFieldKey(4)).toBe('partValues[4].value')
+    expect(partEffectRowFieldKey(2)).toBe('partEffectValues[2].value')
     expect(anchorRowFieldKey(3)).toBe('anchorValues[3].value')
     expect(panelRowFieldKey(1)).toBe('panelValues[1].value')
     expect(arrowRowFieldKey(2)).toBe('arrowValues[2].value')

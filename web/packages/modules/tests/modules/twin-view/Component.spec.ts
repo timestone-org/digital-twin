@@ -32,6 +32,69 @@ const TWIN = {
   ],
 }
 
+describe('部件状态效果的独立输入', () => {
+  it('实时连接断开时失效采样值，保留明确的常量值', async () => {
+    const wrapper = mount(Component, {
+      props: {
+        config: {
+          twin: {
+            parts: [
+              { id: 'pump', effect: { enabled: true } },
+              { id: 'constant', effect: { enabled: true } },
+              { id: 'unknown', effect: { enabled: true } },
+            ],
+          },
+        },
+        values: {
+          partEffectValues: [{ value: 1 }, { value: true }, { value: 1 }],
+        },
+        meta: {
+          connectionState: 'closed',
+          slots: {
+            'partEffectValues[0].value': { state: 'ok', timestampMs: 10 },
+            'partEffectValues[1].value': { state: 'ok' },
+          },
+        },
+      },
+    })
+    await flushPromises()
+    expect(wrapper.getComponent(scene.TwinScene).props('values')).toEqual(
+      expect.objectContaining({ effectParts: { constant: { value: true } } }),
+    )
+  })
+
+  it('陈旧或失败的槽不会继续触发效果，相邻有效槽保持正常', async () => {
+    const wrapper = mount(Component, {
+      props: {
+        config: {
+          twin: {
+            parts: [
+              { id: 'stale', effect: { enabled: true } },
+              { id: 'failed', effect: { enabled: true } },
+              { id: 'good', effect: { enabled: true } },
+            ],
+          },
+        },
+        values: {
+          partEffectValues: [{ value: 1 }, { value: 1 }, { value: 1 }],
+        },
+        meta: {
+          connectionState: 'open',
+          slots: {
+            'partEffectValues[0].value': { state: 'ok', isStale: true },
+            'partEffectValues[1].value': { state: 'error', message: '断线' },
+            'partEffectValues[2].value': { state: 'ok', timestampMs: 10 },
+          },
+        },
+      },
+    })
+    await flushPromises()
+    expect(wrapper.getComponent(scene.TwinScene).props('values')).toEqual(
+      expect.objectContaining({ effectParts: { good: { value: 1 } } }),
+    )
+  })
+})
+
 async function render(
   config: Record<string, unknown>,
   values: Record<string, unknown> = {},

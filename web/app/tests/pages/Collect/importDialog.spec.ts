@@ -173,6 +173,37 @@ describe('预检', () => {
 })
 
 describe('提交', () => {
+  it('包含 # 的现场点位预检通过，导入时保留编码和寻址串', async () => {
+    const code = 'RS_HYGS_DLZX_1#PRESSUREPUMP_FREQ'
+    const createdPoint = point(code)
+    const create = vi.spyOn(collectApi, 'createPoints').mockResolvedValue({
+      items: [createdPoint],
+      address_checks: [
+        { address: createdPoint.address, status: 'passed', detail: null },
+      ],
+    })
+    const wrapper = await render()
+    await select(
+      wrapper,
+      `${HEADER}\n${code},压力泵频率,${createdPoint.address}`,
+    )
+    expect(document.body.textContent).toContain('可导入 1 行')
+    expect(document.body.textContent).not.toContain('只能用字母')
+    expect(bodyButton('导入 1 个点位')?.disabled).toBe(false)
+    bodyButton('导入')?.click()
+    await flushPromises()
+    expect(create).toHaveBeenCalledWith(
+      {
+        source_id: 's1',
+        items: [
+          expect.objectContaining({ code, address: createdPoint.address }),
+        ],
+      },
+      expect.any(String),
+    )
+    expect(wrapper.emitted('imported')).toHaveLength(1)
+  })
+
   it('按批调后端，并在完成后通知外面刷新', async () => {
     const create = vi.spyOn(collectApi, 'createPoints').mockResolvedValue({
       items: [point('t1')],

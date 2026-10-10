@@ -346,6 +346,159 @@ describe('逐槽结论', () => {
 })
 
 describe('派生槽', () => {
+  it('多层派生继承最早采样时刻与任一输入的陈旧标记', () => {
+    const bindings = [
+      fakeBinding({ id: 'source', fieldKey: 'source', sourceKind: 'opcua' }),
+      fakeBinding({ id: 'fresh', fieldKey: 'fresh', sourceKind: 'opcua' }),
+      fakeBinding({
+        id: 'constant',
+        fieldKey: 'constant',
+        sourceKind: 'static',
+        staticValueJson: 1,
+      }),
+      fakeBinding({
+        id: 'effect',
+        fieldKey: 'effect',
+        sourceKind: 'computed',
+        computeJson: { op: 'sum', inputs: ['middle', 'constant'] },
+      }),
+      fakeBinding({
+        id: 'middle',
+        fieldKey: 'middle',
+        sourceKind: 'computed',
+        computeJson: { op: 'sum', inputs: ['source', 'fresh'] },
+      }),
+    ]
+    const read: BindingValueReader = (binding, siblings) => {
+      if (binding.fieldKey === 'source')
+        return { state: 'ok', value: 1, timestampMs: 100, isStale: true }
+      if (binding.fieldKey === 'fresh')
+        return { state: 'ok', value: 2, timestampMs: 300 }
+      return arithmeticReader(binding, siblings)
+    }
+    const result = computeModuleValues({ specs: [], bindings, read })
+    expect(result.values).toEqual({
+      source: 1,
+      fresh: 2,
+      constant: 1,
+      middle: 3,
+      effect: 4,
+    })
+    expect(result.slots.middle).toEqual({
+      state: 'ok',
+      timestampMs: 100,
+      isStale: true,
+    })
+    expect(result.slots.effect).toEqual({
+      state: 'ok',
+      timestampMs: 100,
+      isStale: true,
+    })
+    expect(result.slots.constant).toEqual({ state: 'ok' })
+    expect(result.valueTimeMs).toBe(300)
+  })
+
+  it('纯常量的多层派生不生成采样时刻或陈旧标记', () => {
+    const result = computeModuleValues({
+      specs: [],
+      read: arithmeticReader,
+      bindings: [
+        fakeBinding({
+          id: 'constant',
+          fieldKey: 'constant',
+          sourceKind: 'static',
+          staticValueJson: 1,
+        }),
+        fakeBinding({
+          id: 'middle',
+          fieldKey: 'middle',
+          sourceKind: 'computed',
+          computeJson: { op: 'sum', inputs: ['constant'] },
+        }),
+        fakeBinding({
+          id: 'effect',
+          fieldKey: 'effect',
+          sourceKind: 'computed',
+          computeJson: { op: 'sum', inputs: ['middle'] },
+        }),
+      ],
+    })
+    expect(result.slots).toEqual({
+      constant: { state: 'ok' },
+      middle: { state: 'ok' },
+      effect: { state: 'ok' },
+    })
+    expect(result.tally.sampled).toBe(0)
+    expect(result.valueTimeMs).toBeNull()
+  })
+
+  it('继承输入时保留读取器的序列、触顶方向和已有采样时刻', () => {
+    const result = computeModuleValues({
+      specs: [],
+      bindings: [
+        fakeBinding({ id: 'source', fieldKey: 'source', sourceKind: 'opcua' }),
+        fakeBinding({
+          id: 'rows[0].value',
+          fieldKey: 'rows[0].value',
+          sourceKind: 'computed',
+          computeJson: { op: 'sum', inputs: ['source'] },
+        }),
+      ],
+      read: readerOf({
+        source: { state: 'ok', value: 1, timestampMs: 100, isStale: true },
+        'rows[0].value': {
+          state: 'ok',
+          value: 9,
+          timestampMs: 50,
+          points: [{ t: 20, v: 9 }],
+          isTruncated: true,
+          truncatedSide: 'early',
+          isStale: false,
+        },
+      }),
+    })
+    expect(result.slots['rows[0].value']).toEqual({
+      state: 'ok',
+      timestampMs: 50,
+      isStale: true,
+      isTruncated: true,
+      truncatedSide: 'early',
+    })
+    expect(result.values).toEqual({
+      source: 1,
+      rows: [{ value: 9, valuePoints: [{ t: 20, v: 9 }] }],
+    })
+  })
+
+  it('读取器的派生失败和等待状态不被输入元数据改成成功', () => {
+    const result = computeModuleValues({
+      specs: [],
+      bindings: [
+        fakeBinding({ id: 'source', fieldKey: 'source', sourceKind: 'opcua' }),
+        fakeBinding({
+          id: 'failed',
+          fieldKey: 'failed',
+          sourceKind: 'computed',
+          computeJson: { op: 'sum', inputs: ['source'] },
+        }),
+        fakeBinding({
+          id: 'waiting',
+          fieldKey: 'waiting',
+          sourceKind: 'computed',
+          computeJson: { op: 'sum', inputs: ['source'] },
+        }),
+      ],
+      read: readerOf({
+        source: { state: 'ok', value: 1, timestampMs: 100, isStale: true },
+        failed: { state: 'error', message: '不可算' },
+        waiting: { state: 'pending' },
+      }),
+    })
+    expect(result.slots.failed).toEqual({ state: 'error', message: '不可算' })
+    expect(result.slots.waiting).toEqual({ state: 'pending' })
+    expect(result.values).toEqual({ source: 1 })
+  })
+
   it('拿得到同节点内已求值的兄弟槽', () => {
     // ⚠ 兄弟袋是同一个对象，逐次求值就地填；要比对每次调用时的样子只能当场复制一份
     const seen: Array<Record<string, unknown>> = []

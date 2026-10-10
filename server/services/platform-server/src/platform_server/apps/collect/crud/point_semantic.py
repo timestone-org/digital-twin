@@ -3,6 +3,7 @@
 import uuid
 from collections.abc import Sequence
 from dataclasses import dataclass
+from typing import TypedDict
 
 from sqlalchemy import text
 from sqlalchemy.ext.asyncio import AsyncSession
@@ -140,6 +141,16 @@ class PendingPoint:
     content: str
 
 
+class PointSearchParameters(TypedDict):
+    """点位混合召回的过滤条件与候选数量。"""
+
+    query: str
+    source_id: uuid.UUID | None
+    limit: int
+    signature: str
+    probe: list[float] | None
+
+
 async def pending(session: AsyncSession, signature: str) -> list[PendingPoint]:
     """取有界待处理批次。Args: session, signature。"""
     rows = await session.execute(
@@ -182,11 +193,12 @@ async def save_many(
 
 
 async def search(
-    session: AsyncSession, parameters: dict[str, object]
+    session: AsyncSession, parameters: PointSearchParameters
 ) -> tuple[list[dict[str, object]], int]:
     """合并精确、关键词和语义召回。Args: session, parameters。"""
     rows = await session.execute(
-        _SEARCH, {**parameters, "candidates": CANDIDATE_LIMIT}
+        _SEARCH,
+        {**parameters, "candidates": max(CANDIDATE_LIMIT, parameters["limit"])},
     )
     found = [dict(row) for row in rows.mappings()]
     count = await session.scalar(_PENDING_COUNT, parameters)

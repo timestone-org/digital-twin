@@ -31,6 +31,7 @@ import {
 } from '@dt/ui'
 import { useFormDirty } from '@/composables/useFormDirty'
 import { validateHttpPointer } from '../scripts/httpPointMapping'
+import { pointCodeProblem } from '../scripts/pointCode'
 
 const props = defineProps<{
   modelValue: boolean
@@ -183,8 +184,10 @@ const isNumeric = computed(
 )
 
 function validate(): string | null {
-  if (!isEdit.value && !/^[A-Za-z0-9][A-Za-z0-9._-]*$/.test(code.value.trim()))
-    return '点位编码只能用字母、数字与 . _ -，且以字母或数字开头'
+  if (!isEdit.value) {
+    const problem = pointCodeProblem(code.value.trim())
+    if (problem !== null) return problem
+  }
   if (name.value.trim() === '') return '请填写名称'
   if (address.value.trim() === '') return '请填写寻址串'
   if (props.protocol === 'http') {

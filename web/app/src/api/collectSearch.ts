@@ -12,10 +12,11 @@ export function searchCollectPoints(
   query: string,
   sourceId?: string,
   signal?: AbortSignal,
+  limit = 6,
 ): Promise<PointMatchesOut> {
   return requestData<PointMatchesOut>('/collect-point-matches', {
     baseUrl: PLATFORM_BASE_URL,
-    query: { q: query, source_id: sourceId, limit: 6 },
+    query: { q: query, source_id: sourceId, limit },
     signal,
   })
 }

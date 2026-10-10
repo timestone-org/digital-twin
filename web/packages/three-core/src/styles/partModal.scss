@@ -65,6 +65,22 @@
     );
   }
 
+  &__view-actions {
+    display: flex;
+    flex: 0 0 100%;
+    flex-wrap: wrap;
+    align-items: center;
+    gap: 8px;
+    padding: 8px 14px;
+    border-bottom: 1px solid var(--border-subtle);
+
+    p {
+      margin: 0;
+      color: var(--text-secondary);
+      font-size: 11px;
+    }
+  }
+
   &__data {
     min-width: 0;
     min-height: 0;

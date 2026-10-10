@@ -19,7 +19,9 @@ import {
   TWIN_NAVIGATION_MODES,
   TWIN_PANEL_BINDING_KEY,
   TWIN_PART_BINDING_KEY,
+  TWIN_PART_EFFECT_BINDING_KEY,
   TWIN_PART_FIELD_BINDING_KEY,
+  partEffectRowFieldKey,
   twinBindingRows,
   normalizeTwinConfig,
   twinSceneValues,
@@ -89,6 +91,23 @@ const navigationMode = computed(() =>
   readEnum(props.config.navigationMode, TWIN_NAVIGATION_MODES, 'orbit'),
 )
 
+/** 状态效果只消费有效值，断线时保留未带采样时刻的明确常量槽。 */
+function effectRows(raw: unknown): unknown {
+  if (!Array.isArray(raw)) return undefined
+  const source: unknown[] = raw
+  const disconnected =
+    props.meta?.connectionState !== undefined &&
+    props.meta.connectionState !== 'open'
+  return source.map((row, index) => {
+    const slot = props.meta?.slots?.[partEffectRowFieldKey(index)]
+    if (slot?.isStale === true || (slot !== undefined && slot.state !== 'ok'))
+      return undefined
+    if (disconnected && (slot === undefined || slot.timestampMs !== undefined))
+      return undefined
+    return row
+  })
+}
+
 /**
  * 本模块消费的六个槽。
  * ⚠ 键在这里显式列一遍、不把整袋直接递下去：清单声明的槽键与渲染侧真正消费的
@@ -102,6 +121,9 @@ const rows = computed(() => ({
       ? undefined
       : props.values[TWIN_ANIMATION_BINDING_KEY],
   [TWIN_PART_BINDING_KEY]: props.values[TWIN_PART_BINDING_KEY],
+  [TWIN_PART_EFFECT_BINDING_KEY]: effectRows(
+    props.values[TWIN_PART_EFFECT_BINDING_KEY],
+  ),
   [TWIN_ANCHOR_BINDING_KEY]: props.values[TWIN_ANCHOR_BINDING_KEY],
   [TWIN_PANEL_BINDING_KEY]: props.values[TWIN_PANEL_BINDING_KEY],
   [TWIN_ARROW_BINDING_KEY]: props.values[TWIN_ARROW_BINDING_KEY],

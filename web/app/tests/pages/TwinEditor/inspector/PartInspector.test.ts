@@ -38,6 +38,7 @@ function mountPart(
       cameras,
       fieldRowOffset: 0,
       tintBound: false,
+      effectBound: false,
     },
   })
 }
@@ -220,6 +221,26 @@ describe('显隐', () => {
 })
 
 describe('外观与状态染色', () => {
+  it('从真实开关开启状态效果，常态外观和状态染色原样保留', async () => {
+    const part = makePart({
+      look: { opacity: 0.5 },
+      tint: { mode: 'stops' },
+      nodes: ['Cube'],
+    })
+    const wrapper = mountPart(part)
+
+    await wrapper
+      .get('button[role="switch"][aria-label="启用状态效果"]')
+      .trigger('click')
+
+    expect(lastPart(wrapper)).toMatchObject({
+      effect: { enabled: true, mode: 'point', threshold: 1, pattern: 'pulse' },
+      look: { opacity: 0.5 },
+      tint: part.tint,
+      nodes: ['Cube'],
+    })
+  })
+
   it('两段都摆出来，且各用共用的字段件', () => {
     const wrapper = mountPart()
 

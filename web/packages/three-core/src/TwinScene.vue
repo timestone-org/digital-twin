@@ -89,6 +89,8 @@ const emit = defineEmits<{
   partClick: [TwinPartClick]
   previewResult: [string]
   roamProgress: [{ segmentIndex: number; percent: number; playing: boolean }]
+  partDetailView: [{ partId: string; view: TwinFocusView | null }]
+  partDetailClose: []
 }>()
 
 const containerRef = ref<HTMLDivElement | null>(null)
@@ -168,6 +170,11 @@ const tools = useSceneTools({
 provide(SCENE_TOOLS_KEY, tools)
 
 const detail = usePartDetail()
+
+function closePartDetail(): void {
+  detail.close()
+  emit('partDetailClose')
+}
 
 /** 弹窗里那块 3D 要克隆的对象；模型没加载时是空数组。 */
 function partObjectsOf(partId: string): readonly THREE.Object3D[] {
@@ -458,7 +465,9 @@ watch(
       :values="detailValues"
       :part-values="tintValues"
       :objects-of="partObjectsOf"
-      @close="detail.close()"
+      :editable="previewAction?.kind === 'detail-edit'"
+      @view-change="emit('partDetailView', $event)"
+      @close="closePartDetail"
       @select="detail.select($event)"
     />
   </div>

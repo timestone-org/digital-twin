@@ -48,6 +48,19 @@ async function openTab(
 }
 
 describe('顶层分页', () => {
+  it('独立视角编辑从实际按钮穿过整个右栏，带上选中部件 id', async () => {
+    const wrapper = mountPane()
+    await wrapper.setProps({
+      config: normalizeTwinConfig({ parts: [{ id: 'pump' }] }),
+      selection: { kind: 'parts', id: 'pump' },
+    })
+
+    await wrapper.get('[data-test="part-detail-edit-view"]').trigger('click')
+
+    expect(wrapper.emitted('editPartDetailView')).toEqual([['pump']])
+    expect(wrapper.emitted('capturePartView')).toBeUndefined()
+  })
+
   it('默认停在属性页', () => {
     const wrapper = mountPane()
 

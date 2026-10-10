@@ -11,6 +11,7 @@ import type {
   TwinConfig,
   TwinFlowValues,
   TwinPanelValues,
+  TwinPartEffectValues,
   TwinPartValues,
   Vec3,
 } from '@dt/twin-config'
@@ -29,6 +30,7 @@ import { SceneEffectsLayer } from './sceneEffects'
 export interface SceneLayerValues {
   /** 部件状态染色用；只有配了染色的部件在里面。 */
   parts: TwinPartValues
+  effectParts?: TwinPartEffectValues
   anchors: TwinAnchorValues
   arrows: TwinArrowValues
   panels: TwinPanelValues
@@ -121,6 +123,7 @@ export class SceneLayers {
     //   点位再怎么变，部件的颜色都不会跟着走
     this.distanceDirty = true
     this.parts.setValues(values.parts)
+    this.parts.setEffectValues(values.effectParts ?? {})
     this.anchors.setValues(values.anchors)
     this.arrows.setValues(values.arrows)
     this.panels.setValues(values.panels)
@@ -190,6 +193,7 @@ export class SceneLayers {
    * @param camera 当前相机
    */
   update(deltaSeconds: number, camera: THREE.Camera): void {
+    this.parts.update(deltaSeconds)
     if (deltaSeconds > 0) {
       this.flows.update(deltaSeconds)
       this.effects.update(deltaSeconds)

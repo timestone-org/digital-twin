@@ -7,6 +7,7 @@
 import { describe, expect, it } from 'vitest'
 import { flushPromises, mount } from '@vue/test-utils'
 import type { VueWrapper } from '@vue/test-utils'
+import { DtNumberInput, DtSelect, DtSwitch } from '@dt/ui'
 
 import PointFormDialog from '@/pages/Collect/Opcua/components/PointFormDialog.vue'
 import type { CollectProtocol } from '@dt/contracts'
@@ -35,6 +36,15 @@ async function fillFirstText(wrapper: VueWrapper, value: string) {
   })
   if (input === undefined) throw new Error('弹窗里没有文本输入框')
   await input.setValue(value)
+}
+
+function setNumberInputs(wrapper: VueWrapper, values: readonly number[]): void {
+  const inputs = wrapper.findAllComponents(DtNumberInput)
+  values.forEach((value, index) => {
+    const input = inputs[index]
+    if (input === undefined) throw new Error('点位参数输入框不存在')
+    input.vm.$emit('update:modelValue', value)
+  })
 }
 
 describe('误关保护', () => {
@@ -116,3 +126,54 @@ it('saves a point description with the other metadata', async () => {
   })
   wrapper.unmount()
 })
+
+it('手动添加保留包含 # 的点位编码与 OPC UA 寻址串', async () => {
+  const wrapper = await render()
+  const code = 'RS_HYGS_DLZX_1#PRESSUREPUMP_FREQ'
+  const address = `ns=2;s=${code}`
+  await wrapper.find('input[placeholder="如：outlet_temp"]').setValue(code)
+  await wrapper.find('input[placeholder="如：出口温度"]').setValue('压力泵频率')
+  await wrapper
+    .find('input[placeholder="ns=2;s=Plant1.OutletTemp"]')
+    .setValue(address)
+  await wrapper.find('input[placeholder="如：℃"]').setValue('Hz')
+  wrapper.findComponent(DtSelect).vm.$emit('update:modelValue', 'int')
+  setNumberInputs(wrapper, [2500, 0.5, 45000, 30])
+  const save = wrapper
+    .findAll('button')
+    .find((one) => /保存|创建|添加/.test(one.text()))
+  await save?.trigger('click')
+  expect(wrapper.emitted('create')?.[0]?.[0]).toMatchObject({
+    code,
+    address,
+    data_type: 'int',
+    unit: 'Hz',
+    sampling_interval_ms: 2500,
+    deadband: 0.5,
+    archive_max_interval_ms: 45000,
+    archive_retention_days: 30,
+  })
+  wrapper.findComponent(DtSwitch).vm.$emit('update:modelValue', false)
+  await save?.trigger('click')
+  expect(wrapper.emitted('create')?.[1]?.[0]).toMatchObject({
+    code,
+    address,
+    archive_enabled: false,
+  })
+  wrapper.unmount()
+})
+
+it.each(['', 'pump:freq', 'pump freq', 'a'.repeat(65)])(
+  '手动添加拒绝不合规编码 %s',
+  async (code) => {
+    const wrapper = await render()
+    await wrapper.find('input[placeholder="如：outlet_temp"]').setValue(code)
+    const save = wrapper
+      .findAll('button')
+      .find((one) => /保存|创建|添加/.test(one.text()))
+    await save?.trigger('click')
+    expect(wrapper.emitted('create')).toBeUndefined()
+    expect(wrapper.text()).toContain('点位编码')
+    wrapper.unmount()
+  },
+)

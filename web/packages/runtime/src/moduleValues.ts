@@ -284,7 +284,11 @@ function resolveBinding(
   state: EvaluationState,
 ): void {
   state.tally.bound += 1
-  const slot = input.read(binding, state.siblings)
+  const slot = withInputMetadata(
+    binding,
+    input.read(binding, state.siblings),
+    state.slots,
+  )
   if (slot.state === 'pending') {
     state.tally.pending += 1
     state.slots[binding.fieldKey] = { state: 'pending' }
@@ -311,6 +315,36 @@ function resolveBinding(
   }
   state.siblings[binding.fieldKey] = value
   injectFieldValue(state.values, binding.fieldKey, value)
+}
+
+/** 派生值继承输入最早的采样时刻与陈旧标记，保留读取器的其余结论。 */
+function withInputMetadata(
+  binding: BindingView,
+  slot: BindingSlot,
+  siblings: Readonly<Record<string, ModuleSlotMeta>>,
+): BindingSlot {
+  if (slot.state !== 'ok' || binding.computeJson === null) return slot
+  let timestampMs = slot.timestampMs
+  let isStale = slot.isStale === true
+  for (const key of binding.computeJson.inputs) {
+    const input = siblings[key]
+    timestampMs = earlierTimestamp(timestampMs, input?.timestampMs)
+    if (input?.isStale === true) isStale = true
+  }
+  return {
+    ...slot,
+    ...(timestampMs === undefined ? {} : { timestampMs }),
+    ...(isStale ? { isStale: true } : {}),
+  }
+}
+
+/** 取已有采样时刻中的最早值，两侧都缺席时仍缺席。 */
+function earlierTimestamp(
+  left: number | undefined,
+  right: number | undefined,
+): number | undefined {
+  if (left === undefined) return right
+  return right === undefined ? left : Math.min(left, right)
 }
 
 /**

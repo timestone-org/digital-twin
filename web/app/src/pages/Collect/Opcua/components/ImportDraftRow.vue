@@ -1,10 +1,5 @@
 <script setup lang="ts">
-/**
- * @fileoverview 导入弹窗里的一行：现场的名字与寻址串（只读）+ 点位编码（可改）。
- *
- * ⚠ 编码可改是这一行存在的全部理由：现场用中文命名标记时推不出编码，而编码
- * 只能是 ASCII 标识串。跳过那些节点等于把整台设备挡在门外。
- */
+/** @fileoverview 导入草稿行：现场名称、寻址串与可编辑编码，规则见 docs/COLLECT_DESIGN.md §2。 */
 import { computed } from 'vue'
 import type { CollectDataType } from '@dt/contracts'
 import { DtInput, DtTag } from '@dt/ui'

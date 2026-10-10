@@ -6,7 +6,12 @@
  * 新信息牌」），等视口回调再落。不记的话，视口只知道用户点了模型上的哪个东西，
  * 不知道那一下是给谁点的。
  */
-import type { TwinConfig, TwinDistanceRef, Vec3 } from '@dt/twin-config'
+import type {
+  TwinConfig,
+  TwinDistanceRef,
+  TwinFocusView,
+  Vec3,
+} from '@dt/twin-config'
 import { computed, ref, type ComputedRef, type Ref } from 'vue'
 
 import type { TwinEditorActions } from './twinEditorActions'
@@ -52,6 +57,10 @@ export interface TwinViewportOps {
   onSelectNodes: (names: readonly string[]) => void
   captureCamera: (id: string) => void
   capturePartView: (id: string) => void
+  savePartDetailView: (change: {
+    partId: string
+    view: TwinFocusView | null
+  }) => void
   /** 按参考系量当前相机离选中实体多远；量不出给 null。 */
   measureDistance: (ref: TwinDistanceRef) => number | null
   previewRoam: () => void
@@ -164,7 +173,10 @@ function createPicking(
 function createCapture(
   deps: TwinViewportDeps,
   viewportRef: Ref<TwinViewportHandle | null>,
-): Pick<TwinViewportOps, 'captureCamera' | 'capturePartView'> {
+): Pick<
+  TwinViewportOps,
+  'captureCamera' | 'capturePartView' | 'savePartDetailView'
+> {
   return {
     captureCamera: (id) => {
       const pose = viewportRef.value?.snapshot()
@@ -177,6 +189,11 @@ function createCapture(
       if (part === undefined) return
       // ⚠ 整段 `click` 一起写回：只发一个 `view` 会把远近两档的动作抹成缺省
       patchEntity(deps, 'parts', id, { click: { ...part.click, view: pose } })
+    },
+    savePartDetailView: ({ partId, view }) => {
+      const part = deps.config()?.parts.find((item) => item.id === partId)
+      if (part === undefined) return
+      patchEntity(deps, 'parts', partId, { detail: { ...part.detail, view } })
     },
   }
 }

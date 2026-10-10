@@ -1,4 +1,4 @@
-// 信息牌的观感：挂点与引线、卡片版式、八种字段画法、三层装饰、八种变体。
+// 信息牌的观感：挂点与引线、卡片版式、字段画法、三层装饰、八种变体。
 //
 // ⚠ 必须是全局样式，不能 scoped：牌是 CSS3DObject 的 DOM，挂在标签层容器里，
 // 不在任何组件的 scoped 作用域内——写成 scoped 会一条都不生效。
@@ -227,6 +227,10 @@
       --tp-tone: var(--state-danger);
     }
 
+    &[data-tone='neutral'] {
+      --tp-tone: var(--text-secondary);
+    }
+
     // ⚠ 只有这两档满幅：走势横向压到半格宽就只剩一团墨。大字**不**满幅——
     //   它在两列里放得下，一起满幅会让分了列的牌大半行仍是一行一个，
     //   看起来就像「列数没生效」。
@@ -257,6 +261,104 @@
     color: var(--text-primary);
     font-weight: 700;
     font-variant-numeric: tabular-nums;
+  }
+
+  &__row[data-kind='status'] &__line,
+  &__row[data-kind='switch'] &__line {
+    align-items: center;
+  }
+
+  &__state {
+    display: inline-flex;
+    flex: none;
+    gap: 0.65em;
+    align-items: center;
+    justify-content: center;
+    min-width: 4.6em;
+    max-width: 65%;
+    padding: 0.3em 0.7em;
+    border: 1px solid color-mix(in srgb, var(--tp-tone) 35%, transparent);
+    border-radius: var(--radius-pill);
+    background: color-mix(in srgb, var(--tp-tone) 12%, transparent);
+  }
+
+  &__state-text {
+    min-width: 0;
+    overflow: hidden;
+    color: var(--text-primary);
+    text-overflow: ellipsis;
+    font-weight: 600;
+    letter-spacing: 0.025em;
+  }
+
+  &__state-mark {
+    box-sizing: border-box;
+    display: inline-block;
+    flex: none;
+    width: 0.65em;
+    height: 0.65em;
+    border: 1px solid var(--tp-tone);
+    border-radius: var(--radius-pill);
+    background: var(--tp-tone);
+  }
+
+  &__row[data-kind='status'][data-state='on'] &__state-mark {
+    box-shadow: 0 0 0 3px color-mix(in srgb, var(--tp-tone) 15%, transparent);
+  }
+
+  &__row[data-kind='status'][data-state='off'] &__state-mark {
+    background: transparent;
+  }
+
+  &__row[data-state='unknown'] &__state {
+    border-style: dashed;
+    background: transparent;
+  }
+
+  &__row[data-state='unknown'] &__state-mark {
+    background: transparent;
+    border-style: dashed;
+  }
+
+  &__row[data-kind='switch'] &__state {
+    min-width: 0;
+    padding: 0;
+    border: 0;
+    background: none;
+  }
+
+  &__row[data-kind='switch'] &__state-mark {
+    position: relative;
+    width: 2.3em;
+    height: 1.25em;
+    background: color-mix(in srgb, var(--tp-tone) 16%, transparent);
+
+    &::before {
+      position: absolute;
+      top: 50%;
+      left: 0.17em;
+      width: 0.75em;
+      height: 0.75em;
+      border-radius: var(--radius-pill);
+      background: var(--tp-tone);
+      transform: translateY(-50%);
+      transition: left var(--fx-transition, 0.2s ease);
+      content: '';
+    }
+  }
+
+  &__row[data-kind='switch'][data-state='on'] &__state-mark::before {
+    left: calc(100% - 0.92em);
+  }
+
+  &__row[data-kind='switch'][data-state='unknown'] &__state-mark::before {
+    left: calc(50% - 0.375em);
+  }
+
+  @media (prefers-reduced-motion: reduce) {
+    &__state-mark::before {
+      transition: none;
+    }
   }
 
   // 大字主指标

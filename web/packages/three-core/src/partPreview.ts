@@ -13,6 +13,11 @@
  * 下面，不去重就是同一块几何重叠着画两遍，表面闪烁得像模型坏了。
  */
 import * as THREE from 'three'
+import {
+  MIN_CAMERA_FOV,
+  MAX_CAMERA_FOV,
+  type TwinFocusView,
+} from '@dt/twin-config'
 import { OrbitControls } from 'three/examples/jsm/controls/OrbitControls.js'
 import { TransparentGeometry } from './transparentGeometry'
 import {
@@ -43,6 +48,8 @@ const FIT_MARGIN = 1.06
 const FIT_DIRECTION: readonly [number, number, number] = [1, 0.7, 1]
 /** 体量为 0 的部件（单个点）也得有个距离，否则相机与它重合。 */
 const MIN_FIT_DISTANCE = 0.5
+/** 可用取景的最小机位跨度。 */
+const MIN_PREVIEW_VIEW_SPAN = 1e-6
 
 export interface PartPreviewOptions {
   /** 画布挂到这里。 */
@@ -50,6 +57,10 @@ export interface PartPreviewOptions {
   /** 要展示的对象，画布上那棵模型树里的原件。 */
   objects: readonly THREE.Object3D[]
   autoRotate: boolean
+  /** 世界坐标取景；缺省或 null = 自动框住部件。 */
+  view?: TwinFocusView | null
+  /** 编辑视角时允许右键平移。 */
+  allowPan?: boolean
   /** 渲染器工厂；测试里换成 headless 替身。 */
   renderer?: SceneRendererFactory
 }
@@ -61,6 +72,10 @@ export interface PartPreview {
   frame: (deltaS: number) => void
   /** 用户接管了镜头，之后不再自动取景。 */
   releaseFraming: () => void
+  /** 当前预览机位转换回世界坐标。 */
+  snapshot: () => TwinFocusView
+  /** 恢复默认视野并重新框住部件。 */
+  frameDefault: () => void
   dispose: () => void
 }
 
@@ -194,12 +209,74 @@ function frameBox(
 }
 
 /** 把这一组对象搬到原点附近，免得相机得先飞很远才看得见。 */
-function centerAt(group: THREE.Group): THREE.Box3 {
+function centerAt(group: THREE.Group): {
+  box: THREE.Box3
+  center: THREE.Vector3
+} {
   const box = new THREE.Box3().setFromObject(group)
-  if (box.isEmpty()) return box
-  const center = box.getCenter(new THREE.Vector3())
+  const center = new THREE.Vector3()
+  if (box.isEmpty()) return { box, center }
+  box.getCenter(center)
   group.position.sub(center)
-  return box.translate(center.clone().negate())
+  return { box: box.translate(center.clone().negate()), center }
+}
+
+function usablePreviewView(
+  view: TwinFocusView | null | undefined,
+): TwinFocusView | null {
+  if (view === null || view === undefined) return null
+  const { position, target, fov } = view
+  if (
+    !position.every(Number.isFinite) ||
+    !target.every(Number.isFinite) ||
+    !Number.isFinite(fov) ||
+    fov < MIN_CAMERA_FOV ||
+    fov > MAX_CAMERA_FOV
+  )
+    return null
+  return Math.hypot(
+    position[0] - target[0],
+    position[1] - target[1],
+    position[2] - target[2],
+  ) > MIN_PREVIEW_VIEW_SPAN
+    ? view
+    : null
+}
+
+function applyPreviewView(
+  camera: THREE.PerspectiveCamera,
+  controls: OrbitControls,
+  view: TwinFocusView,
+  center: THREE.Vector3,
+): void {
+  // ⚠ 克隆件已居中，机位与注视点必须一起平移，否则保存的角度会改变。
+  camera.position.set(...view.position).sub(center)
+  controls.target.set(...view.target).sub(center)
+  controls.update()
+}
+
+function updateClipping(camera: THREE.PerspectiveCamera, span: number): void {
+  const near = Math.max(span * NEAR_RATIO, MIN_NEAR)
+  const far = Math.max(span * FAR_RATIO, camera.position.length() + span * 2)
+  if (camera.near === near && camera.far === far) return
+  camera.near = near
+  camera.far = far
+  camera.updateProjectionMatrix()
+}
+
+function attachPreviewCanvas(
+  renderer: SceneRenderer,
+  container: HTMLElement,
+): HTMLCanvasElement {
+  renderer.setPixelRatio(clampPixelRatio())
+  renderer.setClearColor(0x000000, 0)
+  const canvas = renderer.domElement
+  canvas.style.position = 'absolute'
+  canvas.style.inset = '0'
+  canvas.style.width = '100%'
+  canvas.style.height = '100%'
+  container.append(canvas)
+  return canvas
 }
 
 /**
@@ -222,28 +299,27 @@ export function createPartPreview(
       ? attachStudioEnvironment(scene, lighting, loadStudioEnvironment)
       : () => {}
   const stage = createStage(options.objects)
-  const box = centerAt(stage)
+  const { box, center } = centerAt(stage)
   const sorting = sortPreviewGeometry(stage)
   scene.add(lighting, stage)
 
-  const camera = new THREE.PerspectiveCamera(PREVIEW_FOV_DEG, 1, MIN_NEAR, 1)
-  renderer.setPixelRatio(clampPixelRatio())
-  renderer.setClearColor(0x000000, 0)
-  const canvas = renderer.domElement
-  canvas.style.position = 'absolute'
-  canvas.style.inset = '0'
-  canvas.style.width = '100%'
-  canvas.style.height = '100%'
-  options.container.append(canvas)
+  const view = usablePreviewView(options.view)
+  const camera = new THREE.PerspectiveCamera(
+    view?.fov ?? PREVIEW_FOV_DEG,
+    1,
+    MIN_NEAR,
+    1,
+  )
+  const canvas = attachPreviewCanvas(renderer, options.container)
 
   const controls = new OrbitControls(camera, canvas)
   controls.enableDamping = true
-  // 平移会把部件推出画面，而这块预览没有「回到中心」的入口
-  controls.enablePan = false
+  controls.enablePan = options.allowPan === true
 
   // ⚠ 真正的取景在 `measure` 里做：那时才知道舞台的宽高比，而宽高比正是
   //   「长条形部件能不能填满画面」的决定项。这里只先给一个不至于把它裁掉的距离
-  frameBox(camera, controls, box)
+  if (view === null) frameBox(camera, controls, box)
+  else applyPreviewView(camera, controls, view, center)
 
   const handle = makeHandle({
     cancelEnvironment,
@@ -256,8 +332,10 @@ export function createPartPreview(
     lighting,
     sorting,
     box,
+    center,
     span: box.isEmpty() ? 1 : box.getSize(new THREE.Vector3()).length(),
     autoRotate: options.autoRotate,
+    framing: view === null,
   })
   // 用户一碰控制器就不再自动取景：换宽高比时把他正看的角度拽走比画面小更糟
   controls.addEventListener('start', handle.releaseFraming)
@@ -277,15 +355,17 @@ interface HandleParts {
   lighting: THREE.Group
   /** 已居中到原点的包围盒，换宽高比时按它重新取景。 */
   box: THREE.Box3
+  center: THREE.Vector3
   /** 取景内容的体量，剪裁面按它给。 */
   span: number
   autoRotate: boolean
+  framing: boolean
 }
 
 function makeHandle(parts: HandleParts): PartPreview {
-  const { renderer, scene, camera, controls, canvas, stage, lighting } = parts
+  const { renderer, scene, camera, controls, stage } = parts
   /** 用户还没碰过镜头：换宽高比时可以替他重新取景。 */
-  let framing = true
+  let framing = parts.framing
   // ⚠ 具名函数：内联箭头那个 `removeEventListener` 摘不掉，每开一次弹窗就往
   //   控制器上多留一个
   function releaseFraming(): void {
@@ -293,6 +373,11 @@ function makeHandle(parts: HandleParts): PartPreview {
   }
   return {
     releaseFraming,
+    snapshot: () => snapshotPreview(parts),
+    frameDefault: () => {
+      framing = true
+      frameDefaultPreview(parts)
+    },
 
     measure: (width, height) => {
       // ⚠ 下限取 1：宿主被折叠时 height 是 0，aspect 变 Infinity 会让投影矩阵
@@ -300,13 +385,12 @@ function makeHandle(parts: HandleParts): PartPreview {
       const w = Math.max(1, Math.floor(width))
       const h = Math.max(1, Math.floor(height))
       camera.aspect = w / h
-      camera.near = Math.max(parts.span * NEAR_RATIO, MIN_NEAR)
-      camera.far = parts.span * FAR_RATIO
-      camera.updateProjectionMatrix()
       renderer.setSize(w, h)
       // ⚠ 取景要等真实宽高比：舞台宽了，长条形的部件才填得满，否则放大弹窗
       //   只是把黑边一起放大
       if (framing) frameBox(camera, controls, parts.box)
+      updateClipping(camera, parts.span)
+      camera.updateProjectionMatrix()
     },
 
     frame: (deltaS) => {
@@ -314,25 +398,52 @@ function makeHandle(parts: HandleParts): PartPreview {
         stage.rotation.y += THREE.MathUtils.degToRad(SPIN_DEG_PER_S) * deltaS
       }
       controls.update()
+      updateClipping(camera, parts.span)
       renderer.render(scene, camera)
     },
 
-    dispose: () => {
-      for (const sorting of parts.sorting) sorting.dispose()
-      parts.cancelEnvironment()
-      scene.environment?.dispose()
-      scene.environment = null
-      controls.removeEventListener('start', releaseFraming)
-      controls.dispose()
-      // ⚠ 只收自己造的灯：几何与材质是与主场景共用的，在这里 dispose 会让
-      //   大屏上那个部件整块消失
-      lighting.traverse((node) => {
-        if (node instanceof THREE.Light) node.dispose()
-      })
-      scene.clear()
-      canvas.remove()
-      renderer.dispose()
-      renderer.forceContextLoss()
-    },
+    dispose: () => disposePreview(parts, releaseFraming),
   }
+}
+
+function snapshotPreview(parts: HandleParts): TwinFocusView {
+  const position = parts.camera.position.clone().add(parts.center)
+  const target = parts.controls.target.clone().add(parts.center)
+  return {
+    position: [position.x, position.y, position.z],
+    target: [target.x, target.y, target.z],
+    fov: parts.camera.fov,
+  }
+}
+
+function frameDefaultPreview(parts: HandleParts): void {
+  const { camera, controls } = parts
+  const damping = controls.enableDamping
+  // ⚠ 先耗尽手势余量，否则重框后下一帧又会继续旋转或平移。
+  controls.enableDamping = false
+  controls.update()
+  controls.enableDamping = damping
+  camera.fov = PREVIEW_FOV_DEG
+  parts.stage.rotation.y = 0
+  frameBox(camera, controls, parts.box)
+  updateClipping(camera, parts.span)
+  camera.updateProjectionMatrix()
+}
+
+function disposePreview(parts: HandleParts, releaseFraming: () => void): void {
+  const { scene, controls, lighting, canvas, renderer } = parts
+  for (const sorting of parts.sorting) sorting.dispose()
+  parts.cancelEnvironment()
+  scene.environment?.dispose()
+  scene.environment = null
+  controls.removeEventListener('start', releaseFraming)
+  controls.dispose()
+  // ⚠ 几何与材质仍由主场景持有，这里只释放独立灯光与渲染器。
+  lighting.traverse((node) => {
+    if (node instanceof THREE.Light) node.dispose()
+  })
+  scene.clear()
+  canvas.remove()
+  renderer.dispose()
+  renderer.forceContextLoss()
 }

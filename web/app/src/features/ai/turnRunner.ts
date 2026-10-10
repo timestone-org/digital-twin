@@ -104,7 +104,9 @@ export async function runTurn(
       },
       // 模型收了嘴而计划没走完：代用户催一句，让它接着干（ADR-0024）
       nudge: () => {
-        if (!planUnfinished(watch.plan) || nudges >= MAX_PLAN_NUDGES) {
+        if (!planUnfinished(watch.plan)) return null
+        if (nudges >= MAX_PLAN_NUDGES) {
+          sink.onNote(unfinishedPlanNote(watch.plan))
           return null
         }
         nudges += 1
@@ -122,8 +124,18 @@ interface PlanWatch {
 }
 
 /** 计划还挂着没走完。 */
-function planUnfinished(plan: AssistantPlan | null): boolean {
+function planUnfinished(plan: AssistantPlan | null): plan is AssistantPlan {
   return plan !== null && plan.state === 'active'
+}
+
+function unfinishedPlanNote(plan: AssistantPlan): string {
+  const remaining = plan.items
+    .filter(
+      (item) => item.status === 'pending' || item.status === 'in_progress',
+    )
+    .map((item) => item.title)
+    .join('、')
+  return `自动继续已达 ${MAX_PLAN_NUDGES} 次上限，任务尚未完成，已停下。剩余：${remaining}。说一句「继续」可接着处理。`
 }
 
 /** 每一轮都要带的那几格：在哪一页、这一页此刻长什么样、实现了哪些工具。 */

@@ -8,6 +8,33 @@ import {
   rowSample,
   applyPreviewData,
 } from '@/pages/TwinEditor/scripts/previewData'
+it('部件效果模拟与染色、详情读数保持独立', () => {
+  const config = normalizeTwinConfig({
+    parts: [
+      {
+        id: 'pump',
+        tint: {},
+        effect: { enabled: true },
+        detail: { fields: [{ key: 'temp' }] },
+      },
+    ],
+  })
+  const values = twinSceneValues(config, {
+    partValues: [{ value: 90 }],
+    partEffectValues: [{ value: false }],
+    partFieldValues: [{ value: 30 }],
+  })
+  const rows = previewDataRows(config, { kind: 'parts', id: 'pump' }, null)
+  const output = applyPreviewData(values, rows, { 'effectParts:pump': true })
+  expect(rows.map((row) => row.key)).toContain('effectParts:pump')
+  expect(output.effectParts?.pump?.value).toBe(true)
+  expect(output.parts.pump?.value).toBe(90)
+  expect(output.partFields['pump::temp']?.value).toBe(30)
+  expect(values.effectParts?.pump?.value).toBe(false)
+  const effectRow = rows.find((row) => row.slot === 'effectParts')
+  if (effectRow === undefined) throw new Error('缺少效果模拟行')
+  expect(rowSample(values, effectRow)).toBe(false)
+})
 it('只覆盖当前信息牌字段，不改变其他对象或实时值', () => {
   const config = normalizeTwinConfig({
     panels: [

@@ -7,6 +7,7 @@
  */
 import * as THREE from 'three'
 import { describe, expect, it } from 'vitest'
+import type { TwinFocusView } from '@dt/twin-config'
 
 import {
   createPartPreview,
@@ -57,6 +58,222 @@ function setup(autoRotate = false) {
   if (preview === null) throw new Error('预览没造出来')
   return { ...model, container, renderer, preview }
 }
+
+function setupView(view: TwinFocusView | null, allowPan = false) {
+  const model = buildModel()
+  const renderer = createHeadlessRenderer()
+  const preview = createPartPreview({
+    container: document.createElement('div'),
+    objects: [model.pump],
+    autoRotate: false,
+    view,
+    allowPan,
+    renderer: () => renderer,
+  })
+  if (preview === null) throw new Error('预览没造出来')
+  preview.measure(600, 400)
+  preview.frame(0)
+  const camera = renderer.renders[0]?.camera
+  if (!(camera instanceof THREE.PerspectiveCamera))
+    throw new Error('没有透视相机')
+  return { ...model, preview, renderer, camera }
+}
+
+describe('独立模型取景', () => {
+  it.each([false, true])('右键平移只在允许编辑位置时生效 %s', (allowPan) => {
+    const { preview, renderer } = setupView(
+      {
+        position: [13, 4, 12],
+        target: [11, 1, -2],
+        fov: 67,
+      },
+      allowPan,
+    )
+    const canvas = renderer.domElement
+    Object.defineProperty(canvas, 'clientHeight', { value: 400 })
+    canvas.dispatchEvent(
+      new PointerEvent('pointerdown', {
+        pointerId: 1,
+        pointerType: 'mouse',
+        button: 2,
+        clientX: 100,
+        clientY: 100,
+      }),
+    )
+    canvas.ownerDocument.dispatchEvent(
+      new PointerEvent('pointermove', {
+        pointerId: 1,
+        pointerType: 'mouse',
+        button: 2,
+        clientX: 150,
+        clientY: 100,
+      }),
+    )
+    canvas.ownerDocument.dispatchEvent(
+      new PointerEvent('pointerup', {
+        pointerId: 1,
+        pointerType: 'mouse',
+        button: 2,
+        clientX: 150,
+        clientY: 100,
+      }),
+    )
+    preview.frame(0)
+
+    const moved = new THREE.Vector3(...preview.snapshot().target).distanceTo(
+      new THREE.Vector3(11, 1, -2),
+    )
+    if (allowPan) expect(moved).toBeGreaterThan(0)
+    else expect(moved).toBeLessThan(1e-6)
+    preview.frameDefault()
+    expect(preview.snapshot().target).toEqual([10, 0, 0])
+    preview.dispose()
+  })
+
+  it('独立预览快照把机位与注视点转换回世界坐标', () => {
+    const { preview, camera } = setupView({
+      position: [13, 4, 12],
+      target: [11, 1, -2],
+      fov: 67,
+    })
+    camera.position.set(6, 7, 8)
+    preview.frame(0)
+
+    const view = preview.snapshot()
+
+    expect(
+      new THREE.Vector3(...view.position).distanceTo(
+        new THREE.Vector3(16, 7, 8),
+      ),
+    ).toBeLessThan(1e-6)
+    expect(view.target).toEqual([11, 1, -2])
+    expect(view.fov).toBe(67)
+    const reopened = setupView(view)
+    expect(reopened.camera.position.distanceTo(camera.position)).toBeLessThan(
+      1e-6,
+    )
+    preview.dispose()
+    reopened.preview.dispose()
+  })
+
+  it('滚轮调节后保存当前缩放，恢复默认重新框住部件', () => {
+    const { preview, renderer, camera } = setupView({
+      position: [13, 4, 12],
+      target: [11, 1, -2],
+      fov: 67,
+    })
+    const before = camera.position.distanceTo(new THREE.Vector3(1, 1, -2))
+    renderer.domElement.dispatchEvent(new WheelEvent('wheel', { deltaY: -100 }))
+    preview.frame(0)
+
+    const view = preview.snapshot()
+    expect(
+      new THREE.Vector3(...view.position).distanceTo(
+        new THREE.Vector3(...view.target),
+      ),
+    ).toBeLessThan(before)
+    preview.frameDefault()
+    preview.frame(0)
+
+    expect(preview.snapshot().target).toEqual([10, 0, 0])
+    expect(camera.fov).toBe(45)
+    expect(camera.position.x / camera.position.z).toBeCloseTo(1)
+    preview.dispose()
+  })
+
+  it('没保存独立机位时保留默认的自动取景', () => {
+    const { preview, camera } = setupView(null)
+
+    expect(camera.fov).toBe(45)
+    expect(camera.position.x / camera.position.z).toBeCloseTo(1)
+    expect(camera.position.y / camera.position.z).toBeCloseTo(0.7)
+    preview.dispose()
+  })
+
+  it('世界机位与注视点一起减去部件中心，视野跟随配置', () => {
+    const { preview, camera, pump } = setupView({
+      position: [13, 4, 12],
+      target: [11, 1, -2],
+      fov: 67,
+    })
+
+    expect(
+      camera.position.distanceTo(new THREE.Vector3(3, 4, 12)),
+    ).toBeLessThan(1e-6)
+    expect(
+      camera
+        .getWorldDirection(new THREE.Vector3())
+        .distanceTo(new THREE.Vector3(-2, -3, -14).normalize()),
+    ).toBeLessThan(1e-6)
+    expect(camera.fov).toBe(67)
+    expect(pump.getWorldPosition(new THREE.Vector3()).toArray()).toEqual([
+      10, 0, 0,
+    ])
+    preview.dispose()
+  })
+
+  it('已配置机位换舞台尺寸后仍保留取景', () => {
+    const { preview, camera } = setupView({
+      position: [13, 4, 12],
+      target: [11, 1, -2],
+      fov: 67,
+    })
+    const before = camera.position.clone()
+
+    preview.measure(1400, 350)
+    preview.frame(0)
+
+    expect(camera.position.distanceTo(before)).toBeLessThan(1e-6)
+    expect(camera.aspect).toBe(4)
+    preview.dispose()
+  })
+
+  it('远处保存的机位不会把整个部件裁掉', () => {
+    const { preview, camera } = setupView({
+      position: [10, 0, 100000],
+      target: [10, 0, 0],
+      fov: 45,
+    })
+
+    expect(camera.far).toBeGreaterThan(100002)
+    expect(new THREE.Vector3(0, 0, -1).project(camera).z).toBeLessThan(1)
+    preview.dispose()
+  })
+
+  it('用户继续拉远镜头时剪裁面跟着扩大', () => {
+    const { preview, camera } = setupView({
+      position: [10, 0, 100000],
+      target: [10, 0, 0],
+      fov: 45,
+    })
+
+    preview.releaseFraming()
+    camera.position.multiplyScalar(3)
+    preview.frame(0)
+
+    expect(camera.far).toBeGreaterThan(300002)
+    expect(new THREE.Vector3(0, 0, -1).project(camera).z).toBeLessThan(1)
+    preview.dispose()
+  })
+
+  it.each([
+    { position: [1, 2, 3], target: [1, 2, 3], fov: 45 },
+    { position: [Number.NaN, 2, 3], target: [0, 0, 0], fov: 45 },
+    { position: [1, 2, 3], target: [0, Number.POSITIVE_INFINITY, 0], fov: 45 },
+    { position: [1, 2, 3], target: [0, 0, 0], fov: 0 },
+    { position: [1, 2, 3], target: [0, 0, 0], fov: 180 },
+    { position: [1, 2, 3], target: [0, 0, 0], fov: Number.NaN },
+  ] satisfies TwinFocusView[])('不可用的直接取景 %j 回退默认机位', (view) => {
+    const { preview, camera } = setupView(view)
+
+    expect(camera.fov).toBe(45)
+    expect(camera.position.x).toBeGreaterThan(0)
+    expect(camera.position.y).toBeGreaterThan(0)
+    expect(camera.position.z).toBeGreaterThan(0)
+    expect(camera.position.toArray().every(Number.isFinite)).toBe(true)
+    preview.dispose()
+  })
+})
 
 describe('装配', () => {
   it('半透明部件预览独占墙面排序几何，关闭时保留主场景资源', () => {

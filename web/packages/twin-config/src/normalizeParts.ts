@@ -29,6 +29,7 @@ import {
   TWIN_TINT_MODES,
   type TwinPartClick,
   type TwinPartDetail,
+  type TwinFocusView,
   type TwinPartLook,
   type TwinPartTint,
   type TwinTintGradient,
@@ -37,6 +38,8 @@ import {
 
 /** 常态染色浓度：染上去还看得出金属/纹理，不至于糊成一块纯色。 */
 const DEFAULT_BLEND = 0.85
+/** 可用取景的最小机位跨度。 */
+const MIN_DETAIL_VIEW_SPAN = 1e-6
 /** 自发光上限；再高只是把画面烧白。 */
 const MAX_GLOW = 3
 /** 渐变缺省区间，配成 0–100 让百分比类点位开箱即用。 */
@@ -151,6 +154,7 @@ export const DEFAULT_PART_DETAIL: TwinPartDetail = Object.freeze({
   fields: [],
   showModel: true,
   autoRotate: false,
+  view: null,
   modelHeight: 420,
   width: 1120,
   variant: 'card',
@@ -175,6 +179,31 @@ export function normalizePartClick(raw: unknown): TwinPartClick {
   }
 }
 
+function isFiniteVec3(raw: unknown): boolean {
+  return (
+    Array.isArray(raw) &&
+    raw.length === 3 &&
+    raw.every((axis: unknown) => toFiniteNumber(axis) !== null)
+  )
+}
+
+/** 校验详情取景坐标，视野采用视点的归一化区间。 */
+function normalizeDetailView(raw: unknown): TwinFocusView | null {
+  if (
+    !isRecord(raw) ||
+    !isFiniteVec3(raw.position) ||
+    !isFiniteVec3(raw.target)
+  )
+    return null
+  const view = normalizeFocusView(raw)
+  if (view === null) return null
+  const [px, py, pz] = view.position
+  const [tx, ty, tz] = view.target
+  return Math.hypot(px - tx, py - ty, pz - tz) > MIN_DETAIL_VIEW_SPAN
+    ? view
+    : null
+}
+
 /**
  * 部件详情弹窗。
  * ⚠ 一个字段都没有也照样产出一份详情：字段是不是空由 `fields.length` 说了算，
@@ -189,6 +218,7 @@ export function normalizePartDetail(raw: unknown): TwinPartDetail {
     fields: normalizeList(source.fields, normalizePanelField),
     showModel: boolOr(source.showModel, DEFAULT_PART_DETAIL.showModel),
     autoRotate: boolOr(source.autoRotate, DEFAULT_PART_DETAIL.autoRotate),
+    view: normalizeDetailView(source.view),
     modelHeight: clampedOr(
       source.modelHeight,
       DEFAULT_PART_DETAIL.modelHeight,

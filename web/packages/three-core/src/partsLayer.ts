@@ -9,8 +9,11 @@
  */
 import {
   partAppearance,
+  partEffectActive,
+  partEffectIntensity,
   type TwinPart,
   type TwinPartColor,
+  type TwinPartEffectValues,
   type TwinPartValues,
 } from '@dt/twin-config'
 import * as THREE from 'three'
@@ -36,6 +39,9 @@ interface PartEntry {
    * 最后一个部件算出的那个色。
    */
   scratch: THREE.Color
+  fade: number
+  elapsedMs: number
+  wasActive: boolean
 }
 
 /** 部件的世界包围盒；一个对象都没命中时给 null。 */
@@ -52,7 +58,8 @@ function changesMaterials(part: TwinPart): boolean {
     part.visibility.fade !== null ||
     part.look.opacity < 1 ||
     part.look.color !== '' ||
-    part.tint !== null
+    part.tint !== null ||
+    (part.effect !== undefined && part.effect !== null)
   )
 }
 
@@ -60,6 +67,7 @@ function changesMaterials(part: TwinPart): boolean {
 export class PartsLayer {
   private entries: PartEntry[] = []
   private values: TwinPartValues = {}
+  private effectValues: TwinPartEffectValues = {}
   private readonly colors: ColorSpecCache
 
   /**
@@ -90,6 +98,9 @@ export class PartsLayer {
           ? new PartMaterials(meshesOfNames(index, part.nodes))
           : null,
         scratch: new THREE.Color(),
+        fade: 1,
+        elapsedMs: 0,
+        wasActive: false,
       })
     }
   }
@@ -100,6 +111,21 @@ export class PartsLayer {
    */
   setValues(values: TwinPartValues): void {
     this.values = values
+  }
+
+  setEffectValues(values: TwinPartEffectValues): void {
+    this.effectValues = values
+  }
+
+  /** 推进条件效果，不重算距离规则或更改显隐。 */
+  update(deltaSeconds: number): void {
+    for (const entry of this.entries) {
+      if (entry.part.effect === undefined || entry.part.effect === null)
+        continue
+      const active = this.syncEffect(entry)
+      if (active && deltaSeconds > 0) entry.elapsedMs += deltaSeconds * 1000
+      this.dress(entry)
+    }
   }
 
   /**
@@ -113,7 +139,8 @@ export class PartsLayer {
         distanceResolver(context, entry.center, entry.center),
       )
       for (const object of entry.objects) object.visible = state.visible
-      this.dress(entry, state.opacity)
+      entry.fade = state.opacity
+      this.dress(entry)
     }
   }
 
@@ -125,7 +152,10 @@ export class PartsLayer {
    * 显隐在编辑器里由左栏的眼睛单独管，这里一个字都不能碰。
    */
   applyAppearance(): void {
-    for (const entry of this.entries) this.dress(entry, 1)
+    for (const entry of this.entries) {
+      entry.fade = 1
+      this.dress(entry)
+    }
   }
 
   /**
@@ -178,11 +208,10 @@ export class PartsLayer {
    * 把外观套到这个部件的材质上。
    * ⚠ 距离淡出是**乘**在配置的透明度上，不是覆盖：写成覆盖的话，给半透明外壳
    * 配了淡出之后，一进近景它反而变得比平时更实。
-   * @param fade 这一帧的距离淡出系数，1 = 不淡
    */
-  private dress(entry: PartEntry, fade: number): void {
+  private dress(entry: PartEntry): void {
     const look = this.lookOf(entry)
-    entry.materials?.apply({ ...look, opacity: look.opacity * fade })
+    entry.materials?.apply({ ...look, opacity: look.opacity * entry.fade })
   }
 
   /** 这个部件这一刻的材质外观，颜色已解析成 `THREE.Color`。 */
@@ -196,7 +225,34 @@ export class PartsLayer {
       color: this.colorOf(appearance.color, entry.scratch),
       blend: appearance.blend,
       glow: appearance.glow,
+      ...this.effectLook(entry),
     }
+  }
+
+  private effectLook(entry: PartEntry): Pick<PartLook, 'effect'> {
+    const effect = entry.part.effect
+    if (effect === undefined || effect === null || !this.syncEffect(entry)) {
+      return {}
+    }
+    return {
+      effect: {
+        color: effect.color === '' ? null : this.colors.get(effect.color),
+        blend: effect.blend,
+        glow: effect.glow,
+        intensity: partEffectIntensity(effect, entry.elapsedMs),
+      },
+    }
+  }
+
+  private syncEffect(entry: PartEntry): boolean {
+    const effect = entry.part.effect
+    const active =
+      effect !== undefined &&
+      effect !== null &&
+      partEffectActive(effect, this.effectValues[entry.part.id]?.value)
+    if (active && !entry.wasActive) entry.elapsedMs = 0
+    entry.wasActive = active
+    return active
   }
 
   /**

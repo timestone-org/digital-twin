@@ -109,12 +109,20 @@ def test_slots_split_scalar_and_array_entries() -> None:
     assert slots.array_fields == {
         "animationValues": frozenset({"value"}),
         "partValues": frozenset({"value"}),
+        "partEffectValues": frozenset({"value"}),
         "anchorValues": frozenset({"value"}),
         "panelValues": frozenset({"value"}),
         "arrowValues": frozenset({"value"}),
         "flowValues": frozenset({"intensity", "active"}),
         "partFieldValues": frozenset({"value"}),
     }
+
+
+def test_part_effect_rows_are_pinned_independently_of_tint() -> None:
+    """效果与染色槽分别登记，允许只绑定部分部件的开关量。"""
+    slots = load_module_catalog().slots("twin-view")
+    assert "partEffectValues" in slots.entity_pinned
+    assert "partValues" in slots.entity_pinned
 
 
 def test_the_two_d_twin_slots_are_arrays_pinned_to_the_drawing() -> None:

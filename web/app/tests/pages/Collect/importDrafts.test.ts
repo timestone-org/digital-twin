@@ -115,13 +115,33 @@ describe('编码逐条判合法', () => {
     expect(found.get('ns=2;s=A.Temp')).toContain('必填')
   })
 
-  it('中文与空格这类字符不合规——后端的 Code 只收 ASCII 标识串', () => {
+  it('中文与内部空白不属于点位编码的可见 ASCII 范围', () => {
     expect(codeProblems([draft('出口温度')], new Set()).size).toBe(1)
     expect(codeProblems([draft('outlet temp')], new Set()).size).toBe(1)
   })
 
-  it('不许以点或下划线开头', () => {
-    expect(codeProblems([draft('_temp')], new Set()).size).toBe(1)
+  it.each(['_temp', '#Pump[1]', 'ns=2;s=RS_HYGS_DLZX_1#PRESSUREPUMP_FREQ'])(
+    '现场符号编码 %s 可用于浏览节点导入',
+    (code) => {
+      expect(codeProblems([draft(code)], new Set()).size).toBe(0)
+    },
+  )
+
+  it.each(['pump:freq', 'pump\u0000freq', 'pump\u007ffreq'])(
+    '冒号与控制字符编码 %s 必须拒绝',
+    (code) => {
+      expect(codeProblems([draft(code)], new Set()).size).toBe(1)
+    },
+  )
+
+  it('包含 # 的相同编码仍报告本批与已有点位的重复', () => {
+    const code = 'Pump#1'
+    expect(
+      codeProblems([draft(code), draft(code, 'ns=2;s=B.Temp')], new Set()).get(
+        'ns=2;s=B.Temp',
+      ),
+    ).toContain('第 1 行')
+    expect(codeProblems([draft(code)], new Set([code])).size).toBe(1)
   })
 
   it('超过 64 个字符要报出来，不然整批 422', () => {

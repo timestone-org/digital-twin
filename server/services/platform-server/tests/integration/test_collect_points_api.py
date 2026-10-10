@@ -9,6 +9,7 @@ from conftest import CollectFakes
 from unit.collect_fakes import ACTION_VALIDATE
 
 from integration.collect_helpers import (
+    PLAN,
     POINTS,
     create_points,
     create_source,
@@ -16,6 +17,7 @@ from integration.collect_helpers import (
     payload,
     point_item,
 )
+from platform_server.settings import Settings
 
 pytestmark = pytest.mark.requires_postgres
 
@@ -68,6 +70,47 @@ async def test_a_point_carries_its_node_key(
     source = await create_source(app_client)
     batch = await create_points(app_client, source["id"])
     assert batch["items"][0]["node_key"] == f"{source['id']}:outlet_temp"
+
+
+async def test_symbol_codes_survive_batch_storage_listing_and_plan(
+    app_client: httpx.AsyncClient,
+    collect_fakes: CollectFakes,
+    settings: Settings,
+) -> None:
+    source = await create_source(app_client)
+    address = "ns=2;s=RS_HYGS_DLZX_1#PRESSUREPUMP_FREQ"
+    codes = ["RS_HYGS_DLZX_1#PRESSUREPUMP_FREQ", address]
+    accept_all(collect_fakes, address)
+    created = await create_points(
+        app_client,
+        source["id"],
+        *(point_item(code, address=address) for code in codes),
+    )
+    assert [check["status"] for check in created["address_checks"]] == [
+        "passed"
+    ]
+    listed = await app_client.get(POINTS, params={"source_id": source["id"]})
+    assert listed.status_code == 200
+    expected = [(code, address, f"{source['id']}:{code}") for code in codes]
+    for points in (created["items"], payload(listed)["items"]):
+        assert [
+            (point["code"], point["address"], point["node_key"])
+            for point in points
+        ] == expected
+    response = await app_client.get(
+        PLAN,
+        headers={"X-Service-Key": settings.edge_service_key.get_secret_value()},
+    )
+    assert response.status_code == 200
+    planned_source = next(
+        item
+        for item in payload(response)["sources"]
+        if item["source_id"] == source["id"]
+    )
+    assert [
+        (point["point_code"], point["address"])
+        for point in planned_source["points"]
+    ] == [(code, address) for code in codes]
 
 
 async def test_an_unanswered_address_is_reported_unverified(
@@ -275,6 +318,34 @@ async def test_the_list_searches_by_name_and_by_code(
     assert [item["code"] for item in payload(by_name)["items"]] == [
         "outlet_temp"
     ]
+
+
+@pytest.mark.parametrize(
+    ("code", "other_code"),
+    [
+        (r"Pump\Freq", "PumpFreq"),
+        ("Pump%Freq", "PumpOtherFreq"),
+        ("Pump_Freq", "PumpXFreq"),
+    ],
+    ids=["backslash", "percent", "underscore"],
+)
+async def test_code_queries_match_literal_symbols_case_insensitively(
+    app_client: httpx.AsyncClient, code: str, other_code: str
+) -> None:
+    source = await create_source(app_client)
+    await create_points(
+        app_client, source["id"], point_item(code), point_item(other_code)
+    )
+    for keyword in (code.lower(), code.lower()[4:]):
+        for query in (
+            {"q": keyword},
+            {"q": keyword, "source_id": source["id"]},
+        ):
+            response = await app_client.get(POINTS, params=query)
+            assert response.status_code == 200
+            assert [item["code"] for item in payload(response)["items"]] == [
+                code
+            ]
 
 
 async def test_the_list_is_ordered_the_same_way_twice(

@@ -8,6 +8,39 @@ import {
   replacedBindings,
 } from '@/pages/TwinEditor/scripts/batchConfig'
 import { createBinding } from '@/features/dashboard/editorDoc'
+it('复制效果规则保留目标染色与点位，整批支持撤销', () => {
+  const config = normalizeTwinConfig({
+    parts: [
+      {
+        id: 'source',
+        effect: { enabled: false, pattern: 'blink', threshold: 0 },
+      },
+      {
+        id: 'target',
+        tint: { fallback: '#ff0000' },
+        effect: { enabled: true },
+      },
+    ],
+  })
+  const bindings = [
+    {
+      ...createBinding('n', 'partEffectValues[1].value'),
+      sourceKind: 'opcua' as const,
+      nodeKey: 's:pump-switch',
+    },
+  ]
+  const doc = createTwinDoc({ config, bindings })
+  doc.commit(copyPartSettings(config, 'source', ['target'], ['effect']))
+  expect(doc.config.value.parts[1]?.effect).toMatchObject({
+    enabled: false,
+    pattern: 'blink',
+    threshold: 0,
+  })
+  expect(doc.config.value.parts[1]?.tint).toEqual(config.parts[1]?.tint)
+  expect(doc.bindings.value).toEqual(bindings)
+  doc.undo()
+  expect(doc.config.value).toEqual(config)
+})
 it('复制外观时保留目标身份、节点、层级和取景', () => {
   const config = normalizeTwinConfig({
     parts: [

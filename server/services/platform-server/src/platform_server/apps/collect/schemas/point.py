@@ -8,10 +8,10 @@ from collectwire import DataType
 from platform_server.apps.collect.models import MIN_INTERVAL_MS
 from platform_server.apps.collect.schemas.common import (
     Address,
-    Code,
     InputModel,
     Label,
     OutputModel,
+    PointCode,
     UpdateModel,
     Utc,
 )
@@ -56,7 +56,7 @@ class PointOut(OutputModel):
 class PointItemIn(InputModel):
     """批量里的一个点位。数据源在批的层面上给，一批只对一个源。"""
 
-    code: Code
+    code: PointCode
     name: Label
     description: str | None = Field(default=None, max_length=1000)
     address: Address

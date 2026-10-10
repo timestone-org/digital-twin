@@ -201,6 +201,7 @@ describe('normalizeTwinConfig 的实体', () => {
         visibility: shown(true),
         look: DEFAULT_PART_LOOK,
         tint: null,
+        effect: null,
         clickDistance: NO_CLICK_LIMIT,
         click: DEFAULT_PART_CLICK,
         detail: DEFAULT_PART_DETAIL,
@@ -214,6 +215,7 @@ describe('normalizeTwinConfig 的实体', () => {
         visibility: shown(false),
         look: DEFAULT_PART_LOOK,
         tint: null,
+        effect: null,
         clickDistance: NO_CLICK_LIMIT,
         click: DEFAULT_PART_CLICK,
         detail: DEFAULT_PART_DETAIL,
@@ -248,6 +250,75 @@ describe('normalizeTwinConfig 的实体', () => {
       { id: 'f-keep', kind: 'anchors', name: '温度', itemIds: ['a-1'] },
       { id: 'fold-3', kind: 'anchors', name: '', itemIds: ['anchor-1'] },
     ])
+  })
+})
+
+describe('部件详情模型取景', () => {
+  it('序列化并重新归一化后保留独立取景，远距点击取景各自保存', () => {
+    const view = { position: [13, 4, 12], target: [11, 1, -2], fov: 67 }
+    const clickView = { position: [20, 10, 20], target: [0, 0, 0], fov: 45 }
+    const config = normalizeTwinConfig({
+      parts: [{ id: 'pump', detail: { view }, click: { view: clickView } }],
+    })
+    const saved: unknown = JSON.parse(JSON.stringify(config))
+    const part = normalizeTwinConfig(saved).parts[0]
+
+    expect(part?.detail.view).toEqual(view)
+    expect(part?.click.view).toEqual(clickView)
+  })
+
+  it.each([
+    undefined,
+    null,
+    'no-view',
+    {},
+    { position: '1,2,3', target: [0, 0, 0] },
+    { position: [1, 2], target: [0, 0, 0] },
+    { position: [1, 2, 3, 4], target: [0, 0, 0] },
+    { position: [Number.NaN, 1, 2], target: [0, 0, 0] },
+    { position: [1, 2, 3], target: [0, Number.POSITIVE_INFINITY, 0] },
+    { position: [1, 2, 3], target: [1, 2, 3] },
+    { position: [1, 2, 3], target: [1, 2, 3.00000001] },
+  ])('缺少或不可用的取景 %j 回退自动取景', (view) => {
+    const part = normalizeTwinConfig({ parts: [{ detail: { view } }] }).parts[0]
+
+    expect(part?.detail.view).toBeNull()
+  })
+
+  it.each([
+    { fov: undefined, expected: 45 },
+    { fov: 0, expected: 1 },
+    { fov: 180, expected: 179 },
+  ])('详情视野 $fov 与视点采用相同合法区间', ({ fov, expected }) => {
+    const part = normalizeTwinConfig({
+      parts: [
+        { detail: { view: { position: [1, 2, 3], target: [0, 0, 0], fov } } },
+      ],
+    }).parts[0]
+
+    expect(part?.detail.view?.fov).toBe(expected)
+  })
+
+  it('坐标数字字符串按视点坐标相同口径收敛成有限数', () => {
+    const part = normalizeTwinConfig({
+      parts: [
+        {
+          detail: {
+            view: {
+              position: ['1', '2', '3'],
+              target: ['0', '0', '0'],
+              fov: '60',
+            },
+          },
+        },
+      ],
+    }).parts[0]
+
+    expect(part?.detail.view).toEqual({
+      position: [1, 2, 3],
+      target: [0, 0, 0],
+      fov: 60,
+    })
   })
 })
 

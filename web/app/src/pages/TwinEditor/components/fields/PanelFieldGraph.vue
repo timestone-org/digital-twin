@@ -1,17 +1,14 @@
 <script setup lang="ts">
 /**
- * @fileoverview 一个信息牌字段的画法组：画法、量程与阈值档。
- *
- * ⚠ 换画法**不改行数**：八种画法都只吃一个值，既有绑定不会因为把某一行改成
- * 仪表盘而整体错位。这一点要在面板上说清楚，否则用户不敢动。
- * ⚠ 趋势线与柱群攒的是**本次会话内收到的读数**，不是历史库里查来的——刚打开
- * 大屏时图是空的，不写明的话用户会以为是绑定没生效。
+ * @fileoverview 信息牌字段的画法、量程、阈值与设备状态映射。
  */
 import {
   PANEL_FIELD_KINDS,
+  DEFAULT_PANEL_STATE,
   TWIN_PANEL_TONES,
   panelKindUsesRange,
   panelKindUsesSeries,
+  panelKindUsesState,
   type TwinPanelField,
   type TwinPanelFieldKind,
   type TwinPanelLevel,
@@ -19,6 +16,8 @@ import {
 } from '@dt/twin-config'
 import { DtButton, DtField, DtNumberInput, DtSelect } from '@dt/ui'
 import { computed } from 'vue'
+
+import PanelFieldState from './PanelFieldState.vue'
 
 const props = defineProps<{ field: TwinPanelField }>()
 
@@ -32,6 +31,8 @@ const KIND_LABELS: Readonly<Record<TwinPanelFieldKind, string>> = {
   sparkline: '迷你趋势线',
   bars: '迷你柱群',
   dot: '状态灯',
+  status: '状态徽标',
+  switch: '开关指示',
   delta: '升降角标',
 }
 const TONE_LABELS: Readonly<Record<TwinPanelTone, string>> = {
@@ -55,6 +56,7 @@ const toneOptions = TWIN_PANEL_TONES.map((value) => ({
 
 const usesRange = computed(() => panelKindUsesRange(props.field.kind))
 const usesSeries = computed(() => panelKindUsesSeries(props.field.kind))
+const usesState = computed(() => panelKindUsesState(props.field.kind))
 
 /** 量程颠倒时图形画不出来，会退回纯文本——这一档必须当场说。 */
 const badRange = computed(
@@ -63,7 +65,12 @@ const badRange = computed(
 
 function writeKind(next: string): void {
   const kind = PANEL_FIELD_KINDS.find((item) => item === next)
-  if (kind !== undefined) emit('update', { kind })
+  if (kind === undefined) return
+  if (panelKindUsesState(kind) && props.field.state === undefined) {
+    emit('update', { kind, state: { ...DEFAULT_PANEL_STATE } })
+    return
+  }
+  emit('update', { kind })
 }
 
 function writeLevels(levels: TwinPanelLevel[]): void {
@@ -143,52 +150,60 @@ function writeTone(id: string, next: string): void {
       走势攒的是本次会话内收到的读数，不查历史库：刚打开大屏时图是空的。
     </p>
 
-    <div
-      v-for="level in field.levels"
-      :key="level.id"
-      class="flex items-center gap-1.5"
-    >
-      <span class="shrink-0 text-xs text-text-secondary">≥</span>
-      <DtNumberInput
-        class="min-w-0 flex-1"
-        :model-value="level.at"
-        aria-label="阈值"
-        size="sm"
-        :steppers="false"
-        @update:model-value="patchLevel(level.id, { at: $event ?? 0 })"
-      />
-      <DtSelect
-        class="min-w-0 flex-1"
-        :model-value="level.tone"
-        :options="toneOptions"
-        aria-label="档位颜色"
-        size="sm"
-        @update:model-value="writeTone(level.id, $event)"
-      />
-      <DtButton
-        size="xs"
-        variant="ghost"
-        intent="danger"
-        icon="trash"
-        aria-label="删除阈值档"
-        title="删除阈值档"
-        @click="removeLevel(level.id)"
-      />
-    </div>
+    <PanelFieldState
+      v-if="usesState"
+      :field="field"
+      @update="emit('update', $event)"
+    />
 
-    <DtButton
-      v-if="field.levels.length < MAX_LEVELS"
-      variant="soft"
-      size="sm"
-      icon="plus"
-      block
-      @click="addLevel"
-    >
-      添加阈值档
-    </DtButton>
-    <!-- ⚠ 取的是满足条件里阈值最大的那一档，不是写在前面的那一档 -->
-    <p v-if="field.levels.length > 1" class="text-xs text-text-disabled">
-      读数同时满足几档时取阈值最大的那一档，与这里的先后无关。
-    </p>
+    <template v-else>
+      <div
+        v-for="level in field.levels"
+        :key="level.id"
+        class="flex items-center gap-1.5"
+      >
+        <span class="shrink-0 text-xs text-text-secondary">≥</span>
+        <DtNumberInput
+          class="min-w-0 flex-1"
+          :model-value="level.at"
+          aria-label="阈值"
+          size="sm"
+          :steppers="false"
+          @update:model-value="patchLevel(level.id, { at: $event ?? 0 })"
+        />
+        <DtSelect
+          class="min-w-0 flex-1"
+          :model-value="level.tone"
+          :options="toneOptions"
+          aria-label="档位颜色"
+          size="sm"
+          @update:model-value="writeTone(level.id, $event)"
+        />
+        <DtButton
+          size="xs"
+          variant="ghost"
+          intent="danger"
+          icon="trash"
+          aria-label="删除阈值档"
+          title="删除阈值档"
+          @click="removeLevel(level.id)"
+        />
+      </div>
+
+      <DtButton
+        v-if="field.levels.length < MAX_LEVELS"
+        variant="soft"
+        size="sm"
+        icon="plus"
+        block
+        @click="addLevel"
+      >
+        添加阈值档
+      </DtButton>
+      <!-- ⚠ 取的是满足条件里阈值最大的那一档，不是写在前面的那一档 -->
+      <p v-if="field.levels.length > 1" class="text-xs text-text-disabled">
+        读数同时满足几档时取阈值最大的那一档，与这里的先后无关。
+      </p>
+    </template>
   </div>
 </template>

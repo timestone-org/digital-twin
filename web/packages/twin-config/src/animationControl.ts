@@ -39,7 +39,7 @@ export function normalizeAnimationControls(
 }
 
 export function animationCondition(
-  control: TwinAnimationControl,
+  control: Pick<TwinAnimationControl, 'operator' | 'threshold'>,
   raw: unknown,
 ): boolean | null {
   const value = typeof raw === 'boolean' ? Number(raw) : toFiniteNumber(raw)

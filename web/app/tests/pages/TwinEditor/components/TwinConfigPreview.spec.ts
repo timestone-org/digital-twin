@@ -1,6 +1,7 @@
 /** @fileoverview 预览随选中切换并传递隔离节点、机位和临时动画配置。 */
 import { TwinScene } from '@dt/three-core'
 import { normalizeTwinConfig } from '@dt/twin-config'
+import type { TwinFocusView } from '@dt/twin-config'
 import { mount, flushPromises } from '@vue/test-utils'
 import { expect, it, vi } from 'vitest'
 import { DtSegmented } from '@dt/ui'
@@ -32,6 +33,123 @@ vi.mock('@dt/three-core', async () => {
 const config = normalizeTwinConfig({
   parts: [{ id: 'pump', nodes: ['pump-mesh'] }],
   cameras: [{ id: 'view', position: [1, 2, 3], target: [0, 0, 0] }],
+})
+it('直接打开独立视角编辑，应用和恢复时保持弹窗宿主，关闭后清除请求', async () => {
+  const config = normalizeTwinConfig({
+    parts: [
+      { id: 'pump', nodes: ['pump'] },
+      { id: 'child', parentId: 'pump' },
+    ],
+  })
+  const wrapper = mount(TwinConfigPreview, {
+    props: {
+      node: null,
+      config,
+      selection: { kind: 'parts', id: 'pump' },
+      animation: null,
+      testMode: 'live',
+      bindings: [],
+      readBinding: () => () => ({ state: 'pending' }),
+    },
+  })
+  await flushPromises()
+  wrapper.vm.editPartDetailView('pump')
+  await flushPromises()
+  const scene = wrapper.findComponent(TwinScene)
+  expect(scene.props('previewAction')).toMatchObject({
+    partId: 'pump',
+    kind: 'detail-edit',
+  })
+  const change: { partId: string; view: TwinFocusView } = {
+    partId: 'child',
+    view: { position: [11, 2, 3], target: [10, 0, 0], fov: 50 },
+  }
+  scene.vm.$emit('partDetailView', change)
+  expect(wrapper.emitted('partDetailView')?.at(-1)).toEqual([change])
+  for (const view of [change.view, null]) {
+    await wrapper.setProps({
+      config: normalizeTwinConfig({
+        ...config,
+        parts: config.parts.map((part) => ({
+          ...part,
+          detail: { ...part.detail, view },
+        })),
+      }),
+    })
+    expect(wrapper.findComponent({ name: 'PreviewScene' }).element).toBe(
+      scene.element,
+    )
+  }
+  scene.vm.$emit('partDetailClose')
+  await flushPromises()
+  expect(
+    wrapper.findComponent({ name: 'PreviewScene' }).props('previewAction'),
+  ).toBeNull()
+  wrapper.unmount()
+})
+
+it('旧部件的编辑请求不打开当前部件，切换对象清除编辑请求', async () => {
+  const wrapper = mount(TwinConfigPreview, {
+    props: {
+      node: null,
+      config,
+      selection: { kind: 'parts', id: 'pump' },
+      animation: null,
+      testMode: 'live',
+      bindings: [],
+      readBinding: () => () => ({ state: 'pending' }),
+    },
+  })
+  await flushPromises()
+  wrapper.vm.editPartDetailView('missing')
+  expect(
+    wrapper.findComponent({ name: 'PreviewScene' }).props('previewAction'),
+  ).toBeNull()
+  wrapper.vm.editPartDetailView('pump')
+  await flushPromises()
+  await wrapper.setProps({ selection: { kind: 'cameras', id: 'view' } })
+  expect(
+    wrapper.findComponent({ name: 'PreviewScene' }).props('previewAction'),
+  ).toBeNull()
+  wrapper.unmount()
+})
+
+it('详情预览读取自己的视角，恢复默认时重新取景', async () => {
+  const view = { position: [11, 2, 3], target: [10, 0, 0], fov: 50 }
+  const config = normalizeTwinConfig({
+    parts: [{ id: 'pump', nodes: ['pump'], detail: { view } }],
+  })
+  const wrapper = mount(TwinConfigPreview, {
+    props: {
+      node: null,
+      config,
+      selection: { kind: 'parts', id: 'pump' },
+      animation: null,
+      testMode: 'live',
+      bindings: [],
+      readBinding: () => () => ({ state: 'pending' }),
+    },
+  })
+  await flushPromises()
+  wrapper
+    .findComponent(TwinPreviewControls)
+    .vm.$emit('update:partMode', 'detail')
+  await flushPromises()
+  const scene = wrapper.findComponent({ name: 'PreviewScene' })
+  expect(scene.props('focusView')).toEqual(view)
+  await wrapper.setProps({
+    config: normalizeTwinConfig({
+      ...config,
+      parts: config.parts.map((part) => ({
+        ...part,
+        detail: { ...part.detail, view: null },
+      })),
+    }),
+  })
+  const resetScene = wrapper.findComponent({ name: 'PreviewScene' })
+  expect(resetScene.props('focusView')).toBeNull()
+  expect(resetScene.element).not.toBe(scene.element)
+  wrapper.unmount()
 })
 it('默认跟随配置，改变部件与视点后更新预览，关闭后选中对象再次打开', async () => {
   const wrapper = mount(TwinConfigPreview, {

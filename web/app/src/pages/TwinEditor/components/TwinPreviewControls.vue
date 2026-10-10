@@ -15,7 +15,7 @@ const props = defineProps<{
 const emit = defineEmits<{
   'update:partMode': [string]
   'update:segmentKey': [string]
-  action: ['detail' | 'near' | 'far' | 'click']
+  action: ['detail' | 'detail-edit' | 'near' | 'far' | 'click']
 }>()
 const hasVisibilityRules = computed(() => {
   const selection = props.selection
@@ -73,8 +73,8 @@ const progressText = computed(
       v-if="partMode === 'detail'"
       size="xs"
       variant="soft"
-      @click="emit('action', 'detail')"
-      >打开完整详情弹窗</DtButton
+      @click="emit('action', 'detail-edit')"
+      >编辑弹窗视角</DtButton
     >
     <template v-if="partMode === 'click'">
       <div class="flex flex-wrap gap-1">

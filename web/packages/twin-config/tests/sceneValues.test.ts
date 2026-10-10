@@ -97,6 +97,7 @@ describe('缝合六路', () => {
 
     expect(live).toEqual({
       parts: {},
+      effectParts: {},
       anchors: {},
       arrows: {},
       panels: {},

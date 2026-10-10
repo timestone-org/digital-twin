@@ -28,6 +28,14 @@ export interface PartLook {
   blend: number
   /** 自发光强度；0 或没有染色时还原成基线。 */
   glow: number
+  effect?: PartEffectLook
+}
+
+interface PartEffectLook {
+  color: THREE.Color | null
+  blend: number
+  glow: number
+  intensity: number
 }
 
 /** 有基础色通道的材质。⚠ `MeshBasicMaterial` 有色但没有自发光，两者要分开判。 */
@@ -147,10 +155,41 @@ function sameLook(left: PartLook | null, right: PartLook): boolean {
     left.opacity === right.opacity &&
     left.blend === right.blend &&
     left.glow === right.glow &&
-    (left.color === null
-      ? right.color === null
-      : right.color !== null && left.color.equals(right.color))
+    sameColor(left.color, right.color) &&
+    sameEffect(left.effect, right.effect)
   )
+}
+
+function sameColor(
+  left: THREE.Color | null,
+  right: THREE.Color | null,
+): boolean {
+  return left === null ? right === null : right !== null && left.equals(right)
+}
+
+function sameEffect(
+  left: PartEffectLook | undefined,
+  right: PartEffectLook | undefined,
+): boolean {
+  if (left === undefined || right === undefined) return left === right
+  return (
+    left.blend === right.blend &&
+    left.glow === right.glow &&
+    left.intensity === right.intensity &&
+    sameColor(left.color, right.color)
+  )
+}
+
+function copyLook(look: PartLook): PartLook {
+  return {
+    ...look,
+    color: look.color?.clone() ?? null,
+    ...(look.effect === undefined
+      ? {}
+      : {
+          effect: { ...look.effect, color: look.effect.color?.clone() ?? null },
+        }),
+  }
 }
 
 /**
@@ -192,10 +231,11 @@ export class PartMaterials {
    */
   apply(look: PartLook): void {
     if (sameLook(this.applied, look)) return
-    this.applied = { ...look, color: look.color?.clone() ?? null }
+    this.applied = copyLook(look)
     for (const base of this.baselines) {
       applyOpacity(base, look.opacity)
       applyColor(base, look)
+      applyEffect(base.material, look.effect)
     }
     for (const owner of this.owners) syncSorting(owner)
   }
@@ -254,4 +294,32 @@ function applyColor(base: Baseline, look: PartLook): void {
   }
   material.emissive.copy(look.color)
   material.emissiveIntensity = look.glow
+}
+
+/** 条件效果叠在当前外观上，强度为零时保留完整常态外观。 */
+function applyEffect(
+  material: THREE.Material,
+  effect: PartEffectLook | undefined,
+): void {
+  if (effect === undefined || effect.intensity <= 0) return
+  if (isColored(material) && effect.color !== null) {
+    material.color.lerp(effect.color, effect.blend * effect.intensity)
+  }
+  const color = effect.color ?? (isColored(material) ? material.color : null)
+  if (!isGlowing(material) || color === null || effect.glow <= 0) return
+  const baseGlow = existingGlow(material)
+  material.emissive.lerp(color, effect.intensity)
+  material.emissiveIntensity = Math.max(
+    baseGlow,
+    effect.glow * effect.intensity,
+  )
+}
+
+function existingGlow(material: GlowingMaterial): number {
+  // ⚠ 黑色自发光的默认强度为 1，但实际发光为零。
+  return material.emissive.r === 0 &&
+    material.emissive.g === 0 &&
+    material.emissive.b === 0
+    ? 0
+    : material.emissiveIntensity
 }
