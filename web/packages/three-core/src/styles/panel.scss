@@ -302,7 +302,8 @@
     background: var(--tp-tone);
   }
 
-  &__row[data-kind='status'][data-state='on'] &__state-mark {
+  &__row[data-kind='status'][data-state='on'] &__state-mark,
+  &__row[data-kind='status'][data-state='matched'] &__state-mark {
     box-shadow: 0 0 0 3px color-mix(in srgb, var(--tp-tone) 15%, transparent);
   }
 
@@ -351,6 +352,7 @@
     left: calc(100% - 0.92em);
   }
 
+  &__row[data-kind='switch'][data-state='matched'] &__state-mark::before,
   &__row[data-kind='switch'][data-state='unknown'] &__state-mark::before {
     left: calc(50% - 0.375em);
   }

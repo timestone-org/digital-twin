@@ -1,4 +1,4 @@
-/** @fileoverview 状态牌按真实开关值显示文案，无数据或未知编码时不冒充关闭。 */
+/** @fileoverview 状态牌按显式点位编码显示文案和颜色，未知读数清除匹配显示。 */
 import { normalizeTwinConfig } from '@dt/twin-config'
 import { describe, expect, it } from 'vitest'
 
@@ -50,6 +50,47 @@ describe.each(['status', 'switch'])('%s 状态显示', (kind) => {
     expect(view.row.dataset.tone).toBe('neutral')
   })
 
+  it('第三和第四状态随点位更新，未知读数清除激活颜色', () => {
+    const { view } = renderState(kind, 2, {
+      states: [
+        { id: 'on', value: '1', label: '运行', tone: 'success' },
+        { id: 'off', value: '0', label: '停止', tone: 'neutral' },
+        { id: 'standby', value: '2', label: '待机', tone: 'warning' },
+        { id: 'fault', value: '3', label: '故障', tone: 'danger' },
+      ],
+      unknownLabel: '待确认',
+    })
+    expect(view.valueEl.textContent).toBe('待机')
+    expect(view.row.dataset.state).toBe('matched')
+    expect(view.row.dataset.tone).toBe('warning')
+    expect(view.row.dataset.empty).toBeUndefined()
+
+    paintPanelField(view, { 'p::s': { value: '3.00' } })
+    expect(view.valueEl.textContent).toBe('故障')
+    expect(view.row.dataset.state).toBe('matched')
+    expect(view.row.dataset.tone).toBe('danger')
+    expect(view.row.getAttribute('aria-label')).toBe('设备状态：故障')
+
+    paintPanelField(view, { 'p::s': { value: 9 } })
+    expect(view.valueEl.textContent).toBe('待确认')
+    expect(view.row.dataset.state).toBe('unknown')
+    expect(view.row.dataset.tone).toBe('neutral')
+    expect(view.row.dataset.empty).toBe('on')
+  })
+
+  it('多状态点位缺失时清除上一轮匹配显示', () => {
+    const { view } = renderState(kind, 'fault', {
+      states: [{ id: 'fault', value: 'fault', label: '故障', tone: 'danger' }],
+    })
+    expect(view.valueEl.textContent).toBe('故障')
+    paintPanelField(view, {})
+    expect(view.valueEl.textContent).toBe('未知')
+    expect(view.valueEl.title).toBe('未知')
+    expect(view.row.dataset.state).toBe('unknown')
+    expect(view.row.dataset.tone).toBe('neutral')
+    expect(view.row.dataset.empty).toBe('on')
+  })
+
   it('支持反向编码、自定义文案与故障配色', () => {
     const { view } = renderState(kind, false, {
       onValue: '0',
@@ -74,6 +115,16 @@ describe.each(['status', 'switch'])('%s 状态显示', (kind) => {
       onLabel: '<img src=x onerror=alert(1)>',
     })
     expect(view.valueEl.textContent).toBe('<img src=x onerror=alert(1)>')
+    expect(built.card.querySelector('img')).toBeNull()
+  })
+
+  it('多状态文案中的 HTML 只显示为文本', () => {
+    const label = '<img src=x onerror=alert(1)>'
+    const { built, view } = renderState(kind, 2, {
+      states: [{ id: 'fault', value: '2', label, tone: 'danger' }],
+    })
+    expect(view.valueEl.textContent).toBe(label)
+    expect(view.row.dataset.state).toBe('matched')
     expect(built.card.querySelector('img')).toBeNull()
   })
 

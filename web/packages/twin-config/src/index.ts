@@ -88,6 +88,7 @@ export {
   DEFAULT_PANEL_STATE,
   panelFieldState,
   panelKindUsesState,
+  panelStateItems,
   panelStateValuesConflict,
 } from './panelState'
 export type { PanelStateReading } from './panelState'
@@ -228,6 +229,7 @@ export type {
   TwinPanelOrient,
   TwinPanelStyle,
   TwinPanelState,
+  TwinPanelStateItem,
   TwinPanelStateTone,
   TwinPanelTone,
   TwinPanelValue,

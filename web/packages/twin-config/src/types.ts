@@ -513,11 +513,19 @@ export const TWIN_PANEL_TONES = [
 ] as const
 export type TwinPanelTone = (typeof TWIN_PANEL_TONES)[number]
 
-/** 开关状态色轴。 */
+/** 状态色轴。 */
 export const TWIN_PANEL_STATE_TONES = ['neutral', ...TWIN_PANEL_TONES] as const
 export type TwinPanelStateTone = (typeof TWIN_PANEL_STATE_TONES)[number]
 
-/** 开关两态的取值、文案与配色。 */
+/** 一个状态的精确编码、文案与配色。 */
+export interface TwinPanelStateItem {
+  id: string
+  value: string
+  label: string
+  tone: TwinPanelStateTone
+}
+
+/** 状态列表优先；缺少列表时读取开启／关闭映射。 */
 export interface TwinPanelState {
   onValue: string
   offValue: string
@@ -526,6 +534,7 @@ export interface TwinPanelState {
   unknownLabel: string
   onTone: TwinPanelStateTone
   offTone: TwinPanelStateTone
+  states?: TwinPanelStateItem[]
 }
 
 /**

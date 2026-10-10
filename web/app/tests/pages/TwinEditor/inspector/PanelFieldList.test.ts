@@ -314,7 +314,7 @@ describe('状态测点预设', () => {
     await pickPreset(wrapper, '运行状态')
     await wrapper.setProps({ panel: panelOf(lastWritten(wrapper)) })
 
-    await wrapper.get('input[aria-label="开启文案"]').setValue('主机运行')
+    await wrapper.get('input[aria-label="状态1文案"]').setValue('主机运行')
 
     const fields = lastWritten(wrapper)
     expect(fields[0]?.state?.onLabel).toBe('主机运行')
@@ -332,7 +332,7 @@ describe('状态画法的有效配置', () => {
       expect(wrapper.find('input[aria-label="字段键"]').exists()).toBe(true)
       expect(wrapper.find('input[aria-label="标签"]').exists()).toBe(true)
       expect(wrapper.find('button[aria-label="画法"]').exists()).toBe(true)
-      expect(wrapper.find('input[aria-label="开启值"]').exists()).toBe(true)
+      expect(wrapper.find('input[aria-label="状态1值"]').exists()).toBe(true)
       expect(wrapper.find('input[aria-label="数值前缀"]').exists()).toBe(false)
       expect(wrapper.find('input[aria-label="单位"]').exists()).toBe(false)
       expect(wrapper.find('button[aria-label="指定小数位"]').exists()).toBe(

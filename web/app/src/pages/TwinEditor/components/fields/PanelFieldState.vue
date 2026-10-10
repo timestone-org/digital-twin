@@ -3,12 +3,14 @@
 import {
   DEFAULT_PANEL_STATE,
   TWIN_PANEL_STATE_TONES,
+  panelStateItems,
   panelStateValuesConflict,
   type TwinPanelField,
   type TwinPanelState,
+  type TwinPanelStateItem,
   type TwinPanelStateTone,
 } from '@dt/twin-config'
-import { DtInput, DtNotice, DtSelect } from '@dt/ui'
+import { DtButton, DtInput, DtNotice, DtSelect } from '@dt/ui'
 import { computed } from 'vue'
 
 const props = defineProps<{ field: TwinPanelField }>()
@@ -27,15 +29,68 @@ const toneOptions = TWIN_PANEL_STATE_TONES.map((value) => ({
 }))
 
 const state = computed(() => props.field.state ?? DEFAULT_PANEL_STATE)
+const items = computed(() => panelStateItems(props.field.state))
 const hasConflict = computed(() => panelStateValuesConflict(state.value))
 
 function patch(next: Partial<TwinPanelState>): void {
-  emit('update', { state: { ...state.value, ...next } })
+  const states = next.states ?? items.value.map((item) => ({ ...item }))
+  const on = states.find((item) => item.id === 'on')
+  const off = states.find((item) => item.id === 'off')
+  emit('update', {
+    state: {
+      ...state.value,
+      ...next,
+      states,
+      ...(on === undefined
+        ? {}
+        : { onValue: on.value, onLabel: on.label, onTone: on.tone }),
+      ...(off === undefined
+        ? {}
+        : { offValue: off.value, offLabel: off.label, offTone: off.tone }),
+    },
+  })
 }
 
-function writeTone(key: 'onTone' | 'offTone', next: string): void {
+function patchItem(id: string, next: Partial<TwinPanelStateItem>): void {
+  patch({
+    states: items.value.map((item) =>
+      item.id === id ? { ...item, ...next } : { ...item },
+    ),
+  })
+}
+
+function writeTone(id: string, next: string): void {
   const tone = TWIN_PANEL_STATE_TONES.find((item) => item === next)
-  if (tone !== undefined) patch({ [key]: tone })
+  if (tone !== undefined) patchItem(id, { tone })
+}
+
+function freshStateId(): string {
+  const taken = new Set(items.value.map((item) => item.id))
+  let serial = items.value.length + 1
+  while (taken.has(`state-${serial}`)) serial += 1
+  return `state-${serial}`
+}
+
+function addItem(): void {
+  patch({
+    states: [
+      ...items.value.map((item) => ({ ...item })),
+      {
+        id: freshStateId(),
+        value: '',
+        label: `状态${items.value.length + 1}`,
+        tone: 'neutral',
+      },
+    ],
+  })
+}
+
+function removeItem(id: string): void {
+  patch({
+    states: items.value
+      .filter((item) => item.id !== id)
+      .map((item) => ({ ...item })),
+  })
 }
 </script>
 
@@ -45,59 +100,59 @@ function writeTone(key: 'onTone' | 'offTone', next: string): void {
       将设备值映射为状态文案；未匹配的值显示未知状态。
     </p>
     <div
-      class="grid grid-cols-2 gap-1.5 rounded border border-border-subtle bg-surface-raised p-2"
+      v-for="(item, index) in items"
+      :key="item.id"
+      class="flex flex-col gap-1.5 rounded border border-border-subtle bg-surface-raised p-2"
     >
-      <span class="text-xs text-text-secondary">开启状态</span>
-      <span class="text-xs text-text-secondary">关闭状态</span>
-      <DtInput
-        :model-value="state.onValue"
-        label="开启值"
-        aria-label="开启值"
-        placeholder="如 1、true、ON"
-        size="sm"
-        @update:model-value="patch({ onValue: $event })"
-      />
-      <DtInput
-        :model-value="state.offValue"
-        label="关闭值"
-        aria-label="关闭值"
-        placeholder="如 0、false、OFF"
-        size="sm"
-        @update:model-value="patch({ offValue: $event })"
-      />
-      <DtInput
-        :model-value="state.onLabel"
-        label="开启文案"
-        aria-label="开启文案"
-        placeholder="如 开启、运行、故障"
-        size="sm"
-        @update:model-value="patch({ onLabel: $event })"
-      />
-      <DtInput
-        :model-value="state.offLabel"
-        label="关闭文案"
-        aria-label="关闭文案"
-        placeholder="如 关闭、停止、正常"
-        size="sm"
-        @update:model-value="patch({ offLabel: $event })"
-      />
+      <div class="flex items-center justify-between gap-1.5">
+        <span class="text-xs text-text-secondary">状态 {{ index + 1 }}</span>
+        <DtButton
+          size="xs"
+          variant="ghost"
+          intent="danger"
+          icon="trash"
+          :aria-label="`删除状态${index + 1}`"
+          :title="`删除状态${index + 1}`"
+          @click="removeItem(item.id)"
+        />
+      </div>
+      <div class="grid grid-cols-2 gap-1.5">
+        <DtInput
+          :model-value="item.value"
+          :label="`状态${index + 1}值`"
+          :aria-label="`状态${index + 1}值`"
+          placeholder="如 0、1、2、running"
+          size="sm"
+          @update:model-value="patchItem(item.id, { value: $event })"
+        />
+        <DtInput
+          :model-value="item.label"
+          :label="`状态${index + 1}文案`"
+          :aria-label="`状态${index + 1}文案`"
+          placeholder="如 停止、运行、故障"
+          size="sm"
+          @update:model-value="patchItem(item.id, { label: $event })"
+        />
+      </div>
       <DtSelect
-        :model-value="state.onTone"
+        :model-value="item.tone"
         :options="toneOptions"
-        label="开启颜色"
-        aria-label="开启颜色"
+        :label="`状态${index + 1}颜色`"
+        :aria-label="`状态${index + 1}颜色`"
         size="sm"
-        @update:model-value="writeTone('onTone', $event)"
-      />
-      <DtSelect
-        :model-value="state.offTone"
-        :options="toneOptions"
-        label="关闭颜色"
-        aria-label="关闭颜色"
-        size="sm"
-        @update:model-value="writeTone('offTone', $event)"
+        @update:model-value="writeTone(item.id, $event)"
       />
     </div>
+    <DtButton
+      variant="soft"
+      size="sm"
+      icon="plus"
+      block
+      aria-label="添加状态"
+      @click="addItem"
+    >
+      添加状态
+    </DtButton>
     <DtInput
       :model-value="state.unknownLabel"
       label="未知文案"
@@ -106,8 +161,11 @@ function writeTone(key: 'onTone' | 'offTone', next: string): void {
       size="sm"
       @update:model-value="patch({ unknownLabel: $event })"
     />
-    <DtNotice v-if="hasConflict" intent="warning" icon="alert-triangle">
-      开启值与关闭值相同或为空，无法区分状态；请填写两个不同的非空值。
+    <DtNotice v-if="items.length === 0" intent="warning" icon="alert-triangle">
+      至少添加一个状态并填写状态值；当前所有值都显示未知状态。
+    </DtNotice>
+    <DtNotice v-else-if="hasConflict" intent="warning" icon="alert-triangle">
+      状态值为空或重复，无法区分状态；请为每个状态填写不同的非空值。
     </DtNotice>
   </div>
 </template>
