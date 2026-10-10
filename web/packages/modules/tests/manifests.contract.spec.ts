@@ -12,6 +12,7 @@ import {
   TWIN_ARROW_BINDING_KEY,
   TWIN_CONFIG_KEY,
   TWIN_FLOW_BINDING_KEY,
+  TWIN_PART_EFFECT_BINDING_KEY,
   TWIN_PART_FIELD_BINDING_KEY,
   TWIN_PANEL_BINDING_KEY,
   TWIN_PART_BINDING_KEY,
@@ -108,6 +109,7 @@ const KEY_CONSTANTS: Record<string, string> = {
   TWIN_ARROW_BINDING_KEY,
   TWIN_CONFIG_KEY,
   TWIN_FLOW_BINDING_KEY,
+  TWIN_PART_EFFECT_BINDING_KEY,
   TWIN_PART_FIELD_BINDING_KEY,
   TWIN_PANEL_BINDING_KEY,
   TWIN_PART_BINDING_KEY,
@@ -465,10 +467,14 @@ describe('声明的键与渲染侧真正读的键', () => {
       'readText(props.config.title)',
       "readBoolean(props.config['showTitle'])",
       'stitch(props.values[TWIN_ANCHOR_BINDING_KEY])',
+      'stitch(props.values[TWIN_PART_EFFECT_BINDING_KEY])',
     ].join('\n')
 
     expect(readKeys(source, 'config')).toEqual(['showTitle', 'title'])
-    expect(readKeys(source, 'values')).toEqual(['anchorValues'])
+    expect(readKeys(source, 'values')).toEqual([
+      'anchorValues',
+      'partEffectValues',
+    ])
   })
 
   it('扫描器也认得裸的与包在上下文里的取法', () => {

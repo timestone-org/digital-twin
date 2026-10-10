@@ -66,6 +66,7 @@ async def test_a_single_module_carries_its_config_and_slots(
     assert [spec["key"] for spec in module["bindings"]] == [
         "animationValues",
         "partValues",
+        "partEffectValues",
         "anchorValues",
         "panelValues",
         "arrowValues",

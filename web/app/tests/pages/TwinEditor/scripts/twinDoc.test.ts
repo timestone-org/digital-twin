@@ -58,6 +58,48 @@ describe('写入', () => {
     expect(doc.config.value.anchors).toHaveLength(1)
   })
 
+  it('信息牌和部件详情的多状态列表在保存读回及撤销重做后保留', () => {
+    const states = [
+      { id: 'on', value: '1', label: '运行', tone: 'success' },
+      { id: 'off', value: '0', label: '停止', tone: 'neutral' },
+      { id: 'standby', value: '2', label: '待机', tone: 'warning' },
+      { id: 'fault', value: '3', label: '故障', tone: 'danger' },
+    ]
+    const field = {
+      key: 'status',
+      label: '设备状态',
+      kind: 'status',
+      state: { states, unknownLabel: '未接入' },
+    }
+    const initial = normalizeTwinConfig({
+      panels: [{ id: 'p1', fields: [{ key: 'status' }] }],
+      parts: [{ id: 'part1', detail: { fields: [{ key: 'status' }] } }],
+    })
+    const bindings = [
+      binding('panelValues[0].value'),
+      binding('partFieldValues[0].value'),
+    ]
+    const doc = createTwinDoc({ config: initial, bindings })
+    doc.commit(
+      normalizeTwinConfig({
+        panels: [{ id: 'p1', fields: [field] }],
+        parts: [{ id: 'part1', detail: { fields: [field] } }],
+      }),
+    )
+    doc.markSaved()
+    const readback = normalizeTwinConfig(
+      JSON.parse(JSON.stringify(doc.config.value)),
+    )
+    expect(readback.panels[0]?.fields[0]?.state?.states).toEqual(states)
+    expect(readback.parts[0]?.detail.fields[0]?.state?.states).toEqual(states)
+    expect(doc.bindings.value).toEqual(bindings)
+    doc.undo()
+    expect(doc.isDirty.value).toBe(true)
+    doc.redo()
+    expect(doc.config.value.panels[0]?.fields[0]?.state?.states).toEqual(states)
+    expect(doc.isDirty.value).toBe(false)
+  })
+
   // 同一个引用再 commit 一次不该白占一格撤销栈
   it('引用没变的 commit 直接忽略', () => {
     const doc = docWithThreeAnchors()

@@ -58,6 +58,7 @@ const OWNERS: Readonly<Record<string, readonly string[]>> = {
   TwinPanelStyle: ['inspector/PanelStyleFields.vue'],
   TwinPanelField: ['fields/PanelFieldList.vue', 'fields/PanelFieldGraph.vue'],
   TwinPanelState: ['fields/PanelFieldState.vue'],
+  TwinPanelStateItem: ['fields/PanelFieldState.vue'],
   TwinPanelLevel: ['fields/PanelFieldGraph.vue'],
   TwinArrow: ['inspector/ArrowInspector.vue'],
   TwinFlowLink: ['inspector/FlowInspector.vue'],

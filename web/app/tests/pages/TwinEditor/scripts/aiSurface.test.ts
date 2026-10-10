@@ -538,6 +538,41 @@ describe('配置场景实体', () => {
     )
   })
 
+  it('助手写入多个状态后回执和实体读回保留完整列表', async () => {
+    const { surface, patchConfig } = setup()
+    const states = [
+      { id: 'on', value: '1', label: '运行', tone: 'success' },
+      { id: 'off', value: '0', label: '停止', tone: 'neutral' },
+      { id: 'standby', value: '2', label: '待机', tone: 'warning' },
+      { id: 'fault', value: '3', label: '故障', tone: 'danger' },
+    ]
+    const changed = await run(surface, 'twin.patch_config', {
+      section: 'panels',
+      id: 'p1',
+      patch: {
+        fields: [
+          {
+            key: 'temp',
+            label: '设备状态',
+            kind: 'status',
+            state: { states, unknownLabel: '未接入' },
+          },
+          { key: 'flow', label: '流量' },
+        ],
+      },
+    })
+    const readback = await run(surface, 'twin.read_entity', {
+      section: 'panels',
+      id: 'p1',
+    })
+    expect(changed.changed).toBe(true)
+    expect(readback.config).toEqual(changed.config)
+    expect(readback.config).toMatchObject({
+      fields: [{ state: { states, unknownLabel: '未接入' } }, { key: 'flow' }],
+    })
+    expect(patchConfig).toHaveBeenCalledOnce()
+  })
+
   it('诊断当前草稿里的跨字段问题', async () => {
     const { surface } = setup()
     await run(surface, 'twin.patch_config', {

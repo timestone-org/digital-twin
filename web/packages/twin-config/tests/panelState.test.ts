@@ -7,6 +7,7 @@ import {
   normalizePanelState,
   panelFieldState,
   panelKindUsesState,
+  panelStateItems,
   panelStateValuesConflict,
 } from '../src/panelState'
 
@@ -70,6 +71,149 @@ describe('状态编码', () => {
 })
 
 describe('配置与保存', () => {
+  it('旧两态展开为独立可编辑项，显式列表保留其顺序', () => {
+    const items = panelStateItems(undefined)
+    expect(items).toEqual([
+      { id: 'on', value: '1', label: '开启', tone: 'success' },
+      { id: 'off', value: '0', label: '关闭', tone: 'neutral' },
+    ])
+    expect(panelStateItems(undefined)).not.toBe(items)
+    const state = normalizePanelState({
+      states: [
+        { id: 'off', value: false, label: '停止', tone: 'neutral' },
+        { id: 'on', value: true, label: '运行', tone: 'success' },
+      ],
+    })
+    expect(panelStateItems(state)).toEqual(state.states)
+    expect(panelFieldState(state, 'true').state).toBe('on')
+    expect(panelFieldState(state, '-0.00').state).toBe('off')
+  })
+
+  it('条目独立归一化并生成稳定唯一身份，非法值保留待填提示', () => {
+    const state = normalizePanelState({
+      states: [
+        null,
+        { id: 'custom', value: 2, label: '  待机  ', tone: 'warning' },
+        { id: 'custom', value: false, label: '停机', tone: 'bad' },
+        {},
+        { id: 'named', value: {}, label: ' ' },
+        { id: 'spaced', value: ' RUN ', label: '运行', tone: 'success' },
+      ],
+    })
+    expect(state.states).toEqual([
+      { id: 'custom', value: '2', label: '待机', tone: 'warning' },
+      { id: 'state-4', value: 'false', label: '停机', tone: 'neutral' },
+      { id: 'state-5', value: '', label: '状态 4', tone: 'neutral' },
+      { id: 'named', value: '', label: '状态 5', tone: 'neutral' },
+      { id: 'spaced', value: 'RUN', label: '运行', tone: 'success' },
+    ])
+    expect(normalizePanelState(state)).toEqual(state)
+    expect(normalizePanelState({ states: 'bad' })).toEqual(DEFAULT_PANEL_STATE)
+  })
+
+  it('状态数不沿用阈值档的数量上限，文本和大整数编码保持精确', () => {
+    const state = normalizePanelState({
+      states: [
+        ...Array.from({ length: 12 }, (_, index) => ({
+          id: `code-${index}`,
+          value: String(index),
+          label: `状态${index}`,
+          tone: 'accent',
+        })),
+        { id: 'run', value: 'RUN', label: '运行', tone: 'success' },
+        {
+          id: 'large',
+          value: '9007199254740993',
+          label: '维护',
+          tone: 'warning',
+        },
+      ],
+    })
+    expect(state.states).toHaveLength(14)
+    expect(panelFieldState(state, 11).label).toBe('状态11')
+    expect(panelFieldState(state, 'RUN').label).toBe('运行')
+    expect(panelFieldState(state, '9007199254740993').label).toBe('维护')
+    expect(panelFieldState(state, '9007199254740992').state).toBe('unknown')
+  })
+
+  it('多个状态独立匹配文案与配色，保存读回不丢失', () => {
+    const config = normalizeTwinConfig({
+      panels: [
+        {
+          fields: [
+            {
+              key: 'run',
+              kind: 'status',
+              state: {
+                states: [
+                  { id: 'stopped', value: '0', label: '停机', tone: 'neutral' },
+                  { id: 'running', value: '1', label: '运行', tone: 'success' },
+                  {
+                    id: 'starting',
+                    value: '2',
+                    label: '启动中',
+                    tone: 'warning',
+                  },
+                  { id: 'fault', value: '3', label: '故障', tone: 'danger' },
+                ],
+                unknownLabel: '未接入',
+              },
+            },
+          ],
+        },
+      ],
+    })
+    const state = config.panels[0]?.fields[0]?.state
+    expect(panelFieldState(state, 2)).toEqual({
+      state: 'matched',
+      label: '启动中',
+      tone: 'warning',
+    })
+    expect(panelFieldState(state, '3.00')).toEqual({
+      state: 'matched',
+      label: '故障',
+      tone: 'danger',
+    })
+    expect(panelFieldState(state, 4)).toEqual({
+      state: 'unknown',
+      label: '未接入',
+      tone: 'neutral',
+    })
+    expect(normalizeTwinConfig(JSON.parse(JSON.stringify(config)))).toEqual(
+      config,
+    )
+    expect(state?.states).toHaveLength(4)
+  })
+
+  it('显式状态列表优先于两态字段，不复活已删除的状态', () => {
+    const state = normalizePanelState({
+      onValue: '1',
+      onLabel: '旧开启',
+      states: [{ id: 'fault', value: '2', label: '故障', tone: 'danger' }],
+    })
+    expect(panelFieldState(state, 1).state).toBe('unknown')
+    expect(panelFieldState(state, 2).label).toBe('故障')
+    const empty = normalizePanelState({ states: [] })
+    expect(empty.states).toEqual([])
+    expect(panelFieldState(empty, 1).state).toBe('unknown')
+    expect(panelStateValuesConflict(empty)).toBe(true)
+  })
+
+  it.each(['1.00', 'true', ''])(
+    '第三项编码 %s 重复或为空时不猜状态',
+    (value) => {
+      const state = normalizePanelState({
+        states: [
+          { id: 'on', value: '1', label: '运行', tone: 'success' },
+          { id: 'off', value: '0', label: '停机', tone: 'neutral' },
+          { id: 'extra', value, label: '故障', tone: 'danger' },
+        ],
+      })
+      expect(panelStateValuesConflict(state)).toBe(true)
+      expect(panelFieldState(state, 1).state).toBe('unknown')
+    },
+  )
+
   it('缺省配置为开启/关闭，非法配色回落', () => {
     expect(normalizePanelState(undefined)).toEqual({
       onValue: '1',
