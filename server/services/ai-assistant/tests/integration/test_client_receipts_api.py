@@ -76,7 +76,7 @@ async def test_partial_cancelled_batch_records_only_actual_result_without_model(
         if step["kind"] == "client_tool"
     ]
     assert [step["state"] for step in steps] == ["succeeded", "awaiting_client"]
-    assert steps[0]["output_json"]["body"] == '{"is_saved": false}'
+    assert steps[0]["output_json"]["body"] == "is_saved: false"
     assert len(steps[0]["output_json"]["receipt_sha256"]) == 64
     assert messages[-1]["content_json"]["tool_call_id"] == "a"
 
@@ -328,6 +328,6 @@ def _assert_salvaged_receipts(
     assert [message["content_json"]["tool_call_id"] for message in tools] == ids
     assert len(tools) == 2
     assert [message["content_json"]["text"] for message in tools] == [
-        '{"is_saved": false, "operation": 1}',
-        '{"is_saved": false, "operation": 2}',
+        "is_saved: false\noperation: 1",
+        "is_saved: false\noperation: 2",
     ]

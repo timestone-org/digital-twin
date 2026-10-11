@@ -6,6 +6,7 @@
  * 输入）；步骤标题库里不存，回放时要用名字与状态凑出来。
  */
 import { beforeEach, describe, expect, it } from 'vitest'
+import { mount } from '@vue/test-utils'
 import type {
   AssistantMessage,
   AssistantSessionDetail,
@@ -17,6 +18,8 @@ import { ASSISTANT_ASK_TOOL } from '@dt/contracts'
 import { __resetEntryIds } from '@/features/ai/conversationLog'
 import { AUTO_CONTINUE_PREFIX, replayedLog } from '@/features/ai/replayLog'
 import { PLAN_CONTINUE_TEXT } from '@/features/ai/turnRunner'
+import AiToolCard from '@/components/ai/AiToolCard.vue'
+import { outputPreview } from '@/features/ai/stepPreview'
 
 function stepOf(partial: Partial<AssistantStep> = {}): AssistantStep {
   return {
@@ -200,6 +203,61 @@ describe('坏形状防御', () => {
 })
 
 describe('回放里的入参与产出', () => {
+  it('历史完整结果先生成展示，内部回执指纹不进入可读详情', async () => {
+    const raw = {
+      items: Array.from({ length: 20 }, (_, at) => ({
+        id: `point-${at + 1}`,
+        name: `${at + 1}号循环泵温度`,
+        description: '现场采集点位，用于查询当前设备状态与测量信息'.repeat(3),
+      })),
+      metadata: { has_more: true, next_page: 2 },
+      warnings: ['只返回第一页'],
+    }
+    const stored = {
+      body: JSON.stringify(raw),
+      receipt_sha256: 'internal-receipt-fingerprint',
+    }
+    expect(stored.body.length).toBeGreaterThan(1_500)
+    const log = replayedLog(
+      detailOf([
+        messageOf({
+          role: 'assistant',
+          content_json: { text: '好了' },
+          steps: [stepOf({ output_json: stored })],
+        }),
+      ]),
+    )
+    const step = log.entries.find((one) => one.role === 'step')?.step
+    if (step === undefined) throw new Error('缺少历史步骤')
+    const wrapper = mount(AiToolCard, { props: { step } })
+    expect(wrapper.text()).toContain('返回 20 条结果')
+    await wrapper.get('.ai-step__head').trigger('click')
+    expect(wrapper.find('table').exists()).toBe(true)
+    expect(wrapper.text()).toContain('metadata.next_page: 2')
+    expect(wrapper.text()).toContain('只返回第一页')
+    expect(wrapper.text()).not.toContain('receipt_sha256')
+    expect(wrapper.text()).not.toContain('internal-receipt-fingerprint')
+    expect(step.output).toBe(outputPreview(stored))
+  })
+
+  it('历史紧凑正文按原文展示，不混入持久化指纹', () => {
+    const text =
+      'has_more: false\n\n| id | name |\n| --- | --- |\n| p1 | 温度 |'
+    const log = replayedLog(
+      detailOf([
+        messageOf({
+          role: 'assistant',
+          steps: [
+            stepOf({ output_json: { body: text, receipt_sha256: 'internal' } }),
+          ],
+        }),
+      ]),
+    )
+    expect(
+      log.entries.find((one) => one.role === 'step')?.step?.displayOutput,
+    ).toBe(text)
+  })
+
   it('库里存的那两格照样展得开', () => {
     // 不带回来的话，历史里的每一步都只剩一句标题，出错当场最该看的东西没了
     const log = replayedLog(

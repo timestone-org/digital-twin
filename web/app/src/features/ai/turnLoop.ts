@@ -25,7 +25,12 @@ import type {
 import { ASSISTANT_ASK_TOOL } from '@dt/contracts'
 
 import { createFrameReader, type FrameReader } from './sseFrames'
-import { inputPreview, isImageOutput, outputPreview } from './stepPreview'
+import {
+  inputPreview,
+  isImageOutput,
+  outputDisplay,
+  outputPreview,
+} from './stepPreview'
 import {
   ActualToolReceiptError,
   CancelledToolReceipt,
@@ -54,6 +59,10 @@ export interface RunnerStep {
   input?: Record<string, string>
   /** 产出摘要。 */
   output?: string
+  /** 从完整回执生成的有界展示正文。 */
+  displayOutput?: string
+  /** 从完整回执生成的折叠概要。 */
+  displaySummary?: string
   /**
    * 这一步截到的图（`data:image/…`）。
    * ⚠ 只有最近几步留着原图，更早的会被丢掉换成 `isImageDropped` —— 一张截图
@@ -379,6 +388,7 @@ function stepOf(
     error,
     ...(input === null ? {} : { input }),
     ...(text === null ? {} : { output: text }),
+    ...outputDisplay(output),
     ...(isImageOutput(output) ? { image: output } : {}),
   }
 }

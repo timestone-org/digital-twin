@@ -9,6 +9,7 @@
  * 没有答复，下一轮请求会被端点判成不合法。
  */
 import { afterEach, describe, expect, it, vi } from 'vitest'
+import { mount } from '@vue/test-utils'
 import {
   ASSISTANT_ASK_TOOL,
   ASSISTANT_MCP_CONFIRM_TOOL,
@@ -26,6 +27,8 @@ import {
 } from '@/features/ai/turnRunner'
 import { __resetAskHandler, setAskHandler } from '@/features/ai/askBridge'
 import { __resetSurfaces, setSurface } from '@/features/ai/surfaces'
+import AiToolCard from '@/components/ai/AiToolCard.vue'
+import { outputPreview } from '@/features/ai/stepPreview'
 
 function frame(name: string, body: unknown): string {
   return `event: ${name}\ndata: ${JSON.stringify(body)}\n\n`
@@ -233,6 +236,66 @@ describe('回合循环', () => {
 
     expect(seen.ran[0]?.input).toEqual({ node_id: 'n1' })
     expect(seen.ran[0]?.output).toBe('{"ok":true}')
+  })
+
+  it('完整客户端列表先生成可读展示，回执与原始预览分别保持不变', async () => {
+    const raw = {
+      items: Array.from({ length: 20 }, (_, at) => ({
+        id: `point-${at + 1}`,
+        name: `${at + 1}号循环泵温度`,
+        description: '现场采集点位，用于查询当前设备状态与测量信息'.repeat(3),
+      })),
+      metadata: { page: 1, total: 80, has_more: true, next_page: 2 },
+      warnings: ['只返回第一页，继续查询需保持筛选条件'],
+    }
+    expect(JSON.stringify(raw).length).toBeGreaterThan(1_500)
+    setSurface({
+      kind: 'dashboard-editor',
+      label: '大屏编辑器',
+      snapshot: () => ({}),
+      tools: ['dashboard.list_nodes'],
+      run: vi.fn().mockResolvedValue(raw),
+    })
+    const { advance, bodies } = advanceOf([
+      [
+        frame('client_tool.request', {
+          calls: [
+            { call_id: 'r1', name: 'dashboard.list_nodes', arguments: {} },
+          ],
+        }),
+      ],
+      [frame('turn.done', { reply: '找到了' })],
+    ])
+    const saveReceipts = vi.fn(async () => {
+      await Promise.resolve()
+    })
+    const { sink, seen } = sinkOf()
+    await runTurn({ ...inputOf(advance), saveReceipts }, sink)
+    const step = seen.ran[0]
+    expect(step).toBeDefined()
+    if (step === undefined) throw new Error('缺少客户端步骤')
+    const wrapper = mount(AiToolCard, { props: { step } })
+    expect(wrapper.text()).toContain('返回 20 条结果')
+    await wrapper.get('.ai-step__head').trigger('click')
+    expect(wrapper.find('table').exists()).toBe(true)
+    expect(wrapper.findAll('th')).toHaveLength(3)
+    expect(wrapper.findAll('tbody tr').length).toBeGreaterThan(0)
+    expect(
+      wrapper
+        .findAll('tbody tr')
+        .every((row) => row.findAll('td').length === 3),
+    ).toBe(true)
+    expect(wrapper.text()).toContain('metadata.next_page: 2')
+    expect(wrapper.text()).toContain('只返回第一页，继续查询需保持筛选条件')
+    expect(wrapper.text().indexOf('metadata.next_page')).toBeLessThan(
+      wrapper.text().indexOf('point-1'),
+    )
+    expect(wrapper.text()).not.toContain('"items"')
+    expect(step.output).toBe(outputPreview(raw))
+    expect(bodies[1]?.tool_results).toEqual([{ call_id: 'r1', output: raw }])
+    expect(saveReceipts).toHaveBeenCalledWith('s1', [
+      { call_id: 'r1', output: raw },
+    ])
   })
 
   it('截图进 image 那一格，不混进文本产出', async () => {
