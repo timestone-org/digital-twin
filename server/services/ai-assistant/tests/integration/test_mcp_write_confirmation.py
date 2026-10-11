@@ -80,7 +80,7 @@ async def test_prepare_execute_actual_receipt_and_replay(
         m for m in detail.json()["data"]["messages"] if m["role"] == "tool"
     ]
     assert len(tools) == 1
-    assert tools[0]["content_json"]["text"] == '{"saved": true}'
+    assert tools[0]["content_json"]["text"] == "saved: true"
 
 
 async def test_cancel_after_revocation_has_no_external_io(
@@ -225,7 +225,7 @@ async def test_caller_cancellation_preserves_actual_execution_receipt(
         await task
     assert len(stack.external.dispatches) == 1
     assert (await stack.step()).state == "succeeded"
-    assert (await stack.step()).output_json["body"] == '{"saved": true}'
+    assert (await stack.step()).output_json["body"] == "saved: true"
 
 
 async def test_owner_and_prepare_body_are_enforced(db_mcp_stack: Stack) -> None:
@@ -378,7 +378,7 @@ async def test_delete_running_mcp_preserves_actual_receipt(
     assert "执行" in deleted.json()["message"]
     assert result.status_code == 200
     assert (await stack.step()).state == "succeeded"
-    assert (await stack.step()).output_json["body"] == '{"saved": true}'
+    assert (await stack.step()).output_json["body"] == "saved: true"
     assert len(stack.external.dispatches) == 1
     assert (
         await stack.client.delete(f"{BASE}/{stack.session_id}")

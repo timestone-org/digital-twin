@@ -31,7 +31,7 @@ def test_each_actual_receipt_settles_its_exact_call_and_preserves_missing() -> (
     assert steps[0].state == "awaiting_client"
     assert steps[1].state == "succeeded"
     assert steps[1].output_json is not None
-    assert steps[1].output_json["body"] == '{"is_saved": false}'
+    assert steps[1].output_json["body"] == "is_saved: false"
     assert len(steps[1].output_json["receipt_sha256"]) == 64
     assert steps[1].ended_at is not None
 

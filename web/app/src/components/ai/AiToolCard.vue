@@ -11,10 +11,11 @@
  * 功能最常见的失败。
  */
 import { computed, ref } from 'vue'
-import { DtIcon, DtModal, DtTag } from '@dt/ui'
+import { DtIcon, DtMarkdown, DtModal, DtTag } from '@dt/ui'
 import type { IconName } from '@dt/ui'
 
 import type { RunnerStep } from '@/features/ai/turnRunner'
+import { toolOutputPreview, toolOutputSummary } from '@/features/ai/stepPreview'
 
 const props = defineProps<{ step: RunnerStep }>()
 
@@ -36,12 +37,18 @@ const isSucceeded = computed(() => props.step.state === 'succeeded')
 const isRunning = computed(() => props.step.state === 'running')
 
 const args = computed(() => Object.entries(props.step.input ?? {}))
+const output = computed(
+  () => props.step.displayOutput ?? toolOutputPreview(props.step.output),
+)
+const summary = computed(
+  () => props.step.displaySummary ?? toolOutputSummary(props.step.output),
+)
 
 /** 有没有东西可展开。没有的话整行禁用，免得点了什么都不发生。 */
 const hasDetail = computed(
   () =>
     args.value.length > 0 ||
-    props.step.output !== undefined ||
+    output.value !== null ||
     props.step.image !== undefined ||
     props.step.isImageDropped === true,
 )
@@ -69,7 +76,10 @@ function toggle(): void {
       @click="toggle"
     >
       <DtIcon :name="icon" :size="14" class="ai-step__icon" />
-      <span class="ai-step__title">{{ step.title }}</span>
+      <span class="ai-step__title">
+        <span>{{ step.title }}</span>
+        <span v-if="summary" class="ai-step__summary">{{ summary }}</span>
+      </span>
       <DtIcon
         v-if="step.image !== undefined"
         name="image"
@@ -123,9 +133,7 @@ function toggle(): void {
         截图已释放，只留最近几张。
       </p>
 
-      <p v-if="step.output !== undefined" class="ai-step__out">
-        {{ step.output }}
-      </p>
+      <DtMarkdown v-if="output !== null" :text="output" class="ai-step__out" />
     </div>
 
     <p v-if="step.error" class="ai-step__reason">{{ step.error }}</p>
@@ -194,11 +202,21 @@ function toggle(): void {
 }
 
 .ai-step__title {
+  display: flex;
+  flex-direction: column;
   flex: 1;
   min-width: 0;
   overflow: hidden;
   text-overflow: ellipsis;
   white-space: nowrap;
+}
+
+.ai-step__summary {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  color: var(--text-disabled);
+  font-size: 0.75rem;
 }
 
 .ai-step__shot,

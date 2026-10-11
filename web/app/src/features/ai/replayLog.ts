@@ -23,7 +23,7 @@ import {
   withStep,
   type ConversationLog,
 } from './conversationLog'
-import { inputPreview, outputPreview } from './stepPreview'
+import { inputPreview, outputDisplay, outputPreview } from './stepPreview'
 import { followingReceipts, replayClientSteps } from './replayClientSteps'
 import type { RunnerStep } from './turnRunner'
 
@@ -119,6 +119,10 @@ function runnerStepOf(step: AssistantStep): RunnerStep {
       : step.input_json,
   )
   const output = outputPreview(step.output_json)
+  const storedBody = step.output_json?.body
+  const display = outputDisplay(
+    typeof storedBody === 'string' ? storedBody : step.output_json,
+  )
   return {
     kind: step.kind,
     name: step.name,
@@ -127,6 +131,7 @@ function runnerStepOf(step: AssistantStep): RunnerStep {
     error: step.error,
     ...(input === null ? {} : { input }),
     ...(output === null ? {} : { output }),
+    ...display,
   }
 }
 

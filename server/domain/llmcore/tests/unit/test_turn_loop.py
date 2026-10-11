@@ -4,6 +4,7 @@
 超大产出要截断且说出来、上限可配。助手那边另有一条把熔断也串进来的用例。
 """
 
+import json
 from dataclasses import replace
 from typing import Any
 
@@ -34,6 +35,39 @@ CLIENT_TOOL = ToolSpec(
     parameters={"type": "object", "properties": {}},
     runs_on="client",
 )
+
+
+async def test_model_receives_compact_page_with_exact_continuation() -> None:
+    output = {
+        "items": [
+            {"node_key": f"temperature.{index}", "display_name": "工房温度"}
+            for index in range(20)
+        ],
+        "total": 46,
+        "has_more": True,
+        "next_page": 2,
+    }
+    responder = ScriptedResponder(
+        [
+            AIMessage(content="", tool_calls=[tool_call("kb.search", {}, "p")]),
+            AIMessage(content="继续查询"),
+        ]
+    )
+
+    async def run_tool(name: str, arguments: dict[str, Any]) -> object:
+        del name, arguments
+        return output
+
+    outcome = await run_turn(_deps(responder, run_tool), [])
+    text = next(
+        str(message.content)
+        for message in outcome.messages
+        if isinstance(message, ToolMessage)
+    )
+
+    assert len(text) < len(json.dumps(output, ensure_ascii=False)) * 0.7
+    assert all(f"temperature.{index}" in text for index in range(20))
+    assert "next_page: 2" in text
 
 
 def test_tools_are_nonexclusive_by_default() -> None:

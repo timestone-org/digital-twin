@@ -6,7 +6,6 @@
 几十份过期快照再喂一遍，而模型分不出哪一份是此刻的。
 """
 
-import json
 import uuid
 from typing import Any
 
@@ -107,20 +106,19 @@ def test_the_block_is_the_last_message_when_tools_report_back() -> None:
     assert any("绑好了" in str(message.content) for message in messages)
 
 
-def test_structured_client_results_are_bounded_json() -> None:
+def test_structured_client_results_are_bounded_readable_text() -> None:
     result = ClientToolResult(
         call_id="c1",
         output={"name": "冷站设备", "active": True},
     )
     text = result.as_text()
-    assert json.loads(text) == {"name": "冷站设备", "active": True}
+    assert "冷站设备" in text
+    assert "active: true" in text
 
     oversized = ClientToolResult(call_id="c2", output={"text": "长" * 30_000})
     clipped = oversized.as_text()
-    envelope = json.loads(clipped)
-    assert len(clipped) < MAX_TOOL_RESULT_CHARS + 100
-    assert envelope["is_truncated"] is True
-    assert envelope["total_chars"] > MAX_TOOL_RESULT_CHARS
+    assert len(clipped) <= MAX_TOOL_RESULT_CHARS
+    assert "截断" in clipped or "省略" in clipped
 
 
 def test_the_block_never_lands_in_the_database() -> None:

@@ -44,6 +44,7 @@ from llmcore import (
 )
 from llmcore.deltas import text_of
 from llmcore.memory.history import sized
+from llmcore.output.tool_text import format_tool_output
 from llmcore.textcalls import salvage
 from llmcore.tools.names import restore_offered_aliases
 from llmcore.tools.shapes import (
@@ -131,7 +132,7 @@ class TurnDeps:
     # 窗口」。只有前者的表现是——一个回合里连查三次的那种问题每次都在同一步
     # 400，而单看每一次产出都在上限之内（实测 n_ctx=6656 的本地端点）
     max_context_chars: int = 0
-    # 单个工具产出的字数上限，超了截断并说出来（见 `_clamped`）
+    # 单个工具产出的字数上限
     max_tool_result_chars: int = DEFAULT_MAX_TOOL_RESULT_CHARS
 
 
@@ -411,9 +412,7 @@ async def _run_one(
                 error=reason,
             ),
         )
-    body = _clamped(
-        json.dumps(result, ensure_ascii=False, default=str), max_chars
-    )
+    body = format_tool_output(result, max_chars)
     return (
         ToolMessage(content=body, tool_call_id=call.call_id),
         TurnStep(
@@ -480,21 +479,6 @@ def _room(deps: TurnDeps, used: int) -> int:
         return deps.max_tool_result_chars
     left = deps.max_context_chars - used
     return max(MIN_TOOL_RESULT_CHARS, min(deps.max_tool_result_chars, left))
-
-
-def _clamped(body: str, max_chars: int) -> str:
-    """把工具产出钳在上限内，截断要**说出来**。
-
-    ⚠ 不设上限的话，一次超大结果能把整个上下文挤掉，被挤走的正是常驻提示词
-    与技能正文；静默截断则会让模型把半份结果当成全部。
-
-    Args: body, max_chars。
-    """
-    if len(body) <= max_chars:
-        return body
-    kept = body[:max_chars]
-    tail = f"……（产出太大已截断，共 {len(body)} 字。要看后面请缩小范围再调）"
-    return f"{kept}\n{tail}"
 
 
 def _after_think(state: TurnState) -> str:
