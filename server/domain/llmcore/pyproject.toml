@@ -21,6 +21,9 @@ dependencies = [
     "httpx>=0.28",
     # 端点密钥用 SecretStr 装着——从形状上就不许它被 print 出去
     "pydantic>=2.10",
+    "pyyaml>=6.0",
+    "jsonschema>=4.26",
+    "referencing>=0.37",
 ]
 
 [tool.uv.sources]
