@@ -4,12 +4,17 @@
 `features/ai`）。这里漂一档，界面就画不出来——而两侧代码单看都对。
 """
 
+import json
 import pathlib
 import re
 
 from knowledge_server.apps.chat import enums
-from knowledge_server.apps.chat.services.tools.client import ASK_SPEC
+from knowledge_server.apps.chat.services.tools.client import (
+    ASK_SPEC,
+    ClientTools,
+)
 from knowledge_server.apps.chat.services.tools.collect import COLLECT_SPECS
+from knowledge_server.apps.chat.services.tools.knowledge import KNOWLEDGE_SPECS
 
 # 助手的源码在仓里的位置。⚠ 按文件读而不是 import：服务之间不许互相 import
 ASSISTANT = (
@@ -18,6 +23,22 @@ ASSISTANT = (
     / "src"
     / "ai_assistant"
 )
+
+
+def test_existing_tool_names_inputs_and_execution_sides_stay_compatible() -> (
+    None
+):
+    snapshot = (
+        pathlib.Path(__file__).parents[1] / "fixtures" / "chat_tool_inputs.json"
+    )
+    expected = json.loads(snapshot.read_text(encoding="utf-8"))
+    specs = (*KNOWLEDGE_SPECS, *ClientTools().specs())
+    assert {spec.name: spec.parameters for spec in specs} == expected
+    assert {spec.name for spec in specs if spec.runs_on == "server"} == {
+        "kb.list_bases",
+        "kb.search",
+        "kb.read_chunk",
+    }
 
 
 def _tuple_literal(source: str, name: str) -> tuple[str, ...]:

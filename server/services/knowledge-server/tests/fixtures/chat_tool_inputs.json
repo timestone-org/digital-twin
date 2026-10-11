@@ -1,0 +1,131 @@
+{
+  "kb.list_bases": {
+    "type": "object",
+    "properties": {},
+    "required": [],
+    "additionalProperties": false
+  },
+  "kb.search": {
+    "type": "object",
+    "properties": {
+      "base_id": {
+        "type": "string",
+        "description": "哪个库，取自 kb.list_bases"
+      },
+      "query": {
+        "type": "string",
+        "description": "要查什么，用人话描述"
+      },
+      "limit": {
+        "type": "integer",
+        "description": "最多回几条，缺省 6，上限 20"
+      }
+    },
+    "required": [
+      "base_id",
+      "query"
+    ],
+    "additionalProperties": false
+  },
+  "kb.read_chunk": {
+    "type": "object",
+    "properties": {
+      "chunk_id": {
+        "type": "string",
+        "description": "哪一块，取自 kb.search 的回执"
+      }
+    },
+    "required": [
+      "chunk_id"
+    ],
+    "additionalProperties": false
+  },
+  "user.ask": {
+    "type": "object",
+    "properties": {
+      "question": {
+        "type": "string",
+        "description": "一句话问题，一次只问一件事"
+      },
+      "options": {
+        "type": "array",
+        "description": "备选项，2–6 个，最可能的排第一个",
+        "items": {
+          "type": "object",
+          "properties": {
+            "value": {
+              "type": "string",
+              "description": "这一项的取值，回执按它认"
+            },
+            "label": {
+              "type": "string",
+              "description": "按钮上的字，一行以内"
+            },
+            "hint": {
+              "type": "string",
+              "description": "补一句这一项意味着什么，可省"
+            }
+          },
+          "required": [
+            "value",
+            "label"
+          ],
+          "additionalProperties": false
+        }
+      },
+      "allow_multiple": {
+        "type": "boolean",
+        "description": "允许多选，缺省 false"
+      },
+      "allow_free_text": {
+        "type": "boolean",
+        "description": "除选项外再给一个输入框，缺省 false；给了也仍然要给选项"
+      }
+    },
+    "required": [
+      "question",
+      "options"
+    ],
+    "additionalProperties": false
+  },
+  "collect.search_points": {
+    "type": "object",
+    "properties": {
+      "query": {
+        "type": "string",
+        "description": "2–6个关键词，通常不超过40字，例如：动力换热 2#阀门 开度。保留设备编号；不要写用途、权限、背景介绍或实时显示要求。",
+        "minLength": 1,
+        "maxLength": 80
+      },
+      "source_id": {
+        "description": "可选的数据源过滤。未知或未指定数据源时必须传null或省略；不能猜测UUID，不能用全零UUID代替全部数据源。非空值只能来自先前搜索结果的source_id。",
+        "anyOf": [
+          {
+            "type": "string",
+            "format": "uuid"
+          },
+          {
+            "type": "null"
+          }
+        ]
+      }
+    },
+    "required": [
+      "query"
+    ],
+    "additionalProperties": false
+  },
+  "collect.watch_point": {
+    "type": "object",
+    "properties": {
+      "node_key": {
+        "type": "string",
+        "description": "搜索结果中的点位身份，原样传入"
+      }
+    },
+    "required": [
+      "node_key"
+    ],
+    "additionalProperties": false
+  }
+}

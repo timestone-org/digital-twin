@@ -5,6 +5,7 @@
 而后者是这套东西最容易失去信任的地方。
 """
 
+import json
 from typing import Any
 
 from ai_assistant.apps.chat.services.memory import state_block
@@ -136,12 +137,25 @@ def test_an_oversized_snapshot_says_it_was_cut() -> None:
     """悄悄截断会让模型把「我看到的就是全部」当成事实。"""
     text = render(_shot(nodes=[{"id": f"n{index}"} for index in range(9000)]))
 
-    assert "只给了前面一截" in text
+    assert "部分字段已省略" in text
     assert len(text) < MAX_CONTEXT_CHARS * 2
 
 
 def test_the_snapshot_rides_along_in_the_state_block() -> None:
     assert "n7" in state_block.render(_shot(selected_id="n7"), None)
+
+
+def test_truncated_snapshot_keeps_valid_json_and_selected_identity() -> None:
+    text = render(
+        _shot(
+            nodes=[{"id": f"n{index}"} for index in range(9000)],
+            selected_id="selected-7",
+            _truncated=False,
+        )
+    )
+    body = json.loads(text.split("```json\n", 1)[1].split("```", 1)[0])
+    assert body["selected_id"] == "selected-7"
+    assert body["_truncated"] is True
 
 
 def test_the_snapshot_never_rides_along_in_the_system_prompt() -> None:

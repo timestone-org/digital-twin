@@ -16,6 +16,7 @@ from ai_assistant.apps.chat.schemas.capability import (
 )
 from ai_assistant.apps.chat.services import model_profiles, skill_catalog
 from ai_assistant.apps.chat.services.perception import accepted_suffixes
+from ai_assistant.apps.chat.skills import SkillCatalog
 from ai_assistant.container import Container
 from ai_assistant.deps import get_container, require
 from ai_assistant.llm.registry import ModelRegistry
@@ -44,6 +45,7 @@ async def read_capabilities(
                 container.models, container.logins
             ),
             container.settings.codex_reasoning_effort,
+            container.skills,
         )
     )
 
@@ -52,6 +54,7 @@ def capability_of(
     models: ModelRegistry,
     profiles: list[ModelProfileOut],
     default_effort: str,
+    skills: SkillCatalog | None = None,
 ) -> CapabilityOut:
     """把探测到的几路模型摊成出参。
 
@@ -68,7 +71,7 @@ def capability_of(
     ready = [one.id for one in profiles if one.is_ready]
     return CapabilityOut(
         is_model_enabled=bool(ready),
-        skills=skill_catalog(),
+        skills=skill_catalog(skills),
         models=profiles,
         default_model_id=model_profiles.default_id_of(models, profiles),
         default_effort=default_effort,

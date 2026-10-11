@@ -16,6 +16,7 @@ import {
 } from './conversationLog'
 import { runTurn } from './turnRunner'
 import { aiPorts, type AdvanceStream } from './ports'
+import type { AiSurface } from './surfaces'
 
 /** 正在跑的那个回合。放在闭包外，`send` 与 `stop` 共用同一格。 */
 export interface RunState {
@@ -24,7 +25,11 @@ export interface RunState {
 
 export interface SenderParts {
   sessionId: () => string | null
-  surface: () => { kind: AssistantSurfaceKind; label: string }
+  surface: () => {
+    kind: AssistantSurfaceKind
+    label: string
+    instance?: AiSurface
+  }
   state: RunState
   isRunning: Ref<boolean>
   edit: (next: (given: ConversationLog) => ConversationLog) => void
@@ -84,6 +89,7 @@ function inputOf(
     sessionId,
     surfaceKind: where.kind,
     surfaceLabel: where.label,
+    ...(where.instance === undefined ? {} : { originSurface: where.instance }),
     userText: said.text,
     userImages: said.images,
     signal: controller.signal,

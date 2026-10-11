@@ -83,13 +83,13 @@ export function useAiPanel(options: AiPanelOptions): AiPanel {
 
   const chat = useAiConversation(
     () => sessionId.value,
-    () => ({ kind: surface.kind, label: surface.label }),
+    () => ({ kind: surface.kind, label: surface.label, instance: surface }),
   )
   const compose = newComposeState()
   const replayer = createReplayer(chat)
 
   onUnmounted(() => {
-    clearSurface(surface.kind)
+    clearSurface(surface)
     replayer.abort()
   })
 

@@ -33,10 +33,18 @@ from ai_assistant.apps.chat.services import (
 from ai_assistant.apps.chat.services.client_result import ClientToolResult
 from ai_assistant.apps.chat.services.intent import select as tool_select
 from ai_assistant.apps.chat.services.memory import state_block
+from ai_assistant.apps.chat.services.memory.page_context import (
+    path_of,
+    snapshot_of,
+)
 from ai_assistant.apps.chat.services.memory.prompt import build_system_prompt
+from ai_assistant.apps.chat.services.memory.skill_context import (
+    restored_messages,
+)
 from ai_assistant.apps.chat.services.model_retry import RetryingModel
 from ai_assistant.apps.chat.services.perception import vision
 from ai_assistant.apps.chat.services.planning import plan as plan_service
+from ai_assistant.apps.chat.services.tools.execution import ToolExecutor
 from ai_assistant.apps.chat.services.tools.mcp_policy import policies_of
 from ai_assistant.apps.chat.services.tools.providers.mcp import (
     PROVIDER as MCP_PROVIDER,
@@ -44,6 +52,11 @@ from ai_assistant.apps.chat.services.tools.providers.mcp import (
 from ai_assistant.apps.chat.services.tools.registry import (
     ProviderDeps,
     build_registry,
+)
+from ai_assistant.apps.chat.skills import (
+    SkillCatalog,
+    SkillManifest,
+    default_catalog,
 )
 from ai_assistant.container import Container
 from ai_assistant.llm import (
@@ -103,6 +116,7 @@ class AdvanceDeps:
     # ⚠ `None` 与空集不是一回事：`None` 是「没给」这一道不收窄，空集是「一个码
     # 都没有」该收窄的一个不留（`intent/ports.py` 的 `TurnContext.codes`）
     codes: frozenset[str] | None = None
+    skills: SkillCatalog | None = None
 
 
 def deps_of(
@@ -148,6 +162,7 @@ def deps_of(
         # 与真能跑的那一份会漂开，而两边都不报错
         extra_specs=registry.specs_of(MCP_PROVIDER),
         codes=codes,
+        skills=container.skills,
     )
 
 
@@ -210,32 +225,24 @@ def assemble(
     rows: Sequence[HistoryRow],
     plan: dict[str, Any] | None,
     summary: Summary | None = None,
+    skills: tuple[SkillManifest, ...] | None = None,
 ) -> list[BaseMessage]:
-    """把这一轮喂给模型的消息列表拼出来。
+    """按稳定性组装上下文，回执邻接与恢复规则见 AI_ASSISTANT_SKILLS。
 
-    ⚠ 顺序就是上下文的分层，从最稳到每轮都变：常驻提示词 → 历史 → 这一次的
-    输入 → **末尾的状态块**。易变的东西一旦挪到前面去，它后面的工具声明与整段
-    历史会跟着一起丢掉端点的前缀缓存（`memory/prompt.py`
-    与 `memory/state_block.py` 文件头）。
-
-    ⚠ 状态块**不落库**：`advance_persist.persist` 落的是入向消息与本回合新增
-    的那几条，而它两者都不是。
-
-    ⚠ 历史只带最近的一截，且截断点不许把工具调用与它的回应切开
-    （`history.window`）。全带的话，一个跑了几十轮的会话会把上下文占满。
-
-    ⚠ 摘要排在历史**之前**、常驻提示词**之后**：它代表的就是更早的那一截。
-    它与历史窗口锚在同一个台阶上，同一个台阶内两者都逐字不变——挪到别处或者
-    每轮现折，它就成了第五个前缀断点（`memory/summarize.py`）。
-
-    ⚠ 实际回执紧邻所属调用；未收回执只补未知占位，见服务 CONTEXT。
-
-    Args: payload, rows（这个会话的全部消息）, plan（会话上的当前计划）。
+    Args: payload, rows, plan, summary, skills。
     """
     recent = history.window(rows, MAX_HISTORY_MESSAGES)
+    selected = (
+        skills
+        if skills is not None
+        else default_catalog().select(
+            payload.surface_kind, path_of(payload.surface_context)
+        )
+    )
     system = SystemMessage(
         content=build_system_prompt(
-            payload.surface_kind, surface_label=payload.surface_label
+            payload.surface_kind,
+            skills=selected,
         )
     )
     messages = _adjacent_replies(
@@ -245,7 +252,10 @@ def assemble(
         system,
         *summarize.messages_of(summary),
         *messages,
-        *state_block.messages_of(payload.surface_context, plan),
+        *restored_messages(rows, recent, selected),
+        *state_block.messages_of(
+            snapshot_of(payload.surface_context, payload.surface_label), plan
+        ),
     ]
 
 
@@ -339,27 +349,30 @@ async def advance(
     chat_session_id: uuid.UUID,
     payload: AdvanceInput,
 ) -> AsyncIterator[AdvanceEvent]:
-    """推进一个回合，边跑边吐，最后落库。
-
-    ⚠ 增量**不进落库那一摞**：回合结束时落的是攒齐的那条助手消息，增量只是
-    它的碎片。都留下的话，同一段话在库里会有两份，而重放时模型看到自己把
-    同一件事说了两遍。
+    """推进并持久化回合，增量只展示，实际输入与结果落库。
 
     Args: deps, chat_session_id, payload。
     """
-    messages, choice = await _opened(deps, chat_session_id, payload)
+    selected = (deps.skills or default_catalog()).select(
+        payload.surface_kind, path_of(payload.surface_context), deps.codes
+    )
+    messages, choice = await _opened(deps, chat_session_id, payload, selected)
     plans = plan_service.PlanTools(
         sessions=deps.sessions, chat_session_id=chat_session_id
     )
+    specs = tool_select.specs_for(
+        payload.surface_kind,
+        payload.client_tools,
+        codes=deps.codes,
+        extra=deps.extra_specs,
+        skills=selected,
+    )
     turn = TurnDeps(
         model=RetryingModel(deps.model),
-        specs=tool_select.specs_for(
-            payload.surface_kind,
-            payload.client_tools,
-            codes=deps.codes,
-            extra=deps.extra_specs,
+        specs=specs,
+        run_tool=ToolExecutor(
+            specs, selected, _with_plan_tools(plans, deps.server_tools)
         ),
-        run_tool=_with_plan_tools(plans, deps.server_tools),
         choice=choice,
     )
     produced: list[TurnStep] = []
@@ -402,7 +415,10 @@ async def _persist_turn(
 
 
 async def _opened(
-    deps: AdvanceDeps, chat_session_id: uuid.UUID, payload: AdvanceInput
+    deps: AdvanceDeps,
+    chat_session_id: uuid.UUID,
+    payload: AdvanceInput,
+    selected: tuple[SkillManifest, ...],
 ) -> tuple[list[BaseMessage], ModelChoice]:
     """读原料 → 折叠 → 拼上下文。
 
@@ -431,6 +447,7 @@ async def _opened(
         rows=loaded.rows,
         plan=loaded.plan,
         summary=summary,
+        skills=selected,
     )
     return messages, loaded.choice
 

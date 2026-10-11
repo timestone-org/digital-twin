@@ -13,6 +13,7 @@ from langchain_core.messages import (
 from knowledge_server.apps.chat.services import advance_service as svc
 from knowledge_server.apps.chat.services.prompt import (
     SYSTEM_PROMPT,
+    build_system_prompt,
     render_scope,
 )
 from knowledge_server.apps.chat.services.scope import (
@@ -21,6 +22,7 @@ from knowledge_server.apps.chat.services.scope import (
     ScopeBase,
 )
 from knowledge_server.apps.chat.services.tools.client import ASK_TOOL
+from knowledge_server.apps.chat.skills import default_catalog
 from llmcore.memory import HistoryRow, Summary
 from llmcore.tools.shapes import ToolSpec, object_schema
 
@@ -60,7 +62,7 @@ def test_the_prompt_is_the_first_message_and_never_varies() -> None:
     )
 
     assert isinstance(made[0], SystemMessage)
-    assert made[0].content == SYSTEM_PROMPT
+    assert made[0].content == build_system_prompt(default_catalog().select())
 
 
 def test_the_prompt_demands_all_three_citation_parts() -> None:
@@ -225,7 +227,7 @@ def test_the_scope_is_injected_right_after_the_resident_prompt() -> None:
         scope=_scoped("手册库", "规程库"),
     )
 
-    assert made[0].content == SYSTEM_PROMPT
+    assert made[0].content == build_system_prompt(default_catalog().select())
     assert "手册库" in str(made[1].content)
     assert "规程库" in str(made[1].content)
 

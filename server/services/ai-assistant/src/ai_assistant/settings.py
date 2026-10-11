@@ -4,6 +4,7 @@
 """
 
 import json
+from pathlib import Path
 from typing import Any, Self, cast
 
 from pydantic import Field, SecretStr, field_validator, model_validator
@@ -143,6 +144,14 @@ class MigrationSettings(PostgresSettings):
 
 class Settings(AppSettings, PostgresSettings, RedisSettings):
     """进程启动时构造一次并冻结。"""
+
+    skills_directory: Path | None = None
+    skills_routes_file: Path | None = None
+
+    @field_validator("skills_directory", "skills_routes_file", mode="before")
+    @classmethod
+    def empty_skill_path(cls, given: object) -> object:
+        return None if given == "" else given
 
     model_config = SettingsConfigDict(
         env_prefix="ASSISTANT_",

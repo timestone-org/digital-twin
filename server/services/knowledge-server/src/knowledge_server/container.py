@@ -14,6 +14,7 @@ from dataclasses import dataclass, field
 import httpx
 from langchain_core.language_models import BaseChatModel
 
+from knowledge_server.apps.chat.skills import default_catalog, load_catalog
 from knowledge_server.apps.knowledge.services.assembly import (
     external_parsers,
 )
@@ -64,6 +65,7 @@ from llmcore import (
 )
 from llmcore.codex import CodexRewire
 from llmcore.guard import GuardedModel
+from llmcore.skills import SkillCatalog
 
 # 幂等键的命名空间。⚠ 必须带服务名：共用一个 Redis 的两个服务，同一个端点名
 # 撞上同一个幂等键时会互相返回对方的结果
@@ -117,6 +119,7 @@ class Container:
     # Redis consumer 的进程级随机后缀。⚠ app_instance 可能为空或多副本同名，
     # 只用它会让旧进程在新 owner 接管后仍被 Lua 误判为 owner。
     ingest_consumer_nonce: uuid.UUID = field(default_factory=uuid.uuid4)
+    skills: SkillCatalog | None = None
 
     def ingest_group(self) -> StreamGroup:
         """摄取队列的消费组身份。
@@ -185,6 +188,7 @@ def build_container(settings: Settings) -> Container:
     chat_adapter = _chat_adapter(settings, catalog)
     return Container(
         settings=settings,
+        skills=_build_skills(settings),
         database=_build_database(settings),
         cache=cache,
         idempotency=IdempotencyStore(
@@ -212,6 +216,14 @@ def build_container(settings: Settings) -> Container:
             settings.office_preview_timeout_s,
         ),
     )
+
+
+def _build_skills(settings: Settings) -> SkillCatalog | None:
+    if settings.app_role == ROLE_WORKER:
+        return None
+    if settings.skills_directory:
+        return load_catalog(settings.skills_directory)
+    return default_catalog()
 
 
 def _build_stream(settings: Settings) -> RedisStream:

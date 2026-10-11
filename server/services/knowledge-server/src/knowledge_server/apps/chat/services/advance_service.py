@@ -1,9 +1,4 @@
-"""推进一个回合：装上下文、跑循环、逐步吐出去、落库。
-
-⚠ 与助手那份同构但**更薄**：没有工作面、没有附件、没有计划子系统
-（docs/KNOWLEDGE_CHAT_DESIGN.md §7）。上下文只有三层：常驻提示词 → 历史
-（含窗口外折成的摘要）→ 这一次的输入。
-"""
+"""知识库回合编排：保留范围、引用与标题语义，按问题加载固定目录中的标准技能。"""
 
 import json
 import uuid
@@ -37,9 +32,13 @@ from knowledge_server.apps.chat.services.citations import (
     as_json,
     with_figures,
 )
+from knowledge_server.apps.chat.services.context import (
+    ContextProjection,
+    marked,
+)
 from knowledge_server.apps.chat.services.markers import numbers_in
 from knowledge_server.apps.chat.services.prompt import (
-    SYSTEM_PROMPT,
+    build_system_prompt,
     scope_messages,
 )
 from knowledge_server.apps.chat.services.scope import BaseScope
@@ -50,6 +49,12 @@ from knowledge_server.apps.chat.services.tools import (
     ToolDeps,
     build_registry,
 )
+from knowledge_server.apps.chat.services.tools.execution import scoped_runner
+from knowledge_server.apps.chat.services.tools.guides import (
+    describe_tool,
+    with_guides,
+)
+from knowledge_server.apps.chat.skills import default_catalog
 from knowledge_server.apps.knowledge.services.assembly import (
     lanes_of,
     strategies,
@@ -65,6 +70,11 @@ from llmcore.memory import (
     history,
     summarize,
 )
+from llmcore.output.tool_text import format_tool_output
+from llmcore.skills import SkillCatalog, SkillManifest
+from llmcore.skills.context import restored_from_messages
+from llmcore.skills.tools import METADATA_SPECS
+from llmcore.tools.execution import ToolExecutor
 from llmcore.tools.registry import ToolRegistry
 from llmcore.tools.selection import specs_named
 from llmcore.tools.shapes import ToolSpec, openai_schema
@@ -104,6 +114,8 @@ class AdvanceDeps:
     # 整段上下文的字数预算；0 = 不知道窗口。⚠ 与上面两格是三条判据：一条管
     # 单次产出、一条管历史、这一条管「这一轮加起来」
     context_chars: int = 0
+    skills: SkillCatalog | None = None
+    codes: frozenset[str] | None = None
 
 
 def deps_of(container: Container, caller: CallerContext) -> AdvanceDeps:
@@ -111,7 +123,6 @@ def deps_of(container: Container, caller: CallerContext) -> AdvanceDeps:
 
     Args: container, caller（只用来确认已认证；工具在进程内直调，不转发头）。
     """
-    del caller
     # ⚠ 问的是**此刻**：对话档的端点来自运行期可改的目录，装配了不等于能用
     if not container.answerer.can_answer:
         raise ChatUnavailable("这套部署没有接对话档，知识库对话用不了")
@@ -138,6 +149,8 @@ def deps_of(container: Container, caller: CallerContext) -> AdvanceDeps:
         tool_result_chars=afforded,
         history_chars=budget.history_chars(window_tokens, afforded),
         context_chars=budget.context_chars(window_tokens),
+        skills=container.skills,
+        codes=caller.permissions,
     )
 
 
@@ -152,8 +165,16 @@ class ClientToolResult:
     def as_text(self) -> str:
         """摊成模型认的一段工具输出。"""
         if self.error is not None:
-            return f"失败：{self.error}"
-        return str(self.output)
+            return (
+                f"失败：{self.error}\ncode: client_tool_failed\n"
+                "next_action: 核对会话状态、权限与工具参数后再调用；"
+                "不要把失败当成空结果。"
+            )
+        return (
+            self.output
+            if isinstance(self.output, str)
+            else json.dumps(self.output, ensure_ascii=False, default=str)
+        )
 
 
 @dataclass(frozen=True)
@@ -182,7 +203,9 @@ def incoming_messages(payload: AdvanceInput) -> list[BaseMessage]:
         [result.as_text() for result in payload.tool_results]
     )
     return [
-        ToolMessage(content=body, tool_call_id=result.call_id)
+        ToolMessage(
+            content=format_tool_output(body, 8000), tool_call_id=result.call_id
+        )
         for result, body in zip(payload.tool_results, texts, strict=True)
     ]
 
@@ -230,32 +253,33 @@ def _history_row(row: ChatMessage) -> HistoryRow:
     return HistoryRow(role=row.role, seq=row.seq, content_json=row.content_json)
 
 
+MAX_SKILL_RESTORE_CHARS = 4000
+
+
+@dataclass(frozen=True)
+class ContextOptions:
+    history_chars: int = 0
+    skills: tuple[SkillManifest, ...] | None = None
+    restore_chars: int = MAX_SKILL_RESTORE_CHARS
+
+
 def assemble(
     *,
     payload: AdvanceInput,
     rows: list[HistoryRow],
     summary: Summary | None,
     scope: BaseScope,
-    history_chars: int = 0,
+    options: ContextOptions | None = None,
 ) -> list[BaseMessage]:
-    """把这一轮喂给模型的消息列表拼出来。
-
-    ⚠ 顺序就是上下文的分层，从最稳到每轮都变：常驻提示词 → 检索范围（会话内
-    不变）→ 摘要 → 历史窗口 → 这一次的输入。易变的东西一旦挪到前面去，它后面
-    的整段历史会跟着一起丢掉端点的前缀缓存（ADR-0025）。
-
-    ⚠ 尾部没应答的工具调用要补回执：否则端点判整段历史不合法，而这个会话再也
-    发不出下一句。
-
-    ⚠ 历史要按**字数**再收一次（`history.fitted`）。条数窗口管不住 token：
-    一次检索回执三千多 token，三四轮下来光历史就把小模型的窗口占满，而表现是
-    每次都在同一步 400（实测 `n_ctx=6656` 的本地端点）。给 0 表示不知道窗口，
-    这一步就不动。
-
-    Args: payload, rows, summary, scope, history_chars（0 = 不限）。
-    """
+    """稳定规则、范围、摘要、历史、技能恢复按序组装。"""
+    options = options or ContextOptions()
+    selected = (
+        options.skills
+        if options.skills is not None
+        else default_catalog().select()
+    )
     recent = history.window(rows, MAX_HISTORY_MESSAGES, HISTORY_DROP_STEP)
-    replayed = history.fitted(history.replay(recent), history_chars)
+    replayed = history.fitted(history.replay(recent), options.history_chars)
     fresh = incoming_messages(payload)
     answered = {
         one.tool_call_id for one in fresh if isinstance(one, ToolMessage)
@@ -266,12 +290,23 @@ def assemble(
         if call_id not in answered
     )
     return [
-        SystemMessage(content=SYSTEM_PROMPT),
-        *scope_messages(scope),
-        *summarize.messages_of(summary),
+        *marked(
+            [
+                SystemMessage(content=build_system_prompt(selected)),
+                *scope_messages(scope),
+            ],
+            "prefix",
+        ),
+        *marked(summarize.messages_of(summary), "summary"),
         *replayed,
         *history.fillers(orphans),
         *fresh,
+        *marked(
+            restored_from_messages(
+                history.replay(rows), replayed, selected, options.restore_chars
+            ),
+            "restored",
+        ),
     ]
 
 
@@ -281,25 +316,14 @@ async def advance(
     chat_session_id: uuid.UUID,
     payload: AdvanceInput,
 ) -> AsyncIterator[TurnEvent | title_service.SessionTitled | CitationsFound]:
-    """推进一个回合，边跑边吐，最后落库。
-
-    ⚠ 增量**不进落库那一摞**：回合结束时落的是攒齐的那条助手消息，增量只是
-    它的碎片。
-
-    Args: deps, chat_session_id, payload。
-    """
-    loaded, messages = await _opened(deps, chat_session_id, payload)
+    """推进、持久化并依次返回引用、标题和回合终态。"""
+    selected = (deps.skills or default_catalog()).select(codes=deps.codes)
+    loaded, messages = await _opened(deps, chat_session_id, payload, selected)
     # ⚠ 注册表按这一轮读到的范围现造：范围改了下一轮就跟着改，不留隔夜的那份
     ledger = Ledger()
     registry = deps.tools(loaded.scope, ledger)
-    turn = TurnDeps(
-        model=deps.model,
-        specs=_offered(registry.specs, payload.client_tools),
-        run_tool=registry.run,
-        choice=ModelChoice(),
-        max_context_chars=deps.context_chars,
-        max_tool_result_chars=deps.tool_result_chars,
-    )
+    specs = _turn_specs(registry.specs, payload.client_tools)
+    turn = _turn_deps(deps, loaded, selected, registry, specs)
     produced: list[TurnStep] = []
     outcome: TurnOutcome | None = None
     async for item in stream_turn(turn, messages):
@@ -317,6 +341,42 @@ async def advance(
             deps, chat_session_id, payload, cited, outcome
         ):
             yield tail
+
+
+def _turn_deps(
+    deps: AdvanceDeps,
+    loaded: LoadedContext,
+    selected: tuple[SkillManifest, ...],
+    registry: ToolRegistry,
+    specs: tuple[ToolSpec, ...],
+) -> TurnDeps:
+    """把业务范围、当次工具预算和模型输入投影装配在同一个回合。"""
+    return TurnDeps(
+        model=deps.model,
+        specs=specs,
+        run_tool=ToolExecutor(
+            specs,
+            selected,
+            scoped_runner(registry),
+            describe=describe_tool,
+            max_skill_chars=deps.tool_result_chars,
+            result_reserve_chars=400 if deps.context_chars > 0 else 0,
+        ),
+        choice=ModelChoice(),
+        max_context_chars=deps.context_chars,
+        max_tool_result_chars=deps.tool_result_chars,
+        prepare_messages=ContextProjection(
+            deps.context_chars,
+            len(
+                json.dumps(
+                    [openai_schema(one) for one in specs], ensure_ascii=False
+                )
+            ),
+            selected,
+            history.replay(loaded.rows),
+            _restore_budget(deps),
+        ),
+    )
 
 
 async def _stored(
@@ -418,7 +478,10 @@ def _offered(
 
 
 async def _opened(
-    deps: AdvanceDeps, chat_session_id: uuid.UUID, payload: AdvanceInput
+    deps: AdvanceDeps,
+    chat_session_id: uuid.UUID,
+    payload: AdvanceInput,
+    selected: tuple[SkillManifest, ...],
 ) -> tuple[LoadedContext, list[BaseMessage]]:
     """读原料 → 折叠 → 拼上下文。折叠在事务之外。
 
@@ -427,15 +490,16 @@ async def _opened(
     async with deps.sessions() as session:
         loaded = await load_context(session, chat_session_id=chat_session_id)
     summary = await _summary_of(deps, chat_session_id, loaded)
-    history_limit, keep_summary = _continuation_budget(
-        deps, loaded, payload, summary
-    )
     return loaded, assemble(
         payload=payload,
         rows=loaded.rows,
-        summary=summary if keep_summary else None,
+        summary=summary,
         scope=loaded.scope,
-        history_chars=history_limit,
+        options=ContextOptions(
+            0 if deps.context_chars > 0 else deps.history_chars,
+            selected,
+            _restore_budget(deps),
+        ),
     )
 
 
@@ -468,30 +532,18 @@ async def _summary_of(
     return folded
 
 
-def _continuation_budget(
-    deps: AdvanceDeps,
-    loaded: LoadedContext,
-    payload: AdvanceInput,
-    summary: Summary | None,
-) -> tuple[int, bool]:
-    """按实际前缀分配历史。Args: deps, loaded, payload, summary。"""
-    if deps.context_chars <= 0 or not payload.tool_results:
-        return deps.history_chars, True
-    specs = _offered(
-        deps.tools(loaded.scope, Ledger()).specs, payload.client_tools
+def _turn_specs(
+    specs: tuple[ToolSpec, ...], client_tools: tuple[str, ...]
+) -> tuple[ToolSpec, ...]:
+    return tuple(
+        with_guides(one)
+        for one in (*_offered(specs, client_tools), *METADATA_SPECS)
     )
-    schemas_chars = len(
-        json.dumps([openai_schema(spec) for spec in specs], ensure_ascii=False)
-    )
-    fixed = [
-        SystemMessage(content=SYSTEM_PROMPT),
-        *scope_messages(loaded.scope),
-        *incoming_messages(payload),
-    ]
-    return budget.continuation_history(
-        deps.context_chars,
-        deps.history_chars,
-        sum(history.sized(one) for one in fixed),
-        sum(history.sized(one) for one in summarize.messages_of(summary)),
-        schemas_chars,
+
+
+def _restore_budget(deps: AdvanceDeps) -> int:
+    return (
+        min(MAX_SKILL_RESTORE_CHARS, deps.context_chars // 8)
+        if deps.context_chars > 0
+        else MAX_SKILL_RESTORE_CHARS
     )

@@ -3,9 +3,10 @@
 变量名 = `KNOWLEDGE_<组>_<键>`。密钥类一律无默认值——缺失即拒绝启动。
 """
 
+from pathlib import Path
 from typing import Self
 
-from pydantic import Field, SecretStr, model_validator
+from pydantic import Field, SecretStr, field_validator, model_validator
 from pydantic_settings import SettingsConfigDict
 
 from lib.config import AppSettings, PostgresSettings, RedisSettings
@@ -86,6 +87,13 @@ class Settings(
         extra="ignore",
         frozen=True,
     )
+
+    skills_directory: Path | None = None
+
+    @field_validator("skills_directory", mode="before")
+    @classmethod
+    def empty_skill_path(cls, given: object) -> object:
+        return None if given == "" else given
 
     app_name: str = SERVICE_NAME
     app_http_port: int = HTTP_PORT

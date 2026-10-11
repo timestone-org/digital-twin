@@ -2,6 +2,11 @@
 
 from dataclasses import dataclass
 
+from ai_assistant.apps.chat.skills import (
+    SkillCatalog,
+    default_catalog,
+    load_catalog,
+)
 from ai_assistant.llm import (
     DEFAULT_PROFILE,
     AdapterDeps,
@@ -72,6 +77,7 @@ class Container:
     # ⚠ 一个进程一份：注册表与嵌入那一路读的都是它的快照，各造一份的话
     # 两边看到的目录可以在同一次回合里不一样
     catalog: CatalogCache
+    skills: SkillCatalog | None = None
 
 
 def _build_database(settings: Settings) -> Database:
@@ -212,6 +218,11 @@ def build_container(settings: Settings) -> Container:
     )
     return Container(
         settings=settings,
+        skills=(
+            load_catalog(settings.skills_directory, settings.skills_routes_file)
+            if settings.skills_directory or settings.skills_routes_file
+            else default_catalog()
+        ),
         database=_build_database(settings),
         cache=cache,
         idempotency=IdempotencyStore(

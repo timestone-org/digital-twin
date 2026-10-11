@@ -1,5 +1,5 @@
 /**
- * @fileoverview 知识库对话的回合门面：信封里没有工作面、只自报 `user.ask`、
+ * @fileoverview 知识库对话的回合门面：客户端工具、
  * 反问停下来等人、回填之后接着跑。内核的规矩由助手那份用例守，这里只验门面。
  */
 import { afterEach, describe, expect, it } from 'vitest'
@@ -85,10 +85,11 @@ function sinkOf(): {
 
 afterEach(() => {
   __resetAskHandler()
+  window.history.replaceState(null, '', '/')
 })
 
 describe('知识库对话的回合门面', () => {
-  it('信封里只有自报的工具，没有工作面', async () => {
+  it('信封只携带工具能力，保留知识库专用请求形状', async () => {
     // ⚠ 知识库那边的入参是 extra="forbid"：多一格 surface_kind 整个回合就是 400
     const { advance, bodies } = advanceOf([[DONE]])
     const { sink, replies } = sinkOf()
@@ -109,6 +110,21 @@ describe('知识库对话的回合门面', () => {
     })
     expect(bodies[0]).not.toHaveProperty('surface_kind')
     expect(bodies[0]).not.toHaveProperty('user_images')
+  })
+
+  it('请求不携带页面或 URL 信息', async () => {
+    window.history.replaceState(
+      null,
+      '',
+      '/ai/knowledge/chat?token=private#item',
+    )
+    const { advance, bodies } = advanceOf([[DONE]])
+    await runKnowledgeTurn(
+      { advance, sessionId: 's1', userText: '查规程' },
+      sinkOf().sink,
+    )
+    expect(bodies[0]).not.toHaveProperty('surface_context')
+    expect(JSON.stringify(bodies[0])).not.toContain('private')
   })
 
   it('反问：停下来等人，用户选了就带着回执再推进一次', async () => {

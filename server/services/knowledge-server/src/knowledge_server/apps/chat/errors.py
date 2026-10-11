@@ -44,3 +44,10 @@ class ChatSessionVersionConflict(AppError):
 
     code = 42323
     http_status = 409
+
+
+class ChatContextTooLarge(AppError):
+    """不可再裁剪的当前问题或工具批次超过配置的模型窗口。"""
+
+    code = 42324
+    http_status = 413

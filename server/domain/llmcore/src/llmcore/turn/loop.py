@@ -28,7 +28,7 @@ import json
 import operator
 from collections.abc import AsyncIterator, Awaitable, Callable, Sequence
 from dataclasses import dataclass, field, replace
-from typing import Annotated, Any, Protocol, TypedDict
+from typing import Annotated, Any, TypedDict
 from uuid import uuid4
 
 from langchain_core.messages import AIMessage, BaseMessage, ToolMessage
@@ -47,6 +47,7 @@ from llmcore.memory.history import sized
 from llmcore.output.tool_text import format_tool_output
 from llmcore.textcalls import salvage
 from llmcore.tools.names import restore_offered_aliases
+from llmcore.tools.ports import BudgetedToolRunner, ServerToolRunner
 from llmcore.tools.shapes import (
     ToolSpec,
     openai_schema,
@@ -105,12 +106,6 @@ class TurnUpdate(TypedDict, total=False):
     pending: tuple[ClientToolCall, ...]
 
 
-class ServerToolRunner(Protocol):
-    """服务端工具的执行面。测试注一个假的进来。"""
-
-    async def __call__(self, name: str, arguments: dict[str, Any]) -> Any: ...
-
-
 @dataclass(frozen=True)
 class TurnDeps:
     """跑一个回合要的那几样。"""
@@ -134,6 +129,10 @@ class TurnDeps:
     max_context_chars: int = 0
     # 单个工具产出的字数上限
     max_tool_result_chars: int = DEFAULT_MAX_TOOL_RESULT_CHARS
+    # 仅投影模型输入；图状态和持久化记录保留原消息
+    prepare_messages: (
+        Callable[[Sequence[BaseMessage]], list[BaseMessage]] | None
+    ) = None
 
 
 async def run_turn(deps: TurnDeps, messages: list[BaseMessage]) -> TurnOutcome:
@@ -288,10 +287,11 @@ def _thinker(deps: TurnDeps) -> Callable[[TurnState], Awaitable[TurnUpdate]]:
     async def think(state: TurnState) -> TurnUpdate:
         # ⚠ 没地方了这一轮就不发工具，捡回那一步也要跟着关：捡回来的调用照样
         # 会跑，于是「地方用完就收手」这条闸被绕开，上下文接着飘
-        roomy = _has_room(deps, _used(state["messages"], overhead))
+        messages = _prepared(deps, state["messages"])
+        roomy = _has_room(deps, _used(messages, overhead))
         answered = await deps.model.respond(
             choice=deps.choice,
-            messages=list(state["messages"]),
+            messages=messages,
             tools=schemas if roomy else [],
             on_delta=deps.on_delta,
         )
@@ -371,7 +371,7 @@ def _tool_step(
         asked = _tool_calls(state["messages"])
         outputs: list[BaseMessage] = []
         steps: list[TurnStep] = []
-        used = _used(state["messages"], overhead)
+        used = _used(_prepared(deps, state["messages"]), overhead)
         for call in asked:
             if call.name in client_names:
                 continue
@@ -395,7 +395,11 @@ async def _run_one(
     Args: run_tool, call, max_chars。
     """
     try:
-        result = await run_tool(call.name, call.arguments)
+        result = (
+            await run_tool.run_with_budget(call.name, call.arguments, max_chars)
+            if isinstance(run_tool, BudgetedToolRunner)
+            else await run_tool(call.name, call.arguments)
+        )
     # ⚠ 接住所有异常是刻意的：一个工具坏掉不该炸掉整个回合，而模型拿到
     # 「这个工具失败了」之后往往能换一条路走
     except Exception as error:
@@ -425,6 +429,16 @@ async def _run_one(
             # 原样存的话，一次超大结果每次重放这个会话都要再读一遍
             output_json={"body": body},
         ),
+    )
+
+
+def _prepared(
+    deps: TurnDeps, messages: Sequence[BaseMessage]
+) -> list[BaseMessage]:
+    return (
+        deps.prepare_messages(messages)
+        if deps.prepare_messages
+        else list(messages)
     )
 
 

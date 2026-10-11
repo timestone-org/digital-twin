@@ -15,6 +15,22 @@ from typing import Any, Protocol, runtime_checkable
 from llmcore.tools.shapes import ToolSpec
 
 
+@runtime_checkable
+class ServerToolRunner(Protocol):
+    """服务端调用入口。"""
+
+    async def __call__(self, name: str, arguments: dict[str, Any]) -> Any: ...
+
+
+@runtime_checkable
+class BudgetedToolRunner(Protocol):
+    """可按本次完整回执预算分页的执行入口。"""
+
+    async def run_with_budget(
+        self, name: str, arguments: dict[str, Any], max_chars: int
+    ) -> Any: ...
+
+
 class UnknownTool(LookupError):
     """这一路来源里没有这个工具名。"""
 

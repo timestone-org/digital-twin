@@ -16,6 +16,10 @@ KNOWLEDGE_APP_ROLE=worker uv run knowledge-server   # worker 角色，跑摄取
 
 配置见 `.env.example`。
 
+对话技能、固定目录与上下文预算见
+[知识库技能接入指南](../../../docs/KNOWLEDGE_SKILLS.md)。
+内建知识检索与实时数据技能使用标准 `SKILL.md`，附加包复制到技能目录后重启 API 即可使用。
+
 ## 向量索引（硬依赖）
 
 检索的两路都是硬依赖（[ADR-0045](../../../docs/adr/0045-向量与关键词索引改为硬依赖.md)）：

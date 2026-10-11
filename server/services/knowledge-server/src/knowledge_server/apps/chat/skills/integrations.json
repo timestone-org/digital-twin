@@ -1,0 +1,27 @@
+[
+  {
+    "name": "knowledge-retrieval",
+    "title": "资料检索与引用",
+    "required_codes": [
+      "knowledge:use"
+    ],
+    "server_tools": [
+      "kb.list_bases",
+      "kb.search",
+      "kb.read_chunk"
+    ],
+    "client_tools": []
+  },
+  {
+    "name": "knowledge-live-data",
+    "title": "实时点位与卡片",
+    "required_codes": [
+      "knowledge:use"
+    ],
+    "server_tools": [],
+    "client_tools": [
+      "collect.search_points",
+      "collect.watch_point"
+    ]
+  }
+]

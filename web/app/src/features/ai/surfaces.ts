@@ -47,8 +47,14 @@ export function setSurface(surface: AiSurface): void {
 }
 
 /** 撤掉当前工作面。⚠ 页面卸载时必须调，否则助手会对着一个已经没了的页面动手。 */
-export function clearSurface(kind: AssistantSurfaceKind): void {
-  if (current?.kind === kind) current = null
+export function clearSurface(surface: AiSurface | AssistantSurfaceKind): void {
+  if (
+    typeof surface === 'string'
+      ? current?.kind === surface
+      : current === surface
+  ) {
+    current = null
+  }
 }
 
 /** 当前工作面；没有就给 null。 */

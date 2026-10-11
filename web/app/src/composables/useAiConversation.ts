@@ -32,6 +32,7 @@ import {
   type SenderParts,
 } from '@/features/ai/conversationSender'
 import { replayedLog } from '@/features/ai/replayLog'
+import type { AiSurface } from '@/features/ai/surfaces'
 
 export type { ChatEntry }
 
@@ -66,7 +67,11 @@ export interface AiConversation {
  */
 export function useAiConversation(
   sessionId: () => string | null,
-  surface: () => { kind: AssistantSurfaceKind; label: string },
+  surface: () => {
+    kind: AssistantSurfaceKind
+    label: string
+    instance?: AiSurface
+  },
 ): AiConversation {
   const log = ref<ConversationLog>(emptyLog())
   const isRunning = ref(false)

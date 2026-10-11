@@ -27,16 +27,27 @@ from ai_assistant.apps.chat.services.tools.catalog.modules import (
     catalog_of,
     detail_of,
 )
+from ai_assistant.apps.chat.services.tools.guides import describe_tool
 from ai_assistant.apps.chat.services.tools.pagination import ToolPage
 from ai_assistant.apps.chat.services.tools.points.resolve import (
     resolve_points,
     split_node_key,
 )
+from ai_assistant.apps.chat.services.tools.providers.client import ClientTools
+from ai_assistant.apps.chat.services.tools.providers.knowledge import (
+    KNOWLEDGE_SPECS,
+)
+from ai_assistant.apps.chat.services.tools.providers.memory import MEMORY_SPECS
 from ai_assistant.apps.chat.services.tools.providers.server_specs import (
     SERVER_SPECS,
 )
-from ai_assistant.apps.chat.skills import find_skill
+from ai_assistant.apps.chat.services.tools.skill_access import (
+    load_skill,
+    resource_answer,
+)
+from ai_assistant.apps.chat.skills import find_skill, list_skills
 from ai_assistant.upstream import PlatformClient
+from llmcore.tools.ports import UnknownTool
 from llmcore.tools.shapes import ToolSpec
 
 MAX_POINT_QUERY_CHARS = 300
@@ -44,7 +55,7 @@ MAX_POINT_QUERY_CHARS = 300
 ToolHandler = Callable[[dict[str, Any]], Awaitable[Any]]
 
 
-class UnknownServerTool(RuntimeError):
+class UnknownServerTool(UnknownTool):
     """叫了一个不存在的服务端工具。"""
 
 
@@ -101,6 +112,8 @@ class ServerTools:
         """
         return {
             "skills.load": _skill_answer,
+            "skills.read_resource": _resource_answer,
+            "tools.describe": _tool_answer,
             "modules.catalog": self._modules,
             "points.list_sources": self._list_sources,
             "points.search": self._search_points,
@@ -376,12 +389,18 @@ def _load_skill(name: str) -> dict[str, Any]:
     skill = find_skill(name)
     if skill is None:
         return {"ok": False, "reason": f"没有名为 {name} 的技能"}
-    return {
-        "ok": True,
-        "name": skill.name,
-        "title": skill.title,
-        "instructions": skill.instructions(),
-    }
+    return load_skill(skill)
+
+
+async def _resource_answer(arguments: dict[str, Any]) -> dict[str, object]:
+    return await resource_answer(list_skills(), arguments)
+
+
+async def _tool_answer(arguments: dict[str, Any]) -> dict[str, object]:
+    specs = (
+        SERVER_SPECS + MEMORY_SPECS + KNOWLEDGE_SPECS + ClientTools().specs()
+    )
+    return describe_tool(specs, str(arguments.get("name") or ""))
 
 
 def _source_of(row: object) -> dict[str, Any]:

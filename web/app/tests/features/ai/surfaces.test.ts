@@ -63,6 +63,15 @@ describe('工作面注册', () => {
     clearSurface('dashboard-editor')
     expect(activeSurface()?.kind).toBe('twin-editor')
   })
+
+  it('同类页面的旧实例卸载时保留新实例', () => {
+    const oldPage = surface()
+    const newPage = surface()
+    setSurface(oldPage)
+    setSurface(newPage)
+    clearSurface(oldPage)
+    expect(activeSurface()).toBe(newPage)
+  })
 })
 
 describe('客户端工具的执行', () => {

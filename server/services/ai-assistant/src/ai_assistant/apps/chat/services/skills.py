@@ -6,18 +6,19 @@
 
 from ai_assistant.apps.chat.schemas.capability import SkillOut
 from ai_assistant.apps.chat.skills import (
+    SkillCatalog,
     SkillManifest,
     list_skills,
     skills_for,
 )
 
 
-def skill_catalog() -> list[SkillOut]:
+def skill_catalog(catalog: SkillCatalog | None = None) -> list[SkillOut]:
     """全部已装技能，按名字排序。
 
     ⚠ 排序钉死：顺序不稳的话前端两次拿到的清单顺序可以不同，界面上的技能会跳。
     """
-    return _present_all(list_skills())
+    return _present_all(catalog.skills if catalog else list_skills())
 
 
 def skills_of_surface(surface_kind: str) -> list[SkillOut]:

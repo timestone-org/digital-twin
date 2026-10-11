@@ -14,6 +14,9 @@ uv run ai-assistant                  # 起服务，默认 8006
 配置见 `.env.example`。⚠ `ASSISTANT_MODEL_ENABLED=true` 时必须同时配
 `ASSISTANT_MODEL_API_KEY`，否则**启动即失败**——这是刻意的，见 CONTEXT.md §3。
 
+技能采用标准 `SKILL.md` 目录。复制技能、配置多页面路径映射及工具扩展方式见
+[技能与上下文工程](../../../docs/AI_ASSISTANT_SKILLS.md)。
+
 ## 它不做什么
 
 - 不直连别的服务的 schema。业务数据一律经 platform 的 HTTP 面拿。

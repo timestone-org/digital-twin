@@ -116,6 +116,67 @@ function inputOf(advance: ReturnType<typeof advanceOf>['advance']) {
 afterEach(() => {
   __resetSurfaces()
   __resetAskHandler()
+  window.history.replaceState(null, '', '/')
+})
+
+it('每轮上报当前路径且不包含查询参数和片段', async () => {
+  window.history.replaceState(
+    null,
+    '',
+    '/ai/dashboards/d/edit?token=private#part',
+  )
+  const { advance, bodies } = advanceOf([
+    [frame('turn.done', { reply: '已读页面' })],
+  ])
+  const { sink } = sinkOf()
+  await runTurn(inputOf(advance), sink)
+  expect(bodies[0]?.surface_context).toEqual({
+    page: { path: '/ai/dashboards/d/edit', label: '大屏编辑器' },
+  })
+  expect(JSON.stringify(bodies[0])).not.toContain('private')
+})
+
+it('旧面板在切页后发送请求时不会取得新页面工具', async () => {
+  const originSurface = {
+    kind: 'dashboard-editor' as const,
+    label: '旧大屏',
+    snapshot: () => ({}),
+    tools: [],
+    run: vi.fn(),
+  }
+  setSurface({ ...originSurface, label: '新大屏' })
+  const { advance, bodies } = advanceOf([
+    [frame('turn.done', { reply: '完成' })],
+  ])
+  const { sink } = sinkOf()
+  await expect(
+    runTurn({ ...inputOf(advance), originSurface }, sink),
+  ).rejects.toThrow('页面已切换')
+  expect(bodies).toEqual([])
+})
+
+it('切换同类页面后不会把旧回合工具执行到新工作面', async () => {
+  const oldRun = vi.fn().mockResolvedValue({ ok: true })
+  const newRun = vi.fn().mockResolvedValue({ ok: true })
+  const makeSurface = (run: typeof oldRun) => ({
+    kind: 'dashboard-editor' as const,
+    label: '大屏编辑器',
+    snapshot: () => ({}),
+    tools: ['dashboard.save'],
+    run,
+  })
+  setSurface(makeSurface(oldRun))
+  async function* advance(): AsyncGenerator<string> {
+    await Promise.resolve()
+    setSurface(makeSurface(newRun))
+    yield frame('client_tool.request', {
+      calls: [{ call_id: 'stale', name: 'dashboard.save', arguments: {} }],
+    })
+  }
+  const { sink } = sinkOf()
+  await expect(runTurn(inputOf(advance), sink)).rejects.toThrow('页面已切换')
+  expect(newRun).not.toHaveBeenCalled()
+  expect(oldRun).not.toHaveBeenCalled()
 })
 
 /** 一次提问的入参，两个选项。 */
@@ -522,8 +583,14 @@ describe('回合循环', () => {
     await runTurn(inputOf(advance), sink)
 
     // 只在第一轮带的话，助手动过两下之后读到的是一屏过期的画布
-    expect(bodies[0]?.surface_context).toEqual({ selected_id: 'n1' })
-    expect(bodies[1]?.surface_context).toEqual({ selected_id: 'n2' })
+    expect(bodies[0]?.surface_context).toMatchObject({
+      selected_id: 'n1',
+      page: { path: '/', label: '大屏编辑器' },
+    })
+    expect(bodies[1]?.surface_context).toMatchObject({
+      selected_id: 'n2',
+      page: { path: '/', label: '大屏编辑器' },
+    })
   })
 
   it('客户端工具跑完记成步骤，成败分得开', async () => {

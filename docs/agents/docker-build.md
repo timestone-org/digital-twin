@@ -49,18 +49,25 @@ Python 服务的构建上下文取 **`server/`**（workspace 根，构建要能�
 **/tests/
 **/docs/
 **/*.md
-!services/ai-assistant/src/ai_assistant/apps/chat/skills/**/skill.md
+!services/ai-assistant/src/ai_assistant/apps/chat/skills/library/**
+!services/knowledge-server/src/knowledge_server/apps/chat/skills/library/**
 **/.env
 **/.env.*
+**/.git
+**/.venv
+**/__pycache__
+**/*.pyc
+**/node_modules
 **/logs
 **/*.log
 ```
 
 `web/`、`docs/`、`.git/`、`node_modules/` 根本不在 `server/` 内，无需规则即已排除。这份 `.dockerignore` 处理的是 `server/` **内部**的噪音：`.venv`、`__pycache__`、测试与文档。
 
-助手的 `apps/chat/skills/<name>/skill.md` 是运行时指令正文，属于源码资源，必须在
-Markdown 排除规则之后精确放行。构建上下文与运行镜像都要保留这些文件；其它
-Markdown 文档仍排除。
+助手与知识库的 `apps/chat/skills/library/<name>/SKILL.md` 及包内参考资源属于运行时资源，
+必须在 Markdown 排除规则之后放行。构建上下文与运行镜像都要保留这些文件；
+技能包之外的 Markdown 文档仍排除。
+技能资源放行之后再次排除密钥文件与缓存，避免复制外部包时覆盖安全排除规则。
 
 > ⚠ `.dockerignore` 的 `!` **无法把已被排除的父目录里的文件重新放行**。写了 `**/tests/` 之后再写 `!libs/dt-core/tests/` 是无效的。需要例外时，调整排除规则本身，别指望 `!` 兜底。
 

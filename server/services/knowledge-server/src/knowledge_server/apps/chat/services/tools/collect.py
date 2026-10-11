@@ -11,11 +11,7 @@ COLLECT_SPECS = (
     ToolSpec(
         name=SEARCH_POINTS,
         description=(
-            "跨全部采集数据源查找 OPC UA 和 PLC 点位；用设备名、编号、"
-            "测量量等短关键词，不扩写描述。使用向量与关键词混合检索。"
-            "返回候选、数据源名称与协议、检索降级说明。"
-            "标识只能来自结果；多项可能匹配时用 user.ask 确认，"
-            "allow_multiple=true 允许多选。"
+            "用设备编号和测量量短词跨来源查点位，返回真实身份、来源和降级状态；歧义先请用户选择。"
         ),
         parameters=object_schema(
             {
@@ -47,11 +43,8 @@ COLLECT_SPECS = (
     ToolSpec(
         name=WATCH_POINT,
         description=(
-            "打开一个持续接收采集数据的只读实时卡片。按点位所属数据源订阅"
-            "既有实时通道，OPC UA 和 PLC 共用此工具。用户多选时对每个选中"
-            "点位分别调用，可同批调用多个，页面并排展示。必须先查点位并"
-            "消除歧义；不能猜测标识。回执仅表示卡片已创建，不代表已经"
-            "收到现场读数；不要编造实时值。"
+            "为一个已确认的真实 node_key 打开只读实时卡片；多选逐个"
+            "调用，回执不代表已收到现场值。"
         ),
         parameters=object_schema(
             {"node_key": string_schema("搜索结果中的点位身份，原样传入")},

@@ -1,0 +1,198 @@
+[
+  {
+    "name": "dashboard-binding",
+    "title": "批量绑点",
+    "surface_kinds": [
+      "dashboard-editor",
+      "twin-editor",
+      "twin2d-editor"
+    ],
+    "required_codes": [
+      "dashboard:edit",
+      "collect:view"
+    ],
+    "server_tools": [
+      "modules.catalog",
+      "datasets.list_tables",
+      "datasets.read_columns",
+      "points.list_sources",
+      "points.search",
+      "points.resolve",
+      "dashboard.validate"
+    ],
+    "client_tools": [
+      "dashboard.read_canvas",
+      "dashboard.read_bindings",
+      "dashboard.write_binding",
+      "dashboard.remove_binding",
+      "dashboard.copy_bindings",
+      "dashboard.read_values",
+      "dashboard.save"
+    ]
+  },
+  {
+    "name": "dashboard-compose",
+    "title": "组态大屏",
+    "surface_kinds": [
+      "dashboard-editor"
+    ],
+    "required_codes": [
+      "dashboard:edit"
+    ],
+    "server_tools": [
+      "modules.catalog"
+    ],
+    "client_tools": [
+      "dashboard.read_canvas",
+      "dashboard.read_bindings",
+      "dashboard.read_config",
+      "dashboard.chrome_keys",
+      "dashboard.apply_style",
+      "dashboard.read_page_style",
+      "dashboard.set_page_style",
+      "dashboard.add_module",
+      "dashboard.remove_node",
+      "dashboard.set_config",
+      "dashboard.add_config_item",
+      "dashboard.remove_config_item",
+      "dashboard.set_geometry",
+      "dashboard.arrange",
+      "dashboard.write_binding"
+    ]
+  },
+  {
+    "name": "dashboard-interact",
+    "title": "配联动",
+    "surface_kinds": [
+      "dashboard-editor"
+    ],
+    "required_codes": [
+      "dashboard:edit"
+    ],
+    "server_tools": [
+      "dashboards.list"
+    ],
+    "client_tools": [
+      "dashboard.read_canvas",
+      "dashboard.read_interactions",
+      "dashboard.write_interaction",
+      "dashboard.remove_interaction",
+      "dashboard.set_visible",
+      "dashboard.capture"
+    ]
+  },
+  {
+    "name": "dashboard-review",
+    "title": "看图提建议",
+    "surface_kinds": [
+      "dashboard-editor",
+      "twin-editor"
+    ],
+    "required_codes": [
+      "dashboard:edit"
+    ],
+    "server_tools": [],
+    "client_tools": [
+      "dashboard.capture",
+      "dashboard.read_canvas"
+    ]
+  },
+  {
+    "name": "formula-author",
+    "title": "写公式",
+    "surface_kinds": [
+      "dataset-table"
+    ],
+    "required_codes": [
+      "dataset:manage"
+    ],
+    "server_tools": [
+      "formula.catalog",
+      "formula.validate",
+      "formula.preview"
+    ],
+    "client_tools": [
+      "dataset.read_columns",
+      "dataset.propose_formula"
+    ]
+  },
+  {
+    "name": "knowledge-qa",
+    "title": "查知识库",
+    "surface_kinds": [
+      "dashboard-editor",
+      "twin-editor",
+      "twin2d-editor",
+      "dashboard-view",
+      "dataset-table",
+      "report-editor",
+      "collect-source"
+    ],
+    "required_codes": [
+      "knowledge:use"
+    ],
+    "server_tools": [
+      "knowledge.list_bases",
+      "knowledge.search"
+    ],
+    "client_tools": []
+  },
+  {
+    "name": "report-template-author",
+    "title": "配置报告模板",
+    "surface_kinds": [
+      "report-editor"
+    ],
+    "required_codes": [
+      "report:manage"
+    ],
+    "server_tools": [],
+    "client_tools": [
+      "report.read_draft",
+      "report.set_template",
+      "report.upsert_metric",
+      "report.insert_content",
+      "report.set_page",
+      "report.validate_draft",
+      "report.preview_draft"
+    ]
+  },
+  {
+    "name": "twin-configure",
+    "title": "配置三维孪生",
+    "surface_kinds": [
+      "twin-editor"
+    ],
+    "required_codes": [
+      "dashboard:edit"
+    ],
+    "server_tools": [],
+    "client_tools": [
+      "twin.list_folders",
+      "twin.list_entities",
+      "twin.read_entity",
+      "twin.read_config",
+      "twin.patch_config",
+      "twin.diagnose",
+      "dashboard.capture",
+      "dashboard.save"
+    ]
+  },
+  {
+    "name": "twin2d-configure",
+    "title": "配置二维孪生",
+    "surface_kinds": [
+      "twin2d-editor"
+    ],
+    "required_codes": [
+      "dashboard:edit"
+    ],
+    "server_tools": [],
+    "client_tools": [
+      "dashboard.read_canvas",
+      "twin2d.read_config",
+      "twin2d.patch_config",
+      "twin2d.diagnose"
+    ]
+  }
+]

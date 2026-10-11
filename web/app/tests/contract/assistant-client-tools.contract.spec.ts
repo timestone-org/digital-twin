@@ -12,7 +12,8 @@
  * 三个方向都在这里对。⚠ 对着 Python 源码比而不是 openapi：工具规格不出 HTTP 面，
  * 它随每一轮的提示词下发。
  */
-import { existsSync, readdirSync, readFileSync } from 'node:fs'
+import { readFileSync } from 'node:fs'
+import integrations from '../../../../server/services/ai-assistant/src/ai_assistant/apps/chat/skills/integrations.json'
 import { join } from 'node:path'
 import { describe, expect, it } from 'vitest'
 import { ASSISTANT_ASK_TOOL } from '@dt/contracts'
@@ -74,16 +75,6 @@ function backendClientTools(): string[] {
   return found
 }
 
-/** 一个 `字段=(…)` 元组里的那几个字符串字面量。 */
-function tupleOf(source: string, field: string): string[] {
-  const from = source.indexOf(`${field}=(`)
-  if (from < 0) return []
-  const to = source.indexOf(')', from)
-  return [...source.slice(from, to).matchAll(/"([^"]+)"/g)].map(
-    (match) => match[1] ?? '',
-  )
-}
-
 interface SkillDecl {
   name: string
   surfaces: string[]
@@ -91,28 +82,11 @@ interface SkillDecl {
 }
 
 function skillDecls(): SkillDecl[] {
-  const root = join(CHAT_DIR, 'skills')
-  return (
-    readdirSync(root, { withFileTypes: true })
-      // ⚠ 按「有没有 manifest.py」筛，不是按目录名：跑过一次 pytest 之后
-      // 这里还会多出一个 `__pycache__`，而那一天这条闸才第一次红
-      .filter(
-        (entry) =>
-          entry.isDirectory() &&
-          existsSync(join(root, entry.name, 'manifest.py')),
-      )
-      .map((entry) => {
-        const source = readFileSync(
-          join(root, entry.name, 'manifest.py'),
-          'utf8',
-        )
-        return {
-          name: tupleOf(source, 'name')[0] ?? entry.name,
-          surfaces: tupleOf(source, 'surface_kinds'),
-          clientTools: tupleOf(source, 'client_tools'),
-        }
-      })
-  )
+  return integrations.map((entry) => ({
+    name: entry.name,
+    surfaces: entry.surface_kinds,
+    clientTools: entry.client_tools,
+  }))
 }
 
 describe('客户端工具两侧同名', () => {

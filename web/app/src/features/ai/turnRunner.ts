@@ -31,9 +31,10 @@ import {
   runBuiltinTool,
 } from './builtinTools'
 import type { AdvanceStream, AiAssistantPorts } from './ports'
-import { activeSurface, runClientTool } from './surfaces'
+import { activeSurface, runClientTool, type AiSurface } from './surfaces'
 import { readObject, readText, runLoop, type LoopSink } from './turnLoop'
 import { runMcpWrite } from './mcpWriteBridge'
+import { currentPagePath } from './pageContext'
 
 export { ASK_MUST_BE_ALONE, type RunnerStep } from './turnLoop'
 
@@ -61,6 +62,7 @@ export interface RunnerSink extends LoopSink {
 }
 
 export interface RunnerInput {
+  originSurface?: AiSurface
   advance: AdvanceStream
   saveReceipts?: AiAssistantPorts['saveReceipts']
   sessionId: string
@@ -84,17 +86,27 @@ export async function runTurn(
   sink: RunnerSink,
 ): Promise<void> {
   const watch: PlanWatch = { plan: null }
+  const origin = {
+    surface: input.originSurface ?? activeSurface(),
+    path: currentPagePath(),
+  }
   let nudges = 0
   await runLoop<AdvanceBody>(
     {
       advance: input.advance,
       saveReceipts: input.saveReceipts,
       sessionId: input.sessionId,
-      envelope: () => envelope(input),
+      envelope: () => {
+        requireOrigin(origin)
+        return envelope(input)
+      },
       userText: input.userText,
       userImages: input.userImages,
       signal: input.signal,
-      dispatch: (call) => dispatch(input, call),
+      dispatch: (call) => {
+        requireOrigin(origin)
+        return dispatch(input, call)
+      },
       onFrame: (name, data) => {
         if (name !== 'plan') return
         const plan = readPlan(data.plan)
@@ -116,6 +128,17 @@ export async function runTurn(
     },
     sink,
   )
+}
+
+function requireOrigin(origin: {
+  surface: ReturnType<typeof activeSurface>
+  path: string
+}): void {
+  if (activeSurface() !== origin.surface || currentPagePath() !== origin.path) {
+    throw new Error(
+      '页面已切换，本回合已停止；请在当前页面重新发起请求。未派发的工具没有执行。',
+    )
+  }
 }
 
 /** 循环手上那份最新计划。 */
@@ -145,7 +168,10 @@ function envelope(input: RunnerInput): AdvanceBody {
   return {
     surface_kind: input.surfaceKind,
     surface_label: input.surfaceLabel,
-    ...(snapshot === undefined ? {} : { surface_context: snapshot }),
+    surface_context: {
+      ...snapshot,
+      page: { path: currentPagePath(), label: input.surfaceLabel },
+    },
     // 页面自报实现了哪些客户端工具：内建那几个每一页都有，工作面的按登记来。
     // ⚠ 没有工作面时也**不是空**——提问不归任何一页，一个工作面都没登记的
     // 页面（纯看板、纯列表页）照样要能问

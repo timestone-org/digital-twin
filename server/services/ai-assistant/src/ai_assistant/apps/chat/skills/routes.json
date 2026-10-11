@@ -1,0 +1,72 @@
+{
+  "routes": [
+    {
+      "paths": [
+        "/dashboards/:dashboardId/edit"
+      ],
+      "skills": [
+        "dashboard-binding",
+        "dashboard-compose",
+        "dashboard-interact",
+        "dashboard-review",
+        "knowledge-qa"
+      ]
+    },
+    {
+      "paths": [
+        "/dashboards/:dashboardId"
+      ],
+      "skills": [
+        "knowledge-qa"
+      ]
+    },
+    {
+      "paths": [
+        "/dashboards/:dashboardId/edit/twin/:nodeId"
+      ],
+      "skills": [
+        "dashboard-binding",
+        "dashboard-review",
+        "knowledge-qa",
+        "twin-configure"
+      ]
+    },
+    {
+      "paths": [
+        "/dashboards/:dashboardId/edit/twin-2d/:nodeId"
+      ],
+      "skills": [
+        "dashboard-binding",
+        "knowledge-qa",
+        "twin2d-configure"
+      ]
+    },
+    {
+      "paths": [
+        "/datasets/:tableId",
+        "/datasets/:tableId/**"
+      ],
+      "skills": [
+        "formula-author",
+        "knowledge-qa"
+      ]
+    },
+    {
+      "paths": [
+        "/reports/templates/:templateId"
+      ],
+      "skills": [
+        "knowledge-qa",
+        "report-template-author"
+      ]
+    },
+    {
+      "paths": [
+        "/collect/**"
+      ],
+      "skills": [
+        "knowledge-qa"
+      ]
+    }
+  ]
+}

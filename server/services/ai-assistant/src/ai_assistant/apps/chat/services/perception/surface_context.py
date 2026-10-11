@@ -39,7 +39,7 @@ _NOTE = (
     "要看全部画布节点、槽位或配置，用对应的读取工具再拉一次。"
 )
 
-_TRUNCATED = "⚠ 快照太长，只给了前面一截——别把它当成这一屏的全部。"
+_TRUNCATED = "⚠ 快照过大，部分字段已省略；请按需读取详情，不要视为全集。"
 
 _NOTHING_SELECTED = (
     "用户此刻**没有选中**任何画布节点。他说「这个」时先问清是哪一个。"
@@ -57,7 +57,7 @@ def render(context: dict[str, Any] | None) -> str:
         return ""
     body = _dump(context)
     parts = [_HEADING, "", _selected_line(context), "```json", body, "```"]
-    if len(body) >= MAX_CONTEXT_CHARS:
+    if json.loads(body).get("_truncated"):
         parts.append(_TRUNCATED)
     parts.append(_NOTE)
     return "\n".join(one for one in parts if one)
@@ -173,14 +173,14 @@ def _named(chosen: dict[str, Any]) -> str:
 
     Args: chosen。
     """
-    label = str(chosen.get("label") or chosen.get("name") or "")
+    label = str(chosen.get("label") or chosen.get("name") or "")[:160]
     kind = str(
         chosen.get("module_type")
         or chosen.get("type")
         or chosen.get("kind")
         or ""
-    )
-    chosen_id = str(chosen.get("id") or "")
+    )[:64]
+    chosen_id = str(chosen.get("id") or "")[:128]
     parts = [f"「{label}」" if label else "", f"（{kind}）" if kind else ""]
     parts.append(f"`{chosen_id}`" if chosen_id else "")
     return "".join(parts) or "一个说不出身份的对象"
@@ -192,4 +192,28 @@ def _dump(context: dict[str, Any]) -> str:
     Args: context。
     """
     body = json.dumps(context, ensure_ascii=False, default=str)
-    return body[:MAX_CONTEXT_CHARS]
+    if len(body) <= MAX_CONTEXT_CHARS:
+        return body
+    priority = (
+        "page",
+        "selected",
+        "selected_id",
+        "selected_ids",
+        "selected_section",
+    )
+    ordered = dict.fromkeys((*priority, *context))
+    compact: dict[str, Any] = {"_truncated": True}
+    omitted = 0
+    for key in ordered:
+        if key not in context or key in {"_truncated", "_omitted_fields"}:
+            continue
+        candidate = {**compact, key: context[key]}
+        if (
+            len(json.dumps(candidate, ensure_ascii=False, default=str))
+            <= MAX_CONTEXT_CHARS - 64
+        ):
+            compact[key] = context[key]
+        else:
+            omitted += 1
+    compact["_omitted_fields"] = omitted
+    return json.dumps(compact, ensure_ascii=False, default=str)

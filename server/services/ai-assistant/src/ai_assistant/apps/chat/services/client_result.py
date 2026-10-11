@@ -20,7 +20,19 @@ class ClientToolResult:
     def as_text(self) -> str:
         """摊成模型认的一段工具输出。"""
         if self.error is not None:
-            return f"失败：{self.error}"
+            return f"失败：{self.error}\n" + format_tool_output(
+                {
+                    "code": "client_tool_failed",
+                    "execution": "unknown",
+                    "retryable": False,
+                    "next_action": (
+                        "先核对当前页面和工具参数；写操作须读回确认实际状"
+                        "态，再决定是否需要修正。不要重复执行结果未知的操"
+                        "作。"
+                    ),
+                },
+                1200,
+            )
         # ⚠ 图不放在工具消息里：那一层只认文字，塞进去多半被整条丢掉，
         # 表现是模型说「我没看到图」而调用明明成功了
         if vision.is_image(self.output):

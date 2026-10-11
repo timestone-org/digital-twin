@@ -19,17 +19,23 @@
 from collections.abc import Sequence
 
 from ai_assistant.apps.chat.services.intent.registry import narrow_all
+from ai_assistant.apps.chat.services.tools.guides import with_guides
 from ai_assistant.apps.chat.services.tools.mcp_policy import (
     CONFIRMATION_CAPABILITY,
 )
 from ai_assistant.apps.chat.services.tools.specs import TOOL_SPECS
-from ai_assistant.apps.chat.skills import skills_for
+from ai_assistant.apps.chat.skills import SkillManifest, skills_for
 from llmcore.intent.ports import Allowed, TurnContext
 from llmcore.tools.selection import specs_named
 from llmcore.tools.shapes import ToolSpec
 
 # 哪个工作面都有的服务端工具：拉技能正文、写执行计划
-CORE_SERVER_TOOLS = ("skills.load", "plan.write")
+CORE_SERVER_TOOLS = (
+    "skills.load",
+    "skills.read_resource",
+    "tools.describe",
+    "plan.write",
+)
 BUILTIN_CLIENT_TOOLS = ("user.ask",)
 # 新名字就是能力版本；老页面没自报清单时不能靠技能清单猜它已实现
 REPORTED_ONLY_CLIENT_TOOLS = frozenset(
@@ -70,7 +76,9 @@ CROSS_MODULE_READ_TOOLS: tuple[str, ...] = (
 )
 
 
-def allowed_for(context: TurnContext) -> Allowed:
+def allowed_for(
+    context: TurnContext, skills: tuple[SkillManifest, ...] | None = None
+) -> Allowed:
     """这一轮准许出现的**名字集合**，工具与技能各一份。
 
     ⚠ 收窄先跑、再由活下来的技能推工具：反过来的话，被权限拦掉的技能贡献的
@@ -81,7 +89,12 @@ def allowed_for(context: TurnContext) -> Allowed:
 
     Args: context。
     """
-    on_surface = skills_for(context.surface_kind)
+    on_surface = skills_for(context.surface_kind) if skills is None else skills
+    on_surface = tuple(
+        skill
+        for skill in on_surface
+        if context.codes is None or set(skill.required_codes) <= context.codes
+    )
     gated = narrow_all(
         context,
         Allowed(
@@ -117,6 +130,7 @@ def specs_for(
     client_tools: Sequence[str] | None,
     codes: frozenset[str] | None = None,
     extra: Sequence[ToolSpec] = (),
+    skills: tuple[SkillManifest, ...] | None = None,
 ) -> tuple[ToolSpec, ...]:
     """这一轮下发给模型的工具集，保持 `TOOL_SPECS` 的原序。
 
@@ -139,7 +153,8 @@ def specs_for(
             surface_kind=surface_kind,
             client_tools=None if client_tools is None else tuple(client_tools),
             codes=codes,
-        )
+        ),
+        skills,
     )
     confirmation_enabled = (
         client_tools is not None and CONFIRMATION_CAPABILITY in client_tools
@@ -149,4 +164,9 @@ def specs_for(
         for spec in extra
         if spec.runs_on == "server" or confirmation_enabled
     )
-    return specs_named(TOOL_SPECS, allowed.tools) + supported
+    return (
+        tuple(
+            with_guides(spec) for spec in specs_named(TOOL_SPECS, allowed.tools)
+        )
+        + supported
+    )

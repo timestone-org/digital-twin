@@ -4,6 +4,7 @@
 """
 
 from ai_assistant.apps.chat.services.tools.pagination import page_properties
+from llmcore.skills.tools import METADATA_SPECS
 from llmcore.tools.shapes import (
     ToolSpec,
     integer_schema,
@@ -13,20 +14,7 @@ from llmcore.tools.shapes import (
 )
 
 SERVER_SPECS: tuple[ToolSpec, ...] = (
-    ToolSpec(
-        name="skills.load",
-        description=(
-            "取一个技能的完整指令。提示词里只有技能的名字与一句话简介，"
-            "**动手之前必须先把要用的那个技能拉全**——简介里没有任何"
-            "关于怎么做的约束。这个工具**必须单独调用**，拿到指令"
-            "后再决定其它工具调用。"
-        ),
-        parameters=object_schema(
-            {"name": string_schema("技能名，取自可用技能清单")}, ["name"]
-        ),
-        runs_on="server",
-        is_exclusive=True,
-    ),
+    *METADATA_SPECS,
     ToolSpec(
         name="plan.write",
         description=(

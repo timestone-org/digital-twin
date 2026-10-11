@@ -444,3 +444,32 @@ async def test_a_turn_without_markers_stores_no_citations(
 
     detail = await db_stack.client.get(f"{URL}/{session_id}")
     assert detail.json()["data"]["messages"][-1]["citations"] == []
+
+
+async def test_skill_roundtrip_persists_conversation_and_receipts(
+    db_stack: DbStack,
+) -> None:
+    model = ScriptedChat(
+        script=[
+            asks("skills.load", "load", name="knowledge-retrieval"),
+            AIMessage(content="已加载资料检索流程"),
+        ]
+    )
+    _install(db_stack, model)
+    session_id = await _new_session(db_stack.client)
+    events = await _advance(
+        db_stack.client,
+        session_id,
+        user_text="查设备手册",
+    )
+    assert events[-1][0] == "turn.done"
+    detail = (await db_stack.client.get(f"{URL}/{session_id}")).json()["data"]
+    steps = [
+        step for message in detail["messages"] for step in message["steps"]
+    ]
+    load = next(step for step in steps if step["name"] == "skills.load")
+    assert load["state"] == "succeeded"
+    body = json.loads(load["output_json"]["body"])
+    assert body["name"] == "knowledge-retrieval"
+    assert body["ok"] is True
+    assert body["instructions"]
