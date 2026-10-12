@@ -89,3 +89,23 @@ async def test_valid_call_preserves_the_business_result() -> None:
         "id": "one",
         "value": "observed",
     }
+
+
+@pytest.mark.parametrize("reserve", [0, 160])
+async def test_business_results_honor_the_continuation_reserve(
+    reserve: int,
+) -> None:
+    observed = {"id": "one", "text": "observed evidence\n" * 200}
+
+    async def run(_name: str, _arguments: dict[str, Any]) -> object:
+        return observed
+
+    executor = ToolExecutor((SPEC,), (), run, result_reserve_chars=reserve)
+    result = await executor.run_with_budget(SPEC.name, {"id": "one"}, 500)
+    if reserve == 0:
+        assert result is observed
+    else:
+        assert isinstance(result, str)
+        assert len(result) <= 500 - reserve
+        assert "observed evidence" in result
+        assert "已截断" in result

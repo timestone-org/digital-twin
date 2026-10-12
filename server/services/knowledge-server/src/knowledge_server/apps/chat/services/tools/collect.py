@@ -17,9 +17,9 @@ COLLECT_SPECS = (
             {
                 "query": {
                     **string_schema(
-                        "2–6个关键词，通常不超过40字，"
+                        "已知点位编码时只传原始编码；否则传2–6个关键词，通常不超过40字，"
                         "例如：动力换热 2#阀门 开度。"
-                        "保留设备编号；不要写用途、权限、背景介绍或实时显示要求。"
+                        "数据源UUID单独放source_id；query仅含编码或设备与测量量。"
                     ),
                     "minLength": 1,
                     "maxLength": POINT_QUERY_MAX_CHARS,
@@ -28,7 +28,7 @@ COLLECT_SPECS = (
                     "description": (
                         "可选的数据源过滤。未知或未指定数据源时必须传null或省略；"
                         "不能猜测UUID，不能用全零UUID代替全部数据源。"
-                        "非空值只能来自先前搜索结果的source_id。"
+                        "非空值取用户明确提供的数据源UUID或真实搜索结果的source_id。"
                     ),
                     "anyOf": [
                         {"type": "string", "format": "uuid"},

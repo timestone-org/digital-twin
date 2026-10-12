@@ -60,6 +60,58 @@ def test_nothing_drops_while_the_session_is_short() -> None:
     assert len(kept) == 4
 
 
+def test_active_request_is_retained_once_without_images() -> None:
+    rows = [
+        _row("user", {"text": "只查设备 A17，禁止保存"}, seq=1),
+        _row("user", {"text": history.IMAGE_PLACEHOLDER}, seq=2),
+        _row("assistant", {"text": "正在查询"}, seq=3),
+    ]
+    recent = history.replay(rows[1:])
+    retained = history.with_user_requests(rows, recent)
+    assert retained[0].content == "只查设备 A17，禁止保存"
+    assert retained[1:] == recent
+    assert history.with_user_requests(rows, retained) == retained
+    assert len(recent) == 2
+
+
+def test_user_requests_are_retained_in_order_without_tool_history() -> None:
+    rows = [
+        _row("user", {"text": "旧要求"}, seq=1),
+        _row("user", {"text": "改查设备 B18"}, seq=2),
+    ]
+    retained = history.with_user_requests(rows[::-1], [])
+    assert [one.content for one in retained] == ["旧要求", "改查设备 B18"]
+    assert history.with_user_requests([], retained) == retained
+    assert (
+        history.with_user_requests(
+            [_row("user", {"text": history.IMAGE_PLACEHOLDER})], []
+        )
+        == []
+    )
+
+
+def test_retained_requests_respect_count_and_character_budgets() -> None:
+    rows = [_row("user", {"text": str(n)}, seq=n) for n in range(60)]
+    kept = history.with_user_requests(rows, [])
+    assert [one.content for one in kept] == [str(n) for n in range(20, 60)]
+    large = "用户要求" * 1600
+    rows = [
+        _row("user", {"text": large}, seq=1),
+        _row("user", {"text": large + "新的"}, seq=2),
+    ]
+    assert [one.content for one in history.with_user_requests(rows, [])] == [
+        large + "新的"
+    ]
+
+
+def test_latest_request_is_never_silently_truncated() -> None:
+    request = "用户要求" * 4000
+    rows = [_row("user", {"text": request}, seq=1)]
+    assert [one.content for one in history.with_user_requests(rows, [])] == [
+        request
+    ]
+
+
 def test_the_orphan_tool_replies_go_to_the_folded_half() -> None:
     """掐掉的孤儿回执归折叠区——它们不是凭空消失，只是不进窗口。
 

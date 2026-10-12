@@ -106,6 +106,42 @@ def test_the_block_is_the_last_message_when_tools_report_back() -> None:
     assert any("绑好了" in str(message.content) for message in messages)
 
 
+def test_tool_continuation_keeps_request_outside_message_window() -> None:
+    request = "只处理设备 A17，单位用摄氏度；保持只读，禁止保存。"
+    rows = [HistoryRow(role="user", seq=1, content_json={"text": request})]
+    for index in range(22):
+        call_id = f"read-{index}"
+        rows.extend(
+            [
+                HistoryRow(
+                    role="assistant",
+                    seq=index * 2 + 2,
+                    content_json={
+                        "tool_calls": [
+                            {
+                                "id": call_id,
+                                "name": "dashboard.read_canvas",
+                                "args": {},
+                            }
+                        ]
+                    },
+                ),
+                HistoryRow(
+                    role="tool",
+                    seq=index * 2 + 3,
+                    content_json={
+                        "tool_call_id": call_id,
+                        "text": "节点数：12",
+                    },
+                ),
+            ]
+        )
+    payload = AdvanceInput(surface_kind=SURFACE, tool_results=[])
+    messages = assemble(payload=payload, rows=rows, plan=None, summary=None)
+    assert sum(one.content == request for one in messages) == 1
+    assert isinstance(messages[0], SystemMessage)
+
+
 def test_structured_client_results_are_bounded_readable_text() -> None:
     result = ClientToolResult(
         call_id="c1",

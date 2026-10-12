@@ -134,6 +134,14 @@ function searchArguments(arguments_: Record<string, unknown>) {
     throw new Error(
       '查询过长：请重新提炼2–6个关键词，最多80字，例如「动力换热 2#阀门 开度」。不要附带用途、权限或背景描述。',
     )
+  if (
+    source !== undefined &&
+    query.trim() !== source &&
+    query.trim().split(/\s+/).includes(source)
+  )
+    throw new Error(
+      '数据源 UUID 只放在 source_id；请从 query 移除数据源 UUID，仅保留点位编码或设备与测量量关键词后重新调用。',
+    )
   return { query, source }
 }
 

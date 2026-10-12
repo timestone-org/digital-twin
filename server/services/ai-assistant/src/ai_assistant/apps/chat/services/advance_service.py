@@ -246,7 +246,10 @@ def assemble(
         )
     )
     messages = _adjacent_replies(
-        [*history.replay(recent), *incoming_messages(payload)]
+        [
+            *history.with_user_requests(rows, history.replay(recent)),
+            *incoming_messages(payload),
+        ]
     )
     return [
         system,

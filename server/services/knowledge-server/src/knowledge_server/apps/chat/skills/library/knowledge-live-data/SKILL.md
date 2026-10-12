@@ -3,11 +3,10 @@ name: knowledge-live-data
 description: "查询采集点位并打开持续推送的只读实时卡片，支持歧义选择、多选和数据源区分。"
 ---
 
-# 实时点位与卡片
+# 实时点位
 
-1. `collect.search_points` 用设备编号和测量量的短关键词查询。来源未指定时省略 source_id；身份只能取真实结果。
-2. 同名候选按数据源、协议和编码区分；仍有歧义用 `user.ask`，允许多选。取消时停止，不能猜一个。
-3. 每个选中的 node_key 分别调用 `collect.watch_point`，可同批打开多个卡片。
-4. 回执只代表卡片创建。现场读数、采样时间、质量、连接状态以卡片为准；不编造数值和资料角标。
+1. `collect.search_points` 的 `query` 只传原始编码或设备与测量量短词；数据源 UUID 单独放 `source_id`，未限定时省略。
+2. 每个已确认的 node_key 分别调用 `collect.watch_point`；全部创建成功后告知已打开，结束本次查询。
+3. 回执只代表卡片创建。现场值、时间与质量以卡片为准，不编造值或引用。
 
-查询词、来源过滤、降级与多选的完整规则见 [实时查询](references/live-data.md)，需要时按需读取。
+歧义、多选、降级或查询失败时，先读 [实时查询](references/live-data.md)。

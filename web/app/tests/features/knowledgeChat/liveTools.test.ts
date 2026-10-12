@@ -203,6 +203,42 @@ it('searches every source when no source filter is requested', async () => {
     items: [{ source_id: SOURCE_ID, source_protocol: 'modbus_tcp' }],
   })
 })
+it('rejects a source UUID appended to keywords before searching', async () => {
+  vi.mocked(search.searchCollectPoints).mockResolvedValue({
+    items: [],
+    mode: 'keyword',
+    pending_count: 0,
+  })
+  await expect(
+    runLiveTool({
+      call_id: 'source-in-query',
+      name: SEARCH_POINTS,
+      arguments: {
+        query: `YR.YR.DB7.REAL236 ${SOURCE_ID}`,
+        source_id: SOURCE_ID,
+      },
+    }),
+  ).rejects.toThrow('source_id')
+  expect(collect.getSource).not.toHaveBeenCalled()
+  expect(search.searchCollectPoints).not.toHaveBeenCalled()
+})
+it('preserves a UUID used as the complete point code', async () => {
+  vi.mocked(search.searchCollectPoints).mockResolvedValue({
+    items: [],
+    mode: 'keyword',
+    pending_count: 0,
+  })
+  await runLiveTool({
+    call_id: 'uuid-point-code',
+    name: SEARCH_POINTS,
+    arguments: { query: SOURCE_ID, source_id: SOURCE_ID },
+  })
+  expect(search.searchCollectPoints).toHaveBeenCalledWith(
+    SOURCE_ID,
+    SOURCE_ID,
+    undefined,
+  )
+})
 it('rejects a card receipt whose source contradicts its point identity', () => {
   expect(
     parseLivePoint(

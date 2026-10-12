@@ -10,6 +10,7 @@ from jsonschema.exceptions import ValidationError
 from referencing import Registry
 
 from lib.errors import AppError
+from llmcore.output.tool_text import format_tool_output
 from llmcore.skills import SkillManifest
 from llmcore.skills.access import (
     load_skill,
@@ -82,7 +83,12 @@ class ToolExecutor:
             "skills.read_resource",
             "tools.describe",
         }:
-            return await self(name, arguments)
+            result = await self(name, arguments)
+            if self.result_reserve_chars <= 0:
+                return result
+            return format_tool_output(
+                result, max(1, max_chars - self.result_reserve_chars)
+            )
         available = max(1, max_chars - self.result_reserve_chars)
         limit = min(self.max_skill_chars or available, available)
         result = await replace(self, max_skill_chars=limit)(name, arguments)

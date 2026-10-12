@@ -279,7 +279,9 @@ def assemble(
         else default_catalog().select()
     )
     recent = history.window(rows, MAX_HISTORY_MESSAGES, HISTORY_DROP_STEP)
-    replayed = history.fitted(history.replay(recent), options.history_chars)
+    replayed = history.with_user_requests(
+        rows, history.fitted(history.replay(recent), options.history_chars)
+    )
     fresh = incoming_messages(payload)
     answered = {
         one.tool_call_id for one in fresh if isinstance(one, ToolMessage)

@@ -31,6 +31,7 @@ from llmcore.testing import asks
 from llmcore.tools.execution import ToolExecutor
 from llmcore.tools.shapes import openai_schema
 from llmcore.turn import TurnDeps, run_turn
+from llmcore.turn.loop import ServerToolRunner
 
 CLIENTS = ("user.ask", "collect.search_points", "collect.watch_point")
 
@@ -57,7 +58,12 @@ def _rows(messages: list[BaseMessage]) -> list[HistoryRow]:
     ]
 
 
-async def _run(model: Model, payload: svc.AdvanceInput, rows: list[HistoryRow]):
+async def _run(
+    model: Model,
+    payload: svc.AdvanceInput,
+    rows: list[HistoryRow],
+    runner: ServerToolRunner = _unused,
+):
     skills = default_catalog().select()
     specs = svc._turn_specs(
         (*KNOWLEDGE_SPECS, ASK_SPEC, *COLLECT_SPECS), CLIENTS
@@ -71,7 +77,7 @@ async def _run(model: Model, payload: svc.AdvanceInput, rows: list[HistoryRow]):
         run_tool=ToolExecutor(
             specs,
             skills,
-            _unused,
+            runner,
             describe=describe_tool,
             max_skill_chars=budget.result_chars(6656, 20000),
             result_reserve_chars=400,
@@ -147,7 +153,20 @@ def _point_items() -> list[dict[str, str]]:
     ]
 
 
-async def _searched_history() -> list[HistoryRow]:
+def _search_receipt(items: list[dict[str, str]]) -> dict[str, Any]:
+    return {
+        "items": [
+            {**one, "source_id": one["node_key"].partition(":")[0]}
+            for one in items
+        ],
+        "mode": "hybrid",
+        "pending_count": 0,
+    }
+
+
+async def _searched_history(
+    question: str = "show the water tank temperature",
+) -> list[HistoryRow]:
     model = Model(
         [
             asks("skills.load", "load", name="knowledge-live-data"),
@@ -160,9 +179,7 @@ async def _searched_history() -> list[HistoryRow]:
     )
     seed, result = await _run(
         model,
-        svc.AdvanceInput(
-            user_text="show the water tank temperature", client_tools=CLIENTS
-        ),
+        svc.AdvanceInput(user_text=question, client_tools=CLIENTS),
         [],
     )
     return _rows([*seed[2:], *result.messages])
@@ -275,6 +292,103 @@ def test_projection_recomputes_skill_restoration_after_history_drops() -> None:
     assert len(messages) == 5
 
 
+async def test_continuation_keeps_skill_and_receipt_with_long_question() -> (
+    None
+):
+    question = "请查询水箱当前温度，确认编码后只打开一张只读实时卡片。" * 9
+    rows = await _searched_history(question)
+    items = _point_items()
+    model = _watch_model([items[0]["node_key"]])
+
+    _, outcome = await _run(
+        model,
+        svc.AdvanceInput(
+            tool_results=[
+                svc.ClientToolResult("search", _search_receipt(items))
+            ],
+            client_tools=CLIENTS,
+        ),
+        rows,
+    )
+
+    seen = model.seen[0]["messages"]
+    assert any(one.content == question for one in seen)
+    assert any("回执只代表卡片创建" in str(one.content) for one in seen)
+    assert any(items[0]["node_key"] in str(one.content) for one in seen)
+    assert outcome.pending[0].name == "collect.watch_point"
+    _assert_paired(model)
+
+
+async def test_card_completion_keeps_search_evidence_until_answer() -> None:
+    question = "请查询水箱当前温度，确认编码后只打开一张只读实时卡片。" * 9
+    rows = await _searched_history(question)
+    items = _point_items()
+    searched = svc.AdvanceInput(
+        tool_results=[svc.ClientToolResult("search", _search_receipt(items))],
+        client_tools=CLIENTS,
+    )
+    _, watched = await _run(
+        _watch_model([items[0]["node_key"]]), searched, rows
+    )
+    rows = _rows(
+        [
+            *history.replay(rows),
+            *svc.incoming_messages(searched),
+            *watched.messages,
+        ]
+    )
+    model = Model([AIMessage(content="卡片已打开")])
+    await _run(
+        model,
+        svc.AdvanceInput(
+            tool_results=[
+                svc.ClientToolResult(
+                    "watch-0", {"kind": "collect.live.v1", **items[0]}
+                )
+            ],
+            client_tools=CLIENTS,
+        ),
+        rows,
+    )
+    names = {
+        call["name"]
+        for one in model.seen[0]["messages"]
+        if isinstance(one, AIMessage)
+        for call in one.tool_calls
+    }
+    assert {"collect.search_points", "collect.watch_point"} <= names
+    _assert_paired(model)
+
+
+async def test_business_results_leave_room_for_loaded_skill_and_tools() -> None:
+    async def search(_name: str, _arguments: dict[str, Any]) -> object:
+        return {"document_title": "能耗报告", "text": "资料证据\n" * 3000}
+
+    model = Model(
+        [
+            asks("skills.load", "load", name="knowledge-retrieval"),
+            asks(
+                "kb.read_chunk",
+                "search",
+                chunk_id="01a06b37-bcdb-73ec-bb62-5cd467b641a9",
+            ),
+            AIMessage(content="已有足够依据"),
+        ]
+    )
+    await _run(
+        model,
+        svc.AdvanceInput(user_text="查二月能耗", client_tools=CLIENTS),
+        [],
+        search,
+    )
+    seen = model.seen[-1]["messages"]
+    assert any("每句资料结论" in str(one.content) for one in seen)
+    assert any("资料证据" in str(one.content) for one in seen)
+    assert not any(
+        "必须调用 skills.load 重新加载" in str(one.content) for one in seen
+    )
+
+
 def test_projection_preserves_a_multi_tool_batch_and_current_question() -> None:
     calls = AIMessage(
         content="",
@@ -304,6 +418,26 @@ def test_projection_preserves_a_multi_tool_batch_and_current_question() -> None:
 def test_unknown_budget_keeps_existing_messages() -> None:
     messages = [HumanMessage(content="保留原窗口")]
     assert ContextProjection(0, 0, (), [])(messages) == messages
+
+
+def test_tool_window_keeps_the_original_user_request() -> None:
+    request = "只查二月报告，重点看异常能耗，实时点位保持只读。"
+    messages: list[BaseMessage] = [HumanMessage(content=request)]
+    for index in range(22):
+        call_id = f"search-{index}"
+        messages.extend(
+            [
+                asks("kb.list_bases", call_id),
+                ToolMessage(content="当前可查一个库", tool_call_id=call_id),
+            ]
+        )
+    assembled = svc.assemble(
+        payload=svc.AdvanceInput(tool_results=[]),
+        rows=_rows(messages),
+        summary=None,
+        scope=ALL_BASES,
+    )
+    assert sum(one.content == request for one in assembled) == 1
 
 
 def test_oversized_current_request_has_an_actionable_failure() -> None:

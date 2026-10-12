@@ -42,6 +42,8 @@ IMAGE_BLOCK_TYPES = frozenset({"image", "image_url", "input_image"})
 # 窗口一次脱落几条。⚠ 按台阶脱落而不是逐条：逐条会让窗口每多一条消息就整体
 # 前移一格，历史区的前缀从此再也对不上（ADR-0025）
 DEFAULT_DROP_STEP = 10
+MAX_RETAINED_REQUESTS = 40
+MAX_RETAINED_REQUEST_CHARS = 12_000
 
 _USER = "user"
 _ASSISTANT = "assistant"
@@ -142,6 +144,39 @@ def window(
     Args: rows, limit（高水位）, step（一次脱落几条）。
     """
     return split(rows, limit, step)[1]
+
+
+def with_user_requests(
+    rows: Sequence[HistoryRow], messages: Sequence[BaseMessage]
+) -> list[BaseMessage]:
+    """用户要求独立于工具条数保留，按时间原文补回。Args: rows, messages。"""
+    requests = [
+        text
+        for row in sorted(rows, key=lambda one: one.seq, reverse=True)
+        if (text := _request_text(row))
+    ][:MAX_RETAINED_REQUESTS]
+    retained: list[BaseMessage] = []
+    remaining = MAX_RETAINED_REQUEST_CHARS
+    for index, text in enumerate(requests):
+        if any(
+            isinstance(one, HumanMessage) and one.content == text
+            for one in messages
+        ):
+            continue
+        if len(text) > remaining and index > 0:
+            break
+        retained.append(HumanMessage(content=text))
+        remaining -= len(text)
+        if remaining <= 0:
+            break
+    return [*reversed(retained), *messages]
+
+
+def _request_text(row: HistoryRow) -> str:
+    text = str(row.content_json.get("text") or "")
+    if row.role != _USER or not text.replace(IMAGE_PLACEHOLDER, "").strip():
+        return ""
+    return text
 
 
 def fitted(
