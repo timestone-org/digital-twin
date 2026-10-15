@@ -53,7 +53,7 @@ describe('颜色与它的两个附属项', () => {
     const wrapper = mountFields()
 
     expect(wrapper.findAllComponents(DtSlider)).toHaveLength(1)
-    expect(wrapper.text()).toContain('常态色留空时不染色')
+    expect(wrapper.text()).toContain('常态色留空时保留模型原色')
   })
 
   it('配了颜色才摆出浓度与自发光', () => {
@@ -69,7 +69,7 @@ describe('颜色与它的两个附属项', () => {
 
     const clear = wrapper
       .findAll('button')
-      .find((item) => item.text().includes('清除常态色'))
+      .find((item) => item.text().includes('恢复模型原色'))
     await clear?.trigger('click')
 
     expect(lastWrite(wrapper)).toEqual({

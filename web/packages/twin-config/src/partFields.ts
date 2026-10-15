@@ -3,6 +3,7 @@
  * 绑定行派发、运行时缝合读值、详情卡片与编辑器的字段列表四处共用同一套次序。
  */
 import { ALWAYS_VISIBLE } from './normalizeRules'
+import { DEFAULT_PANEL_STYLE } from './panelStyle'
 import type { TwinPanel, TwinPanelField, TwinPart } from './types'
 
 /** 一个详情字段在整份配置里的位置：部件 + 字段 + 实时值的键。 */
@@ -65,7 +66,7 @@ export function detailPanelOf(part: TwinPart): TwinPanel {
       width: 0,
       height: 0,
       columns: detail.columns,
-      density: 'normal',
+      density: DEFAULT_PANEL_STYLE.density,
       scan: false,
       corners: false,
       grid: false,

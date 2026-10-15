@@ -118,7 +118,7 @@ describe('选中什么就画什么', () => {
   it('选中的实体已经不在了就说出来，不画任何检查器', () => {
     const wrapper = mountInspector({ kind: 'anchors', id: 'gone' })
 
-    expect(wrapper.text()).toContain('选中的东西已经不在了')
+    expect(wrapper.text()).toContain('所选对象已不存在')
     expect(wrapper.findComponent(AnchorInspector).exists()).toBe(false)
   })
 })

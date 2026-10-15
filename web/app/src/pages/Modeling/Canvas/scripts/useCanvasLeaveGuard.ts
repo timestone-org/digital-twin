@@ -1,6 +1,6 @@
 /** @fileoverview 建模画布的站内离开与关页保护。 */
 import { useConfirm } from '@dt/ui'
-import { onBeforeRouteLeave, onBeforeRouteUpdate } from 'vue-router'
+import { useWorkspaceGuard } from '@/features/workspace/useWorkspaceGuard'
 
 import { useUnsavedGuard } from '@/composables/useUnsavedGuard'
 
@@ -26,10 +26,8 @@ export function useCanvasLeaveGuard(
     onLeave()
     return true
   }
-  onBeforeRouteLeave(allowLeaving)
-  onBeforeRouteUpdate((to, from) =>
-    to.params['pipelineId'] === from.params['pipelineId']
-      ? true
-      : allowLeaving(),
+  useWorkspaceGuard(
+    allowLeaving,
+    (to, from) => to.params['pipelineId'] !== from.params['pipelineId'],
   )
 }

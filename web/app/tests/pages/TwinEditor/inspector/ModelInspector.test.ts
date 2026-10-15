@@ -1,5 +1,5 @@
 /**
- * @fileoverview 契约：模型检查器只落素材引用、用空串表达「背景透明」、
+ * @fileoverview 契约：模型检查器只落素材引用、用空串表达「透明背景」、
  * 特效关掉时把字段整段收起来、clips 空数组是「全播」而不是「一条都不播」。
  *
  * ⚠ 素材弹窗 teleport 到 body，断言一律查 `document.body`——查 wrapper 只会拿到
@@ -187,7 +187,7 @@ describe('背景', () => {
   it('透明时把「露出下面那层大屏」说出来', () => {
     const wrapper = mountModel()
 
-    expect(wrapper.text()).toContain('背景透明')
+    expect(wrapper.text()).toContain('透明背景')
   })
 })
 
@@ -249,18 +249,18 @@ describe('内置动画', () => {
     expect(wrapper.text()).not.toContain('要播的 clip')
   })
 
-  it('开了之后把「一条都不填 = 全播」说清楚', () => {
+  it('开了之后把「留空时播放全部片段」说清楚', () => {
     const wrapper = mountModel(makeModel({ animations: { enabled: true } }))
 
-    expect(wrapper.text()).toContain('一条都不填 = 全播')
+    expect(wrapper.text()).toContain('留空时播放全部片段')
   })
 
   it('clip 名可以手填——模型没加载时拿不到候选', async () => {
     const wrapper = mountModel(makeModel({ animations: { enabled: true } }))
 
-    const input = wrapper.find('input[aria-label="手填名字"]')
+    const input = wrapper.find('input[aria-label="输入节点名称"]')
     await input.setValue('Take 001')
-    await wrapper.find('button[aria-label="添加名字"]').trigger('click')
+    await wrapper.find('button[aria-label="添加节点名称"]').trigger('click')
 
     expect(lastModel(wrapper).animations.clips).toEqual(['Take 001'])
   })

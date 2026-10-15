@@ -203,6 +203,33 @@ describe('读画布', () => {
 })
 
 describe('读绑定', () => {
+  it('按2D实体及槽位筛选，只返回目标的真实读数槽', async () => {
+    const { surface, write, save } = setup()
+    const shot = await run(surface, 'dashboard.read_bindings', {
+      node_id: 'host',
+      entity_id: 'n2',
+      slot_key: 'nodeValues',
+      limit: 1,
+    })
+    expect(shot).toMatchObject({
+      returned: 1,
+      slots: [
+        {
+          key: 'nodeValues',
+          rows: [
+            {
+              field_key: TARGET?.fieldKey,
+              entity_id: 'n2',
+              node_key: null,
+            },
+          ],
+        },
+      ],
+    })
+    expect(write).not.toHaveBeenCalled()
+    expect(save).not.toHaveBeenCalled()
+  })
+
   it('每一行都带着它喂的那个实体的名字', async () => {
     const { surface } = setup()
 

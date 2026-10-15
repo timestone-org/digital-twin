@@ -88,7 +88,7 @@ function togglePick(): void {
       <DtInput
         :model-value="modelValue.label"
         label="前缀"
-        hint="留空 = 只显示数值"
+        hint="留空时仅显示数值"
         size="sm"
         @update:model-value="write({ label: $event })"
       />
@@ -113,7 +113,7 @@ function togglePick(): void {
         @update:model-value="writeDecimals"
       />
       <p v-else class="text-xs text-text-disabled">
-        不定位数：拿到什么值就按什么值上屏，不补零也不截断。
+        保留原始小数位，不补零、不截断。
       </p>
     </InspectorSection>
 

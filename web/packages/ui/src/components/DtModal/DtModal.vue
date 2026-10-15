@@ -14,7 +14,14 @@
  * Esc 可能只是习惯性动作，所以第一次只提示、再按一次才真的丢。
  * 「关闭」按钮与页面自己的取消键不在此列：那是瞄准了才点得中的目标。
  */
-import { nextTick, onBeforeUnmount, ref, watch } from 'vue'
+import {
+  nextTick,
+  onActivated,
+  onDeactivated,
+  onBeforeUnmount,
+  ref,
+  watch,
+} from 'vue'
 import DtButton from '../DtButton/DtButton.vue'
 
 const props = withDefaults(
@@ -37,6 +44,13 @@ const emit = defineEmits<{ 'update:modelValue': [value: boolean] }>()
 const panel = ref<HTMLElement | null>(null)
 /** 已经拦下过一次误关，提示条正挂着；再按一次 Esc 就放行。 */
 const isGuardShown = ref(false)
+const isActive = ref(true)
+onActivated(() => {
+  isActive.value = true
+})
+onDeactivated(() => {
+  isActive.value = false
+})
 let previouslyFocused: HTMLElement | null = null
 
 const FOCUSABLE =
@@ -93,7 +107,7 @@ function onKeydown(event: KeyboardEvent): void {
 }
 
 watch(
-  () => props.modelValue,
+  () => props.modelValue && isActive.value,
   async (open) => {
     // 重开一次就重新拦一次：上一次的「再按一次就丢」不该跨着一次打开继续有效
     isGuardShown.value = false
@@ -118,6 +132,7 @@ onBeforeUnmount(() => {
   <Teleport to="body">
     <div
       v-if="modelValue"
+      v-show="isActive"
       class="dt-modal"
       :class="`dt-modal--${layer}`"
       @keydown="onKeydown"

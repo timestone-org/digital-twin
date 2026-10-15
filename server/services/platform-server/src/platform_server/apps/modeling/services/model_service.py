@@ -16,6 +16,7 @@ from platform_server.apps.modeling.crud import (
     model_version_crud,
     node_run_crud,
 )
+from platform_server.apps.modeling.errors import RunNotPublishable
 from platform_server.apps.modeling.models import (
     ModelingBinding,
     ModelingModelArtifact,
@@ -126,6 +127,8 @@ def _version_row(draft: _Draft) -> ModelingModelVersion:
     Args: draft。
     """
     verdict = draft.verdict
+    if not verdict.target_key:
+        raise RunNotPublishable(verdict.reason or "这次运行没有有效的预测目标")
     return ModelingModelVersion(
         id=draft.version_id,
         pipeline_id=draft.run.pipeline_id,

@@ -139,11 +139,7 @@ function toggleAutoHeight(auto: boolean): void {
         @update:model-value="writeVariant"
       />
     </DtField>
-    <DtField
-      label="卡片相对锚点"
-      hint="非居中时会画一条引线与锚点标记"
-      size="sm"
-    >
+    <DtField label="卡片相对锚点" hint="非居中布局显示引线和锚点标记" size="sm">
       <DtSelect
         :model-value="modelValue.orient"
         :options="orientOptions"
@@ -158,7 +154,7 @@ function toggleAutoHeight(auto: boolean): void {
       :model-value="modelValue.columns"
       :range="COLUMN_RANGE"
       label="字段列数"
-      hint="趋势线与柱群两档始终占满一整行，其余按列排"
+      hint="趋势线和柱状图独占一行，其他字段按列排列"
       size="sm"
       show-value
       @update:model-value="writeStyle({ columns: $event })"
@@ -173,7 +169,7 @@ function toggleAutoHeight(auto: boolean): void {
     <DtColorInput
       :model-value="modelValue.background"
       label="背景色"
-      hint="留空 = 跟随变体自带的底"
+      hint="留空时使用当前风格的默认背景"
       size="sm"
       @update:model-value="writeStyle({ background: $event })"
     />
@@ -183,7 +179,7 @@ function toggleAutoHeight(auto: boolean): void {
       size="sm"
       @click="writeStyle({ background: '' })"
     >
-      背景跟随变体
+      恢复默认背景
     </DtButton>
   </InspectorSection>
 
@@ -218,7 +214,7 @@ function toggleAutoHeight(auto: boolean): void {
       :model-value="modelValue.height"
       :range="HEIGHT_RANGE"
       label="卡片最小高度 px"
-      hint="字段放不下时照样往下长"
+      hint="内容超出最小高度时自动扩展"
       aria-label="卡片最小高度"
       size="sm"
       :steppers="false"
@@ -249,7 +245,7 @@ function toggleAutoHeight(auto: boolean): void {
       :model-value="modelValue.scale"
       :range="SCALE_RANGE"
       label="整体大小"
-      hint="1 = 按模型体量自动定；换模型时不用重调"
+      hint="1 为根据模型尺寸计算的默认比例"
       size="sm"
       show-value
       @update:model-value="writeStyle({ scale: $event })"

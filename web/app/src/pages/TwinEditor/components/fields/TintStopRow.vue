@@ -132,7 +132,7 @@ function writeMatch(next: string): void {
 
     <DtColorInput
       :model-value="modelValue.color"
-      aria-label="这一档的颜色"
+      aria-label="档位颜色"
       size="sm"
       placeholder="留空 = 命中但不染色"
       :swatches="swatches"

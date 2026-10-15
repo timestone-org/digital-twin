@@ -68,19 +68,19 @@ describe('空态给下一步', () => {
   it('一个视点都没有时告诉用户先去存机位', () => {
     const wrapper = mountInspector(makeTour(), [])
 
-    expect(wrapper.text()).toContain('先在左边的「视点」里加两个视点')
+    expect(wrapper.text()).toContain('请在左侧新增至少两个视点')
   })
 
   it('只有一个视点时说清至少要两个', () => {
     const wrapper = mountInspector(makeTour(), [CAMERAS[0] as TwinCamera])
 
-    expect(wrapper.text()).toContain('漫游至少要 2')
+    expect(wrapper.text()).toContain('漫游至少需要 2')
   })
 
   it('轨迹空着时告诉用户从下面挑', () => {
     const wrapper = mountInspector()
 
-    expect(wrapper.text()).toContain('轨迹还是空的')
+    expect(wrapper.text()).toContain('尚未配置轨迹')
   })
 })
 
@@ -131,7 +131,7 @@ describe('轨迹站点', () => {
   it('轨迹里有已删视点时把条数说出来', () => {
     const wrapper = mountInspector(makeTour({ items: ['c1', '没了'] }))
 
-    expect(wrapper.text()).toContain('有 1 个视点已经被删掉了')
+    expect(wrapper.text()).toContain('有 1 个视点已删除')
   })
 
   it('第一站不给上移、最后一站不给下移', () => {
@@ -168,7 +168,7 @@ describe('时长用秒不用毫秒', () => {
     const wrapper = mountInspector(
       makeTour({ idleAutoplay: true, idleAutoplayDelayMs: 60000 }),
     )
-    const input = numberInput(wrapper, '闲置多少秒后开始')
+    const input = numberInput(wrapper, '空闲等待时间（秒）')
     expect(input.element.value).toBe('60')
 
     await input.setValue('30')
@@ -180,7 +180,7 @@ describe('时长用秒不用毫秒', () => {
   it('没开闲置自动播时不给延时这一栏', () => {
     const wrapper = mountInspector(makeTour({ idleAutoplay: false }))
 
-    expect(wrapper.text()).not.toContain('闲置多少秒后开始')
+    expect(wrapper.text()).not.toContain('空闲等待时间（秒）')
   })
 })
 
@@ -200,7 +200,7 @@ describe('预览漫游', () => {
     expect(
       buttonByText(wrapper, '预览漫游').attributes('disabled'),
     ).toBeDefined()
-    expect(wrapper.text()).toContain('可用的站点还不够')
+    expect(wrapper.text()).toContain('轨迹中的有效站点少于')
   })
 
   it('正在预览时按钮变成停止', async () => {
@@ -229,7 +229,7 @@ describe('开关', () => {
     const wrapper = mountInspector()
     const loop = wrapper
       .findAll('button[role="switch"]')
-      .find((item) => item.text() === '飞完最后一站回到第一站')
+      .find((item) => item.text() === '循环播放')
 
     await loop?.trigger('click')
 

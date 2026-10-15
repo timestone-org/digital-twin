@@ -43,8 +43,8 @@ const emit = defineEmits<{
 }>()
 
 const GIZMO_OPTIONS = [
-  { value: 'translate', label: '拖位置' },
-  { value: 'rotate', label: '拖朝向' },
+  { value: 'translate', label: '平移' },
+  { value: 'rotate', label: '旋转' },
 ] as const
 
 /** 分段控件给回来的是裸字符串，对不上就当没改。 */
@@ -105,12 +105,12 @@ function togglePick(): void {
         {{ picking ? '取消拾取' : '从视口拾取位置' }}
       </DtButton>
       <p v-if="picking" class="text-xs text-text-secondary">
-        在视口里点一下，把那个点作为箭头位置。
+        点击三维视口，将箭头定位到所选位置。
       </p>
 
       <DtField
         label="方向向量"
-        hint="渲染前会归一化，只看方向不看长短"
+        hint="向量仅用于确定方向，不影响箭头长度"
         size="sm"
       >
         <Vec3Field
@@ -119,13 +119,17 @@ function togglePick(): void {
         />
       </DtField>
       <DtNotice v-if="isZeroDirection" intent="warning" icon="alert-triangle">
-        零向量不是一个方向：这样保存后会被当成没配，箭头回退成朝上（+Y）。
+        方向向量不能为零；保存后将使用默认方向（+Y）。
       </DtNotice>
-      <DtField label="视口里怎么拖" hint="在 3D 里直接拖坐标轴手柄" size="sm">
+      <DtField
+        label="视口操作"
+        hint="在三维视口中拖动坐标轴手柄调整位置或旋转"
+        size="sm"
+      >
         <DtSegmented
           :model-value="gizmoMode"
           :options="GIZMO_OPTIONS"
-          aria-label="视口里怎么拖"
+          aria-label="视口操作"
           size="sm"
           block
           @update:model-value="writeGizmoMode"
@@ -207,7 +211,7 @@ function togglePick(): void {
           @update:model-value="write({ decimals: $event ?? 0 })"
         />
         <span v-else class="min-w-0 flex-1 text-xs text-text-disabled">
-          不定位数，按原值上屏
+          保留原始小数位
         </span>
       </div>
     </InspectorSection>

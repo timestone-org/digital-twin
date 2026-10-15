@@ -40,9 +40,9 @@ const REF_LABELS: Readonly<Record<TwinDistanceRef, string>> = {
 
 /** 量不出来时，各参考系各有各的原因，笼统说一句「量不出」等于没说。 */
 const REF_REASONS: Readonly<Record<TwinDistanceRef, string>> = {
-  orbit: '模型还没加载完',
-  self: '这个元素还定不出位置（锚点悬空、能量流路径不足两点）',
-  'part-center': '当前选中的不是部件；这一档对覆盖层元素恒不成立',
+  orbit: '模型尚未加载完成',
+  self: '无法确定元素位置，请检查锚点引用及能量流路径',
+  'part-center': '当前对象不是部件，无法使用部件中心作为距离参考',
 }
 
 const options = TWIN_DISTANCE_REFS.map((value) => ({
@@ -78,7 +78,9 @@ function fillMeasured(): void {
   const distance = measure(rule.ref)
   const value = distance === null ? null : measuredThreshold(distance)
   if (value === null) {
-    toast.error(`量不出${REF_LABELS[rule.ref]}的距离：${REF_REASONS[rule.ref]}`)
+    toast.error(
+      `无法测量${REF_LABELS[rule.ref]}的距离：${REF_REASONS[rule.ref]}`,
+    )
     return
   }
   emit('update:modelValue', { ...rule, value })
@@ -120,8 +122,8 @@ function fillMeasured(): void {
         intent="neutral"
         size="sm"
         icon="ruler"
-        :aria-label="`${label} 量当前距离`"
-        :title="`把镜头摆到你希望它生效的位置，点这里把当前${REF_LABELS[modelValue.ref]}的距离填进来`"
+        :aria-label="`${label} 获取当前距离`"
+        :title="`将相机调整至目标位置，使用当前${REF_LABELS[modelValue.ref]}的距离作为阈值`"
         @click="fillMeasured"
       />
     </div>

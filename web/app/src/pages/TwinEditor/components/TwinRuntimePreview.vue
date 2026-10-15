@@ -160,8 +160,8 @@ const sizeLabel = computed(() => {
           variant="ghost"
           intent="neutral"
           :icon="wide ? 'minus' : 'plus'"
-          :aria-label="wide ? '收回画中画' : '放大画中画'"
-          :title="wide ? '收回画中画' : '放大画中画'"
+          :aria-label="wide ? '缩小预览窗口' : '放大预览窗口'"
+          :title="wide ? '缩小预览窗口' : '放大预览窗口'"
           data-test="toggle-wide"
           @click="wide = !wide"
         />
@@ -170,8 +170,8 @@ const sizeLabel = computed(() => {
           variant="ghost"
           intent="neutral"
           icon="close"
-          aria-label="关掉预览"
-          title="关掉预览"
+          aria-label="关闭预览"
+          title="关闭预览"
           data-test="close-preview"
           @click="open = false"
         />
@@ -194,7 +194,7 @@ const sizeLabel = computed(() => {
         </div>
       </div>
       <DtNotice v-else intent="neutral">
-        这块在大屏上的尺寸或模块取不到，预览不了。
+        无法获取模块信息或画布尺寸，暂时无法预览。
       </DtNotice>
     </div>
   </div>

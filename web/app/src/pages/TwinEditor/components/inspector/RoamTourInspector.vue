@@ -107,13 +107,13 @@ function togglePreview(): void {
       <template v-if="modelValue.enabled">
         <DtSwitch
           :model-value="modelValue.autoplay"
-          label="打开大屏就开始飞"
+          label="加载后自动播放"
           size="sm"
           @update:model-value="write({ autoplay: $event })"
         />
         <DtSwitch
           :model-value="modelValue.loop"
-          label="飞完最后一站回到第一站"
+          label="循环播放"
           size="sm"
           @update:model-value="write({ loop: $event })"
         />
@@ -125,7 +125,7 @@ function togglePreview(): void {
         />
         <DtSwitch
           :model-value="modelValue.idleAutoplay"
-          label="没人动镜头时自动开始"
+          label="空闲时自动播放"
           size="sm"
           @update:model-value="write({ idleAutoplay: $event })"
         />
@@ -133,8 +133,8 @@ function togglePreview(): void {
           v-if="modelValue.idleAutoplay"
           :model-value="idleSeconds"
           :range="IDLE_RANGE"
-          label="闲置多少秒后开始"
-          hint="用户一动镜头就停下，并重新开始计时"
+          label="空闲等待时间（秒）"
+          hint="手动操作相机后暂停漫游，并重新计算空闲时间"
           size="sm"
           @update:model-value="writeIdle"
         />
@@ -143,11 +143,10 @@ function togglePreview(): void {
 
     <InspectorSection title="轨迹">
       <DtNotice v-if="cameras.length === 0" intent="info">
-        还没有保存过机位。先在左边的「视点」里加两个视点，把镜头摆好后用「取当前机位」存下来，再回来编轨迹。
+        尚未配置视点。请在左侧新增至少两个视点，调整相机后点击「取当前机位」，再配置漫游轨迹。
       </DtNotice>
       <DtNotice v-else-if="cameras.length < MIN_ROAM_TOUR_STOPS" intent="info">
-        只有 1 个视点。漫游至少要 {{ MIN_ROAM_TOUR_STOPS }}
-        个——镜头得有个去处才飞得起来。
+        当前仅有 1 个视点，漫游至少需要 {{ MIN_ROAM_TOUR_STOPS }} 个视点。
       </DtNotice>
 
       <RoamStopList
@@ -168,14 +167,14 @@ function togglePreview(): void {
         {{ previewLabel }}
       </DtButton>
       <p class="text-xs text-text-secondary">
-        在预览小窗选择整条或单段；中央编辑视口保持不动。
+        可在预览窗口中选择完整轨迹或单个区段，预览不改变中央编辑视口。
       </p>
       <p class="text-xs text-text-disabled">
         <template v-if="canFly">
-          在编辑视口里按当前配置飞一遍，不用存了去大屏看。飞的时候一碰镜头就停。
+          预览直接使用当前配置，无需先保存场景；手动操作预览相机后暂停漫游。
         </template>
         <template v-else>
-          轨迹上可用的站点还不够 {{ MIN_ROAM_TOUR_STOPS }} 个，预览飞不起来。
+          轨迹中的有效站点少于 {{ MIN_ROAM_TOUR_STOPS }} 个，暂时无法预览。
         </template>
       </p>
     </InspectorSection>
@@ -185,7 +184,7 @@ function togglePreview(): void {
         :model-value="flySeconds"
         :range="FLY_RANGE"
         label="每段飞行（秒）"
-        hint="从一站飞到下一站要多久"
+        hint="相邻站点之间的视角过渡时长"
         size="sm"
         @update:model-value="writeFly"
       />
@@ -193,7 +192,7 @@ function togglePreview(): void {
         :model-value="holdSeconds"
         :range="HOLD_RANGE"
         label="每站停留（秒）"
-        hint="到站后停多久再飞下一段"
+        hint="到达站点后继续下一段漫游前的停留时长"
         size="sm"
         @update:model-value="writeHold"
       />

@@ -5,6 +5,7 @@
  * 行号。插一个元素会让它之后的每一行整体后移一格——编辑器改完必须重派绑定行。
  */
 import {
+  boolOr,
   clampedOr,
   entityId,
   normalizeList,
@@ -14,6 +15,7 @@ import {
 } from './normalizeShared'
 import { normalizeVisibility } from './normalizeRules'
 import { normalizePanelState, panelKindUsesState } from './panelState'
+import { DEFAULT_PANEL_STYLE } from './panelStyle'
 import {
   finiteOr,
   isRecord,
@@ -73,22 +75,33 @@ function decimalsOf(raw: unknown): number | null {
 
 function normalizePanelStyle(raw: unknown): TwinPanelStyle {
   const source = isRecord(raw) ? raw : {}
+  const defaults = DEFAULT_PANEL_STYLE
   return {
-    variant: oneOf(source.variant, TWIN_PANEL_VARIANTS, 'card'),
-    orient: oneOf(source.orient, TWIN_PANEL_ORIENTS, 'center'),
-    accent: normalizeColorSpec(source.accent) ?? DEFAULT_ACCENT,
-    background: normalizeColorSpec(source.background) ?? '',
-    width: clampedOr(source.width, 0, 0, MAX_PANEL_WIDTH),
-    height: clampedOr(source.height, 0, 0, MAX_PANEL_HEIGHT),
-    columns: clampedOr(source.columns, 1, 1, MAX_PANEL_COLUMNS),
-    density: oneOf(source.density, TWIN_PANEL_DENSITIES, 'normal'),
-    scan: source.scan === true,
-    corners: source.corners === true,
-    grid: source.grid === true,
-    fontScale: clampedOr(source.fontScale, 1, MIN_FONT_SCALE, MAX_FONT_SCALE),
-    scale: clampedOr(source.scale, 1, MIN_PANEL_SCALE, MAX_PANEL_SCALE),
-    animate: source.animate === true,
-    pulse: source.pulse === true,
+    variant: oneOf(source.variant, TWIN_PANEL_VARIANTS, defaults.variant),
+    orient: oneOf(source.orient, TWIN_PANEL_ORIENTS, defaults.orient),
+    accent: normalizeColorSpec(source.accent) ?? defaults.accent,
+    background: normalizeColorSpec(source.background) ?? defaults.background,
+    width: clampedOr(source.width, defaults.width, 0, MAX_PANEL_WIDTH),
+    height: clampedOr(source.height, defaults.height, 0, MAX_PANEL_HEIGHT),
+    columns: clampedOr(source.columns, defaults.columns, 1, MAX_PANEL_COLUMNS),
+    density: oneOf(source.density, TWIN_PANEL_DENSITIES, defaults.density),
+    scan: boolOr(source.scan, defaults.scan),
+    corners: boolOr(source.corners, defaults.corners),
+    grid: boolOr(source.grid, defaults.grid),
+    fontScale: clampedOr(
+      source.fontScale,
+      defaults.fontScale,
+      MIN_FONT_SCALE,
+      MAX_FONT_SCALE,
+    ),
+    scale: clampedOr(
+      source.scale,
+      defaults.scale,
+      MIN_PANEL_SCALE,
+      MAX_PANEL_SCALE,
+    ),
+    animate: boolOr(source.animate, defaults.animate),
+    pulse: boolOr(source.pulse, defaults.pulse),
   }
 }
 

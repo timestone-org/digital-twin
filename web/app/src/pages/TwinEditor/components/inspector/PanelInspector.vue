@@ -4,8 +4,7 @@
  *
  * ⚠ `anchorId` 与 `position` 二选一，**前者优先**：两个都给时按锚点走，
  * `position` 那份静默不生效。用户配了没反应会找不到原因，所以面板上必须摆明。
- * ⚠ 旋转只在「钉死朝向」档有意义：另两档朝向每帧被相机接管，所以那两档下
- * 不摆旋转控件——摆一个改了没反应的输入框比没有更糟。
+ * ⚠ 旋转仅在「固定朝向」模式生效；其余模式的朝向由相机控制，因此隐藏旋转控件。
  */
 import type { GizmoMode } from '@dt/three-core'
 import {
@@ -54,8 +53,8 @@ const emit = defineEmits<{
 }>()
 
 const GIZMO_OPTIONS = [
-  { value: 'translate', label: '拖位置' },
-  { value: 'rotate', label: '拖旋转' },
+  { value: 'translate', label: '平移' },
+  { value: 'rotate', label: '旋转' },
 ] as const
 
 /** 分段控件给回来的是裸字符串，对不上就当没改。 */
@@ -65,7 +64,7 @@ function writeGizmoMode(next: string): void {
 }
 
 const ORIENT_LABELS: Readonly<Record<TwinPanelOrient, string>> = {
-  center: '居中（不画引线）',
+  center: '居中（无引线）',
   top: '上方',
   bottom: '下方',
   left: '左侧',
@@ -76,9 +75,9 @@ const ORIENT_LABELS: Readonly<Record<TwinPanelOrient, string>> = {
 const FIXED_WIDTH = 240
 
 const BILLBOARD_LABELS: Readonly<Record<TwinBillboardMode, string>> = {
-  face: '始终朝相机',
-  horizontal: '只水平跟随',
-  fixed: '钉死朝向',
+  face: '面向相机',
+  horizontal: '水平跟随',
+  fixed: '固定朝向',
 }
 const billboardOptions = TWIN_BILLBOARD_MODES.map((value) => ({
   value,
@@ -90,7 +89,7 @@ const orientOptions = TWIN_PANEL_ORIENTS.map((value) => ({
 }))
 
 const anchorOptions = computed(() => [
-  { value: '', label: '（不锚定，用世界坐标）' },
+  { value: '', label: '不锚定（使用坐标定位）' },
   ...props.anchors.map((anchor, index) => ({
     value: anchor.id,
     label: anchor.name.trim() === '' ? `锚点 ${index + 1}` : anchor.name,
@@ -125,7 +124,7 @@ function togglePick(): void {
 <template>
   <div class="flex flex-col">
     <InspectorSection title="基本">
-      <DtField label="标题文本" hint="留空 = 不画标题行" size="sm">
+      <DtField label="标题文本" hint="留空时隐藏标题" size="sm">
         <DtInput
           :model-value="modelValue.name"
           aria-label="标题文本"
@@ -134,7 +133,7 @@ function togglePick(): void {
         />
       </DtField>
 
-      <DtField label="副标题" hint="标题上那行小字，会转成大写等宽" size="sm">
+      <DtField label="副标题" hint="显示于标题上方，采用大写等宽字体" size="sm">
         <DtInput
           :model-value="modelValue.subtitle"
           aria-label="副标题"
@@ -144,7 +143,7 @@ function togglePick(): void {
         />
       </DtField>
 
-      <DtField label="页脚文案" hint="留空 = 不画底栏" size="sm">
+      <DtField label="页脚文案" hint="留空时隐藏页脚" size="sm">
         <DtInput
           :model-value="modelValue.footnote"
           aria-label="页脚文案"
@@ -165,10 +164,11 @@ function togglePick(): void {
       </DtField>
 
       <DtNotice v-if="anchored" intent="warning" icon="alert-triangle">
-        已锚定：牌的位置以锚点为准，下面的坐标不生效。要用坐标定位，先把锚定改回「不锚定」。
+        已启用锚定，信息牌位置由锚点确定。如需使用坐标定位，请选择「不锚定」。
       </DtNotice>
       <DtNotice v-if="danglingAnchor" intent="danger" icon="alert-circle">
-        锚点 {{ modelValue.anchorId }} 不存在，这张牌会落在原点。
+        锚点
+        {{ modelValue.anchorId }} 不存在，信息牌将显示于原点。请重新选择锚点。
       </DtNotice>
 
       <DtField :label="anchored ? '坐标（当前不生效）' : '坐标'" size="sm">
@@ -189,11 +189,11 @@ function togglePick(): void {
           {{ picking ? '取消拾取' : '从视口拾取位置' }}
         </DtButton>
         <p v-if="picking" class="text-xs text-text-secondary">
-          在模型表面点一下，牌的中心会吸附到那个点。
+          点击模型表面，将信息牌定位到所选位置。
         </p>
       </template>
 
-      <DtField label="偏移" hint="相对锚点或上面那个坐标" size="sm">
+      <DtField label="偏移" hint="相对于锚点或配置坐标的位移" size="sm">
         <Vec3Field
           :model-value="modelValue.offset"
           @update:model-value="write({ offset: $event })"
@@ -202,7 +202,7 @@ function togglePick(): void {
 
       <DtField
         label="朝向"
-        hint="只水平跟随 = 牌永远竖着，俯视时不会躺下去"
+        hint="水平跟随仅绕竖直轴旋转；固定朝向支持手动设置旋转角度"
         size="sm"
       >
         <DtSegmented
@@ -227,14 +227,14 @@ function togglePick(): void {
         </DtField>
         <DtField
           v-if="!anchored"
-          label="视口里怎么拖"
-          hint="在 3D 里直接拖坐标轴手柄"
+          label="视口操作"
+          hint="在三维视口中拖动坐标轴手柄调整位置或旋转"
           size="sm"
         >
           <DtSegmented
             :model-value="gizmoMode"
             :options="GIZMO_OPTIONS"
-            aria-label="视口里怎么拖"
+            aria-label="视口操作"
             size="sm"
             block
             @update:model-value="writeGizmoMode"

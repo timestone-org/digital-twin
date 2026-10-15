@@ -20,11 +20,14 @@ import AppCompactNav from './AppCompactNav.vue'
 import AppTopbar from './AppTopbar.vue'
 import { useEmbedContext } from '@/features/embed/context'
 import { useCompactNavigation } from '@/composables/useCompactNavigation'
+import { watch } from 'vue'
+import WorkspaceTabs from '@/features/workspace/WorkspaceTabs.vue'
+import { useWorkspace, useWorkspacePage } from '@/features/workspace/context'
 
 const embed = useEmbedContext()
 const isCompact = useCompactNavigation()
 
-defineProps<{
+const props = defineProps<{
   focusMode?: boolean
   title?: string | undefined
   subtitle?: string | undefined
@@ -32,6 +35,15 @@ defineProps<{
   backTo?: string | undefined
   backLabel?: string | undefined
 }>()
+const workspace = useWorkspace()
+const page = useWorkspacePage()
+watch(
+  () => props.title,
+  (title) => {
+    if (page !== null && title) workspace?.update(page.key, { title })
+  },
+  { immediate: true },
+)
 </script>
 
 <template>
@@ -56,12 +68,18 @@ defineProps<{
         <template #actions><slot name="actions" /></template>
       </AppTopbar>
 
-      <main
-        class="flex min-h-0 min-w-0 flex-1 flex-col overflow-hidden"
-        :class="focusMode ? 'p-2' : isCompact ? 'p-3' : 'p-5'"
-      >
-        <slot />
-      </main>
+      <div class="relative flex min-h-0 flex-1 flex-col">
+        <WorkspaceTabs v-if="!embed.isEmbedded.value" />
+        <main
+          class="flex min-h-0 min-w-0 flex-1 flex-col overflow-hidden"
+          :class="[
+            focusMode ? 'p-2' : isCompact ? 'p-3' : 'p-5',
+            { 'pt-5': workspace && !embed.isEmbedded.value },
+          ]"
+        >
+          <slot />
+        </main>
+      </div>
     </div>
   </div>
 </template>

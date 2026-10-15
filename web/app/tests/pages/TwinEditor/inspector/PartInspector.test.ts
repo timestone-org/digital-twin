@@ -67,8 +67,8 @@ function buttonByText(wrapper: Wrapper, text: string) {
 }
 
 async function typeNode(wrapper: Wrapper, name: string): Promise<void> {
-  await wrapper.find('input[aria-label="手填名字"]').setValue(name)
-  await wrapper.find('button[aria-label="添加名字"]').trigger('click')
+  await wrapper.find('input[aria-label="输入节点名称"]').setValue(name)
+  await wrapper.find('button[aria-label="添加节点名称"]').trigger('click')
 }
 
 describe('关联节点', () => {
@@ -93,7 +93,7 @@ describe('关联节点', () => {
 
     // 候选下拉的选项是运行时开合的浮层，这里直接从组件口子上给值
     // ⚠ 按 aria-label 认人：检查器里不止一个 DtSelect，取第一个会挑到「上级部件」
-    selectLabeled(wrapper, '从候选里挑').vm.$emit('update:modelValue', 'Cube')
+    selectLabeled(wrapper, '选择节点').vm.$emit('update:modelValue', 'Cube')
     await wrapper.vm.$nextTick()
 
     expect(lastPart(wrapper).nodes).toEqual(['Cube'])
@@ -110,7 +110,7 @@ describe('关联节点', () => {
   it('节点很多时清单限制高度并在内部滚动', () => {
     const nodes = Array.from({ length: 20 }, (_, index) => `Node_${index}`)
     const wrapper = mountPart(makePart({ nodes }), nodes)
-    const list = wrapper.find('ul[aria-label="已选择的名字"]')
+    const list = wrapper.find('ul[aria-label="已选节点名称"]')
 
     expect(list.classes()).toContain('max-h-56')
     expect(list.classes()).toContain('overflow-y-auto')
@@ -121,13 +121,13 @@ describe('关联节点', () => {
   it('模型里没有的名字当场标出来', () => {
     const wrapper = mountPart(makePart({ nodes: ['Cube', 'Ghost'] }))
 
-    expect(wrapper.text()).toContain('在当前模型里没找到')
+    expect(wrapper.text()).toContain('当前模型中不存在的节点')
   })
 
   it('模型还没加载时不判缺失——那是「还不知道」不是「不存在」', () => {
     const wrapper = mountPart(makePart({ nodes: ['Ghost'] }), [])
 
-    expect(wrapper.text()).not.toContain('在当前模型里没找到')
+    expect(wrapper.text()).not.toContain('当前模型中不存在的节点')
     expect(wrapper.text()).toContain('模型还没加载')
   })
 })
@@ -164,7 +164,7 @@ describe('点击距离', () => {
     for (const label of [
       '近于此距离不响应',
       '远于此距离不响应',
-      '远近两档的分界',
+      '远近距离分界',
     ]) {
       expect(
         wrapper.find(`button[role="switch"][aria-label="${label}"]`).exists(),
@@ -176,7 +176,7 @@ describe('点击距离', () => {
     const wrapper = mountPart()
 
     await wrapper
-      .find('button[role="switch"][aria-label="远近两档的分界"]')
+      .find('button[role="switch"][aria-label="远近距离分界"]')
       .trigger('click')
 
     const next = lastPart(wrapper)
@@ -190,7 +190,7 @@ describe('点击距离', () => {
     const wrapper = mountPart(makePart({ click: { near: 'detail' } }))
 
     await wrapper
-      .find('button[role="switch"][aria-label="远近两档的分界"]')
+      .find('button[role="switch"][aria-label="远近距离分界"]')
       .trigger('click')
 
     expect(lastPart(wrapper).click.near).toBe('detail')
@@ -202,7 +202,7 @@ describe('显隐', () => {
     const wrapper = mountPart()
 
     expect(wrapper.text()).toContain('初始可见')
-    expect(wrapper.text()).toContain('距离规则只在大屏运行时生效')
+    expect(wrapper.text()).toContain('距离规则仅在大屏运行时生效')
   })
 
   it('改显隐回的是整份部件，节点原样带上', async () => {
@@ -281,6 +281,6 @@ describe('外观与状态染色', () => {
   it('把「有没有挑点位」透传给染色面板', () => {
     const tinted = makePart({ tint: { mode: 'stops' } })
 
-    expect(mountPart(tinted).text()).toContain('还没挑点位')
+    expect(mountPart(tinted).text()).toContain('尚未绑定状态点位')
   })
 })

@@ -115,11 +115,15 @@ describe('转发', () => {
 describe('没保存的提醒', () => {
   // ⚠ 推送方读的是已落库的绑定；不提醒的话表现成「绑完了但一直是占位符」
   it('有未保存改动时说明推送要等保存', () => {
-    expect(mountPane([], true).text()).toContain('保存之后才会开始推送')
+    expect(mountPane([], true).text()).toContain(
+      '保存场景后，新配置的点位绑定开始接收实时数据',
+    )
   })
 
   it('干净时不摆这条提醒', () => {
-    expect(mountPane([], false).text()).not.toContain('保存之后才会开始推送')
+    expect(mountPane([], false).text()).not.toContain(
+      '保存场景后，新配置的点位绑定开始接收实时数据',
+    )
   })
 })
 
@@ -139,7 +143,7 @@ describe('只看选中的那一个', () => {
   it('⚠ 收窄了要说出来，否则一个短短的绑定页看着像别的绑定丢了', () => {
     const wrapper = mountPane([], false, { kind: 'panels', id: 'p1' })
 
-    expect(wrapper.text()).toContain('只看选中的信息牌')
+    expect(wrapper.text()).toContain('仅显示选中的信息牌')
   })
 
   it('点「显示全部」切回整段孪生', async () => {

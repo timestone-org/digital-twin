@@ -27,8 +27,8 @@ const props = defineProps<{
 const emit = defineEmits<{ 'update:modelValue': [TwinViewpointSwitcher] }>()
 
 const MODE_LABELS: Readonly<Record<TwinViewpointMode, string>> = {
-  buttons: '按钮排',
-  dropdown: '下拉',
+  buttons: '按钮组',
+  dropdown: '下拉列表',
 }
 
 const modeOptions = TWIN_VIEWPOINT_MODES.map((value) => ({
@@ -127,14 +127,14 @@ function nameOf(camera: TwinCamera): string {
         />
         <DtSwitch
           :model-value="modelValue.keyboard"
-          label="数字键与方向键也能切"
+          label="启用键盘切换"
           size="sm"
           @update:model-value="write({ keyboard: $event })"
         />
       </template>
     </InspectorSection>
 
-    <InspectorSection title="显示哪些视点">
+    <InspectorSection title="显示范围">
       <DtSwitch
         :model-value="showAll"
         label="全部显示（按视点列表的顺序）"
@@ -143,15 +143,14 @@ function nameOf(camera: TwinCamera): string {
       />
 
       <p v-if="showAll" class="text-xs text-text-disabled">
-        清单为空 =
-        按视点列表的文档序全部显示。这里没有「一个都不显示」这一档，要整个藏起来请关掉上面的切换控件。
+        未指定视点时，按列表顺序显示全部视点。如需隐藏切换控件，请关闭上方的显示开关。
       </p>
 
       <template v-else>
         <DtEmpty
           v-if="cameras.length === 0"
           size="inline"
-          title="还没有视点，先去大纲树里加一个。"
+          title="尚未配置视点，请在大纲中新增。"
         />
         <ul v-else class="flex flex-col gap-1">
           <li
@@ -187,12 +186,12 @@ function nameOf(camera: TwinCamera): string {
           </li>
         </ul>
         <p class="text-xs text-text-disabled">
-          勾掉最后一个会让清单变空，那等于回到「全部显示」。
+          取消全部选择后，将恢复显示所有视点。
         </p>
       </template>
 
       <p v-if="dangling > 0" class="text-xs text-state-warning">
-        清单里有 {{ dangling }} 个视点已经被删掉了，运行态不会显示它们。
+        所选列表中有 {{ dangling }} 个视点已删除，运行时将自动忽略。
       </p>
     </InspectorSection>
   </div>

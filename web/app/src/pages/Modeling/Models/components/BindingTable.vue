@@ -11,6 +11,7 @@ import type {
   ModelingBinding,
 } from '@dt/contracts'
 import { PERMISSION_CODES } from '@dt/contracts'
+import type { DtPaginationState } from '@dt/ui'
 import { DtButton, DtDataView, DtSwitch, DtTag } from '@dt/ui'
 
 import PermGuard from '@/components/PermGuard.vue'
@@ -39,11 +40,14 @@ const props = defineProps<{
   versionLabels: ReadonlyMap<string, string>
   isLoading: boolean
   error: string | null
+  pagination: DtPaginationState
 }>()
 
 const view = defineModel<DtDataViewMode>('view', { required: true })
 
 defineEmits<{
+  'update:page': [page: number]
+  'update:size': [size: number]
   toggle: [row: ModelingBinding, isOn: boolean]
   unbind: [row: ModelingBinding]
 }>()
@@ -63,12 +67,15 @@ function paramsOf(row: ModelingBinding): string {
     :loading="props.isLoading"
     :error="props.error"
     :empty="EMPTY"
+    :pagination="props.pagination"
     :layout="{
       fixedLayout: true,
       minWidth: '60rem',
       cardColumns: 3,
       cardMinWidth: '20rem',
     }"
+    @update:page="$emit('update:page', $event)"
+    @update:size="$emit('update:size', $event)"
   >
     <template #toolbar><slot name="toolbar" /></template>
     <template #cell-fx_code="{ row }">

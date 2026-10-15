@@ -63,7 +63,7 @@ const childrenUnreachable = computed(
 
 const unreachableText = computed(
   () =>
-    `这个部件收着 ${children.value.length} 个子件，但它自己的近距点击不弹详情，装配栏在运行态点不出来。`,
+    `当前部件包含 ${children.value.length} 个下级部件，但未启用近距点击详情，运行时无法通过该部件打开装配栏。`,
 )
 </script>
 
@@ -72,7 +72,7 @@ const unreachableText = computed(
     <DtField
       label="上级部件"
       size="sm"
-      hint="挂上之后，点开上级的详情能在左栏切到这一个。"
+      hint="设置上级后，可在上级详情的装配栏中切换至当前部件。"
     >
       <DtSelect
         :model-value="modelValue.parentId"
@@ -85,7 +85,7 @@ const unreachableText = computed(
       />
     </DtField>
     <DtNotice v-if="dangling" intent="danger" icon="alert-circle">
-      找不到部件 {{ modelValue.parentId }}，这个部件会当顶层处理。
+      上级部件 {{ modelValue.parentId }} 不存在，当前部件将作为顶层部件处理。
     </DtNotice>
 
     <DtField

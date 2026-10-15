@@ -6,12 +6,14 @@
  * 所以它不装这道闸），关掉标签页就是真没了，而且没有任何提示。
  */
 import { onBeforeUnmount, watch } from 'vue'
+import { useWorkspaceDirty } from '@/features/workspace/useWorkspaceGuard'
 
 /**
  * 装上关页拦截。
  * @param isDirty 取「此刻有没有未保存改动」
  */
 export function useUnsavedGuard(isDirty: () => boolean): void {
+  useWorkspaceDirty(isDirty)
   function block(event: BeforeUnloadEvent): void {
     // ⚠ 文案一律由浏览器出，自定义字符串早就被忽略了。现代浏览器只认
     // preventDefault，returnValue 是留给老 WebKit 的——少了它那些浏览器直接放行

@@ -7,7 +7,7 @@
  */
 import { describe, expect, it } from 'vitest'
 import { mount } from '@vue/test-utils'
-import { nextTick } from 'vue'
+import { defineComponent, h, KeepAlive, nextTick, ref } from 'vue'
 
 import DtModal from '../../src/components/DtModal/DtModal.vue'
 
@@ -35,6 +35,39 @@ function pressEscape(): void {
 function closedTimes(wrapper: ReturnType<typeof mountModal>): number {
   return (wrapper.emitted('update:modelValue') ?? []).length
 }
+
+it('缓存页停用时隐藏弹窗，再次激活保留输入内容', async () => {
+  const visible = ref(true)
+  const page = defineComponent({
+    setup: () => () =>
+      h(
+        DtModal,
+        {
+          modelValue: true,
+          title: '编辑数据源',
+        },
+        () => h('input', { value: '未保存的输入' }),
+      ),
+  })
+  const host = defineComponent({
+    setup: () => () => h(KeepAlive, () => (visible.value ? h(page) : null)),
+  })
+  const wrapper = mount(host, { attachTo: document.body })
+  visible.value = false
+  await nextTick()
+  expect(document.querySelector<HTMLElement>('.dt-modal')?.style.display).toBe(
+    'none',
+  )
+  visible.value = true
+  await nextTick()
+  expect(
+    document.querySelector<HTMLElement>('.dt-modal')?.style.display,
+  ).not.toBe('none')
+  expect(
+    document.querySelector<HTMLInputElement>('.dt-modal input')?.value,
+  ).toBe('未保存的输入')
+  wrapper.unmount()
+})
 
 describe('干净的弹窗', () => {
   it('点外面就关', () => {

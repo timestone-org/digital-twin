@@ -233,19 +233,19 @@ watch(
         <DtButton
           size="sm"
           variant="ghost"
+          :icon="wide ? 'minimize' : 'maximize'"
           :aria-label="wide ? '缩小配置预览' : '放大配置预览'"
+          :title="wide ? '缩小配置预览' : '放大配置预览'"
           @click="wide = !wide"
-        >
-          {{ wide ? '缩小' : '放大' }}
-        </DtButton>
+        />
         <DtButton
           size="sm"
           variant="ghost"
+          icon="close"
           aria-label="关闭配置预览"
+          title="关闭配置预览"
           @click="open = false"
-        >
-          关闭
-        </DtButton>
+        />
       </header>
       <DtSegmented
         v-model="mode"
@@ -293,10 +293,7 @@ watch(
           @roam-progress="onProgress"
         />
       </div>
-      <div
-        v-if="mode === 'configure' && card"
-        class="shrink-0 border-t border-border-subtle"
-      >
+      <div v-if="mode === 'configure' && card" class="config-preview__card">
         <header v-if="part" class="p-2 text-xs">
           <strong>{{ part.detail.title || part.name }}</strong>
           <p v-if="part.detail.subtitle">{{ part.detail.subtitle }}</p>
@@ -346,7 +343,7 @@ watch(
   right: 12px;
   bottom: 12px;
   width: min(400px, calc(100% - 24px));
-  max-height: calc(100% - 24px);
+  max-height: min(640px, 80dvh, calc(100% - 24px));
   z-index: var(--z-sticky);
   &--wide {
     width: min(760px, calc(100% - 24px));
@@ -365,11 +362,35 @@ watch(
     border-radius: var(--radius-md);
     background: var(--surface-base);
     box-shadow: var(--fx-shadow-menu);
+
+    > :not(.config-preview__card) {
+      flex-shrink: 0;
+    }
+
+    > header {
+      position: sticky;
+      top: 0;
+      z-index: 1;
+      background: var(--surface-base);
+    }
+  }
+  &__card {
+    display: flex;
+    flex: 1 1 auto;
+    flex-direction: column;
+    min-height: 128px;
+    overflow: hidden;
+    border-top: 1px solid var(--border-subtle);
+
+    > header {
+      flex: none;
+      overflow-wrap: anywhere;
+    }
   }
   &__scene {
     flex: none;
     width: 100%;
-    max-height: 60vh;
+    max-height: min(320px, 35dvh);
   }
 }
 </style>

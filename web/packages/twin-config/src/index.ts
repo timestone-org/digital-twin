@@ -47,6 +47,7 @@ export {
 } from './bindingRows'
 export type { TwinBindingRow } from './bindingRows'
 export { defaultCameraOf, isUsablePose, partFocusView } from './cameraSelect'
+export { DEFAULT_PANEL_STYLE } from './panelStyle'
 export {
   sameVec3,
   toFrameCoords,

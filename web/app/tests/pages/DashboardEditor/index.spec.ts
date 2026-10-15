@@ -39,6 +39,7 @@ vi.mock('vue-router', () => ({
   useRoute: () => route,
   // 草稿流会注册离开守卫；这里只验证「注册不炸」，守卫行为在 useEditorDraftFlow.spec 里守
   onBeforeRouteLeave: vi.fn(),
+  onBeforeRouteUpdate: vi.fn(),
   RouterLink: { props: ['to'], template: '<a :href="to"><slot /></a>' },
 }))
 

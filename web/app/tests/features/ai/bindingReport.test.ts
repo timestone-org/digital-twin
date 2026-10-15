@@ -14,6 +14,7 @@ import {
   slotsFromRows,
   type BindingRowInput,
 } from '@/features/ai/bindingReport'
+import { bindingReportQuery } from '@/features/ai/bindingReportQuery'
 
 const MANIFEST: ModuleManifest = {
   type: 'metric-demo',
@@ -155,7 +156,7 @@ describe('靠模块清单摊', () => {
       manifest: MANIFEST,
       config: {},
       bindings: [],
-      maxRows: 2,
+      query: bindingReportQuery({ slot_key: 'itemValues', limit: 2 }),
     })
     expect(found.slots[0]?.rows).toHaveLength(2)
     expect(found.is_truncated).toBe(true)
@@ -171,6 +172,30 @@ describe('靠模块清单摊', () => {
       bindings: [],
     })
     expect(found).toMatchObject({ slots: [], scalars: [], is_truncated: false })
+  })
+
+  it('标量和数组共用分页窗口，续页不会重复标量或重编号', () => {
+    const input = {
+      nodeId: 'n1',
+      moduleType: MANIFEST.type,
+      nodeLabel: '主变监视',
+      manifest: MANIFEST,
+      config: {},
+      bindings: [binding('title', null)],
+    }
+    const first = manifestBindingReport({
+      ...input,
+      query: bindingReportQuery({ limit: 1 }),
+    })
+    expect(first).toMatchObject({ total: 4, returned: 1, next_offset: 1 })
+    expect(first.scalars[0]).toMatchObject({ key: 'title', static_value: 7 })
+    expect(first.slots[0]?.rows).toEqual([])
+    const next = manifestBindingReport({
+      ...input,
+      query: bindingReportQuery({ limit: 1, offset: first.next_offset }),
+    })
+    expect(next.scalars).toEqual([])
+    expect(next.slots[0]?.rows[0]?.field_key).toBe('itemValues[0].value')
   })
 
   it('行表里标量槽也占一条，fieldKey 就是槽键', () => {

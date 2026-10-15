@@ -6,7 +6,8 @@
  * ⚠ 监听挂在 window 上，卸载必须摘——画布是个整屏页面，留着的监听会在别的页面
  * 上继续吃按键。
  */
-import { onBeforeUnmount, onMounted } from 'vue'
+import { onBeforeUnmount, onMounted, ref } from 'vue'
+import { useWorkspacePage } from '@/features/workspace/context'
 
 /** 方向键一下挪多少；按住 Shift 挪一大格。 */
 const NUDGE_STEP = 8
@@ -96,7 +97,10 @@ function actionOf(event: KeyboardEvent): SimpleAction | null {
 }
 
 export function useCanvasShortcuts(actions: ShortcutActions): void {
+  const page = useWorkspacePage()
+  const active = page?.active ?? ref(true)
   function onKey(event: KeyboardEvent): void {
+    if (!active.value) return
     if (isTyping(event.target)) return
     const nudge = event.metaKey || event.ctrlKey ? null : nudgeOf(event)
     if (nudge !== null) {

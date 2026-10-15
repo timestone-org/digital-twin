@@ -3,7 +3,10 @@
  * 关页与站内跳转前先落草稿再确认、进屏时提议恢复（布局部分是一步可撤销的改动）。
  */
 import { onBeforeUnmount, onMounted, watch, type Ref } from 'vue'
-import { onBeforeRouteLeave } from 'vue-router'
+import {
+  useWorkspaceDirty,
+  useWorkspaceGuard,
+} from '@/features/workspace/useWorkspaceGuard'
 import type { DashboardPayload } from '@dt/contracts'
 
 import type { DashboardEditor } from '@/composables/useDashboardEditor'
@@ -101,7 +104,8 @@ function beforeUnloadOf(ctx: DraftFlowCtx): (event: BeforeUnloadEvent) => void {
 
 /** 站内跳转守卫：脏着先落草稿再问；确认离开后草稿仍在，回来可选择恢复。 */
 function installLeaveGuard(ctx: DraftFlowCtx): void {
-  onBeforeRouteLeave(async () => {
+  useWorkspaceDirty(ctx.isAnyDirty)
+  useWorkspaceGuard(async () => {
     if (!ctx.isAnyDirty()) return true
     ctx.flushDraft()
     return ctx.deps.confirm.ask({

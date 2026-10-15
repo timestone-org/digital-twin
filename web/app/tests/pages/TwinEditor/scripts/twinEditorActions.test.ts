@@ -47,25 +47,40 @@ describe('新增', () => {
   })
 })
 
-describe('按拾取点落牌', () => {
-  it('新牌的中心落在给定坐标上，选中挪过去', () => {
+describe.each(['anchors', 'panels'] as const)('按拾取点新建 %s', (kind) => {
+  it('新实体落在给定坐标上，选中挪过去', () => {
     const { actions, select, doc } = setup({})
 
-    actions.addPanelAt([3, 2, 1])
+    actions.addAt(kind, [3, 2, 1])
 
-    const created = doc.config.value.panels[0]
+    const created = doc.config.value[kind][0]
     expect(created?.position).toEqual([3, 2, 1])
-    expect(select).toHaveBeenCalledWith({ kind: 'panels', id: created?.id })
+    expect(select).toHaveBeenCalledWith({ kind, id: created?.id })
   })
 
-  // 建牌 + 落点必须是一笔：分两笔的话撤销一步只退回落点，留下一张原点上的牌
-  it('撤销一步就回到「没这张牌」', () => {
+  it('撤销一步完全移除新实体，重做恢复拾取位置', () => {
     const { actions, doc } = setup({})
 
-    actions.addPanelAt([3, 2, 1])
+    actions.addAt(kind, [3, 2, 1])
     doc.undo()
 
-    expect(doc.config.value.panels).toHaveLength(0)
+    expect(doc.config.value[kind]).toHaveLength(0)
+    expect(doc.canUndo.value).toBe(false)
+    doc.redo()
+    expect(doc.config.value[kind][0]?.position).toEqual([3, 2, 1])
+  })
+
+  it('不存在或异类文件夹不产生实体或撤销记录', () => {
+    const { actions, select, doc } = setup({
+      folders: [{ id: 'other', kind: 'parts', name: '部件组', itemIds: [] }],
+    })
+
+    actions.addAt(kind, [1, 2, 3], 'other')
+    actions.addAt(kind, [1, 2, 3], 'missing')
+
+    expect(doc.config.value[kind]).toEqual([])
+    expect(doc.canUndo.value).toBe(false)
+    expect(select).not.toHaveBeenCalled()
   })
 })
 

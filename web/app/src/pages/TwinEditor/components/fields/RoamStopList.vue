@@ -104,7 +104,7 @@ function move(order: number, delta: number): void {
     </ol>
 
     <p v-else class="text-xs text-text-disabled">
-      轨迹还是空的。从下面挑几个视点加进来，镜头就会按这个顺序一站站飞过去。
+      尚未配置轨迹，请添加视点。漫游将按列表顺序依次切换视角。
     </p>
 
     <div v-if="rest.length > 0" class="flex flex-wrap gap-1">
@@ -121,7 +121,7 @@ function move(order: number, delta: number): void {
     </div>
 
     <p v-if="dangling > 0" class="text-xs text-state-warning">
-      轨迹里有 {{ dangling }} 个视点已经被删掉了，飞的时候会跳过它们。
+      轨迹中有 {{ dangling }} 个视点已删除，漫游时将自动跳过。
     </p>
   </div>
 </template>

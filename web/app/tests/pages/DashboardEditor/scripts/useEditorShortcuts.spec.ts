@@ -5,6 +5,7 @@
 import { describe, expect, it } from 'vitest'
 import { mount } from '@vue/test-utils'
 import { defineComponent, h, ref } from 'vue'
+import { WORKSPACE_PAGE_KEY } from '@/features/workspace/context'
 
 import { nudgeStepOf } from '@/pages/DashboardEditor/scripts/shortcutKeys'
 import {
@@ -127,6 +128,31 @@ function handlerSpy(calls: string[]): EditorShortcutHandlers {
     orderBack: () => calls.push('orderBack'),
   }
 }
+
+it('后台页签不响应快捷键，重新激活后恢复', () => {
+  const calls: string[] = []
+  const active = ref(true)
+  const host = defineComponent({
+    setup() {
+      useEditorShortcuts({ handlers: handlerSpy(calls) })
+      return () => h('div')
+    },
+  })
+  const wrapper = mount(host, {
+    global: {
+      provide: {
+        [WORKSPACE_PAGE_KEY]: { key: '/editor', active, cached: true },
+      },
+    },
+  })
+  active.value = false
+  window.dispatchEvent(keyEvent('s', { metaKey: true }))
+  expect(calls).toEqual([])
+  active.value = true
+  window.dispatchEvent(keyEvent('s', { metaKey: true }))
+  expect(calls).toEqual(['save'])
+  wrapper.unmount()
+})
 
 describe('监听的生死与挂起', () => {
   function mountShortcuts(suspended?: () => boolean) {

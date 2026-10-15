@@ -106,7 +106,9 @@ def entry_of(
         return ()
     first = served[0]
     seen = without_target(
-        frame_columns_of(record_of(records, first), "inputs", "frame"),
+        frame_columns_of(
+            record_of(records, first), "inputs", _input_port_of(graph, first)
+        ),
         target_key,
     )
     if seen is None:
@@ -124,7 +126,7 @@ def entry_meta(
     均值还必然落在训练区间内，拿它做发布期那一次实跑不会触发外推告警。
     Args: graph, records, first。
     """
-    upstream = upstream_of(graph, first, "frame")
+    upstream = upstream_of(graph, first, _input_port_of(graph, first))
     if upstream is None:
         return {}
     node_id, port = upstream
@@ -146,7 +148,7 @@ def smoke_moment(
     """
     if not served:
         return None
-    upstream = upstream_of(graph, served[0], "frame")
+    upstream = upstream_of(graph, served[0], _input_port_of(graph, served[0]))
     if upstream is None:
         return None
     node_id, port = upstream
@@ -170,6 +172,11 @@ def upstream_of(
         if edge.to_node == node_id and edge.to_port == port:
             return edge.from_node, edge.from_port
     return None
+
+
+def _input_port_of(graph: PipelineGraph, node_id: str) -> str:
+    # ⚠ 模型直接作为推理链入口时，训练帧接在 train 端口。
+    return "frame" if upstream_of(graph, node_id, "frame") else "train"
 
 
 def _entry_column(key: str, meta: dict[str, dict[str, Any]]) -> EntryColumn:

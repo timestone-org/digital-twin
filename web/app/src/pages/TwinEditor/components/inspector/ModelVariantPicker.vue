@@ -68,8 +68,8 @@ const staleWarning = computed(() => {
   const row = byName.value.get(props.modelValue)
   if (row === undefined || row.status === 'ready') return ''
   return row.status === 'pending'
-    ? '这一档还在压。压好之前大屏会走原件。'
-    : `这一档压失败了，大屏会走原件。原因：${row.error}`
+    ? '所选精度版本正在压缩，完成前使用原始模型。'
+    : `所选精度版本压缩失败，将使用原始模型。原因：${row.error}`
 })
 
 function onPick(next: string): void {
@@ -89,7 +89,7 @@ watch(
     isLoading.value = true
     await raced.run(() => getAsset(id), {
       ok: (found) => (asset.value = found),
-      fail: () => (error.value = '取不到这个模型的压缩档'),
+      fail: () => (error.value = '无法获取模型精度版本'),
       settled: () => (isLoading.value = false),
     })
   },
@@ -102,9 +102,9 @@ watch(
     <DtSelect
       :model-value="modelValue"
       :options="options"
-      label="使用档位"
+      label="模型精度"
       size="sm"
-      hint="按这块屏要多清楚来选。原件最清楚也最慢"
+      hint="根据显示精度和加载性能选择；原始模型保留完整细节，加载耗时较长"
       @update:model-value="onPick"
     />
     <DtSpinner v-if="isLoading" />

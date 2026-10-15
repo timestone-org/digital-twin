@@ -24,6 +24,7 @@ const guard = vi.hoisted(() => ({
 }))
 
 vi.mock('vue-router', () => ({
+  onBeforeRouteUpdate: vi.fn(),
   onBeforeRouteLeave: (fn: () => Promise<boolean> | boolean) => {
     guard.current = fn
   },

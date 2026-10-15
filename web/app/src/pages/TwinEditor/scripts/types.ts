@@ -29,6 +29,9 @@ export interface TwinEntityLists {
 /** 实体集合名。 */
 export type TwinEntityKind = keyof TwinEntityLists
 
+/** 新建时先由视口拾取位置的实体。 */
+export type TwinPlaceableKind = 'anchors' | 'panels'
+
 /** 六类实体的显示名，用于按钮文案与删除确认。 */
 export const TWIN_ENTITY_LABELS: Readonly<Record<TwinEntityKind, string>> = {
   parts: '部件',

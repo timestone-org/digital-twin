@@ -133,7 +133,7 @@ describe('档位选择器', () => {
     expect(optionFor(wrapper, 'medium').label).toContain('压缩中')
   })
 
-  it('已选的档后来失败了要当面说清会走原件', async () => {
+  it('已选的档后来失败了要当面说清会使用原始模型', async () => {
     const wrapper = await render(
       [
         variant({
@@ -147,7 +147,7 @@ describe('档位选择器', () => {
     )
 
     // 存量配置可能指着一个后来失败了的档，不说的话现场只会「莫名其妙变慢」
-    expect(wrapper.text()).toContain('走原件')
+    expect(wrapper.text()).toContain('使用原始模型')
     expect(wrapper.text()).toContain('压缩超时')
   })
 

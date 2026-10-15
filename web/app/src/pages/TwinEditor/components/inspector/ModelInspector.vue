@@ -48,7 +48,7 @@ const emit = defineEmits<{ 'update:modelValue': [TwinModelRef] }>()
 /** 与归一化的钳制一致；越界值会被存回时静默改写，界面上先拦住。 */
 const SCALE_RANGE = { min: 0.001, max: 1000, step: 0.1 } as const
 const ROTATION_STEP = 5
-/** 动画速度：0 = 定格，负数倒放。 */
+/** 动画速度：0 表示暂停，负值表示反向播放。 */
 const SPEED_RANGE = { min: -4, max: 4, step: 0.05 } as const
 
 const pickerOpen = ref(false)
@@ -140,11 +140,11 @@ function toggleBackground(opaque: boolean): void {
         @update:model-value="write({ variant: $event })"
       />
       <p class="text-xs text-text-disabled">
-        存的是素材引用而不是下载地址；换一次部署地址也不会失效。
+        模型通过素材标识关联，调整部署地址后无需重新选择。
       </p>
     </InspectorSection>
 
-    <InspectorSection title="摆放">
+    <InspectorSection title="模型变换">
       <DtNumberInput
         :model-value="modelValue.scale"
         :range="SCALE_RANGE"
@@ -178,8 +178,8 @@ function toggleBackground(opaque: boolean): void {
 
     <InspectorSection title="坐标基准">
       <DtField
-        label="摆放坐标以谁为 0"
-        hint="只换读数，不挪动任何已摆好的东西"
+        label="坐标原点"
+        hint="仅切换坐标显示基准，不改变场景对象的位置"
         size="sm"
       >
         <DtSegmented
@@ -192,10 +192,8 @@ function toggleBackground(opaque: boolean): void {
         />
       </DtField>
       <p class="text-xs text-text-disabled">
-        锚点 / 信息牌 / 箭头 /
-        视点填的坐标都按它显示；视口里的网格与坐标轴、场景特效的底座与光柱也都以
-        这个原点为中心。「模型中心」只把前后左右挪到全部模块的正中心，高度轴仍与
-        模型坐标系一致。
+        锚点、信息牌、箭头和视点的坐标，以及参考网格和场景特效，均使用所选原点。
+        「模型中心」将水平原点设为所有模型的包围盒中心，高度基准保持与模型坐标系一致。
       </p>
       <p class="text-xs text-text-disabled">
         当前原点（世界坐标）：{{ originText }}
@@ -217,7 +215,7 @@ function toggleBackground(opaque: boolean): void {
         @update:model-value="write({ background: $event })"
       />
       <p v-else class="text-xs text-text-disabled">
-        背景透明，露出它下面那一层大屏。
+        透明背景下可显示底层大屏内容。
       </p>
       <DtSwitch
         :model-value="modelValue.showGroundGrid"
@@ -226,11 +224,11 @@ function toggleBackground(opaque: boolean): void {
         @update:model-value="write({ showGroundGrid: $event })"
       />
       <p class="text-xs text-text-disabled">
-        大屏与编辑视口共用这一个开关；关掉之后编辑时也没有网格与坐标轴可参照。
+        同时控制大屏和编辑视口中的参考网格与坐标轴。
       </p>
     </InspectorSection>
 
-    <InspectorSection title="动画缺省行为">
+    <InspectorSection title="动画默认行为">
       <p class="text-xs text-text-disabled">
         单个动画的点位控制和试播请在左侧「模型动画」中配置；这里仅影响未单独配置的动画。
       </p>
@@ -241,22 +239,22 @@ function toggleBackground(opaque: boolean): void {
         @update:model-value="writeAnimationsEnabled"
       />
       <template v-if="modelValue.animations.enabled">
-        <span class="text-xs text-text-secondary">要播的 clip</span>
+        <span class="text-xs text-text-secondary">播放动画片段</span>
         <NodePicker
           :model-value="modelValue.animations.clips"
           :candidates="[]"
-          placeholder="clip 名"
-          empty-hint="clip 名来自模型文件，按 GLB 里的名字手填。"
+          placeholder="动画片段名称"
+          empty-hint="填写 GLB 模型中定义的动画片段名称。"
           @update:model-value="writeClips"
         />
         <p class="text-xs text-text-disabled">
-          一条都不填 = 全播；填了就只播列出的这几条。
+          留空时播放全部片段；填写后仅播放指定片段。
         </p>
         <DtNumberInput
           :model-value="modelValue.animations.speed"
           :range="SPEED_RANGE"
           label="速度倍率"
-          hint="0 = 定格，负数倒放"
+          hint="0 表示暂停，负值表示反向播放"
           size="sm"
           @update:model-value="writeSpeed"
         />

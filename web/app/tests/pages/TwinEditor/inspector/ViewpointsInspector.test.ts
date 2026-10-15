@@ -72,13 +72,13 @@ describe('空清单这一档', () => {
     expect(
       switchByLabel(wrapper, '全部显示（按视点列表的顺序）').text(),
     ).toContain('全部显示')
-    expect(wrapper.text()).toContain('没有「一个都不显示」这一档')
+    expect(wrapper.text()).toContain('未指定视点时，按列表顺序显示全部视点')
   })
 
   it('要整个藏起来得关掉切换控件，界面上指明这条路', () => {
     const wrapper = mountSwitcher()
 
-    expect(wrapper.text()).toContain('要整个藏起来请关掉上面的切换控件')
+    expect(wrapper.text()).toContain('如需隐藏切换控件，请关闭上方的显示开关')
   })
 
   it('关掉「全部显示」时把现有视点铺进清单，不留一个空清单', async () => {
@@ -91,10 +91,10 @@ describe('空清单这一档', () => {
     expect(lastSwitcher(wrapper).items).toEqual(['c1', 'c2', 'c3'])
   })
 
-  it('勾掉最后一个会让清单变空，界面上先把这件事说在前面', () => {
+  it('取消全部选择后，将恢复显示所有视点，界面上先把这件事说在前面', () => {
     const wrapper = mountSwitcher(makeSwitcher({ items: ['c1'] }))
 
-    expect(wrapper.text()).toContain('勾掉最后一个会让清单变空')
+    expect(wrapper.text()).toContain('取消全部选择后，将恢复显示所有视点')
   })
 
   it('勾掉最后一个确实退回空清单', async () => {
@@ -174,7 +174,7 @@ describe('挑视点', () => {
   it('指向已删视点的清单项要报出来，而不是静默少一项', () => {
     const wrapper = mountSwitcher(makeSwitcher({ items: ['c1', '没了'] }))
 
-    expect(wrapper.text()).toContain('1 个视点已经被删掉了')
+    expect(wrapper.text()).toContain('1 个视点已删除')
   })
 
   it('一个视点都没有时给去加一个的说法', () => {
@@ -182,7 +182,7 @@ describe('挑视点', () => {
 
     // 面板寸土寸金：空态走行内单行档，不带图标
     const empty = wrapper.get('.dt-empty--inline')
-    expect(empty.text()).toContain('还没有视点')
+    expect(empty.text()).toContain('尚未配置视点')
     expect(empty.find('svg').exists()).toBe(false)
   })
 })
@@ -191,14 +191,14 @@ describe('控件本身', () => {
   it('关掉整个控件时形态与键盘开关一起收起来', () => {
     const wrapper = mountSwitcher(makeSwitcher({ enabled: false }))
 
-    expect(wrapper.text()).not.toContain('按钮排')
-    expect(wrapper.text()).not.toContain('数字键与方向键也能切')
+    expect(wrapper.text()).not.toContain('按钮组')
+    expect(wrapper.text()).not.toContain('启用键盘切换')
   })
 
   it('形态的选项从常量联合生成', () => {
     const wrapper = mountSwitcher()
 
-    expect(wrapper.text()).toContain('按钮排')
+    expect(wrapper.text()).toContain('按钮组')
     expect(wrapper.text()).toContain('下拉')
   })
 
@@ -206,7 +206,7 @@ describe('控件本身', () => {
     const switcher = makeSwitcher({ items: ['c1'] })
     const wrapper = mountSwitcher(switcher)
 
-    await switchByLabel(wrapper, '数字键与方向键也能切').trigger('click')
+    await switchByLabel(wrapper, '启用键盘切换').trigger('click')
 
     const next = lastSwitcher(wrapper)
     expect(next.keyboard).toBe(true)

@@ -214,7 +214,7 @@ async def test_the_kind_catalog_carries_the_limits(
     model = next(item for item in catalog if item["kind"] == "model")
 
     # 上限随目录下发，界面不自己写一份——两份会漂，而漂了只表现为上传失败
-    assert model["max_bytes"] > 0
+    assert model["max_bytes"] == 2_147_483_648
     assert GLB in model["content_types"]
 
 

@@ -8,6 +8,7 @@
  */
 import { normalizePanelField, MAX_PANEL_COLUMNS } from './normalizeElements'
 import { normalizeFocusView } from './normalizeScene'
+import { DEFAULT_PANEL_STYLE } from './panelStyle'
 import {
   boolOr,
   clampedOr,
@@ -157,9 +158,9 @@ export const DEFAULT_PART_DETAIL: TwinPartDetail = Object.freeze({
   view: null,
   modelHeight: 420,
   width: 1120,
-  variant: 'card',
+  variant: DEFAULT_PANEL_STYLE.variant,
   accent: '',
-  columns: 1,
+  columns: DEFAULT_PANEL_STYLE.columns,
 })
 
 /**

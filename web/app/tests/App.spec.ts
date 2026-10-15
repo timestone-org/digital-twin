@@ -12,6 +12,7 @@ import {
 const global = {
   stubs: {
     RouterView: { template: '<div data-test="route-page">页面</div>' },
+    WorkspaceView: { template: '<div data-test="route-page">页面</div>' },
     DtToastHost: true,
     DtConfirmHost: true,
     DtTipHost: true,

@@ -7,7 +7,11 @@
  */
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 
-import type { ModelingGraph, ModelingVersionSummary } from '@dt/contracts'
+import type {
+  ModelingBinding,
+  ModelingGraph,
+  ModelingVersionSummary,
+} from '@dt/contracts'
 
 import * as client from '@/api/client'
 import * as modeling from '@/api/modeling'
@@ -22,7 +26,13 @@ beforeEach(() => {
   // ⚠ 两个入口都要桩：取数走 requestData，204 的删除走 request
   requestMock = vi
     .fn()
-    .mockResolvedValue({ items: [], page: 1, size: 200, total: 0 })
+    .mockImplementation((path: string) =>
+      Promise.resolve(
+        path === '/modeling-bindings'
+          ? []
+          : { items: [], page: 1, size: 200, total: 0 },
+      ),
+    )
   vi.spyOn(client, 'request').mockImplementation(requestMock)
   vi.spyOn(client, 'requestData').mockImplementation(requestMock)
 })
@@ -125,6 +135,41 @@ describe('每一条都打 platform 前缀', () => {
 })
 
 describe('URL 与方法', () => {
+  it('绑定接口的空数组转换为有效的分页结果', async () => {
+    requestMock.mockResolvedValueOnce([])
+
+    expect(await modeling.listModelingBindings({ page: 1, size: 200 })).toEqual(
+      {
+        items: [],
+        page: 1,
+        size: 200,
+        total: 0,
+      },
+    )
+  })
+
+  it('绑定接口的完整数组按所选页码和条数切分', async () => {
+    const rows: ModelingBinding[] = ['b1', 'b2', 'b3'].map((id) => ({
+      id,
+      fx_code: id,
+      model_version_id: 'v1',
+      param_map: [],
+      is_enabled: true,
+      is_orphaned: false,
+      created_by_name: null,
+      created_at: STAMP,
+      updated_at: STAMP,
+    }))
+    requestMock.mockResolvedValueOnce(rows)
+
+    expect(await modeling.listModelingBindings({ page: 2, size: 2 })).toEqual({
+      items: [rows[2]],
+      page: 2,
+      size: 2,
+      total: 3,
+    })
+  })
+
   it('算子目录是一条读', async () => {
     await modeling.listModelingOperators()
 

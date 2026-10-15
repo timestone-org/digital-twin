@@ -16,9 +16,13 @@ import type {
 import { resolveModuleConfig } from '@dt/runtime'
 
 import { arrayRowCount, slotRows } from '@/features/dashboard/bindingSlots'
+import {
+  bindingReportQuery,
+  type BindingReportQuery,
+} from './bindingReportQuery'
 
-/** 一份规格书最多摊几行。一份大场景能有几百行，整份塞进去会占满上下文。 */
-const MAX_ROWS = 150
+// 为服务端回执排版预留字符空间。
+const MAX_REPORT_CHARS = 12_000
 
 /**
  * 一个可绑位置落在哪个实体上。
@@ -92,6 +96,12 @@ export interface BindingReport {
   node_label: string
   slots: BindingReportSlot[]
   scalars: BindingReportScalar[]
+  total: number
+  offset: number
+  limit: number
+  returned: number
+  has_more: boolean
+  next_offset: number | null
   is_truncated: boolean
 }
 
@@ -100,8 +110,7 @@ export interface BindingReportSubject {
   nodeId: string
   moduleType: string
   nodeLabel: string
-  /** 最多摊几行；不给用 150。 */
-  maxRows?: number
+  query?: BindingReportQuery
 }
 
 /** 靠模块清单摊的那一支：大屏编辑器的每个画布节点都走它。 */
@@ -273,15 +282,41 @@ interface ReportParts extends BindingReportSubject {
 
 /** 槽表 + 行表 + 已有绑定 → 规格书。 */
 function reportOf(parts: ReportParts): BindingReport {
-  const bound = boundBy(parts.bindings)
-  const arrays = new Set(
-    parts.slots.filter((slot) => slot.isArray).map((slot) => slot.key),
+  const query = parts.query ?? bindingReportQuery({})
+  const wanted = parts.rows.filter((row) => matchesRow(row, query))
+  const kept = wanted.slice(query.offset, query.offset + query.limit)
+  let report = makeReport(parts, query, wanted, kept)
+  while (JSON.stringify(report, null, 1).length > MAX_REPORT_CHARS) {
+    if (kept.length <= 1) {
+      throw new Error(
+        '单个绑定字段或槽位声明超过读取预算，请在绑定面板核对该项',
+      )
+    }
+    kept.pop()
+    report = makeReport(parts, query, wanted, kept)
+  }
+  return report
+}
+
+function matchesRow(row: BindingRowInput, query: BindingReportQuery): boolean {
+  if (query.slotKey && row.slotKey !== query.slotKey) return false
+  if (
+    query.entityId &&
+    row.entityId !== query.entityId &&
+    !row.entityId.startsWith(`${query.entityId}::`)
   )
-  const limit = parts.maxRows ?? MAX_ROWS
-  const wanted = parts.rows.filter((row) => arrays.has(row.slotKey))
-  const kept = wanted.slice(0, limit)
+    return false
+  return `${row.label} ${row.entityId} ${row.fieldKey}`
+    .toLocaleLowerCase()
+    .includes(query.keyword)
+}
+
+function rowsBySlot(
+  rows: readonly BindingRowInput[],
+  bound: ReadonlyMap<string, BindingView>,
+): Map<string, BindingReportRow[]> {
   const bySlot = new Map<string, BindingReportRow[]>()
-  for (const row of kept) {
+  for (const row of rows) {
     const list = bySlot.get(row.slotKey) ?? []
     list.push({
       index: row.index,
@@ -292,30 +327,62 @@ function reportOf(parts: ReportParts): BindingReport {
     })
     bySlot.set(row.slotKey, list)
   }
+  return bySlot
+}
+
+function reportSlots(
+  slots: readonly BindingSlotInput[],
+  bySlot: ReadonlyMap<string, BindingReportRow[]>,
+): BindingReportSlot[] {
+  return slots
+    .filter((slot) => slot.isArray)
+    .map((slot) => ({
+      key: slot.key,
+      label: slot.label,
+      data_type: slot.dataType,
+      is_array: true,
+      is_entity_pinned: slot.isEntityPinned,
+      is_required: slot.isRequired,
+      row_count: slot.rowCount,
+      rows: bySlot.get(slot.key) ?? [],
+    }))
+}
+
+function makeReport(
+  parts: ReportParts,
+  query: BindingReportQuery,
+  wanted: readonly BindingRowInput[],
+  kept: readonly BindingRowInput[],
+): BindingReport {
+  const bound = boundBy(parts.bindings)
+  const bySlot = rowsBySlot(kept, bound)
+  const matchedSlots = new Set(wanted.map((row) => row.slotKey))
+  const slots = parts.slots.filter(
+    (slot) =>
+      (!query.slotKey || slot.key === query.slotKey) &&
+      (!(query.entityId || query.keyword) || matchedSlots.has(slot.key)),
+  )
+  const nextOffset = query.offset + kept.length
+  const hasMore = nextOffset < wanted.length
   return {
     node_id: parts.nodeId,
     module_type: parts.moduleType,
     node_label: parts.nodeLabel,
-    slots: parts.slots
-      .filter((slot) => slot.isArray)
-      .map((slot) => ({
-        key: slot.key,
-        label: slot.label,
-        data_type: slot.dataType,
-        is_array: true,
-        is_entity_pinned: slot.isEntityPinned,
-        is_required: slot.isRequired,
-        row_count: slot.rowCount,
-        rows: bySlot.get(slot.key) ?? [],
-      })),
-    scalars: parts.slots
-      .filter((slot) => !slot.isArray)
+    total: wanted.length,
+    offset: query.offset,
+    limit: query.limit,
+    returned: kept.length,
+    has_more: hasMore,
+    next_offset: hasMore ? nextOffset : null,
+    slots: reportSlots(slots, bySlot),
+    scalars: slots
+      .filter((slot) => !slot.isArray && bySlot.has(slot.key))
       .map((slot) => ({
         key: slot.key,
         label: slot.label,
         ...sourceOf(bound, slot.key),
       })),
-    is_truncated: wanted.length > kept.length,
+    is_truncated: hasMore,
   }
 }
 

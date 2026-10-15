@@ -175,6 +175,8 @@
 
   // 标题上那行小字：工业大屏上惯用的等宽大写标识
   &__eyebrow {
+    white-space: normal;
+    overflow-wrap: anywhere;
     color: color-mix(in srgb, var(--tp-accent) 72%, var(--text-secondary));
     font-size: 0.76em;
     font-family: var(--font-mono, ui-monospace, monospace);
@@ -189,8 +191,11 @@
     color: var(--text-title);
     font-weight: 700;
     letter-spacing: 0.04em;
+    white-space: normal;
+    overflow-wrap: anywhere;
 
     &::before {
+      flex: none;
       width: 3px;
       height: 1em;
       background: var(--tp-accent);
@@ -242,9 +247,15 @@
 
   &__line {
     display: flex;
-    gap: 12px;
+    flex-wrap: wrap;
+    min-width: 0;
+    gap: 4px 12px;
     align-items: baseline;
     justify-content: space-between;
+  }
+
+  &__line > &__label {
+    flex-basis: 5em;
   }
 
   // ⚠ 标签吃掉中间的空档，读数才贴着右边：靠 `space-between` 分的话，
@@ -258,6 +269,12 @@
   }
 
   &__value {
+    min-width: 0;
+    max-width: 100%;
+    margin-left: auto;
+    white-space: normal;
+    overflow-wrap: anywhere;
+    text-align: right;
     color: var(--text-primary);
     font-weight: 700;
     font-variant-numeric: tabular-nums;
@@ -366,16 +383,26 @@
   // 大字主指标
   &__hero {
     display: flex;
+    flex-wrap: wrap;
+    min-width: 0;
     align-items: baseline;
     gap: 5px;
   }
 
   &__num {
+    min-width: 0;
+    max-width: 100%;
+    white-space: normal;
+    overflow-wrap: anywhere;
     color: var(--text-primary);
     font-variant-numeric: tabular-nums;
   }
 
   &__unit {
+    min-width: 0;
+    max-width: 100%;
+    white-space: normal;
+    overflow-wrap: anywhere;
     color: var(--tp-tone);
     font-size: 0.8em;
     font-weight: 700;
@@ -496,6 +523,7 @@
   // 环形仪表：圆环按占比填，数值压在圆心
   &__row[data-kind='gauge'] {
     flex-direction: row;
+    flex-wrap: wrap;
     align-items: center;
     gap: 10px;
   }
@@ -509,8 +537,8 @@
     display: grid;
     place-items: center;
     flex: none;
-    width: 56px;
-    height: 56px;
+    width: min(56px, 100%);
+    aspect-ratio: 1;
 
     &::before {
       position: absolute;
@@ -540,15 +568,21 @@
   }
 
   &__row[data-kind='gauge'] &__num {
+    max-width: calc(100% - 12px);
+    overflow: hidden;
+    white-space: nowrap;
+    text-overflow: ellipsis;
     font-size: 0.98em;
     font-weight: 700;
   }
 
   &__ring-meta {
     display: flex;
+    flex: 1 1 5em;
     flex-direction: column;
     gap: 2px;
     min-width: 0;
+    max-width: 100%;
   }
 
   // 状态灯

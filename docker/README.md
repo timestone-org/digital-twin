@@ -272,6 +272,16 @@ docker compose run --rm --no-deps database-migrate --service auth-server
 到 `/ai` 下并保留查询参数；API `/api/` 与素材 `/oss/` 不变。更新时需重新
 构建前端并重载对应 Nginx 配置。
 
+### 模型素材上传大小
+
+单个三维模型最多 2 GB（2,147,483,648 字节）。大小上限由 platform 素材类型目录
+下发，前端提示、新上传与重新上传的签名策略、确认时的对象大小校验共用该上限。
+图片仍最多 16 MB，图标仍最多 512 KB。
+
+Linux 与 Windows 网关的 `/oss/` 请求体上限为 `2049m`，在 2 GB 文件之外
+预留 1 MB 的 multipart 表单开销；对象存储的签名策略仍严格限制文件大小为 2 GB。
+升级时更新 platform API 并重载对应 Nginx 配置，刷新素材页即可取得新的上限。
+
 ### 模型素材重新上传
 
 先执行 platform 数据库迁移，再排空并升级旧 `platform-worker`，随后更新

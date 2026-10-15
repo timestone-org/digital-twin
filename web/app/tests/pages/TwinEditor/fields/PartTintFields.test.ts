@@ -82,12 +82,14 @@ describe('开关', () => {
 
 describe('没绑点位时的提醒', () => {
   // ⚠ 不提醒的话，用户配好一堆档位看到的是「颜色一动不动」，与点位没通一模一样
-  it('还没挑点位时当场说出来', () => {
-    expect(mountFields(TWO_STOPS, false).text()).toContain('还没挑点位')
+  it('尚未绑定状态点位时当场说出来', () => {
+    expect(mountFields(TWO_STOPS, false).text()).toContain('尚未绑定状态点位')
   })
 
   it('挑过了就不再提醒', () => {
-    expect(mountFields(TWO_STOPS, true).text()).not.toContain('还没挑点位')
+    expect(mountFields(TWO_STOPS, true).text()).not.toContain(
+      '尚未绑定状态点位',
+    )
   })
 })
 
@@ -96,13 +98,13 @@ describe('档位表', () => {
     const wrapper = mountFields(rule({ stops: [] }))
 
     expect(wrapper.text()).toContain('回落色')
-    expect(wrapper.text()).toContain('一档都没配')
+    expect(wrapper.text()).toContain('尚未配置档位')
   })
 
-  it('添加一档追加到末尾，且 id 不与现有的重名', async () => {
+  it('添加档位追加到末尾，且 id 不与现有的重名', async () => {
     const wrapper = mountFields(TWO_STOPS)
 
-    await buttonByText(wrapper, '添加一档').trigger('click')
+    await buttonByText(wrapper, '添加档位').trigger('click')
 
     const stops = lastWrite(wrapper)?.stops ?? []
     expect(stops).toHaveLength(3)

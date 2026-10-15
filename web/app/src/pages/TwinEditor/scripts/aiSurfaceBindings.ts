@@ -33,6 +33,7 @@ import {
   type ValueReport,
 } from '@/features/ai/valueReport'
 import { createBinding } from '@/features/dashboard/editorDoc'
+import { bindingReportQuery } from '@/features/ai/bindingReportQuery'
 
 import type { TwinSurfaceDeps } from './aiSurfaceTypes'
 
@@ -105,6 +106,7 @@ function readBindings(
     rows: twinBindingRows(configOf(deps)),
     bindings: deps.bindings(),
     slotLabels: SLOT_LABELS,
+    query: bindingReportQuery(call.arguments),
   })
 }
 

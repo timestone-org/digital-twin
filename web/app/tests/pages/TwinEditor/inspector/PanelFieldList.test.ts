@@ -1,9 +1,9 @@
 /**
  * @fileoverview 契约：信息牌字段列表把「行号」摆在明面上。
  *
- * 实时值按所有信息牌字段摊平后的文档序对齐，插一行会让它之后每一行整体后移一格——
+ * 实时值按所有信息牌字段摊平后的文档序对齐，插一行会让它之后每一行更新后续序号——
  * 这是本模块最安静的坑，所以列表必须显示行号、必须能表达 `decimals = null`
- * 这一档（不定位数），并且改动一律整份写回、不就地改 props。
+ * 这一档（保留原始小数位），并且改动一律整份写回、不就地改 props。
  */
 import {
   ALWAYS_VISIBLE,
@@ -116,13 +116,13 @@ describe('行号', () => {
   it('没给前置行数时说清楚这是本牌内序号，不假装知道全局位置', () => {
     const wrapper = mountList(panelOf([fieldOf('a')]))
 
-    expect(wrapper.text()).toContain('本牌第 1 行')
+    expect(wrapper.text()).toContain('本信息牌第 1 行')
   })
 
   it('把「插一行会让后面整体后移」写在面板上', () => {
     const wrapper = mountList(panelOf([fieldOf('a')]))
 
-    expect(wrapper.text()).toContain('整体后移一格')
+    expect(wrapper.text()).toContain('更新后续序号')
   })
 
   it('每行标出取值键，键里带牌 id', () => {
@@ -133,10 +133,10 @@ describe('行号', () => {
 })
 
 describe('小数位的三档', () => {
-  it('null 档在界面上写明「不定位数」，不用 0 兼职', () => {
+  it('null 档在界面上写明「保留原始小数位」，不用 0 兼职', () => {
     const wrapper = mountList(panelOf([fieldOf('a')]))
 
-    expect(wrapper.text()).toContain('不定位数')
+    expect(wrapper.text()).toContain('保留原始小数位')
   })
 
   it('打开开关从 null 变成 0', async () => {
@@ -247,13 +247,13 @@ describe('看不见的坑写在面板上', () => {
   it('静态文本与常量绑定的区别写在面板上', () => {
     const wrapper = mountList(panelOf([fieldOf('a')]))
 
-    expect(wrapper.text()).toContain('不进求值')
+    expect(wrapper.text()).toContain('不参与计算')
   })
 
-  it('一个字段都没有时说清楚画出来是空卡片', () => {
+  it('未配置字段时显示信息牌空状态', () => {
     const wrapper = mountList(panelOf([]))
 
-    expect(wrapper.text()).toContain('空卡片')
+    expect(wrapper.text()).toContain('尚未配置')
   })
 })
 
@@ -323,15 +323,15 @@ describe('状态测点预设', () => {
   })
 })
 
-describe('状态画法的有效配置', () => {
+describe('状态显示方式的有效配置', () => {
   it.each(['status', 'switch'] as const)(
-    '%s仅展示字段标识、画法与状态配置',
+    '%s仅展示字段标识、显示方式与状态配置',
     (kind) => {
       const wrapper = mountList(panelOf([fieldOf('run', { kind })]))
 
       expect(wrapper.find('input[aria-label="字段键"]').exists()).toBe(true)
       expect(wrapper.find('input[aria-label="标签"]').exists()).toBe(true)
-      expect(wrapper.find('button[aria-label="画法"]').exists()).toBe(true)
+      expect(wrapper.find('button[aria-label="显示方式"]').exists()).toBe(true)
       expect(wrapper.find('input[aria-label="状态1值"]').exists()).toBe(true)
       expect(wrapper.find('input[aria-label="数值前缀"]').exists()).toBe(false)
       expect(wrapper.find('input[aria-label="单位"]').exists()).toBe(false)
@@ -339,7 +339,7 @@ describe('状态画法的有效配置', () => {
         false,
       )
       expect(wrapper.find('input[aria-label="静态文本"]').exists()).toBe(false)
-      expect(wrapper.text()).not.toContain('静态文本纯展示')
+      expect(wrapper.text()).not.toContain('静态文本仅用于显示')
       wrapper.unmount()
     },
   )
@@ -357,11 +357,11 @@ describe('状态画法的有效配置', () => {
       ]),
     )
     expect(wrapper.find('input[aria-label="单位"]').exists()).toBe(false)
-    await wrapper.get('button[aria-label="画法"]').trigger('click')
+    await wrapper.get('button[aria-label="显示方式"]').trigger('click')
     const option = [...document.querySelectorAll('[role="option"]')].find(
       (item) => item.textContent?.trim() === '文本',
     )
-    if (option === undefined) throw new Error('缺少文本画法')
+    if (option === undefined) throw new Error('缺少文本显示方式')
     option.dispatchEvent(new MouseEvent('click', { bubbles: true }))
     await flushPromises()
     await wrapper.setProps({ panel: panelOf(lastWritten(wrapper)) })
@@ -380,7 +380,7 @@ describe('状态画法的有效配置', () => {
       wrapper.get<HTMLInputElement>('input[aria-label="静态文本"]').element
         .value,
     ).toBe('备用')
-    expect(wrapper.text()).toContain('静态文本纯展示')
+    expect(wrapper.text()).toContain('静态文本仅用于显示')
     wrapper.unmount()
   })
 
@@ -393,7 +393,7 @@ describe('状态画法的有效配置', () => {
     expect(wrapper.findAll('input[aria-label="数值前缀"]')).toHaveLength(1)
     expect(wrapper.findAll('input[aria-label="静态文本"]')).toHaveLength(1)
     expect(wrapper.findAll('button[aria-label="指定小数位"]')).toHaveLength(1)
-    expect(wrapper.text()).toContain('静态文本纯展示')
+    expect(wrapper.text()).toContain('静态文本仅用于显示')
     wrapper.unmount()
   })
 })

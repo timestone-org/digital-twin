@@ -31,6 +31,7 @@ interface SceneStub {
   setSelection: Mock
   setPickMode: Mock
   setNavigationMode: Mock
+  setActive: Mock
   focus: Mock
   snapshot: Mock
   measureDistance: Mock
@@ -58,6 +59,7 @@ vi.mock('@dt/three-core', async (importOriginal) => {
     readonly setSelection = vi.fn()
     readonly setPickMode = vi.fn()
     readonly setNavigationMode = vi.fn()
+    readonly setActive = vi.fn()
     readonly focus = vi.fn()
     readonly snapshot = vi.fn(() => seam.pose)
     readonly measureDistance = vi.fn(() => seam.measured)
@@ -260,10 +262,10 @@ describe('覆盖层', () => {
   it('拾取模式下给出提示条，回到浏览态就收起', async () => {
     const wrapper = mountViewport({ pickMode: 'position' })
 
-    expect(wrapper.text()).toContain('取那个点的坐标')
+    expect(wrapper.text()).toContain('以获取坐标')
 
     await wrapper.setProps({ pickMode: null })
-    expect(wrapper.text()).not.toContain('取那个点的坐标')
+    expect(wrapper.text()).not.toContain('以获取坐标')
     wrapper.unmount()
   })
 
@@ -275,7 +277,7 @@ describe('覆盖层', () => {
     })
 
     expect(wrapper.text()).toContain('新信息牌会吸附到那个点')
-    expect(wrapper.text()).not.toContain('取那个点的坐标')
+    expect(wrapper.text()).not.toContain('以获取坐标')
     wrapper.unmount()
   })
 

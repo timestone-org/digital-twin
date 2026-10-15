@@ -72,7 +72,7 @@ function clearColor(): void {
         :model-value="modelValue.blend"
         :range="UNIT_RANGE"
         label="染色浓度"
-        hint="0 = 完全原色，1 = 完全换成染色"
+        hint="0 保留模型原色，1 完全使用配置颜色"
         size="sm"
         show-value
         @update:model-value="write({ blend: $event })"
@@ -82,7 +82,7 @@ function clearColor(): void {
         :model-value="modelValue.glow"
         :range="GLOW_RANGE"
         label="自发光"
-        hint="发光色就是当前染色；暗场里才看得出"
+        hint="使用当前配置颜色增强亮度，在暗色场景中效果更明显"
         size="sm"
         show-value
         @update:model-value="write({ glow: $event })"
@@ -93,12 +93,12 @@ function clearColor(): void {
         class="self-start text-xs text-text-disabled underline"
         @click="clearColor"
       >
-        清除常态色，回到模型原色
+        恢复模型原色
       </button>
     </template>
 
     <p v-else class="text-xs text-text-disabled">
-      常态色留空时不染色；浓度与自发光要配了颜色才有意义，故先不显示。
+      常态色留空时保留模型原色；设置颜色后可调整染色浓度和自发光。
     </p>
   </div>
 </template>

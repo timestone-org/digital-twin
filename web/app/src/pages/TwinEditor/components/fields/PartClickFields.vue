@@ -36,18 +36,18 @@ const emit = defineEmits<{
 }>()
 
 const FAR_OPTIONS = [
-  { value: 'approach', label: '把这个部件框进画面' },
-  { value: 'view', label: '飞到指定取景' },
-  { value: 'none', label: '不响应' },
+  { value: 'approach', label: '聚焦部件' },
+  { value: 'view', label: '切换至指定视角' },
+  { value: 'none', label: '仅触发联动' },
 ] as const
 
 const NEAR_OPTIONS = [
-  { value: 'none', label: '只上抛联动事件' },
+  { value: 'none', label: '仅触发联动' },
   { value: 'detail', label: '弹出部件详情' },
 ] as const
 
 const cameraOptions = computed(() => [
-  { value: '', label: '（不挑视点）' },
+  { value: '', label: '不使用预设视点' },
   ...props.cameras.map((item, index) => ({
     value: item.id,
     label: item.name === '' ? `视点 ${index + 1}` : item.name,
@@ -56,7 +56,7 @@ const cameraOptions = computed(() => [
 
 const viewText = computed(() => {
   const view = props.modelValue.view
-  if (view === null) return '（没存机位）'
+  if (view === null) return '尚未保存取景快照'
   const position = view.position.map((axis) => axis.toFixed(1)).join(', ')
   const target = view.target.map((axis) => axis.toFixed(1)).join(', ')
   return `机位 (${position}) → 注视 (${target})，视野 ${view.fov.toFixed(0)}°`
@@ -116,16 +116,16 @@ function writeMax(max: TwinDistanceRule | null): void {
   <div class="flex flex-col gap-3" @focusin="previewIntent?.('click')">
     <DistanceField
       :model-value="distance.farThreshold"
-      label="远近两档的分界"
+      label="远近距离分界"
       :fallback="30"
       @update:model-value="writeFarThreshold"
     />
 
-    <DtField label="远于分界时点击" size="sm">
+    <DtField label="远距点击动作" size="sm">
       <DtSelect
         :model-value="modelValue.far"
         :options="FAR_OPTIONS"
-        aria-label="远于分界时点击"
+        aria-label="远距点击动作"
         size="sm"
         @update:model-value="writeFar"
       />
@@ -159,11 +159,11 @@ function writeMax(max: TwinDistanceRule | null): void {
         清除取景
       </DtButton>
 
-      <DtField label="或切到预设视点" size="sm">
+      <DtField label="预设视点" size="sm">
         <DtSelect
           :model-value="modelValue.cameraId"
           :options="cameraOptions"
-          aria-label="或切到预设视点"
+          aria-label="预设视点"
           size="sm"
           @update:model-value="write({ cameraId: $event })"
         />
@@ -173,31 +173,31 @@ function writeMax(max: TwinDistanceRule | null): void {
         intent="warning"
         icon="alert-triangle"
       >
-        取景快照优先：上面这个预设视点当前不生效。要用它，先清除取景。
+        已优先使用取景快照。如需使用预设视点，请先清除快照。
       </DtNotice>
       <DtNotice v-if="danglingCamera" intent="danger" icon="alert-circle">
         视点
-        {{ modelValue.cameraId }} 不存在，远距点击会退回把这个部件框进画面。
+        {{ modelValue.cameraId }} 不存在，远距点击将自动聚焦部件。
       </DtNotice>
       <DtNotice v-if="missingTarget" intent="warning" icon="alert-triangle">
-        既没存机位也没挑视点，远距点击会退回把这个部件框进画面。
+        尚未配置取景快照或预设视点，远距点击将自动聚焦部件。
       </DtNotice>
       <DtNotice v-if="noFarThreshold" intent="warning" icon="alert-triangle">
-        没配上面的「远近两档的分界」，每一下都算近距点击，这个取景永远飞不到。
+        尚未配置远近距离分界，所有点击均执行近距动作，远距动作暂不生效。
       </DtNotice>
     </template>
 
-    <DtField label="近于分界时点击" size="sm">
+    <DtField label="近距点击动作" size="sm">
       <DtSelect
         :model-value="modelValue.near"
         :options="NEAR_OPTIONS"
-        aria-label="近于分界时点击"
+        aria-label="近距点击动作"
         size="sm"
         @update:model-value="writeNear"
       />
     </DtField>
     <p class="text-xs text-text-disabled">
-      联动事件两档都照发：这里配的是附加动作，不会把同屏别的模块的联动掐掉。
+      远距和近距点击均可触发联动；此处配置的附加动作不会影响其他模块的联动。
     </p>
 
     <DistanceField
@@ -213,7 +213,7 @@ function writeMax(max: TwinDistanceRule | null): void {
       @update:model-value="writeMax"
     />
     <p class="text-xs text-text-disabled">
-      阈值 ≤ 0 或距离取不到时一律按「不限制」走，不误杀点击。
+      阈值不大于 0 或无法获取距离时，不应用距离限制。
     </p>
   </div>
 </template>
