@@ -12,7 +12,8 @@ import {
 } from '@dt/ui'
 import type { ModelAnimationEntry } from '@dt/three-core'
 import { computed, ref, watch, provide } from 'vue'
-import { onBeforeRouteLeave, useRoute } from 'vue-router'
+import { useRoute } from 'vue-router'
+import { useWorkspaceGuard } from '@/features/workspace/useWorkspaceGuard'
 
 import { installDashboardModules } from '@/bootstrap/dashboard'
 import { AppShell } from '@/components/layout'
@@ -178,7 +179,7 @@ const viewport = createTwinViewportOps({
   config: () => config.value,
   actions: () => actions.value,
   selection: () => selection.value,
-  onRoamUnavailable: () => toast.error('轨迹上可用的视点不足两个，先去加几站'),
+  onRoamUnavailable: () => toast.error('有效视点不足两个，请先补充漫游站点'),
 })
 
 // ⚠ 模板里的 `ref="viewportRef"` 只认得顶层绑定，写成 `viewport.viewportRef`
@@ -210,13 +211,14 @@ function select(next: TwinSelection): void {
   selection.value = next
 }
 
-/** 信息牌走「先点位置再落牌」：进入拾取，等视口回传表面点；其余实体直接建。 */
-function addEntityOf(kind: TwinEntityKind): void {
-  if (kind === 'panels') {
-    viewport.requestPlacePanel()
+/** 锚点和信息牌先拾取位置，再创建并归夹。 */
+function addEntityOf(kind: TwinEntityKind, folderId?: string): void {
+  viewport.cancelPick()
+  if (kind === 'anchors' || kind === 'panels') {
+    viewport.requestPlace(kind, folderId)
     return
   }
-  actions.value?.add(kind)
+  actions.value?.add(kind, folderId)
 }
 
 function addFolderIn(kind: TwinEntityKind): void {
@@ -262,13 +264,12 @@ async function save(): Promise<void> {
 /** 返回大屏编辑器；外壳的返回入口按站内路径走。 */
 const backTo = computed(() => `/dashboards/${dashboardId.value}/edit`)
 
-// ⚠ 走之前必须问：这一页的改动只在内存里，直接离开就没了，且没有任何提示。
-// 站内跳转拦在这里，关标签页 / 刷新那一半拦在 `useUnsavedGuard`
-onBeforeRouteLeave(async () => {
+// ⚠ 切换页签保留草稿；关闭时必须确认，浏览器刷新由 useUnsavedGuard 拦截。
+useWorkspaceGuard(async () => {
   if (page.doc.value?.isDirty.value !== true) return true
   return await confirm.ask({
     title: '放弃未保存的改动',
-    message: '孪生场景有改动还没保存，离开就会丢失。',
+    message: '孪生场景存在未保存的更改，离开后将丢失。',
     confirmText: '离开',
     danger: true,
   })
@@ -336,7 +337,7 @@ useUnsavedGuard(() => page.doc.value?.isDirty.value === true)
           @select-animation="selectAnimation"
           @select="select"
           @add="addEntityOf"
-          @add-in-folder="actions?.add($event.kind, $event.folderId)"
+          @add-in-folder="addEntityOf($event.kind, $event.folderId)"
           @place="actions?.place($event)"
           @bulk-add="bulk.openBlank()"
           @remove="actions?.remove($event.kind, $event.id)"
@@ -376,11 +377,7 @@ useUnsavedGuard(() => page.doc.value?.isDirty.value === true)
               :selection="selection"
               :pick-mode="viewport.pickMode.value"
               :navigation-mode="editorNavigationMode"
-              :pick-hint="
-                viewport.isPlacingPanel.value
-                  ? '在模型表面点一下，新信息牌会吸附到那个点'
-                  : undefined
-              "
+              :pick-hint="viewport.placementHint.value"
               :gizmo-mode="gizmoMode"
               :target-size="page.targetSize.value"
               :values="binding.liveValues.value"

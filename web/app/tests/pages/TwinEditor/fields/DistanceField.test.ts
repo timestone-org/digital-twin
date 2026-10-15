@@ -1,5 +1,5 @@
 /**
- * @fileoverview 契约：距离字段的「量当前距离」按**当前参考系**取数并整份写回，
+ * @fileoverview 契约：距离字段的「获取当前距离」按**当前参考系**取数并整份写回，
  * 量不出时说清是哪一档量不出，绝不悄悄填一个数。
  *
  * ⚠ 填错参考系的后果是静默的：同一个位置在三种参考系下是三个数，
@@ -50,7 +50,7 @@ function ruler(
   found: readonly { trigger: (event: string) => Promise<void> }[],
 ) {
   const button = found[0]
-  if (button === undefined) throw new Error('没有量当前距离的按钮')
+  if (button === undefined) throw new Error('没有获取当前距离的按钮')
   return button
 }
 
@@ -58,7 +58,7 @@ beforeEach(() => {
   useToast().clear()
 })
 
-describe('量当前距离', () => {
+describe('获取当前距离', () => {
   it('把量出来的数填进阈值，参考系原样留着', async () => {
     const { wrapper, writes } = mountField(() => 42.5)
 
@@ -95,7 +95,7 @@ describe('量当前距离', () => {
 
     expect(writes).toEqual([])
     const messages = useToast().toasts.value.map((item) => item.message)
-    expect(messages.join(' ')).toContain('选中的不是部件')
+    expect(messages.join(' ')).toContain('当前对象不是部件')
   })
 
   // 没人 provide 测距时（挂载测试、将来别的宿主）按钮照样在，只是量不出

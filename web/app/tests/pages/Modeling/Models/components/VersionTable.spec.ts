@@ -26,7 +26,13 @@ const VERSION: ModelingVersionSummary = {
 
 function open() {
   return mount(VersionTable, {
-    props: { rows: [VERSION], view: 'table', isLoading: false, error: null },
+    props: {
+      rows: [VERSION],
+      view: 'table',
+      isLoading: false,
+      error: null,
+      pagination: { page: 1, size: 200, total: 1 },
+    },
     global: {
       stubs: { PermGuard: { props: ['codes'], template: '<slot />' } },
     },

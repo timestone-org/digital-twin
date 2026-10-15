@@ -12,15 +12,25 @@
 import { computed } from 'vue'
 import DtButton from '../DtButton/DtButton.vue'
 import DtModal from '../DtModal/DtModal.vue'
+import DtConfirmBubble from './DtConfirmBubble.vue'
 import { useConfirm } from '../../composables/useConfirm'
 
-const { pending, resolve } = useConfirm()
+const { pending, anchor, resolve } = useConfirm()
 
 const open = computed(() => pending.value !== null)
 </script>
 
 <template>
+  <DtConfirmBubble
+    v-if="pending && anchor"
+    :key="pending.id"
+    :request="pending"
+    :anchor="anchor"
+    @confirm="resolve(true)"
+    @cancel="resolve(false)"
+  />
   <DtModal
+    v-else
     :model-value="open"
     :title="pending?.title ?? '请确认'"
     width="26rem"

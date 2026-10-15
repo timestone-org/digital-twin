@@ -84,14 +84,14 @@ function writeFields(fields: TwinPanelField[]): void {
     <DtInput
       :model-value="detail.title"
       label="标题"
-      :hint="`留空 = 用部件名「${part.name}」`"
+      :hint="`留空时使用部件名称「${part.name}」`"
       size="sm"
       @update:model-value="write({ title: $event })"
     />
     <DtInput
       :model-value="detail.subtitle"
       label="副标题"
-      hint="标题上方那行小字；留空 = 不画"
+      hint="显示于标题上方，留空时隐藏"
       size="sm"
       @update:model-value="write({ subtitle: $event })"
     />
@@ -108,7 +108,7 @@ function writeFields(fields: TwinPanelField[]): void {
       :model-value="detail.accent"
       :swatches="SWATCHES"
       label="主题色"
-      hint="留空 = 跟随大屏主题色"
+      hint="留空时跟随大屏主题色"
       size="sm"
       @update:model-value="write({ accent: $event })"
     />
@@ -122,12 +122,12 @@ function writeFields(fields: TwinPanelField[]): void {
 
     <DtSwitch
       :model-value="detail.showModel"
-      label="弹窗里画这个部件的模型"
+      label="显示部件模型"
       size="sm"
       @update:model-value="write({ showModel: $event })"
     />
     <p class="text-xs text-text-disabled">
-      弹窗里那块 3D 只装这一个部件，自己一套场景，能单独转着看。
+      在详情弹窗中独立预览当前部件及其下级部件，支持旋转和缩放。
     </p>
     <div v-if="detail.showModel" class="flex flex-col gap-2">
       <DtField label="弹窗初始视角" size="sm">
@@ -136,7 +136,7 @@ function writeFields(fields: TwinPanelField[]): void {
         </p>
       </DtField>
       <p class="text-xs text-text-disabled">
-        在独立窗口里拖动旋转、滚轮缩放，使用当前视角后保存场景即可。
+        在独立窗口中调整视角，点击「使用当前视角」后保存场景。
       </p>
       <DtButton
         variant="soft"
@@ -184,8 +184,7 @@ function writeFields(fields: TwinPanelField[]): void {
       @update:model-value="write({ width: $event ?? WIDTH_RANGE.min })"
     />
     <p v-if="part.parentId !== ''" class="text-xs text-text-disabled">
-      被上级带出来看时，弹窗宽度与模型区高度用上级的那一份——框属于那一次打开，
-      逐个子件换宽高会让弹窗在屏幕上跳。上面这两个数只在单独点开这个部件时生效。
+      从上级部件详情中切换至当前部件时，沿用上级弹窗的尺寸。此处尺寸仅在单独打开当前部件时生效。
     </p>
 
     <PanelFieldList

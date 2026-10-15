@@ -80,7 +80,7 @@ const visibleRows = computed(() =>
   <div class="flex h-full min-h-0 flex-col gap-2 p-2">
     <!-- ⚠ 收窄时必须说出来：不说的话，一个只有两行的绑定页看着像别的绑定丢了 -->
     <div v-if="scope !== null" class="flex shrink-0 items-center gap-2">
-      <DtTag size="sm" intent="primary">只看选中的{{ scope }}</DtTag>
+      <DtTag size="sm" intent="primary">仅显示选中的{{ scope }}</DtTag>
       <DtButton
         size="sm"
         variant="ghost"
@@ -92,7 +92,7 @@ const visibleRows = computed(() =>
     </div>
 
     <DtNotice v-if="isDirty" intent="info" icon="alert-circle">
-      新绑的点位要保存之后才会开始推送：推送方读的是已落库的那一份绑定。
+      保存场景后，新配置的点位绑定开始接收实时数据。
     </DtNotice>
     <BindingPanel
       class="min-h-0 flex-1"

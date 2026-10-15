@@ -1,6 +1,6 @@
 <script setup lang="ts">
 /**
- * @fileoverview 名字清单编辑：从候选里挑、也允许手填，逐条可删。
+ * @fileoverview 名字清单编辑：选择节点、也允许手填，逐条可删。
  * 部件的模型节点与模型动画的 clip 共用这一件——两者都是「本包看不见的外部名字」。
  *
  * ⚠ 候选里没有的名字必须标出来：模型换了或节点改了名，配置里那一条就静默地
@@ -27,7 +27,7 @@ const draft = ref('')
 
 // ⚠ 缺省值走 computed 不走 withDefaults：exactOptionalPropertyTypes 下
 //   withDefaults 出来的仍是 `string | undefined`，往下传会在每个调用点报错
-const inputPlaceholder = computed(() => props.placeholder ?? '手动输入名字')
+const inputPlaceholder = computed(() => props.placeholder ?? '输入节点名称')
 const emptyText = computed(() => props.emptyHint ?? '')
 
 const candidateSet = computed(() => new Set(props.candidates))
@@ -91,7 +91,7 @@ function remove(name: string): void {
     </div>
     <ul
       v-if="modelValue.length > 0"
-      aria-label="已选择的名字"
+      aria-label="已选节点名称"
       class="flex max-h-56 flex-col gap-1 overflow-y-auto overscroll-contain pr-1"
     >
       <li
@@ -121,10 +121,10 @@ function remove(name: string): void {
         />
       </li>
     </ul>
-    <DtEmpty v-else size="inline" title="还没有条目。" />
+    <DtEmpty v-else size="inline" title="尚未选择节点" />
 
     <p v-if="hasMissing" class="text-xs text-state-warning">
-      标黄的名字在当前模型里没找到，它们不会命中任何东西。
+      黄色标记表示当前模型中不存在的节点，相关配置暂不生效。
     </p>
 
     <DtSelect
@@ -132,11 +132,11 @@ function remove(name: string): void {
       model-value=""
       :options="options"
       :display="{
-        placeholder: '从候选里挑（可多选）…',
+        placeholder: '选择节点（支持多选）…',
         searchable: true,
         closeOnSelect: false,
       }"
-      aria-label="从候选里挑"
+      aria-label="选择节点"
       size="sm"
       @update:model-value="add"
     >
@@ -165,7 +165,7 @@ function remove(name: string): void {
       <DtInput
         v-model="draft"
         :placeholder="inputPlaceholder"
-        aria-label="手填名字"
+        aria-label="输入节点名称"
         size="sm"
         class="min-w-0 flex-1"
         @enter="addDraft"
@@ -174,7 +174,7 @@ function remove(name: string): void {
         variant="soft"
         size="sm"
         icon="plus"
-        aria-label="添加名字"
+        aria-label="添加节点名称"
         @click="addDraft"
       />
     </div>

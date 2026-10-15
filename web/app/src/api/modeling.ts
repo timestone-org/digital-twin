@@ -313,10 +313,19 @@ export async function retireModelingVersion(
 export async function listModelingBindings(
   query: ModelingPageQuery = {},
 ): Promise<Page<ModelingBinding>> {
-  return await requestData<Page<ModelingBinding>>(
+  const bindings = await requestData<ModelingBinding[]>(
     '/modeling-bindings',
-    onPlatform({ query: { page: query.page, size: query.size } }),
+    onPlatform(),
   )
+  const page = query.page ?? 1
+  const size = query.size ?? 20
+  const offset = (page - 1) * size
+  return {
+    items: bindings.slice(offset, offset + size),
+    page,
+    size,
+    total: bindings.length,
+  }
 }
 
 /** 把一个版本绑到一条公式条目上。回执带受影响的台账列。 */

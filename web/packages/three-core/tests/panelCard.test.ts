@@ -85,6 +85,26 @@ function render(over: Partial<TwinPanel> = {}, values: TwinPanelValues = {}) {
 }
 
 describe('页眉与页脚', () => {
+  it('完整名称与读数可悬停读取，并随实时值更新', () => {
+    const { card, fields } = render(
+      {
+        name: '冷却循环系统信息板',
+        fields: [field({ label: '冷却循环系统出水温度', unit: '℃' })],
+      },
+      { 'p1::f1': { value: '12345678901234567890' } },
+    )
+    const value = card.querySelector<HTMLElement>('.twin-panel__value')
+
+    expect(card.querySelector<HTMLElement>('.twin-panel__label')?.title).toBe(
+      '冷却循环系统出水温度',
+    )
+    expect(value?.title).toBe('12345678901234567890 ℃')
+    for (const view of fields) paintPanelField(view, { 'p1::f1': { value: 0 } })
+    expect(value?.title).toBe('0 ℃')
+    for (const view of fields) paintPanelField(view, {})
+    expect(value?.title).toBe('— ℃')
+  })
+
   it('标题与副标题都空时不画页眉', () => {
     expect(render().card.querySelector('.twin-panel__head')).toBeNull()
   })

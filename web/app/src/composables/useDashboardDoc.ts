@@ -5,6 +5,7 @@
 
 import { ref, type Ref } from 'vue'
 import type { DashboardPayload } from '@dt/contracts'
+import { useWorkspaceDashboard } from '@/features/workspace/useWorkspaceDashboard'
 
 import type { DashboardPatchInput, ReplaceLayoutInput } from '@/api/dashboard'
 import {
@@ -52,6 +53,7 @@ export function useDashboardDoc(): DashboardDoc {
     conflict: ref<string | null>(null),
   }
   const { load, dispose } = createLoader(state)
+  useWorkspaceDashboard(() => state.dashboard.value)
   return {
     ...state,
     get resourceVersion() {

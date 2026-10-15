@@ -1,17 +1,12 @@
-/**
- * @fileoverview 把一个页面接进助手：登记工作面、探一次能力、管开合与会话，
- * 并在打开时把库里的历史回放到时间线上。
- *
- * ⚠ 工作面**挂载时登记、卸载时撤掉**。不撤的话，用户离开这一页之后助手仍握着
- * 一份指向已经没了的页面的句柄，下一次动手会改到一个不存在的东西上。
- *
- * ⚠ 探测失败一律当作「这套部署没有助手」，不是「暂时故障」：某些现场根本不
- * 部署 ai-assistant，那时入口就该干净地不出现，而不是弹一条红色告警
- * （features/ai/ports.ts）。
- *
- * ⚠ 对话放在这里而不是面板组件里：面板收起就卸载，对话不能跟着没。
- */
-import { onMounted, onUnmounted, ref, type Ref } from 'vue'
+/** @fileoverview 助手工作面与会话装配；缓存页停用时终止回合，返回时恢复工作面。 */
+import {
+  onActivated,
+  onDeactivated,
+  onMounted,
+  onUnmounted,
+  ref,
+  type Ref,
+} from 'vue'
 import type { AssistantModelProfile } from '@dt/contracts'
 import { useToast } from '@dt/ui'
 
@@ -88,10 +83,7 @@ export function useAiPanel(options: AiPanelOptions): AiPanel {
   const compose = newComposeState()
   const replayer = createReplayer(chat)
 
-  onUnmounted(() => {
-    clearSurface(surface)
-    replayer.abort()
-  })
+  useSurfaceLifecycle(surface, chat, replayer.abort)
 
   onMounted(() => {
     void probeInto({ isAvailable, models, attachmentSuffixes, choice })
@@ -121,6 +113,23 @@ export function useAiPanel(options: AiPanelOptions): AiPanel {
       isOpen.value = false
     },
   }
+}
+
+function useSurfaceLifecycle(
+  surface: AiSurface,
+  chat: AiConversation,
+  abortReplay: () => void,
+): void {
+  onActivated(() => setSurface(surface))
+  onDeactivated(() => {
+    clearSurface(surface)
+    chat.stop()
+    abortReplay()
+  })
+  onUnmounted(() => {
+    clearSurface(surface)
+    abortReplay()
+  })
 }
 
 /**

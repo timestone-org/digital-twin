@@ -617,6 +617,54 @@ describe('配置场景实体', () => {
 })
 
 describe('读绑定', () => {
+  it('按实体读取超过清单上限的详情字段并保留真实槽键与现有绑定', async () => {
+    const scene = normalizeTwinConfig({
+      panels: [
+        {
+          id: 'panel',
+          fields: Array.from({ length: 150 }, (_, index) => ({
+            key: `f${String(index)}`,
+            label: `读数${String(index)}`,
+          })),
+        },
+      ],
+      parts: [
+        {
+          id: 'chiller-1',
+          name: '制冷机1#',
+          detail: { fields: [{ key: 'temperature', label: '出水温度' }] },
+        },
+      ],
+    })
+    const { surface, write, save } = setup({
+      config: scene,
+      bindings: [point('partFieldValues[0].value', 'src:CHILLER1_TT')],
+    })
+    const shot = await run(surface, 'dashboard.read_bindings', {
+      node_id: 'n1',
+      entity_id: 'chiller-1',
+      slot_key: 'partFieldValues',
+    })
+    expect(shot).toMatchObject({
+      slots: [
+        {
+          key: 'partFieldValues',
+          rows: [
+            {
+              field_key: 'partFieldValues[0].value',
+              entity: '制冷机1# · 出水温度',
+              entity_id: 'chiller-1::temperature',
+              node_key: 'src:CHILLER1_TT',
+            },
+          ],
+        },
+      ],
+      is_truncated: false,
+    })
+    expect(write).not.toHaveBeenCalled()
+    expect(save).not.toHaveBeenCalled()
+  })
+
   it('每一行都带着它喂的那个实体的名字', async () => {
     const { surface } = setup()
 

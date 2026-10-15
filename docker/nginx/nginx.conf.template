@@ -254,7 +254,8 @@ http {
       # ⚠ 必须关掉请求缓冲：开着的话 nginx 会把整个上传先落到自己的临时盘上，
       # 大模型于是需要双份磁盘，且首字节延迟等于整份上传时间
       proxy_request_buffering off;
-      client_max_body_size 512m;
+      # ⚠ 2 GB 模型之外预留 multipart 表单开销，文件上限仍由签名策略强制。
+      client_max_body_size 2049m;
     }
 
     # —— 受保护面 ——

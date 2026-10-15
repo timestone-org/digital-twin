@@ -132,7 +132,10 @@ function buildDecor(style: TwinPanelStyle): HTMLElement[] {
 function span(className: string, text = ''): HTMLElement {
   const el = document.createElement('span')
   el.className = className
-  if (text !== '') el.textContent = text
+  if (text !== '') {
+    el.textContent = text
+    el.title = text
+  }
   return el
 }
 
@@ -433,6 +436,7 @@ export function paintPanelField(
     return
   }
   const reading = readingOf(view, values)
+  view.valueEl.title = reading.text
   if (view.unitEl === null) {
     view.valueEl.textContent = reading.text
   } else {

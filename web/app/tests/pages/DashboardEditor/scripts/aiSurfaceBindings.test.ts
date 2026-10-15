@@ -154,6 +154,36 @@ async function bind(
 }
 
 describe('读绑定', () => {
+  it('普通画布把实体筛选与续读窗口传给绑定清单', async () => {
+    const { surface } = setup()
+    const shot = await surface.run(
+      call('dashboard.read_bindings', {
+        node_id: 'a',
+        slot_key: 'itemValues',
+        entity_id: 'm-1',
+        limit: 1,
+      }),
+    )
+    expect(shot).toMatchObject({
+      total: 1,
+      returned: 1,
+      has_more: false,
+      next_offset: null,
+      slots: [
+        {
+          key: 'itemValues',
+          rows: [
+            {
+              field_key: 'itemValues[0].value',
+              entity_id: 'm-1',
+              node_key: null,
+            },
+          ],
+        },
+      ],
+    })
+  })
+
   it('数组槽摊出行，每一行带着它喂的那个实体', async () => {
     const { surface } = setup()
     const shot = (await surface.run(

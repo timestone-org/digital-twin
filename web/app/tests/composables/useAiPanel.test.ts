@@ -9,7 +9,7 @@
  */
 import { mount } from '@vue/test-utils'
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
-import { defineComponent, h } from 'vue'
+import { defineComponent, h, KeepAlive, nextTick, ref } from 'vue'
 import type {
   AssistantMessage,
   AssistantSession,
@@ -52,6 +52,30 @@ function setup(): Harness {
   const wrapper = mount(host)
   return { panel, wrapper }
 }
+
+it('缓存页签切回时恢复自己的助手工作面，隐藏时撤销登记', async () => {
+  const visible = ref(true)
+  const ownSurface = surface()
+  const page = defineComponent({
+    setup() {
+      useAiPanel({ surface: () => ownSurface, refId: () => 'db1' })
+      return () => h('div', '编辑器')
+    },
+  })
+  const host = defineComponent({
+    setup: () => () => h(KeepAlive, () => (visible.value ? h(page) : null)),
+  })
+  const wrapper = mount(host)
+  expect(activeSurface()).toBe(ownSurface)
+  visible.value = false
+  await nextTick()
+  expect(activeSurface()).toBeNull()
+  visible.value = true
+  await nextTick()
+  expect(activeSurface()).toBe(ownSurface)
+  wrapper.unmount()
+  expect(activeSurface()).toBeNull()
+})
 
 /** 库里的一条消息。 */
 function said(role: string, text: string, seq: number): AssistantMessage {

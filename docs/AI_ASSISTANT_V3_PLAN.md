@@ -81,7 +81,7 @@
             rows: [{ index, field_key, entity, entity_id,   // 来自 bindingRowLabels
                      source_kind, node_key, static_value }] }],
   scalars: [{ key, label, source_kind, node_key, static_value }],
-  is_truncated
+  total, offset, limit, returned, has_more, next_offset, is_truncated
 }
 ```
 
@@ -89,6 +89,7 @@
   指标名）。缺了它，模型只能按行号猜。
 - ⚠ 行没绑时也要出现在 `rows` 里，`node_key: null`。省掉空行的话，模型会以为
   那些实体不存在。
+- 筛选与续读遵循 [绑定清单读取契约](AI_ASSISTANT_DESIGN.md#工具结果的按需读取)。
 
 ### 2.5 `dashboard.read_canvas` / 快照（富化）
 

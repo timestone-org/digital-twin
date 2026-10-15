@@ -34,6 +34,7 @@ import {
 } from '@/features/ai/valueReport'
 import { createBinding, upsertBinding } from '@/features/dashboard/editorDoc'
 import { nodeLabelOf } from '@/features/dashboard/nodeLabel'
+import { bindingReportQuery } from '@/features/ai/bindingReportQuery'
 import type { EditorToolDeps } from './aiSurfaceTypes'
 
 /** 这一半实现了哪些工具。⚠ 与规格书 §2 里的名字逐字相同。 */
@@ -85,6 +86,7 @@ function readBindings(
     manifest: deps.getManifest(node.moduleType),
     config: node.configJson,
     bindings: node.bindings,
+    query: bindingReportQuery(call.arguments),
   })
 }
 

@@ -12,6 +12,7 @@ import { useGlobalTheme } from '@/composables/useGlobalTheme'
 import EmbedError from '@/features/embed/EmbedError.vue'
 import AiMcpWriteConfirmHost from '@/components/ai/AiMcpWriteConfirmHost.vue'
 import { useEmbedContext } from '@/features/embed/context'
+import WorkspaceView from '@/features/workspace/WorkspaceView.vue'
 
 useGlobalTheme()
 const embed = useEmbedContext()
@@ -22,7 +23,7 @@ const embed = useEmbedContext()
     v-if="embed.isEmbedded.value && embed.error.value !== null"
     :message="embed.error.value"
   />
-  <RouterView v-else />
+  <WorkspaceView v-else />
   <DtToastHost />
   <DtConfirmHost />
   <AiMcpWriteConfirmHost />

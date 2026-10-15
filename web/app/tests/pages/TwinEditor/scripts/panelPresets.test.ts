@@ -15,11 +15,30 @@ import {
 function baseStyle(): TwinPanelStyle {
   const config = normalizeTwinConfig({ panels: [{ id: 'p1', name: '牌' }] })
   const panel = config.panels[0]
-  expect(panel).toBeDefined()
-  return panel?.style as TwinPanelStyle
+  if (panel === undefined) throw new Error('缺少信息牌')
+  return panel.style
 }
 
 describe('预设清单', () => {
+  it('缺省使用信号矩阵的外观、单列、上方朝向和自适应尺寸', () => {
+    expect(baseStyle()).toMatchObject({
+      variant: 'matrix',
+      orient: 'top',
+      density: 'compact',
+      columns: 1,
+      width: 0,
+      height: 0,
+      fontScale: 1,
+      scale: 1,
+      scan: true,
+      corners: true,
+      grid: false,
+      animate: true,
+      pulse: false,
+    })
+    expect(matchedPanelPreset(baseStyle())).toBe('matrix')
+  })
+
   it('每套都有 id、文案与说明，且 id 不重复', () => {
     const ids = TWIN_PANEL_PRESETS.map((preset) => preset.id)
 
@@ -32,8 +51,8 @@ describe('预设清单', () => {
 
   it('一套都不动配色——主题色是按项目定的，换版式不该把它抹掉', () => {
     for (const preset of TWIN_PANEL_PRESETS) {
-      expect(preset.patch.accent).toBeUndefined()
-      expect(preset.patch.background).toBeUndefined()
+      expect(preset.patch).not.toHaveProperty('accent')
+      expect(preset.patch).not.toHaveProperty('background')
     }
   })
 })
@@ -46,17 +65,29 @@ describe('布局保留', () => {
   })
 
   it.each(TWIN_PANEL_PRESETS)(
-    '套用 $label 保留用户设置的列数和尺寸',
+    '套用 $label 保留用户设置的全部布局',
     (preset) => {
       const current: TwinPanelStyle = {
         ...baseStyle(),
         columns: 3,
         width: 360,
         height: 180,
+        orient: 'bottom',
+        density: 'loose',
+        fontScale: 1.35,
+        scale: 1.8,
       }
       const applied: TwinPanelStyle = { ...current, ...preset.patch }
 
-      expect(applied).toMatchObject({ columns: 3, width: 360, height: 180 })
+      expect(applied).toMatchObject({
+        columns: 3,
+        width: 360,
+        height: 180,
+        orient: 'bottom',
+        density: 'loose',
+        fontScale: 1.35,
+        scale: 1.8,
+      })
     },
   )
 })

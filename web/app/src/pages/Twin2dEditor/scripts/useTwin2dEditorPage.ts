@@ -15,6 +15,7 @@ import { computed, ref, shallowRef, watch } from 'vue'
 import type { ComputedRef, Ref, ShallowRef } from 'vue'
 
 import { getDashboard } from '@/api/dashboard'
+import { useWorkspaceDashboard } from '@/features/workspace/useWorkspaceDashboard'
 import { describeError } from '@/composables/useAsyncList'
 import { useRacedFetch } from '@/composables/useRacedFetch'
 import type { RacedFetch } from '@/composables/useRacedFetch'
@@ -167,6 +168,7 @@ export function useTwin2dEditorPage(
     },
   }
   const raced = useRacedFetch()
+  useWorkspaceDashboard(() => page.file.dashboard.value)
   const reload = createReload(page, raced, dashboardId, nodeId)
   const node = computed<DashboardNodePayload | null>(
     () =>

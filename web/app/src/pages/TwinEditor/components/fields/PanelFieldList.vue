@@ -39,7 +39,7 @@ const props = withDefaults(
      */
     owner?: string
   }>(),
-  { rowOffset: undefined, owner: '牌' },
+  { rowOffset: undefined, owner: '信息牌' },
 )
 
 const emit = defineEmits<{ 'update:fields': [TwinPanelField[]] }>()
@@ -177,11 +177,7 @@ function toggleDecimals(index: number, on: boolean): void {
 <template>
   <div class="flex flex-col gap-2">
     <p class="text-xs text-text-disabled">
-      实时值按所有{{
-        owner
-      }}字段摊平后的文档序对齐：在前面插一行，它之后的每一行（含后面每一个{{
-        owner
-      }}）整体后移一格。
+      字段序号对应数据绑定中的行号；新增、删除或调整字段顺序会更新后续序号。
     </p>
 
     <DtNotice
@@ -189,7 +185,9 @@ function toggleDecimals(index: number, on: boolean): void {
       intent="warning"
       icon="alert-triangle"
     >
-      字段键重复（{{ duplicateKeys.join('、') }}）：重名的两行会抢同一份实时值。
+      字段键重复（{{
+        duplicateKeys.join('、')
+      }}）：重复字段将显示同一实时值，请使用唯一的字段键。
     </DtNotice>
 
     <div
@@ -284,7 +282,7 @@ function toggleDecimals(index: number, on: boolean): void {
           @update:model-value="patch(row.index, { decimals: $event ?? 0 })"
         />
         <span v-else class="min-w-0 flex-1 text-xs text-text-disabled">
-          不定位数，按原值上屏
+          保留原始小数位
         </span>
       </div>
 
@@ -303,10 +301,10 @@ function toggleDecimals(index: number, on: boolean): void {
     <DtEmpty
       v-if="rows.length === 0"
       size="inline"
-      :title="`这个${owner}上还没有字段，画出来是一张空卡片。`"
+      :title="`尚未配置${owner}字段`"
     />
     <p v-else-if="hasFormattedFields" class="text-xs text-text-disabled">
-      静态文本纯展示、不进求值，与「常量绑定」不是一回事。
+      静态文本仅用于显示，不参与计算；如需将固定值用于计算，请使用常量绑定。
     </p>
 
     <div class="flex items-center gap-2">

@@ -300,7 +300,7 @@ onBeforeUnmount(() => {
               class="twin-part-modal__stage twin-part-modal__blank"
               data-test="part-modal-stage-empty"
             >
-              模型里找不到这个部件的节点
+              当前模型中未找到该部件关联的节点
             </p>
           </section>
           <section class="twin-part-modal__readings">
@@ -322,7 +322,7 @@ onBeforeUnmount(() => {
               class="twin-part-modal__blank"
               data-test="part-modal-no-fields"
             >
-              这个部件没有配读数
+              尚未配置部件读数
             </p>
           </section>
         </div>

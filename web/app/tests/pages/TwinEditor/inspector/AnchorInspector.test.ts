@@ -61,10 +61,10 @@ function textInput(wrapper: Wrapper, index: number) {
 }
 
 describe('小数位', () => {
-  it('不定位数时说清楚它按原值上屏，不是「定 0 位」', () => {
+  it('保留原始小数位时说清楚它按原值上屏，不是「定 0 位」', () => {
     const wrapper = mountAnchor()
 
-    expect(wrapper.text()).toContain('不定位数')
+    expect(wrapper.text()).toContain('保留原始小数位')
     // 只剩坐标那三个数字框，没有小数位那一个
     expect(wrapper.findAll('input[role="spinbutton"]')).toHaveLength(3)
   })
@@ -88,7 +88,7 @@ describe('小数位', () => {
   it('定了位数才露出位数输入框', () => {
     const wrapper = mountAnchor(makeAnchor({ decimals: 2 }))
 
-    expect(wrapper.text()).not.toContain('不定位数')
+    expect(wrapper.text()).not.toContain('保留原始小数位')
     expect(wrapper.findAll('input[role="spinbutton"]')).toHaveLength(4)
   })
 
@@ -158,7 +158,7 @@ describe('读数', () => {
   it('前缀留空时说明只显示数值', () => {
     const wrapper = mountAnchor()
 
-    expect(wrapper.text()).toContain('留空 = 只显示数值')
+    expect(wrapper.text()).toContain('留空时仅显示数值')
   })
 
   it('改单位回的是整份锚点，其余字段原样带上', async () => {
@@ -180,6 +180,6 @@ describe('显隐', () => {
     const wrapper = mountAnchor()
 
     expect(wrapper.text()).toContain('初始可见')
-    expect(wrapper.text()).toContain('距离规则只在大屏运行时生效')
+    expect(wrapper.text()).toContain('距离规则仅在大屏运行时生效')
   })
 })

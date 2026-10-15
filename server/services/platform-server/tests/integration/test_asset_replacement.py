@@ -20,6 +20,47 @@ pytestmark = pytest.mark.requires_postgres
 NEW_BYTES = b"new model bytes"
 
 
+@pytest.mark.parametrize(
+    "size_bytes",
+    [268_435_457, 1_073_741_824, 2_147_483_648],
+    ids=["above-256-mib", "one-gib", "two-gib"],
+)
+async def test_large_replacements_receive_a_two_gib_upload_policy(
+    app_client: httpx.AsyncClient,
+    object_store: FakeObjectStore,
+    size_bytes: int,
+) -> None:
+    old = await make_asset(app_client, object_store)
+    response = await app_client.post(
+        f"{ASSETS_URL}/{old['id']}:presign-replacement",
+        json={
+            "kind": "model",
+            "content_type": GLB,
+            "size_bytes": size_bytes,
+        },
+    )
+    assert response.status_code == 201
+    assert data_of(response)["fields"]["x-fake-max"] == "2147483648"
+
+
+async def test_oversized_replacement_preserves_the_current_model(
+    app_client: httpx.AsyncClient,
+    object_store: FakeObjectStore,
+) -> None:
+    old = await make_asset(app_client, object_store)
+    response = await app_client.post(
+        f"{ASSETS_URL}/{old['id']}:presign-replacement",
+        json={
+            "kind": "model",
+            "content_type": GLB,
+            "size_bytes": 2_147_483_649,
+        },
+    )
+    assert response.status_code == 400
+    assert response.json()["code"] == 41503
+    assert data_of(await app_client.get(f"{ASSETS_URL}/{old['id']}")) == old
+
+
 async def prepare(
     client: httpx.AsyncClient, store: FakeObjectStore, asset_id: str
 ) -> str:

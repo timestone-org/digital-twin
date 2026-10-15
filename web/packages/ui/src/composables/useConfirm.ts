@@ -5,7 +5,14 @@
  * 后者每加一个可删对象就要复制一遍那份状态，而复制漏一处的表现是**点了删除没反应**。
  */
 
-import { readonly, ref, type DeepReadonly, type Ref } from 'vue'
+import {
+  readonly,
+  ref,
+  shallowReadonly,
+  shallowRef,
+  type DeepReadonly,
+  type Ref,
+} from 'vue'
 
 export interface DtConfirmRequest {
   title?: string
@@ -23,32 +30,44 @@ interface PendingConfirm extends DtConfirmRequest {
 }
 
 const pending = ref<PendingConfirm | null>(null)
+const anchor = shallowRef<HTMLElement | null>(null)
 let sequence = 0
 
 function settle(confirmed: boolean): void {
   const current = pending.value
   if (current === null) return
   pending.value = null
+  anchor.value = null
   current.settle(confirmed)
 }
 
 interface ConfirmApi {
   pending: DeepReadonly<Ref<PendingConfirm | null>>
-  /** 弹出确认框，用户点「确定」时 resolve 为 true，其余一切关闭路径都是 false。 */
-  ask: (request: DtConfirmRequest) => Promise<boolean>
+  anchor: Readonly<Ref<HTMLElement | null>>
+  /** 提供 trigger 时显示气泡；只有确认 resolve(true)，其余关闭路径均为 false。 */
+  ask: (request: DtConfirmRequest, trigger?: HTMLElement) => Promise<boolean>
   resolve: (confirmed: boolean) => void
 }
 
 export function useConfirm(): ConfirmApi {
-  function ask(request: DtConfirmRequest): Promise<boolean> {
+  function ask(
+    request: DtConfirmRequest,
+    trigger?: HTMLElement,
+  ): Promise<boolean> {
     // ⚠ 前一个还没结的时候直接顶掉它，并把它判为「取消」：
     // 不结的话调用方的 await 永远挂着，那条代码路径就静默停在半截。
     settle(false)
+    anchor.value = trigger ?? null
     return new Promise<boolean>((done) => {
       sequence += 1
       pending.value = { ...request, id: sequence, settle: done }
     })
   }
 
-  return { pending: readonly(pending), ask, resolve: settle }
+  return {
+    pending: readonly(pending),
+    anchor: shallowReadonly(anchor),
+    ask,
+    resolve: settle,
+  }
 }

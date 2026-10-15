@@ -34,13 +34,30 @@ onBeforeUnmount(() => {
 })
 </script>
 <template>
-  <div ref="host" class="panel-preview" aria-label="卡片配置预览" />
+  <div
+    ref="host"
+    class="panel-preview"
+    role="region"
+    aria-label="卡片配置预览"
+    tabindex="0"
+  />
 </template>
 <style scoped lang="scss">
 .panel-preview {
+  box-sizing: border-box;
+  flex: 1 1 auto;
   padding: 16px;
   min-width: 0;
+  min-height: 0;
+  max-height: min(320px, 40dvh);
   overflow: auto;
+  overscroll-behavior: contain;
+  scrollbar-width: thin;
+
+  &:focus-visible {
+    outline: 2px solid var(--accent-primary);
+    outline-offset: -2px;
+  }
   :deep(.twin-panel-mount) {
     width: 100%;
     height: auto;
@@ -49,6 +66,7 @@ onBeforeUnmount(() => {
   :deep(.twin-panel-mount > .twin-panel) {
     position: relative;
     transform: none;
+    min-width: 0;
     max-width: 100%;
     box-sizing: border-box;
   }

@@ -16,6 +16,7 @@ ASSET_KINDS = ("model", "image", "icon")
 
 KIB = 1024
 MIB = 1024 * KIB
+GIB = 1024 * MIB
 
 
 @dataclass(frozen=True)
@@ -47,7 +48,7 @@ _MODEL = KindSpec(
         # 不收它等于「文件明明选对了却传不上去」
         "application/octet-stream",
     ),
-    max_bytes=256 * MIB,
+    max_bytes=2 * GIB,
     label="三维模型",
 )
 

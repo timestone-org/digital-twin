@@ -64,13 +64,13 @@ describe('零向量', () => {
   it('三个分量都是 0 时提示这样等于没配', () => {
     const wrapper = mountInspector(arrowOf({ direction: [0, 0, 0] }))
 
-    expect(wrapper.text()).toContain('零向量不是一个方向')
+    expect(wrapper.text()).toContain('方向向量不能为零')
   })
 
   it('有方向时不提示', () => {
     const wrapper = mountInspector(arrowOf())
 
-    expect(wrapper.text()).not.toContain('零向量不是一个方向')
+    expect(wrapper.text()).not.toContain('方向向量不能为零')
   })
 
   it('改一个分量也整份换新数组', async () => {
@@ -99,7 +99,7 @@ describe('从视口拾取位置', () => {
 
   it('拾取中点一下是取消，并说清楚现在该做什么', async () => {
     const wrapper = mountInspector(arrowOf(), true)
-    expect(wrapper.text()).toContain('在视口里点一下')
+    expect(wrapper.text()).toContain('点击三维视口')
     await pickButton(wrapper).trigger('click')
 
     expect(wrapper.emitted('cancelPick')).toHaveLength(1)
@@ -108,10 +108,10 @@ describe('从视口拾取位置', () => {
 })
 
 describe('小数位的 null 档', () => {
-  it('不定位数时写明按原值上屏', () => {
+  it('保留原始小数位时写明按原值上屏', () => {
     const wrapper = mountInspector(arrowOf())
 
-    expect(wrapper.text()).toContain('不定位数')
+    expect(wrapper.text()).toContain('保留原始小数位')
   })
 
   it('关掉开关写回 null 而不是 0', async () => {

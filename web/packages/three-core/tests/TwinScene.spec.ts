@@ -22,6 +22,7 @@ import {
 } from '../src/testing/createHeadlessRenderer'
 import type { TwinModelAsset } from '../src/modelLoader'
 import TwinScene from '../src/TwinScene.vue'
+import { defineComponent, h, KeepAlive, nextTick, ref } from 'vue'
 
 const seam = vi.hoisted(() => ({
   createWebGLRenderer: vi.fn(),
@@ -127,6 +128,33 @@ afterEach(() => {
   seam.createWebGLRenderer.mockReset()
   seam.loadTwinModel.mockReset()
   __resetGlSnapshots()
+})
+
+it('缓存的运行态场景停用后暂停绘制，返回时复用模型与渲染器', async () => {
+  const visible = ref(true)
+  const sceneConfig = config()
+  const host = defineComponent({
+    setup: () => () =>
+      h(KeepAlive, () =>
+        visible.value ? h(TwinScene, { config: sceneConfig }) : null,
+      ),
+  })
+  const wrapper = mount(host, { attachTo: document.body })
+  await flushPromises()
+  await new Promise<void>((resolve) => requestAnimationFrame(() => resolve()))
+  visible.value = false
+  await nextTick()
+  const count = renderer.renders.length
+  await new Promise<void>((resolve) => requestAnimationFrame(() => resolve()))
+  expect(renderer.renders).toHaveLength(count)
+  expect(renderer.disposeCount).toBe(0)
+  visible.value = true
+  await nextTick()
+  await new Promise<void>((resolve) => requestAnimationFrame(() => resolve()))
+  expect(renderer.renders.length).toBeGreaterThan(count)
+  expect(seam.loadTwinModel).toHaveBeenCalledOnce()
+  wrapper.unmount()
+  expect(renderer.disposeCount).toBe(1)
 })
 
 describe('降级路径', () => {

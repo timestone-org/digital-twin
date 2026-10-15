@@ -5,7 +5,7 @@
  * 直接算下去的话，一帧就能把整条漫游轨迹走完、把动画跳过一大截。
  */
 import type * as THREE from 'three'
-import { onBeforeUnmount } from 'vue'
+import { onActivated, onDeactivated, onBeforeUnmount } from 'vue'
 
 import { createFrameClock } from './frameClock'
 import { renderScene, resizeScene, type SceneCore } from './sceneCore'
@@ -41,6 +41,8 @@ export function useRenderLoop(options: RenderLoopOptions): RenderLoop {
   const clock = createFrameClock()
   let observer: ResizeObserver | null = null
   let frameHandle = 0
+  let isStarted = false
+  let isActive = true
 
   function measure(): void {
     const core = options.core()
@@ -50,6 +52,7 @@ export function useRenderLoop(options: RenderLoopOptions): RenderLoop {
   }
 
   function tick(now: number): void {
+    if (!isActive) return
     const core = options.core()
     if (core === null) return
     options.onFrame(clock.tick(now))
@@ -58,8 +61,11 @@ export function useRenderLoop(options: RenderLoopOptions): RenderLoop {
   }
 
   function start(): void {
+    isStarted = true
+    if (!isActive) return
     const element = options.element()
     if (element === null) return
+    stop()
     observer = new ResizeObserver(measure)
     observer.observe(element)
     measure()
@@ -67,13 +73,26 @@ export function useRenderLoop(options: RenderLoopOptions): RenderLoop {
     frameHandle = requestAnimationFrame(tick)
   }
 
-  // ⚠ 早于宿主释放场景那一步跑：Vue 按注册顺序调卸载钩子，而这个组合式函数
-  // 在 setup 里先装配。反过来的话最后一帧会画在已 dispose 的场景上
-  onBeforeUnmount(() => {
-    cancelAnimationFrame(frameHandle)
+  function stop(): void {
+    if (frameHandle !== 0) cancelAnimationFrame(frameHandle)
+    frameHandle = 0
     observer?.disconnect()
     observer = null
+  }
+
+  onDeactivated(() => {
+    isActive = false
+    stop()
   })
+  onActivated(() => {
+    if (isActive) return
+    isActive = true
+    if (isStarted) start()
+  })
+
+  // ⚠ 早于宿主释放场景那一步跑：Vue 按注册顺序调卸载钩子，而这个组合式函数
+  // 在 setup 里先装配。反过来的话最后一帧会画在已 dispose 的场景上
+  onBeforeUnmount(stop)
 
   return { start, measure }
 }

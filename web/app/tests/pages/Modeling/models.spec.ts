@@ -104,6 +104,64 @@ afterEach(() => {
 })
 
 describe('模型库', () => {
+  it('两块列表分别显示分页器，空绑定列表也保留分页区', async () => {
+    stub([version()], [])
+    signIn([PERMISSION_CODES.modelingView])
+    const wrapper = open()
+    await flushPromises()
+
+    const pagers = wrapper.findAll('nav[aria-label="分页"]')
+    expect(pagers).toHaveLength(2)
+    expect(pagers[0]?.text()).toContain('共 1 条')
+    expect(pagers[1]?.text()).toContain('共 0 条')
+  })
+
+  it.each([
+    ['模型版本', 'listModelingVersions', 'listModelingBindings'],
+    ['公式绑定', 'listModelingBindings', 'listModelingVersions'],
+  ] as const)('%s 的翻页只更新自己的列表', async (title, target, other) => {
+    stub([version()], [binding()])
+    vi.mocked(modeling.listModelingVersions).mockResolvedValue({
+      items: [version()],
+      page: 1,
+      size: 200,
+      total: 400,
+    })
+    vi.mocked(modeling.listModelingBindings).mockResolvedValue({
+      items: [binding()],
+      page: 1,
+      size: 200,
+      total: 400,
+    })
+    signIn([PERMISSION_CODES.modelingView])
+    const wrapper = open()
+    await flushPromises()
+    const block = wrapper
+      .findAll('.dt-ml-models__block')
+      .find((item) => item.find('h2').text() === title)
+    const next = block
+      ?.findAll('button')
+      .find((item) => item.text() === '下一页')
+    expect(next).toBeDefined()
+    vi.mocked(modeling[target]).mockClear()
+    vi.mocked(modeling[other]).mockClear()
+    await next?.trigger('click')
+    await flushPromises()
+
+    expect(modeling[target]).toHaveBeenCalledWith({ page: 2, size: 200 })
+    expect(modeling[other]).not.toHaveBeenCalled()
+
+    await block?.get('button[role="combobox"]').trigger('click')
+    await wrapper
+      .findAll('[role="option"]')
+      .find((item) => item.text() === '20 条/页')
+      ?.trigger('click')
+    await flushPromises()
+
+    expect(modeling[target]).toHaveBeenLastCalledWith({ page: 1, size: 20 })
+    expect(modeling[other]).not.toHaveBeenCalled()
+  })
+
   it('不可用的版本要说出原因，不是只标一个「不可用」', async () => {
     stub(
       [

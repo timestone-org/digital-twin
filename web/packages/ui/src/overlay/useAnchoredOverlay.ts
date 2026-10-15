@@ -2,7 +2,7 @@
  * @fileoverview 锚定浮层的开合、挂载点与定位状态，供 Popover / DropdownMenu / Tooltip 共用。
  * 抽出来是因为这几件事必须成套做对：teleport 出去、跟着滚动重算、点外面收起、卸载摘监听。
  */
-import { nextTick, ref } from 'vue'
+import { nextTick, onDeactivated, ref } from 'vue'
 import type { Ref } from 'vue'
 import { measureAnchored } from './placement'
 import type { DtOverlayAlign, DtOverlaySide } from './placement'
@@ -70,6 +70,10 @@ export function useAnchoredOverlay(
     onOutside: () => {
       options.onOutside()
     },
+  })
+  onDeactivated(() => {
+    if (isOpen.value) options.onOutside()
+    close()
   })
 
   /**

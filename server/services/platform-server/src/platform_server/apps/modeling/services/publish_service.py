@@ -119,7 +119,8 @@ def inspect_run(
     ]
     if windowed:
         return _unservable(
-            "滞后 / 滚动特征在单行预测时拿不到历史窗口，本流水线暂不可上线"
+            "滞后 / 滚动特征在单行预测时拿不到历史窗口，本流水线暂不可上线",
+            payload,
         )
     publishing = _Publishing(
         graph=graph,
@@ -131,7 +132,7 @@ def inspect_run(
     )
     unusable = _channel_refusal(publishing)
     if unusable:
-        return _unservable(unusable)
+        return _unservable(unusable, payload)
     return _servable(publishing)
 
 
@@ -198,17 +199,18 @@ def _servable(publishing: _Publishing) -> Publishable:
     if entry is None:
         return _unservable(
             "这次运行没有留下逐步的列记录，早于本次升级——"
-            "请重跑一遍这条流水线再发布"
+            "请重跑一遍这条流水线再发布",
+            publishing.payload,
         )
     steps = _steps_of(publishing, entry)
     refused = _refusal(publishing, steps, entry)
     if refused:
-        return _unservable(refused)
+        return _unservable(refused, publishing.payload)
     serving = _serving_of(publishing, steps, entry)
     try:
         compiled = compile_model(serving, estimator=publishing.estimator)
     except OperatorError as error:
-        return _unservable(f"可服务表示编译不出来：{error}")
+        return _unservable(f"可服务表示编译不出来：{error}", publishing.payload)
     moment = (
         smoke_moment(publishing.graph, publishing.records, publishing.served)
         if compiled.requires_timestamp
@@ -217,12 +219,13 @@ def _servable(publishing: _Publishing) -> Publishable:
     if compiled.requires_timestamp and moment is None:
         return _unservable(
             "这条链带时间特征，而这次运行的摘要里没有留下任何时刻，"
-            "发布前那一次实跑做不了——请重跑一遍这条流水线再发布"
+            "发布前那一次实跑做不了——请重跑一遍这条流水线再发布",
+            publishing.payload,
         )
     try:
         compiled.predict([item.mean for item in entry], moment)
     except OperatorError as error:
-        return _unservable(f"可服务表示校验没通过：{error}")
+        return _unservable(f"可服务表示校验没通过：{error}", publishing.payload)
     return _published(publishing, serving, steps, entry)
 
 
@@ -459,16 +462,24 @@ def _target_meta(publishing: _Publishing, target_key: str) -> dict[str, Any]:
     }
 
 
-def _unservable(reason: str) -> Publishable:
+def _unservable(
+    reason: str, payload: dict[str, Any] | None = None
+) -> Publishable:
+    model = payload or {}
+    channel = as_text(model.get("serving_channel"))
     return Publishable(
         is_servable=False,
         reason=reason,
         serving={},
-        feature_keys=(),
-        target_key="",
-        algo="",
-        task="",
-        channel=CHANNEL_JSON,
+        feature_keys=tuple(as_texts(model.get("feature_keys"))),
+        target_key=as_text(model.get("target_key")),
+        algo=as_text(model.get("algo")),
+        task=as_text(model.get("task")),
+        channel=(
+            channel
+            if channel in (CHANNEL_JSON, CHANNEL_BINARY)
+            else CHANNEL_JSON
+        ),
     )
 
 

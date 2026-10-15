@@ -27,6 +27,31 @@ const meta = {
 export default meta
 type Story = StoryObj<typeof meta>
 
+export const 气泡确认: Story = {
+  render: () => ({
+    components: { DtButton, DtConfirmHost, DtNotice },
+    setup() {
+      const { ask } = useConfirm()
+      const result = ref('')
+      async function closeTabs(event: MouseEvent): Promise<void> {
+        if (!(event.currentTarget instanceof HTMLElement)) return
+        const confirmed = await ask(
+          {
+            title: '关闭全部页签',
+            message: '关闭页面并返回工作台。未保存的改动会另行确认。',
+            confirmText: '关闭全部',
+            danger: true,
+          },
+          event.currentTarget,
+        )
+        result.value = confirmed ? '已确认关闭' : '已取消'
+      }
+      return { closeTabs, result }
+    },
+    template: `<div class="sb-col"><DtButton size="sm" variant="ghost" icon="tabs-close" aria-label="关闭全部页签" @click="closeTabs" /><DtNotice v-if="result" intent="neutral">{{ result }}</DtNotice><DtConfirmHost /></div>`,
+  }),
+}
+
 /** 危险操作：确认键转危险色。 */
 export const 危险操作: Story = {
   render: () => ({

@@ -157,19 +157,19 @@ describe('喂给模块的东西', () => {
   })
 })
 
-describe('预览不了的时候', () => {
+describe('无法预览的时候', () => {
   it('模块没注册就直说，不留一块空白', async () => {
     seam.manifest = null
     const wrapper = await opened()
 
     expect(wrapper.find('[data-test="preview-box"]').exists()).toBe(false)
-    expect(wrapper.text()).toContain('预览不了')
+    expect(wrapper.text()).toContain('无法预览')
   })
 
   it('大屏上取不到尺寸时也直说', async () => {
     const wrapper = await opened({ node: node({ w: 0 }) })
 
     expect(wrapper.find('[data-test="preview-box"]').exists()).toBe(false)
-    expect(wrapper.text()).toContain('预览不了')
+    expect(wrapper.text()).toContain('无法预览')
   })
 })

@@ -256,6 +256,7 @@ export class EditorScene {
   private selection: TwinSceneSelection | null = null
   private pickMode: TwinPickMode = null
   private frameHandle = 0
+  private isActive = true
   private loadSeq = 0
   private loadAbort: AbortController | null = null
   private modelSpan = 0
@@ -277,6 +278,18 @@ export class EditorScene {
     this.config = options.config
     this.gltfSource = options.gltfSource ?? createGltfSource()
     this.mount(options.createRenderer ?? createWebGLRenderer)
+  }
+
+  /** 页签隐藏时暂停渲染与游戏操作，返回时沿用模型和相机。 */
+  setActive(active: boolean): void {
+    if (this.isActive === active || this.core === null) return
+    this.isActive = active
+    cancelAnimationFrame(this.frameHandle)
+    this.gameNavigation?.setMode(active ? this.navigationMode : 'orbit')
+    this.clock.reset()
+    if (!active) return
+    this.measure()
+    this.frameHandle = requestAnimationFrame(this.tick)
   }
 
   /**

@@ -1,5 +1,5 @@
 /**
- * @fileoverview 信息牌画法的绑定提示、量程诊断、趋势与阈值配置契约。
+ * @fileoverview 信息牌显示方式的绑定提示、量程诊断、趋势与阈值配置契约。
  */
 import type { TwinPanelField } from '@dt/twin-config'
 import { DtNumberInput, DtSelect } from '@dt/ui'
@@ -70,38 +70,40 @@ async function typeNumber(
   await found.trigger('change')
 }
 
-describe('画法', () => {
-  it('十种画法都列在下拉里', () => {
+describe('显示方式', () => {
+  it('十种显示方式都列在下拉里', () => {
     const wrapper = mountGraph(fieldOf())
 
-    expect(selectByLabel(wrapper, '画法').props('options')).toHaveLength(10)
+    expect(selectByLabel(wrapper, '显示方式').props('options')).toHaveLength(10)
   })
 
   it('选一档写回 kind', async () => {
     const wrapper = mountGraph(fieldOf())
 
-    await selectByLabel(wrapper, '画法').setValue('gauge')
+    await selectByLabel(wrapper, '显示方式').setValue('gauge')
 
     expect(patchOf(wrapper)).toEqual({ kind: 'gauge' })
   })
 
-  // ⚠ 下拉给回来的是裸字符串：对不上还照写的话，配置里会多出一个渲染层不认的画法
+  // ⚠ 下拉给回来的是裸字符串：对不上还照写的话，配置里会多出一个渲染层不认的显示方式
   it('对不上任何一档的值当没改', async () => {
     const wrapper = mountGraph(fieldOf())
 
-    await selectByLabel(wrapper, '画法').setValue('radar')
+    await selectByLabel(wrapper, '显示方式').setValue('radar')
 
     expect(wrapper.emitted('update')).toBeUndefined()
   })
 
-  // ⚠ 换画法不改行数，用户才敢动它
-  it('写明换画法不会让绑定错位', () => {
-    expect(mountGraph(fieldOf()).text()).toContain('换画法不改行号')
+  // ⚠ 换显示方式不改行数，用户才敢动它
+  it('写明换显示方式不会让绑定错位', () => {
+    expect(mountGraph(fieldOf()).text()).toContain(
+      '切换显示方式不改变数据绑定关系',
+    )
   })
 })
 
 describe('量程', () => {
-  it('不吃量程的画法不给量程输入', () => {
+  it('不吃量程的显示方式不给量程输入', () => {
     const wrapper = mountGraph(fieldOf({ kind: 'text' }))
 
     expect(
@@ -111,7 +113,7 @@ describe('量程', () => {
     ).toBe(false)
   })
 
-  it('吃量程的画法给上下限两个输入，改了各写各的', async () => {
+  it('吃量程的显示方式给上下限两个输入，改了各写各的', async () => {
     const wrapper = mountGraph(fieldOf({ kind: 'bar' }))
 
     await typeNumber(wrapper, '量程上限', '250')
@@ -127,38 +129,38 @@ describe('量程', () => {
     expect(patchOf(wrapper)).toEqual({ min: 0 })
   })
 
-  // ⚠ 渲染层遇到颠倒的量程退回纯文本：不当场说，用户只会以为是画法没生效
-  it('量程颠倒时当场说会退回纯文本', () => {
+  // ⚠ 渲染层遇到颠倒的量程以纯文本显示：不当场说，用户只会以为是显示方式没生效
+  it('量程颠倒时当场说会以纯文本显示', () => {
     const wrapper = mountGraph(fieldOf({ kind: 'gauge', min: 80, max: 20 }))
 
-    expect(wrapper.text()).toContain('退回纯文本')
+    expect(wrapper.text()).toContain('以纯文本显示')
   })
 
   it('量程正常时不报这一句', () => {
     const wrapper = mountGraph(fieldOf({ kind: 'gauge', min: 0, max: 100 }))
 
-    expect(wrapper.text()).not.toContain('退回纯文本')
+    expect(wrapper.text()).not.toContain('以纯文本显示')
   })
 
-  // ⚠ 同样颠倒的量程，配在不吃量程的画法上无所谓——报出来只会变成噪音
-  it('不吃量程的画法配着颠倒的量程也不报', () => {
+  // ⚠ 同样颠倒的量程，配在不吃量程的显示方式上无所谓——报出来只会变成噪音
+  it('不吃量程的显示方式配着颠倒的量程也不报', () => {
     const wrapper = mountGraph(fieldOf({ kind: 'text', min: 80, max: 20 }))
 
-    expect(wrapper.text()).not.toContain('退回纯文本')
+    expect(wrapper.text()).not.toContain('以纯文本显示')
   })
 })
 
 describe('走势序列', () => {
   // ⚠ 攒的是本次会话内收到的读数：不写明的话，刚打开大屏时图是空的会被当成绑定没生效
-  it('趋势线与柱群写明不查历史库', () => {
+  it('趋势线与柱群写明不加载历史数据', () => {
     for (const kind of ['sparkline', 'bars'] as const) {
-      expect(mountGraph(fieldOf({ kind })).text()).toContain('不查历史库')
+      expect(mountGraph(fieldOf({ kind })).text()).toContain('不加载历史数据')
     }
   })
 
-  it('别的画法不说这一句', () => {
+  it('别的显示方式不说这一句', () => {
     expect(mountGraph(fieldOf({ kind: 'bar' })).text()).not.toContain(
-      '不查历史库',
+      '不加载历史数据',
     )
   })
 })
@@ -278,7 +280,7 @@ describe('阈值档', () => {
       }),
     )
 
-    expect(wrapper.text()).toContain('取阈值最大的那一档')
+    expect(wrapper.text()).toContain('采用最高阈值对应的颜色')
   })
 
   it('只有一档时不啰嗦这一句', () => {
@@ -286,6 +288,6 @@ describe('阈值档', () => {
       fieldOf({ levels: [{ id: 'a', at: 60, tone: 'warning' }] }),
     )
 
-    expect(wrapper.text()).not.toContain('取阈值最大的那一档')
+    expect(wrapper.text()).not.toContain('采用最高阈值对应的颜色')
   })
 })

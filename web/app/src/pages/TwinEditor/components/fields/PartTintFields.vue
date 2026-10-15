@@ -124,7 +124,7 @@ function moveStop(index: number, delta: number): void {
 
     <template v-if="tint !== null">
       <DtNotice v-if="!bound" intent="warning" icon="alert-triangle">
-        这个部件还没挑点位：去右栏「绑定」页给它挑一个，否则颜色永远只会是回落色。
+        尚未绑定状态点位，请在右侧「绑定」中选择点位；绑定前使用回落色。
       </DtNotice>
 
       <DtSegmented
@@ -153,10 +153,10 @@ function moveStop(index: number, delta: number): void {
         <DtEmpty
           v-if="tint.stops.length === 0"
           size="inline"
-          title="一档都没配，这个部件的颜色永远只会是回落色。"
+          title="尚未配置档位，将使用回落色。"
         />
         <DtButton variant="soft" size="sm" icon="plus" block @click="addStop">
-          添加一档
+          添加档位
         </DtButton>
       </template>
 

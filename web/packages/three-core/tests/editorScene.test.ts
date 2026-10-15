@@ -177,6 +177,21 @@ async function renderedScene(harness: Harness): Promise<THREE.Object3D> {
   return last.scene
 }
 
+it('页签停用时停止渲染，重新激活沿用相机并在关闭时释放上下文', async () => {
+  const harness = await ready()
+  await nextFrame()
+  const pose = harness.scene.snapshot()
+  harness.scene.setActive(false)
+  const count = harness.renderer.renders.length
+  await nextFrame()
+  expect(harness.renderer.renders).toHaveLength(count)
+  expect(harness.renderer.disposeCount).toBe(0)
+  harness.scene.setActive(true)
+  await nextFrame()
+  expect(harness.renderer.renders.length).toBeGreaterThan(count)
+  expect(harness.scene.snapshot()).toEqual(pose)
+})
+
 /** CSS2D 覆盖层的对象自带一个 DOM 元素，牌面文本从它上面读。 */
 function hasElement(
   object: THREE.Object3D,

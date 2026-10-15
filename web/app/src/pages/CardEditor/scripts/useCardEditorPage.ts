@@ -13,6 +13,7 @@ import { computed, ref, shallowRef } from 'vue'
 import type { ComputedRef, Ref } from 'vue'
 
 import { getDashboard } from '@/api/dashboard'
+import { useWorkspaceDashboard } from '@/features/workspace/useWorkspaceDashboard'
 import type { ReplaceLayoutInput } from '@/api/dashboard'
 import { describeError } from '@/composables/useAsyncList'
 import { useRacedFetch } from '@/composables/useRacedFetch'
@@ -169,6 +170,7 @@ export function useCardEditorPage(
     loadedNodeId: null,
   }
   const save0 = createSaver(doc)
+  useWorkspaceDashboard(() => dashboard.value)
 
   const node = computed<DashboardNodePayload | null>(
     () => dashboard.value?.nodes.find((one) => one.id === nodeId()) ?? null,

@@ -5,6 +5,7 @@
  */
 
 import { onMounted, onUnmounted } from 'vue'
+import { useWorkspacePage } from '@/features/workspace/context'
 
 import { isFormFocused } from './isFormFocused'
 import {
@@ -34,6 +35,7 @@ export interface EditorShortcutOptions {
  * @param options 处理器与「暂时让位」的判定
  */
 export function useEditorShortcuts(options: EditorShortcutOptions): void {
+  const page = useWorkspacePage()
   const { handlers } = options
   let listeners: AbortController | null = null
 
@@ -53,6 +55,7 @@ export function useEditorShortcuts(options: EditorShortcutOptions): void {
   }
 
   function onKeyDown(event: KeyboardEvent): void {
+    if (page?.active.value === false) return
     if (options.suspended?.() === true) {
       if (event.key === 'Escape') handlers.escape()
       return

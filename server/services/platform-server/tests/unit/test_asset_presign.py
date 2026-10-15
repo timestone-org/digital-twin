@@ -52,12 +52,23 @@ async def test_a_type_outside_the_whitelist_is_refused() -> None:
 
 
 async def test_an_oversized_declaration_is_refused_before_uploading() -> None:
-    spec = spec_of("model")
-    assert spec is not None
     store = FakeObjectStore()
     with pytest.raises(AssetTooLarge):
-        await presign_upload(store, request(size_bytes=spec.max_bytes + 1))
+        await presign_upload(store, request(size_bytes=2_147_483_649))
     assert store.presigned == []
+
+
+@pytest.mark.parametrize(
+    "size_bytes",
+    [268_435_457, 1_073_741_824, 2_147_483_648],
+    ids=["above-256-mib", "one-gib", "two-gib"],
+)
+async def test_large_models_receive_a_two_gib_upload_policy(
+    size_bytes: int,
+) -> None:
+    store = FakeObjectStore()
+    await presign_upload(store, request(size_bytes=size_bytes))
+    assert store.presigned[0].fields["x-fake-max"] == "2147483648"
 
 
 async def test_the_ticket_points_at_the_staging_key_for_that_kind() -> None:

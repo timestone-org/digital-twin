@@ -26,13 +26,13 @@ import {
 import { placeOutlineEntity } from './outlinePlacement'
 import type { OutlinePlacement } from './outlinePlacement'
 import type { TwinDoc } from './twinDoc'
-import type { TwinEntityKind, TwinSelection } from './types'
+import type { TwinEntityKind, TwinPlaceableKind, TwinSelection } from './types'
 
 export interface TwinEditorActions {
   add: (kind: TwinEntityKind, folderId?: string) => void
   place: (placement: OutlinePlacement) => void
-  /** 新建一张信息牌，中心落在给定的世界坐标上（视口拾取的表面点）。 */
-  addPanelAt: (position: Vec3) => void
+  /** 按视口拾取的世界坐标新建实体，落点与归夹合为一次撤销。 */
+  addAt: (kind: TwinPlaceableKind, position: Vec3, folderId?: string) => void
   /** 按模型节点名批量建部件；选中最后建出来的那个。 */
   addParts: (nodeNames: readonly string[]) => void
   remove: (kind: TwinEntityKind, id: string) => void
@@ -146,15 +146,6 @@ export function createTwinEditorActions(
 
     ...createAddAction(doc, select),
 
-    // 建牌 + 落点只 commit 一次：撤销一步就该回到「没这张牌」的状态
-    addPanelAt: (position) => {
-      const created = addEntity(doc.config.value, 'panels')
-      doc.commit(
-        updateEntity(created.config, 'panels', created.id, { position }),
-      )
-      select({ kind: 'panels', id: created.id })
-    },
-
     addParts: (nodeNames) => {
       const { config, ids } = addPartsFromNodes(doc.config.value, nodeNames)
       if (ids.length === 0) return
@@ -190,21 +181,29 @@ export function createTwinEditorActions(
 function createAddAction(
   doc: TwinDoc,
   select: (selection: TwinSelection) => void,
-): Pick<TwinEditorActions, 'add'> {
+): Pick<TwinEditorActions, 'add' | 'addAt'> {
+  function add(kind: TwinEntityKind, folderId?: string, position?: Vec3): void {
+    if (
+      folderId !== undefined &&
+      !doc.config.value.folders.some(
+        (folder) => folder.id === folderId && folder.kind === kind,
+      )
+    )
+      return
+    const created = addEntity(doc.config.value, kind)
+    const config =
+      position === undefined
+        ? created.config
+        : updateEntity(created.config, kind, created.id, { position })
+    doc.commit(
+      folderId === undefined
+        ? config
+        : moveIntoFolder(config, folderId, created.id),
+    )
+    select({ kind, id: created.id })
+  }
   return {
-    add: (kind, folderId) => {
-      if (
-        folderId !== undefined &&
-        !doc.config.value.folders.some(
-          (folder) => folder.id === folderId && folder.kind === kind,
-        )
-      )
-        return
-      const { config, id } = addEntity(doc.config.value, kind)
-      doc.commit(
-        folderId === undefined ? config : moveIntoFolder(config, folderId, id),
-      )
-      select({ kind, id })
-    },
+    add: (kind, folderId) => add(kind, folderId),
+    addAt: (kind, position, folderId) => add(kind, folderId, position),
   }
 }

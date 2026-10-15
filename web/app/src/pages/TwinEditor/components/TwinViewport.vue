@@ -21,10 +21,19 @@ import type {
 } from '@dt/twin-config'
 import { DEFAULT_CAMERA_FOV } from '@dt/twin-config'
 import { DtButton, DtNotice, DtSpinner } from '@dt/ui'
-import { computed, onBeforeUnmount, onMounted, ref, watch } from 'vue'
+import {
+  computed,
+  onActivated,
+  onDeactivated,
+  onBeforeUnmount,
+  onMounted,
+  ref,
+  watch,
+} from 'vue'
 
 import { targetFrameVars } from '../scripts/targetFrame'
 import type { TwinSelection } from '../scripts/types'
+import { useWorkspacePage } from '@/features/workspace/context'
 
 const props = defineProps<{
   /** ⚠ 必须是 `normalizeTwinConfig` 的输出：视口按引用比对，就地改字段不会重绘。 */
@@ -80,6 +89,7 @@ const emit = defineEmits<{
 const containerRef = ref<HTMLDivElement | null>(null)
 const status = ref<EditorSceneStatus>('empty')
 const errorMessage = ref('')
+const page = useWorkspacePage()
 
 // ⚠ 场景不进响应式：它是命令式对象，被代理一遍只会让 three 的内部结构在每一帧
 // 白走一次依赖收集，而它的变化本来就不需要驱动模板
@@ -91,12 +101,13 @@ const overlayMessage = computed(() =>
 const pickHint = computed(() => {
   if (props.pickMode === null) return ''
   if (props.pickHint !== undefined) return props.pickHint
-  if (props.pickMode === 'node') return '点模型上的部件，取它的节点名'
-  return '点模型表面或地面，取那个点的坐标'
+  if (props.pickMode === 'node') return '点击模型部件以选择对应节点'
+  return '点击模型表面或地面以获取坐标'
 })
 
 /** 拾取途中按 Esc 也能退出来，不用非得找到那个取消按钮。 */
 function onKeydown(event: KeyboardEvent): void {
+  if (page?.active.value === false) return
   if (event.key === 'Escape' && props.pickMode !== null) emit('cancelPick')
 }
 /** 按目标格子的宽高比留边；没给尺寸就铺满。 */
@@ -176,6 +187,8 @@ onBeforeUnmount(() => {
   scene?.dispose()
   scene = null
 })
+onActivated(() => scene?.setActive(true))
+onDeactivated(() => scene?.setActive(false))
 
 watch(
   () => props.config,

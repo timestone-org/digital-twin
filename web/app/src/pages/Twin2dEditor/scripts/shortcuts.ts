@@ -14,6 +14,7 @@
 import { TWIN_2D_DEFAULT_GRID } from '@dt/twin2d'
 import type { Pt } from '@dt/twin2d'
 import { onMounted, onUnmounted } from 'vue'
+import { useWorkspacePage } from '@/features/workspace/context'
 
 /**
  * 数字键 1..6 对应的工具。
@@ -183,6 +184,7 @@ export interface Twin2dShortcutOptions {
  * @param options 落点、栅格与「暂时让位」的判定
  */
 export function useTwin2dShortcuts(options: Twin2dShortcutOptions): void {
+  const page = useWorkspacePage()
   let listeners: AbortController | null = null
 
   function run(action: Twin2dShortcutAction, event: KeyboardEvent): void {
@@ -201,6 +203,7 @@ export function useTwin2dShortcuts(options: Twin2dShortcutOptions): void {
   }
 
   function onKeyDown(event: KeyboardEvent): void {
+    if (page?.active.value === false) return
     if (options.suspended?.() === true) {
       if (event.key === 'Escape') options.handlers.escape()
       return

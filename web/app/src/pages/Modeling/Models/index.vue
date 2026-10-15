@@ -24,7 +24,7 @@ import VersionTable from './components/VersionTable.vue'
 import { useBindingOps } from './scripts/useBindingOps'
 import { useVersionOps } from './scripts/useVersionOps'
 
-// 后端 size 的上限。版本与绑定都是业务级资源，一次取满即可
+// 初始每页条数
 const PAGE_SIZE = 200
 
 const versionView = useViewMode('modeling-versions')
@@ -94,7 +94,7 @@ onMounted(() => {
   >
     <!-- h-full + min-h-0 见 AppShell 的契约：main 不滚，高度由页面自己吃满 -->
     <div
-      class="dt-ml-models flex h-full min-h-0 flex-col gap-5 overflow-y-auto"
+      class="dt-ml-models flex h-full min-h-0 flex-col gap-4 overflow-hidden"
     >
       <section class="dt-ml-models__block">
         <VersionTable
@@ -102,6 +102,9 @@ onMounted(() => {
           :rows="versions.items.value"
           :is-loading="versions.loading.value"
           :error="versions.error.value"
+          :pagination="versions.pager.value"
+          @update:page="(page) => void versions.goToPage(page)"
+          @update:size="(size) => void versions.setSize(size)"
           @detail="(row) => void openDetail(row)"
           @bind="(row) => (binding = row)"
           @retire="(row) => void versionOps.retire(row)"
@@ -119,6 +122,9 @@ onMounted(() => {
           :version-labels="versionLabels"
           :is-loading="bindings.loading.value"
           :error="bindings.error.value"
+          :pagination="bindings.pager.value"
+          @update:page="(page) => void bindings.goToPage(page)"
+          @update:size="(size) => void bindings.setSize(size)"
           @toggle="(row, isOn) => void ops.update(row.id, { is_enabled: isOn })"
           @unbind="(row) => void ops.unbind(row.id)"
         >
@@ -149,8 +155,21 @@ onMounted(() => {
 .dt-ml-models {
   &__block {
     display: flex;
+    flex: 1 1 0;
     flex-direction: column;
     gap: 0.5rem;
+    min-width: 0;
+    min-height: 0;
+    overflow: hidden;
+
+    :deep(.dt-data-view.is-fill) {
+      overflow: hidden;
+    }
+
+    :deep(.dt-data-view.is-fill .dt-data-view__panel),
+    :deep(.dt-data-view.is-fill .dt-data-view__grid) {
+      min-height: 0;
+    }
   }
 
   &__title {

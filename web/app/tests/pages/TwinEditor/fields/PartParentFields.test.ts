@@ -105,7 +105,7 @@ describe('两条提醒', () => {
     const parts = partsOf([{ id: 'a', parentId: 'ghost' }])
 
     expect(mountFields(partNamed(parts, 'a'), parts).text()).toContain(
-      '找不到部件 ghost',
+      '上级部件 ghost 不存在',
     )
   })
 
@@ -117,13 +117,13 @@ describe('两条提醒', () => {
     ])
 
     expect(mountFields(partNamed(parts, 'unit'), parts).text()).toContain(
-      '装配栏在运行态点不出来',
+      '运行时无法通过该部件打开装配栏',
     )
   })
 
   it('自己弹详情就不提醒', () => {
     expect(mountFields(partNamed(UNIT, 'unit')).text()).not.toContain(
-      '装配栏在运行态点不出来',
+      '运行时无法通过该部件打开装配栏',
     )
   })
 })

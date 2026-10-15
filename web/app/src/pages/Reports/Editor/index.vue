@@ -7,12 +7,8 @@ import {
   ref,
   watch,
 } from 'vue'
-import {
-  useRoute,
-  useRouter,
-  onBeforeRouteLeave,
-  onBeforeRouteUpdate,
-} from 'vue-router'
+import { useRoute, useRouter } from 'vue-router'
+import { useWorkspaceGuard } from '@/features/workspace/useWorkspaceGuard'
 import { DtButton, DtInput, DtNotice, useToast, useConfirm } from '@dt/ui'
 import type {
   ReportBody,
@@ -75,8 +71,7 @@ const isDirty = computed(
     JSON.stringify(draft.value) !== savedSnapshot.value,
 )
 useUnsavedGuard(() => isDirty.value)
-onBeforeRouteLeave(confirmLeave)
-onBeforeRouteUpdate(confirmLeave)
+useWorkspaceGuard(confirmLeave)
 const canEdit = computed(() => auth.can(['report:manage']))
 const id = computed(() => String(route.params['templateId'] ?? ''))
 const ai = useAiPanel({

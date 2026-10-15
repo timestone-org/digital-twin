@@ -17,6 +17,7 @@ import AiCoreIcon from '@/components/ai/AiCoreIcon.vue'
 import PermGuard from '@/components/PermGuard.vue'
 import type { AiPanel } from '@/composables/useAiPanel'
 import { isAssistantToggle, modLabelOf } from '@/features/ai/composeKeys'
+import { useWorkspacePage } from '@/features/workspace/context'
 
 const props = defineProps<{
   ai: AiPanel
@@ -31,6 +32,7 @@ const props = defineProps<{
 // ⚠ 放大不是装饰：助手的回答里常有表格与代码块，26rem 宽的话它们只能在自己的
 // 框里横向滚，读一行要来回拖两次
 const isWide = ref(false)
+const page = useWorkspacePage()
 const isPeeking = computed(
   () =>
     !props.ai.isOpen.value &&
@@ -42,6 +44,7 @@ const modKey = modLabelOf(navigator.platform)
 
 /** ⌘I / Ctrl+I 开合。权限闸在 PermGuard，这里只看「这套部署有没有助手」。 */
 function onGlobalKey(event: KeyboardEvent): void {
+  if (page?.active.value === false) return
   if (!isAssistantToggle(event) || !props.ai.isAvailable.value) return
   event.preventDefault()
   if (props.ai.isOpen.value) props.ai.close()

@@ -1,10 +1,5 @@
 /**
- * @fileoverview 页面与 3D 视口之间的那几个来回：视口里拾取节点 / 位置、
- * 取当前机位存进视点或部件的取景快照、试飞漫游。
- *
- * ⚠ 拾取是**两段式**的：先记下「点完写回哪个实体的哪个字段」（或「点完落一张
- * 新信息牌」），等视口回调再落。不记的话，视口只知道用户点了模型上的哪个东西，
- * 不知道那一下是给谁点的。
+ * @fileoverview 页面与 3D 视口之间的两段式拾取、新实体放置、机位快照与漫游预览。
  */
 import type {
   TwinConfig,
@@ -15,7 +10,8 @@ import type {
 import { computed, ref, type ComputedRef, type Ref } from 'vue'
 
 import type { TwinEditorActions } from './twinEditorActions'
-import type { TwinEntityKind, TwinSelection } from './types'
+import { TWIN_ENTITY_LABELS } from './types'
+import type { TwinEntityKind, TwinPlaceableKind, TwinSelection } from './types'
 
 /** 相机快照：位置、目标点与视场角。 */
 type CameraPose = { position: Vec3; target: Vec3; fov: number }
@@ -44,12 +40,12 @@ export interface TwinViewportOps {
   pickMode: ComputedRef<'node' | 'position' | null>
   /** 正在等视口里点一下。 */
   isPicking: ComputedRef<boolean>
-  /** 正在等「点一下落新牌」；提示语与写回目标都和普通位置拾取不同。 */
-  isPlacingPanel: ComputedRef<boolean>
+  /** 新建实体的放置提示；普通拾取沿用视口默认文案。 */
+  placementHint: ComputedRef<string | undefined>
   focus: (selection: TwinSelection) => void
   requestPick: (what: 'node' | 'position') => void
-  /** 进入「先点位置再落牌」：下一次位置拾取新建信息牌而不是写回选中实体。 */
-  requestPlacePanel: () => void
+  /** 先拾取位置，再新建实体并归入请求时指定的文件夹。 */
+  requestPlace: (kind: TwinPlaceableKind, folderId?: string) => void
   cancelPick: () => void
   onPickNode: (name: string) => void
   onPickPosition: (position: Vec3) => void
@@ -69,7 +65,7 @@ export interface TwinViewportOps {
 
 export interface TwinViewportDeps {
   config: () => TwinConfig | null
-  actions: () => TwinEditorActions | null
+  actions: () => Pick<TwinEditorActions, 'patchConfig' | 'addAt'> | null
   selection: () => TwinSelection
   /** 轨迹上可用站点不足两个，飞不起来。 */
   onRoamUnavailable: () => void
@@ -82,10 +78,11 @@ interface PendingPatchPick {
   what: 'node' | 'position'
 }
 
-/** 正在等的那一次拾取：按拾取点新建一张信息牌。 */
+/** 正在等的那一次拾取：按拾取点新建实体。 */
 interface PendingPlacePick {
   what: 'position'
-  place: 'panels'
+  place: TwinPlaceableKind
+  folderId: string | undefined
 }
 
 type PendingPick = PendingPatchPick | PendingPlacePick
@@ -121,14 +118,14 @@ function nodesOf(
   return null
 }
 
-/** 拾取那一路：记下「写回谁」或「要落一张新牌」，等视口回调再落。 */
+/** 记下写回目标或新建种类，等视口回调再写入。 */
 function createPicking(
   deps: TwinViewportDeps,
   pending: Ref<PendingPick | null>,
 ): Pick<
   TwinViewportOps,
   | 'requestPick'
-  | 'requestPlacePanel'
+  | 'requestPlace'
   | 'cancelPick'
   | 'onPickNode'
   | 'onPickPosition'
@@ -139,8 +136,8 @@ function createPicking(
       if (!('id' in current)) return
       pending.value = { kind: current.kind, id: current.id, what }
     },
-    requestPlacePanel: () => {
-      pending.value = { what: 'position', place: 'panels' }
+    requestPlace: (kind, folderId) => {
+      pending.value = { what: 'position', place: kind, folderId }
     },
     cancelPick: () => {
       pending.value = null
@@ -161,7 +158,7 @@ function createPicking(
       pending.value = null
       if (target === null) return
       if ('place' in target) {
-        deps.actions()?.addPanelAt(position)
+        deps.actions()?.addAt(target.place, position, target.folderId)
         return
       }
       patchEntity(deps, target.kind, target.id, { position })
@@ -212,9 +209,12 @@ export function createTwinViewportOps(deps: TwinViewportDeps): TwinViewportOps {
     viewportRef,
     pickMode: computed(() => pending.value?.what ?? null),
     isPicking: computed(() => pending.value !== null),
-    isPlacingPanel: computed(
-      () => pending.value !== null && 'place' in pending.value,
-    ),
+    placementHint: computed(() => {
+      const target = pending.value
+      return target !== null && 'place' in target
+        ? `点击模型表面或地面，设置新${TWIN_ENTITY_LABELS[target.place]}的位置`
+        : undefined
+    }),
     focus: (selection) => viewportRef.value?.focus(selection),
     measureDistance: (ref) => viewportRef.value?.measureDistance(ref) ?? null,
     onSelectNodes: (names) => {

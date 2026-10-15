@@ -27,6 +27,10 @@ description: "把大屏上模块的数据槽位批量绑到采集点位上。用
 2. **动手之前先读绑定**：`dashboard.read_bindings` 读目标节点的槽位声明，
    以及**每一行此刻喂的是谁**（`entity`）。槽位是模块清单定死的，
    不能凭空造一个槽键。
+   已定位的设备逐个传 `entity_id`，详情字段可加 `slot_key='partFieldValues'`；
+   按名称查找可先用 `keyword`。`has_more=true` 时保持筛选，沿 `next_offset`
+   继续读取，直到目标字段读完；`is_truncated` 表示还有后续页，继续读取即可。
+   只使用回执中的真实 `field_key` 与已有绑定；读取期间若修改字段结构，从头重读。
 3. 已经绑着东西的行，把那些 `node_key` 收一批交给 `points.resolve` 换成名字，
    跟 `entity` 对一遍。**光看 `node_key` 那串身份认不出绑没绑对。**
    进了 `unknown` 的那几个是库里真的没有的点位，如实报给用户。

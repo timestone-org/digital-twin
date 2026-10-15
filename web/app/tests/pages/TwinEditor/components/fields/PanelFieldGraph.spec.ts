@@ -1,4 +1,4 @@
-/** @fileoverview 信息牌状态画法的选择、文案配色与字段写回契约。 */
+/** @fileoverview 信息牌状态显示方式的选择、文案配色与字段写回契约。 */
 import type { TwinPanelField, TwinPanelState } from '@dt/twin-config'
 import { flushPromises, mount } from '@vue/test-utils'
 import { afterEach, describe, expect, it } from 'vitest'
@@ -87,14 +87,14 @@ afterEach(() => {
   document.body.innerHTML = ''
 })
 
-describe('状态画法', () => {
+describe('状态显示方式', () => {
   it.each([
     ['状态徽标', 'status'],
     ['开关指示', 'switch'],
   ] as const)('可选择%s并写入默认映射', async (label, kind) => {
     const wrapper = render(field())
 
-    await select(wrapper, '画法', label)
+    await select(wrapper, '显示方式', label)
 
     expect(wrapper.emitted('update')).toEqual([[{ kind, state: STATE }]])
     wrapper.unmount()
@@ -119,7 +119,7 @@ describe('状态画法', () => {
     },
   )
 
-  it('非状态画法没有无效的状态配置', () => {
+  it('非状态显示方式没有无效的状态配置', () => {
     const wrapper = render(field())
 
     expect(wrapper.find('input[aria-label="状态1值"]').exists()).toBe(false)
@@ -127,11 +127,11 @@ describe('状态画法', () => {
     wrapper.unmount()
   })
 
-  it('状态画法之间切换保留自定义映射', async () => {
+  it('状态显示方式之间切换保留自定义映射', async () => {
     const state = { ...STATE, onValue: 'running', onLabel: '运行' }
     const wrapper = render(field({ kind: 'status', state }))
 
-    await select(wrapper, '画法', '开关指示')
+    await select(wrapper, '显示方式', '开关指示')
 
     expect(wrapper.emitted('update')).toEqual([[{ kind: 'switch' }]])
     expect(state.onLabel).toBe('运行')

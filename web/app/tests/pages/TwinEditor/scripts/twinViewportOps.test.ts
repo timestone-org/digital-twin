@@ -47,10 +47,13 @@ function fakeHandle(overrides: Partial<TwinViewportHandle> = {}) {
 
 function setup(selection: TwinSelection = { kind: 'parts', id: 'part-1' }) {
   const patchConfig = vi.fn()
-  const addPanelAt = vi.fn()
+  const addAt = vi.fn()
   const onRoamUnavailable = vi.fn()
   const config: { value: TwinConfig | null } = { value: CONFIG }
-  const actions = { patchConfig, addPanelAt } as unknown as TwinEditorActions
+  const actions = { patchConfig, addAt } satisfies Pick<
+    TwinEditorActions,
+    'patchConfig' | 'addAt'
+  >
   const ops = createTwinViewportOps({
     config: () => config.value,
     actions: () => actions,
@@ -59,7 +62,7 @@ function setup(selection: TwinSelection = { kind: 'parts', id: 'part-1' }) {
   })
   const handle = fakeHandle()
   ops.viewportRef.value = handle
-  return { ops, patchConfig, addPanelAt, onRoamUnavailable, handle, config }
+  return { ops, patchConfig, addAt, onRoamUnavailable, handle, config }
 }
 
 describe('两段式拾取', () => {
@@ -135,58 +138,78 @@ describe('两段式拾取', () => {
   })
 })
 
-describe('先点位置再落牌', () => {
-  it('请求落牌后进入位置拾取，点到哪牌建在哪', () => {
-    const { ops, addPanelAt, patchConfig } = setup()
+describe.each(['anchors', 'panels'] as const)('先点位置再新建 %s', (kind) => {
+  it('请求放置后进入位置拾取，点到哪里就建在哪里', () => {
+    const { ops, addAt, patchConfig } = setup()
 
-    ops.requestPlacePanel()
+    ops.requestPlace(kind)
     expect(ops.pickMode.value).toBe('position')
-    expect(ops.isPlacingPanel.value).toBe(true)
+    expect(ops.placementHint.value).toContain('设置新')
+    expect(addAt).not.toHaveBeenCalled()
 
     ops.onPickPosition([3, 2, 1])
 
-    expect(addPanelAt).toHaveBeenCalledWith([3, 2, 1])
-    // 落的是新牌，不许顺手改到当前选中的实体上
+    expect(addAt).toHaveBeenCalledWith(kind, [3, 2, 1], undefined)
     expect(patchConfig).not.toHaveBeenCalled()
   })
 
-  it('落完一次就结束，第二下不再建牌', () => {
-    const { ops, addPanelAt } = setup()
+  it('落完一次就结束，第二下不再新建', () => {
+    const { ops, addAt } = setup()
 
-    ops.requestPlacePanel()
+    ops.requestPlace(kind)
     ops.onPickPosition([1, 1, 1])
     ops.onPickPosition([2, 2, 2])
 
-    expect(addPanelAt).toHaveBeenCalledTimes(1)
-    expect(ops.isPlacingPanel.value).toBe(false)
+    expect(addAt).toHaveBeenCalledTimes(1)
+    expect(ops.placementHint.value).toBeUndefined()
   })
 
-  it('取消之后视口回来的那一下不建牌', () => {
-    const { ops, addPanelAt } = setup()
+  it('取消之后视口回来的那一下不新建', () => {
+    const { ops, addAt } = setup()
 
-    ops.requestPlacePanel()
+    ops.requestPlace(kind)
     ops.cancelPick()
     ops.onPickPosition([1, 1, 1])
 
-    expect(addPanelAt).not.toHaveBeenCalled()
+    expect(addAt).not.toHaveBeenCalled()
+    expect(ops.placementHint.value).toBeUndefined()
   })
 
-  // 落牌不依赖选中：大纲里选着模型段也照样能加牌
-  it('单例段选中时也能请求落牌', () => {
-    const { ops, addPanelAt } = setup(TWIN_SELECT_MODEL)
+  it('单例段选中时也能请求放置', () => {
+    const { ops, addAt } = setup(TWIN_SELECT_MODEL)
 
-    ops.requestPlacePanel()
+    ops.requestPlace(kind)
     ops.onPickPosition([1, 2, 3])
 
-    expect(addPanelAt).toHaveBeenCalledWith([1, 2, 3])
+    expect(addAt).toHaveBeenCalledWith(kind, [1, 2, 3], undefined)
   })
 
-  it('普通位置拾取不算落牌，提示语不该换', () => {
+  it('普通位置拾取沿用默认提示', () => {
     const { ops } = setup()
 
     ops.requestPick('position')
 
-    expect(ops.isPlacingPanel.value).toBe(false)
+    expect(ops.placementHint.value).toBeUndefined()
+  })
+
+  it('新实体归入发起放置时指定的文件夹', () => {
+    const { ops, addAt } = setup()
+
+    ops.requestPlace(kind, 'folder')
+    ops.onPickPosition([1, 2, 3])
+
+    expect(addAt).toHaveBeenCalledWith(kind, [1, 2, 3], 'folder')
+  })
+
+  it('放置模式不会把模型节点拾取写入当前部件', () => {
+    const { ops, addAt, patchConfig } = setup()
+
+    ops.requestPlace(kind)
+    ops.onPickNode('tank')
+
+    expect(patchConfig).not.toHaveBeenCalled()
+    expect(addAt).not.toHaveBeenCalled()
+    expect(ops.pickMode.value).toBe('position')
   })
 })
 

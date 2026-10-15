@@ -11,6 +11,7 @@ import type {
   ModelingVersionSummary,
 } from '@dt/contracts'
 import { PERMISSION_CODES } from '@dt/contracts'
+import type { DtPaginationState } from '@dt/ui'
 import { DtButton, DtDataView, DtTag } from '@dt/ui'
 
 import PermGuard from '@/components/PermGuard.vue'
@@ -47,11 +48,14 @@ const props = defineProps<{
   rows: readonly ModelingVersionSummary[]
   isLoading: boolean
   error: string | null
+  pagination: DtPaginationState
 }>()
 
 const view = defineModel<DtDataViewMode>('view', { required: true })
 
 defineEmits<{
+  'update:page': [page: number]
+  'update:size': [size: number]
   detail: [row: ModelingVersionSummary]
   bind: [row: ModelingVersionSummary]
   retire: [row: ModelingVersionSummary]
@@ -66,12 +70,15 @@ defineEmits<{
     :loading="props.isLoading"
     :error="props.error"
     :empty="EMPTY"
+    :pagination="props.pagination"
     :layout="{
       fixedLayout: true,
       minWidth: '69rem',
       cardColumns: 3,
       cardMinWidth: '20rem',
     }"
+    @update:page="$emit('update:page', $event)"
+    @update:size="$emit('update:size', $event)"
   >
     <template #toolbar><slot name="toolbar" /></template>
     <template #cell-name="{ row }">

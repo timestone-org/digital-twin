@@ -277,6 +277,6 @@ function writeFlow(next: TwinFlowLink): void {
       :anchors="config.anchors"
       @update:model-value="writeFlow"
     />
-    <DtEmpty v-else title="选中的东西已经不在了" />
+    <DtEmpty v-else title="所选对象已不存在" />
   </div>
 </template>

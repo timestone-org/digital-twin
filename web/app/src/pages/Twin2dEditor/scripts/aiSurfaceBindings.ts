@@ -37,6 +37,7 @@ import {
   type ValueReport,
 } from '@/features/ai/valueReport'
 import { createBinding } from '@/features/dashboard/editorDoc'
+import { bindingReportQuery } from '@/features/ai/bindingReportQuery'
 
 import type { Twin2dSurfaceDeps } from './aiSurfaceTypes'
 
@@ -106,6 +107,7 @@ function readBindings(
     rows: twin2dBindingRows(twin2dConfigOf(deps)),
     bindings: deps.bindings(),
     slotLabels: SLOT_LABELS,
+    query: bindingReportQuery(call.arguments),
   })
 }
 

@@ -1,7 +1,5 @@
 /**
- * @fileoverview 信息牌的整套外观预设：外观那三组有十几个开关，逐个试出一副协调的
- * 样子很费劲，预设把「一整套」变成一次点击。
- * ⚠ 预设保留配色、列数与尺寸，切换外观只调整风格和装饰。
+ * @fileoverview 信息牌外观预设；切换只调整风格、装饰与动效，保留配色和布局。
  */
 import type { TwinPanelStyle } from '@dt/twin-config'
 
@@ -13,7 +11,10 @@ export interface TwinPanelPreset {
   label: string
   /** 一句话说明它长什么样。 */
   hint: string
-  patch: Partial<TwinPanelStyle>
+  patch: Pick<
+    TwinPanelStyle,
+    'variant' | 'scan' | 'corners' | 'grid' | 'animate' | 'pulse'
+  >
 }
 
 /**
@@ -24,11 +25,9 @@ export const TWIN_PANEL_PRESETS: readonly TwinPanelPreset[] = [
   {
     id: 'plain-card',
     label: '简洁卡片',
-    hint: '常规卡片，无动效，适合密集摆放',
+    hint: '常规卡片，无动效，适合密集布局',
     patch: {
       variant: 'card',
-      orient: 'center',
-      density: 'normal',
       scan: false,
       corners: false,
       grid: false,
@@ -42,8 +41,6 @@ export const TWIN_PANEL_PRESETS: readonly TwinPanelPreset[] = [
     hint: '带入场动画与锚点光环，适合少量重点位',
     patch: {
       variant: 'hud',
-      orient: 'top',
-      density: 'normal',
       scan: true,
       corners: false,
       grid: false,
@@ -54,11 +51,9 @@ export const TWIN_PANEL_PRESETS: readonly TwinPanelPreset[] = [
   {
     id: 'glass',
     label: '玻璃',
-    hint: '半透底，压在模型上不挡视线',
+    hint: '半透明背景，适合叠加在模型上方',
     patch: {
       variant: 'glass',
-      orient: 'center',
-      density: 'normal',
       scan: false,
       corners: false,
       grid: false,
@@ -69,12 +64,9 @@ export const TWIN_PANEL_PRESETS: readonly TwinPanelPreset[] = [
   {
     id: 'mini-tag',
     label: '小标签',
-    hint: '紧凑小字标签，适合标很多点',
+    hint: '实心标题栏与细线边框，适合多点位标注',
     patch: {
       variant: 'tag',
-      orient: 'top',
-      density: 'compact',
-      fontScale: 0.85,
       scan: false,
       corners: false,
       grid: false,
@@ -85,11 +77,9 @@ export const TWIN_PANEL_PRESETS: readonly TwinPanelPreset[] = [
   {
     id: 'precision',
     label: '精密切角',
-    hint: '冷线细描配不对称切角，综合态势那一档',
+    hint: '细线边框与不对称切角，适合综合态势展示',
     patch: {
       variant: 'precision',
-      orient: 'top',
-      density: 'normal',
       scan: true,
       corners: true,
       grid: true,
@@ -103,8 +93,6 @@ export const TWIN_PANEL_PRESETS: readonly TwinPanelPreset[] = [
     hint: '左侧一条竖导轨，能源与产线主题',
     patch: {
       variant: 'forge',
-      orient: 'right',
-      density: 'normal',
       scan: false,
       corners: false,
       grid: true,
@@ -115,11 +103,9 @@ export const TWIN_PANEL_PRESETS: readonly TwinPanelPreset[] = [
   {
     id: 'matrix',
     label: '信号矩阵',
-    hint: '点阵底配开放式角标，设备监控那一档',
+    hint: '点阵背景与开放式角标，适合设备监控',
     patch: {
       variant: 'matrix',
-      orient: 'top',
-      density: 'compact',
       scan: true,
       corners: true,
       grid: false,
@@ -130,12 +116,9 @@ export const TWIN_PANEL_PRESETS: readonly TwinPanelPreset[] = [
   {
     id: 'command-wall',
     label: '指挥大屏',
-    hint: '宽松版式配完整装饰，适合重点设备监控',
+    hint: '网格底配完整装饰，适合重点设备监控',
     patch: {
       variant: 'precision',
-      orient: 'center',
-      density: 'loose',
-      fontScale: 1.1,
       scan: true,
       corners: true,
       grid: true,

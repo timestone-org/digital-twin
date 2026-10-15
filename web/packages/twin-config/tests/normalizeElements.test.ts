@@ -22,6 +22,7 @@ import {
   stitchPanelValues,
 } from '../src/twinMath'
 import { normalizeTwinConfig } from '../src/normalize'
+import { detailPanelOf } from '../src/partFields'
 import type { TwinArrow, TwinFlowLink, TwinPanel } from '../src/types'
 
 function panel(raw: unknown, index = 0): TwinPanel {
@@ -43,14 +44,38 @@ function flow(raw: unknown, index = 0): TwinFlowLink {
 }
 
 describe('信息牌', () => {
+  it('部件详情缺省沿用信号矩阵和单列，已有风格与列数不变', () => {
+    const parts = normalizeTwinConfig({
+      parts: [
+        { id: 'new' },
+        { id: 'saved', detail: { variant: 'glass', columns: 3 } },
+      ],
+    }).parts
+    const fresh = parts[0]
+    const saved = parts[1]
+    if (fresh === undefined || saved === undefined) throw new Error('缺少部件')
+
+    expect(detailPanelOf(fresh).style).toMatchObject({
+      variant: 'matrix',
+      columns: 1,
+      width: 0,
+      height: 0,
+      density: 'compact',
+    })
+    expect(detailPanelOf(saved).style).toMatchObject({
+      variant: 'glass',
+      columns: 3,
+    })
+  })
+
   it('非对象条目丢掉', () => {
     expect(normalizePanel('nope', 0)).toBeNull()
   })
 
-  it('风格缺省是卡片、居中、跟随主题强调色', () => {
+  it('风格缺省是信号矩阵、上方、跟随主题强调色', () => {
     const style = panel({}).style
-    expect(style.variant).toBe('card')
-    expect(style.orient).toBe('center')
+    expect(style.variant).toBe('matrix')
+    expect(style.orient).toBe('top')
     expect(style.accent).toBe('--accent-primary')
   })
 
@@ -80,8 +105,8 @@ describe('信息牌', () => {
     const style = panel({
       style: { variant: 'neon', orient: 'diagonal' },
     }).style
-    expect(style.variant).toBe('card')
-    expect(style.orient).toBe('center')
+    expect(style.variant).toBe('matrix')
+    expect(style.orient).toBe('top')
   })
 
   it('字段缺 key 时按下标铸一个', () => {
@@ -96,14 +121,13 @@ describe('信息牌', () => {
     expect(fields.map((item) => item.decimals)).toEqual([3, 10, null])
   })
 
-  // ⚠ 旧配置里没有这几个键：缺省不对的话，一次保存就把存量牌的观感全改了
-  it('版式与装饰缺省是单列、标准密度、不带装饰', () => {
+  it('版式与装饰缺省使用信号矩阵的单列紧凑外观', () => {
     const style = panel({}).style
     expect(style.height).toBe(0)
     expect(style.columns).toBe(1)
-    expect(style.density).toBe('normal')
-    expect(style.scan).toBe(false)
-    expect(style.corners).toBe(false)
+    expect(style.density).toBe('compact')
+    expect(style.scan).toBe(true)
+    expect(style.corners).toBe(true)
     expect(style.grid).toBe(false)
   })
 
@@ -112,7 +136,26 @@ describe('信息牌', () => {
     expect(panel({ style: { columns: 0 } }).style.columns).toBe(1)
     expect(panel({ style: { height: -20 } }).style.height).toBe(0)
     expect(panel({ style: { height: 9999 } }).style.height).toBe(1200)
-    expect(panel({ style: { density: 'airy' } }).style.density).toBe('normal')
+    expect(panel({ style: { density: 'airy' } }).style.density).toBe('compact')
+  })
+
+  it('已保存的风格、布局与显式关闭的装饰保持原值', () => {
+    const style = {
+      variant: 'glass',
+      orient: 'left',
+      density: 'loose',
+      columns: 3,
+      width: 360,
+      height: 180,
+      fontScale: 1.2,
+      scale: 2,
+      scan: false,
+      corners: false,
+      animate: false,
+      grid: true,
+      pulse: true,
+    }
+    expect(panel({ style }).style).toMatchObject(style)
   })
 
   it('副标题与页脚缺省为空串，两端空白去掉', () => {

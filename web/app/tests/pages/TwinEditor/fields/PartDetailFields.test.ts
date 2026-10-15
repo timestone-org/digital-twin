@@ -119,9 +119,7 @@ describe('弹窗里那块 3D', () => {
     const wrapper = render()
 
     expect(
-      switchByText(wrapper, '弹窗里画这个部件的模型').attributes(
-        'aria-checked',
-      ),
+      switchByText(wrapper, '显示部件模型').attributes('aria-checked'),
     ).toBe('true')
     expect(switchByText(wrapper, '模型自转').attributes('aria-checked')).toBe(
       'false',
@@ -138,7 +136,7 @@ describe('弹窗里那块 3D', () => {
   it('关掉「画模型」只动这一个字段', async () => {
     const wrapper = render({ detail: { autoRotate: false } })
 
-    await switchByText(wrapper, '弹窗里画这个部件的模型').trigger('click')
+    await switchByText(wrapper, '显示部件模型').trigger('click')
 
     expect(lastDetail(wrapper)).toMatchObject({
       showModel: false,
@@ -159,7 +157,7 @@ describe('字段', () => {
     const wrapper = render()
 
     expect(wrapper.getComponent(PanelFieldList).props('owner')).toBe('部件')
-    expect(wrapper.text()).toContain('实时值按所有部件字段摊平后的文档序对齐')
+    expect(wrapper.text()).toContain('字段序号对应数据绑定中的行号')
   })
 
   // ⚠ 行号是摊平后的全局位次：按本部件内序号报会让人以为插一行只影响自己
@@ -181,7 +179,7 @@ describe('字段', () => {
     expect(wrapper.emitted('update:modelValue')).toHaveLength(1)
   })
 
-  it('一个字段都没有时说清楚弹出来是空卡片', () => {
-    expect(render().text()).toContain('这个部件上还没有字段')
+  it('未配置字段时显示部件空状态', () => {
+    expect(render().text()).toContain('尚未配置部件字段')
   })
 })

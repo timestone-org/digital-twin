@@ -126,7 +126,7 @@ describe('锚点与坐标二选一', () => {
   it('锚定之后写明坐标不生效', () => {
     const wrapper = mountInspector(panelOf({ anchorId: 'a1' }))
 
-    expect(wrapper.text()).toContain('下面的坐标不生效')
+    expect(wrapper.text()).toContain('信息牌位置由锚点确定')
     expect(wrapper.text()).toContain('坐标（当前不生效）')
   })
 
@@ -184,7 +184,7 @@ describe('从视口拾取位置', () => {
 })
 
 describe('旋转', () => {
-  it('钉死朝向档给旋转输入，改一轴整份写回', async () => {
+  it('固定朝向档给旋转输入，改一轴整份写回', async () => {
     const wrapper = mountInspector(panelOf({ billboard: 'fixed' }))
 
     expect(wrapper.text()).toContain('旋转')
@@ -199,16 +199,16 @@ describe('旋转', () => {
   it('跟随相机的两档不摆旋转控件', () => {
     const wrapper = mountInspector(panelOf({ billboard: 'face' }))
 
-    expect(wrapper.text()).not.toContain('旋转')
-    expect(wrapper.text()).not.toContain('视口里怎么拖')
+    expect(wrapper.find('input[aria-label="Y°"]').exists()).toBe(false)
+    expect(wrapper.text()).not.toContain('视口操作')
   })
 
-  it('钉死朝向且没锚定时给手柄模式切换，切到拖旋转', async () => {
+  it('固定朝向且没锚定时给手柄模式切换，切到旋转', async () => {
     const wrapper = mountInspector(panelOf({ billboard: 'fixed' }))
 
     const rotate = wrapper
       .findAll('button')
-      .find((item) => item.text().includes('拖旋转'))
+      .find((item) => item.text().includes('旋转'))
     expect(rotate).toBeDefined()
     await rotate?.trigger('click')
 
@@ -222,7 +222,7 @@ describe('旋转', () => {
     )
 
     expect(wrapper.text()).toContain('旋转')
-    expect(wrapper.text()).not.toContain('视口里怎么拖')
+    expect(wrapper.text()).not.toContain('视口操作')
   })
 })
 
@@ -284,10 +284,10 @@ describe('整份写回', () => {
     expect(written(wrapper).fields).toEqual([])
   })
 
-  it('标题留空时说明不画标题行', () => {
+  it('标题留空时说明隐藏标题', () => {
     const wrapper = mountInspector(panelOf({ name: '' }))
 
-    expect(wrapper.text()).toContain('不画标题行')
+    expect(wrapper.text()).toContain('隐藏标题')
   })
 })
 
@@ -315,7 +315,7 @@ describe('外观预设', () => {
     const next = written(wrapper)
     expect(next.style).toMatchObject({
       variant: 'hud',
-      orient: 'top',
+      orient: 'center',
       animate: true,
       pulse: true,
     })

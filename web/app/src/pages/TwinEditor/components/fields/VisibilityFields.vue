@@ -122,7 +122,7 @@ function writeFadeDirection(next: string): void {
     </div>
 
     <p class="text-xs text-text-disabled">
-      初始可见与距离规则只在大屏运行时生效；编辑视口的显隐请用左栏眼睛控制。
+      初始可见性和距离规则仅在大屏运行时生效；编辑视口的显示状态由左侧可见性按钮控制。
     </p>
   </div>
 </template>

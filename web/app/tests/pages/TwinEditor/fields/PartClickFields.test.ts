@@ -94,7 +94,7 @@ describe('两档动作', () => {
   })
 
   it('联动照发这一条写在旁边', () => {
-    expect(render().text()).toContain('联动事件两档都照发')
+    expect(render().text()).toContain('远距和近距点击均可触发联动')
   })
 })
 
@@ -135,7 +135,7 @@ describe('远距取景', () => {
       click: { far: 'view', cameraId: 'c1', view: { position: [1, 2, 3] } },
     })
 
-    expect(wrapper.text()).toContain('取景快照优先')
+    expect(wrapper.text()).toContain('已优先使用取景快照')
   })
 
   it('视点已经删了就当场标出来', () => {
@@ -147,7 +147,7 @@ describe('远距取景', () => {
   it('既没机位也没视点时说明会退回自动框住', () => {
     const wrapper = render({ click: { far: 'view' } })
 
-    expect(wrapper.text()).toContain('退回把这个部件框进画面')
+    expect(wrapper.text()).toContain('自动聚焦部件')
   })
 
   // ⚠ 没有分界就没有远档：配好的机位永远飞不到
@@ -156,7 +156,7 @@ describe('远距取景', () => {
       click: { far: 'view', view: { position: [1, 2, 3] } },
     })
 
-    expect(wrapper.text()).toContain('这个取景永远飞不到')
+    expect(wrapper.text()).toContain('远距动作暂不生效')
   })
 
   it('配了分界就不再提醒', () => {
@@ -165,7 +165,7 @@ describe('远距取景', () => {
       clickDistance: { farThreshold: { ref: 'orbit', value: 20 } },
     })
 
-    expect(wrapper.text()).not.toContain('这个取景永远飞不到')
+    expect(wrapper.text()).not.toContain('远距动作暂不生效')
   })
 
   it('存了机位就不再提醒', () => {
@@ -184,7 +184,7 @@ describe('点击距离', () => {
     for (const label of [
       '近于此距离不响应',
       '远于此距离不响应',
-      '远近两档的分界',
+      '远近距离分界',
     ]) {
       expect(
         wrapper.find(`button[role="switch"][aria-label="${label}"]`).exists(),
@@ -197,7 +197,7 @@ describe('点击距离', () => {
     const wrapper = render()
 
     await wrapper
-      .find('button[role="switch"][aria-label="远近两档的分界"]')
+      .find('button[role="switch"][aria-label="远近距离分界"]')
       .trigger('click')
 
     const next = lastDistance(wrapper)
@@ -208,6 +208,6 @@ describe('点击距离', () => {
   })
 
   it('把「不限制」的口径写在旁边', () => {
-    expect(render().text()).toContain('阈值 ≤ 0 或距离取不到')
+    expect(render().text()).toContain('阈值不大于 0 或无法获取距离')
   })
 })

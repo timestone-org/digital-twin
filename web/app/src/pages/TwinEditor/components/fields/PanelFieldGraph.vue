@@ -29,7 +29,7 @@ const KIND_LABELS: Readonly<Record<TwinPanelFieldKind, string>> = {
   bar: '量程进度条',
   gauge: '环形仪表',
   sparkline: '迷你趋势线',
-  bars: '迷你柱群',
+  bars: '迷你柱状图',
   dot: '状态灯',
   status: '状态徽标',
   switch: '开关指示',
@@ -112,11 +112,11 @@ function writeTone(id: string, next: string): void {
 
 <template>
   <div class="flex flex-col gap-1.5">
-    <DtField label="画法" hint="换画法不改行号，绑定不会跟着错位" size="sm">
+    <DtField label="显示方式" hint="切换显示方式不改变数据绑定关系" size="sm">
       <DtSelect
         :model-value="field.kind"
         :options="kindOptions"
-        aria-label="画法"
+        aria-label="显示方式"
         size="sm"
         @update:model-value="writeKind"
       />
@@ -142,12 +142,12 @@ function writeTone(id: string, next: string): void {
         />
       </div>
       <p v-if="badRange" class="text-xs text-state-danger">
-        上限不大于下限，这个字段会退回纯文本。
+        量程上限必须大于下限，否则字段将以纯文本显示。
       </p>
     </template>
 
     <p v-if="usesSeries" class="text-xs text-text-disabled">
-      走势攒的是本次会话内收到的读数，不查历史库：刚打开大屏时图是空的。
+      图表展示本次会话接收的实时数据，不加载历史数据；接收到数据后开始绘制。
     </p>
 
     <PanelFieldState
@@ -202,7 +202,7 @@ function writeTone(id: string, next: string): void {
       </DtButton>
       <!-- ⚠ 取的是满足条件里阈值最大的那一档，不是写在前面的那一档 -->
       <p v-if="field.levels.length > 1" class="text-xs text-text-disabled">
-        读数同时满足几档时取阈值最大的那一档，与这里的先后无关。
+        读数同时满足多个阈值时，采用最高阈值对应的颜色，不受列表顺序影响。
       </p>
     </template>
   </div>
