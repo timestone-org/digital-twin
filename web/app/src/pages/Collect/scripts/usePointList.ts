@@ -8,15 +8,20 @@
  * 而那台设备其实好好的。
  */
 import { computed, ref, watch, type ComputedRef, type Ref } from 'vue'
-import type { CollectPoint, DtDataViewEmpty } from '@dt/contracts'
+import type {
+  CollectPoint,
+  CollectReadableProtocol,
+  DtDataViewEmpty,
+} from '@dt/contracts'
 
 import * as collect from '@/api/collect'
 import { useAsyncList, type AsyncList } from '@/composables/useAsyncList'
 import { listEmptyState } from '@/utils/listEmpty'
 
-const BLANK_EMPTY: DtDataViewEmpty = {
-  title: '尚未导入点位',
-  hint: '在左侧浏览树中勾选变量节点并导入，或用 CSV 批量导入。',
+const EMPTY_HINTS: Record<CollectReadableProtocol, string> = {
+  opcua: '打开地址浏览，勾选变量节点并导入，或用 CSV 批量导入。',
+  modbus_tcp: '新增寄存器点位并配置寻址串，或用 CSV 批量导入。',
+  http: '从 JSON 样例生成点位，或新增点位并配置 JSON Pointer。',
 }
 
 export interface PointList {
@@ -28,8 +33,12 @@ export interface PointList {
 /**
  * 装上点位列表。换源时自己清词回第一页，调用方只管拿。
  * @param sourceId 取当前数据源 id
+ * @param protocol 取当前数据源协议
  */
-export function usePointList(sourceId: () => string): PointList {
+export function usePointList(
+  sourceId: () => string,
+  protocol: () => CollectReadableProtocol,
+): PointList {
   const keyword = ref('')
   const list = useAsyncList<CollectPoint>((query) =>
     collect.listPoints({
@@ -44,7 +53,7 @@ export function usePointList(sourceId: () => string): PointList {
       isFiltered: keyword.value.trim() !== '',
       subject: '点位',
       keyword: keyword.value,
-      blank: BLANK_EMPTY,
+      blank: { title: '尚未导入点位', hint: EMPTY_HINTS[protocol()] },
     }),
   )
 

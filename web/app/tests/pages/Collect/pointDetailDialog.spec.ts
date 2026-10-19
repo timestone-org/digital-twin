@@ -2,7 +2,7 @@
 import { afterEach, expect, it, vi } from 'vitest'
 import { enableAutoUnmount, flushPromises, mount } from '@vue/test-utils'
 import type { CollectPoint } from '@dt/contracts'
-import PointDetailDialog from '@/pages/Collect/Opcua/components/PointDetailDialog.vue'
+import PointDetailDialog from '@/pages/Collect/components/PointDetailDialog.vue'
 import { fetchPointAggregate } from '@/api/pointHistories'
 
 vi.mock('@/api/pointHistories', () => ({ fetchPointAggregate: vi.fn() }))

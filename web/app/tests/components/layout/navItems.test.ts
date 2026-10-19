@@ -29,6 +29,26 @@ const NAV_EXEMPT = new Set([
 ])
 
 describe('导航清单', () => {
+  it('数据采集按协议提供三个独立菜单入口', () => {
+    const collection = NAV_ITEMS.find((item) => item.key === 'collect')
+    expect(
+      collection?.children?.map(({ label, to }) => ({ label, to })),
+    ).toEqual([
+      { label: 'OPC UA 采集', to: '/collect/opcua' },
+      { label: 'Modbus TCP 采集', to: '/collect/modbus-tcp' },
+      { label: 'HTTP / HTTPS 采集', to: '/collect/http' },
+    ])
+  })
+
+  it.each([
+    ['/collect/opcua', 'OPC UA 采集'],
+    ['/collect/modbus-tcp', 'Modbus TCP 采集'],
+    ['/collect/http', 'HTTP / HTTPS 采集'],
+  ])('%s 有独立标题且沿用采集查看权限', (path, title) => {
+    const route = router.getRoutes().find((entry) => entry.path === path)
+    expect(route?.meta).toMatchObject({ title, permissions: ['collect:view'] })
+  })
+
   it('每个叶子项都指向一条真实存在的路由', () => {
     const paths = router.getRoutes().map((route) => route.path)
     for (const item of leaves) {

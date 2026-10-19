@@ -9,7 +9,7 @@ import { flushPromises, mount } from '@vue/test-utils'
 import type { VueWrapper } from '@vue/test-utils'
 import { DtNumberInput, DtSelect, DtSwitch } from '@dt/ui'
 
-import PointFormDialog from '@/pages/Collect/Opcua/components/PointFormDialog.vue'
+import PointFormDialog from '@/pages/Collect/components/PointFormDialog.vue'
 import type { CollectProtocol } from '@dt/contracts'
 
 async function render(

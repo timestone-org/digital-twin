@@ -5,7 +5,7 @@
 import { mount } from '@vue/test-utils'
 import { describe, expect, it } from 'vitest'
 
-import OptionsEditor from '@/pages/Collect/Opcua/components/OptionsEditor.vue'
+import OptionsEditor from '@/pages/Collect/components/OptionsEditor.vue'
 
 function render(modelValue: Record<string, string> = {}) {
   return mount(OptionsEditor, { props: { modelValue } })

@@ -4,7 +4,7 @@ import { enableAutoUnmount, flushPromises, mount } from '@vue/test-utils'
 import type { VueWrapper } from '@vue/test-utils'
 import type { CollectPoint } from '@dt/contracts'
 import * as collect from '@/api/collect'
-import HttpPointMappingDialog from '@/pages/Collect/Opcua/components/HttpPointMappingDialog.vue'
+import HttpPointMappingDialog from '@/pages/Collect/components/HttpPointMappingDialog.vue'
 
 enableAutoUnmount(afterEach)
 beforeEach(() => {

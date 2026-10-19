@@ -136,13 +136,29 @@ export const routes: RouteRecordRaw[] = [
     },
   },
   {
-    // 数据采集：一个协议一个页面（主从单页，左列表右详情）。第二个驱动进来
-    // 时它是同级的另一条，而不是把这条改成通配——协议不同，配置字段就不同
     path: '/collect/opcua',
     name: 'collect-opcua',
     component: () => import('@/pages/Collect/Opcua/index.vue'),
     meta: {
-      title: '工业数据采集',
+      title: 'OPC UA 采集',
+      permissions: [PERMISSION_CODES.collectView],
+    },
+  },
+  {
+    path: '/collect/modbus-tcp',
+    name: 'collect-modbus-tcp',
+    component: () => import('@/pages/Collect/ModbusTcp/index.vue'),
+    meta: {
+      title: 'Modbus TCP 采集',
+      permissions: [PERMISSION_CODES.collectView],
+    },
+  },
+  {
+    path: '/collect/http',
+    name: 'collect-http',
+    component: () => import('@/pages/Collect/Http/index.vue'),
+    meta: {
+      title: 'HTTP / HTTPS 采集',
       permissions: [PERMISSION_CODES.collectView],
     },
   },

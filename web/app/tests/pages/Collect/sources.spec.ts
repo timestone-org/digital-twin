@@ -12,20 +12,32 @@ import { createPinia, setActivePinia } from 'pinia'
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 import { enableAutoUnmount, flushPromises, mount } from '@vue/test-utils'
 import type { VueWrapper } from '@vue/test-utils'
-import type { CollectSource, CollectSourceRuntime } from '@dt/contracts'
+import type {
+  CollectProtocol,
+  CollectSource,
+  CollectSourceRuntime,
+} from '@dt/contracts'
 
 import { BizError } from '@/api/client'
 import * as collectApi from '@/api/collect'
 import CollectOpcuaPage from '@/pages/Collect/Opcua/index.vue'
+import CollectModbusPage from '@/pages/Collect/ModbusTcp/index.vue'
+import CollectHttpPage from '@/pages/Collect/Http/index.vue'
+import { COLLECT_PROTOCOL_PAGES } from '@/features/collect/protocols'
 import { useAuthStore } from '@/stores/auth'
 
 // ⚠ 共用一份 spy 而不是每次 useRouter() 现造一个：现造的那个拿不到手，
 // 「选中要写进地址栏」这条接线就没人守——而模板上的事件名写错，
 // typecheck 与 lint 双双放行
 const router = vi.hoisted(() => ({ replace: vi.fn(), push: vi.fn() }))
+const route = vi.hoisted(() => ({
+  path: '/collect/opcua',
+  query: {},
+  matched: [{ path: '/collect/opcua' }],
+}))
 vi.mock('vue-router', () => ({
   useRouter: () => router,
-  useRoute: () => ({ path: '/collect/opcua', query: {} }),
+  useRoute: () => route,
   RouterLink: { props: ['to'], template: '<a :href="to"><slot /></a>' },
 }))
 
@@ -45,14 +57,14 @@ vi.mock('@dt/ui', async () => {
 })
 
 // 右栏的浏览树与点位表各有自己的 spec，这里桩掉免得整页测试被它们的请求淹没
-vi.mock('@/pages/Collect/Opcua/components/BrowsePanel.vue', () => ({
+vi.mock('@/pages/Collect/components/BrowsePanel.vue', () => ({
   default: {
     name: 'BrowsePanel',
     props: ['source'],
     template: '<div data-test="browse-panel-stub" />',
   },
 }))
-vi.mock('@/pages/Collect/Opcua/components/NodeTable.vue', () => ({
+vi.mock('@/pages/Collect/components/NodeTable.vue', () => ({
   default: {
     name: 'NodeTable',
     props: ['source'],
@@ -109,14 +121,24 @@ function signIn(permissions: string[]): void {
   auth.accessToken = 'token'
 }
 
-async function render(rows: CollectSource[]): Promise<VueWrapper> {
+async function render(
+  rows: CollectSource[],
+  protocol: CollectProtocol = rows[0]?.protocol ?? 'opcua',
+): Promise<VueWrapper> {
   vi.spyOn(collectApi, 'listSources').mockResolvedValue({
     items: rows,
     page: 1,
     size: 100,
     total: rows.length,
   })
-  const wrapper = mount(CollectOpcuaPage, {
+  route.path = COLLECT_PROTOCOL_PAGES[protocol].path
+  route.matched = [{ path: route.path }]
+  const pages = {
+    opcua: CollectOpcuaPage,
+    modbus_tcp: CollectModbusPage,
+    http: CollectHttpPage,
+  }
+  const wrapper = mount(pages[protocol], {
     attachTo: document.body,
     global: {
       stubs: { RouterLink: { props: ['to'], template: '<a><slot /></a>' } },
@@ -497,14 +519,6 @@ describe('HTTP 数据源提交', () => {
   ): Promise<HTMLButtonElement> {
     await clickByText(wrapper, '新增数据源')
     await flushPromises()
-    document.body.querySelector<HTMLButtonElement>('[role="combobox"]')?.click()
-    await flushPromises()
-    const option = [
-      ...document.body.querySelectorAll<HTMLElement>('[role="option"]'),
-    ].find((node) => node.textContent?.trim() === 'HTTP / HTTPS')
-    if (option === undefined) throw new Error('没有 HTTP 协议选项')
-    option.click()
-    await flushPromises()
     for (const [placeholder, value] of [
       ['如：1号生产线 PLC', 'HTTP 测试接口'],
       ['如：plant1_plc', 'http_test'],
@@ -538,7 +552,7 @@ describe('HTTP 数据源提交', () => {
           complete = resolve
         }),
     )
-    const wrapper = await render([])
+    const wrapper = await render([], 'http')
     const submit = await openHttpCreate(wrapper)
     submit.click()
     submit.click()
@@ -564,7 +578,7 @@ describe('HTTP 数据源提交', () => {
       .spyOn(collectApi, 'createSource')
       .mockRejectedValueOnce(new Error('请求失败'))
       .mockResolvedValueOnce(created)
-    const wrapper = await render([])
+    const wrapper = await render([], 'http')
     const submit = await openHttpCreate(wrapper)
     submit.click()
     await flushPromises()

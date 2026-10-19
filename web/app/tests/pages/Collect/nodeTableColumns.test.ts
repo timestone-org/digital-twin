@@ -7,7 +7,7 @@
  */
 import { describe, expect, it } from 'vitest'
 
-import { nodeTableColumns } from '@/pages/Collect/Opcua/scripts/nodeTableColumns'
+import { nodeTableColumns } from '@/pages/Collect/scripts/nodeTableColumns'
 
 describe('列配置', () => {
   it('⚠ 只有寻址串一列不写宽度：多一列不写，它就要跟人对半分', () => {

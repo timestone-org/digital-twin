@@ -17,7 +17,7 @@ import type { CollectPoint, CollectSource } from '@dt/contracts'
 import * as collectApi from '@/api/collect'
 import * as histories from '@/api/pointHistories'
 import { BizError } from '@/api/client'
-import NodeTable from '@/pages/Collect/Opcua/components/NodeTable.vue'
+import NodeTable from '@/pages/Collect/components/NodeTable.vue'
 import { useAuthStore } from '@/stores/auth'
 
 vi.mock('vue-router', () => ({
@@ -709,8 +709,10 @@ describe('操作反馈与实时有效性', () => {
 })
 
 describe('紧凑点位卡片', () => {
-  beforeEach(() => localStorage.setItem('dt.view-mode.collect-points', 'card'))
-  afterEach(() => localStorage.removeItem('dt.view-mode.collect-points'))
+  beforeEach(() =>
+    localStorage.setItem('dt.view-mode.collect-points-opcua', 'card'),
+  )
+  afterEach(() => localStorage.removeItem('dt.view-mode.collect-points-opcua'))
 
   it('名称与读数优先，单位随值显示，配置字段不重复铺开', async () => {
     const wrapper = await render()

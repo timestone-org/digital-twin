@@ -447,14 +447,17 @@ collector **不直接推 WebSocket**。它只写 Redis 快照。
 
 ## 9. 配置面（前端）与它的实时通道
 
-配置页在 `web/app/src/pages/Collect/Opcua/`，左栏「数据采集 → OPC UA」。
+配置页在 `web/app/src/pages/Collect/`，菜单「数据采集」下按协议分别提供
+`Opcua/`、`ModbusTcp/`、`Http/` 三个页面；共用组件与脚本在分组目录的
+`components/`、`scripts/` 下。
 权限沿用 §5 的三个码：进页面 `collect:view`，增删改 `collect:manage`，
 连通性测试 / 地址空间浏览 / 下发写值 `collect:operate`。
 
-**一个协议一个主从单页**（`/collect/opcua`，不再有 `:sourceId` 详情子路由）：
-左栏数据源列表，右栏详情头 + 「在线浏览」与「已导入节点」两块并排。第二个
-驱动进来时是同级的另一页，不是把这页改成通配——协议不同，配置字段就不同，
-表单里因此也没有协议选择。详情头上的「连接 / 断开」按钮改的是 `is_enabled`
+**一个协议一个主从单页**：`/collect/opcua`、`/collect/modbus-tcp`、`/collect/http`。
+左栏的数据源查询、搜索、分页与运行态刷新始终带当前协议条件；右栏管理选中源的
+点位。新建表单固定当前页面协议，OPC UA 支持地址浏览，Modbus TCP 使用只读轮询，
+HTTP 支持 JSON 样例映射。选中源保存在 `?source=`，旧链接指向另一协议的源时，
+跳转到对应协议页并保留查询参数。详情头上的「连接 / 断开」按钮改的是 `is_enabled`
 （采集器按计划自动收敛，见 §4.4），状态徽标显示的是真实运行态——两件事在
 按钮与徽标上各说各的（§9.2）。顶栏的「采集参数 / 归档参数」两个弹窗读写
 `collect-runtime-params`（§5.2），字段清单、上下界与危险方向全部来自后端目录，

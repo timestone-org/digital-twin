@@ -3,7 +3,7 @@ import { afterEach, beforeEach, describe, expect, it } from 'vitest'
 import { enableAutoUnmount, flushPromises, mount } from '@vue/test-utils'
 import type { VueWrapper } from '@vue/test-utils'
 import type { CollectSource } from '@dt/contracts'
-import SourceFormDialog from '@/pages/Collect/Opcua/components/SourceFormDialog.vue'
+import SourceFormDialog from '@/pages/Collect/components/SourceFormDialog.vue'
 
 enableAutoUnmount(afterEach)
 beforeEach(() => {

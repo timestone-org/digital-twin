@@ -6,7 +6,7 @@ import { defineComponent, h, nextTick, ref } from 'vue'
 import {
   useLiveValues,
   type LiveValues,
-} from '@/pages/Collect/Opcua/scripts/useLiveValues'
+} from '@/pages/Collect/scripts/useLiveValues'
 
 interface Subscription {
   topic: string

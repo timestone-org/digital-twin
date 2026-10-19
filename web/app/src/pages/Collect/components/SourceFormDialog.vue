@@ -52,6 +52,7 @@ import SourceCredentialFields from './SourceCredentialFields.vue'
 const props = defineProps<{
   modelValue: boolean
   source: CollectSource | null
+  fixedProtocol?: CollectProtocol
   loading?: boolean
 }>()
 const emit = defineEmits<{
@@ -114,18 +115,18 @@ function reset(target: CollectSource | null): void {
   credential.value = ''
   isCredentialCleared.value = false
   if (target === null) {
-    protocol.value = 'opcua'
+    protocol.value = props.fixedProtocol ?? 'opcua'
     name.value = ''
     code.value = ''
     description.value = ''
     endpoint.value = ''
     securityMode.value = 'None'
     securityPolicy.value = 'None'
-    readMode.value = 'subscribe'
+    readMode.value = protocol.value === 'opcua' ? 'subscribe' : 'poll'
     pollIntervalMs.value = 1000
     username.value = ''
-    isEnabled.value = true
-    extraOptions.value = {}
+    isEnabled.value = protocol.value !== 'modbus_tcp'
+    extraOptions.value = protocol.value === 'http' ? defaultHttpOptions() : {}
     return
   }
   const split = splitOptions(target.options_json)
@@ -144,7 +145,7 @@ function reset(target: CollectSource | null): void {
 }
 
 watch(
-  () => [props.modelValue, props.source] as const,
+  () => [props.modelValue, props.source, props.fixedProtocol] as const,
   ([open]) => {
     if (open) reset(props.source)
   },
@@ -165,6 +166,7 @@ const readModeValue = computed<string>({
 const protocolValue = computed<string>({
   get: () => protocol.value,
   set: (next) => {
+    if (isEdit.value || props.fixedProtocol !== undefined) return
     const selected =
       COLLECT_PROTOCOLS.find((candidate) => candidate === next) ?? 'opcua'
     if (selected === protocol.value) return
@@ -241,7 +243,7 @@ function submit(): void {
           label="协议"
           required
           :options="PROTOCOL_OPTIONS"
-          :disabled="isEdit"
+          :disabled="isEdit || fixedProtocol !== undefined"
         />
         <DtField label="名称" required>
           <DtInput v-model="name" placeholder="如：1号生产线 PLC" />

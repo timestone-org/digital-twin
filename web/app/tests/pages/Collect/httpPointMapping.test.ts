@@ -3,7 +3,7 @@ import { describe, expect, it } from 'vitest'
 import {
   parseHttpSample,
   validateHttpPointer,
-} from '@/pages/Collect/Opcua/scripts/httpPointMapping'
+} from '@/pages/Collect/scripts/httpPointMapping'
 
 describe('HTTP JSON 映射', () => {
   it('同一响应映射多个叶子，保留数组下标和转义键名', () => {

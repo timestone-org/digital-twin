@@ -16,7 +16,7 @@ import type {
 } from '@dt/contracts'
 import { DtSelect } from '@dt/ui'
 
-import SourceFormDialog from '@/pages/Collect/Opcua/components/SourceFormDialog.vue'
+import SourceFormDialog from '@/pages/Collect/components/SourceFormDialog.vue'
 
 function source(): CollectSource {
   return {

@@ -26,8 +26,8 @@ import type {
 } from '@dt/contracts'
 
 import * as collectApi from '@/api/collect'
-import BrowsePanel from '@/pages/Collect/Opcua/components/BrowsePanel.vue'
-import BrowseTreeNode from '@/pages/Collect/Opcua/components/BrowseTreeNode.vue'
+import BrowsePanel from '@/pages/Collect/components/BrowsePanel.vue'
+import BrowseTreeNode from '@/pages/Collect/components/BrowseTreeNode.vue'
 import { useAuthStore } from '@/stores/auth'
 
 vi.mock('vue-router', () => ({

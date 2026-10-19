@@ -1,7 +1,7 @@
 /** @fileoverview 采集点位的交互与数据完整性契约。 */
 import { describe, expect, it } from 'vitest'
 import type { CollectPoint } from '@dt/contracts'
-import { previewPointEdits } from '@/pages/Collect/Opcua/scripts/batchPointEdit'
+import { previewPointEdits } from '@/pages/Collect/scripts/batchPointEdit'
 const point: CollectPoint = {
   id: 'p1',
   source_id: 's1',
