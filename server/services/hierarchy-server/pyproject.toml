@@ -26,6 +26,8 @@ markers = ["requires_postgres: 需要真实 PostgreSQL", "requires_redis: 需要
 
 [tool.coverage.run]
 branch = true
+# ⚠ SQLAlchemy 的异步 DBAPI 经 greenlet 执行，覆盖率需跟踪切换。
+concurrency = ["thread", "greenlet"]
 source = ["hierarchy_server"]
 omit = ["*/__main__.py"]
 
