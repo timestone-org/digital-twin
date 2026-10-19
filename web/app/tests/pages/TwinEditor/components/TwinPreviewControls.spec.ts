@@ -17,17 +17,23 @@ it('近远动作和当前视距验证分别发出命令', async () => {
       progress: { segmentIndex: 0, percent: 0, playing: false },
       result: '',
     },
+    global: { stubs: { teleport: true } },
   })
   expect(wrapper.text()).toContain('临时显示当前对象')
   wrapper.findComponent(DtSegmented).vm.$emit('update:modelValue', 'click')
   expect(wrapper.emitted('update:partMode')).toEqual([['click']])
   await wrapper.setProps({ partMode: 'click' })
-  for (const label of ['预演近距动作', '预演远距动作', '按当前视距测试'])
-    await wrapper
-      .findAll('button')
-      .find((button) => button.text() === label)
-      ?.trigger('click')
-  expect(wrapper.emitted('action')).toEqual([['near'], ['far'], ['click']])
+  await wrapper.get('[aria-label="按当前配置测试点击"]').trigger('click')
+  expect(wrapper.find('[role="menu"]').exists()).toBe(false)
+  for (const label of ['预演点击动作', '预演远距动作']) {
+    await wrapper.get('[aria-label="单独预演动作"]').trigger('click')
+    const item = wrapper
+      .findAll('[role="menuitem"]')
+      .find((item) => item.text().startsWith(label))
+    if (item === undefined) throw new Error(`没有预演入口：${label}`)
+    await item.trigger('click')
+  }
+  expect(wrapper.emitted('action')).toEqual([['click'], ['near'], ['far']])
   await wrapper.setProps({ partMode: 'detail', result: '已打开完整详情' })
   await wrapper
     .findAll('button')

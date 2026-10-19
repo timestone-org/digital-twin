@@ -45,7 +45,11 @@
 - `look.color=''` 表示保留模型原材质；`opacity`、`blend` 范围 0–1，`glow` 范围 0–3。
 - `tint=null` 表示不取数；启用染色后还要配置规则并用绑定工具绑定对应行。
 - `visibility.visible` 是初始可见；距离规则必须同时带 `ref` 与 `value`。
-- `click.far='view'` 时要有取景快照或 `cameraId`，并配置 `clickDistance.farThreshold`。
+- 直接点击切视角用 `click.near='view'`；需要远近分档时，再配置
+  `clickDistance.farThreshold` 和 `click.far`。
+- 切视角必须明确 `click.viewSource`：预设视点用 `camera` 并设置 `cameraId`；
+  取景快照用 `snapshot` 并设置 `view`。修改来源时保留另一份取景配置，
+  读取实际配置后再写入，不能假设快照始终覆盖预设视点。
 - 要显示详情，`click.near` 设为 `detail`，且 `detail.fields` 不能空。详情字段另走
   `partFieldValues` 绑定，不能拿状态染色的绑定代替。
 - `parentId` 指向另一个部件；自指、成环或不存在的 id 都会由诊断报告。

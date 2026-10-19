@@ -34,6 +34,102 @@ const config = normalizeTwinConfig({
   parts: [{ id: 'pump', nodes: ['pump-mesh'] }],
   cameras: [{ id: 'view', position: [1, 2, 3], target: [0, 0, 0] }],
 })
+it.each(['关闭', '整屏运行'])(
+  '%s 后不保留上一次点击验证的结果',
+  async (action) => {
+    const wrapper = mount(TwinConfigPreview, {
+      props: {
+        node: null,
+        config,
+        selection: { kind: 'parts', id: 'pump' },
+        animation: null,
+        testMode: 'live',
+        bindings: [],
+        readBinding: () => () => ({ state: 'pending' }),
+      },
+      global: { stubs: { TwinRuntimePreview: true } },
+    })
+    await flushPromises()
+    wrapper.vm.showPartMode('click')
+    await flushPromises()
+    wrapper
+      .findComponent(TwinScene)
+      .vm.$emit('previewResult', '上一次点击的结果')
+    if (action === '关闭')
+      await wrapper.get('[aria-label="关闭配置预览"]').trigger('click')
+    else
+      wrapper
+        .findComponent(DtSegmented)
+        .vm.$emit('update:modelValue', 'runtime')
+    await flushPromises()
+    wrapper.vm.showPartMode('click')
+    await flushPromises()
+
+    expect(wrapper.findComponent(TwinPreviewControls).props('result')).toBe('')
+    expect(wrapper.findComponent(TwinScene).props('previewAction')).toBeNull()
+    wrapper.unmount()
+  },
+)
+
+it.each(['model', 'click'])(
+  '切换到 %s 预览时取消旧的弹窗视角编辑命令',
+  async (mode) => {
+    const wrapper = mount(TwinConfigPreview, {
+      props: {
+        node: null,
+        config,
+        selection: { kind: 'parts', id: 'pump' },
+        animation: null,
+        testMode: 'live',
+        bindings: [],
+        readBinding: () => () => ({ state: 'pending' }),
+      },
+    })
+    await flushPromises()
+    wrapper.vm.editPartDetailView('pump')
+    await flushPromises()
+    wrapper
+      .findComponent(TwinScene)
+      .vm.$emit('previewResult', '正在编辑弹窗视角')
+    if (mode === 'click') wrapper.vm.showPartMode('click')
+    else
+      wrapper
+        .findComponent(TwinPreviewControls)
+        .vm.$emit('update:partMode', mode)
+    await flushPromises()
+
+    expect(wrapper.findComponent(TwinScene).props('previewAction')).toBeNull()
+    expect(wrapper.findComponent(TwinPreviewControls).props('result')).toBe('')
+    wrapper.unmount()
+  },
+)
+
+it('再次聚焦同一类配置不会关闭正在编辑的弹窗', async () => {
+  const wrapper = mount(TwinConfigPreview, {
+    props: {
+      node: null,
+      config,
+      selection: { kind: 'parts', id: 'pump' },
+      animation: null,
+      testMode: 'live',
+      bindings: [],
+      readBinding: () => () => ({ state: 'pending' }),
+    },
+  })
+  await flushPromises()
+  wrapper.vm.editPartDetailView('pump')
+  await flushPromises()
+  const scene = wrapper.findComponent(TwinScene)
+  wrapper.vm.showPartMode('detail')
+  await flushPromises()
+
+  expect(wrapper.findComponent(TwinScene).element).toBe(scene.element)
+  expect(wrapper.findComponent(TwinScene).props('previewAction')).toMatchObject(
+    { kind: 'detail-edit' },
+  )
+  wrapper.unmount()
+})
+
 it('直接打开独立视角编辑，应用和恢复时保持弹窗宿主，关闭后清除请求', async () => {
   const config = normalizeTwinConfig({
     parts: [

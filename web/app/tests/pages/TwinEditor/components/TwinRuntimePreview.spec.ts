@@ -80,6 +80,16 @@ beforeEach(() => {
 })
 
 describe('开关', () => {
+  it('嵌入配置预览时由外层统一开关，不再显示第二个关闭入口', () => {
+    const wrapper = mountPreview({ embedded: true })
+
+    expect(wrapper.find('[data-test="preview-box"]').exists()).toBe(true)
+    expect(wrapper.find('[data-test="close-preview"]').exists()).toBe(false)
+    expect(wrapper.find('[data-test="toggle-wide"]').exists()).toBe(false)
+    expect(wrapper.text()).toContain('1280 × 720')
+    wrapper.unmount()
+  })
+
   // ⚠ 3D 预览自带一个 WebGL 上下文并把模型再解析一遍，常挂着等于整页把模型
   // 显存吃两份——所以缺省是收着的，只有点开才挂
   it('缺省收着，不挂任何渲染', () => {

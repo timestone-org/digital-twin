@@ -328,6 +328,7 @@ describe('取当前机位', () => {
         expect.objectContaining({
           id: 'part-1',
           click: expect.objectContaining({
+            viewSource: 'snapshot',
             view: expect.objectContaining({ fov: 50 }),
           }),
         }),

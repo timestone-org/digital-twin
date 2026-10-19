@@ -1,5 +1,10 @@
 /** @fileoverview 配置预览的聚焦与部件动作命令。 */
-import { partFocusView, type TwinConfig, type TwinPart } from '@dt/twin-config'
+import {
+  partFocusView,
+  type TwinCamera,
+  type TwinConfig,
+  type TwinPart,
+} from '@dt/twin-config'
 import { resolveClickGate } from './distanceRules'
 import { distanceContextOf, distanceResolver } from './distanceContext'
 import type { SceneCore } from './sceneCore'
@@ -103,28 +108,28 @@ function runPartAction(
   kind: 'near' | 'far',
   deps: PreviewActionDeps,
 ): void {
-  if (kind === 'near') {
-    deps.near(part)
-    deps.result(
-      part.click.near === 'detail'
-        ? '近距动作：打开部件详情'
-        : '近距动作：发出联动事件（预览不会触发其他模块）',
-    )
-    return
-  }
-  deps.far(part, deps.parts?.boxOf(part.id) ?? null)
-  const message =
-    part.click.far === 'none'
-      ? '远距动作：不响应'
-      : part.click.far === 'view' &&
-          partFocusView(part, deps.config.cameras) !== null
-        ? '远距动作：飞到指定取景'
-        : '远距动作：框选部件'
+  if (kind === 'near') deps.near(part)
+  else deps.far(part, deps.parts?.boxOf(part.id) ?? null)
+  const label = kind === 'near' ? '近距动作' : '远距动作'
+  const message = `${label}：${partActionMessage(part, kind, deps.config.cameras)}`
   deps.result(
-    part.clickDistance.farThreshold === null
+    kind === 'far' && part.clickDistance.farThreshold === null
       ? `${message}；未配置远近分界，运行时无法进入远距动作`
       : message,
   )
+}
+
+function partActionMessage(
+  part: TwinPart,
+  kind: 'near' | 'far',
+  cameras: readonly TwinCamera[],
+): string {
+  const action = part.click[kind]
+  if (action === 'view')
+    return partFocusView(part, cameras) !== null ? '飞到指定取景' : '框选部件'
+  if (action === 'detail') return '打开部件详情'
+  if (action === 'approach') return '框选部件'
+  return kind === 'near' ? '发出联动事件（预览不会触发其他模块）' : '不响应'
 }
 
 function testCurrentDistance(

@@ -181,29 +181,28 @@ function partObjectsOf(partId: string): readonly THREE.Object3D[] {
   return layers?.parts.objectsOf(partId) ?? []
 }
 
-/**
- * 落在远档的一下。
- * ⚠ 配了「飞到取景」却什么都没存时**退回自动框住**：不退的话远距点击彻底没
- * 反应，而用户看不出是少配了一样东西（这一条由 `collectTwinConfigIssues` 报）。
- */
-function onFarClick(part: TwinPart, box: THREE.Box3 | null): void {
-  if (part.click.far === 'none' || core === null) return
-  if (part.click.far === 'view') {
-    const view = partFocusView(part, props.config.cameras)
-    if (view !== null) return sceneCamera.applyView(view)
-  }
+/** 切换部件取景，缺少目标时退回自动框住。 */
+function focusPart(part: TwinPart, box: THREE.Box3 | null): void {
+  if (core === null) return
+  roam.pause()
+  const view = partFocusView(part, props.config.cameras)
+  if (view !== null) return sceneCamera.applyView(view)
   if (box !== null) flight.flyToBox(core, box)
 }
 
-/**
- * 落在近档的一下：这是一次真点击。
- * ⚠ 联动事件照发不误：弹详情是附加动作，不是替代——否则给部件配上详情会把
- * 同屏别的模块的联动静默掐掉。
- * ⚠ 上抛的是**部件 id** 不是名字：名字随时可改，而联动规则里存的那份不会跟着改。
- */
+/** 执行远距点击动作。 */
+function onFarClick(part: TwinPart, box: THREE.Box3 | null): void {
+  if (part.click.far === 'none' || core === null) return
+  if (part.click.far === 'view') return focusPart(part, box)
+  if (box !== null) flight.flyToBox(core, box)
+}
+
+/** 执行近距动作，并以稳定部件 id 发送联动事件。 */
 function onNearClick(part: TwinPart): void {
   emit('partClick', { partId: part.id, partName: part.name })
   if (part.click.near === 'detail') detail.open(part)
+  if (part.click.near === 'view')
+    focusPart(part, layers?.parts.boxOf(part.id) ?? null)
 }
 
 usePartClick({

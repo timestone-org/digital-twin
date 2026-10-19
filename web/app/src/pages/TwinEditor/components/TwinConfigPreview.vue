@@ -101,6 +101,7 @@ function onProgress(value: typeof progress.value): void {
 }
 function stopTransient(): void {
   request.value = null
+  result.value = ''
   emit('roamPlaying', false)
 }
 function clearSamples(): void {
@@ -116,11 +117,12 @@ function selectSegment(value: string): void {
   issue('roam-stop')
 }
 function selectPartMode(value: string): void {
+  if (partMode.value === value) return
+  stopTransient()
   partMode.value = value
-  result.value = ''
 }
 function showPartMode(value: 'detail' | 'click'): void {
-  partMode.value = value
+  selectPartMode(value)
   open.value = true
   mode.value = 'configure'
 }
@@ -131,8 +133,7 @@ function editPartDetailView(id: string): void {
 }
 function closePartDetailEdit(): void {
   if (request.value?.kind !== 'detail-edit') return
-  request.value = null
-  result.value = ''
+  stopTransient()
 }
 defineExpose({
   showPartMode,
@@ -192,7 +193,6 @@ watch([() => props.selection, () => props.animation], () => {
   partMode.value = 'model'
   segmentKey.value = ''
   clearSamples()
-  result.value = ''
   stopTransient()
 })
 watch([open, mode], () => {

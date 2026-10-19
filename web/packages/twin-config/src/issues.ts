@@ -3,6 +3,7 @@
  * 归一化只管形状，这两样必须响亮报出去——静默降级对人尚可忍受，对 Agent 是致命的（ADR-0012 四）。
  */
 import { MIN_ROAM_TOUR_STOPS } from './normalizeScene'
+import { partFocusView } from './cameraSelect'
 import { panelFieldSpan, panelKindUsesRange } from './panelGraph'
 import {
   MAX_ASSEMBLY_DEPTH,
@@ -145,7 +146,7 @@ function shortFlows(
 }
 
 /**
- * 部件的远距取景指到一个不存在的预设视点。
+ * 部件的点击取景指到一个不存在的预设视点。
  * ⚠ 渲染层对这种部件是「退回把它框进画面」——不报出来的话，用户看到的是
  * 「远距点它飞到的位置跟配的视点对不上」，而那与飞行没生效看起来一模一样。
  */
@@ -155,32 +156,43 @@ function danglingPartCameras(
 ): TwinConfigIssue[] {
   return config.parts
     .map((part, index) => ({ part, index }))
+    .filter((ref) => ref.part.click.viewSource === 'camera')
     .filter((ref) => ref.part.click.cameraId !== '')
     .filter((ref) => !known.has(ref.part.click.cameraId))
     .map((ref) => ({
       kind: 'dangling-part-camera' as const,
       entityId: ref.part.id,
       path: `parts[${ref.index}].click.cameraId`,
-      detail: `找不到视点 ${ref.part.click.cameraId}，远距点击会退回把这个部件框进画面`,
+      detail: `找不到视点 ${ref.part.click.cameraId}，点击会退回把这个部件框进画面`,
     }))
 }
 
 /**
- * 远距动作选了「飞到取景」，却既没有取景快照也没有预设视点。
+ * 点击动作选了「飞到取景」，却既没有取景快照也没有预设视点。
  * ⚠ 渲染层这时退回 `approach`——不报出来的话，用户以为配好了一个机位，
  * 而现场飞到的是自动算出来的另一个位置。
  */
-function partFocusWithoutTarget(config: TwinConfig): TwinConfigIssue[] {
+function partFocusWithoutTarget(
+  config: TwinConfig,
+  known: ReadonlySet<string>,
+): TwinConfigIssue[] {
   return config.parts
     .map((part, index) => ({ part, index }))
-    .filter((ref) => ref.part.click.far === 'view')
-    .filter((ref) => ref.part.click.view === null)
-    .filter((ref) => ref.part.click.cameraId === '')
+    .filter(
+      (ref) => ref.part.click.far === 'view' || ref.part.click.near === 'view',
+    )
+    .filter((ref) => partFocusView(ref.part, config.cameras) === null)
+    .filter(
+      (ref) =>
+        ref.part.click.viewSource === 'snapshot' ||
+        ref.part.click.cameraId === '' ||
+        known.has(ref.part.click.cameraId),
+    )
     .map((ref) => ({
       kind: 'part-focus-no-target' as const,
       entityId: ref.part.id,
-      path: `parts[${ref.index}].click.far`,
-      detail: '远距动作是「飞到取景」，却没存机位也没挑视点，会退回自动框住',
+      path: `parts[${ref.index}].click.${ref.part.click.near === 'view' ? 'near' : 'far'}`,
+      detail: '所选取景来源没有有效目标，点击会退回自动框住部件',
     }))
 }
 
@@ -193,6 +205,7 @@ function unreachablePartFarAction(config: TwinConfig): TwinConfigIssue[] {
   return config.parts
     .map((part, index) => ({ part, index }))
     .filter((ref) => ref.part.click.far === 'view')
+    .filter((ref) => ref.part.click.near !== 'view')
     .filter((ref) => ref.part.clickDistance.farThreshold === null)
     .map((ref) => ({
       kind: 'part-far-unreachable' as const,
@@ -425,7 +438,7 @@ export function collectTwinConfigIssues(config: TwinConfig): TwinConfigIssue[] {
     ...shortRoamTour(config, cameraIds),
     ...danglingPartCameras(config, cameraIds),
     ...danglingPartParents(config),
-    ...partFocusWithoutTarget(config),
+    ...partFocusWithoutTarget(config, cameraIds),
     ...unreachablePartFarAction(config),
     ...unreachablePartDetails(config),
     ...emptyPartDetails(config),
