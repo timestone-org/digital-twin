@@ -75,3 +75,5 @@ ADR 只记录仍需长期记住的“决定与理由”。领域词、边界与�
 - platform：[无监督异常检测的目标与判定](../../server/services/platform-server/docs/adr/0003-无监督异常检测保留空目标并提供显式判定.md)
 - web：[source-only pnpm workspace](../../web/docs/adr/0001-前端采用source-only-pnpm-workspace.md)
 - web：[刷新令牌跨标签协调](../../web/docs/adr/0002-刷新令牌跨标签串行化.md)
+
+- [ADR-0059：层级图作为可选独立数据属主](0059-层级图作为可选独立数据属主.md)：独立安装、项目版本归属与浏览器出图边界。

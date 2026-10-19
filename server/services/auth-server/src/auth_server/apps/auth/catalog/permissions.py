@@ -82,6 +82,9 @@ KNOWLEDGE_MANAGE = "knowledge:manage"
 LLM_VIEW = "llm:view"
 LLM_MANAGE = "llm:manage"
 
+HIERARCHY_VIEW = "hierarchy:view"
+HIERARCHY_MANAGE = "hierarchy:manage"
+
 PERMISSIONS: tuple[PermissionSpec, ...] = (
     PermissionSpec(
         code=USER_VIEW,
@@ -549,6 +552,24 @@ PERMISSIONS: tuple[PermissionSpec, ...] = (
         group_label="报告",
         sort_order=40,
         description="配置周期自动生成报告",
+    ),
+    PermissionSpec(
+        HIERARCHY_VIEW,
+        "查看层级图",
+        "view",
+        "hierarchy",
+        "层级图",
+        10,
+        "查看和导出自己的层级图项目",
+    ),
+    PermissionSpec(
+        HIERARCHY_MANAGE,
+        "管理层级图",
+        "manage",
+        "hierarchy",
+        "层级图",
+        20,
+        "创建、编辑、导入、删除和恢复自己的层级图项目",
     ),
 )
 

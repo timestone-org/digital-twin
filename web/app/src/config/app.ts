@@ -52,3 +52,6 @@ export const MAX_TIMEOUT_MS = 2 ** 31 - 1
 
 /** 请求超时。下游之和必须小于上游，见 docs/agents/runtime-resilience.md §3。 */
 export const REQUEST_TIMEOUT_MS = 20_000
+
+/** 可选的层级图项目服务。 */
+export const HIERARCHY_BASE_URL = '/api/v1/hierarchy'

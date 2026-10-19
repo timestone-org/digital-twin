@@ -28,6 +28,7 @@ export default defineConfig(({ mode }) => {
   parseLiveCardLimit(env.VITE_KNOWLEDGE_CHAT_MAX_ACTIVE_LIVE_CARDS)
   return {
     base: '/ai/',
+    worker: { format: 'es' },
     plugins: [vue(), tailwind(), umoAssets()],
     resolve: {
       alias: {

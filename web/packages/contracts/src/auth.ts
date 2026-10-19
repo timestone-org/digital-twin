@@ -19,6 +19,8 @@ export const PERMISSION_CODES = {
   routeRuleManage: 'route_rule:manage',
   acView: 'ac:view',
   acManage: 'ac:manage',
+  hierarchyView: 'hierarchy:view',
+  hierarchyManage: 'hierarchy:manage',
   opcuaView: 'opcua:view',
   opcuaOperate: 'opcua:operate',
   opcuaManage: 'opcua:manage',

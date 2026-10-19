@@ -612,3 +612,5 @@ export type {
   OpenModelDetect,
   OpenModelDetectRequest,
 } from './modelingDetection'
+
+export type * from './hierarchy'

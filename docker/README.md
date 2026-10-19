@@ -229,7 +229,7 @@ worker 把 DOCX 派生为私有 PDF，浏览器优先画 PDF。关掉生成开�
 
 ## 迁移与种子（自动）
 
-一个 `database-migrate` 作业依次调用七个服务原有的 Alembic 链，并执行 auth/platform
+一个 `database-migrate` 作业依次调用八个服务的 Alembic 链，并执行 auth/platform
 种子；全部成功后才启动后端角色。各 schema 的版本表与迁移归属保持独立，
 任一步失败立即退出，已经成功的链不会回滚；排除故障后再运行可继续推进。
 设计取舍见 [ADR-0058](../docs/adr/0058-数据库迁移由单一部署作业调度.md)。
@@ -290,3 +290,21 @@ platform API 与 Nginx，最后发布前端。旧 worker 不识别内容版本�
 
 已有 `asset:<uuid>` 引用和大屏配置无需迁移；素材名称、ID 与创建信息保持不变。
 新压缩档就绪前读取当前版本原件。旧内容版本保留至删除该素材时一并清理。
+
+### 可选层级图
+
+先在仓库根运行 `corepack pnpm@11.21.0 --dir web build`，再在 `docker/` 中运行
+`docker compose --profile hierarchy up -d --build auth-server hierarchy-server`
+启用独立 `hierarchy-server`，
+前端入口为“工具 → 层级图”（`/ai/tools/hierarchy`）。默认编排不启动该服务，
+边缘用运行期 DNS 解析，服务缺席不阻断网关。能力探测失败仅隐藏对应入口。
+
+统一迁移作业包含 hierarchy 独立迁移链；默认部署也建立空 schema，不启动绘图
+服务。认证种子登记 `hierarchy:view` 与 `hierarchy:manage`，只读角色可以查看
+自己的项目，管理权限用于创建、导入、修改与删除。服务镜像仅安装 lib 与自身。
+升级先执行迁移与认证种子，再启动可选服务、更新前端并执行 `docker compose restart edge-gateway`，让入口脚本重新渲染
+Nginx 模板；用 `docker compose exec edge-gateway nginx -t` 验证加载配置。停用时停止
+`hierarchy-server` 并移除 profile，项目数据保留，刷新页面后入口隐藏；代码回滚不回滚数据库。
+
+项目默认按账号隔离。JSON 与 Excel 可与 Layerflow v1 案例互导；PDF 导出打开
+浏览器打印窗口，选择“保存为 PDF”。SVG / PNG 均导出完整图纸。

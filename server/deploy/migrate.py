@@ -31,6 +31,7 @@ SERVICES: tuple[str, ...] = (
     "realtime-hub",
     "ai-assistant",
     "knowledge-server",
+    "hierarchy-server",
 )
 SERVICE_PREFIXES: tuple[tuple[str, str], ...] = (
     ("auth-server", "AUTH"),
@@ -40,6 +41,7 @@ SERVICE_PREFIXES: tuple[tuple[str, str], ...] = (
     ("realtime-hub", "REALTIME"),
     ("ai-assistant", "ASSISTANT"),
     ("knowledge-server", "KNOWLEDGE"),
+    ("hierarchy-server", "HIERARCHY"),
 )
 PLATFORM_ALIASES: tuple[tuple[str, str], ...] = (
     ("AUTH_EDGE_SIGNING_SECRET", "PLATFORM_EDGE_SIGNING_SECRET"),

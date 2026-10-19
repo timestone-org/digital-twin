@@ -1,0 +1,3 @@
+DigitalTwin hierarchy editor uses ExcelJS 4.4.0 under MIT.
+Original license: exceljs-MIT.txt.
+Source: https://github.com/exceljs/exceljs/tree/v4.4.0

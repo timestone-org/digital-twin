@@ -249,3 +249,9 @@ uv run pytest -q                # 全量测试
 报告分 `report:view`、`report:manage`、`report:render`、`report:schedule` 四档。
 报告生成与下载独立于查看，下载规则优先于通用 GET 规则；Word 导入使用管理权限。
 对应规则在 `catalog/rules_report.py`，两侧的报告路由矩阵分别验证边缘与 API 权限。
+
+## 层级图权限
+
+`hierarchy:view` 查看和导出自己的层级图，`hierarchy:manage` 创建、编辑、导入、删除
+和恢复自己的项目。闸 1 规则集中在 `catalog/rules_hierarchy.py`，与层级图端点
+按实际路由逐项比对；项目归属由 hierarchy-server 再次校验。

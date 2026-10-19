@@ -81,6 +81,7 @@ ignore = [
 known-first-party = [
     "ai_assistant",
     "knowledge_server",
+    "hierarchy_server",
     "lib",
     "llmcore",
     "timeseries",

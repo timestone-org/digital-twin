@@ -197,6 +197,13 @@ export const NAV_ITEMS: readonly NavItem[] = [
     icon: 'layout-grid',
     children: [
       {
+        key: 'hierarchy',
+        label: '层级图',
+        icon: 'network',
+        to: '/tools/hierarchy',
+        permission: [PERMISSION_CODES.hierarchyView],
+      },
+      {
         key: 'opcua-servers',
         label: 'OPC UA 服务端',
         icon: 'activity',

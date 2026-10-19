@@ -4,6 +4,8 @@ packages:
 
 # Umo 固定旧 core，传递依赖也必须落到安全版本。
 overrides:
+  # ExcelJS 的 Node 解压依赖使用不含无许可 buffers 的兼容版本。
+  'exceljs@4.4.0>unzipper': '0.12.3'
   '@tiptap/core': '3.31.3'
   '@tiptap/pm': '3.31.3'
   # 数学扩展的官方 peer 范围从此版接受安全 KaTeX 0.18。

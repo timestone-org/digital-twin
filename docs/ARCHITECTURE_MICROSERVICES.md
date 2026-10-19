@@ -1,6 +1,6 @@
 # 服务架构
 
-> 后端由 **7 个服务代码单元**构成，连同边缘网关共 **11 个部署单元**。本文定义它们各自的边界、通信方式与数据所有权。
+> 后端由 **8 个服务代码单元**构成，连同边缘网关共 **12 个部署单元**（含可选层级图服务）。本文定义它们各自的边界、通信方式与数据所有权。
 > 每条约束的理由见 [`adr/`](adr/)；代码结构见 [`agents/project-structure-python.md`](agents/project-structure-python.md)；镜像构建见 [`agents/docker-build.md`](agents/docker-build.md)。
 
 ---
@@ -36,7 +36,7 @@
 
 ## 2. 服务清单
 
-### 2.1 代码单元（`server/services/*`，7 个）
+### 2.1 代码单元（`server/services/*`，8 个）
 
 | 服务 | 职责 | 对外前缀 | 端口 |
 |---|---|---|---|
@@ -47,8 +47,9 @@
 | `realtime-hub` | WebSocket 连接与订阅、服务→客户端扇出、通知 | `/api/v1/realtime` | 8000 |
 | `ai-assistant` | 技能驱动的对话式助手：按页面装技能、点位召回、改画布的工具下发到浏览器 | `/api/v1/assistant` | 8006 |
 | `knowledge-server` | 知识库：可插拔的知识来源与文档解析、切块与嵌入、混合检索与 AgenticRAG 编排 | `/api/v1/knowledge` | 8009 |
+| `hierarchy-server` | 可选的计量层级图项目、版本与图文档校验 | `/api/v1/hierarchy` | 8010 |
 
-### 2.2 部署单元（11 个）
+### 2.2 部署单元（12 个，含可选服务）
 
 | # | 部署单元 | 代码单元 | 角色 | 副本策略 |
 |---|---|---|---|---|
@@ -63,6 +64,7 @@
 | 9 | `ai-assistant` | ai-assistant | api | HPA |
 | 10 | `knowledge-api` | knowledge-server | `api` | HPA（QPS），**完全无状态** |
 | 11 | `knowledge-worker` | knowledge-server | `worker` | HPA（队列深度） |
+| 12 | `hierarchy-server` | hierarchy-server | `api` | 可选安装，按 QPS 扩缩 |
 | — | `migrate` | 各服务 | one-shot | 部署前 Job |
 
 `platform-publisher` 与 `platform-worker` 可以合成一个进程（`ROLE=worker,publisher`）省一份内存。一旦实测批任务的 CPU 抖动把推送延迟拉高就拆开——两者是同一镜像换启动参数，拆分成本接近零。
@@ -180,6 +182,7 @@ server/
 | `assistant` | 会话、消息、回合步骤、长期记忆 | ai-assistant |
 | `platform` | 大屏、绑定、项目、模板、素材、点位配置、台账、报告、建模 | platform-server |
 | `collect` | 点位历史、采集运行态 | collector-server |
+| `hierarchy` | 层级图项目与最近 50 个保存版本 | hierarchy-server |
 | `knowledge` | 知识库、来源、文档、块、向量与对话 | knowledge-server |
 
 口径是 **写独占、读放行**：一张表只有一个属主，只有属主能写、只有属主管迁移；跨 schema 只读允许，但要用独立的只读 DB role 授权，不靠自觉。
@@ -248,3 +251,8 @@ server/
 - `platform-server` 的模块间 import 计数持续上升，白名单闸频繁被要求放宽。
 
 在此之前，platform 内部靠 `apps/<feature>/` 的模块边界与**跨模块 import 白名单闸**维持可拆分性——真要拆时，拆分动作应当只是把目录搬走。
+
+## 可选层级图服务
+
+层级图拥有独立安装、发布和故障隔离边界，不读写平台表。独立代码单元的取舍见
+[ADR-0059](adr/0059-层级图作为可选独立数据属主.md)，功能与验收见 [层级图设计](HIERARCHY_DESIGN.md)。

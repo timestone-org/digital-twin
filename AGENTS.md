@@ -18,7 +18,7 @@
 
 ### Service topology
 
-后端 **7 个服务代码单元**，连同边缘网关共 **11 个部署单元**：`auth-server` / `platform-server` / `collector-server` / `opcua-server` / `realtime-hub` / `ai-assistant` / `knowledge-server`；`platform-server` 按 `ROLE=api|worker|publisher` 跑出三种进程，`knowledge-server` 按 `ROLE=api|worker` 跑出两种进程，`opcua-server` 独占 opc.tcp 端口段、单活且不经边缘。**代码单元 ≠ 部署单元**——扩缩与故障隔离在部署层解决，不为运行角色另建服务目录。数据是一库多 schema、**写独占读放行**。见 `docs/ARCHITECTURE_MICROSERVICES.md` 与 `docs/adr/`。
+后端 **8 个服务代码单元**，连同边缘网关共 **12 个部署单元**（含可选层级图服务）：`auth-server` / `platform-server` / `collector-server` / `opcua-server` / `realtime-hub` / `ai-assistant` / `knowledge-server` / `hierarchy-server`；`platform-server` 按 `ROLE=api|worker|publisher` 跑出三种进程，`knowledge-server` 按 `ROLE=api|worker` 跑出两种进程，`opcua-server` 独占 opc.tcp 端口段、单活且不经边缘。**代码单元 ≠ 部署单元**——扩缩与故障隔离在部署层解决，不为运行角色另建服务目录。数据是一库多 schema、**写独占读放行**。见 `docs/ARCHITECTURE_MICROSERVICES.md` 与 `docs/adr/`。
 
 ### Project structure
 

@@ -387,6 +387,12 @@ export const routes: RouteRecordRaw[] = [
     },
   },
   {
+    path: '/tools/hierarchy',
+    name: 'tools-hierarchy',
+    component: () => import('@/pages/Tools/Hierarchy/index.vue'),
+    meta: { title: '层级图', permissions: [PERMISSION_CODES.hierarchyView] },
+  },
+  {
     path: '/tools/opcua-servers',
     name: 'tools-opcua-servers',
     component: () => import('@/pages/Tools/OpcuaServers/index.vue'),

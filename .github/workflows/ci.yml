@@ -203,6 +203,14 @@ jobs:
     env:
       # 服务容器的端口映射到 runner 上，所以一律走 localhost——
       # act 也是这么映射的，两边不需要各写一套地址
+      HIERARCHY_POSTGRES_HOST: localhost
+      HIERARCHY_POSTGRES_PORT: '55432'
+      HIERARCHY_POSTGRES_USER: dt
+      HIERARCHY_POSTGRES_PASSWORD: dt
+      HIERARCHY_POSTGRES_DB: dt
+      HIERARCHY_POSTGRES_SCHEMA: hierarchy
+      HIERARCHY_REDIS_HOST: localhost
+      HIERARCHY_REDIS_PORT: '56379'
       AUTH_POSTGRES_HOST: localhost
       AUTH_POSTGRES_PORT: '55432'
       AUTH_POSTGRES_USER: dt
@@ -366,6 +374,10 @@ jobs:
         working-directory: server/services/ai-assistant
         run: uv run alembic upgrade head
 
+      - name: 建 hierarchy schema
+        working-directory: server/services/hierarchy-server
+        run: uv run alembic upgrade head
+
       # ⚠ 这一步会 `CREATE EXTENSION vector / pg_trgm`（ADR-0045）：检索的两路
       # 都是硬依赖，装不上就该在这里红，而不是留到线上「检索悄悄少一路」
       - name: 建 knowledge schema
@@ -468,6 +480,14 @@ jobs:
             --junitxml=../../../assistant-junit.xml 2>&1 \
             | tee ../../../assistant-pytest.log
 
+      - name: hierarchy-server 全层
+        working-directory: server/services/hierarchy-server
+        run: |
+          set -o pipefail
+          uv run pytest -q --cov=hierarchy_server --cov-branch \
+            --cov-report=xml:../../../hierarchy-coverage.xml \
+            --junitxml=../../../hierarchy-junit.xml 2>&1 | tee ../../../hierarchy-pytest.log
+
       # ⚠ 索引档的两条实现只有真库能分开验：pgvector 装没装决定走哪一路，
       # 而回退那一路平时没人跑，长期没人跑等于没有
       - name: knowledge-server 全层
@@ -518,6 +538,8 @@ jobs:
           uv run --project server python scripts/gates/check_pytest_run.py \
             knowledge-junit.xml knowledge-pytest.log
           uv run --project server python scripts/gates/check_pytest_run.py \
+            hierarchy-junit.xml hierarchy-pytest.log
+          uv run --project server python scripts/gates/check_pytest_run.py \
             deployment-junit.xml deployment-pytest.log
 
       # 整体覆盖率不许低于基线——哪怕仍在阈值之上
@@ -545,6 +567,8 @@ jobs:
             ai-assistant assistant-coverage.xml
           uv run --project server python scripts/gates/check_coverage.py \
             knowledge-server knowledge-coverage.xml
+          uv run --project server python scripts/gates/check_coverage.py \
+            hierarchy-server hierarchy-coverage.xml
 
       # 基线是**本次推送前的 main**（`github.event.before`）：刚合进来的那一坨
       # 改动正好落在这段区间里。⚠ 没有 before（分支首推、手动补跑）时无基线
@@ -566,7 +590,7 @@ jobs:
             auth-coverage.xml \
             platform-coverage.xml opcua-coverage.xml \
             collector-coverage.xml realtime-coverage.xml \
-            assistant-coverage.xml knowledge-coverage.xml \
+            assistant-coverage.xml knowledge-coverage.xml hierarchy-coverage.xml \
             deployment-coverage.xml \
             --compare-branch "${BASELINE}" --fail-under=85
 
@@ -587,6 +611,9 @@ jobs:
           fetch-depth: 0
       - uses: ./.github/actions/setup-web
       - uses: ./.github/actions/setup-server
+
+      - name: 层级图生成类型与 OpenAPI 一致
+        run: uv run --project server python server/services/hierarchy-server/scripts/export_types.py --check
 
       - name: 报告生成类型与 OpenAPI 一致
         run: uv run --project server python server/services/platform-server/scripts/export_report_types.py --check
@@ -640,6 +667,14 @@ jobs:
           --health-timeout 3s
           --health-retries 20
     env:
+      HIERARCHY_POSTGRES_HOST: localhost
+      HIERARCHY_POSTGRES_PORT: '55432'
+      HIERARCHY_POSTGRES_USER: dt
+      HIERARCHY_POSTGRES_PASSWORD: dt
+      HIERARCHY_POSTGRES_DB: dt
+      HIERARCHY_POSTGRES_SCHEMA: hierarchy
+      HIERARCHY_REDIS_HOST: localhost
+      HIERARCHY_REDIS_PORT: '56379'
       AUTH_POSTGRES_HOST: localhost
       AUTH_POSTGRES_PORT: '55432'
       AUTH_POSTGRES_USER: dt
@@ -717,6 +752,17 @@ jobs:
           ASSISTANT_EDGE_SIGNING_SECRET: ci-only-edge-signing-0123456789abcdef
           ASSISTANT_EDGE_SERVICE_KEY: ci-only-edge-service-0123456789abcdef
         run: uv run python scripts/export_openapi.py --check
+
+      - name: hierarchy-server 的 openapi.json 与代码一致
+        working-directory: server/services/hierarchy-server
+        run: uv run python scripts/export_openapi.py --check
+
+      - name: hierarchy-server 的迁移 upgrade → downgrade → upgrade
+        working-directory: server/services/hierarchy-server
+        run: |
+          uv run alembic upgrade head
+          uv run alembic downgrade base
+          uv run alembic upgrade head
 
       - name: knowledge-server 的 openapi.json 与代码一致
         working-directory: server/services/knowledge-server
