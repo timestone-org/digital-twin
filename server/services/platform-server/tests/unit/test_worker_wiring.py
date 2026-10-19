@@ -5,14 +5,19 @@
 """
 
 import asyncio
+import sys
 from concurrent.futures import ThreadPoolExecutor
 from dataclasses import dataclass, field
+from pathlib import Path
 from typing import cast
 
 import pytest
 
 from platform_server import __main__ as main_module
 from platform_server import worker
+from platform_server.apps.assets.services.compress_runtime import (
+    CompressorRuntime,
+)
 from platform_server.apps.hvac.services.ac_model_worker import (
     TrainerPool,
     TrainingConsumer,
@@ -241,6 +246,7 @@ async def _explode() -> None:
 
 async def test_serving_wires_the_container_and_shuts_it_down(
     monkeypatch: pytest.MonkeyPatch,
+    tmp_path: Path,
 ) -> None:
     """装配一次、自检一次、收到信号后按序收摊。"""
     ledger: list[str] = []
@@ -257,7 +263,15 @@ async def test_serving_wires_the_container_and_shuts_it_down(
         return cast(TrainingConsumer, FakeConsumer(ledger))
 
     monkeypatch.setattr(worker, "build_trainer", fake_trainer)
-    await worker.serve(build_settings(), wait=_immediate)
+    script = tmp_path / "compress-model.mjs"
+    script.touch()
+    settings = build_settings().model_copy(
+        update={
+            "assetcompress_node": sys.executable,
+            "assetcompress_script": str(script),
+        }
+    )
+    await worker.serve(settings, wait=_immediate)
     assert ledger[:2] == ["stop", "stop"]
     assert sorted(ledger[2:4]) == ["drain", "drain"]
     assert ledger[4:8] == ["lease_released"] * 4
@@ -272,6 +286,41 @@ async def test_serving_wires_the_container_and_shuts_it_down(
         "ac_source",
         "database",
     ]
+
+
+def test_compressor_uses_validated_absolute_paths(tmp_path: Path) -> None:
+    runtime = CompressorRuntime(
+        node="C:/Node/node.exe", script=tmp_path / "tool.mjs"
+    )
+
+    consumer = worker.build_model_compressor(build_container([]), runtime)
+
+    assert consumer._options.node == "C:/Node/node.exe"
+    assert consumer._options.script == tmp_path / "tool.mjs"
+
+
+@pytest.mark.parametrize(
+    ("node", "script", "variable"),
+    [
+        ("missing-node.exe", "auto", "PLATFORM_ASSETCOMPRESS_NODE"),
+        (sys.executable, "missing.mjs", "PLATFORM_ASSETCOMPRESS_SCRIPT"),
+    ],
+)
+async def test_missing_compression_tool_fails_before_resources_start(
+    monkeypatch: pytest.MonkeyPatch, node: str, script: str, variable: str
+) -> None:
+    started: list[bool] = []
+    monkeypatch.setattr(
+        worker, "build_container", lambda _: started.append(True)
+    )
+    settings = build_settings().model_copy(
+        update={"assetcompress_node": node, "assetcompress_script": script}
+    )
+
+    with pytest.raises(RuntimeError, match=variable):
+        await worker.serve(settings, wait=_immediate)
+
+    assert started == []
 
 
 def test_the_worker_role_runs_the_consumer_not_uvicorn(

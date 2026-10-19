@@ -26,6 +26,9 @@ from platform_server.apps.assets import crud, keys, variants
 from platform_server.apps.assets.crud.asset import lock_revision
 from platform_server.apps.assets.crud.asset_variant import VariantResult
 from platform_server.apps.assets.services.compress_queue import decode
+from platform_server.apps.assets.services.compress_runtime import (
+    resolve_compressor,
+)
 
 _logger = get_logger("platform.assets.compress_worker")
 
@@ -56,15 +59,24 @@ async def run_compressor(
 
     Args: script, node, source, output, ratio。
     """
-    process = await asyncio.create_subprocess_exec(
-        node,
-        str(script),
-        str(source),
-        str(output),
-        str(ratio),
-        stdout=asyncio.subprocess.DEVNULL,
-        stderr=asyncio.subprocess.PIPE,
+    runtime = await asyncio.to_thread(
+        resolve_compressor, node=node, script=str(script)
     )
+    try:
+        process = await asyncio.create_subprocess_exec(
+            runtime.node,
+            str(runtime.script),
+            str(source),
+            str(output),
+            str(ratio),
+            stdout=asyncio.subprocess.DEVNULL,
+            stderr=asyncio.subprocess.PIPE,
+        )
+    except OSError as error:
+        raise RuntimeError(
+            "无法启动 Node；请检查 PLATFORM_ASSETCOMPRESS_NODE"
+            f"（{runtime.node}）及 NSSM 服务账户的执行权限：{error}"
+        ) from error
     try:
         async with asyncio.timeout(COMPRESS_TIMEOUT_S):
             _, stderr = await process.communicate()

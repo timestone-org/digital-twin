@@ -202,10 +202,9 @@ class Settings(
     # 「传上去永远在压缩中」，而两边的配置单看都对
     assetcompress_stream: str = "platform:asset:compress"
     assetcompress_group: str = "asset-compress-workers"
-    # ⚠ 出厂值是镜像里的落点。本机跑 worker 时要指到仓里那份，否则表现是
-    # 每一档都失败、原因是「node: no such file」
+    # ⚠ NSSM 的 PATH 不等于登录用户的 PATH，非标准安装须填写绝对路径。
     assetcompress_node: str = "node"
-    assetcompress_script: str = "/app/nodetools/compress-model.mjs"
+    assetcompress_script: str = "auto"
 
     acmodel_stream: str = "platform:ac-model:train"
     acmodel_group: str = "ac-model-trainers"
