@@ -26,6 +26,8 @@ from auth_server.apps.auth.catalog.permissions import (
     DATASET_VIEW,
     FORMULA_MANAGE,
     FORMULA_VIEW,
+    HIERARCHY_MANAGE,
+    HIERARCHY_VIEW,
     KNOWLEDGE_MANAGE,
     KNOWLEDGE_USE,
     KNOWLEDGE_WRITE,
@@ -56,6 +58,7 @@ from auth_server.apps.auth.catalog.permissions import (
 from auth_server.apps.auth.catalog.roles import ROLE_ADMIN, ROLE_VIEWER, ROLES
 from auth_server.apps.auth.catalog.rules_assistant import ASSISTANT_RULES
 from auth_server.apps.auth.catalog.rules_auth import AUTH_RULES
+from auth_server.apps.auth.catalog.rules_hierarchy import HIERARCHY_RULES
 from auth_server.apps.auth.catalog.rules_knowledge import KNOWLEDGE_RULES
 from auth_server.apps.auth.catalog.rules_modeling import (
     MODELING_RULES,
@@ -82,6 +85,7 @@ ROUTE_RULES: tuple[RouteRuleSpec, ...] = (
     *REALTIME_RULES,
     *ASSISTANT_RULES,
     *KNOWLEDGE_RULES,
+    *HIERARCHY_RULES,
 )
 
 __all__ = [
@@ -107,6 +111,9 @@ __all__ = [
     "DATASET_VIEW",
     "FORMULA_MANAGE",
     "FORMULA_VIEW",
+    "HIERARCHY_MANAGE",
+    "HIERARCHY_RULES",
+    "HIERARCHY_VIEW",
     "KNOWLEDGE_MANAGE",
     "KNOWLEDGE_RULES",
     "KNOWLEDGE_USE",

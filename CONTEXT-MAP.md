@@ -17,6 +17,7 @@ AI 助手与三个画布工作面共用的绑定清单采用按实体、槽位�
 | 实时通道 | `server/services/realtime-hub/` | [`server/services/realtime-hub/CONTEXT.md`](server/services/realtime-hub/CONTEXT.md) | 已建 |
 | AI 助手 | `server/services/ai-assistant/` | [`server/services/ai-assistant/CONTEXT.md`](server/services/ai-assistant/CONTEXT.md) | 已建 |
 | 知识库 | `server/services/knowledge-server/` | [`server/services/knowledge-server/CONTEXT.md`](server/services/knowledge-server/CONTEXT.md) | 已建（`api` 角色：库/来源/文档/检索/对话/语音；`worker` 角色：摄取管线） |
+| 层级图 | `server/services/hierarchy-server/` | [`server/services/hierarchy-server/CONTEXT.md`](server/services/hierarchy-server/CONTEXT.md) | 已建（可选安装） |
 | 前端 | `web/` | [`web/CONTEXT.md`](web/CONTEXT.md) | 已建 |
 | 边缘网关 | `docker/nginx/` | 见 `docker/README.md` | 已建 |
 

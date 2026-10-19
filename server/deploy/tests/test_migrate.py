@@ -24,7 +24,7 @@ def make_settings(**overrides: object) -> migrate.RunnerSettings:
     return migrate.RunnerSettings.model_validate(values)
 
 
-def test_default_plan_keeps_seven_independent_chains_and_two_seeds() -> None:
+def test_default_plan_keeps_eight_independent_chains_and_two_seeds() -> None:
     plan = migrate.build_commands(migrate.SERVICES, Path("/deployment"))
     assert [(item.service, item.argv[1:]) for item in plan] == [
         ("auth-server", ("-m", "alembic", "upgrade", "head")),
@@ -36,6 +36,7 @@ def test_default_plan_keeps_seven_independent_chains_and_two_seeds() -> None:
         ("realtime-hub", ("-m", "alembic", "upgrade", "head")),
         ("ai-assistant", ("-m", "alembic", "upgrade", "head")),
         ("knowledge-server", ("-m", "alembic", "upgrade", "head")),
+        ("hierarchy-server", ("-m", "alembic", "upgrade", "head")),
     ]
     assert plan[0].cwd == Path("/deployment/services/auth-server")
     assert plan[2].cwd == Path("/deployment/services/platform-server")

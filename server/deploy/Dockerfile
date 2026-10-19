@@ -16,6 +16,7 @@ COPY services/opcua-server/pyproject.toml services/opcua-server/
 COPY services/realtime-hub/pyproject.toml services/realtime-hub/
 COPY services/ai-assistant/pyproject.toml services/ai-assistant/
 COPY services/knowledge-server/pyproject.toml services/knowledge-server/
+COPY services/hierarchy-server/pyproject.toml services/hierarchy-server/
 
 RUN --mount=type=cache,target=/root/.cache/uv \
     uv export --frozen --no-dev --no-emit-workspace \
@@ -33,7 +34,7 @@ RUN groupadd --gid 10001 app \
 ENV PATH="/src/.venv/bin:$PATH" \
     PYTHONUNBUFFERED=1 \
     PYTHONDONTWRITEBYTECODE=1 \
-    PYTHONPATH="/src/lib/src:/src/domain/collectwire/src:/src/domain/llmcore/src:/src/domain/timeseries/src:/src/services/auth-server/src:/src/services/platform-server/src:/src/services/collector-server/src:/src/services/opcua-server/src:/src/services/realtime-hub/src:/src/services/ai-assistant/src:/src/services/knowledge-server/src"
+    PYTHONPATH="/src/lib/src:/src/domain/collectwire/src:/src/domain/llmcore/src:/src/domain/timeseries/src:/src/services/auth-server/src:/src/services/platform-server/src:/src/services/collector-server/src:/src/services/opcua-server/src:/src/services/realtime-hub/src:/src/services/ai-assistant/src:/src/services/knowledge-server/src:/src/services/hierarchy-server/src"
 
 WORKDIR /src
 COPY --from=builder --chown=app:app /src/.venv /src/.venv
@@ -64,6 +65,9 @@ COPY --chown=app:app services/ai-assistant/alembic.ini services/ai-assistant/ale
 COPY --chown=app:app services/knowledge-server/src/ services/knowledge-server/src/
 COPY --chown=app:app services/knowledge-server/migrations/ services/knowledge-server/migrations/
 COPY --chown=app:app services/knowledge-server/alembic.ini services/knowledge-server/alembic.ini
+COPY --chown=app:app services/hierarchy-server/src/ services/hierarchy-server/src/
+COPY --chown=app:app services/hierarchy-server/migrations/ services/hierarchy-server/migrations/
+COPY --chown=app:app services/hierarchy-server/alembic.ini services/hierarchy-server/alembic.ini
 COPY --chown=app:app deploy/migrate.py deploy/migrate.py
 
 USER app

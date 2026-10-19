@@ -5,6 +5,8 @@
  * 顶部 Logo 回工作台，底部头像进个人中心与登出。新增页面只加 `navItems.ts`。
  */
 import { computed } from 'vue'
+import { PERMISSION_CODES } from '@dt/contracts'
+import { useHierarchyAvailability } from '@/composables/useHierarchyAvailability'
 import { RouterLink, useRoute, useRouter } from 'vue-router'
 import { DtButton, DtIcon } from '@dt/ui'
 
@@ -24,8 +26,23 @@ const props = defineProps<{ menu?: boolean }>()
 const { isCollapsed: preferredCollapsed, toggle } = useSidebar()
 const isCollapsed = computed(() => !props.menu && preferredCollapsed.value)
 
+const hierarchyAvailable = useHierarchyAvailability(() =>
+  auth.can([PERMISSION_CODES.hierarchyView]),
+)
 const items = computed(() =>
-  visibleNavItems(NAV_ITEMS, (codes) => auth.can(codes, 'any')),
+  visibleNavItems(
+    NAV_ITEMS.map((item) =>
+      item.children
+        ? {
+            ...item,
+            children: item.children.filter(
+              (child) => child.key !== 'hierarchy' || hierarchyAvailable.value,
+            ),
+          }
+        : item,
+    ),
+    (codes) => auth.can(codes, 'any'),
+  ),
 )
 
 function isActive(to: string | undefined): boolean {

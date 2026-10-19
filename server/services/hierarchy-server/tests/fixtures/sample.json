@@ -1,0 +1,590 @@
+{
+  "schemaVersion": 1,
+  "title": "蒸汽计量系统",
+  "templateId": "case-v1",
+  "nodes": [
+    {
+      "id": "s1",
+      "code": "Z1-01",
+      "name": "1#锅炉产汽",
+      "parameter": "1.0级",
+      "position": {
+        "x": 160,
+        "y": 40
+      },
+      "order": 1,
+      "kind": "meter"
+    },
+    {
+      "id": "s2",
+      "code": "Z1-02",
+      "name": "2#锅炉产汽",
+      "parameter": "1.0级",
+      "position": {
+        "x": 400,
+        "y": 40
+      },
+      "order": 2,
+      "kind": "meter"
+    },
+    {
+      "id": "s3",
+      "code": "Z1-03",
+      "name": "3#锅炉产汽",
+      "parameter": "1.0级",
+      "position": {
+        "x": 640,
+        "y": 40
+      },
+      "order": 3,
+      "kind": "meter"
+    },
+    {
+      "id": "s4",
+      "code": "Z1-04",
+      "name": "4#锅炉产汽",
+      "parameter": "1.0级",
+      "position": {
+        "x": 880,
+        "y": 40
+      },
+      "order": 4,
+      "kind": "meter"
+    },
+    {
+      "id": "bus",
+      "code": "汇流-01",
+      "name": "主蒸汽汇流",
+      "parameter": "",
+      "position": {
+        "x": 500,
+        "y": 210
+      },
+      "order": 0,
+      "kind": "junction"
+    },
+    {
+      "id": "m1",
+      "code": "Z2-01",
+      "name": "至联合工房热力\n站分汽缸",
+      "parameter": "1.0级",
+      "position": {
+        "x": 40,
+        "y": 355
+      },
+      "order": 1,
+      "kind": "meter"
+    },
+    {
+      "id": "m2",
+      "code": "Z2-02",
+      "name": "除氧器用蒸汽",
+      "parameter": "1.0级",
+      "position": {
+        "x": 280,
+        "y": 355
+      },
+      "order": 2,
+      "kind": "meter"
+    },
+    {
+      "id": "m3",
+      "code": "Z2-03",
+      "name": "低压分汽缸用蒸汽",
+      "parameter": "1.0级",
+      "position": {
+        "x": 520,
+        "y": 355
+      },
+      "order": 3,
+      "kind": "meter"
+    },
+    {
+      "id": "m4",
+      "code": "Z2-04",
+      "name": "库房暖气用蒸汽",
+      "parameter": "1.0级",
+      "position": {
+        "x": 760,
+        "y": 355
+      },
+      "order": 4,
+      "kind": "meter"
+    },
+    {
+      "id": "m5",
+      "code": "Z2-05",
+      "name": "联合工房真空回\n潮用蒸汽",
+      "parameter": "1.0级",
+      "position": {
+        "x": 1000,
+        "y": 355
+      },
+      "order": 5,
+      "kind": "meter"
+    },
+    {
+      "id": "c1",
+      "code": "Z3-01",
+      "name": "香料厨房用蒸汽",
+      "parameter": "1.0级",
+      "position": {
+        "x": 40,
+        "y": 585
+      },
+      "order": 1,
+      "kind": "meter"
+    },
+    {
+      "id": "c2",
+      "code": "Z3-02",
+      "name": "制丝车间用蒸汽",
+      "parameter": "1.0级",
+      "position": {
+        "x": 260,
+        "y": 585
+      },
+      "order": 2,
+      "kind": "meter"
+    },
+    {
+      "id": "c3",
+      "code": "Z3-03",
+      "name": "制丝车间储气罐\n用蒸汽",
+      "parameter": "1.0级",
+      "position": {
+        "x": 480,
+        "y": 585
+      },
+      "order": 3,
+      "kind": "meter"
+    },
+    {
+      "id": "c4",
+      "code": "Z3-04",
+      "name": "K5空调机组用\n蒸汽",
+      "parameter": "1.0级",
+      "position": {
+        "x": 700,
+        "y": 585
+      },
+      "order": 4,
+      "kind": "meter"
+    },
+    {
+      "id": "c5",
+      "code": "Z3-05",
+      "name": "空调用蒸汽减温\n减压",
+      "parameter": "1.0级",
+      "position": {
+        "x": 920,
+        "y": 585
+      },
+      "order": 5,
+      "kind": "meter"
+    },
+    {
+      "id": "t1",
+      "code": "Z4-01",
+      "name": "残烟处理",
+      "parameter": "1.0级",
+      "position": {
+        "x": 40,
+        "y": 825
+      },
+      "order": 1,
+      "kind": "meter"
+    },
+    {
+      "id": "t2",
+      "code": "Z4-02",
+      "name": "薄板式烘梗丝机",
+      "parameter": "1.0级",
+      "position": {
+        "x": 260,
+        "y": 825
+      },
+      "order": 2,
+      "kind": "meter"
+    },
+    {
+      "id": "t3",
+      "code": "Z4-03",
+      "name": "薄板式烘叶丝机",
+      "parameter": "1.0级",
+      "position": {
+        "x": 480,
+        "y": 825
+      },
+      "order": 3,
+      "kind": "meter"
+    },
+    {
+      "id": "t4",
+      "code": "Z4-04",
+      "name": "K1空调机组用\n蒸汽",
+      "parameter": "1.0级",
+      "position": {
+        "x": 700,
+        "y": 825
+      },
+      "order": 4,
+      "kind": "meter"
+    },
+    {
+      "id": "t5",
+      "code": "Z4-05",
+      "name": "K2空调机组用\n蒸汽",
+      "parameter": "1.0级",
+      "position": {
+        "x": 920,
+        "y": 825
+      },
+      "order": 5,
+      "kind": "meter"
+    },
+    {
+      "id": "t6",
+      "code": "Z4-06",
+      "name": "K3空调机组用\n蒸汽",
+      "parameter": "1.0级",
+      "position": {
+        "x": 1140,
+        "y": 825
+      },
+      "order": 6,
+      "kind": "meter"
+    },
+    {
+      "id": "t7",
+      "code": "Z4-07",
+      "name": "K4空调机组用\n蒸汽",
+      "parameter": "1.0级",
+      "position": {
+        "x": 1360,
+        "y": 825
+      },
+      "order": 7,
+      "kind": "meter"
+    },
+    {
+      "id": "t8",
+      "code": "Z4-08",
+      "name": "K6空调机组用\n蒸汽",
+      "parameter": "1.0级",
+      "position": {
+        "x": 1580,
+        "y": 825
+      },
+      "order": 8,
+      "kind": "meter"
+    },
+    {
+      "id": "t9",
+      "code": "Z4-09",
+      "name": "K7空调机组用\n蒸汽",
+      "parameter": "1.0级",
+      "position": {
+        "x": 40,
+        "y": 1005
+      },
+      "order": 9,
+      "kind": "meter"
+    },
+    {
+      "id": "t10",
+      "code": "Z4-10",
+      "name": "K8空调机组用\n蒸汽",
+      "parameter": "1.0级",
+      "position": {
+        "x": 260,
+        "y": 1005
+      },
+      "order": 10,
+      "kind": "meter"
+    },
+    {
+      "id": "t11",
+      "code": "Z4-11",
+      "name": "K9空调机组用\n蒸汽",
+      "parameter": "1.0级",
+      "position": {
+        "x": 480,
+        "y": 1005
+      },
+      "order": 11,
+      "kind": "meter"
+    },
+    {
+      "id": "t12",
+      "code": "Z4-12",
+      "name": "K10空调机组用\n蒸汽",
+      "parameter": "1.0级",
+      "position": {
+        "x": 700,
+        "y": 1005
+      },
+      "order": 12,
+      "kind": "meter"
+    },
+    {
+      "id": "t13",
+      "code": "Z4-13",
+      "name": "K11空调机组用\n蒸汽",
+      "parameter": "1.0级",
+      "position": {
+        "x": 920,
+        "y": 1005
+      },
+      "order": 13,
+      "kind": "meter"
+    },
+    {
+      "id": "t14",
+      "code": "Z4-14",
+      "name": "K12空调机组用\n蒸汽",
+      "parameter": "1.0级",
+      "position": {
+        "x": 1140,
+        "y": 1005
+      },
+      "order": 14,
+      "kind": "meter"
+    },
+    {
+      "id": "t15",
+      "code": "Z4-15",
+      "name": "K13空调机组用\n蒸汽",
+      "parameter": "1.0级",
+      "position": {
+        "x": 1360,
+        "y": 1005
+      },
+      "order": 15,
+      "kind": "meter"
+    },
+    {
+      "id": "t16",
+      "code": "Z4-16",
+      "name": "K14空调机组用\n蒸汽",
+      "parameter": "1.0级",
+      "position": {
+        "x": 1580,
+        "y": 1005
+      },
+      "order": 16,
+      "kind": "meter"
+    },
+    {
+      "id": "t17",
+      "code": "Z4-17",
+      "name": "K15空调机组用\n蒸汽",
+      "parameter": "1.0级",
+      "position": {
+        "x": 40,
+        "y": 1185
+      },
+      "order": 17,
+      "kind": "meter"
+    },
+    {
+      "id": "t18",
+      "code": "Z4-18",
+      "name": "K16空调机组用\n蒸汽",
+      "parameter": "1.0级",
+      "position": {
+        "x": 260,
+        "y": 1185
+      },
+      "order": 18,
+      "kind": "meter"
+    },
+    {
+      "id": "t19",
+      "code": "Z4-19",
+      "name": "K17空调机组用\n蒸汽",
+      "parameter": "1.0级",
+      "position": {
+        "x": 480,
+        "y": 1185
+      },
+      "order": 19,
+      "kind": "meter"
+    }
+  ],
+  "edges": [
+    {
+      "id": "s1-bus",
+      "source": "s1",
+      "target": "bus"
+    },
+    {
+      "id": "s2-bus",
+      "source": "s2",
+      "target": "bus"
+    },
+    {
+      "id": "s3-bus",
+      "source": "s3",
+      "target": "bus"
+    },
+    {
+      "id": "s4-bus",
+      "source": "s4",
+      "target": "bus"
+    },
+    {
+      "id": "bus-m1",
+      "source": "bus",
+      "target": "m1"
+    },
+    {
+      "id": "m1-c1",
+      "source": "m1",
+      "target": "c1"
+    },
+    {
+      "id": "bus-m2",
+      "source": "bus",
+      "target": "m2"
+    },
+    {
+      "id": "m1-c2",
+      "source": "m1",
+      "target": "c2"
+    },
+    {
+      "id": "bus-m3",
+      "source": "bus",
+      "target": "m3"
+    },
+    {
+      "id": "m1-c3",
+      "source": "m1",
+      "target": "c3"
+    },
+    {
+      "id": "bus-m4",
+      "source": "bus",
+      "target": "m4"
+    },
+    {
+      "id": "m1-c4",
+      "source": "m1",
+      "target": "c4"
+    },
+    {
+      "id": "bus-m5",
+      "source": "bus",
+      "target": "m5"
+    },
+    {
+      "id": "m1-c5",
+      "source": "m1",
+      "target": "c5"
+    },
+    {
+      "id": "c2-t1",
+      "source": "c2",
+      "target": "t1"
+    },
+    {
+      "id": "c3-t2",
+      "source": "c3",
+      "target": "t2"
+    },
+    {
+      "id": "c3-t3",
+      "source": "c3",
+      "target": "t3"
+    },
+    {
+      "id": "c5-t4",
+      "source": "c5",
+      "target": "t4"
+    },
+    {
+      "id": "c5-t5",
+      "source": "c5",
+      "target": "t5"
+    },
+    {
+      "id": "c5-t6",
+      "source": "c5",
+      "target": "t6"
+    },
+    {
+      "id": "c5-t7",
+      "source": "c5",
+      "target": "t7"
+    },
+    {
+      "id": "c5-t8",
+      "source": "c5",
+      "target": "t8"
+    },
+    {
+      "id": "c5-t9",
+      "source": "c5",
+      "target": "t9"
+    },
+    {
+      "id": "c5-t10",
+      "source": "c5",
+      "target": "t10"
+    },
+    {
+      "id": "c5-t11",
+      "source": "c5",
+      "target": "t11"
+    },
+    {
+      "id": "c5-t12",
+      "source": "c5",
+      "target": "t12"
+    },
+    {
+      "id": "c5-t13",
+      "source": "c5",
+      "target": "t13"
+    },
+    {
+      "id": "c5-t14",
+      "source": "c5",
+      "target": "t14"
+    },
+    {
+      "id": "c5-t15",
+      "source": "c5",
+      "target": "t15"
+    },
+    {
+      "id": "c5-t16",
+      "source": "c5",
+      "target": "t16"
+    },
+    {
+      "id": "c5-t17",
+      "source": "c5",
+      "target": "t17"
+    },
+    {
+      "id": "c5-t18",
+      "source": "c5",
+      "target": "t18"
+    },
+    {
+      "id": "c5-t19",
+      "source": "c5",
+      "target": "t19"
+    }
+  ],
+  "viewport": {
+    "x": 35,
+    "y": 40,
+    "zoom": 0.8
+  },
+  "paper": {
+    "width": 1516
+  }
+}
