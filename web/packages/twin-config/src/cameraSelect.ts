@@ -24,7 +24,9 @@ export function defaultCameraOf(
  * 的视点，两个坐标就都是原点）。这时候该退回自动取景，而不是飞过去。
  * @param camera 归一化后的视点
  */
-export function isUsablePose(camera: TwinCamera): boolean {
+export function isUsablePose(
+  camera: Pick<TwinFocusView, 'position' | 'target'>,
+): boolean {
   const [px, py, pz] = camera.position
   const [tx, ty, tz] = camera.target
   return Math.hypot(px - tx, py - ty, pz - tz) > MIN_POSE_SPAN
@@ -34,19 +36,18 @@ export function isUsablePose(camera: TwinCamera): boolean {
 const MIN_POSE_SPAN = 1e-6
 
 /**
- * 部件远距点击要飞去的取景：自己的快照优先，没有就退回它引用的预设视点。
- *
- * ⚠ 两个都配了时预设视点静默不生效——编辑器上要把这一条摆明。
- * ⚠ 一个都取不到时给 null，调用方退回「把这个部件框进画面」：远距点击彻底没
- * 反应的话，用户看不出是少配了一样东西。悬空与漏配由 `collectTwinConfigIssues` 报。
+ * 按所选来源解析部件点击取景，目标不可用时给 null。
  * @param part 归一化后的部件
  * @param cameras 归一化后的视点
  */
 export function partFocusView(
-  part: TwinPart,
+  part: Pick<TwinPart, 'click'>,
   cameras: readonly TwinCamera[],
 ): TwinFocusView | null {
-  if (part.click.view !== null) return part.click.view
+  if (part.click.viewSource === 'snapshot') {
+    const view = part.click.view
+    return view !== null && isUsablePose(view) ? view : null
+  }
   const camera = cameras.find((item) => item.id === part.click.cameraId)
   if (camera === undefined || !isUsablePose(camera)) return null
   return { position: camera.position, target: camera.target, fov: camera.fov }

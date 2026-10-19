@@ -4,6 +4,10 @@
 契约测试逐条断言的（docs/MODELING_DESIGN.md §5.6）。加算子在这里加一行 import。
 """
 
+from platform_server.apps.modeling.operators.anomaly import (
+    AnomalyDistance,
+    SplitSamples,
+)
 from platform_server.apps.modeling.operators.base import (
     CATEGORIES,
     CHANNEL_BINARY,
@@ -106,7 +110,12 @@ from platform_server.apps.modeling.operators.resample import (
     AGG_FUNCS,
     Resample,
 )
+from platform_server.apps.modeling.operators.selection import SelectColumns
 from platform_server.apps.modeling.operators.source import LedgerSource
+from platform_server.apps.modeling.operators.temporal import (
+    CyclicTime,
+    TimeShift,
+)
 from platform_server.apps.modeling.operators.timefeature import (
     TIME_PARTS,
     TimeFeature,
@@ -141,6 +150,7 @@ __all__ = [
     "TIER_SMALL",
     "TIME_PARTS",
     "ZONES",
+    "AnomalyDistance",
     "BlockAt",
     "BlockKind",
     "CastType",
@@ -153,6 +163,7 @@ __all__ = [
     "ColumnKeys",
     "ColumnsByPort",
     "CrossValidate",
+    "CyclicTime",
     "DropMissing",
     "FeatureImportance",
     "FillMissing",
@@ -185,11 +196,14 @@ __all__ = [
     "RollingFeature",
     "RowCounts",
     "Scale",
+    "SelectColumns",
     "SelectFeature",
     "SplitDataset",
+    "SplitSamples",
     "Standardize",
     "TimeAxis",
     "TimeFeature",
+    "TimeShift",
     "TreeRegressor",
     "Zone",
     "axis_block",

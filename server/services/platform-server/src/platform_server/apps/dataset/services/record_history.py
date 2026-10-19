@@ -5,9 +5,7 @@
 分不开（docs/DATASET_DESIGN.md §5.6）。
 """
 
-import contextlib
 import uuid
-from collections.abc import AsyncGenerator
 from dataclasses import dataclass
 from datetime import datetime, tzinfo
 from typing import Any
@@ -32,6 +30,7 @@ from platform_server.apps.dataset.formula import (
 )
 from platform_server.apps.dataset.services import analysis_provider
 from platform_server.apps.dataset.services.effective import to_snapshot
+from platform_server.apps.dataset.services.sessions import BorrowedSessions
 
 
 @dataclass(frozen=True)
@@ -128,24 +127,8 @@ async def load_models(
     Args: session, scope。
     """
     return await analysis_provider.load_models(
-        _OneShot(session), frozenset(scope.plan.model_refs)
+        BorrowedSessions(session), frozenset(scope.plan.model_refs)
     )
-
-
-@dataclass(frozen=True)
-class _OneShot:
-    """把手上这个会话包成「开短事务」的最小面。
-
-    ⚠ 装模型这一步跑在调用方已经开好的事务里，不另开：另开一条连接的话，
-    同一次请求里刚写下、还没提交的绑定它看不见。
-    """
-
-    opened: AsyncSession
-
-    @contextlib.asynccontextmanager
-    async def session(self) -> AsyncGenerator[AsyncSession]:
-        """交出手上这个会话，不提交也不回滚——事务归调用方。"""
-        yield self.opened
 
 
 async def load_whole_stats(

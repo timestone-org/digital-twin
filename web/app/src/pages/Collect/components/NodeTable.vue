@@ -68,9 +68,13 @@ const canManage = computed(() =>
 const COLUMNS = computed(() => nodeTableColumns(canManage.value))
 
 const sourceId = computed(() => props.source.id)
-const view = useViewMode('collect-points')
+const sourceProtocol = computed(() => props.source.protocol)
+const view = useViewMode(`collect-points-${sourceProtocol.value}`)
 
-const { keyword, list, emptyState } = usePointList(() => sourceId.value)
+const { keyword, list, emptyState } = usePointList(
+  () => sourceId.value,
+  () => props.source.protocol,
+)
 
 const live = useLiveValues(sourceId)
 const ops = usePointOps(() => sourceId.value)

@@ -81,7 +81,7 @@ class Publishable:
     reason: str
     serving: dict[str, Any]
     feature_keys: tuple[str, ...]
-    target_key: str
+    target_key: str | None
     algo: str
     task: str
     channel: str
@@ -189,7 +189,7 @@ def _servable(publishing: _Publishing) -> Publishable:
     编译得过、跑起来才抛。
     Args: publishing。
     """
-    target_key = as_text(publishing.payload.get("target_key"))
+    target_key = as_text(publishing.payload.get("target_key")) or None
     entry = entry_of(
         publishing.graph,
         publishing.records,
@@ -280,7 +280,7 @@ def _published(
 
     Args: publishing, serving, steps, entry。
     """
-    target_key = as_text(publishing.payload.get("target_key"))
+    target_key = as_text(publishing.payload.get("target_key")) or None
     task = as_text(publishing.payload.get("task"))
     return Publishable(
         is_servable=True,
@@ -331,7 +331,7 @@ def _steps_of(
     Args: publishing, entry。
     """
     nodes = publishing.graph.node_by_id()
-    target_key = as_text(publishing.payload.get("target_key"))
+    target_key = as_text(publishing.payload.get("target_key")) or None
     steps: list[dict[str, Any]] = []
     flowed: list[str] | None = [item.key for item in entry]
     for node_id in publishing.served:
@@ -360,7 +360,7 @@ def _steps_of(
 
 
 def _seen_by(
-    record: NodeRecord, flowed: list[str] | None, target_key: str
+    record: NodeRecord, flowed: list[str] | None, target_key: str | None
 ) -> list[str] | None:
     """这一步在推理时会看到哪些列。
 
@@ -444,11 +444,20 @@ def _as_meta(item: EntryColumn) -> dict[str, Any]:
     }
 
 
-def _target_meta(publishing: _Publishing, target_key: str) -> dict[str, Any]:
+def _target_meta(
+    publishing: _Publishing, target_key: str | None
+) -> dict[str, Any]:
     """目标列的类型、显示名与单位；取数摘要里没有就只留 key。
 
     Args: publishing, target_key。
     """
+    if target_key is None:
+        return {
+            "key": "anomaly_score",
+            "label": "异常分数",
+            "unit": "",
+            "dtype": DTYPE_NUMBER,
+        }
     if not publishing.served:
         return {"key": target_key}
     stat = entry_meta(
@@ -472,7 +481,7 @@ def _unservable(
         reason=reason,
         serving={},
         feature_keys=tuple(as_texts(model.get("feature_keys"))),
-        target_key=as_text(model.get("target_key")),
+        target_key=as_text(model.get("target_key")) or None,
         algo=as_text(model.get("algo")),
         task=as_text(model.get("task")),
         channel=(

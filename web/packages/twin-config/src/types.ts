@@ -276,19 +276,19 @@ export type TwinPartFarAction = (typeof TWIN_PART_FAR_ACTIONS)[number]
 
 /**
  * 近距点击（近于分界，或没配分界）做什么。
- * ⚠ 联动事件两档都照发：动作是附加的，不是替代——否则给部件配上详情会把同屏
- * 别的模块的联动静默掐掉。
+ * ⚠ 普通点击和近距点击始终发出联动事件，附加动作不替代联动。
  */
-export const TWIN_PART_NEAR_ACTIONS = ['detail', 'none'] as const
+export const TWIN_PART_NEAR_ACTIONS = ['detail', 'view', 'none'] as const
 export type TwinPartNearAction = (typeof TWIN_PART_NEAR_ACTIONS)[number]
 
 /** 一个部件远近两档的点击动作。 */
 export interface TwinPartClick {
   far: TwinPartFarAction
   near: TwinPartNearAction
-  /** `far: 'view'` 的取景快照；null = 退回 `cameraId`。 */
+  viewSource: 'camera' | 'snapshot'
+  /** 两档 `view` 动作共用的取景快照。 */
   view: TwinFocusView | null
-  /** `far: 'view'` 且没有快照时切到这个预设视点；空串 = 不切。 */
+  /** 预设视点来源的目标；空串 = 未配置。 */
   cameraId: string
 }
 

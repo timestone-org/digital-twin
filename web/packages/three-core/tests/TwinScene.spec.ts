@@ -1200,6 +1200,120 @@ describe('远近两档的点击动作', () => {
     wrapper.unmount()
   })
 
+  it('不配距离分界时点击部件只切换到指定视点', async () => {
+    const { wrapper, element } = await scene(
+      { click: { near: 'view', cameraId: 'c9' } },
+      {
+        cameras: [
+          { id: 'home', position: [4, 4, 4], target: [0, 0, 0], fov: 45 },
+          { id: 'c9', position: [6, 7, 8], target: [0, 0, 0], fov: 25 },
+        ],
+      },
+    )
+
+    try {
+      await vi.waitFor(() => {
+        expect(cameraOf().fov).toBe(45)
+      })
+      clickPart(element)
+      await vi.waitFor(() => {
+        expect(cameraOf().fov).toBe(25)
+      })
+
+      expect(cameraOf().position.x).toBeCloseTo(6)
+      expect(cameraOf().position.y).toBeCloseTo(7)
+      expect(cameraOf().position.z).toBeCloseTo(8)
+      expect(modal()).toBeNull()
+      expect(wrapper.emitted('partClick')).toEqual([
+        [{ partId: 'part-pump', partName: '泵' }],
+      ])
+    } finally {
+      wrapper.unmount()
+    }
+  })
+
+  it.each([null, { ref: 'orbit', value: 100000 }])(
+    '普通点击优先使用快照，分界为 %j 时均可切换',
+    async (farThreshold) => {
+      const { wrapper, element } = await scene(
+        {
+          click: {
+            near: 'view',
+            far: 'none',
+            cameraId: 'home',
+            view: { position: [3, 4, 5], target: [1, 1, 1], fov: 30 },
+          },
+          clickDistance: { farThreshold },
+        },
+        { cameras: [{ id: 'home', position: [4, 4, 4], fov: 45 }] },
+      )
+
+      try {
+        clickPart(element)
+        await vi.waitFor(() => expect(cameraOf().fov).toBe(30))
+        expect(cameraOf().position.x).toBeCloseTo(3)
+        expect(cameraOf().position.y).toBeCloseTo(4)
+        expect(cameraOf().position.z).toBeCloseTo(5)
+        expect(modal()).toBeNull()
+      } finally {
+        wrapper.unmount()
+      }
+    },
+  )
+
+  it('采用预设视点时备用快照不会覆盖选择，预演与运行使用同一来源', async () => {
+    const { wrapper, element } = await scene(
+      {
+        click: {
+          near: 'view',
+          viewSource: 'camera',
+          cameraId: 'target',
+          view: { position: [3, 4, 5], target: [0, 0, 0], fov: 30 },
+        },
+      },
+      {
+        cameras: [
+          { id: 'home', position: [4, 4, 4], fov: 45 },
+          { id: 'target', position: [6, 7, 8], fov: 25 },
+        ],
+      },
+    )
+    try {
+      clickPart(element)
+      await vi.waitFor(() => expect(cameraOf().fov).toBe(25))
+      expect(cameraOf().position.x).toBeCloseTo(6)
+      await wrapper.setProps({
+        previewAction: { sequence: 1, partId: 'part-pump', kind: 'near' },
+      })
+      expect(wrapper.emitted('previewResult')?.flat()).toContain(
+        '近距动作：飞到指定取景',
+      )
+      expect(modal()).toBeNull()
+    } finally {
+      wrapper.unmount()
+    }
+  })
+
+  it.each(['', 'deleted-camera'])(
+    '普通点击目标缺失（%s）时退回聚焦部件',
+    async (cameraId) => {
+      const { wrapper, element } = await scene(
+        { click: { near: 'view', cameraId } },
+        { cameras: [{ id: 'home', position: [40, 40, 40], fov: 45 }] },
+      )
+
+      try {
+        clickPart(element)
+        await vi.waitFor(() => {
+          expect(cameraOf().position.length()).toBeLessThan(20)
+        })
+        expect(modal()).toBeNull()
+      } finally {
+        wrapper.unmount()
+      }
+    },
+  )
+
   it('远距动作选了「飞到取景」时飞到配好的机位', async () => {
     const { wrapper, element } = await scene({
       clickDistance: { farThreshold: { ref: 'orbit', value: 0.001 } },
@@ -1323,6 +1437,73 @@ it('配置动作可打开真实详情，近距预演发事件，缺失分界给�
     '泵',
   )
   wrapper.unmount()
+})
+
+it.each([
+  { view: { position: [3, 4, 5], fov: 30 }, message: '飞到指定取景' },
+  { view: null, message: '框选部件' },
+])(
+  '普通点击切视角的预览反馈与实际动作一致：$message',
+  async ({ view, message }) => {
+    const wrapper = mountScene({
+      config: config({
+        parts: [
+          { id: 'part-pump', nodes: ['pump'], click: { near: 'view', view } },
+        ],
+      }),
+    })
+    await flushPromises()
+
+    try {
+      await wrapper.setProps({
+        previewAction: { sequence: 1, partId: 'part-pump', kind: 'click' },
+      })
+
+      expect(wrapper.emitted('previewResult')?.flat()).toContain(
+        `近距动作：${message}`,
+      )
+      expect(document.querySelector('[data-test="part-modal-data"]')).toBeNull()
+    } finally {
+      wrapper.unmount()
+    }
+  },
+)
+
+it('点击部件切视角时暂停正在播放的漫游', async () => {
+  const wrapper = mountScene({
+    config: config({
+      cameras: [
+        { id: 'home', position: [4, 4, 4] },
+        { id: 'target', position: [6, 7, 8] },
+      ],
+      roamTour: { enabled: true, items: ['home', 'target'] },
+      parts: [
+        {
+          id: 'part-pump',
+          nodes: ['pump'],
+          click: { near: 'view', cameraId: 'target' },
+        },
+      ],
+    }),
+  })
+  await flushPromises()
+
+  try {
+    await wrapper.setProps({
+      previewAction: { sequence: 1, partId: '', kind: 'roam-play' },
+    })
+    expect(wrapper.emitted('roamProgress')?.at(-1)).toEqual([
+      expect.objectContaining({ playing: true }),
+    ])
+    await wrapper.setProps({
+      previewAction: { sequence: 2, partId: 'part-pump', kind: 'near' },
+    })
+    expect(wrapper.emitted('roamProgress')?.at(-1)).toEqual([
+      expect.objectContaining({ playing: false }),
+    ])
+  } finally {
+    wrapper.unmount()
+  }
 })
 
 it('视角编辑动作打开真实独立预览，并把保存与恢复默认转发给编辑器', async () => {

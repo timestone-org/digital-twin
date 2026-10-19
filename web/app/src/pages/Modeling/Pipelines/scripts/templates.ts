@@ -16,6 +16,10 @@ import type {
   ModelingGraphNode,
 } from '@dt/contracts'
 
+import { deviceAnomalyGraph } from './anomalyTemplates'
+import { dailyEnergyGraph } from './energyTemplates'
+import { shortTermLoadGraph } from './loadTemplates'
+
 /** 节点在画布上的横向间距与起点。⚠ 坐标是 `left`/`top` 不是 `x`/`y`——
 写成后者时对象字面量整个变成错误类型，而 typecheck 只报一处、lint 报在
 **用到它的地方**，两边都指不到这里。 */
@@ -92,6 +96,30 @@ export const PIPELINE_TEMPLATES: readonly PipelineTemplate[] = [
     label: '空白',
     hint: '自己从算子面板拖。',
     build: () => ({ format_version: '1.0', nodes: [], edges: [] }),
+  },
+  {
+    key: 'daily_energy',
+    label: '每日能耗预测（同表）',
+    hint: '选择台账，将示例列「计划产量、工单数、能耗」换成实际字段 → 按完整日汇总 → 时序验证 → 发布模型。至少准备 35 个完整日；能耗须为期间用量，预测时提供每日计划数据。',
+    build: () => dailyEnergyGraph(),
+  },
+  {
+    key: 'daily_energy_joined',
+    label: '每日能耗预测（生产与能耗分表）',
+    hint: '分别选择生产、能耗台账和实际字段 → 各自按日汇总 → 同一天精确对齐 → 时序训练评估。发布后按输入签名提供每日计划产量、工单数；可继续增删算子。',
+    build: () => dailyEnergyGraph(true),
+  },
+  {
+    key: 'short_term_load',
+    label: '短期负荷预测（每半小时）',
+    hint: '未来 6 小时，每半小时一个点（12 点）。历史负荷按 6 小时、24 小时、7 天精确对齐，配合计划产量、工单数、预报温度和周期特征。至少准备 42 天历史；负荷为平均功率 kW，发布后逐点提供计划和对应历史负荷。',
+    build: shortTermLoadGraph,
+  },
+  {
+    key: 'device_anomaly',
+    label: '设备异常检测（正常工况）',
+    hint: '选择电流、频率、温度等正常工况样本，无需故障标签。按时间切分，学习多变量关系并校准阈值；发布后第三方输入实时值，检测接口返回是否异常。至少 100 行，建议覆盖代表性工况。',
+    build: deviceAnomalyGraph,
   },
   {
     key: 'regression',

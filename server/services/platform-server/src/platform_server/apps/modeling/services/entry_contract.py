@@ -76,7 +76,9 @@ def frame_columns_of(
     return [as_text(item) for item in cast("list[object]", found)]
 
 
-def without_target(keys: list[str] | None, target_key: str) -> list[str] | None:
+def without_target(
+    keys: list[str] | None, target_key: str | None
+) -> list[str] | None:
     """推理时那一行上会有的列 = 训练时那一步看到的列**去掉目标列**。
 
     ⚠ 这是训练与推理之间唯一的差别：目标列在训练时一路跟着走（切分要用它），
@@ -92,7 +94,7 @@ def entry_of(
     graph: PipelineGraph,
     records: dict[str, NodeRecord],
     served: list[str],
-    target_key: str,
+    target_key: str | None,
 ) -> tuple[EntryColumn, ...] | None:
     """调用方必须提供的那几列，**在特征工程之前**。
 

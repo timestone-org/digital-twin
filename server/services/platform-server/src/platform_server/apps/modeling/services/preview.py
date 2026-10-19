@@ -183,12 +183,15 @@ def _metrics_preview(payload: MetricsPayload) -> dict[str, Any]:
 
 def _provenance(frame: Frame) -> dict[str, Any]:
     source = frame.provenance
-    return {
+    provenance = {
         "table_codes": list(source.table_codes),
         "since": None if source.since is None else source.since.isoformat(),
         "until": None if source.until is None else source.until.isoformat(),
         "is_truncated": source.is_truncated,
     }
+    if source.observed_until is not None:
+        provenance["observed_until"] = source.observed_until.isoformat()
+    return provenance
 
 
 def _trim_rows(preview: dict[str, Any], rows: int) -> dict[str, Any]:

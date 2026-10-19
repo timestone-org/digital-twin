@@ -715,8 +715,8 @@ describe('骨架表的边界', () => {
     ).toEqual([])
   })
 
-  it('24 个算子逐个都登记了', () => {
-    expect(formulaCodes()).toHaveLength(24)
+  it('29 个算子逐个都登记了', () => {
+    expect(formulaCodes()).toHaveLength(29)
     for (const code of [
       'split_dataset',
       'linear_regression',
@@ -725,6 +725,11 @@ describe('骨架表的边界', () => {
       'cast_type',
       'ledger_source',
       'cross_validate',
+      'select_columns',
+      'time_shift',
+      'cyclic_time',
+      'split_samples',
+      'anomaly_distance',
     ]) {
       expect(
         formulasOf(code, { blocks: [], ports: [], config: {} }).length,

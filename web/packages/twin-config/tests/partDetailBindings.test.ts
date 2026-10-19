@@ -175,6 +175,77 @@ describe('部件详情实时值缝合', () => {
 })
 
 describe('部件点击与详情诊断', () => {
+  it.each([
+    { viewSource: 'snapshot', view: null, cameraId: 'valid' },
+    {
+      viewSource: 'snapshot',
+      view: { position: [0, 0, 0], target: [0, 0, 0] },
+      cameraId: 'valid',
+    },
+    { viewSource: 'camera', view: { position: [1, 2, 3] }, cameraId: '' },
+  ])('所选来源 $viewSource 缺少目标时不能被备用配置掩盖', (click) => {
+    const issues = collectTwinConfigIssues(
+      configOf({
+        cameras: [{ id: 'valid', position: [3, 4, 5] }],
+        parts: [{ id: 'p1', click: { near: 'view', ...click } }],
+      }),
+    )
+    expect(issues).toEqual([
+      expect.objectContaining({ kind: 'part-focus-no-target' }),
+    ])
+  })
+
+  it('采用快照时备用视点已删除不会误报当前取景不可用', () => {
+    const issues = collectTwinConfigIssues(
+      configOf({
+        parts: [
+          {
+            id: 'p1',
+            click: {
+              near: 'view',
+              viewSource: 'snapshot',
+              view: { position: [1, 2, 3] },
+              cameraId: 'gone',
+            },
+          },
+        ],
+      }),
+    )
+    expect(issues).toEqual([])
+  })
+
+  it('普通点击缺少切换目标时定位到近距动作', () => {
+    const issues = collectTwinConfigIssues(
+      configOf({ parts: [{ id: 'p1', click: { near: 'view' } }] }),
+    )
+
+    expect(issues).toEqual([
+      expect.objectContaining({
+        kind: 'part-focus-no-target',
+        entityId: 'p1',
+        path: 'parts[0].click.near',
+      }),
+    ])
+  })
+
+  it.each(['approach', 'view'])(
+    '普通点击配置了目标时无需远近分界，远距动作 %s 不影响诊断',
+    (far) => {
+      const issues = collectTwinConfigIssues(
+        configOf({
+          parts: [
+            {
+              id: 'p1',
+              click: { near: 'view', far, view: { position: [1, 2, 3] } },
+            },
+          ],
+        }),
+      )
+
+      expect(issues).toEqual([])
+    },
+  )
+
   it('远距取景指到已删的视点时报出来，否则只表现为飞错了地方', () => {
     const issues = collectTwinConfigIssues(
       configOf({ parts: [{ id: 'p1', click: { cameraId: 'gone' } }] }),

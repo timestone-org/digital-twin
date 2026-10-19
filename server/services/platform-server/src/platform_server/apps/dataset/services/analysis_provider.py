@@ -23,6 +23,7 @@ __all__ = [
     "AnalysisUnavailable",
     "LoadedModels",
     "load_models",
+    "load_preview_models",
     "register_provider",
     "registered_providers",
 ]
@@ -52,6 +53,14 @@ class AnalysisProvider(ABC):
         Args: sessions, codes。
         """
 
+    async def load_preview(
+        self, sessions: Sessions, codes: frozenset[str]
+    ) -> LoadedModels:
+        """未声明轻量预览能力时拒绝加载。Args: sessions, codes。"""
+        del sessions
+        unavailable = AnalysisUnavailable(reason="这个模型暂不支持公式预览")
+        return dict.fromkeys(codes, unavailable)
+
 
 _PROVIDERS: dict[str, AnalysisProvider] = {}
 
@@ -79,18 +88,39 @@ async def load_models(
     而真相可能只是一个模型的版本行坏了。
     Args: sessions, codes。
     """
+    return await _load_all(sessions, codes, is_preview=False)
+
+
+async def load_preview_models(
+    sessions: Sessions, codes: frozenset[str]
+) -> dict[str, AnalysisModel | AnalysisUnavailable]:
+    """只加载提供者明确支持的轻量预览模型。Args: sessions, codes。"""
+    return await _load_all(sessions, codes, is_preview=True)
+
+
+async def _load_all(
+    sessions: Sessions, codes: frozenset[str], *, is_preview: bool
+) -> dict[str, AnalysisModel | AnalysisUnavailable]:
     loaded: dict[str, AnalysisModel | AnalysisUnavailable] = {}
     if not codes:
         return loaded
     for provider in _PROVIDERS.values():
-        loaded.update(await _load_one(provider, sessions, codes))
+        loaded.update(
+            await _load_one(provider, sessions, codes, is_preview=is_preview)
+        )
     return loaded
 
 
 async def _load_one(
-    provider: AnalysisProvider, sessions: Sessions, codes: frozenset[str]
+    provider: AnalysisProvider,
+    sessions: Sessions,
+    codes: frozenset[str],
+    *,
+    is_preview: bool,
 ) -> LoadedModels:
     try:
+        if is_preview:
+            return await provider.load_preview(sessions, codes)
         return await provider.load(sessions, codes)
     except Exception as error:
         _logger.error(

@@ -3,7 +3,7 @@ import { afterEach, describe, expect, it, vi } from 'vitest'
 import { enableAutoUnmount, flushPromises, mount } from '@vue/test-utils'
 import type { CollectPoint } from '@dt/contracts'
 import * as collect from '@/api/collect'
-import BatchEditDialog from '@/pages/Collect/Opcua/components/BatchEditDialog.vue'
+import BatchEditDialog from '@/pages/Collect/components/BatchEditDialog.vue'
 
 vi.mock('@/api/collect', () => ({ updatePoint: vi.fn() }))
 const point: CollectPoint = {

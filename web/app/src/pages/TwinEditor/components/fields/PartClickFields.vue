@@ -1,11 +1,7 @@
 <script setup lang="ts">
 /**
- * @fileoverview 部件的点击：三条距离阈值，加上远近两档各做什么。
- *
- * ⚠ 「两段式分界」是这一节的支点：远于它的一下只算远档（缺省是把部件框进画面），
- * 近于它的才是真点击。三条阈值各自带参考系，脱离参考系的裸数字不可类比。
- * ⚠ 阈值 ≤ 0 或距离取不到时一律按「不限制」走：误挡一次点击的表现是「点了没反应」，
- * 用户找不到原因也没法自行恢复。
+ * @fileoverview 部件点击动作、共用取景目标与可选的远近距离分界。
+ * 动作语义见 docs/TWIN_PART_INTERACTION_DESIGN.md。
  */
 import type {
   TwinCamera,
@@ -13,7 +9,8 @@ import type {
   TwinDistanceRule,
   TwinPartClick,
 } from '@dt/twin-config'
-import { DtButton, DtField, DtNotice, DtSelect } from '@dt/ui'
+import { partFocusView } from '@dt/twin-config'
+import { DtButton, DtField, DtNotice, DtSegmented, DtSelect } from '@dt/ui'
 import { computed, inject } from 'vue'
 import { TWIN_PREVIEW_INTENT } from '../../scripts/previewIntent'
 const previewIntent = inject(TWIN_PREVIEW_INTENT, undefined)
@@ -38,13 +35,29 @@ const emit = defineEmits<{
 const FAR_OPTIONS = [
   { value: 'approach', label: '聚焦部件' },
   { value: 'view', label: '切换至指定视角' },
-  { value: 'none', label: '仅触发联动' },
+  { value: 'none', label: '不响应' },
 ] as const
 
 const NEAR_OPTIONS = [
   { value: 'none', label: '仅触发联动' },
+  { value: 'view', label: '切换至指定视角' },
   { value: 'detail', label: '弹出部件详情' },
 ] as const
+
+const VIEW_SOURCES = [
+  { value: 'camera', label: '预设视点' },
+  { value: 'snapshot', label: '取景快照' },
+] as const
+
+const hasFarThreshold = computed(() => props.distance.farThreshold !== null)
+const nearLabel = computed(() =>
+  hasFarThreshold.value ? '近距点击动作' : '点击动作',
+)
+const usesView = computed(
+  () =>
+    props.modelValue.near === 'view' ||
+    (hasFarThreshold.value && props.modelValue.far === 'view'),
+)
 
 const cameraOptions = computed(() => [
   { value: '', label: '不使用预设视点' },
@@ -64,19 +77,22 @@ const viewText = computed(() => {
 
 /** 选了远档动作却没配分界：每一下都算近距点击，远档整个不存在。 */
 const noFarThreshold = computed(
-  () => props.modelValue.far === 'view' && props.distance.farThreshold === null,
+  () =>
+    props.modelValue.far === 'view' &&
+    props.modelValue.near !== 'view' &&
+    props.distance.farThreshold === null,
 )
 
 /** 选了「飞到取景」却什么都没配：运行态会退回自动框住。 */
 const missingTarget = computed(
   () =>
-    props.modelValue.far === 'view' &&
-    props.modelValue.view === null &&
-    props.modelValue.cameraId === '',
+    usesView.value &&
+    partFocusView({ click: props.modelValue }, props.cameras) === null,
 )
 
 const danglingCamera = computed(
   () =>
+    props.modelValue.viewSource === 'camera' &&
     props.modelValue.cameraId !== '' &&
     !props.cameras.some((item) => item.id === props.modelValue.cameraId),
 )
@@ -93,6 +109,11 @@ function writeFar(next: string): void {
 function writeNear(next: string): void {
   const found = NEAR_OPTIONS.find((item) => item.value === next)
   if (found !== undefined) write({ near: found.value })
+}
+
+function writeViewSource(next: string): void {
+  const found = VIEW_SOURCES.find((item) => item.value === next)
+  if (found !== undefined) write({ viewSource: found.value })
 }
 
 function writeDistance(patch: Partial<TwinClickDistanceRule>): void {
@@ -121,7 +142,7 @@ function writeMax(max: TwinDistanceRule | null): void {
       @update:model-value="writeFarThreshold"
     />
 
-    <DtField label="远距点击动作" size="sm">
+    <DtField v-if="hasFarThreshold" label="远距点击动作" size="sm">
       <DtSelect
         :model-value="modelValue.far"
         :options="FAR_OPTIONS"
@@ -131,35 +152,66 @@ function writeMax(max: TwinDistanceRule | null): void {
       />
     </DtField>
 
-    <template v-if="modelValue.far === 'view'">
-      <DtField label="取景快照" size="sm">
-        <code
-          class="block truncate rounded bg-surface-sunken px-2 py-1 text-xs text-text-secondary"
-          >{{ viewText }}</code
-        >
-      </DtField>
-      <DtButton
-        variant="soft"
+    <DtField :label="nearLabel" size="sm">
+      <DtSelect
+        :model-value="modelValue.near"
+        :options="NEAR_OPTIONS"
+        :aria-label="nearLabel"
         size="sm"
-        icon="refresh-cw"
-        block
-        data-test="part-capture-view"
-        @click="emit('captureView')"
-      >
-        取当前机位
-      </DtButton>
-      <DtButton
-        v-if="modelValue.view !== null"
-        variant="ghost"
-        size="sm"
-        block
-        data-test="part-clear-view"
-        @click="write({ view: null })"
-      >
-        清除取景
-      </DtButton>
+        @update:model-value="writeNear"
+      />
+    </DtField>
+    <p v-if="distance.farThreshold === null" class="text-xs text-text-disabled">
+      未设置远近距离分界，所有点击都执行此动作。
+    </p>
+    <DtNotice v-if="noFarThreshold" intent="warning" icon="alert-triangle">
+      已保留远距取景配置，远距动作暂不生效。启用远近距离分界，或将点击动作设为切换至指定视角。
+    </DtNotice>
 
-      <DtField label="预设视点" size="sm">
+    <template v-if="usesView">
+      <DtField label="目标视角来源" size="sm">
+        <DtSegmented
+          :model-value="modelValue.viewSource"
+          :options="VIEW_SOURCES"
+          aria-label="目标视角来源"
+          size="sm"
+          block
+          @update:model-value="writeViewSource"
+        />
+      </DtField>
+      <p class="text-xs text-text-disabled">
+        切换来源会保留已有配置，远近切视角共用同一个目标。
+      </p>
+      <template v-if="modelValue.viewSource === 'snapshot'">
+        <DtField label="取景快照" size="sm">
+          <code
+            class="block truncate rounded bg-surface-sunken px-2 py-1 text-xs text-text-secondary"
+            >{{ viewText }}</code
+          >
+        </DtField>
+        <DtButton
+          variant="soft"
+          size="sm"
+          icon="refresh-cw"
+          block
+          data-test="part-capture-view"
+          @click="emit('captureView')"
+        >
+          取当前机位
+        </DtButton>
+        <DtButton
+          v-if="modelValue.view !== null"
+          variant="ghost"
+          size="sm"
+          block
+          data-test="part-clear-view"
+          @click="write({ view: null, viewSource: 'camera' })"
+        >
+          清除取景
+        </DtButton>
+      </template>
+
+      <DtField v-else label="预设视点" size="sm">
         <DtSelect
           :model-value="modelValue.cameraId"
           :options="cameraOptions"
@@ -168,36 +220,21 @@ function writeMax(max: TwinDistanceRule | null): void {
           @update:model-value="write({ cameraId: $event })"
         />
       </DtField>
+      <DtNotice v-if="danglingCamera" intent="danger" icon="alert-circle">
+        视点
+        {{ modelValue.cameraId }} 不存在，点击将自动聚焦部件。
+      </DtNotice>
       <DtNotice
-        v-if="modelValue.view !== null && modelValue.cameraId !== ''"
+        v-else-if="missingTarget"
         intent="warning"
         icon="alert-triangle"
       >
-        已优先使用取景快照。如需使用预设视点，请先清除快照。
-      </DtNotice>
-      <DtNotice v-if="danglingCamera" intent="danger" icon="alert-circle">
-        视点
-        {{ modelValue.cameraId }} 不存在，远距点击将自动聚焦部件。
-      </DtNotice>
-      <DtNotice v-if="missingTarget" intent="warning" icon="alert-triangle">
-        尚未配置取景快照或预设视点，远距点击将自动聚焦部件。
-      </DtNotice>
-      <DtNotice v-if="noFarThreshold" intent="warning" icon="alert-triangle">
-        尚未配置远近距离分界，所有点击均执行近距动作，远距动作暂不生效。
+        当前取景尚未配置完整，点击将自动聚焦部件。
       </DtNotice>
     </template>
 
-    <DtField label="近距点击动作" size="sm">
-      <DtSelect
-        :model-value="modelValue.near"
-        :options="NEAR_OPTIONS"
-        aria-label="近距点击动作"
-        size="sm"
-        @update:model-value="writeNear"
-      />
-    </DtField>
     <p class="text-xs text-text-disabled">
-      远距和近距点击均可触发联动；此处配置的附加动作不会影响其他模块的联动。
+      普通点击和近距点击会同时触发联动；远距动作只控制镜头。
     </p>
 
     <DistanceField

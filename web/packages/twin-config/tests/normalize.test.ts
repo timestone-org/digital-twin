@@ -253,6 +253,61 @@ describe('normalizeTwinConfig 的实体', () => {
   })
 })
 
+describe('部件点击取景', () => {
+  it.each([
+    { view: null, expected: 'camera' },
+    { view: { position: [3, 4, 5] }, expected: 'snapshot' },
+  ])('旧配置按已有取景推导来源 $expected', ({ view, expected }) => {
+    const part = normalizeTwinConfig({
+      parts: [{ click: { view, cameraId: 'overview' } }],
+    }).parts[0]
+
+    expect(part?.click).toMatchObject({
+      viewSource: expected,
+      cameraId: 'overview',
+    })
+  })
+
+  it('明确选择预设视点时保留快照，保存后来源不被旧优先级覆盖', () => {
+    const view = { position: [3, 4, 5], target: [0, 0, 0], fov: 30 }
+    const config = normalizeTwinConfig({
+      parts: [
+        {
+          click: {
+            near: 'view',
+            viewSource: 'camera',
+            view,
+            cameraId: 'overview',
+          },
+        },
+      ],
+    })
+    const saved: unknown = JSON.parse(JSON.stringify(config))
+
+    expect(normalizeTwinConfig(saved).parts[0]?.click).toMatchObject({
+      viewSource: 'camera',
+      view,
+      cameraId: 'overview',
+    })
+  })
+
+  it('普通点击取景序列化往返后保留动作、视点与快照，距离分界仍为空', () => {
+    const click = {
+      near: 'view',
+      far: 'none',
+      cameraId: 'overview',
+      view: { position: [3, 4, 5], target: [0, 0, 0], fov: 30 },
+    }
+    const config = normalizeTwinConfig({ parts: [{ id: 'pump', click }] })
+    const saved: unknown = JSON.parse(JSON.stringify(config))
+    const part = normalizeTwinConfig(saved).parts[0]
+
+    expect(part?.click).toEqual({ ...click, viewSource: 'snapshot' })
+    expect(part?.clickDistance.farThreshold).toBeNull()
+    expect(part?.detail.fields).toEqual([])
+  })
+})
+
 describe('部件详情模型取景', () => {
   it('序列化并重新归一化后保留独立取景，远距点击取景各自保存', () => {
     const view = { position: [13, 4, 12], target: [11, 1, -2], fov: 67 }

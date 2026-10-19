@@ -185,7 +185,9 @@ function createCapture(
       const part = deps.config()?.parts.find((item) => item.id === id)
       if (part === undefined) return
       // ⚠ 整段 `click` 一起写回：只发一个 `view` 会把远近两档的动作抹成缺省
-      patchEntity(deps, 'parts', id, { click: { ...part.click, view: pose } })
+      patchEntity(deps, 'parts', id, {
+        click: { ...part.click, view: pose, viewSource: 'snapshot' },
+      })
     },
     savePartDetailView: ({ partId, view }) => {
       const part = deps.config()?.parts.find((item) => item.id === partId)

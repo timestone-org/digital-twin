@@ -13,6 +13,7 @@ from contextlib import asynccontextmanager
 from dataclasses import dataclass, field
 from pathlib import Path
 from typing import Any, cast
+from unittest.mock import AsyncMock
 
 import pytest
 from sqlalchemy.ext.asyncio import AsyncSession
@@ -247,6 +248,79 @@ def script_that(tmp_path: Path, body: str) -> Path:
     path = tmp_path / "fake_tool.py"
     path.write_text(body, encoding="utf-8")
     return path
+
+
+async def test_missing_node_identifies_configuration_for_every_variant(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    rows = [FakeRow(name, "pending") for name in ("high", "medium", "low")]
+    recorder = install_fakes(monkeypatch, asset=FakeAsset(), rows=rows)
+    compressor = compress_worker.ModelCompressor(
+        database=cast(Database, FakeDatabase()),
+        store=await store_with_original(),
+        options=compress_worker.CompressOptions(
+            target=TARGET,
+            script=script_that(tmp_path, "pass"),
+            node=str(tmp_path / "missing-node.exe"),
+        ),
+    )
+
+    await compressor.compress(ASSET_ID)
+
+    assert recorder.ready == []
+    assert {name for name, _ in recorder.failed} == {"high", "medium", "low"}
+    for _, reason in recorder.failed:
+        assert "PLATFORM_ASSETCOMPRESS_NODE" in reason
+        assert "NSSM" in reason
+
+
+async def test_process_start_failure_keeps_node_configuration_context(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    script = script_that(tmp_path, "pass")
+    error = FileNotFoundError("[WinError 2] 系统找不到指定的文件。")
+    monkeypatch.setattr(
+        asyncio, "create_subprocess_exec", AsyncMock(side_effect=error)
+    )
+
+    with pytest.raises(
+        RuntimeError, match="PLATFORM_ASSETCOMPRESS_NODE"
+    ) as caught:
+        await compress_worker.run_compressor(
+            script=script,
+            node=sys.executable,
+            source=tmp_path / "in.glb",
+            output=tmp_path / "out.glb",
+            ratio=1.0,
+        )
+
+    assert "NSSM" in str(caught.value)
+    assert "WinError 2" in str(caught.value)
+
+
+async def test_spaces_and_non_ascii_paths_remain_separate_arguments(
+    tmp_path: Path,
+) -> None:
+    root = tmp_path / "模型 & tools"
+    root.mkdir()
+    source = root / "原始 模型.glb"
+    output = root / "高画质 模型.glb"
+    source.write_bytes(GLB)
+    script = script_that(
+        root,
+        "from pathlib import Path\nimport sys\n"
+        "Path(sys.argv[2]).write_bytes(Path(sys.argv[1]).read_bytes())\n",
+    )
+
+    await compress_worker.run_compressor(
+        script=script,
+        node=sys.executable,
+        source=source,
+        output=output,
+        ratio=1.0,
+    )
+
+    assert output.read_bytes() == GLB
 
 
 async def test_a_non_zero_exit_carries_the_stderr_out(tmp_path: Path) -> None:

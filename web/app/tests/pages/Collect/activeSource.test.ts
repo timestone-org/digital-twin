@@ -4,8 +4,8 @@
  * ⚠ 用真路由而不是假件：这条口径的全部价值就在「地址栏真的变了」与「地址栏
  * 变了页面真的跟着走」，假件把这两件事都替换掉之后，测的就只剩自己了。
  */
-import { describe, expect, it, vi } from 'vitest'
-import { flushPromises, mount } from '@vue/test-utils'
+import { afterEach, describe, expect, it, vi } from 'vitest'
+import { enableAutoUnmount, flushPromises, mount } from '@vue/test-utils'
 import { defineComponent, h } from 'vue'
 import { createMemoryHistory, createRouter } from 'vue-router'
 import type { Router } from 'vue-router'
@@ -14,9 +14,11 @@ import {
   SOURCE_QUERY_KEY,
   useActiveSource,
   type ActiveSource,
-} from '@/pages/Collect/Opcua/scripts/useActiveSource'
+} from '@/pages/Collect/scripts/useActiveSource'
 
 const PAGE = '/collect/opcua'
+
+enableAutoUnmount(afterEach)
 
 function must(api: ActiveSource | null): ActiveSource {
   if (api === null) throw new Error('composable 还没装起来')
@@ -38,8 +40,8 @@ async function mountActive(initial: string = PAGE) {
       return () => h('div')
     },
   })
-  mount(host, { global: { plugins: [router] } })
-  return { router, api: () => must(created) }
+  const wrapper = mount(host, { global: { plugins: [router] } })
+  return { wrapper, router, api: () => must(created) }
 }
 
 function queryId(router: Router): unknown {
@@ -78,6 +80,18 @@ describe('从地址栏读', () => {
 })
 
 describe('往地址栏写', () => {
+  it('页面销毁后才完成的创建不能改写地址栏或选中态', async () => {
+    const { wrapper, router, api } = await mountActive()
+    const replace = vi.spyOn(router, 'replace')
+    wrapper.unmount()
+
+    api().select('late-created')
+    await flushPromises()
+
+    expect(replace).not.toHaveBeenCalled()
+    expect(api().activeId.value).toBeNull()
+  })
+
   it('选一个源就写进地址栏', async () => {
     const { router, api } = await mountActive()
 

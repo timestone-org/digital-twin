@@ -766,18 +766,21 @@ POST /api/v1/platform/modeling-model-versions/{id}:register-formula
 
 `kmeans` 看着只是「再加一个算子」，实际拦路的有三条，每一条都动契约：
 
-1. **第三种任务类型。** `ModelTask` 现在是 `classification | regression`，
+1. **聚类任务类型。** `ModelTask` 支持 `classification | regression | anomaly_detection`，
    而 `modeling_model_versions.task` 上有一条按它渲染的 CHECK。加 `clustering`
    要走一次放宽 CHECK 的扩展迁移；
-2. **没有目标列。** 聚类是无监督的，而 `modeling_model_versions.target_key` 上有
-   `length(target_key) > 0` 的 CHECK，`_single_target` 也要求上游恰好一个目标角色。
+2. **没有目标列。** `modeling_model_versions.target_key` 只允许异常检测任务为空，
+   聚类还需扩展任务与目标的联合约束；监督切分仍要求恰好一个目标角色。
    往里写 `"__none__"` 这种假值正是「往闭合集合里塞一个当前没有语义的取值」，
    [MODELING_DESIGN.md](./MODELING_DESIGN.md) §4 明确不许；
-3. **没有切分，也没有现成的评估。** 聚类不切训练 / 测试，`split_dataset` 那条路
-   整个不适用；指标要另出一套（轮廓系数 / 簇内平方和），与两套现成的都不同源。
+3. **评估口径不同。** 无目标数据可用 `split_samples`，但聚类指标仍需另出一套
+   （轮廓系数 / 簇内平方和），不能沿用异常分数、异常比例或监督任务指标。
 
 三条都不难，但它们是**契约级**的改动（一次迁移 + 两处 CHECK + 一种新任务的评估），
 与「加一个类 + 清单里加一行」不是一个量级。单独成期做，不混进算子扩容里。
+
+设备异常检测已采用无监督时序切分和正常工况距离模型，具体输入、校准及第三方
+`:detect` 契约见 [建模设计](./MODELING_DESIGN.md#设备异常检测与第三方实时调用)。
 
 ### 8.5 评估 `evaluate`
 

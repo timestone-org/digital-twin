@@ -400,11 +400,14 @@ C:\DigitalTwin\app\server\.venv\Scripts\python.exe -c "import auth_server, platf
 ```powershell
 cd C:\DigitalTwin\app\server\services\platform-server\nodetools
 npm ci --omit=dev --no-audit --no-fund
-node .\compress-model.mjs   # 不带参数应当打印用法/报参数错，能跑起来就说明依赖齐了
+node .\compress-model.mjs   # 不带参数应当打印用法；这一步只验证脚本和依赖可加载
 ```
 
 ⚠ `npm ci` 不是 `npm install`：后者会在锁文件与清单不一致时**默默改锁文件**，
 于是现场装的和仓里锁的不是同一批。
+
+依赖加载通过后，上传一个测试 GLB，确认高画质、中等、轻量三档均完成并可预览。
+`node --version` 或打印脚本用法不代表实际 Draco 编码已成功。
 
 ### 3.4 前端
 
@@ -636,9 +639,35 @@ compose 里靠显式覆盖遮住了。这里漏写的表现是：主题登记 fa
 |---|---|---|
 | `<前缀>_APP_HTTP_HOST` | `127.0.0.1` | 默认 `0.0.0.0`；后端不能暴露在厂区网上（§1.1）。前缀 = `AUTH_` / `PLATFORM_` / `OPCUA_` / `REALTIME_` / `COLLECT_` / `ASSISTANT_` / `KNOWLEDGE_` |
 | `OPCUA_PKI_DIR` | `C:\DigitalTwin\data\opcua-pki` | 默认是容器路径 `/var/lib/opcua/pki`，Windows 上建不出来 |
-| `PLATFORM_ASSETCOMPRESS_SCRIPT` | `C:\DigitalTwin\app\server\services\platform-server\nodetools\compress-model.mjs` | 默认是镜像里的 `/app/nodetools/…`；不改的表现是每一档压缩都失败，原因写着「找不到文件」 |
-| `PLATFORM_ASSETCOMPRESS_NODE` | `C:\Program Files\nodejs\node.exe` | 服务以 LocalSystem 跑，PATH 与你的登录会话不同；写绝对路径最省事 |
+| `PLATFORM_ASSETCOMPRESS_SCRIPT` | `auto`（默认）或脚本的实际绝对路径 | `auto` 按已安装源码所在目录寻找 `nodetools/compress-model.mjs`，其次寻找镜像的 `/app/nodetools/…`，不依赖 NSSM 工作目录 |
+| `PLATFORM_ASSETCOMPRESS_NODE` | `node`（默认）或 `node.exe` 的实际绝对路径 | 先查服务进程的 PATH；Windows 再查 `ProgramW6432`、`ProgramFiles`、`ProgramFiles(x86)` 下的 `nodejs/node.exe`。非标准安装须填写绝对路径 |
 | `<前缀>_APP_LOG_FORMAT` | `json` | 与容器一致，便于同一套查询 |
+
+worker 启动时会校验 Node 和脚本路径；无效时在取任务前退出，并指出对应配置项。
+显式填写的无效路径不会自动换成另一套安装。API 与 publisher 不要求本机有压缩工具。
+
+**三个档位都报 `[WinError 2] 系统找不到指定的文件`** 时，先核对
+`PLATFORM_ASSETCOMPRESS_NODE`。这是 Python 启动可执行文件失败；脚本或依赖缺失
+通常由已启动的 Node 返回 `Cannot find module` / `Cannot find package`。
+
+在 Windows PowerShell 中定位安装，并验证程序和脚本：
+
+```powershell
+$nodeExe = (Get-Command node.exe -CommandType Application -ErrorAction Stop).Source
+$platformDir = 'C:\DigitalTwin\app\server\services\platform-server' # 改为实际目录
+$compressScript = Join-Path $platformDir 'nodetools\compress-model.mjs'
+Test-Path -LiteralPath $nodeExe -PathType Leaf
+Test-Path -LiteralPath $compressScript -PathType Leaf
+& $nodeExe --version
+& $nodeExe $compressScript
+```
+
+若 `Get-Command` 找不到 Node，先安装 Node；若只装在登录用户的版本管理器里，
+须确认服务账户有执行权限，或安装机器级 Node。将 `$nodeExe` 的实际路径写入
+该服务目录 `.env` 的 `PLATFORM_ASSETCOMPRESS_NODE`；脚本可填 `auto` 或实际绝对路径。
+**更新 `.env.bj` 不会自动生效**，实际读取位置由 NSSM 的 `AppDirectory` 决定。
+NSSM `AppEnvironmentExtra` 中的同名项优先于 `.env`；修改时保留已有的角色和实例变量。
+重启 `dt-platform-worker` 后，在素材页面对失败模型执行“重压”：失败任务不会自动重试。
 
 ⚠ **`ZoneInfoNotFoundError: 'Asia/Shanghai'`**：Windows 没有系统 tz 库。
 platform-server 已经把 `tzdata` 声明成依赖，`uv sync` 会带上；**若你手工用 pip 装过
@@ -1446,7 +1475,9 @@ Restart-Service dt-auth, dt-platform, dt-realtime, dt-opcua, dt-assistant, dt-kn
 | 大屏**订不到任何主题**，auth 与 realtime 都健康 | `REALTIME_AUTH_BASE_URL` 用了代码默认值（端口 8001 是错的）| 显式写成 `http://127.0.0.1:8004` |
 | 3D 模型 / 图片 / 图标 **403** | MinIO 匿名前缀没设（`minio-init` 那步从没在这台跑过）| §4.4，`__probe__` 回 404 才算对 |
 | 素材**上传 404** | `/oss/` 的桶名 rewrite、`PLATFORM_OBJECTSTORE_PUBLIC_BASE`、前端 `ASSET_BASE_URL` 三处分叉 | 三处必须同为 `/oss/` + 同一个桶 |
-| 模型永远停在**「压缩中」** | `PLATFORM_ASSETCOMPRESS_NODE/SCRIPT` 还是容器路径，或 `nodetools` 没 `npm ci` | §3.3、§5.4 |
+| 模型三档都报 **`WinError 2`** | Node 路径无效或服务账户的 PATH 找不到它 | §5.4：配置实际 `node.exe` 路径，重启 worker 后重压 |
+| 模型报 **`Cannot find module/package`** | 脚本路径不正确，或 `nodetools` 没 `npm ci` | §3.3、§5.4 |
+| 模型永远停在**「压缩中」** | worker 未启动或启动路径校验失败 | 查看 worker 日志，按 §5.4 修正 Node / 脚本路径 |
 | **api 健康，worker 与 publisher 无限重启** | 对象存储那四项只给了 api（三个角色共用一份 Settings）| 补全后重启 |
 | `ZoneInfoNotFoundError: 'Asia/Shanghai'` | Windows 没有系统 tz 库，`tzdata` 被卸掉了 | 重跑 `uv sync --all-packages --frozen --no-dev` |
 | 采集服务**健康、日志不报错，但一条历史都没有** | `collector-server` 那条迁移没跑（超表不存在）| §6 |

@@ -1,7 +1,14 @@
 <script setup lang="ts">
 /** @fileoverview 部件预览模式、动作预演与漫游段选择。 */
 import { buildRoamSegments, type TwinConfig } from '@dt/twin-config'
-import { DtButton, DtNotice, DtSegmented, DtSelect } from '@dt/ui'
+import type { DtMenuItem } from '@dt/contracts'
+import {
+  DtButton,
+  DtDropdownMenu,
+  DtNotice,
+  DtSegmented,
+  DtSelect,
+} from '@dt/ui'
 import { computed } from 'vue'
 import type { TwinSelection } from '../scripts/types'
 const props = defineProps<{
@@ -41,6 +48,29 @@ const partModes = [
   { value: 'detail', label: '详情卡片' },
   { value: 'click', label: '点击验证' },
 ]
+const hasFarThreshold = computed(() => {
+  const selection = props.selection
+  if (selection.kind !== 'parts') return false
+  return props.config.parts.some(
+    (part) =>
+      part.id === selection.id && part.clickDistance.farThreshold !== null,
+  )
+})
+const actionItems = computed<DtMenuItem[]>(() => [
+  {
+    value: 'near',
+    label: hasFarThreshold.value ? '预演近距动作' : '预演点击动作',
+  },
+  {
+    value: 'far',
+    label: hasFarThreshold.value
+      ? '预演远距动作'
+      : '预演远距动作（未启用分界）',
+  },
+])
+function previewAction(item: DtMenuItem): void {
+  if (item.value === 'near' || item.value === 'far') emit('action', item.value)
+}
 const segments = computed(() =>
   buildRoamSegments(props.config.cameras, props.config.roamTour),
 )
@@ -78,18 +108,33 @@ const progressText = computed(
     >
     <template v-if="partMode === 'click'">
       <div class="flex flex-wrap gap-1">
-        <DtButton size="xs" @click="emit('action', 'near')"
-          >预演近距动作</DtButton
+        <DtButton
+          size="xs"
+          aria-label="按当前配置测试点击"
+          @click="emit('action', 'click')"
+          >测试点击</DtButton
         >
-        <DtButton size="xs" @click="emit('action', 'far')"
-          >预演远距动作</DtButton
+        <DtDropdownMenu
+          :items="actionItems"
+          label="单独预演动作"
+          @select="previewAction"
         >
-        <DtButton size="xs" variant="soft" @click="emit('action', 'click')"
-          >按当前视距测试</DtButton
-        >
+          <template #trigger="{ toggle, isOpen }">
+            <DtButton
+              size="xs"
+              variant="ghost"
+              aria-label="单独预演动作"
+              aria-haspopup="menu"
+              :aria-expanded="isOpen"
+              @click="toggle"
+            >
+              单独预演
+            </DtButton>
+          </template>
+        </DtDropdownMenu>
       </div>
       <p class="text-xs text-text-secondary">
-        预演直接展示所配动作；当前视距测试会检查距离限制。联动事件仅在预览内显示。
+        测试点击按当前视距检查距离限制；单独预演跳过距离限制。联动事件仅在预览内显示。
       </p>
     </template>
     <DtNotice v-if="result" intent="info">{{ result }}</DtNotice>

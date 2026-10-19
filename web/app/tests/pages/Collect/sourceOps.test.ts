@@ -2,7 +2,7 @@
 import type { CollectSource, CollectSourceCreateInput } from '@dt/contracts'
 import { afterEach, describe, expect, it, vi } from 'vitest'
 import * as collectApi from '@/api/collect'
-import { useSourceOps } from '@/pages/Collect/Opcua/scripts/useSourceOps'
+import { useSourceOps } from '@/pages/Collect/scripts/useSourceOps'
 
 const INPUT: CollectSourceCreateInput = {
   name: 'HTTP 能源接口',

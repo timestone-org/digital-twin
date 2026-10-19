@@ -166,6 +166,7 @@ const sizeLabel = computed(() => {
           @click="wide = !wide"
         />
         <DtButton
+          v-if="!embedded"
           size="xs"
           variant="ghost"
           intent="neutral"

@@ -144,6 +144,7 @@ const MAX_MODAL_WIDTH = 2400
 export const DEFAULT_PART_CLICK: TwinPartClick = Object.freeze({
   far: 'approach',
   near: 'none',
+  viewSource: 'camera',
   view: null,
   cameraId: '',
 })
@@ -172,10 +173,16 @@ export const DEFAULT_PART_DETAIL: TwinPartDetail = Object.freeze({
  */
 export function normalizePartClick(raw: unknown): TwinPartClick {
   if (!isRecord(raw)) return { ...DEFAULT_PART_CLICK }
+  const view = normalizeFocusView(raw.view)
   return {
     far: oneOf(raw.far, TWIN_PART_FAR_ACTIONS, DEFAULT_PART_CLICK.far),
     near: oneOf(raw.near, TWIN_PART_NEAR_ACTIONS, DEFAULT_PART_CLICK.near),
-    view: normalizeFocusView(raw.view),
+    viewSource: oneOf(
+      raw.viewSource,
+      ['camera', 'snapshot'] as const,
+      view === null ? 'camera' : 'snapshot',
+    ),
+    view,
     cameraId: trimmedString(raw.cameraId),
   }
 }

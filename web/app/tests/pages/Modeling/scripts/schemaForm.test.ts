@@ -51,6 +51,25 @@ const LEDGER_SCHEMA = {
 }
 
 describe('把算子 schema 摊成字段表', () => {
+  it('按列汇总使用列映射控件并解析聚合枚举', () => {
+    const fields = fieldsOf({
+      $defs: { Agg: { type: 'string', enum: ['sum', 'avg'] } },
+      properties: {
+        column_aggregations: {
+          type: 'object',
+          additionalProperties: { $ref: '#/$defs/Agg' },
+          'x-dt-widget': 'column-aggregations',
+          description: 'sum=求和；avg=平均',
+        },
+      },
+    })
+    expect(fields[0]?.widget).toBe('column-aggregations')
+    expect(fields[0]?.options).toEqual([
+      { value: 'sum', label: '求和' },
+      { value: 'avg', label: '平均' },
+    ])
+    expect(defaultsOf(fields)).toEqual({ column_aggregations: {} })
+  })
   it('三个自定义标记各自映射到自己的控件', () => {
     const byKey = new Map(fieldsOf(LEDGER_SCHEMA).map((f) => [f.key, f]))
 

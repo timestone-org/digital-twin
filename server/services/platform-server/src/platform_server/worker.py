@@ -8,13 +8,16 @@ import asyncio
 from collections.abc import Awaitable, Callable
 from dataclasses import dataclass
 from datetime import UTC, datetime
-from pathlib import Path
 from typing import Protocol
 from zoneinfo import ZoneInfo
 
 from lib.lifespan import wait_for_termination
 from lib.logging import configure_logging, get_logger
 from lib.stream import StreamGroup
+from platform_server.apps.assets.services.compress_runtime import (
+    CompressorRuntime,
+    resolve_compressor,
+)
 from platform_server.apps.assets.services.compress_worker import (
     CompressConsumer,
     CompressOptions,
@@ -139,12 +142,14 @@ def build_consumer(container: Container) -> ShardConsumer:
     )
 
 
-def build_model_compressor(container: Container) -> CompressConsumer:
+def build_model_compressor(
+    container: Container, runtime: CompressorRuntime
+) -> CompressConsumer:
     """按配置装出模型压缩消费者。
 
     ⚠ 压缩真正跑在 Node 子进程里（Python 没有可用的 glTF Draco 编码器，
     ADR-0022），故这条循环本身不吃 CPU，与其它消费循环共用事件循环无碍。
-    Args: container。
+    Args: container, runtime。
     """
     settings = container.settings
     options = CompressOptions(
@@ -153,8 +158,8 @@ def build_model_compressor(container: Container) -> CompressConsumer:
             group=settings.assetcompress_group,
             consumer=settings.app_instance,
         ),
-        script=Path(settings.assetcompress_script),
-        node=settings.assetcompress_node,
+        script=runtime.script,
+        node=runtime.node,
     )
     return CompressConsumer(
         stream=container.stream,
@@ -511,11 +516,28 @@ def _report_consumers(
     )
 
 
+async def _check_compressor(settings: Settings) -> CompressorRuntime:
+    """校验并记录模型压缩路径。Args: settings。"""
+    runtime = await asyncio.to_thread(
+        resolve_compressor,
+        node=settings.assetcompress_node,
+        script=settings.assetcompress_script,
+    )
+    _logger.info(
+        "asset_compress_runtime_ready",
+        "模型压缩程序路径校验通过",
+        node=runtime.node,
+        script=str(runtime.script),
+    )
+    return runtime
+
+
 async def serve(settings: Settings, *, wait: Wait) -> None:
     """装配并跑到收到终止信号为止。
 
     Args: settings, wait。
     """
+    compressor_runtime = await _check_compressor(settings)
     container = build_container(settings)
     # ⚠ worker 也要注册：回填与重算跑在这里
     register_provider(ModelingAnalysisProvider(store=container.object_store))
@@ -539,7 +561,7 @@ async def serve(settings: Settings, *, wait: Wait) -> None:
                     publisher,
                     scheduler,
                     build_daily_consumer(container),
-                    build_model_compressor(container),
+                    build_model_compressor(container, compressor_runtime),
                     collector,
                     retention,
                     build_modeling_runner(container, pool=node_pool),

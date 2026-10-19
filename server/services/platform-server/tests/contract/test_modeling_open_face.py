@@ -63,7 +63,7 @@ def test_every_open_route_carries_the_auth_dependency() -> None:
     assert missing == []
 
 
-def test_the_open_face_has_exactly_the_two_documented_endpoints() -> None:
+def test_the_open_face_has_exactly_the_documented_endpoints() -> None:
     """对外面只有两个端点：读签名与预测。
 
     ⚠ 这一条钉的是**面的大小**：匿名可达的东西越少越好，多一个端点就要多想
@@ -75,6 +75,7 @@ def test_the_open_face_has_exactly_the_two_documented_endpoints() -> None:
     )
     assert paths == [
         f"{OPEN_PREFIX}/{{code}}",
+        f"{OPEN_PREFIX}/{{code}}:detect",
         f"{OPEN_PREFIX}/{{code}}:predict",
     ]
 

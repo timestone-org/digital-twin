@@ -36,6 +36,11 @@ const endpoint = computed(
     `POST /api/v1/platform/open-models/${props.deployment?.code ?? ''}:predict`,
 )
 
+const detectionEndpoint = computed(
+  () =>
+    `POST /api/v1/platform/open-models/${props.deployment?.code ?? ''}:detect`,
+)
+
 function mint(): void {
   emit('mint', newName.value.trim())
   newName.value = ''
@@ -51,6 +56,12 @@ function mint(): void {
   >
     <div class="dt-ml-keys flex flex-col gap-4">
       <p class="dt-ml-keys__endpoint">{{ endpoint }}</p>
+      <p class="dt-ml-keys__endpoint">{{ detectionEndpoint }}</p>
+      <p>
+        异常检测模型使用 :detect，返回
+        is_anomaly、score、threshold。其他模型使用
+        :predict。调用频率由接入方控制，并受本服务配额限制。
+      </p>
 
       <PermGuard :codes="[PERMISSION_CODES.modelingPublish]">
         <div class="dt-ml-keys__mint">

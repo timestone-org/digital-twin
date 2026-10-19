@@ -1,6 +1,6 @@
 /** @fileoverview 采集点位的交互与数据完整性契约。 */
 import { describe, expect, it } from 'vitest'
-import { pointStatus } from '@/pages/Collect/Opcua/scripts/pointStatus'
+import { pointStatus } from '@/pages/Collect/scripts/pointStatus'
 
 describe('点位状态', () => {
   it('没有读数不伪装成异常或正常', () => {

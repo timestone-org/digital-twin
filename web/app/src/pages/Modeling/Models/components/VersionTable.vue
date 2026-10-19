@@ -89,8 +89,8 @@ defineEmits<{
       <code class="dt-ml-versions__code" :title="row.algo">{{ row.algo }}</code>
     </template>
     <template #cell-target_key="{ row }">
-      <code class="dt-ml-versions__code" :title="row.target_key">
-        {{ row.target_key }}
+      <code class="dt-ml-versions__code" :title="row.target_key ?? undefined">
+        {{ row.target_key ?? '无监督（无目标列）' }}
       </code>
     </template>
     <template #cell-servable="{ row }">

@@ -4,7 +4,7 @@ import { mount, flushPromises } from '@vue/test-utils'
 import { defineComponent, ref } from 'vue'
 import type { CollectPoint } from '@dt/contracts'
 import { fetchPointAggregate } from '@/api/pointHistories'
-import { usePointHistory } from '@/pages/Collect/Opcua/scripts/usePointHistory'
+import { usePointHistory } from '@/pages/Collect/scripts/usePointHistory'
 
 vi.mock('@/api/pointHistories', () => ({ fetchPointAggregate: vi.fn() }))
 const point: CollectPoint = {

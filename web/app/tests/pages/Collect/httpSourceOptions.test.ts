@@ -5,13 +5,13 @@ import {
   validateHttpAuth,
   validateHttpEndpoint,
   validateHttpOptions,
-} from '@/pages/Collect/Opcua/scripts/httpSourceOptions'
+} from '@/pages/Collect/scripts/httpSourceOptions'
 import {
   toCreateInput,
   toUpdateInput,
   validateSourceForm,
   type SourceFormValues,
-} from '@/pages/Collect/Opcua/scripts/sourceFormPayload'
+} from '@/pages/Collect/scripts/sourceFormPayload'
 
 function values(extraOptions: Record<string, string> = {}): SourceFormValues {
   return {

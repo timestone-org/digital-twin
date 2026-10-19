@@ -9,7 +9,7 @@
  * ⚠ 渲染读的是 ref、地址栏是它的镜像，两个方向都同步：真源换成地址栏的话，
  * 一次被守卫拦下的导航会让点击「看起来没反应」。
  */
-import { ref, watch, type Ref } from 'vue'
+import { onBeforeUnmount, ref, watch, type Ref } from 'vue'
 import { useRoute, useRouter } from 'vue-router'
 
 /** 选中的数据源在地址栏里的参数名。 */
@@ -38,9 +38,19 @@ function readId(raw: unknown): string | null {
 export function useActiveSource(): ActiveSource {
   const route = useRoute()
   const router = useRouter()
+  const pageRecord = route.matched.at(-1)
+  let isAlive = true
+  onBeforeUnmount(() => {
+    isAlive = false
+  })
   const activeId = ref<string | null>(readId(route.query[SOURCE_QUERY_KEY]))
 
+  function isCurrentPage(): boolean {
+    return pageRecord !== undefined && route.matched.includes(pageRecord)
+  }
+
   function write(id: string | null): void {
+    if (!isCurrentPage()) return
     if (readId(route.query[SOURCE_QUERY_KEY]) === id) return
     const query = { ...route.query }
     if (id === null) delete query[SOURCE_QUERY_KEY]
@@ -49,6 +59,7 @@ export function useActiveSource(): ActiveSource {
   }
 
   function select(id: string | null): void {
+    if (!isAlive) return
     activeId.value = id
     write(id)
   }
@@ -62,7 +73,7 @@ export function useActiveSource(): ActiveSource {
   watch(
     () => route.query[SOURCE_QUERY_KEY],
     (raw) => {
-      activeId.value = readId(raw)
+      if (isCurrentPage()) activeId.value = readId(raw)
     },
   )
 

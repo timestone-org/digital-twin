@@ -25,7 +25,11 @@ from platform_server.apps.modeling.schemas import (
     OpenModelPredictIn,
     OpenModelPredictOut,
 )
-from platform_server.apps.modeling.services import open_model_service
+from platform_server.apps.modeling.schemas.detection import (
+    OpenModelDetectIn,
+    OpenModelDetectOut,
+)
+from platform_server.apps.modeling.services import detection, open_model_service
 from platform_server.apps.modeling.services.open_model_service import (
     ResolvedCall,
 )
@@ -93,6 +97,25 @@ async def predict(
     """
     return ok(
         await open_model_service.predict_and_record(
+            session, deps=deps, resolved=call, payload=payload
+        )
+    )
+
+
+@open_models.post(
+    "/{code}:detect",
+    response_model=ApiResponse[OpenModelDetectOut],
+    summary="设备异常检测",
+)
+async def detect(
+    payload: OpenModelDetectIn,
+    session: SessionDep,
+    deps: DepsDep,
+    call: CallDep,
+) -> ApiResponse[OpenModelDetectOut]:
+    """按模型阈值判断一批设备实时输入。Args: payload, session, deps, call。"""
+    return ok(
+        await detection.detect(
             session, deps=deps, resolved=call, payload=payload
         )
     )

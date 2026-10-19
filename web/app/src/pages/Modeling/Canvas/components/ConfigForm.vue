@@ -16,6 +16,7 @@ import type { FormField, FormOptions } from '../scripts/schemaForm'
 import { isDefault, missingHint } from '../scripts/schemaForm'
 
 import ColumnPicker from './ColumnPicker.vue'
+import ColumnAggregations from './ColumnAggregations.vue'
 import MomentInput from './MomentInput.vue'
 
 const props = defineProps<{
@@ -145,6 +146,16 @@ function errorOf(field: FormField): string {
         :model-value="textOf(field.key)"
         :label="field.label"
         :hint="field.hint"
+        :is-readonly="props.isReadonly"
+        @update:model-value="emit('change', field.key, $event)"
+      />
+      <ColumnAggregations
+        v-else-if="field.widget === 'column-aggregations'"
+        :model-value="props.config[field.key]"
+        :columns="props.options.columns"
+        :options="field.options"
+        :label="field.label"
+        :note="props.options.columnsNote"
         :is-readonly="props.isReadonly"
         @update:model-value="emit('change', field.key, $event)"
       />

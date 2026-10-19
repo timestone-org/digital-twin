@@ -15,7 +15,7 @@ class ModelPayload:
     algo: str
     task: str
     feature_keys: tuple[str, ...]
-    target_key: str
+    target_key: str | None
     hyper_params: dict[str, Any] = field(default_factory=dict[str, Any])
     fitted: dict[str, Any] = field(default_factory=dict[str, Any])
     # 走哪条可服务通道，取自算子的 SERVING_CHANNEL

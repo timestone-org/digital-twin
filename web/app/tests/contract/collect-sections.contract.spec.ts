@@ -9,20 +9,20 @@
 import { mount } from '@vue/test-utils'
 import { describe, expect, it } from 'vitest'
 
-import BrowsePanel from '@/pages/Collect/Opcua/components/BrowsePanel.vue'
-import ForceDeleteDialog from '@/pages/Collect/Opcua/components/ForceDeleteDialog.vue'
-import ImportNodesDialog from '@/pages/Collect/Opcua/components/ImportNodesDialog.vue'
-import ImportPointsDialog from '@/pages/Collect/Opcua/components/ImportPointsDialog.vue'
-import HttpPointMappingDialog from '@/pages/Collect/Opcua/components/HttpPointMappingDialog.vue'
-import HttpSourceFields from '@/pages/Collect/Opcua/components/HttpSourceFields.vue'
-import NodeTable from '@/pages/Collect/Opcua/components/NodeTable.vue'
-import PointFormDialog from '@/pages/Collect/Opcua/components/PointFormDialog.vue'
-import PointValueCell from '@/pages/Collect/Opcua/components/PointValueCell.vue'
+import BrowsePanel from '@/pages/Collect/components/BrowsePanel.vue'
+import ForceDeleteDialog from '@/pages/Collect/components/ForceDeleteDialog.vue'
+import ImportNodesDialog from '@/pages/Collect/components/ImportNodesDialog.vue'
+import ImportPointsDialog from '@/pages/Collect/components/ImportPointsDialog.vue'
+import HttpPointMappingDialog from '@/pages/Collect/components/HttpPointMappingDialog.vue'
+import HttpSourceFields from '@/pages/Collect/components/HttpSourceFields.vue'
+import NodeTable from '@/pages/Collect/components/NodeTable.vue'
+import PointFormDialog from '@/pages/Collect/components/PointFormDialog.vue'
+import PointValueCell from '@/pages/Collect/components/PointValueCell.vue'
 import RuntimeParamsDialog from '@/components/runtime/RuntimeParamsDialog.vue'
-import SourceFormDialog from '@/pages/Collect/Opcua/components/SourceFormDialog.vue'
-import SourceListItem from '@/pages/Collect/Opcua/components/SourceListItem.vue'
-import SourceStateTag from '@/pages/Collect/Opcua/components/SourceStateTag.vue'
-import WriteValueDialog from '@/pages/Collect/Opcua/components/WriteValueDialog.vue'
+import SourceFormDialog from '@/pages/Collect/components/SourceFormDialog.vue'
+import SourceListItem from '@/pages/Collect/components/SourceListItem.vue'
+import SourceStateTag from '@/pages/Collect/components/SourceStateTag.vue'
+import WriteValueDialog from '@/pages/Collect/components/WriteValueDialog.vue'
 import { router } from '@/router'
 
 /**
@@ -102,6 +102,7 @@ describe('弹窗的对外面', () => {
   })
   it('数据源表单收 source（编辑态）与在途 loading，抛建与改两种意图', () => {
     expect(propNames(SourceFormDialog).sort()).toEqual([
+      'fixedProtocol',
       'loading',
       'modelValue',
       'source',

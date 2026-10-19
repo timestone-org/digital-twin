@@ -71,7 +71,7 @@ class ModelingModelVersion(UuidPrimaryKeyMixin, CreatedAtMixin, Base):
     signature_json: Mapped[dict[str, Any]] = mapped_column(
         JSONB, nullable=False, server_default=text("'{}'::jsonb")
     )
-    target_key: Mapped[str] = mapped_column(Text, nullable=False)
+    target_key: Mapped[str | None] = mapped_column(Text, nullable=True)
     # 发布时冻结的评估指标
     metrics_json: Mapped[dict[str, Any]] = mapped_column(JSONB, nullable=False)
     # `{format_version, python, numpy, sklearn, rows, since, until,
@@ -103,6 +103,11 @@ class ModelingModelVersion(UuidPrimaryKeyMixin, CreatedAtMixin, Base):
         CheckConstraint("length(name) > 0", name="name_nonempty"),
         CheckConstraint("length(algo) > 0", name="algo_nonempty"),
         CheckConstraint("length(target_key) > 0", name="target_key_nonempty"),
+        CheckConstraint(
+            "(task = 'anomaly_detection' AND target_key IS NULL) OR "
+            "(task <> 'anomaly_detection' AND target_key IS NOT NULL)",
+            name="target_matches_task",
+        ),
         CheckConstraint(
             f"task IN ({sql_values(MODEL_TASKS)})", name="task_known"
         ),

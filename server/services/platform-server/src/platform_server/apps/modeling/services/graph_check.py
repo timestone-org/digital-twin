@@ -249,7 +249,12 @@ def _check_one_column(
     Args: node, field, keys。
     """
     raw: object = node.config.get(field.name)
-    referenced = cast("list[object]", raw) if isinstance(raw, list) else [raw]
+    if isinstance(raw, dict):
+        referenced = list(cast("dict[str, object]", raw))
+    else:
+        referenced = (
+            cast("list[object]", raw) if isinstance(raw, list) else [raw]
+        )
     return [
         GraphIssue(
             f"参数「{field.title}」里的列「{value}」上游没有，{_listed(keys)}",
@@ -322,7 +327,10 @@ def _column_fields(operator: type[OperatorBase]) -> list[_ColumnField]:
     titles = _titles_in(schema)
     return [
         _ColumnField(name=name, title=titles.get(name, name))
-        for name in fields_with_widget(schema, COLUMN_WIDGET)
+        for name in (
+            *fields_with_widget(schema, COLUMN_WIDGET),
+            *fields_with_widget(schema, "column-aggregations"),
+        )
     ]
 
 

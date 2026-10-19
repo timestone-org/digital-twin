@@ -7,16 +7,13 @@
 import { describe, expect, it } from 'vitest'
 import type { CollectBrowseItem } from '@dt/contracts'
 
-import {
-  toNodes,
-  variableIndex,
-} from '@/pages/Collect/Opcua/scripts/browseTree'
+import { toNodes, variableIndex } from '@/pages/Collect/scripts/browseTree'
 import {
   codeProblems,
   toDrafts,
   toPointItems,
-} from '@/pages/Collect/Opcua/scripts/importDrafts'
-import type { ImportDraft } from '@/pages/Collect/Opcua/scripts/importDrafts'
+} from '@/pages/Collect/scripts/importDrafts'
+import type { ImportDraft } from '@/pages/Collect/scripts/importDrafts'
 
 function browsed(
   address: string,

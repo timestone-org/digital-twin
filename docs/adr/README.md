@@ -72,5 +72,6 @@ ADR 只记录仍需长期记住的“决定与理由”。领域词、边界与�
 ## 上下文内决策
 
 - platform：[报告模板与 worker 生成](../../server/services/platform-server/docs/adr/0001-报告模板使用结构化编辑器与worker生成.md)
+- platform：[无监督异常检测的目标与判定](../../server/services/platform-server/docs/adr/0003-无监督异常检测保留空目标并提供显式判定.md)
 - web：[source-only pnpm workspace](../../web/docs/adr/0001-前端采用source-only-pnpm-workspace.md)
 - web：[刷新令牌跨标签协调](../../web/docs/adr/0002-刷新令牌跨标签串行化.md)

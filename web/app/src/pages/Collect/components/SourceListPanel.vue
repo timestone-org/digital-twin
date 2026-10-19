@@ -4,14 +4,16 @@
  * 选择与刷新都冒泡给主从页，本组件不发请求。
  */
 import { computed } from 'vue'
-import type { CollectSource } from '@dt/contracts'
+import type { CollectProtocol, CollectSource } from '@dt/contracts'
 import { PERMISSION_CODES } from '@dt/contracts'
 import { DtButton, DtCard, DtEmpty, DtInput, DtSkeleton, DtTag } from '@dt/ui'
 
 import PermGuard from '@/components/PermGuard.vue'
+import { protocolLabel } from '@/features/collect/protocols'
 import SourceListItem from './SourceListItem.vue'
 
 const props = defineProps<{
+  protocol: CollectProtocol
   keyword?: string
   page?: number
   size?: number
@@ -22,6 +24,10 @@ const props = defineProps<{
   error: string | null
   activeId: string | null
 }>()
+
+const emptyHint = computed(
+  () => `新增 ${protocolLabel(props.protocol)} 数据源，随后配置采集点位。`,
+)
 
 defineEmits<{
   'update:keyword': [value: string]
@@ -90,11 +96,7 @@ const nextDisabled = computed(
           v-else-if="sources.length === 0"
           icon="server"
           :title="isFiltered ? '没有匹配的数据源' : '还没有数据源'"
-          :hint="
-            isFiltered
-              ? '请调整搜索关键词。'
-              : '新增 OPC UA、只读 Modbus TCP 或 HTTP / HTTPS 数据源，随后配置采集点位。'
-          "
+          :hint="isFiltered ? '请调整搜索关键词。' : emptyHint"
         >
           <PermGuard :codes="[PERMISSION_CODES.collectManage]">
             <DtButton size="sm" icon="plus" @click="$emit('create')">

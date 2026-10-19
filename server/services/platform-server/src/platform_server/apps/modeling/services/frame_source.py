@@ -84,7 +84,12 @@ async def load_frame(
         ),
         limit=request.row_limit,
     )
-    window = _Window(since=since, until=until, is_truncated=scan.is_truncated)
+    window = _Window(
+        since=since,
+        until=until,
+        is_truncated=scan.is_truncated,
+        observed_until=now,
+    )
     return _build(columns, scan.rows, request, window)
 
 
@@ -95,6 +100,7 @@ class _Window:
     since: datetime | None
     until: datetime
     is_truncated: bool
+    observed_until: datetime
 
 
 def _build(
@@ -134,6 +140,7 @@ def _build(
             since=window.since,
             until=window.until,
             is_truncated=window.is_truncated,
+            observed_until=window.observed_until,
         ),
     )
 

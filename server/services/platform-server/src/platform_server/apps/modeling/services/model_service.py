@@ -61,10 +61,9 @@ from platform_server.apps.modeling.services.publish_service import (
     require_version,
 )
 
-# 只有这两个算子的 metrics 是「这个模型好不好」；另外三个评估算子的端口也叫
-# metrics，取到它们会把残差统计量或折数冻成模型指标
+# 模型版本冻结的评估指标来源
 PUBLISHED_METRIC_OPERATORS = frozenset(
-    {"regression_metrics", "classification_metrics"}
+    {"regression_metrics", "classification_metrics", "anomaly_distance"}
 )
 
 
@@ -100,6 +99,7 @@ async def publish_version(
         metrics=_metrics_of(graph, records),
     )
     row = model_version_crud.add(session, _version_row(draft))
+    await session.flush()
     if draft.verdict.is_servable and binary.meta:
         model_artifact_crud.add(session, _artifact_row(version_id, binary.meta))
     await session.flush()
@@ -127,7 +127,7 @@ def _version_row(draft: _Draft) -> ModelingModelVersion:
     Args: draft。
     """
     verdict = draft.verdict
-    if not verdict.target_key:
+    if not verdict.target_key and verdict.task != "anomaly_detection":
         raise RunNotPublishable(verdict.reason or "这次运行没有有效的预测目标")
     return ModelingModelVersion(
         id=draft.version_id,
@@ -356,6 +356,7 @@ async def _records_of(
             preview=as_dict(row.preview_json),
             fitted=row.fitted_json,
             io=as_dict(row.io_json),
+            artifact=row.artifact_json,
         )
         for row in rows
     }

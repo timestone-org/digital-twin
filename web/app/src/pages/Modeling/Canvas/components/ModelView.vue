@@ -18,6 +18,7 @@ const props = defineProps<{ preview: ModelPreview }>()
 const TASK_LABELS: Record<string, string> = {
   regression: '回归',
   classification: '分类',
+  anomaly_detection: '异常检测',
 }
 
 /**

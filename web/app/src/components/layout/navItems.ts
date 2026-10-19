@@ -66,9 +66,23 @@ export const NAV_ITEMS: readonly NavItem[] = [
     children: [
       {
         key: 'collect-opcua',
-        label: '工业采集',
+        label: 'OPC UA 采集',
         icon: 'activity',
         to: '/collect/opcua',
+        permission: [PERMISSION_CODES.collectView],
+      },
+      {
+        key: 'collect-modbus-tcp',
+        label: 'Modbus TCP 采集',
+        icon: 'activity',
+        to: '/collect/modbus-tcp',
+        permission: [PERMISSION_CODES.collectView],
+      },
+      {
+        key: 'collect-http',
+        label: 'HTTP / HTTPS 采集',
+        icon: 'activity',
+        to: '/collect/http',
         permission: [PERMISSION_CODES.collectView],
       },
     ],

@@ -14,7 +14,7 @@ import {
   pointsToCsv,
   splitCsvLine,
   templateCsv,
-} from '@/pages/Collect/Opcua/scripts/pointCsv'
+} from '@/pages/Collect/scripts/pointCsv'
 
 const BOM = '﻿'
 const HEADER = '点位编码,名称,寻址串,数据类型,单位,采样周期(ms)'
