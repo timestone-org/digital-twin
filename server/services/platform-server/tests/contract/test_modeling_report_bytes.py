@@ -5,6 +5,7 @@
 25 个算子不写最坏字节用例也全闸绿（docs/MODELING_RESULT_VIEW_DESIGN.md §10.2）。
 """
 
+from dataclasses import replace
 from functools import cache
 from typing import Any
 
@@ -242,7 +243,20 @@ def frames() -> dict[str, Frame]:
     ⚠ 共用是有意的：新算子想蒙混过关就得动这里，而动了这里全部 24 条一起响。
     """
     trained = _roled(_numeric(FIT_ROWS, is_dense=True))
+    anomaly = _numeric(FIT_ROWS, is_dense=True)
+    anomaly = replace(
+        anomaly,
+        columns=anomaly.columns[:16],
+        rows=tuple(row[:16] for row in anomaly.rows),
+    )
+    cut = FIT_ROWS * 4 // 5
     return {
+        "anomaly_train": replace(
+            anomaly, rows=anomaly.rows[:cut], index=(anomaly.index or ())[:cut]
+        ),
+        "anomaly_test": replace(
+            anomaly, rows=anomaly.rows[cut:], index=(anomaly.index or ())[cut:]
+        ),
         "wide": _numeric(YEAR_ROWS),
         "gapped": _numeric(YEAR_ROWS, has_gaps=True),
         "hollow": _numeric(SCORED_ROWS, empty_tail=WIDE_COLUMNS - TEXT_COLUMNS),
@@ -335,6 +349,7 @@ def _preprocess_loads() -> dict[str, tuple[Case, ...]]:
         "resample": (
             ({"frame": pool["gapped"]}, {"bucket": "1m", "agg": "avg"}),
         ),
+        "select_columns": (({"frame": pool["wide"]}, {"columns": every[:1]}),),
     }
 
 
@@ -343,6 +358,8 @@ def _feature_loads() -> dict[str, tuple[Case, ...]]:
     pool = frames()
     every = _every_key()
     return {
+        "cyclic_time": (({"frame": pool["wide"]}, {}),),
+        "time_shift": (({"frame": pool["wide"]}, {"offset_minutes": 43200}),),
         "lag_feature": (
             ({"frame": pool["wide"]}, {"columns": every, "lags": [1, 2, 3]}),
         ),
@@ -391,6 +408,13 @@ def _model_loads() -> dict[str, tuple[Case, ...]]:
     """切分与三个建模算子的最坏负载。"""
     pool = frames()
     return {
+        "split_samples": (({"frame": pool["roled"]}, {}),),
+        "anomaly_distance": (
+            (
+                {"train": pool["anomaly_train"], "test": pool["anomaly_test"]},
+                {},
+            ),
+        ),
         "linear_regression": (
             (
                 {"train": pool["is_dense"], "test": pool["is_dense"]},
@@ -479,7 +503,7 @@ def test_every_registered_operator_has_a_worst_load_here() -> None:
     """反向遍历的入口：花名册上多一个算子，这张表就得跟着多一行。"""
     assert set(loads()) == set(CODES) - set(UNREACHABLE)
     assert UNREACHABLE == ()
-    assert len(CODES) == 24
+    assert len(CODES) == 29
 
 
 def test_the_shared_frames_really_are_the_worst_ones() -> None:

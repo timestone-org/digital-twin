@@ -37,7 +37,7 @@ RunTrigger = Literal["api", "manual"]
 RUN_TRIGGERS: tuple[str, ...] = tuple(sorted(get_args(RunTrigger)))
 
 # 建模任务类型，决定评估指标用哪一套
-ModelTask = Literal["classification", "regression"]
+ModelTask = Literal["anomaly_detection", "classification", "regression"]
 
 MODEL_TASKS: tuple[str, ...] = tuple(sorted(get_args(ModelTask)))
 

@@ -6,7 +6,7 @@
 
 from collections.abc import Callable
 from dataclasses import dataclass, replace
-from typing import Any, Literal
+from typing import Annotated, Any, Literal
 
 from pydantic import Field
 
@@ -54,11 +54,12 @@ _BUCKET_MS: dict[str, int] = {
     "1m": 60_000,
     "5m": 300_000,
     "15m": 900_000,
+    "30m": 1_800_000,
     "1h": 3_600_000,
     "6h": 21_600_000,
     "1d": 86_400_000,
 }
-type BucketWidth = Literal["1m", "5m", "15m", "1h", "6h", "1d"]
+type BucketWidth = Literal["1m", "5m", "15m", "30m", "1h", "6h", "1d"]
 
 # 聚合口径。⚠ **与台账那八档同集合**，由契约用例钉住：两边漂了的表现是
 # 「台账里按小时看是一个数、建模里按小时取是另一个数」
@@ -95,7 +96,7 @@ class ResampleConfig(OperatorConfig):
     bucket: BucketWidth = Field(
         default="1h",
         title="桶宽",
-        description="1m=一分钟；5m=五分钟；15m=十五分钟；1h=一小时；"
+        description="1m=一分钟；5m=五分钟；15m=十五分钟；30m=半小时；1h=一小时；"
         "6h=六小时；1d=一天",
     )
     agg: AggFunc = Field(
@@ -105,6 +106,31 @@ class ResampleConfig(OperatorConfig):
             "avg=平均；count=非空个数；delta=末值减初值；first=桶内第一个；"
             "last=桶内最后一个；max=最大；min=最小；sum=求和"
         ),
+    )
+    column_aggregations: dict[Annotated[str, Field(min_length=1)], AggFunc] = (
+        Field(
+            default_factory=dict,
+            max_length=256,
+            title="各列的汇总方式",
+            description=(
+                "avg=平均；count=非空个数；delta=末值减初值；first=桶内第一个；"
+                "last=桶内最后一个；max=最大；min=最小；sum=求和"
+            ),
+            json_schema_extra={
+                "x-dt-widget": "column-aggregations",
+                "default": {},
+            },
+        )
+    )
+    missing_policy: Literal["ignore", "propagate"] = Field(
+        default="ignore",
+        title="桶内有缺失值时",
+        description="ignore=只用非空值汇总；propagate=该列该桶保持空值，避免把部分能耗当全天总量",
+    )
+    should_keep_complete_buckets: bool = Field(
+        default=False,
+        title="只保留完整时间桶",
+        description="只保留查询窗口完整覆盖的桶，排除首尾半天；取数触顶或没有窗口时停止",
     )
 
 
@@ -156,7 +182,9 @@ class Resample(OperatorBase):
         buckets = _buckets_of(
             frame.index, self._config.bucket, self.tz_offset_minutes
         )
-        folded = _merged(frame, buckets, self._config.agg)
+        _check_aggregations(frame, self._config)
+        buckets = _complete_buckets(frame, buckets, self._config)
+        folded = _merged(frame, buckets, self._config)
         self._folding = _Folding(
             row_count=frame.row_count,
             starts=tuple(start for start, _ in buckets),
@@ -188,12 +216,15 @@ class _Folding:
     #: 与 `starts` 同序的每桶行数
     sizes: tuple[int, ...]
 
+    @property
+    def excluded_rows(self) -> int:
+        return self.row_count - sum(self.sizes)
+
 
 def _rows_block(folding: _Folding, width: int) -> ReportBlock:
     """压缩比：多少行折成多少行。
 
-    ⚠ 折掉的行不记进 `dropped`：一行都没被丢，每一行都进了某个桶——记成丢弃
-    的话，界面会告诉用户这一步丢了数据。
+    ⚠ 只把完整桶筛选排除的行记为丢弃，合并进桶的行不算丢弃。
     Args: folding, width。
     """
     after = len(folding.starts)
@@ -202,6 +233,7 @@ def _rows_block(folding: _Folding, width: int) -> ReportBlock:
         RowCounts(
             before=folding.row_count,
             after=after,
+            dropped=folding.excluded_rows,
             ratio_actual=ratio_of(after, folding.row_count),
         ),
         funnel=funnel_of(_bucket_stages(folding, width)),
@@ -218,6 +250,11 @@ def _bucket_stages(folding: _Folding, width: int) -> tuple[Stage, ...]:
     note = "" if span is not None else NOTE_NO_ROWS
     return (
         Stage("输入行", folding.row_count, "行"),
+        *(
+            (Stage("排除不完整桶后", sum(folding.sizes), "行"),)
+            if folding.excluded_rows
+            else ()
+        ),
         Stage("时段内的桶", span, "个", note),
         Stage("有数据的桶", occupied, "个"),
         Stage("空桶", None if span is None else span - occupied, "个", note),
@@ -315,22 +352,106 @@ def _buckets_of(
 
 
 def _merged(
-    frame: Frame, buckets: list[tuple[int, list[int]]], agg: AggFunc
+    frame: Frame, buckets: list[tuple[int, list[int]]], config: ResampleConfig
 ) -> Frame:
     """把每个桶折成一行。
 
-    Args: frame, buckets, agg。
+    Args: frame, buckets, config。
     """
+    methods: list[AggFunc] = [
+        _column_method(column, config) for column in frame.columns
+    ]
     rows = tuple(
         tuple(
-            _aggregated(
-                column, [frame.rows[at][position] for at in positions], agg
+            _column_value(
+                column,
+                [frame.rows[at][position] for at in positions],
+                methods[position],
+                config.missing_policy,
             )
             for position, column in enumerate(frame.columns)
         )
         for _, positions in buckets
     )
-    return replace(frame, rows=rows, index=tuple(start for start, _ in buckets))
+    columns = tuple(
+        (
+            replace(column, dtype=DTYPE_NUMBER, unit="")
+            if method == "count"
+            else column
+        )
+        for column, method in zip(frame.columns, methods, strict=True)
+    )
+    return replace(
+        frame,
+        columns=columns,
+        rows=rows,
+        index=tuple(start for start, _ in buckets),
+    )
+
+
+def _check_aggregations(frame: Frame, config: ResampleConfig) -> None:
+    """显式配置的列必须存在且支持该聚合。Args: frame, config。"""
+    for key, method in config.column_aggregations.items():
+        column = frame.column_of(key)
+        if column.dtype != DTYPE_NUMBER and method not in (
+            "first",
+            "last",
+            "count",
+        ):
+            raise OperatorError(
+                f"列「{key}」不是数值列，只能取首值、末值或计数"
+            )
+
+
+def _column_method(column: FrameColumn, config: ResampleConfig) -> AggFunc:
+    return config.column_aggregations.get(
+        column.key, config.agg if column.dtype == DTYPE_NUMBER else "last"
+    )
+
+
+def _column_value(
+    column: FrameColumn,
+    values: list[CellValue],
+    method: AggFunc,
+    missing_policy: str,
+) -> CellValue:
+    """按一列的汇总及缺失口径折算。
+
+    Args: column, values, method, missing_policy。
+    """
+    if missing_policy == "propagate" and any(value is None for value in values):
+        return None
+    if method == "count":
+        return float(sum(value is not None for value in values))
+    if column.dtype != DTYPE_NUMBER and method == "first":
+        return next((value for value in values if value is not None), None)
+    return _aggregated(column, values, method)
+
+
+def _complete_buckets(
+    frame: Frame, buckets: list[tuple[int, list[int]]], config: ResampleConfig
+) -> list[tuple[int, list[int]]]:
+    """仅保留查询范围完整覆盖的桶。Args: frame, buckets, config。"""
+    if not config.should_keep_complete_buckets:
+        return buckets
+    source = frame.provenance
+    if source.is_truncated:
+        raise OperatorError(
+            "取数达到行数上限，无法确认完整时间桶；请缩小取数窗口或提高行数上限"
+        )
+    if source.since is None or source.until is None:
+        raise OperatorError("完整时间桶需要明确的取数起止窗口")
+    since = source.since.timestamp() * 1000
+    until = (
+        min(source.until, source.observed_until or source.until).timestamp()
+        * 1000
+    )
+    width = _BUCKET_MS[config.bucket]
+    return [
+        (start, positions)
+        for start, positions in buckets
+        if since <= start and start + width <= until
+    ]
 
 
 def _aggregated(

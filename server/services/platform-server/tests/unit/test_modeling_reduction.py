@@ -73,6 +73,19 @@ def test_selecting_by_correlation_keeps_the_column_that_matters() -> None:
     assert WIDE not in got.keys
 
 
+def test_correlation_with_an_unlabeled_split_explains_the_missing_target() -> (
+    None
+):
+    operator, _ = registry.build("select_feature", {"method": "correlation"})
+    split = registry.get("split_samples").CONFIG_MODEL()
+    operator.bind_runtime(
+        tz_offset_minutes=0,
+        split_plan=split.model_dump(),
+    )
+    with pytest.raises(OperatorError, match=r"目标列.*方差"):
+        operator.run({"frame": _frame()})
+
+
 def test_selecting_by_variance_falls_for_the_unit() -> None:
     """按方差筛时留下的是量纲大的那一列——这正是算子说明里要讲的那条。"""
     got = _ran("select_feature", _frame(), method="variance", top_k=1)

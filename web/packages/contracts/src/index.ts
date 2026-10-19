@@ -606,3 +606,9 @@ export type {
 } from './report'
 
 export type { PointMatchOut, PointMatchesOut } from './collectSearch'
+
+export type {
+  AnomalyDecision,
+  OpenModelDetect,
+  OpenModelDetectRequest,
+} from './modelingDetection'

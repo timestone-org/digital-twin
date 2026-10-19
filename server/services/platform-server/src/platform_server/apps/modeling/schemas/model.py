@@ -46,7 +46,7 @@ class ModelVersionSummaryOut(OutputModel):
     serving_channel: ServingChannel
     unservable_reason: str | None
     feature_keys: list[str]
-    target_key: str
+    target_key: str | None
     created_by_name: str | None
     created_at: Utc
 

@@ -29,10 +29,12 @@ from platform_server.apps.modeling.operators.resample import (
 
 # 本期算子的**写死名单**。加算子必须同时改这里——防的是重名静默覆盖与漏登记
 EXPECTED_CODES = (
+    "anomaly_distance",
     "cast_type",
     "classification_metrics",
     "clip_outlier",
     "cross_validate",
+    "cyclic_time",
     "drop_missing",
     "feature_importance",
     "fill_missing",
@@ -48,10 +50,13 @@ EXPECTED_CODES = (
     "resample",
     "residual_analysis",
     "rolling_feature",
+    "select_columns",
     "select_feature",
     "split_dataset",
+    "split_samples",
     "standardize",
     "time_feature",
+    "time_shift",
     "tree_regressor",
 )
 # 带「跑用户给的东西」意味的词。撞上就该来读一遍设计文档 §9.3
@@ -231,6 +236,15 @@ def test_config_schemas_only_use_closed_types() -> None:
     for spec in registry.specs():
         for name, field in _properties(spec.config_schema).items():
             resolved = _resolved(spec.config_schema, field)
+            if field.get(WIDGET_KEY) == "column-aggregations":
+                assert _kind_of(resolved) == "object"
+                values = _resolved(
+                    spec.config_schema, resolved["additionalProperties"]
+                )
+                assert set(values["enum"]) == set(AGG_FUNCS)
+                assert resolved["maxProperties"] == 256
+                assert field["default"] == {}
+                continue
             assert (
                 _kind_of(resolved) in ALLOWED_CONFIG_TYPES
             ), f"{spec.code}.{name}"
@@ -434,6 +448,7 @@ def _least_config(code: str) -> Any:
         "table_code": "t",
         "target_column": "甲",
         "column": "甲",
+        "columns": ["甲"],
     }
     schema: dict[str, Any] = registry.get(code).CONFIG_MODEL.model_json_schema()
     required = cast("list[str]", schema.get("required", []))

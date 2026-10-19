@@ -4,7 +4,9 @@
 回填三条路径上各有各的事务，把它收成一个面，用例才能把那条回滚事务包进来。
 """
 
-from contextlib import AbstractAsyncContextManager
+from collections.abc import AsyncGenerator
+from contextlib import AbstractAsyncContextManager, asynccontextmanager
+from dataclasses import dataclass
 from typing import Protocol
 
 from sqlalchemy.ext.asyncio import AsyncSession
@@ -14,3 +16,14 @@ class Sessions(Protocol):
     """开一个短事务的最小面。"""
 
     def session(self) -> AbstractAsyncContextManager[AsyncSession]: ...
+
+
+@dataclass(frozen=True)
+class BorrowedSessions:
+    """复用调用方的会话，提交与回滚仍由调用方持有。"""
+
+    opened: AsyncSession
+
+    @asynccontextmanager
+    async def session(self) -> AsyncGenerator[AsyncSession]:
+        yield self.opened

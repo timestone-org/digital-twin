@@ -447,7 +447,12 @@ def _target_key(split_plan: dict[str, Any] | None) -> str:
 
     Args: split_plan。
     """
-    return "" if split_plan is None else str(split_plan[PLAN_TARGET])
+    if split_plan is None:
+        return ""
+    target = split_plan.get(PLAN_TARGET)
+    if not isinstance(target, str) or not target:
+        raise OperatorError("相关性筛选需要目标列；无监督样本请改用方差筛选")
+    return target
 
 
 def _with_components(

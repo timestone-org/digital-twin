@@ -29,6 +29,7 @@ from platform_server.apps.modeling.models import (
 )
 from platform_server.apps.modeling.operators import (
     CHANNEL_BINARY,
+    CHANNEL_JSON,
     OperatorError,
 )
 from platform_server.apps.modeling.services import artifact_io
@@ -67,6 +68,17 @@ class ModelingAnalysisProvider(AnalysisProvider):
 
         Args: sessions, codes。
         """
+        return await self._load(sessions, codes, is_preview=False)
+
+    async def load_preview(
+        self, sessions: Sessions, codes: frozenset[str]
+    ) -> LoadedModels:
+        """只编译 JSON 模型，不读取或解码二进制产物。Args: sessions, codes。"""
+        return await self._load(sessions, codes, is_preview=True)
+
+    async def _load(
+        self, sessions: Sessions, codes: frozenset[str], *, is_preview: bool
+    ) -> LoadedModels:
         loaded: dict[str, AnalysisModel | AnalysisUnavailable] = {}
         async with sessions.session() as session:
             bindings = await binding_crud.list_by_codes(
@@ -74,15 +86,21 @@ class ModelingAnalysisProvider(AnalysisProvider):
             )
             found = {binding.fx_code: binding for binding in bindings}
             for code in codes:
-                loaded[code] = await self._one(session, found.get(code))
+                loaded[code] = await self._one(
+                    session, found.get(code), is_preview=is_preview
+                )
         return loaded
 
     async def _one(
-        self, session: AsyncSession, binding: ModelingBinding | None
+        self,
+        session: AsyncSession,
+        binding: ModelingBinding | None,
+        *,
+        is_preview: bool,
     ) -> AnalysisModel | AnalysisUnavailable:
         """一条绑定编译出来的模型，或一句用不了的原因。
 
-        Args: session, binding。
+        Args: session, binding, is_preview。
         """
         if binding is None:
             return AnalysisUnavailable(reason="模型未绑定")
@@ -97,19 +115,29 @@ class ModelingAnalysisProvider(AnalysisProvider):
             return AnalysisUnavailable(
                 reason=version.unservable_reason or "这个模型版本不可上线"
             )
-        return await self._compiled(session, version)
+        return await self._compiled(session, version, is_preview=is_preview)
 
     async def _compiled(
-        self, session: AsyncSession, version: ModelingModelVersion
+        self,
+        session: AsyncSession,
+        version: ModelingModelVersion,
+        *,
+        is_preview: bool,
     ) -> AnalysisModel | AnalysisUnavailable:
         """编译一个版本。通道 B 先把模型本体从对象存储装回来。
 
         ⚠ 加载放在**取数相位**：编译出来的东西在求值期只做算术，那里一次 I/O
         都不许有（docs/MODELING_DESIGN.md D20）。
-        Args: session, version。
+        Args: session, version, is_preview。
         """
+        if is_preview and version.serving_channel != CHANNEL_JSON:
+            return AnalysisUnavailable(
+                reason="二进制模型请通过台账重算查看结果，公式预览暂不支持"
+            )
         try:
-            estimator = await self._estimator(session, version)
+            estimator = (
+                None if is_preview else await self._estimator(session, version)
+            )
             return compile_model(
                 dict(version.serving_json), estimator=estimator
             )

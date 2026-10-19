@@ -47,6 +47,7 @@ from platform_server.apps.dataset.schemas import (
     FormulaValidateIn,
     FormulaValidateOut,
 )
+from platform_server.apps.dataset.services import analysis_provider
 from platform_server.apps.dataset.services.formula_cycles import (
     check_no_cycle,
 )
@@ -54,6 +55,7 @@ from platform_server.apps.dataset.services.formula_library import (
     library_for,
     load_library,
 )
+from platform_server.apps.dataset.services.sessions import BorrowedSessions
 from platform_server.apps.dataset.services.table_service import require_table
 
 
@@ -135,7 +137,12 @@ async def preview_formula(
     columns = await column_crud.list_by_table(session, table.id)
     try:
         parsed = await _parse_against(session, columns, payload)
-        externals = build_externals(parsed.deps, empty_cache(), None)
+        cache = empty_cache()
+        cache.models = await analysis_provider.load_preview_models(
+            BorrowedSessions(session),
+            frozenset(reference.code for reference in parsed.deps.model),
+        )
+        externals = build_externals(parsed.deps, cache, None)
         value = evaluate(
             parsed,
             EvalContext(values=dict(payload.values), externals=externals),
@@ -152,7 +159,9 @@ async def preview_formula(
         should_suggest_sum=bool(
             value is None and missing and _is_pure_addition(parsed)
         ),
-        history_refs=sorted(_describe(key) for key in externals),
+        history_refs=sorted(
+            _describe(key) for key in externals if key[0] != "model"
+        ),
     )
 
 

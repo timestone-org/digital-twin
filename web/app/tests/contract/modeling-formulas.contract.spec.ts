@@ -47,10 +47,10 @@ function backendCodes(): string[] {
 const EMPTY: FormulaContext = { blocks: [], ports: [], config: {} }
 
 describe('公式表覆盖后端每一个算子', () => {
-  it('后端那 24 个 code 一个不少', () => {
+  it('后端注册的算子一个不少', () => {
     const backend = backendCodes()
 
-    expect(backend).toHaveLength(24)
+    expect(backend.length).toBeGreaterThan(0)
     for (const code of backend) expect(formulaCodes()).toContain(code)
   })
 

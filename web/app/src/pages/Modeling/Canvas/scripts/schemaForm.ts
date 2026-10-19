@@ -24,6 +24,7 @@ export type FieldWidget =
   | 'columns'
   | 'table'
   | 'moment'
+  | 'column-aggregations'
 
 /** 参数面板里的一行。 */
 export interface FormField {
@@ -106,6 +107,7 @@ function widgetOf(
   const type = asText(field['type'])
   if (marked === 'table') return 'table'
   if (marked === 'moment') return 'moment'
+  if (marked === 'column-aggregations') return 'column-aggregations'
   if (marked === 'column') return type === 'array' ? 'columns' : 'column'
   if (options.length > 0) return 'select'
   if (type === 'boolean') return 'switch'
@@ -125,7 +127,14 @@ export function fieldsOf(schema: Record<string, unknown>): FormField[] {
   )
   return Object.entries(asRecord(raw.properties)).map(([key, value]) => {
     const field = deref(asRecord(value), defs)
-    const options = optionsOf(field)
+    const options = optionsOf(
+      field['x-dt-widget'] === 'column-aggregations'
+        ? {
+            ...deref(asRecord(field['additionalProperties']), defs),
+            description: field['description'],
+          }
+        : field,
+    )
     return {
       key,
       label: asText(field['title']) || key,
@@ -150,7 +159,8 @@ export function defaultsOf(
       config[field.key] = field.fallback
       continue
     }
-    if (field.widget === 'columns') config[field.key] = []
+    if (field.widget === 'column-aggregations') config[field.key] = {}
+    else if (field.widget === 'columns') config[field.key] = []
     else if (field.widget === 'switch') config[field.key] = false
     else if (field.widget === 'number' || field.widget === 'integer') {
       config[field.key] = null

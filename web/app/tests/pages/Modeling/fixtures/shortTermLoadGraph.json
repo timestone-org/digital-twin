@@ -1,0 +1,359 @@
+{
+  "format_version": "1.0",
+  "nodes": [
+    {
+      "id": "s",
+      "operator": "ledger_source",
+      "alias": "选择历史负荷与生产计划台账",
+      "config": {
+        "table_code": "",
+        "since": "-120d",
+        "row_source": "collect"
+      },
+      "position": {
+        "left": 80,
+        "top": 100
+      }
+    },
+    {
+      "id": "c",
+      "operator": "select_columns",
+      "alias": "选择预测时已知的计划与气象字段",
+      "config": {
+        "columns": ["计划产量", "工单数", "预报温度", "负荷"]
+      },
+      "position": {
+        "left": 300,
+        "top": 100
+      }
+    },
+    {
+      "id": "a",
+      "operator": "resample",
+      "alias": "完整半小时：负荷取平均功率",
+      "config": {
+        "bucket": "30m",
+        "agg": "avg",
+        "column_aggregations": {
+          "计划产量": "sum",
+          "工单数": "sum"
+        },
+        "missing_policy": "propagate",
+        "should_keep_complete_buckets": true
+      },
+      "position": {
+        "left": 520,
+        "top": 100
+      }
+    },
+    {
+      "id": "h",
+      "operator": "select_columns",
+      "alias": "仅取历史负荷",
+      "config": {
+        "columns": ["负荷"]
+      },
+      "position": {
+        "left": 740,
+        "top": 320
+      }
+    },
+    {
+      "id": "h6",
+      "operator": "time_shift",
+      "alias": "6 小时前负荷 → 目标时刻",
+      "config": {
+        "offset_minutes": 360
+      },
+      "position": {
+        "left": 960,
+        "top": 320
+      }
+    },
+    {
+      "id": "hd",
+      "operator": "time_shift",
+      "alias": "昨日同时刻 → 目标时刻",
+      "config": {
+        "offset_minutes": 1440
+      },
+      "position": {
+        "left": 1180,
+        "top": 540
+      }
+    },
+    {
+      "id": "hw",
+      "operator": "time_shift",
+      "alias": "上周同时刻 → 目标时刻",
+      "config": {
+        "offset_minutes": 10080
+      },
+      "position": {
+        "left": 1400,
+        "top": 760
+      }
+    },
+    {
+      "id": "j6",
+      "operator": "ledger_join",
+      "alias": "精确关联 6 小时前负荷",
+      "config": {
+        "how": "left",
+        "tolerance_ms": 0,
+        "right_prefix": "六小时前_"
+      },
+      "position": {
+        "left": 1180,
+        "top": 100
+      }
+    },
+    {
+      "id": "jd",
+      "operator": "ledger_join",
+      "alias": "精确关联昨日同时刻",
+      "config": {
+        "how": "left",
+        "tolerance_ms": 0,
+        "right_prefix": "昨日_"
+      },
+      "position": {
+        "left": 1400,
+        "top": 100
+      }
+    },
+    {
+      "id": "jw",
+      "operator": "ledger_join",
+      "alias": "精确关联上周同时刻",
+      "config": {
+        "how": "left",
+        "tolerance_ms": 0,
+        "right_prefix": "上周_"
+      },
+      "position": {
+        "left": 1620,
+        "top": 100
+      }
+    },
+    {
+      "id": "d",
+      "operator": "drop_missing",
+      "alias": "剔除缺失目标或历史输入的时段",
+      "config": {
+        "axis": "row",
+        "how": "any",
+        "subset": [
+          "负荷",
+          "六小时前_负荷",
+          "昨日_负荷",
+          "上周_负荷",
+          "计划产量",
+          "工单数",
+          "预报温度"
+        ]
+      },
+      "position": {
+        "left": 1840,
+        "top": 100
+      }
+    },
+    {
+      "id": "t",
+      "operator": "cyclic_time",
+      "alias": "半小时时刻的日内 / 周内周期",
+      "config": {
+        "cycles": ["day", "week"],
+        "timezone_offset_minutes": 480
+      },
+      "position": {
+        "left": 2060,
+        "top": 100
+      }
+    },
+    {
+      "id": "z",
+      "operator": "standardize",
+      "alias": "只用训练段拟合标准化",
+      "config": {},
+      "position": {
+        "left": 2280,
+        "top": 100
+      }
+    },
+    {
+      "id": "p",
+      "operator": "split_dataset",
+      "alias": "按时间留出最近 20%（至少 7 天）",
+      "config": {
+        "target_column": "负荷",
+        "method": "time_order",
+        "test_ratio": 0.2,
+        "min_test_rows": 336
+      },
+      "position": {
+        "left": 2500,
+        "top": 100
+      }
+    },
+    {
+      "id": "m",
+      "operator": "linear_regression",
+      "alias": "未来 6 小时半小时负荷模型",
+      "config": {
+        "use_intercept": true,
+        "regularization": "ridge",
+        "ridge_alpha": 1
+      },
+      "position": {
+        "left": 2720,
+        "top": 100
+      }
+    },
+    {
+      "id": "v",
+      "operator": "regression_metrics",
+      "alias": "检查 kW 误差后发布",
+      "config": {},
+      "position": {
+        "left": 2940,
+        "top": 100
+      }
+    }
+  ],
+  "edges": [
+    {
+      "id": "s_frame_c_frame",
+      "from_node": "s",
+      "from_port": "frame",
+      "to_node": "c",
+      "to_port": "frame"
+    },
+    {
+      "id": "c_frame_a_frame",
+      "from_node": "c",
+      "from_port": "frame",
+      "to_node": "a",
+      "to_port": "frame"
+    },
+    {
+      "id": "a_frame_h_frame",
+      "from_node": "a",
+      "from_port": "frame",
+      "to_node": "h",
+      "to_port": "frame"
+    },
+    {
+      "id": "h_frame_h6_frame",
+      "from_node": "h",
+      "from_port": "frame",
+      "to_node": "h6",
+      "to_port": "frame"
+    },
+    {
+      "id": "h_frame_hd_frame",
+      "from_node": "h",
+      "from_port": "frame",
+      "to_node": "hd",
+      "to_port": "frame"
+    },
+    {
+      "id": "h_frame_hw_frame",
+      "from_node": "h",
+      "from_port": "frame",
+      "to_node": "hw",
+      "to_port": "frame"
+    },
+    {
+      "id": "a_frame_j6_left",
+      "from_node": "a",
+      "from_port": "frame",
+      "to_node": "j6",
+      "to_port": "left"
+    },
+    {
+      "id": "h6_frame_j6_right",
+      "from_node": "h6",
+      "from_port": "frame",
+      "to_node": "j6",
+      "to_port": "right"
+    },
+    {
+      "id": "j6_frame_jd_left",
+      "from_node": "j6",
+      "from_port": "frame",
+      "to_node": "jd",
+      "to_port": "left"
+    },
+    {
+      "id": "hd_frame_jd_right",
+      "from_node": "hd",
+      "from_port": "frame",
+      "to_node": "jd",
+      "to_port": "right"
+    },
+    {
+      "id": "jd_frame_jw_left",
+      "from_node": "jd",
+      "from_port": "frame",
+      "to_node": "jw",
+      "to_port": "left"
+    },
+    {
+      "id": "hw_frame_jw_right",
+      "from_node": "hw",
+      "from_port": "frame",
+      "to_node": "jw",
+      "to_port": "right"
+    },
+    {
+      "id": "jw_frame_d_frame",
+      "from_node": "jw",
+      "from_port": "frame",
+      "to_node": "d",
+      "to_port": "frame"
+    },
+    {
+      "id": "d_frame_t_frame",
+      "from_node": "d",
+      "from_port": "frame",
+      "to_node": "t",
+      "to_port": "frame"
+    },
+    {
+      "id": "t_frame_z_frame",
+      "from_node": "t",
+      "from_port": "frame",
+      "to_node": "z",
+      "to_port": "frame"
+    },
+    {
+      "id": "z_frame_p_frame",
+      "from_node": "z",
+      "from_port": "frame",
+      "to_node": "p",
+      "to_port": "frame"
+    },
+    {
+      "id": "p_train_m_train",
+      "from_node": "p",
+      "from_port": "train",
+      "to_node": "m",
+      "to_port": "train"
+    },
+    {
+      "id": "p_test_m_test",
+      "from_node": "p",
+      "from_port": "test",
+      "to_node": "m",
+      "to_port": "test"
+    },
+    {
+      "id": "m_scored_v_scored",
+      "from_node": "m",
+      "from_port": "scored",
+      "to_node": "v",
+      "to_port": "scored"
+    }
+  ]
+}

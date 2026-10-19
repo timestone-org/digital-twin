@@ -1,5 +1,5 @@
 /**
- * @fileoverview 建模算子的公式骨架表，按算子 code 建键。24 个算子一个不漏。
+ * @fileoverview 建模算子的公式骨架表，按算子 code 建键。
  *
  * 骨架随算子代码走、不随运行走——公式**不进结果摘要**（§6）：放进去等于每次
  * 运行把同一串常量重传一遍还要吃字节预算。实参只从三处取：这一步的讲解块、
@@ -42,6 +42,7 @@ import {
 import { CLEAN_FORMULAS } from './formulaClean'
 import { EVAL_FORMULAS } from './formulaEval'
 import { FEATURE_FORMULAS } from './formulaFeature'
+import { PREPARATION_FORMULAS } from './formulaPreparation'
 import { niceNumber } from './numbers'
 import type { ModelPreview } from './preview'
 
@@ -487,11 +488,22 @@ function treeSplit(): FormulaSpec {
   }
 }
 
+function splitSamples(context: FormulaContext): FormulaSpec {
+  const spec = splitSize(context)
+  return {
+    ...spec,
+    isOpen: false,
+    notes: [...spec.notes, '按时间顺序保留末段测试样本，不需要目标列。'],
+  }
+}
+
 const CATALOG: Record<string, readonly FormulaMaker[]> = {
   ...CLEAN_FORMULAS,
   ...FEATURE_FORMULAS,
   ...EVAL_FORMULAS,
+  ...PREPARATION_FORMULAS,
   split_dataset: [splitSize, splitOrder],
+  split_samples: [splitSamples],
   linear_regression: [linearPredict, linearFit],
   logistic_regression: [logitScore, logitProbability, logitDecide, logitOdds],
   tree_regressor: [treeEnsemble, treeSplit],

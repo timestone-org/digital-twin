@@ -9,6 +9,7 @@
 from typing import Any
 
 import pytest
+from unit.anomaly_fakes import training_pair
 
 from platform_server.apps.modeling.operators import (
     BLOCK_KINDS,
@@ -142,6 +143,9 @@ def frame_cases(source: Frame) -> dict[str, Case]:
     """
     one: dict[str, Any] = {"frame": source}
     return {
+        "cyclic_time": (one, {}),
+        "time_shift": (one, {}),
+        "split_samples": (one, {"min_test_rows": 5}),
         "cast_type": (one, {"columns": [SHIFT], "to": "number"}),
         "clip_outlier": (one, {}),
         "drop_missing": (one, {}),
@@ -151,6 +155,7 @@ def frame_cases(source: Frame) -> dict[str, Case]:
         "one_hot": (one, {"columns": [SHIFT]}),
         "pca": (one, {"n_components": 2}),
         "resample": (one, {}),
+        "select_columns": (one, {"columns": [WARM, TARGET]}),
         "rolling_feature": (one, {"columns": [WARM], "window": 3}),
         "select_feature": (
             {"frame": with_roles(source, target_key=TARGET)},
@@ -172,6 +177,7 @@ def other_cases(source: Frame) -> dict[str, Case]:
     trained = model_of(roled)
     binary: dict[str, Any] = {"train": labelled(), "test": labelled()}
     return {
+        "anomaly_distance": (training_pair(), {}),
         "classification_metrics": ({"scored": scored(is_binary=True)}, {}),
         "cross_validate": ({"model": trained, "frame": roled}, {"folds": 4}),
         "feature_importance": ({"model": trained, "test": roled}, {}),
@@ -221,7 +227,7 @@ def test_every_registered_operator_has_a_minimal_input_here() -> None:
     """反向遍历的入口：花名册上多一个算子，这张表就得跟着多一行。"""
     assert set(cases()) == set(CODES) - set(UNREACHABLE)
     assert UNREACHABLE == ()
-    assert len(CODES) == 24
+    assert len(CODES) == 29
 
 
 @pytest.mark.parametrize("code", CODES)

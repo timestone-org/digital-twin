@@ -230,7 +230,11 @@ export interface ModelingRun extends ModelingRunSummary {
 }
 
 /** 模型的任务类型，决定评估指标用哪一套。 */
-export const MODELING_TASKS = ['regression', 'classification'] as const
+export const MODELING_TASKS = [
+  'regression',
+  'classification',
+  'anomaly_detection',
+] as const
 export type ModelingTask = (typeof MODELING_TASKS)[number]
 
 /**
@@ -255,7 +259,7 @@ export interface ModelingVersionSummary {
   serving_channel: ModelingServingChannel
   unservable_reason: string | null
   feature_keys: string[]
-  target_key: string
+  target_key: string | null
   created_by_name: string | null
   created_at: string
 }

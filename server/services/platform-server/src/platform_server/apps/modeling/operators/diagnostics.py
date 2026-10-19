@@ -247,7 +247,7 @@ class FeatureImportance(OperatorBase):
         Args: model, payload, test。
         """
         config = self._config
-        target = _target_values(test, payload.target_key)
+        target = _target_values(test, _supervised_target(payload))
         probe = _Probe(
             model=model,
             payload=payload,
@@ -483,7 +483,7 @@ class CrossValidate(OperatorBase):
         if not isinstance(payload, ModelPayload):
             raise OperatorError("输入端口 model 上没有模型")
         frame = with_roles(
-            frame_input(inputs, "frame"), target_key=payload.target_key
+            frame_input(inputs, "frame"), target_key=_supervised_target(payload)
         )
         spans = _folds(frame.row_count, self._config.folds, self._config.method)
         scores = [
@@ -556,7 +556,7 @@ def _fold_score(
     tested = select_rows(frame, test)
     truth = [
         float(value or _ZERO)
-        for value in numbers_of(tested, payload.target_key)
+        for value in numbers_of(tested, _supervised_target(payload))
     ]
     return _scored_by_task(payload.task, truth, model.predict_rows(tested))
 
@@ -576,3 +576,9 @@ def _summary(scores: list[float]) -> dict[str, float | None]:
         "score_std": variance**0.5,
         "score_worst": min(scores),
     }
+
+
+def _supervised_target(payload: ModelPayload) -> str:
+    if payload.target_key is None:
+        raise OperatorError("这一步需要有目标列的监督模型，不能用于异常检测")
+    return payload.target_key

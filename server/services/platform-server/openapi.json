@@ -675,6 +675,35 @@
         "title": "AggregateOut",
         "type": "object"
       },
+      "AnomalyDecisionOut": {
+        "description": "异常分数大于阈值才判异常，分数不是概率。",
+        "properties": {
+          "is_anomaly": {
+            "title": "Is Anomaly",
+            "type": "boolean"
+          },
+          "row": {
+            "title": "Row",
+            "type": "integer"
+          },
+          "score": {
+            "title": "Score",
+            "type": "number"
+          },
+          "threshold": {
+            "title": "Threshold",
+            "type": "number"
+          }
+        },
+        "required": [
+          "row",
+          "is_anomaly",
+          "score",
+          "threshold"
+        ],
+        "title": "AnomalyDecisionOut",
+        "type": "object"
+      },
       "ApiResponse_AcDataBindingOut_": {
         "properties": {
           "code": {
@@ -2878,6 +2907,51 @@
           }
         },
         "title": "ApiResponse[NodeRunOut]",
+        "type": "object"
+      },
+      "ApiResponse_OpenModelDetectOut_": {
+        "properties": {
+          "code": {
+            "default": 0,
+            "title": "Code",
+            "type": "integer"
+          },
+          "data": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/OpenModelDetectOut"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "details": {
+            "anyOf": [
+              {
+                "items": {
+                  "$ref": "#/components/schemas/FieldErrorOut"
+                },
+                "type": "array"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Details"
+          },
+          "message": {
+            "default": "ok",
+            "title": "Message",
+            "type": "string"
+          },
+          "trace_id": {
+            "default": "",
+            "title": "Trace Id",
+            "type": "string"
+          }
+        },
+        "title": "ApiResponse[OpenModelDetectOut]",
         "type": "object"
       },
       "ApiResponse_OpenModelPredictOut_": {
@@ -8954,6 +9028,25 @@
         "title": "DatasetsOut",
         "type": "object"
       },
+      "DetectionRow": {
+        "additionalProperties": {
+          "anyOf": [
+            {
+              "$ref": "#/components/schemas/FiniteSensor"
+            },
+            {
+              "type": "integer"
+            },
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ]
+        },
+        "type": "object"
+      },
       "DocumentMark": {
         "additionalProperties": false,
         "description": "富文本标记。",
@@ -9331,6 +9424,9 @@
         ],
         "title": "FinalizeUploadIn",
         "type": "object"
+      },
+      "FiniteSensor": {
+        "type": "number"
       },
       "FormulaColumnOut": {
         "description": "公式里可引用的一列。",
@@ -13114,11 +13210,19 @@
             "type": "object"
           },
           "target_key": {
-            "title": "Target Key",
-            "type": "string"
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Target Key"
           },
           "task": {
             "enum": [
+              "anomaly_detection",
               "classification",
               "regression"
             ],
@@ -13223,11 +13327,19 @@
             "type": "string"
           },
           "target_key": {
-            "title": "Target Key",
-            "type": "string"
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Target Key"
           },
           "task": {
             "enum": [
+              "anomaly_detection",
               "classification",
               "regression"
             ],
@@ -14291,6 +14403,55 @@
           "kind"
         ],
         "title": "NodeValue",
+        "type": "object"
+      },
+      "OpenModelDetectIn": {
+        "additionalProperties": false,
+        "description": "实时数据按行输入，布尔值不作为数值接受。",
+        "properties": {
+          "rows": {
+            "items": {
+              "$ref": "#/components/schemas/DetectionRow"
+            },
+            "maxItems": 256,
+            "minItems": 1,
+            "title": "Rows",
+            "type": "array"
+          }
+        },
+        "required": [
+          "rows"
+        ],
+        "title": "OpenModelDetectIn",
+        "type": "object"
+      },
+      "OpenModelDetectOut": {
+        "description": "模型版本、逐行判定与输入区间告警。",
+        "properties": {
+          "model": {
+            "$ref": "#/components/schemas/OpenModelInfoOut"
+          },
+          "results": {
+            "items": {
+              "$ref": "#/components/schemas/AnomalyDecisionOut"
+            },
+            "title": "Results",
+            "type": "array"
+          },
+          "warnings": {
+            "items": {
+              "$ref": "#/components/schemas/OpenModelWarningOut"
+            },
+            "title": "Warnings",
+            "type": "array"
+          }
+        },
+        "required": [
+          "model",
+          "results",
+          "warnings"
+        ],
+        "title": "OpenModelDetectOut",
         "type": "object"
       },
       "OpenModelInfoOut": {
@@ -31866,6 +32027,69 @@
           }
         },
         "summary": "模型签名",
+        "tags": [
+          "modeling-open"
+        ]
+      }
+    },
+    "/api/v1/platform/open-models/{code}:detect": {
+      "post": {
+        "description": "按模型阈值判断一批设备实时输入。Args: payload, session, deps, call。",
+        "operationId": "detect_api_v1_platform_open_models__code__detect_post",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "code",
+            "required": true,
+            "schema": {
+              "title": "Code",
+              "type": "string"
+            }
+          },
+          {
+            "in": "header",
+            "name": "X-Api-Key",
+            "required": false,
+            "schema": {
+              "default": "",
+              "title": "X-Api-Key",
+              "type": "string"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/OpenModelDetectIn"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiResponse_OpenModelDetectOut_"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "设备异常检测",
         "tags": [
           "modeling-open"
         ]

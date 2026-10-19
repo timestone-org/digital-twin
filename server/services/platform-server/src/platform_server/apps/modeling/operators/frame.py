@@ -56,6 +56,7 @@ class Provenance:
     since: datetime | None = None
     until: datetime | None = None
     is_truncated: bool = False
+    observed_until: datetime | None = None
 
 
 @dataclass(frozen=True)

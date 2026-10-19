@@ -24,9 +24,9 @@ VERSIONS = Path(__file__).resolve().parents[2] / "migrations" / "versions"
 PATTERN = "*add_modeling_tables.py"
 
 
-def _migration() -> ModuleType:
+def _migration(pattern: str = PATTERN) -> ModuleType:
     """把建表那一支迁移当普通模块加载，好读它的字面量。"""
-    matches = sorted(VERSIONS.glob(PATTERN))
+    matches = sorted(VERSIONS.glob(pattern))
     assert len(matches) == 1
     spec = importlib.util.spec_from_file_location("modeling_ddl", matches[0])
     assert spec is not None
@@ -62,7 +62,10 @@ def test_run_triggers_match() -> None:
 
 def test_model_tasks_match() -> None:
     """任务类型两侧相等。"""
-    assert sql_values(MODEL_TASKS) == _migration().MODEL_TASKS
+    assert (
+        sql_values(MODEL_TASKS)
+        == _migration("*add_anomaly_model_task.py").MODEL_TASKS
+    )
 
 
 def test_serving_channels_match_the_migration() -> None:

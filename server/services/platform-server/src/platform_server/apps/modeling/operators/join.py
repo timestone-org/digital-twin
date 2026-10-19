@@ -23,6 +23,7 @@ from platform_server.apps.modeling.operators.base import (
 from platform_server.apps.modeling.operators.frame import (
     CellValue,
     Frame,
+    Provenance,
     frame_input,
 )
 from platform_server.apps.modeling.operators.registry import register_operator
@@ -292,12 +293,22 @@ def _joined(
         left,
         columns=columns,
         rows=rows,
+        provenance=_joined_provenance(left, right),
         index=(
             tuple(left.index[position] for position in kept)
             if left.index is not None
             else None
         ),
     )
+
+
+def _joined_provenance(left: Frame, right: Frame) -> Provenance:
+    cutoffs = [
+        source.observed_until
+        for source in (left.provenance, right.provenance)
+        if source.observed_until is not None
+    ]
+    return replace(left.provenance, observed_until=min(cutoffs, default=None))
 
 
 def _tally_block(aligned: _Aligned, config: LedgerJoinConfig) -> ReportBlock:

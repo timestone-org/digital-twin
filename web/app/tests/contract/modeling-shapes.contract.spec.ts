@@ -6,11 +6,15 @@
  * 枚举一遍键（漏一个或多一个都过不了 typecheck），再和 openapi 的 properties
  * 比对，两头都锁住。
  */
+import { execFile } from 'node:child_process'
 import { readFileSync } from 'node:fs'
-import { join } from 'node:path'
+import { dirname, join } from 'node:path'
+import { promisify } from 'node:util'
 import { describe, expect, it } from 'vitest'
 
 import type {
+  AnomalyDecision,
+  OpenModelDetect,
   ModelApiKey,
   ModelApiKeyMinted,
   ModelCallStat,
@@ -301,6 +305,18 @@ const FORMULA_REGISTRATION = {
   binding: true,
 } satisfies Keys<ModelFormulaRegistration>
 
+const ANOMALY_DECISION = {
+  row: true,
+  is_anomaly: true,
+  score: true,
+  threshold: true,
+} satisfies Keys<AnomalyDecision>
+const OPEN_MODEL_DETECT = {
+  model: true,
+  results: true,
+  warnings: true,
+} satisfies Keys<OpenModelDetect>
+
 const PAIRS: ReadonlyArray<readonly [string, Record<string, true>]> = [
   ['PortOut', PORT],
   ['OperatorOut', OPERATOR],
@@ -330,6 +346,8 @@ const PAIRS: ReadonlyArray<readonly [string, Record<string, true>]> = [
   ['OpenModelInfoOut', OPEN_MODEL_INFO],
   ['OpenModelWarningOut', OPEN_MODEL_WARNING],
   ['OpenModelPredictOut', OPEN_MODEL_PREDICT],
+  ['AnomalyDecisionOut', ANOMALY_DECISION],
+  ['OpenModelDetectOut', OPEN_MODEL_DETECT],
 ]
 
 describe('分析建模线形与 openapi 一致', () => {
@@ -339,4 +357,22 @@ describe('分析建模线形与 openapi 一致', () => {
     const declared = Object.keys(schema?.properties ?? {}).sort()
     expect(Object.keys(wire).sort()).toEqual(declared)
   })
+
+  it('异常检测的生成类型与 OpenAPI 逐字一致', async () => {
+    const execute = promisify(execFile)
+    await expect(
+      execute(
+        'uv',
+        [
+          'run',
+          '--no-sync',
+          'python',
+          '-m',
+          'scripts.export_modeling_detection_types',
+          '--check',
+        ],
+        { cwd: dirname(SPEC_PATH), timeout: 60_000 },
+      ),
+    ).resolves.toMatchObject({ stdout: '' })
+  }, 60_000)
 })

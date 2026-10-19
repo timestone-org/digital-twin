@@ -50,5 +50,5 @@ def fit_columns(
         for key in configured:
             frame.position_of(key)
         return tuple(configured)
-    target = None if split_plan is None else str(split_plan[PLAN_TARGET])
+    target = None if split_plan is None else split_plan.get(PLAN_TARGET)
     return tuple(key for key in numeric_keys(frame) if key != target)

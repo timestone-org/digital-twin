@@ -286,7 +286,7 @@ function resampleBucket(context: FormulaContext): FormulaSpec {
     ],
     notes: [
       '⚠ 按 UTC 切一天在东八区会整体偏 8 小时，而每个数看着都完全正常——这就是要看 Δ 的原因。',
-      `桶里这几行按 ${agg === '' ? 'avg' : agg} 折成一行。`,
+      `默认按 ${agg === '' ? 'avg' : agg} 汇总；单独配置的列使用各自的汇总方式。`,
     ],
   }
 }
