@@ -3899,6 +3899,51 @@
         "title": "ApiResponse[PointBatchOut]",
         "type": "object"
       },
+      "ApiResponse_PointImportOut_": {
+        "properties": {
+          "code": {
+            "default": 0,
+            "title": "Code",
+            "type": "integer"
+          },
+          "data": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/PointImportOut"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "details": {
+            "anyOf": [
+              {
+                "items": {
+                  "$ref": "#/components/schemas/FieldErrorOut"
+                },
+                "type": "array"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Details"
+          },
+          "message": {
+            "default": "ok",
+            "title": "Message",
+            "type": "string"
+          },
+          "trace_id": {
+            "default": "",
+            "title": "Trace Id",
+            "type": "string"
+          }
+        },
+        "title": "ApiResponse[PointImportOut]",
+        "type": "object"
+      },
       "ApiResponse_PointMatchesOut_": {
         "properties": {
           "code": {
@@ -15832,6 +15877,221 @@
         "title": "PointDeleteIn",
         "type": "object"
       },
+      "PointImportIn": {
+        "additionalProperties": false,
+        "description": "同一数据源的一批点位；已有编码可选择跳过。",
+        "properties": {
+          "is_skipping_existing": {
+            "default": false,
+            "title": "Is Skipping Existing",
+            "type": "boolean"
+          },
+          "items": {
+            "items": {
+              "$ref": "#/components/schemas/PointImportItemIn"
+            },
+            "maxItems": 200,
+            "minItems": 1,
+            "title": "Items",
+            "type": "array"
+          },
+          "source_id": {
+            "format": "uuid",
+            "title": "Source Id",
+            "type": "string"
+          }
+        },
+        "required": [
+          "source_id",
+          "items"
+        ],
+        "title": "PointImportIn",
+        "type": "object"
+      },
+      "PointImportItemIn": {
+        "additionalProperties": false,
+        "description": "编码必填；导入中的空白或 null 均保留原值。",
+        "properties": {
+          "address": {
+            "anyOf": [
+              {
+                "maxLength": 256,
+                "minLength": 1,
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Address"
+          },
+          "archive_enabled": {
+            "anyOf": [
+              {
+                "type": "boolean"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Archive Enabled"
+          },
+          "archive_max_interval_ms": {
+            "anyOf": [
+              {
+                "exclusiveMinimum": 0.0,
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Archive Max Interval Ms"
+          },
+          "archive_retention_days": {
+            "anyOf": [
+              {
+                "exclusiveMinimum": 0.0,
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Archive Retention Days"
+          },
+          "code": {
+            "maxLength": 64,
+            "minLength": 1,
+            "pattern": "^[\\x21-\\x39\\x3b-\\x7e]+$",
+            "title": "Code",
+            "type": "string"
+          },
+          "data_type": {
+            "anyOf": [
+              {
+                "enum": [
+                  "bool",
+                  "float",
+                  "int",
+                  "string"
+                ],
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Data Type"
+          },
+          "deadband": {
+            "anyOf": [
+              {
+                "minimum": 0.0,
+                "type": "number"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Deadband"
+          },
+          "description": {
+            "anyOf": [
+              {
+                "maxLength": 1000,
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Description"
+          },
+          "name": {
+            "anyOf": [
+              {
+                "maxLength": 64,
+                "minLength": 1,
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Name"
+          },
+          "sampling_interval_ms": {
+            "anyOf": [
+              {
+                "minimum": 50.0,
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Sampling Interval Ms"
+          },
+          "unit": {
+            "anyOf": [
+              {
+                "maxLength": 32,
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Unit"
+          }
+        },
+        "required": [
+          "code"
+        ],
+        "title": "PointImportItemIn",
+        "type": "object"
+      },
+      "PointImportOut": {
+        "description": "导入后点位与新增、实际更新、未改动数量。",
+        "properties": {
+          "address_checks": {
+            "items": {
+              "$ref": "#/components/schemas/AddressCheckOut"
+            },
+            "title": "Address Checks",
+            "type": "array"
+          },
+          "created_count": {
+            "title": "Created Count",
+            "type": "integer"
+          },
+          "items": {
+            "items": {
+              "$ref": "#/components/schemas/PointOut"
+            },
+            "title": "Items",
+            "type": "array"
+          },
+          "unchanged_count": {
+            "title": "Unchanged Count",
+            "type": "integer"
+          },
+          "updated_count": {
+            "title": "Updated Count",
+            "type": "integer"
+          }
+        },
+        "required": [
+          "items",
+          "address_checks",
+          "created_count",
+          "updated_count",
+          "unchanged_count"
+        ],
+        "title": "PointImportOut",
+        "type": "object"
+      },
       "PointItemIn": {
         "additionalProperties": false,
         "description": "批量里的一个点位。数据源在批的层面上给，一批只对一个源。",
@@ -24249,6 +24509,66 @@
           }
         },
         "summary": "批量删除点位",
+        "tags": [
+          "collect-point"
+        ]
+      }
+    },
+    "/api/v1/platform/collect-points:import": {
+      "post": {
+        "description": "按编码导入，空白保留。Args: payload, session, write。",
+        "operationId": "import_points_api_v1_platform_collect_points_import_post",
+        "parameters": [
+          {
+            "in": "header",
+            "name": "idempotency-key",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Idempotency-Key"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/PointImportIn"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiResponse_PointImportOut_"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "按编码批量导入并更新点位",
         "tags": [
           "collect-point"
         ]

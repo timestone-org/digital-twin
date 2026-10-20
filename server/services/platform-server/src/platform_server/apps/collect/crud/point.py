@@ -87,6 +87,30 @@ class PointCrud(CrudBase[CollectPoint]):
         )
         return frozenset(rows.scalars().all())
 
+    async def lock_by_codes(
+        self,
+        session: AsyncSession,
+        source_id: uuid.UUID,
+        codes: Sequence[str],
+    ) -> list[CollectPoint]:
+        """按源与编码批量锁定已有点位。
+
+        Args: session, source_id, codes。
+        """
+        statement = (
+            select(CollectPoint)
+            .where(
+                CollectPoint.source_id == source_id,
+                CollectPoint.code.in_(list(codes)),
+            )
+            .order_by(CollectPoint.code)
+            .with_for_update()
+        )
+        result = await session.execute(
+            statement.execution_options(populate_existing=True)
+        )
+        return list(result.scalars().all())
+
     async def retention_days_of(
         self,
         session: AsyncSession,

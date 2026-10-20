@@ -9,6 +9,8 @@
  * 重试在没有幂等键时会**建两个数据源**、**建两批点位**或**向 PLC 写两次**。
  */
 import type {
+  CollectPointImportInput,
+  CollectPointImportResult,
   CollectBrowseResult,
   CollectConnectivity,
   CollectPoint,
@@ -215,6 +217,17 @@ export async function createPoints(
 ): Promise<CollectPointBatch> {
   return await requestData<CollectPointBatch>(
     '/collect-points',
+    onPlatform({ method: 'POST', body: input, headers: idempotent(key) }),
+  )
+}
+
+/** 按编码导入，缺省字段保留；每批使用独立幂等键。 */
+export async function importPoints(
+  input: CollectPointImportInput,
+  key: string = newIdempotencyKey(),
+): Promise<CollectPointImportResult> {
+  return await requestData<CollectPointImportResult>(
+    '/collect-points:import',
     onPlatform({ method: 'POST', body: input, headers: idempotent(key) }),
   )
 }
