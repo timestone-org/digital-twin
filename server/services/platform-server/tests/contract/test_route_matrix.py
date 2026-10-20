@@ -504,7 +504,8 @@ def test_the_collect_face_was_actually_covered() -> None:
         if collect_expectation(path, method) is not None
     ]
     # 配置、动作、语义检索与采集运行参数面
-    assert len(covered) == 20
+    assert len(covered) == 21
+    assert (f"{API_PREFIX}/collect-points:import", "POST") in covered
 
 
 def test_every_field_action_still_points_at_a_live_route() -> None:

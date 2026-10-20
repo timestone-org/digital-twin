@@ -313,6 +313,7 @@ POST   /api/v1/platform/collect-sources/{id}:browse-subtree  一次收齐一棵�
 
 GET    /api/v1/platform/collect-points?source_id=&q=      分页 + 搜索（Agent 按名字找点用）
 POST   /api/v1/platform/collect-points                   支持批量
+POST   /api/v1/platform/collect-points:import             按源与编码新增或更新，空白保留
 PATCH  /api/v1/platform/collect-points/{id}
 DELETE /api/v1/platform/collect-points/{id}?force=      force 跳过绑定守卫（引用失效）
 POST   /api/v1/platform/collect-points:batch-delete      批量删点，整批全删或全不删
@@ -526,11 +527,18 @@ CSV，而带 BOM 的 UTF-8 CSV 在 Excel 里双击就能开、改完另存回 CS
 2. **不能 `split(',')`**。寻址串里带逗号是常事（`ns=2;s=A,B`），一刀切会把一列劈成
    两列，多出来的那列静默顶掉后面所有字段。
 3. **三类问题分开讲**：这一行读不了（改文件）、文件内撞码（改文件，跳过开关救不了）、
-   库里已存（可以跳过）。混成一句「导入失败」，用户就只能一行行试。
+   库里已存（默认更新，也可跳过）。混成一句「导入失败」，用户就只能一行行试。
+
+导入以当前数据源和编码匹配，保留已有点位 id、node_key、历史与绑定。编码必填，
+新编码还须填写名称、寻址串。空白字段不更新，明确的 0、false/“否”正常写入；
+新增项的空白可选字段采用创建默认值。导入 API 的 null 同样表示保留，不改变
+单点 PATCH 对可空字段的显式清空语义。界面分别报告新增、更新和未改动数量，
+仅更新也刷新列表；仅填写寻址串时调用地址校验，提交成功后通知采集计划变化。
+若并发请求抢先创建同一新编码，返回 409 并回滚本批全部修改，刷新后可重新导入。
 
 提交按 `MAX_BATCH`（200）**切批，每批一个独立幂等键**——共用一个键会让第二批起被
 后端当成同一次请求而静默丢失。后端一批是原子的，故失败要**按批**列出编码，只说
-「失败」会让用户以为一条都没进，然后重导一次撞一堆 409。
+「失败」会让用户以为前面的批次也没有保存。文件内重复编码仍需先处理，不按行覆盖。
 
 ### 9.5 下发写值
 

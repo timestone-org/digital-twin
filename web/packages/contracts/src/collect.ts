@@ -231,6 +231,23 @@ export interface CollectPointUpdateInput {
   archive_retention_days?: number | null | undefined
 }
 
+/** CSV 导入只提交非空字段，以编码匹配当前数据源的点位。 */
+export interface CollectPointImportItemInput extends CollectPointUpdateInput {
+  code: string
+}
+
+export interface CollectPointImportInput {
+  source_id: string
+  items: CollectPointImportItemInput[]
+  is_skipping_existing?: boolean
+}
+
+export interface CollectPointImportResult extends CollectPointBatch {
+  created_count: number
+  updated_count: number
+  unchanged_count: number
+}
+
 /**
  * 批量删点。
  * ⚠ 整批全删或全不删：一个点位还被大屏绑着，整批就 409 并点名那几个。

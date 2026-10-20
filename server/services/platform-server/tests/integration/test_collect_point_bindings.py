@@ -97,6 +97,40 @@ async def test_a_bound_point_cannot_be_deleted(
     assert "一号大屏" in body["details"][0]["message"]
 
 
+async def test_import_preserves_existing_dashboard_bindings(
+    app_client: httpx.AsyncClient,
+) -> None:
+    source = await create_source(app_client)
+    original = (await create_points(app_client, source["id"]))["items"][0]
+    _, node_id = await bind_point(
+        app_client, node_key=original["node_key"], name="绑定保留"
+    )
+    url = f"{NODES_URL}/{node_id}"
+    before = await app_client.get(url)
+    assert before.status_code == 200
+    assert payload(before)["bindings"]
+    response = await app_client.post(
+        f"{POINTS}:import",
+        json={
+            "source_id": source["id"],
+            "items": [
+                {
+                    "code": original["code"],
+                    "name": "新名称",
+                    "address": "ns=3;s=updated",
+                }
+            ],
+        },
+    )
+    assert response.status_code == 200
+    updated = payload(response)["items"][0]
+    assert updated["id"] == original["id"]
+    assert updated["node_key"] == original["node_key"]
+    after = await app_client.get(url)
+    assert after.status_code == 200
+    assert payload(after) == payload(before)
+
+
 async def test_the_conflict_lists_every_dashboard_that_binds_it(
     app_client: httpx.AsyncClient,
 ) -> None:

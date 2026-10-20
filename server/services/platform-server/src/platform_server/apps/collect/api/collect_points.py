@@ -27,8 +27,13 @@ from platform_server.apps.collect.schemas import (
     WriteIn,
     WriteOut,
 )
+from platform_server.apps.collect.schemas.point_import import (
+    PointImportIn,
+    PointImportOut,
+)
 from platform_server.apps.collect.services import (
     field_service,
+    point_import,
     point_service,
 )
 from platform_server.settings import API_PREFIX
@@ -91,6 +96,26 @@ async def create_points(
     await write.plans.notify(reason=REASON_POINT_CHANGED)
     _set_location(response, created)
     return ok(created, message="点位已创建")
+
+
+@router.post(
+    ":import",
+    response_model=ApiResponse[PointImportOut],
+    summary="按编码批量导入并更新点位",
+)
+async def import_points(
+    payload: PointImportIn, session: SessionDep, write: ManageDep
+) -> ApiResponse[PointImportOut]:
+    """按编码导入，空白保留。Args: payload, session, write。"""
+    result = await write.run_once(
+        endpoint="import_collect_points",
+        model=PointImportOut,
+        action=lambda: point_import.import_points(
+            session, bus=write.bus, payload=payload
+        ),
+    )
+    await write.plans.notify(reason=REASON_POINT_CHANGED)
+    return ok(result, message="点位已导入")
 
 
 @router.patch(

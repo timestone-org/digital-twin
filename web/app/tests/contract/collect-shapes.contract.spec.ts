@@ -22,6 +22,7 @@ import type {
   CollectHistoryBucket,
   CollectPoint,
   CollectPointBatch,
+  CollectPointImportResult,
   CollectPointSaved,
   CollectSource,
   CollectSourceRuntime,
@@ -175,6 +176,14 @@ const SHAPES: Record<string, Record<string, true>> = {
     items: true,
     address_checks: true,
   } satisfies Keys<CollectPointBatch>,
+
+  PointImportOut: {
+    items: true,
+    address_checks: true,
+    created_count: true,
+    updated_count: true,
+    unchanged_count: true,
+  } satisfies Keys<CollectPointImportResult>,
 
   PointSavedOut: {
     point: true,
