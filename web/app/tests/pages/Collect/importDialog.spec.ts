@@ -10,7 +10,7 @@ import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 import { enableAutoUnmount, flushPromises, mount } from '@vue/test-utils'
 import type { VueWrapper } from '@vue/test-utils'
 import type { CollectPoint } from '@dt/contracts'
-import { DtFilePicker } from '@dt/ui'
+import { DtFilePicker, DtSwitch } from '@dt/ui'
 
 import * as collectApi from '@/api/collect'
 import ImportPointsDialog from '@/pages/Collect/components/ImportPointsDialog.vue'
@@ -122,13 +122,16 @@ describe('预检', () => {
     expect(document.body.textContent).toContain('表头缺少必填列')
   })
 
-  it('⚠ 库里已存的编码标出来，且默认跳过它们', async () => {
+  it('库里已存的编码默认更新，也可选择跳过', async () => {
     const wrapper = await render([point('t1')])
     await select(wrapper, `${HEADER}\nt1,温度,ns=2;s=T1\nt2,压力,ns=2;s=P1`)
 
     const text = document.body.textContent ?? ''
     expect(text).toContain('编码已存在 1 个')
-    // 跳过之后只剩一条会提交
+    expect(bodyButton('导入 2 个点位')).toBeDefined()
+    expect(text).toContain('空白字段保留原值')
+    wrapper.findComponent(DtSwitch).vm.$emit('update:modelValue', true)
+    await flushPromises()
     expect(bodyButton('导入 1 个点位')).toBeDefined()
   })
 
@@ -169,14 +172,100 @@ describe('预检', () => {
     await select(wrapper, `${HEADER}\nt1,温度,ns=2;s=T1`)
 
     expect(document.body.textContent).toContain('取不到已有点位')
+    expect(bodyButton('导入')?.disabled).toBe(true)
+  })
+
+  it('切换数据源后，旧查询不能覆盖新源的编码匹配结果', async () => {
+    let finishOld: (value: ReturnType<typeof listing>) => void = () => undefined
+    const pending = new Promise<ReturnType<typeof listing>>((resolve) => {
+      finishOld = resolve
+    })
+    vi.spyOn(collectApi, 'listPoints')
+      .mockReturnValueOnce(pending)
+      .mockResolvedValueOnce(listing([point('new_source_point')]))
+    const wrapper = mount(ImportPointsDialog, {
+      props: { modelValue: false, sourceId: 's1' },
+      attachTo: document.body,
+    })
+    await wrapper.setProps({ modelValue: true })
+    await flushPromises()
+    expect(bodyButton('导入')?.disabled).toBe(true)
+    await wrapper.setProps({ sourceId: 's2' })
+    await flushPromises()
+    await select(wrapper, '点位编码\nnew_source_point')
+    finishOld(listing([point('old_source_point')]))
+    await flushPromises()
+    expect(bodyButton('导入 1 个点位')?.disabled).toBe(false)
+    expect(document.body.textContent).not.toContain('新增点位的名称')
+  })
+
+  it('读文件失败时显示原因且不能提交旧内容', async () => {
+    const wrapper = await render()
+    await select(wrapper, `${HEADER}\nt1,温度,ns=2;s=T1`)
+    wrapper.findComponent(DtFilePicker).vm.$emit('select', [
+      {
+        name: 'broken.csv',
+        text: () => Promise.reject(new Error('文件读取失败')),
+      },
+    ])
+    await flushPromises()
+    expect(document.body.textContent).toContain('文件读取失败')
+    expect(bodyButton('导入')?.disabled).toBe(true)
   })
 })
 
 describe('提交', () => {
+  it('只更新已有点位也会刷新，空白字段不进入请求', async () => {
+    const imported = vi.spyOn(collectApi, 'importPoints').mockResolvedValue({
+      items: [point('t1')],
+      address_checks: [],
+      created_count: 0,
+      updated_count: 1,
+      unchanged_count: 0,
+    })
+    const wrapper = await render([point('t1')])
+    await select(
+      wrapper,
+      '点位编码,名称,寻址串,死区,归档,单位\nt1, ,ns=3;s=T1,0,否, ',
+    )
+    bodyButton('导入')?.click()
+    await flushPromises()
+    expect(imported).toHaveBeenCalledWith(
+      {
+        source_id: 's1',
+        is_skipping_existing: false,
+        items: [
+          {
+            code: 't1',
+            address: 'ns=3;s=T1',
+            deadband: 0,
+            archive_enabled: false,
+          },
+        ],
+      },
+      expect.any(String),
+    )
+    expect(wrapper.emitted('imported')).toHaveLength(1)
+    expect(document.body.textContent).toContain('更新 1 个')
+  })
+
+  it('只有编码的已有点位可以导入，新点位缺少必填项单独报错', async () => {
+    const wrapper = await render([point('t1')])
+    await select(wrapper, '点位编码\nt1\nnew')
+    expect(document.body.textContent).toContain('可导入 1 行')
+    expect(document.body.textContent).toContain(
+      '新增点位的名称、寻址串不能为空',
+    )
+    expect(bodyButton('导入 1 个点位')).toBeDefined()
+  })
+
   it('包含 # 的现场点位预检通过，导入时保留编码和寻址串', async () => {
     const code = 'RS_HYGS_DLZX_1#PRESSUREPUMP_FREQ'
     const createdPoint = point(code)
-    const create = vi.spyOn(collectApi, 'createPoints').mockResolvedValue({
+    const create = vi.spyOn(collectApi, 'importPoints').mockResolvedValue({
+      created_count: 1,
+      updated_count: 0,
+      unchanged_count: 0,
       items: [createdPoint],
       address_checks: [
         { address: createdPoint.address, status: 'passed', detail: null },
@@ -195,6 +284,7 @@ describe('提交', () => {
     expect(create).toHaveBeenCalledWith(
       {
         source_id: 's1',
+        is_skipping_existing: false,
         items: [
           expect.objectContaining({ code, address: createdPoint.address }),
         ],
@@ -205,7 +295,10 @@ describe('提交', () => {
   })
 
   it('按批调后端，并在完成后通知外面刷新', async () => {
-    const create = vi.spyOn(collectApi, 'createPoints').mockResolvedValue({
+    const create = vi.spyOn(collectApi, 'importPoints').mockResolvedValue({
+      created_count: 1,
+      updated_count: 0,
+      unchanged_count: 0,
       items: [point('t1')],
       address_checks: [
         { address: 'ns=2;s=T1', status: 'passed', detail: null },
@@ -218,11 +311,14 @@ describe('提交', () => {
 
     expect(create).toHaveBeenCalledTimes(1)
     expect(wrapper.emitted('imported')).toHaveLength(1)
-    expect(document.body.textContent).toContain('已建 1 个点位')
+    expect(document.body.textContent).toContain('已新增 1 个点位')
   })
 
   it('⚠ 没到现场确认过的寻址串要说出来，不混进「成功」里', async () => {
-    vi.spyOn(collectApi, 'createPoints').mockResolvedValue({
+    vi.spyOn(collectApi, 'importPoints').mockResolvedValue({
+      created_count: 1,
+      updated_count: 0,
+      unchanged_count: 0,
       items: [point('t1')],
       address_checks: [
         { address: 'ns=2;s=T1', status: 'unverified', detail: '采集侧离线' },
@@ -237,7 +333,7 @@ describe('提交', () => {
   })
 
   it('⚠ 整批被拒时列出这一批的编码，用户才回得去文件里找', async () => {
-    vi.spyOn(collectApi, 'createPoints').mockRejectedValue(
+    vi.spyOn(collectApi, 'importPoints').mockRejectedValue(
       new Error('编码已存在'),
     )
     const wrapper = await render()

@@ -10,7 +10,11 @@ import { COLLECT_POINT_BATCH_MAX } from '@dt/contracts'
 
 import { BizError } from '@/api/client'
 import * as collect from '@/api/collect'
-import { chunk, importPoints } from '@/pages/Collect/scripts/pointImport'
+import {
+  chunk,
+  importPoints,
+  importCsvPoints,
+} from '@/pages/Collect/scripts/pointImport'
 
 function item(code: string): CollectPointItemInput {
   return { code, name: code, address: `ns=2;s=${code}` }
@@ -61,6 +65,41 @@ describe('切批', () => {
 })
 
 describe('逐批提交', () => {
+  it('CSV 分批累计新增、更新与未变更，并独立记录失败', async () => {
+    const saved = vi
+      .spyOn(collect, 'importPoints')
+      .mockResolvedValueOnce({
+        items: [],
+        address_checks: [{ address: 'x', status: 'unverified', detail: null }],
+        created_count: 10,
+        updated_count: 180,
+        unchanged_count: 10,
+      })
+      .mockRejectedValueOnce(new Error('该批校验失败'))
+    const progress = vi.fn()
+    const result = await importCsvPoints('s1', items(201), progress, true)
+    expect(result).toMatchObject({
+      created: 10,
+      updated: 180,
+      unchanged: 10,
+      unverified: 1,
+    })
+    expect(result.failures[0]?.codes).toEqual(['p200'])
+    expect(progress).toHaveBeenLastCalledWith({ done: 201, total: 201 })
+    expect(saved.mock.calls[0]?.[0].is_skipping_existing).toBe(true)
+    expect(saved.mock.calls[0]?.[1]).not.toBe(saved.mock.calls[1]?.[1])
+  })
+
+  it('空 CSV 不发导入请求', async () => {
+    const saved = vi.spyOn(collect, 'importPoints')
+    expect(await importCsvPoints('s1', [])).toMatchObject({
+      created: 0,
+      updated: 0,
+      unchanged: 0,
+    })
+    expect(saved).not.toHaveBeenCalled()
+  })
+
   it('每批各带一个幂等键——共用一个键会让第二批起静默丢失', async () => {
     await importPoints('s1', items(COLLECT_POINT_BATCH_MAX + 1))
     const keys = createMock.mock.calls.map((call) => call[1] as string)

@@ -11,12 +11,13 @@
  * 2. **Excel 的科学计数**：`1E5` 这种寻址串被 Excel 存成 `100000`。这里不做
  *    还原（还原等于猜），但会把它当普通字符串原样上传——错的是导出那一步。
  * 3. **同名编码**：文件内重复与库里已存是两件事，提示必须分开——前者要用户
- *    改文件，后者可以选择跳过。
+ *    改文件，后者默认更新非空字段，也可选择跳过。
  */
 import type {
   CollectDataType,
   CollectPoint,
-  CollectPointItemInput,
+  CollectPointImportItemInput,
+  CollectPointUpdateInput,
 } from '@dt/contracts'
 import { COLLECT_DATA_TYPES, COLLECT_MIN_INTERVAL_MS } from '@dt/contracts'
 import { pointCodeProblem } from './pointCode'
@@ -27,8 +28,8 @@ const BOM = '\uFEFF'
 /** 列名与它在界面上的叫法。顺序就是模板里的列序。 */
 export const CSV_COLUMNS = [
   { key: 'code', label: '点位编码', required: true },
-  { key: 'name', label: '名称', required: true },
-  { key: 'address', label: '寻址串', required: true },
+  { key: 'name', label: '名称', required: false },
+  { key: 'address', label: '寻址串', required: false },
   { key: 'data_type', label: '数据类型', required: false },
   { key: 'unit', label: '单位', required: false },
   { key: 'sampling_interval_ms', label: '采样周期(ms)', required: false },
@@ -80,7 +81,7 @@ const SAMPLE_ROWS: readonly string[][] = [
 export interface ParsedRow {
   /** 文件里的行号，从 1 开始且**不含表头**——报错要指得回去。 */
   line: number
-  item: CollectPointItemInput | null
+  item: CollectPointImportItemInput | null
   error: string | null
 }
 
@@ -188,17 +189,29 @@ function parseRow(
   }
 }
 
-function buildItem(values: Map<ColumnKey, string>): CollectPointItemInput {
+function buildItem(
+  values: Map<ColumnKey, string>,
+): CollectPointImportItemInput {
   const code = required(values, 'code', '点位编码')
   const problem = pointCodeProblem(code)
   if (problem !== null) throw new Error(`点位编码「${code}」：${problem}`)
   const unit = values.get('unit') ?? ''
-  return {
+  const item: CollectPointImportItemInput = {
     code,
-    name: required(values, 'name', '名称'),
-    address: required(values, 'address', '寻址串'),
+    name: values.get('name') ?? '',
+    address: values.get('address') ?? '',
     data_type: dataType(values.get('data_type') ?? ''),
     unit: unit === '' ? null : unit,
+    ...readSettings(values),
+  }
+  for (const { key } of CSV_COLUMNS) {
+    if (key !== 'code' && !values.get(key)) delete item[key]
+  }
+  return item
+}
+
+function readSettings(values: Map<ColumnKey, string>): CollectPointUpdateInput {
+  return {
     sampling_interval_ms: positive(
       values.get('sampling_interval_ms') ?? '',
       1000,

@@ -58,7 +58,6 @@ describe('表头', () => {
   it('缺必填列时整表拒绝，并说清缺哪几列', () => {
     const result = parsePointCsv('名称,单位\n温度,℃')
     expect(result.fatal).toContain('点位编码')
-    expect(result.fatal).toContain('寻址串')
     expect(result.rows).toEqual([])
   })
 
@@ -100,17 +99,28 @@ describe('逐行解析', () => {
     },
   )
 
-  it('缺省列走默认值，不逼用户填满一整行', () => {
+  it('缺省列不提交，避免更新时用默认值覆盖旧配置', () => {
     const item = parsePointCsv('code,name,address\nt1,温度,ns=2;s=T1').rows[0]
       ?.item
-    expect(item).toMatchObject({
-      data_type: 'float',
-      unit: null,
-      sampling_interval_ms: 1000,
+    expect(item).toEqual({ code: 't1', name: '温度', address: 'ns=2;s=T1' })
+  })
+
+  it('允许只有编码与待更新列，并保留明确的 0 和否', () => {
+    const result = parsePointCsv(
+      '点位编码,死区,归档,单位,名称,寻址串\nt1,0,否,  , ,',
+    )
+    expect(result.fatal).toBeNull()
+    expect(result.rows[0]?.item).toEqual({
+      code: 't1',
       deadband: 0,
-      archive_enabled: true,
-      archive_retention_days: null,
+      archive_enabled: false,
     })
+  })
+
+  it('所有可选列留空时只提交编码', () => {
+    const header = CSV_COLUMNS.map((column) => column.label).join(',')
+    const result = parsePointCsv(`${header}\nt1,,,,,,,,,`)
+    expect(result.rows[0]?.item).toEqual({ code: 't1' })
   })
 
   it('行号从 1 起且不含表头——报错要指得回文件里那一行', () => {
