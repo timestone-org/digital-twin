@@ -34,6 +34,7 @@ import {
   DtModal,
   DtSelect,
   useToast,
+  DtIconButton,
 } from '@dt/ui'
 import { computed, ref } from 'vue'
 
@@ -366,16 +367,15 @@ function close(): void {
           data-test="style-lib-import"
           @select="onPickFile"
         />
-        <DtButton
+        <DtIconButton
           size="sm"
           variant="outline"
           intent="neutral"
-          icon="download"
           data-test="style-lib-export"
+          icon="download"
+          label="导出样式包"
           @click="onExport"
-        >
-          导出样式包
-        </DtButton>
+        />
       </div>
 
       <DtEmpty

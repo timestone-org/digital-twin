@@ -5,7 +5,7 @@
  * 这里不再自带一个，免得同一行上有两个「返回」。
  * 工具栏自己不改文档，只把动作抛给页面统一编排。
  */
-import { DtButton, DtTag } from '@dt/ui'
+import { DtButton, DtTag, DtIconButton } from '@dt/ui'
 import { computed } from 'vue'
 
 const props = defineProps<{
@@ -62,24 +62,24 @@ const alignTitle = computed(() => {
 
 <template>
   <div class="dt-twin2d-bar" role="toolbar" aria-label="2D 孪生编辑器工具条">
-    <DtButton
+    <DtIconButton
       size="sm"
       variant="ghost"
       intent="neutral"
       icon="undo"
-      aria-label="撤销"
-      title="撤销"
+      label="撤销"
+      tooltip="撤销"
       data-test="undo"
       :disabled="!canUndo"
       @click="emit('undo')"
     />
-    <DtButton
+    <DtIconButton
       size="sm"
       variant="ghost"
       intent="neutral"
       icon="redo"
-      aria-label="重做"
-      title="重做"
+      label="重做"
+      tooltip="重做"
       data-test="redo"
       :disabled="!canRedo"
       @click="emit('redo')"
@@ -87,13 +87,13 @@ const alignTitle = computed(() => {
 
     <span class="dt-twin2d-bar__sep" />
 
-    <DtButton
+    <DtIconButton
       size="sm"
       variant="ghost"
       intent="neutral"
       icon="search"
-      aria-label="适应画布"
-      title="适应画布"
+      label="适应画布"
+      tooltip="适应画布"
       data-test="fit"
       @click="emit('fit')"
     />
@@ -113,13 +113,13 @@ const alignTitle = computed(() => {
       {{ parityExact ? '1:1' : parityText }}
     </DtButton>
 
-    <DtButton
+    <DtIconButton
       size="sm"
       variant="ghost"
       intent="neutral"
       icon="magnet"
-      aria-label="画布裁到内容"
-      :title="cropTitle"
+      label="画布裁到内容"
+      :tooltip="cropTitle"
       data-test="crop-content"
       :disabled="cropExact"
       @click="emit('cropToContent')"
@@ -141,16 +141,17 @@ const alignTitle = computed(() => {
     </DtButton>
 
     <DtTag v-if="isDirty" size="sm" intent="warning">未保存</DtTag>
-    <DtButton
+    <DtIconButton
       size="sm"
-      icon="save"
       data-test="save"
       :loading="isSaving"
       :disabled="!isDirty"
+      variant="solid"
+      intent="primary"
+      icon="save"
+      label="保存"
       @click="emit('save')"
-    >
-      保存
-    </DtButton>
+    />
   </div>
 </template>
 

@@ -1,7 +1,7 @@
 <script setup lang="ts">
 /** @fileoverview 层级图自绘编辑画布与视口工具。 */
 import { computed, ref, toRef, useId } from 'vue'
-import { DtButton, DtCheckbox } from '@dt/ui'
+import { DtButton, DtCheckbox, DtIconButton } from '@dt/ui'
 import { canvasPoint, edgePath, fitViewport } from '../scripts/canvasGeometry'
 import { editorSize } from '../scripts/geometry'
 import { useCanvasPointer } from '../scripts/useCanvasPointer'
@@ -241,15 +241,23 @@ defineExpose({ fit, focus, add })
       >
         ＋
       </DtButton>
-      <DtButton size="sm" variant="ghost" @click="fit()"> 适应全部 </DtButton>
-      <DtButton
+      <DtIconButton
+        size="sm"
+        variant="ghost"
+        intent="neutral"
+        icon="maximize"
+        label="适应全部"
+        @click="fit()"
+      />
+      <DtIconButton
         size="sm"
         variant="ghost"
         :disabled="!editor.selectedIds.value.length"
+        intent="neutral"
+        icon="focus"
+        label="定位选中"
         @click="fit(true)"
-      >
-        定位选中
-      </DtButton>
+      />
     </div>
     <div class="canvas-hint">
       {{

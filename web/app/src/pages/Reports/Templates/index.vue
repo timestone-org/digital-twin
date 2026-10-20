@@ -11,6 +11,7 @@ import {
   DtTag,
   useToast,
   useConfirm,
+  DtIconButton,
 } from '@dt/ui'
 import type { DtDataColumn, ReportTemplateSummary } from '@dt/contracts'
 import * as api from '@/api/reports'
@@ -115,9 +116,14 @@ async function remove(id: string): Promise<void> {
         >
           导入 Word
         </DtButton>
-        <DtButton size="sm" icon="plus" @click="isOpen = true"
-          >新建模板</DtButton
-        >
+        <DtIconButton
+          size="sm"
+          variant="solid"
+          intent="primary"
+          icon="plus"
+          label="新建模板"
+          @click="isOpen = true"
+        />
       </PermGuard>
     </template>
     <div class="flex h-full min-h-0 flex-col gap-4">
@@ -158,15 +164,14 @@ async function remove(id: string): Promise<void> {
         </template>
         <template #cell-actions="{ row }">
           <PermGuard :codes="['report:manage']">
-            <DtButton
+            <DtIconButton
               size="sm"
               variant="ghost"
               intent="danger"
               icon="trash"
+              label="删除"
               @click="remove(row.id)"
-            >
-              删除
-            </DtButton>
+            />
           </PermGuard>
         </template>
       </DtDataView>

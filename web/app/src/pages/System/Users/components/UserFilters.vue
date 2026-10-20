@@ -5,7 +5,7 @@
  */
 import { computed } from 'vue'
 import type { DtSelectOption, RoleSummary } from '@dt/contracts'
-import { DtButton, DtIcon, DtInput, DtSelect } from '@dt/ui'
+import { DtIcon, DtInput, DtSelect, DtIconButton } from '@dt/ui'
 
 const props = defineProps<{
   q: string
@@ -79,5 +79,12 @@ function pickActive(value: string): void {
     :options="STATUS_OPTIONS"
     @update:model-value="pickActive"
   />
-  <DtButton variant="outline" size="sm" @click="emit('search')">查询</DtButton>
+  <DtIconButton
+    variant="outline"
+    size="sm"
+    intent="neutral"
+    icon="search"
+    label="查询"
+    @click="emit('search')"
+  />
 </template>

@@ -10,6 +10,7 @@ import {
   DtSelect,
   DtTag,
   useConfirm,
+  DtIconButton,
 } from '@dt/ui'
 import type {
   DtDataColumn,
@@ -152,14 +153,14 @@ async function remove(id: string): Promise<void> {
     subtitle="报告期结束后延迟生成，等待台账数据齐备"
   >
     <template #actions>
-      <DtButton
+      <DtIconButton
         variant="ghost"
         size="sm"
+        intent="neutral"
         icon="refresh-cw"
+        label="刷新"
         @click="list.reload"
-      >
-        刷新
-      </DtButton>
+      />
       <PermGuard :codes="['report:schedule']">
         <DtButton
           size="sm"
@@ -211,15 +212,15 @@ async function remove(id: string): Promise<void> {
         }}</template>
         <template #cell-actions="{ row }">
           <PermGuard :codes="['report:schedule']">
-            <DtButton
+            <DtIconButton
               size="sm"
               variant="ghost"
-              icon="pencil"
               :disabled="busyIds.includes(row.id)"
+              intent="neutral"
+              icon="pencil"
+              label="编辑"
               @click="openEdit(row)"
-            >
-              编辑
-            </DtButton>
+            />
             <DtButton
               size="sm"
               variant="ghost"
@@ -229,16 +230,15 @@ async function remove(id: string): Promise<void> {
             >
               {{ row.is_enabled ? '停用' : '启用' }}
             </DtButton>
-            <DtButton
+            <DtIconButton
               size="sm"
               variant="ghost"
               intent="danger"
-              icon="trash"
               :disabled="busyIds.includes(row.id)"
+              icon="trash"
+              label="删除"
               @click="remove(row.id)"
-            >
-              删除
-            </DtButton>
+            />
           </PermGuard>
         </template>
       </DtDataView>

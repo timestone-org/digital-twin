@@ -21,6 +21,7 @@ import {
   DtNotice,
   DtPageState,
   DtSegmented,
+  DtIconButton,
 } from '@dt/ui'
 
 import * as formulas from '@/api/datasetFormulas'
@@ -81,9 +82,14 @@ onMounted(() => {
   <AppShell title="公式库" subtitle="可复用公式 · 台账列里写 @标识(实参) 调用">
     <template #actions>
       <PermGuard :codes="[PERMISSION_CODES.formulaManage]" explain>
-        <DtButton size="sm" icon="plus" @click="ops.openCreate">
-          新建公式
-        </DtButton>
+        <DtIconButton
+          size="sm"
+          variant="solid"
+          intent="primary"
+          icon="plus"
+          label="新建公式"
+          @click="ops.openCreate"
+        />
       </PermGuard>
     </template>
 

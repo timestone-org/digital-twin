@@ -17,7 +17,13 @@ import type {
   Twin2dFillKind,
   Twin2dGradientStop,
 } from '@dt/twin2d'
-import { DtButton, DtInput, DtNumberInput, DtSelect } from '@dt/ui'
+import {
+  DtButton,
+  DtInput,
+  DtNumberInput,
+  DtSelect,
+  DtIconButton,
+} from '@dt/ui'
 
 import { TWIN_2D_UNIT_RANGE } from '../../scripts/inspectorFields'
 import { freshTwin2dId, orderList } from '../../scripts/nodeOps'
@@ -264,7 +270,7 @@ function writeFit(id: string, next: string): void {
           size="xs"
           variant="ghost"
           intent="neutral"
-          icon="chevron-up"
+          icon="arrow-up"
           :disabled="index === 0"
           aria-label="上移这一层"
           title="上移这一层"
@@ -275,7 +281,7 @@ function writeFit(id: string, next: string): void {
           size="xs"
           variant="ghost"
           intent="neutral"
-          icon="chevron-down"
+          icon="arrow-down"
           :disabled="index === modelValue.length - 1"
           aria-label="下移这一层"
           title="下移这一层"
@@ -465,16 +471,15 @@ function writeFit(id: string, next: string): void {
             @click="removeStop(row.id, stop.id)"
           />
         </div>
-        <DtButton
-          size="xs"
+        <DtIconButton
+          size="sm"
           variant="ghost"
           intent="neutral"
-          icon="plus"
           :data-test="`fill-stop-add-${row.id}`"
+          icon="plus"
+          label="新增色标"
           @click="addStop(row.id)"
-        >
-          新增色标
-        </DtButton>
+        />
       </div>
     </div>
 

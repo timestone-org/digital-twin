@@ -1,7 +1,7 @@
 <script setup lang="ts">
 /** @fileoverview 层级图编辑、对齐与格式导出工具栏。 */
 import { ref } from 'vue'
-import { DtButton, DtSelect } from '@dt/ui'
+import { DtButton, DtSelect, DtIconButton } from '@dt/ui'
 import type { HierarchyEditor } from '../scripts/useHierarchyDocument'
 import type { Alignment } from '../scripts/geometry'
 import type { ExportFormat, NodeKind } from '../scripts/types'
@@ -103,32 +103,35 @@ function drag(event: DragEvent, kind: NodeKind) {
       >
         汇流点
       </DtButton>
-      <DtButton
+      <DtIconButton
         size="sm"
         variant="ghost"
         :disabled="busy || !editor.past.value.length"
+        intent="neutral"
+        icon="undo"
+        label="撤销"
         @click="editor.undo()"
-      >
-        撤销
-      </DtButton>
-      <DtButton
+      />
+      <DtIconButton
         size="sm"
         variant="ghost"
         :disabled="busy || !editor.future.value.length"
+        intent="neutral"
+        icon="redo"
+        label="重做"
         @click="editor.undo(true)"
-      >
-        重做
-      </DtButton>
-      <DtButton
+      />
+      <DtIconButton
         size="sm"
         variant="ghost"
         :disabled="
           busy || (!editor.selectedIds.value.length && !editor.edgeId.value)
         "
+        intent="danger"
+        icon="trash"
+        label="删除选中"
         @click="editor.remove"
-      >
-        删除选中
-      </DtButton>
+      />
       <DtButton
         size="sm"
         variant="outline"
@@ -171,8 +174,14 @@ function drag(event: DragEvent, kind: NodeKind) {
       size="sm"
       class="w-36 shrink-0"
     />
-    <DtButton size="sm" variant="outline" :disabled="busy" @click="exportFile">
-      导出
-    </DtButton>
+    <DtIconButton
+      size="sm"
+      variant="outline"
+      :disabled="busy"
+      intent="neutral"
+      icon="download"
+      label="导出"
+      @click="exportFile"
+    />
   </div>
 </template>

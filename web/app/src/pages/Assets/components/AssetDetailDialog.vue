@@ -11,7 +11,7 @@
  * 11px 的等宽值，看着像标题压脚注（同 `WriteValueDialog` 的写法）。
  * ⚠ 删除的二次确认走全局宿主（`layer="confirm"`，z 比本弹窗高），故可以从这里问。
  */
-import { DtButton, DtInput, DtModal, DtTag } from '@dt/ui'
+import { DtButton, DtInput, DtModal, DtTag, DtIconButton } from '@dt/ui'
 import { computed, ref, watch } from 'vue'
 
 import type { Asset } from '@/api/assets'
@@ -151,21 +151,28 @@ watch(
     </div>
 
     <template #footer>
-      <DtButton variant="ghost" icon="copy" @click="emit('copy')">
-        复制引用
-      </DtButton>
-      <DtButton variant="ghost" icon="download" @click="emit('download')">
-        下载原件
-      </DtButton>
-      <DtButton
+      <DtIconButton
+        variant="ghost"
+        intent="neutral"
+        icon="copy"
+        label="复制引用"
+        @click="emit('copy')"
+      />
+      <DtIconButton
+        variant="ghost"
+        intent="neutral"
+        icon="download"
+        label="下载原件"
+        @click="emit('download')"
+      />
+      <DtIconButton
         v-if="canManage"
         variant="ghost"
         intent="danger"
         icon="trash"
+        label="删除"
         @click="emit('remove')"
-      >
-        删除
-      </DtButton>
+      />
       <DtButton variant="outline" intent="neutral" @click="close">
         关闭
       </DtButton>

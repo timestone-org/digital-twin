@@ -12,7 +12,7 @@
  * 已经没人看的状态。
  */
 import { computed, onUnmounted, ref, watch } from 'vue'
-import { DtButton, DtModal, DtNotice, DtSpinner } from '@dt/ui'
+import { DtButton, DtModal, DtNotice, DtSpinner, DtIconButton } from '@dt/ui'
 
 import { readDocumentPreview, readDocumentRaw } from '@/api/knowledge'
 import type { KnowledgeDocument } from '@/api/knowledge'
@@ -197,15 +197,15 @@ onUnmounted(() => {
     </div>
 
     <template #footer>
-      <DtButton
+      <DtIconButton
         variant="outline"
-        icon="download"
         :disabled="loaded === null"
         :loading="isSaving"
+        intent="neutral"
+        icon="download"
+        label="下载原件"
         @click="save"
-      >
-        下载原件
-      </DtButton>
+      />
       <DtButton variant="ghost" @click="emit('update:modelValue', false)">
         关闭
       </DtButton>

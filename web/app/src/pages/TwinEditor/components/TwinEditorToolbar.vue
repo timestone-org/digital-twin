@@ -6,7 +6,7 @@
  * 工具栏自己不改文档，只把动作抛给页面统一编排。
  */
 import type { TwinNavigationMode } from '@dt/twin-config'
-import { DtButton, DtSegmented, DtTag } from '@dt/ui'
+import { DtButton, DtSegmented, DtTag, DtIconButton } from '@dt/ui'
 import { computed } from 'vue'
 
 const props = defineProps<{
@@ -55,24 +55,24 @@ function onNavigationMode(value: string): void {
 
     <span class="dt-twin-bar__sep" />
 
-    <DtButton
+    <DtIconButton
       size="sm"
       variant="ghost"
       intent="neutral"
       icon="undo"
-      aria-label="撤销"
-      title="撤销"
+      label="撤销"
+      tooltip="撤销"
       data-test="undo"
       :disabled="!canUndo"
       @click="emit('undo')"
     />
-    <DtButton
+    <DtIconButton
       size="sm"
       variant="ghost"
       intent="neutral"
       icon="redo"
-      aria-label="重做"
-      title="重做"
+      label="重做"
+      tooltip="重做"
       data-test="redo"
       :disabled="!canRedo"
       @click="emit('redo')"
@@ -105,16 +105,17 @@ function onNavigationMode(value: string): void {
       >批量配置</DtButton
     >
     <DtTag v-if="isDirty" size="sm" intent="warning">未保存</DtTag>
-    <DtButton
+    <DtIconButton
       size="sm"
-      icon="save"
       data-test="save"
       :loading="isSaving"
       :disabled="!isDirty"
+      variant="solid"
+      intent="primary"
+      icon="save"
+      label="保存"
       @click="emit('save')"
-    >
-      保存
-    </DtButton>
+    />
   </div>
 </template>
 

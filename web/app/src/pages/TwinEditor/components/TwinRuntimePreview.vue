@@ -19,7 +19,7 @@ import {
   type BindingValueReader,
 } from '@dt/runtime'
 import type { TwinConfig } from '@dt/twin-config'
-import { DtButton, DtNotice } from '@dt/ui'
+import { DtButton, DtNotice, DtIconButton } from '@dt/ui'
 import {
   computed,
   ref,
@@ -138,17 +138,16 @@ const sizeLabel = computed(() => {
     class="twin-preview"
     :class="{ 'twin-preview--embedded': embedded }"
   >
-    <DtButton
+    <DtIconButton
       v-if="!open"
       size="sm"
       variant="soft"
       intent="neutral"
-      icon="eye"
       data-test="open-preview"
+      icon="eye"
+      label="运行态预览"
       @click="open = true"
-    >
-      运行态预览
-    </DtButton>
+    />
 
     <div v-else class="twin-preview__panel">
       <header class="twin-preview__bar">

@@ -9,7 +9,7 @@
  */
 import type { AcModel } from '@dt/contracts'
 import { PERMISSION_CODES } from '@dt/contracts'
-import { DtButton, DtTooltip } from '@dt/ui'
+import { DtButton, DtTooltip, DtIconButton } from '@dt/ui'
 
 import PermGuard from '@/components/PermGuard.vue'
 import { isModelBusy } from '@/features/hvac/modelView'
@@ -48,14 +48,14 @@ const emit = defineEmits<{ liveTest: []; retrain: []; remove: [] }>()
       >
         重训
       </DtButton>
-      <DtButton
+      <DtIconButton
         intent="danger"
         variant="ghost"
         size="sm"
+        icon="trash"
+        label="删除"
         @click="emit('remove')"
-      >
-        删除
-      </DtButton>
+      />
     </PermGuard>
   </div>
 </template>

@@ -1,6 +1,6 @@
 <script setup lang="ts">
 /** @fileoverview 视口的常用定位与临时隔离操作。 */
-import { DtButton } from '@dt/ui'
+import { DtButton, DtIconButton } from '@dt/ui'
 defineProps<{ isolated: boolean; canIsolate: boolean; canBack: boolean }>()
 const emit = defineEmits<{
   focus: []
@@ -12,9 +12,14 @@ const emit = defineEmits<{
 </script>
 <template>
   <div class="viewport-tools" role="toolbar" aria-label="模型配置快捷操作">
-    <DtButton size="xs" variant="soft" @click="emit('focus')"
-      >聚焦选中</DtButton
-    >
+    <DtIconButton
+      size="sm"
+      variant="soft"
+      intent="primary"
+      icon="focus"
+      label="聚焦选中"
+      @click="emit('focus')"
+    />
     <DtButton
       size="xs"
       variant="ghost"

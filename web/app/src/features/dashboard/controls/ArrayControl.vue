@@ -10,7 +10,7 @@
  */
 import type { ConfigField } from '@dt/contracts'
 import { configDefaults } from '@dt/modules'
-import { DtButton, DtField, DtNotice } from '@dt/ui'
+import { DtButton, DtField, DtNotice, DtIconButton } from '@dt/ui'
 import { computed } from 'vue'
 
 import { isFieldVisible } from '@/features/dashboard/configForm'
@@ -129,7 +129,7 @@ function moveRow(at: number, delta: -1 | 1): void {
           <DtButton
             size="sm"
             variant="ghost"
-            icon="chevron-up"
+            icon="arrow-up"
             aria-label="上移这一行"
             :disabled="disabled || at === 0"
             @click="moveRow(at, -1)"
@@ -137,7 +137,7 @@ function moveRow(at: number, delta: -1 | 1): void {
           <DtButton
             size="sm"
             variant="ghost"
-            icon="chevron-down"
+            icon="arrow-down"
             aria-label="下移这一行"
             :disabled="disabled || at === rowEntries.length - 1"
             @click="moveRow(at, 1)"
@@ -171,14 +171,14 @@ function moveRow(at: number, delta: -1 | 1): void {
         />
       </DtField>
     </div>
-    <DtButton
+    <DtIconButton
       size="sm"
       variant="outline"
-      icon="plus"
       :disabled="disabled || !canAdd || itemSchema.length === 0"
+      intent="primary"
+      icon="plus"
+      label="新增一行"
       @click="addRow"
-    >
-      新增一行
-    </DtButton>
+    />
   </div>
 </template>

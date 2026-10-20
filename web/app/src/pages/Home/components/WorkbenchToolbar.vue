@@ -4,7 +4,7 @@
  */
 import { computed } from 'vue'
 import { PERMISSION_CODES } from '@dt/contracts'
-import { DtButton, DtIcon, DtInput } from '@dt/ui'
+import { DtButton, DtIcon, DtInput, DtIconButton } from '@dt/ui'
 
 import type { ProjectSummary } from '@/api/dashboardWire'
 import PermGuard from '@/components/PermGuard.vue'
@@ -79,39 +79,39 @@ const summary = computed(() => {
       </DtInput>
 
       <PermGuard :codes="SETTINGS_CODES" mode="any">
-        <DtButton
+        <DtIconButton
           size="sm"
           variant="ghost"
           intent="neutral"
-          icon="settings"
           :disabled="project === null"
           data-test="open-project-settings"
+          icon="settings"
+          label="设置"
           @click="emit('settings')"
-        >
-          设置
-        </DtButton>
+        />
       </PermGuard>
 
       <PermGuard :codes="MANAGE_CODES">
-        <DtButton
+        <DtIconButton
           size="sm"
           variant="soft"
-          icon="upload"
           :disabled="project === null"
           data-test="open-import"
+          intent="primary"
+          icon="upload"
+          label="导入"
           @click="emit('import')"
-        >
-          导入
-        </DtButton>
-        <DtButton
+        />
+        <DtIconButton
           size="sm"
-          icon="plus"
           :disabled="project === null"
           data-test="open-new-dashboard"
+          variant="solid"
+          intent="primary"
+          icon="plus"
+          label="新建大屏"
           @click="emit('create')"
-        >
-          新建大屏
-        </DtButton>
+        />
       </PermGuard>
     </div>
   </header>

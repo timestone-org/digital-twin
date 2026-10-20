@@ -23,6 +23,7 @@ import {
   DtSpinner,
   useConfirm,
   useToast,
+  DtIconButton,
 } from '@dt/ui'
 
 import * as opcua from '@/api/opcua'
@@ -186,14 +187,14 @@ onMounted(() => {
       <div class="mb-3 flex items-center justify-between gap-2">
         <h3 class="m-0 text-sm font-medium">地址空间</h3>
         <PermGuard :codes="[PERMISSION_CODES.opcuaManage]">
-          <DtButton
+          <DtIconButton
             size="sm"
             variant="outline"
+            intent="primary"
             icon="plus"
+            label="新建节点"
             @click="formOpen = true"
-          >
-            新建节点
-          </DtButton>
+          />
         </PermGuard>
       </div>
 

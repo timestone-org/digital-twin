@@ -376,7 +376,7 @@ describe('普通未保存画布离开', () => {
     await flushPromises()
     expect(router.currentRoute.value.path).toBe('/modeling/pipelines/p1')
     expect(wrapper.findAll('.dt-ml-node')).toHaveLength(1)
-    await wrapper.find('button[title="撤销（⌘Z）"]').trigger('click')
+    await wrapper.find('button[aria-label="撤销"]').trigger('click')
     await flushPromises()
     expect(wrapper.findAll('.dt-ml-node')).toHaveLength(0)
     const cleanUnload = new Event('beforeunload', { cancelable: true })

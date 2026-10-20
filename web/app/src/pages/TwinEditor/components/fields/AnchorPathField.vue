@@ -7,7 +7,7 @@
  * 否则用户看到的是「配了一条流，画面上什么都没有」。
  */
 import type { TwinAnchor } from '@dt/twin-config'
-import { DtButton, DtEmpty, DtNotice, DtSelect } from '@dt/ui'
+import { DtButton, DtEmpty, DtNotice, DtSelect, DtIconButton } from '@dt/ui'
 import { computed, ref } from 'vue'
 
 const props = defineProps<{
@@ -117,7 +117,7 @@ function move(index: number, delta: number): void {
         size="xs"
         variant="ghost"
         intent="neutral"
-        icon="chevron-up"
+        icon="arrow-up"
         :disabled="stop.index === 0"
         aria-label="上移路径点"
         title="上移路径点"
@@ -127,7 +127,7 @@ function move(index: number, delta: number): void {
         size="xs"
         variant="ghost"
         intent="neutral"
-        icon="chevron-down"
+        icon="arrow-down"
         :disabled="stop.index === stops.length - 1"
         aria-label="下移路径点"
         title="下移路径点"
@@ -157,9 +157,14 @@ function move(index: number, delta: number): void {
         size="sm"
         @update:model-value="pending = $event"
       />
-      <DtButton variant="soft" size="sm" icon="plus" @click="add"
-        >添加</DtButton
-      >
+      <DtIconButton
+        variant="soft"
+        size="sm"
+        intent="primary"
+        icon="plus"
+        label="添加"
+        @click="add"
+      />
     </div>
 
     <DtNotice v-if="resolved < 2" intent="warning" icon="alert-triangle">

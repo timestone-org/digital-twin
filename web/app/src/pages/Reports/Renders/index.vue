@@ -9,6 +9,7 @@ import {
   DtModal,
   DtNotice,
   DtTag,
+  DtIconButton,
 } from '@dt/ui'
 import type { DtDataColumn, ReportRender } from '@dt/contracts'
 import * as api from '@/api/reports'
@@ -103,14 +104,15 @@ async function download(id: string): Promise<void> {
       <RouterLink to="/reports">
         <DtButton variant="ghost" size="sm" icon="table">报告模板</DtButton>
       </RouterLink>
-      <DtButton
+      <DtIconButton
         size="sm"
-        icon="refresh-cw"
         :loading="loading"
+        variant="solid"
+        intent="primary"
+        icon="refresh-cw"
+        label="刷新"
         @click="reload()"
-      >
-        刷新
-      </DtButton>
+      />
     </template>
     <div class="flex h-full min-h-0 flex-col gap-3">
       <DtDataView
@@ -152,14 +154,15 @@ async function download(id: string): Promise<void> {
         </template>
         <template #cell-actions="{ row }">
           <PermGuard :codes="['report:render']">
-            <DtButton
+            <DtIconButton
               v-if="row.status === 'succeeded' && row.kind === 'render'"
               size="sm"
+              variant="solid"
+              intent="primary"
               icon="download"
+              label="下载 Word"
               @click="download(row.id)"
-            >
-              下载 Word
-            </DtButton>
+            />
           </PermGuard>
         </template>
       </DtDataView>

@@ -9,7 +9,14 @@
 import type { ConfigField } from '@dt/contracts'
 import { getCardPart, getModule, readText } from '@dt/modules'
 import type { GetModuleManifest } from '@dt/runtime'
-import { DtButton, DtNotice, DtSpinner, useConfirm, useToast } from '@dt/ui'
+import {
+  DtButton,
+  DtNotice,
+  DtSpinner,
+  useConfirm,
+  useToast,
+  DtIconButton,
+} from '@dt/ui'
 import { computed, onBeforeUnmount, onMounted, ref, watch } from 'vue'
 import { useRoute, useRouter } from 'vue-router'
 
@@ -220,16 +227,17 @@ useSubEditorRouteGuard(() => page.isDirty.value, {
   >
     <template #actions>
       <DtButton variant="ghost" size="sm" @click="back">回大屏</DtButton>
-      <DtButton
+      <DtIconButton
         size="sm"
-        icon="save"
         :loading="page.saving.value"
         :disabled="!page.isDirty.value"
         data-test="save-card"
+        variant="solid"
+        intent="primary"
+        icon="save"
+        label="保存"
         @click="save"
-      >
-        保存
-      </DtButton>
+      />
     </template>
 
     <div class="flex h-full min-h-0 flex-col gap-2">

@@ -6,7 +6,7 @@
  * 留在这里而不是顶栏。
  */
 import { PERMISSION_CODES } from '@dt/contracts'
-import { DtButton, DtCard, DtTag } from '@dt/ui'
+import { DtCard, DtTag, DtIconButton } from '@dt/ui'
 
 import PermGuard from '@/components/PermGuard.vue'
 import type { RoomEntry } from '../scripts/roomGroups'
@@ -35,14 +35,14 @@ defineEmits<{ create: [] }>()
 
     <template #actions>
       <PermGuard :codes="[PERMISSION_CODES.acManage]">
-        <DtButton
+        <DtIconButton
           intent="primary"
           size="sm"
+          variant="solid"
           icon="plus"
+          label="新建模型"
           @click="$emit('create')"
-        >
-          新建模型
-        </DtButton>
+        />
       </PermGuard>
     </template>
   </DtCard>

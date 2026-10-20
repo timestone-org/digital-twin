@@ -17,7 +17,7 @@ import { getModule } from '@dt/modules'
 import { ModuleRenderer, provideRuntimeData } from '@dt/runtime'
 import { TWIN_2D_CONFIG_KEY } from '@dt/twin2d'
 import type { Twin2dConfig } from '@dt/twin2d'
-import { DtButton, DtNotice } from '@dt/ui'
+import { DtButton, DtNotice, DtIconButton } from '@dt/ui'
 import { computed, ref } from 'vue'
 import type { CSSProperties } from 'vue'
 
@@ -137,17 +137,16 @@ const liveLabel = computed(() => {
 
 <template>
   <div class="twin2d-preview">
-    <DtButton
+    <DtIconButton
       v-if="!open"
       size="sm"
       variant="soft"
       intent="neutral"
-      icon="eye"
       data-test="open-preview"
+      icon="eye"
+      label="运行态预览"
       @click="open = true"
-    >
-      运行态预览
-    </DtButton>
+    />
 
     <div v-else class="twin2d-preview__panel">
       <header class="twin2d-preview__bar">

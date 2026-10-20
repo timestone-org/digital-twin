@@ -15,6 +15,7 @@ import {
   DtNotice,
   useConfirm,
   useToast,
+  DtIconButton,
 } from '@dt/ui'
 
 import type { DashboardPublication } from '@dt/contracts'
@@ -246,9 +247,14 @@ async function copyLink(): Promise<void> {
         >
           重新发布
         </DtButton>
-        <DtButton icon="copy" :disabled="busy || link === ''" @click="copyLink">
-          复制链接
-        </DtButton>
+        <DtIconButton
+          :disabled="busy || link === ''"
+          variant="solid"
+          intent="primary"
+          icon="copy"
+          label="复制链接"
+          @click="copyLink"
+        />
       </template>
       <template v-else>
         <DtButton

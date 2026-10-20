@@ -5,7 +5,7 @@
  * ⚠ 失败的那一条要留在列表里并说出原因：一次挑十个文件、其中一个超限时，
  * 把它悄悄丢掉的话用户只会发现「怎么少了一个」，而没有任何一处说过为什么。
  */
-import { DtButton, DtProgress } from '@dt/ui'
+import { DtButton, DtProgress, DtIconButton } from '@dt/ui'
 import { computed } from 'vue'
 
 import type { UploadJob } from '@/features/assets/assetUploads'
@@ -58,14 +58,15 @@ function statusOf(job: UploadJob): string {
       <DtButton v-if="isBusy" size="sm" variant="ghost" @click="emit('cancel')">
         全部取消
       </DtButton>
-      <DtButton
+      <DtIconButton
         v-else-if="finished > 0"
         size="sm"
         variant="ghost"
+        intent="neutral"
+        icon="close"
+        label="清空"
         @click="emit('clear')"
-      >
-        清空
-      </DtButton>
+      />
     </header>
 
     <ul class="dt-upload-panel__list">

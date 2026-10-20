@@ -8,7 +8,7 @@
  */
 import type { DtDataColumn, DtDataViewMode, DtTableSort } from '@dt/contracts'
 import { PERMISSION_CODES } from '@dt/contracts'
-import { DtButton, DtDataView, DtHelpTip, DtTag } from '@dt/ui'
+import { DtButton, DtDataView, DtHelpTip, DtTag, DtIconButton } from '@dt/ui'
 
 import PermGuard from '@/components/PermGuard.vue'
 import {
@@ -193,14 +193,14 @@ const emit = defineEmits<{
           >
             重训
           </DtButton>
-          <DtButton
+          <DtIconButton
             variant="ghost"
             intent="danger"
             size="sm"
+            icon="trash"
+            label="删除"
             @click="emit('remove', row)"
-          >
-            删除
-          </DtButton>
+          />
         </PermGuard>
       </div>
     </template>

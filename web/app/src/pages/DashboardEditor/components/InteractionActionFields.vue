@@ -13,7 +13,14 @@ import type {
   InteractionAction,
   InteractionNavigateByValueAction,
 } from '@dt/contracts'
-import { DtButton, DtField, DtInput, DtNotice, DtSelect } from '@dt/ui'
+import {
+  DtButton,
+  DtField,
+  DtInput,
+  DtNotice,
+  DtSelect,
+  DtIconButton,
+} from '@dt/ui'
 
 import DashboardRefControl from '@/features/dashboard/controls/DashboardRefControl.vue'
 import { useRowKeys } from '@/features/dashboard/rowKeys'
@@ -177,15 +184,15 @@ function onNavigateTarget(raw: unknown): void {
           @update:targets="onGroupTargets(row.key, $event)"
         />
       </div>
-      <DtButton
+      <DtIconButton
         size="sm"
         variant="outline"
-        icon="plus"
         data-test="ix-group-add"
+        intent="primary"
+        icon="plus"
+        label="添加一组"
         @click="addGroup"
-      >
-        添加一组
-      </DtButton>
+      />
     </template>
     <template v-else-if="action.type === 'openModal'">
       <DtSelect

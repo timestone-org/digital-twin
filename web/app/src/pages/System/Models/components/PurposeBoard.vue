@@ -9,7 +9,7 @@
  */
 import { computed, ref, watch } from 'vue'
 import type { DtSelectOption, LlmProvider, LlmPurpose } from '@dt/contracts'
-import { DtButton, DtSelect, DtTag } from '@dt/ui'
+import { DtButton, DtSelect, DtTag, DtIconButton } from '@dt/ui'
 
 const props = defineProps<{
   purposes: readonly LlmPurpose[]
@@ -219,15 +219,15 @@ function save(purpose: LlmPurpose): void {
           >
             保存
           </DtButton>
-          <DtButton
+          <DtIconButton
             v-if="purpose.provider_id !== null"
             variant="ghost"
             intent="neutral"
             size="sm"
+            icon="close"
+            label="清除"
             @click="emit('clear', purpose.purpose)"
-          >
-            清除
-          </DtButton>
+          />
         </div>
       </div>
     </section>

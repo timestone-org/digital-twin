@@ -43,6 +43,14 @@ function usedIconNames(): { name: string; file: string }[] {
 }
 
 const USED = usedIconNames()
+const BUTTON_TAGS = collectSources(APP_ROOT).flatMap((file) =>
+  Array.from(
+    readFileSync(file, 'utf8').matchAll(
+      /<Dt(?:Icon)?Button\b(?:"[^"]*"|'[^']*'|[^'">])*>/g,
+    ),
+    (match) => ({ file, tag: match[0] }),
+  ),
+)
 
 describe('转发给 DtIcon 的图标名', () => {
   it('确实扫到了（扫不到就等于这条闸没跑）', () => {
@@ -54,5 +62,29 @@ describe('转发给 DtIcon 的图标名', () => {
       (item) => `${item.name} @ ${item.file}`,
     )
     expect(unregistered).toEqual([])
+  })
+
+  it('图标按钮必须显式提供非空中文动作名称', () => {
+    const buttons = BUTTON_TAGS.filter(({ tag }) =>
+      tag.startsWith('<DtIconButton'),
+    )
+    expect(buttons.length).toBeGreaterThan(50)
+    const missing = buttons.filter(({ tag }) => {
+      const label = /(?:^|\s):?label="([^"]*)"/.exec(tag)?.[1]
+      return !label?.trim()
+    })
+    expect(missing).toEqual([])
+  })
+
+  it('上下移动用直箭头，与撤销重做及展开折叠区分', () => {
+    const incorrect = BUTTON_TAGS.filter(({ tag }) => {
+      const label = /(?:aria-label|label)="([^"]+)"/.exec(tag)?.[1]
+      const icon = /(?<![:\w-])icon="([^"]+)"/.exec(tag)?.[1]
+      if (!label || !icon) return false
+      if (label.startsWith('上移')) return icon !== 'arrow-up'
+      if (label.startsWith('下移')) return icon !== 'arrow-down'
+      return false
+    })
+    expect(incorrect).toEqual([])
   })
 })

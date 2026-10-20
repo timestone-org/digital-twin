@@ -20,13 +20,13 @@
 import { computed } from 'vue'
 
 import {
-  DtButton,
   DtCheckbox,
   DtDateTimeInput,
   DtEmpty,
   DtLineChart,
   DtNotice,
   DtSelect,
+  DtIconButton,
 } from '@dt/ui'
 import type { DtSelectOption } from '@dt/contracts'
 import type { DtChartSeries } from '@dt/ui'
@@ -110,15 +110,16 @@ function patchRange(patch: Partial<TrendRangeValue>): void {
           @update:model-value="patchRange({ to: $event })"
         />
         <slot name="options" />
-        <DtButton
+        <DtIconButton
           size="sm"
-          icon="chart-line"
           :loading="loading"
           :disabled="!canQuery"
+          variant="solid"
+          intent="primary"
+          icon="chart-line"
+          label="查询"
           @click="emit('query')"
-        >
-          查询
-        </DtButton>
+        />
       </div>
 
       <p v-if="rangeProblem" class="text-xs text-state-danger" role="alert">
@@ -134,15 +135,15 @@ function patchRange(patch: Partial<TrendRangeValue>): void {
           <span class="text-xs text-text-secondary">
             已选 {{ selected.length }} / {{ MAX_TREND_SERIES }} 条
           </span>
-          <DtButton
+          <DtIconButton
             variant="ghost"
             intent="neutral"
-            size="xs"
+            size="sm"
             :disabled="selected.length === 0"
+            icon="close"
+            label="清空"
             @click="emit('clear')"
-          >
-            清空
-          </DtButton>
+          />
         </div>
 
         <fieldset

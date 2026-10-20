@@ -11,7 +11,7 @@
 import { computed, onMounted, ref } from 'vue'
 import type { LlmProvider } from '@dt/contracts'
 import { PERMISSION_CODES } from '@dt/contracts'
-import { DtButton, DtCard, DtNotice, useConfirm, useToast } from '@dt/ui'
+import { DtCard, DtNotice, useConfirm, useToast, DtIconButton } from '@dt/ui'
 
 import * as llm from '@/api/llmProviders'
 import PermGuard from '@/components/PermGuard.vue'
@@ -132,14 +132,15 @@ onMounted(() => void catalog.reload())
   <AppShell title="模型管理" subtitle="供应商、各用途走哪个模型、订阅账号">
     <template #actions>
       <PermGuard :codes="[PERMISSION_CODES.llmManage]" explain>
-        <DtButton
+        <DtIconButton
           size="sm"
-          icon="plus"
           :disabled="catalog.isDisabled.value"
+          variant="solid"
+          intent="primary"
+          icon="plus"
+          label="新建供应商"
           @click="openCreate"
-        >
-          新建供应商
-        </DtButton>
+        />
       </PermGuard>
     </template>
 

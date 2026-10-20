@@ -11,7 +11,14 @@ import { computed, onMounted, onUnmounted } from 'vue'
 
 import { COLLECT_AGGREGATES } from '@dt/contracts'
 import type { DtSelectOption } from '@dt/contracts'
-import { DtButton, DtIcon, DtInput, DtNotice, DtSelect, DtSwitch } from '@dt/ui'
+import {
+  DtIcon,
+  DtInput,
+  DtNotice,
+  DtSelect,
+  DtSwitch,
+  DtIconButton,
+} from '@dt/ui'
 
 import TrendSurface from '@/components/trend/TrendSurface.vue'
 import { POINT_PICKER_PAGE_SIZE } from '@/composables/usePointPicker'
@@ -132,16 +139,15 @@ onUnmounted(trend.dispose)
           label="只看记录历史的"
           @update:model-value="trend.drawableOnly.value = $event"
         />
-        <DtButton
+        <DtIconButton
           variant="ghost"
           intent="neutral"
-          size="xs"
-          icon="search"
+          size="sm"
           :loading="trend.picker.loading.value"
+          icon="search"
+          label="搜索"
           @click="trend.picker.search()"
-        >
-          搜索
-        </DtButton>
+        />
       </div>
 
       <DtNotice

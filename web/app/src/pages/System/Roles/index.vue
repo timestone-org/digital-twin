@@ -11,7 +11,7 @@
 import { computed, onMounted, ref } from 'vue'
 import type { DtDataColumn, RoleSummary } from '@dt/contracts'
 import { PERMISSION_CODES } from '@dt/contracts'
-import { DtButton, DtDataView, DtTag, useConfirm, useToast } from '@dt/ui'
+import { DtDataView, DtTag, useConfirm, useToast, DtIconButton } from '@dt/ui'
 
 import * as admin from '@/api/admin'
 import PermGuard from '@/components/PermGuard.vue'
@@ -121,7 +121,14 @@ onMounted(() => {
   <AppShell title="角色管理" subtitle="岗位与它持有的权限码">
     <template #actions>
       <PermGuard :codes="[PERMISSION_CODES.roleManage]" explain>
-        <DtButton size="sm" icon="plus" @click="openCreate">新建角色</DtButton>
+        <DtIconButton
+          size="sm"
+          variant="solid"
+          intent="primary"
+          icon="plus"
+          label="新建角色"
+          @click="openCreate"
+        />
       </PermGuard>
     </template>
 

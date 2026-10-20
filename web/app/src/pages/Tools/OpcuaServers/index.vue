@@ -9,7 +9,15 @@ import { computed, onMounted, ref } from 'vue'
 import { RouterLink } from 'vue-router'
 import type { DtDataColumn, OpcuaInstance } from '@dt/contracts'
 import { PERMISSION_CODES } from '@dt/contracts'
-import { DtButton, DtDataView, DtIcon, DtInput, DtNotice, DtTag } from '@dt/ui'
+import {
+  DtButton,
+  DtDataView,
+  DtIcon,
+  DtInput,
+  DtNotice,
+  DtTag,
+  DtIconButton,
+} from '@dt/ui'
 
 import * as opcua from '@/api/opcua'
 import { listEmptyState } from '@/utils/listEmpty'
@@ -74,9 +82,14 @@ onMounted(() => {
     <template #actions>
       <div class="flex items-center gap-2">
         <PermGuard :codes="[PERMISSION_CODES.opcuaManage]" explain>
-          <DtButton size="sm" icon="plus" @click="ops.openCreate">
-            新建实例
-          </DtButton>
+          <DtIconButton
+            size="sm"
+            variant="solid"
+            intent="primary"
+            icon="plus"
+            label="新建实例"
+            @click="ops.openCreate"
+          />
         </PermGuard>
       </div>
     </template>
@@ -117,13 +130,14 @@ onMounted(() => {
           >
             <template #leading><DtIcon name="search" :size="14" /></template>
           </DtInput>
-          <DtButton
+          <DtIconButton
             variant="outline"
             size="sm"
+            intent="neutral"
+            icon="search"
+            label="查询"
             @click="list.reloadFromFirstPage()"
-          >
-            查询
-          </DtButton>
+          />
         </template>
 
         <template #summary>共 {{ list.total.value }} 个实例</template>
@@ -200,17 +214,22 @@ onMounted(() => {
               </DtButton>
             </PermGuard>
             <PermGuard :codes="[PERMISSION_CODES.opcuaManage]">
-              <DtButton size="sm" variant="ghost" @click="ops.openEdit(row)">
-                编辑
-              </DtButton>
-              <DtButton
+              <DtIconButton
+                size="sm"
+                variant="ghost"
+                intent="neutral"
+                icon="pencil"
+                label="编辑"
+                @click="ops.openEdit(row)"
+              />
+              <DtIconButton
                 size="sm"
                 variant="ghost"
                 intent="danger"
+                icon="trash"
+                label="删除"
                 @click="ops.remove(row)"
-              >
-                删除
-              </DtButton>
+              />
             </PermGuard>
           </div>
         </template>

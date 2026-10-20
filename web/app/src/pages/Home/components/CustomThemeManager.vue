@@ -7,7 +7,7 @@
  * 所以删除前要说清「这几张屏会换回默认配色」，而不是问「确定删除吗」。
  */
 import { computed, ref } from 'vue'
-import { DtButton, DtColorInput, DtInput, DtSelect } from '@dt/ui'
+import { DtButton, DtColorInput, DtInput, DtSelect, DtIconButton } from '@dt/ui'
 import type { DtSelectOption, ProjectThemePayload } from '@dt/contracts'
 
 import type {
@@ -80,15 +80,15 @@ function submit(): void {
       <p class="text-xs text-text-secondary">
         自定义主题 {{ props.themes.length }}
       </p>
-      <DtButton
+      <DtIconButton
         variant="ghost"
         size="sm"
-        icon="plus"
         :disabled="busy"
+        intent="primary"
+        icon="plus"
+        label="新建主题"
         @click="startCreate"
-      >
-        新建主题
-      </DtButton>
+      />
     </div>
 
     <div v-if="editingId !== null" class="dt-theme-edit">

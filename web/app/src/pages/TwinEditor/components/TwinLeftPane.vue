@@ -7,7 +7,7 @@
  */
 import type { BindingPayload } from '@dt/contracts'
 import type { ModelAnimationEntry } from '@dt/three-core'
-import { DtButton, DtSelect } from '@dt/ui'
+import { DtSelect, DtIconButton } from '@dt/ui'
 import { computed, ref, watch, nextTick } from 'vue'
 import {
   OUTLINE_KINDS,
@@ -138,7 +138,14 @@ function reveal(): void {
           aria-label="配置状态筛选"
           @update:model-value="pickStatus"
         />
-        <DtButton size="xs" variant="ghost" @click="reveal">定位选中</DtButton>
+        <DtIconButton
+          size="sm"
+          variant="ghost"
+          intent="neutral"
+          icon="focus"
+          label="定位选中"
+          @click="reveal"
+        />
       </div>
     </div>
     <div class="min-h-0 flex-1 overflow-y-auto">

@@ -6,7 +6,7 @@
  * 所以它摆在一个要显式关掉的弹窗里，而不是一条会自己消失的 toast。
  */
 import type { ModelApiKeyMinted } from '@dt/contracts'
-import { DtButton, DtModal, DtNotice, useToast } from '@dt/ui'
+import { DtButton, DtModal, DtNotice, useToast, DtIconButton } from '@dt/ui'
 
 const props = defineProps<{ minted: ModelApiKeyMinted | null }>()
 
@@ -48,7 +48,13 @@ async function copy(): Promise<void> {
     </div>
     <template #footer>
       <DtButton variant="ghost" @click="emit('close')">我已保存</DtButton>
-      <DtButton icon="copy" @click="void copy()">复制</DtButton>
+      <DtIconButton
+        variant="solid"
+        intent="primary"
+        icon="copy"
+        label="复制"
+        @click="void copy()"
+      />
     </template>
   </DtModal>
 </template>

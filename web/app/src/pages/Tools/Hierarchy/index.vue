@@ -9,6 +9,7 @@ import {
   DtInput,
   DtModal,
   DtNotice,
+  DtIconButton,
 } from '@dt/ui'
 import { AppShell } from '@/components/layout'
 import HierarchyCanvas from './components/HierarchyCanvas.vue'
@@ -80,9 +81,15 @@ function onRestore(revision: number) {
           {{ status }}
         </span>
         <template v-if="canEdit">
-          <DtButton size="sm" :disabled="busy" @click="isNewOpen = true">
-            新建项目
-          </DtButton>
+          <DtIconButton
+            size="sm"
+            :disabled="busy"
+            variant="solid"
+            intent="primary"
+            icon="plus"
+            label="新建项目"
+            @click="isNewOpen = true"
+          />
           <DtFilePicker
             label="导入配置"
             accept=".json,.xlsx"
@@ -90,14 +97,15 @@ function onRestore(revision: number) {
             :disabled="busy"
             @select="onImport"
           />
-          <DtButton
+          <DtIconButton
             size="sm"
             variant="outline"
             :disabled="!document || busy"
+            intent="primary"
+            icon="save"
+            label="保存"
             @click="page.safe(saving.flush)"
-          >
-            保存
-          </DtButton>
+          />
         </template>
         <DtButton
           size="sm"
@@ -108,14 +116,15 @@ function onRestore(revision: number) {
           历史版本
         </DtButton>
         <template v-if="canEdit">
-          <DtButton
+          <DtIconButton
             size="sm"
             variant="ghost"
             :disabled="!document || busy"
+            intent="neutral"
+            icon="copy"
+            label="复制"
             @click="page.safe(page.duplicate)"
-          >
-            复制
-          </DtButton>
+          />
           <DtButton
             size="sm"
             variant="ghost"

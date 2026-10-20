@@ -7,7 +7,15 @@
  */
 import type { DtDataColumn, ModelingPipelineSummary } from '@dt/contracts'
 import { PERMISSION_CODES } from '@dt/contracts'
-import { DtButton, DtDataView, DtIcon, DtInput, DtNotice, DtTag } from '@dt/ui'
+import {
+  DtButton,
+  DtDataView,
+  DtIcon,
+  DtInput,
+  DtNotice,
+  DtTag,
+  DtIconButton,
+} from '@dt/ui'
 import { computed, onMounted, ref } from 'vue'
 import { RouterLink } from 'vue-router'
 
@@ -98,9 +106,14 @@ onMounted(() => void list.reload())
         </RouterLink>
       </PermGuard>
       <PermGuard :codes="[PERMISSION_CODES.modelingManage]" explain>
-        <DtButton size="sm" icon="plus" @click="ops.openCreate">
-          新建流水线
-        </DtButton>
+        <DtIconButton
+          size="sm"
+          variant="solid"
+          intent="primary"
+          icon="plus"
+          label="新建流水线"
+          @click="ops.openCreate"
+        />
       </PermGuard>
     </template>
 

@@ -126,9 +126,9 @@ describe('几何与层序', () => {
   it('定位键的文案与无障碍名都说「定位」，档位键不变', () => {
     const button = mountPanel().get('[data-test="order-center"]')
 
-    expect(button.text()).toBe('定位')
+    expect(button.classes()).toContain('dt-btn--icon-only')
     expect(button.attributes('aria-label')).toBe('定位到此节点')
-    expect(button.attributes('title')).toBe('定位到此节点')
+    expect(button.find('.dt-icon').exists()).toBe(true)
   })
 
   it('已经在最上面时置顶与上移置灰，往下的两个照常', () => {
