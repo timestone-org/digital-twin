@@ -19,11 +19,12 @@ import {
   DtSwitch,
   DtTable,
   DtTag,
+  DtIconButton,
 } from '@dt/ui'
 
 import { downloadCsv } from '@/utils/downloadJson'
 import { CSV_COLUMNS, templateCsv } from '../scripts/pointCsv'
-import { importPoints, type ImportOutcome } from '../scripts/pointImport'
+import { importCsvPoints, type CsvImportOutcome } from '../scripts/pointImport'
 import { useCsvPreflight } from '../scripts/useCsvPreflight'
 
 const props = defineProps<{
@@ -49,6 +50,7 @@ const {
   parsed,
   scanError,
   isSkippingExisting,
+  isScanning,
   goodCount,
   errorRows,
   duplicated,
@@ -57,16 +59,20 @@ const {
   isBlocked,
   reset,
   take,
+  cancel,
 } = useCsvPreflight()
 
 const busy = ref(false)
 const progress = ref({ done: 0, total: 0 })
-const outcome = ref<ImportOutcome | null>(null)
+const outcome = ref<CsvImportOutcome | null>(null)
 
 watch(
-  () => props.modelValue,
-  (open) => {
-    if (!open) return
+  () => [props.modelValue, props.sourceId] as const,
+  ([open]) => {
+    if (!open) {
+      cancel()
+      return
+    }
     outcome.value = null
     progress.value = { done: 0, total: 0 }
     void reset(props.sourceId)
@@ -96,16 +102,24 @@ function downloadTemplate(): void {
 
 async function submit(): Promise<void> {
   const items = submittable.value
-  if (busy.value || items.length === 0) return
+  if (
+    busy.value ||
+    isScanning.value ||
+    scanError.value ||
+    isBlocked.value ||
+    items.length === 0
+  )
+    return
   busy.value = true
   progress.value = { done: 0, total: items.length }
   try {
-    outcome.value = await importPoints(
+    outcome.value = await importCsvPoints(
       props.sourceId,
       items,
       (next) => (progress.value = next),
+      isSkippingExisting.value,
     )
-    if (outcome.value.created > 0) emit('imported')
+    if (outcome.value.created > 0 || outcome.value.updated > 0) emit('imported')
   } finally {
     busy.value = false
   }
@@ -121,14 +135,14 @@ async function submit(): Promise<void> {
   >
     <div class="flex flex-col gap-3">
       <div class="flex flex-wrap items-center gap-2">
-        <DtButton
+        <DtIconButton
           variant="outline"
           size="sm"
+          intent="neutral"
           icon="download"
+          label="下载导入模板"
           @click="downloadTemplate"
-        >
-          下载导入模板
-        </DtButton>
+        />
         <DtFilePicker
           accept=".csv,text/csv"
           label="选择 CSV 文件"
@@ -141,12 +155,15 @@ async function submit(): Promise<void> {
 
       <p class="m-0 text-xs text-text-secondary">
         模板是带 BOM 的 UTF-8 CSV，Excel 双击即可打开；改完仍另存为 CSV。
-        必填列：{{ REQUIRED_LABELS }}。
+        必填列：{{ REQUIRED_LABELS }}；新增点位还需名称和寻址串。
+        同一数据源下编码相同的点位会更新已填写的信息，留空保留原值；0
+        和“否”正常更新。
       </p>
 
       <DtNotice v-if="scanError" intent="warning" icon="alert-triangle">
-        取不到已有点位（{{ scanError }}），这次没法预先标出会撞的编码——
-        撞上的那一批会在提交时被整批拒绝。
+        取不到已有点位（{{
+          scanError
+        }}），暂无法完成导入预检，请重新打开弹窗重试。
       </DtNotice>
 
       <DtNotice v-if="parsed?.fatal" intent="danger" icon="alert-circle">
@@ -178,14 +195,15 @@ async function submit(): Promise<void> {
           v-if="conflicting.length > 0"
           v-model="isSkippingExisting"
           label="跳过库里已存在的编码"
+          :disabled="busy"
         />
         <DtNotice
           v-if="conflicting.length > 0 && !isSkippingExisting"
           intent="warning"
           icon="alert-triangle"
         >
-          不跳过的话，含已存编码的那一批会整批被拒——一批
-          {{ COLLECT_POINT_BATCH_MAX }} 条是原子的，同批其它点位也进不去。
+          将按编码更新 {{ conflicting.length }} 个已有点位，空白字段保留原值。
+          点位编码、历史记录和已有绑定保持不变。
         </DtNotice>
 
         <div v-if="errorRows.length > 0" class="max-h-48 overflow-auto">
@@ -212,7 +230,8 @@ async function submit(): Promise<void> {
           :intent="outcome.failures.length > 0 ? 'warning' : 'success'"
           icon="check"
         >
-          已建 {{ outcome.created }} 个点位。
+          已新增 {{ outcome.created }} 个点位，更新
+          {{ outcome.updated }} 个，未改动 {{ outcome.unchanged }} 个。
           <template v-if="outcome.unverified > 0">
             其中 {{ outcome.unverified }} 条寻址串没有被现场确认过（采集侧当时
             没有活会话或超时），它们会照常下发，但是否真读得到要看运行态。
@@ -225,7 +244,7 @@ async function submit(): Promise<void> {
           icon="alert-circle"
         >
           第 {{ failure.batch }} 批（{{ failure.codes.slice(0, 3).join('、')
-          }}{{ failure.codes.length > 3 ? ' 等' : '' }}）没进去：{{
+          }}{{ failure.codes.length > 3 ? ' 等' : '' }}）未保存：{{
             failure.message
           }}
         </DtNotice>
@@ -237,7 +256,9 @@ async function submit(): Promise<void> {
         {{ outcome ? '关闭' : '取消' }}
       </DtButton>
       <DtButton
-        :disabled="isBlocked || submittable.length === 0"
+        :disabled="
+          isBlocked || isScanning || !!scanError || submittable.length === 0
+        "
         :loading="busy"
         @click="submit"
       >
