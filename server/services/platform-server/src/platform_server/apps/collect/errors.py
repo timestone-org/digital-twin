@@ -134,3 +134,11 @@ class HistoryUnavailable(AppError):
     code = 51103
     http_status = 503
     is_retryable = True
+
+
+class PointSearchTimedOut(AppError):
+    """点位查询超过数据库的执行预算。"""
+
+    code = 51104
+    http_status = 503
+    is_retryable = True
