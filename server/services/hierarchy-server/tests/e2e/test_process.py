@@ -33,8 +33,9 @@ def environment(settings: Settings) -> dict[str, str]:
     )
     values["edge_service_key"] = settings.edge_service_key.get_secret_value()
     for name, value in values.items():
-        if value is not None:
-            result[f"HIERARCHY_{name.upper()}"] = str(value)
+        result[f"HIERARCHY_{name.upper()}"] = (
+            "null" if value is None else str(value)
+        )
     return result
 
 

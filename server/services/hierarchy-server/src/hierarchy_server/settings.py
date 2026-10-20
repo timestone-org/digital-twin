@@ -15,7 +15,11 @@ class MigrationSettings(PostgresSettings):
     """迁移连接配置。"""
 
     model_config = SettingsConfigDict(
-        env_prefix="HIERARCHY_", extra="ignore", frozen=True
+        env_prefix="HIERARCHY_",
+        env_file=".env",
+        env_file_encoding="utf-8",
+        extra="ignore",
+        frozen=True,
     )
     postgres_schema: str = DB_SCHEMA
 
@@ -24,7 +28,11 @@ class Settings(AppSettings, PostgresSettings, RedisSettings):
     """冻结的进程配置。"""
 
     model_config = SettingsConfigDict(
-        env_prefix="HIERARCHY_", extra="ignore", frozen=True
+        env_prefix="HIERARCHY_",
+        env_file=".env",
+        env_file_encoding="utf-8",
+        extra="ignore",
+        frozen=True,
     )
     app_name: str = SERVICE_NAME
     app_http_port: int = HTTP_PORT

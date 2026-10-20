@@ -34,6 +34,7 @@ def document() -> HierarchyDocument:
 @pytest.fixture
 def settings() -> Settings:
     return Settings(
+        _env_file=None,
         postgres_host=os.getenv("HIERARCHY_POSTGRES_HOST", "127.0.0.1"),
         postgres_port=int(os.getenv("HIERARCHY_POSTGRES_PORT", "55432")),
         postgres_user=os.getenv("HIERARCHY_POSTGRES_USER", "hierarchy_test"),
