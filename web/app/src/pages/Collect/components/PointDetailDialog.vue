@@ -3,12 +3,12 @@
 import { computed } from 'vue'
 import type { CollectPoint, PointSample } from '@dt/contracts'
 import {
-  DtButton,
   DtField,
   DtLineChart,
   DtModal,
   DtNotice,
   DtSelect,
+  DtIconButton,
 } from '@dt/ui'
 import { formatTimestampMs } from '@/utils/datetime'
 import { HISTORY_WINDOWS, usePointHistory } from '../scripts/usePointHistory'
@@ -92,13 +92,14 @@ const aggregateOptions = [
             :options="aggregateOptions"
             label="统计方式"
           />
-          <DtButton
+          <DtIconButton
             variant="outline"
             :loading="history.loading.value"
+            intent="neutral"
+            icon="refresh-cw"
+            label="刷新历史"
             @click="history.reload"
-          >
-            刷新历史
-          </DtButton>
+          />
         </div>
         <DtNotice v-if="history.error.value" intent="danger">
           {{ history.error.value }}

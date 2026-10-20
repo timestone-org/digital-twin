@@ -18,7 +18,7 @@ import type {
   Twin2dGradientKind,
   Twin2dGradientStop,
 } from '@dt/twin2d'
-import { DtButton, DtNumberInput, DtSelect } from '@dt/ui'
+import { DtButton, DtNumberInput, DtSelect, DtIconButton } from '@dt/ui'
 
 import { TWIN_2D_UNIT_RANGE } from '../../../scripts/inspectorFields'
 import { freshTwin2dId } from '../../../scripts/nodeOps'
@@ -292,16 +292,15 @@ function removeStop(row: Twin2dGradient, stopId: string): void {
         />
       </div>
 
-      <DtButton
-        size="xs"
+      <DtIconButton
+        size="sm"
         variant="ghost"
         intent="neutral"
-        icon="plus"
         :data-test="`grad-stop-add-${row.id}`"
+        icon="plus"
+        label="加一个色标"
         @click="addStop(row)"
-      >
-        加一个色标
-      </DtButton>
+      />
     </div>
 
     <DtButton

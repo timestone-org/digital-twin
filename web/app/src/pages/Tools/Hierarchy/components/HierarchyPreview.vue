@@ -1,7 +1,7 @@
 <script setup lang="ts">
 /** @fileoverview 安全的整图 SVG 预览与缩放。 */
 import { computed, ref, watch } from 'vue'
-import { DtButton } from '@dt/ui'
+import { DtIconButton } from '@dt/ui'
 import { svgBlob } from '../scripts/exportDrawing'
 import type { Drawing } from '../scripts/types'
 const props = defineProps<{ drawing: Drawing }>()
@@ -38,14 +38,31 @@ function zoom(value: number) {
         {{ drawing.rows.length }} 行 · {{ drawing.width }} ×
         {{ drawing.height }} px
       </span>
-      <DtButton size="sm" variant="ghost" @click="fit"> 适应图纸 </DtButton>
-      <DtButton size="sm" variant="ghost" @click="zoom(scale / 1.2)">
-        缩小
-      </DtButton>
+      <DtIconButton
+        size="sm"
+        variant="ghost"
+        intent="neutral"
+        icon="maximize"
+        label="适应图纸"
+        @click="fit"
+      />
+      <DtIconButton
+        size="sm"
+        variant="ghost"
+        intent="neutral"
+        icon="zoom-out"
+        label="缩小"
+        @click="zoom(scale / 1.2)"
+      />
       <span> {{ Math.round(scale * 100) }}% </span>
-      <DtButton size="sm" variant="ghost" @click="zoom(scale * 1.2)">
-        放大
-      </DtButton>
+      <DtIconButton
+        size="sm"
+        variant="ghost"
+        intent="neutral"
+        icon="zoom-in"
+        label="放大"
+        @click="zoom(scale * 1.2)"
+      />
     </div>
     <div
       ref="frame"

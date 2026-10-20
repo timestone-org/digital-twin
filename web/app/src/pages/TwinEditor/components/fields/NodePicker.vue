@@ -8,7 +8,14 @@
  * ⚠ 候选为空不等于「都不存在」，那是「还不知道」（模型没加载），此时不判定缺失。
  */
 import type { DtSelectOption } from '@dt/contracts'
-import { DtButton, DtEmpty, DtIcon, DtInput, DtSelect } from '@dt/ui'
+import {
+  DtButton,
+  DtEmpty,
+  DtIcon,
+  DtInput,
+  DtSelect,
+  DtIconButton,
+} from '@dt/ui'
 import { computed, ref } from 'vue'
 
 const props = defineProps<{
@@ -81,13 +88,15 @@ function remove(name: string): void {
       <span class="text-xs text-text-secondary" aria-live="polite"
         >已选 {{ modelValue.length }} 项</span
       >
-      <DtButton
+      <DtIconButton
         size="sm"
         variant="ghost"
         :disabled="modelValue.length === 0"
+        intent="neutral"
+        icon="close"
+        label="清空已选"
         @click="emit('update:modelValue', [])"
-        >清空已选</DtButton
-      >
+      />
     </div>
     <ul
       v-if="modelValue.length > 0"

@@ -7,7 +7,14 @@ import type {
   CollectSourceCreateInput,
 } from '@dt/contracts'
 import { PERMISSION_CODES } from '@dt/contracts'
-import { DtButton, DtCard, DtEmpty, DtNotice, useToast } from '@dt/ui'
+import {
+  DtButton,
+  DtCard,
+  DtEmpty,
+  DtNotice,
+  useToast,
+  DtIconButton,
+} from '@dt/ui'
 
 import * as collect from '@/api/collect'
 import PermGuard from '@/components/PermGuard.vue'
@@ -110,9 +117,14 @@ const archiveParamsOpen = ref(false)
       </PermGuard>
       <!-- explain：只读账号看不到写入口，这里如实说明原因，免得以为功能没做 -->
       <PermGuard :codes="[PERMISSION_CODES.collectManage]" explain>
-        <DtButton size="sm" icon="plus" @click="ops.openCreate">
-          新增数据源
-        </DtButton>
+        <DtIconButton
+          size="sm"
+          variant="solid"
+          intent="primary"
+          icon="plus"
+          label="新增数据源"
+          @click="ops.openCreate"
+        />
       </PermGuard>
     </template>
 

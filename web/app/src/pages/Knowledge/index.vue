@@ -19,6 +19,7 @@ import {
   DtProgress,
   useConfirm,
   useToast,
+  DtIconButton,
 } from '@dt/ui'
 
 import type { KnowledgeBase, KnowledgeDocument } from '@/api/knowledge'
@@ -136,9 +137,14 @@ async function removeDocument(doc: KnowledgeDocument): Promise<void> {
         />
       </PermGuard>
       <PermGuard :codes="[PERMISSION_CODES.knowledgeManage]">
-        <DtButton size="sm" icon="plus" @click="openCreate">
-          新建知识库
-        </DtButton>
+        <DtIconButton
+          size="sm"
+          variant="solid"
+          intent="primary"
+          icon="plus"
+          label="新建知识库"
+          @click="openCreate"
+        />
       </PermGuard>
     </template>
 

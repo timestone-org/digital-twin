@@ -16,7 +16,7 @@ import type {
   BindingRowLabel,
   BindingSpec,
 } from '@dt/contracts'
-import { DtButton, DtEmpty, DtHelpTip, DtTag } from '@dt/ui'
+import { DtButton, DtEmpty, DtHelpTip, DtTag, DtIconButton } from '@dt/ui'
 import { computed } from 'vue'
 
 import {
@@ -192,15 +192,15 @@ function bindingOf(fieldKey: string): BindingPayload | null {
           <DtTag v-if="section.spec.isRequired" size="sm" intent="warning">
             必绑
           </DtTag>
-          <DtButton
+          <DtIconButton
             v-if="section.spec.isArray && !section.isPinned"
             size="sm"
             variant="outline"
+            intent="primary"
             icon="plus"
+            label="新增一行"
             @click="emit('addRow', section.spec.key)"
-          >
-            新增一行
-          </DtButton>
+          />
         </header>
 
         <DtEmpty

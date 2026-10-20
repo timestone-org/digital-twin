@@ -1,7 +1,15 @@
 <script setup lang="ts">
 /** @fileoverview 指标配置与插入正文，绑定选择取自台账目录。 */
 import { computed, onBeforeUnmount, onMounted, ref, watch } from 'vue'
-import { DtButton, DtCard, DtInput, DtNotice, DtSelect, DtTag } from '@dt/ui'
+import {
+  DtButton,
+  DtCard,
+  DtInput,
+  DtNotice,
+  DtSelect,
+  DtTag,
+  DtIconButton,
+} from '@dt/ui'
 import type {
   DatasetColumn,
   DatasetTableSummary,
@@ -123,16 +131,15 @@ function remove(name: string): void {
         >
           插入
         </DtButton>
-        <DtButton
+        <DtIconButton
           v-if="!disabled"
           size="sm"
           variant="ghost"
           intent="danger"
           icon="trash"
+          label="移除"
           @click="remove(metric.name)"
-        >
-          移除
-        </DtButton>
+        />
       </div>
       <template v-if="!disabled">
         <DtInput v-model="name" label="指标名称" size="sm" />
@@ -167,7 +174,14 @@ function remove(name: string): void {
         <DtNotice v-if="error" intent="danger">
           {{ error }}
         </DtNotice>
-        <DtButton size="sm" icon="plus" @click="add">添加指标</DtButton>
+        <DtIconButton
+          size="sm"
+          variant="solid"
+          intent="primary"
+          icon="plus"
+          label="添加指标"
+          @click="add"
+        />
       </template>
     </div>
   </DtCard>

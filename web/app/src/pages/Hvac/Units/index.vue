@@ -10,12 +10,12 @@ import { computed, onMounted, onUnmounted, ref, watch } from 'vue'
 import type { AcUnit, DtDataColumn } from '@dt/contracts'
 import { PERMISSION_CODES } from '@dt/contracts'
 import {
-  DtButton,
   DtDataView,
   DtNotice,
   DtTag,
   useConfirm,
   useToast,
+  DtIconButton,
 } from '@dt/ui'
 
 import * as hvac from '@/api/hvac'
@@ -157,7 +157,14 @@ onMounted(() => {
   <AppShell title="空调台账" subtitle="全场空调的建档与检索">
     <template #actions>
       <PermGuard :codes="[PERMISSION_CODES.acManage]" explain>
-        <DtButton size="sm" icon="plus" @click="openCreate">新建空调</DtButton>
+        <DtIconButton
+          size="sm"
+          variant="solid"
+          intent="primary"
+          icon="plus"
+          label="新建空调"
+          @click="openCreate"
+        />
       </PermGuard>
     </template>
 

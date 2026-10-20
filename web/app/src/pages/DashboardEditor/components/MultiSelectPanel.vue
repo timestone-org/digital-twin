@@ -8,7 +8,8 @@
  */
 import type { ConfigPreset, DashboardNodePayload } from '@dt/contracts'
 import type { GetModuleManifest } from '@dt/runtime'
-import { DtButton } from '@dt/ui'
+import { DtButton, DtIconButton } from '@dt/ui'
+import type { IconName } from '@dt/ui'
 import { computed } from 'vue'
 
 import {
@@ -40,23 +41,35 @@ const emit = defineEmits<{
   'size-batch': [mode: SizeMatchMode]
 }>()
 
-const ALIGN_ACTIONS: readonly { kind: AlignKind; label: string }[] = [
-  { kind: 'left', label: '左对齐' },
-  { kind: 'hcenter', label: '水平居中' },
-  { kind: 'right', label: '右对齐' },
-  { kind: 'top', label: '顶对齐' },
-  { kind: 'vcenter', label: '垂直居中' },
-  { kind: 'bottom', label: '底对齐' },
+const ALIGN_ACTIONS: readonly {
+  kind: AlignKind
+  label: string
+  icon: IconName
+}[] = [
+  { kind: 'left', label: '左对齐', icon: 'align-left' },
+  { kind: 'hcenter', label: '水平居中', icon: 'align-center-horizontal' },
+  { kind: 'right', label: '右对齐', icon: 'align-right' },
+  { kind: 'top', label: '顶对齐', icon: 'align-top' },
+  { kind: 'vcenter', label: '垂直居中', icon: 'align-center-vertical' },
+  { kind: 'bottom', label: '底对齐', icon: 'align-bottom' },
 ]
 
-const DISTRIBUTE_ACTIONS: readonly { axis: 'x' | 'y'; label: string }[] = [
-  { axis: 'x', label: '水平等间距' },
-  { axis: 'y', label: '垂直等间距' },
+const DISTRIBUTE_ACTIONS: readonly {
+  axis: 'x' | 'y'
+  label: string
+  icon: IconName
+}[] = [
+  { axis: 'x', label: '水平等间距', icon: 'distribute-horizontal' },
+  { axis: 'y', label: '垂直等间距', icon: 'distribute-vertical' },
 ]
 
-const VISIBLE_ACTIONS: readonly { isVisible: boolean; label: string }[] = [
-  { isVisible: true, label: '全部显示' },
-  { isVisible: false, label: '全部隐藏' },
+const VISIBLE_ACTIONS: readonly {
+  isVisible: boolean
+  label: string
+  icon: IconName
+}[] = [
+  { isVisible: true, label: '全部显示', icon: 'eye' },
+  { isVisible: false, label: '全部隐藏', icon: 'eye-off' },
 ]
 
 const SIZE_ACTIONS: readonly { mode: SizeMatchMode; label: string }[] = [
@@ -132,41 +145,41 @@ function forwardPreset(preset: ConfigPreset): void {
 
     <section>
       <h3 class="m-0 mb-2 text-2xs tracking-wide text-text-disabled">对齐</h3>
-      <div class="grid grid-cols-3 gap-1">
-        <DtButton
+      <div class="flex flex-wrap gap-1.5">
+        <DtIconButton
           v-for="item in ALIGN_ACTIONS"
           :key="item.kind"
           size="sm"
           variant="outline"
-          :aria-label="item.label"
-          :title="alignReady ? item.label : `${item.label}：需同层级 ≥2 个节点`"
+          :label="item.label"
+          :tooltip="
+            alignReady ? item.label : `${item.label}：需同层级 ≥2 个节点`
+          "
           :data-test="`multi-align-${item.kind}`"
           :disabled="!alignReady"
+          :icon="item.icon"
           @click="emit('align', item.kind)"
-        >
-          {{ item.label }}
-        </DtButton>
+        />
       </div>
     </section>
 
     <section>
       <h3 class="m-0 mb-2 text-2xs tracking-wide text-text-disabled">分布</h3>
-      <div class="grid grid-cols-2 gap-1">
-        <DtButton
+      <div class="flex flex-wrap gap-1.5">
+        <DtIconButton
           v-for="item in DISTRIBUTE_ACTIONS"
           :key="item.axis"
           size="sm"
           variant="outline"
-          :aria-label="item.label"
-          :title="
+          :label="item.label"
+          :tooltip="
             distributeReady ? item.label : `${item.label}：需同层级 ≥3 个节点`
           "
           :data-test="`multi-distribute-${item.axis}`"
           :disabled="!distributeReady"
+          :icon="item.icon"
           @click="emit('distribute', item.axis)"
-        >
-          {{ item.label }}
-        </DtButton>
+        />
       </div>
     </section>
 
@@ -174,17 +187,17 @@ function forwardPreset(preset: ConfigPreset): void {
       <h3 class="m-0 mb-2 text-2xs tracking-wide text-text-disabled">
         初始显隐
       </h3>
-      <div class="grid grid-cols-2 gap-1">
-        <DtButton
+      <div class="flex flex-wrap gap-1.5">
+        <DtIconButton
           v-for="item in VISIBLE_ACTIONS"
           :key="item.label"
           size="sm"
           variant="outline"
           :data-test="`multi-visible-${item.isVisible ? 'on' : 'off'}`"
+          :label="item.label"
+          :icon="item.icon"
           @click="emit('visible-batch', item.isVisible)"
-        >
-          {{ item.label }}
-        </DtButton>
+        />
       </div>
     </section>
 

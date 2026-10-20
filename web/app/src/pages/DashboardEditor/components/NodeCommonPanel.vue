@@ -12,7 +12,7 @@ import type {
 } from '@dt/contracts'
 import { mergeCardChrome } from '@dt/runtime'
 import {
-  DtButton,
+  DtIconButton,
   DtField,
   DtHelpTip,
   DtInput,
@@ -20,6 +20,7 @@ import {
   DtSwitch,
 } from '@dt/ui'
 import { computed, ref, watch } from 'vue'
+import type { IconName } from '@dt/ui'
 
 import type { ConfigPath } from '@/features/dashboard/configPath'
 import { useCanvasCardDefault } from '@/features/dashboard/editorContext'
@@ -58,15 +59,20 @@ const GEOMETRY_FIELDS: readonly { key: keyof NodeGeometry; label: string }[] = [
   { key: 'h', label: '高 (px)' },
 ]
 
-type OrderAction = { key: OrderKind; label: string; hint?: string }
+type OrderAction = {
+  key: OrderKind
+  label: string
+  icon: IconName
+  hint?: string
+}
 
 // center 是「视口滚动定位到节点」，不动节点几何，文案与提示都按定位说
 const ORDER_ACTIONS: readonly OrderAction[] = [
-  { key: 'front', label: '置顶' },
-  { key: 'forward', label: '上移一层' },
-  { key: 'backward', label: '下移一层' },
-  { key: 'back', label: '置底' },
-  { key: 'center', label: '定位', hint: '定位到此节点' },
+  { key: 'front', label: '置顶', icon: 'arrow-up-to-line' },
+  { key: 'forward', label: '上移一层', icon: 'arrow-up' },
+  { key: 'backward', label: '下移一层', icon: 'arrow-down' },
+  { key: 'back', label: '置底', icon: 'arrow-down-to-line' },
+  { key: 'center', label: '定位', icon: 'focus', hint: '定位到此节点' },
 ]
 
 /** 钉位节点（页头 / 页脚）横向锁死，只许改高；钉住的那条边由动作层重新算回去。 */
@@ -219,20 +225,19 @@ function writeCardStyle(next: CardChrome): void {
         </span>
       </div>
       <div class="flex flex-wrap gap-1.5">
-        <DtButton
+        <DtIconButton
           v-for="action in ORDER_ACTIONS"
           :key="action.key"
           size="sm"
           variant="outline"
           intent="neutral"
-          :title="action.hint"
-          :aria-label="action.hint"
+          :tooltip="action.hint ?? action.label"
+          :label="action.hint ?? action.label"
+          :icon="action.icon"
           :data-test="`order-${action.key}`"
           :disabled="isOrderDisabled(action.key)"
           @click="emit('order', action.key)"
-        >
-          {{ action.label }}
-        </DtButton>
+        />
       </div>
     </section>
 

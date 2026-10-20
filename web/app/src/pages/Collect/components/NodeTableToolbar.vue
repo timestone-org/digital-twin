@@ -4,7 +4,7 @@
  * 全部动作冒泡给点位表，本组件不发请求。
  */
 import { PERMISSION_CODES } from '@dt/contracts'
-import { DtButton, DtIcon, DtInput } from '@dt/ui'
+import { DtButton, DtIcon, DtInput, DtIconButton } from '@dt/ui'
 
 import PermGuard from '@/components/PermGuard.vue'
 
@@ -35,9 +35,14 @@ defineEmits<{
   >
     <template #leading><DtIcon name="search" :size="14" /></template>
   </DtInput>
-  <DtButton variant="outline" size="sm" @click="$emit('search')">
-    查询
-  </DtButton>
+  <DtIconButton
+    variant="outline"
+    size="sm"
+    intent="neutral"
+    icon="search"
+    label="查询"
+    @click="$emit('search')"
+  />
   <PermGuard :codes="[PERMISSION_CODES.collectManage]">
     <DtButton
       v-if="hasRows"
@@ -47,9 +52,14 @@ defineEmits<{
     >
       全选本页
     </DtButton>
-    <DtButton size="sm" icon="plus" @click="$emit('create')">
-      新建点位
-    </DtButton>
+    <DtIconButton
+      size="sm"
+      variant="solid"
+      intent="primary"
+      icon="plus"
+      label="新建点位"
+      @click="$emit('create')"
+    />
     <DtButton
       variant="outline"
       size="sm"
@@ -59,13 +69,13 @@ defineEmits<{
       批量导入
     </DtButton>
   </PermGuard>
-  <DtButton
+  <DtIconButton
     variant="outline"
     size="sm"
-    icon="download"
     :loading="exporting"
+    intent="neutral"
+    icon="download"
+    label="导出 CSV"
     @click="$emit('exportCsv')"
-  >
-    导出 CSV
-  </DtButton>
+  />
 </template>

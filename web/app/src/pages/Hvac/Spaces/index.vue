@@ -9,7 +9,7 @@
 import { computed, onMounted, ref } from 'vue'
 import type { AcUnit, DtSelectOption, Room, Workshop } from '@dt/contracts'
 import { PERMISSION_CODES } from '@dt/contracts'
-import { DtButton, DtEmpty, DtNotice, useConfirm, useToast } from '@dt/ui'
+import { DtEmpty, DtNotice, useConfirm, useToast, DtIconButton } from '@dt/ui'
 
 import * as hvac from '@/api/hvac'
 import PermGuard from '@/components/PermGuard.vue'
@@ -165,19 +165,20 @@ onMounted(() => {
   >
     <template #actions>
       <PermGuard :codes="[PERMISSION_CODES.acManage]" explain>
-        <DtButton
+        <DtIconButton
           size="sm"
-          icon="plus"
           :disabled="board.workshopId.value === ''"
+          variant="solid"
+          intent="primary"
+          icon="plus"
+          label="新建房间"
           @click="
             openTask({
               kind: 'room-create',
               workshopId: board.workshopId.value,
             })
           "
-        >
-          新建房间
-        </DtButton>
+        />
       </PermGuard>
     </template>
 

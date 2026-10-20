@@ -17,7 +17,7 @@ import type {
   UserListItem,
 } from '@dt/contracts'
 import { PERMISSION_CODES } from '@dt/contracts'
-import { DtButton, DtDataView, DtTag, useConfirm, useToast } from '@dt/ui'
+import { DtDataView, DtTag, useConfirm, useToast, DtIconButton } from '@dt/ui'
 
 import * as admin from '@/api/admin'
 import { listEmptyState } from '@/utils/listEmpty'
@@ -165,7 +165,14 @@ onMounted(async () => {
   <AppShell title="用户管理" subtitle="账号、角色与直权">
     <template #actions>
       <PermGuard :codes="[PERMISSION_CODES.userManage]" explain>
-        <DtButton size="sm" icon="plus" @click="openCreate">新建用户</DtButton>
+        <DtIconButton
+          size="sm"
+          variant="solid"
+          intent="primary"
+          icon="plus"
+          label="新建用户"
+          @click="openCreate"
+        />
       </PermGuard>
     </template>
 

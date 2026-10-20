@@ -20,7 +20,7 @@
  */
 import { TWIN_2D_PRIM_KINDS } from '@dt/twin2d'
 import type { Twin2dConfig, Twin2dNodeStyle, Twin2dPrimKind } from '@dt/twin2d'
-import { DtButton, DtEmpty, DtIcon, DtNotice } from '@dt/ui'
+import { DtButton, DtEmpty, DtIcon, DtNotice, DtIconButton } from '@dt/ui'
 import { computed, ref } from 'vue'
 
 import type { Twin2dOrderMove } from '../../scripts/nodeOps'
@@ -377,17 +377,17 @@ const ROW_ACTIONS: readonly Twin2dRowAction[] = [
       <span class="mr-auto text-3xs text-text-disabled" data-test="prim-add-at">
         {{ addBlocked === '' ? addAt.hint : addBlocked }}
       </span>
-      <DtButton
-        size="xs"
+      <DtIconButton
+        size="sm"
         variant="ghost"
         intent="neutral"
         :disabled="selected === ''"
-        title="把选中那一枚（连子树）打进剪贴板，⌘C 同效"
+        tooltip="把选中那一枚（连子树）打进剪贴板，⌘C 同效"
         data-test="prim-clip-copy"
+        icon="copy"
+        label="复制"
         @click="emit('copy')"
-      >
-        复制
-      </DtButton>
+      />
       <DtButton
         size="xs"
         variant="ghost"

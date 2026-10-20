@@ -10,6 +10,7 @@ import {
   DtNotice,
   DtProgress,
   DtTag,
+  DtIconButton,
 } from '@dt/ui'
 import PermGuard from '@/components/PermGuard.vue'
 import {
@@ -198,14 +199,15 @@ const status = computed(() =>
         >
           关闭
         </DtButton>
-        <DtButton
+        <DtIconButton
           variant="outline"
           :disabled="task.loading.value || task.busy.value"
           data-test="backfill-refresh"
+          intent="neutral"
+          icon="refresh-cw"
+          label="刷新进度"
           @click="task.refresh()"
-        >
-          刷新进度
-        </DtButton>
+        />
         <PermGuard :codes="[PERMISSION_CODES.datasetBackfill]">
           <DtButton
             v-if="task.job.value?.status === 'running'"

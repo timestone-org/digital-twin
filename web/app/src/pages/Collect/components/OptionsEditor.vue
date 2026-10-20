@@ -8,7 +8,7 @@
  * 只会看到「参数不合法」而不知道是哪一行。
  */
 import { computed, ref, watch } from 'vue'
-import { DtButton, DtEmpty, DtIcon, DtInput } from '@dt/ui'
+import { DtButton, DtEmpty, DtIcon, DtInput, DtIconButton } from '@dt/ui'
 
 const props = defineProps<{ modelValue: Record<string, string> }>()
 const emit = defineEmits<{
@@ -93,9 +93,14 @@ const isEmpty = computed(() => rows.value.length === 0)
       </DtButton>
     </div>
     <div>
-      <DtButton variant="outline" size="sm" icon="plus" @click="add">
-        添加参数
-      </DtButton>
+      <DtIconButton
+        variant="outline"
+        size="sm"
+        intent="primary"
+        icon="plus"
+        label="添加参数"
+        @click="add"
+      />
     </div>
   </div>
 </template>

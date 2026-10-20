@@ -27,6 +27,7 @@ import {
   DtSwitch,
   DtTag,
   DtTextarea,
+  DtIconButton,
 } from '@dt/ui'
 
 import * as llm from '@/api/llmProviders'
@@ -353,9 +354,14 @@ async function onSubmit(): Promise<void> {
       <section class="flex flex-col gap-2">
         <div class="flex items-center justify-between">
           <span class="text-sm text-text-title">登记的模型</span>
-          <DtButton variant="ghost" size="xs" icon="plus" @click="addRow">
-            加一行
-          </DtButton>
+          <DtIconButton
+            variant="ghost"
+            size="sm"
+            intent="primary"
+            icon="plus"
+            label="加一行"
+            @click="addRow"
+          />
         </div>
         <p
           v-if="form.models.length === 0"

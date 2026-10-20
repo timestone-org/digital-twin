@@ -6,7 +6,15 @@
 import { computed } from 'vue'
 import type { CollectProtocol, CollectSource } from '@dt/contracts'
 import { PERMISSION_CODES } from '@dt/contracts'
-import { DtButton, DtCard, DtEmpty, DtInput, DtSkeleton, DtTag } from '@dt/ui'
+import {
+  DtButton,
+  DtCard,
+  DtEmpty,
+  DtInput,
+  DtSkeleton,
+  DtTag,
+  DtIconButton,
+} from '@dt/ui'
 
 import PermGuard from '@/components/PermGuard.vue'
 import { protocolLabel } from '@/features/collect/protocols'
@@ -70,9 +78,14 @@ const nextDisabled = computed(
         @update:model-value="$emit('update:keyword', $event)"
         @enter="$emit('search')"
       />
-      <DtButton variant="outline" size="sm" @click="$emit('search')">
-        查找
-      </DtButton>
+      <DtIconButton
+        variant="outline"
+        size="sm"
+        intent="neutral"
+        icon="search"
+        label="查找"
+        @click="$emit('search')"
+      />
     </div>
     <div class="relative min-h-0 flex-1">
       <div class="absolute inset-0 overflow-y-auto">
@@ -99,9 +112,14 @@ const nextDisabled = computed(
           :hint="isFiltered ? '请调整搜索关键词。' : emptyHint"
         >
           <PermGuard :codes="[PERMISSION_CODES.collectManage]">
-            <DtButton size="sm" icon="plus" @click="$emit('create')">
-              新增数据源
-            </DtButton>
+            <DtIconButton
+              size="sm"
+              variant="solid"
+              intent="primary"
+              icon="plus"
+              label="新增数据源"
+              @click="$emit('create')"
+            />
           </PermGuard>
         </DtEmpty>
         <!-- 列表 -->

@@ -17,6 +17,7 @@ import {
   DtPageState,
   DtTag,
   useToast,
+  DtIconButton,
 } from '@dt/ui'
 import { computed, onBeforeUnmount, onMounted, ref, watch } from 'vue'
 import { useRoute, useRouter } from 'vue-router'
@@ -251,16 +252,15 @@ watch(
       >
         回到编辑
       </DtButton>
-      <DtButton
-        class="dt-ml-page__terse"
+      <DtIconButton
         variant="ghost"
         size="sm"
+        tooltip="快捷键与手势"
+        intent="neutral"
         icon="keyboard"
-        title="快捷键与手势"
+        label="快捷键"
         @click="isKeysOpen = true"
-      >
-        快捷键
-      </DtButton>
+      />
       <DtButton
         class="dt-ml-page__terse"
         variant="ghost"
@@ -273,44 +273,44 @@ watch(
         运行历史
       </DtButton>
       <PermGuard :codes="[PERMISSION_CODES.modelingManage]">
-        <DtButton
+        <DtIconButton
           class="dt-ml-page__terse"
           variant="ghost"
           size="sm"
-          icon="undo"
-          title="撤销（⌘Z）"
+          tooltip="撤销（⌘Z）"
           :disabled="isReadonly || !page.graph.canUndo.value"
+          intent="neutral"
+          icon="undo"
+          label="撤销"
           @click="page.graph.undo()"
-        >
-          撤销
-        </DtButton>
-        <DtButton
+        />
+        <DtIconButton
           class="dt-ml-page__terse"
           variant="ghost"
           size="sm"
-          icon="redo"
-          title="重做（⌘⇧Z）"
+          tooltip="重做（⌘⇧Z）"
           :disabled="isReadonly || !page.graph.canRedo.value"
+          intent="neutral"
+          icon="redo"
+          label="重做"
           @click="page.graph.redo()"
-        >
-          重做
-        </DtButton>
-        <DtButton
+        />
+        <DtIconButton
           class="dt-ml-page__terse"
           variant="ghost"
           size="sm"
-          icon="save"
-          title="保存"
+          tooltip="保存"
           :disabled="
             isReadonly ||
             !page.graph.isDirty.value ||
             saving.isPreparingRun.value
           "
           :loading="page.doc.isSaving.value"
+          intent="primary"
+          icon="save"
+          label="保存"
           @click="void saving.save()"
-        >
-          保存
-        </DtButton>
+        />
       </PermGuard>
       <PermGuard :codes="[PERMISSION_CODES.modelingRun]" explain>
         <RunControls

@@ -12,13 +12,13 @@ import { computed, onMounted, ref } from 'vue'
 import type { DtDataColumn, RouteRule } from '@dt/contracts'
 import { PERMISSION_CODES } from '@dt/contracts'
 import {
-  DtButton,
   DtDataView,
   DtIcon,
   DtInput,
   DtNotice,
   useConfirm,
   useToast,
+  DtIconButton,
 } from '@dt/ui'
 
 import * as admin from '@/api/admin'
@@ -141,9 +141,14 @@ onMounted(() => {
         <!-- 试算不改数据，故不套 PermGuard：能看这张表的人就该能试 -->
         <RuleMatcher :rules="list.items.value" />
         <PermGuard :codes="[PERMISSION_CODES.routeRuleManage]" explain>
-          <DtButton size="sm" icon="plus" @click="openCreate">
-            新增规则
-          </DtButton>
+          <DtIconButton
+            size="sm"
+            variant="solid"
+            intent="primary"
+            icon="plus"
+            label="新增规则"
+            @click="openCreate"
+          />
         </PermGuard>
       </div>
     </template>
@@ -183,13 +188,14 @@ onMounted(() => {
           >
             <template #leading><DtIcon name="search" :size="14" /></template>
           </DtInput>
-          <DtButton
+          <DtIconButton
             variant="outline"
             size="sm"
+            intent="neutral"
+            icon="search"
+            label="查询"
             @click="list.reloadFromFirstPage()"
-          >
-            查询
-          </DtButton>
+          />
         </template>
 
         <template #summary>共 {{ list.total.value }} 条</template>

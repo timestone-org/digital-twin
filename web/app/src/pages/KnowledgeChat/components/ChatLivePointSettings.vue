@@ -1,6 +1,6 @@
 <script setup lang="ts">
 /** @fileoverview 实时卡片的小数位与采样信息设置浮层。 */
-import { DtButton, DtNumberInput, DtPopover } from '@dt/ui'
+import { DtNumberInput, DtPopover, DtIconButton } from '@dt/ui'
 import { protocolLabel } from '@/features/collect/protocols'
 
 defineProps<{
@@ -15,15 +15,16 @@ const decimals = defineModel<number | undefined>()
 <template>
   <DtPopover align="end" panel-label="数值卡片设置">
     <template #default="{ toggle, isOpen, panelId }">
-      <DtButton
+      <DtIconButton
         variant="ghost"
-        size="xs"
-        aria-label="数值卡片设置"
+        size="sm"
         :aria-expanded="isOpen"
         :aria-controls="panelId"
+        intent="neutral"
+        icon="settings"
+        label="数值卡片设置"
         @click="toggle"
-        >设置</DtButton
-      >
+      />
     </template>
     <template #content>
       <div class="chat-live-point__settings">

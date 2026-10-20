@@ -12,7 +12,7 @@ import type {
 } from '@dt/contracts'
 import type { GetModuleManifest } from '@dt/runtime'
 import { reconcileSetActiveGroups } from '@dt/runtime'
-import { DtButton, DtEmpty } from '@dt/ui'
+import { DtEmpty, DtIconButton } from '@dt/ui'
 
 import { newClientUuid } from '@/api/idempotency'
 import InteractionRuleCard from './InteractionRuleCard.vue'
@@ -172,16 +172,16 @@ function removeRule(id: string): void {
         @update="updateRule"
         @remove="removeRule"
       />
-      <DtButton
+      <DtIconButton
         v-if="canAdd"
         size="sm"
         variant="outline"
-        icon="plus"
         data-test="ix-add"
+        intent="primary"
+        icon="plus"
+        label="新增规则"
         @click="addRule"
-      >
-        新增规则
-      </DtButton>
+      />
     </template>
   </div>
 </template>

@@ -49,7 +49,7 @@ const emit = defineEmits<{
         <DtButton
           variant="ghost"
           size="xs"
-          icon="undo"
+          icon="arrow-up"
           aria-label="上移"
           :disabled="index === 0"
           @click="emit('movePart', index, -1)"
@@ -57,7 +57,7 @@ const emit = defineEmits<{
         <DtButton
           variant="ghost"
           size="xs"
-          icon="redo"
+          icon="arrow-down"
           aria-label="下移"
           :disabled="index === parts.length - 1"
           @click="emit('movePart', index, 1)"

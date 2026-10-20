@@ -6,7 +6,7 @@
  */
 import { computed } from 'vue'
 import type { InteractionNavigateByValueAction } from '@dt/contracts'
-import { DtButton, DtField, DtInput } from '@dt/ui'
+import { DtButton, DtField, DtInput, DtIconButton } from '@dt/ui'
 
 import DashboardRefControl from '@/features/dashboard/controls/DashboardRefControl.vue'
 import { useRowKeys } from '@/features/dashboard/rowKeys'
@@ -121,13 +121,13 @@ function onTarget(key: string, raw: unknown): void {
       {{ row.warning }}
     </p>
   </div>
-  <DtButton
+  <DtIconButton
     size="sm"
     variant="outline"
-    icon="plus"
     data-test="ix-route-add"
+    intent="primary"
+    icon="plus"
+    label="添加一条"
     @click="add"
-  >
-    添加一条
-  </DtButton>
+  />
 </template>

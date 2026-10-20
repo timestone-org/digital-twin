@@ -15,7 +15,13 @@
  */
 import { TWIN_2D_EXPR_KINDS, TWIN_2D_MAX_EXPR_DEPTH } from '@dt/twin2d'
 import type { Twin2dExpr, Twin2dExprKind } from '@dt/twin2d'
-import { DtButton, DtInput, DtNumberInput, DtSelect } from '@dt/ui'
+import {
+  DtButton,
+  DtInput,
+  DtNumberInput,
+  DtSelect,
+  DtIconButton,
+} from '@dt/ui'
 import { computed } from 'vue'
 
 type RatioExpr = Extract<Twin2dExpr, { kind: 'ratio' }>
@@ -385,17 +391,16 @@ function writeSep(sep: string): void {
         />
       </div>
 
-      <DtButton
+      <DtIconButton
         v-if="args.length > 0"
-        size="xs"
+        size="sm"
         variant="ghost"
         intent="neutral"
-        icon="plus"
         data-test="expr-arg-add"
+        icon="plus"
+        label="加一项"
         @click="addArg"
-      >
-        加一项
-      </DtButton>
+      />
 
       <DtInput
         v-if="joinSep !== null"

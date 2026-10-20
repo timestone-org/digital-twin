@@ -10,7 +10,7 @@
  * 而要改的是这一格（docs/DATASET_DESIGN.md §5.11）。所以提示写在这里。
  */
 import type { DtSelectOption } from '@dt/contracts'
-import { DtButton, DtInput, DtNotice, DtSelect } from '@dt/ui'
+import { DtButton, DtInput, DtNotice, DtSelect, DtIconButton } from '@dt/ui'
 
 import {
   PARAM_HINT_MAX,
@@ -70,16 +70,15 @@ function remove(rowId: string): void {
       <span class="text-xs text-text-secondary">
         形参 · 公式体里写作 {形参名}，调用时按顺序填
       </span>
-      <DtButton
+      <DtIconButton
         variant="ghost"
         intent="neutral"
         size="sm"
-        icon="plus"
         :disabled="props.disabled || props.params.length >= PARAMS_MAX"
+        icon="plus"
+        label="加一个"
         @click="emit('add')"
-      >
-        加一个
-      </DtButton>
+      />
     </div>
 
     <p v-if="props.params.length === 0" class="text-xs text-text-secondary">

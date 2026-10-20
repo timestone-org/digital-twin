@@ -9,7 +9,7 @@
  * 占着顶栏最贵的横向空间。
  */
 import type { DtSegmentedOption, DtSelectOption } from '@dt/contracts'
-import { DtButton, DtSegmented, DtSelect, DtTag } from '@dt/ui'
+import { DtButton, DtSegmented, DtSelect, DtTag, DtIconButton } from '@dt/ui'
 import { computed } from 'vue'
 
 import { SNAP_STEP_PRESETS } from '@/features/dashboard/canvasSnap'
@@ -81,22 +81,22 @@ function pickStep(value: string): void {
 <template>
   <div class="dt-toolbar" role="toolbar" aria-label="编辑器工具条">
     <div class="dt-toolbar__group">
-      <DtButton
+      <DtIconButton
         size="sm"
         variant="ghost"
         icon="undo"
-        aria-label="撤销"
-        title="撤销"
+        label="撤销"
+        tooltip="撤销"
         data-test="undo"
         :disabled="!canUndo"
         @click="emit('undo')"
       />
-      <DtButton
+      <DtIconButton
         size="sm"
         variant="ghost"
         icon="redo"
-        aria-label="重做"
-        title="重做"
+        label="重做"
+        tooltip="重做"
         data-test="redo"
         :disabled="!canRedo"
         @click="emit('redo')"
@@ -104,12 +104,12 @@ function pickStep(value: string): void {
     </div>
 
     <div class="dt-toolbar__group">
-      <DtButton
+      <DtIconButton
         size="sm"
         :pressed="snap.enabled"
         icon="magnet"
-        aria-label="吸附总开关"
-        title="吸附总开关"
+        label="吸附总开关"
+        tooltip="吸附总开关"
         data-test="snap-enabled"
         @click="emit('set-snap', { enabled: !snap.enabled })"
       />
@@ -130,23 +130,23 @@ function pickStep(value: string): void {
         :disabled="snap.mode !== 'px'"
         @update:model-value="pickStep"
       />
-      <DtButton
+      <DtIconButton
         size="sm"
         :pressed="snap.guides"
         icon="guides"
-        aria-label="智能参考线"
-        title="智能参考线"
+        label="智能参考线"
+        tooltip="智能参考线"
         data-test="snap-guides"
         @click="emit('set-snap', { guides: !snap.guides })"
       />
       <!-- 整理与吸附同类：都是「让东西摆整齐」，且都不要求先选中什么 -->
-      <DtButton
+      <DtIconButton
         size="sm"
         variant="ghost"
         intent="neutral"
         icon="layout-grid"
-        aria-label="整理布局"
-        title="整理布局：消重叠并钳回边界"
+        label="整理布局"
+        tooltip="整理布局：消重叠并钳回边界"
         data-test="tidy"
         @click="emit('tidy')"
       />
@@ -165,23 +165,23 @@ function pickStep(value: string): void {
         :display="{ searchable: false }"
         @update:model-value="pickZoom"
       />
-      <DtButton
+      <DtIconButton
         size="sm"
         variant="ghost"
         intent="neutral"
         icon="play"
-        aria-label="预览"
-        title="预览"
+        label="预览"
+        tooltip="预览"
         data-test="preview"
         @click="emit('preview')"
       />
-      <DtButton
+      <DtIconButton
         size="sm"
         variant="ghost"
         intent="neutral"
         icon="keyboard"
-        aria-label="快捷键帮助"
-        title="快捷键帮助"
+        label="快捷键帮助"
+        tooltip="快捷键帮助"
         data-test="help"
         @click="emit('help')"
       />
@@ -189,13 +189,13 @@ function pickStep(value: string): void {
 
     <!-- 文件组：出入与落盘。保存是全条唯一的实心键，它是这里的终点 -->
     <div class="dt-toolbar__group">
-      <DtButton
+      <DtIconButton
         size="sm"
         variant="ghost"
         intent="neutral"
         icon="download"
-        aria-label="导出 JSON"
-        title="导出 JSON"
+        label="导出 JSON"
+        tooltip="导出 JSON"
         data-test="export"
         @click="emit('export')"
       />
@@ -210,16 +210,17 @@ function pickStep(value: string): void {
       >
         重新加载
       </DtButton>
-      <DtButton
+      <DtIconButton
         size="sm"
-        icon="check"
         data-test="save"
         :loading="saving"
         :disabled="hasConflict || !isDirty"
+        variant="solid"
+        intent="primary"
+        icon="save"
+        label="保存"
         @click="emit('save')"
-      >
-        保存
-      </DtButton>
+      />
     </div>
   </div>
 </template>

@@ -9,7 +9,7 @@
  */
 import { computed, ref } from 'vue'
 import type { DtMenuItem } from '@dt/contracts'
-import { DtButton, DtCard, DtDropdownMenu, DtSpinner, DtTag } from '@dt/ui'
+import { DtCard, DtDropdownMenu, DtSpinner, DtTag, DtIconButton } from '@dt/ui'
 
 import type { DashboardSummary } from '@/api/dashboardWire'
 import { useAuthStore } from '@/stores/auth'
@@ -130,24 +130,25 @@ function onCardClick(event: MouseEvent): void {
         v-if="!isRenaming"
         class="absolute inset-0 flex items-center justify-center gap-2 bg-surface-overlay/70 opacity-0 transition-opacity group-focus-within:opacity-100 group-hover:opacity-100"
       >
-        <DtButton
+        <DtIconButton
           size="sm"
           variant="soft"
-          icon="play"
           data-test="card-preview"
+          intent="primary"
+          icon="eye"
+          label="预览"
           @click="emit('preview')"
-        >
-          预览
-        </DtButton>
-        <DtButton
+        />
+        <DtIconButton
           v-if="canEdit"
           size="sm"
-          icon="pencil"
           data-test="card-edit"
+          variant="solid"
+          intent="primary"
+          icon="pencil"
+          label="编辑"
           @click="emit('edit')"
-        >
-          编辑
-        </DtButton>
+        />
       </div>
 
       <!-- 比例角标：缩略图一律 16:9 铺，光看图分不出这张屏是按什么尺寸画的 -->

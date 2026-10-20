@@ -25,7 +25,7 @@ import type {
   Twin2dPrim,
   Twin2dVariant,
 } from '@dt/twin2d'
-import { DtButton, DtEmpty } from '@dt/ui'
+import { DtButton, DtEmpty, DtIconButton } from '@dt/ui'
 import { computed } from 'vue'
 
 import type { Twin2dStyleFocus } from '../../scripts/editorSelection'
@@ -225,16 +225,15 @@ function onMerge(next: Twin2dConfig, key: string): void {
             @blur="onEndMerge"
           />
           <div class="flex items-center gap-1">
-            <DtButton
-              size="xs"
+            <DtIconButton
+              size="sm"
               variant="outline"
               intent="primary"
-              icon="plus"
               data-test="style-pane-add-variant"
+              icon="plus"
+              label="加一条变体"
               @click="onAddVariant"
-            >
-              加一条变体
-            </DtButton>
+            />
             <DtButton
               v-for="variant in variants"
               :key="variant.id"

@@ -15,7 +15,15 @@ import { computed, onMounted, ref } from 'vue'
 import { RouterLink } from 'vue-router'
 import type { DatasetTableSummary, DtDataColumn } from '@dt/contracts'
 import { PERMISSION_CODES } from '@dt/contracts'
-import { DtButton, DtDataView, DtIcon, DtInput, DtNotice, DtTag } from '@dt/ui'
+import {
+  DtButton,
+  DtDataView,
+  DtIcon,
+  DtInput,
+  DtNotice,
+  DtTag,
+  DtIconButton,
+} from '@dt/ui'
 
 import * as dataset from '@/api/dataset'
 import PermGuard from '@/components/PermGuard.vue'
@@ -124,9 +132,14 @@ onMounted(() => {
         运行参数
       </DtButton>
       <PermGuard :codes="[PERMISSION_CODES.datasetManage]" explain>
-        <DtButton size="sm" icon="plus" @click="ops.openCreate">
-          新建台账
-        </DtButton>
+        <DtIconButton
+          size="sm"
+          variant="solid"
+          intent="primary"
+          icon="plus"
+          label="新建台账"
+          @click="ops.openCreate"
+        />
       </PermGuard>
     </template>
 

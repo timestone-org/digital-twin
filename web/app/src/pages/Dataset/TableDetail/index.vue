@@ -12,7 +12,7 @@
 import { computed, onMounted } from 'vue'
 import { RouterView, useRoute } from 'vue-router'
 import { PERMISSION_CODES } from '@dt/contracts'
-import { DtButton, DtPageState, DtTag } from '@dt/ui'
+import { DtPageState, DtTag, DtIconButton } from '@dt/ui'
 
 import AiDock from '@/components/ai/AiDock.vue'
 import PermGuard from '@/components/PermGuard.vue'
@@ -106,9 +106,14 @@ onMounted(() => {
         v-if="isColumnsTab && detail.table.value"
         :codes="[PERMISSION_CODES.datasetManage]"
       >
-        <DtButton size="sm" icon="plus" @click="ops.openCreate">
-          新增列
-        </DtButton>
+        <DtIconButton
+          size="sm"
+          variant="solid"
+          intent="primary"
+          icon="plus"
+          label="新增列"
+          @click="ops.openCreate"
+        />
       </PermGuard>
     </template>
 

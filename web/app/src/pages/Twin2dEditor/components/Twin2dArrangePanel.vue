@@ -12,7 +12,8 @@
  * 否则「为什么少了两个键」得靠猜。
  */
 import type { Twin2dConfig, Twin2dNodeStyle } from '@dt/twin2d'
-import { DtButton } from '@dt/ui'
+import { DtIconButton } from '@dt/ui'
+import type { IconName } from '@dt/ui'
 import { computed } from 'vue'
 
 import type { Twin2dPick } from '../scripts/editorSelection'
@@ -44,21 +45,26 @@ const KIND_LABELS: Readonly<Record<ArrangeKind, string>> = {
   marks: '标注',
 }
 
-const ALIGN_ACTIONS: readonly { edge: Twin2dAlignEdge; label: string }[] = [
-  { edge: 'left', label: '左对齐' },
-  { edge: 'hcenter', label: '水平居中' },
-  { edge: 'right', label: '右对齐' },
-  { edge: 'top', label: '顶对齐' },
-  { edge: 'vcenter', label: '垂直居中' },
-  { edge: 'bottom', label: '底对齐' },
+const ALIGN_ACTIONS: readonly {
+  edge: Twin2dAlignEdge
+  label: string
+  icon: IconName
+}[] = [
+  { edge: 'left', label: '左对齐', icon: 'align-left' },
+  { edge: 'hcenter', label: '水平居中', icon: 'align-center-horizontal' },
+  { edge: 'right', label: '右对齐', icon: 'align-right' },
+  { edge: 'top', label: '顶对齐', icon: 'align-top' },
+  { edge: 'vcenter', label: '垂直居中', icon: 'align-center-vertical' },
+  { edge: 'bottom', label: '底对齐', icon: 'align-bottom' },
 ]
 
 const DISTRIBUTE_ACTIONS: readonly {
   axis: Twin2dDistributeAxis
   label: string
+  icon: IconName
 }[] = [
-  { axis: 'x', label: '水平等间距' },
-  { axis: 'y', label: '垂直等间距' },
+  { axis: 'x', label: '水平等间距', icon: 'distribute-horizontal' },
+  { axis: 'y', label: '垂直等间距', icon: 'distribute-vertical' },
 ]
 
 /** 这一批摆不摆得动；摆不动时整块不画。 */
@@ -142,40 +148,36 @@ function distribute(axis: Twin2dDistributeAxis): void {
     </p>
 
     <h3 class="mb-1 text-2xs tracking-wide text-text-disabled">对齐</h3>
-    <div class="mb-2 grid grid-cols-3 gap-1">
-      <DtButton
+    <div class="mb-2 flex flex-wrap gap-1.5">
+      <DtIconButton
         v-for="item in ALIGN_ACTIONS"
         :key="item.edge"
         size="sm"
         variant="outline"
         intent="neutral"
-        block
-        :aria-label="item.label"
-        :title="item.label"
+        :label="item.label"
+        :tooltip="item.label"
         :data-test="`arrange-align-${item.edge}`"
+        :icon="item.icon"
         @click="align(item.edge)"
-      >
-        {{ item.label }}
-      </DtButton>
+      />
     </div>
 
     <h3 class="mb-1 text-2xs tracking-wide text-text-disabled">分布</h3>
-    <div class="grid grid-cols-2 gap-1">
-      <DtButton
+    <div class="flex flex-wrap gap-1.5">
+      <DtIconButton
         v-for="item in DISTRIBUTE_ACTIONS"
         :key="item.axis"
         size="sm"
         variant="outline"
         intent="neutral"
-        block
-        :aria-label="item.label"
-        :title="canDistribute ? item.label : `${item.label}：至少要选三个`"
+        :label="item.label"
+        :tooltip="canDistribute ? item.label : `${item.label}：至少要选三个`"
         :disabled="!canDistribute"
         :data-test="`arrange-distribute-${item.axis}`"
+        :icon="item.icon"
         @click="distribute(item.axis)"
-      >
-        {{ item.label }}
-      </DtButton>
+      />
     </div>
   </section>
 </template>

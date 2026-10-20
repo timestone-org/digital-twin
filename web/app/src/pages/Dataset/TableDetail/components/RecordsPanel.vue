@@ -12,7 +12,7 @@
 import { computed, onMounted, watch } from 'vue'
 import type { DatasetColumn, DatasetTable } from '@dt/contracts'
 import { PERMISSION_CODES } from '@dt/contracts'
-import { DtButton, DtNotice } from '@dt/ui'
+import { DtButton, DtNotice, DtIconButton } from '@dt/ui'
 
 import PermGuard from '@/components/PermGuard.vue'
 import OverrideBulkDialog from './OverrideBulkDialog.vue'
@@ -99,15 +99,15 @@ function onRevoke(column: DatasetColumn, row: RecordRow): void {
       </span>
 
       <div class="ml-auto flex items-center gap-2">
-        <DtButton
+        <DtIconButton
           variant="ghost"
           intent="neutral"
           size="sm"
-          icon="refresh-cw"
           :disabled="isBusy"
+          icon="refresh-cw"
+          label="刷新数据"
           @click="records.refresh()"
-          >刷新数据</DtButton
-        >
+        />
         <PermGuard :codes="[PERMISSION_CODES.datasetOverride]">
           <DtButton
             variant="ghost"

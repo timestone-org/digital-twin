@@ -19,6 +19,7 @@ import {
   DtPageState,
   DtTag,
   useToast,
+  DtIconButton,
 } from '@dt/ui'
 
 import * as collect from '@/api/collect'
@@ -182,15 +183,15 @@ onMounted(() => {
       <DtTag v-if="hasSelection" size="sm" intent="info">
         已选 {{ tree.selectedCount.value }}
       </DtTag>
-      <DtButton
+      <DtIconButton
         variant="ghost"
         size="sm"
-        icon="refresh-cw"
         :loading="tree.loading.value"
+        intent="neutral"
+        icon="refresh-cw"
+        label="刷新"
         @click="tree.loadRoot"
-      >
-        刷新
-      </DtButton>
+      />
       <!-- 导入写的是点位表，挂 collect:manage；能浏览不等于能落点位 -->
       <PermGuard :codes="[PERMISSION_CODES.collectManage]">
         <DtButton

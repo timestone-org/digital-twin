@@ -19,6 +19,7 @@ import {
   DtNumberInput,
   DtSegmented,
   DtSwitch,
+  DtIconButton,
 } from '@dt/ui'
 import { computed, ref } from 'vue'
 import { useAssetName } from '@/features/assets/useAssetName'
@@ -124,15 +125,15 @@ function toggleBackground(opaque: boolean): void {
         >
           选择模型
         </DtButton>
-        <DtButton
+        <DtIconButton
           variant="ghost"
           size="sm"
-          icon="close"
           :disabled="modelValue.asset === ''"
+          intent="neutral"
+          icon="close"
+          label="清除"
           @click="clearAsset"
-        >
-          清除
-        </DtButton>
+        />
       </div>
       <ModelVariantPicker
         :asset-ref="modelValue.asset"
