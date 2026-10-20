@@ -6,10 +6,15 @@ from dataclasses import dataclass
 from typing import TypedDict
 
 from sqlalchemy import text
+from sqlalchemy.exc import DBAPIError
+from sqlalchemy.exc import TimeoutError as DatabaseTimeoutError
 from sqlalchemy.ext.asyncio import AsyncSession
+
+from platform_server.apps.collect.errors import PointSearchTimedOut
 
 BATCH_SIZE = 32
 CANDIDATE_LIMIT = 40
+MAX_NATIVE_VECTOR_DIMENSIONS = 16000
 
 _CATALOG = """
 WITH catalog AS (
@@ -70,11 +75,10 @@ WHERE EXCLUDED.embedding IS NOT NULL
     )
 )
 
-_SEARCH = text(
-    "".join(
-        (
-            _CATALOG,
-            """
+_SEARCH_SQL = "".join(
+    (
+        _CATALOG,
+        """
 , current_points AS (
  SELECT c.*, e.embedding,
         (e.content_hash = c.content_hash AND e.model_signature = :signature
@@ -88,15 +92,14 @@ _SEARCH = text(
  id) AS rank
  FROM current_points WHERE strpos(lower(content), lower(:query)) > 0
  ORDER BY rank LIMIT :candidates
+), scored AS MATERIALIZED (
+ SELECT id, CASE WHEN is_indexed
+ AND cardinality(embedding) = cardinality(CAST(:probe AS double precision[]))
+ THEN {similarity} END AS similarity
+ FROM current_points WHERE CAST(:probe AS double precision[]) IS NOT NULL
 ), semantic AS (
  SELECT id, row_number() OVER (ORDER BY similarity DESC, id) AS rank
- FROM (
-  SELECT id, (SELECT sum(a * b) FROM unnest(embedding, CAST(:probe AS
- double precision[])) AS v(a,b)) AS similarity
-  FROM current_points WHERE is_indexed AND CAST(:probe AS double
- precision[]) IS NOT NULL
- AND cardinality(embedding) = cardinality(CAST(:probe AS double precision[]))
- ) scored WHERE similarity >= 0.35
+ FROM scored WHERE similarity >= 0.35
  ORDER BY rank LIMIT :candidates
 ), ranked AS (
  SELECT id, sum(1.0 / (60 + rank)) AS score FROM (
@@ -111,9 +114,30 @@ SELECT c.id, c.source_id, c.node_key, c.code, c.name, c.description, c.unit,
 FROM ranked r JOIN current_points c ON c.id = r.id
 ORDER BY is_exact DESC, r.score DESC, c.id LIMIT :limit
 """,
-        )
     )
 )
+
+_SEARCH = text(_SEARCH_SQL.format(similarity="""
+(SELECT sum(a * b) FROM unnest(embedding,
+ CAST(:probe AS double precision[])) AS values(a,b))
+"""))
+_VECTOR_SEARCH = text(_SEARCH_SQL.format(similarity="""
+-(CAST(embedding AS vector) <#>
+ CAST(CAST(:probe AS double precision[]) AS vector))
+"""))
+_VECTOR_PATH = text("""
+WITH previous AS MATERIALIZED (
+ SELECT current_setting('search_path') AS path
+)
+SELECT previous.path, set_config('search_path',
+ quote_ident(namespace.nspname) || ',' || previous.path, true)
+FROM pg_extension extension
+JOIN pg_namespace namespace ON namespace.oid = extension.extnamespace
+CROSS JOIN previous
+WHERE extension.extname = 'vector'
+AND has_schema_privilege(namespace.oid, 'USAGE')
+""")
+_RESTORE_PATH = text("SELECT set_config('search_path', :path, true)")
 
 _PENDING_COUNT = text(
     "".join(
@@ -196,10 +220,35 @@ async def search(
     session: AsyncSession, parameters: PointSearchParameters
 ) -> tuple[list[dict[str, object]], int]:
     """合并精确、关键词和语义召回。Args: session, parameters。"""
+    try:
+        return await _search(session, parameters)
+    except DBAPIError as error:
+        if getattr(error.orig, "sqlstate", None) != "57014":
+            raise
+        raise PointSearchTimedOut("点位搜索超时，请缩小范围后重试") from error
+    except (TimeoutError, DatabaseTimeoutError) as error:
+        raise PointSearchTimedOut("点位搜索超时，请缩小范围后重试") from error
+
+
+async def _search(
+    session: AsyncSession, parameters: PointSearchParameters
+) -> tuple[list[dict[str, object]], int]:
+    probe = parameters["probe"]
+    path = (
+        await session.scalar(_VECTOR_PATH)
+        if probe is not None and len(probe) <= MAX_NATIVE_VECTOR_DIMENSIONS
+        else None
+    )
     rows = await session.execute(
-        _SEARCH,
+        _VECTOR_SEARCH if path is not None else _SEARCH,
         {**parameters, "candidates": max(CANDIDATE_LIMIT, parameters["limit"])},
     )
     found = [dict(row) for row in rows.mappings()]
-    count = await session.scalar(_PENDING_COUNT, parameters)
+    count = (
+        found[0]["pending_count"]
+        if found
+        else await session.scalar(_PENDING_COUNT, parameters)
+    )
+    if path is not None:
+        await session.execute(_RESTORE_PATH, {"path": path})
     return found, int(count or 0)

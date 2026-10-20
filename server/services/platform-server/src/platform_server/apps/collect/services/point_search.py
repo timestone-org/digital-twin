@@ -6,6 +6,7 @@ from dataclasses import dataclass
 from lib.crypto import SecretCipher
 from lib.logging import get_logger
 from platform_server.apps.collect.crud import point_semantic
+from platform_server.apps.collect.errors import PointSearchTimedOut
 from platform_server.apps.collect.schemas.point_search import (
     PointMatchesOut,
     PointMatchOut,
@@ -47,24 +48,46 @@ class PointSearch:
                     error_type=type(error).__name__,
                 )
                 note = "语义检索暂不可用，本次仅按关键词查找"
-        async with self.database.session() as session:
-            rows, pending_count = await point_semantic.search(
-                session,
-                {
-                    "query": query,
-                    "source_id": source_id,
-                    "limit": limit,
-                    "signature": profile.signature if profile else "",
-                    "probe": probe,
-                },
-            )
+        parameters: point_semantic.PointSearchParameters = {
+            "query": query,
+            "source_id": source_id,
+            "limit": limit,
+            "signature": profile.signature if profile else "",
+            "probe": probe,
+        }
+        rows, pending_count, degraded = await self._search(parameters)
+        if degraded:
+            note = "语义检索超时，本次仅按关键词查找"
         if note is None and pending_count:
             note = (
                 f"有 {pending_count} 个点位正在等待语义索引，仍参与关键词匹配"
             )
         return PointMatchesOut(
             items=[PointMatchOut.model_validate(row) for row in rows],
-            mode="hybrid" if probe is not None else "keyword",
+            mode="hybrid" if probe is not None and not degraded else "keyword",
             pending_count=pending_count,
             note=note,
         )
+
+    async def _search(
+        self, parameters: point_semantic.PointSearchParameters
+    ) -> tuple[list[dict[str, object]], int, bool]:
+        try:
+            rows, pending = await self._query(parameters)
+            return rows, pending, False
+        except PointSearchTimedOut:
+            if parameters["probe"] is None:
+                raise
+        _logger.warning(
+            "point_search_query_timed_out",
+            "语义检索超时，转为关键词检索",
+        )
+        # ⚠ 失败事务已退出并回滚；降级必须使用新会话。
+        rows, pending = await self._query({**parameters, "probe": None})
+        return rows, pending, True
+
+    async def _query(
+        self, parameters: point_semantic.PointSearchParameters
+    ) -> tuple[list[dict[str, object]], int]:
+        async with self.database.session() as session:
+            return await point_semantic.search(session, parameters)
