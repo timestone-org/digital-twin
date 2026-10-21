@@ -27,7 +27,7 @@
     "sass-embedded": "^1.83.0",
     "storybook": "^10.5.7",
     "typescript": "~5.7.2",
-    "vite": "^6.0.7",
+    "vite": "^6.4.4",
     "vue-tsc": "^2.2.0"
   }
 }
