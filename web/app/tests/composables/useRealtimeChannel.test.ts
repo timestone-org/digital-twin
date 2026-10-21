@@ -29,6 +29,7 @@ import { STORAGE_KEYS } from '@dt/security'
 import * as authApi from '@/api/auth'
 import { resetEmbedContext } from '@/features/embed/context'
 import { useAuthStore } from '@/stores/auth'
+import { createPointSubscribe } from '@/runtime/pointStream'
 
 type Listener = (event: unknown) => void
 
@@ -98,6 +99,14 @@ function sentTopics(socket: FakeSocket, action: string): string[] {
     .map((raw) => JSON.parse(raw) as Record<string, unknown>)
     .filter((message) => message['action'] === action)
     .map((message) => String(message['topic']))
+}
+
+function pointPayload(value: number) {
+  return {
+    items: [
+      { nodeKey: 's:1', state: 'ok', value, timestampMs: 10, quality: 'good' },
+    ],
+  }
 }
 
 beforeEach(() => {
@@ -411,6 +420,163 @@ describe('公开链接', () => {
     useRealtimeChannel()
 
     expect(latest().protocols).toEqual([AUTH_SUBPROTOCOL, 'tok-1'])
+  })
+})
+
+describe('画布初值', () => {
+  it('不同视图取到的通道共享初值，后续变化仍推给每个视图', () => {
+    const first = vi.fn()
+    createPointSubscribe(useRealtimeChannel(), () => 'dashboard:d1')(
+      ['s:1'],
+      first,
+    )
+    latest().emit('open')
+    latest().emit('message', {
+      data: dataFrame('dashboard:d1', pointPayload(21)),
+    })
+    latest().sent = []
+    const second = vi.fn()
+    createPointSubscribe(useRealtimeChannel(), () => 'dashboard:d1')(
+      ['s:1'],
+      second,
+    )
+
+    expect(second).toHaveBeenCalledWith('s:1', {
+      state: 'ok',
+      value: 21,
+      timestampMs: 10,
+      quality: 'good',
+    })
+    expect(latest().sent).toEqual([])
+    latest().emit('message', {
+      data: dataFrame('dashboard:d1', pointPayload(22)),
+    })
+    expect(first).toHaveBeenLastCalledWith(
+      's:1',
+      expect.objectContaining({ value: 22 }),
+    )
+    expect(second).toHaveBeenLastCalledWith(
+      's:1',
+      expect.objectContaining({ value: 22 }),
+    )
+  })
+
+  it('缺少初值时更新订阅身份，补发到来后已有视图也继续收到', () => {
+    const channel = useRealtimeChannel()
+    latest().emit('open')
+    const subscribe = createPointSubscribe(channel, () => 'dashboard:d1')
+    const first = vi.fn()
+    subscribe(['s:1'], first)
+    latest().sent = []
+    const second = vi.fn()
+    subscribe(['s:1'], second)
+    subscribe(['s:1'], vi.fn())
+
+    expect(latest().sent.map((raw): unknown => JSON.parse(raw))).toEqual([
+      {
+        action: 'unsubscribe',
+        topic: 'dashboard:d1',
+        req_id: expect.any(String),
+      },
+      {
+        action: 'subscribe',
+        topic: 'dashboard:d1',
+        req_id: expect.any(String),
+      },
+    ])
+    latest().emit('message', {
+      data: dataFrame('dashboard:d1', pointPayload(23)),
+    })
+    expect(first).toHaveBeenCalledWith(
+      's:1',
+      expect.objectContaining({ value: 23 }),
+    )
+    expect(second).toHaveBeenCalledWith(
+      's:1',
+      expect.objectContaining({ value: 23 }),
+    )
+  })
+
+  it('连接未就绪或无人订阅时不发补发请求', () => {
+    const channel = useRealtimeChannel()
+    channel.requestSnapshot('dashboard:unknown')
+    channel.subscribe('dashboard:d1', () => undefined)
+    latest().sent = []
+    latest().readyState = 0
+    channel.requestSnapshot('dashboard:d1')
+    expect(latest().sent).toEqual([])
+  })
+
+  it('断线后新视图不读旧快照，旧连接迟到的事件不能污染重连结果', () => {
+    const channel = useRealtimeChannel()
+    const subscribe = createPointSubscribe(channel, () => 'dashboard:d1')
+    subscribe(['s:1'], vi.fn())
+    latest().emit('open')
+    const oldSocket = latest()
+    oldSocket.emit('message', {
+      data: dataFrame('dashboard:d1', pointPayload(21)),
+    })
+    oldSocket.emit('close', { code: 1006 })
+    const seen = vi.fn()
+    subscribe(['s:1'], seen)
+    expect(seen).not.toHaveBeenCalled()
+    vi.advanceTimersByTime(1000)
+    latest().emit('open')
+    latest().emit('message', {
+      data: dataFrame('dashboard:d1', pointPayload(24)),
+    })
+    seen.mockClear()
+
+    oldSocket.emit('message', {
+      data: dataFrame('dashboard:d1', pointPayload(21)),
+    })
+    oldSocket.emit('open')
+    oldSocket.emit('close', { code: 1006 })
+    expect(channel.connectionState.value).toBe('open')
+    expect(seen).not.toHaveBeenCalled()
+    subscribe(['s:1'], seen)
+    expect(seen).toHaveBeenCalledWith(
+      's:1',
+      expect.objectContaining({ value: 24 }),
+    )
+  })
+
+  it('关闭会话清空初值，再登录不能沿用上一条连接的值', () => {
+    const subscribe = createPointSubscribe(
+      useRealtimeChannel(),
+      () => 'dashboard:d1',
+    )
+    subscribe(['s:1'], vi.fn())
+    latest().emit('open')
+    latest().emit('message', {
+      data: dataFrame('dashboard:d1', pointPayload(21)),
+    })
+    closeRealtimeChannel()
+
+    const seen = vi.fn()
+    createPointSubscribe(useRealtimeChannel(), () => 'dashboard:d1')(
+      ['s:1'],
+      seen,
+    )
+    expect(seen).not.toHaveBeenCalled()
+  })
+
+  it('切换公开凭据清空初值，旧票据连接不能再推数据', () => {
+    const channel = usePublicRealtimeChannel('ticket-a')
+    const subscribe = createPointSubscribe(channel, () => 'public:ticket-a')
+    subscribe(['s:1'], vi.fn())
+    latest().emit('open')
+    const oldSocket = latest()
+    oldSocket.emit('message', {
+      data: dataFrame('public:ticket-a', pointPayload(21)),
+    })
+    usePublicRealtimeChannel('ticket-b')
+    const seen = vi.fn()
+    subscribe(['s:1'], seen)
+    oldSocket.emit('message', {
+      data: dataFrame('public:ticket-a', pointPayload(21)),
+    })
+    expect(seen).not.toHaveBeenCalled()
   })
 })
 
