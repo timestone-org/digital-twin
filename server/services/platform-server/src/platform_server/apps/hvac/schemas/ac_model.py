@@ -5,6 +5,9 @@ import uuid
 from pydantic import Field
 
 from platform_server.apps.hvac.model_statuses import MIN_HALF_LIFE_DAYS
+from platform_server.apps.hvac.schemas.ac_compliance import (
+    EffectiveComplianceOut,
+)
 from platform_server.apps.hvac.schemas.common import (
     InputModel,
     Label,
@@ -167,6 +170,12 @@ class PredictOut(OutputModel):
     is_dedicated: bool
     trained_at: Utc
 
+    effective_at: Utc | None = None
+    compliance: list[EffectiveComplianceOut] = Field(
+        default_factory=list[EffectiveComplianceOut]
+    )
+    timezone: str = "Asia/Shanghai"
+
 
 class RecommendIn(InputModel):
     """推荐入参：同一个起始条件，让全部服务组合同台比。
@@ -200,3 +209,8 @@ class RecommendOut(OutputModel):
 
     items: list[RecommendEntryOut]
     trained_at: Utc
+    effective_at: Utc | None = None
+    compliance: list[EffectiveComplianceOut] = Field(
+        default_factory=list[EffectiveComplianceOut]
+    )
+    timezone: str = "Asia/Shanghai"

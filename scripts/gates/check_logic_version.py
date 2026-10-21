@@ -1,20 +1,7 @@
 #!/usr/bin/env python3
-"""动了抽取引擎就必须动 `LOGIC_VERSION`：docs/AC_STARTUP_DESIGN.md §5。
+"""抽取、范围或季节判定变化时必须升级 LOGIC_VERSION。
 
-⚠ 开机事件的参数指纹只由抽取参数的取值与 `LOGIC_VERSION` 算出，代码不进指纹：
-一次纯行为改动（判定换个写法、掩码多掩一种）指纹分毫不变，页面于是把按旧规则
-算出来的那份数据当成当前的，屏幕上没有任何迹象。本仓已经漏过，只是那几次
-恰好连带改了字段名，指纹才跟着变。
-
-比的是两侧「去掉 `#` 注释之后」的内容差没差，不对源码求哈希：哈希一次格式化
-就炸，而 +1 的代价是已有批次全部判为过期、要重跑一次全量抽取——为一条改过措辞
-的注释付这个代价，这条闸一个月内就会被绕过，然后它什么也保护不了。注释改不了
-抽取行为，所以去掉它不会漏报。
-⚠ 只去 `#` 注释，**不去 docstring**：docstring 会被程序读走（帮助文本、契约
-描述），把它当成散文一并抹掉就是一处静默的假阴性。
-
-用法：`check_logic_version.py [<base-ref> [<head-ref>]]`。
-比较基线与头的取值：命令行参数 > `PR_BASE_REF`/`PR_HEAD_REF` > `origin/main`。
+配置指纹不包含源码；版本闸避免代码语义变化后继续使用旧标签。
 """
 
 from __future__ import annotations
@@ -36,12 +23,12 @@ from _report import (
 
 _SERVICES = "server/services/platform-server/src/platform_server"
 _ENGINE_DIR = f"{_SERVICES}/apps/hvac/services"
-# 只有这两个文件决定抽出来的事件长什么样：判定状态机，与喂给它的帧怎么算。
-# 取数、分片、批次生命周期改了不动判定口径，圈进来只会让这条闸天天误报，
-# 而被无视的闸门等于没有闸门（docs/agents/ci-gates.md §2 领域不变量）
+# 事件、帧、范围与季节的判定口径
 ENGINE_FILES = (
     f"{_ENGINE_DIR}/ac_startup_rules.py",
     f"{_ENGINE_DIR}/ac_startup_frames.py",
+    f"{_SERVICES}/apps/hvac/rooms.py",
+    f"{_SERVICES}/apps/hvac/seasons.py",
 )
 # 常量定义在判定状态机那一份里
 VERSION_FILE = ENGINE_FILES[0]

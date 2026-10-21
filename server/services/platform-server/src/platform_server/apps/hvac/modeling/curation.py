@@ -25,7 +25,9 @@ class Curated:
 
 
 def is_instantly_compliant(
-    sample: EpisodeSample, units: Sequence[RoomUnit]
+    sample: EpisodeSample,
+    units: Sequence[RoomUnit],
+    timezone: str = "Asia/Shanghai",
 ) -> bool:
     """开机那一刻整个房间是不是已经达标（每台各自落在它自己的范围内）。
 
@@ -38,11 +40,19 @@ def is_instantly_compliant(
     if not units:
         return False
     readings = sample.conditions.readings
-    return all(unit.is_in_band(readings.get(unit.serial, {})) for unit in units)
+    return all(
+        unit.at(sample.conditions.started_at, timezone).is_in_band(
+            readings.get(unit.serial, {})
+        )
+        for unit in units
+    )
 
 
 def curate(
-    samples: Sequence[EpisodeSample], *, units: Sequence[RoomUnit]
+    samples: Sequence[EpisodeSample],
+    *,
+    units: Sequence[RoomUnit],
+    timezone: str = "Asia/Shanghai",
 ) -> Curated:
     """剔除「开机即达标却记着非零时长」的事件，并数出反方向有多少条。
 
@@ -56,7 +66,7 @@ def curate(
     contradictory = 0
     unexplained = 0
     for sample in samples:
-        is_compliant = is_instantly_compliant(sample, units)
+        is_compliant = is_instantly_compliant(sample, units, timezone)
         if is_compliant and sample.duration_minutes != 0:
             contradictory += 1
             continue

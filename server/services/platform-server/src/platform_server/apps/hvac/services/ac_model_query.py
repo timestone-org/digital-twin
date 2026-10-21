@@ -24,6 +24,10 @@ from platform_server.apps.hvac.schemas import (
 )
 from platform_server.apps.hvac.schemas.common import RoomRef, WorkshopRef
 from platform_server.apps.hvac.services import ac_model_service
+from platform_server.apps.hvac.services.ac_room_configuration import (
+    load_configurations,
+)
+from platform_server.apps.hvac.services.ac_startup_rules import ExtractionRules
 
 
 def to_model_out(
@@ -65,7 +69,10 @@ def to_model_out(
 
 
 async def stale_flags(
-    session: AsyncSession, models: list[AcModel]
+    session: AsyncSession,
+    models: list[AcModel],
+    *,
+    timezone: str = "Asia/Shanghai",
 ) -> dict[uuid.UUID, bool]:
     """一批模型的「数据已更新」位。
 
@@ -74,7 +81,22 @@ async def stale_flags(
     fingerprints = await ac_model_service.current_fingerprints(
         session, [model.room_id for model in models]
     )
-    return ac_model_service.batch_stale_map(models, fingerprints)
+    found = ac_model_service.batch_stale_map(models, fingerprints)
+    current = await load_configurations(
+        session,
+        list({model.room_id for model in models}),
+        timezone=timezone,
+        rules=ExtractionRules(),
+    )
+    for model in models:
+        if model.trained_at is not None:
+            found[model.id] = (
+                found[model.id]
+                or model.configuration_snapshot is None
+                or current[model.room_id].fingerprint()
+                != model.batch_fingerprint
+            )
+    return found
 
 
 async def prediction_page(

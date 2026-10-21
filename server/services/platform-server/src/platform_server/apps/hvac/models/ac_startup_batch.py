@@ -13,7 +13,7 @@ from sqlalchemy import (
     Text,
     text,
 )
-from sqlalchemy.dialects.postgresql import UUID
+from sqlalchemy.dialects.postgresql import JSONB, UUID
 from sqlalchemy.orm import Mapped, mapped_column
 
 from lib.db import TimestampMixin, UuidPrimaryKeyMixin
@@ -38,6 +38,9 @@ class AcStartupBatch(UuidPrimaryKeyMixin, TimestampMixin, Base):
         nullable=False,
     )
     params_fingerprint: Mapped[str] = mapped_column(Text, nullable=False)
+    configuration_snapshot: Mapped[dict[str, object] | None] = mapped_column(
+        JSONB, nullable=True
+    )
     logic_version: Mapped[int] = mapped_column(Integer, nullable=False)
     window_start: Mapped[datetime] = mapped_column(
         DateTime(timezone=True), nullable=False

@@ -10,6 +10,10 @@ import { readFileSync } from 'node:fs'
 import { join } from 'node:path'
 import { describe, expect, it } from 'vitest'
 import type {
+  AcCompliancePolicy,
+  AcCompliancePolicyInput,
+  AcEffectiveCompliance,
+  AcWinterPeriod,
   AcModel,
   AcModelPublication,
   AcModelPublicationInput,
@@ -272,6 +276,26 @@ const SHAPES: Record<string, Record<string, true>> = {
     values: true,
   } satisfies Keys<SeriesPoint>,
 
+  WinterPeriodIn: { start: true, end: true } satisfies Keys<AcWinterPeriod>,
+  CompliancePolicyIn: {
+    winter_period: true,
+    non_winter: true,
+    winter: true,
+  } satisfies Keys<AcCompliancePolicyInput>,
+  CompliancePolicyOut: {
+    winter_period: true,
+    non_winter: true,
+    winter: true,
+    effective_at: true,
+    effective_season: true,
+    timezone: true,
+  } satisfies Keys<AcCompliancePolicy>,
+  EffectiveComplianceOut: {
+    serial: true,
+    season: true,
+    limits: true,
+  } satisfies Keys<AcEffectiveCompliance>,
+
   StartupEpisodeOut: {
     started_at: true,
     running_set: true,
@@ -282,6 +306,7 @@ const SHAPES: Record<string, Record<string, true>> = {
     idle_minutes: true,
     is_excluded: true,
     exclusion_reason: true,
+    compliance: true,
   } satisfies Keys<StartupEpisode>,
 
   StartupBatchOut: {
@@ -436,6 +461,9 @@ const SHAPES: Record<string, Record<string, true>> = {
     is_in_serving_sets: true,
     is_dedicated: true,
     trained_at: true,
+    effective_at: true,
+    compliance: true,
+    timezone: true,
   } satisfies Keys<ModelPredictResult>,
 
   RecommendEntryOut: {
@@ -454,6 +482,9 @@ const SHAPES: Record<string, Record<string, true>> = {
   RecommendOut: {
     items: true,
     trained_at: true,
+    effective_at: true,
+    compliance: true,
+    timezone: true,
   } satisfies Keys<ModelRecommendResult>,
 
   Page_ModelPredictionOut_: {

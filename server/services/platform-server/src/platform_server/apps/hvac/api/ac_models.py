@@ -17,6 +17,7 @@ from platform_server.apps.hvac.deps import (
     Dispatcher,
     get_caller,
     get_dispatcher,
+    get_hvac_timezone,
     get_session,
     require,
 )
@@ -43,6 +44,7 @@ from platform_server.settings import API_PREFIX
 router = APIRouter(prefix=API_PREFIX, tags=["ac-models"])
 
 SessionDep = Annotated[AsyncSession, Depends(get_session)]
+TimezoneDep = Annotated[str, Depends(get_hvac_timezone)]
 PageDep = Annotated[PageParams, Depends(page_params)]
 DispatchDep = Annotated[Dispatcher, Depends(get_dispatcher)]
 CallerDep = Annotated[CallerContext, Depends(get_caller)]
@@ -57,6 +59,7 @@ ManageDep = Annotated[CallerContext, Depends(require(AC_MANAGE))]
 )
 async def list_ac_models(
     session: SessionDep,
+    timezone: TimezoneDep,
     _viewer: ViewDep,
     room_id: Annotated[uuid.UUID | None, Query()] = None,
 ) -> ApiResponse[list[AcModelOut]]:
@@ -64,7 +67,7 @@ async def list_ac_models(
 
     Args: session, _viewer, room_id。
     """
-    return ok(await _present_many(session, room_id=room_id))
+    return ok(await _present_many(session, room_id=room_id, timezone=timezone))
 
 
 @router.post(
@@ -76,6 +79,7 @@ async def list_ac_models(
 async def create_ac_model(
     payload: AcModelCreateIn,
     session: SessionDep,
+    timezone: TimezoneDep,
     dispatcher: DispatchDep,
     caller: CallerDep,
     _manager: ManageDep,
@@ -88,7 +92,7 @@ async def create_ac_model(
         session, payload, created_by=caller.username
     )
     dispatcher.after_commit_training(message)
-    out = await _present(session, model.id)
+    out = await _present(session, model.id, timezone=timezone)
     return ok(out, message="训练已排队")
 
 
@@ -100,13 +104,14 @@ async def create_ac_model(
 async def get_ac_model(
     model_id: uuid.UUID,
     session: SessionDep,
+    timezone: TimezoneDep,
     _viewer: ViewDep,
 ) -> ApiResponse[AcModelOut]:
     """一个模型的完整形态：配置、评估、出处与过期提示。
 
     Args: model_id, session, _viewer。
     """
-    return ok(await _present(session, model_id))
+    return ok(await _present(session, model_id, timezone=timezone))
 
 
 @router.patch(
@@ -118,6 +123,7 @@ async def patch_ac_model(
     model_id: uuid.UUID,
     payload: AcModelPatchIn,
     session: SessionDep,
+    timezone: TimezoneDep,
     _manager: ManageDep,
 ) -> ApiResponse[AcModelOut]:
     """改配置。⚠ 改服务组合就地重汇总评估，不触发重训。
@@ -125,7 +131,9 @@ async def patch_ac_model(
     Args: model_id, payload, session, _manager。
     """
     await ac_model_service.patch_model(session, model_id, payload)
-    return ok(await _present(session, model_id), message="已保存")
+    return ok(
+        await _present(session, model_id, timezone=timezone), message="已保存"
+    )
 
 
 @router.delete(
@@ -155,6 +163,7 @@ async def delete_ac_model(
 async def retrain_ac_model(
     model_id: uuid.UUID,
     session: SessionDep,
+    timezone: TimezoneDep,
     dispatcher: DispatchDep,
     _manager: ManageDep,
 ) -> ApiResponse[AcModelOut]:
@@ -164,7 +173,10 @@ async def retrain_ac_model(
     """
     _, message = await ac_model_service.request_retrain(session, model_id)
     dispatcher.after_commit_training(message)
-    return ok(await _present(session, model_id), message="重训已排队")
+    return ok(
+        await _present(session, model_id, timezone=timezone),
+        message="重训已排队",
+    )
 
 
 @router.get(
@@ -197,13 +209,16 @@ async def predict_with_ac_model(
     model_id: uuid.UUID,
     payload: PredictIn,
     session: SessionDep,
+    timezone: TimezoneDep,
     _viewer: ViewDep,
 ) -> ApiResponse[PredictOut]:
     """纯计算的 what-if，不训练也不碰外库。读权限即可试算。
 
     Args: model_id, payload, session, _viewer。
     """
-    found = await ac_model_predictor.predict(session, model_id, payload)
+    found = await ac_model_predictor.predict(
+        session, model_id, payload, timezone=timezone
+    )
     return ok(_predict_out(found))
 
 
@@ -216,13 +231,16 @@ async def recommend_with_ac_model(
     model_id: uuid.UUID,
     payload: RecommendIn,
     session: SessionDep,
+    timezone: TimezoneDep,
     _viewer: ViewDep,
 ) -> ApiResponse[RecommendOut]:
     """同一起始条件下每个服务组合各出一份预测，排好序。读权限即可。
 
     Args: model_id, payload, session, _viewer。
     """
-    found = await ac_model_predictor.recommend(session, model_id, payload)
+    found = await ac_model_predictor.recommend(
+        session, model_id, payload, timezone=timezone
+    )
     return ok(_recommend_out(found))
 
 
@@ -246,7 +264,9 @@ async def _prediction_page(
     )
 
 
-async def _present(session: AsyncSession, model_id: uuid.UUID) -> AcModelOut:
+async def _present(
+    session: AsyncSession, model_id: uuid.UUID, *, timezone: str
+) -> AcModelOut:
     """取一个模型的对外形态（含过期提示位）。
 
     Args: session, model_id。
@@ -254,14 +274,16 @@ async def _present(session: AsyncSession, model_id: uuid.UUID) -> AcModelOut:
     model, room, workshop = await ac_model_service.get_with_refs(
         session, model_id
     )
-    stale = await ac_model_query.stale_flags(session, [model])
+    stale = await ac_model_query.stale_flags(
+        session, [model], timezone=timezone
+    )
     return ac_model_query.to_model_out(
         model, room, workshop, is_batch_stale=stale[model.id]
     )
 
 
 async def _present_many(
-    session: AsyncSession, *, room_id: uuid.UUID | None
+    session: AsyncSession, *, room_id: uuid.UUID | None, timezone: str
 ) -> list[AcModelOut]:
     """一批模型的对外形态（含过期提示位）。
 
@@ -269,7 +291,7 @@ async def _present_many(
     """
     rows = await ac_model_service.list_with_refs(session, room_id=room_id)
     stale = await ac_model_query.stale_flags(
-        session, [model for model, _, _ in rows]
+        session, [model for model, _, _ in rows], timezone=timezone
     )
     return [
         ac_model_query.to_model_out(
@@ -295,6 +317,9 @@ def _predict_out(found: ac_model_predictor.PredictResult) -> PredictOut:
         is_in_serving_sets=found.is_in_serving_sets,
         is_dedicated=found.is_dedicated,
         trained_at=found.trained_at,
+        effective_at=found.effective_at,
+        compliance=list(found.compliance),
+        timezone=found.timezone,
     )
 
 
@@ -308,6 +333,9 @@ def _recommend_out(
     return RecommendOut(
         items=[_recommend_entry_out(entry) for entry in found.entries],
         trained_at=found.trained_at,
+        effective_at=found.effective_at,
+        compliance=list(found.compliance),
+        timezone=found.timezone,
     )
 
 

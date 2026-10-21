@@ -37,6 +37,13 @@ from platform_server.apps.hvac.rooms import (
     MetricBand,
     RoomUnit,
 )
+from platform_server.apps.hvac.services.ac_room_configuration import (
+    load_configuration,
+)
+from platform_server.apps.hvac.services.ac_startup_rules import (
+    LOGIC_VERSION,
+    ExtractionRules,
+)
 from platform_server.apps.hvac.startups import BATCH_STATUS_READY
 
 PREFIX = "/api/v1/platform"
@@ -72,29 +79,17 @@ async def seed_room(session: AsyncSession) -> Seeded:
     session.add(room)
     await session.flush()
     for serial in serials:
-        unit = AcUnit(serial=serial, name=serial, room_id=room.id)
-        session.add(unit)
-        await session.flush()
-        session.add(
-            AcDataBinding(
-                ac_unit_id=unit.id,
-                dataset="raw_minute",
-                source_object=f"v_{serial.replace('-', '_')}",
-            )
-        )
-        session.add(
-            AcMetricLimit(
-                ac_unit_id=unit.id,
-                metric="workshop_temp_avg",
-                lower_limit=Decimal(18),
-                upper_limit=Decimal(26),
-            )
-        )
+        await _seed_bound_unit(session, room.id, serial)
+    await session.flush()
+    configuration = await load_configuration(
+        session, room.id, timezone=TZ, rules=ExtractionRules()
+    )
     session.add(
         AcStartupBatch(
             room_id=room.id,
-            params_fingerprint="f" * 64,
-            logic_version=2,
+            params_fingerprint=configuration.fingerprint(),
+            configuration_snapshot=configuration.snapshot(),
+            logic_version=LOGIC_VERSION,
             window_start=BASE,
             window_end=BASE + timedelta(days=200),
             status=BATCH_STATUS_READY,
@@ -183,6 +178,11 @@ async def _mark_trained(
         )
     )
     _seed_outcome(model, running_set, prediction_count)
+    configuration = await load_configuration(
+        session, model.room_id, timezone=TZ, rules=ExtractionRules()
+    )
+    model.batch_fingerprint = configuration.fingerprint()
+    model.configuration_snapshot = configuration.snapshot()
     for row in _seed_predictions(model_id, running_set, prediction_count):
         session.add(row)
     await session.flush()
@@ -266,4 +266,27 @@ def _sample(index: int, running_set: list[str]) -> EpisodeSample:
             readings={running_set[0]: {"workshop_temp_avg": 26.0 + over}},
         ),
         duration_minutes=int(8 * over),
+    )
+
+
+async def _seed_bound_unit(
+    session: AsyncSession, room_id: uuid.UUID, serial: str
+) -> None:
+    unit = AcUnit(serial=serial, name=serial, room_id=room_id)
+    session.add(unit)
+    await session.flush()
+    session.add(
+        AcDataBinding(
+            ac_unit_id=unit.id,
+            dataset="raw_minute",
+            source_object=f"v_{serial.replace('-', '_')}",
+        )
+    )
+    session.add(
+        AcMetricLimit(
+            ac_unit_id=unit.id,
+            metric="workshop_temp_avg",
+            lower_limit=Decimal(18),
+            upper_limit=Decimal(26),
+        )
     )

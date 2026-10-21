@@ -7,6 +7,8 @@
  */
 
 import type {
+  AcCompliancePolicy,
+  AcCompliancePolicyInput,
   AcDataBinding,
   AcModel,
   AcModelPublication,
@@ -579,5 +581,24 @@ export async function publishModelNow(
   return await requestData<ModelPublishResult>(
     `/ac-models/${modelId}/publication:publish`,
     onPlatform({ method: 'POST', headers: { 'Idempotency-Key': key } }),
+  )
+}
+
+export async function getAcCompliancePolicy(
+  acUnitId: string,
+): Promise<AcCompliancePolicy> {
+  return await requestData<AcCompliancePolicy>(
+    `/ac-units/${acUnitId}/compliance-policies`,
+    onPlatform(),
+  )
+}
+
+export async function putAcCompliancePolicy(
+  acUnitId: string,
+  body: AcCompliancePolicyInput,
+): Promise<AcCompliancePolicy> {
+  return await requestData<AcCompliancePolicy>(
+    `/ac-units/${acUnitId}/compliance-policies`,
+    onPlatform({ method: 'PUT', body }),
   )
 }

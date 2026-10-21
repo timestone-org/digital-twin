@@ -619,3 +619,10 @@ export type {
 } from './modelingDetection'
 
 export type * from './hierarchy'
+
+export type {
+  AcCompliancePolicy,
+  AcCompliancePolicyInput,
+  AcEffectiveCompliance,
+  AcWinterPeriod,
+} from './hvacCompliance'
