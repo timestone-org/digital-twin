@@ -255,7 +255,8 @@
   }
 
   &__line > &__label {
-    flex-basis: 5em;
+    // ⚠ 固定字宽与 max-content 的内容测量不一致，会把短标签的读数提前挤到下一行。
+    flex-basis: auto;
   }
 
   // ⚠ 标签吃掉中间的空档，读数才贴着右边：靠 `space-between` 分的话，

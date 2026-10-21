@@ -1,6 +1,6 @@
 <script setup lang="ts">
 /** @fileoverview 视口的常用定位与临时隔离操作。 */
-import { DtButton, DtIconButton } from '@dt/ui'
+import { DtIconButton } from '@dt/ui'
 defineProps<{ isolated: boolean; canIsolate: boolean; canBack: boolean }>()
 const emit = defineEmits<{
   focus: []
@@ -20,26 +20,33 @@ const emit = defineEmits<{
       label="聚焦选中"
       @click="emit('focus')"
     />
-    <DtButton
-      size="xs"
-      variant="ghost"
+    <DtIconButton
+      size="sm"
+      icon="scan-eye"
+      :label="isolated ? '退出隔离' : '只看选中'"
+      :pressed="isolated"
       :disabled="!canIsolate"
       @click="emit('isolate')"
-      >{{ isolated ? '退出隔离' : '只看选中' }}</DtButton
-    >
-    <DtButton size="xs" variant="ghost" @click="emit('reset')"
-      >显示全部</DtButton
-    >
-    <DtButton size="xs" variant="ghost" @click="emit('overview')"
-      >全览</DtButton
-    >
-    <DtButton
-      size="xs"
-      variant="ghost"
+    />
+    <DtIconButton
+      size="sm"
+      icon="eye"
+      label="显示全部"
+      @click="emit('reset')"
+    />
+    <DtIconButton
+      size="sm"
+      icon="maximize"
+      label="全览"
+      @click="emit('overview')"
+    />
+    <DtIconButton
+      size="sm"
+      icon="arrow-left"
+      label="上一视角"
       :disabled="!canBack"
       @click="emit('back')"
-      >上一视角</DtButton
-    >
+    />
   </div>
 </template>
 <style scoped lang="scss">
@@ -49,6 +56,7 @@ const emit = defineEmits<{
   left: 8px;
   z-index: var(--z-sticky);
   display: flex;
+  align-items: center;
   flex-wrap: wrap;
   gap: 4px;
   max-width: calc(100% - 16px);

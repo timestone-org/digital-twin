@@ -40,6 +40,7 @@ function fakeChannel(): {
     isConnected: ref(true),
     connectionState: ref('open'),
     isRejected: ref(false),
+    requestSnapshot: vi.fn(),
     subscribe: (_topic: string, handler: Handler) => {
       state.handler = handler
       return () => {

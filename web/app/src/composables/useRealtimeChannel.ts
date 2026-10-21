@@ -1,16 +1,4 @@
-/**
- * @fileoverview realtime-hub 的 WebSocket 连接：一个应用一条，按主题分发。
- *
- * 模块级单例。一条连接承载全部主题——每个页面各开一条的话，切页面会反复
- * 握手，而握手要走一次验签；连接数也会随打开的面板数线性涨。
- *
- * ⚠ 凭据走**子协议**（标记 + 凭据两个值），不是 `Authorization` 头：
- * 浏览器的 WebSocket API 根本不允许自定义头。服务端回它收到的那个标记。
- * ⚠ 两种凭据、两个标记：登录态报 `dt.auth` + access token，公开链接报
- * `dt.public` + 公开令牌（ADR-0021）。公开面那条**必须显式接管**——它没有
- * 登录态，沿用登录态那条的话 `accessToken` 恒为 null，表现是「一条连接都不建、
- * 页面一直是静态快照」，而且没有任何报错。
- */
+/** @fileoverview 共用的 WebSocket 连接、主题订阅与凭据生命周期，见 ADR-0014、0049。 */
 
 import {
   REALTIME_HANDSHAKE_REJECTED_CLOSE_CODE,
@@ -21,6 +9,7 @@ import {
 import { ref, type Ref } from 'vue'
 
 import { newClientUuid } from '@/api/idempotency'
+import { clearPointSnapshots, resetPointSnapshots } from '@/runtime/pointStream'
 import {
   CLOSE_TOKEN_EXPIRED,
   REALTIME_WS_PATH,
@@ -43,12 +32,10 @@ interface Channel {
   isConnected: Ref<boolean>
   /** 连接态；模块的「数据可能过期」由它推，判定只此一份。 */
   connectionState: Ref<ModuleConnectionState>
-  /**
-   * 服务端明确拒绝了这条连接：票据无效、已被撤回，或标记形状不对。
-   * ⚠ 与「断了」分开：断了要等它自己回来，被拒了要去问一句「这张屏还公开吗」。
-   */
+  /** 服务端明确拒绝连接，公开页据此重新检查发布状态。 */
   isRejected: Ref<boolean>
   subscribe: (topic: string, handler: TopicHandler) => () => void
+  requestSnapshot: (topic: string) => void
 }
 
 const isRejected = ref(false)
@@ -56,8 +43,7 @@ const topics = createTopicRegistry()
 const ports: DispatchPorts = {
   topics,
   send: (message) => send(message),
-  // ⚠ 换票用的也是当前这条连接的凭据：公开连接换成 access token 等于在一条
-  // 已建立的连接上换主体，服务端会拒，而客户端看不出来自己送错了东西
+  // ⚠ 公开连接换票不能改用登录态凭据，否则服务端会拒绝主体切换。
   token: () => credential()?.token ?? null,
   newRequestId: newClientUuid,
 }
@@ -103,40 +89,35 @@ function connect(): void {
   markConnecting()
 
   opened.addEventListener('open', () => {
+    if (socket !== opened) return
     connectionState.value = 'open'
     isRejected.value = false
     resetBackoff()
     resubscribeAll()
   })
   opened.addEventListener('message', (event: MessageEvent<string>) => {
+    if (socket !== opened) return
     dispatchFrame(event.data, ports)
   })
   opened.addEventListener('close', (event: CloseEvent) => {
+    if (socket !== opened) return
     socket = null
-    // ⚠ 1008 是「票压根验不过」，换票没用：再重连也是拿同一张票被拒，
-    // 那会退化成一个打满退避上限的空转循环。停下，等登录态那条路把票换掉；
-    // 停下也要把态说出来，否则屏上一切照旧显示成活值
+    clearPointSnapshots(subscribe)
+    // ⚠ 握手被拒后必须停止重连并报告错误，不能让旧值仍显示为实时。
     if (event.code === REALTIME_HANDSHAKE_REJECTED_CLOSE_CODE) {
       isRejected.value = true
       connectionState.value = 'error'
       return
     }
-    // ⚠ 4003 是「这枚公开票据没有授权」：要么链接被撤回了，要么推送方还没把
-    // 它对账到 hub。后者只要等一轮对账，所以照常退避重连；同时把「被拒」说
-    // 出来，页面据它去问一句「这张屏还公开吗」
+    // ⚠ 公开授权尚未对账也会报 4003，须保留退避重连并检查发布状态。
     if (event.code === REALTIME_PUBLIC_GRANT_CLOSE_CODE) isRejected.value = true
-    // ⚠ 4001 是「票过期了」：由 store 的刷新逻辑保证下次握手带的是新票，
-    // 所以退避归零、立刻重连
+    // ⚠ 票过期时刷新归 store，通道只重置退避并用新票重连。
     if (event.code === CLOSE_TOKEN_EXPIRED) resetBackoff()
     scheduleReconnect()
   })
 }
 
-/**
- * 订一个主题，返回退订函数。
- * ⚠ 调用方**必须**在卸载时调那个退订函数：不退的话，切走的页面仍会收到消息
- * 并更新已经不在的组件的状态。
- */
+/** 订一个主题；调用方卸载时须调用返回的退订函数。 */
 function subscribe(topic: string, handler: TopicHandler): () => void {
   if (topics.add(topic, handler)) {
     send({ action: 'subscribe', topic, req_id: newClientUuid() })
@@ -148,6 +129,17 @@ function subscribe(topic: string, handler: TopicHandler): () => void {
   }
 }
 
+/** 更新订阅身份，让发布器为当前观看者补发全量。 */
+function requestSnapshot(topic: string): void {
+  if (
+    socket?.readyState !== WebSocket.OPEN ||
+    topics.listeners(topic).length === 0
+  )
+    return
+  send({ action: 'unsubscribe', topic, req_id: newClientUuid() })
+  send({ action: 'subscribe', topic, req_id: newClientUuid() })
+}
+
 /** 关掉连接并停掉重连。登出与离开公开页时用。 */
 export function closeRealtimeChannel(): void {
   isClosing = true
@@ -156,8 +148,8 @@ export function closeRealtimeChannel(): void {
   socket?.close()
   socket = null
   topics.clear()
-  // ⚠ 票据也要清：不清的话回到登录态之后，下一次握手仍会报公开那条子协议，
-  // 而那条连接看什么都被拒
+  resetPointSnapshots(subscribe)
+  // ⚠ 残留公开票据会让回到登录态后的握手仍使用公开子协议。
   setPublicTicket(null)
   resetBackoff()
   connectionState.value = 'closed'
@@ -168,29 +160,28 @@ export function closeRealtimeChannel(): void {
 export function useRealtimeChannel(): Channel {
   isClosing = false
   connect()
-  return { isConnected, connectionState, isRejected, subscribe }
+  return {
+    isConnected,
+    connectionState,
+    isRejected,
+    subscribe,
+    requestSnapshot,
+  }
 }
 
 /**
- * 取通道，并让它用一枚公开令牌握手（公开大屏页专用）。
- *
- * ⚠ 必须在页面 setup 的最前面调：`useRealtimeChannel()` 一被调用就去连，
- * 而连接用的凭据在那一刻就定死了。晚一步调，先建起来的是一条没有凭据、
- * 于是根本没建立的连接。
- * ⚠ 换票据要重连：一条连接的授权在握手那一刻定死，服务端不接受在连上之后
- * 换成另一枚票据。
- * @param ticket 公开令牌，就是地址里的那一段
+ * 使用公开票据建立通道，须在页面 setup 的其它取通道操作之前调用。
+ * @param ticket 公开令牌
  */
 export function usePublicRealtimeChannel(ticket: string): Channel {
   if (setPublicTicket(ticket)) {
+    clearPointSnapshots(subscribe)
     socket?.close()
     socket = null
     resetBackoff()
     connectionState.value = 'closed'
     isRejected.value = false
   }
-  // ⚠ 刻意**不**清主题登记表：换屏时退订旧主题是取数那一侧的事（它按屏重订），
-  // 在这里清会与它的重订抢顺序——清在后面就把刚登记好的处理器一起抹掉了，
-  // 表现是「跳过去那一屏永远没有值」，而且没有任何报错
+  // ⚠ 换屏由取数层重订，清主题表会误删它刚登记的处理器。
   return useRealtimeChannel()
 }
