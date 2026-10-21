@@ -72,7 +72,7 @@ def test_feature_names_scale_with_the_room() -> None:
     """组合指示列随房间机组数变，其余列固定。"""
     names = feature_names(UNITS)
     assert names.index("run_K11") < names.index("run_K12")
-    assert len(names) == 6 + len(UNITS) + 1 + 1 + 5 + 3 + 7 + 4
+    assert len(names) == 6 + len(UNITS) + 1 + 1 + 5 + 3 + 7 + 4 + len(UNITS)
 
 
 def test_room_conditions_average_over_all_units() -> None:

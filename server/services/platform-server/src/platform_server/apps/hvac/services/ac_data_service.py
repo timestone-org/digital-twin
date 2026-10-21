@@ -9,6 +9,7 @@ import uuid
 from decimal import Decimal
 from typing import Protocol
 
+from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from lib.errors import FieldError, ValidationFailed
@@ -34,7 +35,11 @@ from platform_server.apps.hvac.errors import (
     SourceObjectInvalid,
     SourceObjectShapeMismatch,
 )
-from platform_server.apps.hvac.models import AcDataBinding, AcMetricLimit
+from platform_server.apps.hvac.models import (
+    AcDataBinding,
+    AcMetricLimit,
+    AcUnit,
+)
 from platform_server.apps.hvac.schemas import (
     AcDataBindingOut,
     AcDataBindingPutIn,
@@ -228,6 +233,26 @@ async def list_metric_limits(
 
 
 async def put_metric_limits(
+    session: AsyncSession, *, ac_unit_id: uuid.UUID, payload: MetricLimitsPutIn
+) -> MetricLimitsOut:
+    """非季节旧入口；启用季节后要求整体保存。
+
+    Args: session, ac_unit_id, payload。"""
+    unit = await session.scalar(
+        select(AcUnit).where(AcUnit.id == ac_unit_id).with_for_update()
+    )
+    if unit is None:
+        raise AcUnitNotFound("空调不存在")
+    if unit.winter_policy is not None:
+        raise ValidationFailed(
+            "这台空调已启用冬季，请在季节达标配置中保存两套范围"
+        )
+    return await replace_metric_limits(
+        session, ac_unit_id=ac_unit_id, payload=payload
+    )
+
+
+async def replace_metric_limits(
     session: AsyncSession, *, ac_unit_id: uuid.UUID, payload: MetricLimitsPutIn
 ) -> MetricLimitsOut:
     """覆盖式设置达标范围。请求里没出现的指标视为清除。

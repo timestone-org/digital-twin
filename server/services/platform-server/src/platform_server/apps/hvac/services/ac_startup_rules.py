@@ -6,7 +6,7 @@
 """
 
 import hashlib
-from collections.abc import Iterator, Mapping, Sequence
+from collections.abc import Callable, Iterator, Mapping, Sequence
 from dataclasses import dataclass, fields
 from datetime import datetime, timedelta
 
@@ -20,7 +20,7 @@ from platform_server.apps.hvac.startups import (
 # ⚠ 改抽取逻辑的人手动 +1，不对代码求哈希：否则一次格式化就触发全量重算提醒，
 # 很快没人理它（docs/AC_STARTUP_DESIGN.md §5）。
 # v2：事件记录全停时长 idle_minutes（蓄热特征，docs/AC_MODEL_DESIGN.md §2.5）
-LOGIC_VERSION = 2
+LOGIC_VERSION = 3
 
 _ONE_MINUTE = timedelta(minutes=1)
 
@@ -113,7 +113,10 @@ class Episode:
 
 
 def extract_episodes(
-    frames: Sequence[Frame], *, rules: ExtractionRules
+    frames: Sequence[Frame],
+    *,
+    rules: ExtractionRules,
+    compliance: Callable[[Frame, datetime], bool] | None = None,
 ) -> list[Episode]:
     """按 §3 的规则从一段按时刻升序的帧序列里抽出开机事件。
 
@@ -122,7 +125,7 @@ def extract_episodes(
     边界的那次开机会凭空消失，而调用方还会以为自己抽全了。
     Args: frames, rules。
     """
-    machine = _Machine(rules)
+    machine = _Machine(rules, compliance)
     for minute in _minutes(frames):
         machine.step(minute)
     return machine.episodes
@@ -198,8 +201,13 @@ def _closed(
 class _Machine:
     """§3 的判定状态机：空闲时数全停分钟，开机后跟组合、达标与数据质量。"""
 
-    def __init__(self, rules: ExtractionRules) -> None:
+    def __init__(
+        self,
+        rules: ExtractionRules,
+        compliance: Callable[[Frame, datetime], bool] | None = None,
+    ) -> None:
         self._rules = rules
+        self._compliance = compliance
         self.episodes: list[Episode] = []
         # ⚠ 从 0 起算：序列开头之前的状态我们看不见，只认亲眼数到的全停分钟
         self._off_streak = 0
@@ -296,7 +304,12 @@ class _Machine:
 
         Args: frame, episode。
         """
-        if not frame.is_compliant:
+        compliant = (
+            frame.is_compliant
+            if self._compliance is None
+            else self._compliance(frame, episode.started_at)
+        )
+        if not compliant:
             episode.compliant_streak = 0
             episode.compliant_since = None
             return None

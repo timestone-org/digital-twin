@@ -9,6 +9,7 @@ import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 import { enableAutoUnmount, flushPromises, mount } from '@vue/test-utils'
 import type {
   AcDataBinding,
+  AcCompliancePolicy,
   AcDataset,
   AcMetricLimit,
   AcSourceObject,
@@ -20,6 +21,17 @@ import * as hvac from '@/api/hvac'
 import AcDataDialog from '@/pages/Hvac/Units/components/AcDataDialog.vue'
 
 const STAMP = '2026-01-01T00:00:00.000Z'
+
+function policy(non_winter: AcMetricLimit[] = []): AcCompliancePolicy {
+  return {
+    non_winter,
+    winter: [],
+    winter_period: null,
+    effective_season: 'non_winter',
+    effective_at: STAMP,
+    timezone: 'Asia/Shanghai',
+  }
+}
 
 function acUnit(id = 'a1', serial = 'AC-A-101'): AcUnit {
   return {
@@ -157,7 +169,7 @@ function optionLabels(): string[] {
 beforeEach(() => {
   vi.spyOn(hvac, 'listAcDatasets').mockResolvedValue([catalog()])
   vi.spyOn(hvac, 'listAcDataBindings').mockResolvedValue([])
-  vi.spyOn(hvac, 'listAcMetricLimits').mockResolvedValue([])
+  vi.spyOn(hvac, 'getAcCompliancePolicy').mockResolvedValue(policy())
   vi.spyOn(hvac, 'listAcSourceObjects').mockResolvedValue([
     sourceObject('KTStartData_K01', '一号空调'),
     sourceObject('KTStartData_K02', null),
@@ -269,8 +281,8 @@ describe('数据源绑定', () => {
 describe('达标范围', () => {
   it('只给 is_limitable 的指标出输入框，量纲写在标签上', async () => {
     await open()
-    expect(inputByLabel('车间温度下限（℃）')).toBeDefined()
-    expect(inputByLabel('车间湿度上限（%）')).toBeDefined()
+    expect(inputByLabel('非冬季车间温度下限（℃）')).toBeDefined()
+    expect(inputByLabel('非冬季车间湿度上限（%）')).toBeDefined()
     expect(controlByLabel('新风温度下限')).toBeNull()
   })
 
@@ -283,33 +295,35 @@ describe('达标范围', () => {
     )
     expect(visible).toContain('下限')
     expect(visible).toContain('上限')
-    expect(visible).not.toContain('车间温度下限（℃）')
+    expect(visible).not.toContain('非冬季车间温度下限（℃）')
     // 可读名仍然完整，读屏用户不会只听到两声「下限」
-    expect(inputByLabel('车间温度下限（℃）')).toBeDefined()
-    expect(inputByLabel('车间湿度下限（%）')).toBeDefined()
+    expect(inputByLabel('非冬季车间温度下限（℃）')).toBeDefined()
+    expect(inputByLabel('非冬季车间湿度下限（%）')).toBeDefined()
   })
 
   it('温湿度填反时给出提醒——上下限校验对这种错完全无能为力', async () => {
     await open()
-    await fill('车间温度上限（℃）', '53')
-    await fill('车间湿度下限（%）', '27')
+    await fill('非冬季车间温度上限（℃）', '53')
+    await fill('非冬季车间湿度下限（%）', '27')
     expect(document.body.textContent).toContain('填反')
   })
 
   it('提醒只是提醒，不拦保存——范围终究是用户自己定的', async () => {
-    const put = vi.spyOn(hvac, 'putAcMetricLimits').mockResolvedValue([])
+    const put = vi
+      .spyOn(hvac, 'putAcCompliancePolicy')
+      .mockResolvedValue(policy())
     await open()
-    await fill('车间温度上限（℃）', '53')
+    await fill('非冬季车间温度上限（℃）', '53')
     await click('保存达标范围')
     expect(put).toHaveBeenCalled()
   })
 
   it('填对时一句提醒都不出', async () => {
     await open()
-    await fill('车间温度下限（℃）', '23')
-    await fill('车间温度上限（℃）', '27')
-    await fill('车间湿度下限（%）', '53')
-    await fill('车间湿度上限（%）', '63')
+    await fill('非冬季车间温度下限（℃）', '23')
+    await fill('非冬季车间温度上限（℃）', '27')
+    await fill('非冬季车间湿度下限（%）', '53')
+    await fill('非冬季车间湿度上限（%）', '63')
     expect(document.body.textContent).not.toContain('填反')
   })
 
@@ -317,51 +331,75 @@ describe('达标范围', () => {
     const saved: AcMetricLimit[] = [
       { metric: 'workshop_temp_avg', lower_limit: '20.15', upper_limit: '24' },
     ]
-    vi.mocked(hvac.listAcMetricLimits).mockResolvedValue(saved)
+    vi.mocked(hvac.getAcCompliancePolicy).mockResolvedValue(policy(saved))
     await open()
-    expect(inputByLabel('车间温度下限（℃）').value).toBe('20.15')
+    expect(inputByLabel('非冬季车间温度下限（℃）').value).toBe('20.15')
   })
 
   it('留空的一侧送 null——空是「不限制」，不是 0', async () => {
-    const put = vi.spyOn(hvac, 'putAcMetricLimits').mockResolvedValue([])
+    const put = vi
+      .spyOn(hvac, 'putAcCompliancePolicy')
+      .mockResolvedValue(policy())
     await open()
-    await fill('车间温度上限（℃）', '24')
+    await fill('非冬季车间温度上限（℃）', '24')
     await click('保存达标范围')
-    expect(put).toHaveBeenCalledWith('a1', [
-      { metric: 'workshop_temp_avg', lower_limit: null, upper_limit: '24' },
-      { metric: 'workshop_humidity_avg', lower_limit: null, upper_limit: null },
-    ])
+    expect(put).toHaveBeenCalledWith('a1', {
+      winter_period: null,
+      winter: [],
+      non_winter: [
+        { metric: 'workshop_temp_avg', lower_limit: null, upper_limit: '24' },
+        {
+          metric: 'workshop_humidity_avg',
+          lower_limit: null,
+          upper_limit: null,
+        },
+      ],
+    })
   })
 
   it('被清空的指标照样出现在载荷里，由后端删掉而不是漏送', async () => {
-    vi.mocked(hvac.listAcMetricLimits).mockResolvedValue([
-      { metric: 'workshop_temp_avg', lower_limit: '20', upper_limit: '24' },
-    ])
-    const put = vi.spyOn(hvac, 'putAcMetricLimits').mockResolvedValue([])
+    vi.mocked(hvac.getAcCompliancePolicy).mockResolvedValue(
+      policy([
+        { metric: 'workshop_temp_avg', lower_limit: '20', upper_limit: '24' },
+      ]),
+    )
+    const put = vi
+      .spyOn(hvac, 'putAcCompliancePolicy')
+      .mockResolvedValue(policy())
     await open()
-    await fill('车间温度下限（℃）', '')
-    await fill('车间温度上限（℃）', '')
+    await fill('非冬季车间温度下限（℃）', '')
+    await fill('非冬季车间温度上限（℃）', '')
     await click('保存达标范围')
-    expect(put).toHaveBeenCalledWith('a1', [
-      { metric: 'workshop_temp_avg', lower_limit: null, upper_limit: null },
-      { metric: 'workshop_humidity_avg', lower_limit: null, upper_limit: null },
-    ])
+    expect(put).toHaveBeenCalledWith('a1', {
+      winter_period: null,
+      winter: [],
+      non_winter: [
+        { metric: 'workshop_temp_avg', lower_limit: null, upper_limit: null },
+        {
+          metric: 'workshop_humidity_avg',
+          lower_limit: null,
+          upper_limit: null,
+        },
+      ],
+    })
   })
 
   it('精确小数原样送出去，不经过一次数字化', async () => {
-    const put = vi.spyOn(hvac, 'putAcMetricLimits').mockResolvedValue([])
+    const put = vi
+      .spyOn(hvac, 'putAcCompliancePolicy')
+      .mockResolvedValue(policy())
     await open()
-    await fill('车间温度下限（℃）', '20.150')
+    await fill('非冬季车间温度下限（℃）', '20.150')
     await click('保存达标范围')
     const sent = vi.mocked(put).mock.calls[0]?.[1]
-    expect(sent?.[0]?.lower_limit).toBe('20.150')
+    expect(sent?.non_winter[0]?.lower_limit).toBe('20.150')
   })
 
   it('下限大于上限时就地拦下，不发请求', async () => {
-    const put = vi.spyOn(hvac, 'putAcMetricLimits')
+    const put = vi.spyOn(hvac, 'putAcCompliancePolicy')
     await open()
-    await fill('车间温度下限（℃）', '25')
-    await fill('车间温度上限（℃）', '24')
+    await fill('非冬季车间温度下限（℃）', '25')
+    await fill('非冬季车间温度上限（℃）', '24')
     await click('保存达标范围')
     expect(put).not.toHaveBeenCalled()
     expect(document.querySelector('[role="alert"]')?.textContent).toContain(
@@ -370,7 +408,7 @@ describe('达标范围', () => {
   })
 
   it('后端拒绝时把原因显示在表单里', async () => {
-    vi.spyOn(hvac, 'putAcMetricLimits').mockRejectedValue(new Error('boom'))
+    vi.spyOn(hvac, 'putAcCompliancePolicy').mockRejectedValue(new Error('boom'))
     await open()
     await click('保存达标范围')
     expect(document.querySelector('[role="alert"]')?.textContent).toContain(
@@ -421,4 +459,90 @@ describe('竞态', () => {
     expect(document.body.textContent).toContain('KTStartData_K02')
     expect(document.body.textContent).not.toContain('KTStartData_K01')
   })
+})
+
+describe('逐台冬季配置', () => {
+  async function enableWinter(): Promise<void> {
+    const checkbox = document.querySelector('input[type="checkbox"]')
+    if (!(checkbox instanceof HTMLInputElement)) throw new Error('没有冬季开关')
+    checkbox.click()
+    await flushPromises()
+  }
+
+  it('开启冬季后缺少两季范围不能保存', async () => {
+    const put = vi.spyOn(hvac, 'putAcCompliancePolicy')
+    await open()
+    await enableWinter()
+    await fill('冬季开始（月-日）', '11-15')
+    await fill('冬季结束（月-日）', '03-15')
+    await click('保存达标范围')
+    expect(put).not.toHaveBeenCalled()
+    expect(document.body.textContent).toContain('都必须填写')
+  })
+
+  it('两季范围和跨年日期一次提交到当前空调', async () => {
+    const put = vi
+      .spyOn(hvac, 'putAcCompliancePolicy')
+      .mockResolvedValue(policy())
+    await open()
+    await enableWinter()
+    await fill('冬季开始（月-日）', '11-15')
+    await fill('冬季结束（月-日）', '03-15')
+    for (const season of ['非冬季', '冬季']) {
+      await fill(`${season}车间温度下限（℃）`, '20')
+      await fill(`${season}车间温度上限（℃）`, '24')
+      await fill(`${season}车间湿度下限（%）`, '45')
+      await fill(`${season}车间湿度上限（%）`, '55')
+    }
+    await click('保存达标范围')
+    expect(put).toHaveBeenCalledWith('a1', {
+      winter_period: { start: '11-15', end: '03-15' },
+      non_winter: [
+        { metric: 'workshop_temp_avg', lower_limit: '20', upper_limit: '24' },
+        {
+          metric: 'workshop_humidity_avg',
+          lower_limit: '45',
+          upper_limit: '55',
+        },
+      ],
+      winter: [
+        { metric: 'workshop_temp_avg', lower_limit: '20', upper_limit: '24' },
+        {
+          metric: 'workshop_humidity_avg',
+          lower_limit: '45',
+          upper_limit: '55',
+        },
+      ],
+    })
+  })
+
+  it('读取失败时不能把空草稿覆盖到空调上', async () => {
+    vi.mocked(hvac.getAcCompliancePolicy).mockRejectedValue(new Error('failed'))
+    const put = vi.spyOn(hvac, 'putAcCompliancePolicy')
+    await open()
+    await click('保存达标范围')
+    expect(put).not.toHaveBeenCalled()
+  })
+})
+
+it('保存中的空调被切换后，旧保存结果不能覆盖新空调', async () => {
+  const slow = deferred<AcCompliancePolicy>()
+  vi.spyOn(hvac, 'putAcCompliancePolicy').mockReturnValue(slow.promise)
+  const wrapper = await open()
+  await fill('非冬季车间温度下限（℃）', '20')
+  await click('保存达标范围')
+  vi.mocked(hvac.getAcCompliancePolicy).mockResolvedValue(
+    policy([
+      { metric: 'workshop_temp_avg', lower_limit: '28', upper_limit: '30' },
+    ]),
+  )
+  await wrapper.setProps({ unit: acUnit('a2', 'K02') })
+  await flushPromises()
+  slow.resolve(
+    policy([
+      { metric: 'workshop_temp_avg', lower_limit: '20', upper_limit: '24' },
+    ]),
+  )
+  await flushPromises()
+  expect(inputByLabel('非冬季车间温度下限（℃）').value).toBe('28')
 })

@@ -41,6 +41,9 @@ class AcModel(UuidPrimaryKeyMixin, TimestampMixin, Base):
     """
 
     __tablename__ = "hvac_ac_models"
+    configuration_snapshot: Mapped[dict[str, object] | None] = mapped_column(
+        JSONB, nullable=True
+    )
 
     room_id: Mapped[uuid.UUID] = mapped_column(
         UUID(as_uuid=True),

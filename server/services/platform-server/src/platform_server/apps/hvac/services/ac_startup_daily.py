@@ -9,7 +9,7 @@
 """
 
 import uuid
-from dataclasses import dataclass
+from dataclasses import dataclass, replace
 from datetime import date, datetime, time, timedelta
 from zoneinfo import ZoneInfo
 
@@ -22,8 +22,12 @@ from platform_server.apps.hvac.crud import (
 )
 from platform_server.apps.hvac.models import AcStartupBatch, AcStartupEpisode
 from platform_server.apps.hvac.schemas import TimeWindow
+from platform_server.apps.hvac.services.ac_room_configuration import (
+    load_configuration,
+)
 from platform_server.apps.hvac.services.ac_startup_extract import (
     ExtractionContext,
+    batch_context,
     extract_window,
 )
 from platform_server.apps.hvac.services.ac_startup_rules import (
@@ -117,11 +121,24 @@ async def append_day(
             outcome=DAILY_RUN_SKIPPED,
             reason="这个房间还没有当前批次，先做一次全量抽取",
         )
+    configuration = await load_configuration(
+        session, room_id, timezone=timezone, rules=context.rules
+    )
+    context = replace(context, configuration=configuration)
+    if batch.configuration_snapshot is None:
+        return DailyRun(
+            outcome=DAILY_RUN_SKIPPED,
+            reason="当前批次缺少配置快照，请先全量重算",
+        )
     mismatch = _fingerprint_mismatch(batch, context)
     if mismatch is not None:
         return DailyRun(outcome=DAILY_RUN_SKIPPED, reason=mismatch)
     return await _append(
-        session, context, batch=batch, day=day, timezone=timezone
+        session,
+        batch_context(batch, context),
+        batch=batch,
+        day=day,
+        timezone=timezone,
     )
 
 
@@ -140,7 +157,15 @@ def _fingerprint_mismatch(
             f"当前批次按抽取逻辑 v{batch.logic_version} 算，"
             f"现在是 v{LOGIC_VERSION}，请先全量重算"
         )
-    if batch.params_fingerprint != context.rules.fingerprint():
+    expected = (
+        context.configuration.fingerprint()
+        if context.configuration is not None
+        else context.rules.fingerprint()
+    )
+    if (
+        batch.configuration_snapshot is None
+        or batch.params_fingerprint != expected
+    ):
         return "当前批次的抽取参数与现在这套不符，请先全量重算"
     return None
 
@@ -162,6 +187,17 @@ async def _append(
     episodes = await extract_window(
         session, context, room_id=batch.room_id, window=window
     )
+    current = await load_configuration(
+        session,
+        batch.room_id,
+        timezone=timezone,
+        rules=context.rules,
+        should_lock_units=True,
+    )
+    if current.fingerprint() != batch.params_fingerprint:
+        return DailyRun(
+            outcome=DAILY_RUN_SKIPPED, reason="抽取期间配置发生变化，请全量重算"
+        )
     replaced = await ac_startup_episode_crud.replace_window(
         session,
         batch_id=batch.id,

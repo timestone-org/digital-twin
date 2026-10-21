@@ -34,6 +34,14 @@ from platform_server.apps.hvac.schemas import (
     StartupBatchOut,
     StartupEpisodeOut,
 )
+from platform_server.apps.hvac.services.ac_compliance_service import (
+    effective_compliance,
+)
+from platform_server.apps.hvac.services.ac_room_configuration import (
+    RoomConfiguration,
+    load_configuration,
+    restore_configuration,
+)
 from platform_server.apps.hvac.services.ac_source_reader import AcSourceReader
 from platform_server.apps.hvac.services.ac_startup_extract import (
     resolve_source_extent,
@@ -80,7 +88,14 @@ async def list_episodes(
         session, current.id, window=window
     )
     excluded = await ac_startup_exclusion_crud.map_by_room(session, room_id)
-    return _to_page(rows, limit=cursor.limit, excluded=excluded)
+    configuration = (
+        None
+        if current.configuration_snapshot is None
+        else restore_configuration(current.configuration_snapshot)
+    )
+    return _to_page(
+        rows, limit=cursor.limit, excluded=excluded, configuration=configuration
+    )
 
 
 def parse_filters(outcome: str | None, running_set: str | None) -> EpisodePage:
@@ -141,6 +156,7 @@ def _to_page(
     *,
     limit: int,
     excluded: dict[datetime, AcStartupExclusion],
+    configuration: RoomConfiguration | None = None,
 ) -> CursorPage[StartupEpisodeOut]:
     """多取的那一行只用来判断还有没有下一页。
 
@@ -156,14 +172,16 @@ def _to_page(
         else None
     )
     return CursorPage[StartupEpisodeOut](
-        items=[_to_episode(row, excluded) for row in visible],
+        items=[_to_episode(row, excluded, configuration) for row in visible],
         next=next_cursor,
         has_more=has_more,
     )
 
 
 def _to_episode(
-    row: AcStartupEpisode, excluded: dict[datetime, AcStartupExclusion]
+    row: AcStartupEpisode,
+    excluded: dict[datetime, AcStartupExclusion],
+    configuration: RoomConfiguration | None = None,
 ) -> StartupEpisodeOut:
     """事件行 → 对外模型，顺带套上人工排除。
 
@@ -179,6 +197,15 @@ def _to_episode(
         idle_minutes=row.idle_minutes,
         is_excluded=exclusion is not None,
         exclusion_reason=exclusion.reason if exclusion else None,
+        compliance=(
+            []
+            if configuration is None
+            else effective_compliance(
+                [bound.unit for bound in configuration.units],
+                row.started_at,
+                configuration.timezone,
+            )
+        ),
     )
 
 
@@ -198,7 +225,10 @@ async def list_batches(
         session, room_id, limit=BATCH_RETENTION
     )
     current = await ac_startup_batch_crud.find_current(session, room_id)
-    expected = rules.fingerprint()
+    configuration = await load_configuration(
+        session, room_id, timezone=reader.timezone, rules=rules
+    )
+    expected = configuration.fingerprint()
     return StartupBatchesOut(
         items=[await _to_batch(session, row) for row in rows],
         current=(
