@@ -39,6 +39,7 @@ def test_whole_canvas_read_accepts_an_explicit_null_scope() -> None:
     validate_arguments(
         spec, {"node_id": None, "keyword": "温度", "offset": 0, "limit": 2}
     )
+    assert "null" in spec.parameters["properties"]["node_id"]["type"]
 
 
 @pytest.mark.parametrize("path", [[], ["indicators", -1], [True], [0.5]])

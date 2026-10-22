@@ -100,12 +100,16 @@ describe('报告模板 AI 工作面', () => {
         text: '改进后的段落',
       }),
     )
-    expect(got.draft().doc_json?.content?.[0]?.content?.[0]?.text).toBe(
-      '改进后的段落',
-    )
-    expect(got.draft().doc_json?.content?.[1]?.content?.[0]?.text).toBe(
-      '保留段落',
-    )
+    expect(got.draft().doc_json).toEqual({
+      type: 'doc',
+      content: [
+        {
+          type: 'paragraph',
+          content: [{ type: 'text', text: '改进后的段落' }],
+        },
+        { type: 'paragraph', content: [{ type: 'text', text: '保留段落' }] },
+      ],
+    })
     await expect(
       got.surface.run(
         tool('report.replace_text', {
