@@ -213,7 +213,7 @@ async def test_failed_backfill_is_not_reported_as_zero_matches(
         Knowledge(scope="user", owner_id=ALICE, title="口径", body="正文")
     )
     embedder.model = "second-model"
-    with pytest.raises(DependencyUnavailable, match="补算.*未完成"):
+    with pytest.raises(DependencyUnavailable, match=r"补算.*未完成"):
         await MemoryTools(store=store, headers={HEADER_USER_ID: ALICE}).run(
             "memory.search", {"query": "口径"}
         )
