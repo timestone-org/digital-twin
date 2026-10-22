@@ -78,6 +78,60 @@ function harness(canEdit = true): Harness {
 }
 
 describe('报告模板 AI 工作面', () => {
+  it('报告长正文可以续读，并用原文核对后修改已有段落', async () => {
+    const got = harness()
+    const text = '甲'.repeat(300) + '最后的条件'
+    got.draft().doc_json = {
+      type: 'doc',
+      content: [
+        { type: 'paragraph', content: [{ type: 'text', text }] },
+        { type: 'paragraph', content: [{ type: 'text', text: '保留段落' }] },
+      ],
+    }
+    expect(
+      await got.surface.run(
+        tool('report.read_content', { path: '0', offset: 300 }),
+      ),
+    ).toMatchObject({ text: '最后的条件', has_more: false })
+    await got.surface.run(
+      tool('report.replace_text', {
+        path: '0',
+        expected_text: text,
+        text: '改进后的段落',
+      }),
+    )
+    expect(got.draft().doc_json?.content?.[0]?.content?.[0]?.text).toBe(
+      '改进后的段落',
+    )
+    expect(got.draft().doc_json?.content?.[1]?.content?.[0]?.text).toBe(
+      '保留段落',
+    )
+    await expect(
+      got.surface.run(
+        tool('report.replace_text', {
+          path: '0',
+          expected_text: text,
+          text: '重复写入',
+        }),
+      ),
+    ).rejects.toThrow(/变化/)
+  })
+
+  it('报告结构可以读取第120项以后的内容', async () => {
+    const got = harness()
+    got.draft().doc_json = {
+      type: 'doc',
+      content: Array.from({ length: 121 }, (_, index) => ({
+        type: 'paragraph',
+        content: [{ type: 'text', text: `段落${String(index)}` }],
+      })),
+    }
+    expect(
+      await got.surface.run(tool('report.read_draft', { offset: 120 })),
+    ).toMatchObject({
+      document: { has_more: false, items: [{ path: '119' }, { path: '120' }] },
+    })
+  })
   it('快照提供指标、页面设置和有界正文提纲', () => {
     const got = harness().surface.snapshot()
     expect(got['template_id']).toBe('report-1')

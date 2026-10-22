@@ -1,6 +1,6 @@
 <script setup lang="ts">
 /** @fileoverview 协议采集页共用的主从布局、数据源操作与点位管理。 */
-import { computed, ref } from 'vue'
+import { computed, ref, watch } from 'vue'
 import type {
   CollectProtocol,
   CollectSource,
@@ -17,6 +17,9 @@ import {
 } from '@dt/ui'
 
 import * as collect from '@/api/collect'
+import AiDock from '@/components/ai/AiDock.vue'
+import { useAiPanel } from '@/composables/useAiPanel'
+import { createCollectSurface } from '../scripts/aiSurface'
 import PermGuard from '@/components/PermGuard.vue'
 import { AppShell } from '@/components/layout'
 import { COLLECT_PROTOCOL_PAGES } from '@/features/collect/protocols'
@@ -50,6 +53,12 @@ const {
   searchSources,
   changeSourcePage,
 } = useSourceList(() => props.protocol)
+
+const ai = useAiPanel({
+  surface: () => createCollectSurface(() => activeSource.value),
+  refId: () => activeId.value,
+})
+watch(activeId, () => ai.chat.stop())
 
 /** 有几个源配了点位却没在采。它是「配了没人读」最外层的一道提示。 */
 const stalledCount = computed(
@@ -229,6 +238,16 @@ const archiveParamsOpen = ref(false)
         </section>
       </div>
     </div>
+
+    <AiDock
+      :ai="ai"
+      surface-label="采集配置页"
+      hint="查询点位、解释最近运行态和检索资料；设备写值与配置操作由你在页面执行。"
+      :starters="[
+        '检查当前数据源的配置数量与运行数量是否一致',
+        '帮我查找这套设备的温度点位',
+      ]"
+    />
 
     <!-- 弹窗 -->
     <SourceFormDialog

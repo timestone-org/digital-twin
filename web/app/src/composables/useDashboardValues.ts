@@ -34,13 +34,19 @@ export interface DashboardValues {
  * @param nodes 当前大屏的全部节点
  * @param scope 当前是哪张屏；跨屏跳转时订阅与快照都要跟着翻篇（见 usePointSamples）
  * @param connectionState 实时通道连接态，运行态的两张页面才给
+ * @param currentConnection 编辑器只读本次连接的样本，重连后逐点等首帧
  */
 export function useDashboardValues(
   nodes: () => readonly DashboardNodeView[],
   scope: () => string,
   connectionState?: () => ModuleConnectionState,
+  currentConnection?: () => ModuleConnectionState | undefined,
 ): DashboardValues {
-  const samples = usePointSamples(() => boundPointKeys(nodes()), scope)
+  const samples = usePointSamples(
+    () => boundPointKeys(nodes()),
+    scope,
+    currentConnection,
+  )
 
   // ⚠ 不给连接态就是「这里没有实时通道」，模块永不标「数据可能过期」：
   // 编辑器画布是设计态，画一枚说通道断了的角标只会让人去查一条不存在的故障

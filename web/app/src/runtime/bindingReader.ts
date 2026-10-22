@@ -21,6 +21,19 @@ const NO_POINT_MESSAGE = '实时绑定还没挑点位'
 /** 取一个点位当前的快照；没收到过给 undefined。 */
 export type ReadPointSample = (nodeKey: string) => PointSample | undefined
 
+/** 读取当前连接的样本；断线缓存不作为在线读数。 */
+export function connectedPointReader(
+  read: ReadPointSample,
+  connectionState: () => string | undefined,
+): ReadPointSample {
+  return (nodeKey) => {
+    const state = connectionState()
+    return state !== undefined && state !== 'open'
+      ? { state: 'error', errorMessage: '实时连接已断开，数据可能过期' }
+      : read(nodeKey)
+  }
+}
+
 /** 一个点位的快照 → 一条槽的结果。 */
 function slotOfSample(sample: PointSample): BindingSlot {
   if (sample.state === 'error') {

@@ -21,7 +21,10 @@ import { installDashboardDataSources } from '@/bootstrap/dashboard'
 import { usePointSamples } from '@/composables/usePointSamples'
 import { useRealtimeChannel } from '@/composables/useRealtimeChannel'
 import { boundPointKeysOf } from '@/features/dashboard/editorDoc'
-import { createBindingReader } from '@/runtime/bindingReader'
+import {
+  connectedPointReader,
+  createBindingReader,
+} from '@/runtime/bindingReader'
 import type { ReadPointSample } from '@/runtime/bindingReader'
 import { dashboardTopic } from '@/runtime/pointFrames'
 import { createPointSubscribe } from '@/runtime/pointStream'
@@ -100,8 +103,9 @@ export function useTwin2dLiveValues(
   dashboardId: () => string,
   bindings: () => readonly BindingView[],
 ): Twin2dLiveValues {
+  const channel = useRealtimeChannel()
   installDashboardDataSources({
-    subscribe: createPointSubscribe(useRealtimeChannel(), () => {
+    subscribe: createPointSubscribe(channel, () => {
       const id = dashboardId()
       return id === '' ? null : dashboardTopic(id)
     }),
@@ -110,7 +114,16 @@ export function useTwin2dLiveValues(
   // ⚠ `boundPointKeysOf` 出的是**定序**的去重表：次序一抖，`usePointSamples`
   //   会把「同一批点位」认成换了一批，于是每改一次绑定就退订重订一轮
   const keys = computed(() => boundPointKeysOf(bindings()))
-  const samples = usePointSamples(() => keys.value, dashboardId)
+  const samples = usePointSamples(
+    () => keys.value,
+    dashboardId,
+    () => channel.connectionState?.value,
+  )
+
+  const read = connectedPointReader(
+    samples.read,
+    () => channel.connectionState?.value,
+  )
 
   const tally = computed(() => tallyOf(keys.value, samples.read))
 
@@ -118,12 +131,17 @@ export function useTwin2dLiveValues(
     if (dashboardId() === '') return 'unwired'
     const { bound, received } = tally.value
     if (bound === 0) return 'idle'
+    if (
+      channel.connectionState?.value !== undefined &&
+      channel.connectionState.value !== 'open'
+    )
+      return 'waiting'
     return received === 0 ? 'waiting' : 'live'
   })
 
   return {
-    readBinding: () => createBindingReader(samples.read),
-    read: samples.read,
+    readBinding: () => createBindingReader(read),
+    read,
     state,
     tally,
   }

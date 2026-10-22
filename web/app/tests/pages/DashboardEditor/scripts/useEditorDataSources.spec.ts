@@ -14,9 +14,16 @@ import { __resetProviders, listProviders } from '@dt/datasources'
 import { useRuntimeData, type RuntimeDataSource } from '@dt/runtime'
 
 import { useEditorDataSources } from '@/pages/DashboardEditor/scripts/useEditorDataSources'
+import type { ReadPointSample } from '@/runtime/bindingReader'
 
 // ⚠ 通道必须打桩：不桩的话挂载就真的开一条 WebSocket
-const connectionState = ref<'open'>('open')
+const connectionState = ref<'open' | 'closed'>('open')
+vi.mock('@/composables/usePointSamples', () => ({
+  usePointSamples: () => ({
+    sampleCount: ref(1),
+    read: () => ({ state: 'ok', value: 42, quality: 'good', timestampMs: 1 }),
+  }),
+}))
 vi.mock('@/composables/useRealtimeChannel', () => ({
   useRealtimeChannel: () => ({
     isConnected: computed(() => true),
@@ -30,6 +37,7 @@ vi.mock('@/composables/useRealtimeChannel', () => ({
 function mountSources() {
   const dashboard = ref<DashboardPayload | null>(null)
   let source: RuntimeDataSource | null = null
+  let readPoint: ReadPointSample = () => undefined
   const child = defineComponent({
     setup() {
       source = useRuntimeData()
@@ -38,19 +46,48 @@ function mountSources() {
   })
   const host = defineComponent({
     setup() {
-      useEditorDataSources(dashboard, () => [])
+      readPoint = useEditorDataSources(dashboard, () => []).read
       return () => h('div', [h(child)])
     },
   })
   const wrapper = mount(host)
-  return { wrapper, read: () => source }
+  return { wrapper, read: () => source, readPoint }
 }
 
 beforeEach(() => {
   __resetProviders()
+  connectionState.value = 'open'
 })
 
 describe('编辑器的序列取数', () => {
+  it('断线与重连时，画布和助手使用相同的实时读取状态', () => {
+    const found = mountSources()
+    const binding = {
+      id: 'b-1',
+      fieldKey: 'value',
+      sourceKind: 'opcua' as const,
+      nodeKey: 'source:point',
+      staticValueJson: null,
+      computeJson: null,
+      detailJson: null,
+      transformJson: null,
+    }
+    connectionState.value = 'closed'
+    expect(found.readPoint('source:point')).toMatchObject({ state: 'error' })
+    expect(found.read()?.readBinding()(binding, {})).toMatchObject({
+      state: 'error',
+    })
+    connectionState.value = 'open'
+    expect(found.readPoint('source:point')).toMatchObject({
+      state: 'ok',
+      value: 42,
+    })
+    expect(found.read()?.readBinding()(binding, {})).toMatchObject({
+      state: 'ok',
+      value: 42,
+    })
+    found.wrapper.unmount()
+  })
   it('装上了批量取数口，序列槽在设计态也出数', () => {
     const found = mountSources()
 

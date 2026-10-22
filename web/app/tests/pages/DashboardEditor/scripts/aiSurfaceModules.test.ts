@@ -7,6 +7,7 @@ import { useDashboardEditor } from '@/composables/useDashboardEditor'
 import { createEditorActions } from '@/pages/DashboardEditor/scripts/editorActions'
 import { createArrangeActions } from '@/pages/DashboardEditor/scripts/editorArrange'
 import { createEditorSurface } from '@/pages/DashboardEditor/scripts/aiSurface'
+import configPathFixture from '../../../../../../server/services/ai-assistant/tests/fixtures/config_path.json'
 
 function setup(type: string) {
   registerBuiltinModules()
@@ -68,7 +69,13 @@ describe('新模块实际清单', () => {
     expect(await run('read_bindings')).toMatchObject({
       slots: [{ row_count: 3 }],
     })
-    await run('set_config', { path: ['indicators', 0, 'name'], value: '能效' })
+    await run('set_config', {
+      path: configPathFixture.arguments.path,
+      value: configPathFixture.arguments.value,
+    })
+    expect(editor.nodes.value[0]?.configJson.indicators).toEqual(
+      expect.arrayContaining([expect.objectContaining({ name: '能效' })]),
+    )
     expect(editor.nodes.value[0]?.configJson.indicators).toHaveLength(3)
     await run('add_config_item', {
       field: 'indicators',

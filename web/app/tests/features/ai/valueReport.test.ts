@@ -7,9 +7,12 @@
  */
 import { describe, expect, it } from 'vitest'
 import type { BindingView, PointSample } from '@dt/contracts'
+import { computeModuleValues } from '@dt/runtime'
+import { createBindingReader } from '@/runtime/bindingReader'
 
 import type { BindingRowInput } from '@/features/ai/bindingReport'
 import { pairRows, valueReport } from '@/features/ai/valueReport'
+import { bindingReportQuery } from '@/features/ai/bindingReportQuery'
 
 function row(fieldKey: string, label: string): BindingRowInput {
   return { slotKey: 'itemValues', index: 0, fieldKey, label, entityId: 'e1' }
@@ -50,6 +53,39 @@ function report(
 }
 
 describe('四档取数结论', () => {
+  it('坏质量保留与画布相同的转换值，同时明确不能作为有效读数', () => {
+    const bound = binding('a', { transformJson: { scale: 0.001 } })
+    const read = (): PointSample => ({
+      ...READING,
+      value: 1000,
+      quality: 'bad',
+    })
+    const rendered = computeModuleValues({
+      specs: [],
+      bindings: [bound],
+      read: createBindingReader(read),
+    })
+    const item = report([bound], read).items[0]
+    expect(item).toMatchObject({
+      value: 1,
+      raw_value: 1000,
+      quality: 'bad',
+      status: 'unavailable',
+    })
+    expect(item?.value).toBe(rendered.values.a)
+  })
+  it.each(['bad', 'uncertain'] as const)(
+    '质量为 %s 时不得声称有效验收',
+    (quality) => {
+      expect(
+        report([binding('a')], () => ({ ...READING, quality })).items[0],
+      ).toMatchObject({
+        quality,
+        raw_value: 42,
+        status: quality === 'bad' ? 'unavailable' : 'uncertain',
+      })
+    },
+  )
   it('有值时带上值与采样时刻，时刻是 UTC RFC3339', () => {
     const found = report([binding('a')], () => READING)
     expect(found.items[0]).toMatchObject({
@@ -96,6 +132,45 @@ describe('四档取数结论', () => {
 })
 
 describe('非实时的那几种来源', () => {
+  it('枚举值复用模块清单映射并保留原始数值', () => {
+    const found = valueReport({
+      rows: pairRows(
+        [row('a', '状态')],
+        [binding('a')],
+        [
+          {
+            key: 'a',
+            label: '状态',
+            dataType: 'enum',
+            enumMap: { '1': 'running' },
+          },
+        ],
+      ),
+      read: () => ({ ...READING, value: 1 }),
+    })
+    expect(found.items[0]).toMatchObject({ raw_value: 1, value: 'running' })
+  })
+  it.each(['opcua', 'static'] as const)(
+    '%s 读值使用画布的缩放、偏移和取整，保留原值',
+    (sourceKind) => {
+      const found = report(
+        [
+          binding('a', {
+            sourceKind,
+            staticValueJson: 1000,
+            transformJson: { scale: 0.001, offset: 0.25, round: 1 },
+          }),
+        ],
+        () => ({ ...READING, value: 1000 }),
+      )
+      expect(found.items[0]).toMatchObject({
+        raw_value: 1000,
+        value: 1.3,
+        status: 'has_value',
+      })
+    },
+  )
+
   it('常量就地给值，没有采样时刻', () => {
     const found = report([
       binding('a', { sourceKind: 'static', nodeKey: null, staticValueJson: 5 }),
@@ -140,6 +215,44 @@ describe('非实时的那几种来源', () => {
 })
 
 describe('条数上限', () => {
+  it('单一场景第201行可按实体筛选并续读，保持原槽键', () => {
+    const rows = Array.from({ length: 201 }, (_, index) => ({
+      ...row(`values[${String(index)}].value`, `设备${String(index)}`),
+      entityId: 'device::temperature',
+    }))
+    const found = valueReport({
+      rows: pairRows(rows, []),
+      read: () => undefined,
+      query: bindingReportQuery({
+        entity_id: 'device',
+        offset: 200,
+        limit: 20,
+      }),
+    })
+    expect(found).toMatchObject({
+      total: 201,
+      returned: 1,
+      offset: 200,
+      has_more: false,
+      next_offset: null,
+    })
+    expect(found.items[0]?.field_key).toBe('values[200].value')
+  })
+
+  it('读数分页在过滤之后进行，并返回实际下一位置', () => {
+    const found = valueReport({
+      rows: pairRows([row('a', '甲'), row('b', '乙'), row('c', '乙')], []),
+      read: () => undefined,
+      query: bindingReportQuery({ keyword: '乙', limit: 1 }),
+    })
+    expect(found).toMatchObject({
+      total: 2,
+      returned: 1,
+      next_offset: 1,
+      has_more: true,
+    })
+    expect(found.items[0]?.field_key).toBe('b')
+  })
   it('超过上限时截断并说出来', () => {
     const rows = [row('a', '甲'), row('b', '乙'), row('c', '丙')]
     const found = valueReport({

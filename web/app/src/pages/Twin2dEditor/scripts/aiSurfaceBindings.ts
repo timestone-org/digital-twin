@@ -119,8 +119,9 @@ function readValues(
   twin2dSameNodeOrThrow(deps, call)
   const rows = twin2dBindingRows(twin2dConfigOf(deps))
   return valueReport({
-    rows: pairRows(rows, deps.bindings()),
+    rows: pairRows(rows, deps.bindings(), TWIN_2D_VIEW_BINDINGS),
     read: deps.read,
+    query: bindingReportQuery(call.arguments),
   })
 }
 

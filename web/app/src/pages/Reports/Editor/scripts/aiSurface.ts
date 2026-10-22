@@ -10,8 +10,12 @@ import type {
 } from '@dt/contracts'
 
 import type { AiSurface, SurfaceSnapshot } from '@/features/ai/surfaces'
+import { bindingReportQuery } from '@/features/ai/bindingReportQuery'
+import { readReportContent, replaceReportText } from './aiContent'
 
 export const REPORT_TOOLS = [
+  'report.read_content',
+  'report.replace_text',
   'report.read_draft',
   'report.set_template',
   'report.upsert_metric',
@@ -42,6 +46,9 @@ const OUTLINE_ATTRS = [
 interface OutlineState {
   items: SurfaceSnapshot[]
   isTruncated: boolean
+  total: number
+  offset: number
+  limit: number
 }
 
 export interface ReportSurfaceDeps {
@@ -66,7 +73,10 @@ export function createReportSurface(deps: ReportSurfaceDeps): AiSurface {
   }
 }
 
-function snapshotOf(deps: ReportSurfaceDeps): SurfaceSnapshot {
+function snapshotOf(
+  deps: ReportSurfaceDeps,
+  args?: Readonly<Record<string, unknown>>,
+): SurfaceSnapshot {
   const draft = deps.draft()
   return {
     template_id: deps.templateId(),
@@ -75,16 +85,37 @@ function snapshotOf(deps: ReportSurfaceDeps): SurfaceSnapshot {
     metric_count: draft.metrics?.length ?? 0,
     metrics: draft.metrics ?? [],
     page: draft.page_json ?? {},
-    document: outlineOf(draft.doc_json),
+    document: outlineOf(draft.doc_json, args),
   }
 }
 
-function outlineOf(document: ReportDocument | undefined): SurfaceSnapshot {
-  const state: OutlineState = { items: [], isTruncated: false }
+function outlineOf(
+  document: ReportDocument | undefined,
+  args?: Readonly<Record<string, unknown>>,
+): SurfaceSnapshot {
+  const query = bindingReportQuery(args ?? {})
+  const state: OutlineState = {
+    items: [],
+    isTruncated: false,
+    total: 0,
+    offset: query.offset,
+    limit: args === undefined ? MAX_OUTLINE_NODES : query.limit,
+  }
   if (document !== undefined) visitDocument(document, [], state)
   return {
     items: state.items,
     is_truncated: state.isTruncated,
+    ...(args === undefined
+      ? {}
+      : {
+          total: state.total,
+          offset: state.offset,
+          returned: state.items.length,
+          has_more: state.isTruncated,
+          next_offset: state.isTruncated
+            ? state.offset + state.items.length
+            : null,
+        }),
   }
 }
 
@@ -93,19 +124,19 @@ function visitDocument(
   path: number[],
   state: OutlineState,
 ): void {
-  if (state.items.length >= MAX_OUTLINE_NODES) {
-    state.isTruncated = true
-    return
-  }
   if (node.type !== 'text') {
-    const text = textOf(node).slice(0, MAX_NODE_TEXT)
-    const attrs = compactAttrs(node.attrs)
-    state.items.push({
-      path: path.join('.'),
-      type: node.type,
-      ...(text ? { text } : {}),
-      ...(Object.keys(attrs).length > 0 ? { attrs } : {}),
-    })
+    const index = state.total++
+    if (index >= state.offset + state.limit) state.isTruncated = true
+    if (index >= state.offset && index < state.offset + state.limit) {
+      const text = textOf(node).slice(0, MAX_NODE_TEXT)
+      const attrs = compactAttrs(node.attrs)
+      state.items.push({
+        path: path.join('.'),
+        type: node.type,
+        ...(text ? { text } : {}),
+        ...(Object.keys(attrs).length > 0 ? { attrs } : {}),
+      })
+    }
   }
   node.content?.forEach((child, index) => {
     visitDocument(child, [...path, index], state)
@@ -136,8 +167,18 @@ async function runTool(
   deps: ReportSurfaceDeps,
   call: AssistantToolCall,
 ): Promise<unknown> {
-  if (call.name === 'report.read_draft') return snapshotOf(deps)
+  if (call.name === 'report.read_draft') return snapshotOf(deps, call.arguments)
+  if (call.name === 'report.read_content')
+    return readReportContent(deps.draft().doc_json ?? { type: 'doc' }, call)
   ensureEditable(deps)
+  if (call.name === 'report.replace_text') {
+    const current = deps.draft()
+    deps.setDraft({
+      ...current,
+      doc_json: replaceReportText(current.doc_json ?? { type: 'doc' }, call),
+    })
+    return { ok: true, staged: true, path: call.arguments.path }
+  }
   if (call.name === 'report.set_template') return setTemplate(deps, call)
   if (call.name === 'report.upsert_metric') return upsertMetric(deps, call)
   if (call.name === 'report.insert_content') return insertContent(deps, call)

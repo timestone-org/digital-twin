@@ -249,6 +249,15 @@ function applyEnumMap(value: unknown, spec: BindingSpec | undefined): unknown {
   return enumMap[String(value)] ?? value
 }
 
+/** 将原始绑定值转换为渲染值；Args: value, binding, spec。 */
+export function bindingDisplayValue(
+  value: unknown,
+  binding: BindingView,
+  spec: BindingSpec | undefined,
+): unknown {
+  return applyEnumMap(applyBindingTransform(value, binding.transformJson), spec)
+}
+
 /**
  * 求一个模块实例的全部绑定。
  * @param input 绑定槽声明、绑定列表与注入的读取器
@@ -304,10 +313,7 @@ function resolveBinding(
   state.slots[binding.fieldKey] = okSlotMeta(slot)
   injectPoints(state.values, binding, slot.points)
   const spec = resolveBindingSpec(input.specs, binding.fieldKey)
-  const value = applyEnumMap(
-    applyBindingTransform(slot.value, binding.transformJson),
-    spec,
-  )
+  const value = bindingDisplayValue(slot.value, binding, spec)
   if (value === null || value === undefined) state.tally.empty += 1
   else {
     state.tally.ok += 1

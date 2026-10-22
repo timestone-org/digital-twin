@@ -22,7 +22,10 @@ import { installDashboardDataSources } from '@/bootstrap/dashboard'
 import { usePointSamples } from '@/composables/usePointSamples'
 import { useRealtimeChannel } from '@/composables/useRealtimeChannel'
 import { boundPointKeysOf } from '@/features/dashboard/editorDoc'
-import { createBindingReader } from '@/runtime/bindingReader'
+import {
+  connectedPointReader,
+  createBindingReader,
+} from '@/runtime/bindingReader'
 import type { ReadPointSample } from '@/runtime/bindingReader'
 import { dashboardTopic } from '@/runtime/pointFrames'
 import { createPointSubscribe } from '@/runtime/pointStream'
@@ -68,18 +71,14 @@ export function useTwinLiveValues(
   const samples = usePointSamples(
     () => boundPointKeysOf(bindings()),
     dashboardId,
+    () => channel.connectionState?.value,
   )
 
-  const readBinding = (): BindingValueReader => {
-    const read = createBindingReader(samples.read)
-    const disconnected =
-      channel.connectionState?.value !== undefined &&
-      channel.connectionState.value !== 'open'
-    return (binding, siblings) =>
-      binding.sourceKind === 'opcua' && disconnected
-        ? { state: 'error', message: '实时连接已断开，数据可能过期' }
-        : read(binding, siblings)
-  }
+  const read = connectedPointReader(
+    samples.read,
+    () => channel.connectionState?.value,
+  )
+  const readBinding = (): BindingValueReader => createBindingReader(read)
 
   // ⚠ 在 computed 里调用读取器：对快照缓存的响应式依赖由这次调用建立
   const values = computed(
@@ -98,5 +97,5 @@ export function useTwinLiveValues(
     return stitched
   })
 
-  return { scene, readBinding, read: samples.read }
+  return { scene, readBinding, read }
 }

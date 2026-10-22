@@ -118,8 +118,9 @@ function readValues(
   sameNodeOrThrow(deps, call)
   const rows = twinBindingRows(configOf(deps))
   return valueReport({
-    rows: pairRows(rows, deps.bindings()),
+    rows: pairRows(rows, deps.bindings(), TWIN_VIEW_BINDINGS),
     read: deps.read,
+    query: bindingReportQuery(call.arguments),
   })
 }
 

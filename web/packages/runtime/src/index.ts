@@ -33,6 +33,7 @@ export type { GetModuleManifest, NodeTreeView, RuntimeNode } from './nodeTree'
 export {
   computeModuleValues,
   applyBindingTransform,
+  bindingDisplayValue,
   injectFieldValue,
   resolveBindingSpec,
 } from './moduleValues'

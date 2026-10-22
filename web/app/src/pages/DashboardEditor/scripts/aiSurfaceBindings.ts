@@ -111,7 +111,11 @@ function readValues(
       : ''
     // ⚠ 一块一块配对：整屏时十块卡片上的 `itemValues[0].value` 是同一个
     //   fieldKey，先并成一张表再配对会让后一块的绑定盖掉前一块的
-    const paired = pairRows(rowsOf(deps, node), node.bindings)
+    const paired = pairRows(
+      rowsOf(deps, node),
+      node.bindings,
+      deps.getManifest(node.moduleType)?.bindings ?? [],
+    )
     for (const one of paired) {
       rows.push({
         ...one,
@@ -123,6 +127,7 @@ function readValues(
   return valueReport({
     rows,
     read: deps.readSample,
+    query: bindingReportQuery(call.arguments),
     ...(deps.readSeries === undefined
       ? {}
       : {

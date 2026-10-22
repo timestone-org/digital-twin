@@ -87,6 +87,7 @@ function mountValues(
   initial: DashboardNodePayload[],
   initialScope = 'd1',
   connectionState?: () => ModuleConnectionState,
+  currentConnection?: () => ModuleConnectionState,
 ) {
   const nodes = ref<DashboardNodePayload[]>(initial)
   const scope = ref(initialScope)
@@ -105,6 +106,7 @@ function mountValues(
         () => nodes.value,
         () => scope.value,
         connectionState,
+        currentConnection,
       )
       values = found
       return () => h('div', [String(found.sampleCount.value), h(child)])
@@ -277,6 +279,43 @@ describe('透出去的那份快照缓存', () => {
 })
 
 describe('连接态', () => {
+  it('编辑器重连后逐点等待首帧，断线旧值不能再次验收', () => {
+    registerFakeRealtime()
+    const state = ref<ModuleConnectionState>('open')
+    const found = mountValues(
+      [node([binding('s:a'), binding('s:b')])],
+      'd1',
+      undefined,
+      () => state.value,
+    )
+    emit('s:a', { state: 'ok', value: 42, timestampMs: 99, quality: 'good' })
+    emit('s:b', { state: 'ok', value: 8, timestampMs: 99, quality: 'good' })
+    state.value = 'reconnecting'
+    emit('s:a', { state: 'ok', value: 43, timestampMs: 100, quality: 'good' })
+    state.value = 'open'
+    expect(found.values()?.sampleCount.value).toBe(0)
+    expect(found.values()?.read('s:a')).toBeUndefined()
+    expect(found.read()?.readBinding()(binding('s:a'), {})).toEqual({
+      state: 'pending',
+    })
+    emit('s:a', { state: 'ok', value: 44, timestampMs: 101, quality: 'good' })
+    expect(found.values()?.read('s:a')).toMatchObject({ value: 44 })
+    expect(found.values()?.read('s:b')).toBeUndefined()
+    found.wrapper.unmount()
+  })
+
+  it('运行页仍保留最后值，并提供断线状态用于陈旧标识', () => {
+    registerFakeRealtime()
+    const state = ref<ModuleConnectionState>('open')
+    const found = mountValues([node([binding('s:a')])], 'd1', () => state.value)
+    emit('s:a', { state: 'ok', value: 42, timestampMs: 99, quality: 'good' })
+    state.value = 'reconnecting'
+    expect(found.read()?.readBinding()(binding('s:a'), {})).toMatchObject({
+      value: 42,
+    })
+    expect(found.read()?.connectionState?.()).toBe('reconnecting')
+    found.wrapper.unmount()
+  })
   it('给了就装进取数源，且每次都现取——通道断了模块才重算得出来', () => {
     registerFakeRealtime()
     const state = ref<ModuleConnectionState>('open')

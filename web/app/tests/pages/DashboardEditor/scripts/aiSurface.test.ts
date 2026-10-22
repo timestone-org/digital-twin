@@ -123,6 +123,29 @@ function setup(): Harness {
 }
 
 describe('读画布', () => {
+  it('可以续读摘要之外的画布节点，并限定已选中范围', async () => {
+    const { editor, surface } = setup()
+    editor.reset(
+      Array.from({ length: 121 }, (_, index) =>
+        node(`n${String(index).padStart(3, '0')}`),
+      ),
+    )
+    editor.setSelection(['n120'])
+    expect(
+      await surface.run(call('dashboard.list_nodes', { offset: 120 })),
+    ).toMatchObject({
+      total: 121,
+      returned: 1,
+      has_more: false,
+      nodes: [{ id: 'n120' }],
+    })
+    expect(
+      await surface.run(call('dashboard.list_nodes', { selected_only: true })),
+    ).toMatchObject({
+      total: 1,
+      nodes: [{ id: 'n120' }],
+    })
+  })
   it('给出节点数、选中项与每个节点的摘要', async () => {
     const { surface } = setup()
     const shot = await surface.run(call('dashboard.read_canvas', {}))

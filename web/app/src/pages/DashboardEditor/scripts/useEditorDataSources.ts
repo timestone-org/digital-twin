@@ -12,6 +12,8 @@ import {
   type ReadRenderedSeries,
 } from '@/runtime/renderedSeries'
 
+import { connectedPointReader } from '@/runtime/bindingReader'
+
 import { fetchPointHistory } from '@/api/pointHistories'
 import {
   installDashboardDataSources,
@@ -34,22 +36,36 @@ export function useEditorDataSources(
   dashboard: Ref<DashboardPayload | null>,
   nodes: () => readonly DashboardNodeView[],
 ): DashboardValues & { readSeries: ReadRenderedSeries } {
+  const channel = useRealtimeChannel()
   installDashboardDataSources({
-    subscribe: createPointSubscribe(useRealtimeChannel(), () => {
+    subscribe: createPointSubscribe(channel, () => {
       const current = dashboard.value
       return current === null ? null : dashboardTopic(current.id)
     }),
     fetchHistory: fetchPointHistory,
     fetchDatasetSeries,
   })
-  const values = useDashboardValues(nodes, () => dashboard.value?.id ?? '')
+  const values = useDashboardValues(
+    nodes,
+    () => dashboard.value?.id ?? '',
+    undefined,
+    () => channel.connectionState?.value,
+  )
+  const read = connectedPointReader(
+    values.read,
+    () => channel.connectionState?.value,
+  )
   // ⚠ 必须排在 `useDashboardValues` 之后：两次注入的是同一个键，后者整份覆盖前者
   const rendered = createRenderedSeries()
   watch(() => dashboard.value?.id, rendered.clear)
   onScopeDispose(rendered.clear)
   installDashboardSeries({
-    readPoint: values.read,
+    readPoint: read,
     observeSeries: rendered.observe,
   })
-  return { ...values, readSeries: rendered.read }
+  return {
+    ...values,
+    read,
+    readSeries: rendered.read,
+  }
 }

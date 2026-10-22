@@ -36,6 +36,7 @@ import { COMPOSE_TOOLS, runCompose } from './aiSurfaceCompose'
 import { CONFIG_TOOLS, runConfig } from './aiSurfaceConfig'
 import { INTERACTION_TOOLS, runInteraction } from './aiSurfaceInteraction'
 import { PAGE_STYLE_TOOLS, runPageStyle } from './aiSurfacePageStyle'
+import { runCanvasRead } from './aiSurfaceCanvas'
 import type {
   ComposeDeps,
   EditorSurfaceDeps,
@@ -52,6 +53,7 @@ const CARD_STYLE = '__cardStyle'
 
 /** 这一页实现了哪些客户端工具。⚠ 与技能清单里声明的名字逐字相同。 */
 export const EDITOR_TOOLS = [
+  'dashboard.list_nodes',
   'dashboard.read_canvas',
   'dashboard.write_binding',
   'dashboard.remove_binding',
@@ -138,6 +140,7 @@ function settle(
 type ToolRunner = (deps: EditorToolDeps, call: AssistantToolCall) => unknown
 
 const RUNNERS: readonly ToolRunner[] = [
+  runCanvasRead,
   runBindingTool,
   runCompose,
   runConfig,

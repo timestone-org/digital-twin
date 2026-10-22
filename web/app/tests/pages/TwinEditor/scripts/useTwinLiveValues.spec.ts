@@ -17,9 +17,11 @@ import { useTwinLiveValues } from '@/pages/TwinEditor/scripts/useTwinLiveValues'
 
 const subscribed: string[] = []
 let emit: PointValueListener = () => undefined
+const connectionState = ref('open')
 
 vi.mock('@/composables/useRealtimeChannel', () => ({
   useRealtimeChannel: () => ({
+    connectionState,
     subscribe: (topic: string) => {
       subscribed.push(topic)
       return () => undefined
@@ -92,6 +94,7 @@ function mountLive(dashboardId = 'd1') {
 }
 
 beforeEach(() => {
+  connectionState.value = 'open'
   __resetProviders()
   subscribed.length = 0
 })
@@ -111,6 +114,36 @@ describe('订阅', () => {
 })
 
 describe('缝回场景', () => {
+  it('断线后助手与视口都拒绝把缓存当作当前有效值', () => {
+    const { wrapper, live } = mountLive()
+    emit('ns=2;s=F', {
+      state: 'ok',
+      value: 3.5,
+      timestampMs: 1,
+      quality: 'good',
+    })
+    connectionState.value = 'closed'
+    expect(live()?.read('ns=2;s=F')).toEqual({
+      state: 'error',
+      errorMessage: '实时连接已断开，数据可能过期',
+    })
+    expect(
+      live()?.readBinding()(binding('panelValues[1].value', 'ns=2;s=F'), {}),
+    ).toEqual({
+      state: 'error',
+      message: '实时连接已断开，数据可能过期',
+    })
+    connectionState.value = 'open'
+    expect(live()?.read('ns=2;s=F')).toBeUndefined()
+    emit('ns=2;s=F', {
+      state: 'ok',
+      value: 3.5,
+      timestampMs: 2,
+      quality: 'good',
+    })
+    expect(live()?.read('ns=2;s=F')).toMatchObject({ state: 'ok', value: 3.5 })
+    wrapper.unmount()
+  })
   it('第 2 行落在扁平化后的第 2 个信息牌字段上', async () => {
     const { wrapper, values } = mountLive()
 
