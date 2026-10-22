@@ -18,10 +18,17 @@ from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from ai_assistant.apps.chat.models import KnowledgeChunk
-from ai_assistant.apps.chat.services.memory.ports import Hit, Knowledge, Scope
+from ai_assistant.apps.chat.services.memory.ports import (
+    Hit,
+    Knowledge,
+    Remembered,
+    Scope,
+)
 from ai_assistant.llm import EmbeddingAdapter
 from lib import vectors
+from lib.errors import DependencyUnavailable
 from lib.logging import get_logger
+from llmcore.embedding_snapshot import EmbeddingBatch
 
 _logger = get_logger("assistant.memory")
 
@@ -55,19 +62,20 @@ class PgLongTermStore:
         """
         return self.embedder is not None and self.embedder.is_ready
 
-    async def remember(self, item: Knowledge) -> str:
+    async def remember(self, item: Knowledge) -> Remembered:
         """记一条，回它的 id。
 
         Args: item。
         """
-        vector = await self._embed(f"{item.title}\n{item.body}")
+        batch = await self._embed_many([f"{item.title}\n{item.body}"])
+        vector = None if batch is None else batch.vectors[0]
         row = KnowledgeChunk(
             scope=item.scope,
             owner_id=item.owner_id,
             title=item.title,
             body=item.body,
             embedding=None if vector is None else vectors.encode(vector),
-            embedding_model=None if vector is None else self._model_id(),
+            embedding_model=None if batch is None else batch.identity,
             dimensions=None if vector is None else len(vector),
         )
         async with self.sessions() as session:
@@ -75,7 +83,11 @@ class PgLongTermStore:
             # ⚠ flush 不 commit：事务由这一层的上下文管理器收口，
             # 提前 commit 取 id 会把一次写拆成两段（database-standard）
             await session.flush()
-            return str(row.id)
+            return Remembered(
+                id=str(row.id),
+                is_searchable=batch is not None
+                and batch.identity == self._model_id(),
+            )
 
     async def search(
         self, query: str, scope: Scope, owner_id: str, limit: int
@@ -85,12 +97,21 @@ class PgLongTermStore:
         Args: query, scope, owner_id, limit。
         """
         started = time.monotonic()
-        asked = await self._embed(query)
-        if asked is None:
+        batch = await self._embed_many([query])
+        if batch is None:
+            if self.can_rank:
+                raise DependencyUnavailable(
+                    "长期记忆嵌入请求失败，本次没有完成检索"
+                )
             return []
+        model = batch.identity
         rows = await self._rows_of(scope, owner_id)
-        await self._backfill(rows)
-        found = _ranked(rows, asked, limit)
+        await self._backfill(rows, model)
+        if self._model_id() != model:
+            raise DependencyUnavailable(
+                "记忆检索期间嵌入模型发生变化，请重新查询"
+            )
+        found = _ranked(rows, batch.vectors[0], limit, model)
         # 耗时指标。⚠ 标签只有 scope——低基数（observability）；owner_id 进去
         # 就是每个用户一条时间序列，那会把指标后端撑爆
         _logger.info(
@@ -116,22 +137,31 @@ class PgLongTermStore:
             )
             return list(found.scalars().all())
 
-    async def _backfill(self, rows: Sequence[KnowledgeChunk]) -> None:
+    async def _backfill(
+        self, rows: Sequence[KnowledgeChunk], model: str
+    ) -> None:
         """给当时没算出向量的那几条补上，就地写回。
 
         Args: rows。
         """
-        pending = [one for one in rows if one.embedding is None][:MAX_BACKFILL]
+        if self._model_id() != model:
+            raise DependencyUnavailable("嵌入模型已变化，请重新检索")
+        pending = [
+            one
+            for one in rows
+            if one.embedding is None or one.embedding_model != model
+        ][:MAX_BACKFILL]
         if not pending or self.embedder is None:
             return
         made = await self._embed_many(
             [f"{one.title}\n{one.body}" for one in pending]
         )
         if made is None:
-            return
-        model = self._model_id()
+            raise DependencyUnavailable("长期记忆补算失败，本次检索尚未完成")
+        if made.identity != model:
+            raise DependencyUnavailable("嵌入模型已变化，请重新检索")
         async with self.sessions() as session:
-            for row, vector in zip(pending, made, strict=True):
+            for row, vector in zip(pending, made.vectors, strict=True):
                 stored = await session.get(KnowledgeChunk, row.id)
                 if stored is None:
                     continue
@@ -141,17 +171,14 @@ class PgLongTermStore:
                 # 就地也更新手上这一份，本次检索就能把它排进去
                 row.embedding = stored.embedding
                 row.dimensions = stored.dimensions
+                row.embedding_model = stored.embedding_model
 
     def _model_id(self) -> str | None:
-        return None if self.embedder is None else self.embedder.id
+        if self.embedder is None:
+            return None
+        return self.embedder.identity
 
-    async def _embed(self, text: str) -> list[float] | None:
-        made = await self._embed_many([text])
-        return None if made is None else made[0]
-
-    async def _embed_many(
-        self, texts: Sequence[str]
-    ) -> list[list[float]] | None:
+    async def _embed_many(self, texts: Sequence[str]) -> EmbeddingBatch | None:
         """算一批向量；没接嵌入档或这次算不出来给 `None`。
 
         ⚠ 吞掉异常是刻意的：嵌入算不出来该退化成「这条暂时检索不到」，
@@ -162,7 +189,7 @@ class PgLongTermStore:
         if self.embedder is None:
             return None
         try:
-            return await self.embedder.embed(texts)
+            return await self.embedder.embed_batch(texts)
         except Exception as error:  # 理由：见上
             _logger.warning(
                 "memory_embed_failed",
@@ -174,12 +201,19 @@ class PgLongTermStore:
 
 
 def _ranked(
-    rows: Sequence[KnowledgeChunk], asked: Sequence[float], limit: int
+    rows: Sequence[KnowledgeChunk],
+    asked: Sequence[float],
+    limit: int,
+    model: str | None,
 ) -> list[Hit]:
     """按余弦排序取前几条。没有向量的条目排不上——它们等下一次补算。"""
     scored: list[tuple[float, KnowledgeChunk]] = []
     for row in rows:
-        if row.embedding is None:
+        if (
+            row.embedding is None
+            or row.embedding_model != model
+            or row.dimensions != len(asked)
+        ):
             continue
         scored.append(
             (vectors.cosine(asked, vectors.decode(row.embedding)), row)

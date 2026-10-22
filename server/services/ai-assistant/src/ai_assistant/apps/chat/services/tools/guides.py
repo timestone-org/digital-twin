@@ -5,6 +5,12 @@ from dataclasses import replace
 from llmcore.tools.shapes import ToolSpec
 
 OUTPUT_GUIDES = (
+    ("report.read_content", "正文窗口及has_more/next_offset，保留路径与类型。"),
+    ("report.replace_text", "按原文核对后修改的草稿路径，未保存。"),
+    (
+        "dashboard.list_nodes",
+        "当前大屏节点名片、total与next_offset；选中范围不随分页扩大。",
+    ),
     (
         "skills.load",
         "ok、name、title、instructions、compatibility、resources；资源只给相对路径索引。",
@@ -72,6 +78,10 @@ OUTPUT_GUIDES = (
         "当前用户的记忆候选与检索可用状态；不能替代业务数据读取。",
     ),
     ("knowledge.list_bases", "当前用户可见的知识库及分页信息。"),
+    (
+        "knowledge.read_chunk",
+        "原块正文窗口、出处、has_more与next_offset；未到末页不能宣称全文已读完。",
+    ),
     (
         "knowledge.search",
         "资料片段、document_title 与 locator；结论引用必须对应召回证据。",
@@ -149,7 +159,10 @@ OUTPUT_GUIDES = (
     ("dashboard.read_interactions", "当前联动规则、对象与状态。"),
     ("dashboard.write_interaction", "新增或修改联动规则的草稿回执。"),
     ("dashboard.remove_interaction", "删除联动规则的草稿回执。"),
-    ("dashboard.set_visible", "运行态显隐结果；不更改持久化配置。"),
+    (
+        "dashboard.set_visible",
+        "节点草稿的初始显隐，可撤销；保存后影响运行页初始状态。",
+    ),
     ("dashboard.read_page_style", "整屏外观缺省配置。"),
     ("dashboard.set_page_style", "整屏外观草稿修改结果。"),
     ("twin2d.read_config", "二维孪生配置或筛选后的实体分页。"),
@@ -178,14 +191,17 @@ READ_TOOLS = frozenset(
         "memory.search",
         "knowledge.list_bases",
         "knowledge.search",
+        "knowledge.read_chunk",
         "dataset.read_columns",
         "dashboard.read_canvas",
+        "dashboard.list_nodes",
         "dashboard.read_bindings",
         "dashboard.read_values",
         "dashboard.capture",
         "dashboard.read_config",
         "dashboard.chrome_keys",
         "report.read_draft",
+        "report.read_content",
         "report.validate_draft",
         "report.preview_draft",
         "twin.list_folders",
@@ -217,7 +233,7 @@ def effect_of(name: str) -> str:
         "user.ask": "等待用户选择",
         "dataset.propose_formula": "生成待用户采用的提议",
         "dashboard.save": "保存整份草稿，包括用户尚未保存的修改",
-        "dashboard.set_visible": "更改运行态显隐",
+        "dashboard.set_visible": "修改可撤销草稿的初始显隐，尚未保存",
         "dashboard.copy_bindings": "dry_run=true 只预览；false 修改草稿",
         "dashboard.set_page_style": "更改整屏外观草稿，不在撤销栈中",
         "dashboard.write_interaction": "更改联动草稿，不在撤销栈中",
@@ -257,7 +273,5 @@ def with_guides(spec: ToolSpec) -> ToolSpec:
         spec,
         description=(
             f"{spec.description}\n执行位置：{spec.runs_on}；影响：{effect_of(spec.name)}。"
-            f"\n输出：{output_of(spec.name)}\n失败时按提示修正；"
-            "完整契约可查询 tools.describe。"
         ),
     )

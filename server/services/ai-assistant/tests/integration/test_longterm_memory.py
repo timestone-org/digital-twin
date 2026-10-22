@@ -12,11 +12,16 @@ from collections.abc import AsyncIterator
 from contextlib import asynccontextmanager
 from dataclasses import dataclass, field
 
+import pytest
 from sqlalchemy.ext.asyncio import AsyncSession, async_sessionmaker
 
 from ai_assistant.apps.chat.services.memory.longterm import PgLongTermStore
 from ai_assistant.apps.chat.services.memory.ports import Knowledge
+from ai_assistant.apps.chat.services.tools.providers.memory import MemoryTools
 from integration.conftest import DbStack
+from lib.auth.edge_headers import HEADER_USER_ID
+from lib.errors import DependencyUnavailable
+from llmcore.embedding_snapshot import EmbeddingBatch, embedding_identity
 
 ALICE = "11111111-1111-4111-8111-111111111111"
 BOB = "22222222-2222-4222-8222-222222222222"
@@ -29,13 +34,37 @@ class FakeEmbedder:
     dimensions: int = 3
     is_broken: bool = False
     id: str = "fake"
+    model: str = "first-model"
+    is_ready: bool = True
+    switch_model: str | None = None
+    fail_on_call: int | None = None
     calls: list[int] = field(default_factory=list[int])
+
+    @property
+    def identity(self) -> str:
+        return embedding_identity(
+            "https://test/v1", self.model, self.dimensions, self.id
+        )
+
+    async def embed_batch(self, texts: list[str]) -> EmbeddingBatch:
+        identity = self.identity
+        return EmbeddingBatch(identity, await self.embed(texts))
 
     async def embed(self, texts: list[str]) -> list[list[float]]:
         self.calls.append(len(texts))
-        if self.is_broken:
+        if self.is_broken or len(self.calls) == self.fail_on_call:
             raise RuntimeError("端点挂了")
-        return [[float(len(one)), 1.0, 0.0] for one in texts]
+        result = [
+            (
+                [float(len(one)), 1.0, 0.0]
+                if self.model == "first-model"
+                else [0.0, float(len(one)), 1.0]
+            )[: self.dimensions]
+            for one in texts
+        ]
+        if self.switch_model is not None:
+            self.model, self.switch_model = self.switch_model, None
+        return result
 
 
 def _sessions(
@@ -146,3 +175,57 @@ async def test_searching_without_an_embedder_comes_back_empty(
 
     assert await blind.search("正文", "user", ALICE, 10) == []
     assert blind.can_rank is False
+
+
+async def test_embedding_failure_does_not_claim_the_saved_memory_is_searchable(
+    db_stack: DbStack,
+) -> None:
+    store = _store(db_stack, FakeEmbedder(is_broken=True))
+    result = await MemoryTools(
+        store=store, headers={HEADER_USER_ID: ALICE}
+    ).run("memory.remember", {"title": "口径", "body": "正文"})
+    assert result["is_searchable"] is False
+    assert "暂时" in result["note"]
+
+
+@pytest.mark.parametrize("dimensions", [2, 3])
+async def test_changed_embedding_model_rebuilds_vectors_before_ranking(
+    db_stack: DbStack, dimensions: int
+) -> None:
+    embedder = FakeEmbedder()
+    store = _store(db_stack, embedder)
+    await store.remember(
+        Knowledge(scope="user", owner_id=ALICE, title="口径", body="正文")
+    )
+    embedder.model = "second-model"
+    embedder.dimensions = dimensions
+    found = await store.search("口径\n正文", "user", ALICE, 5)
+    assert len(found) == 1
+    assert found[0].score == pytest.approx(1.0)
+
+
+async def test_failed_backfill_is_not_reported_as_zero_matches(
+    db_stack: DbStack,
+) -> None:
+    embedder = FakeEmbedder(fail_on_call=3)
+    store = _store(db_stack, embedder)
+    await store.remember(
+        Knowledge(scope="user", owner_id=ALICE, title="口径", body="正文")
+    )
+    embedder.model = "second-model"
+    with pytest.raises(DependencyUnavailable, match="补算.*未完成"):
+        await MemoryTools(store=store, headers={HEADER_USER_ID: ALICE}).run(
+            "memory.search", {"query": "口径"}
+        )
+
+
+async def test_model_change_during_embedding_does_not_mislabel_vector(
+    db_stack: DbStack,
+) -> None:
+    embedder = FakeEmbedder(switch_model="second-model")
+    store = _store(db_stack, embedder)
+    await store.remember(
+        Knowledge(scope="user", owner_id=ALICE, title="口径", body="正文")
+    )
+    found = await store.search("口径\n正文", "user", ALICE, 5)
+    assert found[0].score == pytest.approx(1.0)

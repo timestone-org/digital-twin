@@ -47,6 +47,24 @@ async def test_points_come_back_as_a_list() -> None:
     assert len(got) == 1
 
 
+async def test_exact_point_on_the_second_page_is_not_reported_missing() -> None:
+    def handler(request: httpx.Request) -> httpx.Response:
+        page = int(request.url.params.get("page", "1"))
+        items = (
+            [{"code": f"{index:03}A1"} for index in range(200)]
+            if page == 1
+            else [{"code": "A1", "name": "实际测点"}]
+        )
+        return httpx.Response(
+            200, json={"data": {"items": items, "total": 201}}
+        )
+
+    client = _client(handler)
+    found = await client.find_point(HEADERS, source_id="source", code="A1")
+    assert found == {"code": "A1", "name": "实际测点"}
+    await client.close()
+
+
 async def test_the_identity_headers_go_through_verbatim() -> None:
     seen: dict[str, str] = {}
 

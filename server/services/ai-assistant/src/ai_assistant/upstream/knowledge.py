@@ -13,13 +13,14 @@
 越少，它被当成越权通道的可能就越小。
 """
 
-from typing import Any
+from http import HTTPStatus
+from typing import Any, cast
 
 import httpx
 from pydantic import BaseModel, ValidationError
 
 from ai_assistant.upstream.identity import DelegatedIdentity
-from lib.errors import DependencyUnavailable
+from lib.errors import AppError, DependencyUnavailable
 from lib.logging import current_traceparent, get_logger
 
 _logger = get_logger("assistant.upstream.knowledge")
@@ -31,6 +32,13 @@ class KnowledgeUnavailable(DependencyUnavailable):
     """知识库没答上来。"""
 
     code = 52211
+
+
+class KnowledgeObjectNotFound(AppError):
+    """知识对象已删除、重建或不属于所选知识库。"""
+
+    code = 42204
+    http_status = 404
 
 
 class _Envelope(BaseModel):
@@ -103,6 +111,21 @@ class KnowledgeClient:
             )
         return self._http
 
+    async def read_chunk(
+        self,
+        headers: dict[str, str],
+        base_id: str,
+        chunk_id: str,
+        window: tuple[int, int] = (0, 4000),
+    ) -> object:
+        """按原用户身份续读知识块；Args: headers, base_id, chunk_id, window。"""
+        return await self._call(
+            "GET",
+            f"{_BASES}/{base_id}/chunks/{chunk_id}",
+            headers,
+            params={"offset": window[0], "limit": window[1]},
+        )
+
     async def _fresh(self, headers: dict[str, str]) -> dict[str, str]:
         if self._identity is None:
             return headers
@@ -129,6 +152,10 @@ class KnowledgeClient:
                 return None
             return _Envelope.model_validate(response.json()).data
         except (httpx.HTTPError, ValidationError, ValueError) as error:
+            if _is_missing_object(error):
+                raise KnowledgeObjectNotFound(
+                    "知识对象不存在或不属于所选知识库；请重新检索取得当前身份"
+                ) from error
             _logger.warning(
                 "knowledge_call_failed",
                 "打知识库失败",
@@ -136,6 +163,22 @@ class KnowledgeClient:
                 error_type=type(error).__name__,
             )
             raise KnowledgeUnavailable("知识库暂时不可用") from error
+
+
+def _is_missing_object(error: Exception) -> bool:
+    if (
+        not isinstance(error, httpx.HTTPStatusError)
+        or error.response.status_code != HTTPStatus.NOT_FOUND
+    ):
+        return False
+    try:
+        body: object = error.response.json()
+    except ValueError:
+        return False
+    if not isinstance(body, dict):
+        return False
+    code = cast("dict[str, object]", body).get("code")
+    return type(code) is int and code in {42301, 42303, 42317}
 
 
 def _with_trace(headers: dict[str, str]) -> dict[str, str]:

@@ -5,6 +5,7 @@
 """
 
 import uuid
+from unittest.mock import AsyncMock
 
 import pytest
 from sqlalchemy.ext.asyncio import AsyncSession
@@ -135,6 +136,28 @@ async def test_plan_tools_reject_unknown_names() -> None:
     )
     with pytest.raises(PlanInvalid):
         await tools.run("plan.explode", {})
+
+
+async def test_plan_tool_returns_normalized_items_to_the_model(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    monkeypatch.setattr(AsyncSession, "execute", AsyncMock())
+    tools = plan_service.PlanTools(
+        sessions=AsyncSession, chat_session_id=uuid.uuid4()
+    )
+    result = await tools.run(
+        "plan.write",
+        {
+            "items": [
+                {"title": "读取", "status": "in_progress"},
+                {"title": "核对", "status": "in_progress"},
+            ]
+        },
+    )
+    assert [one["status"] for one in result["plan"]["items"]] == [
+        "in_progress",
+        "pending",
+    ]
 
 
 def _refuse_sessions() -> "_NeverOpen":

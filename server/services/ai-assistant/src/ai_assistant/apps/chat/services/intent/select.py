@@ -40,6 +40,9 @@ BUILTIN_CLIENT_TOOLS = ("user.ask",)
 # 新名字就是能力版本；老页面没自报清单时不能靠技能清单猜它已实现
 REPORTED_ONLY_CLIENT_TOOLS = frozenset(
     {
+        "dashboard.list_nodes",
+        "report.read_content",
+        "report.replace_text",
         "twin.list_folders",
         "twin.list_entities",
         "twin.read_entity",
@@ -73,6 +76,7 @@ CROSS_MODULE_READ_TOOLS: tuple[str, ...] = (
     # 哪一页无关，跟着工作面走反而会让「在大屏页问得到的，回台账页就问不到」
     "knowledge.list_bases",
     "knowledge.search",
+    "knowledge.read_chunk",
 )
 
 

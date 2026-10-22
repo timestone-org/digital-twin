@@ -57,7 +57,8 @@
       "dashboard.remove_config_item",
       "dashboard.set_geometry",
       "dashboard.arrange",
-      "dashboard.write_binding"
+      "dashboard.write_binding",
+      "dashboard.list_nodes"
     ]
   },
   {
@@ -133,7 +134,8 @@
     ],
     "server_tools": [
       "knowledge.list_bases",
-      "knowledge.search"
+      "knowledge.search",
+      "knowledge.read_chunk"
     ],
     "client_tools": []
   },
@@ -154,7 +156,9 @@
       "report.insert_content",
       "report.set_page",
       "report.validate_draft",
-      "report.preview_draft"
+      "report.preview_draft",
+      "report.read_content",
+      "report.replace_text"
     ]
   },
   {
@@ -194,5 +198,22 @@
       "twin2d.patch_config",
       "twin2d.diagnose"
     ]
+  },
+  {
+    "name": "collect-inspect",
+    "title": "检查采集信息",
+    "surface_kinds": [
+      "collect-source"
+    ],
+    "required_codes": [
+      "collect:view"
+    ],
+    "server_tools": [
+      "points.list_sources",
+      "points.search",
+      "points.detail",
+      "points.resolve"
+    ],
+    "client_tools": []
   }
 ]

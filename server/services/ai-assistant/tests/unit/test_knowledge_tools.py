@@ -121,6 +121,27 @@ async def test_a_long_snippet_is_trimmed() -> None:
     assert made["hits"][0]["locator"] == "第 12 页"
 
 
+async def test_search_keeps_incomplete_status_and_a_chunk_continuation() -> (
+    None
+):
+    made = await _tools(
+        {
+            "hits": [
+                {"chunk_id": "c", "document_id": "d", "text": "字" * 1300}
+            ],
+            "strategy": "agentic",
+            "rounds": 3,
+            "is_complete": False,
+            "note": "尚未查全",
+        }
+    ).run("knowledge.search", {"base_id": "b", "query": "检查"})
+    assert made["is_complete"] is False
+    assert made["rounds"] == 3
+    assert made["hits"][0]["document_id"] == "d"
+    assert made["hits"][0]["is_truncated"] is True
+    assert made["hits"][0]["next_offset"] == 1200
+
+
 async def test_an_unreadable_answer_never_looks_like_no_results() -> None:
     """⚠ 把「读不懂的回包」读成「没有结果」，助手会当着用户的面说库里没有。"""
     made = await _tools("这不是一个对象").run(
@@ -134,6 +155,7 @@ def test_every_spec_is_read_only_and_runs_on_the_server() -> None:
     """⚠ 助手能动的东西越少，它被当成越权通道的可能就越小。"""
     assert {spec.runs_on for spec in KNOWLEDGE_SPECS} == {"server"}
     assert {spec.name for spec in KNOWLEDGE_SPECS} == {
+        "knowledge.read_chunk",
         "knowledge.list_bases",
         "knowledge.search",
     }

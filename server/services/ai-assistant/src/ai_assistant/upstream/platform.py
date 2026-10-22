@@ -15,6 +15,7 @@
 调用方拿着入站那组头一路传就行（`upstream/identity.py` 的文件头记着为什么）。
 """
 
+import asyncio
 import uuid
 from typing import Any, cast
 
@@ -295,7 +296,7 @@ class PlatformClient:
         """按 `(source_id, code)` 找那一个点位；没有就给 None。
 
         ⚠ 上游没有按编码精确取一条的端点，`q` 是名字/编码的模糊匹配；
-        这里先按 `q=code` 缩一页，再本地按编码逐字比对。
+        这里按 `q=code` 分页检索，再按编码逐字比对；不完整时拒绝下不存在结论。
 
         Args: headers, source_id, code。
         """
@@ -305,8 +306,40 @@ class PlatformClient:
             "source_id": source_id,
             "q": code,
         }
-        rows = _items_of(await self._get(_POINTS, query, headers))
-        return next((row for row in rows if _code_of(row) == code), None)
+        try:
+            async with asyncio.timeout(15.0):
+                return await self._find_point_pages(headers, query, code)
+        except TimeoutError as error:
+            raise PlatformUnavailable(
+                "点位精确定位超时，查询尚未完成，不能判定该点位不存在"
+            ) from error
+
+    async def _find_point_pages(
+        self, headers: dict[str, str], query: dict[str, Any], code: str
+    ) -> object | None:
+        for page in range(1, 101):
+            query["page"] = page
+            body = await self._get(_POINTS, query, headers)
+            rows = _items_of(body)
+            found = next((row for row in rows if _code_of(row) == code), None)
+            if found is not None:
+                return found
+            total = (
+                cast("dict[str, object]", body).get("total")
+                if isinstance(body, dict)
+                else None
+            )
+            if type(total) is int and page * self._page_size >= total:
+                return None
+            if not rows:
+                if type(total) is int and (page - 1) * self._page_size < total:
+                    raise PlatformUnavailable(
+                        "点位清单在读取期间变化，请重新查询"
+                    )
+                return None
+        raise PlatformUnavailable(
+            "点位候选超过查询预算，尚未查完，不能判定不存在"
+        )
 
     async def validate_dashboard(
         self, headers: dict[str, str], dashboard_id: str

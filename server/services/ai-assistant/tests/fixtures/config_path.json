@@ -1,0 +1,8 @@
+{
+  "name": "dashboard.set_config",
+  "arguments": {
+    "node_id": "radar",
+    "path": ["indicators", 0, "name"],
+    "value": "能效"
+  }
+}

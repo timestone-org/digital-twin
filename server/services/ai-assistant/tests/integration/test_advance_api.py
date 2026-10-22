@@ -39,6 +39,44 @@ pytestmark = pytest.mark.requires_postgres
 PNG = "data:image/png;base64,iVBORw0KGgo="
 
 
+async def test_context_refusal_keeps_already_completed_tool_receipts(
+    db_stack: DbStack,
+) -> None:
+    model = ScriptedChat(
+        script=[
+            _asks(
+                "plan.write",
+                "saved-plan",
+                title="保留执行记录",
+                items=[{"title": "已经执行", "status": "in_progress"}],
+            ),
+            _asks("tools.describe", "oversized-call", name="x" * 100_000),
+        ]
+    )
+    _install(db_stack, model)
+    session_id = await _new_session(db_stack.client)
+    events = await _advance(
+        db_stack.client, session_id, user_text="规划并核验工具"
+    )
+    assert events[-1][0] == "error"
+    assert events[-1][1]["code"] == 42203
+    detail = await db_stack.client.get(f"{SESSIONS_URL}/{session_id}")
+    data = detail.json()["data"]
+    assert data["plan_json"]["title"] == "保留执行记录"
+    messages = data["messages"]
+    assert messages[0]["role"] == "user"
+    assert any(
+        message["role"] == "tool"
+        and "保留执行记录" in json.dumps(message, ensure_ascii=False)
+        for message in messages
+    )
+    steps = [step for message in messages for step in message["steps"]]
+    assert any(
+        step["name"] == "plan.write" and step["state"] == "succeeded"
+        for step in steps
+    )
+
+
 async def test_late_partial_receipt_replays_adjacent_preserving_database_order(
     db_stack: DbStack,
 ) -> None:
@@ -408,6 +446,8 @@ async def test_writing_a_plan_streams_a_snapshot_and_persists_it(
     stored = detail.json()["data"]["plan_json"]
     assert stored is not None
     assert stored["title"] == "绑完整屏"
+    assert "绑完整屏" in str(model.seen[1][-1].content)
+    assert "读画布" in str(model.seen[1][-1].content)
 
 
 async def test_the_plan_reaches_the_next_rounds_prompt(

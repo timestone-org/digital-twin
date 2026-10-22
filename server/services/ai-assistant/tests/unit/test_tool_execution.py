@@ -1,6 +1,7 @@
 """服务端工具在执行前校验参数，失败提示说明状态与恢复方式。"""
 
 import json
+from pathlib import Path
 from typing import Any
 
 import pytest
@@ -9,6 +10,7 @@ from ai_assistant.apps.chat.services.intent.select import specs_for
 from ai_assistant.apps.chat.services.tools.execution import (
     ToolExecutionError,
     ToolExecutor,
+    validate_arguments,
 )
 from ai_assistant.apps.chat.services.tools.guides import OUTPUT_GUIDES
 from ai_assistant.apps.chat.services.tools.providers.server import ServerTools
@@ -19,6 +21,24 @@ from llmcore.tools.shapes import ToolSpec
 
 async def _must_not_run(name: str, arguments: dict[str, Any]) -> object:
     raise AssertionError(f"不应调用业务工具 {name}：{arguments}")
+
+
+def test_config_path_accepts_the_browser_array_index_fixture() -> None:
+    fixture = json.loads(
+        (Path(__file__).parents[1] / "fixtures/config_path.json").read_text()
+    )
+    spec = next(one for one in TOOL_SPECS if one.name == fixture["name"])
+    validate_arguments(spec, fixture["arguments"])
+    assert fixture["arguments"]["path"] == ["indicators", 0, "name"]
+
+
+@pytest.mark.parametrize("path", [[], ["indicators", -1], [True], [0.5]])
+def test_config_path_rejects_invalid_field_or_index_segments(
+    path: list[object],
+) -> None:
+    spec = next(one for one in TOOL_SPECS if one.name == "dashboard.set_config")
+    with pytest.raises(ToolExecutionError):
+        validate_arguments(spec, {"node_id": "radar", "path": path, "value": 1})
 
 
 def _executor() -> ToolExecutor:
@@ -77,6 +97,17 @@ def test_every_builtin_tool_has_a_result_guide() -> None:
     assert {spec.name for spec in TOOL_SPECS} == {
         name for name, _ in OUTPUT_GUIDES
     }
+
+
+async def test_chunk_window_never_clips_while_claiming_end() -> None:
+    async def read(_name: str, _arguments: dict[str, Any]) -> object:
+        return {"text": "原文" * 2000, "has_more": False, "next_offset": None}
+
+    executor = ToolExecutor(TOOL_SPECS, (), read, result_reserve_chars=512)
+    with pytest.raises(ToolExecutionError, match="完整"):
+        await executor.run_with_budget(
+            "knowledge.read_chunk", {"base_id": "b", "chunk_id": "c"}, 1000
+        )
 
 
 @pytest.mark.parametrize("error_type", [RuntimeError, ValueError])

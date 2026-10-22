@@ -17,6 +17,7 @@ from ai_assistant.apps.chat.services.advance_service import (
     assemble,
 )
 from ai_assistant.apps.chat.services.intent.select import specs_for
+from ai_assistant.apps.chat.services.memory.context import unmarked
 from ai_assistant.apps.chat.services.memory.prompt import build_system_prompt
 from ai_assistant.settings import HISTORY_DROP_STEP, MAX_HISTORY_MESSAGES
 from llmcore.memory import Summary, history, summarize
@@ -80,7 +81,9 @@ def _wire(messages: list[BaseMessage]) -> str:
         str(head.content),
         json.dumps(tools, ensure_ascii=False),
         *(
-            json.dumps(one.model_dump(), ensure_ascii=False, default=str)
+            json.dumps(
+                unmarked(one).model_dump(), ensure_ascii=False, default=str
+            )
             for one in rest
         ),
     ]

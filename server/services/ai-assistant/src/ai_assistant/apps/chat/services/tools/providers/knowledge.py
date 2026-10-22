@@ -39,6 +39,29 @@ MAX_SNIPPET_CHARS = 1_200
 
 KNOWLEDGE_SPECS: tuple[ToolSpec, ...] = (
     ToolSpec(
+        name="knowledge.read_chunk",
+        description="按知识库与原块身份续读被截断的证据；保留出处，按next_offset读到has_more=false。块不存在时重新检索。",
+        parameters=object_schema(
+            {
+                "base_id": string_schema("检索所用的知识库id"),
+                "chunk_id": string_schema("knowledge.search返回的chunk_id"),
+                "offset": {
+                    "type": "integer",
+                    "minimum": 0,
+                    "description": "首次为0，续读取next_offset",
+                },
+                "limit": {
+                    "type": "integer",
+                    "minimum": 1,
+                    "maximum": 8000,
+                    "description": "正文字符数，默认4000，上限8000",
+                },
+            },
+            ["base_id", "chunk_id"],
+        ),
+        runs_on="server",
+    ),
+    ToolSpec(
         name="knowledge.list_bases",
         description=(
             "列出这个人看得见的知识库。**检索之前先列一次**——库 id 只能从"
@@ -109,6 +132,7 @@ class KnowledgeTools:
         return {
             "knowledge.list_bases": self._list_bases,
             "knowledge.search": self._search,
+            "knowledge.read_chunk": self._read_chunk,
         }
 
     def _upstream(self) -> KnowledgeClient:
@@ -154,6 +178,14 @@ class KnowledgeTools:
         )
         return _search_result(made)
 
+    async def _read_chunk(self, arguments: dict[str, Any]) -> object:
+        return await self._upstream().read_chunk(
+            self.headers,
+            _text(arguments, "base_id"),
+            _text(arguments, "chunk_id"),
+            window=(arguments.get("offset", 0), arguments.get("limit", 4000)),
+        )
+
 
 def _search_result(made: object) -> dict[str, Any]:
     """把检索回执摊成给模型看的样子。
@@ -175,6 +207,8 @@ def _search_result(made: object) -> dict[str, Any]:
             if isinstance(one, dict)
         ],
         "strategy": body.get("strategy", ""),
+        "rounds": body.get("rounds", 0),
+        "is_complete": body.get("is_complete") is True,
         "note": body.get("note", ""),
     }
 
@@ -184,12 +218,18 @@ def _hit_of(row: dict[str, Any]) -> dict[str, Any]:
     where = ""
     if isinstance(locator, dict):
         where = str(cast("dict[str, Any]", locator).get("label", ""))
+    text = str(row.get("text", ""))
+    is_truncated = len(text) > MAX_SNIPPET_CHARS
     return {
         "chunk_id": row.get("chunk_id", ""),
+        "document_id": row.get("document_id", ""),
         "document_title": row.get("document_title", ""),
         "locator": where,
         "heading_path": row.get("heading_path", ""),
-        "text": str(row.get("text", ""))[:MAX_SNIPPET_CHARS],
+        "text": text[:MAX_SNIPPET_CHARS],
+        "is_truncated": is_truncated,
+        "total_chars": len(text),
+        "next_offset": MAX_SNIPPET_CHARS if is_truncated else None,
         "score": row.get("score", 0),
         "why": row.get("why", ""),
     }

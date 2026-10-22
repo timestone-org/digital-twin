@@ -9,12 +9,68 @@ from llmcore.tools.shapes import (
 
 REPORT_SPECS: tuple[ToolSpec, ...] = (
     ToolSpec(
+        name="report.read_content",
+        description="按正文提纲中的path读取完整文本窗口，沿next_offset续读。can_replace_text表明是否支持保留格式的文本替换。",
+        parameters=object_schema(
+            {
+                "path": string_schema("来自report.read_draft的正文路径"),
+                "offset": {
+                    "type": "integer",
+                    "minimum": 0,
+                    "description": "首次0，续读next_offset",
+                },
+                "limit": {
+                    "type": "integer",
+                    "minimum": 1,
+                    "maximum": 8000,
+                    "description": "文本字符数，默认4000",
+                },
+            },
+            ["path"],
+        ),
+        runs_on="client",
+    ),
+    ToolSpec(
+        name="report.replace_text",
+        description="修改已有同一格式的段落或标题，只改草稿。必须先读完整原文并作为expected_text；原文已变化时拒绝，复杂混合格式在正文编辑器修改。",
+        parameters=object_schema(
+            {
+                "path": string_schema("来自report.read_draft的段落或标题路径"),
+                "expected_text": string_schema(
+                    "本次读取的完整原文，防止覆盖并发编辑"
+                ),
+                "text": {
+                    "type": "string",
+                    "maxLength": 16000,
+                    "description": "替换文本；空串清空段落内容",
+                },
+            },
+            ["path", "expected_text", "text"],
+        ),
+        runs_on="client",
+    ),
+    ToolSpec(
         name="report.read_draft",
         description=(
             "读取当前未保存的报告草稿：模板信息、指标、页面设置，以及有界的"
-            "正文提纲。配置前必须先读；回执里的 is_truncated 表示提纲被截断。"
+            "正文提纲。沿document.next_offset续读到has_more=false；正文详情使用read_content。"
         ),
-        parameters=object_schema({}, []),
+        parameters=object_schema(
+            {
+                "offset": {
+                    "type": "integer",
+                    "minimum": 0,
+                    "description": "提纲窗口起点，首次0",
+                },
+                "limit": {
+                    "type": "integer",
+                    "minimum": 1,
+                    "maximum": 20,
+                    "description": "提纲每页条数，默认20",
+                },
+            },
+            [],
+        ),
         runs_on="client",
     ),
     ToolSpec(

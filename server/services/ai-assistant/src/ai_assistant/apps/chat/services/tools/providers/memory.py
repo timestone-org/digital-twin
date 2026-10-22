@@ -135,16 +135,16 @@ class MemoryTools:
         found = await store.remember(
             Knowledge(scope="user", owner_id=owner, title=title, body=body)
         )
-        ranked = store.can_rank
+        ranked = found.is_searchable
         return {
             "ok": True,
-            "id": found,
+            "id": found.id,
             "is_searchable": ranked,
             "note": (
                 "记下了，以后每次对话都查得到。"
                 if ranked
-                else "记下了，但本部署没接嵌入档，这条暂时检索不到——"
-                "接上之后下一次检索会自动补算。请把这件事告诉用户。"
+                else "文本已保存，但当前模型的向量尚未就绪，暂时检索不到；"
+                "嵌入恢复后会在检索时补算。"
             ),
         }
 
@@ -165,7 +165,8 @@ class MemoryTools:
                 for one in hits
             ],
             "note": (
-                "按语义相似度排序，分数越高越像。"
+                "仅检索本人最近2000条中与当前模型一致的向量；"
+                "每次最多补算20条，按语义相似度排序，分数不是正确概率。"
                 if store.can_rank
                 else "⚠ 本部署没接嵌入档，长期记忆检索用不了——"
                 "这里恒为空，不代表用户没记过东西。"

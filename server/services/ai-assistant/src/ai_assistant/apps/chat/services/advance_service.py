@@ -1,17 +1,9 @@
-"""推进一个回合：装上下文、跑循环、逐步吐出去、落库。
-
-⚠ **不用请求级的数据库会话。** 流式响应的生成器跑在路由函数返回之后，那时
-请求作用域的依赖可能已经收摊了——拿着一个关掉的会话去写库，报出来的错与
-「助手做了什么」毫无关系，且只在流够长时才出现。本模块自己从容器开会话。
-
-⚠ 落库在**流结束之前**完成。停在等浏览器时尤其要紧：浏览器一定会带着结果
-回来，而它要能在库里找到自己接的是哪一步。
-"""
+"""推进回合并持久化真实回执；上下文投影不改写会话历史。"""
 
 import uuid
 from collections.abc import AsyncIterator, Callable, Sequence
 from contextlib import AbstractAsyncContextManager
-from dataclasses import dataclass, field
+from dataclasses import dataclass, field, replace
 from typing import Any
 
 from langchain_core.messages import (
@@ -32,6 +24,7 @@ from ai_assistant.apps.chat.services import (
 )
 from ai_assistant.apps.chat.services.client_result import ClientToolResult
 from ai_assistant.apps.chat.services.intent import select as tool_select
+from ai_assistant.apps.chat.services.memory import context as context_budget
 from ai_assistant.apps.chat.services.memory import state_block
 from ai_assistant.apps.chat.services.memory.page_context import (
     path_of,
@@ -117,6 +110,8 @@ class AdvanceDeps:
     # 都没有」该收窄的一个不留（`intent/ports.py` 的 `TurnContext.codes`）
     codes: frozenset[str] | None = None
     skills: SkillCatalog | None = None
+    model_context_tokens: int = 65536
+    vision_context_tokens: int = 0
 
 
 def deps_of(
@@ -124,14 +119,7 @@ def deps_of(
     headers: dict[str, str],
     codes: frozenset[str] | None = None,
 ) -> AdvanceDeps:
-    """从容器取出这几样；没接模型就抛。
-
-    ⚠ `headers` 是这一次调用要转发给 platform 的身份头，**每请求一份**。
-    做成进程级的话，两个用户的请求会互相借用对方的身份。
-
-    Args: container, headers, codes（调用者的权限码；只许由路由从已认证的
-        `CallerContext` 传进来）。
-    """
+    """按实际用户装配工具与模型；Args: container, headers, codes。"""
     if container.model is None:
         raise ModelDisabled("本部署没有接模型")
     model = container.model
@@ -163,6 +151,8 @@ def deps_of(
         extra_specs=registry.specs_of(MCP_PROVIDER),
         codes=codes,
         skills=container.skills,
+        model_context_tokens=container.settings.model_context_tokens,
+        vision_context_tokens=container.settings.vision_context_tokens,
     )
 
 
@@ -215,8 +205,18 @@ def incoming_messages(payload: AdvanceInput) -> list[BaseMessage]:
     ]
     # ⚠ 图统一排在这一批工具消息**之后**：夹在中间的话，工具消息与它对应的
     # 调用就不再相邻，而有的端点按相邻性校验这一段
-    pictures = [one.image() for one in payload.tool_results]
-    return replies + [vision.image_message(one) for one in pictures if one]
+    pictures = [
+        vision.image_message(image).model_copy(
+            update={
+                "additional_kwargs": {
+                    context_budget.IMAGE_CALL_ID: result.call_id,
+                }
+            }
+        )
+        for result in payload.tool_results
+        if (image := result.image())
+    ]
+    return replies + pictures
 
 
 def assemble(
@@ -252,12 +252,18 @@ def assemble(
         ]
     )
     return [
-        system,
-        *summarize.messages_of(summary),
+        *context_budget.marked([system], "prefix"),
+        *context_budget.marked(summarize.messages_of(summary), "summary"),
         *messages,
-        *restored_messages(rows, recent, selected),
-        *state_block.messages_of(
-            snapshot_of(payload.surface_context, payload.surface_label), plan
+        *context_budget.marked(
+            restored_messages(rows, recent, selected), "restored"
+        ),
+        *context_budget.marked(
+            state_block.messages_of(
+                snapshot_of(payload.surface_context, payload.surface_label),
+                plan,
+            ),
+            "state",
         ),
     ]
 
@@ -363,21 +369,14 @@ async def advance(
     plans = plan_service.PlanTools(
         sessions=deps.sessions, chat_session_id=chat_session_id
     )
-    specs = tool_select.specs_for(
-        payload.surface_kind,
-        payload.client_tools,
-        codes=deps.codes,
-        extra=deps.extra_specs,
-        skills=selected,
-    )
-    turn = TurnDeps(
-        model=RetryingModel(deps.model),
-        specs=specs,
-        run_tool=ToolExecutor(
-            specs, selected, _with_plan_tools(plans, deps.server_tools)
-        ),
-        choice=choice,
-    )
+    turn = _turn_for(deps, payload, selected, plans, (messages, choice))
+
+    async def persist_partial(outcome: TurnOutcome) -> None:
+        await _persist_turn(
+            deps, chat_session_id, payload, outcome, outcome.steps
+        )
+
+    turn = replace(turn, persist_partial=persist_partial)
     produced: list[TurnStep] = []
     outcome: TurnOutcome | None = None
     async for item in stream_turn(turn, messages):
@@ -393,6 +392,51 @@ async def advance(
     if outcome is not None:
         await _persist_turn(deps, chat_session_id, payload, outcome, produced)
         yield outcome
+
+
+def _turn_for(
+    deps: AdvanceDeps,
+    payload: AdvanceInput,
+    selected: tuple[SkillManifest, ...],
+    plans: plan_service.PlanTools,
+    opened: tuple[list[BaseMessage], ModelChoice],
+) -> TurnDeps:
+    """装配当前工作面的工具、模型和预算投影。"""
+    messages, choice = opened
+    specs = tool_select.specs_for(
+        payload.surface_kind,
+        payload.client_tools,
+        codes=deps.codes,
+        extra=deps.extra_specs,
+        skills=selected,
+    )
+    projection = context_budget.projection_of(
+        deps,
+        (
+            messages,
+            choice,
+            snapshot_of(payload.surface_context, payload.surface_label),
+        ),
+        specs,
+        selected,
+        plans,
+    )
+    return TurnDeps(
+        model=RetryingModel(deps.model),
+        specs=specs,
+        run_tool=ToolExecutor(
+            specs,
+            selected,
+            _with_plan_tools(plans, deps.server_tools),
+            max_skill_chars=20_000,
+            result_reserve_chars=context_budget.TOOL_RESERVE_CHARS,
+        ),
+        choice=choice,
+        max_context_chars=projection.text_budget,
+        max_tool_result_chars=20_000,
+        prepare_messages=projection,
+        measure_messages=context_budget.input_size,
+    )
 
 
 async def _persist_turn(
@@ -423,17 +467,7 @@ async def _opened(
     payload: AdvanceInput,
     selected: tuple[SkillManifest, ...],
 ) -> tuple[list[BaseMessage], ModelChoice]:
-    """读原料 → 折叠 → 拼上下文。
-
-    ⚠ 原料一次会话里读完：分两次开的话，中途改过模型的那一轮会读到两份不一致
-    的状态（提示词按旧的拼、模型按新的取）。
-
-    ⚠ 折叠**在事务之外**：那是一次模型调用，耗时不可控，放在事务里会把数据库
-    连接与锁一起长期占住（database-standard）。所以是「短事务读 → 调用 →
-    短事务写」，不是「一个事务包住全程」。
-
-    Args: deps, chat_session_id, payload。
-    """
+    """读库后在事务外折叠历史，再组装模型输入。"""
     async with deps.sessions() as session:
         if payload.user_text is not None:
             await mcp_writes.invalidate_pending(session, chat_session_id)
@@ -458,19 +492,7 @@ async def _opened(
 async def _summary_of(
     deps: AdvanceDeps, chat_session_id: uuid.UUID, loaded: LoadedContext
 ) -> Summary | None:
-    """这一轮该挂哪一段摘要：同台阶复用，跨台阶重折。
-
-    ⚠ **同一个台阶内必须原样复用**，不许重折。重折出来的字句一定与上一轮不同，
-    而它排在历史区前面——那就是一个新的前缀断点，后面整段历史跟着作废。
-
-    ⚠ 换了模型也要重折：两截摘要由不同模型折出来时口径可以差很远，
-    而拼在一起看不出接缝。
-
-    ⚠ 折不出来时退回**上一段**（可能是 `None`）：那一段仍然逐字稳定，
-    比没有强，也比抛出去让整个回合发不出去强。
-
-    Args: deps, chat_session_id, loaded。
-    """
+    """按台阶复用摘要，折叠失败时保留上一份。"""
     dropped, kept = history.split(loaded.rows, MAX_HISTORY_MESSAGES)
     if not dropped:
         return None

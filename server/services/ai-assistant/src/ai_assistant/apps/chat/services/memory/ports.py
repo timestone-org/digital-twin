@@ -26,6 +26,14 @@ class Knowledge:
 
 
 @dataclass(frozen=True)
+class Remembered:
+    """一次记忆保存的真实结果。"""
+
+    id: str
+    is_searchable: bool
+
+
+@dataclass(frozen=True)
 class Hit:
     """一条召回。"""
 
@@ -50,7 +58,7 @@ class LongTermStore(Protocol):
         """
         ...
 
-    async def remember(self, item: Knowledge) -> str:
+    async def remember(self, item: Knowledge) -> Remembered:
         """记一条，回它的 id。
 
         ⚠ 嵌入算不出来时**仍然写入**（存文本、标记没有向量），由调用方如实

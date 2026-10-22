@@ -12,6 +12,7 @@ import pytest
 from ai_assistant.apps.chat.services.memory.ports import (
     Hit,
     Knowledge,
+    Remembered,
     Scope,
 )
 from ai_assistant.apps.chat.services.tools.providers.memory import (
@@ -34,9 +35,9 @@ class FakeStore:
         default_factory=list[tuple[str, str, str, int]]
     )
 
-    async def remember(self, item: Knowledge) -> str:
+    async def remember(self, item: Knowledge) -> Remembered:
         self.written.append(item)
-        return f"id-{len(self.written)}"
+        return Remembered(f"id-{len(self.written)}", self.can_rank)
 
     async def search(
         self, query: str, scope: Scope, owner_id: str, limit: int

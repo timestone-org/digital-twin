@@ -8,6 +8,9 @@
 """
 
 from ai_assistant.apps.chat.services.tools.providers.client_specs import history
+from ai_assistant.apps.chat.services.tools.providers.client_specs.reads import (
+    binding_read_parameters,
+)
 from llmcore.tools.shapes import (
     ToolSpec,
     integer_schema,
@@ -16,6 +19,32 @@ from llmcore.tools.shapes import (
 )
 
 CLIENT_SPECS: tuple[ToolSpec, ...] = (
+    ToolSpec(
+        name="dashboard.list_nodes",
+        description="大屏节点名片分页；摘要未列全时按keyword或selected_only筛选，沿next_offset续读。每页最多20个。",
+        parameters=object_schema(
+            {
+                "keyword": string_schema("节点名称、id或模块类型"),
+                "selected_only": {
+                    "type": "boolean",
+                    "description": "只列用户已选中的节点，默认false",
+                },
+                "offset": {
+                    "type": "integer",
+                    "minimum": 0,
+                    "description": "首次0，随后使用next_offset",
+                },
+                "limit": {
+                    "type": "integer",
+                    "minimum": 1,
+                    "maximum": 20,
+                    "description": "每页条数，默认20",
+                },
+            },
+            [],
+        ),
+        runs_on="client",
+    ),
     # 内建：不归任何技能，只要这一页报了它就下发（见 `tool_select`）
     ToolSpec(
         name="user.ask",
@@ -126,34 +155,7 @@ CLIENT_SPECS: tuple[ToolSpec, ...] = (
         parameters=object_schema(
             {
                 "node_id": string_schema("画布节点 id"),
-                "slot_key": {
-                    "type": ["string", "null"],
-                    "description": (
-                        "槽键精确筛选，如 partFieldValues；空值不限定"
-                    ),
-                },
-                "entity_id": {
-                    "type": ["string", "null"],
-                    "description": (
-                        "真实实体 id，包含该实体的全部字段；空值不限定"
-                    ),
-                },
-                "keyword": {
-                    "type": ["string", "null"],
-                    "description": "匹配实体名、身份或字段槽键；空值不限定",
-                },
-                "offset": {
-                    "type": "integer",
-                    "minimum": 0,
-                    "maximum": 9007199254740991,
-                    "description": "首次省略或给 0，续读使用回执 next_offset",
-                },
-                "limit": {
-                    "type": "integer",
-                    "minimum": 1,
-                    "maximum": 20,
-                    "description": "最多读取的行数，默认 20",
-                },
+                **binding_read_parameters(),
             },
             ["node_id"],
         ),
@@ -201,7 +203,7 @@ CLIENT_SPECS: tuple[ToolSpec, ...] = (
         description=(
             "把当前草稿整份保存落库。**新绑的点位要保存之后才会有实时数**"
             "——推送方读的是已落库的绑定计划，编辑器草稿里的绑定它看不见，"
-            "这是你主动调它的唯一理由。"
+            "用户明确要求保存时也可按授权调用。"
             "⚠ 它保存的是**整份草稿**，连用户自己刚改还没保存的那些一起落库；"
             "第一次调之前先跟用户说一句。"
             "⚠ 保存失败（尤其是 409：别人动过这张屏）就**停下来**报给用户，"
@@ -215,8 +217,11 @@ CLIENT_SPECS: tuple[ToolSpec, ...] = (
         description=(
             "读此刻画面上的实时读数，与画布渲染的是同一份数。"
             "给 node_id 就只读那一个画布节点，不给则读整屏。"
-            "每一行的 `status`：`has_value` 有数、`waiting` 订上了还没来"
-            "第一帧、`empty` 历史窗口内无数据、`unavailable` 取数失败、"
+            "按实体、槽位或关键词筛选，每页最多20行；沿next_offset续读。"
+            "value 是变换后的显示值，raw_value 保留原值，quality 表明质量。"
+            "status：has_value 有有效值、uncertain 质量不确定、"
+            "waiting 尚无样本、"
+            "empty 无数据、unavailable 取数失败或质量不合格、"
             "`unbound` 还没绑。"
             "大屏历史槽还返回 series：点数、实际起止时刻、截断方向与陈旧标记。"
             "⚠ `waiting` **不等于**点位坏了：刚 `dashboard.save` 完就读，"
@@ -226,7 +231,8 @@ CLIENT_SPECS: tuple[ToolSpec, ...] = (
             {
                 "node_id": string_schema(
                     "画布节点 id；不给则读整屏（或整段孪生）"
-                )
+                ),
+                **binding_read_parameters(),
             },
             [],
         ),
@@ -407,9 +413,9 @@ CLIENT_SPECS: tuple[ToolSpec, ...] = (
         description=(
             "往一个**数组配置字段**末尾加一项，新项按模块清单里的 itemSchema "
             "填默认值，再用 `values` 覆盖你要改的那几格。"
-            "「给实时数值卡再加一个指标」就是它（field 为 items）。"
-            "返回新项的下标，**数据槽的行号与它一致**——加完通常还要为这一行"
-            "写绑定，槽键形如 `itemValues[下标].value`。"
+            "field 来自当前模块清单。返回配置项下标；"
+            "配置数组不一定对应数据行，"
+            "新增后用 dashboard.read_bindings 查询实际实体与槽键再绑定。"
         ),
         parameters=object_schema(
             {
@@ -431,8 +437,8 @@ CLIENT_SPECS: tuple[ToolSpec, ...] = (
         name="dashboard.remove_config_item",
         description=(
             "删掉一个数组配置字段里的第 index 项。"
-            "⚠ 删中间一项会让它之后每一行的数据绑定都改喂前一项——"
-            "删完必须重读绑定并跟用户说清。"
+            "会改变已有绑定所指实体时，工具在写入前拒绝。"
+            "先读取受影响绑定，在已确认范围内处理，再重新读取验证。"
         ),
         parameters=object_schema(
             {
@@ -466,9 +472,16 @@ CLIENT_SPECS: tuple[ToolSpec, ...] = (
                 "node_id": string_schema("画布节点 id"),
                 "path": {
                     "type": "array",
-                    "items": {"type": "string"},
+                    "minItems": 1,
+                    "items": {
+                        "anyOf": [
+                            {"type": "string"},
+                            {"type": "integer", "minimum": 0},
+                        ]
+                    },
                     "description": (
-                        "配置路径，如 ['__cardStyle','borderStyle']"
+                        "字段用字符串，数组下标用非负整数；"
+                        "如 ['indicators',0,'name']"
                     ),
                 },
                 "value": {

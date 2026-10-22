@@ -5,14 +5,15 @@
 1. 先 `dry_run: true` 跑一次，把 `copied` 与 `skipped` 拿给用户过目。
 2. `copied` 里覆盖掉目标原有绑定的那几条要**点出来**。
 3. `skipped` 里的**如实报**：按名字对不上就是对不上。
-4. 用 `user.ask` 让他拍板（覆盖掉的那几条写进选项的 `hint` 里），
+4. 已有覆盖授权则按范围继续，否则用 `user.ask` 确认（影响写进选项的 `hint`），
    确认后再 `dry_run: false` 落一次，然后照常 `dashboard.save` +
    `dashboard.read_values`。
 
 ⚠ **匹配不上不要改用 `by_index` 硬抄。** 按行号对齐是这套数组绑定最容易出
 「每一条都有值、但全接错对象」的地方，而那种错在画面上完全看不出来。
 
-⚠ 它抄的**只是取数来源**。标题、单位、阈值这些配置归 `dashboard.set_config`，
+⚠ 它抄的**只是取数来源**。标题、单位、阈值等配置在大屏使用 `dashboard.set_config`，
+三维与二维分别使用 `twin.patch_config` / `twin2d.patch_config`；
 不要指望它一起过去——真一起过去了，2 号机组的标题会变成「1 号机组…」。
 
 

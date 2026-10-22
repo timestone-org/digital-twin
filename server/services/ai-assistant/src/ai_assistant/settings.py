@@ -239,6 +239,8 @@ class Settings(AppSettings, PostgresSettings, RedisSettings):
     # 一次模型调用的上限。⚠ 它必须大于边缘的读超时才有意义——所以助手的流式
     # 端点不走边缘的通用超时，见 docker/nginx 里那条 location
     model_timeout_s: float = Field(default=120.0, gt=0)
+    model_context_tokens: int = Field(default=65536, ge=1024)
+    vision_context_tokens: int = Field(default=0, ge=0)
     # 连续失败多少次就断路。断开期间如实回「模型暂时不可用」而不是继续排队等超时
     model_breaker_failures: int = Field(default=5, ge=1)
     model_breaker_reset_s: float = Field(default=30.0, gt=0)
