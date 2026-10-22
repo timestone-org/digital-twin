@@ -4,12 +4,17 @@
 在页面上长得一模一样。
 """
 
+import logging
 from typing import Any
 from uuid import UUID, uuid4
 
+import pytest
+
 from collector_server.apps.collect.bus.consumer import CommandConsumer
 from collector_server.apps.collect.drivers.base import (
+    BrowseContinuationInvalid,
     BrowseItem,
+    BrowsePageTooLarge,
     DriverCapabilities,
 )
 from collectwire import (
@@ -101,6 +106,48 @@ async def test_browse_returns_the_address_space_items(driver: Any) -> None:
     _, payload = transport.replies[0]
     assert payload["status"] == STATUS_OK
     assert payload["data"]["items"][0]["address"] == "ns=2;s=Dev"
+
+
+async def test_a_legacy_browse_request_never_silently_truncates_the_folder(
+    driver: Any,
+) -> None:
+    driver.items = [
+        BrowseItem(
+            address=f"ns=2;s=Point{index}",
+            name=f"Point{index}",
+            has_children=False,
+            is_variable=True,
+        )
+        for index in range(201)
+    ]
+    transport = FakeTransport([_request(ACTION_BROWSE)])
+    consumer = _consumer(transport, {SOURCE_ID: FakeSession(driver)})
+    await consumer.handle_once()
+    payload = transport.replies[0][1]
+    assert payload["status"] == STATUS_ERROR
+    assert payload["reason"] == "browse_page_too_large"
+
+
+async def test_a_paged_browse_request_preserves_the_continuation(
+    driver: Any,
+) -> None:
+    driver.items = [
+        BrowseItem(
+            address=f"ns=2;s=Point{index}",
+            name=f"Point{index}",
+            has_children=False,
+            is_variable=True,
+        )
+        for index in range(201)
+    ]
+    transport = FakeTransport([_request(ACTION_BROWSE, limit=200)])
+    consumer = _consumer(transport, {SOURCE_ID: FakeSession(driver)})
+    await consumer.handle_once()
+    payload = transport.replies[0][1]
+    assert payload["status"] == STATUS_OK
+    assert len(payload["data"]["items"]) == 200
+    assert payload["data"]["continuation_token"] == "200"
+    assert payload["data"]["has_more"] is True
 
 
 async def test_browse_carries_the_value_type_of_each_variable(
@@ -276,3 +323,28 @@ async def test_a_driver_failure_is_answered_with_a_reason(
     )
     await consumer.handle_once()
     assert transport.replies[0][1]["reason"] == "driver_failed"
+
+
+@pytest.mark.parametrize(
+    "error_type", [BrowseContinuationInvalid, BrowsePageTooLarge]
+)
+async def test_expected_browse_rejections_are_logged_as_warnings(
+    build_driver: Any,
+    caplog: pytest.LogCaptureFixture,
+    error_type: type[Exception],
+) -> None:
+    driver = build_driver()
+
+    async def reject(_parent: str | None) -> list[BrowseItem]:
+        raise error_type("请刷新文件夹")
+
+    driver.browse = reject
+    transport = FakeTransport([_request(ACTION_BROWSE)])
+    consumer = _consumer(transport, {SOURCE_ID: FakeSession(driver)})
+    with caplog.at_level(logging.WARNING):
+        await consumer.handle_once()
+    assert [
+        record.levelno
+        for record in caplog.records
+        if record.getMessage() == "command_failed"
+    ] == [logging.WARNING]

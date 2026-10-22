@@ -343,6 +343,9 @@ async def test_lifecycle_and_read_only_operations_are_explicit() -> None:
     with pytest.raises(BrowseNotSupported):
         await driver.browse(None)
     with pytest.raises(BrowseNotSupported):
+        await driver.browse_page(None)
+    await driver.release_browse("unused")
+    with pytest.raises(BrowseNotSupported):
         await driver.subscribe([point()], lambda *_: None)
     with pytest.raises(WriteNotSupported):
         await driver.write("value", 1)

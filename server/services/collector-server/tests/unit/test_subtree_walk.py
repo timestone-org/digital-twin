@@ -1,13 +1,8 @@
-"""守子树遍历：拼得回层级、走得完、到点会停、失败分得清是哪一种。
-
-⚠ 这里没有条数上限，也不该有：勾一个通道要的就是它下面的全部点位。遍历会
-终止靠的是**按寻址串去重**——那条断言（`test_a_cycle_does_not_walk_forever`）
-因此是这一组里最要紧的一条，它塌了就是无限打设备。
-"""
+"""守子树遍历的层级、分页、时间及节点预算。"""
 
 import pytest
 
-from collector_server.apps.collect.drivers.base import BrowseItem
+from collector_server.apps.collect.drivers.base import BrowseItem, BrowsePage
 from collector_server.apps.collect.services.subtree import (
     DEADLINE_RESERVE_MS,
     walk_subtree,
@@ -49,11 +44,20 @@ class FakeSpace:
         self.asked: list[str | None] = []
         self.failing: set[str | None] = set()
 
-    async def browse(self, parent: str | None) -> list[BrowseItem]:
+    async def browse(
+        self,
+        parent: str | None,
+        *,
+        limit: int = 200,
+        continuation_token: str | None = None,
+    ) -> BrowsePage:
         self.asked.append(parent)
         if parent in self.failing:
             raise RuntimeError("这一层拉不动")
-        return self.layers.get(parent, [])
+        items = self.layers.get(parent, [])
+        offset = int(continuation_token or 0)
+        token = str(offset + limit) if offset + limit < len(items) else None
+        return BrowsePage(tuple(items[offset : offset + limit]), token)
 
 
 def clock_at(*values: int) -> Clock:
@@ -137,9 +141,7 @@ async def test_a_cycle_does_not_walk_forever() -> None:
     assert [one.item.address for one in result.entries] == ["b", "b.x"]
 
 
-async def test_a_big_subtree_comes_back_whole_not_capped_at_some_number() -> (
-    None
-):
+async def test_a_big_subtree_stops_at_the_node_budget() -> None:
     # ⚠ 勾一个通道要的就是它下面的**全部**点位。按条数掐断等于替用户决定他
     # 只要前 N 个，而他多半到建完点位才发现少了
     layers = {"ch": [folder(f"dev{index}") for index in range(40)]}
@@ -155,9 +157,9 @@ async def test_a_big_subtree_comes_back_whole_not_capped_at_some_number() -> (
     )
 
     variables = [one for one in result.entries if one.item.is_variable]
-    assert len(variables) == 2000
+    assert len(variables) == 1960
     assert len(space.asked) == 41
-    assert result.is_truncated is False
+    assert result.is_truncated is True
 
 
 async def test_the_callers_deadline_stops_the_walk_before_it_expires() -> None:
@@ -229,3 +231,31 @@ async def test_walking_from_the_root_marks_the_first_layer_as_parentless() -> (
 
     assert result.entries[0].parent is None
     assert result.entries[1].parent == "ch"
+
+
+async def test_a_single_large_folder_cannot_bypass_the_node_budget() -> None:
+    space = FakeSpace({"ch": [tag(f"T{index}") for index in range(10_000)]})
+    result = await walk_subtree(
+        space.browse, "ch", deadline_ms=FAR_DEADLINE_MS, clock=lambda: NOW_MS
+    )
+    assert len(result.entries) == 2000
+    assert result.is_truncated is True
+
+
+async def test_hitting_the_node_budget_releases_the_unread_page() -> None:
+    space = FakeSpace({"ch": [tag(f"T{index}") for index in range(10_000)]})
+    released: list[str] = []
+
+    async def release(token: str) -> None:
+        released.append(token)
+
+    result = await walk_subtree(
+        space.browse,
+        "ch",
+        deadline_ms=FAR_DEADLINE_MS,
+        clock=lambda: NOW_MS,
+        release=release,
+    )
+    assert result.is_truncated is True
+    assert "2000" in released
+    assert len(space.asked) == 10

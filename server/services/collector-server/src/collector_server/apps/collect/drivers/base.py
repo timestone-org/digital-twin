@@ -9,7 +9,7 @@ from dataclasses import dataclass, field
 from typing import Literal, Protocol
 
 from collector_server.apps.collect.errors import CollectError
-from collectwire import DataType
+from collectwire import DEFAULT_BROWSE_LIMIT, DataType
 from timeseries import Quality
 
 # 回调签名：point_code、value、ts_ms、quality。
@@ -39,6 +39,18 @@ class BrowseNotSupported(DriverError):
     """
 
     reason: str = "browse_unsupported"
+
+
+class BrowseContinuationInvalid(DriverError):
+    """浏览游标不属于当前文件夹或已经失效。"""
+
+    reason: str = "browse_continuation_invalid"
+
+
+class BrowsePageTooLarge(DriverError):
+    """现场不支持有界浏览且返回超过兼容容量。"""
+
+    reason: str = "browse_page_too_large"
 
 
 class WriteNotSupported(DriverError):
@@ -131,6 +143,14 @@ class BrowseItem:
 
 
 @dataclass(frozen=True)
+class BrowsePage:
+    """地址空间的一页与当前会话的续读游标。"""
+
+    items: tuple[BrowseItem, ...]
+    continuation_token: str | None = None
+
+
+@dataclass(frozen=True)
 class RejectedPoint:
     """现场拒了的点位与拒绝原因。"""
 
@@ -215,6 +235,20 @@ class Driver(Protocol):
 
         Args: parent（协议寻址串，None 表示根）。
         """
+        ...
+
+    async def browse_page(
+        self,
+        parent: str | None,
+        *,
+        limit: int = DEFAULT_BROWSE_LIMIT,
+        continuation_token: str | None = None,
+    ) -> BrowsePage:
+        """有界浏览一页；游标只属于当前数据源会话和父节点。"""
+        ...
+
+    async def release_browse(self, continuation_token: str) -> None:
+        """释放不再使用的浏览游标。"""
         ...
 
     def fingerprint(self) -> tuple[str, ...]:

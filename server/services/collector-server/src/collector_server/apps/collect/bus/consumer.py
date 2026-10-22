@@ -13,6 +13,7 @@ from pydantic import BaseModel, ConfigDict, Field, ValidationError
 
 from collector_server.apps.collect.drivers.base import (
     BrowseItem,
+    BrowsePageTooLarge,
     Driver,
     Sample,
 )
@@ -34,6 +35,11 @@ from collectwire import (
     ACTION_BROWSE_SUBTREE,
     ACTION_READ,
     ACTION_WRITE,
+    DEFAULT_BROWSE_LIMIT,
+    MAX_BROWSE_LIMIT,
+    MAX_BROWSE_TOKEN_LENGTH,
+    REASON_BROWSE_CONTINUATION_INVALID,
+    REASON_BROWSE_PAGE_TOO_LARGE,
     REASON_DRIVER_FAILED,
     STATUS_ERROR,
     STATUS_OK,
@@ -77,6 +83,10 @@ class CommandRequest(BaseModel):
     deadline_ms: int
     # 浏览用；None 表示从根开始
     parent: str | None = None
+    limit: int = Field(default=DEFAULT_BROWSE_LIMIT, ge=1, le=MAX_BROWSE_LIMIT)
+    continuation_token: str | None = Field(
+        default=None, min_length=1, max_length=MAX_BROWSE_TOKEN_LENGTH
+    )
     # 读用
     point_codes: tuple[str, ...] = ()
     # 写用。⚠ 幂等键在 platform 侧兜（api-contract §7），本层只负责执行一次
@@ -202,15 +212,15 @@ class CommandConsumer:
         """
         driver = self._driver_of(request.source_id)
         if request.action == ACTION_BROWSE:
-            items = await driver.browse(request.parent)
-            return {"items": [_browse_payload(item) for item in items]}
+            return await _browse_data(driver, request)
         if request.action == ACTION_BROWSE_SUBTREE:
             return _subtree_payload(
                 await walk_subtree(
-                    driver.browse,
+                    driver.browse_page,
                     request.parent,
                     deadline_ms=request.deadline_ms,
                     clock=self._clock,
+                    release=driver.release_browse,
                 )
             )
         if request.action == ACTION_READ:
@@ -248,7 +258,16 @@ class CommandConsumer:
 
         Args: request, reason, detail。
         """
-        _logger.error(
+        emit = (
+            _logger.warning
+            if reason
+            in (
+                REASON_BROWSE_CONTINUATION_INVALID,
+                REASON_BROWSE_PAGE_TOO_LARGE,
+            )
+            else _logger.error
+        )
+        emit(
             "command_failed",
             "命令执行失败",
             action=request.action,
@@ -274,6 +293,27 @@ class CommandConsumer:
         """
         with contextlib.suppress(TimeoutError):
             await asyncio.wait_for(self._stopped.wait(), timeout=delay_s)
+
+
+async def _browse_data(
+    driver: Driver, request: CommandRequest
+) -> dict[str, Any]:
+    """按调用方声明选择分页，旧调用不静默截断。Args: driver, request。"""
+    if not {"limit", "continuation_token"} & request.model_fields_set:
+        items = await driver.browse(request.parent)
+        if len(items) > DEFAULT_BROWSE_LIMIT:
+            raise BrowsePageTooLarge("目录需要分页，请升级浏览客户端后重新浏览")
+        return {"items": [_browse_payload(item) for item in items]}
+    page = await driver.browse_page(
+        request.parent,
+        limit=request.limit,
+        continuation_token=request.continuation_token,
+    )
+    return {
+        "items": [_browse_payload(item) for item in page.items],
+        "continuation_token": page.continuation_token,
+        "has_more": page.continuation_token is not None,
+    }
 
 
 def _require_point(request: CommandRequest) -> str:

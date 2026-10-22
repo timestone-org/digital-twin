@@ -15,6 +15,8 @@ from asyncua.common.subscription import Subscription, SubscriptionHandler
 
 from collector_server.apps.collect.drivers.base import (
     BrowseItem,
+    BrowsePage,
+    BrowsePageTooLarge,
     DriverCapabilities,
     DriverConnection,
     DriverNotConnected,
@@ -27,11 +29,12 @@ from collector_server.apps.collect.drivers.base import (
     ValueSink,
 )
 from collector_server.apps.collect.drivers.opcua import mapping
+from collector_server.apps.collect.drivers.opcua.browse import BrowsePager
 from collector_server.apps.collect.drivers.opcua.notifier import (
     DataChangeNotifier,
 )
 from collector_server.clock import Clock, utc_now_ms
-from collectwire import DataType
+from collectwire import DEFAULT_BROWSE_LIMIT, DataType
 from lib.logging import get_logger
 
 _logger = get_logger("collect.driver.opcua")
@@ -190,10 +193,7 @@ def align_samples(
 def browse_items(
     descriptions: Sequence[ua.ReferenceDescription],
 ) -> list[BrowseItem]:
-    """把一次浏览的引用描述翻成协议无关的条目。
-
-    ⚠ 变量节点按叶子处理：它的子节点是 EngineeringUnits 这类属性，不是点位，
-    摆进树里只会让人以为还能往下选。
+    """把引用描述翻成协议无关条目，变量的工程属性不作为子点位。
 
     Args: descriptions。
     """
@@ -215,14 +215,9 @@ def browse_items(
 async def typed_items(
     client: Client, items: list[BrowseItem], *, timeout_s: float
 ) -> list[BrowseItem]:
-    """给这一层的变量节点补上现场的值类型。
+    """批量补上当前页变量的值类型，读不到时留空。
 
-    ⚠ 浏览本身回不出类型（引用描述里没有这一项），只能再读一趟 DataType
-    属性——一层一趟，不是一个节点一趟。
-    ⚠ 读不到就整层留空并照常回树：类型只是建点位时的预选值，为它让整棵
-    地址空间浏览不出来是本末倒置。
-
-    Args: client, items, timeout_s（一趟读的预算）。
+    Args: client, items, timeout_s。
     """
     addresses = [item.address for item in items if item.is_variable]
     if not addresses:
@@ -285,6 +280,7 @@ class OpcuaDriver:
         self._factory = client_factory
         self._clock = clock
         self._client: Client | None = None
+        self._browser: BrowsePager | None = None
         self._subscription: Subscription | None = None
         self._notifier: DataChangeNotifier | None = None
         self._points: dict[str, PointSpec] = {}
@@ -343,15 +339,28 @@ class OpcuaDriver:
         async with asyncio.timeout(self._connection.timeouts.connect_s):
             await client.connect()
         self._client = client
+        self._browser = BrowsePager(
+            client,
+            clock=self._clock,
+            timeout_s=self._connection.timeouts.browse_s,
+            release_timeout_s=self._connection.timeouts.request_s,
+        )
 
     async def disconnect(self) -> None:
         """拆会话。拆不掉也要把本地状态清干净，否则重连会认为自己还连着。"""
+        browser, self._browser = self._browser, None
         client, self._client = self._client, None
         self._subscription = None
         self._notifier = None
         self._handles.clear()
-        if client is None:
-            return
+        try:
+            if browser is not None:
+                await browser.close()
+        finally:
+            if client is not None:
+                await self._disconnect_client(client)
+
+    async def _disconnect_client(self, client: Client) -> None:
         try:
             async with asyncio.timeout(self._connection.timeouts.request_s):
                 await client.disconnect()
@@ -444,23 +453,44 @@ class OpcuaDriver:
             await client.get_node(node_id).write_value(value)
 
     async def browse(self, parent: str | None) -> list[BrowseItem]:
-        """浏览地址空间。`parent` 为 None 时从 Objects 文件夹起。
+        """兼容旧浏览调用，大目录明确要求使用分页。Args: parent。"""
+        page = await self.browse_page(parent)
+        if page.continuation_token is not None:
+            await self.release_browse(page.continuation_token)
+            raise BrowsePageTooLarge("目录需要分页，请升级浏览客户端后重新浏览")
+        return list(page.items)
 
-        Args: parent。
-        """
+    async def browse_page(
+        self,
+        parent: str | None,
+        *,
+        limit: int = DEFAULT_BROWSE_LIMIT,
+        continuation_token: str | None = None,
+    ) -> BrowsePage:
+        """浏览一个有界页，只为本页变量读取类型。"""
         client = self._require_client()
-        node = (
-            client.nodes.objects
-            if parent is None
-            else client.get_node(mapping.node_id_of(parent))
+        browser = self._browser
+        if browser is None:
+            raise DriverNotConnected("OPC UA 会话尚未建立")
+        page = await browser.page(
+            parent, limit=limit, continuation_token=continuation_token
         )
-        async with asyncio.timeout(self._connection.timeouts.browse_s):
-            descriptions = await node.get_children_descriptions()
-        return await typed_items(
-            client,
-            browse_items(descriptions),
-            timeout_s=self._connection.timeouts.request_s,
-        )
+        try:
+            items = await typed_items(
+                client,
+                browse_items(page.references),
+                timeout_s=self._connection.timeouts.request_s,
+            )
+        except BaseException:
+            if page.continuation_token is not None:
+                await browser.release(page.continuation_token)
+            raise
+        return BrowsePage(tuple(items), page.continuation_token)
+
+    async def release_browse(self, continuation_token: str) -> None:
+        """释放未消费完的浏览游标。"""
+        if self._browser is not None:
+            await self._browser.release(continuation_token)
 
     async def _ensure_subscription(
         self, resolved: Sequence[ResolvedPoint], on_value: ValueSink

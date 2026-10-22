@@ -12,6 +12,7 @@ from pymodbus.exceptions import ModbusException
 from collector_server.apps.collect.drivers.base import (
     BrowseItem,
     BrowseNotSupported,
+    BrowsePage,
     DriverCapabilities,
     DriverConnection,
     DriverNotConnected,
@@ -36,6 +37,7 @@ from collector_server.apps.collect.drivers.modbus_tcp.mapping import (
     decode_registers,
 )
 from collector_server.clock import utc_now_ms
+from collectwire import DEFAULT_BROWSE_LIMIT
 from lib.logging import get_logger
 
 CAPABILITIES = DriverCapabilities(
@@ -269,6 +271,19 @@ class ModbusTcpDriver:
     async def browse(self, parent: str | None) -> list[BrowseItem]:
         del parent
         raise BrowseNotSupported("Modbus 没有可浏览的地址空间")
+
+    async def browse_page(
+        self,
+        parent: str | None,
+        *,
+        limit: int = DEFAULT_BROWSE_LIMIT,
+        continuation_token: str | None = None,
+    ) -> BrowsePage:
+        del parent, limit, continuation_token
+        raise BrowseNotSupported("本协议没有地址空间")
+
+    async def release_browse(self, continuation_token: str) -> None:
+        del continuation_token
 
     def fingerprint(self) -> tuple[str, ...]:
         return (

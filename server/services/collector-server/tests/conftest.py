@@ -20,6 +20,7 @@ from redis.exceptions import RedisError
 from collector_server.apps.collect.drivers.base import (
     BrowseItem,
     BrowseNotSupported,
+    BrowsePage,
     DriverCapabilities,
     PointSpec,
     RejectedPoint,
@@ -387,6 +388,21 @@ class FakeDriver:
         if not self.capabilities.is_browse_supported:
             raise BrowseNotSupported("本协议没有地址空间")
         return self.items
+
+    async def browse_page(
+        self,
+        parent: str | None,
+        *,
+        limit: int = 200,
+        continuation_token: str | None = None,
+    ) -> BrowsePage:
+        items = await self.browse(parent)
+        offset = int(continuation_token or 0)
+        token = str(offset + limit) if offset + limit < len(items) else None
+        return BrowsePage(tuple(items[offset : offset + limit]), token)
+
+    async def release_browse(self, continuation_token: str) -> None:
+        del continuation_token
 
     def fingerprint(self) -> tuple[str, ...]:
         return ("fake",)

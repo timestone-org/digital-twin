@@ -15,6 +15,7 @@ from collector_server.apps.collect.drivers.base import (
 )
 from collector_server.apps.collect.drivers.opcua import driver as opcua_driver
 from collector_server.apps.collect.drivers.opcua.driver import OpcuaDriver
+from collector_server.clock import Clock
 
 NOW_MS = 1_767_323_045_000
 MAX_NODES = opcua_driver.MAX_NODES_PER_READ
@@ -87,6 +88,14 @@ class FakeClient:
 
     def __init__(self, connection: DriverConnection) -> None:
         self.connection = connection
+        self.uaclient = self
+        self.continuations: dict[
+            bytes, tuple[list[ua.ReferenceDescription], int]
+        ] = {}
+        self.released: list[bytes] = []
+        self.next_continuation = 0
+        self.browse_requests = 0
+        self.is_page_limit_ignored = False
         self.is_connected = False
         self.is_checked = False
         self.nodes = FakeShortcuts(FakeNode(ua.NodeId(85)))
@@ -100,6 +109,49 @@ class FakeClient:
         self.asked: list[tuple[int, list[str]]] = []
         # 现场的 MaxNodesPerRead；超了整批回 BadTooManyOperations
         self.max_nodes_per_read: int | None = None
+
+    async def browse(
+        self, parameters: ua.BrowseParameters
+    ) -> list[ua.BrowseResult]:
+        self.browse_requests += 1
+        assert parameters.View.Timestamp == ua.get_win_epoch()
+        node_id = parameters.NodesToBrowse[0].NodeId
+        node = (
+            self.nodes.objects
+            if node_id.Identifier == 85
+            else self.get_node(node_id)
+        )
+        if self.is_page_limit_ignored:
+            return [ua.BrowseResult(References=node.children)]
+        return self._page(
+            node.children, parameters.RequestedMaxReferencesPerNode
+        )
+
+    def _page(
+        self, references: list[ua.ReferenceDescription], limit: int
+    ) -> list[ua.BrowseResult]:
+        token = None
+        if len(references) > limit:
+            token = str(self.next_continuation).encode()
+            self.next_continuation += 1
+            self.continuations[token] = (references[limit:], limit)
+        return [
+            ua.BrowseResult(
+                References=references[:limit], ContinuationPoint_=token
+            )
+        ]
+
+    async def browse_next(
+        self, parameters: ua.BrowseNextParameters
+    ) -> list[ua.BrowseResult]:
+        if parameters.ReleaseContinuationPoints:
+            for point in parameters.ContinuationPoints:
+                self.continuations.pop(point, None)
+                self.released.append(point)
+            return []
+        token = parameters.ContinuationPoints[0]
+        references, limit = self.continuations.pop(token, ([], 200))
+        return self._page(references, limit)
 
     async def connect(self) -> None:
         self.is_connected = True
@@ -162,7 +214,9 @@ def _spec(code: str, interval_ms: int = 1000) -> PointSpec:
     )
 
 
-def _driver() -> tuple[OpcuaDriver, list[FakeClient]]:
+def _driver(
+    *, clock: Clock = lambda: NOW_MS
+) -> tuple[OpcuaDriver, list[FakeClient]]:
     built: list[FakeClient] = []
 
     def factory(connection: DriverConnection) -> FakeClient:
@@ -173,7 +227,7 @@ def _driver() -> tuple[OpcuaDriver, list[FakeClient]]:
     made = OpcuaDriver(
         connection=DriverConnection(endpoint="opc.tcp://127.0.0.1:4840/x"),
         client_factory=factory,
-        clock=lambda: NOW_MS,
+        clock=clock,
     )
     return made, built
 

@@ -19,6 +19,11 @@ BLOCK_SOCKET_MARGIN_S = 5.0
 # BLPOP/BRPOP 回包里 `(键名, 内容)` 这一对的长度
 REPLY_PAIR_LENGTH = 2
 
+DEFAULT_BROWSE_LIMIT = 200
+MAX_BROWSE_LIMIT = 500
+MAX_BROWSE_TOKEN_LENGTH = 256
+MAX_SUBTREE_ITEMS = 2000
+
 ACTION_BROWSE = "browse"
 # 一次收齐整棵子树，勾上层节点用。⚠ 与 browse 是两个动作而不是一个带开关的
 # 参数：两者的设备负载差着两个数量级、预算也不是一档
@@ -43,6 +48,8 @@ STATUS_ERROR = "error"
 # 采集侧回的稳定 `reason`，配置面按它翻成自己的错误码
 REASON_SOURCE_OFFLINE = "source_offline"
 REASON_BROWSE_UNSUPPORTED = "browse_unsupported"
+REASON_BROWSE_CONTINUATION_INVALID = "browse_continuation_invalid"
+REASON_BROWSE_PAGE_TOO_LARGE = "browse_page_too_large"
 REASON_WRITE_UNSUPPORTED = "write_unsupported"
 REASON_UNKNOWN_ACTION = "unknown_action"
 REASON_MISSING_POINT_CODE = "missing_point_code"

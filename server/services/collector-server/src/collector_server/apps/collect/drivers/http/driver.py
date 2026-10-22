@@ -12,6 +12,7 @@ from pydantic import JsonValue
 from collector_server.apps.collect.drivers.base import (
     BrowseItem,
     BrowseNotSupported,
+    BrowsePage,
     DriverCapabilities,
     DriverConnection,
     DriverNotConnected,
@@ -42,6 +43,7 @@ from collector_server.apps.collect.drivers.http.transport import (
     fetch_json,
 )
 from collector_server.clock import utc_now_ms
+from collectwire import DEFAULT_BROWSE_LIMIT
 from collectwire.http import HttpOptions, validate_http_pointer
 
 CAPABILITIES = DriverCapabilities(
@@ -266,6 +268,19 @@ class HttpDriver:
     async def browse(self, parent: str | None) -> list[BrowseItem]:
         del parent
         raise BrowseNotSupported("HTTP 请通过样例 JSON 配置点位路径")
+
+    async def browse_page(
+        self,
+        parent: str | None,
+        *,
+        limit: int = DEFAULT_BROWSE_LIMIT,
+        continuation_token: str | None = None,
+    ) -> BrowsePage:
+        del parent, limit, continuation_token
+        raise BrowseNotSupported("本协议没有地址空间")
+
+    async def release_browse(self, continuation_token: str) -> None:
+        del continuation_token
 
     def fingerprint(self) -> tuple[str, ...]:
         fields = [

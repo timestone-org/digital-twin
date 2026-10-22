@@ -204,6 +204,9 @@ async def test_reads_are_batched_aligned_and_read_only() -> None:
         await driver.write("count", 9)
     with pytest.raises(BrowseNotSupported):
         await driver.browse(None)
+    with pytest.raises(BrowseNotSupported):
+        await driver.browse_page(None)
+    await driver.release_browse("unused")
 
 
 async def test_failed_read_is_bad_and_next_read_recovers() -> None:
