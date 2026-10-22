@@ -66,13 +66,13 @@ async def test_legacy_browse_requests_do_not_advertise_paging_support() -> None:
 
 
 @pytest.mark.parametrize(
-    "with_items", [False, True], ids=["cursor", "oversized"]
+    "has_items", [False, True], ids=["cursor", "oversized"]
 )
 async def test_a_legacy_browse_response_never_silently_hides_additional_nodes(
-    with_items: bool,
+    has_items: bool,
 ) -> None:
     data: dict[str, object] = {"items": []}
-    if with_items:
+    if has_items:
         data["items"] = [{"address": "ns=2;s=Temp"}] * 201
     else:
         data["continuation_token"] = "next"
