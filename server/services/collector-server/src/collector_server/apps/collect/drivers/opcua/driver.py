@@ -1,8 +1,4 @@
-"""OPC UA 驱动：一期唯一的驱动实现。
-
-会话生命周期、点位表与结果装配在这里，协议特有的决断在 `mapping.py`。
-⚠ asyncua 只允许出现在本目录下，见 CONTEXT.md §3（契约测试守着这条）。
-"""
+"""OPC UA 会话、点位表与读写装配；协议边界见 CONTEXT.md §3。"""
 
 import asyncio
 import hashlib
@@ -300,13 +296,7 @@ class OpcuaDriver:
         return len(self._points)
 
     def _remember(self, points: Sequence[PointSpec]) -> None:
-        """把这批点位**并入**点位表。
-
-        ⚠ 订阅增量时不能整表替换：那会把没被本次订阅带上的点位从表里抹掉，
-        随后对它们的读写就会以「点位未登记」失败，而计划里明明还有它们。
-
-        Args: points。
-        """
+        """登记增量点位，保留尚未变更的既有点位。Args: points。"""
         self._points.update({point.point_code: point for point in points})
 
     def fingerprint(self) -> tuple[str, ...]:
