@@ -55,9 +55,9 @@ async def test_browsing_keeps_the_browse_budget_and_types_use_request_budget(
     budgets: list[float | None] = []
     native_timeout = asyncio.timeout
 
-    def timeout(delay: float | None) -> asyncio.Timeout:
-        budgets.append(delay)
-        return native_timeout(delay)
+    def timeout(delay_s: float | None) -> asyncio.Timeout:
+        budgets.append(delay_s)
+        return native_timeout(delay_s)
 
     monkeypatch.setattr(asyncio, "timeout", timeout)
     try:
