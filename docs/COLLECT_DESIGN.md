@@ -113,7 +113,9 @@ class Driver(Protocol):
     async def unsubscribe(self, point_codes: Sequence[str]) -> int
     async def read_many(self, point_codes) -> list[Sample]
     async def write(self, point_code: str, value: object) -> None
-    async def browse(self, parent: str | None) -> list[BrowseItem]
+    async def browse(self, parent: str | None) -> list[BrowseItem]  # 完整小目录，超限明确失败
+    async def browse_page(self, parent, *, limit=200, continuation_token=None) -> BrowsePage
+    async def release_browse(self, continuation_token: str) -> None
     def fingerprint(self) -> tuple[str, ...]                # 变了就必须重连
     def classify_error(self, error: BaseException) -> ErrorCategory
 ```
@@ -308,10 +310,10 @@ GET    /api/v1/platform/collect-sources/{id}
 PATCH  /api/v1/platform/collect-sources/{id}
 DELETE /api/v1/platform/collect-sources/{id}?force=     force 连点位一起删（CASCADE）
 POST   /api/v1/platform/collect-sources/{id}:test        连通性测试（走命令总线）
-POST   /api/v1/platform/collect-sources/{id}:browse      地址空间浏览一层（10s 超时）
-POST   /api/v1/platform/collect-sources/{id}:browse-subtree  一次收齐一棵子树（15s 超时）
+POST   /api/v1/platform/collect-sources/{id}:browse      地址空间浏览一页（默认 200、最大 500 条，10s 超时）
+POST   /api/v1/platform/collect-sources/{id}:browse-subtree  有界遍历子树（最多 2000 节点，15s 超时）
 
-GET    /api/v1/platform/collect-points?source_id=&q=      分页 + 搜索（Agent 按名字找点用）
+GET    /api/v1/platform/collect-points?source_id=&q=&status= 分页 + 搜索 + 全量状态筛选
 POST   /api/v1/platform/collect-points                   支持批量
 POST   /api/v1/platform/collect-points:import             按源与编码新增或更新，空白保留
 PATCH  /api/v1/platform/collect-points/{id}
@@ -329,17 +331,44 @@ POST   /api/v1/platform/point-histories:aggregate         分桶聚合，回 is_
 GET    /internal/v1/platform/collect-plan                collector 拉计划，服务级密钥
 ```
 
-**勾一个上层节点时，递归在采集侧做**（`:browse-subtree`）。前端逐层拉的代价是
-「一层一个请求」：一次 HTTP + 一趟命令总线 + 一趟设备往返，勾一个几百节点的通道
-就是几百个串行请求，而现场看到的只是界面卡住。子树接口一趟走完、**平铺**回来，
-每一项带 `parent`，由客户端拼回层级。
+点位列表的 `status` 是可选白名单参数，默认 `all`。`source_id`、`q` 与状态条件
+共同限定结果；**先筛选全部候选点位，再分页**，`total` 是全部匹配数。
 
-**不设条数上限。** 勾一个通道要的就是它下面的全部点位，按条数掐断等于替用户
-决定他只要前 N 个，而他多半要到建完点位才发现少了。遍历一定会终止——按寻址串
-去重 + 地址空间是有限集合，不靠计数刹车兜底。唯一的刹车是发起方给的**绝对
-墙钟**（`PLATFORM_COLLECT_SUBTREE_TIMEOUT_S`，采集侧留 500ms 余量编应答）。
-到点了把 `is_truncated` 置真——**界面必须说出来**，静默只回一半会让用户以为
-这个通道就这么点点位。
+| `status` | 查询口径 |
+|---|---|
+| `all` | 全部配置点位，不读取运行态或快照 |
+| `abnormal` | 全部非正常点位：无快照、质量为 `bad` / `uncertain`，或所属源运行态不是 `online` |
+| `waiting` | 无有效快照，尚未上报或快照已失效 |
+| `stale` | 有快照，但所属源运行态不是 `online`（包括 `unknown`） |
+| `good` | 有快照、质量为 `good`，且所属源运行态为 `online` |
+
+状态筛选只读取现有配置、collector 运行态和 Redis 快照，不发起现场连接。
+候选点位和快照按有界批次读取；每批结束配置库只读事务后才读取旁路信息，
+只保留返回页及匹配计数，不因页大小或批大小截断查询范围。整个查询有超时预算；
+依赖不可用时明确报告查询失败，不将其当成“零个异常”或缺失快照。
+**采样时刻旧不等于陈旧**：订阅点位值不变时可以长期没有新采样，查询不按
+`timestampMs` 年龄判断状态。
+
+**地址空间按页浏览。** `:browse` 接收 `parent`、`limit`（默认 200，最大 500）和
+可空 `continuation_token`，返回 `items`、可空 `continuation_token`、`has_more`。
+collector 直接调用 OPC UA Browse/BrowseNext，每页只为本页变量读取 DataType。
+游标是绑定数据源、父节点、页大小及现场会话的随机不透明标识；只能消费一次，失效
+返回明确的 409 并提示刷新。每个数据源最多保留 32 个游标，空闲 60 秒后自动归还设备续读点，
+断开会话时全部释放。若设备忽略原生页大小，仅兼容缓存原始引用描述；每源所有缓存
+总计最多 20000 条，超限明确报告而不把整个文件夹送到页面。界面逐页加载并使用虚拟列表，
+切换数据源、刷新或关闭浏览时取消旧请求，过期结果不能覆盖当前页面。
+
+新前端始终显式发送 `limit`，包括首请求和续页。旧 HTTP 或命令请求未声明分页时，
+仅在目录完整且未超过预算时成功；存在续页就释放游标并明确提示升级客户端，绝不
+将首 200 条伪装为整个目录。新平台对旧采集器返回的超预算响应同样明确拒绝。
+滚动升级顺序及此项显式降级的取舍见 [ADR-0060](adr/0060-采集地址浏览显式分页并拒绝静默截断.md)。
+
+**勾一个上层节点时，递归在采集侧做**（`:browse-subtree`）。遍历复用相同分页能力，
+按寻址串去重，结果平铺并带 `parent`。整个请求最多返回 2000 个节点，同时受发起方
+绝对墙钟约束（`PLATFORM_COLLECT_SUBTREE_TIMEOUT_S`，采集侧留 500ms 余量编码应答）。
+达到节点或时间预算时设置 `is_truncated` 并释放剩余续读点；界面必须明确显示只加载了
+部分节点，不把部分结果当作整个通道，也不自动发起无限续读。较大范围应分文件夹选择
+或通过点表导入。
 
 ⚠ 这一趟会**占住采集副本的命令循环**（消费端一次只处理一条）：走子树期间，
 同一副本上的写值与连通性测试要排队。预算因此不能无限放大，且整条链必须逐级
@@ -465,6 +494,12 @@ HTTP 支持 JSON 样例映射。选中源保存在 `?source=`，旧链接指向�
 前端不手写一份。删除（数据源 / 点位）走「引用守卫」两级弹窗：普通删除 409 时
 升级出「强制删除」，后果写在冲突文案里。
 
+右栏的点位状态筛选查询所选源的全部点位，规则见 §5.2。切换状态回到第一页，
+关键词与状态可组合查询；更换数据源清空这两项条件和选择项。页面直接展示后端
+返回的分页结果，禁止再对当前页本地筛选。状态集合和匹配总数取查询时的结果，
+点击“刷新列表”重新查询；当前值仍由 §9.1 的 WebSocket 实时推送，浏览器通道
+断线或停止收到心跳时照常标陈旧，不把浏览器连接状态作为后端点位查询条件。
+
 ### 9.1 实时值：主题 `collect:{source_id}`
 
 ```
@@ -502,6 +537,8 @@ collector → Redis 快照 → publisher 的 collect 链路 → hub → 配置�
 
 浏览树勾中的节点在导入弹窗里**逐行确认点位编码**，因为编码是点位的身份，使用
 §2 的可见 ASCII 规则（`PointCode` 约束），而现场用中文命名标记是常态。
+弹窗每页只渲染 50 条草稿；校验和确认提交仍针对全部选中节点，跨页编辑保留，
+隐藏页的编码错误也阻止提交并提供定位。切换数据源时关闭弹窗并清除旧草稿。
 
 - **编码从寻址串的最后一段推**（`ns=2;s=A.B.OutletTemp` → `outlet_temp`），
   带中文的**整段转拼音**（`出口温度` → `chu_kou_wen_du`）。⚠ 不能只把中文当分隔符
@@ -511,7 +548,7 @@ collector → Redis 快照 → publisher 的 collect 链路 → hub → 配置�
   设备挡在门外，而点位表里的编码字段是同一套点位编码约束，一点没省事。
 - **判重同时看本批与库里已有**，撞了自动挂序号；有一行不合法就不许提交——后端一批
   是原子的，一条编码不合规是整批被拒。
-- **数据类型跟着现场读到的建**：浏览的引用描述里没有类型，采集侧因此按层多读一趟
+- **数据类型跟着现场读到的建**：浏览的引用描述里没有类型，采集侧因此仅为当前页读取
   `DataType` 属性（读不到就留空，不猜）。没读到的那些按弹窗里选的那一档建。
 
 ### 9.4 批量导入
