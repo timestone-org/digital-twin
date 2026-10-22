@@ -229,9 +229,13 @@ CLIENT_SPECS: tuple[ToolSpec, ...] = (
         ),
         parameters=object_schema(
             {
-                "node_id": string_schema(
-                    "画布节点 id；不给则读整屏（或整段孪生）"
-                ),
+                "node_id": {
+                    "type": ["string", "null"],
+                    "description": (
+                        "画布节点 id；省略、null或空字符串"
+                        "均读整屏（或当前孪生）"
+                    ),
+                },
                 **binding_read_parameters(),
             },
             [],

@@ -33,7 +33,10 @@ import {
   type ValueReport,
 } from '@/features/ai/valueReport'
 import { createBinding } from '@/features/dashboard/editorDoc'
-import { bindingReportQuery } from '@/features/ai/bindingReportQuery'
+import {
+  bindingReportQuery,
+  optionalReadNodeId,
+} from '@/features/ai/bindingReportQuery'
 
 import type { TwinSurfaceDeps } from './aiSurfaceTypes'
 
@@ -115,7 +118,13 @@ function readValues(
   deps: TwinSurfaceDeps,
   call: AssistantToolCall,
 ): ValueReport {
-  sameNodeOrThrow(deps, call)
+  sameNodeOrThrow(deps, {
+    ...call,
+    arguments: {
+      ...call.arguments,
+      node_id: optionalReadNodeId(call.arguments),
+    },
+  })
   const rows = twinBindingRows(configOf(deps))
   return valueReport({
     rows: pairRows(rows, deps.bindings(), TWIN_VIEW_BINDINGS),

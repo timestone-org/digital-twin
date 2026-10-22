@@ -1,7 +1,7 @@
 /** @fileoverview 可信服务端回执与尚未取得回执的错误必须分开，避免改写执行历史。 */
 import type { AssistantToolResult } from '@dt/contracts'
 
-/** 服务端已保存的实际失败；output 与 error 原样回填，不能只保存错误文案。 */
+/** 可信执行端的实际失败或拒绝；output 与 error 原样回填，不能只保存错误文案。 */
 export class ActualToolReceiptError extends Error {
   constructor(readonly result: AssistantToolResult) {
     super(result.error ?? '工具执行失败')

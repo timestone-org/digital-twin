@@ -156,6 +156,14 @@ async function run(
 }
 
 describe('读场景', () => {
+  it.each([null, '', '   '])('空节点 %s 读取当前孪生', async (nodeId) => {
+    const { surface } = setup()
+    const result = await run(surface, 'dashboard.read_values', {
+      node_id: nodeId,
+      limit: 2,
+    })
+    expect(result.returned).toBe(2)
+  })
   it('给出各类实体的条数与已绑数', async () => {
     const { surface } = setup()
 

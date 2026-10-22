@@ -40,7 +40,122 @@ function inputOf(controller: AbortController) {
   }
 }
 
+it('相同失败参数即使更换调用ID和键顺序也不重复执行，拒绝回执落库后停止', async () => {
+  let round = 0
+  const advance = vi.fn(async function* () {
+    await Promise.resolve()
+    round += 1
+    yield frame('client_tool.request', {
+      calls: [
+        {
+          call_id: `call-${String(round)}`,
+          name: 'dashboard.read_values',
+          arguments:
+            round === 1 ? { node_id: '', limit: 2 } : { limit: 2, node_id: '' },
+        },
+      ],
+    })
+  })
+  const input = inputOf(new AbortController())
+  input.dispatch.mockRejectedValue(new Error('参数错误'))
+  const saveReceipts = vi.fn(async () => {
+    await Promise.resolve()
+  })
+  const sink = sinkOf()
+  await runLoop({ ...input, advance, saveReceipts }, sink)
+  expect(input.dispatch).toHaveBeenCalledOnce()
+  expect(advance).toHaveBeenCalledTimes(2)
+  expect(saveReceipts).toHaveBeenLastCalledWith('test-session', [
+    expect.objectContaining({
+      call_id: 'call-2',
+      output: expect.objectContaining({ execution: 'not_started' }),
+    }),
+  ])
+  expect(sink.onError).toHaveBeenCalledWith(expect.stringContaining('相同参数'))
+})
+
 describe('回合取消', () => {
+  it.each([false, true])(
+    '没有独立回执协议或MCP确认桥时仍按原协议回填：%s',
+    async (isMcp) => {
+      let round = 0
+      const bodies: LoopBody[] = []
+      const advance = vi.fn(async function* (_id: string, body: LoopBody) {
+        bodies.push(body)
+        await Promise.resolve()
+        round += 1
+        yield round === 3
+          ? frame('turn.done', { reply: '已核对失败' })
+          : frame('client_tool.request', {
+              calls: [
+                {
+                  call_id: `receipt-${String(round)}`,
+                  name: isMcp ? 'mcp.demo.update' : 'dashboard.read_values',
+                  arguments: {},
+                },
+              ],
+            })
+      })
+      const input = inputOf(new AbortController())
+      input.dispatch.mockRejectedValue(new Error('实际失败'))
+      const saveReceipts = isMcp
+        ? vi.fn(async () => {
+            await Promise.resolve()
+          })
+        : undefined
+      const sink = sinkOf()
+      await runLoop(
+        { ...input, advance, saveReceipts, nudge: () => null },
+        sink,
+      )
+      expect(input.dispatch).toHaveBeenCalledTimes(2)
+      expect(bodies[2]?.tool_results).toEqual([
+        { call_id: 'receipt-2', error: '实际失败' },
+      ])
+      expect(sink.onDone).toHaveBeenCalledWith('已核对失败')
+    },
+  )
+  it('参数修正后仍能继续，成功的相同读取不被当成失败重试', async () => {
+    let round = 0
+    const advance = vi.fn(async function* () {
+      await Promise.resolve()
+      round += 1
+      yield round === 4
+        ? frame('turn.done', { reply: '已读回' })
+        : frame('client_tool.request', {
+            calls: [
+              {
+                call_id: `read-${String(round)}`,
+                name: 'dashboard.read_values',
+                arguments: {
+                  node_id: round === 1 ? 'bad' : 'good',
+                  fields: ['value', 0],
+                },
+              },
+            ],
+          })
+    })
+    const input = inputOf(new AbortController())
+    input.dispatch
+      .mockRejectedValueOnce(new Error('目标错误'))
+      .mockResolvedValue({ value: 42 })
+    const sink = sinkOf()
+    await runLoop(
+      {
+        ...input,
+        advance,
+        maxRounds: 5,
+        nudge: () => null,
+        saveReceipts: async () => {
+          await Promise.resolve()
+        },
+      },
+      sink,
+    )
+    expect(input.dispatch).toHaveBeenCalledTimes(3)
+    expect(sink.onDone).toHaveBeenCalledWith('已读回')
+    expect(sink.onError).not.toHaveBeenCalled()
+  })
   it('预取消不收流、读工作面或派发工具', async () => {
     const controller = new AbortController()
     controller.abort()

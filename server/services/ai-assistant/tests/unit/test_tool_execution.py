@@ -32,6 +32,15 @@ def test_config_path_accepts_the_browser_array_index_fixture() -> None:
     assert fixture["arguments"]["path"] == ["indicators", 0, "name"]
 
 
+def test_whole_canvas_read_accepts_an_explicit_null_scope() -> None:
+    spec = next(
+        one for one in TOOL_SPECS if one.name == "dashboard.read_values"
+    )
+    validate_arguments(
+        spec, {"node_id": None, "keyword": "温度", "offset": 0, "limit": 2}
+    )
+
+
 @pytest.mark.parametrize("path", [[], ["indicators", -1], [True], [0.5]])
 def test_config_path_rejects_invalid_field_or_index_segments(
     path: list[object],

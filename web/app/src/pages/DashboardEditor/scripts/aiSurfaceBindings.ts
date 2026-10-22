@@ -34,7 +34,10 @@ import {
 } from '@/features/ai/valueReport'
 import { createBinding, upsertBinding } from '@/features/dashboard/editorDoc'
 import { nodeLabelOf } from '@/features/dashboard/nodeLabel'
-import { bindingReportQuery } from '@/features/ai/bindingReportQuery'
+import {
+  bindingReportQuery,
+  optionalReadNodeId,
+} from '@/features/ai/bindingReportQuery'
 import type { EditorToolDeps } from './aiSurfaceTypes'
 
 /** 这一半实现了哪些工具。⚠ 与规格书 §2 里的名字逐字相同。 */
@@ -99,8 +102,8 @@ function readValues(
   deps: EditorToolDeps,
   call: AssistantToolCall,
 ): ValueReport {
-  const given = call.arguments.node_id
-  const isWhole = given === undefined || given === null
+  const given = optionalReadNodeId(call.arguments)
+  const isWhole = given === null
   const nodes = isWhole
     ? deps.editor.nodes.value
     : [nodeOf(deps, call, 'node_id')]

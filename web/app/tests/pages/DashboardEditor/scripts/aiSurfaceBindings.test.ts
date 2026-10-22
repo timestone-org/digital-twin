@@ -225,6 +225,26 @@ describe('读绑定', () => {
 })
 
 describe('读实时读数', () => {
+  it.each([null, '', '   '])(
+    '空节点范围 %s 与省略一致，并支持续页',
+    async (nodeId) => {
+      const { surface } = setup()
+      const first = (await surface.run(
+        call('dashboard.read_values', { node_id: nodeId, limit: 2 }),
+      )) as ValueReport
+      const next = (await surface.run(
+        call('dashboard.read_values', {
+          node_id: nodeId,
+          limit: 2,
+          offset: first.next_offset,
+        }),
+      )) as ValueReport
+      expect(first.returned).toBe(2)
+      expect(first.has_more).toBe(true)
+      expect(next.returned).toBe(2)
+      expect(next.has_more).toBe(false)
+    },
+  )
   it('读的是画布那份快照缓存，不另发请求', async () => {
     const read = vi.fn(() => ({
       state: 'ok' as const,

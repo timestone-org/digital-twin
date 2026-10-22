@@ -25,6 +25,7 @@ import type {
 import { ASSISTANT_ASK_TOOL } from '@dt/contracts'
 
 import { createFrameReader, type FrameReader } from './sseFrames'
+import { clientFailureGuard } from './clientFailureGuard'
 import {
   inputPreview,
   isImageOutput,
@@ -147,6 +148,10 @@ export async function runLoop<Body extends LoopBody>(
   if (isCancelled(input.signal)) return
   // ⚠ 图只随第一帧走：后面每一帧都是工具回填，而回填不许夹带图
   let body = firstBody(input)
+  const guarded = clientFailureGuard(
+    input.dispatch,
+    input.saveReceipts !== undefined,
+  )
   for (let round = 0; round < input.maxRounds; round += 1) {
     if (isCancelled(input.signal)) return
     const outcome = await pumpUnlessCancelled(input, body, sink)
@@ -154,12 +159,20 @@ export async function runLoop<Body extends LoopBody>(
     if (outcome.kind === 'pending') {
       const batch = await runAll(
         outcome.calls,
-        input.dispatch,
+        guarded.dispatch,
         sink,
         input.signal,
       )
       if (!(await saveActualReceipts(input, batch.results, sink))) return
-      if (shouldStopBatch(batch.hasUnknown, input.signal)) return
+      if (
+        shouldStopBatch(
+          batch.hasUnknown,
+          guarded.hasRepeated(),
+          sink,
+          input.signal,
+        )
+      )
+        return
       body = { ...input.envelope(), tool_results: batch.results }
       continue
     }
@@ -187,8 +200,17 @@ async function saveActualReceipts<Body extends LoopBody>(
   }
 }
 
-function shouldStopBatch(hasUnknown: boolean, signal?: AbortSignal): boolean {
-  return hasUnknown || isCancelled(signal)
+function shouldStopBatch(
+  hasUnknown: boolean,
+  repeated: boolean,
+  sink: LoopSink,
+  signal?: AbortSignal,
+): boolean {
+  if (repeated)
+    sink.onError(
+      '相同参数的工具调用已失败，已停止重复执行；请核对失败原因后再继续。',
+    )
+  return repeated || hasUnknown || isCancelled(signal)
 }
 
 function isCancelled(signal?: AbortSignal): boolean {

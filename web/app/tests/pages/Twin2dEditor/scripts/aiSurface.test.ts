@@ -427,6 +427,14 @@ describe('照抄绑定', () => {
 })
 
 describe('读实时读数', () => {
+  it.each([null, '', '   '])('空节点 %s 读取当前孪生', async (nodeId) => {
+    const { surface } = setup()
+    const result = await run(surface, 'dashboard.read_values', {
+      node_id: nodeId,
+      limit: 2,
+    })
+    expect(result.returned).toBe(2)
+  })
   it('走的是画中画那一份快照缓存，取到什么报什么', async () => {
     const { surface } = setup({
       bindings: [point(SOURCE.fieldKey, 'src-1:PT101')],

@@ -119,6 +119,42 @@ async def test_unknown_duplicate_conflict_rejected_atomically(
     assert steps[0]["error"] == "版本冲突"
 
 
+async def test_repeated_call_refusal_preserves_not_started_in_history(
+    db_stack: DbStack,
+) -> None:
+    session_id = await _pending(db_stack)
+    result = await db_stack.client.post(
+        f"{SESSIONS_URL}/{session_id}:receipts",
+        json={
+            "tool_results": [
+                {
+                    "call_id": "a",
+                    "error": "相同参数已失败，未执行",
+                    "output": {
+                        "ok": False,
+                        "code": "repeated_failed_call",
+                        "execution": "not_started",
+                        "retryable": False,
+                    },
+                }
+            ]
+        },
+    )
+    assert result.status_code == 200
+    messages = await _messages(db_stack, session_id)
+    body = messages[-1]["content_json"]["text"]
+    assert "not_started" in body
+    assert "unknown" not in body
+    steps = [
+        step
+        for message in messages
+        for step in message["steps"]
+        if step["kind"] == "client_tool"
+    ]
+    assert steps[0]["state"] == "failed"
+    assert steps[0]["output_json"]["body"] == body
+
+
 async def test_fingerprint_conflict_rolls_back_the_whole_batch(
     db_stack: DbStack,
 ) -> None:
