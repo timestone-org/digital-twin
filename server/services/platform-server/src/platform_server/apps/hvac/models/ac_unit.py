@@ -10,7 +10,7 @@ from sqlalchemy import (
     Text,
     UniqueConstraint,
 )
-from sqlalchemy.dialects.postgresql import UUID
+from sqlalchemy.dialects.postgresql import JSONB, UUID
 from sqlalchemy.orm import Mapped, mapped_column, relationship
 
 from lib.db import TimestampMixin, UuidPrimaryKeyMixin
@@ -36,6 +36,9 @@ class AcUnit(UuidPrimaryKeyMixin, TimestampMixin, Base):
     )
     serial: Mapped[str] = mapped_column(Text, nullable=False)
     name: Mapped[str] = mapped_column(Text, nullable=False)
+    winter_policy: Mapped[dict[str, object] | None] = mapped_column(
+        JSONB, nullable=True
+    )
 
     room: Mapped["Room"] = relationship(back_populates="units", lazy="noload")
 

@@ -9,6 +9,7 @@ import { useRacedFetch } from '@/composables/useRacedFetch'
 import * as ops from './acDataOps'
 import type { ConfigState } from './acDataOps'
 import type { LimitRow } from './acLimitForm'
+import { emptyWinter, type WinterDraft } from './seasonalLimitForm'
 import { useSourceObjects } from './useSourceObjects'
 
 export interface AcDataConfig {
@@ -20,6 +21,8 @@ export interface AcDataConfig {
   sourceObject: Ref<string>
   boundObject: ComputedRef<string>
   rows: Ref<LimitRow[]>
+  winter: Ref<WinterDraft>
+  effectiveSeason: Ref<string>
   loading: Ref<boolean>
   busy: Ref<boolean>
   error: ComputedRef<string | null>
@@ -41,6 +44,9 @@ export function useAcDataConfig(acUnitId: () => string): AcDataConfig {
     bindings: ref<AcDataBinding[]>([]),
     sourceObject: ref(''),
     rows: ref<LimitRow[]>([]),
+    winter: ref(emptyWinter()),
+    effectiveSeason: ref(''),
+    loadedUnitId: ref(''),
     loading: ref(false),
     busy: ref(false),
     failure: ref<string | null>(null),
@@ -51,6 +57,8 @@ export function useAcDataConfig(acUnitId: () => string): AcDataConfig {
     datasetKey: state.datasetKey,
     sourceObject: state.sourceObject,
     rows: state.rows,
+    winter: state.winter,
+    effectiveSeason: state.effectiveSeason,
     loading: state.loading,
     busy: state.busy,
     objectOptions: state.objects.options,

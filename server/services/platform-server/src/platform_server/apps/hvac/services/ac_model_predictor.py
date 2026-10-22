@@ -29,7 +29,17 @@ from platform_server.apps.hvac.modeling.features import (
 )
 from platform_server.apps.hvac.models import AcModel
 from platform_server.apps.hvac.schemas import PredictIn, RecommendIn
+from platform_server.apps.hvac.schemas.ac_compliance import (
+    EffectiveComplianceOut,
+)
 from platform_server.apps.hvac.services import ac_model_service
+from platform_server.apps.hvac.services.ac_compliance_service import (
+    effective_compliance,
+)
+from platform_server.apps.hvac.services.ac_room_configuration import (
+    load_configuration,
+)
+from platform_server.apps.hvac.services.ac_startup_rules import ExtractionRules
 
 
 @dataclass(frozen=True)
@@ -44,6 +54,9 @@ class PredictResult:
     # 答话的是这个组合的专属子模型，还是房间共用模型在兜底
     is_dedicated: bool
     trained_at: datetime
+    effective_at: datetime | None = None
+    compliance: tuple[EffectiveComplianceOut, ...] = ()
+    timezone: str = "Asia/Shanghai"
 
 
 @dataclass(frozen=True)
@@ -66,16 +79,25 @@ class RecommendResult:
 
     entries: list[RecommendEntry]
     trained_at: datetime
+    effective_at: datetime | None = None
+    compliance: tuple[EffectiveComplianceOut, ...] = ()
+    timezone: str = "Asia/Shanghai"
 
 
 async def predict(
-    session: AsyncSession, model_id: uuid.UUID, payload: PredictIn
+    session: AsyncSession,
+    model_id: uuid.UUID,
+    payload: PredictIn,
+    *,
+    timezone: str = "Asia/Shanghai",
 ) -> PredictResult:
     """试算：读工件、算特征、出三分位。
 
     Args: session, model_id, payload。
     """
-    model, bundle = await _load_bundle(session, model_id)
+    model, bundle = await _load_bundle(session, model_id, timezone=timezone)
+    at = payload.at or utcnow()
+    payload = payload.model_copy(update={"at": at})
     running = sorted(set(payload.running_set))
     unknown = [item for item in running if item not in bundle.serials]
     if unknown:
@@ -94,11 +116,18 @@ async def predict(
         in {set_key(serving) for serving in model.serving_sets},
         is_dedicated=found.is_dedicated,
         trained_at=model.trained_at,
+        effective_at=at,
+        compliance=tuple(effective_compliance(bundle.units, at, timezone)),
+        timezone=timezone,
     )
 
 
 async def recommend(
-    session: AsyncSession, model_id: uuid.UUID, payload: RecommendIn
+    session: AsyncSession,
+    model_id: uuid.UUID,
+    payload: RecommendIn,
+    *,
+    timezone: str = "Asia/Shanghai",
 ) -> RecommendResult:
     """同一个起始条件下让全部服务组合同台比，排好序、第一名带推荐标。
 
@@ -106,7 +135,9 @@ async def recommend(
     最后少开机组优先——同样快就选省电的。
     Args: session, model_id, payload。
     """
-    model, bundle = await _load_bundle(session, model_id)
+    model, bundle = await _load_bundle(session, model_id, timezone=timezone)
+    at = payload.at or utcnow()
+    payload = payload.model_copy(update={"at": at})
     scored = [
         _score_set(bundle, sorted(set(serving)), payload=payload)
         for serving in model.serving_sets
@@ -132,11 +163,14 @@ async def recommend(
             for at, entry in enumerate(scored)
         ],
         trained_at=model.trained_at,
+        effective_at=at,
+        compliance=tuple(effective_compliance(bundle.units, at, timezone)),
+        timezone=timezone,
     )
 
 
 async def _load_bundle(
-    session: AsyncSession, model_id: uuid.UUID
+    session: AsyncSession, model_id: uuid.UUID, *, timezone: str
 ) -> tuple[AcModel, ModelBundle]:
     """取模型与过完护栏的工件；没训过或工件不可用都在这里拒绝。
 
@@ -155,6 +189,16 @@ async def _load_bundle(
         )
     except ArtifactRejected as error:
         raise ModelArtifactUnusable(str(error)) from error
+    configuration = await load_configuration(
+        session, model.room_id, timezone=timezone, rules=ExtractionRules()
+    )
+    if (
+        model.configuration_snapshot is None
+        or model.batch_fingerprint != configuration.fingerprint()
+    ):
+        raise ModelNotReady(
+            "季节、达标范围或数据配置已变更，请先重算开机事件并重训模型"
+        )
     return model, bundle
 
 

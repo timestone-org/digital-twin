@@ -164,6 +164,10 @@ class AcSourceReader:
         # ⚠ 时区名非法要在装配时就炸，不能拖到第一次查询才发现
         self._zone = ZoneInfo(timezone)
 
+    @property
+    def timezone(self) -> str:
+        return self._zone.key
+
     async def list_bindable_objects(
         self, required_columns: Sequence[str]
     ) -> list[str]:

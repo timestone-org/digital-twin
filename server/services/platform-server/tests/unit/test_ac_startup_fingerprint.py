@@ -37,7 +37,7 @@ def test_the_cold_start_switch_is_not_a_minute_count() -> None:
 def test_the_default_fingerprint_is_pinned() -> None:
     """默认规则 + `LOGIC_VERSION` 的指纹钉成字面量：它一变就该全量重算。"""
     assert DEFAULTS.fingerprint() == (
-        "f1872508b11fde7a9ca033f4034fd06d" "8ce64034123c7a43f806e1dd50b85d0e"
+        "dc9ecb8980b7a7609f32e15a15932fd7" "f8eab3f3782b6980e779b9a38d9c4f1b"
     )
 
 

@@ -33,7 +33,9 @@ class AcUnitCrud(CrudBase[AcUnit]):
         if not ac_unit_ids:
             return []
         result = await session.execute(
-            select(AcUnit).where(AcUnit.id.in_(ac_unit_ids))
+            select(AcUnit)
+            .where(AcUnit.id.in_(ac_unit_ids))
+            .execution_options(populate_existing=True)
         )
         return list(result.scalars().all())
 

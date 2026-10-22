@@ -34,7 +34,10 @@ from platform_server.apps.hvac.errors import (
     SourceObjectInvalid,
     SourceObjectShapeMismatch,
 )
-from platform_server.apps.hvac.models import AcDataBinding, AcMetricLimit
+from platform_server.apps.hvac.models import (
+    AcDataBinding,
+    AcMetricLimit,
+)
 from platform_server.apps.hvac.schemas import (
     AcDataBindingOut,
     AcDataBindingPutIn,
@@ -47,6 +50,7 @@ from platform_server.apps.hvac.schemas import (
     MetricLimitsPutIn,
     MetricOut,
 )
+from platform_server.apps.hvac.services.ac_configuration_guard import lock_unit
 
 _logger = get_logger("platform.hvac.ac_data")
 
@@ -174,6 +178,7 @@ async def put_binding(
     await ensure_source_object_matches(
         reader, source_object=source_object, dataset=spec
     )
+    await lock_unit(session, ac_unit_id)
     binding = await ac_data_binding_crud.find(session, ac_unit_id, dataset)
     if binding is None:
         binding = AcDataBinding(
@@ -201,7 +206,7 @@ async def delete_binding(
 
     Args: session, ac_unit_id, dataset。
     """
-    await _require_ac_unit(session, ac_unit_id)
+    await lock_unit(session, ac_unit_id)
     require_dataset(dataset)
     binding = await ac_data_binding_crud.find(session, ac_unit_id, dataset)
     if binding is None:
@@ -230,11 +235,27 @@ async def list_metric_limits(
 async def put_metric_limits(
     session: AsyncSession, *, ac_unit_id: uuid.UUID, payload: MetricLimitsPutIn
 ) -> MetricLimitsOut:
+    """非季节旧入口；启用季节后要求整体保存。
+
+    Args: session, ac_unit_id, payload。"""
+    unit = await lock_unit(session, ac_unit_id)
+    if unit.winter_policy is not None:
+        raise ValidationFailed(
+            "这台空调已启用冬季，请在季节达标配置中保存两套范围"
+        )
+    return await replace_metric_limits(
+        session, ac_unit_id=ac_unit_id, payload=payload
+    )
+
+
+async def replace_metric_limits(
+    session: AsyncSession, *, ac_unit_id: uuid.UUID, payload: MetricLimitsPutIn
+) -> MetricLimitsOut:
     """覆盖式设置达标范围。请求里没出现的指标视为清除。
 
     Args: session, ac_unit_id, payload。
     """
-    await _require_ac_unit(session, ac_unit_id)
+    await lock_unit(session, ac_unit_id)
     wanted = _validated_limits(payload.items)
     existing = {
         row.metric: row

@@ -38,7 +38,10 @@ MAX_PLAUSIBLE_CELSIUS = 60.0
 
 
 def build_frames(
-    units: Sequence[RoomUnit], rows: Mapping[str, Sequence[SourceRow]]
+    units: Sequence[RoomUnit],
+    rows: Mapping[str, Sequence[SourceRow]],
+    *,
+    timezone: str = "Asia/Shanghai",
 ) -> list[Frame]:
     """按时刻对齐每台空调的行，摊成房间级的帧序列。
 
@@ -53,7 +56,12 @@ def build_frames(
         for unit in units
     }
     moments = sorted({ts for found in by_serial.values() for ts in found})
-    return [_to_frame(units, ts, _at(by_serial, ts)) for ts in moments]
+    return [
+        _to_frame(
+            [unit.at(ts, timezone) for unit in units], ts, _at(by_serial, ts)
+        )
+        for ts in moments
+    ]
 
 
 def _at(
@@ -150,8 +158,22 @@ def _is_in_band(unit: RoomUnit, values: Mapping[str, float | None]) -> bool:
 
     Args: unit, values。
     """
-    for metric, band in unit.bands.items():
-        value = values.get(metric)
-        if value is None or not band.contains(value):
-            return False
-    return True
+    return unit.is_in_band(values)
+
+
+def compliant_at(
+    frame: Frame,
+    started_at: datetime,
+    *,
+    units: Sequence[RoomUnit],
+    timezone: str,
+) -> bool:
+    """用开机时刻固定的目标判断后续帧。
+
+    Args: frame, started_at, units, timezone。"""
+    return frame.is_valid and all(
+        unit.at(started_at, timezone).is_in_band(
+            frame.readings.get(unit.serial, {})
+        )
+        for unit in units
+    )

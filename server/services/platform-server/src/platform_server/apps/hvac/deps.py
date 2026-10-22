@@ -125,6 +125,12 @@ def get_ac_source_reader(
     )
 
 
+def get_hvac_timezone(
+    container: Annotated[Container, Depends(get_container)],
+) -> str:
+    return container.settings.acsource_timezone
+
+
 def get_sessions(
     container: Annotated[Container, Depends(get_container)],
 ) -> Sessions:

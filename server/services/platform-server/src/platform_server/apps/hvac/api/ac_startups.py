@@ -130,7 +130,9 @@ async def rebuild_startup_batches(
     resolved = await ac_startup_service.resolve_window(
         session, reader, room_id=room_id, asked=payload
     )
-    plan = await _queue(session, room_id=room_id, resolved=resolved)
+    plan = await _queue(
+        session, room_id=room_id, resolved=resolved, timezone=reader.timezone
+    )
     dispatcher.after_commit(plan.dispatch())
     return ok(_to_rebuild_out(plan, resolved), message="重算已排队")
 
@@ -140,6 +142,7 @@ async def _queue(
     *,
     room_id: uuid.UUID,
     resolved: ac_startup_service.ResolvedWindow,
+    timezone: str,
 ) -> ac_startup_service.RebuildPlan:
     """按定下来的区间建批次与分片行。
 
@@ -150,6 +153,7 @@ async def _queue(
         room_id=room_id,
         window=resolved.window,
         rules=ExtractionRules(),
+        timezone=timezone,
     )
 
 

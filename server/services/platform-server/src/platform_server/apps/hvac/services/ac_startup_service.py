@@ -36,6 +36,10 @@ from platform_server.apps.hvac.schemas import (
     StartupRebuildIn,
     TimeWindow,
 )
+from platform_server.apps.hvac.services.ac_room_configuration import (
+    load_configuration,
+    restore_configuration,
+)
 from platform_server.apps.hvac.services.ac_source_reader import AcSourceReader
 from platform_server.apps.hvac.services.ac_startup_extract import (
     resolve_source_extent,
@@ -165,6 +169,7 @@ async def request_rebuild(
     room_id: uuid.UUID,
     window: TimeWindow,
     rules: ExtractionRules,
+    timezone: str = "Asia/Shanghai",
 ) -> RebuildPlan:
     """建一个新批次并登记它的分片。只入队，不在这里抽取。
 
@@ -180,6 +185,11 @@ async def request_rebuild(
         # 它会带着 0 条事件被切成当前批次，把这个房间的数据从页面上抹掉
         raise TimeRangeInvalid("抽取区间为空，无法切出任何分片")
     batch = _new_batch(room_id, window=window, rules=rules, shards=len(months))
+    configuration = await load_configuration(
+        session, room_id, timezone=timezone, rules=rules
+    )
+    batch.configuration_snapshot = configuration.snapshot()
+    batch.params_fingerprint = configuration.fingerprint()
     session.add(batch)
     await session.flush()
     await ac_startup_shard_crud.seed(session, batch.id, months)
@@ -263,6 +273,8 @@ async def finalize_if_complete(
         return await _fail(session, batch)
     if not _is_complete(batch, counts):
         return None
+    if not await _configuration_current(session, batch):
+        return await _fail(session, batch)
     return await _publish(session, batch)
 
 
@@ -488,3 +500,19 @@ async def delete_exclusion(
             room_id=str(room_id),
             started_at=started_at.isoformat(),
         )
+
+
+async def _configuration_current(
+    session: AsyncSession, batch: AcStartupBatch
+) -> bool:
+    if batch.configuration_snapshot is None:
+        return False
+    saved = restore_configuration(batch.configuration_snapshot)
+    current = await load_configuration(
+        session,
+        batch.room_id,
+        timezone=saved.timezone,
+        rules=saved.rules,
+        should_lock_units=True,
+    )
+    return current.fingerprint() == batch.params_fingerprint

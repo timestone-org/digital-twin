@@ -161,14 +161,10 @@ async def test_recommend_before_training_is_a_conflict(
     assert response.json()["code"] == 41622
 
 
-async def test_recommend_skips_sets_the_artifact_cannot_answer(
+async def test_membership_changes_require_reextract_and_retrain(
     app_client: httpx.AsyncClient, db_session: AsyncSession, sign: SignHeaders
 ) -> None:
-    """⚠ 训练后新加的机组不在工件列里：含它的组合跳过，只剩它则 422。
-
-    工件按训练时的机组清单拼特征行，答不了它不认识的机组——静默给数
-    比拒绝更危险。
-    """
+    """成员变化后拒绝按旧配置推荐，要求重抽和重训。"""
     seeded = await seed_room(db_session)
     manager = sign([AC_MANAGE])
     data = await create_model(app_client, manager, seeded)
@@ -186,9 +182,8 @@ async def test_recommend_skips_sets_the_artifact_cannot_answer(
         json={},
         headers=sign([AC_VIEW]),
     )
-    assert response.status_code == 200
-    items = response.json()["data"]["items"]
-    assert [item["set_key"] for item in items] == [seeded.serials[0]]
+    assert response.status_code == 409
+    assert "重训" in response.json()["message"]
     only_new = await app_client.patch(
         f"{PREFIX}/ac-models/{model_id}",
         json={"serving_sets": [[newcomer]]},
@@ -200,8 +195,8 @@ async def test_recommend_skips_sets_the_artifact_cannot_answer(
         json={},
         headers=sign([AC_VIEW]),
     )
-    assert refused.status_code == 422
-    assert refused.json()["code"] == 41620
+    assert refused.status_code == 409
+    assert refused.json()["code"] == 41622
 
 
 async def test_a_corrupted_artifact_is_a_conflict_with_a_reason(

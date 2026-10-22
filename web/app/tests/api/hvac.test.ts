@@ -466,3 +466,42 @@ describe('达标时长模型面', () => {
     expect(call()[1].baseUrl).toBe(PLATFORM_BASE_URL)
   })
 })
+
+describe('逐台季节达标配置', () => {
+  const limits = [
+    { metric: 'workshop_temp_avg', lower_limit: '20', upper_limit: '24' },
+    { metric: 'workshop_humidity_avg', lower_limit: '45', upper_limit: '55' },
+  ]
+  const body = {
+    winter_period: { start: '11-15', end: '03-15' },
+    non_winter: limits,
+    winter: limits,
+  }
+  const saved = {
+    ...body,
+    effective_at: FROM,
+    effective_season: 'non_winter',
+    timezone: 'Asia/Shanghai',
+  }
+
+  it('读取整套季节配置并保留服务端判定的业务时间', async () => {
+    requestMock.mockResolvedValue(saved)
+    expect(await hvac.getAcCompliancePolicy('a1')).toEqual(saved)
+    const [path, options] = call()
+    expect(path).toBe('/ac-units/a1/compliance-policies')
+    expect(options.baseUrl).toBe(PLATFORM_BASE_URL)
+    expect(options.method).toBeUndefined()
+  })
+
+  it('两季范围与冬季日期放在同一个 PUT 中提交', async () => {
+    requestMock.mockResolvedValue(saved)
+    await hvac.putAcCompliancePolicy('a1', body)
+    const [path, options] = call()
+    expect(path).toBe('/ac-units/a1/compliance-policies')
+    expect(options).toMatchObject({
+      method: 'PUT',
+      baseUrl: PLATFORM_BASE_URL,
+      body,
+    })
+  })
+})

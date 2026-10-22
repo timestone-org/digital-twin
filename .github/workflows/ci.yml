@@ -618,6 +618,10 @@ jobs:
       - name: 报告生成类型与 OpenAPI 一致
         run: uv run --project server python server/services/platform-server/scripts/export_report_types.py --check
 
+      - name: 空调季节生成类型与 OpenAPI 一致
+        working-directory: server/services/platform-server
+        run: uv run python -m scripts.export_hvac_compliance_types --check
+
       # 阈值写在 vitest.config.ts 里，本地与 CI 同一份口径
       - name: 单元 + 组件 + 契约（含覆盖率阈值）
         working-directory: web

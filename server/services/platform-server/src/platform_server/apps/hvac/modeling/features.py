@@ -20,7 +20,7 @@ from platform_server.apps.hvac.rooms import (
 # 页面据此提示「特征口径已更新，建议重训」。
 # v2：加设定值距离、回风/送风、温湿度极差、焓值与空气路径温差（热力学口径
 # 取自参考实现 ../Baoding/api 的特征工程，只取按物理讲得通的那部分）
-FEATURE_VERSION = 2
+FEATURE_VERSION = 3
 
 # 外部条件与供冷能力的代理测点（datasets.py 里的列名）
 _FRESH_TEMP = "fresh_air_temp"
@@ -91,6 +91,7 @@ def feature_names(units: Sequence[RoomUnit]) -> tuple[str, ...]:
         "enthalpy_setpoint_gap",
         "fresh_return_temp_gap",
         "supply_return_temp_gap",
+        *(f"winter_{unit.serial}" for unit in units),
     )
 
 
@@ -104,6 +105,8 @@ def build_row(
 
     Args: conditions, units, timezone。
     """
+    seasons = _season_flags(units, conditions, timezone)
+    units = [unit.at(conditions.started_at, timezone) for unit in units]
     readings = conditions.readings
     running = frozenset(conditions.running_set)
     idle = conditions.idle_minutes
@@ -134,6 +137,20 @@ def build_row(
         _mean(_enthalpy_gaps(readings, units)),
         _mean(_pair_gaps(readings, running, _FRESH_TEMP, _RETURN_TEMP)),
         _mean(_pair_gaps(readings, running, _SUPPLY_TEMP, _RETURN_TEMP)),
+        *seasons,
+    ]
+
+
+def _season_flags(
+    units: Sequence[RoomUnit], conditions: StartConditions, timezone: str
+) -> list[float]:
+    return [
+        (
+            1.0
+            if unit.season_at(conditions.started_at, timezone) == "winter"
+            else 0.0
+        )
+        for unit in units
     ]
 
 

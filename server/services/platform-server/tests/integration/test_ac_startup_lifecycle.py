@@ -74,6 +74,10 @@ class StubReader(AcSourceReader):
         self.windows: list[tuple[datetime, datetime]] = []
         self.asked: list[tuple[str, int, int]] = []
 
+    @property
+    def timezone(self) -> str:
+        return "Asia/Shanghai"
+
     async def fetch_samples(
         self,
         *,

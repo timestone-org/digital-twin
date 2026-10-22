@@ -187,7 +187,14 @@ describe('空调台账页', () => {
   it('点数据与达标打开的是这一台的配置', async () => {
     vi.spyOn(hvac, 'listAcDatasets').mockResolvedValue([])
     vi.spyOn(hvac, 'listAcDataBindings').mockResolvedValue([])
-    vi.spyOn(hvac, 'listAcMetricLimits').mockResolvedValue([])
+    vi.spyOn(hvac, 'getAcCompliancePolicy').mockResolvedValue({
+      non_winter: [],
+      winter: [],
+      winter_period: null,
+      effective_season: 'non_winter',
+      effective_at: '2026-01-01T00:00:00Z',
+      timezone: 'Asia/Shanghai',
+    })
     const wrapper = await render(['ac:view', 'ac:manage'])
     await wrapper.find('[aria-label="数据与达标"]').trigger('click')
     await flushPromises()

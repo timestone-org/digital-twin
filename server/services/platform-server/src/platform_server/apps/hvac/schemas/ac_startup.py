@@ -4,6 +4,9 @@ import uuid
 
 from pydantic import Field, computed_field
 
+from platform_server.apps.hvac.schemas.ac_compliance import (
+    EffectiveComplianceOut,
+)
 from platform_server.apps.hvac.schemas.common import (
     InputModel,
     OutputModel,
@@ -33,6 +36,9 @@ class StartupEpisodeOut(OutputModel):
     idle_minutes: int | None
     is_excluded: bool
     exclusion_reason: str | None
+    compliance: list[EffectiveComplianceOut] = Field(
+        default_factory=list[EffectiveComplianceOut]
+    )
 
     @computed_field
     @property
