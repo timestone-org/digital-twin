@@ -100,6 +100,61 @@ async def test_browsing_asks_the_collector_and_maps_the_items(
     assert envelope_sent["source_id"] == source["id"]
 
 
+async def test_browsing_preserves_a_bounded_page_and_continuation(
+    app_client: httpx.AsyncClient, collect_fakes: CollectFakes
+) -> None:
+    source = await create_source(app_client)
+    collect_fakes.bus.replies[ACTION_BROWSE] = {
+        "status": "ok",
+        "data": {"items": [], "continuation_token": "next"},
+    }
+    response = await app_client.post(
+        f"{SOURCES}/{source['id']}:browse",
+        json={
+            "parent": "ns=2;s=Root",
+            "limit": 100,
+            "continuation_token": "previous",
+        },
+    )
+    assert response.status_code == 200
+    result = payload(response)
+    assert result["continuation_token"] == "next"
+    assert result["has_more"] is True
+    sent = collect_fakes.bus.envelopes_of(ACTION_BROWSE)[0]
+    assert sent["limit"] == 100
+    assert sent["continuation_token"] == "previous"
+
+
+async def test_a_legacy_browser_never_silently_truncates_a_large_folder(
+    app_client: httpx.AsyncClient, collect_fakes: CollectFakes
+) -> None:
+    source = await create_source(app_client)
+    collect_fakes.bus.replies[ACTION_BROWSE] = {
+        "status": "ok",
+        "data": {"items": [{"address": "ns=2;s=Temp"}] * 201},
+    }
+    response = await app_client.post(
+        f"{SOURCES}/{source['id']}:browse", json={"parent": "ns=2;s=Root"}
+    )
+    assert response.status_code == 400
+    assert "刷新页面" in envelope(response)["message"]
+    sent = collect_fakes.bus.envelopes_of(ACTION_BROWSE)[0]
+    assert "limit" not in sent
+    assert "continuation_token" not in sent
+
+
+@pytest.mark.parametrize("limit", [0, 501], ids=["zero", "over-limit"])
+async def test_browsing_rejects_unbounded_pages_before_enqueue(
+    app_client: httpx.AsyncClient, collect_fakes: CollectFakes, limit: int
+) -> None:
+    source = await create_source(app_client)
+    response = await app_client.post(
+        f"{SOURCES}/{source['id']}:browse", json={"limit": limit}
+    )
+    assert response.status_code == 400
+    assert collect_fakes.bus.envelopes_of(ACTION_BROWSE) == []
+
+
 async def test_browsing_an_unsupported_protocol_is_not_an_empty_tree(
     app_client: httpx.AsyncClient, collect_fakes: CollectFakes
 ) -> None:

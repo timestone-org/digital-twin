@@ -2,6 +2,7 @@
 
 import uuid
 from collections.abc import Sequence
+from dataclasses import dataclass
 
 from sqlalchemy import Select, delete, func, select, tuple_
 from sqlalchemy.ext.asyncio import AsyncSession
@@ -22,6 +23,21 @@ DEFAULT_ORDER = (
     CollectPoint.id.asc(),
 )
 
+PointCursor = tuple[uuid.UUID, str, uuid.UUID]
+
+
+@dataclass(frozen=True)
+class PointCandidate:
+    """状态筛选所需的点位身份与排序锚点。"""
+
+    id: uuid.UUID
+    source_id: uuid.UUID
+    code: str
+
+    @property
+    def cursor(self) -> PointCursor:
+        return self.source_id, self.code, self.id
+
 
 class PointCrud(CrudBase[CollectPoint]):
     """`collect_points` 的数据访问。"""
@@ -38,6 +54,39 @@ class PointCrud(CrudBase[CollectPoint]):
             select(CollectPoint).order_by(*DEFAULT_ORDER)
         )
         return list(rows.scalars().all())
+
+    async def list_candidates(
+        self,
+        session: AsyncSession,
+        *,
+        filters: tuple[uuid.UUID | None, str | None],
+        after: PointCursor | None,
+        limit: int,
+    ) -> list[PointCandidate]:
+        """按稳定锚点读取一批候选。
+
+        Args: session, filters, after, limit。
+        """
+        source_id, keyword = filters
+        statement = self.build_query(
+            source_id=source_id, keyword=keyword
+        ).with_only_columns(
+            CollectPoint.id, CollectPoint.source_id, CollectPoint.code
+        )
+        if after is not None:
+            statement = statement.where(
+                tuple_(
+                    CollectPoint.source_id, CollectPoint.code, CollectPoint.id
+                )
+                > after
+            )
+        rows = await session.execute(
+            statement.order_by(*DEFAULT_ORDER).limit(limit)
+        )
+        return [
+            PointCandidate(id=point_id, source_id=source_id, code=code)
+            for point_id, source_id, code in rows.tuples()
+        ]
 
     async def list_by_ids(
         self, session: AsyncSession, point_ids: Sequence[uuid.UUID]

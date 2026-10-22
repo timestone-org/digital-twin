@@ -78,14 +78,11 @@ class SourceStateSource:
     history: HistorySource
 
     async def read(
-        self, source_ids: Sequence[uuid.UUID]
+        self, source_ids: Sequence[uuid.UUID], *, is_strict: bool = False
     ) -> dict[uuid.UUID, SourceRuntime]:
-        """取一批数据源的运行态。采集侧没写过的**不出现在结果里**。
+        """按批读取运行态，默认降级为空表，严格模式透传依赖故障。
 
-        ⚠ 读不到不许把整页请求打挂：运行态是配置页的旁路信息，collector 没
-        起来时配置本身照样要能看、能改。故这里吞掉依赖异常并返回空表，调用
-        方按 `UNKNOWN` 兜底。
-        Args: source_ids。
+        Args: source_ids, is_strict（状态查询失败时透传依赖异常）。
         """
         if not source_ids:
             return {}
@@ -94,6 +91,8 @@ class SourceStateSource:
                 _SELECT, {"source_ids": [str(item) for item in source_ids]}
             )
         except HistoryUnavailable as error:
+            if is_strict:
+                raise
             _logger.warning(
                 "collect_state_read_failed",
                 "读采集运行态失败，本次按「还不知道」显示",

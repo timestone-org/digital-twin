@@ -151,7 +151,7 @@ async def test_browse_maps_every_field_of_an_entry() -> None:
             }
         }
     )
-    entries = await build_bus(transport).browse(SOURCE_ID, None)
+    entries = (await build_bus(transport).browse(SOURCE_ID, None)).entries
     assert len(entries) == 1
     assert entries[0].address == "ns=2;s=Temp1"
     assert entries[0].name == "出口温度"
@@ -192,7 +192,7 @@ async def test_the_value_type_comes_through_and_unknowns_become_none(
             }
         }
     )
-    entries = await build_bus(transport).browse(SOURCE_ID, None)
+    entries = (await build_bus(transport).browse(SOURCE_ID, None)).entries
     assert entries[0].data_type == expected
 
 
@@ -206,7 +206,7 @@ async def test_an_item_without_a_value_type_reads_as_unknown() -> None:
             }
         }
     )
-    entries = await build_bus(transport).browse(SOURCE_ID, None)
+    entries = (await build_bus(transport).browse(SOURCE_ID, None)).entries
     assert entries[0].data_type is None
 
 
@@ -219,7 +219,7 @@ async def test_a_malformed_browse_item_is_dropped() -> None:
             }
         }
     )
-    entries = await build_bus(transport).browse(SOURCE_ID, None)
+    entries = (await build_bus(transport).browse(SOURCE_ID, None)).entries
     assert len(entries) == 1
     assert entries[0].address == "ns=2;s=A"
 
@@ -228,7 +228,7 @@ async def test_browse_gives_an_empty_list_when_data_has_no_items() -> None:
     transport = FakeCommandTransport(
         replies={ACTION_BROWSE: {"status": "ok", "data": {}}}
     )
-    assert await build_bus(transport).browse(SOURCE_ID, None) == []
+    assert (await build_bus(transport).browse(SOURCE_ID, None)).entries == ()
 
 
 async def test_probe_returns_none_when_the_source_answers() -> None:

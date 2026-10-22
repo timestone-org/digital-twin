@@ -110,6 +110,20 @@ class HistoryQueryInvalid(AppError):
     http_status = 400
 
 
+class BrowseContinuationInvalid(AppError):
+    """浏览续页已失效或不属于当前文件夹与会话。"""
+
+    code = 41116
+    http_status = 409
+
+
+class BrowsePageTooLarge(AppError):
+    """设备未遵守分页预算，地址空间回包超过兼容上限。"""
+
+    code = 41117
+    http_status = 400
+
+
 class CollectorUnreachable(AppError):
     """命令总线上没有等到应答。
 

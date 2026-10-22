@@ -22,6 +22,7 @@ from platform_server.apps.collect.errors import (
 )
 from platform_server.apps.collect.models import CollectSource
 from platform_server.apps.collect.schemas import (
+    BrowseIn,
     BrowseOut,
     ConnectivityOut,
     SubtreeOut,
@@ -89,11 +90,11 @@ async def browse_source(
     *,
     bus: CommandBus,
     source_id: uuid.UUID,
-    parent: str | None,
+    request: BrowseIn,
 ) -> BrowseOut:
     """浏览地址空间。协议不支持就明确报错，**不回空列表**。
 
-    Args: session, bus, source_id, parent。
+    Args: session, bus, source_id, request。
     """
     source = await source_service.require_source(session, source_id)
     if source.protocol == "modbus_tcp":
@@ -104,8 +105,21 @@ async def browse_source(
         )
     resolved = source.id
     await release_read_transaction(session)
-    entries = await bus.browse(resolved, parent)
-    return BrowseOut(items=[to_browse_item_out(item) for item in entries])
+    outcome = await bus.browse(
+        resolved,
+        request.parent,
+        limit=(
+            request.limit
+            if {"limit", "continuation_token"} & request.model_fields_set
+            else None
+        ),
+        continuation_token=request.continuation_token,
+    )
+    return BrowseOut(
+        items=[to_browse_item_out(item) for item in outcome.entries],
+        continuation_token=outcome.continuation_token,
+        has_more=outcome.has_more,
+    )
 
 
 async def browse_subtree(
@@ -117,8 +131,7 @@ async def browse_subtree(
 ) -> SubtreeOut:
     """一次收齐一棵子树，勾上层节点用。
 
-    ⚠ 不限条数，只受这次请求的时间预算约束。到点没走完只标 `is_truncated`
-    而不抛：收到一半的地址空间仍然有用，但用户必须知道它是一半。
+    ⚠ 达到时间或节点预算时标 `is_truncated`，界面必须如实提示。
     Args: session, bus, source_id, parent。
     """
     source = await source_service.require_source(session, source_id)

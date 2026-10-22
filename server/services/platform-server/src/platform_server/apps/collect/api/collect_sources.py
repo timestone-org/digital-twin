@@ -241,7 +241,7 @@ async def browse_source(
             session,
             bus=write.bus,
             source_id=source_id,
-            parent=payload.parent,
+            request=payload,
         )
     )
 
@@ -261,7 +261,7 @@ async def browse_subtree(
 
     ⚠ 递归在**持有会话的采集进程**里做，不由客户端逐层拉：逐层拉一个几百
     节点的通道就是几百个串行请求，每一个都要过一遍边缘、总线与设备。
-    ⚠ 不限条数，只受这次请求的时间预算约束；到点没走完 `is_truncated`
+    ⚠ 受时间与节点预算约束；没走完时 `is_truncated`
     为真——界面必须说出来。
     Args: source_id, payload, session, write。
     """

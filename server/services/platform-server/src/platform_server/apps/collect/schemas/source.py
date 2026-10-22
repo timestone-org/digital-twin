@@ -5,7 +5,13 @@ from typing import Any
 
 from pydantic import Field, SecretStr
 
-from collectwire import DataType
+from collectwire import (
+    DEFAULT_BROWSE_LIMIT,
+    MAX_BROWSE_LIMIT,
+    MAX_BROWSE_TOKEN_LENGTH,
+    MAX_SUBTREE_ITEMS,
+    DataType,
+)
 from platform_server.apps.collect.models import MIN_INTERVAL_MS
 from platform_server.apps.collect.protocols import (
     Protocol,
@@ -141,15 +147,21 @@ class BrowseItemOut(OutputModel):
 
 
 class BrowseIn(InputModel):
-    """一次地址空间浏览。`parent` 缺省表示从根开始。"""
+    """浏览一页地址空间；续页令牌只适用于原文件夹及当前会话。"""
 
     parent: Address | None = None
+    limit: int = Field(default=DEFAULT_BROWSE_LIMIT, ge=1, le=MAX_BROWSE_LIMIT)
+    continuation_token: str | None = Field(
+        default=None, min_length=1, max_length=MAX_BROWSE_TOKEN_LENGTH
+    )
 
 
 class BrowseOut(OutputModel):
-    """一次浏览的结果。"""
+    """一页浏览结果；存在续页时由用户显式继续加载。"""
 
-    items: list[BrowseItemOut]
+    items: list[BrowseItemOut] = Field(max_length=MAX_BROWSE_LIMIT)
+    continuation_token: str | None = None
+    has_more: bool = False
 
 
 class SubtreeItemOut(BrowseItemOut):
@@ -164,13 +176,12 @@ class SubtreeItemOut(BrowseItemOut):
 class SubtreeOut(OutputModel):
     """一次子树遍历的结果。
 
-    ⚠ 不限条数：勾一个通道要的就是它下面的全部点位。唯一的约束是这次请求的
-    时间预算，到点没走完才置 `is_truncated`。
+    ⚠ 达到时间或节点预算时置 `is_truncated`，避免大子树形成无界响应。
     ⚠ `is_truncated` 为真时**必须**在界面上说出来：不说的话用户会把
     「只收到一半」当成「这个通道就这么多点位」。
     """
 
-    items: list[SubtreeItemOut]
+    items: list[SubtreeItemOut] = Field(max_length=MAX_SUBTREE_ITEMS)
     is_truncated: bool
 
 

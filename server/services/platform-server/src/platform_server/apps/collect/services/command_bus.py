@@ -16,6 +16,11 @@ from collectwire import (
     ACTION_READ,
     ACTION_VALIDATE,
     ACTION_WRITE,
+    DEFAULT_BROWSE_LIMIT,
+    MAX_BROWSE_TOKEN_LENGTH,
+    MAX_SUBTREE_ITEMS,
+    REASON_BROWSE_CONTINUATION_INVALID,
+    REASON_BROWSE_PAGE_TOO_LARGE,
     REASON_BROWSE_UNSUPPORTED,
     REASON_COLLECTOR_UNREACHABLE,
     REASON_MALFORMED_REPLY,
@@ -31,6 +36,8 @@ from lib.logging import current_traceparent, get_logger
 from lib.utils.ids import uuid7
 from lib.utils.timeutils import utcnow
 from platform_server.apps.collect.errors import (
+    BrowseContinuationInvalid,
+    BrowsePageTooLarge,
     BrowseUnsupported,
     CollectorUnreachable,
     CommandFailed,
@@ -60,6 +67,19 @@ class BrowseEntry:
     is_variable: bool
     # 现场说这个变量是什么类型；`None` = 采集侧没读到，不是「不是数」
     data_type: DataType | None = None
+
+
+@dataclass(frozen=True)
+class BrowseOutcome:
+    """一页地址空间及绑定当前会话的续页令牌。"""
+
+    entries: tuple[BrowseEntry, ...]
+    continuation_token: str | None
+
+    @property
+    def has_more(self) -> bool:
+        """当前文件夹是否还有下一页。"""
+        return self.continuation_token is not None
 
 
 @dataclass(frozen=True)
@@ -115,26 +135,42 @@ class CommandBus:
     subtree_timeout_s: float
 
     async def browse(
-        self, source_id: uuid.UUID, parent: str | None
-    ) -> list[BrowseEntry]:
-        """浏览一个数据源的地址空间。
+        self,
+        source_id: uuid.UUID,
+        parent: str | None,
+        *,
+        limit: int | None = DEFAULT_BROWSE_LIMIT,
+        continuation_token: str | None = None,
+    ) -> BrowseOutcome:
+        """浏览一个数据源的一页地址空间。
 
-        Args: source_id, parent（协议寻址串，None 表示根）。
+        Args: source_id, parent, limit, continuation_token。
         """
         outcome = await self._call(
             action=ACTION_BROWSE,
             source_id=source_id,
             timeout_s=self.browse_timeout_s,
-            fields={"parent": parent},
+            fields=_browse_fields(parent, limit, continuation_token),
         )
         if not outcome.is_ok:
+            if limit is None and outcome.reason == REASON_BROWSE_PAGE_TOO_LARGE:
+                raise _legacy_browse_error()
             raise _browse_error(outcome.reason)
-        return [_browse_entry(item) for item in _items(outcome.data, "items")]
+        items = _items(outcome.data, "items")
+        token = _browse_token(outcome.data)
+        if limit is None and (len(items) > DEFAULT_BROWSE_LIMIT or token):
+            raise _legacy_browse_error()
+        if limit is not None and len(items) > limit:
+            raise CommandFailed("采集侧未按分页预算返回，请先升级采集进程")
+        return BrowseOutcome(
+            entries=tuple(_browse_entry(item) for item in items),
+            continuation_token=token,
+        )
 
     async def browse_subtree(
         self, source_id: uuid.UUID, parent: str | None
     ) -> SubtreeOutcome:
-        """一次收齐一棵子树下的全部节点。
+        """在 2000 个节点与时间预算内遍历子树。
 
         ⚠ 递归在采集侧做。这一跳看着只是「多一个动作」，但它替掉的是前端逐层
         浏览时打出的**几百个串行请求**——每一个都要过一遍边缘、总线与设备。
@@ -148,10 +184,11 @@ class CommandBus:
         )
         if not outcome.is_ok:
             raise _browse_error(outcome.reason)
+        items = _items(outcome.data, "items")
+        if len(items) > MAX_SUBTREE_ITEMS:
+            raise CommandFailed("采集侧未按子树节点预算返回，请先升级采集进程")
         return SubtreeOutcome(
-            entries=tuple(
-                _subtree_entry(item) for item in _items(outcome.data, "items")
-            ),
+            entries=tuple(_subtree_entry(item) for item in items),
             is_truncated=bool(outcome.data.get("is_truncated", False)),
         )
 
@@ -317,6 +354,31 @@ def _browse_entry(item: dict[str, Any]) -> BrowseEntry:
     )
 
 
+def _browse_token(data: dict[str, Any]) -> str | None:
+    """收敛续页令牌，非法载荷不静默伪装成最后一页。Args: data。"""
+    token = data.get("continuation_token")
+    if token is None:
+        return None
+    if isinstance(token, str) and 0 < len(token) <= MAX_BROWSE_TOKEN_LENGTH:
+        return token
+    raise CommandFailed("采集侧返回的浏览续页无效，请刷新文件夹重新浏览")
+
+
+def _browse_fields(
+    parent: str | None, limit: int | None, token: str | None
+) -> dict[str, Any]:
+    """保留旧调用未声明分页的事实。Args: parent, limit, token。"""
+    if limit is None:
+        return {"parent": parent}
+    return {"parent": parent, "limit": limit, "continuation_token": token}
+
+
+def _legacy_browse_error() -> BrowsePageTooLarge:
+    return BrowsePageTooLarge(
+        "当前目录需要分页，请刷新页面或升级浏览客户端后重新浏览"
+    )
+
+
 def _data_type(value: object) -> DataType | None:
     """回包里的值类型；不在闭合集合里的一律当没读到。
 
@@ -361,6 +423,13 @@ def _browse_error(reason: str) -> Exception:
 
     Args: reason。
     """
+    if reason == REASON_BROWSE_CONTINUATION_INVALID:
+        return BrowseContinuationInvalid("浏览续页已失效，请刷新文件夹重新浏览")
+    if reason == REASON_BROWSE_PAGE_TOO_LARGE:
+        return BrowsePageTooLarge(
+            "设备返回的目录超过浏览上限，"
+            "请选择较小文件夹、手填 NodeId 或导入点表"
+        )
     if reason == REASON_BROWSE_UNSUPPORTED:
         return BrowseUnsupported("这个协议没有可浏览的地址空间")
     if reason == REASON_SOURCE_OFFLINE:

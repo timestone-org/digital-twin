@@ -7155,8 +7155,28 @@
       },
       "BrowseIn": {
         "additionalProperties": false,
-        "description": "一次地址空间浏览。`parent` 缺省表示从根开始。",
+        "description": "浏览一页地址空间；续页令牌只适用于原文件夹及当前会话。",
         "properties": {
+          "continuation_token": {
+            "anyOf": [
+              {
+                "maxLength": 256,
+                "minLength": 1,
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Continuation Token"
+          },
+          "limit": {
+            "default": 200,
+            "maximum": 500.0,
+            "minimum": 1.0,
+            "title": "Limit",
+            "type": "integer"
+          },
           "parent": {
             "anyOf": [
               {
@@ -7221,12 +7241,29 @@
         "type": "object"
       },
       "BrowseOut": {
-        "description": "一次浏览的结果。",
+        "description": "一页浏览结果；存在续页时由用户显式继续加载。",
         "properties": {
+          "continuation_token": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Continuation Token"
+          },
+          "has_more": {
+            "default": false,
+            "title": "Has More",
+            "type": "boolean"
+          },
           "items": {
             "items": {
               "$ref": "#/components/schemas/BrowseItemOut"
             },
+            "maxItems": 500,
             "title": "Items",
             "type": "array"
           }
@@ -20774,7 +20811,7 @@
         "type": "object"
       },
       "SubtreeOut": {
-        "description": "一次子树遍历的结果。\n\n⚠ 不限条数：勾一个通道要的就是它下面的全部点位。唯一的约束是这次请求的\n时间预算，到点没走完才置 `is_truncated`。\n⚠ `is_truncated` 为真时**必须**在界面上说出来：不说的话用户会把\n「只收到一半」当成「这个通道就这么多点位」。",
+        "description": "一次子树遍历的结果。\n\n⚠ 达到时间或节点预算时置 `is_truncated`，避免大子树形成无界响应。\n⚠ `is_truncated` 为真时**必须**在界面上说出来：不说的话用户会把\n「只收到一半」当成「这个通道就这么多点位」。",
         "properties": {
           "is_truncated": {
             "title": "Is Truncated",
@@ -20784,6 +20821,7 @@
             "items": {
               "$ref": "#/components/schemas/SubtreeItemOut"
             },
+            "maxItems": 2000,
             "title": "Items",
             "type": "array"
           }
@@ -24114,9 +24152,32 @@
     },
     "/api/v1/platform/collect-points": {
       "get": {
-        "description": "分页列出点位。`q` 按名字与编码模糊搜，Agent 找点用它。\n\nArgs: session, page, _viewer, source_id, q。",
+        "description": "按名字、编码和全量运行状态筛选后分页列出点位。\n\nArgs: session, page, _viewer, context, filters。",
         "operationId": "list_points_api_v1_platform_collect_points_get",
         "parameters": [
+          {
+            "in": "query",
+            "name": "page",
+            "required": false,
+            "schema": {
+              "default": 1,
+              "minimum": 1,
+              "title": "Page",
+              "type": "integer"
+            }
+          },
+          {
+            "in": "query",
+            "name": "size",
+            "required": false,
+            "schema": {
+              "default": 20,
+              "maximum": 200,
+              "minimum": 1,
+              "title": "Size",
+              "type": "integer"
+            }
+          },
           {
             "in": "query",
             "name": "source_id",
@@ -24152,25 +24213,19 @@
           },
           {
             "in": "query",
-            "name": "page",
+            "name": "status",
             "required": false,
             "schema": {
-              "default": 1,
-              "minimum": 1,
-              "title": "Page",
-              "type": "integer"
-            }
-          },
-          {
-            "in": "query",
-            "name": "size",
-            "required": false,
-            "schema": {
-              "default": 20,
-              "maximum": 200,
-              "minimum": 1,
-              "title": "Size",
-              "type": "integer"
+              "default": "all",
+              "enum": [
+                "all",
+                "abnormal",
+                "waiting",
+                "stale",
+                "good"
+              ],
+              "title": "Status",
+              "type": "string"
             }
           }
         ],
@@ -25160,7 +25215,7 @@
     },
     "/api/v1/platform/collect-sources/{source_id}:browse-subtree": {
       "post": {
-        "description": "勾一个上层节点时用：把它下面的整棵子树一次收齐。\n\n⚠ 递归在**持有会话的采集进程**里做，不由客户端逐层拉：逐层拉一个几百\n节点的通道就是几百个串行请求，每一个都要过一遍边缘、总线与设备。\n⚠ 不限条数，只受这次请求的时间预算约束；到点没走完 `is_truncated`\n为真——界面必须说出来。\nArgs: source_id, payload, session, write。",
+        "description": "勾一个上层节点时用：把它下面的整棵子树一次收齐。\n\n⚠ 递归在**持有会话的采集进程**里做，不由客户端逐层拉：逐层拉一个几百\n节点的通道就是几百个串行请求，每一个都要过一遍边缘、总线与设备。\n⚠ 受时间与节点预算约束；没走完时 `is_truncated`\n为真——界面必须说出来。\nArgs: source_id, payload, session, write。",
         "operationId": "browse_subtree_api_v1_platform_collect_sources__source_id__browse_subtree_post",
         "parameters": [
           {

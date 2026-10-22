@@ -16,6 +16,7 @@ from platform_server.apps.collect.catalog import (
 )
 from platform_server.apps.collect.errors import IdempotencyKeyRequired
 from platform_server.apps.collect.services import CommandBus, PlanNotifier
+from platform_server.apps.collect.services.point_query import PointQueryContext
 from platform_server.apps.collect.services.source_service import SourceContext
 from platform_server.apps.collect.services.state_source import (
     SourceStateSource,
@@ -38,6 +39,7 @@ __all__ = [
     "get_idempotency_key",
     "get_manage_context",
     "get_operate_context",
+    "get_point_query_context",
     "get_session",
     "get_source_context",
     "get_write_value_context",
@@ -45,6 +47,16 @@ __all__ = [
     "require_idempotency_key",
     "require_service_key",
 ]
+
+
+def get_point_query_context(
+    container: Annotated[Container, Depends(get_container)],
+) -> PointQueryContext:
+    """点位状态查询的旁路读侧。Args: container。"""
+    return PointQueryContext(
+        snapshots=container.snapshots,
+        states=SourceStateSource(history=container.history),
+    )
 
 
 def get_source_context(

@@ -13,6 +13,7 @@ from platform_server.apps.collect.catalog import COLLECT_VIEW
 from platform_server.apps.collect.deps import (
     WriteContext,
     get_manage_context,
+    get_point_query_context,
     get_session,
     get_write_value_context,
     require,
@@ -31,10 +32,16 @@ from platform_server.apps.collect.schemas.point_import import (
     PointImportIn,
     PointImportOut,
 )
+from platform_server.apps.collect.schemas.point_query import PointStatus
 from platform_server.apps.collect.services import (
     field_service,
     point_import,
+    point_query,
     point_service,
+)
+from platform_server.apps.collect.services.point_query import (
+    PointFilters,
+    PointQueryContext,
 )
 from platform_server.settings import API_PREFIX
 
@@ -47,8 +54,21 @@ PageDep = Annotated[PageParams, Depends(page_params)]
 ViewDep = Annotated[CallerContext, Depends(require(COLLECT_VIEW))]
 ManageDep = Annotated[WriteContext, Depends(get_manage_context)]
 WriteValueDep = Annotated[WriteContext, Depends(get_write_value_context)]
+QueryContextDep = Annotated[PointQueryContext, Depends(get_point_query_context)]
 
 REASON_POINT_CHANGED = "point_changed"
+
+
+def list_filters(
+    source_id: uuid.UUID | None = None,
+    q: str | None = None,
+    status: PointStatus = "all",
+) -> PointFilters:
+    """点位列表的组合查询条件。Args: source_id, q, status。"""
+    return PointFilters(source_id=source_id, keyword=q, status=status)
+
+
+FilterDep = Annotated[PointFilters, Depends(list_filters)]
 
 
 @router.get("", response_model=ApiResponse[Page[PointOut]], summary="点位列表")
@@ -56,16 +76,16 @@ async def list_points(
     session: SessionDep,
     page: PageDep,
     _viewer: ViewDep,
-    source_id: uuid.UUID | None = None,
-    q: str | None = None,
+    context: QueryContextDep,
+    filters: FilterDep,
 ) -> ApiResponse[Page[PointOut]]:
-    """分页列出点位。`q` 按名字与编码模糊搜，Agent 找点用它。
+    """按名字、编码和全量运行状态筛选后分页列出点位。
 
-    Args: session, page, _viewer, source_id, q。
+    Args: session, page, _viewer, context, filters。
     """
     return ok(
-        await point_service.list_points(
-            session, source_id=source_id, keyword=q, page=page, sort=None
+        await point_query.list_points(
+            session, context, filters=filters, page=page
         )
     )
 
