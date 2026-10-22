@@ -30,6 +30,8 @@ export interface TreeNode {
   dataType: CollectDataType | null
   /** `null` 表示这一层还没拉过；拉过之后即使收起也留着。 */
   children: TreeNode[] | null
+  nextToken: string | null
+  isIncomplete: boolean
   /** 拉过之后是否展开显示。 */
   isOpen: boolean
   isLoading: boolean
@@ -56,6 +58,8 @@ function toNode(item: CollectBrowseItem): TreeNode {
     isVariable: item.is_variable,
     dataType: item.data_type,
     children: null,
+    nextToken: null,
+    isIncomplete: false,
     isOpen: false,
     isLoading: false,
     error: null,
@@ -99,17 +103,43 @@ function attach(
 ): void {
   const items = byParent.get(node.address)
   if (items === undefined) {
-    if (isWhole && !node.isVariable) {
-      node.children = []
-      node.hasChildren = false
-    }
+    completeEmptyNode(node, isWhole)
     return
   }
   const kept = new Map((node.children ?? []).map((one) => [one.address, one]))
-  const children = items.map((item) => kept.get(item.address) ?? toNode(item))
+  const wasComplete = hasCompleteChildren(node)
+  const received = items.map((item) => kept.get(item.address) ?? toNode(item))
+  const children = isWhole
+    ? received
+    : mergeNodes(node.children ?? [], received)
+  node.isIncomplete = !isWhole && !wasComplete && node.nextToken === null
+  if (isWhole) node.nextToken = null
   node.children = children
   node.hasChildren = true
   for (const child of children) attach(child, byParent, isWhole)
+}
+
+function hasCompleteChildren(node: TreeNode): boolean {
+  return node.children !== null && node.nextToken === null && !node.isIncomplete
+}
+
+function completeEmptyNode(node: TreeNode, isWhole: boolean): void {
+  if (!isWhole || node.isVariable) return
+  node.children = []
+  node.hasChildren = false
+  node.nextToken = null
+  node.isIncomplete = false
+}
+
+/** 合并续页，保留已经展开和勾选的节点身份。 */
+export function mergeNodes(
+  current: readonly TreeNode[],
+  received: readonly TreeNode[],
+): TreeNode[] {
+  const merged = new Map(current.map((node) => [node.address, node]))
+  for (const node of received)
+    if (!merged.has(node.address)) merged.set(node.address, node)
+  return [...merged.values()]
 }
 
 /** 深度优先找一个节点；找不到返回 null。 */
@@ -157,7 +187,11 @@ export function variablesUnder(node: TreeNode): TreeNode[] {
 export function unloadedUnder(node: TreeNode): TreeNode[] {
   const found: TreeNode[] = []
   walk(node, (one) => {
-    if (one.hasChildren && one.children === null) found.push(one)
+    if (
+      one.hasChildren &&
+      (one.children === null || one.nextToken !== null || one.isIncomplete)
+    )
+      found.push(one)
   })
   return found
 }
@@ -202,7 +236,7 @@ function fill(
   }
   let total = 0
   let picked = 0
-  let isComplete = !node.hasChildren || node.children !== null
+  let isComplete = !node.hasChildren || hasCompleteChildren(node)
   for (const child of node.children ?? []) {
     const part = fill(child, selected, taken, states)
     total += part.total

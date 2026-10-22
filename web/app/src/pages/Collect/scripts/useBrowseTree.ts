@@ -6,16 +6,20 @@
  */
 import {
   computed,
+  onBeforeUnmount,
   reactive,
   ref,
   toRaw,
   watchEffect,
+  watch,
   type ComputedRef,
   type Ref,
 } from 'vue'
 
 import {
   expand,
+  cancelRequests,
+  loadMore,
   loadRoot,
   toggle,
   type Ctx,
@@ -34,6 +38,8 @@ export interface BrowseTree {
   roots: Ref<TreeNode[]>
   loading: Ref<boolean>
   error: Ref<string | null>
+  nextToken: Ref<string | null>
+  loadingMore: Ref<boolean>
   selected: Ref<Set<string>>
   /**
    * 每个节点的勾选态，按寻址串查。
@@ -47,6 +53,7 @@ export interface BrowseTree {
   loadRoot: () => Promise<void>
   /** 展开或收起一个节点。 */
   expand: (address: string) => Promise<void>
+  loadMore: (address: string | null) => Promise<void>
   /** 勾一个节点。变量只勾它自己；上层勾的是它下面的全部变量。 */
   toggle: (address: string) => Promise<ToggleOutcome>
   /** 全部取消勾选。建完点位之后用。 */
@@ -101,21 +108,43 @@ export function useBrowseTree(
     taken,
     roots,
     loading: ref(false),
+    loadingMore: ref(false),
+    nextToken: ref<string | null>(null),
     error: ref<string | null>(null),
     selected,
     states,
+    requests: new Map(),
   }
+  watch(sourceId, () => reset(ctx), { flush: 'sync' })
+  onBeforeUnmount(() => cancelRequests(ctx))
+  return bindTree(ctx)
+}
+
+function bindTree(ctx: Ctx): BrowseTree {
   return {
-    roots,
+    roots: ctx.roots,
     loading: ctx.loading,
     error: ctx.error,
-    selected,
-    states,
-    index: computed(() => variableIndex(roots.value)),
-    selectedCount: computed(() => selected.value.size),
+    nextToken: ctx.nextToken,
+    loadingMore: ctx.loadingMore,
+    selected: ctx.selected,
+    states: ctx.states,
+    index: computed(() => variableIndex(ctx.roots.value)),
+    selectedCount: computed(() => ctx.selected.value.size),
     loadRoot: () => loadRoot(ctx),
     expand: (address) => expand(ctx, address),
+    loadMore: (address) => loadMore(ctx, address),
     toggle: (address) => toggle(ctx, address),
-    clear: () => (selected.value = new Set()),
+    clear: () => (ctx.selected.value = new Set()),
   }
+}
+
+function reset(ctx: Ctx): void {
+  cancelRequests(ctx)
+  ctx.roots.value = []
+  ctx.selected.value = new Set()
+  ctx.nextToken.value = null
+  ctx.loading.value = false
+  ctx.loadingMore.value = false
+  ctx.error.value = null
 }

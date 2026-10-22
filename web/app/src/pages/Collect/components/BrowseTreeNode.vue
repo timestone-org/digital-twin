@@ -1,18 +1,5 @@
 <script setup lang="ts">
-/**
- * @fileoverview 地址空间树的一个节点，递归渲染自己。
- *
- * ⚠ 上层节点的勾选框**不是把它自己建成点位**（对象节点建成点位就是一个永远
- * 读不到值的配置），而是「把它下面的变量全勾上」。两种语义长得一样、后果差
- * 很远，所以它的可读名称写死成「全选 xxx 下的点位」。
- *
- * ⚠ 半选（`some`）与全选（`all`）必须画成两个样子：上层显示全选时，用户就
- * 不会再往下看——而下面很可能还有没拉回来的层。
- *
- * ⚠ 缩进列与折叠钮同宽、且都不许收缩：宽度不等，有箭头的行与没箭头的行就错开
- * 一格；可收缩的话，同一层里名字长的那几行会被挤得比兄弟行更靠左——两样都让
- * 「谁挂在谁下面」彻底读不出来。
- */
+/** @fileoverview 地址空间虚拟树的一行：层级、展开与选择。 */
 import { computed } from 'vue'
 import { DtButton, DtCheckbox, DtTag } from '@dt/ui'
 
@@ -55,7 +42,12 @@ function onExpand(): void {
 </script>
 
 <template>
-  <li class="list-none">
+  <li
+    class="list-none"
+    role="treeitem"
+    :aria-level="depth + 1"
+    :aria-expanded="node.hasChildren ? node.isOpen : undefined"
+  >
     <div class="tree-row">
       <!-- 每一层祖先留一条竖线：只缩进不画线的话，几十行的一层里看不出哪些是
            兄弟。线走缩进列的中线，正对着父节点的折叠钮 -->
@@ -119,31 +111,6 @@ function onExpand(): void {
         </span>
       </div>
     </div>
-
-    <div v-if="node.error" class="tree-row">
-      <span
-        v-for="level in depth + 1"
-        :key="level"
-        class="tree-guide"
-        aria-hidden="true"
-      />
-      <div class="tree-main">
-        <p class="m-0 truncate text-xs text-state-danger">{{ node.error }}</p>
-      </div>
-    </div>
-
-    <ul v-if="node.children && node.isOpen" class="m-0 p-0">
-      <BrowseTreeNode
-        v-for="child in node.children"
-        :key="child.address"
-        :node="child"
-        :depth="depth + 1"
-        :states="states"
-        :taken="taken"
-        @expand="emit('expand', $event)"
-        @toggle="emit('toggle', $event)"
-      />
-    </ul>
   </li>
 </template>
 
@@ -157,6 +124,7 @@ function onExpand(): void {
   // 退回自身内容高度（0），画出来是一截一截的
   align-items: stretch;
   min-width: 0;
+  height: 100%;
 }
 
 // 缩进列。⚠ `flex-shrink` 必须是 0：默认值会让名字长的行把缩进挤掉，同一层的

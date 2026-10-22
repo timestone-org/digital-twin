@@ -72,6 +72,31 @@ describe('点位', () => {
     expect(call()[1].signal).toBe(controller.signal)
   })
 
+  it.each(['abnormal', 'waiting', 'stale', 'good'] as const)(
+    '状态 %s 与关键词、数据源和分页一起发给后端',
+    async (status) => {
+      await collect.listPoints({
+        sourceId: 's1',
+        q: '温度',
+        status,
+        page: 2,
+        size: 10,
+      })
+      expect(call()[1].query).toEqual({
+        source_id: 's1',
+        q: '温度',
+        status,
+        page: 2,
+        size: 10,
+      })
+    },
+  )
+
+  it('全部状态沿用不传状态参数的兼容查询', async () => {
+    await collect.listPoints({ status: 'all' })
+    expect(call()[1].query).not.toHaveProperty('status')
+  })
+
   it('不给取消信号时不塞一个 undefined 进去', async () => {
     await collect.listPoints()
 
@@ -194,14 +219,14 @@ describe('数据源', () => {
     const [path, options] = call()
 
     expect(path).toBe('/collect-sources/s1:browse')
-    expect(options.body).toEqual({ parent: 'ns=2;s=Plant' })
+    expect(options.body).toEqual({ parent: 'ns=2;s=Plant', limit: 200 })
   })
 
   it('从根开始浏览时 parent 显式给 null', async () => {
     // 不给字段的话后端按缺省处理，两种意图在线上分不开
     await collect.browseSource('s1', null)
 
-    expect(call()[1].body).toEqual({ parent: null })
+    expect(call()[1].body).toEqual({ parent: null, limit: 200 })
   })
 
   it('浏览带取消信号，连着展开节点才掐得掉在途请求', async () => {
@@ -209,6 +234,29 @@ describe('数据源', () => {
     await collect.browseSource('s1', null, controller.signal)
 
     expect(call()[1].signal).toBe(controller.signal)
+  })
+
+  it('浏览续页原样传递游标并限制每页数量', async () => {
+    await collect.browseSource('s1', 'folder', undefined, {
+      limit: 37,
+      continuationToken: 'opaque-token',
+    })
+    expect(call()[1].body).toEqual({
+      parent: 'folder',
+      limit: 37,
+      continuation_token: 'opaque-token',
+    })
+  })
+
+  it('续页未指定数量时仍显式声明分页能力', async () => {
+    await collect.browseSource('s1', 'folder', undefined, {
+      continuationToken: 'opaque-token',
+    })
+    expect(call()[1].body).toEqual({
+      parent: 'folder',
+      limit: 200,
+      continuation_token: 'opaque-token',
+    })
   })
 
   it('删数据源走 DELETE', async () => {

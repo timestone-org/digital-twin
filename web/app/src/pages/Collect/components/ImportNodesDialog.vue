@@ -22,6 +22,7 @@ import {
   DtModal,
   DtNotice,
   DtNumberInput,
+  DtPagination,
   DtSelect,
   DtSwitch,
 } from '@dt/ui'
@@ -65,6 +66,12 @@ const isBusy = computed(() => props.loading === true)
 
 /** 本地可改的一份；改编码不该回写到浏览树上。 */
 const rows = ref<ImportDraft[]>([])
+const DRAFT_PAGE_SIZE = 50
+const page = ref(1)
+const pageOffset = computed(() => (page.value - 1) * DRAFT_PAGE_SIZE)
+const visibleRows = computed(() =>
+  rows.value.slice(pageOffset.value, pageOffset.value + DRAFT_PAGE_SIZE),
+)
 const fallbackType = ref<CollectDataType>('float')
 const samplingIntervalMs = ref(1000)
 const archiveEnabled = ref(true)
@@ -82,12 +89,14 @@ watch(
   (open) => {
     if (!open) return
     rows.value = props.drafts.map((draft) => ({ ...draft }))
+    page.value = 1
     fallbackType.value = 'float'
     samplingIntervalMs.value = 1000
     archiveEnabled.value = true
     deadband.value = 0
     retentionDays.value = 0
   },
+  { immediate: true },
 )
 
 const count = computed(() => rows.value.length)
@@ -97,8 +106,13 @@ const typeless = computed(
 )
 
 function setCode(index: number, code: string): void {
-  const row = rows.value[index]
+  const row = rows.value[pageOffset.value + index]
   if (row !== undefined) row.code = code
+}
+
+function showFirstProblem(): void {
+  const index = rows.value.findIndex((row) => problems.value.has(row.address))
+  if (index >= 0) page.value = Math.floor(index / DRAFT_PAGE_SIZE) + 1
 }
 
 /** 提交前再判一次：编码有毛病就不发，后端一批原子，一条不合规是整批被拒。 */
@@ -132,6 +146,13 @@ function confirm(): void {
         64
         个字符，不能含空白、控制字符或冒号；中文名已按拼音推了一个，可以直接改。
       </DtNotice>
+      <DtButton
+        v-if="problems.size > 0"
+        variant="ghost"
+        @click="showFirstProblem"
+      >
+        定位首个编码问题
+      </DtButton>
 
       <p class="m-0 text-sm text-text-secondary">
         将导入
@@ -174,7 +195,7 @@ function confirm(): void {
         class="max-h-72 overflow-y-auto rounded-md border border-border-subtle"
       >
         <ImportDraftRow
-          v-for="(row, index) in rows"
+          v-for="(row, index) in visibleRows"
           :key="row.address"
           :draft="row"
           :fallback-type="fallbackType"
@@ -183,6 +204,14 @@ function confirm(): void {
           @update:code="setCode(index, $event)"
         />
       </div>
+      <DtPagination
+        v-if="count > DRAFT_PAGE_SIZE"
+        v-model:page="page"
+        :size="DRAFT_PAGE_SIZE"
+        :total="count"
+        :size-options="[DRAFT_PAGE_SIZE]"
+        aria-label="节点草稿分页"
+      />
     </div>
 
     <template #footer>

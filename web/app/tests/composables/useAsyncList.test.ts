@@ -4,10 +4,11 @@
  * 而线上表现是「快速切筛选后看到过期数据且没有任何报错」。
  */
 import { describe, expect, it, vi } from 'vitest'
+import { effectScope } from 'vue'
 import type { Page } from '@dt/contracts'
 
 import { TransportError } from '@/api/client'
-import { useAsyncList } from '@/composables/useAsyncList'
+import { useAsyncList, type AsyncListPage } from '@/composables/useAsyncList'
 
 function page<T>(items: T[], total = items.length): Page<T> {
   return { items, page: 1, size: 20, total }
@@ -52,6 +53,40 @@ describe('useAsyncList 取数三态', () => {
 })
 
 describe('useAsyncList 竞态', () => {
+  it('新查询中止前一次请求的取消信号', async () => {
+    const pending = deferred<Page<string>>()
+    const signals: AbortSignal[] = []
+    const list = useAsyncList((_query, signal) => {
+      signals.push(signal)
+      return pending.promise
+    })
+    const first = list.reload()
+    const second = list.reload()
+    expect(signals[0]?.aborted).toBe(true)
+    expect(signals[1]?.aborted).toBe(false)
+    pending.settle(page([]))
+    await Promise.all([first, second])
+  })
+
+  it('作用域销毁中止请求并丢弃之后返回的结果', async () => {
+    const pending = deferred<Page<string>>()
+    const scope = effectScope()
+    let signal: AbortSignal | undefined
+    const fetcher = vi.fn((_query: AsyncListPage, current: AbortSignal) => {
+      signal = current
+      return pending.promise
+    })
+    const list = scope.run(() => useAsyncList(fetcher))
+    if (list === undefined) throw new Error('未建立列表作用域')
+    const task = list.reload()
+    scope.stop()
+    expect(signal?.aborted).toBe(true)
+    pending.settle(page(['已卸载结果']))
+    await task
+    expect(list.items.value).toEqual([])
+    expect(list.total.value).toBe(0)
+  })
+
   it('慢的那次先发、后返回时，结果被丢弃', async () => {
     const slow = deferred<Page<string>>()
     const fast = deferred<Page<string>>()
@@ -123,14 +158,20 @@ describe('useAsyncList 分页', () => {
     const fetcher = vi.fn(() => Promise.resolve(page<string>([], 0)))
     const list = useAsyncList(fetcher, 50)
     await list.reload()
-    expect(fetcher).toHaveBeenLastCalledWith({ page: 1, size: 50 })
+    expect(fetcher).toHaveBeenLastCalledWith(
+      { page: 1, size: 50 },
+      expect.any(AbortSignal),
+    )
   })
 
   it('翻页后按新页码取数', async () => {
     const fetcher = vi.fn(() => Promise.resolve(page<string>([], 0)))
     const list = useAsyncList(fetcher)
     await list.goToPage(3)
-    expect(fetcher).toHaveBeenLastCalledWith({ page: 3, size: 20 })
+    expect(fetcher).toHaveBeenLastCalledWith(
+      { page: 3, size: 20 },
+      expect.any(AbortSignal),
+    )
   })
 
   it('翻到当前页不重复取数', async () => {
@@ -146,7 +187,10 @@ describe('useAsyncList 分页', () => {
     const list = useAsyncList(fetcher, 10)
     await list.goToPage(9)
     await list.setSize(100)
-    expect(fetcher).toHaveBeenLastCalledWith({ page: 1, size: 100 })
+    expect(fetcher).toHaveBeenLastCalledWith(
+      { page: 1, size: 100 },
+      expect.any(AbortSignal),
+    )
   })
 
   it('改筛选条件也回第一页', async () => {
@@ -154,7 +198,10 @@ describe('useAsyncList 分页', () => {
     const list = useAsyncList(fetcher)
     await list.goToPage(4)
     await list.reloadFromFirstPage()
-    expect(fetcher).toHaveBeenLastCalledWith({ page: 1, size: 20 })
+    expect(fetcher).toHaveBeenLastCalledWith(
+      { page: 1, size: 20 },
+      expect.any(AbortSignal),
+    )
   })
 
   it('pager 直接可以喂给 DtDataView', async () => {

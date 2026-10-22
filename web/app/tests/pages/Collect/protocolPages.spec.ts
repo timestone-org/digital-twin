@@ -241,6 +241,7 @@ describe('协议页面隔离', () => {
       expect(router.currentRoute.value.query.source).toBe(protocol)
       expect(collect.listPoints).toHaveBeenCalledWith(
         expect.objectContaining({ sourceId: protocol }),
+        expect.any(AbortSignal),
       )
       expect(wrapper.text().includes('浏览并导入点位')).toBe(
         protocol === 'opcua',

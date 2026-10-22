@@ -303,6 +303,7 @@ describe('把一次子树遍历接回树上', () => {
     )
 
     expect(unloadedUnder(node).map((one) => one.address)).toEqual([
+      'ns=2;s=L1',
       'ns=2;s=L1.Dev',
     ])
     const states = selectionStates([node], new Set(['ns=2;s=L1.T']))

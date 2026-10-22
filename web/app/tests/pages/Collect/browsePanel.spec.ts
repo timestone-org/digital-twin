@@ -149,7 +149,11 @@ function browseTree(
 ): void {
   vi.spyOn(collectApi, 'browseSource').mockImplementation(
     (_sourceId: string, parent: string | null) =>
-      Promise.resolve({ items: tree[parent ?? ROOT] ?? [] }),
+      Promise.resolve({
+        items: tree[parent ?? ROOT] ?? [],
+        continuation_token: null,
+        has_more: false,
+      }),
   )
   vi.spyOn(collectApi, 'browseSubtree').mockImplementation(
     (_sourceId: string, parent: string | null) =>
@@ -206,7 +210,9 @@ function chevron(wrapper: VueWrapper, index = 0): DOMWrapper<Element> {
   return found
 }
 
-async function click(target: DOMWrapper<Element>): Promise<void> {
+async function click(
+  target: Pick<DOMWrapper<Element>, 'trigger'>,
+): Promise<void> {
   await target.trigger('click')
   await flushPromises()
 }
@@ -254,6 +260,8 @@ describe('浏览', () => {
     expect(vi.mocked(collectApi.browseSource)).toHaveBeenLastCalledWith(
       's1',
       'ns=2;s=Line1',
+      expect.any(AbortSignal),
+      {},
     )
   })
 
@@ -275,6 +283,38 @@ describe('浏览', () => {
 })
 
 describe('逐个勾选', () => {
+  it('切源后旧的已有点位响应不能清掉当前源的已建标记', async () => {
+    browseTree({ [ROOT]: [leaf('Temp')] }, 500)
+    let resolveOld:
+      | ((value: Awaited<ReturnType<typeof collectApi.listPoints>>) => void)
+      | undefined
+    const old = new Promise<Awaited<ReturnType<typeof collectApi.listPoints>>>(
+      (resolve) => {
+        resolveOld = resolve
+      },
+    )
+    vi.spyOn(collectApi, 'listPoints').mockImplementation((query) =>
+      query?.sourceId === 's1'
+        ? old
+        : Promise.resolve({
+            items: [point('ns=2;s=Temp', 'temp')],
+            page: 1,
+            size: 100,
+            total: 1,
+          }),
+    )
+    const wrapper = mount(BrowsePanel, { props: { source: source() } })
+    await flushPromises()
+    await wrapper.setProps({ source: { ...source(), id: 's2' } })
+    await flushPromises()
+    expect(element(wrapper, 'Temp').disabled).toBe(true)
+
+    resolveOld?.({ items: [], page: 1, size: 100, total: 0 })
+    await flushPromises()
+
+    expect(element(wrapper, 'Temp').disabled).toBe(true)
+  })
+
   it('勾一个变量只勾它自己', async () => {
     const wrapper = await render({ [ROOT]: [leaf('Temp'), leaf('Flow')] })
 
@@ -300,6 +340,116 @@ describe('逐个勾选', () => {
 
     expect(element(wrapper, 'Temp').disabled).toBe(true)
     expect(wrapper.text()).toContain('已建')
+  })
+})
+
+async function renderPaged(): Promise<VueWrapper> {
+  vi.spyOn(collectApi, 'listPoints').mockResolvedValue({
+    items: [],
+    page: 1,
+    size: 100,
+    total: 0,
+  })
+  const wrapper = mount(BrowsePanel, { props: { source: source() } })
+  await flushPromises()
+  return wrapper
+}
+
+describe('分页浏览', () => {
+  it('当前页没有可展示节点但有续页时仍能继续浏览', async () => {
+    vi.spyOn(collectApi, 'browseSource')
+      .mockResolvedValueOnce({
+        items: [],
+        continuation_token: 'root-next',
+        has_more: true,
+      })
+      .mockResolvedValueOnce({
+        items: [leaf('Temp')],
+        continuation_token: null,
+        has_more: false,
+      })
+    const wrapper = await renderPaged()
+    await click(wrapper.get('button[aria-label="继续浏览「根节点」"]'))
+    expect(wrapper.text()).toContain('ns=2;s=Temp')
+  })
+
+  it('根层续读保留已有节点与选择', async () => {
+    const browse = vi
+      .spyOn(collectApi, 'browseSource')
+      .mockResolvedValueOnce({
+        items: [leaf('Temp')],
+        continuation_token: 'root-next',
+        has_more: true,
+      })
+      .mockResolvedValueOnce({
+        items: [leaf('Flow')],
+        continuation_token: null,
+        has_more: false,
+      })
+    const wrapper = await renderPaged()
+    await check(box(wrapper, 'Temp'))
+
+    await click(wrapper.get('button[aria-label="继续浏览「根节点」"]'))
+
+    expect(element(wrapper, 'Temp').checked).toBe(true)
+    expect(wrapper.text()).toContain('已选 1')
+    expect(wrapper.text()).toContain('ns=2;s=Flow')
+    expect(browse).toHaveBeenLastCalledWith(
+      's1',
+      null,
+      expect.any(AbortSignal),
+      { continuationToken: 'root-next' },
+    )
+  })
+
+  it('子层续读保留已选节点，尚有续页时不能显示全选', async () => {
+    vi.spyOn(collectApi, 'browseSource')
+      .mockResolvedValueOnce({
+        items: [branch('Line1')],
+        continuation_token: null,
+        has_more: false,
+      })
+      .mockResolvedValueOnce({
+        items: [leaf('Temp')],
+        continuation_token: 'child-next',
+        has_more: true,
+      })
+      .mockResolvedValueOnce({
+        items: [leaf('Flow')],
+        continuation_token: null,
+        has_more: false,
+      })
+    const wrapper = await renderPaged()
+    await click(chevron(wrapper))
+    await check(box(wrapper, 'Temp'))
+    expect(element(wrapper, 'Line1').indeterminate).toBe(true)
+
+    await click(wrapper.get('button[aria-label="继续浏览「Line1」"]'))
+
+    expect(element(wrapper, 'Temp').checked).toBe(true)
+    expect(wrapper.text()).toContain('已选 1')
+    expect(wrapper.text()).toContain('ns=2;s=Flow')
+  })
+
+  it('根层续读失败仍显示当前节点与继续浏览入口，可再次继续', async () => {
+    vi.spyOn(collectApi, 'browseSource')
+      .mockResolvedValueOnce({
+        items: [leaf('Temp')],
+        continuation_token: 'root-next',
+        has_more: true,
+      })
+      .mockRejectedValueOnce(new Error('本次浏览超时'))
+      .mockResolvedValueOnce({
+        items: [leaf('Flow')],
+        continuation_token: null,
+        has_more: false,
+      })
+    const wrapper = await renderPaged()
+    await click(wrapper.get('button[aria-label="继续浏览「根节点」"]'))
+    expect(wrapper.text()).toContain('请求失败，请重试')
+    expect(wrapper.text()).toContain('ns=2;s=Temp')
+    await click(wrapper.get('button[aria-label="继续浏览「根节点」"]'))
+    expect(wrapper.text()).toContain('ns=2;s=Flow')
   })
 })
 
@@ -340,6 +490,7 @@ describe('按子树批量勾选', () => {
     expect(vi.mocked(collectApi.browseSubtree)).toHaveBeenCalledExactlyOnceWith(
       's1',
       'ns=2;s=Line1',
+      expect.any(AbortSignal),
     )
     expect(browse.mock.calls.length).toBe(afterRoot)
   })
@@ -525,6 +676,26 @@ async function openImport(wrapper: VueWrapper): Promise<void> {
 }
 
 describe('导入选中', () => {
+  it('切换数据源会关闭旧源的导入草稿，防止提交到新源', async () => {
+    const wrapper = await render({ [ROOT]: [leaf('Temp')] })
+    await check(box(wrapper, 'Temp'))
+    await openImport(wrapper)
+    await wrapper.setProps({ source: { ...source(), id: 's2' } })
+    await flushPromises()
+    expect(dialogButton(/^导入 \d+ 个节点$/)).toBeUndefined()
+    expect(wrapper.text()).not.toContain('已选')
+  })
+
+  it('取消导入关闭草稿弹窗且保留树上的选择', async () => {
+    const wrapper = await render({ [ROOT]: [leaf('Temp')] })
+    await check(box(wrapper, 'Temp'))
+    await openImport(wrapper)
+    dialogButton(/^取消$/)?.click()
+    await flushPromises()
+    expect(dialogButton(/^导入 \d+ 个节点$/)).toBeUndefined()
+    expect(wrapper.text()).toContain('已选 1')
+  })
+
   it('先开导入弹窗统一设采样与归档默认，确认后寻址串原样带过去', async () => {
     const wrapper = await render({ [ROOT]: [leaf('Temp'), leaf('Flow')] })
     const create = vi.spyOn(collectApi, 'createPoints').mockResolvedValue({
@@ -615,6 +786,21 @@ describe('导入选中', () => {
  * 上限（`subtree.py`），所以这棵树在几万个节点上必须还能用。
  */
 describe('几万点位的文件夹', () => {
+  it('展开 2000 点位文件夹只挂载可见窗口的节点', async () => {
+    const wrapper = await render({
+      [ROOT]: [branch('Large')],
+      'ns=2;s=Large': Array.from({ length: 2000 }, (_, index) =>
+        leaf(`Point${index}`),
+      ),
+    })
+
+    await click(chevron(wrapper))
+
+    expect(wrapper.findAllComponents(BrowseTreeNode).length).toBeLessThan(100)
+    expect(wrapper.text()).toContain('ns=2;s=Point0')
+    expect(wrapper.text()).not.toContain('ns=2;s=Point1999')
+  })
+
   it('⚠ 勾一下不许换掉那张勾选态表：换一张就是让树上每个节点都重渲染一遍', async () => {
     const wrapper = await render({ [ROOT]: [leaf('Temp'), leaf('Flow')] })
     const first = wrapper.findComponent(BrowseTreeNode)

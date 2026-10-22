@@ -20,7 +20,7 @@ import * as collect from '@/api/collect'
 import PermGuard from '@/components/PermGuard.vue'
 import { useViewMode } from '@/composables/useViewMode'
 import { useAuthStore } from '@/stores/auth'
-import { POINT_STATUS_OPTIONS, pointStatus } from '../scripts/pointStatus'
+import { POINT_STATUS_OPTIONS } from '../scripts/pointStatus'
 import { nodeTableColumns } from '../scripts/nodeTableColumns'
 import { useArchiveOps } from '../scripts/useArchiveOps'
 import { useForceDelete } from '../scripts/useForceDelete'
@@ -71,7 +71,7 @@ const sourceId = computed(() => props.source.id)
 const sourceProtocol = computed(() => props.source.protocol)
 const view = useViewMode(`collect-points-${sourceProtocol.value}`)
 
-const { keyword, list, emptyState } = usePointList(
+const { keyword, status, setStatus, list, emptyState } = usePointList(
   () => sourceId.value,
   () => props.source.protocol,
 )
@@ -90,25 +90,6 @@ const batchRemoval = useForceDelete<readonly string[]>(
   (_pointIds, message) => `${message}。强制删除会让那些大屏上的绑定就此失效。`,
   () => list.reload(),
   (pointIds) => `已删除 ${pointIds.length} 个点位`,
-)
-
-const statusFilter = ref('all')
-const visibleRows = computed(() =>
-  list.items.value.filter(
-    (row) =>
-      statusFilter.value === 'all' ||
-      pointStatus(
-        live.samples.value.get(row.node_key),
-        !live.isConnected.value ||
-          live.staleKeys.value.has(row.node_key) ||
-          props.source.runtime.state !== 'online',
-      ) === statusFilter.value,
-  ),
-)
-const filteredEmpty = computed(() =>
-  statusFilter.value === 'all'
-    ? emptyState.value
-    : { title: '本页没有符合状态的点位', hint: '切换状态或翻页查看其他点位。' },
 )
 
 const hasPoints = computed(() => list.total.value > 0)
@@ -141,7 +122,7 @@ function openBatchEdit(): void {
 }
 
 function selectPage(): void {
-  archive.selectAll(visibleRows.value.map((one) => one.id))
+  archive.selectAll(list.items.value.map((one) => one.id))
 }
 
 defineExpose({ reload })
@@ -157,7 +138,12 @@ watch(
 )
 
 watch(
-  () => [list.pager.value.page, list.pager.value.size, keyword.value],
+  () => [
+    list.pager.value.page,
+    list.pager.value.size,
+    keyword.value,
+    status.value,
+  ],
   () => archive.clearSelection(),
 )
 watch(list.items, (rows) => {
@@ -181,6 +167,9 @@ watch(list.items, (rows) => {
         :source="source"
         :is-connected="live.isConnected.value"
       />
+      <p class="text-xs text-text-secondary">
+        状态筛选覆盖当前数据源的全部点位。“全部异常”包含等待数据、数据陈旧和质量异常；状态变化后点击“刷新列表”重新查询。
+      </p>
 
       <BatchActionBar
         v-if="hasSelection"
@@ -196,11 +185,11 @@ watch(list.items, (rows) => {
         v-model:view="view"
         class="min-h-0 flex-1"
         :columns="COLUMNS"
-        :rows="visibleRows"
+        :rows="list.items.value"
         :loading="list.loading.value"
         :error="list.error.value"
         :pagination="list.pager.value"
-        :empty="filteredEmpty"
+        :empty="emptyState"
         :layout="{
           minWidth: '83rem',
           fixedLayout: true,
@@ -213,11 +202,21 @@ watch(list.items, (rows) => {
       >
         <template #toolbar>
           <DtSelect
-            v-model="statusFilter"
+            :model-value="status"
             :options="POINT_STATUS_OPTIONS"
-            aria-label="本页点位状态"
+            aria-label="点位状态"
             size="sm"
+            @update:model-value="setStatus"
           />
+          <DtButton
+            variant="outline"
+            size="sm"
+            icon="refresh-cw"
+            :loading="list.loading.value"
+            @click="list.reload()"
+          >
+            刷新列表
+          </DtButton>
           <NodeTableToolbar
             v-model:keyword="keyword"
             :has-rows="hasRows"
@@ -235,8 +234,8 @@ watch(list.items, (rows) => {
         </template>
 
         <template #summary
-          >共 {{ list.total.value }} 个点位 · 本页显示
-          {{ visibleRows.length }} / {{ list.items.value.length }}</template
+          >共 {{ list.total.value }} 个点位 · 本页
+          {{ list.items.value.length }} 个</template
         >
 
         <template #card="{ row }">

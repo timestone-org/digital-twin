@@ -1,18 +1,12 @@
-/**
- * @fileoverview 一个数据源下的点位列表：取数、关键词、以及列表空着时说什么。
- *
- * ⚠ 空态分两种，合成一种会造出一条**让人做错事**的引导：搜不到时若说「去浏览树
- * 里勾选导入」，工程师真的会再导一遍，于是同一批点位被导入两次（见
- * `utils/listEmpty`）。
- * ⚠ 换源要连搜索词一起清：留着上一台设备的关键词，新源的表会「一个点位都没有」，
- * 而那台设备其实好好的。
- */
+/** @fileoverview 数据源点位的后端关键词与状态查询、分页和空态。 */
 import { computed, ref, watch, type ComputedRef, type Ref } from 'vue'
 import type {
   CollectPoint,
+  CollectPointStatus,
   CollectReadableProtocol,
   DtDataViewEmpty,
 } from '@dt/contracts'
+import { COLLECT_POINT_STATUSES } from '@dt/contracts'
 
 import * as collect from '@/api/collect'
 import { useAsyncList, type AsyncList } from '@/composables/useAsyncList'
@@ -26,12 +20,14 @@ const EMPTY_HINTS: Record<CollectReadableProtocol, string> = {
 
 export interface PointList {
   keyword: Ref<string>
+  status: Ref<CollectPointStatus>
+  setStatus: (value: string) => void
   list: AsyncList<CollectPoint>
   emptyState: ComputedRef<DtDataViewEmpty>
 }
 
 /**
- * 装上点位列表。换源时自己清词回第一页，调用方只管拿。
+ * 管理点位查询；切状态回第一页，切数据源清除筛选。
  * @param sourceId 取当前数据源 id
  * @param protocol 取当前数据源协议
  */
@@ -40,17 +36,22 @@ export function usePointList(
   protocol: () => CollectReadableProtocol,
 ): PointList {
   const keyword = ref('')
-  const list = useAsyncList<CollectPoint>((query) =>
-    collect.listPoints({
-      sourceId: sourceId(),
-      q: keyword.value || undefined,
-      ...query,
-    }),
+  const status = ref<CollectPointStatus>('all')
+  const list = useAsyncList<CollectPoint>((query, signal) =>
+    collect.listPoints(
+      {
+        sourceId: sourceId(),
+        q: keyword.value || undefined,
+        status: status.value,
+        ...query,
+      },
+      signal,
+    ),
   )
 
   const emptyState = computed(() =>
     listEmptyState({
-      isFiltered: keyword.value.trim() !== '',
+      isFiltered: keyword.value.trim() !== '' || status.value !== 'all',
       subject: '点位',
       keyword: keyword.value,
       blank: { title: '尚未导入点位', hint: EMPTY_HINTS[protocol()] },
@@ -58,13 +59,24 @@ export function usePointList(
   )
 
   watch(
-    sourceId,
-    () => {
-      keyword.value = ''
+    [sourceId, status],
+    ([id], previous) => {
+      if (id !== previous[0]) {
+        keyword.value = ''
+        if (status.value !== 'all') {
+          status.value = 'all'
+          return
+        }
+      }
       void list.reloadFromFirstPage()
     },
     { immediate: true },
   )
 
-  return { keyword, list, emptyState }
+  function setStatus(value: string): void {
+    const next = COLLECT_POINT_STATUSES.find((item) => item === value)
+    if (next !== undefined) status.value = next
+  }
+
+  return { keyword, status, setStatus, list, emptyState }
 }

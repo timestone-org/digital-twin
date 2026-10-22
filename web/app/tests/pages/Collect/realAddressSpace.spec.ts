@@ -85,7 +85,11 @@ function signIn(): void {
 async function render(): Promise<VueWrapper> {
   vi.spyOn(collectApi, 'browseSource').mockImplementation(
     (_sourceId: string, parent: string | null) =>
-      Promise.resolve({ items: REAL_TREE[parent ?? ROOT] ?? [] }),
+      Promise.resolve({
+        items: REAL_TREE[parent ?? ROOT] ?? [],
+        continuation_token: null,
+        has_more: false,
+      }),
   )
   vi.spyOn(collectApi, 'browseSubtree').mockImplementation(
     (_sourceId: string, parent: string | null) =>

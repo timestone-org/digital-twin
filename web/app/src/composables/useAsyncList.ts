@@ -5,7 +5,15 @@
  * 会覆盖快的那次的结果，界面显示过期数据**且没有任何报错**。
  */
 
-import { computed, ref, shallowRef, type ComputedRef, type Ref } from 'vue'
+import {
+  computed,
+  getCurrentScope,
+  onScopeDispose,
+  ref,
+  shallowRef,
+  type ComputedRef,
+  type Ref,
+} from 'vue'
 import type { Page } from '@dt/contracts'
 import type { DtPaginationState } from '@dt/ui'
 
@@ -45,7 +53,7 @@ export interface AsyncList<TItem> {
  * @param initialSize 初始每页条数
  */
 export function useAsyncList<TItem>(
-  fetcher: (query: AsyncListPage) => Promise<Page<TItem>>,
+  fetcher: (query: AsyncListPage, signal: AbortSignal) => Promise<Page<TItem>>,
   initialSize = 20,
 ): AsyncList<TItem> {
   const items = shallowRef<TItem[]>([])
@@ -55,12 +63,13 @@ export function useAsyncList<TItem>(
   const page = ref(1)
   const size = ref(initialSize)
   const raced = useRacedFetch()
+  if (getCurrentScope() !== undefined) onScopeDispose(raced.cancel)
 
   async function reload(): Promise<void> {
     loading.value = true
     error.value = null
-    const task = (): Promise<Page<TItem>> =>
-      fetcher({ page: page.value, size: size.value })
+    const task = (signal: AbortSignal): Promise<Page<TItem>> =>
+      fetcher({ page: page.value, size: size.value }, signal)
     await raced.run(task, {
       ok: ({ items: rows, total: count }) => {
         items.value = rows

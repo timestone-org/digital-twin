@@ -18,6 +18,7 @@ import type {
   CollectPointCreateInput,
   CollectPointDeleteInput,
   CollectPointSaved,
+  CollectPointStatus,
   CollectPointUpdateInput,
   CollectSource,
   CollectSourceCreateInput,
@@ -33,6 +34,8 @@ import { newIdempotencyKey } from './idempotency'
 
 export { newIdempotencyKey }
 
+const BROWSE_PAGE_SIZE = 200
+
 /** 点位与数据源列表共用的查询面。 */
 export interface CollectPageQuery {
   q?: string | undefined
@@ -42,11 +45,17 @@ export interface CollectPageQuery {
 
 export interface PointQuery extends CollectPageQuery {
   sourceId?: string | undefined
+  status?: CollectPointStatus | undefined
 }
 
 export interface SourceQuery extends CollectPageQuery {
   protocol?: string | undefined
   isEnabled?: boolean | undefined
+}
+
+export interface BrowsePageQuery {
+  limit?: number
+  continuationToken?: string
 }
 
 function onPlatform(options: RequestOptions = {}): RequestOptions {
@@ -145,12 +154,19 @@ export async function browseSource(
   sourceId: string,
   parent: string | null,
   signal?: AbortSignal,
+  page: BrowsePageQuery = {},
 ): Promise<CollectBrowseResult> {
   return await requestData<CollectBrowseResult>(
     `/collect-sources/${sourceId}:browse`,
     onPlatform({
       method: 'POST',
-      body: { parent },
+      body: {
+        parent,
+        limit: page.limit ?? BROWSE_PAGE_SIZE,
+        ...(page.continuationToken === undefined
+          ? {}
+          : { continuation_token: page.continuationToken }),
+      },
       ...(signal === undefined ? {} : { signal }),
     }),
   )
@@ -186,7 +202,7 @@ export async function browseSubtree(
 
 /**
  * 分页找点位。
- * @param query 数据源、关键字与分页
+ * @param query 数据源、关键字、运行状态与分页
  * @param signal 取消信号；连续输入关键字时用它掐掉在途请求
  */
 export async function listPoints(
@@ -199,6 +215,9 @@ export async function listPoints(
       query: {
         source_id: query.sourceId,
         q: query.q,
+        ...(query.status === undefined || query.status === 'all'
+          ? {}
+          : { status: query.status }),
         page: query.page,
         size: query.size,
       },

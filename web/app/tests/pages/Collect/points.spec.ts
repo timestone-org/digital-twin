@@ -130,12 +130,13 @@ function signIn(permissions: string[]): void {
 async function render(
   rows: CollectPoint[] = [point()],
   over: Partial<CollectSource> = {},
+  total = rows.length,
 ): Promise<VueWrapper> {
   vi.spyOn(collectApi, 'listPoints').mockResolvedValue({
     items: rows,
     page: 1,
     size: 20,
-    total: rows.length,
+    total,
   })
   const wrapper = mount(NodeTable, {
     props: { source: source(over) },
@@ -281,7 +282,7 @@ describe('当前值的四种情形', () => {
       quality: 'good',
     })
     expect(wrapper.text()).toContain('36.5')
-    expect(wrapper.text()).not.toContain('陈旧')
+    expect(wrapper.find('tbody').text()).not.toContain('陈旧')
   })
 
   it('取不到时标「取不到」，不留着上一个值', async () => {
@@ -500,6 +501,219 @@ describe('两种空态', () => {
   })
 })
 
+describe('全数据源状态查询', () => {
+  async function chooseStatus(
+    wrapper: VueWrapper,
+    label: string,
+  ): Promise<void> {
+    await wrapper
+      .find('[role="combobox"][aria-label$="点位状态"]')
+      .trigger('click')
+    await flushPromises()
+    const option = [
+      ...document.body.querySelectorAll<HTMLElement>('[role="option"]'),
+    ].find((one) => one.textContent?.includes(label))
+    if (option === undefined) throw new Error(`没有状态选项「${label}」`)
+    option.click()
+    await flushPromises()
+  }
+
+  it('异常节点在未加载分页中也能查询并显示匹配总数', async () => {
+    const rows = Array.from({ length: 20 }, (_unused, index) =>
+      point({
+        id: `p${index + 1}`,
+        code: `normal_${index}`,
+        node_key: `s1:normal_${index}`,
+        name: `正常节点${index + 1}`,
+      }),
+    )
+    const wrapper = await render(rows, {}, 25)
+    expect(wrapper.text()).toContain('共 25 个点位')
+    expect(wrapper.text()).not.toContain('跨页异常节点')
+    const abnormal = point({
+      id: 'p25',
+      code: 'fault_25',
+      node_key: 's1:fault_25',
+      name: '跨页异常节点',
+    })
+    const listed = vi.mocked(collectApi.listPoints)
+    listed.mockImplementation((query = {}) =>
+      Promise.resolve({
+        items: query.status === 'abnormal' ? [abnormal] : [point()],
+        page: 1,
+        size: 20,
+        total: query.status === 'abnormal' ? 1 : 25,
+      }),
+    )
+    await push({
+      nodeKey: 's1:outlet_temp',
+      state: 'ok',
+      value: 1,
+      timestampMs: 1,
+      quality: 'good',
+    })
+
+    await chooseStatus(wrapper, '异常')
+
+    expect(wrapper.text()).toContain('跨页异常节点')
+    expect(wrapper.text()).toContain('共 1 个点位')
+    expect(wrapper.text()).not.toContain('本页没有符合状态的点位')
+    expect(listed).toHaveBeenLastCalledWith(
+      expect.objectContaining({ sourceId: 's1', status: 'abnormal', page: 1 }),
+      expect.any(AbortSignal),
+    )
+  })
+
+  it('在后续页切状态回第一页，再翻页仍保留状态与匹配总数', async () => {
+    const wrapper = await render()
+    const listed = vi.mocked(collectApi.listPoints)
+    listed.mockImplementation((query = {}) =>
+      Promise.resolve({
+        items: [point({ name: `查询第${query.page ?? 1}页` })],
+        page: query.page ?? 1,
+        size: query.size ?? 20,
+        total: query.status === 'abnormal' ? 25 : 60,
+      }),
+    )
+    await clickByText(wrapper, '查询')
+    await flushPromises()
+    await clickByText(wrapper, '下一页')
+    await flushPromises()
+    expect(wrapper.text()).toContain('查询第2页')
+
+    await chooseStatus(wrapper, '异常')
+    expect(wrapper.text()).toContain('查询第1页')
+    expect(wrapper.text()).toContain('共 25 个点位')
+    await clickByText(wrapper, '下一页')
+    await flushPromises()
+    expect(listed).toHaveBeenLastCalledWith(
+      expect.objectContaining({ status: 'abnormal', page: 2 }),
+      expect.any(AbortSignal),
+    )
+    expect(wrapper.text()).toContain('查询第2页')
+  })
+
+  it('关键词和状态组合查询，刷新列表重新获取筛选集合', async () => {
+    const wrapper = await render()
+    const listed = vi.mocked(collectApi.listPoints)
+    await search(wrapper, '温度')
+    await chooseStatus(wrapper, '异常')
+    expect(listed).toHaveBeenLastCalledWith(
+      expect.objectContaining({
+        sourceId: 's1',
+        q: '温度',
+        status: 'abnormal',
+        page: 1,
+      }),
+      expect.any(AbortSignal),
+    )
+
+    listed.mockResolvedValue({
+      items: [point({ name: '刷新后的异常点' })],
+      page: 1,
+      size: 20,
+      total: 1,
+    })
+    await clickByText(wrapper, '刷新列表')
+    await flushPromises()
+    expect(wrapper.text()).toContain('刷新后的异常点')
+    expect(wrapper.text()).toContain('状态筛选覆盖当前数据源的全部点位')
+  })
+
+  it('切状态清多选，换源同时重置关键词与状态并切换实时主题', async () => {
+    const wrapper = await render()
+    await selectRow(wrapper, '出口温度')
+    await chooseStatus(wrapper, '异常')
+    expect(wrapper.text()).not.toContain('已选 1 项')
+    await search(wrapper, '温度')
+    const listed = vi.mocked(collectApi.listPoints)
+    listed.mockClear()
+    await wrapper.setProps({ source: source({ id: 's2', code: 'plant2' }) })
+    await flushPromises()
+    expect(listed).toHaveBeenCalledTimes(1)
+    expect(listed).toHaveBeenLastCalledWith(
+      expect.objectContaining({
+        sourceId: 's2',
+        q: undefined,
+        status: 'all',
+        page: 1,
+      }),
+      expect.any(AbortSignal),
+    )
+    expect(
+      wrapper.find('input[placeholder="搜索名称或编码"]').element,
+    ).toHaveProperty('value', '')
+    expect(wrapper.find('[aria-label="点位状态"]').text()).toContain('全部状态')
+    expect(subscribed).toEqual(['collect:s1', 'collect:s2'])
+    expect(unsubscribed).toContain('collect:s1')
+  })
+
+  it('全选只选择后端筛选结果的当前页', async () => {
+    const wrapper = await render()
+    vi.mocked(collectApi.listPoints).mockResolvedValue({
+      items: [point({ id: 'fault', name: '筛选到的异常点' })],
+      page: 1,
+      size: 20,
+      total: 1,
+    })
+    await chooseStatus(wrapper, '异常')
+    await clickByText(wrapper, '全选本页')
+    await flushPromises()
+    expect(
+      wrapper.find('input[aria-label="选择 筛选到的异常点"]').element,
+    ).toHaveProperty('checked', true)
+    expect(wrapper.text()).toContain('已选 1 项')
+  })
+
+  it('快速切换状态时迟到的旧请求不能覆盖最新结果', async () => {
+    const wrapper = await render()
+    const listed = vi.mocked(collectApi.listPoints)
+    let finish: (() => void) | undefined
+    listed.mockImplementation((query = {}) => {
+      if (query.status === 'abnormal')
+        return new Promise((resolve) => {
+          finish = () =>
+            resolve({
+              items: [point({ name: '旧异常结果' })],
+              page: 1,
+              size: 20,
+              total: 1,
+            })
+        })
+      return Promise.resolve({
+        items: [point({ name: '最新正常结果' })],
+        page: 1,
+        size: 20,
+        total: 1,
+      })
+    })
+    await chooseStatus(wrapper, '异常')
+    const previousSignal = listed.mock.calls.at(-1)?.[1]
+    await chooseStatus(wrapper, '正常')
+    expect(previousSignal?.aborted).toBe(true)
+    expect(wrapper.text()).toContain('最新正常结果')
+    finish?.()
+    await flushPromises()
+    expect(wrapper.text()).toContain('最新正常结果')
+    expect(wrapper.text()).not.toContain('旧异常结果')
+  })
+
+  it('状态查询失败显示错误，重试与零结果不引导重复导入', async () => {
+    const wrapper = await render()
+    const listed = vi.mocked(collectApi.listPoints)
+    listed.mockRejectedValueOnce(
+      new BizError(51104, '运行状态暂不可用', 503, 'trace'),
+    )
+    await chooseStatus(wrapper, '异常')
+    expect(wrapper.text()).toContain('运行状态暂不可用')
+    listed.mockResolvedValue({ items: [], page: 1, size: 20, total: 0 })
+    await clickByText(wrapper, '重试')
+    await flushPromises()
+    expect(wrapper.text()).toContain('没有匹配的点位')
+    expect(wrapper.text()).not.toContain('尚未导入点位')
+  })
+})
+
 describe('批量开关记录历史', () => {
   const SAVED = { point: point(), address_check: null }
 
@@ -669,7 +883,7 @@ describe('操作反馈与实时有效性', () => {
         quality: 'good',
       })
       await vi.advanceTimersByTimeAsync(46_000)
-      expect(wrapper.text()).toContain('陈旧')
+      expect(wrapper.find('tbody').text()).toContain('陈旧')
       await push({
         nodeKey: 's1:outlet_temp',
         state: 'ok',
@@ -677,7 +891,7 @@ describe('操作反馈与实时有效性', () => {
         timestampMs: 1,
         quality: 'good',
       })
-      expect(wrapper.text()).not.toContain('陈旧')
+      expect(wrapper.find('tbody').text()).not.toContain('陈旧')
       wrapper.unmount()
     } finally {
       vi.useRealTimers()

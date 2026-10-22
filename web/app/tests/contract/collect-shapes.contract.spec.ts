@@ -39,6 +39,7 @@ import {
   COLLECT_POINT_BATCH_MAX,
   COLLECT_POINT_CODE_MAX_LENGTH,
   COLLECT_POINT_CODE_PATTERN,
+  COLLECT_POINT_STATUSES,
   COLLECT_PROTOCOLS,
   COLLECT_READ_MODES,
   isCollectPointCode,
@@ -60,6 +61,18 @@ const SPEC_PATH = join(
 
 const spec = JSON.parse(readFileSync(SPEC_PATH, 'utf8')) as {
   components: { schemas: Record<string, OpenApiSchema> }
+  paths: Record<
+    string,
+    {
+      get?: {
+        parameters?: {
+          name: string
+          in: string
+          schema: { enum?: string[]; default?: string }
+        }[]
+      }
+    }
+  >
 }
 const schemas = spec.components.schemas
 
@@ -131,6 +144,8 @@ const SHAPES: Record<string, Record<string, true>> = {
 
   BrowseOut: {
     items: true,
+    continuation_token: true,
+    has_more: true,
   } satisfies Keys<CollectBrowseResult>,
 
   SubtreeItemOut: {
@@ -259,6 +274,18 @@ function constraintOf(schemaName: string, field: string, key: string): unknown {
 }
 
 describe('const 联合与后端的闭合集合一致', () => {
+  it('点位运行状态查询参数', () => {
+    const parameter = spec.paths[
+      '/api/v1/platform/collect-points'
+    ]?.get?.parameters?.find(
+      (one) => one.in === 'query' && one.name === 'status',
+    )
+    expect(parameter).toBeDefined()
+    expect([...(parameter?.schema.enum ?? [])].sort()).toEqual(
+      [...COLLECT_POINT_STATUSES].sort(),
+    )
+    expect(parameter?.schema.default).toBe('all')
+  })
   it('协议', () => {
     expect([...COLLECT_PROTOCOLS].sort()).toEqual(
       literalsOf('SourceCreateIn', 'protocol'),

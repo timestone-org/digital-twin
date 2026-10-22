@@ -26,6 +26,15 @@ export type CollectReadMode = (typeof COLLECT_READ_MODES)[number]
 export const COLLECT_DATA_TYPES = ['float', 'int', 'bool', 'string'] as const
 export type CollectDataType = (typeof COLLECT_DATA_TYPES)[number]
 
+export const COLLECT_POINT_STATUSES = [
+  'all',
+  'abnormal',
+  'waiting',
+  'stale',
+  'good',
+] as const
+export type CollectPointStatus = (typeof COLLECT_POINT_STATUSES)[number]
+
 /**
  * 数据源此刻的采集运行态。
  * ⚠ `unknown` 是**平台侧**的取值，表示采集侧还没写过这一行——通常意味着
@@ -154,6 +163,8 @@ export interface CollectBrowseItem {
 
 export interface CollectBrowseResult {
   items: CollectBrowseItem[]
+  continuation_token: string | null
+  has_more: boolean
 }
 
 /**
@@ -167,8 +178,7 @@ export interface CollectSubtreeItem extends CollectBrowseItem {
 
 /**
  * 一次子树遍历的结果。
- * ⚠ 不限条数：勾一个通道要的就是它下面的全部点位。唯一的约束是这次请求的
- * 时间预算，到点没走完才置 `is_truncated`。
+ * 节点数量和时间预算任一耗尽时置 `is_truncated`。
  * ⚠ `is_truncated` 为真时界面**必须**说出来：不说的话用户会把「只收到一半」
  * 当成「这个通道就这么多点位」。
  */

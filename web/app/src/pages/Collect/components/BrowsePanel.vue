@@ -22,7 +22,6 @@ import {
   DtIconButton,
 } from '@dt/ui'
 
-import * as collect from '@/api/collect'
 import PermGuard from '@/components/PermGuard.vue'
 import { describeError } from '@/composables/useAsyncList'
 import type { ImportDraft } from '../scripts/importDrafts'
@@ -30,11 +29,9 @@ import { toDrafts } from '../scripts/importDrafts'
 import { importPoints } from '../scripts/pointImport'
 import { loadRomanize } from '../scripts/romanize'
 import { useBrowseTree } from '../scripts/useBrowseTree'
-import BrowseTreeNode from './BrowseTreeNode.vue'
+import { useBrowseTaken } from '../scripts/useBrowseTaken'
+import BrowseTreeViewport from './BrowseTreeViewport.vue'
 import ImportNodesDialog from './ImportNodesDialog.vue'
-
-/** 扫已有点位时一次取多少条。⚠ 与后端单页上限对齐。 */
-const SCAN_PAGE_SIZE = 100
 
 const props = defineProps<{ source: CollectSource }>()
 const emit = defineEmits<{ imported: [count: number] }>()
@@ -45,9 +42,11 @@ const importOpen = ref(false)
 /** 待导入的草稿；编码在弹窗里逐行确认，推不出来的等人填。 */
 const pending = ref<ImportDraft[]>([])
 
-/** 库里已经建过点位的寻址串与编码。重复建会以 409 整批被拒。 */
-const takenAddresses = ref(new Set<string>())
-const takenCodes = ref(new Set<string>())
+const {
+  addresses: takenAddresses,
+  codes: takenCodes,
+  load: loadTaken,
+} = useBrowseTaken(() => props.source.id)
 
 const tree = useBrowseTree(() => props.source.id, takenAddresses)
 
@@ -68,8 +67,8 @@ async function toggle(address: string): Promise<void> {
   }
   if (!outcome.isWhole) {
     toast.warning(
-      '这个节点下面的地址空间太大，采集侧在这次请求的时间内没走完——已勾上' +
-        '读回来的那些，剩下的请逐层展开再勾。',
+      '这个节点下的地址空间达到本次浏览数量或时间预算，还没走完——已勾上' +
+        '读回来的点位，其余可点击「加载更多点位」继续浏览。',
     )
     return
   }
@@ -79,27 +78,6 @@ async function toggle(address: string): Promise<void> {
       ? '这个节点下面没有可选的点位'
       : '这个节点下面的点位都已经建过了',
   )
-}
-
-async function scanExisting(): Promise<void> {
-  const addresses = new Set<string>()
-  const codes = new Set<string>()
-  let page = 1
-  for (;;) {
-    const chunk = await collect.listPoints({
-      sourceId: props.source.id,
-      page,
-      size: SCAN_PAGE_SIZE,
-    })
-    for (const point of chunk.items) {
-      addresses.add(point.address)
-      codes.add(point.code)
-    }
-    if (codes.size >= chunk.total || chunk.items.length === 0) break
-    page += 1
-  }
-  takenAddresses.value = addresses
-  takenCodes.value = codes
 }
 
 /**
@@ -135,7 +113,7 @@ async function doImport(items: CollectPointItemInput[]): Promise<void> {
     if (outcome.created > 0) {
       importOpen.value = false
       tree.clear()
-      await scanExisting()
+      await loadTaken()
       emit('imported', outcome.created)
     }
     for (const failure of outcome.failures) {
@@ -151,20 +129,12 @@ async function doImport(items: CollectPointItemInput[]): Promise<void> {
   }
 }
 
-/** 已有点位取不到不阻断浏览：它只影响「已建」标记与编码去重。 */
-async function loadTaken(): Promise<void> {
-  try {
-    await scanExisting()
-  } catch {
-    takenAddresses.value = new Set<string>()
-    takenCodes.value = new Set<string>()
-  }
-}
-
 // 换源：重拉根层与已建清单（useBrowseTree 的 ctx 按 sourceId 现取，无需重建）
 watch(
   () => props.source.id,
   () => {
+    importOpen.value = false
+    pending.value = []
     tree.clear()
     void tree.loadRoot()
     void loadTaken()
@@ -212,34 +182,40 @@ onMounted(() => {
         不出东西。空树的意思是「读不到」，不是「设备没有点位」。
       </DtNotice>
 
+      <DtNotice
+        v-if="tree.error.value && tree.roots.value.length > 0"
+        intent="danger"
+      >
+        {{ tree.error.value }}
+      </DtNotice>
+
       <!-- ⚠ 外面这层 div 不能省：DtPageState 渲染的是 fragment，直接挂在它上
            面的 class 会被 Vue 静默丢掉，树区域于是没有高度约束。
            justify-center 只对空态/加载态生效：树自己是 h-full，与右边点位表的空态同高 -->
       <div class="flex min-h-0 flex-1 flex-col justify-center">
         <DtPageState
           :loading="tree.loading.value"
-          :error="tree.error.value"
+          :error="tree.roots.value.length === 0 ? tree.error.value : null"
           :empty="
             !tree.loading.value &&
             tree.error.value === null &&
-            tree.roots.value.length === 0
+            tree.roots.value.length === 0 &&
+            tree.nextToken.value === null
           "
           empty-title="未发现可浏览节点"
           empty-hint="设备没连上时这里一定是空的，先点「连接」并做一次连通性测试。"
           @retry="tree.loadRoot"
         >
-          <ul class="m-0 h-full overflow-auto p-0">
-            <BrowseTreeNode
-              v-for="node in tree.roots.value"
-              :key="node.address"
-              :node="node"
-              :depth="0"
-              :states="tree.states"
-              :taken="takenAddresses"
-              @expand="tree.expand"
-              @toggle="toggle"
-            />
-          </ul>
+          <BrowseTreeViewport
+            :roots="tree.roots.value"
+            :next-token="tree.nextToken.value"
+            :loading-more="tree.loadingMore.value"
+            :states="tree.states"
+            :taken="takenAddresses"
+            @expand="tree.expand"
+            @toggle="toggle"
+            @load-more="tree.loadMore"
+          />
         </DtPageState>
       </div>
     </div>
