@@ -181,6 +181,51 @@
         "title": "ApiResponse[ChatSessionOut]",
         "type": "object"
       },
+      "ApiResponse_ChunkWindowOut_": {
+        "properties": {
+          "code": {
+            "default": 0,
+            "title": "Code",
+            "type": "integer"
+          },
+          "data": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/ChunkWindowOut"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "details": {
+            "anyOf": [
+              {
+                "items": {
+                  "$ref": "#/components/schemas/FieldErrorOut"
+                },
+                "type": "array"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Details"
+          },
+          "message": {
+            "default": "ok",
+            "title": "Message",
+            "type": "string"
+          },
+          "trace_id": {
+            "default": "",
+            "title": "Trace Id",
+            "type": "string"
+          }
+        },
+        "title": "ApiResponse[ChunkWindowOut]",
+        "type": "object"
+      },
       "ApiResponse_DocumentOut_": {
         "properties": {
           "code": {
@@ -1371,6 +1416,72 @@
           "created_at"
         ],
         "title": "ChatStepOut",
+        "type": "object"
+      },
+      "ChunkWindowOut": {
+        "properties": {
+          "base_id": {
+            "format": "uuid",
+            "title": "Base Id",
+            "type": "string"
+          },
+          "chunk_id": {
+            "format": "uuid",
+            "title": "Chunk Id",
+            "type": "string"
+          },
+          "document_title": {
+            "title": "Document Title",
+            "type": "string"
+          },
+          "has_more": {
+            "title": "Has More",
+            "type": "boolean"
+          },
+          "heading_path": {
+            "title": "Heading Path",
+            "type": "string"
+          },
+          "locator": {
+            "$ref": "#/components/schemas/LocatorOut"
+          },
+          "next_offset": {
+            "anyOf": [
+              {
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Next Offset"
+          },
+          "offset": {
+            "title": "Offset",
+            "type": "integer"
+          },
+          "text": {
+            "title": "Text",
+            "type": "string"
+          },
+          "total_chars": {
+            "title": "Total Chars",
+            "type": "integer"
+          }
+        },
+        "required": [
+          "base_id",
+          "chunk_id",
+          "document_title",
+          "heading_path",
+          "locator",
+          "text",
+          "offset",
+          "total_chars",
+          "has_more",
+          "next_offset"
+        ],
+        "title": "ChunkWindowOut",
         "type": "object"
       },
       "DocumentOut": {
@@ -3183,6 +3294,83 @@
         "summary": "Get One",
         "tags": [
           "library"
+        ]
+      }
+    },
+    "/api/v1/knowledge/knowledge-bases/{base_id}/chunks/{chunk_id}": {
+      "get": {
+        "description": "读取同一库内的原块窗口。\n\nArgs: session, _viewer, base_id, chunk_id, window。",
+        "operationId": "read_chunk_api_v1_knowledge_knowledge_bases__base_id__chunks__chunk_id__get",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "base_id",
+            "required": true,
+            "schema": {
+              "format": "uuid",
+              "title": "Base Id",
+              "type": "string"
+            }
+          },
+          {
+            "in": "path",
+            "name": "chunk_id",
+            "required": true,
+            "schema": {
+              "format": "uuid",
+              "title": "Chunk Id",
+              "type": "string"
+            }
+          },
+          {
+            "in": "query",
+            "name": "offset",
+            "required": false,
+            "schema": {
+              "default": 0,
+              "minimum": 0,
+              "title": "Offset",
+              "type": "integer"
+            }
+          },
+          {
+            "in": "query",
+            "name": "limit",
+            "required": false,
+            "schema": {
+              "default": 4000,
+              "maximum": 8000,
+              "minimum": 1,
+              "title": "Limit",
+              "type": "integer"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiResponse_ChunkWindowOut_"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Read Chunk",
+        "tags": [
+          "search"
         ]
       }
     },

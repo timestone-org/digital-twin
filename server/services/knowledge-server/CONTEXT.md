@@ -97,6 +97,10 @@
 
 ## 4. 七层
 
+原块的只读窗口通过 `GET /api/v1/knowledge/knowledge-bases/{base_id}/chunks/{chunk_id}`
+提供，沿用 `knowledge:use`。属库必须一致；返回文档标题、定位、正文窗口与续读位置，
+默认4000、上限8000字符。它供助手读取已检索块，不改变 Knowledge Chat 的会话范围过滤。
+
 `apps/knowledge/services/` 下七个子包，每个一副 `ports.py` + `registry.py` +
 实现目录（各层均以端口和显式注册表作为扩展缝）：
 `sources/` → `parsing/` → `chunking/` → `embedding/` → `indexing/` → `retrieval/`

@@ -17,6 +17,13 @@ class KnowledgeBaseNotFound(AppError):
     http_status = 404
 
 
+class ChunkNotFound(AppError):
+    """知识块不存在或不属于请求的知识库。"""
+
+    code = 42317
+    http_status = 404
+
+
 class UnsupportedRawItem(AppError):
     """没有哪一路解析器认得这份原件。
 

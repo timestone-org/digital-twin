@@ -12,13 +12,46 @@ from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from knowledge_server.apps.knowledge import crud
+from knowledge_server.apps.knowledge.errors import ChunkNotFound
 from knowledge_server.apps.knowledge.models import (
     KnowledgeChunk,
     KnowledgeDocument,
 )
+from knowledge_server.apps.knowledge.schemas.chunk import (
+    ChunkWindowIn,
+    ChunkWindowOut,
+)
+from knowledge_server.apps.knowledge.schemas.search import LocatorOut
 
 # 前后各带几块
 NEIGHBOURS = 1
+
+
+async def read_window(
+    session: AsyncSession,
+    base_id: uuid.UUID,
+    chunk_id: uuid.UUID,
+    window: ChunkWindowIn,
+) -> ChunkWindowOut:
+    """按原块身份返回正文窗口；Args: session, base_id, chunk_id, window。"""
+    found = await read_around(session, chunk_id)
+    if found is None or found.base_id != base_id:
+        raise ChunkNotFound("知识块不存在，请重新检索取得当前块身份")
+    text = found.text[window.offset : window.offset + window.limit]
+    next_offset = window.offset + len(text)
+    has_more = next_offset < len(found.text)
+    return ChunkWindowOut(
+        base_id=base_id,
+        chunk_id=chunk_id,
+        document_title=found.document_title,
+        heading_path=found.heading_path,
+        locator=LocatorOut.model_validate(found.locator),
+        text=text,
+        offset=window.offset,
+        total_chars=len(found.text),
+        has_more=has_more,
+        next_offset=next_offset if has_more else None,
+    )
 
 
 @dataclass(frozen=True)

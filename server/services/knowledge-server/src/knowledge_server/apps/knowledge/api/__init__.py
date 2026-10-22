@@ -7,6 +7,7 @@
 from knowledge_server.apps.knowledge.api import (
     bases,
     capabilities,
+    chunks,
     documents,
     search,
     sources,
@@ -18,6 +19,7 @@ ROUTERS = (
     sources.router,
     documents.router,
     search.router,
+    chunks.router,
 )
 
 __all__ = ["ROUTERS"]
