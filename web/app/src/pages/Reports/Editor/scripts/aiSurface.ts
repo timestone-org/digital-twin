@@ -169,13 +169,13 @@ async function runTool(
 ): Promise<unknown> {
   if (call.name === 'report.read_draft') return snapshotOf(deps, call.arguments)
   if (call.name === 'report.read_content')
-    return readReportContent(deps.draft().doc_json ?? { type: 'doc' }, call)
+    return readReportContent(documentOf(deps.draft().doc_json), call)
   ensureEditable(deps)
   if (call.name === 'report.replace_text') {
     const current = deps.draft()
     deps.setDraft({
       ...current,
-      doc_json: replaceReportText(current.doc_json ?? { type: 'doc' }, call),
+      doc_json: replaceReportText(documentOf(current.doc_json), call),
     })
     return { ok: true, staged: true, path: call.arguments.path }
   }
@@ -195,6 +195,12 @@ async function runTool(
     return result
   }
   throw new Error(`当前页面没有实现 ${call.name}`)
+}
+
+function documentOf(
+  document: ReportDocument | null | undefined,
+): ReportDocument {
+  return document ?? { type: 'doc' }
 }
 
 function ensureEditable(deps: ReportSurfaceDeps): void {

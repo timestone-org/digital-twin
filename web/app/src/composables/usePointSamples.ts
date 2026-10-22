@@ -103,10 +103,7 @@ export function usePointSamples(
       { immediate: true, flush: 'sync' },
     )
 
-  onUnmounted(() => {
-    stop?.()
-    stop = null
-  })
+  onUnmounted(() => stop?.())
 
   return { sampleCount, read: (nodeKey) => samples.value.get(nodeKey) }
 }
