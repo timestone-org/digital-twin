@@ -46,6 +46,13 @@ from platform_server.apps.hvac.services.ac_model_trainer import (
     mark_failed,
     run_training,
 )
+from platform_server.apps.hvac.services.ac_room_configuration import (
+    load_configuration,
+)
+from platform_server.apps.hvac.services.ac_startup_rules import (
+    LOGIC_VERSION,
+    ExtractionRules,
+)
 from platform_server.apps.hvac.startups import (
     BATCH_STATUS_READY,
     OUTCOME_TIMEOUT,
@@ -127,10 +134,15 @@ async def seed_room(session: AsyncSession, *, episodes: int) -> SeededRoom:
     await session.flush()
     for serial in serials:
         await _seed_unit(session, room_id=room.id, serial=serial)
+    await session.flush()
+    configuration = await load_configuration(
+        session, room.id, timezone="Asia/Shanghai", rules=ExtractionRules()
+    )
     batch = AcStartupBatch(
         room_id=room.id,
-        params_fingerprint="f" * 64,
-        logic_version=2,
+        params_fingerprint=configuration.fingerprint(),
+        configuration_snapshot=configuration.snapshot(),
+        logic_version=LOGIC_VERSION,
         window_start=BASE,
         window_end=BASE + timedelta(days=400),
         status=BATCH_STATUS_READY,
@@ -141,22 +153,7 @@ async def seed_room(session: AsyncSession, *, episodes: int) -> SeededRoom:
     )
     session.add(batch)
     await session.flush()
-    for index in range(episodes):
-        over = 1.0 + (index % 6)
-        session.add(
-            AcStartupEpisode(
-                batch_id=batch.id,
-                room_id=room.id,
-                started_at=BASE + timedelta(days=index, minutes=index),
-                running_set=[serials[0]],
-                complied_at=BASE
-                + timedelta(days=index, minutes=index + int(8 * over)),
-                duration_minutes=int(8 * over),
-                outcome=OUTCOME_USABLE,
-                readings={serials[0]: {"workshop_temp_avg": 26.0 + over}},
-                idle_minutes=390,
-            )
-        )
+    _seed_episodes(session, batch, serials, episodes)
     await session.flush()
     return SeededRoom(room_id=room.id, batch_id=batch.id, serials=serials)
 
@@ -195,7 +192,9 @@ async def test_training_persists_everything_in_one_go(
     assert found is not None
     assert found.status == MODEL_STATUS_READY
     assert found.sample_count == 40
-    assert found.batch_fingerprint == "f" * 64
+    batch = await db_session.get(AcStartupBatch, seeded.batch_id)
+    assert batch is not None
+    assert found.batch_fingerprint == batch.params_fingerprint
     assert found.metrics is not None
     assert found.metrics["overall"]["count"] == 40
     pair_key = "+".join(sorted(seeded.serials))
@@ -395,3 +394,27 @@ async def test_marking_a_deleted_model_failed_is_a_noop(
         reason="超时",
     )
     assert await ac_model_crud.get(db_session, ghost) is None
+
+
+def _seed_episodes(
+    session: AsyncSession,
+    batch: AcStartupBatch,
+    serials: tuple[str, str],
+    episodes: int,
+) -> None:
+    for index in range(episodes):
+        over = 1.0 + (index % 6)
+        session.add(
+            AcStartupEpisode(
+                batch_id=batch.id,
+                room_id=batch.room_id,
+                started_at=BASE + timedelta(days=index, minutes=index),
+                running_set=[serials[0]],
+                complied_at=BASE
+                + timedelta(days=index, minutes=index + int(8 * over)),
+                duration_minutes=int(8 * over),
+                outcome=OUTCOME_USABLE,
+                readings={serials[0]: {"workshop_temp_avg": 26.0 + over}},
+                idle_minutes=390,
+            )
+        )

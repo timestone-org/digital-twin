@@ -6,8 +6,11 @@ import，任何指回 `services/` 的边都会绕成循环 import 并让子进�
 """
 
 from collections.abc import Mapping
-from dataclasses import dataclass
+from dataclasses import dataclass, field
+from datetime import datetime
 from decimal import Decimal
+
+from platform_server.apps.hvac.seasons import Season, WinterPeriod
 
 METRIC_FAN_FREQUENCY = "fan_frequency"
 METRIC_WORKSHOP_TEMP = "workshop_temp_avg"
@@ -41,14 +44,31 @@ class RoomUnit:
 
     serial: str
     bands: Mapping[str, MetricBand]
+    winter_period: WinterPeriod | None = None
+    winter_bands: Mapping[str, MetricBand] = field(
+        default_factory=dict[str, MetricBand]
+    )
+
+    def season_at(self, at: datetime, timezone: str) -> Season:
+        """选择这台空调的季节。Args: at, timezone。"""
+        if self.winter_period is not None and self.winter_period.contains(
+            at, timezone
+        ):
+            return "winter"
+        return "non_winter"
+
+    def at(self, at: datetime, timezone: str) -> "RoomUnit":
+        """固定本次开机采用的范围。Args: at, timezone。"""
+        bands = (
+            self.winter_bands
+            if self.season_at(at, timezone) == "winter"
+            else self.bands
+        )
+        return RoomUnit(serial=self.serial, bands=bands)
 
     def is_in_band(self, values: Mapping[str, float | None]) -> bool:
-        """这台在某一刻的读数是不是各项都落在它自己配置的范围内。
+        """按已选定的闭区间检查读数，缺测不作达标证明。
 
-        ⚠ 缺测按不达标处理：读不到的指标不能替它作证。
-        ⚠ 与 `services/ac_startup_frames._is_in_band` 是同一口径的两份实现——
-        抽取引擎那两个文件被 `check_logic_version` 锁着，改一个字就要全量重抽；
-        两份由 `tests/contract/test_ac_compliance_predicate.py` 钉死一致。
         Args: values。
         """
         for metric, band in self.bands.items():

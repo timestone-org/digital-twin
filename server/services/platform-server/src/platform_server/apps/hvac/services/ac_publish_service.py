@@ -162,7 +162,10 @@ async def _plan(
         async with database.session() as session:
             live = await read_live(session, reader, room_id=view.room_id)
             result = await recommend(
-                session, view.publication.model_id, _conditions(live)
+                session,
+                view.publication.model_id,
+                _conditions(live),
+                timezone=reader.timezone,
             )
     # 领域异常（外库不可达、模型没训好、工件不可用、组合全被跳过）一律降级：
     # ⚠ 这些是「这一拍答不出来」，不是「配置错了」——照写点位，写哨兵值

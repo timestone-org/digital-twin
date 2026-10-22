@@ -4,10 +4,9 @@
 """
 
 import uuid
-from dataclasses import dataclass
-from decimal import Decimal
+from dataclasses import dataclass, replace
+from functools import partial
 
-from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from platform_server.apps.hvac.crud import (
@@ -21,20 +20,27 @@ from platform_server.apps.hvac.datasets import (
     metric_keys,
 )
 from platform_server.apps.hvac.models import (
-    AcDataBinding,
-    AcMetricLimit,
     AcStartupBatch,
     AcStartupEpisode,
     AcStartupShard,
-    AcUnit,
 )
-from platform_server.apps.hvac.rooms import MetricBand, RoomUnit
 from platform_server.apps.hvac.schemas import TimeWindow
+from platform_server.apps.hvac.services.ac_room_configuration import (
+    BoundUnit,
+    RoomConfiguration,
+    load_bound_units,
+    restore_configuration,
+)
 from platform_server.apps.hvac.services.ac_source_reader import (
     AcSourceReader,
     SourceExtent,
 )
-from platform_server.apps.hvac.services.ac_startup_frames import build_frames
+from platform_server.apps.hvac.services.ac_startup_frames import (
+    build_frames,
+    compliant_at,
+)
+
+__all__ = ["BoundUnit", "load_bound_units"]
 from platform_server.apps.hvac.services.ac_startup_queue import ShardMessage
 from platform_server.apps.hvac.services.ac_startup_rules import (
     Episode,
@@ -62,20 +68,13 @@ SHARD_RUN_ORPHANED = "orphaned"
 
 
 @dataclass(frozen=True)
-class BoundUnit:
-    """一台空调加上它读哪个数据源对象。"""
-
-    unit: RoomUnit
-    source_object: str
-
-
-@dataclass(frozen=True)
 class ExtractionContext:
     """跑一片要用的协作对象与参数。"""
 
     reader: AcSourceReader
     rules: ExtractionRules
     max_rows: int
+    configuration: RoomConfiguration | None = None
 
 
 @dataclass(frozen=True)
@@ -110,6 +109,7 @@ async def run_shard(
         return await _skip(
             session, batch=batch, month=message.month, status=batch.status
         )
+    context = batch_context(batch, context)
     window = shard_range(
         message.month,
         window_start=batch.window_start,
@@ -164,7 +164,11 @@ async def extract_window(
 
     Args: session, context, room_id, window。
     """
-    units = await load_bound_units(session, room_id)
+    units = (
+        list(context.configuration.units)
+        if context.configuration is not None
+        else await load_bound_units(session, room_id)
+    )
     if not units:
         return []
     rows = {
@@ -176,8 +180,14 @@ async def extract_window(
         )
         for bound in units
     }
-    frames = build_frames([bound.unit for bound in units], rows)
-    found = extract_episodes(frames, rules=context.rules)
+    room_units = [bound.unit for bound in units]
+    timezone = context.reader.timezone
+    frames = build_frames(room_units, rows, timezone=timezone)
+    found = extract_episodes(
+        frames,
+        rules=context.rules,
+        compliance=partial(compliant_at, units=room_units, timezone=timezone),
+    )
     # ⚠ 只写归属区间内的：取数越了界，事件也会多出来，不过滤就会与相邻分片
     # 各写一份同一次开机
     return [item for item in found if window.owns(item.started_at)]
@@ -201,66 +211,6 @@ def _to_row(batch: AcStartupBatch, episode: Episode) -> AcStartupEpisode:
         },
         idle_minutes=episode.idle_minutes,
     )
-
-
-async def load_bound_units(
-    session: AsyncSession, room_id: uuid.UUID
-) -> list[BoundUnit]:
-    """房间里绑定了原始数据的空调，连同它们各自的达标范围。
-
-    ⚠ 没绑数据源的空调整台跳过：它一分钟数据都没有，留在房间清单里只会让
-    每一帧都因「少一台」而作废。
-    Args: session, room_id。
-    """
-    rows = await session.execute(
-        select(AcUnit.id, AcUnit.serial, AcDataBinding.source_object)
-        .join(AcDataBinding, AcDataBinding.ac_unit_id == AcUnit.id)
-        .where(
-            AcUnit.room_id == room_id,
-            AcDataBinding.dataset == DATASET_RAW_MINUTE,
-        )
-        .order_by(AcUnit.serial.asc())
-    )
-    found = list(rows.all())
-    bands = await _load_bands(
-        session, frozenset(unit_id for unit_id, _, _ in found)
-    )
-    return [
-        BoundUnit(
-            unit=RoomUnit(serial=serial, bands=bands.get(unit_id, {})),
-            source_object=source_object,
-        )
-        for unit_id, serial, source_object in found
-    ]
-
-
-async def _load_bands(
-    session: AsyncSession, unit_ids: frozenset[uuid.UUID]
-) -> dict[uuid.UUID, dict[str, MetricBand]]:
-    """批量取一组空调的达标范围，逐台回查就是 N+1。
-
-    Args: session, unit_ids。
-    """
-    if not unit_ids:
-        return {}
-    rows = await session.execute(
-        select(
-            AcMetricLimit.ac_unit_id,
-            AcMetricLimit.metric,
-            AcMetricLimit.lower_limit,
-            AcMetricLimit.upper_limit,
-        ).where(AcMetricLimit.ac_unit_id.in_(unit_ids))
-    )
-    found: dict[uuid.UUID, dict[str, MetricBand]] = {}
-    for unit_id, metric, lower, upper in rows.all():
-        found.setdefault(unit_id, {})[metric] = MetricBand(
-            lower=_as_decimal(lower), upper=_as_decimal(upper)
-        )
-    return found
-
-
-def _as_decimal(value: object) -> Decimal | None:
-    return value if isinstance(value, Decimal) else None
 
 
 async def resolve_source_extent(
@@ -288,3 +238,20 @@ async def resolve_source_extent(
         start=min(extent.start for extent in found),
         end=max(extent.end for extent in found),
     )
+
+
+def batch_context(
+    batch: AcStartupBatch, context: ExtractionContext
+) -> ExtractionContext:
+    """固定批次快照；缺失或不兼容时要求重算。Args: batch, context。"""
+    if batch.configuration_snapshot is None:
+        raise ValueError("批次缺少季节配置快照，请全量重算")
+    configuration = restore_configuration(batch.configuration_snapshot)
+    if (
+        configuration.rules_fingerprint != context.rules.fingerprint()
+        or configuration.timezone != context.reader.timezone
+    ):
+        raise ValueError("抽取规则或业务时区已变更，请全量重算")
+    if configuration.fingerprint() != batch.params_fingerprint:
+        raise ValueError("批次配置快照与指纹不一致，请全量重算")
+    return replace(context, configuration=configuration)

@@ -1199,6 +1199,51 @@
         "title": "ApiResponse[ColumnOut]",
         "type": "object"
       },
+      "ApiResponse_CompliancePolicyOut_": {
+        "properties": {
+          "code": {
+            "default": 0,
+            "title": "Code",
+            "type": "integer"
+          },
+          "data": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/CompliancePolicyOut"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "details": {
+            "anyOf": [
+              {
+                "items": {
+                  "$ref": "#/components/schemas/FieldErrorOut"
+                },
+                "type": "array"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Details"
+          },
+          "message": {
+            "default": "ok",
+            "title": "Message",
+            "type": "string"
+          },
+          "trace_id": {
+            "default": "",
+            "title": "Trace Id",
+            "type": "string"
+          }
+        },
+        "title": "ApiResponse[CompliancePolicyOut]",
+        "type": "object"
+      },
       "ApiResponse_ConnectivityOut_": {
         "properties": {
           "code": {
@@ -7908,6 +7953,99 @@
         "title": "CombinationCoverageOut",
         "type": "object"
       },
+      "CompliancePolicyIn": {
+        "additionalProperties": false,
+        "description": "覆盖一台空调的完整季节配置。",
+        "properties": {
+          "non_winter": {
+            "items": {
+              "$ref": "#/components/schemas/MetricLimitIn"
+            },
+            "maxItems": 2,
+            "title": "Non Winter",
+            "type": "array"
+          },
+          "winter": {
+            "items": {
+              "$ref": "#/components/schemas/MetricLimitIn"
+            },
+            "maxItems": 2,
+            "title": "Winter",
+            "type": "array"
+          },
+          "winter_period": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/WinterPeriodIn"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          }
+        },
+        "required": [
+          "non_winter"
+        ],
+        "title": "CompliancePolicyIn",
+        "type": "object"
+      },
+      "CompliancePolicyOut": {
+        "description": "已保存的范围与服务端选定的当前季节。",
+        "properties": {
+          "effective_at": {
+            "format": "date-time",
+            "title": "Effective At",
+            "type": "string"
+          },
+          "effective_season": {
+            "enum": [
+              "winter",
+              "non_winter"
+            ],
+            "title": "Effective Season",
+            "type": "string"
+          },
+          "non_winter": {
+            "items": {
+              "$ref": "#/components/schemas/MetricLimitOut"
+            },
+            "title": "Non Winter",
+            "type": "array"
+          },
+          "timezone": {
+            "title": "Timezone",
+            "type": "string"
+          },
+          "winter": {
+            "items": {
+              "$ref": "#/components/schemas/MetricLimitOut"
+            },
+            "title": "Winter",
+            "type": "array"
+          },
+          "winter_period": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/WinterPeriodIn"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          }
+        },
+        "required": [
+          "winter_period",
+          "non_winter",
+          "winter",
+          "effective_season",
+          "effective_at",
+          "timezone"
+        ],
+        "title": "CompliancePolicyOut",
+        "type": "object"
+      },
       "ConfigFieldConditionOut": {
         "description": "条件显示：同级字段的当前值落在 `in_values` 里才渲染本字段。",
         "properties": {
@@ -9236,6 +9374,37 @@
           }
         },
         "title": "DuplicateDashboardIn",
+        "type": "object"
+      },
+      "EffectiveComplianceOut": {
+        "description": "某次计算中一台空调实际使用的范围。",
+        "properties": {
+          "limits": {
+            "items": {
+              "$ref": "#/components/schemas/MetricLimitOut"
+            },
+            "title": "Limits",
+            "type": "array"
+          },
+          "season": {
+            "enum": [
+              "winter",
+              "non_winter"
+            ],
+            "title": "Season",
+            "type": "string"
+          },
+          "serial": {
+            "title": "Serial",
+            "type": "string"
+          }
+        },
+        "required": [
+          "serial",
+          "season",
+          "limits"
+        ],
+        "title": "EffectiveComplianceOut",
         "type": "object"
       },
       "ErrorStatsOut": {
@@ -16728,6 +16897,25 @@
       "PredictOut": {
         "description": "试算结果：三分位达标时长与可靠性。\n\n⚠ `is_in_serving_sets` 为假表示这是对服务组合之外的外推——不拒绝，\n但要说清楚。",
         "properties": {
+          "compliance": {
+            "items": {
+              "$ref": "#/components/schemas/EffectiveComplianceOut"
+            },
+            "title": "Compliance",
+            "type": "array"
+          },
+          "effective_at": {
+            "anyOf": [
+              {
+                "format": "date-time",
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Effective At"
+          },
           "instant_probability": {
             "title": "Instant Probability",
             "type": "number"
@@ -16758,6 +16946,11 @@
           },
           "reliability": {
             "title": "Reliability",
+            "type": "string"
+          },
+          "timezone": {
+            "default": "Asia/Shanghai",
+            "title": "Timezone",
             "type": "string"
           },
           "trained_at": {
@@ -18008,12 +18201,36 @@
       "RecommendOut": {
         "description": "推荐结果：全部服务组合按「更快达标」排好序，第一名带推荐标。",
         "properties": {
+          "compliance": {
+            "items": {
+              "$ref": "#/components/schemas/EffectiveComplianceOut"
+            },
+            "title": "Compliance",
+            "type": "array"
+          },
+          "effective_at": {
+            "anyOf": [
+              {
+                "format": "date-time",
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Effective At"
+          },
           "items": {
             "items": {
               "$ref": "#/components/schemas/RecommendEntryOut"
             },
             "title": "Items",
             "type": "array"
+          },
+          "timezone": {
+            "default": "Asia/Shanghai",
+            "title": "Timezone",
+            "type": "string"
           },
           "trained_at": {
             "format": "date-time",
@@ -20531,6 +20748,13 @@
       "StartupEpisodeOut": {
         "description": "一次开机事件。\n\n⚠ 被人工排除的事件仍然出现在列表里，只是带上排除标记——页面把它置灰保留\n而不是让它消失，否则人会以为自己排掉的那条从数据里没了。",
         "properties": {
+          "compliance": {
+            "items": {
+              "$ref": "#/components/schemas/EffectiveComplianceOut"
+            },
+            "title": "Compliance",
+            "type": "array"
+          },
           "complied_at": {
             "anyOf": [
               {
@@ -21979,6 +22203,28 @@
         "title": "Watermark",
         "type": "object"
       },
+      "WinterPeriodIn": {
+        "additionalProperties": false,
+        "description": "每年重复的月日区间，起止日均包含。",
+        "properties": {
+          "end": {
+            "pattern": "^\\d{2}-\\d{2}$",
+            "title": "End",
+            "type": "string"
+          },
+          "start": {
+            "pattern": "^\\d{2}-\\d{2}$",
+            "title": "Start",
+            "type": "string"
+          }
+        },
+        "required": [
+          "start",
+          "end"
+        ],
+        "title": "WinterPeriodIn",
+        "type": "object"
+      },
       "WorkshopCreateIn": {
         "additionalProperties": false,
         "description": "建车间。",
@@ -23115,6 +23361,100 @@
         "summary": "更新空调",
         "tags": [
           "ac-unit"
+        ]
+      }
+    },
+    "/api/v1/platform/ac-units/{ac_unit_id}/compliance-policies": {
+      "get": {
+        "operationId": "get_compliance_policy_api_v1_platform_ac_units__ac_unit_id__compliance_policies_get",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "ac_unit_id",
+            "required": true,
+            "schema": {
+              "format": "uuid",
+              "title": "Ac Unit Id",
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiResponse_CompliancePolicyOut_"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "季节达标配置",
+        "tags": [
+          "ac-data"
+        ]
+      },
+      "put": {
+        "operationId": "put_compliance_policy_api_v1_platform_ac_units__ac_unit_id__compliance_policies_put",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "ac_unit_id",
+            "required": true,
+            "schema": {
+              "format": "uuid",
+              "title": "Ac Unit Id",
+              "type": "string"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/CompliancePolicyIn"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiResponse_CompliancePolicyOut_"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "保存两季达标配置",
+        "tags": [
+          "ac-data"
         ]
       }
     },

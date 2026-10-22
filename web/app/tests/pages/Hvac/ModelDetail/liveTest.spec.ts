@@ -138,6 +138,7 @@ describe('打开即出结果', () => {
     await open()
     expect(hvac.getRoomLiveReadings).toHaveBeenCalledWith('r1')
     expect(hvac.recommendWithAcModel).toHaveBeenCalledWith('m1', {
+      at: '2026-08-12T03:00:00.000Z',
       readings: {
         K11: {
           workshop_temp_avg: 24.1,
@@ -224,6 +225,7 @@ describe('读数有问题', () => {
     expect(hvac.recommendWithAcModel).not.toHaveBeenCalled()
     await click('仍要按未知条件试算')
     expect(hvac.recommendWithAcModel).toHaveBeenCalledWith('m1', {
+      at: '2026-08-12T03:00:00.000Z',
       readings: {},
     })
   })
@@ -333,6 +335,7 @@ describe('微调与重算', () => {
     await typeNumber(4, '9')
     await click('按调整后条件重算')
     expect(hvac.recommendWithAcModel).toHaveBeenLastCalledWith('m1', {
+      at: '2026-08-12T03:00:00.000Z',
       readings: {
         K11: {
           workshop_temp_avg: 24.1,
@@ -361,6 +364,7 @@ describe('微调与重算', () => {
     await typeNumber(0, '26.5')
     await click('按调整后条件重算')
     expect(hvac.recommendWithAcModel).toHaveBeenLastCalledWith('m1', {
+      at: '2026-08-12T03:00:00.000Z',
       readings: {
         K11: {
           workshop_temp_avg: 26.5,

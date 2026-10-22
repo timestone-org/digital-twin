@@ -18,7 +18,13 @@ from platform_server.apps.hvac.models import (
     Room,
     Workshop,
 )
-from platform_server.apps.hvac.services.ac_startup_rules import ExtractionRules
+from platform_server.apps.hvac.services.ac_room_configuration import (
+    load_configuration,
+)
+from platform_server.apps.hvac.services.ac_startup_rules import (
+    LOGIC_VERSION,
+    ExtractionRules,
+)
 from platform_server.apps.hvac.startups import (
     BATCH_STATUS_READY,
     OUTCOME_SET_CHANGED,
@@ -68,10 +74,14 @@ async def make_batch(
 
     Args: session, room_id, is_current, fingerprint。
     """
+    configuration = await load_configuration(
+        session, room_id, timezone="Asia/Shanghai", rules=ExtractionRules()
+    )
     batch = AcStartupBatch(
         room_id=room_id,
-        params_fingerprint=fingerprint or ExtractionRules().fingerprint(),
-        logic_version=1,
+        params_fingerprint=fingerprint or configuration.fingerprint(),
+        configuration_snapshot=configuration.snapshot(),
+        logic_version=LOGIC_VERSION,
         window_start=at(0),
         window_end=at(1440),
         status=BATCH_STATUS_READY,

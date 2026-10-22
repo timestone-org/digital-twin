@@ -3,14 +3,24 @@
  * `ConfigState` 传进来，组合式函数那层只负责把 ref 建好，见 ./useAcDataConfig.ts。
  */
 import type { Ref } from 'vue'
-import type { AcDataBinding, AcDataset } from '@dt/contracts'
+import type {
+  AcDataBinding,
+  AcDataset,
+  AcCompliancePolicy,
+} from '@dt/contracts'
 
 import * as hvac from '@/api/hvac'
 import { describeError } from '@/composables/useAsyncList'
 import type { RacedFetch } from '@/composables/useRacedFetch'
-import { buildLimitRows, toLimitPayload, validateRows } from './acLimitForm'
+import { buildLimitRows } from './acLimitForm'
 import type { LimitRow } from './acLimitForm'
 import type { SourceObjects } from './useSourceObjects'
+import {
+  emptyWinter,
+  seasonalPayload,
+  validateSeasonalLimits,
+  type WinterDraft,
+} from './seasonalLimitForm'
 
 export interface ConfigState {
   acUnitId: () => string
@@ -19,6 +29,9 @@ export interface ConfigState {
   bindings: Ref<AcDataBinding[]>
   sourceObject: Ref<string>
   rows: Ref<LimitRow[]>
+  winter: Ref<WinterDraft>
+  effectiveSeason: Ref<string>
+  loadedUnitId: Ref<string>
   loading: Ref<boolean>
   busy: Ref<boolean>
   failure: Ref<string | null>
@@ -40,18 +53,24 @@ export async function load(state: ConfigState): Promise<void> {
   state.loading.value = true
   state.failure.value = null
   const id = state.acUnitId()
+  state.loadedUnitId.value = ''
+  state.rows.value = []
+  state.busy.value = false
+  state.winter.value = emptyWinter()
+  state.effectiveSeason.value = ''
   await state.snapshot.run(
     async () =>
       await Promise.all([
         hvac.listAcDatasets(),
         hvac.listAcDataBindings(id),
-        hvac.listAcMetricLimits(id),
+        hvac.getAcCompliancePolicy(id),
       ]),
     {
       ok: ([catalog, bound, limits]) => {
         state.datasets.value = catalog
         state.bindings.value = bound
-        state.rows.value = buildLimitRows(catalog, limits)
+        applyPolicy(state, limits)
+        state.loadedUnitId.value = id
         state.datasetKey.value = catalog[0]?.key ?? ''
         state.sourceObject.value = boundObjectOf(state)
       },
@@ -76,16 +95,17 @@ async function write(
   state: ConfigState,
   task: () => Promise<unknown>,
 ): Promise<boolean> {
+  const id = state.acUnitId()
   state.busy.value = true
   state.failure.value = null
   try {
     await task()
-    return true
+    return state.acUnitId() === id
   } catch (caught) {
-    state.failure.value = describeError(caught)
+    if (state.acUnitId() === id) state.failure.value = describeError(caught)
     return false
   } finally {
-    state.busy.value = false
+    if (state.acUnitId() === id) state.busy.value = false
   }
 }
 
@@ -117,16 +137,28 @@ export async function removeBinding(state: ConfigState): Promise<boolean> {
 
 /** ⚠ 提交的是**全部**可配指标：PUT 覆盖式，漏掉一项等于把它删了。 */
 export async function saveLimits(state: ConfigState): Promise<boolean> {
-  const invalid = validateRows(state.rows.value)
+  if (state.loadedUnitId.value !== state.acUnitId()) return false
+  const invalid = validateSeasonalLimits(state.rows.value, state.winter.value)
   if (invalid !== null) {
     state.failure.value = invalid
     return false
   }
+  const id = state.acUnitId()
+  const payload = seasonalPayload(state.rows.value, state.winter.value)
   return await write(state, async () => {
-    const saved = await hvac.putAcMetricLimits(
-      state.acUnitId(),
-      toLimitPayload(state.rows.value),
-    )
-    state.rows.value = buildLimitRows(state.datasets.value, saved)
+    const saved = await hvac.putAcCompliancePolicy(id, payload)
+    if (state.acUnitId() === id) applyPolicy(state, saved)
   })
+}
+
+function applyPolicy(state: ConfigState, saved: AcCompliancePolicy): void {
+  state.rows.value = buildLimitRows(state.datasets.value, saved.non_winter)
+  state.winter.value = {
+    isEnabled: saved.winter_period !== null,
+    start: saved.winter_period?.start ?? '',
+    end: saved.winter_period?.end ?? '',
+    rows: buildLimitRows(state.datasets.value, saved.winter),
+  }
+  state.effectiveSeason.value =
+    saved.effective_season === 'winter' ? '冬季' : '非冬季'
 }

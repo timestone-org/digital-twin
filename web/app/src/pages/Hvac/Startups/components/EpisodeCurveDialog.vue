@@ -7,6 +7,8 @@ import type { AcUnit, DtSegmentedOption } from '@dt/contracts'
 import { DtLineChart, DtModal, DtNotice, DtSegmented } from '@dt/ui'
 import type { DtChartSeries } from '@dt/ui'
 
+import ComplianceSummary from '@/features/hvac/ComplianceSummary.vue'
+
 import type { EpisodeRow } from '../scripts/startupView'
 
 defineProps<{
@@ -37,6 +39,7 @@ const emit = defineEmits<{
     @update:model-value="emit('update:modelValue', $event)"
   >
     <div class="flex flex-col gap-3">
+      <ComplianceSummary :items="row?.episode.compliance ?? []" />
       <DtSegmented
         v-if="options.length > 1"
         :model-value="serial"

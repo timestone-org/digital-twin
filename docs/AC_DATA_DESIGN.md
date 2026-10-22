@@ -334,3 +334,9 @@ ORDER BY bucket_ts ASC
 - **不在图表上体现达标范围**，只存不画。
 - **不导入 `KTInfo` 的空调清单**：我们的台账是我们自己的，`KTInfo` 只在绑定下拉框里
   提供一个 `caption` 帮人认位置。
+
+## 季节达标配置（北京烟厂分支）
+
+每台空调独立配置年度冬季月日区间，起止日均包含，支持跨年和闰日。按显式业务时区判定；闰日边界按月日比较，平年不生成不存在的日期。未配置冬季时全年沿用非冬季范围。启用冬季必须完整提供两季的温度、湿度上下限；保留未启用季节时单边为空表示不限的兼容语义。
+
+`GET/PUT /api/v1/platform/ac-units/{id}/compliance-policies` 读写 `winter_period: {start: MM-DD, end: MM-DD} | null`、`non_winter` 与 `winter` 范围数组。日期和两季范围原子保存；出参增加服务端的 `effective_season`、`effective_at` 和 `timezone`。非冬季值保留在原达标范围表，冬季配置存空调的可空、经过 schema 校验的 JSONB。旧 metric-limits 写入口在启用冬季后拒绝写入，避免旧客户端静默覆盖完整配置。前端新增类型由 OpenAPI 生成。

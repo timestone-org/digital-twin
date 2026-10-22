@@ -103,6 +103,9 @@ async function runRecommend(
   state.recommendProblem.value = null
   const body = {
     readings,
+    ...(state.readings.value === null
+      ? {}
+      : { at: state.readings.value.as_of }),
     ...(idle === undefined ? {} : { idle_minutes: idle }),
   }
   await fetcher.run(() => hvac.recommendWithAcModel(found.id, body), {

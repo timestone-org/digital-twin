@@ -32,6 +32,24 @@ class RoomCrud(CrudBase[Room]):
     def __init__(self) -> None:
         super().__init__(Room)
 
+    async def lock_configuration(
+        self,
+        session: AsyncSession,
+        room_ids: frozenset[uuid.UUID],
+        *,
+        should_share: bool = False,
+    ) -> None:
+        """按固定顺序锁定房间配置边界。
+
+        Args: session, room_ids, should_share。"""
+        if room_ids:
+            await session.execute(
+                select(Room.id)
+                .where(Room.id.in_(room_ids))
+                .order_by(Room.id)
+                .with_for_update(read=should_share)
+            )
+
     async def locations(
         self, session: AsyncSession, room_ids: frozenset[uuid.UUID]
     ) -> dict[uuid.UUID, RoomLocation]:

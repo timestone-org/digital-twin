@@ -22,6 +22,7 @@ import {
 } from '@dt/ui'
 
 import PermGuard from '@/components/PermGuard.vue'
+import ComplianceSummary from '@/features/hvac/ComplianceSummary.vue'
 import { liveTestNotices } from '@/features/hvac/liveTest'
 import { isModelBusy } from '@/features/hvac/modelView'
 import { formatTimeAt } from '@/utils/datetime'
@@ -105,6 +106,7 @@ function onEdit(
       </template>
 
       <template v-else>
+        <ComplianceSummary :items="live.result.value?.compliance ?? []" />
         <DtNotice
           v-for="notice in notices"
           :key="notice.id"

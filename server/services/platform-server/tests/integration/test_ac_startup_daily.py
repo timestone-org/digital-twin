@@ -28,6 +28,9 @@ from platform_server.apps.hvac.models import (
     Workshop,
 )
 from platform_server.apps.hvac.schemas import TimeWindow
+from platform_server.apps.hvac.services.ac_room_configuration import (
+    load_configuration,
+)
 from platform_server.apps.hvac.services.ac_source_reader import (
     AcSourceReader,
     SourceRow,
@@ -67,6 +70,10 @@ class StubReader(AcSourceReader):
     def __init__(self, rows: Sequence[SourceRow]) -> None:
         self.rows = list(rows)
         self.windows: list[tuple[datetime, datetime]] = []
+
+    @property
+    def timezone(self) -> str:
+        return "Asia/Shanghai"
 
     async def fetch_samples(
         self,
@@ -172,9 +179,13 @@ async def seed_batch(
     Args: session, room_id, fingerprint, logic_version。
     """
     bounds = day_bounds(DAY, SHANGHAI)
+    configuration = await load_configuration(
+        session, room_id, timezone=SHANGHAI, rules=RULES
+    )
     batch = AcStartupBatch(
         room_id=room_id,
-        params_fingerprint=fingerprint or RULES.fingerprint(),
+        params_fingerprint=fingerprint or configuration.fingerprint(),
+        configuration_snapshot=configuration.snapshot(),
         logic_version=(
             LOGIC_VERSION if logic_version is None else logic_version
         ),

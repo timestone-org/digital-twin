@@ -8,6 +8,8 @@
  */
 
 /** 车间的引用形态：只给指认它所需的最少字段。 */
+import type { AcEffectiveCompliance } from './hvacCompliance'
+
 export interface WorkshopRef {
   id: string
   name: string
@@ -236,6 +238,7 @@ export interface StartupEpisode {
   /** ⚠ 被排除的事件仍在列表里，只是置灰——消失会让人以为数据没了。 */
   is_excluded: boolean
   exclusion_reason: string | null
+  compliance?: AcEffectiveCompliance[]
 }
 
 export interface StartupBatch {
@@ -427,6 +430,9 @@ export interface ModelPredictResult {
   /** 真 = 组合专属子模型在答话；假 = 组合样本不足，房间共用模型兜底。 */
   is_dedicated: boolean
   trained_at: string
+  effective_at?: string | null
+  compliance?: AcEffectiveCompliance[]
+  timezone?: string
 }
 
 /** 推荐入参：同一个起始条件，让全部服务组合同台比，故不选组合。 */
@@ -455,6 +461,9 @@ export interface ModelRecommendEntry {
 export interface ModelRecommendResult {
   items: ModelRecommendEntry[]
   trained_at: string
+  effective_at?: string | null
+  compliance?: AcEffectiveCompliance[]
+  timezone?: string
 }
 
 /* 房间实时工况 —— 试算与推荐的当下入参 */

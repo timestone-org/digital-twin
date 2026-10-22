@@ -11,6 +11,7 @@ import { computed, watch } from 'vue'
 import type { AcUnit } from '@dt/contracts'
 import {
   DtButton,
+  DtCheckbox,
   DtInput,
   DtModal,
   DtNotice,
@@ -19,6 +20,8 @@ import {
   useConfirm,
   useToast,
 } from '@dt/ui'
+
+import AcLimitRanges from './AcLimitRanges.vue'
 
 import { implausibleWarnings } from '../scripts/acLimitForm'
 import { useAcDataConfig } from '../scripts/useAcDataConfig'
@@ -39,7 +42,16 @@ const title = computed(() =>
 )
 const hasDatasetChoice = computed(() => config.datasetOptions.value.length > 1)
 // 只提醒不拦截：范围是用户自己定的，但「看着不像这个量」值得说一声
-const warnings = computed(() => implausibleWarnings(config.rows.value))
+const warnings = computed(() => [
+  ...implausibleWarnings(config.rows.value).map(
+    (warning) => `非冬季：${warning}`,
+  ),
+  ...(config.winter.value.isEnabled
+    ? implausibleWarnings(config.winter.value.rows).map(
+        (warning) => `冬季：${warning}`,
+      )
+    : []),
+])
 
 // immediate 兼作初值：组件在「已经是打开态」时被挂载时，只监听变化的 watch 一次都不跑
 watch(
@@ -66,7 +78,7 @@ async function onRemoveBinding(): Promise<void> {
 }
 
 async function onSaveLimits(): Promise<void> {
-  if (await config.saveLimits()) toast.success('达标范围已保存')
+  if (await config.saveLimits()) toast.success('季节达标范围已保存')
 }
 </script>
 
@@ -129,40 +141,52 @@ async function onSaveLimits(): Promise<void> {
 
       <section class="flex flex-col gap-3">
         <h3 class="text-sm font-medium">达标范围</h3>
+        <DtCheckbox
+          v-model="config.winter.value.isEnabled"
+          :disabled="config.loading.value"
+          label="配置冬季时间"
+        />
         <p class="text-xs text-secondary">
-          留空表示该侧不限制。保存的是全部指标，清空即视为取消该项。
+          未配置冬季时间时，全年使用非冬季范围。日期按业务时区每年重复，起止日均包含，支持跨年。
         </p>
-        <!-- ⚠ 一行一个指标、名字只说一次，两个框摆成「下限 ～ 上限」的区间：
-           上一版是每个指标一个 2×2 的数字方阵，两条轴（指标 / 上下限）谁横谁竖
-           全靠标签区分，现场 17 台全部把两条轴读反了。区间式没有第二条轴可读反。 -->
-        <div
-          v-for="row in config.rows.value"
-          :key="row.metric"
-          class="flex flex-wrap items-end gap-2"
-        >
-          <span class="w-32 shrink-0 pb-2 text-xs text-text-primary">
-            {{ row.name }}（{{ row.unit }}）
-          </span>
+        <div v-if="config.winter.value.isEnabled" class="flex flex-wrap gap-3">
           <DtInput
-            v-model="row.lower"
-            class="w-24"
-            size="sm"
-            inputmode="decimal"
-            label="下限"
-            :aria-label="`${row.name}下限（${row.unit}）`"
-            placeholder="不限"
+            v-model="config.winter.value.start"
+            label="冬季开始（月-日）"
+            placeholder="11-15"
+            class="w-40"
           />
-          <span class="pb-2 text-text-disabled">～</span>
           <DtInput
-            v-model="row.upper"
-            class="w-24"
-            size="sm"
-            inputmode="decimal"
-            label="上限"
-            :aria-label="`${row.name}上限（${row.unit}）`"
-            placeholder="不限"
+            v-model="config.winter.value.end"
+            label="冬季结束（月-日）"
+            placeholder="03-15"
+            class="w-40"
           />
         </div>
+        <h4 class="text-sm font-medium">非冬季达标范围</h4>
+        <AcLimitRanges
+          :rows="config.rows.value"
+          season="非冬季"
+          @update:rows="config.rows.value = $event"
+        />
+        <template v-if="config.winter.value.isEnabled">
+          <h4 class="text-sm font-medium">冬季达标范围</h4>
+          <AcLimitRanges
+            :rows="config.winter.value.rows"
+            season="冬季"
+            @update:rows="config.winter.value.rows = $event"
+          />
+          <p class="text-xs text-secondary">
+            两季的温度、湿度上下限都必须填写。
+          </p>
+        </template>
+        <p v-else class="text-xs text-secondary">留空表示该侧不限制。</p>
+        <p v-if="config.effectiveSeason.value" class="text-xs text-secondary">
+          当前已保存的规则采用：{{ config.effectiveSeason.value }}
+        </p>
+        <DtNotice intent="info"
+          >修改日期或范围后，该房间需要重新抽取开机事件，再重新训练模型。</DtNotice
+        >
         <DtNotice v-for="text in warnings" :key="text" intent="warning">
           {{ text }}
         </DtNotice>
@@ -173,6 +197,7 @@ async function onSaveLimits(): Promise<void> {
           <DtButton
             size="sm"
             :loading="config.busy.value"
+            :disabled="config.loading.value"
             @click="onSaveLimits"
           >
             保存达标范围

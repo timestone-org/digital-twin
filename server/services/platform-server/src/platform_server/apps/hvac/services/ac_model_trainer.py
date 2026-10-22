@@ -51,9 +51,11 @@ from platform_server.apps.hvac.models import (
     AcStartupEpisode,
 )
 from platform_server.apps.hvac.rooms import RoomUnit
-from platform_server.apps.hvac.services.ac_startup_extract import (
-    load_bound_units,
+from platform_server.apps.hvac.services.ac_room_configuration import (
+    RoomConfiguration,
+    load_configuration,
 )
+from platform_server.apps.hvac.services.ac_startup_rules import ExtractionRules
 from platform_server.apps.hvac.startups import OUTCOME_USABLE
 
 _logger = get_logger("platform.hvac.ac_model_trainer")
@@ -84,6 +86,7 @@ class _Inputs:
     samples: list[EpisodeSample]
     units: list[RoomUnit]
     batch: AcStartupBatch
+    configuration: RoomConfiguration
 
 
 async def run_training(
@@ -110,7 +113,7 @@ async def run_training(
         room_id = model.room_id
     try:
         async with database.session() as session:
-            inputs = await _load_inputs(session, room_id)
+            inputs = await _load_inputs(session, room_id, timezone=timezone)
         trained = await _fit(
             executor,
             inputs,
@@ -128,11 +131,8 @@ async def run_training(
 def _log_curation(
     model_id: uuid.UUID, room_id: uuid.UUID, trained: TrainedModel
 ) -> None:
-    """甄别数出对不上的标签就报出来。
+    """记录事件标签与其季节范围不一致的计数。
 
-    ⚠ 这是批次过期目前唯一的迹象：达标范围与数据源绑定都不进批次指纹，改了
-    它们页面不会提醒重抽，可事件的标签当场就作废了。放宽范围造出前一个数、
-    收窄造出后一个，任一个不为零都该先去重算批次再训。
     Args: model_id, room_id, trained。
     """
     if not trained.contradictory_count and not trained.unexplained_zero_count:
@@ -148,7 +148,12 @@ def _log_curation(
     )
 
 
-async def _load_inputs(session: AsyncSession, room_id: uuid.UUID) -> _Inputs:
+async def _load_inputs(
+    session: AsyncSession,
+    room_id: uuid.UUID,
+    *,
+    timezone: str = "Asia/Shanghai",
+) -> _Inputs:
     """读出当前批次的可用事件（剔除人工排除）与房间机组。
 
     Args: session, room_id。
@@ -156,9 +161,19 @@ async def _load_inputs(session: AsyncSession, room_id: uuid.UUID) -> _Inputs:
     batch = await ac_startup_batch_crud.find_current(session, room_id)
     if batch is None:
         raise TrainingRejected("这个房间还没有抽取出来的当前批次，先去重算")
-    bound = await load_bound_units(session, room_id)
+    configuration = await load_configuration(
+        session, room_id, timezone=timezone, rules=ExtractionRules()
+    )
+    bound = configuration.units
     if not bound:
         raise TrainingRejected("这个房间没有一台空调绑定了数据源")
+    if (
+        batch.configuration_snapshot is None
+        or batch.params_fingerprint != configuration.fingerprint()
+    ):
+        raise TrainingRejected(
+            "达标范围、季节或数据配置已变更，请先全量重算开机事件"
+        )
     units = sorted((item.unit for item in bound), key=lambda unit: unit.serial)
     excluded = await ac_startup_exclusion_crud.map_by_room(session, room_id)
     episodes = await ac_startup_episode_crud.list_by_batch(session, batch.id)
@@ -167,7 +182,9 @@ async def _load_inputs(session: AsyncSession, room_id: uuid.UUID) -> _Inputs:
         for row in episodes
         if row.outcome == OUTCOME_USABLE and row.started_at not in excluded
     ]
-    return _Inputs(samples=samples, units=units, batch=batch)
+    return _Inputs(
+        samples=samples, units=units, batch=batch, configuration=configuration
+    )
 
 
 def _to_sample(row: AcStartupEpisode) -> EpisodeSample:
@@ -227,6 +244,17 @@ async def _persist(
     if model is None:
         # 训练期间被删了：产物无处可放，丢弃即可（级联已把从表清干净）
         return TrainRun(TRAIN_RUN_ORPHANED, reason="模型在训练期间被删除")
+    current = await load_configuration(
+        session,
+        model.room_id,
+        timezone=inputs.configuration.timezone,
+        rules=ExtractionRules(),
+        should_lock_units=True,
+    )
+    if current.fingerprint() != inputs.configuration.fingerprint():
+        model.status = MODEL_STATUS_FAILED
+        model.error = "训练期间季节或数据配置已变更，请重算并重训"
+        return TrainRun(TRAIN_RUN_FAILED, reason=model.error)
     metrics = summarize(trained.oof, model.serving_sets)
     await ac_model_artifact_crud.put(
         session,
@@ -241,19 +269,7 @@ async def _persist(
     await ac_model_prediction_crud.replace_all(
         session,
         model_id=model.id,
-        rows=[
-            AcModelPrediction(
-                model_id=model.id,
-                started_at=row.started_at,
-                running_set=list(row.running_set),
-                actual_minutes=row.actual_minutes,
-                p10=row.p10,
-                p50=row.p50,
-                p90=row.p90,
-                fold=row.fold,
-            )
-            for row in trained.oof
-        ],
+        rows=_prediction_rows(model.id, trained),
     )
     _snapshot(model, inputs, trained, metrics)
     return TrainRun(TRAIN_RUN_TRAINED)
@@ -269,6 +285,7 @@ def _snapshot(
 
     Args: model, inputs, trained, metrics。
     """
+    model.configuration_snapshot = inputs.configuration.snapshot()
     model.status = MODEL_STATUS_READY
     model.error = None
     model.trained_at = utcnow()
@@ -321,3 +338,21 @@ async def mark_failed(
     Args: database, model_id, reason。
     """
     await _mark_failed(database, model_id, reason=reason)
+
+
+def _prediction_rows(
+    model_id: uuid.UUID, trained: TrainedModel
+) -> list[AcModelPrediction]:
+    return [
+        AcModelPrediction(
+            model_id=model_id,
+            started_at=row.started_at,
+            running_set=list(row.running_set),
+            actual_minutes=row.actual_minutes,
+            p10=row.p10,
+            p50=row.p50,
+            p90=row.p90,
+            fold=row.fold,
+        )
+        for row in trained.oof
+    ]

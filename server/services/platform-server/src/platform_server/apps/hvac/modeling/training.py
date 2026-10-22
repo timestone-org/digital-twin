@@ -115,7 +115,7 @@ def train(
     Args: samples（可用事件）, units（serial 升序）, timezone,
     half_life_days, serving_sets（要出专属子模型的组合）。
     """
-    curated = curate(samples, units=units)
+    curated = curate(samples, units=units, timezone=timezone)
     if len(curated.kept) < MIN_SAMPLES:
         raise InsufficientSamples(len(curated.kept))
     prepared = _prepare(
