@@ -11,6 +11,7 @@ from pydantic import TypeAdapter
 from sqlalchemy import and_, select
 from sqlalchemy.ext.asyncio import AsyncSession
 
+from platform_server.apps.hvac.crud import room_crud
 from platform_server.apps.hvac.datasets import DATASET_RAW_MINUTE
 from platform_server.apps.hvac.models import (
     AcDataBinding,
@@ -161,11 +162,8 @@ async def _room_data(
     if not room_ids:
         return {}, {}
     if should_lock_units:
-        await session.execute(
-            select(AcUnit.id)
-            .where(AcUnit.room_id.in_(room_ids))
-            .order_by(AcUnit.id)
-            .with_for_update(read=True)
+        await room_crud.lock_configuration(
+            session, frozenset(room_ids), should_share=True
         )
     rows = (
         await session.execute(

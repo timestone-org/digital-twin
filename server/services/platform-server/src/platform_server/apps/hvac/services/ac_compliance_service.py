@@ -27,6 +27,7 @@ from platform_server.apps.hvac.schemas.ac_data import (
 )
 from platform_server.apps.hvac.seasons import WinterPeriod
 from platform_server.apps.hvac.services import ac_data_service
+from platform_server.apps.hvac.services.ac_configuration_guard import lock_unit
 
 _logger = get_logger("platform.hvac.compliance")
 
@@ -84,11 +85,7 @@ async def put_policy(
     """日期和两套范围在同一事务中保存。
 
     Args: session, unit_id, payload, timezone。"""
-    unit = await session.scalar(
-        select(AcUnit).where(AcUnit.id == unit_id).with_for_update()
-    )
-    if unit is None:
-        raise AcUnitNotFound("空调不存在")
+    unit = await lock_unit(session, unit_id)
     await ac_data_service.replace_metric_limits(
         session,
         ac_unit_id=unit_id,

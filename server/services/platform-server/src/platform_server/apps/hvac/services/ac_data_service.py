@@ -9,7 +9,6 @@ import uuid
 from decimal import Decimal
 from typing import Protocol
 
-from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from lib.errors import FieldError, ValidationFailed
@@ -38,7 +37,6 @@ from platform_server.apps.hvac.errors import (
 from platform_server.apps.hvac.models import (
     AcDataBinding,
     AcMetricLimit,
-    AcUnit,
 )
 from platform_server.apps.hvac.schemas import (
     AcDataBindingOut,
@@ -52,6 +50,7 @@ from platform_server.apps.hvac.schemas import (
     MetricLimitsPutIn,
     MetricOut,
 )
+from platform_server.apps.hvac.services.ac_configuration_guard import lock_unit
 
 _logger = get_logger("platform.hvac.ac_data")
 
@@ -179,6 +178,7 @@ async def put_binding(
     await ensure_source_object_matches(
         reader, source_object=source_object, dataset=spec
     )
+    await lock_unit(session, ac_unit_id)
     binding = await ac_data_binding_crud.find(session, ac_unit_id, dataset)
     if binding is None:
         binding = AcDataBinding(
@@ -206,7 +206,7 @@ async def delete_binding(
 
     Args: session, ac_unit_id, dataset。
     """
-    await _require_ac_unit(session, ac_unit_id)
+    await lock_unit(session, ac_unit_id)
     require_dataset(dataset)
     binding = await ac_data_binding_crud.find(session, ac_unit_id, dataset)
     if binding is None:
@@ -238,11 +238,7 @@ async def put_metric_limits(
     """非季节旧入口；启用季节后要求整体保存。
 
     Args: session, ac_unit_id, payload。"""
-    unit = await session.scalar(
-        select(AcUnit).where(AcUnit.id == ac_unit_id).with_for_update()
-    )
-    if unit is None:
-        raise AcUnitNotFound("空调不存在")
+    unit = await lock_unit(session, ac_unit_id)
     if unit.winter_policy is not None:
         raise ValidationFailed(
             "这台空调已启用冬季，请在季节达标配置中保存两套范围"
@@ -259,7 +255,7 @@ async def replace_metric_limits(
 
     Args: session, ac_unit_id, payload。
     """
-    await _require_ac_unit(session, ac_unit_id)
+    await lock_unit(session, ac_unit_id)
     wanted = _validated_limits(payload.items)
     existing = {
         row.metric: row

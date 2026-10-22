@@ -24,6 +24,10 @@ from platform_server.apps.hvac.schemas import (
     AcUnitUpdateIn,
     RoomRef,
 )
+from platform_server.apps.hvac.services.ac_configuration_guard import (
+    lock_unit,
+    lock_units,
+)
 from platform_server.apps.hvac.services.changes import given_changes
 from platform_server.apps.hvac.services.presenters import (
     location_to_workshop_ref,
@@ -83,6 +87,7 @@ async def create_ac_unit(
 
     Args: session, payload。
     """
+    await room_crud.lock_configuration(session, frozenset({payload.room_id}))
     location = await _require_location(session, payload.room_id)
     ac_unit = AcUnit(
         room_id=location.room_id, serial=payload.serial, name=payload.name
@@ -100,9 +105,15 @@ async def update_ac_unit(
 
     Args: session, ac_unit_id, payload。
     """
-    ac_unit = await _require_ac_unit(session, ac_unit_id)
     changes = given_changes(payload)
     target = changes.get("room_id")
+    ac_unit = (
+        await lock_units(
+            session,
+            frozenset({ac_unit_id}),
+            target_room_id=target if isinstance(target, uuid.UUID) else None,
+        )
+    )[0]
     if isinstance(target, uuid.UUID):
         await _require_location(session, target)
     ac_unit_crud.apply_changes(ac_unit, changes)
@@ -118,7 +129,7 @@ async def delete_ac_unit(
 
     Args: session, ac_unit_id。
     """
-    ac_unit = await _require_ac_unit(session, ac_unit_id)
+    ac_unit = await lock_unit(session, ac_unit_id)
     _logger.info("ac_unit_deleted", "空调已删除", ac_unit_id=str(ac_unit.id))
     await ac_unit_crud.delete(session, ac_unit)
 
@@ -132,11 +143,9 @@ async def relocate_ac_units(
     以为全部生效了。
     Args: session, payload。
     """
-    location = await _require_location(session, payload.room_id)
     requested = frozenset(payload.ac_unit_ids)
-    found = await ac_unit_crud.list_by_ids(session, requested)
-    if len(found) != len(requested):
-        raise AcUnitNotFound("有空调不存在，请刷新后重试")
+    found = await lock_units(session, requested, target_room_id=payload.room_id)
+    location = await _require_location(session, payload.room_id)
     moved = [item for item in found if item.room_id != location.room_id]
     for item in moved:
         item.room_id = location.room_id
