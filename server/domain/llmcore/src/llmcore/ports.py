@@ -17,6 +17,8 @@ from typing import Literal, Protocol, runtime_checkable
 
 from langchain_core.language_models import BaseChatModel
 
+from llmcore.embedding_snapshot import EmbeddingBatch
+
 # 对话用与看图用分两档：视觉模型的单价与延迟都高得多，混成一档等于每次
 # 对话都按视觉计费
 # ⚠ `summary` 单列一档不是为了换模型，是为了**换断路器**：折叠是后台性质的
@@ -117,6 +119,15 @@ class EmbeddingAdapter(Protocol):
     ⚠ 档位名（`id`）与维数都要如实报出去：它们是**要落库对账**的，
     换了嵌入模型而维数变了的话，旧条目与新条目算不出有意义的余弦。
     """
+
+    @property
+    def identity(self) -> str | None:
+        """当前向量空间的身份。"""
+        ...
+
+    async def embed_batch(self, texts: Sequence[str]) -> EmbeddingBatch:
+        """返回本次实际使用的身份与对应向量。"""
+        ...
 
     @property
     def id(self) -> str:

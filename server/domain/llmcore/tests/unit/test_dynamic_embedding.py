@@ -16,6 +16,7 @@ from llmcore import (
     ModelDisabled,
 )
 from llmcore.dynamic_embedding import OpenAiCompatEmbeddingAdapter
+from llmcore.embedding_snapshot import embedding_identity
 
 
 def _endpoint(model: str = "embed-1", key: str = "k1") -> EmbeddingEndpoint:
@@ -90,6 +91,28 @@ async def test_the_refresh_hook_runs_before_each_call(
     await made.embed(["乙"])
     assert switch.refreshed == 2
     assert inner.asked == [["甲"], ["乙"]]
+
+
+async def test_catalog_change_during_request_does_not_relabel_the_vectors(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    switch = _Switch(_endpoint())
+    made = DynamicEmbeddingAdapter(resolve=switch.resolve)
+
+    class SwitchingInner(_FakeInner):
+        async def embed(self, texts: list[str]) -> list[list[float]]:
+            switch.endpoint = _endpoint(model="embed-2")
+            return await super().embed(texts)
+
+    monkeypatch.setattr(
+        made, "_adapter_for", lambda _endpoint: SwitchingInner("embed-1")
+    )
+    batch = await made.embed_batch(["甲"])
+    assert batch.vectors == [[1.0, 0.0, 0.0]]
+    assert batch.identity == embedding_identity(
+        "https://endpoint/v1", "embed-1", 3, made.id
+    )
+    assert batch.identity != made.identity
 
 
 def test_the_client_is_reused_until_the_endpoint_changes() -> None:

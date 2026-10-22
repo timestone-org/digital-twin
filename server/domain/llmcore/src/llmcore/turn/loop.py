@@ -1,26 +1,6 @@
-"""一个回合的编排：模型 ↔ 工具，直到给出答复或停下来等浏览器。
+"""模型与工具的有界回合循环，产出按步骤持久化。
 
-图长这样：
-
-    START → think →（没有工具调用）──────────────────→ END
-                  →（有服务端工具）→ use_tools →（还有待办）→ END
-                                              →（没有待办）→ think
-                  →（只有客户端工具）─────────────────→ END
-
-⚠ **客户端工具不在这里执行**。它们要下发到浏览器、由编辑器改那份本地草稿
-（ADR-0023）。走到那一步回合就地结束，待办随 `TurnOutcome.pending` 交出去。
-
-⚠ 服务端与客户端工具混在同一批时，**服务端那几个先就地跑完**再交出去。否则
-浏览器回来时模型手上缺半批结果——它看到的是「我问了四件事，回来两件」，
-而那通常会让它把没答的重问一遍。
-
-⚠ 服务端工具失败也必须回一条工具消息。不回的话，模型那次调用永远没有答复，
-下一轮请求会被端点判成不合法——报出来的是一条与失败原因毫无关系的 400。
-
-⚠ `StateGraph.add_node` / `.add_conditional_edges` / `.compile` 在 langgraph
-当前版本上是「部分未知类型」，pyright strict 会红。压制**全部收在
-`_build_graph` 这一个函数里**：扩散出去之后，就没人知道到底有多少地方在跟这个
-库的类型缝隙打交道了。
+langgraph 的动态状态边界收敛在本文件，局部未知成员注解对应上游类型缝隙。
 """
 
 import asyncio
@@ -43,6 +23,7 @@ from llmcore import (
     ModelChoice,
 )
 from llmcore.deltas import text_of
+from llmcore.errors import ModelRejected
 from llmcore.memory.history import sized
 from llmcore.output.tool_text import format_tool_output
 from llmcore.textcalls import salvage
@@ -133,6 +114,8 @@ class TurnDeps:
     prepare_messages: (
         Callable[[Sequence[BaseMessage]], list[BaseMessage]] | None
     ) = None
+    measure_messages: Callable[[Sequence[BaseMessage]], int] | None = None
+    persist_partial: Callable[[TurnOutcome], Awaitable[None]] | None = None
 
 
 async def run_turn(deps: TurnDeps, messages: list[BaseMessage]) -> TurnOutcome:
@@ -150,13 +133,6 @@ async def stream_turn(
     deps: TurnDeps, messages: list[BaseMessage]
 ) -> AsyncIterator[TurnEvent]:
     """跑一个回合，**边跑边吐**：模型说的每一小块、走完的每一步，最后一个结果。
-
-    ⚠ 存在的理由只有一个：界面要在回合进行中就看见助手在动。等回合整个跑完
-    再一次性推，一次绑点要转十几秒的圈——而那期间助手一直在动，只是外面
-    看不见（ADR-0023 的第二条决策）。
-
-    ⚠ 增量与步骤走**同一条队列**。各走各的话，两侧的先后就由调度器决定，
-    而界面上会出现「先看见结论、再看见推导」这种读起来像是乱序的东西。
 
     Args: deps, messages。
     """
@@ -217,35 +193,32 @@ async def _walk(
 ) -> AsyncIterator[TurnStep | TurnOutcome]:
     """把图走一遍，每走完一步吐一步，最后吐一个结果。
 
-    ⚠ 取的是**整份状态**而不是增量：增量要在这里把两个规约（消息追加、
-    步骤追加）再实现一遍，而那份实现与图里那份一旦漂开，界面上会少一步或
-    多一步，且只在特定的工具组合下才复现。
-
     Args: deps, messages。
     """
     graph = _build_graph(deps)
     seed: TurnState = {"messages": messages, "steps": [], "pending": ()}
     seen = 0
     latest: dict[str, Any] = {}
-    async for state in graph.astream(  # type: ignore[reportUnknownMemberType]  # 理由：见文件头
-        seed, {"recursion_limit": deps.max_steps}, stream_mode="values"
-    ):
-        latest = dict(state)
-        steps = list(latest.get("steps") or [])
-        for step in steps[seen:]:
-            yield step
-        seen = len(steps)
+    try:
+        async for state in graph.astream(  # type: ignore[reportUnknownMemberType]  # 理由：见文件头
+            seed, {"recursion_limit": deps.max_steps}, stream_mode="values"
+        ):
+            latest = dict(state)
+            steps = list(latest.get("steps") or [])
+            for step in steps[seen:]:
+                yield step
+            seen = len(steps)
+    except Exception:
+        if latest and deps.persist_partial is not None:
+            await deps.persist_partial(
+                replace(_outcome(latest, len(messages)), pending=())
+            )
+        raise
     yield _outcome(latest, len(messages))
 
 
 def _as_event(item: TurnEvent | object) -> TurnEvent:
-    """队列里取出来的那一格收成事件。
-
-    ⚠ 收不成就抛：能进这条队列的只有三种东西加一个哨兵，多出第四种说明
-    上面某处漏了分支，而静默丢弃会让界面少一整段。
-
-    Args: item。
-    """
+    """校验队列中的事件类型；Args: item。"""
     if isinstance(item, TurnDelta | TurnStep | TurnOutcome):
         return item
     raise TypeError(f"回合里冒出了一个不认识的东西：{type(item).__name__}")
@@ -288,7 +261,9 @@ def _thinker(deps: TurnDeps) -> Callable[[TurnState], Awaitable[TurnUpdate]]:
         # ⚠ 没地方了这一轮就不发工具，捡回那一步也要跟着关：捡回来的调用照样
         # 会跑，于是「地方用完就收手」这条闸被绕开，上下文接着飘
         messages = _prepared(deps, state["messages"])
-        roomy = _has_room(deps, _used(messages, overhead))
+        roomy = _has_room(
+            deps, _used(messages, overhead, deps.measure_messages)
+        )
         answered = await deps.model.respond(
             choice=deps.choice,
             messages=messages,
@@ -371,16 +346,20 @@ def _tool_step(
         asked = _tool_calls(state["messages"])
         outputs: list[BaseMessage] = []
         steps: list[TurnStep] = []
-        used = _used(_prepared(deps, state["messages"]), overhead)
-        for call in asked:
-            if call.name in client_names:
-                continue
+        used = _used(
+            _prepared(deps, state["messages"]), overhead, deps.measure_messages
+        )
+        server_calls = [call for call in asked if call.name not in client_names]
+        _check_batch_room(deps, used, len(server_calls))
+        for index, call in enumerate(server_calls):
             message, step = await _run_one(
-                deps.run_tool, call, _room(deps, used)
+                deps.run_tool,
+                call,
+                _room(deps, used, len(server_calls) - index),
             )
             outputs.append(message)
             steps.append(step)
-            used += sized(message)
+            used += _used([message], 0, deps.measure_messages)
         # ⚠ 不回 `pending`：上一步定下来的待办要原样留着
         return {"messages": outputs, "steps": steps}
 
@@ -406,7 +385,10 @@ async def _run_one(
         reason = f"{type(error).__name__}: {error}"
         _logger.warning("server_tool_failed", "服务端工具失败", tool=call.name)
         return (
-            ToolMessage(content=f"失败：{reason}", tool_call_id=call.call_id),
+            ToolMessage(
+                content=_bounded_failure(reason, max_chars),
+                tool_call_id=call.call_id,
+            ),
             TurnStep(
                 kind="server_tool",
                 name=call.name,
@@ -455,20 +437,22 @@ def _overhead(schemas: Sequence[dict[str, Any]]) -> int:
     return len(json.dumps(schemas, ensure_ascii=False))
 
 
-def _used(messages: Sequence[BaseMessage], overhead: int) -> int:
+def _used(
+    messages: Sequence[BaseMessage],
+    overhead: int,
+    measure: Callable[[Sequence[BaseMessage]], int] | None = None,
+) -> int:
     """这一轮到此刻占了多少字，连工具声明一起。
 
     Args: messages, overhead。
     """
-    return overhead + sum(sized(one) for one in messages)
+    return overhead + (
+        measure(messages) if measure else sum(sized(one) for one in messages)
+    )
 
 
 def _has_room(deps: TurnDeps, used: int) -> bool:
     """还有地方再查一次吗。
-
-    ⚠ 没地方了就**不再下发工具**，让模型拿现有资料作答。继续下发的表现是它
-    接着查、每次只拿得到几百字、而上下文仍在往上飘——最后整个回合以一句
-    「模型端点认为请求不合法」告终，用户一个字都拿不到。少答几条总比不答好。
 
     Args: deps, used。
     """
@@ -477,22 +461,47 @@ def _has_room(deps: TurnDeps, used: int) -> bool:
     return used + MIN_TOOL_RESULT_CHARS < deps.max_context_chars
 
 
-def _room(deps: TurnDeps, used: int) -> int:
+def _room(deps: TurnDeps, used: int, remaining: int = 1) -> int:
     """这一次的工具产出还剩多少地方。
-
-    ⚠ 一个回合里连查三次是常事，而每一次都在单次上限之内——顶穿窗口的是**它们
-    加起来**。按剩余地方逐次收紧之后，后面几次拿到的越来越少，模型据此收手，
-    而不是整个回合以一句「模型端点认为请求不合法」告终。
-
-    ⚠ 地方不够时也留 `MIN_TOOL_RESULT_CHARS`：回一个空壳与回一句「已截断」在
-    模型眼里是两件事，前者会被读成「查过了，没有」。
 
     Args: deps, used（这一轮已经占掉多少字）。
     """
     if deps.max_context_chars <= 0:
         return deps.max_tool_result_chars
-    left = deps.max_context_chars - used
+    left = (deps.max_context_chars - used) // max(1, remaining)
+    if deps.measure_messages is not None:
+        left -= deps.measure_messages(
+            [ToolMessage(content="", tool_call_id="")]
+        )
     return max(MIN_TOOL_RESULT_CHARS, min(deps.max_tool_result_chars, left))
+
+
+def _check_batch_room(deps: TurnDeps, used: int, count: int) -> None:
+    if deps.max_context_chars <= 0 or deps.measure_messages is None:
+        return
+    framing = deps.measure_messages([ToolMessage(content="", tool_call_id="")])
+    if (
+        used + count * (MIN_TOOL_RESULT_CHARS + framing)
+        > deps.max_context_chars
+    ):
+        raise ModelRejected(
+            "本批工具调用超过结果预算，尚未执行；请减少并行调用数量"
+        )
+
+
+def _bounded_failure(reason: str, max_chars: int) -> str:
+    if len(reason) + 3 <= max_chars:
+        return f"失败：{reason}"
+    return json.dumps(
+        {
+            "ok": False,
+            "execution": "unknown",
+            "retryable": False,
+            "message": "工具失败，详细错误超过输入预算",
+            "next_action": "先读回核验；不要重复执行结果未知的写操作。",
+        },
+        ensure_ascii=False,
+    )
 
 
 def _after_think(state: TurnState) -> str:
@@ -582,12 +591,6 @@ def _outcome(final: dict[str, Any], seeded: int) -> TurnOutcome:
 
 def _last_text(messages: Sequence[BaseMessage]) -> str:
     """最后一条助手消息的文本。
-
-    ⚠ `content` 可能是**一串块**而不是一个字符串：带思考摘要的那几路
-    （Responses 方言）把摘要与正文分别放进 `reasoning` 与 `text` 块里。当成
-    字符串取的表现极难认——回合看着答完了，答案也确实流到了界面上（增量是
-    另一条路），只有**依赖 `reply` 的东西**静默失灵：知识库那边靠它扫角标出
-    引用，于是引用一条都不出，而日志里没有任何异常。
 
     Args: messages。
     """

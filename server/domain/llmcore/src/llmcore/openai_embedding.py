@@ -12,6 +12,7 @@ from dataclasses import dataclass
 
 from openai import AsyncOpenAI
 
+from llmcore.embedding_snapshot import EmbeddingBatch, embedding_identity
 from llmcore.endpoints import EmbeddingEndpoint
 
 # 这一路在能力面上的名字。⚠ 是线上契约的一部分：落库的 `embedding_model`
@@ -38,6 +39,16 @@ class OpenAiCompatEmbeddingAdapter:
     # 端点定死的这一路造出来就能用；动态那一路才会在运行期变成假
     is_ready: bool = True
 
+    @property
+    def identity(self) -> str:
+        return embedding_identity(
+            str(self.client.base_url), self.model, self.dimensions, self.id
+        )
+
+    async def embed_batch(self, texts: Sequence[str]) -> EmbeddingBatch:
+        identity = self.identity
+        return EmbeddingBatch(identity, await self.embed(texts))
+
     async def embed(self, texts: Sequence[str]) -> list[list[float]]:
         """把一批文本转成向量，顺序与入参一一对应。
 
@@ -47,6 +58,8 @@ class OpenAiCompatEmbeddingAdapter:
             model=self.model, input=list(texts)
         )
         made = [list(one.embedding) for one in answer.data]
+        if len(made) != len(texts):
+            raise EmbeddingShapeChanged("嵌入返回条数与输入不一致")
         wrong = next(
             (len(one) for one in made if len(one) != self.dimensions), None
         )
