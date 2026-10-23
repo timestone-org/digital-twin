@@ -17,6 +17,7 @@ from platform_server.apps.modeling.protocols import (
     RUN_STATUSES,
     RUN_TRIGGERS,
     SERVING_CHANNELS,
+    TRAINED_MODEL_TASKS,
     sql_values,
 )
 
@@ -63,8 +64,16 @@ def test_run_triggers_match() -> None:
 def test_model_tasks_match() -> None:
     """任务类型两侧相等。"""
     assert (
-        sql_values(MODEL_TASKS)
-        == _migration("*add_anomaly_model_task.py").MODEL_TASKS
+        sql_values(TRAINED_MODEL_TASKS)
+        == _migration("*add_rule_calculation_model_task.py").MODEL_TASKS
+    )
+
+
+def test_rule_task_is_isolated_from_legacy_version_table() -> None:
+    assert set(MODEL_TASKS) == {*TRAINED_MODEL_TASKS, "rule_calculation"}
+    assert (
+        _migration("*add_rule_calculation_model_task.py").RULE_TASK
+        == "rule_calculation"
     )
 
 

@@ -74,6 +74,32 @@ afterEach(() => {
 })
 
 describe('批量合并', () => {
+  it('自然日台账按绑定时区把 today 落成服务端可读的 UTC 边界', async () => {
+    await readDatasetSeries(
+      [
+        {
+          fieldKey: 'daily',
+          detail: {
+            datasetKey: 'ds:energy:kwh',
+            range: { lastWindow: 'today' },
+            timezone: 'Asia/Shanghai',
+          },
+        },
+      ],
+      undefined,
+      Date.parse('2026-10-23T16:15:00Z'),
+    )
+    expect(seriesMock).toHaveBeenCalledWith(
+      't-1',
+      ['kwh'],
+      {
+        since: '2026-10-23T16:00:00.000Z',
+        until: '2026-10-23T16:15:00.000Z',
+      },
+      undefined,
+    )
+  })
+
   it('同一张表同一段窗口的 3 列并成一次请求', async () => {
     const found = await readDatasetSeries(
       [

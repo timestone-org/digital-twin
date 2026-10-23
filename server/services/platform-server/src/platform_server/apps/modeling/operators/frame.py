@@ -46,6 +46,8 @@ class FrameColumn:
     # 取数时按列定义的类型转不动、只好当缺失的行数。⚠ 台账 values_json 里的
     # 类型不可信：写入路径的类型收敛只在 API 那一条上生效
     coerce_failed: int = 0
+    # 概率列的模型类目，升序末项是该列概率对应的类别
+    probability_classes: tuple[float, ...] = ()
 
 
 @dataclass(frozen=True)

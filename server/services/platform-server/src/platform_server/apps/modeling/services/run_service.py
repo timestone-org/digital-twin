@@ -8,7 +8,7 @@
 """
 
 import uuid
-from dataclasses import dataclass
+from dataclasses import dataclass, replace
 from datetime import datetime
 
 from sqlalchemy.ext.asyncio import AsyncSession
@@ -25,6 +25,7 @@ from platform_server.apps.modeling.errors import (
     RunNotFound,
 )
 from platform_server.apps.modeling.models import ModelingRun
+from platform_server.apps.modeling.operators import registry
 from platform_server.apps.modeling.protocols import ACTIVE_RUN_STATUSES
 from platform_server.apps.modeling.schemas import (
     NodeRunOut,
@@ -67,12 +68,16 @@ async def start_run(
     pipeline = await require_pipeline(session, pipeline_id)
     graph = presenters.graph_of(pipeline.graph_json)
     _require_valid(graph)
+    if any(node.operator == "energy_rules" for node in graph.nodes):
+        context = replace(
+            context, target=run_queue.rules_target(context.target)
+        )
     run = await run_crud.add_active(
         session,
         ModelingRun(
             pipeline_id=pipeline.id,
             status="pending",
-            graph_snapshot=graph.model_dump(),
+            graph_snapshot=_snapshot_of(graph),
             trigger=payload.trigger,
             is_keeping_frames=payload.is_keeping_frames,
             created_by=context.actor.user_id,
@@ -81,6 +86,21 @@ async def start_run(
     )
     _enqueue_after_commit(session, run.id, context)
     return await get_run(session, run.id)
+
+
+def _snapshot_of(graph: PipelineGraph) -> dict[str, object]:
+    """冻结校验后的实际生效参数；Args: graph。"""
+    nodes = [
+        node.model_copy(
+            update={
+                "config": registry.get(node.operator)
+                .CONFIG_MODEL.model_validate(node.config)
+                .model_dump(mode="json")
+            }
+        )
+        for node in graph.nodes
+    ]
+    return graph.model_copy(update={"nodes": nodes}).model_dump(mode="json")
 
 
 def _enqueue_after_commit(

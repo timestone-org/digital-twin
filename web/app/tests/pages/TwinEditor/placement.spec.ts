@@ -1,12 +1,17 @@
 /** @fileoverview 新建锚点与信息牌先拾取位置，取消无草稿，落点与归夹可整笔撤销。 */
-import type { DashboardPayload } from '@dt/contracts'
+import type { BindingPayload, DashboardPayload } from '@dt/contracts'
 import type * as ThreeCore from '@dt/three-core'
 import type { EditorSceneOptions } from '@dt/three-core'
-import { TWIN_CONFIG_KEY, type TwinConfig } from '@dt/twin-config'
+import {
+  TWIN_CONFIG_KEY,
+  normalizeTwinConfig,
+  type TwinConfig,
+} from '@dt/twin-config'
 import { enableAutoUnmount, flushPromises, mount } from '@vue/test-utils'
 import { createPinia, setActivePinia } from 'pinia'
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 import * as dashboardApi from '@/api/dashboard'
+import * as apiClient from '@/api/client'
 import type * as RealtimeChannel from '@/composables/useRealtimeChannel'
 import TwinEditor from '@/pages/TwinEditor/index.vue'
 import TwinLeftPane from '@/pages/TwinEditor/components/TwinLeftPane.vue'
@@ -86,8 +91,13 @@ function payload(config: Partial<TwinConfig>): DashboardPayload {
   }
 }
 
-async function setup(config: Partial<TwinConfig> = {}) {
-  vi.spyOn(dashboardApi, 'getDashboard').mockResolvedValue(payload(config))
+async function setup(
+  config: Partial<TwinConfig> = {},
+  bindings: BindingPayload[] = [],
+) {
+  const data = payload(config)
+  data.nodes[0]?.bindings.push(...bindings)
+  vi.spyOn(dashboardApi, 'getDashboard').mockResolvedValue(data)
   const wrapper = mount(TwinEditor, {
     global: {
       stubs: {
@@ -119,6 +129,58 @@ beforeEach(() => {
   vi.spyOn(Math, 'random').mockReturnValue(0.25)
 })
 afterEach(() => vi.restoreAllMocks())
+
+it('台账过期时主编辑视口明确提示，静态文案不再冒充实时台账', async () => {
+  const requestMock = vi
+    .fn()
+    .mockResolvedValueOnce({
+      items: [
+        {
+          id: 't1',
+          code: 'nyyh',
+          collect_mode: 'aggregate',
+          collect_interval_ms: 300000,
+        },
+      ],
+      page: 1,
+      size: 200,
+      total: 1,
+    })
+    .mockResolvedValueOnce({
+      ts: '2020-01-01T00:00:00Z',
+      values: {},
+      computed: { heat: 5 },
+    })
+  vi.spyOn(apiClient, 'requestData').mockImplementation(requestMock)
+  const { wrapper, viewport } = await setup(
+    normalizeTwinConfig({
+      panels: [
+        {
+          id: 'p1',
+          fields: [{ key: 'heat', label: '余热', staticText: '100' }],
+        },
+      ],
+    }),
+    [
+      {
+        id: 'b1',
+        nodeId: 'n1',
+        fieldKey: 'panelValues[0].value',
+        sourceKind: 'dataset',
+        nodeKey: null,
+        staticValueJson: null,
+        computeJson: null,
+        transformJson: null,
+        detailJson: { datasetKey: 'ds:nyyh:heat', range: {} },
+        createdAt: '',
+        updatedAt: '',
+      },
+    ],
+  )
+  expect(wrapper.text()).toContain('台账数据已过期，请检查台账采集与重算')
+  expect(wrapper.text()).toContain('静态文案不代表当前台账读数')
+  expect(viewport.props('values')?.panels).toEqual({})
+})
 
 describe.each([
   ['anchors', '锚点'],

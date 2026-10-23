@@ -12,6 +12,8 @@ import { computed } from 'vue'
 
 import {
   LEDGER_LIMITS,
+  columnCountText,
+  columnListCut,
   columnsSummary,
   degradedReasonOf,
   dtypesOf,
@@ -39,38 +41,34 @@ interface NameList {
   readonly cut: string
 }
 
-// ⚠ 只说「列到上限」不说「共 M 列」：payload 不带原始总数，M 只能编
-function cutOf(names: readonly string[]): string {
-  return names.length >= LEDGER_LIMITS.names
-    ? `名单已经列到上限 ${LEDGER_LIMITS.names} 个，后面的列名没有带出来`
-    : ''
-}
-
 function listOf(
   kind: string,
   label: string,
   names: readonly string[],
+  total: number | null,
 ): NameList {
   return {
     kind,
-    label: `${label} ${names.length} 列`,
+    label: `${label} ${columnCountText(total, names.length, LEDGER_LIMITS.names)} 列`,
     names,
     isOpen: names.length <= OPEN_UNDER,
-    cut: cutOf(names),
+    cut: columnListCut(total, names.length, LEDGER_LIMITS.names),
   }
 }
 
 const lists = computed<NameList[]>(() =>
   [
-    listOf('added', '新增', change.value.added),
-    listOf('removed', '移除', change.value.removed),
+    listOf('added', '新增', change.value.added, change.value.addedTotal),
+    listOf('removed', '移除', change.value.removed, change.value.removedTotal),
   ].filter((one) => one.names.length > 0),
 )
 
 const dtypeCut = computed(() =>
-  dtypes.value.length >= LEDGER_LIMITS.dtypes
-    ? `类型对照已经列到上限 ${LEDGER_LIMITS.dtypes} 列，后面的没有带出来`
-    : '',
+  columnListCut(
+    change.value.dtypeBeforeTotal,
+    dtypes.value.length,
+    LEDGER_LIMITS.dtypes,
+  ),
 )
 </script>
 

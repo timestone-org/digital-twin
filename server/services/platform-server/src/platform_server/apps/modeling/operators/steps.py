@@ -223,18 +223,22 @@ def dtype_changes(
     before: Mapping[str, str],
     after: Mapping[str, str],
     *,
-    limit: int = MAX_DTYPE_BEFORE,
+    limit: int | None = MAX_DTYPE_BEFORE,
 ) -> list[dict[str, Any]]:
     """逐列的类型前后对照，只列真的换过的那几列。
 
-    Args: before, after, limit。
+    Args: before, after, limit（None 交由块构造器截断）。
     """
     changed = [
         {"key": key, "before": kind, "after": after[key]}
         for key, kind in before.items()
         if key in after and after[key] != kind
     ]
-    return changed[: max(0, min(limit, MAX_DTYPE_BEFORE))]
+    return (
+        changed
+        if limit is None
+        else changed[: max(0, min(limit, MAX_DTYPE_BEFORE))]
+    )
 
 
 def ratio_of(part: int, whole: int) -> float | None:

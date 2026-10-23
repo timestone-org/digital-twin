@@ -64,6 +64,9 @@ function statusInputOf(
       input.bindings(),
     ),
     tally: values.tally,
+    hasStaleData: Object.values(values.slots).some(
+      (slot) => slot.isStale === true,
+    ),
     ...(connection === undefined ? {} : { connectionState: connection }),
   }
 }

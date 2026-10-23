@@ -8,6 +8,7 @@
 import { mount } from '@vue/test-utils'
 import { describe, expect, it } from 'vitest'
 
+import FrameDownloadButton from '@/pages/Modeling/Canvas/components/FrameDownloadButton.vue'
 import ResultView from '@/pages/Modeling/Canvas/components/ResultView.vue'
 
 const MODEL_BODY = {
@@ -49,6 +50,44 @@ const FRAME_BODY = {
 const FRAME = { frame: FRAME_BODY }
 
 describe('结果视图按 kind 派发', () => {
+  it('规则模型说明封存状态并保留完整嵌套参数', () => {
+    const wrapper = mount(ResultView, {
+      props: {
+        payload: {
+          model: {
+            ...MODEL_BODY,
+            task: 'rule_calculation',
+            target_key: null,
+            hyper_params: {
+              kind: 'unit_consumption',
+              fields: { energy: '能耗' },
+            },
+            fitted: { config: { kind: 'unit_consumption' } },
+          },
+        },
+      },
+    })
+    expect(wrapper.text()).toContain('可部署：业务规则已封存')
+    expect(wrapper.text()).toContain('规则计算')
+    expect(wrapper.text()).toContain('能耗')
+    expect(wrapper.text()).not.toContain('[object Object]')
+  })
+  it('规则尚未生成时不使用训练模型提示', () => {
+    const wrapper = mount(ResultView, {
+      props: {
+        payload: {
+          model: {
+            ...MODEL_BODY,
+            task: 'rule_calculation',
+            fitted: {},
+          },
+        },
+      },
+    })
+    expect(wrapper.text()).toContain('尚未生成规则模型')
+    expect(wrapper.text()).not.toContain('还没有训练出模型')
+    expect(wrapper.text()).not.toContain('业务规则已封存')
+  })
   it('帧：形状与截断都写在页面上', () => {
     const wrapper = mount(ResultView, { props: { payload: FRAME } })
 
@@ -454,7 +493,7 @@ describe('前若干行那张表', () => {
 })
 
 describe('全量结果的下载入口', () => {
-  it('留过的端口才摆下载链接', () => {
+  it('留过的端口才摆认证下载按钮', () => {
     const wrapper = mount(ResultView, {
       props: {
         payload: FRAME,
@@ -464,10 +503,13 @@ describe('全量结果的下载入口', () => {
       },
     })
 
-    const link = wrapper.find('a[download]')
-    expect(link.exists()).toBe(true)
-    expect(link.attributes('href')).toContain('/modeling-runs/r1/frames/n1')
-    expect(link.attributes('href')).toContain('port=frame')
+    const button = wrapper.findComponent(FrameDownloadButton)
+    expect(button.find('button').exists()).toBe(true)
+    expect(button.props('target')).toEqual({
+      runId: 'r1',
+      nodeId: 'n1',
+      port: 'frame',
+    })
   })
 
   it('没留过就一个链接都不摆', () => {
@@ -480,7 +522,7 @@ describe('全量结果的下载入口', () => {
       },
     })
 
-    expect(wrapper.find('a[download]').exists()).toBe(false)
+    expect(wrapper.findComponent(FrameDownloadButton).exists()).toBe(false)
   })
 
   it('不知道是哪次运行时也不摆——地址拼不出来', () => {
@@ -488,6 +530,6 @@ describe('全量结果的下载入口', () => {
       props: { payload: FRAME, exportedPorts: ['frame'] },
     })
 
-    expect(wrapper.find('a[download]').exists()).toBe(false)
+    expect(wrapper.findComponent(FrameDownloadButton).exists()).toBe(false)
   })
 })

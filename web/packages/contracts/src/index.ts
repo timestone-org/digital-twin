@@ -616,6 +616,10 @@ export type {
   AnomalyDecision,
   OpenModelDetect,
   OpenModelDetectRequest,
+  ModelingJsonValue,
+  OpenModelCalculateRequest,
+  OpenModelCalculate,
+  ModelingVersionUpdateInput,
 } from './modelingDetection'
 
 export type * from './hierarchy'

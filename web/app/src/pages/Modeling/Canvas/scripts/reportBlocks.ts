@@ -187,18 +187,29 @@ export function rowsOf(payload: Item): RowCounts {
 /** 列的去向：多出来的是谁造的、少掉的是谁删的。 */
 export interface ColumnChange {
   added: string[]
+  addedTotal: number | null
   removed: string[]
+  removedTotal: number | null
   kept: number
   dtypeBefore: Item[]
+  dtypeBeforeTotal: number | null
   reason: string
+}
+
+function columnTotal(value: unknown): number | null {
+  const count = asNumber(value)
+  return count !== null && Number.isInteger(count) && count >= 0 ? count : null
 }
 
 export function columnsOf(payload: Item): ColumnChange {
   return {
     added: asTexts(payload['added']),
+    addedTotal: columnTotal(payload['added_total']),
     removed: asTexts(payload['removed']),
+    removedTotal: columnTotal(payload['removed_total']),
     kept: asCount(payload['kept']),
     dtypeBefore: asItems(payload['dtype_before']),
+    dtypeBeforeTotal: columnTotal(payload['dtype_before_total']),
     reason: asText(payload['reason']),
   }
 }

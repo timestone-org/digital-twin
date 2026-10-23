@@ -37,9 +37,17 @@ RunTrigger = Literal["api", "manual"]
 RUN_TRIGGERS: tuple[str, ...] = tuple(sorted(get_args(RunTrigger)))
 
 # 建模任务类型，决定评估指标用哪一套
-ModelTask = Literal["anomaly_detection", "classification", "regression"]
+ModelTask = Literal[
+    "anomaly_detection", "classification", "regression", "rule_calculation"
+]
 
 MODEL_TASKS: tuple[str, ...] = tuple(sorted(get_args(ModelTask)))
+
+TRAINED_MODEL_TASKS: tuple[str, ...] = (
+    "anomaly_detection",
+    "classification",
+    "regression",
+)
 
 # 拟合参数怎么带到推理侧：json = 纯数据表达，binary = 二进制产物（D9）。
 # ⚠ 与 operators/base.py 的同名集合必须同集合：算子登记期按它判自己走哪条

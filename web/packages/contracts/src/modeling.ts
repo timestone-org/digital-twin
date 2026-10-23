@@ -234,6 +234,7 @@ export const MODELING_TASKS = [
   'regression',
   'classification',
   'anomaly_detection',
+  'rule_calculation',
 ] as const
 export type ModelingTask = (typeof MODELING_TASKS)[number]
 

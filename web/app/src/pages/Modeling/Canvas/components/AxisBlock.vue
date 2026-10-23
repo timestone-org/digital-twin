@@ -165,7 +165,12 @@ const coverRow = computed<TimelineRow | null>(() => {
   if (cursor < until) {
     made.push({ since: cursor, until, label: '有数据', tone: 'primary' })
   }
-  return { name: '实际覆盖', segments: made, showGaps: true }
+  return {
+    name: '实际覆盖',
+    segments: made,
+    showGaps: true,
+    coverageBounds: { low: since, high: until },
+  }
 })
 
 const requested = computed(() =>
@@ -182,6 +187,16 @@ const span = computed<{ low: number; high: number } | null>(() => {
   const lows = found.map((one) => one.since ?? 0)
   const highs = found.map((one) => one.until ?? 0)
   return { low: Math.min(...lows), high: Math.max(...highs) }
+})
+
+const boundaryFacts = computed<string[]>(() => {
+  const asked = span.value
+  const since = sinceMs.value
+  const until = untilMs.value
+  if (asked === null || since === null || until === null) return []
+  return asked.low < since || asked.high > until
+    ? ['请求区间超出实际样本时段的部分未覆盖，不计为样本间断档。']
+    : []
 })
 
 function laid(found: readonly SegmentRead[]): TimelineSegment[] {
@@ -352,6 +367,7 @@ const facts = computed<string[]>(() => {
   }
   const asked = span.value
   if (asked !== null) made.push(askedFact(asked, sinceMs.value))
+  made.push(...boundaryFacts.value)
   const gapped = gapFact(gaps.value.length, missing.value, occupancy.length > 0)
   if (gapped !== '') made.push(gapped)
   if (occupancy.length > 0) {

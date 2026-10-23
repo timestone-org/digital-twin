@@ -368,7 +368,7 @@ def _columns_block(aligned: _Aligned, config: LedgerJoinConfig) -> ReportBlock:
             added=tuple(
                 f"{prefix}{column.key}" for column in aligned.right.columns
             ),
-            kept=len(aligned.left.columns),
+            kept=len(aligned.left.columns) + len(aligned.right.columns),
             reason=f"右边每一列都加前缀「{prefix}」，同名列不会互相盖掉",
         ),
     )

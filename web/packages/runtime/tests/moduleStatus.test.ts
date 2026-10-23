@@ -70,6 +70,15 @@ describe('必绑槽的缺口', () => {
 })
 
 describe('状态阶梯', () => {
+  it('按需读取已过期时保留值并标 stale，不依赖实时通道是否连接', () => {
+    expect(
+      computeModuleStatus({
+        unboundRequiredCount: 0,
+        tally: tally({ bound: 1, ok: 1 }),
+        hasStaleData: true,
+      }),
+    ).toBe('stale')
+  })
   it('没有绑定的模块是正常态', () => {
     expect(
       computeModuleStatus({ unboundRequiredCount: 0, tally: EMPTY_TALLY }),

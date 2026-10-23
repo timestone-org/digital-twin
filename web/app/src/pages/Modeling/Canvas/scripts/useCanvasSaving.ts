@@ -78,6 +78,7 @@ export function useCanvasSaving(
   page: ReturnType<typeof useCanvasPage>,
   pipelineId: () => string,
   isKeepingFrames: () => boolean,
+  blockReason: () => string = () => '',
 ) {
   const toast = useToast()
   const isPreparingRun = ref(false)
@@ -85,6 +86,10 @@ export function useCanvasSaving(
 
   /** 存图后校验同一快照；失败不运行，也不清掉后续草稿。 */
   async function run(): Promise<void> {
+    if (blockReason()) {
+      toast.warning(blockReason())
+      return
+    }
     if (page.doc.isSaving.value || isPreparingRun.value) return
     const token = lifecycle.token()
     const id = pipelineId()
@@ -106,6 +111,10 @@ export function useCanvasSaving(
   return {
     isPreparingRun,
     save: () => {
+      if (blockReason()) {
+        toast.warning(blockReason())
+        return Promise.resolve()
+      }
       if (isPreparingRun.value) return Promise.resolve()
       const token = lifecycle.token()
       const id = pipelineId()

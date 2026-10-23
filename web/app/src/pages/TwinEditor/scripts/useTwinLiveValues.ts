@@ -20,6 +20,7 @@ import { computed, type ComputedRef } from 'vue'
 
 import { installDashboardDataSources } from '@/bootstrap/dashboard'
 import { usePointSamples } from '@/composables/usePointSamples'
+import { useDatasetLatestValues } from '@/composables/useDatasetLatestValues'
 import { useRealtimeChannel } from '@/composables/useRealtimeChannel'
 import { boundPointKeysOf } from '@/features/dashboard/editorDoc'
 import { createBindingReader } from '@/runtime/bindingReader'
@@ -69,16 +70,14 @@ export function useTwinLiveValues(
     () => boundPointKeysOf(bindings()),
     dashboardId,
   )
+  const readDataset = useDatasetLatestValues(bindings, dashboardId)
 
   const readBinding = (): BindingValueReader => {
-    const read = createBindingReader(samples.read)
+    const read = createBindingReader(samples.read, readDataset)
     const disconnected =
       channel.connectionState?.value !== undefined &&
       channel.connectionState.value !== 'open'
-    return (binding, siblings) =>
-      binding.sourceKind === 'opcua' && disconnected
-        ? { state: 'error', message: '实时连接已断开，数据可能过期' }
-        : read(binding, siblings)
+    return guardEditorReading(read, disconnected)
   }
 
   // ⚠ 在 computed 里调用读取器：对快照缓存的响应式依赖由这次调用建立
@@ -99,4 +98,23 @@ export function useTwinLiveValues(
   })
 
   return { scene, readBinding, read: samples.read }
+}
+
+/** 编辑视口不携带逐槽元数据，陈旧读数必须显式失效。 */
+function guardEditorReading(
+  read: BindingValueReader,
+  disconnected: boolean,
+): BindingValueReader {
+  return (binding, siblings) => {
+    if (binding.sourceKind === 'opcua' && disconnected)
+      return { state: 'error', message: '实时连接已断开，数据可能过期' }
+    const slot = read(binding, siblings)
+    if (
+      binding.sourceKind === 'dataset' &&
+      slot.state === 'ok' &&
+      slot.isStale === true
+    )
+      return { state: 'error', message: '台账数据已过期，请检查台账采集与重算' }
+    return slot
+  }
 }

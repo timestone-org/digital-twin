@@ -23,6 +23,8 @@ const props = defineProps<{
   /** 没有候选时要显示的那句人话。 */
   note: string
   isReadonly: boolean
+  error?: string | undefined
+  isRequired?: boolean | undefined
 }>()
 
 const emit = defineEmits<{ 'update:modelValue': [value: string[]] }>()
@@ -64,10 +66,11 @@ function toggle(key: string, isOn: boolean): void {
 }
 
 function pickAll(): void {
-  emit(
-    'update:modelValue',
-    matched.value.map((item) => item.key),
-  )
+  const selected = new Set([
+    ...props.modelValue,
+    ...matched.value.map((item) => item.key),
+  ])
+  emit('update:modelValue', ordered(selected))
 }
 
 /** 只丢掉上游没有的那几列，已勾的正常列原样留着。 */
@@ -80,7 +83,12 @@ function dropStrays(): void {
 </script>
 
 <template>
-  <DtField :label="props.label" :hint="props.hint">
+  <DtField
+    :label="props.label"
+    :hint="props.hint"
+    :error="props.error"
+    :required="props.isRequired"
+  >
     <p
       v-if="props.columns.length === 0 && strays.length === 0"
       class="dt-ml-cols__note"
@@ -103,7 +111,7 @@ function dropStrays(): void {
           :disabled="props.isReadonly"
           @click="pickAll"
         >
-          全选
+          {{ keyword.trim() ? '全选筛选结果' : '全选' }}
         </button>
         <button
           type="button"
@@ -142,9 +150,7 @@ function dropStrays(): void {
           @update:model-value="toggle(key, $event)"
         />
       </div>
-      <p class="dt-ml-cols__note">
-        已选 {{ props.modelValue.length }} 列，留空表示取全部列
-      </p>
+      <p class="dt-ml-cols__note">已选 {{ props.modelValue.length }} 列</p>
     </template>
   </DtField>
 </template>

@@ -33,6 +33,32 @@ const TWIN = {
 }
 
 describe('部件状态效果的独立输入', () => {
+  it('新鲜台账效果带采样时间但不依赖实时通道', async () => {
+    const wrapper = mount(Component, {
+      props: {
+        config: {
+          twin: { parts: [{ id: 'ledger', effect: { enabled: true } }] },
+        },
+        values: { partEffectValues: [{ value: 1 }] },
+        meta: {
+          connectionState: 'closed',
+          slots: {
+            'partEffectValues[0].value': {
+              state: 'ok',
+              timestampMs: 10,
+              dependsOnRealtime: false,
+            },
+          },
+        },
+      },
+    })
+    await flushPromises()
+    expect(wrapper.getComponent(scene.TwinScene).props('values')).toMatchObject(
+      {
+        effectParts: { ledger: { value: 1 } },
+      },
+    )
+  })
   it('实时连接断开时失效采样值，保留明确的常量值', async () => {
     const wrapper = mount(Component, {
       props: {

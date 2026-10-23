@@ -36,6 +36,7 @@ from platform_server.apps.modeling.operators.diagnostics import (
     FeatureImportance,
     ResidualAnalysis,
 )
+from platform_server.apps.modeling.operators.energy_rules import EnergyRules
 from platform_server.apps.modeling.operators.evaluate import (
     ClassificationMetrics,
     RegressionMetrics,
@@ -165,6 +166,7 @@ __all__ = [
     "CrossValidate",
     "CyclicTime",
     "DropMissing",
+    "EnergyRules",
     "FeatureImportance",
     "FillMissing",
     "FilterRows",

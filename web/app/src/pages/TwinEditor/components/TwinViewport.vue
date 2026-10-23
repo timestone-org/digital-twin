@@ -58,6 +58,7 @@ const props = defineProps<{
    * 所以在这里核对过的对应关系，到大屏上就是那个结果。
    */
   values?: SceneLayerValues | undefined
+  dataWarning?: string
 }>()
 
 const emit = defineEmits<{
@@ -255,6 +256,13 @@ defineExpose({
       :class="{ 'twin-viewport--framed': frameVars !== undefined }"
       :style="[backgroundStyle, frameVars]"
     >
+      <DtNotice
+        v-if="dataWarning"
+        intent="warning"
+        class="twin-viewport__data-warning"
+      >
+        {{ dataWarning }}；视口中的静态文案不代表当前台账读数。
+      </DtNotice>
       <div v-if="status === 'loading'" class="twin-viewport__overlay">
         <DtSpinner />
         <span class="twin-viewport__hint">模型加载中</span>
@@ -288,6 +296,12 @@ defineExpose({
 </template>
 
 <style scoped lang="scss">
+.twin-viewport__data-warning {
+  position: absolute;
+  inset: 8px 8px auto;
+  z-index: 2;
+}
+
 // 舞台把视口居中；视口自己按目标格子的宽高比留边。
 // ⚠ `container-type` 不是装饰：比例框用 cqw/cqh 量的就是这块舞台，
 // 去掉它以后框会按整个视口算大小，比例照样是错的

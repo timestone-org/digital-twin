@@ -42,7 +42,10 @@ from platform_server.apps.dataset.formula.values import (
     to_number,
     truthy,
 )
-from platform_server.apps.dataset.formula.windows import parse_window
+from platform_server.apps.dataset.formula.windows import (
+    parse_complete_window,
+    parse_window,
+)
 
 # 预取值的键，四种形状：
 # `("prev", 列key, 期数)` / `("win", 函数名, 列key, 窗口规范写法)`
@@ -250,7 +253,13 @@ class _Evaluator:
         if name in WINDOW_FUNCS:
             key = self._parsed.placeholders[name_ref(node.args[0])]
             # 求值期重新规范化，`'3月'` 与 `'3mo'` 才落到同一个键上
-            literal = parse_window(str(const_value(node.args[1]))).literal
+            raw = str(const_value(node.args[1]))
+            spec = (
+                parse_complete_window(raw, const_value(node.args[2]))
+                if name == "SUM_COMPLETE_OVER"
+                else parse_window(raw)
+            )
+            literal = spec.literal
             return ("win", name, key, literal)
         if name in ALL_FUNCS:
             return (

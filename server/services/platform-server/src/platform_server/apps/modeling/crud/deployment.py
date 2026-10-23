@@ -29,6 +29,17 @@ class DeploymentCrud(CrudBase[ModelingDeployment]):
     def __init__(self) -> None:
         super().__init__(ModelingDeployment)
 
+    async def get_for_update(
+        self, session: AsyncSession, deployment_id: uuid.UUID
+    ) -> ModelingDeployment | None:
+        """锁定并刷新部署引用。Args: session, deployment_id。"""
+        return await session.get(
+            ModelingDeployment,
+            deployment_id,
+            with_for_update=True,
+            populate_existing=True,
+        )
+
     async def get_by_code(
         self, session: AsyncSession, code: str
     ) -> ModelingDeployment | None:
@@ -61,7 +72,10 @@ class DeploymentCrud(CrudBase[ModelingDeployment]):
         rows = await session.execute(
             select(func.count())
             .select_from(ModelingDeployment)
-            .where(ModelingDeployment.model_version_id == version_id)
+            .where(
+                (ModelingDeployment.model_version_id == version_id)
+                | (ModelingDeployment.rule_version_id == version_id)
+            )
         )
         return int(rows.scalar_one())
 

@@ -4,7 +4,7 @@
  * ⚠ 实参只从三处取，取不到就说清是哪一种取不到：这几步的公式代不进参数时，
  * 用户核对不了「界是怎么定出来的」，而那正是他打开这一屏要问的事。
  */
-import type { FormulaNode } from './formula'
+import type { FormulaCase, FormulaNode } from './formula'
 import { cases, frac, nameOf, numOf, opOf, run, sqrt, varOf } from './formula'
 import type { FormulaContext, FormulaSpec } from './formulaArgs'
 import {
@@ -104,20 +104,42 @@ function joinMatch(context: FormulaContext): FormulaSpec {
   }
 }
 
+function castFailureRows(onError: string): FormulaCase[] {
+  if (onError === 'coerce' || onError === 'error') {
+    return [
+      {
+        when: '解析不动（当前配置）',
+        then: [run(onError === 'error' ? varOf('当场报错') : varOf('∅'))],
+      },
+    ]
+  }
+  return [
+    { when: '解析不动且 on_error = coerce', then: [run(varOf('∅'))] },
+    { when: '解析不动且 on_error = error', then: [run(varOf('当场报错'))] },
+  ]
+}
+
+function castFailureNote(onError: string): string {
+  if (onError === 'coerce') {
+    return '解析不动的格子变成空值，这一步不报错：转坏了多少格看上面那张账。'
+  }
+  if (onError === 'error') return '解析不动就整步报错，一格都不换。'
+  return '本次记录未保存转型失败时的处理方式；coerce 将该格留空，error 会中止本步。'
+}
+
 function castRule(context: FormulaContext): FormulaSpec {
   const onError = textAt(context.config, 'on_error')
   const to = textAt(context.config, 'to')
   const rows: { when: string; then: FormulaNode[] }[] = [
     { when: 'v 是空', then: [run(varOf('∅'))] },
-    { when: 'v 是 true / false', then: [run(varOf('1.0 / 0.0'))] },
+    ...(to === 'number'
+      ? [{ when: 'v 是 true / false', then: [run(varOf('1.0 / 0.0'))] }]
+      : []),
     {
       when: 'v 解析得动',
-      then: [run(nameOf(`${to === '' ? 'number' : to}(v)`))],
+      then: [run(nameOf(`${to === '' ? '目标类型' : to}(v)`))],
     },
-    {
-      when: onError === 'error' ? '解析不动（当前配置）' : '解析不动',
-      then: [run(onError === 'error' ? varOf('当场报错') : varOf('∅'))],
-    },
+    ...castFailureRows(onError),
   ]
   return {
     id: 'cast',
@@ -127,11 +149,7 @@ function castRule(context: FormulaContext): FormulaSpec {
     fallback: null,
     isOpen: false,
     legend: [{ symbol: 'v', text: '换之前那一格的原值' }],
-    notes: [
-      onError === 'coerce'
-        ? '解析不动的格子变成空值，这一步不报错：转坏了多少格看上面那张账。'
-        : '解析不动就整步报错，一格都不换。',
-    ],
+    notes: [castFailureNote(onError)],
   }
 }
 

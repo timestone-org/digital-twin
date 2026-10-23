@@ -20,6 +20,7 @@ import type {
 import { DataSourceError } from '@dt/datasources'
 
 import { PLATFORM_BASE_URL } from '@/config/app'
+import { calendarDayStart } from '@/utils/calendarDay'
 import { requestData, type RequestOptions } from './client'
 
 /** 服务端单页上限（openapi 钉死 200），翻页时按它取满。 */
@@ -70,6 +71,7 @@ function parseWindowMs(lastWindow: string): number | null {
  * @param lastWindow 相对窗原文
  */
 export function windowToMs(lastWindow: string | undefined): number {
+  if (lastWindow === 'today') return 86_400_000
   return parseWindowMs(lastWindow ?? '') ?? DEFAULT_WINDOW_MS
 }
 
@@ -93,13 +95,19 @@ function requiredWindowMs(lastWindow: string | undefined): number {
  * 一模一样，而配置面是个自由文本框、没有校验。
  * @param range 绑定里的范围口径
  * @param nowMs 当前时刻，测试注入
+ * @param timezone 自然日的 IANA 时区，缺省 Asia/Shanghai
  */
 export function resolveWindow(
   range: HistoryTimeRange,
   nowMs: number,
+  timezone?: string,
 ): { fromMs: number; toMs: number } {
   const toMs = range.toMs ?? nowMs
-  const fromMs = range.fromMs ?? toMs - requiredWindowMs(range.lastWindow)
+  const fromMs =
+    range.fromMs ??
+    (range.lastWindow === 'today'
+      ? calendarDayStart(toMs, timezone)
+      : toMs - requiredWindowMs(range.lastWindow))
   return { fromMs: Math.min(fromMs, toMs), toMs }
 }
 

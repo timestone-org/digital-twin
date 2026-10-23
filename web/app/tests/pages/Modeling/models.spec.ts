@@ -3,7 +3,11 @@
  * 对应特征列、换绑回执里的影响面要报给用户。
  */
 import { PERMISSION_CODES } from '@dt/contracts'
-import type { ModelingBinding, ModelingVersionSummary } from '@dt/contracts'
+import type {
+  ModelingBinding,
+  ModelingVersion,
+  ModelingVersionSummary,
+} from '@dt/contracts'
 import { flushPromises, mount } from '@vue/test-utils'
 import { createPinia, setActivePinia } from 'pinia'
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
@@ -104,6 +108,141 @@ afterEach(() => {
 })
 
 describe('模型库', () => {
+  it('规则计算版本显示规则任务且不给绑定数值公式', async () => {
+    stub([version({ task: 'rule_calculation', target_key: null })], [])
+    signIn([PERMISSION_CODES.modelingView, PERMISSION_CODES.modelingPublish])
+    const wrapper = open()
+    await flushPromises()
+
+    expect(wrapper.text()).toContain('规则计算（无目标列）')
+    const bind = wrapper
+      .findAll('button')
+      .find((button) => button.text() === '绑公式')
+    expect(bind?.attributes('disabled')).toBeDefined()
+  })
+
+  it('发布权限允许改名并保存名称和说明', async () => {
+    stub([version()], [])
+    vi.spyOn(modeling, 'updateModelingVersion').mockResolvedValue({
+      ...version(),
+      signature: {},
+      metrics: {},
+      fingerprint: {},
+      description: '原说明',
+    })
+    vi.spyOn(modeling, 'getModelingVersion').mockResolvedValue({
+      ...version(),
+      signature: {},
+      metrics: {},
+      fingerprint: {},
+      description: '原说明',
+    })
+    signIn([PERMISSION_CODES.modelingView, PERMISSION_CODES.modelingPublish])
+    const wrapper = open()
+    await flushPromises()
+    await wrapper
+      .findAll('button')
+      .find((button) => button.text() === '改名')
+      ?.trigger('click')
+    await flushPromises()
+    await wrapper
+      .get('input[aria-label="模型名称"]')
+      .setValue('设备能效评估模型')
+    await wrapper
+      .findAll('button')
+      .find((button) => button.text() === '保存名称')
+      ?.trigger('click')
+    await flushPromises()
+
+    expect(modeling.updateModelingVersion).toHaveBeenCalledWith('v1', {
+      name: '设备能效评估模型',
+      description: '原说明',
+    })
+  })
+
+  it('只读账号没有模型版本改名入口', async () => {
+    stub([version()], [])
+    signIn([PERMISSION_CODES.modelingView])
+    const wrapper = open()
+    await flushPromises()
+    expect(
+      wrapper.findAll('button').some((button) => button.text() === '改名'),
+    ).toBe(false)
+  })
+
+  it('快速切换改名对象时迟到的详情不会覆盖当前对象', async () => {
+    const first = version({ id: 'v1', name: '设备异常检测模型' })
+    const second = version({ id: 'v2', name: '能耗预测模型' })
+    stub([first, second], [])
+    let finishFirst: (value: ModelingVersion) => void = () => {}
+    vi.spyOn(modeling, 'getModelingVersion').mockImplementation((id) =>
+      id === 'v1'
+        ? new Promise<ModelingVersion>((resolve) => {
+            finishFirst = resolve
+          })
+        : Promise.resolve({
+            ...second,
+            signature: {},
+            metrics: {},
+            fingerprint: {},
+            description: null,
+          }),
+    )
+    signIn([PERMISSION_CODES.modelingView, PERMISSION_CODES.modelingPublish])
+    const wrapper = open()
+    await flushPromises()
+    const buttons = wrapper
+      .findAll('button')
+      .filter((button) => button.text() === '改名')
+    await buttons[0]?.trigger('click')
+    await buttons[1]?.trigger('click')
+    await flushPromises()
+    finishFirst({
+      ...first,
+      signature: {},
+      metrics: {},
+      fingerprint: {},
+      description: null,
+    })
+    await flushPromises()
+
+    expect(
+      wrapper.get<HTMLInputElement>('input[aria-label="模型名称"]').element
+        .value,
+    ).toBe('能耗预测模型')
+  })
+
+  it('空名称不可提交，取消改名不写入', async () => {
+    stub([version()], [])
+    vi.spyOn(modeling, 'getModelingVersion').mockResolvedValue({
+      ...version(),
+      signature: {},
+      metrics: {},
+      fingerprint: {},
+      description: null,
+    })
+    const update = vi.spyOn(modeling, 'updateModelingVersion')
+    signIn([PERMISSION_CODES.modelingView, PERMISSION_CODES.modelingPublish])
+    const wrapper = open()
+    await flushPromises()
+    await wrapper
+      .findAll('button')
+      .find((button) => button.text() === '改名')
+      ?.trigger('click')
+    await flushPromises()
+    await wrapper.get('input[aria-label="模型名称"]').setValue('')
+    expect(
+      wrapper
+        .findAll('button')
+        .find((button) => button.text() === '保存名称')
+        ?.attributes('disabled'),
+    ).toBeDefined()
+    await wrapper
+      .findAll('button')
+      .find((button) => button.text() === '取消')
+      ?.trigger('click')
+    expect(update).not.toHaveBeenCalled()
+  })
   it('两块列表分别显示分页器，空绑定列表也保留分页区', async () => {
     stub([version()], [])
     signIn([PERMISSION_CODES.modelingView])

@@ -24,7 +24,7 @@ from platform_server.apps.modeling.errors import (
 )
 from platform_server.apps.modeling.models import (
     ModelingBinding,
-    ModelingModelVersion,
+    ModelVersion,
 )
 from platform_server.apps.modeling.services.jsonshape import (
     as_dict,
@@ -60,6 +60,10 @@ async def create_binding(
     if await binding_crud.get_by_code(session, draft.fx_code) is not None:
         raise BindingCodeTaken("这条公式条目已经绑过一个模型版本了")
     version = await require_version(session, draft.model_version_id)
+    if version.task == "rule_calculation":
+        raise ModelVersionUnservable(
+            "规则模型返回结构化结果，请通过模型服务的 :calculate 接口调用"
+        )
     if not version.servable:
         raise ModelVersionUnservable(
             version.unservable_reason or "这个模型版本不可上线"
@@ -104,6 +108,10 @@ async def rebind(
     """
     row = await require_binding(session, binding_id)
     version = await require_version(session, version_id)
+    if version.task == "rule_calculation":
+        raise ModelVersionUnservable(
+            "规则模型返回结构化结果，请通过模型服务的 :calculate 接口调用"
+        )
     if not version.servable:
         raise ModelVersionUnservable(
             version.unservable_reason or "这个模型版本不可上线"
@@ -207,7 +215,7 @@ async def _column_params(
     return tuple(param.name for param in entry.params)
 
 
-def _entry_of(version: ModelingModelVersion) -> list[str]:
+def _entry_of(version: ModelVersion) -> list[str]:
     """这个版本的**入口契约**：调用方要提供的那几列，按序。
 
     ⚠ 不是 `feature_keys`：带特征工程的链上两者个数就不同（一次独热能把一列

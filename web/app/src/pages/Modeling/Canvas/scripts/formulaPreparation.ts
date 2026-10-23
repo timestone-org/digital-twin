@@ -1,7 +1,14 @@
 /** @fileoverview 选列、历史对齐、周期编码与异常判定的公式说明。 */
 import { frac, nameOf, numOf, opOf, run, varOf } from './formula'
+import type { FormulaNode } from './formula'
 import type { FormulaContext, FormulaSpec } from './formulaArgs'
-import { NO_CONFIG, numberAt, textsAt } from './formulaArgs'
+import {
+  NO_CONFIG,
+  hyperNumber,
+  modelAt,
+  numberAt,
+  textsAt,
+} from './formulaArgs'
 
 function selectColumns(context: FormulaContext): FormulaSpec {
   const columns = textsAt(context.config, 'columns')
@@ -72,7 +79,21 @@ function cyclicTime(context: FormulaContext): FormulaSpec {
 }
 
 function anomalyDistance(context: FormulaContext): FormulaSpec {
-  const quantile = numberAt(context.config, 'quantile')
+  const quantile =
+    hyperNumber(context.ports, 'quantile') ??
+    numberAt(context.config, 'quantile')
+  const threshold = numberAt(
+    modelAt(context.ports)?.fitted ?? {},
+    'distance_threshold',
+  )
+  const filled: FormulaNode[] = []
+  if (quantile !== null)
+    filled.push(run(varOf('q'), opOf('='), numOf(quantile)))
+  if (threshold !== null) {
+    filled.push(run(varOf('τ'), opOf('='), numOf(threshold)))
+  } else if (quantile !== null) {
+    filled.push(run(varOf('τ'), opOf('='), varOf('max(1, Q_higher(q, D_cal))')))
+  }
   return {
     id: 'distance',
     title: '与正常工况的距离及异常判定',
@@ -82,14 +103,8 @@ function anomalyDistance(context: FormulaContext): FormulaSpec {
       frac([run(varOf('max(0, zᵀ Σ⁻¹ z)'))], [run(varOf('τ'))]),
       run(varOf('is_anomaly'), opOf('⟺'), varOf('score > 1')),
     ],
-    filled:
-      quantile === null
-        ? null
-        : [
-            run(varOf('q'), opOf('='), numOf(quantile)),
-            run(varOf('τ'), opOf('='), varOf('max(1, Q_higher(q, D_cal))')),
-          ],
-    fallback: quantile === null ? NO_CONFIG : null,
+    filled: filled.length === 0 ? null : filled,
+    fallback: filled.length === 0 ? NO_CONFIG : null,
     isOpen: false,
     legend: [
       { symbol: 'μ / σ', text: '正常工况训练得到的中心与数值尺度' },

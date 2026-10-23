@@ -11,13 +11,18 @@
  */
 import type { DtSelectOption } from '@dt/contracts'
 import { DtField, DtInput, DtNumberInput, DtSelect, DtSwitch } from '@dt/ui'
+import { computed, ref, watch } from 'vue'
 
 import type { FormField, FormOptions } from '../scripts/schemaForm'
-import { isDefault, missingHint } from '../scripts/schemaForm'
+import { isDefault } from '../scripts/schemaForm'
+import { configError, fieldValue, numberRange } from '../scripts/configValues'
+import type { ConfigStatus } from '../scripts/configValues'
 
+import ArrayConfigInput from './ArrayConfigInput.vue'
 import ColumnPicker from './ColumnPicker.vue'
 import ColumnAggregations from './ColumnAggregations.vue'
 import MomentInput from './MomentInput.vue'
+import StructuredConfigInput from './StructuredConfigInput.vue'
 
 const props = defineProps<{
   fields: readonly FormField[]
@@ -30,7 +35,32 @@ const emit = defineEmits<{
   change: [key: string, value: unknown]
   /** 台账清单拉失败了，用户按了「重试」。 */
   reloadTables: []
+  status: [value: ConfigStatus]
 }>()
+
+const drafts = ref<Record<string, ConfigStatus>>({})
+const status = computed<ConfigStatus>(() => {
+  if (props.isReadonly) return { message: '', hasDraft: false }
+  const issues = props.fields.map((field) => ({
+    field,
+    draft: drafts.value[field.key],
+    message:
+      drafts.value[field.key]?.message ||
+      configError(field, fieldValue(field, props.config)),
+  }))
+  const first =
+    issues.find((issue) => issue.draft?.hasDraft === true) ??
+    issues.find((issue) => issue.message !== '')
+  return {
+    message: first ? `${first.field.label}：${first.message}` : '',
+    hasDraft: issues.some((issue) => issue.draft?.hasDraft === true),
+  }
+})
+watch(status, (value) => emit('status', value), { immediate: true })
+
+function setDraft(key: string, value: ConfigStatus): void {
+  drafts.value = { ...drafts.value, [key]: value }
+}
 
 /** 台账下拉总带搜索框：台账靠编码认，只有一张也要能敲编码定位。 */
 const TABLE_DISPLAY = {
@@ -46,36 +76,24 @@ const COLUMN_DISPLAY = {
   searchPlaceholder: '按列名搜索',
 }
 
-function textOf(key: string): string {
-  const value = props.config[key]
+function textOf(field: FormField): string {
+  const value = fieldValue(field, props.config)
   return typeof value === 'string' ? value : ''
 }
 
-function numberOf(key: string): number | undefined {
-  const value = props.config[key]
+function numberOf(field: FormField): number | undefined {
+  const value = fieldValue(field, props.config)
   return typeof value === 'number' ? value : undefined
 }
 
-function boolOf(key: string): boolean {
-  return props.config[key] === true
+function boolOf(field: FormField): boolean {
+  return fieldValue(field, props.config) === true
 }
 
-function listOf(key: string): readonly string[] {
-  const value = props.config[key]
+function listOf(field: FormField): readonly string[] {
+  const value = fieldValue(field, props.config)
   if (!Array.isArray(value)) return []
   return value.filter((item): item is string => typeof item === 'string')
-}
-
-function rangeOf(field: FormField): {
-  min?: number
-  max?: number
-  step?: number
-} {
-  return {
-    ...(field.min === null ? {} : { min: field.min }),
-    ...(field.max === null ? {} : { max: field.max }),
-    ...(field.widget === 'integer' ? { step: 1 } : {}),
-  }
 }
 
 /**
@@ -90,7 +108,7 @@ function tableOptions(field: FormField): readonly DtSelectOption[] {
     value: item.code,
     label: `${item.name}（${item.code}）`,
   }))
-  const current = textOf(field.key)
+  const current = textOf(field)
   if (current === '' || listed.some((item) => item.value === current)) {
     return listed
   }
@@ -115,7 +133,7 @@ function columnOptions(field: FormField): readonly DtSelectOption[] {
     value: item.key,
     label: item.name || item.key,
   }))
-  const current = textOf(field.key)
+  const current = textOf(field)
   if (current === '' || listed.some((item) => item.value === current)) {
     return listed
   }
@@ -130,20 +148,40 @@ function canReset(field: FormField): boolean {
 
 /** 这一项的提示语：必填没填时说出来，否则用 schema 的说明。 */
 function hintOf(field: FormField): string {
-  return missingHint(field, props.config[field.key]) || field.hint
+  return errorOf(field) || field.hint
 }
 
 function errorOf(field: FormField): string {
-  return missingHint(field, props.config[field.key])
+  return configError(field, fieldValue(field, props.config))
 }
 </script>
 
 <template>
   <div class="dt-ml-form">
     <div v-for="field in props.fields" :key="field.key" class="dt-ml-form__row">
+      <StructuredConfigInput
+        v-if="field.widget === 'json'"
+        :model-value="fieldValue(field, props.config)"
+        :value-type="field.jsonType"
+        :label="field.label"
+        :hint="field.hint"
+        :is-readonly="props.isReadonly"
+        @update:model-value="emit('change', field.key, $event)"
+        @status="setDraft(field.key, $event)"
+      />
+      <ArrayConfigInput
+        v-else-if="
+          field.widget === 'multi-select' || field.widget.endsWith('-list')
+        "
+        :field="field"
+        :model-value="fieldValue(field, props.config)"
+        :is-readonly="props.isReadonly"
+        @update:model-value="emit('change', field.key, $event)"
+        @status="setDraft(field.key, $event)"
+      />
       <MomentInput
-        v-if="field.widget === 'moment'"
-        :model-value="textOf(field.key)"
+        v-else-if="field.widget === 'moment'"
+        :model-value="textOf(field)"
         :label="field.label"
         :hint="field.hint"
         :is-readonly="props.isReadonly"
@@ -161,17 +199,19 @@ function errorOf(field: FormField): string {
       />
       <ColumnPicker
         v-else-if="field.widget === 'columns'"
-        :model-value="listOf(field.key)"
+        :model-value="listOf(field)"
         :columns="props.options.columns"
         :label="field.label"
         :hint="field.hint"
+        :error="errorOf(field)"
+        :is-required="field.isRequired || (field.minItems ?? 0) > 0"
         :note="props.options.columnsNote"
         :is-readonly="props.isReadonly"
         @update:model-value="emit('change', field.key, $event)"
       />
       <div v-else-if="field.widget === 'column'" class="dt-ml-form__stack">
         <DtSelect
-          :model-value="textOf(field.key)"
+          :model-value="textOf(field)"
           :options="columnOptions(field)"
           :display="COLUMN_DISPLAY"
           :label="field.label"
@@ -193,7 +233,7 @@ function errorOf(field: FormField): string {
         :hint="field.hint"
       >
         <DtInput
-          :model-value="textOf(field.key)"
+          :model-value="textOf(field)"
           placeholder="填台账编码"
           :error="errorOf(field)"
           :required="field.isRequired"
@@ -206,7 +246,7 @@ function errorOf(field: FormField): string {
       </DtField>
       <div v-else-if="field.widget === 'table'" class="dt-ml-form__stack">
         <DtSelect
-          :model-value="textOf(field.key)"
+          :model-value="textOf(field)"
           :options="tableOptions(field)"
           :display="TABLE_DISPLAY"
           :label="field.label"
@@ -230,7 +270,7 @@ function errorOf(field: FormField): string {
       </div>
       <DtSelect
         v-else-if="field.widget === 'select'"
-        :model-value="textOf(field.key)"
+        :model-value="textOf(field)"
         :options="field.options"
         :label="field.label"
         :hint="hintOf(field)"
@@ -241,8 +281,8 @@ function errorOf(field: FormField): string {
       />
       <DtNumberInput
         v-else-if="field.widget === 'number' || field.widget === 'integer'"
-        :model-value="numberOf(field.key)"
-        :range="rangeOf(field)"
+        :model-value="numberOf(field)"
+        :range="numberRange(field, fieldValue(field, props.config))"
         :label="field.label"
         :hint="hintOf(field)"
         :error="errorOf(field)"
@@ -252,7 +292,7 @@ function errorOf(field: FormField): string {
       />
       <DtField v-else-if="field.widget === 'switch'" :hint="field.hint">
         <DtSwitch
-          :model-value="boolOf(field.key)"
+          :model-value="boolOf(field)"
           :label="field.label"
           :disabled="props.isReadonly"
           @update:model-value="emit('change', field.key, $event)"
@@ -260,7 +300,7 @@ function errorOf(field: FormField): string {
       </DtField>
       <DtInput
         v-else
-        :model-value="textOf(field.key)"
+        :model-value="textOf(field)"
         :label="field.label"
         :hint="hintOf(field)"
         :error="errorOf(field)"

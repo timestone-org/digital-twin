@@ -25,7 +25,13 @@ import type { MetricsPreview } from '../scripts/preview'
 import BarList from './BarList.vue'
 import MatrixTable from './MatrixTable.vue'
 
-const props = defineProps<{ preview: MetricsPreview }>()
+const props = withDefaults(
+  defineProps<{
+    preview: MetricsPreview
+    positiveLabel?: number | null | undefined
+  }>(),
+  { positiveLabel: null },
+)
 
 const LEDGER_COLUMNS: readonly DtTableColumn[] = [
   { key: 'label', label: '类目', width: '11rem', align: 'left' },
@@ -60,7 +66,11 @@ const stats = computed(() =>
 )
 
 const positive = computed(() =>
-  positiveClassOf(stats.value.classes, props.preview.metrics),
+  positiveClassOf(
+    stats.value.classes,
+    props.preview.metrics,
+    props.positiveLabel,
+  ),
 )
 
 const sort = ref<DtTableSort>({ ...DEFAULT_LEDGER_SORT })
@@ -111,8 +121,7 @@ const positiveText = computed(
     <DtNotice v-if="isEmptyTest" intent="warning">
       这份测试集里一行都没有，四个指标与混淆矩阵都算不出来。
     </DtNotice>
-    <!-- ⚠ 正类是 config 里的一个 float，摘要里没有这一项：这里靠报上来的
-         精确率与召回率反查是哪一类，对不上就不画徽标（规格 R-20） -->
+    <!-- ⚠ 旧运行没有冻结正类参数时，才按指标反查；对不上不猜。 -->
     <p v-if="positive.kind === 'found'" class="dt-ml-clf__positive">
       <DtTag intent="primary" size="sm">{{ positiveText }}</DtTag>
     </p>

@@ -48,6 +48,7 @@ const error = computed(() =>
 )
 
 function switchTo(next: string): void {
+  if (props.isReadonly) return
   const wanted = MODES.find((item) => item.value === next)?.value ?? 'blank'
   emit('update:modelValue', seedFor(wanted))
 }
@@ -56,12 +57,16 @@ function switchTo(next: string): void {
 <template>
   <DtField :label="props.label" :hint="props.hint">
     <DtSegmented
+      v-if="!props.isReadonly"
       :model-value="mode"
       :options="MODES"
       size="sm"
       aria-label="时刻写法"
       @update:model-value="switchTo"
     />
+    <p v-else class="dt-ml-moment__blank">
+      {{ MODES.find((item) => item.value === mode)?.label }}
+    </p>
     <template v-if="mode === 'relative'">
       <DtSelect
         :model-value="presetValue"

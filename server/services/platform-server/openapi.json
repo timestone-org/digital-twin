@@ -2954,6 +2954,51 @@
         "title": "ApiResponse[NodeRunOut]",
         "type": "object"
       },
+      "ApiResponse_OpenModelCalculateOut_": {
+        "properties": {
+          "code": {
+            "default": 0,
+            "title": "Code",
+            "type": "integer"
+          },
+          "data": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/OpenModelCalculateOut"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "details": {
+            "anyOf": [
+              {
+                "items": {
+                  "$ref": "#/components/schemas/FieldErrorOut"
+                },
+                "type": "array"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Details"
+          },
+          "message": {
+            "default": "ok",
+            "title": "Message",
+            "type": "string"
+          },
+          "trace_id": {
+            "default": "",
+            "title": "Trace Id",
+            "type": "string"
+          }
+        },
+        "title": "ApiResponse[OpenModelCalculateOut]",
+        "type": "object"
+      },
       "ApiResponse_OpenModelDetectOut_": {
         "properties": {
           "code": {
@@ -13475,7 +13520,8 @@
             "enum": [
               "anomaly_detection",
               "classification",
-              "regression"
+              "regression",
+              "rule_calculation"
             ],
             "title": "Task",
             "type": "string"
@@ -13592,7 +13638,8 @@
             "enum": [
               "anomaly_detection",
               "classification",
-              "regression"
+              "regression",
+              "rule_calculation"
             ],
             "title": "Task",
             "type": "string"
@@ -13630,6 +13677,40 @@
           "created_at"
         ],
         "title": "ModelVersionSummaryOut",
+        "type": "object"
+      },
+      "ModelVersionUpdateIn": {
+        "additionalProperties": false,
+        "description": "仅修改展示元数据，计算内容保持不可变。",
+        "properties": {
+          "description": {
+            "anyOf": [
+              {
+                "maxLength": 512,
+                "minLength": 1,
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Description"
+          },
+          "name": {
+            "anyOf": [
+              {
+                "maxLength": 128,
+                "minLength": 1,
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Name"
+          }
+        },
+        "title": "ModelVersionUpdateIn",
         "type": "object"
       },
       "ModuleCatalogOut": {
@@ -14654,6 +14735,51 @@
           "kind"
         ],
         "title": "NodeValue",
+        "type": "object"
+      },
+      "OpenModelCalculateIn": {
+        "additionalProperties": false,
+        "description": "输入按模型签名校验，缺失值不能作为正常值计算。",
+        "properties": {
+          "rows": {
+            "description": "按模型列输入；精确计量值使用十进制字符串，保留原值精度",
+            "items": {
+              "$ref": "#/components/schemas/DetectionRow"
+            },
+            "maxItems": 256,
+            "minItems": 1,
+            "title": "Rows",
+            "type": "array"
+          }
+        },
+        "required": [
+          "rows"
+        ],
+        "title": "OpenModelCalculateIn",
+        "type": "object"
+      },
+      "OpenModelCalculateOut": {
+        "description": "规则结果保留分类明细、能源路径与诊断命中条件。",
+        "properties": {
+          "model": {
+            "$ref": "#/components/schemas/OpenModelInfoOut"
+          },
+          "results": {
+            "items": {
+              "additionalProperties": {
+                "$ref": "#/components/schemas/JsonValue"
+              },
+              "type": "object"
+            },
+            "title": "Results",
+            "type": "array"
+          }
+        },
+        "required": [
+          "model",
+          "results"
+        ],
+        "title": "OpenModelCalculateOut",
         "type": "object"
       },
       "OpenModelDetectIn": {
@@ -31855,6 +31981,74 @@
         "tags": [
           "modeling-model"
         ]
+      },
+      "patch": {
+        "description": "只改名称和说明。Args: version_id, payload, session, _write。",
+        "operationId": "update_version_metadata_api_v1_platform_modeling_model_versions__version_id__patch",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "version_id",
+            "required": true,
+            "schema": {
+              "format": "uuid",
+              "title": "Version Id",
+              "type": "string"
+            }
+          },
+          {
+            "in": "header",
+            "name": "idempotency-key",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Idempotency-Key"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/ModelVersionUpdateIn"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiResponse_ModelVersionOut_"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "修改模型展示信息",
+        "tags": [
+          "modeling-model"
+        ]
       }
     },
     "/api/v1/platform/modeling-model-versions/{version_id}:register-formula": {
@@ -32742,6 +32936,69 @@
           }
         },
         "summary": "模型签名",
+        "tags": [
+          "modeling-open"
+        ]
+      }
+    },
+    "/api/v1/platform/open-models/{code}:calculate": {
+      "post": {
+        "description": "返回按模型规则计算的逐行明细。Args: payload, session, deps, call。",
+        "operationId": "calculate_api_v1_platform_open_models__code__calculate_post",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "code",
+            "required": true,
+            "schema": {
+              "title": "Code",
+              "type": "string"
+            }
+          },
+          {
+            "in": "header",
+            "name": "X-Api-Key",
+            "required": false,
+            "schema": {
+              "default": "",
+              "title": "X-Api-Key",
+              "type": "string"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/OpenModelCalculateIn"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiResponse_OpenModelCalculateOut_"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "规则计算",
         "tags": [
           "modeling-open"
         ]

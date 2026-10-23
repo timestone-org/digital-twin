@@ -178,6 +178,15 @@ def other_cases(source: Frame) -> dict[str, Case]:
     binary: dict[str, Any] = {"train": labelled(), "test": labelled()}
     return {
         "anomaly_distance": (training_pair(), {}),
+        "energy_rules": (
+            {
+                "frame": Frame(
+                    columns=(number("温度"), number("湿度")),
+                    rows=((24.0, 50.0),),
+                )
+            },
+            {},
+        ),
         "classification_metrics": ({"scored": scored(is_binary=True)}, {}),
         "cross_validate": ({"model": trained, "frame": roled}, {"folds": 4}),
         "feature_importance": ({"model": trained, "test": roled}, {}),
@@ -227,7 +236,7 @@ def test_every_registered_operator_has_a_minimal_input_here() -> None:
     """反向遍历的入口：花名册上多一个算子，这张表就得跟着多一行。"""
     assert set(cases()) == set(CODES) - set(UNREACHABLE)
     assert UNREACHABLE == ()
-    assert len(CODES) == 29
+    assert len(CODES) == 30
 
 
 @pytest.mark.parametrize("code", CODES)

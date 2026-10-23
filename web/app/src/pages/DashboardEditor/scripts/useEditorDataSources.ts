@@ -49,6 +49,7 @@ export function useEditorDataSources(
   onScopeDispose(rendered.clear)
   installDashboardSeries({
     readPoint: values.read,
+    readBinding: values.readBinding,
     observeSeries: rendered.observe,
   })
   return { ...values, readSeries: rendered.read }

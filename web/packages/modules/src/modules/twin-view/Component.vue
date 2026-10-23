@@ -102,10 +102,17 @@ function effectRows(raw: unknown): unknown {
     const slot = props.meta?.slots?.[partEffectRowFieldKey(index)]
     if (slot?.isStale === true || (slot !== undefined && slot.state !== 'ok'))
       return undefined
-    if (disconnected && (slot === undefined || slot.timestampMs !== undefined))
-      return undefined
+    if (disconnected && dependsOnConnection(slot)) return undefined
     return row
   })
+}
+
+/** 台账采样的时刻不表示其依赖 WebSocket。 */
+function dependsOnConnection(slot: ModuleSlotMeta | undefined): boolean {
+  return (
+    slot === undefined ||
+    (slot.timestampMs !== undefined && slot.dependsOnRealtime !== false)
+  )
 }
 
 /**

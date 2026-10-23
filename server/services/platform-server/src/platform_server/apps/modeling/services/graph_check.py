@@ -46,6 +46,7 @@ _COMPLAINTS: dict[str, str] = {
     "int_type": "要填一个整数",
     "float_parsing": "要填一个数",
     "float_type": "要填一个数",
+    "finite_number": "要填有限数值",
     "string_type": "要填一段文字",
     "list_type": "要填一组值",
     "greater_than": "太小了",

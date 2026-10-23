@@ -32,6 +32,13 @@ class ModelVersionCreateIn(InputModel):
     description: Note | None = None
 
 
+class ModelVersionUpdateIn(InputModel):
+    """仅修改展示元数据，计算内容保持不可变。"""
+
+    name: Label | None = None
+    description: Note | None = None
+
+
 class ModelVersionSummaryOut(OutputModel):
     """版本列表里的一条。"""
 

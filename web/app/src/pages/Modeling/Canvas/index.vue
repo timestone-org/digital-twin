@@ -28,7 +28,7 @@ import { nowStamp } from '@/utils/datetime'
 import { useAuthStore } from '@/stores/auth'
 
 import CanvasMenu from './components/CanvasMenu.vue'
-import ConfigForm from './components/ConfigForm.vue'
+import ConfigEditorDialog from './components/ConfigEditorDialog.vue'
 import EditorCanvas from './components/EditorCanvas.vue'
 import GraphIssues from './components/GraphIssues.vue'
 import OperatorPalette from './components/OperatorPalette.vue'
@@ -77,13 +77,6 @@ const pipelineId = computed(() => String(route.params['pipelineId'] ?? ''))
 // 那颗按钮，没有写权限时给的是 PermGuard 的那句说明
 // 这次运行要不要留全量结果。⚠ 默认关，理由见上面那条注释
 const isKeepingFrames = ref(false)
-const saving = useCanvasSaving(
-  page,
-  () => pipelineId.value,
-  () => isKeepingFrames.value,
-)
-useCanvasLeaveGuard(() => page.graph.isDirty.value, saving.cancel)
-
 const isReadonly = computed(
   () =>
     page.isReplaying.value ||
@@ -98,6 +91,19 @@ const config = useConfigPanel({
   setConfig: page.graph.setConfig,
   canViewLedger: () => auth.can([PERMISSION_CODES.datasetView]),
 })
+const saving = useCanvasSaving(
+  page,
+  () => pipelineId.value,
+  () => isKeepingFrames.value,
+  () => config.blockReason.value,
+)
+useCanvasLeaveGuard(
+  () => page.graph.isDirty.value || config.hasDraft.value,
+  () => {
+    saving.cancel()
+    config.discard()
+  },
+)
 
 const actions = useCanvasActions({
   graph: page.graph,
@@ -170,8 +176,14 @@ function applyRename(): void {
  * 而刷新一下就回到编辑态了。
  */
 async function pickRun(runId: string): Promise<void> {
-  if (!(await confirmReplay(page.graph.isDirty.value, page.isReplaying.value)))
+  if (
+    !(await confirmReplay(
+      page.graph.isDirty.value || config.hasDraft.value,
+      page.isReplaying.value,
+    ))
+  )
     return
+  config.discard()
   isHistoryOpen.value = false
   await router.replace({ query: { ...route.query, run_id: runId } })
   await page.replay(runId)
@@ -303,6 +315,7 @@ watch(
           :disabled="
             isReadonly ||
             !page.graph.isDirty.value ||
+            config.blockReason.value !== '' ||
             saving.isPreparingRun.value
           "
           :loading="page.doc.isSaving.value"
@@ -316,7 +329,7 @@ watch(
         <RunControls
           v-model:is-keeping-frames="isKeepingFrames"
           :is-running="page.runner.run.value?.status === 'running'"
-          :is-readonly="isReadonly"
+          :is-readonly="isReadonly || config.blockReason.value !== ''"
           :is-starting="
             page.runner.isStarting.value ||
             saving.isPreparingRun.value ||
@@ -342,6 +355,9 @@ watch(
         @pick="addOperator"
       />
       <div class="dt-ml-page__main">
+        <DtNotice v-if="config.blockReason.value" intent="warning">
+          {{ config.blockReason.value }}；请先改正或应用参数，再保存或运行。
+        </DtNotice>
         <GraphIssues
           v-if="page.issueViews.value.length > 0"
           :issues="page.issueViews.value"
@@ -392,23 +408,17 @@ watch(
 
     <CanvasMenu :menu="menu.menu.value" @pick="menu.run" @close="menu.close" />
 
-    <DtModal
-      :model-value="config.node.value !== null"
-      :title="config.spec.value?.name ?? '参数'"
-      :description="config.spec.value?.description"
-      width="34rem"
-      @update:model-value="config.close"
-    >
-      <ConfigForm
-        v-if="config.node.value"
-        :fields="config.fields.value"
-        :config="config.node.value.config"
-        :options="config.options.value"
-        :is-readonly="isReadonly"
-        @change="config.setValue"
-        @reload-tables="config.loadTables"
-      />
-    </DtModal>
+    <ConfigEditorDialog
+      :node="config.node.value"
+      :operator="config.spec.value"
+      :fields="config.fields.value"
+      :options="config.options.value"
+      :is-readonly="isReadonly"
+      @change="config.setValue"
+      @status="config.setStatus"
+      @reload-tables="config.loadTables"
+      @close="config.close"
+    />
 
     <DtModal
       :model-value="renameNodeId !== null"

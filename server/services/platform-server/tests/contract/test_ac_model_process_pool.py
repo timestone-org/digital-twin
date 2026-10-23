@@ -10,6 +10,7 @@ import pickle
 import subprocess
 import sys
 from concurrent.futures import ProcessPoolExecutor
+from dataclasses import replace
 from datetime import UTC, datetime, timedelta
 from decimal import Decimal
 from functools import partial
@@ -117,11 +118,19 @@ def test_training_runs_through_a_real_spawned_process_pool() -> None:
     assert trained.oof
 
 
-def test_a_refusal_survives_the_trip_back_from_the_subprocess() -> None:
+@pytest.mark.parametrize("is_filtered", [False, True], ids=["short", "curated"])
+def test_a_refusal_survives_the_trip_back_from_the_subprocess(
+    is_filtered: bool,
+) -> None:
     """⚠ 拒训的原因要原样回到父进程：它会直接落到模型行上给操作员看。"""
+    rows = samples()
+    if is_filtered:
+        rows[-1] = replace(rows[-1], duration_minutes=61)
+    else:
+        rows = rows[: MIN_SAMPLES - 1]
     fitted = partial(
         train,
-        samples()[: MIN_SAMPLES - 1],
+        rows,
         units=units(),
         timezone=TZ,
         half_life_days=HALF_LIFE_DAYS,
@@ -134,6 +143,7 @@ def test_a_refusal_survives_the_trip_back_from_the_subprocess() -> None:
     ):
         pool.submit(fitted).result(timeout=POOL_TIMEOUT_S)
     assert caught.value.got == MIN_SAMPLES - 1
+    assert caught.value.overlong_episode_count == int(is_filtered)
     assert str(caught.value).count("可用事件只有") == 1
 
 

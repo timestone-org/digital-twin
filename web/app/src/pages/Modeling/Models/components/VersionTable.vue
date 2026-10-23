@@ -34,7 +34,7 @@ const COLUMNS: readonly DtDataColumn[] = [
     key: 'actions',
     label: '操作',
     align: 'right',
-    width: '11rem',
+    width: '15rem',
     card: 'actions',
   },
 ]
@@ -59,6 +59,7 @@ defineEmits<{
   detail: [row: ModelingVersionSummary]
   bind: [row: ModelingVersionSummary]
   retire: [row: ModelingVersionSummary]
+  rename: [row: ModelingVersionSummary]
 }>()
 </script>
 
@@ -90,7 +91,12 @@ defineEmits<{
     </template>
     <template #cell-target_key="{ row }">
       <code class="dt-ml-versions__code" :title="row.target_key ?? undefined">
-        {{ row.target_key ?? '无监督（无目标列）' }}
+        {{
+          row.target_key ??
+          (row.task === 'rule_calculation'
+            ? '规则计算（无目标列）'
+            : '无监督（无目标列）')
+        }}
       </code>
     </template>
     <template #cell-servable="{ row }">
@@ -113,10 +119,13 @@ defineEmits<{
         详情
       </DtButton>
       <PermGuard :codes="[PERMISSION_CODES.modelingPublish]">
+        <DtButton variant="ghost" size="xs" @click="$emit('rename', row)">
+          改名
+        </DtButton>
         <DtButton
           variant="ghost"
           size="xs"
-          :disabled="!row.is_servable"
+          :disabled="!row.is_servable || row.task === 'rule_calculation'"
           @click="$emit('bind', row)"
         >
           绑公式

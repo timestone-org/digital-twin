@@ -23,6 +23,7 @@ from platform_server.apps.modeling.operators.evalblocks import (
     classification_blocks,
     regression_blocks,
 )
+from platform_server.apps.modeling.operators.evalcurves import BINARY_CLASSES
 from platform_server.apps.modeling.operators.evalstats import (
     Scored,
     deviation_of,
@@ -301,7 +302,7 @@ class ClassificationMetrics(OperatorBase):
             matrix=matrix,
             positive_text=positive,
             rows=len(truth),
-            probabilities=_probabilities_of(scored),
+            probabilities=_probabilities_of(scored, labels, wanted),
             actual_positive=tuple(value == wanted for value in truth),
             predicted_positive=tuple(value == wanted for value in predicted),
         )
@@ -338,21 +339,32 @@ def _scored_pairs(scored: Frame) -> tuple[list[float], list[float]]:
     )
 
 
-def _probabilities_of(scored: Frame) -> tuple[float, ...] | None:
+def _probabilities_of(
+    scored: Frame, labels: list[float], positive: float
+) -> tuple[float, ...] | None:
     """打分帧上的正类概率列；没有这一列、或它不可用时给 `None`。
 
     ⚠ 不抛：概率列是给三条曲线用的加项，缺了它四个指标照旧算得出来，而抛出去
     会让一份本来完整的评估整个失败。
-    Args: scored。
+    Args: scored, labels, positive。
     """
     if SCORED_PROBA not in scored.keys:
         return None
     if scored.column_of(SCORED_PROBA).dtype != DTYPE_NUMBER:
         return None
     values = numbers_of(scored, SCORED_PROBA)
-    if any(value is None for value in values):
+    if any(value is None or not _ZERO <= value <= 1.0 for value in values):
         return None
-    return tuple(float(value or _ZERO) for value in values)
+    probabilities = tuple(float(value or _ZERO) for value in values)
+    # ⚠ 模型概率对应升序后的较大类，评估正类可以独立切换。
+    classes = scored.column_of(SCORED_PROBA).probability_classes
+    if not classes and len(labels) == BINARY_CLASSES:
+        classes = tuple(labels)
+    if len(classes) != BINARY_CLASSES or positive not in classes:
+        return None
+    if positive == classes[0]:
+        return tuple(1.0 - value for value in probabilities)
+    return probabilities
 
 
 def _classification_scores(

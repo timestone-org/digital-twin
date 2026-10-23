@@ -49,6 +49,7 @@ _CMP_SYMBOLS: dict[type[ast.cmpop], str] = {
 # 聚合函数 → 展示符号。Σ 只给求和，其余用小写词，生造符号反而难认
 _AGG_SYMBOLS = {
     "SUM_OVER": "Σ",
+    "SUM_COMPLETE_OVER": "Σ完整",
     "AVG_OVER": "avg",
     "MIN_OVER": "min",
     "MAX_OVER": "max",
@@ -364,7 +365,9 @@ class _Builder:
                 else 1
             )
             return {"t": "prev", "x": self._column(key), "n": int(steps)}
-        if name in WINDOW_FUNCS or name in ALL_FUNCS:
+        if name != "SUM_COMPLETE_OVER" and (
+            name in WINDOW_FUNCS or name in ALL_FUNCS
+        ):
             return self._aggregate(name, node)
         if name == "SQRT":
             return {"t": "sqrt", "x": self.visit(node.args[0])}
@@ -395,7 +398,11 @@ class _Builder:
         return {
             "t": "agg",
             "sym": _AGG_SYMBOLS[name],
-            "label": f"近 {spec.label}" if spec is not None else "全表",
+            "label": (
+                (spec.label if spec.is_today else f"近 {spec.label}")
+                if spec is not None
+                else "全表"
+            ),
             # func / window 只给回写公式文本用，展示不需要
             "func": name,
             "window": spec.literal if spec is not None else None,

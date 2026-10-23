@@ -26,6 +26,7 @@ from platform_server.apps.hvac.modeling.evaluation import set_key
 from platform_server.apps.hvac.modeling.features import (
     StartConditions,
     build_row,
+    instant_compliance,
 )
 from platform_server.apps.hvac.models import AcModel
 from platform_server.apps.hvac.schemas import PredictIn, RecommendIn
@@ -104,7 +105,7 @@ async def predict(
         raise ModelConfigInvalid(
             f"组合里有模型不认识的机组：{'、'.join(unknown)}"
         )
-    found = _score_set(bundle, running, payload=payload)
+    found = score_set(bundle, running, payload=payload)
     if model.trained_at is None:  # pragma: no cover - _load_bundle 已挡
         raise ModelNotReady("模型还没有一次成功的训练，先训练再试算")
     return PredictResult(
@@ -139,7 +140,7 @@ async def recommend(
     at = payload.at or utcnow()
     payload = payload.model_copy(update={"at": at})
     scored = [
-        _score_set(bundle, sorted(set(serving)), payload=payload)
+        score_set(bundle, sorted(set(serving)), payload=payload)
         for serving in model.serving_sets
         if all(item in bundle.serials for item in serving)
     ]
@@ -202,7 +203,7 @@ async def _load_bundle(
     return model, bundle
 
 
-def _score_set(
+def score_set(
     bundle: ModelBundle,
     running: list[str],
     *,
@@ -213,13 +214,24 @@ def _score_set(
     ⚠ 按工件自己的机组清单拼行，不按房间当前清单：房间变动不改老工件的列。
     Args: bundle, running（已排序去重）, payload。
     """
+    conditions = _conditions_of(payload, running)
     row = build_row(
-        _conditions_of(payload, running),
+        conditions,
         units=bundle.units,
         timezone=bundle.timezone,
     )
     pair, is_dedicated = bundle.pair_for(set_key(running))
-    found = predict_mixture(pair, row)
+    found = predict_mixture(
+        pair,
+        row,
+        known_compliance=instant_compliance(
+            conditions, units=bundle.units, timezone=bundle.timezone
+        ),
+    )
+    if pair.duration_forest is None and found.instant_probability < 1.0:
+        raise ModelArtifactUnusable(
+            "模型没有非零时长训练样本，无法预测未达标工况，请补充样本后重训"
+        )
     return RecommendEntry(
         running_set=tuple(running),
         set_key=set_key(running),

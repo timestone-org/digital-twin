@@ -19,6 +19,7 @@ import type { ComputedRef } from 'vue'
 
 import { installDashboardDataSources } from '@/bootstrap/dashboard'
 import { usePointSamples } from '@/composables/usePointSamples'
+import { useDatasetLatestValues } from '@/composables/useDatasetLatestValues'
 import { useRealtimeChannel } from '@/composables/useRealtimeChannel'
 import { boundPointKeysOf } from '@/features/dashboard/editorDoc'
 import { createBindingReader } from '@/runtime/bindingReader'
@@ -111,6 +112,7 @@ export function useTwin2dLiveValues(
   //   会把「同一批点位」认成换了一批，于是每改一次绑定就退订重订一轮
   const keys = computed(() => boundPointKeysOf(bindings()))
   const samples = usePointSamples(() => keys.value, dashboardId)
+  const readDataset = useDatasetLatestValues(bindings, dashboardId)
 
   const tally = computed(() => tallyOf(keys.value, samples.read))
 
@@ -122,7 +124,7 @@ export function useTwin2dLiveValues(
   })
 
   return {
-    readBinding: () => createBindingReader(samples.read),
+    readBinding: () => createBindingReader(samples.read, readDataset),
     read: samples.read,
     state,
     tally,

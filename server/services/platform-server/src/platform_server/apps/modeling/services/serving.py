@@ -8,7 +8,7 @@
 
 from dataclasses import dataclass
 from datetime import datetime
-from typing import Any
+from typing import Any, Protocol, runtime_checkable
 
 from platform_server.apps.modeling.operators import (
     CHANNEL_BINARY,
@@ -42,6 +42,11 @@ _FIELD_FITTED = "fitted"
 _FIELD_EXPECTED = "expected_input_columns"
 # 建模那一步产出的那一列的名字，只在编译出来的链路内部用
 _PREDICTION_KEY = "__prediction__"
+
+
+@runtime_checkable
+class _StructuredRule(Protocol):
+    def calculate_rows(self, frame: Frame) -> list[dict[str, object]]: ...
 
 
 @dataclass(frozen=True)
@@ -125,6 +130,27 @@ class CompiledModel:
         for slot, index in enumerate(live):
             answers[index] = _value_at(frame, slot)
         return answers
+
+    def calculate_many(
+        self, rows: list[tuple[list[float | str], datetime | None]]
+    ) -> list[dict[str, object]]:
+        """保持十进制输入并返回结构化结果。Args: rows。"""
+        if len(self._steps) != 1:
+            raise OperatorError("规则计算不允许会改变计量值的前置推理步骤")
+        for args, at in rows:
+            if len(args) != len(self._features):
+                raise OperatorError("规则输入列数与发布契约不一致")
+            if self.requires_timestamp and at is None:
+                raise OperatorError("规则计算缺少时刻")
+        frame = Frame(
+            columns=tuple(
+                FrameColumn(key=key, name=key, dtype="number")
+                for key in self._features
+            ),
+            rows=tuple(tuple(args) for args, _at in rows),
+            index=tuple(_epoch_ms(at) for _args, at in rows),
+        )
+        return _calculate(self._steps[0], frame)
 
     def _is_answerable(
         self, args: list[float | None], at: datetime | None
@@ -265,6 +291,20 @@ def _apply(step: _Step, frame: Frame, estimator: object | None) -> Frame:
     if not isinstance(produced, Frame):
         raise OperatorError(f"步骤「{step.operator}」在推理时没有产出数据")
     return produced
+
+
+def _calculate(step: _Step, frame: Frame) -> list[dict[str, object]]:
+    """恢复发布时规则并按列契约计算。Args: step, frame。"""
+    if step.expected and frame.keys != step.expected:
+        raise OperatorError("规则计算的列与发布时不一致")
+    operator, _ = registry.build(step.operator, step.config)
+    if step.fitted:
+        operator.load_fitted(step.fitted)
+    if step.operator != "energy_rules" or not isinstance(
+        operator, _StructuredRule
+    ):
+        raise OperatorError("这个模型不是结构化规则模型")
+    return operator.calculate_rows(frame)
 
 
 def _one_row(

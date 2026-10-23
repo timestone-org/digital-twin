@@ -52,6 +52,18 @@ interface PlainSpec {
 }
 
 const PLAIN: Record<string, PlainSpec> = {
+  test_rows: {
+    label: '验证样本数',
+    hint: '独立验证段参与检测的样本数',
+  },
+  threshold: {
+    label: '异常分数阈值',
+    hint: '分数严格大于此值才判异常；分数不是概率',
+  },
+  anomaly_rate: {
+    label: '异常比例',
+    hint: '独立验证样本的异常占比，按 0–1 表示；它不是检测准确率',
+  },
   mae: { label: 'MAE', hint: SCALED },
   rmse: { label: 'RMSE', hint: SCALED },
   max_error: { label: '最大误差', hint: SCALED },

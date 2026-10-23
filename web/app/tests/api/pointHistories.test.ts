@@ -50,6 +50,20 @@ function lastCall(): [string, Record<string, unknown>] {
 }
 
 describe('窗口换算', () => {
+  it.each([
+    ['Asia/Shanghai', '2026-10-23T16:00:00Z', '2026-10-23T16:00:00Z'],
+    ['UTC', '2026-10-23T16:00:00Z', '2026-10-23T00:00:00Z'],
+    ['America/New_York', '2026-03-08T20:00:00Z', '2026-03-08T05:00:00Z'],
+    ['America/New_York', '2026-11-01T20:00:00Z', '2026-11-01T04:00:00Z'],
+  ])('today 按 %s 的日界解析，包含夏令时切换', (timezone, now, start) => {
+    expect(
+      resolveWindow({ lastWindow: 'today' }, Date.parse(now), timezone),
+    ).toEqual({
+      fromMs: Date.parse(start),
+      toMs: Date.parse(now),
+    })
+  })
+
   it('相对窗四种单位；给界面那一面的换算认不出就回落一小时', () => {
     expect(windowToMs('30s')).toBe(30_000)
     expect(windowToMs('5m')).toBe(300_000)

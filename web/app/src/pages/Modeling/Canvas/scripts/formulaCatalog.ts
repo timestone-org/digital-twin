@@ -43,6 +43,7 @@ import { CLEAN_FORMULAS } from './formulaClean'
 import { EVAL_FORMULAS } from './formulaEval'
 import { FEATURE_FORMULAS } from './formulaFeature'
 import { PREPARATION_FORMULAS } from './formulaPreparation'
+import { ENERGY_RULE_FORMULAS } from './formulaRules'
 import { niceNumber } from './numbers'
 import type { ModelPreview } from './preview'
 
@@ -502,6 +503,7 @@ const CATALOG: Record<string, readonly FormulaMaker[]> = {
   ...FEATURE_FORMULAS,
   ...EVAL_FORMULAS,
   ...PREPARATION_FORMULAS,
+  ...ENERGY_RULE_FORMULAS,
   split_dataset: [splitSize, splitOrder],
   split_samples: [splitSamples],
   linear_regression: [linearPredict, linearFit],

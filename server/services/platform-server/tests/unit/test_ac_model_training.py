@@ -27,7 +27,6 @@ from platform_server.apps.hvac.modeling.training import (
     MIN_SAMPLES,
     InsufficientSamples,
     TrainedModel,
-    _zero_anchors,
     train,
 )
 from unit.test_ac_model_features import TZ, UNITS
@@ -74,14 +73,18 @@ def trained() -> TrainedModel:
     )
 
 
-def test_every_sample_gets_exactly_one_oof_prediction(
+def test_only_samples_after_the_initial_training_window_get_predictions(
     trained: TrainedModel,
 ) -> None:
-    """每条样本恰好有一次「模型没见过它」的预测。"""
+    """首块用于训练，其余每条样本只有一次前向预测。"""
     assert trained.sample_count == 80
     assert trained.contradictory_count == 0
-    assert len(trained.oof) == 80
-    assert len({row.started_at for row in trained.oof}) == 80
+    assert len(trained.oof) == 66
+    assert len({row.started_at for row in trained.oof}) == 66
+    assert (
+        min(row.started_at for row in trained.oof)
+        == sample(14).conditions.started_at
+    )
 
 
 def test_the_model_learns_the_synthetic_physics(
@@ -109,11 +112,10 @@ def test_instant_and_delayed_starts_are_told_apart(
     assert delayed_hit > 0.8
 
 
-def test_stage_b_can_answer_below_the_shortest_hot_row(
+def test_positive_duration_distribution_cannot_include_zero_anchors(
     trained: TrainedModel,
 ) -> None:
-    """⚠ 只喂非零样本的阶段 B 在带内条件上也只能答一个 ≥ 最短热行的数：
-    掺进来的那一小撮零样本锚点就是为了让它答得下去（`ZERO_ANCHOR_SHARE`）。"""
+    """条件分布只回答非零时长，判零由起始状态和混合入口负责。"""
     bundle = load(
         trained.artifact.payload,
         digest=trained.artifact.digest,
@@ -124,14 +126,13 @@ def test_stage_b_can_answer_below_the_shortest_hot_row(
     assert pair.duration_forest is not None
     instant = build_row(sample(0).conditions, units=UNITS, timezone=TZ)
     (median,) = pair.duration_forest.quantiles_at(instant, [0.5])
-    assert median < SHORTEST_HOT_MINUTES
+    assert median >= SHORTEST_HOT_MINUTES - 1e-9
 
 
-def test_the_anchors_do_not_swamp_the_hot_rows(
+def test_positive_durations_are_not_swamped_by_zero_samples(
     trained: TrainedModel,
 ) -> None:
-    """⚠ 锚点只是锚点：借得太多、太重，阶段 B 就改口在答另一个问题，
-    热行整段被拽向 0——漏报是这个模型最贵的那类错。"""
+    """非零时长样本不能被大量零时长样本压成瞬时达标。"""
     delayed = [row for row in trained.oof if row.actual_minutes >= 16]
     assert sum(1 for row in delayed if row.p50 >= 5.0) / len(delayed) > 0.8
 
@@ -159,20 +160,6 @@ def test_a_room_that_always_complies_instantly_has_no_stage_b() -> None:
         trained_sklearn_version=trained.artifact.sklearn_version,
     )
     assert bundle.pooled.duration_forest is None
-
-
-def test_zero_anchors_are_spread_out_capped_and_repeatable() -> None:
-    """锚点的三条约定：等距摊开、要得比有的多就全给、同一份数据挑同一批行。"""
-    answers = [0.0 if at % 2 else 5.0 for at in range(20)]
-    picked = _zero_anchors(answers, wanted=5)
-    assert picked == _zero_anchors(answers, wanted=5)
-    assert len(picked) == 5
-    assert all(answers[at] == 0.0 for at in picked)
-    assert picked == sorted(picked)
-    # 要 99 条而只有 10 条零样本：全给，不报错也不重复
-    assert len(_zero_anchors(answers, wanted=99)) == 10
-    assert _zero_anchors(answers, wanted=0) == []
-    assert _zero_anchors([1.0, 2.0], wanted=3) == []
 
 
 def test_training_is_deterministic() -> None:

@@ -34,6 +34,49 @@ const MODE_SPEC: BindingSpec = {
   enumMap: { 0: '停机', 1: '运行' },
 }
 
+describe('按需标量的时间与派生元数据', () => {
+  it('台账时刻保留给展示，及其多层派生都不计作实时采样', () => {
+    const bindings = [
+      fakeBinding({ id: 'a', fieldKey: 'a', sourceKind: 'dataset' }),
+      fakeBinding({
+        id: 'b',
+        fieldKey: 'b',
+        sourceKind: 'computed',
+        computeJson: { op: 'sum', inputs: ['a'] },
+      }),
+    ]
+    const result = computeModuleValues({
+      specs: [],
+      bindings,
+      read: (binding, siblings) =>
+        binding.fieldKey === 'a'
+          ? {
+              state: 'ok',
+              value: 8,
+              timestampMs: 100,
+              dependsOnRealtime: false,
+              isStale: true,
+            }
+          : { state: 'ok', value: siblings.a },
+    })
+    expect(result.tally.sampled).toBe(0)
+    expect(result.valueTimeMs).toBe(100)
+    expect(result.slots.b).toEqual({
+      state: 'ok',
+      timestampMs: 100,
+      dependsOnRealtime: false,
+      isStale: true,
+    })
+    expect(
+      computeModuleStatus({
+        unboundRequiredCount: 0,
+        tally: result.tally,
+        connectionState: 'closed',
+      }),
+    ).toBe('connected')
+  })
+})
+
 /** 按槽键给定结果的读取器；没给的槽当作还在等首帧。 */
 function readerOf(slots: Record<string, BindingSlot>): BindingValueReader {
   return (binding) => slots[binding.fieldKey] ?? { state: 'pending' }

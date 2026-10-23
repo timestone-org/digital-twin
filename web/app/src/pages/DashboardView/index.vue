@@ -90,6 +90,7 @@ const values = useDashboardValues(
 // ⚠ 必须排在 `useDashboardValues` 之后：两次注入的是同一个键，后者整份覆盖前者
 installDashboardSeries({
   readPoint: values.read,
+  readBinding: values.readBinding,
   connectionState: () => channel.connectionState.value,
   seriesEpoch: useSeriesEpoch(),
 })

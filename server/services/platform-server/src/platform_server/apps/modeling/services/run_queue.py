@@ -8,7 +8,7 @@
 
 import uuid
 from collections.abc import Mapping
-from dataclasses import dataclass
+from dataclasses import dataclass, replace
 
 from lib.logging import current_traceparent
 from lib.stream import StreamGroup, StreamLike
@@ -77,3 +77,10 @@ async def publish_run(
     Args: stream, target, message。
     """
     return await stream.publish(target.stream, message.to_fields())
+
+
+def rules_target(target: StreamGroup) -> StreamGroup:
+    """规则运行与旧worker的训练流隔离。Args: target。"""
+    return replace(
+        target, stream=f"{target.stream}:rules", group=f"{target.group}:rules"
+    )

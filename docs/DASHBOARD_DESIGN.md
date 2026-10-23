@@ -143,10 +143,15 @@ opcua      → 实时点位，node_key 指向 collect_points，走 WS 推送
 static     → 常量，static_value_json
 computed   → 同模块内其它槽的运算，compute_json {op, inputs, precision}
 archive    → 历史序列，detail_json {node_key, range}
+dataset    → 台账列，detail_json {dataset_key, range, timezone?}；已登录标量读 HTTP latest，序列读 series
 ```
 
 `source_kind` 是**闭合集合**，未注册的值 `400`。参考实现放开成任意字符串，
 于是 `"opuca"` 这种拼写照常入库、永不产数据、无任何告警。
+
+台账绑定的 `range.last_window = "today"` 按显式 `timezone` 的自然日限定读数，
+缺省采用业务时区 `Asia/Shanghai`。当日尚无台账桶时标量返回空，不沿用昨日累计；
+一般最新值绑定继续保留原口径。序列取数也按同一时区从当日零点开始。
 
 ### 4.2 数组绑定
 

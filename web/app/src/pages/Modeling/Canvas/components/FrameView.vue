@@ -27,8 +27,9 @@ const props = withDefaults(
      * 这一屏唯一的出处，不能一删了事（结果展示规格 §2-P1）。
      */
     hasProvenanceBar?: boolean | undefined
+    hasFullExport?: boolean | undefined
   }>(),
-  { hasProvenanceBar: false },
+  { hasProvenanceBar: false, hasFullExport: false },
 )
 
 /**
@@ -65,7 +66,7 @@ const STAT_COLUMNS: readonly DtTableColumn[] = [
 const headColumns = computed<DtTableColumn[]>(() => [
   { key: 'index', label: props.preview.indexName || '#', width: '11rem' },
   ...props.preview.columns.map((column) => ({
-    key: column.key,
+    key: `value:${column.key}`,
     label: column.name || column.key,
   })),
 ])
@@ -83,7 +84,7 @@ const headRows = computed<HeadRow[]>(() =>
       ),
     }
     props.preview.columns.forEach((column, at) => {
-      cells[column.key] = display(row[at])
+      cells[`value:${column.key}`] = display(row[at])
     })
     return cells
   }),
@@ -173,7 +174,13 @@ function statOf(column: ColumnStat, key: string): string {
       </template>
     </DtTable>
     <p v-if="props.preview.isRowsTruncated" class="dt-ml-frame__note">
-      只显示了开头这几行，完整结果在下游算子里
+      只显示了开头这几行。
+      <template v-if="props.hasFullExport">
+        已保留的全量结果可从下载入口获取。
+      </template>
+      <template v-else>
+        本次运行未保留全量结果；需要完整数据时，请开启“留全量结果”后重新运行流水线。
+      </template>
     </p>
   </div>
 </template>

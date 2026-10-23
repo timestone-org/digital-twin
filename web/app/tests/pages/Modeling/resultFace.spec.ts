@@ -50,8 +50,6 @@ const FRAME_BODY = {
 
 const FRAME = { frame: FRAME_BODY }
 
-const FRAME_URL = '/api/v1/platform/modeling-runs/r1/frames/n1?port=frame'
-
 function blockOf(over: Record<string, unknown> = {}) {
   return {
     kind: 'rows',
@@ -386,7 +384,7 @@ describe('出处那一行', () => {
         until: null,
         actualSince: '2026-08-12T03:00:00Z',
         actualUntil: null,
-        downloadUrl: '',
+        downloadTarget: null,
       },
     }).text()
 
@@ -403,7 +401,7 @@ describe('出处那一行', () => {
         until: null,
         actualSince: null,
         actualUntil: null,
-        downloadUrl: '',
+        downloadTarget: null,
       },
     }).text()
 
@@ -418,7 +416,7 @@ describe('出处那一行', () => {
       since: '2026-01-01T00:00:00Z',
       until: null,
       actualUntil: null,
-      downloadUrl: '',
+      downloadTarget: null,
     }
     const asked = mount(ProvenanceBar, {
       props: { ...bare, actualSince: null },
@@ -434,7 +432,7 @@ describe('出处那一行', () => {
   })
 
   // ⚠ 屏上那份摘要有 200 行硬上限：想把处理好的数据拿走只能走这个链接
-  it('留了全量结果时给一个原生下载链接', () => {
+  it('留了全量结果时给认证下载按钮', () => {
     const link = mount(ProvenanceBar, {
       props: {
         tableCodes: [],
@@ -442,13 +440,11 @@ describe('出处那一行', () => {
         until: null,
         actualSince: null,
         actualUntil: null,
-        downloadUrl: FRAME_URL,
+        downloadTarget: { runId: 'r1', nodeId: 'n1', port: 'frame' },
       },
-    }).find('a')
+    }).find('button')
 
-    expect(link.attributes('href')).toBe(FRAME_URL)
-    // 交给浏览器直接下：几十 MB 的 CSV 拉回内存造 blob 是白付一遍内存
-    expect(link.attributes('download')).toBe('')
+    expect(link.attributes('type')).toBe('button')
     expect(link.text()).toBe('下载全量结果')
   })
 
@@ -460,7 +456,7 @@ describe('出处那一行', () => {
         until: null,
         actualSince: null,
         actualUntil: null,
-        downloadUrl: '',
+        downloadTarget: null,
       },
     })
 
@@ -480,10 +476,12 @@ describe('出处那一行', () => {
     })
     const gone = mount(ResultView, { props: { ...shared, exportedPorts: [] } })
 
-    expect(kept.findComponent(ProvenanceBar).props('downloadUrl')).toContain(
-      'port=frame',
-    )
-    expect(gone.findComponent(ProvenanceBar).props('downloadUrl')).toBe('')
+    expect(kept.findComponent(ProvenanceBar).props('downloadTarget')).toEqual({
+      runId: 'r1',
+      nodeId: 'n1',
+      port: 'frame',
+    })
+    expect(gone.findComponent(ProvenanceBar).props('downloadTarget')).toBeNull()
   })
 })
 

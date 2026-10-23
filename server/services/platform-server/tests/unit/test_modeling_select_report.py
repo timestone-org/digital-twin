@@ -179,6 +179,15 @@ def test_the_degradation_flag_is_on_when_no_split_plan_arrived() -> None:
     assert "在 4 行训练行上" in blocks["columns"].payload["reason"]
 
 
+def test_the_column_reason_counts_the_actual_selected_candidates() -> None:
+    frame = frame_of({"甲": [1.0, 2.0], "乙": [2.0, 4.0]})
+    produced, blocks = run_of(frame, top_k=5)
+    assert len(produced.columns) == 2
+    assert blocks["columns"].payload["reason"] == (
+        "在 2 行训练行上按方差给 2 个候选列打分，留下前 2 列"
+    )
+
+
 def test_the_degradation_flag_is_off_when_one_split_sits_downstream() -> None:
     """恰好一个下游切分时排名只看训练行，那时报退化就是乱报。"""
     frame = frame_of(

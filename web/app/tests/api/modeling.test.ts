@@ -98,6 +98,10 @@ const CALLS: [string, () => Promise<unknown>][] = [
     () => modeling.publishModelingVersion({ run_id: 'r1', name: 'v' }),
   ],
   ['getModelingVersion', () => modeling.getModelingVersion('v1')],
+  [
+    'updateModelingVersion',
+    () => modeling.updateModelingVersion('v1', { name: '设备能效评估模型' }),
+  ],
   ['retireModelingVersion', () => modeling.retireModelingVersion('v1')],
   ['listModelingBindings', () => modeling.listModelingBindings()],
   [

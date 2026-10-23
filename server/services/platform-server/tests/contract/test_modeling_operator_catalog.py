@@ -36,6 +36,7 @@ EXPECTED_CODES = (
     "cross_validate",
     "cyclic_time",
     "drop_missing",
+    "energy_rules",
     "feature_importance",
     "fill_missing",
     "filter_rows",
@@ -244,6 +245,11 @@ def test_config_schemas_only_use_closed_types() -> None:
                 assert set(values["enum"]) == set(AGG_FUNCS)
                 assert resolved["maxProperties"] == 256
                 assert field["default"] == {}
+                continue
+            if field.get(WIDGET_KEY) == "energy-rules-json":
+                assert spec.code == "energy_rules"
+                assert name in {"fields", "parameters", "meters", "topology"}
+                assert _kind_of(resolved) in {"object", "array"}
                 continue
             assert (
                 _kind_of(resolved) in ALLOWED_CONFIG_TYPES

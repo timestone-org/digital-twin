@@ -17,6 +17,7 @@ from platform_server.apps.dataset.crud import (
     WholeStatsRow,
     record_crud,
 )
+from platform_server.apps.dataset.errors import DatasetRecordInvalid
 from platform_server.apps.dataset.formula import (
     AnalysisModel,
     AnalysisUnavailable,
@@ -28,9 +29,12 @@ from platform_server.apps.dataset.formula import (
     WindowSpec,
     window_lower_bound,
 )
+from platform_server.apps.dataset.models import DatasetRecord
 from platform_server.apps.dataset.services import analysis_provider
 from platform_server.apps.dataset.services.effective import to_snapshot
 from platform_server.apps.dataset.services.sessions import BorrowedSessions
+
+MAX_FORMULA_HISTORY_ROWS = 200_000
 
 
 @dataclass(frozen=True)
@@ -94,6 +98,21 @@ class RowSpan:
     table_id: uuid.UUID
     start: datetime
     end: datetime
+
+
+async def load_formula_rows(
+    session: AsyncSession, window: RecordWindow
+) -> list[DatasetRecord]:
+    """有界预取公式历史，触顶时拒绝部分计算。Args: session, window。"""
+    rows = await record_crud.scan_oldest(
+        session, window=window, limit=MAX_FORMULA_HISTORY_ROWS
+    )
+    if len(rows) > MAX_FORMULA_HISTORY_ROWS:
+        raise DatasetRecordInvalid(
+            f"公式历史预取超过 {MAX_FORMULA_HISTORY_ROWS} 行，数据不完整，"
+            "请缩短公式窗口或重算范围"
+        )
+    return rows
 
 
 async def load_history(
@@ -276,11 +295,11 @@ async def _load_windows(
     lowers = [
         window_lower_bound(target.ts, spec, scope.timezone) for spec in specs
     ]
-    rows = await record_crud.list_ascending(
+    rows = await load_formula_rows(
         session,
         window=RecordWindow(
             table_id=target.table_id,
-            after=min(lowers),
+            since=min(lowers),
             until=target.ts,
             exclude_row_id=target.exclude_row_id,
         ),
@@ -310,7 +329,7 @@ async def _external_series(
         ]
         + [span.start]
     )
-    series = await record_crud.list_ascending(
+    series = await load_formula_rows(
         session,
         window=RecordWindow(table_id=table_id, since=lower, until=span.end),
     )

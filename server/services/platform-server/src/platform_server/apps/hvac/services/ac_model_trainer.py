@@ -29,6 +29,9 @@ from platform_server.apps.hvac.model_statuses import (
     MODEL_STATUS_READY,
     MODEL_STATUS_TRAINING,
 )
+from platform_server.apps.hvac.modeling.curation import (
+    MAX_NORMAL_DURATION_MINUTES,
+)
 from platform_server.apps.hvac.modeling.evaluation import (
     ModelMetrics,
     summarize,
@@ -131,10 +134,19 @@ async def run_training(
 def _log_curation(
     model_id: uuid.UUID, room_id: uuid.UUID, trained: TrainedModel
 ) -> None:
-    """记录事件标签与其季节范围不一致的计数。
+    """记录长时长剔除和达标标签不一致的计数。
 
     Args: model_id, room_id, trained。
     """
+    if trained.overlong_episode_count:
+        _logger.info(
+            "ac_model_long_durations_excluded",
+            "超过正常工况达标时长上限的样本已排除",
+            model_id=str(model_id),
+            room_id=str(room_id),
+            excluded_count=trained.overlong_episode_count,
+            max_duration_minutes=MAX_NORMAL_DURATION_MINUTES,
+        )
     if not trained.contradictory_count and not trained.unexplained_zero_count:
         return
     _logger.warning(

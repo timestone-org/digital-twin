@@ -408,6 +408,23 @@ def _model_loads() -> dict[str, tuple[Case, ...]]:
     """切分与三个建模算子的最坏负载。"""
     pool = frames()
     return {
+        "energy_rules": (
+            (
+                {"frame": pool["is_dense"]},
+                {
+                    "kind": "energy_aggregation",
+                    "meters": [
+                        {
+                            "category": f"用能分类{seat}" + "类" * 40,
+                            "column": _key(seat),
+                            "unit": "kWh",
+                            "standard_coal_factor": "0.1229",
+                        }
+                        for seat in range(32)
+                    ],
+                },
+            ),
+        ),
         "split_samples": (({"frame": pool["roled"]}, {}),),
         "anomaly_distance": (
             (
@@ -503,7 +520,7 @@ def test_every_registered_operator_has_a_worst_load_here() -> None:
     """反向遍历的入口：花名册上多一个算子，这张表就得跟着多一行。"""
     assert set(loads()) == set(CODES) - set(UNREACHABLE)
     assert UNREACHABLE == ()
-    assert len(CODES) == 29
+    assert len(CODES) == 30
 
 
 def test_the_shared_frames_really_are_the_worst_ones() -> None:

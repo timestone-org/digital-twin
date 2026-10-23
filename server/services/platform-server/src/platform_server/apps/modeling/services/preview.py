@@ -6,6 +6,7 @@
 """
 
 import json
+from statistics import median
 from typing import Any
 
 from platform_server.apps.modeling.operators import (
@@ -60,7 +61,10 @@ def fit_budget(preview: dict[str, Any]) -> tuple[dict[str, Any], bool]:
     Args: preview。
     """
     if size_of(preview) <= PREVIEW_MAX_BYTES:
-        return preview, bool(preview.get("rows_truncated"))
+        return preview, any(
+            bool(preview.get(key))
+            for key in ("rows_truncated", "cols_truncated", "pairs_truncated")
+        )
     if preview.get("kind") == KIND_FRAME:
         for rows in FALLBACK_ROWS:
             trimmed = _trim_rows(preview, rows)
@@ -142,7 +146,7 @@ def _number_stat(numbers: list[float]) -> dict[str, float | None]:
         "min": ordered[0],
         "max": ordered[-1],
         "mean": sum(ordered) / len(ordered),
-        "p50": ordered[len(ordered) // 2],
+        "p50": median(ordered),
     }
 
 

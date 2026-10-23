@@ -39,7 +39,8 @@ export function useResultPanel(deps: ResultPanelDeps) {
   const nodeId = ref<string | null>(null)
 
   const labels = computed<Record<string, string>>(() => {
-    const node = deps.graph.value.nodes.find((item) => item.id === nodeId.value)
+    const graph = deps.runGraph() ?? deps.graph.value
+    const node = graph.nodes.find((item) => item.id === nodeId.value)
     if (node === undefined) return {}
     const table: Record<string, string> = {}
     for (const port of deps.operators.value.get(node.operator)?.outputs ?? []) {

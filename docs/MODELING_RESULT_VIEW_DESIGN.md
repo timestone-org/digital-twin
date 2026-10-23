@@ -4,7 +4,7 @@
 >
 > 本文是唯一可施工的设计规格，合成自三份提案（A 前端为主 / B 契约扩容 / C 问题导向）与三份评审（可施工性 / 数据正确性 / 视觉与信息设计）。评审挑出的每一条硬伤在 §11 逐条落到决策。
 >
-> **先更正一处既知事实：注册的算子是 24 个，不是 22 个。** `grep @register_operator` 24 处，`server/services/platform-server/tests/contract/test_modeling_operator_catalog.py:30-55` 的写死名单也是 24 项。§5 按 24 个给全。
+> §5 定义基础的 24 个算子；当前注册表已有 30 个，包含选列、历史平移、周期编码、无监督切分、异常检测和能源业务规则。现行数量与完整输出覆盖由算子目录、默认配置和输出矩阵契约验证。
 
 ---
 
@@ -177,7 +177,7 @@ class ReportBlock:
 | block kind | 回答什么 | payload 关键字段（含硬上限） | 谁产 |
 |---|---|---|---|
 | `rows` | 行数变了多少、谁的锅 | `before/after/dropped/dropped_blank/ratio_configured/ratio_actual/funnel[≤6]/by_column[≤12]` | 8 个算子 |
-| `columns` | 列去哪了 / 多出来的是谁造的 | `added[≤60]/removed[≤60]/kept/dtype_before[≤12]/reason` | 9 个算子 |
+| `columns` | 列去哪了 / 多出来的是谁造的 | `added[≤60]/removed[≤60]/kept/dtype_before[≤12]/reason`，三个名单各有截断前的 `added_total/removed_total/dtype_before_total`；`kept` 是包含新增列的最终输出列数 | 9 个算子 |
 | `cells` | 默默改了多少个数 | `by_column[≤12]: {key, changed, low, high, samples[≤3]}` | 4 个算子 |
 | `fits` | 学到了什么、能不能核对 | `method/train_rows/total_rows/by_column[≤60]: {key, params{}, skipped_reason}` | 6 个算子 |
 | `bins` | 这条线画在哪、分布长什么样 | `by_column[≤8]: {key, bins[≤40], marks[≤4]{at,label,intent}, off_axis{label,count}}` | 8 个算子 |
@@ -511,7 +511,7 @@ interface FormulaTerm { text: string; kind: 'var' | 'num' | 'op' | 'name' | 'war
 ```
 
 - **骨架**在 `scripts/formulaCatalog.ts`，按 `operator code + formula id` 建键。
-- **实参**从 `report` / `preview.fitted` / `ModelingRun.graph.nodes[].config` 取。config 是**运行时冻结的快照**，所以 `tolerance_ms` / `threshold` / `k` / `test_ratio` / `method` / `lags` / `window` 这些「参数不进摘要」的问题**零后端**解决，历史回看也正确。
+- **实参**从该次 `report` / `preview.fitted` / 模型 `hyper_params` / `ModelingRun.graph.nodes[].config` 取。新运行冻结校验后的有效配置，包含实际默认值；旧记录缺失时显示条件式或缺失说明，不能拿当前 schema 的默认值冒充历史参数。
 
 **排版**：分式 = 两行 + `border-top: 1px solid currentColor`；根号 = `√` + 一个带 `border-top` 的 span；上下标 `<sub>/<sup>`；`cases` = 左侧 `border-left` + grid 两列。变量名 `--font-mono`，数值 `--font-digit`，运算符前后各 `0.25em`。
 
@@ -874,3 +874,14 @@ interface FormulaTerm { text: string; kind: 'var' | 'num' | 'op' | 'name' | 'war
 | R-36 | 打分帧加列是**契约变更**，会动到 `describe_columns` 与列声明契约测试、`serving_json` 的逐步列集（`docs/MODELING_PLATFORM_DESIGN.md` D4 的 `2.0` 形状） | PR-24 单列一期，只做这一件事；契约用例先红后绿 |
 | R-37 | 存量已发布的逻辑回归模型版本，其 `serving_json` 里没有 `positive_threshold` | 推理侧读不到时回落 0.5（与今天的行为一字不差），**不回填**存量版本 |
 | R-38 | 下游算子（残差分析、特征重要性）拿到多出来的一列会不会串味 | **已核实不会**：三个吃打分帧的下游全都按**列 key** 取（回归评估 `evaluate.py:127` → `scored_columns_of` `:171-172`、分类评估 `evaluate.py:325-326`、残差分析 `diagnostics.py:129`），既不按位置也不按 role，多一列不会错位。⚠ 这条结论不能靠 role 立论——概率列的 role 就是 `feature`（§13.2） |
+
+## 现行配置与结果面约束
+
+- 配置 schema 导出可信配置工厂的真实默认值；前端显示、恢复默认和新运行快照采用同一口径。数组元素的枚举、整数及范围约束必须可编辑、可验证，不能退化成普通文本。
+- 显式 `false`、`0` 和空数组保持各自语义。未应用的 JSON 或非法列表草稿须提示并阻止直接保存、运行；已经进入图定义的未完成配置仍可按现有流程保存为草稿，运行另行验证。
+- 历史结果的算子身份、参数和正类取该次冻结记录，端口标签按该次算子的端口契约匹配；业务列名与表格内部行键、时间索引隔离。特征列名与指标名相同，也不能据此把重要性数值格式化成百分比。
+- 数值列的偶数样本中位数取两个中间值的平均。概率列携带模型类别的内部元数据，切换正类后同步概率方向；旧单类观测缺少概率类别时不猜测方向。阈值网格包含全判负类，并保持有界行数。
+- 列变化的 `kept` 表示最终输出列数，包含新增列；新增、移除和类型对照各自保留完整计数，名单截断不能当作实际总数。特征筛选的说明采用实际保留数量。
+- 时间覆盖的请求边界决定横轴，实际样本时段决定内部断档；请求范围两端未覆盖的部分单独说明，不推测样本延续时间或漏采。
+- 取数截断、摘要削减和报告块削减分别说明；没有保留全量结果时提示重新运行并开启保留，不把终端算子的完整结果指向不存在的下游。
+- 受保护 CSV 通过现有认证客户端获取字节，再触发浏览器下载；原生受保护 URL 不携带 Bearer，不能直接作为下载锚点。下载保留权限校验、进度与失败提示，并防止重复触发。

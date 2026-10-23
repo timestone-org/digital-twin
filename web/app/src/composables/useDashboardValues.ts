@@ -7,9 +7,11 @@
 
 import type { DashboardNodeView, ModuleConnectionState } from '@dt/contracts'
 import { provideRuntimeData } from '@dt/runtime'
+import type { BindingValueReader } from '@dt/runtime'
 import type { Ref } from 'vue'
 
 import { usePointSamples } from '@/composables/usePointSamples'
+import { useDatasetLatestValues } from '@/composables/useDatasetLatestValues'
 import { boundPointKeys } from '@/features/dashboard/editorDoc'
 import {
   createBindingReader,
@@ -26,6 +28,7 @@ export interface DashboardValues {
    * ⚠ 每次调用都现取：取好再传下去的话，值再变也不会重算。
    */
   read: ReadPointSample
+  readBinding: () => BindingValueReader
 }
 
 /**
@@ -39,15 +42,23 @@ export function useDashboardValues(
   nodes: () => readonly DashboardNodeView[],
   scope: () => string,
   connectionState?: () => ModuleConnectionState,
+  hasDatasetAccess = true,
 ): DashboardValues {
   const samples = usePointSamples(() => boundPointKeys(nodes()), scope)
+  const readDataset = useDatasetLatestValues(
+    () => nodes().flatMap((node) => node.bindings),
+    scope,
+    hasDatasetAccess,
+  )
+  const readBinding = (): BindingValueReader =>
+    createBindingReader(samples.read, readDataset)
 
   // ⚠ 不给连接态就是「这里没有实时通道」，模块永不标「数据可能过期」：
   // 编辑器画布是设计态，画一枚说通道断了的角标只会让人去查一条不存在的故障
   provideRuntimeData({
-    readBinding: () => createBindingReader(samples.read),
+    readBinding,
     ...(connectionState === undefined ? {} : { connectionState }),
   })
 
-  return { sampleCount: samples.sampleCount, read: samples.read }
+  return { sampleCount: samples.sampleCount, read: samples.read, readBinding }
 }

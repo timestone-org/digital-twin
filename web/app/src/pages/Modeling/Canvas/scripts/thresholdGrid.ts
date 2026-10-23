@@ -19,7 +19,7 @@ export const NEGATIVE_LABEL = '负类'
 
 /** 网格上的一档：一个阈值与它上面判对判错的四格。 */
 export interface ThresholdRow {
-  /** 后端已经排好版的写法（三位小数），两处印的是同一个串。 */
+  /** 后端已经排好版的写法，包括全判负类的边界档。 */
   text: string
   threshold: number
   truePositive: number
@@ -32,7 +32,7 @@ export interface ThresholdRow {
 export interface ThresholdGrid {
   /** 按阈值从低到高：滑杆往右推就是把门槛抬高。 */
   rows: ThresholdRow[]
-  /** 打分那一刀：判成正类的行里最低的那个概率；null = 一行都没判成正类。 */
+  /** 打分那一档：最低正类概率或全判负类边界；null = 旧结果没有边界。 */
   trainedThreshold: number | null
   /** 默认停在第几档；网格是空的时候是 0。 */
   trainedSeat: number
@@ -115,7 +115,7 @@ function nearestSeat(
  * 一整张网格。
  *
  * ⚠ 默认那一档是**就近**找的，且 `isExact` 照实说：后端会把打分那一刀强行留在
- * 网格上，留不住时（旧结果、或那一次一行都没判成正类）只能就近站，而就近那一
+ * 网格上，留不住时（旧结果没有保留边界）只能就近站，而就近那一
  * 档的四格与 ② 区那张指标卡不是同一组数，界面上得说清楚。
  * Args: payload 这一块的 payload；trained 打分那一刀的阈值。
  */
@@ -131,9 +131,7 @@ export function buildThresholdGrid(
     trainedThreshold: trained,
     trainedSeat: seat,
     isExact:
-      found !== undefined &&
-      trained !== null &&
-      Math.abs(found.threshold - trained) < Number.EPSILON,
+      found !== undefined && trained !== null && found.threshold === trained,
   }
 }
 
@@ -180,7 +178,11 @@ function offsetOf(row: ThresholdRow, grid: ThresholdGrid): string {
     return '这一次打分一行都没判成正类，没有可比的阈值'
   }
   const gap = row.threshold - trained
-  const at = `打分那一刀切在 ${niceNumber(trained)}`
+  const original = grid.rows[grid.trainedSeat]
+  const at =
+    grid.isExact && original?.text === '全判负类'
+      ? '打分那一档是全判负类'
+      : `打分那一刀切在 ${niceNumber(trained)}`
   if (gap === 0) return `${at}，就停在这一档上：四个数与上面那张指标卡同源`
   const way = gap > 0 ? '高' : '低'
   const more = gap > 0 ? '判成正类的行更少' : '判成正类的行更多'

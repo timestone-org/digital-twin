@@ -7,11 +7,11 @@
 from typing import Any
 
 import pytest
+from pydantic import ValidationError
 
 from platform_server.apps.modeling.operators import (
     Frame,
     FrameColumn,
-    OperatorError,
     registry,
 )
 from platform_server.apps.modeling.services.entry_contract import NodeRecord
@@ -109,7 +109,7 @@ def test_a_window_of_only_blanks_stays_blank() -> None:
 
 def test_an_out_of_range_lag_is_refused() -> None:
     """越界的期数当场说清楚。"""
-    with pytest.raises(OperatorError, match="滞后期数"):
+    with pytest.raises(ValidationError, match="greater_than_equal"):
         _made("lag_feature", _frame([1.0]), columns=[KEY], lags=[0])
 
 

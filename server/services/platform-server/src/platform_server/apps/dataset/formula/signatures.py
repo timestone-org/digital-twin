@@ -58,9 +58,10 @@ SCALAR_FUNCS: dict[str, tuple[int, int | None]] = {
     "OR": (2, None),
 }
 
-# 时间窗族。签名固定 `FN_OVER({列}, '窗口')`，元数恒 (2, 2)
+# 时间窗族；完整采样合计额外声明步长。
 WINDOW_FUNCS: tuple[str, ...] = (
     "SUM_OVER",
+    "SUM_COMPLETE_OVER",
     "AVG_OVER",
     "MIN_OVER",
     "MAX_OVER",
@@ -98,6 +99,7 @@ FIXED_ARITY: dict[str, tuple[int, int]] = {
     PREDICT_FUNC: (2, MAX_PREDICT_ARGS),
     **dict.fromkeys(WINDOW_FUNCS, (2, 2)),
     **dict.fromkeys(ALL_FUNCS, (1, 1)),
+    "SUM_COMPLETE_OVER": (3, 3),
 }
 
 

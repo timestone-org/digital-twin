@@ -32,7 +32,8 @@ MULTICLASS_NOTE = (
 )
 # 没有概率列为什么没有那四样。这一句要用户换上游算子或重跑
 NO_PROBABILITY_NOTE = (
-    "这份打分结果里没有可用的每行概率（y_proba 列缺失或有空值），"
+    "这份打分结果里没有可用的每行正类概率（y_proba 缺失、为空、超出 0~1，"
+    "或缺少可确认的模型类目信息），"
     "ROC / PR / 校准曲线与阈值网格都画不出来。"
     "下面四个指标是单一阈值上的一张切片"
 )
@@ -54,7 +55,8 @@ CALIBRATION_NOTE = (
 )
 GRID_NOTE = (
     "每个阈值上的 TP / FP / TN / FN 与 F1；"
-    "竖线按判成正类的行里最低的那个概率反推，与这一份指标卡切在同一刀上"
+    "竖线按判成正类的最低概率反推；没有判正类时标出全判负类档，"
+    "与这一份指标卡切在同一刀上"
 )
 _ZERO = 0.0
 
@@ -68,6 +70,7 @@ class ThresholdCount:
     false_positive: int
     true_negative: int
     false_negative: int
+    is_all_negative: bool = False
 
 
 @dataclass(frozen=True)
@@ -135,6 +138,11 @@ def curves_of(
     full = threshold_counts(probabilities, actual_positive)
     positives = sum(1 for flag in actual_positive if flag)
     negatives = len(actual_positive) - positives
+    if full and keep is not None and keep > full[0].threshold:
+        full = (
+            ThresholdCount(keep, 0, 0, negatives, positives, True),
+            *full,
+        )
     both = positives > 0 and negatives > 0
     return Curves(
         grid=_sampled(full, limit, keep),
@@ -193,6 +201,8 @@ def roc_items(curves: Curves) -> list[dict[str, Any]]:
         }
     ]
     for count in curves.grid:
+        if count.is_all_negative:
+            continue
         rate = count.true_positive / curves.positives
         made.append(
             {
@@ -219,6 +229,8 @@ def pr_items(curves: Curves) -> list[dict[str, Any]]:
         return []
     made: list[dict[str, Any]] = []
     for count in curves.grid:
+        if count.is_all_negative:
+            continue
         guessed = count.true_positive + count.false_positive
         precision = None if guessed == 0 else count.true_positive / guessed
         made.append(
@@ -242,7 +254,11 @@ def grid_items(curves: Curves) -> list[dict[str, Any]]:
     """
     return [
         {
-            "name": threshold_text(count.threshold),
+            "name": (
+                "全判负类"
+                if count.is_all_negative
+                else threshold_text(count.threshold)
+            ),
             "threshold": count.threshold,
             "tp": count.true_positive,
             "fp": count.false_positive,

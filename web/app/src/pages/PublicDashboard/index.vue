@@ -109,6 +109,7 @@ const values = useDashboardValues(
   () => nodes.value,
   () => publicToken(),
   () => channel.connectionState.value,
+  false,
 )
 // 这张屏到底有没有实时绑定。⚠ 没有的话不许说「实时」：通道连着与画面上的
 // 数字是活的，是两件事
