@@ -21,6 +21,8 @@ from platform_server.apps.modeling.models import (
     ModelingBinding,
     ModelingModelArtifact,
     ModelingModelVersion,
+    ModelingRuleVersion,
+    ModelVersion,
 )
 from platform_server.apps.modeling.protocols import ModelTask, ServingChannel
 from platform_server.apps.modeling.schemas import (
@@ -32,6 +34,7 @@ from platform_server.apps.modeling.schemas import (
     ModelVersionCreateIn,
     ModelVersionOut,
     ModelVersionSummaryOut,
+    ModelVersionUpdateIn,
     ParamMapOut,
 )
 from platform_server.apps.modeling.schemas.graph import PipelineGraph
@@ -119,7 +122,7 @@ class _Draft:
     metrics: dict[str, Any]
 
 
-def _version_row(draft: _Draft) -> ModelingModelVersion:
+def _version_row(draft: _Draft) -> ModelVersion:
     """一行不可变的模型版本。
 
     ⚠ 版本 id 是**外面铸好的**：通道 B 的对象键按它拼，而字节要在这一行落库
@@ -127,9 +130,17 @@ def _version_row(draft: _Draft) -> ModelingModelVersion:
     Args: draft。
     """
     verdict = draft.verdict
-    if not verdict.target_key and verdict.task != "anomaly_detection":
+    if not verdict.target_key and verdict.task not in {
+        "anomaly_detection",
+        "rule_calculation",
+    }:
         raise RunNotPublishable(verdict.reason or "这次运行没有有效的预测目标")
-    return ModelingModelVersion(
+    model = (
+        ModelingRuleVersion
+        if verdict.task == "rule_calculation"
+        else ModelingModelVersion
+    )
+    return model(
         id=draft.version_id,
         pipeline_id=draft.run.pipeline_id,
         run_id=draft.run.id,
@@ -258,6 +269,22 @@ async def list_versions(
         size=page.size,
         total=total,
     )
+
+
+async def update_version_metadata(
+    session: AsyncSession,
+    *,
+    version_id: uuid.UUID,
+    payload: ModelVersionUpdateIn,
+) -> ModelVersionOut:
+    """修改版本名称与说明。Args: session, version_id, payload。"""
+    row = await require_version(session, version_id)
+    if payload.name is not None:
+        row.name = payload.name
+    if "description" in payload.model_fields_set:
+        row.description = payload.description
+    await session.flush()
+    return _to_version_out(row)
 
 
 async def get_version(
@@ -397,7 +424,7 @@ def _table_codes_of(run: Any) -> list[str]:
     )
 
 
-def _to_summary(row: ModelingModelVersion) -> ModelVersionSummaryOut:
+def _to_summary(row: ModelVersion) -> ModelVersionSummaryOut:
     return ModelVersionSummaryOut(
         id=row.id,
         pipeline_id=row.pipeline_id,
@@ -416,7 +443,7 @@ def _to_summary(row: ModelingModelVersion) -> ModelVersionSummaryOut:
     )
 
 
-def _to_version_out(row: ModelingModelVersion) -> ModelVersionOut:
+def _to_version_out(row: ModelVersion) -> ModelVersionOut:
     return ModelVersionOut(
         **_to_summary(row).model_dump(),
         metrics={

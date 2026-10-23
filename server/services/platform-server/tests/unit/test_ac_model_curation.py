@@ -163,6 +163,29 @@ def test_a_fresh_batch_shows_zero_on_both_counters() -> None:
     assert len(found.kept) == 2
 
 
+def test_durations_over_the_normal_operation_limit_are_excluded() -> None:
+    rows = [
+        episode(temperature=29.0, minutes=60, index=0),
+        episode(temperature=29.0, minutes=61, index=1),
+        episode(temperature=29.0, minutes=100, index=2),
+    ]
+    found = curate(rows, units=UNITS)
+    assert [row.duration_minutes for row in found.kept] == [60]
+    assert found.overlong_episode_count == 2
+
+
+def test_the_training_floor_is_checked_after_long_duration_exclusion() -> None:
+    rows = [
+        episode(temperature=29.0, minutes=20, index=index)
+        for index in range(MIN_SAMPLES - 1)
+    ]
+    rows.append(episode(temperature=29.0, minutes=61, index=MIN_SAMPLES))
+    with pytest.raises(InsufficientSamples, match="29") as caught:
+        train(rows, units=UNITS, timezone=TZ, half_life_days=180.0)
+    assert caught.value.overlong_episode_count == 1
+    assert "60 分钟" in str(caught.value)
+
+
 def test_the_sample_floor_counts_only_what_survives_curation() -> None:
     """⚠ 下限按剔除之后的条数算：先拿毛数放行，就是用过期标签训出一个模型。"""
     rows = [

@@ -49,6 +49,7 @@ from platform_server.apps.dataset.services.record_history import (
     RowTarget,
     fold_current,
     load_external_rows,
+    load_formula_rows,
     load_history,
     load_models,
     load_whole_stats,
@@ -377,22 +378,22 @@ async def _seed_rows(
         window_lower_bound(start, spec, scope.timezone)
         for spec in scope.local_windows
     ]
+    rows: list[DatasetRecord] = []
+    before = min(lowers) if lowers else start
     if lowers:
-        rows = await record_crud.list_ascending(
+        rows = await load_formula_rows(
             session,
-            window=RecordWindow(
-                table_id=table_id, since=min(lowers), before=start
-            ),
+            window=RecordWindow(table_id=table_id, since=before, before=start),
         )
+    missing = scope.max_prev - len(rows)
+    if missing <= 0:
         return [to_snapshot(row) for row in rows]
-    if scope.max_prev <= 0:
-        return []
-    rows = await record_crud.list_before(
+    previous = await record_crud.list_before(
         session,
-        window=RecordWindow(table_id=table_id, before=start),
-        limit=scope.max_prev,
+        window=RecordWindow(table_id=table_id, before=before),
+        limit=missing,
     )
-    return [to_snapshot(row) for row in reversed(rows)]
+    return [to_snapshot(row) for row in [*reversed(previous), *rows]]
 
 
 def _needs_extra_passes(scope: ComputeScope) -> bool:

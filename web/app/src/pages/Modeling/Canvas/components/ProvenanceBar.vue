@@ -7,7 +7,10 @@
  */
 import { computed } from 'vue'
 
+import type { ModelingFrameTarget } from '@/api/modeling'
 import { formatDateTime } from '@/utils/datetime'
+
+import FrameDownloadButton from './FrameDownloadButton.vue'
 
 const props = defineProps<{
   tableCodes: readonly string[]
@@ -16,8 +19,8 @@ const props = defineProps<{
   /** 实际取到的起止；null = 后端没记，那时只印请求区间。 */
   actualSince: string | null
   actualUntil: string | null
-  /** 全量结果的下载地址；空串 = 这次运行没留全量结果。 */
-  downloadUrl: string
+  /** 仅为已保留全量的端口提供下载目标。 */
+  downloadTarget: ModelingFrameTarget | null
 }>()
 
 const source = computed(() =>
@@ -49,16 +52,7 @@ const actual = computed(() =>
       <span v-if="source">{{ source }}</span>
       <span>{{ requested }}</span>
     </p>
-    <!-- ⚠ 用原生 <a download>：一份 CSV 可以到几十 MB，拉回内存再造 blob
-         是白付一遍内存，交给浏览器直接下更省也天然带进度 -->
-    <a
-      v-if="props.downloadUrl"
-      class="dt-ml-prov__download"
-      :href="props.downloadUrl"
-      download
-    >
-      下载全量结果
-    </a>
+    <FrameDownloadButton :target="props.downloadTarget" />
   </div>
 </template>
 
@@ -82,17 +76,6 @@ const actual = computed(() =>
 
   &__actual {
     color: var(--text-primary);
-  }
-
-  &__download {
-    flex: none;
-    color: var(--accent-primary);
-    font-size: var(--ctl-hint-fs-md);
-    text-decoration: none;
-
-    &:hover {
-      text-decoration: underline;
-    }
   }
 }
 </style>

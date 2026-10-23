@@ -33,10 +33,10 @@ vi.mock('@/api/dataset', async () => {
 const mounted: { unmount: () => void }[] = []
 
 /** DtModal 会 Teleport 到 body，不打桩的话弹窗里的东西 wrapper 找不到。 */
-function open() {
+function open(isTeleporting = false) {
   const wrapper = mount(CanvasPage, {
     attachTo: document.body,
-    global: { stubs: { Teleport: true } },
+    global: { stubs: { Teleport: !isTeleporting } },
   })
   mounted.push(wrapper)
   return wrapper
@@ -600,7 +600,7 @@ describe('画布页', () => {
           ordinal: 0,
           status: 'succeeded' as const,
           duration_ms: 30,
-          has_preview: true,
+          has_preview: false,
           error_text: null,
         },
         {
@@ -1096,5 +1096,144 @@ describe('保存前的整图校验', () => {
     await flushPromises()
 
     expect(start).not.toHaveBeenCalled()
+  })
+})
+
+describe('参数草稿与保存运行闭环', () => {
+  async function editor(
+    property: Record<string, unknown>,
+    extra: Record<string, unknown> = {},
+    isTeleporting = false,
+  ) {
+    stubApi({
+      operators: [
+        operator({
+          config_schema: { properties: { value: property, ...extra } },
+        }),
+      ],
+    })
+    const save = vi
+      .spyOn(modeling, 'updateModelingPipeline')
+      .mockImplementation((_id, patch) =>
+        Promise.resolve({
+          ...pipeline(),
+          graph: patch.graph ?? pipeline().graph,
+        }),
+      )
+    const start = vi
+      .spyOn(modeling, 'startModelingRun')
+      .mockResolvedValue(runOf('succeeded'))
+    signIn(WRITER)
+    const wrapper = open(isTeleporting)
+    await flushPromises()
+    await wrapper.find('.dt-ml-palette__item').trigger('click')
+    await wrapper
+      .findAll('.dt-ml-node__action')
+      .find((button) => button.text() === '参数')
+      ?.trigger('click')
+    await flushPromises()
+    return { wrapper, save, start }
+  }
+
+  const LAGS = {
+    type: 'array',
+    items: { type: 'integer', minimum: 1, maximum: 100 },
+    default: [1],
+    minItems: 1,
+    title: '滞后几期',
+  }
+
+  it('非法列表草稿阻止保存与运行，改正后实际提交新列表', async () => {
+    const { wrapper, save, start } = await editor(LAGS)
+    await wrapper.get('.dt-ml-form input').setValue('0')
+    await flushPromises()
+    const saveButton = () => wrapper.get('button[aria-label="保存"]')
+    const runButton = () =>
+      wrapper.findAll('button').find((button) => button.text() === '运行')
+    expect(saveButton().attributes('disabled')).toBeDefined()
+    expect(runButton()?.attributes('disabled')).toBeDefined()
+    expect(wrapper.text()).toContain('不小于 1')
+    await saveButton().trigger('click')
+    await runButton()?.trigger('click')
+    expect(save).not.toHaveBeenCalled()
+    expect(start).not.toHaveBeenCalled()
+    await wrapper.get('.dt-ml-form input').setValue('2')
+    await flushPromises()
+    expect(saveButton().attributes('disabled')).toBeUndefined()
+    await saveButton().trigger('click')
+    await flushPromises()
+    expect(save.mock.calls[0]?.[1].graph?.nodes[0]?.config['value']).toEqual([
+      2,
+    ])
+  })
+
+  it('JSON必须应用后才允许保存与运行', async () => {
+    const { wrapper, save } = await editor({
+      type: 'object',
+      default: {},
+      title: '列映射',
+      'x-dt-widget': 'energy-rules-json',
+    })
+    await wrapper.get('textarea').setValue('{"energy":"用电量"}')
+    await flushPromises()
+    expect(
+      wrapper.get('button[aria-label="保存"]').attributes('disabled'),
+    ).toBeDefined()
+    expect(wrapper.text()).toContain('尚未应用')
+    await wrapper
+      .findAll('button')
+      .find((button) => button.text() === '应用配置')
+      ?.trigger('click')
+    await flushPromises()
+    expect(
+      wrapper.get('button[aria-label="保存"]').attributes('disabled'),
+    ).toBeUndefined()
+    await wrapper.get('button[aria-label="保存"]').trigger('click')
+    await flushPromises()
+    expect(save.mock.calls[0]?.[1].graph?.nodes[0]?.config['value']).toEqual({
+      energy: '用电量',
+    })
+  })
+
+  it('关闭有草稿的参数面板先确认，取消保留，明确丢弃后解除阻止', async () => {
+    const { wrapper } = await editor(LAGS)
+    await wrapper.get('.dt-ml-form input').setValue('0')
+    await wrapper.get('button[aria-label="关闭"]').trigger('click')
+    await flushPromises()
+    expect(useConfirm().pending.value?.message).toContain('草稿')
+    useConfirm().resolve(false)
+    await flushPromises()
+    expect(
+      wrapper.get<HTMLInputElement>('.dt-ml-form input').element.value,
+    ).toBe('0')
+    await wrapper.get('button[aria-label="关闭"]').trigger('click')
+    useConfirm().resolve(true)
+    await flushPromises()
+    expect(wrapper.find('.dt-ml-form').exists()).toBe(false)
+    expect(
+      wrapper.get('button[aria-label="保存"]').attributes('disabled'),
+    ).toBeUndefined()
+  })
+
+  it('修改其他字段不会丢弃未应用的JSON草稿', async () => {
+    const { wrapper, save } = await editor(
+      {
+        type: 'object',
+        default: {},
+        title: '列映射',
+        'x-dt-widget': 'energy-rules-json',
+      },
+      { limit: { type: 'integer', default: 10, title: '行数' } },
+      true,
+    )
+    const form = wrapper.findComponent({ name: 'ConfigForm' })
+    await form.get('textarea').setValue('{"energy":"用电量"}')
+    await form.get('.dt-ml-form input').setValue('12')
+    await flushPromises()
+    expect(form.get('textarea').element.value).toContain('用电量')
+    expect(
+      wrapper.get('button[aria-label="保存"]').attributes('disabled'),
+    ).toBeDefined()
+    expect(save).not.toHaveBeenCalled()
   })
 })

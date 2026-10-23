@@ -51,6 +51,16 @@ const LEDGER_SCHEMA = {
 }
 
 describe('把算子 schema 摊成字段表', () => {
+  it('结构化规则参数保留对象与数组，使用专用编辑控件', () => {
+    const fields = fieldsOf({
+      properties: {
+        fields: { type: 'object', 'x-dt-widget': 'energy-rules-json' },
+        topology: { type: 'array', 'x-dt-widget': 'energy-rules-json' },
+      },
+    })
+    expect(fields.map((field) => field.widget)).toEqual(['json', 'json'])
+    expect(defaultsOf(fields)).toEqual({ fields: {}, topology: [] })
+  })
   it('按列汇总使用列映射控件并解析聚合枚举', () => {
     const fields = fieldsOf({
       $defs: { Agg: { type: 'string', enum: ['sum', 'avg'] } },

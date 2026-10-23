@@ -10,7 +10,7 @@
 
 import math
 from dataclasses import replace
-from typing import Any, Literal
+from typing import Annotated, Any, Literal
 
 from pydantic import Field
 
@@ -59,7 +59,7 @@ class LagFeatureConfig(OperatorConfig):
         description="留空表示一列都不做",
         default_factory=list[str],
     )
-    lags: list[int] = Field(
+    lags: list[Annotated[int, Field(ge=1, le=MAX_LAG)]] = Field(
         default_factory=lambda: [1],
         min_length=1,
         title="滞后几期",

@@ -8,6 +8,7 @@
 
 from collections.abc import Mapping, Sequence
 from dataclasses import dataclass, replace
+from math import inf, nextafter
 from typing import Any
 
 from platform_server.apps.modeling.operators.evalcurves import (
@@ -496,7 +497,9 @@ def _scoring_threshold(
         for value, flag in zip(probabilities, predicted_positive, strict=True)
         if flag
     ]
-    return min(seats) if seats else None
+    if seats:
+        return min(seats)
+    return nextafter(max(probabilities), inf) if probabilities else None
 
 
 def _stat(name: str, key: str, value: float | None) -> dict[str, Any]:
@@ -567,7 +570,21 @@ def _fold_stages(view: Folds) -> tuple[Stage, ...]:
         Stage("总行数", view.rows, "行"),
         Stage("配置折数", view.configured, "折"),
         Stage("实得折数", made, "折", note),
-        Stage("每折测试行", view.rows // max(view.configured, 1), "行"),
+        *_fold_size_stages(view),
+    )
+
+
+def _fold_size_stages(view: Folds) -> tuple[Stage, ...]:
+    """实际各折测试行数，同长一项、不同长给最少/最多；Args: view。"""
+    sizes = [len(test) for _, test in view.spans]
+    if not sizes:
+        return (Stage("每折测试行", None, "行"),)
+    low, high = min(sizes), max(sizes)
+    if low == high:
+        return (Stage("每折测试行", low, "行"),)
+    return (
+        Stage("每折测试最少", low, "行"),
+        Stage("每折测试最多", high, "行"),
     )
 
 

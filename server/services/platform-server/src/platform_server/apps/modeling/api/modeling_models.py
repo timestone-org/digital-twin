@@ -31,6 +31,7 @@ from platform_server.apps.modeling.schemas import (
     ModelVersionCreateIn,
     ModelVersionOut,
     ModelVersionSummaryOut,
+    ModelVersionUpdateIn,
 )
 from platform_server.apps.modeling.services import Actor, model_service
 from platform_server.apps.modeling.services.binding_service import (
@@ -144,6 +145,25 @@ async def get_version(
     Args: version_id, session, _viewer。
     """
     return ok(await model_service.get_version(session, version_id))
+
+
+@versions.patch(
+    "/{version_id}",
+    response_model=ApiResponse[ModelVersionOut],
+    summary="修改模型展示信息",
+)
+async def update_version_metadata(
+    version_id: uuid.UUID,
+    payload: ModelVersionUpdateIn,
+    session: SessionDep,
+    _write: PublishDep,
+) -> ApiResponse[ModelVersionOut]:
+    """只改名称和说明。Args: version_id, payload, session, _write。"""
+    return ok(
+        await model_service.update_version_metadata(
+            session, version_id=version_id, payload=payload
+        )
+    )
 
 
 @versions.delete(

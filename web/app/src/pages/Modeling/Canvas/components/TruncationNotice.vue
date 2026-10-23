@@ -15,6 +15,7 @@ const props = defineProps<{
   kind: TruncationKind
   /** 被降档丢掉的那些块的标题。只有 `budget` 那一档摆它。 */
   dropped?: readonly string[] | undefined
+  scope?: 'preview' | 'report'
 }>()
 
 interface Wording {
@@ -41,7 +42,7 @@ const WORDINGS: Record<TruncationKind, Wording> = {
   upstream: {
     intent: 'warning',
     icon: 'alert-triangle',
-    text: '上一步的摘要被预算削掉了，这里的前后对比只剩一半。把上游那一步单独跑一次就能看全。',
+    text: '上一步的摘要被预算削掉了，这里的前后对比只剩一半。查看上游结果；需要完整数据时，开启“留全量结果”后重新运行流水线。',
   },
   missing: {
     intent: 'neutral',
@@ -50,7 +51,14 @@ const WORDINGS: Record<TruncationKind, Wording> = {
   },
 }
 
-const wording = computed(() => WORDINGS[props.kind])
+const wording = computed(() => {
+  const base = WORDINGS[props.kind]
+  if (props.kind !== 'budget' || props.scope !== 'preview') return base
+  return {
+    ...base,
+    text: '结果摘要达到保存上限，部分预览行、绘图点或参数没有随摘要保存；本次计算结果不受影响。',
+  }
+})
 
 /** 丢掉的块照它们的标题明示，不写「若干块」。 */
 const droppedText = computed(() => {

@@ -1,6 +1,5 @@
 /**
- * @fileoverview 分类评估的「正类是哪一个」：摘要里没有这一项，只能由报上来的
- * 精确率 / 召回率反查是哪一类（设计规格 §5-21、R-20）。
+ * @fileoverview 按冻结配置确定正类，缺少旧记录时再由指标反查（规格 R-20）。
  *
  * ⚠ 这不是猜：后端的 TP/FP/FN 与混淆矩阵的行合计、列合计是同一批计数
  * （`evaluate._classification_scores` 与 `evaluate._confusion` 读的是同一对
@@ -26,6 +25,19 @@ const CLOSE = 1e-12
 
 const NOTHING: PositiveClass = { kind: 'unknown', label: '' }
 
+function configuredClass(
+  classes: readonly ClassStat[],
+  configuredLabel: number,
+): PositiveClass {
+  const known = classes.find(
+    (item) =>
+      item.label.trim() !== '' && Number(item.label) === configuredLabel,
+  )
+  return known === undefined
+    ? { kind: 'absent', label: '' }
+    : { kind: 'found', label: known.label }
+}
+
 /** 两个比率是不是同一个。两边都无定义也算同一个。Args: left, right。 */
 function same(left: number | null, right: number | null): boolean {
   if (left === null || right === null) return left === right
@@ -42,10 +54,14 @@ function same(left: number | null, right: number | null): boolean {
 export function positiveClassOf(
   classes: readonly ClassStat[],
   metrics: readonly (readonly [string, number | null])[],
+  configuredLabel?: number | null,
 ): PositiveClass {
-  const table = new Map(metrics)
-  if (!table.has('precision') || !table.has('recall')) return NOTHING
   if (classes.length === 0) return NOTHING
+  if (typeof configuredLabel === 'number') {
+    return configuredClass(classes, configuredLabel)
+  }
+  const table = new Map(metrics)
+  if (!['precision', 'recall'].every((key) => table.has(key))) return NOTHING
   const precision = table.get('precision') ?? null
   const recall = table.get('recall') ?? null
   if (precision === null && recall === null)

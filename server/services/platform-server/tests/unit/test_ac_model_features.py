@@ -7,12 +7,15 @@ import math
 from datetime import UTC, datetime
 from decimal import Decimal
 
+import pytest
+
 from platform_server.apps.hvac.modeling.features import (
     EpisodeSample,
     StartConditions,
     build_matrix,
     build_row,
     feature_names,
+    instant_compliance,
 )
 from platform_server.apps.hvac.rooms import (
     MetricBand,
@@ -247,3 +250,34 @@ def test_spread_measures_the_room_gradient() -> None:
     )
     assert row["temp_spread"] == 6.0
     assert math.isnan(row["humidity_spread"])
+
+
+@pytest.mark.parametrize("missing", [None, math.nan, math.inf])
+def test_partial_readings_do_not_prove_instant_compliance(
+    missing: float | None,
+) -> None:
+    values = conditions(
+        {
+            "K11": {
+                "workshop_temp_avg": 24.0,
+                "workshop_humidity_avg": missing,
+            },
+            "K12": {"workshop_temp_avg": 25.0, "workshop_humidity_avg": 55.0},
+        }
+    )
+    assert instant_compliance(values, units=UNITS, timezone=TZ) is None
+
+
+def test_known_violation_dominates_missing_readings() -> None:
+    values = conditions({"K11": {"workshop_temp_avg": 27.0}})
+    assert instant_compliance(values, units=UNITS, timezone=TZ) == 0.0
+
+
+def test_no_units_leave_instant_compliance_unknown() -> None:
+    assert instant_compliance(conditions({}), units=(), timezone=TZ) is None
+
+
+def test_unconstrained_metrics_do_not_require_readings_for_compliance() -> None:
+    units = (unit("K11", upper=None),)
+    values = conditions({"K11": {"workshop_humidity_avg": 55.0}})
+    assert instant_compliance(values, units=units, timezone=TZ) == 1.0

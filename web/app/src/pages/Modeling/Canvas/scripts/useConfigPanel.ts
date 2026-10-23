@@ -20,6 +20,7 @@ import type { FormOptions } from './schemaForm'
 import { fieldsOf } from './schemaForm'
 import { sourceTablesFor } from './upstream'
 import { useLedgerOptions } from './useLedgerOptions'
+import { useConfigDraft } from './useConfigDraft'
 
 type Operators = ReadonlyMap<string, ModelingOperator>
 type Ledger = ReturnType<typeof useLedgerOptions>
@@ -112,6 +113,10 @@ export function useConfigPanel(deps: ConfigPanelDeps) {
   const nodeId = ref<string | null>(null)
   const ledger = useLedgerOptions({ canView: deps.canViewLedger })
   const views = viewsOf(deps, nodeId, ledger)
+  const drafts = useConfigDraft(nodeId)
+  watch(views.node, (node) => {
+    if (node === null && nodeId.value !== null) drafts.discard()
+  })
 
   // 上游选了哪张台账一变，就把那张台账的列拉回来
   watch(
@@ -125,13 +130,8 @@ export function useConfigPanel(deps: ConfigPanelDeps) {
   return {
     ...views,
     nodeId,
+    ...drafts,
     loadTables: ledger.loadTables,
-    open: (id: string) => {
-      nodeId.value = id
-    },
-    close: () => {
-      nodeId.value = null
-    },
     setValue: (key: string, value: unknown) => {
       const current = views.node.value
       if (current === null) return

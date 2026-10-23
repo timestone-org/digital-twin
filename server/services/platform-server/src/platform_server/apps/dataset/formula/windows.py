@@ -70,16 +70,24 @@ class WindowSpec:
 
     amount: int
     unit: str
+    step_s: int | None = None
 
     @property
     def literal(self) -> str:
         """规范写法。`'3月'` 与 `'3mo'` 归一到同一个串，缓存键才对得上。"""
-        return f"{self.amount}{self.unit}"
+        literal = "today" if self.is_today else f"{self.amount}{self.unit}"
+        return literal if self.step_s is None else f"{literal}@{self.step_s}s"
 
     @property
     def label(self) -> str:
         """给人看的写法，如 `3 个月`。"""
+        if self.is_today:
+            return "当日"
         return f"{self.amount} {_UNIT_LABELS[self.unit]}"
+
+    @property
+    def is_today(self) -> bool:
+        return self.unit == "today"
 
     @property
     def is_calendar(self) -> bool:
@@ -92,11 +100,13 @@ def parse_window(literal: str) -> WindowSpec:
 
     Args: literal。
     """
+    if literal.strip().lower() == "today":
+        return WindowSpec(amount=1, unit="today")
     found = _WINDOW_RE.match(literal or "")
     if found is None:
         raise FormulaError(
             f"时间窗 '{literal}' 非法，应形如 '30s' / '15m' / '1h' / '7d' / "
-            "'1w' / '3mo' / '1y'（也可写中文：'3月' / '1年'）"
+            "'1w' / '3mo' / '1y' / 'today'（也可写中文：'3月' / '1年'）"
         )
     amount = int(found.group(1))
     if amount <= 0:
@@ -111,14 +121,37 @@ def parse_window(literal: str) -> WindowSpec:
     return WindowSpec(amount=amount, unit=unit)
 
 
+def parse_complete_window(literal: str, step_s: object) -> WindowSpec:
+    """校验完整自然日窗口与固定采样步长。Args: literal, step_s。"""
+    spec = parse_window(literal)
+    if not spec.is_today:
+        raise FormulaError("SUM_COMPLETE_OVER 的时间范围必须是 'today'")
+    if (
+        isinstance(step_s, bool)
+        or not isinstance(step_s, int)
+        or not 1 <= step_s <= _FIXED_UNIT_SECONDS["d"]
+    ):
+        raise FormulaError(
+            "SUM_COMPLETE_OVER 的步长必须是 1..86400 秒整数字面量"
+        )
+    return WindowSpec(amount=1, unit="today", step_s=step_s)
+
+
 def window_lower_bound(ts: datetime, spec: WindowSpec, tz: tzinfo) -> datetime:
-    """时间窗的下界；窗口是半开区间 `(下界, ts]`，当前行在窗内。
+    """时间窗下界；滚动窗开下界，today 包含当地零点。
 
     ⚠ `tz` 没有默认值：月/年要按**业务时区**的日历回推。北京时间 07-01 03:00
     在 UTC 上还是 06-30，按 UTC 字段回推一个月得到 05-31 而不是 06-01——月度
     台账上凭空多出一天，且不报任何错。
     Args: ts, spec, tz（业务时区）。
     """
+    if spec.is_today:
+        anchor = ts if ts.tzinfo is not None else ts.replace(tzinfo=UTC)
+        return (
+            anchor.astimezone(tz)
+            .replace(hour=0, minute=0, second=0, microsecond=0, fold=0)
+            .astimezone(anchor.tzinfo)
+        )
     if not spec.is_calendar:
         seconds = spec.amount * _FIXED_UNIT_SECONDS[spec.unit]
         return ts - timedelta(seconds=seconds)

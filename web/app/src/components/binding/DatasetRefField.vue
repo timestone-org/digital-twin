@@ -8,7 +8,7 @@
  * ⚠ 台账列表与列清单取不到时，把已存的身份串**原样显示**而不是清空：清空
  * 等于因为一次取数失败就把用户配好的绑定改掉。
  */
-import { computed, onMounted, ref, watch } from 'vue'
+import { computed, onBeforeUnmount, onMounted, ref, watch } from 'vue'
 import type {
   DatasetColumn,
   DatasetTableSummary,
@@ -46,6 +46,16 @@ const tableOptions = computed<DtSelectOption[]>(() =>
   })),
 )
 
+// ⚠ 只选表的草稿还不是完整列身份，必须保留表选择才能继续加载列。
+const tableCode = computed(
+  () =>
+    parsed.value?.code ??
+    tables.value.find(
+      (table) => datasetBindingKey(table.code, '') === props.datasetKey,
+    )?.code ??
+    '',
+)
+
 const columnOptions = computed<DtSelectOption[]>(() =>
   columns.value.map((column) => ({
     value: column.key,
@@ -54,7 +64,7 @@ const columnOptions = computed<DtSelectOption[]>(() =>
 )
 
 const tableId = computed(
-  () => tables.value.find((item) => item.code === parsed.value?.code)?.id ?? '',
+  () => tables.value.find((item) => item.code === tableCode.value)?.id ?? '',
 )
 
 async function loadTables(): Promise<void> {
@@ -68,10 +78,10 @@ async function loadTables(): Promise<void> {
 
 /** 换台账就重取它的列；台账没选或找不到时列清单为空。 */
 function loadColumns(id: string): void {
-  if (id === '') {
-    columns.value = []
-    return
-  }
+  columnsFetch.cancel()
+  columns.value = []
+  failure.value = ''
+  if (id === '') return
   void columnsFetch.run(() => dataset.listDatasetColumns(id), {
     ok: (list) => {
       columns.value = list
@@ -89,12 +99,13 @@ function pickTable(code: string): void {
 }
 
 function pickColumn(key: string): void {
-  const code = parsed.value?.code
-  if (code === undefined) return
+  const code = tableCode.value
+  if (code === '') return
   emit('pick', datasetBindingKey(code, key))
 }
 
 watch(tableId, loadColumns, { immediate: true })
+onBeforeUnmount(columnsFetch.cancel)
 onMounted(() => {
   void loadTables()
 })
@@ -103,10 +114,11 @@ onMounted(() => {
 <template>
   <DtField label="台账" size="sm">
     <DtSelect
-      :model-value="parsed?.code ?? ''"
+      :model-value="tableCode"
       :options="tableOptions"
       size="sm"
-      placeholder="选一张台账"
+      aria-label="台账"
+      :display="{ placeholder: '选一张台账' }"
       @update:model-value="pickTable"
     />
   </DtField>
@@ -115,7 +127,9 @@ onMounted(() => {
       :model-value="parsed?.columnKey ?? ''"
       :options="columnOptions"
       size="sm"
-      placeholder="选一列"
+      aria-label="列"
+      :disabled="tableId === ''"
+      :display="{ placeholder: '选一列' }"
       @update:model-value="pickColumn"
     />
   </DtField>

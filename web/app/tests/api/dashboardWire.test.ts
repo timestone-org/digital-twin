@@ -295,9 +295,7 @@ describe('时间范围', () => {
     ).toEqual({ nodeKey: 's1:t1', range: {} })
   })
 
-  it('台账那一支不长这三项', () => {
-    // ⚠ 台账 `:series` 端点没有桶宽、档位与时区三个参数，写出去就是配得出来、
-    // 存得下、取数时被丢掉
+  it('普通台账不带分桶参数，自然日台账的时区可完整往返', () => {
     const wire = fromBindingDetail({
       datasetKey: 'ds:energy_log:进水量',
       range: { lastWindow: '1h' },
@@ -307,6 +305,12 @@ describe('时间范围', () => {
     expect(toBindingDetail({ dataset_key: 'ds:a:b', interval: '15m' })).toEqual(
       { datasetKey: 'ds:a:b', range: {} },
     )
+    const daily = {
+      datasetKey: 'ds:a:b',
+      range: { lastWindow: 'today' },
+      timezone: 'Asia/Shanghai',
+    }
+    expect(toBindingDetail(fromBindingDetail(daily))).toEqual(daily)
   })
 
   it('按自身形状判别是哪一支，不看 source_kind', () => {

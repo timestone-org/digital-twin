@@ -22,12 +22,13 @@ export type BindingSlot =
       state: 'ok'
       value: unknown
       /**
-       * 采样时刻，UTC 毫秒。
-       * ⚠ 带序列的槽一律不写它：它只记进 `tally.sampled`，而那一档推的是
-       * 「实时通道断了、屏上还挂着推来的值」。历史序列是一次性拉回来的，
-       * 写了会让实时通道一抖就把一屏图表全标成可能过期。时刻在 `points` 里。
+       * 采样或台账桶起点，UTC 毫秒。
+       * ⚠ 历史序列的时刻只在 points 里；HTTP 标量必须同时声明
+       * dependsOnRealtime=false，避免通道断开时误判过期。
        */
       timestampMs?: number
+      /** HTTP 台账标量带时刻，但不随实时通道断开而过期。 */
+      dependsOnRealtime?: boolean
       /**
        * 时序槽的历史序列，按时刻升序。
        * ⚠ 缺席 ≠ 空序列：取不到就让 `state` 落 `error`，缺席时这一格一个点
@@ -311,7 +312,8 @@ function resolveBinding(
   if (value === null || value === undefined) state.tally.empty += 1
   else {
     state.tally.ok += 1
-    if (slot.timestampMs !== undefined) state.tally.sampled += 1
+    if (slot.timestampMs !== undefined && slot.dependsOnRealtime !== false)
+      state.tally.sampled += 1
   }
   state.siblings[binding.fieldKey] = value
   injectFieldValue(state.values, binding.fieldKey, value)
@@ -335,7 +337,27 @@ function withInputMetadata(
     ...slot,
     ...(timestampMs === undefined ? {} : { timestampMs }),
     ...(isStale ? { isStale: true } : {}),
+    ...(realtimeDependencyOf(slot, binding.computeJson.inputs, siblings) ===
+    false
+      ? { dependsOnRealtime: false }
+      : {}),
   }
+}
+
+/** 任何实时输入都会使派生值依赖通道，纯 HTTP 输入保留 false。 */
+function realtimeDependencyOf(
+  slot: Extract<BindingSlot, { state: 'ok' }>,
+  inputs: readonly string[],
+  siblings: Readonly<Record<string, ModuleSlotMeta>>,
+): boolean | undefined {
+  let dependency = slot.dependsOnRealtime
+  for (const key of inputs) {
+    const input = siblings[key]
+    if (input?.timestampMs === undefined) continue
+    if (input.dependsOnRealtime !== false) return true
+    dependency ??= false
+  }
+  return dependency
 }
 
 /** 取已有采样时刻中的最早值，两侧都缺席时仍缺席。 */
@@ -369,6 +391,7 @@ function okSlotMeta(
       ? { truncatedSide: slot.truncatedSide }
       : {}),
     ...(slot.isStale !== undefined ? { isStale: slot.isStale } : {}),
+    ...(slot.dependsOnRealtime === false ? { dependsOnRealtime: false } : {}),
   }
 }
 

@@ -11,7 +11,7 @@
  * ⚠ 模型地址解析必须走深路径 `@dt/three-core/host`：桶文件第一行就静态依赖
  * 整个 three，从桶进来会把 three 拖进首屏 chunk（startup-graph 契约测试守着）。
  */
-import type { RuntimeDataSource } from '@dt/runtime'
+import type { BindingValueReader, RuntimeDataSource } from '@dt/runtime'
 import type {
   HistoryQuery,
   HistoryResult,
@@ -202,6 +202,8 @@ export interface DashboardSeriesPorts {
 
   /** 点位快照读取器，取自 `useDashboardValues` 的返回值。 */
   readPoint: ReadPointSample
+  /** 已装配台账缓存的读取器；重新注入时必须保留。 */
+  readBinding?: () => BindingValueReader
   /**
    * 实时通道连接态。
    * ⚠ 不给就是「这里没有实时通道」，模块永不标「数据可能过期」：设计态画布
@@ -226,7 +228,8 @@ export interface DashboardSeriesPorts {
  */
 export function installDashboardSeries(ports: DashboardSeriesPorts): void {
   provideRuntimeData({
-    readBinding: () => createBindingReader(ports.readPoint),
+    readBinding:
+      ports.readBinding ?? (() => createBindingReader(ports.readPoint)),
     ...(ports.connectionState === undefined
       ? {}
       : { connectionState: ports.connectionState }),

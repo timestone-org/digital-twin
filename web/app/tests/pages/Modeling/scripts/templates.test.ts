@@ -33,6 +33,7 @@ const KNOWN_OPERATORS = new Set([
   'ledger_join',
   'time_shift',
   'cyclic_time',
+  'energy_rules',
 ])
 
 describe('新建流水线的开箱模板', () => {
@@ -100,16 +101,50 @@ describe('新建流水线的开箱模板', () => {
     },
   )
 
-  it.each(PIPELINE_TEMPLATES.filter((item) => item.key !== 'blank'))(
-    '「$label」的切分给建模那一步喂了 train 与 test 两路',
-    (template) => {
-      const ports = template
-        .build()
-        .edges.filter((edge) => edge.to_node === 'm')
-        .map((edge) => edge.to_port)
-      expect(ports.sort()).toEqual(['test', 'train'])
-    },
-  )
+  it.each(
+    PIPELINE_TEMPLATES.filter(
+      (item) => item.key !== 'blank' && !item.key.startsWith('rule_'),
+    ),
+  )('「$label」的切分给建模那一步喂了 train 与 test 两路', (template) => {
+    const ports = template
+      .build()
+      .edges.filter((edge) => edge.to_node === 'm')
+      .map((edge) => edge.to_port)
+    expect(ports.sort()).toEqual(['test', 'train'])
+  })
+
+  it.each([
+    ['hvac_compliance', '空调机组达标检测模型'],
+    ['efficiency_fluctuation', '能效波动分析模型'],
+    ['energy_aggregation', '能耗分类归集模型'],
+    ['energy_trace', '能源流向追溯模型'],
+    ['unit_consumption', '单位能耗核算模型'],
+    ['efficiency_benchmark', '能效对标分析模型'],
+    ['equipment_efficiency', '设备能效评估模型'],
+    ['supply_diagnosis', '能源供应异常诊断模型'],
+  ])('%s 直接使用可配置规则，不虚构训练目标', (kind, label) => {
+    const template = PIPELINE_TEMPLATES.find(
+      (item) => item.key === `rule_${kind}`,
+    )
+    expect(template?.label).toBe(label)
+    const graph = template?.build()
+    expect(graph?.nodes.map((node) => node.operator)).toEqual([
+      'ledger_source',
+      'energy_rules',
+    ])
+    expect(graph?.nodes.find((node) => node.id === 'm')?.config['kind']).toBe(
+      kind,
+    )
+    expect(graph?.edges).toEqual([
+      {
+        id: 's_frame_m_frame',
+        from_node: 's',
+        from_port: 'frame',
+        to_node: 'm',
+        to_port: 'frame',
+      },
+    ])
+  })
 
   it.each(PIPELINE_TEMPLATES)('「$label」写了一句说明', (template) => {
     expect(template.hint.length).toBeGreaterThan(2)

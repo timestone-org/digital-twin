@@ -388,7 +388,9 @@ class LogisticRegressionOperator(OperatorBase):
                 serving_channel=self.SERVING_CHANNEL,
             ),
             "scored": _with_proba(
-                scored_frame(test, target_key, predicted), probabilities
+                scored_frame(test, target_key, predicted),
+                probabilities,
+                self._classes,
             ),
         }
 
@@ -553,12 +555,19 @@ def _logit_hyper_params(config: LogisticRegressionConfig) -> dict[str, Any]:
     }
 
 
-def _with_proba(scored: Frame, probabilities: list[float]) -> Frame:
+def _with_proba(
+    scored: Frame, probabilities: list[float], classes: list[float]
+) -> Frame:
     """在打分帧右边接上正类概率那一列。
 
-    Args: scored, probabilities。
+    Args: scored, probabilities, classes。
     """
-    column = FrameColumn(key=SCORED_PROBA, name="正类概率", dtype=DTYPE_NUMBER)
+    column = FrameColumn(
+        key=SCORED_PROBA,
+        name="正类概率",
+        dtype=DTYPE_NUMBER,
+        probability_classes=tuple(classes),
+    )
     rows = tuple(
         (*row, value)
         for row, value in zip(scored.rows, probabilities, strict=True)

@@ -31,6 +31,8 @@ export interface TimelineRow {
   segments: readonly TimelineSegment[]
   /** 段与段之间的空隙画成断档。占用条要，切分与折的两色条不要。 */
   showGaps?: boolean
+  /** 检测断档和覆盖率的实际时段；请求区间只决定共用横轴。 */
+  coverageBounds?: Bounds
 }
 
 export interface TimelineInput {
@@ -376,10 +378,11 @@ function rowViewOf(
   index: number,
   frame: Frame,
 ): { view: RowView; notes: string[] } {
-  const gaps = row.showGaps === true ? gapsOf(spans.kept, frame.at) : []
+  const bounds = row.coverageBounds ?? frame.at
+  const gaps = row.showGaps === true ? gapsOf(spans.kept, bounds) : []
   const top = PAD_TOP + index * (ROW_H + ROW_GAP)
   const notes: string[] = []
-  const note = noteOf(row, spans.kept, gaps, frame.at)
+  const note = noteOf(row, spans.kept, gaps, bounds)
   if (note !== '') notes.push(note)
   if (spans.all > spans.kept.length) {
     notes.push(

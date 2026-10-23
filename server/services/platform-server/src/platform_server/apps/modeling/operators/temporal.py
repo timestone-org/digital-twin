@@ -204,7 +204,7 @@ class CyclicTime(OperatorBase):
         )
         self._change = ColumnChange(
             added=keys,
-            kept=len(frame.columns),
+            kept=len(columns),
             reason=(
                 f"固定 UTC 偏移 {config.timezone_offset_minutes} 分钟，"
                 "预测时沿用"

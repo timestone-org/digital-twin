@@ -205,6 +205,11 @@ describe('模型服务', () => {
     expect(wrapper.text()).toContain(
       '/api/v1/platform/open-models/energy-forecast:predict',
     )
+    expect(wrapper.text()).toContain(
+      '/api/v1/platform/open-models/energy-forecast:calculate',
+    )
+    expect(wrapper.text()).toContain('X-Api-Key')
+    expect(wrapper.text()).toContain('结构化结果')
   })
 
   it('铸出来那把钥匙的明文摆在一个要显式关掉的窗口里', async () => {

@@ -121,6 +121,7 @@ class ColumnChange:
 
     added: Sequence[str] = ()
     removed: Sequence[str] = ()
+    #: 最终输出列数，包含这一步新增的列
     kept: int = 0
     #: 换过类型的列原本是什么类型
     dtype_before: Sequence[Item] = ()
@@ -266,9 +267,12 @@ def columns_block(at: BlockAt, change: ColumnChange) -> ReportBlock:
     """
     payload: dict[str, Any] = {
         "added": list(change.added[:MAX_COLUMN_NAMES]),
+        "added_total": len(change.added),
         "removed": list(change.removed[:MAX_COLUMN_NAMES]),
+        "removed_total": len(change.removed),
         "kept": change.kept,
         "dtype_before": _items(change.dtype_before, MAX_DTYPE_BEFORE),
+        "dtype_before_total": len(change.dtype_before),
         "reason": change.reason,
     }
     return _block("columns", at, payload)

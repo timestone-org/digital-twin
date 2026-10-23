@@ -25,6 +25,8 @@ export interface ModuleStatusInput {
    * 否则编辑器里每一格都会挂上一枚说不通的角标。
    */
   connectionState?: ModuleConnectionState
+  /** 按需读数超期或来自明确降级的缓存。 */
+  hasStaleData?: boolean
 }
 
 /** 这个槽键配过来源没有：数组槽 `rows[0].value` 算配过了 `rows`。 */
@@ -73,6 +75,7 @@ export function computeModuleStatus(input: ModuleStatusInput): ModuleStatus {
   if (tally.error > 0) return 'error'
   if (tally.pending > 0) return 'loading'
   if (tally.bound > 0 && tally.ok === 0) return 'empty'
+  if (input.hasStaleData === true) return 'stale'
   if (tally.sampled > 0 && isChannelDown(input.connectionState)) return 'stale'
   return 'connected'
 }

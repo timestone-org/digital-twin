@@ -53,7 +53,7 @@ from platform_server.apps.dataset.schemas import (
 CATALOG = build_catalog(EMPTY_LIBRARY)
 CATALOG_NAMES = {item.doc.name for item in CATALOG.functions}
 # 五族的总数。写死是为了让「加了函数没加目录」在这里红
-BUILTIN_COUNT = 60
+BUILTIN_COUNT = 61
 # 有专属节点类型、故不进 `_FN_LABELS` 的那几个
 OWN_NOTATION_NODE = frozenset({"IF", "IFS", "SQRT", "POW"})
 # 逐字符比对两份列 key 规则时用的探针

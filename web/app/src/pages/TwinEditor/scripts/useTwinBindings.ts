@@ -35,6 +35,7 @@ export interface TwinBindings {
   liveValues: ComputedRef<TwinSceneValues | undefined>
   /** 取一个绑定读取器，运行态预览按它自己求值；每次求值都要重新调。 */
   readBinding: () => BindingValueReader
+  datasetWarning: ComputedRef<string>
   /**
    * 取一个点位此刻的快照；没收到过给 undefined。
    * ⚠ 助手的 `dashboard.read_values` 走它，与视口读的是同一份缓存。
@@ -119,6 +120,22 @@ export function useTwinBindings(
     },
     liveValues: live.scene,
     readBinding: live.readBinding,
+    datasetWarning: computed(() =>
+      datasetWarningOf(bindings.value, live.readBinding()),
+    ),
     readSample: live.read,
   }
+}
+
+/** 主视口不能把静态回退文案误当作当前台账读数。 */
+function datasetWarningOf(
+  bindings: readonly BindingPayload[],
+  read: BindingValueReader,
+): string {
+  for (const item of bindings) {
+    if (item.sourceKind !== 'dataset') continue
+    const slot = read(item, {})
+    if (slot.state === 'error') return slot.message
+  }
+  return ''
 }

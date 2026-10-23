@@ -181,7 +181,7 @@ read: () => {
 }
 ```
 
-收益：① 非时序槽绑了 archive/dataset 仍返回原来那句 error（**本来就画不出，这是对的**）；② `app/tests/runtime/bindingReader.test.ts` 不用改；③ runtime 仍然不认识来源种类。
+收益：① 非时序槽绑定 archive 仍明确报错；dataset 标量现由已登录页面的共享 HTTP latest 缓存读取，时序槽仍走 series；② 未装配台账缓存的独立读取器仍明确拒绝；③ runtime 仍然不认识来源种类。页面按分钟刷新，台账自身的聚合周期保持独立；匿名页不开放台账读侧，详见 DATASET_DESIGN §16.1。
 
 **D7 · 竞态防护两层，且第一层要真的接得上。**
 

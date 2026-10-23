@@ -23,7 +23,7 @@ BASE = datetime(2026, 6, 1, tzinfo=UTC)
 
 
 def test_folds_are_contiguous_time_blocks() -> None:
-    """折是连续时间块：折号单调不减，才不会把未来泄给过去。"""
+    """分块保留时间顺序，前向训练集合由调用方选择。"""
     ids = time_fold_ids(11, 5)
     assert len(ids) == 11
     assert ids == sorted(ids)

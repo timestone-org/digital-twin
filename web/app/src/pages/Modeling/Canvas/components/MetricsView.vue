@@ -1,11 +1,6 @@
 <script setup lang="ts">
 /**
- * @fileoverview 一次评估的派发外壳：一排指标卡 + 按摘要里实际有什么分派到
- * 回归 / 分类 / 交叉验证 / 重要性四种子视图（设计规格 §5-20～24）。
- *
- * ⚠ 摘要里没有算子 code，只能按内容分派：五个评估算子的端口都叫 `metrics`、
- * kind 也都是 `metrics`（规格 §4.1）。真正的分派键要等 `ResultView` 把节点的
- * 算子 code 传下来。
+ * @fileoverview 按评估算子身份派发指标、分类、回归、交叉验证和重要性结果。
  */
 import { DtNotice, DtTag } from '@dt/ui'
 import { computed } from 'vue'
@@ -29,6 +24,8 @@ import RegressionMetricsView from './RegressionMetricsView.vue'
 const props = withDefaults(
   defineProps<{
     preview: MetricsPreview
+    code?: string | undefined
+    positiveLabel?: number | null | undefined
     /**
      * 这一路还带回了讲解块。
      *
@@ -38,7 +35,7 @@ const props = withDefaults(
      */
     hasBlocks?: boolean
   }>(),
-  { hasBlocks: false },
+  { hasBlocks: false, code: '', positiveLabel: null },
 )
 
 type MetricsShape =
@@ -46,11 +43,22 @@ type MetricsShape =
 
 // 交叉验证的四个标量一起来一起走（`diagnostics._summary`），认一个就够
 const FOLD_KEY = 'score_mean'
+const SHAPES_BY_CODE: Readonly<Record<string, MetricsShape>> = {
+  feature_importance: 'importance',
+  cross_validate: 'folds',
+  classification_metrics: 'classification',
+  regression_metrics: 'regression',
+  residual_analysis: 'regression',
+}
 
 const keys = computed(() => props.preview.metrics.map(([key]) => key))
 
 /** 键是指标名还是列名。列名那一档不查阈值表也不拼单位（规格 R-34）。 */
-const space = computed(() => metricSpaceOf(keys.value))
+const space = computed(() => {
+  if (props.code === 'feature_importance') return 'column'
+  if (props.code !== '') return 'metric'
+  return metricSpaceOf(keys.value)
+})
 
 /** 四种「有没有东西可看」的判据都不成立时，这份摘要里没有可画的。 */
 const isBlank = computed(() => {
@@ -81,6 +89,8 @@ const isSilent = computed(() => isBlank.value && !props.hasBlocks)
 const shape = computed<MetricsShape>(() => {
   const preview = props.preview
   if (isBlank.value) return 'plain'
+  const declared = SHAPES_BY_CODE[props.code]
+  if (declared !== undefined) return declared
   if (space.value === 'column') return 'importance'
   if (keys.value.includes(FOLD_KEY)) return 'folds'
   if (preview.task === 'classification' || preview.labels.length > 0) {
@@ -118,6 +128,7 @@ const cards = computed(() =>
     <ClassificationMetricsView
       v-if="shape === 'classification'"
       :preview="props.preview"
+      :positive-label="props.positiveLabel"
     />
     <RegressionMetricsView
       v-else-if="shape === 'regression'"

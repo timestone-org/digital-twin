@@ -147,7 +147,7 @@ function absorbRequest(
   nowMs: number,
 ): void {
   const { detail, fieldKey } = request
-  const bounds = resolveWindow(detail.range, nowMs)
+  const bounds = resolveWindow(detail.range, nowMs, detail.timezone)
   const key = JSON.stringify([
     detail.interval ?? '',
     detail.aggregate ?? '',

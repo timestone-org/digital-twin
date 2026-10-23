@@ -493,11 +493,12 @@ export interface ModuleSlotMeta {
   /** `state: 'error'` 时的原因。 */
   message?: string
   /**
-   * 采样时刻，UTC 毫秒；只有 `ok` 档有。
-   * ⚠ 时序槽一律没有它：它推的是「通道断了、屏上还挂着推来的值」那一档，
-   * 而历史序列是一次性拉回来的，跟实时通道无关。
+   * 采样或台账桶起点，UTC 毫秒；只有 ok 档有。
+   * 历史序列的时刻在序列点中，HTTP 标量用 dependsOnRealtime=false 标明边界。
    */
   timestampMs?: number
+  /** 该采样是否依赖实时通道；HTTP 台账标量明确为 false。 */
+  dependsOnRealtime?: boolean
   /**
    * 序列触顶：窗内还有更多点，只取回了上限那一批。
    * ⚠ 文案必须说清砍的是哪一头——两个历史端点砍的方向是相反的，

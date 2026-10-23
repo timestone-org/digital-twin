@@ -26,7 +26,7 @@ from platform_server.apps.modeling.errors import (
 from platform_server.apps.modeling.models import (
     ModelingApiKey,
     ModelingDeployment,
-    ModelingModelVersion,
+    ModelVersion,
 )
 from platform_server.apps.modeling.schemas import (
     ModelApiKeyCreateIn,
@@ -49,7 +49,7 @@ class _Presented:
     """一个部署加上展示要用的那几样。"""
 
     row: ModelingDeployment
-    version: ModelingModelVersion
+    version: ModelVersion
     key_count: int
 
 
@@ -67,7 +67,12 @@ async def create_deployment(
         session,
         ModelingDeployment(
             code=payload.code,
-            model_version_id=version.id,
+            model_version_id=(
+                None if version.task == "rule_calculation" else version.id
+            ),
+            rule_version_id=(
+                version.id if version.task == "rule_calculation" else None
+            ),
             name=payload.name,
             description=payload.description,
             max_rows_per_call=payload.max_rows_per_call,
@@ -93,7 +98,9 @@ async def list_deployments(session: AsyncSession) -> list[ModelDeploymentOut]:
     rows = await deployment_crud.list_all(session)
     presented: list[ModelDeploymentOut] = []
     for row in rows:
-        version = await model_version_crud.get(session, row.model_version_id)
+        version = await model_version_crud.get(
+            session, row.effective_version_id
+        )
         keys = await api_key_crud.list_by_deployment(session, row.id)
         if version is not None:
             presented.append(
@@ -124,12 +131,17 @@ async def update_deployment(
 
     Args: session, deployment_id, payload。
     """
-    found = await _presented(session, deployment_id)
+    found = await _presented(session, deployment_id, should_lock=True)
     row = found.row
     version = found.version
     if payload.model_version_id is not None:
         version = await _require_version(session, payload.model_version_id)
-        row.model_version_id = version.id
+        row.model_version_id = (
+            None if version.task == "rule_calculation" else version.id
+        )
+        row.rule_version_id = (
+            version.id if version.task == "rule_calculation" else None
+        )
     _apply_patch(row, payload)
     await session.flush()
     return _present(
@@ -247,16 +259,23 @@ async def daily_stats(
 
 
 async def _presented(
-    session: AsyncSession, deployment_id: uuid.UUID
+    session: AsyncSession,
+    deployment_id: uuid.UUID,
+    *,
+    should_lock: bool = False,
 ) -> _Presented:
     """取一个部署连同它钉的版本与密钥数；缺任何一样都当作不存在。
 
     Args: session, deployment_id。
     """
-    row = await deployment_crud.get(session, deployment_id)
+    row = (
+        await deployment_crud.get_for_update(session, deployment_id)
+        if should_lock
+        else await deployment_crud.get(session, deployment_id)
+    )
     if row is None:
         raise DeploymentNotFound("这个对外服务不存在")
-    version = await model_version_crud.get(session, row.model_version_id)
+    version = await model_version_crud.get(session, row.effective_version_id)
     if version is None:  # pragma: no cover —— 外键是 RESTRICT，删不掉
         raise DeploymentNotFound("这个对外服务钉的模型版本已不存在")
     keys = await api_key_crud.list_by_deployment(session, row.id)
@@ -265,7 +284,7 @@ async def _presented(
 
 async def _require_version(
     session: AsyncSession, version_id: uuid.UUID
-) -> ModelingModelVersion:
+) -> ModelVersion:
     """取一个模型版本，不存在即抛。
 
     Args: session, version_id。
@@ -285,7 +304,7 @@ def _present(found: _Presented) -> ModelDeploymentOut:
     return ModelDeploymentOut(
         id=row.id,
         code=row.code,
-        model_version_id=row.model_version_id,
+        model_version_id=row.effective_version_id,
         model_name=found.version.name,
         model_version=found.version.version,
         name=row.name,

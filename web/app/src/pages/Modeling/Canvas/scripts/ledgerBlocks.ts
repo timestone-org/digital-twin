@@ -17,9 +17,8 @@ type Item = Record<string, unknown>
 /**
  * 后端逐块的硬上限，与 `operators/reporting.py` 的 `MAX_*` 逐个对齐。
  *
- * ⚠ 除漏斗外，条数正好等于上限时**无法判定**到底截没截：那几处 payload 不带
- * 原始总数，所以措辞一律是「已经列到上限」，不是「共 M 项」——后者要编一个数
- * 出来。漏斗带回了 `funnel_total`，那一处才说得出真的截没截。
+ * ⚠ 没有原始总数时，条数正好等于上限不能判定是否截断；带总数的漏斗和列名单
+ * 按原始总数判断，不把展示数量说成完整数量。
  */
 export const LEDGER_LIMITS = {
   funnel: 6,
@@ -254,12 +253,47 @@ export function columnsSummary(
 ): string {
   const head = `这一步之后一共 ${grouped(change.kept)} 列`
   const moved: string[] = []
-  if (change.added.length > 0) moved.push(`新增 ${change.added.length} 列`)
-  if (change.removed.length > 0) moved.push(`移除 ${change.removed.length} 列`)
-  if (dtypes.length > 0) moved.push(`${dtypes.length} 列换了类型`)
+  if ((change.addedTotal ?? change.added.length) > 0)
+    moved.push(
+      `新增 ${columnCountText(change.addedTotal, change.added.length, LEDGER_LIMITS.names)} 列`,
+    )
+  if ((change.removedTotal ?? change.removed.length) > 0)
+    moved.push(
+      `移除 ${columnCountText(change.removedTotal, change.removed.length, LEDGER_LIMITS.names)} 列`,
+    )
+  if ((change.dtypeBeforeTotal ?? dtypes.length) > 0)
+    moved.push(
+      `${columnCountText(change.dtypeBeforeTotal, dtypes.length, LEDGER_LIMITS.dtypes)} 列换了类型`,
+    )
   return moved.length === 0
     ? `${head}：这一步一列都没动`
     : `${head}：${moved.join('、')}`
+}
+
+/** 有总数就用总数；历史名单达到上限时只知道下界。Args: total, shown, limit。 */
+export function columnCountText(
+  total: number | null,
+  shown: number,
+  limit: number,
+): string {
+  return total === null && shown >= limit
+    ? `至少 ${grouped(shown)}`
+    : grouped(total ?? shown)
+}
+
+/** 名单的展示范围，保留已知总数与未知总数的区别。Args: total, shown, limit。 */
+export function columnListCut(
+  total: number | null,
+  shown: number,
+  limit: number,
+): string {
+  if (total !== null)
+    return total > shown
+      ? `共 ${grouped(total)} 列，已展示前 ${grouped(shown)} 列，另 ${grouped(total - shown)} 列未展示。`
+      : ''
+  return shown >= limit
+    ? `名单已到上限 ${grouped(limit)} 列，原始总数未记录，可能还有未展示的列。`
+    : ''
 }
 
 /**
@@ -271,7 +305,11 @@ export function cellsSummary(cells: readonly CellChange[]): string {
   if (cells.length === 0) return '一个格子都没有被改，行数也没变'
   const total = cells.reduce((sum, item) => sum + item.changed, 0)
   const top = [...cells].sort((one, two) => two.changed - one.changed)[0]
-  const head = `${cells.length} 列上一共改了 ${grouped(total)} 个格子，行数一行都没变`
+  const scope =
+    cells.length >= LEDGER_LIMITS.cells
+      ? `已展示的 ${cells.length} 列合计改了`
+      : `${cells.length} 列上一共改了`
+  const head = `${scope} ${grouped(total)} 个格子，行数一行都没变`
   return top === undefined
     ? head
     : `${head}；最多的是「${top.key}」：${grouped(top.changed)} 格`

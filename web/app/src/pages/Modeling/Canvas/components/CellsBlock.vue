@@ -62,7 +62,7 @@ const rows = computed<CellRow[]>(() => {
 
 const columnCut = computed(() =>
   cells.value.length >= LEDGER_LIMITS.cells
-    ? `逐列的账已经列到上限 ${LEDGER_LIMITS.cells} 列，改得少的那些没有带出来`
+    ? `逐列的账已经列到上限 ${LEDGER_LIMITS.cells} 列，可能还有未展示的列；汇总仅统计已展示明细`
     : '',
 )
 </script>

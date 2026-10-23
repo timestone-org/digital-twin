@@ -19,7 +19,7 @@ from platform_server.apps.hvac.rooms import RoomUnit
 # 老工件拒载并提示重训。
 # v3：时长森林改 log1p 尺度——老工件在原始尺度上拟合，用新代码反解会把
 # 分钟数当对数再指数化，错得悄无声息，必须拒载
-FORMAT_VERSION = 4
+FORMAT_VERSION = 5
 
 # 对外报的三个分位水平，顺序固定
 QUANTILE_LEVELS = (0.1, 0.5, 0.9)
@@ -139,16 +139,23 @@ class MixturePrediction:
     p90: float
 
 
-def predict_mixture(pair: StagePair, row: list[float]) -> MixturePrediction:
+def predict_mixture(
+    pair: StagePair, row: list[float], *, known_compliance: float | None = None
+) -> MixturePrediction:
     """一行特征 → 瞬时达标概率与混合分布的三分位。
 
     时长分布是「概率 p₀ 的 0 + 概率 (1−p₀) 的连续时长」的混合
     （实测近半开机一开机就已达标，直接回归会把非零场景全稀释成 0）。
     混合分布在水平 q 上的分位：q ≤ p₀ 时是 0，否则是条件分布在
     (q − p₀)/(1 − p₀) 水平上的分位。
-    Args: pair, row。
+    Args: pair, row, known_compliance。
     """
-    p_zero = pair.zero_classifier.proba_zero(row)
+    # ⚠ 起始达标是已知事实；只有缺测未定时才使用分类器概率。
+    p_zero = (
+        pair.zero_classifier.proba_zero(row)
+        if known_compliance is None
+        else known_compliance
+    )
     positive = [
         (level, (level - p_zero) / (1.0 - p_zero))
         for level in QUANTILE_LEVELS
@@ -171,13 +178,13 @@ def predict_mixture(pair: StagePair, row: list[float]) -> MixturePrediction:
 
 
 def predict_quantiles(
-    pair: StagePair, row: list[float]
+    pair: StagePair, row: list[float], *, known_compliance: float | None = None
 ) -> tuple[float, float, float]:
     """一行特征 → 混合分布的 (p10, p50, p90)。折外评估只要分位不要 p₀。
 
-    Args: pair, row。
+    Args: pair, row, known_compliance。
     """
-    found = predict_mixture(pair, row)
+    found = predict_mixture(pair, row, known_compliance=known_compliance)
     return (found.p10, found.p50, found.p90)
 
 

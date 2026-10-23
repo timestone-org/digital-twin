@@ -25,11 +25,19 @@ from platform_server.apps.modeling.schemas import (
     OpenModelPredictIn,
     OpenModelPredictOut,
 )
+from platform_server.apps.modeling.schemas.calculation import (
+    OpenModelCalculateIn,
+    OpenModelCalculateOut,
+)
 from platform_server.apps.modeling.schemas.detection import (
     OpenModelDetectIn,
     OpenModelDetectOut,
 )
-from platform_server.apps.modeling.services import detection, open_model_service
+from platform_server.apps.modeling.services import (
+    calculation,
+    detection,
+    open_model_service,
+)
 from platform_server.apps.modeling.services.open_model_service import (
     ResolvedCall,
 )
@@ -116,6 +124,25 @@ async def detect(
     """按模型阈值判断一批设备实时输入。Args: payload, session, deps, call。"""
     return ok(
         await detection.detect(
+            session, deps=deps, resolved=call, payload=payload
+        )
+    )
+
+
+@open_models.post(
+    "/{code}:calculate",
+    response_model=ApiResponse[OpenModelCalculateOut],
+    summary="规则计算",
+)
+async def calculate(
+    payload: OpenModelCalculateIn,
+    session: SessionDep,
+    deps: DepsDep,
+    call: CallDep,
+) -> ApiResponse[OpenModelCalculateOut]:
+    """返回按模型规则计算的逐行明细。Args: payload, session, deps, call。"""
+    return ok(
+        await calculation.calculate_and_record(
             session, deps=deps, resolved=call, payload=payload
         )
     )

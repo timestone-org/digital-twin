@@ -113,6 +113,7 @@ function bindingsOf(
     pickPoint: vi.fn(),
     closePicker: vi.fn(),
     liveValues: computed(() => undefined),
+    datasetWarning: computed(() => ''),
     readBinding: () => () => ({ state: 'pending' }),
     readSample: (nodeKey) => {
       harness.asked.push(nodeKey)

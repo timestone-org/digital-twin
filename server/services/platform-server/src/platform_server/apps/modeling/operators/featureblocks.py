@@ -399,7 +399,8 @@ def _select_columns(run: SelectRun) -> ReportBlock:
             reason=(
                 f"在 {run.train_rows} 行训练行上按"
                 f"{SCORE_LABELS.get(run.method, run.method)}"
-                f"给 {len(run.candidates)} 个候选列打分，留下前 {run.top_k} 列"
+                f"给 {len(run.candidates)} 个候选列打分，"
+                f"留下前 {len(run.kept)} 列"
             ),
         ),
     )

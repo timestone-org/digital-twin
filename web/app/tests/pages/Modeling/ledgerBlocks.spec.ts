@@ -400,7 +400,7 @@ describe('列的账', () => {
       props: { block: blockOf('columns', '新增列', { added: many, kept: 62 }) },
     })
 
-    expect(wrapper.text()).toContain('名单已经列到上限 60 个')
+    expect(wrapper.text()).toContain('名单已到上限 60 列，原始总数未记录')
   })
 
   it('类型对照触到上限时也说清', () => {
@@ -415,7 +415,7 @@ describe('列的账', () => {
       },
     })
 
-    expect(wrapper.text()).toContain('类型对照已经列到上限 12 列')
+    expect(wrapper.text()).toContain('名单已到上限 12 列，原始总数未记录')
   })
 
   it('长中文列名截断靠版式，全名挂在 DtTooltip 上', () => {

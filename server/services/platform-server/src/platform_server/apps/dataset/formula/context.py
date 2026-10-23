@@ -15,6 +15,9 @@ from platform_server.apps.dataset.formula.analysis import (
     AnalysisUnavailable,
     ModelMemo,
 )
+from platform_server.apps.dataset.formula.complete_windows import (
+    sum_complete_window,
+)
 from platform_server.apps.dataset.formula.errors import FormulaError
 from platform_server.apps.dataset.formula.evaluator import ExternalKey
 from platform_server.apps.dataset.formula.refs import FormulaDeps, WindowRef
@@ -173,7 +176,7 @@ def _window_value(
             ref.spec,
             cache.tz,
         )
-        return _aggregate(ref.func, rows, ref.column_key)
+        return _window_aggregate(ref, rows, current.ts, cache.tz)
     # ⚠ 这里**再切一次**窗口，不假定取数层切得刚好：取多了不会报错，只会让
     # 「近 1 小时」悄悄算成近一天，而两边的代码单看都对
     rows = _slice_window(
@@ -184,9 +187,23 @@ def _window_value(
     )
     # 当前行参与本表窗口：仅当它确实持有该列的值——公式列引用自身窗口时不成立，
     # 这正是 `SUM_OVER({自己}, '1y')` 不构成环的原因
-    if current.values.get(ref.key) is not None:
+    if current.values.get(ref.key) is not None or ref.spec.step_s is not None:
         rows = sorted([*rows, current], key=lambda row: row.ts)
-    return _aggregate(ref.func, rows, ref.key)
+    return _window_aggregate(ref, rows, current.ts, cache.tz)
+
+
+def _window_aggregate(
+    ref: WindowRef, rows: list[RowSnapshot], ts: datetime, tz: tzinfo
+) -> object:
+    """按窗口口径求和或执行普通聚合。Args: ref, rows, ts, tz。"""
+    if ref.spec.step_s is not None:
+        return sum_complete_window(
+            ((row.ts, row.get(ref.column_key)) for row in rows),
+            window_lower_bound(ts, ref.spec, tz),
+            ts,
+            ref.spec.step_s,
+        )
+    return _aggregate(ref.func, rows, ref.column_key)
 
 
 def _slice_window(
@@ -197,6 +214,8 @@ def _slice_window(
     Args: rows, ts, spec, tz。
     """
     lower = window_lower_bound(ts, spec, tz)
+    if spec.is_today:
+        return [row for row in rows if lower <= row.ts <= ts]
     return [row for row in rows if lower < row.ts <= ts]
 
 

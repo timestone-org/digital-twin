@@ -76,7 +76,7 @@ export interface HistoryTimeRange {
   fromMs?: number
   /** 右边界，UTC 毫秒，含。 */
   toMs?: number
-  /** 相对窗，形如 `1h` / `7d`；与 `fromMs` 同时给时以 `fromMs` 为准。 */
+  /** 相对窗 `1h` / `7d` 或自然日 `today`；与 `fromMs` 同时给时以 `fromMs` 为准。 */
   lastWindow?: string
   /** 最多取多少个点，取最新的那批。 */
   limit?: number
@@ -85,10 +85,8 @@ export interface HistoryTimeRange {
 /**
  * `archive` 来源的取数说明，落在绑定的 `detailJson`。
  *
- * ⚠ 分桶那三项挂在这一层而不是共用的 `HistoryTimeRange`：只有点位历史的
- * `POST /point-histories:aggregate` 收桶宽、档位与时区，台账 `:series` 与逐条
- * 读数都没有这三个参数。挂进共用那层的话，台账绑定与逐条读数上也长出这三项，
- * 配得出来、存得下、取数时被丢掉，而界面上没有任何迹象。
+ * ⚠ 分桶口径挂在此层：只有点位历史聚合接口收桶宽与档位。
+ * 台账的 timezone 仅用于客户端解析自然日边界，不传给台账序列接口。
  */
 export interface ArchiveBindingDetail {
   /** 点位身份 `{sourceId}:{pointCode}`。 */
@@ -116,6 +114,8 @@ export interface DatasetBindingDetail {
   /** 台账列身份 `ds:{台账code}:{列key}`。 */
   datasetKey: string
   range: HistoryTimeRange
+  /** `today` 的自然日时区；缺省按业务日界 Asia/Shanghai。 */
+  timezone?: string
 }
 
 /** 一条绑定的取数说明。按 `sourceKind` 判别，其余来源为 null。 */

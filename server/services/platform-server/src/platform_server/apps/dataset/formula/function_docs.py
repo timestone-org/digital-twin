@@ -438,6 +438,17 @@ FUNCTION_DOCS: tuple[FunctionDoc, ...] = (
         args=("列", "时间范围"),
     ),
     FunctionDoc(
+        name="SUM_COMPLETE_OVER",
+        category="history",
+        signature="SUM_COMPLETE_OVER({列}, 'today', 300)",
+        description=(
+            "按业务时区合计当日零点至当前记录；第三参为固定采样步长秒数，"
+            "缺桶、重复桶或任一值无效时为空"
+        ),
+        example="SUM_COMPLETE_OVER({用电增量}, 'today', 300)",
+        args=("列", "当日范围", "采样步长秒数"),
+    ),
+    FunctionDoc(
         name="AVG_OVER",
         category="history",
         signature="AVG_OVER({列}, '1h')",

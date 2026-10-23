@@ -1,8 +1,4 @@
-"""worker 角色的进程装配与关停编排。
-
-⚠ 关停顺序是「停收新活 → drain → 让资源」，**不是启动顺序的逆序**
-（docs/agents/runtime-resilience.md §8）。
-"""
+"""worker 角色的进程装配与关停；顺序见 docs/agents/runtime-resilience.md §8。"""
 
 import asyncio
 from collections.abc import Awaitable, Callable
@@ -72,6 +68,7 @@ from platform_server.apps.modeling.services.retention import (
     ModelingRetention,
     RetentionOptions,
 )
+from platform_server.apps.modeling.services.run_queue import rules_target
 from platform_server.apps.report.services.scheduler import ReportScheduler
 from platform_server.apps.report.services.worker import (
     ReportWorker,
@@ -201,25 +198,24 @@ def build_trainer(
 
 
 def build_modeling_runner(
-    container: Container, *, pool: NodePool
+    container: Container, *, pool: NodePool, is_rule_calculation: bool = False
 ) -> RunConsumer:
-    """按配置装出建模运行的消费者。
-
-    Args: container, pool（⚠ 必须是进程池：算子拟合是 CPU 密集，线程池救不了
-    GIL，会把同一事件循环上的其它消费循环一起卡住）。
-    """
+    """装出训练或规则消费者。Args: container, pool, is_rule_calculation。"""
     settings = container.settings
+    target = StreamGroup(
+        stream=settings.modeling_stream,
+        group=settings.modeling_group,
+        consumer=settings.app_instance,
+    )
+    if is_rule_calculation:
+        target = rules_target(target)
     return RunConsumer(
         sessions=container.database,
         stream=container.stream,
         pool=pool,
         options=RunConsumerOptions(
             store=container.object_store,
-            target=StreamGroup(
-                stream=settings.modeling_stream,
-                group=settings.modeling_group,
-                consumer=settings.app_instance,
-            ),
+            target=target,
             prefetch=settings.modeling_prefetch,
             block_ms=settings.modeling_block_ms,
             claim_idle_ms=settings.modeling_claim_idle_ms,
@@ -565,6 +561,9 @@ async def serve(settings: Settings, *, wait: Wait) -> None:
                     collector,
                     retention,
                     build_modeling_runner(container, pool=node_pool),
+                    build_modeling_runner(
+                        container, pool=node_pool, is_rule_calculation=True
+                    ),
                     build_modeling_retention(container),
                     *_report_consumers(container, word_pool),
                     PointIndexWorker(container.database, container.llm.cipher),

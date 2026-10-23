@@ -284,7 +284,13 @@ function toBucketing(raw: Record<string, unknown>): ArchiveBucketing {
 export function toBindingDetail(raw: unknown): BindingDetail | null {
   if (!isRecord(raw)) return null
   if (typeof raw.dataset_key === 'string') {
-    return { datasetKey: raw.dataset_key, range: toHistoryRange(raw.range) }
+    return {
+      datasetKey: raw.dataset_key,
+      range: toHistoryRange(raw.range),
+      ...(typeof raw.timezone === 'string' && raw.timezone !== ''
+        ? { timezone: raw.timezone }
+        : {}),
+    }
   }
   if (typeof raw.node_key === 'string') {
     return {
@@ -304,7 +310,12 @@ export function fromBindingDetail(
   detail: BindingDetail,
 ): Record<string, unknown> {
   const range = fromHistoryRange(detail.range)
-  if ('datasetKey' in detail) return { dataset_key: detail.datasetKey, range }
+  if ('datasetKey' in detail)
+    return {
+      dataset_key: detail.datasetKey,
+      range,
+      ...(detail.timezone === undefined ? {} : { timezone: detail.timezone }),
+    }
   const out: Record<string, unknown> = { node_key: detail.nodeKey, range }
   if (detail.interval !== undefined) out.interval = detail.interval
   if (detail.aggregate !== undefined) out.aggregate = detail.aggregate

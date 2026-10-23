@@ -1,6 +1,6 @@
 /**
  * @fileoverview 把一条绑定读成 `@dt/runtime` 要的 `BindingSlot`：
- * 实时点位查快照缓存、常量与派生就地算、序列类（点位历史与台账）诚实拒绝。
+ * 实时点位与台账标量各查页面缓存，常量与派生就地算，历史序列交给异步读取器。
  *
  * ⚠ 按 `sourceKind` 穷举分支，末尾有一条 `never` 兜底：`BindingSourceKind`
  * 是闭合联合，再加一种来源时这里**编译不过**，而不是安静地少认一种
@@ -8,7 +8,11 @@
  * ⚠ 取不到就说取不到：没有快照就是 `pending`，取数失败就是 `error`，
  * 绝不拿 `null` 冒充「现场报的就是空」。
  */
-import type { BindingView, PointSample } from '@dt/contracts'
+import type {
+  BindingView,
+  DatasetBindingDetail,
+  PointSample,
+} from '@dt/contracts'
 import { computeValue, resolveStaticValue } from '@dt/datasources'
 import type { BindingSlot, BindingValueReader } from '@dt/runtime'
 
@@ -20,6 +24,12 @@ const NO_POINT_MESSAGE = '实时绑定还没挑点位'
 
 /** 取一个点位当前的快照；没收到过给 undefined。 */
 export type ReadPointSample = (nodeKey: string) => PointSample | undefined
+
+/** 查询已由页面异步取得的台账最新值。 */
+export type ReadDatasetValue = (
+  datasetKey: string,
+  detail?: DatasetBindingDetail,
+) => BindingSlot | undefined
 
 /** 一个点位的快照 → 一条槽的结果。 */
 function slotOfSample(sample: PointSample): BindingSlot {
@@ -40,6 +50,7 @@ function slotOfSample(sample: PointSample): BindingSlot {
  */
 export function createBindingReader(
   readPoint: ReadPointSample,
+  readDataset?: ReadDatasetValue,
 ): BindingValueReader {
   return (binding: BindingView, siblings): BindingSlot => {
     const kind = binding.sourceKind
@@ -63,11 +74,25 @@ export function createBindingReader(
       }
       return { state: 'ok', value: computeValue(spec, siblings) }
     }
-    if (kind === 'archive' || kind === 'dataset') {
+    if (kind === 'dataset') return readDatasetSlot(binding, readDataset)
+    if (kind === 'archive') {
       return { state: 'error', message: SERIES_MESSAGE }
     }
     return assertNever(kind)
   }
+}
+
+/** 台账标量只读异步缓存，不在同步求值时发请求。 */
+function readDatasetSlot(
+  binding: BindingView,
+  readDataset: ReadDatasetValue | undefined,
+): BindingSlot {
+  if (readDataset === undefined)
+    return { state: 'error', message: SERIES_MESSAGE }
+  const detail = binding.detailJson
+  if (detail === null || !('datasetKey' in detail))
+    return { state: 'error', message: '台账绑定还没挑选台账列' }
+  return readDataset(detail.datasetKey, detail) ?? { state: 'pending' }
 }
 
 /** 新增一种来源却没在上面认它时，这一行编译不过。 */

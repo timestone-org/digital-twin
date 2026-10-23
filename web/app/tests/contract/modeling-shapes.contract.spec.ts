@@ -15,6 +15,9 @@ import { describe, expect, it } from 'vitest'
 import type {
   AnomalyDecision,
   OpenModelDetect,
+  OpenModelCalculate,
+  OpenModelCalculateRequest,
+  ModelingVersionUpdateInput,
   ModelApiKey,
   ModelApiKeyMinted,
   ModelCallStat,
@@ -317,6 +320,18 @@ const OPEN_MODEL_DETECT = {
   warnings: true,
 } satisfies Keys<OpenModelDetect>
 
+const OPEN_MODEL_CALCULATE = {
+  model: true,
+  results: true,
+} satisfies Keys<OpenModelCalculate>
+const OPEN_MODEL_CALCULATE_REQUEST = {
+  rows: true,
+} satisfies Keys<OpenModelCalculateRequest>
+const VERSION_UPDATE = {
+  name: true,
+  description: true,
+} satisfies Keys<ModelingVersionUpdateInput>
+
 const PAIRS: ReadonlyArray<readonly [string, Record<string, true>]> = [
   ['PortOut', PORT],
   ['OperatorOut', OPERATOR],
@@ -348,6 +363,9 @@ const PAIRS: ReadonlyArray<readonly [string, Record<string, true>]> = [
   ['OpenModelPredictOut', OPEN_MODEL_PREDICT],
   ['AnomalyDecisionOut', ANOMALY_DECISION],
   ['OpenModelDetectOut', OPEN_MODEL_DETECT],
+  ['OpenModelCalculateOut', OPEN_MODEL_CALCULATE],
+  ['OpenModelCalculateIn', OPEN_MODEL_CALCULATE_REQUEST],
+  ['ModelVersionUpdateIn', VERSION_UPDATE],
 ]
 
 describe('分析建模线形与 openapi 一致', () => {
@@ -358,7 +376,7 @@ describe('分析建模线形与 openapi 一致', () => {
     expect(Object.keys(wire).sort()).toEqual(declared)
   })
 
-  it('异常检测的生成类型与 OpenAPI 逐字一致', async () => {
+  it('异常检测、规则计算和版本元数据的生成类型与 OpenAPI 逐字一致', async () => {
     const execute = promisify(execFile)
     await expect(
       execute(

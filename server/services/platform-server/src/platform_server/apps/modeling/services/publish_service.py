@@ -20,7 +20,7 @@ from platform_server.apps.modeling.errors import (
     RunAlreadyPublished,
     RunNotPublishable,
 )
-from platform_server.apps.modeling.models import ModelingModelVersion
+from platform_server.apps.modeling.models import ModelVersion
 from platform_server.apps.modeling.operators import (
     CHANNEL_BINARY,
     CHANNEL_JSON,
@@ -202,6 +202,7 @@ def _servable(publishing: _Publishing) -> Publishable:
             "请重跑一遍这条流水线再发布",
             publishing.payload,
         )
+    entry = _rule_entry(publishing, entry)
     steps = _steps_of(publishing, entry)
     refused = _refusal(publishing, steps, entry)
     if refused:
@@ -229,6 +230,18 @@ def _servable(publishing: _Publishing) -> Publishable:
     return _published(publishing, serving, steps, entry)
 
 
+def _rule_entry(
+    publishing: _Publishing, entry: tuple[EntryColumn, ...]
+) -> tuple[EntryColumn, ...]:
+    """直接规则入口只保留真正使用的计量列。Args: publishing, entry。"""
+    if as_text(
+        publishing.payload.get("task")
+    ) != "rule_calculation" or publishing.served != [publishing.model_id]:
+        return entry
+    features = as_texts(publishing.payload.get("feature_keys"))
+    return tuple(item for item in entry if item.key in features)
+
+
 def _refusal(
     publishing: _Publishing,
     steps: list[dict[str, Any]],
@@ -238,6 +251,11 @@ def _refusal(
 
     Args: publishing, steps, entry。
     """
+    if (
+        as_text(publishing.payload.get("task")) == "rule_calculation"
+        and len(steps) != 1
+    ):
+        return "规则计算不允许会改变计量值的前置推理步骤，请直接连接业务原值"
     starved = _starved_step(publishing.graph, steps)
     if starved:
         return starved
@@ -337,6 +355,10 @@ def _steps_of(
     for node_id in publishing.served:
         record = record_of(publishing.records, node_id)
         expected = _seen_by(record, flowed, target_key)
+        if as_text(
+            publishing.payload.get("task")
+        ) == "rule_calculation" and publishing.served == [publishing.model_id]:
+            expected = [item.key for item in entry]
         produced = without_target(
             frame_columns_of(record, "outputs", "frame"), target_key
         )
@@ -451,6 +473,13 @@ def _target_meta(
 
     Args: publishing, target_key。
     """
+    if as_text(publishing.payload.get("task")) == "rule_calculation":
+        return {
+            "key": "results",
+            "label": "规则计算结果",
+            "dtype": "object",
+            "unit": "",
+        }
     if target_key is None:
         return {
             "key": "anomaly_score",
@@ -513,7 +542,7 @@ def fingerprint(
 
 async def require_version(
     session: AsyncSession, version_id: uuid.UUID
-) -> ModelingModelVersion:
+) -> ModelVersion:
     """取模型版本，取不到即 404。
 
     Args: session, version_id。

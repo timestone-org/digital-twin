@@ -19,6 +19,7 @@ import type {
 import { deviceAnomalyGraph } from './anomalyTemplates'
 import { dailyEnergyGraph } from './energyTemplates'
 import { shortTermLoadGraph } from './loadTemplates'
+import { ENERGY_RULE_TEMPLATES } from './ruleTemplates'
 
 /** 节点在画布上的横向间距与起点。⚠ 坐标是 `left`/`top` 不是 `x`/`y`——
 写成后者时对象字面量整个变成错误类型，而 typecheck 只报一处、lint 报在
@@ -121,6 +122,7 @@ export const PIPELINE_TEMPLATES: readonly PipelineTemplate[] = [
     hint: '选择电流、频率、温度等正常工况样本，无需故障标签。按时间切分，学习多变量关系并校准阈值；发布后第三方输入实时值，检测接口返回是否异常。至少 100 行，建议覆盖代表性工况。',
     build: deviceAnomalyGraph,
   },
+  ...ENERGY_RULE_TEMPLATES,
   {
     key: 'regression',
     label: '回归预测',

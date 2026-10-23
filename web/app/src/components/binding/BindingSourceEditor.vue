@@ -6,8 +6,7 @@
  * ⚠ 五种来源**逐档显式列出**，末尾那一档是「没有认出的来源」而不是某一种来源：
  * 用 `v-else` 兜底的话，再加一种来源会安静地画成上一种的表单，
  * 用户填得完、也存得下，只是存的是另一种来源的字段。契约测试逐档钉死。
- * ⚠ 取点间隔、折算与分桶时区**只画在点位历史那一档**：台账 `:series` 与常量、派生
- * 都不收这些参数，放在其它来源会形成无效配置。
+ * ⚠ 取点间隔与折算只适用于点位历史；台账时区仅用于自然日边界。
  * ⚠ 前两项的说法与趋势分析页逐字一致：同一件事在两个页面上长得不一样，用户
  * 会以为它们是两回事。
  */
@@ -17,6 +16,7 @@ import type {
   BindingSpec,
   CollectAggregate,
   ComputeOp,
+  DatasetBindingDetail,
   DtSelectOption,
   HistoryTimeRange,
 } from '@dt/contracts'
@@ -39,6 +39,7 @@ import {
   TREND_BUCKET_AUTO,
   trendBucketChoices,
 } from '@/features/trend/trendBucket'
+import { DEFAULT_CALENDAR_TIMEZONE } from '@/utils/calendarDay'
 import DatasetRefField from './DatasetRefField.vue'
 import PointRefField from './PointRefField.vue'
 
@@ -167,11 +168,19 @@ const bucketOptions = computed<DtSelectOption[]>(() => {
 /** 聚合下拉当前选中的那一档；空串即没配过、跟服务端缺省走。 */
 const aggregateValue = computed(() => archiveDetail.value?.aggregate ?? '')
 
-/** 台账那一支的列身份；这条绑定不是那一支时给空串。 */
-const datasetKey = computed(() => {
+const datasetDetail = computed<DatasetBindingDetail | null>(() => {
   const detail = props.binding.detailJson
-  return detail !== null && 'datasetKey' in detail ? detail.datasetKey : ''
+  return detail !== null && 'datasetKey' in detail ? detail : null
 })
+const datasetKey = computed(() => datasetDetail.value?.datasetKey ?? '')
+const datasetTimezone = computed(
+  () => datasetDetail.value?.timezone ?? DEFAULT_CALENDAR_TIMEZONE,
+)
+const datasetTimezoneError = computed(() =>
+  isValidIanaTimezone(datasetTimezone.value)
+    ? undefined
+    : '请输入有效的 IANA 时区',
+)
 
 function writeWindow(text: string): void {
   const range = { lastWindow: text }
@@ -179,10 +188,7 @@ function writeWindow(text: string): void {
   // 原来那一支的身份串还躺在 detailJson 里，原样带过去就是拿点位身份当台账
   // 列身份用，取数永远落空而界面上什么都看不出来
   if (props.binding.sourceKind === 'dataset') {
-    emit('write', {
-      ...props.binding,
-      detailJson: { datasetKey: datasetKey.value, range },
-    })
+    writeDataset(datasetKey.value, range, datasetDetail.value?.timezone)
     return
   }
   writeArchive(
@@ -265,13 +271,28 @@ function writeTimezone(raw: string): void {
 
 /** 挑好台账列之后写回身份串，时间窗保持不变。 */
 function writeDatasetKey(key: string): void {
+  writeDataset(
+    key,
+    datasetDetail.value?.range ?? {},
+    datasetDetail.value?.timezone,
+  )
+}
+
+function writeDatasetTimezone(raw: string): void {
+  writeDataset(datasetKey.value, datasetDetail.value?.range ?? {}, raw.trim())
+}
+
+function writeDataset(
+  datasetKey: string,
+  range: HistoryTimeRange,
+  timezone: string | undefined,
+): void {
   emit('write', {
     ...props.binding,
-    // 时间窗留空时不写这个字段，而不是写一个 undefined 进去：
-    // 后端收到的是一个「配过但没值」的 range，与「没配过」不是一回事
     detailJson: {
-      datasetKey: key,
-      range: window.value === '' ? {} : { lastWindow: window.value },
+      datasetKey,
+      range,
+      ...(timezone ? { timezone } : {}),
     },
   })
 }
@@ -368,7 +389,11 @@ function writeDatasetKey(key: string): void {
 
     <template v-else-if="binding.sourceKind === 'dataset'">
       <DatasetRefField :dataset-key="datasetKey" @pick="writeDatasetKey" />
-      <DtField label="相对窗" help="填写相对时间窗，例如 1h 或 7d。" size="sm">
+      <DtField
+        label="相对窗"
+        help="填写 1h、7d 或 today；today 只显示本日数据，当日采集尚未到达时显示暂无数据。"
+        size="sm"
+      >
         <DtInput
           :model-value="window"
           size="sm"
@@ -376,6 +401,16 @@ function writeDatasetKey(key: string): void {
           @update:model-value="writeWindow"
         />
       </DtField>
+      <DtInput
+        v-if="window === 'today'"
+        label="自然日时区"
+        :model-value="datasetTimezone"
+        :error="datasetTimezoneError"
+        size="sm"
+        aria-label="自然日时区"
+        placeholder="Asia/Shanghai"
+        @update:model-value="writeDatasetTimezone"
+      />
     </template>
 
     <DtNotice v-else intent="danger" icon="alert-triangle">

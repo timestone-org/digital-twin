@@ -40,8 +40,11 @@ class ModelingDeployment(UuidPrimaryKeyMixin, TimestampMixin, Base):
 
     # URL 段。⚠ 不拿版本 id 做 URL：换版本时第三方不必改代码
     code: Mapped[str] = mapped_column(Text, nullable=False)
-    model_version_id: Mapped[uuid.UUID] = mapped_column(
-        UUID(as_uuid=True), nullable=False
+    model_version_id: Mapped[uuid.UUID | None] = mapped_column(
+        UUID(as_uuid=True), nullable=True
+    )
+    rule_version_id: Mapped[uuid.UUID | None] = mapped_column(
+        UUID(as_uuid=True), nullable=True
     )
     name: Mapped[str] = mapped_column(Text, nullable=False)
     description: Mapped[str | None] = mapped_column(Text, nullable=True)
@@ -60,6 +63,14 @@ class ModelingDeployment(UuidPrimaryKeyMixin, TimestampMixin, Base):
     )
     created_by_name: Mapped[str | None] = mapped_column(Text, nullable=True)
 
+    @property
+    def effective_version_id(self) -> uuid.UUID:
+        """部署实际指向的训练或规则版本。"""
+        found = self.model_version_id or self.rule_version_id
+        if found is None:
+            raise ValueError("部署缺少模型版本")
+        return found
+
     __table_args__ = (
         ForeignKeyConstraint(
             ["model_version_id"],
@@ -67,6 +78,16 @@ class ModelingDeployment(UuidPrimaryKeyMixin, TimestampMixin, Base):
             name="fk_modeling_deployments_version_id",
             # ⚠ RESTRICT：还有第三方在调的版本删不掉
             ondelete="RESTRICT",
+        ),
+        ForeignKeyConstraint(
+            ["rule_version_id"],
+            ["platform.modeling_rule_versions.id"],
+            name="fk_modeling_deployments_rule_version_id",
+            ondelete="RESTRICT",
+        ),
+        CheckConstraint(
+            "(model_version_id IS NULL) <> (rule_version_id IS NULL)",
+            name="exactly_one_version",
         ),
         UniqueConstraint("code", name="uq_modeling_deployments_code"),
         CheckConstraint(

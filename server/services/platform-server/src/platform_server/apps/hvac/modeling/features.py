@@ -20,7 +20,7 @@ from platform_server.apps.hvac.rooms import (
 # 页面据此提示「特征口径已更新，建议重训」。
 # v2：加设定值距离、回风/送风、温湿度极差、焓值与空气路径温差（热力学口径
 # 取自参考实现 ../Baoding/api 的特征工程，只取按物理讲得通的那部分）
-FEATURE_VERSION = 3
+FEATURE_VERSION = 4
 
 # 外部条件与供冷能力的代理测点（datasets.py 里的列名）
 _FRESH_TEMP = "fresh_air_temp"
@@ -139,6 +139,29 @@ def build_row(
         _mean(_pair_gaps(readings, running, _SUPPLY_TEMP, _RETURN_TEMP)),
         *seasons,
     ]
+
+
+def instant_compliance(
+    conditions: StartConditions, *, units: Sequence[RoomUnit], timezone: str
+) -> float | None:
+    """起始达标事实：1 达标、0 超限、None 未定。
+
+    Args: conditions, units, timezone。
+    """
+    if not units:
+        return None
+    has_missing = False
+    for unit in units:
+        values = conditions.readings.get(unit.serial, {})
+        for metric, band in unit.at(
+            conditions.started_at, timezone
+        ).bands.items():
+            value = values.get(metric)
+            if value is None or not math.isfinite(value):
+                has_missing = True
+            elif not band.contains(value):
+                return 0.0
+    return None if has_missing else 1.0
 
 
 def _season_flags(

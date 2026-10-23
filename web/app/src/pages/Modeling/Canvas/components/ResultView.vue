@@ -10,9 +10,10 @@ import { DtCard, DtEmpty, DtSegmented } from '@dt/ui'
 import type { DtSegmentedOption } from '@dt/contracts'
 import { computed, ref } from 'vue'
 
-import { modelingFrameUrl } from '@/api/modeling'
+import type { ModelingFrameTarget } from '@/api/modeling'
 
 import { formulasOf } from '../scripts/formulaCatalog'
+import { numberAt } from '../scripts/formulaArgs'
 import { grouped } from '../scripts/numbers'
 import type { PortPreview } from '../scripts/preview'
 import { portPreviewsOf } from '../scripts/preview'
@@ -28,6 +29,7 @@ import {
 } from '../scripts/zones'
 
 import FrameView from './FrameView.vue'
+import FrameDownloadButton from './FrameDownloadButton.vue'
 import MetricsView from './MetricsView.vue'
 import ModelView from './ModelView.vue'
 import ProvenanceBar from './ProvenanceBar.vue'
@@ -79,6 +81,9 @@ const ports = computed(() => portPreviewsOf(props.payload))
 const isLabelled = computed(() => ports.value.length > 1)
 
 const report = computed(() => reportOf(props.report))
+const positiveLabel = computed(() =>
+  numberAt(props.config ?? {}, 'positive_label'),
+)
 
 /** 有块才铺六区；一块都没有的运行照升级前的样子渲染（规格 §4.7）。 */
 const hasFace = computed(() => report.value.blocks.length > 0)
@@ -201,12 +206,12 @@ function actualSpanOf(port: string) {
 }
 
 /** 这一路有没有全量结果可下；没有就不摆那个链接。 */
-function downloadOf(port: string): string {
+function downloadOf(port: string): ModelingFrameTarget | null {
   const runId = props.runId
   const nodeId = props.nodeId
-  if (runId === undefined || nodeId === undefined) return ''
-  if (!(props.exportedPorts ?? []).includes(port)) return ''
-  return modelingFrameUrl(runId, nodeId, port)
+  if (runId === undefined || nodeId === undefined) return null
+  if (!(props.exportedPorts ?? []).includes(port)) return null
+  return { runId, nodeId, port }
 }
 
 /** 「完整数据（12,480 行 × 8 列）」：点开之前也要知道点开有多少东西。 */
@@ -281,7 +286,7 @@ function jump(target: string): void {
       </button>
     </nav>
     <TruncationNotice v-if="hasFace && isSourceTruncated" kind="source" />
-    <TruncationNotice v-if="isPreviewTrimmed" kind="budget" />
+    <TruncationNotice v-if="isPreviewTrimmed" kind="budget" scope="preview" />
     <ReportBlocks
       v-if="hasFace"
       :blocks="nodeBlocks"
@@ -312,16 +317,7 @@ function jump(target: string): void {
         <h4 v-if="isLabelled" class="dt-ml-result__port">
           {{ labelOf(item.port) }}
         </h4>
-        <!-- ⚠ 用原生 <a download>：一份 CSV 可以到几十 MB，拉回内存再造 blob
-             是白付一遍内存，交给浏览器直接下更省也天然带进度 -->
-        <a
-          v-if="downloadOf(item.port)"
-          class="dt-ml-result__download"
-          :href="downloadOf(item.port)"
-          download
-        >
-          下载全量结果
-        </a>
+        <FrameDownloadButton :target="downloadOf(item.port)" />
       </header>
       <ReportBlocks
         v-if="hasFace"
@@ -352,6 +348,7 @@ function jump(target: string): void {
             v-if="item.preview.kind === 'frame'"
             :preview="item.preview"
             :has-provenance-bar="hasFace"
+            :has-full-export="downloadOf(item.port) !== null"
           />
           <ModelView
             v-else-if="item.preview.kind === 'model'"
@@ -360,6 +357,8 @@ function jump(target: string): void {
           <MetricsView
             v-else-if="item.preview.kind === 'metrics'"
             :preview="item.preview"
+            :code="props.code"
+            :positive-label="positiveLabel"
             :has-blocks="portBlocks(item.port).length > 0"
           />
           <UnknownView
@@ -376,7 +375,7 @@ function jump(target: string): void {
         :until="provenanceOf(item)?.until ?? null"
         :actual-since="actualSpanOf(item.port).since"
         :actual-until="actualSpanOf(item.port).until"
-        :download-url="downloadOf(item.port)"
+        :download-target="downloadOf(item.port)"
       />
       <p v-if="hasFace && isSharedProvenance" class="dt-ml-result__shared">
         各路来自同一次取数，这一步不改出处。
@@ -436,16 +435,6 @@ function jump(target: string): void {
     color: var(--text-secondary);
     font-size: var(--ctl-hint-fs-sm);
     font-weight: 600;
-  }
-
-  &__download {
-    color: var(--accent-primary);
-    font-size: var(--ctl-hint-fs-md);
-    text-decoration: none;
-
-    &:hover {
-      text-decoration: underline;
-    }
   }
 
   &__data {

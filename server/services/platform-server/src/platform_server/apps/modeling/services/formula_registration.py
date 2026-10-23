@@ -25,7 +25,7 @@ from platform_server.apps.dataset.services import (
 from platform_server.apps.modeling.errors import ModelVersionUnservable
 from platform_server.apps.modeling.models import (
     ModelingBinding,
-    ModelingModelVersion,
+    ModelVersion,
 )
 from platform_server.apps.modeling.services import binding_service
 from platform_server.apps.modeling.services.jsonshape import (
@@ -70,6 +70,10 @@ async def register_formula(
     Args: session, version_id, fx_code, actor。
     """
     version = await require_version(session, version_id)
+    if version.task == "rule_calculation":
+        raise ModelVersionUnservable(
+            "规则模型返回结构化结果，请通过模型服务的 :calculate 接口调用"
+        )
     if not version.servable:
         raise ModelVersionUnservable(
             version.unservable_reason or "这个模型版本不可上线"
@@ -108,7 +112,7 @@ def expression_of(fx_code: str, params: list[str]) -> str:
     return f"PREDICT('{fx_code}', {slots})"
 
 
-def param_names_of(version: ModelingModelVersion) -> list[str]:
+def param_names_of(version: ModelVersion) -> list[str]:
     """形参名，**按入口契约的顺序**。
 
     ⚠ 顺序就是契约：绑定按位置把形参落到入口列上，顺序错了不报错，只是算出

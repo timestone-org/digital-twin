@@ -196,19 +196,19 @@ async def test_training_persists_everything_in_one_go(
     assert batch is not None
     assert found.batch_fingerprint == batch.params_fingerprint
     assert found.metrics is not None
-    assert found.metrics["overall"]["count"] == 40
+    assert found.metrics["overall"]["count"] == 33
     pair_key = "+".join(sorted(seeded.serials))
     assert found.metrics["by_set"][pair_key] is None
     solo = found.metrics["by_set"][seeded.serials[0]]
     assert solo is not None
-    assert solo["count"] == 40
+    assert solo["count"] == 33
     # 事件时长都大于零，故整体块与热行块都算得出 R²
     assert isinstance(found.metrics["overall"]["r2"], float)
     assert isinstance(found.metrics["overall"]["hot"]["r2"], float)
     rows = await ac_model_prediction_crud.page(
         db_session, model_id=model.id, running_set=None, offset=0, limit=100
     )
-    assert len(rows) == 40
+    assert len(rows) == 33
     artifact = await ac_model_artifact_crud.get(db_session, model.id)
     assert artifact is not None
     bundle = load(
@@ -249,10 +249,14 @@ async def test_manual_exclusions_are_left_out_of_training(
     assert found.sample_count == 39
 
 
-async def test_unusable_episodes_never_reach_the_training_set(
+@pytest.mark.parametrize(
+    "duration_minutes", [None, 61], ids=["timeout", "over-limit"]
+)
+async def test_out_of_scope_episodes_never_reach_the_training_set(
     db_session: AsyncSession,
+    duration_minutes: int | None,
 ) -> None:
-    """非 usable 的事件（如超时）不进训练集。"""
+    """超时与超过正常上限的事件保留事实，但不参与训练。"""
     seeded = await seed_room(db_session, episodes=30)
     db_session.add(
         AcStartupEpisode(
@@ -260,9 +264,15 @@ async def test_unusable_episodes_never_reach_the_training_set(
             room_id=seeded.room_id,
             started_at=BASE + timedelta(days=300),
             running_set=[seeded.serials[0]],
-            complied_at=None,
-            duration_minutes=None,
-            outcome=OUTCOME_TIMEOUT,
+            complied_at=(
+                BASE + timedelta(days=300, minutes=duration_minutes)
+                if duration_minutes is not None
+                else None
+            ),
+            duration_minutes=duration_minutes,
+            outcome=(
+                OUTCOME_TIMEOUT if duration_minutes is None else OUTCOME_USABLE
+            ),
             readings={seeded.serials[0]: {"workshop_temp_avg": 30.0}},
             idle_minutes=100,
         )

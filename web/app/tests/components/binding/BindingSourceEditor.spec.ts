@@ -3,7 +3,7 @@
  * ⚠ 常量的 `0` / `false` / `''` 都是合法取值：清空输入写的是 `null`（= 没配过），
  * 把 falsy 当成「没配」会让一整屏的零值消失。
  */
-import { describe, expect, it } from 'vitest'
+import { describe, expect, it, vi } from 'vitest'
 import { mount } from '@vue/test-utils'
 import type {
   BindingPayload,
@@ -13,10 +13,15 @@ import type {
   DtSelectOption,
 } from '@dt/contracts'
 import { BINDING_SOURCE_KINDS } from '@dt/contracts'
-import { DtHelpTip, DtSelect } from '@dt/ui'
+import { DtHelpTip, DtInput, DtSelect } from '@dt/ui'
 
 import BindingSourceEditor from '@/components/binding/BindingSourceEditor.vue'
+import DatasetRefField from '@/components/binding/DatasetRefField.vue'
 import { TREND_BUCKET_AUTO } from '@/features/trend/trendBucket'
+
+vi.mock('@/api/dataset', () => ({
+  listDatasetTables: () => Promise.resolve({ items: [] }),
+}))
 
 function binding(over: Partial<BindingPayload> = {}): BindingPayload {
   return {
@@ -170,6 +175,40 @@ describe('派生', () => {
 })
 
 describe('历史序列', () => {
+  it('自然日台账编辑窗口、时区和列身份时保留其余日期约束', async () => {
+    const current = binding({
+      sourceKind: 'dataset',
+      detailJson: {
+        datasetKey: 'ds:nyyh:输入',
+        range: { lastWindow: 'today' },
+        timezone: 'Asia/Shanghai',
+      },
+    })
+    const wrapper = mountEditor(current)
+    const timezone = wrapper
+      .findAllComponents(DtInput)
+      .find((input) => input.props('label') === '自然日时区')
+    expect(timezone?.props('modelValue')).toBe('Asia/Shanghai')
+    timezone?.vm.$emit('update:modelValue', 'UTC')
+    expect(written(wrapper).detailJson).toEqual({
+      datasetKey: 'ds:nyyh:输入',
+      range: { lastWindow: 'today' },
+      timezone: 'UTC',
+    })
+    wrapper.findComponent(DatasetRefField).vm.$emit('pick', 'ds:nyyh:输出')
+    expect(written(wrapper).detailJson).toEqual({
+      datasetKey: 'ds:nyyh:输出',
+      range: { lastWindow: 'today' },
+      timezone: 'Asia/Shanghai',
+    })
+    await wrapper.find('.dt-input__el').setValue('7d')
+    expect(written(wrapper).detailJson).toEqual({
+      datasetKey: 'ds:nyyh:输入',
+      range: { lastWindow: '7d' },
+      timezone: 'Asia/Shanghai',
+    })
+  })
+
   it('相对窗只常驻显示名称，格式示例收进按需说明', () => {
     const wrapper = mountEditor(
       binding({

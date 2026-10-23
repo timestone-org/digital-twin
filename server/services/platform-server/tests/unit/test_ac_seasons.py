@@ -13,6 +13,7 @@ from platform_server.apps.hvac.modeling.features import (
     StartConditions,
     build_row,
     feature_names,
+    instant_compliance,
 )
 from platform_server.apps.hvac.rooms import MetricBand, RoomUnit
 from platform_server.apps.hvac.seasons import WinterPeriod
@@ -135,6 +136,12 @@ def test_features_and_curation_use_each_samples_own_season() -> None:
         warm["worst_humidity_over"],
         warm["winter_K01"],
     ) == (2.0, 5.0, 0.0)
+    assert (
+        instant_compliance(winter.conditions, units=[unit], timezone=TZ) == 1.0
+    )
+    assert (
+        instant_compliance(summer.conditions, units=[unit], timezone=TZ) == 0.0
+    )
     curated = curate([winter, summer], units=[unit], timezone=TZ)
     assert curated.kept == (winter, summer)
     assert curated.contradictory_count == curated.unexplained_zero_count == 0
@@ -146,7 +153,7 @@ def test_units_in_same_room_can_have_different_seasons() -> None:
         seasonal_unit("K02"), winter_period=WinterPeriod("12-01", "02-28")
     )
     at = datetime(2026, 11, 20, tzinfo=UTC)
-    values = {
+    values: dict[str, object] = {
         "workshop_temp_avg": 22.0,
         "workshop_humidity_avg": 50.0,
         "fan_frequency": 40.0,

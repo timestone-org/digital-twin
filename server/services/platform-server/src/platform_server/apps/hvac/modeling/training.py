@@ -1,4 +1,4 @@
-"""训练管线：每组合专属子模型 + 房间共用兜底，折外评估各归各。
+"""训练管线：组合专属模型与房间共用兜底，使用前向验证评估。
 
 CPU 密集，调用方必须放进进程池跑（docs/AC_MODEL_DESIGN.md §4）；
 本模块只保证「喂纯数据、吐纯数据」，两头都可 pickle。
@@ -15,7 +15,10 @@ from platform_server.apps.hvac.modeling.artifact import (
     predict_quantiles,
     seal,
 )
-from platform_server.apps.hvac.modeling.curation import curate
+from platform_server.apps.hvac.modeling.curation import (
+    MAX_NORMAL_DURATION_MINUTES,
+    curate,
+)
 from platform_server.apps.hvac.modeling.estimators import (
     DurationForest,
     ZeroClassifier,
@@ -29,6 +32,7 @@ from platform_server.apps.hvac.modeling.features import (
     EpisodeSample,
     build_matrix,
     feature_names,
+    instant_compliance,
 )
 from platform_server.apps.hvac.modeling.folds import time_fold_ids
 from platform_server.apps.hvac.modeling.weights import decay_weights
@@ -41,26 +45,25 @@ MIN_SAMPLES = 30
 # 折外评估的折数
 FOLD_COUNT = 5
 
-# 借进阶段 B 的零样本条数上限，按非零样本条数的这个比例算。
-# ⚠ 阶段 B 答的是「不瞬时达标的话要多久」，零样本一多它就改口在答另一个问题，
-# 分位整体被拽向 0——而漏报（热行被判成 0）本就是这个模型最贵的那类错。只借
-# 一小撮当低端锚点，让边界附近的叶子知道「再好一点就是 0 分钟」。
-ZERO_ANCHOR_SHARE = 0.25
-
-# 借进来的零样本再乘这个权重折扣：它们是锚点，不是这一段要回答的样本。
-ZERO_ANCHOR_WEIGHT = 0.25
-
 
 class InsufficientSamples(Exception):
     """样本不够，拒绝训练。异常信息就是给人看的原因。"""
 
-    def __init__(self, got: int) -> None:
+    def __init__(self, got: int, overlong_episode_count: int = 0) -> None:
+        excluded = (
+            f"（已按 {MAX_NORMAL_DURATION_MINUTES} 分钟正常工况上限排除"
+            f" {overlong_episode_count} 条长时长事件）"
+            if overlong_episode_count
+            else ""
+        )
         super().__init__(
-            f"可用事件只有 {got} 条，少于下限 {MIN_SAMPLES} 条，不训练"
+            f"可用事件只有 {got} 条，少于下限 {MIN_SAMPLES} 条，"
+            f"不训练{excluded}"
         )
         self.got = got
+        self.overlong_episode_count = overlong_episode_count
 
-    def __reduce__(self) -> tuple[type["InsufficientSamples"], tuple[int]]:
+    def __reduce__(self) -> tuple[type["InsufficientSamples"], tuple[int, int]]:
         """跨进程搬运时按条数重建，而不是拿整句话再当条数走一遍 `__init__`。
 
         ⚠ 拟合跑在进程池里，异常回到父进程要过一次 pickle：默认口径是拿
@@ -68,7 +71,7 @@ class InsufficientSamples(Exception):
         原因是「可用事件只有 可用事件只有 21 条…… 条……」，`got` 也从条数
         变成了一句话。
         """
-        return (InsufficientSamples, (self.got,))
+        return (InsufficientSamples, (self.got, self.overlong_episode_count))
 
 
 @dataclass(frozen=True)
@@ -79,6 +82,7 @@ class _Prepared:
     matrix: list[list[float]]
     targets: list[float]
     weights: list[float]
+    compliance: list[float | None]
 
 
 @dataclass(frozen=True)
@@ -94,6 +98,7 @@ class TrainedModel:
     # 甄别数出来的两个方向，口径见 `modeling/curation.py`
     contradictory_count: int
     unexplained_zero_count: int
+    overlong_episode_count: int
 
 
 def train(
@@ -104,20 +109,16 @@ def train(
     half_life_days: float,
     serving_sets: Sequence[Sequence[str]] = (),
 ) -> TrainedModel:
-    """训练一个房间的达标时长模型。
+    """筛选正常工况后训练组合专属模型与共用模型，附前向验证结果。
 
-    入口先过一遍 `curate`：标签与当前达标范围自相矛盾的事件在这里就被剔掉，
-    样本数下限也按剩下的那些算——先按毛数放行、再拟合一个学了过期物理的模型，
-    比直接拒训危险。
-    每个攒够 `MIN_SAMPLES` 条的服务组合各训一套**专属子模型**（只用该组合
-    的数据），其余组合由**共用模型**（全部可用事件、组合进特征）兜底；
-    折外评估各归各——专属子模型的指标只由它自己的折外预测算出。
-    Args: samples（可用事件）, units（serial 升序）, timezone,
-    half_life_days, serving_sets（要出专属子模型的组合）。
+    Args: samples, units（serial 升序）, timezone, half_life_days,
+        serving_sets。
     """
     curated = curate(samples, units=units, timezone=timezone)
     if len(curated.kept) < MIN_SAMPLES:
-        raise InsufficientSamples(len(curated.kept))
+        raise InsufficientSamples(
+            len(curated.kept), curated.overlong_episode_count
+        )
     prepared = _prepare(
         curated.kept,
         units=units,
@@ -144,6 +145,7 @@ def train(
         sample_count=len(ordered),
         contradictory_count=curated.contradictory_count,
         unexplained_zero_count=curated.unexplained_zero_count,
+        overlong_episode_count=curated.overlong_episode_count,
     )
 
 
@@ -167,6 +169,12 @@ def _prepare(
             [sample.conditions.started_at for sample in ordered],
             half_life_days=half_life_days,
         ),
+        compliance=[
+            instant_compliance(
+                sample.conditions, units=units, timezone=timezone
+            )
+            for sample in ordered
+        ],
     )
 
 
@@ -216,45 +224,17 @@ def _fit_duration(
     answers: list[float],
     picked: list[float],
 ) -> DurationForest | None:
-    """阶段 B：全部非零样本，加一小撮降权的零样本当低端锚点。
-
-    ⚠ 一条非零时长都没有就没有阶段 B：条件时长无从谈起，混合分布退化成恒 0，
-    这时再拿零样本去拟合只会训出一个「永远答 0」却看着很自信的森林。
-    Args: inputs, answers, picked。
-    """
+    """只用正时长拟合条件分布。Args: inputs, answers, picked。"""
     positive = [at for at, minutes in enumerate(answers) if minutes > 0]
     if not positive:
         return None
-    anchors = _zero_anchors(
-        answers, wanted=int(len(positive) * ZERO_ANCHOR_SHARE)
-    )
-    chosen = [*positive, *anchors]
     forest = DurationForest()
     forest.fit(
-        [inputs[at] for at in chosen],
-        [answers[at] for at in chosen],
-        sample_weight=[
-            *(picked[at] for at in positive),
-            *(picked[at] * ZERO_ANCHOR_WEIGHT for at in anchors),
-        ],
+        [inputs[at] for at in positive],
+        [answers[at] for at in positive],
+        sample_weight=[picked[at] for at in positive],
     )
     return forest
-
-
-def _zero_anchors(answers: Sequence[float], *, wanted: int) -> list[int]:
-    """从零样本里等距挑 `wanted` 条当锚点，行号按入参顺序。
-
-    ⚠ 等距挑而不是取头尾或随机：行序即时序，等距才让锚点摊在整段历史上，
-    既不把某个季节的零样本整块灌进来，同一份数据也永远挑出同一批行。
-    Args: answers, wanted。
-    """
-    zeros = [at for at, minutes in enumerate(answers) if minutes == 0]
-    if wanted <= 0 or not zeros:
-        return []
-    if wanted >= len(zeros):
-        return zeros
-    step = len(zeros) / wanted
-    return [zeros[int(index * step)] for index in range(wanted)]
 
 
 def _neutralize_blind_columns(
@@ -279,55 +259,54 @@ def _neutralize_blind_columns(
 def _out_of_fold(
     prepared: "_Prepared", rows_by_set: dict[str, list[int]]
 ) -> list[OofPrediction]:
-    """折外预测，路由与服务一致：有子模型的组合用子模型的折，其余用共用折。
+    """扩展训练窗评估，仅使用验证时刻之前的数据。
 
-    ⚠ 各归各不能混：专属子模型的评估混进共用模型的预测，页面上那份
-    「按组合」指标就不再是「这个组合的模型有多准」。
     Args: prepared, rows_by_set。
     """
-    dedicated_rows = {row for rows in rows_by_set.values() for row in rows}
-    total = len(prepared.ordered)
-    found = _fold_predictions(
-        prepared,
-        candidates=list(range(total)),
-        report={row for row in range(total) if row not in dedicated_rows},
-    )
-    for rows in rows_by_set.values():
-        found.extend(
-            _fold_predictions(prepared, candidates=rows, report=set(rows))
-        )
+    ids = time_fold_ids(len(prepared.ordered), FOLD_COUNT + 1)
+    found: list[OofPrediction] = []
+    for fold in sorted(set(ids))[1:]:
+        held = [at for at, id_ in enumerate(ids) if id_ == fold]
+        used = [at for at, id_ in enumerate(ids) if id_ < fold]
+        pooled = _fit_pair(prepared, used)
+        pairs = {
+            key: _fit_pair(prepared, past)
+            for key, rows in rows_by_set.items()
+            if len(past := [at for at in rows if at < held[0]]) >= MIN_SAMPLES
+        }
+        found.extend(_fold_predictions(prepared, held, (pooled, pairs), fold))
     return found
 
 
 def _fold_predictions(
     prepared: "_Prepared",
-    *,
-    candidates: list[int],
-    report: set[int],
+    held: Sequence[int],
+    models: tuple[StagePair, dict[str, StagePair]],
+    fold: int,
 ) -> list[OofPrediction]:
-    """在一组行号上做时序分块折外，只报出 `report` 里的行。
+    """按该折历史样本量选择专属或共用模型。
 
-    Args: prepared, candidates, report。
+    Args: prepared, held, models, fold。
     """
-    ids = time_fold_ids(len(candidates), FOLD_COUNT)
+    pooled, pairs = models
     found: list[OofPrediction] = []
-    for fold in sorted(set(ids)):
-        held = [candidates[at] for at, id_ in enumerate(ids) if id_ == fold]
-        used = [candidates[at] for at, id_ in enumerate(ids) if id_ != fold]
-        pair = _fit_pair(prepared, used)
-        for row in held:
-            if row not in report:
-                continue
-            p10, p50, p90 = predict_quantiles(pair, prepared.matrix[row])
-            found.append(
-                OofPrediction(
-                    started_at=prepared.ordered[row].conditions.started_at,
-                    running_set=prepared.ordered[row].conditions.running_set,
-                    actual_minutes=int(prepared.targets[row]),
-                    p10=p10,
-                    p50=p50,
-                    p90=p90,
-                    fold=fold,
-                )
+    for row in held:
+        conditions = prepared.ordered[row].conditions
+        pair = pairs.get(set_key(conditions.running_set), pooled)
+        p10, p50, p90 = predict_quantiles(
+            pair,
+            prepared.matrix[row],
+            known_compliance=prepared.compliance[row],
+        )
+        found.append(
+            OofPrediction(
+                started_at=conditions.started_at,
+                running_set=conditions.running_set,
+                actual_minutes=int(prepared.targets[row]),
+                p10=p10,
+                p50=p50,
+                p90=p90,
+                fold=fold,
             )
+        )
     return found

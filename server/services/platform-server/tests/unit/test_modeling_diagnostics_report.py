@@ -422,6 +422,22 @@ def test_an_even_split_gets_every_fold_it_asked_for() -> None:
     assert stages["实得折数"]["note"] == ""
 
 
+@pytest.mark.parametrize("method", ["forward_chain", "kfold"])
+def test_unequal_folds_report_the_actual_test_size_range(method: str) -> None:
+    blocks = validated(training(rows=49), folds=4, method=method).report()
+    payload = block_of(blocks, "折的配置与实得").payload
+    stages = {stage["name"]: stage["value"] for stage in payload["funnel"]}
+    assert "每折测试行" not in stages
+    assert stages["每折测试最少"] == 12
+    assert stages["每折测试最多"] == 13
+    sizes = [
+        segment["test_rows"]
+        for segment in block_of(blocks, "折布局").payload["segments"]
+    ]
+    assert (min(sizes), max(sizes)) == (12, 13)
+    assert payload["funnel_total"] == 5
+
+
 def test_the_fold_scores_survive_instead_of_being_folded_into_four() -> None:
     """⚠ 逐折分数从前被折成四个标量就扔了，逐折波动画不出来。"""
     blocks = validated(training(), folds=4).report()

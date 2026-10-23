@@ -25,7 +25,7 @@ from platform_server.apps.modeling.crud import (
 )
 from platform_server.apps.modeling.models import (
     ModelingBinding,
-    ModelingModelVersion,
+    ModelVersion,
 )
 from platform_server.apps.modeling.operators import (
     CHANNEL_BINARY,
@@ -120,7 +120,7 @@ class ModelingAnalysisProvider(AnalysisProvider):
     async def _compiled(
         self,
         session: AsyncSession,
-        version: ModelingModelVersion,
+        version: ModelVersion,
         *,
         is_preview: bool,
     ) -> AnalysisModel | AnalysisUnavailable:
@@ -147,7 +147,7 @@ class ModelingAnalysisProvider(AnalysisProvider):
             return AnalysisUnavailable(reason=str(error))
 
     async def _estimator(
-        self, session: AsyncSession, version: ModelingModelVersion
+        self, session: AsyncSession, version: ModelVersion
     ) -> object | None:
         """通道 B 的模型本体；通道 A 给 `None`。
 

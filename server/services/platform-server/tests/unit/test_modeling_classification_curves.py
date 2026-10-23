@@ -64,18 +64,29 @@ SKEWED_POSITIVE_RATE = 0.3
 
 
 def scored(
-    rows: tuple[Row, ...], *, has_proba: bool = True, dtype: str = "number"
+    rows: tuple[Row, ...],
+    *,
+    has_proba: bool = True,
+    dtype: str = "number",
+    has_class_metadata: bool = True,
 ) -> Frame:
     """一份打分帧：真实类目、预测类目，以及可缺的正类概率列。
 
-    Args: rows, has_proba, dtype（概率列的类型，用来试非数值列）。
+    Args: rows, has_proba, dtype, has_class_metadata。
     """
     columns = [
         FrameColumn(key="y_true", name="真实值", dtype="number"),
         FrameColumn(key="y_pred", name="预测值", dtype="number"),
     ]
     if has_proba:
-        columns.append(FrameColumn(key="y_proba", name="正类概率", dtype=dtype))
+        columns.append(
+            FrameColumn(
+                key="y_proba",
+                name="正类概率",
+                dtype=dtype,
+                probability_classes=(0.0, 1.0) if has_class_metadata else (),
+            )
+        )
     width = 3 if has_proba else 2
     return Frame(
         columns=tuple(columns),

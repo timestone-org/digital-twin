@@ -6,6 +6,8 @@
 
 from typing import Any
 
+import pytest
+
 from platform_server.apps.modeling.operators import reporting
 from platform_server.apps.modeling.operators.reporting import (
     BLOCK_KINDS,
@@ -113,7 +115,28 @@ def test_columns_caps_both_name_lists_and_the_dtype_table() -> None:
     assert len(payload["added"]) == reporting.MAX_COLUMN_NAMES
     assert len(payload["removed"]) == reporting.MAX_COLUMN_NAMES
     assert len(payload["dtype_before"]) == reporting.MAX_DTYPE_BEFORE
+    assert payload["added_total"] == 200
+    assert payload["removed_total"] == 200
+    assert payload["dtype_before_total"] == 50
     assert payload["reason"] == "独热展开"
+
+
+@pytest.mark.parametrize(("names", "dtypes"), [(0, 0), (60, 12), (61, 13)])
+def test_column_totals_distinguish_a_full_list_from_a_cut(
+    names: int, dtypes: int
+) -> None:
+    payload = reporting.columns_block(
+        at(),
+        ColumnChange(
+            added=[f"a{seat}" for seat in range(names)],
+            removed=[f"r{seat}" for seat in range(names)],
+            dtype_before=items(dtypes),
+        ),
+    ).payload
+    assert payload["added_total"] == payload["removed_total"] == names
+    assert payload["dtype_before_total"] == dtypes
+    assert len(payload["added"]) == len(payload["removed"]) == min(names, 60)
+    assert len(payload["dtype_before"]) == min(dtypes, 12)
 
 
 def test_cells_caps_the_columns_and_the_samples_inside_each() -> None:

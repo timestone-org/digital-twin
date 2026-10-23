@@ -103,6 +103,7 @@ watch(
       </section>
 
       <PermGuard
+        v-if="props.version.task !== 'rule_calculation'"
         :codes="[
           PERMISSION_CODES.modelingPublish,
           PERMISSION_CODES.datasetManage,
@@ -132,6 +133,10 @@ watch(
           <p class="dt-ml-detail__preview">{{ preview }}</p>
         </section>
       </PermGuard>
+      <DtNotice v-else intent="info">
+        规则计算通过模型服务的 :calculate
+        接口返回结构化结果。发布后到模型服务开通部署并配置调用密钥。
+      </DtNotice>
     </div>
     <template #footer>
       <DtButton variant="ghost" @click="emit('close')">关闭</DtButton>

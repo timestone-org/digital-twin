@@ -40,7 +40,7 @@ from platform_server.apps.modeling.models import (
     ModelingApiKey,
     ModelingCallLog,
     ModelingDeployment,
-    ModelingModelVersion,
+    ModelVersion,
 )
 from platform_server.apps.modeling.operators import (
     CHANNEL_BINARY,
@@ -85,7 +85,7 @@ class ResolvedCall:
     """一次通过了鉴权的调用。"""
 
     deployment: ModelingDeployment
-    version: ModelingModelVersion
+    version: ModelVersion
     api_key_id: uuid.UUID
     #: 这把钥匙在当前这一分钟里的第几次调用。1 表示这一分钟的头一次
     hits_in_window: int = 1
@@ -122,7 +122,9 @@ async def resolve_call(
     key = await _verified_key(session, deployment.id, presented_key)
     if not deployment.is_enabled:
         raise DeploymentDisabled("这个模型服务已停用")
-    version = await model_version_crud.get(session, deployment.model_version_id)
+    version = await model_version_crud.get(
+        session, deployment.effective_version_id
+    )
     if version is None:  # pragma: no cover —— 外键是 RESTRICT
         raise DeploymentUnservable("这个模型服务钉的版本已不存在")
     if not version.servable:
@@ -214,13 +216,13 @@ async def predict_and_record(
             session, deps=deps, resolved=counted, payload=payload
         )
     except AppError as error:
-        await _record(deps, counted, started, error.http_status, error.code)
+        await record_call(deps, counted, started, error.http_status, error.code)
         raise
-    await _record(deps, counted, started, HTTP_OK, None)
+    await record_call(deps, counted, started, HTTP_OK, None)
     return answer
 
 
-async def _record(
+async def record_call(
     deps: OpenModelDeps,
     resolved: ResolvedCall,
     started: float,
@@ -274,6 +276,10 @@ async def predict(
     到 C 的往返。
     Args: session, deps, resolved, payload。
     """
+    if resolved.version.task == "rule_calculation":
+        raise PredictRequestInvalid(
+            "规则模型返回结构化结果，请通过 :calculate 接口调用"
+        )
     if len(payload.rows) > resolved.deployment.max_rows_per_call:
         raise PredictRequestInvalid(
             f"一次最多算 {resolved.deployment.max_rows_per_call} 行，"
@@ -298,7 +304,7 @@ async def predict(
 
 
 async def _compiled(
-    session: AsyncSession, deps: OpenModelDeps, version: ModelingModelVersion
+    session: AsyncSession, deps: OpenModelDeps, version: ModelVersion
 ) -> CompiledModel:
     """把版本编译成可调用对象，通道 B 顺带把模型本体装回来。
 
@@ -314,7 +320,7 @@ async def _compiled(
 
 
 async def _estimator(
-    session: AsyncSession, deps: OpenModelDeps, version: ModelingModelVersion
+    session: AsyncSession, deps: OpenModelDeps, version: ModelVersion
 ) -> object | None:
     """通道 B 的模型本体；通道 A 给 `None`。
 
@@ -339,7 +345,7 @@ async def _estimator(
     )
 
 
-def _entry_of(version: ModelingModelVersion) -> list[dict[str, object]]:
+def _entry_of(version: ModelVersion) -> list[dict[str, object]]:
     """这个版本的入口契约，逐列。
 
     Args: version。
@@ -402,7 +408,7 @@ def _row_moment(row: OpenModelRow, index: int) -> datetime | None:
 
 
 def _warnings_of(
-    rows: list[OpenModelRow], version: ModelingModelVersion
+    rows: list[OpenModelRow], version: ModelVersion
 ) -> list[OpenModelWarningOut]:
     """逐行逐列看有没有超出训练区间。
 
@@ -442,7 +448,7 @@ def _is_outside(value: object, bounds: dict[str, object]) -> bool:
     return value < float(low) or value > float(high)
 
 
-def public_signature(version: ModelingModelVersion) -> dict[str, object]:
+def public_signature(version: ModelVersion) -> dict[str, object]:
     """对外那份模型签名：**剥掉训练统计**。
 
     ⚠ 训练区间的具体数值是训练数据的分布，属于内部信息（D8、防线 ⑩）。

@@ -19,6 +19,7 @@ const TASK_LABELS: Record<string, string> = {
   regression: '回归',
   classification: '分类',
   anomaly_detection: '异常检测',
+  rule_calculation: '规则计算',
 }
 
 /**
@@ -29,6 +30,18 @@ const TASK_LABELS: Record<string, string> = {
  * 的摘要里看不出来，所以只说明形态、不打包票。
  */
 const SERVING = computed(() => {
+  if (!props.preview.isFitted && !props.preview.isFittedTrimmed) {
+    return {
+      intent: 'neutral' as const,
+      text:
+        props.preview.task === 'rule_calculation'
+          ? '未生成规则模型'
+          : '尚未生成可服务的模型',
+    }
+  }
+  if (props.preview.task === 'rule_calculation') {
+    return { intent: 'success' as const, text: '可部署：业务规则已封存' }
+  }
   if (props.preview.servingChannel === 'json') {
     return { intent: 'success' as const, text: '可上线：拟合参数是纯 JSON' }
   }
@@ -85,10 +98,18 @@ const bars = computed(() =>
 <template>
   <div class="dt-ml-model">
     <DtNotice v-if="props.preview.isFittedTrimmed" intent="info">
-      这一步的结果摘要太大，拟合参数没有一起带回来；模型本身是训好的。
+      {{
+        props.preview.task === 'rule_calculation'
+          ? '规则摘要已截断；完整规则保留在封存版本中。'
+          : '这一步的结果摘要太大，拟合参数没有一起带回来；模型本身是训好的。'
+      }}
     </DtNotice>
     <DtNotice v-else-if="!props.preview.isFitted" intent="warning">
-      这一步还没有训练出模型，下游用不了
+      {{
+        props.preview.task === 'rule_calculation'
+          ? '这一步尚未生成规则模型，下游用不了'
+          : '这一步还没有训练出模型，下游用不了'
+      }}
     </DtNotice>
     <dl class="dt-ml-model__facts">
       <dt>算法</dt>
@@ -137,7 +158,11 @@ const bars = computed(() =>
         </li>
       </ul>
     </template>
-    <h4 class="dt-ml-model__title">超参</h4>
+    <h4 class="dt-ml-model__title">
+      {{
+        props.preview.task === 'rule_calculation' ? '封存的业务规则' : '超参'
+      }}
+    </h4>
     <dl class="dt-ml-model__facts">
       <template v-for="[key, value] in props.preview.hyperParams" :key="key">
         <dt>{{ key }}</dt>

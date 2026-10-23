@@ -82,7 +82,7 @@ class OperatorConfig(BaseModel):
     约束永远是空的，而没有任何一处会报错。
     """
 
-    model_config = ConfigDict(extra="forbid")
+    model_config = ConfigDict(extra="forbid", allow_inf_nan=False)
 
 
 class OperatorSpec(BaseModel):
@@ -354,9 +354,20 @@ class OperatorBase:
             icon=cls.ICON,
             inputs=list(cls.INPUTS),
             outputs=list(cls.OUTPUTS),
-            config_schema=cls.CONFIG_MODEL.model_json_schema(),
+            config_schema=_config_schema(cls.CONFIG_MODEL),
             fit_required=cls.REQUIRES_FIT,
             serving_enabled=cls.ENABLED_IN_SERVING,
             serving_window_required=cls.SERVING_NEEDS_WINDOW,
             serving_channel=cls.SERVING_CHANNEL,
         )
+
+
+def _config_schema(model: type[OperatorConfig]) -> dict[str, Any]:
+    """导出参数与工厂生成的实际默认值；Args: model。"""
+    schema = model.model_json_schema()
+    defaults = model.model_construct().model_dump(mode="json", by_alias=True)
+    for key, value in defaults.items():
+        field = schema.get("properties", {}).get(key)
+        if isinstance(field, dict) and "default" not in field:
+            field["default"] = value
+    return schema

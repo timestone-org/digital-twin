@@ -22,8 +22,8 @@ from sqlalchemy.orm import Mapped, mapped_column
 from lib.db import UuidPrimaryKeyMixin
 from platform_server.apps.modeling.models.base import Base, CreatedAtMixin
 from platform_server.apps.modeling.protocols import (
-    MODEL_TASKS,
     SERVING_CHANNELS,
+    TRAINED_MODEL_TASKS,
     sql_values,
 )
 
@@ -32,10 +32,8 @@ from platform_server.apps.modeling.protocols import (
 # 要开二进制通道时照 `ac_model_artifacts` 的形状另起一张子表（§4.4）
 
 
-class ModelingModelVersion(UuidPrimaryKeyMixin, CreatedAtMixin, Base):
+class ModelVersionFields(UuidPrimaryKeyMixin, CreatedAtMixin):
     """一个模型版本。`(pipeline_id, version)` 唯一，一次运行至多发布一个。"""
-
-    __tablename__ = "modeling_model_versions"
 
     # ⚠ RESTRICT 而不是 CASCADE：删流水线前必须先退役它的模型，否则台账里
     # 一批公式会连着失去它们钉住的那一版
@@ -84,6 +82,12 @@ class ModelingModelVersion(UuidPrimaryKeyMixin, CreatedAtMixin, Base):
     # ⚠ 冗余存一份用户名是刻意的：账号可能被删，而这一行要一直答得出「谁发的」
     created_by_name: Mapped[str | None] = mapped_column(Text, nullable=True)
 
+
+class ModelingModelVersion(ModelVersionFields, Base):
+    """训练模型版本；规则版本独立存放以兼容旧读取端。"""
+
+    __tablename__ = "modeling_model_versions"
+
     __table_args__ = (
         ForeignKeyConstraint(
             ["pipeline_id"],
@@ -109,7 +113,7 @@ class ModelingModelVersion(UuidPrimaryKeyMixin, CreatedAtMixin, Base):
             name="target_matches_task",
         ),
         CheckConstraint(
-            f"task IN ({sql_values(MODEL_TASKS)})", name="task_known"
+            f"task IN ({sql_values(TRAINED_MODEL_TASKS)})", name="task_known"
         ),
         CheckConstraint(
             f"serving_channel IN ({sql_values(SERVING_CHANNELS)})",

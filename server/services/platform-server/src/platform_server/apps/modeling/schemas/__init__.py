@@ -42,6 +42,7 @@ from platform_server.apps.modeling.schemas.model import (
     ModelVersionCreateIn,
     ModelVersionOut,
     ModelVersionSummaryOut,
+    ModelVersionUpdateIn,
     ParamMapOut,
 )
 from platform_server.apps.modeling.schemas.operator import OperatorOut, PortOut
@@ -90,6 +91,7 @@ __all__ = [
     "ModelVersionCreateIn",
     "ModelVersionOut",
     "ModelVersionSummaryOut",
+    "ModelVersionUpdateIn",
     "NodePosition",
     "NodeRunOut",
     "NodeRunSummaryOut",

@@ -10,17 +10,20 @@ import type {
   ModelingVersion,
   ModelingVersionSummary,
 } from '@dt/contracts'
-import { computed, onMounted, ref } from 'vue'
+import { useToast } from '@dt/ui'
+import { computed, onBeforeUnmount, onMounted, ref } from 'vue'
 
 import * as modeling from '@/api/modeling'
 import { AppShell } from '@/components/layout'
-import { useAsyncList } from '@/composables/useAsyncList'
+import { describeError, useAsyncList } from '@/composables/useAsyncList'
+import { useRacedFetch } from '@/composables/useRacedFetch'
 import { useViewMode } from '@/composables/useViewMode'
 
 import BindDialog from './components/BindDialog.vue'
 import BindingTable from './components/BindingTable.vue'
 import VersionDetailDialog from './components/VersionDetailDialog.vue'
 import VersionTable from './components/VersionTable.vue'
+import VersionNameDialog from './components/VersionNameDialog.vue'
 import { useBindingOps } from './scripts/useBindingOps'
 import { useVersionOps } from './scripts/useVersionOps'
 
@@ -32,6 +35,9 @@ const bindingView = useViewMode('modeling-bindings')
 const binding = ref<ModelingVersionSummary | null>(null)
 // 详情要签名与指纹，列表那份没有——点开时按 id 现取一次
 const detail = ref<ModelingVersion | null>(null)
+const renaming = ref<ModelingVersion | null>(null)
+const versionRead = useRacedFetch()
+const toast = useToast()
 
 const versions = useAsyncList<ModelingVersionSummary>(
   (query) => modeling.listModelingVersions(query),
@@ -63,7 +69,30 @@ const versionLabels = computed(
 )
 
 async function openDetail(row: ModelingVersionSummary): Promise<void> {
-  detail.value = await modeling.getModelingVersion(row.id)
+  await readVersion(row, (version) => {
+    detail.value = version
+  })
+}
+
+async function readVersion(
+  row: ModelingVersionSummary,
+  show: (version: ModelingVersion) => void,
+): Promise<void> {
+  await versionRead.run(
+    (signal) => modeling.getModelingVersion(row.id, signal),
+    {
+      ok: show,
+      fail: (caught) => toast.error(describeError(caught)),
+      settled: () => {},
+    },
+  )
+}
+
+async function saveName(name: string, description: string): Promise<void> {
+  const version = renaming.value
+  if (version === null) return
+  const result = await versionOps.rename(version.id, name, description)
+  if (result !== null) renaming.value = null
 }
 
 async function register(fxCode: string): Promise<void> {
@@ -84,6 +113,7 @@ onMounted(() => {
   void versions.reload()
   void bindings.reload()
 })
+onBeforeUnmount(versionRead.cancel)
 </script>
 
 <template>
@@ -108,6 +138,12 @@ onMounted(() => {
           @detail="(row) => void openDetail(row)"
           @bind="(row) => (binding = row)"
           @retire="(row) => void versionOps.retire(row)"
+          @rename="
+            (row) =>
+              void readVersion(row, (version) => {
+                renaming = version
+              })
+          "
         >
           <template #toolbar>
             <h2 class="dt-ml-models__title">模型版本</h2>
@@ -147,6 +183,12 @@ onMounted(() => {
       :is-busy="ops.isBusy.value"
       @submit="(code) => void submitBind(code)"
       @close="binding = null"
+    />
+    <VersionNameDialog
+      :version="renaming"
+      :is-busy="versionOps.isBusy.value"
+      @submit="(name, description) => void saveName(name, description)"
+      @close="renaming = null"
     />
   </AppShell>
 </template>

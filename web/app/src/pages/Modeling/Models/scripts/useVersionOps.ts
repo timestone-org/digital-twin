@@ -50,6 +50,13 @@ export function useVersionOps(onDone: () => void) {
 
   return {
     isBusy,
+    rename: async (versionId: string, name: string, description: string) => {
+      const done = await run(() =>
+        modeling.updateModelingVersion(versionId, { name, description }),
+      )
+      if (done !== null) toast.success('模型名称已保存')
+      return done
+    },
     /** 下线一个版本。 */
     retire: async (row: ModelingVersionSummary) => {
       if (!(await confirm.ask(retireAsk(row.name, row.version)))) return

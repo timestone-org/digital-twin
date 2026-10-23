@@ -26,13 +26,19 @@ import type {
   ModelingRunSummary,
   ModelingTrigger,
   ModelingVersion,
+  ModelingVersionUpdateInput,
   ModelingVersionSummary,
   Page,
 } from '@dt/contracts'
 
 import { PLATFORM_BASE_URL } from '@/config/app'
 
-import { request, requestData, type RequestOptions } from './client'
+import {
+  request,
+  requestBytes,
+  requestData,
+  type RequestOptions,
+} from './client'
 import { newIdempotencyKey } from './idempotency'
 
 function onPlatform(options: RequestOptions = {}): RequestOptions {
@@ -166,8 +172,7 @@ export async function startModelingRun(
 /**
  * 某个端口那份全量结果的下载地址。
  *
- * ⚠ 只给地址不给字节：一份 CSV 可以到几十 MB，走 `fetch` 拉回内存再造 blob
- * 是白付一遍内存；交给浏览器直接下更省，也天然带进度。
+ * 仅用于展示地址；实际下载经 `readModelingFrame` 携带身份。
  * ⚠ 这条要 `modeling:view` **且** `dataset:record:export`——那份 CSV 里是台账
  * 原始数据（docs/MODELING_PLATFORM_DESIGN.md D12）。
  */
@@ -178,6 +183,23 @@ export function modelingFrameUrl(
 ): string {
   const query = new URLSearchParams({ port })
   return `${PLATFORM_BASE_URL}/modeling-runs/${runId}/frames/${nodeId}?${query.toString()}`
+}
+
+export interface ModelingFrameTarget {
+  readonly runId: string
+  readonly nodeId: string
+  readonly port: string
+}
+
+/** 取回受保护的全量帧文件；Args: target, signal。 */
+export async function readModelingFrame(
+  target: ModelingFrameTarget,
+  signal?: AbortSignal,
+): Promise<Blob> {
+  return await requestBytes(
+    `/modeling-runs/${encodeURIComponent(target.runId)}/frames/${encodeURIComponent(target.nodeId)}`,
+    onPlatform({ query: { port: target.port }, ...(signal ? { signal } : {}) }),
+  )
 }
 
 /**
@@ -292,10 +314,22 @@ export async function publishModelingVersion(input: {
 
 export async function getModelingVersion(
   versionId: string,
+  signal?: AbortSignal,
 ): Promise<ModelingVersion> {
   return await requestData<ModelingVersion>(
     `/modeling-model-versions/${versionId}`,
-    onPlatform(),
+    onPlatform(signal === undefined ? {} : { signal }),
+  )
+}
+
+/** 修改版本展示名称与说明。 */
+export async function updateModelingVersion(
+  versionId: string,
+  input: ModelingVersionUpdateInput,
+): Promise<ModelingVersion> {
+  return await requestData<ModelingVersion>(
+    `/modeling-model-versions/${versionId}`,
+    onPlatform({ method: 'PATCH', body: input }),
   )
 }
 

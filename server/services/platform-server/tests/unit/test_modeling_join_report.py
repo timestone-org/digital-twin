@@ -172,7 +172,7 @@ def test_the_prefixed_columns_are_named_one_by_one() -> None:
         sided("温度", [0]), sided("湿度", [0]), tolerance_ms=SECOND
     )["columns"]
     assert block.payload["added"] == ["右_湿度"]
-    assert block.payload["kept"] == 1
+    assert block.payload["kept"] == 2
     assert "右_" in block.payload["reason"]
 
 

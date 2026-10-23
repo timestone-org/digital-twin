@@ -1,4 +1,4 @@
-/** @fileoverview 从 platform OpenAPI 生成的异常检测契约。 */
+/** @fileoverview 从 platform OpenAPI 生成的异常检测、规则计算与版本元数据契约。 */
 import type { OpenModelInfo, OpenModelWarning } from './modeling'
 export type DetectionRow = Record<string, number | string | null>
 
@@ -16,3 +16,17 @@ export type OpenModelDetect = {
 }
 
 export type OpenModelDetectRequest = { rows: DetectionRow[] }
+
+export type ModelingJsonValue = unknown
+
+export type OpenModelCalculateRequest = { rows: DetectionRow[] }
+
+export type OpenModelCalculate = {
+  model: OpenModelInfo
+  results: Record<string, ModelingJsonValue>[]
+}
+
+export type ModelingVersionUpdateInput = {
+  description?: string | null
+  name?: string | null
+}

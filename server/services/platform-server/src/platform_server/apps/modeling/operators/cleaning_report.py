@@ -276,7 +276,9 @@ def _cast_columns_block(run: CastRun) -> ReportBlock:
         BlockAt(zone="step", title="类型对照", port=PORT, tier=TIER_SCALAR),
         ColumnChange(
             kept=len(run.after.columns),
-            dtype_before=dtype_changes(_dtypes(run.before), _dtypes(run.after)),
+            dtype_before=dtype_changes(
+                _dtypes(run.before), _dtypes(run.after), limit=None
+            ),
             reason=(
                 f"{len(run.failed)} 列转成{CAST_TARGET[run.target]}，"
                 f"转不动的{CAST_FATE[run.on_error]}"

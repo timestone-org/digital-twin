@@ -25,6 +25,11 @@ export type FieldWidget =
   | 'table'
   | 'moment'
   | 'column-aggregations'
+  | 'json'
+  | 'multi-select'
+  | 'integer-list'
+  | 'number-list'
+  | 'text-list'
 
 /** 参数面板里的一行。 */
 export interface FormField {
@@ -37,6 +42,17 @@ export interface FormField {
   min: number | null
   max: number | null
   fallback: unknown
+  minItems?: number | null
+  maxItems?: number | null
+  minLength?: number | null
+  maxLength?: number | null
+  isMinExclusive?: boolean
+  isMaxExclusive?: boolean
+  jsonType?: 'object' | 'array' | undefined
+  multipleOf?: number | null
+  itemMin?: number | null
+  itemMax?: number | null
+  hasUniqueItems?: boolean
 }
 
 interface RawSchema {
@@ -99,21 +115,100 @@ function optionsOf(field: Record<string, unknown>): FormField['options'] {
   return values.map((value) => ({ value, label: labels.get(value) ?? value }))
 }
 
+const DIRECT_WIDGETS: Readonly<Record<string, FieldWidget | undefined>> = {
+  table: 'table',
+  moment: 'moment',
+  'column-aggregations': 'column-aggregations',
+  'energy-rules-json': 'json',
+}
+
 function widgetOf(
   field: Record<string, unknown>,
   options: FormField['options'],
+  item: Record<string, unknown>,
 ): FieldWidget {
   const marked = asText(field['x-dt-widget'])
   const type = asText(field['type'])
-  if (marked === 'table') return 'table'
-  if (marked === 'moment') return 'moment'
-  if (marked === 'column-aggregations') return 'column-aggregations'
+  const custom = DIRECT_WIDGETS[marked]
+  if (custom !== undefined) return custom
   if (marked === 'column') return type === 'array' ? 'columns' : 'column'
+  if (type === 'array') return arrayWidget(item, options)
   if (options.length > 0) return 'select'
   if (type === 'boolean') return 'switch'
   if (type === 'integer') return 'integer'
   if (type === 'number') return 'number'
   return 'text'
+}
+
+function arrayWidget(
+  item: Record<string, unknown>,
+  options: FormField['options'],
+): FieldWidget {
+  if (options.length > 0) return 'multi-select'
+  if (item['type'] === 'integer') return 'integer-list'
+  return item['type'] === 'number' ? 'number-list' : 'text-list'
+}
+
+function fieldOf(
+  key: string,
+  value: unknown,
+  defs: Record<string, unknown>,
+  required: ReadonlySet<string>,
+): FormField {
+  const field = deref(asRecord(value), defs)
+  const item = deref(asRecord(field['items']), defs)
+  const choices = field['type'] === 'array' ? item : field
+  const options = optionsOf(
+    field['x-dt-widget'] === 'column-aggregations'
+      ? {
+          ...deref(asRecord(field['additionalProperties']), defs),
+          description: field['description'],
+        }
+      : { ...choices, description: field['description'] },
+  )
+  const jsonType = structureType(field)
+  return {
+    key,
+    label: asText(field['title']) || key,
+    hint: asText(field['description']),
+    widget: widgetOf(field, options, item),
+    isRequired: required.has(key),
+    options,
+    ...constraintsOf(field, item),
+    jsonType,
+    fallback:
+      field['default'] ??
+      (field['x-dt-widget'] === 'energy-rules-json'
+        ? jsonType === 'array'
+          ? []
+          : {}
+        : field['default']),
+  }
+}
+
+function structureType(field: Record<string, unknown>): FormField['jsonType'] {
+  if (field['type'] === 'array') return 'array'
+  return field['type'] === 'object' ? 'object' : undefined
+}
+
+function constraintsOf(
+  field: Record<string, unknown>,
+  item: Record<string, unknown>,
+) {
+  return {
+    min: asNumber(field['minimum'] ?? field['exclusiveMinimum']),
+    max: asNumber(field['maximum'] ?? field['exclusiveMaximum']),
+    isMinExclusive: typeof field['exclusiveMinimum'] === 'number',
+    isMaxExclusive: typeof field['exclusiveMaximum'] === 'number',
+    minItems: asNumber(field['minItems']),
+    maxItems: asNumber(field['maxItems']),
+    minLength: asNumber(field['minLength']),
+    maxLength: asNumber(field['maxLength']),
+    multipleOf: asNumber(field['multipleOf']),
+    itemMin: asNumber(item['minimum']),
+    itemMax: asNumber(item['maximum']),
+    hasUniqueItems: field['uniqueItems'] === true,
+  }
 }
 
 /** 把一份算子 schema 摊成字段表。认不出来的键一律跳过。 */
@@ -125,28 +220,9 @@ export function fieldsOf(schema: Record<string, unknown>): FormField[] {
       (item): item is string => typeof item === 'string',
     ),
   )
-  return Object.entries(asRecord(raw.properties)).map(([key, value]) => {
-    const field = deref(asRecord(value), defs)
-    const options = optionsOf(
-      field['x-dt-widget'] === 'column-aggregations'
-        ? {
-            ...deref(asRecord(field['additionalProperties']), defs),
-            description: field['description'],
-          }
-        : field,
-    )
-    return {
-      key,
-      label: asText(field['title']) || key,
-      hint: asText(field['description']),
-      widget: widgetOf(field, options),
-      isRequired: required.has(key),
-      options,
-      min: asNumber(field['minimum']),
-      max: asNumber(field['maximum']),
-      fallback: field['default'],
-    }
-  })
+  return Object.entries(asRecord(raw.properties)).map(([key, value]) =>
+    fieldOf(key, value, defs, required),
+  )
 }
 
 /** 一份参数的初值：schema 里写了默认就用它，没写按控件给空值。 */
@@ -160,7 +236,12 @@ export function defaultsOf(
       continue
     }
     if (field.widget === 'column-aggregations') config[field.key] = {}
-    else if (field.widget === 'columns') config[field.key] = []
+    else if (
+      field.widget === 'columns' ||
+      field.widget === 'multi-select' ||
+      field.widget.endsWith('-list')
+    )
+      config[field.key] = []
     else if (field.widget === 'switch') config[field.key] = false
     else if (field.widget === 'number' || field.widget === 'integer') {
       config[field.key] = null
@@ -188,6 +269,7 @@ export interface FormOptions {
 
 /** 这个字段现在的值是不是就是 schema 给的默认值。 */
 export function isDefault(field: FormField, value: unknown): boolean {
+  if (value === undefined) return true
   if (field.fallback === undefined) return value === undefined
   return JSON.stringify(value) === JSON.stringify(field.fallback)
 }

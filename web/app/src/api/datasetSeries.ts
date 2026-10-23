@@ -118,7 +118,7 @@ function planOne(request: DatasetSeriesRequest, nowMs: number): Wanted {
       `不是台账列身份（应形如 ds:台账编码:列标识）：${datasetKey}`,
     )
   }
-  const { fromMs, toMs } = resolveWindow(range, nowMs)
+  const { fromMs, toMs } = resolveWindow(range, nowMs, request.detail.timezone)
   return {
     fieldKey: request.fieldKey,
     ...parts,

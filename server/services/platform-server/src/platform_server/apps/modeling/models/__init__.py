@@ -17,15 +17,21 @@ from platform_server.apps.modeling.models.model_version import (
     ModelingModelVersion,
 )
 from platform_server.apps.modeling.models.pipeline import ModelingPipeline
+from platform_server.apps.modeling.models.rule_version import (
+    ModelingRuleVersion,
+)
 from platform_server.apps.modeling.models.run import (
     MAX_ERROR_TEXT_LENGTH,
     ModelingNodeRun,
     ModelingRun,
 )
 
+type ModelVersion = ModelingModelVersion | ModelingRuleVersion
+
 __all__ = [
     "MAX_ERROR_TEXT_LENGTH",
     "Base",
+    "ModelVersion",
     "ModelingApiKey",
     "ModelingBinding",
     "ModelingCallLog",
@@ -34,5 +40,6 @@ __all__ = [
     "ModelingModelVersion",
     "ModelingNodeRun",
     "ModelingPipeline",
+    "ModelingRuleVersion",
     "ModelingRun",
 ]

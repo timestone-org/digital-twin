@@ -1,4 +1,4 @@
-"""训练前的样本甄别：把标签与当前达标范围自相矛盾的事件挡在拟合之外。
+"""训练前的正常工况时长筛选与达标标签一致性甄别。
 
 ⚠ 口径前提是 `compliance_frames = 1`（`ExtractionRules` 的现网唯一取值）：起始
 帧一达标事件就当场收尾，所以「起始时刻已达标」与「时长 0」必须同真同假。一条
@@ -12,16 +12,19 @@ from dataclasses import dataclass
 from platform_server.apps.hvac.modeling.features import EpisodeSample
 from platform_server.apps.hvac.rooms import RoomUnit
 
+MAX_NORMAL_DURATION_MINUTES = 60
+
 
 @dataclass(frozen=True)
 class Curated:
-    """甄别结果：留下来的样本，加两个方向各自对不上的条数。"""
+    """保留样本、标签不一致与超出正常时长的计数。"""
 
     kept: tuple[EpisodeSample, ...]
     # 开机即达标却记着非零时长——已剔除
     contradictory_count: int
     # 开机不达标却记着时长 0——只数不剔，理由见 `curate`
     unexplained_zero_count: int
+    overlong_episode_count: int
 
 
 def is_instantly_compliant(
@@ -54,7 +57,7 @@ def curate(
     units: Sequence[RoomUnit],
     timezone: str = "Asia/Shanghai",
 ) -> Curated:
-    """剔除「开机即达标却记着非零时长」的事件，并数出反方向有多少条。
+    """筛选正常工况时长，再甄别达标标签。
 
     ⚠ 反方向（开机不达标却记着时长 0）同样是标签过期的证据，但**只数不剔**：
     达标范围一被收窄它就覆盖整批零样本，剔掉等于把数据集删掉大半——那是
@@ -65,7 +68,11 @@ def curate(
     kept: list[EpisodeSample] = []
     contradictory = 0
     unexplained = 0
+    overlong_episode_count = 0
     for sample in samples:
+        if sample.duration_minutes > MAX_NORMAL_DURATION_MINUTES:
+            overlong_episode_count += 1
+            continue
         is_compliant = is_instantly_compliant(sample, units, timezone)
         if is_compliant and sample.duration_minutes != 0:
             contradictory += 1
@@ -77,4 +84,5 @@ def curate(
         kept=tuple(kept),
         contradictory_count=contradictory,
         unexplained_zero_count=unexplained,
+        overlong_episode_count=overlong_episode_count,
     )

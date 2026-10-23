@@ -1,4 +1,4 @@
-"""从 platform OpenAPI 生成设备异常检测契约。"""
+"""从 platform OpenAPI 生成异常检测、规则计算与版本元数据契约。"""
 
 import shutil
 import subprocess
@@ -14,6 +14,10 @@ ALIASES = (
     ("AnomalyDecisionOut", "AnomalyDecision"),
     ("OpenModelDetectOut", "OpenModelDetect"),
     ("OpenModelDetectIn", "OpenModelDetectRequest"),
+    ("JsonValue", "ModelingJsonValue"),
+    ("OpenModelCalculateIn", "OpenModelCalculateRequest"),
+    ("OpenModelCalculateOut", "OpenModelCalculate"),
+    ("ModelVersionUpdateIn", "ModelingVersionUpdateInput"),
 )
 REFERENCES = (
     *ALIASES,
@@ -28,7 +32,8 @@ def render() -> str:
         (ROOT / "server/services/platform-server/openapi.json").read_text()
     )
     rows = [
-        "/** @fileoverview 从 platform OpenAPI 生成的异常检测契约。 */",
+        "/** @fileoverview 从 platform OpenAPI 生成的"
+        "异常检测、规则计算与版本元数据契约。 */",
         "import type { OpenModelInfo, OpenModelWarning } from './modeling'",
     ]
     for name, alias in ALIASES:
@@ -55,7 +60,7 @@ def main() -> None:
     made = render()
     if "--check" in sys.argv:
         if OUTPUT.read_text() != made:
-            raise SystemExit("异常检测契约与 OpenAPI 不一致")
+            raise SystemExit("建模生成契约与 OpenAPI 不一致")
     else:
         OUTPUT.write_text(made)
 

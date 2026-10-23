@@ -381,6 +381,7 @@ useUnsavedGuard(() => page.doc.value?.isDirty.value === true)
               :gizmo-mode="gizmoMode"
               :target-size="page.targetSize.value"
               :values="binding.liveValues.value"
+              :data-warning="binding.datasetWarning.value"
               @select="selection = $event ?? TWIN_SELECT_MODEL"
               @pick-node="viewport.onPickNode"
               @pick-position="viewport.onPickPosition"

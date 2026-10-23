@@ -37,7 +37,10 @@ from platform_server.apps.dataset.formula.tokens import (
     split_external,
     to_expression,
 )
-from platform_server.apps.dataset.formula.windows import parse_window
+from platform_server.apps.dataset.formula.windows import (
+    parse_complete_window,
+    parse_window,
+)
 
 _ALLOWED_NODES = (
     ast.Expression,
@@ -314,11 +317,30 @@ class _Walker:
 
         Args: name, node。
         """
+        if name == "SUM_COMPLETE_OVER":
+            self._complete_window(node)
+            return
         if len(node.args) != _TWO_ARGS:
             raise FormulaError(f"{name} 用法：{name}({{列key}}, '1h')")
         key = self._column_ref_of(node.args[0], allow_external=True)
         spec = parse_window(_const_str_of(node.args[1]))
         self._deps.window.add(WindowRef(func=name, key=key, spec=spec))
+
+    def _complete_window(self, node: ast.Call) -> None:
+        """提取完整自然日合计依赖。Args: node。"""
+        if len(node.args) != _TWO_ARGS + 1:
+            raise FormulaError(
+                "SUM_COMPLETE_OVER 用法：SUM_COMPLETE_OVER({列}, 'today', 300)"
+            )
+        key = self._column_ref_of(node.args[0], allow_external=True)
+        step = node.args[2]
+        spec = parse_complete_window(
+            _const_str_of(node.args[1]),
+            step.value if isinstance(step, ast.Constant) else None,
+        )
+        self._deps.window.add(
+            WindowRef(func="SUM_COMPLETE_OVER", key=key, spec=spec)
+        )
 
     def _whole(self, name: str, node: ast.Call) -> None:
         """`FN_ALL({列})`。

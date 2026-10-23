@@ -766,10 +766,10 @@ POST /api/v1/platform/modeling-model-versions/{id}:register-formula
 
 `kmeans` 看着只是「再加一个算子」，实际拦路的有三条，每一条都动契约：
 
-1. **聚类任务类型。** `ModelTask` 支持 `classification | regression | anomaly_detection`，
+1. **聚类任务类型。** `ModelTask` 支持 `classification | regression | anomaly_detection | rule_calculation`，
    而 `modeling_model_versions.task` 上有一条按它渲染的 CHECK。加 `clustering`
    要走一次放宽 CHECK 的扩展迁移；
-2. **没有目标列。** `modeling_model_versions.target_key` 只允许异常检测任务为空，
+2. **没有目标列。** 训练版本表 `modeling_model_versions.target_key` 只允许异常检测任务为空；规则版本独立存储且目标为空，
    聚类还需扩展任务与目标的联合约束；监督切分仍要求恰好一个目标角色。
    往里写 `"__none__"` 这种假值正是「往闭合集合里塞一个当前没有语义的取值」，
    [MODELING_DESIGN.md](./MODELING_DESIGN.md) §4 明确不许；

@@ -64,7 +64,7 @@ def test_every_open_route_carries_the_auth_dependency() -> None:
 
 
 def test_the_open_face_has_exactly_the_documented_endpoints() -> None:
-    """对外面只有两个端点：读签名与预测。
+    """对外面只包含签名、预测、异常检测和规则计算。
 
     ⚠ 这一条钉的是**面的大小**：匿名可达的东西越少越好，多一个端点就要多想
     一遍它会不会漏出内部信息。
@@ -75,6 +75,7 @@ def test_the_open_face_has_exactly_the_documented_endpoints() -> None:
     )
     assert paths == [
         f"{OPEN_PREFIX}/{{code}}",
+        f"{OPEN_PREFIX}/{{code}}:calculate",
         f"{OPEN_PREFIX}/{{code}}:detect",
         f"{OPEN_PREFIX}/{{code}}:predict",
     ]
@@ -124,7 +125,7 @@ def test_the_call_log_is_written_in_its_own_transaction() -> None:
     事务的约束），跨事务这件事在用例里根本演不出来。而借请求那条的后果恰恰是
     「失败那一次」永远记不下来——请求出错时它整个回滚。
     """
-    body = _stripped(inspect.getsource(open_model_service._record))
+    body = _stripped(inspect.getsource(open_model_service.record_call))
     assert "deps.sessions.session()" in body
 
 

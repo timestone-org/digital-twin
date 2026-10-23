@@ -78,6 +78,8 @@ export interface ModelPreview {
   classes: number[]
   intercept: number | null
   servingChannel: string
+  /** 这次模型实际保存的参数，供公式读取学习到的阈值。 */
+  fitted?: Readonly<Record<string, unknown>>
 }
 
 /** 残差直方图的一根柱：这个区间里落了多少行。 */
@@ -241,7 +243,12 @@ function modelOf(raw: Record<string, unknown>): ModelPreview {
     featureKeys: asTexts(raw['feature_keys']),
     targetKey: asText(raw['target_key']),
     hyperParams: Object.entries(asRecord(raw['hyper_params'])).map(
-      ([key, value]) => [key, String(value)],
+      ([key, value]) => [
+        key,
+        typeof value === 'object' && value !== null
+          ? JSON.stringify(value)
+          : String(value),
+      ],
     ),
     isFitted: isBinary || (hasFitted && Object.keys(fitted).length > 0),
     isFittedTrimmed: !hasFitted && !isBinary,
@@ -249,6 +256,7 @@ function modelOf(raw: Record<string, unknown>): ModelPreview {
     classes: classesOf(fitted),
     intercept: asNumber(fitted['intercept']),
     servingChannel: channel,
+    fitted,
   }
 }
 

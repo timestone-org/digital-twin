@@ -140,3 +140,59 @@ describe('单值列引用', () => {
     expect(listed[0]).toEqual({ value: 'F1', label: 'F1（上游没有这一列）' })
   })
 })
+
+describe('结构化规则参数', () => {
+  function rulesForm(isReadonly = false) {
+    return mount(ConfigForm, {
+      props: {
+        fields: fieldsOf({
+          properties: {
+            fields: {
+              title: '列映射',
+              type: 'object',
+              'x-dt-widget': 'energy-rules-json',
+            },
+          },
+        }),
+        config: { fields: { energy: '能耗', output: '产量' } },
+        options: options(),
+        isReadonly,
+      },
+    })
+  }
+  it('显示保存的嵌套列映射，编辑后显式应用', async () => {
+    const wrapper = rulesForm()
+    expect(wrapper.get('textarea').element.value).toContain('能耗')
+    await wrapper
+      .get('textarea')
+      .setValue('{"energy":"用电量","output":"产量"}')
+    expect(wrapper.emitted('change')).toBeUndefined()
+    await wrapper
+      .findAll('button')
+      .find((button) => button.text() === '应用配置')
+      ?.trigger('click')
+    expect(wrapper.emitted('change')?.at(-1)).toEqual([
+      'fields',
+      { energy: '用电量', output: '产量' },
+    ])
+  })
+  it('语法错误和标量不能覆盖有效规则配置', async () => {
+    const wrapper = rulesForm()
+    await wrapper.get('textarea').setValue('{')
+    expect(wrapper.text()).toContain('配置格式不完整')
+    await wrapper.get('textarea').setValue('42')
+    expect(wrapper.text()).toContain('配置必须是对象或列表')
+    expect(
+      wrapper
+        .findAll('button')
+        .find((button) => button.text() === '应用配置')
+        ?.attributes('disabled'),
+    ).toBeDefined()
+    expect(wrapper.emitted('change')).toBeUndefined()
+  })
+  it('只读账号保留可见规则并禁止修改', () => {
+    const wrapper = rulesForm(true)
+    expect(wrapper.get('textarea').attributes('disabled')).toBeDefined()
+    expect(wrapper.text()).not.toContain('应用配置')
+  })
+})

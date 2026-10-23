@@ -73,6 +73,8 @@ const trainedText = computed(() => {
   if (row === undefined) return ''
   const seat = `（第 ${grid.value.trainedSeat + 1} 档，共 ${grid.value.rows.length} 档）`
   const head = '竖线是打分那一刀：判成正类的最低概率'
+  if (grid.value.isExact && row.text === '全判负类')
+    return `竖线是打分那一档：全判负类${seat}`
   if (grid.value.isExact) return `${head} ${row.text}${seat}`
   return `${head}不在网格上，就近站在 ${row.text}${seat}，四个数与上面那张指标卡会有出入`
 })
