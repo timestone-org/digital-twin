@@ -14,7 +14,7 @@ overrides:
   '@tiptap/extension-unique-id@3.20.0>uuid': 11.1.1
   '@umoteam/editor-external@10.1.0>echarts': 6.1.0
   katex@<0.18.2: 0.18.2
-  mermaid@11.17.2>dompurify: 3.4.16
+  mermaid@11.17.2>dompurify: 3.4.17
   js-yaml@^4: 4.3.2
   brace-expansion@^2: 2.1.7
   '@umoteam/editor@11.1.1>fast-glob': '-'
@@ -2660,8 +2660,8 @@ packages:
   dom-to-image-more@3.7.2:
     resolution: {integrity: sha512-uQf+pHv6eQhgfI8t2bFuinV0KsPyT8TZgCLwcSU8uBVgN9v6leb0mMpvp6HQAlAcplP3NCcGjxbdqef6pTzvmw==}
 
-  dompurify@3.4.16:
-    resolution: {integrity: sha512-sqo+pNp3qRhCIpbgRi1y8Tgk27Bo2Ry7w0dC1NBeNTdZChWjz9Xb/KOoZbRP/R6pQZ80Qw8YhXw13hWWBbMRnQ==}
+  dompurify@3.4.17:
+    resolution: {integrity: sha512-B/pSlYVHQ58kqISD/yDjuJ1yfzI34m1gF4lAod2bwSRhiN4K5Cl3H8Af7hqB2PmTL911tdEudnnXn5FnhRoz0w==}
 
   dunder-proto@1.0.1:
     resolution: {integrity: sha512-KIN/nDJBQRcXw0MLVhZE9iQHmG68qAVIBg9CqmUYjmQIhgij9U5MFvrqkUL5FbtyyzZuOeOt0zdeRe4UY7ct+A==}
@@ -6623,7 +6623,7 @@ snapshots:
 
   dom-to-image-more@3.7.2: {}
 
-  dompurify@3.4.16:
+  dompurify@3.4.17:
     optionalDependencies:
       '@types/trusted-types': 2.0.7
 
@@ -7309,7 +7309,7 @@ snapshots:
       d3-sankey: 0.12.3
       dagre-d3-es: 7.0.14
       dayjs: 1.11.23
-      dompurify: 3.4.16
+      dompurify: 3.4.17
       es-toolkit: 1.52.0
       fastdom: 1.0.12
       katex: 0.18.2
