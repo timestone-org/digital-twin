@@ -50,7 +50,7 @@ it(
         path.join(assetRoot, 'mermaid/mermaid.min.js'),
         'utf8',
       )
-      expect(mermaid).toContain('3.4.16')
+      expect(mermaid).toContain('3.4.17')
       expect(mermaid).toContain('0.18.2')
       expect(mermaid).toContain('globalThis.mermaid')
       expect(
