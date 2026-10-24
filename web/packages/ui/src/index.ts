@@ -68,3 +68,5 @@ export {
 
 export { default as EditorSplitter } from './components/EditorPanes/EditorSplitter.vue'
 export { useEditorPanes } from './components/EditorPanes/useEditorPanes'
+export { default as DtResizableLayout } from './components/DtResizableLayout/DtResizableLayout.vue'
+export type { ResizablePane } from './components/DtResizableLayout/layoutSizes'
