@@ -1,24 +1,15 @@
 <script setup lang="ts">
 /**
- * @fileoverview 2D 孪生子编辑器：大纲（左）/ 画布（中）/ 检查器（右）。
- * 编辑的是某张大屏上某个节点的那段 2D 孪生配置，落库走大屏的整树替换。
- *
- * ⚠ 这一页对「自己在编 twin-2d-view」一无所知，也不该知道：是大屏编辑器按清单上的
- * `subEditor` 声明跳进来的，路由参数只有 `dashboardId` + `nodeId`。
- * ⚠ 未保存的改动只在内存里，没有本地草稿可恢复，所以两道守卫缺一不可：站内跳转
- * 拦在 `useSubEditorRouteGuard`，关标签页 / 刷新拦在 `useUnsavedGuard`。
- * ⚠ 键盘手势装在这一层而不是画布层：撤销、粘贴、保存都要落到文档态上，装在画布里
- * 的话焦点一离开画布这几个键就整片失灵，而这一步零报错。让位表单的判定归
- * `isTwin2dFormFocused`（按最近可交互祖先判，见 `shortcuts.ts`）。
- * ⚠ 样式库抽屉开着时整套手势 `suspended`：不让位的话，在库里用方向键翻行会同时把
- * 画布上选中的节点 nudge 一格并压进撤销栈——不报错，只是图悄悄动了。
- * ⚠ 右栏是属性 / 绑定两页并存，不是「绑定另开一页」：绑点时要一边看着图上是谁、
- * 一边填槽，分成两条路由的话每绑一个点位都要来回跳一趟。
- * ⚠ 画中画预览走的是运行态那条渲染链（模块自己画），这一页对「自己在编哪个模块」
- * 一无所知——模块类型来自节点行、草稿注回的键来自清单，一个都不写死。
+ * @fileoverview 2D 孪生子编辑器：大纲、画布、诊断与检查器；交互由 scripts/ 编排。
  */
 import type { Twin2dConfig } from '@dt/twin2d'
-import { DtButton, DtNotice, DtPageState, useToast } from '@dt/ui'
+import {
+  DtButton,
+  DtNotice,
+  DtPageState,
+  DtResizableLayout,
+  useToast,
+} from '@dt/ui'
 import { computed, onBeforeUnmount, ref, watch } from 'vue'
 import { useRoute } from 'vue-router'
 
@@ -49,8 +40,7 @@ import { useTwin2dBindings } from './scripts/useTwin2dBindings'
 import { useTwin2dEditorPage } from './scripts/useTwin2dEditorPage'
 import { useTwin2dSizing } from './scripts/useTwin2dSizing'
 
-// ⚠ 子编辑器也要装：直接刷新到这条路由时大屏那三页一个都没跑过，
-// 不装的话素材地址与内置图标解析恒回空串，画面上是一张只剩底色的图
+// ⚠ 直达子编辑器也要装配模块，否则素材地址与内置图标恒回空串。
 installDashboardModules()
 
 const route = useRoute()
@@ -72,16 +62,10 @@ const showIssues = ref(false)
 const fitRequest = ref(0)
 /** 样式库抽屉开着没有。 */
 const libraryOpen = ref(false)
-/**
- * 带预览的样式编辑面开在哪一份上；空串 = 没开着。
- * ⚠ 住在这一层而不是抽屉里：画布的键盘手势按它整体让位，而开编辑面这一步会顺手把
- * 抽屉关掉，闸门只认抽屉的话它自己就失效了。
- */
+// ⚠ 编辑面开着时抽屉已经关闭，键盘手势仍必须暂停。
+/** 带预览的样式编辑面；空串表示关闭。 */
 const styleEditId = ref('')
-/**
- * 图元树上选中的那一枚；空串 = 一枚都没选。
- * ⚠ 住在这一层而不是样式面里：右栏的图元字段面与将来画布上的高亮都要读它。
- */
+/** 图元树选中项；右栏字段与画布高亮共用，空串表示未选。 */
 const selectedPrim = ref('')
 
 const config = computed(() => page.doc.value?.config.value ?? null)
@@ -93,23 +77,15 @@ const binding = useTwin2dBindings(
   () => nodeId.value,
 )
 
-// 助手：绑点 + 照抄 + 读数 + 保存。⚠ 这一页不给截图，2D 舞台是 SVG/DOM，
-// 那条链路没在它上面验过（见 scripts/aiSurface.ts 的文件头）
+// ⚠ SVG/DOM 舞台未接截图能力，见 scripts/aiSurface.ts。
 const ai = useTwin2dAi(page, binding, selection)
 
-// ⚠ 诊断走 `twin2dIssues` 那一支，与右下角那张清单同源：各调各的话，顶栏这个数与
-// 清单上的行数迟早对不上，而先信哪一个全靠猜
+// ⚠ 顶栏计数与诊断清单共用 twin2dIssues，避免显示不一致。
 const issues = computed(() =>
   config.value === null ? [] : twin2dScan(config.value).issues,
 )
 
-/**
- * 装配这一层的缺口（当下只有素材解析一条）。
- * ⚠ 只在装载这一刻问一次：装配是启动期一次性的事（上面那句
- * `installDashboardModules` 就是它），做成 computed 会让人以为它还会变。
- * ⚠ 必须与配置问题合并计数：素材没接上时整张图的图标与底图一起消失，而配置一字
- * 没错——不合进顶栏那个数的话，用户根本不会想到去展开诊断。
- */
+// ⚠ 装配缺口只在启动时读取，并合入顶栏计数，避免素材缺失却没有诊断提示。
 const setupIssues = twin2dSetupIssues()
 
 const outlineSummary = computed(() => {
@@ -331,128 +307,164 @@ onBeforeUnmount(page.dispose)
           </DtButton>
         </div>
 
-        <div class="flex min-h-0 flex-1">
-          <aside
-            class="flex w-64 shrink-0 flex-col gap-2 overflow-y-auto border-r border-border-subtle p-2 text-2xs text-text-secondary"
-            aria-label="大纲"
-            data-test="outline"
-          >
-            <div class="flex items-center gap-1">
-              <span class="min-w-0 flex-1 truncate">{{ outlineSummary }}</span>
-              <DtButton
-                size="xs"
-                variant="ghost"
-                intent="primary"
-                icon="palette"
-                aria-label="样式库"
-                title="样式库：新建、复制、恢复内置与整包导入导出"
-                data-test="open-style-library"
-                @click="libraryOpen = true"
-              />
-            </div>
-            <Twin2dOutline
-              :config="config"
-              :selection="selection"
-              @change="commit"
-            />
-            <NodePalette :styles="config.styles" @add="addFromPalette" />
-          </aside>
-
-          <div class="flex min-w-0 flex-1 flex-col">
-            <section
-              class="relative min-h-0 flex-1"
-              aria-label="画布"
-              data-test="canvas"
-              :data-fit-request="fitRequest"
+        <DtResizableLayout
+          class="min-h-0 flex-1"
+          storage-key="dt.twin2d-editor.layout"
+          :stack-at="720"
+          :panes="[
+            { id: 'outline', label: '大纲', size: 20, minSize: 180 },
+            { id: 'stage', label: '画布', size: 55, minSize: 280 },
+            { id: 'inspector', label: '检查器', size: 25, minSize: 240 },
+          ]"
+        >
+          <template #outline>
+            <aside
+              class="flex min-h-0 flex-1 flex-col gap-2 overflow-y-auto p-2 text-2xs text-text-secondary"
+              aria-label="大纲"
+              data-test="outline"
             >
-              <EditorStage
-                v-if="config !== null"
+              <div class="flex items-center gap-1">
+                <span class="min-w-0 flex-1 truncate">{{
+                  outlineSummary
+                }}</span>
+                <DtButton
+                  size="xs"
+                  variant="ghost"
+                  intent="primary"
+                  icon="palette"
+                  aria-label="样式库"
+                  title="样式库：新建、复制、恢复内置与整包导入导出"
+                  data-test="open-style-library"
+                  @click="libraryOpen = true"
+                />
+              </div>
+              <Twin2dOutline
                 :config="config"
                 :selection="selection"
-                :fit-request="fitRequest"
                 @change="commit"
               />
-              <Twin2dRuntimePreview
-                :node="page.node.value"
-                :config="config"
-                :bindings="binding.bindings.value"
-                :live="binding.live"
-              />
-              <p
-                class="pointer-events-none absolute bottom-1 right-2 text-2xs text-text-disabled"
-                data-test="canvas-readout"
-              >
-                {{ canvasSummary }}
-              </p>
-            </section>
-            <div
-              v-if="showIssues"
-              class="max-h-48 shrink-0 overflow-y-auto border-t border-border-subtle p-2 text-2xs text-text-secondary"
-              aria-label="配置问题"
-              data-test="diagnostics"
-            >
-              <DtNotice
-                v-for="text in setupIssues"
-                :key="text"
-                class="mb-1.5"
-                intent="warning"
-                icon="alert-triangle"
-                data-test="setup-issue"
-              >
-                {{ text }}
-              </DtNotice>
-              <Twin2dDiagnostics :config="config" @select="focusIssue" />
-            </div>
-          </div>
-
-          <aside
-            class="flex w-80 shrink-0 flex-col border-l border-border-subtle text-2xs text-text-secondary"
-            aria-label="检查器"
-            data-test="inspector"
-          >
-            <div class="flex shrink-0 items-center gap-1 p-2 pb-0">
-              <span
-                class="min-w-0 flex-1 truncate text-text-disabled"
-                data-test="inspector-target"
-              >
-                {{ targetSummary }}
-              </span>
-              <DtButton
-                v-if="selection.styleFocus.value !== null"
-                size="xs"
-                variant="ghost"
-                intent="neutral"
-                icon="close"
-                aria-label="退出样式编辑"
-                title="退出样式编辑，回到画布上选中的那一个"
-                data-test="close-style-focus"
-                @click="selection.clearStyleFocus()"
-              />
-            </div>
-            <Twin2dRightPane
-              v-if="config !== null"
+              <NodePalette :styles="config.styles" @add="addFromPalette" />
+            </aside>
+          </template>
+          <template #stage>
+            <DtResizableLayout
               class="min-h-0 flex-1"
-              :config="config"
-              :selection="selection.inspect.value"
-              :pick="selection.pick.value"
-              :style-focus="selection.styleFocus.value"
-              :selected-prim="selectedPrim"
-              :bindings="binding.bindings.value"
-              :is-dirty="page.doc.value?.isDirty.value ?? false"
-              @change="commit"
-              @merge="commitMerged"
-              @end-merge="endMerge"
-              @pick-prim="selectedPrim = $event"
-              @copy-prim="commands.handlers.copy()"
-              @paste-prim="commands.handlers.paste()"
-              @write-binding="binding.write"
-              @drop-binding="binding.drop"
-              @add-binding="binding.bind"
-              @pick-point="binding.pickingFieldKey.value = $event"
-              @remove-binding-row="binding.removeRow"
-            />
-          </aside>
-        </div>
+              direction="vertical"
+              storage-key="dt.twin2d-editor.diagnostics"
+              :panes="
+                showIssues
+                  ? [
+                      { id: 'canvas', label: '画布', size: 75, minSize: 180 },
+                      {
+                        id: 'issues',
+                        label: '配置问题',
+                        size: 25,
+                        minSize: 80,
+                      },
+                    ]
+                  : [{ id: 'canvas', label: '画布', size: 75, minSize: 180 }]
+              "
+            >
+              <template #canvas>
+                <section
+                  class="relative min-h-0 min-w-0 flex-1"
+                  aria-label="画布"
+                  data-test="canvas"
+                  :data-fit-request="fitRequest"
+                >
+                  <EditorStage
+                    v-if="config !== null"
+                    :config="config"
+                    :selection="selection"
+                    :fit-request="fitRequest"
+                    @change="commit"
+                  />
+                  <Twin2dRuntimePreview
+                    :node="page.node.value"
+                    :config="config"
+                    :bindings="binding.bindings.value"
+                    :live="binding.live"
+                  />
+                  <p
+                    class="pointer-events-none absolute bottom-1 right-2 text-2xs text-text-disabled"
+                    data-test="canvas-readout"
+                  >
+                    {{ canvasSummary }}
+                  </p>
+                </section>
+              </template>
+              <template #issues>
+                <div
+                  v-if="showIssues"
+                  class="min-h-0 flex-1 overflow-y-auto p-2 text-2xs text-text-secondary"
+                  aria-label="配置问题"
+                  data-test="diagnostics"
+                >
+                  <DtNotice
+                    v-for="text in setupIssues"
+                    :key="text"
+                    class="mb-1.5"
+                    intent="warning"
+                    icon="alert-triangle"
+                    data-test="setup-issue"
+                  >
+                    {{ text }}
+                  </DtNotice>
+                  <Twin2dDiagnostics :config="config" @select="focusIssue" />
+                </div>
+              </template>
+            </DtResizableLayout>
+          </template>
+          <template #inspector>
+            <aside
+              class="flex min-h-0 flex-1 flex-col text-2xs text-text-secondary"
+              aria-label="检查器"
+              data-test="inspector"
+            >
+              <div class="flex shrink-0 items-center gap-1 p-2 pb-0">
+                <span
+                  class="min-w-0 flex-1 truncate text-text-disabled"
+                  data-test="inspector-target"
+                >
+                  {{ targetSummary }}
+                </span>
+                <DtButton
+                  v-if="selection.styleFocus.value !== null"
+                  size="xs"
+                  variant="ghost"
+                  intent="neutral"
+                  icon="close"
+                  aria-label="退出样式编辑"
+                  title="退出样式编辑，回到画布上选中的那一个"
+                  data-test="close-style-focus"
+                  @click="selection.clearStyleFocus()"
+                />
+              </div>
+              <Twin2dRightPane
+                v-if="config !== null"
+                class="min-h-0 flex-1"
+                :config="config"
+                :selection="selection.inspect.value"
+                :pick="selection.pick.value"
+                :style-focus="selection.styleFocus.value"
+                :selected-prim="selectedPrim"
+                :bindings="binding.bindings.value"
+                :is-dirty="page.doc.value?.isDirty.value ?? false"
+                @change="commit"
+                @merge="commitMerged"
+                @end-merge="endMerge"
+                @pick-prim="selectedPrim = $event"
+                @copy-prim="commands.handlers.copy()"
+                @paste-prim="commands.handlers.paste()"
+                @write-binding="binding.write"
+                @drop-binding="binding.drop"
+                @add-binding="binding.bind"
+                @pick-point="binding.pickingFieldKey.value = $event"
+                @remove-binding-row="binding.removeRow"
+              />
+            </aside>
+          </template>
+        </DtResizableLayout>
 
         <StyleLibraryDrawer
           v-model:open="libraryOpen"

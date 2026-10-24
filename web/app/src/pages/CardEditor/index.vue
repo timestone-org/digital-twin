@@ -13,6 +13,7 @@ import {
   DtButton,
   DtNotice,
   DtSpinner,
+  DtResizableLayout,
   useConfirm,
   useToast,
   DtIconButton,
@@ -254,12 +255,20 @@ useSubEditorRouteGuard(() => page.isDirty.value, {
       >
         <DtSpinner />
       </div>
-      <div
+      <DtResizableLayout
         v-else-if="page.node.value !== null"
-        class="flex min-h-0 flex-1 gap-3"
+        class="min-h-0 flex-1"
+        storage-key="dt.card-editor.layout"
+        :stack-at="720"
+        :panes="[
+          { id: 'structure', label: '结构', size: 20, minSize: 180 },
+          { id: 'preview', label: '预览', size: 55, minSize: 280 },
+          { id: 'fields', label: '字段', size: 25, minSize: 220 },
+        ]"
       >
-        <aside class="w-56 shrink-0 border-r border-border-subtle pr-2">
+        <template #structure>
           <StructurePane
+            class="min-h-0 flex-1 overflow-y-auto pr-2"
             :parts="partRows"
             :cells="cellRows"
             :active-key="activeKey"
@@ -272,27 +281,29 @@ useSubEditorRouteGuard(() => page.isDirty.value, {
             @remove-cell="onRemoveCell"
             @move-part="onMovePart"
           />
-        </aside>
-        <section class="min-h-0 min-w-0 flex-1">
+        </template>
+        <template #preview>
           <CardPreviewStage
             v-model:backdrop="backdrop"
+            class="min-h-0 min-w-0 flex-1"
             :module-type="moduleType"
             :config="config"
             :get-manifest="getManifest"
             :width="size.width"
             :height="size.height"
           />
-        </section>
-        <aside class="w-72 shrink-0 border-l border-border-subtle pl-3">
+        </template>
+        <template #fields>
           <FieldsPane
+            class="min-h-0 flex-1 pl-2"
             :schema="activeSchema"
             :row="activeRow"
             :title="activeTitle"
             :help="activeHelp"
             @update="onUpdate"
           />
-        </aside>
-      </div>
+        </template>
+      </DtResizableLayout>
     </div>
   </AppShell>
 </template>
