@@ -20,6 +20,7 @@ import {
   DtIcon,
   DtInput,
   DtNotice,
+  DtResizableLayout,
   DtSpinner,
   useConfirm,
   useToast,
@@ -180,110 +181,120 @@ onMounted(() => {
 </script>
 
 <template>
-  <div
-    class="grid h-full min-h-0 gap-4 lg:grid-cols-[minmax(18rem,24rem)_minmax(0,1fr)] 2xl:grid-cols-[minmax(18rem,30rem)_minmax(0,1fr)]"
-  >
-    <DtCard class="flex min-h-0 flex-col">
-      <div class="mb-3 flex items-center justify-between gap-2">
-        <h3 class="m-0 text-sm font-medium">地址空间</h3>
-        <PermGuard :codes="[PERMISSION_CODES.opcuaManage]">
-          <DtIconButton
-            size="sm"
-            variant="outline"
-            intent="primary"
-            icon="plus"
-            label="新建节点"
-            @click="formOpen = true"
+  <div class="flex h-full min-h-0 flex-col">
+    <DtResizableLayout
+      class="min-h-0 flex-1"
+      storage-key="dt.opcua-node-explorer.layout"
+      :stack-at="800"
+      :panes="[
+        { id: 'tree', label: '地址空间', size: 35, minSize: 240 },
+        { id: 'detail', label: '节点详情', size: 65, minSize: 280 },
+      ]"
+    >
+      <template #tree>
+        <DtCard class="flex min-h-0 flex-1 flex-col">
+          <div class="mb-3 flex items-center justify-between gap-2">
+            <h3 class="m-0 text-sm font-medium">地址空间</h3>
+            <PermGuard :codes="[PERMISSION_CODES.opcuaManage]">
+              <DtIconButton
+                size="sm"
+                variant="outline"
+                intent="primary"
+                icon="plus"
+                label="新建节点"
+                @click="formOpen = true"
+              />
+            </PermGuard>
+          </div>
+
+          <div class="mb-2 flex items-center gap-1">
+            <DtInput
+              v-model="keyword"
+              class="flex-1"
+              size="sm"
+              aria-label="搜索节点"
+              placeholder="搜 BrowseName / 标识 / NodeId"
+            >
+              <template #leading><DtIcon name="search" :size="14" /></template>
+            </DtInput>
+            <DtButton
+              size="sm"
+              variant="ghost"
+              aria-label="全部展开"
+              @click="expandAll"
+            >
+              <DtIcon name="chevron-down" :size="14" />
+            </DtButton>
+            <DtButton
+              size="sm"
+              variant="ghost"
+              aria-label="全部折叠"
+              @click="collapseAll"
+            >
+              <DtIcon name="chevron-up" :size="14" />
+            </DtButton>
+          </div>
+
+          <DtSpinner v-if="loading" />
+          <DtNotice v-else-if="error" intent="danger" icon="alert-triangle">
+            {{ error }}
+          </DtNotice>
+          <DtEmpty
+            v-else-if="nodes.length === 0"
+            title="还没有节点"
+            hint="建一个变量节点，上位机就能读到它"
           />
-        </PermGuard>
-      </div>
+          <DtEmpty
+            v-else-if="rows.length === 0"
+            title="没有匹配的节点"
+            hint="换个关键词，或按标识、NodeId 搜"
+          />
+          <NodeTree
+            v-else
+            class="min-h-0 flex-1"
+            :rows="rows"
+            :selected-id="selectedId"
+            @select="selectedId = $event"
+            @toggle="toggle"
+            @expand="setExpanded($event, true)"
+            @collapse="setExpanded($event, false)"
+          />
 
-      <div class="mb-2 flex items-center gap-1">
-        <DtInput
-          v-model="keyword"
-          class="flex-1"
-          size="sm"
-          aria-label="搜索节点"
-          placeholder="搜 BrowseName / 标识 / NodeId"
-        >
-          <template #leading><DtIcon name="search" :size="14" /></template>
-        </DtInput>
-        <DtButton
-          size="sm"
-          variant="ghost"
-          aria-label="全部展开"
-          @click="expandAll"
-        >
-          <DtIcon name="chevron-down" :size="14" />
-        </DtButton>
-        <DtButton
-          size="sm"
-          variant="ghost"
-          aria-label="全部折叠"
-          @click="collapseAll"
-        >
-          <DtIcon name="chevron-up" :size="14" />
-        </DtButton>
-      </div>
+          <p class="m-0 mt-2 text-2xs text-text-disabled">
+            <span v-if="searching"
+              >命中 {{ matchCount }} / {{ nodes.length }} 个节点</span
+            >
+            <span v-else>共 {{ nodes.length }} 个节点</span>
+          </p>
 
-      <DtSpinner v-if="loading" />
-      <DtNotice v-else-if="error" intent="danger" icon="alert-triangle">
-        {{ error }}
-      </DtNotice>
-      <DtEmpty
-        v-else-if="nodes.length === 0"
-        title="还没有节点"
-        hint="建一个变量节点，上位机就能读到它"
-      />
-      <DtEmpty
-        v-else-if="rows.length === 0"
-        title="没有匹配的节点"
-        hint="换个关键词，或按标识、NodeId 搜"
-      />
-      <NodeTree
-        v-else
-        class="min-h-0 flex-1"
-        :rows="rows"
-        :selected-id="selectedId"
-        @select="selectedId = $event"
-        @toggle="toggle"
-        @expand="setExpanded($event, true)"
-        @collapse="setExpanded($event, false)"
-      />
-
-      <p class="m-0 mt-2 text-2xs text-text-disabled">
-        <span v-if="searching"
-          >命中 {{ matchCount }} / {{ nodes.length }} 个节点</span
-        >
-        <span v-else>共 {{ nodes.length }} 个节点</span>
-      </p>
-
-      <!-- ⚠ 超出一页的节点其父子关系会被截断，如实说出来，不要让人以为
+          <!-- ⚠ 超出一页的节点其父子关系会被截断，如实说出来，不要让人以为
            地址空间本来就长这样 -->
-      <DtNotice
-        v-if="nodes.length >= NODE_PAGE_SIZE"
-        intent="warning"
-        icon="alert-triangle"
-      >
-        只加载了前 {{ NODE_PAGE_SIZE }} 个节点，更深的层级可能显示不全。
-      </DtNotice>
-    </DtCard>
-
-    <DtCard class="min-h-0">
-      <DtEmpty
-        v-if="selected === null"
-        title="选一个节点"
-        hint="左侧点一个，或用方向键在树里走"
-      />
-      <NodeDetailPanel
-        v-else
-        :instance-id="instance.id"
-        :node="selected"
-        :parent-name="parentName"
-        @remove="removeNode"
-      />
-    </DtCard>
-
+          <DtNotice
+            v-if="nodes.length >= NODE_PAGE_SIZE"
+            intent="warning"
+            icon="alert-triangle"
+          >
+            只加载了前 {{ NODE_PAGE_SIZE }} 个节点，更深的层级可能显示不全。
+          </DtNotice>
+        </DtCard>
+      </template>
+      <template #detail>
+        <DtCard class="min-h-0 flex-1 overflow-auto">
+          <DtEmpty
+            v-if="selected === null"
+            title="选一个节点"
+            hint="左侧点一个，或用方向键在树里走"
+          />
+          <NodeDetailPanel
+            v-else
+            :instance-id="instance.id"
+            :node="selected"
+            :parent-name="parentName"
+            @remove="removeNode"
+          />
+        </DtCard>
+      </template>
+    </DtResizableLayout>
     <NodeFormDialog v-model="formOpen" :nodes="nodes" @create="createNode" />
   </div>
 </template>

@@ -117,6 +117,14 @@ async function clickConfirm(): Promise<void> {
 }
 
 describe('列表', () => {
+  it('房间和模型之间提供可聚焦的尺寸分隔线', async () => {
+    const wrapper = await open()
+    const splitter = wrapper.get('[role="separator"]')
+    expect(splitter.attributes('tabindex')).toBe('0')
+    expect(splitter.attributes('aria-label')).toContain('房间列表')
+    expect(wrapper.text()).toContain('早班模型')
+  })
+
   it('行里给出名称、状态、样本与热行指标', async () => {
     const wrapper = await open()
     expect(wrapper.text()).toContain('早班模型')

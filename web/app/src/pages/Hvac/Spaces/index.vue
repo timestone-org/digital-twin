@@ -9,7 +9,14 @@
 import { computed, onMounted, ref } from 'vue'
 import type { AcUnit, DtSelectOption, Room, Workshop } from '@dt/contracts'
 import { PERMISSION_CODES } from '@dt/contracts'
-import { DtEmpty, DtNotice, useConfirm, useToast, DtIconButton } from '@dt/ui'
+import {
+  DtEmpty,
+  DtNotice,
+  DtResizableLayout,
+  useConfirm,
+  useToast,
+  DtIconButton,
+} from '@dt/ui'
 
 import * as hvac from '@/api/hvac'
 import PermGuard from '@/components/PermGuard.vue'
@@ -182,55 +189,66 @@ onMounted(() => {
       </PermGuard>
     </template>
 
-    <!-- h-full + min-h-0 见 AppShell 的契约：main 不滚，高度由页面自己吃满 -->
-    <div class="flex h-full min-h-0 gap-4">
-      <WorkshopRail
-        :workshops="board.workshops.value"
-        :active-id="board.workshopId.value"
-        @select="selectWorkshop($event)"
-        @create="openTask({ kind: 'workshop-create' })"
-        @rename="openTask({ kind: 'workshop-rename', workshop: $event })"
-        @remove="removeWorkshop($event)"
-      />
-
-      <div class="flex min-h-0 min-w-0 flex-1 flex-col gap-3">
-        <DtNotice v-if="board.partialHint.value" intent="warning">
-          {{ board.partialHint.value }}
-        </DtNotice>
-
-        <RelocateBar
-          v-if="selectedIds.length > 0"
-          :count="selectedIds.length"
-          :room-options="roomOptions"
-          :is-busy="isRelocating"
-          @relocate="relocate($event)"
-          @clear="selectedIds = []"
+    <DtResizableLayout
+      class="h-full min-h-0"
+      storage-key="dt.hvac-spaces.layout"
+      :stack-at="800"
+      :panes="[
+        { id: 'workshops', label: '车间列表', size: 24, minSize: 220 },
+        { id: 'rooms', label: '空间配置', size: 76, minSize: 320 },
+      ]"
+    >
+      <template #workshops>
+        <WorkshopRail
+          style="width: 100%; flex: 1"
+          :workshops="board.workshops.value"
+          :active-id="board.workshopId.value"
+          @select="selectWorkshop($event)"
+          @create="openTask({ kind: 'workshop-create' })"
+          @rename="openTask({ kind: 'workshop-rename', workshop: $event })"
+          @remove="removeWorkshop($event)"
         />
+      </template>
+      <template #rooms>
+        <div class="flex min-h-0 min-w-0 flex-1 flex-col gap-3">
+          <DtNotice v-if="board.partialHint.value" intent="warning">
+            {{ board.partialHint.value }}
+          </DtNotice>
 
-        <!-- 一个车间都没有时只留下面那句「先选一个车间」，不再叠一句「还没有房间」 -->
-        <RoomBoard
-          v-if="board.workshopId.value !== '' || board.loading.value"
-          :rooms="board.rooms.value"
-          :units-by-room="board.unitsByRoom.value"
-          :selected-ids="selectedIds"
-          :is-selectable="canManage"
-          :is-loading="board.loading.value"
-          :error="board.error.value"
-          @toggle="toggleUnit($event)"
-          @rename="openTask({ kind: 'room-rename', room: $event })"
-          @remove="removeRoom($event)"
-          @retry="refresh()"
-        />
+          <RelocateBar
+            v-if="selectedIds.length > 0"
+            :count="selectedIds.length"
+            :room-options="roomOptions"
+            :is-busy="isRelocating"
+            @relocate="relocate($event)"
+            @clear="selectedIds = []"
+          />
 
-        <DtEmpty
-          v-if="board.workshopId.value === '' && !board.loading.value"
-          class="flex-1"
-          icon="building"
-          title="先选一个车间"
-          hint="左侧还没有车间时，先建一个。"
-        />
-      </div>
-    </div>
+          <!-- 一个车间都没有时只留下面那句「先选一个车间」，不再叠一句「还没有房间」 -->
+          <RoomBoard
+            v-if="board.workshopId.value !== '' || board.loading.value"
+            :rooms="board.rooms.value"
+            :units-by-room="board.unitsByRoom.value"
+            :selected-ids="selectedIds"
+            :is-selectable="canManage"
+            :is-loading="board.loading.value"
+            :error="board.error.value"
+            @toggle="toggleUnit($event)"
+            @rename="openTask({ kind: 'room-rename', room: $event })"
+            @remove="removeRoom($event)"
+            @retry="refresh()"
+          />
+
+          <DtEmpty
+            v-if="board.workshopId.value === '' && !board.loading.value"
+            class="flex-1"
+            icon="building"
+            title="先选一个车间"
+            hint="左侧还没有车间时，先建一个。"
+          />
+        </div>
+      </template>
+    </DtResizableLayout>
 
     <SpaceNameDialog
       :model-value="task !== null"
