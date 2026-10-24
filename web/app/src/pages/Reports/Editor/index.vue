@@ -9,7 +9,14 @@ import {
 } from 'vue'
 import { useRoute, useRouter } from 'vue-router'
 import { useWorkspaceGuard } from '@/features/workspace/useWorkspaceGuard'
-import { DtButton, DtInput, DtNotice, useToast, useConfirm } from '@dt/ui'
+import {
+  DtButton,
+  DtInput,
+  DtNotice,
+  DtResizableLayout,
+  useToast,
+  useConfirm,
+} from '@dt/ui'
 import type {
   ReportBody,
   ReportDocument,
@@ -291,55 +298,66 @@ async function previewForAssistant(
       <DtNotice v-if="periodWarning" intent="warning">
         {{ periodWarning }}
       </DtNotice>
-      <div
+      <DtResizableLayout
         v-if="template"
-        class="grid min-h-0 flex-1 grid-rows-[minmax(38rem,1fr)_auto] gap-4 overflow-y-auto xl:grid-cols-[minmax(0,1fr)_21rem] xl:grid-rows-1 xl:overflow-hidden"
+        class="min-h-0 flex-1"
+        storage-key="dt.report-editor.layout"
+        :stack-at="960"
+        :panes="[
+          { id: 'document', label: '报告正文', size: 75, minSize: 320 },
+          { id: 'settings', label: '报告设置', size: 25, minSize: 240 },
+        ]"
       >
-        <ReportEditor
-          ref="editor"
-          :model-value="draft.doc_json ?? { type: 'doc' }"
-          :page="draft.page_json ?? {}"
-          :title="draft.name"
-          :disabled="!canEdit || isBusy"
-          :save-document="save"
-          :metrics="draft.metrics ?? []"
-          @update:model-value="draft.doc_json = $event"
-          @update:page="draft.page_json = $event"
-        />
-        <aside class="flex min-h-0 flex-col gap-4 overflow-auto pr-1">
-          <TemplateSettingsCard
-            :name="draft.name"
-            :granularity="draft.granularity ?? 'month'"
-            :enabled="draft.is_enabled ?? true"
+        <template #document>
+          <ReportEditor
+            ref="editor"
+            class="min-h-0 flex-1"
+            :model-value="draft.doc_json ?? { type: 'doc' }"
+            :page="draft.page_json ?? {}"
+            :title="draft.name"
             :disabled="!canEdit || isBusy"
-            :can-edit="canEdit"
-            @update:name="draft.name = $event"
-            @update:granularity="changeGranularity"
-            @update:enabled="draft.is_enabled = $event"
-            @open-page="isPageOpen = true"
+            :save-document="save"
+            :metrics="draft.metrics ?? []"
+            @update:model-value="draft.doc_json = $event"
+            @update:page="draft.page_json = $event"
           />
-          <MetricPanel
-            :model-value="draft.metrics ?? []"
-            :disabled="!canEdit || isBusy"
-            @update:model-value="draft.metrics = $event"
-            @insert="
-              insert({
-                type: 'metricRef',
-                attrs: { expr: $event, precision: 2 },
-              })
-            "
-          />
-          <DtButton
-            v-if="canEdit"
-            size="sm"
-            icon="plus"
-            @click="isNodeOpen = true"
-          >
-            插入数据内容
-          </DtButton>
-          <PreviewPanel v-if="preview" :preview="preview" />
-        </aside>
-      </div>
+        </template>
+        <template #settings>
+          <aside class="flex min-h-0 flex-1 flex-col gap-4 overflow-auto pr-1">
+            <TemplateSettingsCard
+              :name="draft.name"
+              :granularity="draft.granularity ?? 'month'"
+              :enabled="draft.is_enabled ?? true"
+              :disabled="!canEdit || isBusy"
+              :can-edit="canEdit"
+              @update:name="draft.name = $event"
+              @update:granularity="changeGranularity"
+              @update:enabled="draft.is_enabled = $event"
+              @open-page="isPageOpen = true"
+            />
+            <MetricPanel
+              :model-value="draft.metrics ?? []"
+              :disabled="!canEdit || isBusy"
+              @update:model-value="draft.metrics = $event"
+              @insert="
+                insert({
+                  type: 'metricRef',
+                  attrs: { expr: $event, precision: 2 },
+                })
+              "
+            />
+            <DtButton
+              v-if="canEdit"
+              size="sm"
+              icon="plus"
+              @click="isNodeOpen = true"
+            >
+              插入数据内容
+            </DtButton>
+            <PreviewPanel v-if="preview" :preview="preview" />
+          </aside>
+        </template>
+      </DtResizableLayout>
       <PageDialog
         v-model="isPageOpen"
         :page="draft.page_json ?? {}"

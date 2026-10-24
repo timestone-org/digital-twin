@@ -144,6 +144,9 @@ it('加载模板时按业务时区初始化当前报告期', async () => {
   const wrapper = mount(EditorPage, { global: { stubs: { teleport: true } } })
   await flushPromises()
 
+  expect(wrapper.get('[role="separator"]').attributes('aria-label')).toContain(
+    '报告正文',
+  )
   expect(
     wrapper.get<HTMLInputElement>('input[aria-label="报告期"]').element.value,
   ).toBe('2025-12')

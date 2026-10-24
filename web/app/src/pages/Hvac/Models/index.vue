@@ -8,7 +8,7 @@
 import { computed, onBeforeUnmount, onMounted, ref } from 'vue'
 import { useRoute, useRouter } from 'vue-router'
 import type { AcModel, DtTableSort, Room } from '@dt/contracts'
-import { DtEmpty, useConfirm, useToast } from '@dt/ui'
+import { DtEmpty, DtResizableLayout, useConfirm, useToast } from '@dt/ui'
 
 import * as hvac from '@/api/hvac'
 import { AppShell } from '@/components/layout'
@@ -194,46 +194,53 @@ function onCreated(modelId: string): void {
     title="达标预测"
     subtitle="给定当前条件与一个运行组合，预测多久达标"
   >
-    <!-- 两侧都要 min-h-0，右区还要 min-w-0：少 min-h-0 不是滚动而是把整页撑长，
-         而 AppShell 的 main 是 overflow-hidden；少 min-w-0 则宽表格顶破页面横滚 -->
-    <!-- 并排的门槛是 2xl：xl 那一档右区只有八百多像素，八列的模型表要横滚才见得到
-         操作列；2xl 以下房间栏叠在上面，表格拿整行宽 -->
-    <div class="flex h-full min-h-0 flex-col gap-4 2xl:flex-row">
-      <RoomSidebar
-        class="max-h-72 shrink-0 2xl:max-h-none 2xl:w-72"
-        :entries="listing.entries"
-        :hidden-count="listing.hiddenCount"
-        :selected="roomId"
-        @select="selectRoom"
-      />
-
-      <div class="flex min-h-0 min-w-0 flex-1 flex-col gap-3">
-        <template v-if="current">
-          <RoomHeader :room="current" @create="isCreating = true" />
-
-          <ModelTable
-            :rows="rows"
-            :loading="loading"
-            :error="error"
-            :sort="sort"
-            :view="view"
-            @open="open"
-            @retrain="retrain"
-            @remove="remove"
-            @retry="load"
-            @update:sort="sort = $event"
-            @update:view="view = $event"
-          />
-        </template>
-
-        <DtEmpty
-          v-else
-          icon="building"
-          title="先配置房间"
-          hint="先在空间配置页建车间与房间，并把空调挂到房间上。"
+    <DtResizableLayout
+      class="h-full min-h-0"
+      storage-key="dt.hvac-models.layout"
+      :stack-at="1200"
+      :panes="[
+        { id: 'rooms', label: '房间列表', size: 22, minSize: 220 },
+        { id: 'models', label: '预测模型', size: 78, minSize: 360 },
+      ]"
+    >
+      <template #rooms>
+        <RoomSidebar
+          class="min-h-0 flex-1"
+          :entries="listing.entries"
+          :hidden-count="listing.hiddenCount"
+          :selected="roomId"
+          @select="selectRoom"
         />
-      </div>
-    </div>
+      </template>
+      <template #models>
+        <div class="flex min-h-0 min-w-0 flex-1 flex-col gap-3">
+          <template v-if="current">
+            <RoomHeader :room="current" @create="isCreating = true" />
+
+            <ModelTable
+              :rows="rows"
+              :loading="loading"
+              :error="error"
+              :sort="sort"
+              :view="view"
+              @open="open"
+              @retrain="retrain"
+              @remove="remove"
+              @retry="load"
+              @update:sort="sort = $event"
+              @update:view="view = $event"
+            />
+          </template>
+
+          <DtEmpty
+            v-else
+            icon="building"
+            title="先配置房间"
+            hint="先在空间配置页建车间与房间，并把空调挂到房间上。"
+          />
+        </div>
+      </template>
+    </DtResizableLayout>
 
     <CreateModelDialog
       :open="isCreating"
