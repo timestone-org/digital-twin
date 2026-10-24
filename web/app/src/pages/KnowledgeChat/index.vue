@@ -10,7 +10,7 @@
  * 交互编排在 `scripts/useKnowledgeChatPage.ts`。
  */
 import { computed, onMounted } from 'vue'
-import { DtButton, DtNotice, useConfirm } from '@dt/ui'
+import { DtButton, DtNotice, DtResizableLayout, useConfirm } from '@dt/ui'
 
 import { AppShell } from '@/components/layout'
 import ChatPanel from './components/ChatPanel.vue'
@@ -74,35 +74,44 @@ onMounted(() => void page.reload())
         {{ page.error.value }}
       </DtNotice>
 
-      <!-- <xl 竖排：左栏定高，面板吃掉剩下的那一行；≥xl 并成两栏 -->
-      <div
-        class="grid min-h-0 flex-1 grid-cols-1 grid-rows-[auto_minmax(0,1fr)] gap-4 xl:grid-cols-[20rem_minmax(0,1fr)] xl:grid-rows-1"
+      <DtResizableLayout
+        class="min-h-0 flex-1"
+        :panes="[
+          { id: 'sessions', label: '对话列表', size: 1, minSize: 200 },
+          { id: 'chat', label: '对话内容', size: 3, minSize: 320 },
+        ]"
+        :stack-at="1000"
+        storage-key="dt.knowledge-chat.layout"
       >
-        <aside class="flex h-56 min-w-0 shrink-0 flex-col xl:h-auto xl:min-h-0">
-          <ChatSessionList
-            :sessions="page.sessions.value"
-            :selected-id="page.selectedId.value"
-            @select="page.select"
-            @rename="page.rename"
-            @archive="page.archive"
-            @remove="removeSession"
-          />
-        </aside>
+        <template #sessions>
+          <aside class="flex h-full min-h-0 min-w-0 flex-col">
+            <ChatSessionList
+              :sessions="page.sessions.value"
+              :selected-id="page.selectedId.value"
+              @select="page.select"
+              @rename="page.rename"
+              @archive="page.archive"
+              @remove="removeSession"
+            />
+          </aside>
+        </template>
 
-        <section class="flex min-h-0 min-w-0 flex-col">
-          <ChatPanel
-            :key="page.selectedId.value ?? 'new'"
-            :chat="page.chat"
-            :title="selectedLabel"
-            :starters="STARTERS"
-            :speech-enabled="page.isAsrEnabled.value"
-            :bases="page.bases.value"
-            :scope="page.scope.value"
-            @send="(text: string) => void page.send(text)"
-            @scope="(ids: string[] | null) => void page.setScope(ids)"
-          />
-        </section>
-      </div>
+        <template #chat>
+          <section class="flex h-full min-h-0 min-w-0 flex-col">
+            <ChatPanel
+              :key="page.selectedId.value ?? 'new'"
+              :chat="page.chat"
+              :title="selectedLabel"
+              :starters="STARTERS"
+              :speech-enabled="page.isAsrEnabled.value"
+              :bases="page.bases.value"
+              :scope="page.scope.value"
+              @send="(text: string) => void page.send(text)"
+              @scope="(ids: string[] | null) => void page.setScope(ids)"
+            />
+          </section>
+        </template>
+      </DtResizableLayout>
     </div>
   </AppShell>
 </template>
