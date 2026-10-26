@@ -140,6 +140,14 @@ async function renderWithHosts(codes: string[]) {
 }
 
 describe('空间配置页', () => {
+  it('车间和房间之间提供可聚焦的尺寸分隔线', async () => {
+    const wrapper = await render(['ac:view'])
+    const splitter = wrapper.get('[role="separator"]')
+    expect(splitter.attributes('tabindex')).toBe('0')
+    expect(splitter.attributes('aria-label')).toContain('车间列表')
+    expect(wrapper.findAll('.room-group')).toHaveLength(3)
+  })
+
   it('每个房间画成一个容器，空房间也照样画', async () => {
     const wrapper = await render(['ac:view'])
     const groups = wrapper.findAll('.room-group')

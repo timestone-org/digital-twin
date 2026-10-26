@@ -1,13 +1,5 @@
 <script setup lang="ts">
-/**
- * @fileoverview 一条流水线的画布：摆算子、连线、配参数、跑、看结果。
- * 见 docs/MODELING_DESIGN.md §9。
- *
- * ⚠ 画布是**自绘**的，不引图编辑框架（ADR-0028 同一条理由）。手势、视口与
- * 几何都在 `scripts/` 下的那几个组合式里。
- * ⚠ 「运行中」不锁编辑：运行吃的是发起那一刻**冻结的**图，改画布不影响它。
- * 锁编辑的只有回看历史与没有写权限两种。
- */
+/** @fileoverview 建模流水线的编辑、运行与回看工作面，见 docs/MODELING_DESIGN.md §9。 */
 import { PERMISSION_CODES } from '@dt/contracts'
 import {
   DtButton,
@@ -15,6 +7,7 @@ import {
   DtModal,
   DtNotice,
   DtPageState,
+  DtResizableLayout,
   DtTag,
   useToast,
   DtIconButton,
@@ -58,7 +51,7 @@ const page = useCanvasPage()
 const auth = useAuthStore()
 const toast = useToast()
 
-// 「已用多久」要自己走字：只靠轮询回包重算的话，两拍之间那一秒是不动的
+// 运行计时
 const tick = ref(nowStamp())
 const clock = ref<ReturnType<typeof setInterval> | null>(null)
 
@@ -73,9 +66,7 @@ const isKeysOpen = ref(false)
 const isSnapping = ref(true)
 
 const pipelineId = computed(() => String(route.params['pipelineId'] ?? ''))
-// ⚠ 只读来自两个互不相同的理由，界面上也要分开说：回看历史时给的是「回到编辑」
-// 那颗按钮，没有写权限时给的是 PermGuard 的那句说明
-// 这次运行要不要留全量结果。⚠ 默认关，理由见上面那条注释
+// 全量结果保留开关
 const isKeepingFrames = ref(false)
 const isReadonly = computed(
   () =>
@@ -169,12 +160,7 @@ function applyRename(): void {
   renameNodeId.value = null
 }
 
-/**
- * 回看某一次运行。
- *
- * ⚠ 运行 id 进地址栏：不进的话「把这次跑的结果发给同事看」只能靠口述第几条，
- * 而刷新一下就回到编辑态了。
- */
+/** 回看运行并把运行 id 写入地址栏，供刷新与分享恢复。 */
 async function pickRun(runId: string): Promise<void> {
   if (
     !(await confirmReplay(
@@ -347,64 +333,77 @@ watch(
       :error="page.doc.error.value"
       :empty="false"
     />
-    <!-- h-full + min-h-0 见 AppShell 的契约：main 不滚，高度由页面自己吃满 -->
-    <div v-else class="dt-ml-page flex h-full min-h-0">
-      <OperatorPalette
-        :operators="page.operators.value"
-        :is-readonly="isReadonly"
-        @pick="addOperator"
-      />
-      <div class="dt-ml-page__main">
-        <DtNotice v-if="config.blockReason.value" intent="warning">
-          {{ config.blockReason.value }}；请先改正或应用参数，再保存或运行。
-        </DtNotice>
-        <GraphIssues
-          v-if="page.issueViews.value.length > 0"
-          :issues="page.issueViews.value"
-          @pick="focusIssue"
-        />
-        <DtNotice
-          v-else-if="page.graph.graph.value.nodes.length === 0 && !isReadonly"
-          intent="info"
-          icon="circle-question"
-        >
-          把左边的算子拖到画布上开始；连线是从卡片右侧的圆点拉到下游那张卡片上，
-          松手落在卡片任意位置都算。选中多个之后右键可以对齐。
-        </DtNotice>
-        <EditorCanvas
-          ref="canvasRef"
-          class="dt-ml-page__canvas"
-          :graph="page.graph.graph.value"
-          :operators="page.operatorMap.value"
-          :runtime="page.runtime.value"
-          :selection="{
-            nodes: page.selection.selectedNodeIds.value,
-            edges: page.selection.selectedEdgeIds.value,
-          }"
+    <DtResizableLayout
+      v-else
+      class="dt-ml-page h-full min-h-0"
+      storage-key="dt.modeling-canvas.layout"
+      :stack-at="640"
+      :panes="[
+        { id: 'operators', label: '算子库', size: 18, minSize: 180 },
+        { id: 'canvas', label: '建模画布', size: 82, minSize: 320 },
+      ]"
+    >
+      <template #operators>
+        <OperatorPalette
+          style="width: 100%; min-height: 0; flex: 1"
+          :operators="page.operators.value"
           :is-readonly="isReadonly"
-          :is-snapping="isSnapping"
-          @pick-node="
-            (id, additive) =>
-              additive
-                ? page.selection.toggle({ kind: 'node', id })
-                : page.selection.select({ kind: 'node', id })
-          "
-          @pick-edge="(id) => page.selection.select({ kind: 'edge', id })"
-          @pick-nothing="page.selection.clear"
-          @box-select="page.selection.selectNodes"
-          @move-nodes="page.graph.moveNodes"
-          @connect="(out, into) => page.graph.addEdge(edgeOf(out, into))"
-          @remove-edge="actions.removeEdge"
-          @reject="(reason) => toast.warning(reason)"
-          @open-config="config.open"
-          @open-result="(id) => void result.open(id)"
-          @drop-operator="dropOperator"
-          @open-menu="menu.open"
-          @auto-layout="actions.autoLayout"
-          @toggle-snap="isSnapping = !isSnapping"
+          @pick="addOperator"
         />
-      </div>
-    </div>
+      </template>
+      <template #canvas>
+        <div class="dt-ml-page__main">
+          <DtNotice v-if="config.blockReason.value" intent="warning">
+            {{ config.blockReason.value }}；请先改正或应用参数，再保存或运行。
+          </DtNotice>
+          <GraphIssues
+            v-if="page.issueViews.value.length > 0"
+            :issues="page.issueViews.value"
+            @pick="focusIssue"
+          />
+          <DtNotice
+            v-else-if="page.graph.graph.value.nodes.length === 0 && !isReadonly"
+            intent="info"
+            icon="circle-question"
+          >
+            把左边的算子拖到画布上开始；连线是从卡片右侧的圆点拉到下游那张卡片上，
+            松手落在卡片任意位置都算。选中多个之后右键可以对齐。
+          </DtNotice>
+          <EditorCanvas
+            ref="canvasRef"
+            class="dt-ml-page__canvas"
+            :graph="page.graph.graph.value"
+            :operators="page.operatorMap.value"
+            :runtime="page.runtime.value"
+            :selection="{
+              nodes: page.selection.selectedNodeIds.value,
+              edges: page.selection.selectedEdgeIds.value,
+            }"
+            :is-readonly="isReadonly"
+            :is-snapping="isSnapping"
+            @pick-node="
+              (id, additive) =>
+                additive
+                  ? page.selection.toggle({ kind: 'node', id })
+                  : page.selection.select({ kind: 'node', id })
+            "
+            @pick-edge="(id) => page.selection.select({ kind: 'edge', id })"
+            @pick-nothing="page.selection.clear"
+            @box-select="page.selection.selectNodes"
+            @move-nodes="page.graph.moveNodes"
+            @connect="(out, into) => page.graph.addEdge(edgeOf(out, into))"
+            @remove-edge="actions.removeEdge"
+            @reject="(reason) => toast.warning(reason)"
+            @open-config="config.open"
+            @open-result="(id) => void result.open(id)"
+            @drop-operator="dropOperator"
+            @open-menu="menu.open"
+            @auto-layout="actions.autoLayout"
+            @toggle-snap="isSnapping = !isSnapping"
+          />
+        </div>
+      </template>
+    </DtResizableLayout>
 
     <CanvasMenu :menu="menu.menu.value" @pick="menu.run" @close="menu.close" />
 
@@ -485,8 +484,6 @@ watch(
     gap: 0.5rem;
     min-width: 0;
     min-height: 0;
-    // 只留左侧一格：画布框的上下边要与算子面板的外描边齐平
-    padding: 0 0 0 0.75rem;
   }
 
   &__canvas {

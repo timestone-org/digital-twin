@@ -134,6 +134,14 @@ async function open(path = '/modeling/pipelines/p1', isAddingNode = true) {
 }
 
 describe('普通未保存画布离开', () => {
+  it('算子和画布之间提供分隔线并保留画布节点', async () => {
+    const { wrapper } = await open()
+    const splitter = wrapper.get('[role="separator"]')
+    expect(splitter.attributes('tabindex')).toBe('0')
+    expect(splitter.attributes('aria-label')).toContain('算子库')
+    expect(wrapper.text()).toContain('测试算子')
+  })
+
   it('p2文档先回来但历史未完成时不开放旧算子，完成后新编辑不会被重置', async () => {
     vi.mocked(modeling.getModelingPipeline).mockImplementation((id) =>
       Promise.resolve({ ...PIPELINE, id, name: id }),

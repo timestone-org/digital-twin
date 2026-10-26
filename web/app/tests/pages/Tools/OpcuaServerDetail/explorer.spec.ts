@@ -186,6 +186,9 @@ describe('进来先看见全貌', () => {
 
   it('默认选中第一个节点，右侧不是一片空白', async () => {
     const wrapper = await explorer()
+    expect(
+      wrapper.get('[role="separator"]').attributes('aria-label'),
+    ).toContain('地址空间')
     expect(wrapper.text()).toContain('ns=2;s=Line1')
   })
 

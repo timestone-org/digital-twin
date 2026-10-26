@@ -16,6 +16,52 @@ VITE_KNOWLEDGE_CHAT_MAX_ACTIVE_LIVE_CARDS=20
 环境变量在构建时写入前端，修改后需运行 `pnpm --dir web build` 并刷新页面；开发时
 重启 `pnpm --dir web dev`。只重启后端或修改 `docker/.env` 不会改变已构建的前端。
 
+## 可调整页面布局
+
+页面区块使用 `@dt/ui` 的 `DtResizableLayout`，按 `panes` 中的 `id` 提供具名插槽：
+
+```vue
+<script setup lang="ts">
+import { DtResizableLayout } from '@dt/ui'
+</script>
+
+<template>
+  <div class="flex h-full min-h-0 flex-col">
+    <DtResizableLayout
+      class="min-h-0 flex-1"
+      :panes="[
+        { id: 'list', label: '列表', size: 1, minSize: 220 },
+        { id: 'detail', label: '详情', size: 3, minSize: 320 },
+      ]"
+      direction="horizontal"
+      :stack-at="1000"
+      storage-key="dt.example.layout"
+    >
+      <template #list>
+        <div class="min-h-0 flex-1 overflow-auto">列表内容</div>
+      </template>
+      <template #detail>
+        <div class="min-h-0 flex-1 overflow-auto">详情内容</div>
+      </template>
+    </DtResizableLayout>
+  </div>
+</template>
+```
+
+`size` 是初始份额，示例的 `1:3` 表示约四分之一与四分之三；`minSize` 是像素下限，
+容器装不下时按比例收缩。`direction` 默认 `horizontal`，设为 `vertical` 可上下调整，
+也可在插槽内嵌套另一个布局。`stackAt` 按**布局容器宽度**判断，示例在不足 1000px 时
+自动改为上下排列。父容器须提供有界高度，内容区保持 `flex-1 min-h-0`，让列表在区块内滚动。
+接入时移除子区块的固定宽高，嵌套工作区应保留可操作的最小高度，并让外层区块承接溢出滚动。
+
+拖动分隔线调整相邻区块；聚焦分隔线后用方向键微调，按住 Shift 加大步长，Home / End
+移到允许的两端。双击分隔线或按 Enter 恢复该布局的初始比例。每个布局的 `storageKey`
+须唯一，嵌套布局也使用各自的 key；尺寸偏好仅保存在当前浏览器的 localStorage，
+横向与纵向分别记忆。
+
+目前已接入三种协议采集页、知识库管理与对话、卡片与二维编辑器、报告模板编辑、建模画布、
+OPC UA 节点浏览、层级图、空调空间与模型页，共 13 个路由。
+
 ## 字体与授权
 
 本软件使用并随包分发 HarmonyOS Sans SC，字体版权归 Huawei Device Co., Ltd.；

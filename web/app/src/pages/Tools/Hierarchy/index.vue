@@ -1,6 +1,6 @@
 <script setup lang="ts">
 /** @fileoverview 工具中的层级图项目与标准出图工作面。 */
-import { nextTick, ref } from 'vue'
+import { computed, nextTick, ref } from 'vue'
 import type { ExportFormat } from './scripts/types'
 import {
   DtButton,
@@ -9,6 +9,7 @@ import {
   DtInput,
   DtModal,
   DtNotice,
+  DtResizableLayout,
   DtIconButton,
 } from '@dt/ui'
 import { AppShell } from '@/components/layout'
@@ -42,6 +43,15 @@ const {
   useSample,
 } = page
 const { document } = editor
+const panes = computed(() => [
+  ...(showProjects.value
+    ? [{ id: 'projects', label: '层级图项目', size: 20, minSize: 180 }]
+    : []),
+  { id: 'canvas', label: '层级图画布', size: 60, minSize: 280 },
+  ...(document.value && mode.value === 'edit' && showInspector.value
+    ? [{ id: 'inspector', label: '层级图检查器', size: 20, minSize: 200 }]
+    : []),
+])
 const canvas = ref<InstanceType<typeof HierarchyCanvas> | null>(null)
 async function arrange() {
   await page.arrange()
@@ -182,43 +192,54 @@ function onRestore(revision: number) {
           @edit="mode = 'edit'"
           @export="onExport"
         />
-        <div class="flex min-h-0 flex-1 gap-3">
-          <HierarchyProjects
-            v-if="showProjects"
-            :projects="projects"
-            :selected="saving.projectId.value"
-            @open="onOpen"
-          />
-          <div v-if="document" class="flex min-h-0 min-w-0 flex-1 flex-col">
-            <DtNotice v-if="outdated && mode === 'drawing'" intent="warning">
-              预览对应之前的配置，请重新生成。导出始终使用当前配置。
-            </DtNotice>
-            <HierarchyCanvas
-              v-show="mode === 'edit'"
-              ref="canvas"
+        <DtResizableLayout
+          class="min-h-0 flex-1"
+          storage-key="dt.hierarchy.layout"
+          :stack-at="720"
+          :panes="panes"
+        >
+          <template #projects>
+            <HierarchyProjects
+              style="width: 100%; flex: 1"
+              :projects="projects"
+              :selected="saving.projectId.value"
+              @open="onOpen"
+            />
+          </template>
+          <template #canvas>
+            <div v-if="document" class="flex min-h-0 min-w-0 flex-1 flex-col">
+              <DtNotice v-if="outdated && mode === 'drawing'" intent="warning">
+                预览对应之前的配置，请重新生成。导出始终使用当前配置。
+              </DtNotice>
+              <HierarchyCanvas
+                v-show="mode === 'edit'"
+                ref="canvas"
+                :editor="editor"
+                :readonly="!canEdit || busy"
+                @save="page.safe(saving.flush)"
+              />
+              <HierarchyPreview
+                v-if="mode === 'drawing' && drawing"
+                :drawing="drawing"
+              />
+            </div>
+            <div
+              v-else
+              class="flex flex-1 items-center justify-center text-text-secondary"
+            >
+              新建一个项目，或导入案例中的 JSON / Excel 配置。
+            </div>
+          </template>
+          <template #inspector>
+            <HierarchyInspector
+              style="width: 100%; min-height: 0; flex: 1"
               :editor="editor"
               :readonly="!canEdit || busy"
-              @save="page.safe(saving.flush)"
+              @focus="focus"
+              @apply="page.safe(editor.applyDrafts)"
             />
-            <HierarchyPreview
-              v-if="mode === 'drawing' && drawing"
-              :drawing="drawing"
-            />
-          </div>
-          <div
-            v-else
-            class="flex flex-1 items-center justify-center text-text-secondary"
-          >
-            新建一个项目，或导入案例中的 JSON / Excel 配置。
-          </div>
-          <HierarchyInspector
-            v-if="document && mode === 'edit' && showInspector"
-            :editor="editor"
-            :readonly="!canEdit || busy"
-            @focus="focus"
-            @apply="page.safe(editor.applyDrafts)"
-          />
-        </div>
+          </template>
+        </DtResizableLayout>
       </template>
     </div>
     <DtModal v-model="isNewOpen" title="新建层级图项目" width="28rem">

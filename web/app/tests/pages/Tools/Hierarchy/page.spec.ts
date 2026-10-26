@@ -144,6 +144,7 @@ function button(wrapper: ReturnType<typeof mount>, text: string) {
 it('编辑保存、生成、导出、版本恢复和复制可从页面完成', async () => {
   const wrapper = await setup()
   expect(wrapper.text()).toContain('蒸汽计量系统')
+  expect(wrapper.findAll('[role="separator"]')).toHaveLength(2)
   const canvas = wrapper.getComponent(HierarchyCanvas)
   canvas.vm.$emit('save')
   await flushPromises()
@@ -167,6 +168,7 @@ it('编辑保存、生成、导出、版本恢复和复制可从页面完成', a
   const toolbar = wrapper.getComponent(HierarchyToolbar)
   toolbar.vm.$emit('draw')
   await flushPromises()
+  expect(wrapper.findAll('[role="separator"]')).toHaveLength(1)
   expect(wrapper.text()).toContain('33 个计量节点 · 4 层 · 5 行')
   expect(wrapper.find('img[alt="标准计量层级图"]').exists()).toBe(true)
   await button(wrapper, '放大').trigger('click')
