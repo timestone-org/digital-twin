@@ -31,9 +31,11 @@ function zoom(value: number) {
 }
 </script>
 <template>
-  <div class="flex min-h-0 flex-1 flex-col gap-2">
-    <div class="flex shrink-0 items-center gap-3 text-sm text-text-secondary">
-      <span>
+  <div class="flex min-h-0 flex-1 flex-col">
+    <div
+      class="flex shrink-0 flex-wrap items-center gap-2 border-b border-border-subtle px-3 py-2 text-xs text-text-secondary"
+    >
+      <span class="mr-auto">
         {{ drawing.nodeCount }} 个计量节点 · {{ drawing.levelCount }} 层 ·
         {{ drawing.rows.length }} 行 · {{ drawing.width }} ×
         {{ drawing.height }} px
@@ -64,16 +66,13 @@ function zoom(value: number) {
         @click="zoom(scale * 1.2)"
       />
     </div>
-    <div
-      ref="frame"
-      class="min-h-0 flex-1 overflow-auto rounded border border-border-default bg-surface-sunken p-4"
-    >
+    <div ref="frame" class="min-h-0 flex-1 overflow-auto bg-surface-sunken p-4">
       <img :src="image" alt="标准计量层级图" :style="size" @load="fit" />
     </div>
     <p
       v-for="warning in drawing.warnings"
       :key="warning.message"
-      class="text-xs text-text-secondary"
+      class="px-3 py-2 text-xs text-text-secondary"
     >
       {{ warning.message }}
     </p>

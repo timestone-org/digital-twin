@@ -32,6 +32,7 @@ it('画布缩放、定位、键盘、拖入与端口事件更新真实文档', a
   const canvas = mount(Canvas, {
     props: { editor, readonly: false },
     attachTo: document.body,
+    global: { stubs: { teleport: true } },
   })
   const frame = canvas.get('.hierarchy-canvas')
   vi.spyOn(frame.element, 'getBoundingClientRect').mockReturnValue(
@@ -51,6 +52,7 @@ it('画布缩放、定位、键盘、拖入与端口事件更新真实文档', a
   expect(editor.selectedIds.value).toEqual([first.id])
   await button(canvas, '定位选中').trigger('click')
   await button(canvas, '适应全部').trigger('click')
+  await button(canvas, '画布辅助').trigger('click')
   await canvas.findAll('input[type="checkbox"]')[0]?.setValue(false)
   await canvas.findAll('input[type="checkbox"]')[1]?.setValue(false)
   await frame.trigger('keydown', { key: 'ArrowRight', shiftKey: true })
@@ -107,6 +109,7 @@ it('工具栏保留两类节点、全部对齐、拖出和导出格式事件', a
   editor.select(required(editor.document.value).nodes.map((node) => node.id))
   const toolbar = mount(Toolbar, {
     props: { editor, readonly: false, busy: false, mode: 'edit' },
+    global: { stubs: { teleport: true } },
   })
   for (const kind of ['计量节点', '汇流点']) {
     const transfer = { setData: vi.fn() }
@@ -115,14 +118,14 @@ it('工具栏保留两类节点、全部对齐、拖出和导出格式事件', a
     await button(toolbar, kind).trigger('click')
   }
   expect(toolbar.emitted('add')).toEqual([['meter'], ['junction']])
-  toolbar.findAllComponents(DtSelect)[0]?.vm.$emit('update:modelValue', 'right')
-  await button(toolbar, '应用对齐').trigger('click')
+  await button(toolbar, '对齐与分布').trigger('click')
+  await button(toolbar, '右对齐').trigger('click')
   expect(required(editor.document.value?.nodes[0]).position.x).toBe(400)
-  toolbar.findAllComponents(DtSelect)[1]?.vm.$emit('update:modelValue', 'json')
   await button(toolbar, '导出').trigger('click')
+  await button(toolbar, 'JSON · 完整项目配置').trigger('click')
   expect(toolbar.emitted('export')).toEqual([['json']])
   await button(toolbar, '项目列表').trigger('click')
-  await button(toolbar, '属性').trigger('click')
+  await button(toolbar, '配置面板').trigger('click')
   expect(toolbar.emitted('projects')).toHaveLength(1)
   expect(toolbar.emitted('inspector')).toHaveLength(1)
   await toolbar.setProps({ mode: 'drawing' })
@@ -136,10 +139,8 @@ it('属性面板的文本、顺序和图纸宽度全部接入文档', async () =
   editor.select([required(editor.document.value?.nodes[0]).id])
   const inspector = mount(Inspector, { props: { editor, readonly: false } })
   const changes: Record<string, string> = {
-    项目名称: '新标题',
     节点编号: 'M001',
     圆内下栏: '0.5级',
-    查找节点: 'M001',
   }
   for (const input of inspector.findAllComponents(DtInput)) {
     const value = changes[required(input.props('label'))]
@@ -150,15 +151,18 @@ it('属性面板的文本、顺序和图纸宽度全部接入文档', async () =
     .find((input) => input.props('label') === '分支内顺序')
   required(order).vm.$emit('update:modelValue', 9)
   inspector.getComponent(DtTextarea).vm.$emit('update:modelValue', '锅炉\n计量')
+  await inspector.vm.$nextTick()
   await button(inspector, '应用修改').trigger('click')
   editor.applyDrafts()
-  expect(editor.document.value?.title).toBe('新标题')
   expect(required(editor.document.value?.nodes[0])).toMatchObject({
     code: 'M001',
     name: '锅炉\n计量',
     parameter: '0.5级',
     order: 9,
   })
+  await button(inspector, '图纸设置').trigger('click')
+  inspector.getComponent(DtInput).vm.$emit('update:modelValue', '新标题')
+  expect(editor.document.value?.title).toBe('新标题')
   const paper = inspector
     .findAllComponents(DtNumberInput)
     .find((input) => input.props('label') === '图纸宽度')

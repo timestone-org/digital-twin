@@ -19,6 +19,7 @@ export function useHierarchyDocument() {
     selectEdge: controller.selectEdge,
     applyDrafts: controller.applyDrafts,
     patchDraft: controller.patchDraft,
+    discardDrafts: controller.discardDrafts,
     add: controller.add,
     connect: controller.connect,
     remove: controller.remove,

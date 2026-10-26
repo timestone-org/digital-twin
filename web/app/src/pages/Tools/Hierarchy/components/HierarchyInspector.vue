@@ -1,165 +1,128 @@
 <script setup lang="ts">
-/** @fileoverview 节点属性、图纸设置和节点搜索定位。 */
-import { computed, ref } from 'vue'
-import {
-  DtButton,
-  DtInput,
-  DtTextarea,
-  DtNumberInput,
-  DtSelect,
-  DtNotice,
-} from '@dt/ui'
+/** @fileoverview 层级图配置分区、节点定位与待应用修改。 */
+import { computed, ref, watch } from 'vue'
+import { DtButton, DtIcon, DtNotice, DtSegmented, DtSelect } from '@dt/ui'
 import type { HierarchyEditor } from '../scripts/useHierarchyDocument'
-import type { GraphDocument } from '../scripts/types'
-const props = defineProps<{ editor: HierarchyEditor; readonly: boolean }>()
+import HierarchyNodeProperties from './HierarchyNodeProperties.vue'
+import HierarchyRelations from './HierarchyRelations.vue'
+import HierarchyPaperSettings from './HierarchyPaperSettings.vue'
+
+const props = withDefaults(
+  defineProps<{ editor: HierarchyEditor; readonly: boolean; mode?: string }>(),
+  { mode: 'edit' },
+)
 const emit = defineEmits<{ focus: [id: string]; apply: [] }>()
-const query = ref('')
-const node = computed(() => props.editor.editing.value)
-const results = computed(() =>
-  (props.editor.document.value?.nodes ?? [])
-    .filter((item) =>
-      `${item.code} ${item.name}`
-        .toLowerCase()
-        .includes(query.value.toLowerCase()),
-    )
-    .map((item) => ({ value: item.id, label: `${item.code} · ${item.name}` })),
+const section = ref('node')
+const sections = [
+  { value: 'node', label: '节点属性' },
+  { value: 'relations', label: '上下游' },
+  { value: 'paper', label: '图纸设置' },
+]
+const options = computed(() =>
+  (props.editor.document.value?.nodes ?? []).map((node) => ({
+    value: node.id,
+    label: `${node.code} · ${node.name}`,
+  })),
 )
 const selected = computed(() => props.editor.selectedIds.value[0] ?? '')
-const relations = computed(() => {
-  const document = props.editor.document.value,
-    selected = node.value
-  if (!document || !selected) return { parents: [], childCount: 0 }
-  const parentIds = new Set(
-    document.edges
-      .filter((edge) => edge.target === selected.id)
-      .map((edge) => edge.source),
-  )
-  return {
-    parents: document.nodes.filter((parent) => parentIds.has(parent.id)),
-    childCount: document.edges.filter((edge) => edge.source === selected.id)
-      .length,
-  }
+const draftCount = computed(() => Object.keys(props.editor.drafts.value).length)
+watch(
+  () => props.mode,
+  (mode) => {
+    if (mode === 'drawing') section.value = 'paper'
+  },
+  { immediate: true },
+)
+watch(selected, (id) => {
+  if (id && section.value === 'paper') section.value = 'node'
 })
-const widths = [
-  { value: '756', label: '窄幅 756 px' },
-  { value: '1122', label: 'A3 横向 1122 px' },
-  { value: '1516', label: '标准 1516 px' },
-  { value: '2245', label: '宽幅 2245 px' },
-  { value: '3200', label: '宽幅 3200 px' },
-]
-function paper(width: number | undefined) {
-  const value = props.editor.document.value
-  if (width !== undefined && value)
-    props.editor.commit({ ...value, paper: { width: Math.round(width) } })
-}
-function title(value: string) {
-  const current = props.editor.document.value
-  if (current) props.editor.commit({ ...current, title: value })
-}
-const document = computed<GraphDocument | null>(
-  () => props.editor.document.value,
+watch(
+  () => props.editor.edgeId.value,
+  (id) => {
+    if (id && props.mode !== 'drawing') section.value = 'relations'
+  },
+  { immediate: true },
 )
 </script>
+
 <template>
-  <aside
-    class="flex w-64 shrink-0 flex-col gap-3 overflow-y-auto border-l border-border-subtle pl-3"
-  >
-    <DtInput
-      v-if="document"
-      :model-value="document.title"
-      label="项目名称"
-      :disabled="readonly"
-      :maxlength="80"
-      @update:model-value="title"
+  <aside class="inspector" aria-label="层级图配置">
+    <div class="flex shrink-0 items-center justify-between gap-2 px-4 pt-4">
+      <h2 class="flex items-center gap-2 text-sm font-semibold">
+        <DtIcon name="settings" :size="16" /> 配置面板
+      </h2>
+      <span class="text-xs text-text-secondary">{{
+        readonly ? '只读' : '编辑配置'
+      }}</span>
+    </div>
+    <div class="shrink-0 px-4 py-3">
+      <DtSelect
+        :model-value="selected"
+        :options="options"
+        label="查找节点"
+        size="sm"
+        :display="{ placeholder: '搜索编号或名称，定位节点', searchable: true }"
+        @update:model-value="emit('focus', $event)"
+      />
+    </div>
+    <DtSegmented
+      v-model="section"
+      :options="sections"
+      variant="tabs"
+      block
+      aria-label="配置分区"
+      class="shrink-0 px-3"
     />
-    <DtInput
-      v-model="query"
-      label="查找节点"
-      type="search"
-      placeholder="编号或名称"
-    />
-    <DtSelect
-      :model-value="selected"
-      :options="results"
-      aria-label="定位节点"
-      :display="{ placeholder: '选择节点定位', searchable: true }"
-      @update:model-value="emit('focus', $event)"
-    />
-    <template v-if="node">
-      <DtNotice>
-        {{ node.kind === 'meter' ? '计量节点' : '汇流点：不占逻辑层级' }}
-      </DtNotice>
-      <DtInput
-        :model-value="node.code"
-        label="节点编号"
-        :maxlength="40"
-        :disabled="readonly"
-        @update:model-value="editor.patchDraft({ code: $event })"
+    <div class="min-h-0 flex-1 overflow-y-auto p-4">
+      <HierarchyNodeProperties
+        v-if="section === 'node'"
+        :editor="editor"
+        :readonly="readonly"
       />
-      <DtTextarea
-        :model-value="node.name"
-        rows="3"
-        hint="可手动换行，标准名称框最多两行"
-        label="节点名称"
-        :maxlength="100"
-        :disabled="readonly"
-        @update:model-value="editor.patchDraft({ name: $event })"
+      <HierarchyRelations
+        v-else-if="section === 'relations'"
+        :editor="editor"
+        :readonly="readonly"
+        @focus="emit('focus', $event)"
       />
-      <DtInput
-        v-if="node.kind === 'meter'"
-        :model-value="node.parameter"
-        label="圆内下栏"
-        :maxlength="40"
-        :disabled="readonly"
-        @update:model-value="editor.patchDraft({ parameter: $event })"
-      />
-      <DtNumberInput
-        :model-value="node.order"
-        label="分支内顺序"
-        :range="{ min: 0, max: 99999, step: 1 }"
-        :disabled="readonly"
-        @update:model-value="editor.patchDraft({ order: $event ?? 0 })"
-      />
-      <DtButton
-        v-if="!readonly"
-        :disabled="!editor.hasDrafts.value"
-        @click="emit('apply')"
-      >
-        应用修改
-      </DtButton>
-      <p class="text-xs text-text-secondary">
-        上级 {{ relations.parents.length }} · 下游 {{ relations.childCount }}
-      </p>
-      <div class="flex flex-wrap gap-1">
-        <DtButton
-          v-for="parent in relations.parents"
-          :key="parent.id"
-          variant="ghost"
-          size="sm"
-          @click="emit('focus', parent.id)"
-          >{{ parent.code }}</DtButton
+      <HierarchyPaperSettings v-else :editor="editor" :readonly="readonly" />
+    </div>
+    <div v-if="draftCount && !readonly" class="draft-actions">
+      <DtNotice intent="warning">{{ draftCount }} 个节点有待应用修改</DtNotice>
+      <div class="flex items-center gap-2">
+        <DtButton class="flex-1" size="sm" @click="emit('apply')"
+          >应用修改</DtButton
+        >
+        <DtButton size="sm" variant="ghost" @click="editor.discardDrafts()"
+          >放弃修改</DtButton
         >
       </div>
-    </template>
-    <template v-if="document">
-      <DtSelect
-        :model-value="String(document.paper.width)"
-        :options="widths"
-        label="常用图纸宽度"
-        :disabled="readonly"
-        @update:model-value="paper(Number($event))"
-      />
-      <DtNumberInput
-        :model-value="document.paper.width"
-        label="图纸宽度"
-        unit="px"
-        :range="{ min: 360, max: 12000, step: 1 }"
-        :disabled="readonly"
-        @update:model-value="paper"
-      />
-    </template>
-    <p class="text-xs text-text-secondary">
-      高度自动延伸。标准图按真实关系计算层级，编辑坐标与缩放不影响出图。名称最多两行；超限时会定位提示。
-    </p>
+      <p class="text-xs text-text-secondary">
+        应用后自动保存；保存和导出也会应用修改。
+      </p>
+    </div>
   </aside>
 </template>
+
+<style scoped lang="scss">
+.inspector {
+  display: flex;
+  flex: 1;
+  min-width: 0;
+  min-height: 0;
+  flex-direction: column;
+  border: 1px solid var(--border-subtle);
+  border-radius: var(--radius-lg);
+  background: var(--surface-panel);
+  overflow: hidden;
+}
+.draft-actions {
+  display: flex;
+  flex-shrink: 0;
+  flex-direction: column;
+  gap: 10px;
+  padding: 12px 16px;
+  border-top: 1px solid var(--border-subtle);
+  background: var(--surface-sunken);
+}
+</style>
