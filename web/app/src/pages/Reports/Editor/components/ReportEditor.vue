@@ -340,6 +340,21 @@ defineExpose({ insert })
   font-family: var(--report-body-font);
   font-size: var(--report-body-size);
 }
+
+.umo-dt-theme .umo-status-bar {
+  height: auto;
+  min-height: 30px;
+  flex-shrink: 0;
+  flex-wrap: wrap;
+  row-gap: 4px;
+}
+
+.umo-dt-theme .umo-status-bar-left,
+.umo-dt-theme .umo-status-bar-right {
+  min-width: 0;
+  max-width: 100%;
+  flex-wrap: wrap;
+}
 </style>
 
 <style lang="scss">
