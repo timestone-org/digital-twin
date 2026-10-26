@@ -8,7 +8,7 @@
  * 为的是把「加载中」「冲突」「出错」这几种界面分支逐个摆出来。
  */
 import type { DashboardNodePayload } from '@dt/contracts'
-import { DtHelpTip } from '@dt/ui'
+import { DtHelpTip, DtResizableLayout } from '@dt/ui'
 import { flushPromises, mount } from '@vue/test-utils'
 import { createPinia, setActivePinia } from 'pinia'
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
@@ -178,6 +178,19 @@ afterEach(() => {
 })
 
 describe('三栏骨架', () => {
+  it('结构、预览和字段接到独立记忆尺寸的分隔布局', async () => {
+    const wrapper = await mountPage()
+    const layout = wrapper.findComponent(DtResizableLayout)
+
+    expect(layout.props('storageKey')).toBe('dt.card-editor.layout')
+    expect(layout.props('panes')).toEqual([
+      { id: 'structure', label: '结构', size: 20, minSize: 180 },
+      { id: 'preview', label: '预览', size: 55, minSize: 280 },
+      { id: 'fields', label: '字段', size: 25, minSize: 220 },
+    ])
+    expect(layout.findAll('[role="separator"]')).toHaveLength(2)
+  })
+
   it('一进来就取一次数', async () => {
     await mountPage()
 

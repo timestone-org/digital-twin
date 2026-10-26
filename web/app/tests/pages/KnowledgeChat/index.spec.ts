@@ -9,6 +9,7 @@
 import { createPinia, setActivePinia } from 'pinia'
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 import { enableAutoUnmount, flushPromises, mount } from '@vue/test-utils'
+import { DtResizableLayout } from '@dt/ui'
 import type {
   KnowledgeChatSession,
   KnowledgeChatSessionDetail,
@@ -16,6 +17,7 @@ import type {
 
 import type { KnowledgeCapability } from '@/api/knowledge'
 import KnowledgeChatPage from '@/pages/KnowledgeChat/index.vue'
+import ChatPanel from '@/pages/KnowledgeChat/components/ChatPanel.vue'
 import ChatSessionList from '@/pages/KnowledgeChat/components/ChatSessionList.vue'
 import { useAuthStore } from '@/stores/auth'
 
@@ -200,6 +202,21 @@ async function render() {
 }
 
 describe('首屏', () => {
+  it('对话列表与内容区接入可调整布局并保存各自尺寸', async () => {
+    const wrapper = await render()
+    const layout = wrapper.getComponent(DtResizableLayout)
+    expect(layout.props('storageKey')).toBe('dt.knowledge-chat.layout')
+    expect(layout.props('stackAt')).toBe(1000)
+    expect(layout.props('panes')).toMatchObject([
+      { id: 'sessions' },
+      { id: 'chat' },
+    ])
+    expect(wrapper.get('main aside').text()).toContain('锅炉那几台')
+    expect(wrapper.getComponent(ChatPanel).text()).toContain(
+      '查资料，也能查看实时数据',
+    )
+  })
+
   it('列出对话，不自动选中任何一个', async () => {
     const wrapper = await render()
 

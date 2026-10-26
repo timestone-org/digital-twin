@@ -17,6 +17,7 @@ import {
   DtFilePicker,
   DtNotice,
   DtProgress,
+  DtResizableLayout,
   useConfirm,
   useToast,
   DtIconButton,
@@ -148,9 +149,7 @@ async function removeDocument(doc: KnowledgeDocument): Promise<void> {
       </PermGuard>
     </template>
 
-    <!-- ⚠ 这一页必须自己能滚：窄屏（<xl）时左栏、文档表、试验台是竖着堆的，加起来
-         必然高过视口，而 AppShell 的 `<main>` 是 overflow-hidden、自己不滚 -->
-    <div class="flex h-full min-h-0 flex-col gap-4 overflow-y-auto">
+    <div class="flex h-full min-h-0 flex-col gap-4">
       <KnowledgeGuide />
       <DtNotice v-if="page.error.value !== ''" intent="danger">
         {{ page.error.value }}
@@ -166,84 +165,103 @@ async function removeDocument(doc: KnowledgeDocument): Promise<void> {
         {{ page.indexHint.value }}
       </DtNotice>
 
-      <!-- ⚠ `flex-1` 只在 ≥xl 给：窄屏时要让这块按内容撑开，交给外面那层滚 -->
-      <div
-        class="grid min-h-0 grid-cols-1 gap-4 xl:flex-1 xl:grid-cols-[20rem_minmax(0,1fr)]"
+      <DtResizableLayout
+        class="min-h-0 flex-1"
+        :panes="[
+          { id: 'bases', label: '知识库列表', size: 1, minSize: 220 },
+          { id: 'detail', label: '知识库详情', size: 3, minSize: 320 },
+        ]"
+        :stack-at="1000"
+        storage-key="dt.knowledge.layout"
       >
-        <aside class="flex h-80 min-w-0 shrink-0 flex-col xl:h-auto xl:min-h-0">
-          <KnowledgeBaseList
-            :bases="page.bases.value"
-            :selected-id="page.selectedId.value"
-            :loading="page.isLoading.value"
-            @select="page.select"
-            @reload="page.reload"
-            @create="openCreate"
-          />
-        </aside>
-
-        <section class="flex min-h-0 min-w-0 flex-col gap-4">
-          <template v-if="page.selected.value !== null">
-            <KnowledgeBaseHeader
-              :base="page.selected.value"
-              :document-count="page.documents.value.length"
-              :refreshing="page.isRefreshing.value"
-              @refresh="page.refreshDocuments"
-              @remove="dropBase(page.selected.value)"
+        <template #bases>
+          <aside class="flex h-full min-h-0 min-w-0 flex-col">
+            <KnowledgeBaseList
+              :bases="page.bases.value"
+              :selected-id="page.selectedId.value"
+              :loading="page.isLoading.value"
+              @select="page.select"
+              @reload="page.reload"
+              @create="openCreate"
             />
+          </aside>
+        </template>
 
-            <div
-              v-if="page.upload.value !== null"
-              class="flex items-center gap-3"
-            >
-              <span class="shrink-0 text-xs text-text-secondary">
-                正在上传 {{ page.upload.value.name }}
-              </span>
-              <DtProgress
-                class="min-w-0 flex-1"
-                size="sm"
-                show-label
-                :value="page.upload.value.ratio * 100"
+        <template #detail>
+          <section class="flex h-full min-h-0 min-w-0 flex-col gap-4">
+            <template v-if="page.selected.value !== null">
+              <KnowledgeBaseHeader
+                :base="page.selected.value"
+                :document-count="page.documents.value.length"
+                :refreshing="page.isRefreshing.value"
+                @refresh="page.refreshDocuments"
+                @remove="dropBase(page.selected.value)"
               />
-            </div>
 
-            <!-- 文档表 + 试验台：<2xl 竖排固定高、交给外层滚；≥2xl 并排铺满内部滚动。
-                 ⚠ 并排的门槛是 2xl 不是 xl：xl 那一档右区只剩八百多像素，分给文档表
-                 的一半连文档名都截成七个字，而名字是这张表唯一的识别依据 -->
-            <div
-              class="grid min-h-0 grid-cols-1 gap-4 2xl:flex-1 2xl:grid-cols-[minmax(0,3fr)_minmax(0,2fr)] 2xl:grid-rows-1"
-            >
-              <KnowledgeDocumentTable
-                class="h-100 shrink-0 2xl:h-auto"
-                :documents="page.documents.value"
-                :loading="page.isLoading.value"
-                @preview="preview"
-                @reparse="reparse"
-                @remove="removeDocument"
-              />
-              <KnowledgeSearchPanel
-                class="h-100 shrink-0 2xl:h-auto"
-                :query="page.query.value"
-                :searched="page.searched.value"
-                :result="page.result.value"
-                :is-searching="page.isSearching.value"
-                :rerank="page.capability.value?.rerank ?? null"
-                @update:query="(value: string) => (page.query.value = value)"
-                @search="page.search"
-              />
-            </div>
-          </template>
+              <div
+                v-if="page.upload.value !== null"
+                class="flex items-center gap-3"
+              >
+                <span class="shrink-0 text-xs text-text-secondary">
+                  正在上传 {{ page.upload.value.name }}
+                </span>
+                <DtProgress
+                  class="min-w-0 flex-1"
+                  size="sm"
+                  show-label
+                  :value="page.upload.value.ratio * 100"
+                />
+              </div>
 
-          <!-- 未选中库（新建入口在左栏与顶栏，这里只指路） -->
-          <DtCard v-else class="flex min-h-0 flex-1 flex-col justify-center">
-            <KnowledgeMascot scene="library" class="mx-auto" />
-            <DtEmpty
-              icon="folder-open"
-              title="选择一个知识库"
-              hint="从左侧选一个，或者新建一个再往里传文档。"
-            />
-          </DtCard>
-        </section>
-      </div>
+              <DtResizableLayout
+                class="min-h-0 flex-1"
+                style="min-height: 24rem"
+                :panes="[
+                  { id: 'documents', label: '文档列表', size: 3, minSize: 300 },
+                  { id: 'search', label: '检索试验台', size: 2, minSize: 240 },
+                ]"
+                :stack-at="900"
+                storage-key="dt.knowledge.documents-layout"
+              >
+                <template #documents>
+                  <KnowledgeDocumentTable
+                    class="h-full min-h-0 flex-1"
+                    :documents="page.documents.value"
+                    :loading="page.isLoading.value"
+                    @preview="preview"
+                    @reparse="reparse"
+                    @remove="removeDocument"
+                  />
+                </template>
+                <template #search>
+                  <KnowledgeSearchPanel
+                    class="h-full min-h-0 flex-1"
+                    :query="page.query.value"
+                    :searched="page.searched.value"
+                    :result="page.result.value"
+                    :is-searching="page.isSearching.value"
+                    :rerank="page.capability.value?.rerank ?? null"
+                    @update:query="
+                      (value: string) => (page.query.value = value)
+                    "
+                    @search="page.search"
+                  />
+                </template>
+              </DtResizableLayout>
+            </template>
+
+            <!-- 未选中库（新建入口在左栏与顶栏，这里只指路） -->
+            <DtCard v-else class="flex min-h-0 flex-1 flex-col justify-center">
+              <KnowledgeMascot scene="library" class="mx-auto" />
+              <DtEmpty
+                icon="folder-open"
+                title="选择一个知识库"
+                hint="从左侧选一个，或者新建一个再往里传文档。"
+              />
+            </DtCard>
+          </section>
+        </template>
+      </DtResizableLayout>
     </div>
 
     <KnowledgeBaseFormDialog

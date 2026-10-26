@@ -12,6 +12,7 @@ import { createPinia, setActivePinia } from 'pinia'
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 import { enableAutoUnmount, flushPromises, mount } from '@vue/test-utils'
 import type { VueWrapper } from '@vue/test-utils'
+import { DtResizableLayout } from '@dt/ui'
 import type {
   CollectProtocol,
   CollectSource,
@@ -416,31 +417,41 @@ describe('权限', () => {
   })
 })
 
-describe('页面自己要能滚', () => {
-  /**
-   * ⚠ 这条不是样式洁癖，守的是一次真实故障：窄屏（<xl）时左栏 15rem + 在线浏览
-   * 20rem + 点位表 30rem 是竖着堆的，加起来必然高过视口，而 AppShell 的
-   * `<main>` 是 `overflow-hidden`、自己不滚。这一页要是不自己滚，多出来的部分
-   * 既看不见也够不着；更要命的是 `overflow-hidden` **能被程序滚动**——点一下
-   * 裁切线以下的勾选框，浏览器会滚 `<main>` 去露出焦点元素，而它没有滚动条，
-   * 用户看到的就是整页内容凭空消失、再也回不来。
-   *
-   * ⚠ 只能断言到 class：happy-dom 不做布局，量不到盒高。
-   */
-  it('⚠ 页面根节点必须是自己的滚动容器，否则窄屏时内容会被焦点滚出视野且回不来', async () => {
+describe('可调整区块布局', () => {
+  it('数据源与详情使用独立存档，窄屏由布局转为上下排列', async () => {
     const wrapper = await render([source()])
-    const root = wrapper.find('main > div')
-
-    expect(root.exists()).toBe(true)
-    expect(root.classes()).toContain('overflow-y-auto')
+    const layout = wrapper.findAllComponents(DtResizableLayout)[0]
+    expect(layout?.props('storageKey')).toBe('dt.collect.opcua.layout')
+    expect(layout?.props('stackAt')).toBe(1000)
+    expect(layout?.props('panes')).toMatchObject([
+      { id: 'sources' },
+      { id: 'detail' },
+    ])
+    expect(wrapper.get('main aside').text()).toContain('一号车间 PLC')
+    expect(wrapper.find('[data-test="node-table-stub"]').exists()).toBe(true)
   })
 
-  it('⚠ 主栅格的 `flex-1` 只能在 ≥xl 给：窄屏要按内容撑开交给外层滚', async () => {
+  it('展开与收起地址浏览保留点位表实例', async () => {
     const wrapper = await render([source()])
-    const grid = wrapper.find('main > div > div.grid')
+    const nodes = wrapper.get('[data-test="node-table-stub"]').element
+    const layout = wrapper.findAllComponents(DtResizableLayout)[1]
+    expect(layout?.props('panes')).toMatchObject([{ id: 'nodes' }])
+    expect(layout?.attributes('style')).toContain('min-height: 20rem')
 
-    expect(grid.classes()).not.toContain('flex-1')
-    expect(grid.classes()).toContain('xl:flex-1')
+    await clickByText(wrapper, '浏览并导入点位')
+    await flushPromises()
+    expect(layout?.props('panes')).toMatchObject([
+      { id: 'browse' },
+      { id: 'nodes' },
+    ])
+    expect(wrapper.find('[data-test="browse-panel-stub"]').exists()).toBe(true)
+    expect(wrapper.get('[data-test="node-table-stub"]').element).toBe(nodes)
+
+    await clickByText(wrapper, '收起地址浏览')
+    await flushPromises()
+    expect(layout?.props('panes')).toMatchObject([{ id: 'nodes' }])
+    expect(wrapper.find('[data-test="browse-panel-stub"]').exists()).toBe(false)
+    expect(wrapper.get('[data-test="node-table-stub"]').element).toBe(nodes)
   })
 })
 

@@ -11,7 +11,7 @@ import { createPinia, setActivePinia } from 'pinia'
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 import { enableAutoUnmount, flushPromises, mount } from '@vue/test-utils'
 import type { VueWrapper } from '@vue/test-utils'
-import { DtFilePicker, DtPagination } from '@dt/ui'
+import { DtFilePicker, DtPagination, DtResizableLayout } from '@dt/ui'
 
 import type {
   KnowledgeBase,
@@ -192,6 +192,28 @@ async function search(wrapper: VueWrapper, query: string): Promise<void> {
 }
 
 describe('首屏', () => {
+  it('知识库、文档和检索区块使用嵌套的可调整布局', async () => {
+    const wrapper = await render()
+    const layouts = wrapper.findAllComponents(DtResizableLayout)
+    expect(layouts).toHaveLength(2)
+    expect(layouts[0]?.props('storageKey')).toBe('dt.knowledge.layout')
+    expect(layouts[0]?.props('panes')).toMatchObject([
+      { id: 'bases' },
+      { id: 'detail' },
+    ])
+    expect(layouts[1]?.props('storageKey')).toBe(
+      'dt.knowledge.documents-layout',
+    )
+    expect(layouts[1]?.props('panes')).toMatchObject([
+      { id: 'documents' },
+      { id: 'search' },
+    ])
+    expect(layouts[1]?.attributes('style')).toContain('min-height: 24rem')
+    expect(wrapper.get('main aside').text()).toContain('运维手册')
+    expect(layouts[1]?.text()).toContain('一号机组.docx')
+    expect(wrapper.find('input[type="search"]').exists()).toBe(true)
+  })
+
   it('取能力与库清单，选中第一个并列出它的文档', async () => {
     const wrapper = await render()
 

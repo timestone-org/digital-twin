@@ -12,6 +12,7 @@ import {
   DtCard,
   DtEmpty,
   DtNotice,
+  DtResizableLayout,
   useToast,
   DtIconButton,
 } from '@dt/ui'
@@ -50,6 +51,13 @@ const {
   searchSources,
   changeSourcePage,
 } = useSourceList(() => props.protocol)
+
+const pointPanes = computed(() => [
+  ...(browseOpen.value && activeSource.value?.protocol === 'opcua'
+    ? [{ id: 'browse', label: '地址浏览', size: 2, minSize: 220 }]
+    : []),
+  { id: 'nodes', label: '点位表', size: 3, minSize: 320 },
+])
 
 /** 有几个源配了点位却没在采。它是「配了没人读」最外层的一道提示。 */
 const stalledCount = computed(
@@ -128,13 +136,7 @@ const archiveParamsOpen = ref(false)
       </PermGuard>
     </template>
 
-    <!-- ⚠ 这一页必须自己能滚：窄屏时左栏 15rem（<xl）+ 浏览 20rem + 点位表
-         37.5rem（<2xl）是竖着堆的，加起来必然高过视口，而 AppShell 的 `<main>` 是
-         overflow-hidden、自己不滚。装不下又没处滚，多出来的部分既看不见也够
-         不着；更糟的是 overflow-hidden **能被程序滚动**——点一下裁切线以下
-         的勾选框，浏览器会把 `<main>` 滚过去露出焦点元素，而它没有滚动条，
-         用户只看到整页内容凭空消失且再也回不来。 -->
-    <div class="flex h-full min-h-0 flex-col gap-4 overflow-y-auto">
+    <div class="flex h-full min-h-0 flex-col gap-4">
       <DtNotice
         v-if="stalledCount !== 0"
         intent="warning"
@@ -144,90 +146,97 @@ const archiveParamsOpen = ref(false)
         个已启用的数据源当前不在采集，它们的点位不会产生任何数据。
       </DtNotice>
 
-      <!-- ⚠ `flex-1` 只在 ≥xl 给：窄屏时要让这块按内容撑开，交给外面那层滚，
-           否则栅格行被压扁、内容溢出到行外，滚动条也就无从出现 -->
-      <div
-        class="grid min-h-0 grid-cols-1 gap-4 xl:flex-1 xl:grid-cols-[20rem_minmax(0,1fr)]"
+      <DtResizableLayout
+        class="min-h-0 flex-1"
+        :panes="[
+          { id: 'sources', label: '数据源', size: 1, minSize: 220 },
+          { id: 'detail', label: '数据源详情', size: 3, minSize: 320 },
+        ]"
+        :stack-at="1000"
+        :storage-key="`dt.collect.${protocol}.layout`"
       >
-        <!-- 左栏：数据源列表 -->
-        <aside class="flex h-80 min-w-0 shrink-0 flex-col xl:h-auto xl:min-h-0">
-          <SourceListPanel
-            v-model:keyword="sourceKeyword"
-            :protocol="protocol"
-            :page="sourcePage"
-            :total="sourceTotal"
-            :size="SOURCE_LIST_SIZE"
-            :is-filtered="sourceQuery !== ''"
-            :sources="sources"
-            :loading="sourcesLoading"
-            :error="sourcesError"
-            :active-id="activeId"
-            @search="searchSources"
-            @page="changeSourcePage"
-            @select="selectSource"
-            @reload="loadSources"
-            @create="ops.openCreate"
-          />
-        </aside>
-
-        <!-- 右栏：详情 -->
-        <section class="flex min-h-0 min-w-0 flex-col gap-4">
-          <template v-if="activeSource">
-            <SourceDetailHeader
-              :source="activeSource"
-              :busy="ops.busyId.value === activeSource.id"
-              :refreshing="sourcesLoading"
-              @connect="ops.setEnabled(activeSource, true)"
-              @disconnect="ops.setEnabled(activeSource, false)"
-              @test="ops.test(activeSource)"
-              @refresh="loadSources"
-              @edit="ops.openEdit(activeSource)"
-              @remove="removal.ask(activeSource)"
+        <template #sources>
+          <aside class="flex h-full min-h-0 min-w-0 flex-col">
+            <SourceListPanel
+              v-model:keyword="sourceKeyword"
+              :protocol="protocol"
+              :page="sourcePage"
+              :total="sourceTotal"
+              :size="SOURCE_LIST_SIZE"
+              :is-filtered="sourceQuery !== ''"
+              :sources="sources"
+              :loading="sourcesLoading"
+              :error="sourcesError"
+              :active-id="activeId"
+              @search="searchSources"
+              @page="changeSourcePage"
+              @select="selectSource"
+              @reload="loadSources"
+              @create="ops.openCreate"
             />
+          </aside>
+        </template>
 
-            <DtButton
-              v-if="activeSource.protocol === 'opcua'"
-              variant="outline"
-              size="sm"
-              :aria-expanded="browseOpen"
-              @click="browseOpen = !browseOpen"
-            >
-              {{ browseOpen ? '收起地址浏览' : '浏览并导入点位' }}
-            </DtButton>
-            <!-- 浏览 + 点位表：<2xl 竖排固定高、交给外层滚；≥2xl 并排铺满内部滚动。
-                 ⚠ 并排的门槛是 2xl 不是 xl：xl 那一档右区只剩八百多像素，点位表分到
-                 五百像素时工具条要折三行、表体只剩两行，浏览树那边连「在线浏览」四个
-                 字都竖着排——与知识库页同一条口径 -->
-            <div
-              class="grid min-h-0 grid-cols-1 gap-4 2xl:flex-1 2xl:grid-rows-1"
-              :class="{
-                '2xl:grid-cols-[minmax(0,2fr)_minmax(0,3fr)]': browseOpen,
-              }"
-            >
-              <BrowsePanel
-                v-if="browseOpen && activeSource.protocol === 'opcua'"
-                class="h-80 shrink-0 2xl:h-auto"
+        <template #detail>
+          <section class="flex h-full min-h-0 min-w-0 flex-col gap-4">
+            <template v-if="activeSource">
+              <SourceDetailHeader
                 :source="activeSource"
-                @imported="onImported"
+                :busy="ops.busyId.value === activeSource.id"
+                :refreshing="sourcesLoading"
+                @connect="ops.setEnabled(activeSource, true)"
+                @disconnect="ops.setEnabled(activeSource, false)"
+                @test="ops.test(activeSource)"
+                @refresh="loadSources"
+                @edit="ops.openEdit(activeSource)"
+                @remove="removal.ask(activeSource)"
               />
-              <NodeTable
-                ref="nodeTableRef"
-                class="h-150 shrink-0 2xl:h-auto"
-                :source="activeSource"
-              />
-            </div>
-          </template>
 
-          <!-- 未选中源（新增入口在左栏与顶栏，这里只指路不再塞第三个按钮） -->
-          <DtCard v-else class="flex min-h-0 flex-1 flex-col justify-center">
-            <DtEmpty
-              icon="database"
-              title="选择一个数据源"
-              :hint="pageConfig.selectionHint"
-            />
-          </DtCard>
-        </section>
-      </div>
+              <DtButton
+                v-if="activeSource.protocol === 'opcua'"
+                variant="outline"
+                size="sm"
+                :aria-expanded="browseOpen"
+                @click="browseOpen = !browseOpen"
+              >
+                {{ browseOpen ? '收起地址浏览' : '浏览并导入点位' }}
+              </DtButton>
+              <DtResizableLayout
+                class="min-h-0 flex-1"
+                style="min-height: 20rem"
+                :panes="pointPanes"
+                :stack-at="900"
+                :storage-key="`dt.collect.${protocol}.points-layout`"
+              >
+                <template #browse>
+                  <BrowsePanel
+                    v-if="browseOpen && activeSource.protocol === 'opcua'"
+                    class="h-full min-h-0 flex-1"
+                    :source="activeSource"
+                    @imported="onImported"
+                  />
+                </template>
+                <template #nodes>
+                  <NodeTable
+                    ref="nodeTableRef"
+                    class="h-full min-h-0 flex-1"
+                    :source="activeSource"
+                  />
+                </template>
+              </DtResizableLayout>
+            </template>
+
+            <!-- 未选中源（新增入口在左栏与顶栏，这里只指路不再塞第三个按钮） -->
+            <DtCard v-else class="flex min-h-0 flex-1 flex-col justify-center">
+              <DtEmpty
+                icon="database"
+                title="选择一个数据源"
+                :hint="pageConfig.selectionHint"
+              />
+            </DtCard>
+          </section>
+        </template>
+      </DtResizableLayout>
     </div>
 
     <!-- 弹窗 -->

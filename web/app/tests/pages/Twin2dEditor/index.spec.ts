@@ -22,6 +22,7 @@ import type {
 } from '@dt/contracts'
 import { __resetTwin2dAssets, normalizeTwin2dConfig } from '@dt/twin2d'
 import type { Twin2dConfig } from '@dt/twin2d'
+import { DtResizableLayout } from '@dt/ui'
 import { flushPromises, mount } from '@vue/test-utils'
 import { createPinia, setActivePinia } from 'pinia'
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
@@ -240,6 +241,19 @@ afterEach(() => {
 })
 
 describe('三栏骨架', () => {
+  it('大纲、画布和检查器接到独立记忆尺寸的分隔布局', () => {
+    const wrapper = mountPage()
+    const layout = wrapper.findComponent(DtResizableLayout)
+
+    expect(layout.props('storageKey')).toBe('dt.twin2d-editor.layout')
+    expect(layout.props('panes')).toEqual([
+      { id: 'outline', label: '大纲', size: 20, minSize: 180 },
+      { id: 'stage', label: '画布', size: 55, minSize: 280 },
+      { id: 'inspector', label: '检查器', size: 25, minSize: 240 },
+    ])
+    expect(wrapper.findAll('[role="separator"]')).toHaveLength(2)
+  })
+
   it('大纲、画布、检查器三栏都在', () => {
     const wrapper = mountPage()
 
@@ -498,6 +512,23 @@ describe('检查器装配', () => {
 })
 
 describe('诊断', () => {
+  it('展开诊断增加上下分隔条并保留同一个画布实例', async () => {
+    const wrapper = mountPage()
+    const stage = wrapper.findComponent(EditorStage).element
+    const layout = wrapper.findAllComponents(DtResizableLayout)[1]
+
+    expect(layout?.props('direction')).toBe('vertical')
+    expect(layout?.props('storageKey')).toBe('dt.twin2d-editor.diagnostics')
+    await wrapper.find('[data-test="issues"]').trigger('click')
+
+    expect(wrapper.findAll('[role="separator"]')).toHaveLength(3)
+    expect(wrapper.findComponent(EditorStage).element === stage).toBe(true)
+    await wrapper.find('[data-test="issues"]').trigger('click')
+
+    expect(wrapper.findAll('[role="separator"]')).toHaveLength(2)
+    expect(wrapper.findComponent(EditorStage).element === stage).toBe(true)
+  })
+
   it('顶栏上写着问题条数', () => {
     const wrapper = mountPage()
 
