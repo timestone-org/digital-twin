@@ -8,7 +8,7 @@
  * 的重取会互相追尾，慢的那次后返回就会把屏幕刷成上一页，而且不报任何错。
  */
 
-import { computed, ref, type ComputedRef, type Ref } from 'vue'
+import { computed, onScopeDispose, ref, type ComputedRef, type Ref } from 'vue'
 
 import * as dataset from '@/api/dataset'
 import { describeError } from '@/composables/useAsyncList'
@@ -26,6 +26,7 @@ export const RECORD_PAGE_SIZE = 50
 export interface RecordsView {
   rows: ComputedRef<RecordRow[]>
   loading: Ref<boolean>
+  isFetching: Ref<boolean>
   error: Ref<string | null>
   /** 1 起的页序。游标分页给不出总数，所以只说得出这个。 */
   page: ComputedRef<number>
@@ -43,6 +44,8 @@ export interface RecordsView {
   reload: () => Promise<void>
   /** 原地重取当前页。写完走这条，别把人甩回第一页。 */
   refresh: () => Promise<void>
+  refreshInBackground: () => Promise<void>
+  cancel: () => void
   next: () => Promise<void>
   prev: () => Promise<void>
 }
@@ -54,18 +57,24 @@ export interface RecordsView {
 export function useRecords(tableId: () => string): RecordsView {
   const isStale = ref(false)
   const pages = useCursorPages(
-    (after) =>
-      dataset.listDatasetRecords(tableId(), {
-        limit: RECORD_PAGE_SIZE,
-        ...(after === null ? {} : { after }),
-      }),
+    (after, signal) =>
+      dataset.listDatasetRecords(
+        tableId(),
+        {
+          limit: RECORD_PAGE_SIZE,
+          ...(after === null ? {} : { after }),
+        },
+        signal,
+      ),
     describeError,
   )
   const rows = computed(() => toRecordRows(pages.items.value))
+  onScopeDispose(pages.cancel)
 
   return {
     rows,
     loading: pages.loading,
+    isFetching: pages.isFetching,
     error: pages.problem,
     page: pages.pageNumber,
     hasPrev: pages.hasPrev,
@@ -79,6 +88,8 @@ export function useRecords(tableId: () => string): RecordsView {
       await pages.reload()
     },
     refresh: () => pages.refresh(),
+    refreshInBackground: () => pages.refresh({ background: true }),
+    cancel: pages.cancel,
     next: () => pages.next(),
     prev: () => pages.prev(),
   }
