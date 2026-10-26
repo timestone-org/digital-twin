@@ -7,6 +7,7 @@ import { createPinia } from 'pinia'
 
 import App from './App.vue'
 import { installAiAssistant } from './bootstrap/ai'
+import { installTwinModelHost } from './bootstrap/twinModelHost'
 import { router } from './router'
 // ⚠ 顺序不可换：tailwind.css 里那句 `@layer theme, base, components, utilities`
 // 决定了级联层的先后。它必须先出现，后面 index.scss 往 base / components 层里
@@ -22,6 +23,7 @@ import '@dt/tokens/decor.scss'
 // 某些现场没有外网、根本不部署 ai-assistant，那时这里就是唯一要改的地方
 // （见 features/ai/ports.ts 记的三层「关掉」）。
 installAiAssistant()
+installTwinModelHost()
 
 const app = createApp(App)
 app.use(createPinia())

@@ -3,10 +3,13 @@
  * 取消后抛 AbortError 且**已解析出来的 GPU 资源被逐个释放**（丢而不释放是纯泄漏）。
  */
 import * as THREE from 'three'
+import { DRACOLoader } from 'three/examples/jsm/loaders/DRACOLoader.js'
+import { configureTwinModelHost, resetTwinModelHost } from '../src/host'
 import { describe, expect, it, vi } from 'vitest'
 
 import {
   createGltfSource,
+  disposeGltfDecoders,
   loadTwinModel,
   type GltfSource,
 } from '../src/modelLoader'
@@ -43,6 +46,23 @@ function sourceOf(
 }
 
 describe('模型装载', () => {
+  it('解码器与应用入口共用部署前缀', () => {
+    configureTwinModelHost({
+      resolveModelUrl: () => '',
+      dracoDecoderPath: '/ai/draco/',
+    })
+    const decoderPath = vi.spyOn(DRACOLoader.prototype, 'setDecoderPath')
+    disposeGltfDecoders()
+    try {
+      createGltfSource()
+      expect(decoderPath).toHaveBeenCalledWith('/ai/draco/')
+    } finally {
+      disposeGltfDecoders()
+      decoderPath.mockRestore()
+      resetTwinModelHost()
+    }
+  })
+
   it('解析成功时把 gltf 的场景交出去', async () => {
     const root = scene()
 

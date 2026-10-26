@@ -1,22 +1,13 @@
 /**
- * @fileoverview glTF/glb 装载：进度回传与取消丢弃，外加 Draco 解码。
- * ⚠ `GLTFLoader` 没有中止能力，取消只能在解析完成后把成果丢掉并**逐个释放**——
- * 丢而不释放就是一次纯泄漏，而快速切模型正是最容易触发它的路径。
- * ⚠ 解码器自托管在 `/draco/`，**不许走 CDN**：现场那台机器不一定有外网，
- * 而没有外网时的表现是「模型永远加载中」，控制台里只有一条被浏览器吞掉的
- * 跨域错误（ADR-0022）。
+ * @fileoverview glTF/glb 装载、取消后的资源释放与自托管 Draco 解码。
+ * 素材及压缩档约束见 docs/adr/0015。
  */
 import { DRACOLoader } from 'three/examples/jsm/loaders/DRACOLoader.js'
 import { GLTFLoader } from 'three/examples/jsm/loaders/GLTFLoader.js'
 import type * as THREE from 'three'
 
 import { disposeSceneGraph } from './sceneCore'
-
-/**
- * 解码器文件的取回路径，末尾必须带斜杠。
- * ⚠ 与 `web/app/public/draco/` 逐字对应：那几个文件随构建产物原样发出去。
- */
-const DRACO_PATH = '/draco/'
+import { resolveDracoDecoderPath } from './host'
 
 // ⚠ 整个应用共用一个解码器：`DRACOLoader` 背后是一池 Web Worker，每次装载新造
 // 一个就是每次多起一池——连开十几个模型之后线程数就失控了，而现象只是「越用越卡」
@@ -24,7 +15,7 @@ let shared: DRACOLoader | null = null
 
 function dracoLoader(): DRACOLoader {
   if (shared === null) {
-    shared = new DRACOLoader().setDecoderPath(DRACO_PATH)
+    shared = new DRACOLoader().setDecoderPath(resolveDracoDecoderPath())
   }
   return shared
 }

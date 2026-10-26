@@ -27,12 +27,12 @@ import {
 } from '@dt/datasources'
 import { configureAssetImages, registerBuiltinModules } from '@dt/modules'
 import { provideRuntimeData } from '@dt/runtime'
-import { configureTwinModelHost } from '@dt/three-core/host'
 import { configureTwin2dAssets } from '@dt/twin2d'
-import { assetUrl, modelVariantUrl } from '@dt/contracts'
+import { assetUrl } from '@dt/contracts'
 import { onScopeDispose, ref } from 'vue'
 
 import { ASSET_BASE_URL } from '@/config/app'
+import { installTwinModelHost } from './twinModelHost'
 
 import { installConfigControls } from '@/features/dashboard/configControls'
 import {
@@ -101,18 +101,6 @@ function installTwin2dAssets(): void {
   configureTwin2dAssets({
     resolveIcon: (ref) => assetUrl(ASSET_BASE_URL, 'icon', ref),
     resolveImage: (ref) => assetUrl(ASSET_BASE_URL, 'image', ref),
-  })
-}
-
-/**
- * 告诉 3D 宿主怎么把 `asset:<uuid>` 变成一个能 fetch 的地址。
- * ⚠ 不装它的话 `resolveModelUrl` 恒回空串——孪生模块**永远加载不出模型**，
- * 而画布上显示的是一句「模型地址解析失败」，看着像素材坏了。
- */
-function installTwinModelHost(): void {
-  configureTwinModelHost({
-    resolveModelUrl: (ref, variant) =>
-      modelVariantUrl(ASSET_BASE_URL, ref, variant),
   })
 }
 

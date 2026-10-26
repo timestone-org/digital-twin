@@ -13,6 +13,7 @@ import type { ModelVariant } from '@dt/contracts'
 export interface TwinModelHost {
   /** 素材引用 + 档位 → 可 fetch 的 URL；解析不出返回空串。 */
   resolveModelUrl(assetRef: string, variant: ModelVariant): string
+  dracoDecoderPath?: string
 }
 
 // ⚠ 默认桩不臆造后端前缀：没注入宿主时要在界面上看得见「取不到」，而不是拿到一个必然 404 的地址
@@ -31,6 +32,11 @@ export function configureTwinModelHost(impl: TwinModelHost): void {
 /** 复位到默认桩，供测试与组件展示隔离。 */
 export function resetTwinModelHost(): void {
   host = NOT_CONFIGURED
+}
+
+/** 自托管解码器地址由应用壳提供，独立宿主缺省使用根路径。 */
+export function resolveDracoDecoderPath(): string {
+  return host.dracoDecoderPath ?? '/draco/'
 }
 
 /**
