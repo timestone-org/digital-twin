@@ -41,6 +41,7 @@ interface ChartLineStyle {
 
 interface ChartAxis {
   type: 'time' | 'value'
+  show?: boolean
   name?: string | undefined
   nameTextStyle?: { color?: string | undefined } | undefined
   position?: 'left' | 'right' | undefined
@@ -115,8 +116,11 @@ function buildYAxes(
   series: readonly DtChartSeries[],
   theme: ChartTheme,
 ): ChartAxis[] {
-  return axisGroups(series).map((axis, index) => ({
+  const groups = axisGroups(series)
+  // ⚠ ECharts 的笛卡尔坐标系即使没有数据也需要成对坐标轴。
+  return (groups.length > 0 ? groups : ['']).map((axis, index) => ({
     type: 'value' as const,
+    show: series.length > 0,
     name: unitOfAxis(series, axis),
     nameTextStyle: { color: theme.label },
     position: index % 2 === 0 ? ('left' as const) : ('right' as const),
@@ -169,6 +173,7 @@ export function buildLineOption(
       formatter: createTooltipFormatter(series),
     },
     xAxis: {
+      show: series.length > 0,
       type: 'time',
       axisLine: { lineStyle: { color: theme.axis } },
       axisLabel: { color: theme.label, hideOverlap: true },

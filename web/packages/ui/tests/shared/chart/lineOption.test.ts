@@ -118,9 +118,11 @@ describe('系列数据', () => {
 })
 
 describe('空系列', () => {
-  it('一条系列都没有时没有轴也没有系列，option 仍然完整', () => {
+  it('空系列保留隐藏的成对坐标轴，使加载中的图表仍可布局', () => {
     const option = buildLineOption([])
-    expect(option.yAxis).toEqual([])
+    expect(option.yAxis).toHaveLength(1)
+    expect(option.yAxis[0]?.show).toBe(false)
+    expect(option.xAxis.show).toBe(false)
     expect(option.series).toEqual([])
     expect(option.tooltip.trigger).toBe('axis')
   })
