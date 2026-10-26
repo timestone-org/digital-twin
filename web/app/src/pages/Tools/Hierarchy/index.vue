@@ -1,7 +1,8 @@
 <script setup lang="ts">
 /** @fileoverview 工具中的层级图项目与标准出图工作面。 */
-import { computed, nextTick, ref } from 'vue'
-import type { ExportFormat } from './scripts/types'
+import { computed, nextTick, onBeforeUnmount, onMounted, ref, watch } from 'vue'
+import type { DtMenuItem } from '@dt/contracts'
+import type { ExportFormat, NodeKind } from './scripts/types'
 import {
   DtButton,
   DtCheckbox,
@@ -10,7 +11,10 @@ import {
   DtModal,
   DtNotice,
   DtResizableLayout,
-  DtIconButton,
+  DtSegmented,
+  DtDropdownMenu,
+  DtEmpty,
+  DtIcon,
 } from '@dt/ui'
 import { AppShell } from '@/components/layout'
 import HierarchyCanvas from './components/HierarchyCanvas.vue'
@@ -43,22 +47,111 @@ const {
   useSample,
 } = page
 const { document } = editor
-const panes = computed(() => [
-  ...(showProjects.value
-    ? [{ id: 'projects', label: '层级图项目', size: 20, minSize: 180 }]
-    : []),
-  { id: 'canvas', label: '层级图画布', size: 60, minSize: 280 },
-  ...(document.value && mode.value === 'edit' && showInspector.value
-    ? [{ id: 'inspector', label: '层级图检查器', size: 20, minSize: 200 }]
+const workspace = ref<HTMLElement | null>(null)
+const workspaceWidth = ref(0)
+const compactPane = ref('canvas')
+const isCompact = computed(
+  () => workspaceWidth.value > 0 && workspaceWidth.value < 760,
+)
+const projectsVisible = computed(() =>
+  isCompact.value ? compactPane.value === 'projects' : showProjects.value,
+)
+const inspectorVisible = computed(() =>
+  isCompact.value ? compactPane.value === 'inspector' : showInspector.value,
+)
+const compactOptions = computed(() => [
+  { value: 'projects', label: '我的项目', icon: 'folder' },
+  {
+    value: 'canvas',
+    label: mode.value === 'drawing' ? '图纸预览' : '编辑画布',
+    icon: 'network',
+  },
+  ...(document.value
+    ? [{ value: 'inspector', label: '配置', icon: 'settings' }]
     : []),
 ])
+let observer: ResizeObserver | undefined
+onMounted(() => {
+  if (!workspace.value) return
+  workspaceWidth.value = workspace.value.clientWidth
+  observer = new ResizeObserver(([entry]) => {
+    if (entry) workspaceWidth.value = entry.contentRect.width
+  })
+  observer.observe(workspace.value)
+})
+onBeforeUnmount(() => observer?.disconnect())
+watch([() => saving.projectId.value, mode], () => {
+  compactPane.value = 'canvas'
+})
+const panes = computed(() => [
+  ...(projectsVisible.value
+    ? [{ id: 'projects', label: '层级图项目', size: 19, minSize: 210 }]
+    : []),
+  ...(!isCompact.value ||
+  compactPane.value === 'canvas' ||
+  (!document.value && compactPane.value === 'inspector')
+    ? [{ id: 'canvas', label: '层级图画布', size: 55, minSize: 320 }]
+    : []),
+  ...(document.value && inspectorVisible.value
+    ? [{ id: 'inspector', label: '层级图配置', size: 26, minSize: 270 }]
+    : []),
+])
+function toggleProjects() {
+  if (isCompact.value) compactPane.value = 'projects'
+  else showProjects.value = !showProjects.value
+}
+function toggleInspector() {
+  if (isCompact.value) compactPane.value = 'inspector'
+  else showInspector.value = !showInspector.value
+}
+const projectActions = computed<DtMenuItem[]>(() => [
+  { value: 'history', label: '历史版本', icon: 'layers' },
+  ...(canEdit.value
+    ? [
+        { value: 'duplicate', label: '复制', icon: 'copy' },
+        { value: 'remove', label: '删除项目', icon: 'trash', danger: true },
+      ]
+    : []),
+])
+function projectAction(item: DtMenuItem) {
+  const actions: Record<string, () => Promise<unknown>> = {
+    history: page.history,
+    duplicate: page.duplicate,
+    remove: page.remove,
+  }
+  const action = actions[item.value]
+  if (action) void page.safe(action)
+}
+function startProject(sample = false) {
+  useSample.value = sample
+  newTitle.value = sample ? '蒸汽计量系统' : '未命名层级图'
+  isNewOpen.value = true
+}
 const canvas = ref<InstanceType<typeof HierarchyCanvas> | null>(null)
+function onAddNode(kind: NodeKind) {
+  void page.safe(() => addNode(kind))
+}
+async function addNode(kind: NodeKind) {
+  mode.value = 'edit'
+  compactPane.value = 'canvas'
+  showInspector.value = true
+  await nextTick()
+  canvas.value?.add(kind)
+  if (isCompact.value) compactPane.value = 'inspector'
+}
+async function draw() {
+  await page.draw()
+  if (!compute.error.value) compactPane.value = 'canvas'
+}
 async function arrange() {
+  compactPane.value = 'canvas'
   await page.arrange()
   canvas.value?.fit()
 }
 async function focus(id: string) {
   mode.value = 'edit'
+  showInspector.value = true
+  compactPane.value = 'canvas'
   await nextTick()
   canvas.value?.focus(id)
 }
@@ -66,7 +159,10 @@ function onImport(files: File[]) {
   void page.safe(() => page.importFiles(files))
 }
 function onOpen(id: string) {
-  void page.safe(() => page.open(id))
+  void page.safe(async () => {
+    await page.open(id)
+    compactPane.value = 'canvas'
+  })
 }
 function onExport(format: ExportFormat) {
   void page.safe(() => page.exportFile(format))
@@ -81,25 +177,44 @@ function onRestore(revision: number) {
 }
 </script>
 <template>
-  <AppShell title="层级图" subtitle="计量关系编排与标准图纸">
+  <AppShell
+    class="hierarchy-shell"
+    title="层级图"
+    subtitle="计量关系编排与标准图纸"
+  >
     <template #actions>
-      <div v-if="available" class="flex items-center gap-2 overflow-x-auto">
+      <div v-if="available" class="hierarchy-actions flex items-center gap-2">
         <span
           v-if="document"
-          class="whitespace-nowrap text-xs text-text-secondary"
+          class="save-status"
+          role="status"
+          :data-pending="saving.dirty.value"
+          :data-error="!!saving.error.value"
         >
-          {{ status }}
+          <DtIcon
+            :name="
+              saving.error.value
+                ? 'alert-circle'
+                : saving.dirty.value
+                  ? 'pencil'
+                  : 'check'
+            "
+            :size="14"
+          />
+          <span class="compact-label">
+            {{ canEdit ? status : '只读模式' }}
+          </span>
         </span>
         <template v-if="canEdit">
-          <DtIconButton
+          <DtButton
             size="sm"
             :disabled="busy"
-            variant="solid"
-            intent="primary"
-            icon="plus"
-            label="新建项目"
-            @click="isNewOpen = true"
-          />
+            variant="outline"
+            @click="startProject()"
+          >
+            <template #leading><DtIcon name="plus" :size="14" /></template>
+            新建项目
+          </DtButton>
           <DtFilePicker
             label="导入配置"
             accept=".json,.xlsx"
@@ -107,47 +222,28 @@ function onRestore(revision: number) {
             :disabled="busy"
             @select="onImport"
           />
-          <DtIconButton
-            size="sm"
-            variant="outline"
-            :disabled="!document || busy"
-            intent="primary"
-            icon="save"
-            label="保存"
-            @click="page.safe(saving.flush)"
-          />
-        </template>
-        <DtButton
-          size="sm"
-          variant="ghost"
-          :disabled="!document || busy"
-          @click="page.safe(page.history)"
-        >
-          历史版本
-        </DtButton>
-        <template v-if="canEdit">
-          <DtIconButton
-            size="sm"
-            variant="ghost"
-            :disabled="!document || busy"
-            intent="neutral"
-            icon="copy"
-            label="复制"
-            @click="page.safe(page.duplicate)"
-          />
           <DtButton
             size="sm"
-            variant="ghost"
-            intent="danger"
-            :disabled="!document || busy"
-            @click="page.safe(page.remove)"
+            variant="solid"
+            :disabled="!document || busy || saving.saving.value"
+            @click="page.safe(saving.flush)"
           >
-            删除项目
+            <template #leading><DtIcon name="save" :size="14" /></template
+            ><span class="compact-label"> 保存 </span>
           </DtButton>
         </template>
+        <DtDropdownMenu
+          :items="projectActions"
+          label="项目操作"
+          :disabled="!document || busy"
+          @select="projectAction"
+        />
       </div>
     </template>
-    <div class="flex h-full min-h-0 flex-col gap-3">
+    <div
+      ref="workspace"
+      class="hierarchy-page flex h-full min-h-0 flex-col gap-3"
+    >
       <DtNotice v-if="checking"> 正在检查层级图服务… </DtNotice>
       <DtNotice v-else-if="!available" intent="warning">
         层级图服务尚未启用或暂时不可用。{{ availabilityError }}
@@ -163,8 +259,9 @@ function onRestore(revision: number) {
             variant="outline"
             :disabled="busy || saving.saving.value"
             @click="page.safe(page.reload)"
-            >重新加载服务器版本</DtButton
           >
+            重新加载服务器版本
+          </DtButton>
         </DtNotice>
         <DtNotice v-if="compute.error.value" intent="danger">
           {{ compute.error.value }}
@@ -184,18 +281,25 @@ function onRestore(revision: number) {
           :readonly="!canEdit"
           :busy="busy"
           :mode="mode"
-          @add="canvas?.add($event)"
-          @projects="showProjects = !showProjects"
-          @inspector="showInspector = !showInspector"
+          :panels="{ projects: projectsVisible, inspector: inspectorVisible }"
+          @add="onAddNode"
+          @projects="toggleProjects"
+          @inspector="toggleInspector"
           @arrange="page.safe(arrange)"
-          @draw="page.safe(page.draw)"
+          @draw="page.safe(draw)"
           @edit="mode = 'edit'"
           @export="onExport"
         />
+        <DtSegmented
+          v-if="isCompact"
+          v-model="compactPane"
+          :options="compactOptions"
+          block
+          aria-label="工作区面板"
+        />
         <DtResizableLayout
-          class="min-h-0 flex-1"
+          class="hierarchy-layout min-h-0 flex-1"
           storage-key="dt.hierarchy.layout"
-          :stack-at="720"
           :panes="panes"
         >
           <template #projects>
@@ -207,9 +311,20 @@ function onRestore(revision: number) {
             />
           </template>
           <template #canvas>
-            <div v-if="document" class="flex min-h-0 min-w-0 flex-1 flex-col">
+            <div
+              v-if="document"
+              class="canvas-panel flex min-h-0 min-w-0 flex-1 flex-col"
+            >
               <DtNotice v-if="outdated && mode === 'drawing'" intent="warning">
-                预览对应之前的配置，请重新生成。导出始终使用当前配置。
+                配置已更新，当前预览尚未刷新。
+                <DtButton
+                  size="sm"
+                  variant="ghost"
+                  :disabled="busy"
+                  @click="page.safe(draw)"
+                >
+                  重新生成预览
+                </DtButton>
               </DtNotice>
               <HierarchyCanvas
                 v-show="mode === 'edit'"
@@ -225,9 +340,36 @@ function onRestore(revision: number) {
             </div>
             <div
               v-else
-              class="flex flex-1 items-center justify-center text-text-secondary"
+              class="canvas-panel flex min-h-0 flex-1 flex-col items-center justify-center overflow-y-auto p-6"
             >
-              新建一个项目，或导入案例中的 JSON / Excel 配置。
+              <DtEmpty
+                icon="network"
+                title="从一张层级图开始"
+                :hint="
+                  canEdit
+                    ? '建立计量关系，生成清晰的标准图纸。可从空白项目、示例或配置文件开始。'
+                    : '暂无可查看的项目。已有项目可在左侧搜索打开。'
+                "
+              />
+              <div
+                v-if="canEdit"
+                class="mt-4 flex flex-wrap justify-center gap-3"
+              >
+                <DtButton :disabled="busy" @click="startProject()">
+                  创建空白项目
+                </DtButton>
+                <DtButton
+                  variant="outline"
+                  :disabled="busy"
+                  @click="startProject(true)"
+                >
+                  从示例开始
+                </DtButton>
+              </div>
+
+              <p v-if="canEdit" class="text-xs text-text-secondary">
+                已有配置？使用右上角“导入配置”，支持 JSON / Excel。
+              </p>
             </div>
           </template>
           <template #inspector>
@@ -235,6 +377,7 @@ function onRestore(revision: number) {
               style="width: 100%; min-height: 0; flex: 1"
               :editor="editor"
               :readonly="!canEdit || busy"
+              :mode="mode"
               @focus="focus"
               @apply="page.safe(editor.applyDrafts)"
             />
@@ -268,3 +411,42 @@ function onRestore(revision: number) {
     />
   </AppShell>
 </template>
+
+<style scoped lang="scss">
+.save-status {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  font-size: 12px;
+  color: var(--state-success);
+}
+.save-status[data-pending='true'] {
+  color: var(--state-warning);
+}
+.save-status[data-error='true'] {
+  color: var(--state-danger);
+}
+.canvas-panel {
+  overflow: hidden;
+  border: 1px solid var(--border-subtle);
+  border-radius: var(--radius-lg);
+  background: var(--surface-panel);
+}
+@media (max-width: 640px) {
+  .hierarchy-shell :deep(header:has(.hierarchy-actions)) {
+    flex-direction: column;
+    align-items: stretch;
+  }
+  .hierarchy-actions {
+    gap: 4px;
+  }
+  .compact-label {
+    position: absolute;
+    width: 1px;
+    height: 1px;
+    overflow: hidden;
+    clip-path: inset(50%);
+    white-space: nowrap;
+  }
+}
+</style>

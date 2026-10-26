@@ -11,6 +11,7 @@ import {
   useConfirm,
   useToast,
   DtFilePicker,
+  DtNumberInput,
 } from '@dt/ui'
 import * as api from '@/api/hierarchy'
 import { useAuthStore } from '@/stores/auth'
@@ -137,7 +138,11 @@ async function setup(write = true) {
   return wrapper
 }
 function button(wrapper: ReturnType<typeof mount>, text: string) {
-  const found = wrapper.findAll('button').find((node) => node.text() === text)
+  const found = wrapper
+    .findAll('button')
+    .find(
+      (node) => node.text() === text || node.attributes('aria-label') === text,
+    )
   if (!found) throw new Error(`按钮不存在：${text}`)
   return found
 }
@@ -168,7 +173,7 @@ it('编辑保存、生成、导出、版本恢复和复制可从页面完成', a
   const toolbar = wrapper.getComponent(HierarchyToolbar)
   toolbar.vm.$emit('draw')
   await flushPromises()
-  expect(wrapper.findAll('[role="separator"]')).toHaveLength(1)
+  expect(wrapper.findAll('[role="separator"]')).toHaveLength(2)
   expect(wrapper.text()).toContain('33 个计量节点 · 4 层 · 5 行')
   expect(wrapper.find('img[alt="标准计量层级图"]').exists()).toBe(true)
   await button(wrapper, '放大').trigger('click')
@@ -180,6 +185,7 @@ it('编辑保存、生成、导出、版本恢复和复制可从页面完成', a
   toolbar.vm.$emit('export', 'json')
   await flushPromises()
   expect(effects.revoke).toHaveBeenCalled()
+  await wrapper.get('[aria-label="项目操作"]').trigger('click')
   await button(wrapper, '历史版本').trigger('click')
   await flushPromises()
   expect(wrapper.text()).toContain('最近 50 个保存版本')
@@ -188,6 +194,7 @@ it('编辑保存、生成、导出、版本恢复和复制可从页面完成', a
   await flushPromises()
   expect(api.restoreProject).toHaveBeenCalledWith('project-1', 2, 1)
   await wrapper.get('[aria-label="关闭"]').trigger('click')
+  await wrapper.get('[aria-label="项目操作"]').trigger('click')
   await button(wrapper, '复制').trigger('click')
   await flushPromises()
   expect(api.createProject).toHaveBeenCalledWith(
@@ -237,12 +244,7 @@ it('新建示例、导入、删除、搜索和编辑器动作正确接线', asyn
   await button(wrapper, '查询项目').trigger('click')
   await flushPromises()
   expect(api.listProjects).toHaveBeenCalled()
-  await vi.waitFor(() =>
-    expect(
-      button(wrapper, '删除项目').attributes('disabled'),
-      wrapper.text(),
-    ).toBeUndefined(),
-  )
+  await wrapper.get('[aria-label="项目操作"]').trigger('click')
   await button(wrapper, '删除项目').trigger('click')
   expect(useConfirm().pending.value, wrapper.text()).not.toBeNull()
   useConfirm().resolve(true)
@@ -264,4 +266,81 @@ it('只读账号不出现管理入口，服务缺席有明确状态', async () =
   await flushPromises()
   expect(absent.text()).toContain('服务不可用')
   absent.unmount()
+})
+
+it('预览中修改图纸宽度标记过期，重新生成后更新预览', async () => {
+  const wrapper = await setup()
+  await button(wrapper, '生成层级图').trigger('click')
+  await flushPromises()
+  const inspector = wrapper.getComponent(HierarchyInspector)
+  expect(inspector.text()).toContain('图纸宽度')
+  inspector.getComponent(DtNumberInput).vm.$emit('update:modelValue', 2245)
+  await flushPromises()
+  expect(wrapper.text()).toContain('配置已更新，当前预览尚未刷新')
+  await button(wrapper, '重新生成预览').trigger('click')
+  await flushPromises()
+  expect(wrapper.text()).not.toContain('当前预览尚未刷新')
+  expect(wrapper.find('img[alt="标准计量层级图"]').exists()).toBe(true)
+  await button(wrapper, '返回编辑').trigger('click')
+  expect(wrapper.getComponent(HierarchyCanvas).isVisible()).toBe(true)
+  wrapper.unmount()
+})
+
+it('窄屏一次显示一个面板，切换配置保留草稿并可返回项目画布', async () => {
+  vi.spyOn(HTMLElement.prototype, 'clientWidth', 'get').mockReturnValue(640)
+  const wrapper = await setup()
+  expect(wrapper.findAll('[data-pane]')).toHaveLength(1)
+  expect(wrapper.get('[data-pane]').attributes('data-pane')).toBe('canvas')
+  await wrapper.get('.hierarchy-node').trigger('keydown', { key: 'Enter' })
+  await button(wrapper, '配置面板').trigger('click')
+  expect(wrapper.get('[data-pane]').attributes('data-pane')).toBe('inspector')
+  await wrapper.get('textarea').setValue('窄屏编辑草稿')
+  await button(wrapper, '编辑画布').trigger('click')
+  await button(wrapper, '配置').trigger('click')
+  expect(wrapper.get('textarea').element.value).toBe('窄屏编辑草稿')
+  await button(wrapper, '项目列表').trigger('click')
+  expect(wrapper.get('[data-pane]').attributes('data-pane')).toBe('projects')
+  await button(wrapper, '蒸汽计量系统').trigger('click')
+  await flushPromises()
+  expect(wrapper.get('[data-pane]').attributes('data-pane')).toBe('canvas')
+  expect(wrapper.text()).toContain('窄屏编辑草稿')
+  wrapper.unmount()
+})
+
+it('无项目时提供空白和示例入口，取消新建不产生项目', async () => {
+  stored = []
+  const wrapper = await setup()
+  expect(wrapper.text()).toContain('从一张层级图开始')
+  await button(wrapper, '创建空白项目').trigger('click')
+  expect(
+    wrapper.get<HTMLInputElement>('input[type="checkbox"]').element.checked,
+  ).toBe(false)
+  await button(wrapper, '取消').trigger('click')
+  expect(api.createProject).not.toHaveBeenCalled()
+  await button(wrapper, '从示例开始').trigger('click')
+  expect(
+    wrapper.get<HTMLInputElement>('input[type="checkbox"]').element.checked,
+  ).toBe(true)
+  await button(wrapper, '创建项目').trigger('click')
+  await flushPromises()
+  expect(wrapper.findAll('.hierarchy-node')).toHaveLength(34)
+  wrapper.unmount()
+})
+
+it('窄屏从配置面板添加节点后可立即编辑并生成预览', async () => {
+  vi.spyOn(HTMLElement.prototype, 'clientWidth', 'get').mockReturnValue(640)
+  const wrapper = await setup()
+  await button(wrapper, '配置').trigger('click')
+  await button(wrapper, '计量节点').trigger('click')
+  await flushPromises()
+  expect(wrapper.get('[data-pane]').attributes('data-pane')).toBe('inspector')
+  expect(wrapper.get('textarea').element.value).toBe('新计量节点')
+  await button(wrapper, '生成层级图').trigger('click')
+  await flushPromises()
+  expect(wrapper.get('[data-pane]').attributes('data-pane')).toBe('canvas')
+  await button(wrapper, '配置').trigger('click')
+  await button(wrapper, '重新生成').trigger('click')
+  await flushPromises()
+  expect(wrapper.get('[data-pane]').attributes('data-pane')).toBe('canvas')
+  wrapper.unmount()
 })

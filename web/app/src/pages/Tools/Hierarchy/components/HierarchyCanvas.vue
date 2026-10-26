@@ -1,7 +1,7 @@
 <script setup lang="ts">
 /** @fileoverview 层级图自绘编辑画布与视口工具。 */
 import { computed, ref, toRef, useId } from 'vue'
-import { DtButton, DtCheckbox, DtIconButton } from '@dt/ui'
+import { DtButton, DtCheckbox, DtIconButton, DtPopover } from '@dt/ui'
 import { canvasPoint, edgePath, fitViewport } from '../scripts/canvasGeometry'
 import { editorSize } from '../scripts/geometry'
 import { useCanvasPointer } from '../scripts/useCanvasPointer'
@@ -222,8 +222,23 @@ defineExpose({ fit, focus, add })
       <DtButton v-if="!readonly" @click="add('meter')"> 添加计量节点 </DtButton>
     </div>
     <div class="canvas-controls" @pointerdown.stop>
-      <DtCheckbox v-model="snap" label="网格吸附" />
-      <DtCheckbox v-model="showGuides" label="对齐辅助线" />
+      <DtPopover side="top" align="end" panel-label="画布辅助设置">
+        <template #default="{ toggle, isOpen }">
+          <DtIconButton
+            icon="magnet"
+            label="画布辅助"
+            :pressed="isOpen"
+            @click="toggle"
+          />
+        </template>
+        <template #content>
+          <div class="flex flex-col gap-3 p-1">
+            <strong class="text-sm">画布辅助</strong>
+            <DtCheckbox v-model="snap" label="网格吸附" />
+            <DtCheckbox v-model="showGuides" label="对齐辅助线" />
+          </div>
+        </template>
+      </DtPopover>
       <DtButton
         size="sm"
         variant="ghost"
@@ -263,7 +278,7 @@ defineExpose({ fit, focus, add })
       {{
         connection
           ? '点击目标输入端口完成连接 · Esc 取消'
-          : '拖动节点 · 输出口连向输入口 · Shift 框选 / 多选 · 方向键微调'
+          : '拖动空白处平移 · 滚轮缩放 · Shift 多选'
       }}
     </div>
   </div>
@@ -280,6 +295,9 @@ defineExpose({ fit, focus, add })
   background-color: var(--surface-sunken);
   background-image: radial-gradient(var(--border-default) 1px, transparent 1px);
   background-size: 20px 20px;
+  &:focus-visible {
+    box-shadow: inset 0 0 0 2px var(--accent-primary);
+  }
 }
 .canvas-world {
   position: absolute;
@@ -314,6 +332,11 @@ defineExpose({ fit, focus, add })
   font-size: 12px;
   color: var(--text-secondary);
   pointer-events: none;
+  max-width: calc(100% - 24px);
+  padding: 6px 10px;
+  border: 1px solid var(--border-subtle);
+  border-radius: var(--radius-md);
+  background: var(--surface-panel);
 }
 .canvas-empty {
   position: absolute;

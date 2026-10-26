@@ -100,6 +100,9 @@ export class Controller {
         },
       }
   }
+  discardDrafts = () => {
+    this.state.drafts.value = {}
+  }
   safely = (action: () => void) => {
     try {
       action()
