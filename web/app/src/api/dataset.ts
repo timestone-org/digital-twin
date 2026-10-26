@@ -439,14 +439,16 @@ export type DatasetRecordQuery = {
  * `total`，界面只说得出「第几页」，说不出「共几页」。
  * @param tableId 台账 id
  * @param query 每页条数与游标
+ * @param signal 取消当前读取的信号
  */
 export async function listDatasetRecords(
   tableId: string,
   query: DatasetRecordQuery = {},
+  signal?: AbortSignal,
 ): Promise<CursorPage<DatasetRecord>> {
   return await requestData<CursorPage<DatasetRecord>>(
     `/dataset-tables/${tableId}/records`,
-    onPlatform({ query }),
+    onPlatform({ query, signal }),
   )
 }
 

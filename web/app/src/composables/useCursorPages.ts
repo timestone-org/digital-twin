@@ -19,6 +19,8 @@ import { useRacedFetch, type RacedFetch } from '@/composables/useRacedFetch'
 export interface CursorPages<TItem, TProblem> {
   items: Ref<TItem[]>
   loading: Ref<boolean>
+  /** 包括保留当前表格的后台刷新。 */
+  isFetching: Ref<boolean>
   hasNext: Ref<boolean>
   /** 这两项由游标栈算出来，不另存一份——存两份就会有一份是错的。 */
   hasPrev: ComputedRef<boolean>
@@ -27,8 +29,9 @@ export interface CursorPages<TItem, TProblem> {
   problem: Ref<TProblem | null>
   /** 回到第一页并清空游标栈。换房间 / 换筛选走这条。 */
   reload: () => Promise<void>
-  /** 原地重取当前页。写操作之后走这条，别把人甩回第一页。 */
-  refresh: () => Promise<void>
+  /** 原地重取当前页；background 不触发整页加载态。 */
+  refresh: (options?: { background?: boolean }) => Promise<void>
+  cancel: () => void
   next: () => Promise<void>
   prev: () => Promise<void>
 }
@@ -37,10 +40,14 @@ export interface CursorPages<TItem, TProblem> {
 type Trail = readonly (string | null)[]
 
 interface PagesState<TItem, TProblem> {
-  fetcher: (after: string | null) => Promise<CursorPage<TItem>>
+  fetcher: (
+    after: string | null,
+    signal: AbortSignal,
+  ) => Promise<CursorPage<TItem>>
   describe: (caught: unknown) => TProblem
   items: Ref<TItem[]>
   loading: Ref<boolean>
+  isFetching: Ref<boolean>
   hasNext: Ref<boolean>
   trail: Ref<Trail>
   cursor: Ref<string | null>
@@ -53,7 +60,10 @@ interface PagesState<TItem, TProblem> {
  * @param describe 把失败翻成调用方要显示的形状——各页对错误的分诊口径不同
  */
 export function useCursorPages<TItem, TProblem>(
-  fetcher: (after: string | null) => Promise<CursorPage<TItem>>,
+  fetcher: (
+    after: string | null,
+    signal: AbortSignal,
+  ) => Promise<CursorPage<TItem>>,
   describe: (caught: unknown) => TProblem,
 ): CursorPages<TItem, TProblem> {
   const state: PagesState<TItem, TProblem> = {
@@ -62,6 +72,7 @@ export function useCursorPages<TItem, TProblem>(
     // 一页也可能是两百行，深层代理没有收益；同 useCursorList
     items: shallowRef<TItem[]>([]),
     loading: ref(false),
+    isFetching: ref(false),
     hasNext: ref(false),
     trail: ref<Trail>([null]),
     cursor: ref<string | null>(null),
@@ -71,12 +82,18 @@ export function useCursorPages<TItem, TProblem>(
   return {
     items: state.items,
     loading: state.loading,
+    isFetching: state.isFetching,
     hasNext: state.hasNext,
     hasPrev: computed(() => state.trail.value.length > 1),
     pageNumber: computed(() => state.trail.value.length),
     problem: state.problem,
     reload: () => go(state, [null]),
-    refresh: () => go(state, state.trail.value),
+    refresh: (options) => go(state, state.trail.value, options?.background),
+    cancel: () => {
+      state.raced.cancel()
+      state.loading.value = false
+      state.isFetching.value = false
+    },
     next: () => next(state),
     prev: () => prev(state),
   }
@@ -116,13 +133,18 @@ function fail<TItem, TProblem>(
 async function go<TItem, TProblem>(
   state: PagesState<TItem, TProblem>,
   trail: Trail,
+  isBackground = false,
 ): Promise<void> {
-  state.loading.value = true
+  state.loading.value = !isBackground
+  state.isFetching.value = true
   const after = trail[trail.length - 1] ?? null
-  await state.raced.run(() => state.fetcher(after), {
+  await state.raced.run((signal) => state.fetcher(after, signal), {
     ok: (page) => accept(state, page, trail),
     fail: (caught) => fail(state, caught, trail),
-    settled: () => (state.loading.value = false),
+    settled: () => {
+      state.loading.value = false
+      state.isFetching.value = false
+    },
   })
 }
 

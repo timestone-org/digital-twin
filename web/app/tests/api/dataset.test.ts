@@ -135,6 +135,12 @@ describe('台账的读写', () => {
 })
 
 describe('数据行的读写', () => {
+  it('记录读取把取消信号传给 HTTP 客户端', async () => {
+    const controller = new AbortController()
+    await dataset.listDatasetRecords('t1', {}, controller.signal)
+    expect(call()[1].signal).toBe(controller.signal)
+  })
+
   it('⚠ 列表走游标而不是页码：时序集合按页码翻会静默重复与漏行', async () => {
     await dataset.listDatasetRecords('t1', { limit: 50, after: 'cursor-1' })
     const [path, options] = call()

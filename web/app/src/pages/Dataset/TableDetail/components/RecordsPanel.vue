@@ -21,6 +21,7 @@ import RecordTable from './RecordTable.vue'
 import { overrideStats, type RecordRow } from '../scripts/recordView'
 import { useRecordOps } from '../scripts/useRecordOps'
 import { useRecords } from '../scripts/useRecords'
+import { useRecordRefresh } from '../scripts/useRecordRefresh'
 
 const props = defineProps<{
   table: DatasetTable | null
@@ -40,6 +41,12 @@ const hasFormulaColumn = computed(() =>
 // 行内动作在「详情页正忙」或「本分区正忙」时一起禁掉：删一列与删一行同时在飞，
 // 后回来的那个会拿着一份已经不成立的行去发请求
 const isBusy = computed(() => props.busy || ops.busy.value)
+
+useRecordRefresh({
+  table: () => props.table,
+  records,
+  isBusy: () => isBusy.value || ops.isFormOpen.value || ops.isBulkOpen.value,
+})
 
 onMounted(() => {
   if (props.table !== null) void records.reload()

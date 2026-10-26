@@ -7,6 +7,7 @@
  * 一起藏掉，他就永远不知道自己该去找谁重算。
  */
 import { createPinia, setActivePinia } from 'pinia'
+import { ref } from 'vue'
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 import { enableAutoUnmount, flushPromises, mount } from '@vue/test-utils'
 import type {
@@ -17,6 +18,8 @@ import type {
 } from '@dt/contracts'
 
 import * as dataset from '@/api/dataset'
+import { TransportError } from '@/api/client'
+import { WORKSPACE_PAGE_KEY } from '@/features/workspace/context'
 import RecordsPanel from '@/pages/Dataset/TableDetail/components/RecordsPanel.vue'
 import { useAuthStore } from '@/stores/auth'
 
@@ -147,6 +150,7 @@ function signIn(codes: string[]): void {
 
 beforeEach(() => {
   setActivePinia(createPinia())
+  vi.spyOn(document, 'hidden', 'get').mockReturnValue(false)
   localStorage.clear()
   confirmSpy.mockReset().mockResolvedValue(true)
   toastSuccess.mockReset()
@@ -174,13 +178,20 @@ beforeEach(() => {
 enableAutoUnmount(afterEach)
 
 afterEach(() => {
+  vi.useRealTimers()
   vi.restoreAllMocks()
 })
 
-async function render(codes: string[], columns = COLUMNS) {
+async function render(codes: string[], columns = COLUMNS, active = ref(true)) {
   signIn(codes)
   const wrapper = mount(RecordsPanel, {
     props: { table: table(), columns, busy: false },
+    global: {
+      stubs: { teleport: true },
+      provide: {
+        [WORKSPACE_PAGE_KEY]: { key: 'dataset:t1', active, cached: true },
+      },
+    },
   })
   await flushPromises()
   return wrapper
@@ -191,6 +202,27 @@ function button(wrapper: ReturnType<typeof mount>, text: string) {
 }
 
 describe('取数', () => {
+  it('五分钟台账产生新记录后，保持打开的页面会自动显示新值', async () => {
+    vi.useFakeTimers()
+    const wrapper = await render(['dataset:view'])
+    await wrapper.setProps({
+      table: { ...table(), collect_interval_ms: 300_000 },
+    })
+    vi.mocked(dataset.listDatasetRecords).mockResolvedValue(
+      page([
+        record({
+          row_id: 'r2',
+          ts: '2026-01-01T00:05:00.000Z',
+          values: { kwh: 57.87 },
+          overrides: null,
+        }),
+      ]),
+    )
+    await vi.advanceTimersByTimeAsync(300_000)
+    await flushPromises()
+    expect(wrapper.text()).toContain('57.87')
+  })
+
   it('回填后只读账号也能主动刷新数据，仍从真实记录列表读取', async () => {
     const wrapper = await render(['dataset:view'])
     const refresh = button(wrapper, '刷新数据')
@@ -201,9 +233,11 @@ describe('取数', () => {
   })
   it('挂载就取第一页，按游标不按页码', async () => {
     await render(['dataset:view'])
-    expect(dataset.listDatasetRecords).toHaveBeenCalledWith('t1', {
-      limit: 50,
-    })
+    expect(dataset.listDatasetRecords).toHaveBeenCalledWith(
+      't1',
+      { limit: 50 },
+      expect.any(AbortSignal),
+    )
   })
 
   it('本页的修正总数摆在工具条上：角标散在表里数不过来', async () => {
@@ -223,6 +257,127 @@ describe('取数', () => {
     )
     const wrapper = await render(['dataset:view'])
     expect(wrapper.text()).toContain('数据迁移带进来')
+  })
+})
+
+describe('自动刷新', () => {
+  beforeEach(() => vi.useFakeTimers())
+
+  it.each([{ collect_mode: 'manual' as const }, { is_enabled: false }])(
+    '人工或停用台账不轮询：%j',
+    async (overrides) => {
+      const wrapper = await render(['dataset:view'])
+      await wrapper.setProps({ table: { ...table(), ...overrides } })
+      await vi.advanceTimersByTimeAsync(300_000)
+      expect(dataset.listDatasetRecords).toHaveBeenCalledTimes(1)
+    },
+  )
+
+  it('查看历史页时保持当前页，不自动跳回最新数据', async () => {
+    vi.mocked(dataset.listDatasetRecords).mockResolvedValueOnce({
+      ...page(),
+      next: 'older',
+      has_more: true,
+    })
+    const wrapper = await render(['dataset:view'])
+    await button(wrapper, '下一页')?.trigger('click')
+    await flushPromises()
+    await vi.advanceTimersByTimeAsync(300_000)
+    expect(wrapper.text()).toContain('第 2 页')
+    expect(dataset.listDatasetRecords).toHaveBeenCalledTimes(2)
+  })
+
+  it('编辑弹窗打开期间暂停，关闭后继续按分钟刷新', async () => {
+    const wrapper = await render(['dataset:view', 'dataset:record:write'])
+    await button(wrapper, '录入数据')?.trigger('click')
+    await vi.advanceTimersByTimeAsync(300_000)
+    expect(dataset.listDatasetRecords).toHaveBeenCalledTimes(1)
+    await button(wrapper, '取消')?.trigger('click')
+    await vi.advanceTimersByTimeAsync(60_000)
+    expect(dataset.listDatasetRecords).toHaveBeenCalledTimes(2)
+  })
+
+  it('浏览器隐藏时暂停，重新可见时立即刷新', async () => {
+    await render(['dataset:view'])
+    vi.spyOn(document, 'hidden', 'get').mockReturnValue(true)
+    document.dispatchEvent(new Event('visibilitychange'))
+    await vi.advanceTimersByTimeAsync(300_000)
+    expect(dataset.listDatasetRecords).toHaveBeenCalledTimes(1)
+    vi.spyOn(document, 'hidden', 'get').mockReturnValue(false)
+    document.dispatchEvent(new Event('visibilitychange'))
+    await flushPromises()
+    expect(dataset.listDatasetRecords).toHaveBeenCalledTimes(2)
+  })
+
+  it('隐藏时中止在途后台请求，恢复后可以重新读取', async () => {
+    const wrapper = await render(['dataset:view'])
+    vi.mocked(dataset.listDatasetRecords).mockReturnValueOnce(
+      new Promise(() => undefined),
+    )
+    await vi.advanceTimersByTimeAsync(60_000)
+    const signal = vi.mocked(dataset.listDatasetRecords).mock.calls[1]?.[2]
+    vi.spyOn(document, 'hidden', 'get').mockReturnValue(true)
+    document.dispatchEvent(new Event('visibilitychange'))
+    await flushPromises()
+    expect(signal?.aborted).toBe(true)
+    vi.spyOn(document, 'hidden', 'get').mockReturnValue(false)
+    document.dispatchEvent(new Event('visibilitychange'))
+    await flushPromises()
+    expect(dataset.listDatasetRecords).toHaveBeenCalledTimes(3)
+    expect(wrapper.text()).toContain('本页 1 条')
+  })
+
+  it('暂停后台刷新不会中止人工台账的首次加载', async () => {
+    vi.mocked(dataset.listDatasetRecords).mockReturnValueOnce(
+      new Promise(() => undefined),
+    )
+    const wrapper = await render(['dataset:view'])
+    await wrapper.setProps({ table: { ...table(), collect_mode: 'manual' } })
+    const signal = vi.mocked(dataset.listDatasetRecords).mock.calls[0]?.[2]
+    vi.spyOn(document, 'hidden', 'get').mockReturnValue(true)
+    document.dispatchEvent(new Event('visibilitychange'))
+    await flushPromises()
+    expect(signal?.aborted).toBe(false)
+  })
+
+  it('失活的工作页签暂停，回来立即刷新，卸载后释放定时器', async () => {
+    const active = ref(true)
+    const wrapper = await render(['dataset:view'], COLUMNS, active)
+    active.value = false
+    await vi.advanceTimersByTimeAsync(300_000)
+    expect(dataset.listDatasetRecords).toHaveBeenCalledTimes(1)
+    active.value = true
+    await flushPromises()
+    expect(dataset.listDatasetRecords).toHaveBeenCalledTimes(2)
+    wrapper.unmount()
+    await vi.advanceTimersByTimeAsync(300_000)
+    expect(dataset.listDatasetRecords).toHaveBeenCalledTimes(2)
+    expect(vi.getTimerCount()).toBe(0)
+  })
+
+  it('慢请求不重复发送，后台读取期间保留已显示的表格', async () => {
+    const wrapper = await render(['dataset:view'])
+    vi.mocked(dataset.listDatasetRecords).mockReturnValue(
+      new Promise(() => undefined),
+    )
+    await vi.advanceTimersByTimeAsync(300_000)
+    expect(dataset.listDatasetRecords).toHaveBeenCalledTimes(2)
+    expect(wrapper.text()).toContain('本页 1 条')
+    const signal = vi.mocked(dataset.listDatasetRecords).mock.calls[1]?.[2]
+    wrapper.unmount()
+    expect(signal?.aborted).toBe(true)
+  })
+
+  it('读取失败明确提示，下一次成功读取后恢复', async () => {
+    const wrapper = await render(['dataset:view'])
+    vi.mocked(dataset.listDatasetRecords).mockRejectedValueOnce(
+      new TransportError(503, '台账暂不可用'),
+    )
+    await vi.advanceTimersByTimeAsync(60_000)
+    expect(wrapper.text()).toContain('台账暂不可用')
+    await vi.advanceTimersByTimeAsync(60_000)
+    expect(wrapper.text()).not.toContain('台账暂不可用')
+    expect(wrapper.text()).toContain('本页 1 条')
   })
 })
 

@@ -23,7 +23,57 @@ function fetcherOf(...pages: CursorPage<string>[]): Mock<Fetcher> {
   return mock.mockReturnValue(new Promise(() => undefined))
 }
 
+function deferredPage() {
+  let resolve: (value: CursorPage<string>) => void = () => undefined
+  const promise = new Promise<CursorPage<string>>((finish) => {
+    resolve = finish
+  })
+  return { promise, resolve }
+}
+
 describe('useCursorPages', () => {
+  it('后台刷新不进入整页加载态，并可中止且拒收迟到的结果', async () => {
+    const pending = deferredPage()
+    const fetcher = vi
+      .fn<
+        (
+          after: string | null,
+          signal: AbortSignal,
+        ) => Promise<CursorPage<string>>
+      >()
+      .mockResolvedValueOnce(page(['旧值']))
+      .mockReturnValueOnce(pending.promise)
+    const pages = useCursorPages(fetcher, describeError)
+    await pages.reload()
+    const refresh = pages.refresh({ background: true })
+    expect(pages.loading.value).toBe(false)
+    expect(pages.isFetching.value).toBe(true)
+    expect(pages.items.value).toEqual(['旧值'])
+    pages.cancel()
+    expect(fetcher.mock.calls[1]?.[1].aborted).toBe(true)
+    pending.resolve(page(['迟到值']))
+    await refresh
+    expect(pages.items.value).toEqual(['旧值'])
+    expect(pages.isFetching.value).toBe(false)
+  })
+
+  it('后台旧响应晚于主动翻页返回时，不覆盖新页', async () => {
+    const pending = deferredPage()
+    const fetcher = vi
+      .fn<Fetcher>()
+      .mockResolvedValueOnce(page(['首页'], 'C1'))
+      .mockReturnValueOnce(pending.promise)
+      .mockResolvedValueOnce(page(['第二页']))
+    const pages = useCursorPages(fetcher, describeError)
+    await pages.reload()
+    const refresh = pages.refresh({ background: true })
+    await pages.next()
+    pending.resolve(page(['过期首页'], 'C1'))
+    await refresh
+    expect(pages.items.value).toEqual(['第二页'])
+    expect(pages.pageNumber.value).toBe(2)
+  })
+
   it('首屏取第一页：不带 after，页序是 1，没有上一页', async () => {
     const fetcher = fetcherOf(page(['a'], 'C1'))
     const pages = useCursorPages(fetcher, describeError)
