@@ -136,7 +136,7 @@ function onSort(column: DtTableColumn): void {
 .dt-table {
   width: 100%;
   border-collapse: collapse;
-  font-size: 13px;
+  font-size: var(--font-size-body);
   line-height: 1.5;
 
   &.is-fixed {
@@ -159,9 +159,9 @@ function onSort(column: DtTableColumn): void {
     padding: 12px;
     background: var(--surface-panel);
     box-shadow: inset 0 -1px 0 var(--border-subtle);
-    font-size: 11px;
-    font-weight: 400;
-    color: var(--text-disabled);
+    font-size: var(--font-size-compact);
+    font-weight: 500;
+    color: var(--text-secondary);
     white-space: nowrap;
     // 定宽列里列名长过列宽时截成省略号：表头不裁切会直接盖到相邻表头上
     overflow: hidden;

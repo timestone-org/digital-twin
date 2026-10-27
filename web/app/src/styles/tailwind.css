@@ -56,11 +56,20 @@
   --radius-sm: var(--radius-sm);
   --radius-md: var(--radius-md);
   --radius-lg: var(--radius-lg);
-}
 
-@theme {
-  /* 密集面板需要 11px / 10px 这一档，Tailwind 内置阶最小到 text-xs(12px)。
-     取 rem 而非 px：用户把浏览器基准字号调大时它要跟着放大。 */
-  --text-2xs: 0.6875rem;
-  --text-3xs: 0.625rem;
+  --text-xs: var(--font-size-caption);
+  --text-xs--line-height: var(--line-height-body);
+  --text-sm: var(--font-size-body);
+  --text-sm--line-height: var(--line-height-body);
+  --text-base: var(--font-size-section);
+  --text-base--line-height: var(--line-height-body);
+  --text-lg: var(--font-size-dialog);
+  --text-lg--line-height: var(--line-height-heading);
+  --text-xl: var(--font-size-page);
+  --text-xl--line-height: var(--line-height-heading);
+  /* 紧凑说明沿用同一可读下限。 */
+  --text-2xs: var(--font-size-caption);
+  --text-2xs--line-height: var(--line-height-body);
+  --text-3xs: var(--font-size-caption);
+  --text-3xs--line-height: var(--line-height-body);
 }

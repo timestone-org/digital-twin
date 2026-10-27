@@ -79,7 +79,7 @@ onBeforeUnmount(() => {
       <div class="min-w-0">
         <h1
           v-if="title"
-          class="dt-glow-text truncate text-base font-semibold tracking-wide"
+          class="dt-glow-text truncate text-xl font-semibold tracking-wide"
         >
           {{ title }}
         </h1>

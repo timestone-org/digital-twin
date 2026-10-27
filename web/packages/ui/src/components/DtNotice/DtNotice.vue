@@ -43,7 +43,7 @@ const accent = computed(() => {
   align-items: center;
   gap: 6px;
   margin: 0;
-  font-size: 12px;
+  font-size: var(--font-size-compact);
   line-height: 1.6;
   color: rgb(var(--_n-rgb));
 }

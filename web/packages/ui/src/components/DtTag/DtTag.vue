@@ -49,13 +49,13 @@ const accent = computed(() => {
   &--sm {
     height: 20px;
     padding: 0 8px;
-    font-size: 10px;
+    font-size: var(--font-size-caption);
   }
 
   &--md {
     height: 24px;
     padding: 0 10px;
-    font-size: 12px;
+    font-size: var(--font-size-compact);
   }
 
   &--mono {

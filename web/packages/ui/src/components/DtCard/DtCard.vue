@@ -104,14 +104,16 @@ withDefaults(
     gap: 8px;
     margin: 0;
     font-family: var(--font-display);
-    font-size: 15px;
+    font-size: var(--font-size-section);
+    line-height: var(--line-height-heading);
     font-weight: 600;
     color: var(--text-title);
   }
 
   &__subtitle {
     margin: 4px 0 0;
-    font-size: 12px;
+    font-size: var(--font-size-caption);
+    line-height: var(--line-height-body);
     color: var(--text-disabled);
   }
 
@@ -124,7 +126,7 @@ withDefaults(
 
   &__ft {
     margin-top: 12px;
-    font-size: 11px;
+    font-size: var(--font-size-caption);
     color: var(--text-disabled);
   }
 
