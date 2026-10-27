@@ -101,13 +101,14 @@ async function save(): Promise<void> {
 
 <template>
   <DtModal
+    width="44rem"
     :model-value="props.modelValue"
     :dirty="isDirty"
     :title="isEdit ? '编辑空调' : '新建空调'"
     description="序号是全场唯一的设备编号，不是排序号"
     @update:model-value="emit('update:modelValue', $event)"
   >
-    <form class="flex flex-col gap-4" @submit.prevent="onSubmit">
+    <form class="dt-form-grid" @submit.prevent="onSubmit">
       <DtInput
         v-model="serial"
         label="空调序号"

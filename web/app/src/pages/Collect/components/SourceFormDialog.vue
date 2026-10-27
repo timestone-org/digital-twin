@@ -228,7 +228,7 @@ function submit(): void {
   <DtModal
     :model-value="modelValue"
     :title="isEdit ? '编辑数据源' : '新增数据源'"
-    width="36rem"
+    width="52rem"
     :dirty="isDirty"
     @update:model-value="!loading && emit('update:modelValue', $event)"
   >
@@ -263,24 +263,24 @@ function submit(): void {
             "
           />
         </DtField>
-      </div>
 
-      <DtField
-        label="编码"
-        required
-        :hint="
-          isEdit
-            ? '编码是数据源的身份，建好之后不可更改。'
-            : '点位身份与历史归档都挂在它上面，建好之后不可更改。'
-        "
-      >
-        <DtInput
-          v-model="code"
-          class="font-mono"
-          :disabled="isEdit"
-          placeholder="如：plant1_plc"
-        />
-      </DtField>
+        <DtField
+          label="编码"
+          required
+          :hint="
+            isEdit
+              ? '编码是数据源的身份，建好之后不可更改。'
+              : '点位身份与历史归档都挂在它上面，建好之后不可更改。'
+          "
+        >
+          <DtInput
+            v-model="code"
+            class="font-mono"
+            :disabled="isEdit"
+            placeholder="如：plant1_plc"
+          />
+        </DtField>
+      </div>
 
       <DtField label="描述">
         <DtInput v-model="description" placeholder="可选，用于备注用途" />

@@ -182,12 +182,13 @@ function submit(): void {
 
 <template>
   <DtModal
+    width="48rem"
     :model-value="modelValue"
     :dirty="isDirty"
     :title="isEdit ? '编辑实例' : '新建实例'"
     @update:model-value="emit('update:modelValue', $event)"
   >
-    <div class="flex flex-col gap-4">
+    <div class="dt-form-grid">
       <DtNotice v-if="isEdit" intent="warning" icon="alert-triangle">
         端点路径、命名空间 URI
         与安全策略改完要重启实例才生效，重启会断开该实例上全部上位机会话。
@@ -236,7 +237,7 @@ function submit(): void {
         </DtField>
       </template>
 
-      <DtField label="描述">
+      <DtField label="描述" class="dt-form-grid__wide">
         <DtInput v-model="description" placeholder="选填" />
       </DtField>
 
@@ -248,7 +249,7 @@ function submit(): void {
         <DtInput v-model="namespaceUri" placeholder="urn:digitaltwin:plant" />
       </DtField>
 
-      <DtField label="安全策略" required>
+      <DtField label="安全策略" required class="dt-form-grid__wide">
         <div class="flex flex-col gap-1">
           <DtCheckbox
             v-for="policy in OPCUA_SECURITY_POLICIES"

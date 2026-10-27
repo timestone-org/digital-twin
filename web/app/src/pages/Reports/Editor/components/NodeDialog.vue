@@ -123,12 +123,13 @@ function dataNode(selected: ReportMetric | undefined): ReportDocument | null {
 </script>
 <template>
   <DtModal
+    width="46rem"
     :dirty="dirty.isDirty.value"
     :model-value="props.modelValue"
     :title="props.node ? '配置当前数据内容' : '插入数据节点'"
     @update:model-value="emit('update:modelValue', $event)"
   >
-    <div class="flex flex-col gap-3">
+    <div class="dt-form-grid">
       <DtSelect
         v-model="kind"
         label="节点类型"
@@ -145,6 +146,7 @@ function dataNode(selected: ReportMetric | undefined): ReportDocument | null {
       <DtInput
         v-if="kind === 'condText' || kind === 'metricRef'"
         v-model="expression"
+        class="dt-form-grid__wide"
         label="表达式"
         size="sm"
         placeholder="IF({本期}>{上期}, '升高', '降低')"
@@ -187,7 +189,7 @@ function dataNode(selected: ReportMetric | undefined): ReportDocument | null {
         label="最多显示行数（1–20000）"
         size="sm"
       />
-      <p v-if="props.node" class="text-sm text-secondary">
+      <p v-if="props.node" class="dt-form-grid__wide text-sm text-secondary">
         仅修改当前这一处内容；应用后请保存模板。
       </p>
     </div>

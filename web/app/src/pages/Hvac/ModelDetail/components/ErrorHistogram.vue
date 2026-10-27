@@ -14,7 +14,7 @@ import { signedError } from '@/features/hvac/modelView'
 const WIDTH = 320
 const HEIGHT = 176
 const PAD_X = 8
-const PAD_BOTTOM = 18
+const PAD_BOTTOM = 22
 const EDGE = 5
 // 中位偏差小于它就当没有系统偏差
 const NEUTRAL_BIAS = 0.1
@@ -128,14 +128,14 @@ function labelOf(index: number, width: number): string {
         >
           <title>{{ bin.title }}</title>
         </rect>
-        <text :x="PAD_X" :y="HEIGHT - 5" class="fill-text-secondary text-[9px]">
+        <text :x="PAD_X" :y="HEIGHT - 5" class="fill-text-secondary text-xs">
           ≤ −{{ edgeLabel }}
         </text>
         <text
           :x="WIDTH / 2"
           :y="HEIGHT - 5"
           text-anchor="middle"
-          class="fill-text-secondary text-[9px]"
+          class="fill-text-secondary text-xs"
         >
           0
         </text>
@@ -143,7 +143,7 @@ function labelOf(index: number, width: number): string {
           :x="WIDTH - PAD_X"
           :y="HEIGHT - 5"
           text-anchor="end"
-          class="fill-text-secondary text-[9px]"
+          class="fill-text-secondary text-xs"
         >
           ≥ +{{ edgeLabel }}
         </text>

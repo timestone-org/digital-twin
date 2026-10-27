@@ -82,12 +82,13 @@ function save(): void {
 </script>
 <template>
   <DtModal
+    width="44rem"
     :dirty="dirty.isDirty.value"
     :model-value="modelValue"
     title="页面设置"
     @update:model-value="emit('update:modelValue', $event)"
   >
-    <div class="flex flex-col gap-3">
+    <div class="dt-form-grid">
       <DtSelect
         v-model="size"
         label="纸张"
@@ -108,7 +109,7 @@ function save(): void {
           { value: 'landscape', label: '横向' },
         ]"
       />
-      <div class="grid grid-cols-2 gap-3">
+      <div class="dt-form-grid dt-form-grid__wide">
         <DtInput
           v-for="side in sides"
           :key="side.key"
