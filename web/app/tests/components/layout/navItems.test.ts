@@ -26,13 +26,18 @@ const NAV_EXEMPT = new Set([
   '/modeling/services',
   // 运行记录同上
   '/modeling/runs',
-  // 模板与接入说明由建模模块内部导航访问。
-  '/modeling/pipelines',
+  // 模板、接入实例与接入说明由第三方接入分区访问。
+  '/modeling/instances',
   '/modeling/templates',
   '/modeling/integration',
 ])
 
 describe('导航清单', () => {
+  it('分析建模默认进入流程图工作台', () => {
+    expect(NAV_ITEMS.find((item) => item.key === 'modeling')?.to).toBe(
+      '/modeling/pipelines',
+    )
+  })
   it('数据采集按协议提供三个独立菜单入口', () => {
     const collection = NAV_ITEMS.find((item) => item.key === 'collect')
     expect(

@@ -3,9 +3,10 @@
  */
 import type { ModelingPipelineSummary } from '@dt/contracts'
 import { useConfirm, useToast } from '@dt/ui'
-import { ref } from 'vue'
+import { onBeforeUnmount, ref } from 'vue'
 
 import * as modeling from '@/api/modeling'
+import { newClientUuid } from '@/api/idempotency'
 import { describeError } from '@/composables/useAsyncList'
 
 import { PIPELINE_TEMPLATES } from './templates'
@@ -24,23 +25,24 @@ const BLANK: PipelineDraft = { id: null, code: '', name: '', description: '' }
 async function submit(
   input: PipelineDraft,
   templateKey: string,
-): Promise<void> {
+): Promise<string | null> {
   if (input.id === null) {
     // ⚠ 找不到那张模板时给空白图而不是抛：模板是前端常量，键对不上是代码问题，
     // 不该让用户的「新建」当场失败
     const template = PIPELINE_TEMPLATES.find((item) => item.key === templateKey)
-    await modeling.createModelingPipeline({
+    const created = await modeling.createModelingPipeline({
       code: input.code,
       name: input.name,
       description: input.description || null,
       ...(template ? { graph: template.build() } : {}),
     })
-    return
+    return created.id
   }
   await modeling.updateModelingPipeline(input.id, {
     name: input.name,
     description: input.description || null,
   })
+  return null
 }
 
 /** 删除前的问话。⚠ 要说清连带删掉什么，也说清什么不跟着删。 */
@@ -68,26 +70,45 @@ function draftOf(row: ModelingPipelineSummary): PipelineDraft {
   }
 }
 
-export function usePipelineOps(onDone: () => void) {
+function usePipelineSaving(onDone: () => void) {
   const draft = ref<PipelineDraft | null>(null)
   const isSaving = ref(false)
   const toast = useToast()
-  const confirm = useConfirm()
+  let isDisposed = false
+  onBeforeUnmount(() => {
+    isDisposed = true
+  })
 
-  async function save(input: PipelineDraft, templateKey = ''): Promise<void> {
+  async function save(
+    input: PipelineDraft,
+    templateKey = '',
+  ): Promise<string | null> {
+    if (isSaving.value) return null
     isSaving.value = true
     try {
-      await submit(input, templateKey)
+      const createdId = await submit(input, templateKey)
+      if (isDisposed) return null
       draft.value = null
-      toast.success(input.id === null ? '流水线已建好' : '已保存')
+      toast.success(
+        input.id === null ? '流水线已创建，接下来在流程图中配置' : '已保存',
+      )
       onDone()
+      return createdId
     } catch (caught) {
-      toast.error(describeError(caught))
+      if (!isDisposed) toast.error(describeError(caught))
+      return null
     } finally {
-      isSaving.value = false
+      if (!isDisposed) isSaving.value = false
     }
   }
 
+  return { draft, isSaving, save }
+}
+
+export function usePipelineOps(onDone: () => void) {
+  const { draft, isSaving, save } = usePipelineSaving(onDone)
+  const toast = useToast()
+  const confirm = useConfirm()
   async function remove(row: ModelingPipelineSummary): Promise<void> {
     if (!(await confirm.ask(removalAsk(row.name)))) return
     try {
@@ -106,14 +127,17 @@ export function usePipelineOps(onDone: () => void) {
     remove,
     /** 打开新建表单。 */
     openCreate: () => {
-      draft.value = { ...BLANK }
+      draft.value = {
+        ...BLANK,
+        code: `model_${newClientUuid().slice(0, 8)}`,
+      }
     },
     /** 打开改名表单。**编码不给改**，绑定引用的就是它。 */
     openEdit: (row: ModelingPipelineSummary) => {
       draft.value = draftOf(row)
     },
     close: () => {
-      draft.value = null
+      if (!isSaving.value) draft.value = null
     },
   }
 }

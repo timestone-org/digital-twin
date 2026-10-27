@@ -146,7 +146,7 @@ onBeforeUnmount(() => {
   <AppShell
     title="运行记录"
     subtitle="跨流水线 · 点进去只读回看当时那张图"
-    back-to="/modeling/instances"
+    back-to="/modeling/pipelines"
   >
     <!-- h-full + min-h-0 见 AppShell 的契约：main 不滚，高度由页面自己吃满 -->
     <div class="flex h-full min-h-0 flex-col gap-3 overflow-y-auto">

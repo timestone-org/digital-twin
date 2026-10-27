@@ -8,7 +8,7 @@
  * 中的位置被重建的数组盖回去。
  */
 import type { ModelingGraphNode, ModelingOperator } from '@dt/contracts'
-import { DtIcon, DtTag } from '@dt/ui'
+import { DtButton, DtIcon, DtTag } from '@dt/ui'
 import { computed } from 'vue'
 
 import type { NodeRunState } from '../scripts/nodeState'
@@ -103,26 +103,27 @@ function portMood(side: 'in' | 'out', name: string): string {
       {{ props.headline }}
     </p>
     <footer class="dt-ml-node__actions">
-      <button
-        type="button"
+      <DtButton
+        variant="ghost"
+        size="xs"
         class="dt-ml-node__action"
-        :disabled="props.isReadonly"
         @pointerdown.stop
         @dblclick.stop
         @click="$emit('openConfig')"
       >
         参数
-      </button>
-      <button
+      </DtButton>
+      <DtButton
         v-if="props.hasResult"
-        type="button"
+        variant="ghost"
+        size="xs"
         class="dt-ml-node__action"
         @pointerdown.stop
         @dblclick.stop
         @click="$emit('openResult')"
       >
         结果
-      </button>
+      </DtButton>
     </footer>
     <span
       v-for="(port, index) in outputs"
@@ -212,21 +213,6 @@ function portMood(side: 'in' | 'out', name: string): string {
     display: flex;
     gap: 0.5rem;
     padding: 0.5rem 0.75rem;
-  }
-
-  &__action {
-    padding: 0.125rem 0.5rem;
-    border: 1px solid var(--border-default);
-    border-radius: var(--radius-sm);
-    background: var(--surface-base);
-    color: var(--text-secondary);
-    font-size: var(--ctl-hint-fs-sm);
-    cursor: pointer;
-
-    &:disabled {
-      opacity: 0.5;
-      cursor: not-allowed;
-    }
   }
 
   // ⚠ 接点要压在卡片之上：不给 z-index 的话它被卡片盖住，用户点不到

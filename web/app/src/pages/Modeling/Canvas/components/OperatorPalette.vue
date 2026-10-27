@@ -9,7 +9,7 @@
  * 一次添加。
  */
 import type { ModelingCategory, ModelingOperator } from '@dt/contracts'
-import { DtEmpty, DtIcon, DtInput } from '@dt/ui'
+import { DtButton, DtEmpty, DtIcon, DtInput, DtTag } from '@dt/ui'
 import { computed, ref } from 'vue'
 
 import { OPERATOR_MIME } from '../scripts/dragMime'
@@ -97,11 +97,15 @@ function onDragStart(event: DragEvent, code: string): void {
         hint="换个词试试，或清空搜索看全部。"
       />
       <section v-for="group in groups" :key="group.category">
-        <h3 class="dt-ml-palette__title">{{ group.label }}</h3>
-        <button
+        <h3 class="dt-ml-palette__title">
+          {{ group.label }} <DtTag>{{ group.items.length }}</DtTag>
+        </h3>
+        <DtButton
           v-for="item in group.items"
           :key="item.code"
-          type="button"
+          variant="ghost"
+          intent="neutral"
+          size="sm"
           class="dt-ml-palette__item"
           :draggable="!props.isReadonly"
           :disabled="props.isReadonly"
@@ -111,7 +115,7 @@ function onDragStart(event: DragEvent, code: string): void {
         >
           <DtIcon :name="item.icon" :size="14" />
           <span class="dt-ml-palette__name">{{ item.name }}</span>
-        </button>
+        </DtButton>
       </section>
     </div>
     <p class="dt-ml-palette__hint">拖到画布上摆放，或点一下落在视野正中</p>
@@ -140,34 +144,22 @@ function onDragStart(event: DragEvent, code: string): void {
   }
 
   &__title {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
     margin: 0 0 0.25rem;
     color: var(--text-secondary);
     font-size: var(--ctl-hint-fs-sm);
   }
 
   &__item {
-    display: flex;
-    gap: 0.5rem;
-    align-items: center;
     width: 100%;
-    padding: 0.375rem 0.5rem;
-    border: 1px solid transparent;
-    border-radius: var(--radius-sm);
-    background: none;
-    color: var(--text-primary);
-    font-size: var(--ctl-fs-sm);
-    text-align: left;
-    cursor: pointer;
-
-    &:hover:not(:disabled) {
-      border-color: var(--border-hover);
-      background: var(--surface-raised);
-    }
-
-    &:disabled {
-      opacity: 0.5;
-      cursor: not-allowed;
-    }
+    justify-content: flex-start;
+  }
+  &__item :deep(.dt-btn__label) {
+    display: flex;
+    align-items: center;
+    gap: 0.5rem;
   }
 
   &__name {

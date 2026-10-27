@@ -119,9 +119,9 @@ onBeforeUnmount(versionRead.cancel)
 
 <template>
   <AppShell
-    title="模型库"
-    subtitle="已发布的版本 · 绑到台账公式"
-    back-to="/modeling/instances"
+    title="模型版本"
+    subtitle="查看已发布版本，绑定台账公式或部署为服务"
+    back-to="/modeling/pipelines"
   >
     <!-- h-full + min-h-0 见 AppShell 的契约：main 不滚，高度由页面自己吃满 -->
     <div

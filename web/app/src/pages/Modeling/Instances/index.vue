@@ -49,7 +49,10 @@ onMounted(() => void list.reload())
 </script>
 
 <template>
-  <AppShell title="模型实例" subtitle="基于模板配置输入输出，独立训练与部署">
+  <AppShell
+    title="接入实例"
+    subtitle="查看第三方创建的独立模型，支持配置、训练与部署验证"
+  >
     <template #actions>
       <PermGuard :codes="[PERMISSION_CODES.modelingRun]">
         <RouterLink to="/modeling/templates">

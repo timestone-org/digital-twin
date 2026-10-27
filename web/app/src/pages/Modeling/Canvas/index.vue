@@ -8,11 +8,9 @@ import {
   DtNotice,
   DtPageState,
   DtResizableLayout,
-  DtTag,
   useToast,
-  DtIconButton,
 } from '@dt/ui'
-import { computed, onBeforeUnmount, onMounted, ref, watch } from 'vue'
+import { computed, nextTick, onBeforeUnmount, onMounted, ref, watch } from 'vue'
 import { useRoute, useRouter } from 'vue-router'
 
 import PermGuard from '@/components/PermGuard.vue'
@@ -22,6 +20,7 @@ import { useAuthStore } from '@/stores/auth'
 import PublishTemplateButton from '../components/PublishTemplateButton.vue'
 
 import CanvasMenu from './components/CanvasMenu.vue'
+import CanvasWorkspaceBar from './components/CanvasWorkspaceBar.vue'
 import ConfigEditorDialog from './components/ConfigEditorDialog.vue'
 import EditorCanvas from './components/EditorCanvas.vue'
 import GraphIssues from './components/GraphIssues.vue'
@@ -59,6 +58,16 @@ const clock = ref<ReturnType<typeof setInterval> | null>(null)
 // ⚠ 手工与 EditorCanvas 的 `defineExpose` 对齐：`InstanceType<typeof 组件>` 取不到
 // `defineExpose` 的类型（会塌成 any），写错了 typecheck 与 lint 都不拦
 const canvasRef = ref<CanvasHandle | null>(null)
+watch(
+  canvasRef,
+  (canvas) => {
+    if (canvas === null) return
+    void nextTick(() => {
+      if (canvasRef.value === canvas) canvas.fit()
+    })
+  },
+  { flush: 'post' },
+)
 const renameNodeId = ref<string | null>(null)
 const renameDraft = ref('')
 const isHistoryOpen = ref(false)
@@ -238,16 +247,6 @@ watch(
     back-to="/modeling/pipelines"
   >
     <template #actions>
-      <PublishTemplateButton
-        :pipeline="page.doc.pipeline.value"
-        :disabled="
-          isReadonly || page.graph.isDirty.value || config.hasDraft.value
-        "
-      />
-      <DtTag v-if="page.isReplaying.value" intent="info" size="sm">
-        正在回看历史运行
-      </DtTag>
-      <span v-if="progress" class="dt-ml-page__progress">{{ progress }}</span>
       <DtButton
         v-if="page.isReplaying.value"
         variant="ghost"
@@ -257,54 +256,10 @@ watch(
       >
         回到编辑
       </DtButton>
-      <DtIconButton
-        variant="ghost"
-        size="sm"
-        tooltip="快捷键与手势"
-        intent="neutral"
-        icon="keyboard"
-        label="快捷键"
-        @click="isKeysOpen = true"
-      />
-      <DtButton
-        class="dt-ml-page__terse"
-        variant="ghost"
-        size="sm"
-        icon="list-checks"
-        title="运行历史"
-        :disabled="page.isOpening.value"
-        @click="isHistoryOpen = true"
-      >
-        运行历史
-      </DtButton>
       <PermGuard :codes="[PERMISSION_CODES.modelingManage]">
-        <DtIconButton
-          class="dt-ml-page__terse"
-          variant="ghost"
+        <DtButton
+          variant="outline"
           size="sm"
-          tooltip="撤销（⌘Z）"
-          :disabled="isReadonly || !page.graph.canUndo.value"
-          intent="neutral"
-          icon="undo"
-          label="撤销"
-          @click="page.graph.undo()"
-        />
-        <DtIconButton
-          class="dt-ml-page__terse"
-          variant="ghost"
-          size="sm"
-          tooltip="重做（⌘⇧Z）"
-          :disabled="isReadonly || !page.graph.canRedo.value"
-          intent="neutral"
-          icon="redo"
-          label="重做"
-          @click="page.graph.redo()"
-        />
-        <DtIconButton
-          class="dt-ml-page__terse"
-          variant="ghost"
-          size="sm"
-          tooltip="保存"
           :disabled="
             isReadonly ||
             !page.graph.isDirty.value ||
@@ -314,14 +269,19 @@ watch(
           :loading="page.doc.isSaving.value"
           intent="primary"
           icon="save"
-          label="保存"
+          aria-label="保存"
           @click="void saving.save()"
-        />
+          >保存</DtButton
+        >
       </PermGuard>
       <PermGuard :codes="[PERMISSION_CODES.modelingRun]" explain>
         <RunControls
           v-model:is-keeping-frames="isKeepingFrames"
-          :is-running="page.runner.run.value?.status === 'running'"
+          :is-running="
+            ['pending', 'running', 'cancelling'].includes(
+              page.runner.run.value?.status ?? '',
+            )
+          "
           :is-readonly="isReadonly || config.blockReason.value !== ''"
           :is-starting="
             page.runner.isStarting.value ||
@@ -334,6 +294,33 @@ watch(
       </PermGuard>
     </template>
 
+    <CanvasWorkspaceBar
+      v-if="!page.isOpening.value && !page.doc.error.value"
+      :state="{
+        isReadonly,
+        isReplaying: page.isReplaying.value,
+        isDirty: page.graph.isDirty.value || config.hasDraft.value,
+        canUndo: page.graph.canUndo.value,
+        canRedo: page.graph.canRedo.value,
+        canConfigure: page.selection.selectedNodeIds.value.length === 1,
+        nodeCount: page.graph.graph.value.nodes.length,
+        progress,
+      }"
+      @undo="page.graph.undo()"
+      @redo="page.graph.redo()"
+      @configure="
+        firstSelected() !== null && config.open(firstSelected() ?? '')
+      "
+      @history="isHistoryOpen = true"
+      @shortcuts="isKeysOpen = true"
+    >
+      <PublishTemplateButton
+        :pipeline="page.doc.pipeline.value"
+        :disabled="
+          isReadonly || page.graph.isDirty.value || config.hasDraft.value
+        "
+      />
+    </CanvasWorkspaceBar>
     <DtPageState
       v-if="page.isOpening.value || page.doc.error.value"
       :loading="page.isOpening.value"
@@ -342,7 +329,7 @@ watch(
     />
     <DtResizableLayout
       v-else
-      class="dt-ml-page h-full min-h-0"
+      class="dt-ml-page h-full min-h-0 flex-1"
       storage-key="dt.modeling-canvas.layout"
       :stack-at="640"
       :panes="[
@@ -363,6 +350,10 @@ watch(
           <DtNotice v-if="config.blockReason.value" intent="warning">
             {{ config.blockReason.value }}；请先改正或应用参数，再保存或运行。
           </DtNotice>
+          <p class="m-0 text-caption text-text-secondary">
+            双击节点配置参数 → 点击运行自动保存并校验 →
+            点击节点上的「结果」查看输出
+          </p>
           <GraphIssues
             v-if="page.issueViews.value.length > 0"
             :issues="page.issueViews.value"
@@ -470,18 +461,6 @@ watch(
 
 <style scoped lang="scss">
 .dt-ml-page {
-  &__progress {
-    color: var(--text-secondary);
-    font-family: var(--font-digit);
-    font-size: var(--ctl-hint-fs-sm);
-    white-space: nowrap;
-  }
-  // 顶栏在 2xl 以下摆不开八颗按钮；这几颗都带图标与 title，缩成只有图标
-  @media (width < 96rem) {
-    &__terse :deep(.dt-btn__label) {
-      display: none;
-    }
-  }
   &__main {
     display: flex;
     flex: 1;

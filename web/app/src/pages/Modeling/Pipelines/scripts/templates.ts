@@ -24,7 +24,7 @@ import { ENERGY_RULE_TEMPLATES } from './ruleTemplates'
 /** 节点在画布上的横向间距与起点。⚠ 坐标是 `left`/`top` 不是 `x`/`y`——
 写成后者时对象字面量整个变成错误类型，而 typecheck 只报一处、lint 报在
 **用到它的地方**，两边都指不到这里。 */
-const STEP_X = 220
+const STEP_X = 320
 const ORIGIN = { left: 80, top: 200 }
 
 export interface PipelineTemplate {

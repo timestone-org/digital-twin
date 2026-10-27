@@ -10,12 +10,14 @@ import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 
 import * as modeling from '@/api/modeling'
 import PipelinesPage from '@/pages/Modeling/Pipelines/index.vue'
+import PipelineFormDialog from '@/pages/Modeling/Pipelines/components/PipelineFormDialog.vue'
 import { useAuthStore } from '@/stores/auth'
 
 const STAMP = '2026-01-01T00:00:00.000Z'
+const push = vi.fn()
 
 vi.mock('vue-router', () => ({
-  useRouter: () => ({ replace: vi.fn(), push: vi.fn() }),
+  useRouter: () => ({ replace: vi.fn(), push }),
   useRoute: () => ({ path: '/modeling/pipelines', query: {} }),
   RouterLink: { template: '<a><slot /></a>' },
 }))
@@ -65,6 +67,53 @@ afterEach(() => {
 })
 
 describe('流水线列表', () => {
+  it('日常入口突出流程图建模，快捷实例只在第三方区域出现', async () => {
+    vi.spyOn(modeling, 'listModelingPipelines').mockResolvedValue(page([]))
+    signIn([PERMISSION_CODES.modelingView, PERMISSION_CODES.modelingManage])
+    const wrapper = mount(PipelinesPage)
+    await flushPromises()
+    expect(wrapper.text()).toContain('选择设计模板')
+    expect(wrapper.text()).toContain('配置流程图')
+    expect(wrapper.text()).toContain('运行并查看结果')
+    const nav = wrapper.get('nav[aria-label="分析建模导航"]')
+    expect(nav.text()).toContain('建模工作台')
+    expect(nav.text()).not.toContain('模型实例')
+    expect(nav.text()).not.toContain('模板库')
+    wrapper.unmount()
+  })
+
+  it('按设计模板创建成功后直接打开返回的流水线画布', async () => {
+    vi.spyOn(modeling, 'listModelingPipelines').mockResolvedValue(page([]))
+    vi.spyOn(modeling, 'createModelingPipeline').mockResolvedValue({
+      ...pipeline(),
+      graph: { format_version: '1.0', nodes: [], edges: [] },
+    })
+    signIn([PERMISSION_CODES.modelingView, PERMISSION_CODES.modelingManage])
+    const wrapper = mount(PipelinesPage)
+    await flushPromises()
+    wrapper.getComponent(PipelineFormDialog).vm.$emit(
+      'submit',
+      {
+        id: null,
+        code: 'energy_fit',
+        name: '能耗回归',
+        description: '',
+      },
+      'regression',
+    )
+    await flushPromises()
+    expect(push).toHaveBeenCalledWith('/modeling/pipelines/p1')
+    expect(modeling.createModelingPipeline).toHaveBeenCalledWith(
+      expect.objectContaining({
+        graph: expect.objectContaining({
+          nodes: expect.arrayContaining([
+            expect.objectContaining({ operator: 'linear_regression' }),
+          ]),
+        }),
+      }),
+    )
+    wrapper.unmount()
+  })
   it('取回之后名称与取自的台账都在页面上', async () => {
     vi.spyOn(modeling, 'listModelingPipelines').mockResolvedValue(
       page([pipeline()]),

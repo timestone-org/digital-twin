@@ -132,9 +132,9 @@ onBeforeUnmount(versionRequest.cancel)
 
 <template>
   <AppShell
-    title="模型服务"
-    subtitle="开给第三方系统调的地址 · 密钥 · 调用量"
-    back-to="/modeling/instances"
+    title="部署服务"
+    subtitle="将模型版本提供给第三方调用，管理部署密钥与调用统计"
+    back-to="/modeling/pipelines"
   >
     <!-- h-full + min-h-0 见 AppShell 的契约：main 不滚，高度由页面自己吃满 -->
     <div class="flex h-full min-h-0 flex-col gap-3 overflow-y-auto">

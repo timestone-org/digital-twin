@@ -71,7 +71,7 @@ const emptyState = computed(() =>
     keyword: appliedKeyword.value,
     blank: {
       title: '还没有已发布模板',
-      hint: '在模板设计中保存并发布流水线，即可在这里重复使用。',
+      hint: '在建模工作台中打开流水线，保存后发布为模板，即可供第三方重复使用。',
     },
   }),
 )
@@ -83,7 +83,10 @@ onMounted(() => void list.reload())
 </script>
 
 <template>
-  <AppShell title="模板库" subtitle="选择已验证的流程，创建参数独立的模型">
+  <AppShell
+    title="已发布模板"
+    subtitle="供第三方快捷创建模型使用；设计和日常运行请前往建模工作台"
+  >
     <div class="flex h-full min-h-0 flex-col gap-4">
       <ModelingNav />
 

@@ -266,7 +266,7 @@ export const routes: RouteRecordRaw[] = [
     name: 'modeling-pipelines',
     component: () => import('@/pages/Modeling/Pipelines/index.vue'),
     meta: {
-      title: '模板设计',
+      title: '建模工作台',
       permissions: [PERMISSION_CODES.modelingView],
     },
   },
@@ -284,13 +284,13 @@ export const routes: RouteRecordRaw[] = [
     path: '/modeling/templates',
     name: 'modeling-templates',
     component: () => import('@/pages/Modeling/Templates/index.vue'),
-    meta: { title: '模板库', permissions: [PERMISSION_CODES.modelingView] },
+    meta: { title: '已发布模板', permissions: [PERMISSION_CODES.modelingView] },
   },
   {
     path: '/modeling/instances',
     name: 'modeling-instances',
     component: () => import('@/pages/Modeling/Instances/index.vue'),
-    meta: { title: '模型实例', permissions: [PERMISSION_CODES.modelingView] },
+    meta: { title: '接入实例', permissions: [PERMISSION_CODES.modelingView] },
   },
   {
     path: '/modeling/instances/:instanceId',
@@ -311,7 +311,7 @@ export const routes: RouteRecordRaw[] = [
     name: 'modeling-models',
     component: () => import('@/pages/Modeling/Models/index.vue'),
     meta: {
-      title: '模型库',
+      title: '模型版本',
       permissions: [PERMISSION_CODES.modelingView],
     },
   },
@@ -335,7 +335,7 @@ export const routes: RouteRecordRaw[] = [
     name: 'modeling-services',
     component: () => import('@/pages/Modeling/Services/index.vue'),
     meta: {
-      title: '模型服务',
+      title: '部署服务',
       permissions: [PERMISSION_CODES.modelingView],
     },
   },
