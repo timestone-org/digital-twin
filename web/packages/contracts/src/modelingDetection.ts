@@ -42,6 +42,8 @@ export type ModelingBdmCatalogItem = {
   identifier: string
   name: string
   system: string | null
+  table_type?: string | null
+  unit?: string | null
 }
 
 export type ModelingBdmKind = 'point' | 'raw' | 'formula'
@@ -53,6 +55,11 @@ export type ModelingBdmCatalog = {
   size: number
   system_filter_available: boolean | null
   total: number
+}
+
+export type ModelingBdmSystems = {
+  items: string[]
+  system_filter_available: boolean
 }
 
 export type ModelingConfiguration = {

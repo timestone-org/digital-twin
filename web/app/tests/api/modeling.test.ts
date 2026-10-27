@@ -66,9 +66,52 @@ it('BDM 目录走平台代理并传递取消信号', async () => {
   ])
 })
 
-it('BDM 完整目录搜索可用每页 200 项读取', async () => {
+it('BDM 单页目录支持指定每页条数', async () => {
   await modeling.listModelingBdmCatalog({ kind: 'formula', page: 2, size: 200 })
   expect(call()[1]['query']).toEqual({ kind: 'formula', page: 2, size: 200 })
+})
+
+it.each(['point', 'raw', 'formula'] as const)(
+  '%s 目录按名称向平台代理传递过滤',
+  async (kind) => {
+    await modeling.listModelingBdmCatalog({ kind, page: 1, name: '能耗' })
+    expect(call()[1]['query']).toEqual({
+      kind,
+      page: 1,
+      size: 50,
+      name: '能耗',
+    })
+  },
+)
+
+it('属性名称和系统条件同时传递', async () => {
+  await modeling.listModelingBdmCatalog({
+    kind: 'raw',
+    page: 1,
+    name: '功率',
+    system: '空压系统',
+  })
+  expect(call()[1]['query']).toEqual({
+    kind: 'raw',
+    page: 1,
+    size: 50,
+    name: '功率',
+    system: '空压系统',
+  })
+})
+
+it('系统目录经平台鉴权并支持取消', async () => {
+  const controller = new AbortController()
+  await modeling.listModelingBdmSystems(controller.signal)
+  expect(call()).toEqual([
+    '/modeling-bdm-systems',
+    { baseUrl: PLATFORM_BASE_URL, signal: controller.signal },
+  ])
+  await modeling.listModelingBdmSystems()
+  expect(call()).toEqual([
+    '/modeling-bdm-systems',
+    { baseUrl: PLATFORM_BASE_URL },
+  ])
 })
 
 function version(id: string, runId: string): ModelingVersionSummary {
