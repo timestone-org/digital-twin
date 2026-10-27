@@ -92,12 +92,11 @@ from platform_server.apps.modeling.deps import get_modeling_sessions
 from platform_server.apps.report.catalog import REPORT_CODES
 from platform_server.container import (
     IDEMPOTENCY_NAMESPACE,
-    TIMESCALE_SCHEMA,
     Container,
+    _build_history_database,
 )
 from platform_server.deps import get_session, get_stream
 from platform_server.settings import Settings
-from timeseries import HISTORY_SCHEMA
 
 # 与 auth-server 的 AUTH_EDGE_PERMISSION_TTL_S 同量级，用例不依赖它的确切取值。
 # ⚠ 别往下调：身份头在夹具里签一次给整条用例用，CPU 受限的容器里从签发到发请求
@@ -327,13 +326,7 @@ async def history_source(
     """
     if not postgres_available:
         pytest.skip("本机连不到 Postgres")
-    # ⚠ search_path 与生产装配逐字相同（`container._build_history_database`）：
-    # 少了扩展那一段，`time_bucket` / `last` / `first` 一个都解析不到，而用例
-    # 里换成别的路径就会把这条真实的失败挡在外面
-    database = Database(
-        dsn=settings.dsn(),
-        search_path=f"{HISTORY_SCHEMA},{TIMESCALE_SCHEMA}",
-    )
+    database = _build_history_database(settings)
     yield ReadOnlyHistorySource(database=database)
     await database.dispose()
 

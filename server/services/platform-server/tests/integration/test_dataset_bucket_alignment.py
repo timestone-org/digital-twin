@@ -26,8 +26,24 @@ from platform_server.apps.dataset.services.buckets import (
     bucket_start,
     build_bucket_expression,
 )
+from platform_server.settings import Settings
 
 pytestmark = pytest.mark.requires_postgres
+
+
+async def test_archive_connection_uses_the_history_budget(
+    archive: ArchiveWriter, settings: Settings
+) -> None:
+    """归档查询沿用生产历史连接的完整超时预算。"""
+    async with archive.database.session() as session:
+        applied = await session.scalar(
+            text(
+                "SELECT extract(epoch FROM "
+                "current_setting('statement_timeout')::interval) * 1000"
+            )
+        )
+    assert applied == settings.collect_history_statement_timeout_ms
+
 
 # 覆盖三类桶宽：整除一天的、不整除一天的、以及不整除「两个原点之差」的。
 # ⚠ 中间那一类是关键——1s/1min/1h/1d 在 2000-01-01 与 2000-01-03 两个原点下
