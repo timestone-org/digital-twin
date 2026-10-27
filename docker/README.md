@@ -109,6 +109,16 @@ docker compose --profile mineru up -d --build
 ⚠ EMS 不可达**不影响启动，也不影响就绪**：空调数据面返回 503，台账页与空间配置页
 照常工作（[ADR-0009](../docs/adr/0009-空调原始数据由平台直读外部EMS库.md)）。
 
+### 能管取数
+
+在 `docker/.env` 中设置 `PLATFORM_BDM_ENABLED=true`、`PLATFORM_BDM_BASE_URL`
+和 `PLATFORM_BDM_API_KEY`，共用环境段会传给 platform 各角色。时间口径与请求预算
+由 `PLATFORM_BDM_TIMEZONE`、`PLATFORM_BDM_TIMEOUT_S`、
+`PLATFORM_BDM_LOAD_TIMEOUT_S` 配置。Key 仅由后端发送，不写入镜像或前端构建参数。
+
+使用新算子前须更新所有 platform worker，再更新 API 和前端；环境文件改动后须
+重新创建容器才能注入新值。操作与数据边界见 [能管取数](../docs/MODELING_DESIGN.md#能管取数)。
+
 ### 迁移与种子
 
 迁移随 `docker compose up` 自动执行，操作方法见下方「迁移与种子（自动）」。

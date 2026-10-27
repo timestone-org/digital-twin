@@ -3,7 +3,11 @@
 变量名 = `PLATFORM_<组>_<键>`。密钥类一律无默认值——缺失即拒绝启动。
 """
 
-from pydantic import Field, SecretStr, field_validator
+from typing import Self
+from urllib.parse import urlsplit
+from zoneinfo import ZoneInfo, ZoneInfoNotFoundError
+
+from pydantic import Field, SecretStr, field_validator, model_validator
 from pydantic_settings import SettingsConfigDict
 
 from lib.config import (
@@ -38,6 +42,9 @@ LEASE_TTL_FLOOR_S = 5
 # ⚠ 两边同口径，改一边就要改另一边：hub 自己还能被配到 PAYLOAD_ITEM_CEILING
 # （5000），故把 hub 调大之后这里也要跟着放，届时它会明确地拒绝启动而不是静默
 PUBLISH_MAX_ITEMS_CEILING = 500
+BDM_KEY_MIN_LENGTH = 32
+BDM_KEY_MAX_LENGTH = 256
+MAX_TCP_PORT = 65535
 
 
 class Settings(
@@ -236,6 +243,47 @@ class Settings(
     # 运行记录保留天数
     modeling_run_retention_days: int = 90
 
+    bdm_enabled: bool = False
+    bdm_base_url: str | None = None
+    bdm_api_key: SecretStr | None = None
+    bdm_timezone: str = "Asia/Shanghai"
+    bdm_timeout_s: float = Field(default=10.0, gt=0, lt=20)
+    bdm_load_timeout_s: float = Field(default=120.0, gt=0, le=240)
+
+    @model_validator(mode="after")
+    def validate_bdm(self) -> Self:
+        """启用外部取数时要求完整配置和有界预算。"""
+        if not self.bdm_enabled:
+            return self
+        if not self.bdm_base_url or self.bdm_api_key is None:
+            raise ValueError(
+                "PLATFORM_BDM_BASE_URL / PLATFORM_BDM_API_KEY 必填"
+            )
+        _validate_bdm_url(self.bdm_base_url)
+        key = self.bdm_api_key.get_secret_value()
+        if (
+            not BDM_KEY_MIN_LENGTH <= len(key) <= BDM_KEY_MAX_LENGTH
+            or not key.isascii()
+            or not key.isprintable()
+            or any(char.isspace() for char in key)
+        ):
+            raise ValueError(
+                "PLATFORM_BDM_API_KEY 须为 32–256 个无空白 ASCII 字符"
+            )
+        try:
+            ZoneInfo(self.bdm_timezone)
+        except (ZoneInfoNotFoundError, ValueError):
+            raise ValueError("PLATFORM_BDM_TIMEZONE 不是有效时区") from None
+        if (
+            not self.bdm_timeout_s
+            < self.bdm_load_timeout_s
+            < self.modeling_node_timeout_s
+        ):
+            raise ValueError(
+                "BDM 单次超时须小于取数总超时，且总超时须小于建模节点超时"
+            )
+        return self
+
     # 预测下发，见 docs/AC_PUBLISH_DESIGN.md §5
     # opcua-server 的地址。⚠ 直连不经边缘：边缘对 `/internal/` 一律 deny。
     # ⚠ 端口是 **8008** 不是 8000——8000 是 realtime-hub 的，两个抄串了的表现是
@@ -264,3 +312,27 @@ class Settings(
     # 调度器多久醒一次看「跨天了没有」。⚠ 它只入队不干活：锁内禁长 IO
     acdaily_scheduler_interval_s: float = Field(default=60.0, gt=0)
     acdaily_lease_ttl_s: int = Field(default=180, ge=LEASE_TTL_FLOOR_S)
+
+
+def _validate_bdm_url(value: str) -> None:
+    try:
+        parsed = urlsplit(value)
+        port = parsed.port
+    except ValueError:
+        raise ValueError(
+            "PLATFORM_BDM_BASE_URL 不是有效 HTTP(S) 地址"
+        ) from None
+    if (
+        parsed.scheme not in ("http", "https")
+        or not parsed.hostname
+        or parsed.username is not None
+        or parsed.password is not None
+        or parsed.query
+        or parsed.fragment
+        or parsed.path not in ("", "/")
+        or any(char.isspace() for char in value)
+        or (port is not None and not 1 <= port <= MAX_TCP_PORT)
+    ):
+        raise ValueError(
+            "PLATFORM_BDM_BASE_URL 只允许 HTTP(S) origin，不含凭据、路径或查询"
+        )
