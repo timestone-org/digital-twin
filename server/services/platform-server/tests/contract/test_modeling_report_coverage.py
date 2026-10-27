@@ -195,6 +195,10 @@ def other_cases(source: Frame) -> dict[str, Case]:
             {PREFETCHED_KEY: source},
             {"table_code": "energy_h"},
         ),
+        "bdm_source": (
+            {PREFETCHED_KEY: source},
+            {"identifiers": list(source.keys)},
+        ),
         "linear_regression": (pair, {}),
         "logistic_regression": (binary, {}),
         "regression_metrics": ({"scored": scored()}, {}),
@@ -236,7 +240,7 @@ def test_every_registered_operator_has_a_minimal_input_here() -> None:
     """反向遍历的入口：花名册上多一个算子，这张表就得跟着多一行。"""
     assert set(cases()) == set(CODES) - set(UNREACHABLE)
     assert UNREACHABLE == ()
-    assert len(CODES) == 30
+    assert len(CODES) == 31
 
 
 @pytest.mark.parametrize("code", CODES)

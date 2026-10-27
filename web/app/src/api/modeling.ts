@@ -15,6 +15,7 @@ import type {
   ModelDeployment,
   ModelFormulaRegistration,
   ModelingBinding,
+  ModelingBdmCatalog,
   ModelingBindingImpact,
   ModelingGraph,
   ModelingGraphCheck,
@@ -77,6 +78,25 @@ export async function listModelingOperators(
   return await requestData<ModelingOperator[]>(
     '/modeling-operators',
     onPlatform(signal === undefined ? {} : { signal }),
+  )
+}
+
+/** 服务端代理的单页 BDM 目录，外部 Key 不进入浏览器。 */
+export async function listModelingBdmCatalog(
+  query: {
+    kind: ModelingBdmCatalog['kind']
+    page: number
+    size?: number | undefined
+    keyword?: string | undefined
+  },
+  signal?: AbortSignal,
+): Promise<ModelingBdmCatalog> {
+  return await requestData<ModelingBdmCatalog>(
+    '/modeling-bdm-catalogs',
+    onPlatform({
+      query: { ...query, size: query.size ?? 50 },
+      ...(signal ? { signal } : {}),
+    }),
   )
 }
 

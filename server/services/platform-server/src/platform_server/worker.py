@@ -61,6 +61,9 @@ from platform_server.apps.modeling.services import (
     RunConsumer,
     RunConsumerOptions,
 )
+from platform_server.apps.modeling.services.bdm_client import (
+    configured_connection,
+)
 from platform_server.apps.modeling.services.model_provider import (
     ModelingAnalysisProvider,
 )
@@ -222,6 +225,7 @@ def build_modeling_runner(
             node_timeout_s=settings.modeling_node_timeout_s,
             tz_offset_minutes=_business_tz_offset_minutes(container),
             keep_per_pipeline=settings.modeling_run_keep_per_pipeline,
+            bdm_connection=configured_connection(settings),
         ),
     )
 

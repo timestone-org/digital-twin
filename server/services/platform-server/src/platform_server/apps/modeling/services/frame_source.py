@@ -72,8 +72,8 @@ async def load_frame(
     )
     specs = await column_service.list_column_specs(session, table_id=table_id)
     columns = _selected(specs, request.columns)
-    since = _moment(request.since, now, "since")
-    until = _moment(request.until, now, "until") or now
+    since = resolve_moment(request.since, now, "since")
+    until = resolve_moment(request.until, now, "until") or now
     scan = await record_read.scan_effective(
         session,
         window=EffectiveWindow(
@@ -205,7 +205,7 @@ def _as_number(value: object) -> tuple[CellValue, bool]:
         return None, True
 
 
-def _moment(raw: str, now: datetime, field: str) -> datetime | None:
+def resolve_moment(raw: str, now: datetime, field: str) -> datetime | None:
     """把一个时刻参数解析成 UTC 时刻。空串表示不限。
 
     Args: raw, now, field。
