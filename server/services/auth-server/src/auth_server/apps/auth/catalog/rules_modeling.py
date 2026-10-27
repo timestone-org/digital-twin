@@ -19,6 +19,27 @@ _PLATFORM = "/api/v1/platform"
 
 MODELING_RULES: tuple[RouteRuleSpec, ...] = (
     RouteRuleSpec(
+        f"{_PLATFORM}/modeling-instances*",
+        "*",
+        codes=(MODELING_RUN,),
+        priority=985,
+        description="通过已有模板创建、配置和训练模型实例",
+    ),
+    RouteRuleSpec(
+        f"{_PLATFORM}/modeling-instances*",
+        "GET",
+        codes=(MODELING_VIEW,),
+        priority=989,
+        description="查看模型实例与全部参数 Schema",
+    ),
+    RouteRuleSpec(
+        f"{_PLATFORM}/modeling-instances*:deploy",
+        "POST",
+        codes=(MODELING_PUBLISH,),
+        priority=991,
+        description="部署实例的指定不可变模型版本",
+    ),
+    RouteRuleSpec(
         f"{_PLATFORM}/modeling-*",
         "*",
         codes=(MODELING_MANAGE,),

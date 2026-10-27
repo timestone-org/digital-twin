@@ -20,6 +20,7 @@ import { computed, onBeforeUnmount, onMounted, ref, watch } from 'vue'
 import * as modeling from '@/api/modeling'
 import { BizError } from '@/api/client'
 import { AppShell } from '@/components/layout'
+import ModelingNav from '../components/ModelingNav.vue'
 import { describeError, useAsyncList } from '@/composables/useAsyncList'
 import { useViewMode } from '@/composables/useViewMode'
 
@@ -145,10 +146,11 @@ onBeforeUnmount(() => {
   <AppShell
     title="运行记录"
     subtitle="跨流水线 · 点进去只读回看当时那张图"
-    back-to="/modeling/pipelines"
+    back-to="/modeling/instances"
   >
     <!-- h-full + min-h-0 见 AppShell 的契约：main 不滚，高度由页面自己吃满 -->
     <div class="flex h-full min-h-0 flex-col gap-3 overflow-y-auto">
+      <ModelingNav />
       <DtNotice v-if="published.error.value" intent="warning">
         模型版本状态加载失败，暂时不能发布：{{ published.error.value }}
         <DtButton size="xs" variant="ghost" @click="void published.reload()">

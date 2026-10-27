@@ -114,7 +114,7 @@ export const NAV_ITEMS: readonly NavItem[] = [
     key: 'modeling',
     label: '分析建模',
     icon: 'workflow',
-    to: '/modeling/pipelines',
+    to: '/modeling/instances',
     permission: [PERMISSION_CODES.modelingView],
   },
   {

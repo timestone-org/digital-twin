@@ -36,6 +36,7 @@ __all__ = [
     "WriteGate",
     "get_container",
     "get_idempotency_key",
+    "get_instance_write_context",
     "get_manage_context",
     "get_modeling_sessions",
     "get_object_store",
@@ -86,6 +87,19 @@ def get_manage_context(
 
     Args: container, caller, idempotency_key。
     """
+    return WriteGate(
+        idempotency=container.idempotency,
+        idempotency_key=idempotency_key,
+        caller=caller,
+    )
+
+
+def get_instance_write_context(
+    container: Annotated[Container, Depends(get_container)],
+    caller: Annotated[CallerContext, Depends(require(MODELING_RUN))],
+    idempotency_key: Annotated[str | None, Depends(get_idempotency_key)],
+) -> WriteGate:
+    """实例配置与训练的幂等写上下文。"""
     return WriteGate(
         idempotency=container.idempotency,
         idempotency_key=idempotency_key,

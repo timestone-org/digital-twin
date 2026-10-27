@@ -26,6 +26,10 @@ const NAV_EXEMPT = new Set([
   '/modeling/services',
   // 运行记录同上
   '/modeling/runs',
+  // 模板与接入说明由建模模块内部导航访问。
+  '/modeling/pipelines',
+  '/modeling/templates',
+  '/modeling/integration',
 ])
 
 describe('导航清单', () => {

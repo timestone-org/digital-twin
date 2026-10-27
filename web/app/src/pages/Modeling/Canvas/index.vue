@@ -19,6 +19,7 @@ import PermGuard from '@/components/PermGuard.vue'
 import { AppShell } from '@/components/layout'
 import { nowStamp } from '@/utils/datetime'
 import { useAuthStore } from '@/stores/auth'
+import PublishTemplateButton from '../components/PublishTemplateButton.vue'
 
 import CanvasMenu from './components/CanvasMenu.vue'
 import ConfigEditorDialog from './components/ConfigEditorDialog.vue'
@@ -237,6 +238,12 @@ watch(
     back-to="/modeling/pipelines"
   >
     <template #actions>
+      <PublishTemplateButton
+        :pipeline="page.doc.pipeline.value"
+        :disabled="
+          isReadonly || page.graph.isDirty.value || config.hasDraft.value
+        "
+      />
       <DtTag v-if="page.isReplaying.value" intent="info" size="sm">
         正在回看历史运行
       </DtTag>
@@ -469,14 +476,12 @@ watch(
     font-size: var(--ctl-hint-fs-sm);
     white-space: nowrap;
   }
-
   // 顶栏在 2xl 以下摆不开八颗按钮；这几颗都带图标与 title，缩成只有图标
   @media (width < 96rem) {
     &__terse :deep(.dt-btn__label) {
       display: none;
     }
   }
-
   &__main {
     display: flex;
     flex: 1;
@@ -485,7 +490,6 @@ watch(
     min-width: 0;
     min-height: 0;
   }
-
   &__canvas {
     flex: 1;
     min-height: 0;

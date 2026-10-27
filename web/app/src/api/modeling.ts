@@ -55,6 +55,7 @@ function idempotent(key: string): Record<'Idempotency-Key', string> {
 export interface ModelingPageQuery {
   page?: number | undefined
   size?: number | undefined
+  includeInstances?: boolean | undefined
 }
 
 export interface ModelingPipelineCreateInput {
@@ -119,7 +120,15 @@ export async function listModelingPipelines(
 ): Promise<Page<ModelingPipelineSummary>> {
   return await requestData<Page<ModelingPipelineSummary>>(
     '/modeling-pipelines',
-    onPlatform({ query: { page: query.page, size: query.size } }),
+    onPlatform({
+      query: {
+        page: query.page,
+        size: query.size,
+        ...(query.includeInstances === undefined
+          ? {}
+          : { include_instances: query.includeInstances }),
+      },
+    }),
   )
 }
 

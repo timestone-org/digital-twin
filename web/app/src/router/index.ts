@@ -266,7 +266,7 @@ export const routes: RouteRecordRaw[] = [
     name: 'modeling-pipelines',
     component: () => import('@/pages/Modeling/Pipelines/index.vue'),
     meta: {
-      title: '分析建模',
+      title: '模板设计',
       permissions: [PERMISSION_CODES.modelingView],
     },
   },
@@ -279,6 +279,30 @@ export const routes: RouteRecordRaw[] = [
       title: '画布',
       permissions: [PERMISSION_CODES.modelingView],
     },
+  },
+  {
+    path: '/modeling/templates',
+    name: 'modeling-templates',
+    component: () => import('@/pages/Modeling/Templates/index.vue'),
+    meta: { title: '模板库', permissions: [PERMISSION_CODES.modelingView] },
+  },
+  {
+    path: '/modeling/instances',
+    name: 'modeling-instances',
+    component: () => import('@/pages/Modeling/Instances/index.vue'),
+    meta: { title: '模型实例', permissions: [PERMISSION_CODES.modelingView] },
+  },
+  {
+    path: '/modeling/instances/:instanceId',
+    name: 'modeling-instance',
+    component: () => import('@/pages/Modeling/Instance/index.vue'),
+    meta: { title: '模型配置', permissions: [PERMISSION_CODES.modelingView] },
+  },
+  {
+    path: '/modeling/integration',
+    name: 'modeling-integration',
+    component: () => import('@/pages/Modeling/Integration/index.vue'),
+    meta: { title: '第三方接入', permissions: [PERMISSION_CODES.modelingView] },
   },
   {
     // 模型库与流水线**平级**：一个版本一旦发布出去就脱离了产它的那条流水线，

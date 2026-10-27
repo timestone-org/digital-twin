@@ -25,6 +25,11 @@ from platform_server.apps.modeling.models.run import (
     ModelingNodeRun,
     ModelingRun,
 )
+from platform_server.apps.modeling.models.template import (
+    ModelingConfigurationAudit,
+    ModelingInstance,
+    ModelingTemplate,
+)
 
 type ModelVersion = ModelingModelVersion | ModelingRuleVersion
 
@@ -35,11 +40,14 @@ __all__ = [
     "ModelingApiKey",
     "ModelingBinding",
     "ModelingCallLog",
+    "ModelingConfigurationAudit",
     "ModelingDeployment",
+    "ModelingInstance",
     "ModelingModelArtifact",
     "ModelingModelVersion",
     "ModelingNodeRun",
     "ModelingPipeline",
     "ModelingRuleVersion",
     "ModelingRun",
+    "ModelingTemplate",
 ]

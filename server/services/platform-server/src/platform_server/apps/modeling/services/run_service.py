@@ -18,6 +18,7 @@ from lib.errors.base import FieldError
 from lib.stream import StreamGroup, StreamLike
 from lib.web import Page, PageParams
 from platform_server.apps.modeling.crud import node_run_crud, run_crud
+from platform_server.apps.modeling.crud.template import instances
 from platform_server.apps.modeling.errors import (
     GraphInvalid,
     NodeRunNotFound,
@@ -65,6 +66,7 @@ async def start_run(
     拓扑与参数（D6）。
     Args: session, pipeline_id, payload, context。
     """
+    await instances.lock(session, pipeline_id)
     pipeline = await require_pipeline(session, pipeline_id)
     graph = presenters.graph_of(pipeline.graph_json)
     _require_valid(graph)

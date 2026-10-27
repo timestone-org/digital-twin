@@ -10,10 +10,12 @@ from platform_server.apps.modeling.crud import (
     model_version_crud,
     pipeline_crud,
 )
+from platform_server.apps.modeling.crud.template import has_templates, instances
 from platform_server.apps.modeling.errors import (
     PipelineCodeTaken,
     PipelineHasVersions,
     PipelineNotFound,
+    TemplateUnavailable,
 )
 from platform_server.apps.modeling.models import ModelingPipeline
 from platform_server.apps.modeling.schemas import (
@@ -39,17 +41,26 @@ class Actor:
 
     user_id: str
     name: str
+    source_ip: str | None = None
 
 
 async def list_pipelines(
-    session: AsyncSession, *, keyword: str | None, page: PageParams
+    session: AsyncSession,
+    *,
+    keyword: str | None,
+    page: PageParams,
+    should_include_instances: bool = True,
 ) -> Page[PipelineSummaryOut]:
     """流水线列表。**页码分页**：这是有限的管理集合，不是追加型时序流。
 
     Args: session, keyword, page。
     """
     rows, total = await pipeline_crud.page(
-        session, keyword=keyword, offset=page.offset, limit=page.size
+        session,
+        keyword=keyword,
+        offset=page.offset,
+        limit=page.size,
+        should_include_instances=should_include_instances,
     )
     return Page[PipelineSummaryOut](
         items=[presenters.to_pipeline_summary(row) for row in rows],
@@ -108,6 +119,10 @@ async def update_pipeline(
     Args: session, pipeline_id, payload。
     """
     row = await require_pipeline(session, pipeline_id)
+    if await instances.get(session, pipeline_id):
+        raise TemplateUnavailable(
+            "模型实例请通过集中配置入口修改，模板结构保持固定"
+        )
     if payload.name is not None:
         row.name = payload.name
     if payload.description is not None:
@@ -127,6 +142,10 @@ async def delete_pipeline(
     Args: session, pipeline_id。
     """
     row = await require_pipeline(session, pipeline_id)
+    if await instances.get(session, pipeline_id) or await has_templates(
+        session, pipeline_id
+    ):
+        raise TemplateUnavailable("这条流水线已用于模板或模型实例，不能删除")
     if await model_version_crud.count_of_pipeline(session, row.id):
         raise PipelineHasVersions("这条流水线下还有模型版本，请先把它们退役")
     await pipeline_crud.delete(session, row)

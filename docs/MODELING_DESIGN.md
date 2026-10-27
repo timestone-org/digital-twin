@@ -1,5 +1,40 @@
 # 分析建模（modeling）—— 设计与接口契约
 
+## 模板建模与第三方接入
+
+现行产品主流程为「模板设计 → 发布模板 → 创建模型实例 → 配置 → 训练 → 发布模型版本 → 部署」。
+设计仍使用本文件的算子图与执行引擎；模板、实例及权限边界见 [ADR-0061](adr/0061-建模模板冻结结构而实例独立配置和训练.md)。
+
+模板的每个版本不可变，停用只阻止新建实例。实例参数彼此独立，模板再次发布不修改
+既有实例。输入数据源、列、目标、预处理和算法参数统一在节点参数中配置；训练后的
+实际输入输出签名由既有模型版本接口给出，不从未执行的图虚构签名。
+
+所有下列路径以 `/api/v1/platform` 为前缀，使用账号凭据（含账号 API 密钥），
+读面要求 `modeling:view`。资源列表按 `page/size/q` 分页。
+
+| 方法与资源 | 行为 | 写权限 |
+|---|---|---|
+| `POST /modeling-templates` | 将 `pipeline_id` 的已保存图发布为一个模板版本 | `modeling:manage` |
+| `GET /modeling-templates`、`GET /modeling-templates/{id}` | 读取可选模板及版本 | — |
+| `GET /modeling-templates/{id}/configuration` | 全部节点 Schema、端口、默认参数与组合 JSON Schema | — |
+| `PATCH /modeling-templates/{id}` | 显式启停模板 | `modeling:manage` |
+| `POST /modeling-instances` | 按 `template_id` 创建独立实例，可同时给完整参数 | `modeling:run` |
+| `GET /modeling-instances`、`GET /modeling-instances/{id}` | 模型列表、模板来源、修订号和最近训练状态 | — |
+| `GET /modeling-instances/{id}/configuration` | 当前全部配置与对应 Schema | — |
+| `PUT /modeling-instances/{id}/configuration` | `expected_revision` + `configuration.nodes` 原子替换所有节点参数 | `modeling:run` |
+| `POST /modeling-instances/{id}:train` | 冻结当前参数、提交训练，返回 202 与运行记录 | `modeling:run` |
+| `POST /modeling-instances/{id}:deploy` | 将本实例的可服务 `model_version_id` 部署为稳定服务地址 | `modeling:publish` |
+
+训练状态、取消与中间结果沿用 `/modeling-runs`；发布成功运行沿用
+`POST /modeling-model-versions`；签发部署密钥和停用部署沿用 `/modeling-deployments`。
+创建模板、实例、训练和部署支持 `Idempotency-Key`，调用方对同一逻辑请求复用键。
+配置校验失败为 400、版本冲突及训练中修改为 409、权限不足为 403。
+部署必须指定属于本实例且可服务的版本，不根据“最新”静默换版。
+
+第三方专用账号授予 `modeling:view`、`modeling:run`，需要上线时再授予
+`modeling:publish`；不要授予模板设计权限。模型资源沿用平台共享权限域。
+完整调用示例与页面验收方式见 [模板建模接入指南](MODELING_TEMPLATE_GUIDE.md)。
+
 > 权威设计文档，开发前必读。涉及 **platform-server**（新增 `apps/modeling`：5 张表 +
 > 算子体系 + 执行引擎 + 一个台账求值扩展点的实现 + REST）、**web**（建模页）与
 > **auth-server**（权限码与闸 1 规则）三处。任何跨层契约变更**先改本文档、再改代码**。
