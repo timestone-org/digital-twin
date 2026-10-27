@@ -1,5 +1,5 @@
 /** @fileoverview BDM 目录选择、分页、只读状态与过期请求不覆盖。 */
-import type { ModelingBdmCatalog } from '@dt/contracts'
+import type { ModelingBdmCatalog, ModelingBdmSystems } from '@dt/contracts'
 import { DtInput, DtSelect } from '@dt/ui'
 import { flushPromises, mount } from '@vue/test-utils'
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
@@ -273,6 +273,41 @@ describe('BDM 取数参数', () => {
     ).toBeUndefined()
     await wrapper.get('input[type="checkbox"]').setValue(false)
     expect(wrapper.emitted('update:modelValue')?.at(-1)).toEqual([[]])
+    wrapper.unmount()
+  })
+
+  it('快速往返类别后旧系统分类不得覆盖新选项', async () => {
+    let resolveOld: (value: ModelingBdmSystems) => void = () => undefined
+    const old = new Promise<ModelingBdmSystems>((resolve) => {
+      resolveOld = resolve
+    })
+    const systems = vi
+      .mocked(modeling.listModelingBdmSystems)
+      .mockReturnValueOnce(old)
+      .mockResolvedValueOnce({
+        items: ['新系统'],
+        system_filter_available: true,
+      })
+    vi.spyOn(modeling, 'listModelingBdmCatalog').mockImplementation((query) =>
+      Promise.resolve(page(query.kind)),
+    )
+    const wrapper = mount(BdmIdentifierPicker, {
+      props: { kind: 'point', field, modelValue: [], isReadonly: false },
+    })
+    await wrapper.setProps({ kind: 'raw' })
+    expect(systems.mock.calls[0]?.[0]?.aborted).toBe(true)
+    await wrapper.setProps({ kind: 'point' })
+    await flushPromises()
+    expect(systems).toHaveBeenCalledTimes(2)
+    resolveOld({ items: ['旧系统'], system_filter_available: true })
+    await flushPromises()
+    const select = wrapper
+      .findAllComponents(DtSelect)
+      .find((item) => item.props('label') === '点位所属系统')
+    expect(select?.props('options')).toEqual([
+      { value: '', label: '全部系统' },
+      { value: '新系统', label: '新系统' },
+    ])
     wrapper.unmount()
   })
 
