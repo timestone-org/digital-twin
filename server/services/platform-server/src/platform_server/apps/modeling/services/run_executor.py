@@ -400,7 +400,11 @@ def _source_facts(context: dict[tuple[str, str], Any]) -> dict[str, Any]:
     frames = [
         value
         for value in context.values()
-        if isinstance(value, Frame) and value.provenance.table_codes
+        if isinstance(value, Frame)
+        and (
+            value.provenance.table_codes
+            or value.provenance.observed_until is not None
+        )
     ]
     if not frames:
         return {"row_count": None, "is_source_truncated": False}

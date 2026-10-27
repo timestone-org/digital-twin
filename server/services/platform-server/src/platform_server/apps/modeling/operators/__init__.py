@@ -26,6 +26,7 @@ from platform_server.apps.modeling.operators.base import (
     OperatorSpec,
     PortSpec,
 )
+from platform_server.apps.modeling.operators.bdm import BdmSource
 from platform_server.apps.modeling.operators.cleaning import (
     CastType,
     DropMissing,
@@ -152,6 +153,7 @@ __all__ = [
     "TIME_PARTS",
     "ZONES",
     "AnomalyDistance",
+    "BdmSource",
     "BlockAt",
     "BlockKind",
     "CastType",

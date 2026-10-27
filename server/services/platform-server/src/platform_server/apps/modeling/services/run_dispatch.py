@@ -7,10 +7,12 @@
 图会被无限重投，把整个建模面堵死。
 """
 
+from __future__ import annotations
+
 import uuid
 from dataclasses import dataclass
 from datetime import UTC, datetime
-from typing import Any
+from typing import TYPE_CHECKING, Any
 
 from lib.logging import get_logger
 from lib.objectstore import ObjectStore, ObjectStoreError
@@ -20,10 +22,12 @@ from platform_server.apps.modeling.protocols import ACTIVE_RUN_STATUSES
 from platform_server.apps.modeling.schemas.graph import PipelineGraph
 from platform_server.apps.modeling.services import (
     artifact_store,
+    bdm_frame,
     frame_export,
     frame_source,
     presenters,
 )
+from platform_server.apps.modeling.services.bdm_client import BdmConnection
 from platform_server.apps.modeling.services.run_executor import (
     Execution,
     NodeOutcome,
@@ -33,6 +37,9 @@ from platform_server.apps.modeling.services.run_executor import (
     execute_graph,
 )
 from platform_server.apps.modeling.services.sessions import Sessions
+
+if TYPE_CHECKING:
+    from platform_server.apps.modeling.services.run_pool import NodePool
 
 _logger = get_logger("platform.modeling.dispatch")
 
@@ -54,6 +61,8 @@ class DispatchOptions:
     #: 二进制产物的落脚处。⚠ 缺省是「没有」而不是必填：纯 JSON 那些算子
     #: 一个字节都不产，没配对象存储的部署照样跑得起来
     store: ObjectStore | None = None
+    bdm_connection: BdmConnection | None = None
+    pool: NodePool | None = None
 
 
 @dataclass(frozen=True)
@@ -83,7 +92,9 @@ async def execute_run(
             status="failed",
             pipeline_id=claimed.pipeline_id,
         )
-    sources = await _load_sources(sessions, claimed)
+    sources = await _load_sources(
+        sessions, claimed, options.bdm_connection, pool=options.pool
+    )
     outcome = await execute_graph(
         claimed.graph,
         execution=Execution(
@@ -121,7 +132,7 @@ class _Claimed:
     is_keeping_frames: bool
 
 
-async def _claim(sessions: Sessions, run_id: uuid.UUID) -> "_Claimed | None":
+async def _claim(sessions: Sessions, run_id: uuid.UUID) -> _Claimed | None:
     """把运行标成 running 并回它的图快照；已终态或不存在给 None。
 
     ⚠ `attempt` 在这里 +1，于是「这是第几次被派发」有据可查：第二次拿到同一条
@@ -146,16 +157,30 @@ async def _claim(sessions: Sessions, run_id: uuid.UUID) -> "_Claimed | None":
         )
 
 
-async def _load_sources(sessions: Sessions, claimed: _Claimed) -> Sources:
+async def _load_sources(
+    sessions: Sessions,
+    claimed: _Claimed,
+    connection: BdmConnection | None,
+    *,
+    pool: NodePool | None = None,
+) -> Sources:
     """取数阶段。取不到的节点带着原因交给引擎，由它落 `failed`。
 
     Args: sessions, claimed。
     """
+    now = datetime.now(UTC)
     async with sessions.session() as session:
         prefetched = await frame_source.prefetch(
-            session, graph=claimed.graph, now=datetime.now(UTC)
+            session, graph=claimed.graph, now=now
         )
-    return Sources(frames=prefetched.frames, failures=prefetched.failures)
+    # ⚠ 外部 HTTP 必须等上面的只读事务释放后再发起。
+    external = await bdm_frame.prefetch(
+        connection, claimed.graph, now=now, pool=pool
+    )
+    return Sources(
+        frames=prefetched.frames | external.frames,
+        failures=prefetched.failures | external.failures,
+    )
 
 
 async def _is_cancelled(sessions: Sessions, run_id: uuid.UUID) -> bool:

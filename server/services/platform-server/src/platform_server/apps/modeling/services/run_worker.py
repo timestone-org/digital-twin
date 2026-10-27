@@ -19,6 +19,7 @@ from lib.logging import (
 from lib.objectstore import ObjectStore
 from lib.stream import StreamEntry, StreamGroup, StreamLike
 from platform_server.apps.modeling.services import run_queue
+from platform_server.apps.modeling.services.bdm_client import BdmConnection
 from platform_server.apps.modeling.services.retention import (
     converge_pipeline,
 )
@@ -52,6 +53,7 @@ class RunConsumerOptions:
     keep_per_pipeline: int
     #: 二进制产物的落脚处。缺省「没有」——纯 JSON 那些算子一个字节都不产
     store: ObjectStore | None = None
+    bdm_connection: BdmConnection | None = None
 
 
 class RunConsumer:
@@ -179,6 +181,8 @@ class RunConsumer:
                     ),
                     tz_offset_minutes=options.tz_offset_minutes,
                     store=options.store,
+                    bdm_connection=options.bdm_connection,
+                    pool=self._pool,
                 ),
             )
         except Exception as error:  # pragma: no cover - 依赖同时不可用

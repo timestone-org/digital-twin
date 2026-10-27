@@ -12,6 +12,7 @@ import pytest
 from lib.stream import StreamGroup
 from platform_server.apps.modeling.services import run_queue
 from platform_server.apps.modeling.services.run_dispatch import (
+    DispatchOptions,
     DispatchReport,
 )
 from platform_server.apps.modeling.services.run_pool import NodePool
@@ -52,6 +53,9 @@ class RecordingDispatch:
     async def __call__(self, *_args: object, **kwargs: object) -> object:
         run_id = kwargs["run_id"]
         assert isinstance(run_id, uuid.UUID)
+        options = kwargs["options"]
+        assert isinstance(options, DispatchOptions)
+        assert isinstance(options.pool, NodePool)
         self.seen.append(run_id)
         if self.error is not None:
             raise self.error
