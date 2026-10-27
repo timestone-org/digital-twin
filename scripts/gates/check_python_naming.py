@@ -82,6 +82,10 @@ CONTRACT_NAMES = frozenset({"q"})
 # 两条都由 tests/contract/test_runtime_asyncua_contract.py 钉住。
 UPSTREAM_BOOL_NAMES: dict[str, frozenset[str]] = {
     "apps/instance/runtime/sessions.py": frozenset({"external", "delete_subs"}),
+    # Executor.shutdown 的标准关键字，NodePool 依靠这两个参数回收执行器。
+    "server/services/platform-server/tests/unit/test_modeling_run_pool.py": (
+        frozenset({"wait", "cancel_futures"})
+    ),
 }
 
 
