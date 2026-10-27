@@ -50,6 +50,27 @@ function headersOf(options: Record<string, unknown>): Record<string, string> {
   return (options['headers'] ?? {}) as Record<string, string>
 }
 
+it('BDM 目录走平台代理并传递取消信号', async () => {
+  const controller = new AbortController()
+  await modeling.listModelingBdmCatalog(
+    { kind: 'point', page: 2, keyword: '温度' },
+    controller.signal,
+  )
+  expect(call()).toEqual([
+    '/modeling-bdm-catalogs',
+    {
+      baseUrl: PLATFORM_BASE_URL,
+      query: { kind: 'point', page: 2, size: 50, keyword: '温度' },
+      signal: controller.signal,
+    },
+  ])
+})
+
+it('BDM 完整目录搜索可用每页 200 项读取', async () => {
+  await modeling.listModelingBdmCatalog({ kind: 'formula', page: 2, size: 200 })
+  expect(call()[1]['query']).toEqual({ kind: 'formula', page: 2, size: 200 })
+})
+
 function version(id: string, runId: string): ModelingVersionSummary {
   return {
     id,

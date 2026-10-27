@@ -1064,6 +1064,51 @@
         "title": "ApiResponse[BackfillJobOut]",
         "type": "object"
       },
+      "ApiResponse_BdmCatalogOut_": {
+        "properties": {
+          "code": {
+            "default": 0,
+            "title": "Code",
+            "type": "integer"
+          },
+          "data": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/BdmCatalogOut"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "details": {
+            "anyOf": [
+              {
+                "items": {
+                  "$ref": "#/components/schemas/FieldErrorOut"
+                },
+                "type": "array"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Details"
+          },
+          "message": {
+            "default": "ok",
+            "title": "Message",
+            "type": "string"
+          },
+          "trace_id": {
+            "default": "",
+            "title": "Trace Id",
+            "type": "string"
+          }
+        },
+        "title": "ApiResponse[BdmCatalogOut]",
+        "type": "object"
+      },
       "ApiResponse_BindingOut_": {
         "properties": {
           "code": {
@@ -6888,6 +6933,108 @@
         ],
         "title": "BackfillStartIn",
         "type": "object"
+      },
+      "BdmCatalogItemOut": {
+        "properties": {
+          "code": {
+            "title": "Code",
+            "type": "string"
+          },
+          "history_available": {
+            "anyOf": [
+              {
+                "type": "boolean"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "History Available"
+          },
+          "identifier": {
+            "title": "Identifier",
+            "type": "string"
+          },
+          "name": {
+            "title": "Name",
+            "type": "string"
+          },
+          "system": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "System"
+          }
+        },
+        "required": [
+          "identifier",
+          "code",
+          "name",
+          "system",
+          "history_available"
+        ],
+        "title": "BdmCatalogItemOut",
+        "type": "object"
+      },
+      "BdmCatalogOut": {
+        "properties": {
+          "items": {
+            "items": {
+              "$ref": "#/components/schemas/BdmCatalogItemOut"
+            },
+            "title": "Items",
+            "type": "array"
+          },
+          "kind": {
+            "$ref": "#/components/schemas/BdmKind"
+          },
+          "page": {
+            "title": "Page",
+            "type": "integer"
+          },
+          "size": {
+            "title": "Size",
+            "type": "integer"
+          },
+          "system_filter_available": {
+            "anyOf": [
+              {
+                "type": "boolean"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "System Filter Available"
+          },
+          "total": {
+            "title": "Total",
+            "type": "integer"
+          }
+        },
+        "required": [
+          "kind",
+          "total",
+          "page",
+          "size",
+          "system_filter_available",
+          "items"
+        ],
+        "title": "BdmCatalogOut",
+        "type": "object"
+      },
+      "BdmKind": {
+        "enum": [
+          "point",
+          "raw",
+          "formula"
+        ],
+        "type": "string"
       },
       "BindingCreateIn": {
         "additionalProperties": false,
@@ -31083,6 +31230,105 @@
         "summary": "给一个用途指定模型",
         "tags": [
           "llm-purpose"
+        ]
+      }
+    },
+    "/api/v1/platform/modeling-bdm-catalogs": {
+      "get": {
+        "operationId": "list_bdm_catalog_api_v1_platform_modeling_bdm_catalogs_get",
+        "parameters": [
+          {
+            "in": "query",
+            "name": "kind",
+            "required": false,
+            "schema": {
+              "$ref": "#/components/schemas/BdmKind",
+              "default": "point"
+            }
+          },
+          {
+            "in": "query",
+            "name": "page",
+            "required": false,
+            "schema": {
+              "default": 1,
+              "maximum": 100000,
+              "minimum": 1,
+              "title": "Page",
+              "type": "integer"
+            }
+          },
+          {
+            "in": "query",
+            "name": "size",
+            "required": false,
+            "schema": {
+              "default": 50,
+              "maximum": 200,
+              "minimum": 1,
+              "title": "Size",
+              "type": "integer"
+            }
+          },
+          {
+            "in": "query",
+            "name": "keyword",
+            "required": false,
+            "schema": {
+              "default": "",
+              "maxLength": 100,
+              "title": "Keyword",
+              "type": "string"
+            }
+          },
+          {
+            "in": "query",
+            "name": "system",
+            "required": false,
+            "schema": {
+              "default": "",
+              "maxLength": 100,
+              "title": "System",
+              "type": "string"
+            }
+          },
+          {
+            "in": "query",
+            "name": "code",
+            "required": false,
+            "schema": {
+              "default": "",
+              "maxLength": 200,
+              "title": "Code",
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiResponse_BdmCatalogOut_"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "BDM 取数目录",
+        "tags": [
+          "modeling-bdm"
         ]
       }
     },

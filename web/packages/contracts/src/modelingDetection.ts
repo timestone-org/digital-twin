@@ -30,3 +30,22 @@ export type ModelingVersionUpdateInput = {
   description?: string | null
   name?: string | null
 }
+
+export type ModelingBdmCatalogItem = {
+  code: string
+  history_available: boolean | null
+  identifier: string
+  name: string
+  system: string | null
+}
+
+export type ModelingBdmKind = 'point' | 'raw' | 'formula'
+
+export type ModelingBdmCatalog = {
+  items: ModelingBdmCatalogItem[]
+  kind: ModelingBdmKind
+  page: number
+  size: number
+  system_filter_available: boolean | null
+  total: number
+}
