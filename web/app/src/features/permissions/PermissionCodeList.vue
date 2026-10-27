@@ -44,23 +44,26 @@ const orphans = computed(() => {
 </script>
 
 <template>
-  <div class="flex flex-col gap-5">
-    <p v-if="codes.length === 0" class="m-0 text-xs text-text-secondary">
+  <div class="dt-form-grid">
+    <p
+      v-if="codes.length === 0"
+      class="dt-form-grid__wide m-0 text-xs text-text-secondary"
+    >
       这个角色没有任何权限码，持有它的账号只能访问免码路由。
     </p>
 
     <section v-for="group in held" :key="group.code">
-      <h3 class="m-0 mb-2 text-xs font-semibold text-text-secondary">
+      <h3 class="m-0 mb-2 text-sm font-semibold text-text-secondary">
         {{ group.label }}
       </h3>
       <ul class="m-0 flex list-none flex-col gap-2 p-0">
         <li
           v-for="item in group.items"
           :key="item.code"
-          class="flex items-baseline gap-2"
+          class="flex flex-wrap items-baseline gap-2"
         >
           <span class="min-w-0 text-xs text-text-primary">{{ item.name }}</span>
-          <code class="ml-auto font-mono text-2xs text-text-disabled">{{
+          <code class="break-all font-mono text-2xs text-text-disabled">{{
             item.code
           }}</code>
           <DtTag

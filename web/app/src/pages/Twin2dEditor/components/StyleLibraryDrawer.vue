@@ -350,33 +350,32 @@ function close(): void {
         </DtButton>
       </div>
 
-      <div class="flex flex-wrap items-end gap-2">
-        <DtSelect
-          v-model="mode"
-          :options="MODE_OPTIONS"
-          size="sm"
-          label="导入时 id 撞了怎么办"
-          hint="缺省改名并存：静默覆盖会把正在用的那份样式换掉"
-          class="min-w-56 flex-1"
-          data-test="style-lib-mode"
-        />
-        <DtFilePicker
-          accept="application/json,.json"
-          label="导入样式包"
-          size="sm"
-          data-test="style-lib-import"
-          @select="onPickFile"
-        />
-        <DtIconButton
-          size="sm"
-          variant="outline"
-          intent="neutral"
-          data-test="style-lib-export"
-          icon="download"
-          label="导出样式包"
-          @click="onExport"
-        />
-      </div>
+      <DtSelect
+        v-model="mode"
+        :options="MODE_OPTIONS"
+        size="sm"
+        label="导入时 id 撞了怎么办"
+        hint="缺省改名并存：静默覆盖会把正在用的那份样式换掉"
+        class="min-w-0"
+        data-test="style-lib-mode"
+      >
+        <template #actions
+          ><DtFilePicker
+            accept="application/json,.json"
+            label="导入样式包"
+            size="sm"
+            data-test="style-lib-import"
+            @select="onPickFile" />
+          <DtIconButton
+            size="sm"
+            variant="outline"
+            intent="neutral"
+            data-test="style-lib-export"
+            icon="download"
+            label="导出样式包"
+            @click="onExport"
+        /></template>
+      </DtSelect>
 
       <DtEmpty
         v-if="rows.length === 0"

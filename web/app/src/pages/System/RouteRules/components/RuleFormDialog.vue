@@ -125,18 +125,19 @@ async function onSubmit(): Promise<void> {
     :model-value="modelValue"
     :dirty="isDirty"
     :title="isEdit ? '修改规则' : '新增规则'"
-    width="34rem"
+    width="48rem"
     description="改动即改变全系统鉴权矩阵，最长约 10 秒后各副本生效"
     @update:model-value="emit('update:modelValue', $event)"
   >
-    <div class="flex flex-col gap-4">
+    <div class="dt-form-grid">
       <DtInput
         v-model="form.path_pattern"
+        class="dt-form-grid__wide"
         label="路径模式"
         required
         hint="以 / 开头；* 跨斜杠匹配，如 /api/v1/auth/users*"
       />
-      <div class="grid grid-cols-2 gap-4">
+      <div class="dt-form-grid dt-form-grid__wide">
         <DtSelect
           v-model="form.http_method"
           label="方法"
@@ -160,7 +161,7 @@ async function onSubmit(): Promise<void> {
       <DtInput v-model="form.description" label="说明" />
       <DtCheckbox v-model="form.is_enabled" label="启用这条规则" />
 
-      <div>
+      <div class="dt-form-grid__wide">
         <p class="m-0 mb-2 text-xs font-semibold text-text-secondary">
           需要的权限码
           <span class="font-normal text-text-disabled">

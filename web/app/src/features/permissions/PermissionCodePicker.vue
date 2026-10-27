@@ -32,9 +32,9 @@ function toggle(code: string, checked: boolean): void {
 </script>
 
 <template>
-  <div class="flex flex-col gap-5">
+  <div class="dt-form-grid">
     <section v-for="group in groups" :key="group.code">
-      <h3 class="m-0 mb-2 text-xs font-semibold text-text-secondary">
+      <h3 class="m-0 mb-2 text-sm font-semibold text-text-secondary">
         {{ group.label }}
       </h3>
       <ul class="m-0 flex list-none flex-col gap-2 p-0">
@@ -44,12 +44,13 @@ function toggle(code: string, checked: boolean): void {
           class="flex items-center justify-between gap-3"
         >
           <DtCheckbox
+            class="permission-code min-w-0 flex-1"
             :model-value="modelValue.has(item.code)"
             :disabled="locked?.has(item.code) ?? false"
             @update:model-value="toggle(item.code, $event)"
           >
             <span class="text-[13px] text-text-primary">{{ item.name }}</span>
-            <code class="ml-2 text-2xs text-text-disabled">{{
+            <code class="break-all text-2xs text-text-disabled">{{
               item.code
             }}</code>
           </DtCheckbox>
@@ -67,3 +68,19 @@ function toggle(code: string, checked: boolean): void {
     </section>
   </div>
 </template>
+
+<style scoped lang="scss">
+.permission-code.dt-checkbox {
+  display: grid;
+  grid-template-columns: var(--ctl-box-sm) minmax(0, 1fr);
+  gap: 2px 8px;
+
+  :deep(.dt-checkbox__box) {
+    grid-row: 1 / 3;
+  }
+
+  code {
+    grid-column: 2;
+  }
+}
+</style>

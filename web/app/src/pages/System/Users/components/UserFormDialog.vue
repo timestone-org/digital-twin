@@ -105,13 +105,14 @@ async function onSubmit(): Promise<void> {
 
 <template>
   <DtModal
+    width="44rem"
     :model-value="modelValue"
     :dirty="isDirty"
     :title="isEdit ? '编辑资料' : '新建用户'"
     :description="isEdit ? '角色与直权请走各自的授权入口' : undefined"
     @update:model-value="emit('update:modelValue', $event)"
   >
-    <form class="flex flex-col gap-4" @submit.prevent="onSubmit">
+    <form class="dt-form-grid" @submit.prevent="onSubmit">
       <DtInput
         v-if="!isEdit"
         v-model="form.username"
