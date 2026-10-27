@@ -86,7 +86,7 @@ defineEmits<{ starter: [text: string] }>()
   &__footnote {
     margin: 1.25rem 0 0;
     color: var(--text-secondary);
-    font-size: 0.6875rem;
+    font-size: var(--font-size-caption);
     line-height: 1.7;
   }
 }

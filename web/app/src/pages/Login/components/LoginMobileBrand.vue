@@ -55,7 +55,7 @@ import { appConfig } from '@/config/app'
 
 .login-mobile__sub {
   margin: 2px 0 0;
-  font-size: 10px;
+  font-size: var(--font-size-caption);
   letter-spacing: 0.3em;
   text-transform: uppercase;
   color: rgba(var(--accent-primary-rgb), 0.7);

@@ -238,7 +238,7 @@ const liveLabel = computed(() => {
   // 尺寸把两个按钮推到右头，读数与标题不会挤在一起
   &__size {
     flex: 1;
-    font-size: 11px;
+    font-size: var(--font-size-caption);
     color: var(--text-secondary);
     font-variant-numeric: tabular-nums;
   }
@@ -263,7 +263,7 @@ const liveLabel = computed(() => {
   &__live {
     max-width: 320px;
     padding: 4px 10px 6px;
-    font-size: 11px;
+    font-size: var(--font-size-caption);
     color: var(--state-warning);
     border-top: 1px solid var(--border-subtle);
 

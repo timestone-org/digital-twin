@@ -245,7 +245,7 @@ function onDragStart(event: DragEvent, styleId: string): void {
   gap: 6px;
   align-items: center;
   margin: 0 0 4px;
-  font-size: 11px;
+  font-size: var(--font-size-caption);
   font-weight: 600;
   color: var(--text-secondary);
 }
@@ -304,7 +304,7 @@ function onDragStart(event: DragEvent, styleId: string): void {
 
 .t2p-name {
   max-width: 100%;
-  font-size: 11px;
+  font-size: var(--font-size-caption);
   line-height: 1.2;
   text-align: center;
   overflow-wrap: anywhere;
@@ -315,6 +315,6 @@ function onDragStart(event: DragEvent, styleId: string): void {
   border: 1px solid var(--border-subtle);
   border-radius: var(--radius-sm);
   color: var(--text-disabled);
-  font-size: 10px;
+  font-size: var(--font-size-caption);
 }
 </style>

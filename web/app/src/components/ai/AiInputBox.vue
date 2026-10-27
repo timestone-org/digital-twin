@@ -137,7 +137,7 @@ const text = computed(() => ({
   min-width: 0;
   overflow: hidden;
   color: var(--text-disabled);
-  font-size: 0.6875rem;
+  font-size: var(--font-size-caption);
   text-align: right;
   white-space: nowrap;
 }

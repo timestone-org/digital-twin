@@ -175,7 +175,7 @@ const groups = computed(() =>
   align-items: center;
   gap: 4px;
   width: 100%;
-  font-size: 11px;
+  font-size: var(--font-size-caption);
   color: var(--text-secondary);
   cursor: pointer;
   transition: color 0.15s ease;

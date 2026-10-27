@@ -105,7 +105,7 @@ const picture = computed(() => isImage(props.attachment))
   flex: none;
   margin-left: auto;
   color: var(--text-disabled);
-  font-size: 0.6875rem;
+  font-size: var(--font-size-caption);
 }
 
 /* 附件全文：用户发出去前能核对助手将要看到什么 */
@@ -119,7 +119,7 @@ const picture = computed(() => isImage(props.attachment))
   background: var(--surface-panel);
   color: var(--text-secondary);
   font-family: var(--font-mono);
-  font-size: 0.6875rem;
+  font-size: var(--font-size-caption);
   line-height: 1.5;
   white-space: pre-wrap;
   overflow-wrap: anywhere;

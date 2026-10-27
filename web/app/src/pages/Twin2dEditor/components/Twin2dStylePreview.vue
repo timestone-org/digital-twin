@@ -289,7 +289,7 @@ function setCustom(axis: 'w' | 'h', value: number | undefined): void {
   right: 4px;
   bottom: 2px;
   color: var(--text-disabled);
-  font-size: 10px;
+  font-size: var(--font-size-caption);
   pointer-events: none;
 }
 </style>

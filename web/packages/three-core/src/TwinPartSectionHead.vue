@@ -26,14 +26,14 @@ defineProps<{ title: string; hint: string }>()
   h3 {
     margin: 0;
     color: var(--text-title);
-    font-size: 12px;
+    font-size: var(--font-size-body);
     font-weight: 600;
     letter-spacing: 0.04em;
   }
 
   span {
     color: var(--text-secondary);
-    font-size: 11px;
+    font-size: var(--font-size-caption);
   }
 }
 </style>

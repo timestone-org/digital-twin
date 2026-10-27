@@ -58,7 +58,7 @@ withDefaults(
   padding: 0 5px;
   border: 1px solid var(--border-subtle);
   border-radius: var(--radius-sm);
-  font-size: 10px;
+  font-size: var(--font-size-caption);
   color: var(--text-secondary);
   text-overflow: ellipsis;
 }

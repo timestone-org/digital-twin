@@ -185,7 +185,7 @@ const fullTime = computed(() =>
     align-items: center;
     gap: 8px;
     min-width: 0;
-    font-size: 11px;
+    font-size: var(--font-size-caption);
     color: var(--text-secondary);
   }
 
@@ -200,7 +200,7 @@ const fullTime = computed(() =>
 
   &__type {
     flex-shrink: 0;
-    font-size: 10px;
+    font-size: var(--font-size-caption);
     opacity: 0.75;
   }
 
@@ -243,7 +243,7 @@ const fullTime = computed(() =>
     align-items: flex-end;
     gap: 3px;
     flex-shrink: 0;
-    font-size: 11px;
+    font-size: var(--font-size-caption);
   }
 
   &__status {
@@ -283,14 +283,14 @@ const fullTime = computed(() =>
   }
 
   &__archive {
-    font-size: 11px;
+    font-size: var(--font-size-caption);
     color: var(--text-secondary);
   }
 
   &__error {
     margin: 0;
     overflow-wrap: anywhere;
-    font-size: 11px;
+    font-size: var(--font-size-caption);
     line-height: 1.4;
     color: var(--state-danger);
   }

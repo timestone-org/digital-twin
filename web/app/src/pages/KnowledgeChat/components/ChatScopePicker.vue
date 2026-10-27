@@ -178,7 +178,7 @@ function toggle(baseId: string): void {
 .chat-scope__head {
   margin: 0;
   color: var(--text-secondary);
-  font-size: 0.6875rem;
+  font-size: var(--font-size-caption);
 }
 
 .chat-scope__list {

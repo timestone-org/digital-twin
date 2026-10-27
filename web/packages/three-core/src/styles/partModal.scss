@@ -2,7 +2,7 @@
 .twin-part-modal {
   --tp-accent: var(--accent-primary);
   --tp-bg: var(--surface-overlay);
-  --tp-font-size: 12px;
+  --tp-font-size: var(--font-size-body);
   --tp-preview-height: min(
     var(--tp-stage-height, 260px),
     max(160px, calc(100dvh - 250px))
@@ -77,7 +77,7 @@
     p {
       margin: 0;
       color: var(--text-secondary);
-      font-size: 11px;
+      font-size: var(--font-size-caption);
     }
   }
 

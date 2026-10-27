@@ -280,7 +280,7 @@ function writeCardStyle(next: CardChrome): void {
   gap: 4px;
   margin: 0;
   color: var(--text-secondary);
-  font-size: 11px;
+  font-size: var(--font-size-caption);
   font-weight: 600;
   letter-spacing: 0.08em;
 }
@@ -288,6 +288,6 @@ function writeCardStyle(next: CardChrome): void {
 .dt-common__meta {
   margin: 0;
   color: var(--text-disabled);
-  font-size: 10px;
+  font-size: var(--font-size-caption);
 }
 </style>

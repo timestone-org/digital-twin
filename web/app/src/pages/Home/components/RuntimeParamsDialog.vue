@@ -251,7 +251,7 @@ async function reset(): Promise<void> {
     gap: 8px;
     align-items: center;
     margin: 0;
-    font-size: 11px;
+    font-size: var(--font-size-caption);
   }
 }
 </style>

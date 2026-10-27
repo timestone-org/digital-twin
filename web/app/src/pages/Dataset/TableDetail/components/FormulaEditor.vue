@@ -265,7 +265,7 @@ onMounted(() => {
   padding: 4px 8px;
   color: var(--text-disabled);
   font-family: var(--font-mono);
-  font-size: 11px;
+  font-size: var(--font-size-caption);
   white-space: pre;
 }
 </style>

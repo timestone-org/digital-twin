@@ -188,7 +188,7 @@ function insertColumn(key: string): void {
    下一行，而结构闸的闭合标签正则认不出那种写法 */
 .ftb-head {
   color: var(--text-disabled);
-  font-size: 11px;
+  font-size: var(--font-size-caption);
 }
 
 .ftb-chip {
@@ -200,7 +200,7 @@ function insertColumn(key: string): void {
   background: rgba(var(--accent-primary-rgb), 0.04);
   padding: 4px 6px;
   color: var(--text-secondary);
-  font-size: 11px;
+  font-size: var(--font-size-caption);
   transition:
     border-color 0.15s ease,
     color 0.15s ease;
@@ -220,7 +220,7 @@ function insertColumn(key: string): void {
 
 .ftb-chip__unit {
   color: var(--text-disabled);
-  font-size: 10px;
+  font-size: var(--font-size-caption);
 }
 
 .ftb-op {

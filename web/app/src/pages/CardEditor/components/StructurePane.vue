@@ -116,7 +116,7 @@ const emit = defineEmits<{
 .ce-tree__head {
   margin: 0 0 2px;
   color: var(--text-disabled);
-  font-size: 11px;
+  font-size: var(--font-size-caption);
   letter-spacing: 0.06em;
 }
 
@@ -151,7 +151,7 @@ const emit = defineEmits<{
 .ce-tree__note {
   flex: none;
   color: var(--text-secondary);
-  font-size: 11px;
+  font-size: var(--font-size-caption);
   font-style: normal;
 }
 </style>

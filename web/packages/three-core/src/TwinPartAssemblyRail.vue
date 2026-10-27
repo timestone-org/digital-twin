@@ -119,7 +119,7 @@ const rows = computed<RailRow[]>(() =>
     border-bottom: 1px solid var(--border-subtle);
     color: var(--tp-accent);
     font-family: var(--font-display);
-    font-size: 10px;
+    font-size: var(--font-size-caption);
     font-weight: 600;
     letter-spacing: 0.2em;
   }
@@ -153,7 +153,7 @@ const rows = computed<RailRow[]>(() =>
     background: transparent;
     color: var(--text-secondary);
     font-family: inherit;
-    font-size: 12.5px;
+    font-size: var(--font-size-compact);
     line-height: 1.4;
     text-align: left;
     cursor: pointer;
