@@ -21,6 +21,7 @@ ALIASES = (
     ("BdmCatalogItemOut", "ModelingBdmCatalogItem"),
     ("BdmKind", "ModelingBdmKind"),
     ("BdmCatalogOut", "ModelingBdmCatalog"),
+    ("BdmSystemsOut", "ModelingBdmSystems"),
 )
 REFERENCES = (
     *ALIASES,

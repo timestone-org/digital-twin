@@ -1,7 +1,8 @@
 /** @fileoverview BDM 目录选择、分页、只读状态与过期请求不覆盖。 */
 import type { ModelingBdmCatalog } from '@dt/contracts'
+import { DtInput, DtSelect } from '@dt/ui'
 import { flushPromises, mount } from '@vue/test-utils'
-import { afterEach, describe, expect, it, vi } from 'vitest'
+import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 
 import * as modeling from '@/api/modeling'
 import { BizError } from '@/api/client'
@@ -52,8 +53,248 @@ function page(
 }
 
 afterEach(() => vi.restoreAllMocks())
+beforeEach(() => {
+  vi.spyOn(modeling, 'listModelingBdmSystems').mockResolvedValue({
+    items: [],
+    system_filter_available: false,
+  })
+})
 
 describe('BDM 取数参数', () => {
+  it('上游不支持系统筛选时提示原因且仍能搜索名称', async () => {
+    const request = vi
+      .spyOn(modeling, 'listModelingBdmCatalog')
+      .mockResolvedValue(page())
+    const wrapper = mount(BdmIdentifierPicker, {
+      props: { kind: 'point', field, modelValue: [], isReadonly: false },
+    })
+    await flushPromises()
+    expect(wrapper.text()).toContain('当前数据源不支持点位系统筛选')
+    expect(
+      wrapper
+        .findAllComponents(DtSelect)
+        .some((select) => select.props('label') === '点位所属系统'),
+    ).toBe(false)
+    const input = wrapper.get('.dt-bdm-picker__search input')
+    expect(input.attributes('maxlength')).toBe('100')
+    await input.setValue(' 温度 ')
+    await input.trigger('keydown', { key: 'Enter' })
+    await flushPromises()
+    expect(request.mock.calls.at(-1)?.[0]).toEqual({
+      kind: 'point',
+      page: 1,
+      name: '温度',
+      system: '',
+    })
+    wrapper.unmount()
+  })
+
+  it('点位系统采用接口的实际分类，与名称条件一起提交', async () => {
+    vi.mocked(modeling.listModelingBdmSystems).mockResolvedValue({
+      items: ['空压系统'],
+      system_filter_available: true,
+    })
+    const request = vi
+      .spyOn(modeling, 'listModelingBdmCatalog')
+      .mockResolvedValue(page())
+    const wrapper = mount(BdmIdentifierPicker, {
+      props: { kind: 'point', field, modelValue: [], isReadonly: false },
+    })
+    await flushPromises()
+    const select = wrapper.getComponent(DtSelect)
+    expect(select.props('options')).toEqual([
+      { value: '', label: '全部系统' },
+      { value: '空压系统', label: '空压系统' },
+    ])
+    select.vm.$emit('update:modelValue', '空压系统')
+    await wrapper.get('.dt-bdm-picker__search input').setValue('压力')
+    await wrapper
+      .get('.dt-bdm-picker__search input')
+      .trigger('keydown', { key: 'Enter' })
+    await flushPromises()
+    expect(request.mock.calls.at(-1)?.[0]).toEqual({
+      kind: 'point',
+      page: 1,
+      name: '压力',
+      system: '空压系统',
+    })
+    wrapper.unmount()
+  })
+
+  it('属性系统精确筛选在查询时回到首页，翻页保持已提交条件', async () => {
+    const request = vi
+      .spyOn(modeling, 'listModelingBdmCatalog')
+      .mockResolvedValue(page('raw'))
+    const wrapper = mount(BdmIdentifierPicker, {
+      props: { kind: 'raw', field, modelValue: ['kept'], isReadonly: false },
+    })
+    await flushPromises()
+    await wrapper
+      .findAll('button')
+      .find((button) => button.text() === '下一页')
+      ?.trigger('click')
+    await flushPromises()
+    const system = wrapper
+      .findAllComponents(DtInput)
+      .find((input) => input.props('label') === '属性所属系统')
+    expect(system).toBeDefined()
+    await system?.get('input').setValue(' 空压系统 ')
+    const input = wrapper.get('.dt-bdm-picker__search input')
+    await input.setValue(' 功率 ')
+    await input.trigger('keydown', { key: 'Enter' })
+    await flushPromises()
+    expect(request.mock.calls.at(-1)?.[0]).toEqual({
+      kind: 'raw',
+      page: 1,
+      name: '功率',
+      system: '空压系统',
+    })
+    await input.setValue('尚未提交')
+    await wrapper
+      .findAll('button')
+      .find((button) => button.text() === '下一页')
+      ?.trigger('click')
+    await flushPromises()
+    expect(request.mock.calls.at(-1)?.[0]).toEqual({
+      kind: 'raw',
+      page: 2,
+      name: '功率',
+      system: '空压系统',
+    })
+    expect(wrapper.emitted('update:modelValue')).toBeUndefined()
+    wrapper.unmount()
+  })
+
+  it('系统分类失败可以独立重试且不阻断目录', async () => {
+    vi.mocked(modeling.listModelingBdmSystems).mockRejectedValueOnce(
+      new Error('offline'),
+    )
+    vi.spyOn(modeling, 'listModelingBdmCatalog').mockResolvedValue(page())
+    const wrapper = mount(BdmIdentifierPicker, {
+      props: { kind: 'point', field, modelValue: [], isReadonly: false },
+    })
+    await flushPromises()
+    expect(wrapper.text()).toContain('系统分类读取失败')
+    expect(wrapper.text()).toContain('温度')
+    await wrapper
+      .findAll('button')
+      .find((button) => button.text() === '重试系统分类')
+      ?.trigger('click')
+    await flushPromises()
+    expect(wrapper.text()).not.toContain('系统分类读取失败')
+    expect(wrapper.text()).toContain('当前数据源不支持点位系统筛选')
+    wrapper.unmount()
+  })
+
+  it('空搜索结果显示零项并可刷新，不当作接口失败', async () => {
+    const request = vi
+      .spyOn(modeling, 'listModelingBdmCatalog')
+      .mockResolvedValue({ ...page('formula'), total: 0, items: [] })
+    const wrapper = mount(BdmIdentifierPicker, {
+      props: {
+        kind: 'formula',
+        field,
+        modelValue: ['kept'],
+        isReadonly: false,
+      },
+    })
+    await flushPromises()
+    expect(wrapper.text()).toContain('共 0 项')
+    expect(wrapper.text()).toContain('没有匹配项')
+    expect(wrapper.find('[role="alert"]').exists()).toBe(false)
+    await wrapper
+      .findAll('button')
+      .find((button) => button.text() === '刷新目录')
+      ?.trigger('click')
+    await flushPromises()
+    expect(request).toHaveBeenCalledTimes(2)
+    expect(wrapper.emitted('update:modelValue')).toBeUndefined()
+    wrapper.unmount()
+  })
+
+  it('同名项通过真实标识区分，并展示单位与系统', async () => {
+    const base = page('raw')
+    const item = base.items[0]
+    if (item === undefined) throw new Error('Missing fixture')
+    vi.spyOn(modeling, 'listModelingBdmCatalog').mockResolvedValue({
+      ...base,
+      items: [
+        {
+          ...item,
+          identifier: 'first',
+          code: 'first',
+          system: '空压',
+          unit: 'kW',
+        },
+        {
+          ...item,
+          identifier: 'second',
+          code: 'second',
+          system: '空调',
+          unit: 'kW',
+        },
+      ],
+    })
+    const wrapper = mount(BdmIdentifierPicker, {
+      props: { kind: 'raw', field, modelValue: ['first'], isReadonly: false },
+    })
+    await flushPromises()
+    expect(wrapper.text()).toContain('空压 · kW')
+    expect(wrapper.text()).toContain('空调 · kW')
+    await wrapper.findAll('input[type="checkbox"]').at(1)?.setValue(true)
+    expect(wrapper.emitted('update:modelValue')?.at(-1)).toEqual([
+      ['first', 'second'],
+    ])
+    wrapper.unmount()
+  })
+
+  it('不可查询点位不能新增选择，但允许移除已有选择', async () => {
+    const base = page()
+    vi.spyOn(modeling, 'listModelingBdmCatalog').mockResolvedValue({
+      ...base,
+      items: base.items.map((item) => ({
+        ...item,
+        history_available: false,
+        table_type: 'Run',
+      })),
+    })
+    const wrapper = mount(BdmIdentifierPicker, {
+      props: { kind: 'point', field, modelValue: [], isReadonly: false },
+    })
+    await flushPromises()
+    expect(
+      wrapper.get('input[type="checkbox"]').attributes('disabled'),
+    ).toBeDefined()
+    expect(wrapper.text()).toContain('无可查询的历史字段')
+    expect(wrapper.text()).toContain('Run')
+    await wrapper.setProps({ modelValue: ['p1'] })
+    expect(
+      wrapper.get('input[type="checkbox"]').attributes('disabled'),
+    ).toBeUndefined()
+    await wrapper.get('input[type="checkbox"]').setValue(false)
+    expect(wrapper.emitted('update:modelValue')?.at(-1)).toEqual([[]])
+    wrapper.unmount()
+  })
+
+  it('关闭面板取消目录和系统分类请求', () => {
+    const request = vi
+      .spyOn(modeling, 'listModelingBdmCatalog')
+      .mockReturnValue(new Promise(() => undefined))
+    vi.mocked(modeling.listModelingBdmSystems).mockReturnValue(
+      new Promise(() => undefined),
+    )
+    const wrapper = mount(BdmIdentifierPicker, {
+      props: { kind: 'point', field, modelValue: [], isReadonly: false },
+    })
+    expect(wrapper.text()).toContain('正在读取目录')
+    const signal = request.mock.calls[0]?.[1]
+    const systemsSignal = vi.mocked(modeling.listModelingBdmSystems).mock
+      .calls[0]?.[0]
+    wrapper.unmount()
+    expect(signal?.aborted).toBe(true)
+    expect(systemsSignal?.aborted).toBe(true)
+  })
+
   it.each(['raw', 'formula'] as const)('%s 目录提供搜索入口', async (kind) => {
     vi.spyOn(modeling, 'listModelingBdmCatalog').mockResolvedValue(page(kind))
     const wrapper = mount(BdmIdentifierPicker, {
@@ -72,7 +313,7 @@ describe('BDM 取数参数', () => {
   })
 
   it.each(['raw', 'formula'] as const)(
-    '%s 搜索能找到当前页之外的记录',
+    '%s 名称搜索只读取过滤后的单页并保留已选标识',
     async (kind) => {
       const records = Array.from({ length: 201 }, (_, index) => ({
         identifier: `id-${index}`,
@@ -81,19 +322,22 @@ describe('BDM 取数参数', () => {
         system: null,
         history_available: null,
       }))
-      vi.spyOn(modeling, 'listModelingBdmCatalog').mockImplementation(
-        (query) => {
+      const request = vi
+        .spyOn(modeling, 'listModelingBdmCatalog')
+        .mockImplementation((query) => {
           const size = query.size ?? 50
+          const matches = records.filter((item) =>
+            item.name.includes(query.name ?? ''),
+          )
           return Promise.resolve({
             kind,
             page: query.page,
             size,
-            total: records.length,
+            total: matches.length,
             system_filter_available: null,
-            items: records.slice((query.page - 1) * size, query.page * size),
+            items: matches.slice((query.page - 1) * size, query.page * size),
           })
-        },
-      )
+        })
       const wrapper = mount(BdmIdentifierPicker, {
         props: { kind, field, modelValue: ['kept'], isReadonly: false },
       })
@@ -105,6 +349,13 @@ describe('BDM 取数参数', () => {
         .find((button) => button.text() === '查询')
         ?.trigger('click')
       await vi.waitFor(() => expect(wrapper.text()).toContain('目标温度'))
+      expect(request).toHaveBeenCalledTimes(2)
+      expect(request.mock.calls.at(-1)?.[0]).toEqual({
+        kind,
+        page: 1,
+        name: '目标',
+        system: '',
+      })
       expect(wrapper.findAll('input[type="checkbox"]')).toHaveLength(1)
       await wrapper.get('input[type="checkbox"]').setValue(true)
       expect(wrapper.emitted('update:modelValue')?.at(-1)).toEqual([
@@ -125,9 +376,12 @@ describe('BDM 取数参数', () => {
     expect(request.mock.calls[0]?.[0]).toEqual({
       kind: 'point',
       page: 1,
-      keyword: '',
+      name: '',
+      system: '',
     })
-    expect(wrapper.text()).toContain('温度（P_1）')
+    expect(wrapper.get('input[type="checkbox"]').attributes('aria-label')).toBe(
+      '温度（P_1）',
+    )
     await wrapper.get('input[type="checkbox"]').setValue(true)
     expect(wrapper.emitted('update:modelValue')?.at(-1)).toEqual([['p1']])
     await wrapper.getComponent(ArrayConfigInput).get('input').setValue('p1,p2')

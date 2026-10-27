@@ -1109,6 +1109,51 @@
         "title": "ApiResponse[BdmCatalogOut]",
         "type": "object"
       },
+      "ApiResponse_BdmSystemsOut_": {
+        "properties": {
+          "code": {
+            "default": 0,
+            "title": "Code",
+            "type": "integer"
+          },
+          "data": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/BdmSystemsOut"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "details": {
+            "anyOf": [
+              {
+                "items": {
+                  "$ref": "#/components/schemas/FieldErrorOut"
+                },
+                "type": "array"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Details"
+          },
+          "message": {
+            "default": "ok",
+            "title": "Message",
+            "type": "string"
+          },
+          "trace_id": {
+            "default": "",
+            "title": "Trace Id",
+            "type": "string"
+          }
+        },
+        "title": "ApiResponse[BdmSystemsOut]",
+        "type": "object"
+      },
       "ApiResponse_BindingOut_": {
         "properties": {
           "code": {
@@ -6969,6 +7014,28 @@
               }
             ],
             "title": "System"
+          },
+          "table_type": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Table Type"
+          },
+          "unit": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Unit"
           }
         },
         "required": [
@@ -7035,6 +7102,27 @@
           "formula"
         ],
         "type": "string"
+      },
+      "BdmSystemsOut": {
+        "properties": {
+          "items": {
+            "items": {
+              "type": "string"
+            },
+            "title": "Items",
+            "type": "array"
+          },
+          "system_filter_available": {
+            "title": "System Filter Available",
+            "type": "boolean"
+          }
+        },
+        "required": [
+          "items",
+          "system_filter_available"
+        ],
+        "title": "BdmSystemsOut",
+        "type": "object"
       },
       "BindingCreateIn": {
         "additionalProperties": false,
@@ -31272,6 +31360,17 @@
           },
           {
             "in": "query",
+            "name": "name",
+            "required": false,
+            "schema": {
+              "default": "",
+              "maxLength": 100,
+              "title": "Name",
+              "type": "string"
+            }
+          },
+          {
+            "in": "query",
             "name": "keyword",
             "required": false,
             "schema": {
@@ -31302,6 +31401,16 @@
               "title": "Code",
               "type": "string"
             }
+          },
+          {
+            "in": "query",
+            "name": "include_unqueryable",
+            "required": false,
+            "schema": {
+              "default": false,
+              "title": "Include Unqueryable",
+              "type": "boolean"
+            }
           }
         ],
         "responses": {
@@ -31326,7 +31435,28 @@
             "description": "Validation Error"
           }
         },
-        "summary": "BDM 取数目录",
+        "summary": "能管取数目录",
+        "tags": [
+          "modeling-bdm"
+        ]
+      }
+    },
+    "/api/v1/platform/modeling-bdm-systems": {
+      "get": {
+        "operationId": "list_bdm_systems_api_v1_platform_modeling_bdm_systems_get",
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiResponse_BdmSystemsOut_"
+                }
+              }
+            },
+            "description": "Successful Response"
+          }
+        },
+        "summary": "能管点位系统目录",
         "tags": [
           "modeling-bdm"
         ]

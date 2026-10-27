@@ -69,6 +69,7 @@ async def test_catalog_requires_modeling_view_and_returns_platform_envelope(
 
     def respond(request: httpx.Request) -> httpx.Response:
         requests.append(str(request.url))
+        assert request.url.params["includeUnqueryable"] == "true"
         return success(
             {
                 "total": 1,
@@ -87,7 +88,9 @@ async def test_catalog_requires_modeling_view_and_returns_platform_envelope(
         )
 
     install_transport(monkeypatch, respond)
-    response = await app_client.get(CATALOG)
+    response = await app_client.get(
+        CATALOG, params={"name": "温度", "include_unqueryable": True}
+    )
     assert response.status_code == 200
     assert response.json()["code"] == 0
     assert response.json()["trace_id"]
@@ -95,6 +98,29 @@ async def test_catalog_requires_modeling_view_and_returns_platform_envelope(
     response = await app_client.get(CATALOG, headers=sign(codes=()))
     assert response.status_code == 403
     assert len(requests) == 1
+    assert "name=%E6%B8%A9%E5%BA%A6" in requests[0]
+
+
+async def test_system_catalog_uses_same_permission_and_platform_envelope(
+    app_client: httpx.AsyncClient,
+    sign: SignHeaders,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    def respond(request: httpx.Request) -> httpx.Response:
+        assert request.url.path.endswith("/points/systems")
+        return success({"items": [], "systemFilterAvailable": False})
+
+    install_transport(monkeypatch, respond)
+    endpoint = "/api/v1/platform/modeling-bdm-systems"
+    response = await app_client.get(endpoint)
+    assert response.status_code == 200
+    assert response.json()["data"] == {
+        "items": [],
+        "system_filter_available": False,
+    }
+    assert response.json()["trace_id"]
+    denied = await app_client.get(endpoint, headers=sign(codes=()))
+    assert denied.status_code == 403
 
 
 def graph() -> dict[str, Any]:

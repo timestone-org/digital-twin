@@ -26,6 +26,7 @@ import type {
   ModelingBinding,
   ModelingBdmCatalog,
   ModelingBdmCatalogItem,
+  ModelingBdmSystems,
   ModelingBindingImpact,
   ModelingBindingUsage,
   ModelingGraph,
@@ -77,7 +78,13 @@ const BDM_ITEM = {
   name: true,
   system: true,
   history_available: true,
+  table_type: true,
+  unit: true,
 } satisfies Keys<ModelingBdmCatalogItem>
+const BDM_SYSTEMS = {
+  items: true,
+  system_filter_available: true,
+} satisfies Keys<ModelingBdmSystems>
 const BDM_CATALOG = {
   kind: true,
   total: true,
@@ -387,6 +394,7 @@ const PAIRS: ReadonlyArray<readonly [string, Record<string, true>]> = [
   ['ModelVersionUpdateIn', VERSION_UPDATE],
   ['BdmCatalogItemOut', BDM_ITEM],
   ['BdmCatalogOut', BDM_CATALOG],
+  ['BdmSystemsOut', BDM_SYSTEMS],
 ]
 
 describe('分析建模线形与 openapi 一致', () => {

@@ -16,6 +16,7 @@ import type {
   ModelFormulaRegistration,
   ModelingBinding,
   ModelingBdmCatalog,
+  ModelingBdmSystems,
   ModelingBindingImpact,
   ModelingGraph,
   ModelingGraphCheck,
@@ -88,6 +89,8 @@ export async function listModelingBdmCatalog(
     page: number
     size?: number | undefined
     keyword?: string | undefined
+    name?: string | undefined
+    system?: string | undefined
   },
   signal?: AbortSignal,
 ): Promise<ModelingBdmCatalog> {
@@ -97,6 +100,16 @@ export async function listModelingBdmCatalog(
       query: { ...query, size: query.size ?? 50 },
       ...(signal ? { signal } : {}),
     }),
+  )
+}
+
+/** 点位系统的实际分类与筛选能力。 */
+export async function listModelingBdmSystems(
+  signal?: AbortSignal,
+): Promise<ModelingBdmSystems> {
+  return await requestData<ModelingBdmSystems>(
+    '/modeling-bdm-systems',
+    onPlatform(signal === undefined ? {} : { signal }),
   )
 }
 

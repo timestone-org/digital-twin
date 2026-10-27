@@ -4,6 +4,7 @@ from collections.abc import Callable
 
 import httpx
 import pytest
+from pydantic import ValidationError
 
 from lib.errors import ValidationFailed
 from platform_server.apps.modeling.schemas.bdm import BdmCatalogQuery
@@ -62,8 +63,160 @@ async def test_point_catalog_filters_and_missing_system_are_preserved(
         "name": "温度",
         "system": None,
         "history_available": True,
+        "table_type": None,
+        "unit": None,
     }
     assert SECRET not in result.model_dump_json()
+
+
+@pytest.mark.parametrize("kind", ["point", "raw", "formula"])
+async def test_names_are_filtered_upstream_for_every_catalog(
+    monkeypatch: pytest.MonkeyPatch, kind: str
+) -> None:
+    def respond(request: httpx.Request) -> httpx.Response:
+        assert request.url.params["name"] == "温度"
+        assert request.url.params["page"] == "3"
+        assert "keyword" not in request.url.params
+        return success({"total": 0, "page": 3, "pageSize": 50, "items": []})
+
+    replace_transport(monkeypatch, respond)
+    query = BdmCatalogQuery.model_validate(
+        {"kind": kind, "name": "温度", "page": 3}
+    )
+    result = await bdm_catalog.read_catalog(connection(), query)
+    assert result.total == 0
+    assert result.page == 3
+
+
+def test_name_filter_has_upstream_character_limit() -> None:
+    with pytest.raises(ValidationError):
+        BdmCatalogQuery.model_validate({"name": "温" * 101})
+
+
+async def test_empty_catalog_accepts_omitted_zero_total(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    def respond(_request: httpx.Request) -> httpx.Response:
+        return success({"page": 1, "pageSize": 50, "items": []})
+
+    replace_transport(monkeypatch, respond)
+    result = await bdm_catalog.read_catalog(connection(), BdmCatalogQuery())
+    assert result.total == 0
+    assert result.items == []
+
+
+async def test_populated_catalog_requires_total(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    def respond(_request: httpx.Request) -> httpx.Response:
+        return success(
+            {"page": 1, "pageSize": 50, "items": [{"pointId": "p1"}]}
+        )
+
+    replace_transport(monkeypatch, respond)
+    with pytest.raises(BdmReadFailed, match="响应格式"):
+        await bdm_catalog.read_catalog(connection(), BdmCatalogQuery())
+
+
+@pytest.mark.parametrize("is_available", [True, False])
+async def test_point_systems_preserve_upstream_capability(
+    monkeypatch: pytest.MonkeyPatch, is_available: bool
+) -> None:
+    def respond(request: httpx.Request) -> httpx.Response:
+        assert request.url.path == "/api/bdm/training-data/points/systems"
+        return success(
+            {
+                "items": ["空压系统", "空调系统"] if is_available else [],
+                "systemFilterAvailable": is_available,
+            }
+        )
+
+    replace_transport(monkeypatch, respond)
+    result = await bdm_catalog.read_systems(connection())
+    assert result.system_filter_available is is_available
+    assert result.items == (["空压系统", "空调系统"] if is_available else [])
+    assert SECRET not in result.model_dump_json()
+
+
+async def test_disabled_systems_are_unavailable() -> None:
+    with pytest.raises(BdmReadFailed, match="未启用"):
+        await bdm_catalog.read_systems(None)
+
+
+@pytest.mark.parametrize(
+    "data",
+    [{"items": []}, {"items": [12], "systemFilterAvailable": True}],
+)
+async def test_malformed_systems_are_rejected(
+    monkeypatch: pytest.MonkeyPatch, data: dict[str, object]
+) -> None:
+    replace_transport(monkeypatch, lambda _request: success(data))
+    with pytest.raises(BdmReadFailed, match="响应格式"):
+        await bdm_catalog.read_systems(connection())
+
+
+async def test_point_configuration_audit_is_explicit_and_preserves_metadata(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    def respond(request: httpx.Request) -> httpx.Response:
+        assert request.url.params["includeUnqueryable"] == "true"
+        return success(
+            {
+                "total": 1,
+                "page": 1,
+                "pageSize": 50,
+                "items": [
+                    {
+                        "pointId": "p1",
+                        "tableType": "Run",
+                        "historyAvailable": False,
+                    }
+                ],
+            }
+        )
+
+    replace_transport(monkeypatch, respond)
+    result = await bdm_catalog.read_catalog(
+        connection(), BdmCatalogQuery(include_unqueryable=True)
+    )
+    assert result.items[0].history_available is False
+    assert result.items[0].table_type == "Run"
+
+
+async def test_raw_name_and_system_filter_preserves_unit(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    def respond(request: httpx.Request) -> httpx.Response:
+        assert dict(request.url.params) == {
+            "kind": "raw",
+            "name": "功率",
+            "system": "空压系统",
+            "page": "1",
+            "pageSize": "50",
+        }
+        return success(
+            {
+                "total": 1,
+                "page": 1,
+                "pageSize": 50,
+                "items": [
+                    {
+                        "propertyId": "r1",
+                        "nodeName": "1#空压机",
+                        "propertyName": "功率",
+                        "unit": "kW",
+                    }
+                ],
+            }
+        )
+
+    replace_transport(monkeypatch, respond)
+    result = await bdm_catalog.read_catalog(
+        connection(),
+        BdmCatalogQuery(kind="raw", name="功率", system="空压系统"),
+    )
+    assert result.items[0].unit == "kW"
+    assert result.items[0].name == "1#空压机 · 功率"
 
 
 @pytest.mark.parametrize(
@@ -105,10 +258,12 @@ async def test_property_and_formula_directories(
         {"kind": "formula", "keyword": "x"},
         {"kind": "raw", "code": "x"},
         {"kind": "formula", "system": "x"},
+        {"kind": "raw", "include_unqueryable": True},
+        {"kind": "formula", "include_unqueryable": True},
     ],
 )
 async def test_unsupported_filters_are_not_silently_ignored(
-    values: dict[str, str],
+    values: dict[str, object],
 ) -> None:
     with pytest.raises(ValidationFailed):
         await bdm_catalog.read_catalog(

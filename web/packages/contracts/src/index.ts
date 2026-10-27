@@ -622,6 +622,7 @@ export type {
   ModelingVersionUpdateInput,
   ModelingBdmCatalogItem,
   ModelingBdmCatalog,
+  ModelingBdmSystems,
 } from './modelingDetection'
 
 export type * from './hierarchy'
