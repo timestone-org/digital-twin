@@ -196,3 +196,52 @@ describe('结构化规则参数', () => {
     expect(wrapper.text()).not.toContain('应用配置')
   })
 })
+
+describe('参数的恢复默认操作', () => {
+  const fields = fieldsOf({
+    properties: {
+      factor: { type: 'number', title: '比例', default: 1 },
+      name: { type: 'string', title: '名称', default: '默认名称' },
+      enabled: { type: 'boolean', title: '启用', default: true },
+      method: { type: 'string', title: '方法', enum: ['a', 'b'], default: 'a' },
+    },
+  })
+
+  it('行内按钮恢复各自字段的默认值', async () => {
+    const wrapper = mount(ConfigForm, {
+      props: {
+        fields,
+        config: { factor: 2, name: '自定义', enabled: false, method: 'b' },
+        options: options(),
+        isReadonly: false,
+      },
+    })
+    const buttons = wrapper.findAll('.dt-field__actions button')
+    expect(buttons).toHaveLength(4)
+    for (const button of buttons) await button.trigger('click')
+    expect(wrapper.emitted('change')).toEqual([
+      ['factor', 1],
+      ['name', '默认名称'],
+      ['enabled', true],
+      ['method', 'a'],
+    ])
+    wrapper.unmount()
+  })
+
+  it('只读字段和默认值不显示恢复操作', () => {
+    for (const isReadonly of [false, true]) {
+      const wrapper = mount(ConfigForm, {
+        props: {
+          fields,
+          config: isReadonly
+            ? { factor: 2, name: '自定义', enabled: false, method: 'b' }
+            : { factor: 1, name: '默认名称', enabled: true, method: 'a' },
+          options: options(),
+          isReadonly,
+        },
+      })
+      expect(wrapper.text()).not.toContain('恢复默认')
+      wrapper.unmount()
+    }
+  })
+})

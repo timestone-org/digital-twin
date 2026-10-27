@@ -28,12 +28,13 @@ const emit = defineEmits<{
     :model-value="props.node !== null"
     :title="props.operator?.name ?? '参数'"
     :description="props.operator?.description"
-    width="34rem"
+    width="48rem"
     @update:model-value="emit('close')"
   >
     <ConfigForm
       v-if="props.node"
       :key="props.node.id"
+      class="dt-ml-dialog-form"
       :fields="props.fields"
       :config="props.node.config"
       :options="props.options"
@@ -44,3 +45,24 @@ const emit = defineEmits<{
     />
   </DtModal>
 </template>
+
+<style scoped lang="scss">
+.dt-ml-dialog-form.dt-ml-form {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(min(100%, 18rem), 1fr));
+  align-items: start;
+  gap: 16px;
+
+  :deep(.dt-ml-form__row) {
+    min-width: 0;
+  }
+
+  :deep(
+    .dt-ml-form__row:not([data-widget='number']):not(
+        [data-widget='integer']
+      ):not([data-widget='select']):not([data-widget='switch'])
+  ) {
+    grid-column: 1 / -1;
+  }
+}
+</style>
