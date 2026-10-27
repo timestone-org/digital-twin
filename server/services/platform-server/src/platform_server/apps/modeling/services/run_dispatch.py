@@ -20,10 +20,12 @@ from platform_server.apps.modeling.protocols import ACTIVE_RUN_STATUSES
 from platform_server.apps.modeling.schemas.graph import PipelineGraph
 from platform_server.apps.modeling.services import (
     artifact_store,
+    bdm_frame,
     frame_export,
     frame_source,
     presenters,
 )
+from platform_server.apps.modeling.services.bdm_client import BdmConnection
 from platform_server.apps.modeling.services.run_executor import (
     Execution,
     NodeOutcome,
@@ -54,6 +56,7 @@ class DispatchOptions:
     #: 二进制产物的落脚处。⚠ 缺省是「没有」而不是必填：纯 JSON 那些算子
     #: 一个字节都不产，没配对象存储的部署照样跑得起来
     store: ObjectStore | None = None
+    bdm_connection: BdmConnection | None = None
 
 
 @dataclass(frozen=True)
@@ -83,7 +86,7 @@ async def execute_run(
             status="failed",
             pipeline_id=claimed.pipeline_id,
         )
-    sources = await _load_sources(sessions, claimed)
+    sources = await _load_sources(sessions, claimed, options.bdm_connection)
     outcome = await execute_graph(
         claimed.graph,
         execution=Execution(
@@ -146,16 +149,24 @@ async def _claim(sessions: Sessions, run_id: uuid.UUID) -> "_Claimed | None":
         )
 
 
-async def _load_sources(sessions: Sessions, claimed: _Claimed) -> Sources:
+async def _load_sources(
+    sessions: Sessions, claimed: _Claimed, connection: BdmConnection | None
+) -> Sources:
     """取数阶段。取不到的节点带着原因交给引擎，由它落 `failed`。
 
     Args: sessions, claimed。
     """
+    now = datetime.now(UTC)
     async with sessions.session() as session:
         prefetched = await frame_source.prefetch(
-            session, graph=claimed.graph, now=datetime.now(UTC)
+            session, graph=claimed.graph, now=now
         )
-    return Sources(frames=prefetched.frames, failures=prefetched.failures)
+    # ⚠ 外部 HTTP 必须等上面的只读事务释放后再发起。
+    external = await bdm_frame.prefetch(connection, claimed.graph, now=now)
+    return Sources(
+        frames=prefetched.frames | external.frames,
+        failures=prefetched.failures | external.failures,
+    )
 
 
 async def _is_cancelled(sessions: Sessions, run_id: uuid.UUID) -> bool:
