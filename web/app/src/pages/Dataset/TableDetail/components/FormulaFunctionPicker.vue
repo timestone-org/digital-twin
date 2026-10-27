@@ -193,7 +193,7 @@ function briefOf(fn: DatasetCatalogFunction): string {
 /* 抬头写成类名而不是一串工具类：理由见 FormulaToolbox 里同名的那一条 */
 .ftb-head {
   color: var(--text-disabled);
-  font-size: 11px;
+  font-size: var(--font-size-caption);
 }
 
 .ftb-wrap {
@@ -204,7 +204,7 @@ function briefOf(fn: DatasetCatalogFunction): string {
   border-radius: var(--radius-sm);
   padding: 2px 6px;
   color: var(--text-disabled);
-  font-size: 11px;
+  font-size: var(--font-size-caption);
   transition:
     color 0.15s ease,
     background-color 0.15s ease;
@@ -251,7 +251,7 @@ function briefOf(fn: DatasetCatalogFunction): string {
   max-width: 8rem;
   overflow: hidden;
   color: var(--text-disabled);
-  font-size: 10px;
+  font-size: var(--font-size-caption);
   text-overflow: ellipsis;
   white-space: nowrap;
 }

@@ -144,7 +144,7 @@ const status = computed(() => {
   align-items: center;
   gap: 0.25rem;
   color: var(--text-secondary);
-  font-size: 0.6875rem;
+  font-size: var(--font-size-caption);
 }
 .chat-live-point__dot {
   flex-shrink: 0;

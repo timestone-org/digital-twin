@@ -85,7 +85,7 @@ $card-min: 84px;
   gap: 6px;
   align-items: center;
   margin: 0 0 6px;
-  font-size: 11px;
+  font-size: var(--font-size-caption);
   font-weight: 600;
   color: var(--text-secondary);
 }
@@ -97,7 +97,7 @@ $card-min: 84px;
   border: 1px solid var(--border-subtle);
   border-radius: var(--radius-pill);
   background: var(--surface-sunken);
-  font-size: 10px;
+  font-size: var(--font-size-caption);
 }
 
 // 列数交给 auto-fill 自己算：侧栏是可拖的，钉死列数就只有一个宽度好看
@@ -135,7 +135,7 @@ $card-min: 84px;
 }
 
 .dt-lib__name {
-  font-size: 11px;
+  font-size: var(--font-size-caption);
   line-height: 1.2;
   text-align: center;
   overflow-wrap: anywhere;

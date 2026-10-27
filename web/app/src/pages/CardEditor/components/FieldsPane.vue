@@ -70,7 +70,7 @@ const groups = computed(() => formGroups(props.schema, props.row))
 .ce-fields__head {
   margin: 0;
   color: var(--text-disabled);
-  font-size: 11px;
+  font-size: var(--font-size-caption);
   letter-spacing: 0.06em;
 }
 

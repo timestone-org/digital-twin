@@ -258,13 +258,13 @@ function moveArm(at: number, delta: -1 | 1): void {
    尖括号折到下一行，而结构闸的闭合标签正则认不出那种写法 */
 .fb-head {
   color: var(--text-disabled);
-  font-size: 11px;
+  font-size: var(--font-size-caption);
 }
 
 .fb-tag {
   padding-top: 6px;
   color: var(--text-disabled);
-  font-size: 11px;
+  font-size: var(--font-size-caption);
   white-space: nowrap;
 }
 

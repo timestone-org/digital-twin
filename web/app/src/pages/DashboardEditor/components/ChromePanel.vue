@@ -275,7 +275,7 @@ function cardOf(draft: EditorMetaDraft | null): CardChrome {
 
 <style scoped lang="scss">
 .dt-chrome__heading {
-  font-size: 11px;
+  font-size: var(--font-size-caption);
   font-weight: 600;
   letter-spacing: 0.08em;
   color: var(--text-secondary);

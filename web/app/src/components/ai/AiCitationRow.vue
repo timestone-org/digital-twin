@@ -172,6 +172,6 @@ onUnmounted(() => {
 .cites__figure figcaption {
   padding-top: 0.1875rem;
   color: var(--text-disabled);
-  font-size: 0.6875rem;
+  font-size: var(--font-size-caption);
 }
 </style>

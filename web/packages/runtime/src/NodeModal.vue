@@ -176,7 +176,8 @@ function onKeydown(event: KeyboardEvent): void {
 
 .dt-node-modal__title {
   overflow: hidden;
-  font-size: 14px;
+  font-size: var(--font-size-dialog);
+  line-height: var(--line-height-heading);
   font-weight: 600;
   color: var(--text-title);
   text-overflow: ellipsis;

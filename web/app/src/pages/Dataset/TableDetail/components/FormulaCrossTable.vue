@@ -121,7 +121,7 @@ function insert(column: DatasetColumn): void {
   border-radius: var(--radius-sm);
   padding: 4px 6px;
   color: var(--text-secondary);
-  font-size: 11px;
+  font-size: var(--font-size-caption);
   transition:
     border-color 0.15s ease,
     color 0.15s ease;

@@ -96,7 +96,7 @@ const groups = computed(() => groupedCitations(props.items))
 
 .cites__base {
   color: var(--text-disabled);
-  font-size: 0.6875rem;
+  font-size: var(--font-size-caption);
 }
 
 .cites__list {

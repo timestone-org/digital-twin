@@ -40,7 +40,7 @@ import KnowledgeMascot from './KnowledgeMascot.vue'
   p {
     margin: 0 0 0.35rem;
     color: var(--accent-primary);
-    font-size: 0.6875rem;
+    font-size: var(--font-size-caption);
     letter-spacing: 0.15em;
   }
   h2 {

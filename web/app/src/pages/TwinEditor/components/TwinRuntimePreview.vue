@@ -238,7 +238,7 @@ const sizeLabel = computed(() => {
   // 尺寸推开两个按钮，读数与标题不会挤在一起
   &__size {
     flex: 1;
-    font-size: 11px;
+    font-size: var(--font-size-caption);
     color: var(--text-secondary);
     font-variant-numeric: tabular-nums;
   }

@@ -152,7 +152,7 @@ function presetHelpText(preset: ConfigPreset): string | undefined {
 .dt-prop__heading {
   margin: 0;
   color: var(--text-disabled);
-  font-size: 11px;
+  font-size: var(--font-size-caption);
   letter-spacing: 0.08em;
 }
 

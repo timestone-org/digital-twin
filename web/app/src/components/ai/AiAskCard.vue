@@ -233,7 +233,7 @@ const freeTextLabel = computed(
 
 .ai-ask__hint {
   color: var(--text-secondary);
-  font-size: 0.6875rem;
+  font-size: var(--font-size-caption);
 }
 
 .ai-ask__acts {

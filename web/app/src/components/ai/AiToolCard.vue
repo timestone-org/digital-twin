@@ -288,7 +288,7 @@ function toggle(): void {
 .ai-step__shot-box figcaption {
   padding-top: 0.25rem;
   color: var(--text-disabled);
-  font-size: 0.6875rem;
+  font-size: var(--font-size-caption);
 }
 
 .ai-step__gone,

@@ -269,7 +269,7 @@ function onRenameKeydown(event: KeyboardEvent): void {
   min-width: 0;
   overflow: hidden;
   color: var(--text-disabled);
-  font-size: 10px;
+  font-size: var(--font-size-caption);
   text-overflow: ellipsis;
   white-space: nowrap;
 }

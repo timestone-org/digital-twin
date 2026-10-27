@@ -191,7 +191,7 @@ import LoginClock from './LoginClock.vue'
 
   &__sub {
     margin: 2px 0 0;
-    font-size: 10px;
+    font-size: var(--font-size-caption);
     letter-spacing: 0.34em;
     text-transform: uppercase;
     color: rgba(var(--accent-primary-rgb), 0.7);
@@ -208,7 +208,7 @@ import LoginClock from './LoginClock.vue'
     align-items: center;
     gap: 8px;
     margin: 0 0 12px;
-    font-size: 11px;
+    font-size: var(--font-size-caption);
     letter-spacing: 0.3em;
     text-transform: uppercase;
     color: rgba(var(--accent-secondary-rgb), 0.8);

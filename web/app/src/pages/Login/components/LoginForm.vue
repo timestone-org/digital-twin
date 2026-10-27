@@ -266,7 +266,7 @@ async function onSubmit(): Promise<void> {
     margin-top: 32px;
     padding-top: 16px;
     border-top: 1px solid var(--border-subtle);
-    font-size: 11px;
+    font-size: var(--font-size-caption);
     color: var(--text-disabled);
   }
 

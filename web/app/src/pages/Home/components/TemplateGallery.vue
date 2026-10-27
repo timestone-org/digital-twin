@@ -174,7 +174,7 @@ defineExpose({ reload: load })
 
   &__meta {
     margin: 2px 10px 0;
-    font-size: 10px;
+    font-size: var(--font-size-caption);
     color: var(--text-disabled);
   }
 
