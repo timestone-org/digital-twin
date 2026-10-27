@@ -121,10 +121,10 @@ async function onSubmit(): Promise<void> {
     :dirty="isDirty"
     :title="isEdit ? '编辑角色' : '新建角色'"
     :description="description"
-    width="34rem"
+    width="52rem"
     @update:model-value="emit('close')"
   >
-    <form class="flex flex-col gap-4" @submit.prevent="onSubmit">
+    <form class="dt-form-grid" @submit.prevent="onSubmit">
       <DtInput
         v-model="form.name"
         label="角色名"
@@ -134,7 +134,7 @@ async function onSubmit(): Promise<void> {
       />
       <DtInput v-model="form.description" label="描述" />
 
-      <section v-if="!isEdit">
+      <section v-if="!isEdit" class="dt-form-grid__wide">
         <h3 class="m-0 mb-2 text-xs font-semibold text-text-secondary">
           权限码
         </h3>

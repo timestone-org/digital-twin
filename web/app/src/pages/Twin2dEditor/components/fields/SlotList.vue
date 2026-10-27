@@ -322,17 +322,19 @@ function removeSlot(key: string): void {
           :error="drafts.errorOf(row.slot.key)"
           :data-test="`slot-key-${row.slot.key}`"
           @update:model-value="drafts.edit(row.slot.key, $event)"
-        />
-        <DtButton
-          size="xs"
-          variant="ghost"
-          intent="danger"
-          icon="trash"
-          aria-label="删除这个槽位"
-          title="删除这个槽位"
-          :data-test="`slot-remove-${row.slot.key}`"
-          @click="removeSlot(row.slot.key)"
-        />
+        >
+          <template #actions
+            ><DtButton
+              size="xs"
+              variant="ghost"
+              intent="danger"
+              icon="trash"
+              aria-label="删除这个槽位"
+              title="删除这个槽位"
+              :data-test="`slot-remove-${row.slot.key}`"
+              @click="removeSlot(row.slot.key)"
+          /></template>
+        </DtInput>
       </div>
 
       <div class="grid grid-cols-2 gap-1.5">

@@ -53,7 +53,7 @@ function cloneIt(): void {
   <DtModal
     :model-value="role !== null"
     title="角色权限"
-    width="34rem"
+    width="52rem"
     :description="description"
     @update:model-value="emit('close')"
   >

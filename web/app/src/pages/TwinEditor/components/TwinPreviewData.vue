@@ -74,14 +74,17 @@ const fields = computed(() =>
           @update:model-value="
             emit('write', { key: field.key, value: previewSample($event) })
           "
-        />
-        <DtButton
-          size="xs"
-          variant="ghost"
-          :aria-label="`${field.label}模拟无数据`"
-          @click="emit('write', { key: field.key, value: null })"
-          >无数据</DtButton
         >
+          <template #actions>
+            <DtButton
+              size="xs"
+              variant="ghost"
+              :aria-label="`${field.label}模拟无数据`"
+              @click="emit('write', { key: field.key, value: null })"
+              >无数据</DtButton
+            >
+          </template>
+        </DtInput>
       </div>
     </div>
   </div>

@@ -116,20 +116,22 @@ watch(
             一步建好公式库条目与绑定。形参名取上面那几列的显示名，顺序也照它——
             于是台账里写 <code>@标识(列, 列)</code> 时位置天然对齐。
           </p>
-          <div class="dt-ml-detail__register">
-            <DtInput
-              v-model="fxCode"
-              label="公式标识"
-              hint="台账列里用 @标识(…) 引用它；已存在时不覆盖"
-            />
-            <DtButton
-              :disabled="fxCode.trim() === '' || !props.version.is_servable"
-              :loading="props.isBusy"
-              @click="emit('register', fxCode.trim())"
-            >
-              注册
-            </DtButton>
-          </div>
+          <DtInput
+            v-model="fxCode"
+            class="mt-2"
+            label="公式标识"
+            hint="台账列里用 @标识(…) 引用它；已存在时不覆盖"
+          >
+            <template #actions>
+              <DtButton
+                :disabled="fxCode.trim() === '' || !props.version.is_servable"
+                :loading="props.isBusy"
+                @click="emit('register', fxCode.trim())"
+              >
+                注册
+              </DtButton>
+            </template>
+          </DtInput>
           <p class="dt-ml-detail__preview">{{ preview }}</p>
         </section>
       </PermGuard>
@@ -172,17 +174,6 @@ watch(
     margin: 0.375rem 0 0;
     color: var(--text-secondary);
     font-size: var(--ctl-hint-fs-md);
-  }
-
-  &__register {
-    display: flex;
-    gap: 0.5rem;
-    align-items: flex-end;
-    margin-top: 0.5rem;
-
-    > :first-child {
-      flex: 1;
-    }
   }
 
   &__preview {

@@ -75,20 +75,21 @@ function mint(): void {
       <RuleResultGuide />
 
       <PermGuard :codes="[PERMISSION_CODES.modelingPublish]">
-        <div class="dt-ml-keys__mint">
-          <DtInput
-            v-model="newName"
-            label="给这把钥匙起个用途名"
-            hint="比如「MES 生产系统」。一把钥匙对一家对接方，撤销时不牵连别人"
-          />
-          <DtButton
-            :disabled="newName.trim() === ''"
-            :loading="props.isBusy"
-            @click="mint"
-          >
-            铸一把
-          </DtButton>
-        </div>
+        <DtInput
+          v-model="newName"
+          label="给这把钥匙起个用途名"
+          hint="比如「MES 生产系统」。一把钥匙对一家对接方，撤销时不牵连别人"
+        >
+          <template #actions>
+            <DtButton
+              :disabled="newName.trim() === ''"
+              :loading="props.isBusy"
+              @click="mint"
+            >
+              铸一把
+            </DtButton>
+          </template>
+        </DtInput>
       </PermGuard>
 
       <ApiKeyList :rows="props.keys" @revoke="(key) => emit('revoke', key)" />
@@ -115,16 +116,6 @@ function mint(): void {
     font-family: var(--font-mono);
     font-size: var(--ctl-hint-fs-md);
     overflow-x: auto;
-  }
-
-  &__mint {
-    display: flex;
-    gap: 0.5rem;
-    align-items: flex-end;
-
-    > :first-child {
-      flex: 1;
-    }
   }
 
   &__title {

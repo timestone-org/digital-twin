@@ -247,10 +247,10 @@ async function onSubmit(): Promise<void> {
     :dirty="isDirty"
     :title="isEdit ? '编辑供应商' : '新建供应商'"
     :description="kind?.description ?? '一路模型来源，助手与知识库共用这份目录'"
-    width="40rem"
+    width="52rem"
     @update:model-value="emit('update:modelValue', $event)"
   >
-    <form class="flex flex-col gap-4" @submit.prevent="onSubmit">
+    <form class="dt-form-grid" @submit.prevent="onSubmit">
       <DtSelect
         v-if="!isEdit"
         :model-value="form.kind"
@@ -268,7 +268,10 @@ async function onSubmit(): Promise<void> {
         required
         placeholder="例如：阿里云百炼"
       />
-      <div v-if="hasPresets" class="flex flex-wrap items-center gap-1.5">
+      <div
+        v-if="hasPresets"
+        class="dt-form-grid__wide flex flex-wrap items-center gap-1.5"
+      >
         <span class="text-2xs text-text-secondary"
           >常见的一家，点一下填上：</span
         >
@@ -318,7 +321,7 @@ async function onSubmit(): Promise<void> {
         :hint="dialectHint"
       />
 
-      <div class="flex items-center gap-3">
+      <div class="dt-form-grid__wide flex items-center gap-3">
         <DtButton
           v-if="hasEndpoint"
           variant="outline"
@@ -338,7 +341,10 @@ async function onSubmit(): Promise<void> {
       <DtNotice v-if="probe" :intent="probe.isOk ? 'success' : 'warning'">
         {{ probe.message }}
       </DtNotice>
-      <div v-if="unregistered.length > 0" class="flex flex-wrap gap-1.5">
+      <div
+        v-if="unregistered.length > 0"
+        class="dt-form-grid__wide flex flex-wrap gap-1.5"
+      >
         <span class="text-2xs text-text-secondary">端点自报，点一下登记：</span>
         <button
           v-for="name in unregistered"
@@ -351,7 +357,7 @@ async function onSubmit(): Promise<void> {
         </button>
       </div>
 
-      <section class="flex flex-col gap-2">
+      <section class="dt-form-grid__wide flex flex-col gap-2">
         <div class="flex items-center justify-between">
           <span class="text-sm text-text-title">登记的模型</span>
           <DtIconButton
@@ -409,12 +415,17 @@ async function onSubmit(): Promise<void> {
       <DtTextarea
         v-if="hasEndpoint"
         v-model="form.extraBody"
+        class="dt-form-grid__wide"
         label="额外请求体（可选）"
         mono
         :placeholder="EXTRA_BODY_EXAMPLE"
         hint="透传给端点的 JSON 对象，思考开关一类各家不同的键放这里"
       />
-      <DtTextarea v-model="form.notes" label="备注（可选）" />
+      <DtTextarea
+        v-model="form.notes"
+        class="dt-form-grid__wide"
+        label="备注（可选）"
+      />
 
       <DtNotice v-if="error" intent="danger">{{ error }}</DtNotice>
       <DtTag v-if="isEdit && provider?.assigned_purposes.length" size="sm">

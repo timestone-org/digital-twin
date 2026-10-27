@@ -90,7 +90,7 @@ async function onSubmit(): Promise<void> {
   <DtModal
     :model-value="user !== null"
     title="设置直权"
-    width="34rem"
+    width="52rem"
     :description="
       user
         ? `目标账号：${user.username}。提交的即为最终集合，未勾选的会被移除`

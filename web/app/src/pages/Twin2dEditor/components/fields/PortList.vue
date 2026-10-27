@@ -313,17 +313,20 @@ function removePort(id: string): void {
           :error="drafts.errorOf(row.port.id)"
           :data-test="`port-id-${row.port.id}`"
           @update:model-value="drafts.edit(row.port.id, $event)"
-        />
-        <DtButton
-          size="xs"
-          variant="ghost"
-          intent="danger"
-          icon="trash"
-          aria-label="删除这个引脚"
-          title="删除这个引脚"
-          :data-test="`port-remove-${row.port.id}`"
-          @click="removePort(row.port.id)"
-        />
+        >
+          <template #actions>
+            <DtButton
+              size="xs"
+              variant="ghost"
+              intent="danger"
+              icon="trash"
+              aria-label="删除这个引脚"
+              title="删除这个引脚"
+              :data-test="`port-remove-${row.port.id}`"
+              @click="removePort(row.port.id)"
+            />
+          </template>
+        </DtInput>
       </div>
 
       <DtInput

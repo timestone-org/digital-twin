@@ -57,7 +57,7 @@ async function onSubmit(): Promise<void> {
   <DtModal
     :model-value="role !== null"
     title="设置角色权限"
-    width="34rem"
+    width="52rem"
     :description="
       role ? `${role.name}。提交的即为最终集合，未勾选的会被移除` : undefined
     "
