@@ -118,12 +118,13 @@ function submit(): void {
 
 <template>
   <DtModal
+    width="46rem"
     :model-value="modelValue"
     :dirty="isDirty"
     title="新建节点"
     @update:model-value="emit('update:modelValue', $event)"
   >
-    <div class="flex flex-col gap-4">
+    <div class="dt-form-grid">
       <DtNotice intent="warning" icon="alert-triangle">
         标识一经创建不会被服务端改写，冲突时直接报错——上位系统的组态硬编码着它。
       </DtNotice>
@@ -159,6 +160,7 @@ function submit(): void {
       <DtField
         v-if="isVariable"
         label="初值"
+        class="dt-form-grid__wide"
         :error="parsedInitial.error ?? undefined"
         hint="留空使用类型零值；布尔填 true/false；整数与 float 均检查类型范围"
       >

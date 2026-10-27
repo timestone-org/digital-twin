@@ -87,7 +87,7 @@ async function onSaveLimits(): Promise<void> {
     :model-value="props.modelValue"
     :title="title"
     description="配置这台空调的数据来源与各指标的达标范围"
-    width="38rem"
+    width="52rem"
     @update:model-value="emit('update:modelValue', $event)"
   >
     <div class="flex flex-col gap-6">

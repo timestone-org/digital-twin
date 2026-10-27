@@ -78,11 +78,11 @@ watch(
   <DtModal
     :model-value="props.draft !== null"
     :title="isCreate ? '新建流水线' : '改流水线'"
-    width="28rem"
+    width="44rem"
     :dirty="dirty.isDirty.value"
     @update:model-value="emit('close')"
   >
-    <div class="flex flex-col gap-3">
+    <div class="dt-form-grid">
       <DtInput
         v-model="form.code"
         label="编码"
@@ -99,11 +99,17 @@ watch(
       <DtSelect
         v-if="isCreate"
         v-model="templateKey"
+        class="dt-form-grid__wide"
         label="从哪儿起步"
         :hint="templateHint"
         :options="TEMPLATE_OPTIONS"
       />
-      <DtTextarea v-model="form.description" label="说明" :rows="3" />
+      <DtTextarea
+        v-model="form.description"
+        class="dt-form-grid__wide"
+        label="说明"
+        :rows="3"
+      />
     </div>
     <template #footer>
       <DtButton variant="ghost" @click="emit('close')">取消</DtButton>

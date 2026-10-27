@@ -168,10 +168,10 @@ async function submit(): Promise<void> {
     :dirty="isDirty"
     title="新建模型"
     description="一个房间一个模型；训练用房间的全部可用事件，勾选的组合是要重点评估与试算的那几个。"
-    width="34rem"
+    width="46rem"
     @update:model-value="emit('close')"
   >
-    <div class="flex flex-col gap-4">
+    <div class="dt-form-grid">
       <DtSelect
         v-model="pickedRoom"
         label="房间"
@@ -180,7 +180,7 @@ async function submit(): Promise<void> {
       />
       <DtInput v-model="name" label="模型名称" required maxlength="64" />
 
-      <DtField label="服务组合" required>
+      <DtField label="服务组合" required class="dt-form-grid__wide">
         <DtNotice v-if="coverageError" intent="warning">
           {{ coverageError }}
         </DtNotice>
@@ -206,6 +206,7 @@ async function submit(): Promise<void> {
 
       <DtInput
         v-model="description"
+        class="dt-form-grid__wide"
         label="描述"
         placeholder="可选"
         maxlength="200"
@@ -213,7 +214,7 @@ async function submit(): Promise<void> {
 
       <button
         type="button"
-        class="self-start text-xs text-text-secondary hover:text-text-primary"
+        class="dt-form-grid__wide justify-self-start text-xs text-text-secondary hover:text-text-primary"
         :aria-expanded="isAdvancedOpen"
         @click="isAdvancedOpen = !isAdvancedOpen"
       >
@@ -222,6 +223,7 @@ async function submit(): Promise<void> {
       <DtNumberInput
         v-if="isAdvancedOpen"
         v-model="halfLife"
+        class="dt-form-grid__wide"
         label="样本半衰期（天）"
         hint="老样本每过一个半衰期权重减半；季节差异由特征承担，不靠丢老数据"
         :range="{ min: 7, max: 3650 }"

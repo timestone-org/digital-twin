@@ -226,10 +226,10 @@ function submit(): void {
     :model-value="modelValue"
     :dirty="isDirty"
     :title="isEdit ? '编辑点位' : '新建点位'"
-    width="34rem"
+    width="48rem"
     @update:model-value="emit('update:modelValue', $event)"
   >
-    <div class="flex flex-col gap-3">
+    <div class="dt-form-grid">
       <DtNotice v-if="error" intent="danger" icon="alert-circle">
         {{ error }}
       </DtNotice>
@@ -253,6 +253,7 @@ function submit(): void {
 
       <DtField
         label="描述"
+        class="dt-form-grid__wide"
         hint="写明设备、位置、用途及常用叫法，保存后用于语义查找。"
       >
         <DtInput
@@ -264,6 +265,7 @@ function submit(): void {
 
       <DtField
         label="寻址串"
+        class="dt-form-grid__wide"
         required
         :hint="
           protocol === 'modbus_tcp'
@@ -286,7 +288,7 @@ function submit(): void {
         />
       </DtField>
 
-      <div class="grid grid-cols-2 gap-3">
+      <div class="dt-form-grid dt-form-grid__wide">
         <DtField label="数据类型">
           <DtSelect v-model="dataTypeValue" :options="DATA_TYPES" />
         </DtField>
@@ -295,7 +297,7 @@ function submit(): void {
         </DtField>
       </div>
 
-      <div class="grid grid-cols-2 gap-3">
+      <div class="dt-form-grid dt-form-grid__wide">
         <DtField label="采样周期（毫秒）">
           <DtNumberInput v-model="samplingIntervalMs" :range="SAMPLING_RANGE" />
         </DtField>
@@ -312,7 +314,7 @@ function submit(): void {
         <DtSwitch v-model="archiveEnabled" label="把历史值写进归档表" />
       </DtField>
 
-      <div v-if="archiveEnabled" class="grid grid-cols-2 gap-3">
+      <div v-if="archiveEnabled" class="dt-form-grid dt-form-grid__wide">
         <DtField
           label="归档心跳（毫秒）"
           hint="值不变时也至少每隔这么久落一条，曲线才不会断成一段一段。"

@@ -197,7 +197,7 @@ async function onSubmit(): Promise<void> {
     :dirty="isDirty"
     :title="isEdit ? '编辑列' : '新增列'"
     description="一列 = 一个字段：人工填的、从点位历史汇总的，或由公式算出来的"
-    width="40rem"
+    width="52rem"
     @update:model-value="emit('update:modelValue', $event)"
   >
     <form class="flex flex-col gap-4" @submit.prevent="onSubmit">

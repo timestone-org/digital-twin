@@ -190,10 +190,10 @@ async function onSubmit(): Promise<void> {
     :dirty="isDirty"
     :title="isEdit ? '编辑台账' : '新建台账'"
     description="一张台账就是一份自定义表结构：先建表，再给它配列"
-    width="34rem"
+    width="46rem"
     @update:model-value="emit('update:modelValue', $event)"
   >
-    <form class="flex flex-col gap-4" @submit.prevent="onSubmit">
+    <form class="dt-form-grid" @submit.prevent="onSubmit">
       <DtInput
         v-model="name"
         label="台账名称"
@@ -216,6 +216,7 @@ async function onSubmit(): Promise<void> {
       />
       <DtTextarea
         v-model="description"
+        class="dt-form-grid__wide"
         label="说明"
         :maxlength="DESCRIPTION_MAX"
         hint="这张台账记什么、谁来填、多久填一次"

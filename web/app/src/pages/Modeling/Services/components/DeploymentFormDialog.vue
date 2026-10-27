@@ -126,11 +126,11 @@ function submit(): void {
   <DtModal
     :model-value="props.isOpen"
     :title="props.editing ? '改对外服务' : '开一个对外服务'"
-    width="32rem"
+    width="46rem"
     :dirty="dirty.isDirty.value"
     @update:model-value="emit('close')"
   >
-    <div class="flex flex-col gap-3">
+    <div class="dt-form-grid">
       <DtNotice v-if="options.length === 0" intent="warning">
         还没有可上线的模型版本。先到「运行记录」把一次成功运行发布成版本，再回来开服务。
       </DtNotice>
@@ -147,6 +147,7 @@ function submit(): void {
       <DtInput v-model="form.name" label="名称" required />
       <DtSelect
         v-model="form.versionId"
+        class="dt-form-grid__wide"
         label="钉住的模型版本"
         hint="换版本时第三方不必改代码——地址跟着标识走，不跟着版本走"
         :options="options"

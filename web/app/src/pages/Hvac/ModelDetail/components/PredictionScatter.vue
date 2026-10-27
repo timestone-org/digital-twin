@@ -155,7 +155,7 @@ function at(minutes: number): number {
             :x="tick.at"
             :y="SIZE - PAD + 14"
             text-anchor="middle"
-            class="fill-text-secondary text-[9px]"
+            class="fill-text-secondary text-xs"
           >
             {{ tick.value }}
           </text>
@@ -163,7 +163,7 @@ function at(minutes: number): number {
             :x="PAD - 6"
             :y="SIZE - tick.at + 3"
             text-anchor="end"
-            class="fill-text-secondary text-[9px]"
+            class="fill-text-secondary text-xs"
           >
             {{ tick.value }}
           </text>
@@ -172,16 +172,16 @@ function at(minutes: number): number {
           :x="SIZE / 2"
           :y="SIZE - 4"
           text-anchor="middle"
-          class="fill-text-secondary text-[10px]"
+          class="fill-text-secondary text-xs"
         >
           实际达标时长（分钟）
         </text>
         <text
-          :x="10"
+          :x="14"
           :y="SIZE / 2"
           text-anchor="middle"
-          class="fill-text-secondary text-[10px]"
-          :transform="`rotate(-90 10 ${SIZE / 2})`"
+          class="fill-text-secondary text-xs"
+          :transform="`rotate(-90 14 ${SIZE / 2})`"
         >
           折外预测 p50（分钟）
         </text>

@@ -129,7 +129,7 @@ async function onSubmit(): Promise<void> {
     :dirty="isDirty"
     :title="isEdit ? '编辑数据行' : '录入数据'"
     description="一行 = 一个数据周期。公式列在保存时自动算出"
-    width="40rem"
+    width="46rem"
     @update:model-value="emit('update:modelValue', $event)"
   >
     <form class="flex flex-col gap-4" @submit.prevent="onSubmit">

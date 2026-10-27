@@ -74,13 +74,14 @@ async function save(): Promise<void> {
 
 <template>
   <DtModal
+    width="44rem"
     :model-value="modelValue"
     title="编辑定时规则"
     :dirty="dirty.isDirty.value"
     :close-on-backdrop="!isSaving"
     @update:model-value="close"
   >
-    <div class="flex flex-col gap-3">
+    <div class="dt-form-grid">
       <DtNotice v-if="error" intent="danger">{{ error }}</DtNotice>
       <DtInput
         v-model="name"
@@ -96,7 +97,7 @@ async function save(): Promise<void> {
         disabled
         hint="报告模板和周期沿用原规则，启停可在列表操作"
       />
-      <div class="flex flex-wrap gap-2">
+      <div class="dt-form-grid__wide flex flex-wrap gap-2">
         <DtTag>周期：{{ record?.granularity }}</DtTag>
         <DtTag>{{ record?.is_enabled ? '已启用' : '已停用' }}</DtTag>
       </div>
