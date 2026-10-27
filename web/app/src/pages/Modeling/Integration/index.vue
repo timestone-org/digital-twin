@@ -142,7 +142,7 @@ const example = JSON.stringify(
   border-radius: var(--radius-lg);
 }
 h2 {
-  font-size: var(--font-size-lg);
+  font-size: var(--font-size-section);
   font-weight: 600;
   margin-bottom: 0.6rem;
 }

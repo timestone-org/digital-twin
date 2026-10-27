@@ -10,6 +10,7 @@ import {
 } from '@dt/ui'
 import { onBeforeUnmount, ref, watch } from 'vue'
 import { publishTemplate } from '@/api/modelingTemplates'
+import { useFormDirty } from '@/composables/useFormDirty'
 import { describeModelingError } from '../scripts/instancePresentation'
 const props = defineProps<{ pipeline: { id: string; name: string } | null }>()
 const emit = defineEmits<{ close: [] }>()
@@ -17,6 +18,7 @@ const name = ref('')
 const description = ref('')
 const busy = ref(false)
 const error = ref('')
+const { isDirty, markClean } = useFormDirty([name, description])
 let isDisposed = false
 onBeforeUnmount(() => {
   isDisposed = true
@@ -28,6 +30,7 @@ watch(
     name.value = pipeline?.name ?? ''
     description.value = ''
     error.value = ''
+    markClean()
   },
   { immediate: true },
 )
@@ -61,6 +64,7 @@ async function publish(): Promise<void> {
     title="发布建模模板"
     width="46rem"
     :close-on-backdrop="!busy"
+    :dirty="isDirty"
     @update:model-value="!busy && emit('close')"
   >
     <div class="flex flex-col gap-4">

@@ -10,7 +10,7 @@ import {
   useConfirm,
   useToast,
 } from '@dt/ui'
-import { onMounted, ref } from 'vue'
+import { computed, onMounted, ref } from 'vue'
 import { RouterLink } from 'vue-router'
 import * as api from '@/api/modelingTemplates'
 import PermGuard from '@/components/PermGuard.vue'
@@ -18,6 +18,7 @@ import { AppShell } from '@/components/layout'
 import { describeError, useAsyncList } from '@/composables/useAsyncList'
 import { useViewMode } from '@/composables/useViewMode'
 import { formatDateTime } from '@/utils/datetime'
+import { listEmptyState } from '@/utils/listEmpty'
 import ModelingNav from '../components/ModelingNav.vue'
 import CreateModelDialog from './components/CreateModelDialog.vue'
 
@@ -31,9 +32,10 @@ const columns: readonly DtDataColumn[] = [
   { key: 'actions', label: '操作', width: '15rem', card: 'actions' },
 ]
 const keyword = ref('')
+const appliedKeyword = ref('')
 const selected = ref<ModelingTemplate | null>(null)
 const list = useAsyncList((query, signal) =>
-  api.listTemplates({ ...query, q: keyword.value }, signal),
+  api.listTemplates({ ...query, q: appliedKeyword.value }, signal),
 )
 const view = useViewMode('modeling-template-library', 'card')
 const toast = useToast()
@@ -62,6 +64,21 @@ async function toggle(row: ModelingTemplate): Promise<void> {
     busyId.value = ''
   }
 }
+const emptyState = computed(() =>
+  listEmptyState({
+    isFiltered: appliedKeyword.value !== '',
+    subject: '模板',
+    keyword: appliedKeyword.value,
+    blank: {
+      title: '还没有已发布模板',
+      hint: '在模板设计中保存并发布流水线，即可在这里重复使用。',
+    },
+  }),
+)
+async function search(): Promise<void> {
+  appliedKeyword.value = keyword.value.trim()
+  await list.reloadFromFirstPage()
+}
 onMounted(() => void list.reload())
 </script>
 
@@ -78,20 +95,14 @@ onMounted(() => void list.reload())
         :loading="list.loading.value"
         :error="list.error.value"
         :pagination="list.pager.value"
-        :empty="{
-          title: '还没有已发布模板',
-          hint: '在模板设计中保存并发布流水线，即可在这里重复使用。',
-        }"
+        :empty="emptyState"
         :layout="{ cardColumns: 3, cardMinWidth: '22rem', minWidth: '65rem' }"
         @update:page="void list.goToPage($event)"
         @update:size="void list.setSize($event)"
         @retry="void list.reload()"
       >
         <template #toolbar>
-          <form
-            class="flex gap-2"
-            @submit.prevent="void list.reloadFromFirstPage()"
-          >
+          <form class="flex gap-2" @submit.prevent="void search()">
             <DtInput
               v-model="keyword"
               label="搜索模板"

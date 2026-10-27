@@ -178,12 +178,12 @@ const hasChanges = computed(
   gap: 0.75rem;
 }
 h2 {
-  font-size: var(--font-size-lg);
+  font-size: var(--font-size-section);
   font-weight: 600;
 }
 p {
   color: var(--text-secondary);
-  font-size: var(--font-size-sm);
+  font-size: var(--font-size-compact);
 }
 .instance-save {
   display: flex;
@@ -194,6 +194,6 @@ p {
   padding-top: 1rem;
   border-top: 1px solid var(--border-default);
   color: var(--text-secondary);
-  font-size: var(--font-size-sm);
+  font-size: var(--font-size-compact);
 }
 </style>

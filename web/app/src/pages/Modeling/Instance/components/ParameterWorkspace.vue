@@ -100,7 +100,7 @@ watch(
 }
 .parameter-panel > p {
   color: var(--text-secondary);
-  font-size: var(--font-size-sm);
+  font-size: var(--font-size-compact);
 }
 @media (max-width: 900px) {
   .parameter-workspace {

@@ -37,7 +37,7 @@ import PermGuard from '@/components/PermGuard.vue'
     padding: 0.45rem 0.8rem;
     border-radius: var(--radius-md);
     color: var(--text-secondary);
-    font-size: var(--font-size-sm);
+    font-size: var(--font-size-compact);
   }
   a.router-link-active {
     color: var(--accent-primary);
