@@ -1,8 +1,8 @@
-"""规格 §10.2 契约 #4：24 个算子在各自**最坏**的一份负载上都还讲得下。
+"""规格 §10.2 契约 #4：全部算子在各自**最坏**的一份负载上都还讲得下。
 
 从算子花名册反向遍历，逐个把各块的逐列 / 逐项上限顶满真跑一遍。契约 #2 喂的是
-最小输入，挡不住宽帧 / 366 天轴 / 20 类 / 20 折 / 深树这一头——缺了这一条，第
-25 个算子不写最坏字节用例也全闸绿（docs/MODELING_RESULT_VIEW_DESIGN.md §10.2）。
+最小输入，挡不住宽帧 / 366 天轴 / 20 类 / 20 折 / 深树这一头——缺了这一条，
+新增算子不写最坏字节用例也全闸绿（docs/MODELING_RESULT_VIEW_DESIGN.md §10.2）。
 """
 
 from dataclasses import replace
@@ -11,6 +11,7 @@ from typing import Any
 
 import pytest
 
+from contract.modeling_report_bdm import BDM_COLUMNS, bdm_frames, bdm_loads
 from platform_server.apps.modeling.operators import (
     CellValue,
     Frame,
@@ -240,7 +241,7 @@ def _scored_row(
 def frames() -> dict[str, Frame]:
     """全部最坏帧只造一份，逐个负载共用。
 
-    ⚠ 共用是有意的：新算子想蒙混过关就得动这里，而动了这里全部 24 条一起响。
+    ⚠ 共用是有意的：新算子想蒙混过关就得动这里，而动了这里全部算子一起响。
     """
     trained = _roled(_numeric(FIT_ROWS, is_dense=True))
     anomaly = _numeric(FIT_ROWS, is_dense=True)
@@ -250,6 +251,7 @@ def frames() -> dict[str, Frame]:
         rows=tuple(row[:16] for row in anomaly.rows),
     )
     cut = FIT_ROWS * 4 // 5
+    wide = _numeric(YEAR_ROWS)
     return {
         "anomaly_train": replace(
             anomaly, rows=anomaly.rows[:cut], index=(anomaly.index or ())[:cut]
@@ -257,7 +259,8 @@ def frames() -> dict[str, Frame]:
         "anomaly_test": replace(
             anomaly, rows=anomaly.rows[cut:], index=(anomaly.index or ())[cut:]
         ),
-        "wide": _numeric(YEAR_ROWS),
+        "wide": wide,
+        **bdm_frames(wide, _categorical(YEAR_ROWS, BDM_COLUMNS)),
         "gapped": _numeric(YEAR_ROWS, has_gaps=True),
         "hollow": _numeric(SCORED_ROWS, empty_tail=WIDE_COLUMNS - TEXT_COLUMNS),
         "narrow": _numeric(FIT_ROWS // 2),
@@ -291,6 +294,7 @@ def _source_loads() -> dict[str, tuple[Case, ...]]:
     """取数与对齐的最坏负载。"""
     pool = frames()
     return {
+        "bdm_source": bdm_loads(pool),
         "ledger_join": (
             (
                 {"left": pool["wide"], "right": pool["narrow"]},
@@ -520,7 +524,7 @@ def test_every_registered_operator_has_a_worst_load_here() -> None:
     """反向遍历的入口：花名册上多一个算子，这张表就得跟着多一行。"""
     assert set(loads()) == set(CODES) - set(UNREACHABLE)
     assert UNREACHABLE == ()
-    assert len(CODES) == 30
+    assert len(CODES) == 31
 
 
 def test_the_shared_frames_really_are_the_worst_ones() -> None:
@@ -531,6 +535,12 @@ def test_the_shared_frames_really_are_the_worst_ones() -> None:
     pool = frames()
     assert len(pool["wide"].columns) == WIDE_COLUMNS
     assert pool["wide"].row_count == YEAR_ROWS
+    for value_type in ("number", "string"):
+        frame = pool[f"bdm_{value_type}"]
+        assert len(frame.columns) == BDM_COLUMNS
+        assert frame.row_count == YEAR_ROWS
+        assert all(column.dtype == value_type for column in frame.columns)
+        assert frame.provenance.is_truncated
     assert len(pool["gapped"].columns) == WIDE_COLUMNS
     assert len({row[0] for row in pool["class_scored"].rows}) == CLASSES
     assert len({row[2] for row in pool["proba_scored"].rows}) > CLASSES
