@@ -8,6 +8,8 @@ from platform_server.apps.modeling.schemas.bdm import (
     BdmCatalogOut,
     BdmCatalogQuery,
     BdmCatalogWire,
+    BdmSystemsOut,
+    BdmSystemsWire,
 )
 from platform_server.apps.modeling.services.bdm_client import (
     BdmClient,
@@ -41,6 +43,18 @@ async def read_catalog(
     )
 
 
+async def read_systems(connection: BdmConnection | None) -> BdmSystemsOut:
+    """读取点位系统选项及筛选能力。Args: connection。"""
+    if connection is None:
+        raise BdmReadFailed("BDM 接口未启用，请联系管理员配置连接")
+    async with BdmClient(connection) as client:
+        result = await client.read("/points/systems", BdmSystemsWire)
+    return BdmSystemsOut(
+        items=result.items,
+        system_filter_available=result.system_filter_available,
+    )
+
+
 def _params(query: BdmCatalogQuery) -> dict[str, str | int]:
     if query.kind != "point" and (query.keyword or query.code):
         raise ValidationFailed(
@@ -48,13 +62,18 @@ def _params(query: BdmCatalogQuery) -> dict[str, str | int]:
         )
     if query.kind == "formula" and query.system:
         raise ValidationFailed("公式目录不支持系统过滤")
+    if query.kind != "point" and query.should_include_unqueryable:
+        raise ValidationFailed("仅点位目录支持查询不可取数配置")
     params: dict[str, str | int] = {"page": query.page, "pageSize": query.size}
     if query.kind != "point":
         params["kind"] = query.kind
+    if query.should_include_unqueryable:
+        params["includeUnqueryable"] = "true"
     params.update(
         {
             key: value
             for key, value in (
+                ("name", query.name),
                 ("keyword", query.keyword),
                 ("code", query.code),
                 ("system", query.system),
@@ -100,4 +119,6 @@ def _item(item: dict[str, JsonValue], kind: str) -> BdmCatalogItemOut:
         system=_text(item, "system" if kind == "point" else "nodeSystem")
         or None,
         history_available=available,
+        table_type=_text(item, "tableType") or None,
+        unit=_text(item, "unit") or None,
     )
