@@ -440,6 +440,7 @@ function boundLine(
 }
 
 export const CLEAN_FORMULAS = {
+  bdm_source: [bdmRows],
   ledger_source: [windowRows],
   ledger_join: [joinMatch],
   cast_type: [castRule],
@@ -449,3 +450,25 @@ export const CLEAN_FORMULAS = {
   fill_missing: [fillValue],
   clip_outlier: [clipBound],
 } as const
+
+function bdmRows(context: FormulaContext): FormulaSpec {
+  const limit = numberAt(context.config, 'row_limit')
+  return {
+    id: 'bdm-window',
+    title: '按时刻对齐取数',
+    symbolic: [
+      run(varOf('X(t,k)'), opOf('='), nameOf('标识 k 在时刻 t 的值；缺失为空')),
+    ],
+    filled:
+      limit === null
+        ? null
+        : [run(nameOf('最多保留最新'), numOf(limit), nameOf('个时刻'))],
+    fallback: limit === null ? NO_CONFIG : null,
+    isOpen: false,
+    legend: [
+      { symbol: 't', text: 'UTC 时刻' },
+      { symbol: 'k', text: '点位 ID、属性 ID 或公式编码' },
+    ],
+    notes: ['窗口左闭右开；公式以业务周期起点标记；缺失值不补零。'],
+  }
+}

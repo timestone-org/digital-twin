@@ -18,6 +18,9 @@ ALIASES = (
     ("OpenModelCalculateIn", "OpenModelCalculateRequest"),
     ("OpenModelCalculateOut", "OpenModelCalculate"),
     ("ModelVersionUpdateIn", "ModelingVersionUpdateInput"),
+    ("BdmCatalogItemOut", "ModelingBdmCatalogItem"),
+    ("BdmKind", "ModelingBdmKind"),
+    ("BdmCatalogOut", "ModelingBdmCatalog"),
 )
 REFERENCES = (
     *ALIASES,

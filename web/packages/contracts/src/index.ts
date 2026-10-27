@@ -620,6 +620,8 @@ export type {
   OpenModelCalculateRequest,
   OpenModelCalculate,
   ModelingVersionUpdateInput,
+  ModelingBdmCatalogItem,
+  ModelingBdmCatalog,
 } from './modelingDetection'
 
 export type * from './hierarchy'

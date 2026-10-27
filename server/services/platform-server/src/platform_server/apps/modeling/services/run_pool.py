@@ -8,6 +8,7 @@
 import asyncio
 from collections.abc import Callable
 from concurrent.futures import Executor, ProcessPoolExecutor
+from functools import partial
 
 from platform_server.apps.modeling.services.node_task import (
     NodePayload,
@@ -29,6 +30,18 @@ class NodePool:
     def __init__(self, factory: Callable[[], Executor] | None = None) -> None:
         self._factory = factory or (lambda: ProcessPoolExecutor(max_workers=1))
         self._executor = self._factory()
+        self._slot = asyncio.Semaphore(1)
+
+    async def run[Result](self, job: Callable[[], Result]) -> Result:
+        """在独占执行槽运行纯计算；执行中取消时回收旧池。Args: job。"""
+        async with self._slot:
+            try:
+                return await asyncio.get_running_loop().run_in_executor(
+                    self._executor, job
+                )
+            except (Exception, asyncio.CancelledError):
+                self.recycle()
+                raise
 
     @property
     def executor(self) -> Executor:
@@ -70,18 +83,5 @@ class PooledRunner:
 
         Args: payload。
         """
-        loop = asyncio.get_running_loop()
-        future = loop.run_in_executor(
-            self._pool.executor, run_node_payload, payload
-        )
-        try:
-            async with asyncio.timeout(self._timeout_s):
-                return await future
-        except TimeoutError:
-            self._pool.recycle()
-            raise
-        except Exception:
-            # 子进程猝死会把整池永久标记为坏：不换池的话，这个进程往后每一次
-            # 提交都秒抛，整个建模面就此哑掉
-            self._pool.recycle()
-            raise
+        async with asyncio.timeout(self._timeout_s):
+            return await self._pool.run(partial(run_node_payload, payload))

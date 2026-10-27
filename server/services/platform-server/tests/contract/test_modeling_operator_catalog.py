@@ -30,6 +30,7 @@ from platform_server.apps.modeling.operators.resample import (
 # 本期算子的**写死名单**。加算子必须同时改这里——防的是重名静默覆盖与漏登记
 EXPECTED_CODES = (
     "anomaly_distance",
+    "bdm_source",
     "cast_type",
     "classification_metrics",
     "clip_outlier",
@@ -451,6 +452,7 @@ def _least_config(code: str) -> Any:
     Args: code。
     """
     least: dict[str, Any] = {
+        "identifiers": ["甲"],
         "table_code": "t",
         "target_column": "甲",
         "column": "甲",
