@@ -212,6 +212,8 @@ onBeforeUnmount(() => {
     border-radius: var(--radius-lg);
     background: var(--surface-overlay);
     box-shadow: var(--fx-shadow-modal);
+    font-size: var(--font-size-body);
+    line-height: var(--line-height-body);
   }
 
   &__head {
@@ -232,14 +234,15 @@ onBeforeUnmount(() => {
   &__title {
     margin: 0;
     font-family: var(--font-display);
-    font-size: 15px;
+    font-size: var(--font-size-dialog);
+    line-height: var(--line-height-heading);
     font-weight: 600;
     color: var(--text-title);
   }
 
   &__desc {
     margin: 4px 0 0;
-    font-size: 12px;
+    font-size: var(--font-size-compact);
     color: var(--text-disabled);
   }
 
@@ -250,7 +253,7 @@ onBeforeUnmount(() => {
     border-bottom: 1px solid var(--border-subtle);
     background: color-mix(in srgb, var(--state-warning) 12%, transparent);
     color: var(--state-warning);
-    font-size: 12px;
+    font-size: var(--font-size-compact);
   }
 
   &__body {

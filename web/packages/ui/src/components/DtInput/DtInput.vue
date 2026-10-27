@@ -119,6 +119,9 @@ defineExpose({ inputEl: exposed })
         </span>
       </div>
     </template>
+    <template v-if="$slots.actions" #actions>
+      <slot name="actions" />
+    </template>
   </DtField>
 </template>
 

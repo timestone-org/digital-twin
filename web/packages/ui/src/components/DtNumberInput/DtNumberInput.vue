@@ -191,6 +191,9 @@ function onChange(): void {
         </button>
       </div>
     </template>
+    <template v-if="$slots.actions" #actions>
+      <slot name="actions" />
+    </template>
   </DtField>
 </template>
 

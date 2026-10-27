@@ -37,7 +37,10 @@ const describedby = computed(() => {
 </script>
 
 <template>
-  <div class="dt-field" :class="`dt-field--${size}`">
+  <div
+    class="dt-field"
+    :class="[`dt-field--${size}`, { 'dt-field--actions': !!$slots.actions }]"
+  >
     <div v-if="label || help" class="dt-field__label-row">
       <label v-if="label" class="dt-field__label" :for="controlId">
         {{ label }}
@@ -52,6 +55,9 @@ const describedby = computed(() => {
       />
     </div>
     <slot :id="controlId" :describedby="describedby" :invalid="invalid" />
+    <div v-if="$slots.actions" class="dt-field__actions">
+      <slot name="actions" />
+    </div>
     <p v-if="shownHint" :id="hintId" class="dt-field__hint">{{ shownHint }}</p>
     <p v-if="error" :id="errorId" class="dt-field__error" role="alert">
       {{ error }}
@@ -67,6 +73,30 @@ const describedby = computed(() => {
   flex-direction: column;
   gap: 6px;
 
+  &--actions {
+    display: grid;
+    grid-template-columns: minmax(0, 1fr) auto;
+    align-items: center;
+    column-gap: 8px;
+
+    > :deep(*) {
+      min-width: 0;
+    }
+
+    > .dt-field__label-row,
+    > .dt-field__hint,
+    > .dt-field__error {
+      grid-column: 1 / -1;
+    }
+  }
+
+  &__actions {
+    display: flex;
+    grid-column: 2;
+    align-items: center;
+    gap: 8px;
+  }
+
   &__label-row {
     display: flex;
     align-items: center;
@@ -76,7 +106,7 @@ const describedby = computed(() => {
 
   &__label {
     color: var(--text-secondary);
-    line-height: 1.2;
+    line-height: var(--line-height-body);
   }
 
   &__required {
@@ -86,7 +116,7 @@ const describedby = computed(() => {
   &__hint,
   &__error {
     margin: 0;
-    line-height: 1.3;
+    line-height: var(--line-height-body);
   }
 
   &__hint {

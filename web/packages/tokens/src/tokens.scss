@@ -91,15 +91,25 @@
   --radius-lg: 14px;
   --radius-pill: 999px;
 
+  /* —— 管理界面字阶（16px 浏览器基准）—— */
+  --font-size-caption: 0.75rem;
+  --font-size-compact: 0.8125rem;
+  --font-size-body: 0.875rem;
+  --font-size-section: 1rem;
+  --font-size-dialog: 1.125rem;
+  --font-size-page: 1.25rem;
+  --line-height-body: 1.5;
+  --line-height-heading: 1.4;
+
   /* —— 控件尺寸轴：@dt/ui 全体表单原语的唯一真源 ——
    * h 主轴高度（同档必须逐像素相同，一行摆开要齐平）/ fs 字号 / px 横向内边距 /
    * icon 内嵌图标边长 / r 圆角（md、lg 共用 --radius-md，48px 高再放大会变胶囊）。 */
   --ctl-h-sm: 32px;
   --ctl-h-md: 40px;
   --ctl-h-lg: 48px;
-  --ctl-fs-sm: 12px;
-  --ctl-fs-md: 14px;
-  --ctl-fs-lg: 16px;
+  --ctl-fs-sm: var(--font-size-compact);
+  --ctl-fs-md: var(--font-size-body);
+  --ctl-fs-lg: var(--font-size-section);
   --ctl-px-sm: 10px;
   --ctl-px-md: 12px;
   --ctl-px-lg: 16px;
@@ -116,13 +126,13 @@
   --ctl-r-sm: var(--radius-sm);
   --ctl-r-md: var(--radius-md);
   --ctl-r-lg: var(--radius-md);
-  /* 标签与提示是元信息，比控件内文字小一档 */
-  --ctl-label-fs-sm: 11px;
-  --ctl-label-fs-md: 12px;
-  --ctl-label-fs-lg: 13px;
-  --ctl-hint-fs-sm: 10px;
-  --ctl-hint-fs-md: 11px;
-  --ctl-hint-fs-lg: 12px;
+  /* 标签保持可读，说明不随紧凑控件缩到 12px 以下。 */
+  --ctl-label-fs-sm: var(--font-size-compact);
+  --ctl-label-fs-md: var(--font-size-compact);
+  --ctl-label-fs-lg: var(--font-size-body);
+  --ctl-hint-fs-sm: var(--font-size-caption);
+  --ctl-hint-fs-md: var(--font-size-caption);
+  --ctl-hint-fs-lg: var(--font-size-compact);
 
   /* —— 层级标尺：只约束脱离文档流的全局浮层 ——
    * 组件内部的层叠继续用 1/2/3，那些比的是兄弟节点、不是全局。 */

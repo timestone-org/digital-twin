@@ -4,7 +4,7 @@
  */
 import { DT_SIZES } from '@dt/contracts'
 import type { Meta, StoryObj } from '@storybook/vue3-vite'
-import { DtField } from '../src'
+import { DtButton, DtField, DtInput } from '../src'
 
 const meta = {
   title: '表单/DtField 字段外壳',
@@ -127,6 +127,25 @@ export const 无标签: Story = {
             <input :id="id" class="sb-w-full" aria-label="采样周期" :aria-describedby="describedby" />
           </template>
         </DtField>
+      </div>
+    `,
+  }),
+}
+
+export const 行内操作: Story = {
+  render: () => ({
+    components: { DtInput, DtButton },
+    template: `
+      <div class="sb-grid">
+        <DtInput label="用途名称" hint="说明换行时，操作按钮仍与输入框处于同一行。">
+          <template #actions><DtButton>创建</DtButton></template>
+        </DtInput>
+        <DtInput label="公式标识" error="标识不能包含空格，请检查后重新输入。">
+          <template #actions><DtButton>注册</DtButton></template>
+        </DtInput>
+        <DtInput aria-label="搜索内容" placeholder="没有可见标签">
+          <template #actions><DtButton>搜索</DtButton></template>
+        </DtInput>
       </div>
     `,
   }),
