@@ -30,6 +30,7 @@ export type FieldWidget =
   | 'integer-list'
   | 'number-list'
   | 'text-list'
+  | 'bdm-identifiers'
 
 /** 参数面板里的一行。 */
 export interface FormField {
@@ -116,6 +117,7 @@ function optionsOf(field: Record<string, unknown>): FormField['options'] {
 }
 
 const DIRECT_WIDGETS: Readonly<Record<string, FieldWidget | undefined>> = {
+  'bdm-identifiers': 'bdm-identifiers',
   table: 'table',
   moment: 'moment',
   'column-aggregations': 'column-aggregations',
@@ -237,8 +239,7 @@ export function defaultsOf(
     }
     if (field.widget === 'column-aggregations') config[field.key] = {}
     else if (
-      field.widget === 'columns' ||
-      field.widget === 'multi-select' ||
+      ['columns', 'bdm-identifiers', 'multi-select'].includes(field.widget) ||
       field.widget.endsWith('-list')
     )
       config[field.key] = []

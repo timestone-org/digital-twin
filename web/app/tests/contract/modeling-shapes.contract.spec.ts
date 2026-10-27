@@ -24,6 +24,8 @@ import type {
   ModelDeployment,
   ModelFormulaRegistration,
   ModelingBinding,
+  ModelingBdmCatalog,
+  ModelingBdmCatalogItem,
   ModelingBindingImpact,
   ModelingBindingUsage,
   ModelingGraph,
@@ -50,6 +52,7 @@ import type {
 
 interface OpenApiSchema {
   properties?: Record<string, unknown>
+  enum?: string[]
 }
 
 // ⚠ 用 process.cwd()（= web/）而不是 import.meta.url：happy-dom 下后者不是 file URL
@@ -67,6 +70,22 @@ const spec = JSON.parse(readFileSync(SPEC_PATH, 'utf8')) as {
 }
 
 type Keys<T> = Record<keyof T, true>
+
+const BDM_ITEM = {
+  identifier: true,
+  code: true,
+  name: true,
+  system: true,
+  history_available: true,
+} satisfies Keys<ModelingBdmCatalogItem>
+const BDM_CATALOG = {
+  kind: true,
+  total: true,
+  page: true,
+  size: true,
+  system_filter_available: true,
+  items: true,
+} satisfies Keys<ModelingBdmCatalog>
 
 const PORT = {
   name: true,
@@ -366,9 +385,19 @@ const PAIRS: ReadonlyArray<readonly [string, Record<string, true>]> = [
   ['OpenModelCalculateOut', OPEN_MODEL_CALCULATE],
   ['OpenModelCalculateIn', OPEN_MODEL_CALCULATE_REQUEST],
   ['ModelVersionUpdateIn', VERSION_UPDATE],
+  ['BdmCatalogItemOut', BDM_ITEM],
+  ['BdmCatalogOut', BDM_CATALOG],
 ]
 
 describe('分析建模线形与 openapi 一致', () => {
+  it('BDM 数据类别与生成类型一致', () => {
+    const kinds = [
+      'point',
+      'raw',
+      'formula',
+    ] satisfies ModelingBdmCatalog['kind'][]
+    expect(spec.components.schemas['BdmKind']?.enum).toEqual(kinds)
+  })
   it.each(PAIRS)('%s 的键与线形逐字相等', (name, wire) => {
     const schema = spec.components.schemas[name]
     expect(schema).toBeDefined()

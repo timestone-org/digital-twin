@@ -13,7 +13,7 @@ import type { DtSelectOption } from '@dt/contracts'
 import { DtField, DtInput, DtNumberInput, DtSelect, DtSwitch } from '@dt/ui'
 import { computed, ref, watch } from 'vue'
 
-import type { FormField, FormOptions } from '../scripts/schemaForm'
+import type { FieldWidget, FormField, FormOptions } from '../scripts/schemaForm'
 import { isDefault } from '../scripts/schemaForm'
 import { configError, fieldValue, numberRange } from '../scripts/configValues'
 import type { ConfigStatus } from '../scripts/configValues'
@@ -23,6 +23,18 @@ import ColumnPicker from './ColumnPicker.vue'
 import ColumnAggregations from './ColumnAggregations.vue'
 import MomentInput from './MomentInput.vue'
 import StructuredConfigInput from './StructuredConfigInput.vue'
+import BdmIdentifierPicker from './BdmIdentifierPicker.vue'
+import ConfigResetButton from './ConfigResetButton.vue'
+
+const INLINE_RESET_WIDGETS: readonly FieldWidget[] = [
+  'text',
+  'number',
+  'integer',
+  'switch',
+  'select',
+  'column',
+  'table',
+]
 
 const props = defineProps<{
   fields: readonly FormField[]
@@ -158,9 +170,23 @@ function errorOf(field: FormField): string {
 
 <template>
   <div class="dt-ml-form">
-    <div v-for="field in props.fields" :key="field.key" class="dt-ml-form__row">
+    <div
+      v-for="field in props.fields"
+      :key="field.key"
+      class="dt-ml-form__row"
+      :data-widget="field.widget"
+    >
+      <BdmIdentifierPicker
+        v-if="field.widget === 'bdm-identifiers'"
+        :field="field"
+        :kind="props.config['kind']"
+        :model-value="listOf(field)"
+        :is-readonly="props.isReadonly"
+        @update:model-value="emit('change', field.key, $event)"
+        @status="setDraft(field.key, $event)"
+      />
       <StructuredConfigInput
-        v-if="field.widget === 'json'"
+        v-else-if="field.widget === 'json'"
         :model-value="fieldValue(field, props.config)"
         :value-type="field.jsonType"
         :label="field.label"
@@ -220,7 +246,14 @@ function errorOf(field: FormField): string {
           :required="field.isRequired"
           :disabled="props.isReadonly"
           @update:model-value="emit('change', field.key, $event)"
-        />
+        >
+          <template v-if="canReset(field)" #actions>
+            <ConfigResetButton
+              :fallback="field.fallback"
+              @reset="emit('change', field.key, field.fallback)"
+            />
+          </template>
+        </DtSelect>
         <p v-if="props.options.columns.length === 0" class="dt-ml-form__note">
           {{ props.options.columnsNote }}
         </p>
@@ -239,7 +272,14 @@ function errorOf(field: FormField): string {
           :required="field.isRequired"
           :disabled="props.isReadonly"
           @update:model-value="emit('change', field.key, $event)"
-        />
+        >
+          <template v-if="canReset(field)" #actions>
+            <ConfigResetButton
+              :fallback="field.fallback"
+              @reset="emit('change', field.key, field.fallback)"
+            />
+          </template>
+        </DtInput>
         <!-- ⚠ 这句必须**总是**看得见：空下拉读起来是「一张台账都没建」，
              而真相往往是「你看不到」，两者的处置完全不同 -->
         <p class="dt-ml-form__note">{{ props.options.tablesNote }}</p>
@@ -255,7 +295,14 @@ function errorOf(field: FormField): string {
           :required="field.isRequired"
           :disabled="props.isReadonly"
           @update:model-value="emit('change', field.key, $event)"
-        />
+        >
+          <template v-if="canReset(field)" #actions>
+            <ConfigResetButton
+              :fallback="field.fallback"
+              @reset="emit('change', field.key, field.fallback)"
+            />
+          </template>
+        </DtSelect>
         <p v-if="props.options.tablesNote" class="dt-ml-form__note">
           {{ props.options.tablesNote }}
           <button
@@ -278,7 +325,14 @@ function errorOf(field: FormField): string {
         :required="field.isRequired"
         :disabled="props.isReadonly"
         @update:model-value="emit('change', field.key, $event)"
-      />
+      >
+        <template v-if="canReset(field)" #actions>
+          <ConfigResetButton
+            :fallback="field.fallback"
+            @reset="emit('change', field.key, field.fallback)"
+          />
+        </template>
+      </DtSelect>
       <DtNumberInput
         v-else-if="field.widget === 'number' || field.widget === 'integer'"
         :model-value="numberOf(field)"
@@ -289,7 +343,14 @@ function errorOf(field: FormField): string {
         :required="field.isRequired"
         :disabled="props.isReadonly"
         @update:model-value="emit('change', field.key, $event)"
-      />
+      >
+        <template v-if="canReset(field)" #actions>
+          <ConfigResetButton
+            :fallback="field.fallback"
+            @reset="emit('change', field.key, field.fallback)"
+          />
+        </template>
+      </DtNumberInput>
       <DtField v-else-if="field.widget === 'switch'" :hint="field.hint">
         <DtSwitch
           :model-value="boolOf(field)"
@@ -297,6 +358,12 @@ function errorOf(field: FormField): string {
           :disabled="props.isReadonly"
           @update:model-value="emit('change', field.key, $event)"
         />
+        <template v-if="canReset(field)" #actions>
+          <ConfigResetButton
+            :fallback="field.fallback"
+            @reset="emit('change', field.key, field.fallback)"
+          />
+        </template>
       </DtField>
       <DtInput
         v-else
@@ -307,16 +374,19 @@ function errorOf(field: FormField): string {
         :required="field.isRequired"
         :disabled="props.isReadonly"
         @update:model-value="emit('change', field.key, $event)"
-      />
-      <button
-        v-if="canReset(field)"
-        type="button"
-        class="dt-ml-form__reset"
-        :title="`恢复默认：${JSON.stringify(field.fallback)}`"
-        @click="emit('change', field.key, field.fallback)"
       >
-        恢复默认
-      </button>
+        <template v-if="canReset(field)" #actions>
+          <ConfigResetButton
+            :fallback="field.fallback"
+            @reset="emit('change', field.key, field.fallback)"
+          />
+        </template>
+      </DtInput>
+      <ConfigResetButton
+        v-if="canReset(field) && !INLINE_RESET_WIDGETS.includes(field.widget)"
+        :fallback="field.fallback"
+        @reset="emit('change', field.key, field.fallback)"
+      />
     </div>
   </div>
 </template>
@@ -329,8 +399,9 @@ function errorOf(field: FormField): string {
 
   &__row {
     display: flex;
+    flex-direction: column;
     gap: 0.5rem;
-    align-items: center;
+    align-items: stretch;
 
     > :first-child {
       flex: 1;
@@ -363,22 +434,8 @@ function errorOf(field: FormField): string {
     }
   }
 
-  &__reset {
-    flex: none;
-    height: var(--ctl-h-sm);
-    padding: 0 0.5rem;
-    border: 1px solid var(--border-default);
-    border-radius: var(--radius-sm);
-    background: var(--surface-base);
-    color: var(--text-secondary);
-    font-size: var(--ctl-hint-fs-sm);
-    white-space: nowrap;
-    cursor: pointer;
-
-    &:hover {
-      border-color: var(--border-hover);
-      color: var(--text-primary);
-    }
+  &__row > .dt-ml-form__reset {
+    align-self: flex-end;
   }
 }
 </style>

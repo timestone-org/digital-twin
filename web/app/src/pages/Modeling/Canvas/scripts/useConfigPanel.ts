@@ -42,8 +42,8 @@ function noteFor(
   hasColumns: boolean,
   isNarrowed: boolean,
 ): string {
-  if (tables.length === 0) return '先在上游的取数算子里选好台账'
   if (hasColumns) return ''
+  if (tables.length === 0) return '先在上游的取数算子里配置数据源'
   if (isNarrowed) return '上游那一步的取数把列挑窄了，这里一列都不剩'
   return '这张台账还没有列，或者当前账号看不到它的列'
 }
@@ -135,7 +135,14 @@ export function useConfigPanel(deps: ConfigPanelDeps) {
     setValue: (key: string, value: unknown) => {
       const current = views.node.value
       if (current === null) return
-      deps.setConfig(current.id, { ...current.config, [key]: value })
+      const config = { ...current.config, [key]: value }
+      if (
+        current.operator === 'bdm_source' &&
+        key === 'kind' &&
+        current.config['kind'] !== value
+      )
+        config['identifiers'] = []
+      deps.setConfig(current.id, config)
     },
   }
 }
