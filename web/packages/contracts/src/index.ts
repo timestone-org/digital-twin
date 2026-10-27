@@ -623,6 +623,18 @@ export type {
   ModelingBdmCatalogItem,
   ModelingBdmCatalog,
 } from './modelingDetection'
+export type {
+  ModelingConfiguration,
+  ModelingParameterNode,
+  ModelingConfigurationDetail,
+  ModelingTemplateCreateInput,
+  ModelingTemplateUpdateInput,
+  ModelingTemplate,
+  ModelingInstanceCreateInput,
+  ModelingInstanceConfigureInput,
+  ModelingInstanceDeployInput,
+  ModelingInstance,
+} from './modelingDetection'
 
 export type * from './hierarchy'
 

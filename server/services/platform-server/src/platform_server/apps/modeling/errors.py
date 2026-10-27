@@ -197,3 +197,31 @@ class FrameExportMissing(AppError):
 
     code = 41425
     http_status = 404
+
+
+class TemplateNotFound(AppError):
+    """建模模板不存在。"""
+
+    code = 41426
+    http_status = 404
+
+
+class TemplateUnavailable(AppError):
+    """模板停用或不能由实例发布。"""
+
+    code = 41427
+    http_status = 409
+
+
+class InstanceNotFound(AppError):
+    """模型实例不存在。"""
+
+    code = 41428
+    http_status = 404
+
+
+class InstanceRevisionConflict(AppError):
+    """实例参数修订冲突或仍有在途训练。"""
+
+    code = 41429
+    http_status = 409

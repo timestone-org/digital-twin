@@ -5,10 +5,12 @@ from fastapi import APIRouter
 from platform_server.apps.modeling.api import (
     modeling_bdm,
     modeling_deployments,
+    modeling_instances,
     modeling_models,
     modeling_operators,
     modeling_pipelines,
     modeling_runs,
+    modeling_templates,
     open_models,
 )
 
@@ -16,6 +18,8 @@ ROUTERS: tuple[APIRouter, ...] = (
     modeling_bdm.router,
     modeling_operators.router,
     modeling_pipelines.router,
+    modeling_templates.router,
+    modeling_instances.router,
     modeling_runs.router,
     modeling_models.versions,
     modeling_models.bindings,

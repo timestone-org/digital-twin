@@ -29,6 +29,8 @@ import { listEmptyState } from '@/utils/listEmpty'
 
 import PipelineFormDialog from './components/PipelineFormDialog.vue'
 import { usePipelineOps } from './scripts/usePipelineOps'
+import ModelingNav from '../components/ModelingNav.vue'
+import PublishTemplateButton from '../components/PublishTemplateButton.vue'
 
 const COLUMNS: readonly DtDataColumn[] = [
   { key: 'name', label: '名称', card: 'title' },
@@ -40,7 +42,7 @@ const COLUMNS: readonly DtDataColumn[] = [
     key: 'actions',
     label: '操作',
     align: 'right',
-    width: '7rem',
+    width: '14rem',
     card: 'actions',
   },
 ]
@@ -57,7 +59,8 @@ const view = useViewMode('modeling-pipelines')
 const keyword = ref('')
 
 const list = useAsyncList<ModelingPipelineSummary>(
-  (query) => modeling.listModelingPipelines(query),
+  (query) =>
+    modeling.listModelingPipelines({ ...query, includeInstances: false }),
   PAGE_SIZE,
 )
 const ops = usePipelineOps(() => void list.reload())
@@ -90,7 +93,7 @@ onMounted(() => void list.reload())
 </script>
 
 <template>
-  <AppShell title="分析建模" subtitle="算子图 · 训练 · 发布成台账公式">
+  <AppShell title="模板设计" subtitle="设计算子图，发布为可复用的建模模板">
     <template #actions>
       <PermGuard :codes="[PERMISSION_CODES.modelingView]">
         <RouterLink to="/modeling/runs">
@@ -119,6 +122,7 @@ onMounted(() => void list.reload())
 
     <!-- h-full + min-h-0 见 AppShell 的契约：main 不滚，高度由页面自己吃满 -->
     <div class="flex h-full min-h-0 flex-col gap-4">
+      <ModelingNav />
       <DtNotice v-if="missing > 0" intent="warning" icon="alert-triangle">
         还有 {{ missing }} 条流水线没取回来，搜索只筛得到已经列出的这
         {{ list.items.value.length }} 条。
@@ -185,6 +189,7 @@ onMounted(() => void list.reload())
               <DtIcon name="workflow" :size="16" />
             </RouterLink>
             <PermGuard :codes="[PERMISSION_CODES.modelingManage]">
+              <PublishTemplateButton :pipeline="row" />
               <DtButton
                 variant="ghost"
                 size="xs"

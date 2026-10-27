@@ -292,6 +292,7 @@ export interface ModelingSignatureDerived {
  */
 export interface ModelingSignature {
   format_version: string
+  requires_timestamp?: boolean
   inputs: ModelingSignatureInput[]
   derived: ModelingSignatureDerived[]
   output: {

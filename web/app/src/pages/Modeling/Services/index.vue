@@ -21,6 +21,7 @@ import { onBeforeUnmount, onMounted, ref } from 'vue'
 import * as modeling from '@/api/modeling'
 import PermGuard from '@/components/PermGuard.vue'
 import { AppShell } from '@/components/layout'
+import ModelingNav from '../components/ModelingNav.vue'
 import { describeError } from '@/composables/useAsyncList'
 import { useRacedFetch } from '@/composables/useRacedFetch'
 import { useViewMode } from '@/composables/useViewMode'
@@ -133,10 +134,11 @@ onBeforeUnmount(versionRequest.cancel)
   <AppShell
     title="模型服务"
     subtitle="开给第三方系统调的地址 · 密钥 · 调用量"
-    back-to="/modeling/pipelines"
+    back-to="/modeling/instances"
   >
     <!-- h-full + min-h-0 见 AppShell 的契约：main 不滚，高度由页面自己吃满 -->
     <div class="flex h-full min-h-0 flex-col gap-3 overflow-y-auto">
+      <ModelingNav />
       <DtNotice v-if="versionError" intent="warning">
         模型版本加载失败：{{ versionError }}
         <DtButton size="xs" variant="ghost" @click="void loadVersions()">

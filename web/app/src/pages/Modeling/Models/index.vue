@@ -15,6 +15,7 @@ import { computed, onBeforeUnmount, onMounted, ref } from 'vue'
 
 import * as modeling from '@/api/modeling'
 import { AppShell } from '@/components/layout'
+import ModelingNav from '../components/ModelingNav.vue'
 import { describeError, useAsyncList } from '@/composables/useAsyncList'
 import { useRacedFetch } from '@/composables/useRacedFetch'
 import { useViewMode } from '@/composables/useViewMode'
@@ -120,12 +121,13 @@ onBeforeUnmount(versionRead.cancel)
   <AppShell
     title="模型库"
     subtitle="已发布的版本 · 绑到台账公式"
-    back-to="/modeling/pipelines"
+    back-to="/modeling/instances"
   >
     <!-- h-full + min-h-0 见 AppShell 的契约：main 不滚，高度由页面自己吃满 -->
     <div
       class="dt-ml-models flex h-full min-h-0 flex-col gap-4 overflow-hidden"
     >
+      <ModelingNav />
       <section class="dt-ml-models__block">
         <VersionTable
           v-model:view="versionView"

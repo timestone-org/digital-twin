@@ -21,12 +21,24 @@ ALIASES = (
     ("BdmCatalogItemOut", "ModelingBdmCatalogItem"),
     ("BdmKind", "ModelingBdmKind"),
     ("BdmCatalogOut", "ModelingBdmCatalog"),
+    ("ModelingConfiguration", "ModelingConfiguration"),
+    ("ModelingParameterNodeOut", "ModelingParameterNode"),
+    ("ModelingConfigurationOut", "ModelingConfigurationDetail"),
+    ("ModelingTemplateCreateIn", "ModelingTemplateCreateInput"),
+    ("ModelingTemplateUpdateIn", "ModelingTemplateUpdateInput"),
+    ("ModelingTemplateOut", "ModelingTemplate"),
+    ("ModelingInstanceCreateIn", "ModelingInstanceCreateInput"),
+    ("ModelingInstanceConfigureIn", "ModelingInstanceConfigureInput"),
+    ("ModelingInstanceDeployIn", "ModelingInstanceDeployInput"),
+    ("ModelingInstanceOut", "ModelingInstance"),
 )
 REFERENCES = (
     *ALIASES,
     ("FiniteSensor", "number"),
     ("OpenModelInfoOut", "OpenModelInfo"),
     ("OpenModelWarningOut", "OpenModelWarning"),
+    ("OperatorOut", "ModelingOperator"),
+    ("RunSummaryOut", "ModelingRunSummary"),
 )
 
 
@@ -37,7 +49,8 @@ def render() -> str:
     rows = [
         "/** @fileoverview 从 platform OpenAPI 生成的"
         "异常检测、规则计算与版本元数据契约。 */",
-        "import type { OpenModelInfo, OpenModelWarning } from './modeling'",
+        "import type { OpenModelInfo, OpenModelWarning, "
+        "ModelingOperator, ModelingRunSummary } from './modeling'",
     ]
     for name, alias in ALIASES:
         shape = type_of(schema.components.schemas[name])

@@ -6,7 +6,7 @@
 import uuid
 from typing import Annotated
 
-from fastapi import APIRouter, Depends, Response, status
+from fastapi import APIRouter, Depends, Query, Response, status
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from lib.auth import CallerContext
@@ -58,13 +58,18 @@ async def list_pipelines(
     page: PageDep,
     _viewer: ViewDep,
     q: str | None = None,
+    should_include_instances: Annotated[
+        bool, Query(alias="include_instances")
+    ] = True,
 ) -> ApiResponse[Page[PipelineSummaryOut]]:
-    """分页列出流水线。`q` 按名称与编码模糊搜。
-
-    Args: session, page, _viewer, q。
-    """
+    """分页列出流水线，q 按名称与编码搜索。"""
     return ok(
-        await pipeline_service.list_pipelines(session, keyword=q, page=page)
+        await pipeline_service.list_pipelines(
+            session,
+            keyword=q,
+            page=page,
+            should_include_instances=should_include_instances,
+        )
     )
 
 
