@@ -257,6 +257,6 @@ onBeforeRouteLeave(
 }
 .instance-eyebrow {
   color: var(--text-secondary);
-  font-size: var(--font-size-sm);
+  font-size: var(--font-size-compact);
 }
 </style>

@@ -165,11 +165,11 @@ const versionColumns: readonly DtDataColumn[] = [
   gap: 1rem;
 }
 h2 {
-  font-size: var(--font-size-lg);
+  font-size: var(--font-size-section);
   font-weight: 600;
 }
 p {
   color: var(--text-secondary);
-  font-size: var(--font-size-sm);
+  font-size: var(--font-size-compact);
 }
 </style>

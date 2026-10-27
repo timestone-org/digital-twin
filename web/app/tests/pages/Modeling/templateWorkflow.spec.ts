@@ -12,6 +12,7 @@ import Templates from '@/pages/Modeling/Templates/index.vue'
 import Instances from '@/pages/Modeling/Instances/index.vue'
 import Integration from '@/pages/Modeling/Integration/index.vue'
 import PublishButton from '@/pages/Modeling/components/PublishTemplateButton.vue'
+import PublishTemplateDialog from '@/pages/Modeling/components/PublishTemplateDialog.vue'
 import { configuration } from '@/testing/modelingTemplateFixtures'
 
 vi.mock('vue-router', () => ({
@@ -165,3 +166,55 @@ function textInput(wrapper: VueWrapper, label: string) {
   if (!field) throw new Error(`没有输入框：${label}`)
   return field.get('input')
 }
+
+it.each([
+  ['模板库', Templates, '还没有已发布模板', '没有匹配的模板'],
+  ['模型实例', Instances, '创建第一个模型', '没有匹配的模型'],
+] as const)(
+  '%s 区分空库与已提交筛选的无结果',
+  async (_name, page, blank, filtered) => {
+    vi.mocked(api.listTemplates).mockResolvedValue({
+      items: [],
+      page: 1,
+      size: 20,
+      total: 0,
+    })
+    vi.mocked(api.listInstances).mockResolvedValue({
+      items: [],
+      page: 1,
+      size: 20,
+      total: 0,
+    })
+    const wrapper = mount(page)
+    wrappers.push(wrapper)
+    await flushPromises()
+    expect(wrapper.text()).toContain(blank)
+    await wrapper.get('input[type="search"]').setValue('no-such-entry')
+    expect(wrapper.text()).toContain(blank)
+    await wrapper.get('form').trigger('submit')
+    await flushPromises()
+    expect(wrapper.text()).toContain(filtered)
+    expect(wrapper.text()).not.toContain(blank)
+    await wrapper.get('input[type="search"]').setValue('')
+    await wrapper.get('form').trigger('submit')
+    await flushPromises()
+    expect(wrapper.text()).toContain(blank)
+  },
+)
+
+it('模板发布草稿防止误关，切换设计时建立新的干净基准', async () => {
+  const wrapper = mount(PublishTemplateDialog, {
+    props: { pipeline: { id: 'p1', name: '原设计' } },
+    global: { stubs: { teleport: true } },
+  })
+  wrappers.push(wrapper)
+  expect(wrapper.findComponent(ui.DtModal).props('dirty')).toBe(false)
+  await wrapper.get('textarea').setValue('尚未保存的模板用途')
+  expect(wrapper.findComponent(ui.DtModal).props('dirty')).toBe(true)
+  await wrapper.get('.dt-modal__backdrop').trigger('click')
+  expect(wrapper.emitted('close')).toBeUndefined()
+  expect(wrapper.text()).toContain('有还没提交的内容')
+  await wrapper.setProps({ pipeline: { id: 'p2', name: '另一个设计' } })
+  expect(wrapper.findComponent(ui.DtModal).props('dirty')).toBe(false)
+  expect(wrapper.get('input').element.value).toBe('另一个设计')
+})

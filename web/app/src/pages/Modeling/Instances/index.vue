@@ -3,7 +3,7 @@
 import type { DtDataColumn } from '@dt/contracts'
 import { PERMISSION_CODES } from '@dt/contracts'
 import { DtButton, DtDataView, DtInput, DtTag } from '@dt/ui'
-import { onMounted, ref } from 'vue'
+import { computed, onMounted, ref } from 'vue'
 import { RouterLink } from 'vue-router'
 import { listInstances } from '@/api/modelingTemplates'
 import PermGuard from '@/components/PermGuard.vue'
@@ -11,6 +11,7 @@ import { AppShell } from '@/components/layout'
 import { useAsyncList } from '@/composables/useAsyncList'
 import { useViewMode } from '@/composables/useViewMode'
 import { formatDateTime } from '@/utils/datetime'
+import { listEmptyState } from '@/utils/listEmpty'
 import ModelingNav from '../components/ModelingNav.vue'
 import { runLabel } from '../scripts/instancePresentation'
 
@@ -24,10 +25,26 @@ const columns: readonly DtDataColumn[] = [
   { key: 'actions', label: '操作', width: '8rem', card: 'actions' },
 ]
 const keyword = ref('')
+const appliedKeyword = ref('')
 const list = useAsyncList((query, signal) =>
-  listInstances({ ...query, q: keyword.value }, signal),
+  listInstances({ ...query, q: appliedKeyword.value }, signal),
 )
 const view = useViewMode('modeling-instances')
+const emptyState = computed(() =>
+  listEmptyState({
+    isFiltered: appliedKeyword.value !== '',
+    subject: '模型',
+    keyword: appliedKeyword.value,
+    blank: {
+      title: '创建第一个模型',
+      hint: '选择模板 → 配置输入输出与参数 → 训练 → 发布版本并部署',
+    },
+  }),
+)
+async function search(): Promise<void> {
+  appliedKeyword.value = keyword.value.trim()
+  await list.reloadFromFirstPage()
+}
 onMounted(() => void list.reload())
 </script>
 
@@ -52,20 +69,14 @@ onMounted(() => void list.reload())
         :loading="list.loading.value"
         :error="list.error.value"
         :pagination="list.pager.value"
-        :empty="{
-          title: '创建第一个模型',
-          hint: '选择模板 → 配置输入输出与参数 → 训练 → 发布版本并部署',
-        }"
+        :empty="emptyState"
         :layout="{ minWidth: '60rem', cardColumns: 3, cardMinWidth: '22rem' }"
         @update:page="void list.goToPage($event)"
         @update:size="void list.setSize($event)"
         @retry="void list.reload()"
       >
         <template #toolbar>
-          <form
-            class="flex gap-2"
-            @submit.prevent="void list.reloadFromFirstPage()"
-          >
+          <form class="flex gap-2" @submit.prevent="void search()">
             <DtInput
               v-model="keyword"
               label="搜索模型"
