@@ -14,6 +14,7 @@ overrides:
   '@tiptap/extension-table-of-contents@3.20.0>uuid': '11.1.1'
   '@tiptap/extension-unique-id@3.20.0>uuid': '11.1.1'
   '@umoteam/editor-external@10.1.0>echarts': '6.1.0'
+  '@umoteam/editor@11.1.1>vue-i18n': '11.4.14'
   'katex@<0.18.2': '0.18.2'
   'mermaid@11.17.2>dompurify': '3.4.17'
   'zod@>=4.0.0 <4.6.6': '4.6.6'
