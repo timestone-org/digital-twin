@@ -232,14 +232,6 @@ class Scenario:
             },
             status=201,
         )
-        key = self.request(
-            "POST",
-            f"{PLATFORM}/modeling-deployments/{deployment['id']}/api-keys",
-            {"name": "E2E 推理"},
-            status=201,
-        )
-        self.client.headers.pop("Authorization")
-        self.client.headers["X-Api-Key"] = key["plaintext"]
         signature = self.request("GET", f"{PLATFORM}/open-models/{code}")
         prediction = self.request(
             "POST",

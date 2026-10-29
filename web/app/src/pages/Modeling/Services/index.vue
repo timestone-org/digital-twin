@@ -1,15 +1,6 @@
 <script setup lang="ts">
-/**
- * @fileoverview 模型对外服务：开给第三方系统调的地址、密钥与调用量。
- *
- * 「部署」与「绑定」并列而不是替代：绑定把模型接进系统**内**的台账，部署把它
- * 开给系统**外**（docs/MODELING_PLATFORM_DESIGN.md D13）。
- *
- * 这一页只做编排与取数，表与弹窗各自成件。
- */
+/** @fileoverview 模型部署的配置、调用说明与调用量。 */
 import type {
-  ModelApiKey,
-  ModelApiKeyMinted,
   ModelCallStat,
   ModelDeployment,
   ModelingVersionSummary,
@@ -26,10 +17,9 @@ import { describeError } from '@/composables/useAsyncList'
 import { useRacedFetch } from '@/composables/useRacedFetch'
 import { useViewMode } from '@/composables/useViewMode'
 
-import ApiKeyDrawer from './components/ApiKeyDrawer.vue'
+import DeploymentAccessDrawer from './components/DeploymentAccessDrawer.vue'
 import DeploymentFormDialog from './components/DeploymentFormDialog.vue'
 import DeploymentTable from './components/DeploymentTable.vue'
-import MintedKeyDialog from './components/MintedKeyDialog.vue'
 import { useDeploymentOps } from './scripts/useDeploymentOps'
 
 const view = useViewMode('modeling-deployments')
@@ -45,9 +35,10 @@ const error = ref<string | null>(null)
 const isFormOpen = ref(false)
 const editing = ref<ModelDeployment | null>(null)
 const inspecting = ref<ModelDeployment | null>(null)
-const keys = ref<ModelApiKey[]>([])
 const stats = ref<ModelCallStat[]>([])
-const minted = ref<ModelApiKeyMinted | null>(null)
+const isStatsLoading = ref(false)
+const statsError = ref<string | null>(null)
+const statsRequest = useRacedFetch()
 
 const ops = useDeploymentOps(() => {
   void reload()
@@ -58,8 +49,7 @@ async function reload(): Promise<void> {
   error.value = null
   try {
     rows.value = await modeling.listModelDeployments()
-    // 打开着密钥面时同步刷一遍：撤销之后那一行的状态要当场变
-    if (inspecting.value !== null) await openKeys(inspecting.value)
+    if (inspecting.value !== null) await openAccess(inspecting.value)
   } catch (caught) {
     error.value = describeError(caught)
   } finally {
@@ -83,10 +73,24 @@ async function loadVersions(): Promise<void> {
   )
 }
 
-async function openKeys(row: ModelDeployment): Promise<void> {
+async function openAccess(row: ModelDeployment): Promise<void> {
   inspecting.value = row
-  keys.value = await modeling.listModelApiKeys(row.id)
-  stats.value = await modeling.listModelCallStats(row.id)
+  stats.value = []
+  statsError.value = null
+  isStatsLoading.value = true
+  await statsRequest.run(
+    (signal) => modeling.listModelCallStats(row.id, signal),
+    {
+      ok: (found) => (stats.value = found),
+      fail: (caught) => (statsError.value = describeError(caught)),
+      settled: () => (isStatsLoading.value = false),
+    },
+  )
+}
+
+function closeAccess(): void {
+  statsRequest.cancel()
+  inspecting.value = null
 }
 
 function openForm(row: ModelDeployment | null): void {
@@ -115,25 +119,21 @@ async function submitForm(payload: {
   if (done !== null) isFormOpen.value = false
 }
 
-async function mint(name: string): Promise<void> {
-  const row = inspecting.value
-  if (row === null) return
-  const created = await ops.mintKey(row.id, { name })
-  if (created !== null) minted.value = created
-}
-
 onMounted(() => {
   void reload()
   void loadVersions()
 })
 
-onBeforeUnmount(versionRequest.cancel)
+onBeforeUnmount(() => {
+  versionRequest.cancel()
+  statsRequest.cancel()
+})
 </script>
 
 <template>
   <AppShell
     title="部署服务"
-    subtitle="将模型版本提供给第三方调用，管理部署密钥与调用统计"
+    subtitle="将模型版本提供给第三方调用，统一使用用户 APIKey"
     back-to="/modeling/pipelines"
   >
     <!-- h-full + min-h-0 见 AppShell 的契约：main 不滚，高度由页面自己吃满 -->
@@ -150,7 +150,7 @@ onBeforeUnmount(versionRequest.cancel)
         :rows="rows"
         :is-loading="isLoading"
         :error="error"
-        @keys="(row) => void openKeys(row)"
+        @access="(row) => void openAccess(row)"
         @edit="(row) => openForm(row)"
         @toggle="(row, isOn) => void ops.update(row.id, { is_enabled: isOn })"
         @remove="(row) => void ops.remove(row)"
@@ -180,19 +180,12 @@ onBeforeUnmount(versionRequest.cancel)
       @close="isFormOpen = false"
     />
 
-    <ApiKeyDrawer
+    <DeploymentAccessDrawer
       :deployment="inspecting"
-      :keys="keys"
       :stats="stats"
-      :is-busy="ops.isBusy.value"
-      @mint="(name) => void mint(name)"
-      @revoke="
-        (key) =>
-          inspecting && void ops.revokeKey(inspecting.id, key.id, key.name)
-      "
-      @close="inspecting = null"
+      :is-loading="isStatsLoading"
+      :error="statsError"
+      @close="closeAccess"
     />
-
-    <MintedKeyDialog :minted="minted" @close="minted = null" />
   </AppShell>
 </template>

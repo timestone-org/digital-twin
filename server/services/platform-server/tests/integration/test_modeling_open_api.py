@@ -1,16 +1,11 @@
-"""对外推理面的端到端：开服务 → 铸钥匙 → 第三方带着钥匙来算数。
-
-⚠ 造的数据是严格线性的 `能耗 = 2×温度 + 3×负荷 + 5`，于是「接口通了」不等于
-「算的是那个模型」这件事能被真正断言：回来的数要与手算逐位吻合。
-⚠ 这一组另一半盯的是**拒绝**：没钥匙、错钥匙、撤销过的钥匙、停用的服务、
-超行数——每一种都要给出各自的状态码，而理由里一个字都不许多说
-（docs/MODELING_PLATFORM_DESIGN.md D15）。
-"""
+"""账号身份调用模型，验证真实预测、拒绝路径、配额与调用记录。"""
 
 from typing import Any
 
 import httpx
 import pytest
+from conftest import SignHeaders
+from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 from unit.database_fakes import MakerSessions
 
@@ -24,6 +19,7 @@ from integration.modeling_helpers import (
     data_of,
 )
 from integration.test_modeling_formula_seam import _trained_version
+from platform_server.apps.modeling.models import ModelingCallLog
 
 pytestmark = pytest.mark.requires_postgres
 
@@ -35,7 +31,7 @@ HTTP_UNAUTHORIZED = 401
 HTTP_FORBIDDEN = 403
 HTTP_NOT_FOUND = 404
 
-API_KEY_INVALID = 41421
+UNAUTHENTICATED = 40100
 DEPLOYMENT_DISABLED = 41419
 PREDICT_REQUEST_INVALID = 41423
 
@@ -52,8 +48,8 @@ async def _served(
     session: AsyncSession,
     sessions: MakerSessions,
     code: str,
-) -> tuple[dict[str, Any], str]:
-    """训一个模型、开成对外服务、铸一把钥匙。回部署与明文钥匙。
+) -> tuple[dict[str, Any], dict[str, str]]:
+    """训练并部署模型，返回部署与边缘账号身份。
 
     Args: client, session, sessions, code。
     """
@@ -68,34 +64,29 @@ async def _served(
     )
     assert created.status_code == HTTP_CREATED, created.text
     deployment = dict(data_of(created))
-    minted = await client.post(
-        f"{DEPLOYMENTS}/{deployment['id']}/api-keys",
-        json={"name": "MES 生产系统"},
-    )
-    assert minted.status_code == HTTP_CREATED, minted.text
-    return deployment, str(data_of(minted)["plaintext"])
+    return deployment, dict(client.headers)
 
 
 def _rows(temperature: float = SAMPLE_TEMPERATURE) -> dict[str, Any]:
     return {"rows": [{TEMPERATURE: temperature, LOAD: SAMPLE_LOAD}]}
 
 
-async def test_a_third_party_with_a_key_gets_the_hand_computed_answer(
+async def test_an_account_gets_the_hand_computed_answer(
     app_client: httpx.AsyncClient,
     db_session: AsyncSession,
     worker_sessions: MakerSessions,
 ) -> None:
-    """带着钥匙来算，回来的数与手算逐位吻合。
+    """使用账号来算，回来的数与手算逐位吻合。
 
     ⚠ 这是本期存在的理由那一条：接口通不等于算的是那个模型。
     """
-    deployment, key = await _served(
+    deployment, caller_headers = await _served(
         app_client, db_session, worker_sessions, "openone"
     )
     response = await app_client.post(
         f"{OPEN}/{deployment['code']}:predict",
         json=_rows(),
-        headers={"X-Api-Key": key},
+        headers=caller_headers,
     )
     assert response.status_code == HTTP_OK, response.text
     answer = data_of(response)
@@ -112,11 +103,11 @@ async def test_the_signature_comes_back_without_training_stats(
 
     ⚠ 训练区间的具体数值是训练数据的分布，属于内部信息（D8）。
     """
-    deployment, key = await _served(
+    deployment, caller_headers = await _served(
         app_client, db_session, worker_sessions, "opentwo"
     )
     response = await app_client.get(
-        f"{OPEN}/{deployment['code']}", headers={"X-Api-Key": key}
+        f"{OPEN}/{deployment['code']}", headers=caller_headers
     )
     assert response.status_code == HTTP_OK, response.text
     inputs = data_of(response)["inputs"]
@@ -124,66 +115,53 @@ async def test_the_signature_comes_back_without_training_stats(
     assert all("training_stats" not in item for item in inputs)
 
 
-async def test_a_call_without_a_key_is_turned_away(
+@pytest.mark.parametrize("suffix", ["", ":predict", ":detect", ":calculate"])
+async def test_all_model_calls_reject_untrusted_identity(
+    app_client: httpx.AsyncClient, suffix: str
+) -> None:
+    response = await app_client.request(
+        "POST" if suffix else "GET",
+        f"{OPEN}/unknown{suffix}",
+        json=_rows() if suffix else None,
+        headers={"X-Auth-Sig": "", "X-Api-Key": "dtmk_legacy-key"},
+    )
+    assert response.status_code == HTTP_UNAUTHORIZED
+    assert code_of(response) == UNAUTHENTICATED
+
+
+@pytest.mark.parametrize("suffix", ["", ":predict", ":detect", ":calculate"])
+async def test_model_calls_need_account_permission(
+    app_client: httpx.AsyncClient, sign: SignHeaders, suffix: str
+) -> None:
+    response = await app_client.request(
+        "POST" if suffix else "GET",
+        f"{OPEN}/unknown{suffix}",
+        json=_rows() if suffix else None,
+        headers=sign(codes=("ac:view",)),
+    )
+    assert response.status_code == HTTP_FORBIDDEN
+
+
+async def test_deployment_key_issuance_is_retired(
     app_client: httpx.AsyncClient,
     db_session: AsyncSession,
     worker_sessions: MakerSessions,
 ) -> None:
-    """不带钥匙一律 401，且理由里只有四个字。"""
     deployment, _ = await _served(
-        app_client, db_session, worker_sessions, "openthree"
+        app_client, db_session, worker_sessions, "retired-keys"
     )
     response = await app_client.post(
-        f"{OPEN}/{deployment['code']}:predict", json=_rows()
+        f"{DEPLOYMENTS}/{deployment['id']}/api-keys", json={"name": "不再签发"}
     )
-    assert response.status_code == HTTP_UNAUTHORIZED
-    assert code_of(response) == API_KEY_INVALID
-    assert response.json()["message"] == "密钥无效"
-
-
-async def test_a_wrong_key_gets_the_very_same_refusal(
-    app_client: httpx.AsyncClient,
-    db_session: AsyncSession,
-    worker_sessions: MakerSessions,
-) -> None:
-    """错钥匙与没钥匙给的是同一句话。
-
-    ⚠ 区分开等于送一个枚举接口（防线 ⑪）。
-    """
-    deployment, _ = await _served(
-        app_client, db_session, worker_sessions, "openfour"
+    assert response.status_code == 410
+    assert code_of(response) == 41430
+    assert "用户 APIKey" in response.json()["message"]
+    assert (
+        data_of(
+            await app_client.get(f"{DEPLOYMENTS}/{deployment['id']}/api-keys")
+        )
+        == []
     )
-    response = await app_client.post(
-        f"{OPEN}/{deployment['code']}:predict",
-        json=_rows(),
-        headers={"X-Api-Key": "dtmk_this-one-is-not-real-at-all"},
-    )
-    assert response.status_code == HTTP_UNAUTHORIZED
-    assert response.json()["message"] == "密钥无效"
-
-
-async def test_a_revoked_key_stops_working_at_once(
-    app_client: httpx.AsyncClient,
-    db_session: AsyncSession,
-    worker_sessions: MakerSessions,
-) -> None:
-    """撤销立刻生效。"""
-    deployment, key = await _served(
-        app_client, db_session, worker_sessions, "openfive"
-    )
-    keys = data_of(
-        await app_client.get(f"{DEPLOYMENTS}/{deployment['id']}/api-keys")
-    )
-    revoked = await app_client.post(
-        f"{DEPLOYMENTS}/{deployment['id']}/api-keys/{keys[0]['id']}:revoke"
-    )
-    assert revoked.status_code == HTTP_OK, revoked.text
-    response = await app_client.post(
-        f"{OPEN}/{deployment['code']}:predict",
-        json=_rows(),
-        headers={"X-Api-Key": key},
-    )
-    assert response.status_code == HTTP_UNAUTHORIZED
 
 
 async def test_a_disabled_deployment_says_so_instead_of_answering(
@@ -192,7 +170,7 @@ async def test_a_disabled_deployment_says_so_instead_of_answering(
     worker_sessions: MakerSessions,
 ) -> None:
     """停用之后立刻 403，不是静默返回旧值。"""
-    deployment, key = await _served(
+    deployment, caller_headers = await _served(
         app_client, db_session, worker_sessions, "opensix"
     )
     patched = await app_client.patch(
@@ -202,7 +180,7 @@ async def test_a_disabled_deployment_says_so_instead_of_answering(
     response = await app_client.post(
         f"{OPEN}/{deployment['code']}:predict",
         json=_rows(),
-        headers={"X-Api-Key": key},
+        headers=caller_headers,
     )
     assert response.status_code == HTTP_FORBIDDEN
     assert code_of(response) == DEPLOYMENT_DISABLED
@@ -214,7 +192,7 @@ async def test_too_many_rows_are_refused_with_the_limit_spelled_out(
     worker_sessions: MakerSessions,
 ) -> None:
     """超过单次行数上限时说清楚上限是多少。"""
-    deployment, key = await _served(
+    deployment, caller_headers = await _served(
         app_client, db_session, worker_sessions, "openseven"
     )
     await app_client.patch(
@@ -223,7 +201,7 @@ async def test_too_many_rows_are_refused_with_the_limit_spelled_out(
     response = await app_client.post(
         f"{OPEN}/{deployment['code']}:predict",
         json={"rows": [{TEMPERATURE: 20.0, LOAD: 400.0}] * 3},
-        headers={"X-Api-Key": key},
+        headers=caller_headers,
     )
     assert response.status_code == HTTP_BAD_REQUEST
     assert code_of(response) == PREDICT_REQUEST_INVALID
@@ -239,13 +217,13 @@ async def test_a_value_outside_the_training_range_is_flagged(
 
     ⚠ 告警里**不说区间是多少**——只说「超了」。
     """
-    deployment, key = await _served(
+    deployment, caller_headers = await _served(
         app_client, db_session, worker_sessions, "openeight"
     )
     response = await app_client.post(
         f"{OPEN}/{deployment['code']}:predict",
         json=_rows(FAR_OUTSIDE),
-        headers={"X-Api-Key": key},
+        headers=caller_headers,
     )
     assert response.status_code == HTTP_OK, response.text
     answer = data_of(response)
@@ -267,34 +245,13 @@ async def test_an_unknown_code_is_a_plain_not_found(
     assert response.status_code == HTTP_NOT_FOUND
 
 
-async def test_the_key_list_never_shows_a_plaintext(
-    app_client: httpx.AsyncClient,
-    db_session: AsyncSession,
-    worker_sessions: MakerSessions,
-) -> None:
-    """密钥列表里一把明文都没有，只有前缀。
-
-    ⚠ 明文只在铸出来那一次的回执里出现。
-    """
-    deployment, key = await _served(
-        app_client, db_session, worker_sessions, "opennine"
-    )
-    response = await app_client.get(
-        f"{DEPLOYMENTS}/{deployment['id']}/api-keys"
-    )
-    assert response.status_code == HTTP_OK, response.text
-    listed = data_of(response)
-    assert key not in response.text
-    assert listed[0]["key_prefix"] == key[: len(listed[0]["key_prefix"])]
-
-
 async def test_a_deployment_can_be_taken_down(
     app_client: httpx.AsyncClient,
     db_session: AsyncSession,
     worker_sessions: MakerSessions,
 ) -> None:
     """删掉服务之后那个 URL 立刻 404。"""
-    deployment, key = await _served(
+    deployment, caller_headers = await _served(
         app_client, db_session, worker_sessions, "openten"
     )
     removed = await app_client.delete(f"{DEPLOYMENTS}/{deployment['id']}")
@@ -302,7 +259,7 @@ async def test_a_deployment_can_be_taken_down(
     response = await app_client.post(
         f"{OPEN}/{deployment['code']}:predict",
         json=_rows(),
-        headers={"X-Api-Key": key},
+        headers=caller_headers,
     )
     assert response.status_code == HTTP_NOT_FOUND
 
@@ -317,13 +274,13 @@ async def test_a_successful_call_lands_in_the_stats(
     ⚠ 记录里只有行数、耗时与状态码——**没有入参也没有出参**：那是业务数据，
     可能含敏感值，而且体积会压垮这张表（防线 ⑫）。
     """
-    deployment, key = await _served(
+    deployment, caller_headers = await _served(
         app_client, db_session, worker_sessions, "openeleven"
     )
     await app_client.post(
         f"{OPEN}/{deployment['code']}:predict",
         json=_rows(),
-        headers={"X-Api-Key": key},
+        headers=caller_headers,
     )
     response = await app_client.get(
         f"{DEPLOYMENTS}/{deployment['id']}/call-stats"
@@ -335,29 +292,52 @@ async def test_a_successful_call_lands_in_the_stats(
     assert str(SAMPLE_LOAD) not in response.text
 
 
-async def test_using_a_key_stamps_when_it_was_last_used(
+async def test_account_calls_do_not_reference_deployment_keys(
     app_client: httpx.AsyncClient,
     db_session: AsyncSession,
     worker_sessions: MakerSessions,
 ) -> None:
-    """用过一次之后，密钥上留下「最后用过」。
+    deployment, _ = await _served(
+        app_client, db_session, worker_sessions, "call-owner"
+    )
+    response = await app_client.post(
+        f"{OPEN}/{deployment['code']}:predict", json=_rows()
+    )
+    assert response.status_code == HTTP_OK
+    rows = list((await db_session.scalars(select(ModelingCallLog))).all())
+    assert len(rows) == 1
+    assert rows[0].api_key_id is None
 
-    ⚠ 每分钟最多写一次：每次调用都写会把那一行变成热点，而它的用途只是
-    「这把钥匙还在不在用」。
-    """
-    deployment, key = await _served(
-        app_client, db_session, worker_sessions, "openthirteen"
+
+async def test_quota_is_independent_for_each_account_and_deployment(
+    app_client: httpx.AsyncClient,
+    db_session: AsyncSession,
+    worker_sessions: MakerSessions,
+    sign: SignHeaders,
+) -> None:
+    deployment, _ = await _served(
+        app_client, db_session, worker_sessions, "quota-one"
     )
-    before = data_of(
-        await app_client.get(f"{DEPLOYMENTS}/{deployment['id']}/api-keys")
+    await app_client.patch(
+        f"{DEPLOYMENTS}/{deployment['id']}", json={"rate_limit_per_minute": 1}
     )
-    assert before[0]["last_used_at"] is None
-    await app_client.post(
-        f"{OPEN}/{deployment['code']}:predict",
-        json=_rows(),
-        headers={"X-Api-Key": key},
+    second = await app_client.post(
+        DEPLOYMENTS,
+        json={
+            "code": "quota-two",
+            "name": "另一个服务",
+            "model_version_id": deployment["model_version_id"],
+            "rate_limit_per_minute": 1,
+        },
     )
-    after = data_of(
-        await app_client.get(f"{DEPLOYMENTS}/{deployment['id']}/api-keys")
-    )
-    assert after[0]["last_used_at"] is not None
+    assert second.status_code == HTTP_CREATED
+    url = f"{OPEN}/{deployment['code']}:predict"
+    assert (await app_client.post(url, json=_rows())).status_code == HTTP_OK
+    assert (await app_client.post(url, json=_rows())).status_code == 429
+    other = sign(codes=("modeling:view",))
+    assert (
+        await app_client.post(url, json=_rows(), headers=other)
+    ).status_code == HTTP_OK
+    assert (
+        await app_client.post(f"{OPEN}/quota-two:predict", json=_rows())
+    ).status_code == HTTP_OK

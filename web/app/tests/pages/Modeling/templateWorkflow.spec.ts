@@ -151,11 +151,13 @@ it('模型列表显示实例来源和状态，并按编码搜索', async () => {
   )
 })
 
-it('接入说明包含完整配置入口和两种密钥用途', () => {
+it('接入说明包含完整配置入口和统一用户 APIKey', () => {
   const wrapper = mount(Integration)
   wrappers.push(wrapper)
   expect(wrapper.text()).toContain('PUT /modeling-instances/{id}/configuration')
-  expect(wrapper.text()).toContain('X-Api-Key')
+  expect(wrapper.text()).toContain('Authorization: Bearer')
+  expect(wrapper.text()).toContain('用户 APIKey')
+  expect(wrapper.text()).not.toContain('X-Api-Key')
   expect(wrapper.text()).toContain('Idempotency-Key')
 })
 

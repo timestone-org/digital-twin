@@ -64,14 +64,8 @@ async def _predict(
         },
     )
     assert response.status_code == 201, response.text
-    minted = await client.post(
-        f"{DEPLOYMENTS}/{data_of(response)['id']}/api-keys",
-        json={"name": "对接测试"},
-    )
-    assert minted.status_code == 201, minted.text
     return await client.post(
         f"{OPEN}/publication:predict",
-        headers={"X-Api-Key": data_of(minted)["plaintext"]},
         json={"rows": [{"温度": 25.0, "负荷": 430.0}]},
     )
 

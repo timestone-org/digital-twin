@@ -225,3 +225,10 @@ class InstanceRevisionConflict(AppError):
 
     code = 41429
     http_status = 409
+
+
+class DeploymentKeysRetired(AppError):
+    """模型部署不再签发独立密钥。"""
+
+    code = 41430
+    http_status = 410

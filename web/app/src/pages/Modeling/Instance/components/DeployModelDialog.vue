@@ -1,18 +1,10 @@
 <script setup lang="ts">
-/** @fileoverview 部署指定模型版本并交付仅显示一次的调用密钥。 */
+/** @fileoverview 部署指定模型版本并展示统一账号鉴权的调用方式。 */
 import type { ModelDeployment, ModelingVersionSummary } from '@dt/contracts'
-import {
-  DtButton,
-  DtInput,
-  DtModal,
-  DtNotice,
-  DtNumberInput,
-  DtTextarea,
-} from '@dt/ui'
+import { DtButton, DtInput, DtModal, DtNotice, DtNumberInput } from '@dt/ui'
 import { computed, onBeforeUnmount, ref, watch } from 'vue'
 import { onBeforeRouteLeave, RouterLink } from 'vue-router'
 import { deployInstance } from '@/api/modelingTemplates'
-import { createModelApiKey } from '@/api/modeling'
 import { describeModelingError } from '../../scripts/instancePresentation'
 const props = defineProps<{
   instanceId: string
@@ -26,7 +18,6 @@ const rate = ref<number | undefined>(60)
 const busy = ref(false)
 const error = ref('')
 const deployment = ref<ModelDeployment | null>(null)
-const plaintext = ref('')
 let isDisposed = false
 onBeforeUnmount(() => {
   isDisposed = true
@@ -45,7 +36,6 @@ watch(
     name.value = version?.name ?? ''
     code.value = ''
     error.value = ''
-    plaintext.value = ''
     deployment.value = null
   },
   { immediate: true },
@@ -59,9 +49,6 @@ function deploymentInput(versionId: string) {
     rate_limit_per_minute: rate.value ?? 60,
   }
 }
-function deploymentError(caught: unknown): string {
-  return `${deployment.value ? '部署已创建，密钥生成失败，可再次生成：' : ''}${describeModelingError(caught)}`
-}
 async function deploy(): Promise<void> {
   if (!props.version || !valid.value || busy.value) return
   const versionId = props.version.id
@@ -73,20 +60,13 @@ async function deploy(): Promise<void> {
   busy.value = true
   error.value = ''
   try {
-    const created =
-      deployment.value ??
-      (await deployInstance(instanceId, deploymentInput(versionId)))
+    const created = await deployInstance(instanceId, deploymentInput(versionId))
     if (!isCurrent()) return
     deployment.value = created
-    const key = await createModelApiKey(created.id, {
-      name: '首次接入密钥',
-    })
-    if (!isCurrent()) return
-    plaintext.value = key.plaintext
     emit('deployed')
   } catch (caught) {
     if (!isCurrent()) return
-    error.value = deploymentError(caught)
+    error.value = describeModelingError(caught)
   } finally {
     if (isCurrent()) busy.value = false
   }
@@ -97,7 +77,7 @@ async function deploy(): Promise<void> {
     :model-value="version !== null"
     title="部署模型"
     width="48rem"
-    :dirty="code !== '' && !plaintext"
+    :dirty="code !== '' && !deployment"
     :close-on-backdrop="!busy"
     @update:model-value="!busy && emit('close')"
   >
@@ -108,7 +88,7 @@ async function deploy(): Promise<void> {
         }}。部署固定此版本，重新训练不会自动替换线上服务。
       </DtNotice>
 
-      <template v-if="!plaintext">
+      <template v-if="!deployment">
         <DtInput
           v-model="name"
           label="服务名称"
@@ -144,7 +124,7 @@ async function deploy(): Promise<void> {
 
       <template v-else>
         <DtNotice intent="success">
-          模型已部署。请保存调用密钥，关闭后无法再次读取明文。
+          模型已部署。统一使用用户 APIKey 调用，账号需具有 modeling:view 权限。
         </DtNotice>
 
         <DtInput
@@ -153,15 +133,14 @@ async function deploy(): Promise<void> {
           readonly
         />
 
-        <DtTextarea
-          :model-value="plaintext"
-          label="调用密钥（仅显示一次）"
-          :rows="3"
+        <DtInput
+          model-value="Authorization: Bearer <用户 APIKey>"
+          label="请求头"
           readonly
         />
 
         <RouterLink to="/modeling/services">
-          前往部署服务查看签名、调用示例与密钥管理
+          前往部署服务查看调用说明与统计
         </RouterLink>
       </template>
 
@@ -172,17 +151,15 @@ async function deploy(): Promise<void> {
 
     <template #footer>
       <DtButton variant="ghost" :disabled="busy" @click="emit('close')">
-        {{ plaintext ? '完成' : '取消' }}
+        {{ deployment ? '完成' : '取消' }}
       </DtButton>
 
       <DtButton
-        v-if="!plaintext"
+        v-if="!deployment"
         :disabled="!valid || busy"
         @click="void deploy()"
       >
-        {{
-          busy ? '正在部署…' : deployment ? '重新生成密钥' : '部署并生成密钥'
-        }}
+        {{ busy ? '正在部署…' : '部署模型' }}
       </DtButton>
     </template>
   </DtModal>

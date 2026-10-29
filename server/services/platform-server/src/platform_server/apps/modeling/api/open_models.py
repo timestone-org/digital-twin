@@ -1,25 +1,19 @@
-"""模型对外推理面。**这是本模块唯一匿名可达的前缀。**
-
-⚠ 匿名可达性由边缘那条免认证 location 保证（`docker/nginx/nginx.conf.template`
-里的 `location ^~ /api/v1/platform/open-models/`），照 `public-dashboards` 的
-先例。授权凭据是 `X-Api-Key` 头，由本服务自己核对
-（docs/MODELING_PLATFORM_DESIGN.md D14）。
-
-⚠ 本文件里**每一个**路由函数都必须以 `CallDep` 开头——那个依赖就是鉴权本身。
-漏一个的表现是那条路径整个匿名开放，而它不会报任何错。有一条契约测试扫描本
-文件逐个核对。
-"""
+"""模型对外调用面，使用账号鉴权和部署配额；见 ADR-0062。"""
 
 from typing import Annotated
 
-from fastapi import APIRouter, Depends, Header
+from fastapi import APIRouter, Depends
+from fastapi.security import HTTPBearer
 from sqlalchemy.ext.asyncio import AsyncSession
 
+from lib.auth import CallerContext
 from lib.web import ApiResponse, ok
+from platform_server.apps.modeling.catalog import MODELING_VIEW
 from platform_server.apps.modeling.deps import (
     OpenModelDeps,
     get_open_model_deps,
     get_session,
+    require,
 )
 from platform_server.apps.modeling.schemas import (
     OpenModelPredictIn,
@@ -44,28 +38,35 @@ from platform_server.apps.modeling.services.open_model_service import (
 from platform_server.settings import API_PREFIX
 
 open_models = APIRouter(
-    prefix=f"{API_PREFIX}/open-models", tags=["modeling-open"]
+    prefix=f"{API_PREFIX}/open-models",
+    tags=["modeling-open"],
+    dependencies=[
+        Depends(
+            HTTPBearer(
+                auto_error=False,
+                scheme_name="UserApiKey",
+                description=(
+                    "用户 APIKey（dtk_…），" "账号需具有 modeling:view 权限。"
+                ),
+            )
+        )
+    ],
 )
 
 SessionDep = Annotated[AsyncSession, Depends(get_session)]
 DepsDep = Annotated[OpenModelDeps, Depends(get_open_model_deps)]
-# 密钥头。⚠ 只从头里取，绝不接受查询参数——URL 会进访问日志、进浏览器历史、
-# 进代理的缓存键（防线 ⑪）
-ApiKeyHeader = Annotated[str, Header(alias="X-Api-Key")]
+ViewDep = Annotated[CallerContext, Depends(require(MODELING_VIEW))]
 
 
 async def resolve(
     code: str,
+    viewer: ViewDep,
     session: SessionDep,
     deps: DepsDep,
-    x_api_key: ApiKeyHeader = "",
 ) -> ResolvedCall:
-    """认一次调用并计一次配额。本前缀下每个端点的第一件事。
-
-    Args: code, session, deps, x_api_key。
-    """
+    """检查部署状态并计入当前账号的配额。Args: code, viewer, session, deps。"""
     resolved = await open_model_service.resolve_call(
-        session, code=code, presented_key=x_api_key
+        session, code=code, user_id=viewer.user_id
     )
     return await open_model_service.guard_rate(deps, resolved)
 

@@ -1,5 +1,7 @@
 # 模板建模与第三方接入
 
+第三方接入页面的已部署模型查询、8 步建模流程、字段说明与调用示例见 [第三方接入页面接口说明](MODELING_THIRD_PARTY_API.md)。
+
 模型设计仍使用原有算子画布。设计者保存流水线后点击“发布为模板”，产生一个有名称、
 用途说明和版本号的不可变模板快照。模板库可基于同一版本创建多个模型实例；每个实例
 独立保存输入数据源、输入列、目标列、预处理和算法参数，以及自己的训练记录和模型版本。
@@ -15,18 +17,18 @@
 4. **训练**：保存完成后开始训练。页面自动更新进度，训练期间配置锁定，可请求取消；
    离开页面不取消 worker 的训练。每次训练保留自己的参数快照和节点结果。
 5. **版本与部署**：成功运行可发布模型版本，选择可部署版本并填写稳定服务编码及配额。
-   部署完成后签发调用密钥，明文只显示一次。已有部署继续固定原版本，重新训练不会自动换版。
-6. **部署服务**：查看输入输出签名和调用示例，管理密钥、启停和版本切换。
+   部署完成后直接使用用户 APIKey 调用，无需再签发部署密钥。已有部署继续固定原版本，重新训练不会自动换版。
+6. **部署服务**：查看输入输出签名和调用示例，使用用户 APIKey 调用，管理启停和版本切换。
 
-## 两类凭据
+## 统一账号凭据
 
-建模管理接口使用 `Authorization: Bearer <账号 API 密钥>`。第三方专用账号授予
+建模管理与线上模型调用均使用 `Authorization: Bearer <账号 API 密钥>`。第三方专用账号授予
 `modeling:view`、`modeling:run`，需要发布和部署时增加 `modeling:publish`。
 不授予 `modeling:manage` 即不能设计和发布模板。资源沿用平台现有共享权限域；
 这些权限不代表不同第三方之间的租户隔离。
 
-线上模型调用使用 `X-Api-Key: <部署密钥>`。部署密钥不赋予模板、参数、训练或发布管理权限。
-两类密钥均不放入 URL。
+仅调用模型需要 `modeling:view`。密钥由系统管理中的 API 密钥入口统一管理，
+账号停用、密钥到期或吊销后调用立即被拒绝。密钥不放入 URL。
 
 ## 接入顺序
 
@@ -35,6 +37,7 @@
 
 | 操作 | 方法与路径 | 关键内容 |
 |---|---|---|
+| 获取全部已部署模型 | `GET /modeling-deployments` | 返回 data 数组，无需分页；选取 is_enabled 与 is_servable 均为 true 的记录，使用其 code 读取签名并调用 |
 | 找模板 | `GET /modeling-templates?page=1&size=20&q=能耗` | 选定 `is_enabled=true` 的模板 ID，列表需要翻页 |
 | 取全部 Schema 和默认值 | `GET /modeling-templates/{template_id}/configuration` | `configuration.nodes`、`json_schema`、`nodes[].operator`，每个算子含参数 Schema 和输入输出端口 |
 | 创建模型 | `POST /modeling-instances` | `template_id`、`code`、`name`；可同时给完整 `configuration` |
@@ -45,9 +48,8 @@
 | 取消训练 | `POST /modeling-runs/{run_id}:cancel` | 取消在 worker 的节点边界生效 |
 | 发布模型版本 | `POST /modeling-model-versions` | `run_id`、`name`；必须是成功运行 |
 | 部署 | `POST /modeling-instances/{id}:deploy` | `model_version_id`、`code`、`name`、可选配额；版本必须属于本实例并可服务 |
-| 签发调用密钥 | `POST /modeling-deployments/{deployment_id}/api-keys` | `{"name":"业务系统"}`；保存一次性 `plaintext` |
-| 读线上签名 | `GET /open-models/{code}` | 使用部署密钥，实际输入输出以签名为准 |
-| 预测 / 检测 / 核算 | `POST /open-models/{code}:predict`、`:detect`、`:calculate` | 使用部署密钥，按模型任务类型选择端点 |
+| 读线上签名 | `GET /open-models/{code}` | 使用账号 API 密钥，实际输入输出以签名为准 |
+| 预测 / 检测 / 核算 | `POST /open-models/{code}:predict`、`:detect`、`:calculate` | 使用账号 API 密钥，按模型任务类型选择端点 |
 
 创建模板、创建实例、训练和部署支持 `Idempotency-Key`。同一逻辑操作重放时使用同一键，
 新操作使用新键。配置采用乐观版本保护；409 时重新读取完整配置快照，并由调用方确认

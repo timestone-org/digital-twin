@@ -1,18 +1,9 @@
-"""对外推理面：认密钥、限流、算一批数。
-
-⚠ 这是本模块**唯一匿名可达**的入口（真正的匿名性由边缘那条免认证 location
-保证）。四条纪律，一条都不许松（docs/MODELING_PLATFORM_DESIGN.md D15）：
-- 密钥校验失败一律 401 +「密钥无效」四个字，**不区分**「不存在」「已撤销」
-  「已过期」——区分等于送一个枚举接口；
-- 密钥不进日志、不进 URL、不进错误信息；
-- 入参不进日志（那是业务数据），排查靠 `trace_id` + 行数 + 耗时；
-- 停用即 403、版本不可服务即 410，绝不静默用旧值。
-"""
+"""模型对外调用的部署校验、账号配额与计算记录；见 ADR-0062。"""
 
 import time
 import uuid
 from dataclasses import dataclass, field, replace
-from datetime import UTC, datetime
+from datetime import datetime
 
 from sqlalchemy.ext.asyncio import AsyncSession
 
@@ -23,21 +14,18 @@ from lib.objectstore import ObjectStore
 from lib.ratelimit import FixedWindowLimiter
 from lib.utils.timeutils import to_utc
 from platform_server.apps.modeling.crud import (
-    api_key_crud,
     call_log_crud,
     deployment_crud,
     model_artifact_crud,
     model_version_crud,
 )
 from platform_server.apps.modeling.errors import (
-    ApiKeyInvalid,
     DeploymentDisabled,
     DeploymentNotFound,
     DeploymentUnservable,
     PredictRequestInvalid,
 )
 from platform_server.apps.modeling.models import (
-    ModelingApiKey,
     ModelingCallLog,
     ModelingDeployment,
     ModelVersion,
@@ -53,7 +41,7 @@ from platform_server.apps.modeling.schemas import (
     OpenModelRow,
     OpenModelWarningOut,
 )
-from platform_server.apps.modeling.services import api_key, artifact_io
+from platform_server.apps.modeling.services import artifact_io
 from platform_server.apps.modeling.services.artifact_store import (
     ArtifactRejected,
 )
@@ -68,12 +56,9 @@ _logger = get_logger("platform.modeling.open")
 
 # 请求体里那一格保留键：这一行的时刻。带时间特征的模型没它算不出来
 TIMESTAMP_KEY = "__ts__"
-# 限流的窗口与命名空间。⚠ 服务侧这一层按**密钥**限，边缘那层按来源 IP 限；
-# 只有边缘那层的话，一把密钥换台机器就绕过去了（防线 ⑬）
-RATE_NAMESPACE = "open_model"
+# 账号与部署的配额窗口
+RATE_NAMESPACE = "open_model_account"
 RATE_WINDOW_S = 60
-# 密钥无效时对外只说这四个字
-INVALID_KEY_MESSAGE = "密钥无效"
 # 成功那一次记进调用记录的状态码
 HTTP_OK = 200
 # 超出训练区间的告警种类
@@ -86,9 +71,7 @@ class ResolvedCall:
 
     deployment: ModelingDeployment
     version: ModelVersion
-    api_key_id: uuid.UUID
-    #: 这把钥匙在当前这一分钟里的第几次调用。1 表示这一分钟的头一次
-    hits_in_window: int = 1
+    user_id: uuid.UUID
     #: 这次请求带了几行。记录里只留这个数，不留内容
     row_count: int = 0
 
@@ -108,18 +91,12 @@ class OpenModelDeps:
 
 
 async def resolve_call(
-    session: AsyncSession, *, code: str, presented_key: str
+    session: AsyncSession, *, code: str, user_id: uuid.UUID
 ) -> ResolvedCall:
-    """认一次调用：部署在不在、密钥对不对、版本能不能用。
-
-    ⚠ 顺序是**先认密钥、再看部署状态**：反过来的话，不带密钥的人也能靠状态码
-    区分出「这个 code 存在但停用了」与「这个 code 不存在」。
-    Args: session, code, presented_key。
-    """
+    """为已认证账号解析可用部署。Args: session, code, user_id。"""
     deployment = await deployment_crud.get_by_code(session, code)
     if deployment is None:
         raise DeploymentNotFound("这个模型服务不存在")
-    key = await _verified_key(session, deployment.id, presented_key)
     if not deployment.is_enabled:
         raise DeploymentDisabled("这个模型服务已停用")
     version = await model_version_crud.get(
@@ -131,57 +108,13 @@ async def resolve_call(
         raise DeploymentUnservable(
             version.unservable_reason or "这个模型版本不可上线"
         )
-    return ResolvedCall(
-        deployment=deployment, version=version, api_key_id=key.id
-    )
-
-
-async def _verified_key(
-    session: AsyncSession, deployment_id: uuid.UUID, presented: str
-) -> ModelingApiKey:
-    """按摘要点查那一把，逐条核对状态。
-
-    ⚠ 四种失败**同一个异常、同一句话**：不存在、不属于这个部署、已撤销、
-    已过期。分开报等于送一个枚举接口（防线 ⑪）。
-    Args: session, deployment_id, presented。
-    """
-    if not api_key.looks_like_a_key(presented):
-        raise ApiKeyInvalid(INVALID_KEY_MESSAGE)
-    row = await api_key_crud.get_by_digest(
-        session, api_key.digest_of(presented)
-    )
-    if row is None or row.deployment_id != deployment_id:
-        raise ApiKeyInvalid(INVALID_KEY_MESSAGE)
-    # ⚠ 这一句是纵深防御：摘要唯一，按摘要查得到就一定对得上。它防的是
-    # 「有人把那次点查换成了别的比较」这类改动
-    if not api_key.matches(
-        presented, row.key_hash
-    ):  # pragma: no cover —— 摘要唯一，查得到必对得上
-        raise ApiKeyInvalid(INVALID_KEY_MESSAGE)
-    if row.revoked_at is not None:
-        raise ApiKeyInvalid(INVALID_KEY_MESSAGE)
-    if row.expires_at is not None and row.expires_at <= _now_of(row):
-        raise ApiKeyInvalid(INVALID_KEY_MESSAGE)
-    return row
-
-
-def _now_of(row: ModelingApiKey) -> datetime:
-    """与 `expires_at` 同一时区的「现在」。
-
-    Args: row。
-    """
-    return datetime.now(row.expires_at.tzinfo if row.expires_at else None)
+    return ResolvedCall(deployment=deployment, version=version, user_id=user_id)
 
 
 async def guard_rate(
     deps: OpenModelDeps, resolved: ResolvedCall
 ) -> ResolvedCall:
-    """服务侧那一层配额，按**密钥**计。超了抛 `RateLimited`。
-
-    ⚠ 按密钥而不是按部署：一个部署可以发给几家对接方，一家把量打满不该把
-    别家一起挡住。
-    Args: deps, resolved。
-    """
+    """按部署与账号计配额。Args: deps, resolved。"""
     limiter = FixedWindowLimiter(
         cache=deps.cache,
         namespace=RATE_NAMESPACE,
@@ -189,8 +122,8 @@ async def guard_rate(
         window_s=RATE_WINDOW_S,
         message="调用过于频繁，请稍后再试",
     )
-    hits = await limiter.hit(str(resolved.api_key_id))
-    return replace(resolved, hits_in_window=hits)
+    await limiter.hit(f"{resolved.deployment.id}:{resolved.user_id}")
+    return resolved
 
 
 async def predict_and_record(
@@ -205,7 +138,7 @@ async def predict_and_record(
     ⚠ 记录走**自己的**事务：请求那条在出错时会整个回滚，而「这次调用失败了」
     恰恰是最该留下来的那一条。
     ⚠ 鉴权与限流那几种失败**不记**：它们在 `resolve_call` 里就被拒了，还没
-    归到任何一个部署的账上；而记下来正好给了拿错密钥猛打的人一个撑爆这张表的
+    归到任何一个部署的账上；而记下来正好给了未授权的调用者一个撑爆这张表的
     办法（防线 ⑬）。
     Args: session, deps, resolved, payload。
     """
@@ -229,10 +162,8 @@ async def record_call(
     status: int,
     error_code: int | None,
 ) -> None:
-    """记一条调用记录，顺带在每分钟的头一次更新「最后用过」。
+    """使用独立事务记录调用结果。
 
-    ⚠ `last_used_at` 每分钟最多写一次：每次调用都写会把那一行变成热点，
-    而它的用途只是「这把钥匙还在不在用」，精确到分钟绰绰有余。
     Args: deps, resolved, started, status, error_code。
     """
     duration_ms = int((time.monotonic() - started) * 1000)
@@ -242,17 +173,13 @@ async def record_call(
                 session,
                 ModelingCallLog(
                     deployment_id=resolved.deployment.id,
-                    api_key_id=resolved.api_key_id,
+                    api_key_id=None,
                     row_count=resolved.row_count,
                     duration_ms=duration_ms,
                     status=status,
                     error_code=error_code,
                 ),
             )
-            if resolved.hits_in_window == 1:
-                key = await api_key_crud.get(session, resolved.api_key_id)
-                if key is not None:
-                    key.last_used_at = datetime.now(UTC)
     except Exception as error:
         # ⚠ 记不上不许把这次调用拖垮：数已经算出来了，记录只是给运维看的账
         _logger.warning(

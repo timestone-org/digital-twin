@@ -1,4 +1,4 @@
-"""真库训练、发布与第三方异常检测，包含拒绝路径和密钥隔离。"""
+"""真库训练、发布与第三方异常检测，包含账号鉴权与拒绝路径。"""
 
 import json
 import uuid
@@ -54,7 +54,7 @@ async def anomaly_service(
     app_client: httpx.AsyncClient,
     db_session: AsyncSession,
     worker_sessions: MakerSessions,
-) -> tuple[dict[str, Any], str]:
+) -> tuple[dict[str, Any], dict[str, str]]:
     code = await seed_normal(app_client, db_session)
     graph = json.loads(FIXTURE.read_text())
     graph["nodes"][0]["config"] = {
@@ -81,17 +81,14 @@ async def anomaly_service(
     )
     assert response.status_code == 201, response.text
     deployment = dict(data_of(response))
-    response = await app_client.post(
-        f"{DEPLOYMENTS}/{deployment['id']}/api-keys", json={"name": "测试调用"}
-    )
-    assert response.status_code == 201, response.text
-    return deployment, str(data_of(response)["plaintext"])
+    return deployment, dict(app_client.headers)
 
 
 async def test_third_party_receives_boolean_for_normal_and_joint_anomalies(
-    app_client: httpx.AsyncClient, anomaly_service: tuple[dict[str, Any], str]
+    app_client: httpx.AsyncClient,
+    anomaly_service: tuple[dict[str, Any], dict[str, str]],
 ) -> None:
-    deployment, key = anomaly_service
+    deployment, caller_headers = anomaly_service
     rows = [
         NORMAL,
         {**NORMAL, "电流": 70},
@@ -101,7 +98,7 @@ async def test_third_party_receives_boolean_for_normal_and_joint_anomalies(
     response = await app_client.post(
         f"{OPEN}/{deployment['code']}:detect",
         json={"rows": rows},
-        headers={"X-Api-Key": key},
+        headers=caller_headers,
     )
     assert response.status_code == 200, response.text
     answer = data_of(response)
@@ -129,54 +126,38 @@ async def test_third_party_receives_boolean_for_normal_and_joint_anomalies(
 )
 async def test_invalid_sensor_row_is_rejected_not_reported_as_normal(
     app_client: httpx.AsyncClient,
-    anomaly_service: tuple[dict[str, Any], str],
+    anomaly_service: tuple[dict[str, Any], dict[str, str]],
     row: dict[str, object],
 ) -> None:
-    deployment, key = anomaly_service
+    deployment, caller_headers = anomaly_service
     response = await app_client.post(
         f"{OPEN}/{deployment['code']}:detect",
         json={"rows": [row]},
-        headers={"X-Api-Key": key},
+        headers=caller_headers,
     )
     assert response.status_code == 400, response.text
     assert response.json()["code"] != 0
 
 
-async def test_detection_requires_a_live_key_and_respects_disabled_services(
-    app_client: httpx.AsyncClient, anomaly_service: tuple[dict[str, Any], str]
+async def test_detection_requires_account_auth_and_respects_disabled_services(
+    app_client: httpx.AsyncClient,
+    anomaly_service: tuple[dict[str, Any], dict[str, str]],
 ) -> None:
-    deployment, key = anomaly_service
+    deployment, caller_headers = anomaly_service
     url = f"{OPEN}/{deployment['code']}:detect"
     assert (
-        await app_client.post(url, json={"rows": [NORMAL]})
+        await app_client.post(
+            url, json={"rows": [NORMAL]}, headers={"X-Auth-Sig": ""}
+        )
     ).status_code == 401
     await app_client.patch(
         f"{DEPLOYMENTS}/{deployment['id']}", json={"is_enabled": False}
     )
     assert (
         await app_client.post(
-            url, json={"rows": [NORMAL]}, headers={"X-Api-Key": key}
+            url, json={"rows": [NORMAL]}, headers=caller_headers
         )
     ).status_code == 403
-
-
-async def test_revoked_or_other_deployment_key_cannot_detect(
-    app_client: httpx.AsyncClient, anomaly_service: tuple[dict[str, Any], str]
-) -> None:
-    deployment, key = anomaly_service
-    listed = data_of(
-        await app_client.get(f"{DEPLOYMENTS}/{deployment['id']}/api-keys")
-    )
-    response = await app_client.post(
-        f"{DEPLOYMENTS}/{deployment['id']}/api-keys/{listed[0]['id']}:revoke"
-    )
-    assert response.status_code == 200
-    response = await app_client.post(
-        f"{OPEN}/{deployment['code']}:detect",
-        json={"rows": [NORMAL]},
-        headers={"X-Api-Key": key},
-    )
-    assert response.status_code == 401
 
 
 async def test_supervised_model_is_rejected_by_detection(
@@ -184,24 +165,25 @@ async def test_supervised_model_is_rejected_by_detection(
     db_session: AsyncSession,
     worker_sessions: MakerSessions,
 ) -> None:
-    deployment, key = await _served(
+    deployment, caller_headers = await _served(
         app_client, db_session, worker_sessions, "normal-regression"
     )
     response = await app_client.post(
         f"{OPEN}/{deployment['code']}:detect",
         json={"rows": [NORMAL]},
-        headers={"X-Api-Key": key},
+        headers=caller_headers,
     )
     assert response.status_code == 400
 
 
 async def test_detect_limits_batch_size_and_rate(
-    app_client: httpx.AsyncClient, anomaly_service: tuple[dict[str, Any], str]
+    app_client: httpx.AsyncClient,
+    anomaly_service: tuple[dict[str, Any], dict[str, str]],
 ) -> None:
-    deployment, key = anomaly_service
+    deployment, caller_headers = anomaly_service
     url = f"{OPEN}/{deployment['code']}:detect"
     response = await app_client.post(
-        url, json={"rows": [NORMAL] * 257}, headers={"X-Api-Key": key}
+        url, json={"rows": [NORMAL] * 257}, headers=caller_headers
     )
     assert response.status_code == 400
     response = await app_client.patch(
@@ -211,11 +193,11 @@ async def test_detect_limits_batch_size_and_rate(
     assert response.status_code == 200
     assert (
         await app_client.post(
-            url, json={"rows": [NORMAL] * 2}, headers={"X-Api-Key": key}
+            url, json={"rows": [NORMAL] * 2}, headers=caller_headers
         )
     ).status_code == 400
     assert (
         await app_client.post(
-            url, json={"rows": [NORMAL]}, headers={"X-Api-Key": key}
+            url, json={"rows": [NORMAL]}, headers=caller_headers
         )
     ).status_code == 429

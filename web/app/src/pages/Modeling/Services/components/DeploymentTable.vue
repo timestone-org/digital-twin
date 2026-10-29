@@ -1,6 +1,6 @@
 <script setup lang="ts">
 /**
- * @fileoverview 对外服务一览：谁在开着、钉的哪个版本、配额多少、几把钥匙。
+ * @fileoverview 对外服务一览：谁在开着、钉的哪个版本、配额多少。
  *
  * ⚠ 「停用」与「版本不可上线」是**两格**：一个是人关的，一个是模型本身用不了，
  * 两者的补救办法完全不同（docs/MODELING_PLATFORM_DESIGN.md D15 的防线 ⑭）。
@@ -22,7 +22,6 @@ const COLUMNS: readonly DtDataColumn[] = [
   { key: 'model', label: '钉住的版本', width: '13rem' },
   { key: 'state', label: '状态', width: '13rem' },
   { key: 'quota', label: '配额', width: '11rem', align: 'right' },
-  { key: 'key_count', label: '密钥', width: '5rem', align: 'right' },
   { key: 'created_at', label: '开通时间', width: '10rem' },
   {
     key: 'actions',
@@ -47,7 +46,7 @@ const props = defineProps<{
 const view = defineModel<DtDataViewMode>('view', { required: true })
 
 defineEmits<{
-  keys: [row: ModelDeployment]
+  access: [row: ModelDeployment]
   edit: [row: ModelDeployment]
   toggle: [row: ModelDeployment, isOn: boolean]
   remove: [row: ModelDeployment]
@@ -64,7 +63,7 @@ defineEmits<{
     :empty="EMPTY"
     :layout="{
       fixedLayout: true,
-      minWidth: '78rem',
+      minWidth: '73rem',
       cardColumns: 2,
       cardMinWidth: '24rem',
     }"
@@ -116,13 +115,12 @@ defineEmits<{
     <template #cell-quota="{ row }">
       {{ row.rate_limit_per_minute }} 次/分 · {{ row.max_rows_per_call }} 行/次
     </template>
-    <template #cell-key_count="{ row }">{{ row.key_count }}</template>
     <template #cell-created_at="{ row }">
       {{ formatDateTime(row.created_at) }}
     </template>
     <template #cell-actions="{ row }">
-      <DtButton variant="ghost" size="xs" @click="$emit('keys', row)">
-        密钥
+      <DtButton variant="ghost" size="xs" @click="$emit('access', row)">
+        调用说明
       </DtButton>
       <PermGuard :codes="[PERMISSION_CODES.modelingPublish]">
         <DtButton

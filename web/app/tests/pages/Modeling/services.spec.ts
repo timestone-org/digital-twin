@@ -1,24 +1,19 @@
-/**
- * @fileoverview 模型服务页：明文只摆一次、停用与版本不可用要分得开、
- * 删服务之前要说清爆炸半径。
- *
- * ⚠ 这一组盯的是那几处「静默就出事」的地方：明文用 toast 摆会自己消失，
- * 而那是唯一一次看得到它的机会（docs/MODELING_PLATFORM_DESIGN.md D13）。
- */
+/** @fileoverview 模型服务的账号调用说明、启停与版本状态。 */
 import { PERMISSION_CODES } from '@dt/contracts'
 import type {
   ModelApiKey,
-  ModelApiKeyMinted,
+  ModelCallStat,
   ModelDeployment,
   ModelingVersionSummary,
 } from '@dt/contracts'
 import { flushPromises, mount } from '@vue/test-utils'
-import { useToast } from '@dt/ui'
+import { DtInput, useConfirm, useToast } from '@dt/ui'
 import { createPinia, setActivePinia } from 'pinia'
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 
 import * as modeling from '@/api/modeling'
 import ServicesPage from '@/pages/Modeling/Services/index.vue'
+import CallStatList from '@/pages/Modeling/Services/components/CallStatList.vue'
 import { useAuthStore } from '@/stores/auth'
 
 const STAMP = '2026-01-01T00:00:00.000Z'
@@ -66,10 +61,6 @@ function apiKey(over: Partial<ModelApiKey> = {}): ModelApiKey {
     created_at: STAMP,
     ...over,
   }
-}
-
-function minted(): ModelApiKeyMinted {
-  return { ...apiKey(), plaintext: PLAINTEXT }
 }
 
 function version(): ModelingVersionSummary {
@@ -174,66 +165,38 @@ describe('模型服务', () => {
     expect(wrapper.text()).toContain('500 行/次')
   })
 
-  it('密钥列表里只有前缀，一个明文都没有', async () => {
+  it('调用说明使用用户 APIKey，且不获取或签发部署密钥', async () => {
     stub([deployment()], [apiKey()])
-    signIn([PERMISSION_CODES.modelingView])
-
+    const createKey = vi.spyOn(modeling, 'createModelApiKey')
+    signIn([PERMISSION_CODES.modelingView, PERMISSION_CODES.modelingPublish])
     const wrapper = open()
     await flushPromises()
-    await wrapper
+    const access = wrapper
       .findAll('button')
-      .find((item) => item.text() === '密钥')
-      ?.trigger('click')
+      .find((item) => item.text() === '调用说明')
+    if (!access) throw new Error('缺少调用说明入口')
+    await access.trigger('click')
     await flushPromises()
-
-    expect(wrapper.text()).toContain('dtmk_abc123')
-    expect(wrapper.text()).not.toContain(PLAINTEXT)
-  })
-
-  it('调用地址摆在密钥面上，不必去翻文档', async () => {
-    stub([deployment()], [apiKey()])
-    signIn([PERMISSION_CODES.modelingView])
-
-    const wrapper = open()
-    await flushPromises()
-    await wrapper
-      .findAll('button')
-      .find((item) => item.text() === '密钥')
-      ?.trigger('click')
-    await flushPromises()
-
     expect(wrapper.text()).toContain(
       '/api/v1/platform/open-models/energy-forecast:predict',
     )
     expect(wrapper.text()).toContain(
       '/api/v1/platform/open-models/energy-forecast:calculate',
     )
-    expect(wrapper.text()).toContain('X-Api-Key')
+    expect(wrapper.text()).toContain('用户 APIKey')
     expect(wrapper.text()).toContain('结构化结果')
-  })
-
-  it('铸出来那把钥匙的明文摆在一个要显式关掉的窗口里', async () => {
-    stub([deployment()], [apiKey()])
-    vi.spyOn(modeling, 'createModelApiKey').mockResolvedValue(minted())
-    signIn([PERMISSION_CODES.modelingView, PERMISSION_CODES.modelingPublish])
-
-    const wrapper = open()
-    await flushPromises()
-    await wrapper
-      .findAll('button')
-      .find((item) => item.text() === '密钥')
-      ?.trigger('click')
-    await flushPromises()
-    const input = wrapper.findAll('input')
-    await input[input.length - 1]?.setValue('新对接方')
-    await wrapper
-      .findAll('button')
-      .find((item) => item.text() === '铸一把')
-      ?.trigger('click')
-    await flushPromises()
-
-    expect(wrapper.text()).toContain(PLAINTEXT)
-    expect(wrapper.text()).toContain('再也取不回')
+    expect(
+      wrapper
+        .findAll('input')
+        .some(
+          (item) =>
+            item.element.value === 'Authorization: Bearer <用户 APIKey>',
+        ),
+    ).toBe(true)
+    expect(modeling.listModelApiKeys).not.toHaveBeenCalled()
+    expect(createKey).not.toHaveBeenCalled()
+    expect(wrapper.text()).not.toContain('铸一把')
+    expect(wrapper.text()).not.toContain(PLAINTEXT)
   })
 
   it('只读账号看不到开通与撤销的入口', async () => {
@@ -342,4 +305,135 @@ describe('模型服务', () => {
 
     expect(signal?.aborted).toBe(true)
   })
+})
+
+it('关闭后打开另一部署时丢弃先前迟到的调用统计', async () => {
+  stub([
+    deployment(),
+    deployment({ id: 'd2', code: 'other', name: '第二服务' }),
+  ])
+  signIn([PERMISSION_CODES.modelingView])
+  let finish: ((rows: ModelCallStat[]) => void) | undefined
+  let signal: AbortSignal | undefined
+  vi.mocked(modeling.listModelCallStats)
+    .mockImplementationOnce((_id, given) => {
+      signal = given
+      return new Promise((resolve) => {
+        finish = resolve
+      })
+    })
+    .mockResolvedValueOnce([{ day: '2026-10-28', total: 2, failed: 0 }])
+  const wrapper = open()
+  await flushPromises()
+  const entries = wrapper
+    .findAll('button')
+    .filter((item) => item.text() === '调用说明')
+  await entries[0]?.trigger('click')
+  await flushPromises()
+  const close = wrapper.findAll('button').find((item) => item.text() === '关闭')
+  if (!close || !finish) throw new Error('调用说明未打开')
+  await close.trigger('click')
+  expect(signal?.aborted).toBe(true)
+  await entries[1]?.trigger('click')
+  await flushPromises()
+  finish([{ day: '2026-10-27', total: 99, failed: 99 }])
+  await flushPromises()
+  expect(wrapper.findComponent(CallStatList).props('rows')).toEqual([
+    { day: '2026-10-28', total: 2, failed: 0 },
+  ])
+})
+
+it('调用统计失败显示错误，关闭后中止请求', async () => {
+  stub([deployment()])
+  signIn([PERMISSION_CODES.modelingView])
+  vi.mocked(modeling.listModelCallStats).mockRejectedValue(new Error('offline'))
+  const wrapper = open()
+  await flushPromises()
+  const entry = wrapper
+    .findAll('button')
+    .find((item) => item.text() === '调用说明')
+  if (!entry) throw new Error('缺少调用说明')
+  await entry.trigger('click')
+  await flushPromises()
+  expect(wrapper.text()).toContain('请求失败，请重试')
+  expect(wrapper.findComponent(CallStatList).exists()).toBe(false)
+})
+
+it('使用账号鉴权的服务仍可修改配置、启停并删除', async () => {
+  stub([deployment()], [], [version()])
+  signIn([PERMISSION_CODES.modelingView, PERMISSION_CODES.modelingPublish])
+  const update = vi
+    .spyOn(modeling, 'updateModelDeployment')
+    .mockResolvedValue(deployment())
+  const remove = vi
+    .spyOn(modeling, 'deleteModelDeployment')
+    .mockResolvedValue(undefined)
+  const wrapper = open()
+  await flushPromises()
+  await wrapper.get('button[title="改配置"]').trigger('click')
+  await flushPromises()
+  const name = wrapper
+    .findAllComponents(DtInput)
+    .find((input) => input.props('label') === '名称')
+  if (!name) throw new Error('未显示名称字段')
+  await name.get('input').setValue('已更新服务')
+  const save = wrapper.findAll('button').find((item) => item.text() === '保存')
+  if (!save) throw new Error('缺少保存按钮')
+  await save.trigger('click')
+  await flushPromises()
+  expect(update).toHaveBeenCalledWith(
+    'd1',
+    expect.objectContaining({ name: '已更新服务' }),
+  )
+  await wrapper.get('button[title="停用"]').trigger('click')
+  await flushPromises()
+  expect(update).toHaveBeenLastCalledWith('d1', { is_enabled: false })
+  await wrapper.get('button[title="删掉"]').trigger('click')
+  useConfirm().resolve(true)
+  await flushPromises()
+  expect(remove).toHaveBeenCalledWith('d1')
+})
+
+it('创建服务完成后无需签发密钥，并能关闭配置和调用说明', async () => {
+  stub([deployment()], [], [version()])
+  signIn([PERMISSION_CODES.modelingView, PERMISSION_CODES.modelingPublish])
+  const create = vi
+    .spyOn(modeling, 'createModelDeployment')
+    .mockResolvedValue(deployment())
+  const wrapper = open()
+  await flushPromises()
+  const click = async (name: string) => {
+    const item = wrapper
+      .findAll('button')
+      .find((element) => element.text() === name)
+    if (!item) throw new Error('缺少操作按钮')
+    await item.trigger('click')
+    await flushPromises()
+  }
+  await click('开一个服务')
+  for (const [label, value] of [
+    ['对外标识', 'account-service'],
+    ['名称', '账号调用服务'],
+  ]) {
+    const input = wrapper
+      .findAllComponents(DtInput)
+      .find((item) => item.props('label') === label)
+    if (!input || value === undefined) throw new Error('缺少配置输入')
+    await input.get('input').setValue(value)
+  }
+  await click('开通')
+  expect(create).toHaveBeenCalledWith(
+    expect.objectContaining({ code: 'account-service' }),
+  )
+  await click('开一个服务')
+  await click('取消')
+  await wrapper.get('[aria-label="卡片视图"]').trigger('click')
+  await click('调用说明')
+  const dismiss = wrapper
+    .findAll('button')
+    .find((item) => item.attributes('aria-label') === '关闭')
+  if (!dismiss) throw new Error('缺少关闭窗口按钮')
+  await dismiss.trigger('click')
+  await flushPromises()
+  expect(wrapper.text()).not.toContain('的调用说明')
 })

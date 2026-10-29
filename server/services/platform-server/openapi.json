@@ -23476,6 +23476,13 @@
         "title": "WriteOut",
         "type": "object"
       }
+    },
+    "securitySchemes": {
+      "UserApiKey": {
+        "description": "用户 APIKey（dtk_…），账号需具有 modeling:view 权限。",
+        "scheme": "bearer",
+        "type": "http"
+      }
     }
   },
   "info": {
@@ -32658,6 +32665,7 @@
     },
     "/api/v1/platform/modeling-deployments/{deployment_id}/api-keys": {
       "get": {
+        "deprecated": true,
         "description": "一个服务下的全部密钥。⚠ 回执里没有明文。\n\nArgs: deployment_id, session, _viewer。",
         "operationId": "list_keys_api_v1_platform_modeling_deployments__deployment_id__api_keys_get",
         "parameters": [
@@ -32694,13 +32702,14 @@
             "description": "Validation Error"
           }
         },
-        "summary": "密钥列表",
+        "summary": "历史部署密钥列表",
         "tags": [
           "modeling-deployment"
         ]
       },
       "post": {
-        "description": "铸一把新钥匙。**明文只在这个回执里出现一次。**\n\nArgs: deployment_id, payload, session, response, write。",
+        "deprecated": true,
+        "description": "签发已停用，返回 410 并提示使用用户 APIKey。\n\nArgs: deployment_id, _payload, session, _write。",
         "operationId": "create_key_api_v1_platform_modeling_deployments__deployment_id__api_keys_post",
         "parameters": [
           {
@@ -32751,6 +32760,9 @@
             },
             "description": "Successful Response"
           },
+          "410": {
+            "description": "请使用用户 APIKey 调用模型"
+          },
           "422": {
             "content": {
               "application/json": {
@@ -32762,7 +32774,7 @@
             "description": "Validation Error"
           }
         },
-        "summary": "铸一把密钥",
+        "summary": "独立部署密钥已停用",
         "tags": [
           "modeling-deployment"
         ]
@@ -32770,6 +32782,7 @@
     },
     "/api/v1/platform/modeling-deployments/{deployment_id}/api-keys/{key_id}:revoke": {
       "post": {
+        "deprecated": true,
         "description": "撤销一把钥匙，立刻生效。\n\nArgs: deployment_id, key_id, session, _write。",
         "operationId": "revoke_key_api_v1_platform_modeling_deployments__deployment_id__api_keys__key_id__revoke_post",
         "parameters": [
@@ -32832,7 +32845,7 @@
             "description": "Validation Error"
           }
         },
-        "summary": "撤销一把密钥",
+        "summary": "撤销历史部署密钥",
         "tags": [
           "modeling-deployment"
         ]
@@ -34739,16 +34752,6 @@
               "title": "Code",
               "type": "string"
             }
-          },
-          {
-            "in": "header",
-            "name": "X-Api-Key",
-            "required": false,
-            "schema": {
-              "default": "",
-              "title": "X-Api-Key",
-              "type": "string"
-            }
           }
         ],
         "responses": {
@@ -34773,6 +34776,11 @@
             "description": "Validation Error"
           }
         },
+        "security": [
+          {
+            "UserApiKey": []
+          }
+        ],
         "summary": "模型签名",
         "tags": [
           "modeling-open"
@@ -34790,16 +34798,6 @@
             "required": true,
             "schema": {
               "title": "Code",
-              "type": "string"
-            }
-          },
-          {
-            "in": "header",
-            "name": "X-Api-Key",
-            "required": false,
-            "schema": {
-              "default": "",
-              "title": "X-Api-Key",
               "type": "string"
             }
           }
@@ -34836,6 +34834,11 @@
             "description": "Validation Error"
           }
         },
+        "security": [
+          {
+            "UserApiKey": []
+          }
+        ],
         "summary": "规则计算",
         "tags": [
           "modeling-open"
@@ -34853,16 +34856,6 @@
             "required": true,
             "schema": {
               "title": "Code",
-              "type": "string"
-            }
-          },
-          {
-            "in": "header",
-            "name": "X-Api-Key",
-            "required": false,
-            "schema": {
-              "default": "",
-              "title": "X-Api-Key",
               "type": "string"
             }
           }
@@ -34899,6 +34892,11 @@
             "description": "Validation Error"
           }
         },
+        "security": [
+          {
+            "UserApiKey": []
+          }
+        ],
         "summary": "设备异常检测",
         "tags": [
           "modeling-open"
@@ -34916,16 +34914,6 @@
             "required": true,
             "schema": {
               "title": "Code",
-              "type": "string"
-            }
-          },
-          {
-            "in": "header",
-            "name": "X-Api-Key",
-            "required": false,
-            "schema": {
-              "default": "",
-              "title": "X-Api-Key",
               "type": "string"
             }
           }
@@ -34962,6 +34950,11 @@
             "description": "Validation Error"
           }
         },
+        "security": [
+          {
+            "UserApiKey": []
+          }
+        ],
         "summary": "预测",
         "tags": [
           "modeling-open"

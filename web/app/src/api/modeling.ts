@@ -558,9 +558,10 @@ export async function revokeModelApiKey(
 /** 近一个月按天的调用量与出错量。 */
 export async function listModelCallStats(
   deploymentId: string,
+  signal?: AbortSignal,
 ): Promise<ModelCallStat[]> {
   return await requestData<ModelCallStat[]>(
     `/modeling-deployments/${deploymentId}/call-stats`,
-    onPlatform(),
+    onPlatform({ signal }),
   )
 }

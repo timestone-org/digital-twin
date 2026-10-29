@@ -9,7 +9,7 @@
 > 跨层契约变更**先改本文档、再改代码**。
 >
 > 涉及 **platform-server**（`apps/modeling` 扩容 + `apps/dataset` 一处公开面）、
-> **web**（建模四面）、**auth-server**（权限码与闸 1 规则）、**docker/nginx**（一条免认证 location）。
+> **web**（建模四面）、**auth-server**（权限码与闸 1 规则）、**docker/nginx**（模型调用鉴权与限流）。
 
 ---
 
@@ -19,7 +19,7 @@
 | --- | --- | --- |
 | 工作流跑完能把模型保存到 OSS，模型作为公式进公式库，台账能调它算数 | 模型产物有独立存放处（不再寄生在结果摘要里）；公式接缝从「两页手工对接」收成一步 | §2 §5 §7 |
 | 现在的建模模块规划得不好 | 算子只有 6 个、结果只能看 200 行、模型库页只有一张表；信息架构与算子清单都要补 | §8 §9 |
-| 每个部署完成的模型有一个接口供第三方系统调用 | 新的领域概念「部署」+ API 密钥 + 限流 + 一条免认证 location | §6 |
+| 每个部署完成的模型有一个接口供第三方系统调用 | 领域概念「部署」+ 用户 APIKey + 账号鉴权与限流 | §6 |
 | 每个模型要有 schema，告诉用户配哪些参数；有特征工程时输入应该是**特征工程之前**的数据 | 推理入口契约从「建模节点的特征列」改成「推理子图入口的真实列集」，并另出一份面向人的模型签名 | §3 §4 |
 
 第四条是四条里最深的一条，也是其它三条的地基：**没有一份说得清的输入契约，
@@ -146,7 +146,7 @@ predict([25.0, 430.0]) 抛了：
 | **派生列** `derived column` | 推理子链自己造出来的列（时间特征、独热、滞后…）。调用方不提供、也不该提供 | —— |
 | **模型签名** `signature` | 一份面向**人与第三方系统**的输入输出说明：每个入口列的标签、单位、类型、是否必填、训练取值域；输出是什么。它是 `serving_json` 的**人话投影**，不参与任何计算。界面文案里也叫「模型 schema」 | 代码与库里**不叫 `schema`**：那个名字在出参模型上会与 `BaseModel.schema` 撞并当场告警。也不叫接口文档（它是数据不是文字；文档由它生成） |
 | **产物** `artifact` | 一个模型版本的二进制可服务件（本服务自己训练、自己序列化、自己写入对象存储的字节）。只有通道 B 的算法有 | 不叫模型文件（「文件」暗示可上传可替换；这里只可由本服务写、按摘要校验后读） |
-| **部署** `deployment` | 一个模型版本的**对外服务实例**：一个 URL 段、一组 API 密钥、一份配额。有了它「部署」这个词才名副其实 | 与**绑定**（binding）分家：绑定是「进台账公式」，部署是「出系统给第三方」。同一个版本可以只绑不部署、只部署不绑、两者都有 |
+| **部署** `deployment` | 一个模型版本的**对外服务实例**：一个 URL 段、一份配额，调用权限继承用户账号。有了它「部署」这个词才名副其实 | 与**绑定**（binding）分家：绑定是「进台账公式」，部署是「出系统给第三方」。同一个版本可以只绑不部署、只部署不绑、两者都有 |
 | **API 密钥** `api key` | 第三方调用部署时出示的凭据。明文只在创建回执里出现一次，库里只存哈希 | 不叫 token（本仓 token 已指会话令牌，两者生命周期与撤销语义都不同） |
 
 ⚠ **「部署」这个词在 [MODELING_DESIGN.md](./MODELING_DESIGN.md) §2 里被明确排除过**
@@ -489,126 +489,56 @@ Python → C 的往返 + 一次数组构造，20 万行 × 一次往返是另一
 
 ## 6. 对外服务端点（诉求 3）
 
-### D13 · 「部署」是新的一等概念，与「绑定」并列而不是替代
+### D13 · 部署提供稳定地址、版本与配额
+
+模型版本既可绑定到内部公式库条目，也可部署为第三方调用的稳定 URL。两者都固定
+不可变版本，换版本是显式动作。部署以 `code` 寻址，支持启停、单次行数与每分钟配额。
+
+`modeling_deployments` 保存部署配置；`modeling_call_logs` 保留部署、时间、行数、
+耗时、状态与错误码，不记业务入参出参。`modeling_api_keys` 与调用记录的旧密钥引用
+仅保留历史兼容，新调用的 `api_key_id` 为 null，不把账号密钥 ID 写入平台密钥外键。
+
+### 6.2 管理与调用统一鉴权
+
+所有接口使用 `Authorization: Bearer <用户 APIKey>`，账号密钥由 auth-server 管理。
+管理读取需 `modeling:view`，部署写入需 `modeling:publish`；模型调用需 `modeling:view`。
+浏览器会话继续走同一账号鉴权链。共享权限域下不按部署创建者限制调用。
 
 ```
-模型版本 ──┬── 绑定 binding ─────▶ 公式库条目 ──▶ 台账列        （进系统内）
-           └── 部署 deployment ──▶ 一个 URL + 一组 API 密钥      （出系统外）
+GET  /api/v1/platform/open-models/{code}            → 模型签名（剥掉训练统计）
+POST /api/v1/platform/open-models/{code}:predict    → 回归或分类预测
+POST /api/v1/platform/open-models/{code}:detect     → 异常判定
+POST /api/v1/platform/open-models/{code}:calculate  → 规则计算明细
 ```
 
-两者都钉一个**不可变的版本**，换版本都是显式动作、都带影响面回执。
-两者互不依赖：可以只绑不部署（内部分析）、只部署不绑（给 MES / EMS 调）、也可以都有。
-
-### 6.1 三张新表
-
-**`modeling_deployments`**
-
-| 列 | 说明 |
-| --- | --- |
-| `code` | URL 段，全局唯一，`^[a-z0-9][a-z0-9-]{1,62}$`。⚠ 不拿版本 id 做 URL：换版本时第三方不必改代码 |
-| `model_version_id` | 钉住的版本，`ON DELETE RESTRICT` |
-| `name` / `description` | 展示 |
-| `is_enabled` | 停用后立刻 403，不是静默返回旧值 |
-| `max_rows_per_call` | 单次请求行数上限，默认 200，硬上限 1000 |
-| `rate_limit_per_minute` | 每分钟调用次数上限，默认 60 |
-
-**`modeling_api_keys`**
-
-| 列 | 说明 |
-| --- | --- |
-| `deployment_id` | 一把密钥属于一个部署。⚠ 不做「一把钥匙开全部部署」：那把撤销的爆炸半径会放大到所有对接方 |
-| `name` | 给人看的用途标记（「MES 生产系统」） |
-| `key_prefix` | 明文的前 12 位，**可见**，用于在列表里认出是哪一把 |
-| `key_hash` | `sha256(明文)` 的十六进制。⚠ 明文是高熵随机串不是口令，不需要慢哈希；比对必须 `hmac.compare_digest` |
-| `expires_at` / `revoked_at` / `last_used_at` | 有效期与撤销。`last_used_at` **异步**更新，不进请求事务 |
-
-⚠ **明文只在创建回执里出现一次**，之后任何接口都取不回来。丢了只能重发一把。
-这条要在界面上说清楚，并给「复制」按钮。
-
-**`modeling_call_logs`**（轻量，带保留期）
-
-`deployment_id` / `api_key_id` / `created_at` / `row_count` / `duration_ms` /
-`status` / `error_code`。
-
-⚠ **不记入参与出参**：那是业务数据，可能含敏感值，且体积会压垮这张表。
-需要排查具体一次调用时靠 `trace_id` 去结构化日志里找——日志里同样不记入参。
-
-### 6.2 两个面，两套鉴权
-
-| 面 | 路径 | 谁能进 |
-| --- | --- | --- |
-| 管理面 | `/api/v1/platform/modeling-deployments…` | 会话 + `modeling:view` / `modeling:publish`，走既有闸 1 |
-| 对外面 | `/api/v1/platform/open-models/{code}…` | **API 密钥**，边缘免认证 location，platform-server 自己校验 |
-
-**对外面只有两个端点**：
-
-```
-GET  /api/v1/platform/open-models/{code}          → 模型签名（剥掉训练统计，见 D8）
-POST /api/v1/platform/open-models/{code}:predict  → 预测
-```
-
-请求：
-
-```jsonc
+```http
 POST /api/v1/platform/open-models/energy-forecast:predict
-X-Api-Key: dtmk_a1b2c3d4e5f6_<32 位随机>
-{ "rows": [ { "温度": 25.0, "负荷": 430.0 },
-            { "温度": 26.5, "负荷": 455.0, "__ts__": "2026-09-03T10:00:00Z" } ] }
+Authorization: Bearer <用户 APIKey>
+Content-Type: application/json
+
+{"rows":[{"温度":25.0,"负荷":430.0}]}
 ```
 
-回执（统一信封，HTTP 状态码真实）：
+响应仍使用统一信封，输入输出格式与模型签名不变。
 
-```jsonc
-{ "code": 0, "message": "ok", "trace_id": "…",
-  "data": {
-    "model": { "code": "energy-forecast", "version": 3 },
-    "predictions": [ 1345.0, 1421.5 ],
-    "warnings": [ { "row": 1, "column": "温度", "kind": "out_of_training_range",
-                    "message": "这一路输入超出训练区间，属于外推" } ] } }
-```
+### D14 · 账号鉴权与部署状态各自校验
 
-### D14 · 对外面照 `public-dashboards` 的先例：边缘一条免认证 location + 服务自己校验密钥
+边缘的 `open-models/` location 挂 `auth-inject.conf`，auth-server 验证账号密钥的
+有效期、吊销状态、账号启用状态和权限，再注入签名身份头；platform 验签并检查
+`modeling:view` 后读取部署和模型版本。未认证时不读取部署状态；直连平台且缺少有效
+签名头时同样拒绝。决策见 ADR-0062。
 
-本仓已有的先例（`docker/nginx/nginx.conf.template`）：
-`location ^~ /api/v1/platform/public-dashboards/` 是一条**免认证** location，
-配一个自己的 `limit_req_zone`；auth-server 的规则表里单列一段并写明
-「真正的匿名可达性由边缘那条免认证 location 保证」。
+独立部署密钥不再接受。旧签发端点返回 410，并指引调用者使用用户 APIKey；历史列表
+与撤销端点标记弃用，保留用于清理历史记录。部署页面只展示调用说明与调用量。
 
-对外面照同一形状：
+### D15 · 调用边界
 
-```nginx
-limit_req_zone $binary_remote_addr zone=open_model:10m rate=120r/m;
-
-# 模型对外推理面。⚠ 这是一条**免认证** location，不是漏了 auth-inject：
-# 调用方是第三方系统，持的是 API 密钥不是会话；挂上 auth_request 一律 401。
-# ⚠ `^~` 不能省：存在正则 location 时短前缀会重新参与竞争。
-location ^~ /api/v1/platform/open-models/ {
-  limit_req zone=open_model burst=40 nodelay;
-  client_max_body_size 256k;
-  proxy_pass http://$platform_upstream$request_uri;
-}
-```
-
-**为什么不让 auth-server 认 API 密钥**：密钥是**业务资源**（挂在部署上、由建模模块的
-`modeling:publish` 管、跟着部署一起删）。放进 auth-server 就要在两个服务之间同步一张表的生死，
-而 `/verify` 是全站每个请求都要过的热路径——为一个低频端点给它加一条分支不划算。
-
-**为什么服务自己校验是安全的**：这条 location 之下**只有两个端点**，都在
-`api/open_models.py` 一个文件里，都以 `require_api_key` 依赖开头。
-配一条契约测试扫描：`open-models` 前缀下的每一个路由函数都必须挂那个依赖。
-
-### D15 · 对外面的五条额外防线
-
-[MODELING_DESIGN.md](./MODELING_DESIGN.md) §9.3 的九道防线针对的是「算子参数」；
-对外面是本模块第一次出现**匿名可达的入口**，另加五条：
-
-| # | 防线 |
-| --- | --- |
-| ⑩ | **对外面只回预测值与告警**，不回图、不回列统计、不回训练区间的具体数值（D8）、不回任何台账编码 |
-| ⑪ | **密钥不进日志、不进 URL、不进错误信息**。校验失败一律 401 + 「密钥无效」，不区分「不存在」「已撤销」「已过期」——区分等于送一个枚举接口 |
-| ⑫ | **入参不进日志**（业务数据）。排查靠 `trace_id` + 行数 + 耗时 |
-| ⑬ | **三层配额**：边缘 `limit_req`（按来源 IP）、服务侧按密钥的令牌桶、单次请求行数上限。⚠ 三层缺一不可：只有边缘那层的话，一把密钥换台机器就绕过去了 |
-| ⑭ | **停用 / 退役立刻生效**：部署 `is_enabled=false` → 403；版本被退役 → 410 + 一句人话。绝不静默用旧值 |
+- 身份无效返回 401，权限不足返回 403，启用状态与模型可服务性继续独立检查。
+- 密钥不进入 URL、日志和错误详情，业务入参出参不记日志。
+- 三层配额：边缘按 IP 限流；服务按部署 ID 与用户 ID 计每分钟次数；请求有行数上限。
+  同账号多把密钥共享配额，不同账号或部署不互相占用。
+- 部署停用立即返回 403，模型不可服务返回 410，不返回陈旧结果。
+- 对外签名剥除训练统计；保留预测、检测与规则计算各自的返回结构。
 
 ### D16 · 一期跑在 `api` 角色，不新开部署单元
 
@@ -900,7 +830,7 @@ POST /api/v1/platform/modeling-model-versions/{id}:register-formula
 | --- | --- |
 | ~~台账公式重算加批量预测相位，求值器保持纯同步~~ → **ADR-0046** | 五+六 ✅ |
 | ~~模型二进制产物走对象存储且只加载自产字节~~ → **ADR-0048** | 五+六 ✅ |
-| ~~对外推理面走 API 密钥并由边缘免认证 location 承载~~ → **ADR-0047** | 七 ✅ |
+| 对外推理统一使用账号 APIKey → **ADR-0062** | 七 ✅ |
 
 ⚠ 编号取当前未占用的下一个。本设计对应 ADR-0048、ADR-0046 与 ADR-0047；ADR-0045 属于知识库索引决策。
 
@@ -909,7 +839,7 @@ POST /api/v1/platform/modeling-model-versions/{id}:register-formula
 ⚠ **重跑一次 auth 种子**：新增的 `modeling-deployments` 与 `open-models` 两段
 规则不进库的话，那两个前缀会被 900 那几条方法兜底收走，表现是「新端点全 403」。
 ⚠ **两份边缘配置都要更新并 reload**：Linux 那份模板与 Windows 那份各有一条
-`open-models` 的免认证 location 与一个 `limit_req_zone`。只改一份的表现是
+`open-models` 的账号鉴权 location 与一个 `limit_req_zone`。只改一份的表现是
 「一边通、一边 401」。
 
 ---

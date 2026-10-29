@@ -49,14 +49,8 @@ async def test_template_instance_trains_and_deploys(
         f"{INSTANCES}/{instance['id']}:deploy", json=payload, headers=headers
     )
     assert data_of(replay)["id"] == data_of(deployed)["id"]
-    minted = await app_client.post(
-        f"{DEPLOYMENTS}/{data_of(deployed)['id']}/api-keys",
-        json={"name": "test-key"},
-    )
-    key = data_of(minted)["plaintext"]
     prediction = await app_client.post(
         "/api/v1/platform/open-models/energy-instance:predict",
-        headers={"X-Api-Key": key},
         json={"rows": [{"温度": 25, "负荷": 430}]},
     )
     assert prediction.status_code == 200

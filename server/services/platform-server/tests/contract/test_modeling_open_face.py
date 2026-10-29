@@ -1,9 +1,4 @@
-"""对外推理面的契约：这是本仓第二个匿名可达的前缀，形状要钉死。
-
-⚠ 这一组防的是**「漏挂一个依赖 = 那条路径整个匿名开放」**，而它不会报任何错：
-路由照常注册、请求照常 200，只是没人问过凭据
-（docs/MODELING_PLATFORM_DESIGN.md D14）。
-"""
+"""模型调用的账号鉴权、模型签名与独立调用记录契约。"""
 
 import ast
 import inspect
@@ -13,9 +8,6 @@ from pathlib import Path
 
 from platform_server.apps.modeling.api import ROUTERS, open_models
 from platform_server.apps.modeling.services import open_model_service
-from platform_server.apps.modeling.services.open_model_service import (
-    INVALID_KEY_MESSAGE,
-)
 
 SOURCE = (
     Path(__file__).resolve().parents[2]
@@ -66,7 +58,7 @@ def test_every_open_route_carries_the_auth_dependency() -> None:
 def test_the_open_face_has_exactly_the_documented_endpoints() -> None:
     """对外面只包含签名、预测、异常检测和规则计算。
 
-    ⚠ 这一条钉的是**面的大小**：匿名可达的东西越少越好，多一个端点就要多想
+    ⚠ 这一条钉的是**面的大小**：对外端点越少越好，多一个端点就要多想
     一遍它会不会漏出内部信息。
     """
     paths = sorted(
@@ -96,26 +88,23 @@ def test_the_key_never_travels_in_the_url() -> None:
     ⚠ URL 会进访问日志、进浏览器历史、进代理的缓存键（防线 ⑪）。
     """
     text = SOURCE.read_text(encoding="utf-8")
-    assert 'Header(alias="X-Api-Key")' in text
+    assert 'Header(alias="X-Api-Key")' not in text
     assert "Query(" not in text
 
 
-def test_the_refusal_says_nothing_about_why() -> None:
-    """密钥无效时只说这四个字。
-
-    ⚠ 区分「不存在」「已撤销」「已过期」等于送一个枚举接口（防线 ⑪）。
-    """
-    assert INVALID_KEY_MESSAGE == "密钥无效"
-
-
-def test_the_open_endpoints_declare_the_key_header() -> None:
-    """两个端点在 openapi 上都声明了 `X-Api-Key`，第三方照它对接。"""
+def test_the_open_endpoints_declare_account_bearer_auth() -> None:
     spec = json.loads(SPEC.read_text(encoding="utf-8"))
-    for path in (f"{OPEN_PREFIX}/{{code}}", f"{OPEN_PREFIX}/{{code}}:predict"):
-        operations = spec["paths"][path]
-        for operation in operations.values():
+    paths = [path for path in spec["paths"] if path.startswith(OPEN_PREFIX)]
+    assert len(paths) == 4
+    for path in paths:
+        for operation in spec["paths"][path].values():
             names = [item["name"] for item in operation.get("parameters", [])]
-            assert "X-Api-Key" in names
+            assert "X-Api-Key" not in names
+            assert operation["security"] == [{"UserApiKey": []}]
+    assert (
+        spec["components"]["securitySchemes"]["UserApiKey"]["scheme"]
+        == "bearer"
+    )
 
 
 def test_the_call_log_is_written_in_its_own_transaction() -> None:

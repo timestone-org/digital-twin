@@ -34,14 +34,14 @@ const steps = [
     '提交成功训练的 run_id 和 name。响应 signature 为实际输入输出签名，is_servable=true 的版本才能部署。',
   ],
   [
-    '7. 部署并取得密钥',
+    '7. 部署模型',
     'POST /modeling-instances/{id}:deploy',
-    '提交 model_version_id、服务 code 和 name。再通过 POST /modeling-deployments/{id}/api-keys 签发调用密钥。',
+    '提交 model_version_id、服务 code 和 name。部署完成后即可使用用户 APIKey 调用。',
   ],
   [
     '8. 调用服务',
     'GET /open-models/{code}',
-    '使用部署密钥读取签名，再按任务类型调用 :predict、:detect 或 :calculate。',
+    '使用用户 APIKey 读取签名，再按任务类型调用 :predict、:detect 或 :calculate。',
   ],
 ]
 const example = JSON.stringify(
@@ -101,11 +101,26 @@ const example = JSON.stringify(
       </DtCard>
     </div>
     <DtNotice intent="info">
-      所有路径前缀为 /api/v1/platform。建模管理接口使用 Authorization: Bearer
-      &lt;账号 API 密钥&gt;；线上推理使用 X-Api-Key 请求头携带独立部署密钥。
+      所有路径前缀为 /api/v1/platform。建模管理与线上调用统一使用 Authorization:
+      Bearer &lt;用户 APIKey&gt;。仅调用模型需要 modeling:view 权限。
       专用账号授予 modeling:view、modeling:run，需要部署时增加
       modeling:publish，无需 modeling:manage。
     </DtNotice>
+    <DtCard
+      title="获取全部已部署模型"
+      subtitle="从部署列表选择服务，再读取签名并调用"
+    >
+      <code>GET /modeling-deployments</code>
+      <p>
+        使用用户 APIKey，账号需有 modeling:view 权限。返回 data
+        数组，包含全部部署，无需分页；没有部署时返回空数组。
+      </p>
+      <p>
+        列表包含名称、code、固定模型版本、状态和配额。选择 is_enabled=true 且
+        is_servable=true 的项，再通过 GET /open-models/{code}
+        读取输入输出签名。停用或不可服务的部署仍会出现在列表中。
+      </p>
+    </DtCard>
     <div class="integration-content">
       <ol class="integration-steps" aria-label="第三方接入流程">
         <li v-for="step in steps" :key="step[0]">

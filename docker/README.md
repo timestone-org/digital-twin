@@ -21,6 +21,14 @@
 3. **`/internal/` 一律 deny**。`/verify` 与权限回查都挂在那下面，
    它们只认服务级密钥，对外暴露等于把鉴权端点交给公网。
 
+### 模型调用鉴权
+
+`/api/v1/platform/open-models/` 使用 `auth-inject.conf`，通过 auth-server 校验用户
+APIKey 和 `modeling:view` 权限，再由 platform 校验签名身份。模型调用保留独立 IP
+限流和 256 KiB 请求体限制。发布此鉴权切换时需先同步 auth 路由种子，再更新
+platform 和边缘配置；切换完成前暂停调用，避免混合版本拒绝请求。详见
+[ADR-0062](../docs/adr/0062-模型调用统一使用账号API密钥.md)。
+
 ### 缓冲区
 
 `/verify` 的响应头里带 base64 编码的权限集，默认 4k 的 `proxy_buffer_size`

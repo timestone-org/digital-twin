@@ -107,7 +107,7 @@ async def _rule_version(
 @pytest.fixture
 async def rule_service(
     app_client: httpx.AsyncClient, worker_sessions: MakerSessions
-) -> tuple[dict[str, Any], str]:
+) -> tuple[dict[str, Any], dict[str, str]]:
     version = await _rule_version(app_client, worker_sessions)
     created = await app_client.post(
         DEPLOYMENTS,
@@ -119,22 +119,18 @@ async def rule_service(
     )
     assert created.status_code == 201, created.text
     deployment = dict(data_of(created))
-    minted = await app_client.post(
-        f"{DEPLOYMENTS}/{deployment['id']}/api-keys",
-        json={"name": "业务系统"},
-    )
-    assert minted.status_code == 201, minted.text
-    return deployment, str(data_of(minted)["plaintext"])
+    return deployment, dict(app_client.headers)
 
 
 async def test_rule_calculation_returns_exact_decimal_and_business_details(
-    app_client: httpx.AsyncClient, rule_service: tuple[dict[str, Any], str]
+    app_client: httpx.AsyncClient,
+    rule_service: tuple[dict[str, Any], dict[str, str]],
 ) -> None:
-    deployment, key = rule_service
+    deployment, caller_headers = rule_service
     response = await app_client.post(
         f"{OPEN}/{deployment['code']}:calculate",
         json={"rows": [{"能耗": 0.3, "产量": 0.1}]},
-        headers={"X-Api-Key": key},
+        headers=caller_headers,
     )
     assert response.status_code == 200, response.text
     answer = data_of(response)
@@ -167,14 +163,14 @@ async def test_rule_calculation_returns_exact_decimal_and_business_details(
 )
 async def test_bad_inputs_are_rejected_instead_of_computed(
     app_client: httpx.AsyncClient,
-    rule_service: tuple[dict[str, Any], str],
+    rule_service: tuple[dict[str, Any], dict[str, str]],
     row: dict[str, object],
 ) -> None:
-    deployment, key = rule_service
+    deployment, caller_headers = rule_service
     response = await app_client.post(
         f"{OPEN}/{deployment['code']}:calculate",
         json={"rows": [row]},
-        headers={"X-Api-Key": key},
+        headers=caller_headers,
     )
     assert response.status_code == 400, response.text
     assert response.json()["code"] != 0
@@ -184,7 +180,7 @@ async def test_rule_and_trained_versions_keep_legacy_store_readable_and_page(
     app_client: httpx.AsyncClient,
     db_session: AsyncSession,
     worker_sessions: MakerSessions,
-    rule_service: tuple[dict[str, Any], str],
+    rule_service: tuple[dict[str, Any], dict[str, str]],
 ) -> None:
     deployment, _key = rule_service
     await _served(app_client, db_session, worker_sessions, "trained-version")
@@ -216,17 +212,20 @@ async def test_rule_and_trained_versions_keep_legacy_store_readable_and_page(
     assert len(listed) == 2
 
 
-async def test_rules_require_keys_and_reject_numeric_prediction(
-    app_client: httpx.AsyncClient, rule_service: tuple[dict[str, Any], str]
+async def test_rules_require_account_auth_and_reject_numeric_prediction(
+    app_client: httpx.AsyncClient,
+    rule_service: tuple[dict[str, Any], dict[str, str]],
 ) -> None:
-    deployment, key = rule_service
+    deployment, caller_headers = rule_service
     rows = {"rows": [{"能耗": 6, "产量": 2}]}
     url = f"{OPEN}/{deployment['code']}"
     assert (
-        await app_client.post(f"{url}:calculate", json=rows)
+        await app_client.post(
+            f"{url}:calculate", json=rows, headers={"X-Auth-Sig": ""}
+        )
     ).status_code == 401
     predicted = await app_client.post(
-        f"{url}:predict", json=rows, headers={"X-Api-Key": key}
+        f"{url}:predict", json=rows, headers=caller_headers
     )
     assert predicted.status_code == 400, predicted.text
     registered = await app_client.post(
@@ -239,7 +238,7 @@ async def test_rules_require_keys_and_reject_numeric_prediction(
     )
     assert (
         await app_client.post(
-            f"{url}:calculate", json=rows, headers={"X-Api-Key": key}
+            f"{url}:calculate", json=rows, headers=caller_headers
         )
     ).status_code == 403
 
@@ -277,9 +276,10 @@ async def test_rule_run_is_enqueued_only_on_the_rule_stream(
 
 
 async def test_decimal_inputs_keep_precision_before_rule_arithmetic(
-    app_client: httpx.AsyncClient, rule_service: tuple[dict[str, Any], str]
+    app_client: httpx.AsyncClient,
+    rule_service: tuple[dict[str, Any], dict[str, str]],
 ) -> None:
-    deployment, key = rule_service
+    deployment, caller_headers = rule_service
     response = await app_client.post(
         f"{OPEN}/{deployment['code']}:calculate",
         json={
@@ -288,7 +288,7 @@ async def test_decimal_inputs_keep_precision_before_rule_arithmetic(
                 {"能耗": "0.3", "产量": "0.1"},
             ]
         },
-        headers={"X-Api-Key": key},
+        headers=caller_headers,
     )
     assert response.status_code == 200, response.text
     results = data_of(response)["results"]
@@ -300,10 +300,10 @@ async def test_decimal_inputs_keep_precision_before_rule_arithmetic(
 
 async def test_invalid_decimal_range_is_recorded_before_client_error(
     app_client: httpx.AsyncClient,
-    rule_service: tuple[dict[str, Any], str],
+    rule_service: tuple[dict[str, Any], dict[str, str]],
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
-    deployment, key = rule_service
+    deployment, caller_headers = rule_service
     recorded: list[tuple[int, int | None]] = []
     original = open_model_service.record_call
 
@@ -321,7 +321,7 @@ async def test_invalid_decimal_range_is_recorded_before_client_error(
     response = await app_client.post(
         f"{OPEN}/{deployment['code']}:calculate",
         json={"rows": [{"能耗": 10, "产量": "1e100"}]},
-        headers={"X-Api-Key": key},
+        headers=caller_headers,
     )
     assert response.status_code == 400, response.text
     assert recorded == [(400, 41423)]

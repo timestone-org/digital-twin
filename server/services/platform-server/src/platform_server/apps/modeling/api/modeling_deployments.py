@@ -1,8 +1,4 @@
-"""对外服务的管理面。读用 `modeling:view`，写用 `modeling:publish`。
-
-⚠ 与 `open_models.py` 分成两个文件、两个前缀：那一份是匿名可达的，这一份不是。
-混在一个路由器里，「哪些端点不要登录」在评审时就看不出来了。
-"""
+"""部署管理面：读取需 modeling:view，写入需 modeling:publish。"""
 
 import uuid
 from typing import Annotated
@@ -137,7 +133,8 @@ async def delete_deployment(
 @deployments.get(
     "/{deployment_id}/api-keys",
     response_model=ApiResponse[list[ModelApiKeyOut]],
-    summary="密钥列表",
+    summary="历史部署密钥列表",
+    deprecated=True,
 )
 async def list_keys(
     deployment_id: uuid.UUID, session: SessionDep, _viewer: ViewDep
@@ -153,33 +150,28 @@ async def list_keys(
     "/{deployment_id}/api-keys",
     response_model=ApiResponse[ModelApiKeyMintedOut],
     status_code=status.HTTP_201_CREATED,
-    summary="铸一把密钥",
+    summary="独立部署密钥已停用",
+    deprecated=True,
+    responses={410: {"description": "请使用用户 APIKey 调用模型"}},
 )
 async def create_key(
     deployment_id: uuid.UUID,
-    payload: ModelApiKeyCreateIn,
+    _payload: ModelApiKeyCreateIn,
     session: SessionDep,
-    response: Response,
-    write: PublishDep,
+    _write: PublishDep,
 ) -> ApiResponse[ModelApiKeyMintedOut]:
-    """铸一把新钥匙。**明文只在这个回执里出现一次。**
+    """签发已停用，返回 410 并提示使用用户 APIKey。
 
-    Args: deployment_id, payload, session, response, write。
+    Args: deployment_id, _payload, session, _write。
     """
-    created = await deployment_service.create_key(
-        session,
-        deployment_id=deployment_id,
-        payload=payload,
-        actor=_actor(write),
-    )
-    response.status_code = status.HTTP_201_CREATED
-    return ok(created)
+    await deployment_service.create_key(session, deployment_id=deployment_id)
 
 
 @deployments.post(
     "/{deployment_id}/api-keys/{key_id}:revoke",
     response_model=ApiResponse[ModelApiKeyOut],
-    summary="撤销一把密钥",
+    summary="撤销历史部署密钥",
+    deprecated=True,
 )
 async def revoke_key(
     deployment_id: uuid.UUID,

@@ -1,12 +1,9 @@
-"""对外服务的管理面：建改删部署、铸与撤销密钥、看调用量。事务边界在这一层。
-
-⚠ 明文密钥只在铸出来那一次的回执里出现。本模块任何读接口都不回明文，
-也没有任何地方存明文（docs/MODELING_PLATFORM_DESIGN.md D13）。
-"""
+"""部署管理、历史密钥清理与调用统计。"""
 
 import uuid
 from dataclasses import dataclass
 from datetime import UTC, datetime, timedelta
+from typing import NoReturn
 
 from sqlalchemy.exc import IntegrityError
 from sqlalchemy.ext.asyncio import AsyncSession
@@ -20,6 +17,7 @@ from platform_server.apps.modeling.crud import (
 from platform_server.apps.modeling.errors import (
     ApiKeyNotFound,
     DeploymentCodeTaken,
+    DeploymentKeysRetired,
     DeploymentNotFound,
     ModelVersionNotFound,
 )
@@ -29,15 +27,12 @@ from platform_server.apps.modeling.models import (
     ModelVersion,
 )
 from platform_server.apps.modeling.schemas import (
-    ModelApiKeyCreateIn,
-    ModelApiKeyMintedOut,
     ModelApiKeyOut,
     ModelCallStatOut,
     ModelDeploymentCreateIn,
     ModelDeploymentOut,
     ModelDeploymentUpdateIn,
 )
-from platform_server.apps.modeling.services import api_key
 from platform_server.apps.modeling.services.pipeline_service import Actor
 
 # 调用量默认回看多少天
@@ -185,30 +180,11 @@ async def create_key(
     session: AsyncSession,
     *,
     deployment_id: uuid.UUID,
-    payload: ModelApiKeyCreateIn,
-    actor: Actor,
-) -> ModelApiKeyMintedOut:
-    """铸一把新钥匙。**明文只在这个回执里出现一次。**
-
-    Args: session, deployment_id, payload, actor。
-    """
-    found = await _presented(session, deployment_id)
-    minted = api_key.mint()
-    row = api_key_crud.add(
-        session,
-        ModelingApiKey(
-            deployment_id=found.row.id,
-            name=payload.name,
-            key_prefix=minted.prefix,
-            key_hash=minted.digest,
-            expires_at=payload.expires_at,
-            created_by=actor.user_id,
-            created_by_name=actor.name,
-        ),
-    )
-    await session.flush()
-    return ModelApiKeyMintedOut(
-        **_to_key_out(row).model_dump(), plaintext=minted.plaintext
+) -> NoReturn:
+    """拒绝签发独立部署密钥。Args: session, deployment_id。"""
+    await _presented(session, deployment_id)
+    raise DeploymentKeysRetired(
+        "模型调用已统一使用用户 APIKey，请通过 Authorization: Bearer 携带"
     )
 
 

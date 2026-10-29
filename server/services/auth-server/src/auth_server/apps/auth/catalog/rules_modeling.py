@@ -138,25 +138,18 @@ MODELING_RULES: tuple[RouteRuleSpec, ...] = (
         description=(
             "对外服务与密钥的读面。必须压过 987 那条 `*` 方法的写规则，"
             "否则只读用户连有哪些服务在跑都看不到。"
-            "⚠ 密钥列表里没有明文——明文只在铸出来那一次的回执里出现"
+            "历史部署密钥仅保留查询与撤销，不再签发"
         ),
     ),
 )
 
-# 模型对外推理面。⚠ 单列一段是因为它是 platform 上第二个匿名可达的前缀，
-# 混进上面那串会让「哪些路径不需要登录」在评审时看不出来。
+# 模型调用与建模读取共用账号权限
 OPEN_MODEL_RULES: tuple[RouteRuleSpec, ...] = (
     RouteRuleSpec(
         f"{_PLATFORM}/open-models/*",
         "*",
+        codes=(MODELING_VIEW,),
         priority=950,
-        description=(
-            "按 API 密钥调模型。⚠ 空 codes 是「任意已登录用户」，"
-            "**不是**匿名放行：真正的匿名可达性由边缘那条免认证 location 保证，"
-            "这条只负责让带着密钥来的已登录用户不被 900 的方法兜底要走别的码。"
-            "密钥本身由 platform-server 自己核对——它是业务资源，"
-            "放进 auth-server 就要在两个服务之间同步一张表的生死，"
-            "而 `/verify` 是全站每个请求都要过的热路径"
-        ),
+        description="模型签名、预测、检测与计算统一使用账号鉴权及建模查看权限。",
     ),
 )

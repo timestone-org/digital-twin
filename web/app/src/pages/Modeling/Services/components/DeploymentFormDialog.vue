@@ -164,7 +164,7 @@ function submit(): void {
         v-model="form.rateLimit"
         label="每分钟最多调几次"
         :range="{ min: 1, max: MAX_RATE }"
-        hint="按密钥计。边缘还有一层按来源 IP 的闸，两层缺一不可"
+        hint="按用户账号与当前部署分别计数；边缘另按来源 IP 限流"
       />
     </div>
     <template #footer>

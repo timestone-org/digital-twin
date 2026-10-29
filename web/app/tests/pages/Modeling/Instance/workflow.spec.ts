@@ -222,29 +222,25 @@ it('加载与写入失败给出可重试反馈', async () => {
   expect(wrapper.text()).toContain('请求失败')
 })
 
-it('部署失败后保留已创建的服务，只重试生成密钥', async () => {
-  vi.mocked(modeling.createModelApiKey).mockRejectedValueOnce(
-    new Error('temporary'),
-  )
+it('部署完成即可使用用户 APIKey，无需签发部署密钥', async () => {
   const wrapper = mount(DeployDialog, {
     props: { instanceId: versionSummary.pipeline_id, version: versionSummary },
     global: { stubs: { teleport: true } },
   })
   wrappers.push(wrapper)
   await wrapper.findAll('input')[1]?.setValue('local-service')
-  await button(wrapper, '部署并生成密钥').trigger('click')
-  await flushPromises()
-  expect(wrapper.text()).toContain('部署已创建，密钥生成失败')
-  await button(wrapper, '重新生成密钥').trigger('click')
+  await button(wrapper, '部署模型').trigger('click')
   await flushPromises()
   expect(api.deployInstance).toHaveBeenCalledTimes(1)
-  expect(modeling.createModelApiKey).toHaveBeenCalledTimes(2)
+  expect(modeling.createModelApiKey).not.toHaveBeenCalled()
+  expect(wrapper.text()).toContain('用户 APIKey')
+  expect(wrapper.text()).not.toContain('调用密钥（仅显示一次）')
   expect(wrapper.text()).toContain('模型已部署')
   await button(wrapper, '完成').trigger('click')
   expect(wrapper.emitted('close')).toHaveLength(1)
 })
 
-it('部署进行中 X 关闭不会丢掉唯一密钥回执', async () => {
+it('部署进行中 X 关闭不会丢掉部署结果', async () => {
   let finish: ((value: typeof deployment) => void) | undefined
   vi.mocked(api.deployInstance).mockImplementation(
     () =>
@@ -258,7 +254,7 @@ it('部署进行中 X 关闭不会丢掉唯一密钥回执', async () => {
   })
   wrappers.push(wrapper)
   await wrapper.findAll('input')[1]?.setValue('local-service')
-  await button(wrapper, '部署并生成密钥').trigger('click')
+  await button(wrapper, '部署模型').trigger('click')
   await wrapper.get('button[aria-label="关闭"]').trigger('click')
   expect(wrapper.emitted('close')).toBeUndefined()
   if (!finish) throw new Error('部署请求未提交')
@@ -332,7 +328,7 @@ it('从版本列表部署并关闭结果后保留页面状态', async () => {
     .findAllComponents(ui.DtNumberInput)
     .find((field) => field.props('label') === '每分钟调用次数')
     ?.vm.$emit('update:modelValue', 120)
-  await button(wrapper, '部署并生成密钥').trigger('click')
+  await button(wrapper, '部署模型').trigger('click')
   await flushPromises()
   expect(api.deployInstance).toHaveBeenCalledWith(configuration.instance?.id, {
     code: 'ui-model-service',
@@ -391,4 +387,25 @@ it('离开页面后完成的训练提交不会再次请求该页面数据', asyn
   finish(run)
   await flushPromises()
   expect(api.getInstance).toHaveBeenCalledTimes(reads)
+})
+
+it('部署失败保留表单并允许修正后重试，不请求额外密钥', async () => {
+  vi.mocked(api.deployInstance).mockRejectedValueOnce(
+    new BizError(41418, '服务编码已存在', 409, 'test-trace'),
+  )
+  const wrapper = mount(DeployDialog, {
+    props: { instanceId: versionSummary.pipeline_id, version: versionSummary },
+    global: { stubs: { teleport: true } },
+  })
+  wrappers.push(wrapper)
+  await wrapper.findAll('input')[1]?.setValue('account-service')
+  await button(wrapper, '部署模型').trigger('click')
+  await flushPromises()
+  expect(wrapper.text()).toContain('服务编码已存在')
+  expect(wrapper.findAll('input')[1]?.element.value).toBe('account-service')
+  await wrapper.findAll('input')[1]?.setValue('account-service-new')
+  await button(wrapper, '部署模型').trigger('click')
+  await flushPromises()
+  expect(wrapper.text()).toContain('模型已部署')
+  expect(modeling.createModelApiKey).not.toHaveBeenCalled()
 })

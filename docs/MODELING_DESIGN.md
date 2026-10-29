@@ -31,7 +31,7 @@
 | `POST /modeling-instances/{id}:deploy` | 将本实例的可服务 `model_version_id` 部署为稳定服务地址 | `modeling:publish` |
 
 训练状态、取消与中间结果沿用 `/modeling-runs`；发布成功运行沿用
-`POST /modeling-model-versions`；签发部署密钥和停用部署沿用 `/modeling-deployments`。
+`POST /modeling-model-versions`；启停与配置部署沿用 `/modeling-deployments`。
 创建模板、实例、训练和部署支持 `Idempotency-Key`，调用方对同一逻辑请求复用键。
 配置校验失败为 400、版本冲突及训练中修改为 409、权限不足为 403。
 部署必须指定属于本实例且可服务的版本，不根据“最新”静默换版。
@@ -1929,7 +1929,7 @@ CI 不重试）。
 [ADR-0003](../server/services/platform-server/docs/adr/0003-无监督异常检测保留空目标并提供显式判定.md)。
 现有回归、分类模型仍要求非空目标列。已有 `:predict` 对异常模型返回分数；
 第三方应使用 `POST /api/v1/platform/open-models/{code}:detect` 获得明确判定。
-鉴权继续使用 `X-Api-Key`，每次至多 256 行且受部署行数和每分钟配额共同约束。
+鉴权统一使用 `Authorization: Bearer <用户 APIKey>`（ADR-0062），每次至多 256 行且受部署行数和每分钟配额共同约束。
 
 检测接口接收 `rows`，按模型输入签名取数，与请求对象的键顺序无关。未知字段、
 缺失、空值、布尔值、非数值、非有限数拒绝为客户端错误，不将错误行当正常。
@@ -1963,7 +1963,7 @@ platform [ADR-0004](../server/services/platform-server/docs/adr/0004-规则计�
 业务名称不带环境标记。
 
 第三方使用 `POST /api/v1/platform/open-models/{code}:calculate`，
-沿用独立部署密钥、行数与频率配额，按模型签名提供 `rows`，读取逐行结构化
+使用用户 APIKey，保留行数与频率配额，按模型签名提供 `rows`，读取逐行结构化
 `results`。精确核算值以十进制字符串输出；缺失、布尔值、非有限数、
 不允许的负值、无效分母与无效拓扑显式报错，不补零、不返回虚构正常结果。
 数值预测和工况偏离检测分别保留 `:predict`、`:detect` 的既有契约。
