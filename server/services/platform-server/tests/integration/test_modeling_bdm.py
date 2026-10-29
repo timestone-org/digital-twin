@@ -123,6 +123,38 @@ async def test_system_catalog_uses_same_permission_and_platform_envelope(
     assert denied.status_code == 403
 
 
+@pytest.mark.parametrize("endpoint", ["capabilities", "indicators"])
+async def test_discovery_routes_require_view_without_leaking_connection(
+    app_client: httpx.AsyncClient,
+    sign: SignHeaders,
+    monkeypatch: pytest.MonkeyPatch,
+    endpoint: str,
+) -> None:
+    def respond(_request: httpx.Request) -> httpx.Response:
+        return success({"items": [], "page": 1, "pageSize": 50})
+
+    install_transport(monkeypatch, respond)
+    path = f"/api/v1/platform/modeling-bdm-{endpoint}"
+    response = await app_client.get(path)
+    assert response.status_code == 200
+    assert response.json()["code"] == 0
+    assert "api_key" not in response.text
+    assert "base_url" not in response.text
+    if endpoint == "capabilities":
+        assert response.json()["data"]["is_configured"]
+    denied = await app_client.get(path, headers=sign(codes=()))
+    assert denied.status_code == 403
+
+
+async def test_indicator_page_limits_use_real_http_error(
+    app_client: httpx.AsyncClient,
+) -> None:
+    response = await app_client.get(
+        "/api/v1/platform/modeling-bdm-indicators?size=201"
+    )
+    assert response.status_code == 400
+
+
 def graph() -> dict[str, Any]:
     return {
         "format_version": "1.0",

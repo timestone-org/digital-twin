@@ -23,9 +23,13 @@ from platform_server.apps.modeling.operators.reporting import (
     annotated,
     rows_block,
 )
-from platform_server.apps.modeling.schemas.bdm import BdmKind
+from platform_server.apps.modeling.schemas.bdm import BdmGranularity, BdmKind
 
 MAX_FORMULAS = 8
+MAX_IDENTIFIERS = 10
+MAX_ROWS = 200_000
+HOUR_MINUTES = 60
+MINUTE_INTERVALS = (1, 2, 3, 4, 5, 6, 10, 12, 15, 20, 30, 60)
 type BdmIdentifier = Annotated[
     str, StringConstraints(strip_whitespace=True, min_length=1, max_length=200)
 ]
@@ -43,7 +47,7 @@ class BdmSourceConfig(OperatorConfig):
     )
     identifiers: list[BdmIdentifier] = Field(
         min_length=1,
-        max_length=10,
+        max_length=MAX_IDENTIFIERS,
         title="取数标识",
         description=(
             "从目录选择 pointId、propertyId 或公式 code；" "每个标识输出一列"
@@ -56,17 +60,34 @@ class BdmSourceConfig(OperatorConfig):
     since: str = moment_field(
         default="-7d",
         title="起始时刻",
-        description="UTC 绝对时刻或 -7d、-12h；最多取 366 天",
+        description=(
+            "UTC 绝对时刻或 -7d、-12h；"
+            "长区间自动分段，仍受行数和取数预算限制"
+        ),
     )
     until: str = moment_field(
         default="",
         title="截止时刻",
         description="留空取到本次运行时刻；区间左闭右开",
     )
-    granularity: Literal["day", "month"] = Field(
+    granularity: BdmGranularity = Field(
         default="day",
         title="公式粒度",
-        description="day=按日，仅公式有效；month=按月，仅公式有效",
+        description="day=按日；month=按月；hour=按小时；minute=按分钟；仅公式有效",
+    )
+    interval_minutes: int | None = Field(
+        default=None,
+        ge=1,
+        le=60,
+        title="分钟间隔",
+        description=(
+            "分钟粒度默认 1；" "允许 1、2、3、4、5、6、10、12、15、20、30、60"
+        ),
+    )
+    time_alignment: Literal["complete", "strict"] = Field(
+        default="complete",
+        title="分时边界",
+        description="complete=只取完整周期，自动对齐；strict=严格对齐，未对齐时报错；仅小时/分钟有效",
     )
     value_type: Literal["number", "string"] = Field(
         default="number",
@@ -76,7 +97,7 @@ class BdmSourceConfig(OperatorConfig):
     row_limit: int = Field(
         default=50_000,
         ge=1,
-        le=200_000,
+        le=MAX_ROWS,
         title="行数上限",
         description="按时间对齐后保留最新的这些行；触顶明确标注，缺失不补零",
     )
@@ -87,7 +108,31 @@ class BdmSourceConfig(OperatorConfig):
             raise ValueError("取数标识不能重复")
         if self.kind == "formula" and len(self.identifiers) > MAX_FORMULAS:
             raise ValueError("公式最多选择 8 个")
+        if (
+            self.interval_minutes is not None
+            and self.interval_minutes not in MINUTE_INTERVALS
+        ):
+            raise ValueError(
+                "分钟间隔必须为 1、2、3、4、5、6、10、12、15、20、30 或 60"
+            )
+        self.validate_formula_interval()
         return self
+
+    def validate_formula_interval(self) -> None:
+        if self.kind != "formula" or self.interval_minutes is None:
+            return
+        if self.granularity == "hour" and self.interval_minutes != HOUR_MINUTES:
+            raise ValueError("小时粒度的间隔固定为 60 分钟")
+        if self.granularity in ("day", "month"):
+            raise ValueError("日/月粒度不使用分钟间隔，请清空该参数")
+
+    @property
+    def effective_interval_minutes(self) -> int:
+        return (
+            HOUR_MINUTES
+            if self.granularity == "hour"
+            else self.interval_minutes or 1
+        )
 
 
 @register_operator

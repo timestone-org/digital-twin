@@ -17,6 +17,8 @@ import type {
   ModelingBinding,
   ModelingBdmCatalog,
   ModelingBdmSystems,
+  ModelingBdmCapabilities,
+  ModelingBdmIndicators,
   ModelingBindingImpact,
   ModelingGraph,
   ModelingGraphCheck,
@@ -92,6 +94,8 @@ export async function listModelingBdmCatalog(
     keyword?: string | undefined
     name?: string | undefined
     system?: string | undefined
+    code?: string | undefined
+    include_unqueryable?: boolean | undefined
   },
   signal?: AbortSignal,
 ): Promise<ModelingBdmCatalog> {
@@ -111,6 +115,27 @@ export async function listModelingBdmSystems(
   return await requestData<ModelingBdmSystems>(
     '/modeling-bdm-systems',
     onPlatform(signal === undefined ? {} : { signal }),
+  )
+}
+
+/** 能管连接的配置状态及取数边界。 */
+export async function getModelingBdmCapabilities(
+  signal?: AbortSignal,
+): Promise<ModelingBdmCapabilities> {
+  return await requestData<ModelingBdmCapabilities>(
+    '/modeling-bdm-capabilities',
+    onPlatform(signal === undefined ? {} : { signal }),
+  )
+}
+
+/** 指标来源绑定目录，编码精确匹配。 */
+export async function listModelingBdmIndicators(
+  query: { page: number; code: string; size?: number },
+  signal?: AbortSignal,
+): Promise<ModelingBdmIndicators> {
+  return await requestData<ModelingBdmIndicators>(
+    '/modeling-bdm-indicators',
+    onPlatform({ query, ...(signal ? { signal } : {}) }),
   )
 }
 

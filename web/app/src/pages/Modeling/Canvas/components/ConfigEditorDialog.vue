@@ -7,6 +7,7 @@ import type { ConfigStatus } from '../scripts/configValues'
 import type { FormField, FormOptions } from '../scripts/schemaForm'
 
 import ConfigForm from './ConfigForm.vue'
+import BdmSourceConfigForm from './BdmSourceConfigForm.vue'
 
 const props = defineProps<{
   node: ModelingGraphNode | null
@@ -28,11 +29,21 @@ const emit = defineEmits<{
     :model-value="props.node !== null"
     :title="props.operator?.name ?? '参数'"
     :description="props.operator?.description"
-    width="48rem"
+    :width="props.operator?.code === 'bdm_source' ? '72rem' : '48rem'"
     @update:model-value="emit('close')"
   >
+    <BdmSourceConfigForm
+      v-if="props.node && props.operator?.code === 'bdm_source'"
+      :key="props.node.id"
+      :fields="props.fields"
+      :config="props.node.config"
+      :options="props.options"
+      :is-readonly="props.isReadonly"
+      @change="(key, value) => emit('change', key, value)"
+      @status="emit('status', $event)"
+    />
     <ConfigForm
-      v-if="props.node"
+      v-else-if="props.node"
       :key="props.node.id"
       class="dt-ml-dialog-form"
       :fields="props.fields"

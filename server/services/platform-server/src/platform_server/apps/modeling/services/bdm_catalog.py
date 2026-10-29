@@ -3,6 +3,12 @@
 from pydantic import JsonValue
 
 from lib.errors import ValidationFailed
+from platform_server.apps.modeling.operators.bdm import (
+    MAX_FORMULAS,
+    MAX_IDENTIFIERS,
+    MAX_ROWS,
+    MINUTE_INTERVALS,
+)
 from platform_server.apps.modeling.schemas.bdm import (
     BdmCatalogItemOut,
     BdmCatalogOut,
@@ -11,11 +17,73 @@ from platform_server.apps.modeling.schemas.bdm import (
     BdmSystemsOut,
     BdmSystemsWire,
 )
+from platform_server.apps.modeling.schemas.bdm_discovery import (
+    BdmCapabilitiesOut,
+    BdmIndicatorOut,
+    BdmIndicatorPageWire,
+    BdmIndicatorQuery,
+    BdmIndicatorSourceOut,
+    BdmIndicatorsOut,
+)
 from platform_server.apps.modeling.services.bdm_client import (
     BdmClient,
     BdmConnection,
     BdmReadFailed,
 )
+
+
+def capabilities(connection: BdmConnection | None) -> BdmCapabilitiesOut:
+    """返回本地配置与算子边界，不探测上游连通性。Args: connection。"""
+    return BdmCapabilitiesOut(
+        is_configured=connection is not None,
+        timezone=connection.timezone if connection else None,
+        minute_intervals=list(MINUTE_INTERVALS),
+        max_identifiers=MAX_IDENTIFIERS,
+        max_formula_identifiers=MAX_FORMULAS,
+        max_rows=MAX_ROWS,
+        load_timeout_s=connection.load_timeout_s if connection else None,
+    )
+
+
+async def read_indicators(
+    connection: BdmConnection | None, query: BdmIndicatorQuery
+) -> BdmIndicatorsOut:
+    """读取指标的可选属性绑定。Args: connection, query。"""
+    if connection is None:
+        raise BdmReadFailed("BDM 接口未启用，请联系管理员配置连接")
+    params: dict[str, str | int] = {"page": query.page, "pageSize": query.size}
+    if query.code:
+        params["code"] = query.code
+    async with BdmClient(connection) as client:
+        result = await client.read(
+            "/indicators", BdmIndicatorPageWire, params=params
+        )
+    return BdmIndicatorsOut(
+        total=result.total,
+        page=result.page,
+        size=result.page_size,
+        items=[
+            BdmIndicatorOut(
+                id=item.id,
+                code=item.code,
+                name=item.name,
+                unit=item.unit,
+                sources=[
+                    BdmIndicatorSourceOut(
+                        source_type=source.source_type,
+                        source_id=source.source_id,
+                        source_property=source.source_property,
+                        alias=source.alias,
+                        unit=source.unit,
+                        is_selectable=source.source_type == "unitProperty"
+                        and bool(source.source_id and source.source_id.strip()),
+                    )
+                    for source in item.sources
+                ],
+            )
+            for item in result.items
+        ],
+    )
 
 
 async def read_catalog(

@@ -62,6 +62,40 @@ export type ModelingBdmSystems = {
   system_filter_available: boolean
 }
 
+export type ModelingBdmCapabilities = {
+  is_configured: boolean
+  load_timeout_s: number | null
+  max_formula_identifiers: number
+  max_identifiers: number
+  max_rows: number
+  minute_intervals: number[]
+  timezone: string | null
+}
+
+export type ModelingBdmIndicatorSource = {
+  alias: string | null
+  is_selectable: boolean
+  source_id: string | null
+  source_property: string | null
+  source_type: string
+  unit: string | null
+}
+
+export type ModelingBdmIndicator = {
+  code: string
+  id: string
+  name: string
+  sources: ModelingBdmIndicatorSource[]
+  unit: string | null
+}
+
+export type ModelingBdmIndicators = {
+  items: ModelingBdmIndicator[]
+  page: number
+  size: number
+  total: number
+}
+
 export type ModelingConfiguration = {
   nodes: Record<string, Record<string, ModelingJsonValue>>
 }

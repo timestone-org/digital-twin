@@ -27,6 +27,10 @@ import type {
   ModelingBdmCatalog,
   ModelingBdmCatalogItem,
   ModelingBdmSystems,
+  ModelingBdmCapabilities,
+  ModelingBdmIndicatorSource,
+  ModelingBdmIndicator,
+  ModelingBdmIndicators,
   ModelingBindingImpact,
   ModelingBindingUsage,
   ModelingGraph,
@@ -93,6 +97,36 @@ const BDM_CATALOG = {
   system_filter_available: true,
   items: true,
 } satisfies Keys<ModelingBdmCatalog>
+const BDM_CAPABILITIES = {
+  is_configured: true,
+  timezone: true,
+  minute_intervals: true,
+  max_identifiers: true,
+  max_formula_identifiers: true,
+  max_rows: true,
+  load_timeout_s: true,
+} satisfies Keys<ModelingBdmCapabilities>
+const BDM_INDICATOR_SOURCE = {
+  source_type: true,
+  source_id: true,
+  source_property: true,
+  alias: true,
+  unit: true,
+  is_selectable: true,
+} satisfies Keys<ModelingBdmIndicatorSource>
+const BDM_INDICATOR = {
+  id: true,
+  code: true,
+  name: true,
+  unit: true,
+  sources: true,
+} satisfies Keys<ModelingBdmIndicator>
+const BDM_INDICATORS = {
+  total: true,
+  page: true,
+  size: true,
+  items: true,
+} satisfies Keys<ModelingBdmIndicators>
 
 const PORT = {
   name: true,
@@ -395,6 +429,10 @@ const PAIRS: ReadonlyArray<readonly [string, Record<string, true>]> = [
   ['BdmCatalogItemOut', BDM_ITEM],
   ['BdmCatalogOut', BDM_CATALOG],
   ['BdmSystemsOut', BDM_SYSTEMS],
+  ['BdmCapabilitiesOut', BDM_CAPABILITIES],
+  ['BdmIndicatorSourceOut', BDM_INDICATOR_SOURCE],
+  ['BdmIndicatorOut', BDM_INDICATOR],
+  ['BdmIndicatorsOut', BDM_INDICATORS],
 ]
 
 describe('分析建模线形与 openapi 一致', () => {

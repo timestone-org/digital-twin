@@ -623,6 +623,10 @@ export type {
   ModelingBdmCatalogItem,
   ModelingBdmCatalog,
   ModelingBdmSystems,
+  ModelingBdmCapabilities,
+  ModelingBdmIndicatorSource,
+  ModelingBdmIndicator,
+  ModelingBdmIndicators,
 } from './modelingDetection'
 export type {
   ModelingConfiguration,

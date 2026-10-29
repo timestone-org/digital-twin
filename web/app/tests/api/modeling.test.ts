@@ -71,6 +71,45 @@ it('BDM 单页目录支持指定每页条数', async () => {
   expect(call()[1]['query']).toEqual({ kind: 'formula', page: 2, size: 200 })
 })
 
+it('能管配置能力经平台读取并传递取消信号', async () => {
+  await modeling.getModelingBdmCapabilities()
+  expect(call()).toEqual([
+    '/modeling-bdm-capabilities',
+    { baseUrl: PLATFORM_BASE_URL },
+  ])
+  const controller = new AbortController()
+  await modeling.getModelingBdmCapabilities(controller.signal)
+  expect(call()[1]['signal']).toBe(controller.signal)
+})
+
+it('指标绑定仅向平台代理传递编码和分页，保留取消信号', async () => {
+  const controller = new AbortController()
+  const query = { code: 'energy.intensity', page: 2, size: 50 }
+  await modeling.listModelingBdmIndicators(query, controller.signal)
+  expect(call()).toEqual([
+    '/modeling-bdm-indicators',
+    { baseUrl: PLATFORM_BASE_URL, query, signal: controller.signal },
+  ])
+  await modeling.listModelingBdmIndicators({ code: '', page: 1 })
+  expect(call()[1]['signal']).toBeUndefined()
+})
+
+it('点位完整编码与不可查询开关按接口字段传递', async () => {
+  await modeling.listModelingBdmCatalog({
+    kind: 'point',
+    page: 1,
+    code: 'P1',
+    include_unqueryable: true,
+  })
+  expect(call()[1]['query']).toEqual({
+    kind: 'point',
+    page: 1,
+    size: 50,
+    code: 'P1',
+    include_unqueryable: true,
+  })
+})
+
 it.each(['point', 'raw', 'formula'] as const)(
   '%s 目录按名称向平台代理传递过滤',
   async (kind) => {

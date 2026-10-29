@@ -7,6 +7,7 @@ from pydantic import BaseModel, ConfigDict, Field, JsonValue, model_validator
 from platform_server.apps.modeling.schemas.common import OutputModel
 
 type BdmKind = Literal["point", "raw", "formula"]
+type BdmGranularity = Literal["day", "month", "hour", "minute"]
 
 
 class BdmEnvelope(BaseModel):
@@ -36,8 +37,14 @@ class BdmSeries(BaseModel):
 
 
 class BdmSeriesData(BaseModel):
-    kind: BdmKind
+    kind: BdmKind | None = None
     series: list[BdmSeries] = Field(min_length=1, max_length=10)
+    interval_minutes: int | None = Field(
+        default=None, alias="intervalMinutes", ge=1, le=60
+    )
+    is_end_exclusive: bool | None = Field(
+        default=None, alias="endExclusive", strict=True
+    )
 
 
 class BdmCatalogWire(BaseModel):

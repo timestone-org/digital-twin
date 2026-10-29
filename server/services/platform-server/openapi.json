@@ -1064,6 +1064,51 @@
         "title": "ApiResponse[BackfillJobOut]",
         "type": "object"
       },
+      "ApiResponse_BdmCapabilitiesOut_": {
+        "properties": {
+          "code": {
+            "default": 0,
+            "title": "Code",
+            "type": "integer"
+          },
+          "data": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/BdmCapabilitiesOut"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "details": {
+            "anyOf": [
+              {
+                "items": {
+                  "$ref": "#/components/schemas/FieldErrorOut"
+                },
+                "type": "array"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Details"
+          },
+          "message": {
+            "default": "ok",
+            "title": "Message",
+            "type": "string"
+          },
+          "trace_id": {
+            "default": "",
+            "title": "Trace Id",
+            "type": "string"
+          }
+        },
+        "title": "ApiResponse[BdmCapabilitiesOut]",
+        "type": "object"
+      },
       "ApiResponse_BdmCatalogOut_": {
         "properties": {
           "code": {
@@ -1107,6 +1152,51 @@
           }
         },
         "title": "ApiResponse[BdmCatalogOut]",
+        "type": "object"
+      },
+      "ApiResponse_BdmIndicatorsOut_": {
+        "properties": {
+          "code": {
+            "default": 0,
+            "title": "Code",
+            "type": "integer"
+          },
+          "data": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/BdmIndicatorsOut"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "details": {
+            "anyOf": [
+              {
+                "items": {
+                  "$ref": "#/components/schemas/FieldErrorOut"
+                },
+                "type": "array"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Details"
+          },
+          "message": {
+            "default": "ok",
+            "title": "Message",
+            "type": "string"
+          },
+          "trace_id": {
+            "default": "",
+            "title": "Trace Id",
+            "type": "string"
+          }
+        },
+        "title": "ApiResponse[BdmIndicatorsOut]",
         "type": "object"
       },
       "ApiResponse_BdmSystemsOut_": {
@@ -7204,6 +7294,66 @@
         "title": "BackfillStartIn",
         "type": "object"
       },
+      "BdmCapabilitiesOut": {
+        "properties": {
+          "is_configured": {
+            "title": "Is Configured",
+            "type": "boolean"
+          },
+          "load_timeout_s": {
+            "anyOf": [
+              {
+                "type": "number"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Load Timeout S"
+          },
+          "max_formula_identifiers": {
+            "title": "Max Formula Identifiers",
+            "type": "integer"
+          },
+          "max_identifiers": {
+            "title": "Max Identifiers",
+            "type": "integer"
+          },
+          "max_rows": {
+            "title": "Max Rows",
+            "type": "integer"
+          },
+          "minute_intervals": {
+            "items": {
+              "type": "integer"
+            },
+            "title": "Minute Intervals",
+            "type": "array"
+          },
+          "timezone": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Timezone"
+          }
+        },
+        "required": [
+          "is_configured",
+          "timezone",
+          "minute_intervals",
+          "max_identifiers",
+          "max_formula_identifiers",
+          "max_rows",
+          "load_timeout_s"
+        ],
+        "title": "BdmCapabilitiesOut",
+        "type": "object"
+      },
       "BdmCatalogItemOut": {
         "properties": {
           "code": {
@@ -7318,6 +7468,146 @@
           "items"
         ],
         "title": "BdmCatalogOut",
+        "type": "object"
+      },
+      "BdmIndicatorOut": {
+        "properties": {
+          "code": {
+            "title": "Code",
+            "type": "string"
+          },
+          "id": {
+            "title": "Id",
+            "type": "string"
+          },
+          "name": {
+            "title": "Name",
+            "type": "string"
+          },
+          "sources": {
+            "items": {
+              "$ref": "#/components/schemas/BdmIndicatorSourceOut"
+            },
+            "title": "Sources",
+            "type": "array"
+          },
+          "unit": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Unit"
+          }
+        },
+        "required": [
+          "id",
+          "code",
+          "name",
+          "unit",
+          "sources"
+        ],
+        "title": "BdmIndicatorOut",
+        "type": "object"
+      },
+      "BdmIndicatorSourceOut": {
+        "properties": {
+          "alias": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Alias"
+          },
+          "is_selectable": {
+            "title": "Is Selectable",
+            "type": "boolean"
+          },
+          "source_id": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Source Id"
+          },
+          "source_property": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Source Property"
+          },
+          "source_type": {
+            "title": "Source Type",
+            "type": "string"
+          },
+          "unit": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Unit"
+          }
+        },
+        "required": [
+          "source_type",
+          "source_id",
+          "source_property",
+          "alias",
+          "unit",
+          "is_selectable"
+        ],
+        "title": "BdmIndicatorSourceOut",
+        "type": "object"
+      },
+      "BdmIndicatorsOut": {
+        "properties": {
+          "items": {
+            "items": {
+              "$ref": "#/components/schemas/BdmIndicatorOut"
+            },
+            "title": "Items",
+            "type": "array"
+          },
+          "page": {
+            "title": "Page",
+            "type": "integer"
+          },
+          "size": {
+            "title": "Size",
+            "type": "integer"
+          },
+          "total": {
+            "title": "Total",
+            "type": "integer"
+          }
+        },
+        "required": [
+          "total",
+          "page",
+          "size",
+          "items"
+        ],
+        "title": "BdmIndicatorsOut",
         "type": "object"
       },
       "BdmKind": {
@@ -32078,6 +32368,27 @@
         ]
       }
     },
+    "/api/v1/platform/modeling-bdm-capabilities": {
+      "get": {
+        "operationId": "get_bdm_capabilities_api_v1_platform_modeling_bdm_capabilities_get",
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiResponse_BdmCapabilitiesOut_"
+                }
+              }
+            },
+            "description": "Successful Response"
+          }
+        },
+        "summary": "能管取数配置能力",
+        "tags": [
+          "modeling-bdm"
+        ]
+      }
+    },
     "/api/v1/platform/modeling-bdm-catalogs": {
       "get": {
         "operationId": "list_bdm_catalog_api_v1_platform_modeling_bdm_catalogs_get",
@@ -32193,6 +32504,74 @@
           }
         },
         "summary": "能管取数目录",
+        "tags": [
+          "modeling-bdm"
+        ]
+      }
+    },
+    "/api/v1/platform/modeling-bdm-indicators": {
+      "get": {
+        "operationId": "list_bdm_indicators_api_v1_platform_modeling_bdm_indicators_get",
+        "parameters": [
+          {
+            "in": "query",
+            "name": "page",
+            "required": false,
+            "schema": {
+              "default": 1,
+              "maximum": 100000,
+              "minimum": 1,
+              "title": "Page",
+              "type": "integer"
+            }
+          },
+          {
+            "in": "query",
+            "name": "size",
+            "required": false,
+            "schema": {
+              "default": 50,
+              "maximum": 200,
+              "minimum": 1,
+              "title": "Size",
+              "type": "integer"
+            }
+          },
+          {
+            "in": "query",
+            "name": "code",
+            "required": false,
+            "schema": {
+              "default": "",
+              "maxLength": 200,
+              "title": "Code",
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiResponse_BdmIndicatorsOut_"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "能管指标来源绑定目录",
         "tags": [
           "modeling-bdm"
         ]

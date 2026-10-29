@@ -21,6 +21,7 @@ import { fieldsOf } from './schemaForm'
 import { sourceTablesFor } from './upstream'
 import { useLedgerOptions } from './useLedgerOptions'
 import { useConfigDraft } from './useConfigDraft'
+import { changeBdmConfig } from './bdmConfig'
 
 type Operators = ReadonlyMap<string, ModelingOperator>
 type Ledger = ReturnType<typeof useLedgerOptions>
@@ -135,13 +136,10 @@ export function useConfigPanel(deps: ConfigPanelDeps) {
     setValue: (key: string, value: unknown) => {
       const current = views.node.value
       if (current === null) return
-      const config = { ...current.config, [key]: value }
-      if (
-        current.operator === 'bdm_source' &&
-        key === 'kind' &&
-        current.config['kind'] !== value
-      )
-        config['identifiers'] = []
+      const config =
+        current.operator === 'bdm_source'
+          ? changeBdmConfig(current.config, key, value)
+          : { ...current.config, [key]: value }
       deps.setConfig(current.id, config)
     },
   }

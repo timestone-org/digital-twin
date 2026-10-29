@@ -32,6 +32,7 @@ from platform_server.apps.modeling.services.bdm_window import (
     BdmWindow,
     formula_windows,
     history_windows,
+    is_interval_aligned,
     resolve_window,
     sample_time,
 )
@@ -60,6 +61,7 @@ class _Read:
     identifier: str
     name: str = ""
     unit: str = ""
+    is_truncated: bool = False
     samples: dict[int, CellValue] = field(default_factory=dict[int, CellValue])
 
 
@@ -108,26 +110,34 @@ async def _read_identifier(
 ) -> _Read:
     result = _Read(identifier=identifier)
     windows = (
-        formula_windows(window, config.granularity)
+        formula_windows(window, config.granularity, config.interval_minutes)
         if config.kind == "formula"
         else history_windows(window)
     )
     for period in windows:
+        if len(result.samples) >= config.row_limit:
+            result.is_truncated = True
+            break
         offset: int | None = 0
         while offset is not None and len(result.samples) <= config.row_limit:
+            if len(result.samples) == config.row_limit:
+                result.is_truncated = True
+                break
             payload = _query(config, period, identifier, offset)
             budget.take()
             data = await client.read(
                 QUERY_PATHS[config.kind], BdmSeriesData, payload=payload
             )
             series = _one_series(data, config.kind, identifier)
+            _validate_formula(data, series, config, window)
             _merge(result, series, window)
             offset = (
                 _next_offset(series, offset)
                 if config.kind != "formula"
                 else None
             )
-        if len(result.samples) > config.row_limit:
+        if len(result.samples) > config.row_limit or result.is_truncated:
+            result.is_truncated = True
             break
     return result
 
@@ -154,7 +164,7 @@ def _query(
 
 
 def _one_series(data: BdmSeriesData, kind: str, identifier: str) -> BdmSeries:
-    if data.kind != kind or len(data.series) != 1:
+    if data.kind not in (None, kind) or len(data.series) != 1:
         raise BdmReadFailed("BDM 响应的序列数量或类别不匹配")
     series = data.series[0]
     received = (
@@ -165,6 +175,27 @@ def _one_series(data: BdmSeriesData, kind: str, identifier: str) -> BdmSeries:
     if received != identifier:
         raise BdmReadFailed("BDM 返回了与请求不一致的标识")
     return series
+
+
+def _validate_formula(
+    data: BdmSeriesData,
+    series: BdmSeries,
+    config: BdmSourceConfig,
+    window: BdmWindow,
+) -> None:
+    if config.kind != "formula" or config.granularity not in ("hour", "minute"):
+        return
+    if (
+        data.interval_minutes != config.effective_interval_minutes
+        or data.is_end_exclusive is not True
+    ):
+        raise BdmReadFailed(
+            "能管接口未按请求粒度返回左闭右开分时结果，请确认上游支持小时/分钟查询"
+        )
+    for sample in series.samples:
+        moment = sample_time(sample.ct, window).astimezone(window.timezone)
+        if not is_interval_aligned(moment, config.effective_interval_minutes):
+            raise BdmReadFailed("能管公式样本时间未按所选分钟间隔对齐")
 
 
 def _merge(result: _Read, series: BdmSeries, window: BdmWindow) -> None:
@@ -203,7 +234,9 @@ def _build_frame(
     now: datetime,
 ) -> Frame:
     stamps = sorted({stamp for result in reads for stamp in result.samples})
-    truncated = len(stamps) > config.row_limit
+    truncated = len(stamps) > config.row_limit or any(
+        result.is_truncated for result in reads
+    )
     kept = stamps[-config.row_limit :]
     columns: list[FrameColumn] = []
     values: list[list[CellValue]] = []

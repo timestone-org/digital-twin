@@ -61,6 +61,52 @@ beforeEach(() => {
 })
 
 describe('BDM 取数参数', () => {
+  it('点位可以按完整编码精确搜索，不同时发送名称条件', async () => {
+    const request = vi
+      .spyOn(modeling, 'listModelingBdmCatalog')
+      .mockResolvedValue(page())
+    const wrapper = mount(BdmIdentifierPicker, {
+      props: { kind: 'point', field, modelValue: [], isReadonly: false },
+    })
+    await flushPromises()
+    const mode = wrapper
+      .findAllComponents(DtSelect)
+      .find((select) => select.props('label') === '查找方式')
+    expect(mode).toBeDefined()
+    mode?.vm.$emit('update:modelValue', 'code')
+    await wrapper.get('.dt-bdm-picker__search input').setValue('P_1')
+    await wrapper
+      .get('.dt-bdm-picker__search input')
+      .trigger('keydown', { key: 'Enter' })
+    await flushPromises()
+    expect(request.mock.calls.at(-1)?.[0]).toMatchObject({
+      code: 'P_1',
+      page: 1,
+    })
+    expect(request.mock.calls.at(-1)?.[0].name).toBeUndefined()
+    wrapper.unmount()
+  })
+
+  it('跨页选中的名称可读并能单独移除，手填入口默认折叠', async () => {
+    vi.spyOn(modeling, 'listModelingBdmCatalog')
+      .mockResolvedValueOnce(page())
+      .mockResolvedValue({ ...page(), items: [], page: 2 })
+    const wrapper = mount(BdmIdentifierPicker, {
+      props: { kind: 'point', field, modelValue: ['p1'], isReadonly: false },
+    })
+    await flushPromises()
+    await wrapper
+      .findAll('button')
+      .find((button) => button.text() === '下一页')
+      ?.trigger('click')
+    await flushPromises()
+    expect(wrapper.get('[aria-label="已选数据"]').text()).toContain('温度')
+    expect(wrapper.get('details').attributes('open')).toBeUndefined()
+    await wrapper.get('button[aria-label="移除 温度"]').trigger('click')
+    expect(wrapper.emitted('update:modelValue')?.at(-1)).toEqual([[]])
+    wrapper.unmount()
+  })
+
   it('上游不支持系统筛选时提示原因且仍能搜索名称', async () => {
     const request = vi
       .spyOn(modeling, 'listModelingBdmCatalog')
@@ -101,7 +147,10 @@ describe('BDM 取数参数', () => {
       props: { kind: 'point', field, modelValue: [], isReadonly: false },
     })
     await flushPromises()
-    const select = wrapper.getComponent(DtSelect)
+    const select = wrapper
+      .findAllComponents(DtSelect)
+      .find((item) => item.props('label') === '点位所属系统')
+    if (!select) throw new Error('Missing system selector')
     expect(select.props('options')).toEqual([
       { value: '', label: '全部系统' },
       { value: '空压系统', label: '空压系统' },

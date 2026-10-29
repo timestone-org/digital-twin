@@ -249,6 +249,47 @@ describe('只读与嵌套配置类型', () => {
     ])
   })
 
+  it('从相对切到绝对后能填写日期，清空草稿仍保留日期控件', async () => {
+    const wrapper = mount(MomentInput, {
+      props: {
+        modelValue: '-7d',
+        label: '起始时刻',
+        hint: '',
+        isReadonly: false,
+      },
+    })
+    await wrapper
+      .findAll('button')
+      .find((button) => button.text() === '绝对')
+      ?.trigger('click')
+    await wrapper.setProps({ modelValue: '' })
+    expect(wrapper.find('input[type="datetime-local"]').exists()).toBe(true)
+    wrapper.unmount()
+  })
+
+  it('逐字修改相对时间不会在中途跳成日期选择器，外部重置仍同步模式', async () => {
+    const wrapper = mount(MomentInput, {
+      props: {
+        modelValue: '-7d',
+        label: '起始时刻',
+        hint: '',
+        isReadonly: false,
+      },
+    })
+    await wrapper.get('input[placeholder="或自己写，如 -12h"]').setValue('-')
+    await wrapper.setProps({ modelValue: '-' })
+    expect(wrapper.find('input[type="datetime-local"]').exists()).toBe(false)
+    expect(wrapper.text()).toContain('相对写法形如')
+    await wrapper.get('input[placeholder="或自己写，如 -12h"]').setValue('-12h')
+    await wrapper.setProps({ modelValue: '-12h' })
+    expect(wrapper.text()).not.toContain('相对写法形如')
+    await wrapper.setProps({ modelValue: '2026-10-27T00:00:00Z' })
+    expect(wrapper.find('input[type="datetime-local"]').exists()).toBe(true)
+    await wrapper.setProps({ modelValue: '' })
+    expect(wrapper.text()).toContain('不限——起始取最早')
+    wrapper.unmount()
+  })
+
   it('只读时刻不提供可修改的模式按钮', async () => {
     const wrapper = mount(MomentInput, {
       props: {

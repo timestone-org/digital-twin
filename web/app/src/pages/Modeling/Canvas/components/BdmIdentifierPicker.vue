@@ -1,5 +1,6 @@
 <script setup lang="ts">
 /** @fileoverview 从 BDM 分页目录选择取数标识，并保留手填与跨页选择。 */
+import type { ModelingBdmCatalogItem } from '@dt/contracts'
 import {
   DtButton,
   DtCheckbox,
@@ -8,13 +9,16 @@ import {
   DtNotice,
   DtPagination,
   DtSelect,
+  DtTag,
 } from '@dt/ui'
-import { computed } from 'vue'
+import { computed, ref, watch } from 'vue'
 
 import type { ConfigStatus } from '../scripts/configValues'
 import type { FormField } from '../scripts/schemaForm'
 import { useBdmCatalog } from '../scripts/useBdmCatalog'
+import { useBdmSelection } from '../scripts/useBdmSelection'
 import ArrayConfigInput from './ArrayConfigInput.vue'
+import BdmIndicatorPicker from './BdmIndicatorPicker.vue'
 
 const props = defineProps<{
   kind: unknown
@@ -33,6 +37,7 @@ const catalog = useBdmCatalog(() => kind.value)
 const {
   page,
   name,
+  searchBy,
   system,
   items,
   total,
@@ -44,10 +49,29 @@ const {
   systemsError,
   systemsLoading,
 } = catalog
-const searchLabel = computed(
-  () =>
-    ({ point: '点位名称', raw: '属性名称', formula: '公式名称' })[kind.value],
+const searchLabel = computed(() =>
+  kind.value === 'point'
+    ? ({ code: '完整点位编码', keyword: '点位关键词' }[searchBy.value] ??
+      '点位名称')
+    : kind.value === 'raw'
+      ? '属性名称'
+      : '公式名称',
 )
+const searchModes = [
+  { value: 'name', label: '按名称' },
+  { value: 'keyword', label: '按关键词（编码／名称／表描述）' },
+  { value: 'code', label: '按完整编码' },
+]
+const selection = useBdmSelection(
+  () => kind.value,
+  () => items.value,
+  () => props.modelValue,
+)
+const { selected } = selection
+const isIndicatorOpen = ref(false)
+watch(kind, () => {
+  isIndicatorOpen.value = false
+})
 const limit = computed(() => (kind.value === 'formula' ? 8 : 10))
 const manualField = computed<FormField>(() => ({
   ...props.field,
@@ -93,21 +117,44 @@ function toggle(identifier: string, checked: boolean): void {
 }
 
 function input(values: (string | number)[]): void {
+  if (props.isReadonly) return
   emit(
     'update:modelValue',
     values.filter((value): value is string => typeof value === 'string'),
   )
 }
+
+function addProperty(item: ModelingBdmCatalogItem): void {
+  if (
+    props.isReadonly ||
+    props.modelValue.includes(item.identifier) ||
+    props.modelValue.length >= limit.value
+  )
+    return
+  selection.remember(item)
+  emit('update:modelValue', [...props.modelValue, item.identifier])
+}
 </script>
 
 <template>
   <div class="dt-bdm-picker">
+    <DtSelect
+      v-if="kind === 'point'"
+      v-model="searchBy"
+      label="查找方式"
+      :options="searchModes"
+      :disabled="props.isReadonly"
+    />
     <div class="dt-bdm-picker__search">
       <DtInput
         v-model="name"
         :label="searchLabel"
-        placeholder="输入名称片段，最多 100 个字符"
-        :maxlength="100"
+        :placeholder="
+          searchBy === 'code'
+            ? '填写完整编码，精确匹配'
+            : '输入名称或关键词片段'
+        "
+        :maxlength="searchBy === 'code' ? 200 : 100"
         :disabled="props.isReadonly"
         @enter="catalog.search"
       >
@@ -153,15 +200,17 @@ function input(values: (string | number)[]): void {
       当前数据源不支持点位系统筛选，可按名称查找。
     </DtNotice>
     <DtNotice v-if="systemsLoading" intent="neutral">
-      <span>正在读取系统分类…</span>
+      <span> 正在读取系统分类… </span>
     </DtNotice>
     <DtNotice v-if="systemsError" intent="warning">
-      <span>系统分类读取失败：{{ systemsError }}</span>
+      <span> 系统分类读取失败：{{ systemsError }} </span>
     </DtNotice>
     <DtButton v-if="systemsError" variant="ghost" @click="catalog.loadSystems">
-      <span>重试系统分类</span>
+      <span> 重试系统分类 </span>
     </DtButton>
-    <DtNotice v-if="error" intent="danger">{{ error }}</DtNotice>
+    <DtNotice v-if="error" intent="danger">
+      {{ error }}
+    </DtNotice>
     <DtButton
       v-if="error"
       variant="ghost"
@@ -186,14 +235,18 @@ function input(values: (string | number)[]): void {
           @update:model-value="toggle(item.identifier, $event)"
         >
           <span class="dt-bdm-picker__item">
-            <span>{{ item.name }}</span>
-            <span class="dt-bdm-picker__code">{{ item.code }}</span>
-            <span v-if="item.details" class="dt-bdm-picker__note">{{
-              item.details
-            }}</span>
-            <span v-if="item.note" class="dt-bdm-picker__note">{{
-              item.note
-            }}</span>
+            <span>
+              {{ item.name }}
+            </span>
+            <span class="dt-bdm-picker__code">
+              {{ item.code }}
+            </span>
+            <span v-if="item.details" class="dt-bdm-picker__note">
+              {{ item.details }}
+            </span>
+            <span v-if="item.note" class="dt-bdm-picker__note">
+              {{ item.note }}
+            </span>
           </span>
         </DtCheckbox>
         <p v-if="choices.length === 0">没有匹配项，请调整名称或系统条件。</p>
@@ -207,13 +260,71 @@ function input(values: (string | number)[]): void {
       :total="total"
       aria-label="能管目录分页"
     />
-    <ArrayConfigInput
-      :field="manualField"
-      :model-value="props.modelValue"
+    <section class="dt-bdm-picker__selected" aria-label="已选数据">
+      <div class="dt-bdm-picker__heading">
+        <strong> 已选数据 </strong>
+        <DtTag
+          :intent="props.modelValue.length === limit ? 'warning' : 'neutral'"
+        >
+          {{ props.modelValue.length }} / {{ limit }}
+        </DtTag>
+        <DtButton
+          v-if="props.modelValue.length"
+          variant="ghost"
+          :disabled="props.isReadonly"
+          @click="emit('update:modelValue', [])"
+        >
+          清空选择
+        </DtButton>
+      </div>
+      <p v-if="!selected.length" class="dt-bdm-picker__note">
+        从目录勾选数据，每项会成为下游的一列。
+      </p>
+      <ul v-else class="dt-bdm-picker__selected-list">
+        <li v-for="item in selected" :key="item.identifier">
+          <div>
+            <strong>
+              {{ item.name }}
+            </strong>
+            <span class="dt-bdm-picker__note">
+              {{ item.identifier }}{{ item.unit ? ` · ${item.unit}` : ''
+              }}{{ item.hasName ? '' : ' · 尚未加载目录名称' }}
+            </span>
+          </div>
+          <DtButton
+            variant="ghost"
+            icon="close"
+            :aria-label="`移除 ${item.name}`"
+            :disabled="props.isReadonly"
+            @click="toggle(item.identifier, false)"
+          />
+        </li>
+      </ul>
+    </section>
+    <DtButton
+      v-if="kind === 'raw'"
+      variant="ghost"
+      :aria-expanded="isIndicatorOpen"
+      @click="isIndicatorOpen = !isIndicatorOpen"
+    >
+      {{ isIndicatorOpen ? '收起指标绑定' : '从指标绑定选择属性' }}
+    </DtButton>
+    <BdmIndicatorPicker
+      v-if="kind === 'raw' && isIndicatorOpen"
+      :selected="props.modelValue"
       :is-readonly="props.isReadonly"
-      @update:model-value="input"
-      @status="emit('status', $event)"
+      @select="addProperty"
     />
+    <details class="dt-bdm-picker__manual">
+      <summary>高级：手动填写标识</summary>
+      <ArrayConfigInput
+        :field="manualField"
+        :model-value="props.modelValue"
+        :is-readonly="props.isReadonly"
+        @update:model-value="input"
+        @status="emit('status', $event)"
+      />
+    </details>
   </div>
 </template>
 
@@ -225,6 +336,45 @@ function input(values: (string | number)[]): void {
 }
 .dt-bdm-picker__search {
   min-width: 0;
+}
+.dt-bdm-picker__heading {
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+  flex-wrap: wrap;
+}
+.dt-bdm-picker__selected {
+  padding: 0.75rem;
+  border: 1px solid var(--border-subtle);
+  border-radius: var(--radius-md);
+  background: var(--surface-sunken);
+}
+.dt-bdm-picker__selected-list {
+  display: grid;
+  gap: 0.5rem;
+  max-height: 12rem;
+  overflow: auto;
+  margin: 0.5rem 0 0;
+  padding: 0;
+  list-style: none;
+  li {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 0.5rem;
+  }
+  li > div {
+    display: grid;
+    min-width: 0;
+    overflow-wrap: anywhere;
+  }
+}
+.dt-bdm-picker__manual {
+  summary {
+    cursor: pointer;
+    color: var(--text-secondary);
+    padding-block: 0.5rem;
+  }
 }
 .dt-bdm-picker__choices {
   display: grid;

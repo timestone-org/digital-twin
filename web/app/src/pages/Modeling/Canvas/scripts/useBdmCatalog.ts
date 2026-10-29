@@ -11,8 +11,10 @@ type Kind = ModelingBdmCatalog['kind']
 interface CatalogState {
   page: Ref<number>
   name: Ref<string>
+  searchBy: Ref<string>
   system: Ref<string>
   appliedName: Ref<string>
+  appliedSearchBy: Ref<string>
   appliedSystem: Ref<string>
   result: Ref<ModelingBdmCatalog | null>
   isLoading: Ref<boolean>
@@ -29,8 +31,10 @@ function watchCatalogPages(
     ([nextKind], [previousKind]) => {
       if (nextKind !== previousKind) {
         state.name.value = ''
+        state.searchBy.value = 'name'
         state.system.value = ''
         state.appliedName.value = ''
+        state.appliedSearchBy.value = 'name'
         state.appliedSystem.value = ''
         if (state.page.value !== 1) {
           state.page.value = 1
@@ -57,7 +61,7 @@ async function loadCatalog(
         {
           kind,
           page: state.page.value,
-          name: state.appliedName.value,
+          ...searchFilter(kind, state),
           system: state.appliedSystem.value,
         },
         signal,
@@ -74,6 +78,15 @@ async function loadCatalog(
       },
     },
   )
+}
+
+function searchFilter(kind: Kind, state: CatalogState) {
+  const value = state.appliedName.value
+  if (kind === 'point' && state.appliedSearchBy.value === 'code')
+    return { code: value }
+  if (kind === 'point' && state.appliedSearchBy.value === 'keyword')
+    return { keyword: value }
+  return { name: value }
 }
 
 function usePointSystems(kind: () => Kind) {
@@ -108,8 +121,10 @@ export function useBdmCatalog(kind: () => Kind) {
   const state: CatalogState = {
     page: ref(1),
     name: ref(''),
+    searchBy: ref('name'),
     system: ref(''),
     appliedName: ref(''),
+    appliedSearchBy: ref('name'),
     appliedSystem: ref(''),
     result: ref<ModelingBdmCatalog | null>(null),
     isLoading: ref(false),
@@ -122,6 +137,7 @@ export function useBdmCatalog(kind: () => Kind) {
   onScopeDispose(() => raced.cancel())
   function search(): void {
     state.appliedName.value = state.name.value.trim()
+    state.appliedSearchBy.value = state.searchBy.value
     state.appliedSystem.value = state.system.value.trim()
     if (state.page.value === 1) void load()
     else state.page.value = 1
