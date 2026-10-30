@@ -16,6 +16,12 @@ from platform_server.apps.dataset.services import register_provider
 from platform_server.apps.hvac.api import ROUTERS as HVAC_ROUTERS
 from platform_server.apps.llm_providers.api import ROUTERS as LLM_ROUTERS
 from platform_server.apps.modeling.api import ROUTERS as MODELING_ROUTERS
+from platform_server.apps.modeling.api.modeling_commands import (
+    handle_command_pending,
+)
+from platform_server.apps.modeling.command_errors import (
+    CommandPending,
+)
 from platform_server.apps.modeling.services.model_provider import (
     ModelingAnalysisProvider,
 )
@@ -66,6 +72,7 @@ def build_app(settings: Settings) -> FastAPI:
     # 任意 API 副本。漏一处的现象是「有时候出数、有时候是空」，且与副本编号
     # 相关，极难复现（docs/MODELING_DESIGN.md §3.2）
     register_provider(ModelingAnalysisProvider(store=container.object_store))
+    app.add_exception_handler(CommandPending, handle_command_pending)
     app.state.container = container
     return app
 

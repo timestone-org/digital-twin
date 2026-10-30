@@ -2954,6 +2954,51 @@
         "title": "ApiResponse[ModelVersionOut]",
         "type": "object"
       },
+      "ApiResponse_ModelingCommandOut_": {
+        "properties": {
+          "code": {
+            "default": 0,
+            "title": "Code",
+            "type": "integer"
+          },
+          "data": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/ModelingCommandOut"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "details": {
+            "anyOf": [
+              {
+                "items": {
+                  "$ref": "#/components/schemas/FieldErrorOut"
+                },
+                "type": "array"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Details"
+          },
+          "message": {
+            "default": "ok",
+            "title": "Message",
+            "type": "string"
+          },
+          "trace_id": {
+            "default": "",
+            "title": "Trace Id",
+            "type": "string"
+          }
+        },
+        "title": "ApiResponse[ModelingCommandOut]",
+        "type": "object"
+      },
       "ApiResponse_ModelingConfigurationOut_": {
         "properties": {
           "code": {
@@ -8746,6 +8791,32 @@
           "usable_count"
         ],
         "title": "CombinationCoverageOut",
+        "type": "object"
+      },
+      "CommandFailureOut": {
+        "properties": {
+          "code": {
+            "title": "Code",
+            "type": "integer"
+          },
+          "details": {
+            "items": {
+              "$ref": "#/components/schemas/FieldErrorOut"
+            },
+            "title": "Details",
+            "type": "array"
+          },
+          "message": {
+            "title": "Message",
+            "type": "string"
+          }
+        },
+        "required": [
+          "code",
+          "message",
+          "details"
+        ],
+        "title": "CommandFailureOut",
         "type": "object"
       },
       "CompliancePolicyIn": {
@@ -14558,6 +14629,135 @@
           }
         },
         "title": "ModelVersionUpdateIn",
+        "type": "object"
+      },
+      "ModelingCommandOut": {
+        "properties": {
+          "completed_at": {
+            "anyOf": [
+              {
+                "format": "date-time",
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Completed At"
+          },
+          "created_at": {
+            "format": "date-time",
+            "title": "Created At",
+            "type": "string"
+          },
+          "error": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/CommandFailureOut"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "http_status": {
+            "anyOf": [
+              {
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Http Status"
+          },
+          "id": {
+            "format": "uuid",
+            "title": "Id",
+            "type": "string"
+          },
+          "is_verification_required": {
+            "title": "Is Verification Required",
+            "type": "boolean"
+          },
+          "operation": {
+            "enum": [
+              "create_instance",
+              "configure_instance",
+              "train_instance",
+              "publish_version",
+              "deploy_instance",
+              "create_deployment",
+              "update_deployment",
+              "archive_instance",
+              "restore_instance",
+              "archive_version",
+              "restore_version",
+              "switch_deployment",
+              "rollback_deployment",
+              "update_version",
+              "retire_version",
+              "delete_deployment",
+              "cancel_run"
+            ],
+            "title": "Operation",
+            "type": "string"
+          },
+          "resource_id": {
+            "anyOf": [
+              {
+                "format": "uuid",
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Resource Id"
+          },
+          "result": {
+            "anyOf": [
+              {
+                "additionalProperties": {
+                  "$ref": "#/components/schemas/JsonValue"
+                },
+                "type": "object"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Result"
+          },
+          "state": {
+            "enum": [
+              "pending",
+              "unknown",
+              "succeeded",
+              "failed"
+            ],
+            "title": "State",
+            "type": "string"
+          },
+          "trace_id": {
+            "title": "Trace Id",
+            "type": "string"
+          }
+        },
+        "required": [
+          "id",
+          "operation",
+          "resource_id",
+          "state",
+          "http_status",
+          "result",
+          "error",
+          "created_at",
+          "completed_at",
+          "trace_id",
+          "is_verification_required"
+        ],
+        "title": "ModelingCommandOut",
         "type": "object"
       },
       "ModelingConfiguration": {
@@ -33215,6 +33415,136 @@
         "summary": "换版本或启停",
         "tags": [
           "modeling-binding"
+        ]
+      }
+    },
+    "/api/v1/platform/modeling-commands": {
+      "get": {
+        "operationId": "find_command_api_v1_platform_modeling_commands_get",
+        "parameters": [
+          {
+            "in": "query",
+            "name": "operation",
+            "required": true,
+            "schema": {
+              "enum": [
+                "create_instance",
+                "configure_instance",
+                "train_instance",
+                "publish_version",
+                "deploy_instance",
+                "create_deployment",
+                "update_deployment",
+                "archive_instance",
+                "restore_instance",
+                "archive_version",
+                "restore_version",
+                "switch_deployment",
+                "rollback_deployment",
+                "update_version",
+                "retire_version",
+                "delete_deployment",
+                "cancel_run"
+              ],
+              "title": "Operation",
+              "type": "string"
+            }
+          },
+          {
+            "in": "query",
+            "name": "resource_id",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "format": "uuid",
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Resource Id"
+            }
+          },
+          {
+            "in": "header",
+            "name": "Idempotency-Key",
+            "required": true,
+            "schema": {
+              "title": "Idempotency-Key",
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiResponse_ModelingCommandOut_"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Find Command",
+        "tags": [
+          "modeling-command"
+        ]
+      }
+    },
+    "/api/v1/platform/modeling-commands/{command_id}": {
+      "get": {
+        "operationId": "get_command_api_v1_platform_modeling_commands__command_id__get",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "command_id",
+            "required": true,
+            "schema": {
+              "format": "uuid",
+              "title": "Command Id",
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiResponse_ModelingCommandOut_"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Get Command",
+        "tags": [
+          "modeling-command"
         ]
       }
     },

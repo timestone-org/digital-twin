@@ -642,6 +642,7 @@ export type {
 } from './modelingDetection'
 
 export type * from './hierarchy'
+export * from './modelingManagement'
 
 export type {
   AcCompliancePolicy,
