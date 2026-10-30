@@ -27,6 +27,29 @@ class Result(BaseModel):
     value: int
 
 
+async def test_lookup_only_reads_an_existing_result() -> None:
+    store = build_store()
+    missing = await store.lookup_result(
+        endpoint="create", key="k1", caller=CALLER, model=Result
+    )
+    assert missing is None
+
+    async def action() -> Result:
+        return Result(value=17)
+
+    await store.run_once(
+        endpoint="create", key="k1", caller=CALLER, model=Result, action=action
+    )
+    cached = await store.lookup_result(
+        endpoint="create", key="k1", caller=CALLER, model=Result
+    )
+    other = await store.lookup_result(
+        endpoint="other", key="k1", caller=CALLER, model=Result
+    )
+    assert cached == Result(value=17)
+    assert other is None
+
+
 async def test_without_a_key_every_call_runs() -> None:
     store = build_store()
     calls: list[int] = []

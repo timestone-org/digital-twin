@@ -38,6 +38,23 @@ class IdempotencyStore:
     cache: CacheLike
     namespace: str
 
+    async def lookup_result[ResultT: BaseModel](
+        self,
+        *,
+        endpoint: str,
+        key: str,
+        caller: UUID,
+        model: type[ResultT],
+    ) -> ResultT | None:
+        """只读首次成功结果，不认领或执行。
+
+        Args: endpoint, key, caller, model。
+        """
+        cached: Any | None = await self.cache.get_json(
+            self._result_key(endpoint, key, caller)
+        )
+        return None if cached is None else model.model_validate(cached)
+
     async def run_once[ResultT: BaseModel](
         self,
         *,
