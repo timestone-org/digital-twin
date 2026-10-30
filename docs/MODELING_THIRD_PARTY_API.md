@@ -1,12 +1,14 @@
 # DigitalTwin 第三方接入页面接口说明
 
-文档版本 1.3　接口版本 v1　更新日期 2026 年 10 月 30 日
+文档版本 1.5　接口版本 v1　更新日期 2026 年 10 月 30 日
 
 本文对应系统“分析建模 → 第三方接入 → 接入指南”页面的 8 步流程：选择模板、获取配置、创建模型、配置参数、训练、发布版本、部署、调用服务。平台方预先设计并发布模板，第三方按模板完成建模和使用模型。已有部署时，也可先获取全部已部署模型列表，选择服务后直接调用。
 
 全部请求统一使用用户 APIKey。模板、模型实例和部署服务分别有自己的 ID 或编码，按每一步返回的结果继续调用。
 
 **适用版本**：目标环境须已更新为统一用户 APIKey 的接入版本。BASE_URL、用户 APIKey 和可用模板由平台方提供；本文示例域名、UUID、列名和数值均为示意，实际输入以所选模板及已部署模型的签名为准。
+
+本文还覆盖实例全集、历史运行、历史版本、部署管理、数据选项与结果下载。下文“当前”指本仓接口实现，不能据此认定客户环境已部署、外部能管已连通或已有可用训练数据。机器可读的字段和类型以 [platform OpenAPI](../server/services/platform-server/openapi.json) 为准。新增筛选、游标、归档、受控换版与持久命令的完整契约及升级步骤见 [管理与命令恢复接入](MODELING_MANAGEMENT_API.md)。
 
 ## 接入前准备
 
@@ -24,8 +26,10 @@ Content-Type: application/json
 | modeling:view | 读取已部署模型列表、模板、配置、训练结果和模型签名，调用模型 |
 | modeling:run | 创建模型实例、保存参数、训练和取消训练 |
 | modeling:publish | 发布模型版本和部署模型 |
+| dataset:view | 使用平台台账取数时读取真实台账、字段、记录与序列 |
+| dataset:record:export | 与 modeling:view 同时具备时，下载已保留的运行端口 CSV |
 
-完成整条流程的第三方账号需要上述三项权限，无需模板设计权限 `modeling:manage`。APIKey 继承账号权限；账号停用、密钥过期或吊销后，后续请求被拒绝。当前模型资源属于共享权限域，不按创建者做租户隔离。
+完成基本建模流程的第三方账号需要 `modeling:view`、`modeling:run`、`modeling:publish`；台账目录与 CSV 下载按表中说明附加权限，无需模板设计权限 `modeling:manage`。APIKey 继承账号权限；账号停用、密钥过期或吊销后，后续请求被拒绝。当前模型资源属于共享权限域，不按创建者做租户隔离。
 
 成功响应格式如下，各接口的结果放在 `data` 中：
 
@@ -40,11 +44,13 @@ Content-Type: application/json
 
 先检查 HTTP 状态，再检查业务 `code`。出现错误时保留 `trace_id`；字段错误可能附带 `details`。网关错误可能返回 HTML 或空体，不能假定所有错误都是 JSON。
 
+`trace_id` 是请求排障标识，不是实例、运行或命令 ID。成功创建使用 HTTP 201，训练提交使用 202，删除成功使用 204 且无响应体，不能把所有成功都按 200 解析。
+
 ## 获取全部已部署模型
 
 `GET /modeling-deployments`
 
-权限：`modeling:view`。成功：HTTP 200。使用同一把用户 APIKey，无请求体，无分页参数。
+权限：`modeling:view`。成功：HTTP 200。使用同一把用户 APIKey，无请求体，无分页参数。可选 `code`、`model_version_id`、`instance_id`、`is_enabled` 做精确组合过滤，不传时查询全部部署。
 
 返回的 `data` 是全部部署服务组成的数组，不是 `data.items`。按创建时间由新到旧返回，没有部署时为 `[]`。同一模型版本部署成多个服务时，会返回多条部署记录。
 
@@ -103,6 +109,114 @@ curl --silent --show-error \
 ```
 
 列表不包含完整输入输出签名。选择记录后调用 `GET /open-models/{code}`，根据 `output.task` 再选择预测、异常检测或规则计算接口。只消费已有模型时，可以直接使用这条查询和调用流程。
+
+## 找回实例、历史运行和历史版本
+
+以下读取均需 `modeling:view`，成功 HTTP 200。实例列表包含未训练、失败、未发布、未部署的实例，部署列表不能替代它。
+
+| 场景 | 方法与路径 | 当前查询参数 | data 形状 |
+|---|---|---|---|
+| 模型实例全集 | `GET /modeling-instances` | 分页、`q`、`code`、模板/运行状态/归档筛选 | 页码或游标集合 |
+| 实例详情 | `GET /modeling-instances/{instance_id}` | 无 | 实例对象 |
+| 历史训练运行 | `GET /modeling-runs` | 分页、`instance_id`/`pipeline_id`、状态/时间筛选 | 页码或游标集合 |
+| 全部固定模型版本 | `GET /modeling-model-versions` | 分页、`instance_id`/`pipeline_id`、任务/归档等筛选 | 页码或游标集合 |
+| 单个模型版本详情 | `GET /modeling-model-versions/{version_id}` | 无 | 版本对象，含 signature、metrics、fingerprint |
+
+这些列表默认 `page=1&size=20`，`size` 范围 1–200，返回 `{items,page,size,total}`；空页 `items=[]`。新接入可用 `pagination=cursor&limit=100`，返回 `{items,next,has_more}`。实例的 `q` 按名称或编码模糊匹配，精确编码查询使用 `code`。**从模板创建的实例，其 `instance.id` 与对应 `pipeline_id` 相同**，查询该实例运行和版本推荐传 `instance_id`，原 `pipeline_id` 继续兼容。通用设计流水线对应的 `instance_id` 为 null；两个筛选同时给出但不同会返回 400。
+
+页码模式的实例按 `(updated_at DESC,id DESC)`，运行按 `(created_at DESC,id DESC)`，版本按 `(version DESC,id DESC)` 排序；页码翻页期间新增或修改资源可能改变页边界。游标模式统一按 `(created_at DESC,id DESC)`，绑定筛选条件，不提供跨请求快照保证。筛选参数、归档可见范围及关联部署查询见 [管理查询契约](MODELING_MANAGEMENT_API.md#1-模型列表与关系)。
+
+### 实例和运行字段
+
+实例列表与详情返回相同形状：
+
+| 字段 | 含义 |
+|---|---|
+| id、code、name、description | 实例 UUID、唯一编码、名称、可空说明 |
+| template_id、template_name、template_version | 创建时固定的模板版本；不会随模板更新 |
+| revision | 当前配置修订号，用于完整配置保存 |
+| archived_at | 归档 UTC 时间，未归档为 null |
+| latest_run | 最近创建的运行摘要；从未训练时为 null |
+| created_at、updated_at | 实例的 UTC 时间 |
+
+`latest_run` 和运行列表条目含 `id`、`pipeline_id`、`instance_id`、`published_version_id`、`status`、`trigger`、`started_at`、`finished_at`、`duration_ms`、`row_count`、`is_source_truncated`、`is_keeping_frames`、`error_text`、`created_by_name`、`created_at`。`published_version_id` 对应这次运行发布的版本，未发布时为 null；不是整个实例的最新版本。开始/结束时刻、时长、行数、错误和创建者展示名可能为空。最近运行状态不能代表是否部署或是否存在可用历史版本，应分别读取版本和部署。
+
+实例列表示例（为便于阅读，后续示例中的对象均放在统一信封的 `data` 内）：
+
+```json
+{
+  "items": [{
+    "id": "019c0000-0000-7000-8000-000000000002",
+    "code": "chiller-01-energy",
+    "name": "一号冷机能耗模型",
+    "description": null,
+    "template_id": "019c0000-0000-7000-8000-000000000001",
+    "template_name": "冷机能耗模板",
+    "template_version": 1,
+    "revision": 1,
+    "archived_at": null,
+    "latest_run": null,
+    "created_at": "2026-10-30T01:00:00.000Z",
+    "updated_at": "2026-10-30T01:00:00.000Z"
+  }],
+  "page": 1,
+  "size": 20,
+  "total": 1
+}
+```
+
+### 版本字段和反查关系
+
+版本列表条目含 `id`、`pipeline_id`、`instance_id`、`run_id`、`version`、`name`、`algo`、`task`、`is_servable`、`serving_channel`、`unservable_reason`、`feature_keys`、`target_key`、`created_by_name`、`created_at`、`archived_at`、`deployment_count`、`deployments_url`。`target_key` 对异常检测和规则为 null；`serving_channel` 为 `json` 或 `binary`。版本详情另含 `description`、`signature`、`metrics`、`fingerprint`，关联部署按返回的 `deployments_url` 游标读取，不内嵌无限数组。
+
+版本详情的完整形状示例：
+
+```json
+{
+  "id": "019c0000-0000-7000-8000-000000000004",
+  "pipeline_id": "019c0000-0000-7000-8000-000000000002",
+  "instance_id": "019c0000-0000-7000-8000-000000000002",
+  "run_id": "019c0000-0000-7000-8000-000000000003",
+  "version": 1,
+  "name": "一号冷机能耗版本",
+  "algo": "linear_regression",
+  "task": "regression",
+  "is_servable": true,
+  "serving_channel": "json",
+  "unservable_reason": null,
+  "feature_keys": ["temperature", "load"],
+  "target_key": "energy",
+  "created_by_name": null,
+  "created_at": "2026-10-30T02:00:00.000Z",
+  "archived_at": null,
+  "deployment_count": 0,
+  "deployments_url": "/api/v1/platform/modeling-model-versions/019c0000-0000-7000-8000-000000000004/deployments",
+  "description": null,
+  "signature": {
+    "format_version": "1.0",
+    "requires_timestamp": false,
+    "inputs": [
+      {"key":"temperature","label":"温度","unit":"℃","dtype":"number","is_required":true,"default_on_missing":null,"training_stats":{"min":10.0,"max":40.0}},
+      {"key":"load","label":"负荷","unit":"kW","dtype":"number","is_required":true,"default_on_missing":null,"training_stats":{"min":100.0,"max":800.0}}
+    ],
+    "derived": [],
+    "output": {"key":"energy","label":"能耗","unit":"kWh","dtype":"number","task":"regression"}
+  },
+  "metrics": {"r2":0.9,"rmse":12.0},
+  "fingerprint": {}
+}
+```
+
+该示例说明字段结构，不代表任意真实模型具有这些指标或训练统计。管理端版本详情可能含训练分布信息；对外 `GET /open-models/{code}` 会去掉输入的 `training_stats`，二者不能作为完全相同的响应使用。`fingerprint`、报告和签名目前是可扩展对象，应保留实际结构，不能从示意值补出缺失信息。
+
+从部署打开配置的真实反查顺序：
+
+1. 部署的 `model_version_id` → `GET /modeling-model-versions/{version_id}`。
+2. 使用版本的 `pipeline_id` 读取 `GET /modeling-instances/{pipeline_id}`；仅模板实例存在该资源，普通设计流水线可能返回 404。
+3. 使用版本的 `run_id` 读取运行详情；`run.pipeline_id` 应与版本的 `pipeline_id` 相同。
+4. 读取 `GET /modeling-instances/{pipeline_id}/configuration?run_id={run_id}` 找回固定历史配置；需要当前配置时不带 `run_id`。
+
+版本关联部署使用 `GET /modeling-model-versions/{version_id}/deployments`；运行列表及详情中的 `published_version_id` 可定位发布版本。所有反查均使用 UUID，调用服务时才使用部署 `code`；不能用名称、部署 UUID 或模型版本 ID 代替实例 UUID。
 
 ## 第一步 选择模板
 
@@ -231,6 +345,43 @@ curl --silent --show-error \
 
 成功后返回更新的模型实例，`revision` 增加 1。参数不合法返回 400；修订冲突或模型仍在训练时返回 409。遇到冲突应重新读取并核对修改，不要直接用新修订号覆盖其他人的配置。
 
+### 选择真实训练数据
+
+先检查 `nodes[].operator.code`，按实际来源选择参数和目录。“台账取数” `ledger_source` 和“能管取数” `bdm_source` 是两条数据路径，不能把同名目录、点位 ID 和台账编码混用。模板中的 `known_columns` 是当前图的静态列推导，可能为 null，不是当前 APIKey 的完整数据目录，也不证明所选时间段已有数据。
+
+**平台台账 `ledger_source`** 使用 `table_code`、`columns`、`since`、`until`、`row_source`、`row_limit`。其中 `columns=[]` 表示当前全部列，`row_source` 是 `collect/manual/import/all`，默认 `collect`；`all` 中同一时刻可能有多条人工/导入记录。取数默认保留最新 50,000 行，最大 200,000 行，截断会进入运行标记。`should_drop_empty_columns` 默认 false，开启后全空列可能不再出现在下游。
+
+以下平台台账读取另需 `dataset:view`，成功 HTTP 200：
+
+| 方法与路径 | 选项和结果 |
+|---|---|
+| `GET /dataset-tables?page=1&size=20&q=...` | `data.items` 中读取真实 `id/code/name`、`collect_interval_ms`、`last_collected_ts`、`is_enabled`；后两者不是完整数据覆盖证明 |
+| `GET /dataset-tables/{table_id}` | 表详情含全部 `columns` |
+| `GET /dataset-tables/{table_id}/columns` | `data` 是列数组，含 `key/name/unit/decimals/data_type/source/agg/node_key`；配置 `columns` 使用 key |
+| `GET /dataset-tables/{table_id}/records` | 按 `since/until` 查真实数据行；`limit` 默认 100、最大 200，下一页原样传 `after=data.next`，以 `has_more` 判断结束 |
+| `GET /dataset-tables/{table_id}/series` | 重复 `keys=列key` 传选中列，支持 `since/until`；最多 50 列、20,000 行，返回序列及截断信息 |
+
+目录地址用表 UUID；保存模型源参数使用该表返回的 `code`。记录时间字段是 `ts`；序列返回 `data.series[列key][]`，每个元素为 `{ts,value}`，另有 `is_truncated/limit`。不要求在列选择器里伪造一列时间。读取样本可以做训练前核对，但当前没有独立的“训练数据覆盖报告”或“一键预检”契约。没有数据时不能以占位行、0 或随机数据替代。
+
+**能管取数 `bdm_source`** 在训练时由 platform worker 主动调用部署配置授权的外部能管历史接口。浏览器和模型参数不提交外部 URL 或密钥，保存 configuration 本身不上传历史数据。当前按需拉取，不维护独立历史副本或增量同步任务；每次运行按当前窗口重新取数。
+
+以下目录读取使用平台账号 APIKey 与 `modeling:view`，不使用外部能管密钥：
+
+| 方法与路径 | 查询与 data 字段 |
+|---|---|
+| `GET /modeling-bdm-capabilities` | `is_configured/timezone/minute_intervals/max_identifiers/max_formula_identifiers/max_rows/load_timeout_s`；反映配置和上限，不探测连通性 |
+| `GET /modeling-bdm-catalogs` | `kind=point/raw/formula`；`page=1,size=50` 默认，size 最大 200；data 含 `kind/items/page/size/total/system_filter_available` |
+| `GET /modeling-bdm-systems` | `items` 系统名数组与 `system_filter_available` |
+| `GET /modeling-bdm-indicators` | `page/size/code`；data 含 `items/page/size/total`；指标的 `sources` 给出 `source_type/source_id/source_property/alias/unit/is_selectable` |
+
+能管目录条目含 `identifier/code/name/system/history_available/table_type/unit`。`history_available` 可能为 null，仅是上游声明，不包含最早/最晚覆盖时刻。点目录支持 `name/keyword/code/system/include_unqueryable`；属性和公式不支持 keyword/code 过滤，公式不支持 system 过滤；不支持的组合返回 400。`system_filter_available=false` 时不可继续按系统筛选。指标来源仅 `source_type=unitProperty` 且 `source_id` 有效时标为可选，不把所有指标来源都当历史取数能力。
+
+节点配置中 `kind=point` 的 identifiers 是真实 `pointId`，`raw` 是 `propertyId`，`formula` 是公式 `code`。每个标识输出一列，最多 10 个，公式最多 8 个；`value_type=number/string`，无法转数值的样本保留为空并计数。`row_limit` 默认 50,000、最大 200,000，按对齐后最新行截断。
+
+`since` 可用 UTC 绝对时刻或 `-7d/-12h`，`until` 留空固定为本次运行时刻；区间左闭右开。上游无时区时间按能力返回的显式能管时区解释，再转 UTC 精确对齐；缺值不补零、不自动插值。公式支持 `day/month/hour/minute`，分钟间隔以 capabilities 为准；小时/分钟 `time_alignment=complete` 向内取完整周期，`strict` 要求请求边界严格对齐。
+
+当前 worker 调用外部 `/points/query`、`/raw/query` 或 `/formula/query`，长窗分段、按标识分页，并有请求次数、offset、响应大小及总时限上限。上游 offset 分页没有跨页快照保证；同标识同时间的不同值会被拒绝。取数失败使该节点失败，不返回空成功帧。这些外部地址由部署连接的基础地址解析，不能直接拼到本平台 `/api/v1/platform` 下调用。需要快照或游标一致性、独立覆盖时段查询或增量同步时，需先补上游与平台契约。
+
 ## 第五步 训练与查询结果
 
 开始训练：
@@ -267,6 +418,43 @@ curl --silent --show-error \
 `POST /modeling-runs/{run_id}:cancel`
 
 该接口需要 `modeling:run`，无请求体。取消在节点边界生效，应继续查询至终态。同一实例只允许一个在途运行，排队、训练或取消期间不能同时启动另一次训练。
+
+### 读取真实评估和节点结果
+
+运行详情的 `graph` 是本次运行冻结的图，`nodes` 只有节点状态摘要，轮询它不会取得完整评估数据。每个摘要含 `node_id/operator/alias/ordinal/status/duration_ms/has_preview/error_text`，按节点读取：
+
+`GET /modeling-runs/{run_id}/nodes/{node_id}`
+
+权限 `modeling:view`，成功 HTTP 200。node_id 使用冻结运行中的真实节点 ID，不能使用显示别名。响应在摘要字段上增加：
+
+| 字段 | 使用方式 |
+|---|---|
+| preview | 按输出端口组织的有界摘要，不是完整训练数据 |
+| is_preview_truncated | 摘要是否被截断；不能把截断摘要当全样本 |
+| report | 真实算子报告与图表数据，可为 null；按返回块渲染 |
+| fitted | 学到的参数，可为 null；读取不修改拟合结果 |
+| exported_ports | 本次已留下 CSV 的输出端口名数组 |
+
+各任务实际产物不同，只有流水线中对应算子执行并留下结果时才能展示：
+
+| 任务 | 已有评估/报告举例 | 不可推断的内容 |
+|---|---|---|
+| 回归 | R²、RMSE、MAE、MAPE、最大误差、残差统计、真实-预测散点；线性系数、树模型重要性等依实际算法 | 不能要求所有算法都有同一套贡献；MAPE 等未定义时可为 null |
+| 数值二分类 | accuracy/precision/recall/f1、混淆矩阵、类别分布；打分帧有概率列时可有 ROC/PR/校准等报告 | 没有概率列不能补概率曲线，分母为 0 的指标不能改成 0 |
+| 异常检测 | 测试行数、异常率、阈值、判定分布 | 没有故障标签不能声称测试准确率、故障概率或故障原因 |
+| 规则计算 | 按冻结业务规则计算的主数值、明细、命中条件及摘要 | 不生成训练准确率或拟合曲线 |
+
+模型版本详情中的 `metrics` 是发布时冻结的指标集合；节点 report/preview 才是运行中更详细的结果入口。旧运行可能没有 report 或 fitted，未发布运行受保留策略清理，不能承诺永久保留所有训练过程。
+
+### 下载已保留的端口 CSV
+
+训练请求可显式使用 `{"trigger":"api","is_keeping_frames":true}`。默认 false。开启后仍须对象存储可用且导出成功；先查看节点的 `exported_ports`，只对确实存在的端口提供下载按钮。
+
+`GET /modeling-runs/{run_id}/frames/{node_id}?port={port}`
+
+权限须同时具备 `modeling:view`、`dataset:record:export`。成功 HTTP 200，`Content-Type: text/csv; charset=utf-8`，`Content-Disposition` 给出文件名；此端点直接返回文件，**不走 JSON 信封**。`port` 默认 `frame`，应优先使用 exported_ports 返回的真实端口名。
+
+CSV 有时间索引时第一列叫 `__ts__`，当前导出值为 Unix 毫秒整数；它与推理请求中 RFC3339 字符串的同名保留键格式不同。每个导出最多 200,000 行。未启用保留、端口无产物、对象存储未配置或产物已过期时返回 404；不能把重跑出的新数据冒充上一次运行的原始产物。
 
 ## 第六步 发布模型版本
 
@@ -321,6 +509,37 @@ curl --silent --show-error \
 
 部署固定指定版本。重新训练、重新发布模板或产生新模型版本，都不会自动替换已部署版本。
 
+### 已有部署维护、回切和版本退役
+
+| 操作 | 方法与路径 | 权限与成功状态 |
+|---|---|---|
+| 部署详情 | `GET /modeling-deployments/{deployment_id}` | modeling:view，200 |
+| 修改部署 | `PATCH /modeling-deployments/{deployment_id}` | modeling:publish，200，返回完整部署对象 |
+| 删除部署 | `DELETE /modeling-deployments/{deployment_id}` | modeling:publish，204，无响应体 |
+| 近 30 天调用统计 | `GET /modeling-deployments/{deployment_id}/call-stats` | modeling:view，200，data 为 `{day,total,failed}` 数组 |
+| 修改版本名称和说明 | `PATCH /modeling-model-versions/{version_id}` | modeling:publish，200，返回完整版本对象 |
+| 退役版本 | `DELETE /modeling-model-versions/{version_id}` | modeling:publish，204，无响应体 |
+
+部署 PATCH 接受 `name`、`description`、`model_version_id`、`is_enabled`、`max_rows_per_call`、`rate_limit_per_minute`，以及可选 `expected_revision`；`code` 建立后不可修改。配额范围同创建接口。业务字段给 null 时不修改，包括 description，不能以 null 清空部署说明。版本元数据 PATCH 的 `description:null` 则会清空说明；`name:null` 不修改。
+
+停用示例：
+
+```json
+{"expected_revision": 1, "is_enabled": false}
+```
+
+旧部署 PATCH 仍兼容直接修改版本引用；新接入使用带修订、归属及签名保护的 `POST /modeling-deployments/{deployment_id}:switch`。请求示例：
+
+```json
+{"expected_revision": 2, "model_version_id": "019c0000-0000-7000-8000-000000000006", "is_signature_change_confirmed": false}
+```
+
+部署更新在同一事务中修改版本引用并推进 `revision`；带 `expected_revision` 的 PATCH 会拒绝覆盖冲突，未带修订号的旧请求仍为兼容语义。受控 `:switch` 和 `:rollback` 必须给修订号，并校验同一模型、同任务、未归档、可服务及签名变化确认；切换历史与请求说明见 [部署管理契约](MODELING_MANAGEMENT_API.md#3-部署修订换版与回滚)。已解析版本的在途推理继续使用原版，提交后新解析请求使用新引用；这不是所有在途请求同时切换的全局屏障，不提供自动健康探测或自动回滚。
+
+删除部署会同时删除该部署的历史部署密钥和调用记录，不删除其模型版本；部署删除无恢复接口，版本切换历史继续保留。版本“退役”是物理删除，存在部署、公式绑定或切换历史引用时返回 409，停用引用仍算引用。可恢复管理使用实例和版本的 `:archive/:restore`，保留编码、版本与历史，不自动解除引用。未提供物理删除整个实例或级联删除整个模型的接口；设计流水线端点不能作为实例删除按钮的替代。未带持久幂等键删除不存在资源仍返回 404；带同一键回放按原提交结果处理。
+
+调用统计只列实际记录过调用的日期，不补齐空日；签名读取、鉴权和配额阶段的拒绝不属于已记录推理调用，不能把该统计当完整访问审计。原始账号 APIKey 不应进入统计或日志。
+
 ## 第八步 调用服务
 
 ### 读取模型签名
@@ -335,11 +554,18 @@ curl --silent --show-error \
 |---|---|
 | inputs[].key | 每行 JSON 中应提供的输入字段名 |
 | inputs[].dtype、unit | 输入类型及单位 |
-| inputs[].is_required、default_on_missing | 是否必填及缺失值策略；null 不表示填零 |
+| inputs[].is_required、default_on_missing | 必填提示与可用填充值提示；当前 default_on_missing 为数值或 null，不是策略对象；null 不表示填零 |
+| inputs[].missing_policy | 回归/分类新发布推理格式 2.1 的缺字段/显式 null 策略；历史和其他任务签名可能没有 |
 | requires_timestamp | 为 true 时按模型要求提供每行的 __ts__ 时间 |
 | output.task | 决定使用预测、异常检测还是规则计算接口 |
 
 输入字段使用 `inputs[].key`，不使用训练后的 `feature_keys`，也不要提交训练目标列。对外签名不提供训练统计的具体数值。
+
+当前签名输入 dtype 来自 `number/bool/string`，规则输出可标为 `object`；dtype 描述训练入口元信息，不代表所有任务的线上调用都接受所有这些类型。线上 rows 是扁平字段对象，不支持任意嵌套对象或数组。普通预测只接受数值或 null，拒绝布尔与数值字符串；缺少必填字段返回 400。
+
+本次新发布的回归/分类推理格式 2.1 以冻结的前置填充链执行真实默认值：`missing_policy.on_missing/on_null` 为 `fitted_default` 时，缺字段和显式 null 均使用训练时的 `default_on_missing`；未覆盖的必填列为 `{on_missing:"reject",on_null:"return_null"}`。默认值为 0 时也按真实拟合值使用，不把其他空值改成 0。历史 1.0/2.0 模型计算行为不变，其签名可能没有 `missing_policy`，即使旧提示为 optional，缺值仍可能返回 null；需要新行为时重新发布并显式换版，不能改写旧模型。异常的新签名明确完整必填、`default_on_missing=null`，不发布上述回归/分类策略；异常和规则调用仍按各任务自己的严格输入契约。
+
+`requires_timestamp=true` 时需要在每行传 `__ts__`。统一使用带时区的 UTC RFC3339，例如 `2026-10-30T01:00:00Z`，不用本地无时区字符串、Unix 秒或毫秒；派生时间特征沿用固定模型版本的时间口径。规则调用当前不支持额外时间键。
 
 ### 按任务类型执行调用
 
@@ -369,6 +595,16 @@ curl --silent --show-error \
 
 `predictions` 与输入行顺序一致；数值仅为示例，实际值由模型计算。结果可能为 null，不能当作 0。`warnings` 中的 `row` 从 0 开始，训练区间外告警为 `out_of_training_range`。需要时间特征时，在每行增加 `"__ts__":"2026-10-28T01:00:00Z"`。
 
+当前 warnings 条目的完整结构示例：
+
+```json
+{"row":0,"column":"temperature","kind":"out_of_training_range","message":"这一路输入超出训练区间，属于外推"}
+```
+
+`column` 是入口字段 key；告警不包含训练区间具体上下限。出现外推告警仍可能有预测值，不表示该值达到业务精度。无告警返回空数组。
+
+**分类的真实输出**。当前可服务逻辑回归为数值二分类，训练目标须有两个数值类目。仍调用 `:predict`，例如 `predictions:[0.0,1.0]` 表示逐行判定的类目，不是回归量也不是正类概率。类别由已发布模型和阈值固定，不能统一按 0/1 之外的猜测映射名称。线上当前不返回概率数组、文本标签名或多分类结果；训练打分帧中出现 `y_proba` 不代表调用响应已有 probability 字段。需要这些输出时须另行扩展契约。
+
 **异常检测示例**。假设检测模型签名要求电流、频率和温度：
 
 ```json
@@ -389,6 +625,8 @@ curl --silent --show-error \
 
 检测输入必须为签名要求的完整有限数值，不能缺失、为 null、为布尔值或数值字符串。异常判定为 `score > threshold`，分数不是故障概率，报警去抖和通知由第三方实现。
 
+`results[].row` 必有，从 0 开始，与输入顺序一致；`is_anomaly/score/threshold` 均必有且不为空。不能计算有效异常分数时请求失败，不以正常判定代替“无法判断”。warnings 形状与预测相同。
+
 **规则计算示例**。假设单位能耗模型要求能耗和产量：
 
 ```json
@@ -396,6 +634,38 @@ curl --silent --show-error \
 ```
 
 精确计量值优先用十进制字符串。返回 `data.model` 和 `data.results`，结果按输入行顺序对应；单位能耗模型可返回 `unit_consumption: "3"`，其他规则的结构以对应模型说明为准。当前规则结果不声明 `warnings` 字段，也不要额外提交 `__ts__`。
+
+规则结果公共字段为 `kind`、`calculation_method="deterministic_rule"`、`decimal_places`，再按冻结规则追加不同字段。精确明细保留十进制字符串；`summary_value` 是展示摘要数值，不能替代精确核算明细。当前签名只把输出描述为 object，没有完整的逐规则输出 JSON Schema，应结合实际规则说明与返回展示。
+
+| kind | 实际规则结果举例 |
+|---|---|
+| hvac_compliance | `is_compliant/violations/observations`，按冻结温湿度范围判定 |
+| efficiency_fluctuation | `change_pct/threshold_pct/is_fluctuating/comparison_scope`，比较调用方明确提供的当前值与参考值 |
+| unit_consumption | `energy/output/unit_consumption`，计量单位必须由业务输入约定 |
+| efficiency_benchmark | `ratio/deviation_pct/grade/comparison_direction` |
+| equipment_efficiency | `cop/threshold/grade/measurement_requirement`，要求同周期同功率口径 |
+| supply_diagnosis | 观测越界与命中条件，不推断未观测的故障根因 |
+| energy_aggregation | 按配置计量分类与折标系数归集的明细 |
+| energy_trace | 显式计量拓扑的路径和节点收支差额，不把差额解释为泄漏原因 |
+
+单位能耗响应 data 示例，假设冻结规则 decimal_places=6：
+
+```json
+{
+  "model": {"code":"unit-consumption","version":1},
+  "results": [{
+    "kind":"unit_consumption",
+    "calculation_method":"deterministic_rule",
+    "decimal_places":6,
+    "energy":"0.3",
+    "output":"0.1",
+    "unit_consumption":"3",
+    "summary_value":3.0
+  }]
+}
+```
+
+精度参数是最多小数位数，字符串不保证补齐末尾零；分母为 0、缺字段、显式 null 或无效十进制输入均不能当正常结果。规则输入不接受签名外字段。
 
 预测行数受 `max_rows_per_call` 限制；检测和规则计算还各有 256 行的上限。三类调用至少提交 1 行。相同账号的多把 APIKey 共用该账号在同一部署上的配额，签名读取也计入配额；网关另有限流和 256 KiB 请求体限制。
 
@@ -430,11 +700,17 @@ curl --silent --show-error --request POST \
 
 ## 幂等与常见错误
 
-创建实例、训练实例、发布版本、部署实例建议使用 `Idempotency-Key`。同一账号在同一端点重发同一个逻辑请求时使用同一个键；修改参数、发布另一运行或启动下一次训练必须换新键。成功结果当前保留 24 小时，未带键时没有同等防重复保证。
+创建、配置、训练、发布、部署及本文管理动作支持持久 `Idempotency-Key`，完整操作清单见 [命令恢复契约](MODELING_MANAGEMENT_API.md#4-持久命令与超时核查)。同一账号在同一操作范围重发同一个逻辑请求时使用同一个键；修改参数、发布另一运行或启动下一次训练必须换新键。未带键时没有同等防重复与恢复保证，不把未列明的通用写接口默认视为持久命令。
 
 ```http
 Idempotency-Key: 03b87444-47c4-4e04-8101-9db847a7e397
 ```
+
+幂等范围是端点、键和账号；同一账号换 APIKey 不会变成新的逻辑调用者。同键不同参数返回 409/41442；处理中返回 409/41443、`Retry-After: 1` 和命令 ID。成功结果与业务变更同事务持久化，不依赖原 24 小时 Redis 缓存。已知 4xx 且动作回滚的拒绝会保存失败回执；非确定错误保留 pending，超过 5 分钟查询呈现 unknown，不自动接管或重做。修订号解决并行编辑覆盖，幂等键解决同一命令重复提交，两者不能替代。
+
+保存提交响应头 `Modeling-Command-Id`，通过 `GET /modeling-commands/{command_id}` 查询；响应丢失时使用 `GET /modeling-commands?operation=...&resource_id=...` 并携带原 `Idempotency-Key` 找回。仅当前账号且有对应操作权限时可读。训练命令 succeeded 可能仅代表 HTTP 202 已提交，仍需按 run_id 查询终态。超时、5xx 或 unknown 时不生成新键盲重做。升级前旧缓存命中返回 409/41444，缓存已过期且无持久记录的历史请求仍需按已知资源人工核查；新机制不补造过去的参数指纹。
+
+APIKey 代表平台账号；创建者和认证主体不接受客户端伪造。需要区分能管操作人时，仅部署配置授权的专用网关账号可提交 `X-Modeling-Operator-Id`，外部操作人与平台账号分别审计，详见 [可信操作人契约](MODELING_MANAGEMENT_API.md#5-外部操作人和调用审计)。不允许伪造 `X-Auth-*` 或借外部标识提权。本次保持共享权限域，前端隐藏列表或分发不同账号均不构成模型租户隔离。
 
 | HTTP 状态 | 处理方式 |
 |---|---|
@@ -447,3 +723,51 @@ Idempotency-Key: 03b87444-47c4-4e04-8101-9db847a7e397
 | 413 | 请求体过大，缩小批量 |
 | 429 | 触发配额，降低并发并延迟重发 |
 | 5xx | 保存时间、接口路径和 trace_id；写请求先确认是否已生效 |
+
+平台错误 JSON 的 `data` 为 null；`details` 仅在有字段错误时出现。真实错误码示例：
+
+```json
+{
+  "code":41429,
+  "message":"模型配置已经更新，请重新加载后再保存",
+  "data":null,
+  "trace_id":"f14ea9b77b154691aa947da963cd8e12"
+}
+```
+
+上例 HTTP 409。请求形状校验的 HTTP 400 示例：
+
+```json
+{
+  "code":40001,
+  "message":"参数校验失败",
+  "data":null,
+  "trace_id":"f14ea9b77b154691aa947da963cd8e12",
+  "details":[{"field":"expected_revision","code":"greater_than_equal","message":"Input should be greater than or equal to 1"}]
+}
+```
+
+| code | HTTP | 含义 |
+|---|---|---|
+| 40002 | 429 | 平台固定窗口限流 |
+| 40004 | 409 | 通用冲突，例如同幂等键正在处理 |
+| 40106 | 403 | 账号缺权限 |
+| 41402 / 41418 | 409 | 实例编码 / 部署编码占用 |
+| 41403 | 400 | 图或节点参数不合法，可能带 details |
+| 41405 / 41409 / 41417 / 41426 / 41428 | 404 | 运行 / 版本 / 部署 / 模板 / 实例不存在 |
+| 41406 / 41407 | 409 | 已有在途运行 / 当前运行不能取消 |
+| 41410 / 41411 / 41412 / 41413 | 409 | 运行不可发布 / 已发布 / 版本不可服务 / 版本被引用 |
+| 41419 / 41420 | 403 / 410 | 部署已停用 / 固定版本当前不可服务 |
+| 41423 | 400 | 调用输入或行数不合法 |
+| 41425 | 404 | 端口全量结果未保留或已过期 |
+| 41427 / 41429 | 409 | 模板不可创建实例 / 配置修订冲突或训练中 |
+| 41430 | 410 | 旧部署密钥签发入口已停用 |
+| 51401 | 503 | 能管连接或历史读取未能提供可信结果 |
+
+错误 message 会随具体情况变化，接入方按 HTTP 与 code 分支，不匹配整段文案。模型部署配额 429 返回 `Retry-After: 60`；边缘限流格式和响应头可能不同，写操作仍先核查结果。409 不是通用“稍后重试”信号：修订冲突需重新读取并合并，编码占用需核对资源，已在训练需找回该运行，已发布需找回同 run_id 的版本，未知命令不得自动重做。新增管理和命令错误码见 [错误与升级步骤](MODELING_MANAGEMENT_API.md#6-新错误与发布顺序)。
+
+## 当前边界与后续扩展
+
+以上列表、筛选、反查、目录、节点结果、归档恢复、部署维护和命令恢复已有本仓实现，客户接入前仍须完成迁移和版本升级，并按真实权限与数据联调。完整逐规则输出 JSON Schema、线上分类概率/多分类、独立覆盖时段统计和增量同步不属于此次管理接口扩展；其现有支持范围已在对应章节明确，不能从管理页面完成推断这些能力已具备。
+
+“点位历史段 → 未来一段预测 → 统计置信带”是独立业务能力。现有 `:predict` 按输入行计算，不自动读取某点历史或生成未来时间，不返回模型预测区间。历史平移和时间特征算子不改变此边界。规划见 [时序预测专项方案](MODELING_TIMESERIES_FORECAST_PLAN.md)，其中候选接口和算法不是当前可调用契约。

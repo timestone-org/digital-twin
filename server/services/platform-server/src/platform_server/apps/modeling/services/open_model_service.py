@@ -8,11 +8,13 @@ from datetime import datetime
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from lib.cache import Cache
-from lib.errors import AppError
+from lib.errors import AppError, RateLimited
 from lib.logging import get_logger
+from lib.logging.context import current_log_context
 from lib.objectstore import ObjectStore
 from lib.ratelimit import FixedWindowLimiter
 from lib.utils.timeutils import to_utc
+from platform_server.apps.modeling.command_errors import ModelingRateLimited
 from platform_server.apps.modeling.crud import (
     call_log_crud,
     deployment_crud,
@@ -74,6 +76,7 @@ class ResolvedCall:
     user_id: uuid.UUID
     #: 这次请求带了几行。记录里只留这个数，不留内容
     row_count: int = 0
+    external_operator_id: str | None = None
 
 
 @dataclass(frozen=True)
@@ -122,7 +125,10 @@ async def guard_rate(
         window_s=RATE_WINDOW_S,
         message="调用过于频繁，请稍后再试",
     )
-    await limiter.hit(f"{resolved.deployment.id}:{resolved.user_id}")
+    try:
+        await limiter.hit(f"{resolved.deployment.id}:{resolved.user_id}")
+    except RateLimited as error:
+        raise ModelingRateLimited(error.message, RATE_WINDOW_S) from error
     return resolved
 
 
@@ -174,6 +180,9 @@ async def record_call(
                 ModelingCallLog(
                     deployment_id=resolved.deployment.id,
                     api_key_id=None,
+                    account_user_id=resolved.user_id,
+                    external_operator_id=resolved.external_operator_id,
+                    trace_id=current_log_context().trace_id or "",
                     row_count=resolved.row_count,
                     duration_ms=duration_ms,
                     status=status,

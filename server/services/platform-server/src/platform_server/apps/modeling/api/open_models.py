@@ -1,14 +1,20 @@
 """模型对外调用面，使用账号鉴权和部署配额；见 ADR-0062。"""
 
+from dataclasses import replace
 from typing import Annotated
 
-from fastapi import APIRouter, Depends
+from fastapi import APIRouter, Depends, Request
+from fastapi.responses import JSONResponse
 from fastapi.security import HTTPBearer
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from lib.auth import CallerContext
+from lib.logging import get_logger
 from lib.web import ApiResponse, ok
+from lib.web.response import error_payload
 from platform_server.apps.modeling.catalog import MODELING_VIEW
+from platform_server.apps.modeling.command_deps import get_operator_identity
+from platform_server.apps.modeling.command_errors import ModelingRateLimited
 from platform_server.apps.modeling.deps import (
     OpenModelDeps,
     get_open_model_deps,
@@ -56,6 +62,22 @@ open_models = APIRouter(
 SessionDep = Annotated[AsyncSession, Depends(get_session)]
 DepsDep = Annotated[OpenModelDeps, Depends(get_open_model_deps)]
 ViewDep = Annotated[CallerContext, Depends(require(MODELING_VIEW))]
+_logger = get_logger("platform.modeling.open")
+
+
+async def handle_model_rate_limit(
+    _request: Request, error: Exception
+) -> JSONResponse:
+    if not isinstance(error, ModelingRateLimited):
+        raise error
+    _logger.warning(
+        "modeling_call_rate_limited", error.message, code=error.code
+    )
+    return JSONResponse(
+        status_code=error.http_status,
+        content=error_payload(code=error.code, message=error.message),
+        headers={"Retry-After": str(error.retry_after_s)},
+    )
 
 
 async def resolve(
@@ -63,10 +85,15 @@ async def resolve(
     viewer: ViewDep,
     session: SessionDep,
     deps: DepsDep,
+    request: Request,
 ) -> ResolvedCall:
     """检查部署状态并计入当前账号的配额。Args: code, viewer, session, deps。"""
+    identity = get_operator_identity(request, viewer)
     resolved = await open_model_service.resolve_call(
         session, code=code, user_id=viewer.user_id
+    )
+    resolved = replace(
+        resolved, external_operator_id=identity.external_operator_id
     )
     return await open_model_service.guard_rate(deps, resolved)
 
