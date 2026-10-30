@@ -1,6 +1,6 @@
 # 机密扫描配置。默认规则集全开，这里只加**窄**豁免。
 #
-# ⚠ 两条豁免都只针对 `generic-api-key` 这一条**启发式**规则——它是按
+# ⚠ 下列豁免都只针对 `generic-api-key` 这一条**启发式**规则——它是按
 # 「像密钥的字符串」猜的。所有**具体**规则——私钥、AWS/GitHub/Slack 令牌、
 # 连接串——在全仓包括测试目录里一律照常拦截，所以「真凭据被写进测试」
 # 这件 testing-standard-python.md §7.4 真正要防的事仍然拦得住。
@@ -47,3 +47,12 @@ regexes = ['''^\s*[A-Za-z_$][\w$]*\??:\s*[A-Z][A-Za-z0-9]*(?:\[\])?,?\s*$''']
 description = "Sec-WebSocket-Key 是 RFC 6455 的明文握手随机串，不是凭据"
 regexTarget = "line"
 regexes = ['''Sec-WebSocket-Key:\s*[A-Za-z0-9+/]{22}==''']
+
+# 四、此 HTTP 示例的幂等键只标识请求；鉴权使用独立的 Authorization 头。
+# 精确限定文档、固定头名与 UUIDv4；允许扫描器附带的换行边界。
+[[rules.allowlists]]
+description = "模型管理 HTTP 文档中的 UUIDv4 幂等请求标识不是凭据"
+condition = "AND"
+regexTarget = "line"
+paths = ['^docs/MODELING_MANAGEMENT_API\.md$']
+regexes = ['^\n?[ \t]*Idempotency-Key:[ \t]*[0-9a-fA-F]{8}-[0-9a-fA-F]{4}-4[0-9a-fA-F]{3}-[89abAB][0-9a-fA-F]{3}-[0-9a-fA-F]{12}[ \t]*\r?$']
