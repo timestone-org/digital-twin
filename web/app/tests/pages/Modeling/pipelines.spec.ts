@@ -67,7 +67,7 @@ afterEach(() => {
 })
 
 describe('流水线列表', () => {
-  it('日常入口突出流程图建模，快捷实例只在第三方区域出现', async () => {
+  it('日常入口保留完整流程，发布工作流与模型实例可以直接进入', async () => {
     vi.spyOn(modeling, 'listModelingPipelines').mockResolvedValue(page([]))
     signIn([PERMISSION_CODES.modelingView, PERMISSION_CODES.modelingManage])
     const wrapper = mount(PipelinesPage)
@@ -77,8 +77,8 @@ describe('流水线列表', () => {
     expect(wrapper.text()).toContain('运行并查看结果')
     const nav = wrapper.get('nav[aria-label="分析建模导航"]')
     expect(nav.text()).toContain('建模工作台')
-    expect(nav.text()).not.toContain('模型实例')
-    expect(nav.text()).not.toContain('模板库')
+    expect(nav.text()).toContain('模型实例')
+    expect(nav.text()).toContain('已发布工作流')
     wrapper.unmount()
   })
 

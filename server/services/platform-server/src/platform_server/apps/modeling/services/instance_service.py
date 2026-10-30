@@ -13,9 +13,11 @@ from platform_server.apps.modeling.crud.template import (
     templates,
 )
 from platform_server.apps.modeling.errors import (
+    GraphInvalid,
     InstanceNotFound,
     InstanceRevisionConflict,
     PipelineCodeTaken,
+    RunNotFound,
     TemplateNotFound,
     TemplateUnavailable,
 )
@@ -122,13 +124,40 @@ async def get_instance(
 
 
 async def get_configuration(
-    session: AsyncSession, instance_id: uuid.UUID
+    session: AsyncSession,
+    instance_id: uuid.UUID,
+    run_id: uuid.UUID | None = None,
 ) -> ModelingConfigurationOut:
     record = await require_instance(session, instance_id)
-    result = describe_configuration(
-        PipelineGraph.model_validate(record.pipeline.graph_json)
-    )
+    graph = PipelineGraph.model_validate(record.pipeline.graph_json)
+    if run_id is not None:
+        graph = await _historical_graph(session, record, run_id)
+    result = describe_configuration(graph)
     return result.model_copy(update={"instance": to_instance(record)})
+
+
+async def _historical_graph(
+    session: AsyncSession, record: InstanceRecord, run_id: uuid.UUID
+) -> PipelineGraph:
+    run = await run_crud.get(session, run_id)
+    if run is None or run.pipeline_id != record.instance.id:
+        raise RunNotFound("本模型实例下没有这次训练记录")
+    snapshot = PipelineGraph.model_validate(run.graph_snapshot)
+    current = PipelineGraph.model_validate(record.pipeline.graph_json)
+    if _structure_of(snapshot) != _structure_of(current):
+        raise GraphInvalid(
+            "历史运行的流水线结构与当前模型不一致，不能用于优化配置"
+        )
+    require_template_graph(snapshot)
+    return snapshot
+
+
+def _structure_of(graph: PipelineGraph) -> dict[str, object]:
+    return {
+        "format_version": graph.format_version,
+        "nodes": sorted((node.id, node.operator) for node in graph.nodes),
+        "edges": sorted(edge.model_dump_json() for edge in graph.edges),
+    }
 
 
 async def configure_instance(

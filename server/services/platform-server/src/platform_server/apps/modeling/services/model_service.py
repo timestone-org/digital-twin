@@ -90,9 +90,12 @@ async def publish_version(
     graph = graph_of_run(run)
     version_id = uuid7()
     binary = await _binary_of(store, graph, records, version_id)
+    version = await model_version_crud.next_version(session, run.pipeline_id)
+    # ⚠ 流水线行锁到手后再查发布状态，等待期间可能已有并发发布提交。
+    await require_publishable_run(session, run.id)
     draft = _Draft(
         version_id=version_id,
-        version=await model_version_crud.next_version(session, run.pipeline_id),
+        version=version,
         run=run,
         payload=payload,
         actor=actor,

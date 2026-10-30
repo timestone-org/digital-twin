@@ -17,6 +17,7 @@ import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 import * as modeling from '@/api/modeling'
 import { BizError } from '@/api/client'
 import RunsPage from '@/pages/Modeling/Runs/index.vue'
+import RunTable from '@/pages/Modeling/Runs/components/RunTable.vue'
 import { useAuthStore } from '@/stores/auth'
 
 const STAMP = '2026-01-01T00:00:00.000Z'
@@ -219,7 +220,7 @@ describe('发布模型版本', () => {
     expect(wrapper.find('input').element.value).toBe('不能丢的名称')
     expect(wrapper.find('textarea').element.value).toBe('不能丢的说明')
     expect(useToast().toasts.value.at(-1)?.message).toBe('请求失败，请重试')
-    expect(wrapper.text()).not.toContain('已发布')
+    expect(wrapper.getComponent(RunTable).text()).not.toContain('已发布')
   })
 
   it('发布请求返回前离开页面，不再写状态或发送全局提示', async () => {
