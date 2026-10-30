@@ -96,11 +96,21 @@ class ScheduleOut(OutputModel):
     updated_at: Utc
 
 
+class ReportApiConnectionOut(OutputModel):
+    """可供报告选择的连接，不包含地址或凭据。"""
+
+    code: str
+    name: str
+
+
 class ReportRuntimeOut(OutputModel):
     """真实生效的调度配置。"""
 
     is_schedule_enabled: bool
     timezone: str
+    api_connections: list[ReportApiConnectionOut] = Field(
+        default_factory=list[ReportApiConnectionOut]
+    )
 
 
 class ImportTicketIn(InputModel):

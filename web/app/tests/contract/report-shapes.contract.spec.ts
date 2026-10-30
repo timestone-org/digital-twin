@@ -101,6 +101,8 @@ const shapes = {
     width_cm: true,
   } satisfies Record<keyof ReportSchemas['PageSettings'], true>,
   PreviewOut: {
+    api_results: true,
+    checked_at: true,
     is_valid: true,
     metrics: true,
     nodes: true,
@@ -141,10 +143,12 @@ const shapes = {
     warnings: true,
   } satisfies Record<keyof ReportSchemas['RenderOut'], true>,
   ReportRuntimeOut: {
+    api_connections: true,
     is_schedule_enabled: true,
     timezone: true,
   } satisfies Record<keyof ReportSchemas['ReportRuntimeOut'], true>,
   ReportTemplateOut: {
+    api_sources: true,
     code: true,
     created_at: true,
     description: true,
@@ -195,6 +199,36 @@ const shapes = {
     keyof ReportSchemas['ValidationOut'],
     true
   >,
+  ReportApiColumn: {
+    key: true,
+    name: true,
+    pointer: true,
+    data_type: true,
+  } satisfies Record<keyof ReportSchemas['ReportApiColumn'], true>,
+  ReportApiSource: {
+    code: true,
+    name: true,
+    connection: true,
+    path: true,
+    method: true,
+    query: true,
+    body: true,
+    rows_pointer: true,
+    time_pointer: true,
+    columns: true,
+    offset: true,
+  } satisfies Record<keyof ReportSchemas['ReportApiSource'], true>,
+  ReportApiConnectionOut: {
+    code: true,
+    name: true,
+  } satisfies Record<keyof ReportSchemas['ReportApiConnectionOut'], true>,
+  ReportApiResult: {
+    source_code: true,
+    name: true,
+    row_count: true,
+    columns: true,
+    rows: true,
+  } satisfies Record<keyof ReportSchemas['ReportApiResult'], true>,
   Watermark: {
     font_size_pt: true,
     rotation: true,

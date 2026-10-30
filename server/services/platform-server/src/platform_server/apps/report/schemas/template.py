@@ -4,6 +4,7 @@ import uuid
 
 from pydantic import Field
 
+from platform_server.apps.report.schemas.api_source import ReportApiSource
 from platform_server.apps.report.schemas.common import (
     Code,
     Granularity,
@@ -31,6 +32,9 @@ class TemplateBody(InputModel):
         default_factory=list[MetricDef], max_length=200
     )
     page_json: PageSettings = PageSettings()
+    api_sources: list[ReportApiSource] = Field(
+        default_factory=list[ReportApiSource], max_length=10
+    )
 
 
 class ReportTemplateCreateIn(TemplateBody):
@@ -65,3 +69,6 @@ class ReportTemplateOut(ReportTemplateSummaryOut):
     doc_json: DocumentNode
     metrics: list[MetricDef]
     page_json: PageSettings
+    api_sources: list[ReportApiSource] = Field(
+        default_factory=list[ReportApiSource]
+    )

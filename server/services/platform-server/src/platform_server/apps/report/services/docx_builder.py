@@ -21,7 +21,12 @@ from platform_server.apps.report.schemas.template import TemplateBody
 from platform_server.apps.report.services.chart_ooxml import add_chart
 from platform_server.apps.report.services.chart_raster import render_chart
 from platform_server.apps.report.services.document import text_attr
+from platform_server.apps.report.services.docx_layout import (
+    apply_paragraph_layout,
+    normalize_text_color,
+)
 from platform_server.apps.report.services.docx_page import add_toc, apply_page
+from platform_server.apps.report.services.docx_tables import table_placements
 from platform_server.apps.report.services.ooxml import append_property
 from platform_server.apps.report.services.table_layout import format_table
 from platform_server.apps.report.services.typography import (
@@ -30,7 +35,6 @@ from platform_server.apps.report.services.typography import (
     set_font_size,
 )
 
-_HEX_COLOR_LENGTH = 7
 _NATIVE_CHART_POINT_LIMIT = 12
 
 
@@ -169,10 +173,12 @@ def _paragraph(
         "center": WD_ALIGN_PARAGRAPH.CENTER,
         "right": WD_ALIGN_PARAGRAPH.RIGHT,
         "justify": WD_ALIGN_PARAGRAPH.JUSTIFY,
+        "distributed": WD_ALIGN_PARAGRAPH.DISTRIBUTE,
     }
     alignment = node.attrs.get("textAlign")
     if isinstance(alignment, str) and alignment in alignments:
         paragraph.alignment = alignments[alignment]
+    apply_paragraph_layout(paragraph, node)
     for index, child in enumerate(node.content):
         child_path = f"{path}.content.{index}"
         if child.type == "text":
@@ -198,6 +204,8 @@ def _marks(run: Run, node: DocumentNode) -> None:
             setattr(target, mark.type, True)
         elif mark.type == "textStyle":
             _text_style(run, mark)
+        elif mark.type in ("subscript", "superscript"):
+            setattr(run.font, mark.type, True)
 
 
 def _set_paragraph_style(paragraph: Paragraph, node: DocumentNode) -> None:
@@ -217,17 +225,16 @@ def _text_style(run: Run, mark: DocumentMark) -> None:
         if points is not None:
             set_font_size(run.font, points)
     color = mark.attrs.get("color")
-    if (
-        isinstance(color, str)
-        and len(color) == _HEX_COLOR_LENGTH
-        and color.startswith("#")
-    ):
+    if isinstance(color, str):
         _set_color(run, color)
 
 
 def _set_color(run: Run, color: str) -> None:
+    normalized = normalize_text_color(color)
+    if normalized is None:
+        return
     try:
-        run.font.color.rgb = RGBColor.from_string(color[1:])
+        run.font.color.rgb = RGBColor.from_string(normalized)
     except ValueError:
         return
 
@@ -241,16 +248,28 @@ def _table(
     rows = node.content
     if not rows:
         return
-    columns = max((len(row.content) for row in rows), default=1)
+    placements = table_placements(rows)
+    columns = max(
+        (cell.column + cell.colspan for cell in placements), default=1
+    )
     table = parent.add_table(rows=len(rows), cols=columns)
     table.style = "Table Grid"
-    for row_index, row in enumerate(rows):
-        for column_index, cell in enumerate(row.content):
-            target = table.cell(row_index, column_index)
-            cell_path = f"{path}.content.{row_index}.content.{column_index}"
-            _cell_blocks(state, target, cell, cell_path)
-    _repeat_header(table.rows[0])
-    format_table(table, state.document)
+    for placement in placements:
+        cell = rows[placement.row].content[placement.index]
+        target = table.cell(placement.row, placement.column)
+        if placement.colspan > 1 or placement.rowspan > 1:
+            target = target.merge(
+                table.cell(
+                    placement.row + placement.rowspan - 1,
+                    placement.column + placement.colspan - 1,
+                )
+            )
+        cell_path = f"{path}.content.{placement.row}.content.{placement.index}"
+        _cell_blocks(state, target, cell, cell_path)
+    has_header = any(cell.type == "tableHeader" for cell in rows[0].content)
+    if has_header:
+        _repeat_header(table.rows[0])
+    format_table(table, state.document, has_header=has_header)
 
 
 def _cell_blocks(

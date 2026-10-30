@@ -3,11 +3,12 @@
 from datetime import datetime
 from zoneinfo import ZoneInfo
 
+from platform_server.apps.report.schemas.common import Aggregation
 from platform_server.apps.report.schemas.nodes import DataNodeSpec
 from platform_server.apps.report.schemas.preview import NodeValue
 from platform_server.apps.report.services.aggregation import (
     aggregate,
-    format_number,
+    format_value,
 )
 from platform_server.apps.report.services.source import SourceData
 
@@ -17,6 +18,7 @@ def build_table(
 ) -> NodeValue:
     """构造报告里的表格，汇总只算可见行。Args: found, spec, timezone。"""
     columns = {column.key: column.name for column in found.columns}
+    kinds = {column.key: column.data_type for column in found.columns}
     if not spec.keys or set(spec.keys) - columns.keys():
         raise ValueError("表格必须选择存在的台账列")
     values = _values(found, spec, timezone)
@@ -27,12 +29,17 @@ def build_table(
     rows = [
         [
             _time_label(stamp, spec),
-            *(format_number(value, spec.decimals) for value in row),
+            *(
+                format_value(
+                    value, _display_kind(kinds[key], spec), spec.decimals
+                )
+                for key, value in zip(spec.keys, row, strict=True)
+            ),
         ]
         for stamp, row in values
     ]
     if spec.summary != "none" and values:
-        rows.append(_summary(values, spec))
+        rows.append(_summary(values, spec, kinds))
     return NodeValue(
         kind="dsTable",
         title=spec.title,
@@ -55,14 +62,23 @@ def _values(
             )
             for row in found.rows
         ]
+    kinds = {column.key: column.data_type for column in found.columns}
     return [
-        (stamp, [aggregate(group[key], spec.agg) for key in spec.keys])
+        (
+            stamp,
+            [
+                _aggregate_column(group[key], kinds[key], spec.agg)
+                for key in spec.keys
+            ],
+        )
         for stamp, group in sorted(_groups(found, spec, timezone).items())
     ]
 
 
 def _summary(
-    values: list[tuple[datetime, list[object]]], spec: DataNodeSpec
+    values: list[tuple[datetime, list[object]]],
+    spec: DataNodeSpec,
+    kinds: dict[str, str],
 ) -> list[str]:
     if spec.summary == "none":
         return []
@@ -76,13 +92,34 @@ def _summary(
     return [
         labels[spec.summary],
         *(
-            format_number(
-                aggregate([row[index] for _, row in values], spec.summary),
+            format_value(
+                _aggregate_column(
+                    [row[index] for _, row in values],
+                    _display_kind(kinds[key], spec),
+                    spec.summary,
+                ),
+                (
+                    "number"
+                    if spec.summary == "count"
+                    else _display_kind(kinds[key], spec)
+                ),
                 spec.decimals,
             )
-            for index in range(len(spec.keys))
+            for index, key in enumerate(spec.keys)
         ),
     ]
+
+
+def _aggregate_column(
+    values: list[object], kind: str, mode: Aggregation
+) -> object:
+    if kind != "number" and mode not in ("count", "first", "last"):
+        return None
+    return aggregate(values, mode)
+
+
+def _display_kind(kind: str, spec: DataNodeSpec) -> str:
+    return "number" if spec.bucket != "none" and spec.agg == "count" else kind
 
 
 def _groups(

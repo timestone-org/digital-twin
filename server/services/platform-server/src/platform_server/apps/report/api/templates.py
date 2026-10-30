@@ -3,7 +3,7 @@
 import uuid
 from typing import Annotated
 
-from fastapi import APIRouter, Depends, Response
+from fastapi import APIRouter, Depends, Query, Response
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from lib.auth import CallerContext
@@ -43,9 +43,12 @@ ContainerDep = Annotated[Container, Depends(get_container)]
 
 @router.get("", response_model=ApiResponse[Page[ReportTemplateSummaryOut]])
 async def list_templates(
-    session: SessionDep, page: PageDep, _viewer: ViewDep
+    session: SessionDep,
+    page: PageDep,
+    _viewer: ViewDep,
+    q: Annotated[str, Query(max_length=200)] = "",
 ) -> ApiResponse[Page[ReportTemplateSummaryOut]]:
-    return ok(await template_service.list_templates(session, page))
+    return ok(await template_service.list_templates(session, page, q))
 
 
 @router.post("", status_code=201, response_model=ApiResponse[ReportTemplateOut])
@@ -118,5 +121,6 @@ async def preview_template(
             template_id,
             payload,
             container.settings.dataset_bucket_timezone,
+            connections=container.settings.report_api_connections,
         )
     )

@@ -33,6 +33,7 @@ export function blankReport(name = '新报告'): ReportBody {
     is_enabled: true,
     description: '',
     metrics: [],
+    api_sources: [],
     page_json: {},
     doc_json: { type: 'doc', content: [{ type: 'paragraph', content: [] }] },
   }
@@ -44,6 +45,7 @@ export function reportDraft(template: ReportTemplate): ReportBody {
     granularity: template.granularity,
     is_enabled: template.is_enabled,
     metrics: template.metrics,
+    api_sources: template.api_sources ?? [],
     page_json: template.page_json,
     doc_json: template.doc_json,
   }

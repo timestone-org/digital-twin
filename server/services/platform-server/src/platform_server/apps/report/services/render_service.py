@@ -1,10 +1,11 @@
 """任务提交、读取与下载；生成只在 worker 执行。"""
 
+import asyncio
 import hashlib
 import json
 import uuid
 from dataclasses import dataclass
-from datetime import datetime
+from datetime import UTC, datetime
 
 from sqlalchemy.exc import IntegrityError
 from sqlalchemy.ext.asyncio import AsyncSession
@@ -33,6 +34,15 @@ from platform_server.apps.report.schemas.jobs import (
 )
 from platform_server.apps.report.schemas.preview import PreviewOut
 from platform_server.apps.report.schemas.template import TemplateBody
+from platform_server.apps.report.services.dispatch import (
+    GROUP as REPORT_GROUP,
+)
+from platform_server.apps.report.services.dispatch import (
+    PUBLISH_TIMEOUT_S,
+    STREAM,
+    initial_payload,
+    message_fields,
+)
 from platform_server.apps.report.services.period import parse_period
 from platform_server.apps.report.services.template_service import (
     record_audit,
@@ -43,8 +53,7 @@ from platform_server.apps.report.services.template_service import (
 CONTENT_TYPE = (
     "application/vnd.openxmlformats-officedocument.wordprocessingml.document"
 )
-STREAM = "platform:report:jobs"
-GROUP = "report-workers"
+GROUP = REPORT_GROUP
 MAX_KEY_LENGTH = 200
 MAX_PENDING_RENDERS = 100
 
@@ -189,16 +198,13 @@ async def cached_request(
 def enqueue(
     session: AsyncSession, row: ReportRender, stream: StreamLike
 ) -> None:
-    fields = {
-        "envelope_version": "1",
-        "render_id": str(row.id),
-        "traceparent": row.traceparent,
-        "idempotency_key": str(row.id),
-    }
+    fields = message_fields(row.id, row.traceparent)
+    row.result_json = initial_payload(row.created_at or datetime.now(UTC))
 
     async def publish() -> None:
         """提交后投递带 traceparent 的任务信封。"""
-        await stream.publish(STREAM, fields)
+        async with asyncio.timeout(PUBLISH_TIMEOUT_S):
+            await stream.publish(STREAM, fields)
 
     after_commit(session, publish)
 
@@ -208,7 +214,7 @@ async def read_render(
 ) -> RenderDetailOut:
     row = await require_render(session, render_id)
     details = RenderDetailOut(**output(row).model_dump())
-    if row.result_json:
+    if row.status == "succeeded" and row.result_json:
         if (
             row.kind == "import"
             and row.created_by == str(caller.user_id)

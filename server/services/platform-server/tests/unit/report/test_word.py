@@ -109,7 +109,7 @@ def test_table_inline_metric_has_no_extra_empty_paragraph():
     document = Document(io.BytesIO(result.payload))
     assert document.tables[0].cell(0, 0).text == "能耗 12.30"
     with zipfile.ZipFile(io.BytesIO(result.payload)) as archive:
-        assert b"tblHeader" in archive.read("word/document.xml")
+        assert b"tblHeader" not in archive.read("word/document.xml")
 
 
 def test_list_semantics_survive_word_export():

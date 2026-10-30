@@ -14,15 +14,28 @@ from platform_server.apps.report.models import (
 
 
 async def page(
-    session: AsyncSession, offset: int, limit: int
+    session: AsyncSession, offset: int, limit: int, keyword: str = ""
 ) -> tuple[list[ReportTemplate], int]:
     query = select(ReportTemplate).order_by(
         ReportTemplate.created_at.desc(), ReportTemplate.id.desc()
     )
+    total_query = select(func.count()).select_from(ReportTemplate)
+    if keyword.strip():
+        pattern = (
+            "%"
+            + keyword.strip()
+            .replace("\\", "\\\\")
+            .replace("%", "\\%")
+            .replace("_", "\\_")
+            + "%"
+        )
+        matches = ReportTemplate.name.ilike(pattern, escape="\\") | (
+            ReportTemplate.code.ilike(pattern, escape="\\")
+        )
+        query = query.where(matches)
+        total_query = total_query.where(matches)
     rows = await session.scalars(query.offset(offset).limit(limit))
-    total = await session.scalar(
-        select(func.count()).select_from(ReportTemplate)
-    )
+    total = await session.scalar(total_query)
     return list(rows), total or 0
 
 

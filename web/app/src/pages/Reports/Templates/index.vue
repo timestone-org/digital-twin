@@ -1,6 +1,6 @@
 <script setup lang="ts">
 /** @fileoverview 报告模板列表与创建入口。 */
-import { computed, onMounted, ref } from 'vue'
+import { computed, onMounted, ref, watch } from 'vue'
 import { RouterLink, useRouter } from 'vue-router'
 import {
   DtButton,
@@ -30,8 +30,11 @@ const COLUMNS: readonly DtDataColumn[] = [
   { key: 'granularity', label: '周期' },
   { key: 'actions', label: '操作', card: 'actions' },
 ]
+const keyword = ref('')
 const list = useAsyncList<ReportTemplateSummary>((query) =>
-  api.listReports(query.page),
+  keyword.value.trim()
+    ? api.listReports(query.page, query.size, keyword.value.trim())
+    : api.listReports(query.page),
 )
 const view = useViewMode('report-templates')
 const router = useRouter()
@@ -43,16 +46,7 @@ const name = ref('')
 const code = ref('')
 const error = ref('')
 const isSaving = ref(false)
-const keyword = ref('')
-const visibleReports = computed(() => {
-  const query = keyword.value.trim().toLocaleLowerCase()
-  if (!query) return list.items.value
-  return list.items.value.filter(
-    (report) =>
-      report.name.toLocaleLowerCase().includes(query) ||
-      report.code.toLocaleLowerCase().includes(query),
-  )
-})
+watch(keyword, () => void list.reloadFromFirstPage())
 const emptyState = computed(() =>
   listEmptyState({
     isFiltered: keyword.value.trim() !== '',
@@ -131,7 +125,7 @@ async function remove(id: string): Promise<void> {
         v-model:view="view"
         class="min-h-0 flex-1"
         :columns="COLUMNS"
-        :rows="visibleReports"
+        :rows="list.items.value"
         :loading="list.loading.value"
         :error="list.error.value"
         :pagination="list.pager.value"

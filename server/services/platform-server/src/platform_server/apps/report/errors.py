@@ -38,6 +38,13 @@ class ReportPreviewTimeout(AppError):
     http_status = 504
 
 
+class ReportApiReadFailed(AppError):
+    """报告依赖的第三方接口暂不可用。"""
+
+    code = 51302
+    http_status = 503
+
+
 class ReportQueueFull(AppError):
     """报告队列已达到背压水位。"""
 

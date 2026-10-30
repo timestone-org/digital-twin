@@ -18516,6 +18516,25 @@
       "PreviewOut": {
         "description": "模板试算全貌。",
         "properties": {
+          "api_results": {
+            "items": {
+              "$ref": "#/components/schemas/ReportApiResult"
+            },
+            "title": "Api Results",
+            "type": "array"
+          },
+          "checked_at": {
+            "anyOf": [
+              {
+                "format": "date-time",
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Checked At"
+          },
           "is_valid": {
             "title": "Is Valid",
             "type": "boolean"
@@ -20297,9 +20316,221 @@
         "title": "ReplaceUploadIn",
         "type": "object"
       },
+      "ReportApiColumn": {
+        "additionalProperties": false,
+        "description": "把响应字段映射为报告可用列。",
+        "properties": {
+          "data_type": {
+            "default": "number",
+            "enum": [
+              "number",
+              "text",
+              "boolean"
+            ],
+            "title": "Data Type",
+            "type": "string"
+          },
+          "key": {
+            "maxLength": 64,
+            "pattern": "^[A-Za-z_][A-Za-z0-9_]*$",
+            "title": "Key",
+            "type": "string"
+          },
+          "name": {
+            "maxLength": 128,
+            "minLength": 1,
+            "title": "Name",
+            "type": "string"
+          },
+          "pointer": {
+            "maxLength": 1024,
+            "title": "Pointer",
+            "type": "string"
+          }
+        },
+        "required": [
+          "key",
+          "name",
+          "pointer"
+        ],
+        "title": "ReportApiColumn",
+        "type": "object"
+      },
+      "ReportApiConnectionOut": {
+        "description": "可供报告选择的连接，不包含地址或凭据。",
+        "properties": {
+          "code": {
+            "title": "Code",
+            "type": "string"
+          },
+          "name": {
+            "title": "Name",
+            "type": "string"
+          }
+        },
+        "required": [
+          "code",
+          "name"
+        ],
+        "title": "ReportApiConnectionOut",
+        "type": "object"
+      },
+      "ReportApiResult": {
+        "description": "已映射数据的有限样例，不返回原始响应。",
+        "properties": {
+          "columns": {
+            "items": {
+              "type": "string"
+            },
+            "title": "Columns",
+            "type": "array"
+          },
+          "name": {
+            "title": "Name",
+            "type": "string"
+          },
+          "row_count": {
+            "title": "Row Count",
+            "type": "integer"
+          },
+          "rows": {
+            "items": {
+              "items": {
+                "type": "string"
+              },
+              "type": "array"
+            },
+            "title": "Rows",
+            "type": "array"
+          },
+          "source_code": {
+            "title": "Source Code",
+            "type": "string"
+          }
+        },
+        "required": [
+          "source_code",
+          "name",
+          "row_count",
+          "columns",
+          "rows"
+        ],
+        "title": "ReportApiResult",
+        "type": "object"
+      },
+      "ReportApiSource": {
+        "additionalProperties": false,
+        "description": "模板持久化的 API 读取定义，不含凭据。",
+        "properties": {
+          "body": {
+            "anyOf": [
+              {
+                "additionalProperties": {
+                  "$ref": "#/components/schemas/JsonValue"
+                },
+                "type": "object"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Body"
+          },
+          "code": {
+            "maxLength": 60,
+            "pattern": "^[A-Za-z_][A-Za-z0-9_]*$",
+            "title": "Code",
+            "type": "string"
+          },
+          "columns": {
+            "items": {
+              "$ref": "#/components/schemas/ReportApiColumn"
+            },
+            "maxItems": 50,
+            "minItems": 1,
+            "title": "Columns",
+            "type": "array"
+          },
+          "connection": {
+            "maxLength": 64,
+            "pattern": "^[A-Za-z_][A-Za-z0-9_]*$",
+            "title": "Connection",
+            "type": "string"
+          },
+          "method": {
+            "default": "GET",
+            "enum": [
+              "GET",
+              "POST"
+            ],
+            "title": "Method",
+            "type": "string"
+          },
+          "name": {
+            "maxLength": 128,
+            "minLength": 1,
+            "title": "Name",
+            "type": "string"
+          },
+          "offset": {
+            "default": 0,
+            "maximum": 120.0,
+            "minimum": -120.0,
+            "title": "Offset",
+            "type": "integer"
+          },
+          "path": {
+            "maxLength": 2048,
+            "minLength": 1,
+            "title": "Path",
+            "type": "string"
+          },
+          "query": {
+            "additionalProperties": {
+              "type": "string"
+            },
+            "title": "Query",
+            "type": "object"
+          },
+          "rows_pointer": {
+            "default": "",
+            "maxLength": 1024,
+            "title": "Rows Pointer",
+            "type": "string"
+          },
+          "time_pointer": {
+            "anyOf": [
+              {
+                "maxLength": 1024,
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Time Pointer"
+          }
+        },
+        "required": [
+          "code",
+          "name",
+          "connection",
+          "path",
+          "columns"
+        ],
+        "title": "ReportApiSource",
+        "type": "object"
+      },
       "ReportRuntimeOut": {
         "description": "真实生效的调度配置。",
         "properties": {
+          "api_connections": {
+            "items": {
+              "$ref": "#/components/schemas/ReportApiConnectionOut"
+            },
+            "title": "Api Connections",
+            "type": "array"
+          },
           "is_schedule_enabled": {
             "title": "Is Schedule Enabled",
             "type": "boolean"
@@ -20320,6 +20551,14 @@
         "additionalProperties": false,
         "description": "创建模板。",
         "properties": {
+          "api_sources": {
+            "items": {
+              "$ref": "#/components/schemas/ReportApiSource"
+            },
+            "maxItems": 10,
+            "title": "Api Sources",
+            "type": "array"
+          },
           "code": {
             "maxLength": 64,
             "pattern": "^[A-Za-z_][A-Za-z0-9_]*$",
@@ -20408,6 +20647,13 @@
       "ReportTemplateOut": {
         "description": "完整模板。",
         "properties": {
+          "api_sources": {
+            "items": {
+              "$ref": "#/components/schemas/ReportApiSource"
+            },
+            "title": "Api Sources",
+            "type": "array"
+          },
           "code": {
             "title": "Code",
             "type": "string"
@@ -22822,6 +23068,14 @@
         "additionalProperties": false,
         "description": "一份完整模板定义。",
         "properties": {
+          "api_sources": {
+            "items": {
+              "$ref": "#/components/schemas/ReportApiSource"
+            },
+            "maxItems": 10,
+            "title": "Api Sources",
+            "type": "array"
+          },
           "description": {
             "anyOf": [
               {
@@ -23176,6 +23430,14 @@
         "additionalProperties": false,
         "description": "整份保存并校验读到的版本。",
         "properties": {
+          "api_sources": {
+            "items": {
+              "$ref": "#/components/schemas/ReportApiSource"
+            },
+            "maxItems": 10,
+            "title": "Api Sources",
+            "type": "array"
+          },
           "description": {
             "anyOf": [
               {
@@ -36071,6 +36333,17 @@
       "get": {
         "operationId": "list_templates_api_v1_platform_report_templates_get",
         "parameters": [
+          {
+            "in": "query",
+            "name": "q",
+            "required": false,
+            "schema": {
+              "default": "",
+              "maxLength": 200,
+              "title": "Q",
+              "type": "string"
+            }
+          },
           {
             "in": "query",
             "name": "page",

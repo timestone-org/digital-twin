@@ -46,6 +46,7 @@ describe('报告文档边界', () => {
       updated_at: '2026-08-01T00:00:00Z',
       doc_json: { type: 'doc' },
       metrics: [],
+      api_sources: [],
       page_json: {},
     }
     expect(reportDraft(template)).toEqual({
@@ -55,6 +56,7 @@ describe('报告文档边界', () => {
       is_enabled: true,
       doc_json: { type: 'doc' },
       metrics: [],
+      api_sources: [],
       page_json: {},
     })
   })

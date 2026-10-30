@@ -77,6 +77,8 @@ export interface ReportSchemas {
     period: string
   }
   PreviewOut: {
+    api_results?: ReportSchemas['ReportApiResult'][]
+    checked_at?: string | null
     is_valid: boolean
     metrics: ReportSchemas['MetricValue'][]
     nodes: Record<string, ReportSchemas['NodeValue']>
@@ -121,8 +123,40 @@ export interface ReportSchemas {
     timezone: string
     warnings: string[]
   }
-  ReportRuntimeOut: { is_schedule_enabled: boolean; timezone: string }
+  ReportApiColumn: {
+    data_type?: 'number' | 'text' | 'boolean'
+    key: string
+    name: string
+    pointer: string
+  }
+  ReportApiConnectionOut: { code: string; name: string }
+  ReportApiResult: {
+    columns: string[]
+    name: string
+    row_count: number
+    rows: string[][]
+    source_code: string
+  }
+  ReportApiSource: {
+    body?: Record<string, ReportSchemas['JsonValue']> | null
+    code: string
+    columns: ReportSchemas['ReportApiColumn'][]
+    connection: string
+    method?: 'GET' | 'POST'
+    name: string
+    offset?: number
+    path: string
+    query?: Record<string, string>
+    rows_pointer?: string
+    time_pointer?: string | null
+  }
+  ReportRuntimeOut: {
+    api_connections?: ReportSchemas['ReportApiConnectionOut'][]
+    is_schedule_enabled: boolean
+    timezone: string
+  }
   ReportTemplateCreateIn: {
+    api_sources?: ReportSchemas['ReportApiSource'][]
     code: string
     description?: string | null
     doc_json?: ReportSchemas['DocumentNode']
@@ -133,6 +167,7 @@ export interface ReportSchemas {
     page_json?: ReportSchemas['PageSettings']
   }
   ReportTemplateOut: {
+    api_sources?: ReportSchemas['ReportApiSource'][]
     code: string
     created_at: string
     description: string | null
@@ -185,6 +220,7 @@ export interface ReportSchemas {
   }
   SeriesPoint: { ts: string; value: string | null }
   TemplateBody: {
+    api_sources?: ReportSchemas['ReportApiSource'][]
     description?: string | null
     doc_json?: ReportSchemas['DocumentNode']
     granularity?: 'day' | 'month' | 'quarter' | 'year'
@@ -200,6 +236,7 @@ export interface ReportSchemas {
     where: string
   }
   TemplateUpdateIn: {
+    api_sources?: ReportSchemas['ReportApiSource'][]
     description?: string | null
     doc_json?: ReportSchemas['DocumentNode']
     expected_version: number

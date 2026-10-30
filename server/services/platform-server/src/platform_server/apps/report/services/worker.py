@@ -10,6 +10,7 @@ from datetime import UTC, datetime
 from multiprocessing.process import BaseProcess
 from typing import Protocol, cast
 
+from lib.errors import AppError
 from lib.logging import (
     bind_log_context,
     get_logger,
@@ -20,8 +21,12 @@ from lib.objectstore import ObjectStore
 from lib.stream import StreamGroup, StreamLike
 from platform_server.apps.dataset.services import Sessions
 from platform_server.apps.report.crud import renders
+from platform_server.apps.report.errors import ReportInvalid
+from platform_server.apps.report.schemas.api_source import ReportApiConnection
 from platform_server.apps.report.schemas.preview import PreviewOut
 from platform_server.apps.report.schemas.template import TemplateBody
+from platform_server.apps.report.services.aggregation import wire_value
+from platform_server.apps.report.services.api_source import fetch_api_sources
 from platform_server.apps.report.services.metrics import PreviewContext
 from platform_server.apps.report.services.preview import preview
 from platform_server.apps.report.services.render_service import (
@@ -29,7 +34,11 @@ from platform_server.apps.report.services.render_service import (
     GROUP,
     STREAM,
 )
-from platform_server.apps.report.services.template_service import record_audit
+from platform_server.apps.report.services.source import SourceData
+from platform_server.apps.report.services.template_service import (
+    record_audit,
+    require_valid,
+)
 from platform_server.apps.report.services.word_task import (
     WordTask,
     WordTaskResult,
@@ -83,6 +92,7 @@ class WorkerOptions:
     store: ObjectStore
     consumer: str
     timeout_s: float = 300
+    connections: tuple[ReportApiConnection, ...] = ()
 
 
 class ReportWorker:
@@ -92,11 +102,13 @@ class ReportWorker:
         self._options = options
         self._pool = pool
         self._stopping = False
+        self._wake = asyncio.Event()
         self._idle = asyncio.Event()
         self._idle.set()
 
     def stop(self) -> None:
         self._stopping = True
+        self._wake.set()
 
     async def drain(self, timeout_s: float) -> None:
         try:
@@ -112,15 +124,23 @@ class ReportWorker:
         target = StreamGroup(
             stream=STREAM, group=GROUP, consumer=self._options.consumer
         )
-        await self._options.stream.ensure_group(target)
+        is_group_ready = False
         while not self._stopping:
             try:
+                if not is_group_ready:
+                    await self._options.stream.ensure_group(target)
+                    is_group_ready = True
                 await self._tick(target)
             except Exception as error:
+                is_group_ready = False
                 _logger.error(
                     "report_consumer_failed", "报告消费失败", error=error
                 )
-                await asyncio.sleep(1)
+                try:
+                    async with asyncio.timeout(1):
+                        await self._wake.wait()
+                except TimeoutError:
+                    continue
 
     async def _tick(self, target: StreamGroup) -> None:
         stream = self._options.stream
@@ -169,7 +189,7 @@ class ReportWorker:
                 "report_generation_failed",
                 "报告生成失败",
                 render_id=str(render_id),
-                error=error,
+                error_type=type(error).__name__,
             )
             async with self._options.database.session() as session:
                 await renders.finish(
@@ -177,7 +197,12 @@ class ReportWorker:
                     render_id,
                     {
                         "status": "failed",
-                        "error": "生成失败，请检查报告配置或联系管理员",
+                        "result_json": None,
+                        "error": (
+                            error.message
+                            if isinstance(error, AppError)
+                            else "生成失败，请检查报告配置或联系管理员"
+                        ),
                         "finished_at": datetime.now(UTC),
                     },
                 )
@@ -196,6 +221,7 @@ class ReportWorker:
                 row.timezone,
             )
         async with asyncio.timeout(options.timeout_s):
+            api_data: dict[str, SourceData] = {}
             if kind == "import":
                 if source_key is None:
                     raise ValueError("导入任务缺少文件")
@@ -205,24 +231,40 @@ class ReportWorker:
                 preview_result = None
             else:
                 template = TemplateBody.model_validate(snapshot)
-                async with options.database.session() as session:
-                    preview_result = await preview(
-                        session,
-                        PreviewContext(
-                            template=template, period=period, timezone=timezone
-                        ),
-                    )
+                require_valid(template)
+                context = PreviewContext(
+                    template=template, period=period, timezone=timezone
+                )
+                preview_result = await self._preview_snapshot(context)
+                api_data = context.api_data
                 task = WordTask(template=template, preview=preview_result)
             result = await self._pool.run(task, options.timeout_s)
             return await self._save_result(
-                render_id, result, preview_result, source_key, actor
+                render_id,
+                result,
+                result_payload(result, preview_result, api_data),
+                source_key,
+                actor,
             )
+
+    async def _preview_snapshot(self, context: PreviewContext) -> PreviewOut:
+        context.api_data = await fetch_api_sources(
+            context.template.api_sources,
+            self._options.connections,
+            context.period,
+            context.template.granularity,
+            context.timezone,
+        )
+        async with self._options.database.session() as session:
+            result = await preview(session, context)
+        _require_complete(result)
+        return result
 
     async def _save_result(
         self,
         render_id: uuid.UUID,
         result: WordTaskResult,
-        preview_result: PreviewOut | None,
+        result_json: dict[str, object] | None,
         source_key: str | None,
         actor: str,
     ) -> bool:
@@ -236,7 +278,6 @@ class ReportWorker:
             await options.store.put_bytes(
                 object_key, result.payload, content_type=CONTENT_TYPE
             )
-        result_json = result_payload(result, preview_result)
         async with options.database.session() as session:
             completed = await renders.finish(
                 session,
@@ -267,8 +308,47 @@ class ReportWorker:
 
 
 def result_payload(
-    result: WordTaskResult, preview_result: PreviewOut | None
+    result: WordTaskResult,
+    preview_result: PreviewOut | None,
+    api_data: Mapping[str, SourceData] | None = None,
 ) -> dict[str, object] | None:
     if result.imported is not None:
         return result.imported.model_dump(mode="json")
-    return preview_result.model_dump(mode="json") if preview_result else None
+    if preview_result is None:
+        return None
+    payload = preview_result.model_dump(mode="json")
+    if api_data:
+        payload["api_data"] = {
+            code: {
+                "columns": [
+                    {
+                        "key": column.key,
+                        "name": column.name,
+                        "data_type": column.data_type,
+                    }
+                    for column in found.columns
+                ],
+                "rows": [
+                    {
+                        "ts": row.ts.isoformat(),
+                        "values": {
+                            key: wire_value(value)
+                            for key, value in row.values.items()
+                        },
+                    }
+                    for row in found.rows
+                ],
+                "is_truncated": found.is_truncated,
+            }
+            for code, found in api_data.items()
+        }
+    return payload
+
+
+def _require_complete(result: PreviewOut) -> None:
+    if any(metric.error for metric in result.metrics) or any(
+        node.text == "[数据不可用]" for node in result.nodes.values()
+    ):
+        raise ReportInvalid(
+            "报告数据检查未通过，请先试算并修复缺失或错误的数据"
+        )

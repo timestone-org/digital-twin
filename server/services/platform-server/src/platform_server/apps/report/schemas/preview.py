@@ -77,6 +77,16 @@ class NodeValue(OutputModel):
     is_stale: bool = False
 
 
+class ReportApiResult(OutputModel):
+    """已映射数据的有限样例，不返回原始响应。"""
+
+    source_code: str
+    name: str
+    row_count: int
+    columns: list[str]
+    rows: list[list[str]]
+
+
 class PreviewOut(OutputModel):
     """模板试算全貌。"""
 
@@ -86,3 +96,7 @@ class PreviewOut(OutputModel):
     metrics: list[MetricValue]
     nodes: dict[str, NodeValue]
     warnings: list[str]
+    api_results: list[ReportApiResult] = Field(
+        default_factory=list[ReportApiResult]
+    )
+    checked_at: Utc | None = None

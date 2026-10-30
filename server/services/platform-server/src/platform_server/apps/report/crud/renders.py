@@ -1,12 +1,15 @@
 """生成任务的原子认领和有界游标查询。"""
 
 import uuid
-from datetime import datetime, timedelta
+from datetime import datetime
 
-from sqlalchemy import and_, func, or_, select, update
+from sqlalchemy import DateTime, and_, cast, func, or_, select, update
 from sqlalchemy.ext.asyncio import AsyncSession
+from sqlalchemy.sql.elements import ColumnElement
 
 from platform_server.apps.report.models import ReportRender
+
+_CAPACITY_LOCK = "platform.report.pending_capacity"
 
 
 async def get(
@@ -82,30 +85,114 @@ async def finish(
     return result.scalar_one_or_none() is not None
 
 
-async def stale(
-    session: AsyncSession, cutoff: datetime, limit: int
+async def fail_stale(
+    session: AsyncSession, cutoff: datetime, now: datetime, limit: int
+) -> int:
+    expired = or_(
+        ReportRender.started_at < cutoff,
+        and_(
+            ReportRender.started_at.is_(None), ReportRender.updated_at < cutoff
+        ),
+    )
+    selected = (
+        select(ReportRender.id)
+        .where(ReportRender.status == "running", expired)
+        .order_by(ReportRender.updated_at)
+        .limit(limit)
+        .with_for_update(skip_locked=True)
+    )
+    result = await session.execute(
+        update(ReportRender)
+        .where(
+            ReportRender.id.in_(selected),
+            ReportRender.status == "running",
+            expired,
+        )
+        .values(
+            status="failed",
+            result_json=None,
+            error="生成任务中断或超过时限，请重新生成",
+            finished_at=now,
+        )
+        .returning(ReportRender.id)
+    )
+    return len(result.scalars().all())
+
+
+async def dispatch_clock(session: AsyncSession) -> datetime:
+    moment = await session.scalar(select(func.clock_timestamp()))
+    if not isinstance(moment, datetime):
+        raise ValueError("数据库未能返回投递时钟")
+    return moment
+
+
+async def pending_dispatch(
+    session: AsyncSession, limit: int
 ) -> list[ReportRender]:
+    due = cast(
+        ReportRender.result_json["_dispatch"]["next_attempt_at"].as_string(),
+        DateTime(timezone=True),
+    )
     query = (
         select(ReportRender)
         .where(
-            or_(
-                and_(
-                    ReportRender.status == "running",
-                    ReportRender.updated_at < cutoff,
-                ),
-                and_(
-                    ReportRender.status == "pending",
-                    ReportRender.created_at < cutoff - timedelta(days=1),
-                ),
-            ),
+            ReportRender.status == "pending",
+            or_(due.is_(None), due <= func.clock_timestamp()),
         )
-        .order_by(ReportRender.updated_at)
+        .order_by(ReportRender.updated_at, ReportRender.id)
         .limit(limit)
+        .with_for_update(skip_locked=True)
     )
     return list(await session.scalars(query))
 
 
+def _dispatch_identity(render_id: uuid.UUID, token: str) -> ColumnElement[bool]:
+    return and_(
+        ReportRender.id == render_id,
+        ReportRender.status == "pending",
+        ReportRender.result_json["_dispatch"]["token"].as_string() == token,
+        cast(
+            ReportRender.result_json["_dispatch"][
+                "next_attempt_at"
+            ].as_string(),
+            DateTime(timezone=True),
+        )
+        > func.clock_timestamp(),
+    )
+
+
+async def owns_dispatch(
+    session: AsyncSession, render_id: uuid.UUID, token: str
+) -> bool:
+    return (
+        await session.scalar(
+            select(ReportRender.id).where(_dispatch_identity(render_id, token))
+        )
+        is not None
+    )
+
+
+async def save_dispatch(
+    session: AsyncSession,
+    render_id: uuid.UUID,
+    token: str,
+    payload: dict[str, object],
+) -> bool:
+    result = await session.execute(
+        update(ReportRender)
+        .where(_dispatch_identity(render_id, token))
+        .values(result_json=payload, updated_at=func.clock_timestamp())
+        .returning(ReportRender.id)
+    )
+    return result.scalar_one_or_none() is not None
+
+
 async def active_count(session: AsyncSession) -> int:
+    await session.execute(
+        select(
+            func.pg_advisory_xact_lock(func.hashtextextended(_CAPACITY_LOCK, 0))
+        )
+    )
     return (
         await session.scalar(
             select(func.count())

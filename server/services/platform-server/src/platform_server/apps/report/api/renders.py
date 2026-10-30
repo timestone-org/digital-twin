@@ -15,6 +15,7 @@ from platform_server.apps.report.schemas.jobs import (
     RenderCreateIn,
     RenderDetailOut,
     RenderOut,
+    ReportApiConnectionOut,
     ReportRuntimeOut,
 )
 from platform_server.apps.report.services import render_service
@@ -90,5 +91,9 @@ async def runtime(
         ReportRuntimeOut(
             is_schedule_enabled=container.settings.report_schedule_enabled,
             timezone=container.settings.dataset_bucket_timezone,
+            api_connections=[
+                ReportApiConnectionOut(code=item.code, name=item.name)
+                for item in container.settings.report_api_connections
+            ],
         )
     )
