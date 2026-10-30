@@ -29,10 +29,8 @@ def normalize_text_color(value: str) -> str | None:
     if re.fullmatch(r"#[0-9a-fA-F]{3}", color):
         return "".join(character * 2 for character in color[1:]).upper()
     match = _RGB.fullmatch(color)
-    if (
-        match is None
-        or (color.lower().startswith("rgba")
-        and match.group(4) is None)
+    if match is None or (
+        color.lower().startswith("rgba") and match.group(4) is None
     ):
         return None
     channels = [int(match.group(index)) for index in (1, 2, 3)]
