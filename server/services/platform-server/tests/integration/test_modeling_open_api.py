@@ -1,5 +1,6 @@
 """账号身份调用模型，验证真实预测、拒绝路径、配额与调用记录。"""
 
+import uuid
 from typing import Any
 
 import httpx
@@ -64,6 +65,9 @@ async def _served(
     )
     assert created.status_code == HTTP_CREATED, created.text
     deployment = dict(data_of(created))
+    assert (
+        created.headers.get("Location") == f"{DEPLOYMENTS}/{deployment['id']}"
+    )
     return deployment, dict(client.headers)
 
 
@@ -307,6 +311,10 @@ async def test_account_calls_do_not_reference_deployment_keys(
     rows = list((await db_session.scalars(select(ModelingCallLog))).all())
     assert len(rows) == 1
     assert rows[0].api_key_id is None
+    assert rows[0].account_user_id == uuid.UUID(
+        app_client.headers["x-auth-user-id"]
+    )
+    assert rows[0].trace_id == response.json()["trace_id"]
 
 
 async def test_quota_is_independent_for_each_account_and_deployment(
@@ -333,7 +341,11 @@ async def test_quota_is_independent_for_each_account_and_deployment(
     assert second.status_code == HTTP_CREATED
     url = f"{OPEN}/{deployment['code']}:predict"
     assert (await app_client.post(url, json=_rows())).status_code == HTTP_OK
-    assert (await app_client.post(url, json=_rows())).status_code == 429
+    limited = await app_client.post(url, json=_rows())
+    assert limited.status_code == 429
+    assert limited.headers["retry-after"] == "60"
+    assert limited.json()["code"] == 40002
+    assert limited.json()["trace_id"]
     other = sign(codes=("modeling:view",))
     assert (
         await app_client.post(url, json=_rows(), headers=other)

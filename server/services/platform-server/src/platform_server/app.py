@@ -19,8 +19,12 @@ from platform_server.apps.modeling.api import ROUTERS as MODELING_ROUTERS
 from platform_server.apps.modeling.api.modeling_commands import (
     handle_command_pending,
 )
+from platform_server.apps.modeling.api.open_models import (
+    handle_model_rate_limit,
+)
 from platform_server.apps.modeling.command_errors import (
     CommandPending,
+    ModelingRateLimited,
 )
 from platform_server.apps.modeling.services.model_provider import (
     ModelingAnalysisProvider,
@@ -73,6 +77,7 @@ def build_app(settings: Settings) -> FastAPI:
     # 相关，极难复现（docs/MODELING_DESIGN.md §3.2）
     register_provider(ModelingAnalysisProvider(store=container.object_store))
     app.add_exception_handler(CommandPending, handle_command_pending)
+    app.add_exception_handler(ModelingRateLimited, handle_model_rate_limit)
     app.state.container = container
     return app
 
