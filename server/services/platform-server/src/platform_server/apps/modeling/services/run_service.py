@@ -16,10 +16,8 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from lib.db import after_commit
 from lib.errors.base import FieldError
 from lib.stream import StreamGroup, StreamLike
-from lib.web import Page, PageParams
 from platform_server.apps.modeling.crud import management_queries as query_crud
 from platform_server.apps.modeling.crud import node_run_crud, run_crud
-from platform_server.apps.modeling.crud.template import instances
 from platform_server.apps.modeling.errors import (
     GraphInvalid,
     NodeRunNotFound,
@@ -35,9 +33,11 @@ from platform_server.apps.modeling.schemas import (
     RunOut,
     RunStartIn,
 )
-from platform_server.apps.modeling.schemas.run import RunSummaryOut
 from platform_server.apps.modeling.services import presenters, run_queue
 from platform_server.apps.modeling.services.graph_check import check_graph
+from platform_server.apps.modeling.services.management_guard import (
+    require_active_instance,
+)
 from platform_server.apps.modeling.services.pipeline_service import (
     Actor,
     require_pipeline,
@@ -67,7 +67,7 @@ async def start_run(
     拓扑与参数（D6）。
     Args: session, pipeline_id, payload, context。
     """
-    await instances.lock(session, pipeline_id)
+    await require_active_instance(session, pipeline_id)
     pipeline = await require_pipeline(session, pipeline_id)
     graph = presenters.graph_of(pipeline.graph_json)
     _require_valid(graph)
@@ -208,46 +208,4 @@ def _require_valid(graph: PipelineGraph) -> None:
             )
             for item in issues
         ),
-    )
-
-
-async def list_runs(
-    session: AsyncSession,
-    *,
-    pipeline_id: uuid.UUID | None,
-    page: PageParams,
-) -> Page[RunSummaryOut]:
-    """运行列表。
-
-    Args: session, pipeline_id, page。
-    """
-    rows, total = await run_crud.page(
-        session,
-        pipeline_id=pipeline_id,
-        offset=page.offset,
-        limit=page.size,
-    )
-    instances = await query_crud.instance_ids(
-        session, [row.pipeline_id for row in rows]
-    )
-    versions = await query_crud.published_versions(
-        session, [row.id for row in rows]
-    )
-    return Page[RunSummaryOut](
-        items=[
-            presenters.to_run_summary(row).model_copy(
-                update={
-                    "instance_id": (
-                        row.pipeline_id
-                        if row.pipeline_id in instances
-                        else None
-                    ),
-                    "published_version_id": versions.get(row.id),
-                }
-            )
-            for row in rows
-        ],
-        page=page.page,
-        size=page.size,
-        total=total,
     )

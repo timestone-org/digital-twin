@@ -3,12 +3,12 @@
 import uuid
 from typing import Annotated
 
-from fastapi import APIRouter, Depends, Response, status
+from fastapi import APIRouter, Depends, Query, Response, status
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from lib.auth import CallerContext
 from lib.objectstore import ObjectStore
-from lib.web import ApiResponse, Page, PageParams, ok, page_params
+from lib.web import ApiResponse, CursorPage, Page, PageParams, ok, page_params
 from platform_server.apps.modeling.catalog import (
     DATASET_MANAGE,
     MODELING_PUBLISH,
@@ -33,7 +33,13 @@ from platform_server.apps.modeling.schemas import (
     ModelVersionSummaryOut,
     ModelVersionUpdateIn,
 )
-from platform_server.apps.modeling.services import Actor, model_service
+from platform_server.apps.modeling.schemas.command import CommandResourceOut
+from platform_server.apps.modeling.schemas.management import VersionListQuery
+from platform_server.apps.modeling.services import (
+    Actor,
+    management_queries,
+    model_service,
+)
 from platform_server.apps.modeling.services.binding_service import (
     BindingDraft,
     delete_binding,
@@ -61,24 +67,19 @@ RegisterDep = Annotated[
 
 @versions.get(
     "",
-    response_model=ApiResponse[Page[ModelVersionSummaryOut]],
+    response_model=ApiResponse[
+        Page[ModelVersionSummaryOut] | CursorPage[ModelVersionSummaryOut]
+    ],
     summary="模型版本列表",
 )
 async def list_versions(
     session: SessionDep,
-    page: PageDep,
     _viewer: ViewDep,
-    pipeline_id: uuid.UUID | None = None,
-) -> ApiResponse[Page[ModelVersionSummaryOut]]:
-    """分页列出模型版本，可按流水线筛。
-
-    Args: session, page, _viewer, pipeline_id。
-    """
-    return ok(
-        await model_service.list_versions(
-            session, pipeline_id=pipeline_id, page=page
-        )
-    )
+    query: Annotated[VersionListQuery, Query()],
+) -> ApiResponse[
+    Page[ModelVersionSummaryOut] | CursorPage[ModelVersionSummaryOut]
+]:
+    return ok(await management_queries.list_versions(session, query))
 
 
 @versions.post(
@@ -159,12 +160,16 @@ async def update_version_metadata(
     version_id: uuid.UUID,
     payload: ModelVersionUpdateIn,
     session: SessionDep,
-    _write: PublishDep,
+    write: PublishDep,
 ) -> ApiResponse[ModelVersionOut]:
-    """只改名称和说明。Args: version_id, payload, session, _write。"""
+    """只改名称和说明。Args: version_id, payload, session, write。"""
     return ok(
-        await model_service.update_version_metadata(
-            session, version_id=version_id, payload=payload
+        await write.run_once(
+            endpoint=f"modeling.update_version.{version_id}",
+            model=ModelVersionOut,
+            action=lambda: model_service.update_version_metadata(
+                session, version_id=version_id, payload=payload
+            ),
         )
     )
 
@@ -175,14 +180,23 @@ async def update_version_metadata(
     summary="退役模型版本",
 )
 async def retire_version(
-    version_id: uuid.UUID, session: SessionDep, _write: PublishDep
-) -> Response:
+    version_id: uuid.UUID,
+    session: SessionDep,
+    write: PublishDep,
+    response: Response,
+) -> None:
     """退役。还有绑定指着它时 409。
 
-    Args: version_id, session, _write。
+    Args: version_id, session, write, response。
     """
-    await model_service.retire_version(session, version_id)
-    return Response(status_code=status.HTTP_204_NO_CONTENT)
+    await write.run_once(
+        endpoint=f"modeling.retire_version.{version_id}",
+        model=CommandResourceOut,
+        action=lambda: model_service.retire_version_command(
+            session, version_id
+        ),
+    )
+    response.status_code = status.HTTP_204_NO_CONTENT
 
 
 @bindings.get(

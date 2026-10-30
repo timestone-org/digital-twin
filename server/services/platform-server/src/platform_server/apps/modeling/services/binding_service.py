@@ -30,13 +30,13 @@ from platform_server.apps.modeling.services.jsonshape import (
     as_dict,
     as_list,
 )
+from platform_server.apps.modeling.services.management_guard import (
+    require_active_version,
+)
 from platform_server.apps.modeling.services.model_schema import (
     entry_keys_of,
 )
 from platform_server.apps.modeling.services.pipeline_service import Actor
-from platform_server.apps.modeling.services.publish_service import (
-    require_version,
-)
 
 # 只有列形参进得了特征矩阵：值形参是一个表达式的位置，不是一列数
 PARAM_COLUMN = "column"
@@ -59,7 +59,7 @@ async def create_binding(
     """
     if await binding_crud.get_by_code(session, draft.fx_code) is not None:
         raise BindingCodeTaken("这条公式条目已经绑过一个模型版本了")
-    version = await require_version(session, draft.model_version_id)
+    version = await require_active_version(session, draft.model_version_id)
     if version.task == "rule_calculation":
         raise ModelVersionUnservable(
             "规则模型返回结构化结果，请通过模型服务的 :calculate 接口调用"
@@ -107,7 +107,7 @@ async def rebind(
     Args: session, binding_id, version_id, is_remap_confirmed。
     """
     row = await require_binding(session, binding_id)
-    version = await require_version(session, version_id)
+    version = await require_active_version(session, version_id)
     if version.task == "rule_calculation":
         raise ModelVersionUnservable(
             "规则模型返回结构化结果，请通过模型服务的 :calculate 接口调用"

@@ -8,19 +8,20 @@
 import uuid
 from typing import Annotated
 
-from fastapi import APIRouter, Depends, Response
+from fastapi import APIRouter, Depends, Query, Response
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from lib.auth import CallerContext
 from lib.objectstore import ObjectStore
-from lib.web import ApiResponse, Page, PageParams, ok, page_params
+from lib.web import ApiResponse, CursorPage, Page, PageParams, ok, page_params
 from platform_server.apps.modeling.catalog import (
     DATASET_RECORD_EXPORT,
     MODELING_VIEW,
 )
 from platform_server.apps.modeling.deps import (
+    WriteGate,
+    get_instance_write_context,
     get_object_store,
-    get_run_context,
     get_session,
     require,
 )
@@ -29,9 +30,10 @@ from platform_server.apps.modeling.schemas import (
     RunOut,
     RunSummaryOut,
 )
+from platform_server.apps.modeling.schemas.management import RunListQuery
 from platform_server.apps.modeling.services import (
-    RunContext,
     frame_export,
+    management_queries,
     run_service,
 )
 from platform_server.settings import API_PREFIX
@@ -41,7 +43,7 @@ router = APIRouter(prefix=f"{API_PREFIX}/modeling-runs", tags=["modeling-run"])
 SessionDep = Annotated[AsyncSession, Depends(get_session)]
 PageDep = Annotated[PageParams, Depends(page_params)]
 ViewDep = Annotated[CallerContext, Depends(require(MODELING_VIEW))]
-RunDep = Annotated[RunContext, Depends(get_run_context)]
+WriteDep = Annotated[WriteGate, Depends(get_instance_write_context)]
 StoreDep = Annotated[ObjectStore, Depends(get_object_store)]
 # ⚠ 下载全量结果要**两个**码：那些 CSV 里是台账原始数据，能看不等于能带走
 # （docs/MODELING_PLATFORM_DESIGN.md D12）
@@ -52,22 +54,15 @@ ExportDep = Annotated[
 
 @router.get(
     "",
-    response_model=ApiResponse[Page[RunSummaryOut]],
+    response_model=ApiResponse[Page[RunSummaryOut] | CursorPage[RunSummaryOut]],
     summary="运行列表",
 )
 async def list_runs(
     session: SessionDep,
-    page: PageDep,
     _viewer: ViewDep,
-    pipeline_id: uuid.UUID | None = None,
-) -> ApiResponse[Page[RunSummaryOut]]:
-    """分页列出运行记录，可按流水线筛。
-
-    Args: session, page, _viewer, pipeline_id。
-    """
-    return ok(
-        await run_service.list_runs(session, pipeline_id=pipeline_id, page=page)
-    )
+    query: Annotated[RunListQuery, Query()],
+) -> ApiResponse[Page[RunSummaryOut] | CursorPage[RunSummaryOut]]:
+    return ok(await management_queries.list_runs(session, query))
 
 
 @router.get(
@@ -111,13 +106,19 @@ async def get_node_run(
     summary="取消运行",
 )
 async def cancel_run(
-    run_id: uuid.UUID, session: SessionDep, _context: RunDep
+    run_id: uuid.UUID, session: SessionDep, write: WriteDep
 ) -> ApiResponse[RunOut]:
     """请求取消。终态在下一个节点边界才落，中间态是 `cancelling`。
 
-    Args: run_id, session, _context。
+    Args: run_id, session, write。
     """
-    return ok(await run_service.cancel_run(session, run_id))
+    return ok(
+        await write.run_once(
+            endpoint=f"modeling.cancel_run.{run_id}",
+            model=RunOut,
+            action=lambda: run_service.cancel_run(session, run_id),
+        )
+    )
 
 
 @router.get(

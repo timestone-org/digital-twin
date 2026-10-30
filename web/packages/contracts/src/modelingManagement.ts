@@ -1,4 +1,4 @@
-/** @fileoverview 从 platform OpenAPI 生成的建模命令契约。 */
+/** @fileoverview 从 platform OpenAPI 生成的建模命令与切换历史契约。 */
 import type { FieldError } from './envelope'
 import type { ModelingJsonValue } from './modelingDetection'
 export const MODELING_COMMAND_OPERATIONS = [
@@ -35,6 +35,19 @@ export type ModelingCommandFailure = {
   code: number
   details: FieldError[]
   message: string
+}
+
+export type ModelDeploymentSwitch = {
+  created_at: string
+  created_by_name: string
+  deployment_code: string
+  deployment_id: string | null
+  from_model_version_id: string
+  id: string
+  is_signature_change_confirmed: boolean
+  revision: number
+  rollback_of_id: string | null
+  to_model_version_id: string
 }
 
 export type ModelingCommand = {

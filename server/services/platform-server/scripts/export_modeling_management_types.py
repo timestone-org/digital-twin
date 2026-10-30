@@ -1,4 +1,4 @@
-"""从 platform OpenAPI 生成建模命令与枚举契约。"""
+"""从 platform OpenAPI 生成建模命令、切换历史与枚举契约。"""
 
 import json
 import shutil
@@ -12,6 +12,7 @@ ROOT = Path(__file__).resolve().parents[4]
 OUTPUT = ROOT / "web/packages/contracts/src/modelingManagement.ts"
 ALIASES = (
     ("CommandFailureOut", "ModelingCommandFailure"),
+    ("DeploymentSwitchOut", "ModelDeploymentSwitch"),
     ("ModelingCommandOut", "ModelingCommand"),
 )
 REFERENCES = (
@@ -30,7 +31,8 @@ def render() -> str:
         (ROOT / "server/services/platform-server/openapi.json").read_text()
     )
     rows = [
-        "/** @fileoverview 从 platform OpenAPI 生成的" "建模命令契约。 */",
+        "/** @fileoverview 从 platform OpenAPI 生成的"
+        "建模命令与切换历史契约。 */",
         "import type { FieldError } from './envelope'",
         "import type { ModelingJsonValue } from './modelingDetection'",
     ]

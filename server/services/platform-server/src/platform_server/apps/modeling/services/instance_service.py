@@ -5,7 +5,6 @@ import uuid
 from sqlalchemy.exc import IntegrityError
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from lib.web import Page, PageParams
 from platform_server.apps.modeling.crud import pipeline_crud, run_crud
 from platform_server.apps.modeling.crud.template import (
     InstanceRecord,
@@ -36,6 +35,9 @@ from platform_server.apps.modeling.services.configuration import (
     require_template_graph,
 )
 from platform_server.apps.modeling.services.graph_walk import source_table_codes
+from platform_server.apps.modeling.services.management_guard import (
+    require_active_instance,
+)
 from platform_server.apps.modeling.services.pipeline_service import Actor
 from platform_server.apps.modeling.services.presenters import to_run_summary
 from platform_server.apps.modeling.services.template_service import record_audit
@@ -153,6 +155,7 @@ async def configure_instance(
     actor: Actor,
 ) -> ModelingInstanceOut:
     record = await lock_instance(session, instance_id)
+    await require_active_instance(session, instance_id)
     if record.instance.revision != payload.expected_revision:
         raise InstanceRevisionConflict("模型配置已经更新，请重新加载后再保存")
     if await run_crud.active_of(session, instance_id):
@@ -216,17 +219,3 @@ def _configuration_snapshot(record: InstanceRecord) -> dict[str, object]:
         "name": record.pipeline.name,
         "description": record.pipeline.description,
     }
-
-
-async def list_instances(
-    session: AsyncSession, keyword: str | None, page: PageParams
-) -> Page[ModelingInstanceOut]:
-    rows, total = await instances.page(
-        session, keyword=keyword, offset=page.offset, limit=page.size
-    )
-    return Page[ModelingInstanceOut](
-        items=[to_instance(row) for row in rows],
-        page=page.page,
-        size=page.size,
-        total=total,
-    )

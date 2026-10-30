@@ -3,7 +3,7 @@
 import uuid
 from typing import Annotated
 
-from fastapi import APIRouter, Depends, Response, status
+from fastapi import APIRouter, Depends, Query, Response, status
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from lib.auth import CallerContext
@@ -24,7 +24,13 @@ from platform_server.apps.modeling.schemas import (
     ModelDeploymentOut,
     ModelDeploymentUpdateIn,
 )
-from platform_server.apps.modeling.services import Actor, deployment_service
+from platform_server.apps.modeling.schemas.command import CommandResourceOut
+from platform_server.apps.modeling.schemas.management import DeploymentListQuery
+from platform_server.apps.modeling.services import (
+    Actor,
+    deployment_service,
+    management_queries,
+)
 from platform_server.settings import API_PREFIX
 
 deployments = APIRouter(
@@ -42,13 +48,15 @@ PublishDep = Annotated[WriteGate, Depends(get_publish_context)]
     summary="对外服务列表",
 )
 async def list_deployments(
-    session: SessionDep, _viewer: ViewDep
+    session: SessionDep,
+    _viewer: ViewDep,
+    query: Annotated[DeploymentListQuery, Query()],
 ) -> ApiResponse[list[ModelDeploymentOut]]:
     """全部对外服务。
 
     Args: session, _viewer。
     """
-    return ok(await deployment_service.list_deployments(session))
+    return ok(await management_queries.list_deployments(session, query))
 
 
 @deployments.post(
@@ -67,10 +75,14 @@ async def create_deployment(
 
     Args: payload, session, response, write。
     """
-    created = await deployment_service.create_deployment(
-        session, payload=payload, actor=_actor(write)
+    created = await write.run_once(
+        endpoint="modeling.create_deployment",
+        model=ModelDeploymentOut,
+        action=lambda: deployment_service.create_deployment(
+            session, payload=payload, actor=_actor(write)
+        ),
     )
-    response.status_code = status.HTTP_201_CREATED
+    response.headers["Location"] = f"{deployments.prefix}/{created.id}"
     return ok(created)
 
 
@@ -98,15 +110,19 @@ async def update_deployment(
     deployment_id: uuid.UUID,
     payload: ModelDeploymentUpdateIn,
     session: SessionDep,
-    _write: PublishDep,
+    write: PublishDep,
+    response: Response,
 ) -> ApiResponse[ModelDeploymentOut]:
-    """换版本、改配额、启停。`code` 不可改。
-
-    Args: deployment_id, payload, session, _write。
-    """
+    """修改部署；Args: deployment_id, payload, session, write, response。"""
+    if payload.expected_revision is None:
+        response.headers["Deprecation"] = "true"
     return ok(
-        await deployment_service.update_deployment(
-            session, deployment_id=deployment_id, payload=payload
+        await write.run_once(
+            endpoint=f"modeling.update_deployment.{deployment_id}",
+            model=ModelDeploymentOut,
+            action=lambda: deployment_service.update_deployment(
+                session, deployment_id=deployment_id, payload=payload
+            ),
         )
     )
 
@@ -120,13 +136,19 @@ async def delete_deployment(
     deployment_id: uuid.UUID,
     session: SessionDep,
     response: Response,
-    _write: PublishDep,
+    write: PublishDep,
 ) -> None:
     """删掉一个对外服务，连同它的密钥与调用记录。
 
-    Args: deployment_id, session, response, _write。
+    Args: deployment_id, session, response, write。
     """
-    await deployment_service.delete_deployment(session, deployment_id)
+    await write.run_once(
+        endpoint=f"modeling.delete_deployment.{deployment_id}",
+        model=CommandResourceOut,
+        action=lambda: deployment_service.delete_deployment_command(
+            session, deployment_id
+        ),
+    )
     response.status_code = status.HTTP_204_NO_CONTENT
 
 

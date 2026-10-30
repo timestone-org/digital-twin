@@ -8,7 +8,6 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from uuid_utils.compat import uuid7
 
 from lib.objectstore import ObjectStore
-from lib.web import Page, PageParams
 from platform_server.apps.dataset.services import formula_library, formula_usage
 from platform_server.apps.modeling.crud import (
     binding_crud,
@@ -17,7 +16,10 @@ from platform_server.apps.modeling.crud import (
     node_run_crud,
 )
 from platform_server.apps.modeling.crud import management_queries as query_crud
+from platform_server.apps.modeling.crud import management_state as state_crud
 from platform_server.apps.modeling.errors import (
+    ModelVersionInUse,
+    ModelVersionNotFound,
     RunNotPublishable,
 )
 from platform_server.apps.modeling.models import (
@@ -40,6 +42,7 @@ from platform_server.apps.modeling.schemas import (
     ModelVersionUpdateIn,
     ParamMapOut,
 )
+from platform_server.apps.modeling.schemas.command import CommandResourceOut
 from platform_server.apps.modeling.schemas.graph import PipelineGraph
 from platform_server.apps.modeling.services import (
     artifact_io,
@@ -56,6 +59,9 @@ from platform_server.apps.modeling.services.jsonshape import (
     as_text,
     as_texts,
 )
+from platform_server.apps.modeling.services.management_guard import (
+    require_active_instance,
+)
 from platform_server.apps.modeling.services.pipeline_service import Actor
 from platform_server.apps.modeling.services.publish_service import (
     Publishable,
@@ -66,6 +72,7 @@ from platform_server.apps.modeling.services.publish_service import (
     require_publishable_run,
     require_version,
 )
+from platform_server.settings import API_PREFIX
 
 # 模型版本冻结的评估指标来源
 PUBLISHED_METRIC_OPERATORS = frozenset(
@@ -93,6 +100,7 @@ async def publish_version(
     graph = graph_of_run(run)
     version_id = uuid7()
     binary = await _binary_of(store, graph, records, version_id)
+    await require_active_instance(session, run.pipeline_id)
     version = await model_version_crud.next_version(session, run.pipeline_id)
     # ⚠ 流水线行锁到手后再查发布状态，等待期间可能已有并发发布提交。
     await require_publishable_run(session, run.id)
@@ -291,6 +299,9 @@ async def get_version(
                 row.pipeline_id if row.pipeline_id in instances else None
             ),
             "deployment_count": deployments.get(row.id, 0),
+            "deployments_url": (
+                f"{API_PREFIX}/modeling-model-versions/" f"{row.id}/deployments"
+            ),
         }
     )
 
@@ -301,8 +312,22 @@ async def retire_version(session: AsyncSession, version_id: uuid.UUID) -> None:
     Args: session, version_id。
     """
     row = await require_version(session, version_id)
-    await binding_service.require_retirable(session, row.id)
-    await model_version_crud.delete(session, row)
+    await state_crud.lock_instance(session, row.pipeline_id)
+    locked = await state_crud.lock_version(session, row.id)
+    if locked is None:
+        raise ModelVersionNotFound("模型版本不存在")
+    if await state_crud.version_references(
+        session, row.id
+    ) or await state_crud.version_history_references(session, row.id):
+        raise ModelVersionInUse("模型版本仍被部署、公式或切换历史引用")
+    await model_version_crud.delete(session, locked)
+
+
+async def retire_version_command(
+    session: AsyncSession, version_id: uuid.UUID
+) -> CommandResourceOut:
+    await retire_version(session, version_id)
+    return CommandResourceOut(id=version_id)
 
 
 async def list_bindings(session: AsyncSession) -> list[ModelBindingOut]:
@@ -480,40 +505,4 @@ def _to_binding_out(
         created_by_name=row.created_by_name,
         created_at=row.created_at,
         updated_at=row.updated_at,
-    )
-
-
-async def list_versions(
-    session: AsyncSession, *, pipeline_id: uuid.UUID | None, page: PageParams
-) -> Page[ModelVersionSummaryOut]:
-    """版本列表。
-
-    Args: session, pipeline_id, page。
-    """
-    rows, total = await model_version_crud.page(
-        session, pipeline_id=pipeline_id, offset=page.offset, limit=page.size
-    )
-    instances = await query_crud.instance_ids(
-        session, [row.pipeline_id for row in rows]
-    )
-    counts = await query_crud.deployment_counts(
-        session, [row.id for row in rows]
-    )
-    return Page[ModelVersionSummaryOut](
-        items=[
-            to_version_summary(row).model_copy(
-                update={
-                    "instance_id": (
-                        row.pipeline_id
-                        if row.pipeline_id in instances
-                        else None
-                    ),
-                    "deployment_count": counts.get(row.id, 0),
-                }
-            )
-            for row in rows
-        ],
-        page=page.page,
-        size=page.size,
-        total=total,
     )
