@@ -48,6 +48,7 @@ class ModelingDeployment(UuidPrimaryKeyMixin, TimestampMixin, Base):
     )
     name: Mapped[str] = mapped_column(Text, nullable=False)
     description: Mapped[str | None] = mapped_column(Text, nullable=True)
+    revision: Mapped[int | None] = mapped_column(Integer, nullable=True)
     # ⚠ 停用后立刻 403，不是静默返回旧值
     is_enabled: Mapped[bool] = mapped_column(
         Boolean, nullable=False, default=True
@@ -172,6 +173,13 @@ class ModelingCallLog(UuidPrimaryKeyMixin, CreatedAtMixin, Base):
     api_key_id: Mapped[uuid.UUID | None] = mapped_column(
         UUID(as_uuid=True), nullable=True
     )
+    account_user_id: Mapped[uuid.UUID | None] = mapped_column(
+        UUID(as_uuid=True), nullable=True
+    )
+    external_operator_id: Mapped[str | None] = mapped_column(
+        Text, nullable=True
+    )
+    trace_id: Mapped[str | None] = mapped_column(Text, nullable=True)
     row_count: Mapped[int] = mapped_column(Integer, nullable=False)
     duration_ms: Mapped[int] = mapped_column(Integer, nullable=False)
     # HTTP 状态码。⚠ 存真实状态码而不是「成功/失败」：限流、鉴权失败与模型

@@ -5,11 +5,13 @@
 """
 
 import uuid
+from datetime import datetime
 from typing import Any
 
 from sqlalchemy import (
     Boolean,
     CheckConstraint,
+    DateTime,
     ForeignKeyConstraint,
     Integer,
     Text,
@@ -78,6 +80,9 @@ class ModelVersionFields(UuidPrimaryKeyMixin, CreatedAtMixin):
         JSONB, nullable=False
     )
     description: Mapped[str | None] = mapped_column(Text, nullable=True)
+    archived_at: Mapped[datetime | None] = mapped_column(
+        DateTime(timezone=True), nullable=True
+    )
     created_by: Mapped[str | None] = mapped_column(Text, nullable=True)
     # ⚠ 冗余存一份用户名是刻意的：账号可能被删，而这一行要一直答得出「谁发的」
     created_by_name: Mapped[str | None] = mapped_column(Text, nullable=True)
