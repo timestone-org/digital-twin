@@ -102,9 +102,14 @@ async def get_instance(
     summary="模型全部配置与 Schema",
 )
 async def get_configuration(
-    instance_id: uuid.UUID, session: SessionDep, _viewer: ViewDep
+    instance_id: uuid.UUID,
+    session: SessionDep,
+    _viewer: ViewDep,
+    run_id: uuid.UUID | None = None,
 ) -> ApiResponse[ModelingConfigurationOut]:
-    return ok(await instance_service.get_configuration(session, instance_id))
+    return ok(
+        await instance_service.get_configuration(session, instance_id, run_id)
+    )
 
 
 @router.put(

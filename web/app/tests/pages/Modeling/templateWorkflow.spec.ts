@@ -118,15 +118,15 @@ it('发布已保存设计，失败时保留内容可再次提交', async () => {
     global: { stubs: { teleport: true } },
   })
   wrappers.push(wrapper)
-  await button(wrapper, '发布为模板').trigger('click')
+  await button(wrapper, '发布为工作流').trigger('click')
   await flushPromises()
   const modal = wrapper.findComponent(ui.DtModal)
   await modal.get('input').setValue('可复用模板')
   await modal.get('textarea').setValue('说明')
-  await button(wrapper, '发布模板').trigger('click')
+  await button(wrapper, '发布工作流').trigger('click')
   await flushPromises()
   expect(wrapper.text()).toContain('请求失败')
-  await button(wrapper, '发布模板').trigger('click')
+  await button(wrapper, '发布工作流').trigger('click')
   await flushPromises()
   expect(api.publishTemplate).toHaveBeenLastCalledWith({
     pipeline_id: 'p1',

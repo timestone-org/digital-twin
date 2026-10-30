@@ -33459,6 +33459,23 @@
               "title": "Instance Id",
               "type": "string"
             }
+          },
+          {
+            "in": "query",
+            "name": "run_id",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "format": "uuid",
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Run Id"
+            }
           }
         ],
         "responses": {
@@ -33768,7 +33785,7 @@
         ]
       },
       "post": {
-        "description": "把一次成功运行发布成一个不可变的版本。\n\nArgs: payload, session, response, write, store。",
+        "description": "发布成功运行；Args: payload, session, response, write, store。",
         "operationId": "publish_version_api_v1_platform_modeling_model_versions_post",
         "parameters": [
           {

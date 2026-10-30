@@ -1,22 +1,27 @@
 <script setup lang="ts">
-/** @fileoverview 日常建模与第三方接入各自的分区导航。 */
-import { DtIcon, DtTag } from '@dt/ui'
-import { computed } from 'vue'
-import { RouterLink, useRoute } from 'vue-router'
+/** @fileoverview 流水线、工作流、模型实例与部署的统一导航。 */
+import { DtIcon } from '@dt/ui'
+import { RouterLink } from 'vue-router'
 import AppTabNav from '@/components/layout/AppTabNav.vue'
 
-const route = useRoute()
-const isIntegration = computed(() =>
-  ['/modeling/integration', '/modeling/templates', '/modeling/instances'].some(
-    (path) => route.path === path || route.path.startsWith(`${path}/`),
-  ),
-)
 const workspaceItems = [
   {
     key: 'pipelines',
     label: '建模工作台',
     icon: 'workflow',
     to: '/modeling/pipelines',
+  },
+  {
+    key: 'templates',
+    label: '已发布工作流',
+    icon: 'layers',
+    to: '/modeling/templates',
+  },
+  {
+    key: 'instances',
+    label: '模型实例',
+    icon: 'workflow',
+    to: '/modeling/instances',
   },
   { key: 'runs', label: '运行记录', icon: 'activity', to: '/modeling/runs' },
   { key: 'models', label: '模型版本', icon: 'layers', to: '/modeling/models' },
@@ -27,46 +32,14 @@ const workspaceItems = [
     to: '/modeling/services',
   },
 ]
-const integrationItems = [
-  {
-    key: 'guide',
-    label: '接入指南',
-    icon: 'list-checks',
-    to: '/modeling/integration',
-  },
-  {
-    key: 'templates',
-    label: '已发布模板',
-    icon: 'layers',
-    to: '/modeling/templates',
-  },
-  {
-    key: 'instances',
-    label: '接入实例',
-    icon: 'workflow',
-    to: '/modeling/instances',
-  },
-]
 </script>
 
 <template>
   <div class="modeling-nav">
-    <template v-if="isIntegration">
-      <RouterLink class="modeling-nav__link" to="/modeling/pipelines">
-        <DtIcon name="arrow-left" :size="14" />返回建模工作台
-      </RouterLink>
-      <DtTag intent="info">第三方接入</DtTag>
-      <AppTabNav :items="integrationItems" label="第三方接入导航" />
-    </template>
-    <template v-else>
-      <AppTabNav :items="workspaceItems" label="分析建模导航" />
-      <RouterLink
-        class="modeling-nav__link modeling-nav__integration"
-        to="/modeling/integration"
-      >
-        <DtIcon name="share" :size="14" />第三方接入
-      </RouterLink>
-    </template>
+    <AppTabNav :items="workspaceItems" label="分析建模导航" />
+    <RouterLink class="modeling-nav__link" to="/modeling/integration">
+      <DtIcon name="share" :size="14" />第三方接入
+    </RouterLink>
   </div>
 </template>
 
