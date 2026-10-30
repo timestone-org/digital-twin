@@ -1,7 +1,9 @@
 /** @fileoverview 模型配置草稿、竞态保护和训练状态轮询。 */
-import { onBeforeUnmount } from 'vue'
+import type { ModelingConfigurationDetail } from '@dt/contracts'
+import { onBeforeUnmount, watch } from 'vue'
 import type { Ref } from 'vue'
-import { createState, type EditorState } from './instanceState'
+import { createState, resetEditorContext } from './instanceState'
+import type { EditorState } from './instanceState'
 import * as api from '@/api/modelingTemplates'
 import { listModelingRuns, listModelingVersions } from '@/api/modeling'
 import { describeModelingError } from '../../scripts/instancePresentation'
@@ -18,40 +20,23 @@ class InstanceReads {
     private readonly state: EditorState,
   ) {}
 
-  async load(): Promise<void> {
+  async load(runId?: string): Promise<void> {
     const state = this.state
     state.loading.value = true
     state.error.value = ''
     this.statusReader.cancel()
     clearTimeout(this.poll)
     await this.reader.run(
-      (signal) => api.getInstanceConfiguration(this.id.value, signal),
+      (signal) =>
+        Promise.all([
+          api.getInstanceConfiguration(this.id.value, signal),
+          runId
+            ? api.getInstanceConfiguration(this.id.value, signal, runId)
+            : Promise.resolve(null),
+        ]),
       {
-        ok: (configuration) => {
-          const model = configuration.instance
-          if (!model) {
-            state.error.value = '模型配置缺少修订信息，请重新加载'
-            return
-          }
-          state.instance.value = model
-          state.detail.value = configuration
-          state.draft.value = JSON.stringify(
-            configuration.configuration,
-            null,
-            2,
-          )
-          state.name.value = model.name
-          state.description.value = model.description ?? ''
-          state.fieldErrors.value = {}
-          state.baseline.value = JSON.stringify([
-            configuration.configuration,
-            state.name.value,
-            state.description.value,
-          ])
-          state.baselineRevision.value = model.revision
-          state.resetKey.value += 1
-          void this.refresh()
-        },
+        ok: ([current, historical]) =>
+          this.applyConfiguration(current, historical ?? current, runId ?? ''),
         fail: (caught) => {
           state.error.value = describeModelingError(caught)
         },
@@ -60,6 +45,34 @@ class InstanceReads {
         },
       },
     )
+  }
+
+  private applyConfiguration(
+    current: ModelingConfigurationDetail,
+    configuration: ModelingConfigurationDetail,
+    sourceRunId: string,
+  ): void {
+    const state = this.state
+    const model = current.instance
+    if (!model) {
+      state.error.value = '模型配置缺少修订信息，请重新加载'
+      return
+    }
+    state.instance.value = model
+    state.detail.value = configuration
+    state.draft.value = JSON.stringify(configuration.configuration, null, 2)
+    state.name.value = model.name
+    state.description.value = model.description ?? ''
+    state.fieldErrors.value = {}
+    state.baseline.value = JSON.stringify([
+      current.configuration,
+      state.name.value,
+      state.description.value,
+    ])
+    state.baselineRevision.value = model.revision
+    state.sourceRunId.value = sourceRunId
+    state.resetKey.value += 1
+    void this.refresh()
   }
 
   async refresh(): Promise<void> {
@@ -93,8 +106,19 @@ class InstanceReads {
     )
   }
 
-  isCurrent(id: string): boolean {
-    return !this.isDisposed && this.id.value === id
+  resetContext(): void {
+    this.reader.cancel()
+    this.statusReader.cancel()
+    clearTimeout(this.poll)
+    resetEditorContext(this.state)
+  }
+
+  isCurrent(id: string, sessionRevision: number): boolean {
+    return (
+      !this.isDisposed &&
+      this.id.value === id &&
+      this.state.sessionRevision.value === sessionRevision
+    )
   }
 
   dispose(): void {
@@ -125,43 +149,50 @@ function change(
     )
 }
 
+function canSave(state: EditorState, id: string): boolean {
+  return (
+    state.instance.value?.id === id &&
+    !state.busy.value &&
+    !state.fieldError.value
+  )
+}
+
 async function save(
   state: EditorState,
   id: string,
   reads: InstanceReads,
 ): Promise<void> {
-  if (
-    !state.instance.value ||
-    !state.parsed.value.value ||
-    state.busy.value ||
-    state.fieldError.value
-  )
-    return
+  const configuration = state.parsed.value.value
+  if (!configuration || !canSave(state, id)) return
+  const sessionRevision = state.sessionRevision.value
   state.busy.value = true
   state.error.value = ''
   try {
     await api.configureInstance(id, {
       expected_revision: state.baselineRevision.value,
-      configuration: state.parsed.value.value,
+      configuration,
       name: state.name.value,
       description: state.description.value.trim() || null,
     })
-    if (reads.isCurrent(id)) await reads.load()
+    if (reads.isCurrent(id, sessionRevision)) await reads.load()
   } catch (caught) {
-    if (reads.isCurrent(id)) state.error.value = describeModelingError(caught)
+    if (reads.isCurrent(id, sessionRevision))
+      state.error.value = describeModelingError(caught)
   } finally {
-    if (reads.isCurrent(id)) state.busy.value = false
+    if (reads.isCurrent(id, sessionRevision)) state.busy.value = false
   }
 }
 
 export function useInstanceEditor(id: Ref<string>) {
   const state = createState()
   const reads = new InstanceReads(id, state)
+  watch(id, () => reads.resetContext(), { flush: 'sync' })
   onBeforeUnmount(() => reads.dispose())
   return {
     ...state,
     load: () => reads.load(),
     refresh: () => reads.refresh(),
+    restore: (runId: string) => reads.load(runId),
     change: (node: string, key: string, value: unknown) =>
       change(state, node, key, value),
     save: () => save(state, id.value, reads),

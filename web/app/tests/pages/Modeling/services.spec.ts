@@ -12,6 +12,7 @@ import { createPinia, setActivePinia } from 'pinia'
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 
 import * as modeling from '@/api/modeling'
+import * as serving from '@/api/modelingServing'
 import ServicesPage from '@/pages/Modeling/Services/index.vue'
 import CallStatList from '@/pages/Modeling/Services/components/CallStatList.vue'
 import { useAuthStore } from '@/stores/auth'
@@ -126,6 +127,12 @@ function open() {
 beforeEach(() => {
   localStorage.clear()
   setActivePinia(createPinia())
+  vi.spyOn(serving, 'getOpenModelSignature').mockResolvedValue({
+    inputs: [
+      { key: 'temperature', label: '温度', dtype: 'number', is_required: true },
+    ],
+    output: { task: 'regression' },
+  })
 })
 
 afterEach(() => {
@@ -436,4 +443,19 @@ it('创建服务完成后无需签发密钥，并能关闭配置和调用说明'
   await dismiss.trigger('click')
   await flushPromises()
   expect(wrapper.text()).not.toContain('的调用说明')
+})
+
+it('部署服务可在页面内输入数据在线试算', async () => {
+  stub([deployment()])
+  signIn([PERMISSION_CODES.modelingView])
+  const wrapper = open()
+  await flushPromises()
+  const entry = wrapper
+    .findAll('button')
+    .find((item) => item.text() === '调用说明')
+  if (!entry) throw new Error('缺少调用说明入口')
+  await entry.trigger('click')
+  await flushPromises()
+  expect(wrapper.text()).toContain('在线试算')
+  expect(wrapper.find('textarea').exists()).toBe(true)
 })

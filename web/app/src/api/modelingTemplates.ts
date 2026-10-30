@@ -24,7 +24,7 @@ interface Query {
 function read<T>(
   path: string,
   signal?: AbortSignal,
-  query?: Query,
+  query?: Query | { run_id: string },
 ): Promise<T> {
   return requestData<T>(path, {
     baseUrl: PLATFORM_BASE_URL,
@@ -67,10 +67,15 @@ export const createInstance = (body: ModelingInstanceCreateInput) =>
   write<ModelingInstance>('/modeling-instances', body)
 export const getInstance = (id: string, signal?: AbortSignal) =>
   read<ModelingInstance>(`/modeling-instances/${id}`, signal)
-export const getInstanceConfiguration = (id: string, signal?: AbortSignal) =>
+export const getInstanceConfiguration = (
+  id: string,
+  signal?: AbortSignal,
+  runId?: string,
+) =>
   read<ModelingConfigurationDetail>(
     `/modeling-instances/${id}/configuration`,
     signal,
+    runId ? { run_id: runId } : undefined,
   )
 export const configureInstance = (
   id: string,

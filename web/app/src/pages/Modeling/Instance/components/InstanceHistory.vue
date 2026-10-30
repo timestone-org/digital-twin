@@ -20,9 +20,11 @@ const props = defineProps<{
   versions: ModelingVersionSummary[]
   totals: { runs: number; versions: number }
   busy: boolean
+  isTraining?: boolean
 }>()
 const emit = defineEmits<{
   refresh: []
+  optimize: [run: ModelingRunSummary]
   publish: [run: ModelingRunSummary]
   deploy: [version: ModelingVersionSummary]
 }>()
@@ -33,7 +35,7 @@ const runColumns: readonly DtDataColumn[] = [
   { key: 'created_at', label: '训练时间' },
   { key: 'status', label: '状态' },
   { key: 'error_text', label: '结果说明' },
-  { key: 'actions', label: '操作', width: '15rem' },
+  { key: 'actions', label: '操作', width: '25rem' },
 ]
 const versionColumns: readonly DtDataColumn[] = [
   { key: 'name', label: '模型版本' },
@@ -85,6 +87,17 @@ const versionColumns: readonly DtDataColumn[] = [
           <RouterLink :to="`/modeling/pipelines/${id}?run_id=${row.id}`">
             <DtButton size="sm" variant="ghost"> 查看结果 </DtButton>
           </RouterLink>
+
+          <PermGuard :codes="[PERMISSION_CODES.modelingRun]">
+            <DtButton
+              size="sm"
+              variant="ghost"
+              :disabled="busy || isTraining"
+              @click="emit('optimize', row)"
+            >
+              基于此配置优化
+            </DtButton>
+          </PermGuard>
 
           <PermGuard :codes="[PERMISSION_CODES.modelingPublish]">
             <DtButton

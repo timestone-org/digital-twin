@@ -8,6 +8,7 @@ import * as api from '@/api/modelingTemplates'
 import { BizError } from '@/api/client'
 import * as modeling from '@/api/modeling'
 import * as hierarchy from '@/api/hierarchy'
+import { onBeforeRouteLeave, onBeforeRouteUpdate } from 'vue-router'
 import ParameterField from '@/pages/Modeling/Instance/components/ParameterField.vue'
 import InstancePage from '@/pages/Modeling/Instance/index.vue'
 import DeployDialog from '@/pages/Modeling/Instance/components/DeployModelDialog.vue'
@@ -28,6 +29,7 @@ vi.mock('vue-router', () => ({
   }),
   useRouter: () => ({ replace: vi.fn(), push: vi.fn() }),
   onBeforeRouteLeave: vi.fn(),
+  onBeforeRouteUpdate: vi.fn(),
   RouterLink: { template: '<a><slot /></a>' },
 }))
 const wrappers: VueWrapper[] = []
@@ -55,6 +57,8 @@ it('配置校验失败展示具体节点和字段原因', async () => {
 })
 
 beforeEach(() => {
+  vi.mocked(onBeforeRouteLeave).mockClear()
+  vi.mocked(onBeforeRouteUpdate).mockClear()
   setActivePinia(createPinia())
   vi.spyOn(hierarchy, 'capabilities').mockResolvedValue({
     is_enabled: false,
@@ -141,13 +145,35 @@ it('只读账号可以检查配置而不能保存、训练或部署', async () =
   expect(
     wrapper
       .findAll('button')
+      .some((item) => item.text().trim() === '基于此配置优化'),
+  ).toBe(false)
+  expect(
+    wrapper
+      .findAll('button')
       .some((item) => item.text().trim() === '保存全部配置'),
   ).toBe(false)
+  expect(wrapper.text()).not.toContain('优化流水线结构')
   expect(
     wrapper
       .findAll('input')
       .some((item) => item.attributes('disabled') !== undefined),
   ).toBe(true)
+})
+
+it('模型可从保存的流水线快照开始优化结构', async () => {
+  const wrapper = await openPage()
+  expect(
+    button(wrapper, '优化流水线结构').attributes('disabled'),
+  ).toBeUndefined()
+  await button(wrapper, '优化流水线结构').trigger('click')
+  expect(wrapper.text()).toContain('创建独立的流水线设计')
+})
+
+it('未保存的模型参数不能被结构优化入口遗漏', async () => {
+  const wrapper = await openPage()
+  await button(wrapper, '完整 JSON').trigger('click')
+  await wrapper.get('textarea[rows="18"]').setValue('{')
+  expect(button(wrapper, '优化流水线结构').attributes('disabled')).toBeDefined()
 })
 
 it('完整 JSON 可以修改全部参数并提交同一快照的修订号', async () => {
@@ -255,6 +281,11 @@ it('部署进行中 X 关闭不会丢掉部署结果', async () => {
   wrappers.push(wrapper)
   await wrapper.findAll('input')[1]?.setValue('local-service')
   await button(wrapper, '部署模型').trigger('click')
+  const update = vi.mocked(onBeforeRouteUpdate).mock.calls.at(-1)?.[0]
+  if (!update) throw new Error('部署缺少切换模型保护')
+  expect(
+    await update(navigationTarget('i2'), navigationTarget('i1'), vi.fn()),
+  ).toBe(false)
   await wrapper.get('button[aria-label="关闭"]').trigger('click')
   expect(wrapper.emitted('close')).toBeUndefined()
   if (!finish) throw new Error('部署请求未提交')
@@ -361,6 +392,7 @@ it('在途训练可请求取消，配置加载失败可显式重试', async () =
   await flushPromises()
   expect(cancel).toHaveBeenCalledWith(run.id)
   expect(wrapper.text()).toContain('训练进行中，参数暂时锁定')
+  expect(button(wrapper, '基于此配置优化').attributes('disabled')).toBeDefined()
 })
 
 function textInput(wrapper: VueWrapper, label: string) {
@@ -409,3 +441,99 @@ it('部署失败保留表单并允许修正后重试，不请求额外密钥', a
   expect(wrapper.text()).toContain('模型已部署')
   expect(modeling.createModelApiKey).not.toHaveBeenCalled()
 })
+
+it('历史训练配置先载入草稿，检查优化后按当前修订号保存', async () => {
+  const historical = structuredClone(configuration)
+  if (!historical.configuration.nodes['source']) throw new Error('缺少数据源')
+  historical.configuration.nodes['source']['row_limit'] = 256
+  if (!historical.instance) throw new Error('缺少实例')
+  historical.instance.revision = 99
+  vi.mocked(api.getInstanceConfiguration).mockImplementation(
+    (_id, _signal, runId) =>
+      Promise.resolve(structuredClone(runId ? historical : configuration)),
+  )
+  const wrapper = await openPage()
+  await button(wrapper, '基于此配置优化').trigger('click')
+  await flushPromises()
+  expect(api.getInstanceConfiguration).toHaveBeenCalledWith(
+    configuration.instance?.id,
+    expect.any(AbortSignal),
+    run.id,
+  )
+  expect(api.configureInstance).not.toHaveBeenCalled()
+  expect(wrapper.text()).toContain('已载入历史训练配置')
+  expect(button(wrapper, '开始训练').attributes('disabled')).toBeDefined()
+  await button(wrapper, '完整 JSON').trigger('click')
+  expect(
+    wrapper.get<HTMLTextAreaElement>('textarea[rows="18"]').element.value,
+  ).toContain('256')
+  await button(wrapper, '保存全部配置').trigger('click')
+  await flushPromises()
+  expect(api.configureInstance).toHaveBeenCalledWith(
+    configuration.instance?.id,
+    expect.objectContaining({
+      expected_revision: configuration.instance?.revision,
+      configuration: historical.configuration,
+    }),
+  )
+  expect(wrapper.text()).not.toContain('已载入历史训练配置')
+})
+
+it('取消载入历史配置时保留未保存草稿', async () => {
+  const wrapper = await openPage()
+  await button(wrapper, '完整 JSON').trigger('click')
+  const changed = structuredClone(configuration.configuration)
+  if (!changed.nodes['source']) throw new Error('缺少数据源')
+  changed.nodes['source']['row_limit'] = 512
+  await wrapper.get('textarea[rows="18"]').setValue(JSON.stringify(changed))
+  vi.mocked(ui.useConfirm().ask).mockResolvedValue(false)
+  const count = vi.mocked(api.getInstanceConfiguration).mock.calls.length
+  await button(wrapper, '基于此配置优化').trigger('click')
+  await flushPromises()
+  expect(api.getInstanceConfiguration).toHaveBeenCalledTimes(count)
+  expect(
+    wrapper.get<HTMLTextAreaElement>('textarea[rows="18"]').element.value,
+  ).toContain('512')
+})
+
+it('切换模型参数与离开页面都保护未保存的配置', async () => {
+  const wrapper = await openPage()
+  await button(wrapper, '完整 JSON').trigger('click')
+  await wrapper.get('textarea[rows="18"]').setValue('{"nodes":{}}')
+  vi.mocked(ui.useConfirm().ask).mockResolvedValue(false)
+  const guards = vi
+    .mocked(onBeforeRouteLeave)
+    .mock.calls.map(([guard]) => guard)
+  const updates = vi
+    .mocked(onBeforeRouteUpdate)
+    .mock.calls.map(([guard]) => guard)
+  if (guards.length === 0 || updates.length === 0)
+    throw new Error('缺少导航草稿保护')
+  const current = navigationTarget(configuration.instance?.id ?? 'current')
+  const route = navigationTarget('another')
+  const next = vi.fn()
+  let canUpdate = true
+  for (const guard of updates) {
+    if ((await guard(route, current, next)) === false) canUpdate = false
+  }
+  expect(canUpdate).toBe(false)
+  let canLeave = true
+  for (const guard of guards) {
+    if ((await guard(route, current, next)) === false) canLeave = false
+  }
+  expect(canLeave).toBe(false)
+})
+
+function navigationTarget(instanceId: string) {
+  return {
+    params: { instanceId },
+    fullPath: `/modeling/instances/${instanceId}`,
+    path: `/modeling/instances/${instanceId}`,
+    query: {},
+    hash: '',
+    name: 'modeling-instance',
+    matched: [],
+    meta: {},
+    redirectedFrom: undefined,
+  }
+}
