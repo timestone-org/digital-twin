@@ -19,9 +19,12 @@ import { useRacedFetch } from '@/composables/useRacedFetch'
 import { describeError } from '@/composables/useAsyncList'
 import { useViewMode } from '@/composables/useViewMode'
 import { downloadBytes } from '@/utils/downloadJson'
+import { formatDateTime } from '@/utils/datetime'
 
 const COLUMNS: readonly DtDataColumn[] = [
+  { key: 'template', label: '报告模板' },
   { key: 'period', label: '报告期', card: 'title' },
+  { key: 'created', label: '提交时间' },
   { key: 'status', label: '状态' },
   { key: 'warnings', label: '提示' },
   { key: 'actions', label: '操作', card: 'actions' },
@@ -34,6 +37,8 @@ const loading = ref(false)
 const selected = ref<ReportRender | null>(null)
 const view = useViewMode('report-renders')
 const raced = useRacedFetch()
+const catalog = useRacedFetch()
+const templateNames = ref<Record<string, string>>({})
 const current = computed(() => trail.value[trail.value.length - 1])
 const pageNumber = computed(() => trail.value.length)
 const hasPrev = computed(() => trail.value.length > 1)
@@ -67,6 +72,15 @@ async function reload(after = current.value): Promise<void> {
 }
 onMounted(() => {
   void reload()
+  void catalog.run(() => api.listReportChoices(), {
+    ok: (items) => {
+      templateNames.value = Object.fromEntries(
+        items.map((item) => [item.id, item.name]),
+      )
+    },
+    fail: () => undefined,
+    settled: () => undefined,
+  })
   timer = setInterval(() => {
     if (active.value) void reload()
   }, 2000)
@@ -74,6 +88,7 @@ onMounted(() => {
 onBeforeUnmount(() => {
   if (timer) clearInterval(timer)
   raced.cancel()
+  catalog.cancel()
 })
 async function nextPage(): Promise<void> {
   if (next.value === null || loading.value) return
@@ -127,8 +142,19 @@ async function download(id: string): Promise<void> {
           hint: '从报告编辑页选择报告期并生成后，任务状态与 Word 产物会显示在这里。',
         }"
       >
+        <template #cell-template="{ row }">
+          <RouterLink
+            v-if="row.template_id"
+            :to="`/reports/templates/${row.template_id}`"
+            >{{ templateNames[row.template_id] ?? row.template_id }}</RouterLink
+          >
+          <span v-else>Word 导入</span>
+        </template>
         <template #cell-period="{ row }">{{
           row.kind === 'import' ? 'Word 导入' : row.period
+        }}</template>
+        <template #cell-created="{ row }">{{
+          formatDateTime(row.created_at)
         }}</template>
         <template #cell-status="{ row }">
           <DtTag

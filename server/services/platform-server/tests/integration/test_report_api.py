@@ -16,6 +16,32 @@ pytestmark = pytest.mark.requires_postgres
 PREFIX = "/api/v1/platform"
 
 
+async def test_report_search_finds_templates_outside_the_first_page(app_client):
+    marker = uuid.uuid4().hex
+    target = data_of(
+        await app_client.post(
+            f"{PREFIX}/report-templates",
+            json={"code": "target_" + marker, "name": "需要查找_" + marker},
+        )
+    )
+    await app_client.post(
+        f"{PREFIX}/report-templates",
+        json={"code": "newer_" + marker, "name": "另一个模板"},
+    )
+    response = await app_client.get(
+        f"{PREFIX}/report-templates",
+        params={"size": 1, "q": marker[:16]},
+    )
+    assert response.status_code == 200
+    assert data_of(response)["total"] == 2
+    exact = await app_client.get(
+        f"{PREFIX}/report-templates",
+        params={"size": 1, "q": target["name"]},
+    )
+    assert [item["id"] for item in data_of(exact)["items"]] == [target["id"]]
+    assert data_of(exact)["total"] == 1
+
+
 async def test_report_template_version_and_render_idempotency(
     app_client: httpx.AsyncClient,
 ):
@@ -301,7 +327,12 @@ async def test_missing_metric_source_is_explicit_and_propagates(app_client):
                 "type": "doc",
                 "content": [
                     {"type": "metricRef", "attrs": {"expr": "{派生}"}},
-                    {"type": "dsChart", "attrs": {"series": []}},
+                    {
+                        "type": "dsChart",
+                        "attrs": {
+                            "series": [{"table": "not_found", "key": "x"}]
+                        },
+                    },
                     {
                         "type": "dsTable",
                         "attrs": {"table": "not_found", "keys": ["x"]},

@@ -84,3 +84,64 @@ def test_unknown_table_column_rejected():
     found = SourceData(rows=(), columns=(), is_truncated=False)
     with pytest.raises(ValueError, match="台账列"):
         build_table(found, DataNodeSpec(keys=["unknown"]), "UTC")
+
+
+def typed_rows():
+    return SourceData(
+        rows=(
+            EffectiveRow(
+                ts=datetime(2026, 8, 1, tzinfo=UTC),
+                source="api:test",
+                values={"code": "00123", "ok": True, "amount": "2"},
+            ),
+        ),
+        columns=(
+            ColumnSpec("code", "编码", "text", ""),
+            ColumnSpec("ok", "正常", "boolean", ""),
+            ColumnSpec("amount", "用量", "number", ""),
+        ),
+        is_truncated=False,
+    )
+
+
+def test_table_does_not_number_format_text_codes_or_booleans():
+    result = build_table(
+        typed_rows(), DataNodeSpec(keys=["code", "ok", "amount"]), "UTC"
+    )
+    assert result.rows[0][1:] == ["00123", "true", "2.00"]
+
+
+def test_table_summary_does_not_sum_text_codes_or_booleans():
+    result = build_table(
+        typed_rows(),
+        DataNodeSpec(keys=["code", "ok", "amount"], summary="sum"),
+        "UTC",
+    )
+    assert result.rows[-1] == ["合计", "—", "—", "2.00"]
+
+
+def test_bucket_counts_remain_numeric_for_all_field_types():
+    result = build_table(
+        typed_rows(),
+        DataNodeSpec(keys=["code", "ok", "amount"], bucket="day", agg="count"),
+        "UTC",
+    )
+    assert result.rows[0][1:] == ["1.00", "1.00", "1.00"]
+
+
+def test_bucket_first_value_preserves_text_and_boolean_types():
+    result = build_table(
+        typed_rows(),
+        DataNodeSpec(keys=["code", "ok", "amount"], bucket="day", agg="first"),
+        "UTC",
+    )
+    assert result.rows[0][1:] == ["00123", "true", "2.00"]
+
+
+def test_table_count_summary_remains_numeric_for_text_and_boolean():
+    result = build_table(
+        typed_rows(),
+        DataNodeSpec(keys=["code", "ok", "amount"], summary="count"),
+        "UTC",
+    )
+    assert result.rows[-1] == ["计数", "1.00", "1.00", "1.00"]

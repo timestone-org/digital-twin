@@ -4,13 +4,18 @@ import json
 from collections.abc import Iterator
 from graphlib import CycleError, TopologicalSorter
 
+from pydantic import ValidationError
+
 from platform_server.apps.dataset.services import report_formula
+from platform_server.apps.report.schemas.api_source import ReportApiSource
 from platform_server.apps.report.schemas.document import DocumentNode, MetricDef
+from platform_server.apps.report.schemas.nodes import DataNodeSpec
 from platform_server.apps.report.schemas.preview import (
     TemplateIssue,
     ValidationOut,
 )
 from platform_server.apps.report.schemas.template import TemplateBody
+from platform_server.apps.report.services.docx_tables import table_placements
 
 BUSINESS_NODES = frozenset(("metricRef", "condText", "dsChart", "dsTable"))
 MAX_DEPTH = 30
@@ -80,12 +85,15 @@ def validate_template(template: TemplateBody) -> ValidationOut:
         ):
             raise ValueError("模板体积超过上限")
         metric_order(template.metrics)
-        for metric in template.metrics:
-            if metric.window:
-                report_formula.parse_window(metric.window)
+        sources = {
+            f"api:{source.code}": source for source in template.api_sources
+        }
+        if len(sources) != len(template.api_sources):
+            raise ValueError("API 数据来源编码不能重复")
+        issues.extend(_metric_issues(template.metrics, sources))
         names = {metric.name for metric in template.metrics}
         for path, node in nodes:
-            issues.extend(_node_issues(path, node, names))
+            issues.extend(_node_issues(path, node, names, sources))
     except (ValueError, report_formula.FormulaError) as error:
         issues.append(
             TemplateIssue(scope="doc", where="doc_json", message=str(error))
@@ -96,8 +104,15 @@ def validate_template(template: TemplateBody) -> ValidationOut:
 
 
 def _node_issues(
-    path: str, node: DocumentNode, names: set[str]
+    path: str,
+    node: DocumentNode,
+    names: set[str],
+    sources: dict[str, ReportApiSource],
 ) -> list[TemplateIssue]:
+    if node.type == "table":
+        return _static_table_issues(path, node)
+    if node.type in ("dsTable", "dsChart"):
+        return _data_node_issues(path, node, sources)
     if node.type not in ("metricRef", "condText"):
         return []
     expression = text_attr(node, "expr")
@@ -118,3 +133,99 @@ def _node_issues(
     except (ValueError, report_formula.FormulaError) as error:
         return [TemplateIssue(scope="node", where=path, message=str(error))]
     return []
+
+
+def _static_table_issues(path: str, node: DocumentNode) -> list[TemplateIssue]:
+    try:
+        table_placements(node.content)
+    except ValueError as error:
+        return [TemplateIssue(scope="node", where=path, message=str(error))]
+    return []
+
+
+def _check_api_metric(
+    metric: MetricDef, sources: dict[str, ReportApiSource]
+) -> None:
+    table = metric.table or ""
+    if not table.startswith("api:") or metric.mode == "expr":
+        return
+    source = sources.get(table)
+    if source is None:
+        raise ValueError("引用了未定义的第三方 API 数据来源")
+    if metric.key not in {column.key for column in source.columns}:
+        raise ValueError("引用了未定义的 API 映射字段")
+    if metric.offset or metric.window or metric.anchor != "period":
+        raise ValueError(
+            "API 报告期偏移请在数据来源中设置，不能重复设置窗口或最新值锚点"
+        )
+
+
+def _metric_issues(
+    metrics: list[MetricDef], sources: dict[str, ReportApiSource]
+) -> list[TemplateIssue]:
+    issues: list[TemplateIssue] = []
+    for index, metric in enumerate(metrics):
+        try:
+            if metric.window:
+                report_formula.parse_window(metric.window)
+            _check_api_metric(metric, sources)
+        except (ValueError, report_formula.FormulaError) as error:
+            issues.append(
+                TemplateIssue(
+                    scope="metric", where=f"metrics.{index}", message=str(error)
+                )
+            )
+    return issues
+
+
+def _data_node_issues(
+    path: str, node: DocumentNode, sources: dict[str, ReportApiSource]
+) -> list[TemplateIssue]:
+    try:
+        spec = DataNodeSpec.model_validate(node.attrs)
+        if spec.window:
+            report_formula.parse_window(spec.window)
+        references = (
+            [(item.table, item.key, item.offset) for item in spec.series]
+            if node.type == "dsChart"
+            else [(spec.table, key, 0) for key in spec.keys]
+        )
+        if not references or any(
+            not table or not key for table, key, _ in references
+        ):
+            raise ValueError("请选择数据来源和字段")
+        for table, key, offset in references:
+            metric = MetricDef(
+                name="数据内容",
+                table=table,
+                key=key,
+                offset=spec.offset + offset,
+                window=spec.window,
+                anchor=spec.anchor,
+            )
+            _check_api_metric(metric, sources)
+            if node.type == "dsChart":
+                _check_chart_column(metric, sources)
+    except ValidationError as error:
+        field = ".".join(str(part) for part in error.errors()[0]["loc"])
+        return [
+            TemplateIssue(
+                scope="node",
+                where=f"{path}.attrs.{field}",
+                message="数据配置的字段类型或范围不正确，请检查条数、精度和报告期偏移",
+            )
+        ]
+    except (ValueError, report_formula.FormulaError) as error:
+        return [TemplateIssue(scope="node", where=path, message=str(error))]
+    return []
+
+
+def _check_chart_column(
+    metric: MetricDef, sources: dict[str, ReportApiSource]
+) -> None:
+    source = sources.get(metric.table or "")
+    if source is not None and any(
+        column.key == metric.key and column.data_type != "number"
+        for column in source.columns
+    ):
+        raise ValueError("图表只能选择数字类型的数据字段")

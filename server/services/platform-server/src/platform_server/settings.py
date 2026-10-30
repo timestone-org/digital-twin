@@ -17,6 +17,7 @@ from lib.config import (
     SqlServerSettings,
 )
 from lib.objectstore import ObjectStoreSettings
+from platform_server.apps.report.schemas.api_source import ReportApiConnection
 
 SERVICE_NAME = "platform-server"
 API_PREFIX = "/api/v1/platform"
@@ -65,6 +66,18 @@ class Settings(
     )
 
     report_schedule_enabled: bool = False
+    report_api_connections: list[ReportApiConnection] = Field(
+        default_factory=list[ReportApiConnection], max_length=50
+    )
+
+    @field_validator("report_api_connections")
+    @classmethod
+    def _unique_report_connections(
+        cls, given: list[ReportApiConnection]
+    ) -> list[ReportApiConnection]:
+        if len({item.code for item in given}) != len(given):
+            raise ValueError("报告 API 连接编码不能重复")
+        return given
 
     app_name: str = SERVICE_NAME
     app_http_port: int = 8005

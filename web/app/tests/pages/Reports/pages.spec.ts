@@ -98,6 +98,20 @@ afterEach(() => {
 })
 
 describe('报告页面', () => {
+  it('模板搜索提交到服务端检索全部分页', async () => {
+    vi.spyOn(api, 'listReports').mockResolvedValue({
+      items: [],
+      page: 1,
+      size: 20,
+      total: 0,
+    })
+    const wrapper = mount(Templates, { global: { stubs: { teleport: true } } })
+    await flushPromises()
+    await wrapper.get('input[aria-label="搜索报告模板"]').setValue('年度报告')
+    await flushPromises()
+    expect(api.listReports).toHaveBeenLastCalledWith(1, 20, '年度报告')
+    wrapper.unmount()
+  })
   it('只读用户能看列表但没有创建入口', async () => {
     vi.spyOn(api, 'listReports').mockResolvedValue({
       items: [summary()],

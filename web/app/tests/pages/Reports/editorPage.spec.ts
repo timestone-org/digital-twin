@@ -319,7 +319,61 @@ it('保存、试算、生成及配置修改走完整页面接线', async () => {
   vi.mocked(api.generateReport).mockRejectedValue(
     new BizError(41305, '队列繁忙', 429, 'trace'),
   )
-  await click('生成已保存模板')
+  vi.mocked(api.saveReport).mockResolvedValue({
+    ...template('r1'),
+    row_version: 3,
+  })
+  await click('保存并生成')
   expect(wrapper.text()).toContain('队列繁忙')
+  wrapper.unmount()
+})
+
+it('修改报告期后将旧试算标记为失效', async () => {
+  setupEditor()
+  vi.spyOn(api, 'getReport').mockResolvedValue(template('r1'))
+  vi.spyOn(api, 'previewReport').mockResolvedValue({
+    is_valid: true,
+    period: '2026-08',
+    timezone: 'UTC',
+    metrics: [{ name: '旧指标', value: '20' }],
+    nodes: {},
+    warnings: [],
+  })
+  const wrapper = mount(EditorPage, { global: { stubs: { teleport: true } } })
+  await flushPromises()
+  await wrapper
+    .findAllComponents(DtButton)
+    .find((button) => button.text() === '试算')
+    ?.trigger('click')
+  await flushPromises()
+  expect(wrapper.text()).toContain('旧指标')
+  await wrapper.get('input[aria-label="报告期"]').setValue('2026-09')
+  expect(wrapper.text()).not.toContain('旧指标')
+  expect(wrapper.text()).toContain('配置或报告期已变更，请重新试算')
+  wrapper.unmount()
+})
+
+it('未保存的修改必须保存成功后才能生成', async () => {
+  setupEditor()
+  vi.spyOn(api, 'getReport').mockResolvedValue(template('r1'))
+  vi.spyOn(api, 'saveReport').mockRejectedValue(
+    new BizError(41302, '版本冲突', 409, 'trace'),
+  )
+  vi.spyOn(api, 'generateReport').mockRejectedValue(new Error('不应生成'))
+  const wrapper = mount(EditorPage, { global: { stubs: { teleport: true } } })
+  await flushPromises()
+  wrapper.findComponent(TemplateSettingsCard).vm.$emit('update:name', '新月报')
+  await flushPromises()
+  await wrapper
+    .findAllComponents(DtButton)
+    .find((button) => button.text() === '保存并生成')
+    ?.trigger('click')
+  await flushPromises()
+  expect(api.saveReport).toHaveBeenCalledWith(
+    'r1',
+    expect.objectContaining({ name: '新月报' }),
+  )
+  expect(api.generateReport).not.toHaveBeenCalled()
+  expect(wrapper.text()).toContain('版本冲突')
   wrapper.unmount()
 })

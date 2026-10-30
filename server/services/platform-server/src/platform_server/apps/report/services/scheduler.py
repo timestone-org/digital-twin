@@ -13,6 +13,7 @@ from platform_server.apps.report.models import ReportRender
 from platform_server.apps.report.schemas.common import Granularity
 from platform_server.apps.report.schemas.jobs import ScheduleOut
 from platform_server.apps.report.schemas.template import TemplateBody
+from platform_server.apps.report.services.dispatch import ReportDispatcher
 from platform_server.apps.report.services.period import (
     format_period,
     parse_period,
@@ -67,9 +68,11 @@ class ReportScheduler:
         self._stop = asyncio.Event()
         self._idle = asyncio.Event()
         self._idle.set()
+        self._dispatcher = ReportDispatcher(options.database, options.stream)
 
     def stop(self) -> None:
         self._stop.set()
+        self._dispatcher.stop()
 
     async def drain(self, timeout_s: float) -> None:
         try:
@@ -100,15 +103,13 @@ class ReportScheduler:
     async def tick(self, now: datetime) -> None:
         """收敛中断任务，再触发到期规则。Args: now。"""
         async with self._options.database.session() as session:
-            stale = await renders.stale(
+            await renders.fail_stale(
                 session,
                 now - timedelta(seconds=self._options.timeout_s + 120),
+                now,
                 _PAGE_SIZE,
             )
-            for row in stale:
-                row.status = "failed"
-                row.error = "生成任务中断或未能投递，请重新生成"
-                row.finished_at = now
+        await self._dispatcher.tick()
         if not self._enabled:
             return
         after: uuid.UUID | None = None

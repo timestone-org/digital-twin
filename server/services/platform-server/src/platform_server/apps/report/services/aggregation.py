@@ -78,6 +78,19 @@ def format_number(value: object, precision: int = 2, unit: str = "") -> str:
     return f"{text}{unit}"
 
 
+def format_value(
+    value: object, kind: str, precision: int | None = 2, unit: str = ""
+) -> str:
+    """按类型格式化值。Args: value, kind, precision, unit。"""
+    if value is None:
+        return "—"
+    if kind == "number" and precision is not None:
+        return format_number(value, precision, unit)
+    if kind == "boolean":
+        return "true" if value is True else "false"
+    return str(value)
+
+
 def value_kind(value: object) -> Literal["number", "text", "boolean", "empty"]:
     if value is None:
         return "empty"

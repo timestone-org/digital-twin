@@ -19,6 +19,7 @@ import '@umoteam/editor/style'
 import type { ReportDocument, ReportPage, ReportMetric } from '@dt/contracts'
 import { UMO_ASSETS_DIR } from '../../../../../umoAssets.shared'
 import { businessExtensions } from '../scripts/businessNodes'
+import { reportTypography } from '../scripts/reportTypography'
 import NodeDialog from './NodeDialog.vue'
 import { documentFrom } from '../../scripts/reportDocument'
 
@@ -184,7 +185,7 @@ function initialOptions(): UmoEditorOptions {
       readOnly: props.disabled,
       title: props.title,
     },
-    extensions: businessExtensions,
+    extensions: [...businessExtensions, reportTypography],
     locale: 'zh-CN',
     onSave: async () => {
       if (!props.saveDocument) {

@@ -58,7 +58,7 @@ function defaultAttributes(): Attributes {
     offset: { default: 0 },
     anchor: { default: 'period' },
     kind: { default: 'line' },
-    limit: { default: 100 },
+    limit: { default: 1000 },
     bucket: { default: 'none' },
     agg: { default: 'avg' },
     order: { default: 'asc' },

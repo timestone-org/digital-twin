@@ -48,6 +48,9 @@ class PreviewContext:
     latest: dict[tuple[str, datetime], datetime | None] = field(
         default_factory=dict[tuple[str, datetime], datetime | None]
     )
+    api_data: dict[str, SourceData] = field(
+        default_factory=dict[str, SourceData]
+    )
 
     async def read(
         self, session: AsyncSession, window: SourceWindow
@@ -60,7 +63,21 @@ class PreviewContext:
             if remaining <= 0:
                 raise ValueError("本次报告取数总量已达到上限，请缩小时间窗")
             bounded = replace(window, limit=min(window.limit, remaining))
-            self.windows[window] = await read_window(session, bounded)
+            if window.table.startswith("api:"):
+                found = self.api_data.get(window.table)
+                if found is None:
+                    raise ValueError(
+                        "第三方 API 数据尚未获取，请重新检查数据来源"
+                    )
+                self.windows[window] = replace(
+                    found,
+                    rows=found.rows[-bounded.limit :],
+                    is_truncated=(
+                        found.is_truncated or len(found.rows) > bounded.limit
+                    ),
+                )
+            else:
+                self.windows[window] = await read_window(session, bounded)
         return self.windows[window]
 
 
@@ -69,12 +86,25 @@ async def metric_window(
 ) -> SourceWindow:
     """确定取数边界，latest 也不越过报告期。Args: session, context, metric。"""
     zone = ZoneInfo(context.timezone)
-    options = WindowOptions(offset=metric.offset, window=metric.window)
+    table = metric.table or ""
+    offset = metric.offset
+    if table.startswith("api:"):
+        source = next(
+            (
+                item
+                for item in context.template.api_sources
+                if table == f"api:{item.code}"
+            ),
+            None,
+        )
+        if source is None:
+            raise ValueError("引用了未定义的第三方 API 数据来源")
+        offset = source.offset
+    options = WindowOptions(offset=offset, window=metric.window)
     since, until = resolve_window(
         context.period, context.template.granularity, zone, options
     )
     nominal_until = until
-    table = metric.table or ""
     if metric.anchor == "latest":
         cache_key = (table, until)
         if cache_key not in context.latest:
@@ -147,7 +177,7 @@ async def _resolve_source(
     window = await metric_window(session, context, metric)
     found = await context.read(session, window)
     if metric.key not in {column.key for column in found.columns}:
-        raise ValueError("指标引用的台账列不存在")
+        raise ValueError("指标引用的数据字段不存在")
     values = [row.values.get(metric.key or "") for row in found.rows]
     mode = "last" if metric.mode in ("latest", "at_bucket") else metric.agg
     raw = aggregate(values, mode)

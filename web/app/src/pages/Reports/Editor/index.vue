@@ -14,6 +14,8 @@ import {
   DtInput,
   DtNotice,
   DtResizableLayout,
+  DtSegmented,
+  DtTag,
   useToast,
   useConfirm,
 } from '@dt/ui'
@@ -38,6 +40,7 @@ import NodeDialog from './components/NodeDialog.vue'
 import PreviewPanel from './components/PreviewPanel.vue'
 import PageDialog from './components/PageDialog.vue'
 import TemplateSettingsCard from './components/TemplateSettingsCard.vue'
+import ApiSourcePanel from './components/ApiSourcePanel.vue'
 import { createReportSurface } from './scripts/aiSurface'
 import { currentReportPeriod } from '../scripts/reportPeriod'
 import {
@@ -71,6 +74,13 @@ const savedSnapshot = ref('')
 const periodTimezone = ref<string | null>(null)
 const periodWarning = ref('')
 const canDefaultPeriod = ref(true)
+const section = ref('data')
+const previewStale = ref(false)
+const SECTIONS = [
+  { value: 'data', label: '报告数据' },
+  { value: 'template', label: '模板设置' },
+  { value: 'check', label: '数据核对' },
+]
 const LOADING_MESSAGE = '正在加载报告模板…'
 const isDirty = computed(
   () =>
@@ -95,17 +105,28 @@ const ai = useAiPanel({
       preview: previewForAssistant,
       showPreview: (value) => {
         preview.value = value
+        previewStale.value = false
+        section.value = 'check'
       },
     }),
   refId: () => id.value || null,
 })
 watch(id, load, { immediate: true })
+watch(
+  [() => JSON.stringify(draft.value), period],
+  () => {
+    if (preview.value) previewStale.value = true
+    preview.value = null
+  },
+  { flush: 'sync' },
+)
 function load(): void {
   saves.cancel()
   trials.cancel()
   periods.cancel()
   template.value = null
   preview.value = null
+  previewStale.value = false
   period.value = ''
   periodTimezone.value = null
   periodWarning.value = ''
@@ -173,6 +194,7 @@ onBeforeUnmount(() => {
 })
 async function save(): Promise<boolean> {
   if (!template.value) return false
+  error.value = ''
   isBusy.value = true
   let isSaved = false
   const payload = reportUpdate(draft.value, template.value.row_version)
@@ -195,12 +217,20 @@ async function save(): Promise<boolean> {
 }
 async function trial(): Promise<void> {
   if (!template.value) return
+  error.value = ''
   isBusy.value = true
+  const signature = JSON.stringify([draft.value, period.value])
   await trials.run(
     (signal) => api.previewReport(id.value, period.value, draft.value, signal),
     {
       ok: (value) => {
+        if (signature !== JSON.stringify([draft.value, period.value])) {
+          previewStale.value = true
+          return
+        }
         preview.value = value
+        previewStale.value = false
+        section.value = 'check'
       },
       fail: (caught) => {
         error.value = describeError(caught)
@@ -213,6 +243,12 @@ async function trial(): Promise<void> {
 }
 async function generate(): Promise<void> {
   if (!template.value) return
+  if (isDirty.value && !(await save())) return
+  if (isDirty.value) {
+    error.value = '保存期间模板又有修改，请再次保存并生成'
+    return
+  }
+  error.value = ''
   isBusy.value = true
   try {
     await api.generateReport(id.value, period.value)
@@ -253,12 +289,13 @@ async function previewForAssistant(
         size="sm"
         aria-label="报告期"
         placeholder="按模板周期填写"
+        :disabled="isBusy"
         @update:model-value="changePeriod"
       />
       <PermGuard :codes="['report:manage']">
         <DtButton
           :loading="isBusy"
-          :disabled="!template"
+          :disabled="!template || !period.trim()"
           variant="ghost"
           size="sm"
           icon="activity"
@@ -279,12 +316,12 @@ async function previewForAssistant(
       <PermGuard :codes="['report:render']">
         <DtButton
           :loading="isBusy"
-          :disabled="!template"
           size="sm"
           icon="play"
+          :disabled="!template || !period.trim() || (!canEdit && isDirty)"
           @click="generate"
         >
-          生成已保存模板
+          {{ isDirty ? '保存并生成' : '生成已保存模板' }}
         </DtButton>
       </PermGuard>
     </template>
@@ -298,14 +335,23 @@ async function previewForAssistant(
       <DtNotice v-if="periodWarning" intent="warning">
         {{ periodWarning }}
       </DtNotice>
+      <div
+        v-if="template"
+        class="flex flex-wrap items-center gap-3 text-sm text-secondary"
+      >
+        <DtTag :intent="isDirty ? 'warning' : 'success'">{{
+          isDirty ? '有未保存修改' : '模板已保存'
+        }}</DtTag>
+        <p>① 配置数据来源和指标 · ② 插入正文 · ③ 试算核对后生成 Word</p>
+      </div>
       <DtResizableLayout
         v-if="template"
         class="min-h-0 flex-1"
         storage-key="dt.report-editor.layout"
         :stack-at="960"
         :panes="[
-          { id: 'document', label: '报告正文', size: 75, minSize: 320 },
-          { id: 'settings', label: '报告设置', size: 25, minSize: 240 },
+          { id: 'document', label: '报告正文', size: 65, minSize: 320 },
+          { id: 'settings', label: '报告设置', size: 35, minSize: 320 },
         ]"
       >
         <template #document>
@@ -324,7 +370,15 @@ async function previewForAssistant(
         </template>
         <template #settings>
           <aside class="flex min-h-0 flex-1 flex-col gap-4 overflow-auto pr-1">
+            <DtSegmented
+              v-model="section"
+              :options="SECTIONS"
+              variant="tabs"
+              block
+              aria-label="报告配置分区"
+            />
             <TemplateSettingsCard
+              v-show="section === 'template'"
               :name="draft.name"
               :granularity="draft.granularity ?? 'month'"
               :enabled="draft.is_enabled ?? true"
@@ -336,7 +390,9 @@ async function previewForAssistant(
               @open-page="isPageOpen = true"
             />
             <MetricPanel
+              v-show="section === 'data'"
               :model-value="draft.metrics ?? []"
+              :api-sources="draft.api_sources ?? []"
               :disabled="!canEdit || isBusy"
               @update:model-value="draft.metrics = $event"
               @insert="
@@ -346,15 +402,32 @@ async function previewForAssistant(
                 })
               "
             />
+            <ApiSourcePanel
+              v-show="section === 'data'"
+              :model-value="draft.api_sources ?? []"
+              :metrics="draft.metrics ?? []"
+              :document="draft.doc_json ?? { type: 'doc' }"
+              :disabled="!canEdit || isBusy"
+              @update:model-value="draft.api_sources = $event"
+            />
             <DtButton
-              v-if="canEdit"
+              v-if="canEdit && section === 'data'"
               size="sm"
               icon="plus"
               @click="isNodeOpen = true"
             >
-              插入数据内容
+              插入图表、表格或条件文本
             </DtButton>
-            <PreviewPanel v-if="preview" :preview="preview" />
+            <div v-show="section === 'check'" class="flex flex-col gap-3">
+              <DtNotice v-if="previewStale" intent="warning">
+                配置或报告期已变更，请重新试算
+              </DtNotice>
+              <DtNotice v-else-if="!preview" intent="info">
+                选择报告期并点击“试算”，查看指标、图表和 API
+                取数结果。试算使用当前草稿；生成会先保存修改。
+              </DtNotice>
+              <PreviewPanel v-if="preview" :preview="preview" />
+            </div>
           </aside>
         </template>
       </DtResizableLayout>

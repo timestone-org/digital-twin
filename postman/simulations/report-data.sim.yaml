@@ -1,0 +1,6 @@
+simulation: report-data
+routing: path
+mocks:
+  - name: report-data
+    routeKey: report-data
+    path: postman/mocks/report-data

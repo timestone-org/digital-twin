@@ -35,6 +35,7 @@ def to_output(row: ReportTemplate) -> ReportTemplateOut:
         doc_json=body.doc_json,
         metrics=body.metrics,
         page_json=body.page_json,
+        api_sources=body.api_sources,
     )
 
 
@@ -64,9 +65,9 @@ async def read_template(
 
 
 async def list_templates(
-    session: AsyncSession, page: PageParams
+    session: AsyncSession, page: PageParams, keyword: str = ""
 ) -> Page[ReportTemplateSummaryOut]:
-    rows, total = await templates.page(session, page.offset, page.size)
+    rows, total = await templates.page(session, page.offset, page.size, keyword)
     return Page[ReportTemplateSummaryOut](
         items=[to_summary(row) for row in rows],
         page=page.page,

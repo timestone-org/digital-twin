@@ -1,0 +1,64 @@
+purpose:
+  stands_in_for: >-
+    本地通用第三方报告数据查询接口，全部响应为合成数据。未指定供应商，
+    因而未搜索供应商所有者或复用供应商 mock；本仿真不承诺真实上游行为。
+  unblocks: >-
+    验证真实报告 API 客户端经本地 HTTP 取数，随后由真实试算与 Word 生成器
+    使用共享快照；覆盖上游故障、字段变化、报告期边界与响应大小限制。
+assumptions:
+  - id: local-shared-report-snapshot
+    status: supported
+    claim: >-
+      在本仿真场景中，一次成功的 POST 查询结果供两个指标、一张图表和一张表格
+      共同使用，后续试算和 Word 生成不重复调用数据接口。
+    reason: >-
+      客户端、试算与 Word 生成器均运行真实代码；模拟端统计成功请求增量为一。
+      该结论限定于此次本地场景，不是供应商一致性保证。
+    verification: >-
+      2026-10-30，fingerprint report-data-20261030，执行
+      server/.venv/bin/python postman/verify_report_api.py
+      http://127.0.0.1:4137/report-data --output /tmp/report-data-simulation-20261030.docx。
+      首跑与整理脚本后的复跑均 passed；最新复跑增加 Word 第一段精确文本断言，
+      确认直接指标引用不经过浮点转换。每次日志显示一次 POST /query?case=good、
+      两个 GET /stats。最新 Word 39494 字节，含原生图表；精确数字、零值与缺失值均保留。
+    source: >-
+      postman/verify_report_api.py; postman/mocks/report-data/default.js;
+      server/services/platform-server/src/platform_server/apps/report/services/api_source.py;
+      /tmp/report-data-sim-20261030.ndjson
+    updated_at: "2026-10-30"
+  - id: local-failure-outcomes
+    status: supported
+    claim: >-
+      在本地合成接口返回 HTTP 503、缺少映射字段、时间等于报告期末端或响应超过
+      2 MB 时，报告取数明确失败，不把这些情况当作空数据成功。
+    reason: >-
+      对四个故障场景都运行了真实 HTTP 客户端，并核对了安全中文失败消息；
+      上游响应正文没有泄露到业务错误。
+    verification: >-
+      2026-10-30，fingerprint report-data-20261030，同一次验证命令通过四项失败断言。
+      仿真 request 日志确认 /query?case=503 返回 503；missing、outside、large 返回 200，
+      但客户端分别拒绝字段缺失、越过半开区间和 2000012 字节响应。
+    source: >-
+      postman/verify_report_api.py; postman/mocks/report-data/default.js;
+      /tmp/report-data-sim-20261030.ndjson
+    updated_at: "2026-10-30"
+  - id: real-provider-contract
+    status: unknown
+    claim: >-
+      真实第三方接口支持相应认证、报告期参数、时区、半开时间区间、精确小数和
+      不超过限制的完整响应。
+    reason: >-
+      用户要求通用配置，尚无指定供应商或接口文档。mock 中的请求和响应仅用于
+      检查调用方，不构成供应商证据；接入时须按实际契约配置和验证。
+    verification: >-
+      2026-10-30 未调用真实第三方服务，未发布或上传 mock。仿真使用 --no-history。
+      后续需要实际接口文档及真实测试环境核对认证、字段与分页边界。
+    source: >-
+      postman/mocks/report-data/config.yaml; postman/mocks/report-data/default.js;
+      postman/simulations/report-data.sim.yaml
+    updated_at: "2026-10-30"
+fingerprints:
+  - id: report-data-20261030
+    date: "2026-10-30"
+    commit: "90b8439eaa50feef5ce65a96103de9c05aea2f6d"
+    cli: "Postman CLI 1.77.0; 工作区含尚未提交的报告 API 实现和仿真文件"

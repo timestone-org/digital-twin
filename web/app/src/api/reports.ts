@@ -35,10 +35,10 @@ function write(body: unknown, method: 'POST' | 'PUT' = 'POST'): RequestOptions {
     headers: { 'Idempotency-Key': newIdempotencyKey() },
   })
 }
-export const listReports = (page = 1, size = 20) =>
+export const listReports = (page = 1, size = 20, q?: string) =>
   requestData<Page<ReportTemplateSummary>>(
     '/report-templates',
-    options({ query: { page, size } }),
+    options({ query: { page, size, q } }),
   )
 export const getReport = (id: string, signal?: AbortSignal) =>
   requestData<ReportTemplate>(`/report-templates/${id}`, options({ signal }))
@@ -93,6 +93,10 @@ export const reportRuntime = (signal?: AbortSignal) =>
     '/report-renders/runtime/settings',
     options({ signal }),
   )
+
+export async function reportApiConnections(signal?: AbortSignal) {
+  return (await reportRuntime(signal)).api_connections ?? []
+}
 
 /** 将原件直传对象存储，再提交异步导入。 */
 export async function importReport(

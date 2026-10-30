@@ -1,7 +1,7 @@
 """报告表格的边框、表头、行间留白与跨页控制。"""
 
 import re
-from typing import Protocol
+from typing import Protocol, cast
 
 from docx.document import Document
 from docx.enum.table import WD_CELL_VERTICAL_ALIGNMENT
@@ -26,7 +26,17 @@ class Cell(Protocol):
     def paragraphs(self) -> list[Paragraph]: ...
 
 
-def format_table(table: Table, document: Document) -> None:
+class ParagraphSpacing(Protocol):
+    """第三方动态段落格式的最小读写口。"""
+
+    line_spacing: object
+    space_before: object
+    space_after: object
+
+
+def format_table(
+    table: Table, document: Document, *, has_header: bool = True
+) -> None:
     """应用统一表格样式，保留数据和显式的文字格式。Args: table, document。"""
     section = document.sections[0]
     width = (
@@ -51,13 +61,15 @@ def format_table(table: Table, document: Document) -> None:
         append_property(row, "trPr", f'<w:cantSplit xmlns:w="{_W_NS}"/>', "_tr")
         for cell in row.cells:
             cell.vertical_alignment = WD_CELL_VERTICAL_ALIGNMENT.CENTER
-            _format_cell(cell, index)
+            _format_cell(cell, index, has_header)
 
 
-def _format_cell(cell: Cell, index: int) -> None:
+def _format_cell(cell: Cell, index: int, has_header: bool) -> None:
     """设置单元格留白和数字对齐。Args: cell, index。"""
     color = (
-        "E8EEF4" if index == 0 else ("F7F9FB" if index % 2 == 0 else "FFFFFF")
+        "E8EEF4"
+        if index == 0 and has_header
+        else ("F7F9FB" if index % 2 == 0 else "FFFFFF")
     )
     append_property(
         cell,
@@ -76,15 +88,21 @@ def _format_cell(cell: Cell, index: int) -> None:
         "_tc",
     )
     for paragraph in cell.paragraphs:
-        paragraph.paragraph_format.line_spacing = Pt(15)
-        paragraph.paragraph_format.space_before = Pt(0)
-        paragraph.paragraph_format.space_after = Pt(0)
-        if index == 0:
+        formatting = cast(ParagraphSpacing, paragraph.paragraph_format)
+        if formatting.line_spacing is None:
+            formatting.line_spacing = Pt(15)
+        if formatting.space_before is None:
+            formatting.space_before = Pt(0)
+        if formatting.space_after is None:
+            formatting.space_after = Pt(0)
+        if index == 0 and has_header and paragraph.alignment is None:
             paragraph.alignment = WD_ALIGN_PARAGRAPH.CENTER
-        elif re.fullmatch(r"[+-]?\d+(?:\.\d+)?", cell.text.strip()):
+        elif paragraph.alignment is None and re.fullmatch(
+            r"[+-]?\d+(?:\.\d+)?", cell.text.strip()
+        ):
             paragraph.alignment = WD_ALIGN_PARAGRAPH.RIGHT
         for run in paragraph.runs:
             if run.font.size is None:
                 set_font_size(run.font, 10.5)
-            if index == 0:
+            if index == 0 and has_header and run.bold is None:
                 run.bold = True
