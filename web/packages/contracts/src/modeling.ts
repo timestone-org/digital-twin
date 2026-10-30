@@ -204,6 +204,8 @@ export interface ModelingNodeRun extends ModelingNodeRunSummary {
 export interface ModelingRunSummary {
   id: string
   pipeline_id: string
+  instance_id?: string | null
+  published_version_id?: string | null
   status: ModelingRunStatus
   trigger: ModelingTrigger
   started_at: string | null
@@ -263,6 +265,10 @@ export interface ModelingVersionSummary {
   target_key: string | null
   created_by_name: string | null
   created_at: string
+  archived_at?: string | null
+  instance_id?: string | null
+  deployment_count?: number
+  deployments_url?: string | null
 }
 
 /** 模型签名里的一个入口列：调用方要提供的东西。 */
@@ -358,6 +364,7 @@ export interface ModelDeployment {
   id: string
   /** URL 段。⚠ 建后不可改——第三方的代码里写着它。 */
   code: string
+  revision?: number
   model_version_id: string
   model_name: string
   model_version: number

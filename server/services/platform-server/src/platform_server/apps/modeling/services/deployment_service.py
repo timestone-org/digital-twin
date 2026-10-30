@@ -21,6 +21,9 @@ from platform_server.apps.modeling.errors import (
     DeploymentNotFound,
     ModelVersionNotFound,
 )
+from platform_server.apps.modeling.management_errors import (
+    DeploymentRevisionConflict,
+)
 from platform_server.apps.modeling.models import (
     ModelingApiKey,
     ModelingDeployment,
@@ -62,6 +65,7 @@ async def create_deployment(
         session,
         ModelingDeployment(
             code=payload.code,
+            revision=1,
             model_version_id=(
                 None if version.task == "rule_calculation" else version.id
             ),
@@ -83,27 +87,6 @@ async def create_deployment(
             f"对外标识「{payload.code}」已经被别的服务占了"
         ) from error
     return _present(_Presented(row=row, version=version, key_count=0))
-
-
-async def list_deployments(session: AsyncSession) -> list[ModelDeploymentOut]:
-    """全部对外服务。
-
-    Args: session。
-    """
-    rows = await deployment_crud.list_all(session)
-    presented: list[ModelDeploymentOut] = []
-    for row in rows:
-        version = await model_version_crud.get(
-            session, row.effective_version_id
-        )
-        keys = await api_key_crud.list_by_deployment(session, row.id)
-        if version is not None:
-            presented.append(
-                _present(
-                    _Presented(row=row, version=version, key_count=len(keys))
-                )
-            )
-    return presented
 
 
 async def get_deployment(
@@ -128,6 +111,11 @@ async def update_deployment(
     """
     found = await _presented(session, deployment_id, should_lock=True)
     row = found.row
+    if payload.expected_revision is not None and payload.expected_revision != (
+        row.revision or 1
+    ):
+        raise DeploymentRevisionConflict("部署已修改，请重新读取")
+    row.revision = (row.revision or 1) + 1
     version = found.version
     if payload.model_version_id is not None:
         version = await _require_version(session, payload.model_version_id)
@@ -258,19 +246,6 @@ async def _presented(
     return _Presented(row=row, version=version, key_count=len(keys))
 
 
-async def _require_version(
-    session: AsyncSession, version_id: uuid.UUID
-) -> ModelVersion:
-    """取一个模型版本，不存在即抛。
-
-    Args: session, version_id。
-    """
-    version = await model_version_crud.get(session, version_id)
-    if version is None:
-        raise ModelVersionNotFound("这个模型版本不存在")
-    return version
-
-
 def _present(found: _Presented) -> ModelDeploymentOut:
     """摆成对外的形状。
 
@@ -280,6 +255,7 @@ def _present(found: _Presented) -> ModelDeploymentOut:
     return ModelDeploymentOut(
         id=row.id,
         code=row.code,
+        revision=row.revision or 1,
         model_version_id=row.effective_version_id,
         model_name=found.version.name,
         model_version=found.version.version,
@@ -295,6 +271,19 @@ def _present(found: _Presented) -> ModelDeploymentOut:
         created_at=row.created_at,
         updated_at=row.updated_at,
     )
+
+
+def present_for_version(
+    rows: list[ModelingDeployment],
+    version: ModelVersion,
+    keys: dict[uuid.UUID, int],
+) -> list[ModelDeploymentOut]:
+    return [
+        _present(
+            _Presented(row=row, version=version, key_count=keys.get(row.id, 0))
+        )
+        for row in rows
+    ]
 
 
 def _to_key_out(row: ModelingApiKey) -> ModelApiKeyOut:
@@ -313,3 +302,49 @@ def _to_key_out(row: ModelingApiKey) -> ModelApiKeyOut:
         created_by_name=row.created_by_name,
         created_at=row.created_at,
     )
+
+
+def present_deployment_pairs(
+    rows: list[tuple[ModelingDeployment, ModelVersion]],
+    keys: dict[uuid.UUID, int],
+) -> list[ModelDeploymentOut]:
+    return [
+        _present(
+            _Presented(row=row, version=version, key_count=keys.get(row.id, 0))
+        )
+        for row, version in rows
+    ]
+
+
+async def _require_version(
+    session: AsyncSession, version_id: uuid.UUID
+) -> ModelVersion:
+    """取一个模型版本，不存在即抛。
+
+    Args: session, version_id。
+    """
+    version = await model_version_crud.get(session, version_id)
+    if version is None:
+        raise ModelVersionNotFound("这个模型版本不存在")
+    return version
+
+
+async def list_deployments(session: AsyncSession) -> list[ModelDeploymentOut]:
+    """全部对外服务。
+
+    Args: session。
+    """
+    rows = await deployment_crud.list_all(session)
+    presented: list[ModelDeploymentOut] = []
+    for row in rows:
+        version = await model_version_crud.get(
+            session, row.effective_version_id
+        )
+        keys = await api_key_crud.list_by_deployment(session, row.id)
+        if version is not None:
+            presented.append(
+                _present(
+                    _Presented(row=row, version=version, key_count=len(keys))
+                )
+            )
+    return presented

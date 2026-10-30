@@ -90,6 +90,7 @@ class ModelingInstanceOut(OutputModel):
     latest_run: RunSummaryOut | None
     created_at: Utc
     updated_at: Utc
+    archived_at: Utc | None = None
 
 
 class ModelingInstanceDeployIn(InputModel):

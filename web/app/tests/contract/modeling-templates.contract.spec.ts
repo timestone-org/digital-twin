@@ -79,6 +79,7 @@ const pairs = [
       template_name: true,
       template_version: true,
       revision: true,
+      archived_at: true,
       latest_run: true,
       created_at: true,
       updated_at: true,

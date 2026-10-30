@@ -16,7 +16,10 @@ from platform_server.apps.modeling.crud import (
     model_version_crud,
     node_run_crud,
 )
-from platform_server.apps.modeling.errors import RunNotPublishable
+from platform_server.apps.modeling.crud import management_queries as query_crud
+from platform_server.apps.modeling.errors import (
+    RunNotPublishable,
+)
 from platform_server.apps.modeling.models import (
     ModelingBinding,
     ModelingModelArtifact,
@@ -109,7 +112,7 @@ async def publish_version(
     if draft.verdict.is_servable and binary.meta:
         model_artifact_crud.add(session, _artifact_row(version_id, binary.meta))
     await session.flush()
-    return _to_version_out(row)
+    return await get_version(session, row.id)
 
 
 @dataclass(frozen=True)
@@ -256,24 +259,6 @@ async def register_formula(
     )
 
 
-async def list_versions(
-    session: AsyncSession, *, pipeline_id: uuid.UUID | None, page: PageParams
-) -> Page[ModelVersionSummaryOut]:
-    """版本列表。
-
-    Args: session, pipeline_id, page。
-    """
-    rows, total = await model_version_crud.page(
-        session, pipeline_id=pipeline_id, offset=page.offset, limit=page.size
-    )
-    return Page[ModelVersionSummaryOut](
-        items=[_to_summary(row) for row in rows],
-        page=page.page,
-        size=page.size,
-        total=total,
-    )
-
-
 async def update_version_metadata(
     session: AsyncSession,
     *,
@@ -287,7 +272,7 @@ async def update_version_metadata(
     if "description" in payload.model_fields_set:
         row.description = payload.description
     await session.flush()
-    return _to_version_out(row)
+    return await get_version(session, row.id)
 
 
 async def get_version(
@@ -297,7 +282,17 @@ async def get_version(
 
     Args: session, version_id。
     """
-    return _to_version_out(await require_version(session, version_id))
+    row = await require_version(session, version_id)
+    instances = await query_crud.instance_ids(session, [row.pipeline_id])
+    deployments = await query_crud.deployment_counts(session, [row.id])
+    return _to_version_out(row).model_copy(
+        update={
+            "instance_id": (
+                row.pipeline_id if row.pipeline_id in instances else None
+            ),
+            "deployment_count": deployments.get(row.id, 0),
+        }
+    )
 
 
 async def retire_version(session: AsyncSession, version_id: uuid.UUID) -> None:
@@ -427,7 +422,7 @@ def _table_codes_of(run: Any) -> list[str]:
     )
 
 
-def _to_summary(row: ModelVersion) -> ModelVersionSummaryOut:
+def to_version_summary(row: ModelVersion) -> ModelVersionSummaryOut:
     return ModelVersionSummaryOut(
         id=row.id,
         pipeline_id=row.pipeline_id,
@@ -443,12 +438,13 @@ def _to_summary(row: ModelVersion) -> ModelVersionSummaryOut:
         target_key=row.target_key,
         created_by_name=row.created_by_name,
         created_at=row.created_at,
+        archived_at=row.archived_at,
     )
 
 
 def _to_version_out(row: ModelVersion) -> ModelVersionOut:
     return ModelVersionOut(
-        **_to_summary(row).model_dump(),
+        **to_version_summary(row).model_dump(),
         metrics={
             key: _as_number(value)
             for key, value in as_dict(row.metrics_json).items()
@@ -484,4 +480,40 @@ def _to_binding_out(
         created_by_name=row.created_by_name,
         created_at=row.created_at,
         updated_at=row.updated_at,
+    )
+
+
+async def list_versions(
+    session: AsyncSession, *, pipeline_id: uuid.UUID | None, page: PageParams
+) -> Page[ModelVersionSummaryOut]:
+    """版本列表。
+
+    Args: session, pipeline_id, page。
+    """
+    rows, total = await model_version_crud.page(
+        session, pipeline_id=pipeline_id, offset=page.offset, limit=page.size
+    )
+    instances = await query_crud.instance_ids(
+        session, [row.pipeline_id for row in rows]
+    )
+    counts = await query_crud.deployment_counts(
+        session, [row.id for row in rows]
+    )
+    return Page[ModelVersionSummaryOut](
+        items=[
+            to_version_summary(row).model_copy(
+                update={
+                    "instance_id": (
+                        row.pipeline_id
+                        if row.pipeline_id in instances
+                        else None
+                    ),
+                    "deployment_count": counts.get(row.id, 0),
+                }
+            )
+            for row in rows
+        ],
+        page=page.page,
+        size=page.size,
+        total=total,
     )

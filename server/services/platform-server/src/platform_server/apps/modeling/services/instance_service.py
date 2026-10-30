@@ -86,20 +86,6 @@ async def create_instance(
     return await get_instance(session, pipeline.id)
 
 
-async def list_instances(
-    session: AsyncSession, keyword: str | None, page: PageParams
-) -> Page[ModelingInstanceOut]:
-    rows, total = await instances.page(
-        session, keyword=keyword, offset=page.offset, limit=page.size
-    )
-    return Page[ModelingInstanceOut](
-        items=[to_instance(row) for row in rows],
-        page=page.page,
-        size=page.size,
-        total=total,
-    )
-
-
 async def require_instance(
     session: AsyncSession, instance_id: uuid.UUID
 ) -> InstanceRecord:
@@ -208,8 +194,16 @@ def to_instance(record: InstanceRecord) -> ModelingInstanceOut:
         template_name=template.name,
         template_version=template.version,
         revision=record.instance.revision,
+        archived_at=record.instance.archived_at,
         latest_run=(
-            to_run_summary(record.latest_run) if record.latest_run else None
+            to_run_summary(record.latest_run).model_copy(
+                update={
+                    "instance_id": record.instance.id,
+                    "published_version_id": record.latest_model_version_id,
+                }
+            )
+            if record.latest_run
+            else None
         ),
         created_at=record.instance.created_at,
         updated_at=record.instance.updated_at,
@@ -222,3 +216,17 @@ def _configuration_snapshot(record: InstanceRecord) -> dict[str, object]:
         "name": record.pipeline.name,
         "description": record.pipeline.description,
     }
+
+
+async def list_instances(
+    session: AsyncSession, keyword: str | None, page: PageParams
+) -> Page[ModelingInstanceOut]:
+    rows, total = await instances.page(
+        session, keyword=keyword, offset=page.offset, limit=page.size
+    )
+    return Page[ModelingInstanceOut](
+        items=[to_instance(row) for row in rows],
+        page=page.page,
+        size=page.size,
+        total=total,
+    )

@@ -2,12 +2,18 @@
 
 import uuid
 from dataclasses import dataclass
+from typing import cast
 
-from sqlalchemy import Select, func, select
+from sqlalchemy import ColumnElement, Select, func, select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from lib.db import CrudBase
-from platform_server.apps.modeling.models import ModelingPipeline, ModelingRun
+from platform_server.apps.modeling.models import (
+    ModelingModelVersion,
+    ModelingPipeline,
+    ModelingRuleVersion,
+    ModelingRun,
+)
 from platform_server.apps.modeling.models.template import (
     ModelingConfigurationAudit,
     ModelingInstance,
@@ -21,6 +27,7 @@ class InstanceRecord:
     pipeline: ModelingPipeline
     template: ModelingTemplate
     latest_run: ModelingRun | None
+    latest_model_version_id: uuid.UUID | None
 
 
 class TemplateCrud(CrudBase[ModelingTemplate]):
@@ -84,7 +91,7 @@ class InstanceCrud(CrudBase[ModelingInstance]):
         self, session: AsyncSession, instance_id: uuid.UUID
     ) -> InstanceRecord | None:
         result = await session.execute(
-            _records().where(ModelingInstance.id == instance_id)
+            records_statement().where(ModelingInstance.id == instance_id)
         )
         row = result.one_or_none()
         return InstanceRecord(*row) if row else None
@@ -97,7 +104,7 @@ class InstanceCrud(CrudBase[ModelingInstance]):
         offset: int,
         limit: int,
     ) -> tuple[list[InstanceRecord], int]:
-        statement = _records()
+        statement = records_statement()
         if keyword:
             statement = statement.where(
                 ModelingPipeline.name.contains(keyword, autoescape=True)
@@ -116,11 +123,15 @@ class InstanceCrud(CrudBase[ModelingInstance]):
         return [InstanceRecord(*row) for row in result.all()], count or 0
 
 
-def _records() -> (
-    Select[
-        tuple[ModelingInstance, ModelingPipeline, ModelingTemplate, ModelingRun]
+def records_statement() -> Select[
+    tuple[
+        ModelingInstance,
+        ModelingPipeline,
+        ModelingTemplate,
+        ModelingRun,
+        uuid.UUID | None,
     ]
-):
+]:
     latest = (
         select(ModelingRun.id)
         .where(ModelingRun.pipeline_id == ModelingInstance.id)
@@ -129,9 +140,18 @@ def _records() -> (
         .correlate(ModelingInstance)
         .scalar_subquery()
     )
+    # 外联接可返回空版本，SQLAlchemy 的 coalesce 标注没有体现这一点。
+    published_version_id = cast(
+        "ColumnElement[uuid.UUID | None]",
+        func.coalesce(ModelingModelVersion.id, ModelingRuleVersion.id),
+    )
     return (
         select(
-            ModelingInstance, ModelingPipeline, ModelingTemplate, ModelingRun
+            ModelingInstance,
+            ModelingPipeline,
+            ModelingTemplate,
+            ModelingRun,
+            published_version_id,
         )
         .join(ModelingPipeline, ModelingPipeline.id == ModelingInstance.id)
         .join(
@@ -139,6 +159,12 @@ def _records() -> (
             ModelingTemplate.id == ModelingInstance.template_id,
         )
         .outerjoin(ModelingRun, ModelingRun.id == latest)
+        .outerjoin(
+            ModelingModelVersion, ModelingModelVersion.run_id == ModelingRun.id
+        )
+        .outerjoin(
+            ModelingRuleVersion, ModelingRuleVersion.run_id == ModelingRun.id
+        )
     )
 
 
