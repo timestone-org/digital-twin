@@ -59,6 +59,10 @@ def _family(fonts: list[Font], warnings: list[str]) -> str | None:
         names = (
             properties.find(qn("w:rFonts")) if properties is not None else None
         )
+        if names is not None and any(
+            name.casefold().endswith("theme") for name in names.attrib
+        ):
+            warnings.append("主题字体已转为固定字体，请核对中西文字形")
         eastern = (
             names.attrib.get(qn("w:eastAsia")) if names is not None else None
         )
