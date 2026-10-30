@@ -3,11 +3,11 @@
 import uuid
 from typing import Annotated
 
-from fastapi import APIRouter, Depends, Response
+from fastapi import APIRouter, Depends, Query, Response
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from lib.auth import CallerContext
-from lib.web import ApiResponse, Page, PageParams, ok, page_params
+from lib.web import ApiResponse, CursorPage, Page, PageParams, ok, page_params
 from platform_server.apps.modeling.catalog import MODELING_VIEW
 from platform_server.apps.modeling.configuration_deps import (
     ConfigurationWriteContext,
@@ -24,6 +24,7 @@ from platform_server.apps.modeling.schemas import (
     RunOut,
     RunStartIn,
 )
+from platform_server.apps.modeling.schemas.management import InstanceListQuery
 from platform_server.apps.modeling.schemas.template import (
     ModelingConfigurationOut,
     ModelingInstanceConfigureIn,
@@ -35,6 +36,7 @@ from platform_server.apps.modeling.services import (
     RunContext,
     instance_lifecycle,
     instance_service,
+    management_queries,
 )
 from platform_server.settings import API_PREFIX
 
@@ -51,13 +53,17 @@ RunDep = Annotated[RunContext, Depends(get_run_context)]
 
 @router.get(
     "",
-    response_model=ApiResponse[Page[ModelingInstanceOut]],
+    response_model=ApiResponse[
+        Page[ModelingInstanceOut] | CursorPage[ModelingInstanceOut]
+    ],
     summary="模型实例列表",
 )
 async def list_instances(
-    session: SessionDep, page: PageDep, _viewer: ViewDep, q: str | None = None
-) -> ApiResponse[Page[ModelingInstanceOut]]:
-    return ok(await instance_service.list_instances(session, q, page))
+    session: SessionDep,
+    _viewer: ViewDep,
+    query: Annotated[InstanceListQuery, Query()],
+) -> ApiResponse[Page[ModelingInstanceOut] | CursorPage[ModelingInstanceOut]]:
+    return ok(await management_queries.list_instances(session, query))
 
 
 @router.post(
@@ -124,8 +130,12 @@ async def configure_instance(
     write: WriteDep,
 ) -> ApiResponse[ModelingInstanceOut]:
     return ok(
-        await instance_service.configure_instance(
-            session, instance_id, payload, write.actor
+        await write.gate.run_once(
+            endpoint=f"modeling.configure_instance.{instance_id}",
+            model=ModelingInstanceOut,
+            action=lambda: instance_service.configure_instance(
+                session, instance_id, payload, write.actor
+            ),
         )
     )
 

@@ -1,4 +1,4 @@
-/** @fileoverview 建模命令与 platform OpenAPI 的字段、可空性及路径契约。 */
+/** @fileoverview 建模命令和切换历史与 platform OpenAPI 的字段、可空性及路径契约。 */
 import { execFile } from 'node:child_process'
 import { readFileSync } from 'node:fs'
 import { dirname, join } from 'node:path'
@@ -10,6 +10,7 @@ import {
   MODELING_COMMAND_STATES,
 } from '@dt/contracts'
 import type {
+  ModelDeploymentSwitch,
   ModelingCommand,
   ModelingCommandFailure,
   ModelingCommandOperation,
@@ -59,6 +60,48 @@ const FAILURE = {
     itemsReference: 'FieldErrorOut',
   },
 } satisfies Fields<ModelingCommandFailure>
+
+const SWITCH = {
+  id: { type: 'string', isNullable: false, isRequired: true, format: 'uuid' },
+  deployment_id: {
+    type: 'string',
+    isNullable: true,
+    isRequired: true,
+    format: 'uuid',
+  },
+  deployment_code: { type: 'string', isNullable: false, isRequired: true },
+  from_model_version_id: {
+    type: 'string',
+    isNullable: false,
+    isRequired: true,
+    format: 'uuid',
+  },
+  to_model_version_id: {
+    type: 'string',
+    isNullable: false,
+    isRequired: true,
+    format: 'uuid',
+  },
+  revision: { type: 'integer', isNullable: false, isRequired: true },
+  rollback_of_id: {
+    type: 'string',
+    isNullable: true,
+    isRequired: true,
+    format: 'uuid',
+  },
+  is_signature_change_confirmed: {
+    type: 'boolean',
+    isNullable: false,
+    isRequired: true,
+  },
+  created_by_name: { type: 'string', isNullable: false, isRequired: true },
+  created_at: {
+    type: 'string',
+    isNullable: false,
+    isRequired: true,
+    format: 'date-time',
+  },
+} satisfies Fields<ModelDeploymentSwitch>
 
 const COMMAND = {
   id: { type: 'string', isNullable: false, isRequired: true, format: 'uuid' },
@@ -157,12 +200,14 @@ function checkField(schema: unknown, expected: WireField): void {
 
 const SHAPES: ReadonlyArray<readonly [string, Record<string, WireField>]> = [
   ['CommandFailureOut', FAILURE],
+  ['DeploymentSwitchOut', SWITCH],
   ['ModelingCommandOut', COMMAND],
 ]
 
 const COMMANDS_PATH = '/api/v1/platform/modeling-commands'
+const DEPLOYMENT_PATH = '/api/v1/platform/modeling-deployments/{deployment_id}'
 
-describe('建模命令恢复契约', () => {
+describe('建模命令与部署切换契约', () => {
   it('管理线形和枚举可由 OpenAPI 重复生成', async () => {
     const execute = promisify(execFile)
     await expect(
@@ -240,6 +285,38 @@ describe('建模命令恢复契约', () => {
   it.each([
     [COMMANDS_PATH, 'get', 'ApiResponse_ModelingCommandOut_'],
     [`${COMMANDS_PATH}/{command_id}`, 'get', 'ApiResponse_ModelingCommandOut_'],
+    [`${DEPLOYMENT_PATH}:switch`, 'post', 'ApiResponse_ModelDeploymentOut_'],
+    [`${DEPLOYMENT_PATH}:rollback`, 'post', 'ApiResponse_ModelDeploymentOut_'],
+    [
+      `${DEPLOYMENT_PATH}/switches`,
+      'get',
+      'ApiResponse_CursorPage_DeploymentSwitchOut__',
+    ],
+    [
+      '/api/v1/platform/modeling-instances/{instance_id}:archive',
+      'post',
+      'ApiResponse_ModelingInstanceOut_',
+    ],
+    [
+      '/api/v1/platform/modeling-instances/{instance_id}:restore',
+      'post',
+      'ApiResponse_ModelingInstanceOut_',
+    ],
+    [
+      '/api/v1/platform/modeling-model-versions/{version_id}:archive',
+      'post',
+      'ApiResponse_ModelVersionOut_',
+    ],
+    [
+      '/api/v1/platform/modeling-model-versions/{version_id}:restore',
+      'post',
+      'ApiResponse_ModelVersionOut_',
+    ],
+    [
+      '/api/v1/platform/modeling-model-versions/{version_id}/deployments',
+      'get',
+      'ApiResponse_CursorPage_ModelDeploymentOut__',
+    ],
   ])('%s %s 读取真实响应资源', (path, method, response) => {
     expect(
       readAt(SPEC, [

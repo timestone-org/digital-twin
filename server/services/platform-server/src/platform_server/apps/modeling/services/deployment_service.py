@@ -19,7 +19,6 @@ from platform_server.apps.modeling.errors import (
     DeploymentCodeTaken,
     DeploymentKeysRetired,
     DeploymentNotFound,
-    ModelVersionNotFound,
 )
 from platform_server.apps.modeling.management_errors import (
     DeploymentRevisionConflict,
@@ -35,6 +34,10 @@ from platform_server.apps.modeling.schemas import (
     ModelDeploymentCreateIn,
     ModelDeploymentOut,
     ModelDeploymentUpdateIn,
+)
+from platform_server.apps.modeling.schemas.command import CommandResourceOut
+from platform_server.apps.modeling.services.management_guard import (
+    require_active_version,
 )
 from platform_server.apps.modeling.services.pipeline_service import Actor
 
@@ -60,7 +63,7 @@ async def create_deployment(
     两边都会说「没占用」。
     Args: session, payload, actor。
     """
-    version = await _require_version(session, payload.model_version_id)
+    version = await require_active_version(session, payload.model_version_id)
     row = deployment_crud.add(
         session,
         ModelingDeployment(
@@ -118,7 +121,9 @@ async def update_deployment(
     row.revision = (row.revision or 1) + 1
     version = found.version
     if payload.model_version_id is not None:
-        version = await _require_version(session, payload.model_version_id)
+        version = await require_active_version(
+            session, payload.model_version_id
+        )
         row.model_version_id = (
             None if version.task == "rule_calculation" else version.id
         )
@@ -162,6 +167,13 @@ async def delete_deployment(
     """
     found = await _presented(session, deployment_id)
     await deployment_crud.delete(session, found.row)
+
+
+async def delete_deployment_command(
+    session: AsyncSession, deployment_id: uuid.UUID
+) -> CommandResourceOut:
+    await delete_deployment(session, deployment_id)
+    return CommandResourceOut(id=deployment_id)
 
 
 async def create_key(
@@ -314,37 +326,3 @@ def present_deployment_pairs(
         )
         for row, version in rows
     ]
-
-
-async def _require_version(
-    session: AsyncSession, version_id: uuid.UUID
-) -> ModelVersion:
-    """取一个模型版本，不存在即抛。
-
-    Args: session, version_id。
-    """
-    version = await model_version_crud.get(session, version_id)
-    if version is None:
-        raise ModelVersionNotFound("这个模型版本不存在")
-    return version
-
-
-async def list_deployments(session: AsyncSession) -> list[ModelDeploymentOut]:
-    """全部对外服务。
-
-    Args: session。
-    """
-    rows = await deployment_crud.list_all(session)
-    presented: list[ModelDeploymentOut] = []
-    for row in rows:
-        version = await model_version_crud.get(
-            session, row.effective_version_id
-        )
-        keys = await api_key_crud.list_by_deployment(session, row.id)
-        if version is not None:
-            presented.append(
-                _present(
-                    _Presented(row=row, version=version, key_count=len(keys))
-                )
-            )
-    return presented

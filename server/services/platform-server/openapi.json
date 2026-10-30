@@ -1469,6 +1469,51 @@
         "title": "ApiResponse[ConnectivityOut]",
         "type": "object"
       },
+      "ApiResponse_CursorPage_DeploymentSwitchOut__": {
+        "properties": {
+          "code": {
+            "default": 0,
+            "title": "Code",
+            "type": "integer"
+          },
+          "data": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/CursorPage_DeploymentSwitchOut_"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "details": {
+            "anyOf": [
+              {
+                "items": {
+                  "$ref": "#/components/schemas/FieldErrorOut"
+                },
+                "type": "array"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Details"
+          },
+          "message": {
+            "default": "ok",
+            "title": "Message",
+            "type": "string"
+          },
+          "trace_id": {
+            "default": "",
+            "title": "Trace Id",
+            "type": "string"
+          }
+        },
+        "title": "ApiResponse[CursorPage[DeploymentSwitchOut]]",
+        "type": "object"
+      },
       "ApiResponse_CursorPage_HistoryPointOut__": {
         "properties": {
           "code": {
@@ -1512,6 +1557,51 @@
           }
         },
         "title": "ApiResponse[CursorPage[HistoryPointOut]]",
+        "type": "object"
+      },
+      "ApiResponse_CursorPage_ModelDeploymentOut__": {
+        "properties": {
+          "code": {
+            "default": 0,
+            "title": "Code",
+            "type": "integer"
+          },
+          "data": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/CursorPage_ModelDeploymentOut_"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "details": {
+            "anyOf": [
+              {
+                "items": {
+                  "$ref": "#/components/schemas/FieldErrorOut"
+                },
+                "type": "array"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Details"
+          },
+          "message": {
+            "default": "ok",
+            "title": "Message",
+            "type": "string"
+          },
+          "trace_id": {
+            "default": "",
+            "title": "Trace Id",
+            "type": "string"
+          }
+        },
+        "title": "ApiResponse[CursorPage[ModelDeploymentOut]]",
         "type": "object"
       },
       "ApiResponse_CursorPage_RawSampleOut__": {
@@ -3719,96 +3809,6 @@
         "title": "ApiResponse[Page[ModelPredictionOut]]",
         "type": "object"
       },
-      "ApiResponse_Page_ModelVersionSummaryOut__": {
-        "properties": {
-          "code": {
-            "default": 0,
-            "title": "Code",
-            "type": "integer"
-          },
-          "data": {
-            "anyOf": [
-              {
-                "$ref": "#/components/schemas/Page_ModelVersionSummaryOut_"
-              },
-              {
-                "type": "null"
-              }
-            ]
-          },
-          "details": {
-            "anyOf": [
-              {
-                "items": {
-                  "$ref": "#/components/schemas/FieldErrorOut"
-                },
-                "type": "array"
-              },
-              {
-                "type": "null"
-              }
-            ],
-            "title": "Details"
-          },
-          "message": {
-            "default": "ok",
-            "title": "Message",
-            "type": "string"
-          },
-          "trace_id": {
-            "default": "",
-            "title": "Trace Id",
-            "type": "string"
-          }
-        },
-        "title": "ApiResponse[Page[ModelVersionSummaryOut]]",
-        "type": "object"
-      },
-      "ApiResponse_Page_ModelingInstanceOut__": {
-        "properties": {
-          "code": {
-            "default": 0,
-            "title": "Code",
-            "type": "integer"
-          },
-          "data": {
-            "anyOf": [
-              {
-                "$ref": "#/components/schemas/Page_ModelingInstanceOut_"
-              },
-              {
-                "type": "null"
-              }
-            ]
-          },
-          "details": {
-            "anyOf": [
-              {
-                "items": {
-                  "$ref": "#/components/schemas/FieldErrorOut"
-                },
-                "type": "array"
-              },
-              {
-                "type": "null"
-              }
-            ],
-            "title": "Details"
-          },
-          "message": {
-            "default": "ok",
-            "title": "Message",
-            "type": "string"
-          },
-          "trace_id": {
-            "default": "",
-            "title": "Trace Id",
-            "type": "string"
-          }
-        },
-        "title": "ApiResponse[Page[ModelingInstanceOut]]",
-        "type": "object"
-      },
       "ApiResponse_Page_ModelingTemplateOut__": {
         "properties": {
           "code": {
@@ -4077,51 +4077,6 @@
           }
         },
         "title": "ApiResponse[Page[RoomOut]]",
-        "type": "object"
-      },
-      "ApiResponse_Page_RunSummaryOut__": {
-        "properties": {
-          "code": {
-            "default": 0,
-            "title": "Code",
-            "type": "integer"
-          },
-          "data": {
-            "anyOf": [
-              {
-                "$ref": "#/components/schemas/Page_RunSummaryOut_"
-              },
-              {
-                "type": "null"
-              }
-            ]
-          },
-          "details": {
-            "anyOf": [
-              {
-                "items": {
-                  "$ref": "#/components/schemas/FieldErrorOut"
-                },
-                "type": "array"
-              },
-              {
-                "type": "null"
-              }
-            ],
-            "title": "Details"
-          },
-          "message": {
-            "default": "ok",
-            "title": "Message",
-            "type": "string"
-          },
-          "trace_id": {
-            "default": "",
-            "title": "Trace Id",
-            "type": "string"
-          }
-        },
-        "title": "ApiResponse[Page[RunSummaryOut]]",
         "type": "object"
       },
       "ApiResponse_Page_ScheduleOut__": {
@@ -5879,6 +5834,153 @@
         "title": "ApiResponse[ThumbnailOut]",
         "type": "object"
       },
+      "ApiResponse_Union_Page_ModelVersionSummaryOut___CursorPage_ModelVersionSummaryOut___": {
+        "properties": {
+          "code": {
+            "default": 0,
+            "title": "Code",
+            "type": "integer"
+          },
+          "data": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/Page_ModelVersionSummaryOut_"
+              },
+              {
+                "$ref": "#/components/schemas/CursorPage_ModelVersionSummaryOut_"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Data"
+          },
+          "details": {
+            "anyOf": [
+              {
+                "items": {
+                  "$ref": "#/components/schemas/FieldErrorOut"
+                },
+                "type": "array"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Details"
+          },
+          "message": {
+            "default": "ok",
+            "title": "Message",
+            "type": "string"
+          },
+          "trace_id": {
+            "default": "",
+            "title": "Trace Id",
+            "type": "string"
+          }
+        },
+        "title": "ApiResponse[Union[Page[ModelVersionSummaryOut], CursorPage[ModelVersionSummaryOut]]]",
+        "type": "object"
+      },
+      "ApiResponse_Union_Page_ModelingInstanceOut___CursorPage_ModelingInstanceOut___": {
+        "properties": {
+          "code": {
+            "default": 0,
+            "title": "Code",
+            "type": "integer"
+          },
+          "data": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/Page_ModelingInstanceOut_"
+              },
+              {
+                "$ref": "#/components/schemas/CursorPage_ModelingInstanceOut_"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Data"
+          },
+          "details": {
+            "anyOf": [
+              {
+                "items": {
+                  "$ref": "#/components/schemas/FieldErrorOut"
+                },
+                "type": "array"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Details"
+          },
+          "message": {
+            "default": "ok",
+            "title": "Message",
+            "type": "string"
+          },
+          "trace_id": {
+            "default": "",
+            "title": "Trace Id",
+            "type": "string"
+          }
+        },
+        "title": "ApiResponse[Union[Page[ModelingInstanceOut], CursorPage[ModelingInstanceOut]]]",
+        "type": "object"
+      },
+      "ApiResponse_Union_Page_RunSummaryOut___CursorPage_RunSummaryOut___": {
+        "properties": {
+          "code": {
+            "default": 0,
+            "title": "Code",
+            "type": "integer"
+          },
+          "data": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/Page_RunSummaryOut_"
+              },
+              {
+                "$ref": "#/components/schemas/CursorPage_RunSummaryOut_"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Data"
+          },
+          "details": {
+            "anyOf": [
+              {
+                "items": {
+                  "$ref": "#/components/schemas/FieldErrorOut"
+                },
+                "type": "array"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Details"
+          },
+          "message": {
+            "default": "ok",
+            "title": "Message",
+            "type": "string"
+          },
+          "trace_id": {
+            "default": "",
+            "title": "Trace Id",
+            "type": "string"
+          }
+        },
+        "title": "ApiResponse[Union[Page[RunSummaryOut], CursorPage[RunSummaryOut]]]",
+        "type": "object"
+      },
       "ApiResponse_UploadTicketOut_": {
         "properties": {
           "code": {
@@ -6982,6 +7084,25 @@
           }
         },
         "title": "ApiResponse[list[ThemeOut]]",
+        "type": "object"
+      },
+      "ArchiveIn": {
+        "additionalProperties": false,
+        "properties": {
+          "expected_revision": {
+            "anyOf": [
+              {
+                "minimum": 1.0,
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Expected Revision"
+          }
+        },
+        "title": "ArchiveIn",
         "type": "object"
       },
       "AssetKindOut": {
@@ -9225,6 +9346,39 @@
         "title": "ConnectivityOut",
         "type": "object"
       },
+      "CursorPage_DeploymentSwitchOut_": {
+        "properties": {
+          "has_more": {
+            "title": "Has More",
+            "type": "boolean"
+          },
+          "items": {
+            "items": {
+              "$ref": "#/components/schemas/DeploymentSwitchOut"
+            },
+            "title": "Items",
+            "type": "array"
+          },
+          "next": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Next"
+          }
+        },
+        "required": [
+          "items",
+          "next",
+          "has_more"
+        ],
+        "title": "CursorPage[DeploymentSwitchOut]",
+        "type": "object"
+      },
       "CursorPage_HistoryPointOut_": {
         "properties": {
           "has_more": {
@@ -9256,6 +9410,105 @@
           "has_more"
         ],
         "title": "CursorPage[HistoryPointOut]",
+        "type": "object"
+      },
+      "CursorPage_ModelDeploymentOut_": {
+        "properties": {
+          "has_more": {
+            "title": "Has More",
+            "type": "boolean"
+          },
+          "items": {
+            "items": {
+              "$ref": "#/components/schemas/ModelDeploymentOut"
+            },
+            "title": "Items",
+            "type": "array"
+          },
+          "next": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Next"
+          }
+        },
+        "required": [
+          "items",
+          "next",
+          "has_more"
+        ],
+        "title": "CursorPage[ModelDeploymentOut]",
+        "type": "object"
+      },
+      "CursorPage_ModelVersionSummaryOut_": {
+        "properties": {
+          "has_more": {
+            "title": "Has More",
+            "type": "boolean"
+          },
+          "items": {
+            "items": {
+              "$ref": "#/components/schemas/ModelVersionSummaryOut"
+            },
+            "title": "Items",
+            "type": "array"
+          },
+          "next": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Next"
+          }
+        },
+        "required": [
+          "items",
+          "next",
+          "has_more"
+        ],
+        "title": "CursorPage[ModelVersionSummaryOut]",
+        "type": "object"
+      },
+      "CursorPage_ModelingInstanceOut_": {
+        "properties": {
+          "has_more": {
+            "title": "Has More",
+            "type": "boolean"
+          },
+          "items": {
+            "items": {
+              "$ref": "#/components/schemas/ModelingInstanceOut"
+            },
+            "title": "Items",
+            "type": "array"
+          },
+          "next": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Next"
+          }
+        },
+        "required": [
+          "items",
+          "next",
+          "has_more"
+        ],
+        "title": "CursorPage[ModelingInstanceOut]",
         "type": "object"
       },
       "CursorPage_RawSampleOut_": {
@@ -9355,6 +9608,39 @@
           "has_more"
         ],
         "title": "CursorPage[RenderOut]",
+        "type": "object"
+      },
+      "CursorPage_RunSummaryOut_": {
+        "properties": {
+          "has_more": {
+            "title": "Has More",
+            "type": "boolean"
+          },
+          "items": {
+            "items": {
+              "$ref": "#/components/schemas/RunSummaryOut"
+            },
+            "title": "Items",
+            "type": "array"
+          },
+          "next": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Next"
+          }
+        },
+        "required": [
+          "items",
+          "next",
+          "has_more"
+        ],
+        "title": "CursorPage[RunSummaryOut]",
         "type": "object"
       },
       "CursorPage_StartupEpisodeOut_": {
@@ -10112,6 +10398,136 @@
           "items"
         ],
         "title": "DatasetsOut",
+        "type": "object"
+      },
+      "DeploymentRollbackIn": {
+        "additionalProperties": false,
+        "properties": {
+          "expected_revision": {
+            "minimum": 1.0,
+            "title": "Expected Revision",
+            "type": "integer"
+          },
+          "is_signature_change_confirmed": {
+            "default": false,
+            "title": "Is Signature Change Confirmed",
+            "type": "boolean"
+          },
+          "switch_id": {
+            "format": "uuid",
+            "title": "Switch Id",
+            "type": "string"
+          }
+        },
+        "required": [
+          "expected_revision",
+          "switch_id"
+        ],
+        "title": "DeploymentRollbackIn",
+        "type": "object"
+      },
+      "DeploymentSwitchIn": {
+        "additionalProperties": false,
+        "properties": {
+          "expected_revision": {
+            "minimum": 1.0,
+            "title": "Expected Revision",
+            "type": "integer"
+          },
+          "is_signature_change_confirmed": {
+            "default": false,
+            "title": "Is Signature Change Confirmed",
+            "type": "boolean"
+          },
+          "model_version_id": {
+            "format": "uuid",
+            "title": "Model Version Id",
+            "type": "string"
+          }
+        },
+        "required": [
+          "expected_revision",
+          "model_version_id"
+        ],
+        "title": "DeploymentSwitchIn",
+        "type": "object"
+      },
+      "DeploymentSwitchOut": {
+        "properties": {
+          "created_at": {
+            "format": "date-time",
+            "title": "Created At",
+            "type": "string"
+          },
+          "created_by_name": {
+            "title": "Created By Name",
+            "type": "string"
+          },
+          "deployment_code": {
+            "title": "Deployment Code",
+            "type": "string"
+          },
+          "deployment_id": {
+            "anyOf": [
+              {
+                "format": "uuid",
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Deployment Id"
+          },
+          "from_model_version_id": {
+            "format": "uuid",
+            "title": "From Model Version Id",
+            "type": "string"
+          },
+          "id": {
+            "format": "uuid",
+            "title": "Id",
+            "type": "string"
+          },
+          "is_signature_change_confirmed": {
+            "title": "Is Signature Change Confirmed",
+            "type": "boolean"
+          },
+          "revision": {
+            "title": "Revision",
+            "type": "integer"
+          },
+          "rollback_of_id": {
+            "anyOf": [
+              {
+                "format": "uuid",
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Rollback Of Id"
+          },
+          "to_model_version_id": {
+            "format": "uuid",
+            "title": "To Model Version Id",
+            "type": "string"
+          }
+        },
+        "required": [
+          "id",
+          "deployment_id",
+          "deployment_code",
+          "from_model_version_id",
+          "to_model_version_id",
+          "revision",
+          "rollback_of_id",
+          "is_signature_change_confirmed",
+          "created_by_name",
+          "created_at"
+        ],
+        "title": "DeploymentSwitchOut",
         "type": "object"
       },
       "DetectionRow": {
@@ -33552,6 +33968,77 @@
       "get": {
         "description": "全部对外服务。\n\nArgs: session, _viewer。",
         "operationId": "list_deployments_api_v1_platform_modeling_deployments_get",
+        "parameters": [
+          {
+            "in": "query",
+            "name": "code",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "maxLength": 63,
+                  "minLength": 2,
+                  "pattern": "^[a-z0-9][a-z0-9-]{1,62}$",
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Code"
+            }
+          },
+          {
+            "in": "query",
+            "name": "model_version_id",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "format": "uuid",
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Model Version Id"
+            }
+          },
+          {
+            "in": "query",
+            "name": "instance_id",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "format": "uuid",
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Instance Id"
+            }
+          },
+          {
+            "in": "query",
+            "name": "is_enabled",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "boolean"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Is Enabled"
+            }
+          }
+        ],
         "responses": {
           "200": {
             "content": {
@@ -33562,6 +34049,16 @@
               }
             },
             "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
           }
         },
         "summary": "对外服务列表",
@@ -33630,7 +34127,7 @@
     },
     "/api/v1/platform/modeling-deployments/{deployment_id}": {
       "delete": {
-        "description": "删掉一个对外服务，连同它的密钥与调用记录。\n\nArgs: deployment_id, session, response, _write。",
+        "description": "删掉一个对外服务，连同它的密钥与调用记录。\n\nArgs: deployment_id, session, response, write。",
         "operationId": "delete_deployment_api_v1_platform_modeling_deployments__deployment_id__delete",
         "parameters": [
           {
@@ -33723,7 +34220,7 @@
         ]
       },
       "patch": {
-        "description": "换版本、改配额、启停。`code` 不可改。\n\nArgs: deployment_id, payload, session, _write。",
+        "description": "修改部署；Args: deployment_id, payload, session, write, response。",
         "operationId": "update_deployment_api_v1_platform_modeling_deployments__deployment_id__patch",
         "parameters": [
           {
@@ -34023,24 +34520,32 @@
         ]
       }
     },
-    "/api/v1/platform/modeling-instances": {
+    "/api/v1/platform/modeling-deployments/{deployment_id}/switches": {
       "get": {
-        "operationId": "list_instances_api_v1_platform_modeling_instances_get",
+        "operationId": "list_switches_api_v1_platform_modeling_deployments__deployment_id__switches_get",
         "parameters": [
           {
+            "in": "path",
+            "name": "deployment_id",
+            "required": true,
+            "schema": {
+              "format": "uuid",
+              "title": "Deployment Id",
+              "type": "string"
+            }
+          },
+          {
             "in": "query",
-            "name": "q",
+            "name": "pagination",
             "required": false,
             "schema": {
-              "anyOf": [
-                {
-                  "type": "string"
-                },
-                {
-                  "type": "null"
-                }
+              "default": "cursor",
+              "enum": [
+                "page",
+                "cursor"
               ],
-              "title": "Q"
+              "title": "Pagination",
+              "type": "string"
             }
           },
           {
@@ -34065,6 +34570,53 @@
               "title": "Size",
               "type": "integer"
             }
+          },
+          {
+            "in": "query",
+            "name": "after",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "maxLength": 4096,
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "After"
+            }
+          },
+          {
+            "in": "query",
+            "name": "limit",
+            "required": false,
+            "schema": {
+              "default": 100,
+              "maximum": 200,
+              "minimum": 1,
+              "title": "Limit",
+              "type": "integer"
+            }
+          },
+          {
+            "in": "query",
+            "name": "q",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "maxLength": 128,
+                  "minLength": 1,
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Q"
+            }
           }
         ],
         "responses": {
@@ -34072,7 +34624,351 @@
             "content": {
               "application/json": {
                 "schema": {
-                  "$ref": "#/components/schemas/ApiResponse_Page_ModelingInstanceOut__"
+                  "$ref": "#/components/schemas/ApiResponse_CursorPage_DeploymentSwitchOut__"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "List Switches",
+        "tags": [
+          "modeling-management"
+        ]
+      }
+    },
+    "/api/v1/platform/modeling-deployments/{deployment_id}:rollback": {
+      "post": {
+        "operationId": "rollback_deployment_api_v1_platform_modeling_deployments__deployment_id__rollback_post",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "deployment_id",
+            "required": true,
+            "schema": {
+              "format": "uuid",
+              "title": "Deployment Id",
+              "type": "string"
+            }
+          },
+          {
+            "in": "header",
+            "name": "idempotency-key",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Idempotency-Key"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/DeploymentRollbackIn"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiResponse_ModelDeploymentOut_"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Rollback Deployment",
+        "tags": [
+          "modeling-management"
+        ]
+      }
+    },
+    "/api/v1/platform/modeling-deployments/{deployment_id}:switch": {
+      "post": {
+        "operationId": "switch_deployment_api_v1_platform_modeling_deployments__deployment_id__switch_post",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "deployment_id",
+            "required": true,
+            "schema": {
+              "format": "uuid",
+              "title": "Deployment Id",
+              "type": "string"
+            }
+          },
+          {
+            "in": "header",
+            "name": "idempotency-key",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Idempotency-Key"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/DeploymentSwitchIn"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiResponse_ModelDeploymentOut_"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Switch Deployment",
+        "tags": [
+          "modeling-management"
+        ]
+      }
+    },
+    "/api/v1/platform/modeling-instances": {
+      "get": {
+        "operationId": "list_instances_api_v1_platform_modeling_instances_get",
+        "parameters": [
+          {
+            "in": "query",
+            "name": "pagination",
+            "required": false,
+            "schema": {
+              "default": "page",
+              "enum": [
+                "page",
+                "cursor"
+              ],
+              "title": "Pagination",
+              "type": "string"
+            }
+          },
+          {
+            "in": "query",
+            "name": "page",
+            "required": false,
+            "schema": {
+              "default": 1,
+              "minimum": 1,
+              "title": "Page",
+              "type": "integer"
+            }
+          },
+          {
+            "in": "query",
+            "name": "size",
+            "required": false,
+            "schema": {
+              "default": 20,
+              "maximum": 200,
+              "minimum": 1,
+              "title": "Size",
+              "type": "integer"
+            }
+          },
+          {
+            "in": "query",
+            "name": "after",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "maxLength": 4096,
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "After"
+            }
+          },
+          {
+            "in": "query",
+            "name": "limit",
+            "required": false,
+            "schema": {
+              "default": 100,
+              "maximum": 200,
+              "minimum": 1,
+              "title": "Limit",
+              "type": "integer"
+            }
+          },
+          {
+            "in": "query",
+            "name": "q",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "maxLength": 128,
+                  "minLength": 1,
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Q"
+            }
+          },
+          {
+            "in": "query",
+            "name": "code",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "maxLength": 64,
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Code"
+            }
+          },
+          {
+            "in": "query",
+            "name": "template_id",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "format": "uuid",
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Template Id"
+            }
+          },
+          {
+            "in": "query",
+            "name": "latest_run_status",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "enum": [
+                    "cancelled",
+                    "cancelling",
+                    "failed",
+                    "pending",
+                    "running",
+                    "succeeded"
+                  ],
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Latest Run Status"
+            }
+          },
+          {
+            "in": "query",
+            "name": "has_runs",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "boolean"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Has Runs"
+            }
+          },
+          {
+            "in": "query",
+            "name": "archived",
+            "required": false,
+            "schema": {
+              "default": "active",
+              "enum": [
+                "active",
+                "archived",
+                "all"
+              ],
+              "title": "Archived",
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiResponse_Union_Page_ModelingInstanceOut___CursorPage_ModelingInstanceOut___"
                 }
               }
             },
@@ -34322,6 +35218,75 @@
         ]
       }
     },
+    "/api/v1/platform/modeling-instances/{instance_id}:archive": {
+      "post": {
+        "operationId": "archive_instance_api_v1_platform_modeling_instances__instance_id__archive_post",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "instance_id",
+            "required": true,
+            "schema": {
+              "format": "uuid",
+              "title": "Instance Id",
+              "type": "string"
+            }
+          },
+          {
+            "in": "header",
+            "name": "idempotency-key",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Idempotency-Key"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/ArchiveIn"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiResponse_ModelingInstanceOut_"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Archive Instance",
+        "tags": [
+          "modeling-management"
+        ]
+      }
+    },
     "/api/v1/platform/modeling-instances/{instance_id}:deploy": {
       "post": {
         "operationId": "deploy_instance_api_v1_platform_modeling_instances__instance_id__deploy_post",
@@ -34388,6 +35353,75 @@
         "summary": "部署模型实例的指定版本",
         "tags": [
           "modeling-instance"
+        ]
+      }
+    },
+    "/api/v1/platform/modeling-instances/{instance_id}:restore": {
+      "post": {
+        "operationId": "restore_instance_api_v1_platform_modeling_instances__instance_id__restore_post",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "instance_id",
+            "required": true,
+            "schema": {
+              "format": "uuid",
+              "title": "Instance Id",
+              "type": "string"
+            }
+          },
+          {
+            "in": "header",
+            "name": "idempotency-key",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Idempotency-Key"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/ArchiveIn"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiResponse_ModelingInstanceOut_"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Restore Instance",
+        "tags": [
+          "modeling-management"
         ]
       }
     },
@@ -34462,24 +35496,20 @@
     },
     "/api/v1/platform/modeling-model-versions": {
       "get": {
-        "description": "分页列出模型版本，可按流水线筛。\n\nArgs: session, page, _viewer, pipeline_id。",
         "operationId": "list_versions_api_v1_platform_modeling_model_versions_get",
         "parameters": [
           {
             "in": "query",
-            "name": "pipeline_id",
+            "name": "pagination",
             "required": false,
             "schema": {
-              "anyOf": [
-                {
-                  "format": "uuid",
-                  "type": "string"
-                },
-                {
-                  "type": "null"
-                }
+              "default": "page",
+              "enum": [
+                "page",
+                "cursor"
               ],
-              "title": "Pipeline Id"
+              "title": "Pagination",
+              "type": "string"
             }
           },
           {
@@ -34504,6 +35534,174 @@
               "title": "Size",
               "type": "integer"
             }
+          },
+          {
+            "in": "query",
+            "name": "after",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "maxLength": 4096,
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "After"
+            }
+          },
+          {
+            "in": "query",
+            "name": "limit",
+            "required": false,
+            "schema": {
+              "default": 100,
+              "maximum": 200,
+              "minimum": 1,
+              "title": "Limit",
+              "type": "integer"
+            }
+          },
+          {
+            "in": "query",
+            "name": "q",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "maxLength": 128,
+                  "minLength": 1,
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Q"
+            }
+          },
+          {
+            "in": "query",
+            "name": "instance_id",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "format": "uuid",
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Instance Id"
+            }
+          },
+          {
+            "in": "query",
+            "name": "pipeline_id",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "format": "uuid",
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Pipeline Id"
+            }
+          },
+          {
+            "in": "query",
+            "name": "created_at__gte",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "format": "date-time",
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Created At  Gte"
+            }
+          },
+          {
+            "in": "query",
+            "name": "created_at__lt",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "format": "date-time",
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Created At  Lt"
+            }
+          },
+          {
+            "in": "query",
+            "name": "task",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "enum": [
+                    "anomaly_detection",
+                    "classification",
+                    "regression",
+                    "rule_calculation"
+                  ],
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Task"
+            }
+          },
+          {
+            "in": "query",
+            "name": "is_servable",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "boolean"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Is Servable"
+            }
+          },
+          {
+            "in": "query",
+            "name": "archived",
+            "required": false,
+            "schema": {
+              "default": "active",
+              "enum": [
+                "active",
+                "archived",
+                "all"
+              ],
+              "title": "Archived",
+              "type": "string"
+            }
           }
         ],
         "responses": {
@@ -34511,7 +35709,7 @@
             "content": {
               "application/json": {
                 "schema": {
-                  "$ref": "#/components/schemas/ApiResponse_Page_ModelVersionSummaryOut__"
+                  "$ref": "#/components/schemas/ApiResponse_Union_Page_ModelVersionSummaryOut___CursorPage_ModelVersionSummaryOut___"
                 }
               }
             },
@@ -34594,7 +35792,7 @@
     },
     "/api/v1/platform/modeling-model-versions/{version_id}": {
       "delete": {
-        "description": "退役。还有绑定指着它时 409。\n\nArgs: version_id, session, _write。",
+        "description": "退役。还有绑定指着它时 409。\n\nArgs: version_id, session, write, response。",
         "operationId": "retire_version_api_v1_platform_modeling_model_versions__version_id__delete",
         "parameters": [
           {
@@ -34687,7 +35885,7 @@
         ]
       },
       "patch": {
-        "description": "只改名称和说明。Args: version_id, payload, session, _write。",
+        "description": "只改名称和说明。Args: version_id, payload, session, write。",
         "operationId": "update_version_metadata_api_v1_platform_modeling_model_versions__version_id__patch",
         "parameters": [
           {
@@ -34755,6 +35953,192 @@
         ]
       }
     },
+    "/api/v1/platform/modeling-model-versions/{version_id}/deployments": {
+      "get": {
+        "operationId": "list_version_deployments_api_v1_platform_modeling_model_versions__version_id__deployments_get",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "version_id",
+            "required": true,
+            "schema": {
+              "format": "uuid",
+              "title": "Version Id",
+              "type": "string"
+            }
+          },
+          {
+            "in": "query",
+            "name": "pagination",
+            "required": false,
+            "schema": {
+              "default": "cursor",
+              "enum": [
+                "page",
+                "cursor"
+              ],
+              "title": "Pagination",
+              "type": "string"
+            }
+          },
+          {
+            "in": "query",
+            "name": "page",
+            "required": false,
+            "schema": {
+              "default": 1,
+              "minimum": 1,
+              "title": "Page",
+              "type": "integer"
+            }
+          },
+          {
+            "in": "query",
+            "name": "size",
+            "required": false,
+            "schema": {
+              "default": 20,
+              "maximum": 200,
+              "minimum": 1,
+              "title": "Size",
+              "type": "integer"
+            }
+          },
+          {
+            "in": "query",
+            "name": "after",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "maxLength": 4096,
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "After"
+            }
+          },
+          {
+            "in": "query",
+            "name": "limit",
+            "required": false,
+            "schema": {
+              "default": 100,
+              "maximum": 200,
+              "minimum": 1,
+              "title": "Limit",
+              "type": "integer"
+            }
+          },
+          {
+            "in": "query",
+            "name": "q",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "maxLength": 128,
+                  "minLength": 1,
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Q"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiResponse_CursorPage_ModelDeploymentOut__"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "List Version Deployments",
+        "tags": [
+          "modeling-management"
+        ]
+      }
+    },
+    "/api/v1/platform/modeling-model-versions/{version_id}:archive": {
+      "post": {
+        "operationId": "archive_version_api_v1_platform_modeling_model_versions__version_id__archive_post",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "version_id",
+            "required": true,
+            "schema": {
+              "format": "uuid",
+              "title": "Version Id",
+              "type": "string"
+            }
+          },
+          {
+            "in": "header",
+            "name": "idempotency-key",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Idempotency-Key"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiResponse_ModelVersionOut_"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Archive Version",
+        "tags": [
+          "modeling-management"
+        ]
+      }
+    },
     "/api/v1/platform/modeling-model-versions/{version_id}:register-formula": {
       "post": {
         "description": "一步建库公式条目 + 建绑定。形参从模型签名生成，顺序天然对齐。\n\nArgs: version_id, payload, session, response, caller。",
@@ -34806,6 +36190,65 @@
         "summary": "注册为公式",
         "tags": [
           "modeling-model"
+        ]
+      }
+    },
+    "/api/v1/platform/modeling-model-versions/{version_id}:restore": {
+      "post": {
+        "operationId": "restore_version_api_v1_platform_modeling_model_versions__version_id__restore_post",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "version_id",
+            "required": true,
+            "schema": {
+              "format": "uuid",
+              "title": "Version Id",
+              "type": "string"
+            }
+          },
+          {
+            "in": "header",
+            "name": "idempotency-key",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Idempotency-Key"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiResponse_ModelVersionOut_"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Restore Version",
+        "tags": [
+          "modeling-management"
         ]
       }
     },
@@ -35268,24 +36711,20 @@
     },
     "/api/v1/platform/modeling-runs": {
       "get": {
-        "description": "分页列出运行记录，可按流水线筛。\n\nArgs: session, page, _viewer, pipeline_id。",
         "operationId": "list_runs_api_v1_platform_modeling_runs_get",
         "parameters": [
           {
             "in": "query",
-            "name": "pipeline_id",
+            "name": "pagination",
             "required": false,
             "schema": {
-              "anyOf": [
-                {
-                  "format": "uuid",
-                  "type": "string"
-                },
-                {
-                  "type": "null"
-                }
+              "default": "page",
+              "enum": [
+                "page",
+                "cursor"
               ],
-              "title": "Pipeline Id"
+              "title": "Pagination",
+              "type": "string"
             }
           },
           {
@@ -35310,6 +36749,145 @@
               "title": "Size",
               "type": "integer"
             }
+          },
+          {
+            "in": "query",
+            "name": "after",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "maxLength": 4096,
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "After"
+            }
+          },
+          {
+            "in": "query",
+            "name": "limit",
+            "required": false,
+            "schema": {
+              "default": 100,
+              "maximum": 200,
+              "minimum": 1,
+              "title": "Limit",
+              "type": "integer"
+            }
+          },
+          {
+            "in": "query",
+            "name": "q",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "maxLength": 128,
+                  "minLength": 1,
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Q"
+            }
+          },
+          {
+            "in": "query",
+            "name": "instance_id",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "format": "uuid",
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Instance Id"
+            }
+          },
+          {
+            "in": "query",
+            "name": "pipeline_id",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "format": "uuid",
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Pipeline Id"
+            }
+          },
+          {
+            "in": "query",
+            "name": "created_at__gte",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "format": "date-time",
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Created At  Gte"
+            }
+          },
+          {
+            "in": "query",
+            "name": "created_at__lt",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "format": "date-time",
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Created At  Lt"
+            }
+          },
+          {
+            "in": "query",
+            "name": "status",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "enum": [
+                    "cancelled",
+                    "cancelling",
+                    "failed",
+                    "pending",
+                    "running",
+                    "succeeded"
+                  ],
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Status"
+            }
           }
         ],
         "responses": {
@@ -35317,7 +36895,7 @@
             "content": {
               "application/json": {
                 "schema": {
-                  "$ref": "#/components/schemas/ApiResponse_Page_RunSummaryOut__"
+                  "$ref": "#/components/schemas/ApiResponse_Union_Page_RunSummaryOut___CursorPage_RunSummaryOut___"
                 }
               }
             },
@@ -35495,7 +37073,7 @@
     },
     "/api/v1/platform/modeling-runs/{run_id}:cancel": {
       "post": {
-        "description": "请求取消。终态在下一个节点边界才落，中间态是 `cancelling`。\n\nArgs: run_id, session, _context。",
+        "description": "请求取消。终态在下一个节点边界才落，中间态是 `cancelling`。\n\nArgs: run_id, session, write。",
         "operationId": "cancel_run_api_v1_platform_modeling_runs__run_id__cancel_post",
         "parameters": [
           {
@@ -35506,6 +37084,22 @@
               "format": "uuid",
               "title": "Run Id",
               "type": "string"
+            }
+          },
+          {
+            "in": "header",
+            "name": "idempotency-key",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Idempotency-Key"
             }
           }
         ],

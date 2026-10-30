@@ -96,32 +96,6 @@ class InstanceCrud(CrudBase[ModelingInstance]):
         row = result.one_or_none()
         return InstanceRecord(*row) if row else None
 
-    async def page(
-        self,
-        session: AsyncSession,
-        *,
-        keyword: str | None,
-        offset: int,
-        limit: int,
-    ) -> tuple[list[InstanceRecord], int]:
-        statement = records_statement()
-        if keyword:
-            statement = statement.where(
-                ModelingPipeline.name.contains(keyword, autoescape=True)
-                | ModelingPipeline.code.contains(keyword, autoescape=True)
-            )
-        count = await session.scalar(
-            select(func.count()).select_from(statement.subquery())
-        )
-        result = await session.execute(
-            statement.order_by(
-                ModelingInstance.updated_at.desc(), ModelingInstance.id.desc()
-            )
-            .offset(offset)
-            .limit(limit)
-        )
-        return [InstanceRecord(*row) for row in result.all()], count or 0
-
 
 def records_statement() -> Select[
     tuple[
