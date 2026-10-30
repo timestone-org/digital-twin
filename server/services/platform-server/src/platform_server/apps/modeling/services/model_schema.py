@@ -9,6 +9,9 @@
 from typing import Any
 
 from platform_server.apps.modeling.operators import registry
+from platform_server.apps.modeling.services.input_defaults import (
+    leading_input_defaults,
+)
 from platform_server.apps.modeling.services.jsonshape import (
     as_dict,
     as_list,
@@ -31,11 +34,13 @@ def build_schema(
 
     Args: entry（入口列的元信息）, steps（可服务表示里的步骤）, target, task。
     """
-    filled = _fill_values(steps)
+    filled = (
+        {} if task == "anomaly_detection" else leading_input_defaults(steps)
+    )
     return {
         "format_version": SCHEMA_FORMAT_VERSION,
         "requires_timestamp": _needs_timestamp(steps),
-        "inputs": [_input_of(item, filled) for item in entry],
+        "inputs": [_input_of(item, filled, task) for item in entry],
         "derived": _derived_of(entry, steps),
         "output": {
             "key": as_text(target.get("key")),
@@ -61,13 +66,15 @@ def _needs_timestamp(steps: list[dict[str, Any]]) -> bool:
     )
 
 
-def _input_of(item: dict[str, Any], filled: dict[str, float]) -> dict[str, Any]:
+def _input_of(
+    item: dict[str, Any], filled: dict[str, float], task: str
+) -> dict[str, Any]:
     """一个入口列对外长什么样。
 
-    Args: item, filled。
+    Args: item, filled, task。
     """
     key = as_text(item.get("key"))
-    return {
+    result = {
         "key": key,
         "label": as_text(item.get("label")) or key,
         "unit": as_text(item.get("unit")),
@@ -76,26 +83,12 @@ def _input_of(item: dict[str, Any], filled: dict[str, float]) -> dict[str, Any]:
         "default_on_missing": filled.get(key),
         "training_stats": as_dict(item.get("stats")),
     }
-
-
-def _fill_values(steps: list[dict[str, Any]]) -> dict[str, float]:
-    """哪些入口列可以不给，不给时会被填成什么。
-
-    判据（D7）：推理链上有一步会补空值、且它学到了这一列的填充值，而**排在它
-    前面的每一步也都是补空值的**。
-    ⚠ 最后那个条件不能省：填充排在标准化后面时，那一列在被填之前就已经被读过
-    了，不给它照样算错——而那时候界面上写着「可缺省」。
-    Args: steps。
-    """
-    values: dict[str, float] = {}
-    for step in steps:
-        operator = registry.get(as_text(step.get("operator")))
-        if not operator.FILLS_MISSING:
-            break
-        for key, value in as_dict(step.get("fitted")).items():
-            if isinstance(value, (int | float)):
-                values.setdefault(key, float(value))
-    return values
+    if task in {"regression", "classification"}:
+        result["missing_policy"] = {
+            "on_missing": "fitted_default" if key in filled else "reject",
+            "on_null": "fitted_default" if key in filled else "return_null",
+        }
+    return result
 
 
 def _derived_of(

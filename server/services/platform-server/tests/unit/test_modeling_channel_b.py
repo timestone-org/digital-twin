@@ -5,6 +5,7 @@
 上线后每一格都空着（docs/MODELING_PLATFORM_DESIGN.md D9 / D10）。
 """
 
+from dataclasses import replace
 from datetime import datetime
 from typing import Any
 
@@ -246,16 +247,38 @@ async def test_batch_and_row_by_row_agree() -> None:
 
 
 async def test_a_row_with_a_missing_argument_stays_out_of_the_batch() -> None:
-    """实参有空的那一行答案是 None，且不把缺失值喂进变换链。"""
+    """2.0 历史版本仍将缺值行保留为 None。"""
     graph, records, estimator = await _run()
-    compiled = compile_model(
-        inspect_run(graph, records, estimator).serving, estimator=estimator
-    )
+    serving = inspect_run(graph, records, estimator).serving
+    serving["format_version"] = "2.0"
+    compiled = compile_model(serving, estimator=estimator)
     answers = compiled.predict_many(
         [([None, 400.0], None), ([20.0, 400.0], None)]
     )
     assert answers[0] is None
     assert answers[1] is not None
+
+
+async def test_binary_defaults_agree_for_single_and_batch_prediction() -> None:
+    graph = _tree_graph()
+    graph.nodes[1] = node(
+        "f", "fill_missing", strategy="constant", value=7.0, columns=["温度"]
+    )
+    frame = linear_frame(120)
+    frame = replace(
+        frame, rows=tuple((row[0], row[1], 1345.0) for row in frame.rows)
+    )
+    outcome = await execute_graph(
+        graph, execution=execution_of(DirectRunner(), frames={"s": frame})
+    )
+    estimator = _estimator_of(outcome)
+    verdict = inspect_run(graph, _records_of(outcome), estimator)
+    compiled = compile_model(verdict.serving, estimator=estimator)
+    assert compiled.predict([None, 400.0]) == pytest.approx(1345.0)
+    assert compiled.predict([None, None]) is None
+    assert compiled.predict_many(
+        [([None, 400.0], None), ([25.0, 430.0], None), ([None, None], None)]
+    ) == [pytest.approx(1345.0), pytest.approx(1345.0), None]
 
 
 async def test_a_binary_model_wants_to_be_batched() -> None:

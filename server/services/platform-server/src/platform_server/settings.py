@@ -3,6 +3,7 @@
 变量名 = `PLATFORM_<组>_<键>`。密钥类一律无默认值——缺失即拒绝启动。
 """
 
+import uuid
 from typing import Self
 from urllib.parse import urlsplit
 from zoneinfo import ZoneInfo, ZoneInfoNotFoundError
@@ -66,6 +67,7 @@ class Settings(
     )
 
     report_schedule_enabled: bool = False
+    modeling_trusted_operator_accounts: tuple[uuid.UUID, ...] = ()
     report_api_connections: list[ReportApiConnection] = Field(
         default_factory=list[ReportApiConnection], max_length=50
     )

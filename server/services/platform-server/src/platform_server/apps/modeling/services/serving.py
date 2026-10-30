@@ -17,6 +17,9 @@ from platform_server.apps.modeling.operators import (
     OperatorError,
     registry,
 )
+from platform_server.apps.modeling.services.input_defaults import (
+    leading_input_defaults,
+)
 from platform_server.apps.modeling.services.jsonshape import (
     as_dict,
     as_list,
@@ -25,7 +28,8 @@ from platform_server.apps.modeling.services.jsonshape import (
 )
 
 # `serving_json` 的线形版本。发布写的是它，加载期据此分派
-SERVING_FORMAT_VERSION = "2.0"
+SERVING_FORMAT_VERSION = "2.1"
+SERVING_FORMAT_V2 = "2.0"
 # 头一版：入口契约取 `input_columns`，且每一步的期望列都是同一份特征列。
 # ⚠ 这条加载路径**一行都不许改**：模型版本不可变，历史版本必须按它当初的口径
 # 继续算。改了不会报错，只是从某一天起某几列的历史值与新值口径不同
@@ -73,10 +77,12 @@ class CompiledModel:
         features: tuple[str, ...],
         steps: tuple[_Step, ...],
         estimator: object | None = None,
+        input_defaults: dict[str, float] | None = None,
     ) -> None:
         self._features = features
         self._steps = steps
         self._estimator = estimator
+        self._input_defaults = dict(input_defaults or {})
 
     @property
     def needs_estimator(self) -> bool:
@@ -106,28 +112,24 @@ class CompiledModel:
     def predict_many(
         self, rows: list[tuple[list[float | None], datetime | None]]
     ) -> list[float | None]:
-        """整批算，结果按传入顺序回。
-
-        ⚠ 实参里有空的那些行**不进批**：它们的答案恒为 None，而混进去会让
-        缺失值参与拟合链上的变换，算出一个看着正常的数。
-        Args: rows。
-        """
+        """整批按冻结缺省规则计算，保留输入顺序；Args: rows。"""
         answers: list[float | None] = [None] * len(rows)
+        resolved = [(self._arguments(args, at), at) for args, at in rows]
         live = [
-            index
-            for index, (args, at) in enumerate(rows)
-            if self._is_answerable(args, at)
+            (index, args, at)
+            for index, (args, at) in enumerate(resolved)
+            if args is not None
         ]
         if not live:
             return answers
         frame = _rows(
             self._features,
-            [[float(item or 0.0) for item in rows[index][0]] for index in live],
-            index=tuple(_epoch_ms(rows[index][1]) for index in live),
+            [args for _index, args, _at in live],
+            index=tuple(_epoch_ms(at) for _index, _args, at in live),
         )
         for step in self._steps:
             frame = _apply(step, frame, self._estimator)
-        for slot, index in enumerate(live):
+        for slot, (index, _args, _at) in enumerate(live):
             answers[index] = _value_at(frame, slot)
         return answers
 
@@ -152,15 +154,18 @@ class CompiledModel:
         )
         return _calculate(self._steps[0], frame)
 
-    def _is_answerable(
+    def _arguments(
         self, args: list[float | None], at: datetime | None
-    ) -> bool:
-        """这一行进不进批。形状不对当场抛，缺值只是不进批。
-
-        Args: args, at。
-        """
+    ) -> list[float] | None:
+        """按入口顺序应用冻结缺省值，未覆盖缺值不计算；Args: args, at。"""
         self._refuse_bad_shape(args, at)
-        return all(item is not None for item in args)
+        values: list[float] = []
+        for key, value in zip(self._features, args, strict=True):
+            resolved = self._input_defaults.get(key) if value is None else value
+            if resolved is None:
+                return None
+            values.append(float(resolved))
+        return values
 
     def _refuse_bad_shape(
         self, args: list[float | None], at: datetime | None
@@ -188,12 +193,12 @@ class CompiledModel:
         当场说清楚——拿「现在」顶替会让同一行在不同时候算出不同的数（D19）。
         Args: args, at。
         """
-        self._refuse_bad_shape(args, at)
-        if any(item is None for item in args):
+        values = self._arguments(args, at)
+        if values is None:
             return None
         frame = _one_row(
             self._features,
-            [float(item or 0.0) for item in args],
+            values,
             at=at,
         )
         for step in self._steps:
@@ -222,6 +227,13 @@ def compile_model(
             _step_of(item) for item in as_list(serving.get(_FIELD_STEPS))
         ),
         estimator=estimator,
+        input_defaults=(
+            leading_input_defaults(
+                [as_dict(item) for item in as_list(serving.get(_FIELD_STEPS))]
+            )
+            if serving.get(_FIELD_VERSION) == SERVING_FORMAT_VERSION
+            else None
+        ),
     )
     if compiled.needs_estimator and estimator is None:
         raise OperatorError("这个模型的本体存在二进制产物里，还没有加载进来")
@@ -236,7 +248,7 @@ def _entry_keys_of(serving: dict[str, Any]) -> tuple[str, ...]:
     version = as_text(serving.get(_FIELD_VERSION))
     if version == SERVING_FORMAT_V1:
         return tuple(as_texts(serving.get(_FIELD_INPUTS)))
-    if version == SERVING_FORMAT_VERSION:
+    if version in (SERVING_FORMAT_V2, SERVING_FORMAT_VERSION):
         return tuple(
             as_text(as_dict(item).get(_FIELD_KEY))
             for item in as_list(serving.get(_FIELD_ENTRY))
