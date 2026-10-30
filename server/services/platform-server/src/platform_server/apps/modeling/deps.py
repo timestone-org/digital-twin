@@ -7,7 +7,8 @@
 from datetime import UTC, datetime
 from typing import Annotated
 
-from fastapi import Depends
+from fastapi import Depends, Request, Response
+from sqlalchemy.ext.asyncio import AsyncSession
 
 from lib.auth import CallerContext
 from lib.stream import StreamGroup
@@ -16,6 +17,7 @@ from platform_server.apps.modeling.catalog import (
     MODELING_PUBLISH,
     MODELING_RUN,
 )
+from platform_server.apps.modeling.command_deps import build_command_gate
 from platform_server.apps.modeling.services import Actor, RunContext
 from platform_server.apps.modeling.services.open_model_service import (
     OpenModelDeps,
@@ -94,7 +96,7 @@ def get_manage_context(
     )
 
 
-def get_instance_write_context(
+def _get_instance_write_gate(
     container: Annotated[Container, Depends(get_container)],
     caller: Annotated[CallerContext, Depends(require(MODELING_RUN))],
     idempotency_key: Annotated[str | None, Depends(get_idempotency_key)],
@@ -107,7 +109,7 @@ def get_instance_write_context(
     )
 
 
-def get_publish_context(
+def _get_publish_gate(
     container: Annotated[Container, Depends(get_container)],
     caller: Annotated[CallerContext, Depends(require(MODELING_PUBLISH))],
     idempotency_key: Annotated[str | None, Depends(get_idempotency_key)],
@@ -123,6 +125,26 @@ def get_publish_context(
         idempotency_key=idempotency_key,
         caller=caller,
     )
+
+
+async def get_instance_write_context(
+    request: Request,
+    response: Response,
+    session: Annotated[AsyncSession, Depends(get_session)],
+    gate: Annotated[WriteGate, Depends(_get_instance_write_gate)],
+    sessions: Annotated[Sessions, Depends(get_modeling_sessions)],
+) -> WriteGate:
+    return await build_command_gate(request, response, session, gate, sessions)
+
+
+async def get_publish_context(
+    request: Request,
+    response: Response,
+    session: Annotated[AsyncSession, Depends(get_session)],
+    gate: Annotated[WriteGate, Depends(_get_publish_gate)],
+    sessions: Annotated[Sessions, Depends(get_modeling_sessions)],
+) -> WriteGate:
+    return await build_command_gate(request, response, session, gate, sessions)
 
 
 def get_run_context(
