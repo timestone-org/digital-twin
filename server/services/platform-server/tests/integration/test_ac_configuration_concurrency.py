@@ -2,8 +2,14 @@
 
 import asyncio
 import uuid
-from collections.abc import AsyncIterator
-from dataclasses import dataclass
+from collections.abc import AsyncIterator, Awaitable, Callable
+from contextlib import (
+    AbstractAsyncContextManager,
+    AsyncExitStack,
+    asynccontextmanager,
+)
+from contextvars import ContextVar
+from dataclasses import dataclass, field
 from decimal import Decimal
 
 import pytest
@@ -235,21 +241,18 @@ async def _write_configuration(
 
 
 async def _require_waiting(
-    case: ConfigurationCase, writer: asyncio.Task[None], process_id: int
+    observer: AsyncSession, writer: asyncio.Task[None], process_id: int
 ) -> None:
-    async with case.database.session() as observer:
-        async with asyncio.timeout(2):
-            while not writer.done():
-                blocked = await observer.scalar(
-                    text(
-                        "SELECT cardinality(pg_blocking_pids(:process_id)) > 0"
-                    ),
-                    {"process_id": process_id},
-                )
-                if blocked:
-                    return
-        await writer
-        pytest.fail("配置写入越过了终态快照的事务边界")
+    async with asyncio.timeout(2):
+        while not writer.done():
+            blocked = await observer.scalar(
+                text("SELECT cardinality(pg_blocking_pids(:process_id)) > 0"),
+                {"process_id": process_id},
+            )
+            if blocked:
+                return
+    await writer
+    pytest.fail("配置写入越过了终态快照的事务边界")
 
 
 @pytest.mark.parametrize(
@@ -275,22 +278,24 @@ async def test_configuration_changes_wait_for_final_snapshot(
     room_id = (
         case.empty_room_id if operation == "new_empty_member" else case.room_id
     )
-    async with case.database.session() as snapshot:
-        before = await load_configuration(
-            snapshot,
-            room_id,
-            timezone="Asia/Shanghai",
-            rules=ExtractionRules(),
-            should_lock_units=True,
-        )
-        writer = asyncio.create_task(
-            _write_configuration(case, ready, operation)
-        )
-        try:
-            await _require_waiting(case, writer, await ready)
-        finally:
-            await snapshot.commit()
-            await writer
+    async with case.database.session() as observer:
+        await observer.connection()
+        async with case.database.session() as snapshot:
+            before = await load_configuration(
+                snapshot,
+                room_id,
+                timezone="Asia/Shanghai",
+                rules=ExtractionRules(),
+                should_lock_units=True,
+            )
+            writer = asyncio.create_task(
+                _write_configuration(case, ready, operation)
+            )
+            try:
+                await _require_waiting(observer, writer, await ready)
+            finally:
+                await snapshot.commit()
+                await writer
     async with case.database.session() as session:
         after = await load_configuration(
             session, room_id, timezone="Asia/Shanghai", rules=ExtractionRules()
@@ -303,24 +308,104 @@ async def test_unit_relocation_while_waiting_rejects_configuration_write(
 ) -> None:
     case = configuration_case
     ready: asyncio.Future[int] = asyncio.get_running_loop().create_future()
-    async with case.database.session() as mover:
-        await room_crud.lock_configuration(mover, frozenset({case.room_id}))
-        writer = asyncio.create_task(
-            _write_configuration(case, ready, "binding_delete")
-        )
-        try:
-            await _require_waiting(case, writer, await ready)
-            await ac_unit_service.update_ac_unit(
-                mover,
-                ac_unit_id=case.unit_id,
-                payload=AcUnitUpdateIn(room_id=case.other_room_id),
+    async with case.database.session() as observer:
+        await observer.connection()
+        async with case.database.session() as mover:
+            await room_crud.lock_configuration(mover, frozenset({case.room_id}))
+            writer = asyncio.create_task(
+                _write_configuration(case, ready, "binding_delete")
             )
-        finally:
-            await mover.commit()
-            with pytest.raises(Conflict, match="所属房间已变化"):
-                await writer
+            try:
+                await _require_waiting(observer, writer, await ready)
+                await ac_unit_service.update_ac_unit(
+                    mover,
+                    ac_unit_id=case.unit_id,
+                    payload=AcUnitUpdateIn(room_id=case.other_room_id),
+                )
+            finally:
+                await mover.commit()
+                with pytest.raises(Conflict, match="所属房间已变化"):
+                    await writer
     async with case.database.session() as session:
         bindings = await ac_data_service.list_bindings(
             session, ac_unit_id=case.unit_id
         )
         assert bindings.items[0].source_object == "Before"
+
+
+@dataclass
+class ObserverTeardown:
+    """观察事务退出前阻塞，检查快照锁是否已经释放。"""
+
+    open_session: Callable[[], AbstractAsyncContextManager[AsyncSession]]
+    wait_until_blocked: Callable[
+        [AsyncSession, asyncio.Task[None], int], Awaitable[None]
+    ]
+    observing: ContextVar[bool] = field(
+        default_factory=lambda: ContextVar(
+            "configuration_observer", default=False
+        )
+    )
+    observed_sessions: set[int] = field(default_factory=set)
+    reached: asyncio.Event = field(default_factory=asyncio.Event)
+    release: asyncio.Event = field(default_factory=asyncio.Event)
+
+    @asynccontextmanager
+    async def session(self) -> AsyncIterator[AsyncSession]:
+        is_observing = self.observing.get()
+        async with self.open_session() as session:
+            yield session
+            if is_observing or id(session) in self.observed_sessions:
+                self.reached.set()
+                await self.release.wait()
+
+    async def require_waiting(
+        self,
+        observer: AsyncSession,
+        writer: asyncio.Task[None],
+        process_id: int,
+    ) -> None:
+        self.observed_sessions.add(id(observer))
+        token = self.observing.set(True)
+        try:
+            await self.wait_until_blocked(observer, writer, process_id)
+        finally:
+            self.observing.reset(token)
+
+
+async def _warm_observation_sessions(
+    open_session: Callable[[], AbstractAsyncContextManager[AsyncSession]],
+) -> None:
+    async with AsyncExitStack() as ready:
+        for _ in range(3):
+            session = await ready.enter_async_context(open_session())
+            await session.connection()
+
+
+async def test_snapshot_and_writer_finish_before_observer_teardown(
+    configuration_case: ConfigurationCase, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    case = configuration_case
+    delayed = ObserverTeardown(case.database.session, _require_waiting)
+    monkeypatch.setattr(case.database, "session", delayed.session)
+    monkeypatch.setattr(f"{__name__}._require_waiting", delayed.require_waiting)
+    async with delayed.open_session() as verification:
+        await verification.connection()
+        await _warm_observation_sessions(delayed.open_session)
+        protocol = asyncio.create_task(
+            test_configuration_changes_wait_for_final_snapshot(
+                case, "binding_delete"
+            )
+        )
+        try:
+            async with asyncio.timeout(2):
+                await delayed.reached.wait()
+            binding = await verification.scalar(
+                select(AcDataBinding).where(
+                    AcDataBinding.ac_unit_id == case.unit_id
+                )
+            )
+            assert binding is None
+        finally:
+            delayed.release.set()
+            await protocol
