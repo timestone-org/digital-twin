@@ -13,19 +13,29 @@ from platform_server.apps.modeling.models import (
 )
 
 
-def _identities() -> Subquery:
+def identities_statement() -> Subquery:
     return union_all(
         select(
             ModelingModelVersion.id,
             ModelingModelVersion.version,
             ModelingModelVersion.pipeline_id,
             ModelingModelVersion.run_id,
+            ModelingModelVersion.created_at,
+            ModelingModelVersion.name,
+            ModelingModelVersion.task,
+            ModelingModelVersion.servable,
+            ModelingModelVersion.archived_at,
         ),
         select(
             ModelingRuleVersion.id,
             ModelingRuleVersion.version,
             ModelingRuleVersion.pipeline_id,
             ModelingRuleVersion.run_id,
+            ModelingRuleVersion.created_at,
+            ModelingRuleVersion.name,
+            ModelingRuleVersion.task,
+            ModelingRuleVersion.servable,
+            ModelingRuleVersion.archived_at,
         ),
     ).subquery()
 
@@ -56,7 +66,7 @@ class ModelVersionCrud:
             .where(ModelingPipeline.id == pipeline_id)
             .with_for_update()
         )
-        versions = _identities()
+        versions = identities_statement()
         rows = await session.execute(
             select(func.max(versions.c.version)).where(
                 versions.c.pipeline_id == pipeline_id
@@ -90,7 +100,7 @@ class ModelVersionCrud:
         limit: int,
     ) -> tuple[list[ModelVersion], int]:
         """数据库统一分页。Args: session, pipeline_id, offset, limit。"""
-        versions = _identities()
+        versions = identities_statement()
         selected = select(versions.c.id)
         if pipeline_id is not None:
             selected = selected.where(versions.c.pipeline_id == pipeline_id)
@@ -126,7 +136,7 @@ class ModelVersionCrud:
         self, session: AsyncSession, pipeline_id: uuid.UUID | None
     ) -> frozenset[uuid.UUID]:
         """保留期清理必须保护两个存储的来源运行。Args: session, pipeline_id。"""
-        versions = _identities()
+        versions = identities_statement()
         selected = select(versions.c.run_id)
         if pipeline_id is not None:
             selected = selected.where(versions.c.pipeline_id == pipeline_id)
@@ -137,7 +147,7 @@ class ModelVersionCrud:
         self, session: AsyncSession, pipeline_id: uuid.UUID
     ) -> int:
         """删除流水线前计数全部版本。Args: session, pipeline_id。"""
-        versions = _identities()
+        versions = identities_statement()
         found = await session.scalar(
             select(func.count())
             .select_from(versions)

@@ -231,6 +231,8 @@ const NODE_RUN = {
 const RUN_SUMMARY = {
   id: true,
   pipeline_id: true,
+  instance_id: true,
+  published_version_id: true,
   status: true,
   trigger: true,
   started_at: true,
@@ -265,6 +267,10 @@ const VERSION_SUMMARY = {
   target_key: true,
   created_by_name: true,
   created_at: true,
+  archived_at: true,
+  instance_id: true,
+  deployment_count: true,
+  deployments_url: true,
 } satisfies Keys<ModelingVersionSummary>
 
 const VERSION = {
@@ -305,6 +311,7 @@ const BINDING_IMPACT = {
 const DEPLOYMENT = {
   id: true,
   code: true,
+  revision: true,
   model_version_id: true,
   model_name: true,
   model_version: true,

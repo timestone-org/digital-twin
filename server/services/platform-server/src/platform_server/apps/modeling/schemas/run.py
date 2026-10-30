@@ -79,6 +79,8 @@ class RunSummaryOut(OutputModel):
     error_text: str | None
     created_by_name: str | None
     created_at: Utc
+    instance_id: uuid.UUID | None = None
+    published_version_id: uuid.UUID | None = None
 
 
 class RunOut(RunSummaryOut):

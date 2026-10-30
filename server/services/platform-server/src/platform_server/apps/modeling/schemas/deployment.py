@@ -61,6 +61,7 @@ class ModelDeploymentUpdateIn(InputModel):
         default=None, ge=1, le=MAX_ROWS_CEILING
     )
     rate_limit_per_minute: int | None = Field(default=None, ge=1, le=6000)
+    expected_revision: int | None = Field(default=None, ge=1)
 
 
 class ModelDeploymentOut(OutputModel):
@@ -85,6 +86,7 @@ class ModelDeploymentOut(OutputModel):
     created_by_name: str | None
     created_at: Utc
     updated_at: Utc
+    revision: int = 1
 
 
 class ModelApiKeyCreateIn(InputModel):

@@ -162,6 +162,7 @@ export type ModelingInstanceDeployInput = {
 }
 
 export type ModelingInstance = {
+  archived_at?: string | null
   code: string
   created_at: string
   description: string | null

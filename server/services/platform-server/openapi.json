@@ -13891,6 +13891,11 @@
             "title": "Rate Limit Per Minute",
             "type": "integer"
           },
+          "revision": {
+            "default": 1,
+            "title": "Revision",
+            "type": "integer"
+          },
           "unservable_reason": {
             "anyOf": [
               {
@@ -13945,6 +13950,18 @@
               }
             ],
             "title": "Description"
+          },
+          "expected_revision": {
+            "anyOf": [
+              {
+                "minimum": 1.0,
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Expected Revision"
           },
           "is_enabled": {
             "anyOf": [
@@ -14166,6 +14183,18 @@
             "title": "Algo",
             "type": "string"
           },
+          "archived_at": {
+            "anyOf": [
+              {
+                "format": "date-time",
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Archived At"
+          },
           "created_at": {
             "format": "date-time",
             "title": "Created At",
@@ -14181,6 +14210,22 @@
               }
             ],
             "title": "Created By Name"
+          },
+          "deployment_count": {
+            "default": 0,
+            "title": "Deployment Count",
+            "type": "integer"
+          },
+          "deployments_url": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Deployments Url"
           },
           "description": {
             "anyOf": [
@@ -14209,6 +14254,18 @@
             "format": "uuid",
             "title": "Id",
             "type": "string"
+          },
+          "instance_id": {
+            "anyOf": [
+              {
+                "format": "uuid",
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Instance Id"
           },
           "is_servable": {
             "title": "Is Servable",
@@ -14319,6 +14376,18 @@
             "title": "Algo",
             "type": "string"
           },
+          "archived_at": {
+            "anyOf": [
+              {
+                "format": "date-time",
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Archived At"
+          },
           "created_at": {
             "format": "date-time",
             "title": "Created At",
@@ -14335,6 +14404,22 @@
             ],
             "title": "Created By Name"
           },
+          "deployment_count": {
+            "default": 0,
+            "title": "Deployment Count",
+            "type": "integer"
+          },
+          "deployments_url": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Deployments Url"
+          },
           "feature_keys": {
             "items": {
               "type": "string"
@@ -14346,6 +14431,18 @@
             "format": "uuid",
             "title": "Id",
             "type": "string"
+          },
+          "instance_id": {
+            "anyOf": [
+              {
+                "format": "uuid",
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Instance Id"
           },
           "is_servable": {
             "title": "Is Servable",
@@ -14680,6 +14777,18 @@
       },
       "ModelingInstanceOut": {
         "properties": {
+          "archived_at": {
+            "anyOf": [
+              {
+                "format": "date-time",
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Archived At"
+          },
           "code": {
             "title": "Code",
             "type": "string"
@@ -20985,6 +21094,18 @@
             "title": "Id",
             "type": "string"
           },
+          "instance_id": {
+            "anyOf": [
+              {
+                "format": "uuid",
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Instance Id"
+          },
           "is_keeping_frames": {
             "title": "Is Keeping Frames",
             "type": "boolean"
@@ -21004,6 +21125,18 @@
             "format": "uuid",
             "title": "Pipeline Id",
             "type": "string"
+          },
+          "published_version_id": {
+            "anyOf": [
+              {
+                "format": "uuid",
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Published Version Id"
           },
           "row_count": {
             "anyOf": [
@@ -21148,6 +21281,18 @@
             "title": "Id",
             "type": "string"
           },
+          "instance_id": {
+            "anyOf": [
+              {
+                "format": "uuid",
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Instance Id"
+          },
           "is_keeping_frames": {
             "title": "Is Keeping Frames",
             "type": "boolean"
@@ -21160,6 +21305,18 @@
             "format": "uuid",
             "title": "Pipeline Id",
             "type": "string"
+          },
+          "published_version_id": {
+            "anyOf": [
+              {
+                "format": "uuid",
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Published Version Id"
           },
           "row_count": {
             "anyOf": [

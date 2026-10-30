@@ -17,6 +17,7 @@ from lib.db import after_commit
 from lib.errors.base import FieldError
 from lib.stream import StreamGroup, StreamLike
 from lib.web import Page, PageParams
+from platform_server.apps.modeling.crud import management_queries as query_crud
 from platform_server.apps.modeling.crud import node_run_crud, run_crud
 from platform_server.apps.modeling.crud.template import instances
 from platform_server.apps.modeling.errors import (
@@ -33,8 +34,8 @@ from platform_server.apps.modeling.schemas import (
     PipelineGraph,
     RunOut,
     RunStartIn,
-    RunSummaryOut,
 )
+from platform_server.apps.modeling.schemas.run import RunSummaryOut
 from platform_server.apps.modeling.services import presenters, run_queue
 from platform_server.apps.modeling.services.graph_check import check_graph
 from platform_server.apps.modeling.services.pipeline_service import (
@@ -125,38 +126,24 @@ def _enqueue_after_commit(
     after_commit(session, publish)
 
 
-async def list_runs(
-    session: AsyncSession,
-    *,
-    pipeline_id: uuid.UUID | None,
-    page: PageParams,
-) -> Page[RunSummaryOut]:
-    """运行列表。
-
-    Args: session, pipeline_id, page。
-    """
-    rows, total = await run_crud.page(
-        session,
-        pipeline_id=pipeline_id,
-        offset=page.offset,
-        limit=page.size,
-    )
-    return Page[RunSummaryOut](
-        items=[presenters.to_run_summary(row) for row in rows],
-        page=page.page,
-        size=page.size,
-        total=total,
-    )
-
-
 async def get_run(session: AsyncSession, run_id: uuid.UUID) -> RunOut:
     """运行详情 + 节点状态清单。前端每秒轮询的就是它，**不带结果摘要**。
 
     Args: session, run_id。
     """
     run = await require_run(session, run_id)
-    return presenters.to_run_out(
+    result = presenters.to_run_out(
         run, await node_run_crud.list_by_run(session, run.id)
+    )
+    instances = await query_crud.instance_ids(session, [run.pipeline_id])
+    versions = await query_crud.published_versions(session, [run.id])
+    return result.model_copy(
+        update={
+            "instance_id": (
+                run.pipeline_id if run.pipeline_id in instances else None
+            ),
+            "published_version_id": versions.get(run.id),
+        }
     )
 
 
@@ -221,4 +208,46 @@ def _require_valid(graph: PipelineGraph) -> None:
             )
             for item in issues
         ),
+    )
+
+
+async def list_runs(
+    session: AsyncSession,
+    *,
+    pipeline_id: uuid.UUID | None,
+    page: PageParams,
+) -> Page[RunSummaryOut]:
+    """运行列表。
+
+    Args: session, pipeline_id, page。
+    """
+    rows, total = await run_crud.page(
+        session,
+        pipeline_id=pipeline_id,
+        offset=page.offset,
+        limit=page.size,
+    )
+    instances = await query_crud.instance_ids(
+        session, [row.pipeline_id for row in rows]
+    )
+    versions = await query_crud.published_versions(
+        session, [row.id for row in rows]
+    )
+    return Page[RunSummaryOut](
+        items=[
+            presenters.to_run_summary(row).model_copy(
+                update={
+                    "instance_id": (
+                        row.pipeline_id
+                        if row.pipeline_id in instances
+                        else None
+                    ),
+                    "published_version_id": versions.get(row.id),
+                }
+            )
+            for row in rows
+        ],
+        page=page.page,
+        size=page.size,
+        total=total,
     )
