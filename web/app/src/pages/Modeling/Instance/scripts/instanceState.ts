@@ -11,14 +11,14 @@ import { parseConfiguration } from './parameters'
 export function createState() {
   const instance = ref<ModelingInstance | null>(null)
   const detail = ref<ModelingConfigurationDetail | null>(null)
-  const runs = ref<ModelingRunSummary[]>([])
-  const versions = ref<ModelingVersionSummary[]>([])
-  const totals = ref({ runs: 0, versions: 0 })
+  const history = createHistory()
   const draft = ref('')
   const name = ref('')
   const description = ref('')
   const baseline = ref('')
   const baselineRevision = ref(0)
+  const sourceRunId = ref('')
+  const sessionRevision = ref(0)
   const resetKey = ref(0)
   const error = ref('')
   const loading = ref(false)
@@ -28,8 +28,9 @@ export function createState() {
   const dirty = computed(
     () =>
       baseline.value !== '' &&
-      JSON.stringify([parsed.value.value, name.value, description.value]) !==
-        baseline.value,
+      (sourceRunId.value !== '' ||
+        JSON.stringify([parsed.value.value, name.value, description.value]) !==
+          baseline.value),
   )
   const training = computed(() =>
     isTraining(instance.value?.latest_run?.status),
@@ -38,14 +39,14 @@ export function createState() {
   return {
     instance,
     detail,
-    runs,
-    versions,
-    totals,
+    ...history,
     draft,
     name,
     description,
     baseline,
     baselineRevision,
+    sourceRunId,
+    sessionRevision,
     resetKey,
     error,
     loading,
@@ -61,4 +62,25 @@ export type EditorState = ReturnType<typeof createState>
 
 function getFieldError(errors: Record<string, string>): string {
   return Object.values(errors).find(Boolean) ?? ''
+}
+
+function createHistory() {
+  return {
+    runs: ref<ModelingRunSummary[]>([]),
+    versions: ref<ModelingVersionSummary[]>([]),
+    totals: ref({ runs: 0, versions: 0 }),
+  }
+}
+
+export function resetEditorContext(state: EditorState): void {
+  state.sessionRevision.value += 1
+  state.busy.value = false
+  state.instance.value = null
+  state.detail.value = null
+  state.draft.value = ''
+  state.baseline.value = ''
+  state.sourceRunId.value = ''
+  state.runs.value = []
+  state.versions.value = []
+  state.totals.value = { runs: 0, versions: 0 }
 }

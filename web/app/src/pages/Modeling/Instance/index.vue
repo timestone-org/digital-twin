@@ -11,7 +11,7 @@ import {
   useToast,
 } from '@dt/ui'
 import { computed, onBeforeUnmount, ref, watch } from 'vue'
-import { onBeforeRouteLeave, useRoute } from 'vue-router'
+import { onBeforeRouteLeave, onBeforeRouteUpdate, useRoute } from 'vue-router'
 import { trainInstance } from '@/api/modelingTemplates'
 import { cancelModelingRun, publishModelingVersion } from '@/api/modeling'
 import PermGuard from '@/components/PermGuard.vue'
@@ -23,6 +23,7 @@ import { runLabel } from '../scripts/instancePresentation'
 import DeployModelDialog from './components/DeployModelDialog.vue'
 import InstanceHistory from './components/InstanceHistory.vue'
 import InstanceParameters from './components/InstanceParameters.vue'
+import OptimizePipelineDialog from './components/OptimizePipelineDialog.vue'
 import { useInstanceEditor } from './scripts/useInstanceEditor'
 
 const route = useRoute()
@@ -36,6 +37,7 @@ onBeforeUnmount(() => {
   isDisposed = true
 })
 const deploying = ref<ModelingVersionSummary | null>(null)
+const optimizing = ref(false)
 const canRun = computed(() => auth.can([PERMISSION_CODES.modelingRun]))
 const hasChanges = computed(
   () => editor.dirty.value || editor.fieldError.value !== '',
@@ -43,15 +45,27 @@ const hasChanges = computed(
 const disabled = computed(
   () => !canRun.value || editor.busy.value || editor.training.value,
 )
-watch(id, () => void editor.load(), { immediate: true })
+watch(
+  id,
+  () => {
+    deploying.value = null
+    optimizing.value = false
+    void editor.load()
+  },
+  { immediate: true },
+)
 
 async function runAction(
   task: () => Promise<unknown>,
   message: string,
 ): Promise<void> {
-  if (editor.busy.value) return
+  if (editor.busy.value || editor.instance.value?.id !== id.value) return
   const modelId = id.value
-  const isCurrent = () => !isDisposed && id.value === modelId
+  const sessionRevision = editor.sessionRevision.value
+  const isCurrent = () =>
+    !isDisposed &&
+    id.value === modelId &&
+    editor.sessionRevision.value === sessionRevision
   editor.busy.value = true
   editor.error.value = ''
   try {
@@ -88,6 +102,22 @@ function publish(run: ModelingRunSummary): void {
   )
 }
 
+async function optimize(run: ModelingRunSummary): Promise<void> {
+  if (disabled.value || editor.loading.value) return
+  if (
+    hasChanges.value &&
+    !(await confirm.ask({
+      title: '载入历史训练配置？',
+      message:
+        '当前未保存的修改将被替换。历史配置先载入草稿，保存后才会应用到模型。',
+      confirmText: '载入历史配置',
+      danger: true,
+    }))
+  )
+    return
+  await editor.restore(run.id)
+}
+
 async function discard(): Promise<void> {
   if (
     !hasChanges.value ||
@@ -100,15 +130,21 @@ async function discard(): Promise<void> {
   )
     await editor.load()
 }
-onBeforeRouteLeave(
-  async () =>
+async function confirmLeaving(): Promise<boolean> {
+  return (
     !hasChanges.value ||
     (await confirm.ask({
       title: '离开未保存的模型？',
       message: '参数修改尚未保存，离开后需要重新填写。',
       confirmText: '放弃修改并离开',
       danger: true,
-    })),
+    }))
+  )
+}
+onBeforeRouteLeave(confirmLeaving)
+onBeforeRouteUpdate(
+  (to, from) =>
+    to.params['instanceId'] === from.params['instanceId'] || confirmLeaving(),
 )
 </script>
 
@@ -119,6 +155,20 @@ onBeforeRouteLeave(
     back-to="/modeling/instances"
   >
     <template #actions>
+      <PermGuard :codes="[PERMISSION_CODES.modelingManage]">
+        <DtButton
+          variant="ghost"
+          :disabled="
+            hasChanges ||
+            editor.loading.value ||
+            editor.busy.value ||
+            !editor.instance.value
+          "
+          @click="optimizing = true"
+        >
+          优化流水线结构
+        </DtButton>
+      </PermGuard>
       <PermGuard :codes="[PERMISSION_CODES.modelingRun]">
         <DtButton
           v-if="editor.training.value"
@@ -162,9 +212,12 @@ onBeforeRouteLeave(
       />
 
       <div v-else class="instance-body">
+        <DtNotice v-if="editor.sourceRunId.value" intent="info">
+          已载入历史训练配置，可在此基础上修改。保存全部配置后才能重新训练；已发布版本与部署保持固定。
+        </DtNotice>
         <div class="instance-summary">
           <div>
-            <span class="instance-eyebrow"> 来源模板 </span>
+            <span class="instance-eyebrow"> 来源工作流 </span>
 
             <strong>
               {{ editor.instance.value.template_name }} · v{{
@@ -214,8 +267,10 @@ onBeforeRouteLeave(
           :runs="editor.runs.value"
           :versions="editor.versions.value"
           :totals="editor.totals.value"
-          :busy="editor.busy.value"
+          :busy="editor.busy.value || editor.loading.value"
+          :is-training="editor.training.value"
           @refresh="void editor.refresh()"
+          @optimize="void optimize($event)"
           @publish="publish"
           @deploy="deploying = $event"
         />
@@ -227,6 +282,10 @@ onBeforeRouteLeave(
       :version="deploying"
       @close="deploying = null"
       @deployed="void editor.refresh()"
+    />
+    <OptimizePipelineDialog
+      :instance="optimizing ? editor.instance.value : null"
+      @close="optimizing = false"
     />
   </AppShell>
 </template>

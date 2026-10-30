@@ -284,13 +284,16 @@ export const routes: RouteRecordRaw[] = [
     path: '/modeling/templates',
     name: 'modeling-templates',
     component: () => import('@/pages/Modeling/Templates/index.vue'),
-    meta: { title: '已发布模板', permissions: [PERMISSION_CODES.modelingView] },
+    meta: {
+      title: '已发布工作流',
+      permissions: [PERMISSION_CODES.modelingView],
+    },
   },
   {
     path: '/modeling/instances',
     name: 'modeling-instances',
     component: () => import('@/pages/Modeling/Instances/index.vue'),
-    meta: { title: '接入实例', permissions: [PERMISSION_CODES.modelingView] },
+    meta: { title: '模型实例', permissions: [PERMISSION_CODES.modelingView] },
   },
   {
     path: '/modeling/instances/:instanceId',

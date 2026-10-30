@@ -6,6 +6,7 @@ import { computed } from 'vue'
 
 import CallStatList from './CallStatList.vue'
 import RuleResultGuide from './RuleResultGuide.vue'
+import DeploymentTrial from './DeploymentTrial.vue'
 
 const props = defineProps<{
   deployment: ModelDeployment | null
@@ -66,6 +67,8 @@ const calculationEndpoint = computed(
       <p class="dt-ml-keys__endpoint">
         GET /api/v1/platform/open-models/{{ props.deployment?.code }}
       </p>
+
+      <DeploymentTrial v-if="props.deployment" :deployment="props.deployment" />
 
       <section>
         <h4 class="dt-ml-keys__title">近一个月的调用量</h4>

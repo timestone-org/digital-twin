@@ -77,11 +77,11 @@ const example = JSON.stringify(
         icon="layers"
       >
         <p>
-          在建模工作台完成设计与验证后，使用「发布为模板」。每个接入实例独立保存参数。
+          在建模工作台完成设计与验证后，使用「发布为工作流」，保存为固定版本的建模模板。每个模型实例独立保存流水线与参数。
         </p>
         <template #footer>
           <RouterLink to="/modeling/templates">
-            管理已发布模板 <DtIcon name="arrow-right" :size="14" />
+            管理已发布工作流 <DtIcon name="arrow-right" :size="14" />
           </RouterLink>
         </template>
       </DtCard>
@@ -95,7 +95,7 @@ const example = JSON.stringify(
         </p>
         <template #footer>
           <RouterLink to="/modeling/instances">
-            查看接入实例 <DtIcon name="arrow-right" :size="14" />
+            查看模型实例 <DtIcon name="arrow-right" :size="14" />
           </RouterLink>
         </template>
       </DtCard>
@@ -145,7 +145,7 @@ const example = JSON.stringify(
           </DtNotice>
           <pre><code>{{ example }}</code></pre>
           <p>
-            创建与训练请求带
+            创建、训练、发布版本与部署请求带
             Idempotency-Key，同一逻辑请求使用同一个键。训练失败读取
             error_text，修正配置后使用新键重新训练。
           </p>
