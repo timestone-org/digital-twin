@@ -6,6 +6,7 @@ from datetime import UTC, datetime, timedelta
 from types import SimpleNamespace
 from unittest.mock import AsyncMock
 
+import pytest
 from sqlalchemy.ext.asyncio import AsyncSession
 from unit.report.test_api_worker import Sessions
 
@@ -224,3 +225,29 @@ async def test_pause_after_claim_cannot_publish_with_elapsed_lease(monkeypatch):
     assert not await consumer._deliver(attempt)
     stream.publish.assert_not_awaited()
     saved.assert_not_awaited()
+
+
+@pytest.mark.parametrize("phase", ["group", "read"])
+async def test_unknown_queue_error_exits_instead_of_polling(monkeypatch, phase):
+    stream = SimpleNamespace(ensure_group=AsyncMock())
+    consumer = ReportWorker(
+        WorkerOptions(
+            database=Sessions(),
+            stream=stream,
+            store=SimpleNamespace(),
+            consumer="test",
+        ),
+        SimpleNamespace(),
+    )
+    unexpected = RuntimeError("unexpected queue implementation error")
+    if phase == "group":
+        stream.ensure_group.side_effect = unexpected
+    tick = AsyncMock(side_effect=unexpected)
+    monkeypatch.setattr(consumer, "_tick", tick)
+    with pytest.raises(
+        RuntimeError, match="unexpected queue implementation error"
+    ):
+        async with asyncio.timeout(0.2):
+            await consumer.run()
+    stream.ensure_group.assert_awaited_once()
+    assert tick.await_count == (1 if phase == "read" else 0)

@@ -293,7 +293,7 @@ def test_macro_payload_is_rejected_before_parser_runs():
         import_docx(output.getvalue())
 
 
-def test_theme_font_projection_reports_fixed_font_conversion():
+def test_theme_font_projection_reports_static_font_conversion():
     document = Document()
     document.add_paragraph("主题字体的中西文字形需核对", style="Title")
     imported = import_docx(payload(document))

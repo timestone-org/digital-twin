@@ -10,7 +10,7 @@ from datetime import UTC, datetime
 from multiprocessing.process import BaseProcess
 from typing import Protocol, cast
 
-from lib.errors import AppError
+from lib.errors import AppError, DependencyUnavailable
 from lib.logging import (
     bind_log_context,
     get_logger,
@@ -131,7 +131,7 @@ class ReportWorker:
                     await self._options.stream.ensure_group(target)
                     is_group_ready = True
                 await self._tick(target)
-            except Exception as error:
+            except DependencyUnavailable as error:
                 is_group_ready = False
                 _logger.error(
                     "report_consumer_failed", "报告消费失败", error=error
