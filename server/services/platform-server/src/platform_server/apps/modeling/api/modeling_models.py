@@ -94,14 +94,17 @@ async def publish_version(
     write: PublishDep,
     store: StoreDep,
 ) -> ApiResponse[ModelVersionOut]:
-    """把一次成功运行发布成一个不可变的版本。
-
-    Args: payload, session, response, write, store。
-    """
-    created = await model_service.publish_version(
-        session, payload=payload, actor=_actor(write), store=store
+    """发布成功运行；Args: payload, session, response, write, store。"""
+    created = await write.run_once(
+        endpoint="modeling.publish_version",
+        model=ModelVersionOut,
+        action=lambda: model_service.publish_version(
+            session, payload=payload, actor=_actor(write), store=store
+        ),
     )
-    response.status_code = status.HTTP_201_CREATED
+    response.headers["Location"] = (
+        f"{API_PREFIX}/modeling-model-versions/{created.id}"
+    )
     return ok(created)
 
 

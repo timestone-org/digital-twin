@@ -18,7 +18,7 @@ import { runLabel } from '../scripts/instancePresentation'
 const columns: readonly DtDataColumn[] = [
   { key: 'name', label: '模型名称', card: 'title' },
   { key: 'code', label: '编码', card: 'meta' },
-  { key: 'template_name', label: '来源模板' },
+  { key: 'template_name', label: '来源工作流' },
   { key: 'revision', label: '配置版本', width: '7rem' },
   { key: 'status', label: '最近训练', width: '8rem' },
   { key: 'updated_at', label: '最近配置', width: '12rem' },
@@ -50,13 +50,13 @@ onMounted(() => void list.reload())
 
 <template>
   <AppShell
-    title="接入实例"
-    subtitle="查看第三方创建的独立模型，支持配置、训练与部署验证"
+    title="模型实例"
+    subtitle="查看系统与第三方创建的模型，集中配置、训练、发布和部署"
   >
     <template #actions>
       <PermGuard :codes="[PERMISSION_CODES.modelingRun]">
         <RouterLink to="/modeling/templates">
-          <DtButton icon="plus"> 通过模板创建模型 </DtButton>
+          <DtButton icon="plus"> 通过工作流创建模型 </DtButton>
         </RouterLink>
       </PermGuard>
     </template>

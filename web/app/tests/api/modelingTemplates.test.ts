@@ -74,3 +74,12 @@ it('创建、整体配置、训练和部署每次携带独立幂等键', async (
     configuration: { nodes: {} },
   })
 })
+
+it('读取历史训练配置时带运行 ID，保持只读请求与取消信号', async () => {
+  const signal = new AbortController().signal
+  await api.getInstanceConfiguration('model-1', signal, 'run-1')
+  expect(requestData).toHaveBeenLastCalledWith(
+    '/modeling-instances/model-1/configuration',
+    { baseUrl: '/api/v1/platform', signal, query: { run_id: 'run-1' } },
+  )
+})

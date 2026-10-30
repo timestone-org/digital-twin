@@ -23,7 +23,7 @@ import ModelingNav from '../components/ModelingNav.vue'
 import CreateModelDialog from './components/CreateModelDialog.vue'
 
 const columns: readonly DtDataColumn[] = [
-  { key: 'name', label: '模板名称', card: 'title' },
+  { key: 'name', label: '工作流名称', card: 'title' },
   { key: 'description', label: '用途', card: 'meta' },
   { key: 'version', label: '版本', width: '6rem' },
   { key: 'node_count', label: '算子数', width: '6rem' },
@@ -71,7 +71,7 @@ const emptyState = computed(() =>
     keyword: appliedKeyword.value,
     blank: {
       title: '还没有已发布模板',
-      hint: '在建模工作台中打开流水线，保存后发布为模板，即可供第三方重复使用。',
+      hint: '在建模工作台中打开流水线，保存后发布为工作流，即可在系统内或由第三方重复使用。',
     },
   }),
 )
@@ -84,8 +84,8 @@ onMounted(() => void list.reload())
 
 <template>
   <AppShell
-    title="已发布模板"
-    subtitle="供第三方快捷创建模型使用；设计和日常运行请前往建模工作台"
+    title="已发布工作流"
+    subtitle="发布的流水线保存为固定版本，系统页面与第三方可从同一工作流创建独立模型"
   >
     <div class="flex h-full min-h-0 flex-col gap-4">
       <ModelingNav />

@@ -175,20 +175,32 @@ it('视口操作保留缩放和吸附语义，只读仍可适应视图', async (
   wrapper.unmount()
 })
 
-it('第三方区域只展示接入分区，并保留返回日常建模的链接', async () => {
+it.each([
+  '/modeling/pipelines',
+  '/modeling/templates',
+  '/modeling/instances/i1',
+  '/modeling/integration',
+])('%s 保留完整建模链路与第三方接入入口', async (path) => {
   const router = createRouter({
     history: createMemoryHistory(),
     routes: [{ path: '/:pathMatch(.*)*', component: { template: '<div />' } }],
   })
-  await router.push('/modeling/integration')
+  await router.push(path)
   const wrapper = mount(ModelingNav, { global: { plugins: [router] } })
-  const nav = wrapper.get('nav[aria-label="第三方接入导航"]')
-  expect(nav.text()).toContain('已发布模板')
-  expect(nav.text()).toContain('接入实例')
-  expect(wrapper.get('a[href="/modeling/pipelines"]').text()).toContain(
-    '返回建模工作台',
+  const nav = wrapper.get('nav[aria-label="分析建模导航"]')
+  for (const [href, label] of [
+    ['/modeling/pipelines', '建模工作台'],
+    ['/modeling/templates', '已发布工作流'],
+    ['/modeling/instances', '模型实例'],
+    ['/modeling/runs', '运行记录'],
+    ['/modeling/models', '模型版本'],
+    ['/modeling/services', '部署服务'],
+  ]) {
+    expect(nav.get(`a[href="${href}"]`).text()).toContain(label)
+  }
+  expect(wrapper.get('a[href="/modeling/integration"]').text()).toContain(
+    '第三方接入',
   )
-  expect(wrapper.find('nav[aria-label="分析建模导航"]').exists()).toBe(false)
   wrapper.unmount()
 })
 

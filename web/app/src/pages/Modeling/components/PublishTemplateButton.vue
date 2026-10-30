@@ -19,7 +19,7 @@ const open = ref(false)
       :disabled="disabled || !pipeline"
       @click="open = true"
     >
-      发布为模板
+      发布为工作流
     </DtButton>
   </PermGuard>
   <PublishTemplateDialog

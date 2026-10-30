@@ -3,7 +3,7 @@
 import type { ModelDeployment, ModelingVersionSummary } from '@dt/contracts'
 import { DtButton, DtInput, DtModal, DtNotice, DtNumberInput } from '@dt/ui'
 import { computed, onBeforeUnmount, ref, watch } from 'vue'
-import { onBeforeRouteLeave, RouterLink } from 'vue-router'
+import { onBeforeRouteLeave, onBeforeRouteUpdate, RouterLink } from 'vue-router'
 import { deployInstance } from '@/api/modelingTemplates'
 import { describeModelingError } from '../../scripts/instancePresentation'
 const props = defineProps<{
@@ -23,6 +23,7 @@ onBeforeUnmount(() => {
   isDisposed = true
 })
 onBeforeRouteLeave(() => !busy.value)
+onBeforeRouteUpdate(() => !busy.value)
 const valid = computed(
   () =>
     /^[a-z0-9][a-z0-9-]{1,62}$/.test(code.value) &&

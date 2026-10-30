@@ -1,12 +1,19 @@
 """训练与规则版本共享流水线编号，并以真实行锁串行分配。"""
 
+import asyncio
 import uuid
 from typing import Any
 
 import pytest
 from conftest import AppContext
-from sqlalchemy import delete, text
+from sqlalchemy import delete, event, select, text
 from sqlalchemy.exc import DBAPIError
+from unit.modeling_fakes import (
+    DirectRunner,
+    execution_of,
+    linear_frame,
+    linear_graph,
+)
 
 from lib.db import Database
 from lib.utils.ids import uuid7
@@ -14,15 +21,25 @@ from platform_server.apps.modeling.crud import (
     deployment_crud,
     model_version_crud,
 )
+from platform_server.apps.modeling.errors import RunAlreadyPublished
 from platform_server.apps.modeling.models import (
     ModelingDeployment,
     ModelingModelVersion,
+    ModelingNodeRun,
     ModelingPipeline,
     ModelingRuleVersion,
     ModelingRun,
 )
-from platform_server.apps.modeling.schemas import ModelDeploymentUpdateIn
-from platform_server.apps.modeling.services import deployment_service
+from platform_server.apps.modeling.schemas import (
+    ModelDeploymentUpdateIn,
+    ModelVersionCreateIn,
+)
+from platform_server.apps.modeling.services import (
+    Actor,
+    deployment_service,
+    model_service,
+)
+from platform_server.apps.modeling.services.run_executor import execute_graph
 from platform_server.settings import Settings
 
 pytestmark = pytest.mark.requires_postgres
@@ -276,4 +293,87 @@ async def test_concurrent_retirement_does_not_break_version_pagination(
             assert len(rows) == 1
             assert rows[0].task == "regression"
     finally:
+        await _cleanup(database, pipeline_id)
+
+
+async def _seed_trained_run(
+    database: Database, pipeline_id: uuid.UUID
+) -> uuid.UUID:
+    run_id = (await _seed_runs(database, pipeline_id))[0]
+    graph = linear_graph()
+    outcome = await execute_graph(
+        graph,
+        execution=execution_of(DirectRunner(), frames={"s": linear_frame(48)}),
+    )
+    assert outcome.status == "succeeded"
+    async with database.session() as session:
+        run = await session.get(ModelingRun, run_id)
+        assert run is not None
+        run.graph_snapshot = graph.model_dump(mode="json")
+        run.row_count = outcome.row_count
+        for node in outcome.nodes:
+            session.add(
+                ModelingNodeRun(
+                    run_id=run_id,
+                    node_id=node.node_id,
+                    operator=node.operator,
+                    ordinal=node.ordinal,
+                    status=node.status,
+                    preview_json=node.preview,
+                    fitted_json=node.fitted,
+                    io_json=node.io,
+                )
+            )
+    return run_id
+
+
+async def _publish(database: Database, run_id: uuid.UUID) -> None:
+    async with database.session() as session:
+        await model_service.publish_version(
+            session,
+            payload=ModelVersionCreateIn(run_id=run_id, name="能源模型"),
+            actor=Actor(user_id="test", name="测试员"),
+        )
+
+
+async def test_concurrent_publication_of_one_run_returns_domain_conflict(
+    settings: Settings, app_context: AppContext
+) -> None:
+    del app_context
+    database = Database(dsn=settings.dsn(), search_path="platform")
+    pipeline_id = uuid7()
+    reached_lock = asyncio.Event()
+    engine = database.engine.sync_engine
+    competing: asyncio.Task[None] | None = None
+
+    def observe(**details: Any) -> None:
+        statement = details["statement"]
+        if "modeling_pipelines" in statement and "FOR UPDATE" in statement:
+            reached_lock.set()
+
+    try:
+        run_id = await _seed_trained_run(database, pipeline_id)
+        async with database.session() as first:
+            await first.execute(
+                select(ModelingPipeline.id)
+                .where(ModelingPipeline.id == pipeline_id)
+                .with_for_update()
+            )
+            await model_service.publish_version(
+                first,
+                payload=ModelVersionCreateIn(run_id=run_id, name="首次发布"),
+                actor=Actor(user_id="test", name="测试员"),
+            )
+            event.listen(engine, "before_cursor_execute", observe, named=True)
+            competing = asyncio.create_task(_publish(database, run_id))
+            await asyncio.wait_for(reached_lock.wait(), timeout=5)
+        with pytest.raises(RunAlreadyPublished) as caught:
+            await asyncio.wait_for(competing, timeout=5)
+        assert caught.value.http_status == 409
+    finally:
+        if event.contains(engine, "before_cursor_execute", observe):
+            event.remove(engine, "before_cursor_execute", observe)
+        if competing is not None and not competing.done():
+            competing.cancel()
+            await asyncio.gather(competing, return_exceptions=True)
         await _cleanup(database, pipeline_id)

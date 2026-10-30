@@ -1,5 +1,6 @@
 """对隔离环境运行账号密钥建模、真实 worker 训练与部署预测验收。"""
 
+import copy
 import json
 import os
 import sys
@@ -214,13 +215,29 @@ class Scenario:
         self.resources["run_id"] = run["id"]
         return run["id"]
 
+    def publish_version(self, run_id: str) -> dict[str, Any]:
+        """校验模型版本发布的幂等重放和详情地址；Args: run_id。"""
+        path = f"{PLATFORM}/modeling-model-versions"
+        payload = {"run_id": run_id, "name": "E2E 训练版本"}
+        headers = {"Idempotency-Key": f"e2e-publish-{self.suffix}"}
+        first = self.client.post(path, json=payload, headers=headers)
+        replay = self.client.post(path, json=payload, headers=headers)
+        if (
+            first.status_code != HTTPStatus.CREATED
+            or replay.status_code != HTTPStatus.CREATED
+        ):
+            raise RuntimeError("模型版本发布幂等重放没有返回 201")
+        version = first.json()["data"]
+        if (
+            replay.json()["data"]["id"] != version["id"]
+            or first.headers.get("location") != f"{path}/{version['id']}"
+            or replay.headers.get("location") != first.headers.get("location")
+        ):
+            raise RuntimeError("模型版本发布没有返回同一版本和详情地址")
+        return version
+
     def deploy(self, instance_id: str, run_id: str) -> None:
-        version = self.request(
-            "POST",
-            f"{PLATFORM}/modeling-model-versions",
-            {"run_id": run_id, "name": "E2E 训练版本"},
-            status=201,
-        )
+        version = self.publish_version(run_id)
         code = f"e2e-serving-{self.suffix}"
         deployment = self.request(
             "POST",
@@ -249,6 +266,58 @@ class Scenario:
             deployment_id=deployment["id"],
             deployment_code=code,
         )
+
+    def restore_configuration(self, instance_id: str, run_id: str) -> None:
+        """校验历史配置冻结与恢复后继续编辑；Args: instance_id, run_id。"""
+        path = f"{PLATFORM}/modeling-instances/{instance_id}/configuration"
+        historical = self.request("GET", f"{path}?run_id={run_id}")
+        original = historical["configuration"]
+        changed = copy.deepcopy(original)
+        changed["nodes"]["split"]["test_ratio"] = 0.3
+        self.request(
+            "PUT",
+            path,
+            {
+                "expected_revision": historical["instance"]["revision"],
+                "configuration": changed,
+            },
+        )
+        snapshot = self.request("GET", f"{path}?run_id={run_id}")
+        current = self.request("GET", path)
+        if (
+            snapshot["configuration"] != original
+            or current["configuration"] != changed
+        ):
+            raise RuntimeError("历史训练配置没有独立冻结")
+        restored = self.request(
+            "PUT",
+            path,
+            {
+                "expected_revision": snapshot["instance"]["revision"],
+                "configuration": snapshot["configuration"],
+            },
+        )
+        if (
+            self.request("GET", path)["configuration"] != original
+            or restored["revision"] != current["instance"]["revision"] + 1
+        ):
+            raise RuntimeError("历史配置未能恢复为可继续优化的当前配置")
+        self.check_deployment()
+        self.resources["restored_run_id"] = run_id
+
+    def check_deployment(self) -> None:
+        """校验全部部署列表保留实例部署的固定版本。"""
+        deployments = self.request("GET", f"{PLATFORM}/modeling-deployments")
+        selected = [
+            item
+            for item in deployments
+            if item["id"] == self.resources["deployment_id"]
+        ]
+        if (
+            len(selected) != 1
+            or selected[0]["model_version_id"] != self.resources["version_id"]
+        ):
+            raise RuntimeError("配置优化改变了已部署模型的固定版本")
 
 
 def make_graph(code: str) -> dict[str, object]:
@@ -319,7 +388,9 @@ def main() -> None:
         template_id = scenario.publish_template(scenario.seed_data())
         scenario.partner()
         instance_id = scenario.instantiate(template_id)
-        scenario.deploy(instance_id, scenario.train(instance_id))
+        run_id = scenario.train(instance_id)
+        scenario.deploy(instance_id, run_id)
+        scenario.restore_configuration(instance_id, run_id)
         Path(os.environ["MODELING_E2E_RESULT"]).write_text(
             json.dumps(
                 {"passed": True, "resources": scenario.resources},
@@ -329,7 +400,8 @@ def main() -> None:
         )
         sys.stdout.write(
             "PASS: real gateway, API-key permissions, schema, configuration, "
-            "worker, deployment and prediction\n"
+            "worker, publication replay, deployment, prediction "
+            "and historical configuration\n"
         )
     finally:
         scenario.client.close()

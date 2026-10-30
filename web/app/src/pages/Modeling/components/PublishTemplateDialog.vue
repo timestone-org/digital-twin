@@ -48,7 +48,7 @@ async function publish(): Promise<void> {
     })
     if (!isCurrent()) return
     toast.success(
-      `模板 ${result.name} v${result.version} 已发布，可在模板库创建模型`,
+      `工作流 ${result.name} v${result.version} 已发布，可在已发布工作流中创建模型`,
     )
     emit('close')
   } catch (caught) {
@@ -61,7 +61,7 @@ async function publish(): Promise<void> {
 <template>
   <DtModal
     :model-value="pipeline !== null"
-    title="发布建模模板"
+    title="发布建模工作流"
     width="46rem"
     :close-on-backdrop="!busy"
     :dirty="isDirty"
@@ -69,14 +69,14 @@ async function publish(): Promise<void> {
   >
     <div class="flex flex-col gap-4">
       <DtNotice intent="info">
-        发布已保存的算子与连线快照。每次发布形成新版本，已创建的模型保持原模板版本。
+        将已保存的算子与连线快照保存为固定版本的建模模板。每次发布形成新工作流版本，已有模型保留创建时的版本。
       </DtNotice>
 
-      <DtInput v-model="name" label="模板名称" :maxlength="128" required />
+      <DtInput v-model="name" label="工作流名称" :maxlength="128" required />
 
       <DtTextarea
         v-model="description"
-        label="模板用途"
+        label="工作流用途"
         placeholder="说明适用对象、输入数据要求与输出含义"
         :rows="4"
         :maxlength="512"
@@ -93,7 +93,7 @@ async function publish(): Promise<void> {
       </DtButton>
 
       <DtButton :disabled="busy || !name.trim()" @click="void publish()">
-        {{ busy ? '发布中…' : '发布模板' }}
+        {{ busy ? '发布中…' : '发布工作流' }}
       </DtButton>
     </template>
   </DtModal>
