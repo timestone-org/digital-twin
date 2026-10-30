@@ -8,13 +8,20 @@ from platform_server.apps.modeling.models.artifact import (
 )
 from platform_server.apps.modeling.models.base import Base
 from platform_server.apps.modeling.models.binding import ModelingBinding
+from platform_server.apps.modeling.models.command import ModelingCommand
 from platform_server.apps.modeling.models.deployment import (
     ModelingApiKey,
     ModelingCallLog,
     ModelingDeployment,
 )
+from platform_server.apps.modeling.models.deployment_switch import (
+    ModelingDeploymentSwitch,
+)
 from platform_server.apps.modeling.models.model_version import (
     ModelingModelVersion,
+)
+from platform_server.apps.modeling.models.operator_audit import (
+    ModelingOperatorAudit,
 )
 from platform_server.apps.modeling.models.pipeline import ModelingPipeline
 from platform_server.apps.modeling.models.rule_version import (
@@ -40,12 +47,15 @@ __all__ = [
     "ModelingApiKey",
     "ModelingBinding",
     "ModelingCallLog",
+    "ModelingCommand",
     "ModelingConfigurationAudit",
     "ModelingDeployment",
+    "ModelingDeploymentSwitch",
     "ModelingInstance",
     "ModelingModelArtifact",
     "ModelingModelVersion",
     "ModelingNodeRun",
+    "ModelingOperatorAudit",
     "ModelingPipeline",
     "ModelingRuleVersion",
     "ModelingRun",

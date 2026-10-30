@@ -1,11 +1,13 @@
 """建模模板快照、实例身份与配置审计，见 ADR-0061。"""
 
 import uuid
+from datetime import datetime
 from typing import Any
 
 from sqlalchemy import (
     Boolean,
     CheckConstraint,
+    DateTime,
     ForeignKey,
     Integer,
     Text,
@@ -58,6 +60,9 @@ class ModelingInstance(TimestampMixin, Base):
         index=True,
     )
     revision: Mapped[int] = mapped_column(Integer, default=1)
+    archived_at: Mapped[datetime | None] = mapped_column(
+        DateTime(timezone=True), nullable=True
+    )
     __table_args__ = (
         CheckConstraint("revision > 0", name="revision_positive"),
     )
