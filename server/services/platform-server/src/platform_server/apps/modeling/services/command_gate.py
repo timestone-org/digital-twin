@@ -30,6 +30,11 @@ from platform_server.apps.modeling.services.operator_audit import (
     record_operator,
 )
 from platform_server.apps.modeling.services.sessions import Sessions
+from platform_server.apps.modeling.services.task_replay import (
+    TaskReceipt,
+    payload_with_task,
+    requires_task,
+)
 from platform_server.deps import WriteGate
 
 _JSON_OBJECT = TypeAdapter(dict[str, JsonValue])
@@ -61,7 +66,7 @@ class DurableModelingGate(WriteGate):
         row, is_owner = await self._reserve(endpoint, model)
         self.on_command(str(row.id))
         if not is_owner:
-            return _replay(row, self.request_hash, model)
+            return await _replay(self.session, row, self.request_hash, model)
         try:
             async with self.session.begin_nested():
                 result = await action()
@@ -129,12 +134,15 @@ class DurableModelingGate(WriteGate):
     async def _check_legacy[ResultT: BaseModel](
         self, endpoint: str, model: type[ResultT]
     ) -> None:
+        legacy_model: type[BaseModel] = (
+            TaskReceipt if requires_task(model) else model
+        )
         try:
             legacy = await self.idempotency.lookup_result(
                 endpoint=endpoint,
                 key=self.idempotency_key or "",
                 caller=self.caller.user_id,
-                model=model,
+                model=legacy_model,
             )
         except Exception as error:
             raise DependencyUnavailable(
@@ -185,15 +193,21 @@ class DurableModelingGate(WriteGate):
             )
 
 
-def _replay[ResultT: BaseModel](
-    row: ModelingCommand, request_hash: str, model: type[ResultT]
+async def _replay[ResultT: BaseModel](
+    session: AsyncSession,
+    row: ModelingCommand,
+    request_hash: str,
+    model: type[ResultT],
 ) -> ResultT:
     if row.request_hash != request_hash:
         raise CommandPayloadConflict(
             "此幂等键已用于另一组请求参数，请核查原命令"
         )
     if row.state == "succeeded":
-        return model.model_validate(row.result_json)
+        payload = await payload_with_task(
+            session, model, _JSON_OBJECT.validate_python(row.result_json)
+        )
+        return model.model_validate(payload)
     if row.state == "failed":
         failure = CommandFailureOut.model_validate(row.error_json)
         error = AppError(

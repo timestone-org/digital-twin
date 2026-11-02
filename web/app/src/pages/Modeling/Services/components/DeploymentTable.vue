@@ -15,11 +15,13 @@ import { DtButton, DtDataView, DtTag } from '@dt/ui'
 
 import PermGuard from '@/components/PermGuard.vue'
 import { formatDateTime } from '@/utils/datetime'
+import { taskLabel } from '../../scripts/taskPresentation'
 
 const COLUMNS: readonly DtDataColumn[] = [
   { key: 'name', label: '名称', card: 'title' },
   { key: 'code', label: '对外标识', width: '12rem' },
   { key: 'model', label: '钉住的版本', width: '13rem' },
+  { key: 'task', label: '模型类型', width: '8rem' },
   { key: 'state', label: '状态', width: '13rem' },
   { key: 'quota', label: '配额', width: '11rem', align: 'right' },
   { key: 'created_at', label: '开通时间', width: '10rem' },
@@ -63,7 +65,7 @@ defineEmits<{
     :empty="EMPTY"
     :layout="{
       fixedLayout: true,
-      minWidth: '73rem',
+      minWidth: '81rem',
       cardColumns: 2,
       cardMinWidth: '24rem',
     }"
@@ -112,6 +114,7 @@ defineEmits<{
         </span>
       </span>
     </template>
+    <template #cell-task="{ row }">{{ taskLabel(row.task) }}</template>
     <template #cell-quota="{ row }">
       {{ row.rate_limit_per_minute }} 次/分 · {{ row.max_rows_per_call }} 行/次
     </template>

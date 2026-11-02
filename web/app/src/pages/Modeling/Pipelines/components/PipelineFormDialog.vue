@@ -1,6 +1,6 @@
 <script setup lang="ts">
-/** @fileoverview 从设计模板创建流水线，或修改已有流水线的名称和说明。 */
-import { DtButton, DtInput, DtModal, DtTextarea } from '@dt/ui'
+/** @fileoverview 创建或复制独立流水线，以及修改已有流水线的名称和说明。 */
+import { DtButton, DtInput, DtModal, DtNotice, DtTextarea } from '@dt/ui'
 import { computed, ref, watch } from 'vue'
 import { useFormDirty } from '@/composables/useFormDirty'
 import type { PipelineDraft } from '../scripts/usePipelineOps'
@@ -19,6 +19,29 @@ const form = ref<PipelineDraft>({
 })
 const templateKey = ref('regression')
 const isCreate = computed(() => form.value.id === null)
+const isCopy = computed(() => form.value.sourcePipelineId !== undefined)
+const isTemplateCreate = computed(() => isCreate.value && !isCopy.value)
+const title = computed(() =>
+  isCopy.value
+    ? '复制流水线'
+    : isCreate.value
+      ? '新建流水线'
+      : '编辑流水线信息',
+)
+const description = computed(() =>
+  isCopy.value
+    ? '从已保存的流水线创建独立副本，保留原流水线。'
+    : isCreate.value
+      ? '选择适合业务的设计模板，命名后进入流程图。'
+      : '修改名称和说明，保留现有流程图。',
+)
+const submitText = computed(() =>
+  isCopy.value
+    ? '复制并进入流程图'
+    : isCreate.value
+      ? '创建并进入流程图'
+      : '保存',
+)
 const codeError = computed(() => {
   if (!isCreate.value || form.value.code === '') return ''
   return /^[a-z][a-z0-9_]{1,63}$/.test(form.value.code)
@@ -50,29 +73,29 @@ watch(
 <template>
   <DtModal
     :model-value="props.draft !== null"
-    :title="isCreate ? '新建流水线' : '编辑流水线信息'"
-    :description="
-      isCreate
-        ? '选择适合业务的设计模板，命名后进入流程图。'
-        : '修改名称和说明，保留现有流程图。'
-    "
-    :width="isCreate ? '64rem' : '44rem'"
+    :title="title"
+    :description="description"
+    :width="isTemplateCreate ? '64rem' : '44rem'"
     :dirty="dirty.isDirty.value"
+    :close-on-backdrop="!isSaving"
     @update:model-value="!isSaving && emit('close')"
   >
     <div class="flex flex-col gap-6">
       <TemplatePicker
-        v-if="isCreate"
+        v-if="isTemplateCreate"
         v-model="templateKey"
         :disabled="isSaving"
       />
+      <DtNotice v-if="isCopy" intent="info">
+        复制已保存的算子、参数、连线和位置，副本可独立修改。运行记录、模型版本和部署不会复制。
+      </DtNotice>
       <form
         id="pipeline-details"
         class="dt-form-grid pipeline-details"
         @submit.prevent="
           canSubmit &&
           !isSaving &&
-          emit('submit', form, isCreate ? templateKey : '')
+          emit('submit', form, isTemplateCreate ? templateKey : '')
         "
       >
         <DtInput
@@ -116,7 +139,7 @@ watch(
         :disabled="!canSubmit"
         :loading="isSaving"
         :icon="isCreate ? 'arrow-right' : 'save'"
-        >{{ isCreate ? '创建并进入流程图' : '保存' }}</DtButton
+        >{{ submitText }}</DtButton
       >
     </template>
   </DtModal>

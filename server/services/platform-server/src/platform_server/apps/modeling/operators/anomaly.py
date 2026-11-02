@@ -161,6 +161,7 @@ class AnomalyDistance(OperatorBase):
     """学习正常工况的联合分布，返回可发布的异常分数模型。"""
 
     CODE = "anomaly_distance"
+    MODEL_TASK = TASK_ANOMALY
     NAME = "设备工况异常检测"
     DESCRIPTION = "用正常样本学习多变量关系，分数大于 1 判异常；无需故障标签"
     CATEGORY = "model"

@@ -31,6 +31,7 @@ async function copyExisting(
   const copy = await duplicateDashboard(sourceId, {
     newName: input.name,
     targetProjectId: input.projectId,
+    includePointBindings: input.includePointBindings ?? true,
   })
   return { id: copy.id, name: copy.name, unresolvedBindings: [] }
 }
@@ -68,6 +69,7 @@ export async function createDashboardFrom(
 }
 
 export interface ImportChoice {
+  includePointBindings?: boolean | undefined
   /** 新建时的名字；覆盖既有屏时用不上。 */
   newName: string
   /** 给了就是覆盖既有屏：保留它的 id 与名字，只换配置。 */
@@ -83,6 +85,7 @@ export async function importInto(
   const made = await importDashboard({
     projectId,
     payload,
+    includePointBindings: choice.includePointBindings ?? false,
     ...(choice.targetDashboardId === null
       ? { newName: choice.newName }
       : { targetDashboardId: choice.targetDashboardId }),

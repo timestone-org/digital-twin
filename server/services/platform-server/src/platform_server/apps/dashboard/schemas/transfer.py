@@ -111,11 +111,28 @@ class DashboardExportOut(DashboardExportIn):
     """`:export` 的出参。与导入入参同形，导出的包可原样导回。"""
 
 
+class DashboardExportOptionsIn(InputModel):
+    """导出的点位绑定选项；未提供时保留绑定。"""
+
+    should_include_point_bindings: bool = Field(
+        default=True,
+        validation_alias="include_point_bindings",
+        serialization_alias="include_point_bindings",
+        description="是否保留实时、历史点位绑定及依赖它们的派生绑定",
+    )
+
+
 class DuplicateDashboardIn(InputModel):
     """复制一张大屏。缺省名 = 源名加后缀，缺省项目 = 源项目。"""
 
     new_name: Label | None = None
     target_project_id: uuid.UUID | None = None
+    should_include_point_bindings: bool = Field(
+        default=True,
+        validation_alias="include_point_bindings",
+        serialization_alias="include_point_bindings",
+        description="是否复制实时、历史点位绑定及依赖它们的派生绑定",
+    )
 
 
 class DashboardImportIn(InputModel):
@@ -125,6 +142,12 @@ class DashboardImportIn(InputModel):
     payload: DashboardExportIn
     new_name: Label | None = None
     target_dashboard_id: uuid.UUID | None = None
+    should_include_point_bindings: bool = Field(
+        default=True,
+        validation_alias="include_point_bindings",
+        serialization_alias="include_point_bindings",
+        description="是否导入实时、历史点位绑定及依赖它们的派生绑定",
+    )
 
 
 class UnresolvedBindingOut(OutputModel):

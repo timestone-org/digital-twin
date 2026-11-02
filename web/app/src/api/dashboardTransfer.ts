@@ -32,6 +32,8 @@ export const EXPORT_PAYLOAD_INVALID_CODE = 41013
 export const IMPORT_TARGET_MISMATCH_CODE = 41014
 
 export interface DashboardDuplicateInput {
+  /** 缺省保留实时、历史点位绑定及相关计算。 */
+  includePointBindings?: boolean | undefined
   /** 缺省是源名加「副本」；项目内大屏名不唯一，重名不去重。 */
   newName?: string | undefined
   /** 缺省复制到源屏所在的项目。 */
@@ -50,6 +52,9 @@ export async function duplicateDashboard(
   key: string = newIdempotencyKey(),
 ): Promise<DashboardPayload> {
   const body: Record<string, unknown> = {}
+  if (input.includePointBindings !== undefined) {
+    body.include_point_bindings = input.includePointBindings
+  }
   if (input.newName !== undefined) body.new_name = input.newName
   if (input.targetProjectId !== undefined) {
     body.target_project_id = input.targetProjectId
@@ -64,15 +69,21 @@ export async function duplicateDashboard(
 /** 导出一张屏。只读，故不带幂等键。 */
 export async function exportDashboard(
   dashboardId: string,
+  input: { includePointBindings?: boolean } = {},
 ): Promise<DashboardExportPayload> {
+  const body =
+    input.includePointBindings === undefined
+      ? undefined
+      : { include_point_bindings: input.includePointBindings }
   const raw = await requestData<unknown>(
     `/dashboards/${dashboardId}:export`,
-    onPlatform({ method: 'POST' }),
+    onPlatform({ method: 'POST', ...(body === undefined ? {} : { body }) }),
   )
   return parseExportPackage(raw)
 }
 
 export interface DashboardImportInput {
+  includePointBindings?: boolean | undefined
   projectId: string
   payload: DashboardExportPayload
   /** 只在新建时生效。 */
@@ -84,7 +95,7 @@ export interface DashboardImportInput {
 /**
  * 导入一份整包。
  * ⚠ 出参里的 `unresolvedBindings` 必须真的展示出来：指向本部署不存在的点位的
- * 绑定照常入库，不列出来用户会以为导进来的是一张能用的屏。
+ * 绑定在选择保留时照常入库，不列出来用户会以为导进来的是一张能用的屏。
  * @param input 目标项目、整包与覆盖目标
  * @param key 幂等键
  */
@@ -95,6 +106,9 @@ export async function importDashboard(
   const body: Record<string, unknown> = {
     project_id: input.projectId,
     payload: fromExportPackage(input.payload),
+  }
+  if (input.includePointBindings !== undefined) {
+    body.include_point_bindings = input.includePointBindings
   }
   if (input.newName !== undefined) body.new_name = input.newName
   if (input.targetDashboardId !== undefined) {

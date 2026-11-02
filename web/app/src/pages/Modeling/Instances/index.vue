@@ -14,11 +14,13 @@ import { formatDateTime } from '@/utils/datetime'
 import { listEmptyState } from '@/utils/listEmpty'
 import ModelingNav from '../components/ModelingNav.vue'
 import { runLabel } from '../scripts/instancePresentation'
+import { taskLabel } from '../scripts/taskPresentation'
 
 const columns: readonly DtDataColumn[] = [
   { key: 'name', label: '模型名称', card: 'title' },
   { key: 'code', label: '编码', card: 'meta' },
   { key: 'template_name', label: '来源工作流' },
+  { key: 'task', label: '模型类型', width: '8rem' },
   { key: 'revision', label: '配置版本', width: '7rem' },
   { key: 'status', label: '最近训练', width: '8rem' },
   { key: 'updated_at', label: '最近配置', width: '12rem' },
@@ -73,7 +75,7 @@ onMounted(() => void list.reload())
         :error="list.error.value"
         :pagination="list.pager.value"
         :empty="emptyState"
-        :layout="{ minWidth: '60rem', cardColumns: 3, cardMinWidth: '22rem' }"
+        :layout="{ minWidth: '68rem', cardColumns: 3, cardMinWidth: '22rem' }"
         @update:page="void list.goToPage($event)"
         @update:size="void list.setSize($event)"
         @retry="void list.reload()"
@@ -107,6 +109,7 @@ onMounted(() => void list.reload())
         </template>
 
         <template #cell-revision="{ row }"> r{{ row.revision }} </template>
+        <template #cell-task="{ row }">{{ taskLabel(row.task) }}</template>
 
         <template #cell-status="{ row }">
           <DtTag

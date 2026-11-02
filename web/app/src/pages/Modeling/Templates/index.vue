@@ -20,12 +20,14 @@ import { useViewMode } from '@/composables/useViewMode'
 import { formatDateTime } from '@/utils/datetime'
 import { listEmptyState } from '@/utils/listEmpty'
 import ModelingNav from '../components/ModelingNav.vue'
+import { taskLabel } from '../scripts/taskPresentation'
 import CreateModelDialog from './components/CreateModelDialog.vue'
 
 const columns: readonly DtDataColumn[] = [
   { key: 'name', label: '工作流名称', card: 'title' },
   { key: 'description', label: '用途', card: 'meta' },
   { key: 'version', label: '版本', width: '6rem' },
+  { key: 'task', label: '模型类型', width: '8rem' },
   { key: 'node_count', label: '算子数', width: '6rem' },
   { key: 'is_enabled', label: '状态', width: '6rem' },
   { key: 'created_at', label: '发布时间', width: '12rem' },
@@ -99,7 +101,7 @@ onMounted(() => void list.reload())
         :error="list.error.value"
         :pagination="list.pager.value"
         :empty="emptyState"
-        :layout="{ cardColumns: 3, cardMinWidth: '22rem', minWidth: '65rem' }"
+        :layout="{ cardColumns: 3, cardMinWidth: '22rem', minWidth: '73rem' }"
         @update:page="void list.goToPage($event)"
         @update:size="void list.setSize($event)"
         @retry="void list.reload()"
@@ -124,6 +126,7 @@ onMounted(() => void list.reload())
         }}</template>
         <template #cell-node_count="{ row }">{{ row.node_count }}</template>
         <template #cell-version="{ row }"> v{{ row.version }} </template>
+        <template #cell-task="{ row }">{{ taskLabel(row.task) }}</template>
 
         <template #cell-is_enabled="{ row }">
           <DtTag :intent="row.is_enabled ? 'success' : 'neutral'">

@@ -54,6 +54,7 @@ class EnergyRules(OperatorBase):
     config: OperatorConfig
 
     CODE = "energy_rules"
+    MODEL_TASK = TASK_RULES
     NAME = "能源业务规则"
     DESCRIPTION = "按明确阈值、计量分类与流向拓扑计算，并返回可核对的业务明细"
     CATEGORY = "model"

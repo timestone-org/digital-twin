@@ -1,6 +1,5 @@
 /**
- * @fileoverview 大屏卡片上那几个直接落库的动作：复制、重命名、导出、删除，
- * 外加预览与编辑两条跳转。需要弹窗的动作由页面转给弹窗，不在这里。
+ * @fileoverview 大屏卡片动作，以及复制与导出的点位绑定选项状态。
  *
  * ⚠ 每个动作跑完都重新拉一次列表，而不是就地补一条：复制会多出一张屏、
  * 删除会少一张，本地补的那份与库里的差异只会越攒越大。
@@ -17,6 +16,11 @@ import { describeError } from '@/composables/useAsyncList'
 import { downloadJson } from '@/utils/downloadJson'
 
 export interface CardActions {
+  transfer: Ref<{
+    operation: 'export' | 'copy'
+    dashboard: DashboardSummary
+  } | null>
+  confirmTransfer: (includePointBindings: boolean) => Promise<void>
   /** 正在处理的那张屏，卡片据此盖忙碌遮罩。 */
   busyDashboardId: Ref<string | null>
   busyLabel: Ref<string>
@@ -68,9 +72,12 @@ async function withBusy(
 async function exportOne(
   context: ActionContext,
   dashboard: DashboardSummary,
+  includePointBindings: boolean,
 ): Promise<void> {
   try {
-    const packed = fromExportPackage(await exportDashboard(dashboard.id))
+    const packed = fromExportPackage(
+      await exportDashboard(dashboard.id, { includePointBindings }),
+    )
     downloadJson(packed, dashboard.name)
     context.toast.success(`已导出「${dashboard.name}」`)
   } catch (caught) {
@@ -114,22 +121,44 @@ export function useCardActions(onChanged: () => Promise<void>): CardActions {
     busyLabel: ref('处理中…'),
     onChanged,
   }
+  const transfer = ref<CardActions['transfer']['value']>(null)
+
+  async function confirmTransfer(includePointBindings: boolean): Promise<void> {
+    const choice = transfer.value
+    transfer.value = null
+    if (choice === null) return
+    const dashboard = choice.dashboard
+    if (choice.operation === 'export') {
+      await exportOne(context, dashboard, includePointBindings)
+      return
+    }
+    await withBusy(context, dashboard.id, '复制中…', async () => {
+      const copy = await duplicateDashboard(dashboard.id, {
+        includePointBindings,
+      })
+      context.toast.success(`已复制为「${copy.name}」`)
+    })
+  }
 
   return {
+    transfer,
+    confirmTransfer,
     busyDashboardId: context.busyDashboardId,
     busyLabel: context.busyLabel,
     preview: (dashboard) => goTo(router, 'dashboard-view', dashboard.id),
     edit: (dashboard) => goTo(router, 'dashboard-editor', dashboard.id),
-    duplicate: (dashboard) =>
-      withBusy(context, dashboard.id, '复制中…', async () => {
-        const copy = await duplicateDashboard(dashboard.id)
-        context.toast.success(`已复制为「${copy.name}」`)
-      }),
+    duplicate: (dashboard) => {
+      transfer.value = { operation: 'copy', dashboard }
+      return Promise.resolve()
+    },
     rename: (dashboard, name) =>
       withBusy(context, dashboard.id, '重命名中…', () =>
         updateDashboard(dashboard.id, { name }).then(() => undefined),
       ),
-    exportOne: (dashboard) => exportOne(context, dashboard),
+    exportOne: (dashboard) => {
+      transfer.value = { operation: 'export', dashboard }
+      return Promise.resolve()
+    },
     remove: (dashboard) => remove(context, confirm, dashboard),
   }
 }

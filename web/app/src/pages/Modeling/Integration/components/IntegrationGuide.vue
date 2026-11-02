@@ -6,7 +6,7 @@ const steps = [
   [
     '1. 选择模板',
     'GET /modeling-templates?page=1&size=20',
-    '选取 is_enabled=true 的具体模板版本，保存其 id。',
+    '选取 is_enabled=true 的具体模板版本，保存其 id。模板与实例列表在训练前即返回 task，可据此识别模型类型。',
   ],
   [
     '2. 获取全部配置',
@@ -78,6 +78,7 @@ const example = JSON.stringify(
       >
         <p>
           在建模工作台完成设计与验证后，使用「发布为工作流」，保存为固定版本的建模模板。每个模型实例独立保存流水线与参数。
+          修改源流水线或重新发布模板，不会影响已有实例，也不会改变部署固定的模型版本。
         </p>
         <template #footer>
           <RouterLink to="/modeling/templates">
@@ -116,9 +117,15 @@ const example = JSON.stringify(
         数组，包含全部部署，无需分页；没有部署时返回空数组。
       </p>
       <p>
-        列表包含名称、code、固定模型版本、状态和配额。选择 is_enabled=true 且
-        is_servable=true 的项，再通过 GET /open-models/{code}
+        列表包含名称、code、task、固定模型版本、状态和配额。选择 is_enabled=true
+        且 is_servable=true 的项，再通过 GET /open-models/{code}
         读取输入输出签名。停用或不可服务的部署仍会出现在列表中。
+      </p>
+      <p>
+        按 task 选择 POST 调用接口：regression（回归）与
+        classification（分类）使用 /open-models/{code}:predict；
+        anomaly_detection（异常检测）使用 /open-models/{code}:detect；
+        rule_calculation（规则计算）使用 /open-models/{code}:calculate。
       </p>
     </DtCard>
     <div class="integration-content">

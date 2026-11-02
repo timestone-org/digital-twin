@@ -18,6 +18,7 @@ import * as transferApi from '@/api/dashboardTransfer'
 import type { DashboardSummary, ProjectSummary } from '@/api/dashboardWire'
 import { STORAGE_KEYS } from '@/config/storage'
 import HomePage from '@/pages/Home/index.vue'
+import PointBindingChoiceDialog from '@/features/dashboard/PointBindingChoiceDialog.vue'
 import NewProjectDialog from '@/pages/Home/components/NewProjectDialog.vue'
 import TemplateLibraryDialog from '@/pages/Home/components/TemplateLibraryDialog.vue'
 import WorkbenchDialogs from '@/pages/Home/components/WorkbenchDialogs.vue'
@@ -531,8 +532,30 @@ describe('卡片动作接线', () => {
       .mockResolvedValue({ name: '产线总览 副本' } as never)
     const wrapper = await render()
     await pickMenu(wrapper, '创建副本')
-    expect(duplicate).toHaveBeenCalledWith('d-1')
+    expect(duplicate).not.toHaveBeenCalled()
+    wrapper.getComponent(PointBindingChoiceDialog).vm.$emit('submit', true)
+    await flushPromises()
+    expect(duplicate).toHaveBeenCalledWith('d-1', {
+      includePointBindings: true,
+    })
     expect(dashboardApi.listDashboards).toHaveBeenCalledTimes(2)
+  })
+
+  it.each(['创建副本', '导出 JSON'])('取消%s不发送请求', async (label) => {
+    stubList()
+    const duplicate = vi.spyOn(transferApi, 'duplicateDashboard')
+    const exportOne = vi.spyOn(transferApi, 'exportDashboard')
+    const wrapper = await render()
+    await pickMenu(wrapper, label)
+    wrapper
+      .getComponent(PointBindingChoiceDialog)
+      .vm.$emit('update:open', false)
+    await flushPromises()
+    expect(duplicate).not.toHaveBeenCalled()
+    expect(exportOne).not.toHaveBeenCalled()
+    expect(wrapper.getComponent(PointBindingChoiceDialog).props('open')).toBe(
+      false,
+    )
   })
 
   it('删除先二次确认再落库', async () => {
@@ -585,6 +608,8 @@ describe('卡片动作接线', () => {
     })
     const wrapper = await render()
     await pickMenu(wrapper, '导出 JSON')
+    wrapper.getComponent(PointBindingChoiceDialog).vm.$emit('submit', false)
+    await flushPromises()
 
     // ⚠ 存 camelCase 的包导回来会被 parseExportPackage 判成形状不对，
     // 而那时候用户手里已经只剩这一份文件了
@@ -604,6 +629,8 @@ describe('卡片动作接线', () => {
     )
     const wrapper = await render()
     await pickMenu(wrapper, '导出 JSON')
+    wrapper.getComponent(PointBindingChoiceDialog).vm.$emit('submit', false)
+    await flushPromises()
     expect(toastError).toHaveBeenCalled()
   })
 })

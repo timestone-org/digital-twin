@@ -13,6 +13,7 @@ import { DtButton, DtEmpty, DtPageState, DtSkeleton, useToast } from '@dt/ui'
 import { updateProject } from '@/api/dashboard'
 import { AppShell } from '@/components/layout'
 import PermGuard from '@/components/PermGuard.vue'
+import PointBindingChoiceDialog from '@/features/dashboard/PointBindingChoiceDialog.vue'
 import { describeError } from '@/composables/useAsyncList'
 import { useAuthStore } from '@/stores/auth'
 import DashboardCard from './components/DashboardCard.vue'
@@ -241,6 +242,14 @@ onMounted(() => {
         </div>
       </template>
     </div>
+
+    <PointBindingChoiceDialog
+      :open="cards.transfer.value !== null"
+      :operation="cards.transfer.value?.operation ?? 'export'"
+      :dashboard-name="cards.transfer.value?.dashboard.name ?? ''"
+      @update:open="cards.transfer.value = null"
+      @submit="cards.confirmTransfer"
+    />
 
     <!-- 十个弹窗聚合成一个标签，理由见 WorkbenchDialogs.vue 的文件头 -->
     <WorkbenchDialogs

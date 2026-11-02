@@ -315,7 +315,15 @@ describe('导出 JSON', () => {
     const ctx = setup(() => true, DASHBOARD)
     vi.mocked(exportDashboard).mockResolvedValue(EXPORT_PAYLOAD)
 
-    await ctx.extras.exportJson()
+    ctx.extras.exportJson()
+    expect(ctx.extras.exportOpen.value).toBe(true)
+    expect(exportDashboard).not.toHaveBeenCalled()
+    await ctx.extras.confirmExport(false)
+    await ctx.extras.confirmExport(true)
+    expect(ctx.extras.exportOpen.value).toBe(false)
+    expect(exportDashboard).toHaveBeenCalledWith(DASHBOARD.id, {
+      includePointBindings: false,
+    })
 
     expect(downloadJson).toHaveBeenCalledTimes(1)
     expect(vi.mocked(downloadJson).mock.calls[0]?.[1]).toBe('演示屏')

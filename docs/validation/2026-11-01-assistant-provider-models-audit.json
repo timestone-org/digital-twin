@@ -1,0 +1,16 @@
+{
+  "date": "2026-11-01",
+  "operation": "single_readonly_models_directory_request",
+  "request_limit": 1,
+  "chat_vision_same_model": true,
+  "chat_summary_same_model": true,
+  "distinct_configured_models": 1,
+  "vision_uses_same_endpoint": true,
+  "no_config_changes": true,
+  "status": "success",
+  "page_model_count": 21,
+  "configured_chat_in_page": true,
+  "configured_vision_in_page": true,
+  "configured_summary_in_page": true,
+  "directory_is_not_chat_authorization_proof": true
+}

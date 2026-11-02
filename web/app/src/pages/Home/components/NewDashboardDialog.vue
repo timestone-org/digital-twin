@@ -7,6 +7,7 @@
 import { computed, ref, watch } from 'vue'
 import {
   DtButton,
+  DtCheckbox,
   DtInput,
   DtModal,
   DtNotice,
@@ -61,7 +62,7 @@ const MODES: readonly DtSegmentedOption[] = [
 
 const MODE_HINTS: Record<string, string> = {
   blank: '按下面的设计尺寸开一张空屏。',
-  copy: '整份克隆一张已有的屏，包括节点与绑定。',
+  copy: '复制已有大屏的布局与配置，可选择是否保留点位绑定。',
   template: '把模板实例化成新屏；尺寸沿用模板自带的。',
 }
 
@@ -72,10 +73,20 @@ const width = ref(DEFAULT_DESIGN_WIDTH)
 const height = ref(DEFAULT_DESIGN_HEIGHT)
 const sourceDashboardId = ref('')
 const templateId = ref('')
+const includePointBindings = ref(true)
 
 // ⚠ 填了一半误点遮罩就全没了；脏着时由 DtModal 拦下误关
 const { isDirty } = useFormDirty(
-  [startMode, projectId, name, width, height, sourceDashboardId, templateId],
+  [
+    startMode,
+    projectId,
+    name,
+    width,
+    height,
+    sourceDashboardId,
+    templateId,
+    includePointBindings,
+  ],
   () => props.open,
 )
 
@@ -122,6 +133,7 @@ function resetSizing(): void {
   width.value = DEFAULT_DESIGN_WIDTH
   height.value = DEFAULT_DESIGN_HEIGHT
   sourceDashboardId.value = copyOptions.value[0]?.value ?? ''
+  includePointBindings.value = true
 }
 
 watch(
@@ -173,6 +185,7 @@ function submit(): void {
   }
   if (startMode.value === 'copy') {
     payload.sourceDashboardId = sourceDashboardId.value
+    payload.includePointBindings = includePointBindings.value
   }
   if (startMode.value === 'template') payload.templateId = templateId.value
   emit('submit', payload)
@@ -230,6 +243,19 @@ function submit(): void {
         <DtNotice v-else intent="warning" icon="alert-triangle">
           还没有任何大屏可以复制，换「空白画布」或「套模板」起手。
         </DtNotice>
+        <DtCheckbox
+          v-model="includePointBindings"
+          label="保留点位绑定"
+          :disabled="loading"
+        />
+        <p class="text-2xs text-text-disabled">
+          {{
+            includePointBindings
+              ? '副本继续使用原来的实时、历史点位绑定及相关计算。'
+              : '忽略实时、历史点位绑定及依赖它们的计算，可在副本中重新绑定。'
+          }}
+          静态值和台账绑定保留，不会复制点位本身。
+        </p>
       </template>
 
       <div v-if="startMode === 'template'" class="flex flex-col gap-2">

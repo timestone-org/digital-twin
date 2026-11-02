@@ -11,6 +11,7 @@ import { readFileSync } from 'node:fs'
 import { dirname, join } from 'node:path'
 import { promisify } from 'node:util'
 import { describe, expect, it } from 'vitest'
+import { MODELING_TASKS } from '@dt/contracts'
 
 import type {
   AnomalyDecision,
@@ -315,6 +316,7 @@ const DEPLOYMENT = {
   model_version_id: true,
   model_name: true,
   model_version: true,
+  task: true,
   name: true,
   description: true,
   is_enabled: true,
@@ -443,6 +445,15 @@ const PAIRS: ReadonlyArray<readonly [string, Record<string, true>]> = [
 ]
 
 describe('分析建模线形与 openapi 一致', () => {
+  it('部署必需声明与模型版本一致的任务类型', () => {
+    expect(spec.components.schemas['ModelDeploymentOut']).toMatchObject({
+      required: expect.arrayContaining(['task']),
+      properties: {
+        task: { type: 'string', enum: [...MODELING_TASKS].sort() },
+      },
+    })
+  })
+
   it('BDM 数据类别与生成类型一致', () => {
     const kinds = [
       'point',

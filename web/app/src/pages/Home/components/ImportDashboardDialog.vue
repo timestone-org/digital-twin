@@ -9,6 +9,7 @@
 import { computed, ref, watch } from 'vue'
 import {
   DtButton,
+  DtCheckbox,
   DtInput,
   DtModal,
   DtNotice,
@@ -37,7 +38,13 @@ const props = withDefaults(
 
 const emit = defineEmits<{
   'update:open': [open: boolean]
-  submit: [payload: { newName: string; targetDashboardId: string | null }]
+  submit: [
+    payload: {
+      newName: string
+      targetDashboardId: string | null
+      includePointBindings: boolean
+    },
+  ]
 }>()
 
 const MODES: readonly DtSegmentedOption[] = [
@@ -48,6 +55,7 @@ const MODES: readonly DtSegmentedOption[] = [
 const mode = ref<'new' | 'overwrite'>('new')
 const newName = ref('')
 const targetId = ref('')
+const includePointBindings = ref(false)
 
 const targetOptions = computed<DtSelectOption[]>(() =>
   props.targets.map((target) => ({ value: target.id, label: target.name })),
@@ -74,6 +82,7 @@ watch(
     mode.value = 'new'
     newName.value = props.conflict ? `${incoming.name} 副本` : incoming.name
     targetId.value = props.targets[0]?.id ?? ''
+    includePointBindings.value = false
   },
   { immediate: true },
 )
@@ -86,10 +95,18 @@ function onMode(value: string): void {
 function submit(): void {
   if (!canSubmit.value) return
   if (mode.value === 'overwrite') {
-    emit('submit', { newName: '', targetDashboardId: targetId.value })
+    emit('submit', {
+      newName: '',
+      targetDashboardId: targetId.value,
+      includePointBindings: includePointBindings.value,
+    })
     return
   }
-  emit('submit', { newName: newName.value.trim(), targetDashboardId: null })
+  emit('submit', {
+    newName: newName.value.trim(),
+    targetDashboardId: null,
+    includePointBindings: includePointBindings.value,
+  })
 }
 </script>
 
@@ -117,6 +134,20 @@ function submit(): void {
         aria-label="导入方式"
         @update:model-value="onMode"
       />
+
+      <DtCheckbox
+        v-model="includePointBindings"
+        label="保留点位绑定"
+        :disabled="loading"
+      />
+      <DtNotice icon="circle-question">
+        {{
+          includePointBindings
+            ? '保留包内的实时、历史点位绑定及相关计算，不存在的点位会在导入后列出。'
+            : '忽略实时、历史点位绑定及依赖它们的计算，导入后可重新选择点位。'
+        }}
+        布局、样式、静态值和台账绑定保持不变；不会导入点位本身。
+      </DtNotice>
 
       <DtInput
         v-if="mode === 'new'"
@@ -156,9 +187,6 @@ function submit(): void {
           targetName === '' ? '所选大屏' : `「${targetName}」`
         }}的节点、绑定与主题整体换成包里的内容。 id
         与名字保持不变，此操作不可撤销。
-      </DtNotice>
-      <DtNotice v-else-if="mode === 'new'" icon="circle-question">
-        指向本部署不存在的点位的绑定照常入库，导入完会逐条列出来。
       </DtNotice>
     </div>
 

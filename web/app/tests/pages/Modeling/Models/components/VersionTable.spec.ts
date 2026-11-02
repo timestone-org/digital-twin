@@ -1,7 +1,7 @@
 /**
  * @fileoverview 模型版本长名称与完整不可用原因。
  */
-import type { ModelingVersionSummary } from '@dt/contracts'
+import type { ModelingTask, ModelingVersionSummary } from '@dt/contracts'
 import { mount } from '@vue/test-utils'
 import { describe, expect, it } from 'vitest'
 
@@ -24,10 +24,10 @@ const VERSION: ModelingVersionSummary = {
   created_at: '2026-01-01T00:00:00.000Z',
 }
 
-function open() {
+function open(row: ModelingVersionSummary = VERSION) {
   return mount(VersionTable, {
     props: {
-      rows: [VERSION],
+      rows: [row],
       view: 'table',
       isLoading: false,
       error: null,
@@ -40,6 +40,22 @@ function open() {
 }
 
 describe('模型版本长文本', () => {
+  it.each<{ task: ModelingTask; label: string }>([
+    { task: 'regression', label: '回归' },
+    { task: 'classification', label: '分类' },
+    { task: 'anomaly_detection', label: '异常检测' },
+    { task: 'rule_calculation', label: '规则计算' },
+  ])('列表明确显示 $task 的模型类型', ({ task, label }) => {
+    const wrapper = open({ ...VERSION, task })
+    expect(wrapper.findAll('thead th').map((cell) => cell.text())).toContain(
+      '模型类型',
+    )
+    expect(wrapper.findAll('tbody td').map((cell) => cell.text())).toContain(
+      label,
+    )
+    wrapper.unmount()
+  })
+
   it('长名称在列内截断且完整名称可读', () => {
     const wrapper = open()
     const name = wrapper.findAll('tbody td')[0]?.find('[title]')

@@ -368,6 +368,7 @@ export interface ModelDeployment {
   model_version_id: string
   model_name: string
   model_version: number
+  task: ModelingTask
   name: string
   description: string | null
   /** 人关的开关。关了立刻 403，不是静默返回旧值。 */

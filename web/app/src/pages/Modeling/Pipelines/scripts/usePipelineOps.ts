@@ -1,5 +1,5 @@
 /**
- * @fileoverview 流水线列表上的建、改、删。
+ * @fileoverview 流水线列表上的创建、复制、编辑与删除。
  */
 import type { ModelingPipelineSummary } from '@dt/contracts'
 import { useConfirm, useToast } from '@dt/ui'
@@ -8,6 +8,7 @@ import { onBeforeUnmount, ref } from 'vue'
 import * as modeling from '@/api/modeling'
 import { newClientUuid } from '@/api/idempotency'
 import { describeError } from '@/composables/useAsyncList'
+import { useRacedFetch } from '@/composables/useRacedFetch'
 
 import { PIPELINE_TEMPLATES } from './templates'
 
@@ -17,15 +18,31 @@ export interface PipelineDraft {
   code: string
   name: string
   description: string
+  sourcePipelineId?: string
 }
 
 const BLANK: PipelineDraft = { id: null, code: '', name: '', description: '' }
 
-/** 建一条或改一条。新建时按模板键把一张能跑的图一并落下去。 */
+/** 创建独立图副本，或保存新建与编辑表单。 */
 async function submit(
   input: PipelineDraft,
   templateKey: string,
+  signal: AbortSignal,
 ): Promise<string | null> {
+  if (input.sourcePipelineId !== undefined) {
+    const source = await modeling.getModelingPipeline(
+      input.sourcePipelineId,
+      signal,
+    )
+    if (signal.aborted) return null
+    const created = await modeling.createModelingPipeline({
+      code: input.code,
+      name: input.name.trim(),
+      description: input.description || null,
+      graph: structuredClone(source.graph),
+    })
+    return created.id
+  }
   if (input.id === null) {
     // ⚠ 找不到那张模板时给空白图而不是抛：模板是前端常量，键对不上是代码问题，
     // 不该让用户的「新建」当场失败
@@ -74,10 +91,8 @@ function usePipelineSaving(onDone: () => void) {
   const draft = ref<PipelineDraft | null>(null)
   const isSaving = ref(false)
   const toast = useToast()
-  let isDisposed = false
-  onBeforeUnmount(() => {
-    isDisposed = true
-  })
+  const operation = useRacedFetch()
+  onBeforeUnmount(operation.cancel)
 
   async function save(
     input: PipelineDraft,
@@ -85,21 +100,26 @@ function usePipelineSaving(onDone: () => void) {
   ): Promise<string | null> {
     if (isSaving.value) return null
     isSaving.value = true
-    try {
-      const createdId = await submit(input, templateKey)
-      if (isDisposed) return null
-      draft.value = null
-      toast.success(
-        input.id === null ? '流水线已创建，接下来在流程图中配置' : '已保存',
-      )
-      onDone()
-      return createdId
-    } catch (caught) {
-      if (!isDisposed) toast.error(describeError(caught))
-      return null
-    } finally {
-      if (!isDisposed) isSaving.value = false
-    }
+    let createdId: string | null = null
+    await operation.run((signal) => submit(input, templateKey, signal), {
+      ok: (id) => {
+        createdId = id
+        draft.value = null
+        toast.success(
+          input.sourcePipelineId !== undefined
+            ? '流水线已复制，接下来在副本中修改'
+            : input.id === null
+              ? '流水线已创建，接下来在流程图中配置'
+              : '已保存',
+        )
+        onDone()
+      },
+      fail: (caught) => toast.error(describeError(caught)),
+      settled: () => {
+        isSaving.value = false
+      },
+    })
+    return createdId
   }
 
   return { draft, isSaving, save }
@@ -127,6 +147,7 @@ export function usePipelineOps(onDone: () => void) {
     remove,
     /** 打开新建表单。 */
     openCreate: () => {
+      if (isSaving.value) return
       draft.value = {
         ...BLANK,
         code: `model_${newClientUuid().slice(0, 8)}`,
@@ -134,7 +155,18 @@ export function usePipelineOps(onDone: () => void) {
     },
     /** 打开改名表单。**编码不给改**，绑定引用的就是它。 */
     openEdit: (row: ModelingPipelineSummary) => {
+      if (isSaving.value) return
       draft.value = draftOf(row)
+    },
+    openCopy: (row: ModelingPipelineSummary) => {
+      if (isSaving.value) return
+      draft.value = {
+        ...draftOf(row),
+        id: null,
+        sourcePipelineId: row.id,
+        code: `model_${newClientUuid().replaceAll('-', '')}`,
+        name: `${Array.from(row.name).slice(0, 125).join('')} 副本`,
+      }
     },
     close: () => {
       if (!isSaving.value) draft.value = null

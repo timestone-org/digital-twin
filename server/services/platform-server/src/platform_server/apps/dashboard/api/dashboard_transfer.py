@@ -18,16 +18,24 @@ from platform_server.apps.dashboard.deps import (
     WriteContext,
     get_manage_context,
     get_session,
+    get_validation_context,
     require,
 )
 from platform_server.apps.dashboard.schemas import DashboardOut
 from platform_server.apps.dashboard.schemas.transfer import (
+    DashboardExportOptionsIn,
     DashboardExportOut,
     DashboardImportIn,
     DashboardImportOut,
     DuplicateDashboardIn,
 )
 from platform_server.apps.dashboard.services import transfer_service
+from platform_server.apps.dashboard.services.transfer_bindings import (
+    ExportOptions,
+)
+from platform_server.apps.dashboard.services.validation import (
+    ValidationContext,
+)
 from platform_server.settings import API_PREFIX
 
 router = APIRouter(prefix=API_PREFIX, tags=["dashboard"])
@@ -35,6 +43,7 @@ router = APIRouter(prefix=API_PREFIX, tags=["dashboard"])
 SessionDep = Annotated[AsyncSession, Depends(get_session)]
 ViewDep = Annotated[CallerContext, Depends(require(DASHBOARD_VIEW))]
 ManageDep = Annotated[WriteContext, Depends(get_manage_context)]
+ValidationDep = Annotated[ValidationContext, Depends(get_validation_context)]
 
 
 def copy_action(
@@ -52,6 +61,35 @@ def copy_action(
         dashboard_id=dashboard_id,
         payload=payload,
         context=write.validation,
+    )
+
+
+def import_action(
+    session: AsyncSession,
+    write: WriteContext,
+    payload: DashboardImportIn,
+) -> Callable[[], Awaitable[DashboardImportOut]]:
+    """构造导入的幂等动作。Args: session, write, payload。"""
+    return lambda: transfer_service.import_dashboard(
+        session,
+        project_id=payload.project_id,
+        payload=payload.payload,
+        context=write.validation,
+        new_name=payload.new_name,
+        target_dashboard_id=payload.target_dashboard_id,
+        should_include_point_bindings=payload.should_include_point_bindings,
+    )
+
+
+def export_options(
+    payload: DashboardExportOptionsIn | None, validation: ValidationContext
+) -> ExportOptions:
+    """构造导出选项。Args: payload, validation。"""
+    return ExportOptions(
+        catalog=validation.catalog,
+        should_include_point_bindings=(
+            payload is None or payload.should_include_point_bindings
+        ),
     )
 
 
@@ -87,15 +125,21 @@ async def duplicate_dashboard(
     summary="导出大屏",
 )
 async def export_dashboard(
-    dashboard_id: uuid.UUID, session: SessionDep, _viewer: ViewDep
+    dashboard_id: uuid.UUID,
+    session: SessionDep,
+    _viewer: ViewDep,
+    validation: ValidationDep,
+    payload: DashboardExportOptionsIn | None = None,
 ) -> ApiResponse[DashboardExportOut]:
-    """导出一张大屏成可移植文档，不改任何东西。
+    """导出大屏，可选择忽略点位绑定。
 
-    Args: dashboard_id, session, _viewer。
+    Args: dashboard_id, session, _viewer, validation, payload。
     """
     return ok(
         await transfer_service.export_dashboard(
-            session, dashboard_id=dashboard_id
+            session,
+            dashboard_id=dashboard_id,
+            options=export_options(payload, validation),
         )
     )
 
@@ -115,13 +159,6 @@ async def import_dashboard(
     imported = await write.run_once(
         endpoint="import_dashboard",
         model=DashboardImportOut,
-        action=lambda: transfer_service.import_dashboard(
-            session,
-            project_id=payload.project_id,
-            payload=payload.payload,
-            context=write.validation,
-            new_name=payload.new_name,
-            target_dashboard_id=payload.target_dashboard_id,
-        ),
+        action=import_action(session, write, payload),
     )
     return ok(imported, message="大屏已导入")

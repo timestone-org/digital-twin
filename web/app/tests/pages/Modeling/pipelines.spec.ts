@@ -3,7 +3,12 @@
  * 以及写码决定「新建」露不露面。
  */
 import { PERMISSION_CODES } from '@dt/contracts'
-import type { ModelingPipelineSummary, Page } from '@dt/contracts'
+import { DtInput } from '@dt/ui'
+import type {
+  ModelingPipeline,
+  ModelingPipelineSummary,
+  Page,
+} from '@dt/contracts'
 import { flushPromises, mount } from '@vue/test-utils'
 import { createPinia, setActivePinia } from 'pinia'
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
@@ -59,6 +64,7 @@ function signIn(permissions: string[]): void {
 }
 
 beforeEach(() => {
+  push.mockClear()
   setActivePinia(createPinia())
 })
 
@@ -67,6 +73,150 @@ afterEach(() => {
 })
 
 describe('流水线列表', () => {
+  it('有设计权限时可从现有流水线打开复制表单', async () => {
+    vi.spyOn(modeling, 'listModelingPipelines').mockResolvedValue(
+      page([pipeline()]),
+    )
+    signIn([PERMISSION_CODES.modelingView, PERMISSION_CODES.modelingManage])
+    const wrapper = mount(PipelinesPage, {
+      global: { stubs: { teleport: true } },
+    })
+    await flushPromises()
+    await wrapper.get('button[aria-label="复制流水线"]').trigger('click')
+    const dialog = wrapper.getComponent(PipelineFormDialog)
+    expect(dialog.props('draft')).toEqual({
+      id: null,
+      sourcePipelineId: 'p1',
+      code: expect.stringMatching(/^model_[a-f0-9]{32}$/),
+      name: '能耗回归 副本',
+      description: '',
+    })
+    expect(wrapper.text()).toContain('复制并进入流程图')
+    wrapper.unmount()
+  })
+
+  it('提交复制表单后打开新副本，原流水线不被更新', async () => {
+    vi.spyOn(modeling, 'listModelingPipelines').mockResolvedValue(
+      page([pipeline()]),
+    )
+    const source: ModelingPipeline = {
+      ...pipeline(),
+      graph: { format_version: '1.0', nodes: [], edges: [] },
+    }
+    vi.spyOn(modeling, 'getModelingPipeline').mockResolvedValue(source)
+    const create = vi
+      .spyOn(modeling, 'createModelingPipeline')
+      .mockResolvedValue({
+        ...source,
+        id: 'copy-1',
+        code: 'copy_energy',
+        name: '能耗分析改进版',
+      })
+    const update = vi.spyOn(modeling, 'updateModelingPipeline')
+    signIn([PERMISSION_CODES.modelingView, PERMISSION_CODES.modelingManage])
+    const wrapper = mount(PipelinesPage, {
+      global: { stubs: { teleport: true } },
+    })
+    await flushPromises()
+    await wrapper.get('button[aria-label="复制流水线"]').trigger('click')
+    const dialog = wrapper.getComponent(PipelineFormDialog)
+    const draft = dialog.props('draft')
+    if (!draft) throw new Error('复制表单未打开')
+    dialog.vm.$emit(
+      'submit',
+      { ...draft, code: 'copy_energy', name: '能耗分析改进版' },
+      '',
+    )
+    await flushPromises()
+    expect(create).toHaveBeenCalledWith({
+      code: 'copy_energy',
+      name: '能耗分析改进版',
+      description: null,
+      graph: source.graph,
+    })
+    expect(update).not.toHaveBeenCalled()
+    expect(push).toHaveBeenCalledWith('/modeling/pipelines/copy-1')
+    wrapper.unmount()
+  })
+
+  it('只读权限不显示已有流水线的复制入口', async () => {
+    vi.spyOn(modeling, 'listModelingPipelines').mockResolvedValue(
+      page([pipeline()]),
+    )
+    signIn([PERMISSION_CODES.modelingView])
+    const wrapper = mount(PipelinesPage)
+    await flushPromises()
+    expect(wrapper.text()).toContain('能耗回归')
+    expect(wrapper.find('button[aria-label="复制流水线"]').exists()).toBe(false)
+    wrapper.unmount()
+  })
+
+  it('打开流程图仍进入原流水线，并且不创建副本', async () => {
+    vi.spyOn(modeling, 'listModelingPipelines').mockResolvedValue(
+      page([pipeline()]),
+    )
+    const create = vi.spyOn(modeling, 'createModelingPipeline')
+    signIn([PERMISSION_CODES.modelingView, PERMISSION_CODES.modelingManage])
+    const wrapper = mount(PipelinesPage)
+    await flushPromises()
+    const open = wrapper
+      .findAll('button')
+      .find((button) => button.text().trim() === '打开流程图')
+    if (!open) throw new Error('缺少打开流程图按钮')
+    await open.trigger('click')
+    expect(push).toHaveBeenCalledWith('/modeling/pipelines/p1')
+    expect(create).not.toHaveBeenCalled()
+    expect(wrapper.getComponent(PipelineFormDialog).props('draft')).toBeNull()
+    wrapper.unmount()
+  })
+
+  it('复制创建失败保留用户修改，修正编码后重试进入副本', async () => {
+    vi.spyOn(modeling, 'listModelingPipelines').mockResolvedValue(
+      page([pipeline()]),
+    )
+    const source: ModelingPipeline = {
+      ...pipeline(),
+      graph: { format_version: '1.0', nodes: [], edges: [] },
+    }
+    vi.spyOn(modeling, 'getModelingPipeline').mockResolvedValue(source)
+    const create = vi
+      .spyOn(modeling, 'createModelingPipeline')
+      .mockRejectedValueOnce(new Error('duplicate code'))
+      .mockResolvedValueOnce({ ...source, id: 'copy-retry' })
+    signIn([PERMISSION_CODES.modelingView, PERMISSION_CODES.modelingManage])
+    const wrapper = mount(PipelinesPage, {
+      global: { stubs: { teleport: true } },
+    })
+    await flushPromises()
+    await wrapper.get('button[aria-label="复制流水线"]').trigger('click')
+    function input(label: string) {
+      const field = wrapper
+        .getComponent(PipelineFormDialog)
+        .findAllComponents(DtInput)
+        .find((item) => item.props('label') === label)
+      if (!field) throw new Error(`缺少输入框：${label}`)
+      return field.get('input')
+    }
+    await input('流水线名称').setValue('修改后的副本')
+    await input('编码').setValue('conflicting_code')
+    await wrapper.getComponent(PipelineFormDialog).get('form').trigger('submit')
+    await flushPromises()
+    expect(input('流水线名称').element.value).toBe('修改后的副本')
+    expect(input('编码').element.value).toBe('conflicting_code')
+    expect(push).not.toHaveBeenCalled()
+    await input('编码').setValue('new_copy_code')
+    await wrapper.getComponent(PipelineFormDialog).get('form').trigger('submit')
+    await flushPromises()
+    expect(create).toHaveBeenLastCalledWith({
+      code: 'new_copy_code',
+      name: '修改后的副本',
+      description: null,
+      graph: source.graph,
+    })
+    expect(push).toHaveBeenCalledWith('/modeling/pipelines/copy-retry')
+    wrapper.unmount()
+  })
+
   it('日常入口保留完整流程，发布工作流与模型实例可以直接进入', async () => {
     vi.spyOn(modeling, 'listModelingPipelines').mockResolvedValue(page([]))
     signIn([PERMISSION_CODES.modelingView, PERMISSION_CODES.modelingManage])
@@ -162,6 +312,7 @@ describe('流水线列表', () => {
     await flushPromises()
 
     expect(wrapper.text()).not.toContain('新建流水线')
+    expect(wrapper.find('button[aria-label="复制流水线"]').exists()).toBe(false)
     expect(wrapper.find('[data-test="perm-readonly"]').exists()).toBe(true)
   })
 

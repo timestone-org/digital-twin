@@ -3,6 +3,7 @@
 import type { ModelCallStat, ModelDeployment } from '@dt/contracts'
 import { DtButton, DtInput, DtModal, DtNotice, DtSpinner } from '@dt/ui'
 import { computed } from 'vue'
+import { servingAction, taskLabel } from '../../scripts/taskPresentation'
 
 import CallStatList from './CallStatList.vue'
 import RuleResultGuide from './RuleResultGuide.vue'
@@ -18,20 +19,12 @@ const props = defineProps<{
 const emit = defineEmits<{ close: [] }>()
 
 /** 调用地址。⚠ 摆出来是为了让人直接复制，不必去翻文档。 */
-const endpoint = computed(
-  () =>
-    `POST /api/v1/platform/open-models/${props.deployment?.code ?? ''}:predict`,
-)
-
-const detectionEndpoint = computed(
-  () =>
-    `POST /api/v1/platform/open-models/${props.deployment?.code ?? ''}:detect`,
-)
-
-const calculationEndpoint = computed(
-  () =>
-    `POST /api/v1/platform/open-models/${props.deployment?.code ?? ''}:calculate`,
-)
+const endpoint = computed(() => {
+  const deployment = props.deployment
+  return deployment
+    ? `POST /api/v1/platform/open-models/${deployment.code}:${servingAction(deployment.task)}`
+    : ''
+})
 </script>
 
 <template>
@@ -43,17 +36,19 @@ const calculationEndpoint = computed(
   >
     <div class="dt-ml-keys flex flex-col gap-4">
       <p class="dt-ml-keys__endpoint">{{ endpoint }}</p>
-      <p class="dt-ml-keys__endpoint">{{ detectionEndpoint }}</p>
-      <p class="dt-ml-keys__endpoint">{{ calculationEndpoint }}</p>
-      <p>
-        异常检测模型使用 :detect，返回
-        is_anomaly、score、threshold。回归与分类模型使用
-        :predict。规则计算模型使用 :calculate，返回结构化结果，results
-        中包含归集、核算、路径或诊断明细。三类接口均使用用户 APIKey，输入格式为
-        {"rows": [{…}]}，具体字段见模型详情。
+      <p v-if="props.deployment">
+        模型类型：{{ taskLabel(props.deployment.task) }}。
+        <template v-if="props.deployment.task === 'anomaly_detection'">
+          :detect 返回 is_anomaly、score、threshold。
+        </template>
+        <template v-else-if="props.deployment.task === 'rule_calculation'">
+          :calculate 返回结构化结果，results 中包含归集、核算、路径或诊断明细。
+        </template>
+        <template v-else> :predict 返回 predictions 预测结果。 </template>
+        使用用户 APIKey，输入格式为 {"rows": [{…}]}，具体字段见模型详情。
         调用频率由接入方控制，并受本服务配额限制。
       </p>
-      <RuleResultGuide />
+      <RuleResultGuide v-if="props.deployment?.task === 'rule_calculation'" />
 
       <DtNotice intent="info">
         统一使用用户 APIKey，账号需具有 modeling:view 权限。

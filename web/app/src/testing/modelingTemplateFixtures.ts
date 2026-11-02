@@ -597,6 +597,7 @@ export const configuration: ModelingConfigurationDetail = {
     template_id: '01a17c1a-5196-7c92-9f4f-927ac2a295c6',
     template_name: '能耗预测标准模板',
     template_version: 1,
+    task: 'regression',
     revision: 2,
     latest_run: {
       id: '01a17c1a-5333-71b7-b34b-98eee9392476',
@@ -699,6 +700,7 @@ export const deployment: ModelDeployment = {
   model_version_id: '01a17c1a-5fab-71b3-a7b5-cb98275ac9e3',
   model_name: 'E2E 训练版本',
   model_version: 1,
+  task: 'regression',
   name: 'E2E 预测服务',
   description: null,
   is_enabled: true,

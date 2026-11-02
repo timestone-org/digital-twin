@@ -1,5 +1,5 @@
 /** @fileoverview 模板发布、建模、启停及检索的用户交互。 */
-import type { ModelingTemplate } from '@dt/contracts'
+import type { ModelingTask, ModelingTemplate } from '@dt/contracts'
 import { flushPromises, mount } from '@vue/test-utils'
 import type { VueWrapper } from '@vue/test-utils'
 import { createPinia, setActivePinia } from 'pinia'
@@ -27,6 +27,7 @@ const template: ModelingTemplate = {
   name: '能耗模板',
   description: '输入温度与负荷',
   node_count: 4,
+  task: 'regression',
   version: 1,
   is_enabled: true,
   created_by_name: '测试员',
@@ -149,6 +150,41 @@ it('模型列表显示实例来源和状态，并按编码搜索', async () => {
     { page: 1, size: 20, q: 'model' },
     expect.any(AbortSignal),
   )
+})
+
+it.each<{ task: ModelingTask; label: string }>([
+  { task: 'regression', label: '回归' },
+  { task: 'classification', label: '分类' },
+  { task: 'anomaly_detection', label: '异常检测' },
+  { task: 'rule_calculation', label: '规则计算' },
+])('$task 模板和未训练实例在列表中都有模型类型', async ({ task, label }) => {
+  if (!configuration.instance) throw new Error('缺少模型夹具')
+  vi.mocked(api.listTemplates).mockResolvedValue({
+    items: [{ ...template, task }],
+    page: 1,
+    size: 20,
+    total: 1,
+  })
+  vi.mocked(api.listInstances).mockResolvedValue({
+    items: [{ ...configuration.instance, task, latest_run: null }],
+    page: 1,
+    size: 20,
+    total: 1,
+  })
+  for (const page of [Templates, Instances]) {
+    const wrapper = mount(page)
+    wrappers.push(wrapper)
+    await flushPromises()
+    expect(wrapper.text()).toContain(label)
+    const tableView = wrapper.find('[aria-label="表格视图"]')
+    if (tableView.exists()) await tableView.trigger('click')
+    expect(wrapper.findAll('thead th').map((cell) => cell.text())).toContain(
+      '模型类型',
+    )
+    expect(wrapper.findAll('tbody td').map((cell) => cell.text())).toContain(
+      label,
+    )
+  }
 })
 
 it('接入说明包含完整配置入口和统一用户 APIKey', () => {

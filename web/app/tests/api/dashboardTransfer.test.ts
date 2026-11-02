@@ -77,11 +77,13 @@ describe('复制', () => {
     await transfer.duplicateDashboard('db1', {
       newName: '总览 二期',
       targetProjectId: 'p2',
+      includePointBindings: false,
     })
 
     expect(call()[1].body).toEqual({
       new_name: '总览 二期',
       target_project_id: 'p2',
+      include_point_bindings: false,
     })
   })
 
@@ -104,20 +106,25 @@ describe('导出', () => {
       chrome_json: {},
       nodes: [],
     })
-    const payload = await transfer.exportDashboard('db1')
+    const payload = await transfer.exportDashboard('db1', {
+      includePointBindings: false,
+    })
     const [path, options] = call()
 
     expect(path).toBe('/dashboards/db1:export')
     expect(options.method).toBe('POST')
     expect('headers' in options).toBe(false)
+    expect(options.body).toEqual({ include_point_bindings: false })
     expect(payload).toMatchObject({ name: '总览', schemaVersion: 1 })
+    await transfer.exportDashboard('db1')
+    expect(call()[1]).not.toHaveProperty('body')
   })
 })
 
 describe('导入', () => {
   it('打的是集合级动作端点 `/dashboards:import`，带幂等键', async () => {
     await transfer.importDashboard(
-      { projectId: 'p1', payload: PACKAGE },
+      { projectId: 'p1', payload: PACKAGE, includePointBindings: false },
       'key-2',
     )
     const [path, options] = call()
@@ -125,6 +132,7 @@ describe('导入', () => {
     expect(path).toBe('/dashboards:import')
     expect(options.method).toBe('POST')
     expect(options.headers).toEqual({ 'Idempotency-Key': 'key-2' })
+    expect(options.body).toMatchObject({ include_point_bindings: false })
   })
 
   it('请求体里的整包是线形，不是内存里的 camelCase', async () => {
@@ -146,6 +154,7 @@ describe('导入', () => {
 
     expect('new_name' in body).toBe(false)
     expect('target_dashboard_id' in body).toBe(false)
+    expect('include_point_bindings' in body).toBe(false)
   })
 
   it('给了覆盖目标就下发它——那是「换掉这张屏的配置」这个明确意思', async () => {
@@ -154,11 +163,13 @@ describe('导入', () => {
       payload: PACKAGE,
       newName: '导入的屏',
       targetDashboardId: 'db9',
+      includePointBindings: true,
     })
     const body = call()[1].body as Record<string, unknown>
 
     expect(body.new_name).toBe('导入的屏')
     expect(body.target_dashboard_id).toBe('db9')
+    expect(body.include_point_bindings).toBe(true)
   })
 
   it('出参带告警清单——不列出来用户会以为导进来的是一张能用的屏', async () => {

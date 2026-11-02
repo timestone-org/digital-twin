@@ -133,6 +133,8 @@ export type ModelingTemplate = {
   name: string
   node_count: number
   pipeline_id: string
+  task:
+    'anomaly_detection' | 'classification' | 'regression' | 'rule_calculation'
   updated_at: string
   version: number
 }
@@ -170,6 +172,8 @@ export type ModelingInstance = {
   latest_run: ModelingRunSummary | null
   name: string
   revision: number
+  task:
+    'anomaly_detection' | 'classification' | 'regression' | 'rule_calculation'
   template_id: string
   template_name: string
   template_version: number

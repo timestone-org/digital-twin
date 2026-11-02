@@ -1,9 +1,4 @@
-"""大屏的复制、导出与导入。事务边界在这一层：crud 不提交，api 不写业务。
-
-⚠ 导出包里不许出现任何 id，父子关系一律走 `client_key`；源库里没有
-`client_key` 的节点由导出侧按它在确定序里的位置补一个稳定值。带 id 的包导回
-同一个库，会让「导入」变成悄悄改掉源屏。
-"""
+"""大屏复制、导出与导入的事务边界，见 docs/DASHBOARD_DESIGN.md。"""
 
 import uuid
 from collections.abc import Mapping, Sequence
@@ -53,6 +48,10 @@ from platform_server.apps.dashboard.services.project_service import (
     require_project,
 )
 from platform_server.apps.dashboard.services.state import load_state
+from platform_server.apps.dashboard.services.transfer_bindings import (
+    ExportOptions,
+    without_point_bindings,
+)
 from platform_server.apps.dashboard.services.validation import (
     ValidationContext,
     collect_issues,
@@ -91,16 +90,17 @@ class PlannedNode:
 
 
 async def export_dashboard(
-    session: AsyncSession, *, dashboard_id: uuid.UUID
+    session: AsyncSession,
+    *,
+    dashboard_id: uuid.UUID,
+    options: ExportOptions | None = None,
 ) -> DashboardExportOut:
-    """导出一张大屏成可移植文档。包里不含任何 id。
+    """导出大屏文档。Args: session, dashboard_id, options。"""
 
-    Args: session, dashboard_id。
-    """
     dashboard = await require_dashboard(session, dashboard_id)
     state = await load_state(session, dashboard.id)
     keys = derived_client_keys(state.nodes)
-    return DashboardExportOut(
+    document = DashboardExportOut(
         schema_version=dashboard.schema_version,
         name=dashboard.name,
         description=dashboard.description,
@@ -120,6 +120,11 @@ async def export_dashboard(
             for node in state.nodes
         ],
     )
+    if options is not None and not options.should_include_point_bindings:
+        document.nodes = without_point_bindings(
+            document.nodes, catalog=options.catalog
+        )
+    return document
 
 
 # ⚠ 形参数超出上限：这个签名被端点契约钉死，模板面（PR3）按它直接调用
@@ -131,17 +136,27 @@ async def import_dashboard(  # noqa: PLR0913
     context: ValidationContext,
     new_name: str | None = None,
     target_dashboard_id: uuid.UUID | None = None,
+    should_include_point_bindings: bool = True,
 ) -> DashboardImportOut:
     """把一份文档导入成一张大屏；给了 `target_dashboard_id` 就覆盖它。
 
     Args: session, project_id, payload, context, new_name,
-    target_dashboard_id。
+    target_dashboard_id, should_include_point_bindings。
     """
     project = await require_project(session, project_id)
     target = await _overwrite_target(
         session, project_id=project.id, target_dashboard_id=target_dashboard_id
     )
-    planned = plan_import(payload)
+    document = payload
+    if not should_include_point_bindings:
+        document = payload.model_copy(
+            update={
+                "nodes": without_point_bindings(
+                    payload.nodes, catalog=context.catalog
+                )
+            }
+        )
+    planned = plan_import(document)
     unresolved = await _unresolved_bindings(planned, context=context)
     dashboard = await _prepare_dashboard(
         session,
@@ -182,6 +197,7 @@ async def duplicate_dashboard(
         payload=document,
         context=context,
         new_name=payload.new_name or copy_name(source.name),
+        should_include_point_bindings=payload.should_include_point_bindings,
     )
     _logger.info(
         "dashboard_duplicated",
@@ -193,12 +209,7 @@ async def duplicate_dashboard(
 
 
 def copy_name(name: str) -> str:
-    """复制出来的屏的缺省名。
-
-    ⚠ 必须先截断再拼后缀：源名顶到 `Label` 上限时，直接拼出来的名字过不了
-    长度校验，而那一下抛在出参构造处，对外表现是 500 而不是 400。
-    Args: name。
-    """
+    """截断源名并拼接副本后缀。Args: name。"""
     room = MAX_NAME_LENGTH - len(COPY_NAME_SUFFIX)
     return f"{name[:room]}{COPY_NAME_SUFFIX}"
 
@@ -206,12 +217,7 @@ def copy_name(name: str) -> str:
 def derived_client_keys(
     nodes: Sequence[DashboardNode],
 ) -> dict[uuid.UUID, str]:
-    """每个节点在导出包里的 `client_key`：有就用它，没有按位置补一个。
-
-    ⚠ 位置取自 `(parent_id, z_index, id)` 这个确定序，同一张没改过的大屏导
-    两次逐字相同；补出来的键还要避开包里已有的键，否则父子引用会指错节点。
-    Args: nodes。
-    """
+    """按确定顺序补齐节点键并避开已有键。Args: nodes。"""
     taken = {node.client_key for node in nodes if node.client_key is not None}
     keys: dict[uuid.UUID, str] = {}
     for index, node in enumerate(nodes):
@@ -238,12 +244,7 @@ def plan_import(payload: DashboardExportIn) -> list[PlannedNode]:
 
 
 def in_parent_first_order(planned: Sequence[PlannedNode]) -> list[PlannedNode]:
-    """按「父在子前」排一遍，新节点才插得进自引用外键。
-
-    ⚠ 成环已由校验拦在前面，故这里必然排得出来；排不出的残余按原序追加，
-    不静默丢节点。
-    Args: planned。
-    """
+    """按父在子前排序，无法排序的残余按原序追加。Args: planned。"""
     ordered: list[PlannedNode] = []
     placed: set[uuid.UUID] = set()
     pending = list(planned)

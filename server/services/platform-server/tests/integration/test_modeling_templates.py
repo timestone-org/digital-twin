@@ -5,14 +5,16 @@ import copy
 import httpx
 import pytest
 from conftest import SignHeaders
+from pydantic import JsonValue, TypeAdapter
 
 from integration.modeling_helpers import PIPELINES, data_of, linear_graph
 
 TEMPLATES = "/api/v1/platform/modeling-templates"
 INSTANCES = "/api/v1/platform/modeling-instances"
+_OBJECT = TypeAdapter(dict[str, JsonValue])
 
 
-async def make_template(client: httpx.AsyncClient) -> dict:
+async def make_template(client: httpx.AsyncClient) -> dict[str, JsonValue]:
     pipeline = await client.post(
         PIPELINES,
         json={
@@ -27,10 +29,10 @@ async def make_template(client: httpx.AsyncClient) -> dict:
         json={"pipeline_id": data_of(pipeline)["id"], "name": "能耗模板"},
     )
     assert response.status_code == 201
-    return data_of(response)
+    return _OBJECT.validate_python(data_of(response))
 
 
-async def make_instance(client: httpx.AsyncClient) -> dict:
+async def make_instance(client: httpx.AsyncClient) -> dict[str, JsonValue]:
     template = await make_template(client)
     response = await client.post(
         INSTANCES,
@@ -41,7 +43,7 @@ async def make_instance(client: httpx.AsyncClient) -> dict:
         },
     )
     assert response.status_code == 201
-    return data_of(response)
+    return _OBJECT.validate_python(data_of(response))
 
 
 async def test_template_snapshot_survives_design_edits(app_client):

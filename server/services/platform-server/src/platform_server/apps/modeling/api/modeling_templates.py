@@ -24,6 +24,10 @@ from platform_server.apps.modeling.schemas.template import (
     ModelingTemplateUpdateIn,
 )
 from platform_server.apps.modeling.services import template_service
+from platform_server.apps.modeling.services.task_replay import (
+    TaskCommand,
+    run_task_once,
+)
 from platform_server.settings import API_PREFIX
 
 router = APIRouter(
@@ -58,13 +62,14 @@ async def create_template(
     response: Response,
     write: ManageDep,
 ) -> ApiResponse[ModelingTemplateOut]:
-    created = await write.gate.run_once(
+    command = TaskCommand(
         endpoint="modeling.create_template",
         model=ModelingTemplateOut,
         action=lambda: template_service.create_template(
             session, payload, write.actor
         ),
     )
+    created = await run_task_once(session, write.gate, command)
     response.headers["Location"] = (
         f"{API_PREFIX}/modeling-templates/{created.id}"
     )

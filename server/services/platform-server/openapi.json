@@ -9802,6 +9802,20 @@
         "title": "DashboardExportIn",
         "type": "object"
       },
+      "DashboardExportOptionsIn": {
+        "additionalProperties": false,
+        "description": "导出的点位绑定选项；未提供时保留绑定。",
+        "properties": {
+          "include_point_bindings": {
+            "default": true,
+            "description": "是否保留实时、历史点位绑定及依赖它们的派生绑定",
+            "title": "Include Point Bindings",
+            "type": "boolean"
+          }
+        },
+        "title": "DashboardExportOptionsIn",
+        "type": "object"
+      },
       "DashboardExportOut": {
         "additionalProperties": false,
         "description": "`:export` 的出参。与导入入参同形，导出的包可原样导回。",
@@ -9873,6 +9887,12 @@
         "additionalProperties": false,
         "description": "导入一份大屏文档。给了 `target_dashboard_id` 就是覆盖既有屏。",
         "properties": {
+          "include_point_bindings": {
+            "default": true,
+            "description": "是否导入实时、历史点位绑定及依赖它们的派生绑定",
+            "title": "Include Point Bindings",
+            "type": "boolean"
+          },
           "new_name": {
             "anyOf": [
               {
@@ -10629,6 +10649,12 @@
         "additionalProperties": false,
         "description": "复制一张大屏。缺省名 = 源名加后缀，缺省项目 = 源项目。",
         "properties": {
+          "include_point_bindings": {
+            "default": true,
+            "description": "是否复制实时、历史点位绑定及依赖它们的派生绑定",
+            "title": "Include Point Bindings",
+            "type": "boolean"
+          },
           "new_name": {
             "anyOf": [
               {
@@ -14383,6 +14409,17 @@
             "title": "Revision",
             "type": "integer"
           },
+          "task": {
+            "description": "部署固定模型版本的任务类型",
+            "enum": [
+              "anomaly_detection",
+              "classification",
+              "regression",
+              "rule_calculation"
+            ],
+            "title": "Task",
+            "type": "string"
+          },
           "unservable_reason": {
             "anyOf": [
               {
@@ -14406,6 +14443,7 @@
           "model_version_id",
           "model_name",
           "model_version",
+          "task",
           "name",
           "description",
           "is_enabled",
@@ -15448,6 +15486,17 @@
             "title": "Revision",
             "type": "integer"
           },
+          "task": {
+            "description": "此实例独立图所产出模型的任务类型，训练前即返回",
+            "enum": [
+              "anomaly_detection",
+              "classification",
+              "regression",
+              "rule_calculation"
+            ],
+            "title": "Task",
+            "type": "string"
+          },
           "template_id": {
             "format": "uuid",
             "title": "Template Id",
@@ -15475,6 +15524,7 @@
           "template_id",
           "template_name",
           "template_version",
+          "task",
           "revision",
           "latest_run",
           "created_at",
@@ -15611,6 +15661,17 @@
             "title": "Pipeline Id",
             "type": "string"
           },
+          "task": {
+            "description": "此模板快照所产出模型的任务类型",
+            "enum": [
+              "anomaly_detection",
+              "classification",
+              "regression",
+              "rule_calculation"
+            ],
+            "title": "Task",
+            "type": "string"
+          },
           "updated_at": {
             "format": "date-time",
             "title": "Updated At",
@@ -15628,6 +15689,7 @@
           "name",
           "description",
           "version",
+          "task",
           "node_count",
           "is_enabled",
           "created_by_name",
@@ -30052,7 +30114,7 @@
     },
     "/api/v1/platform/dashboards/{dashboard_id}:export": {
       "post": {
-        "description": "导出一张大屏成可移植文档，不改任何东西。\n\nArgs: dashboard_id, session, _viewer。",
+        "description": "导出大屏，可选择忽略点位绑定。\n\nArgs: dashboard_id, session, _viewer, validation, payload。",
         "operationId": "export_dashboard_api_v1_platform_dashboards__dashboard_id__export_post",
         "parameters": [
           {
@@ -30066,6 +30128,23 @@
             }
           }
         ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "anyOf": [
+                  {
+                    "$ref": "#/components/schemas/DashboardExportOptionsIn"
+                  },
+                  {
+                    "type": "null"
+                  }
+                ],
+                "title": "Payload"
+              }
+            }
+          }
+        },
         "responses": {
           "200": {
             "content": {

@@ -91,6 +91,7 @@ class LinearRegressionOperator(OperatorBase):
     """最小二乘线性回归。拟合参数是纯数，因此可以直接上线（通道 A）。"""
 
     CODE = "linear_regression"
+    MODEL_TASK = TASK_REGRESSION
     NAME = "线性回归"
     DESCRIPTION = "在训练集上拟合一条线性关系，并在测试集上打分"
     CATEGORY = "model"
@@ -320,6 +321,7 @@ class LogisticRegressionOperator(OperatorBase):
     """
 
     CODE = "logistic_regression"
+    MODEL_TASK = TASK_CLASSIFICATION
     NAME = "逻辑回归"
     DESCRIPTION = "在训练集上拟合一个两类判别模型，并在测试集上打分"
     CATEGORY = "model"

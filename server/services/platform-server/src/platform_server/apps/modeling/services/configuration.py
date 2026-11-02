@@ -4,7 +4,8 @@ from pydantic import JsonValue
 
 from lib.errors.base import FieldError
 from platform_server.apps.modeling.errors import GraphInvalid
-from platform_server.apps.modeling.operators import registry
+from platform_server.apps.modeling.operators import CONTRACT_MODEL, registry
+from platform_server.apps.modeling.protocols import ModelTask
 from platform_server.apps.modeling.schemas.graph import PipelineGraph
 from platform_server.apps.modeling.schemas.operator import OperatorOut
 from platform_server.apps.modeling.schemas.template import (
@@ -37,16 +38,7 @@ def require_template_graph(graph: PipelineGraph) -> PipelineGraph:
                 for item in issues
             ),
         )
-    models = [
-        node
-        for node in graph.nodes
-        if any(
-            port.contract == "model@v1"
-            for port in registry.get(node.operator).OUTPUTS
-        )
-    ]
-    if len(models) != 1:
-        raise GraphInvalid("建模模板必须包含且只包含一个产出模型的算子")
+    model_task_of(graph)
     nodes = [
         node.model_copy(
             update={
@@ -58,6 +50,24 @@ def require_template_graph(graph: PipelineGraph) -> PipelineGraph:
         for node in graph.nodes
     ]
     return graph.model_copy(update={"nodes": nodes})
+
+
+def model_task_of(graph: PipelineGraph) -> ModelTask:
+    """读取图中唯一模型算子的任务声明；Args: graph。"""
+    operators = [
+        registry.get(node.operator)
+        for node in graph.nodes
+        if any(
+            port.contract == CONTRACT_MODEL
+            for port in registry.get(node.operator).OUTPUTS
+        )
+    ]
+    if len(operators) != 1:
+        raise GraphInvalid("建模模板必须包含且只包含一个产出模型的算子")
+    task = operators[0].MODEL_TASK
+    if task is None:
+        raise GraphInvalid("建模模板的模型算子未声明任务类型")
+    return task
 
 
 def configure_graph(

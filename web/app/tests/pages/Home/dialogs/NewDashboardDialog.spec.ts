@@ -136,6 +136,19 @@ describe('三种起手方式', () => {
     expect(wrapper.emitted('submit')?.[0]?.[0]).toMatchObject({
       startMode: 'copy',
       sourceDashboardId: 'd1',
+      includePointBindings: true,
+    })
+  })
+
+  it('复制时可选择忽略点位绑定', async () => {
+    const wrapper = mountDialog(false)
+    await wrapper.setProps({ open: true })
+    await clickText(wrapper, '复制现有')
+    await wrapper.get('input[type=text]').setValue('副本')
+    await wrapper.get('input[type=checkbox]').setValue(false)
+    await clickText(wrapper, '创建大屏')
+    expect(wrapper.emitted('submit')?.[0]?.[0]).toMatchObject({
+      includePointBindings: false,
     })
   })
 

@@ -22,6 +22,7 @@ it('表格和卡片都展示完整模板信息', async () => {
     name: '冷机能耗模板',
     description: '预测每小时能耗',
     node_count: 6,
+    task: 'regression',
     version: 2,
     is_enabled: true,
     created_by_name: '测试员',

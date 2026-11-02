@@ -34,6 +34,7 @@ function deployment(over: Partial<ModelDeployment> = {}): ModelDeployment {
     model_version_id: 'v1',
     model_name: '能耗回归',
     model_version: 3,
+    task: 'regression',
     name: '能耗预测服务',
     description: null,
     is_enabled: true,
@@ -187,11 +188,11 @@ describe('模型服务', () => {
     expect(wrapper.text()).toContain(
       '/api/v1/platform/open-models/energy-forecast:predict',
     )
-    expect(wrapper.text()).toContain(
+    expect(wrapper.text()).not.toContain(
       '/api/v1/platform/open-models/energy-forecast:calculate',
     )
     expect(wrapper.text()).toContain('用户 APIKey')
-    expect(wrapper.text()).toContain('结构化结果')
+    expect(wrapper.text()).toContain('predictions')
     expect(
       wrapper
         .findAll('input')
