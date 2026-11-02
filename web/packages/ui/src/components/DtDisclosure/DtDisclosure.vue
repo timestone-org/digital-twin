@@ -19,6 +19,7 @@ const isOpen = computed(
 )
 const bodyId = useId()
 
+/** 切换受控或本地展开状态。 */
 function toggle(): void {
   const next = !isOpen.value
   if (props.open === undefined) localOpen.value = next

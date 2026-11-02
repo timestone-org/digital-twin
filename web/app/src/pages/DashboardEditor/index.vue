@@ -19,6 +19,7 @@ import { AppShell } from '@/components/layout'
 import { useDashboardDoc } from '@/composables/useDashboardDoc'
 import { useDashboardEditor } from '@/composables/useDashboardEditor'
 import { snapStep } from '@/features/dashboard/canvasSnap'
+import { migrateLegacyEditorLayout } from '@/features/workspace/legacyEditorLayout'
 import { DASHBOARD_THEME_KEY } from '@/features/dashboard/useDashboardTheme'
 import { createEditorActions } from './scripts/editorActions'
 import { useEditorDataSources } from './scripts/useEditorDataSources'
@@ -29,7 +30,7 @@ import { useEditorExtras } from './scripts/useEditorExtras'
 import { useEditorMeta } from './scripts/useEditorMeta'
 import { createEditorPageOps } from './scripts/useEditorPageOps'
 import { createEditorInspector } from './scripts/useEditorInspector'
-import { EditorSplitter, useEditorPanes } from '@dt/ui'
+import { DtResizableLayout } from '@dt/ui'
 import { createEditorSurface } from './scripts/useEditorSurface'
 import { useEditorVisibility } from './scripts/useEditorVisibility'
 import EditorCanvas from './components/EditorCanvas.vue'
@@ -44,6 +45,12 @@ const toast = useToast()
 const confirm = useConfirm()
 
 installDashboardModules()
+
+migrateLegacyEditorLayout({
+  previousKey: 'dt.editor.panes',
+  nextKey: 'dt.dashboard-editor.layout',
+  paneIds: ['library', 'canvas', 'inspector'],
+})
 
 const manifests = listModules()
 const getManifest = (moduleType: string): ModuleManifest | undefined =>
@@ -71,10 +78,6 @@ const meta = useEditorMeta(file.dashboard)
 provide(DASHBOARD_THEME_KEY, () => meta.draft.value?.themeJson)
 const chrome = useEditorChrome(file.dashboard, meta)
 const { snap, grid } = chrome
-
-// 左右两栏可拖拽改宽；宽度记在本机，取值域见 paneWidths
-const panes = useEditorPanes()
-const gridRef = panes.hostRef
 
 const arrange = createArrangeActions({
   editor,
@@ -188,90 +191,95 @@ onUnmounted(file.dispose)
         :detached-count="editor.layout.value.detachedIds.length"
       />
 
-      <div
-        ref="gridRef"
-        class="grid min-h-0 flex-1"
-        :style="panes.gridStyle.value"
+      <DtResizableLayout
+        class="min-h-0 flex-1"
+        :panes="[
+          { id: 'library', label: '模块与图层', size: 1, minSize: 220 },
+          { id: 'canvas', label: '画布', size: 3, minSize: 320 },
+          { id: 'inspector', label: '配置', size: 1.2, minSize: 280 },
+        ]"
+        :stack-at="1000"
+        storage-key="dt.dashboard-editor.layout"
       >
-        <LeftRail
-          class="dt-editor__pane"
-          :manifests="manifests"
-          :frames="editing.frames.value"
-          :nodes="editing.nodes.value"
-          :selected-ids="editor.selectedIds.value"
-          :get-manifest="getManifest"
-          @add="ops.addModule"
-          @select="surface.onSelect"
-          @toggle-editor-visible="editing.toggle"
-          @remove="ops.removeNode"
-          @rename="surface.onRename"
-          @move="surface.onMove"
-          @center="centerOn"
-        />
-
-        <EditorSplitter side="left" label="模块栏宽度" :panes="panes" />
-
-        <EditorCanvas
-          ref="canvasRef"
-          class="dt-editor__pane"
-          :design="design"
-          :frames="editing.frames.value"
-          :nodes="editing.nodes.value"
-          :selected-ids="editor.selectedIds.value"
-          :get-manifest="getManifest"
-          :card-chrome="inspector.cardChrome.value"
-          :snap="snap"
-          :grid="grid"
-          :zoom="zoom"
-          @select="surface.onSelect"
-          @marquee="surface.onMarquee"
-          @change="actions.changeGeometry"
-          @change-batch="surface.onChangeBatch"
-          @drop-node="surface.onDropNode"
-          @add-at="surface.onAddAt"
-          @update:zoom="zoom = $event"
-          @canvas-menu="extras.contextMenu.open"
-        />
-
-        <EditorSplitter side="right" label="配置栏宽度" :panes="panes" />
-
-        <RightRail
-          class="dt-editor__pane"
-          :selected-ids="editor.selectedIds.value"
-          :selected="editor.selected.value"
-          :nodes="editor.nodes.value"
-          :get-manifest="getManifest"
-          :rules="chrome.rules.value"
-          :draft="meta.draft.value"
-          :snap="snap"
-          :grid="grid"
-          :align-ready="arrange.alignReady()"
-          :distribute-ready="arrange.distributeReady()"
-          @align="arrange.alignSelected"
-          @distribute="arrange.distributeSelected"
-          @remove-all="ops.removeSelected"
-          @config="actions.changeConfig"
-          @geometry="ops.changeSelectedGeometry"
-          @visible="ops.toggleSelectedVisible"
-          @select-type="editor.setSelection"
-          @size-batch="arrange.matchSelectedSize"
-          @rename="inspector.rename"
-          @order="inspector.order"
-          @preset="inspector.applyPreset"
-          @interactions="chrome.setInteractions"
-          @write="actions.writeBinding"
-          @drop="actions.dropSlot"
-          @bind="actions.bindSlot"
-          @pick="pickingFieldKey = $event"
-          @add-row="actions.addBindingRow"
-          @remove-row="actions.removeBindingRow"
-          @set-field="chrome.setField"
-          @set-snap="chrome.setSnap"
-          @set-grid="chrome.setGrid"
-          @set-card="chrome.setCard"
-          @set-theme="meta.setTheme"
-        />
-      </div>
+        <template #library>
+          <LeftRail
+            class="dt-editor__pane"
+            :manifests="manifests"
+            :frames="editing.frames.value"
+            :nodes="editing.nodes.value"
+            :selected-ids="editor.selectedIds.value"
+            :get-manifest="getManifest"
+            @add="ops.addModule"
+            @select="surface.onSelect"
+            @toggle-editor-visible="editing.toggle"
+            @remove="ops.removeNode"
+            @rename="surface.onRename"
+            @move="surface.onMove"
+            @center="centerOn"
+          />
+        </template>
+        <template #canvas>
+          <EditorCanvas
+            ref="canvasRef"
+            class="dt-editor__pane"
+            :design="design"
+            :frames="editing.frames.value"
+            :nodes="editing.nodes.value"
+            :selected-ids="editor.selectedIds.value"
+            :get-manifest="getManifest"
+            :card-chrome="inspector.cardChrome.value"
+            :snap="snap"
+            :grid="grid"
+            :zoom="zoom"
+            @select="surface.onSelect"
+            @marquee="surface.onMarquee"
+            @change="actions.changeGeometry"
+            @change-batch="surface.onChangeBatch"
+            @drop-node="surface.onDropNode"
+            @add-at="surface.onAddAt"
+            @update:zoom="zoom = $event"
+            @canvas-menu="extras.contextMenu.open"
+          />
+        </template>
+        <template #inspector>
+          <RightRail
+            class="dt-editor__pane"
+            :selected-ids="editor.selectedIds.value"
+            :selected="editor.selected.value"
+            :nodes="editor.nodes.value"
+            :get-manifest="getManifest"
+            :rules="chrome.rules.value"
+            :draft="meta.draft.value"
+            :snap="snap"
+            :grid="grid"
+            :align-ready="arrange.alignReady()"
+            :distribute-ready="arrange.distributeReady()"
+            @align="arrange.alignSelected"
+            @distribute="arrange.distributeSelected"
+            @remove-all="ops.removeSelected"
+            @config="actions.changeConfig"
+            @geometry="ops.changeSelectedGeometry"
+            @visible="ops.toggleSelectedVisible"
+            @select-type="editor.setSelection"
+            @size-batch="arrange.matchSelectedSize"
+            @rename="inspector.rename"
+            @order="inspector.order"
+            @preset="inspector.applyPreset"
+            @interactions="chrome.setInteractions"
+            @write="actions.writeBinding"
+            @drop="actions.dropSlot"
+            @bind="actions.bindSlot"
+            @pick="pickingFieldKey = $event"
+            @add-row="actions.addBindingRow"
+            @remove-row="actions.removeBindingRow"
+            @set-field="chrome.setField"
+            @set-snap="chrome.setSnap"
+            @set-grid="chrome.setGrid"
+            @set-card="chrome.setCard"
+            @set-theme="meta.setTheme"
+          />
+        </template>
+      </DtResizableLayout>
     </div>
 
     <EditorOverlays
