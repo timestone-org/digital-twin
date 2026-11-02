@@ -1,0 +1,51 @@
+{
+  "date": "2026-11-02",
+  "status": "failed",
+  "evidence_origin": "first real run captured command output before fix; retained as comparison",
+  "synthetic_data_only": true,
+  "configured_test_budget_tokens": 11000,
+  "max_model_requests": 3,
+  "max_output_tokens_per_request": 256,
+  "semantic_facts_correct": true,
+  "full_history_retained": true,
+  "history_message_count": 6,
+  "persisted_summary_checks": {
+    "has_point_code": false,
+    "has_temperature": false,
+    "has_readonly_constraint": false,
+    "has_valid_cut": false
+  },
+  "context_states": ["compressing", "ready", "ready", "ready"],
+  "compression_count": 0,
+  "final_context": {
+    "used_tokens": 9805,
+    "max_tokens": 11000,
+    "percent": 89.1,
+    "is_estimated": false,
+    "state": "ready",
+    "compression_count": 0
+  },
+  "model_requests": [
+    {
+      "kind": "summary",
+      "input_tokens": 2082,
+      "output_tokens": 100,
+      "total_tokens": 2182
+    },
+    {
+      "kind": "summary",
+      "input_tokens": 2601,
+      "output_tokens": 79,
+      "total_tokens": 2680
+    },
+    {
+      "kind": "chat",
+      "input_tokens": 9777,
+      "output_tokens": 28,
+      "total_tokens": 9805
+    }
+  ],
+  "summarize_source_sha256": "d9dfb13293301909da6e625308088bc4ffbd8f6cc6150d2f3d3754d94f709a71",
+  "diagnosis": "ModelSummarizer accepted only string content and discarded visible text blocks in structured model responses",
+  "credentials_persisted": false
+}

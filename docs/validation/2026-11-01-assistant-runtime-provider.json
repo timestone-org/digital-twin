@@ -1,0 +1,20 @@
+{
+  "date": "2026-11-01",
+  "status": "failed",
+  "source": "current workspace OpenAiCompatAdapter; model configuration read in memory from running digitaltwin-ai-assistant-1",
+  "docker_file_matches_runtime": true,
+  "actual_http_requests": 1,
+  "automatic_retries": 0,
+  "max_output_tokens": 64,
+  "endpoint_timeout_s": 25,
+  "overall_timeout_s": 30,
+  "http_status": 403,
+  "exception_type": "OpenAIPermissionDeniedError",
+  "machine_details": {
+    "type": "AccessDenied.Unpurchased",
+    "code": "AccessDenied.Unpurchased"
+  },
+  "usage": null,
+  "real_compaction_verified": false,
+  "credentials_or_request_headers_persisted": false
+}

@@ -1,0 +1,6 @@
+simulation: assistant-context
+routing: path
+mocks:
+  - name: assistant-model
+    routeKey: assistant-model
+    path: postman/mocks/assistant-model
