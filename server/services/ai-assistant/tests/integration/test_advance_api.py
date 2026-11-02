@@ -119,12 +119,15 @@ async def test_a_plain_answer_streams_a_step_then_done(
     events = await _advance(db_stack.client, session_id, user_text="在吗")
 
     # ⚠ 增量排在步骤之前：模型是先说出来、这一步才算走完的
-    assert [name for name, _ in events] == [
+    assert [name for name, _ in events if name != "context"] == [
         "message.delta",
         "step",
         "turn.done",
     ]
-    assert events[0][1] == {"channel": "text", "text": "你好"}
+    delta = next(body for name, body in events if name == "message.delta")
+    assert delta == {"channel": "text", "text": "你好"}
+    assert events[0][1]["max_tokens"] == 32768
+    assert events[0][1]["state"] == "ready"
     assert events[-1][1]["reply"] == "你好"
 
 
