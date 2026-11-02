@@ -230,7 +230,11 @@ function cardOf(draft: EditorMetaDraft | null): CardChrome {
             @update:model-value="emit('set-snap', { guides: $event })"
           />
         </div>
-        <div v-if="snap.mode === 'grid'" class="grid grid-cols-3 gap-2">
+        <div
+          v-if="snap.mode === 'grid'"
+          class="grid gap-2 [grid-template-columns:repeat(auto-fit,minmax(min(100%,8rem),1fr))]"
+          data-test="chrome-grid-fields"
+        >
           <DtNumberInput
             size="sm"
             label="列数"

@@ -6,6 +6,7 @@
  * 与「这一步没算出东西」是两回事，摆空态会把前者说成后者。
  */
 import { computed } from 'vue'
+import { DtDisclosure } from '@dt/ui'
 
 const props = defineProps<{
   /** 后端给的说明；空串时给一句照实的兜底。 */
@@ -23,10 +24,9 @@ const raw = computed(() => JSON.stringify(props.raw, null, 2))
 <template>
   <div class="dt-ml-rawview">
     <p class="dt-ml-rawview__note">{{ text }}</p>
-    <details class="dt-ml-rawview__more">
-      <summary>原始摘要</summary>
+    <DtDisclosure title="原始摘要" :default-open="false">
       <pre class="dt-ml-rawview__raw">{{ raw }}</pre>
-    </details>
+    </DtDisclosure>
   </div>
 </template>
 
@@ -40,11 +40,6 @@ const raw = computed(() => JSON.stringify(props.raw, null, 2))
     margin: 0;
     color: var(--text-primary);
     font-size: var(--ctl-hint-fs-lg);
-  }
-
-  &__more {
-    color: var(--text-secondary);
-    font-size: var(--ctl-hint-fs-sm);
   }
 
   &__raw {

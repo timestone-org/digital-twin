@@ -157,9 +157,9 @@ function twoCombinations(): StartupBatches {
 
 /** 点左栏「组合覆盖」里的某一条。 */
 async function pickCombination(label: string): Promise<void> {
-  const row = [...document.querySelectorAll('aside li > button')].find((node) =>
-    node.textContent?.includes(label),
-  )
+  const row = [
+    ...document.querySelectorAll('[aria-label="组合覆盖"] li > button'),
+  ].find((node) => node.textContent?.includes(label))
   if (row === undefined) throw new Error(`左栏里没有「${label}」`)
   row.dispatchEvent(new MouseEvent('click', { bubbles: true }))
   await flushPromises()
@@ -549,14 +549,19 @@ describe('左右分栏', () => {
   it('组合在左、事件在右，两栏各自在自己那格里滚', async () => {
     const wrapper = await open()
     await selectRoom()
-    const split = wrapper
-      .findAll('div')
-      .find((node) => node.classes().includes('lg:flex-row'))
-    expect(split?.classes()).toEqual(
-      expect.arrayContaining(['flex', 'min-h-0', 'flex-1']),
+    const split = wrapper.get('.dt-resizable-layout')
+    expect(split.classes()).toEqual(
+      expect.arrayContaining(['min-h-0', 'flex-1']),
     )
+    expect(
+      split.find('[data-pane="coverage"] [aria-label="组合覆盖"]').exists(),
+    ).toBe(true)
+    expect(split.find('[data-pane="episodes"] .dt-data-view').exists()).toBe(
+      true,
+    )
+    expect(split.find('[role="separator"]').exists()).toBe(true)
     // 左栏自己滚
-    expect(wrapper.find('aside ul').classes()).toEqual(
+    expect(wrapper.find('[aria-label="组合覆盖"] ul').classes()).toEqual(
       expect.arrayContaining(['overflow-y-auto', 'min-h-0']),
     )
     // 右栏的表体由 DtDataView 内部滚，这里锁住它拿得到有界高度
