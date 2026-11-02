@@ -5,7 +5,11 @@
  * 界面上看着像助手在做两件互相矛盾的事。
  */
 import type { Ref } from 'vue'
-import type { AssistantPlan, AssistantSurfaceKind } from '@dt/contracts'
+import type {
+  AssistantContextUsage,
+  AssistantPlan,
+  AssistantSurfaceKind,
+} from '@dt/contracts'
 
 import {
   withDelta,
@@ -34,6 +38,7 @@ export interface SenderParts {
   isRunning: Ref<boolean>
   edit: (next: (given: ConversationLog) => ConversationLog) => void
   plan: Ref<AssistantPlan | null>
+  contextUsage: Ref<AssistantContextUsage | null>
   /** 掐掉上一个回合，但**不往时间线上写字**。 */
   abort: () => void
 }
@@ -68,6 +73,9 @@ export function createSender(
       if (parts.state.running === controller) {
         parts.state.running = null
         parts.isRunning.value = false
+        if (parts.contextUsage.value?.state === 'compressing') {
+          parts.contextUsage.value = null
+        }
       }
     }
   }
@@ -108,6 +116,9 @@ function sinkOf(parts: SenderParts): Parameters<typeof runTurn>[1] {
     onError: (message) => parts.edit((log) => withSaid(log, 'error', message)),
     onPlan: (plan) => {
       parts.plan.value = plan
+    },
+    onContext: (usage) => {
+      parts.contextUsage.value = usage
     },
     onNote: (text) => parts.edit((log) => withSaid(log, 'note', text)),
   }

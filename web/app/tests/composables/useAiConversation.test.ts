@@ -176,6 +176,99 @@ describe('note', () => {
   })
 })
 
+describe('上下文事件', () => {
+  it('压缩期间上游失败后恢复待更新状态，保留明确的错误提示', async () => {
+    setAiPorts({
+      advance: async function* () {
+        await Promise.resolve()
+        yield `event: context\ndata: ${JSON.stringify({
+          used_tokens: 28000,
+          max_tokens: 32768,
+          percent: 85,
+          is_estimated: true,
+          state: 'compressing',
+          compression_count: 0,
+        })}\n\n`
+        throw new Error('连接中断')
+      },
+    })
+    const chat = conversation()
+    await chat.send('继续')
+    expect(chat.contextUsage.value).toBeNull()
+    expect(chat.isRunning.value).toBe(false)
+    expect(chat.entries.value.at(-1)?.text).toBe('连接中断')
+  })
+
+  it('回合尚未结束时已经显示用量与压缩状态，停止后不滞留压缩中', async () => {
+    setAiPorts({
+      advance: async function* (_id, _body, signal) {
+        yield `event: context\ndata: ${JSON.stringify({
+          used_tokens: 28000,
+          max_tokens: 32768,
+          percent: 85,
+          is_estimated: true,
+          state: 'compressing',
+          compression_count: 0,
+        })}\n\n`
+        await new Promise<void>((resolve) => {
+          if (signal?.aborted !== false) return resolve()
+          signal.addEventListener('abort', () => resolve(), { once: true })
+        })
+      },
+    })
+    const chat = conversation()
+    const pending = chat.send('继续')
+    await vi.waitFor(() =>
+      expect(chat.contextUsage.value?.state).toBe('compressing'),
+    )
+    expect(chat.isRunning.value).toBe(true)
+    expect(chat.contextUsage.value?.percent).toBe(85)
+    chat.stop()
+    expect(chat.contextUsage.value).toBeNull()
+    await pending
+  })
+
+  it('流中实时更新，清空与恢复其它历史时不保留旧预算', async () => {
+    const usage = {
+      used_tokens: 8192,
+      max_tokens: 32768,
+      percent: 25,
+      is_estimated: true,
+      state: 'compressed',
+      compression_count: 1,
+    }
+    setAiPorts({
+      advance: async function* () {
+        await Promise.resolve()
+        yield `event: context\ndata: ${JSON.stringify(usage)}\n\n`
+        yield 'event: turn.done\ndata: {"reply":"完成"}\n\n'
+      },
+    })
+    const chat = conversation()
+    await chat.send('继续')
+    expect(chat.contextUsage.value).toEqual(usage)
+    chat.clear()
+    expect(chat.contextUsage.value).toBeNull()
+    await chat.send('继续')
+    chat.restore(detailOf('另一段历史'))
+    expect(chat.contextUsage.value).toBeNull()
+  })
+
+  it('忽略畸形用量帧，后续合法帧及回合仍继续', async () => {
+    setAiPorts({
+      advance: async function* () {
+        await Promise.resolve()
+        yield 'event: context\ndata: {"percent":99}\n\n'
+        yield 'event: turn.done\ndata: {"reply":"完成"}\n\n'
+      },
+    })
+    const chat = conversation()
+    await chat.send('继续')
+    expect(chat.contextUsage.value).toBeNull()
+    expect(chat.entries.value.at(-1)?.text).toBe('完成')
+  })
+})
+
 describe('挂着的提问一定收得了口', () => {
   // 不收口的话回合永远停在那次 await 上：界面既不动也不报错，输入框一直禁着
   it('清空这一屏时结成取消', async () => {

@@ -9,7 +9,11 @@ import { mount } from '@vue/test-utils'
 import { createPinia, setActivePinia } from 'pinia'
 import { computed, nextTick, ref } from 'vue'
 import { beforeEach, describe, expect, it, vi } from 'vitest'
-import { PERMISSION_CODES, type AssistantPlan } from '@dt/contracts'
+import {
+  PERMISSION_CODES,
+  type AssistantPlan,
+  type AssistantContextUsage,
+} from '@dt/contracts'
 
 import BulkPartsDialog from '@/pages/TwinEditor/components/BulkPartsDialog.vue'
 import TwinOverlays from '@/pages/TwinEditor/components/TwinOverlays.vue'
@@ -50,6 +54,7 @@ function chat(): AiConversation {
     isRunning: ref(false),
     isAsking: ref(false),
     plan: ref<AssistantPlan | null>(null),
+    contextUsage: ref<AssistantContextUsage | null>(null),
     send: vi.fn(() => Promise.resolve()),
     stop: vi.fn(),
     clear: vi.fn(),
@@ -66,6 +71,9 @@ function panel(isAvailable: boolean): AiPanel {
     attachmentSuffixes: ref([]),
     choice: ref({ profile: '', effort: '' }),
     pickModel: vi.fn(() => Promise.resolve()),
+    isPickingModel: ref(false),
+    isModelUnconfirmed: ref(false),
+    verifyModel: vi.fn(() => Promise.resolve()),
     isOpen: ref(false),
     sessionId: ref<string | null>(null),
     chat: chat(),

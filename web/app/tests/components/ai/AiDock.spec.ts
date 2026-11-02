@@ -6,10 +6,15 @@ import { createPinia, setActivePinia } from 'pinia'
 import { mount } from '@vue/test-utils'
 import { beforeEach, describe, expect, it, vi } from 'vitest'
 import { computed, ref } from 'vue'
-import { PERMISSION_CODES, type AssistantPlan } from '@dt/contracts'
+import {
+  PERMISSION_CODES,
+  type AssistantPlan,
+  type AssistantContextUsage,
+} from '@dt/contracts'
 
 import AiCoreIcon from '@/components/ai/AiCoreIcon.vue'
 import AiDock from '@/components/ai/AiDock.vue'
+import AiAssistantPanel from '@/components/ai/AiAssistantPanel.vue'
 import type { AiConversation, ChatEntry } from '@/composables/useAiConversation'
 import { newComposeState, type AiPanel } from '@/composables/useAiPanel'
 import { useAuthStore } from '@/stores/auth'
@@ -20,6 +25,7 @@ function fakeChat(): AiConversation {
     isRunning: ref(false),
     isAsking: ref(false),
     plan: ref<AssistantPlan | null>(null),
+    contextUsage: ref<AssistantContextUsage | null>(null),
     send: vi.fn(() => Promise.resolve()),
     stop: vi.fn(),
     clear: vi.fn(),
@@ -37,6 +43,9 @@ function fakeAi(open = false, available = true): AiPanel {
     attachmentSuffixes: ref([]),
     choice: ref({ profile: '', effort: '' }),
     pickModel: vi.fn(() => Promise.resolve()),
+    isPickingModel: ref(false),
+    isModelUnconfirmed: ref(false),
+    verifyModel: vi.fn(() => Promise.resolve()),
     isOpen,
     sessionId: ref<string | null>(null),
     chat: fakeChat(),
@@ -70,6 +79,22 @@ beforeEach(() => {
 })
 
 describe('AiDock', () => {
+  it('模型切换状态透传给输入面板，关闭后保持完整入口', async () => {
+    const ai = fakeAi(true)
+    ai.isPickingModel.value = true
+    const wrapper = mountDock(ai)
+    expect(
+      wrapper.getComponent(AiAssistantPanel).props('modelSelection'),
+    ).toEqual({ isPicking: true, isUnconfirmed: false })
+    wrapper.getComponent(AiAssistantPanel).vm.$emit('verify-model')
+    await wrapper.vm.$nextTick()
+    expect(ai.verifyModel).toHaveBeenCalledTimes(1)
+    ai.isOpen.value = false
+    await wrapper.vm.$nextTick()
+    expect(wrapper.get('.ai-dock').classes()).not.toContain('is-peeking')
+    wrapper.unmount()
+  })
+
   it('收起时是带无障碍标签的机器人图标球', () => {
     const wrapper = mountDock(fakeAi())
     const call = wrapper.find('button[aria-label="打开 AI 助手"]')

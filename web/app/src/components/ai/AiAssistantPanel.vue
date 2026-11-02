@@ -14,11 +14,13 @@ import type { AssistantModelProfile } from '@dt/contracts'
 import { DtButton } from '@dt/ui'
 
 import AiComposer from '@/components/ai/AiComposer.vue'
+import AiContextUsage from '@/components/ai/AiContextUsage.vue'
 import AiCoreIcon from '@/components/ai/AiCoreIcon.vue'
 import AiPlanCard from '@/components/ai/AiPlanCard.vue'
 import AiTimeline from '@/components/ai/AiTimeline.vue'
 import type { AiConversation } from '@/composables/useAiConversation'
 import type { ComposeState, ModelChoice } from '@/composables/useAiPanel'
+import type { ModelSelectionStatus } from '@/composables/useAiModelSelection'
 
 const props = defineProps<{
   /**
@@ -39,6 +41,7 @@ const props = defineProps<{
   models?: readonly AssistantModelProfile[] | undefined
   /** 这个会话选了哪一路。 */
   choice?: ModelChoice | undefined
+  modelSelection?: ModelSelectionStatus | undefined
   /** 附件收哪些后缀，服务端下发；前端不写死一份。 */
   attachmentSuffixes?: readonly string[] | undefined
 }>()
@@ -47,6 +50,7 @@ const emit = defineEmits<{
   close: []
   'toggle-wide': []
   pick: [value: ModelChoice]
+  'verify-model': []
 }>()
 
 /** 草稿为空时 ↑ 召回的那句：时间线上最后一条自己说的话。 */
@@ -122,10 +126,14 @@ function onEscape(event: KeyboardEvent): void {
       @answer="chat.answerAsk"
     />
 
+    <AiContextUsage :usage="chat.contextUsage.value" />
+
     <AiComposer
       ref="composer"
       :compose="compose"
       :running="chat.isRunning.value"
+      :is-picking-model="modelSelection?.isPicking"
+      :is-model-unconfirmed="modelSelection?.isUnconfirmed"
       :asking="chat.isAsking.value"
       :hint="hint"
       :last-said="lastSaid"
@@ -135,6 +143,7 @@ function onEscape(event: KeyboardEvent): void {
       @send="(text, images) => void chat.send(text, images)"
       @stop="chat.stop"
       @pick="(value) => emit('pick', value)"
+      @verify-model="emit('verify-model')"
     />
   </aside>
 </template>
