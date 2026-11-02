@@ -11,6 +11,7 @@ import { effectScope, type EffectScope } from 'vue'
 
 import { parseAttachment } from '@/api/assistant'
 import AiAssistantPanel from '@/components/ai/AiAssistantPanel.vue'
+import AiModelPicker from '@/components/ai/AiModelPicker.vue'
 import { useAiConversation } from '@/composables/useAiConversation'
 import { newComposeState } from '@/composables/useAiPanel'
 import { __resetAskHandler, askUser } from '@/features/ai/askBridge'
@@ -85,6 +86,78 @@ const ASK = {
 }
 
 describe('助手面板', () => {
+  it('模型未确认时保留草稿并暂停发送，重新核验入口可恢复且不影响停止', async () => {
+    const wrapper = mountPanel()
+    await wrapper.setProps({
+      modelSelection: { isPicking: false, isUnconfirmed: true },
+    })
+    await wrapper.get('textarea').setValue('确认后再发送')
+    await wrapper.get('form').trigger('submit')
+    expect(wrapper.chat.entries.value).toHaveLength(0)
+    expect(wrapper.compose.draft.value).toBe('确认后再发送')
+    expect(wrapper.text()).toContain('当前模型尚未确认')
+    const retry = wrapper
+      .findAll('button')
+      .find((button) => button.text() === '重新核验模型')
+    if (retry === undefined) throw new Error('缺少模型核验恢复入口')
+    await retry.trigger('click')
+    expect(wrapper.emitted('verify-model')).toHaveLength(1)
+    await wrapper.setProps({
+      modelSelection: { isPicking: true, isUnconfirmed: true },
+    })
+    expect(retry.attributes('disabled')).toBeDefined()
+    wrapper.chat.isRunning.value = true
+    await wrapper.vm.$nextTick()
+    expect(wrapper.find('[aria-label="停止这个回合"]').exists()).toBe(true)
+    await wrapper.find('[aria-label="停止这个回合"]').trigger('click')
+    expect(wrapper.chat.isRunning.value).toBe(false)
+    wrapper.unmount()
+  })
+
+  it('切换模型时禁止发送并保留草稿，运行和切换期间都不接受模型选择', async () => {
+    const wrapper = mountPanel()
+    const models = ['default', 'codex'].map((id) => ({
+      id,
+      label: id,
+      is_ready: true,
+      has_vision: false,
+      models: [],
+      efforts: [],
+    }))
+    await wrapper.setProps({
+      models,
+      choice: { profile: 'default', effort: '' },
+      modelSelection: { isPicking: true, isUnconfirmed: false },
+    })
+    await wrapper.get('textarea').setValue('稍后发送这份草稿')
+    await wrapper.get('form').trigger('submit')
+    expect(wrapper.compose.draft.value).toBe('稍后发送这份草稿')
+    expect(wrapper.chat.entries.value).toHaveLength(0)
+    expect(wrapper.text()).toContain('正在确认模型')
+    const picker = wrapper.getComponent(AiModelPicker)
+    expect(picker.props('disabled')).toBe(true)
+    picker.vm.$emit('pick', { profile: 'codex', effort: '' })
+    await wrapper.vm.$nextTick()
+    expect(wrapper.emitted('pick')).toBeUndefined()
+    await wrapper.setProps({
+      modelSelection: { isPicking: false, isUnconfirmed: false },
+    })
+    wrapper.chat.isRunning.value = true
+    await wrapper.vm.$nextTick()
+    expect(picker.props('disabled')).toBe(true)
+    picker.vm.$emit('pick', { profile: 'codex', effort: '' })
+    await wrapper.vm.$nextTick()
+    expect(wrapper.emitted('pick')).toBeUndefined()
+    wrapper.chat.isRunning.value = false
+    await wrapper.vm.$nextTick()
+    picker.vm.$emit('pick', { profile: 'codex', effort: '' })
+    await wrapper.vm.$nextTick()
+    expect(wrapper.emitted('pick')).toEqual([
+      [{ profile: 'codex', effort: '' }],
+    ])
+    wrapper.unmount()
+  })
+
   it('没说过话时给一句引导，而不是一片空白', () => {
     const wrapper = mountPanel()
     expect(wrapper.text()).toContain('说说你想做什么')
@@ -98,6 +171,30 @@ describe('助手面板', () => {
   it('摆出当前在哪一页', () => {
     const wrapper = mountPanel()
     expect(wrapper.text()).toContain('大屏编辑器')
+  })
+
+  it('将流里的上下文预算接到输入区上方的进度条', async () => {
+    setAiPorts({
+      advance: async function* () {
+        await Promise.resolve()
+        yield `event: context\ndata: ${JSON.stringify({
+          used_tokens: 8192,
+          max_tokens: 32768,
+          percent: 25,
+          is_estimated: false,
+          state: 'compressed',
+          compression_count: 1,
+        })}\n\n`
+        yield 'event: turn.done\ndata: {"reply":"完成"}\n\n'
+      },
+    })
+    const wrapper = mountPanel()
+    await wrapper.chat.send('继续')
+    await vi.waitFor(() => expect(wrapper.text()).toContain('上下文 25%'))
+    expect(
+      wrapper.get('[aria-label="上下文使用率"]').attributes('aria-valuenow'),
+    ).toBe('25')
+    expect(wrapper.text()).toContain('已自动压缩 1 次')
   })
 
   it('收起按钮往外报一声', async () => {

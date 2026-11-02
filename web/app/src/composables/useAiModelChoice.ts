@@ -87,20 +87,26 @@ export function adoptRow(
  * @param next 用户刚选的那一路
  * @param choice 面板此刻选中的那一路
  * @param sessionId 这一页的会话；还没建起来时是 null
+ * @param isCurrent 响应仍属于当前存活会话
  */
 export async function pickModel(
   next: ModelChoice,
   choice: Ref<ModelChoice>,
   sessionId: Ref<string | null>,
-): Promise<void> {
-  choice.value = next
+  isCurrent: () => boolean = () => true,
+): Promise<boolean> {
   const id = sessionId.value
-  if (id === null) return
-  adoptRow(
-    choice,
-    await patchSession(id, {
-      model_profile: next.profile,
-      ...(next.effort === '' ? {} : { reasoning_effort: next.effort }),
-    }),
-  )
+  if (id === null) {
+    if (isCurrent()) choice.value = next
+    return isCurrent()
+  }
+  const row = await patchSession(id, {
+    model_profile: next.profile,
+    ...(next.effort === '' ? {} : { reasoning_effort: next.effort }),
+  })
+  if (!isCurrent()) return false
+  if (row === null || row.model_profile === null)
+    throw new Error('未收到模型切换确认，请检查连接后重试')
+  adoptRow(choice, row)
+  return true
 }
