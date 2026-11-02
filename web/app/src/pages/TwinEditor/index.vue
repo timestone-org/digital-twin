@@ -3,17 +3,12 @@
 import type { BindingPayload } from '@dt/contracts'
 import { collectTwinConfigIssues } from '@dt/twin-config'
 import type { TwinConfig, TwinNavigationMode, Vec3 } from '@dt/twin-config'
-import {
-  DtPageState,
-  EditorSplitter,
-  useEditorPanes,
-  useConfirm,
-  useToast,
-} from '@dt/ui'
+import { DtPageState, DtResizableLayout, useConfirm, useToast } from '@dt/ui'
 import type { ModelAnimationEntry } from '@dt/three-core'
 import { computed, ref, watch, provide } from 'vue'
 import { useRoute } from 'vue-router'
 import { useWorkspaceGuard } from '@/features/workspace/useWorkspaceGuard'
+import { migrateLegacyEditorLayout } from '@/features/workspace/legacyEditorLayout'
 
 import { installDashboardModules } from '@/bootstrap/dashboard'
 import { AppShell } from '@/components/layout'
@@ -44,17 +39,18 @@ import { useTwinAi } from './scripts/useTwinAi'
 import { useTwinEditorPage } from './scripts/useTwinEditorPage'
 import { useUnsavedGuard } from '@/composables/useUnsavedGuard'
 
-// ⚠ 子编辑器也要装：直接刷新到这条路由时大屏那三页一个都没跑过，
-// 不装的话模型地址解析恒回空串，画面上是一句「模型地址解析失败」
+// ⚠ 子编辑器直接刷新时也必须安装模块，否则模型地址无法解析。
 installDashboardModules()
 
-const panes = useEditorPanes('dt.twin-editor.panes')
-const gridRef = panes.hostRef
+migrateLegacyEditorLayout({
+  previousKey: 'dt.twin-editor.panes',
+  nextKey: 'dt.twin-editor.layout',
+  paneIds: ['outline', 'viewport', 'inspector'],
+})
 
 const route = useRoute()
 const toast = useToast()
 const confirm = useConfirm()
-
 const dashboardId = computed(() => String(route.params.dashboardId ?? ''))
 const nodeId = computed(() => String(route.params.nodeId ?? ''))
 
@@ -315,165 +311,171 @@ useUnsavedGuard(() => page.doc.value?.isDirty.value === true)
         :error="page.error.value"
         :empty="false"
       />
-      <div
+      <DtResizableLayout
         v-else
-        ref="gridRef"
-        class="grid min-h-0 flex-1"
-        :style="panes.gridStyle.value"
+        class="min-h-0 flex-1"
+        :panes="[
+          { id: 'outline', label: '大纲', size: 1, minSize: 220 },
+          { id: 'viewport', label: '视口', size: 3, minSize: 320 },
+          { id: 'inspector', label: '配置', size: 1.2, minSize: 280 },
+        ]"
+        :stack-at="1000"
+        storage-key="dt.twin-editor.layout"
       >
-        <TwinLeftPane
-          :bindings="binding.bindings.value"
-          :animations="{
-            clips: animationClips,
-            selected: selectedAnimation,
-            status: modelStatus,
-          }"
-          class="min-h-0 min-w-0 flex-1 overflow-hidden"
-          :config="hidden.config.value ?? config"
-          :selection="selectedAnimation === null ? selection : null"
-          :flagged-ids="flaggedIds"
-          :renaming-folder-id="renamingFolderId"
-          @focus="navigation.focus($event)"
-          @select-animation="selectAnimation"
-          @select="select"
-          @add="addEntityOf"
-          @add-in-folder="addEntityOf($event.kind, $event.folderId)"
-          @place="actions?.place($event)"
-          @bulk-add="bulk.openBlank()"
-          @remove="actions?.remove($event.kind, $event.id)"
-          @duplicate="actions?.duplicate($event.kind, $event.id)"
-          @move="actions?.move($event.kind, $event.id, $event.delta)"
-          @toggle-editor-visible="hidden.toggle"
-          @add-folder="addFolderIn"
-          @rename-folder="actions?.renameFolder($event.id, $event.name)"
-          @remove-folder="actions?.removeFolder($event)"
-          @move-into-folder="
-            actions?.moveIntoFolder($event.folderId, $event.id)
-          "
-          @remove-from-folder="actions?.removeFromFolder($event)"
-          @create-folder-with-item="createFolderWith"
-        />
-        <EditorSplitter side="left" label="大纲栏宽度" :panes="panes" />
-
-        <div class="flex min-h-0 min-w-0 flex-col">
-          <!-- 画中画钉在视口这一块上，诊断面板展开时不会被它压住 -->
-          <div class="relative flex min-h-0 flex-1">
-            <TwinViewportTools
-              :isolated="navigation.isolated.value"
-              :can-isolate="
-                selection.kind === 'parts' && modelStatus === 'ready'
-              "
-              :can-back="navigation.canBack.value"
-              @focus="navigation.focus(selection)"
-              @overview="navigation.focus(TWIN_SELECT_MODEL)"
-              @isolate="navigation.toggleIsolation"
-              @reset="navigation.reset"
-              @back="navigation.back"
-            />
-            <TwinViewport
-              ref="viewportRef"
-              class="min-h-0 flex-1"
-              :config="hidden.config.value ?? config"
-              :selection="selection"
-              :pick-mode="viewport.pickMode.value"
-              :navigation-mode="editorNavigationMode"
-              :pick-hint="viewport.placementHint.value"
-              :gizmo-mode="gizmoMode"
-              :target-size="page.targetSize.value"
-              :values="binding.liveValues.value"
-              :data-warning="binding.datasetWarning.value"
-              @select="selection = $event ?? TWIN_SELECT_MODEL"
-              @pick-node="viewport.onPickNode"
-              @pick-position="viewport.onPickPosition"
-              @cancel-pick="viewport.cancelPick"
-              @model-nodes="modelNodes = $event"
-              @model-animations="animationClips = $event"
-              @status="modelStatus = $event"
-              @frame-origin="frameOrigin = $event"
-              @roam-preview="roamPreviewing = $event"
-              @entity-transform="actions?.transformEntity($event)"
-              @entity-transform-end="actions?.endTransform()"
-              @marquee-nodes="viewport.onSelectNodes"
-            />
-            <TwinConfigPreview
-              ref="configPreviewRef"
-              :node="page.node.value"
-              :config="config"
-              :selection="selection"
-              :animation="currentAnimation"
-              :test-mode="animationTest"
-              :bindings="binding.bindings.value"
-              :read-binding="binding.readBinding"
-              @roam-playing="roamPreviewing = $event"
-              @part-detail-view="viewport.savePartDetailView"
-            />
-          </div>
-          <TwinDiagnosticsPanel
-            v-if="showIssues"
-            class="max-h-48 shrink-0 overflow-y-auto border-t border-border-subtle"
-            :issues="issues"
-            @focus="select"
-          />
-        </div>
-
-        <EditorSplitter side="right" label="配置栏宽度" :panes="panes" />
-
-        <div class="flex min-h-0 min-w-0 flex-col overflow-hidden">
-          <TwinSelectionContext
-            :config="config"
-            :selection="selection"
-            :clips="animationClips"
-            :animation="selectedAnimation"
-            @select="select"
+        <template #outline>
+          <TwinLeftPane
+            :bindings="binding.bindings.value"
+            :animations="{
+              clips: animationClips,
+              selected: selectedAnimation,
+              status: modelStatus,
+            }"
+            class="min-h-0 min-w-0 flex-1 overflow-hidden"
+            :config="hidden.config.value ?? config"
+            :selection="selectedAnimation === null ? selection : null"
+            :flagged-ids="flaggedIds"
+            :renaming-folder-id="renamingFolderId"
             @focus="navigation.focus($event)"
             @select-animation="selectAnimation"
-          />
-          <TwinAnimationInspector
-            v-if="selectedAnimation !== null"
-            class="min-h-0 flex-1"
-            :config="config"
-            :clip="selectedAnimation"
-            :bindings="binding.bindings.value"
-            :value="binding.liveValues.value?.animations?.[selectedAnimation]"
-            :available="currentAnimation !== null"
-            :is-dirty="isDirty"
-            :test-mode="animationTest"
-            @patch="actions?.patchConfig($event)"
-            @pick="binding.pickingFieldKey.value = $event"
-            @drop="binding.drop"
-            @test="animationTest = $event"
-          />
-          <TwinRightPane
-            v-else
-            v-model:gizmo-mode="gizmoMode"
-            class="min-h-0 min-w-0 overflow-hidden"
-            :config="config"
-            :selection="selection"
-            :model-nodes="modelNodes"
-            :picking="viewport.isPicking.value"
-            :roam-previewing="roamPreviewing"
-            :frame-origin="frameOrigin"
-            :bindings="binding.bindings.value"
-            :is-dirty="isDirty"
-            @patch="actions?.patchConfig($event)"
-            @request-pick="viewport.requestPick"
-            @cancel-pick="viewport.cancelPick"
-            @capture-camera="viewport.captureCamera"
-            @capture-part-view="viewport.capturePartView"
-            @edit-part-detail-view="
-              configPreviewRef?.editPartDetailView($event)
+            @select="select"
+            @add="addEntityOf"
+            @add-in-folder="addEntityOf($event.kind, $event.folderId)"
+            @place="actions?.place($event)"
+            @bulk-add="bulk.openBlank()"
+            @remove="actions?.remove($event.kind, $event.id)"
+            @duplicate="actions?.duplicate($event.kind, $event.id)"
+            @move="actions?.move($event.kind, $event.id, $event.delta)"
+            @toggle-editor-visible="hidden.toggle"
+            @add-folder="addFolderIn"
+            @rename-folder="actions?.renameFolder($event.id, $event.name)"
+            @remove-folder="actions?.removeFolder($event)"
+            @move-into-folder="
+              actions?.moveIntoFolder($event.folderId, $event.id)
             "
-            @select-part="select({ kind: 'parts', id: $event })"
-            @preview-roam="configPreviewRef?.playRoam()"
-            @stop-roam-preview="configPreviewRef?.stopRoam()"
-            @write-binding="binding.write"
-            @drop-binding="binding.drop"
-            @add-binding="binding.bind"
-            @pick-point="binding.pickingFieldKey.value = $event"
-            @remove-binding-row="binding.removeRow"
+            @remove-from-folder="actions?.removeFromFolder($event)"
+            @create-folder-with-item="createFolderWith"
           />
-        </div>
-      </div>
+        </template>
+        <template #viewport>
+          <div class="flex min-h-0 min-w-0 flex-col">
+            <!-- 画中画钉在视口这一块上，诊断面板展开时不会被它压住 -->
+            <div class="relative flex min-h-0 flex-1">
+              <TwinViewportTools
+                :isolated="navigation.isolated.value"
+                :can-isolate="
+                  selection.kind === 'parts' && modelStatus === 'ready'
+                "
+                :can-back="navigation.canBack.value"
+                @focus="navigation.focus(selection)"
+                @overview="navigation.focus(TWIN_SELECT_MODEL)"
+                @isolate="navigation.toggleIsolation"
+                @reset="navigation.reset"
+                @back="navigation.back"
+              />
+              <TwinViewport
+                ref="viewportRef"
+                class="min-h-0 flex-1"
+                :config="hidden.config.value ?? config"
+                :selection="selection"
+                :pick-mode="viewport.pickMode.value"
+                :navigation-mode="editorNavigationMode"
+                :pick-hint="viewport.placementHint.value"
+                :gizmo-mode="gizmoMode"
+                :target-size="page.targetSize.value"
+                :values="binding.liveValues.value"
+                :data-warning="binding.datasetWarning.value"
+                @select="selection = $event ?? TWIN_SELECT_MODEL"
+                @pick-node="viewport.onPickNode"
+                @pick-position="viewport.onPickPosition"
+                @cancel-pick="viewport.cancelPick"
+                @model-nodes="modelNodes = $event"
+                @model-animations="animationClips = $event"
+                @status="modelStatus = $event"
+                @frame-origin="frameOrigin = $event"
+                @roam-preview="roamPreviewing = $event"
+                @entity-transform="actions?.transformEntity($event)"
+                @entity-transform-end="actions?.endTransform()"
+                @marquee-nodes="viewport.onSelectNodes"
+              />
+              <TwinConfigPreview
+                ref="configPreviewRef"
+                :node="page.node.value"
+                :config="config"
+                :selection="selection"
+                :animation="currentAnimation"
+                :test-mode="animationTest"
+                :bindings="binding.bindings.value"
+                :read-binding="binding.readBinding"
+                @roam-playing="roamPreviewing = $event"
+                @part-detail-view="viewport.savePartDetailView"
+              />
+            </div>
+            <TwinDiagnosticsPanel
+              v-if="showIssues"
+              class="max-h-48 shrink-0 overflow-y-auto border-t border-border-subtle"
+              :issues="issues"
+              @focus="select"
+            />
+          </div>
+        </template>
+        <template #inspector>
+          <div class="flex min-h-0 min-w-0 flex-col overflow-hidden">
+            <TwinSelectionContext
+              :config="config"
+              :selection="selection"
+              :clips="animationClips"
+              :animation="selectedAnimation"
+              @select="select"
+              @focus="navigation.focus($event)"
+              @select-animation="selectAnimation"
+            />
+            <TwinAnimationInspector
+              v-if="selectedAnimation !== null"
+              class="min-h-0 flex-1"
+              :config="config"
+              :clip="selectedAnimation"
+              :bindings="binding.bindings.value"
+              :value="binding.liveValues.value?.animations?.[selectedAnimation]"
+              :available="currentAnimation !== null"
+              :is-dirty="isDirty"
+              :test-mode="animationTest"
+              @patch="actions?.patchConfig($event)"
+              @pick="binding.pickingFieldKey.value = $event"
+              @drop="binding.drop"
+              @test="animationTest = $event"
+            />
+            <TwinRightPane
+              v-else
+              v-model:gizmo-mode="gizmoMode"
+              class="min-h-0 min-w-0 overflow-hidden"
+              :config="config"
+              :selection="selection"
+              :model-nodes="modelNodes"
+              :picking="viewport.isPicking.value"
+              :roam-previewing="roamPreviewing"
+              :frame-origin="frameOrigin"
+              :bindings="binding.bindings.value"
+              :is-dirty="isDirty"
+              @patch="actions?.patchConfig($event)"
+              @request-pick="viewport.requestPick"
+              @cancel-pick="viewport.cancelPick"
+              @capture-camera="viewport.captureCamera"
+              @capture-part-view="viewport.capturePartView"
+              @edit-part-detail-view="
+                configPreviewRef?.editPartDetailView($event)
+              "
+              @select-part="select({ kind: 'parts', id: $event })"
+              @preview-roam="configPreviewRef?.playRoam()"
+              @stop-roam-preview="configPreviewRef?.stopRoam()"
+              @write-binding="binding.write"
+              @drop-binding="binding.drop"
+              @add-binding="binding.bind"
+              @pick-point="binding.pickingFieldKey.value = $event"
+              @remove-binding-row="binding.removeRow"
+            />
+          </div>
+        </template>
+      </DtResizableLayout>
     </div>
 
     <TwinBatchConfig
