@@ -1,0 +1,23 @@
+{
+  "date": "2026-11-02",
+  "operation": "read_current_primary_internal_catalog",
+  "credentials_persisted": false,
+  "http_status": 200,
+  "status": "success",
+  "provider_count": 4,
+  "enabled_provider_count": 4,
+  "provider_kinds": {
+    "openai_compat": 3,
+    "codex_oauth": 1
+  },
+  "assignment_count": 6,
+  "enabled_model_count": 4,
+  "has_enabled_openai_compat": true,
+  "has_enabled_login_provider": true,
+  "assistant_chat_assigned": false,
+  "assistant_summary_assigned": false,
+  "assistant_vision_assigned": false,
+  "assistant_assignments_point_to_codex_provider": true,
+  "assistant_assignment_model_names_missing_from_provider_count": 3,
+  "effective_assistant_model_resolution": "current model_for fallback to registered provider chat model"
+}

@@ -1,0 +1,32 @@
+{
+  "date": "2026-11-02",
+  "source": "current primary internal catalog and current source registry",
+  "max_output_tokens": 64,
+  "automatic_retries": 0,
+  "overall_timeout_s": 30,
+  "credentials_persisted": false,
+  "codex_lease_http_status": 200,
+  "chat_profile_count": 2,
+  "ready_by_configuration_count": 2,
+  "selected_kind": "codex_oauth",
+  "selected_from_catalog": true,
+  "selected_is_assigned_provider": true,
+  "status": "success",
+  "http_request_attempted": true,
+  "has_text": true,
+  "expected_reply": false,
+  "usage": {
+    "input_tokens": 37,
+    "output_tokens": 7,
+    "total_tokens": 44,
+    "input_token_details": {
+      "cache_creation": 0,
+      "cache_read": 0
+    },
+    "output_token_details": {
+      "reasoning": 0
+    }
+  },
+  "literal_comparison_was_string_content_only": true,
+  "synthetic_fact_semantics_verified_in_followup_runtime": true
+}

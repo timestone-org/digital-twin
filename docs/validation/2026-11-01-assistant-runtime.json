@@ -1,0 +1,90 @@
+{
+  "status": "passed",
+  "real": ["FastAPI socket HTTP", "PostgreSQL", "Redis", "OpenAiCompatAdapter"],
+  "simulated": ["model provider"],
+  "scenarios": [
+    {
+      "scenario": "automatic_compaction",
+      "http_records": [
+        {
+          "kind": "summary",
+          "stream": false,
+          "message_count": 2,
+          "input_chars": 7991,
+          "tool_count": 0,
+          "status": 200
+        },
+        {
+          "kind": "summary",
+          "stream": false,
+          "message_count": 2,
+          "input_chars": 6131,
+          "tool_count": 0,
+          "status": 200
+        },
+        {
+          "kind": "chat",
+          "stream": true,
+          "message_count": 5,
+          "input_chars": 1811,
+          "tool_count": 37,
+          "status": 200
+        }
+      ],
+      "history_messages": 6,
+      "usage_tokens": 1520
+    },
+    {
+      "scenario": "structured_overflow_recovery",
+      "http_records": [
+        {
+          "kind": "chat",
+          "stream": true,
+          "message_count": 6,
+          "input_chars": 5037,
+          "tool_count": 37,
+          "status": 400
+        },
+        {
+          "kind": "summary",
+          "stream": false,
+          "message_count": 2,
+          "input_chars": 3583,
+          "tool_count": 0,
+          "status": 200
+        },
+        {
+          "kind": "chat",
+          "stream": true,
+          "message_count": 5,
+          "input_chars": 1804,
+          "tool_count": 37,
+          "status": 200
+        }
+      ],
+      "reply_copies": 1
+    },
+    {
+      "scenario": "receipt_continue",
+      "http_records": [
+        {
+          "kind": "chat",
+          "stream": true,
+          "message_count": 2,
+          "input_chars": 1624,
+          "tool_count": 37,
+          "status": 200
+        },
+        {
+          "kind": "chat",
+          "stream": true,
+          "message_count": 4,
+          "input_chars": 1912,
+          "tool_count": 37,
+          "status": 200
+        }
+      ],
+      "stored_receipts": 1
+    }
+  ]
+}

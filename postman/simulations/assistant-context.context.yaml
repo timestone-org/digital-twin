@@ -1,0 +1,153 @@
+purpose:
+  stands_in_for: >-
+    未指定真实供应商的 OpenAI 兼容对话模型；响应仅为合成 Chat Completions JSON、
+    SSE、usage 与机器可读上下文超限错误。没有供应商所有者 mock 可供复用，
+    没有进行云端搜索、上传或部署。
+  unblocks: >-
+    真实 FastAPI socket HTTP、PostgreSQL、Redis、OpenAiCompatAdapter 与 GuardedModel
+    的端到端调用验收；模型服务是唯一模拟依赖。
+assumptions:
+  - id: local-json-stream-usage
+    status: supported
+    claim: >-
+      在本地合成协议下，助手能以普通 JSON 调用摘要模型、以 SSE 调用对话模型，
+      把供应商 usage 映射为 context 事件，并保留全部会话历史。
+    reason: >-
+      验收运行真实应用与适配器；模型端 request 记录与数据库、HTTP detail 断言对应。
+      该结论只覆盖所运行的合成协议响应。
+    verification: >-
+      2026-11-01 fingerprint assistant-context-20261101：运行
+      server/.venv/bin/python postman/tests/verify_assistant_context.py。
+      自动压缩场景产生两次非流式 summary 请求和一次流式 chat 请求；
+      HTTP context 报告1520已用token、is_estimated=false，历史6条完整，
+      summary_json保存有效切点。报告及记录见 docs/validation/2026-11-01-assistant-runtime.json。
+    source: >-
+      postman/tests/verify_assistant_context.py; postman/mocks/assistant-model/default.js;
+      server/domain/llmcore/src/llmcore/openai_compat.py;
+      docs/validation/2026-11-01-assistant-runtime.json
+    updated_at: "2026-11-01"
+  - id: local-overflow-recovery
+    status: supported
+    claim: >-
+      在首次流式请求收到结构化400 context_length_exceeded且有可压缩历史时，
+      助手生成摘要、缩小输入后恢复当前请求一次，回复只出现一份。
+    reason: >-
+      真实兼容适配器把HTTP错误交给真实GuardedModel和ContextModel，第二次chat成功；
+      请求数量与消息字符数由模型端独立记录。
+    verification: >-
+      同一fingerprint运行：chat输入5037字符返回400；summary请求3583字符返回200；
+      恢复chat输入1804字符返回200。输出只有一份，HTTP detail保留6条消息。
+      另以16384预算观察到固定工具及提示词预算估算约14878，进一步压缩无收益，
+      服务返回明确52203而不循环请求；这不是支持任意小窗口的证明。
+    source: >-
+      postman/tests/verify_assistant_context.py;
+      server/services/ai-assistant/src/ai_assistant/apps/chat/services/context_model.py;
+      docs/validation/2026-11-01-assistant-runtime.md
+    updated_at: "2026-11-01"
+  - id: local-receipt-continue
+    status: supported
+    claim: >-
+      在合成模型请求客户端工具后，独立回执只写数据库，不推进模型；
+      相同回执随后用于续跑时不会重复存储。
+    reason: >-
+      前后模型请求数由模拟端记录，实际回执数量从真实HTTP detail读取。
+    verification: >-
+      同一fingerprint运行：首次chat后收到client_tool.request，POST receipts后chat计数仍为1；
+      续跑后chat计数为2，数据库仅一条对应wire-call-1的tool消息。
+    source: >-
+      postman/tests/verify_assistant_context.py;
+      docs/validation/2026-11-01-assistant-runtime.json
+    updated_at: "2026-11-01"
+  - id: real-model-provider
+    status: unknown
+    claim: >-
+      真实供应商支持对应模型窗口、机器错误码、流式工具调用及准确usage，
+      并能生成保留真实用户要求与事实的摘要。
+    reason: >-
+      11月1日ENV路径的一次实际chat返回HTTP403 AccessDenied.Unpurchased，
+      该历史路径不能代表11月2日恢复后的primary实际目录路径。
+      后者已在单独条目验证指定合成场景；本广泛命题仍包括未测的真实硬窗口、
+      真实工具执行及任意客户内容摘要质量，不能由本地仿真或单场景证明。
+    verification: >-
+      最初仅检查根环境未见启用密钥，健康旧验收栈供应商列表为空；该来源不足以
+      判断运行配置。2026-11-01后续从运行容器读取真实配置到内存，以当前适配器
+      实际请求一次，25秒端点/30秒总超时、64输出token上限、无重试，
+      返回403 AccessDenied.Unpurchased，未获得回复或usage。仅再GET目录一次：
+      一页21模型，配置三用途均在目录但实际同1模型，无不同已配置候选。
+      当时主环境数据库协议握手仍超时。11月2日外部状态恢复后，已重新读取目录并
+      验证真实订阅模型压缩，详见primary-codex-real-compaction-20261102及新报告；
+      保留11月1日ENV拒绝记录，但不再将它判定为当前实际助手路径阻塞。
+    source: >-
+      docs/validation/2026-11-01-assistant-runtime.md;
+      postman/mocks/assistant-model/config.yaml
+    updated_at: "2026-11-01"
+  - id: runtime-config-chat-authorized
+    status: contradicted
+    claim: >-
+      在2026-11-01本轮观测时，运行助手容器及与之相同的Docker文件模型配置，
+      允许本账号调用其已配置对话模型。
+    reason: >-
+      实际请求返回HTTP403及机器码AccessDenied.Unpurchased；不是由是否存在密钥
+      或目录是否列出模型推断。三用途实际同一模型，没有另一个已配置候选。
+    verification: >-
+      一次实际chat请求失败，未自动重试；仅一次只读目录GET成功返回一页21模型。
+      配置一致性只比较布尔。未输出或保存真实地址、密钥、令牌及原始headers，
+      未访问业务数据库或修改现有容器配置。
+    source: >-
+      docs/validation/2026-11-01-assistant-runtime-provider.json;
+      docs/validation/2026-11-01-assistant-runtime.md
+    updated_at: "2026-11-01"
+  - id: primary-codex-real-compaction-20261102
+    status: supported
+    claim: >-
+      2026-11-02当前primary目录选中的订阅模型，在独立当前源码应用的合成事实场景中，
+      生成持久摘要并完成一次回合内压缩，保留关键只读要求和完整历史，SSE报告真实usage。
+    reason: >-
+      直接使用当前目录、原有令牌租借面及真实CodexOAuthAdapter，没有模型mock。
+      场景以11000配置预算、low档、每次256输出上限及最多三次请求执行，
+      不承诺任意模型硬窗口、实际工具执行或真实客户数据的摘要质量。
+    verification: >-
+      2026-11-02 primary内部目录200，正常凭据租借200，一次最小真实chat的usage为44。
+      第一次完整运行暴露结构化summary正文被丢弃，回归用例先红后绿修复；
+      修后关闭旧进程另起PID92194，三次真实调用usage为2180、1227、4395。
+      summary_json保留T001、26.5及只读约束，compression_count为1，
+      最终context4395/11000=40.0%且非估算，HTTP历史6条完整，最终事实JSON正确。
+      三组定向回归96、67、139项通过；本轮独立资源已清理，未改主环境配置。
+    source: >-
+      docs/validation/2026-11-02-assistant-real-runtime.md;
+      docs/validation/2026-11-02-assistant-real-runtime.json;
+      docs/validation/2026-11-02-assistant-real-runtime-before-fix.json;
+      server/domain/llmcore/src/llmcore/memory/summarize.py;
+      server/domain/llmcore/tests/unit/test_summary_fold.py
+    updated_at: "2026-11-02"
+  - id: real-browser-context-while-streaming-20261102
+    status: supported
+    claim: >-
+      当前真实AiAssistantPanel、useAiConversation与生产advanceTurn/openStream接入独立真实
+      FastAPI、PostgreSQL、Redis和目录模型时，在请求未结束且Stop可见期间更新百分比，
+      最终标签与ARIA数值和真实context帧一致。
+    reason: >-
+      浏览器发送前安装MutationObserver，只旁路clone真实Response做oracle，
+      原响应交生产解析路径。没有route.fulfill、假SSE、模型mock或primary网关改动；
+      身份为本地反代注入的合成MAC，不证明生产登录流程。
+    verification: >-
+      2026-11-02唯一真实chat，64输出上限，实际input4748/output6/total4754。
+      首个DOM百分比发送后106.6毫秒出现，Stop与running均为true且未EOF，
+      比EOF早4190.8毫秒。真实context为7280/32768=22.2%估算后变为
+      4754/32768=14.5%非估算；15项断言通过，四尺寸Panel在界内，无脚本或console错误。
+      两合成会话逐个DELETE204，专用库count0，本轮四端口和临时资源已精确清理。
+    source: >-
+      docs/validation/2026-11-02-assistant-browser-runtime.json;
+      docs/validation/2026-11-02-assistant-real-runtime.md;
+      docs/validation/2026-11-02-primary-frontend.md;
+      logs/visual-validation-20261102/real-model-ui/browser-e2e-result.json
+    updated_at: "2026-11-02"
+fingerprints:
+  - id: assistant-context-20261101
+    date: "2026-11-01"
+    commit: "e8760510d4c044dd07a9513553139c951625358b"
+    cli: "Postman CLI 1.77.0；工作区含未提交的上下文压缩与前端变更"
+  - id: assistant-real-runtime-20261102
+    date: "2026-11-02"
+    commit: "e8760510d4c044dd07a9513553139c951625358b"
+    cli: "当前未提交源码；真实验收直接调用Python/Codex适配器，非Postman模型仿真；修后源码hash见JSON记录"

@@ -1,0 +1,120 @@
+{
+  "date": "2026-11-02",
+  "status": "passed",
+  "real": [
+    "current FastAPI HTTP",
+    "PostgreSQL",
+    "Redis",
+    "current catalog model",
+    "CodexOAuthAdapter"
+  ],
+  "simulated": [],
+  "synthetic_data_only": true,
+  "configured_test_budget_tokens": 11000,
+  "max_model_requests": 3,
+  "max_output_tokens_per_request": 256,
+  "credentials_persisted": false,
+  "semantic_facts_correct": true,
+  "verified_synthetic_facts": {
+    "point_code": "T001",
+    "temperature_c": 26.5,
+    "read_only": true,
+    "can_write": false
+  },
+  "full_history_retained": true,
+  "history_message_count": 6,
+  "persisted_summary_checks": {
+    "has_point_code": true,
+    "has_temperature": true,
+    "has_readonly_constraint": true,
+    "has_valid_cut": true
+  },
+  "context_states": ["compressing", "compressed", "ready", "ready"],
+  "compression_count": 1,
+  "final_context": {
+    "used_tokens": 4395,
+    "max_tokens": 11000,
+    "percent": 40.0,
+    "is_estimated": false,
+    "state": "ready",
+    "compression_count": 1
+  },
+  "model_requests": [
+    {
+      "kind": "summary",
+      "max_output_tokens": 256,
+      "completed": true,
+      "usage": {
+        "input_tokens": 2082,
+        "output_tokens": 98,
+        "total_tokens": 2180,
+        "input_token_details": {
+          "cache_creation": 0,
+          "cache_read": 0
+        },
+        "output_token_details": {
+          "reasoning": 0
+        }
+      }
+    },
+    {
+      "kind": "summary",
+      "max_output_tokens": 256,
+      "completed": true,
+      "usage": {
+        "input_tokens": 1121,
+        "output_tokens": 106,
+        "total_tokens": 1227,
+        "input_token_details": {
+          "cache_creation": 0,
+          "cache_read": 0
+        },
+        "output_token_details": {
+          "reasoning": 0
+        }
+      }
+    },
+    {
+      "kind": "chat",
+      "max_output_tokens": 256,
+      "completed": true,
+      "usage": {
+        "input_tokens": 4367,
+        "output_tokens": 28,
+        "total_tokens": 4395,
+        "input_token_details": {
+          "cache_creation": 0,
+          "cache_read": 0
+        },
+        "output_token_details": {
+          "reasoning": 0
+        }
+      }
+    }
+  ],
+  "source_sha256": {
+    "server/domain/llmcore/src/llmcore/memory/summarize.py": "5cef0263da655adad2c4d142cabeb4bd2015b375cec33df98acacc30fdf61823",
+    "server/services/ai-assistant/src/ai_assistant/apps/chat/services/context_model.py": "404a4e37475e0af878816762b8ff67dc7cfd769fadd8f405e587880f75f36b96",
+    "server/services/ai-assistant/src/ai_assistant/apps/chat/services/context_summary.py": "73bdde6f43b76183d3b0bbbfec77e678d411ec686d54aacdd50138a5a5b46e18",
+    "server/services/ai-assistant/src/ai_assistant/apps/chat/services/advance_service.py": "0a00ba940d2a9793c2d4a5b30a85ec5f05a99745e0f1ef58dba1b7e23c1d238e"
+  },
+  "head": "e8760510d4c044dd07a9513553139c951625358b",
+  "worktree_is_dirty": true,
+  "new_process_after_fix": true,
+  "model_catalog_snapshot_from_current_primary": true,
+  "regression_test_was_red_before_fix": true,
+  "server_pid_after_fix": 92194,
+  "terminal_verified": true,
+  "owned_sessions_remaining_before_teardown": 0,
+  "only_this_run_temporary_resources_removed": true,
+  "temporary_ports_closed": {
+    "18086": true,
+    "55439": true,
+    "56389": true
+  },
+  "regression_checks": {
+    "llmcore_targeted_and_contract_passed": 96,
+    "knowledge_targeted_passed": 67,
+    "assistant_integration_and_summary_units_correct_environment_passed": 139
+  }
+}

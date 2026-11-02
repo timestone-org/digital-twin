@@ -1,0 +1,144 @@
+{
+  "date": "2026-11-02",
+  "status": "passed",
+  "model": {
+    "model_requests": [
+      {
+        "kind": "chat",
+        "max_output_tokens": 64,
+        "completed": true,
+        "usage": {
+          "input_tokens": 4748,
+          "output_tokens": 6,
+          "total_tokens": 4754,
+          "input_token_details": {
+            "cache_creation": 0,
+            "cache_read": 0
+          },
+          "output_token_details": {
+            "reasoning": 0
+          }
+        }
+      }
+    ],
+    "catalog_snapshot_from_primary": true,
+    "selected_kind": "codex_oauth",
+    "max_model_requests": 1,
+    "context_budget": 32768
+  },
+  "proxy": {
+    "synthetic_actor": true,
+    "actual_model_data_not_simulated": true,
+    "streaming_not_buffered": true,
+    "context_frames": [
+      {
+        "elapsed_ms": 97.82,
+        "upstream_stream_still_open": true,
+        "context": {
+          "used_tokens": 7280,
+          "max_tokens": 32768,
+          "percent": 22.2,
+          "is_estimated": true,
+          "state": "ready",
+          "compression_count": 0
+        }
+      },
+      {
+        "elapsed_ms": 4259.87,
+        "upstream_stream_still_open": true,
+        "context": {
+          "used_tokens": 4754,
+          "max_tokens": 32768,
+          "percent": 14.5,
+          "is_estimated": false,
+          "state": "ready",
+          "compression_count": 0
+        }
+      }
+    ],
+    "requests": [
+      {
+        "method": "GET",
+        "route": "ready",
+        "status": 200
+      },
+      {
+        "method": "POST",
+        "route": "sessions",
+        "status": 201
+      },
+      {
+        "method": "GET",
+        "route": "sessions",
+        "status": 200
+      },
+      {
+        "method": "POST",
+        "route": "sessions",
+        "status": 201
+      },
+      {
+        "method": "GET",
+        "route": "sessions",
+        "status": 200
+      },
+      {
+        "method": "GET",
+        "route": "sessions",
+        "status": 200
+      },
+      {
+        "method": "POST",
+        "route": "advance",
+        "status": 200
+      }
+    ]
+  },
+  "browser_evidence": "logs/visual-validation-20261102/real-model-ui/browser-e2e-result.json",
+  "real_model_not_simulated": true,
+  "synthetic_identity_injected_server_side": true,
+  "browser_received_signing_secret": false,
+  "browser_assertions": {
+    "context_visible_while_stop_and_stream_running": true,
+    "one_browser_advance": true,
+    "actual_sse_status_200": true,
+    "has_context_frames": true,
+    "turn_done_received": true,
+    "ui_usage_matches_last_context": true,
+    "aria_value_matches_last_context": true,
+    "percentage_label_matches": true,
+    "aria_token_counts_match": true,
+    "last_usage_not_estimated": true,
+    "assistant_reply_present": true,
+    "no_error_entry": true,
+    "four_viewport_panels_in_bounds": true,
+    "no_browser_script_errors": true,
+    "no_console_errors": true
+  },
+  "browser_errors": [],
+  "browser_page_error_count": 0,
+  "browser_console_error_count": 0,
+  "browser_last_real_context": {
+    "used_tokens": 4754,
+    "max_tokens": 32768,
+    "percent": 14.5,
+    "is_estimated": false,
+    "state": "ready",
+    "compression_count": 0
+  },
+  "owned_sessions_deleted": 2,
+  "terminal_verified": true,
+  "only_this_run_temporary_resources_removed": true,
+  "owned_sessions_remaining_before_teardown": 0,
+  "temporary_ports_closed": {
+    "18086": true,
+    "18087": true,
+    "55439": true,
+    "56389": true
+  },
+  "source_business_code_changes_for_browser_run": false,
+  "frontend_summary": "logs/visual-validation-20261102/real-model-ui/summary.json",
+  "frontend_report": "docs/validation/2026-11-02-primary-frontend.md",
+  "observed_ui_first_percentage_after_advance_ms": 106.6,
+  "observed_ui_percentage_preceded_stream_eof_ms": 4190.8
+}
