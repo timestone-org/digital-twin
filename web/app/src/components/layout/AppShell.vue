@@ -20,21 +20,34 @@ import AppCompactNav from './AppCompactNav.vue'
 import AppTopbar from './AppTopbar.vue'
 import { useEmbedContext } from '@/features/embed/context'
 import { useCompactNavigation } from '@/composables/useCompactNavigation'
-import { watch } from 'vue'
+import { computed, useSlots, watch } from 'vue'
+import { DtResizableLayout } from '@dt/ui'
 import WorkspaceTabs from '@/features/workspace/WorkspaceTabs.vue'
 import { useWorkspace, useWorkspacePage } from '@/features/workspace/context'
 
 const embed = useEmbedContext()
 const isCompact = useCompactNavigation()
 
-const props = defineProps<{
-  focusMode?: boolean
-  title?: string | undefined
-  subtitle?: string | undefined
-  /** 给了才在标题左侧显示返回入口，取值是站内路径。 */
-  backTo?: string | undefined
-  backLabel?: string | undefined
-}>()
+const props = withDefaults(
+  defineProps<{
+    focusMode?: boolean
+    title?: string | undefined
+    subtitle?: string | undefined
+    /** 给了才在标题左侧显示返回入口，取值是站内路径。 */
+    backTo?: string | undefined
+    backLabel?: string | undefined
+    sidebarVisible?: boolean
+  }>(),
+  { sidebarVisible: true },
+)
+const slots = useSlots()
+const hasSidebar = computed(
+  () => Boolean(slots.sidebar) && props.sidebarVisible,
+)
+const panes = [
+  { id: 'sidebar', label: '业务导航', size: 1, minSize: 190 },
+  { id: 'content', label: '页面', size: 4, minSize: 360 },
+]
 const workspace = useWorkspace()
 const page = useWorkspacePage()
 watch(
@@ -50,36 +63,45 @@ watch(
   <div class="dt-grid-bg flex h-dvh w-full overflow-hidden bg-surface-base">
     <AppNavRail v-if="!embed.isEmbedded.value && !focusMode && !isCompact" />
 
-    <slot name="sidebar" />
-
-    <div class="flex min-w-0 flex-1 flex-col">
-      <AppTopbar
-        :compact="isCompact"
-        :title="title"
-        :subtitle="subtitle"
-        :back-to="backTo"
-        :back-label="backLabel"
-      >
-        <template #navigation>
-          <AppCompactNav
-            v-if="isCompact && !embed.isEmbedded.value && !focusMode"
-          />
-        </template>
-        <template #actions><slot name="actions" /></template>
-      </AppTopbar>
-
-      <div class="relative flex min-h-0 flex-1 flex-col">
-        <WorkspaceTabs v-if="!embed.isEmbedded.value" />
-        <main
-          class="flex min-h-0 min-w-0 flex-1 flex-col overflow-hidden"
-          :class="[
-            focusMode ? 'p-2' : isCompact ? 'p-3' : 'p-5',
-            { 'pt-5': workspace && !embed.isEmbedded.value },
-          ]"
+    <component
+      :is="hasSidebar ? DtResizableLayout : 'div'"
+      class="flex min-h-0 min-w-0 flex-1 flex-col"
+      v-bind="
+        hasSidebar
+          ? { panes, stackAt: 720, storageKey: 'dt.shell.sidebar.layout' }
+          : {}
+      "
+    >
+      <template #sidebar><slot name="sidebar" /></template>
+      <div class="flex min-h-0 min-w-0 flex-1 flex-col">
+        <AppTopbar
+          :compact="isCompact"
+          :title="title"
+          :subtitle="subtitle"
+          :back-to="backTo"
+          :back-label="backLabel"
         >
-          <slot />
-        </main>
+          <template #navigation>
+            <AppCompactNav
+              v-if="isCompact && !embed.isEmbedded.value && !focusMode"
+            />
+          </template>
+          <template #actions><slot name="actions" /></template>
+        </AppTopbar>
+
+        <div class="relative flex min-h-0 flex-1 flex-col">
+          <WorkspaceTabs v-if="!embed.isEmbedded.value" />
+          <main
+            class="flex min-h-0 min-w-0 flex-1 flex-col overflow-hidden"
+            :class="[
+              focusMode ? 'p-2' : isCompact ? 'p-3' : 'p-5',
+              { 'pt-5': workspace && !embed.isEmbedded.value },
+            ]"
+          >
+            <slot />
+          </main>
+        </div>
       </div>
-    </div>
+    </component>
   </div>
 </template>

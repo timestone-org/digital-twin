@@ -136,28 +136,39 @@ describe('AppShell', () => {
     expect(wrapper.find('.business-sidebar').exists()).toBe(true)
   })
 
-  it('不填 sidebar 槽时不多出任何节点', () => {
+  it('不填 sidebar 槽时只保留内容区且没有分隔条', () => {
     const wrapper = mount(AppShell, { attachTo: document.body })
     const root = document.querySelector('.dt-grid-bg')
     // 导航条 + 内容列，不多不少：空插槽不许留下一个占位节点，否则 flex 会多一格
     expect(root?.children).toHaveLength(2)
+    expect(wrapper.find('[data-pane="sidebar"]').exists()).toBe(false)
+    expect(wrapper.find('[role="separator"]').exists()).toBe(false)
     wrapper.unmount()
   })
 
-  it('sidebar 槽渲染在导航条与内容列之间', () => {
+  it('sidebar 槽与内容由同一布局分隔，页面动作留在内容区', () => {
     const wrapper = mount(AppShell, {
       attachTo: document.body,
       slots: { sidebar: '<nav class="probe">项目栏</nav>' },
     })
-    const root = document.querySelector('.dt-grid-bg')
-    const children = root === null ? [] : [...root.children]
-    const sidebar = document.querySelector('.probe')
-    const main = document.querySelector('main')
+    expect(wrapper.get('[data-pane="sidebar"] .probe').text()).toBe('项目栏')
+    expect(wrapper.find('[data-pane="content"] main').exists()).toBe(true)
+    expect(
+      wrapper.get('[role="separator"]').attributes('aria-label'),
+    ).toContain('业务导航')
+    wrapper.unmount()
+  })
 
-    expect(children).toHaveLength(3)
-    expect(sidebar === null ? -1 : children.indexOf(sidebar)).toBe(1)
-    // 顶栏与主内容仍在最后那一列里，侧栏不许挤进那一列
-    expect(main !== null && children[2]?.contains(main)).toBe(true)
+  it('sidebarVisible 关闭时不占导航宽度，也不保留分隔条', async () => {
+    const wrapper = mount(AppShell, {
+      props: { sidebarVisible: false },
+      slots: { sidebar: '<nav class="probe">项目栏</nav>' },
+    })
+    expect(wrapper.find('.probe').exists()).toBe(false)
+    expect(wrapper.find('[role="separator"]').exists()).toBe(false)
+    await wrapper.setProps({ sidebarVisible: true })
+    expect(wrapper.find('.probe').exists()).toBe(true)
+    expect(wrapper.find('[role="separator"]').exists()).toBe(true)
     wrapper.unmount()
   })
 })

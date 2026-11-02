@@ -13,7 +13,7 @@
  */
 import { computed } from 'vue'
 import type { CombinationCoverage } from '@dt/contracts'
-import { DtEmpty, DtProgress, DtTag } from '@dt/ui'
+import { DtCard, DtEmpty, DtProgress, DtTag } from '@dt/ui'
 
 import { THIN_THRESHOLD, coverageRows } from '../scripts/startupView'
 
@@ -34,8 +34,11 @@ function toggle(value: string): void {
 </script>
 
 <template>
-  <aside
-    class="flex min-h-0 flex-col gap-2 rounded-lg border border-border-subtle bg-surface-panel p-3"
+  <DtCard
+    padding="sm"
+    class="flex min-h-0 flex-1 flex-col gap-2"
+    role="complementary"
+    aria-label="组合覆盖"
   >
     <div class="flex shrink-0 items-baseline justify-between gap-2">
       <span class="text-xs tracking-widest text-text-secondary">组合覆盖</span>
@@ -83,5 +86,5 @@ function toggle(value: string): void {
     <p v-if="rows.length > 0" class="shrink-0 text-2xs text-text-disabled">
       少于 {{ THIN_THRESHOLD }} 条的已标黄：样本太少，先别拿它训练。
     </p>
-  </aside>
+  </DtCard>
 </template>

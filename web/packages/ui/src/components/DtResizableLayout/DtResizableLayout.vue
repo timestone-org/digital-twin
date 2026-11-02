@@ -34,7 +34,7 @@ function separatorLabel(index: number): string {
   >
     <template v-for="(pane, index) in panes" :key="pane.id">
       <div class="dt-resizable-layout__pane" :data-pane="pane.id">
-        <slot :name="pane.id" />
+        <slot :name="pane.id"><slot v-if="index === panes.length - 1" /></slot>
       </div>
       <ResizeHandle
         v-if="index < panes.length - 1"

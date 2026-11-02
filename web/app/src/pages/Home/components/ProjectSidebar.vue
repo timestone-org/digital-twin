@@ -40,7 +40,7 @@ function onRenamed(projectId: string, name: string): void {
 
 <template>
   <aside
-    class="dt-scanlines flex h-full w-60 shrink-0 flex-col border-r border-border-subtle bg-surface-panel/60"
+    class="dt-scanlines flex h-full w-full min-w-0 flex-col border-r border-border-subtle bg-surface-panel/60"
     aria-label="项目"
   >
     <div class="flex items-center justify-between px-4 pb-2 pt-5">
