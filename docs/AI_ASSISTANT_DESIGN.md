@@ -146,6 +146,9 @@ END——那一步没人执行；而那坨尖括号原样成了给用户的答�
 会改变 B 段。只要能力上下文未变，历史和末尾状态仍能复用前缀；把快照夹到前面则会
 让后面的工具声明与整段历史每轮一起失效。
 
+SSE 的 `context` 事件声明模型输入预算，载荷为 `{used_tokens,max_tokens,percent,is_estimated,state,compression_count}`。
+`state` 为 `ready` / `compressing` / `compressed`；使用率按配置预算计算，估算数由 `is_estimated` 标明。
+
 ⚠ **A 段一个字都不许跟着会话变。** 「当前时间」「当前用户」这类东西只有
 一个落点：末尾易变状态。这条纪律由 `tests/contract/test_prompt_prefix.py` 守着。
 

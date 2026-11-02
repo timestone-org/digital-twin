@@ -119,6 +119,36 @@ afterEach(() => {
   window.history.replaceState(null, '', '/')
 })
 
+it('上下文帧交给订阅者且不改变正常回合完成', async () => {
+  const usage = {
+    used_tokens: 8192,
+    max_tokens: 32768,
+    percent: 25,
+    is_estimated: true,
+    state: 'compressed',
+    compression_count: 1,
+  }
+  const { advance } = advanceOf([
+    [frame('context', usage), frame('turn.done', { reply: '完成' })],
+  ])
+  const { sink, seen } = sinkOf()
+  const onContext = vi.fn()
+  await runTurn(inputOf(advance), { ...sink, onContext })
+  expect(onContext).toHaveBeenCalledExactlyOnceWith(usage)
+  expect(seen.replies).toEqual(['完成'])
+})
+
+it('畸形上下文帧不会伪造用量或中断答复', async () => {
+  const { advance } = advanceOf([
+    [frame('context', { percent: 99 }), frame('turn.done', { reply: '完成' })],
+  ])
+  const { sink, seen } = sinkOf()
+  const onContext = vi.fn()
+  await runTurn(inputOf(advance), { ...sink, onContext })
+  expect(onContext).not.toHaveBeenCalled()
+  expect(seen.replies).toEqual(['完成'])
+})
+
 it('每轮上报当前路径且不包含查询参数和片段', async () => {
   window.history.replaceState(
     null,

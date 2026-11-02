@@ -7,6 +7,7 @@
 
 from typing import Any
 
+import pytest
 from langchain_core.messages import AIMessage
 from unit.fakes import ScriptedResponder
 
@@ -107,6 +108,63 @@ async def test_a_real_fold_carries_the_boundary_and_the_stamp() -> None:
     assert got.through_seq == 10
     assert got.model == STAMP
     assert "锅炉" in got.text
+
+
+async def test_structured_summary_keeps_text_and_excludes_reasoning() -> None:
+    responder = ScriptedResponder(
+        [
+            AIMessage(
+                content=[
+                    {
+                        "type": "reasoning",
+                        "summary": [
+                            {"type": "summary_text", "text": "内部推理不应存储"}
+                        ],
+                        "encrypted_content": "private-reasoning",
+                    },
+                    {"type": "text", "text": "T001 温度26.5，用户要求只读。"},
+                ]
+            )
+        ]
+    )
+    folder = fold.ModelSummarizer(model=responder, profile="std")
+
+    got = await folder.fold([_row("user", "只读解释T001温度", 1)], 2, None)
+
+    assert got is not None
+    assert got.text == "T001 温度26.5，用户要求只读。"
+    assert got.through_seq == 2
+
+
+@pytest.mark.parametrize(
+    ("content", "expected"),
+    [
+        ("T001 温度26.5", "T001 温度26.5"),
+        ("   ", None),
+        ([], None),
+        ([{"type": "text", "text": ""}], None),
+        (
+            [
+                {
+                    "type": "reasoning",
+                    "summary": [{"type": "summary_text", "text": "内部推理"}],
+                    "encrypted_content": "private-reasoning",
+                }
+            ],
+            None,
+        ),
+        ([{"type": "refusal", "refusal": "不可作为既定事实"}], None),
+    ],
+)
+async def test_summary_text_shapes(
+    content: str | list[str | dict[str, Any]], expected: str | None
+) -> None:
+    responder = ScriptedResponder([AIMessage(content=content)])
+    folder = fold.ModelSummarizer(model=responder, profile="std")
+
+    got = await folder.fold([_row("user", "只读解释T001温度", 1)], 2, None)
+
+    assert (got.text if got is not None else None) == expected
 
 
 async def test_folding_feeds_the_previous_summary_not_the_whole_past() -> None:

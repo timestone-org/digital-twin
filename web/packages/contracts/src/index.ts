@@ -532,6 +532,7 @@ export type {
   AssistantAskAnswer,
   AssistantAskOption,
   AssistantAskRequest,
+  AssistantContextUsage,
   AssistantCapability,
   AssistantDeltaChannel,
   AssistantEventName,

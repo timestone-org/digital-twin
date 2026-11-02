@@ -11,8 +11,10 @@ from typing import Any
 
 import pytest
 
+from ai_assistant.apps.chat.api.advance import _frame_of
 from llmcore.output import events
 from llmcore.output.events import EVENT_SPECS
+from llmcore.output.payloads import ContextPayload
 from llmcore.output.ports import EventSpec
 from llmcore.turn.types import (
     ClientToolCall,
@@ -48,6 +50,7 @@ def _source_of(path: Path) -> str:
 # 线上的六个名字。⚠ 逐字写死在这里，不从被测代码推导：从被测代码推导的话，
 # 谁把某一档改了名，这条闸会跟着一起改口，而前端那边当场就收不到那一档了
 WIRE_NAMES = (
+    "context",
     "message.delta",
     "step",
     "client_tool.request",
@@ -70,6 +73,16 @@ def _sample_frames() -> dict[str, str]:
     )
     calls = (ClientToolCall(call_id="c1", name="dashboard.save", arguments={}),)
     return {
+        events.EVENT_CONTEXT: _frame_of(
+            ContextPayload(
+                used_tokens=1000,
+                max_tokens=32768,
+                percent=3.1,
+                is_estimated=True,
+                state="ready",
+                compression_count=0,
+            )
+        ),
         events.EVENT_DELTA: events.delta_frame(
             TurnDelta(channel="answer", text="好")
         ),
@@ -90,7 +103,7 @@ def _body_of(raw: str) -> dict[str, Any]:
     return parsed
 
 
-def test_the_wire_names_are_exactly_the_six_that_shipped() -> None:
+def test_the_wire_names_are_exactly_the_declared_contract() -> None:
     """名字是活契约：改一个字，前端那一档就再也收不到。"""
     assert tuple(spec.name for spec in EVENT_SPECS) == WIRE_NAMES
 

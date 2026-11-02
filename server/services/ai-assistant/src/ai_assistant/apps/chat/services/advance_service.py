@@ -76,6 +76,7 @@ from llmcore.memory import (
     history,
     summarize,
 )
+from llmcore.output.payloads import ContextPayload
 from llmcore.tools.shapes import ToolSpec
 from llmcore.turn.loop import (
     ServerToolRunner,
@@ -343,7 +344,7 @@ def _history_row(row: ChatMessage) -> HistoryRow:
 
 
 # 一次推进往外吐的东西：回合事件，外加计划快照
-AdvanceEvent = TurnEvent | plan_service.PlanUpdate
+AdvanceEvent = TurnEvent | plan_service.PlanUpdate | ContextPayload
 
 
 async def advance(

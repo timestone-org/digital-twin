@@ -17,6 +17,7 @@ import type {
   AssistantAskOption,
   AssistantAskRequest,
   AssistantCapability,
+  AssistantContextUsage,
   AssistantModelProfile,
   AssistantMcpWritePrepare,
   AssistantMcpWriteDecision,
@@ -280,6 +281,37 @@ describe('三个闭合集合与后端 enums.py 里的那一份逐字相同', () 
 })
 
 describe('事件流的事件名两侧逐字相同', () => {
+  it('上下文事件的六个字段与后端 ContextPayload 逐字一致', () => {
+    const source = readFileSync(
+      join(
+        process.cwd(),
+        '..',
+        'server',
+        'domain',
+        'llmcore',
+        'src',
+        'llmcore',
+        'output',
+        'payloads.py',
+      ),
+      'utf8',
+    )
+    const block =
+      /class ContextPayload\(BaseModel\):([\s\S]*?)(?=\nclass )/.exec(
+        source,
+      )?.[1] ?? ''
+    const fields = [...block.matchAll(/^ {4}(\w+):/gm)].map((match) => match[1])
+    const declared = {
+      used_tokens: true,
+      max_tokens: true,
+      percent: true,
+      is_estimated: true,
+      state: true,
+      compression_count: true,
+    } satisfies Keys<AssistantContextUsage>
+    expect(fields.sort()).toEqual(Object.keys(declared).sort())
+  })
+
   // ⚠ SSE 的载荷 openapi 描述不了，所以这是一份「没有生成物兜底」的契约。
   // 漂开的表现是「助手做了一步但界面上没有」——前端遇到没见过的事件名只能
   // 静默丢弃，而两边代码单看都对。

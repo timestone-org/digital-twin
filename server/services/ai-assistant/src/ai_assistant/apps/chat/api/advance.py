@@ -33,6 +33,7 @@ from lib.auth import CallerContext
 from lib.errors import AppError, ValidationFailed
 from lib.logging import current_log_context, get_logger
 from llmcore.output import events
+from llmcore.output.payloads import ContextPayload
 from llmcore.turn.types import (
     TurnDelta,
     TurnStep,
@@ -127,6 +128,8 @@ def _frame_of(item: advance_service.AdvanceEvent) -> str:
         return events.step_frame(item)
     if isinstance(item, PlanUpdate):
         return events.plan_frame(item.plan)
+    if isinstance(item, ContextPayload):
+        return events.frame(events.EVENT_CONTEXT, item.model_dump())
     return events.outcome_frame(item)
 
 

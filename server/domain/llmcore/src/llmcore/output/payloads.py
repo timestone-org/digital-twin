@@ -8,9 +8,20 @@
 少了它，这份声明就只是一段自说自话的文档。
 """
 
-from typing import Any
+from typing import Any, Literal
 
-from pydantic import BaseModel
+from pydantic import BaseModel, Field
+
+
+class ContextPayload(BaseModel):
+    """当前模型输入的容量与压缩状态；估算值由 is_estimated 标明。"""
+
+    used_tokens: int = Field(ge=0)
+    max_tokens: int = Field(gt=0)
+    percent: float = Field(ge=0, le=100)
+    is_estimated: bool
+    state: Literal["ready", "compressing", "compressed"]
+    compression_count: int = Field(ge=0)
 
 
 class DeltaPayload(BaseModel):
