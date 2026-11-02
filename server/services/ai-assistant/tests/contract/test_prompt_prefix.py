@@ -194,7 +194,11 @@ def test_the_summary_holds_still_inside_one_step() -> None:
     )
 
     stable = _wire(
-        [earlier[0], *summarize.messages_of(stored), *history.replay(first)]
+        [
+            earlier[0],
+            *summarize.messages_of(stored),
+            *history.with_user_requests(first, []),
+        ]
     )
     assert _wire(later).startswith(stable)
 

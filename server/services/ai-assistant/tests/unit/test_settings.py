@@ -48,6 +48,18 @@ def test_model_is_off_by_default_and_needs_no_key() -> None:
     assert settings.model_api_key is None
 
 
+@pytest.mark.parametrize("tokens", [-1, 0, 1023])
+def test_context_budget_rejects_too_small_windows(tokens: int) -> None:
+    with pytest.raises(ValidationError) as caught:
+        _settings(model_context_tokens=tokens)
+    assert caught.value.errors()[0]["loc"] == ("model_context_tokens",)
+
+
+@pytest.mark.parametrize("tokens", [1024, 32768])
+def test_context_budget_accepts_minimum_and_default(tokens: int) -> None:
+    assert _settings(model_context_tokens=tokens).model_context_tokens == tokens
+
+
 def test_model_on_without_key_is_rejected_at_startup() -> None:
     with pytest.raises(ValidationError) as error:
         _settings(model_enabled=True)

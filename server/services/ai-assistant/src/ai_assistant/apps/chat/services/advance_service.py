@@ -8,6 +8,7 @@
 回来，而它要能在库里找到自己接的是哪一步。
 """
 
+import asyncio
 import uuid
 from collections.abc import AsyncIterator, Callable, Sequence
 from contextlib import AbstractAsyncContextManager
@@ -20,7 +21,6 @@ from langchain_core.messages import (
     SystemMessage,
     ToolMessage,
 )
-from sqlalchemy import update
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from ai_assistant.apps.chat.crud import session_crud
@@ -31,6 +31,14 @@ from ai_assistant.apps.chat.services import (
     mcp_writes,
 )
 from ai_assistant.apps.chat.services.client_result import ClientToolResult
+from ai_assistant.apps.chat.services.context_stream import (
+    ContextEvent,
+    context_model,
+    stream_context,
+)
+from ai_assistant.apps.chat.services.context_summary import (
+    summary_of as _summary_of,
+)
 from ai_assistant.apps.chat.services.intent import select as tool_select
 from ai_assistant.apps.chat.services.memory import state_block
 from ai_assistant.apps.chat.services.memory.page_context import (
@@ -41,7 +49,6 @@ from ai_assistant.apps.chat.services.memory.prompt import build_system_prompt
 from ai_assistant.apps.chat.services.memory.skill_context import (
     restored_messages,
 )
-from ai_assistant.apps.chat.services.model_retry import RetryingModel
 from ai_assistant.apps.chat.services.perception import vision
 from ai_assistant.apps.chat.services.planning import plan as plan_service
 from ai_assistant.apps.chat.services.tools.execution import ToolExecutor
@@ -76,13 +83,10 @@ from llmcore.memory import (
     history,
     summarize,
 )
-from llmcore.output.payloads import ContextPayload
 from llmcore.tools.shapes import ToolSpec
 from llmcore.turn.loop import (
     ServerToolRunner,
     TurnDeps,
-    TurnEvent,
-    stream_turn,
 )
 from llmcore.turn.types import (
     TurnOutcome,
@@ -118,6 +122,7 @@ class AdvanceDeps:
     # 都没有」该收窄的一个不留（`intent/ports.py` 的 `TurnContext.codes`）
     codes: frozenset[str] | None = None
     skills: SkillCatalog | None = None
+    context_tokens: int = 32_768
 
 
 def deps_of(
@@ -164,6 +169,7 @@ def deps_of(
         extra_specs=registry.specs_of(MCP_PROVIDER),
         codes=codes,
         skills=container.skills,
+        context_tokens=container.settings.model_context_tokens,
     )
 
 
@@ -233,6 +239,8 @@ def assemble(
     Args: payload, rows, plan, summary, skills。
     """
     recent = history.window(rows, MAX_HISTORY_MESSAGES)
+    if summary is not None:
+        recent = [row for row in recent if row.seq >= summary.through_seq]
     selected = (
         skills
         if skills is not None
@@ -344,7 +352,7 @@ def _history_row(row: ChatMessage) -> HistoryRow:
 
 
 # 一次推进往外吐的东西：回合事件，外加计划快照
-AdvanceEvent = TurnEvent | plan_service.PlanUpdate | ContextPayload
+AdvanceEvent = ContextEvent | plan_service.PlanUpdate
 
 
 async def advance(
@@ -371,8 +379,11 @@ async def advance(
         extra=deps.extra_specs,
         skills=selected,
     )
+    updates: asyncio.Queue[ContextEvent | Exception | None] = asyncio.Queue()
     turn = TurnDeps(
-        model=RetryingModel(deps.model),
+        model=context_model(
+            deps, choice, updates.put_nowait, payload.user_text
+        ),
         specs=specs,
         run_tool=ToolExecutor(
             specs, selected, _with_plan_tools(plans, deps.server_tools)
@@ -381,7 +392,7 @@ async def advance(
     )
     produced: list[TurnStep] = []
     outcome: TurnOutcome | None = None
-    async for item in stream_turn(turn, messages):
+    async for item in stream_context(turn, messages, updates):
         if isinstance(item, TurnOutcome):
             outcome = item
             continue
@@ -454,59 +465,6 @@ async def _opened(
         skills=selected,
     )
     return messages, loaded.choice
-
-
-async def _summary_of(
-    deps: AdvanceDeps, chat_session_id: uuid.UUID, loaded: LoadedContext
-) -> Summary | None:
-    """这一轮该挂哪一段摘要：同台阶复用，跨台阶重折。
-
-    ⚠ **同一个台阶内必须原样复用**，不许重折。重折出来的字句一定与上一轮不同，
-    而它排在历史区前面——那就是一个新的前缀断点，后面整段历史跟着作废。
-
-    ⚠ 换了模型也要重折：两截摘要由不同模型折出来时口径可以差很远，
-    而拼在一起看不出接缝。
-
-    ⚠ 折不出来时退回**上一段**（可能是 `None`）：那一段仍然逐字稳定，
-    比没有强，也比抛出去让整个回合发不出去强。
-
-    Args: deps, chat_session_id, loaded。
-    """
-    dropped, kept = history.split(loaded.rows, MAX_HISTORY_MESSAGES)
-    if not dropped:
-        return None
-    through = kept[0].seq if kept else dropped[-1].seq + 1
-    stored = loaded.summary
-    stamp = summarize.stamp_of(
-        ModelChoice(kind="summary", profile=loaded.choice.profile)
-    )
-    kept_as_is = summarize.reuse(stored, through, stamp)
-    if kept_as_is is not None:
-        return kept_as_is
-    folded = await deps.summarizer(loaded.choice.profile).fold(
-        dropped, through, stored
-    )
-    if folded is None:
-        return stored
-    await _save_summary(deps, chat_session_id, folded)
-    return folded
-
-
-async def _save_summary(
-    deps: AdvanceDeps, chat_session_id: uuid.UUID, summary: Summary
-) -> None:
-    """把折出来的那段落库。
-
-    ⚠ 单开一次短事务：折叠那次模型调用已经跑完了，这里只写一行。
-
-    Args: deps, chat_session_id, summary。
-    """
-    async with deps.sessions() as session:
-        await session.execute(
-            update(ChatSession)
-            .where(ChatSession.id == chat_session_id)
-            .values(summary_json=summarize.as_json(summary))
-        )
 
 
 def _choice_of(row: ChatSession | None, payload: AdvanceInput) -> ModelChoice:
