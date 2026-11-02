@@ -38,6 +38,10 @@ from platform_server.apps.modeling.services import (
     instance_service,
     management_queries,
 )
+from platform_server.apps.modeling.services.task_replay import (
+    TaskCommand,
+    run_task_once,
+)
 from platform_server.settings import API_PREFIX
 
 router = APIRouter(
@@ -78,13 +82,14 @@ async def create_instance(
     response: Response,
     write: WriteDep,
 ) -> ApiResponse[ModelingInstanceOut]:
-    created = await write.gate.run_once(
+    command = TaskCommand(
         endpoint="modeling.create_instance",
         model=ModelingInstanceOut,
         action=lambda: instance_service.create_instance(
             session, payload, write.actor
         ),
     )
+    created = await run_task_once(session, write.gate, command)
     response.headers["Location"] = (
         f"{API_PREFIX}/modeling-instances/{created.id}"
     )
@@ -176,13 +181,14 @@ async def deploy_instance(
     write: PublishDep,
     response: Response,
 ) -> ApiResponse[ModelDeploymentOut]:
-    deployed = await write.gate.run_once(
+    command = TaskCommand(
         endpoint=f"modeling.deploy_instance.{instance_id}",
         model=ModelDeploymentOut,
         action=lambda: instance_lifecycle.deploy_instance(
             session, instance_id, payload, write.actor
         ),
     )
+    deployed = await run_task_once(session, write.gate, command)
     response.headers["Location"] = (
         f"{API_PREFIX}/modeling-deployments/{deployed.id}"
     )

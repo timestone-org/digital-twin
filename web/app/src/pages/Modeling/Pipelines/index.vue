@@ -43,7 +43,7 @@ const COLUMNS: readonly DtDataColumn[] = [
     key: 'actions',
     label: '操作',
     align: 'right',
-    width: '14rem',
+    width: '17rem',
     card: 'actions',
   },
 ]
@@ -207,6 +207,14 @@ onMounted(() => void list.reload())
               打开流程图
             </DtButton>
             <PermGuard :codes="[PERMISSION_CODES.modelingManage]">
+              <DtIconButton
+                variant="ghost"
+                size="sm"
+                icon="copy"
+                label="复制流水线"
+                :disabled="ops.isSaving.value"
+                @click="ops.openCopy(row)"
+              />
               <DtIconButton
                 variant="ghost"
                 size="sm"

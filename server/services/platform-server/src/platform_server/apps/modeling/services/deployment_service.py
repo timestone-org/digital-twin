@@ -3,7 +3,7 @@
 import uuid
 from dataclasses import dataclass
 from datetime import UTC, datetime, timedelta
-from typing import NoReturn
+from typing import NoReturn, cast
 
 from sqlalchemy.exc import IntegrityError
 from sqlalchemy.ext.asyncio import AsyncSession
@@ -28,6 +28,7 @@ from platform_server.apps.modeling.models import (
     ModelingDeployment,
     ModelVersion,
 )
+from platform_server.apps.modeling.protocols import ModelTask
 from platform_server.apps.modeling.schemas import (
     ModelApiKeyOut,
     ModelCallStatOut,
@@ -271,6 +272,7 @@ def _present(found: _Presented) -> ModelDeploymentOut:
         model_version_id=row.effective_version_id,
         model_name=found.version.name,
         model_version=found.version.version,
+        task=cast("ModelTask", found.version.task),
         name=row.name,
         description=row.description,
         is_enabled=row.is_enabled,

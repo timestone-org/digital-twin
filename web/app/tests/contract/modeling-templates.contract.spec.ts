@@ -9,6 +9,7 @@ import type {
 import { readFileSync } from 'node:fs'
 import { join } from 'node:path'
 import { describe, expect, it } from 'vitest'
+import { MODELING_TASKS } from '@dt/contracts'
 
 // happy-dom 的 import.meta.url 使用浏览器地址。
 const spec: {
@@ -62,6 +63,7 @@ const pairs = [
       description: true,
       version: true,
       node_count: true,
+      task: true,
       is_enabled: true,
       created_by_name: true,
       created_at: true,
@@ -78,6 +80,7 @@ const pairs = [
       template_id: true,
       template_name: true,
       template_version: true,
+      task: true,
       revision: true,
       archived_at: true,
       latest_run: true,
@@ -88,6 +91,18 @@ const pairs = [
 ] as const
 
 describe('模板与实例契约', () => {
+  it.each(['ModelingTemplateOut', 'ModelingInstanceOut'])(
+    '%s 必需声明与模型版本一致的任务类型',
+    (name) => {
+      expect(spec.components.schemas[name]).toMatchObject({
+        required: expect.arrayContaining(['task']),
+        properties: {
+          task: { type: 'string', enum: [...MODELING_TASKS].sort() },
+        },
+      })
+    },
+  )
+
   it.each(pairs)('%s 字段一致', (name, fields) => {
     expect(Object.keys(fields).sort()).toEqual(
       Object.keys(spec.components.schemas[name]?.properties ?? {}).sort(),

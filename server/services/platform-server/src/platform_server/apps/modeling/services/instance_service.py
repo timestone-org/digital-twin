@@ -32,6 +32,7 @@ from platform_server.apps.modeling.schemas.template import (
 from platform_server.apps.modeling.services.configuration import (
     configure_graph,
     describe_configuration,
+    model_task_of,
     require_template_graph,
 )
 from platform_server.apps.modeling.services.graph_walk import source_table_codes
@@ -196,6 +197,7 @@ def to_instance(record: InstanceRecord) -> ModelingInstanceOut:
         template_id=template.id,
         template_name=template.name,
         template_version=template.version,
+        task=model_task_of(PipelineGraph.model_validate(row.graph_json)),
         revision=record.instance.revision,
         archived_at=record.instance.archived_at,
         latest_run=(

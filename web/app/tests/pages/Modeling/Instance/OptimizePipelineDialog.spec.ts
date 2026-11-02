@@ -24,6 +24,7 @@ const instance: ModelingInstance = {
   template_id: 'published-workflow-v1',
   template_name: '原工作流',
   template_version: 1,
+  task: 'regression',
   revision: 3,
   latest_run: null,
   created_at: '2026-10-30T00:00:00.000Z',

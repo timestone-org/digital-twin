@@ -1,10 +1,16 @@
 # DigitalTwin 第三方接入页面接口说明
 
-文档版本 1.5　接口版本 v1　更新日期 2026 年 10 月 30 日
+文档版本 1.5　接口版本 v1　更新日期 2026 年 11 月 2 日
 
 本文对应系统“分析建模 → 第三方接入 → 接入指南”页面的 8 步流程：选择模板、获取配置、创建模型、配置参数、训练、发布版本、部署、调用服务。平台方预先设计并发布模板，第三方按模板完成建模和使用模型。已有部署时，也可先获取全部已部署模型列表，选择服务后直接调用。
 
 全部请求统一使用用户 APIKey。模板、模型实例和部署服务分别有自己的 ID 或编码，按每一步返回的结果继续调用。
+
+资源关系为「流水线设计 → 模板快照 → 模型实例 → 训练运行 → 模型版本 → 部署」。
+同一设计可以发布多个模板版本，一个模板版本可以创建多个独立实例，一个实例可以训练并发布多个模型版本。
+模板发布时冻结结构与默认参数，训练提交时冻结本次图和参数，模型版本发布后计算内容不可变。
+修改源流水线、模板再次发布或实例重新训练，都不会替换已有实例的模板或线上部署的模型版本。
+部署固定 `model_version_id`，需要使用新版本时必须显式换版；已有模型引用的源流水线禁止删除。
 
 **适用版本**：目标环境须已更新为统一用户 APIKey 的接入版本。BASE_URL、用户 APIKey 和可用模板由平台方提供；本文示例域名、UUID、列名和数值均为示意，实际输入以所选模板及已部署模型的签名为准。
 
@@ -63,6 +69,7 @@ Content-Type: application/json
 | name、description | 部署服务名称和说明 |
 | model_version_id | 固定的模型版本 UUID |
 | model_name、model_version | 模型名称与版本号 |
+| task | 固定版本的模型任务类型，用于选择 :predict、:detect 或 :calculate |
 | is_enabled | 部署是否启用 |
 | is_servable、unservable_reason | 固定版本是否可服务，以及不可服务原因 |
 | max_rows_per_call、rate_limit_per_minute | 单次行数与每分钟配额 |
@@ -85,6 +92,7 @@ Content-Type: application/json
       "model_version_id": "019c0000-0000-7000-8000-000000000004",
       "model_name": "一号冷机能耗版本",
       "model_version": 1,
+      "task": "regression",
       "is_enabled": true,
       "is_servable": true,
       "unservable_reason": null,
@@ -108,7 +116,11 @@ curl --silent --show-error \
   -H "Authorization: Bearer $DT_API_KEY"
 ```
 
-列表不包含完整输入输出签名。选择记录后调用 `GET /open-models/{code}`，根据 `output.task` 再选择预测、异常检测或规则计算接口。只消费已有模型时，可以直接使用这条查询和调用流程。
+`task` 为必填字符串：`regression`、`classification` 调用 `:predict`，
+`anomaly_detection` 调用 `:detect`，`rule_calculation` 调用 `:calculate`。
+类型对应本记录固定的模型版本，不跟随源流水线或新发布的版本改变。
+列表不包含完整输入输出签名。选择记录后调用 `GET /open-models/{code}` 读取真实输入字段，
+其中 `output.task` 与该部署的 `task` 一致。只消费已有模型时，可以直接使用这条查询和调用流程。
 
 ## 找回实例、历史运行和历史版本
 
@@ -239,6 +251,7 @@ curl --silent --show-error \
 | id | 具体模板版本的 ID，后续作为 template_id |
 | name、code | 模板名称和业务编码 |
 | version | 模板版本号 |
+| task | 此模板快照的模型任务类型，发布新版不改变旧版类型 |
 | node_count | 节点数量，帮助核对配置是否完整 |
 | is_enabled | 是否允许基于该模板创建新实例 |
 
@@ -281,7 +294,12 @@ curl --silent --show-error \
 }
 ```
 
-保存返回的 `data.id` 作为 `instance_id`，并保存 `data.revision`。新实例的修订号为 1。返回对象还包括模型名称、编码、来源模板版本、最近运行摘要等信息。
+保存返回的 `data.id` 作为 `instance_id`，并保存 `data.revision`。新实例的修订号为 1。返回对象还包括模型名称、编码、来源模板版本、`task` 和最近运行摘要等信息。
+
+读取模型实例列表使用 `GET /modeling-instances?page=1&size=20`（支持 `q`，权限 `modeling:view`），
+详情使用 `GET /modeling-instances/{instance_id}`。`task` 在训练前就可获取，
+表示当前实例固定结构对应的任务种类；它不表示已经有可调用的模型版本或部署。
+已发布模型版本列表 `GET /modeling-model-versions` 的每条记录同样包含 `task`。
 
 创建时已提交完整 configuration，且不需再修改时，可以直接进入第五步训练。
 

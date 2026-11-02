@@ -5,6 +5,7 @@ import uuid
 from pydantic import Field, JsonValue
 
 from platform_server.apps.modeling.models.deployment import MAX_ROWS_CEILING
+from platform_server.apps.modeling.protocols import ModelTask
 from platform_server.apps.modeling.schemas.common import (
     InputModel,
     Label,
@@ -56,6 +57,7 @@ class ModelingTemplateOut(OutputModel):
     name: str
     description: str | None
     version: int
+    task: ModelTask = Field(description="此模板快照所产出模型的任务类型")
     node_count: int
     is_enabled: bool
     created_by_name: str
@@ -86,6 +88,9 @@ class ModelingInstanceOut(OutputModel):
     template_id: uuid.UUID
     template_name: str
     template_version: int
+    task: ModelTask = Field(
+        description="此实例独立图所产出模型的任务类型，训练前即返回"
+    )
     revision: int
     latest_run: RunSummaryOut | None
     created_at: Utc

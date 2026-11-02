@@ -90,6 +90,7 @@ class TreeRegressor(OperatorBase):
     """树集成回归。拟合结果走二进制产物（通道 B）。"""
 
     CODE = "tree_regressor"
+    MODEL_TASK = TASK_REGRESSION
     NAME = "树回归"
     DESCRIPTION = "随机森林 / 梯度提升回归；对量纲不敏感，但不会外推"
     CATEGORY = "model"

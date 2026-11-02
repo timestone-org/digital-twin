@@ -294,6 +294,7 @@ class AppContext:
     session: AsyncSession
     """素材字节的进程内替身；用例据它断言「搬没搬」「删没删」。"""
     object_store: FakeObjectStore
+    idempotency: IdempotencyStore
     """台账报脏的进程内替身；用例据它断言「报没报脏」。"""
     dirty: FakeSetSink
     """回填的起跑口。⚠ 与应用同一个实例：端点用例据它看「起过没有」，
@@ -542,11 +543,11 @@ async def app_context(
             client=client,
             session=session,
             object_store=object_store,
+            idempotency=container.idempotency,
             dirty=external_fakes.dirty,
             backfill=container.dataset.backfill,
             sessions=MakerSessions(maker),
         )
-
     await transaction.rollback()
     await connection.close()
     await container.database.dispose()

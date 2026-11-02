@@ -30,6 +30,7 @@ from platform_server.apps.modeling.schemas.template import (
 )
 from platform_server.apps.modeling.services.configuration import (
     describe_configuration,
+    model_task_of,
     require_template_graph,
 )
 from platform_server.apps.modeling.services.pipeline_service import Actor
@@ -127,6 +128,7 @@ async def update_template(
 
 
 def to_template(row: ModelingTemplate) -> ModelingTemplateOut:
+    graph = PipelineGraph.model_validate(row.graph_json)
     return ModelingTemplateOut(
         id=row.id,
         pipeline_id=row.pipeline_id,
@@ -134,7 +136,8 @@ def to_template(row: ModelingTemplate) -> ModelingTemplateOut:
         name=row.name,
         description=row.description,
         version=row.version,
-        node_count=len(PipelineGraph.model_validate(row.graph_json).nodes),
+        task=model_task_of(graph),
+        node_count=len(graph.nodes),
         is_enabled=row.is_enabled,
         created_by_name=row.created_by_name,
         created_at=row.created_at,

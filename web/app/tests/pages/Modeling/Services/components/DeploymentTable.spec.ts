@@ -1,7 +1,7 @@
 /**
  * @fileoverview 模型服务定宽表中的长名称、版本与不可用原因。
  */
-import type { ModelDeployment } from '@dt/contracts'
+import type { ModelDeployment, ModelingTask } from '@dt/contracts'
 import { mount } from '@vue/test-utils'
 import { describe, expect, it } from 'vitest'
 
@@ -13,6 +13,7 @@ const DEPLOYMENT: ModelDeployment = {
   model_version_id: 'v1',
   model_name: 'M'.repeat(128),
   model_version: 3,
+  task: 'regression',
   name: 'N'.repeat(128),
   description: null,
   is_enabled: true,
@@ -36,6 +37,22 @@ function open(row: ModelDeployment = DEPLOYMENT) {
 }
 
 describe('模型服务长文本', () => {
+  it.each<{ task: ModelingTask; label: string }>([
+    { task: 'regression', label: '回归' },
+    { task: 'classification', label: '分类' },
+    { task: 'anomaly_detection', label: '异常检测' },
+    { task: 'rule_calculation', label: '规则计算' },
+  ])('列表明确显示 $task 的模型类型', ({ task, label }) => {
+    const wrapper = open({ ...DEPLOYMENT, task })
+    expect(wrapper.findAll('thead th').map((cell) => cell.text())).toContain(
+      '模型类型',
+    )
+    expect(wrapper.findAll('tbody td').map((cell) => cell.text())).toContain(
+      label,
+    )
+    wrapper.unmount()
+  })
+
   it('名称和版本不会跨列，完整内容仍可通过提示读取', () => {
     const wrapper = open()
     const cells = wrapper.findAll('tbody td')

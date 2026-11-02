@@ -15,6 +15,7 @@ from platform_server.apps.modeling.models.deployment import (
     CODE_PATTERN,
     MAX_ROWS_CEILING,
 )
+from platform_server.apps.modeling.protocols import ModelTask
 from platform_server.apps.modeling.schemas.common import (
     InputModel,
     Label,
@@ -73,6 +74,7 @@ class ModelDeploymentOut(OutputModel):
     #: 钉的那个版本的名字与版本号，免得界面再查一次
     model_name: str
     model_version: int
+    task: ModelTask = Field(description="部署固定模型版本的任务类型")
     name: str
     description: str | None
     is_enabled: bool

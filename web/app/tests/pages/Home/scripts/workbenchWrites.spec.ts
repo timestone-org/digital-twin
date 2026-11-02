@@ -106,7 +106,24 @@ describe('按起手方式分派', () => {
     expect(spy).toHaveBeenCalledWith('src', {
       newName: '副本',
       targetProjectId: 'p1',
+      includePointBindings: true,
     })
+  })
+
+  it('复制时把忽略点位的选择交给接口', async () => {
+    const spy = vi
+      .spyOn(transferApi, 'duplicateDashboard')
+      .mockResolvedValue(made('d2', '副本'))
+    await createDashboardFrom({
+      ...BLANK,
+      startMode: 'copy',
+      sourceDashboardId: 'src',
+      includePointBindings: false,
+    })
+    expect(spy).toHaveBeenCalledWith(
+      'src',
+      expect.objectContaining({ includePointBindings: false }),
+    )
   })
 
   it('套模板打实例化端点，并把没接上的绑定原样带回来', async () => {
@@ -176,6 +193,7 @@ describe('导入', () => {
     expect(spy).toHaveBeenCalledWith({
       projectId: 'p1',
       payload: PACKAGE,
+      includePointBindings: false,
       newName: '新屏',
     })
   })
@@ -190,8 +208,23 @@ describe('导入', () => {
     expect(spy).toHaveBeenCalledWith({
       projectId: 'p1',
       payload: PACKAGE,
+      includePointBindings: false,
       targetDashboardId: 'd7',
     })
+  })
+
+  it('导入时可显式保留点位绑定', async () => {
+    const spy = vi
+      .spyOn(transferApi, 'importDashboard')
+      .mockResolvedValue(imported('屏'))
+    await importInto('p1', PACKAGE, {
+      newName: '屏',
+      targetDashboardId: null,
+      includePointBindings: true,
+    })
+    expect(spy).toHaveBeenCalledWith(
+      expect.objectContaining({ includePointBindings: true }),
+    )
   })
 
   it('出参里的未解析绑定原样带回来', async () => {

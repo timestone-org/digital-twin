@@ -19,6 +19,7 @@ import { AppShell } from '@/components/layout'
 import { useDashboardDoc } from '@/composables/useDashboardDoc'
 import { useDashboardEditor } from '@/composables/useDashboardEditor'
 import { snapStep } from '@/features/dashboard/canvasSnap'
+import PointBindingChoiceDialog from '@/features/dashboard/PointBindingChoiceDialog.vue'
 import { migrateLegacyEditorLayout } from '@/features/workspace/legacyEditorLayout'
 import { DASHBOARD_THEME_KEY } from '@/features/dashboard/useDashboardTheme'
 import { createEditorActions } from './scripts/editorActions'
@@ -281,6 +282,13 @@ onUnmounted(file.dispose)
         </template>
       </DtResizableLayout>
     </div>
+
+    <PointBindingChoiceDialog
+      v-model:open="extras.exportOpen.value"
+      operation="export"
+      :dashboard-name="file.dashboard.value?.name ?? ''"
+      @submit="extras.confirmExport"
+    />
 
     <EditorOverlays
       :picking-field-key="pickingFieldKey"

@@ -7,17 +7,30 @@
 import uuid
 from datetime import UTC, datetime
 
-from pydantic import BaseModel
+import pytest
+from pydantic import BaseModel, ValidationError
 
 from platform_server.apps.dashboard.schemas import NodeOut
+from platform_server.apps.dashboard.schemas.module_type import (
+    BindingSpecOut,
+    ModuleDefaultSizeOut,
+    ModuleTypeOut,
+)
 from platform_server.apps.dashboard.schemas.transfer import (
     COPY_NAME_SUFFIX,
     DashboardExportIn,
+    DashboardExportOptionsIn,
     DashboardExportOut,
+    DashboardImportIn,
     DashboardImportOut,
+    DuplicateDashboardIn,
     ExportBindingIn,
     ExportNodeIn,
     UnresolvedBindingOut,
+)
+from platform_server.apps.dashboard.services.module_catalog import ModuleCatalog
+from platform_server.apps.dashboard.services.transfer_bindings import (
+    without_point_bindings,
 )
 from platform_server.apps.dashboard.services.transfer_service import (
     MAX_NAME_LENGTH,
@@ -203,3 +216,209 @@ def test_a_copy_takes_the_source_name_plus_the_suffix() -> None:
 def test_a_copy_of_a_maximum_length_name_still_fits_the_limit() -> None:
     # 必须先截断再拼后缀：拼出来超限那一下抛在出参构造处，对外是 500 不是 400
     assert len(copy_name("屏" * MAX_NAME_LENGTH)) == MAX_NAME_LENGTH
+
+
+def transfer_catalog(*, is_pinned: bool = False) -> ModuleCatalog:
+    """声明一个有数组槽的模块；参数 is_pinned 决定是否按实体固定索引。"""
+    return ModuleCatalog(
+        catalog_version=1,
+        modules=(
+            ModuleTypeOut(
+                type="twin-view",
+                display_name="试验件",
+                category="试验",
+                default_size=ModuleDefaultSizeOut(width=100, height=100),
+                bindings=[
+                    BindingSpecOut(
+                        key="anchorValues",
+                        label="读数",
+                        data_type="number",
+                        is_array=True,
+                        is_entity_pinned=is_pinned,
+                        array_fields=[
+                            BindingSpecOut(
+                                key="value", label="数值", data_type="number"
+                            ),
+                        ],
+                    ),
+                ],
+            ),
+        ),
+    )
+
+
+def computed_binding(field_key: str, *inputs: str) -> ExportBindingIn:
+    """创建派生绑定；参数 field_key 与 inputs 都是同一节点的槽键。"""
+    return ExportBindingIn(
+        field_key=field_key,
+        source_kind="computed",
+        compute_json={"op": "sum", "inputs": list(inputs)},
+    )
+
+
+def mixed_point_node() -> ExportNodeIn:
+    """混合点位、静态值、台账与多层计算的节点。"""
+    node = sample_node()
+    node.bindings = [
+        computed_binding("derivedAgain", "derived"),
+        computed_binding("derived", "anchorValues[0].value"),
+        ExportBindingIn(
+            field_key="anchorValues[0].value",
+            source_kind="opcua",
+            node_key=KNOWN_KEY,
+        ),
+        ExportBindingIn(
+            field_key="history",
+            source_kind="archive",
+            detail_json={"node_key": KNOWN_KEY},
+        ),
+        computed_binding("historySum", "history"),
+        ExportBindingIn(
+            field_key="constant", source_kind="static", static_value_json=42
+        ),
+        ExportBindingIn(
+            field_key="datasetValue",
+            source_kind="dataset",
+            detail_json={"column_ref": "ds:energy:power"},
+        ),
+        computed_binding("constantSum", "constant"),
+    ]
+    return node
+
+
+def test_ignoring_points_preserves_only_independent_bindings() -> None:
+    result = without_point_bindings(
+        [mixed_point_node()], catalog=transfer_catalog()
+    )
+    assert [binding.field_key for binding in result[0].bindings] == [
+        "constant",
+        "datasetValue",
+        "constantSum",
+    ]
+
+
+def test_ignoring_points_does_not_change_the_source_document() -> None:
+    node = mixed_point_node()
+    before = node.model_dump(mode="json", by_alias=True)
+    result = without_point_bindings([node], catalog=transfer_catalog())
+    assert node.model_dump(mode="json", by_alias=True) == before
+    assert result[0].model_dump(exclude={"bindings"}) == node.model_dump(
+        exclude={"bindings"}
+    )
+
+
+def test_computation_dependencies_are_local_to_each_node() -> None:
+    point_node = mixed_point_node()
+    other_node = sample_node()
+    other_node.client_key = "other"
+    other_node.bindings = [
+        ExportBindingIn(
+            field_key="anchorValues[0].value",
+            source_kind="static",
+            static_value_json=1,
+        ),
+        computed_binding("derived", "anchorValues[0].value"),
+    ]
+    result = without_point_bindings(
+        [point_node, other_node], catalog=transfer_catalog(is_pinned=True)
+    )
+    assert result[1] == other_node
+
+
+def test_entity_pinned_slots_keep_their_original_indexes() -> None:
+    node = sample_node()
+    node.bindings.extend(
+        [
+            ExportBindingIn(
+                field_key="anchorValues[7].value",
+                source_kind="static",
+                static_value_json=4,
+            ),
+            computed_binding("derived", "anchorValues[7].value"),
+        ]
+    )
+    result = without_point_bindings(
+        [node], catalog=transfer_catalog(is_pinned=True)
+    )
+    assert [binding.field_key for binding in result[0].bindings] == [
+        "anchorValues[7].value",
+        "derived",
+    ]
+    assert result[0].bindings[1].compute_json == {
+        "op": "sum",
+        "inputs": ["anchorValues[7].value"],
+    }
+
+
+def test_list_slots_close_gaps_and_rewrite_computation_inputs() -> None:
+    node = sample_node()
+    node.bindings.extend(
+        [
+            ExportBindingIn(
+                field_key="anchorValues[1].value",
+                source_kind="static",
+                static_value_json=4,
+            ),
+            computed_binding("anchorValues[2].value", "anchorValues[1].value"),
+            computed_binding("derived", "anchorValues[2].value"),
+        ]
+    )
+    result = without_point_bindings([node], catalog=transfer_catalog())
+    assert [binding.field_key for binding in result[0].bindings] == [
+        "anchorValues[0].value",
+        "anchorValues[1].value",
+        "derived",
+    ]
+    assert [binding.compute_json for binding in result[0].bindings[1:]] == [
+        {"op": "sum", "inputs": ["anchorValues[0].value"]},
+        {"op": "sum", "inputs": ["anchorValues[1].value"]},
+    ]
+
+
+def test_ignoring_points_handles_an_empty_document() -> None:
+    assert without_point_bindings([], catalog=transfer_catalog()) == []
+
+
+@pytest.mark.parametrize(
+    "should_include", [True, False], ids=["keep", "ignore"]
+)
+def test_transfer_operations_accept_an_explicit_point_binding_choice(
+    should_include: bool,
+) -> None:
+    exported = DashboardExportOptionsIn.model_validate(
+        {"include_point_bindings": should_include}
+    )
+    copied = DuplicateDashboardIn.model_validate(
+        {"include_point_bindings": should_include}
+    )
+    imported = DashboardImportIn.model_validate(
+        {
+            "project_id": "0192f0c0-0000-7000-8000-00000000abcd",
+            "payload": sample_package().model_dump(mode="json", by_alias=True),
+            "include_point_bindings": should_include,
+        }
+    )
+    assert copied.should_include_point_bindings is should_include
+    assert imported.should_include_point_bindings is should_include
+    assert exported.should_include_point_bindings is should_include
+
+
+def test_legacy_import_and_duplicate_keep_point_bindings_by_default() -> None:
+    assert DashboardExportOptionsIn().should_include_point_bindings is True
+    copied = DuplicateDashboardIn()
+    imported = DashboardImportIn.model_validate(
+        {
+            "project_id": "0192f0c0-0000-7000-8000-00000000abcd",
+            "payload": sample_package().model_dump(mode="json", by_alias=True),
+        }
+    )
+    assert copied.should_include_point_bindings is True
+    assert imported.should_include_point_bindings is True
+
+
+@pytest.mark.parametrize("invalid", [None, "ignored", {}, []])
+def test_export_rejects_invalid_point_binding_choices(invalid: object) -> None:
+    with pytest.raises(ValidationError):
+        DashboardExportOptionsIn.model_validate(
+            {"include_point_bindings": invalid}
+        )

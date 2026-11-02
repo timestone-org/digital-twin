@@ -16,6 +16,7 @@ import { DtButton, DtDataView, DtTag } from '@dt/ui'
 
 import PermGuard from '@/components/PermGuard.vue'
 import { formatDateTime } from '@/utils/datetime'
+import { taskLabel } from '../../scripts/taskPresentation'
 
 const COLUMNS: readonly DtDataColumn[] = [
   { key: 'name', label: '名称', card: 'title' },
@@ -27,6 +28,7 @@ const COLUMNS: readonly DtDataColumn[] = [
     card: 'meta',
   },
   { key: 'algo', label: '算法', width: '10rem' },
+  { key: 'task', label: '模型类型', width: '8rem' },
   { key: 'target_key', label: '目标列', width: '11rem' },
   { key: 'servable', label: '可用于取数', width: '13rem' },
   { key: 'created_at', label: '发布时间', width: '10rem' },
@@ -74,7 +76,7 @@ defineEmits<{
     :pagination="props.pagination"
     :layout="{
       fixedLayout: true,
-      minWidth: '69rem',
+      minWidth: '77rem',
       cardColumns: 3,
       cardMinWidth: '20rem',
     }"
@@ -89,6 +91,7 @@ defineEmits<{
     <template #cell-algo="{ row }">
       <code class="dt-ml-versions__code" :title="row.algo">{{ row.algo }}</code>
     </template>
+    <template #cell-task="{ row }">{{ taskLabel(row.task) }}</template>
     <template #cell-target_key="{ row }">
       <code class="dt-ml-versions__code" :title="row.target_key ?? undefined">
         {{

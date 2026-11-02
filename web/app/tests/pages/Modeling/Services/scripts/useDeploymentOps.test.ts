@@ -12,6 +12,7 @@ const DEPLOYMENT: ModelDeployment = {
   model_version_id: 'v1',
   model_name: '测试模型',
   model_version: 1,
+  task: 'regression',
   name: '测试服务',
   description: null,
   is_enabled: true,

@@ -22,6 +22,7 @@ export interface NewDashboardPayload {
   designHeight: number
   /** `startMode === 'copy'` 时必给。 */
   sourceDashboardId?: string | undefined
+  includePointBindings?: boolean | undefined
   /** `startMode === 'template'` 时必给。 */
   templateId?: string | undefined
 }

@@ -1,6 +1,4 @@
-/**
- * @fileoverview 编辑器周边接线：预览、右键菜单、导出、保存截图、助手与快捷键。
- */
+/** @fileoverview 编辑器周边接线：预览、右键菜单、导出、保存截图、助手与快捷键。 */
 import type { ReadRenderedSeries } from '@/runtime/renderedSeries'
 import { ref, type Ref } from 'vue'
 import type { DashboardPayload } from '@dt/contracts'
@@ -60,30 +58,25 @@ export interface EditorExtrasDeps {
       danger: boolean
     }) => Promise<boolean>
   }
-  /** 截图取景元素。 */
   stageEl: () => HTMLElement | null
-  /** 把节点滚进视口中央，由画布提供。 */
   centerOn: (nodeId: string) => void
   onExportFailed: (message: string) => void
-  /** 清单解析器；助手的工作面要靠它读出每个画布节点是什么模块。 */
   getManifest: GetModuleManifest
-  /** 当前大屏 id；助手的会话钉在它上面。 */
   dashboardId: () => string | null
-  /**
-   * 画布渲染用的那份快照缓存，助手读实时读数走它。
-   * ⚠ 不许让助手另发一次请求：另发的话会出现「助手说有值、画面上是占位符」。
-   */
+  /** 助手与画布共用快照缓存，避免两处读数不一致。 */
   readSeries?: ReadRenderedSeries
   readSample: ReadPointSample
 }
 
 export interface EditorExtras {
+  exportOpen: Ref<boolean>
   previewOpen: Ref<boolean>
   helpOpen: Ref<boolean>
   contextMenu: EditorContextMenu
   /** 工具栏保存入口：保存成功后顺手截缩略图并清草稿。 */
   saveWithThumbnail: () => Promise<SaveOutcome>
-  exportJson: () => Promise<void>
+  exportJson: () => void
+  confirmExport: (includePointBindings: boolean) => Promise<void>
   /** 未部署助手时入口隐藏，见 features/ai/ports.ts。 */
   ai: AiPanel
 }
@@ -147,22 +140,23 @@ function saverOf(deps: EditorExtrasDeps): () => Promise<SaveOutcome> {
 }
 
 export function useEditorExtras(deps: EditorExtrasDeps): EditorExtras {
-  const { editor, dashboard } = deps
   const previewOpen = ref(false)
+  const exportOpen = ref(false)
   const saveWithThumbnail = saverOf(deps)
 
-  // ⚠ 助手那条保存工具接的是**同一个** saveWithThumbnail：另起一条的话，
-  //   助手保存完的那张屏不清草稿也不换缩略图，而两处都看不出是谁少做了一步
+  // ⚠ 助手与工具栏共用保存出口，确保清草稿与缩略图一致
   const ai = aiPanelOf(deps, saveWithThumbnail)
 
-  // ⚠ 存的是 `fromExportPackage` 的产出（线形 snake_case），不是内存里的
-  // camelCase 载荷：导入端的 `parseExportPackage` 只认线形，写载荷进文件
-  // 会让这份包导不回来。
-  async function exportJson(): Promise<void> {
-    const current = dashboard.value
+  // ⚠ 导入只认 snake_case，落盘必须经过 fromExportPackage
+  async function confirmExport(includePointBindings: boolean): Promise<void> {
+    if (!exportOpen.value) return
+    exportOpen.value = false
+    const current = deps.dashboard.value
     if (current === null) return
     try {
-      const packed = fromExportPackage(await exportDashboard(current.id))
+      const packed = fromExportPackage(
+        await exportDashboard(current.id, { includePointBindings }),
+      )
       downloadJson(packed, current.name)
     } catch {
       deps.onExportFailed('导出失败，请稍后再试')
@@ -171,7 +165,7 @@ export function useEditorExtras(deps: EditorExtrasDeps): EditorExtras {
 
   // 快捷键：帮助/预览任一浮层打开时全让位，Esc 先关浮层再收挑点面板
   const { helpOpen } = useEditorHotkeys({
-    editor,
+    editor: deps.editor,
     arrange: deps.arrange,
     save: () => void saveWithThumbnail(),
     removeSelected: deps.removeSelected,
@@ -190,11 +184,15 @@ export function useEditorExtras(deps: EditorExtrasDeps): EditorExtras {
   })
 
   return {
+    exportOpen,
     previewOpen,
     helpOpen,
     contextMenu: contextMenuOf(deps),
     saveWithThumbnail,
-    exportJson,
+    exportJson: () => {
+      exportOpen.value = true
+    },
+    confirmExport,
     ai,
   }
 }

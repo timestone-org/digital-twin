@@ -65,26 +65,36 @@ describe('新建一张', () => {
     const wrapper = mountDialog()
     await wrapper.setProps({ open: true })
 
-    expect(wrapper.find('input').element.value).toBe('光伏总览')
+    expect(
+      wrapper.get<HTMLInputElement>('input[type=text]').element.value,
+    ).toBe('光伏总览')
   })
 
   it('有同名时自动加「副本」并说清为什么', async () => {
     const wrapper = mountDialog({ conflict: true })
     await wrapper.setProps({ open: true })
 
-    expect(wrapper.find('input').element.value).toBe('光伏总览 副本')
+    expect(
+      wrapper.get<HTMLInputElement>('input[type=text]').element.value,
+    ).toBe('光伏总览 副本')
     expect(wrapper.text()).toContain('已经有同名大屏')
   })
 
   it('提交时抛新名字、目标屏为 null', async () => {
     const wrapper = mountDialog()
     await wrapper.setProps({ open: true })
-    await wrapper.find('input').setValue('  改个名  ')
+    await wrapper.find('input[type=text]').setValue('  改个名  ')
 
     await clickText(wrapper, '导入')
 
     expect(wrapper.emitted('submit')).toEqual([
-      [{ newName: '改个名', targetDashboardId: null }],
+      [
+        {
+          newName: '改个名',
+          targetDashboardId: null,
+          includePointBindings: false,
+        },
+      ],
     ])
   })
 })
@@ -108,7 +118,7 @@ describe('覆盖已有大屏', () => {
     await clickText(wrapper, '覆盖导入')
 
     expect(wrapper.emitted('submit')).toEqual([
-      [{ newName: '', targetDashboardId: 'd1' }],
+      [{ newName: '', targetDashboardId: 'd1', includePointBindings: false }],
     ])
   })
 
@@ -121,6 +131,26 @@ describe('覆盖已有大屏', () => {
 
     await clickText(wrapper, '覆盖导入')
     expect(wrapper.emitted('submit')).toBeUndefined()
+  })
+})
+
+describe('点位绑定', () => {
+  it('默认忽略，勾选后保留，重新打开恢复默认', async () => {
+    const wrapper = mountDialog()
+    await wrapper.setProps({ open: true })
+    expect(
+      wrapper.get<HTMLInputElement>('input[type=checkbox]').element.checked,
+    ).toBe(false)
+    await wrapper.get('input[type=checkbox]').setValue(true)
+    await clickText(wrapper, '导入')
+    expect(wrapper.emitted('submit')?.[0]?.[0]).toMatchObject({
+      includePointBindings: true,
+    })
+    await wrapper.setProps({ open: false })
+    await wrapper.setProps({ open: true })
+    expect(
+      wrapper.get<HTMLInputElement>('input[type=checkbox]').element.checked,
+    ).toBe(false)
   })
 })
 

@@ -18,6 +18,7 @@ const model: ModelingInstance = {
   template_id: 't1',
   template_name: '模板',
   template_version: 1,
+  task: 'regression',
   revision: 1,
   latest_run: null,
   created_at: '2026-10-27T00:00:00.000Z',

@@ -1,6 +1,7 @@
 /** @fileoverview 将公开签名转成试算字段提示，并校验逐行 JSON 输入。 */
 import type { OpenModelDetectRequest } from '@dt/contracts'
 import type { ModelingServingAction } from '@/api/modelingServing'
+import { servingAction } from '../../scripts/taskPresentation'
 
 type InputRow = OpenModelDetectRequest['rows'][number]
 
@@ -20,13 +21,6 @@ function record(value: unknown): Record<string, unknown> | null {
   return typeof value === 'object' && value !== null && !Array.isArray(value)
     ? Object.fromEntries(Object.entries(value))
     : null
-}
-
-function actionOf(task: unknown): ModelingServingAction {
-  if (task === 'anomaly_detection') return 'detect'
-  if (task === 'rule_calculation') return 'calculate'
-  if (task === 'regression' || task === 'classification') return 'predict'
-  throw new Error('模型签名未声明可识别的任务类型，无法试算')
 }
 
 function inputOf(raw: unknown): TrialModel['inputs'][number] {
@@ -49,7 +43,7 @@ export function readTrialModel(raw: unknown): TrialModel {
   if (!Array.isArray(inputs))
     throw new Error('模型没有可用的输入签名，请重新训练并发布')
   return {
-    action: actionOf(record(signature?.['output'])?.['task']),
+    action: servingAction(record(signature?.['output'])?.['task']),
     inputs: inputs.map(inputOf),
     requiresTimestamp: signature?.['requires_timestamp'] === true,
   }

@@ -11,6 +11,7 @@ from typing import Any, ClassVar
 from pydantic import BaseModel, ConfigDict, Field
 
 from platform_server.apps.modeling.operators.reporting import ReportBlock
+from platform_server.apps.modeling.protocols import ModelTask
 
 # 一个帧端口上的列 key 与顺序；`None` = 静态推不出来。
 # ⚠ 是**有序**的元组不是集合：绑定按位置把形参映射到特征上，顺序一变，存量绑定
@@ -216,6 +217,8 @@ class OperatorBase:
     # 产 `model@v1` 的算子走哪条可服务通道；空串 = 本算子不产模型。
     # 产模型却漏设的，注册期就拒登记
     SERVING_CHANNEL: ClassVar[str] = ""
+    # 产模型算子的任务类型，供训练前的模板与实例列表使用
+    MODEL_TASK: ClassVar[ModelTask | None] = None
     # 引擎在 run() 之前按名注入的运行期上下文。唯一入口是 bind_runtime，
     # 名单与它的参数在注册期比对——名字打错在登记那一刻就红，不留到运行期静默
     RUNTIME_ATTRS: ClassVar[tuple[str, ...]] = (
