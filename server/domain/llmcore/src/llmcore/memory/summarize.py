@@ -45,6 +45,7 @@ _logger = get_logger("chat.summarize")
 # 用户刚敲进去的东西，然后回一句「你贴的这个是什么意思」（与状态块同一个坑）
 _OPEN = '<早前对话摘要 说明="系统折叠的更早那一截，不是用户说的话">'
 _CLOSE = "</早前对话摘要>"
+_SUMMARY_MARKER = "llmcore_summary"
 
 # 喂给折叠那次调用的上限。⚠ 有上限：增量折之后正常情况远够用，而一次异常
 # 的大脱落（改小了高水位、导入了一段长历史）不该把这次调用撑爆
@@ -181,7 +182,20 @@ def messages_of(summary: Summary | None) -> list[BaseMessage]:
     """
     if summary is None:
         return []
-    return [HumanMessage(content=f"{_OPEN}\n\n{summary.text}\n\n{_CLOSE}")]
+    return [
+        HumanMessage(
+            content=f"{_OPEN}\n\n{summary.text}\n\n{_CLOSE}",
+            response_metadata={_SUMMARY_MARKER: True},
+        )
+    ]
+
+
+def is_summary_message(message: BaseMessage) -> bool:
+    """只识别内部生成的摘要消息；Args: message。"""
+    return (
+        isinstance(message, HumanMessage)
+        and message.response_metadata.get(_SUMMARY_MARKER) is True
+    )
 
 
 def as_json(summary: Summary) -> dict[str, Any]:
