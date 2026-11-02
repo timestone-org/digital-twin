@@ -25,6 +25,7 @@ EVENT_CLIENT_TOOL = "client_tool.request"
 EVENT_DONE = "turn.done"
 EVENT_ERROR = "error"
 EVENT_PLAN = "plan"
+EVENT_CONTEXT = "context"
 
 # 六档事件的**唯一声明**：名字 + 载荷形状 + 什么时候出现。
 #
@@ -34,6 +35,11 @@ EVENT_PLAN = "plan"
 #   4. 前端 `turnRunner.ts` 的解帧分支 ← **最容易漏的一处**，它只有一串字面量
 # 前三处由契约测试对着这张表比，第四处由 `test_event_specs.py` 扫源码比。
 EVENT_SPECS: tuple[EventSpec, ...] = (
+    EventSpec(
+        name=EVENT_CONTEXT,
+        payload=payloads.ContextPayload,
+        note="模型调用前后及压缩过程中报告上下文容量",
+    ),
     EventSpec(
         name=EVENT_DELTA,
         payload=payloads.DeltaPayload,

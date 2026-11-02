@@ -14,6 +14,7 @@
  */
 import type {
   AssistantPlan,
+  AssistantContextUsage,
   AssistantPlanItem,
   AssistantPlanStatus,
   AssistantSurfaceKind,
@@ -35,6 +36,7 @@ import { activeSurface, runClientTool, type AiSurface } from './surfaces'
 import { readObject, readText, runLoop, type LoopSink } from './turnLoop'
 import { runMcpWrite } from './mcpWriteBridge'
 import { currentPagePath } from './pageContext'
+import { readContextUsage } from './contextUsage'
 
 export { ASK_MUST_BE_ALONE, type RunnerStep } from './turnLoop'
 
@@ -59,6 +61,7 @@ export const PLAN_CONTINUE_TEXT =
 export interface RunnerSink extends LoopSink {
   /** 计划变了：整份快照，直接盖掉手上那份。 */
   onPlan: (plan: AssistantPlan) => void
+  onContext?: (usage: AssistantContextUsage) => void
 }
 
 export interface RunnerInput {
@@ -107,13 +110,7 @@ export async function runTurn(
         requireOrigin(origin)
         return dispatch(input, call)
       },
-      onFrame: (name, data) => {
-        if (name !== 'plan') return
-        const plan = readPlan(data.plan)
-        if (plan === null) return
-        watch.plan = plan
-        sink.onPlan(plan)
-      },
+      onFrame: frameHandler(watch, sink),
       // 模型收了嘴而计划没走完：代用户催一句，让它接着干（ADR-0024）
       nudge: () => {
         if (!planUnfinished(watch.plan)) return null
@@ -128,6 +125,25 @@ export async function runTurn(
     },
     sink,
   )
+}
+
+/** 转发有效上下文与计划快照。
+ * @param watch 当前计划
+ * @param sink 回合事件订阅者
+ */
+function frameHandler(watch: PlanWatch, sink: RunnerSink) {
+  return (name: string, data: Record<string, unknown>): void => {
+    if (name === 'context') {
+      const usage = readContextUsage(data)
+      if (usage !== null) sink.onContext?.(usage)
+      return
+    }
+    if (name !== 'plan') return
+    const plan = readPlan(data.plan)
+    if (plan === null) return
+    watch.plan = plan
+    sink.onPlan(plan)
+  }
 }
 
 function requireOrigin(origin: {

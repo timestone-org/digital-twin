@@ -33,6 +33,7 @@ from llmcore import (
     ModelRejected,
     ModelUnavailable,
 )
+from llmcore.deltas import text_of
 from llmcore.memory.ports import HistoryRow, Summary
 from llmcore.turn.ports import Responder
 
@@ -129,7 +130,7 @@ class ModelSummarizer:
                 },
             )
             return None
-        text = _text_of(answer)[:MAX_SUMMARY_CHARS].strip()
+        text = text_of(answer)[:MAX_SUMMARY_CHARS].strip()
         if not text:
             return None
         return Summary(
@@ -249,12 +250,3 @@ def _line_of(row: HistoryRow) -> str:
         return ""
     who = "用户" if row.role == "user" else "助手"
     return f"{who}：{text}"
-
-
-def _text_of(answer: BaseMessage) -> str:
-    """模型回的那段文字。
-
-    Args: answer。
-    """
-    content = answer.content
-    return content if isinstance(content, str) else ""

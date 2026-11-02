@@ -175,9 +175,20 @@ export const ASSISTANT_EVENT_NAMES = [
   'turn.done',
   'error',
   'plan',
+  'context',
 ] as const
 
 export type AssistantEventName = (typeof ASSISTANT_EVENT_NAMES)[number]
+
+/** 模型当前输入预算；估算值与上游实际用量明确区分。 */
+export interface AssistantContextUsage {
+  used_tokens: number
+  max_tokens: number
+  percent: number
+  is_estimated: boolean
+  state: 'ready' | 'compressing' | 'compressed'
+  compression_count: number
+}
 
 /**
  * 计划项的状态。⚠ 闭合集合，与后端 `services/plan.py` 逐字一致：

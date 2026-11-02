@@ -6,7 +6,11 @@
 
 import json
 
+import pytest
+from pydantic import ValidationError
+
 from llmcore.output import events
+from llmcore.output.payloads import ContextPayload
 from llmcore.turn.types import (
     ClientToolCall,
     TurnDelta,
@@ -22,6 +26,51 @@ def _payload(frame: str) -> dict[str, object]:
     body = json.loads(line.removeprefix("data: "))
     assert isinstance(body, dict)
     return body
+
+
+@pytest.mark.parametrize(
+    ("field", "value"),
+    [
+        ("used_tokens", -1),
+        ("used_tokens", 1.5),
+        ("max_tokens", 0),
+        ("max_tokens", -1),
+        ("percent", -0.1),
+        ("percent", 100.1),
+        ("percent", float("inf")),
+        ("percent", float("nan")),
+        ("state", "unknown"),
+        ("compression_count", -1),
+        ("is_estimated", "not-a-bool"),
+    ],
+)
+def test_context_payload_rejects_invalid_wire_values(
+    field: str, value: object
+) -> None:
+    payload: dict[str, object] = {
+        "used_tokens": 0,
+        "max_tokens": 1,
+        "percent": 0,
+        "is_estimated": True,
+        "state": "ready",
+        "compression_count": 0,
+    }
+    with pytest.raises(ValidationError) as caught:
+        ContextPayload.model_validate({**payload, field: value})
+    assert caught.value.errors()[0]["loc"] == (field,)
+
+
+@pytest.mark.parametrize("percent", [0, 100])
+def test_context_payload_accepts_percentage_boundaries(percent: int) -> None:
+    payload = ContextPayload(
+        used_tokens=0,
+        max_tokens=1,
+        percent=percent,
+        is_estimated=False,
+        state="ready",
+        compression_count=0,
+    )
+    assert payload.percent == percent
 
 
 def test_a_frame_ends_with_a_blank_line() -> None:
@@ -110,6 +159,7 @@ def test_an_error_frame_carries_the_trace_id() -> None:
 
 def test_the_event_names_are_a_closed_set() -> None:
     assert set(events.EVENT_NAMES) == {
+        events.EVENT_CONTEXT,
         events.EVENT_DELTA,
         events.EVENT_STEP,
         events.EVENT_CLIENT_TOOL,
