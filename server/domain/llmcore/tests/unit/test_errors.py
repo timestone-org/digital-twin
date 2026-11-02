@@ -43,8 +43,8 @@ def _forbidden() -> PermissionDeniedError:
     return PermissionDeniedError("", response=_status(403), body=None)
 
 
-def _bad_request() -> BadRequestError:
-    return BadRequestError("", response=_status(400), body=None)
+def _bad_request(body: object = None) -> BadRequestError:
+    return BadRequestError("", response=_status(400), body=body)
 
 
 def _rate_limited() -> RateLimitError:
@@ -127,6 +127,49 @@ def test_the_reason_never_leaks_the_endpoint() -> None:
     error = APIStatusError("", response=_status(500), body=None)
     assert "model-endpoint" not in reason_of(error)
     assert "http" not in reason_of(error)
+
+
+@pytest.mark.parametrize("detail_key", ["type", "code"], ids=["type", "code"])
+@pytest.mark.parametrize(
+    "error_code", ["exceed_context_size_error", "context_length_exceeded"]
+)
+@pytest.mark.parametrize("is_nested", [True, False], ids=["nested", "flat"])
+def test_context_overflow_has_an_actionable_safe_reason(
+    detail_key: str, error_code: str, is_nested: bool
+) -> None:
+    payload: dict[str, object] = {
+        detail_key: error_code,
+        "message": "request to http://private-model with key hunter2",
+        "n_prompt_tokens": 7998,
+        "n_ctx": 6656,
+    }
+    error = _bad_request({"error": payload} if is_nested else payload)
+
+    reason = reason_of(error)
+
+    assert reason == "模型上下文长度不足，请缩短输入或检查上下文窗口配置"
+    made = classified(error)
+    assert isinstance(made, ModelRejected)
+    assert made.is_retryable is False
+    assert str(made) == reason
+    assert "private-model" not in reason
+    assert "hunter2" not in reason
+
+
+@pytest.mark.parametrize(
+    "body",
+    [
+        {"error": {"type": "invalid_request_error"}},
+        {"code": "invalid_parameter"},
+        {"message": "context_length_exceeded"},
+        {"error": {"message": "exceed_context_size_error"}},
+    ],
+    ids=["unknown-type", "unknown-code", "message-only", "nested-message"],
+)
+def test_unknown_bad_requests_keep_the_generic_reason(body: object) -> None:
+    error = _bad_request(body)
+
+    assert reason_of(error) == "模型端点认为请求不合法"
 
 
 def test_the_machine_readable_detail_is_kept_for_the_log() -> None:

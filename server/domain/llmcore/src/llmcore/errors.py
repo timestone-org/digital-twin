@@ -71,6 +71,9 @@ def is_our_fault(error: OpenAIError) -> bool:
 # 绝不记 `message`：那一格是自由文本，有的端点会把请求内容原样回显进去，
 # 而请求内容不许进日志（observability §3）
 _SAFE_DETAIL_KEYS = ("type", "code", "param", "n_prompt_tokens", "n_ctx")
+_CONTEXT_OVERFLOW_CODES = frozenset(
+    {"exceed_context_size_error", "context_length_exceeded"}
+)
 
 
 def detail_of(error: OpenAIError) -> dict[str, str]:
@@ -105,7 +108,7 @@ def detail_of(error: OpenAIError) -> dict[str, str]:
 def reason_of(error: OpenAIError) -> str:
     """给人看的失败原因。
 
-    ⚠ 只带异常类型与状态码，**不带 URL、密钥与响应体原文**：这句话会显示在
+    ⚠ 按异常类型、状态码与机器错误码返回固定提示，不带响应体原文：这句话会显示在
     界面上（api-contract §4.2）。
 
     Args: error。
@@ -117,7 +120,16 @@ def reason_of(error: OpenAIError) -> str:
     if isinstance(error, PermissionDeniedError):
         return "模型端点拒绝了这次调用"
     if isinstance(error, BadRequestError):
-        return "模型端点认为请求不合法"
+        details = detail_of(error)
+        is_context_overflow = (
+            details.get("type") in _CONTEXT_OVERFLOW_CODES
+            or details.get("code") in _CONTEXT_OVERFLOW_CODES
+        )
+        return (
+            "模型上下文长度不足，请缩短输入或检查上下文窗口配置"
+            if is_context_overflow
+            else "模型端点认为请求不合法"
+        )
     if isinstance(error, APIStatusError):
         return f"模型端点回了 {error.status_code}"
     return "模型端点未响应"
