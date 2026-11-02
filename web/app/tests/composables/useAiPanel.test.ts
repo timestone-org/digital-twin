@@ -389,3 +389,282 @@ describe('下拉显示的那一路', () => {
     ctx.wrapper.unmount()
   })
 })
+
+describe('模型切换与回合互斥', () => {
+  const usage = {
+    used_tokens: 8000,
+    max_tokens: 32768,
+    percent: 24.4,
+    is_estimated: true,
+    state: 'ready',
+    compression_count: 0,
+  } as const
+
+  it('回合运行中不切模型，也不清掉当前用量', async () => {
+    const { panel, wrapper } = setup()
+    await panel.open()
+    panel.chat.isRunning.value = true
+    panel.chat.contextUsage.value = usage
+    await panel.pickModel({ profile: 'codex', effort: '' })
+    expect(patched).not.toHaveBeenCalled()
+    expect(panel.choice.value.profile).toBe('default')
+    expect(panel.chat.contextUsage.value).toEqual(usage)
+    wrapper.unmount()
+  })
+
+  it('等待确认时禁止新回合和重复切换，确认后才更新模型与用量', async () => {
+    let settle: (row: AssistantSession) => void = () => {}
+    patched.mockImplementation(
+      () =>
+        new Promise<AssistantSession>((resolve) => {
+          settle = resolve
+        }),
+    )
+    const advance = vi.fn(async function* () {
+      await Promise.resolve()
+      yield 'event: turn.done\ndata: {"reply":"完成"}\n\n'
+    })
+    setAiPorts({ advance })
+    const { panel, wrapper } = setup()
+    await panel.open()
+    panel.chat.contextUsage.value = usage
+    panel.compose.setDraft('保留这份草稿')
+    const switching = panel.pickModel({ profile: 'codex', effort: '' })
+    expect(panel.isPickingModel.value).toBe(true)
+    expect(panel.choice.value.profile).toBe('default')
+    expect(panel.chat.contextUsage.value).toEqual(usage)
+    await panel.chat.send('不能抢先发送')
+    await panel.pickModel({ profile: 'third', effort: '' })
+    await panel.verifyModel()
+    expect(advance).not.toHaveBeenCalled()
+    expect(patched).toHaveBeenCalledTimes(1)
+    expect(readBack).toHaveBeenCalledTimes(1)
+    expect(panel.compose.draft.value).toBe('保留这份草稿')
+    settle(rowOf({ model_profile: 'codex' }))
+    await switching
+    expect(panel.isPickingModel.value).toBe(false)
+    expect(panel.choice.value.profile).toBe('codex')
+    expect(panel.chat.contextUsage.value).toBeNull()
+    await panel.chat.send('现在发送')
+    expect(advance).toHaveBeenCalledTimes(1)
+    wrapper.unmount()
+  })
+
+  it('切换已保存但响应丢失时只读核验真实模型，不重复PATCH', async () => {
+    const { panel, wrapper } = setup()
+    await panel.open()
+    panel.chat.contextUsage.value = usage
+    let storedProfile = 'default'
+    patched.mockImplementationOnce(async () => {
+      storedProfile = 'codex'
+      await Promise.resolve()
+      throw new Error('response timeout after commit')
+    })
+    readBack.mockImplementationOnce(() =>
+      Promise.resolve({
+        ...detailOf([]),
+        model_profile: storedProfile,
+        reasoning_effort: 'high',
+      }),
+    )
+    await panel.pickModel({ profile: 'codex', effort: '' })
+    expect(patched).toHaveBeenCalledTimes(1)
+    expect(readBack).toHaveBeenCalledTimes(2)
+    expect(panel.choice.value).toEqual({ profile: 'codex', effort: 'high' })
+    expect(panel.chat.contextUsage.value).toBeNull()
+    expect(panel.isModelUnconfirmed.value).toBe(false)
+    wrapper.unmount()
+  })
+
+  it('核验也失败时暂停发送，手动核验恢复而不重试写入，草稿保留', async () => {
+    const advance = vi.fn(async function* () {
+      await Promise.resolve()
+      yield 'event: turn.done\ndata: {"reply":"完成"}\n\n'
+    })
+    setAiPorts({ advance })
+    const { panel, wrapper } = setup()
+    await panel.open()
+    panel.compose.setDraft('这份草稿不能丢')
+    panel.chat.contextUsage.value = usage
+    patched.mockRejectedValueOnce(new Error('write outcome unknown'))
+    readBack.mockRejectedValueOnce(new Error('read unavailable'))
+    await panel.pickModel({ profile: 'codex', effort: '' })
+    expect(panel.isModelUnconfirmed.value).toBe(true)
+    expect(panel.isPickingModel.value).toBe(false)
+    expect(panel.chat.contextUsage.value).toBeNull()
+    await panel.chat.send('不能发送')
+    expect(advance).not.toHaveBeenCalled()
+    expect(panel.compose.draft.value).toBe('这份草稿不能丢')
+    readBack.mockResolvedValueOnce({ ...detailOf([]), model_profile: 'codex' })
+    await panel.verifyModel()
+    expect(panel.isModelUnconfirmed.value).toBe(false)
+    expect(panel.choice.value.profile).toBe('codex')
+    expect(patched).toHaveBeenCalledTimes(1)
+    await panel.chat.send('可以发送')
+    expect(advance).toHaveBeenCalledTimes(1)
+    wrapper.unmount()
+  })
+
+  it('切换失败且未获确认时保留旧选择、作废旧用量并提示', async () => {
+    patched.mockRejectedValue(new Error('模型切换连接失败'))
+    const toast = useToast()
+    toast.clear()
+    const { panel, wrapper } = setup()
+    await panel.open()
+    panel.chat.contextUsage.value = usage
+    await expect(
+      panel.pickModel({ profile: 'codex', effort: '' }),
+    ).resolves.toBeUndefined()
+    expect(panel.choice.value.profile).toBe('default')
+    expect(panel.chat.contextUsage.value).toBeNull()
+    expect(panel.isModelUnconfirmed.value).toBe(true)
+    expect(panel.isPickingModel.value).toBe(false)
+    expect(
+      toast.toasts.value.some((item) =>
+        item.message.includes('模型切换连接失败'),
+      ),
+    ).toBe(true)
+    wrapper.unmount()
+  })
+
+  it('未确认状态允许用户明确选择模型，成功后恢复发送资格', async () => {
+    const { panel, wrapper } = setup()
+    await panel.open()
+    patched.mockRejectedValueOnce(new Error('write outcome unknown'))
+    await panel.pickModel({ profile: 'codex', effort: '' })
+    expect(panel.isModelUnconfirmed.value).toBe(true)
+    patched.mockResolvedValueOnce(rowOf({ model_profile: 'third' }))
+    await panel.pickModel({ profile: 'third', effort: '' })
+    expect(panel.choice.value.profile).toBe('third')
+    expect(panel.isModelUnconfirmed.value).toBe(false)
+    expect(patched).toHaveBeenCalledTimes(2)
+    wrapper.unmount()
+  })
+
+  it.each(['unmount', 'session-change'] as const)(
+    '核验期间%s会取消读取，晚到结果不覆盖选择',
+    async (action) => {
+      const { panel, wrapper } = setup()
+      await panel.open()
+      let settle: (row: AssistantSessionDetail) => void = () => {}
+      const signal = ref<AbortSignal | null>(null)
+      readBack.mockImplementationOnce((_id: string, incoming?: AbortSignal) => {
+        signal.value = incoming ?? null
+        return new Promise<AssistantSessionDetail>((resolve) => {
+          settle = resolve
+        })
+      })
+      patched.mockRejectedValueOnce(new Error('write outcome unknown'))
+      const switching = panel.pickModel({ profile: 'codex', effort: '' })
+      await vi.waitFor(() => expect(readBack).toHaveBeenCalledTimes(2))
+      if (action === 'unmount') wrapper.unmount()
+      else panel.sessionId.value = 's2'
+      expect(signal.value?.aborted).toBe(true)
+      settle({ ...detailOf([]), model_profile: 'codex' })
+      await switching
+      expect(panel.choice.value.profile).toBe('default')
+      if (action !== 'unmount') wrapper.unmount()
+    },
+  )
+
+  it('无明确模型的读取结果不能解除未确认状态', async () => {
+    const { panel, wrapper } = setup()
+    await panel.open()
+    patched.mockRejectedValueOnce(new Error('write outcome unknown'))
+    readBack.mockResolvedValueOnce(detailOf([]))
+    await panel.pickModel({ profile: 'codex', effort: '' })
+    expect(panel.isModelUnconfirmed.value).toBe(true)
+    expect(panel.choice.value.profile).toBe('default')
+    wrapper.unmount()
+  })
+
+  it('卸载后到达的切换确认不更新已销毁面板', async () => {
+    let settle: (row: AssistantSession) => void = () => {}
+    patched.mockImplementation(
+      () =>
+        new Promise<AssistantSession>((resolve) => {
+          settle = resolve
+        }),
+    )
+    const { panel, wrapper } = setup()
+    await panel.open()
+    panel.chat.contextUsage.value = usage
+    const switching = panel.pickModel({ profile: 'codex', effort: '' })
+    wrapper.unmount()
+    settle(rowOf({ model_profile: 'codex' }))
+    await switching
+    expect(panel.choice.value.profile).toBe('default')
+    expect(panel.chat.contextUsage.value).toEqual(usage)
+    await panel.chat.send('卸载后不能发送')
+    expect(panel.chat.entries.value).toHaveLength(0)
+  })
+
+  it('尚未创建会话时允许改本地选择，不发PATCH', async () => {
+    const { panel, wrapper } = setup()
+    await panel.pickModel({ profile: 'codex', effort: 'high' })
+    expect(patched).not.toHaveBeenCalled()
+    expect(panel.choice.value).toEqual({ profile: 'codex', effort: 'high' })
+    wrapper.unmount()
+  })
+
+  it('没有服务端确认时保留旧选择并标记未确认，不再展示旧用量', async () => {
+    patched.mockResolvedValue(null)
+    const { panel, wrapper } = setup()
+    await panel.open()
+    panel.chat.contextUsage.value = usage
+    await panel.pickModel({ profile: 'codex', effort: '' })
+    expect(panel.choice.value.profile).toBe('default')
+    expect(panel.chat.contextUsage.value).toBeNull()
+    expect(panel.isModelUnconfirmed.value).toBe(true)
+    expect(panel.isPickingModel.value).toBe(false)
+    wrapper.unmount()
+  })
+
+  it('会话被替换后忽略上一会话的切换响应', async () => {
+    let settle: (row: AssistantSession) => void = () => {}
+    patched.mockImplementation(
+      () =>
+        new Promise<AssistantSession>((resolve) => {
+          settle = resolve
+        }),
+    )
+    const { panel, wrapper } = setup()
+    await panel.open()
+    panel.chat.contextUsage.value = usage
+    const switching = panel.pickModel({ profile: 'codex', effort: '' })
+    panel.sessionId.value = 's2'
+    settle(rowOf({ model_profile: 'codex' }))
+    await switching
+    expect(panel.choice.value.profile).toBe('default')
+    expect(panel.chat.contextUsage.value).toEqual(usage)
+    expect(panel.isPickingModel.value).toBe(false)
+    wrapper.unmount()
+  })
+
+  it('非Error切换失败给出说明，卸载后的失败不再提示', async () => {
+    patched.mockRejectedValueOnce('connection lost')
+    const toast = useToast()
+    toast.clear()
+    const { panel, wrapper } = setup()
+    await panel.open()
+    await panel.pickModel({ profile: 'codex', effort: '' })
+    expect(
+      toast.toasts.value.some((item) => item.message.includes('模型切换失败')),
+    ).toBe(true)
+    let reject: (reason: Error) => void = () => {}
+    patched.mockImplementation(
+      () =>
+        new Promise<AssistantSession>((_resolve, fail) => {
+          reject = fail
+        }),
+    )
+    const switching = panel.pickModel({ profile: 'codex', effort: '' })
+    const previousMessages = toast.toasts.value.map((item) => item.message)
+    wrapper.unmount()
+    reject(new Error('过期错误'))
+    await switching
+    expect(toast.toasts.value.map((item) => item.message)).toEqual(
+      previousMessages,
+    )
+  })
+})

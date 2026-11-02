@@ -16,6 +16,7 @@ import type { ModelChoice } from '@/composables/useAiPanel'
 const props = defineProps<{
   models: readonly AssistantModelProfile[]
   choice: ModelChoice
+  disabled?: boolean | undefined
 }>()
 
 const emit = defineEmits<{ pick: [value: ModelChoice] }>()
@@ -39,11 +40,13 @@ const effortOptions = computed<DtSelectOption[]>(() =>
 )
 
 function pickProfile(value: string): void {
+  if (props.disabled) return
   // ⚠ 换路时把档位清掉：各路的档位取值不通用，带过去的那个多半不认识
   emit('pick', { profile: value, effort: '' })
 }
 
 function pickEffort(value: string): void {
+  if (props.disabled) return
   emit('pick', { profile: props.choice.profile, effort: value })
 }
 </script>
@@ -53,6 +56,7 @@ function pickEffort(value: string): void {
     <DtSelect
       :model-value="choice.profile"
       :options="profileOptions"
+      :disabled="disabled"
       size="sm"
       aria-label="选模型"
       @update:model-value="pickProfile"
@@ -61,6 +65,7 @@ function pickEffort(value: string): void {
       v-if="effortOptions.length > 0"
       :model-value="choice.effort"
       :options="effortOptions"
+      :disabled="disabled"
       size="sm"
       aria-label="选推理档位"
       @update:model-value="pickEffort"

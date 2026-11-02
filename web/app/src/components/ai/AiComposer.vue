@@ -34,6 +34,8 @@ const props = defineProps<{
   compose: ComposeState
   /** 正在跑回合：发送让位给停止。 */
   running: boolean
+  isPickingModel?: boolean | undefined
+  isModelUnconfirmed?: boolean | undefined
   /**
    * 助手正等着用户在卡片上回答。
    * ⚠ 这期间输入框上锁：不锁的话用户的新消息会与正在跑的回合抢同一条时间线，
@@ -56,11 +58,14 @@ const emit = defineEmits<{
   send: [text: string, images: string[]]
   stop: []
   pick: [value: ModelChoice]
+  'verify-model': []
 }>()
 
 const canSend = computed(
   () =>
     !props.running &&
+    !props.isPickingModel &&
+    !props.isModelUnconfirmed &&
     props.asking !== true &&
     (props.compose.draft.value.trim() !== '' ||
       props.compose.attachments.value.length > 0),
@@ -77,6 +82,11 @@ function send(): void {
   props.compose.setDraft('')
   props.compose.setAttachments([])
   emit('send', text, images)
+}
+
+function pickModel(value: ModelChoice): void {
+  if (props.running || props.asking || props.isPickingModel) return
+  emit('pick', value)
 }
 
 function onKeydown(event: KeyboardEvent): void {
@@ -140,6 +150,19 @@ defineExpose({ focusInput })
 <template>
   <form class="ai-compose" @submit.prevent="send">
     <p v-if="hint" class="ai-compose__hint">{{ hint }}</p>
+    <p v-if="isPickingModel" class="ai-compose__hint" role="status">
+      正在确认模型，草稿已保留
+    </p>
+    <DtNotice v-if="isModelUnconfirmed" intent="warning">
+      当前模型尚未确认，已暂停发送。草稿已保留，请重新核验或选择模型。
+      <DtButton
+        size="sm"
+        variant="ghost"
+        :disabled="isPickingModel || running"
+        @click="emit('verify-model')"
+        >重新核验模型</DtButton
+      >
+    </DtNotice>
 
     <DtNotice v-if="attachError" intent="danger">{{ attachError }}</DtNotice>
 
@@ -199,7 +222,8 @@ defineExpose({ focusInput })
           v-if="models !== undefined && choice !== undefined"
           :models="models"
           :choice="choice"
-          @pick="(value) => emit('pick', value)"
+          :disabled="running || asking === true || isPickingModel === true"
+          @pick="pickModel"
         />
       </template>
     </AiInputBox>

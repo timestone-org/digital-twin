@@ -78,4 +78,16 @@ describe('模型下拉', () => {
       { profile: 'default', effort: '' },
     ])
   })
+
+  it('禁用时两种下拉都不可操作，过期的下拉事件也不切换', async () => {
+    const wrapper = picker([profile(), CODEX], 'codex')
+    await wrapper.setProps({ disabled: true })
+    const selects = wrapper.findAllComponents(DtSelect)
+    expect(selects.every((select) => select.props('disabled'))).toBe(true)
+    selects[0]?.vm.$emit('update:modelValue', 'default')
+    selects[1]?.vm.$emit('update:modelValue', 'high')
+    await wrapper.vm.$nextTick()
+    expect(wrapper.emitted('pick')).toBeUndefined()
+    wrapper.unmount()
+  })
 })

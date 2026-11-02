@@ -18,16 +18,17 @@ import {
 } from '@/composables/useAiConversation'
 import {
   adoptRow,
-  fillDefaults,
-  keepInRange,
   newModelChoice,
-  pickModel,
   type ModelChoice,
 } from '@/composables/useAiModelChoice'
 import { createReplayer } from '@/composables/useAiReplayer'
-import { aiPorts } from '@/features/ai/ports'
-import { clearSurface, setSurface } from '@/features/ai/surfaces'
-import type { AiSurface } from '@/features/ai/surfaces'
+import { useAiModelSelection } from '@/composables/useAiModelSelection'
+import { probeAiCapability } from '@/features/ai/panelCapability'
+import {
+  clearSurface,
+  setSurface,
+  type AiSurface,
+} from '@/features/ai/surfaces'
 
 export { newComposeState, type ComposeState } from '@/composables/useAiCompose'
 export type { ModelChoice } from '@/composables/useAiModelChoice'
@@ -53,6 +54,9 @@ export interface AiPanel {
   choice: Ref<ModelChoice>
   /** 换一路模型。⚠ 落到会话上，不是只改这一屏。 */
   pickModel: (next: ModelChoice) => Promise<void>
+  isPickingModel: Ref<boolean>
+  isModelUnconfirmed: Ref<boolean>
+  verifyModel: () => Promise<void>
   isOpen: Ref<boolean>
   sessionId: Ref<string | null>
   /** 这一页的那段对话。开合面板不动它，历史与计划都留在这。 */
@@ -76,17 +80,23 @@ export function useAiPanel(options: AiPanelOptions): AiPanel {
   const surface = options.surface()
   setSurface(surface)
 
-  const chat = useAiConversation(
+  const conversation = useAiConversation(
     () => sessionId.value,
     () => ({ kind: surface.kind, label: surface.label, instance: surface }),
   )
+  const { send, ...modelSelection } = useAiModelSelection({
+    choice,
+    sessionId,
+    chat: conversation,
+  })
+  const chat: AiConversation = { ...conversation, send }
   const compose = newComposeState()
   const replayer = createReplayer(chat)
 
   useSurfaceLifecycle(surface, chat, replayer.abort)
 
   onMounted(() => {
-    void probeInto({ isAvailable, models, attachmentSuffixes, choice })
+    void probeAiCapability({ isAvailable, models, attachmentSuffixes, choice })
   })
 
   const open = openerOf({
@@ -103,7 +113,7 @@ export function useAiPanel(options: AiPanelOptions): AiPanel {
     models,
     attachmentSuffixes,
     choice,
-    pickModel: (next) => pickModel(next, choice, sessionId),
+    ...modelSelection,
     isOpen,
     sessionId,
     chat,
@@ -171,23 +181,4 @@ function openerOf(parts: {
     const id = parts.sessionId.value
     if (id !== null) await parts.replay(id)
   }
-}
-
-/** 探一次能力：有没有助手、接了哪几路模型。 */
-async function probeInto(into: {
-  isAvailable: Ref<boolean>
-  models: Ref<AssistantModelProfile[]>
-  attachmentSuffixes: Ref<string[]>
-  choice: Ref<ModelChoice>
-}): Promise<void> {
-  const ask = aiPorts()?.probe
-  if (ask === undefined) return
-  const capability = await ask()
-  into.isAvailable.value = capability?.is_model_enabled === true
-  into.models.value = capability?.models ?? []
-  into.attachmentSuffixes.value = capability?.attachment_suffixes ?? []
-  fillDefaults(into.choice, capability)
-  // ⚠ 会话行上那一路可能已经不在册了（配置改过）：下拉要么显示它、要么退回默认，
-  // 不能停在一个空值上而回合照常发出去
-  keepInRange(into.choice, capability)
 }

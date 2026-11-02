@@ -37,6 +37,7 @@ const isPeeking = computed(
   () =>
     !props.ai.isOpen.value &&
     !props.ai.chat.isRunning.value &&
+    !props.ai.isPickingModel.value &&
     !props.ai.chat.isAsking.value,
 )
 
@@ -93,8 +94,13 @@ onUnmounted(() => {
           :is-wide="isWide"
           :models="ai.models.value"
           :choice="ai.choice.value"
+          :model-selection="{
+            isPicking: ai.isPickingModel.value,
+            isUnconfirmed: ai.isModelUnconfirmed.value,
+          }"
           :attachment-suffixes="ai.attachmentSuffixes.value"
           @pick="(value) => void ai.pickModel(value)"
+          @verify-model="() => void ai.verifyModel()"
           @toggle-wide="isWide = !isWide"
           @close="ai.close"
         />

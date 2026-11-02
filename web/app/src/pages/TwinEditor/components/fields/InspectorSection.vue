@@ -3,7 +3,7 @@
  * @fileoverview 检查器里的一节：一个小标题加一组字段，可折叠。
  * 八种检查器共用同一个外壳，免得每种自己画一套标题、深浅与间距。
  */
-import { DtIcon } from '@dt/ui'
+import { DtDisclosure } from '@dt/ui'
 import { computed } from 'vue'
 
 import { isSectionOpen, setSectionOpen } from '../../scripts/sectionCollapse'
@@ -19,25 +19,15 @@ const props = defineProps<{
 const open = computed(() =>
   isSectionOpen(props.title, props.collapsed !== true),
 )
-
-function toggle(): void {
-  setSectionOpen(props.title, !open.value)
-}
 </script>
 
 <template>
-  <section class="border-b border-border-subtle last:border-b-0">
-    <button
-      type="button"
-      class="flex w-full items-center justify-between gap-2 px-3 py-2 text-left text-xs font-medium text-text-secondary hover:text-text-primary"
-      :aria-expanded="open"
-      @click="toggle"
-    >
-      <span>{{ title }}</span>
-      <DtIcon :name="open ? 'chevron-down' : 'chevron-right'" :size="14" />
-    </button>
-    <div v-if="open" class="flex flex-col gap-3 px-3 pb-3">
-      <slot />
-    </div>
-  </section>
+  <DtDisclosure
+    :title="title"
+    :open="open"
+    unmount-on-close
+    @update:open="setSectionOpen(title, $event)"
+  >
+    <slot />
+  </DtDisclosure>
 </template>

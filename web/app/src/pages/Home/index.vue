@@ -107,7 +107,11 @@ onMounted(() => {
 </script>
 
 <template>
-  <AppShell title="工作台" subtitle="数字孪生 · 项目与大屏管理">
+  <AppShell
+    title="工作台"
+    subtitle="数字孪生 · 项目与大屏管理"
+    :sidebar-visible="canView"
+  >
     <template #sidebar>
       <ProjectSidebar
         v-if="canView"

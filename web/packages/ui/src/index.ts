@@ -18,6 +18,7 @@ export { parseMarkdown } from './components/DtMarkdown/blocks'
 export type { DtDataViewLayout } from './components/DtDataView/DtDataView.vue'
 export { default as DtDateTimeInput } from './components/DtDateTimeInput/DtDateTimeInput.vue'
 export { default as DtDigits } from './components/DtDigits/DtDigits.vue'
+export { default as DtDisclosure } from './components/DtDisclosure/DtDisclosure.vue'
 export { default as DtDropdownMenu } from './components/DtDropdownMenu/DtDropdownMenu.vue'
 export { default as DtEmpty } from './components/DtEmpty/DtEmpty.vue'
 export { default as DtField } from './components/DtField/DtField.vue'
@@ -66,7 +67,5 @@ export {
   toLocalMinuteInput,
 } from './shared/datetime'
 
-export { default as EditorSplitter } from './components/EditorPanes/EditorSplitter.vue'
-export { useEditorPanes } from './components/EditorPanes/useEditorPanes'
 export { default as DtResizableLayout } from './components/DtResizableLayout/DtResizableLayout.vue'
 export type { ResizablePane } from './components/DtResizableLayout/layoutSizes'

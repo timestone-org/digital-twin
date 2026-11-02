@@ -9,7 +9,11 @@ import { describe, expect, it } from 'vitest'
 import { ref } from 'vue'
 import type { AssistantCapability, AssistantModelProfile } from '@dt/contracts'
 
-import { keepInRange, newModelChoice } from '@/composables/useAiModelChoice'
+import {
+  keepInRange,
+  newModelChoice,
+  pickModel,
+} from '@/composables/useAiModelChoice'
 
 function profile(id: string): AssistantModelProfile {
   return {
@@ -34,6 +38,24 @@ function capability(ids: string[], fallback: string): AssistantCapability {
 }
 
 describe('会话行上那一路不在册时', () => {
+  it('尚未建会话时可更新选择，明确作废的选择不写入', async () => {
+    const choice = ref({ profile: 'default', effort: '' })
+    const session = ref<string | null>(null)
+    expect(
+      await pickModel({ profile: 'codex', effort: 'high' }, choice, session),
+    ).toBe(true)
+    expect(choice.value.profile).toBe('codex')
+    expect(
+      await pickModel(
+        { profile: 'old', effort: '' },
+        choice,
+        session,
+        () => false,
+      ),
+    ).toBe(false)
+    expect(choice.value.profile).toBe('codex')
+  })
+
   it('退回部署报的默认', () => {
     const choice = ref({ profile: 'codex', effort: 'high' })
     keepInRange(choice, capability(['p1', 'p2'], 'p2'))

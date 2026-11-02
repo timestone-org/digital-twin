@@ -9,7 +9,7 @@
 import { computed, onMounted, ref, watch } from 'vue'
 import type { AcDataset, AcUnit, DtSegmentedOption } from '@dt/contracts'
 import { PERMISSION_CODES } from '@dt/contracts'
-import { DtNotice, useConfirm, useToast } from '@dt/ui'
+import { DtNotice, DtResizableLayout, useConfirm, useToast } from '@dt/ui'
 
 import * as hvac from '@/api/hvac'
 import PermGuard from '@/components/PermGuard.vue'
@@ -229,32 +229,39 @@ onMounted(() => {
           {{ batches.error.value }}
         </DtNotice>
 
-        <!-- 左右分栏：组合列表在左、事件在右，各自在自己那栏里滚。
-             ⚠ 两边都要 min-h-0，少一个就不是滚动而是把整页撑长，
-             而 AppShell 的 main 是 overflow-hidden，撑出去的部分够不着。 -->
-        <div class="flex min-h-0 flex-1 flex-col gap-4 lg:flex-row">
-          <CoverageSidebar
-            class="max-h-64 shrink-0 lg:max-h-none lg:w-72"
-            :items="batches.coverage.value"
-            :selected="combination"
-            @select="combination = $event"
-          />
-
-          <EpisodeTable
-            :rows="rows"
-            :loading="episodes.loading.value"
-            :page="episodes.pageNumber.value"
-            :has-prev="episodes.hasPrev.value"
-            :has-next="episodes.hasNext.value"
-            :error="episodes.problem.value"
-            @prev="episodes.prev"
-            @next="episodes.next"
-            @retry="episodes.reload"
-            @inspect="onInspect"
-            @exclude="excluding = $event"
-            @restore="restore"
-          />
-        </div>
+        <DtResizableLayout
+          class="min-h-0 flex-1"
+          :panes="[
+            { id: 'coverage', label: '组合覆盖', size: 1, minSize: 220 },
+            { id: 'episodes', label: '开机事件', size: 3, minSize: 320 },
+          ]"
+          :stack-at="900"
+          storage-key="dt.hvac-startups.layout"
+        >
+          <template #coverage>
+            <CoverageSidebar
+              :items="batches.coverage.value"
+              :selected="combination"
+              @select="combination = $event"
+            />
+          </template>
+          <template #episodes>
+            <EpisodeTable
+              :rows="rows"
+              :loading="episodes.loading.value"
+              :page="episodes.pageNumber.value"
+              :has-prev="episodes.hasPrev.value"
+              :has-next="episodes.hasNext.value"
+              :error="episodes.problem.value"
+              @prev="episodes.prev"
+              @next="episodes.next"
+              @retry="episodes.reload"
+              @inspect="onInspect"
+              @exclude="excluding = $event"
+              @restore="restore"
+            />
+          </template>
+        </DtResizableLayout>
       </template>
     </div>
 

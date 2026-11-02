@@ -14,6 +14,7 @@
 import { computed, onScopeDispose, ref, type Ref } from 'vue'
 import type {
   AssistantAskAnswer,
+  AssistantContextUsage,
   AssistantPlan,
   AssistantSessionDetail,
   AssistantSurfaceKind,
@@ -43,6 +44,7 @@ export interface AiConversation {
   isAsking: Ref<boolean>
   /** 当前执行计划；没有就是 null。整份快照，来一份盖一份。 */
   plan: Ref<AssistantPlan | null>
+  contextUsage: Ref<AssistantContextUsage | null>
   /** 发一句话，跑一个回合。 */
   send: (text: string, images?: string[]) => Promise<void>
   /** 掐掉正在跑的那个回合。 */
@@ -77,6 +79,7 @@ export function useAiConversation(
   const isRunning = ref(false)
   const isAsking = ref(false)
   const plan = ref<AssistantPlan | null>(null)
+  const contextUsage = ref<AssistantContextUsage | null>(null)
   const state: RunState = { running: null }
   const edit = (next: (given: ConversationLog) => ConversationLog): void => {
     log.value = next(log.value)
@@ -90,6 +93,7 @@ export function useAiConversation(
     isRunning,
     edit,
     plan,
+    contextUsage,
     // 掐掉回合的同时把挂着的提问结成取消：只掐一头的话回合还停在 await 上
     abort: () => {
       state.running?.abort()
@@ -108,6 +112,7 @@ export function useAiConversation(
     isRunning,
     isAsking,
     plan,
+    contextUsage,
     send: createSender(parts),
     ...controlsOf(parts, asks),
   }
@@ -125,6 +130,9 @@ function controlsOf(
       const wasRunning = parts.state.running !== null
       parts.abort()
       parts.isRunning.value = false
+      if (parts.contextUsage.value?.state === 'compressing') {
+        parts.contextUsage.value = null
+      }
       // 不是红的：这是用户自己按的，不是出了错
       if (wasRunning) parts.edit((given) => withSaid(given, 'note', '已停下'))
     },
@@ -133,11 +141,13 @@ function controlsOf(
       parts.isRunning.value = false
       parts.edit(() => emptyLog())
       parts.plan.value = null
+      parts.contextUsage.value = null
     },
     restore: (detail) => {
       if (parts.state.running !== null) return
       parts.edit(() => replayedLog(detail))
       parts.plan.value = detail.plan_json
+      parts.contextUsage.value = null
     },
     answerAsk: asks.answer,
     note: (text) => parts.edit((given) => withSaid(given, 'note', text)),
