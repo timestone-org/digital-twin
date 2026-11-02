@@ -171,6 +171,7 @@ WS 的 token 走 `Sec-WebSocket-Protocol` 子协议，而 `auth_request` 的子�
 | `ASSISTANT_MODEL_ENABLED` / `ASSISTANT_MODEL_API_KEY` | 按量计费那一路。开关为真却没配密钥（**空串同档**）= 启动即失败 |
 | `ASSISTANT_MODEL_BASE_URL` / `_CHAT` / `_VISION` / `_TIMEOUT_S` | 端点与模型代号。换供应商是改这几行，不是改代码 |
 | `ASSISTANT_MODEL_STREAM_ENABLED` / `_EXTRA_BODY` | 逐字流式开关、透传的额外请求体（一段 JSON 对象） |
+| `ASSISTANT_MODEL_CONTEXT_TOKENS` | 上下文总容量，默认 32768；按实际端点容量配置，自动压缩会预留输出空间。前端估算用量明确标注“约” |
 | 订阅账号那一路 | **不在环境变量里**：去「系统管理 → 模型管理」建一路「Codex 订阅」形态的供应商并登录一次（ADR-0041），加密用的是 `PLATFORM_LLM_PROVIDER_SECRET` |
 | `ASSISTANT_CODEX_REASONING_EFFORT` | 那一路没配推理档位时的缺省（`low`/`medium`/`high`/`xhigh` 闭合集合） |
 | `LLM_PROVIDER_SECRET` | 模型供应商目录与凭据的加密密钥（ADR-0041）。**配上它才配得出供应商**；留空即目录整个缺席，两边各用各的环境变量 |

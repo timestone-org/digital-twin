@@ -194,6 +194,8 @@ class Settings(AppSettings, PostgresSettings, RedisSettings):
     # 折叠是后台性质的一次调用，配一整套独立端点的收益抵不上多一条回落链的
     # 代价；真要换供应商时，它跟着对话档走就够了
     summary_model: str = ""
+    # 配置预算；多路模型共用时应不大于最小上下文窗口。
+    model_context_tokens: int = Field(default=32_768, ge=1024)
 
     # 看图那一档的**独立端点**。留空即整格回落到上面对话档那一格——回落链在
     # `endpoint_of` 里逐格写全，不许靠「反正都是同一个默认值」蒙混。

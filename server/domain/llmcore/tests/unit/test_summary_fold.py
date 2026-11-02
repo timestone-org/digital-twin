@@ -5,15 +5,23 @@
 作废，且没有任何运行期迹象，只有账单和延迟会慢慢变难看（ADR-0025）。
 """
 
+import json
 from typing import Any
 
+import httpx2
 import pytest
-from langchain_core.messages import AIMessage
+from langchain_core.messages import AIMessage, HumanMessage
+from openai import AsyncOpenAI
+from pydantic import SecretStr
 from unit.fakes import ScriptedResponder
 
 from llmcore import ModelChoice, ModelUnavailable
+from llmcore.deltas import text_of
+from llmcore.endpoints import ChatEndpoint
 from llmcore.memory import HistoryRow, Summary
 from llmcore.memory import summarize as fold
+from llmcore.openai_compat import OpenAiCompatAdapter
+from llmcore.reasoning import ReasoningChatOpenAI
 
 STAMP = "std:summary"
 
@@ -70,6 +78,127 @@ def test_the_summary_hangs_at_the_very_front_of_the_history() -> None:
 
 def test_no_summary_hangs_nothing() -> None:
     assert fold.messages_of(None) == []
+
+
+def test_summary_identity_requires_an_internal_human_message_marker() -> None:
+    summary = fold.messages_of(_summary())[0]
+
+    assert fold.is_summary_message(summary)
+    assert not fold.is_summary_message(HumanMessage(content=summary.content))
+    assert not fold.is_summary_message(
+        AIMessage(
+            content=summary.content, response_metadata=summary.response_metadata
+        )
+    )
+
+
+def _response_output() -> list[dict[str, object]]:
+    """提供 Responses 的可见输出块。"""
+    return [
+        {
+            "type": "message",
+            "id": "m1",
+            "role": "assistant",
+            "status": "completed",
+            "content": [
+                {"type": "output_text", "text": "摘要可见", "annotations": []}
+            ],
+        }
+    ]
+
+
+def _wire_reply(is_responses: bool) -> dict[str, object]:
+    """生成两个真实模型序列化协议的最小成功回包；Args: is_responses。"""
+    if is_responses:
+        return {
+            "id": "r1",
+            "created_at": 0,
+            "model": "test-model",
+            "object": "response",
+            "status": "completed",
+            "output": _response_output(),
+            "usage": {
+                "input_tokens": 20,
+                "output_tokens": 4,
+                "total_tokens": 24,
+            },
+        }
+    return {
+        "id": "c1",
+        "created": 0,
+        "model": "test-model",
+        "object": "chat.completion",
+        "choices": [
+            {
+                "index": 0,
+                "message": {"role": "assistant", "content": "摘要可见"},
+                "finish_reason": "stop",
+            }
+        ],
+        "usage": {
+            "prompt_tokens": 20,
+            "completion_tokens": 4,
+            "total_tokens": 24,
+        },
+    }
+
+
+async def _wire_model() -> ReasoningChatOpenAI:
+    """通过生产适配器构造实际序列化模型。"""
+    endpoint = ChatEndpoint(
+        base_url="https://model.invalid",
+        api_key=SecretStr("test-key"),
+        model="test-model",
+        timeout_s=1,
+    )
+    adapter = OpenAiCompatAdapter(
+        resolve=lambda _kind: endpoint, label="test", models=("test-model",)
+    )
+    model = await adapter.build(ModelChoice())
+    assert isinstance(model, ReasoningChatOpenAI)
+    return model
+
+
+@pytest.mark.parametrize(
+    "is_responses", [False, True], ids=["chat", "responses"]
+)
+async def test_internal_summary_marker_does_not_reach_the_model_wire(
+    is_responses: bool,
+) -> None:
+    messages = fold.messages_of(_summary())
+    assert fold.is_summary_message(messages[0])
+    requests: list[bytes] = []
+
+    def handle(request: httpx2.Request) -> httpx2.Response:
+        requests.append(request.content)
+        assert request.url.path == (
+            "/responses" if is_responses else "/chat/completions"
+        )
+        assert b"llmcore_summary" not in request.content
+        assert b"response_metadata" not in request.content
+        body: object = json.loads(request.content)
+        assert "早先聊了锅炉" in str(body)
+        return httpx2.Response(200, json=_wire_reply(is_responses))
+
+    model = await _wire_model()
+    async with (
+        httpx2.AsyncClient(
+            transport=httpx2.MockTransport(handle), timeout=1
+        ) as http,
+        AsyncOpenAI(
+            api_key="test-key",
+            base_url="https://model.invalid",
+            http_client=http,
+            max_retries=0,
+        ) as client,
+    ):
+        model.root_async_client = client
+        model.async_client = client.chat.completions
+        model.use_responses_api = is_responses
+        reply = await model.ainvoke(messages)
+
+    assert text_of(reply) == "摘要可见"
+    assert len(requests) == 1
 
 
 def test_a_summary_survives_a_round_trip_through_the_column() -> None:
