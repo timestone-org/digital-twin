@@ -6,6 +6,7 @@
  * 否则「这一块没画出来」与「这一步什么都没算」在界面上长得一模一样。
  */
 import { computed } from 'vue'
+import { DtDisclosure } from '@dt/ui'
 
 import type { ReportBlock } from '../scripts/reportBlocks'
 import { isBlockKind } from '../scripts/reportBlocks'
@@ -28,10 +29,9 @@ const raw = computed(() => JSON.stringify(props.block.payload, null, 2))
   <div class="dt-ml-rawblock">
     <p class="dt-ml-rawblock__title">{{ props.block.title }}</p>
     <p class="dt-ml-rawblock__note">{{ note }}</p>
-    <details class="dt-ml-rawblock__more">
-      <summary>原始内容</summary>
+    <DtDisclosure title="原始内容" :default-open="false">
       <pre class="dt-ml-rawblock__raw">{{ raw }}</pre>
-    </details>
+    </DtDisclosure>
   </div>
 </template>
 
@@ -54,11 +54,6 @@ const raw = computed(() => JSON.stringify(props.block.payload, null, 2))
 
   &__note {
     margin: 0;
-    color: var(--text-secondary);
-    font-size: var(--ctl-hint-fs-sm);
-  }
-
-  &__more {
     color: var(--text-secondary);
     font-size: var(--ctl-hint-fs-sm);
   }

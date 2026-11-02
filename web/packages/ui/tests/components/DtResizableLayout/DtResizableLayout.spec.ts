@@ -35,6 +35,17 @@ function firstSize(wrapper: ReturnType<typeof render>): number {
   return Number(wrapper.get('[role="separator"]').attributes('aria-valuenow'))
 }
 
+it('默认插槽仅作为最后一个区块的后备，具名插槽优先', () => {
+  const wrapper = mount(DtResizableLayout, {
+    props: { panes },
+    slots: { default: '<main>页面</main>', first: '<nav>导航</nav>' },
+  })
+  expect(wrapper.get('[data-pane="first"] nav').text()).toBe('导航')
+  expect(wrapper.get('[data-pane="second"] main').text()).toBe('页面')
+  expect(wrapper.findAll('main')).toHaveLength(1)
+  wrapper.unmount()
+})
+
 beforeEach(() => {
   width = 1000
   height = 600

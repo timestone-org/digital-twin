@@ -44,6 +44,16 @@ describe('大屏级外观面板', () => {
     wrapper.unmount()
   })
 
+  it('网格参数按可用宽度排布，不强制三列挤压数值输入', () => {
+    const wrapper = mountPanel()
+    const fields = wrapper.get('[data-test="chrome-grid-fields"]')
+    expect(fields.classes()).toContain(
+      '[grid-template-columns:repeat(auto-fit,minmax(min(100%,8rem),1fr))]',
+    )
+    expect(fields.findAll('.dt-number')).toHaveLength(3)
+    wrapper.unmount()
+  })
+
   it('主题选择与恢复跟随系统分别抛预设 id 和 null', () => {
     const wrapper = mountPanel({ __base: 'light' })
     const select = wrapper.getComponent(DtSelect)
