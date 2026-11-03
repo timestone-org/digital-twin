@@ -264,6 +264,35 @@ async def test_lists_and_configuration_snapshot_include_matching_identity(
     assert instance["id"] in {row["id"] for row in combined["items"]}
 
 
+async def test_instance_list_allows_omitted_search_with_page_controls(
+    app_client: httpx.AsyncClient,
+) -> None:
+    instance = await make_instance(app_client)
+    response = await app_client.get(INSTANCES, params={"page": 1, "size": 20})
+    assert response.status_code == 200
+    listed = data_of(response)
+    assert (listed["page"], listed["size"], listed["total"]) == (1, 20, 1)
+    assert [item["id"] for item in listed["items"]] == [instance["id"]]
+
+
+async def test_instance_list_rejects_explicit_empty_search(
+    app_client: httpx.AsyncClient,
+) -> None:
+    response = await app_client.get(
+        INSTANCES, params={"page": 1, "size": 20, "q": ""}
+    )
+    assert response.status_code == 400
+    body = _OBJECT.validate_python(response.json())
+    assert body["code"] == 40001
+    details = body["details"]
+    assert isinstance(details, list)
+    assert len(details) == 1
+    detail = details[0]
+    assert isinstance(detail, dict)
+    assert detail["field"] == "q"
+    assert detail["code"] == "string_too_short"
+
+
 @pytest.mark.parametrize("path", [TEMPLATES, INSTANCES])
 async def test_missing_resources_fail_explicitly(app_client, path):
     absent = "00000000-0000-4000-8000-000000000123"

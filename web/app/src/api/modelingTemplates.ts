@@ -26,10 +26,16 @@ function read<T>(
   signal?: AbortSignal,
   query?: Query | { run_id: string },
 ): Promise<T> {
+  const filters = query && { ...query }
+  if (filters && 'q' in filters) {
+    const keyword = filters.q?.trim()
+    if (keyword) filters.q = keyword
+    else delete filters.q
+  }
   return requestData<T>(path, {
     baseUrl: PLATFORM_BASE_URL,
     ...(signal ? { signal } : {}),
-    ...(query ? { query: { ...query } } : {}),
+    ...(filters ? { query: filters } : {}),
   })
 }
 
