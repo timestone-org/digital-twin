@@ -53,6 +53,7 @@ from platform_server.apps.modeling.operators.model import (
     TASK_CLASSIFICATION,
     TASK_REGRESSION,
 )
+from platform_server.apps.modeling.operators.model_restore import restore_model
 from platform_server.apps.modeling.operators.payloads import (
     MetricsPayload,
     ModelPayload,
@@ -187,6 +188,7 @@ class FeatureImportance(OperatorBase):
     """
 
     CODE = "feature_importance"
+    REQUIRES_MODEL_ARTIFACT = True
     NAME = "特征重要性"
     DESCRIPTION = "把每一列打乱再打分，掉得越多说明这一列越重要"
     CATEGORY = "evaluate"
@@ -218,6 +220,11 @@ class FeatureImportance(OperatorBase):
     def __init__(self, config: OperatorConfig) -> None:
         super().__init__(config)
         self._seen: Importances | None = None
+        self._input_estimator: object | None = None
+
+    def attach_estimator(self, estimator: object) -> None:
+        """接收子进程已校验的上游训练产物；Args: estimator。"""
+        self._input_estimator = estimator
 
     def run(self, inputs: dict[str, Any]) -> dict[str, Any]:
         """逐列打乱再打分，掉的分就是这一列的重要性。
@@ -231,7 +238,9 @@ class FeatureImportance(OperatorBase):
         if not isinstance(payload, ModelPayload):
             raise OperatorError("输入端口 model 上没有模型")
         test = frame_input(inputs, "test")
-        self._seen = self._importances(_rebuilt(payload), payload, test)
+        self._seen = self._importances(
+            restore_model(payload, self._input_estimator), payload, test
+        )
         return {"metrics": MetricsPayload(task=payload.task)}
 
     def report(self) -> tuple[ReportBlock, ...]:
@@ -339,19 +348,6 @@ def _residual_stats(residuals: Sequence[float]) -> dict[str, float | None]:
         "residual_p95": quantile_at(ordered, 0.95),
         "residual_max_abs": max(abs(value) for value in residuals),
     }
-
-
-def _rebuilt(payload: ModelPayload) -> OperatorBase:
-    """按模型描述把那个算子重建出来，只为了拿它的 `predict_rows`。
-
-    ⚠ 超参就是那个算子的配置**原样**——两者漂了的话这里会拿一份不完整的配置
-    去构造，而构造得出来、算出来的数却是另一个模型的。契约用例钉住这一条。
-    Args: payload。
-    """
-    model, _ = registry.build(payload.algo, dict(payload.hyper_params))
-    model.bind_runtime(tz_offset_minutes=0, split_plan=None)
-    model.load_fitted(dict(payload.fitted))
-    return model
 
 
 def _target_values(test: Frame, target_key: str) -> list[float]:

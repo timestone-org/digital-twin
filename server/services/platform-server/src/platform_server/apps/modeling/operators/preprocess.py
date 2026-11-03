@@ -65,12 +65,13 @@ class FillMissingConfig(OperatorConfig):
         default=0.0,
         title="固定值",
         description="填法选 constant 时用它",
+        json_schema_extra={"x-dt-visible-when": {"strategy": ["constant"]}},
     )
     on_all_null: AllNullAction = Field(
         default="error",
         title="整列全空时",
         description=(
-            "error=报错（固定值填法照填不误）；skip=这一列原样放过不填"
+            "error=按填法处理（均值/中位数报错，固定值照填）；skip=保留整列空值"
         ),
     )
 

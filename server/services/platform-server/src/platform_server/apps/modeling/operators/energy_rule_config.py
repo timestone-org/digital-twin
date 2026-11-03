@@ -29,24 +29,38 @@ MAX_FIELD_NAME_LENGTH = 128
 class EnergyRuleParameters(OperatorConfig):
     """规则阈值与十进制显示精度。"""
 
-    temperature_min: float = Field(default=18, ge=-100, le=100)
-    temperature_max: float = Field(default=26, ge=-100, le=100)
-    humidity_min: float = Field(default=40, ge=0, le=100)
-    humidity_max: float = Field(default=65, ge=0, le=100)
-    fluctuation_threshold_pct: float = Field(default=10, ge=0, le=10000)
-    benchmark_good_ratio: float = Field(default=1, gt=0, le=100)
-    benchmark_warning_ratio: float = Field(default=1.1, gt=0, le=100)
-    cop_min: float = Field(default=3.2, gt=0, le=100)
-    balance_tolerance: float = Field(default=0.01, ge=0, le=1000000)
-    voltage_min: float = Field(default=209, ge=0, le=1000000)
-    voltage_max: float = Field(default=231, ge=0, le=1000000)
-    frequency_min: float = Field(default=49.5, ge=0, le=1000)
-    frequency_max: float = Field(default=50.5, ge=0, le=1000)
-    pressure_min: float = Field(default=0.45, ge=0, le=1000000)
-    pressure_max: float = Field(default=0.7, ge=0, le=1000000)
-    flow_min: float = Field(default=80, ge=0, le=1000000000)
-    flow_max: float = Field(default=120, ge=0, le=1000000000)
-    decimal_places: int = Field(default=6, ge=0, le=12)
+    temperature_min: float = Field(
+        default=18, ge=-100, le=100, title="温度下限（℃）"
+    )
+    temperature_max: float = Field(
+        default=26, ge=-100, le=100, title="温度上限（℃）"
+    )
+    humidity_min: float = Field(default=40, ge=0, le=100, title="湿度下限（%）")
+    humidity_max: float = Field(default=65, ge=0, le=100, title="湿度上限（%）")
+    fluctuation_threshold_pct: float = Field(
+        default=10, ge=0, le=10000, title="波动阈值（%）"
+    )
+    benchmark_good_ratio: float = Field(
+        default=1, gt=0, le=100, title="对标良好边界比值"
+    )
+    benchmark_warning_ratio: float = Field(
+        default=1.1, gt=0, le=100, title="对标预警边界比值"
+    )
+    cop_min: float = Field(default=3.2, gt=0, le=100, title="最低能效比 COP")
+    balance_tolerance: float = Field(
+        default=0.01, ge=0, le=1000000, title="流向平衡允许差额"
+    )
+    voltage_min: float = Field(default=209, ge=0, le=1000000, title="电压下限")
+    voltage_max: float = Field(default=231, ge=0, le=1000000, title="电压上限")
+    frequency_min: float = Field(default=49.5, ge=0, le=1000, title="频率下限")
+    frequency_max: float = Field(default=50.5, ge=0, le=1000, title="频率上限")
+    pressure_min: float = Field(
+        default=0.45, ge=0, le=1000000, title="压力下限"
+    )
+    pressure_max: float = Field(default=0.7, ge=0, le=1000000, title="压力上限")
+    flow_min: float = Field(default=80, ge=0, le=1000000000, title="流量下限")
+    flow_max: float = Field(default=120, ge=0, le=1000000000, title="流量上限")
+    decimal_places: int = Field(default=6, ge=0, le=12, title="结果小数位数")
 
     @model_validator(mode="after")
     def check_order(self) -> Self:
@@ -71,32 +85,38 @@ class EnergyRuleParameters(OperatorConfig):
 class EnergyMeter(OperatorConfig):
     """一个计量列的类别、单位与用户确认的折标系数。"""
 
-    category: str = Field(min_length=1, max_length=64)
-    column: str = Field(min_length=1, max_length=128)
-    unit: str = Field(default="kWh", min_length=1, max_length=32)
+    category: str = Field(min_length=1, max_length=64, title="能源类别")
+    column: str = Field(min_length=1, max_length=128, title="计量列")
+    unit: str = Field(
+        default="kWh", min_length=1, max_length=32, title="计量单位"
+    )
     standard_coal_factor: Decimal = Field(
         default=Decimal("0.1229"),
         ge=Decimal("1e-12"),
         le=1000000,
         max_digits=20,
         decimal_places=12,
+        title="折标煤系数",
     )
 
 
 class EnergyFlowEdge(OperatorConfig):
     """来源端计量的有向能流边与传输效率。"""
 
-    source: str = Field(min_length=1, max_length=64)
-    target: str = Field(min_length=1, max_length=64)
-    column: str = Field(min_length=1, max_length=128)
+    source: str = Field(min_length=1, max_length=64, title="来源节点")
+    target: str = Field(min_length=1, max_length=64, title="目标节点")
+    column: str = Field(min_length=1, max_length=128, title="来源端计量列")
     efficiency: Decimal = Field(
         default=Decimal("1"),
         ge=Decimal("1e-12"),
         le=1,
         max_digits=13,
         decimal_places=12,
+        title="传输效率",
     )
-    unit: str = Field(default="kWh", min_length=1, max_length=32)
+    unit: str = Field(
+        default="kWh", min_length=1, max_length=32, title="计量单位"
+    )
 
 
 class EnergyRulesConfig(OperatorConfig):

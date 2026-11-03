@@ -60,6 +60,11 @@ export function useResultPanel(deps: ResultPanelDeps) {
   return {
     labels,
     config,
+    operator: computed(() => {
+      const graph = deps.runGraph() ?? deps.graph.value
+      const node = graph.nodes.find((item) => item.id === nodeId.value)
+      return node ? deps.operators.value.get(node.operator) : undefined
+    }),
     /** 当前开着的是哪个节点。⚠ 下载地址要用它，别从详情里反推。 */
     nodeId: computed(() => nodeId.value),
     /** 这个节点的详情；null = 还没拉回来。 */

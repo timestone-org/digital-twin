@@ -219,6 +219,7 @@ class OperatorBase:
     SERVING_CHANNEL: ClassVar[str] = ""
     # 产模型算子的任务类型，供训练前的模板与实例列表使用
     MODEL_TASK: ClassVar[ModelTask | None] = None
+    REQUIRES_MODEL_ARTIFACT: ClassVar[bool] = False
     # 引擎在 run() 之前按名注入的运行期上下文。唯一入口是 bind_runtime，
     # 名单与它的参数在注册期比对——名字打错在登记那一刻就红，不留到运行期静默
     RUNTIME_ATTRS: ClassVar[tuple[str, ...]] = (

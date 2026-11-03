@@ -119,7 +119,7 @@ class EmptyRun:
 
     before: Frame
     after: Frame
-    #: 每一列的空值率，与判据用的是同一个函数
+    #: 判据列的空值率
     ratios: Mapping[str, float]
     removed: tuple[str, ...]
     limit: float
@@ -394,9 +394,14 @@ def _empty_rows_block(run: EmptyRun) -> ReportBlock:
         ),
         funnel=funnel_of(
             (
-                Stage("进来", len(run.ratios), "列"),
+                Stage("进来", len(run.before.columns), "列"),
+                *(
+                    (Stage("参与判定", len(run.ratios), "列"),)
+                    if len(run.ratios) != len(run.before.columns)
+                    else ()
+                ),
                 Stage("空值率超过阈值", len(run.removed), "列"),
-                Stage("留下", len(kept), "列"),
+                Stage("留下", len(run.after.columns), "列"),
             )
         ),
     )
@@ -412,7 +417,10 @@ def _empty_columns_block(run: EmptyRun) -> ReportBlock:
         ColumnChange(
             removed=run.removed,
             kept=len(run.after.columns),
-            reason=f"空值率超过 {run.limit} 的列被丢掉",
+            reason=(
+                "所选列中" if len(run.ratios) != len(run.before.columns) else ""
+            )
+            + f"空值率超过 {run.limit} 的列被丢掉",
         ),
     )
 

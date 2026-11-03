@@ -49,6 +49,8 @@ MAX_WINDOW = 500
 
 type RollingStat = Literal["mean", "sum", "min", "max", "std"]
 ROLLING_STATS: tuple[str, ...] = ("max", "mean", "min", "std", "sum")
+DEFAULT_LAGS = (1,)
+DEFAULT_ROLLING_STATS: tuple[RollingStat, ...] = ("mean",)
 
 
 class LagFeatureConfig(OperatorConfig):
@@ -60,10 +62,11 @@ class LagFeatureConfig(OperatorConfig):
         default_factory=list[str],
     )
     lags: list[Annotated[int, Field(ge=1, le=MAX_LAG)]] = Field(
-        default_factory=lambda: [1],
+        default_factory=lambda: list(DEFAULT_LAGS),
         min_length=1,
         title="滞后几期",
         description="每一期造一列；1 就是上一行的值",
+        json_schema_extra={"default": list(DEFAULT_LAGS)},
     )
 
 
@@ -122,6 +125,7 @@ class LagFeature(OperatorBase):
             (
                 f"{key}{FEATURE_JOINER}lag{lag}",
                 _shifted(numbers_of(frame, key), lag),
+                frame.column_of(key).unit,
             )
             for key in config.columns
             for lag in lags
@@ -170,12 +174,13 @@ class RollingFeatureConfig(OperatorConfig):
         description="连同当前行往前数这么多行",
     )
     stats: list[RollingStat] = Field(
-        default_factory=lambda: ["mean"],
+        default_factory=lambda: list(DEFAULT_ROLLING_STATS),
         min_length=1,
         title="算哪几个",
         description=(
             "mean=均值；sum=求和；min=最小；max=最大；std=标准差（总体口径）"
         ),
+        json_schema_extra={"default": list(DEFAULT_ROLLING_STATS)},
     )
 
 
@@ -236,6 +241,7 @@ class RollingFeature(OperatorBase):
             (
                 f"{key}{FEATURE_JOINER}{stat}{config.window}",
                 _rolled(numbers_of(frame, key), config.window, stat),
+                frame.column_of(key).unit,
             )
             for key in config.columns
             for stat in stats
@@ -384,7 +390,9 @@ def _folded(chunk: list[float], stat: str) -> float:
     return math.sqrt(sum((value - mean) ** 2 for value in chunk) / len(chunk))
 
 
-def _appended(frame: Frame, made: list[tuple[str, list[CellValue]]]) -> Frame:
+def _appended(
+    frame: Frame, made: list[tuple[str, list[CellValue], str]]
+) -> Frame:
     """把造出来的几列接到帧的后面。
 
     Args: frame, made。
@@ -392,12 +400,17 @@ def _appended(frame: Frame, made: list[tuple[str, list[CellValue]]]) -> Frame:
     columns = (
         *frame.columns,
         *(
-            FrameColumn(key=key, name=key, dtype=DTYPE_NUMBER)
-            for key, _ in made
+            FrameColumn(
+                key=key,
+                name=key,
+                dtype=DTYPE_NUMBER,
+                unit=unit,
+            )
+            for key, _, unit in made
         ),
     )
     rows = tuple(
-        (*row, *(values[position] for _, values in made))
+        (*row, *(values[position] for _, values, _ in made))
         for position, row in enumerate(frame.rows)
     )
     return replace(frame, columns=columns, rows=rows)

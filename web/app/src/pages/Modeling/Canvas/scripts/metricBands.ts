@@ -52,6 +52,41 @@ interface PlainSpec {
 }
 
 const PLAIN: Record<string, PlainSpec> = {
+  warning_count: {
+    label: '算法提示数',
+    hint: '本次聚类的收敛或退化提示条数，详情见结果说明',
+  },
+  rows: { label: '样本数', hint: '参与本次分析的输入行数' },
+  feature_count: { label: '特征数', hint: '参与聚类的有效数值特征数' },
+  cluster_count: {
+    label: '簇数量',
+    hint: '不含噪声标签的有效簇数，不代表真实类别数',
+  },
+  noise_rows: { label: '噪声行数', hint: '被密度聚类标记为噪声的观测数' },
+  noise_ratio: { label: '噪声比例', hint: '噪声行占输入的比例，按 0–1 表示' },
+  silhouette: {
+    label: '轮廓系数',
+    hint: '有效样本的簇内紧密与簇间分离程度；退化时无定义，不代表分类准确率',
+  },
+  silhouette_rows: {
+    label: '轮廓计算样本数',
+    hint: '计算轮廓系数实际使用的有界样本数',
+  },
+  inertia: {
+    label: '簇内平方距离和',
+    hint: '依赖样本量、特征尺度和簇数，不设通用好坏线',
+  },
+  aic: { label: 'AIC', hint: '仅在相同数据和模型候选之间比较的信息准则' },
+  bic: { label: 'BIC', hint: '仅在相同数据和模型候选之间比较的信息准则' },
+  precision_macro: {
+    label: '宏平均精确率',
+    hint: '各类精确率等权平均，不表示某个正类',
+  },
+  recall_macro: { label: '宏平均召回率', hint: '各类召回率等权平均' },
+  f1_macro: { label: '宏平均 F1', hint: '各类 F1 等权平均' },
+  precision_weighted: { label: '加权精确率', hint: '按各类真实样本量加权平均' },
+  recall_weighted: { label: '加权召回率', hint: '按各类真实样本量加权平均' },
+  f1_weighted: { label: '加权 F1', hint: '按各类真实样本量加权平均' },
   test_rows: {
     label: '验证样本数',
     hint: '独立验证段参与检测的样本数',

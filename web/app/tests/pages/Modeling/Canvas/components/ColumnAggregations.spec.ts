@@ -23,11 +23,33 @@ const props = {
 }
 
 describe('按列汇总配置', () => {
+  it('宽表默认只展开已配置列，其他列通过选择器按需添加', () => {
+    const columns = Array.from({ length: 200 }, (_, index) => ({
+      key: `c${index}`,
+      name: `指标${index}`,
+    }))
+    const wrapper = mount(ColumnAggregations, {
+      props: { ...props, columns, modelValue: { c10: 'avg' } },
+    })
+    expect(wrapper.findAllComponents(DtSelect)).toHaveLength(2)
+    const picker = wrapper
+      .findAllComponents(DtSelect)
+      .find((item) => item.props('label') === '添加单独汇总列')
+    expect(picker?.props('options')).toHaveLength(199)
+    picker?.vm.$emit('update:modelValue', 'c20')
+    expect(wrapper.emitted('update:modelValue')).toEqual([
+      [{ c10: 'avg', c20: 'sum' }],
+    ])
+    wrapper.unmount()
+  })
+
   it('没有列显示名时仍能搜索列 key，未匹配时不丢弃已存规则', async () => {
     const wrapper = mount(ColumnAggregations, {
       props: { ...props, columns: [{ key: '温度', name: '' }] },
     })
-    expect(wrapper.findComponent(DtSelect).props('label')).toBe('温度')
+    expect(wrapper.findAllComponents(DtSelect).at(-1)?.props('label')).toBe(
+      '温度',
+    )
     wrapper.findComponent(DtInput).vm.$emit('update:modelValue', '不存在')
     await wrapper.vm.$nextTick()
     expect(wrapper.text()).toContain('没有匹配的列')
@@ -64,22 +86,30 @@ describe('按列汇总配置', () => {
     expect(wrapper.emitted('change')).toEqual([['column_aggregations', {}]])
     wrapper.unmount()
   })
-  it('为每列提供默认口径和后端给定的聚合方式', () => {
+  it('仅为已配置列提供默认口径和后端给定的聚合方式', () => {
     const wrapper = mount(ColumnAggregations, { props })
-    const fields = wrapper.findAllComponents(DtSelect)
-    expect(fields[0]?.props('label')).toContain('计划产量')
+    const fields = wrapper
+      .findAllComponents(DtSelect)
+      .filter((item) => item.props('label') !== '添加单独汇总列')
+    expect(fields).toHaveLength(1)
+    expect(fields[0]?.props('label')).toContain('室外温度')
     expect(fields[0]?.props('options')).toEqual([
       { value: '', label: '沿用默认' },
       ...props.options,
     ])
-    expect(fields[1]?.props('modelValue')).toBe('avg')
+    expect(fields[0]?.props('modelValue')).toBe('avg')
     wrapper.unmount()
   })
 
   it('修改一列保持其余列，恢复默认时移除该覆盖', () => {
     const wrapper = mount(ColumnAggregations, { props })
-    wrapper.findAllComponents(DtSelect)[0]?.vm.$emit('update:modelValue', 'sum')
-    wrapper.findAllComponents(DtSelect)[1]?.vm.$emit('update:modelValue', '')
+    wrapper
+      .findAllComponents(DtSelect)[0]
+      ?.vm.$emit('update:modelValue', '产量')
+    wrapper
+      .findAllComponents(DtSelect)
+      .at(-1)
+      ?.vm.$emit('update:modelValue', '')
     expect(wrapper.emitted('update:modelValue')).toEqual([
       [{ 温度: 'avg', 产量: 'sum' }],
       [{}],
@@ -117,7 +147,7 @@ describe('按列汇总配置', () => {
     const wrapper = mount(ColumnAggregations, { props })
     wrapper.findComponent(DtInput).vm.$emit('update:modelValue', '温度')
     await wrapper.vm.$nextTick()
-    expect(wrapper.findAllComponents(DtSelect)).toHaveLength(1)
+    expect(wrapper.findAllComponents(DtSelect)).toHaveLength(2)
     wrapper.findComponent(DtInput).vm.$emit('update:modelValue', '')
     await wrapper.vm.$nextTick()
     expect(wrapper.findAllComponents(DtSelect)).toHaveLength(2)

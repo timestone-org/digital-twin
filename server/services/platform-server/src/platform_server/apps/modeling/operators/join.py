@@ -47,6 +47,7 @@ from platform_server.apps.modeling.operators.steps import (
     ratio_of,
     spread_of,
 )
+from platform_server.apps.modeling.operators.tabular import merged_provenance
 
 # 对齐容差的上限：一天。⚠ 无界的话「就近」会退化成「随便找一行」
 MAX_TOLERANCE_MS = 86_400_000
@@ -303,12 +304,7 @@ def _joined(
 
 
 def _joined_provenance(left: Frame, right: Frame) -> Provenance:
-    cutoffs = [
-        source.observed_until
-        for source in (left.provenance, right.provenance)
-        if source.observed_until is not None
-    ]
-    return replace(left.provenance, observed_until=min(cutoffs, default=None))
+    return merged_provenance(left.provenance, right.provenance)
 
 
 def _tally_block(aligned: _Aligned, config: LedgerJoinConfig) -> ReportBlock:

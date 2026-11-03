@@ -644,6 +644,7 @@ export type {
 
 export type * from './hierarchy'
 export * from './modelingManagement'
+export type * from './modelingTransfer'
 
 export type {
   AcCompliancePolicy,

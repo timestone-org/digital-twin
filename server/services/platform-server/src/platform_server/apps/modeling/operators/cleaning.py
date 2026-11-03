@@ -4,6 +4,7 @@
 同一类里看时间轴的那个（`resample`）在 `resample.py`，它另有一套桶宽与时区口径。
 """
 
+import math
 from typing import Any, Literal
 
 from pydantic import Field
@@ -235,10 +236,10 @@ class DropMissing(OperatorBase):
 
     def _without_empty_columns(self, frame: Frame) -> Frame:
         limit = self._config.max_null_ratio
-        ratios = {
-            column.key: null_ratio_of(frame, column.key)
-            for column in frame.columns
-        }
+        keys = self._config.subset or list(frame.keys)
+        for key in keys:
+            frame.position_of(key)
+        ratios = {key: null_ratio_of(frame, key) for key in keys}
         dropped = tuple(key for key, ratio in ratios.items() if ratio > limit)
         kept = without_columns(frame, dropped)
         if not kept.columns:
@@ -405,12 +406,15 @@ def _as_bool(value: CellValue) -> bool | None:
 def _as_float(value: CellValue) -> float | None:
     if isinstance(value, bool):
         return 1.0 if value else 0.0
-    if isinstance(value, (int | float)):
-        return float(value)
     try:
-        return float(str(value))
-    except ValueError:
+        converted = (
+            float(value)
+            if isinstance(value, (int | float))
+            else float(str(value))
+        )
+    except (ValueError, OverflowError):
         return None
+    return converted if math.isfinite(converted) else None
 
 
 def _is_holed(

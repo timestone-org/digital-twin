@@ -13,6 +13,7 @@ from platform_server.apps.modeling.api import (
     modeling_pipelines,
     modeling_runs,
     modeling_templates,
+    modeling_transfer,
     open_models,
 )
 
@@ -20,6 +21,7 @@ ROUTERS: tuple[APIRouter, ...] = (
     modeling_bdm.router,
     modeling_commands.router,
     modeling_operators.router,
+    modeling_transfer.router,
     modeling_pipelines.router,
     modeling_templates.router,
     modeling_instances.router,

@@ -87,6 +87,15 @@ def test_operation_recovers_resource_and_required_permission():
     assert choose_operation("create_instance", None).http_status == 201
 
 
+def test_import_pipeline_is_an_unscoped_design_command():
+    operation = choose_operation("import_pipeline", None)
+    assert operation.scope == "modeling.import_pipeline"
+    assert operation.permission == "modeling:manage"
+    assert operation.http_status == 201
+    with pytest.raises(ValidationFailed):
+        choose_operation("import_pipeline", RESOURCE)
+
+
 def test_trusted_operator_is_separate_from_platform_account():
     caller = CallerContext(ACCOUNT, "gateway", "partner")
     identity = resolve_operator(caller, "bdm-user-7", (ACCOUNT,), "127.0.0.1")

@@ -18,6 +18,7 @@ import {
   textAt,
 } from './formulaArgs'
 import { niceNumber } from './numbers'
+import { tableExplanation } from './formulaTabularArgs'
 
 /** 指标那一块的标题，逐字与后端 `evalblocks` 对齐。 */
 const METRIC_TITLES = {
@@ -107,7 +108,35 @@ function errorFormulas(context: FormulaContext): FormulaSpec {
   }
 }
 
+function averagedClassification(context: FormulaContext): FormulaSpec {
+  const weighted = textAt(context.config, 'average') === 'weighted'
+  return tableExplanation(context, {
+    id: 'confusion',
+    title: weighted ? '按真实样本数加权的分类指标' : '各类等权的宏平均分类指标',
+    expressions: [
+      weighted
+        ? 'metric_weighted = sum_c(support_c·metric_c) / sum_c(support_c)'
+        : 'metric_macro = sum_c(metric_c) / 有定义的类数',
+    ],
+    parameters: [['average', '汇总方式']],
+    legend: [
+      {
+        symbol: 'metric_c',
+        text: '对类别 c 一对其余计算的精确率、召回率或 F1',
+      },
+      { symbol: 'support_c', text: '类别 c 的真实样本数' },
+    ],
+    notes: [
+      '每个指标独立排除无定义的类别，并按剩余类别重新计算分母；没有有效权重时留空，不补零。',
+      'F1 是逐类算出后再平均，不是对平均精确率和召回率再取调和平均。',
+      '准确率仍为全部测试样本预测正确的比例；这些汇总不对应单一正类，也不生成单类概率曲线。',
+    ],
+  })
+}
+
 function confusionFormula(context: FormulaContext): FormulaSpec {
+  if (['macro', 'weighted'].includes(textAt(context.config, 'average')))
+    return averagedClassification(context)
   const precision = metricAt(context, METRIC_TITLES.classification, 'precision')
   const recall = metricAt(context, METRIC_TITLES.classification, 'recall')
   const label = numberAt(context.config, 'positive_label')

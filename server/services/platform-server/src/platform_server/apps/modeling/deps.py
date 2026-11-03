@@ -43,6 +43,7 @@ __all__ = [
     "get_modeling_sessions",
     "get_object_store",
     "get_open_model_deps",
+    "get_pipeline_import_context",
     "get_publish_context",
     "get_run_context",
     "get_session",
@@ -94,6 +95,17 @@ def get_manage_context(
         idempotency_key=idempotency_key,
         caller=caller,
     )
+
+
+async def get_pipeline_import_context(
+    request: Request,
+    response: Response,
+    session: Annotated[AsyncSession, Depends(get_session)],
+    gate: Annotated[WriteGate, Depends(get_manage_context)],
+    sessions: Annotated[Sessions, Depends(get_modeling_sessions)],
+) -> WriteGate:
+    """导入流水线的持久命令上下文。"""
+    return await build_command_gate(request, response, session, gate, sessions)
 
 
 def _get_instance_write_gate(

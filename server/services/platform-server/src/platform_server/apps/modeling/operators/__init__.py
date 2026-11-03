@@ -8,6 +8,8 @@ from platform_server.apps.modeling.operators.anomaly import (
     AnomalyDistance,
     SplitSamples,
 )
+from platform_server.apps.modeling.operators.anomaly_models import AnomalyModel
+from platform_server.apps.modeling.operators.arithmetic import ColumnMath
 from platform_server.apps.modeling.operators.base import (
     CATEGORIES,
     CHANNEL_BINARY,
@@ -31,6 +33,13 @@ from platform_server.apps.modeling.operators.cleaning import (
     CastType,
     DropMissing,
     FilterRows,
+)
+from platform_server.apps.modeling.operators.clustering import (
+    ClusteringAnalysis,
+)
+from platform_server.apps.modeling.operators.combining import (
+    ConcatRows,
+    KeyJoin,
 )
 from platform_server.apps.modeling.operators.diagnostics import (
     CrossValidate,
@@ -57,6 +66,7 @@ from platform_server.apps.modeling.operators.frame import (
     FrameColumn,
     Provenance,
 )
+from platform_server.apps.modeling.operators.grouping import GroupAggregate
 from platform_server.apps.modeling.operators.join import LedgerJoin
 from platform_server.apps.modeling.operators.model import SplitDataset
 from platform_server.apps.modeling.operators.payloads import (
@@ -112,8 +122,27 @@ from platform_server.apps.modeling.operators.resample import (
     AGG_FUNCS,
     Resample,
 )
+from platform_server.apps.modeling.operators.rowops import (
+    Deduplicate,
+    SampleRows,
+    SortRows,
+)
 from platform_server.apps.modeling.operators.selection import SelectColumns
+from platform_server.apps.modeling.operators.sequence import (
+    CumulativeStats,
+    Difference,
+    RankRows,
+)
 from platform_server.apps.modeling.operators.source import LedgerSource
+from platform_server.apps.modeling.operators.statistics import (
+    Binning,
+    Correlation,
+    DescribeStats,
+)
+from platform_server.apps.modeling.operators.supervised import (
+    ClassificationModel,
+    RegressionModel,
+)
 from platform_server.apps.modeling.operators.temporal import (
     CyclicTime,
     TimeShift,
@@ -121,6 +150,11 @@ from platform_server.apps.modeling.operators.temporal import (
 from platform_server.apps.modeling.operators.timefeature import (
     TIME_PARTS,
     TimeFeature,
+)
+from platform_server.apps.modeling.operators.transforms import (
+    NumericTransform,
+    ReplaceValues,
+    TextTransform,
 )
 from platform_server.apps.modeling.operators.trees import TreeRegressor
 from platform_server.apps.modeling.operators.window import (
@@ -153,20 +187,31 @@ __all__ = [
     "TIME_PARTS",
     "ZONES",
     "AnomalyDistance",
+    "AnomalyModel",
     "BdmSource",
+    "Binning",
     "BlockAt",
     "BlockKind",
     "CastType",
     "CellChange",
     "CellValue",
     "ClassificationMetrics",
+    "ClassificationModel",
     "ClipOutlier",
+    "ClusteringAnalysis",
     "ColumnBins",
     "ColumnChange",
     "ColumnKeys",
+    "ColumnMath",
     "ColumnsByPort",
+    "ConcatRows",
+    "Correlation",
     "CrossValidate",
+    "CumulativeStats",
     "CyclicTime",
+    "Deduplicate",
+    "DescribeStats",
+    "Difference",
     "DropMissing",
     "EnergyRules",
     "FeatureImportance",
@@ -174,6 +219,8 @@ __all__ = [
     "FilterRows",
     "Frame",
     "FrameColumn",
+    "GroupAggregate",
+    "KeyJoin",
     "LagFeature",
     "LedgerJoin",
     "LedgerSource",
@@ -182,6 +229,7 @@ __all__ = [
     "MetricsPayload",
     "ModelPayload",
     "ModelStructure",
+    "NumericTransform",
     "OneHot",
     "OperatorBase",
     "OperatorConfig",
@@ -193,18 +241,24 @@ __all__ = [
     "Pdp",
     "PortSpec",
     "Provenance",
+    "RankRows",
     "RegressionMetrics",
+    "RegressionModel",
+    "ReplaceValues",
     "ReportBlock",
     "Resample",
     "ResidualAnalysis",
     "RollingFeature",
     "RowCounts",
+    "SampleRows",
     "Scale",
     "SelectColumns",
     "SelectFeature",
+    "SortRows",
     "SplitDataset",
     "SplitSamples",
     "Standardize",
+    "TextTransform",
     "TimeAxis",
     "TimeFeature",
     "TimeShift",

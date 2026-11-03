@@ -76,7 +76,12 @@ from platform_server.settings import API_PREFIX
 
 # 模型版本冻结的评估指标来源
 PUBLISHED_METRIC_OPERATORS = frozenset(
-    {"regression_metrics", "classification_metrics", "anomaly_distance"}
+    {
+        "regression_metrics",
+        "classification_metrics",
+        "anomaly_distance",
+        "anomaly_model",
+    }
 )
 
 

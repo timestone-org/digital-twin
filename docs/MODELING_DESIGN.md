@@ -13,6 +13,124 @@
 寻址；后续编辑副本不修改原流水线。复制不包含运行记录、模型版本、已发布模板或部署，
 需要 `modeling:manage` 权限，沿用创建接口的幂等键与编码冲突校验。
 
+### 流水线 JSON 迁移
+
+建模工作台可导出一条**已保存**的流水线，并在另一部署中导入为独立流水线。
+导出件只携带定义，不包含运行、模型版本、训练产物、模板、部署或连接凭据。
+编辑画布后须先保存，再从工作台导出。
+
+便携文档的外层版本与图的版本分别校验：
+
+```json
+{
+  "format_version": "1.0",
+  "pipeline": {
+    "code": "energy_analysis",
+    "name": "能耗分析",
+    "description": null,
+    "graph": { "format_version": "1.0", "nodes": [], "edges": [] }
+  },
+  "operators": []
+}
+```
+
+`operators` 必须恰好覆盖图中的算子类型，每种一条，版本来自导出环境的注册表。
+图中的节点标识、别名、参数、端口、连线和位置均保留。未知格式、未知算子、
+缺失或重复的版本条目、参数值结构类型错误、非法端口、重复节点、悬空引用、重复接线与环路阻断导入；
+算子版本差异给出警告。未完成的配置及目标环境需要重新绑定的数据源明确列为
+待配置事项，导入后仍须校验并完成配置才能运行。
+空节点、空连线的空白草稿允许迁移，并提示先添加取数算子。
+
+| 接口（平台前缀省略） | 用途 | 权限 |
+| --- | --- | --- |
+| `POST /modeling-pipelines/{id}:export` | 读取已保存定义和算子版本，返回 JSON 文档 | `modeling:manage` |
+| `POST /modeling-pipelines:inspect-import` | 预检文档、兼容性及待配置事项，不写入流水线 | `modeling:manage` |
+| `POST /modeling-pipelines:import` | 携带文档及新编码、名称、说明，创建独立流水线 | `modeling:manage` |
+
+导入不按编码覆盖原流水线；编码冲突返回 409，由使用者修改新编码后再提交。
+导入支持 `Idempotency-Key`，沿用建模写命令的持久恢复语义。台账编码和能管
+业务标识属于来源引用，不代表目标环境已有同一数据；目标部署必须自行配置
+授权连接并核对这些引用，地址、API Key 等部署配置不进入 JSON。
+
+### 通用数据分析与算子配置
+
+算子目录支持按分类及名称、编码、说明和算法选项组合搜索。以下通用表格算子
+与原有取数、清洗、特征、模型及评估算子使用同一套特征帧端口：
+
+| 环节 | 算子 | 主要配置与执行口径 |
+| --- | --- | --- |
+| 整理 | `deduplicate`、`sort_rows`、`sample_rows` | 去重保留策略、多列排序与空值位置、比例或数量抽样及固定种子 |
+| 汇总 | `group_aggregate` | 分组列、数值列、汇总方式与分组数上限；全空度量保持空值 |
+| 合并 | `key_join`、`concat_rows` | 同类型业务键多对一关联；纵向合并按列名对齐并检查类型、角色和单位 |
+| 清理 | `text_transform`、`replace_values` | 文本清理、大小写及固定文本替换；数值精确替换与显式缺失填充 |
+| 计算 | `numeric_transform`、`column_math` | 固定数学变换、列或常数四则运算、输出列名及无效结果策略 |
+| 时序 | `difference`、`cumulative_stats` | 差分、增长率、累计统计及缺失策略；按输入顺序计算，使用前先确认排序 |
+| 统计 | `describe_stats`、`correlation` | 有效/缺失数量、分位数、样本或总体标准差；相关系数及有效配对数 |
+| 分析特征 | `binning`、`rank_rows` | 显式分箱边界、左右闭合方式；分组排名及并列排名口径 |
+
+执行引擎采用有界内存计算；数据源单次最多 200,000 行，通用表格算子输入和输出
+最多 200,000 行、256 列。关联要求右键唯一，拒绝笛卡尔放大；分组超限明确失败，
+不静默丢组。统计与顺序相关的变换不作为单行推理步骤，发布模型仍须满足现有
+可服务性检查。该边界不承诺分布式执行或无限规模的数据处理。
+
+每个算子使用其代码提供的 JSON Schema 生成配置 Modal；数值上下界、必填、
+枚举、列引用、列表和默认值由同一份 Schema 驱动。可选显示元数据
+`x-dt-visible-when: {"method": ["random"]}` 表示只在控制字段取给定值时展示该项：
+多个控制字段取 AND，同一字段多个值取 OR；控制值缺省时读取 Schema 默认值。
+隐藏字段保留原值；后端仍校验参数类型，上游列存在性只检查当前激活的列引用。
+`x-dt-ordered: true` 表示列选择顺序影响计算，配置界面显示已选列的优先级并支持
+上下移动；普通列多选仍保持上游列序。
+
+### 常用模型家族
+
+保留 `linear_regression`、`logistic_regression`、`tree_regressor` 与
+`anomaly_distance` 的编码、默认值及冻结推理语义。新增算法按任务归入四个算子，
+通过 `algorithm` 选择类型，仅显示当前算法相关参数；算法候选同样参与目录搜索。
+画布和模型实例配置使用同一份 Schema 解析及通用字段控件。
+内置设计模板提供通用回归、通用分类、聚类分组和正常工况异常四个入口；台账和
+监督目标保留待配置状态，不填入虚构业务引用。通用分类默认采用宏平均评估；
+聚类和异常模板先明确剔除缺失行，再执行相应分析或无监督样本切分。
+
+| 算子 | 算法 | 结果及服务能力 |
+| --- | --- | --- |
+| `regression_model` | Ridge、Lasso、ElasticNet、BayesianRidge、Huber、SGD、决策树、随机森林、ExtraTrees、GBDT、HistGBDT、AdaBoost、KNN、SVR、MLP、XGBoost、LightGBM、CatBoost | 18 种回归选项；训练模型、测试预测，经二进制产物校验后可发布 |
+| `classification_model` | 多分类逻辑回归、SGD、决策树、随机森林、ExtraTrees、GBDT、HistGBDT、AdaBoost、KNN、SVC、LinearSVC、GaussianNB、BernoulliNB、LDA、QDA、MLP、XGBoost、LightGBM、CatBoost | 19 种分类选项；保留原始数值类别，有真实概率时才提供概率，不以决策分数冒充概率 |
+| `clustering_analysis` | KMeans、MiniBatchKMeans、GaussianMixture、DBSCAN、层次聚类、Birch、MeanShift、谱聚类 | 批量分组帧、簇数量/噪声/适用的聚类指标；不伪装为分类模型，不发布单行服务 |
+| `anomaly_model` | IsolationForest、novelty LOF、OneClassSVM、EllipticEnvelope | 使用正常训练样本与内部留出校准，冻结阈值后通过既有 `:detect` 返回异常判定 |
+
+每个算法均执行真实拟合。迭代、训练行列及高复杂度算法的样本规模有显式上限，
+并行度固定为单工作进程内一份计算；超限拒绝，不静默抽样训练或伪造结果。
+未收敛等训练警告进入结果说明，算法建议的标准化由使用者在流水线中明确配置，
+标准化是明确的配置项，统计量只来自训练部分并随产物冻结。
+
+四类入口合计 49 个算法选项，不把切分、预处理或规则计算算成学习算法。
+品牌提升模型使用原生库，统一 CPU 单线程、关闭额外训练文件；平台镜像提供
+OpenMP 运行库。Linux/Windows 使用官方 `xgboost-cpu` 分发，其他平台使用
+`xgboost`，避免将无用的 NCCL 依赖带入 CPU 部署。实际版本以 `uv.lock` 为准。
+产物仅记录其实际使用的品牌库；这三类库按完整版本拒绝加载漂移，旧科学计算
+产物仍遵守既有兼容规则，不被无关品牌库绑定。受限加载只额外放行三库模块根和
+原生状态所需的 `collections.defaultdict` / `OrderedDict`，不开放整个 collections。
+
+树数量、有效叶子数和类别数的组合在拟合前受预算限制，超限要求明确降低模型
+复杂度；产物封存和加载共享 32 MB 上限。全常量异常训练样本拒绝建模，部分
+常量列在结果中明确说明不参与这些新异常算法的评分；原距离模型的尺度下限语义不变。
+
+算法与参数定义核对自 [scikit-learn](https://scikit-learn.org/stable/supervised_learning.html)、
+[XGBoost](https://xgboost.readthedocs.io/en/stable/python/python_api.html)、
+[LightGBM](https://lightgbm.readthedocs.io/en/stable/Python-API.html) 与
+[CatBoost](https://catboost.ai/docs/en/concepts/python-reference_catboostclassifier) 官方文档。
+
+分类支持指定类的一对其余、宏平均及按真实样本数加权评估；旧配置继续按指定
+正类计算。未定义项保持为空，宏平均和加权平均明确排除未定义项，不以零冒充。
+二进制模型接置换重要性时，上游封存字节经独立运行上下文传入计算子进程，先做
+摘要、版本和受限加载校验，再恢复已训练估计器；模型预览与公共端口不携带字节。
+
+能源规则按八种业务类型提供列映射、阈值、分类计量和流向的可视表单；列表行可
+新增、删除，精确小数保持字符串。逐列聚合仅展示已配置的覆盖项，其余列沿用
+默认汇总方式，通过可搜索的列选择器添加覆盖。配置页支持恢复默认、未知列提示
+与只读状态；长表单只滚正文，底部保留配置状态及完成按钮。字段修改进入画布
+草稿，保存流水线后持久化；无效或未应用的结构化草稿继续阻止保存和运行。
+
 第三方流程独立为「发布模板 → 快捷创建模型实例 → 集中配置与更新 → 训练 → 发布模型版本 → 部署」。
 接入指南、已发布模板和接入实例统一从第三方接入区域访问；模板、实例及权限边界仍见
 [ADR-0061](adr/0061-建模模板冻结结构而实例独立配置和训练.md)。

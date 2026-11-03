@@ -17,6 +17,7 @@ from platform_server.apps.modeling.operators import (
 )
 from platform_server.apps.modeling.services.artifact_store import (
     SealedArtifact,
+    load,
     seal,
 )
 
@@ -30,6 +31,7 @@ class NodePayload:
     inputs: dict[str, Any]
     tz_offset_minutes: int
     split_plan: dict[str, Any] | None
+    model_artifact: SealedArtifact | None = None
 
 
 @dataclass(frozen=True)
@@ -65,6 +67,16 @@ def run_node_payload(payload: NodePayload) -> NodeResult:
         tz_offset_minutes=payload.tz_offset_minutes,
         split_plan=payload.split_plan,
     )
+    if payload.model_artifact is not None:
+        sealed = payload.model_artifact
+        operator.attach_estimator(
+            load(
+                sealed.payload,
+                digest=sealed.digest,
+                format_version=sealed.format_version,
+                runtime=sealed.runtime,
+            )
+        )
     outputs = operator.run(payload.inputs)
     estimator = operator.trained_estimator()
     return NodeResult(

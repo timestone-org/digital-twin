@@ -28,6 +28,11 @@ dependencies = [
     # 见 `apps/llm_providers/services/oauth_client.py` 文件头列的四处差异
     "langchain-openai>=1.6",
     "matplotlib>=3.10",
+    "lightgbm>=4.7.0",
+    "catboost>=1.2.10",
+    "xgboost-cpu>=3.4.1 ; sys_platform == 'linux' or sys_platform == 'win32'",
+    "xgboost>=3.4.1 ; sys_platform != 'linux' and sys_platform != 'win32'",
+    "threadpoolctl>=3.6.0",
 ]
 
 [project.scripts]

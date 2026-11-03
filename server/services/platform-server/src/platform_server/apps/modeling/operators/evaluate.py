@@ -6,7 +6,7 @@
 
 from collections.abc import Sequence
 from dataclasses import dataclass
-from typing import Any
+from typing import Any, Literal
 
 from pydantic import Field
 
@@ -17,6 +17,9 @@ from platform_server.apps.modeling.operators.base import (
     OperatorConfig,
     OperatorError,
     PortSpec,
+)
+from platform_server.apps.modeling.operators.classification_average import (
+    classification_averages,
 )
 from platform_server.apps.modeling.operators.evalblocks import (
     Classified,
@@ -239,10 +242,16 @@ def residual_histogram(
 class ClassificationMetricsConfig(OperatorConfig):
     """分类评估的参数。"""
 
+    average: Literal["binary", "macro", "weighted"] = Field(
+        default="binary",
+        title="分类汇总口径",
+        description="binary=指定类的一对其余；macro=各类等权，未定义项不参与；weighted=按真实样本数加权，未定义项不参与",
+    )
     positive_label: float = Field(
         default=1.0,
         title="哪一类算「正类」",
-        description="精确率 / 召回率 / F1 都是相对它算的",
+        description="指定类口径下，精确率 / 召回率 / F1 都是相对它算的",
+        json_schema_extra={"x-dt-visible-when": {"average": ["binary"]}},
     )
 
 
@@ -251,6 +260,7 @@ class ClassificationMetrics(OperatorBase):
     """分类评估：准确率 / 精确率 / 召回率 / F1 + 混淆矩阵。"""
 
     CODE = "classification_metrics"
+    SPEC_VERSION = "1.2"
     NAME = "分类评估"
     DESCRIPTION = "按测试集上的真实类目与预测类目算分类指标，并给出混淆矩阵"
     CATEGORY = "evaluate"
@@ -294,15 +304,33 @@ class ClassificationMetrics(OperatorBase):
         texts = tuple(_label_text(item) for item in labels)
         matrix = _confusion(truth, predicted, labels)
         wanted = self._config.positive_label
-        metrics = _classification_scores(truth, predicted, wanted)
-        positive = _label_text(wanted)
+        average = self._config.average
+        metrics = (
+            _classification_scores(truth, predicted, wanted)
+            if average == "binary"
+            else classification_averages(truth, predicted, average)
+        )
+        positive = (
+            _label_text(wanted)
+            if average == "binary"
+            else (
+                "各类等权（宏平均）"
+                if average == "macro"
+                else "按真实样本数加权"
+            )
+        )
         self._seen = Classified(
             metrics=metrics,
             labels=texts,
             matrix=matrix,
             positive_text=positive,
             rows=len(truth),
-            probabilities=_probabilities_of(scored, labels, wanted),
+            average=average,
+            probabilities=(
+                _probabilities_of(scored, labels, wanted)
+                if average == "binary"
+                else None
+            ),
             actual_positive=tuple(value == wanted for value in truth),
             predicted_positive=tuple(value == wanted for value in predicted),
         )

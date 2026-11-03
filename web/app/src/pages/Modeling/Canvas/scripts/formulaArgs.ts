@@ -38,6 +38,7 @@ export interface FormulaContext {
   blocks: readonly ReportBlock[]
   ports: readonly PortPreview[]
   config: Readonly<Record<string, unknown>>
+  schema?: Record<string, unknown> | undefined
 }
 
 export type FormulaMaker = (context: FormulaContext) => FormulaSpec

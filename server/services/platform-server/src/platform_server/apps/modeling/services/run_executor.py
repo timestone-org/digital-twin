@@ -15,6 +15,7 @@ from dataclasses import dataclass, field
 from typing import Any, Protocol
 
 from platform_server.apps.modeling.operators import (
+    CONTRACT_MODEL,
     PREFETCHED_KEY,
     Frame,
     OperatorError,
@@ -25,6 +26,7 @@ from platform_server.apps.modeling.schemas.graph import GraphNode, PipelineGraph
 from platform_server.apps.modeling.services import preview as preview_service
 from platform_server.apps.modeling.services import report_budget
 from platform_server.apps.modeling.services.artifact_store import (
+    ArtifactRejected,
     SealedArtifact,
 )
 from platform_server.apps.modeling.services.graph_walk import (
@@ -112,6 +114,18 @@ class Execution:
     on_node_finished: Callable[[NodeOutcome], Awaitable[None]]
 
 
+@dataclass
+class _Context:
+    """逐端口纯数据及独立传递的已封存模型产物。"""
+
+    ports: dict[tuple[str, str], Any] = field(
+        default_factory=dict[tuple[str, str], Any]
+    )
+    artifacts: dict[str, SealedArtifact] = field(
+        default_factory=dict[str, SealedArtifact]
+    )
+
+
 async def execute_graph(
     graph: PipelineGraph, *, execution: Execution
 ) -> RunOutcome:
@@ -123,7 +137,7 @@ async def execute_graph(
     """
     nodes = graph.node_by_id()
     order = topological_order(graph)
-    context: dict[tuple[str, str], Any] = {}
+    context = _Context()
     outcomes: list[NodeOutcome] = []
     budgets = _Budgets(
         previews=_Budget(), reports=report_budget.RunReportBudget()
@@ -232,7 +246,7 @@ class _Budgets:
 async def _run_one(
     node: GraphNode,
     setting: _Setting,
-    context: dict[tuple[str, str], Any],
+    context: _Context,
     budgets: "_Budgets",
 ) -> NodeOutcome:
     """跑一个节点：装参数、注入运行期上下文、拼输入、算、出摘要与讲解。
@@ -245,14 +259,13 @@ async def _run_one(
         return _node_failed(node, setting, started, failure)
     try:
         result = await _run_node(node, setting, context)
-    except OperatorError as error:
+    except (OperatorError, ArtifactRejected) as error:
         return _node_failed(node, setting, started, str(error))
     except TimeoutError:
         return _node_failed(node, setting, started, TIMEOUT_REASON)
     except Exception:
         return _node_failed(node, setting, started, traceback.format_exc())
-    for port, payload in result.outputs.items():
-        context[(node.id, port)] = payload
+    _remember_result(node.id, result, context)
     previews, truncated = budgets.previews.take(
         {
             port: preview_service.summarize(value)
@@ -280,10 +293,20 @@ async def _run_one(
     )
 
 
+def _remember_result(
+    node_id: str, result: NodeResult, context: _Context
+) -> None:
+    """公共端口与内部封存件分别记录；Args: node_id, result, context。"""
+    for port, payload in result.outputs.items():
+        context.ports[(node_id, port)] = payload
+    if result.artifact is not None:
+        context.artifacts[node_id] = result.artifact
+
+
 async def _run_node(
     node: GraphNode,
     setting: _Setting,
-    context: dict[tuple[str, str], Any],
+    context: _Context,
 ) -> NodeResult:
     """把一个算子实例交给注入的跑法。
 
@@ -298,14 +321,31 @@ async def _run_node(
             inputs=_inputs_of(node, setting, context),
             tz_offset_minutes=execution.tz_offset_minutes,
             split_plan=split_plan_of(setting.graph, setting.nodes, node.id),
+            model_artifact=_input_artifact(node, setting, context),
         )
     )
+
+
+def _input_artifact(
+    node: GraphNode, setting: _Setting, context: _Context
+) -> SealedArtifact | None:
+    """按模型输入边传递上游封存件；Args: node, setting, context。"""
+    operator = registry.get(node.operator)
+    if not operator.REQUIRES_MODEL_ARTIFACT:
+        return None
+    model_ports = {
+        port.name for port in operator.INPUTS if port.contract == CONTRACT_MODEL
+    }
+    for edge in setting.graph.edges:
+        if edge.to_node == node.id and edge.to_port in model_ports:
+            return context.artifacts.get(edge.from_node)
+    return None
 
 
 def _inputs_of(
     node: GraphNode,
     setting: _Setting,
-    context: dict[tuple[str, str], Any],
+    context: _Context,
 ) -> dict[str, Any]:
     """按边把上游的输出摆到自己的输入端口上。
 
@@ -319,9 +359,9 @@ def _inputs_of(
         if edge.to_node != node.id:
             continue
         key = (edge.from_node, edge.from_port)
-        if key not in context:
+        if key not in context.ports:
             raise OperatorError("上游这一步没有产出可用的数据")
-        inputs[edge.to_port] = context[key]
+        inputs[edge.to_port] = context.ports[key]
     return inputs
 
 
@@ -363,7 +403,7 @@ def _skipped(
 def _failed(
     outcomes: list[NodeOutcome],
     failure: NodeOutcome,
-    context: dict[tuple[str, str], Any],
+    context: _Context,
 ) -> RunOutcome:
     return RunOutcome(
         status="failed",
@@ -373,17 +413,13 @@ def _failed(
     )
 
 
-def _cancelled(
-    outcomes: list[NodeOutcome], context: dict[tuple[str, str], Any]
-) -> RunOutcome:
+def _cancelled(outcomes: list[NodeOutcome], context: _Context) -> RunOutcome:
     return RunOutcome(
         status="cancelled", nodes=tuple(outcomes), **_source_facts(context)
     )
 
 
-def _succeeded(
-    outcomes: list[NodeOutcome], context: dict[tuple[str, str], Any]
-) -> RunOutcome:
+def _succeeded(outcomes: list[NodeOutcome], context: _Context) -> RunOutcome:
     return RunOutcome(
         status="succeeded",
         nodes=tuple(outcomes),
@@ -391,7 +427,7 @@ def _succeeded(
     )
 
 
-def _source_facts(context: dict[tuple[str, str], Any]) -> dict[str, Any]:
+def _source_facts(context: _Context) -> dict[str, Any]:
     """取数那一步的两个第一手事实：取了多少行、有没有触顶。
 
     ⚠ 触顶必须如实往上传：不说的话，用户会拿一段被截过的数据当整段来解释模型。
@@ -399,7 +435,7 @@ def _source_facts(context: dict[tuple[str, str], Any]) -> dict[str, Any]:
     """
     frames = [
         value
-        for value in context.values()
+        for value in context.ports.values()
         if isinstance(value, Frame)
         and (
             value.provenance.table_codes

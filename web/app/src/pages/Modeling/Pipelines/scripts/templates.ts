@@ -10,86 +10,15 @@
  * ⚠ 每一张都要**能跑**：选完只差「挑一张台账、勾几列」。摆一张缺环的图比不摆
  * 更糟——用户会以为是自己配错了。
  */
-import type {
-  ModelingGraph,
-  ModelingGraphEdge,
-  ModelingGraphNode,
-} from '@dt/contracts'
+import type { PipelineTemplate } from './templateGraph'
+import { chain } from './templateGraph'
+import { MODEL_FAMILY_TEMPLATES } from './familyTemplates'
+export type { PipelineTemplate } from './templateGraph'
 
 import { deviceAnomalyGraph } from './anomalyTemplates'
 import { dailyEnergyGraph } from './energyTemplates'
 import { shortTermLoadGraph } from './loadTemplates'
 import { ENERGY_RULE_TEMPLATES } from './ruleTemplates'
-
-/** 节点在画布上的横向间距与起点。⚠ 坐标是 `left`/`top` 不是 `x`/`y`——
-写成后者时对象字面量整个变成错误类型，而 typecheck 只报一处、lint 报在
-**用到它的地方**，两边都指不到这里。 */
-const STEP_X = 320
-const ORIGIN = { left: 80, top: 200 }
-
-export interface PipelineTemplate {
-  key: string
-  label: string
-  hint: string
-  build: () => ModelingGraph
-}
-
-function node(
-  id: string,
-  operator: string,
-  at: number,
-  config: Record<string, unknown> = {},
-): ModelingGraphNode {
-  return {
-    id,
-    operator,
-    alias: '',
-    config,
-    position: { left: ORIGIN.left + at * STEP_X, top: ORIGIN.top },
-  }
-}
-
-function edge(
-  id: string,
-  from: string,
-  fromPort: string,
-  to: string,
-  toPort: string,
-): ModelingGraphEdge {
-  return {
-    id,
-    from_node: from,
-    from_port: fromPort,
-    to_node: to,
-    to_port: toPort,
-  }
-}
-
-/** 一条「取数 → 预处理 → 切分 → 建模 → 评估」的直链。 */
-function chain(
-  steps: readonly (readonly [string, string])[],
-  model: string,
-  evaluator: string,
-): ModelingGraph {
-  const nodes = steps.map(([id, operator], at) => node(id, operator, at))
-  const edges = steps
-    .slice(1)
-    .map(([id], at) =>
-      edge(`e${at + 1}`, steps[at]?.[0] ?? '', 'frame', id, 'frame'),
-    )
-  const split = steps[steps.length - 1]?.[0] ?? ''
-  const at = steps.length
-  return {
-    format_version: '1.0',
-    nodes: [...nodes, node('m', model, at), node('v', evaluator, at + 1)],
-    edges: [
-      ...edges,
-      edge('et', split, 'train', 'm', 'train'),
-      edge('ee', split, 'test', 'm', 'test'),
-      edge('ev', 'm', 'scored', 'v', 'scored'),
-    ],
-  }
-}
 
 export const PIPELINE_TEMPLATES: readonly PipelineTemplate[] = [
   {
@@ -98,6 +27,7 @@ export const PIPELINE_TEMPLATES: readonly PipelineTemplate[] = [
     hint: '自己从算子面板拖。',
     build: () => ({ format_version: '1.0', nodes: [], edges: [] }),
   },
+  ...MODEL_FAMILY_TEMPLATES,
   {
     key: 'daily_energy',
     label: '每日能耗预测（同表）',

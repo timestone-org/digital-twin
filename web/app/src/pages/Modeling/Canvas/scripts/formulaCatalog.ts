@@ -44,6 +44,11 @@ import { EVAL_FORMULAS } from './formulaEval'
 import { FEATURE_FORMULAS } from './formulaFeature'
 import { PREPARATION_FORMULAS } from './formulaPreparation'
 import { ENERGY_RULE_FORMULAS } from './formulaRules'
+import { SUPERVISED_FORMULAS } from './formulaSupervised'
+import { UNSUPERVISED_FORMULAS } from './formulaUnsupervised'
+import { TABLE_FORMULAS } from './formulaTableOps'
+import { VALUE_FORMULAS } from './formulaValueOps'
+import { SEQUENCE_STATS_FORMULAS } from './formulaSequenceStats'
 import { niceNumber } from './numbers'
 import type { ModelPreview } from './preview'
 
@@ -504,6 +509,11 @@ const CATALOG: Record<string, readonly FormulaMaker[]> = {
   ...EVAL_FORMULAS,
   ...PREPARATION_FORMULAS,
   ...ENERGY_RULE_FORMULAS,
+  ...SUPERVISED_FORMULAS,
+  ...UNSUPERVISED_FORMULAS,
+  ...TABLE_FORMULAS,
+  ...VALUE_FORMULAS,
+  ...SEQUENCE_STATS_FORMULAS,
   split_dataset: [splitSize, splitOrder],
   split_samples: [splitSamples],
   linear_regression: [linearPredict, linearFit],

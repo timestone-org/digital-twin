@@ -19,13 +19,17 @@ import hashlib
 import io
 import pickle
 from dataclasses import dataclass
-from typing import Any
+from typing import Any, cast
 
+import catboost
+import lightgbm
 import numpy
 import sklearn
+import xgboost
 
 # 产物的线形版本。序列化的东西换形状就 +1，老产物拒载并提示重训
 ARTIFACT_FORMAT_VERSION = 1
+MAX_ARTIFACT_BYTES = 32 * 1024 * 1024
 # 对象键的两个前缀。⚠ 运行期那份随运行记录一起清，版本那份跟着版本走
 RUN_PREFIX = "modeling/runs"
 MODEL_PREFIX = "modeling/models"
@@ -34,7 +38,9 @@ CONTENT_TYPE = "application/octet-stream"
 
 # 受限反序列化的白名单。⚠ 按**模块树**放行，不按类名逐个列：sklearn 一个森林
 # 里牵出来的类有几十个，逐个列的下场是升个版本就拒载自己训的模型
-_ALLOWED_ROOTS = ("numpy", "scipy", "sklearn", "joblib")
+_PIPELINE_STEP_SIZE = 2
+_BOOSTER_ROOTS = ("xgboost", "lightgbm", "catboost")
+_ALLOWED_ROOTS = ("numpy", "scipy", "sklearn", "joblib", *_BOOSTER_ROOTS)
 # `builtins` 整棵放行等于把 eval / exec / getattr 一起放进来，只点名这几个
 _ALLOWED_BUILTINS = frozenset(
     {
@@ -56,6 +62,7 @@ _ALLOWED_BUILTINS = frozenset(
 )
 # 重建对象时 pickle 自己会用到的那一个
 _ALLOWED_COPYREG = frozenset({"_reconstructor"})
+_ALLOWED_COLLECTIONS = frozenset({"defaultdict", "OrderedDict"})
 
 
 class ArtifactRejected(Exception):
@@ -77,9 +84,33 @@ class SealedArtifact:
         return len(self.payload)
 
 
-def runtime_versions() -> dict[str, str]:
-    """当前进程里那几个库的版本。加载前拿它与产物上的比。"""
-    return {"numpy": numpy.__version__, "sklearn": sklearn.__version__}
+def runtime_versions(estimator: object | None = None) -> dict[str, str]:
+    """只记录产物实际使用的运行库；Args: estimator。"""
+    result = {"numpy": numpy.__version__, "sklearn": sklearn.__version__}
+    for name in sorted(_booster_libraries(estimator)):
+        result[name] = _package_version(name)
+    return result
+
+
+def _booster_libraries(estimator: object | None) -> set[str]:
+    root = type(estimator).__module__.partition(".")[0]
+    libraries = {root} if root in _BOOSTER_ROOTS else set[str]()
+    steps: object = getattr(estimator, "steps", None)
+    if isinstance(steps, list):
+        for item in cast("list[object]", steps):
+            if isinstance(item, tuple):
+                step = cast("tuple[object, ...]", item)
+                if len(step) == _PIPELINE_STEP_SIZE:
+                    libraries.update(_booster_libraries(step[1]))
+    return libraries
+
+
+def _package_version(name: str) -> str:
+    return {
+        "xgboost": xgboost.__version__,
+        "lightgbm": lightgbm.__version__,
+        "catboost": catboost.__version__,
+    }[name]
 
 
 def seal(estimator: object) -> SealedArtifact:
@@ -88,11 +119,15 @@ def seal(estimator: object) -> SealedArtifact:
     Args: estimator。
     """
     payload = pickle.dumps(estimator, protocol=5)
+    if len(payload) > MAX_ARTIFACT_BYTES:
+        raise ArtifactRejected(
+            "训练产物超过 32 MB，请减少样本、特征或模型复杂度"
+        )
     return SealedArtifact(
         payload=payload,
         digest=hashlib.sha256(payload).hexdigest(),
         format_version=ARTIFACT_FORMAT_VERSION,
-        runtime=runtime_versions(),
+        runtime=runtime_versions(estimator),
     )
 
 
@@ -131,6 +166,8 @@ def load(
             f"（v{ARTIFACT_FORMAT_VERSION}）支持，请重新训练"
         )
     _refuse_version_drift(runtime)
+    if len(payload) > MAX_ARTIFACT_BYTES:
+        raise ArtifactRejected("模型产物超过 32 MB，拒绝加载")
     return _RestrictedUnpickler(io.BytesIO(payload)).load()
 
 
@@ -160,15 +197,18 @@ def model_key(version_id: str) -> str:
 
 
 def _refuse_version_drift(runtime: dict[str, str]) -> None:
-    """训练时与现在的库版本必须一致（只比大小版本号）。
-
-    ⚠ 这是**拒载**不是告警：跨版本反序列化行为未定义，放过去的表现是同一个
-    模型换个环境算出不同的数，而两边都不报错。
-    Args: runtime。
-    """
+    """科学库核对主次版本，品牌库核对完整版本；Args: runtime。"""
     current = runtime_versions()
+    for name in _BOOSTER_ROOTS:
+        if name in runtime:
+            current[name] = _package_version(name)
     for name, trained in sorted(runtime.items()):
-        if _minor(trained) != _minor(current.get(name, "")):
+        is_drifted = (
+            trained != current.get(name, "")
+            if name in _BOOSTER_ROOTS
+            else _minor(trained) != _minor(current.get(name, ""))
+        )
+        if is_drifted:
             raise ArtifactRejected(
                 f"这个产物是用 {name} {trained} 训的，当前环境是 "
                 f"{current.get(name, '未知')}，跨版本加载不可信，请重新训练"
@@ -176,10 +216,7 @@ def _refuse_version_drift(runtime: dict[str, str]) -> None:
 
 
 def _minor(version: str) -> tuple[str, str]:
-    """版本号的前两段。补丁号不同不影响反序列化。
-
-    Args: version。
-    """
+    """科学运行库版本的主次号；Args: version。"""
     parts = version.split(".")
     return (parts[0] if parts else "", parts[1] if len(parts) > 1 else "")
 
@@ -199,6 +236,8 @@ class _RestrictedUnpickler(pickle.Unpickler):
         if module == "builtins" and name in _ALLOWED_BUILTINS:
             return super().find_class(module, name)
         if module == "copyreg" and name in _ALLOWED_COPYREG:
+            return super().find_class(module, name)
+        if module == "collections" and name in _ALLOWED_COLLECTIONS:
             return super().find_class(module, name)
         root = module.split(".", maxsplit=1)[0]
         if root in _ALLOWED_ROOTS:

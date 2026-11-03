@@ -766,9 +766,9 @@ describe('参数面板', () => {
 
     // ⚠ 选项要断在 props 上：DtSelect 的选项只在浮层打开时才进 DOM，
     // 按渲染出来的文字断言会把「下拉是空的」也判成通过
-    expect(wrapper.findComponent(DtSelect).props('options')).toEqual([
-      { value: 'energy_log', label: '能耗台账（energy_log）' },
-    ])
+    expect(
+      wrapper.get('.dt-ml-form').findComponent(DtSelect).props('options'),
+    ).toEqual([{ value: 'energy_log', label: '能耗台账（energy_log）' }])
   })
 
   // ⚠ 搜索框不能按选项数量自动给：台账靠编码认，一张也要能敲编码定位
@@ -779,7 +779,10 @@ describe('参数面板', () => {
     await flushPromises()
     await openConfig(wrapper)
 
-    await wrapper.find('.dt-select__trigger').trigger('click')
+    await wrapper
+      .get('.dt-ml-form')
+      .find('.dt-select__trigger')
+      .trigger('click')
 
     expect(document.querySelector('.dt-select-menu__input')).not.toBeNull()
   })
@@ -815,7 +818,9 @@ describe('参数面板', () => {
       ?.trigger('click')
     await flushPromises()
 
-    expect(wrapper.findComponent(DtSelect).props('options')).toEqual([
+    expect(
+      wrapper.get('.dt-ml-form').findComponent(DtSelect).props('options'),
+    ).toEqual([
       { value: 'gone_table', label: 'gone_table（清单里没有这张台账）' },
       { value: 'energy_log', label: '能耗台账（energy_log）' },
     ])
@@ -842,9 +847,9 @@ describe('参数面板', () => {
       ?.trigger('click')
     await flushPromises()
 
-    expect(wrapper.findComponent(DtSelect).props('options')).toEqual([
-      { value: 'energy_log', label: '能耗台账（energy_log）' },
-    ])
+    expect(
+      wrapper.get('.dt-ml-form').findComponent(DtSelect).props('options'),
+    ).toEqual([{ value: 'energy_log', label: '能耗台账（energy_log）' }])
   })
 
   it('改过的参数能一键回到默认值', async () => {

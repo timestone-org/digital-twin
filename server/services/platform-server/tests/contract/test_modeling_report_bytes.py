@@ -1,9 +1,4 @@
-"""规格 §10.2 契约 #4：全部算子在各自**最坏**的一份负载上都还讲得下。
-
-从算子花名册反向遍历，逐个把各块的逐列 / 逐项上限顶满真跑一遍。契约 #2 喂的是
-最小输入，挡不住宽帧 / 366 天轴 / 20 类 / 20 折 / 深树这一头——缺了这一条，
-新增算子不写最坏字节用例也全闸绿（docs/MODELING_RESULT_VIEW_DESIGN.md §10.2）。
-"""
+"""全目录算子在宽帧、长轴与复杂模型上的结果预算契约。"""
 
 from dataclasses import replace
 from functools import cache
@@ -12,6 +7,8 @@ from typing import Any
 import pytest
 
 from contract.modeling_report_bdm import BDM_COLUMNS, bdm_frames, bdm_loads
+from contract.modeling_report_families import family_loads
+from contract.modeling_report_tabular import lookup_frame, tabular_loads
 from platform_server.apps.modeling.operators import (
     CellValue,
     Frame,
@@ -260,6 +257,7 @@ def frames() -> dict[str, Frame]:
             anomaly, rows=anomaly.rows[cut:], index=(anomaly.index or ())[cut:]
         ),
         "wide": wide,
+        "tabular_lookup": lookup_frame(wide),
         **bdm_frames(wide, _categorical(YEAR_ROWS, BDM_COLUMNS)),
         "gapped": _numeric(YEAR_ROWS, has_gaps=True),
         "hollow": _numeric(SCORED_ROWS, empty_tail=WIDE_COLUMNS - TEXT_COLUMNS),
@@ -499,6 +497,8 @@ def loads() -> dict[str, tuple[Case, ...]]:
         **_feature_loads(),
         **_model_loads(),
         **_evaluate_loads(),
+        **tabular_loads(frames()),
+        **family_loads(frames()),
     }
 
 
@@ -524,7 +524,7 @@ def test_every_registered_operator_has_a_worst_load_here() -> None:
     """反向遍历的入口：花名册上多一个算子，这张表就得跟着多一行。"""
     assert set(loads()) == set(CODES) - set(UNREACHABLE)
     assert UNREACHABLE == ()
-    assert len(CODES) == 31
+    assert len(CODES) == 51
 
 
 def test_the_shared_frames_really_are_the_worst_ones() -> None:

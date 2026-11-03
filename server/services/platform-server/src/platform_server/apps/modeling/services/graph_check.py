@@ -88,7 +88,25 @@ def check_graph(graph: PipelineGraph) -> list[GraphIssue]:
     )
 
 
-def _check_nodes(graph: PipelineGraph) -> list[GraphIssue]:
+def check_graph_structure(graph: PipelineGraph) -> list[GraphIssue]:
+    """检查与配置完整性无关的图结构；Args: graph。"""
+    issues = _check_nodes(graph, should_check_config=False)
+    if issues:
+        return issues
+    issues += _check_edges(graph, graph.node_by_id())
+    if issues:
+        return issues
+    return (
+        _check_ports_wired(graph)
+        + _check_acyclic(graph)
+        + _check_isolated(graph)
+        + _check_fit_before_split(graph, graph.node_by_id())
+    )
+
+
+def _check_nodes(
+    graph: PipelineGraph, *, should_check_config: bool = True
+) -> list[GraphIssue]:
     """节点 id 唯一、算子认识、参数能解析。
 
     Args: graph。
@@ -104,7 +122,8 @@ def _check_nodes(graph: PipelineGraph) -> list[GraphIssue]:
                 GraphIssue(f"不认识的算子「{node.operator}」", node_id=node.id)
             )
             continue
-        issues += _check_config(node)
+        if should_check_config:
+            issues += _check_config(node)
     if not graph.nodes:
         issues.append(GraphIssue("流水线是空的，先拖一个取数算子进来"))
     return issues
@@ -234,7 +253,9 @@ def _check_columns(
         keys = known.get(node.id)
         if keys is None:
             continue
-        for field in _column_fields(registry.get(node.operator)):
+        operator = registry.get(node.operator)
+        config = operator.CONFIG_MODEL.model_validate(node.config).model_dump()
+        for field in _column_fields(operator, config):
             issues += _check_one_column(node, field, keys)
     return issues
 
@@ -319,20 +340,46 @@ class _ColumnField:
     title: str
 
 
-def _column_fields(operator: type[OperatorBase]) -> list[_ColumnField]:
+def _column_fields(
+    operator: type[OperatorBase], config: dict[str, object]
+) -> list[_ColumnField]:
     """算子参数里哪些字段是列引用。
 
-    Args: operator。
+    Args: operator, config。
     """
     schema = operator.CONFIG_MODEL.model_json_schema()
     titles = _titles_in(schema)
+    properties: object = schema.get("properties", {})
+    declared = (
+        cast("dict[str, object]", properties)
+        if isinstance(properties, dict)
+        else {}
+    )
     return [
         _ColumnField(name=name, title=titles.get(name, name))
         for name in (
             *fields_with_widget(schema, COLUMN_WIDGET),
             *fields_with_widget(schema, "column-aggregations"),
         )
+        if _column_is_active(declared.get(name), config)
     ]
+
+
+def _column_is_active(spec: object, config: dict[str, object]) -> bool:
+    """只检查当前计算会使用的列引用；Args: spec, config。"""
+    if not isinstance(spec, dict):
+        return True
+    conditions: object = cast("dict[str, object]", spec).get(
+        "x-dt-visible-when", {}
+    )
+    if not isinstance(conditions, dict):
+        return True
+    for key, choices in cast("dict[str, object]", conditions).items():
+        if isinstance(choices, list) and config.get(key) not in cast(
+            "list[object]", choices
+        ):
+            return False
+    return True
 
 
 def _titles_of(operator: type[OperatorBase]) -> dict[str, str]:

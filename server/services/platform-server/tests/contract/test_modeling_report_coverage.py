@@ -11,6 +11,8 @@ from typing import Any
 import pytest
 from unit.anomaly_fakes import training_pair
 
+from contract.modeling_report_families import family_cases
+from contract.modeling_report_tabular import tabular_cases
 from platform_server.apps.modeling.operators import (
     BLOCK_KINDS,
     ZONES,
@@ -210,7 +212,12 @@ def other_cases(source: Frame) -> dict[str, Case]:
 def cases() -> dict[str, Case]:
     """全部算子的最小输入表。"""
     source = frame()
-    return {**frame_cases(source), **other_cases(source)}
+    return {
+        **frame_cases(source),
+        **other_cases(source),
+        **tabular_cases(source),
+        **family_cases(source, labelled()),
+    }
 
 
 def ran(code: str) -> OperatorBase:
@@ -240,7 +247,7 @@ def test_every_registered_operator_has_a_minimal_input_here() -> None:
     """反向遍历的入口：花名册上多一个算子，这张表就得跟着多一行。"""
     assert set(cases()) == set(CODES) - set(UNREACHABLE)
     assert UNREACHABLE == ()
-    assert len(CODES) == 31
+    assert len(CODES) == 51
 
 
 @pytest.mark.parametrize("code", CODES)

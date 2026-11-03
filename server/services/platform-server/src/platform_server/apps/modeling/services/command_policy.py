@@ -8,13 +8,22 @@ from dataclasses import dataclass
 from pydantic import TypeAdapter
 
 from lib.errors import ValidationFailed
-from platform_server.apps.modeling.catalog import MODELING_PUBLISH, MODELING_RUN
+from platform_server.apps.modeling.catalog import (
+    MODELING_MANAGE,
+    MODELING_PUBLISH,
+    MODELING_RUN,
+)
 from platform_server.apps.modeling.schemas.command import CommandOperation
 
 _OPERATIONS: TypeAdapter[CommandOperation] = TypeAdapter(CommandOperation)
 MAX_IDEMPOTENCY_KEY_LENGTH = 256
 _UNSCOPED = frozenset(
-    {"create_instance", "publish_version", "create_deployment"}
+    {
+        "import_pipeline",
+        "create_instance",
+        "publish_version",
+        "create_deployment",
+    }
 )
 _RUN_OPERATIONS = frozenset(
     {
@@ -28,6 +37,7 @@ _RUN_OPERATIONS = frozenset(
 )
 _CREATING = frozenset(
     {
+        "import_pipeline",
         "create_instance",
         "publish_version",
         "deploy_instance",
@@ -49,6 +59,8 @@ class Operation:
 
     @property
     def permission(self) -> str:
+        if self.name == "import_pipeline":
+            return MODELING_MANAGE
         return (
             MODELING_RUN if self.name in _RUN_OPERATIONS else MODELING_PUBLISH
         )

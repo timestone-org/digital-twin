@@ -5,9 +5,8 @@ import type {
   ModelingParameterNode,
 } from '@dt/contracts'
 import { DtButton } from '@dt/ui'
-import { computed, ref, watch } from 'vue'
-import { parameterFields } from '../scripts/parameters'
-import ParameterField from './ParameterField.vue'
+import { ref, watch } from 'vue'
+import InstanceNodeForm from './InstanceNodeForm.vue'
 const props = defineProps<{
   nodes: ModelingParameterNode[]
   configuration: ModelingConfiguration | null
@@ -18,14 +17,8 @@ const emit = defineEmits<{
   error: [key: string, message: string]
 }>()
 const selected = ref('')
-const fields = computed(() =>
-  props.nodes.map((node) => ({
-    ...node,
-    fields: parameterFields(node.operator.config_schema),
-  })),
-)
 watch(
-  fields,
+  () => props.nodes,
   (nodes) => {
     if (!nodes.some((node) => node.id === selected.value))
       selected.value = nodes[0]?.id ?? ''
@@ -37,7 +30,7 @@ watch(
   <div class="parameter-workspace">
     <nav class="parameter-nodes" aria-label="模型参数节点">
       <DtButton
-        v-for="node in fields"
+        v-for="node in props.nodes"
         :key="node.id"
         variant="ghost"
         :pressed="selected === node.id"
@@ -49,7 +42,7 @@ watch(
 
     <div class="parameter-editors">
       <div
-        v-for="node in fields"
+        v-for="node in props.nodes"
         v-show="selected === node.id"
         :key="node.id"
         class="parameter-panel"
@@ -62,18 +55,13 @@ watch(
           {{ node.operator.description }}
         </p>
 
-        <div class="dt-form-grid">
-          <ParameterField
-            v-for="field in node.fields"
-            :key="field.key"
-            :class="{ 'dt-form-grid__wide': field.kind === 'json' }"
-            :field="field"
-            :value="configuration?.nodes[node.id]?.[field.key]"
-            :disabled="disabled || !configuration"
-            @change="emit('change', node.id, field.key, $event)"
-            @error="emit('error', `${node.id}.${field.key}`, $event)"
-          />
-        </div>
+        <InstanceNodeForm
+          :node="node"
+          :config="configuration?.nodes[node.id] ?? {}"
+          :disabled="disabled || !configuration"
+          @change="(key, value) => emit('change', node.id, key, value)"
+          @error="(key, message) => emit('error', key, message)"
+        />
       </div>
     </div>
   </div>

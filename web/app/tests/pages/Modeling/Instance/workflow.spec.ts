@@ -9,7 +9,7 @@ import { BizError } from '@/api/client'
 import * as modeling from '@/api/modeling'
 import * as hierarchy from '@/api/hierarchy'
 import { onBeforeRouteLeave, onBeforeRouteUpdate } from 'vue-router'
-import ParameterField from '@/pages/Modeling/Instance/components/ParameterField.vue'
+import SharedConfigForm from '@/features/modeling-config/components/ConfigForm.vue'
 import InstancePage from '@/pages/Modeling/Instance/index.vue'
 import DeployDialog from '@/pages/Modeling/Instance/components/DeployModelDialog.vue'
 import { useAuthStore } from '@/stores/auth'
@@ -48,7 +48,7 @@ it('配置校验失败展示具体节点和字段原因', async () => {
   await button(wrapper, '完整 JSON').trigger('click')
   const changed = structuredClone(configuration.configuration)
   if (!changed.nodes['split']) throw new Error('缺少切分节点')
-  changed.nodes['split']['test_ratio'] = 5
+  changed.nodes['split']['test_ratio'] = 0.4
   await wrapper.get('textarea[rows="18"]').setValue(JSON.stringify(changed))
   await button(wrapper, '保存全部配置').trigger('click')
   await flushPromises()
@@ -135,6 +135,19 @@ function button(wrapper: VueWrapper, text: string) {
   return found
 }
 
+function formHasField(form: VueWrapper, key: string): boolean {
+  const fields: unknown = Reflect.get(form.props(), 'fields')
+  return (
+    Array.isArray(fields) &&
+    fields.some(
+      (field: unknown) =>
+        typeof field === 'object' &&
+        field !== null &&
+        Reflect.get(field, 'key') === key,
+    )
+  )
+}
+
 it('只读账号可以检查配置而不能保存、训练或部署', async () => {
   vi.mocked(useAuthStore().can).mockReturnValue(false)
   const wrapper = await openPage()
@@ -199,13 +212,19 @@ it('完整 JSON 可以修改全部参数并提交同一快照的修订号', asyn
 
 it('无效 JSON 不能保存，确认重新加载会丢弃同值配置的未完成草稿', async () => {
   const wrapper = await openPage()
-  await wrapper.get('textarea').setValue('["unfinished",')
+  await button(wrapper, '完整 JSON').trigger('click')
+  await wrapper.get('textarea[rows="18"]').setValue('{"nodes":')
   expect(wrapper.text()).toContain('JSON 格式不完整')
   expect(button(wrapper, '保存全部配置').attributes('disabled')).toBeDefined()
   await button(wrapper, '重新加载').trigger('click')
   await flushPromises()
   expect(wrapper.text()).not.toContain('JSON 格式不完整')
-  expect(wrapper.get('textarea').element.value).not.toContain('unfinished')
+  expect(
+    wrapper
+      .findAllComponents(SharedConfigForm)
+      .find((form) => formHasField(form, 'table_code'))
+      ?.props('config'),
+  ).toEqual(configuration.configuration.nodes['source'])
   expect(button(wrapper, '开始训练').attributes('disabled')).toBeUndefined()
 })
 
@@ -298,20 +317,20 @@ it('参数表单的文字、数字、枚举与开关都进入同一完整配置'
   const wrapper = await openPage()
   await textInput(wrapper, '模型名称').setValue('重新命名的模型')
   await textInput(wrapper, '模型说明').setValue('输入输出已核对')
-  const fields = wrapper.findAllComponents(ParameterField)
-  const since = fields.find((field) => field.props('field').key === 'since')
-  const limit = fields.find((field) => field.props('field').key === 'row_limit')
-  const source = fields.find(
-    (field) => field.props('field').key === 'row_source',
-  )
-  const intercept = fields.find(
-    (field) => field.props('field').key === 'use_intercept',
-  )
-  if (!since || !limit || !source || !intercept) throw new Error('缺少参数字段')
-  since.findComponent(ui.DtInput).vm.$emit('update:modelValue', '-7d')
-  limit.findComponent(ui.DtNumberInput).vm.$emit('update:modelValue', 512)
-  source.findComponent(ui.DtSelect).vm.$emit('update:modelValue', 'all')
-  intercept.findComponent(ui.DtSwitch).vm.$emit('update:modelValue', false)
+  const forms = wrapper.findAllComponents(SharedConfigForm)
+  const sourceForm = forms.find((form) => formHasField(form, 'table_code'))
+  const modelForm = forms.find((form) => formHasField(form, 'use_intercept'))
+  if (!sourceForm || !modelForm) throw new Error('缺少参数表单')
+  sourceForm.vm.$emit('change', 'since', '-7d')
+  sourceForm
+    .findAllComponents(ui.DtNumberInput)
+    .find((field) => field.props('label') === '行数上限')
+    ?.vm.$emit('update:modelValue', 512)
+  sourceForm
+    .findAllComponents(ui.DtSelect)
+    .find((field) => field.props('label') === '行来源')
+    ?.vm.$emit('update:modelValue', 'all')
+  modelForm.getComponent(ui.DtSwitch).vm.$emit('update:modelValue', false)
   await flushPromises()
   await button(wrapper, '保存全部配置').trigger('click')
   await flushPromises()

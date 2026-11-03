@@ -9,6 +9,7 @@ from pydantic import BaseModel, JsonValue
 from lib.web.response import FieldErrorOut
 
 CommandOperation = Literal[
+    "import_pipeline",
     "create_instance",
     "configure_instance",
     "train_instance",

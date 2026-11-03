@@ -90,9 +90,13 @@ it('模板按用途筛选，选中模板展示配置说明，搜索无结果时�
   filter.vm.$emit('update:modelValue', 'detection')
   await flushPromises()
   const options = wrapper.findAllComponents(DtButton)
-  expect(options).toHaveLength(1)
-  expect(options[0]?.text()).toContain('设备异常检测')
-  await options[0]?.trigger('click')
+  expect(options).toHaveLength(2)
+  expect(options.some((option) => option.text().includes('设备异常检测'))).toBe(
+    true,
+  )
+  await options
+    .find((option) => option.text().includes('设备异常检测'))
+    ?.trigger('click')
   expect(wrapper.emitted('update:modelValue')).toEqual([['device_anomaly']])
   await wrapper.setProps({ modelValue: 'device_anomaly' })
   expect(wrapper.get('.template-picker__preview').text()).toContain(
@@ -101,7 +105,7 @@ it('模板按用途筛选，选中模板展示配置说明，搜索无结果时�
   await wrapper.get('input').setValue('不存在的模板')
   expect(wrapper.text()).toContain('没有匹配的设计模板')
   await wrapper.get('input').setValue('')
-  expect(wrapper.findAllComponents(DtButton)).toHaveLength(1)
+  expect(wrapper.findAllComponents(DtButton)).toHaveLength(2)
   wrapper.unmount()
 })
 

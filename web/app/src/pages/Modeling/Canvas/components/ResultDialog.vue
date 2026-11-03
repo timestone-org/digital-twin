@@ -8,7 +8,7 @@
  * ⚠ 弹窗宽度由这里给：`FrameView` 的两张表写死 52rem 最小宽，56rem 的弹窗里
  * 它们今天就在横向滚。
  */
-import type { ModelingNodeRun } from '@dt/contracts'
+import type { ModelingNodeRun, ModelingOperator } from '@dt/contracts'
 import { DtModal } from '@dt/ui'
 
 import ReportBlocks from './ReportBlocks.vue'
@@ -18,6 +18,7 @@ const props = defineProps<{
   /** 这个节点这一次的详情；null = 还没拉回来，那时摆骨架。 */
   detail: ModelingNodeRun | null
   labels: Record<string, string>
+  operator?: ModelingOperator | undefined
   /** 这次运行的 id 与开着的那个节点，只用来拼下载地址。 */
   runId: string | undefined
   nodeId: string | null
@@ -50,6 +51,7 @@ const emit = defineEmits<{ close: [] }>()
       :is-preview-truncated="props.detail.is_preview_truncated"
       :code="props.detail.operator"
       :config="props.config"
+      :operator="props.operator"
     />
     <!-- ⚠ 占位高度按区固定：拉回来之后各区落在原处，不跳版 -->
     <ReportBlocks v-else pending />

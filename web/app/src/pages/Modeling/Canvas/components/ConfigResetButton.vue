@@ -1,21 +1,5 @@
-<script setup lang="ts">
-/** @fileoverview 算子参数的恢复默认操作。 */
-import { computed } from 'vue'
-import { DtButton } from '@dt/ui'
-
-const props = defineProps<{ fallback: unknown }>()
-const emit = defineEmits<{ reset: [] }>()
-const title = computed(() => `恢复默认：${JSON.stringify(props.fallback)}`)
+<script lang="ts">
+/** @fileoverview 画布参数控件的共享实现兼容入口。 */
+import Component from '@/features/modeling-config/components/ConfigResetButton.vue'
+export default Component
 </script>
-
-<template>
-  <DtButton
-    class="dt-ml-form__reset"
-    variant="outline"
-    intent="neutral"
-    :title="title"
-    @click="emit('reset')"
-  >
-    恢复默认
-  </DtButton>
-</template>

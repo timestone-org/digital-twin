@@ -38,6 +38,7 @@ from platform_server.apps.modeling.operators.timeblocks import (
 
 # 造得出来的几档时间成分
 type TimePart = Literal["hour", "dayofweek", "month", "dayofyear", "is_weekend"]
+DEFAULT_TIME_PARTS: tuple[TimePart, ...] = ("hour",)
 TIME_PARTS: tuple[str, ...] = (
     "hour",
     "dayofweek",
@@ -56,13 +57,14 @@ class TimeFeatureConfig(OperatorConfig):
     """时间特征的参数。"""
 
     parts: list[TimePart] = Field(
-        default_factory=lambda: ["hour"],
+        default_factory=lambda: list(DEFAULT_TIME_PARTS),
         min_length=1,
         title="造哪几档",
         description=(
             "hour=小时(0-23)；dayofweek=星期(周一0…周日6)；month=月份(1-12)；"
             "dayofyear=年内第几天(1-366)；is_weekend=是否周末(0/1)"
         ),
+        json_schema_extra={"default": list(DEFAULT_TIME_PARTS)},
     )
 
 

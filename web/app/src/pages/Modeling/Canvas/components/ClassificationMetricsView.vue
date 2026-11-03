@@ -29,6 +29,7 @@ const props = withDefaults(
   defineProps<{
     preview: MetricsPreview
     positiveLabel?: number | null | undefined
+    average?: string | undefined
   }>(),
   { positiveLabel: null },
 )
@@ -66,11 +67,13 @@ const stats = computed(() =>
 )
 
 const positive = computed(() =>
-  positiveClassOf(
-    stats.value.classes,
-    props.preview.metrics,
-    props.positiveLabel,
-  ),
+  props.average && props.average !== 'binary'
+    ? { kind: 'unknown' as const, label: '' }
+    : positiveClassOf(
+        stats.value.classes,
+        props.preview.metrics,
+        props.positiveLabel,
+      ),
 )
 
 const sort = ref<DtTableSort>({ ...DEFAULT_LEDGER_SORT })
@@ -118,6 +121,15 @@ const positiveText = computed(
 
 <template>
   <div class="dt-ml-clf">
+    <DtNotice
+      v-if="props.average === 'macro' || props.average === 'weighted'"
+      intent="info"
+      >{{
+        props.average === 'macro'
+          ? '当前指标按各类等权计算宏平均，不对应单一正类。'
+          : '当前指标按各类真实样本数加权，不对应单一正类。'
+      }}</DtNotice
+    >
     <DtNotice v-if="isEmptyTest" intent="warning">
       这份测试集里一行都没有，四个指标与混淆矩阵都算不出来。
     </DtNotice>

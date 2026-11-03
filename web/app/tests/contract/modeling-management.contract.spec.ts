@@ -243,7 +243,7 @@ describe('建模命令与部署切换契约', () => {
     }
   })
 
-  it('17种操作和4个状态与查询参数及命令出参一致', () => {
+  it('操作和状态与查询参数及命令出参一致', () => {
     expectTypeOf<
       ModelingCommand['operation']
     >().toEqualTypeOf<ModelingCommandOperation>()

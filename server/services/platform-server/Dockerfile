@@ -51,7 +51,7 @@ COPY services/platform-server/nodetools/compress-model.mjs ./
 FROM python:3.12-slim-bookworm AS runtime
 
 RUN apt-get update \
- && apt-get install -y --no-install-recommends fonts-noto-cjk \
+ && apt-get install -y --no-install-recommends fonts-noto-cjk libgomp1 \
  && rm -rf /var/lib/apt/lists/*
 
 # 非 root 运行

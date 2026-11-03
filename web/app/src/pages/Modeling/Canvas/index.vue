@@ -442,6 +442,7 @@ watch(
       :run-id="page.runner.run.value?.id"
       :node-id="result.nodeId.value"
       :config="result.config.value"
+      :operator="result.operator.value"
       @close="result.close"
     />
 

@@ -7,7 +7,7 @@
  * ⚠ 没有讲解的运行（老运行）退回升级前的样子：不摆空区、不折叠、不多说一个字。
  */
 import { DtCard, DtEmpty, DtSegmented } from '@dt/ui'
-import type { DtSegmentedOption } from '@dt/contracts'
+import type { DtSegmentedOption, ModelingOperator } from '@dt/contracts'
 import { computed, ref } from 'vue'
 
 import type { ModelingFrameTarget } from '@/api/modeling'
@@ -39,6 +39,7 @@ import UnknownView from './UnknownView.vue'
 
 const props = defineProps<{
   payload: Record<string, unknown>
+  operator?: ModelingOperator | undefined
   /** 端口名 → 算子声明的中文标签。取不到就退回端口名本身。 */
   labels?: Record<string, string> | undefined
   /**
@@ -127,6 +128,7 @@ const formulas = computed(() =>
         blocks: report.value.blocks,
         ports: ports.value,
         config: props.config ?? {},
+        schema: props.operator?.config_schema,
       })
     : [],
 )
@@ -353,12 +355,19 @@ function jump(target: string): void {
           <ModelView
             v-else-if="item.preview.kind === 'model'"
             :preview="item.preview"
+            :operator="props.operator"
+            :config="props.config"
           />
           <MetricsView
             v-else-if="item.preview.kind === 'metrics'"
             :preview="item.preview"
             :code="props.code"
             :positive-label="positiveLabel"
+            :classification-average="
+              typeof props.config?.['average'] === 'string'
+                ? props.config['average']
+                : 'binary'
+            "
             :has-blocks="portBlocks(item.port).length > 0"
           />
           <UnknownView

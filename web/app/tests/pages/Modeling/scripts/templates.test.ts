@@ -17,6 +17,10 @@ import loadGraph from '../fixtures/shortTermLoadGraph.json'
 /** 后端算子花名册里确实有的那些。⚠ 与 `operators/__init__.py` 同源。 */
 const KNOWN_OPERATORS = new Set([
   'anomaly_distance',
+  'regression_model',
+  'classification_model',
+  'clustering_analysis',
+  'anomaly_model',
   'split_samples',
   'ledger_source',
   'fill_missing',
@@ -103,7 +107,10 @@ describe('新建流水线的开箱模板', () => {
 
   it.each(
     PIPELINE_TEMPLATES.filter(
-      (item) => item.key !== 'blank' && !item.key.startsWith('rule_'),
+      (item) =>
+        item.key !== 'blank' &&
+        item.key !== 'clustering_analysis' &&
+        !item.key.startsWith('rule_'),
     ),
   )('「$label」的切分给建模那一步喂了 train 与 test 两路', (template) => {
     const ports = template

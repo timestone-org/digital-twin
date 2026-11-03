@@ -9,10 +9,14 @@
  * 一次添加。
  */
 import type { ModelingCategory, ModelingOperator } from '@dt/contracts'
-import { DtButton, DtEmpty, DtIcon, DtInput, DtTag } from '@dt/ui'
+import { DtButton, DtEmpty, DtIcon, DtInput, DtSelect, DtTag } from '@dt/ui'
 import { computed, ref } from 'vue'
 
 import { OPERATOR_MIME } from '../scripts/dragMime'
+import {
+  algorithmOptions,
+  operatorSearchText,
+} from '../scripts/modelPresentation'
 
 const props = defineProps<{
   operators: readonly ModelingOperator[]
@@ -38,15 +42,48 @@ const CATEGORY_ORDER: readonly ModelingCategory[] = [
 ]
 
 const keyword = ref('')
+const category = ref('')
+const categoryOptions = computed(() => {
+  const counts = new Map<string, number>()
+  for (const item of props.operators)
+    counts.set(item.category, (counts.get(item.category) ?? 0) + 1)
+  return [
+    { value: '', label: `全部分类（${props.operators.length}）` },
+    ...[...counts.entries()]
+      .sort((left, right) => rank(left[0]) - rank(right[0]))
+      .map(([value, count]) => ({
+        value,
+        label: `${CATEGORY_LABELS[value] ?? value}（${count}）`,
+      })),
+  ]
+})
+
+const searchTexts = computed(
+  () =>
+    new Map(
+      props.operators.map((operator) => [
+        operator.code,
+        operatorSearchText(operator),
+      ]),
+    ),
+)
+const algorithmCounts = computed(
+  () =>
+    new Map(
+      props.operators.map((operator) => [
+        operator.code,
+        algorithmOptions(operator).length,
+      ]),
+    ),
+)
 
 const matched = computed(() => {
   const needle = keyword.value.trim().toLowerCase()
-  if (needle === '') return props.operators
   return props.operators.filter(
     (item) =>
-      item.name.toLowerCase().includes(needle) ||
-      item.code.toLowerCase().includes(needle) ||
-      item.description.toLowerCase().includes(needle),
+      (category.value === '' || item.category === category.value) &&
+      (needle === '' ||
+        (searchTexts.value.get(item.code) ?? '').includes(needle)),
   )
 })
 
@@ -89,6 +126,12 @@ function onDragStart(event: DragEvent, code: string): void {
       placeholder="搜算子"
       aria-label="搜算子"
     />
+    <DtSelect
+      v-model="category"
+      :options="categoryOptions"
+      aria-label="算子分类"
+      size="sm"
+    />
     <div class="dt-ml-palette__body">
       <DtEmpty
         v-if="groups.length === 0"
@@ -115,6 +158,12 @@ function onDragStart(event: DragEvent, code: string): void {
         >
           <DtIcon :name="item.icon" :size="14" />
           <span class="dt-ml-palette__name">{{ item.name }}</span>
+          <DtTag
+            v-if="(algorithmCounts.get(item.code) ?? 0) > 0"
+            size="sm"
+            :title="`${algorithmCounts.get(item.code)} 种算法，在配置中选择`"
+            >{{ algorithmCounts.get(item.code) }}</DtTag
+          >
         </DtButton>
       </section>
     </div>

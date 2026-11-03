@@ -26,6 +26,7 @@ const props = withDefaults(
     preview: MetricsPreview
     code?: string | undefined
     positiveLabel?: number | null | undefined
+    classificationAverage?: string | undefined
     /**
      * 这一路还带回了讲解块。
      *
@@ -86,9 +87,12 @@ const isSilent = computed(() => isBlank.value && !props.hasBlocks)
  * ⚠ 折数那一档要排在分类前面：交叉验证在分类模型上跑出来的 `task` 也是
  * `classification`，按 task 先判会把四个标量画成一张空混淆矩阵。
  */
+const isPlainShape = computed(
+  () => isBlank.value || props.code === 'clustering_analysis',
+)
 const shape = computed<MetricsShape>(() => {
   const preview = props.preview
-  if (isBlank.value) return 'plain'
+  if (isPlainShape.value) return 'plain'
   const declared = SHAPES_BY_CODE[props.code]
   if (declared !== undefined) return declared
   if (space.value === 'column') return 'importance'
@@ -104,13 +108,28 @@ const shape = computed<MetricsShape>(() => {
 const cards = computed(() =>
   space.value === 'column'
     ? []
-    : props.preview.metrics.map(([key, value]) => ({
-        key,
-        label: labelOf(key),
-        text: value === null ? '无定义' : `${niceNumber(value)}${unitOf(key)}`,
-        intent: BAND_INTENTS[bandOf(key, value)],
-        hint: bandHintOf(key),
-      })),
+    : props.preview.metrics
+        .filter(([key]) => {
+          const aggregate =
+            props.classificationAverage &&
+            props.classificationAverage !== 'binary'
+          const hasExplicit = keys.value.some(
+            (name) => name === 'precision_macro',
+          )
+          return !(
+            aggregate &&
+            hasExplicit &&
+            ['precision', 'recall', 'f1'].includes(key)
+          )
+        })
+        .map(([key, value]) => ({
+          key,
+          label: labelOf(key),
+          text:
+            value === null ? '无定义' : `${niceNumber(value)}${unitOf(key)}`,
+          intent: BAND_INTENTS[bandOf(key, value)],
+          hint: bandHintOf(key),
+        })),
 )
 </script>
 
@@ -129,6 +148,7 @@ const cards = computed(() =>
       v-if="shape === 'classification'"
       :preview="props.preview"
       :positive-label="props.positiveLabel"
+      :average="props.classificationAverage"
     />
     <RegressionMetricsView
       v-else-if="shape === 'regression'"

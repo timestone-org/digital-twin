@@ -8,12 +8,23 @@
  * JSON，判据见 `scripts/preview.ts` 的 `isFitted`。
  */
 import { DtNotice, DtTag } from '@dt/ui'
+import type { ModelingOperator } from '@dt/contracts'
+import {
+  fieldsOf,
+  visibleFields,
+} from '@/features/modeling-config/scripts/schemaForm'
 import { computed } from 'vue'
 
 import { niceNumber } from '../scripts/numbers'
 import type { ModelPreview } from '../scripts/preview'
+import { modelAlgorithmName } from '../scripts/modelPresentation'
 
-const props = defineProps<{ preview: ModelPreview }>()
+const props = defineProps<{
+  preview: ModelPreview
+  algorithmName?: string | undefined
+  operator?: ModelingOperator | undefined
+  config?: Readonly<Record<string, unknown>> | undefined
+}>()
 
 const TASK_LABELS: Record<string, string> = {
   regression: '回归',
@@ -21,6 +32,40 @@ const TASK_LABELS: Record<string, string> = {
   anomaly_detection: '异常检测',
   rule_calculation: '规则计算',
 }
+
+const configuration = computed(() => ({
+  ...Object.fromEntries(props.preview.hyperParams),
+  ...props.config,
+}))
+const displayAlgorithm = computed(
+  () =>
+    props.algorithmName ||
+    modelAlgorithmName(props.operator, configuration.value, props.preview.algo),
+)
+const hyperParameters = computed(() => {
+  const fields = props.operator ? fieldsOf(props.operator.config_schema) : []
+  const visible = new Set(
+    visibleFields(fields, configuration.value).map((field) => field.key),
+  )
+  const known = new Map(fields.map((field) => [field.key, field]))
+  return props.preview.hyperParams
+    .filter(([key]) => !known.has(key) || visible.has(key))
+    .map(([key, value]) => {
+      const field = known.get(key)
+      const label = field?.options.find(
+        (option) => option.value === value,
+      )?.label
+      const text =
+        field?.widget === 'switch'
+          ? value === 'true'
+            ? '是'
+            : value === 'false'
+              ? '否'
+              : value
+          : (label ?? value)
+      return { key, label: field?.label ?? key, text }
+    })
+})
 
 /**
  * 可服务性：这一版能不能配到台账公式里去。
@@ -113,7 +158,7 @@ const bars = computed(() =>
     </DtNotice>
     <dl class="dt-ml-model__facts">
       <dt>算法</dt>
-      <dd>{{ props.preview.algo }}</dd>
+      <dd>{{ displayAlgorithm }}</dd>
       <dt>任务</dt>
       <dd>{{ TASK_LABELS[props.preview.task] ?? props.preview.task }}</dd>
       <dt>目标列</dt>
@@ -164,9 +209,9 @@ const bars = computed(() =>
       }}
     </h4>
     <dl class="dt-ml-model__facts">
-      <template v-for="[key, value] in props.preview.hyperParams" :key="key">
-        <dt>{{ key }}</dt>
-        <dd>{{ value }}</dd>
+      <template v-for="parameter in hyperParameters" :key="parameter.key">
+        <dt>{{ parameter.label }}</dt>
+        <dd>{{ parameter.text }}</dd>
       </template>
     </dl>
   </div>
@@ -192,6 +237,8 @@ const bars = computed(() =>
     dd {
       margin: 0;
       color: var(--text-primary);
+      min-width: 0;
+      overflow-wrap: anywhere;
     }
   }
 

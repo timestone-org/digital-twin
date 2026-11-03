@@ -129,17 +129,19 @@ class TimeShift(OperatorBase):
 
 
 type Cycle = Literal["day", "week"]
+DEFAULT_CYCLES: tuple[Cycle, ...] = ("day", "week")
 
 
 class CyclicTimeConfig(OperatorConfig):
     """日内和周内正余弦编码的参数。"""
 
     cycles: list[Cycle] = Field(
-        default_factory=lambda: ["day", "week"],
+        default_factory=lambda: list(DEFAULT_CYCLES),
         min_length=1,
         max_length=2,
         title="周期",
         description="day=日内周期；week=周内周期",
+        json_schema_extra={"default": list(DEFAULT_CYCLES)},
     )
     timezone_offset_minutes: int = Field(
         default=480,

@@ -2,6 +2,7 @@
 import type { FieldError } from './envelope'
 import type { ModelingJsonValue } from './modelingDetection'
 export const MODELING_COMMAND_OPERATIONS = [
+  'import_pipeline',
   'create_instance',
   'configure_instance',
   'train_instance',
@@ -58,6 +59,7 @@ export type ModelingCommand = {
   id: string
   is_verification_required: boolean
   operation:
+    | 'import_pipeline'
     | 'create_instance'
     | 'configure_instance'
     | 'train_instance'

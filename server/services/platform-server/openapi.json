@@ -4304,6 +4304,51 @@
         "title": "ApiResponse[Page[WorkshopOut]]",
         "type": "object"
       },
+      "ApiResponse_PipelineImportInspection_": {
+        "properties": {
+          "code": {
+            "default": 0,
+            "title": "Code",
+            "type": "integer"
+          },
+          "data": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/PipelineImportInspection"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "details": {
+            "anyOf": [
+              {
+                "items": {
+                  "$ref": "#/components/schemas/FieldErrorOut"
+                },
+                "type": "array"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Details"
+          },
+          "message": {
+            "default": "ok",
+            "title": "Message",
+            "type": "string"
+          },
+          "trace_id": {
+            "default": "",
+            "title": "Trace Id",
+            "type": "string"
+          }
+        },
+        "title": "ApiResponse[PipelineImportInspection]",
+        "type": "object"
+      },
       "ApiResponse_PipelineOut_": {
         "properties": {
           "code": {
@@ -4347,6 +4392,51 @@
           }
         },
         "title": "ApiResponse[PipelineOut]",
+        "type": "object"
+      },
+      "ApiResponse_PipelineTransferDocument_": {
+        "properties": {
+          "code": {
+            "default": 0,
+            "title": "Code",
+            "type": "integer"
+          },
+          "data": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/PipelineTransferDocument"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "details": {
+            "anyOf": [
+              {
+                "items": {
+                  "$ref": "#/components/schemas/FieldErrorOut"
+                },
+                "type": "array"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Details"
+          },
+          "message": {
+            "default": "ok",
+            "title": "Message",
+            "type": "string"
+          },
+          "trace_id": {
+            "default": "",
+            "title": "Trace Id",
+            "type": "string"
+          }
+        },
+        "title": "ApiResponse[PipelineTransferDocument]",
         "type": "object"
       },
       "ApiResponse_PointBatchOut_": {
@@ -15136,6 +15226,7 @@
           },
           "operation": {
             "enum": [
+              "import_pipeline",
               "create_instance",
               "configure_instance",
               "train_instance",
@@ -17998,6 +18089,92 @@
         "title": "PipelineGraph",
         "type": "object"
       },
+      "PipelineImportIn": {
+        "additionalProperties": false,
+        "description": "将文档导入成一条独立流水线。",
+        "properties": {
+          "code": {
+            "maxLength": 64,
+            "minLength": 1,
+            "pattern": "^[A-Za-z0-9][A-Za-z0-9._-]*$",
+            "title": "Code",
+            "type": "string"
+          },
+          "description": {
+            "anyOf": [
+              {
+                "maxLength": 512,
+                "minLength": 1,
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Description"
+          },
+          "document": {
+            "$ref": "#/components/schemas/PipelineTransferDocument"
+          },
+          "name": {
+            "maxLength": 128,
+            "minLength": 1,
+            "title": "Name",
+            "type": "string"
+          }
+        },
+        "required": [
+          "document",
+          "code",
+          "name"
+        ],
+        "title": "PipelineImportIn",
+        "type": "object"
+      },
+      "PipelineImportInspection": {
+        "description": "无副作用的导入预检结果。",
+        "properties": {
+          "can_import": {
+            "title": "Can Import",
+            "type": "boolean"
+          },
+          "document": {
+            "$ref": "#/components/schemas/PipelineTransferDocument"
+          },
+          "edge_count": {
+            "title": "Edge Count",
+            "type": "integer"
+          },
+          "issues": {
+            "items": {
+              "$ref": "#/components/schemas/TransferIssue"
+            },
+            "title": "Issues",
+            "type": "array"
+          },
+          "node_count": {
+            "title": "Node Count",
+            "type": "integer"
+          },
+          "source_table_codes": {
+            "items": {
+              "type": "string"
+            },
+            "title": "Source Table Codes",
+            "type": "array"
+          }
+        },
+        "required": [
+          "document",
+          "can_import",
+          "issues",
+          "source_table_codes",
+          "node_count",
+          "edge_count"
+        ],
+        "title": "PipelineImportInspection",
+        "type": "object"
+      },
       "PipelineOut": {
         "description": "详情，带整张图。",
         "properties": {
@@ -18148,6 +18325,35 @@
           "updated_at"
         ],
         "title": "PipelineSummaryOut",
+        "type": "object"
+      },
+      "PipelineTransferDocument": {
+        "additionalProperties": false,
+        "description": "不含运行、产物与部署的便携 JSON。",
+        "properties": {
+          "format_version": {
+            "const": "1.0",
+            "title": "Format Version",
+            "type": "string"
+          },
+          "operators": {
+            "items": {
+              "$ref": "#/components/schemas/TransferOperator"
+            },
+            "maxItems": 200,
+            "title": "Operators",
+            "type": "array"
+          },
+          "pipeline": {
+            "$ref": "#/components/schemas/TransferPipeline"
+          }
+        },
+        "required": [
+          "format_version",
+          "pipeline",
+          "operators"
+        ],
+        "title": "PipelineTransferDocument",
         "type": "object"
       },
       "PipelineUpdateIn": {
@@ -24512,6 +24718,105 @@
           "data"
         ],
         "title": "ThumbnailPutIn",
+        "type": "object"
+      },
+      "TransferIssue": {
+        "description": "预检中可定位的问题与待配置提示。",
+        "properties": {
+          "edge_id": {
+            "default": "",
+            "title": "Edge Id",
+            "type": "string"
+          },
+          "level": {
+            "enum": [
+              "error",
+              "warning"
+            ],
+            "title": "Level",
+            "type": "string"
+          },
+          "message": {
+            "title": "Message",
+            "type": "string"
+          },
+          "node_id": {
+            "default": "",
+            "title": "Node Id",
+            "type": "string"
+          }
+        },
+        "required": [
+          "level",
+          "message"
+        ],
+        "title": "TransferIssue",
+        "type": "object"
+      },
+      "TransferOperator": {
+        "additionalProperties": false,
+        "description": "文档引用的算子契约版本。",
+        "properties": {
+          "operator": {
+            "maxLength": 64,
+            "minLength": 1,
+            "title": "Operator",
+            "type": "string"
+          },
+          "spec_version": {
+            "maxLength": 32,
+            "minLength": 1,
+            "title": "Spec Version",
+            "type": "string"
+          }
+        },
+        "required": [
+          "operator",
+          "spec_version"
+        ],
+        "title": "TransferOperator",
+        "type": "object"
+      },
+      "TransferPipeline": {
+        "additionalProperties": false,
+        "description": "可迁移的流水线定义。",
+        "properties": {
+          "code": {
+            "maxLength": 64,
+            "minLength": 1,
+            "pattern": "^[A-Za-z0-9][A-Za-z0-9._-]*$",
+            "title": "Code",
+            "type": "string"
+          },
+          "description": {
+            "anyOf": [
+              {
+                "maxLength": 512,
+                "minLength": 1,
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Description"
+          },
+          "graph": {
+            "$ref": "#/components/schemas/PipelineGraph"
+          },
+          "name": {
+            "maxLength": 128,
+            "minLength": 1,
+            "title": "Name",
+            "type": "string"
+          }
+        },
+        "required": [
+          "code",
+          "name",
+          "graph"
+        ],
+        "title": "TransferPipeline",
         "type": "object"
       },
       "UnresolvedBindingOut": {
@@ -33923,6 +34228,7 @@
             "required": true,
             "schema": {
               "enum": [
+                "import_pipeline",
                 "create_instance",
                 "configure_instance",
                 "train_instance",
@@ -36657,6 +36963,66 @@
         ]
       }
     },
+    "/api/v1/platform/modeling-pipelines/{pipeline_id}:export": {
+      "post": {
+        "description": "只导出定义与算子版本。\n\nArgs: pipeline_id, session, _write。",
+        "operationId": "export_pipeline_api_v1_platform_modeling_pipelines__pipeline_id__export_post",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "pipeline_id",
+            "required": true,
+            "schema": {
+              "format": "uuid",
+              "title": "Pipeline Id",
+              "type": "string"
+            }
+          },
+          {
+            "in": "header",
+            "name": "idempotency-key",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Idempotency-Key"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiResponse_PipelineTransferDocument_"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "导出已保存流水线 JSON",
+        "tags": [
+          "modeling-pipeline"
+        ]
+      }
+    },
     "/api/v1/platform/modeling-pipelines/{pipeline_id}:run": {
       "post": {
         "description": "发起一次运行。同一条流水线已有在途运行时 409。\n\nArgs: pipeline_id, payload, session, context, response。",
@@ -36783,6 +37149,126 @@
           }
         },
         "summary": "校验流水线",
+        "tags": [
+          "modeling-pipeline"
+        ]
+      }
+    },
+    "/api/v1/platform/modeling-pipelines:import": {
+      "post": {
+        "description": "创建独立流水线，支持 Idempotency-Key；Args: payload, session, write。",
+        "operationId": "import_pipeline_api_v1_platform_modeling_pipelines_import_post",
+        "parameters": [
+          {
+            "in": "header",
+            "name": "idempotency-key",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Idempotency-Key"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/PipelineImportIn"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "201": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiResponse_PipelineOut_"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "导入独立流水线",
+        "tags": [
+          "modeling-pipeline"
+        ]
+      }
+    },
+    "/api/v1/platform/modeling-pipelines:inspect-import": {
+      "post": {
+        "description": "检查兼容性与目标环境引用，不写入；Args: payload, session, _write。",
+        "operationId": "inspect_import_api_v1_platform_modeling_pipelines_inspect_import_post",
+        "parameters": [
+          {
+            "in": "header",
+            "name": "idempotency-key",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Idempotency-Key"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/PipelineTransferDocument"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiResponse_PipelineImportInspection_"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "预检流水线 JSON",
         "tags": [
           "modeling-pipeline"
         ]

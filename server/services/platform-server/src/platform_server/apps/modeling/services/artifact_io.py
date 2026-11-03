@@ -16,15 +16,12 @@ from lib.logging import get_logger
 from lib.objectstore import ObjectNotFound, ObjectStore, ObjectStoreError
 from platform_server.apps.modeling.services import artifact_store
 from platform_server.apps.modeling.services.artifact_store import (
+    MAX_ARTIFACT_BYTES,
     ArtifactRejected,
 )
 from platform_server.apps.modeling.services.jsonshape import as_dict, as_text
 
 _logger = get_logger("platform.modeling.artifact")
-
-# 单份产物的体积上限。⚠ 它框住的是**反序列化那一次停顿**：字节越多，事件循环
-# 被占住越久，而那期间这个副本上所有请求一起卡着
-MAX_ARTIFACT_BYTES = 32 * 1024 * 1024
 
 # 每个进程缓存几份模型本体。⚠ 一片森林在内存里可以比它的字节数还大，缓太多的
 # 表现是副本被 OOM 杀掉重启，而日志里只有一行「容器退出」

@@ -4,6 +4,7 @@ import { DtButton, DtCard, DtEmpty, DtInput, DtSegmented, DtTag } from '@dt/ui'
 import { computed, ref } from 'vue'
 import { PIPELINE_TEMPLATES } from '../scripts/templates'
 import { ENERGY_RULE_TEMPLATES } from '../scripts/ruleTemplates'
+import { MODEL_FAMILY_TEMPLATES } from '../scripts/familyTemplates'
 
 const selectedKey = defineModel<string>({ required: true })
 defineProps<{ disabled: boolean }>()
@@ -13,17 +14,24 @@ const categories = [
   { value: 'all', label: '全部' },
   { value: 'prediction', label: '预测与分类' },
   { value: 'detection', label: '异常检测' },
+  { value: 'analysis', label: '探索分析' },
   { value: 'rule', label: '规则计算' },
 ]
 function categoryOf(key: string): string {
-  if (key === 'device_anomaly') return 'detection'
+  if (key === 'device_anomaly' || key === 'anomaly_model') return 'detection'
+  if (key === 'clustering_analysis') return 'analysis'
   if (ENERGY_RULE_TEMPLATES.some((item) => item.key === key)) return 'rule'
   return 'prediction'
 }
+const familyKeys = new Set(MODEL_FAMILY_TEMPLATES.map((item) => item.key))
 const orderedTemplates = [
+  ...MODEL_FAMILY_TEMPLATES,
   ...PIPELINE_TEMPLATES.filter((item) => item.key === 'regression'),
   ...PIPELINE_TEMPLATES.filter(
-    (item) => item.key !== 'regression' && item.key !== 'blank',
+    (item) =>
+      item.key !== 'regression' &&
+      item.key !== 'blank' &&
+      !familyKeys.has(item.key),
   ),
   ...PIPELINE_TEMPLATES.filter((item) => item.key === 'blank'),
 ]

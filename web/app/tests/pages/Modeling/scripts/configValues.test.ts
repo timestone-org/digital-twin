@@ -138,3 +138,35 @@ describe('列表参数', () => {
     expect(configError(property, [1, 2])).toBe('')
   })
 })
+
+it('纯UI步长优先于推导，但不会成为multipleOf验证约束', () => {
+  const configured = field({
+    type: 'number',
+    default: 1,
+    exclusiveMinimum: 0,
+    maximum: 1,
+    'x-dt-step': 0.05,
+  })
+  expect(numberRange(configured).step).toBe(0.05)
+  expect(configured.multipleOf).toBeNull()
+  expect(configError(configured, 0.95)).toBe('')
+  expect(configError(configured, 0.97)).toBe('')
+})
+it.each([0, -1, Number.NaN, Number.POSITIVE_INFINITY])(
+  '无效UI步长%s沿用既有推导',
+  (step) => {
+    expect(
+      numberRange(field({ type: 'number', default: 1, 'x-dt-step': step }))
+        .step,
+    ).toBe(1)
+  },
+)
+it('整数参数拒绝分数UI步长，支持正整数步长', () => {
+  expect(
+    numberRange(field({ type: 'integer', default: 10, 'x-dt-step': 0.05 }))
+      .step,
+  ).toBe(1)
+  expect(
+    numberRange(field({ type: 'integer', default: 10, 'x-dt-step': 2 })).step,
+  ).toBe(2)
+})

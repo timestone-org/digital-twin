@@ -11,12 +11,14 @@ from dataclasses import dataclass, replace
 from math import inf, nextafter
 from typing import Any
 
+from platform_server.apps.modeling.operators.classification_notes import (
+    missing_curves_note,
+    positive_note,
+)
 from platform_server.apps.modeling.operators.evalcurves import (
     BINARY_CLASSES,
     CALIBRATION_NOTE,
     GRID_NOTE,
-    MULTICLASS_NOTE,
-    NO_PROBABILITY_NOTE,
     ONE_SIDED_NOTE,
     PR_NOTE,
     PROBABILITY_NOTE,
@@ -97,6 +99,7 @@ class Classified:
     actual_positive: tuple[bool, ...] = ()
     #: 每行被判成的是不是正类。用来反推打分时站的那个阈值
     predicted_positive: tuple[bool, ...] = ()
+    average: str = "binary"
 
 
 @dataclass(frozen=True)
@@ -178,11 +181,23 @@ def classification_blocks(view: Classified) -> tuple[ReportBlock, ...]:
     """
     made = [
         annotated(
-            _scope_block(view), NOTE_ALERT, (_missing_curves_note(view),)
+            _scope_block(view),
+            NOTE_ALERT,
+            (
+                missing_curves_note(
+                    len(view.labels),
+                    view.probabilities is not None,
+                    view.average,
+                ),
+            ),
         ),
         breakdown_block(
             _at("stats", "分类指标", TIER_SCALAR),
-            Scale(label=_positive_note(view)),
+            Scale(
+                label=positive_note(
+                    view.labels, view.positive_text, view.average
+                )
+            ),
             metric_items(CLASSIFICATION_METRICS, view.metrics),
         ),
         breakdown_block(
@@ -376,18 +391,6 @@ def _scope_block(view: Classified) -> ReportBlock:
     )
 
 
-def _missing_curves_note(view: Classified) -> str:
-    """三条曲线为什么不在这一屏上；画得出来时是空串。
-
-    ⚠ 两种「没有」分开写：多分类要用户改建模口径，缺概率列要用户换上游算子，
-    合成一句之后两种情形都不知道该做什么（规格 §2-P5）。
-    Args: view。
-    """
-    if len(view.labels) > BINARY_CLASSES:
-        return MULTICLASS_NOTE
-    return "" if view.probabilities is not None else NO_PROBABILITY_NOTE
-
-
 def _probability_blocks(view: Classified) -> list[ReportBlock]:
     """概率侧那四样：两个关键数字、ROC、PR、校准曲线，以及阈值网格。
 
@@ -397,7 +400,11 @@ def _probability_blocks(view: Classified) -> list[ReportBlock]:
     不在网格上，滑杆默认停到旁边一档，四格与 ② 区的指标卡对不上账。
     Args: view。
     """
-    if view.probabilities is None or len(view.labels) > BINARY_CLASSES:
+    if (
+        view.average != "binary"
+        or view.probabilities is None
+        or len(view.labels) > BINARY_CLASSES
+    ):
         return []
     stood = _scoring_threshold(view.probabilities, view.predicted_positive)
     curves = curves_of(view.probabilities, view.actual_positive, keep=stood)
@@ -514,21 +521,6 @@ def _stat(name: str, key: str, value: float | None) -> dict[str, Any]:
         "unit": "",
         "score_kind": "",
     }
-
-
-def _positive_note(view: Classified) -> str:
-    """正类是哪一个，以及它在不在这份测试集里。
-
-    ⚠ 正类可能一次都没出现过：那时精确率与召回率双双无定义，而界面照旧会把
-    「无定义」摆在正类徽标旁边，不说清就读成「模型很差」。
-    Args: view。
-    """
-    if view.positive_text in view.labels:
-        return f"精确率 / 召回率 / F1 都是相对正类「{view.positive_text}」算的"
-    return (
-        f"正类「{view.positive_text}」在这份测试集里一次都没出现过，"
-        "精确率与召回率无定义"
-    )
 
 
 def _class_items(view: Classified) -> list[dict[str, Any]]:

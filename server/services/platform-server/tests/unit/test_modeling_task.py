@@ -15,6 +15,9 @@ from platform_server.apps.modeling.services import configuration
 from unit.anomaly_fakes import training_pair
 
 MODEL_TASKS = {
+    "regression_model": "regression",
+    "classification_model": "classification",
+    "anomaly_model": "anomaly_detection",
     "linear_regression": "regression",
     "logistic_regression": "classification",
     "tree_regressor": "regression",
@@ -36,7 +39,7 @@ def _supervised_frame() -> Frame:
 
 
 def _inputs(code: str) -> dict[str, Frame]:
-    if code == "anomaly_distance":
+    if code in {"anomaly_distance", "anomaly_model"}:
         return training_pair()
     if code == "energy_rules":
         return {

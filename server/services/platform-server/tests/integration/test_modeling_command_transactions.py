@@ -3,7 +3,7 @@
 import asyncio
 import uuid
 from collections.abc import AsyncIterator
-from dataclasses import dataclass, field
+from dataclasses import dataclass, field, replace
 from datetime import UTC, datetime, timedelta
 
 import pytest
@@ -40,9 +40,17 @@ from platform_server.apps.modeling.models import (
     ModelingOperatorAudit,
     ModelingPipeline,
 )
+from platform_server.apps.modeling.schemas.graph import GraphNode, PipelineGraph
 from platform_server.apps.modeling.schemas.management import (
     ArchiveIn,
     DeploymentSwitchIn,
+)
+from platform_server.apps.modeling.schemas.pipeline import PipelineOut
+from platform_server.apps.modeling.schemas.transfer import (
+    PipelineImportIn,
+    PipelineTransferDocument,
+    TransferOperator,
+    TransferPipeline,
 )
 from platform_server.apps.modeling.services import (
     deployment_switch as switch_operations,
@@ -53,11 +61,15 @@ from platform_server.apps.modeling.services import (
 from platform_server.apps.modeling.services.command_gate import (
     DurableModelingGate,
 )
+from platform_server.apps.modeling.services.command_policy import fingerprint
 from platform_server.apps.modeling.services.command_service import get_command
 from platform_server.apps.modeling.services.operator_audit import (
     OperatorIdentity,
 )
 from platform_server.apps.modeling.services.pipeline_service import Actor
+from platform_server.apps.modeling.services.pipeline_transfer import (
+    import_pipeline,
+)
 from platform_server.settings import Settings
 
 NOW = datetime(2026, 10, 30, 3, tzinfo=UTC)
@@ -142,6 +154,151 @@ async def committed_commands(
 
 async def _must_not_execute() -> Receipt:
     raise AssertionError("原命令不得重新执行")
+
+
+def _import_payload(fixture: CommittedCommands) -> PipelineImportIn:
+    document = PipelineTransferDocument(
+        format_version="1.0",
+        pipeline=TransferPipeline(
+            code="original",
+            name="原设计",
+            graph=PipelineGraph(
+                nodes=[
+                    GraphNode(
+                        id="s",
+                        operator="ledger_source",
+                        config={"table_code": "energy"},
+                    )
+                ]
+            ),
+        ),
+        operators=[
+            TransferOperator(operator="ledger_source", spec_version="1.1")
+        ],
+    )
+    return PipelineImportIn(
+        document=document,
+        code=f"import-{fixture.account.hex}",
+        name="独立事务导入",
+    )
+
+
+def _import_gate(
+    fixture: CommittedCommands, session: AsyncSession, payload: PipelineImportIn
+) -> DurableModelingGate:
+    return replace(
+        fixture.gate(session),
+        caller=CallerContext(
+            fixture.account,
+            "导入测试",
+            "tester",
+            permissions=frozenset({"modeling:view", "modeling:manage"}),
+        ),
+        request_hash=fingerprint(
+            "POST",
+            "/api/v1/platform/modeling-pipelines:import",
+            payload.model_dump_json().encode(),
+            None,
+        ),
+    )
+
+
+async def _import_action(
+    fixture: CommittedCommands, session: AsyncSession, payload: PipelineImportIn
+) -> PipelineOut:
+    result = await import_pipeline(
+        session, payload, Actor(str(fixture.account), "导入测试")
+    )
+    fixture.pipelines.append(result.id)
+    return result
+
+
+async def _must_not_import() -> PipelineOut:
+    raise AssertionError("导入命令不得重新执行")
+
+
+async def _import_then_interrupt(
+    fixture: CommittedCommands, payload: PipelineImportIn
+) -> None:
+    async with fixture.database.session() as session:
+        await _import_gate(fixture, session, payload).run_once(
+            endpoint="modeling.import_pipeline",
+            model=PipelineOut,
+            action=lambda: _import_action(fixture, session, payload),
+        )
+        raise RuntimeError("提交前中断")
+
+
+async def test_import_success_and_audit_replay_on_a_new_connection(
+    committed_commands: CommittedCommands,
+) -> None:
+    fixture = committed_commands
+    payload = _import_payload(fixture)
+    async with fixture.database.session() as session:
+        first = await _import_gate(fixture, session, payload).run_once(
+            endpoint="modeling.import_pipeline",
+            model=PipelineOut,
+            action=lambda: _import_action(fixture, session, payload),
+        )
+    async with fixture.database.session() as session:
+        replay = await _import_gate(fixture, session, payload).run_once(
+            endpoint="modeling.import_pipeline",
+            model=PipelineOut,
+            action=_must_not_import,
+        )
+        assert replay.id == first.id
+        assert await session.get(ModelingPipeline, first.id) is not None
+        audits = list(
+            (
+                await session.scalars(
+                    select(ModelingOperatorAudit).where(
+                        ModelingOperatorAudit.account_user_id == fixture.account
+                    )
+                )
+            ).all()
+        )
+        assert len(audits) == 1
+        assert audits[0].resource_id == first.id
+        assert audits[0].operation == "import_pipeline"
+        assert audits[0].http_status == 201
+
+
+async def test_import_outer_rollback_preserves_pending_and_never_reexecutes(
+    committed_commands: CommittedCommands,
+) -> None:
+    fixture = committed_commands
+    payload = _import_payload(fixture)
+    with pytest.raises(RuntimeError, match="提交前中断"):
+        await _import_then_interrupt(fixture, payload)
+    async with fixture.database.session() as session:
+        command = await session.scalar(
+            select(ModelingCommand).where(
+                ModelingCommand.account_user_id == fixture.account
+            )
+        )
+        assert command is not None
+        assert command.state == "pending"
+        assert command.result_json is None
+        assert await session.get(ModelingPipeline, fixture.pipelines[0]) is None
+        audit = await session.scalar(
+            select(ModelingOperatorAudit).where(
+                ModelingOperatorAudit.account_user_id == fixture.account
+            )
+        )
+        assert audit is None
+        shown = await get_command(
+            session,
+            _import_gate(fixture, session, payload).caller,
+            command.id,
+            command.created_at + timedelta(minutes=6),
+        )
+        assert shown.state == "unknown"
+        with pytest.raises(CommandPending):
+            await _import_gate(fixture, session, payload).run_once(
+                endpoint="modeling.import_pipeline",
+                model=PipelineOut,
+                action=_must_not_import,
+            )
 
 
 async def _write_then_interrupt(fixture: CommittedCommands) -> None:

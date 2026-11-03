@@ -15,7 +15,6 @@ import {
   DtNotice,
   DtTag,
   DtCard,
-  DtIconButton,
 } from '@dt/ui'
 import { computed, onMounted, ref } from 'vue'
 import { RouterLink, useRouter } from 'vue-router'
@@ -29,6 +28,9 @@ import { formatDateTime } from '@/utils/datetime'
 import { listEmptyState } from '@/utils/listEmpty'
 
 import PipelineFormDialog from './components/PipelineFormDialog.vue'
+import PipelineImportDialog from './components/PipelineImportDialog.vue'
+import PipelineActions from './components/PipelineActions.vue'
+import { usePipelineTransfer } from './scripts/usePipelineTransfer'
 import { usePipelineOps } from './scripts/usePipelineOps'
 import type { PipelineDraft } from './scripts/usePipelineOps'
 import ModelingNav from '../components/ModelingNav.vue'
@@ -66,6 +68,10 @@ const list = useAsyncList<ModelingPipelineSummary>(
   PAGE_SIZE,
 )
 const ops = usePipelineOps(() => void list.reload())
+const transfer = usePipelineTransfer((id) => {
+  void list.reload()
+  void router.push(`/modeling/pipelines/${id}`)
+})
 
 async function save(draft: PipelineDraft, template: string): Promise<void> {
   const createdId = await ops.save(draft, template)
@@ -106,6 +112,14 @@ onMounted(() => void list.reload())
   >
     <template #actions>
       <PermGuard :codes="[PERMISSION_CODES.modelingManage]" explain>
+        <DtButton
+          variant="outline"
+          intent="neutral"
+          icon="upload"
+          @click="transfer.isOpen.value = true"
+        >
+          导入 JSON
+        </DtButton>
         <DtButton icon="plus" @click="ops.openCreate">新建流水线</DtButton>
       </PermGuard>
     </template>
@@ -197,40 +211,16 @@ onMounted(() => void list.reload())
           {{ formatDateTime(row.updated_at) }}
         </template>
         <template #cell-actions="{ row }">
-          <div class="dt-ml-list__actions">
-            <DtButton
-              variant="soft"
-              size="sm"
-              icon="workflow"
-              @click="void router.push(`/modeling/pipelines/${row.id}`)"
-            >
-              打开流程图
-            </DtButton>
-            <PermGuard :codes="[PERMISSION_CODES.modelingManage]">
-              <DtIconButton
-                variant="ghost"
-                size="sm"
-                icon="copy"
-                label="复制流水线"
-                :disabled="ops.isSaving.value"
-                @click="ops.openCopy(row)"
-              />
-              <DtIconButton
-                variant="ghost"
-                size="sm"
-                icon="pencil"
-                label="编辑信息"
-                @click="ops.openEdit(row)"
-              />
-              <DtIconButton
-                variant="ghost"
-                size="sm"
-                icon="trash"
-                label="删除流水线"
-                @click="void ops.remove(row)"
-              />
-            </PermGuard>
-          </div>
+          <PipelineActions
+            :row="row"
+            :is-saving="ops.isSaving.value"
+            :exporting-id="transfer.exportingId.value"
+            @open="(item) => void router.push(`/modeling/pipelines/${item.id}`)"
+            @export="(item) => void transfer.exportSaved(item)"
+            @copy="ops.openCopy"
+            @edit="ops.openEdit"
+            @remove="(item) => void ops.remove(item)"
+          />
         </template>
       </DtDataView>
     </div>
@@ -241,6 +231,7 @@ onMounted(() => void list.reload())
       @submit="(draft, template) => void save(draft, template)"
       @close="ops.close"
     />
+    <PipelineImportDialog :transfer="transfer" />
   </AppShell>
 </template>
 
@@ -305,12 +296,6 @@ onMounted(() => void list.reload())
     color: var(--text-secondary);
     text-overflow: ellipsis;
     white-space: nowrap;
-  }
-
-  &__actions {
-    display: flex;
-    gap: 0.25rem;
-    justify-content: flex-end;
   }
 
   &__icon {
