@@ -16,7 +16,11 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from lib.errors.base import FieldError, ValidationFailed
 from lib.utils.timeutils import format_rfc3339, to_utc
 from lib.web import CursorPage, CursorParams, decode_cursor, encode_cursor
-from platform_server.apps.dataset.crud import RecordWindow, record_crud
+from platform_server.apps.dataset.crud import (
+    RecordWindow,
+    record_crud,
+    table_crud,
+)
 from platform_server.apps.dataset.models import DatasetRecord
 from platform_server.apps.dataset.schemas import (
     DatasetSeriesPointOut,
@@ -210,6 +214,34 @@ async def read_latest(
         ts=record.ts,
         values=effective_values(record),
         computed=dict(record.computed_json or {}),
+    )
+
+
+@dataclass(frozen=True)
+class LatestByCode:
+    """一张台账最新生效值及其采集时效，不携带内部标识。"""
+
+    ts: datetime | None
+    values: dict[str, object]
+    collect_mode: str
+    collect_interval_ms: int
+    is_enabled: bool
+
+
+async def read_latest_by_code(
+    session: AsyncSession, *, code: str
+) -> LatestByCode | None:
+    """按稳定编码读取最新生效值及采集时效。Args: session, code。"""
+    table = await table_crud.get_by_code(session, code)
+    if table is None:
+        return None
+    latest = await read_latest(session, table_id=table.id)
+    return LatestByCode(
+        ts=latest.ts,
+        values={**latest.values, **latest.computed},
+        collect_mode=table.collect_mode,
+        collect_interval_ms=table.collect_interval_ms,
+        is_enabled=table.is_enabled,
     )
 
 

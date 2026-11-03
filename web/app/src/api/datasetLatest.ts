@@ -16,6 +16,11 @@ export interface DatasetLatestValue {
   canRetain?: boolean
 }
 
+export type DatasetLatestReader = (
+  keys: readonly string[],
+  signal: AbortSignal,
+) => Promise<ReadonlyMap<string, DatasetLatestValue>>
+
 /** 只有网络中断或服务端暂态错误才允许保留陈旧值。 */
 export function canRetainDatasetLatest(caught: unknown): boolean {
   if (caught instanceof BizError) return caught.status >= 500

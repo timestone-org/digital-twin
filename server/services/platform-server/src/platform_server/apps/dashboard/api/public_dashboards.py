@@ -7,13 +7,19 @@
 
 from typing import Annotated
 
-from fastapi import APIRouter, Depends
+from fastapi import APIRouter, Depends, Response
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from lib.web import ApiResponse, ok
 from platform_server.apps.dashboard.deps import get_session
-from platform_server.apps.dashboard.schemas.share import PublicDashboardOut
+from platform_server.apps.dashboard.schemas.share import (
+    PublicDashboardOut,
+    PublicDatasetLatestOut,
+)
 from platform_server.apps.dashboard.services import share_service
+from platform_server.apps.dashboard.services.public_dataset import (
+    read_public_dataset_latest,
+)
 from platform_server.settings import API_PREFIX
 
 router = APIRouter(prefix=f"{API_PREFIX}/public-dashboards", tags=["dashboard"])
@@ -37,4 +43,19 @@ async def read_public_dashboard(
         await share_service.get_public_dashboard(
             session, public_token=public_token
         )
+    )
+
+
+@router.get(
+    "/{public_token}/dataset-latest",
+    response_model=ApiResponse[PublicDatasetLatestOut],
+    summary="公开大屏已绑定台账列的最新值",
+)
+async def read_public_dashboard_dataset_latest(
+    public_token: str, session: SessionDep, response: Response
+) -> ApiResponse[PublicDatasetLatestOut]:
+    """仅取本屏绑定的最新台账值。Args: public_token, session, response。"""
+    response.headers["Cache-Control"] = "no-store"
+    return ok(
+        await read_public_dataset_latest(session, public_token=public_token)
     )

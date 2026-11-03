@@ -9,6 +9,7 @@ import type { DashboardNodeView, ModuleConnectionState } from '@dt/contracts'
 import { provideRuntimeData } from '@dt/runtime'
 import type { BindingValueReader } from '@dt/runtime'
 import type { Ref } from 'vue'
+import type { DatasetLatestReader } from '@/api/datasetLatest'
 
 import { usePointSamples } from '@/composables/usePointSamples'
 import { useDatasetLatestValues } from '@/composables/useDatasetLatestValues'
@@ -31,6 +32,11 @@ export interface DashboardValues {
   readBinding: () => BindingValueReader
 }
 
+export interface DashboardDatasetPorts {
+  readLatest: DatasetLatestReader
+  scope: () => string
+}
+
 /**
  * 装上取数源并跟着绑定变化重订。须在 setup 内调用。
  * 收渲染子集：编辑器给的是全量草稿节点，公开页给的是窄面，都能装。
@@ -43,12 +49,14 @@ export function useDashboardValues(
   scope: () => string,
   connectionState?: () => ModuleConnectionState,
   hasDatasetAccess = true,
+  dataset?: DashboardDatasetPorts,
 ): DashboardValues {
   const samples = usePointSamples(() => boundPointKeys(nodes()), scope)
   const readDataset = useDatasetLatestValues(
     () => nodes().flatMap((node) => node.bindings),
-    scope,
+    dataset?.scope ?? scope,
     hasDatasetAccess,
+    dataset?.readLatest,
   )
   const readBinding = (): BindingValueReader =>
     createBindingReader(samples.read, readDataset)

@@ -6,6 +6,7 @@ import { computed, onScopeDispose, ref, shallowRef, watch } from 'vue'
 import {
   canRetainDatasetLatest,
   readDatasetLatest,
+  type DatasetLatestReader,
   type DatasetLatestValue,
 } from '@/api/datasetLatest'
 import { useWorkspacePage } from '@/features/workspace/context'
@@ -39,6 +40,7 @@ export function useDatasetLatestValues(
   bindings: () => readonly BindingView[],
   scope: () => string,
   isEnabled = true,
+  readLatest: DatasetLatestReader = readDatasetLatest,
 ): ReadDatasetValue {
   const keys = computed(() => datasetKeys(bindings()))
   const values = shallowRef<ReadonlyMap<string, DatasetLatestValue>>(new Map())
@@ -48,7 +50,7 @@ export function useDatasetLatestValues(
   function refresh(): void {
     nowMs.value = Date.now()
     const wanted = keys.value
-    void fetch.run((signal) => readDatasetLatest(wanted, signal), {
+    void fetch.run((signal) => readLatest(wanted, signal), {
       ok: (result) => {
         values.value = retainLastValues(result, values.value)
       },
@@ -65,6 +67,7 @@ export function useDatasetLatestValues(
   watch(
     scope,
     () => {
+      fetch.cancel()
       values.value = new Map()
     },
     { flush: 'sync' },
