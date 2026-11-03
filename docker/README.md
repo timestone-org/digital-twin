@@ -97,9 +97,9 @@ docker compose --profile mineru up -d --build
 
 ### 内置基础设施、关闭 AI 页面
 
-使用独立入口 `compose.no-ai.yml`，要求 Docker Compose 2.24.4 或更新版本
-（依赖替换使用 [`!override`](https://docs.docker.com/reference/compose-file/merge/#replace-value)）。
-只传这一个 `-f`，它通过 `extends` 复用业务服务配置；不要再叠加 `compose.yml`。
+使用完整编排 `compose.no-ai.yml` 和 `docker compose` 命令。该文件显式声明全部非 AI
+服务与参数，不依赖或叠加 `compose.yml`。从完整仓库构建时仍需 `server/`、`web/`
+源码、各 Dockerfile 和 `docker/nginx/` 配置；单独复制 YAML 不是完整的离线部署包。
 
 ```bash
 cd docker
@@ -113,7 +113,7 @@ docker compose --env-file .env.no-ai -f compose.no-ai.yml ps -a
 页面入口为 `http://localhost:8080/ai/`（端口由 `EDGE_HTTP_PORT` 控制）。
 该部署包含 PostgreSQL 16 / TimescaleDB、Redis、MinIO、认证、平台的 API / worker /
 publisher、采集、OPC UA、实时通道和边缘网关。历史归档迁移需要 TimescaleDB，不能
-直接替换为普通 `postgres` 镜像。迁移只执行这五个后端代码单元，跳过助手与知识库，
+直接替换为普通 `postgres` 镜像。迁移执行五个核心代码单元及可选层级图的独立迁移链，跳过助手与知识库，
 因此无需 pgvector、嵌入模型或 AI 凭据。初始化作业失败会阻断本次应用启动。
 
 前端由 `web/Dockerfile` 在容器内构建，新入口固定传入 `VITE_AI_ENABLED=false`：
@@ -127,6 +127,38 @@ publisher、采集、OPC UA、实时通道和边缘网关。历史归档迁移�
 照常启动。内置数据库、Redis、MinIO 的连接地址按专用模板填写，不沿用外部部署地址。
 `POSTGRES_USER` 同时用于内置库初始化与业务连接；若要分离迁移和业务权限，须另外
 配置数据库角色、授权及 `MIGRATION_POSTGRES_*`。
+
+`no-ai.env.example` 按业务分组列出本编排全部输入变量，包含 BDM、报告 API 连接与定时
+生成、台账聚合与保留期、建模队列与预算、PLC/HTTP 采集允许清单、连接池、迁移账号、
+日志和实时订阅参数。可选项保持代码默认值；带 `#` 的项取消注释后才生效。
+**新部署只读取命令指定的 `.env.no-ai`，不会自动合并旧的 `docker/.env`**。
+已有现场配置需按需迁入该文件；不要直接覆盖整份模板里的内置数据库和对象存储地址。
+
+需要能管取数时，在 `.env.no-ai` 的 BDM 分组配置以下六项；模型算子的
+`PLATFORM_MODELING_NODE_TIMEOUT_S` 默认 300 秒：
+
+```dotenv
+PLATFORM_BDM_ENABLED=true
+PLATFORM_BDM_BASE_URL=https://bdm.example.com
+PLATFORM_BDM_API_KEY=
+PLATFORM_BDM_TIMEZONE=Asia/Shanghai
+PLATFORM_BDM_TIMEOUT_S=10.0
+PLATFORM_BDM_LOAD_TIMEOUT_S=120.0
+```
+
+把示例地址替换为现场 HTTP(S) origin（不带 `/api` 路径、查询参数或账号），填写
+接口方分配的 32–256 个无空白 ASCII 字符 Key。预算须满足
+`BDM_TIMEOUT_S < BDM_LOAD_TIMEOUT_S < MODELING_NODE_TIMEOUT_S`，且受启动校验的
+范围限制。以上配置只传到平台后端各角色，不传给前端构建；关闭 AI 不会关闭 BDM。
+修改后用同一组 `--env-file`、`-f` 参数重新执行 `up -d`，重建容器后才会注入新值。
+
+层级图继续作为非 AI 可选服务提供，默认只建空 schema：
+
+```bash
+docker compose --env-file .env.no-ai -f compose.no-ai.yml --profile hierarchy up -d --build
+```
+
+启用后入口为“工具 → 层级图”；单独恢复该服务不需要 AI 助手或知识库。
 
 新栈默认项目名为 `digitaltwin-no-ai`，命名卷与原栈隔离，前端产物也存于独立镜像。
 同机并行启动时要在 `.env.no-ai` 为 HTTP、MinIO 管理台与 OPC UA 端口池选择空闲端口。
@@ -162,7 +194,8 @@ PostgreSQL 的初始化变量只对空数据卷生效，已有数据库的密码
 
 ### 能管取数
 
-在 `docker/.env` 中设置 `PLATFORM_BDM_ENABLED=true`、`PLATFORM_BDM_BASE_URL`
+使用默认 `compose.yml` 时在 `docker/.env` 中配置；使用 `compose.no-ai.yml` 时在
+`docker/.env.no-ai` 中配置。设置 `PLATFORM_BDM_ENABLED=true`、`PLATFORM_BDM_BASE_URL`
 和 `PLATFORM_BDM_API_KEY`，共用环境段会传给 platform 各角色。时间口径与请求预算
 由 `PLATFORM_BDM_TIMEZONE`、`PLATFORM_BDM_TIMEOUT_S`、
 `PLATFORM_BDM_LOAD_TIMEOUT_S` 配置。Key 仅由后端发送，不写入镜像或前端构建参数。
