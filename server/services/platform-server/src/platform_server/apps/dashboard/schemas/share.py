@@ -5,9 +5,9 @@
 """
 
 import uuid
-from typing import Any
+from typing import Any, Literal
 
-from pydantic import Field
+from pydantic import Field, JsonValue
 
 from platform_server.apps.dashboard.schemas.common import OutputModel, Utc
 from platform_server.apps.dashboard.source_kinds import SourceKind
@@ -81,3 +81,20 @@ class PublicDashboardOut(OutputModel):
     chrome_json: dict[str, Any]
     updated_at: Utc
     nodes: list[PublicNodeOut] = Field(default_factory=list[PublicNodeOut])
+
+
+class PublicDatasetLatestItemOut(OutputModel):
+    """本屏一条台账列绑定的最新生效值。"""
+
+    dataset_key: str
+    status: Literal["ok", "error"]
+    value: JsonValue = None
+    ts: Utc | None = None
+    stale_at: Utc | None = None
+    message: str | None = None
+
+
+class PublicDatasetLatestOut(OutputModel):
+    """仅包含当前公开大屏绑定列的最新值。"""
+
+    items: list[PublicDatasetLatestItemOut]

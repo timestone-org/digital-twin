@@ -32,6 +32,10 @@ import type {
 import type { DashboardThumbnailWire } from '@/api/dashboardThumbnailWire'
 import type { ProjectThemeWire } from '@/api/projectThemesWire'
 import type { HistoryPointWire } from '@/api/pointHistories'
+import type {
+  PublicDatasetLatestItemWire,
+  PublicDatasetLatestWire,
+} from '@/api/publicDatasetLatest'
 import type { LayoutIssue, ValidationReportWire } from '@/api/dashboard'
 import type {
   AssetKindWire,
@@ -64,6 +68,17 @@ const schemas = (
 type Keys<T> = Record<keyof T, true>
 
 const SHAPES = {
+  PublicDatasetLatestOut: {
+    items: true,
+  } satisfies Keys<PublicDatasetLatestWire>,
+  PublicDatasetLatestItemOut: {
+    dataset_key: true,
+    status: true,
+    value: true,
+    ts: true,
+    stale_at: true,
+    message: true,
+  } satisfies Keys<PublicDatasetLatestItemWire>,
   DashboardSummaryOut: {
     created_at: true,
     description: true,

@@ -3,7 +3,7 @@
  * @fileoverview 公开大屏：拿链接就能看，不需要登录。
  *
  * 实时值与联动都跑（ADR-0021）：
- * - 取数走 WS，凭据是地址里那个公开令牌，订的是它换来的**别名**主题——
+ * - 实时点位取数走 WS，凭据是公开令牌，订的是它换来的**别名**主题——
  *   真主题（`dashboard:{id}`）一个字都不出门（ADR-0014）。
  * - 联动引擎照装，跨屏跳转的句柄在服务端已经改写成目标屏的公开令牌；
  *   跳不到的规则压根不下发，所以这里不必再判「目标存不存在」。
@@ -40,6 +40,7 @@ import {
   installDashboardDataSources,
   installDashboardModules,
 } from '@/bootstrap/dashboard'
+import { readPublicDatasetLatest } from '@/api/publicDatasetLatest'
 import RealtimeOfflineNotice from '@/components/RealtimeOfflineNotice.vue'
 import { useDashboardValues } from '@/composables/useDashboardValues'
 import {
@@ -109,11 +110,21 @@ const values = useDashboardValues(
   () => nodes.value,
   () => publicToken(),
   () => channel.connectionState.value,
-  false,
+  true,
+  {
+    readLatest: (keys, signal) =>
+      readPublicDatasetLatest(publicToken(), keys, signal),
+    scope: () => (doc.loading.value ? '' : publicToken()),
+  },
 )
 // 这张屏到底有没有实时绑定。⚠ 没有的话不许说「实时」：通道连着与画面上的
 // 数字是活的，是两件事
 const hasLiveBindings = computed(() => boundPointKeys(nodes.value).length > 0)
+const hasDatasetBindings = computed(() =>
+  nodes.value.some((node) =>
+    node.bindings.some((binding) => binding.sourceKind === 'dataset'),
+  ),
+)
 const tree = computed(() => buildNodeTree(nodes.value, getManifest))
 
 // 大屏级卡片外观缺省；模块级覆盖由渲染宿主自己读 config.__cardStyle
@@ -184,6 +195,7 @@ function describeStatus(): string {
     if (channel.isConnected.value) return '实时数据'
     if (values.sampleCount.value > 0) return '实时数据 · 已断开'
   }
+  if (hasDatasetBindings.value) return '台账数据 · 每分钟更新'
   const at = doc.dashboard.value?.updatedAt
   return `静态快照 · 数据截止 ${at === undefined ? '未知' : formatDateTime(at)}`
 }

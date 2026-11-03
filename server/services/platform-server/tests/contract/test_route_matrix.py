@@ -209,6 +209,7 @@ STRICTER_THAN_GATE_ONE: dict[tuple[str, str], frozenset[str]] = {
 # 公开大屏：全服务唯一一条**业务**匿名端点（ADR-0014）。凭据是 URL 里的
 # 公开令牌，由端点自己按「已发布」核对，故它没有、也不该有任何权限码。
 PUBLIC_DASHBOARD_PATH = f"{API_PREFIX}/public-dashboards/{{public_token}}"
+PUBLIC_DATASET_LATEST_PATH = f"{PUBLIC_DASHBOARD_PATH}/dataset-latest"
 
 # 探针与文档不吃身份头，它们在边缘走免认证 location
 UNGUARDED = frozenset(
@@ -219,6 +220,7 @@ UNGUARDED = frozenset(
         f"{API_PREFIX}/redoc",
         f"{API_PREFIX}/openapi.json",
         PUBLIC_DASHBOARD_PATH,
+        PUBLIC_DATASET_LATEST_PATH,
         f"{API_PREFIX}/public-assets/{{asset_id}}/{{variant}}",
     }
 )
@@ -425,6 +427,7 @@ def test_anonymous_routes_only_expose_dashboards_and_model_bytes() -> None:
 
     assert UNGUARDED - probes == {
         PUBLIC_DASHBOARD_PATH,
+        PUBLIC_DATASET_LATEST_PATH,
         f"{API_PREFIX}/public-assets/{{asset_id}}/{{variant}}",
     }
 
@@ -435,6 +438,17 @@ def test_the_public_dashboard_route_really_exists() -> None:
     paths = {route.path for route in iter_routes(build_app())}
 
     assert PUBLIC_DASHBOARD_PATH in paths
+
+
+def test_public_dataset_latest_cannot_select_other_tables_or_columns() -> None:
+    route = next(
+        route
+        for route in iter_routes(build_app())
+        if route.path == PUBLIC_DATASET_LATEST_PATH
+    )
+
+    assert route.methods == {"GET"}
+    assert route.dependant.query_params == []
 
 
 def test_action_endpoints_are_post_only() -> None:

@@ -4799,6 +4799,51 @@
         "title": "ApiResponse[PublicDashboardOut]",
         "type": "object"
       },
+      "ApiResponse_PublicDatasetLatestOut_": {
+        "properties": {
+          "code": {
+            "default": 0,
+            "title": "Code",
+            "type": "integer"
+          },
+          "data": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/PublicDatasetLatestOut"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "details": {
+            "anyOf": [
+              {
+                "items": {
+                  "$ref": "#/components/schemas/FieldErrorOut"
+                },
+                "type": "array"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Details"
+          },
+          "message": {
+            "default": "ok",
+            "title": "Message",
+            "type": "string"
+          },
+          "trace_id": {
+            "default": "",
+            "title": "Trace Id",
+            "type": "string"
+          }
+        },
+        "title": "ApiResponse[PublicDatasetLatestOut]",
+        "type": "object"
+      },
       "ApiResponse_PublicationOut_": {
         "properties": {
           "code": {
@@ -19880,6 +19925,84 @@
           "updated_at"
         ],
         "title": "PublicDashboardOut",
+        "type": "object"
+      },
+      "PublicDatasetLatestItemOut": {
+        "description": "本屏一条台账列绑定的最新生效值。",
+        "properties": {
+          "dataset_key": {
+            "title": "Dataset Key",
+            "type": "string"
+          },
+          "message": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Message"
+          },
+          "stale_at": {
+            "anyOf": [
+              {
+                "format": "date-time",
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Stale At"
+          },
+          "status": {
+            "enum": [
+              "ok",
+              "error"
+            ],
+            "title": "Status",
+            "type": "string"
+          },
+          "ts": {
+            "anyOf": [
+              {
+                "format": "date-time",
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Ts"
+          },
+          "value": {
+            "$ref": "#/components/schemas/JsonValue"
+          }
+        },
+        "required": [
+          "dataset_key",
+          "status"
+        ],
+        "title": "PublicDatasetLatestItemOut",
+        "type": "object"
+      },
+      "PublicDatasetLatestOut": {
+        "description": "仅包含当前公开大屏绑定列的最新值。",
+        "properties": {
+          "items": {
+            "items": {
+              "$ref": "#/components/schemas/PublicDatasetLatestItemOut"
+            },
+            "title": "Items",
+            "type": "array"
+          }
+        },
+        "required": [
+          "items"
+        ],
+        "title": "PublicDatasetLatestOut",
         "type": "object"
       },
       "PublicNodeOut": {
@@ -38484,6 +38607,49 @@
           }
         },
         "summary": "按公开令牌读大屏",
+        "tags": [
+          "dashboard"
+        ]
+      }
+    },
+    "/api/v1/platform/public-dashboards/{public_token}/dataset-latest": {
+      "get": {
+        "description": "仅取本屏绑定的最新台账值。Args: public_token, session, response。",
+        "operationId": "read_public_dashboard_dataset_latest_api_v1_platform_public_dashboards__public_token__dataset_latest_get",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "public_token",
+            "required": true,
+            "schema": {
+              "title": "Public Token",
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiResponse_PublicDatasetLatestOut_"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "公开大屏已绑定台账列的最新值",
         "tags": [
           "dashboard"
         ]

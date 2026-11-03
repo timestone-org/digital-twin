@@ -143,7 +143,7 @@ opcua      → 实时点位，node_key 指向 collect_points，走 WS 推送
 static     → 常量，static_value_json
 computed   → 同模块内其它槽的运算，compute_json {op, inputs, precision}
 archive    → 历史序列，detail_json {node_key, range}
-dataset    → 台账列，detail_json {dataset_key, range, timezone?}；已登录标量读 HTTP latest，序列读 series
+dataset    → 台账列，detail_json {dataset_key, range, timezone?}；已登录标量读 HTTP latest，序列读 series；公开页仅按当前票据读取本屏绑定列的 latest
 ```
 
 `source_kind` 是**闭合集合**，未注册的值 `400`。参考实现放开成任意字符串，
