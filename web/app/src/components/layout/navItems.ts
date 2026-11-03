@@ -7,6 +7,8 @@
  */
 
 import { PERMISSION_CODES } from '@dt/contracts'
+import { AI_ENABLED } from '@/config/app'
+import { isAiPageEnabled } from '@/config/aiFeatures'
 
 export interface NavItem {
   key: string
@@ -19,7 +21,7 @@ export interface NavItem {
   children?: NavItem[]
 }
 
-export const NAV_ITEMS: readonly NavItem[] = [
+const ALL_NAV_ITEMS: readonly NavItem[] = [
   // 大屏没有独立入口：项目与大屏都在工作台里管，再挂一项「大屏」会让
   // 「新建大屏」在两个地方各有一个入口，且两处的项目上下文对不上
   { key: 'home', label: '工作台', icon: 'layout-grid', to: '/' },
@@ -264,6 +266,14 @@ export const NAV_ITEMS: readonly NavItem[] = [
     ],
   },
 ]
+
+export const NAV_ITEMS: readonly NavItem[] = ALL_NAV_ITEMS.flatMap((item) => {
+  if (!item.children) return isAiPageEnabled(item.to, AI_ENABLED) ? [item] : []
+  const children = item.children.filter((child) =>
+    isAiPageEnabled(child.to, AI_ENABLED),
+  )
+  return children.length ? [{ ...item, children }] : []
+})
 
 /** 取一项的权限码数组。缺省与空数组同义：人人可见。 */
 export function navPermissionCodes(item: NavItem): readonly string[] {

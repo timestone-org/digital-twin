@@ -1,6 +1,7 @@
 /// <reference types="vite/client" />
 
 interface ImportMetaEnv {
+  readonly VITE_AI_ENABLED?: string
   readonly VITE_KNOWLEDGE_CHAT_MAX_ACTIVE_LIVE_CARDS?: string
 }
 

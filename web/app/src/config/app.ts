@@ -2,6 +2,9 @@
  * @fileoverview 应用级常量与后端前缀。地址一律相对路径，由边缘同域反代。
  */
 import { parseLiveCardLimit } from './liveCardLimit'
+import { parseAiEnabled } from './aiFeatures'
+
+export const AI_ENABLED = parseAiEnabled(import.meta.env.VITE_AI_ENABLED)
 
 export const MAX_ACTIVE_LIVE_CARDS = parseLiveCardLimit(
   import.meta.env.VITE_KNOWLEDGE_CHAT_MAX_ACTIVE_LIVE_CARDS,

@@ -1,15 +1,6 @@
 /**
- * @fileoverview 应用壳注入给 AI 子系统的口子。
- *
- * ⚠ 全字段可选，**不注入 = 该能力如实缺席**，不是假装成功——与大屏子系统的
- * `DashboardRuntimePorts` 同一口径。三层「关掉」各管各的场景：
- *
- *   编译期  `main.ts` 不调 `installAiAssistant` → 整个子系统不进包
- *   部署期  ai-assistant 没部署 → 探测拿不到 → 入口不出现
- *   账号期  没有 `assistant:use` 权限码 → 入口不出现
- *
- * ⚠ 不用环境变量：本仓明令「环境差异只能是取值不能是行为」，而 ports 缺省
- * 本来就是这个仓表达可选能力的方式。
+ * @fileoverview 应用壳注入给 AI 子系统的可选交互端口。
+ * VITE_AI_ENABLED 关闭时不装配；启用后仍受部署能力探测和账号权限约束。
  */
 import type { AssistantCapability, AssistantToolResult } from '@dt/contracts'
 

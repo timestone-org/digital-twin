@@ -1,0 +1,22 @@
+# 构建只读取受版本管理的前端源码与依赖清单。
+*
+!package.json
+!pnpm-lock.yaml
+!pnpm-workspace.yaml
+!tsconfig.base.json
+!app/
+!packages/
+
+**/node_modules
+**/dist
+**/coverage
+**/.vite
+**/storybook-static
+**/.env
+**/.env.*
+**/.git
+**/.DS_Store
+**/*.log
+**/tests
+**/docs
+**/*.md

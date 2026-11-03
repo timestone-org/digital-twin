@@ -8,10 +8,12 @@ import { createRouter, createWebHistory } from 'vue-router'
 import type { RouteRecordRaw } from 'vue-router'
 
 import { PERMISSION_CODES } from '@dt/contracts'
+import { AI_ENABLED } from '@/config/app'
+import { isAiPageEnabled } from '@/config/aiFeatures'
 
 import { installAuthGuard } from './guards'
 
-export const routes: RouteRecordRaw[] = [
+const ALL_ROUTES: RouteRecordRaw[] = [
   {
     path: '/login',
     name: 'login',
@@ -548,6 +550,10 @@ export const routes: RouteRecordRaw[] = [
     meta: { anonymous: true, title: '页面不存在' },
   },
 ]
+
+export const routes: RouteRecordRaw[] = ALL_ROUTES.filter((route) =>
+  isAiPageEnabled(route.path, AI_ENABLED),
+)
 
 export const router = createRouter({
   history: createWebHistory(import.meta.env.BASE_URL),

@@ -95,6 +95,49 @@ docker compose --profile mineru up -d --build
 少写一处就是非对称失效——发送端有值、接收端没有，一律 403，
 而现象与原因隔得极远。
 
+### 内置基础设施、关闭 AI 页面
+
+使用独立入口 `compose.no-ai.yml`，要求 Docker Compose 2.24.4 或更新版本
+（依赖替换使用 [`!override`](https://docs.docker.com/reference/compose-file/merge/#replace-value)）。
+只传这一个 `-f`，它通过 `extends` 复用业务服务配置；不要再叠加 `compose.yml`。
+
+```bash
+cd docker
+cp no-ai.env.example .env.no-ai
+# 编辑 .env.no-ai，填写所有必填项；IMAGE_TAG 使用版本号-提交SHA-no-ai。
+docker compose --env-file .env.no-ai -f compose.no-ai.yml config --quiet
+docker compose --env-file .env.no-ai -f compose.no-ai.yml up -d --build
+docker compose --env-file .env.no-ai -f compose.no-ai.yml ps -a
+```
+
+页面入口为 `http://localhost:8080/ai/`（端口由 `EDGE_HTTP_PORT` 控制）。
+该部署包含 PostgreSQL 16 / TimescaleDB、Redis、MinIO、认证、平台的 API / worker /
+publisher、采集、OPC UA、实时通道和边缘网关。历史归档迁移需要 TimescaleDB，不能
+直接替换为普通 `postgres` 镜像。迁移只执行这五个后端代码单元，跳过助手与知识库，
+因此无需 pgvector、嵌入模型或 AI 凭据。初始化作业失败会阻断本次应用启动。
+
+前端由 `web/Dockerfile` 在容器内构建，新入口固定传入 `VITE_AI_ENABLED=false`：
+隐藏各工作面的 AI 助手、知识库和系统模型供应商管理入口，相关页面 URL 返回
+前端 404；分析建模、达标预测、报告等业务页面保留。不启动 `ai-assistant`、
+`knowledge-server`、`knowledge-worker` 或 MinerU。该开关控制界面和路由，
+不替代后端权限校验。原部署的前端默认仍启用这些功能；修改开关后必须重新构建。
+
+现有平台启动配置仍要求 `ACSOURCE_HOST/USER/PASSWORD/DB`，须填写现场只读 EMS
+连接；本编排不部署 EMS。该系统暂时不可达时，仅相关空调数据查询不可用，其他业务
+照常启动。内置数据库、Redis、MinIO 的连接地址按专用模板填写，不沿用外部部署地址。
+`POSTGRES_USER` 同时用于内置库初始化与业务连接；若要分离迁移和业务权限，须另外
+配置数据库角色、授权及 `MIGRATION_POSTGRES_*`。
+
+新栈默认项目名为 `digitaltwin-no-ai`，命名卷与原栈隔离，前端产物也存于独立镜像。
+同机并行启动时要在 `.env.no-ai` 为 HTTP、MinIO 管理台与 OPC UA 端口池选择空闲端口。
+数据库和 Redis 不发布宿主端口；MinIO 管理台仅可从本机
+`http://127.0.0.1:9001` 访问，对象字节经页面同源 `/oss/` 访问。
+MinIO 初始化只公开 `models/`、`images/`、`icons/`，`staging/` 保持私有。
+
+停止时使用同样的参数执行 `down`（不加 `-v`，保留数据）。备份须包含
+`postgres-data`、`redis-data`、`minio-data` 与 `opcua-pki` 四个命名卷。
+PostgreSQL 的初始化变量只对空数据卷生效，已有数据库的密码须通过数据库另行修改。
+
 ### 必配项
 
 密钥与地址类**都没有默认值，缺失即拒绝启动**——进程会在第一秒把缺的变量名逐个

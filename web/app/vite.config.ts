@@ -3,6 +3,7 @@ import { fileURLToPath, URL } from 'node:url'
 import tailwind from '@tailwindcss/vite'
 import vue from '@vitejs/plugin-vue'
 import { defineConfig, loadEnv } from 'vite'
+import { parseAiEnabled } from './src/config/aiFeatures'
 import { parseLiveCardLimit } from './src/config/liveCardLimit'
 import { umoAssets } from './vite-plugins/umoAssets'
 
@@ -26,6 +27,7 @@ export default defineConfig(({ mode }) => {
     'VITE_',
   )
   parseLiveCardLimit(env.VITE_KNOWLEDGE_CHAT_MAX_ACTIVE_LIVE_CARDS)
+  parseAiEnabled(env.VITE_AI_ENABLED)
   return {
     base: '/ai/',
     worker: { format: 'es' },

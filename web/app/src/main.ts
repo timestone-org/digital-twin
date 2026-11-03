@@ -19,9 +19,6 @@ import './styles/index.scss'
 // 并进 index.scss 会被 Sass 内联掉、产物里留一条死路径（见该文件头）
 import '@dt/tokens/decor.scss'
 
-// ⚠ **删掉这一行 = 整个 AI 子系统不存在**：入口不出现、代码不进首屏包。
-// 某些现场没有外网、根本不部署 ai-assistant，那时这里就是唯一要改的地方
-// （见 features/ai/ports.ts 记的三层「关掉」）。
 installAiAssistant()
 installTwinModelHost()
 

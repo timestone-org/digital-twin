@@ -1,0 +1,144 @@
+# 含基础设施的单机部署；前端关闭 AI 助手、知识库与模型供应商管理。
+# 需要 Docker Compose >= 2.24.4，使用 !override 替换继承的依赖与静态资源挂载。
+name: digitaltwin-no-ai
+
+x-platform-no-ai: &platform-no-ai
+  PLATFORM_LLM_PROVIDER_SECRET: 'null'
+
+services:
+  postgres:
+    image: timescale/timescaledb:2.17.2-pg16
+    environment:
+      POSTGRES_USER: ${POSTGRES_USER:?必填}
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:?必填}
+      POSTGRES_DB: ${POSTGRES_DB:?必填}
+      POSTGRES_INITDB_ARGS: --auth-host=scram-sha-256
+    volumes:
+      - postgres-data:/var/lib/postgresql/data
+    healthcheck:
+      test: ['CMD-SHELL', 'pg_isready -U "$$POSTGRES_USER" -d "$$POSTGRES_DB"']
+      interval: 5s
+      timeout: 3s
+      retries: 12
+      start_period: 10s
+    restart: unless-stopped
+
+  redis:
+    image: redis:7.4-alpine
+    environment:
+      REDIS_PASSWORD: ${REDIS_PASSWORD:?必填}
+    command: ['sh', '-c', 'exec /usr/local/bin/docker-entrypoint.sh redis-server --appendonly yes --requirepass "$$REDIS_PASSWORD"']
+    volumes:
+      - redis-data:/data
+    healthcheck:
+      test: ['CMD-SHELL', 'REDISCLI_AUTH="$$REDIS_PASSWORD" redis-cli ping | grep -qx PONG']
+      interval: 5s
+      timeout: 3s
+      retries: 12
+    restart: unless-stopped
+
+  minio:
+    image: minio/minio:RELEASE.2025-04-22T22-12-26Z
+    environment:
+      MINIO_ROOT_USER: ${OSS_ACCESS_KEY:?必填}
+      MINIO_ROOT_PASSWORD: ${OSS_SECRET_KEY:?必填}
+    command: ['server', '/data', '--console-address', ':9001']
+    ports: ['127.0.0.1:${MINIO_CONSOLE_PORT:-9001}:9001']
+    volumes:
+      - minio-data:/data
+    healthcheck:
+      test: ['CMD', 'curl', '-f', 'http://127.0.0.1:9000/minio/health/live']
+      interval: 5s
+      timeout: 3s
+      retries: 12
+      start_period: 10s
+    restart: unless-stopped
+
+  minio-init:
+    extends: {file: compose.yml, service: minio-init}
+    depends_on:
+      minio: {condition: service_healthy}
+
+  database-migrate:
+    extends: {file: compose.yml, service: database-migrate}
+    image: digitaltwin/database-migrate:${IMAGE_TAG:?必填：版本号-提交SHA}
+    environment:
+      <<: *platform-no-ai
+    command:
+      - --service
+      - auth-server
+      - --service
+      - platform-server
+      - --service
+      - opcua-server
+      - --service
+      - collector-server
+      - --service
+      - realtime-hub
+    depends_on:
+      postgres: {condition: service_healthy}
+      redis: {condition: service_healthy}
+      minio-init: {condition: service_completed_successfully}
+
+  auth-server:
+    extends: {file: compose.yml, service: auth-server}
+    image: digitaltwin/auth-server:${IMAGE_TAG:?必填：版本号-提交SHA}
+    depends_on:
+      redis: {condition: service_healthy}
+
+  platform-server:
+    extends: {file: compose.yml, service: platform-server}
+    image: digitaltwin/platform-server:${IMAGE_TAG:?必填：版本号-提交SHA}
+    environment:
+      <<: *platform-no-ai
+
+  platform-worker:
+    extends: {file: compose.yml, service: platform-worker}
+    image: digitaltwin/platform-server:${IMAGE_TAG:?必填：版本号-提交SHA}
+    environment:
+      <<: *platform-no-ai
+
+  platform-publisher:
+    extends: {file: compose.yml, service: platform-publisher}
+    image: digitaltwin/platform-server:${IMAGE_TAG:?必填：版本号-提交SHA}
+    environment:
+      <<: *platform-no-ai
+
+  collector-server:
+    extends: {file: compose.yml, service: collector-server}
+    image: digitaltwin/collector-server:${IMAGE_TAG:?必填：版本号-提交SHA}
+
+  opcua-server:
+    extends: {file: compose.yml, service: opcua-server}
+    image: digitaltwin/opcua-server:${IMAGE_TAG:?必填：版本号-提交SHA}
+
+  realtime-hub:
+    extends: {file: compose.yml, service: realtime-hub}
+    image: digitaltwin/realtime-hub:${IMAGE_TAG:?必填：版本号-提交SHA}
+
+  edge-gateway:
+    extends: {file: compose.yml, service: edge-gateway}
+    image: digitaltwin/web-no-ai:${IMAGE_TAG:?必填：版本号-提交SHA}
+    build:
+      context: ../web
+      dockerfile: Dockerfile
+      args:
+        VITE_AI_ENABLED: 'false'
+    sysctls:
+      net.ipv4.ip_unprivileged_port_start: 0
+    depends_on: !override
+      auth-server: {condition: service_healthy}
+      platform-server: {condition: service_healthy}
+      opcua-server: {condition: service_started}
+      realtime-hub: {condition: service_started}
+      minio-init: {condition: service_completed_successfully}
+    volumes: !override
+      - ./nginx/nginx.conf.template:/etc/nginx/templates/nginx.conf.template:ro
+      - ./nginx/proxy-common.conf:/etc/nginx/conf.d/proxy-common.conf:ro
+      - ./nginx/auth-inject.conf:/etc/nginx/conf.d/auth-inject.conf:ro
+
+volumes:
+  postgres-data:
+  redis-data:
+  minio-data:
+  opcua-pki:
