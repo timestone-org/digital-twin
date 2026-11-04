@@ -21,7 +21,7 @@ const split: Ports = {
 }
 const unary: Ports = { inputs: { frame: FRAME }, outputs: { frame: FRAME } }
 const ports: Record<string, Ports> = {
-  ledger_source: { inputs: {}, outputs: { frame: FRAME } },
+  bdm_source: { inputs: {}, outputs: { frame: FRAME } },
   fill_missing: unary,
   drop_missing: unary,
   split_dataset: split,
@@ -76,7 +76,10 @@ it.each(MODEL_FAMILY_TEMPLATES)(
     const graph = template.build()
     assertGraphPorts(graph)
     expect(graph.nodes.find((node) => node.id === 's')?.config).toEqual({
-      table_code: '',
+      kind: 'point',
+      identifiers: [],
+      since: '-30d',
+      value_type: 'number',
     })
     expect(graph.nodes.find((node) => node.id === 'm')?.config).toEqual({})
   },
@@ -106,7 +109,7 @@ it('聚类只做整批分析，异常模板剔除缺失后进行训练测试切�
     (item) => item.key === 'clustering_analysis',
   )
   expect(clustering?.build().nodes.map((node) => node.operator)).toEqual([
-    'ledger_source',
+    'bdm_source',
     'drop_missing',
     'clustering_analysis',
   ])
@@ -115,7 +118,7 @@ it('聚类只做整批分析，异常模板剔除缺失后进行训练测试切�
     (item) => item.key === 'anomaly_model',
   )?.build()
   expect(anomaly?.nodes.map((node) => node.operator)).toEqual([
-    'ledger_source',
+    'bdm_source',
     'drop_missing',
     'split_samples',
     'anomaly_model',

@@ -4,12 +4,13 @@
     "nodes": [
       {
         "id": "s",
-        "operator": "ledger_source",
-        "alias": "历史生产：选择台账",
+        "operator": "bdm_source",
+        "alias": "历史生产：选择能管数据",
         "config": {
-          "table_code": "",
+          "kind": "point",
+          "identifiers": [],
           "since": "-180d",
-          "row_source": "collect"
+          "value_type": "number"
         },
         "position": {
           "left": 80,
@@ -186,12 +187,13 @@
     "nodes": [
       {
         "id": "s",
-        "operator": "ledger_source",
-        "alias": "历史生产：选择台账",
+        "operator": "bdm_source",
+        "alias": "历史生产：选择能管数据",
         "config": {
-          "table_code": "",
+          "kind": "point",
+          "identifiers": [],
           "since": "-180d",
-          "row_source": "collect"
+          "value_type": "number"
         },
         "position": {
           "left": 80,
@@ -227,12 +229,13 @@
       },
       {
         "id": "se",
-        "operator": "ledger_source",
-        "alias": "历史能耗：选择台账",
+        "operator": "bdm_source",
+        "alias": "历史能耗：选择能管数据",
         "config": {
-          "table_code": "",
+          "kind": "point",
+          "identifiers": [],
           "since": "-180d",
-          "row_source": "collect"
+          "value_type": "number"
         },
         "position": {
           "left": 80,

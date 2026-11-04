@@ -21,7 +21,9 @@ FIXTURE = (
 
 def template() -> PipelineGraph:
     graph = PipelineGraph.model_validate(json.loads(FIXTURE.read_text()))
-    graph.node_by_id()["s"].config["table_code"] = "normal_device"
+    graph.node_by_id()["s"].config["identifiers"] = [
+        column.key for column in normal_frame().columns
+    ]
     return graph
 
 

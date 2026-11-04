@@ -4,6 +4,7 @@ import type {
   ModelingGraphEdge,
   ModelingGraphNode,
 } from '@dt/contracts'
+import { bdmSourceConfig } from './templateGraph'
 
 function node(
   id: string,
@@ -44,10 +45,10 @@ function sourceBranch(
   return [
     node(
       `s${suffix}`,
-      'ledger_source',
-      suffix ? '历史能耗：选择台账' : '历史生产：选择台账',
+      'bdm_source',
+      suffix ? '历史能耗：选择能管数据' : '历史生产：选择能管数据',
       [0, row],
-      { table_code: '', since: '-180d', row_source: 'collect' },
+      bdmSourceConfig('-180d'),
     ),
     node(
       `c${suffix}`,

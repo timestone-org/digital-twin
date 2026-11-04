@@ -3,12 +3,13 @@
   "nodes": [
     {
       "id": "s",
-      "operator": "ledger_source",
-      "alias": "选择正常工况历史台账",
+      "operator": "bdm_source",
+      "alias": "选择正常工况能管历史",
       "config": {
-        "table_code": "",
-        "row_source": "collect",
-        "since": "-30d"
+        "kind": "point",
+        "identifiers": [],
+        "since": "-30d",
+        "value_type": "number"
       },
       "position": {
         "left": 80,

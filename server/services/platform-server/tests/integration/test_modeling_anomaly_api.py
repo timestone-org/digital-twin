@@ -57,6 +57,7 @@ async def anomaly_service(
 ) -> tuple[dict[str, Any], dict[str, str]]:
     code = await seed_normal(app_client, db_session)
     graph = json.loads(FIXTURE.read_text())
+    graph["nodes"][0]["operator"] = "ledger_source"
     graph["nodes"][0]["config"] = {
         "table_code": code,
         "row_source": "manual",

@@ -22,7 +22,7 @@ const KNOWN_OPERATORS = new Set([
   'clustering_analysis',
   'anomaly_model',
   'split_samples',
-  'ledger_source',
+  'bdm_source',
   'fill_missing',
   'standardize',
   'split_dataset',
@@ -41,6 +41,29 @@ const KNOWN_OPERATORS = new Set([
 ])
 
 describe('新建流水线的开箱模板', () => {
+  it.each(PIPELINE_TEMPLATES.filter((item) => item.key !== 'blank'))(
+    '「$label」默认从能管取数，真实标识由用户选择',
+    (template) => {
+      const graph = template.build()
+      const sources = graph.nodes.filter(
+        (node) => !graph.edges.some((edge) => edge.to_node === node.id),
+      )
+      expect(sources.length).toBeGreaterThan(0)
+      for (const source of sources) {
+        expect(source.operator).toBe('bdm_source')
+        expect(source.config).toMatchObject({
+          kind: 'point',
+          identifiers: [],
+          since: expect.stringMatching(/^-\d+d$/),
+          value_type: 'number',
+        })
+        expect(source.config).not.toHaveProperty('table_code')
+        expect(source.config).not.toHaveProperty('row_source')
+        expect(source.config).not.toHaveProperty('columns')
+      }
+      expect(template.hint).toContain('能管')
+    },
+  )
   it('设备异常模板与后端执行验收图一致', () => {
     expect(
       PIPELINE_TEMPLATES.find((item) => item.key === 'device_anomaly')?.build(),
@@ -136,7 +159,7 @@ describe('新建流水线的开箱模板', () => {
     expect(template?.label).toBe(label)
     const graph = template?.build()
     expect(graph?.nodes.map((node) => node.operator)).toEqual([
-      'ledger_source',
+      'bdm_source',
       'energy_rules',
     ])
     expect(graph?.nodes.find((node) => node.id === 'm')?.config['kind']).toBe(
@@ -194,25 +217,33 @@ describe('新建流水线的开箱模板', () => {
     },
   )
 
-  it('分表模板先汇总再按同一天精确关联', () => {
+  it('分源模板先汇总再按同一天精确关联', () => {
     const graph = PIPELINE_TEMPLATES.find(
       (item) => item.key === 'daily_energy_joined',
     )?.build()
     expect(
-      graph?.nodes.filter((node) => node.operator === 'ledger_source'),
+      graph?.nodes.filter((node) => node.operator === 'bdm_source'),
     ).toHaveLength(2)
     expect(
       graph?.nodes.find((node) => node.operator === 'ledger_join')?.config,
     ).toEqual({ how: 'inner', tolerance_ms: 0, right_prefix: '能耗_' })
   })
 
-  it('多次创建模板不共享可变配置', () => {
-    const template = PIPELINE_TEMPLATES.find(
-      (item) => item.key === 'daily_energy',
-    )
-    const graph = template?.build()
-    const source = graph?.nodes[0]
-    if (source) source.config['table_code'] = 'changed'
-    expect(template?.build().nodes[0]?.config['table_code']).toBe('')
-  })
+  it.each(PIPELINE_TEMPLATES.filter((item) => item.key !== 'blank'))(
+    '「$label」多次创建不共享能管标识配置',
+    (template) => {
+      const sources = template
+        .build()
+        .nodes.filter((node) => node.operator === 'bdm_source')
+      for (const source of sources) {
+        const identifiers = source.config['identifiers']
+        if (!Array.isArray(identifiers)) throw new Error('缺少能管标识列表')
+        identifiers.push('selected-point')
+      }
+      for (const source of template.build().nodes) {
+        if (source.operator === 'bdm_source')
+          expect(source.config['identifiers']).toEqual([])
+      }
+    },
+  )
 })

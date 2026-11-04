@@ -4,6 +4,7 @@ import type {
   ModelingGraphEdge,
   ModelingGraphNode,
 } from '@dt/contracts'
+import { bdmSourceConfig } from './templateGraph'
 
 function node(
   id: string,
@@ -105,11 +106,13 @@ export function shortTermLoadGraph(): ModelingGraph {
   return {
     format_version: '1.0',
     nodes: [
-      node('s', 'ledger_source', '选择历史负荷与生产计划台账', [0, 0], {
-        table_code: '',
-        since: '-120d',
-        row_source: 'collect',
-      }),
+      node(
+        's',
+        'bdm_source',
+        '选择历史负荷与生产计划能管数据',
+        [0, 0],
+        bdmSourceConfig('-120d'),
+      ),
       node('c', 'select_columns', '选择预测时已知的计划与气象字段', [1, 0], {
         columns: ['计划产量', '工单数', '预报温度', '负荷'],
       }),

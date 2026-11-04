@@ -50,6 +50,7 @@ async def served(context: AppContext, algorithm: str) -> dict[str, object]:
     client = context.client
     code = await seed_normal(client, context.session)
     graph = json.loads(FIXTURE.read_text())
+    graph["nodes"][0]["operator"] = "ledger_source"
     graph["nodes"][0]["config"] = {
         "table_code": code,
         "row_source": "manual",

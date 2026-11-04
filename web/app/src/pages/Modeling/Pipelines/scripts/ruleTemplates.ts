@@ -1,5 +1,6 @@
 /** @fileoverview 归集、核算、追溯和诊断的确定性规则模板。 */
 import type { ModelingGraph } from '@dt/contracts'
+import { bdmSourceConfig } from './templateGraph'
 
 interface RuleTemplate {
   kind: string
@@ -7,7 +8,6 @@ interface RuleTemplate {
   hint: string
   fields: Record<string, string>
   parameters: Record<string, number>
-  columns?: readonly string[]
 }
 
 const METERS = ['生产', '空调', '照明'].map((category) => ({
@@ -49,7 +49,7 @@ const RULES: readonly RuleTemplate[] = [
   {
     kind: 'efficiency_fluctuation',
     label: '能效波动分析模型',
-    hint: '比较当前能效与明确提供的基准能效，计算波动百分比并按阈值判定。基准可由台账统计提供；零基准会明确返回无法核算。',
+    hint: '比较当前能效与明确提供的基准能效，计算波动百分比并按阈值判定。基准可由能管统计指标或公式提供；零基准会明确返回无法核算。',
     fields: {
       current_efficiency: '当前能效',
       reference_efficiency: '基准能效',
@@ -62,7 +62,6 @@ const RULES: readonly RuleTemplate[] = [
     hint: '按配置的能源类别或用途归集各表计期间用量，并使用显式折标系数输出分类明细与总折标煤量。示例系数须按业务核算口径确认后调整。',
     fields: {},
     parameters: {},
-    columns: METERS.map((meter) => meter.column),
   },
   {
     kind: 'energy_trace',
@@ -70,7 +69,6 @@ const RULES: readonly RuleTemplate[] = [
     hint: '配置来源、去向与计量列，逐条返回能源路径、转换损耗及节点收支平衡。示例为进线到配电中心，再分向生产、空调、照明。',
     fields: {},
     parameters: { balance_tolerance: 0.01 },
-    columns: TOPOLOGY.map((edge) => edge.column),
   },
   {
     kind: 'unit_consumption',
@@ -134,14 +132,9 @@ function graphOf(rule: RuleTemplate): ModelingGraph {
     nodes: [
       {
         id: 's',
-        operator: 'ledger_source',
-        alias: '选择业务数据台账',
-        config: {
-          table_code: '',
-          columns: [...(rule.columns ?? Object.values(rule.fields))],
-          row_source: 'manual',
-          since: '-30d',
-        },
+        operator: 'bdm_source',
+        alias: '选择能管业务指标',
+        config: bdmSourceConfig(),
         position: { left: 80, top: 180 },
       },
       {
@@ -167,6 +160,6 @@ function graphOf(rule: RuleTemplate): ModelingGraph {
 export const ENERGY_RULE_TEMPLATES = RULES.map((rule) => ({
   key: `rule_${rule.kind}`,
   label: rule.label,
-  hint: `选择台账并调整取数列和规则列映射。${rule.hint} 运行后可直接发布并部署，无需训练目标。`,
+  hint: `从能管选择业务指标，将规则字段、表计或拓扑中的示例列映射到实际取数标识；可切换为产供用属性或 EMS 公式。${rule.hint} 运行后可直接发布并部署，无需训练目标。`,
   build: () => graphOf(rule),
 }))

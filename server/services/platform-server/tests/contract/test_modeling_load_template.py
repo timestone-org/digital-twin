@@ -42,7 +42,7 @@ ROWS = 60 * 48
 
 def template() -> PipelineGraph:
     graph = PipelineGraph.model_validate(json.loads(FIXTURE.read_text()))
-    graph.node_by_id()["s"].config["table_code"] = "historical_load"
+    graph.node_by_id()["s"].config["identifiers"] = list(KEYS)
     return graph
 
 

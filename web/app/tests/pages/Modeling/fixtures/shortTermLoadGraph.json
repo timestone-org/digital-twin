@@ -3,12 +3,13 @@
   "nodes": [
     {
       "id": "s",
-      "operator": "ledger_source",
-      "alias": "选择历史负荷与生产计划台账",
+      "operator": "bdm_source",
+      "alias": "选择历史负荷与生产计划能管数据",
       "config": {
-        "table_code": "",
+        "kind": "point",
+        "identifiers": [],
         "since": "-120d",
-        "row_source": "collect"
+        "value_type": "number"
       },
       "position": {
         "left": 80,

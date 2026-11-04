@@ -33,8 +33,10 @@ NAMES = ("daily_energy", "daily_energy_joined")
 def template(name: str) -> PipelineGraph:
     graph = PipelineGraph.model_validate(json.loads(FIXTURE.read_text())[name])
     for node in graph.nodes:
-        if node.operator == "ledger_source":
-            node.config["table_code"] = "historical_daily_data"
+        if node.operator == "bdm_source":
+            node.config["identifiers"] = [
+                column.key for column in historical_frame().columns
+            ]
     return graph
 
 
@@ -71,7 +73,7 @@ def historical_frame() -> Frame:
 
 
 @pytest.mark.parametrize("name", NAMES)
-def test_template_with_selected_tables_passes_graph_validation(
+def test_template_with_selected_energy_identifiers_passes_graph_validation(
     name: str,
 ) -> None:
     assert check_graph(template(name)) == []

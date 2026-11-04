@@ -18,6 +18,15 @@ export interface PipelineTemplate {
   build: () => ModelingGraph
 }
 
+export function bdmSourceConfig(since = '-30d'): Record<string, unknown> {
+  return {
+    kind: 'point',
+    identifiers: [],
+    since,
+    value_type: 'number',
+  }
+}
+
 export function node(
   id: string,
   operator: string,
@@ -55,7 +64,9 @@ export function chain(
   model: string,
   evaluator: string,
 ): ModelingGraph {
-  const nodes = steps.map(([id, operator], at) => node(id, operator, at))
+  const nodes = steps.map(([id, operator], at) =>
+    node(id, operator, at, operator === 'bdm_source' ? bdmSourceConfig() : {}),
+  )
   const edges = steps
     .slice(1)
     .map(([id], at) =>

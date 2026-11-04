@@ -4,6 +4,7 @@ import type {
   ModelingGraphEdge,
   ModelingGraphNode,
 } from '@dt/contracts'
+import { bdmSourceConfig } from './templateGraph'
 
 function node(
   id: string,
@@ -40,11 +41,7 @@ export function deviceAnomalyGraph(): ModelingGraph {
   return {
     format_version: '1.0',
     nodes: [
-      node('s', 'ledger_source', '选择正常工况历史台账', 0, {
-        table_code: '',
-        row_source: 'collect',
-        since: '-30d',
-      }),
+      node('s', 'bdm_source', '选择正常工况能管历史', 0, bdmSourceConfig()),
       node('c', 'select_columns', '选择设备数值指标', 1, {
         columns: ['电流', '频率', '温度'],
       }),
