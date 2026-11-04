@@ -27,7 +27,6 @@ import PermGuard from '@/components/PermGuard.vue'
 import { AppShell } from '@/components/layout'
 import { describeError, useAsyncList } from '@/composables/useAsyncList'
 import { useViewMode } from '@/composables/useViewMode'
-import SystemTabs from '../components/SystemTabs.vue'
 import MethodTag from './components/MethodTag.vue'
 import RuleBadges from './components/RuleBadges.vue'
 import RuleCard from './components/RuleCard.vue'
@@ -155,8 +154,6 @@ onMounted(() => {
 
     <!-- h-full + min-h-0 见 AppShell 的契约：main 不滚，高度由页面自己吃满 -->
     <div class="flex h-full min-h-0 flex-col gap-4">
-      <SystemTabs />
-
       <!-- 两种视图下都在：它说的是数据语义，不是卡片装饰 -->
       <!-- ⚠ 措辞对两种视图都得成立：表格是自上而下，卡片按宽度铺成多列，
            所以只说「按列表顺序」，具体第几个由卡上的 #n 讲 -->

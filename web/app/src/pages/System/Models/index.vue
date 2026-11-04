@@ -18,7 +18,6 @@ import PermGuard from '@/components/PermGuard.vue'
 import { AppShell } from '@/components/layout'
 import { describeError } from '@/composables/useAsyncList'
 import { useAuthStore } from '@/stores/auth'
-import SystemTabs from '../components/SystemTabs.vue'
 import SubscriptionAccounts from './components/SubscriptionAccounts.vue'
 import EffectiveModelsCard from './components/EffectiveModelsCard.vue'
 import ProviderFormDialog from './components/ProviderFormDialog.vue'
@@ -146,8 +145,6 @@ onMounted(() => void catalog.reload())
 
     <!-- h-full + min-h-0：AppShell 的 main 不再滚动；本页分几节，滚动交给下面那层 -->
     <div class="flex h-full min-h-0 flex-col gap-4">
-      <SystemTabs />
-
       <!-- ⚠ PermGuard 是片段没有根节点，滚动容器得是它外面这一层 div -->
       <div class="flex min-h-0 flex-1 flex-col gap-4 overflow-y-auto pr-1">
         <PermGuard :codes="[PERMISSION_CODES.llmView]" explain>

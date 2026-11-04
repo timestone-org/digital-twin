@@ -21,7 +21,6 @@ import { useViewMode } from '@/composables/useViewMode'
 import { useAuthStore } from '@/stores/auth'
 import CodeChips from '../components/CodeChips.vue'
 import { sortCodes } from '../scripts/codes'
-import SystemTabs from '../components/SystemTabs.vue'
 import { suggestCloneName } from './scripts/cloneName'
 import type { RoleFormTask } from './scripts/roleFormTask'
 import RoleCard from './components/RoleCard.vue'
@@ -134,8 +133,6 @@ onMounted(() => {
 
     <!-- h-full + min-h-0 见 AppShell 的契约：main 不滚，高度由页面自己吃满 -->
     <div class="flex h-full min-h-0 flex-col gap-4">
-      <SystemTabs />
-
       <DtDataView
         v-model:view="view"
         class="min-h-0 flex-1"

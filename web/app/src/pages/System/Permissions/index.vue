@@ -20,7 +20,6 @@ import { AppShell } from '@/components/layout'
 import { describeError } from '@/composables/useAsyncList'
 import { useViewMode } from '@/composables/useViewMode'
 import { useAuthStore } from '@/stores/auth'
-import SystemTabs from '../components/SystemTabs.vue'
 
 const VIEW_OPTIONS: readonly DtSegmentedOption[] = [
   { value: 'table', label: '表格视图', icon: 'table', iconOnly: true },
@@ -74,8 +73,6 @@ onMounted(() => {
   <AppShell title="权限目录" subtitle="全系统权限码的唯一真源（只读）">
     <!-- h-full + min-h-0 见 AppShell 的契约：main 不滚，高度由页面自己吃满 -->
     <div class="flex h-full min-h-0 flex-col gap-4">
-      <SystemTabs />
-
       <!-- 工具条与内容之间取 gap-3：与兄弟页里 DtDataView 工具条到表格的 12px 同距 -->
       <div class="flex min-h-0 flex-1 flex-col gap-3">
         <div class="flex flex-wrap items-center gap-3">

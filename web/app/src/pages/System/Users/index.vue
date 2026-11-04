@@ -26,7 +26,6 @@ import { AppShell } from '@/components/layout'
 import { describeError, useAsyncList } from '@/composables/useAsyncList'
 import { useViewMode } from '@/composables/useViewMode'
 import { formatDateTime } from '@/utils/datetime'
-import SystemTabs from '../components/SystemTabs.vue'
 import UserFormDialog from './components/UserFormDialog.vue'
 import AssignRoleDialog from './components/AssignRoleDialog.vue'
 import DirectGrantTag from './components/DirectGrantTag.vue'
@@ -179,8 +178,6 @@ onMounted(async () => {
     <!-- ⚠ h-full + min-h-0：AppShell 的 main 不再滚动，页面根节点不吃满高度的话
          表格拿不到有界高度，超出的行会被裁掉且滚不到 -->
     <div class="flex h-full min-h-0 flex-col gap-4">
-      <SystemTabs />
-
       <DtDataView
         v-model:view="view"
         class="min-h-0 flex-1"

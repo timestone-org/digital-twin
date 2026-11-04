@@ -1,14 +1,7 @@
 <script setup lang="ts">
 /**
- * @fileoverview 页内分区的页签条。**只管长相与可达性，不管页签从哪来。**
- *
- * ⚠ 页签的标记全系统只此一份：系统管理与 OPC UA 详情都用它。两处各写一份
- * 的话，改了其中一处没有任何人会注意到另一处还是老样子——收进一个组件，
- * 长相漂移就不可能发生。
- *
- * ⚠ 用 RouterLink 而不是按钮：它是导航，地址会变，中键新标签打开与复制链接
- * 都该照常可用。同理不用 `DtSegmented`——那个组件切换的是**同一块内容的呈现**
- * （表格/卡片），而这里切的是不同内容。
+ * @fileoverview 页内分区的链接页签，负责导航样式与可访问性。
+ * 选用规则见 docs/agents/project-structure-typescript.md §4.2。
  */
 import { RouterLink, useRoute } from 'vue-router'
 

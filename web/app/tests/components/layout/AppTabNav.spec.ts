@@ -1,9 +1,5 @@
 /**
- * @fileoverview 页内分区页签条。
- *
- * ⚠ 抽出来是因为它漂过：系统管理用 RouterLink 页签、OPC UA 详情用
- * `DtSegmented`，同一套产品两种长相。这里守的是「两处共用同一份标记」，
- * 以及页签是**导航**——中键新开、复制链接都要照常可用，所以必须是 `<a>`。
+ * @fileoverview 页内分区页签的链接语义、可访问名称与当前页标记。
  */
 import { afterEach, describe, expect, it, vi } from 'vitest'
 import { enableAutoUnmount, mount } from '@vue/test-utils'
