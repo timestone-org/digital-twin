@@ -32,7 +32,13 @@ LOCKFILES = ("server/uv.lock", "web/pnpm-lock.yaml")
 USES = re.compile(r"^\s*(?:-\s*)?uses:\s*(?P<ref>\S+)")
 PINNED = re.compile(r"^[\w.-]+/[\w.-]+(?:/[\w.-]+)*@[0-9a-f]{40}$")
 LOCAL_ACTION = re.compile(r"^\./")
-DOCKER_IMAGE = re.compile(r"^\s*(?:FROM|image:)\s+(?P<image>[\w./-]+:?[\w.-]*)")
+DOCKER_IMAGE = re.compile(r"^\s*image:\s+(?P<image>[\w./-]+:?[\w.-]*)")
+DOCKER_FROM = re.compile(
+    r"^\s*FROM\s+(?:--platform=\S+\s+)?"
+    r"(?P<image>[\w./-]+:?[\w.-]*)(?:@\S+)?"
+    r"(?:\s+AS\s+(?P<stage>[\w.-]+))?",
+    re.IGNORECASE,
+)
 # 重试会把不确定性藏起来；测试偶发失败一律按 P1 缺陷处理
 RETRY_MARKERS = re.compile(
     r"continue-on-error:\s*true|nick-fields/retry|retry-on-failure|--reruns"
@@ -74,11 +80,11 @@ def check_no_latest_tag() -> list[Violation]:
     found: list[Violation] = []
     targets = [*_workflows(), *_dockerfiles(), *_compose_files()]
     for path in targets:
+        stages: set[str] = set()
         for number, line in enumerate(read(path).splitlines(), start=1):
-            match = DOCKER_IMAGE.match(line)
-            if match is None:
+            image = _read_image_reference(line, stages)
+            if image is None:
                 continue
-            image = match.group("image")
             if image.endswith(":latest") or ":" not in image.split("/")[-1]:
                 found.append(
                     Violation(
@@ -88,6 +94,20 @@ def check_no_latest_tag() -> list[Violation]:
                     )
                 )
     return found
+
+
+def _read_image_reference(line: str, stages: set[str]) -> str | None:
+    """读取外部镜像并登记本文件先前声明的构建阶段。Args: line, stages。"""
+    match = DOCKER_FROM.match(line)
+    if match is None:
+        match = DOCKER_IMAGE.match(line)
+        return match.group("image") if match is not None else None
+    image = match.group("image")
+    is_local_stage = image.casefold() in stages
+    stage = match.group("stage")
+    if stage is not None:
+        stages.add(stage.casefold())
+    return None if is_local_stage else image
 
 
 def _dockerfiles() -> list[Path]:

@@ -381,7 +381,7 @@ class NoAiComposeTests(unittest.TestCase):
             "opcua-pki",
         }
         targets = (
-            ("postgres", "postgres-data", "/var/lib/postgresql/data"),
+            ("postgres", "postgres-data", "/var/lib/postgresql"),
             ("redis", "redis-data", "/data"),
             ("minio", "minio-data", "/data"),
             ("opcua-server", "opcua-pki", "/var/lib/opcua/pki"),
@@ -401,6 +401,22 @@ class NoAiComposeTests(unittest.TestCase):
             assert not _read_service(config, service).get("ports")
         ports = _read_objects(_read_service(config, "minio").get("ports"))
         assert [port.get("host_ip") for port in ports] == ["127.0.0.1"]
+
+    def test_object_storage_can_build_without_removed_registry_images(
+        self,
+    ) -> None:
+        config = _render_compose(COMPOSE)
+        for name, target in (("minio", "server"), ("minio-init", "client")):
+            with self.subTest(service=name):
+                service = _read_service(config, name)
+                build = _read_object(service.get("build"))
+                context = build.get("context")
+                assert isinstance(context, str)
+                assert (Path(context) / "Dockerfile").is_file()
+                assert build.get("target") == target
+                image = service.get("image")
+                assert isinstance(image, str)
+                assert image.startswith("digitaltwin/")
 
     def test_opcua_port_pool_and_frontend_mounts_match_the_deployment(
         self,

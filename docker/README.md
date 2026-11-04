@@ -99,7 +99,7 @@ docker compose --profile mineru up -d --build
 
 使用完整编排 `compose.no-ai.yml` 和 `docker compose` 命令。该文件显式声明全部非 AI
 服务与参数，不依赖或叠加 `compose.yml`。从完整仓库构建时仍需 `server/`、`web/`
-源码、各 Dockerfile 和 `docker/nginx/` 配置；单独复制 YAML 不是完整的离线部署包。
+源码、各 Dockerfile、`docker/minio/` 和 `docker/nginx/` 配置；单独复制 YAML 不是完整的离线部署包。
 
 ```bash
 cd docker
@@ -111,10 +111,34 @@ docker compose --env-file .env.no-ai -f compose.no-ai.yml ps -a
 ```
 
 页面入口为 `http://localhost:8080/ai/`（端口由 `EDGE_HTTP_PORT` 控制）。
-该部署包含 PostgreSQL 16 / TimescaleDB、Redis、MinIO、认证、平台的 API / worker /
+该部署包含 PostgreSQL 18 / TimescaleDB、Redis、MinIO、认证、平台的 API / worker /
 publisher、采集、OPC UA、实时通道和边缘网关。历史归档迁移需要 TimescaleDB，不能
 直接替换为普通 `postgres` 镜像。迁移执行五个核心代码单元及可选层级图的独立迁移链，跳过助手与知识库，
 因此无需 pgvector、嵌入模型或 AI 凭据。初始化作业失败会阻断本次应用启动。
+
+基础设施固定版本如下，数据库和 Redis 镜像同时固定多架构 digest，支持 amd64 / arm64：
+
+| 组件 | 固定版本 |
+|---|---|
+| PostgreSQL / TimescaleDB | 18.6 / 2.31.0（`timescale/timescaledb:2.31.0-pg18`） |
+| Redis | 8.10.3（`redis:8.10.3-alpine`） |
+| MinIO | `RELEASE.2025-10-15T17-29-55Z`，官方提交 `9e49d5e7` |
+| MinIO Client | `RELEASE.2025-08-13T08-35-41Z`，官方提交 `7394ce0d` |
+
+MinIO 与客户端由 `docker/minio/Dockerfile` 构建，不依赖 `minio/minio` 或 `minio/mc`
+公开镜像仓库。构建固定官方 GitHub 提交、校验源码归档 SHA256，使用上游 `go.sum`
+验证依赖；首次构建需要访问 Docker Hub 基础镜像、GitHub、Go 模块代理与 Debian 软件源。
+两者使用具体版本和源码提交作为本地镜像 tag，`pull_policy: build` 保证启动时使用构建流程。
+官方版本依据见 [TimescaleDB 发布](https://github.com/timescale/timescaledb/releases/tag/2.31.0)、
+[Redis 发布](https://github.com/redis/redis/releases/tag/8.10.3)、
+[MinIO 发布](https://github.com/minio/minio/releases/tag/RELEASE.2025-10-15T17-29-55Z)
+与 [mc 发布](https://github.com/minio/mc/releases/tag/RELEASE.2025-08-13T08-35-41Z)。
+
+该数据库配置用于全新 PostgreSQL 18 数据卷，挂载目录是 `/var/lib/postgresql`，
+镜像内部数据目录是 `/var/lib/postgresql/18/docker`。已有 PostgreSQL 16 / 17 数据卷
+须先按 [PostgreSQL 主版本升级流程](https://www.postgresql.org/docs/18/upgrading.html)
+执行备份恢复或 `pg_upgrade`，不能直接换镜像启动。MinIO 以 UID 10001 运行；复用已有
+对象存储卷时须另行确认写权限，编排不会自动修改旧卷归属。
 
 前端由 `web/Dockerfile` 在容器内构建，新入口固定传入 `VITE_AI_ENABLED=false`：
 隐藏各工作面的 AI 助手、知识库和系统模型供应商管理入口，相关页面 URL 返回

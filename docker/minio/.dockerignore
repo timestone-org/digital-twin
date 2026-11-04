@@ -1,0 +1,4 @@
+# 构建只读取固定的官方源码，不发送项目文件或凭据。
+*
+!Dockerfile
+!.dockerignore
