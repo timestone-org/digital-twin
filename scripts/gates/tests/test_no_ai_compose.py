@@ -115,10 +115,11 @@ def _render_compose(
     *,
     profile: str | None = None,
     overrides: Mapping[str, str] | None = None,
+    additional_files: tuple[Path, ...] = (),
 ) -> JsonObject:
     """用隔离环境展开配置，不连接 Docker daemon。
 
-    Args: path, profile, overrides。
+    Args: path, profile, overrides, additional_files。
     """
     command = [
         "docker",
@@ -130,6 +131,8 @@ def _render_compose(
         "-f",
         str(path),
     ]
+    for additional_file in additional_files:
+        command.extend(("-f", str(additional_file)))
     if profile is not None:
         command.extend(("--profile", profile))
     command.extend(("config", "--format", "json"))
@@ -319,6 +322,50 @@ class NoAiComposeTests(unittest.TestCase):
                 assert _read_environment(config, service).get(
                     "PLATFORM_LLM_PROVIDER_SECRET"
                 ) in (None, "null")
+
+    def test_default_frontend_builds_without_a_host_dist_directory(
+        self,
+    ) -> None:
+        config = _render_compose(
+            BASE_COMPOSE, overrides={"IMAGE_TAG": "0.1.0-compose-contract"}
+        )
+        gateway = _read_service(config, "edge-gateway")
+        build = _read_object(gateway.get("build"))
+        assert build.get("context") == str(ROOT / "web")
+        assert build.get("dockerfile") == "Dockerfile"
+        assert _read_object(build.get("args"))["VITE_AI_ENABLED"] == "true"
+        assert gateway.get("image") == "digitaltwin/web:0.1.0-compose-contract"
+        assert _read_object(gateway.get("sysctls")) == {
+            "net.ipv4.ip_unprivileged_port_start": "0"
+        }
+        mounts = _read_objects(gateway.get("volumes"))
+        assert [mount.get("target") for mount in mounts] == [
+            "/etc/nginx/templates/nginx.conf.template",
+            "/etc/nginx/conf.d/proxy-common.conf",
+            "/etc/nginx/conf.d/auth-inject.conf",
+        ]
+        assert all(mount.get("read_only") is True for mount in mounts)
+
+    def test_host_frontend_mount_requires_explicit_override(self) -> None:
+        config = _render_compose(
+            BASE_COMPOSE,
+            additional_files=(ROOT / "docker" / "compose.web-host.yml",),
+        )
+        gateway = _read_service(config, "edge-gateway")
+        mounts = _read_objects(gateway.get("volumes"))
+        html_mounts = [
+            mount
+            for mount in mounts
+            if mount.get("target") == "/usr/share/nginx/html"
+        ]
+        assert len(html_mounts) == 1
+        assert html_mounts[0].get("source") == str(ROOT / "web/app/dist")
+        assert html_mounts[0].get("type") == "bind"
+        assert html_mounts[0].get("read_only") is True
+        original = _read_service(_render_compose(BASE_COMPOSE), "edge-gateway")
+        for name in ("build", "image", "depends_on", "environment", "ports"):
+            with self.subTest(field=name):
+                assert gateway.get(name) == original.get(name)
 
     def test_migration_selects_all_six_non_ai_owners(self) -> None:
         config = _render_compose(COMPOSE)

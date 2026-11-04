@@ -496,7 +496,14 @@ x-hierarchy-environment: &hierarchy-environment
 
 services:
   edge-gateway:
-    image: nginx:1.27-alpine
+    image: digitaltwin/web:${IMAGE_TAG:-dev}
+    build:
+      context: ../web
+      dockerfile: Dockerfile
+      args:
+        VITE_AI_ENABLED: 'true'
+    sysctls:
+      net.ipv4.ip_unprivileged_port_start: 0
     # 首屏必经的两个服务等到**真的能应答**再放边缘出来：裸依赖只等到容器进程被
     # 拉起，而 Python 服务还要几秒到几十秒才开始监听，这段窗口里 /api 一律 502，
     # 而首屏正好落在窗口里。
@@ -525,7 +532,6 @@ services:
       - ./nginx/nginx.conf.template:/etc/nginx/templates/nginx.conf.template:ro
       - ./nginx/proxy-common.conf:/etc/nginx/conf.d/proxy-common.conf:ro
       - ./nginx/auth-inject.conf:/etc/nginx/conf.d/auth-inject.conf:ro
-      - ../web/app/dist:/usr/share/nginx/html:ro
     healthcheck:
       test: ['CMD', 'wget', '-qO-', 'http://127.0.0.1/api/v1/auth/health']
       interval: 10s

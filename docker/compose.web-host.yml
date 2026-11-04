@@ -1,0 +1,5 @@
+# 显式开发覆盖：将已构建的宿主前端产物挂载到现有网关。
+services:
+  edge-gateway:
+    volumes:
+      - ../web/app/dist:/usr/share/nginx/html:ro

@@ -91,6 +91,30 @@ docker compose up -d --build
 docker compose --profile mineru up -d --build
 ```
 
+普通编排与 no-ai 编排共用 `web/Dockerfile`：构建阶段安装锁定的 pnpm 依赖并打包
+前端，运行阶段只把 `app/dist` 复制进 Nginx 镜像。默认网关不再依赖宿主机的
+`web/app/dist`，无需预先在宿主机运行前端构建。普通镜像为
+`digitaltwin/web:${IMAGE_TAG:-dev}`，保留 AI 页面；发布时 `IMAGE_TAG` 使用版本号和
+提交 SHA。Nginx 配置仍由现有只读挂载与环境模板提供，页面、API 和素材路径不变。
+
+只更新页面时，在 `docker/` 中运行以下命令；它只重建并替换网关：
+
+```bash
+docker compose up -d --build --no-deps edge-gateway
+```
+
+开发时需要直接使用宿主机产物，可显式叠加 `compose.web-host.yml`；默认命令不会
+读取该文件。先在仓库根构建，再执行：
+
+```bash
+corepack pnpm@11.21.0 --dir web build
+cd docker
+docker compose -f compose.yml -f compose.web-host.yml up -d --build --no-deps edge-gateway
+```
+
+该覆盖只增加只读的 HTML 目录挂载，保留原网关镜像、配置和依赖。之后重新构建宿主
+`dist` 即可更新页面；恢复镜像内页面时用不带该覆盖的命令重新创建网关。
+
 共享值（`AUTH_EDGE_SERVICE_KEY` 等）的回退链**必须每个服务都写全**：
 少写一处就是非对称失效——发送端有值、接收端没有，一律 403，
 而现象与原因隔得极远。
@@ -286,7 +310,9 @@ WS 的 token 走 `Sec-WebSocket-Protocol` 子协议，而 `auth_request` 的子�
 各角色复用同一份配置；共享数据库、Redis、对象存储和身份密钥使用模板里的公共变量。
 可空配置填 `null` 表示未配置，空字符串保留原有语义；容器实例名未设时自动取 hostname。
 固定角色、schema、监听地址、端口和卷路径由 Compose 管理，模板中已注明。
-前端 `VITE_*` 是构建参数，需要传给前端构建命令，修改后重新构建 `web/app/dist`。
+前端 `VITE_*` 是构建参数，需要由 `web/Dockerfile` 声明并由 Compose 的
+`edge-gateway.build.args` 传入；修改后重新构建网关镜像。普通编排固定启用 AI 页面，
+no-ai 编排固定传入 `VITE_AI_ENABLED=false`，不会从容器运行时环境改变已打包页面。
 
 ⚠ **订阅那一路配好之后还要登录一次。** 去 系统管理 → 模型管理 页面，在那一路
 供应商下面走设备码登录（需要 `llm:manage`）；不登录的话面板上这一路是灰的，
@@ -388,8 +414,8 @@ docker compose run --rm --no-deps database-migrate --service auth-server
 
 前端统一从 `/ai/` 访问；容器与 Windows Nginx 配置将该前缀映射到现有
 `dist` 根目录，并回退到 `/ai/index.html` 支持深层页面刷新。旧页面地址重定向
-到 `/ai` 下并保留查询参数；API `/api/` 与素材 `/oss/` 不变。更新时需重新
-构建前端并重载对应 Nginx 配置。
+到 `/ai` 下并保留查询参数；API `/api/` 与素材 `/oss/` 不变。Docker 部署更新时重建
+并重新创建网关；Windows 部署仍需手动构建前端、替换 `dist` 并重载对应 Nginx 配置。
 
 ### 模型素材上传大小
 
@@ -412,16 +438,16 @@ platform API 与 Nginx，最后发布前端。旧 worker 不识别内容版本�
 
 ### 可选层级图
 
-先在仓库根运行 `corepack pnpm@11.21.0 --dir web build`，再在 `docker/` 中运行
-`docker compose --profile hierarchy up -d --build auth-server hierarchy-server`
-启用独立 `hierarchy-server`，
+在 `docker/` 中运行
+`docker compose --profile hierarchy up -d --build auth-server hierarchy-server edge-gateway`
+启用独立 `hierarchy-server` 并构建前端网关，
 前端入口为“工具 → 层级图”（`/ai/tools/hierarchy`）。默认编排不启动该服务，
 边缘用运行期 DNS 解析，服务缺席不阻断网关。能力探测失败仅隐藏对应入口。
 
 统一迁移作业包含 hierarchy 独立迁移链；默认部署也建立空 schema，不启动绘图
 服务。认证种子登记 `hierarchy:view` 与 `hierarchy:manage`，只读角色可以查看
 自己的项目，管理权限用于创建、导入、修改与删除。服务镜像仅安装 lib 与自身。
-升级先执行迁移与认证种子，再启动可选服务、更新前端并执行 `docker compose restart edge-gateway`，让入口脚本重新渲染
+升级先执行迁移与认证种子，再启动可选服务、重建并重新创建前端网关，让入口脚本重新渲染
 Nginx 模板；用 `docker compose exec edge-gateway nginx -t` 验证加载配置。停用时停止
 `hierarchy-server` 并移除 profile，项目数据保留，刷新页面后入口隐藏；代码回滚不回滚数据库。
 
