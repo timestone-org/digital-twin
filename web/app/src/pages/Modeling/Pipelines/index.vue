@@ -17,7 +17,7 @@ import {
   DtTag,
   DtCard,
 } from '@dt/ui'
-import { computed, onMounted, ref } from 'vue'
+import { computed, onMounted, ref, watch } from 'vue'
 import { RouterLink, useRouter } from 'vue-router'
 
 import * as modeling from '@/api/modeling'
@@ -32,11 +32,15 @@ import PipelineFormDialog from './components/PipelineFormDialog.vue'
 import PipelineImportDialog from './components/PipelineImportDialog.vue'
 import PipelineActions from './components/PipelineActions.vue'
 import PipelineCard from './components/PipelineCard.vue'
+import PipelineBatchScheduleDialog from './components/PipelineBatchScheduleDialog.vue'
+import ModelingBatchBar from '../components/ModelingBatchBar.vue'
 import PipelineScheduleDialog from '../components/PipelineScheduleDialog.vue'
 import PublishTemplateDialog from '../components/PublishTemplateDialog.vue'
 import { usePipelineTransfer } from './scripts/usePipelineTransfer'
 import { usePipelineOps } from './scripts/usePipelineOps'
 import type { PipelineDraft } from './scripts/usePipelineOps'
+import { usePipelineBatch } from './scripts/usePipelineBatch'
+import type { PipelineBatchScheduleDraft } from './scripts/pipelineBatchSchedule'
 
 const COLUMNS: readonly DtDataColumn[] = [
   { key: 'name', label: '名称', width: '14rem', card: 'title' },
@@ -66,6 +70,8 @@ const router = useRouter()
 const keyword = ref('')
 const scheduling = ref<ModelingPipelineSummary | null>(null)
 const savingTemplate = ref<ModelingPipelineSummary | null>(null)
+const isBatchScheduling = ref(false)
+const batchScheduleCount = ref(0)
 
 const list = useAsyncList<ModelingPipelineSummary>(
   (query) =>
@@ -79,6 +85,7 @@ const transfer = usePipelineTransfer((id) => {
 })
 
 async function save(draft: PipelineDraft, template: string): Promise<void> {
+  if (writeLocked.value || !bulk.canManage.value) return
   const createdId = await ops.save(draft, template)
   if (createdId !== null) await router.push(`/modeling/pipelines/${createdId}`)
 }
@@ -107,6 +114,68 @@ const emptyState = computed(() =>
   }),
 )
 
+const bulk = usePipelineBatch(
+  () => visible.value,
+  () => keyword.value.trim().toLowerCase(),
+  () => list.reload(),
+  () =>
+    list.loading.value ||
+    ops.isSaving.value ||
+    transfer.isOpen.value ||
+    ops.draft.value !== null ||
+    scheduling.value !== null ||
+    savingTemplate.value !== null,
+)
+const writeLocked = computed(
+  () =>
+    ops.isSaving.value || bulk.batch.isBusy.value || bulk.batch.isBlocked.value,
+)
+function openCreation(): void {
+  if (!writeLocked.value && bulk.canManage.value) ops.openCreate()
+}
+function openImport(): void {
+  if (!writeLocked.value && bulk.canManage.value) transfer.isOpen.value = true
+}
+async function rowAction(
+  action: 'schedule' | 'template' | 'copy' | 'edit' | 'remove',
+  row: ModelingPipelineSummary,
+): Promise<void> {
+  if (writeLocked.value) return
+  if (action === 'schedule') {
+    if (bulk.canTrain.value) scheduling.value = row
+    return
+  }
+  if (!bulk.canManage.value) return
+  if (action === 'template') savingTemplate.value = row
+  if (action === 'copy') ops.openCopy(row)
+  if (action === 'edit') ops.openEdit(row)
+  if (action === 'remove') await ops.remove(row)
+}
+function openBatchSchedule(): void {
+  if (!bulk.canAct.value || !bulk.canTrain.value) return
+  batchScheduleCount.value = bulk.batch.selectedCount.value
+  isBatchScheduling.value = true
+}
+async function saveBatchSchedule(
+  draft: PipelineBatchScheduleDraft,
+): Promise<void> {
+  if (!bulk.canAct.value || !bulk.canTrain.value) return
+  const report = await bulk.enableSchedules(draft)
+  if (report !== null) isBatchScheduling.value = false
+}
+watch(
+  () => [
+    bulk.batch.selectedCount.value,
+    bulk.batch.isBusy.value,
+    bulk.canTrain.value,
+  ],
+  () => {
+    if (!isBatchScheduling.value || bulk.batch.isBusy.value) return
+    if (bulk.batch.selectedCount.value === 0 || !bulk.canTrain.value)
+      isBatchScheduling.value = false
+    else batchScheduleCount.value = bulk.batch.selectedCount.value
+  },
+)
 onMounted(() => void list.reload())
 </script>
 
@@ -125,9 +194,12 @@ onMounted(() => void list.reload())
           intent="neutral"
           icon="upload"
           label="导入 JSON"
-          @click="transfer.isOpen.value = true"
+          :disabled="writeLocked"
+          @click="openImport"
         />
-        <DtButton icon="plus" @click="ops.openCreate">新建工作流</DtButton>
+        <DtButton icon="plus" :disabled="writeLocked" @click="openCreation">
+          新建工作流
+        </DtButton>
       </PermGuard>
     </template>
 
@@ -157,6 +229,51 @@ onMounted(() => void list.reload())
         {{ list.items.value.length }} 条。
       </DtNotice>
 
+      <ModelingBatchBar
+        :selected-count="bulk.batch.selectedCount.value"
+        :state="bulk.batch.state.value"
+        scope-label="仅对已加载且符合当前筛选的选中工作流执行"
+        @clear="bulk.batch.clear()"
+        @stop="bulk.batch.stop()"
+      >
+        <PermGuard :codes="[PERMISSION_CODES.modelingRun]">
+          <DtButton
+            size="sm"
+            :disabled="!bulk.canAct.value"
+            @click="openBatchSchedule"
+          >
+            批量开启定时训练
+          </DtButton>
+          <DtButton
+            size="sm"
+            variant="outline"
+            :disabled="!bulk.canAct.value"
+            @click="void bulk.disableSchedules()"
+          >
+            批量关闭定时训练
+          </DtButton>
+          <DtButton
+            size="sm"
+            variant="outline"
+            :disabled="!bulk.canAct.value"
+            @click="void bulk.train()"
+          >
+            批量训练
+          </DtButton>
+        </PermGuard>
+        <PermGuard :codes="[PERMISSION_CODES.modelingManage]">
+          <DtButton
+            size="sm"
+            intent="danger"
+            variant="outline"
+            :disabled="!bulk.canAct.value"
+            @click="void bulk.remove()"
+          >
+            批量删除工作流
+          </DtButton>
+        </PermGuard>
+      </ModelingBatchBar>
+
       <DtDataView
         v-model:view="view"
         class="min-h-0 flex-1"
@@ -165,6 +282,7 @@ onMounted(() => void list.reload())
         :loading="list.loading.value"
         :error="list.error.value"
         :empty="emptyState"
+        :selection="bulk.selection.value"
         :layout="{
           fixedLayout: true,
           minWidth: '60rem',
@@ -172,6 +290,7 @@ onMounted(() => void list.reload())
           cardMinWidth: '22rem',
         }"
         @retry="void list.reload()"
+        @update:selected-ids="bulk.batch.selectedIds.value = $event"
       >
         <template #toolbar>
           <div class="flex flex-wrap items-center gap-3">
@@ -187,6 +306,7 @@ onMounted(() => void list.reload())
             type="search"
             size="sm"
             placeholder="按名称或编码搜索"
+            :disabled="bulk.batch.isBusy.value"
           >
             <template #leading><DtIcon name="search" :size="14" /></template>
           </DtInput>
@@ -196,17 +316,17 @@ onMounted(() => void list.reload())
             <template #actions>
               <PipelineActions
                 :row="row"
-                :is-saving="ops.isSaving.value"
+                :is-saving="writeLocked"
                 :exporting-id="transfer.exportingId.value"
                 @open="
                   (item) => void router.push(`/modeling/pipelines/${item.id}`)
                 "
                 @export="(item) => void transfer.exportSaved(item)"
-                @schedule="scheduling = $event"
-                @save-template="savingTemplate = $event"
-                @copy="ops.openCopy"
-                @edit="ops.openEdit"
-                @remove="(item) => void ops.remove(item)"
+                @schedule="void rowAction('schedule', $event)"
+                @save-template="void rowAction('template', $event)"
+                @copy="void rowAction('copy', $event)"
+                @edit="void rowAction('edit', $event)"
+                @remove="void rowAction('remove', $event)"
               />
             </template>
           </PipelineCard>
@@ -239,15 +359,15 @@ onMounted(() => void list.reload())
         <template #cell-actions="{ row }">
           <PipelineActions
             :row="row"
-            :is-saving="ops.isSaving.value"
+            :is-saving="writeLocked"
             :exporting-id="transfer.exportingId.value"
             @open="(item) => void router.push(`/modeling/pipelines/${item.id}`)"
             @export="(item) => void transfer.exportSaved(item)"
-            @schedule="scheduling = $event"
-            @save-template="savingTemplate = $event"
-            @copy="ops.openCopy"
-            @edit="ops.openEdit"
-            @remove="(item) => void ops.remove(item)"
+            @schedule="void rowAction('schedule', $event)"
+            @save-template="void rowAction('template', $event)"
+            @copy="void rowAction('copy', $event)"
+            @edit="void rowAction('edit', $event)"
+            @remove="void rowAction('remove', $event)"
           />
         </template>
       </DtDataView>
@@ -261,6 +381,14 @@ onMounted(() => void list.reload())
     />
     <PipelineImportDialog :transfer="transfer" />
     <PipelineScheduleDialog :pipeline="scheduling" @close="scheduling = null" />
+    <PipelineBatchScheduleDialog
+      v-if="isBatchScheduling"
+      :count="batchScheduleCount"
+      :is-busy="bulk.batch.isBusy.value"
+      @submit="(draft) => void saveBatchSchedule(draft)"
+      @stop="bulk.batch.stop()"
+      @close="isBatchScheduling = false"
+    />
     <PublishTemplateDialog
       :pipeline="savingTemplate"
       @close="savingTemplate = null"

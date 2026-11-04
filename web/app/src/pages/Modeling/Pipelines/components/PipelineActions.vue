@@ -25,7 +25,12 @@ const auth = useAuthStore()
 const items = computed<readonly DtMenuItem[]>(() => {
   const actions: DtMenuItem[] = []
   if (auth.can([PERMISSION_CODES.modelingRun])) {
-    actions.push({ value: 'schedule', label: '定时训练', icon: 'calendar' })
+    actions.push({
+      value: 'schedule',
+      label: '定时训练',
+      icon: 'calendar',
+      disabled: props.isSaving,
+    })
   }
   if (auth.can([PERMISSION_CODES.modelingManage])) {
     actions.push(
@@ -65,6 +70,7 @@ const items = computed<readonly DtMenuItem[]>(() => {
   return actions
 })
 function select(item: DtMenuItem): void {
+  if (item.disabled || (props.isSaving && item.value !== 'export')) return
   switch (item.value) {
     case 'schedule':
       emit('schedule', props.row)

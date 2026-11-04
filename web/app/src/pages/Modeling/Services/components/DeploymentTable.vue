@@ -11,6 +11,7 @@ import type {
   ModelDeployment,
 } from '@dt/contracts'
 import { PERMISSION_CODES } from '@dt/contracts'
+import type { DtDataViewSelection } from '@dt/ui'
 import { DtButton, DtDataView, DtIconButton, DtTag } from '@dt/ui'
 
 import PermGuard from '@/components/PermGuard.vue'
@@ -43,6 +44,8 @@ const props = defineProps<{
   rows: readonly ModelDeployment[]
   isLoading: boolean
   error: string | null
+  selection?: DtDataViewSelection<ModelDeployment> | undefined
+  actionsDisabled?: boolean | undefined
 }>()
 
 const view = defineModel<DtDataViewMode>('view', { required: true })
@@ -52,6 +55,7 @@ defineEmits<{
   edit: [row: ModelDeployment]
   toggle: [row: ModelDeployment, isOn: boolean]
   remove: [row: ModelDeployment]
+  'update:selectedIds': [ids: string[]]
 }>()
 </script>
 
@@ -63,12 +67,14 @@ defineEmits<{
     :loading="props.isLoading"
     :error="props.error"
     :empty="EMPTY"
+    :selection="props.selection"
     :layout="{
       fixedLayout: true,
       minWidth: '81rem',
       cardColumns: 2,
       cardMinWidth: '24rem',
     }"
+    @update:selected-ids="$emit('update:selectedIds', $event)"
   >
     <template #toolbar><slot name="toolbar" /></template>
     <template #cell-name="{ row }">
@@ -129,17 +135,20 @@ defineEmits<{
         <DtIconButton
           icon="pencil"
           label="改配置"
+          :disabled="props.actionsDisabled"
           @click="$emit('edit', row)"
         />
         <DtIconButton
           :icon="row.is_enabled ? 'power-off' : 'play'"
           :label="row.is_enabled ? '停用' : '启用'"
+          :disabled="props.actionsDisabled"
           @click="$emit('toggle', row, !row.is_enabled)"
         />
         <DtIconButton
           icon="trash"
           label="删掉"
           intent="danger"
+          :disabled="props.actionsDisabled"
           @click="$emit('remove', row)"
         />
       </PermGuard>

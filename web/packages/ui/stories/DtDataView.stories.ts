@@ -205,6 +205,42 @@ export const 卡片视图: Story = {
   }),
 }
 
+/** 多选值由页面持有，表格和卡片切换时继续使用同一组 ID。 */
+export const 受控多选: Story = {
+  render: (args) => ({
+    components: { DtButton, DtTag },
+    setup() {
+      const view = ref('table')
+      const selectedIds = ref<string[]>(['d-01'])
+      const rowLabel = (row: DeviceRow) => row.name
+      return {
+        args,
+        view,
+        selectedIds,
+        rowLabel,
+        DtDataView,
+        STATUS_TEXT,
+        STATUS_INTENT,
+      }
+    },
+    template: `
+      <div style="height: 520px">
+        <component
+          :is="DtDataView"
+          v-bind="args"
+          :view="view"
+          :selection="{ selectedIds, rowLabel }"
+          @update:view="view = $event"
+          @update:selected-ids="selectedIds = $event"
+        >
+          <template #summary>已选 {{ selectedIds.length }} 项</template>
+          ${CELLS}
+        </component>
+      </div>
+    `,
+  }),
+}
+
 /** 工具条与汇总：筛选控件放 toolbar，条数统计放 summary，两者都不跟着列表滚。 */
 export const 工具条与汇总: Story = {
   render: (args) => ({

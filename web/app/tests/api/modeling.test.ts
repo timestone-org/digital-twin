@@ -50,6 +50,32 @@ function headersOf(options: Record<string, unknown>): Record<string, string> {
   return (options['headers'] ?? {}) as Record<string, string>
 }
 
+it('部署详情补取修订号时透传取消信号', async () => {
+  const controller = new AbortController()
+  await modeling.getModelDeployment('deployment-1', controller.signal)
+  expect(call()).toEqual([
+    '/modeling-deployments/deployment-1',
+    { baseUrl: PLATFORM_BASE_URL, signal: controller.signal },
+  ])
+  await modeling.getModelDeployment('deployment-1')
+  expect(call()[1]['signal']).toBeUndefined()
+})
+
+it('部署启停保留各自expected_revision作为并发保护', async () => {
+  await modeling.updateModelDeployment('deployment-1', {
+    is_enabled: false,
+    expected_revision: 7,
+  })
+  expect(call()).toEqual([
+    '/modeling-deployments/deployment-1',
+    {
+      baseUrl: PLATFORM_BASE_URL,
+      method: 'PATCH',
+      body: { is_enabled: false, expected_revision: 7 },
+    },
+  ])
+})
+
 it('BDM 目录走平台代理并传递取消信号', async () => {
   const controller = new AbortController()
   await modeling.listModelingBdmCatalog(

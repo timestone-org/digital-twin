@@ -31,7 +31,7 @@ const items = computed<readonly DtMenuItem[]>(() => {
   const isTerminal = ['succeeded', 'failed', 'cancelled'].includes(
     props.run.status,
   )
-  if (isTerminal && auth.can([PERMISSION_CODES.modelingManage])) {
+  if (isTerminal && auth.can([PERMISSION_CODES.modelingPublish])) {
     actions.push({
       value: 'remove',
       label: '删除记录',

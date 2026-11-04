@@ -11,7 +11,7 @@ import type {
   ModelingVersionSummary,
 } from '@dt/contracts'
 import { PERMISSION_CODES } from '@dt/contracts'
-import type { DtPaginationState } from '@dt/ui'
+import type { DtDataViewSelection, DtPaginationState } from '@dt/ui'
 import { DtButton, DtDataView, DtIconButton, DtTag } from '@dt/ui'
 
 import PermGuard from '@/components/PermGuard.vue'
@@ -51,6 +51,8 @@ const props = defineProps<{
   isLoading: boolean
   error: string | null
   pagination: DtPaginationState
+  selection?: DtDataViewSelection<ModelingVersionSummary> | undefined
+  actionsDisabled?: boolean | undefined
 }>()
 
 const view = defineModel<DtDataViewMode>('view', { required: true })
@@ -58,6 +60,7 @@ const view = defineModel<DtDataViewMode>('view', { required: true })
 defineEmits<{
   'update:page': [page: number]
   'update:size': [size: number]
+  'update:selectedIds': [ids: string[]]
   detail: [row: ModelingVersionSummary]
   bind: [row: ModelingVersionSummary]
   retire: [row: ModelingVersionSummary]
@@ -76,6 +79,7 @@ defineEmits<{
     :error="props.error"
     :empty="EMPTY"
     :pagination="props.pagination"
+    :selection="props.selection"
     :layout="{
       fixedLayout: true,
       minWidth: '77rem',
@@ -84,6 +88,7 @@ defineEmits<{
     }"
     @update:page="$emit('update:page', $event)"
     @update:size="$emit('update:size', $event)"
+    @update:selected-ids="$emit('update:selectedIds', $event)"
   >
     <template #toolbar><slot name="toolbar" /></template>
     <template #cell-name="{ row }">
@@ -130,7 +135,7 @@ defineEmits<{
         <DtButton
           variant="ghost"
           size="sm"
-          :disabled="!row.is_servable"
+          :disabled="props.actionsDisabled || !row.is_servable"
           @click="$emit('deploy', row)"
           >发布模型</DtButton
         >
@@ -138,12 +143,17 @@ defineEmits<{
           icon="pencil"
           label="改名"
           tooltip="修改模型名称和说明"
+          :disabled="props.actionsDisabled"
           @click="$emit('rename', row)"
         />
         <DtButton
           variant="ghost"
           size="sm"
-          :disabled="!row.is_servable || row.task === 'rule_calculation'"
+          :disabled="
+            props.actionsDisabled ||
+            !row.is_servable ||
+            row.task === 'rule_calculation'
+          "
           @click="$emit('bind', row)"
         >
           绑公式
@@ -151,14 +161,14 @@ defineEmits<{
         <DtIconButton
           icon="power-off"
           label="下线"
+          :disabled="props.actionsDisabled"
           @click="$emit('retire', row)"
         />
-      </PermGuard>
-      <PermGuard :codes="[PERMISSION_CODES.modelingManage]">
         <DtIconButton
           icon="trash"
           label="删除"
           intent="danger"
+          :disabled="props.actionsDisabled"
           @click="$emit('remove', row)"
         />
       </PermGuard>

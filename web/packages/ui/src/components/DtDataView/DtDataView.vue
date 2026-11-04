@@ -16,12 +16,14 @@ import type {
   DtTableSort,
 } from '@dt/contracts'
 import DtCard from '../DtCard/DtCard.vue'
+import DtCheckbox from '../DtCheckbox/DtCheckbox.vue'
 import DtDataCard from './DtDataCard.vue'
 import DtPageState from '../DtPageState/DtPageState.vue'
 import DtPagination from '../DtPagination/DtPagination.vue'
 import type { DtPaginationState } from '../DtPagination/pages'
 import DtSegmented from '../DtSegmented/DtSegmented.vue'
 import DtTable from '../DtTable/DtTable.vue'
+import type { DtDataViewSelection } from './selection'
 
 export interface DtDataViewLayout {
   minWidth?: string | undefined
@@ -60,6 +62,7 @@ const props = withDefaults(
     layout?: DtDataViewLayout | undefined
     /** 给了才渲染分页器；不分页的用法不能凭空多出一条。 */
     pagination?: DtPaginationState | null | undefined
+    selection?: DtDataViewSelection<TRow> | undefined
   }>(),
   {
     loading: false,
@@ -68,6 +71,7 @@ const props = withDefaults(
     empty: undefined,
     layout: undefined,
     pagination: null,
+    selection: undefined,
   },
 )
 
@@ -113,7 +117,54 @@ const emit = defineEmits<{
   'update:page': [value: number]
   'update:size': [value: number]
   retry: []
+  'update:selectedIds': [value: string[]]
 }>()
+
+const SELECTION_COLUMN: DtDataColumn = {
+  key: '__selection',
+  label: '选择',
+  width: '3rem',
+  align: 'center',
+}
+const tableColumns = computed(() =>
+  props.selection ? [SELECTION_COLUMN, ...props.columns] : props.columns,
+)
+const selectedIds = computed(() => new Set(props.selection?.selectedIds ?? []))
+const pageIds = computed(() => props.rows.map((row) => row.id))
+const selectionLocked = computed(
+  () =>
+    props.loading || props.selection?.disabled === true || Boolean(props.error),
+)
+const pageSelection = computed(() => {
+  const count = pageIds.value.filter((id) => selectedIds.value.has(id)).length
+  return {
+    all: count > 0 && count === pageIds.value.length,
+    some: count > 0 && count < pageIds.value.length,
+  }
+})
+
+function updateSelection(ids: readonly string[], isSelected: boolean): void {
+  const selection = props.selection
+  if (selection === undefined || selectionLocked.value) return
+  const next = new Set(selection.selectedIds)
+  const visible = new Set(pageIds.value)
+  let changed = false
+  for (const id of ids) {
+    if (!visible.has(id) || next.has(id) === isSelected) continue
+    changed = true
+    if (isSelected) next.add(id)
+    else next.delete(id)
+  }
+  if (changed) emit('update:selectedIds', [...next])
+}
+
+function selectPage(isSelected: boolean): void {
+  updateSelection(pageIds.value, isSelected)
+}
+
+function selectionLabel(row: TRow): string {
+  return `选择 ${props.selection?.rowLabel?.(row) ?? row.id}`
+}
 
 defineSlots<{
   toolbar?: () => unknown
@@ -162,10 +213,19 @@ const fieldColumns = computed(() =>
 <template>
   <div class="dt-data-view" :class="{ 'is-fill': layout.fill }">
     <div
-      v-if="$slots.toolbar || $slots.summary || layout.toggle"
+      v-if="$slots.toolbar || $slots.summary || layout.toggle || selection"
       class="dt-data-view__bar"
     >
-      <div v-if="$slots.toolbar" class="dt-data-view__toolbar">
+      <div v-if="$slots.toolbar || selection" class="dt-data-view__toolbar">
+        <DtCheckbox
+          v-if="selection"
+          :model-value="pageSelection.all"
+          :indeterminate="pageSelection.some"
+          :label="selection.selectAllLabel ?? '选择本页'"
+          :aria-label="selection.selectAllLabel ?? '选择本页'"
+          :disabled="selectionLocked || rows.length === 0"
+          @update:model-value="selectPage"
+        />
         <slot name="toolbar" />
       </div>
       <div class="dt-data-view__aside">
@@ -191,7 +251,7 @@ const fieldColumns = computed(() =>
         @retry="emit('retry')"
       >
         <DtTable
-          :columns="columns"
+          :columns="tableColumns"
           :rows="rows"
           :sort="sort"
           :min-width="layout.minWidth"
@@ -199,6 +259,14 @@ const fieldColumns = computed(() =>
           :fill="layout.fill"
           @update:sort="emit('update:sort', $event)"
         >
+          <template v-if="selection" #cell-__selection="{ row }">
+            <DtCheckbox
+              :model-value="selectedIds.has(row.id)"
+              :aria-label="selectionLabel(row)"
+              :disabled="selectionLocked"
+              @update:model-value="updateSelection([row.id], $event)"
+            />
+          </template>
           <template
             v-for="column in columns"
             :key="column.key"
@@ -226,7 +294,35 @@ const fieldColumns = computed(() =>
       >
         <!-- 走插槽的后备内容而不是双分支：两条路径不会同时存在 -->
         <template v-for="(row, index) in rows" :key="row.id">
-          <slot name="card" :row="row" :index="index">
+          <div v-if="selection" class="dt-data-view__selectable-card">
+            <div class="dt-data-view__card-select" @click.stop @keydown.stop>
+              <DtCheckbox
+                :model-value="selectedIds.has(row.id)"
+                :aria-label="selectionLabel(row)"
+                :disabled="selectionLocked"
+                @update:model-value="updateSelection([row.id], $event)"
+              />
+            </div>
+            <slot name="card" :row="row" :index="index">
+              <DtDataCard
+                :title-column="titleColumn"
+                :meta-columns="metaColumns"
+                :actions-column="actionsColumn"
+                :field-columns="fieldColumns"
+              >
+                <template
+                  v-for="column in columns"
+                  :key="column.key"
+                  #[cellSlot(column.key)]
+                >
+                  <slot :name="`cell-${column.key}`" :row="row" :index="index"
+                    >—</slot
+                  >
+                </template>
+              </DtDataCard>
+            </slot>
+          </div>
+          <slot v-else name="card" :row="row" :index="index">
             <DtDataCard
               :title-column="titleColumn"
               :meta-columns="metaColumns"

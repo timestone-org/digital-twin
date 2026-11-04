@@ -20,6 +20,10 @@ interface Query {
   size: number
   q?: string
 }
+export type InstanceArchiveFilter = 'active' | 'archived' | 'all'
+interface InstanceQuery extends Query {
+  archived?: InstanceArchiveFilter
+}
 
 function read<T>(
   path: string,
@@ -67,7 +71,7 @@ export const setTemplateEnabled = (id: string, isEnabled: boolean) =>
     { is_enabled: isEnabled },
     'PATCH',
   )
-export const listInstances = (query: Query, signal?: AbortSignal) =>
+export const listInstances = (query: InstanceQuery, signal?: AbortSignal) =>
   read<Page<ModelingInstance>>('/modeling-instances', signal, query)
 export const createInstance = (body: ModelingInstanceCreateInput) =>
   write<ModelingInstance>('/modeling-instances', body)
@@ -94,5 +98,19 @@ export const configureInstance = (
   )
 export const trainInstance = (id: string) =>
   write<ModelingRun>(`/modeling-instances/${id}:train`, { trigger: 'manual' })
+export const archiveInstance = (
+  id: string,
+  expectedRevision: ModelingInstance['revision'],
+) =>
+  write<ModelingInstance>(`/modeling-instances/${id}:archive`, {
+    expected_revision: expectedRevision,
+  })
+export const restoreInstance = (
+  id: string,
+  expectedRevision: ModelingInstance['revision'],
+) =>
+  write<ModelingInstance>(`/modeling-instances/${id}:restore`, {
+    expected_revision: expectedRevision,
+  })
 export const deployInstance = (id: string, body: ModelingInstanceDeployInput) =>
   write<ModelDeployment>(`/modeling-instances/${id}:deploy`, body)

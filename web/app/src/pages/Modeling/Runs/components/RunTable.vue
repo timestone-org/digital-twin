@@ -11,7 +11,7 @@ import type {
   ModelingRunSummary,
 } from '@dt/contracts'
 import { DtDataView } from '@dt/ui'
-import type { DtPaginationState } from '@dt/ui'
+import type { DtDataViewSelection, DtPaginationState } from '@dt/ui'
 import { RouterLink } from 'vue-router'
 
 import RunActions from './RunActions.vue'
@@ -54,6 +54,7 @@ const props = defineProps<{
   isLoading: boolean
   error: string | null
   pagination?: DtPaginationState
+  selection?: DtDataViewSelection<ModelingRunSummary> | undefined
 }>()
 
 const view = defineModel<DtDataViewMode>('view', { required: true })
@@ -64,6 +65,7 @@ defineEmits<{
   remove: [row: ModelingRunSummary]
   'update:page': [page: number]
   'update:size': [size: number]
+  'update:selectedIds': [ids: string[]]
   retry: []
 }>()
 
@@ -84,6 +86,7 @@ function duration(ms: number | null): string {
     :error="props.error"
     :empty="EMPTY"
     :pagination="props.pagination"
+    :selection="props.selection"
     :layout="{
       fixedLayout: true,
       minWidth: '64rem',
@@ -92,6 +95,7 @@ function duration(ms: number | null): string {
     }"
     @update:page="$emit('update:page', $event)"
     @update:size="$emit('update:size', $event)"
+    @update:selected-ids="$emit('update:selectedIds', $event)"
     @retry="$emit('retry')"
   >
     <template #toolbar><slot name="toolbar" /></template>

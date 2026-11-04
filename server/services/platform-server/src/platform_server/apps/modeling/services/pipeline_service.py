@@ -9,12 +9,14 @@ from lib.web import Page, PageParams
 from platform_server.apps.modeling.crud import (
     model_version_crud,
     pipeline_crud,
+    run_crud,
 )
 from platform_server.apps.modeling.crud.template import has_templates, instances
 from platform_server.apps.modeling.errors import (
     PipelineCodeTaken,
     PipelineHasVersions,
     PipelineNotFound,
+    RunAlreadyActive,
     TemplateUnavailable,
 )
 from platform_server.apps.modeling.models import ModelingPipeline
@@ -141,7 +143,15 @@ async def delete_pipeline(
 
     Args: session, pipeline_id。
     """
-    row = await require_pipeline(session, pipeline_id)
+    row = await pipeline_crud.lock(session, pipeline_id)
+    if row is None:
+        raise PipelineNotFound("流水线不存在")
+    if await run_crud.active_of(
+        session, pipeline_id
+    ) or await run_crud.pending_publication_of(session, pipeline_id):
+        raise RunAlreadyActive(
+            "工作流仍有训练或模型发布正在进行，请等待完成后删除"
+        )
     if await instances.get(session, pipeline_id) or await has_templates(
         session, pipeline_id
     ):

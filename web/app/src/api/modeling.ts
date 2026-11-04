@@ -500,6 +500,16 @@ export async function listModelDeployments(
   )
 }
 
+export function getModelDeployment(
+  deploymentId: string,
+  signal?: AbortSignal,
+): Promise<ModelDeployment> {
+  return requestData<ModelDeployment>(
+    `/modeling-deployments/${deploymentId}`,
+    onPlatform(signal === undefined ? {} : { signal }),
+  )
+}
+
 /** 换版本、改配额、启停。`code` 不可改——第三方的代码里写着它。 */
 export async function updateModelDeployment(
   deploymentId: string,
@@ -510,6 +520,7 @@ export async function updateModelDeployment(
     is_enabled?: boolean | undefined
     max_rows_per_call?: number | undefined
     rate_limit_per_minute?: number | undefined
+    expected_revision?: number | undefined
   },
 ): Promise<ModelDeployment> {
   return await requestData<ModelDeployment>(

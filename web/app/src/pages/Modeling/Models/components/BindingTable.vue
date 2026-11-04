@@ -11,7 +11,7 @@ import type {
   ModelingBinding,
 } from '@dt/contracts'
 import { PERMISSION_CODES } from '@dt/contracts'
-import type { DtPaginationState } from '@dt/ui'
+import type { DtDataViewSelection, DtPaginationState } from '@dt/ui'
 import { DtIconButton, DtDataView, DtSwitch, DtTag } from '@dt/ui'
 
 import PermGuard from '@/components/PermGuard.vue'
@@ -41,6 +41,8 @@ const props = defineProps<{
   isLoading: boolean
   error: string | null
   pagination: DtPaginationState
+  selection?: DtDataViewSelection<ModelingBinding> | undefined
+  actionsDisabled?: boolean | undefined
 }>()
 
 const view = defineModel<DtDataViewMode>('view', { required: true })
@@ -48,6 +50,7 @@ const view = defineModel<DtDataViewMode>('view', { required: true })
 defineEmits<{
   'update:page': [page: number]
   'update:size': [size: number]
+  'update:selectedIds': [ids: string[]]
   toggle: [row: ModelingBinding, isOn: boolean]
   unbind: [row: ModelingBinding]
 }>()
@@ -68,6 +71,7 @@ function paramsOf(row: ModelingBinding): string {
     :error="props.error"
     :empty="EMPTY"
     :pagination="props.pagination"
+    :selection="props.selection"
     :layout="{
       fixedLayout: true,
       minWidth: '60rem',
@@ -76,6 +80,7 @@ function paramsOf(row: ModelingBinding): string {
     }"
     @update:page="$emit('update:page', $event)"
     @update:size="$emit('update:size', $event)"
+    @update:selected-ids="$emit('update:selectedIds', $event)"
   >
     <template #toolbar><slot name="toolbar" /></template>
     <template #cell-fx_code="{ row }">
@@ -106,6 +111,7 @@ function paramsOf(row: ModelingBinding): string {
         <DtSwitch
           :model-value="row.is_enabled"
           aria-label="启用这条绑定"
+          :disabled="props.actionsDisabled"
           @update:model-value="$emit('toggle', row, $event)"
         />
         <template #fallback>
@@ -122,6 +128,7 @@ function paramsOf(row: ModelingBinding): string {
           label="解绑"
           tooltip="解除公式绑定"
           intent="danger"
+          :disabled="props.actionsDisabled"
           @click="$emit('unbind', row)"
         />
       </PermGuard>

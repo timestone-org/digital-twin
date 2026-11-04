@@ -60,6 +60,22 @@
     flex-shrink: 0;
   }
 
+  &__selectable-card {
+    position: relative;
+    min-width: 0;
+    padding-left: calc(var(--ctl-box-sm) + 0.5rem);
+
+    > :deep(.dt-card) {
+      height: 100%;
+    }
+  }
+
+  &__card-select {
+    position: absolute;
+    top: 0.75rem;
+    left: 0;
+  }
+
   &.is-fill &__panel {
     flex: 1;
     // ⚠ 筛选栏换行后仍须留下数据区，过矮时由整个数据视图滚动兜底。

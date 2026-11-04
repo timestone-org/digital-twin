@@ -28,6 +28,26 @@
 业务页面调用对应接口。带业务语义的组合件留在页面或应用 features/components；
 产品无关且有真实多个消费者的交互提升到本包，业务存储与权限仍由调用方持有。
 
+## 列表多选
+
+`DtDataView` 可通过 `selection` 对象开启多选，表格、默认卡片和自定义 `card` 插槽
+共用同一组选中 ID；未提供时保持原有呈现。
+
+```ts
+interface DtDataViewSelection<TRow extends { id: string }> {
+  selectedIds: readonly string[]
+  disabled?: boolean
+  selectAllLabel?: string
+  rowLabel?: (row: TRow) => string
+}
+```
+
+类型从 `@dt/ui` 导入。选中值由调用方持有，监听 `update:selectedIds` 更新数组；
+`disabled` 与列表 `loading` 时禁止更改选择。`rowLabel` 为每行复选框提供文本名称，
+缺省使用行 ID；`selectAllLabel` 缺省为“选择本页”。全选及取消全选只修改当前
+`rows` 的 ID，不会新选其他页的记录，原有其他页 ID 保留。分页、筛选与刷新后的
+选择清理由业务页面负责；切换表格和卡片不清空选择。
+
 ## 可调整布局与卡片
 
 可调整卡片布局使用 `DtResizableLayout` 与 `DtCard` 组合：

@@ -1,7 +1,7 @@
 <script setup lang="ts">
 /** @fileoverview 按工作流查看训练历史结果、直接发布与清理记录。 */
 import type { ModelingPipelineSummary, ModelingRunSummary } from '@dt/contracts'
-import { DtIconButton, DtSelect } from '@dt/ui'
+import { DtButton, DtIconButton, DtSelect } from '@dt/ui'
 import {
   computed,
   defineAsyncComponent,
@@ -18,6 +18,8 @@ import { useRacedFetch } from '@/composables/useRacedFetch'
 import { useViewMode } from '@/composables/useViewMode'
 import RunTable from './components/RunTable.vue'
 import { useRunOps } from '../scripts/useRunOps'
+import ModelingBatchBar from '../components/ModelingBatchBar.vue'
+import { useRunBatch } from './scripts/useRunBatch'
 
 const RunResultsDialog = defineAsyncComponent(
   () => import('./components/RunResultsDialog.vue'),
@@ -34,6 +36,18 @@ const runs = useAsyncList<ModelingRunSummary>((query, signal) =>
   modeling.listModelingRuns(pipelineId.value || null, query, signal),
 )
 const ops = useRunOps(() => void runs.reload())
+const bulk = useRunBatch(
+  () => runs.items.value,
+  () => `${pipelineId.value}:${runs.pager.value.page}:${runs.pager.value.size}`,
+  () => runs.reload(),
+  () => runs.loading.value || ops.busyId.value !== '',
+)
+const canWriteRun = computed(
+  () =>
+    ops.busyId.value === '' &&
+    !bulk.batch.isBusy.value &&
+    !bulk.batch.isBlocked.value,
+)
 const options = computed(() => [
   { value: '', label: '全部工作流' },
   ...pipelines.value.map((row) => ({ value: row.id, label: row.name })),
@@ -51,6 +65,14 @@ const savedModels = computed(
 )
 async function reload(): Promise<void> {
   await runs.reloadFromFirstPage()
+}
+async function publishRun(row: ModelingRunSummary): Promise<void> {
+  if (!canWriteRun.value) return
+  await ops.publish(row.id)
+}
+async function removeRun(row: ModelingRunSummary): Promise<void> {
+  if (!canWriteRun.value) return
+  await ops.remove(row)
 }
 watch(
   () => route.query['pipeline_id'],
@@ -80,21 +102,57 @@ onBeforeUnmount(pipelineRead.cancel)
     back-to="/modeling/pipelines"
   >
     <div class="flex h-full min-h-0 flex-col gap-3">
+      <ModelingBatchBar
+        v-if="bulk.selection.value"
+        :selected-count="bulk.batch.selectedCount.value"
+        :state="bulk.batch.state.value"
+        scope-label="当前页训练记录"
+        @clear="bulk.batch.clear"
+        @stop="bulk.batch.stop"
+      >
+        <DtButton
+          v-if="bulk.canCancel.value"
+          size="sm"
+          variant="soft"
+          :disabled="
+            !bulk.batch.canRun.value ||
+            runs.loading.value ||
+            ops.busyId.value !== ''
+          "
+          @click="void bulk.cancel()"
+          >批量取消训练</DtButton
+        >
+        <DtButton
+          v-if="bulk.canRemove.value"
+          size="sm"
+          variant="soft"
+          intent="danger"
+          :disabled="
+            !bulk.batch.canRun.value ||
+            runs.loading.value ||
+            ops.busyId.value !== ''
+          "
+          @click="void bulk.remove()"
+          >批量删除记录</DtButton
+        >
+      </ModelingBatchBar>
       <RunTable
         v-model:view="view"
+        :selection="bulk.selection.value"
         :rows="runs.items.value"
         :pipeline-names="names"
         :published-run-ids="savedModels"
-        :can-publish="ops.busyId.value === ''"
+        :can-publish="canWriteRun"
         :is-loading="runs.loading.value"
         :error="runs.error.value"
         :pagination="runs.pager.value"
+        @update:selected-ids="bulk.batch.selectedIds.value = $event"
         @update:page="void runs.goToPage($event)"
         @update:size="void runs.setSize($event)"
         @retry="void runs.reload()"
         @detail="viewingRun = $event"
-        @publish="void ops.publish($event.id)"
-        @remove="void ops.remove($event)"
+        @publish="void publishRun($event)"
+        @remove="void removeRun($event)"
       >
         <template #toolbar>
           <DtSelect

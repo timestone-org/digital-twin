@@ -57,7 +57,8 @@ async def save_schedule(
     caller: CallerContext,
 ) -> ModelingScheduleOut:
     if (
-        payload.should_auto_publish
+        payload.is_enabled
+        and payload.should_auto_publish
         and MODELING_PUBLISH not in caller.permissions
     ):
         raise PermissionDenied("自动发布需要模型发布权限")

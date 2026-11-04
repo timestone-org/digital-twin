@@ -6,7 +6,7 @@ import type {
   ModelingVersionSummary,
 } from '@dt/contracts'
 import { DtButton, DtNotice } from '@dt/ui'
-import { onBeforeUnmount, onMounted, ref } from 'vue'
+import { computed, onBeforeUnmount, onMounted, ref } from 'vue'
 
 import * as modeling from '@/api/modeling'
 import { AppShell } from '@/components/layout'
@@ -18,6 +18,8 @@ import DeploymentAccessDrawer from './components/DeploymentAccessDrawer.vue'
 import DeploymentFormDialog from './components/DeploymentFormDialog.vue'
 import DeploymentTable from './components/DeploymentTable.vue'
 import { useDeploymentOps } from './scripts/useDeploymentOps'
+import { useDeploymentBatch } from './scripts/useDeploymentBatch'
+import ModelingBatchBar from '../components/ModelingBatchBar.vue'
 
 const view = useViewMode('modeling-deployments')
 
@@ -40,6 +42,15 @@ const statsRequest = useRacedFetch()
 const ops = useDeploymentOps(() => {
   void reload()
 })
+const bulk = useDeploymentBatch(
+  () => rows.value,
+  reload,
+  () => ops.isBusy.value || isLoading.value,
+)
+const isWritingBlocked = computed(
+  () =>
+    ops.isBusy.value || bulk.batch.isBusy.value || bulk.batch.isBlocked.value,
+)
 
 async function reload(): Promise<void> {
   isLoading.value = true
@@ -97,8 +108,26 @@ function closeAccess(): void {
 }
 
 function openForm(row: ModelDeployment): void {
-  if (isVersionLoading.value || versionError.value !== null) return
+  if (
+    isWritingBlocked.value ||
+    isVersionLoading.value ||
+    versionError.value !== null
+  )
+    return
   editing.value = row
+}
+
+async function toggleDeployment(
+  row: ModelDeployment,
+  isOn: boolean,
+): Promise<void> {
+  if (isWritingBlocked.value) return
+  await ops.update(row.id, { is_enabled: isOn })
+}
+
+async function removeDeployment(row: ModelDeployment): Promise<void> {
+  if (isWritingBlocked.value) return
+  await ops.remove(row)
 }
 
 async function submitForm(payload: {
@@ -108,7 +137,7 @@ async function submitForm(payload: {
   rate_limit_per_minute: number
 }): Promise<void> {
   const row = editing.value
-  if (row === null) return
+  if (row === null || isWritingBlocked.value) return
   const done = await ops.update(row.id, payload)
   if (done !== null) editing.value = null
 }
@@ -133,6 +162,40 @@ onBeforeUnmount(() => {
   >
     <!-- h-full + min-h-0 见 AppShell 的契约：main 不滚，高度由页面自己吃满 -->
     <div class="flex h-full min-h-0 flex-col gap-3 overflow-y-auto">
+      <ModelingBatchBar
+        v-if="bulk.selection.value"
+        :selected-count="bulk.batch.selectedCount.value"
+        :state="bulk.batch.state.value"
+        scope-label="当前列表全部服务"
+        @clear="bulk.batch.clear"
+        @stop="bulk.batch.stop"
+      >
+        <DtButton
+          size="sm"
+          variant="soft"
+          :disabled="!bulk.batch.canRun.value || ops.isBusy.value || isLoading"
+          @click="void bulk.toggle(true)"
+        >
+          批量启用服务
+        </DtButton>
+        <DtButton
+          size="sm"
+          variant="soft"
+          :disabled="!bulk.batch.canRun.value || ops.isBusy.value || isLoading"
+          @click="void bulk.toggle(false)"
+        >
+          批量停用服务
+        </DtButton>
+        <DtButton
+          size="sm"
+          variant="soft"
+          intent="danger"
+          :disabled="!bulk.batch.canRun.value || ops.isBusy.value || isLoading"
+          @click="void bulk.remove()"
+        >
+          批量删除服务
+        </DtButton>
+      </ModelingBatchBar>
       <DtNotice v-if="versionError" intent="warning">
         模型版本加载失败：{{ versionError }}
         <DtButton size="xs" variant="ghost" @click="void loadVersions()">
@@ -141,20 +204,23 @@ onBeforeUnmount(() => {
       </DtNotice>
       <DeploymentTable
         v-model:view="view"
+        :selection="bulk.selection.value"
+        :actions-disabled="isWritingBlocked"
         :rows="rows"
         :is-loading="isLoading"
         :error="error"
+        @update:selected-ids="bulk.batch.selectedIds.value = $event"
         @access="(row) => void openAccess(row)"
         @edit="(row) => openForm(row)"
-        @toggle="(row, isOn) => void ops.update(row.id, { is_enabled: isOn })"
-        @remove="(row) => void ops.remove(row)"
+        @toggle="(row, isOn) => void toggleDeployment(row, isOn)"
+        @remove="(row) => void removeDeployment(row)"
       />
     </div>
 
     <DeploymentFormDialog
       v-if="editing"
       :deployment="editing"
-      :is-busy="ops.isBusy.value"
+      :is-busy="isWritingBlocked"
       :versions="versions"
       @submit="(payload) => void submitForm(payload)"
       @close="editing = null"

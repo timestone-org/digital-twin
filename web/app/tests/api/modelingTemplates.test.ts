@@ -83,3 +83,33 @@ it('读取历史训练配置时带运行 ID，保持只读请求与取消信号'
     { baseUrl: '/api/v1/platform', signal, query: { run_id: 'run-1' } },
   )
 })
+
+it('实例归档筛选和归档恢复使用真实修订号与独立幂等键', async () => {
+  await api.listInstances({ page: 1, size: 20, archived: 'archived' })
+  expect(requestData).toHaveBeenLastCalledWith('/modeling-instances', {
+    baseUrl: '/api/v1/platform',
+    query: { page: 1, size: 20, archived: 'archived' },
+  })
+  await api.archiveInstance('instance-1', 3)
+  await api.restoreInstance('instance-2', 7)
+  const writes = vi.mocked(requestData).mock.calls.slice(-2)
+  expect(
+    writes.map(([path, options]) => [path, options?.method, options?.body]),
+  ).toEqual([
+    [
+      '/modeling-instances/instance-1:archive',
+      'POST',
+      { expected_revision: 3 },
+    ],
+    [
+      '/modeling-instances/instance-2:restore',
+      'POST',
+      { expected_revision: 7 },
+    ],
+  ])
+  const keys = writes.map(([, options]) =>
+    new Headers(options?.headers).get('Idempotency-Key'),
+  )
+  expect(keys.every(Boolean)).toBe(true)
+  expect(new Set(keys).size).toBe(2)
+})

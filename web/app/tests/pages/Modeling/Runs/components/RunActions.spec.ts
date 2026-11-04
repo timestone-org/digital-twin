@@ -119,7 +119,7 @@ it.each([
     expect(wrapper.emitted('detail')).toEqual([[target]])
   },
 )
-it('发布权限不隐含删除权限', async () => {
+it('发布权限同时允许删除终态训练记录', async () => {
   vi.mocked(useAuthStore().can).mockImplementation((codes) =>
     codes.includes(PERMISSION_CODES.modelingPublish),
   )
@@ -127,20 +127,19 @@ it('发布权限不隐含删除权限', async () => {
   await openMenu(wrapper)
   expect(
     wrapper.findAll('[role="menuitem"]').map((item) => item.text()),
-  ).toEqual(['发布模型'])
+  ).toEqual(['发布模型', '删除记录'])
 })
 it.each(['succeeded', 'failed', 'cancelled'] as const)(
-  '管理权限可删除终态%s，但不隐含发布权限',
-  async (status) => {
+  '仅管理权限不能删除终态%s训练记录',
+  (status) => {
     vi.mocked(useAuthStore().can).mockImplementation((codes) =>
       codes.includes(PERMISSION_CODES.modelingManage),
     )
     const target = { ...RUN, status }
     const wrapper = open(target)
-    await openMenu(wrapper)
-    expect(
-      wrapper.findAll('[role="menuitem"]').map((item) => item.text()),
-    ).toEqual(['删除记录'])
+    expect(wrapper.find('button[aria-label="训练记录更多操作"]').exists()).toBe(
+      false,
+    )
   },
 )
 it('只读账号也能从训练记录直接查看结果，菜单不出现', async () => {
@@ -170,15 +169,16 @@ it('更多图标保留中文提示和菜单ARIA关联', async () => {
 })
 
 it.each(['failed', 'cancelled'] as const)(
-  '只有发布权限的%s记录没有可用菜单项',
-  (status) => {
+  '只有发布权限的%s记录可删除但不能发布',
+  async (status) => {
     vi.mocked(useAuthStore().can).mockImplementation((codes) =>
       codes.includes(PERMISSION_CODES.modelingPublish),
     )
     const wrapper = open({ ...RUN, status })
-    expect(wrapper.find('button[aria-label="训练记录更多操作"]').exists()).toBe(
-      false,
-    )
+    await openMenu(wrapper)
+    expect(
+      wrapper.findAll('[role="menuitem"]').map((item) => item.text()),
+    ).toEqual(['删除记录'])
     expect(wrapper.find('button[aria-label="查看训练结果"]').exists()).toBe(
       true,
     )

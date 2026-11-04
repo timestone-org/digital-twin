@@ -10,10 +10,11 @@ import type {
   ModelingVersion,
   ModelingVersionSummary,
 } from '@dt/contracts'
-import { useToast } from '@dt/ui'
+import { DtButton, useToast } from '@dt/ui'
 import { computed, onBeforeUnmount, onMounted, ref, watch } from 'vue'
 import { useRoute } from 'vue-router'
 import { useRunOps } from '../scripts/useRunOps'
+import ModelingBatchBar from '../components/ModelingBatchBar.vue'
 
 import * as modeling from '@/api/modeling'
 import { AppShell } from '@/components/layout'
@@ -28,6 +29,8 @@ import VersionTable from './components/VersionTable.vue'
 import VersionNameDialog from './components/VersionNameDialog.vue'
 import { useBindingOps } from './scripts/useBindingOps'
 import { useVersionOps } from './scripts/useVersionOps'
+import { useVersionBatch } from './scripts/useVersionBatch'
+import { useBindingBatch } from './scripts/useBindingBatch'
 
 // 初始每页条数
 const PAGE_SIZE = 200
@@ -68,6 +71,33 @@ function refresh(): void {
 const ops = useBindingOps(refresh)
 // 版本级动作单独一组：下线与注册的对象是版本，爆炸半径也与绑定那几个不同
 const versionOps = useVersionOps(refresh)
+const versionBulk = useVersionBatch(
+  () => versions.items.value,
+  () =>
+    `${workflowId.value ?? ''}:${versions.pager.value.page}:${versions.pager.value.size}`,
+  refreshBatch,
+  (): boolean => isWriting.value || versions.loading.value,
+)
+const bindingBulk = useBindingBatch(
+  () => bindings.items.value,
+  () =>
+    `${workflowId.value ?? ''}:${bindings.pager.value.page}:${bindings.pager.value.size}`,
+  refreshBatch,
+  (): boolean => isWriting.value || bindings.loading.value,
+)
+const isWriting = computed(
+  () =>
+    versionOps.isBusy.value ||
+    ops.isBusy.value ||
+    runOps.busyId.value !== '' ||
+    versionBulk.batch.isBusy.value ||
+    bindingBulk.batch.isBusy.value ||
+    versionBulk.batch.isBlocked.value ||
+    bindingBulk.batch.isBlocked.value,
+)
+async function refreshBatch(): Promise<void> {
+  await Promise.all([versions.reload(), bindings.reload()])
+}
 watch(workflowId, () => {
   versionRead.cancel()
   detail.value = null
@@ -109,23 +139,34 @@ async function readVersion(
 
 async function saveName(name: string, description: string): Promise<void> {
   const version = renaming.value
-  if (version === null) return
+  if (version === null || isWriting.value) return
   const result = await versionOps.rename(version.id, name, description)
   if (result !== null) renaming.value = null
 }
 
 async function register(fxCode: string): Promise<void> {
   const version = detail.value
-  if (version === null) return
+  if (version === null || isWriting.value) return
   const done = await versionOps.register(version.id, fxCode)
   if (done !== null) detail.value = null
 }
 
 async function submitBind(fxCode: string): Promise<void> {
   const version = binding.value
-  if (version === null) return
+  if (version === null || isWriting.value) return
   await ops.bind(fxCode, version.id)
   binding.value = null
+}
+
+function openBinding(row: ModelingVersionSummary): void {
+  if (!isWriting.value) binding.value = row
+}
+
+async function openRename(row: ModelingVersionSummary): Promise<void> {
+  if (isWriting.value) return
+  await readVersion(row, (version) => {
+    if (!isWriting.value) renaming.value = version
+  })
 }
 
 onMounted(() => {
@@ -146,25 +187,57 @@ onBeforeUnmount(versionRead.cancel)
       class="dt-ml-models flex h-full min-h-0 flex-col gap-4 overflow-hidden"
     >
       <section class="dt-ml-models__block">
+        <ModelingBatchBar
+          v-if="versionBulk.selection.value"
+          :selected-count="versionBulk.batch.selectedCount.value"
+          :state="versionBulk.batch.state.value"
+          scope-label="当前页模型版本"
+          @clear="versionBulk.batch.clear"
+          @stop="versionBulk.batch.stop"
+        >
+          <DtButton
+            size="sm"
+            variant="soft"
+            :disabled="
+              !versionBulk.batch.canRun.value ||
+              isWriting ||
+              versions.loading.value
+            "
+            @click="void versionBulk.retire()"
+          >
+            批量下线模型
+          </DtButton>
+          <DtButton
+            size="sm"
+            variant="soft"
+            intent="danger"
+            :disabled="
+              !versionBulk.batch.canRun.value ||
+              isWriting ||
+              versions.loading.value
+            "
+            @click="void versionBulk.remove()"
+          >
+            批量删除模型
+          </DtButton>
+        </ModelingBatchBar>
         <VersionTable
           v-model:view="versionView"
+          :selection="versionBulk.selection.value"
+          :actions-disabled="isWriting"
           :rows="versions.items.value"
           :is-loading="versions.loading.value"
           :error="versions.error.value"
           :pagination="versions.pager.value"
+          @update:selected-ids="versionBulk.batch.selectedIds.value = $event"
           @update:page="(page) => void versions.goToPage(page)"
           @update:size="(size) => void versions.setSize(size)"
           @detail="(row) => void openDetail(row)"
-          @bind="(row) => (binding = row)"
-          @retire="(row) => void versionOps.retire(row)"
-          @remove="(row) => void versionOps.remove(row)"
-          @deploy="(row) => void runOps.publish(row.run_id)"
-          @rename="
-            (row) =>
-              void readVersion(row, (version) => {
-                renaming = version
-              })
-          "
+          @bind="openBinding"
+          @retire="(row) => !isWriting && void versionOps.retire(row)"
+          @remove="(row) => !isWriting && void versionOps.remove(row)"
+          @deploy="(row) => !isWriting && void runOps.publish(row.run_id)"
+          @rename="(row) => void openRename(row)"
         >
           <template #toolbar>
             <h2 class="dt-ml-models__title">模型版本</h2>
@@ -173,17 +246,69 @@ onBeforeUnmount(versionRead.cancel)
       </section>
 
       <section class="dt-ml-models__block">
+        <ModelingBatchBar
+          v-if="bindingBulk.selection.value"
+          :selected-count="bindingBulk.batch.selectedCount.value"
+          :state="bindingBulk.batch.state.value"
+          scope-label="当前页公式绑定"
+          @clear="bindingBulk.batch.clear"
+          @stop="bindingBulk.batch.stop"
+        >
+          <DtButton
+            size="sm"
+            variant="soft"
+            :disabled="
+              !bindingBulk.batch.canRun.value ||
+              isWriting ||
+              bindings.loading.value
+            "
+            @click="void bindingBulk.toggle(true)"
+          >
+            批量启用绑定
+          </DtButton>
+          <DtButton
+            size="sm"
+            variant="soft"
+            :disabled="
+              !bindingBulk.batch.canRun.value ||
+              isWriting ||
+              bindings.loading.value
+            "
+            @click="void bindingBulk.toggle(false)"
+          >
+            批量停用绑定
+          </DtButton>
+          <DtButton
+            size="sm"
+            variant="soft"
+            intent="danger"
+            :disabled="
+              !bindingBulk.batch.canRun.value ||
+              isWriting ||
+              bindings.loading.value
+            "
+            @click="void bindingBulk.unbind()"
+          >
+            批量解除绑定
+          </DtButton>
+        </ModelingBatchBar>
         <BindingTable
           v-model:view="bindingView"
+          :selection="bindingBulk.selection.value"
+          :actions-disabled="isWriting"
           :rows="bindings.items.value"
           :version-labels="versionLabels"
           :is-loading="bindings.loading.value"
           :error="bindings.error.value"
           :pagination="bindings.pager.value"
+          @update:selected-ids="bindingBulk.batch.selectedIds.value = $event"
           @update:page="(page) => void bindings.goToPage(page)"
           @update:size="(size) => void bindings.setSize(size)"
-          @toggle="(row, isOn) => void ops.update(row.id, { is_enabled: isOn })"
-          @unbind="(row) => void ops.unbind(row.id)"
+          @toggle="
+            (row, isOn) =>
+              !isWriting && void ops.update(row.id, { is_enabled: isOn })
+          "
+          @unbind="(row) => !isWriting && void ops.unbind(row.id)"
         >
           <template #toolbar>
             <h2 class="dt-ml-models__title">公式绑定</h2>
@@ -194,20 +319,20 @@ onBeforeUnmount(versionRead.cancel)
 
     <VersionDetailDialog
       :version="detail"
-      :is-busy="versionOps.isBusy.value"
+      :is-busy="isWriting"
       @register="(code) => void register(code)"
       @close="detail = null"
     />
 
     <BindDialog
       :version="binding"
-      :is-busy="ops.isBusy.value"
+      :is-busy="isWriting"
       @submit="(code) => void submitBind(code)"
       @close="binding = null"
     />
     <VersionNameDialog
       :version="renaming"
-      :is-busy="versionOps.isBusy.value"
+      :is-busy="isWriting"
       @submit="(name, description) => void saveName(name, description)"
       @close="renaming = null"
     />
