@@ -191,4 +191,7 @@ def merged_provenance(left: Provenance, right: Provenance) -> Provenance:
             if all(value is not None for value in observed)
             else None
         ),
+        data_period=(
+            left.data_period if left.data_period == right.data_period else None
+        ),
     )

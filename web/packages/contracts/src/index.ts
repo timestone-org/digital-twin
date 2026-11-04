@@ -621,6 +621,8 @@ export type {
   OpenModelInput,
   OpenModelDerived,
   OpenModelOutput,
+  OpenModelFixedDataPeriod,
+  OpenModelCalendarDataPeriod,
   OpenModelSignature,
   ModelingJsonValue,
   OpenModelCalculateRequest,

@@ -34,6 +34,7 @@ from platform_server.apps.modeling.services import presenters
 from platform_server.apps.modeling.services.entry_contract import (
     EntryColumn,
     NodeRecord,
+    entry_data_period,
     entry_meta,
     entry_of,
     frame_columns_of,
@@ -309,6 +310,9 @@ def _published(
             steps=steps,
             target=_target_meta(publishing, target_key),
             task=task,
+            data_period=entry_data_period(
+                publishing.graph, publishing.records, publishing.served
+            ),
         ),
         feature_keys=tuple(as_texts(publishing.payload.get("feature_keys"))),
         entry_columns=entry,

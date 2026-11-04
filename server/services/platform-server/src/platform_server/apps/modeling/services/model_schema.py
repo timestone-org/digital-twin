@@ -29,10 +29,11 @@ def build_schema(
     steps: list[dict[str, Any]],
     target: dict[str, Any],
     task: str,
+    data_period: dict[str, Any] | None = None,
 ) -> dict[str, Any]:
     """拼出模型 schema。
 
-    Args: entry（入口列的元信息）, steps（可服务表示里的步骤）, target, task。
+    Args: entry, steps, target, task, data_period。
     """
     filled = (
         {} if task == "anomaly_detection" else leading_input_defaults(steps)
@@ -40,6 +41,7 @@ def build_schema(
     return {
         "format_version": SCHEMA_FORMAT_VERSION,
         "requires_timestamp": _needs_timestamp(steps),
+        "data_period": data_period,
         "inputs": [_input_of(item, filled, task) for item in entry],
         "derived": _derived_of(entry, steps),
         "output": {

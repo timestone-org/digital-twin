@@ -18,6 +18,8 @@ ALIASES = (
     ("OpenModelInputOut", "OpenModelInput"),
     ("OpenModelDerivedOut", "OpenModelDerived"),
     ("OpenModelOutputOut", "OpenModelOutput"),
+    ("OpenModelFixedDataPeriodOut", "OpenModelFixedDataPeriod"),
+    ("OpenModelCalendarDataPeriodOut", "OpenModelCalendarDataPeriod"),
     ("OpenModelSignatureOut", "OpenModelSignature"),
     ("JsonValue", "ModelingJsonValue"),
     ("OpenModelCalculateIn", "OpenModelCalculateRequest"),

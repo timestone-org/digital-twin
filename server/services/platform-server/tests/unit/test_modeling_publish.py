@@ -13,7 +13,10 @@ import pytest
 
 from platform_server.apps.modeling.operators import OperatorError
 from platform_server.apps.modeling.schemas.graph import PipelineGraph
-from platform_server.apps.modeling.services.entry_contract import NodeRecord
+from platform_server.apps.modeling.services.entry_contract import (
+    NodeRecord,
+    entry_data_period,
+)
 from platform_server.apps.modeling.services.model_schema import build_schema
 from platform_server.apps.modeling.services.publish_service import inspect_run
 from platform_server.apps.modeling.services.run_executor import (
@@ -164,6 +167,39 @@ async def test_the_signature_says_what_to_feed_the_model() -> None:
     assert signature["output"]["key"] == "能耗"
     assert signature["output"]["task"] == "regression"
     assert signature["derived"] == []
+
+
+async def test_the_signature_freezes_the_actual_entry_data_period() -> None:
+    graph, records = await _run()
+    period = {
+        "kind": "fixed",
+        "interval_ms": 1800000,
+        "calendar_unit": None,
+        "timezone": None,
+    }
+    source = records["s"]
+    records["s"] = replace(
+        source,
+        preview={
+            **source.preview,
+            "frame": {**source.preview["frame"], "data_period": period},
+        },
+    )
+    signature = inspect_run(graph, records).signature
+    assert signature["data_period"] == period
+
+
+async def test_a_run_without_period_metadata_has_unknown_data_period() -> None:
+    graph, records = await _run()
+    assert inspect_run(graph, records).signature["data_period"] is None
+
+
+@pytest.mark.parametrize("served", [[], ["missing"]])
+def test_an_entry_without_an_upstream_has_unknown_data_period(
+    served: list[str],
+) -> None:
+    graph = PipelineGraph(nodes=[], edges=[])
+    assert entry_data_period(graph, {}, served) is None
 
 
 async def test_a_filled_column_is_optional_and_says_what_it_falls_back_to() -> (

@@ -11,6 +11,7 @@ from platform_server.apps.modeling.operators import (
     FrameColumn,
     Provenance,
 )
+from platform_server.apps.modeling.operators.frame import DataPeriod
 
 MINUTE = 60_000
 HOUR = 60 * MINUTE
@@ -200,7 +201,14 @@ def preparation_cases() -> tuple[ExecutionCase, ...]:
             "resample",
             {"bucket": "5m", "agg": "sum"},
             sampled,
-            replace(numbers([3.0, 7.0]), index=(0, 5 * MINUTE)),
+            replace(
+                numbers([3.0, 7.0]),
+                index=(0, 5 * MINUTE),
+                provenance=replace(
+                    PROVENANCE,
+                    data_period=DataPeriod(kind="fixed", interval_ms=300_000),
+                ),
+            ),
         ),
         unary(
             "time_shift",

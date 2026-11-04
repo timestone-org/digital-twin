@@ -8,6 +8,7 @@
 import re
 from dataclasses import dataclass
 from datetime import UTC, datetime, timedelta
+from itertools import pairwise
 from typing import cast
 
 from sqlalchemy.ext.asyncio import AsyncSession
@@ -29,6 +30,7 @@ from platform_server.apps.modeling.operators import (
     Provenance,
     registry,
 )
+from platform_server.apps.modeling.operators.frame import DataPeriod
 from platform_server.apps.modeling.schemas.graph import PipelineGraph
 
 # 相对时刻的写法：`-90d` / `-12h` / `-30m` / `-4w`
@@ -70,6 +72,7 @@ async def load_frame(
     table_id = await table_service.resolve_table_code(
         session, request.table_code
     )
+    table = await table_service.get_table(session, table_id)
     specs = await column_service.list_column_specs(session, table_id=table_id)
     columns = _selected(specs, request.columns)
     since = resolve_moment(request.since, now, "since")
@@ -89,8 +92,28 @@ async def load_frame(
         until=until,
         is_truncated=scan.is_truncated,
         observed_until=now,
+        data_period=(
+            _period_of_rows(table.collect_interval_ms, scan.rows)
+            if table.collect_mode == "aggregate"
+            and request.row_source in ("collect", ROW_SOURCE_ALL)
+            else None
+        ),
     )
     return _build(columns, scan.rows, request, window)
+
+
+def _period_of_rows(
+    interval_ms: int, rows: tuple[EffectiveRow, ...]
+) -> DataPeriod | None:
+    """仅在完整历史与当前采集周期一致时声明周期。Args: interval_ms, rows。"""
+    if len(rows) <= 1:
+        return None
+    interval = timedelta(milliseconds=interval_ms)
+    if any(row.source != "collect" for row in rows) or any(
+        right.ts - left.ts != interval for left, right in pairwise(rows)
+    ):
+        return None
+    return DataPeriod(kind="fixed", interval_ms=interval_ms)
 
 
 @dataclass(frozen=True)
@@ -101,6 +124,7 @@ class _Window:
     until: datetime
     is_truncated: bool
     observed_until: datetime
+    data_period: DataPeriod | None
 
 
 def _build(
@@ -141,6 +165,7 @@ def _build(
             until=window.until,
             is_truncated=window.is_truncated,
             observed_until=window.observed_until,
+            data_period=window.data_period,
         ),
     )
 

@@ -10,7 +10,7 @@ import { execFile } from 'node:child_process'
 import { readFileSync } from 'node:fs'
 import { dirname, join } from 'node:path'
 import { promisify } from 'node:util'
-import { describe, expect, it } from 'vitest'
+import { describe, expect, expectTypeOf, it } from 'vitest'
 import { MODELING_TASKS } from '@dt/contracts'
 
 import type {
@@ -57,6 +57,8 @@ import type {
   OpenModelInput,
   OpenModelDerived,
   OpenModelOutput,
+  OpenModelFixedDataPeriod,
+  OpenModelCalendarDataPeriod,
   OpenModelSignature,
   OpenModelWarning,
 } from '@dt/contracts'
@@ -413,10 +415,17 @@ const OPEN_MODEL_SIGNATURE = {
   timestamp_key: true,
   format_version: true,
   requires_timestamp: true,
+  data_period: true,
   inputs: true,
   derived: true,
   output: true,
 } satisfies Keys<OpenModelSignature>
+const OPEN_MODEL_DATA_PERIOD = {
+  kind: true,
+  interval_ms: true,
+  calendar_unit: true,
+  timezone: true,
+} satisfies Keys<OpenModelFixedDataPeriod> & Keys<OpenModelCalendarDataPeriod>
 
 const FORMULA_REGISTRATION = {
   formula: true,
@@ -480,6 +489,8 @@ const PAIRS: ReadonlyArray<readonly [string, Record<string, true>]> = [
   ['OpenModelInputOut', OPEN_MODEL_INPUT],
   ['OpenModelDerivedOut', OPEN_MODEL_DERIVED],
   ['OpenModelOutputOut', OPEN_MODEL_OUTPUT],
+  ['OpenModelFixedDataPeriodOut', OPEN_MODEL_DATA_PERIOD],
+  ['OpenModelCalendarDataPeriodOut', OPEN_MODEL_DATA_PERIOD],
   ['OpenModelSignatureOut', OPEN_MODEL_SIGNATURE],
   ['AnomalyDecisionOut', ANOMALY_DECISION],
   ['OpenModelDetectOut', OPEN_MODEL_DETECT],
@@ -496,6 +507,62 @@ const PAIRS: ReadonlyArray<readonly [string, Record<string, true>]> = [
 ]
 
 describe('分析建模线形与 openapi 一致', () => {
+  it('固定周期的字段类型与必填性由 OpenAPI 生成', () => {
+    expectTypeOf<OpenModelFixedDataPeriod>().toEqualTypeOf<{
+      kind: 'fixed'
+      interval_ms: number
+      calendar_unit?: null
+      timezone?: null
+    }>()
+    expect(
+      spec.components.schemas['OpenModelFixedDataPeriodOut'],
+    ).toMatchObject({
+      required: ['kind', 'interval_ms'],
+      properties: {
+        kind: { const: 'fixed', type: 'string' },
+        interval_ms: { type: 'integer', exclusiveMinimum: 0 },
+        calendar_unit: { type: 'null' },
+        timezone: { type: 'null' },
+      },
+    })
+  })
+  it('日历周期保留单位和时区，签名允许未知周期', () => {
+    expectTypeOf<OpenModelCalendarDataPeriod>().toEqualTypeOf<{
+      kind: 'calendar'
+      interval_ms?: null
+      calendar_unit: 'day' | 'month'
+      timezone: string
+    }>()
+    expectTypeOf<Pick<OpenModelSignature, 'data_period'>>().toEqualTypeOf<{
+      data_period?:
+        OpenModelFixedDataPeriod | OpenModelCalendarDataPeriod | null
+    }>()
+    expect(
+      spec.components.schemas['OpenModelCalendarDataPeriodOut'],
+    ).toMatchObject({
+      required: ['kind', 'calendar_unit', 'timezone'],
+      properties: {
+        kind: { const: 'calendar', type: 'string' },
+        interval_ms: { type: 'null' },
+        calendar_unit: { enum: ['day', 'month'], type: 'string' },
+        timezone: { type: 'string', minLength: 1 },
+      },
+    })
+    expect(
+      spec.components.schemas['OpenModelSignatureOut']?.properties?.[
+        'data_period'
+      ],
+    ).toMatchObject({
+      anyOf: [
+        { $ref: '#/components/schemas/OpenModelFixedDataPeriodOut' },
+        { $ref: '#/components/schemas/OpenModelCalendarDataPeriodOut' },
+        { type: 'null' },
+      ],
+    })
+    expect(spec.components.schemas['OpenModelSignatureOut']).not.toMatchObject({
+      required: expect.arrayContaining(['data_period']),
+    })
+  })
   it('部署必需声明与模型版本一致的任务类型', () => {
     expect(spec.components.schemas['ModelDeploymentOut']).toMatchObject({
       required: expect.arrayContaining(['task']),

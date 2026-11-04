@@ -219,7 +219,11 @@ async def test_a_run_that_fills_the_budget_stubs_the_rest() -> None:
     )
     outcome = await execute_graph(_many_sources(ids), execution=execution)
     assert outcome.nodes[0].preview["frame"]["columns"]
-    assert set(outcome.nodes[-1].preview["frame"]) == {"kind", "note"}
+    assert set(outcome.nodes[-1].preview["frame"]) == {
+        "kind",
+        "note",
+        "data_period",
+    }
     total = sum(
         len(json.dumps(item.preview, ensure_ascii=False).encode())
         for item in outcome.nodes

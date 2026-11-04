@@ -20,6 +20,7 @@ from platform_server.apps.modeling.operators.base import (
 from platform_server.apps.modeling.operators.frame import (
     DTYPE_NUMBER,
     CellValue,
+    DataPeriod,
     Frame,
     FrameColumn,
     frame_input,
@@ -386,6 +387,12 @@ def _merged(
         columns=columns,
         rows=rows,
         index=tuple(start for start, _ in buckets),
+        provenance=replace(
+            frame.provenance,
+            data_period=DataPeriod(
+                kind="fixed", interval_ms=_BUCKET_MS[config.bucket]
+            ),
+        ),
     )
 
 

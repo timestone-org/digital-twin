@@ -1,8 +1,12 @@
 """对外签名提供任务、调用地址和输入参数，并保留冻结版本语义。"""
 
 import pytest
+from pydantic import ValidationError
 
 from platform_server.apps.modeling.models import ModelingModelVersion
+from platform_server.apps.modeling.schemas.signature import (
+    OpenModelSignatureOut,
+)
 from platform_server.apps.modeling.services.open_model_service import (
     public_signature,
 )
@@ -79,3 +83,68 @@ def test_empty_legacy_signature_still_exposes_the_pinned_task() -> None:
     assert result.task == "classification"
     assert result.output.task == "classification"
     assert result.inputs == []
+
+
+@pytest.mark.parametrize(
+    "period",
+    [
+        {
+            "kind": "fixed",
+            "interval_ms": 1800000,
+            "calendar_unit": None,
+            "timezone": None,
+        },
+        {
+            "kind": "calendar",
+            "interval_ms": None,
+            "calendar_unit": "month",
+            "timezone": "Asia/Shanghai",
+        },
+    ],
+)
+def test_public_signature_exposes_the_frozen_data_period(
+    period: dict[str, object],
+) -> None:
+    version = ModelingModelVersion(
+        task="regression",
+        signature_json={"data_period": period},
+    )
+    result = public_signature(version, code="period-model")
+    assert result.model_dump(exclude_unset=True)["data_period"] == period
+
+
+def test_legacy_signature_exposes_unknown_data_period() -> None:
+    version = ModelingModelVersion(task="regression", signature_json={})
+    data = public_signature(version, code="legacy").model_dump(
+        exclude_unset=True
+    )
+    assert data["data_period"] is None
+
+
+@pytest.mark.parametrize(
+    "period",
+    [
+        {"kind": "fixed", "interval_ms": 0},
+        {"kind": "fixed", "interval_ms": -1},
+        {"kind": "calendar", "calendar_unit": "month", "timezone": ""},
+        {"kind": "calendar", "calendar_unit": "year", "timezone": "UTC"},
+    ],
+)
+def test_public_signature_rejects_invalid_data_period(
+    period: dict[str, object],
+) -> None:
+    version = ModelingModelVersion(
+        task="regression", signature_json={"data_period": period}
+    )
+    with pytest.raises(ValidationError):
+        public_signature(version, code="invalid-period")
+
+
+def test_openapi_describes_data_period_as_a_nullable_typed_contract() -> None:
+    schema = OpenModelSignatureOut.model_json_schema()
+    field = schema["properties"]["data_period"]
+    assert field["anyOf"] == [
+        {"$ref": "#/$defs/OpenModelFixedDataPeriodOut"},
+        {"$ref": "#/$defs/OpenModelCalendarDataPeriodOut"},
+        {"type": "null"},
+    ]

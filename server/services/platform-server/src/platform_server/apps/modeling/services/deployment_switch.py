@@ -208,12 +208,14 @@ def _signature_contract(version: ModelVersion) -> dict[str, JsonValue]:
     if not isinstance(inputs, list) or not inputs:
         return {
             "inputs": version.feature_keys,
+            "data_period": signature.get("data_period"),
             "output": {"key": version.target_key, "task": version.task},
             "rule_result": _rule_result_contract(version),
         }
     return {
         "format_version": signature.get("format_version"),
         "requires_timestamp": signature.get("requires_timestamp"),
+        "data_period": signature.get("data_period"),
         "inputs": [
             {
                 key: value

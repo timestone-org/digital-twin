@@ -7,6 +7,7 @@ X 与 y 是同一个矩阵的不同列，故「行数对不对齐」在结构上
 
 from dataclasses import dataclass, replace
 from datetime import datetime
+from typing import Literal
 
 import numpy as np
 
@@ -51,6 +52,16 @@ class FrameColumn:
 
 
 @dataclass(frozen=True)
+class DataPeriod:
+    """输入一行数据代表的固定时长或业务日历周期。"""
+
+    kind: Literal["fixed", "calendar"]
+    interval_ms: int | None = None
+    calendar_unit: Literal["day", "month"] | None = None
+    timezone: str | None = None
+
+
+@dataclass(frozen=True)
 class Provenance:
     """这份数据是从哪儿、哪一段取来的。一路透传到模型版本指纹。"""
 
@@ -59,6 +70,7 @@ class Provenance:
     until: datetime | None = None
     is_truncated: bool = False
     observed_until: datetime | None = None
+    data_period: DataPeriod | None = None
 
 
 @dataclass(frozen=True)

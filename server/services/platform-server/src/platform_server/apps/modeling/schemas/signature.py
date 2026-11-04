@@ -51,6 +51,24 @@ class OpenModelOutputOut(OutputModel):
     dtype: str = ""
 
 
+class OpenModelFixedDataPeriodOut(OutputModel):
+    """固定时长的数据周期。"""
+
+    kind: Literal["fixed"]
+    interval_ms: int = Field(gt=0, description="每行输入代表的数据周期，毫秒")
+    calendar_unit: None = None
+    timezone: None = None
+
+
+class OpenModelCalendarDataPeriodOut(OutputModel):
+    """按业务时区计算的日历周期。"""
+
+    kind: Literal["calendar"]
+    interval_ms: None = None
+    calendar_unit: Literal["day", "month"]
+    timezone: str = Field(min_length=1, description="日历周期的 IANA 业务时区")
+
+
 class OpenModelSignatureOut(OutputModel):
     """公开签名与推荐调用地址，不包含训练分布。"""
 
@@ -64,6 +82,12 @@ class OpenModelSignatureOut(OutputModel):
     format_version: str | None = None
     is_timestamp_required: bool = Field(
         default=False, alias="requires_timestamp"
+    )
+    data_period: (
+        OpenModelFixedDataPeriodOut | OpenModelCalendarDataPeriodOut | None
+    ) = Field(
+        default=None,
+        description="冻结的输入数据周期；未知为 null，与调用频率无关",
     )
     inputs: list[OpenModelInputOut]
     derived: list[OpenModelDerivedOut] = Field(

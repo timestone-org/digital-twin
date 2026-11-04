@@ -224,6 +224,8 @@ class _Budget:
                     "kind": raw.get("kind", "unknown"),
                     "note": "本次运行的结果摘要已用满预算",
                 }
+                if raw.get("kind") == preview_service.KIND_FRAME:
+                    kept[port]["data_period"] = fitted.get("data_period")
                 truncated = True
                 continue
             kept[port] = fitted

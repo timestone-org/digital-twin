@@ -48,7 +48,22 @@ export type OpenModelOutput = {
   unit?: string
 }
 
+export type OpenModelFixedDataPeriod = {
+  calendar_unit?: null
+  interval_ms: number
+  kind: 'fixed'
+  timezone?: null
+}
+
+export type OpenModelCalendarDataPeriod = {
+  calendar_unit: 'day' | 'month'
+  interval_ms?: null
+  kind: 'calendar'
+  timezone: string
+}
+
 export type OpenModelSignature = {
+  data_period?: OpenModelFixedDataPeriod | OpenModelCalendarDataPeriod | null
   derived?: OpenModelDerived[]
   format_version?: string | null
   inputs: OpenModelInput[]

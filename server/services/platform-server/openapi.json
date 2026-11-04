@@ -17152,6 +17152,41 @@
         "title": "OpenModelCalculateOut",
         "type": "object"
       },
+      "OpenModelCalendarDataPeriodOut": {
+        "description": "按业务时区计算的日历周期。",
+        "properties": {
+          "calendar_unit": {
+            "enum": [
+              "day",
+              "month"
+            ],
+            "title": "Calendar Unit",
+            "type": "string"
+          },
+          "interval_ms": {
+            "title": "Interval Ms",
+            "type": "null"
+          },
+          "kind": {
+            "const": "calendar",
+            "title": "Kind",
+            "type": "string"
+          },
+          "timezone": {
+            "description": "日历周期的 IANA 业务时区",
+            "minLength": 1,
+            "title": "Timezone",
+            "type": "string"
+          }
+        },
+        "required": [
+          "kind",
+          "calendar_unit",
+          "timezone"
+        ],
+        "title": "OpenModelCalendarDataPeriodOut",
+        "type": "object"
+      },
       "OpenModelDerivedOut": {
         "additionalProperties": true,
         "description": "推理链生成的字段，不需要调用方提供。",
@@ -17224,6 +17259,36 @@
           "warnings"
         ],
         "title": "OpenModelDetectOut",
+        "type": "object"
+      },
+      "OpenModelFixedDataPeriodOut": {
+        "description": "固定时长的数据周期。",
+        "properties": {
+          "calendar_unit": {
+            "title": "Calendar Unit",
+            "type": "null"
+          },
+          "interval_ms": {
+            "description": "每行输入代表的数据周期，毫秒",
+            "exclusiveMinimum": 0.0,
+            "title": "Interval Ms",
+            "type": "integer"
+          },
+          "kind": {
+            "const": "fixed",
+            "title": "Kind",
+            "type": "string"
+          },
+          "timezone": {
+            "title": "Timezone",
+            "type": "null"
+          }
+        },
+        "required": [
+          "kind",
+          "interval_ms"
+        ],
+        "title": "OpenModelFixedDataPeriodOut",
         "type": "object"
       },
       "OpenModelInfoOut": {
@@ -17445,6 +17510,21 @@
         "additionalProperties": true,
         "description": "公开签名与推荐调用地址，不包含训练分布。",
         "properties": {
+          "data_period": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/OpenModelFixedDataPeriodOut"
+              },
+              {
+                "$ref": "#/components/schemas/OpenModelCalendarDataPeriodOut"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "description": "冻结的输入数据周期；未知为 null，与调用频率无关",
+            "title": "Data Period"
+          },
           "derived": {
             "items": {
               "$ref": "#/components/schemas/OpenModelDerivedOut"

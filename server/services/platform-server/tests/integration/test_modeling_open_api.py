@@ -10,6 +10,7 @@ from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 from unit.database_fakes import MakerSessions
 
+from integration.dataset_helpers import TABLES
 from integration.modeling_helpers import (
     HTTP_CREATED,
     HTTP_NO_CONTENT,
@@ -17,10 +18,16 @@ from integration.modeling_helpers import (
     LOAD,
     TEMPERATURE,
     code_of,
+    create_pipeline,
     data_of,
+    linear_graph,
 )
+from integration.test_modeling_api import _run_pipeline, _seed_ledger
 from integration.test_modeling_formula_seam import _trained_version
-from platform_server.apps.modeling.models import ModelingCallLog
+from platform_server.apps.modeling.models import (
+    ModelingCallLog,
+    ModelingModelVersion,
+)
 
 pytestmark = pytest.mark.requires_postgres
 
@@ -117,6 +124,77 @@ async def test_the_signature_comes_back_without_training_stats(
     inputs = data_of(response)["inputs"]
     assert inputs
     assert all("training_stats" not in item for item in inputs)
+
+
+async def test_data_period_is_persisted_and_stays_frozen_after_source_changes(
+    app_client: httpx.AsyncClient,
+    db_session: AsyncSession,
+    worker_sessions: MakerSessions,
+) -> None:
+    table_id = await _seed_ledger(app_client, db_session, "energy_period")
+    configured = await app_client.patch(
+        f"{TABLES}/{table_id}",
+        json={"collect_mode": "aggregate", "collect_interval_ms": 3_600_000},
+    )
+    assert configured.status_code == HTTP_OK, configured.text
+    graph = linear_graph("energy_period")
+    graph["nodes"][0]["config"]["row_source"] = "collect"
+    pipeline = await create_pipeline(app_client, "period", graph)
+    run = await _run_pipeline(app_client, worker_sessions, pipeline["id"])
+    version_id = uuid.UUID(run["published_version_id"])
+    version = await db_session.get(ModelingModelVersion, version_id)
+    assert version is not None
+    expected = {
+        "kind": "fixed",
+        "interval_ms": 3_600_000,
+        "calendar_unit": None,
+        "timezone": None,
+    }
+    assert version.signature_json["data_period"] == expected
+    deployed = await app_client.post(
+        DEPLOYMENTS,
+        json={
+            "code": "period",
+            "name": "周期模型",
+            "model_version_id": str(version_id),
+        },
+    )
+    assert deployed.status_code == HTTP_CREATED, deployed.text
+    changed = await app_client.patch(
+        f"{TABLES}/{table_id}", json={"collect_interval_ms": 7_200_000}
+    )
+    assert changed.status_code == HTTP_OK, changed.text
+    response = await app_client.get(f"{OPEN}/period")
+    assert response.status_code == HTTP_OK, response.text
+    assert data_of(response)["data_period"] == expected
+    refreshed = await app_client.get(
+        f"/api/v1/platform/modeling-model-versions/{version_id}"
+    )
+    assert refreshed.status_code == HTTP_OK, refreshed.text
+    assert data_of(refreshed)["signature"]["data_period"] == expected
+
+
+async def test_legacy_model_returns_an_unknown_data_period(
+    app_client: httpx.AsyncClient,
+    db_session: AsyncSession,
+    worker_sessions: MakerSessions,
+) -> None:
+    deployment, _ = await _served(
+        app_client, db_session, worker_sessions, "legacy-period"
+    )
+    version = await db_session.get(
+        ModelingModelVersion, uuid.UUID(deployment["model_version_id"])
+    )
+    assert version is not None
+    version.signature_json = {
+        key: value
+        for key, value in version.signature_json.items()
+        if key != "data_period"
+    }
+    await db_session.commit()
+    response = await app_client.get(f"{OPEN}/{deployment['code']}")
+    assert response.status_code == HTTP_OK, response.text
+    assert data_of(response)["data_period"] is None
 
 
 @pytest.mark.parametrize("suffix", ["", ":predict", ":detect", ":calculate"])

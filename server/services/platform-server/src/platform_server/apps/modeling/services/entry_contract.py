@@ -138,6 +138,20 @@ def entry_meta(
     return {as_text(as_dict(item).get("key")): as_dict(item) for item in stats}
 
 
+def entry_data_period(
+    graph: PipelineGraph, records: dict[str, NodeRecord], served: list[str]
+) -> dict[str, Any] | None:
+    """读取实际推理入口上游冻结的数据周期。Args: graph, records, served。"""
+    if not served:
+        return None
+    upstream = upstream_of(graph, served[0], _input_port_of(graph, served[0]))
+    if upstream is None:
+        return None
+    node_id, port = upstream
+    preview = as_dict(record_of(records, node_id).preview.get(port))
+    return as_dict(preview.get("data_period")) or None
+
+
 def smoke_moment(
     graph: PipelineGraph, records: dict[str, NodeRecord], served: list[str]
 ) -> datetime | None:

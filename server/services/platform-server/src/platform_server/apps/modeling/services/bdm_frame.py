@@ -17,6 +17,7 @@ from lib.errors import AppError
 from platform_server.apps.modeling.operators.bdm import BdmSourceConfig
 from platform_server.apps.modeling.operators.frame import (
     CellValue,
+    DataPeriod,
     Frame,
     FrameColumn,
     Provenance,
@@ -267,7 +268,25 @@ def _build_frame(
             until=window.until,
             is_truncated=truncated,
             observed_until=now,
+            data_period=_data_period(config, window),
         ),
+    )
+
+
+def _data_period(
+    config: BdmSourceConfig, window: BdmWindow
+) -> DataPeriod | None:
+    """保留公式接口的明确业务周期。Args: config, window。"""
+    if config.kind != "formula":
+        return None
+    if config.granularity in ("day", "month"):
+        return DataPeriod(
+            kind="calendar",
+            calendar_unit=config.granularity,
+            timezone=window.timezone.key,
+        )
+    return DataPeriod(
+        kind="fixed", interval_ms=config.effective_interval_minutes * 60_000
     )
 
 

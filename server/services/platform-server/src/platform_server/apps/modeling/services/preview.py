@@ -6,6 +6,7 @@
 """
 
 import json
+from dataclasses import asdict
 from statistics import median
 from typing import Any
 
@@ -81,10 +82,13 @@ def _last_resort(preview: dict[str, Any]) -> dict[str, Any]:
     stripped = _stripped(preview)
     if size_of(stripped) <= PREVIEW_MAX_BYTES:
         return stripped
-    return {
+    fallback = {
         "kind": preview.get("kind", "unknown"),
         "note": OVERSIZE_NOTE,
     }
+    if preview.get("kind") == KIND_FRAME:
+        fallback["data_period"] = preview.get("data_period")
+    return fallback
 
 
 def _frame_preview(frame: Frame, rows: int) -> dict[str, Any]:
@@ -100,6 +104,11 @@ def _frame_preview(frame: Frame, rows: int) -> dict[str, Any]:
         "shape": {"rows": frame.row_count, "cols": len(frame.columns)},
         "columns": [_column_stat(frame, column.key) for column in columns],
         "index_name": frame.index_name,
+        "data_period": (
+            None
+            if frame.index is None or frame.provenance.data_period is None
+            else asdict(frame.provenance.data_period)
+        ),
         "index_head": index,
         "head": head,
         "rows_truncated": frame.row_count > rows,

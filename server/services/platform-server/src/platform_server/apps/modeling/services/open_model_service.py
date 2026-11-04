@@ -400,6 +400,7 @@ def public_signature(
 ) -> OpenModelSignatureOut:
     """公开固定版本的签名并剥除训练统计。Args: version, code。"""
     signature = dict(version.signature_json)
+    signature.setdefault("data_period", None)
     signature["inputs"] = [
         {
             key: value
