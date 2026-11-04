@@ -6,8 +6,11 @@
 """
 
 import importlib.util
+import re
 from pathlib import Path
 from types import ModuleType
+
+import pytest
 
 from platform_server.apps.modeling.operators import SERVING_CHANNELS as OPS
 from platform_server.apps.modeling.protocols import (
@@ -56,9 +59,36 @@ def test_node_run_statuses_match() -> None:
     assert sql_values(NODE_RUN_STATUSES) == _migration().NODE_RUN_STATUSES
 
 
-def test_run_triggers_match() -> None:
-    """触发来源两侧相等。"""
-    assert sql_values(RUN_TRIGGERS) == _migration().RUN_TRIGGERS
+class DdlRecorder:
+    def __init__(self) -> None:
+        self.statements: list[str] = []
+
+    def execute(self, statement: object) -> None:
+        self.statements.append(str(statement))
+
+    def add_column(self, *_args: object, **_keywords: object) -> None:
+        return None
+
+    def drop_constraint(self, *_args: object, **_keywords: object) -> None:
+        return None
+
+    def create_table(self, *_args: object, **_keywords: object) -> None:
+        return None
+
+
+def test_run_triggers_match(monkeypatch: pytest.MonkeyPatch) -> None:
+    """最终 CHECK 包含定时触发，初始迁移保持冻结。"""
+    assert _migration().RUN_TRIGGERS == "'api', 'manual'"
+    migration = _migration("*modeling_workflow_20261103.py")
+    operations = DdlRecorder()
+    monkeypatch.setattr(migration, "op", operations)
+    migration.upgrade()
+    checks = [
+        match.group(1)
+        for statement in operations.statements
+        if (match := re.search(r"CHECK \(trigger IN \((.*?)\)\)", statement))
+    ]
+    assert checks == [sql_values(RUN_TRIGGERS)]
 
 
 def test_model_tasks_match() -> None:

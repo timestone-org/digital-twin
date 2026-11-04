@@ -20,23 +20,30 @@ const leaves = NAV_ITEMS.flatMap((item) => item.children ?? [item]).filter(
 const NAV_EXEMPT = new Set([
   // 大屏没有独立入口：项目与大屏都在工作台里管（见 navItems 文件头）
   '/dashboards',
-  // 模型列表由「分析建模」页内部跳过去，不单独占一格导航
-  '/modeling/models',
-  // 模型服务同上：它的入口在「分析建模」页的顶栏，与模型库并排
-  '/modeling/services',
-  // 运行记录同上
-  '/modeling/runs',
-  // 模板、接入实例与接入说明由第三方接入分区访问。
+  // 历史实例兼容旧接入，模板旧地址回工作流，接入说明从发布模型访问。
   '/modeling/instances',
   '/modeling/templates',
   '/modeling/integration',
 ])
 
 describe('导航清单', () => {
-  it('分析建模默认进入流程图工作台', () => {
-    expect(NAV_ITEMS.find((item) => item.key === 'modeling')?.to).toBe(
+  it('旧模板入口返回工作流，创建时再选择模板', () => {
+    expect(
+      router.getRoutes().find((route) => route.path === '/modeling/templates')
+        ?.redirect,
+    ).toBe('/modeling/pipelines')
+  })
+  it('分析建模只提供工作流、训练记录、模型与发布入口', () => {
+    expect(
+      NAV_ITEMS.find((item) => item.key === 'modeling')?.children?.map(
+        (item) => item.to,
+      ),
+    ).toEqual([
       '/modeling/pipelines',
-    )
+      '/modeling/runs',
+      '/modeling/models',
+      '/modeling/services',
+    ])
   })
   it('数据采集按协议提供三个独立菜单入口', () => {
     const collection = NAV_ITEMS.find((item) => item.key === 'collect')

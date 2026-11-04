@@ -19,12 +19,12 @@ it('复制表单不提供模板选择，并提交新的元数据和原来源身�
     global: { stubs: { teleport: true } },
   })
   await flushPromises()
-  expect(wrapper.getComponent(DtModal).props('title')).toBe('复制流水线')
+  expect(wrapper.getComponent(DtModal).props('title')).toBe('复制工作流')
   expect(wrapper.findComponent(TemplatePicker).exists()).toBe(false)
   expect(wrapper.text()).toContain('运行记录、模型版本和部署不会复制')
   const name = wrapper
     .findAllComponents(DtInput)
-    .find((field) => field.props('label') === '流水线名称')
+    .find((field) => field.props('label') === '工作流名称')
   if (!name) throw new Error('缺少名称输入框')
   await name.get('input').setValue('修改后的副本')
   await wrapper.get('form').trigger('submit')
@@ -47,10 +47,10 @@ it('空名称或无效编码不能提交，修正后可复制', async () => {
     if (!field) throw new Error(`缺少输入框：${label}`)
     return field.get('input')
   }
-  await input('流水线名称').setValue('  ')
+  await input('工作流名称').setValue('  ')
   await wrapper.get('form').trigger('submit')
   expect(wrapper.emitted('submit')).toBeUndefined()
-  await input('流水线名称').setValue('新副本')
+  await input('工作流名称').setValue('新副本')
   await input('编码').setValue('!invalid')
   await wrapper.get('form').trigger('submit')
   expect(wrapper.emitted('submit')).toBeUndefined()

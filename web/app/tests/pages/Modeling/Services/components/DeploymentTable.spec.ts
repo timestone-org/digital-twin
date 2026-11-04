@@ -3,6 +3,7 @@
  */
 import type { ModelDeployment, ModelingTask } from '@dt/contracts'
 import { mount } from '@vue/test-utils'
+import { DtIconButton } from '@dt/ui'
 import { describe, expect, it } from 'vitest'
 
 import DeploymentTable from '@/pages/Modeling/Services/components/DeploymentTable.vue'
@@ -91,6 +92,47 @@ describe('模型服务长文本', () => {
     const wrapper = open({ ...DEPLOYMENT, is_enabled: false })
     expect(wrapper.text()).toContain('已停用')
     expect(wrapper.text()).toContain(DEPLOYMENT.unservable_reason)
+    wrapper.unmount()
+  })
+
+  it('配置、删除和启停具有可访问名称，图标事件沿用原部署', async () => {
+    const wrapper = open()
+    expect(
+      wrapper
+        .findAllComponents(DtIconButton)
+        .map((button) => [button.props('icon'), button.props('label')]),
+    ).toEqual([
+      ['pencil', '改配置'],
+      ['power-off', '停用'],
+      ['trash', '删掉'],
+    ])
+    await wrapper.get('button[aria-label="改配置"]').trigger('click')
+    await wrapper.get('button[aria-label="停用"]').trigger('click')
+    await wrapper.get('button[aria-label="删掉"]').trigger('click')
+    expect(wrapper.emitted('edit')).toEqual([[DEPLOYMENT]])
+    expect(wrapper.emitted('toggle')).toEqual([[DEPLOYMENT, false]])
+    expect(wrapper.emitted('remove')).toEqual([[DEPLOYMENT]])
+    expect(
+      wrapper
+        .findAllComponents(DtIconButton)
+        .find((button) => button.props('label') === '删掉')
+        ?.props('intent'),
+    ).toBe('danger')
+    expect(
+      wrapper.findAll('button').some((button) => button.text() === '调用说明'),
+    ).toBe(true)
+    wrapper.unmount()
+  })
+
+  it('停用部署提供启用图标并发送新的启用值', async () => {
+    const row = { ...DEPLOYMENT, is_enabled: false }
+    const wrapper = open(row)
+    const toggle = wrapper
+      .findAllComponents(DtIconButton)
+      .find((button) => button.props('label') === '启用')
+    expect(toggle?.props('icon')).toBe('play')
+    await wrapper.get('button[aria-label="启用"]').trigger('click')
+    expect(wrapper.emitted('toggle')).toEqual([[row, true]])
     wrapper.unmount()
   })
 })

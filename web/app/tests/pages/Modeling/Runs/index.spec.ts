@@ -1,528 +1,437 @@
-/**
- * @fileoverview 运行记录页：成功运行可发布为模型版本，且权限与已发布状态会收住入口。
- */
-import { ERROR_CODES, PERMISSION_CODES } from '@dt/contracts'
-import type {
-  ModelingPipelineSummary,
-  ModelingRunSummary,
-  ModelingVersion,
-  ModelingVersionSummary,
-  Page,
-} from '@dt/contracts'
-import { DtSelect, useToast } from '@dt/ui'
+/** @fileoverview 训练记录的直接发布、引用保护、筛选与权限。 */
+import { PERMISSION_CODES } from '@dt/contracts'
+import type { ModelDeployment, ModelingRunSummary, Page } from '@dt/contracts'
+import * as ui from '@dt/ui'
 import { flushPromises, mount } from '@vue/test-utils'
+import type { VueWrapper } from '@vue/test-utils'
 import { createPinia, setActivePinia } from 'pinia'
-import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
-
+import { afterEach, beforeEach, expect, it, vi } from 'vitest'
+import { useRoute } from 'vue-router'
 import * as modeling from '@/api/modeling'
+import * as hierarchy from '@/api/hierarchy'
+import * as workflow from '@/api/modelingWorkflow'
 import { BizError } from '@/api/client'
 import RunsPage from '@/pages/Modeling/Runs/index.vue'
-import RunTable from '@/pages/Modeling/Runs/components/RunTable.vue'
 import { useAuthStore } from '@/stores/auth'
 
-const STAMP = '2026-01-01T00:00:00.000Z'
-const mounted: { unmount: () => void }[] = []
-
-vi.mock('vue-router', () => ({
-  useRouter: () => ({ replace: vi.fn(), push: vi.fn() }),
-  useRoute: () => ({ path: '/modeling/runs', query: {} }),
-  RouterLink: { template: '<a><slot /></a>' },
-}))
-
-function page<T>(items: T[], total = items.length): Page<T> {
-  return { items, page: 1, size: 200, total }
-}
-
-function pipeline(): ModelingPipelineSummary {
+vi.mock('vue-router', async () => {
+  const { reactive } = await import('vue')
+  const route = reactive<{
+    path: string
+    query: Record<string, string | string[] | null>
+  }>({ path: '/modeling/runs', query: {} })
   return {
-    id: 'p1',
-    code: 'energy-fit',
-    name: '能耗回归',
-    description: null,
-    node_count: 6,
-    source_table_codes: ['energy-log'],
-    created_by_name: '张三',
-    created_at: STAMP,
-    updated_at: STAMP,
+    useRoute: () => route,
+    useRouter: () => ({ replace: vi.fn(), push: vi.fn() }),
+    RouterLink: { template: '<a><slot /></a>' },
   }
+})
+const STAMP = '2026-01-01T00:00:00Z'
+const run: ModelingRunSummary = {
+  id: 'r1',
+  pipeline_id: 'p1',
+  status: 'succeeded',
+  trigger: 'manual',
+  started_at: STAMP,
+  finished_at: STAMP,
+  duration_ms: 1200,
+  row_count: 20,
+  is_source_truncated: false,
+  is_keeping_frames: false,
+  error_text: null,
+  created_by_name: '张三',
+  created_at: STAMP,
+  published_version_id: 'v1',
+  publication_status: 'not_requested',
+  publication_error: null,
+  auto_publish: false,
 }
-
-function run(over: Partial<ModelingRunSummary> = {}): ModelingRunSummary {
-  return {
-    id: 'r1',
-    pipeline_id: 'p1',
-    status: 'succeeded',
-    trigger: 'manual',
-    started_at: STAMP,
-    finished_at: STAMP,
-    duration_ms: 1200,
-    row_count: 20,
-    is_source_truncated: false,
-    is_keeping_frames: false,
-    error_text: null,
-    created_by_name: '张三',
-    created_at: STAMP,
-    ...over,
-  }
+const deployment: ModelDeployment = {
+  id: 'd1',
+  code: 'energy',
+  model_version_id: 'v1',
+  model_name: '能耗',
+  model_version: 1,
+  task: 'regression',
+  name: '能耗',
+  description: null,
+  is_enabled: true,
+  is_servable: true,
+  unservable_reason: null,
+  max_rows_per_call: 200,
+  rate_limit_per_minute: 60,
+  key_count: 0,
+  created_by_name: null,
+  created_at: STAMP,
+  updated_at: STAMP,
 }
-
-function versionSummary(
-  over: Partial<ModelingVersionSummary> = {},
-): ModelingVersionSummary {
-  return {
-    id: 'v1',
-    pipeline_id: 'p1',
-    run_id: 'r1',
-    version: 1,
-    name: '能耗回归',
-    algo: 'linear_regression',
-    task: 'regression',
-    is_servable: true,
-    serving_channel: 'json',
-    unservable_reason: null,
-    feature_keys: ['temperature', 'load'],
-    target_key: 'energy',
-    created_by_name: '张三',
-    created_at: STAMP,
-    ...over,
-  }
-}
-
-function version(over: Partial<ModelingVersion> = {}): ModelingVersion {
-  return {
-    ...versionSummary(),
-    signature: {
-      format_version: '1.0',
-      inputs: [],
-      derived: [],
-      output: {
-        key: 'energy',
-        label: '能耗',
-        unit: 'kWh',
-        dtype: 'number',
-        task: 'regression',
-      },
-    },
-    metrics: {},
-    fingerprint: {},
-    description: '给 MES 使用',
-    ...over,
-  }
-}
-
-function signIn(permissions: string[]): void {
-  const auth = useAuthStore()
-  auth.user = {
-    id: 'u1',
-    username: 'u',
-    email: 'u@example.com',
-    full_name: null,
-    avatar_url: null,
-    phone: null,
-    is_active: true,
-    last_login_at: null,
-    created_at: STAMP,
-    updated_at: STAMP,
-    permissions,
-    role_permissions: permissions,
-    direct_permissions: [],
-    role: { id: 'r1', name: 'r', description: null, is_builtin: false },
-  }
-  auth.accessToken = 'token'
-}
-
-function stub(
-  runs: ModelingRunSummary[],
-  versions: ModelingVersionSummary[] = [],
-): void {
-  vi.spyOn(modeling, 'listModelingPipelines').mockResolvedValue(
-    page([pipeline()]),
-  )
-  vi.spyOn(modeling, 'listModelingRuns').mockResolvedValue(page(runs))
-  vi.spyOn(modeling, 'listAllModelingVersions').mockResolvedValue(versions)
-}
-
+const wrappers: VueWrapper[] = []
+const ask = vi.fn().mockResolvedValue(true)
 function open() {
-  const wrapper = mount(RunsPage, {
-    attachTo: document.body,
-    global: { stubs: { Teleport: true } },
-  })
-  mounted.push(wrapper)
+  const wrapper = mount(RunsPage, { global: { stubs: { Teleport: true } } })
+  wrappers.push(wrapper)
   return wrapper
 }
-
+function button(wrapper: VueWrapper, text: string) {
+  const result = wrapper
+    .findAll('button')
+    .find(
+      (item) => (item.attributes('aria-label') ?? item.text().trim()) === text,
+    )
+  if (!result) throw new Error(`缺少按钮：${text}`)
+  return result
+}
+async function menuAction(wrapper: VueWrapper, text: string): Promise<void> {
+  await button(wrapper, '训练记录更多操作').trigger('click')
+  await flushPromises()
+  const item = wrapper
+    .findAll('[role="menuitem"]')
+    .find((entry) => entry.text() === text)
+  if (!item) throw new Error(`缺少菜单动作：${text}`)
+  await item.trigger('click')
+  await flushPromises()
+}
 beforeEach(() => {
-  localStorage.clear()
+  useRoute().query = {}
+  localStorage.removeItem('dt.view-mode.modeling-runs')
   setActivePinia(createPinia())
+  vi.spyOn(hierarchy, 'capabilities').mockRejectedValue(
+    new Error('本用例不启用层级图服务'),
+  )
+  vi.spyOn(useAuthStore(), 'can').mockReturnValue(true)
+  const confirm = ui.useConfirm()
+  ask.mockReset().mockResolvedValue(true)
+  vi.spyOn(ui, 'useConfirm').mockReturnValue({ ...confirm, ask })
+  ui.useToast().clear()
+  vi.spyOn(modeling, 'listModelingPipelines').mockResolvedValue({
+    items: [
+      {
+        id: 'p1',
+        code: 'energy',
+        name: '能耗工作流',
+        description: null,
+        node_count: 4,
+        source_table_codes: [],
+        created_by_name: null,
+        created_at: STAMP,
+        updated_at: STAMP,
+      },
+    ],
+    page: 1,
+    size: 200,
+    total: 1,
+  })
+  vi.spyOn(modeling, 'listModelingRuns').mockResolvedValue({
+    items: [run],
+    page: 1,
+    size: 20,
+    total: 1,
+  })
+  vi.spyOn(workflow, 'deployModelingRun').mockResolvedValue(deployment)
+  vi.spyOn(workflow, 'deleteModelingRun').mockResolvedValue()
 })
-
 afterEach(() => {
-  for (const wrapper of mounted.splice(0)) wrapper.unmount()
-  useToast().clear()
+  for (const wrapper of wrappers) wrapper.unmount()
+  wrappers.length = 0
   vi.restoreAllMocks()
 })
 
-describe('发布模型版本', () => {
-  it('成功运行可以填写名称与说明后发布', async () => {
-    stub([run()])
-    const publish = vi
-      .spyOn(modeling, 'publishModelingVersion')
-      .mockResolvedValue(version())
-    signIn([PERMISSION_CODES.modelingView, PERMISSION_CODES.modelingPublish])
-
-    const wrapper = open()
-    await flushPromises()
-    const publishButton = wrapper
-      .findAll('button')
-      .find((item) => item.text() === '发布版本')
-    expect(publishButton).toBeDefined()
-    await publishButton?.trigger('click')
-    await flushPromises()
-    await wrapper.find('input').setValue('能耗预测 v1')
-    await wrapper.find('textarea').setValue('给 MES 使用')
-    await wrapper
-      .findAll('button')
-      .find((item) => item.text() === '发布')
-      ?.trigger('click')
-    await flushPromises()
-
-    expect(publish).toHaveBeenCalledWith({
-      run_id: 'r1',
-      name: '能耗预测 v1',
-      description: '给 MES 使用',
+it('成功训练直接发布固定入口，无需再次填写模型名称与服务编码', async () => {
+  const wrapper = open()
+  await flushPromises()
+  expect(wrapper.text()).toContain('模型已保存')
+  await menuAction(wrapper, '发布模型')
+  await flushPromises()
+  expect(workflow.deployModelingRun).toHaveBeenCalledWith('r1')
+  expect(ui.useToast().toasts.value.at(-1)?.message).toContain(
+    '调用编码：energy',
+  )
+  expect(modeling.listModelingRuns).toHaveBeenCalledTimes(2)
+})
+it('取消发布确认时不发请求', async () => {
+  ask.mockResolvedValue(false)
+  const wrapper = open()
+  await flushPromises()
+  await menuAction(wrapper, '发布模型')
+  await flushPromises()
+  expect(workflow.deployModelingRun).not.toHaveBeenCalled()
+})
+it('输入输出签名变化须明确确认后发布', async () => {
+  vi.mocked(workflow.deployModelingRun).mockRejectedValueOnce(
+    new BizError(41435, '签名变化', 409, 'trace'),
+  )
+  const wrapper = open()
+  await flushPromises()
+  await menuAction(wrapper, '发布模型')
+  await flushPromises()
+  expect(ask).toHaveBeenLastCalledWith(
+    expect.objectContaining({ title: '新模型的调用格式有变化', danger: true }),
+  )
+  expect(workflow.deployModelingRun).toHaveBeenLastCalledWith('r1', true)
+})
+it('删除记录时展示清理范围，引用冲突作为错误反馈', async () => {
+  vi.mocked(workflow.deleteModelingRun).mockRejectedValue(
+    new BizError(41438, '当前模型仍在部署', 409, 'trace'),
+  )
+  const wrapper = open()
+  await flushPromises()
+  await menuAction(wrapper, '删除记录')
+  await flushPromises()
+  expect(ask).toHaveBeenCalledWith(
+    expect.objectContaining({
+      danger: true,
+      message: expect.stringContaining('配置快照'),
+    }),
+  )
+  expect(workflow.deleteModelingRun).toHaveBeenCalledWith('r1')
+  expect(ui.useToast().toasts.value.at(-1)?.message).toContain(
+    '当前模型仍在部署',
+  )
+})
+it('删除未引用训练后刷新列表', async () => {
+  const wrapper = open()
+  await flushPromises()
+  await menuAction(wrapper, '删除记录')
+  await flushPromises()
+  expect(modeling.listModelingRuns).toHaveBeenCalledTimes(2)
+})
+it.each(['pending', 'running', 'cancelling'] as const)(
+  '在途%s不能发布或删除',
+  async (status) => {
+    vi.mocked(modeling.listModelingRuns).mockResolvedValue({
+      items: [{ ...run, status }],
+      page: 1,
+      size: 20,
+      total: 1,
     })
-    expect(wrapper.text()).toContain('已发布')
-    expect(wrapper.text()).not.toContain('发布模型版本')
-  })
-
-  it('发布失败时保留表单与已填内容，并给出错误', async () => {
-    stub([run()])
-    vi.spyOn(modeling, 'publishModelingVersion').mockRejectedValue(
-      new Error('offline'),
-    )
-    signIn([PERMISSION_CODES.modelingView, PERMISSION_CODES.modelingPublish])
-
     const wrapper = open()
     await flushPromises()
-    await wrapper
-      .findAll('button')
-      .find((item) => item.text() === '发布版本')
-      ?.trigger('click')
-    await wrapper.find('input').setValue('不能丢的名称')
-    await wrapper.find('textarea').setValue('不能丢的说明')
-    await wrapper
-      .findAll('button')
-      .find((item) => item.text() === '发布')
-      ?.trigger('click')
-    await flushPromises()
-
-    expect(wrapper.text()).toContain('发布模型版本')
-    expect(wrapper.find('input').element.value).toBe('不能丢的名称')
-    expect(wrapper.find('textarea').element.value).toBe('不能丢的说明')
-    expect(useToast().toasts.value.at(-1)?.message).toBe('请求失败，请重试')
-    expect(wrapper.getComponent(RunTable).text()).not.toContain('已发布')
-  })
-
-  it('发布请求返回前离开页面，不再写状态或发送全局提示', async () => {
-    stub([run()])
-    let finish: (created: ModelingVersion) => void = () => undefined
-    vi.spyOn(modeling, 'publishModelingVersion').mockReturnValue(
-      new Promise((resolve) => {
-        finish = resolve
-      }),
-    )
-    signIn([PERMISSION_CODES.modelingView, PERMISSION_CODES.modelingPublish])
-
-    const wrapper = open()
-    await flushPromises()
-    await wrapper
-      .findAll('button')
-      .find((item) => item.text() === '发布版本')
-      ?.trigger('click')
-    const submit = wrapper
-      .findAll('button')
-      .find((item) => item.text() === '发布')
-    await submit?.trigger('click')
-    await submit?.trigger('click')
-    await wrapper
-      .find('[role="dialog"] button[aria-label="关闭"]')
-      .trigger('click')
-    await flushPromises()
-
-    expect(modeling.publishModelingVersion).toHaveBeenCalledTimes(1)
-    expect(wrapper.text()).toContain('发布模型版本')
-    wrapper.unmount()
-    mounted.splice(mounted.indexOf(wrapper), 1)
-    finish(version())
-    await flushPromises()
-
-    expect(useToast().toasts.value).toHaveLength(0)
-  })
-
-  it('空白名称不能提交', async () => {
-    stub([run()])
-    const publish = vi.spyOn(modeling, 'publishModelingVersion')
-    signIn([PERMISSION_CODES.modelingView, PERMISSION_CODES.modelingPublish])
-
-    const wrapper = open()
-    await flushPromises()
-    await wrapper
-      .findAll('button')
-      .find((item) => item.text() === '发布版本')
-      ?.trigger('click')
-    await wrapper.find('input').setValue('   ')
-    await wrapper.find('input').trigger('keydown', { key: 'Enter' })
-
     expect(
       wrapper
         .findAll('button')
-        .find((item) => item.text() === '发布')
-        ?.attributes('disabled'),
-    ).toBeDefined()
-    expect(publish).not.toHaveBeenCalled()
-  })
-
-  it('空说明归一成 null，不把空字符串交给后端', async () => {
-    stub([run()])
-    const publish = vi
-      .spyOn(modeling, 'publishModelingVersion')
-      .mockResolvedValue(version())
-    signIn([PERMISSION_CODES.modelingView, PERMISSION_CODES.modelingPublish])
-
-    const wrapper = open()
-    await flushPromises()
-    await wrapper
+        .some((item) => ['发布模型', '删除记录'].includes(item.text().trim())),
+    ).toBe(false)
+  },
+)
+it('只读账号没有发布和删除菜单，结果查看仍保留', async () => {
+  vi.mocked(useAuthStore().can).mockImplementation((codes) =>
+    codes.includes(PERMISSION_CODES.modelingView),
+  )
+  const wrapper = open()
+  await flushPromises()
+  expect(
+    wrapper
       .findAll('button')
-      .find((item) => item.text() === '发布版本')
-      ?.trigger('click')
-    await wrapper.find('input').trigger('keydown', { key: 'Enter' })
-    await flushPromises()
-
-    expect(publish).toHaveBeenCalledWith({
-      run_id: 'r1',
-      name: '能耗回归',
-      description: null,
-    })
-  })
-
-  it('关闭发布表单不创建模型版本', async () => {
-    stub([run()])
-    const publish = vi.spyOn(modeling, 'publishModelingVersion')
-    signIn([PERMISSION_CODES.modelingView, PERMISSION_CODES.modelingPublish])
-
-    const wrapper = open()
-    await flushPromises()
-    await wrapper
-      .findAll('button')
-      .find((item) => item.text() === '发布版本')
-      ?.trigger('click')
-    await wrapper
-      .find('[role="dialog"] button[aria-label="关闭"]')
-      .trigger('click')
-    await flushPromises()
-
-    expect(wrapper.text()).not.toContain('发布模型版本')
-    expect(publish).not.toHaveBeenCalled()
-  })
-
-  it('版本发布成功但不可服务时把原因直接告诉用户', async () => {
-    stub([run()])
-    const unusable = version({
-      is_servable: false,
-      unservable_reason: '滞后特征需要历史窗口',
-    })
-    vi.spyOn(modeling, 'publishModelingVersion').mockResolvedValue(unusable)
-    signIn([PERMISSION_CODES.modelingView, PERMISSION_CODES.modelingPublish])
-
-    const wrapper = open()
-    await flushPromises()
-    await wrapper
-      .findAll('button')
-      .find((item) => item.text() === '发布版本')
-      ?.trigger('click')
-    await wrapper
-      .findAll('button')
-      .find((item) => item.text() === '发布')
-      ?.trigger('click')
-    await flushPromises()
-
-    expect(wrapper.text()).toContain('已发布')
-    expect(useToast().toasts.value.at(-1)?.message).toContain(
-      '滞后特征需要历史窗口',
-    )
-  })
-
-  it('发布状态过期且后端返回 41411 时收敛成已发布', async () => {
-    stub([run()])
-    vi.spyOn(modeling, 'publishModelingVersion').mockRejectedValue(
-      new BizError(
-        ERROR_CODES.modelingRunAlreadyPublished,
-        '这次运行已经发布过一个版本了',
-        409,
-        'trace',
-      ),
-    )
-    signIn([PERMISSION_CODES.modelingView, PERMISSION_CODES.modelingPublish])
-
-    const wrapper = open()
-    await flushPromises()
-    await wrapper
-      .findAll('button')
-      .find((item) => item.text() === '发布版本')
-      ?.trigger('click')
-    await wrapper
-      .findAll('button')
-      .find((item) => item.text() === '发布')
-      ?.trigger('click')
-    await flushPromises()
-
-    expect(wrapper.text()).toContain('已发布')
-    expect(wrapper.text()).not.toContain('发布模型版本')
-    expect(useToast().toasts.value.at(-1)?.message).toContain('状态已刷新')
-  })
-
-  it('发布结果不确定时重读状态，已经落库就收敛成已发布', async () => {
-    stub([run()])
-    vi.mocked(modeling.listAllModelingVersions)
-      .mockResolvedValueOnce([])
-      .mockResolvedValueOnce([versionSummary()])
-    vi.spyOn(modeling, 'publishModelingVersion').mockRejectedValue(
-      new BizError(50000, '服务端暂时不可用', 500, 'trace'),
-    )
-    signIn([PERMISSION_CODES.modelingView, PERMISSION_CODES.modelingPublish])
-
-    const wrapper = open()
-    await flushPromises()
-    await wrapper
-      .findAll('button')
-      .find((item) => item.text() === '发布版本')
-      ?.trigger('click')
-    await wrapper
-      .findAll('button')
-      .find((item) => item.text() === '发布')
-      ?.trigger('click')
-    await flushPromises()
-
-    expect(modeling.listAllModelingVersions).toHaveBeenCalledTimes(2)
-    expect(wrapper.text()).toContain('已发布')
-    expect(wrapper.text()).not.toContain('发布模型版本')
-    expect(useToast().toasts.value.at(-1)?.message).toContain('状态已刷新')
-  })
-
-  it('已经发布过的运行只显示状态，不再给发布入口', async () => {
-    stub([run()], [versionSummary()])
-    signIn([PERMISSION_CODES.modelingView, PERMISSION_CODES.modelingPublish])
-
-    const wrapper = open()
-    await flushPromises()
-
-    expect(wrapper.text()).toContain('已发布')
-    expect(wrapper.findAll('button').map((item) => item.text())).not.toContain(
-      '发布版本',
-    )
-  })
-
-  it('模型版本状态加载失败时说明原因并收住发布入口', async () => {
-    stub([run()])
-    vi.mocked(modeling.listAllModelingVersions)
-      .mockRejectedValueOnce(new Error('offline'))
-      .mockResolvedValue([])
-    signIn([PERMISSION_CODES.modelingView, PERMISSION_CODES.modelingPublish])
-
-    const wrapper = open()
-    await flushPromises()
-
-    expect(wrapper.text()).toContain('模型版本状态加载失败')
-    expect(wrapper.text()).toContain('请求失败，请重试')
-    expect(wrapper.findAll('button').map((item) => item.text())).not.toContain(
-      '发布版本',
-    )
-    await wrapper
-      .findAll('button')
-      .find((item) => item.text() === '重新加载发布状态')
-      ?.trigger('click')
-    await flushPromises()
-
-    expect(wrapper.text()).not.toContain('模型版本状态加载失败')
-    expect(wrapper.findAll('button').map((item) => item.text())).toContain(
-      '发布版本',
-    )
-  })
-
-  it.each([
-    ['没有发布权限', [PERMISSION_CODES.modelingView], run()],
-    [
-      '排队中',
-      [PERMISSION_CODES.modelingView, PERMISSION_CODES.modelingPublish],
-      run({ status: 'pending' }),
-    ],
-    [
-      '运行中',
-      [PERMISSION_CODES.modelingView, PERMISSION_CODES.modelingPublish],
-      run({ status: 'running' }),
-    ],
-    [
-      '取消中',
-      [PERMISSION_CODES.modelingView, PERMISSION_CODES.modelingPublish],
-      run({ status: 'cancelling' }),
-    ],
-    [
-      '失败',
-      [PERMISSION_CODES.modelingView, PERMISSION_CODES.modelingPublish],
-      run({ status: 'failed', error_text: '取数失败' }),
-    ],
-    [
-      '已取消',
-      [PERMISSION_CODES.modelingView, PERMISSION_CODES.modelingPublish],
-      run({ status: 'cancelled' }),
-    ],
-  ])('%s 时不显示发布入口', async (_name, permissions, row) => {
-    stub([row])
-    signIn(permissions)
-
-    const wrapper = open()
-    await flushPromises()
-
-    expect(wrapper.findAll('button').map((item) => item.text())).not.toContain(
-      '发布版本',
-    )
-  })
-
-  it('切换流水线筛选和卡片视图后仍使用同一批发布动作', async () => {
-    stub([run(), run({ id: 'r2', duration_ms: null, row_count: null })])
-    signIn([PERMISSION_CODES.modelingView, PERMISSION_CODES.modelingPublish])
-
-    const wrapper = open()
-    await flushPromises()
-    wrapper.findComponent(DtSelect).vm.$emit('update:modelValue', 'p1')
-    await flushPromises()
-    await wrapper.find('[aria-label="卡片视图"]').trigger('click')
-
-    expect(modeling.listModelingRuns).toHaveBeenLastCalledWith('p1', {
-      page: 1,
-      size: 200,
-    })
-    expect(
-      wrapper.findAll('button').filter((item) => item.text() === '发布版本'),
-    ).toHaveLength(2)
-  })
-
-  it('流水线清单返回前离页，不再启动发布状态加载', async () => {
-    stub([run()])
-    let finish: (page: Page<ModelingPipelineSummary>) => void = () => undefined
-    vi.mocked(modeling.listModelingPipelines).mockReturnValue(
+      .some((item) => ['发布模型', '删除记录'].includes(item.text().trim())),
+  ).toBe(false)
+  expect(wrapper.find('button[aria-label="训练记录更多操作"]').exists()).toBe(
+    false,
+  )
+  expect(wrapper.find('button[aria-label="查看训练结果"]').exists()).toBe(true)
+})
+it('筛选工作流重置到第一页并传递取消信号', async () => {
+  const wrapper = open()
+  await flushPromises()
+  wrapper.getComponent(ui.DtSelect).vm.$emit('update:modelValue', 'p1')
+  await flushPromises()
+  expect(modeling.listModelingRuns).toHaveBeenLastCalledWith(
+    'p1',
+    { page: 1, size: 20 },
+    expect.any(AbortSignal),
+  )
+})
+it('发布失败提示原因且保留原列表', async () => {
+  vi.mocked(workflow.deployModelingRun).mockRejectedValue(new Error('offline'))
+  const wrapper = open()
+  await flushPromises()
+  await menuAction(wrapper, '发布模型')
+  await flushPromises()
+  expect(ui.useToast().toasts.value.at(-1)?.message).toContain('请求失败')
+  expect(wrapper.text()).toContain('能耗工作流')
+})
+it('离开页面后迟到发布结果不触发提示或刷新', async () => {
+  let finish: ((result: ModelDeployment) => void) | undefined
+  vi.mocked(workflow.deployModelingRun).mockImplementation(
+    () =>
       new Promise((resolve) => {
         finish = resolve
       }),
-    )
-    signIn([PERMISSION_CODES.modelingView, PERMISSION_CODES.modelingPublish])
+  )
+  const wrapper = open()
+  await flushPromises()
+  await menuAction(wrapper, '发布模型')
+  await flushPromises()
+  wrapper.unmount()
+  wrappers.splice(wrappers.indexOf(wrapper), 1)
+  finish?.(deployment)
+  await flushPromises()
+  expect(ui.useToast().toasts.value).toHaveLength(0)
+  expect(modeling.listModelingRuns).toHaveBeenCalledTimes(1)
+})
 
-    const wrapper = open()
-    wrapper.unmount()
-    mounted.splice(mounted.indexOf(wrapper), 1)
-    finish(page([pipeline()]))
-    await flushPromises()
-
-    expect(modeling.listAllModelingVersions).not.toHaveBeenCalled()
+it('刷新图标保留名称、点击刷新和加载禁用语义', async () => {
+  const wrapper = open()
+  await flushPromises()
+  let finish: ((result: Page<ModelingRunSummary>) => void) | undefined
+  const pending = new Promise<Page<ModelingRunSummary>>((resolve) => {
+    finish = resolve
   })
+  vi.mocked(modeling.listModelingRuns).mockReturnValueOnce(pending)
+  const refresh = wrapper.get('button[aria-label="刷新训练状态"]')
+  expect(refresh.classes()).toContain('dt-btn--icon-only')
+  await refresh.trigger('click')
+  expect(modeling.listModelingRuns).toHaveBeenCalledTimes(2)
+  expect(refresh.attributes('aria-busy')).toBe('true')
+  expect(refresh.attributes('disabled')).toBeDefined()
+  finish?.({ items: [run], page: 1, size: 20, total: 1 })
+  await flushPromises()
+  expect(refresh.attributes('aria-busy')).toBeUndefined()
+  expect(refresh.attributes('disabled')).toBeUndefined()
+})
+
+it('列表的查看结果入口将所选训练ID传到历史结果面', async () => {
+  const second = { ...run, id: 'r2', created_at: '2026-11-03T01:00:00Z' }
+  vi.mocked(modeling.listModelingRuns).mockResolvedValue({
+    items: [run, second],
+    page: 1,
+    size: 20,
+    total: 2,
+  })
+  const history = vi
+    .spyOn(modeling, 'getModelingRun')
+    .mockImplementation((id) =>
+      Promise.resolve({
+        ...run,
+        id,
+        graph: { format_version: '1.0', nodes: [], edges: [] },
+        nodes: [],
+      }),
+    )
+  vi.spyOn(modeling, 'listModelingOperators').mockResolvedValue([])
+  const wrapper = open()
+  await flushPromises()
+  const buttons = wrapper.findAll('button[aria-label="查看训练结果"]')
+  expect(buttons).toHaveLength(2)
+  await buttons[1]?.trigger('click')
+  await vi.dynamicImportSettled()
+  await flushPromises()
+  expect(history).toHaveBeenCalledWith('r2', expect.any(AbortSignal))
+  const detail = wrapper.findComponent({ name: 'RunResultsDialog' })
+  expect(detail.props('run')).toMatchObject({ id: 'r2' })
+  await detail.get('button[aria-label="关闭"]').trigger('click')
+  expect(wrapper.findComponent({ name: 'RunResultsDialog' }).exists()).toBe(
+    false,
+  )
+  await buttons[0]?.trigger('click')
+  await vi.dynamicImportSettled()
+  await flushPromises()
+  expect(
+    wrapper.findComponent({ name: 'RunResultsDialog' }).props('run'),
+  ).toMatchObject({ id: 'r1' })
+})
+
+function stubHistory() {
+  vi.spyOn(modeling, 'getModelingRun').mockImplementation((id) =>
+    Promise.resolve({
+      ...run,
+      id,
+      graph: { format_version: '1.0', nodes: [], edges: [] },
+      nodes: [],
+    }),
+  )
+  vi.spyOn(modeling, 'listModelingOperators').mockResolvedValue([])
+}
+
+it('路由切换工作流关闭历史结果并回到第一页，清除查询恢复全部工作流', async () => {
+  useRoute().query = { pipeline_id: 'p1' }
+  vi.mocked(modeling.listModelingRuns).mockResolvedValue({
+    items: [run],
+    page: 1,
+    size: 20,
+    total: 61,
+  })
+  stubHistory()
+  const wrapper = open()
+  await flushPromises()
+  expect(modeling.listModelingRuns).toHaveBeenLastCalledWith(
+    'p1',
+    { page: 1, size: 20 },
+    expect.any(AbortSignal),
+  )
+  await button(wrapper, '下一页').trigger('click')
+  await flushPromises()
+  expect(modeling.listModelingRuns).toHaveBeenLastCalledWith(
+    'p1',
+    { page: 2, size: 20 },
+    expect.any(AbortSignal),
+  )
+  await button(wrapper, '查看训练结果').trigger('click')
+  await vi.dynamicImportSettled()
+  await flushPromises()
+  expect(wrapper.findComponent({ name: 'RunResultsDialog' }).exists()).toBe(
+    true,
+  )
+  useRoute().query = { pipeline_id: 'p2' }
+  await flushPromises()
+  expect(wrapper.findComponent({ name: 'RunResultsDialog' }).exists()).toBe(
+    false,
+  )
+  expect(modeling.listModelingRuns).toHaveBeenLastCalledWith(
+    'p2',
+    { page: 1, size: 20 },
+    expect.any(AbortSignal),
+  )
+  useRoute().query = {}
+  await flushPromises()
+  expect(modeling.listModelingRuns).toHaveBeenLastCalledWith(
+    null,
+    { page: 1, size: 20 },
+    expect.any(AbortSignal),
+  )
+})
+
+it('翻页和切换每页数量发出对应查询，数量改变回第一页', async () => {
+  vi.mocked(modeling.listModelingRuns).mockResolvedValue({
+    items: [run],
+    page: 1,
+    size: 20,
+    total: 61,
+  })
+  const wrapper = open()
+  await flushPromises()
+  await button(wrapper, '下一页').trigger('click')
+  await flushPromises()
+  expect(modeling.listModelingRuns).toHaveBeenLastCalledWith(
+    null,
+    { page: 2, size: 20 },
+    expect.any(AbortSignal),
+  )
+  await wrapper.get('button[aria-label="每页条数"]').trigger('click')
+  const size = wrapper
+    .findAll('[role="option"]')
+    .find((option) => option.text() === '50 条/页')
+  if (!size) throw new Error('缺少每页50条')
+  await size.trigger('click')
+  await flushPromises()
+  expect(modeling.listModelingRuns).toHaveBeenLastCalledWith(
+    null,
+    { page: 1, size: 50 },
+    expect.any(AbortSignal),
+  )
+  await wrapper.get('button[aria-label="卡片视图"]').trigger('click')
+  expect(wrapper.find('.dt-data-view__grid').exists()).toBe(true)
+})
+
+it('记录读取失败可从重试按钮恢复列表', async () => {
+  vi.mocked(modeling.listModelingRuns).mockRejectedValueOnce(
+    new Error('offline'),
+  )
+  const wrapper = open()
+  await flushPromises()
+  expect(wrapper.text()).toContain('请求失败，请重试')
+  await button(wrapper, '重试').trigger('click')
+  await flushPromises()
+  expect(modeling.listModelingRuns).toHaveBeenCalledTimes(2)
+  expect(wrapper.text()).toContain('能耗工作流')
+  expect(wrapper.text()).not.toContain('请求失败，请重试')
 })

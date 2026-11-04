@@ -27,6 +27,9 @@ CommandOperation = Literal[
     "retire_version",
     "delete_deployment",
     "cancel_run",
+    "deploy_run",
+    "delete_run",
+    "create_workflow_from_template",
 ]
 CommandState = Literal["pending", "unknown", "succeeded", "failed"]
 

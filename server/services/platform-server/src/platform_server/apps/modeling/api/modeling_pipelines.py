@@ -14,6 +14,7 @@ from lib.web import ApiResponse, Page, PageParams, ok, page_params
 from platform_server.apps.modeling.catalog import MODELING_VIEW
 from platform_server.apps.modeling.deps import (
     WriteGate,
+    get_instance_write_context,
     get_manage_context,
     get_run_context,
     get_session,
@@ -46,6 +47,7 @@ PageDep = Annotated[PageParams, Depends(page_params)]
 ViewDep = Annotated[CallerContext, Depends(require(MODELING_VIEW))]
 ManageDep = Annotated[WriteGate, Depends(get_manage_context)]
 RunDep = Annotated[RunContext, Depends(get_run_context)]
+RunWriteDep = Annotated[WriteGate, Depends(get_instance_write_context)]
 
 
 @router.get(
@@ -190,16 +192,19 @@ async def start_run(
     payload: RunStartIn,
     session: SessionDep,
     context: RunDep,
-    response: Response,
+    write: RunWriteDep,
 ) -> ApiResponse[RunOut]:
     """发起一次运行。同一条流水线已有在途运行时 409。
 
     Args: pipeline_id, payload, session, context, response。
     """
-    run = await run_service.start_run(
-        session, pipeline_id=pipeline_id, payload=payload, context=context
+    run = await write.run_once(
+        endpoint=f"modeling.train_instance.{pipeline_id}",
+        model=RunOut,
+        action=lambda: run_service.start_run(
+            session, pipeline_id=pipeline_id, payload=payload, context=context
+        ),
     )
-    response.status_code = status.HTTP_202_ACCEPTED
     return ok(run)
 
 

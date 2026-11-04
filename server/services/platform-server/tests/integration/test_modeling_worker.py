@@ -173,7 +173,10 @@ async def test_converge_keeps_only_the_newest_node_details(
 ) -> None:
     """节点明细只留最近 N 次运行的，更老的删明细、**保留运行行**。"""
     await _seed_ledger(app_client, db_session, "energy_q7")
-    created = await create_pipeline(app_client, "q7", linear_graph("energy_q7"))
+    graph = linear_graph("energy_q7")
+    graph["nodes"] = [graph["nodes"][0]]
+    graph["edges"] = []
+    created = await create_pipeline(app_client, "q7", graph)
     first = await _start(app_client, created["id"])
     await drive_run(worker_sessions, uuid.UUID(first["id"]))
     second = await _start(app_client, created["id"])

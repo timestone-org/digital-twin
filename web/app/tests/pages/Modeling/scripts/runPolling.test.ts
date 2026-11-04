@@ -94,6 +94,33 @@ describe('盯着一次运行', () => {
     wrapper.unmount()
   })
 
+  it('训练成功但自动发布仍在进行时继续轮询，发布完成后停止', async () => {
+    const get = vi
+      .spyOn(modeling, 'getModelingRun')
+      .mockResolvedValueOnce(
+        run({ status: 'succeeded', publication_status: 'pending' }),
+      )
+      .mockResolvedValue(
+        run({ status: 'succeeded', publication_status: 'published' }),
+      )
+    const { runner, wrapper } = setup()
+    runner.watchRun(run({ status: 'succeeded', publication_status: 'pending' }))
+    await vi.advanceTimersByTimeAsync(3000)
+    expect(get).toHaveBeenCalledTimes(2)
+    expect(runner.run.value?.publication_status).toBe('published')
+    wrapper.unmount()
+  })
+
+  it('训练并发布将自动发布意图提交给服务端', async () => {
+    const start = vi
+      .spyOn(modeling, 'startModelingRun')
+      .mockResolvedValue(run())
+    const { runner, wrapper } = setup()
+    await runner.start('p1', false, true)
+    expect(start).toHaveBeenCalledWith('p1', 'manual', false, true)
+    wrapper.unmount()
+  })
+
   it('还在跑就一拍一拍地问', async () => {
     const get = vi
       .spyOn(modeling, 'getModelingRun')

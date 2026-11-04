@@ -131,6 +131,9 @@ async def reap_stale(sessions: Sessions, *, options: RetentionOptions) -> int:
             run.status = "failed"
             run.finished_at = datetime.now(UTC)
             run.error_text = INTERRUPTED_REASON
+            if run.publication_status == "pending":
+                run.publication_status = "skipped"
+                run.publication_error = "训练已中断，已保留现有发布模型"
         return len(stale)
 
 

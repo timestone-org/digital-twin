@@ -1,5 +1,7 @@
 """流水线定义的数据访问。"""
 
+import uuid
+
 from sqlalchemy import Select, select
 from sqlalchemy.ext.asyncio import AsyncSession
 
@@ -19,6 +21,16 @@ class PipelineCrud(CrudBase[ModelingPipeline]):
 
     def __init__(self) -> None:
         super().__init__(ModelingPipeline)
+
+    async def lock(
+        self, session: AsyncSession, identity: uuid.UUID
+    ) -> ModelingPipeline | None:
+        return await session.get(
+            ModelingPipeline,
+            identity,
+            with_for_update=True,
+            populate_existing=True,
+        )
 
     async def get_by_code(
         self, session: AsyncSession, code: str

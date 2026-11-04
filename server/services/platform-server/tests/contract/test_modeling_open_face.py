@@ -107,6 +107,32 @@ def test_the_open_endpoints_declare_account_bearer_auth() -> None:
     )
 
 
+def test_signature_inputs_and_invocation_are_discoverable_in_openapi() -> None:
+    spec = json.loads(SPEC.read_text(encoding="utf-8"))
+    response = spec["paths"][f"{OPEN_PREFIX}/{{code}}"]["get"]["responses"]
+    reference = response["200"]["content"]["application/json"]["schema"]["$ref"]
+    assert reference.endswith("/ApiResponse_OpenModelSignatureOut_")
+    schemas = spec["components"]["schemas"]
+    signature = schemas["OpenModelSignatureOut"]
+    assert set(signature["required"]) >= {
+        "task",
+        "invoke_url",
+        "timestamp_key",
+        "inputs",
+        "output",
+    }
+    fields = schemas["OpenModelInputOut"]["properties"]
+    assert set(fields) == {
+        "key",
+        "label",
+        "unit",
+        "dtype",
+        "is_required",
+        "default_on_missing",
+        "missing_policy",
+    }
+
+
 def test_the_call_log_is_written_in_its_own_transaction() -> None:
     """调用记录走**自己的**会话，不借请求那条。
 

@@ -12,7 +12,6 @@ import { useAsyncList } from '@/composables/useAsyncList'
 import { useViewMode } from '@/composables/useViewMode'
 import { formatDateTime } from '@/utils/datetime'
 import { listEmptyState } from '@/utils/listEmpty'
-import ModelingNav from '../components/ModelingNav.vue'
 import { runLabel } from '../scripts/instancePresentation'
 import { taskLabel } from '../scripts/taskPresentation'
 
@@ -64,8 +63,6 @@ onMounted(() => void list.reload())
     </template>
 
     <div class="flex h-full min-h-0 flex-col gap-4">
-      <ModelingNav />
-
       <DtDataView
         v-model:view="view"
         class="min-h-0 flex-1"

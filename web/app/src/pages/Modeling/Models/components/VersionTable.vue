@@ -12,7 +12,7 @@ import type {
 } from '@dt/contracts'
 import { PERMISSION_CODES } from '@dt/contracts'
 import type { DtPaginationState } from '@dt/ui'
-import { DtButton, DtDataView, DtTag } from '@dt/ui'
+import { DtButton, DtDataView, DtIconButton, DtTag } from '@dt/ui'
 
 import PermGuard from '@/components/PermGuard.vue'
 import { formatDateTime } from '@/utils/datetime'
@@ -31,19 +31,19 @@ const COLUMNS: readonly DtDataColumn[] = [
   { key: 'task', label: '模型类型', width: '8rem' },
   { key: 'target_key', label: '目标列', width: '11rem' },
   { key: 'servable', label: '可用于取数', width: '13rem' },
-  { key: 'created_at', label: '发布时间', width: '10rem' },
+  { key: 'created_at', label: '生成时间', width: '10rem' },
   {
     key: 'actions',
     label: '操作',
     align: 'right',
-    width: '15rem',
+    width: '21rem',
     card: 'actions',
   },
 ]
 
 const EMPTY = {
-  title: '还没有发布过版本',
-  hint: '在画布上跑出一个训练好的模型，然后从运行历史里把它发布成一个版本。',
+  title: '还没有训练模型',
+  hint: '成功训练后自动保存可服务模型，可直接发布或绑定公式。',
 }
 
 const props = defineProps<{
@@ -62,6 +62,8 @@ defineEmits<{
   bind: [row: ModelingVersionSummary]
   retire: [row: ModelingVersionSummary]
   rename: [row: ModelingVersionSummary]
+  remove: [row: ModelingVersionSummary]
+  deploy: [row: ModelingVersionSummary]
 }>()
 </script>
 
@@ -118,27 +120,46 @@ defineEmits<{
       {{ formatDateTime(row.created_at) }}
     </template>
     <template #cell-actions="{ row }">
-      <DtButton variant="ghost" size="xs" @click="$emit('detail', row)">
-        详情
-      </DtButton>
+      <DtIconButton
+        icon="eye"
+        label="详情"
+        tooltip="查看模型详情"
+        @click="$emit('detail', row)"
+      />
       <PermGuard :codes="[PERMISSION_CODES.modelingPublish]">
-        <DtButton variant="ghost" size="xs" @click="$emit('rename', row)">
-          改名
-        </DtButton>
         <DtButton
           variant="ghost"
-          size="xs"
+          size="sm"
+          :disabled="!row.is_servable"
+          @click="$emit('deploy', row)"
+          >发布模型</DtButton
+        >
+        <DtIconButton
+          icon="pencil"
+          label="改名"
+          tooltip="修改模型名称和说明"
+          @click="$emit('rename', row)"
+        />
+        <DtButton
+          variant="ghost"
+          size="sm"
           :disabled="!row.is_servable || row.task === 'rule_calculation'"
           @click="$emit('bind', row)"
         >
           绑公式
         </DtButton>
-        <DtButton
-          variant="ghost"
-          size="xs"
+        <DtIconButton
           icon="power-off"
-          title="下线"
+          label="下线"
           @click="$emit('retire', row)"
+        />
+      </PermGuard>
+      <PermGuard :codes="[PERMISSION_CODES.modelingManage]">
+        <DtIconButton
+          icon="trash"
+          label="删除"
+          intent="danger"
+          @click="$emit('remove', row)"
         />
       </PermGuard>
     </template>

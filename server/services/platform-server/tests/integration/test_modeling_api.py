@@ -39,6 +39,8 @@ from platform_server.apps.dataset.models import DatasetRecord
 
 pytestmark = pytest.mark.requires_postgres
 
+VERSIONS = "/api/v1/platform/modeling-model-versions"
+
 PIPELINE_CODE_TAKEN = 41402
 GRAPH_INVALID = 41403
 PIPELINE_NOT_FOUND = 41401
@@ -377,6 +379,9 @@ async def test_a_pipeline_is_deleted_with_its_runs(
         app_client, "del", linear_graph("energy_del")
     )
     run = await _run_pipeline(app_client, worker_sessions, created["id"])
+    assert (
+        await app_client.delete(f"{VERSIONS}/{run['published_version_id']}")
+    ).status_code == HTTP_NO_CONTENT
     response = await app_client.delete(f"{PIPELINES}/{created['id']}")
     assert response.status_code == HTTP_NO_CONTENT
     assert (

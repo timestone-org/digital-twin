@@ -329,16 +329,12 @@ async def test_quota_is_independent_for_each_account_and_deployment(
     await app_client.patch(
         f"{DEPLOYMENTS}/{deployment['id']}", json={"rate_limit_per_minute": 1}
     )
-    second = await app_client.post(
-        DEPLOYMENTS,
-        json={
-            "code": "quota-two",
-            "name": "另一个服务",
-            "model_version_id": deployment["model_version_id"],
-            "rate_limit_per_minute": 1,
-        },
+    second, _ = await _served(
+        app_client, db_session, worker_sessions, "quota-two"
     )
-    assert second.status_code == HTTP_CREATED
+    await app_client.patch(
+        f"{DEPLOYMENTS}/{second['id']}", json={"rate_limit_per_minute": 1}
+    )
     url = f"{OPEN}/{deployment['code']}:predict"
     assert (await app_client.post(url, json=_rows())).status_code == HTTP_OK
     limited = await app_client.post(url, json=_rows())

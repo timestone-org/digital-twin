@@ -85,7 +85,12 @@ function onOpened(): void {
     @update:open="onOpened"
   >
     <template #default="{ toggle, isOpen, panelId }">
-      <slot name="trigger" :toggle="toggle" :is-open="isOpen">
+      <slot
+        name="trigger"
+        :toggle="toggle"
+        :is-open="isOpen"
+        :panel-id="panelId"
+      >
         <DtButton
           variant="ghost"
           intent="neutral"

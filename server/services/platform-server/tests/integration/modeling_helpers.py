@@ -13,6 +13,9 @@ from platform_server.apps.modeling.services.run_dispatch import (
     DispatchReport,
     execute_run,
 )
+from platform_server.apps.modeling.services.workflow_publication import (
+    complete_training,
+)
 
 PIPELINES = "/api/v1/platform/modeling-pipelines"
 RUNS = "/api/v1/platform/modeling-runs"
@@ -145,10 +148,12 @@ async def drive_run(
     那两样，而每次都真写会把用例时长变成主要成本。
     Args: sessions, run_id, store。
     """
-    return await execute_run(
+    report = await execute_run(
         sessions,
         run_id=run_id,
         options=DispatchOptions(
             runner=DirectRunner(), tz_offset_minutes=480, store=store
         ),
     )
+    await complete_training(sessions, run_id, store)
+    return report

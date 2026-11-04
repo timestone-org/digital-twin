@@ -4,6 +4,7 @@ import type {
   OpenModelCalculate,
   OpenModelDetect,
   OpenModelPredict,
+  OpenModelSignature,
 } from '@dt/contracts'
 import { PLATFORM_BASE_URL } from '@/config/app'
 import { requestData } from './client'
@@ -13,11 +14,14 @@ export type ModelingServingAction = 'predict' | 'detect' | 'calculate'
 export function getOpenModelSignature(
   code: string,
   signal?: AbortSignal,
-): Promise<unknown> {
-  return requestData<unknown>(`/open-models/${encodeURIComponent(code)}`, {
-    baseUrl: PLATFORM_BASE_URL,
-    signal,
-  })
+): Promise<OpenModelSignature> {
+  return requestData<OpenModelSignature>(
+    `/open-models/${encodeURIComponent(code)}`,
+    {
+      baseUrl: PLATFORM_BASE_URL,
+      signal,
+    },
+  )
 }
 
 export function callOpenModel(

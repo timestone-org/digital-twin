@@ -13,15 +13,20 @@ from platform_server.apps.modeling.crud import (
     call_log_crud,
     deployment_crud,
     model_version_crud,
+    pipeline_crud,
 )
 from platform_server.apps.modeling.errors import (
     ApiKeyNotFound,
     DeploymentCodeTaken,
     DeploymentKeysRetired,
     DeploymentNotFound,
+    ModelVersionNotFound,
+    ModelVersionUnservable,
 )
 from platform_server.apps.modeling.management_errors import (
     DeploymentRevisionConflict,
+    DeploymentVersionMismatch,
+    WorkflowDeploymentConflict,
 )
 from platform_server.apps.modeling.models import (
     ModelingApiKey,
@@ -41,6 +46,10 @@ from platform_server.apps.modeling.services.management_guard import (
     require_active_version,
 )
 from platform_server.apps.modeling.services.pipeline_service import Actor
+from platform_server.apps.modeling.services.serving_contract import (
+    invoke_url,
+    signature_url,
+)
 
 # 调用量默认回看多少天
 STATS_WINDOW_DAYS = 30
@@ -64,7 +73,17 @@ async def create_deployment(
     两边都会说「没占用」。
     Args: session, payload, actor。
     """
+    version = await model_version_crud.get(session, payload.model_version_id)
+    if version is None:
+        raise ModelVersionNotFound("模型版本不存在")
+    await pipeline_crud.lock(session, version.pipeline_id)
     version = await require_active_version(session, payload.model_version_id)
+    if not version.servable:
+        raise ModelVersionUnservable("请选择可服务的模型版本")
+    if await deployment_crud.for_pipeline(session, version.pipeline_id):
+        raise WorkflowDeploymentConflict(
+            "此工作流已有发布入口，请在已有部署上切换模型版本"
+        )
     row = deployment_crud.add(
         session,
         ModelingDeployment(
@@ -80,7 +99,7 @@ async def create_deployment(
             description=payload.description,
             max_rows_per_call=payload.max_rows_per_call,
             rate_limit_per_minute=payload.rate_limit_per_minute,
-            created_by=actor.user_id,
+            created_by=actor.user_id or None,
             created_by_name=actor.name,
         ),
     )
@@ -125,6 +144,10 @@ async def update_deployment(
         version = await require_active_version(
             session, payload.model_version_id
         )
+        if version.pipeline_id != found.version.pipeline_id:
+            raise DeploymentVersionMismatch("部署只能切换同一工作流的模型版本")
+        if not version.servable:
+            raise ModelVersionUnservable("请选择可服务的模型版本")
         row.model_version_id = (
             None if version.task == "rule_calculation" else version.id
         )
@@ -166,7 +189,7 @@ async def delete_deployment(
     停一段时间再删的话，那段时间里对方以为还通着。
     Args: session, deployment_id。
     """
-    found = await _presented(session, deployment_id)
+    found = await _presented(session, deployment_id, should_lock=True)
     await deployment_crud.delete(session, found.row)
 
 
@@ -246,7 +269,7 @@ async def _presented(
     Args: session, deployment_id。
     """
     row = (
-        await deployment_crud.get_for_update(session, deployment_id)
+        await lock_deployment(session, deployment_id)
         if should_lock
         else await deployment_crud.get(session, deployment_id)
     )
@@ -257,6 +280,23 @@ async def _presented(
         raise DeploymentNotFound("这个对外服务钉的模型版本已不存在")
     keys = await api_key_crud.list_by_deployment(session, row.id)
     return _Presented(row=row, version=version, key_count=len(keys))
+
+
+async def lock_deployment(
+    session: AsyncSession,
+    deployment_id: uuid.UUID,
+) -> ModelingDeployment:
+    row = await deployment_crud.get(session, deployment_id)
+    if row is None:
+        raise DeploymentNotFound("部署不存在")
+    version = await model_version_crud.get(session, row.effective_version_id)
+    if version is None:
+        raise ModelVersionNotFound("模型版本不存在")
+    await pipeline_crud.lock(session, version.pipeline_id)
+    locked = await deployment_crud.get_for_update(session, deployment_id)
+    if locked is None:
+        raise DeploymentNotFound("部署不存在")
+    return locked
 
 
 def _present(found: _Presented) -> ModelDeploymentOut:
@@ -273,6 +313,8 @@ def _present(found: _Presented) -> ModelDeploymentOut:
         model_name=found.version.name,
         model_version=found.version.version,
         task=cast("ModelTask", found.version.task),
+        invoke_url=invoke_url(row.code, cast("ModelTask", found.version.task)),
+        signature_url=signature_url(row.code),
         name=row.name,
         description=row.description,
         is_enabled=row.is_enabled,

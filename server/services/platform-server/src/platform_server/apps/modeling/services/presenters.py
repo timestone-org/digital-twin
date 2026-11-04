@@ -26,6 +26,7 @@ from platform_server.apps.modeling.schemas import (
     RunOut,
     RunSummaryOut,
 )
+from platform_server.apps.modeling.schemas.run import PublicationStatus
 
 
 def graph_of(raw: dict[str, Any]) -> PipelineGraph:
@@ -88,6 +89,11 @@ def to_run_summary(row: ModelingRun) -> RunSummaryOut:
         error_text=row.error_text,
         created_by_name=row.created_by_name,
         created_at=row.created_at,
+        auto_publish=bool(row.auto_publish),
+        publication_status=cast(
+            "PublicationStatus", row.publication_status or "not_requested"
+        ),
+        publication_error=row.publication_error,
     )
 
 

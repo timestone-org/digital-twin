@@ -53,6 +53,11 @@ import type {
   ModelingVersionSummary,
   OpenModelInfo,
   OpenModelPredict,
+  OpenModelMissingPolicy,
+  OpenModelInput,
+  OpenModelDerived,
+  OpenModelOutput,
+  OpenModelSignature,
   OpenModelWarning,
 } from '@dt/contracts'
 
@@ -234,6 +239,9 @@ const RUN_SUMMARY = {
   pipeline_id: true,
   instance_id: true,
   published_version_id: true,
+  auto_publish: true,
+  publication_status: true,
+  publication_error: true,
   status: true,
   trigger: true,
   started_at: true,
@@ -317,6 +325,8 @@ const DEPLOYMENT = {
   model_name: true,
   model_version: true,
   task: true,
+  invoke_url: true,
+  signature_url: true,
   name: true,
   description: true,
   is_enabled: true,
@@ -371,6 +381,42 @@ const OPEN_MODEL_PREDICT = {
   predictions: true,
   warnings: true,
 } satisfies Keys<OpenModelPredict>
+
+const OPEN_MODEL_MISSING_POLICY = {
+  on_missing: true,
+  on_null: true,
+} satisfies Keys<OpenModelMissingPolicy>
+const OPEN_MODEL_INPUT = {
+  key: true,
+  label: true,
+  unit: true,
+  dtype: true,
+  is_required: true,
+  default_on_missing: true,
+  missing_policy: true,
+} satisfies Keys<OpenModelInput>
+const OPEN_MODEL_DERIVED = {
+  key: true,
+  by: true,
+  label: true,
+} satisfies Keys<OpenModelDerived>
+const OPEN_MODEL_OUTPUT = {
+  key: true,
+  label: true,
+  unit: true,
+  dtype: true,
+  task: true,
+} satisfies Keys<OpenModelOutput>
+const OPEN_MODEL_SIGNATURE = {
+  task: true,
+  invoke_url: true,
+  timestamp_key: true,
+  format_version: true,
+  requires_timestamp: true,
+  inputs: true,
+  derived: true,
+  output: true,
+} satisfies Keys<OpenModelSignature>
 
 const FORMULA_REGISTRATION = {
   formula: true,
@@ -430,6 +476,11 @@ const PAIRS: ReadonlyArray<readonly [string, Record<string, true>]> = [
   ['OpenModelInfoOut', OPEN_MODEL_INFO],
   ['OpenModelWarningOut', OPEN_MODEL_WARNING],
   ['OpenModelPredictOut', OPEN_MODEL_PREDICT],
+  ['OpenModelMissingPolicyOut', OPEN_MODEL_MISSING_POLICY],
+  ['OpenModelInputOut', OPEN_MODEL_INPUT],
+  ['OpenModelDerivedOut', OPEN_MODEL_DERIVED],
+  ['OpenModelOutputOut', OPEN_MODEL_OUTPUT],
+  ['OpenModelSignatureOut', OPEN_MODEL_SIGNATURE],
   ['AnomalyDecisionOut', ANOMALY_DECISION],
   ['OpenModelDetectOut', OPEN_MODEL_DETECT],
   ['OpenModelCalculateOut', OPEN_MODEL_CALCULATE],

@@ -33,6 +33,9 @@ from platform_server.apps.modeling.schemas.detection import (
     OpenModelDetectIn,
     OpenModelDetectOut,
 )
+from platform_server.apps.modeling.schemas.signature import (
+    OpenModelSignatureOut,
+)
 from platform_server.apps.modeling.services import (
     calculation,
     detection,
@@ -103,17 +106,22 @@ CallDep = Annotated[ResolvedCall, Depends(resolve)]
 
 @open_models.get(
     "/{code}",
-    response_model=ApiResponse[dict[str, object]],
-    summary="模型签名",
+    response_model=ApiResponse[OpenModelSignatureOut],
+    response_model_exclude_unset=True,
+    summary="模型类型与输入输出参数",
 )
-async def get_signature(call: CallDep) -> ApiResponse[dict[str, object]]:
+async def get_signature(call: CallDep) -> ApiResponse[OpenModelSignatureOut]:
     """这个模型要哪些参数、给出什么。
 
     ⚠ 回的是**剥掉训练统计**的那一份：训练区间的具体数值是训练数据的分布，
     属于内部信息（D8）。
     Args: call。
     """
-    return ok(open_model_service.public_signature(call.version))
+    return ok(
+        open_model_service.public_signature(
+            call.version, code=call.deployment.code
+        )
+    )
 
 
 @open_models.post(

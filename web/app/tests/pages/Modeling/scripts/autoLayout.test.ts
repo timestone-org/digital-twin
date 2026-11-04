@@ -100,4 +100,56 @@ describe('按数据流方向重排', () => {
   it('空图给一张空表', () => {
     expect(layoutGraph(graph([]), SIZES).size).toBe(0)
   })
+
+  it('反向节点顺序下异尺寸分支汇合与孤立节点仍不重叠，配置和连线不变', () => {
+    const input = graph(
+      ['join', 'right', 'isolated', 'left', 'source'],
+      [
+        ['source', 'left'],
+        ['source', 'right'],
+        ['left', 'join'],
+        ['right', 'join'],
+      ],
+    )
+    const before = structuredClone(input)
+    const sizes = new Map([
+      ['source', { width: 224, height: 100 }],
+      ['left', { width: 224, height: 260 }],
+      ['right', { width: 300, height: 90 }],
+      ['join', { width: 224, height: 140 }],
+      ['isolated', { width: 224, height: 220 }],
+    ])
+    const moves = layoutGraph(input, sizes)
+    const boxes = input.nodes.map((node) => {
+      const position = moves.get(node.id)
+      const size = sizes.get(node.id)
+      if (position === undefined || size === undefined)
+        throw new Error('缺少节点矩形')
+      return { id: node.id, ...position, ...size }
+    })
+    for (const edge of input.edges) {
+      expect(moves.get(edge.to_node)?.left).toBeGreaterThan(
+        moves.get(edge.from_node)?.left ?? Infinity,
+      )
+    }
+    for (const [index, box] of boxes.entries()) {
+      for (const other of boxes.slice(index + 1)) {
+        const overlaps =
+          box.left < other.left + other.width &&
+          other.left < box.left + box.width &&
+          box.top < other.top + other.height &&
+          other.top < box.top + box.height
+        expect(overlaps, `${box.id} 与 ${other.id} 不应重叠`).toBe(false)
+      }
+    }
+    expect(input).toEqual(before)
+    const arranged = {
+      ...input,
+      nodes: input.nodes.map((node) => ({
+        ...node,
+        position: moves.get(node.id) ?? node.position,
+      })),
+    }
+    expect(layoutGraph(arranged, sizes)).toEqual(moves)
+  })
 })

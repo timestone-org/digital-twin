@@ -13,6 +13,7 @@ import { useConfirm, useToast } from '@dt/ui'
 import { ref } from 'vue'
 
 import * as modeling from '@/api/modeling'
+import { deleteModelingVersion } from '@/api/modelingWorkflow'
 
 import { attempt } from './useBindingOps'
 
@@ -33,6 +34,32 @@ function retireAsk(
     confirmText: '下线',
     danger: true,
   }
+}
+
+interface VersionRemoval {
+  confirm: ReturnType<typeof useConfirm>
+  run: <T>(task: () => Promise<T>) => Promise<T | null>
+  toast: ReturnType<typeof useToast>
+}
+async function removeVersion(
+  row: ModelingVersionSummary,
+  actions: VersionRemoval,
+): Promise<void> {
+  if (
+    !(await actions.confirm.ask({
+      title: '删除这个训练模型？',
+      message:
+        '将永久删除此模型版本。已部署、绑定公式或用于版本切换历史的模型会受到保护；原训练记录保留。',
+      confirmText: '删除模型',
+      danger: true,
+    }))
+  )
+    return
+  const done = await actions.run(async () => {
+    await deleteModelingVersion(row.id)
+    return true
+  })
+  if (done !== null) actions.toast.success('模型已删除')
 }
 
 export function useVersionOps(onDone: () => void) {
@@ -57,6 +84,8 @@ export function useVersionOps(onDone: () => void) {
       if (done !== null) toast.success('模型名称已保存')
       return done
     },
+    remove: (row: ModelingVersionSummary) =>
+      removeVersion(row, { confirm, run, toast }),
     /** 下线一个版本。 */
     retire: async (row: ModelingVersionSummary) => {
       if (!(await confirm.ask(retireAsk(row.name, row.version)))) return

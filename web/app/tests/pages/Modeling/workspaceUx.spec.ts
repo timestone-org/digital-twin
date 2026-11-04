@@ -6,10 +6,12 @@ import { afterEach, beforeEach, expect, it, vi } from 'vitest'
 import { createMemoryHistory, createRouter } from 'vue-router'
 import PipelineFormDialog from '@/pages/Modeling/Pipelines/components/PipelineFormDialog.vue'
 import TemplatePicker from '@/pages/Modeling/Pipelines/components/TemplatePicker.vue'
+import WorkflowTemplateDialog from '@/pages/Modeling/Pipelines/components/WorkflowTemplateDialog.vue'
 import CanvasToolbar from '@/pages/Modeling/Canvas/components/CanvasToolbar.vue'
 import CanvasWorkspaceBar from '@/pages/Modeling/Canvas/components/CanvasWorkspaceBar.vue'
 import { useAuthStore } from '@/stores/auth'
-import ModelingNav from '@/pages/Modeling/components/ModelingNav.vue'
+import AppNavGroupTree from '@/components/layout/AppNavGroupTree.vue'
+import { NAV_ITEMS } from '@/components/layout/navItems'
 import { usePipelineOps } from '@/pages/Modeling/Pipelines/scripts/usePipelineOps'
 import * as modeling from '@/api/modeling'
 import { defineComponent } from 'vue'
@@ -34,6 +36,7 @@ it('工作栏提供配置与历史入口，并准确展示只读和草稿状态'
   expect(wrapper.text()).toContain('有未保存修改')
   for (const [label, event] of [
     ['配置选中节点', 'configure'],
+    ['自动整理', 'autoLayout'],
     ['运行历史', 'history'],
     ['撤销', 'undo'],
     ['重做', 'redo'],
@@ -68,6 +71,38 @@ it('工作栏提供配置与历史入口，并准确展示只读和草稿状态'
       .find((item) => item.text() === '配置选中节点')
       ?.attributes('disabled'),
   ).toBeDefined()
+  expect(
+    wrapper
+      .findAll('button')
+      .find((item) => item.text().trim() === '自动整理')
+      ?.attributes('disabled'),
+  ).toBeDefined()
+  wrapper.unmount()
+})
+
+it('空图不能触发自动整理', async () => {
+  vi.spyOn(useAuthStore(), 'can').mockReturnValue(true)
+  const wrapper = mount(CanvasWorkspaceBar, {
+    props: {
+      state: {
+        isReadonly: false,
+        isReplaying: false,
+        isDirty: false,
+        canUndo: false,
+        canRedo: false,
+        canConfigure: false,
+        nodeCount: 0,
+        progress: '',
+      },
+    },
+  })
+  const button = wrapper
+    .findAll('button')
+    .find((item) => item.text().trim() === '自动整理')
+  if (!button) throw new Error('缺少自动整理入口')
+  expect(button.attributes('disabled')).toBeDefined()
+  await button.trigger('click')
+  expect(wrapper.emitted('autoLayout')).toBeUndefined()
   wrapper.unmount()
 })
 
@@ -118,13 +153,22 @@ it('新建提交选择的模板和名称，再次打开恢复缺省模板并清�
   await flushPromises()
   const name = wrapper
     .findAllComponents(DtInput)
-    .find((item) => item.props('label') === '流水线名称')
-  if (!name) throw new Error('缺少流水线名称')
+    .find((item) => item.props('label') === '工作流名称')
+  if (!name) throw new Error('缺少工作流名称')
   await name.get('input').setValue('冷机异常')
+  await wrapper
+    .findAll('button')
+    .find((button) => button.text() === '选择模板')
+    ?.trigger('click')
   wrapper
     .getComponent(TemplatePicker)
     .vm.$emit('update:modelValue', 'device_anomaly')
   await flushPromises()
+  await wrapper
+    .getComponent(WorkflowTemplateDialog)
+    .findAll('button')
+    .find((button) => button.text() === '使用所选模板')
+    ?.trigger('click')
   expect(wrapper.getComponent(DtModal).props('dirty')).toBe(true)
   await wrapper.get('form').trigger('submit')
   expect(wrapper.emitted('submit')?.[0]).toEqual([
@@ -134,9 +178,8 @@ it('新建提交选择的模板和名称，再次打开恢复缺省模板并清�
   await wrapper.setProps({ draft: null })
   await wrapper.setProps({ draft: { ...draft, code: 'model_next' } })
   await flushPromises()
-  expect(wrapper.getComponent(TemplatePicker).props('modelValue')).toBe(
-    'regression',
-  )
+  expect(wrapper.findComponent(TemplatePicker).exists()).toBe(false)
+  expect(wrapper.text()).toContain('回归预测')
   expect(wrapper.getComponent(DtModal).props('dirty')).toBe(false)
   wrapper.unmount()
 })
@@ -184,27 +227,31 @@ it.each([
   '/modeling/templates',
   '/modeling/instances/i1',
   '/modeling/integration',
-])('%s 保留完整建模链路与第三方接入入口', async (path) => {
+])('%s 仅展示工作流、训练、模型与发布导航', async (path) => {
   const router = createRouter({
     history: createMemoryHistory(),
     routes: [{ path: '/:pathMatch(.*)*', component: { template: '<div />' } }],
   })
   await router.push(path)
-  const wrapper = mount(ModelingNav, { global: { plugins: [router] } })
-  const nav = wrapper.get('nav[aria-label="分析建模导航"]')
+  const item = NAV_ITEMS.find((entry) => entry.key === 'modeling')
+  if (!item) throw new Error('缺少分析建模导航分组')
+  const wrapper = mount(AppNavGroupTree, {
+    props: { item, currentPath: path },
+    global: { plugins: [router] },
+  })
+  if (wrapper.get('button').attributes('aria-expanded') === 'false')
+    await wrapper.get('button').trigger('click')
+  const nav = wrapper.get('.nav-tree__children')
   for (const [href, label] of [
-    ['/modeling/pipelines', '建模工作台'],
-    ['/modeling/templates', '已发布工作流'],
-    ['/modeling/instances', '模型实例'],
-    ['/modeling/runs', '运行记录'],
-    ['/modeling/models', '模型版本'],
-    ['/modeling/services', '部署服务'],
+    ['/modeling/pipelines', '工作流'],
+    ['/modeling/runs', '训练记录'],
+    ['/modeling/models', '训练模型与公式'],
+    ['/modeling/services', '已发布模型'],
   ]) {
     expect(nav.get(`a[href="${href}"]`).text()).toContain(label)
   }
-  expect(wrapper.get('a[href="/modeling/integration"]').text()).toContain(
-    '第三方接入',
-  )
+  expect(wrapper.find('a[href="/modeling/templates"]').exists()).toBe(false)
+  expect(wrapper.find('a[href="/modeling/integration"]').exists()).toBe(false)
   wrapper.unmount()
 })
 

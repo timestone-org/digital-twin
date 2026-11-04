@@ -71,7 +71,10 @@ def _remove_cached_task(context: AppContext, resource_id: str) -> None:
 
 
 async def _remove_durable_task(
-    context: AppContext, response: httpx.Response
+    context: AppContext,
+    response: httpx.Response,
+    *,
+    should_remove_urls: bool = False,
 ) -> None:
     identity = uuid.UUID(response.headers["Modeling-Command-Id"])
     row = await context.session.get(ModelingCommand, identity)
@@ -79,6 +82,9 @@ async def _remove_durable_task(
     assert row.result_json is not None
     payload = dict(row.result_json)
     del payload["task"]
+    if should_remove_urls:
+        payload.pop("invoke_url", None)
+        payload.pop("signature_url", None)
     row.result_json = payload
     await context.session.flush()
 
@@ -202,7 +208,7 @@ async def test_old_deployment_receipt_uses_its_original_version_task(
     first = await client.post(url, json=payload, headers=headers)
     assert first.status_code == 201, first.text
     saved = data_of(first)
-    await _remove_durable_task(app_context, first)
+    await _remove_durable_task(app_context, first, should_remove_urls=True)
     switched = await client.patch(
         f"{DEPLOYMENTS}/{saved['id']}",
         json={"model_version_id": replacement, "name": "已切换规则版本"},

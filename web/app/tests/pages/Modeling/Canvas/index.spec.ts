@@ -213,7 +213,7 @@ describe('普通未保存画布离开', () => {
     await flushPromises()
     finish(RUN)
     await flushPromises()
-    expect(wrapper.text()).not.toContain('取消运行')
+    expect(wrapper.text()).not.toContain('取消训练')
     expect(wrapper.text()).toContain('p2')
   })
 
@@ -224,7 +224,7 @@ describe('普通未保存画布离开', () => {
     })
     const { wrapper } = await open('/modeling/pipelines/p1?run_id=r2', false)
     await flushPromises()
-    expect(wrapper.text()).not.toContain('取消运行')
+    expect(wrapper.text()).not.toContain('取消训练')
   })
 
   it('已发起p1运行的迟到回执不在p2恢复旧运行或轮询', async () => {
@@ -250,7 +250,7 @@ describe('普通未保存画布离开', () => {
     const { router, wrapper } = await open()
     await wrapper
       .findAll('button')
-      .find((button) => button.text() === '运行')
+      .find((button) => button.text() === '开始训练')
       ?.trigger('click')
     await flushPromises()
     await router.push('/modeling/pipelines/p2')
@@ -258,7 +258,7 @@ describe('普通未保存画布离开', () => {
     finish(RUN)
     await flushPromises()
     expect(wrapper.text()).toContain('p2')
-    expect(wrapper.text()).not.toContain('取消运行')
+    expect(wrapper.text()).not.toContain('取消训练')
     expect(getRun).not.toHaveBeenCalled()
   })
 
@@ -279,7 +279,7 @@ describe('普通未保存画布离开', () => {
     const { router, wrapper } = await open()
     await wrapper
       .findAll('button')
-      .find((button) => button.text() === '运行')
+      .find((button) => button.text() === '开始训练')
       ?.trigger('click')
     const switching = router.push('/modeling/pipelines/p2')
     await flushPromises()
@@ -330,7 +330,7 @@ describe('普通未保存画布离开', () => {
     vi.mocked(modeling.listModelingRuns).mockClear()
     await wrapper
       .findAll('button')
-      .find((button) => button.text() === '运行')
+      .find((button) => button.text() === '开始训练')
       ?.trigger('click')
     const leaving = router.push('/workbench')
     await flushPromises()

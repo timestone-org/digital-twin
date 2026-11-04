@@ -1,11 +1,11 @@
-"""建模幂等回执的任务字段兼容，保留首次结果与原缓存身份。"""
+"""建模幂等回执的任务与服务地址兼容，保留首次结果与原缓存身份。"""
 
 import uuid
 from collections.abc import Awaitable, Callable
 from dataclasses import dataclass
 from typing import TYPE_CHECKING
 
-from pydantic import BaseModel, JsonValue, RootModel
+from pydantic import BaseModel, JsonValue, RootModel, TypeAdapter
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from platform_server.apps.modeling.protocols import ModelTask
@@ -18,6 +18,10 @@ from platform_server.apps.modeling.services import (
     instance_service,
     model_service,
     template_service,
+)
+from platform_server.apps.modeling.services.serving_contract import (
+    invoke_url,
+    signature_url,
 )
 
 if TYPE_CHECKING:
@@ -80,10 +84,18 @@ async def payload_with_task(
     model: type[BaseModel],
     payload: dict[str, JsonValue],
 ) -> dict[str, JsonValue]:
-    """仅补缺失任务字段；Args: session, model, payload。"""
-    if "task" in payload or not requires_task(model):
+    """补齐旧回执的任务和部署地址；Args: session, model, payload。"""
+    if not requires_task(model):
         return payload
-    return {**payload, "task": await _task_of_receipt(session, model, payload)}
+    result = dict(payload)
+    if "task" not in result:
+        result["task"] = await _task_of_receipt(session, model, payload)
+    if model is ModelDeploymentOut:
+        task = TypeAdapter[ModelTask](ModelTask).validate_python(result["task"])
+        code = str(result["code"])
+        result.setdefault("invoke_url", invoke_url(code, task))
+        result.setdefault("signature_url", signature_url(code))
+    return result
 
 
 async def _task_of_receipt(

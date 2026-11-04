@@ -12,7 +12,10 @@ from integration.modeling_management_helpers import (
     seed_rule_versions,
     seed_versions,
 )
-from platform_server.apps.modeling.models import ModelingModelVersion
+from platform_server.apps.modeling.models import (
+    ModelingDeployment,
+    ModelingModelVersion,
+)
 
 DEPLOYMENTS = "/api/v1/platform/modeling-deployments"
 VERSIONS = "/api/v1/platform/modeling-model-versions"
@@ -180,15 +183,14 @@ async def test_version_deployment_query_uses_constant_sql_count(
         assert (await app_client.get(path)).status_code == 200
         single_count = len(statements)
         for number in range(3):
-            response = await app_client.post(
-                DEPLOYMENTS,
-                json={
-                    "code": f"extra-{number}",
-                    "name": "附加",
-                    "model_version_id": versions[0],
-                },
+            db_session.add(
+                ModelingDeployment(
+                    code=f"extra-{number}",
+                    name="历史附加",
+                    model_version_id=uuid.UUID(versions[0]),
+                )
             )
-            assert response.status_code == 201
+        await db_session.commit()
         statements.clear()
         selected = data_of(await app_client.get(path))
         assert len(selected["items"]) == 4
@@ -218,15 +220,14 @@ async def test_deployment_filters_keep_disabled_and_multiple_services(
 ) -> None:
     instance, versions = await seed_versions(app_client, db_session)
     first = await deployed(app_client, versions[0])
-    second = await app_client.post(
-        DEPLOYMENTS,
-        json={
-            "code": "second-service",
-            "name": "第二服务",
-            "model_version_id": versions[0],
-        },
+    db_session.add(
+        ModelingDeployment(
+            code="second-service",
+            name="历史第二服务",
+            model_version_id=uuid.UUID(versions[0]),
+        )
     )
-    assert second.status_code == 201
+    await db_session.commit()
     disabled = await app_client.patch(
         f"{DEPLOYMENTS}/{first['id']}",
         json={"is_enabled": False, "expected_revision": 1},

@@ -30,9 +30,8 @@ NodeRunStatus = Literal[
 
 NODE_RUN_STATUSES: tuple[str, ...] = tuple(sorted(get_args(NodeRunStatus)))
 
-# 这次运行是谁发起的。⚠ 定时触发的 `schedule` 不在集合里：加它要走一次放宽
-# CHECK 的迁移，而不是往库里写一个当前没有任何代码产得出的取值
-RunTrigger = Literal["api", "manual"]
+# 运行的发起来源
+RunTrigger = Literal["api", "manual", "schedule"]
 
 RUN_TRIGGERS: tuple[str, ...] = tuple(sorted(get_args(RunTrigger)))
 

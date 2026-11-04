@@ -21,7 +21,6 @@ from platform_server.apps.modeling.crud import (
     deployment_crud,
     model_version_crud,
 )
-from platform_server.apps.modeling.errors import RunAlreadyPublished
 from platform_server.apps.modeling.models import (
     ModelingDeployment,
     ModelingModelVersion,
@@ -336,7 +335,7 @@ async def _publish(database: Database, run_id: uuid.UUID) -> None:
         )
 
 
-async def test_concurrent_publication_of_one_run_returns_domain_conflict(
+async def test_concurrent_publication_of_one_run_reuses_the_frozen_version(
     settings: Settings, app_context: AppContext
 ) -> None:
     del app_context
@@ -367,9 +366,13 @@ async def test_concurrent_publication_of_one_run_returns_domain_conflict(
             event.listen(engine, "before_cursor_execute", observe, named=True)
             competing = asyncio.create_task(_publish(database, run_id))
             await asyncio.wait_for(reached_lock.wait(), timeout=5)
-        with pytest.raises(RunAlreadyPublished) as caught:
-            await asyncio.wait_for(competing, timeout=5)
-        assert caught.value.http_status == 409
+        await asyncio.wait_for(competing, timeout=5)
+        async with database.session() as session:
+            rows, total = await model_version_crud.page(
+                session, pipeline_id=pipeline_id, offset=0, limit=10
+            )
+            assert total == 1
+            assert rows[0].version == 1
     finally:
         if event.contains(engine, "before_cursor_execute", observe):
             event.remove(engine, "before_cursor_execute", observe)

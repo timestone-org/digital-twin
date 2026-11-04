@@ -4,6 +4,7 @@ import { PERMISSION_CODES } from '@dt/contracts'
 import {
   DtButton,
   DtInput,
+  DtIconButton,
   DtModal,
   DtNotice,
   DtPageState,
@@ -18,6 +19,7 @@ import { AppShell } from '@/components/layout'
 import { nowStamp } from '@/utils/datetime'
 import { useAuthStore } from '@/stores/auth'
 import PublishTemplateButton from '../components/PublishTemplateButton.vue'
+import WorkflowActions from './components/WorkflowActions.vue'
 
 import CanvasMenu from './components/CanvasMenu.vue'
 import CanvasWorkspaceBar from './components/CanvasWorkspaceBar.vue'
@@ -247,6 +249,12 @@ watch(
     back-to="/modeling/pipelines"
   >
     <template #actions>
+      <WorkflowActions
+        :pipeline="page.doc.pipeline.value"
+        :run="page.runner.run.value"
+        :is-readonly="isReadonly"
+        @published="void page.loadRuns(pipelineId)"
+      />
       <DtButton
         v-if="page.isReplaying.value"
         variant="ghost"
@@ -257,7 +265,7 @@ watch(
         回到编辑
       </DtButton>
       <PermGuard :codes="[PERMISSION_CODES.modelingManage]">
-        <DtButton
+        <DtIconButton
           variant="outline"
           size="sm"
           :disabled="
@@ -269,10 +277,10 @@ watch(
           :loading="page.doc.isSaving.value"
           intent="primary"
           icon="save"
-          aria-label="保存"
+          label="保存"
+          tooltip="保存工作流"
           @click="void saving.save()"
-          >保存</DtButton
-        >
+        />
       </PermGuard>
       <PermGuard :codes="[PERMISSION_CODES.modelingRun]" explain>
         <RunControls
@@ -289,6 +297,7 @@ watch(
             page.doc.isSaving.value
           "
           @run="void saving.run()"
+          @train-and-deploy="void saving.run(true)"
           @cancel="void page.runner.cancel()"
         />
       </PermGuard>
@@ -306,6 +315,7 @@ watch(
         nodeCount: page.graph.graph.value.nodes.length,
         progress,
       }"
+      @auto-layout="actions.autoLayout"
       @undo="page.graph.undo()"
       @redo="page.graph.redo()"
       @configure="
@@ -351,7 +361,7 @@ watch(
             {{ config.blockReason.value }}；请先改正或应用参数，再保存或运行。
           </DtNotice>
           <p class="m-0 text-caption text-text-secondary">
-            双击节点配置参数 → 点击运行自动保存并校验 →
+            双击节点配置参数 → 点击训练自动保存并校验 →
             点击节点上的「结果」查看输出
           </p>
           <GraphIssues
@@ -450,7 +460,7 @@ watch(
       <ShortcutsHelp />
     </DtModal>
 
-    <DtModal v-model="isHistoryOpen" title="运行历史" width="26rem">
+    <DtModal v-model="isHistoryOpen" title="训练历史" width="26rem">
       <RunHistory
         :runs="page.runs.value"
         :current-id="page.runner.run.value?.id ?? null"

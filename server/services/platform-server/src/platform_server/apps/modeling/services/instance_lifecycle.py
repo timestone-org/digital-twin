@@ -20,7 +20,6 @@ from platform_server.apps.modeling.services import (
     run_service,
 )
 from platform_server.apps.modeling.services.instance_service import (
-    lock_instance,
     require_instance,
 )
 from platform_server.apps.modeling.services.pipeline_service import Actor
@@ -34,7 +33,7 @@ async def train_instance(
     payload: RunStartIn,
     context: RunContext,
 ) -> RunOut:
-    await lock_instance(session, instance_id)
+    await require_instance(session, instance_id)
     return await run_service.start_run(
         session, pipeline_id=instance_id, payload=payload, context=context
     )

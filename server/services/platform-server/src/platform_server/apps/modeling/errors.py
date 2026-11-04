@@ -155,17 +155,6 @@ class DeploymentUnservable(AppError):
     http_status = 410
 
 
-class ApiKeyInvalid(AppError):
-    """密钥无效。
-
-    ⚠ 「不存在」「已撤销」「已过期」共用这一个：分开报等于送一个枚举接口。
-    消息里也**只有这四个字**。
-    """
-
-    code = 41421
-    http_status = 401
-
-
 class ApiKeyNotFound(AppError):
     """管理面按 id 找不到这把密钥。"""
 

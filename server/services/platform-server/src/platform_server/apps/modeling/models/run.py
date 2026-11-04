@@ -78,7 +78,7 @@ class ModelingRun(UuidPrimaryKeyMixin, CreatedAtMixin, Base):
     heartbeat_at: Mapped[datetime | None] = mapped_column(
         DateTime(timezone=True), nullable=True
     )
-    # 队列重投递次数，超上限即判毒丸落 failed（D25）
+    # 执行认领计数
     attempt: Mapped[int] = mapped_column(
         Integer, nullable=False, default=0, server_default=text("0")
     )
@@ -102,8 +102,36 @@ class ModelingRun(UuidPrimaryKeyMixin, CreatedAtMixin, Base):
     created_by: Mapped[str | None] = mapped_column(Text, nullable=True)
     # ⚠ 冗余存一份用户名是刻意的：账号可能被删，而这一行要一直答得出「谁跑的」
     created_by_name: Mapped[str | None] = mapped_column(Text, nullable=True)
+    auto_publish: Mapped[bool | None] = mapped_column(Boolean, nullable=True)
+    publication_status: Mapped[str | None] = mapped_column(Text, nullable=True)
+    publication_error: Mapped[str | None] = mapped_column(Text, nullable=True)
+    dispatch_after: Mapped[datetime | None] = mapped_column(
+        DateTime(timezone=True), nullable=True
+    )
+    traceparent: Mapped[str | None] = mapped_column(Text, nullable=True)
+    publication_expected_revision: Mapped[int | None] = mapped_column(
+        Integer, nullable=True
+    )
+    publication_deployment_id: Mapped[uuid.UUID | None] = mapped_column(
+        UUID(as_uuid=True), nullable=True, index=True
+    )
 
     __table_args__ = (
+        Index(
+            "ix_modeling_runs_dispatch_after",
+            "dispatch_after",
+            "id",
+            postgresql_where=text(
+                "status = 'pending' OR (status = 'cancelling' AND attempt = 0)"
+            ),
+        ),
+        ForeignKeyConstraint(
+            ["publication_deployment_id"],
+            ["platform.modeling_deployments.id"],
+            name="fk_modeling_runs_publication_deployment_id",
+            ondelete="SET NULL",
+            use_alter=True,
+        ),
         ForeignKeyConstraint(
             ["pipeline_id"],
             ["platform.modeling_pipelines.id"],

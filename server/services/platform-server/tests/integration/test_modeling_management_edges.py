@@ -22,6 +22,7 @@ from lib.errors import ValidationFailed
 from lib.web import CursorPage, encode_cursor
 from platform_server.apps.modeling.crud import model_version_crud
 from platform_server.apps.modeling.models import (
+    ModelingDeployment,
     ModelingInstance,
     ModelingModelVersion,
 )
@@ -212,16 +213,13 @@ async def test_rollback_history_belongs_to_deployment_and_supports_cursor(
 ) -> None:
     _, versions = await seed_versions(app_client, db_session)
     deployment = await deployed(app_client, versions[0])
-    other = data_of(
-        await app_client.post(
-            DEPLOYMENTS,
-            json={
-                "code": "other-service",
-                "name": "其他",
-                "model_version_id": versions[0],
-            },
-        )
+    other = ModelingDeployment(
+        code="other-service",
+        name="历史其他服务",
+        model_version_id=uuid.UUID(versions[0]),
     )
+    db_session.add(other)
+    await db_session.commit()
     url = f"{DEPLOYMENTS}/{deployment['id']}"
     await app_client.post(
         f"{url}:switch",
@@ -230,7 +228,7 @@ async def test_rollback_history_belongs_to_deployment_and_supports_cursor(
     history = data_of(await app_client.get(f"{url}/switches"))["items"]
     rollback = {"expected_revision": 2, "switch_id": history[0]["id"]}
     rejected = await app_client.post(
-        f"{DEPLOYMENTS}/{other['id']}:rollback",
+        f"{DEPLOYMENTS}/{other.id}:rollback",
         json={**rollback, "expected_revision": 1},
     )
     assert rejected.status_code == 404

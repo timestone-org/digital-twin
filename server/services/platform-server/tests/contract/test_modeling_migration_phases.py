@@ -11,10 +11,15 @@ from alembic.script import ScriptDirectory
 
 SERVICE = Path(__file__).resolve().parents[2]
 VERSIONS = SERVICE / "migrations" / "versions"
-STRUCTURES = ("modeling_management_20261030", "modeling_commands_20261030")
+STRUCTURES = (
+    "modeling_management_20261030",
+    "modeling_commands_20261030",
+    "modeling_workflow_20261103",
+)
 INDEXES = (
     "modeling_management_idx_20261030",
     "modeling_commands_idx_20261030",
+    "modeling_workflow_idx_20261103",
 )
 
 
@@ -42,12 +47,14 @@ def test_index_failure_keeps_a_completed_structure_revision_to_resume_from():
         ("modeling_management_idx_20261030", "modeling_management_20261030"),
         ("modeling_commands_20261030", "modeling_management_idx_20261030"),
         ("modeling_commands_idx_20261030", "modeling_commands_20261030"),
+        ("modeling_workflow_20261103", "modeling_commands_idx_20261030"),
+        ("modeling_workflow_idx_20261103", "modeling_workflow_20261103"),
     )
     for revision, predecessor in chain:
         script = scripts.get_revision(revision)
         assert script is not None
         assert script.down_revision == predecessor
-    assert scripts.get_current_head() == "modeling_commands_idx_20261030"
+    assert scripts.get_current_head() == "modeling_workflow_idx_20261103"
 
 
 @pytest.mark.parametrize("revision", STRUCTURES)
@@ -114,8 +121,8 @@ class InterruptedIndexOperations:
 
 @pytest.mark.parametrize(
     ("revision", "fail_at", "expected_count"),
-    [(INDEXES[0], 2, 10), (INDEXES[1], 1, 1)],
-    ids=["management-indexes", "command-index"],
+    [(INDEXES[0], 2, 10), (INDEXES[1], 1, 1), (INDEXES[2], 2, 4)],
+    ids=["management-indexes", "command-index", "workflow-indexes"],
 )
 def test_interrupted_index_phase_can_be_invoked_again(
     monkeypatch, revision, fail_at, expected_count

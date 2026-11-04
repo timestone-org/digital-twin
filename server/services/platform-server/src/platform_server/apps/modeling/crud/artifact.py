@@ -29,22 +29,5 @@ class ModelArtifactCrud(CrudBase[ModelingModelArtifact]):
         )
         return rows.scalars().first()
 
-    async def list_by_versions(
-        self, session: AsyncSession, version_ids: tuple[uuid.UUID, ...]
-    ) -> list[ModelingModelArtifact]:
-        """一批版本的产物，一次查完。
-
-        ⚠ 台账重算一次要装一批模型，逐个查的表现是「一次重算发几十条查询」。
-        Args: session, version_ids。
-        """
-        if not version_ids:
-            return []
-        rows = await session.execute(
-            select(ModelingModelArtifact).where(
-                ModelingModelArtifact.model_version_id.in_(version_ids)
-            )
-        )
-        return list(rows.scalars().all())
-
 
 model_artifact_crud = ModelArtifactCrud()

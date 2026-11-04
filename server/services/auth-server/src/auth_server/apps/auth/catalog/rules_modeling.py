@@ -19,6 +19,27 @@ _PLATFORM = "/api/v1/platform"
 
 MODELING_RULES: tuple[RouteRuleSpec, ...] = (
     RouteRuleSpec(
+        f"{_PLATFORM}/modeling-pipelines/*/schedule",
+        "PUT",
+        codes=(MODELING_RUN,),
+        priority=985,
+        description="管理工作流的定时训练规则，自动发布由端点额外校验发布权限",
+    ),
+    RouteRuleSpec(
+        f"{_PLATFORM}/modeling-runs/*:deploy",
+        "POST",
+        codes=(MODELING_PUBLISH,),
+        priority=987,
+        description="将指定成功训练模型发布到工作流唯一入口",
+    ),
+    RouteRuleSpec(
+        f"{_PLATFORM}/modeling-runs/*",
+        "DELETE",
+        codes=(MODELING_PUBLISH,),
+        priority=987,
+        description="清理终态训练及其未引用模型，引用保护由端点校验",
+    ),
+    RouteRuleSpec(
         f"{_PLATFORM}/modeling-instances*",
         "*",
         codes=(MODELING_RUN,),

@@ -617,6 +617,11 @@ export type {
   AnomalyDecision,
   OpenModelDetect,
   OpenModelDetectRequest,
+  OpenModelMissingPolicy,
+  OpenModelInput,
+  OpenModelDerived,
+  OpenModelOutput,
+  OpenModelSignature,
   ModelingJsonValue,
   OpenModelCalculateRequest,
   OpenModelCalculate,
@@ -652,3 +657,5 @@ export type {
   AcEffectiveCompliance,
   AcWinterPeriod,
 } from './hvacCompliance'
+
+export type * from './modelingWorkflow'

@@ -95,6 +95,31 @@ describe('DtDropdownMenu 渲染', () => {
     wrapper.unmount()
   })
 
+  it('自定义触发器保留受控面板关联和展开状态', async () => {
+    const wrapper = mount(DtDropdownMenu, {
+      props: { items: ITEMS },
+      slots: {
+        trigger: `<template #trigger="{ toggle, isOpen, panelId }">
+          <button type="button" aria-label="操作" aria-haspopup="menu"
+            :aria-expanded="isOpen" :aria-controls="panelId" @click="toggle">操作</button>
+        </template>`,
+      },
+      attachTo: document.body,
+    })
+    const button = wrapper.get('button')
+    const panelId = button.attributes('aria-controls')
+    expect(panelId).toMatch(/^dt-popover-/)
+    expect(button.attributes('aria-expanded')).toBe('false')
+    await openMenu(wrapper)
+    expect(button.attributes('aria-expanded')).toBe('true')
+    expect(document.getElementById(panelId ?? '')?.contains(menu())).toBe(true)
+    items()[0]?.click()
+    await nextTick()
+    expect(button.attributes('aria-expanded')).toBe('false')
+    expect(wrapper.emitted('select')).toEqual([[EDIT]])
+    wrapper.unmount()
+  })
+
   it('自备触发器接管默认按钮', async () => {
     const wrapper = mount(DtDropdownMenu, {
       props: { items: ITEMS },

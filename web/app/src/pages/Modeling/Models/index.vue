@@ -11,11 +11,12 @@ import type {
   ModelingVersionSummary,
 } from '@dt/contracts'
 import { useToast } from '@dt/ui'
-import { computed, onBeforeUnmount, onMounted, ref } from 'vue'
+import { computed, onBeforeUnmount, onMounted, ref, watch } from 'vue'
+import { useRoute } from 'vue-router'
+import { useRunOps } from '../scripts/useRunOps'
 
 import * as modeling from '@/api/modeling'
 import { AppShell } from '@/components/layout'
-import ModelingNav from '../components/ModelingNav.vue'
 import { describeError, useAsyncList } from '@/composables/useAsyncList'
 import { useRacedFetch } from '@/composables/useRacedFetch'
 import { useViewMode } from '@/composables/useViewMode'
@@ -31,6 +32,12 @@ import { useVersionOps } from './scripts/useVersionOps'
 // 初始每页条数
 const PAGE_SIZE = 200
 
+const route = useRoute()
+const workflowId = computed(() => {
+  const value = route.query['pipeline_id']
+  return typeof value === 'string' ? value : undefined
+})
+const runOps = useRunOps(refresh)
 const versionView = useViewMode('modeling-versions')
 const bindingView = useViewMode('modeling-bindings')
 const binding = ref<ModelingVersionSummary | null>(null)
@@ -41,7 +48,11 @@ const versionRead = useRacedFetch()
 const toast = useToast()
 
 const versions = useAsyncList<ModelingVersionSummary>(
-  (query) => modeling.listModelingVersions(query),
+  (query, signal) =>
+    modeling.listModelingVersions(
+      { ...query, pipelineId: workflowId.value },
+      signal,
+    ),
   PAGE_SIZE,
 )
 const bindings = useAsyncList<ModelingBinding>(
@@ -57,6 +68,13 @@ function refresh(): void {
 const ops = useBindingOps(refresh)
 // 版本级动作单独一组：下线与注册的对象是版本，爆炸半径也与绑定那几个不同
 const versionOps = useVersionOps(refresh)
+watch(workflowId, () => {
+  versionRead.cancel()
+  detail.value = null
+  binding.value = null
+  renaming.value = null
+  void versions.reloadFromFirstPage()
+})
 
 /** 版本 id → 「名称 v版本号」。绑定表里显示它，而不是一串 id。 */
 const versionLabels = computed(
@@ -119,15 +137,14 @@ onBeforeUnmount(versionRead.cancel)
 
 <template>
   <AppShell
-    title="模型版本"
-    subtitle="查看已发布版本，绑定台账公式或部署为服务"
+    title="训练模型与公式"
+    subtitle="成功训练自动保存模型，可直接发布调用或绑定台账公式"
     back-to="/modeling/pipelines"
   >
     <!-- h-full + min-h-0 见 AppShell 的契约：main 不滚，高度由页面自己吃满 -->
     <div
       class="dt-ml-models flex h-full min-h-0 flex-col gap-4 overflow-hidden"
     >
-      <ModelingNav />
       <section class="dt-ml-models__block">
         <VersionTable
           v-model:view="versionView"
@@ -140,6 +157,8 @@ onBeforeUnmount(versionRead.cancel)
           @detail="(row) => void openDetail(row)"
           @bind="(row) => (binding = row)"
           @retire="(row) => void versionOps.retire(row)"
+          @remove="(row) => void versionOps.remove(row)"
+          @deploy="(row) => void runOps.publish(row.run_id)"
           @rename="
             (row) =>
               void readVersion(row, (version) => {

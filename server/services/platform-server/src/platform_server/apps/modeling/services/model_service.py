@@ -1,7 +1,7 @@
 """模型版本与绑定的读写。事务边界在这一层。"""
 
 import uuid
-from dataclasses import dataclass, field
+from dataclasses import dataclass, field, replace
 from typing import Any, cast
 
 from sqlalchemy.ext.asyncio import AsyncSession
@@ -14,6 +14,7 @@ from platform_server.apps.modeling.crud import (
     model_artifact_crud,
     model_version_crud,
     node_run_crud,
+    pipeline_crud,
 )
 from platform_server.apps.modeling.crud import management_queries as query_crud
 from platform_server.apps.modeling.crud import management_state as state_crud
@@ -100,30 +101,103 @@ async def publish_version(
     的键。搬完落库失败只留一份没人引用的字节，那由保留期收拾。
     Args: session, payload, actor, store。
     """
-    run = await require_publishable_run(session, payload.run_id)
-    records = await _records_of(session, run.id)
-    graph = graph_of_run(run)
+    existing = await model_version_crud.get_by_run(session, payload.run_id)
+    if existing is not None:
+        return await update_version_metadata(
+            session,
+            version_id=existing.id,
+            payload=ModelVersionUpdateIn(
+                name=payload.name, description=payload.description
+            ),
+        )
+    source = await load_version_source(session, payload.run_id)
+    prepared = await prepare_version(source, payload, actor, store)
+    return await save_prepared_version(
+        session, prepared, is_reusing_existing=True
+    )
+
+
+@dataclass(frozen=True)
+class RunSnapshot:
+    id: uuid.UUID
+    pipeline_id: uuid.UUID
+    row_count: int | None
+    graph_snapshot: dict[str, Any]
+
+
+@dataclass(frozen=True)
+class VersionSource:
+    run: RunSnapshot
+    records: dict[str, NodeRecord]
+    graph: PipelineGraph
+
+
+@dataclass(frozen=True)
+class PreparedVersion:
+    draft: "_Draft"
+    artifact: dict[str, Any]
+
+
+async def load_version_source(
+    session: AsyncSession, run_id: uuid.UUID
+) -> VersionSource:
+    run = await require_publishable_run(session, run_id)
+    return VersionSource(
+        run=RunSnapshot(
+            run.id, run.pipeline_id, run.row_count, run.graph_snapshot
+        ),
+        records=await _records_of(session, run.id),
+        graph=graph_of_run(run),
+    )
+
+
+async def prepare_version(
+    source: VersionSource,
+    payload: ModelVersionCreateIn,
+    actor: Actor,
+    store: ObjectStore | None,
+) -> PreparedVersion:
+    """准备产物；Args: source, payload, actor, store。"""
     version_id = uuid7()
-    binary = await _binary_of(store, graph, records, version_id)
-    await require_active_instance(session, run.pipeline_id)
-    version = await model_version_crud.next_version(session, run.pipeline_id)
-    # ⚠ 流水线行锁到手后再查发布状态，等待期间可能已有并发发布提交。
-    await require_publishable_run(session, run.id)
+    binary = await _binary_of(store, source.graph, source.records, version_id)
     draft = _Draft(
         version_id=version_id,
-        version=version,
-        run=run,
+        version=0,
+        run=source.run,
         payload=payload,
         actor=actor,
         verdict=_refused_if(
-            inspect_run(graph, records, binary.estimator), binary.reason
+            inspect_run(source.graph, source.records, binary.estimator),
+            binary.reason,
         ),
-        metrics=_metrics_of(graph, records),
+        metrics=_metrics_of(source.graph, source.records),
     )
+    return PreparedVersion(draft=draft, artifact=binary.meta)
+
+
+async def save_prepared_version(
+    session: AsyncSession,
+    prepared: PreparedVersion,
+    *,
+    is_reusing_existing: bool = False,
+) -> ModelVersionOut:
+    draft = prepared.draft
+    version = await model_version_crud.next_version(
+        session, draft.run.pipeline_id
+    )
+    await require_active_instance(session, draft.run.pipeline_id)
+    if is_reusing_existing:
+        existing = await model_version_crud.get_by_run(session, draft.run.id)
+        if existing is not None:
+            return await get_version(session, existing.id)
+    await require_publishable_run(session, draft.run.id)
+    draft = replace(draft, version=version)
     row = model_version_crud.add(session, _version_row(draft))
     await session.flush()
-    if draft.verdict.is_servable and binary.meta:
-        model_artifact_crud.add(session, _artifact_row(version_id, binary.meta))
+    if draft.verdict.is_servable and prepared.artifact:
+        model_artifact_crud.add(
+            session, _artifact_row(draft.version_id, prepared.artifact)
+        )
     await session.flush()
     return await get_version(session, row.id)
 
@@ -134,7 +208,7 @@ class _Draft:
 
     version_id: uuid.UUID
     version: int
-    run: Any
+    run: RunSnapshot
     payload: ModelVersionCreateIn
     actor: Actor
     verdict: Publishable
@@ -317,6 +391,7 @@ async def retire_version(session: AsyncSession, version_id: uuid.UUID) -> None:
     Args: session, version_id。
     """
     row = await require_version(session, version_id)
+    await pipeline_crud.lock(session, row.pipeline_id)
     await state_crud.lock_instance(session, row.pipeline_id)
     locked = await state_crud.lock_version(session, row.id)
     if locked is None:

@@ -116,8 +116,36 @@ const ALL_NAV_ITEMS: readonly NavItem[] = [
     key: 'modeling',
     label: '分析建模',
     icon: 'workflow',
-    to: '/modeling/pipelines',
-    permission: [PERMISSION_CODES.modelingView],
+    children: [
+      {
+        key: 'modeling-workflows',
+        label: '工作流',
+        icon: 'workflow',
+        to: '/modeling/pipelines',
+        permission: [PERMISSION_CODES.modelingView],
+      },
+      {
+        key: 'modeling-runs',
+        label: '训练记录',
+        icon: 'activity',
+        to: '/modeling/runs',
+        permission: [PERMISSION_CODES.modelingView],
+      },
+      {
+        key: 'modeling-models',
+        label: '训练模型与公式',
+        icon: 'layers',
+        to: '/modeling/models',
+        permission: [PERMISSION_CODES.modelingView],
+      },
+      {
+        key: 'modeling-services',
+        label: '已发布模型',
+        icon: 'share',
+        to: '/modeling/services',
+        permission: [PERMISSION_CODES.modelingView],
+      },
+    ],
   },
   {
     // 趋势分析横跨两层数据：上游的点位历史与派生出来的台账。挂在台账旁边而

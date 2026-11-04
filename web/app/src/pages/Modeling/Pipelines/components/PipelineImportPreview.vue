@@ -1,5 +1,5 @@
 <script setup lang="ts">
-/** @fileoverview 流水线文件的兼容性摘要与可定位问题清单。 */
+/** @fileoverview 工作流文件的兼容性摘要与可定位问题清单。 */
 import type { ModelingImportInspection } from '@dt/contracts'
 import { DtNotice, DtTag } from '@dt/ui'
 import PipelineImportIssue from './PipelineImportIssue.vue'
@@ -18,7 +18,7 @@ defineProps<{ inspection: ModelingImportInspection }>()
       >
     </div>
     <DtNotice intent="warning"
-      >导入创建新流水线，不覆盖当前系统中的已有内容。若编码已存在，请在下方填写新编码。跨部署后请核对台账、列与能管来源标识。</DtNotice
+      >导入创建新工作流，不覆盖当前系统中的已有内容。若编码已存在，请在下方填写新编码。跨部署后请核对台账、列与能管来源标识。</DtNotice
     >
     <ul
       v-if="inspection.issues.length"

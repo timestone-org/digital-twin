@@ -1,7 +1,7 @@
 """运行面的入参与出参。"""
 
 import uuid
-from typing import Any
+from typing import Any, Literal
 
 from pydantic import Field
 
@@ -17,6 +17,10 @@ from platform_server.apps.modeling.schemas.common import (
 )
 from platform_server.apps.modeling.schemas.graph import PipelineGraph
 
+PublicationStatus = Literal[
+    "not_requested", "pending", "published", "failed", "skipped"
+]
+
 
 class RunStartIn(InputModel):
     """发起一次运行。"""
@@ -26,6 +30,13 @@ class RunStartIn(InputModel):
     #: ⚠ 默认关是刻意的：默认开会让每一次运行都往对象存储写几十 MB，而绝大多数
     #: 运行只是在调参数（docs/MODELING_PLATFORM_DESIGN.md D12）
     is_keeping_frames: bool = False
+    should_auto_publish: bool = Field(default=False, alias="auto_publish")
+
+
+class RunDeployIn(InputModel):
+    """发布本次训练模型，签名变化须明确确认。"""
+
+    is_signature_change_confirmed: bool = False
 
 
 class NodeRunSummaryOut(OutputModel):
@@ -81,6 +92,9 @@ class RunSummaryOut(OutputModel):
     created_at: Utc
     instance_id: uuid.UUID | None = None
     published_version_id: uuid.UUID | None = None
+    should_auto_publish: bool = Field(default=False, alias="auto_publish")
+    publication_status: PublicationStatus = "not_requested"
+    publication_error: str | None = None
 
 
 class RunOut(RunSummaryOut):

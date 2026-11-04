@@ -1,12 +1,4 @@
-/**
- * @fileoverview 盯着一次运行：起、轮询、取消，以及节点结果的按需拉取。
- *
- * ⚠ 轮询必须**在终态停下**：跑完了还每秒打一次，一个开着的画布就能在一夜里
- * 打出几万次请求（MODELING_DESIGN §9.5）。
- * ⚠ 读取统一走useRacedFetch：换运行或卸载取消在飞读取及其回调。
- * ⚠ 停表之后不许再排下一拍：即便传输忽略AbortSignal，作废的回调也不调度。
- * 写入的start/cancel回执另用生命周期代次，已经发送的写入不自动重试。
- */
+/** @fileoverview 训练轮询、取消与节点结果读取；发布完成后停止轮询。 */
 import type { ModelingNodeRun, ModelingRun } from '@dt/contracts'
 import { useToast } from '@dt/ui'
 import type { Ref, ShallowRef } from 'vue'
@@ -17,11 +9,12 @@ import { describeError } from '@/composables/useAsyncList'
 import { useRacedFetch } from '@/composables/useRacedFetch'
 import type { RacedFetch } from '@/composables/useRacedFetch'
 
-/** 轮询间隔。运行是秒级的，再密只是多打请求。 */
 const POLL_MS = 1000
 
-/** 已经跑完的状态，看到就停表。 */
 const SETTLED = new Set(['succeeded', 'failed', 'cancelled'])
+function isSettled(run: ModelingRun): boolean {
+  return SETTLED.has(run.status) && run.publication_status !== 'pending'
+}
 
 interface PollState {
   generation: number
@@ -49,12 +42,12 @@ async function tick(runId: string, state: PollState): Promise<void> {
   await state.polling.run((signal) => modeling.getModelingRun(runId, signal), {
     ok: (next) => {
       state.run.value = next
-      if (SETTLED.has(next.status)) stopPolling(state)
+      if (isSettled(next)) stopPolling(state)
     },
     fail: () => undefined,
     // cancel作废回调后不会再排一拍，包括忽略signal而迟到的成功回包。
     settled: () => {
-      if (state.run.value?.id === runId && !SETTLED.has(state.run.value.status))
+      if (state.run.value?.id === runId && !isSettled(state.run.value))
         schedule(runId, state)
     },
   })
@@ -134,6 +127,38 @@ function createPollState(): PollState {
   }
 }
 
+function createStarter(
+  state: PollState,
+  isStarting: Ref<boolean>,
+  toast: Toast,
+  watchRun: (run: ModelingRun) => void,
+) {
+  return async (
+    pipelineId: string,
+    isKeepingFrames = false,
+    autoPublish = false,
+  ) => {
+    if (state.isDisposed) return
+    const generation = state.generation
+    isStarting.value = true
+    const started = await attempt(
+      () =>
+        autoPublish
+          ? modeling.startModelingRun(
+              pipelineId,
+              'manual',
+              isKeepingFrames,
+              true,
+            )
+          : modeling.startModelingRun(pipelineId, 'manual', isKeepingFrames),
+      toast,
+    )
+    if (generation !== state.generation) return
+    isStarting.value = false
+    if (started !== null) watchRun(started)
+  }
+}
+
 export function useRunPolling() {
   const state = createPollState()
   const previews = ref(new Map<string, ModelingNodeRun>())
@@ -147,7 +172,7 @@ export function useRunPolling() {
     isStarting.value = false
     state.run.value = next
     previews.value = new Map()
-    if (!SETTLED.has(next.status)) schedule(next.id, state)
+    if (!isSettled(next)) schedule(next.id, state)
   }
 
   function stop(): void {
@@ -168,24 +193,7 @@ export function useRunPolling() {
     stop,
     loadPreview: (nodeId: string) =>
       loadPreview(nodeId, state, previews, toast),
-    /**
-     * 发起一次运行。
-     *
-     * ⚠ `isKeepingFrames` 默认关：开着会让每一次运行都往对象存储写几十 MB，
-     * 而绝大多数运行只是在调参数（docs/MODELING_PLATFORM_DESIGN.md D12）。
-     */
-    start: async (pipelineId: string, isKeepingFrames = false) => {
-      if (state.isDisposed) return
-      const generation = state.generation
-      isStarting.value = true
-      const started = await attempt(
-        () => modeling.startModelingRun(pipelineId, 'manual', isKeepingFrames),
-        toast,
-      )
-      if (generation !== state.generation) return
-      isStarting.value = false
-      if (started !== null) watchRun(started)
-    },
+    start: createStarter(state, isStarting, toast, watchRun),
     cancel: () => cancel(state, toast),
   }
 }

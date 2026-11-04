@@ -18,7 +18,6 @@ import PermGuard from '@/components/PermGuard.vue'
 import { AppShell } from '@/components/layout'
 import { describeError } from '@/composables/useAsyncList'
 import { useAuthStore } from '@/stores/auth'
-import ModelingNav from '../components/ModelingNav.vue'
 import { runLabel } from '../scripts/instancePresentation'
 import DeployModelDialog from './components/DeployModelDialog.vue'
 import InstanceHistory from './components/InstanceHistory.vue'
@@ -194,8 +193,6 @@ onBeforeRouteUpdate(
     </template>
 
     <div class="flex h-full min-h-0 flex-col gap-4">
-      <ModelingNav />
-
       <DtNotice v-if="editor.error.value" intent="danger">
         {{ editor.error.value }}
         <DtButton size="xs" variant="ghost" @click="void discard()">

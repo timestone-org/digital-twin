@@ -225,12 +225,17 @@ export async function startModelingRun(
   pipelineId: string,
   trigger: ModelingTrigger = 'manual',
   isKeepingFrames = false,
+  autoPublish = false,
 ): Promise<ModelingRun> {
   return await requestData<ModelingRun>(
     `/modeling-pipelines/${pipelineId}:run`,
     onPlatform({
       method: 'POST',
-      body: { trigger, is_keeping_frames: isKeepingFrames },
+      body: {
+        trigger,
+        is_keeping_frames: isKeepingFrames,
+        auto_publish: autoPublish,
+      },
       headers: idempotent(newIdempotencyKey()),
     }),
   )
@@ -486,29 +491,12 @@ export async function registerModelingFormula(
 }
 
 /** 全部对外服务。 */
-export async function listModelDeployments(): Promise<ModelDeployment[]> {
+export async function listModelDeployments(
+  signal?: AbortSignal,
+): Promise<ModelDeployment[]> {
   return await requestData<ModelDeployment[]>(
     '/modeling-deployments',
-    onPlatform(),
-  )
-}
-
-/** 把一个模型版本开成第三方可调的服务。 */
-export async function createModelDeployment(input: {
-  code: string
-  model_version_id: string
-  name: string
-  description?: string | undefined
-  max_rows_per_call?: number | undefined
-  rate_limit_per_minute?: number | undefined
-}): Promise<ModelDeployment> {
-  return await requestData<ModelDeployment>(
-    '/modeling-deployments',
-    onPlatform({
-      method: 'POST',
-      body: input,
-      headers: idempotent(newIdempotencyKey()),
-    }),
+    onPlatform(signal === undefined ? {} : { signal }),
   )
 }
 

@@ -1,4 +1,4 @@
-/** @fileoverview 对外服务的创建、配额、启停与删除。 */
+/** @fileoverview 已发布模型的配额、启停与删除。 */
 import type { ModelDeployment } from '@dt/contracts'
 import { useConfirm, useToast } from '@dt/ui'
 import { ref } from 'vue'
@@ -37,20 +37,7 @@ async function attempt<T>(
   }
 }
 
-/** 建一个对外服务时的入参。 */
-export interface DeploymentDraft {
-  code: string
-  model_version_id: string
-  name: string
-  description?: string | undefined
-  max_rows_per_call?: number | undefined
-  rate_limit_per_minute?: number | undefined
-}
-
-/** 改一个对外服务时的补丁。缺省的字段不动。 */
-export type DeploymentPatch = Partial<DeploymentDraft> & {
-  is_enabled?: boolean | undefined
-}
+type DeploymentPatch = Parameters<typeof modeling.updateModelDeployment>[1]
 
 export function useDeploymentOps(onDone: () => void) {
   const isBusy = ref(false)
@@ -75,12 +62,6 @@ export function useDeploymentOps(onDone: () => void) {
   return {
     isBusy,
     remove,
-    /** 开一个对外服务。 */
-    create: async (input: DeploymentDraft) => {
-      const done = await run(() => modeling.createModelDeployment(input))
-      if (done !== null) toast.success('对外服务已开通')
-      return done
-    },
     /** 换版本、改配额、启停。 */
     update: async (deploymentId: string, patch: DeploymentPatch) => {
       const done = await run(() =>

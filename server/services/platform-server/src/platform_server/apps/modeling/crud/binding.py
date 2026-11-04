@@ -5,8 +5,6 @@ models 层跨模块，结构闸拦）。孤儿由读侧每次列表时校验，�
 （docs/MODELING_DESIGN.md §4.5、§7.5）。
 """
 
-import uuid
-
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
@@ -57,20 +55,6 @@ class BindingCrud(CrudBase[ModelingBinding]):
             select(ModelingBinding).order_by(*DEFAULT_ORDER)
         )
         return list(rows.scalars().all())
-
-    async def count_of_version(
-        self, session: AsyncSession, model_version_id: uuid.UUID
-    ) -> int:
-        """还有几条绑定指着这个版本。退役前要问一次。
-
-        Args: session, model_version_id。
-        """
-        return await self.count(
-            session,
-            statement=select(ModelingBinding).where(
-                ModelingBinding.model_version_id == model_version_id
-            ),
-        )
 
 
 binding_crud = BindingCrud()

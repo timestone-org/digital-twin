@@ -72,6 +72,9 @@ from platform_server.apps.modeling.services.retention import (
     RetentionOptions,
 )
 from platform_server.apps.modeling.services.run_queue import rules_target
+from platform_server.apps.modeling.services.schedule_worker import (
+    ModelingScheduler,
+)
 from platform_server.apps.report.services.scheduler import ReportScheduler
 from platform_server.apps.report.services.worker import (
     ReportWorker,
@@ -222,6 +225,7 @@ def build_modeling_runner(
             prefetch=settings.modeling_prefetch,
             block_ms=settings.modeling_block_ms,
             claim_idle_ms=settings.modeling_claim_idle_ms,
+            stale_after_s=settings.modeling_stale_minutes * 60,
             node_timeout_s=settings.modeling_node_timeout_s,
             tz_offset_minutes=_business_tz_offset_minutes(container),
             keep_per_pipeline=settings.modeling_run_keep_per_pipeline,
@@ -231,12 +235,7 @@ def build_modeling_runner(
 
 
 def build_modeling_retention(container: Container) -> ModelingRetention:
-    """按配置装出建模的保留期清理循环。
-
-    ⚠ 它不持租约：删的是「按流水线的老运行」与「过期的运行行」，两台一起删也
-    只是各自删到一部分，没有互相踩的写。
-    Args: container。
-    """
+    """装出建模保留期清理循环；Args: container。"""
     settings = container.settings
     return ModelingRetention(
         sessions=container.database,
@@ -534,10 +533,7 @@ async def _check_compressor(settings: Settings) -> CompressorRuntime:
 
 
 async def serve(settings: Settings, *, wait: Wait) -> None:
-    """装配并跑到收到终止信号为止。
-
-    Args: settings, wait。
-    """
+    """装配并跑到收到终止信号为止。Args: settings, wait。"""
     compressor_runtime = await _check_compressor(settings)
     container = build_container(settings)
     # ⚠ worker 也要注册：回填与重算跑在这里
@@ -570,6 +566,9 @@ async def serve(settings: Settings, *, wait: Wait) -> None:
                         container, pool=node_pool, is_rule_calculation=True
                     ),
                     build_modeling_retention(container),
+                    ModelingScheduler.from_settings(
+                        container.database, container.stream, settings
+                    ),
                     *_report_consumers(container, word_pool),
                     PointIndexWorker(container.database, container.llm.cipher),
                 ),
@@ -586,10 +585,7 @@ async def serve(settings: Settings, *, wait: Wait) -> None:
 
 
 def run(settings: Settings) -> None:  # pragma: no cover - 进程入口
-    """worker 角色的入口。
-
-    Args: settings。
-    """
+    """worker 角色的入口。Args: settings。"""
     configure_logging(
         service=settings.app_name,
         role=settings.app_role,

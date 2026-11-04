@@ -4,6 +4,7 @@
  * 的表现是「菜单能用、快捷键不能用」这种只在某一条路径上出现的怪事。
  */
 import type { useToast } from '@dt/ui'
+import { nextTick, onBeforeUnmount } from 'vue'
 
 import { layoutGraph } from './autoLayout'
 import type { GraphClip } from './clipboard'
@@ -46,6 +47,33 @@ function shiftToCenter(clip: GraphClip, center: CanvasPoint): CanvasPoint {
   return { left: center.left - left, top: center.top - top }
 }
 
+/** 自动整理只提交实际位移，DOM 更新后适应原画布。 */
+function autoLayoutAction(deps: CanvasActionDeps): () => void {
+  let isActive = true
+  onBeforeUnmount(() => {
+    isActive = false
+  })
+  return () => {
+    const canvas = deps.canvas()
+    const graph = deps.graph.graph.value
+    if (!isActive || canvas === null || graph.nodes.length === 0) return
+    const moves = layoutGraph(graph, canvas.sizes())
+    for (const node of graph.nodes) {
+      const next = moves.get(node.id)
+      if (
+        next?.left === node.position.left &&
+        next?.top === node.position.top
+      ) {
+        moves.delete(node.id)
+      }
+    }
+    if (moves.size > 0) deps.graph.moveNodes(moves)
+    void nextTick(() => {
+      if (isActive && deps.canvas() === canvas) canvas.fit()
+    })
+  }
+}
+
 /** 对齐与等距分布。 */
 function arrangeActions(deps: CanvasActionDeps) {
   return {
@@ -57,12 +85,7 @@ function arrangeActions(deps: CanvasActionDeps) {
       const moves = distributeAlong(selectedRects(deps), axis)
       if (moves.size > 0) deps.graph.moveNodes(moves)
     },
-    autoLayout: (): void => {
-      const sizes = deps.canvas()?.sizes()
-      if (sizes === undefined) return
-      const moves = layoutGraph(deps.graph.graph.value, sizes)
-      if (moves.size > 0) deps.graph.moveNodes(moves)
-    },
+    autoLayout: autoLayoutAction(deps),
     nudge: (deltaLeft: number, deltaTop: number): void => {
       const moves = new Map<string, CanvasPoint>()
       for (const rect of selectedRects(deps)) {

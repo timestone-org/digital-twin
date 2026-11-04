@@ -32,6 +32,7 @@ from platform_server.apps.modeling.models.run import (
     ModelingNodeRun,
     ModelingRun,
 )
+from platform_server.apps.modeling.models.schedule import ModelingSchedule
 from platform_server.apps.modeling.models.template import (
     ModelingConfigurationAudit,
     ModelingInstance,
@@ -59,5 +60,6 @@ __all__ = [
     "ModelingPipeline",
     "ModelingRuleVersion",
     "ModelingRun",
+    "ModelingSchedule",
     "ModelingTemplate",
 ]

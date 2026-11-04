@@ -11,6 +11,7 @@ from fastapi import Depends, Request, Response
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from lib.auth import CallerContext
+from lib.objectstore import ObjectStore
 from lib.stream import StreamGroup
 from platform_server.apps.modeling.catalog import (
     MODELING_MANAGE,
@@ -19,10 +20,16 @@ from platform_server.apps.modeling.catalog import (
 )
 from platform_server.apps.modeling.command_deps import build_command_gate
 from platform_server.apps.modeling.services import Actor, RunContext
+from platform_server.apps.modeling.services.command_gate import (
+    DurableModelingGate,
+)
 from platform_server.apps.modeling.services.open_model_service import (
     OpenModelDeps,
 )
 from platform_server.apps.modeling.services.sessions import Sessions
+from platform_server.apps.modeling.services.workflow_publication import (
+    PublicationContext,
+)
 from platform_server.container import Container
 from platform_server.deps import (
     WriteGate,
@@ -78,6 +85,18 @@ def get_open_model_deps(
         sessions=sessions,
         store=container.object_store,
         artifacts=container.modeling_artifacts,
+    )
+
+
+def get_run_publication_context(
+    caller: Annotated[CallerContext, Depends(require(MODELING_PUBLISH))],
+    sessions: Annotated[Sessions, Depends(get_modeling_sessions)],
+    store: Annotated[ObjectStore, Depends(get_object_store)],
+) -> PublicationContext:
+    return PublicationContext(
+        sessions=sessions,
+        store=store,
+        actor=Actor(user_id=str(caller.user_id), name=caller.username),
     )
 
 
@@ -155,7 +174,7 @@ async def get_publish_context(
     session: Annotated[AsyncSession, Depends(get_session)],
     gate: Annotated[WriteGate, Depends(_get_publish_gate)],
     sessions: Annotated[Sessions, Depends(get_modeling_sessions)],
-) -> WriteGate:
+) -> DurableModelingGate:
     return await build_command_gate(request, response, session, gate, sessions)
 
 
@@ -179,4 +198,5 @@ def get_run_context(
             consumer=settings.app_instance,
         ),
         now=datetime.now(UTC),
+        can_publish=MODELING_PUBLISH in caller.permissions,
     )

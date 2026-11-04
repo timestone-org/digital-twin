@@ -8,62 +8,42 @@
 import type {
   DtDataColumn,
   DtDataViewMode,
-  ModelingRunStatus,
   ModelingRunSummary,
 } from '@dt/contracts'
-import { PERMISSION_CODES } from '@dt/contracts'
-import { DtButton, DtDataView, DtTag } from '@dt/ui'
+import { DtDataView } from '@dt/ui'
+import type { DtPaginationState } from '@dt/ui'
 import { RouterLink } from 'vue-router'
 
-import PermGuard from '@/components/PermGuard.vue'
+import RunActions from './RunActions.vue'
+import RunStatus from './RunStatus.vue'
 import { formatDateTime } from '@/utils/datetime'
 
 const COLUMNS: readonly DtDataColumn[] = [
-  { key: 'pipeline', label: '流水线', card: 'title' },
-  { key: 'status', label: '状态', width: '7rem' },
-  { key: 'trigger', label: '触发', width: '6rem' },
-  { key: 'row_count', label: '取到的行数', width: '9rem', align: 'right' },
-  { key: 'duration', label: '耗时', width: '7rem', align: 'right' },
+  { key: 'pipeline', label: '工作流', card: 'title' },
+  { key: 'status', label: '状态', width: '7.5rem' },
+  { key: 'trigger', label: '触发', width: '4.5rem' },
+  { key: 'row_count', label: '取到的行数', width: '6rem', align: 'right' },
+  { key: 'duration', label: '耗时', width: '5.5rem', align: 'right' },
   { key: 'created_at', label: '发起时间', width: '10rem' },
   { key: 'why', label: '失败原因' },
   {
     key: 'actions',
-    label: '发布',
-    width: '7rem',
+    label: '操作',
+    width: '11rem',
     align: 'right',
     card: 'actions',
   },
 ]
 
 const EMPTY = {
-  title: '还没有跑过',
-  hint: '到某条流水线的画布上摆好算子、连上线，然后点右上角的「运行」。',
-}
-
-const STATUS_LABELS: Record<ModelingRunStatus, string> = {
-  pending: '排队中',
-  running: '运行中',
-  cancelling: '取消中',
-  succeeded: '成功',
-  failed: '失败',
-  cancelled: '已取消',
-}
-
-const STATUS_INTENTS: Record<
-  ModelingRunStatus,
-  'neutral' | 'info' | 'success' | 'danger' | 'warning'
-> = {
-  pending: 'neutral',
-  running: 'info',
-  cancelling: 'warning',
-  succeeded: 'success',
-  failed: 'danger',
-  cancelled: 'neutral',
+  title: '还没有训练记录',
+  hint: '打开工作流配置数据和算子，然后点击「开始训练」或「训练并发布」。',
 }
 
 const TRIGGER_LABELS: Record<string, string> = {
   manual: '手动',
   api: '接口',
+  schedule: '定时',
 }
 
 const props = defineProps<{
@@ -73,11 +53,19 @@ const props = defineProps<{
   canPublish: boolean
   isLoading: boolean
   error: string | null
+  pagination?: DtPaginationState
 }>()
 
 const view = defineModel<DtDataViewMode>('view', { required: true })
 
-defineEmits<{ publish: [row: ModelingRunSummary] }>()
+defineEmits<{
+  detail: [row: ModelingRunSummary]
+  publish: [row: ModelingRunSummary]
+  remove: [row: ModelingRunSummary]
+  'update:page': [page: number]
+  'update:size': [size: number]
+  retry: []
+}>()
 
 /** 耗时。还没跑完时给空，不显示成 0 秒。 */
 function duration(ms: number | null): string {
@@ -95,12 +83,16 @@ function duration(ms: number | null): string {
     :loading="props.isLoading"
     :error="props.error"
     :empty="EMPTY"
+    :pagination="props.pagination"
     :layout="{
       fixedLayout: true,
-      minWidth: '79rem',
+      minWidth: '64rem',
       cardColumns: 2,
       cardMinWidth: '24rem',
     }"
+    @update:page="$emit('update:page', $event)"
+    @update:size="$emit('update:size', $event)"
+    @retry="$emit('retry')"
   >
     <template #toolbar><slot name="toolbar" /></template>
     <template #cell-pipeline="{ row }">
@@ -113,9 +105,10 @@ function duration(ms: number | null): string {
       </RouterLink>
     </template>
     <template #cell-status="{ row }">
-      <DtTag :intent="STATUS_INTENTS[row.status]" size="sm">
-        {{ STATUS_LABELS[row.status] }}
-      </DtTag>
+      <RunStatus
+        :run="row"
+        :is-saved-model="props.publishedRunIds.has(row.id)"
+      />
     </template>
     <template #cell-trigger="{ row }">
       {{ TRIGGER_LABELS[row.trigger] ?? row.trigger }}
@@ -137,21 +130,13 @@ function duration(ms: number | null): string {
       </span>
     </template>
     <template #cell-actions="{ row }">
-      <DtTag
-        v-if="props.publishedRunIds.has(row.id)"
-        intent="neutral"
-        size="sm"
-      >
-        已发布
-      </DtTag>
-      <PermGuard
-        v-else-if="props.canPublish && row.status === 'succeeded'"
-        :codes="[PERMISSION_CODES.modelingPublish]"
-      >
-        <DtButton variant="ghost" size="xs" @click="$emit('publish', row)">
-          发布版本
-        </DtButton>
-      </PermGuard>
+      <RunActions
+        :run="row"
+        :can-publish="props.canPublish"
+        @detail="$emit('detail', $event)"
+        @publish="$emit('publish', $event)"
+        @remove="$emit('remove', $event)"
+      />
     </template>
   </DtDataView>
 </template>

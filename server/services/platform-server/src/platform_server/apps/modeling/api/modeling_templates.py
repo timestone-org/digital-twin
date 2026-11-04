@@ -14,16 +14,21 @@ from platform_server.apps.modeling.configuration_deps import (
     get_template_write,
 )
 from platform_server.apps.modeling.deps import (
+    WriteGate,
+    get_pipeline_import_context,
     get_session,
     require,
 )
+from platform_server.apps.modeling.schemas.pipeline import PipelineOut
 from platform_server.apps.modeling.schemas.template import (
     ModelingConfigurationOut,
     ModelingTemplateCreateIn,
     ModelingTemplateOut,
     ModelingTemplateUpdateIn,
+    ModelingWorkflowCreateIn,
 )
 from platform_server.apps.modeling.services import template_service
+from platform_server.apps.modeling.services.pipeline_service import Actor
 from platform_server.apps.modeling.services.task_replay import (
     TaskCommand,
     run_task_once,
@@ -37,6 +42,7 @@ SessionDep = Annotated[AsyncSession, Depends(get_session)]
 PageDep = Annotated[PageParams, Depends(page_params)]
 ViewDep = Annotated[CallerContext, Depends(require(MODELING_VIEW))]
 ManageDep = Annotated[ConfigurationWriteContext, Depends(get_template_write)]
+WorkflowDep = Annotated[WriteGate, Depends(get_pipeline_import_context)]
 
 
 @router.get(
@@ -85,6 +91,32 @@ async def get_template(
     template_id: uuid.UUID, session: SessionDep, _viewer: ViewDep
 ) -> ApiResponse[ModelingTemplateOut]:
     return ok(await template_service.get_template(session, template_id))
+
+
+@router.post(
+    "/{template_id}:create-workflow",
+    response_model=ApiResponse[PipelineOut],
+    status_code=201,
+)
+async def create_workflow(
+    template_id: uuid.UUID,
+    payload: ModelingWorkflowCreateIn,
+    session: SessionDep,
+    response: Response,
+    write: WorkflowDep,
+) -> ApiResponse[PipelineOut]:
+    actor = Actor(str(write.caller.user_id), write.caller.username)
+    result = await write.run_once(
+        endpoint=f"modeling.create_workflow_from_template.{template_id}",
+        model=PipelineOut,
+        action=lambda: template_service.create_workflow(
+            session, template_id, payload, actor
+        ),
+    )
+    response.headers["Location"] = (
+        f"{API_PREFIX}/modeling-pipelines/{result.id}"
+    )
+    return ok(result)
 
 
 @router.get(

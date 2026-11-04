@@ -1,4 +1,4 @@
-/** @fileoverview 模板发布、建模、启停及检索的用户交互。 */
+/** @fileoverview 模板发布、历史实例检索与第三方接入说明。 */
 import type { ModelingTask, ModelingTemplate } from '@dt/contracts'
 import { flushPromises, mount } from '@vue/test-utils'
 import type { VueWrapper } from '@vue/test-utils'
@@ -8,7 +8,6 @@ import * as ui from '@dt/ui'
 import * as api from '@/api/modelingTemplates'
 import * as hierarchy from '@/api/hierarchy'
 import { useAuthStore } from '@/stores/auth'
-import Templates from '@/pages/Modeling/Templates/index.vue'
 import Instances from '@/pages/Modeling/Instances/index.vue'
 import Integration from '@/pages/Modeling/Integration/index.vue'
 import PublishButton from '@/pages/Modeling/components/PublishTemplateButton.vue'
@@ -56,19 +55,8 @@ beforeEach(() => {
     ...confirmation,
     ask: vi.fn().mockResolvedValue(true),
   })
-  vi.spyOn(api, 'listTemplates').mockResolvedValue({
-    items: [template],
-    page: 1,
-    size: 20,
-    total: 1,
-  })
-  vi.spyOn(api, 'setTemplateEnabled').mockResolvedValue({
-    ...template,
-    is_enabled: false,
-  })
   vi.spyOn(api, 'publishTemplate').mockResolvedValue(template)
   if (!configuration.instance) throw new Error('缺少模型夹具')
-  vi.spyOn(api, 'createInstance').mockResolvedValue(configuration.instance)
   vi.spyOn(api, 'listInstances').mockResolvedValue({
     items: [configuration.instance],
     page: 1,
@@ -82,36 +70,6 @@ afterEach(() => {
   vi.restoreAllMocks()
 })
 
-it('模板库支持服务端搜索、启停并创建独立模型', async () => {
-  const wrapper = mount(Templates, { global: { stubs: { teleport: true } } })
-  wrappers.push(wrapper)
-  await flushPromises()
-  await wrapper.get('input[type="search"]').setValue('energy')
-  await wrapper.get('form').trigger('submit')
-  await flushPromises()
-  expect(api.listTemplates).toHaveBeenLastCalledWith(
-    { page: 1, size: 20, q: 'energy' },
-    expect.any(AbortSignal),
-  )
-  await button(wrapper, '停用').trigger('click')
-  await flushPromises()
-  expect(api.setTemplateEnabled).toHaveBeenCalledWith('t1', false)
-  await button(wrapper, '创建模型').trigger('click')
-  await flushPromises()
-  const dialog = wrapper.findComponent(ui.DtModal)
-  await textInput(dialog, '模型名称').setValue('新模型')
-  await textInput(dialog, '模型编码').setValue('new-model')
-  await dialog.get('textarea').setValue('验证模板复用')
-  await button(wrapper, '创建并配置').trigger('click')
-  await flushPromises()
-  expect(api.createInstance).toHaveBeenCalledWith({
-    template_id: 't1',
-    code: 'new-model',
-    name: '新模型',
-    description: '验证模板复用',
-  })
-})
-
 it('发布已保存设计，失败时保留内容可再次提交', async () => {
   vi.mocked(api.publishTemplate).mockRejectedValueOnce(new Error('offline'))
   const wrapper = mount(PublishButton, {
@@ -119,15 +77,15 @@ it('发布已保存设计，失败时保留内容可再次提交', async () => {
     global: { stubs: { teleport: true } },
   })
   wrappers.push(wrapper)
-  await button(wrapper, '发布为工作流').trigger('click')
+  await button(wrapper, '保存为模板').trigger('click')
   await flushPromises()
   const modal = wrapper.findComponent(ui.DtModal)
   await modal.get('input').setValue('可复用模板')
   await modal.get('textarea').setValue('说明')
-  await button(wrapper, '发布工作流').trigger('click')
+  await button(wrapper, '保存模板').trigger('click')
   await flushPromises()
   expect(wrapper.text()).toContain('请求失败')
-  await button(wrapper, '发布工作流').trigger('click')
+  await button(wrapper, '保存模板').trigger('click')
   await flushPromises()
   expect(api.publishTemplate).toHaveBeenLastCalledWith({
     pipeline_id: 'p1',
@@ -157,66 +115,48 @@ it.each<{ task: ModelingTask; label: string }>([
   { task: 'classification', label: '分类' },
   { task: 'anomaly_detection', label: '异常检测' },
   { task: 'rule_calculation', label: '规则计算' },
-])('$task 模板和未训练实例在列表中都有模型类型', async ({ task, label }) => {
+])('$task 未训练实例在列表中也有模型类型', async ({ task, label }) => {
   if (!configuration.instance) throw new Error('缺少模型夹具')
-  vi.mocked(api.listTemplates).mockResolvedValue({
-    items: [{ ...template, task }],
-    page: 1,
-    size: 20,
-    total: 1,
-  })
   vi.mocked(api.listInstances).mockResolvedValue({
     items: [{ ...configuration.instance, task, latest_run: null }],
     page: 1,
     size: 20,
     total: 1,
   })
-  for (const page of [Templates, Instances]) {
-    const wrapper = mount(page)
-    wrappers.push(wrapper)
-    await flushPromises()
-    expect(wrapper.text()).toContain(label)
-    const tableView = wrapper.find('[aria-label="表格视图"]')
-    if (tableView.exists()) await tableView.trigger('click')
-    expect(wrapper.findAll('thead th').map((cell) => cell.text())).toContain(
-      '模型类型',
-    )
-    expect(wrapper.findAll('tbody td').map((cell) => cell.text())).toContain(
-      label,
-    )
-  }
+  const wrapper = mount(Instances)
+  wrappers.push(wrapper)
+  await flushPromises()
+  expect(wrapper.text()).toContain(label)
+  const tableView = wrapper.find('[aria-label="表格视图"]')
+  if (tableView.exists()) await tableView.trigger('click')
+  expect(wrapper.findAll('thead th').map((cell) => cell.text())).toContain(
+    '模型类型',
+  )
+  expect(wrapper.findAll('tbody td').map((cell) => cell.text())).toContain(
+    label,
+  )
 })
 
 it('接入说明包含完整配置入口和统一用户 APIKey', () => {
   const wrapper = mount(Integration)
   wrappers.push(wrapper)
-  expect(wrapper.text()).toContain('PUT /modeling-instances/{id}/configuration')
+  expect(wrapper.text()).toContain(
+    'POST /modeling-templates/{template_id}:create-workflow',
+  )
+  expect(wrapper.text()).toContain('PUT /modeling-pipelines/{id}/schedule')
   expect(wrapper.text()).toContain('Authorization: Bearer')
   expect(wrapper.text()).toContain('用户 APIKey')
   expect(wrapper.text()).not.toContain('X-Api-Key')
   expect(wrapper.text()).toContain('Idempotency-Key')
+  expect(wrapper.text()).toContain('invoke_url')
+  expect(wrapper.text()).toContain('signature_url')
+  expect(wrapper.text()).toContain('default_on_missing')
+  expect(wrapper.text()).toContain('missing_policy')
 })
 
-function textInput(wrapper: VueWrapper, label: string) {
-  const field = wrapper
-    .findAllComponents(ui.DtInput)
-    .find((item) => item.props('label') === label)
-  if (!field) throw new Error(`没有输入框：${label}`)
-  return field.get('input')
-}
-
-it.each([
-  ['模板库', Templates, '还没有已发布模板', '没有匹配的模板'],
-  ['模型实例', Instances, '创建第一个模型', '没有匹配的模型'],
-] as const)(
+it.each([['模型实例', Instances, '创建第一个模型', '没有匹配的模型']] as const)(
   '%s 区分空库与已提交筛选的无结果',
   async (_name, page, blank, filtered) => {
-    vi.mocked(api.listTemplates).mockResolvedValue({
-      items: [],
-      page: 1,
-      size: 20,
-      total: 0,
-    })
     vi.mocked(api.listInstances).mockResolvedValue({
       items: [],
       page: 1,

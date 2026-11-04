@@ -1,16 +1,32 @@
 # DigitalTwin 第三方接入页面接口说明
 
-文档版本 1.5　接口版本 v1　更新日期 2026 年 11 月 2 日
+文档版本 1.6　接口版本 v1　更新日期 2026 年 11 月 3 日
 
-本文对应系统“分析建模 → 第三方接入 → 接入指南”页面的 8 步流程：选择模板、获取配置、创建模型、配置参数、训练、发布版本、部署、调用服务。平台方预先设计并发布模板，第三方按模板完成建模和使用模型。已有部署时，也可先获取全部已部署模型列表，选择服务后直接调用。
+当前主流程为“创建工作流 → 训练 → 模型版本 → 发布调用”。本文保留为 API 接入文档，界面中的调用说明由“已发布模型”打开，不设置第三方接入菜单。模板在新建弹窗中用于快捷创建独立工作流，
+无需额外创建模型实例。既有实例配置与训练 API 继续兼容，下文原 8 步接入示例保留供历史调用方使用。
+页面操作见 [工作流建模与模板指南](MODELING_TEMPLATE_GUIDE.md)。
 
-全部请求统一使用用户 APIKey。模板、模型实例和部署服务分别有自己的 ID 或编码，按每一步返回的结果继续调用。
+每个工作流可以保留多次训练与模型版本，只维护一个稳定发布入口；发布下一次结果更新其固定版本。
+训练默认不切换当前发布模型；明确选择训练后自动发布时，成功且签名兼容才换版。训练和发布失败均保留旧模型。
+公式绑定继续固定版本，模板快照与历史模型的计算内容不可变。
 
-资源关系为「流水线设计 → 模板快照 → 模型实例 → 训练运行 → 模型版本 → 部署」。
-同一设计可以发布多个模板版本，一个模板版本可以创建多个独立实例，一个实例可以训练并发布多个模型版本。
-模板发布时冻结结构与默认参数，训练提交时冻结本次图和参数，模型版本发布后计算内容不可变。
-修改源流水线、模板再次发布或实例重新训练，都不会替换已有实例的模板或线上部署的模型版本。
-部署固定 `model_version_id`，需要使用新版本时必须显式换版；已有模型引用的源流水线禁止删除。
+## 工作流快捷接口
+
+以下接口使用 `/api/v1/platform` 前缀，写命令沿用 `Idempotency-Key`；所有权限检查仍以账号为单位。
+
+| 接口                                            | 用途                                                                                       | 权限                                            |
+| ----------------------------------------------- | ------------------------------------------------------------------------------------------ | ----------------------------------------------- |
+| `POST /modeling-templates/{id}:create-workflow` | 从模板复制可编辑工作流，传 `code`、`name` 和可选 `description`                             | `modeling:manage`                               |
+| `POST /modeling-pipelines/{id}:run`             | 训练，`auto_publish` 默认为 false；true 时训练完成后尝试发布                               | `modeling:run`，自动发布另需 `modeling:publish` |
+| `GET /modeling-pipelines/{id}/schedule`         | 读取周期、下一次与最近训练结果                                                             | `modeling:view`                                 |
+| `PUT /modeling-pipelines/{id}/schedule`         | 保存 `is_enabled`、`interval_minutes`、`auto_publish`、`first_run_at`、`expected_revision` | `modeling:run`，自动发布另需 `modeling:publish` |
+| `POST /modeling-runs/{id}:deploy`               | 将该次成功训练发布到工作流稳定入口                                                         | `modeling:publish`                              |
+| `DELETE /modeling-runs/{id}`                    | 清理终态记录及其无引用模型，引用保护时为 409                                               | `modeling:publish`                              |
+
+运行详情中的 `published_version_id` 指向自动保存的模型；`publication_status` 和 `publication_error`
+单独报告发布结果。已训练完成不等于发布成功。手动发布遇到签名变化时，核对调用方后才以
+`is_signature_change_confirmed=true` 明确确认；自动发布不会自行确认。
+定时周期最少 5 分钟，首次时间必须带时区；无规则时修订号为 0，保存时按读取的修订号提交。
 
 **适用版本**：目标环境须已更新为统一用户 APIKey 的接入版本。BASE_URL、用户 APIKey 和可用模板由平台方提供；本文示例域名、UUID、列名和数值均为示意，实际输入以所选模板及已部署模型的签名为准。
 
@@ -28,7 +44,7 @@ Content-Type: application/json
 同一把用户 APIKey 用于建模、训练、部署和模型调用，无需再签发部署密钥，也不使用旧的 `X-Api-Key` 部署凭据。密钥不放入 URL 或业务日志。
 
 | 权限 | 本流程中的用途 |
-|---|---|
+| --------------------- | ------------------------------------------------------------ |
 | modeling:view | 读取已部署模型列表、模板、配置、训练结果和模型签名，调用模型 |
 | modeling:run | 创建模型实例、保存参数、训练和取消训练 |
 | modeling:publish | 发布模型版本和部署模型 |
@@ -58,18 +74,20 @@ Content-Type: application/json
 
 权限：`modeling:view`。成功：HTTP 200。使用同一把用户 APIKey，无请求体，无分页参数。可选 `code`、`model_version_id`、`instance_id`、`is_enabled` 做精确组合过滤，不传时查询全部部署。
 
-返回的 `data` 是全部部署服务组成的数组，不是 `data.items`。按创建时间由新到旧返回，没有部署时为 `[]`。同一模型版本部署成多个服务时，会返回多条部署记录。
+返回的 `data` 是全部部署服务组成的数组，不是 `data.items`。按创建时间由新到旧返回，没有部署时为 `[]`。列表可能保留历史多入口记录；新建部署遵守每工作流唯一入口，同工作流第二次创建返回 409。
 
 列表同时包含启用、停用和当前不可服务的部署。第三方应选择 `is_enabled=true` 且 `is_servable=true` 的记录，保存其 `code`，然后进入第八步读取签名并调用。
 
 | 返回字段 | 说明 |
-|---|---|
+| ---------------------------------------- | ---------------------------------------------------------------- |
 | id | 部署服务 UUID |
 | code | 调用地址使用的服务编码，拼入 /open-models/{code} |
 | name、description | 部署服务名称和说明 |
 | model_version_id | 固定的模型版本 UUID |
 | model_name、model_version | 模型名称与版本号 |
 | task | 固定版本的模型任务类型，用于选择 :predict、:detect 或 :calculate |
+| invoke_url | 对应任务的 POST 调用路径，包含 /api/v1/platform 前缀 |
+| signature_url | 查询此部署输入输出参数的 GET 路径，包含 /api/v1/platform 前缀 |
 | is_enabled | 部署是否启用 |
 | is_servable、unservable_reason | 固定版本是否可服务，以及不可服务原因 |
 | max_rows_per_call、rate_limit_per_minute | 单次行数与每分钟配额 |
@@ -93,6 +111,8 @@ Content-Type: application/json
       "model_name": "一号冷机能耗版本",
       "model_version": 1,
       "task": "regression",
+      "invoke_url": "/api/v1/platform/open-models/chiller-01-energy-api:predict",
+      "signature_url": "/api/v1/platform/open-models/chiller-01-energy-api",
       "is_enabled": true,
       "is_servable": true,
       "unservable_reason": null,
@@ -119,15 +139,16 @@ curl --silent --show-error \
 `task` 为必填字符串：`regression`、`classification` 调用 `:predict`，
 `anomaly_detection` 调用 `:detect`，`rule_calculation` 调用 `:calculate`。
 类型对应本记录固定的模型版本，不跟随源流水线或新发布的版本改变。
-列表不包含完整输入输出签名。选择记录后调用 `GET /open-models/{code}` 读取真实输入字段，
-其中 `output.task` 与该部署的 `task` 一致。只消费已有模型时，可以直接使用这条查询和调用流程。
+列表不包含完整输入输出签名。选择记录后 GET `signature_url` 读取真实输入字段，
+再 POST `invoke_url` 调用。两个 URL 均为同源相对路径；停用或不可服务时仍返回路径，
+不代表可以调用。签名顶层 `task` 和 `output.task` 与该部署固定版本一致。
 
 ## 找回实例、历史运行和历史版本
 
 以下读取均需 `modeling:view`，成功 HTTP 200。实例列表包含未训练、失败、未发布、未部署的实例，部署列表不能替代它。
 
 | 场景 | 方法与路径 | 当前查询参数 | data 形状 |
-|---|---|---|---|
+| ---------------- | ------------------------------------------- | -------------------------------------------------- | -------------------------------------------- |
 | 模型实例全集 | `GET /modeling-instances` | 分页、`q`、`code`、模板/运行状态/归档筛选 | 页码或游标集合 |
 | 实例详情 | `GET /modeling-instances/{instance_id}` | 无 | 实例对象 |
 | 历史训练运行 | `GET /modeling-runs` | 分页、`instance_id`/`pipeline_id`、状态/时间筛选 | 页码或游标集合 |
@@ -143,7 +164,7 @@ curl --silent --show-error \
 实例列表与详情返回相同形状：
 
 | 字段 | 含义 |
-|---|---|
+| -------------------------------------------- | ------------------------------------- |
 | id、code、name、description | 实例 UUID、唯一编码、名称、可空说明 |
 | template_id、template_name、template_version | 创建时固定的模板版本；不会随模板更新 |
 | revision | 当前配置修订号，用于完整配置保存 |
@@ -157,7 +178,8 @@ curl --silent --show-error \
 
 ```json
 {
-  "items": [{
+  "items": [
+    {
     "id": "019c0000-0000-7000-8000-000000000002",
     "code": "chiller-01-energy",
     "name": "一号冷机能耗模型",
@@ -170,7 +192,8 @@ curl --silent --show-error \
     "latest_run": null,
     "created_at": "2026-10-30T01:00:00.000Z",
     "updated_at": "2026-10-30T01:00:00.000Z"
-  }],
+    }
+  ],
   "page": 1,
   "size": 20,
   "total": 1
@@ -208,11 +231,33 @@ curl --silent --show-error \
     "format_version": "1.0",
     "requires_timestamp": false,
     "inputs": [
-      {"key":"temperature","label":"温度","unit":"℃","dtype":"number","is_required":true,"default_on_missing":null,"training_stats":{"min":10.0,"max":40.0}},
-      {"key":"load","label":"负荷","unit":"kW","dtype":"number","is_required":true,"default_on_missing":null,"training_stats":{"min":100.0,"max":800.0}}
+      {
+        "key": "temperature",
+        "label": "温度",
+        "unit": "℃",
+        "dtype": "number",
+        "is_required": true,
+        "default_on_missing": null,
+        "training_stats": { "min": 10.0, "max": 40.0 }
+      },
+      {
+        "key": "load",
+        "label": "负荷",
+        "unit": "kW",
+        "dtype": "number",
+        "is_required": true,
+        "default_on_missing": null,
+        "training_stats": { "min": 100.0, "max": 800.0 }
+      }
     ],
     "derived": [],
-    "output": {"key":"energy","label":"能耗","unit":"kWh","dtype":"number","task":"regression"}
+    "output": {
+      "key": "energy",
+      "label": "能耗",
+      "unit": "kWh",
+      "dtype": "number",
+      "task": "regression"
+    }
   },
   "metrics": {"r2":0.9,"rmse":12.0},
   "fingerprint": {}
@@ -237,7 +282,7 @@ curl --silent --show-error \
 权限：`modeling:view`。成功：HTTP 200。无请求体。
 
 | 参数 | 是否必填 | 说明 |
-|---|---|---|
+| ---- | -------- | ----------------------------- |
 | page | 否 | 页码，默认 1，最小 1 |
 | size | 否 | 每页数量，默认 20，范围 1–200 |
 | q | 否 | 可选检索词 |
@@ -247,7 +292,7 @@ curl --silent --show-error \
 选择 `is_enabled=true` 的模板，并保存以下字段：
 
 | 返回字段 | 用途 |
-|---|---|
+| ---------- | ------------------------------------------------ |
 | id | 具体模板版本的 ID，后续作为 template_id |
 | name、code | 模板名称和业务编码 |
 | version | 模板版本号 |
@@ -264,7 +309,7 @@ curl --silent --show-error \
 权限：`modeling:view`。成功：HTTP 200。`template_id` 使用第一步取得的模板 ID。
 
 | 返回字段 | 说明 |
-|---|---|
+| ------------------------ | ------------------------------------------------------------ |
 | data.configuration | 可供创建和配置模型使用的完整参数对象 |
 | data.configuration.nodes | 节点 ID 到参数对象的映射 |
 | data.json_schema | 用于校验整份 configuration 的 JSON Schema |
@@ -279,7 +324,7 @@ curl --silent --show-error \
 权限：`modeling:run`。成功：HTTP 201。建议携带 `Idempotency-Key`，避免网络重发造成重复创建。
 
 | 字段 | 必填 | 说明 |
-|---|---|---|
+| ------------- | ---- | ------------------------------------------------------------------------- |
 | template_id | 是 | 第一步选中的模板 UUID |
 | code | 是 | 唯一编码，1–64 字符；以字母或数字开头，可含字母、数字、点、下划线和连字符 |
 | name | 是 | 模型名称，1–128 字符 |
@@ -331,7 +376,7 @@ curl --silent --show-error \
 权限：`modeling:run`。成功：HTTP 200。
 
 | 字段 | 必填 | 说明 |
-|---|---|---|
+| ----------------- | ---- | ---------------------------------------- |
 | expected_revision | 是 | 当前模型修订号，至少为 1 |
 | configuration | 是 | 完整节点参数对象，节点集合必须与模板一致 |
 | name | 否 | 同时修改模型名称；省略或为 null 时不修改 |
@@ -372,7 +417,7 @@ curl --silent --show-error \
 以下平台台账读取另需 `dataset:view`，成功 HTTP 200：
 
 | 方法与路径 | 选项和结果 |
-|---|---|
+| ------------------------------------------ | ---------------------------------------------------------------------------------------------------------------------------- |
 | `GET /dataset-tables?page=1&size=20&q=...` | `data.items` 中读取真实 `id/code/name`、`collect_interval_ms`、`last_collected_ts`、`is_enabled`；后两者不是完整数据覆盖证明 |
 | `GET /dataset-tables/{table_id}` | 表详情含全部 `columns` |
 | `GET /dataset-tables/{table_id}/columns` | `data` 是列数组，含 `key/name/unit/decimals/data_type/source/agg/node_key`；配置 `columns` 使用 key |
@@ -386,7 +431,7 @@ curl --silent --show-error \
 以下目录读取使用平台账号 APIKey 与 `modeling:view`，不使用外部能管密钥：
 
 | 方法与路径 | 查询与 data 字段 |
-|---|---|
+| -------------------------------- | ----------------------------------------------------------------------------------------------------------------------------------------- |
 | `GET /modeling-bdm-capabilities` | `is_configured/timezone/minute_intervals/max_identifiers/max_formula_identifiers/max_rows/load_timeout_s`；反映配置和上限，不探测连通性 |
 | `GET /modeling-bdm-catalogs` | `kind=point/raw/formula`；`page=1,size=50` 默认，size 最大 200；data 含 `kind/items/page/size/total/system_filter_available` |
 | `GET /modeling-bdm-systems` | `items` 系统名数组与 `system_filter_available` |
@@ -421,7 +466,7 @@ curl --silent --show-error \
 权限：`modeling:view`。成功：HTTP 200。可按例如 2 秒的间隔轮询；这是接入建议，不是服务端完成时限。
 
 | data.status | 含义 | 接入方处理 |
-|---|---|---|
+| ----------- | ---------- | --------------------------------------- |
 | pending | 排队等待 | 继续查询 |
 | running | 训练执行中 | 继续查询 |
 | cancelling | 正在取消 | 等待终态 |
@@ -446,7 +491,7 @@ curl --silent --show-error \
 权限 `modeling:view`，成功 HTTP 200。node_id 使用冻结运行中的真实节点 ID，不能使用显示别名。响应在摘要字段上增加：
 
 | 字段 | 使用方式 |
-|---|---|
+| -------------------- | ----------------------------------------------- |
 | preview | 按输出端口组织的有界摘要，不是完整训练数据 |
 | is_preview_truncated | 摘要是否被截断；不能把截断摘要当全样本 |
 | report | 真实算子报告与图表数据，可为 null；按返回块渲染 |
@@ -456,7 +501,7 @@ curl --silent --show-error \
 各任务实际产物不同，只有流水线中对应算子执行并留下结果时才能展示：
 
 | 任务 | 已有评估/报告举例 | 不可推断的内容 |
-|---|---|---|
+| ---------- | ------------------------------------------------------------------------------------------ | -------------------------------------------------------- |
 | 回归 | R²、RMSE、MAE、MAPE、最大误差、残差统计、真实-预测散点；线性系数、树模型重要性等依实际算法 | 不能要求所有算法都有同一套贡献；MAPE 等未定义时可为 null |
 | 数值二分类 | accuracy/precision/recall/f1、混淆矩阵、类别分布；打分帧有概率列时可有 ROC/PR/校准等报告 | 没有概率列不能补概率曲线，分母为 0 的指标不能改成 0 |
 | 异常检测 | 测试行数、异常率、阈值、判定分布 | 没有故障标签不能声称测试准确率、故障概率或故障原因 |
@@ -481,7 +526,7 @@ CSV 有时间索引时第一列叫 `__ts__`，当前导出值为 Unix 毫秒整�
 权限：`modeling:publish`。成功：HTTP 201。建议携带 `Idempotency-Key`；成功响应的 `Location` 指向版本详情。
 
 | 字段 | 必填 | 说明 |
-|---|---|---|
+| ----------- | ---- | ---------------------------------- |
 | run_id | 是 | 第五步状态为 succeeded 的运行 UUID |
 | name | 是 | 版本名称，1–128 字符 |
 | description | 否 | 版本说明；非空时 1–512 字符 |
@@ -505,7 +550,7 @@ CSV 有时间索引时第一列叫 `__ts__`，当前导出值为 Unix 毫秒整�
 权限：`modeling:publish`。成功：HTTP 201。建议携带 `Idempotency-Key`。所选版本必须属于当前模型实例，且可以提供服务。
 
 | 字段 | 必填 | 说明 |
-|---|---|---|
+| --------------------- | ---- | ------------------------------------------------------------------- |
 | model_version_id | 是 | 第六步发布成功的版本 UUID |
 | code | 是 | 稳定服务编码，2–63 字符；仅小写字母、数字和连字符，以字母或数字开头 |
 | name | 是 | 服务名称，1–128 字符 |
@@ -530,7 +575,7 @@ CSV 有时间索引时第一列叫 `__ts__`，当前导出值为 Unix 毫秒整�
 ### 已有部署维护、回切和版本退役
 
 | 操作 | 方法与路径 | 权限与成功状态 |
-|---|---|---|
+| ------------------ | ------------------------------------------------------ | ----------------------------------------------------- |
 | 部署详情 | `GET /modeling-deployments/{deployment_id}` | modeling:view，200 |
 | 修改部署 | `PATCH /modeling-deployments/{deployment_id}` | modeling:publish，200，返回完整部署对象 |
 | 删除部署 | `DELETE /modeling-deployments/{deployment_id}` | modeling:publish，204，无响应体 |
@@ -549,7 +594,11 @@ CSV 有时间索引时第一列叫 `__ts__`，当前导出值为 Unix 毫秒整�
 旧部署 PATCH 仍兼容直接修改版本引用；新接入使用带修订、归属及签名保护的 `POST /modeling-deployments/{deployment_id}:switch`。请求示例：
 
 ```json
-{"expected_revision": 2, "model_version_id": "019c0000-0000-7000-8000-000000000006", "is_signature_change_confirmed": false}
+{
+  "expected_revision": 2,
+  "model_version_id": "019c0000-0000-7000-8000-000000000006",
+  "is_signature_change_confirmed": false
+}
 ```
 
 部署更新在同一事务中修改版本引用并推进 `revision`；带 `expected_revision` 的 PATCH 会拒绝覆盖冲突，未带修订号的旧请求仍为兼容语义。受控 `:switch` 和 `:rollback` 必须给修订号，并校验同一模型、同任务、未归档、可服务及签名变化确认；切换历史与请求说明见 [部署管理契约](MODELING_MANAGEMENT_API.md#3-部署修订换版与回滚)。已解析版本的在途推理继续使用原版，提交后新解析请求使用新引用；这不是所有在途请求同时切换的全局屏障，不提供自动健康探测或自动回滚。
@@ -569,15 +618,18 @@ CSV 有时间索引时第一列叫 `__ts__`，当前导出值为 Unix 毫秒整�
 此接口的 `data` 本身就是模型签名。重点读取：
 
 | 字段 | 用途 |
-|---|---|
+| ---------------------------------------- | ---------------------------------------------------------------------------------------------- |
+| task、invoke_url | 固定版本的模型任务和推荐 POST 调用路径，无需根据名称或算法猜测 |
 | inputs[].key | 每行 JSON 中应提供的输入字段名 |
 | inputs[].dtype、unit | 输入类型及单位 |
 | inputs[].is_required、default_on_missing | 必填提示与可用填充值提示；当前 default_on_missing 为数值或 null，不是策略对象；null 不表示填零 |
 | inputs[].missing_policy | 回归/分类新发布推理格式 2.1 的缺字段/显式 null 策略；历史和其他任务签名可能没有 |
-| requires_timestamp | 为 true 时按模型要求提供每行的 __ts__ 时间 |
+| requires_timestamp、timestamp_key | 为 true 时每行额外提供 timestamp_key 指定的 `__ts__`，值为带时区的 RFC3339 时间 |
 | output.task | 决定使用预测、异常检测还是规则计算接口 |
 
 输入字段使用 `inputs[].key`，不使用训练后的 `feature_keys`，也不要提交训练目标列。对外签名不提供训练统计的具体数值。
+签名响应及各输入字段已在 OpenAPI 中声明，可生成客户端类型；历史签名未包含的缺省策略
+仍保持缺省，不补造拟合值。`timestamp_key` 在不需要时间时为 null。
 
 当前签名输入 dtype 来自 `number/bool/string`，规则输出可标为 `object`；dtype 描述训练入口元信息，不代表所有任务的线上调用都接受所有这些类型。线上 rows 是扁平字段对象，不支持任意嵌套对象或数组。普通预测只接受数值或 null，拒绝布尔与数值字符串；缺少必填字段返回 400。
 
@@ -588,7 +640,7 @@ CSV 有时间索引时第一列叫 `__ts__`，当前导出值为 Unix 毫秒整�
 ### 按任务类型执行调用
 
 | 模型任务 | 调用接口 |
-|---|---|
+| ---------------------------- | ------------------------------------ |
 | regression 或 classification | `POST /open-models/{code}:predict` |
 | anomaly_detection | `POST /open-models/{code}:detect` |
 | rule_calculation | `POST /open-models/{code}:calculate` |
@@ -616,7 +668,12 @@ CSV 有时间索引时第一列叫 `__ts__`，当前导出值为 Unix 毫秒整�
 当前 warnings 条目的完整结构示例：
 
 ```json
-{"row":0,"column":"temperature","kind":"out_of_training_range","message":"这一路输入超出训练区间，属于外推"}
+{
+  "row": 0,
+  "column": "temperature",
+  "kind": "out_of_training_range",
+  "message": "这一路输入超出训练区间，属于外推"
+}
 ```
 
 `column` 是入口字段 key；告警不包含训练区间具体上下限。出现外推告警仍可能有预测值，不表示该值达到业务精度。无告警返回空数组。
@@ -656,7 +713,7 @@ CSV 有时间索引时第一列叫 `__ts__`，当前导出值为 Unix 毫秒整�
 规则结果公共字段为 `kind`、`calculation_method="deterministic_rule"`、`decimal_places`，再按冻结规则追加不同字段。精确明细保留十进制字符串；`summary_value` 是展示摘要数值，不能替代精确核算明细。当前签名只把输出描述为 object，没有完整的逐规则输出 JSON Schema，应结合实际规则说明与返回展示。
 
 | kind | 实际规则结果举例 |
-|---|---|
+| ---------------------- | ---------------------------------------------------------------------------------------------- |
 | hvac_compliance | `is_compliant/violations/observations`，按冻结温湿度范围判定 |
 | efficiency_fluctuation | `change_pct/threshold_pct/is_fluctuating/comparison_scope`，比较调用方明确提供的当前值与参考值 |
 | unit_consumption | `energy/output/unit_consumption`，计量单位必须由业务输入约定 |
@@ -671,7 +728,8 @@ CSV 有时间索引时第一列叫 `__ts__`，当前导出值为 Unix 毫秒整�
 ```json
 {
   "model": {"code":"unit-consumption","version":1},
-  "results": [{
+  "results": [
+    {
     "kind":"unit_consumption",
     "calculation_method":"deterministic_rule",
     "decimal_places":6,
@@ -679,7 +737,8 @@ CSV 有时间索引时第一列叫 `__ts__`，当前导出值为 Unix 毫秒整�
     "output":"0.1",
     "unit_consumption":"3",
     "summary_value":3.0
-  }]
+    }
+  ]
 }
 ```
 
@@ -731,7 +790,7 @@ Idempotency-Key: 03b87444-47c4-4e04-8101-9db847a7e397
 APIKey 代表平台账号；创建者和认证主体不接受客户端伪造。需要区分能管操作人时，仅部署配置授权的专用网关账号可提交 `X-Modeling-Operator-Id`，外部操作人与平台账号分别审计，详见 [可信操作人契约](MODELING_MANAGEMENT_API.md#5-外部操作人和调用审计)。不允许伪造 `X-Auth-*` 或借外部标识提权。本次保持共享权限域，前端隐藏列表或分发不同账号均不构成模型租户隔离。
 
 | HTTP 状态 | 处理方式 |
-|---|---|
+| --------- | -------------------------------------------------------- |
 | 400 | 参数、节点配置或输入数据不合法；读取 details 并修正 |
 | 401 | 检查用户 APIKey、到期吊销情况及账号启用状态 |
 | 403 | 检查账号权限；调用模型时还需确认部署已启用 |
@@ -761,12 +820,18 @@ APIKey 代表平台账号；创建者和认证主体不接受客户端伪造。�
   "message":"参数校验失败",
   "data":null,
   "trace_id":"f14ea9b77b154691aa947da963cd8e12",
-  "details":[{"field":"expected_revision","code":"greater_than_equal","message":"Input should be greater than or equal to 1"}]
+  "details": [
+    {
+      "field": "expected_revision",
+      "code": "greater_than_equal",
+      "message": "Input should be greater than or equal to 1"
+    }
+  ]
 }
 ```
 
 | code | HTTP | 含义 |
-|---|---|---|
+| ------------------------------------- | --------- | ------------------------------------------------- |
 | 40002 | 429 | 平台固定窗口限流 |
 | 40004 | 409 | 通用冲突，例如同幂等键正在处理 |
 | 40106 | 403 | 账号缺权限 |

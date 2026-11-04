@@ -365,7 +365,7 @@ describe('画布页', () => {
       ?.trigger('click')
     await wrapper
       .findAll('button')
-      .find((button) => button.text() === '运行')
+      .find((button) => button.text() === '开始训练')
       ?.trigger('click')
     expect(save).toHaveBeenCalledTimes(1)
     expect(start).not.toHaveBeenCalled()
@@ -383,7 +383,7 @@ describe('画布页', () => {
     )
     await wrapper
       .findAll('button')
-      .find((button) => button.text() === '运行')
+      .find((button) => button.text() === '开始训练')
       ?.trigger('click')
     await wrapper.find('.dt-ml-palette__item').trigger('click')
     const sent = save.mock.calls[1]?.[1].graph
@@ -502,10 +502,10 @@ describe('画布页', () => {
     await flushPromises()
 
     const buttons = wrapper.findAll('button')
-    await buttons.find((b) => b.text() === '运行')?.trigger('click')
+    await buttons.find((b) => b.text() === '开始训练')?.trigger('click')
     await flushPromises()
 
-    expect(wrapper.text()).toContain('取消运行')
+    expect(wrapper.text()).toContain('取消训练')
   })
 
   it('回看历史运行时切成只读，并给一条回到编辑的路', async () => {
@@ -623,7 +623,7 @@ describe('画布页', () => {
 
     await wrapper
       .findAll('button')
-      .find((b) => b.text() === '运行')
+      .find((b) => b.text() === '开始训练')
       ?.trigger('click')
     await flushPromises()
 
@@ -1096,7 +1096,7 @@ describe('保存前的整图校验', () => {
 
     await wrapper
       .findAll('button')
-      .find((b) => b.text() === '运行')
+      .find((b) => b.text() === '开始训练')
       ?.trigger('click')
     await flushPromises()
 
@@ -1154,7 +1154,7 @@ describe('参数草稿与保存运行闭环', () => {
     await flushPromises()
     const saveButton = () => wrapper.get('button[aria-label="保存"]')
     const runButton = () =>
-      wrapper.findAll('button').find((button) => button.text() === '运行')
+      wrapper.findAll('button').find((button) => button.text() === '开始训练')
     expect(saveButton().attributes('disabled')).toBeDefined()
     expect(runButton()?.attributes('disabled')).toBeDefined()
     expect(wrapper.text()).toContain('不小于 1')
@@ -1241,4 +1241,98 @@ describe('参数草稿与保存运行闭环', () => {
     ).toBeDefined()
     expect(save).not.toHaveBeenCalled()
   })
+})
+
+it('自动整理入口只调整位置，可撤销并随工作流保存', async () => {
+  const initial = pipeline()
+  initial.graph = {
+    format_version: '1',
+    nodes: [
+      {
+        id: 'source',
+        operator: 'ledger_source',
+        alias: '输入',
+        config: { row_limit: 123 },
+        position: { left: 700, top: 400 },
+      },
+      {
+        id: 'target',
+        operator: 'transform',
+        alias: '变换',
+        config: { factor: 2 },
+        position: { left: -200, top: 400 },
+      },
+    ],
+    edges: [
+      {
+        id: 'source-target',
+        from_node: 'source',
+        from_port: 'out',
+        to_node: 'target',
+        to_port: 'in',
+      },
+    ],
+  }
+  stubApi({
+    pipeline: initial,
+    operators: [
+      operator(),
+      operator({
+        code: 'transform',
+        category: 'preprocess',
+        inputs: [
+          {
+            name: 'in',
+            label: '输入',
+            contract: 'frame',
+            is_required: true,
+            description: '',
+          },
+        ],
+        outputs: [],
+        config_schema: {
+          type: 'object',
+          properties: { factor: { type: 'number' } },
+        },
+      }),
+    ],
+  })
+  const save = vi
+    .spyOn(modeling, 'updateModelingPipeline')
+    .mockImplementation((_id, patch) =>
+      Promise.resolve({
+        ...initial,
+        graph: patch.graph ?? initial.graph,
+      }),
+    )
+  signIn(WRITER)
+  const wrapper = open()
+  await flushPromises()
+  const arrange = wrapper
+    .findAll('button')
+    .find((button) => button.text().trim() === '自动整理')
+  if (!arrange) throw new Error('缺少自动整理入口')
+  await arrange.trigger('click')
+  await flushPromises()
+  expect(wrapper.text()).toContain('有未保存修改')
+  await wrapper.get('button[aria-label="撤销"]').trigger('click')
+  expect(wrapper.text()).not.toContain('有未保存修改')
+  await arrange.trigger('click')
+  await flushPromises()
+  await wrapper.get('button[aria-label="保存"]').trigger('click')
+  await flushPromises()
+  expect(save).toHaveBeenCalledTimes(1)
+  const graph = save.mock.calls[0]?.[1].graph
+  expect(graph?.edges).toEqual(initial.graph.edges)
+  const definitions = (value: ModelingPipeline['graph'] | undefined) =>
+    value?.nodes.map(({ id, operator, alias, config }) => ({
+      id,
+      operator,
+      alias,
+      config,
+    }))
+  expect(definitions(graph)).toEqual(definitions(initial.graph))
+  const first = graph?.nodes.find((node) => node.id === 'source')
+  const next = graph?.nodes.find((node) => node.id === 'target')
+  expect(first?.position.left).toBeLessThan(next?.position.left ?? 0)
 })

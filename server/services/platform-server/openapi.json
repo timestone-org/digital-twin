@@ -3179,6 +3179,51 @@
         "title": "ApiResponse[ModelingInstanceOut]",
         "type": "object"
       },
+      "ApiResponse_ModelingScheduleOut_": {
+        "properties": {
+          "code": {
+            "default": 0,
+            "title": "Code",
+            "type": "integer"
+          },
+          "data": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/ModelingScheduleOut"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "details": {
+            "anyOf": [
+              {
+                "items": {
+                  "$ref": "#/components/schemas/FieldErrorOut"
+                },
+                "type": "array"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Details"
+          },
+          "message": {
+            "default": "ok",
+            "title": "Message",
+            "type": "string"
+          },
+          "trace_id": {
+            "default": "",
+            "title": "Trace Id",
+            "type": "string"
+          }
+        },
+        "title": "ApiResponse[ModelingScheduleOut]",
+        "type": "object"
+      },
       "ApiResponse_ModelingTemplateOut_": {
         "properties": {
           "code": {
@@ -3537,6 +3582,51 @@
           }
         },
         "title": "ApiResponse[OpenModelPredictOut]",
+        "type": "object"
+      },
+      "ApiResponse_OpenModelSignatureOut_": {
+        "properties": {
+          "code": {
+            "default": 0,
+            "title": "Code",
+            "type": "integer"
+          },
+          "data": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/OpenModelSignatureOut"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "details": {
+            "anyOf": [
+              {
+                "items": {
+                  "$ref": "#/components/schemas/FieldErrorOut"
+                },
+                "type": "array"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Details"
+          },
+          "message": {
+            "default": "ok",
+            "title": "Message",
+            "type": "string"
+          },
+          "trace_id": {
+            "default": "",
+            "title": "Trace Id",
+            "type": "string"
+          }
+        },
+        "title": "ApiResponse[OpenModelSignatureOut]",
         "type": "object"
       },
       "ApiResponse_OverrideBulkClearOut_": {
@@ -6339,53 +6429,6 @@
           }
         },
         "title": "ApiResponse[WriteOut]",
-        "type": "object"
-      },
-      "ApiResponse_dict_str__object__": {
-        "properties": {
-          "code": {
-            "default": 0,
-            "title": "Code",
-            "type": "integer"
-          },
-          "data": {
-            "anyOf": [
-              {
-                "additionalProperties": true,
-                "type": "object"
-              },
-              {
-                "type": "null"
-              }
-            ],
-            "title": "Data"
-          },
-          "details": {
-            "anyOf": [
-              {
-                "items": {
-                  "$ref": "#/components/schemas/FieldErrorOut"
-                },
-                "type": "array"
-              },
-              {
-                "type": "null"
-              }
-            ],
-            "title": "Details"
-          },
-          "message": {
-            "default": "ok",
-            "title": "Message",
-            "type": "string"
-          },
-          "trace_id": {
-            "default": "",
-            "title": "Trace Id",
-            "type": "string"
-          }
-        },
-        "title": "ApiResponse[dict[str, object]]",
         "type": "object"
       },
       "ApiResponse_list_AcModelOut__": {
@@ -14502,6 +14545,12 @@
             "title": "Id",
             "type": "string"
           },
+          "invoke_url": {
+            "default": "",
+            "description": "推荐的 POST 调用路径",
+            "title": "Invoke Url",
+            "type": "string"
+          },
           "is_enabled": {
             "title": "Is Enabled",
             "type": "boolean"
@@ -14543,6 +14592,12 @@
             "default": 1,
             "title": "Revision",
             "type": "integer"
+          },
+          "signature_url": {
+            "default": "",
+            "description": "输入输出签名的 GET 路径",
+            "title": "Signature Url",
+            "type": "string"
           },
           "task": {
             "description": "部署固定模型版本的任务类型",
@@ -15288,7 +15343,10 @@
               "update_version",
               "retire_version",
               "delete_deployment",
-              "cancel_run"
+              "cancel_run",
+              "deploy_run",
+              "delete_run",
+              "create_workflow_from_template"
             ],
             "title": "Operation",
             "type": "string"
@@ -15714,6 +15772,145 @@
         "title": "ModelingParameterNodeOut",
         "type": "object"
       },
+      "ModelingScheduleIn": {
+        "additionalProperties": false,
+        "description": "覆盖规则，修订号保护并发编辑。",
+        "properties": {
+          "auto_publish": {
+            "default": false,
+            "title": "Auto Publish",
+            "type": "boolean"
+          },
+          "expected_revision": {
+            "minimum": 0.0,
+            "title": "Expected Revision",
+            "type": "integer"
+          },
+          "first_run_at": {
+            "anyOf": [
+              {
+                "format": "date-time",
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "First Run At"
+          },
+          "interval_minutes": {
+            "default": 1440,
+            "maximum": 525600.0,
+            "minimum": 5.0,
+            "title": "Interval Minutes",
+            "type": "integer"
+          },
+          "is_enabled": {
+            "title": "Is Enabled",
+            "type": "boolean"
+          }
+        },
+        "required": [
+          "is_enabled",
+          "expected_revision"
+        ],
+        "title": "ModelingScheduleIn",
+        "type": "object"
+      },
+      "ModelingScheduleOut": {
+        "description": "工作流的下一次训练与最近触发结果。",
+        "properties": {
+          "auto_publish": {
+            "default": false,
+            "title": "Auto Publish",
+            "type": "boolean"
+          },
+          "interval_minutes": {
+            "default": 1440,
+            "title": "Interval Minutes",
+            "type": "integer"
+          },
+          "is_enabled": {
+            "default": false,
+            "title": "Is Enabled",
+            "type": "boolean"
+          },
+          "last_error": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Last Error"
+          },
+          "last_run_at": {
+            "anyOf": [
+              {
+                "format": "date-time",
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Last Run At"
+          },
+          "last_run_id": {
+            "anyOf": [
+              {
+                "format": "uuid",
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Last Run Id"
+          },
+          "next_run_at": {
+            "anyOf": [
+              {
+                "format": "date-time",
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Next Run At"
+          },
+          "pipeline_id": {
+            "format": "uuid",
+            "title": "Pipeline Id",
+            "type": "string"
+          },
+          "revision": {
+            "default": 0,
+            "title": "Revision",
+            "type": "integer"
+          },
+          "updated_at": {
+            "anyOf": [
+              {
+                "format": "date-time",
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Updated At"
+          }
+        },
+        "required": [
+          "pipeline_id"
+        ],
+        "title": "ModelingScheduleOut",
+        "type": "object"
+      },
       "ModelingTemplateCreateIn": {
         "additionalProperties": false,
         "properties": {
@@ -15847,6 +16044,43 @@
           "is_enabled"
         ],
         "title": "ModelingTemplateUpdateIn",
+        "type": "object"
+      },
+      "ModelingWorkflowCreateIn": {
+        "additionalProperties": false,
+        "properties": {
+          "code": {
+            "maxLength": 64,
+            "minLength": 1,
+            "pattern": "^[A-Za-z0-9][A-Za-z0-9._-]*$",
+            "title": "Code",
+            "type": "string"
+          },
+          "description": {
+            "anyOf": [
+              {
+                "maxLength": 512,
+                "minLength": 1,
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Description"
+          },
+          "name": {
+            "maxLength": 128,
+            "minLength": 1,
+            "title": "Name",
+            "type": "string"
+          }
+        },
+        "required": [
+          "code",
+          "name"
+        ],
+        "title": "ModelingWorkflowCreateIn",
         "type": "object"
       },
       "ModuleCatalogOut": {
@@ -16918,6 +17152,31 @@
         "title": "OpenModelCalculateOut",
         "type": "object"
       },
+      "OpenModelDerivedOut": {
+        "additionalProperties": true,
+        "description": "推理链生成的字段，不需要调用方提供。",
+        "properties": {
+          "by": {
+            "default": "",
+            "title": "By",
+            "type": "string"
+          },
+          "key": {
+            "title": "Key",
+            "type": "string"
+          },
+          "label": {
+            "default": "",
+            "title": "Label",
+            "type": "string"
+          }
+        },
+        "required": [
+          "key"
+        ],
+        "title": "OpenModelDerivedOut",
+        "type": "object"
+      },
       "OpenModelDetectIn": {
         "additionalProperties": false,
         "description": "实时数据按行输入，布尔值不作为数值接受。",
@@ -16984,6 +17243,132 @@
           "version"
         ],
         "title": "OpenModelInfoOut",
+        "type": "object"
+      },
+      "OpenModelInputOut": {
+        "additionalProperties": true,
+        "description": "调用方在每行 rows 对象中提供的一个字段。",
+        "properties": {
+          "default_on_missing": {
+            "anyOf": [
+              {
+                "type": "number"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Default On Missing"
+          },
+          "dtype": {
+            "default": "number",
+            "description": "训练入口的类型元信息",
+            "title": "Dtype",
+            "type": "string"
+          },
+          "is_required": {
+            "default": true,
+            "title": "Is Required",
+            "type": "boolean"
+          },
+          "key": {
+            "description": "请求行中的字段名，保持签名中的顺序",
+            "title": "Key",
+            "type": "string"
+          },
+          "label": {
+            "default": "",
+            "title": "Label",
+            "type": "string"
+          },
+          "missing_policy": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/OpenModelMissingPolicyOut"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "unit": {
+            "default": "",
+            "title": "Unit",
+            "type": "string"
+          }
+        },
+        "required": [
+          "key"
+        ],
+        "title": "OpenModelInputOut",
+        "type": "object"
+      },
+      "OpenModelMissingPolicyOut": {
+        "description": "冻结推理格式声明的缺值处理策略。",
+        "properties": {
+          "on_missing": {
+            "enum": [
+              "reject",
+              "fitted_default"
+            ],
+            "title": "On Missing",
+            "type": "string"
+          },
+          "on_null": {
+            "enum": [
+              "return_null",
+              "fitted_default"
+            ],
+            "title": "On Null",
+            "type": "string"
+          }
+        },
+        "required": [
+          "on_missing",
+          "on_null"
+        ],
+        "title": "OpenModelMissingPolicyOut",
+        "type": "object"
+      },
+      "OpenModelOutputOut": {
+        "additionalProperties": true,
+        "description": "固定模型版本的输出说明。",
+        "properties": {
+          "dtype": {
+            "default": "",
+            "title": "Dtype",
+            "type": "string"
+          },
+          "key": {
+            "default": "",
+            "title": "Key",
+            "type": "string"
+          },
+          "label": {
+            "default": "",
+            "title": "Label",
+            "type": "string"
+          },
+          "task": {
+            "enum": [
+              "anomaly_detection",
+              "classification",
+              "regression",
+              "rule_calculation"
+            ],
+            "title": "Task",
+            "type": "string"
+          },
+          "unit": {
+            "default": "",
+            "title": "Unit",
+            "type": "string"
+          }
+        },
+        "required": [
+          "task"
+        ],
+        "title": "OpenModelOutputOut",
         "type": "object"
       },
       "OpenModelPredictIn": {
@@ -17054,6 +17439,82 @@
           "predictions"
         ],
         "title": "OpenModelPredictOut",
+        "type": "object"
+      },
+      "OpenModelSignatureOut": {
+        "additionalProperties": true,
+        "description": "公开签名与推荐调用地址，不包含训练分布。",
+        "properties": {
+          "derived": {
+            "items": {
+              "$ref": "#/components/schemas/OpenModelDerivedOut"
+            },
+            "title": "Derived",
+            "type": "array"
+          },
+          "format_version": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Format Version"
+          },
+          "inputs": {
+            "items": {
+              "$ref": "#/components/schemas/OpenModelInputOut"
+            },
+            "title": "Inputs",
+            "type": "array"
+          },
+          "invoke_url": {
+            "description": "此任务的同源 POST 调用路径",
+            "title": "Invoke Url",
+            "type": "string"
+          },
+          "output": {
+            "$ref": "#/components/schemas/OpenModelOutputOut"
+          },
+          "requires_timestamp": {
+            "default": false,
+            "title": "Requires Timestamp",
+            "type": "boolean"
+          },
+          "task": {
+            "enum": [
+              "anomaly_detection",
+              "classification",
+              "regression",
+              "rule_calculation"
+            ],
+            "title": "Task",
+            "type": "string"
+          },
+          "timestamp_key": {
+            "anyOf": [
+              {
+                "const": "__ts__",
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "description": "需要逐行时间时为 __ts__，否则为 null",
+            "title": "Timestamp Key"
+          }
+        },
+        "required": [
+          "task",
+          "invoke_url",
+          "timestamp_key",
+          "inputs",
+          "output"
+        ],
+        "title": "OpenModelSignatureOut",
         "type": "object"
       },
       "OpenModelWarningOut": {
@@ -22040,9 +22501,27 @@
         "title": "RoomUpdateIn",
         "type": "object"
       },
+      "RunDeployIn": {
+        "additionalProperties": false,
+        "description": "发布本次训练模型，签名变化须明确确认。",
+        "properties": {
+          "is_signature_change_confirmed": {
+            "default": false,
+            "title": "Is Signature Change Confirmed",
+            "type": "boolean"
+          }
+        },
+        "title": "RunDeployIn",
+        "type": "object"
+      },
       "RunOut": {
         "description": "运行详情：状态 + 节点清单 + 当时那份图。\n\n⚠ 带的是**运行时冻结的快照**而不是流水线现在的图：不然历史运行的界面会\n显示当前的参数、配着当时的结果（docs/MODELING_DESIGN.md D6）。",
         "properties": {
+          "auto_publish": {
+            "default": false,
+            "title": "Auto Publish",
+            "type": "boolean"
+          },
           "created_at": {
             "format": "date-time",
             "title": "Created At",
@@ -22133,6 +22612,29 @@
             "title": "Pipeline Id",
             "type": "string"
           },
+          "publication_error": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Publication Error"
+          },
+          "publication_status": {
+            "default": "not_requested",
+            "enum": [
+              "not_requested",
+              "pending",
+              "published",
+              "failed",
+              "skipped"
+            ],
+            "title": "Publication Status",
+            "type": "string"
+          },
           "published_version_id": {
             "anyOf": [
               {
@@ -22183,7 +22685,8 @@
           "trigger": {
             "enum": [
               "api",
-              "manual"
+              "manual",
+              "schedule"
             ],
             "title": "Trigger",
             "type": "string"
@@ -22212,6 +22715,11 @@
         "additionalProperties": false,
         "description": "发起一次运行。",
         "properties": {
+          "auto_publish": {
+            "default": false,
+            "title": "Auto Publish",
+            "type": "boolean"
+          },
           "is_keeping_frames": {
             "default": false,
             "title": "Is Keeping Frames",
@@ -22221,7 +22729,8 @@
             "default": "manual",
             "enum": [
               "api",
-              "manual"
+              "manual",
+              "schedule"
             ],
             "title": "Trigger",
             "type": "string"
@@ -22233,6 +22742,11 @@
       "RunSummaryOut": {
         "description": "运行列表里的一条。",
         "properties": {
+          "auto_publish": {
+            "default": false,
+            "title": "Auto Publish",
+            "type": "boolean"
+          },
           "created_at": {
             "format": "date-time",
             "title": "Created At",
@@ -22313,6 +22827,29 @@
             "title": "Pipeline Id",
             "type": "string"
           },
+          "publication_error": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Publication Error"
+          },
+          "publication_status": {
+            "default": "not_requested",
+            "enum": [
+              "not_requested",
+              "pending",
+              "published",
+              "failed",
+              "skipped"
+            ],
+            "title": "Publication Status",
+            "type": "string"
+          },
           "published_version_id": {
             "anyOf": [
               {
@@ -22363,7 +22900,8 @@
           "trigger": {
             "enum": [
               "api",
-              "manual"
+              "manual",
+              "schedule"
             ],
             "title": "Trigger",
             "type": "string"
@@ -34368,7 +34906,10 @@
                 "update_version",
                 "retire_version",
                 "delete_deployment",
-                "cancel_run"
+                "cancel_run",
+                "deploy_run",
+                "delete_run",
+                "create_workflow_from_template"
               ],
               "title": "Operation",
               "type": "string"
@@ -37086,6 +37627,100 @@
         ]
       }
     },
+    "/api/v1/platform/modeling-pipelines/{pipeline_id}/schedule": {
+      "get": {
+        "operationId": "get_schedule_api_v1_platform_modeling_pipelines__pipeline_id__schedule_get",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "pipeline_id",
+            "required": true,
+            "schema": {
+              "format": "uuid",
+              "title": "Pipeline Id",
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiResponse_ModelingScheduleOut_"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Get Schedule",
+        "tags": [
+          "modeling-schedule"
+        ]
+      },
+      "put": {
+        "operationId": "save_schedule_api_v1_platform_modeling_pipelines__pipeline_id__schedule_put",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "pipeline_id",
+            "required": true,
+            "schema": {
+              "format": "uuid",
+              "title": "Pipeline Id",
+              "type": "string"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/ModelingScheduleIn"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiResponse_ModelingScheduleOut_"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Save Schedule",
+        "tags": [
+          "modeling-schedule"
+        ]
+      }
+    },
     "/api/v1/platform/modeling-pipelines/{pipeline_id}:export": {
       "post": {
         "description": "只导出定义与算子版本。\n\nArgs: pipeline_id, session, _write。",
@@ -37159,6 +37794,22 @@
               "format": "uuid",
               "title": "Pipeline Id",
               "type": "string"
+            }
+          },
+          {
+            "in": "header",
+            "name": "idempotency-key",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Idempotency-Key"
             }
           }
         ],
@@ -37607,6 +38258,56 @@
       }
     },
     "/api/v1/platform/modeling-runs/{run_id}": {
+      "delete": {
+        "operationId": "delete_run_api_v1_platform_modeling_runs__run_id__delete",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "run_id",
+            "required": true,
+            "schema": {
+              "format": "uuid",
+              "title": "Run Id",
+              "type": "string"
+            }
+          },
+          {
+            "in": "header",
+            "name": "idempotency-key",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Idempotency-Key"
+            }
+          }
+        ],
+        "responses": {
+          "204": {
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "删除训练记录与未使用模型",
+        "tags": [
+          "modeling-run"
+        ]
+      },
       "get": {
         "description": "状态 + 节点清单 + 当时那份图。**不含结果摘要**，前端每秒轮询它。\n\nArgs: run_id, session, _viewer。",
         "operationId": "get_run_api_v1_platform_modeling_runs__run_id__get",
@@ -37814,6 +38515,75 @@
           }
         },
         "summary": "取消运行",
+        "tags": [
+          "modeling-run"
+        ]
+      }
+    },
+    "/api/v1/platform/modeling-runs/{run_id}:deploy": {
+      "post": {
+        "operationId": "deploy_run_api_v1_platform_modeling_runs__run_id__deploy_post",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "run_id",
+            "required": true,
+            "schema": {
+              "format": "uuid",
+              "title": "Run Id",
+              "type": "string"
+            }
+          },
+          {
+            "in": "header",
+            "name": "idempotency-key",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Idempotency-Key"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/RunDeployIn"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiResponse_ModelDeploymentOut_"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "发布本次训练模型",
         "tags": [
           "modeling-run"
         ]
@@ -38101,6 +38871,75 @@
         ]
       }
     },
+    "/api/v1/platform/modeling-templates/{template_id}:create-workflow": {
+      "post": {
+        "operationId": "create_workflow_api_v1_platform_modeling_templates__template_id__create_workflow_post",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "template_id",
+            "required": true,
+            "schema": {
+              "format": "uuid",
+              "title": "Template Id",
+              "type": "string"
+            }
+          },
+          {
+            "in": "header",
+            "name": "idempotency-key",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Idempotency-Key"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/ModelingWorkflowCreateIn"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "201": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiResponse_PipelineOut_"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Create Workflow",
+        "tags": [
+          "modeling-template"
+        ]
+      }
+    },
     "/api/v1/platform/module-types": {
       "get": {
         "description": "全部模块类型及其配置字段与绑定槽。\n\nArgs: container, _viewer。",
@@ -38186,7 +39025,7 @@
             "content": {
               "application/json": {
                 "schema": {
-                  "$ref": "#/components/schemas/ApiResponse_dict_str__object__"
+                  "$ref": "#/components/schemas/ApiResponse_OpenModelSignatureOut_"
                 }
               }
             },
@@ -38208,7 +39047,7 @@
             "UserApiKey": []
           }
         ],
-        "summary": "模型签名",
+        "summary": "模型类型与输入输出参数",
         "tags": [
           "modeling-open"
         ]

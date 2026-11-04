@@ -9,7 +9,7 @@
 import uuid
 from typing import Annotated
 
-from pydantic import Field, StringConstraints
+from pydantic import Field, StrictFloat, StrictInt, StringConstraints
 
 from platform_server.apps.modeling.models.deployment import (
     CODE_PATTERN,
@@ -37,7 +37,7 @@ ModelDeploymentCode = Annotated[
 
 # 一次请求里的一行。键是入口列的 key，值是数或空；`__ts__` 是保留键，
 # 带时间特征的模型靠它算出「小时」这类列
-OpenModelRow = dict[str, float | int | str | None]
+OpenModelRow = dict[str, StrictFloat | StrictInt | str | None]
 
 
 class ModelDeploymentCreateIn(InputModel):
@@ -75,6 +75,10 @@ class ModelDeploymentOut(OutputModel):
     model_name: str
     model_version: int
     task: ModelTask = Field(description="部署固定模型版本的任务类型")
+    invoke_url: str = Field(default="", description="推荐的 POST 调用路径")
+    signature_url: str = Field(
+        default="", description="输入输出签名的 GET 路径"
+    )
     name: str
     description: str | None
     is_enabled: bool

@@ -12,7 +12,7 @@ import type {
 } from '@dt/contracts'
 import { PERMISSION_CODES } from '@dt/contracts'
 import type { DtPaginationState } from '@dt/ui'
-import { DtButton, DtDataView, DtSwitch, DtTag } from '@dt/ui'
+import { DtIconButton, DtDataView, DtSwitch, DtTag } from '@dt/ui'
 
 import PermGuard from '@/components/PermGuard.vue'
 
@@ -117,11 +117,11 @@ function paramsOf(row: ModelingBinding): string {
     </template>
     <template #cell-actions="{ row }">
       <PermGuard :codes="[PERMISSION_CODES.modelingPublish]">
-        <DtButton
-          variant="ghost"
-          size="xs"
+        <DtIconButton
           icon="trash"
-          title="解绑"
+          label="解绑"
+          tooltip="解除公式绑定"
+          intent="danger"
           @click="$emit('unbind', row)"
         />
       </PermGuard>

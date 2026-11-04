@@ -24,6 +24,7 @@ from platform_server.apps.modeling.services.retention import (
     converge_pipeline,
 )
 from platform_server.apps.modeling.services.run_dispatch import (
+    RUN_BUSY,
     RUN_DONE,
     RUN_INTERRUPTED,
     RUN_ORPHANED,
@@ -35,6 +36,9 @@ from platform_server.apps.modeling.services.run_pool import (
     PooledRunner,
 )
 from platform_server.apps.modeling.services.sessions import Sessions
+from platform_server.apps.modeling.services.workflow_publication import (
+    complete_training,
+)
 
 _logger = get_logger("platform.modeling.worker")
 
@@ -54,6 +58,7 @@ class RunConsumerOptions:
     #: 二进制产物的落脚处。缺省「没有」——纯 JSON 那些算子一个字节都不产
     store: ObjectStore | None = None
     bdm_connection: BdmConnection | None = None
+    stale_after_s: float = 3600
 
 
 class RunConsumer:
@@ -123,7 +128,15 @@ class RunConsumer:
             if self._is_stopping:
                 # 没确认的消息留在待确认表里，由别的消费者认领回去
                 return
-            await self._handle(entry)
+            try:
+                await self._handle(entry)
+            except Exception as error:
+                _logger.warning(
+                    "modeling_worker_message_failed",
+                    "消息尚未完成，保留待确认状态",
+                    entry_id=entry.entry_id,
+                    error=error,
+                )
 
     async def _fetch(self) -> list[StreamEntry]:
         """先认领滞留的，再取新的（at-least-once 不能靠运气）。"""
@@ -156,8 +169,8 @@ class RunConsumer:
                     "读不懂的队列消息，直接确认丢弃",
                     entry_id=entry.entry_id,
                 )
-            else:
-                await self._process(message)
+            elif not await self._process(message):
+                return
             # ⚠ 确认只在处理走完之后：放进 finally 会把宽限期到点被取消的那条
             # 当成跑完了确认掉，而 drain 的约定恰恰是「没确认，会被认领回去」
             await self._stream.ack(self._options.target, entry.entry_id)
@@ -165,7 +178,7 @@ class RunConsumer:
             reset_log_context(token)
             self._idle.set()
 
-    async def _process(self, message: run_queue.RunMessage) -> None:
+    async def _process(self, message: run_queue.RunMessage) -> bool:
         """跑一次运行。异常一律记录，循环必须活着。
 
         Args: message。
@@ -183,6 +196,7 @@ class RunConsumer:
                     store=options.store,
                     bdm_connection=options.bdm_connection,
                     pool=self._pool,
+                    stale_after_s=options.stale_after_s,
                 ),
             )
         except Exception as error:  # pragma: no cover - 依赖同时不可用
@@ -192,9 +206,13 @@ class RunConsumer:
                 run_id=str(message.run_id),
                 error=error,
             )
-            return
+            return True
+        if report.outcome == RUN_BUSY:
+            return False
         _log_report(message, report.outcome, report.status)
+        await complete_training(self._sessions, message.run_id, options.store)
         await self._converge(report.pipeline_id)
+        return True
 
     async def _converge(self, pipeline_id: uuid.UUID | None) -> None:
         """跑完一次就把这条流水线的老明细与老产物收敛掉。

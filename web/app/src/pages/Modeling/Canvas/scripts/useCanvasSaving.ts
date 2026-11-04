@@ -10,6 +10,7 @@ interface RunDeps {
   id: string
   isCurrent: () => boolean
   isKeepingFrames: () => boolean
+  autoPublish: boolean
   toast: ReturnType<typeof useToast>
 }
 
@@ -29,7 +30,7 @@ async function runSnapshot(deps: RunDeps): Promise<void> {
     )
     return
   }
-  await page.runner.start(id, isKeepingFrames())
+  await page.runner.start(id, isKeepingFrames(), deps.autoPublish)
   if (isCurrent()) await page.loadRuns(id)
 }
 
@@ -85,7 +86,7 @@ export function useCanvasSaving(
   const lifecycle = useSavingLifecycle(page, pipelineId, isPreparingRun)
 
   /** 存图后校验同一快照；失败不运行，也不清掉后续草稿。 */
-  async function run(): Promise<void> {
+  async function run(autoPublish = false): Promise<void> {
     if (blockReason()) {
       toast.warning(blockReason())
       return
@@ -101,6 +102,7 @@ export function useCanvasSaving(
         id,
         isCurrent: () => lifecycle.isCurrent(token, id),
         isKeepingFrames,
+        autoPublish,
         toast,
       })
     } finally {

@@ -4,6 +4,7 @@ import time
 import uuid
 from dataclasses import dataclass, field, replace
 from datetime import datetime
+from typing import cast
 
 from sqlalchemy.ext.asyncio import AsyncSession
 
@@ -36,12 +37,16 @@ from platform_server.apps.modeling.operators import (
     CHANNEL_BINARY,
     OperatorError,
 )
+from platform_server.apps.modeling.protocols import ModelTask
 from platform_server.apps.modeling.schemas import (
     OpenModelInfoOut,
     OpenModelPredictIn,
     OpenModelPredictOut,
     OpenModelRow,
     OpenModelWarningOut,
+)
+from platform_server.apps.modeling.schemas.signature import (
+    OpenModelSignatureOut,
 )
 from platform_server.apps.modeling.services import artifact_io
 from platform_server.apps.modeling.services.artifact_store import (
@@ -52,6 +57,7 @@ from platform_server.apps.modeling.services.serving import (
     CompiledModel,
     compile_model,
 )
+from platform_server.apps.modeling.services.serving_contract import invoke_url
 from platform_server.apps.modeling.services.sessions import Sessions
 
 _logger = get_logger("platform.modeling.open")
@@ -336,11 +342,16 @@ def _row_moment(row: OpenModelRow, index: int) -> datetime | None:
             f"第 {index + 1} 行的「{TIMESTAMP_KEY}」要一个 RFC3339 时刻"
         )
     try:
-        return to_utc(datetime.fromisoformat(raw))
+        moment = datetime.fromisoformat(raw)
     except ValueError as error:
         raise PredictRequestInvalid(
             f"第 {index + 1} 行的「{TIMESTAMP_KEY}」不是一个 RFC3339 时刻"
         ) from error
+    if moment.tzinfo is None or moment.utcoffset() is None:
+        raise PredictRequestInvalid(
+            f"第 {index + 1} 行的「{TIMESTAMP_KEY}」必须是带时区的 RFC3339 时刻"
+        )
+    return to_utc(moment)
 
 
 def _warnings_of(
@@ -384,13 +395,10 @@ def _is_outside(value: object, bounds: dict[str, object]) -> bool:
     return value < float(low) or value > float(high)
 
 
-def public_signature(version: ModelVersion) -> dict[str, object]:
-    """对外那份模型签名：**剥掉训练统计**。
-
-    ⚠ 训练区间的具体数值是训练数据的分布，属于内部信息（D8、防线 ⑩）。
-    超区间只在告警里说「超了」，不说超的是什么范围。
-    Args: version。
-    """
+def public_signature(
+    version: ModelVersion, *, code: str
+) -> OpenModelSignatureOut:
+    """公开固定版本的签名并剥除训练统计。Args: version, code。"""
     signature = dict(version.signature_json)
     signature["inputs"] = [
         {
@@ -400,4 +408,11 @@ def public_signature(version: ModelVersion) -> dict[str, object]:
         }
         for item in as_list(signature.get("inputs"))
     ]
-    return signature
+    task = cast("ModelTask", version.task)
+    signature["task"] = task
+    signature["invoke_url"] = invoke_url(code, task)
+    signature["timestamp_key"] = (
+        TIMESTAMP_KEY if signature.get("requires_timestamp") else None
+    )
+    signature["output"] = {**as_dict(signature.get("output")), "task": task}
+    return OpenModelSignatureOut.model_validate(signature)

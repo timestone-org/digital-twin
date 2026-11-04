@@ -4,16 +4,19 @@
  */
 import { useToast } from '@dt/ui'
 import { mount } from '@vue/test-utils'
-import { beforeEach, describe, expect, it } from 'vitest'
-import { defineComponent, h } from 'vue'
+import type { VueWrapper } from '@vue/test-utils'
+import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
+import { defineComponent, h, nextTick } from 'vue'
 
 import type { NodeRect } from '@/pages/Modeling/Canvas/scripts/nodeLayout'
 import { useCanvasActions } from '@/pages/Modeling/Canvas/scripts/useCanvasActions'
+import type { CanvasHandle } from '@/pages/Modeling/Canvas/scripts/useCanvasActions'
 import { useCanvasSelection } from '@/pages/Modeling/Canvas/scripts/useCanvasSelection'
 import { useModelingGraph } from '@/pages/Modeling/Canvas/scripts/useModelingGraph'
 
 /** 卡片实测尺寸由画布量出来，用例里按图里的位置 + 固定尺寸造一份。 */
 const CARD = { width: 200, height: 60 }
+const wrappers: VueWrapper[] = []
 
 function setup() {
   let graph!: ReturnType<typeof useModelingGraph>
@@ -27,7 +30,15 @@ function setup() {
       ...CARD,
     }))
 
-  mount(
+  const fit = vi.fn()
+  const handle: CanvasHandle = {
+    fit,
+    rects,
+    sizes: () => new Map(rects().map((rect) => [rect.id, CARD])),
+    center: () => ({ left: 500, top: 500 }),
+  }
+  let currentCanvas: CanvasHandle | null = handle
+  const wrapper = mount(
     defineComponent({
       setup() {
         graph = useModelingGraph()
@@ -35,12 +46,7 @@ function setup() {
         actions = useCanvasActions({
           graph,
           selection,
-          canvas: () => ({
-            fit: () => undefined,
-            rects,
-            sizes: () => new Map(rects().map((r) => [r.id, CARD])),
-            center: () => ({ left: 500, top: 500 }),
-          }),
+          canvas: () => currentCanvas,
           toast: useToast(),
         })
         return () => h('div')
@@ -48,7 +54,16 @@ function setup() {
     }),
   )
 
+  wrappers.push(wrapper)
   return {
+    fit,
+    unmount: () => {
+      wrapper.unmount()
+      wrappers.splice(wrappers.indexOf(wrapper), 1)
+    },
+    replaceCanvas: (nextFit: () => void) => {
+      currentCanvas = { ...handle, fit: nextFit }
+    },
     get graph() {
       return graph
     },
@@ -65,6 +80,10 @@ function setup() {
 
 beforeEach(() => {
   window.localStorage.clear()
+})
+afterEach(() => {
+  for (const wrapper of wrappers) wrapper.unmount()
+  wrappers.length = 0
 })
 
 describe('对齐与分布', () => {
@@ -265,5 +284,110 @@ describe('断线与整理', () => {
 
     expect(bench.graph.graph.value.edges).toHaveLength(0)
     expect(bench.selection.selectedEdgeIds.value).toHaveLength(0)
+  })
+})
+
+describe('自动整理的视口与撤销保护', () => {
+  it('节点更新到DOM后再适应视图', async () => {
+    const bench = setup()
+    bench.graph.addNode('src', { left: 800, top: 900 })
+    bench.actions.autoLayout()
+    expect(bench.fit).not.toHaveBeenCalled()
+    await nextTick()
+    expect(bench.fit).toHaveBeenCalledOnce()
+  })
+
+  it('位置相同的图保持干净且不新增撤销记录，但仍适应视图', async () => {
+    const bench = setup()
+    bench.graph.addNode('src', { left: 80, top: 80 })
+    bench.graph.reset(bench.graph.graph.value)
+    const snapshot = bench.graph.graph.value
+    bench.actions.autoLayout()
+    expect(bench.graph.graph.value).toBe(snapshot)
+    expect(bench.graph.isDirty.value).toBe(false)
+    expect(bench.graph.canUndo.value).toBe(false)
+    await nextTick()
+    expect(bench.fit).toHaveBeenCalledOnce()
+  })
+
+  it('整理只改位置，保留配置与连线，重复整理后一次撤销仍恢复原图', async () => {
+    const bench = setup()
+    const a = bench.graph.addNode(
+      'src',
+      { left: 800, top: 10 },
+      { table_code: 'energy', columns: ['temperature', 'power'] },
+    )
+    const b = bench.graph.addNode(
+      'model',
+      { left: 20, top: 700 },
+      { target_column: 'power', max_depth: 4 },
+    )
+    bench.graph.setAlias(a, '能耗数据')
+    bench.graph.addEdge({
+      id: 'energy-link',
+      from_node: a,
+      from_port: 'frame',
+      to_node: b,
+      to_port: 'training',
+    })
+    bench.graph.reset(bench.graph.graph.value)
+    const original = structuredClone(bench.graph.graph.value)
+    bench.actions.autoLayout()
+    expect(bench.graph.graph.value.edges).toEqual(original.edges)
+    expect(
+      bench.graph.graph.value.nodes.map((node) => ({
+        id: node.id,
+        operator: node.operator,
+        alias: node.alias,
+        config: node.config,
+      })),
+    ).toEqual(
+      original.nodes.map((node) => ({
+        id: node.id,
+        operator: node.operator,
+        alias: node.alias,
+        config: node.config,
+      })),
+    )
+    bench.graph.markSaved()
+    const arranged = bench.graph.graph.value
+    bench.actions.autoLayout()
+    expect(bench.graph.graph.value).toBe(arranged)
+    expect(bench.graph.isDirty.value).toBe(false)
+    bench.graph.undo()
+    expect(bench.graph.graph.value).toEqual(original)
+    expect(bench.graph.canUndo.value).toBe(false)
+    bench.graph.redo()
+    expect(bench.graph.graph.value).toEqual(arranged)
+    await nextTick()
+  })
+
+  it('空图不改变状态也不适应视图', async () => {
+    const bench = setup()
+    bench.actions.autoLayout()
+    await nextTick()
+    expect(bench.fit).not.toHaveBeenCalled()
+    expect(bench.graph.canUndo.value).toBe(false)
+    expect(bench.graph.isDirty.value).toBe(false)
+  })
+
+  it('整理后卸载不会在下一帧调用旧画布', async () => {
+    const bench = setup()
+    bench.graph.addNode('src', { left: 600, top: 0 })
+    bench.actions.autoLayout()
+    bench.unmount()
+    await nextTick()
+    expect(bench.fit).not.toHaveBeenCalled()
+  })
+
+  it('整理后画布被替换，不调用旧画布或新画布的fit', async () => {
+    const bench = setup()
+    const replacementFit = vi.fn()
+    bench.graph.addNode('src', { left: 600, top: 0 })
+    bench.actions.autoLayout()
+    bench.replaceCanvas(replacementFit)
+    await nextTick()
+    expect(bench.fit).not.toHaveBeenCalled()
+    expect(replacementFit).not.toHaveBeenCalled()
   })
 })

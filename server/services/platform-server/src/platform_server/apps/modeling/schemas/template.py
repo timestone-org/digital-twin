@@ -50,6 +50,12 @@ class ModelingTemplateUpdateIn(InputModel):
     is_enabled: bool
 
 
+class ModelingWorkflowCreateIn(InputModel):
+    code: PipelineCode
+    name: Label
+    description: Note | None = None
+
+
 class ModelingTemplateOut(OutputModel):
     id: uuid.UUID
     pipeline_id: uuid.UUID

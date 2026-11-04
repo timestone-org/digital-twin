@@ -22,7 +22,14 @@ const emit = defineEmits<{ close: [] }>()
 const endpoint = computed(() => {
   const deployment = props.deployment
   return deployment
-    ? `POST /api/v1/platform/open-models/${deployment.code}:${servingAction(deployment.task)}`
+    ? `POST ${deployment.invoke_url ?? `/api/v1/platform/open-models/${encodeURIComponent(deployment.code)}:${servingAction(deployment.task)}`}`
+    : ''
+})
+const signatureUrl = computed(() => {
+  const deployment = props.deployment
+  return deployment
+    ? (deployment.signature_url ??
+        `/api/v1/platform/open-models/${encodeURIComponent(deployment.code)}`)
     : ''
 })
 </script>
@@ -45,7 +52,7 @@ const endpoint = computed(() => {
           :calculate 返回结构化结果，results 中包含归集、核算、路径或诊断明细。
         </template>
         <template v-else> :predict 返回 predictions 预测结果。 </template>
-        使用用户 APIKey，输入格式为 {"rows": [{…}]}，具体字段见模型详情。
+        使用用户 APIKey，输入格式为 {"rows": [{…}]}，具体字段见下方输入参数。
         调用频率由接入方控制，并受本服务配额限制。
       </p>
       <RuleResultGuide v-if="props.deployment?.task === 'rule_calculation'" />
@@ -59,9 +66,7 @@ const endpoint = computed(() => {
         label="请求头"
         readonly
       />
-      <p class="dt-ml-keys__endpoint">
-        GET /api/v1/platform/open-models/{{ props.deployment?.code }}
-      </p>
+      <p class="dt-ml-keys__endpoint">GET {{ signatureUrl }}</p>
 
       <DeploymentTrial v-if="props.deployment" :deployment="props.deployment" />
 

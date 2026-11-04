@@ -11,7 +11,7 @@ import type {
   ModelDeployment,
 } from '@dt/contracts'
 import { PERMISSION_CODES } from '@dt/contracts'
-import { DtButton, DtDataView, DtTag } from '@dt/ui'
+import { DtButton, DtDataView, DtIconButton, DtTag } from '@dt/ui'
 
 import PermGuard from '@/components/PermGuard.vue'
 import { formatDateTime } from '@/utils/datetime'
@@ -29,14 +29,14 @@ const COLUMNS: readonly DtDataColumn[] = [
     key: 'actions',
     label: '操作',
     align: 'right',
-    width: '11rem',
+    width: '13rem',
     card: 'actions',
   },
 ]
 
 const EMPTY = {
-  title: '还没有开出对外服务',
-  hint: '在模型库里挑一个可上线的版本，把它开成一个第三方系统能调的地址。',
+  title: '还没有已发布模型',
+  hint: '在工作流中点击「训练并发布」，或在训练记录中选择成功模型直接发布。',
 }
 
 const props = defineProps<{
@@ -122,29 +122,24 @@ defineEmits<{
       {{ formatDateTime(row.created_at) }}
     </template>
     <template #cell-actions="{ row }">
-      <DtButton variant="ghost" size="xs" @click="$emit('access', row)">
+      <DtButton variant="ghost" size="sm" @click="$emit('access', row)">
         调用说明
       </DtButton>
       <PermGuard :codes="[PERMISSION_CODES.modelingPublish]">
-        <DtButton
-          variant="ghost"
-          size="xs"
+        <DtIconButton
           icon="pencil"
-          title="改配置"
+          label="改配置"
           @click="$emit('edit', row)"
         />
-        <DtButton
-          variant="ghost"
-          size="xs"
+        <DtIconButton
           :icon="row.is_enabled ? 'power-off' : 'play'"
-          :title="row.is_enabled ? '停用' : '启用'"
+          :label="row.is_enabled ? '停用' : '启用'"
           @click="$emit('toggle', row, !row.is_enabled)"
         />
-        <DtButton
-          variant="ghost"
-          size="xs"
+        <DtIconButton
           icon="trash"
-          title="删掉"
+          label="删掉"
+          intent="danger"
           @click="$emit('remove', row)"
         />
       </PermGuard>

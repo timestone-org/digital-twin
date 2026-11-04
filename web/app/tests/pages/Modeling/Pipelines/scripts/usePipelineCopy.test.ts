@@ -7,6 +7,7 @@ import { afterEach, beforeEach, expect, it, vi } from 'vitest'
 import { defineComponent } from 'vue'
 
 import * as modeling from '@/api/modeling'
+import * as workflow from '@/api/modelingWorkflow'
 import * as idempotency from '@/api/idempotency'
 import { usePipelineOps } from '@/pages/Modeling/Pipelines/scripts/usePipelineOps'
 
@@ -261,4 +262,53 @@ it('创建已经发出后离开页面，完成时不再触发导航回调', asyn
   finish({ ...source, id: 'copy' })
   expect(await pending).toBeNull()
   expect(done).not.toHaveBeenCalled()
+})
+
+it('已保存模板通过模板快照接口创建，保留模板名称和用户说明', async () => {
+  const create = vi
+    .spyOn(workflow, 'createWorkflowFromTemplate')
+    .mockResolvedValue({ ...source, id: 'from-template' })
+  const plain = vi.spyOn(modeling, 'createModelingPipeline')
+  const { ops } = openCopy()
+  ops.openCreate()
+  const draft = {
+    id: null,
+    code: 'new_energy',
+    name: '  冷机预测  ',
+    description: '生产机组',
+  }
+  expect(await ops.save(draft, 'saved:template-1')).toBe('from-template')
+  expect(create).toHaveBeenCalledWith('template-1', {
+    code: 'new_energy',
+    name: '冷机预测',
+    description: '生产机组',
+  })
+  expect(plain).not.toHaveBeenCalled()
+  expect(done).toHaveBeenCalledOnce()
+})
+
+it('命名模板创建失败保留新建表单，重试仍选用同一模板', async () => {
+  const create = vi
+    .spyOn(workflow, 'createWorkflowFromTemplate')
+    .mockRejectedValueOnce(new Error('unavailable'))
+    .mockResolvedValueOnce({ ...source, id: 'retried-template' })
+  const { ops } = openCopy()
+  ops.openCreate()
+  const draft = {
+    id: null,
+    code: 'new_energy',
+    name: '冷机预测',
+    description: '',
+  }
+  expect(await ops.save(draft, 'saved:template-1')).toBeNull()
+  expect(ops.draft.value).not.toBeNull()
+  expect(error).toHaveBeenCalledOnce()
+  expect(done).not.toHaveBeenCalled()
+  expect(await ops.save(draft, 'saved:template-1')).toBe('retried-template')
+  expect(create).toHaveBeenCalledTimes(2)
+  expect(create).toHaveBeenLastCalledWith('template-1', {
+    code: 'new_energy',
+    name: '冷机预测',
+    description: null,
+  })
 })

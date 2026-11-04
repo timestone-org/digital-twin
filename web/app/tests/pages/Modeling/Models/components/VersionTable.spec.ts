@@ -3,6 +3,7 @@
  */
 import type { ModelingTask, ModelingVersionSummary } from '@dt/contracts'
 import { mount } from '@vue/test-utils'
+import { DtIconButton } from '@dt/ui'
 import { describe, expect, it } from 'vitest'
 
 import VersionTable from '@/pages/Modeling/Models/components/VersionTable.vue'
@@ -85,12 +86,46 @@ describe('模型版本长文本', () => {
 
   it('长名称不会改变详情动作传回的版本', async () => {
     const wrapper = open()
-    const detail = wrapper
-      .findAll('button')
-      .find((button) => button.text() === '详情')
-    expect(detail).toBeDefined()
-    await detail?.trigger('click')
+    await wrapper.get('button[aria-label="详情"]').trigger('click')
     expect(wrapper.emitted('detail')).toEqual([[VERSION]])
+    wrapper.unmount()
+  })
+
+  it('辅助动作使用命名图标按钮，主要业务动作保留文字且事件目标不变', async () => {
+    const wrapper = open({ ...VERSION, is_servable: true })
+    const actions = [
+      ['详情', 'eye', 'detail'],
+      ['改名', 'pencil', 'rename'],
+      ['下线', 'power-off', 'retire'],
+      ['删除', 'trash', 'remove'],
+    ]
+    for (const [label, icon, event] of actions) {
+      if (!label || !event) throw new Error('缺少动作定义')
+      const control = wrapper
+        .findAllComponents(DtIconButton)
+        .find((item) => item.props('label') === label)
+      expect(control?.props()).toMatchObject({ icon, size: 'sm' })
+      await wrapper.get(`button[aria-label="${label}"]`).trigger('click')
+      expect(wrapper.emitted(event)).toEqual([
+        [{ ...VERSION, is_servable: true }],
+      ])
+    }
+    expect(
+      wrapper
+        .findAllComponents(DtIconButton)
+        .find((item) => item.props('label') === '删除')
+        ?.props('intent'),
+    ).toBe('danger')
+    for (const label of ['发布模型', '绑公式']) {
+      expect(
+        wrapper.findAll('button').some((button) => button.text() === label),
+      ).toBe(true)
+      expect(
+        wrapper
+          .findAllComponents(DtIconButton)
+          .some((button) => button.props('label') === label),
+      ).toBe(false)
+    }
     wrapper.unmount()
   })
 })

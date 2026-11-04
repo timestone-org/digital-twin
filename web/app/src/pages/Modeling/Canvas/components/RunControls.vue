@@ -8,6 +8,8 @@
  * 按钮并排会让人以为再点一次能排队。
  */
 import { DtButton, DtCheckbox } from '@dt/ui'
+import { PERMISSION_CODES } from '@dt/contracts'
+import PermGuard from '@/components/PermGuard.vue'
 
 const props = defineProps<{
   isRunning: boolean
@@ -15,7 +17,7 @@ const props = defineProps<{
   isStarting: boolean
 }>()
 
-const emit = defineEmits<{ run: []; cancel: [] }>()
+const emit = defineEmits<{ run: []; trainAndDeploy: []; cancel: [] }>()
 
 const isKeepingFrames = defineModel<boolean>('isKeepingFrames', {
   required: true,
@@ -34,7 +36,7 @@ const isKeepingFrames = defineModel<boolean>('isKeepingFrames', {
     icon="power-off"
     @click="emit('cancel')"
   >
-    取消运行
+    取消训练
   </DtButton>
   <DtButton
     v-else
@@ -44,6 +46,20 @@ const isKeepingFrames = defineModel<boolean>('isKeepingFrames', {
     :loading="props.isStarting"
     @click="emit('run')"
   >
-    运行
+    开始训练
   </DtButton>
+  <PermGuard
+    v-if="!props.isRunning"
+    :codes="[PERMISSION_CODES.modelingPublish]"
+  >
+    <DtButton
+      size="sm"
+      icon="share"
+      :disabled="props.isReadonly"
+      :loading="props.isStarting"
+      @click="emit('trainAndDeploy')"
+    >
+      训练并发布
+    </DtButton>
+  </PermGuard>
 </template>

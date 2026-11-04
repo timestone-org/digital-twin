@@ -56,10 +56,13 @@ class DurableModelingGate(WriteGate):
         endpoint: str,
         model: type[ResultT],
         action: Callable[[], Awaitable[ResultT]],
+        prepare: Callable[[], Awaitable[None]] | None = None,
     ) -> ResultT:
         """执行或恢复同一命令；Args: endpoint, model, action。"""
         operation = parse_scope(endpoint)
         if self.idempotency_key is None:
+            if prepare is not None:
+                await prepare()
             result = await action()
             self._audit(endpoint, result, None)
             return result
@@ -68,6 +71,8 @@ class DurableModelingGate(WriteGate):
         if not is_owner:
             return await _replay(self.session, row, self.request_hash, model)
         try:
+            if prepare is not None:
+                await prepare()
             async with self.session.begin_nested():
                 result = await action()
                 self._audit(endpoint, result, row.id)

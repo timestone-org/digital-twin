@@ -16,7 +16,14 @@ defineProps<{
     progress: string
   }
 }>()
-defineEmits<{ undo: []; redo: []; configure: []; history: []; shortcuts: [] }>()
+defineEmits<{
+  undo: []
+  redo: []
+  configure: []
+  history: []
+  shortcuts: []
+  autoLayout: []
+}>()
 </script>
 
 <template>
@@ -36,15 +43,26 @@ defineEmits<{ undo: []; redo: []; configure: []; history: []; shortcuts: [] }>()
       >
     </div>
     <div class="canvas-workspace-bar__group">
-      <DtButton
+      <DtIconButton
         size="sm"
         variant="soft"
         icon="settings"
+        label="配置选中节点"
+        tooltip="配置选中节点"
         :disabled="!state.canConfigure"
         @click="$emit('configure')"
-        >配置选中节点</DtButton
-      >
+      />
       <PermGuard :codes="[PERMISSION_CODES.modelingManage]">
+        <DtButton
+          size="sm"
+          variant="outline"
+          intent="neutral"
+          icon="distribute-horizontal"
+          title="按数据流整理节点，支持撤销"
+          :disabled="state.isReadonly || state.nodeCount === 0"
+          @click="$emit('autoLayout')"
+          >自动整理</DtButton
+        >
         <DtIconButton
           variant="ghost"
           size="sm"
@@ -64,13 +82,14 @@ defineEmits<{ undo: []; redo: []; configure: []; history: []; shortcuts: [] }>()
           @click="$emit('redo')"
         />
       </PermGuard>
-      <DtButton
+      <DtIconButton
         variant="ghost"
         size="sm"
         icon="list-checks"
+        label="运行历史"
+        tooltip="查看运行历史"
         @click="$emit('history')"
-        >运行历史</DtButton
-      >
+      />
       <DtIconButton
         variant="ghost"
         size="sm"

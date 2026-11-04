@@ -49,6 +49,7 @@ class RecordingDispatch:
 
     seen: list[uuid.UUID] = field(default_factory=list[uuid.UUID])
     error: Exception | None = None
+    outcome: str = "done"
 
     async def __call__(self, *_args: object, **kwargs: object) -> object:
         run_id = kwargs["run_id"]
@@ -59,7 +60,7 @@ class RecordingDispatch:
         self.seen.append(run_id)
         if self.error is not None:
             raise self.error
-        return DispatchReport(outcome="done", status="succeeded")
+        return DispatchReport(outcome=self.outcome, status="succeeded")
 
 
 def consumer_of(stream: InMemoryStream) -> RunConsumer:
@@ -107,9 +108,21 @@ async def test_a_message_is_processed_then_acked(
         "platform_server.apps.modeling.services.run_worker.execute_run",
         dispatch,
     )
+    completed: list[uuid.UUID] = []
+
+    async def finish(
+        _sessions: object, identity: uuid.UUID, _store: object
+    ) -> None:
+        completed.append(identity)
+
+    monkeypatch.setattr(
+        "platform_server.apps.modeling.services.run_worker.complete_training",
+        finish,
+    )
     consumer = consumer_of(stream)
     await consumer._tick()
     assert dispatch.seen == [run_id]
+    assert completed == [run_id]
     assert len(stream.acked) == 1
 
 
@@ -127,6 +140,59 @@ async def test_an_unreadable_message_is_dropped_not_retried(
     await consumer_of(stream)._tick()
     assert dispatch.seen == []
     assert len(stream.acked) == 1
+
+
+async def test_a_busy_training_keeps_its_message_unacknowledged(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    stream = InMemoryStream()
+    run_id = uuid.uuid4()
+    await stream.publish(
+        TARGET.stream, run_queue.new_message(run_id).to_fields()
+    )
+    dispatch = RecordingDispatch(outcome="busy")
+    monkeypatch.setattr(
+        "platform_server.apps.modeling.services.run_worker.execute_run",
+        dispatch,
+    )
+    await consumer_of(stream)._tick()
+    assert dispatch.seen == [run_id]
+    assert stream.acked == []
+
+
+async def test_publication_failure_keeps_message_pending_and_loop_alive(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    stream = InMemoryStream()
+    identities = [uuid.uuid4(), uuid.uuid4()]
+    for identity in identities:
+        await stream.publish(
+            TARGET.stream, run_queue.new_message(identity).to_fields()
+        )
+    dispatch = RecordingDispatch()
+    completed: list[uuid.UUID] = []
+
+    async def finish(
+        _sessions: object, identity: uuid.UUID, _store: object
+    ) -> None:
+        if identity == identities[0]:
+            raise RuntimeError("数据库暂不可用")
+        completed.append(identity)
+
+    monkeypatch.setattr(
+        "platform_server.apps.modeling.services.run_worker.execute_run",
+        dispatch,
+    )
+    monkeypatch.setattr(
+        "platform_server.apps.modeling.services.run_worker.complete_training",
+        finish,
+    )
+    consumer = consumer_of(stream)
+    await consumer._tick()
+    assert stream.acked == []
+    await consumer._tick()
+    assert len(stream.acked) == 1
+    assert completed == [identities[1]]
 
 
 async def test_an_orchestration_error_keeps_the_loop_alive(

@@ -1,4 +1,4 @@
-/** @fileoverview 流水线 JSON 文件预检、导入表单与下载状态。 */
+/** @fileoverview 工作流 JSON 文件预检、导入表单与下载状态。 */
 import type {
   ModelingImportInspection,
   ModelingPipelineSummary,
@@ -138,7 +138,7 @@ async function submitImport(
       ok: (created) => {
         form.isSaving.value = false
         closeImport(form)
-        useToast().success('流水线已导入，请核对数据源并校验后运行')
+        useToast().success('工作流已导入，请核对数据源并校验后运行')
         onImported(created.id)
       },
       fail: (caught) => {
@@ -161,8 +161,8 @@ function usePipelineExport() {
     exportingId.value = row.id
     await exporting.run((signal) => transfer.exportPipeline(row.id, signal), {
       ok: (document) => {
-        downloadJson(document, `${row.code}_流水线`)
-        toast.success('已导出已保存的流水线定义')
+        downloadJson(document, `${row.code}_工作流`)
+        toast.success('已导出已保存的工作流定义')
       },
       fail: (caught) => toast.error(describeError(caught)),
       settled: () => {

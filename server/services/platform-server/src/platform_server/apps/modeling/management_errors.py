@@ -31,3 +31,13 @@ class DeploymentSignatureChanged(AppError):
 class DeploymentSwitchNotFound(AppError):
     code = 41436
     http_status = 404
+
+
+class RunNotDeletable(AppError):
+    code = 41437
+    http_status = 409
+
+
+class WorkflowDeploymentConflict(AppError):
+    code = 41438
+    http_status = 409

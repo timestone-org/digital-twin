@@ -5,14 +5,11 @@ import type {
   ModelDeployment,
   ModelingVersionSummary,
 } from '@dt/contracts'
-import { PERMISSION_CODES } from '@dt/contracts'
 import { DtButton, DtNotice } from '@dt/ui'
 import { onBeforeUnmount, onMounted, ref } from 'vue'
 
 import * as modeling from '@/api/modeling'
-import PermGuard from '@/components/PermGuard.vue'
 import { AppShell } from '@/components/layout'
-import ModelingNav from '../components/ModelingNav.vue'
 import { describeError } from '@/composables/useAsyncList'
 import { useRacedFetch } from '@/composables/useRacedFetch'
 import { useViewMode } from '@/composables/useViewMode'
@@ -25,6 +22,7 @@ import { useDeploymentOps } from './scripts/useDeploymentOps'
 const view = useViewMode('modeling-deployments')
 
 const rows = ref<ModelDeployment[]>([])
+const deploymentsRequest = useRacedFetch()
 const versions = ref<ModelingVersionSummary[]>([])
 const isVersionLoading = ref(true)
 const versionError = ref<string | null>(null)
@@ -32,7 +30,6 @@ const versionRequest = useRacedFetch()
 const isLoading = ref(false)
 const error = ref<string | null>(null)
 
-const isFormOpen = ref(false)
 const editing = ref<ModelDeployment | null>(null)
 const inspecting = ref<ModelDeployment | null>(null)
 const stats = ref<ModelCallStat[]>([])
@@ -47,14 +44,20 @@ const ops = useDeploymentOps(() => {
 async function reload(): Promise<void> {
   isLoading.value = true
   error.value = null
-  try {
-    rows.value = await modeling.listModelDeployments()
-    if (inspecting.value !== null) await openAccess(inspecting.value)
-  } catch (caught) {
-    error.value = describeError(caught)
-  } finally {
-    isLoading.value = false
-  }
+  await deploymentsRequest.run(
+    (signal) => modeling.listModelDeployments(signal),
+    {
+      ok: (found) => {
+        rows.value = found
+        if (inspecting.value === null) return
+        const selected = found.find((row) => row.id === inspecting.value?.id)
+        if (selected) void openAccess(selected)
+        else closeAccess()
+      },
+      fail: (caught) => (error.value = describeError(caught)),
+      settled: () => (isLoading.value = false),
+    },
+  )
 }
 
 async function loadVersions(): Promise<void> {
@@ -93,30 +96,21 @@ function closeAccess(): void {
   inspecting.value = null
 }
 
-function openForm(row: ModelDeployment | null): void {
+function openForm(row: ModelDeployment): void {
   if (isVersionLoading.value || versionError.value !== null) return
   editing.value = row
-  isFormOpen.value = true
 }
 
 async function submitForm(payload: {
-  code: string
   model_version_id: string
   name: string
   max_rows_per_call: number
   rate_limit_per_minute: number
 }): Promise<void> {
   const row = editing.value
-  const done =
-    row === null
-      ? await ops.create(payload)
-      : await ops.update(row.id, {
-          name: payload.name,
-          model_version_id: payload.model_version_id,
-          max_rows_per_call: payload.max_rows_per_call,
-          rate_limit_per_minute: payload.rate_limit_per_minute,
-        })
-  if (done !== null) isFormOpen.value = false
+  if (row === null) return
+  const done = await ops.update(row.id, payload)
+  if (done !== null) editing.value = null
 }
 
 onMounted(() => {
@@ -125,6 +119,7 @@ onMounted(() => {
 })
 
 onBeforeUnmount(() => {
+  deploymentsRequest.cancel()
   versionRequest.cancel()
   statsRequest.cancel()
 })
@@ -132,13 +127,12 @@ onBeforeUnmount(() => {
 
 <template>
   <AppShell
-    title="部署服务"
-    subtitle="将模型版本提供给第三方调用，统一使用用户 APIKey"
+    title="已发布模型"
+    subtitle="每个工作流使用一个固定发布入口，查看当前模型与调用说明"
     back-to="/modeling/pipelines"
   >
     <!-- h-full + min-h-0 见 AppShell 的契约：main 不滚，高度由页面自己吃满 -->
     <div class="flex h-full min-h-0 flex-col gap-3 overflow-y-auto">
-      <ModelingNav />
       <DtNotice v-if="versionError" intent="warning">
         模型版本加载失败：{{ versionError }}
         <DtButton size="xs" variant="ghost" @click="void loadVersions()">
@@ -154,30 +148,16 @@ onBeforeUnmount(() => {
         @edit="(row) => openForm(row)"
         @toggle="(row, isOn) => void ops.update(row.id, { is_enabled: isOn })"
         @remove="(row) => void ops.remove(row)"
-      >
-        <template #toolbar>
-          <PermGuard :codes="[PERMISSION_CODES.modelingPublish]">
-            <DtButton
-              size="sm"
-              icon="plus"
-              :loading="isVersionLoading"
-              :disabled="isVersionLoading || versionError !== null"
-              @click="openForm(null)"
-            >
-              开一个服务
-            </DtButton>
-          </PermGuard>
-        </template>
-      </DeploymentTable>
+      />
     </div>
 
     <DeploymentFormDialog
-      :editing="editing"
-      :is-open="isFormOpen"
+      v-if="editing"
+      :deployment="editing"
       :is-busy="ops.isBusy.value"
       :versions="versions"
       @submit="(payload) => void submitForm(payload)"
-      @close="isFormOpen = false"
+      @close="editing = null"
     />
 
     <DeploymentAccessDrawer

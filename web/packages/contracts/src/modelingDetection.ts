@@ -22,6 +22,44 @@ export type OpenModelDetect = {
 
 export type OpenModelDetectRequest = { rows: DetectionRow[] }
 
+export type OpenModelMissingPolicy = {
+  on_missing: 'reject' | 'fitted_default'
+  on_null: 'return_null' | 'fitted_default'
+}
+
+export type OpenModelInput = {
+  default_on_missing?: number | null
+  dtype?: string
+  is_required?: boolean
+  key: string
+  label?: string
+  missing_policy?: OpenModelMissingPolicy | null
+  unit?: string
+}
+
+export type OpenModelDerived = { by?: string; key: string; label?: string }
+
+export type OpenModelOutput = {
+  dtype?: string
+  key?: string
+  label?: string
+  task:
+    'anomaly_detection' | 'classification' | 'regression' | 'rule_calculation'
+  unit?: string
+}
+
+export type OpenModelSignature = {
+  derived?: OpenModelDerived[]
+  format_version?: string | null
+  inputs: OpenModelInput[]
+  invoke_url: string
+  output: OpenModelOutput
+  requires_timestamp?: boolean
+  task:
+    'anomaly_detection' | 'classification' | 'regression' | 'rule_calculation'
+  timestamp_key: '__ts__' | null
+}
+
 export type ModelingJsonValue = unknown
 
 export type OpenModelCalculateRequest = { rows: DetectionRow[] }

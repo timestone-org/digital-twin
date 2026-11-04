@@ -103,7 +103,7 @@ D-1～D-8 排在任何新画法之前。不修的话新旧画法一起黑，而�
 
 | 区 | 名 | 内容 | 组件 | 尺寸 |
 |---|---|---|---|---|
-| ① | **这一步做了什么** | 一句话 gist + 参数 chips + 行/列/格子的账 + 告警 note | `StepSummary.vue`（内含 `DtTag` chips + `DtNotice`） | 全宽，≤3 行文字 + ≤2 个 note |
+| ① | **这一步做了什么** | 结构化步骤说明、参数与告警 | `ReportBlocks.vue` 的 step 分区，按块类型派发 | 全宽，≤3 行文字 + ≤2 个 note |
 | ② | **关键数字** | 4–8 张指标卡 | `StatCards.vue`（`grid gap-3 sm:grid-cols-2 lg:grid-cols-4` + `DtCard padding="sm"` + `DtDigits` + `DtHelpTip`） | 每卡最小 12rem，最多两行 |
 | ③ | **对比图** | 主体图 + 辅图 | 见 §7 的六个图元件 | 主体图与辅图同为 `min(44rem, 100%)` 一档；辅图网格 `repeat(auto-fit, minmax(min(44rem, 100%), 44rem))`——⚠ 列宽下限低于一档时，`viewBox` 会把 7px 的刻度字按「渲染宽 ÷ 360」一起缩到读不出数（1084px 的格子里排三列实测只剩 6.87px），故摆得下两张整图才排两列 |
 | ④ | **怎么算的** | 公式（符号态 / 代入态）+ 变量表 | `FormulaBlock.vue` | 全宽，行内 flex-wrap |
@@ -615,7 +615,6 @@ interface FormulaTerm { text: string; kind: 'var' | 'num' | 'op' | 'name' | 'war
 | 路径 | 职责 | 行 |
 |---|---|---|
 | `components/ReportBlocks.vue` | **唯一**块派发点：按 `ZONE_ORDER` 分区 → 按 `block.kind` 查常量表 → `<component :is>`；查不到交给 `UnknownBlock` | 100 |
-| `components/StepSummary.vue` | ① 区：gist + 参数 chips + 账 + note | 130 |
 | `components/StatCards.vue` | ② 区：指标卡网格（`DtCard` + `DtDigits` + `DtTag` + `DtHelpTip`） | 100 |
 | `components/BarList.vue` | 图元件：四 mode 横条（HTML） | 210 |
 | `components/HistogramChart.vue` | 图元件：直方 + 参考线 + 双色 + 正态曲线 + 离轴柱 | 240 |
@@ -699,7 +698,7 @@ interface FormulaTerm { text: string; kind: 'var' | 'num' | 'op' | 'name' | 'war
 | **PR-14** | `feat(platform-server)`：`standardize`（含清 `unit`）/ `one_hot`（unseen 与 blank 分开）/ `select_feature`（`degraded_reason` 按 `len(downstream_splits)!=1` 的真条件） | 380 / 7 | platform-server | PR-11 |
 | **PR-15** | `feat(platform-server)`：`estimators.py` 保留 PCA 解释方差 + `pca` / `time_feature` / `lag_feature` / `rolling_feature` 的 `report()` | 370 / 7 | platform-server | PR-11 |
 | **PR-16** | `feat(web)`：`ScatterPlot.vue` 升级（四 mode + 轴刻度 + 参考带）+ `TimelineBand.vue` + 退化用例 | 390 / 5 | web | PR-10 |
-| **PR-17** | `feat(web)`：`StepSummary` / `StatCards` / `ProvenanceBar` 落地 + source + preprocess 九个算子的块渲染接线 + 四档截断空态 | 390 / 8 | web | PR-16 |
+| **PR-17** | `feat(web)`：`ReportBlocks` 步骤分区 / `StatCards` / `ProvenanceBar` 落地 + source + preprocess 九个算子的块渲染接线 + 四档截断空态 | 390 / 8 | web | PR-16 |
 | **PR-18** | `feat(web)`：feature 七个算子的块渲染接线（含 pca 载荷热力、one_hot 命中条、select_feature 排行与两条告警） | 350 / 6 | web | PR-17 |
 | **PR-19** | `feat(platform-server)`：`modelstats.py` + `split_dataset`（含 `index_min/max`、provenance 说明）/ `linear_regression`（训练分 + 秩亏 + 每列 σ）/ `logistic_regression`（类目计数 + 收敛）的 `report()` | 390 / 8 | platform-server | PR-13 |
 | **PR-20** | `feat(platform-server)`：`tree_regressor` 的 `report()`（`importances` + 集成结构 + 训练区间 + PDP + 限深代表树） | 380 / 5 | platform-server | PR-19 |

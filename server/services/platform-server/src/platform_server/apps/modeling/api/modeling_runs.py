@@ -22,19 +22,32 @@ from platform_server.apps.modeling.deps import (
     WriteGate,
     get_instance_write_context,
     get_object_store,
+    get_publish_context,
+    get_run_publication_context,
     get_session,
     require,
 )
 from platform_server.apps.modeling.schemas import (
+    ModelDeploymentOut,
     NodeRunOut,
     RunOut,
     RunSummaryOut,
 )
+from platform_server.apps.modeling.schemas.command import CommandResourceOut
 from platform_server.apps.modeling.schemas.management import RunListQuery
+from platform_server.apps.modeling.schemas.run import RunDeployIn
 from platform_server.apps.modeling.services import (
     frame_export,
     management_queries,
+    run_deletion,
     run_service,
+    workflow_publication,
+)
+from platform_server.apps.modeling.services.command_gate import (
+    DurableModelingGate,
+)
+from platform_server.apps.modeling.services.workflow_publication import (
+    PublicationContext,
 )
 from platform_server.settings import API_PREFIX
 
@@ -44,6 +57,10 @@ SessionDep = Annotated[AsyncSession, Depends(get_session)]
 PageDep = Annotated[PageParams, Depends(page_params)]
 ViewDep = Annotated[CallerContext, Depends(require(MODELING_VIEW))]
 WriteDep = Annotated[WriteGate, Depends(get_instance_write_context)]
+PublishDep = Annotated[DurableModelingGate, Depends(get_publish_context)]
+PublicationDep = Annotated[
+    PublicationContext, Depends(get_run_publication_context)
+]
 StoreDep = Annotated[ObjectStore, Depends(get_object_store)]
 # ⚠ 下载全量结果要**两个**码：那些 CSV 里是台账原始数据，能看不等于能带走
 # （docs/MODELING_PLATFORM_DESIGN.md D12）
@@ -78,6 +95,46 @@ async def get_run(
     Args: run_id, session, _viewer。
     """
     return ok(await run_service.get_run(session, run_id))
+
+
+@router.post(
+    "/{run_id}:deploy",
+    response_model=ApiResponse[ModelDeploymentOut],
+    summary="发布本次训练模型",
+)
+async def deploy_run(
+    run_id: uuid.UUID,
+    payload: RunDeployIn,
+    session: SessionDep,
+    write: PublishDep,
+    publication: PublicationDep,
+) -> ApiResponse[ModelDeploymentOut]:
+    command = workflow_publication.RunDeploymentCommand(
+        session, run_id, payload, publication
+    )
+    return ok(
+        await write.run_once(
+            endpoint=f"modeling.deploy_run.{run_id}",
+            model=ModelDeploymentOut,
+            action=command.execute,
+            prepare=command.prepare,
+        )
+    )
+
+
+@router.delete("/{run_id}", status_code=204, summary="删除训练记录与未使用模型")
+async def delete_run(
+    run_id: uuid.UUID,
+    session: SessionDep,
+    write: PublishDep,
+    store: StoreDep,
+) -> Response:
+    await write.run_once(
+        endpoint=f"modeling.delete_run.{run_id}",
+        model=CommandResourceOut,
+        action=lambda: run_deletion.delete_run(session, run_id, store),
+    )
+    return Response(status_code=204)
 
 
 @router.get(

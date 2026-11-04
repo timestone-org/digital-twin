@@ -20,6 +20,9 @@ export const MODELING_COMMAND_OPERATIONS = [
   'retire_version',
   'delete_deployment',
   'cancel_run',
+  'deploy_run',
+  'delete_run',
+  'create_workflow_from_template',
 ] as const
 export type ModelingCommandOperation =
   (typeof MODELING_COMMAND_OPERATIONS)[number]
@@ -77,6 +80,9 @@ export type ModelingCommand = {
     | 'retire_version'
     | 'delete_deployment'
     | 'cancel_run'
+    | 'deploy_run'
+    | 'delete_run'
+    | 'create_workflow_from_template'
   resource_id: string | null
   result: Record<string, ModelingJsonValue> | null
   state: 'pending' | 'unknown' | 'succeeded' | 'failed'

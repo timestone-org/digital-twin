@@ -136,7 +136,7 @@ describe('流水线列表上的动作', () => {
     expect(remove).not.toHaveBeenCalled()
   })
 
-  it('问话里要说清运行记录跟着删、已发布的版本不跟着删', async () => {
+  it('删除前说明清理范围与发布、公式引用保护', async () => {
     toaster()
     const ask = asker(true)
     vi.spyOn(modeling, 'deleteModelingPipeline').mockResolvedValue()
@@ -145,8 +145,8 @@ describe('流水线列表上的动作', () => {
     await ops.remove(summary())
 
     const message = ask.mock.calls[0]?.[0].message ?? ''
-    expect(message).toContain('运行记录')
-    expect(message).toContain('模型版本不受影响')
+    expect(message).toContain('训练记录')
+    expect(message).toContain('已绑定公式和当前发布模型受到保护')
   })
 
   it('改名时把现有值填进表单，编码原样带着但界面上不给改', () => {

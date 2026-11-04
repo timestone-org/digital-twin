@@ -9,6 +9,7 @@ from integration.modeling_helpers import (
     ENERGY,
     LOAD,
     PIPELINES,
+    RUNS,
     TEMPERATURE,
     create_pipeline,
     data_of,
@@ -145,7 +146,13 @@ async def test_source_edits_preserve_queued_and_deployed_models(
     assert second.target_key == LOAD
     assert second.version == 2
     assert first.id != second.id
-    await _deploy(app_client, second, "snapshot-retrained")
+    await _assert_prediction(app_client, "snapshot-original", 1, 1345)
+    switched = await app_client.post(
+        f"{RUNS}/{second_run.id}:deploy",
+        json={"is_signature_change_confirmed": True},
+    )
+    assert switched.status_code == 200, switched.text
+    assert data_of(switched)["code"] == "snapshot-original"
     await _edit(app_client, pipeline_id, _graph(ENERGY, "missing-data"))
 
     listed = await app_client.get(VERSIONS, params={"pipeline_id": pipeline_id})
@@ -154,5 +161,4 @@ async def test_source_edits_preserve_queued_and_deployed_models(
     assert {item.id for item in versions.items} == {first.id, second.id}
     deletion = await app_client.delete(f"{PIPELINES}/{pipeline_id}")
     assert deletion.status_code == 409, deletion.text
-    await _assert_prediction(app_client, "snapshot-original", 1, 1345)
-    await _assert_prediction(app_client, "snapshot-retrained", 2, 430)
+    await _assert_prediction(app_client, "snapshot-original", 2, 430)

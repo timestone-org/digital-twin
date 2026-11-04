@@ -268,7 +268,7 @@ const ALL_ROUTES: RouteRecordRaw[] = [
     name: 'modeling-pipelines',
     component: () => import('@/pages/Modeling/Pipelines/index.vue'),
     meta: {
-      title: '建模工作台',
+      title: '工作流',
       permissions: [PERMISSION_CODES.modelingView],
     },
   },
@@ -285,9 +285,9 @@ const ALL_ROUTES: RouteRecordRaw[] = [
   {
     path: '/modeling/templates',
     name: 'modeling-templates',
-    component: () => import('@/pages/Modeling/Templates/index.vue'),
+    redirect: '/modeling/pipelines',
     meta: {
-      title: '已发布工作流',
+      title: '工作流模板',
       permissions: [PERMISSION_CODES.modelingView],
     },
   },
@@ -327,7 +327,7 @@ const ALL_ROUTES: RouteRecordRaw[] = [
     name: 'modeling-runs',
     component: () => import('@/pages/Modeling/Runs/index.vue'),
     meta: {
-      title: '运行记录',
+      title: '训练记录',
       permissions: [PERMISSION_CODES.modelingView],
     },
   },
@@ -340,7 +340,7 @@ const ALL_ROUTES: RouteRecordRaw[] = [
     name: 'modeling-services',
     component: () => import('@/pages/Modeling/Services/index.vue'),
     meta: {
-      title: '部署服务',
+      title: '已发布模型',
       permissions: [PERMISSION_CODES.modelingView],
     },
   },

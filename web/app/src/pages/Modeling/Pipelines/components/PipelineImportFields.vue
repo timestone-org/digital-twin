@@ -1,5 +1,5 @@
 <script setup lang="ts">
-/** @fileoverview 导入独立流水线时的目标名称、编码与说明。 */
+/** @fileoverview 导入独立工作流时的目标名称、编码与说明。 */
 import { DtInput, DtTextarea } from '@dt/ui'
 import type { usePipelineTransfer } from '../scripts/usePipelineTransfer'
 defineProps<{ transfer: ReturnType<typeof usePipelineTransfer> }>()
@@ -13,7 +13,7 @@ defineProps<{ transfer: ReturnType<typeof usePipelineTransfer> }>()
   >
     <DtInput
       :model-value="transfer.name.value"
-      label="流水线名称"
+      label="工作流名称"
       :maxlength="128"
       :disabled="transfer.isSaving.value"
       required
@@ -21,7 +21,7 @@ defineProps<{ transfer: ReturnType<typeof usePipelineTransfer> }>()
     />
     <DtInput
       :model-value="transfer.code.value"
-      label="新流水线编码"
+      label="新工作流编码"
       :maxlength="64"
       :error="transfer.codeError.value"
       :disabled="transfer.isSaving.value"

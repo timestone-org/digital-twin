@@ -9,18 +9,25 @@
 
 import uuid
 from dataclasses import dataclass, replace
-from datetime import datetime
+from datetime import datetime, timedelta
 
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from lib.db import after_commit
+from lib.errors import PermissionDenied
 from lib.errors.base import FieldError
 from lib.stream import StreamGroup, StreamLike
+from platform_server.apps.modeling.crud import (
+    deployment_crud,
+    node_run_crud,
+    pipeline_crud,
+    run_crud,
+)
 from platform_server.apps.modeling.crud import management_queries as query_crud
-from platform_server.apps.modeling.crud import node_run_crud, run_crud
 from platform_server.apps.modeling.errors import (
     GraphInvalid,
     NodeRunNotFound,
+    RunAlreadyActive,
     RunNotCancellable,
     RunNotFound,
 )
@@ -52,6 +59,7 @@ class RunContext:
     stream: StreamLike
     target: StreamGroup
     now: datetime
+    can_publish: bool = False
 
 
 async def start_run(
@@ -67,6 +75,11 @@ async def start_run(
     拓扑与参数（D6）。
     Args: session, pipeline_id, payload, context。
     """
+    if payload.should_auto_publish and not context.can_publish:
+        raise PermissionDenied("训练并发布需要模型发布权限")
+    await pipeline_crud.lock(session, pipeline_id)
+    if await run_crud.pending_publication_of(session, pipeline_id):
+        raise RunAlreadyActive("上次训练仍在保存或发布模型，请等待完成")
     await require_active_instance(session, pipeline_id)
     pipeline = await require_pipeline(session, pipeline_id)
     graph = presenters.graph_of(pipeline.graph_json)
@@ -75,6 +88,8 @@ async def start_run(
         context = replace(
             context, target=run_queue.rules_target(context.target)
         )
+    deployments = await deployment_crud.for_pipeline(session, pipeline_id)
+    deployed = deployments[0] if len(deployments) == 1 else None
     run = await run_crud.add_active(
         session,
         ModelingRun(
@@ -83,11 +98,17 @@ async def start_run(
             graph_snapshot=_snapshot_of(graph),
             trigger=payload.trigger,
             is_keeping_frames=payload.is_keeping_frames,
+            auto_publish=payload.should_auto_publish,
+            publication_status="pending",
+            publication_expected_revision=(
+                (deployed.revision or 1) if deployed else 0
+            ),
+            publication_deployment_id=deployed.id if deployed else None,
             created_by=context.actor.user_id,
             created_by_name=context.actor.name,
         ),
     )
-    _enqueue_after_commit(session, run.id, context)
+    _enqueue_after_commit(session, run, context)
     return await get_run(session, run.id)
 
 
@@ -107,7 +128,7 @@ def _snapshot_of(graph: PipelineGraph) -> dict[str, object]:
 
 
 def _enqueue_after_commit(
-    session: AsyncSession, run_id: uuid.UUID, context: RunContext
+    session: AsyncSession, run: ModelingRun, context: RunContext
 ) -> None:
     """排一次提交后的投递。
 
@@ -116,7 +137,9 @@ def _enqueue_after_commit(
     比起「响应 500 但运行行已经在库里」，这个方向更容易解释。
     Args: session, run_id, context。
     """
-    message = run_queue.new_message(run_id)
+    message = run_queue.new_message(run.id)
+    run.traceparent = message.traceparent
+    run.dispatch_after = context.now + timedelta(seconds=60)
 
     async def publish() -> None:
         await run_queue.publish_run(

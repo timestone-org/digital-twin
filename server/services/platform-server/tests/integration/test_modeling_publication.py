@@ -95,6 +95,9 @@ async def test_missing_io_publishes_unservable_version_with_model_identity(
     worker_sessions: MakerSessions,
 ) -> None:
     run = await _trained(app_client, db_session, worker_sessions)
+    assert (
+        await app_client.delete(f"{VERSIONS}/{run['published_version_id']}")
+    ).status_code == 204
     model = await db_session.scalar(
         select(ModelingNodeRun).where(
             ModelingNodeRun.run_id == uuid.UUID(run["id"]),

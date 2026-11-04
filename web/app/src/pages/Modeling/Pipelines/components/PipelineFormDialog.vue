@@ -1,10 +1,18 @@
 <script setup lang="ts">
-/** @fileoverview 创建或复制独立流水线，以及修改已有流水线的名称和说明。 */
-import { DtButton, DtInput, DtModal, DtNotice, DtTextarea } from '@dt/ui'
+/** @fileoverview 创建或复制独立工作流，以及修改已有工作流的名称和说明。 */
+import {
+  DtButton,
+  DtField,
+  DtInput,
+  DtModal,
+  DtNotice,
+  DtTextarea,
+} from '@dt/ui'
 import { computed, ref, watch } from 'vue'
 import { useFormDirty } from '@/composables/useFormDirty'
 import type { PipelineDraft } from '../scripts/usePipelineOps'
-import TemplatePicker from './TemplatePicker.vue'
+import type { WorkflowTemplateChoice } from '../scripts/workflowTemplateChoice'
+import WorkflowTemplateDialog from './WorkflowTemplateDialog.vue'
 
 const props = defineProps<{ draft: PipelineDraft | null; isSaving: boolean }>()
 const emit = defineEmits<{
@@ -17,22 +25,26 @@ const form = ref<PipelineDraft>({
   name: '',
   description: '',
 })
-const templateKey = ref('regression')
+const selection = ref<WorkflowTemplateChoice>({
+  key: 'regression',
+  label: '回归预测',
+})
+const isChoosingTemplate = ref(false)
 const isCreate = computed(() => form.value.id === null)
 const isCopy = computed(() => form.value.sourcePipelineId !== undefined)
 const isTemplateCreate = computed(() => isCreate.value && !isCopy.value)
 const title = computed(() =>
   isCopy.value
-    ? '复制流水线'
+    ? '复制工作流'
     : isCreate.value
-      ? '新建流水线'
-      : '编辑流水线信息',
+      ? '新建工作流'
+      : '编辑工作流信息',
 )
 const description = computed(() =>
   isCopy.value
-    ? '从已保存的流水线创建独立副本，保留原流水线。'
+    ? '从已保存的工作流创建独立副本，保留原工作流。'
     : isCreate.value
-      ? '选择适合业务的设计模板，命名后进入流程图。'
+      ? '填写工作流名称，可选择模板作为起点，再进入流程图配置。'
       : '修改名称和说明，保留现有流程图。',
 )
 const submitText = computed(() =>
@@ -56,18 +68,26 @@ const canSubmit = computed(
 )
 const dirty = useFormDirty(() => ({
   form: form.value,
-  templateKey: templateKey.value,
+  templateKey: selection.value.key,
 }))
 watch(
   () => props.draft,
   (next) => {
     if (next === null) return
     form.value = { ...next }
-    templateKey.value = 'regression'
+    selection.value = { key: 'regression', label: '回归预测' }
+    isChoosingTemplate.value = false
     dirty.markClean()
   },
   { immediate: true, flush: 'post' },
 )
+
+function selectTemplate(choice: WorkflowTemplateChoice): void {
+  selection.value = choice
+  if (!form.value.name.trim())
+    form.value.name = Array.from(choice.label).slice(0, 128).join('')
+  isChoosingTemplate.value = false
+}
 </script>
 
 <template>
@@ -75,17 +95,28 @@ watch(
     :model-value="props.draft !== null"
     :title="title"
     :description="description"
-    :width="isTemplateCreate ? '64rem' : '44rem'"
+    width="44rem"
     :dirty="dirty.isDirty.value"
     :close-on-backdrop="!isSaving"
     @update:model-value="!isSaving && emit('close')"
   >
     <div class="flex flex-col gap-6">
-      <TemplatePicker
+      <DtField
         v-if="isTemplateCreate"
-        v-model="templateKey"
-        :disabled="isSaving"
-      />
+        label="工作流模板"
+        hint="模板只作为创建起点，新工作流可独立修改。"
+      >
+        <div class="flex flex-wrap items-center justify-between gap-3">
+          <span>{{ selection.label }}</span>
+          <DtButton
+            variant="outline"
+            size="sm"
+            :disabled="isSaving"
+            @click="isChoosingTemplate = true"
+            >选择模板</DtButton
+          >
+        </div>
+      </DtField>
       <DtNotice v-if="isCopy" intent="info">
         复制已保存的算子、参数、连线和位置，副本可独立修改。运行记录、模型版本和部署不会复制。
       </DtNotice>
@@ -95,12 +126,12 @@ watch(
         @submit.prevent="
           canSubmit &&
           !isSaving &&
-          emit('submit', form, isTemplateCreate ? templateKey : '')
+          emit('submit', form, isTemplateCreate ? selection.key : '')
         "
       >
         <DtInput
           v-model="form.name"
-          label="流水线名称"
+          label="工作流名称"
           placeholder="例如：1 号冷机能耗预测"
           :maxlength="128"
           :disabled="isSaving"
@@ -143,6 +174,12 @@ watch(
       >
     </template>
   </DtModal>
+  <WorkflowTemplateDialog
+    v-if="isChoosingTemplate && props.draft !== null"
+    :selection="selection"
+    @select="selectTemplate"
+    @close="isChoosingTemplate = false"
+  />
 </template>
 
 <style scoped lang="scss">

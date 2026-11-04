@@ -42,9 +42,10 @@ _CREATING = frozenset(
         "publish_version",
         "deploy_instance",
         "create_deployment",
+        "create_workflow_from_template",
     }
 )
-_DELETING = frozenset({"retire_version", "delete_deployment"})
+_DELETING = frozenset({"retire_version", "delete_deployment", "delete_run"})
 
 
 @dataclass(frozen=True)
@@ -59,7 +60,7 @@ class Operation:
 
     @property
     def permission(self) -> str:
-        if self.name == "import_pipeline":
+        if self.name in {"import_pipeline", "create_workflow_from_template"}:
             return MODELING_MANAGE
         return (
             MODELING_RUN if self.name in _RUN_OPERATIONS else MODELING_PUBLISH

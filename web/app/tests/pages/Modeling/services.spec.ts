@@ -5,6 +5,7 @@ import type {
   ModelCallStat,
   ModelDeployment,
   ModelingVersionSummary,
+  OpenModelSignature,
 } from '@dt/contracts'
 import { flushPromises, mount } from '@vue/test-utils'
 import { DtInput, useConfirm, useToast } from '@dt/ui'
@@ -20,6 +21,16 @@ import { useAuthStore } from '@/stores/auth'
 const STAMP = '2026-01-01T00:00:00.000Z'
 const PLAINTEXT = 'dtmk_this-is-the-only-time-you-see-it'
 const mounted: { unmount: () => void }[] = []
+
+function publicSignature(key = 'temperature'): OpenModelSignature {
+  return {
+    task: 'regression',
+    invoke_url: '/api/v1/platform/open-models/energy-forecast:predict',
+    timestamp_key: null,
+    inputs: [{ key, label: key, dtype: 'number', is_required: true }],
+    output: { task: 'regression' },
+  }
+}
 
 vi.mock('vue-router', () => ({
   useRouter: () => ({ replace: vi.fn(), push: vi.fn() }),
@@ -128,12 +139,9 @@ function open() {
 beforeEach(() => {
   localStorage.clear()
   setActivePinia(createPinia())
-  vi.spyOn(serving, 'getOpenModelSignature').mockResolvedValue({
-    inputs: [
-      { key: 'temperature', label: '温度', dtype: 'number', is_required: true },
-    ],
-    output: { task: 'regression' },
-  })
+  vi.spyOn(serving, 'getOpenModelSignature').mockResolvedValue(
+    publicSignature(),
+  )
 })
 
 afterEach(() => {
@@ -225,40 +233,29 @@ describe('模型服务', () => {
     const wrapper = open()
     await flushPromises()
 
-    expect(wrapper.text()).toContain('还没有开出对外服务')
-    expect(wrapper.text()).toContain('模型库')
+    expect(wrapper.text()).toContain('还没有已发布模型')
+    expect(wrapper.text()).toContain('训练并发布')
   })
 
-  it('没有可上线版本时指向运行记录里的发布入口', async () => {
+  it('发布入口集中在工作流与训练记录，不再另建服务', async () => {
     stub([])
     signIn([PERMISSION_CODES.modelingView, PERMISSION_CODES.modelingPublish])
-
     const wrapper = open()
     await flushPromises()
-    await wrapper
-      .findAll('button')
-      .find((item) => item.text() === '开一个服务')
-      ?.trigger('click')
-    await flushPromises()
-
-    expect(wrapper.text()).toContain('先到「运行记录」')
-    expect(wrapper.text()).toContain('成功运行发布成版本')
+    expect(wrapper.text()).toContain('训练记录中选择成功模型直接发布')
+    expect(
+      wrapper.findAll('button').some((item) => item.text() === '开一个服务'),
+    ).toBe(false)
   })
 
-  it('完整版本列表里的可服务版本会进入开通下拉', async () => {
-    stub([], [], [version()])
+  it('既有部署的配置仍可选择训练版本', async () => {
+    stub([deployment()], [], [version()])
     signIn([PERMISSION_CODES.modelingView, PERMISSION_CODES.modelingPublish])
-
     const wrapper = open()
     await flushPromises()
-    await wrapper
-      .findAll('button')
-      .find((item) => item.text() === '开一个服务')
-      ?.trigger('click')
+    await wrapper.get('button[aria-label="改配置"]').trigger('click')
     await flushPromises()
-
     expect(wrapper.text()).toContain('能耗回归 v3')
-    expect(wrapper.text()).not.toContain('还没有可上线的模型版本')
   })
 
   it('模型版本加载失败时不伪装成空列表，并可重试恢复', async () => {
@@ -273,24 +270,12 @@ describe('模型服务', () => {
 
     expect(wrapper.text()).toContain('模型版本加载失败')
     expect(wrapper.text()).toContain('请求失败，请重试')
-    expect(
-      wrapper
-        .findAll('button')
-        .find((item) => item.text() === '开一个服务')
-        ?.attributes('disabled'),
-    ).toBeDefined()
     await wrapper
       .findAll('button')
       .find((item) => item.text() === '重新加载模型版本')
       ?.trigger('click')
     await flushPromises()
-    await wrapper
-      .findAll('button')
-      .find((item) => item.text() === '开一个服务')
-      ?.trigger('click')
-
     expect(wrapper.text()).not.toContain('模型版本加载失败')
-    expect(wrapper.text()).toContain('能耗回归 v3')
     expect(modeling.listAllModelingVersions).toHaveBeenCalledTimes(2)
     expect(modeling.listAllModelingVersions).toHaveBeenCalledWith(
       expect.any(AbortSignal),
@@ -378,7 +363,7 @@ it('使用账号鉴权的服务仍可修改配置、启停并删除', async () =
     .mockResolvedValue(undefined)
   const wrapper = open()
   await flushPromises()
-  await wrapper.get('button[title="改配置"]').trigger('click')
+  await wrapper.get('button[aria-label="改配置"]').trigger('click')
   await flushPromises()
   const name = wrapper
     .findAllComponents(DtInput)
@@ -393,55 +378,28 @@ it('使用账号鉴权的服务仍可修改配置、启停并删除', async () =
     'd1',
     expect.objectContaining({ name: '已更新服务' }),
   )
-  await wrapper.get('button[title="停用"]').trigger('click')
+  await wrapper.get('button[aria-label="停用"]').trigger('click')
   await flushPromises()
   expect(update).toHaveBeenLastCalledWith('d1', { is_enabled: false })
-  await wrapper.get('button[title="删掉"]').trigger('click')
+  await wrapper.get('button[aria-label="删掉"]').trigger('click')
   useConfirm().resolve(true)
   await flushPromises()
   expect(remove).toHaveBeenCalledWith('d1')
 })
 
-it('创建服务完成后无需签发密钥，并能关闭配置和调用说明', async () => {
+it('固定发布入口仍可查看与关闭调用说明', async () => {
   stub([deployment()], [], [version()])
   signIn([PERMISSION_CODES.modelingView, PERMISSION_CODES.modelingPublish])
-  const create = vi
-    .spyOn(modeling, 'createModelDeployment')
-    .mockResolvedValue(deployment())
   const wrapper = open()
   await flushPromises()
-  const click = async (name: string) => {
-    const item = wrapper
-      .findAll('button')
-      .find((element) => element.text() === name)
-    if (!item) throw new Error('缺少操作按钮')
-    await item.trigger('click')
-    await flushPromises()
-  }
-  await click('开一个服务')
-  for (const [label, value] of [
-    ['对外标识', 'account-service'],
-    ['名称', '账号调用服务'],
-  ]) {
-    const input = wrapper
-      .findAllComponents(DtInput)
-      .find((item) => item.props('label') === label)
-    if (!input || value === undefined) throw new Error('缺少配置输入')
-    await input.get('input').setValue(value)
-  }
-  await click('开通')
-  expect(create).toHaveBeenCalledWith(
-    expect.objectContaining({ code: 'account-service' }),
-  )
-  await click('开一个服务')
-  await click('取消')
   await wrapper.get('[aria-label="卡片视图"]').trigger('click')
-  await click('调用说明')
-  const dismiss = wrapper
+  await wrapper
     .findAll('button')
-    .find((item) => item.attributes('aria-label') === '关闭')
-  if (!dismiss) throw new Error('缺少关闭窗口按钮')
-  await dismiss.trigger('click')
+    .find((item) => item.text() === '调用说明')
+    ?.trigger('click')
+  await flushPromises()
+  expect(wrapper.text()).toContain('用户 APIKey')
+  await wrapper.get('button[aria-label="关闭"]').trigger('click')
   await flushPromises()
   expect(wrapper.text()).not.toContain('的调用说明')
 })
@@ -459,4 +417,101 @@ it('部署服务可在页面内输入数据在线试算', async () => {
   await flushPromises()
   expect(wrapper.text()).toContain('在线试算')
   expect(wrapper.find('textarea').exists()).toBe(true)
+})
+
+it('调用说明展示部署返回的调用与签名地址', async () => {
+  stub([
+    deployment({
+      invoke_url: '/api/v1/platform/open-models/energy-forecast:predict',
+      signature_url: '/api/v1/platform/open-models/energy-forecast',
+    }),
+  ])
+  signIn([PERMISSION_CODES.modelingView])
+  const wrapper = open()
+  await flushPromises()
+  await wrapper
+    .findAll('button')
+    .find((item) => item.text() === '调用说明')
+    ?.trigger('click')
+  await flushPromises()
+  expect(wrapper.text()).toContain(
+    'POST /api/v1/platform/open-models/energy-forecast:predict',
+  )
+  expect(wrapper.text()).toContain(
+    'GET /api/v1/platform/open-models/energy-forecast',
+  )
+})
+
+it('刷新到新部署版本时同步调用说明与输入签名', async () => {
+  stub([deployment()], [], [version()])
+  signIn([PERMISSION_CODES.modelingView, PERMISSION_CODES.modelingPublish])
+  vi.spyOn(modeling, 'updateModelDeployment').mockResolvedValue(deployment())
+  let finish: ((rows: ModelDeployment[]) => void) | undefined
+  vi.mocked(modeling.listModelDeployments)
+    .mockResolvedValueOnce([deployment()])
+    .mockImplementationOnce(() => new Promise((resolve) => (finish = resolve)))
+  const wrapper = open()
+  await flushPromises()
+  await wrapper.get('button[aria-label="改配置"]').trigger('click')
+  await flushPromises()
+  await wrapper
+    .findAll('button')
+    .find((item) => item.text() === '保存')
+    ?.trigger('click')
+  await flushPromises()
+  await wrapper
+    .findAll('button')
+    .find((item) => item.text() === '调用说明')
+    ?.trigger('click')
+  await flushPromises()
+  vi.mocked(serving.getOpenModelSignature).mockResolvedValue(
+    publicSignature('power'),
+  )
+  if (!finish) throw new Error('没有部署刷新请求')
+  finish([deployment({ model_version_id: 'v2', model_version: 4 })])
+  await flushPromises()
+  expect(wrapper.get('[aria-label="输入字段"]').text()).toContain('power')
+  expect(wrapper.get('[aria-label="输入字段"]').text()).not.toContain(
+    'temperature',
+  )
+})
+
+it('并发刷新时迟到的旧列表不能覆盖当前部署', async () => {
+  stub([deployment()])
+  signIn([PERMISSION_CODES.modelingView, PERMISSION_CODES.modelingPublish])
+  vi.spyOn(modeling, 'updateModelDeployment').mockResolvedValue(deployment())
+  let first: ((rows: ModelDeployment[]) => void) | undefined
+  let second: ((rows: ModelDeployment[]) => void) | undefined
+  vi.mocked(modeling.listModelDeployments)
+    .mockResolvedValueOnce([deployment()])
+    .mockImplementationOnce(() => new Promise((resolve) => (first = resolve)))
+    .mockImplementationOnce(() => new Promise((resolve) => (second = resolve)))
+  const wrapper = open()
+  await flushPromises()
+  await wrapper.get('button[aria-label="停用"]').trigger('click')
+  await flushPromises()
+  await wrapper.get('button[aria-label="停用"]').trigger('click')
+  await flushPromises()
+  if (!first || !second) throw new Error('没有两次部署刷新')
+  second([deployment({ name: '最新部署' })])
+  await flushPromises()
+  first([deployment({ name: '旧部署' })])
+  await flushPromises()
+  expect(wrapper.text()).toContain('最新部署')
+  expect(wrapper.text()).not.toContain('旧部署')
+})
+
+it('卸载页面时取消部署列表读取', async () => {
+  stub([])
+  let signal: AbortSignal | undefined
+  vi.mocked(modeling.listModelDeployments).mockImplementation((given) => {
+    signal = given
+    return new Promise(() => undefined)
+  })
+  signIn([PERMISSION_CODES.modelingView])
+  const wrapper = open()
+  await flushPromises()
+  wrapper.unmount()
+  mounted.splice(mounted.indexOf(wrapper), 1)
+  expect(signal?.aborted).toBe(true)
 })

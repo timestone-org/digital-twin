@@ -106,13 +106,13 @@ it('选择文件后展示预检，允许修改新名称和编码并导入独立�
   expect(wrapper.text()).toContain('可以导入')
   expect(wrapper.text()).toContain('不覆盖当前系统中的已有内容')
   const fields = wrapper.findAllComponents(DtInput)
-  const name = fields.find((item) => item.props('label') === '流水线名称')
-  const code = fields.find((item) => item.props('label') === '新流水线编码')
+  const name = fields.find((item) => item.props('label') === '工作流名称')
+  const code = fields.find((item) => item.props('label') === '新工作流编码')
   if (!name || !code) throw new Error('缺少导入字段')
   await name.get('input').setValue('异地能耗分析')
   const currentCode = wrapper
     .findAllComponents(DtInput)
-    .find((item) => item.props('label') === '新流水线编码')
+    .find((item) => item.props('label') === '新工作流编码')
   if (!currentCode) throw new Error('缺少编码输入框')
   await currentCode.get('input').setValue('energy_copy')
   expect(state.code.value).toBe('energy_copy')
@@ -280,6 +280,6 @@ it('提交期间阻止关闭、重复提交和换文件，导出仅下载已保�
   )
   expect(downloads.downloadJson).toHaveBeenCalledWith(
     document,
-    'energy_copy_流水线',
+    'energy_copy_工作流',
   )
 })

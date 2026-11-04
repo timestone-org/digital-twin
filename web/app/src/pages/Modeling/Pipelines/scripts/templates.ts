@@ -1,5 +1,5 @@
 /**
- * @fileoverview 新建流水线时的开箱模板。
+ * @fileoverview 新建工作流时的开箱模板。
  *
  * 新建之后画布空空，用户得自己从二十几个算子里想出一条链——这是「起步是一张
  * 白纸」那条病症（docs/MODELING_PLATFORM_DESIGN.md D21）。

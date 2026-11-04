@@ -1,5 +1,5 @@
 <script setup lang="ts">
-/** @fileoverview JSON 流水线的文件选择、兼容预检与独立导入。 */
+/** @fileoverview JSON 工作流的文件选择、兼容预检与独立导入。 */
 import { DtButton, DtFilePicker, DtModal, DtNotice } from '@dt/ui'
 import PipelineImportPreview from './PipelineImportPreview.vue'
 import PipelineImportFields from './PipelineImportFields.vue'
@@ -11,8 +11,8 @@ defineProps<{ transfer: ReturnType<typeof usePipelineTransfer> }>()
 <template>
   <DtModal
     :model-value="transfer.isOpen.value"
-    title="导入流水线 JSON"
-    description="从其他部署迁移分析设计，创建独立流水线。"
+    title="导入工作流 JSON"
+    description="从其他部署迁移分析设计，创建独立工作流。"
     width="52rem"
     :dirty="transfer.fileName.value !== ''"
     :close-on-backdrop="!transfer.isSaving.value"

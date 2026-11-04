@@ -243,6 +243,22 @@ describe('建模命令与部署切换契约', () => {
     }
   })
 
+  it.each(MODELING_COMMAND_OPERATIONS)(
+    '%s 操作值在 OpenAPI 命令出参中声明',
+    (operation) => {
+      expect(
+        readAt(SPEC, [
+          'components',
+          'schemas',
+          'ModelingCommandOut',
+          'properties',
+          'operation',
+          'enum',
+        ]),
+      ).toContain(operation)
+    },
+  )
+
   it('操作和状态与查询参数及命令出参一致', () => {
     expectTypeOf<
       ModelingCommand['operation']

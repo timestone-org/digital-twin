@@ -14,29 +14,29 @@ const steps = [
     'configuration 是完整默认参数，json_schema 是可直接用于校验的 JSON Schema，nodes 包含每个算子的说明与输入输出端口。',
   ],
   [
-    '3. 创建模型',
-    'POST /modeling-instances',
-    '提交 template_id、唯一 code、name，可同时提交修改后的完整 configuration。',
+    '3. 创建工作流',
+    'POST /modeling-templates/{template_id}:create-workflow',
+    '提交唯一 code、name 和可选 description，获得可独立编辑、训练和发布的工作流。',
   ],
   [
-    '4. 一次配置所有参数',
-    'PUT /modeling-instances/{id}/configuration',
-    '提交 expected_revision 和完整 configuration。读取实例取得 revision；400 表示配置错误，409 表示版本冲突或仍在训练。',
+    '4. 保存工作流配置',
+    'PATCH /modeling-pipelines/{id}',
+    '提交完整 graph 保存数据来源、算子和参数。训练始终使用本次保存的快照。',
   ],
   [
     '5. 训练与查询结果',
-    'POST /modeling-instances/{id}:train',
-    '请求体 {"trigger":"api"}，返回 202。通过 GET /modeling-runs/{run_id} 查询，成功状态为 succeeded；可通过 :cancel 取消。',
+    'POST /modeling-pipelines/{id}:run',
+    '请求体 {"trigger":"api","auto_publish":true} 表示训练并发布。通过 GET /modeling-runs/{run_id} 查询训练状态和 publication_status；可通过 :cancel 取消。',
   ],
   [
-    '6. 发布模型版本',
-    'POST /modeling-model-versions',
-    '提交成功训练的 run_id 和 name。响应 signature 为实际输入输出签名，is_servable=true 的版本才能部署。',
+    '6. 选择模型发布',
+    'POST /modeling-runs/{run_id}:deploy',
+    '成功训练自动保存模型。自动发布关闭时，选择任一次成功训练发布；同一工作流始终复用一个固定调用入口。',
   ],
   [
-    '7. 部署模型',
-    'POST /modeling-instances/{id}:deploy',
-    '提交 model_version_id、服务 code 和 name。部署完成后即可使用用户 APIKey 调用。',
+    '7. 定时重新训练',
+    'PUT /modeling-pipelines/{id}/schedule',
+    '提交 interval_minutes、expected_revision 和 auto_publish。训练或发布失败继续保留当前发布模型。',
   ],
   [
     '8. 调用服务',
@@ -46,23 +46,10 @@ const steps = [
 ]
 const example = JSON.stringify(
   {
-    expected_revision: 1,
-    configuration: {
-      nodes: {
-        source: {
-          table_code: 'chiller-01',
-          columns: ['temperature', 'load', 'energy'],
-          since: '',
-          until: '',
-        },
-        split: {
-          target_column: 'energy',
-          test_ratio: 0.2,
-          method: 'time_order',
-        },
-        model: { use_intercept: true },
-      },
-    },
+    is_enabled: true,
+    interval_minutes: 1440,
+    auto_publish: false,
+    expected_revision: 0,
   },
   null,
   2,
@@ -77,26 +64,23 @@ const example = JSON.stringify(
         icon="layers"
       >
         <p>
-          在建模工作台完成设计与验证后，使用「发布为工作流」，保存为固定版本的建模模板。每个模型实例独立保存流水线与参数。
-          修改源流水线或重新发布模板，不会影响已有实例，也不会改变部署固定的模型版本。
+          工作流保存后使用「保存为模板」，将算子和参数保存为固定版本。每个工作流独立配置和训练，模板更新不会改变已有工作流和当前发布模型。
         </p>
         <template #footer>
-          <RouterLink to="/modeling/templates">
-            管理已发布工作流 <DtIcon name="arrow-right" :size="14" />
+          <RouterLink to="/modeling/pipelines">
+            管理工作流模板 <DtIcon name="arrow-right" :size="14" />
           </RouterLink>
         </template>
       </DtCard>
       <DtCard
         title="接入验证"
-        subtitle="查看快捷建模的使用效果与实例状态"
+        subtitle="查看快捷建模的训练与发布状态"
         icon="workflow"
       >
-        <p>
-          集中查看实例配置、训练记录与部署结果，验证第三方的创建和更新流程。
-        </p>
+        <p>集中查看工作流配置、训练记录与发布结果，验证创建和更新流程。</p>
         <template #footer>
-          <RouterLink to="/modeling/instances">
-            查看模型实例 <DtIcon name="arrow-right" :size="14" />
+          <RouterLink to="/modeling/pipelines">
+            查看工作流 <DtIcon name="arrow-right" :size="14" />
           </RouterLink>
         </template>
       </DtCard>
@@ -104,8 +88,8 @@ const example = JSON.stringify(
     <DtNotice intent="info">
       所有路径前缀为 /api/v1/platform。建模管理与线上调用统一使用 Authorization:
       Bearer &lt;用户 APIKey&gt;。仅调用模型需要 modeling:view 权限。
-      专用账号授予 modeling:view、modeling:run，需要部署时增加
-      modeling:publish，无需 modeling:manage。
+      创建和编辑工作流需要 modeling:manage，训练需要 modeling:run，发布需要
+      modeling:publish；训练并发布同时需要后两项权限。
     </DtNotice>
     <DtCard
       title="获取全部已部署模型"
@@ -117,9 +101,17 @@ const example = JSON.stringify(
         数组，包含全部部署，无需分页；没有部署时返回空数组。
       </p>
       <p>
-        列表包含名称、code、task、固定模型版本、状态和配额。选择 is_enabled=true
-        且 is_servable=true 的项，再通过 GET /open-models/{code}
+        列表包含名称、code、task、invoke_url、signature_url、固定模型版本、状态和配额。选择
+        is_enabled=true 且 is_servable=true 的项，再通过 GET /open-models/{code}
         读取输入输出签名。停用或不可服务的部署仍会出现在列表中。
+      </p>
+      <p>
+        invoke_url 是当前模型的 POST 调用地址，signature_url 是 GET
+        输入参数的地址。签名包含 task、invoke_url、inputs、output 与
+        requires_timestamp。inputs 逐字段说明
+        key、label、dtype、unit、is_required、default_on_missing 和
+        missing_policy；requires_timestamp=true 时每行还需提供 UTC RFC3339
+        格式的 __ts__。公开签名不包含训练数据统计。
       </p>
       <p>
         按 task 选择 POST 调用接口：regression（回归）与
@@ -142,22 +134,23 @@ const example = JSON.stringify(
       </ol>
       <aside class="integration-example">
         <DtCard
-          title="完整参数示例"
-          subtitle="更新前先读取实例的当前 revision"
+          title="定时训练参数示例"
+          subtitle="先 GET 工作流 schedule 取得当前 revision"
           icon="settings"
         >
           <DtNotice intent="warning">
-            以下仅展示请求结构。节点 ID 和参数必须来自所选模板返回的
-            configuration，不能把示例节点直接用于其他模板。保存配置会替换全部节点参数。
+            规则以分钟为周期。首次配置
+            expected_revision=0，后续保存使用最近读取的
+            revision，避免覆盖他人的修改。
           </DtNotice>
           <pre><code>{{ example }}</code></pre>
           <p>
-            创建、训练、发布版本与部署请求带
+            创建工作流、训练与发布请求带
             Idempotency-Key，同一逻辑请求使用同一个键。训练失败读取
-            error_text，修正配置后使用新键重新训练。
+            error_text，发布失败读取 publication_error，修正后再手动发布。
           </p>
           <template #footer>
-            模板新版本不会自动升级已有模型，重新训练也不会替换已部署版本。
+            模板更新不影响已有工作流。自动发布关闭时，重新训练只生成模型，当前发布版本保持不变。
           </template>
         </DtCard>
       </aside>

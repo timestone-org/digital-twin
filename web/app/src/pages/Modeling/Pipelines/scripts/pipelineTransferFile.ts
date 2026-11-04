@@ -1,4 +1,4 @@
-/** @fileoverview 流水线迁移文件的容量、JSON校验与逻辑请求比较。 */
+/** @fileoverview 工作流迁移文件的容量、JSON校验与逻辑请求比较。 */
 import { describeError } from '@/composables/useAsyncList'
 
 const MAX_FILE_BYTES = 2 * 1024 * 1024
@@ -12,7 +12,7 @@ export async function readDocument(file: File): Promise<unknown> {
   try {
     return JSON.parse((await file.text()).replace(/^\uFEFF/, '')) as unknown
   } catch {
-    throw new ImportFileError('文件不是有效的 JSON，请重新选择导出的流水线文件')
+    throw new ImportFileError('文件不是有效的 JSON，请重新选择导出的工作流文件')
   }
 }
 

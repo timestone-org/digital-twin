@@ -89,10 +89,25 @@ async def test_deployment_outputs_identify_the_pinned_model_task(
     assert response.status_code == 201, response.text
     deployment = data_of(response)
     assert deployment["task"] == task
+    action = {
+        "regression": "predict",
+        "classification": "predict",
+        "anomaly_detection": "detect",
+        "rule_calculation": "calculate",
+    }[task]
+    signature_url = f"/api/v1/platform/open-models/{deployment['code']}"
+    assert deployment["signature_url"] == signature_url
+    assert deployment["invoke_url"] == f"{signature_url}:{action}"
+    signature = data_of(await app_client.get(signature_url))
+    assert signature["task"] == task
+    assert signature["output"]["task"] == task
+    assert signature["invoke_url"] == deployment["invoke_url"]
     newer_task = "classification" if task == "regression" else "regression"
     await _seed_version(db_session, pipeline, newer_task, number=2)
     url = f"{DEPLOYMENTS}/{deployment['id']}"
-    assert data_of(await app_client.get(url))["task"] == task
+    detail = data_of(await app_client.get(url))
+    assert detail["task"] == task
+    assert detail["invoke_url"] == deployment["invoke_url"]
     assert [
         item["task"] for item in data_of(await app_client.get(DEPLOYMENTS))
     ] == [task]

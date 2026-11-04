@@ -3,7 +3,7 @@
 import uuid
 from datetime import UTC, datetime
 
-from sqlalchemy import delete, select
+from sqlalchemy import delete, or_, select
 from sqlalchemy.exc import IntegrityError
 from sqlalchemy.ext.asyncio import AsyncSession
 
@@ -23,6 +23,39 @@ class RunCrud(CrudBase[ModelingRun]):
 
     def __init__(self) -> None:
         super().__init__(ModelingRun)
+
+    async def pending_dispatch(
+        self, session: AsyncSession, now: datetime
+    ) -> ModelingRun | None:
+        return await session.scalar(
+            select(ModelingRun)
+            .where(
+                or_(
+                    ModelingRun.status == "pending",
+                    (ModelingRun.status == "cancelling")
+                    & (ModelingRun.attempt == 0),
+                ),
+                or_(
+                    ModelingRun.dispatch_after.is_(None),
+                    ModelingRun.dispatch_after <= now,
+                ),
+            )
+            .order_by(
+                ModelingRun.dispatch_after.asc().nulls_first(), ModelingRun.id
+            )
+            .limit(1)
+            .with_for_update(skip_locked=True)
+        )
+
+    async def get_for_update(
+        self, session: AsyncSession, identity: uuid.UUID
+    ) -> ModelingRun | None:
+        return await session.get(
+            ModelingRun,
+            identity,
+            with_for_update=True,
+            populate_existing=True,
+        )
 
     async def add_active(
         self, session: AsyncSession, run: ModelingRun
@@ -56,6 +89,19 @@ class RunCrud(CrudBase[ModelingRun]):
             )
         )
         return rows.scalars().first()
+
+    async def pending_publication_of(
+        self, session: AsyncSession, pipeline_id: uuid.UUID
+    ) -> ModelingRun | None:
+        return await session.scalar(
+            select(ModelingRun)
+            .where(
+                ModelingRun.pipeline_id == pipeline_id,
+                ModelingRun.publication_status == "pending",
+            )
+            .order_by(*NEWEST_FIRST)
+            .limit(1)
+        )
 
     async def page(
         self,

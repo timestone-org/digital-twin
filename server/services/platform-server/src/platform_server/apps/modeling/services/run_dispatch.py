@@ -1,17 +1,13 @@
-"""worker 侧的一次运行编排：认领 → 取数 → 逐节点跑 → 落终态。
+"""原子认领并逐节点执行训练；健康重复消息保留待确认，失联执行明确中断。
 
-⚠ 每个节点一个短事务：跑到一半的进度必须对别的副本可见，前端轮询读的就是
-那些行。攒到最后一次性提交的话，一次长运行在界面上会一直显示「零进度」。
-⚠ 重投递一律判「执行中断」落终态，**不重放**（docs/MODELING_DESIGN.md D25）：
-一次运行会边跑边写节点记录，重放要先清干净再来一遍；而一张会让子进程崩溃的
-图会被无限重投，把整个建模面堵死。
+短事务与队列恢复语义见 docs/MODELING_DESIGN.md D25。
 """
 
 from __future__ import annotations
 
 import uuid
 from dataclasses import dataclass
-from datetime import UTC, datetime
+from datetime import UTC, datetime, timedelta
 from typing import TYPE_CHECKING, Any
 
 from lib.logging import get_logger
@@ -48,6 +44,7 @@ _logger = get_logger("platform.modeling.dispatch")
 RUN_DONE = "done"
 RUN_INTERRUPTED = "interrupted"
 RUN_ORPHANED = "orphaned"
+RUN_BUSY = "busy"
 
 INTERRUPTED_REASON = "上一次执行中断了，请重新运行"
 
@@ -63,6 +60,7 @@ class DispatchOptions:
     store: ObjectStore | None = None
     bdm_connection: BdmConnection | None = None
     pool: NodePool | None = None
+    stale_after_s: float = 3600
 
 
 @dataclass(frozen=True)
@@ -82,7 +80,11 @@ async def execute_run(
 
     Args: sessions, run_id, options。
     """
-    claimed = await _claim(sessions, run_id)
+    claimed = await _claim(
+        sessions, run_id, stale_after_s=options.stale_after_s
+    )
+    if isinstance(claimed, str):
+        return DispatchReport(outcome=RUN_BUSY)
     if claimed is None:
         return DispatchReport(outcome=RUN_ORPHANED)
     if claimed.is_redelivery:
@@ -132,29 +134,47 @@ class _Claimed:
     is_keeping_frames: bool
 
 
-async def _claim(sessions: Sessions, run_id: uuid.UUID) -> _Claimed | None:
-    """把运行标成 running 并回它的图快照；已终态或不存在给 None。
-
-    ⚠ `attempt` 在这里 +1，于是「这是第几次被派发」有据可查：第二次拿到同一条
-    消息就是重投递，那意味着上一次执行没走完。
-    Args: sessions, run_id。
-    """
+async def _claim(
+    sessions: Sessions,
+    run_id: uuid.UUID,
+    *,
+    stale_after_s: float = 3600,
+    now: datetime | None = None,
+) -> _Claimed | str | None:
+    """原子认领；Args: sessions, run_id, stale_after_s, now。"""
     async with sessions.session() as session:
-        run = await run_crud.get(session, run_id)
+        run = await run_crud.get_for_update(session, run_id)
         if run is None or run.status not in ACTIVE_RUN_STATUSES:
             return None
+        moment = now or datetime.now(UTC)
+        if _is_healthy_execution(run, moment, stale_after_s):
+            return RUN_BUSY
         redelivery = run.attempt > 0
         run.attempt += 1
         if not redelivery:
             run.status = "running"
-            run.started_at = datetime.now(UTC)
-            run_crud.touch(run)
+            run.started_at = moment
+            run.heartbeat_at = moment
         return _Claimed(
             graph=presenters.graph_of(run.graph_snapshot),
             is_redelivery=redelivery,
             pipeline_id=run.pipeline_id,
             is_keeping_frames=run.is_keeping_frames,
         )
+
+
+def _is_healthy_execution(
+    run: ModelingRun,
+    now: datetime,
+    stale_after_s: float,
+) -> bool:
+    heartbeat = run.heartbeat_at or run.started_at
+    return (
+        run.attempt > 0
+        and run.status in {"running", "cancelling"}
+        and heartbeat is not None
+        and heartbeat >= now - timedelta(seconds=stale_after_s)
+    )
 
 
 async def _load_sources(
@@ -325,6 +345,9 @@ def _apply_terminal(run: ModelingRun, outcome: RunOutcome) -> None:
     run.row_count = outcome.row_count
     run.source_truncated = outcome.is_source_truncated
     run.error_text = outcome.error_text or None
+    if outcome.status != "succeeded" and run.publication_status == "pending":
+        run.publication_status = "skipped"
+        run.publication_error = "训练未成功，已保留现有发布模型"
     if run.started_at is not None:
         run.duration_ms = int(
             (finished - run.started_at).total_seconds() * 1000

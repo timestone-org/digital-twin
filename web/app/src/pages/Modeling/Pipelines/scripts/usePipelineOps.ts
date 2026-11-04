@@ -1,16 +1,18 @@
 /**
- * @fileoverview 流水线列表上的创建、复制、编辑与删除。
+ * @fileoverview 工作流列表上的创建、复制、编辑与删除。
  */
 import type { ModelingPipelineSummary } from '@dt/contracts'
 import { useConfirm, useToast } from '@dt/ui'
 import { onBeforeUnmount, ref } from 'vue'
 
 import * as modeling from '@/api/modeling'
+import { createWorkflowFromTemplate } from '@/api/modelingWorkflow'
 import { newClientUuid } from '@/api/idempotency'
 import { describeError } from '@/composables/useAsyncList'
 import { useRacedFetch } from '@/composables/useRacedFetch'
 
 import { PIPELINE_TEMPLATES } from './templates'
+import { savedTemplateId } from './workflowTemplateChoice'
 
 /** 表单弹窗当前在编辑谁。`id` 为 `null` 是新建。 */
 export interface PipelineDraft {
@@ -44,22 +46,34 @@ async function submit(
     return created.id
   }
   if (input.id === null) {
-    // ⚠ 找不到那张模板时给空白图而不是抛：模板是前端常量，键对不上是代码问题，
-    // 不该让用户的「新建」当场失败
-    const template = PIPELINE_TEMPLATES.find((item) => item.key === templateKey)
-    const created = await modeling.createModelingPipeline({
-      code: input.code,
-      name: input.name,
-      description: input.description || null,
-      ...(template ? { graph: template.build() } : {}),
-    })
-    return created.id
+    return createFromTemplate(input, templateKey)
   }
   await modeling.updateModelingPipeline(input.id, {
     name: input.name,
     description: input.description || null,
   })
   return null
+}
+
+async function createFromTemplate(
+  input: PipelineDraft,
+  templateKey: string,
+): Promise<string> {
+  const body = {
+    code: input.code,
+    name: input.name.trim(),
+    description: input.description || null,
+  }
+  const templateId = savedTemplateId(templateKey)
+  if (templateId !== null) {
+    return (await createWorkflowFromTemplate(templateId, body)).id
+  }
+  const template = PIPELINE_TEMPLATES.find((item) => item.key === templateKey)
+  const created = await modeling.createModelingPipeline({
+    ...body,
+    ...(template ? { graph: template.build() } : {}),
+  })
+  return created.id
 }
 
 /** 删除前的问话。⚠ 要说清连带删掉什么，也说清什么不跟着删。 */
@@ -72,7 +86,7 @@ function removalAsk(name: string): {
   return {
     title: `删除「${name}」？`,
     message:
-      '这条流水线与它的全部运行记录都会删掉。已经发布出去的模型版本不受影响，仍然可以继续被台账公式引用。',
+      '将删除此工作流和训练记录；存在模板、模型或部署引用时需要先处理引用。已绑定公式和当前发布模型受到保护。',
     confirmText: '删除',
     danger: true,
   }
@@ -107,9 +121,9 @@ function usePipelineSaving(onDone: () => void) {
         draft.value = null
         toast.success(
           input.sourcePipelineId !== undefined
-            ? '流水线已复制，接下来在副本中修改'
+            ? '工作流已复制，接下来在副本中修改'
             : input.id === null
-              ? '流水线已创建，接下来在流程图中配置'
+              ? '工作流已创建，接下来在流程图中配置'
               : '已保存',
         )
         onDone()

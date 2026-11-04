@@ -142,7 +142,7 @@ describe('模型库', () => {
     await flushPromises()
     await wrapper
       .findAll('button')
-      .find((button) => button.text() === '改名')
+      .find((button) => button.attributes('aria-label') === '改名')
       ?.trigger('click')
     await flushPromises()
     await wrapper
@@ -166,7 +166,9 @@ describe('模型库', () => {
     const wrapper = open()
     await flushPromises()
     expect(
-      wrapper.findAll('button').some((button) => button.text() === '改名'),
+      wrapper
+        .findAll('button')
+        .some((button) => button.attributes('aria-label') === '改名'),
     ).toBe(false)
   })
 
@@ -193,7 +195,7 @@ describe('模型库', () => {
     await flushPromises()
     const buttons = wrapper
       .findAll('button')
-      .filter((button) => button.text() === '改名')
+      .filter((button) => button.attributes('aria-label') === '改名')
     await buttons[0]?.trigger('click')
     await buttons[1]?.trigger('click')
     await flushPromises()
@@ -227,7 +229,7 @@ describe('模型库', () => {
     await flushPromises()
     await wrapper
       .findAll('button')
-      .find((button) => button.text() === '改名')
+      .find((button) => button.attributes('aria-label') === '改名')
       ?.trigger('click')
     await flushPromises()
     await wrapper.get('input[aria-label="模型名称"]').setValue('')
@@ -287,7 +289,14 @@ describe('模型库', () => {
     await next?.trigger('click')
     await flushPromises()
 
-    expect(modeling[target]).toHaveBeenCalledWith({ page: 2, size: 200 })
+    if (target === 'listModelingVersions') {
+      expect(modeling[target]).toHaveBeenCalledWith(
+        { page: 2, size: 200, pipelineId: undefined },
+        expect.any(AbortSignal),
+      )
+    } else {
+      expect(modeling[target]).toHaveBeenCalledWith({ page: 2, size: 200 })
+    }
     expect(modeling[other]).not.toHaveBeenCalled()
 
     await block?.get('button[role="combobox"]').trigger('click')
@@ -297,7 +306,14 @@ describe('模型库', () => {
       ?.trigger('click')
     await flushPromises()
 
-    expect(modeling[target]).toHaveBeenLastCalledWith({ page: 1, size: 20 })
+    if (target === 'listModelingVersions') {
+      expect(modeling[target]).toHaveBeenLastCalledWith(
+        { page: 1, size: 20, pipelineId: undefined },
+        expect.any(AbortSignal),
+      )
+    } else {
+      expect(modeling[target]).toHaveBeenLastCalledWith({ page: 1, size: 20 })
+    }
     expect(modeling[other]).not.toHaveBeenCalled()
   })
 

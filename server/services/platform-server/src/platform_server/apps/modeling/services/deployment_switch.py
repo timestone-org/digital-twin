@@ -6,13 +6,11 @@ from pydantic import JsonValue, TypeAdapter
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from lib.web import CursorPage
+from platform_server.apps.modeling.crud import deployment_switch as switches
 from platform_server.apps.modeling.crud import (
-    deployment_crud,
     model_version_crud,
 )
-from platform_server.apps.modeling.crud import deployment_switch as switches
 from platform_server.apps.modeling.errors import (
-    DeploymentNotFound,
     ModelVersionNotFound,
     ModelVersionUnservable,
 )
@@ -84,9 +82,7 @@ async def _switch(
     actor: Actor,
     rollback_of: uuid.UUID | None,
 ) -> ModelDeploymentOut:
-    deployment = await deployment_crud.get_for_update(session, identity)
-    if deployment is None:
-        raise DeploymentNotFound("部署不存在")
+    deployment = await deployment_service.lock_deployment(session, identity)
     if (deployment.revision or 1) != payload.expected_revision:
         raise DeploymentRevisionConflict("部署已修改，请重新读取")
     source = await model_version_crud.get(

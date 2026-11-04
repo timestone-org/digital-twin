@@ -19,7 +19,6 @@ from platform_server.apps.modeling.errors import (
     BindingEntryChanged,
     BindingNotFound,
     BindingParamsMismatch,
-    ModelVersionInUse,
     ModelVersionUnservable,
 )
 from platform_server.apps.modeling.models import (
@@ -182,17 +181,6 @@ async def require_binding(
     if row is None:
         raise BindingNotFound("绑定不存在")
     return row
-
-
-async def require_retirable(
-    session: AsyncSession, version_id: uuid.UUID
-) -> None:
-    """退役一个版本之前，确认没有绑定还指着它。
-
-    Args: session, version_id。
-    """
-    if await binding_crud.count_of_version(session, version_id):
-        raise ModelVersionInUse("还有绑定指着这个版本，请先解绑")
 
 
 async def _column_params(

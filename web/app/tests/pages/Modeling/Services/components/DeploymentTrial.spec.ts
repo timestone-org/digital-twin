@@ -1,5 +1,5 @@
 /** @fileoverview 线上试算的任务路由、输入校验、停用状态与竞态隔离。 */
-import type { OpenModelPredict } from '@dt/contracts'
+import type { OpenModelPredict, OpenModelSignature } from '@dt/contracts'
 import { flushPromises, mount } from '@vue/test-utils'
 import type { VueWrapper } from '@vue/test-utils'
 import { afterEach, beforeEach, expect, it, vi } from 'vitest'
@@ -8,7 +8,10 @@ import * as api from '@/api/modelingServing'
 import DeploymentTrial from '@/pages/Modeling/Services/components/DeploymentTrial.vue'
 import { deployment } from '@/testing/modelingTemplateFixtures'
 
-const signature = {
+const signature: OpenModelSignature = {
+  task: 'regression',
+  invoke_url: '/api/v1/platform/open-models/energy-forecast:predict',
+  timestamp_key: '__ts__',
   output: { task: 'regression' },
   inputs: [
     {
@@ -52,27 +55,31 @@ it.each([
   ['classification', 'predict'],
   ['anomaly_detection', 'detect'],
   ['rule_calculation', 'calculate'],
-])('按签名任务 %s 调用 %s 并展示结果与字段提示', async (task, action) => {
-  vi.mocked(api.getOpenModelSignature).mockResolvedValue({
-    ...signature,
-    output: { task },
-  })
-  const wrapper = await open()
-  expect(wrapper.text()).toContain('temperature')
-  expect(wrapper.text()).toContain('必填')
-  expect(wrapper.text()).toContain('__ts__')
-  const rows = [{ temperature: 26, __ts__: '2026-10-30T00:00:00Z' }]
-  await wrapper.get('textarea').setValue(JSON.stringify({ rows }))
-  await run(wrapper).trigger('click')
-  await flushPromises()
-  expect(api.callOpenModel).toHaveBeenCalledWith(
-    deployment.code,
-    action,
-    rows,
-    expect.any(AbortSignal),
-  )
-  expect(wrapper.get('[aria-label="试算结果"]').text()).toContain('42')
-})
+] as const)(
+  '按签名任务 %s 调用 %s 并展示结果与字段提示',
+  async (task, action) => {
+    vi.mocked(api.getOpenModelSignature).mockResolvedValue({
+      ...signature,
+      task,
+      output: { task },
+    })
+    const wrapper = await open()
+    expect(wrapper.text()).toContain('temperature')
+    expect(wrapper.text()).toContain('必填')
+    expect(wrapper.text()).toContain('__ts__')
+    const rows = [{ temperature: 26, __ts__: '2026-10-30T00:00:00Z' }]
+    await wrapper.get('textarea').setValue(JSON.stringify({ rows }))
+    await run(wrapper).trigger('click')
+    await flushPromises()
+    expect(api.callOpenModel).toHaveBeenCalledWith(
+      deployment.code,
+      action,
+      rows,
+      expect.any(AbortSignal),
+    )
+    expect(wrapper.get('[aria-label="试算结果"]').text()).toContain('42')
+  },
+)
 
 it.each([
   ['{', 'JSON 格式不完整'],
@@ -110,6 +117,7 @@ it.each([{ is_enabled: false }, { is_servable: false }])(
 it('无法识别的签名不能按默认任务误调接口', async () => {
   vi.mocked(api.getOpenModelSignature).mockResolvedValue({
     ...signature,
+    // @ts-expect-error 服务端未来任务仍须经过运行时校验。
     output: { task: 'future_task' },
   })
   const wrapper = await open()
@@ -143,7 +151,7 @@ it('签名加载失败可重试，试算业务失败保留输入并展示原因'
 })
 
 it('切换部署时丢弃旧签名的迟到响应', async () => {
-  let finish: ((value: unknown) => void) | undefined
+  let finish: ((value: OpenModelSignature) => void) | undefined
   vi.mocked(api.getOpenModelSignature).mockImplementationOnce(
     () =>
       new Promise((resolve) => {
@@ -161,10 +169,11 @@ it('切换部署时丢弃旧签名的迟到响应', async () => {
   })
   await flushPromises()
   if (!finish) throw new Error('签名未请求')
-  finish({ output: { task: 'old_unknown_task' }, inputs: [] })
+  finish({ ...signature, inputs: [{ key: 'stale_input' }] })
   await flushPromises()
   expect(signal?.aborted).toBe(true)
   expect(wrapper.text()).not.toContain('未声明可识别')
+  expect(wrapper.text()).not.toContain('stale_input')
   expect(wrapper.text()).toContain('next-model:predict')
 })
 

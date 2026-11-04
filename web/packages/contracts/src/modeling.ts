@@ -9,6 +9,7 @@
  */
 
 import type { DatasetFormulaDef } from './dataset'
+import type { ModelingPublicationStatus } from './modelingWorkflow'
 
 /** 算子分类，与算子面板的分组一一对应。 */
 export const MODELING_CATEGORIES = [
@@ -50,7 +51,7 @@ export const MODELING_NODE_STATUSES = [
 export type ModelingNodeStatus = (typeof MODELING_NODE_STATUSES)[number]
 
 /** 这次运行是谁发起的。 */
-export const MODELING_TRIGGERS = ['manual', 'api'] as const
+export const MODELING_TRIGGERS = ['manual', 'api', 'schedule'] as const
 export type ModelingTrigger = (typeof MODELING_TRIGGERS)[number]
 
 /** 结果摘要的种类。**前端按它显式派发视图，不做结构嗅探。** */
@@ -206,6 +207,9 @@ export interface ModelingRunSummary {
   pipeline_id: string
   instance_id?: string | null
   published_version_id?: string | null
+  auto_publish?: boolean
+  publication_status?: ModelingPublicationStatus | null
+  publication_error?: string | null
   status: ModelingRunStatus
   trigger: ModelingTrigger
   started_at: string | null
@@ -369,6 +373,8 @@ export interface ModelDeployment {
   model_name: string
   model_version: number
   task: ModelingTask
+  invoke_url?: string
+  signature_url?: string
   name: string
   description: string | null
   /** 人关的开关。关了立刻 403，不是静默返回旧值。 */

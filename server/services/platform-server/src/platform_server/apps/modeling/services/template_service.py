@@ -22,18 +22,26 @@ from platform_server.apps.modeling.models.template import (
     ModelingTemplate,
 )
 from platform_server.apps.modeling.schemas.graph import PipelineGraph
+from platform_server.apps.modeling.schemas.pipeline import (
+    PipelineCreateIn,
+    PipelineOut,
+)
 from platform_server.apps.modeling.schemas.template import (
     ModelingConfigurationOut,
     ModelingTemplateCreateIn,
     ModelingTemplateOut,
     ModelingTemplateUpdateIn,
+    ModelingWorkflowCreateIn,
 )
 from platform_server.apps.modeling.services.configuration import (
     describe_configuration,
     model_task_of,
     require_template_graph,
 )
-from platform_server.apps.modeling.services.pipeline_service import Actor
+from platform_server.apps.modeling.services.pipeline_service import (
+    Actor,
+    create_pipeline,
+)
 
 
 async def create_template(
@@ -96,6 +104,41 @@ async def get_template(
     session: AsyncSession, template_id: uuid.UUID
 ) -> ModelingTemplateOut:
     return to_template(await require_template(session, template_id))
+
+
+async def create_workflow(
+    session: AsyncSession,
+    template_id: uuid.UUID,
+    payload: ModelingWorkflowCreateIn,
+    actor: Actor,
+) -> PipelineOut:
+    template = await require_template(session, template_id)
+    if not template.is_enabled:
+        raise TemplateUnavailable("模板已停用，请选择启用的模板")
+    result = await create_pipeline(
+        session,
+        payload=PipelineCreateIn(
+            code=payload.code,
+            name=payload.name,
+            description=payload.description,
+            graph=PipelineGraph.model_validate(template.graph_json),
+        ),
+        actor=actor,
+    )
+    record_audit(
+        session,
+        actor,
+        "workflow_created_from_template",
+        result.id,
+        (
+            None,
+            {
+                "template_id": str(template.id),
+                "template_version": template.version,
+            },
+        ),
+    )
+    return result
 
 
 async def get_configuration(

@@ -11,6 +11,8 @@ from platform_server.apps.modeling.models import (
     ModelingApiKey,
     ModelingCallLog,
     ModelingDeployment,
+    ModelingModelVersion,
+    ModelingRuleVersion,
 )
 
 # 从这个状态码起算「这次调用失败了」
@@ -28,6 +30,26 @@ class DeploymentCrud(CrudBase[ModelingDeployment]):
 
     def __init__(self) -> None:
         super().__init__(ModelingDeployment)
+
+    async def for_pipeline(
+        self, session: AsyncSession, pipeline_id: uuid.UUID
+    ) -> list[ModelingDeployment]:
+        models = select(ModelingModelVersion.id).where(
+            ModelingModelVersion.pipeline_id == pipeline_id
+        )
+        rules = select(ModelingRuleVersion.id).where(
+            ModelingRuleVersion.pipeline_id == pipeline_id
+        )
+        rows = await session.scalars(
+            select(ModelingDeployment)
+            .where(
+                ModelingDeployment.model_version_id.in_(models)
+                | ModelingDeployment.rule_version_id.in_(rules)
+            )
+            .order_by(*DEPLOYMENT_ORDER)
+            .limit(2)
+        )
+        return list(rows.all())
 
     async def get_for_update(
         self, session: AsyncSession, deployment_id: uuid.UUID
@@ -62,42 +84,12 @@ class DeploymentCrud(CrudBase[ModelingDeployment]):
         )
         return list(rows.scalars().all())
 
-    async def count_by_version(
-        self, session: AsyncSession, version_id: uuid.UUID
-    ) -> int:
-        """这个版本被几个部署钉着。退役前问一句。
-
-        Args: session, version_id。
-        """
-        rows = await session.execute(
-            select(func.count())
-            .select_from(ModelingDeployment)
-            .where(
-                (ModelingDeployment.model_version_id == version_id)
-                | (ModelingDeployment.rule_version_id == version_id)
-            )
-        )
-        return int(rows.scalar_one())
-
 
 class ApiKeyCrud(CrudBase[ModelingApiKey]):
     """`modeling_api_keys` 的数据访问。"""
 
     def __init__(self) -> None:
         super().__init__(ModelingApiKey)
-
-    async def get_by_digest(
-        self, session: AsyncSession, digest: str
-    ) -> ModelingApiKey | None:
-        """按摘要取那一把。
-
-        ⚠ 摘要上有唯一约束，所以这是一次索引点查，不是遍历这个部署的每一把。
-        Args: session, digest。
-        """
-        rows = await session.execute(
-            select(ModelingApiKey).where(ModelingApiKey.key_hash == digest)
-        )
-        return rows.scalars().first()
 
     async def list_by_deployment(
         self, session: AsyncSession, deployment_id: uuid.UUID

@@ -1,10 +1,5 @@
 <script setup lang="ts">
-/**
- * @fileoverview 开一个对外服务，或改它的配置。
- *
- * ⚠ `code` 建后不可改：它就是第三方代码里写着的那个地址段。改一次等于让每一家
- * 对接方当场 404（docs/MODELING_PLATFORM_DESIGN.md D13）。
- */
+/** @fileoverview 修改已发布模型的固定版本与调用配额。 */
 import type { ModelDeployment, ModelingVersionSummary } from '@dt/contracts'
 import {
   DtButton,
@@ -21,14 +16,8 @@ import { useFormDirty } from '@/composables/useFormDirty'
 // 配额的两个上限，与库上的 CHECK 同一份口径
 const MAX_ROWS = 1000
 const MAX_RATE = 6000
-// 对外标识的形状。⚠ 与后端的 CHECK 逐字一致：两边不同就是「界面收得下、
-// 落库时才拒」
-const CODE_SHAPE = /^[a-z0-9][a-z0-9-]{1,62}$/
-
 const props = defineProps<{
-  /** `null` 表示新开一个；给了行就是改它。 */
-  editing: ModelDeployment | null
-  isOpen: boolean
+  deployment: ModelDeployment
   isBusy: boolean
   versions: readonly ModelingVersionSummary[]
 }>()
@@ -36,7 +25,6 @@ const props = defineProps<{
 const emit = defineEmits<{
   submit: [
     payload: {
-      code: string
       model_version_id: string
       name: string
       max_rows_per_call: number
@@ -47,23 +35,18 @@ const emit = defineEmits<{
 }>()
 
 interface DeploymentForm {
-  code: string
   name: string
   versionId: string
   maxRows: number
   rateLimit: number
 }
 
-// 新开一个时的缺省。⚠ 与后端的 server_default 同一份口径
-const BLANK: DeploymentForm = {
-  code: '',
+const form = ref<DeploymentForm>({
   name: '',
   versionId: '',
-  maxRows: 200,
-  rateLimit: 60,
-}
-
-const form = ref<DeploymentForm>({ ...BLANK })
+  maxRows: 0,
+  rateLimit: 0,
+})
 
 /** 只有可上线的版本能开出去。 */
 const options = computed(() =>
@@ -75,26 +58,16 @@ const options = computed(() =>
     })),
 )
 
-const isCodeValid = computed(
-  () => props.editing !== null || CODE_SHAPE.test(form.value.code),
-)
 const canSubmit = computed(
-  () =>
-    form.value.name.trim() !== '' &&
-    form.value.versionId !== '' &&
-    isCodeValid.value,
+  () => form.value.name.trim() !== '' && form.value.versionId !== '',
 )
 
 // ⚠ 这个弹窗有五个输入，关掉前必须问一句：直接关等于把刚填的一整屏悄悄丢掉
 const dirty = useFormDirty(() => form.value)
 
-/** 打开时按「改哪一行」回填；新开一个就回到缺省。 */
-function refill(row: ModelDeployment | null): DeploymentForm {
-  if (row === null) {
-    return { ...BLANK, versionId: options.value[0]?.value ?? '' }
-  }
+/** 按部署当前版本与配额回填。 */
+function refill(row: ModelDeployment): DeploymentForm {
   return {
-    code: row.code,
     name: row.name,
     versionId: row.model_version_id,
     maxRows: row.max_rows_per_call,
@@ -103,9 +76,9 @@ function refill(row: ModelDeployment | null): DeploymentForm {
 }
 
 watch(
-  () => [props.isOpen, props.editing] as const,
+  () => props.deployment,
   () => {
-    form.value = refill(props.editing)
+    form.value = refill(props.deployment)
     dirty.markClean()
   },
   { immediate: true, flush: 'post' },
@@ -113,7 +86,6 @@ watch(
 
 function submit(): void {
   emit('submit', {
-    code: form.value.code.trim(),
     model_version_id: form.value.versionId,
     name: form.value.name.trim(),
     max_rows_per_call: form.value.maxRows,
@@ -124,26 +96,22 @@ function submit(): void {
 
 <template>
   <DtModal
-    :model-value="props.isOpen"
-    :title="props.editing ? '改对外服务' : '开一个对外服务'"
+    :model-value="true"
+    title="改对外服务"
     width="46rem"
     :dirty="dirty.isDirty.value"
     @update:model-value="emit('close')"
   >
     <div class="dt-form-grid">
       <DtNotice v-if="options.length === 0" intent="warning">
-        还没有可上线的模型版本。先到「运行记录」把一次成功运行发布成版本，再回来开服务。
+        暂无可切换的模型版本，请先在工作流中完成训练。
       </DtNotice>
       <DtInput
-        v-model="form.code"
+        :model-value="props.deployment.code"
         label="对外标识"
-        hint="第三方调的地址是 /api/v1/platform/open-models/<标识>；小写字母、数字与连字符，建后不可改"
-        :disabled="props.editing !== null"
-        required
+        hint="已发布入口的固定标识，创建后不可修改"
+        disabled
       />
-      <DtNotice v-if="form.code !== '' && !isCodeValid" intent="danger">
-        只能用小写字母、数字与连字符，且要以字母或数字开头。
-      </DtNotice>
       <DtInput v-model="form.name" label="名称" required />
       <DtSelect
         v-model="form.versionId"
@@ -170,7 +138,7 @@ function submit(): void {
     <template #footer>
       <DtButton variant="ghost" @click="emit('close')">取消</DtButton>
       <DtButton :disabled="!canSubmit" :loading="props.isBusy" @click="submit">
-        {{ props.editing ? '保存' : '开通' }}
+        保存
       </DtButton>
     </template>
   </DtModal>
