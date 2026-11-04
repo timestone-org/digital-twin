@@ -70,7 +70,7 @@ function button(wrapper: VueWrapper, text: string) {
   return target
 }
 async function chooseAll(wrapper: VueWrapper): Promise<void> {
-  await wrapper.get('input[aria-label="选择当前筛选结果"]').setValue(true)
+  await wrapper.get('input[aria-label="选择本页"]').setValue(true)
 }
 async function openSchedule(wrapper: VueWrapper): Promise<void> {
   await chooseAll(wrapper)
@@ -164,9 +164,7 @@ it('单项删除等待回执时锁住本页选择与批量写入', async () => {
   try {
     expect(button(wrapper, '批量训练').attributes('disabled')).toBeDefined()
     expect(
-      wrapper
-        .get('input[aria-label="选择当前筛选结果"]')
-        .attributes('disabled'),
+      wrapper.get('input[aria-label="选择本页"]').attributes('disabled'),
     ).toBeDefined()
   } finally {
     finish?.()
@@ -191,10 +189,10 @@ it('只读账号没有选择；训练权限不授予工作流删除', async () =
     wrapper.findAll('button').some((item) => item.text() === '批量删除工作流'),
   ).toBe(false)
 })
-it('仅在已加载筛选结果中选择，关键词变动清选而表卡切换保留', async () => {
+it('选择限当前后端页，提交关键词清选而草稿与表卡切换保留', async () => {
   const wrapper = open()
   await flushPromises()
-  expect(wrapper.text()).toContain('203')
+  expect(wrapper.text()).toContain('205')
   await chooseAll(wrapper)
   await wrapper.get('button[aria-label="卡片视图"]').trigger('click')
   await flushPromises()
@@ -203,6 +201,22 @@ it('仅在已加载筛选结果中选择，关键词变动清选而表卡切换�
       .checked,
   ).toBe(true)
   await wrapper.get('input[aria-label="搜索工作流"]').setValue('energy')
+  expect(wrapper.text()).toContain('已选择 2 项')
+  vi.mocked(modeling.listModelingPipelines).mockResolvedValue({
+    items: [pipeline('p1', 'energy')],
+    page: 1,
+    size: 20,
+    total: 205,
+  })
+  await wrapper.get('form').trigger('submit')
+  await flushPromises()
+  expect(wrapper.find('[aria-label="批量操作"]').exists()).toBe(false)
+  await chooseAll(wrapper)
+  await button(wrapper, '下一页').trigger('click')
+  await flushPromises()
+  expect(wrapper.find('[aria-label="批量操作"]').exists()).toBe(false)
+  await chooseAll(wrapper)
+  wrapper.getComponent(ui.DtPagination).vm.$emit('update:size', 50)
   await flushPromises()
   expect(wrapper.find('[aria-label="批量操作"]').exists()).toBe(false)
   await chooseAll(wrapper)
@@ -364,7 +378,7 @@ it('GET未返回时卸载会取消读取且不提交定时写入', async () => {
   await button(wrapper, '保存并开启').trigger('click')
   await flushPromises()
   expect(
-    wrapper.get('input[aria-label="选择当前筛选结果"]').attributes('disabled'),
+    wrapper.get('input[aria-label="选择本页"]').attributes('disabled'),
   ).toBeDefined()
   expect(wrapper.getComponent(PipelineActions).props('isSaving')).toBe(true)
   wrapper.unmount()
@@ -389,6 +403,11 @@ async function unknownTraining(wrapper: VueWrapper): Promise<void> {
 it('批量结果未知后禁用单项写菜单与新建导入，读取导航仍可用', async () => {
   const wrapper = open()
   await unknownTraining(wrapper)
+  await wrapper.get('input[type="search"]').setValue('another-scope')
+  await wrapper.get('form').trigger('submit')
+  await flushPromises()
+  await button(wrapper, '下一页').trigger('click')
+  await flushPromises()
   expect(wrapper.text()).toContain('结果待核查')
   expect(
     wrapper.get('button[aria-label="导入 JSON"]').attributes('disabled'),

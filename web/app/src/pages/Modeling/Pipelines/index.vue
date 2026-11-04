@@ -2,8 +2,6 @@
 /**
  * @fileoverview 分析建模的工作流列表：建、改、删，以及进画布。
  * 一条工作流 = 一张算子图 + 它历次的运行（docs/MODELING_DESIGN.md §3）。
- *
- * ⚠ 搜索是**纯客户端过滤**：工作流是业务级资源，几十条顶天（设计 §9.1）。
  */
 import type { DtDataColumn, ModelingPipelineSummary } from '@dt/contracts'
 import { PERMISSION_CODES } from '@dt/contracts'
@@ -13,7 +11,6 @@ import {
   DtIcon,
   DtIconButton,
   DtInput,
-  DtNotice,
   DtTag,
   DtCard,
 } from '@dt/ui'
@@ -27,6 +24,7 @@ import { useAsyncList } from '@/composables/useAsyncList'
 import { useViewMode } from '@/composables/useViewMode'
 import { formatDateTime } from '@/utils/datetime'
 import { listEmptyState } from '@/utils/listEmpty'
+import { reloadModelingPage } from '../scripts/reloadModelingPage'
 
 import PipelineFormDialog from './components/PipelineFormDialog.vue'
 import PipelineImportDialog from './components/PipelineImportDialog.vue'
@@ -62,23 +60,22 @@ const BLANK_EMPTY = {
   hint: '从模板创建或导入工作流，配置后即可训练并发布。',
 }
 
-// 后端 size 的上限。一次取满是「客户端过滤」的前提
-const PAGE_SIZE = 200
-
 const view = useViewMode('modeling-pipelines')
 const router = useRouter()
 const keyword = ref('')
+const appliedKeyword = ref('')
 const scheduling = ref<ModelingPipelineSummary | null>(null)
 const savingTemplate = ref<ModelingPipelineSummary | null>(null)
 const isBatchScheduling = ref(false)
 const batchScheduleCount = ref(0)
 
-const list = useAsyncList<ModelingPipelineSummary>(
-  (query) =>
-    modeling.listModelingPipelines({ ...query, includeInstances: false }),
-  PAGE_SIZE,
+const list = useAsyncList<ModelingPipelineSummary>((query, signal) =>
+  modeling.listModelingPipelines(
+    { ...query, q: appliedKeyword.value, includeInstances: false },
+    signal,
+  ),
 )
-const ops = usePipelineOps(() => void list.reload())
+const ops = usePipelineOps(() => void reloadModelingPage(list))
 const transfer = usePipelineTransfer((id) => {
   void list.reload()
   void router.push(`/modeling/pipelines/${id}`)
@@ -90,34 +87,29 @@ async function save(draft: PipelineDraft, template: string): Promise<void> {
   if (createdId !== null) await router.push(`/modeling/pipelines/${createdId}`)
 }
 
-const visible = computed(() => {
-  const needle = keyword.value.trim().toLowerCase()
-  if (needle === '') return list.items.value
-  return list.items.value.filter(
-    (row) =>
-      row.name.toLowerCase().includes(needle) ||
-      row.code.toLowerCase().includes(needle),
-  )
-})
-
-// ⚠ 取回的比库里的少时必须明说：本地筛选只筛得到手上这一批
-const missing = computed(() =>
-  Math.max(list.total.value - list.items.value.length, 0),
-)
+async function search(): Promise<void> {
+  appliedKeyword.value = keyword.value.trim()
+  await list.reloadFromFirstPage()
+}
 
 const emptyState = computed(() =>
   listEmptyState({
-    isFiltered: keyword.value.trim() !== '',
+    isFiltered: appliedKeyword.value !== '',
     subject: '工作流',
-    keyword: keyword.value,
+    keyword: appliedKeyword.value,
     blank: BLANK_EMPTY,
   }),
 )
 
 const bulk = usePipelineBatch(
-  () => visible.value,
-  () => keyword.value.trim().toLowerCase(),
-  () => list.reload(),
+  () => list.items.value,
+  () =>
+    JSON.stringify([
+      appliedKeyword.value,
+      list.pager.value.page,
+      list.pager.value.size,
+    ]),
+  () => reloadModelingPage(list),
   () =>
     list.loading.value ||
     ops.isSaving.value ||
@@ -224,15 +216,10 @@ onMounted(() => void list.reload())
           </li>
         </ol>
       </DtCard>
-      <DtNotice v-if="missing > 0" intent="warning" icon="alert-triangle">
-        还有 {{ missing }} 条工作流没取回来，搜索只筛得到已经列出的这
-        {{ list.items.value.length }} 条。
-      </DtNotice>
-
       <ModelingBatchBar
         :selected-count="bulk.batch.selectedCount.value"
         :state="bulk.batch.state.value"
-        scope-label="仅对已加载且符合当前筛选的选中工作流执行"
+        scope-label="当前页工作流"
         @clear="bulk.batch.clear()"
         @stop="bulk.batch.stop()"
       >
@@ -278,11 +265,12 @@ onMounted(() => void list.reload())
         v-model:view="view"
         class="min-h-0 flex-1"
         :columns="COLUMNS"
-        :rows="visible"
+        :rows="list.items.value"
         :loading="list.loading.value"
         :error="list.error.value"
         :empty="emptyState"
         :selection="bulk.selection.value"
+        :pagination="list.pager.value"
         :layout="{
           fixedLayout: true,
           minWidth: '60rem',
@@ -290,6 +278,8 @@ onMounted(() => void list.reload())
           cardMinWidth: '22rem',
         }"
         @retry="void list.reload()"
+        @update:page="void list.goToPage($event)"
+        @update:size="void list.setSize($event)"
         @update:selected-ids="bulk.batch.selectedIds.value = $event"
       >
         <template #toolbar>
@@ -299,17 +289,20 @@ onMounted(() => void list.reload())
               {{ list.total.value }} 条
             </DtTag>
           </div>
-          <DtInput
-            v-model="keyword"
-            class="w-72 max-w-full"
-            aria-label="搜索工作流"
-            type="search"
-            size="sm"
-            placeholder="按名称或编码搜索"
-            :disabled="bulk.batch.isBusy.value"
-          >
-            <template #leading><DtIcon name="search" :size="14" /></template>
-          </DtInput>
+          <form class="flex items-center gap-2" @submit.prevent="void search()">
+            <DtInput
+              v-model="keyword"
+              class="w-72 max-w-full"
+              aria-label="搜索工作流"
+              type="search"
+              size="sm"
+              placeholder="按名称或编码搜索"
+              :maxlength="128"
+            >
+              <template #leading><DtIcon name="search" :size="14" /></template>
+            </DtInput>
+            <DtButton type="submit" size="sm" variant="ghost">搜索</DtButton>
+          </form>
         </template>
         <template #card="{ row }">
           <PipelineCard :row="row">

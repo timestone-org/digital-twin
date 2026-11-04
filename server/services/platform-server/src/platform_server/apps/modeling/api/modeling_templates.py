@@ -19,6 +19,7 @@ from platform_server.apps.modeling.deps import (
     get_session,
     require,
 )
+from platform_server.apps.modeling.schemas.common import SearchText
 from platform_server.apps.modeling.schemas.pipeline import PipelineOut
 from platform_server.apps.modeling.schemas.template import (
     ModelingConfigurationOut,
@@ -51,7 +52,7 @@ WorkflowDep = Annotated[WriteGate, Depends(get_pipeline_import_context)]
     summary="建模模板列表",
 )
 async def list_templates(
-    session: SessionDep, page: PageDep, _viewer: ViewDep, q: str | None = None
+    session: SessionDep, page: PageDep, _viewer: ViewDep, q: SearchText = None
 ) -> ApiResponse[Page[ModelingTemplateOut]]:
     return ok(await template_service.list_templates(session, q, page))
 

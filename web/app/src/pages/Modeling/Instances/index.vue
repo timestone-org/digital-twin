@@ -17,6 +17,7 @@ import { runLabel } from '../scripts/instancePresentation'
 import { taskLabel } from '../scripts/taskPresentation'
 import ModelingBatchBar from '../components/ModelingBatchBar.vue'
 import { useInstanceBatch } from './scripts/useInstanceBatch'
+import { reloadModelingPage } from '../scripts/reloadModelingPage'
 
 const columns: readonly DtDataColumn[] = [
   { key: 'name', label: '模型名称', card: 'title' },
@@ -56,7 +57,7 @@ const operations = useInstanceBatch(
       appliedKeyword.value,
       archived.value,
     ]),
-  list.reload,
+  () => reloadModelingPage(list),
   () => list.loading.value || list.error.value !== null,
 )
 const batch = operations.batch
@@ -166,6 +167,7 @@ onMounted(() => void list.reload())
               type="search"
               size="sm"
               placeholder="按名称或编码搜索"
+              :maxlength="128"
             />
 
             <DtButton type="submit" size="sm" variant="ghost"> 搜索 </DtButton>

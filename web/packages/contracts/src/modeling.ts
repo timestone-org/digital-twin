@@ -205,6 +205,8 @@ export interface ModelingNodeRun extends ModelingNodeRunSummary {
 export interface ModelingRunSummary {
   id: string
   pipeline_id: string
+  pipeline_name?: string | null
+  pipeline_code?: string | null
   instance_id?: string | null
   published_version_id?: string | null
   auto_publish?: boolean
@@ -345,6 +347,8 @@ export interface ModelingBinding {
   id: string
   fx_code: string
   model_version_id: string
+  model_name?: string | null
+  model_version?: number | null
   param_map: ModelingParamMap[]
   is_enabled: boolean
   is_orphaned: boolean

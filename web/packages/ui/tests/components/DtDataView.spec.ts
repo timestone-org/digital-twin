@@ -49,6 +49,30 @@ afterEach(() => {
 })
 
 describe('DtDataView', () => {
+  it.each(['table', 'card'])(
+    '自定义pagination插槽在%s中替换内置页码器',
+    (view) => {
+      const wrapper = mount(DtDataView, {
+        props: {
+          columns: COLUMNS,
+          rows: ROWS,
+          view: view === 'table' ? 'table' : 'card',
+          pagination: { page: 1, size: 20, total: 100 },
+        },
+        slots: {
+          ...SLOTS,
+          pagination:
+            '<nav aria-label="训练记录游标分页">第 2 页 · 本页 20 条</nav>',
+        },
+      })
+      expect(wrapper.find('.dt-pagination').exists()).toBe(false)
+      expect(wrapper.get('[aria-label="训练记录游标分页"]').text()).toBe(
+        '第 2 页 · 本页 20 条',
+      )
+      expect(wrapper.find('.dt-data-view').classes()).toContain('is-fill')
+      wrapper.unmount()
+    },
+  )
   it('表格视图渲染 table', () => {
     const wrapper = render()
     expect(wrapper.find('table').exists()).toBe(true)

@@ -13,14 +13,18 @@
 | 集合 | 可用业务筛选 |
 |---|---|
 | `GET /modeling-instances` | `q` 名称/编码模糊匹配、`code` 精确编码、`template_id`、`latest_run_status`、`has_runs`、`archived` |
-| `GET /modeling-runs` | `instance_id`、兼容 `pipeline_id`、`q` 所属流水线名称/编码、`status`、`created_at__gte`、`created_at__lt` |
-| `GET /modeling-model-versions` | `instance_id`、兼容 `pipeline_id`、`q` 版本名称、`task`、`is_servable`、`archived`、`created_at__gte`、`created_at__lt` |
+| `GET /modeling-runs` | `instance_id`、兼容 `pipeline_id`、`q` 所属流水线名称/编码、创建人或运行 UUID、`status`、`created_at__gte`、`created_at__lt` |
+| `GET /modeling-model-versions` | `instance_id`、兼容 `pipeline_id`、`q` 版本名称/算法/说明或流水线名称/编码、`task`、`is_servable`、`archived`、`created_at__gte`、`created_at__lt` |
 
-`GET /modeling-deployments` 保持 `data` 数组、不分页；新增可选的 `code` 精确编码、`model_version_id`、`instance_id`、`is_enabled` 组合过滤。不传过滤仍返回启用、停用及不可服务的全部部署，不能由前端把停用记录当不存在。`instance_id` 仅匹配真实模板实例，不能将普通设计流水线 UUID 冒充实例。
+`GET /modeling-deployments` 与 `GET /modeling-bindings` 未传 `page` 和 `size` 时保持 `data` 数组；显式传任一参数则返回 `{items,page,size,total}`，缺省的另一项取 `page=1`、`size=20`，页大小为 1–200。
+部署支持 `q` 服务名称/编码/说明、固定模型名称或流水线名称/编码，以及 `code` 精确编码、`model_version_id`、`instance_id`、`is_enabled` 组合过滤。不传过滤仍返回启用、停用及不可服务的全部部署，不能由前端把停用记录当不存在。`instance_id` 仅匹配真实模板实例，不能将普通设计流水线 UUID 冒充实例。
+绑定支持 `q` 公式编码、固定模型名称/说明或流水线名称/编码。单独传 `q` 仍返回过滤后的数组。
+
+上述 `q` 去除两端空白、忽略大小写，最多 128 字符；空白等于不检索，`%`、`_` 和反斜杠按字面匹配。工作流与设计模板列表也在后端按名称/编码检索，沿用既有分页参数。
 
 `archived` 为 `active`（默认）、`archived` 或 `all`。运行不因实例归档消失，历史仍可读取。时间筛选使用带时区的 RFC3339，左闭右开；同时给出起止时必须左端小于右端。`instance_id` 和 `pipeline_id` 同时给出但不同会返回 400；`instance_id` 专指模板实例，通用设计流水线使用 `pipeline_id`。
 
-模型实例输出增加可空 `archived_at`。版本输出增加可空 `instance_id`、`archived_at`、`deployment_count` 和 `deployments_url`；运行输出增加可空 `instance_id`、`published_version_id`。普通设计流水线对应的 `instance_id=null`，不能靠名称推断实例。
+模型实例输出增加可空 `archived_at`。版本输出增加可空 `instance_id`、`archived_at`、`deployment_count` 和 `deployments_url`；运行输出增加可空 `instance_id`、`published_version_id`，列表同时返回可空 `pipeline_name`、`pipeline_code`。绑定列表返回可空 `model_name`、`model_version`，无需先拉取全部模型版本补齐名称。普通设计流水线对应的 `instance_id=null`，不能靠名称推断实例。
 
 `GET /modeling-model-versions/{version_id}/deployments?limit=100` 返回该版本关联的部署游标集合，保留停用部署，空集合正常返回 `items=[]`。使用返回的实际 `deployments_url`，不要将版本 UUID 当服务编码。单版本详情、运行详情与列表采用相同的关系含义。
 

@@ -7,11 +7,7 @@
  */
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 
-import type {
-  ModelingBinding,
-  ModelingGraph,
-  ModelingVersionSummary,
-} from '@dt/contracts'
+import type { ModelingBinding, ModelingGraph } from '@dt/contracts'
 
 import * as client from '@/api/client'
 import * as modeling from '@/api/modeling'
@@ -26,13 +22,7 @@ beforeEach(() => {
   // ⚠ 两个入口都要桩：取数走 requestData，204 的删除走 request
   requestMock = vi
     .fn()
-    .mockImplementation((path: string) =>
-      Promise.resolve(
-        path === '/modeling-bindings'
-          ? []
-          : { items: [], page: 1, size: 200, total: 0 },
-      ),
-    )
+    .mockResolvedValue({ items: [], page: 1, size: 200, total: 0 })
   vi.spyOn(client, 'request').mockImplementation(requestMock)
   vi.spyOn(client, 'requestData').mockImplementation(requestMock)
 })
@@ -179,25 +169,6 @@ it('系统目录经平台鉴权并支持取消', async () => {
   ])
 })
 
-function version(id: string, runId: string): ModelingVersionSummary {
-  return {
-    id,
-    pipeline_id: 'p1',
-    run_id: runId,
-    version: 1,
-    name: id,
-    algo: 'linear_regression',
-    task: 'regression',
-    is_servable: true,
-    serving_channel: 'json',
-    unservable_reason: null,
-    feature_keys: ['temperature'],
-    target_key: 'energy',
-    created_by_name: null,
-    created_at: STAMP,
-  }
-}
-
 const CALLS: [string, () => Promise<unknown>][] = [
   ['listModelingOperators', () => modeling.listModelingOperators()],
   ['listModelingPipelines', () => modeling.listModelingPipelines()],
@@ -217,11 +188,12 @@ const CALLS: [string, () => Promise<unknown>][] = [
   ],
   ['startModelingRun', () => modeling.startModelingRun('p1')],
   ['listModelingRuns', () => modeling.listModelingRuns('p1')],
+  ['listModelingRunHistory', () => modeling.listModelingRunHistory(null)],
+  ['listModelDeploymentsPage', () => modeling.listModelDeploymentsPage()],
   ['getModelingRun', () => modeling.getModelingRun('r1')],
   ['getModelingNodeRun', () => modeling.getModelingNodeRun('r1', 'n1')],
   ['cancelModelingRun', () => modeling.cancelModelingRun('r1')],
   ['listModelingVersions', () => modeling.listModelingVersions()],
-  ['listAllModelingVersions', () => modeling.listAllModelingVersions()],
   [
     'publishModelingVersion',
     () => modeling.publishModelingVersion({ run_id: 'r1', name: 'v' }),
@@ -268,20 +240,16 @@ describe('每一条都打 platform 前缀', () => {
 })
 
 describe('URL 与方法', () => {
-  it('绑定接口的空数组转换为有效的分页结果', async () => {
-    requestMock.mockResolvedValueOnce([])
-
-    expect(await modeling.listModelingBindings({ page: 1, size: 200 })).toEqual(
-      {
-        items: [],
-        page: 1,
-        size: 200,
-        total: 0,
-      },
+  it('绑定直接请求后端分页，空结果仍保留真实总数和页码', async () => {
+    const response = { items: [], page: 4, size: 20, total: 60 }
+    requestMock.mockResolvedValueOnce(response)
+    expect(await modeling.listModelingBindings({ page: 4, size: 20 })).toEqual(
+      response,
     )
+    expect(call()[1]['query']).toEqual({ page: 4, size: 20 })
   })
 
-  it('绑定接口的完整数组按所选页码和条数切分', async () => {
+  it('绑定分页与检索由后端完成，不再次slice服务端返回的当前页', async () => {
     const rows: ModelingBinding[] = ['b1', 'b2', 'b3'].map((id) => ({
       id,
       fx_code: id,
@@ -293,14 +261,92 @@ describe('URL 与方法', () => {
       created_at: STAMP,
       updated_at: STAMP,
     }))
-    requestMock.mockResolvedValueOnce(rows)
-
-    expect(await modeling.listModelingBindings({ page: 2, size: 2 })).toEqual({
+    const response = {
       items: [rows[2]],
       page: 2,
       size: 2,
       total: 3,
+    }
+    requestMock.mockResolvedValueOnce(response)
+    const controller = new AbortController()
+    expect(
+      await modeling.listModelingBindings(
+        { page: 2, size: 2, q: ' 冷机 ' },
+        controller.signal,
+      ),
+    ).toEqual(response)
+    expect(call()[1]['query']).toEqual({ page: 2, size: 2, q: '冷机' })
+    expect(call()[1]['signal']).toBe(controller.signal)
+  })
+
+  it('旧服务端返回数组不能被当成已分页结果或再次前端切分', async () => {
+    requestMock.mockResolvedValueOnce([])
+    await expect(modeling.listModelingBindings()).rejects.toBeInstanceOf(
+      client.TransportError,
+    )
+  })
+
+  it('部署管理按后端页读取，保留false精确筛选及取消信号', async () => {
+    const controller = new AbortController()
+    const response = { items: [], page: 2, size: 10, total: 15 }
+    requestMock.mockResolvedValueOnce(response)
+    expect(
+      await modeling.listModelDeploymentsPage(
+        { page: 2, size: 10, q: ' 风机 ', isEnabled: false },
+        controller.signal,
+      ),
+    ).toEqual(response)
+    expect(call()).toEqual([
+      '/modeling-deployments',
+      {
+        baseUrl: PLATFORM_BASE_URL,
+        signal: controller.signal,
+        query: { page: 2, size: 10, q: '风机', is_enabled: false },
+      },
+    ])
+  })
+
+  it('工作流检索透传后端q和signal，不发送空白检索', async () => {
+    const controller = new AbortController()
+    await modeling.listModelingPipelines(
+      { page: 2, size: 20, q: '  Energy_1%  ', includeInstances: false },
+      controller.signal,
+    )
+    expect(call()[1]).toMatchObject({
+      signal: controller.signal,
+      query: { page: 2, size: 20, q: 'Energy_1%', include_instances: false },
     })
+    await modeling.listModelingPipelines({ q: '  ' })
+    expect(call()[1]['query']).not.toHaveProperty('q')
+  })
+
+  it('训练历史使用不透明游标，查询和状态交给后端', async () => {
+    const controller = new AbortController()
+    requestMock.mockResolvedValueOnce({
+      items: [],
+      next: null,
+      has_more: false,
+    })
+    await modeling.listModelingRunHistory(
+      'pipeline-7',
+      { after: 'opaque-cursor', limit: 50, q: ' 冷机 ', status: 'failed' },
+      controller.signal,
+    )
+    expect(call()).toEqual([
+      '/modeling-runs',
+      {
+        baseUrl: PLATFORM_BASE_URL,
+        signal: controller.signal,
+        query: {
+          pagination: 'cursor',
+          pipeline_id: 'pipeline-7',
+          after: 'opaque-cursor',
+          limit: 50,
+          q: '冷机',
+          status: 'failed',
+        },
+      },
+    ])
   })
 
   it('算子目录是一条读', async () => {
@@ -351,42 +397,6 @@ describe('URL 与方法', () => {
       page: undefined,
       size: undefined,
     })
-  })
-
-  it('完整版本列表翻完所有页，并把取消信号传到每一次请求', async () => {
-    const first = Array.from({ length: 200 }, (_item, index) =>
-      version(`v-${index}`, `run-${index}`),
-    )
-    requestMock
-      .mockResolvedValueOnce({ items: first, page: 1, size: 200, total: 201 })
-      .mockResolvedValueOnce({
-        items: [version('v-last', 'run-last')],
-        page: 2,
-        size: 200,
-        total: 201,
-      })
-    const controller = new AbortController()
-
-    const found = await modeling.listAllModelingVersions(controller.signal)
-
-    expect(found).toHaveLength(201)
-    expect(found.at(-1)?.run_id).toBe('run-last')
-    expect(requestMock).toHaveBeenNthCalledWith(
-      1,
-      '/modeling-model-versions',
-      expect.objectContaining({
-        query: { pipeline_id: undefined, page: 1, size: 200 },
-        signal: controller.signal,
-      }),
-    )
-    expect(requestMock).toHaveBeenNthCalledWith(
-      2,
-      '/modeling-model-versions',
-      expect.objectContaining({
-        query: { pipeline_id: undefined, page: 2, size: 200 },
-        signal: controller.signal,
-      }),
-    )
   })
 
   it('改流水线是 PATCH，缺省字段不动', async () => {

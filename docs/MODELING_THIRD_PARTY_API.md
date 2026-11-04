@@ -68,13 +68,25 @@ Content-Type: application/json
 
 `trace_id` 是请求排障标识，不是实例、运行或命令 ID。成功创建使用 HTTP 201，训练提交使用 202，删除成功使用 204 且无响应体，不能把所有成功都按 200 解析。
 
+## 内置设计模板目录
+
+内置设计模板目录另有只读 `GET /modeling-builtin-templates`，需要 `modeling:view`，
+按 `page/size/q/category` 在服务端检索，返回 `Page`。每项为 `{key,label,hint,category}`，
+不包含用户模板 UUID 或图；它是创建普通工作流时的程序内置选项，不替代已保存模板接口。
+
 ## 获取全部已部署模型
 
 `GET /modeling-deployments`
 
-权限：`modeling:view`。成功：HTTP 200。使用同一把用户 APIKey，无请求体，无分页参数。可选 `code`、`model_version_id`、`instance_id`、`is_enabled` 做精确组合过滤，不传时查询全部部署。
+权限：`modeling:view`。成功：HTTP 200。使用同一把用户 APIKey，无请求体。可选 `code`、`model_version_id`、`instance_id`、`is_enabled` 做精确组合过滤，不传时查询全部部署。
 
-返回的 `data` 是全部部署服务组成的数组，不是 `data.items`。按创建时间由新到旧返回，没有部署时为 `[]`。列表可能保留历史多入口记录；新建部署遵守每工作流唯一入口，同工作流第二次创建返回 409。
+未传分页参数时，返回的 `data` 是全部部署服务组成的数组，不是 `data.items`。按创建时间由新到旧返回，没有部署时为 `[]`。列表可能保留历史多入口记录；新建部署遵守每工作流唯一入口，同工作流第二次创建返回 409。
+
+管理端可以显式传 `page` 或 `size` 请求后端分页，此时 `data` 改为
+`{items,page,size,total}`；只传一个时另一项缺省为 `page=1`、`size=20`，页大小上限 200。
+不传这两个参数始终保持上述数组响应。新增 `q` 支持服务名称/编码/说明、固定模型名称及工作流
+名称/编码检索，可以与精确过滤组合。`q` 去除两端空白、忽略大小写，最多 128 字符，
+`%`、`_` 和反斜杠按字面检索；空白等于不检索。单独传 `q` 仍返回过滤后的数组。
 
 列表同时包含启用、停用和当前不可服务的部署。第三方应选择 `is_enabled=true` 且 `is_servable=true` 的记录，保存其 `code`，然后进入第八步读取签名并调用。
 

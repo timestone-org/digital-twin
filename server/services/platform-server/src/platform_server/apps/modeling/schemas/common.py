@@ -9,6 +9,7 @@ from typing import Annotated
 
 from pydantic import (
     BaseModel,
+    BeforeValidator,
     ConfigDict,
     PlainSerializer,
     StringConstraints,
@@ -16,6 +17,15 @@ from pydantic import (
 )
 
 from lib.utils.timeutils import format_rfc3339
+
+
+def normalize_search(value: object) -> object:
+    if isinstance(value, str):
+        return value.strip() or None
+    return value
+
+
+SearchText = Annotated[str | None, BeforeValidator(normalize_search)]
 
 # ⚠ `WithJsonSchema` 不能省：PlainSerializer 会把 openapi 里的类型压成裸
 # `string`，前端由它生成的类型于是丢掉时间语义，而两侧都不会报错

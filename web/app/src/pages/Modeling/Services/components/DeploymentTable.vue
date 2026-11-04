@@ -11,7 +11,7 @@ import type {
   ModelDeployment,
 } from '@dt/contracts'
 import { PERMISSION_CODES } from '@dt/contracts'
-import type { DtDataViewSelection } from '@dt/ui'
+import type { DtDataViewSelection, DtPaginationState } from '@dt/ui'
 import { DtButton, DtDataView, DtIconButton, DtTag } from '@dt/ui'
 
 import PermGuard from '@/components/PermGuard.vue'
@@ -46,6 +46,7 @@ const props = defineProps<{
   error: string | null
   selection?: DtDataViewSelection<ModelDeployment> | undefined
   actionsDisabled?: boolean | undefined
+  pagination?: DtPaginationState | undefined
 }>()
 
 const view = defineModel<DtDataViewMode>('view', { required: true })
@@ -56,6 +57,9 @@ defineEmits<{
   toggle: [row: ModelDeployment, isOn: boolean]
   remove: [row: ModelDeployment]
   'update:selectedIds': [ids: string[]]
+  'update:page': [page: number]
+  'update:size': [size: number]
+  retry: []
 }>()
 </script>
 
@@ -68,6 +72,7 @@ defineEmits<{
     :error="props.error"
     :empty="EMPTY"
     :selection="props.selection"
+    :pagination="props.pagination"
     :layout="{
       fixedLayout: true,
       minWidth: '81rem',
@@ -75,6 +80,9 @@ defineEmits<{
       cardMinWidth: '24rem',
     }"
     @update:selected-ids="$emit('update:selectedIds', $event)"
+    @update:page="$emit('update:page', $event)"
+    @update:size="$emit('update:size', $event)"
+    @retry="$emit('retry')"
   >
     <template #toolbar><slot name="toolbar" /></template>
     <template #cell-name="{ row }">

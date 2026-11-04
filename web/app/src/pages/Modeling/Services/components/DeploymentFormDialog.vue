@@ -1,17 +1,11 @@
 <script setup lang="ts">
 /** @fileoverview 修改已发布模型的固定版本与调用配额。 */
-import type { ModelDeployment, ModelingVersionSummary } from '@dt/contracts'
-import {
-  DtButton,
-  DtInput,
-  DtModal,
-  DtNotice,
-  DtNumberInput,
-  DtSelect,
-} from '@dt/ui'
+import type { ModelDeployment } from '@dt/contracts'
+import { DtButton, DtInput, DtModal, DtNumberInput } from '@dt/ui'
 import { computed, ref, watch } from 'vue'
 
 import { useFormDirty } from '@/composables/useFormDirty'
+import DeploymentVersionPicker from './DeploymentVersionPicker.vue'
 
 // 配额的两个上限，与库上的 CHECK 同一份口径
 const MAX_ROWS = 1000
@@ -19,7 +13,6 @@ const MAX_RATE = 6000
 const props = defineProps<{
   deployment: ModelDeployment
   isBusy: boolean
-  versions: readonly ModelingVersionSummary[]
 }>()
 
 const emit = defineEmits<{
@@ -48,18 +41,13 @@ const form = ref<DeploymentForm>({
   rateLimit: 0,
 })
 
-/** 只有可上线的版本能开出去。 */
-const options = computed(() =>
-  props.versions
-    .filter((row) => row.is_servable)
-    .map((row) => ({
-      value: row.id,
-      label: `${row.name} v${row.version}`,
-    })),
-)
+const versionReady = ref(false)
 
 const canSubmit = computed(
-  () => form.value.name.trim() !== '' && form.value.versionId !== '',
+  () =>
+    versionReady.value &&
+    form.value.name.trim() !== '' &&
+    form.value.versionId !== '',
 )
 
 // ⚠ 这个弹窗有五个输入，关掉前必须问一句：直接关等于把刚填的一整屏悄悄丢掉
@@ -85,6 +73,7 @@ watch(
 )
 
 function submit(): void {
+  if (props.isBusy || !canSubmit.value) return
   emit('submit', {
     model_version_id: form.value.versionId,
     name: form.value.name.trim(),
@@ -103,22 +92,19 @@ function submit(): void {
     @update:model-value="emit('close')"
   >
     <div class="dt-form-grid">
-      <DtNotice v-if="options.length === 0" intent="warning">
-        暂无可切换的模型版本，请先在工作流中完成训练。
-      </DtNotice>
       <DtInput
         :model-value="props.deployment.code"
         label="对外标识"
         hint="已发布入口的固定标识，创建后不可修改"
         disabled
       />
-      <DtInput v-model="form.name" label="名称" required />
-      <DtSelect
+      <DtInput v-model="form.name" label="名称" :maxlength="128" required />
+      <DeploymentVersionPicker
         v-model="form.versionId"
         class="dt-form-grid__wide"
-        label="钉住的模型版本"
-        hint="换版本时第三方不必改代码——地址跟着标识走，不跟着版本走"
-        :options="options"
+        :deployment="deployment"
+        :disabled="isBusy"
+        @ready="versionReady = $event"
       />
       <!-- ⚠ 数值用 DtNumberInput 不是 DtInput：后者的 modelValue 是 string，
            `v-model.number` 会把一个 number 塞进 string 里 -->

@@ -55,11 +55,10 @@ function button(wrapper: VueWrapper, text: string) {
   return target
 }
 function list(rows: ModelingRunSummary[]) {
-  vi.mocked(modeling.listModelingRuns).mockResolvedValue({
+  vi.mocked(modeling.listModelingRunHistory).mockResolvedValue({
     items: rows,
-    page: 1,
-    size: 20,
-    total: rows.length,
+    next: 'cursor:opaque+/=',
+    has_more: true,
   })
 }
 beforeEach(() => {
@@ -76,11 +75,10 @@ beforeEach(() => {
     size: 200,
     total: 0,
   })
-  vi.spyOn(modeling, 'listModelingRuns').mockResolvedValue({
+  vi.spyOn(modeling, 'listModelingRunHistory').mockResolvedValue({
     items: [row('r1'), row('r2')],
-    page: 1,
-    size: 20,
-    total: 2,
+    next: 'cursor:opaque+/=',
+    has_more: true,
   })
   vi.spyOn(workflow, 'deleteModelingRun').mockResolvedValue()
   vi.spyOn(workflow, 'deployModelingRun').mockResolvedValue(deployment)
@@ -126,7 +124,7 @@ it('删除逐项反馈引用冲突，跳过在途与正在发布记录并只刷�
   expect(workflow.deleteModelingRun).toHaveBeenCalledTimes(2)
   expect(workflow.deleteModelingRun).toHaveBeenNthCalledWith(1, 'r1')
   expect(workflow.deleteModelingRun).toHaveBeenNthCalledWith(2, 'r2')
-  expect(modeling.listModelingRuns).toHaveBeenCalledTimes(2)
+  expect(modeling.listModelingRunHistory).toHaveBeenCalledTimes(2)
   expect(wrapper.text()).toContain('模型仍被部署引用')
   expect(wrapper.text()).toContain('训练仍在进行')
   expect(wrapper.text()).toContain('正在发布模型')
@@ -171,7 +169,7 @@ it('切换表卡保留选择，翻页后清除选择', async () => {
     wrapper.get<HTMLInputElement>('input[aria-label="选择 训练 r1"]').element
       .checked,
   ).toBe(true)
-  wrapper.getComponent(RunTable).vm.$emit('update:page', 2)
+  await button(wrapper, '下一页').trigger('click')
   await flushPromises()
   expect(wrapper.find('[aria-label="批量操作"]').exists()).toBe(false)
 })
@@ -199,7 +197,7 @@ it('批量处理中禁用选择与单项发布，卸载后不继续下一项', a
   finish?.()
   await flushPromises()
   expect(workflow.deleteModelingRun).toHaveBeenCalledTimes(1)
-  expect(modeling.listModelingRuns).toHaveBeenCalledTimes(1)
+  expect(modeling.listModelingRunHistory).toHaveBeenCalledTimes(1)
 })
 
 it('批量结果待核查时锁住行菜单及写事件，查看入口保持可用', async () => {
@@ -250,4 +248,30 @@ it('取消批量确认后单项操作保持可用', async () => {
   wrapper.getComponent(RunTable).vm.$emit('remove', row('r1'))
   await flushPromises()
   expect(workflow.deleteModelingRun).toHaveBeenCalledExactlyOnceWith('r1')
+})
+
+it('待核查结果在检索和游标翻页后仍阻止写入，显式清除才能解锁', async () => {
+  vi.mocked(workflow.deleteModelingRun).mockRejectedValueOnce(
+    new TransportError(0, '请求结果未知'),
+  )
+  const wrapper = open()
+  await flushPromises()
+  await wrapper.get('input[aria-label="选择本页"]').setValue(true)
+  await button(wrapper, '批量删除记录').trigger('click')
+  await flushPromises()
+  await wrapper.get('input[type="search"]').setValue('new-scope')
+  await wrapper.get('form').trigger('submit')
+  await flushPromises()
+  await button(wrapper, '下一页').trigger('click')
+  await flushPromises()
+  expect(wrapper.text()).toContain('结果待核查')
+  expect(wrapper.getComponent(RunTable).props('canPublish')).toBe(false)
+  expect(
+    wrapper.getComponent(RunTable).props('selection')?.selectedIds,
+  ).toEqual([])
+  wrapper.getComponent(RunTable).vm.$emit('remove', row('r2'))
+  await flushPromises()
+  expect(workflow.deleteModelingRun).toHaveBeenCalledOnce()
+  await button(wrapper, '清除选择与结果').trigger('click')
+  expect(wrapper.getComponent(RunTable).props('canPublish')).toBe(true)
 })

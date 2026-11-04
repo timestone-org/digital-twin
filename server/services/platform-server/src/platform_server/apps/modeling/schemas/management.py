@@ -5,12 +5,14 @@ from dataclasses import dataclass
 from datetime import datetime
 from typing import Literal, Self
 
-from pydantic import Field, model_validator
+from pydantic import ConfigDict, Field, model_validator
 
+from lib.web import PageParams
 from platform_server.apps.modeling.protocols import ModelTask, RunStatus
 from platform_server.apps.modeling.schemas.common import (
     InputModel,
     OutputModel,
+    SearchText,
     Utc,
 )
 from platform_server.apps.modeling.schemas.deployment import ModelDeploymentCode
@@ -22,7 +24,7 @@ class ManagementListQuery(InputModel):
     size: int = Field(default=20, ge=1, le=200)
     after: str | None = Field(default=None, max_length=4096)
     limit: int = Field(default=100, ge=1, le=200)
-    q: str | None = Field(default=None, min_length=1, max_length=128)
+    q: SearchText = Field(default=None, max_length=128)
 
     @model_validator(mode="after")
     def validate_pagination(self) -> Self:
@@ -122,7 +124,27 @@ class CursorListQuery(ManagementListQuery):
         return self
 
 
-class DeploymentListQuery(InputModel):
+class OptionalPageListQuery(InputModel):
+    """声明分页时返回一页，旧调用仍返回完整数组。"""
+
+    page: int | None = Field(default=None, ge=1)
+    size: int | None = Field(default=None, ge=1, le=200)
+    q: SearchText = Field(default=None, max_length=128)
+
+    @property
+    def page_params(self) -> PageParams | None:
+        if self.page is None and self.size is None:
+            return None
+        return PageParams(page=self.page or 1, size=self.size or 20)
+
+
+class BindingListQuery(OptionalPageListQuery):
+    """公式绑定的后端检索与兼容分页。"""
+
+    model_config = ConfigDict(extra="ignore", populate_by_name=True)
+
+
+class DeploymentListQuery(OptionalPageListQuery):
     code: ModelDeploymentCode | None = None
     model_version_id: uuid.UUID | None = None
     instance_id: uuid.UUID | None = None

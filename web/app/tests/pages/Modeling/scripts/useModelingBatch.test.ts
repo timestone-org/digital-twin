@@ -51,6 +51,30 @@ afterEach(() => {
   vi.restoreAllMocks()
 })
 
+it('批次结束后末页修正或重新检索仍保留完整结果，避免失败原因随翻页消失', async () => {
+  const { batch, scope } = host()
+  batch.selectedIds.value = ['a', 'b']
+  const pending = batch.run(
+    operation((row) => {
+      if (row.id === 'b')
+        return Promise.reject(new BizError(41414, '仍被公式引用', 409, 'trace'))
+      return Promise.resolve()
+    }),
+  )
+  useConfirm().resolve(true)
+  expect(await pending).toMatchObject({ succeeded: 1, failed: 1 })
+  scope.value = 'corrected-last-page'
+  await flushPromises()
+  expect(batch.selectedCount.value).toBe(0)
+  expect(batch.state.value.outcomes.map((row) => row.status)).toEqual([
+    'succeeded',
+    'failed',
+  ])
+  expect(batch.state.value.outcomes[1]?.message).toBe('仍被公式引用')
+  expect(batch.state.value.completed).toBe(2)
+  expect(batch.state.value.total).toBe(2)
+})
+
 it('没有选择或用户取消时不提交，确认时冻结目标并防重复提交', async () => {
   const { batch } = host()
   const action = vi.fn(async () => {})

@@ -1,4 +1,4 @@
-"""从 platform OpenAPI 生成异常检测、规则计算与版本元数据契约。"""
+"""从 platform OpenAPI 生成分析建模扩展契约。"""
 
 import shutil
 import subprocess
@@ -10,6 +10,8 @@ from scripts.export_report_types import OpenApi, type_of
 ROOT = Path(__file__).resolve().parents[4]
 OUTPUT = ROOT / "web/packages/contracts/src/modelingDetection.ts"
 ALIASES = (
+    ("BuiltinTemplateCategory", "ModelingBuiltinTemplateCategory"),
+    ("BuiltinModelingTemplateOut", "ModelingBuiltinTemplate"),
     ("DetectionRow", "DetectionRow"),
     ("AnomalyDecisionOut", "AnomalyDecision"),
     ("OpenModelDetectOut", "OpenModelDetect"),
@@ -59,8 +61,7 @@ def render() -> str:
         (ROOT / "server/services/platform-server/openapi.json").read_text()
     )
     rows = [
-        "/** @fileoverview 从 platform OpenAPI 生成的"
-        "异常检测、规则计算与版本元数据契约。 */",
+        "/** @fileoverview 从 platform OpenAPI 生成的分析建模扩展契约。 */",
         "import type { OpenModelInfo, OpenModelWarning, "
         "ModelingOperator, ModelingRunSummary } from './modeling'",
     ]

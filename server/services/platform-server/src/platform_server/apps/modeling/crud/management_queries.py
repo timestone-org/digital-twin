@@ -4,9 +4,12 @@ import uuid
 from datetime import datetime
 
 from sqlalchemy import (
+    ColumnElement,
     Select,
     SQLColumnExpression,
+    String,
     Subquery,
+    cast,
     func,
     literal,
     select,
@@ -50,8 +53,8 @@ async def list_instances(
     statement = records_statement()
     if query.q:
         statement = statement.where(
-            ModelingPipeline.name.contains(query.q, autoescape=True)
-            | ModelingPipeline.code.contains(query.q, autoescape=True)
+            ModelingPipeline.name.icontains(query.q, autoescape=True)
+            | ModelingPipeline.code.icontains(query.q, autoescape=True)
         )
     if query.code is not None:
         statement = statement.where(ModelingPipeline.code == query.code)
@@ -105,10 +108,12 @@ async def list_runs(
         statement = statement.where(
             ModelingRun.pipeline_id.in_(
                 select(ModelingPipeline.id).where(
-                    ModelingPipeline.name.contains(query.q, autoescape=True)
-                    | ModelingPipeline.code.contains(query.q, autoescape=True)
+                    ModelingPipeline.name.icontains(query.q, autoescape=True)
+                    | ModelingPipeline.code.icontains(query.q, autoescape=True)
                 )
             )
+            | ModelingRun.created_by_name.icontains(query.q, autoescape=True)
+            | cast(ModelingRun.id, String).icontains(query.q, autoescape=True)
         )
     statement = _time_bounds(statement, query, ModelingRun.created_at)
     total = await _total(session, statement, query)
@@ -136,7 +141,15 @@ async def list_versions(
         )
     if query.q:
         statement = statement.where(
-            versions.c.name.contains(query.q, autoescape=True)
+            versions.c.name.icontains(query.q, autoescape=True)
+            | versions.c.algo.icontains(query.q, autoescape=True)
+            | versions.c.description.icontains(query.q, autoescape=True)
+            | versions.c.pipeline_id.in_(
+                select(ModelingPipeline.id).where(
+                    ModelingPipeline.name.icontains(query.q, autoescape=True)
+                    | ModelingPipeline.code.icontains(query.q, autoescape=True)
+                )
+            )
         )
     if query.task is not None:
         statement = statement.where(versions.c.task == query.task)
@@ -173,6 +186,17 @@ async def instance_ids(
     )
 
 
+async def pipeline_labels(
+    session: AsyncSession, identities: list[uuid.UUID]
+) -> dict[uuid.UUID, tuple[str, str]]:
+    rows = await session.execute(
+        select(
+            ModelingPipeline.id, ModelingPipeline.name, ModelingPipeline.code
+        ).where(ModelingPipeline.id.in_(identities))
+    )
+    return {identity: (name, code) for identity, name, code in rows}
+
+
 async def list_version_deployments(
     session: AsyncSession,
     identity: uuid.UUID,
@@ -185,8 +209,8 @@ async def list_version_deployments(
     )
     if query.q:
         statement = statement.where(
-            row.name.contains(query.q, autoescape=True)
-            | row.code.contains(query.q, autoescape=True)
+            row.name.icontains(query.q, autoescape=True)
+            | row.code.icontains(query.q, autoescape=True)
         )
     return list(
         await session.scalars(
@@ -310,7 +334,35 @@ async def _version_rows(
 
 async def list_deployments(
     session: AsyncSession, query: DeploymentListQuery
-) -> list[tuple[ModelingDeployment, ModelVersion]]:
+) -> tuple[list[tuple[ModelingDeployment, ModelVersion]], int]:
+    statement = _deployment_statement(query)
+    page = query.page_params
+    total = 0
+    if page is not None:
+        total = int(
+            await session.scalar(
+                select(func.count()).select_from(statement.subquery())
+            )
+            or 0
+        )
+        statement = statement.offset(page.offset).limit(page.size)
+    rows = await session.execute(
+        statement.order_by(
+            ModelingDeployment.created_at.desc(), ModelingDeployment.id.desc()
+        )
+    )
+    return [
+        (deployment, trained or rule)
+        for deployment, trained, rule in rows
+        if trained is not None or rule is not None
+    ], total
+
+
+def _deployment_statement(
+    query: DeploymentListQuery,
+) -> Select[
+    tuple[ModelingDeployment, ModelingModelVersion, ModelingRuleVersion]
+]:
     row = ModelingDeployment
     effective = func.coalesce(row.model_version_id, row.rule_version_id)
     statement = (
@@ -323,6 +375,8 @@ async def list_deployments(
             ModelingRuleVersion, row.rule_version_id == ModelingRuleVersion.id
         )
     )
+    if query.q:
+        statement = statement.where(_deployment_search(query.q))
     if query.code is not None:
         statement = statement.where(row.code == query.code)
     if query.model_version_id is not None:
@@ -336,11 +390,21 @@ async def list_deployments(
             versions.c.pipeline_id.in_(select(ModelingInstance.id)),
         )
         statement = statement.where(effective.in_(selected))
-    rows = await session.execute(
-        statement.order_by(row.created_at.desc(), row.id.desc())
+    return statement
+
+
+def _deployment_search(keyword: str) -> ColumnElement[bool]:
+    workflows = select(ModelingPipeline.id).where(
+        ModelingPipeline.name.icontains(keyword, autoescape=True)
+        | ModelingPipeline.code.icontains(keyword, autoescape=True)
     )
-    return [
-        (deployment, trained or rule)
-        for deployment, trained, rule in rows
-        if trained is not None or rule is not None
-    ]
+    return (
+        ModelingDeployment.name.icontains(keyword, autoescape=True)
+        | ModelingDeployment.code.icontains(keyword, autoescape=True)
+        | ModelingDeployment.description.icontains(keyword, autoescape=True)
+        | ModelingModelVersion.name.icontains(keyword, autoescape=True)
+        | ModelingRuleVersion.name.icontains(keyword, autoescape=True)
+        | func.coalesce(
+            ModelingModelVersion.pipeline_id, ModelingRuleVersion.pipeline_id
+        ).in_(workflows)
+    )

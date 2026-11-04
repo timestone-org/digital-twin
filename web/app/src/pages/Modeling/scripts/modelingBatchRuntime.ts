@@ -87,7 +87,11 @@ export class ModelingBatchRuntime<TRow extends ModelingBatchRow> {
     this.stop()
     this.selectedIds.value = []
     const previous = this.state.value
-    const outcomes = previous.outcomes.filter((row) => row.status === 'unknown')
+    const outcomes =
+      previous.isBusy ||
+      previous.outcomes.some((row) => row.status === 'unknown')
+        ? previous.outcomes.filter((row) => row.status === 'unknown')
+        : previous.outcomes
     this.state.value = {
       label: previous.label,
       isBusy: previous.isBusy,

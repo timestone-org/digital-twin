@@ -31,9 +31,11 @@ import { useBindingOps } from './scripts/useBindingOps'
 import { useVersionOps } from './scripts/useVersionOps'
 import { useVersionBatch } from './scripts/useVersionBatch'
 import { useBindingBatch } from './scripts/useBindingBatch'
+import ModelSearch from './components/ModelSearch.vue'
+import { reloadModelingPage } from '../scripts/reloadModelingPage'
 
 // 初始每页条数
-const PAGE_SIZE = 200
+const PAGE_SIZE = 20
 
 const route = useRoute()
 const workflowId = computed(() => {
@@ -49,23 +51,25 @@ const detail = ref<ModelingVersion | null>(null)
 const renaming = ref<ModelingVersion | null>(null)
 const versionRead = useRacedFetch()
 const toast = useToast()
+const versionQuery = ref('')
+const bindingQuery = ref('')
 
 const versions = useAsyncList<ModelingVersionSummary>(
   (query, signal) =>
     modeling.listModelingVersions(
-      { ...query, pipelineId: workflowId.value },
+      { ...query, q: versionQuery.value, pipelineId: workflowId.value },
       signal,
     ),
   PAGE_SIZE,
 )
 const bindings = useAsyncList<ModelingBinding>(
-  (query) => modeling.listModelingBindings(query),
+  (query, signal) =>
+    modeling.listModelingBindings({ ...query, q: bindingQuery.value }, signal),
   PAGE_SIZE,
 )
 
 function refresh(): void {
-  void versions.reload()
-  void bindings.reload()
+  void refreshBatch()
 }
 
 const ops = useBindingOps(refresh)
@@ -74,14 +78,14 @@ const versionOps = useVersionOps(refresh)
 const versionBulk = useVersionBatch(
   () => versions.items.value,
   () =>
-    `${workflowId.value ?? ''}:${versions.pager.value.page}:${versions.pager.value.size}`,
+    `${workflowId.value ?? ''}:${versionQuery.value}:${versions.pager.value.page}:${versions.pager.value.size}`,
   refreshBatch,
   (): boolean => isWriting.value || versions.loading.value,
 )
 const bindingBulk = useBindingBatch(
   () => bindings.items.value,
   () =>
-    `${workflowId.value ?? ''}:${bindings.pager.value.page}:${bindings.pager.value.size}`,
+    `${workflowId.value ?? ''}:${bindingQuery.value}:${bindings.pager.value.page}:${bindings.pager.value.size}`,
   refreshBatch,
   (): boolean => isWriting.value || bindings.loading.value,
 )
@@ -96,7 +100,18 @@ const isWriting = computed(
     bindingBulk.batch.isBlocked.value,
 )
 async function refreshBatch(): Promise<void> {
-  await Promise.all([versions.reload(), bindings.reload()])
+  await Promise.all([
+    reloadModelingPage(versions),
+    reloadModelingPage(bindings),
+  ])
+}
+async function searchVersions(query: string): Promise<void> {
+  versionQuery.value = query.trim()
+  await versions.reloadFromFirstPage()
+}
+async function searchBindings(query: string): Promise<void> {
+  bindingQuery.value = query.trim()
+  await bindings.reloadFromFirstPage()
 }
 watch(workflowId, () => {
   versionRead.cancel()
@@ -241,6 +256,13 @@ onBeforeUnmount(versionRead.cancel)
         >
           <template #toolbar>
             <h2 class="dt-ml-models__title">模型版本</h2>
+            <ModelSearch
+              label="搜索模型版本"
+              :disabled="
+                versionBulk.batch.isBusy.value || bindingBulk.batch.isBusy.value
+              "
+              @search="void searchVersions($event)"
+            />
           </template>
         </VersionTable>
       </section>
@@ -312,6 +334,13 @@ onBeforeUnmount(versionRead.cancel)
         >
           <template #toolbar>
             <h2 class="dt-ml-models__title">公式绑定</h2>
+            <ModelSearch
+              label="搜索公式绑定"
+              :disabled="
+                versionBulk.batch.isBusy.value || bindingBulk.batch.isBusy.value
+              "
+              @search="void searchBindings($event)"
+            />
           </template>
         </BindingTable>
       </section>

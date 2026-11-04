@@ -275,22 +275,19 @@ async def test_instance_list_allows_omitted_search_with_page_controls(
     assert [item["id"] for item in listed["items"]] == [instance["id"]]
 
 
-async def test_instance_list_rejects_explicit_empty_search(
+@pytest.mark.parametrize("keyword", ["", "   "])
+async def test_instance_list_treats_empty_search_as_unfiltered(
     app_client: httpx.AsyncClient,
+    keyword: str,
 ) -> None:
+    instance = await make_instance(app_client)
     response = await app_client.get(
-        INSTANCES, params={"page": 1, "size": 20, "q": ""}
+        INSTANCES, params={"page": 1, "size": 20, "q": keyword}
     )
-    assert response.status_code == 400
-    body = _OBJECT.validate_python(response.json())
-    assert body["code"] == 40001
-    details = body["details"]
-    assert isinstance(details, list)
-    assert len(details) == 1
-    detail = details[0]
-    assert isinstance(detail, dict)
-    assert detail["field"] == "q"
-    assert detail["code"] == "string_too_short"
+    assert response.status_code == 200
+    listed = data_of(response)
+    assert (listed["page"], listed["size"], listed["total"]) == (1, 20, 1)
+    assert [item["id"] for item in listed["items"]] == [instance["id"]]
 
 
 @pytest.mark.parametrize("path", [TEMPLATES, INSTANCES])

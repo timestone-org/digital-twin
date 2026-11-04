@@ -78,6 +78,8 @@ class RunSummaryOut(OutputModel):
 
     id: uuid.UUID
     pipeline_id: uuid.UUID
+    pipeline_name: str | None = None
+    pipeline_code: str | None = None
     status: RunStatus
     trigger: RunTrigger
     started_at: Utc | None

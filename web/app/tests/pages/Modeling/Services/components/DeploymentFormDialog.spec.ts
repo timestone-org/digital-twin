@@ -1,20 +1,53 @@
 /** @fileoverview 部署编辑表单按当前记录回填，并将回填值作为干净基准。 */
 import { DtInput, DtModal, DtNumberInput, DtSelect } from '@dt/ui'
-import { mount } from '@vue/test-utils'
+import { DOMWrapper, flushPromises, mount } from '@vue/test-utils'
 import type { VueWrapper } from '@vue/test-utils'
-import { afterEach, expect, it } from 'vitest'
+import { afterEach, beforeEach, expect, it, vi } from 'vitest'
+import * as modeling from '@/api/modeling'
 import DeploymentFormDialog from '@/pages/Modeling/Services/components/DeploymentFormDialog.vue'
 import { deployment } from '@/testing/modelingTemplateFixtures'
 
 const wrappers: VueWrapper[] = []
+beforeEach(() => {
+  vi.spyOn(modeling, 'getModelingVersion').mockImplementation((id) =>
+    Promise.resolve({
+      id,
+      pipeline_id: 'p1',
+      run_id: 'r1',
+      version: 1,
+      name: '当前模型',
+      algo: 'linear_regression',
+      task: 'regression',
+      is_servable: true,
+      serving_channel: 'json',
+      unservable_reason: null,
+      feature_keys: ['x'],
+      target_key: 'y',
+      created_by_name: null,
+      created_at: '2026-11-04T00:00:00Z',
+      signature: {},
+      metrics: {},
+      fingerprint: {},
+      description: null,
+    }),
+  )
+  vi.spyOn(modeling, 'listModelingVersions').mockResolvedValue({
+    items: [],
+    page: 1,
+    size: 20,
+    total: 0,
+  })
+})
 afterEach(() => {
   for (const wrapper of wrappers.splice(0)) wrapper.unmount()
+  vi.restoreAllMocks()
 })
 
 function open() {
   const wrapper = mount(DeploymentFormDialog, {
-    props: { deployment, isBusy: false, versions: [] },
-    global: { stubs: { Teleport: true } },
+    props: { deployment, isBusy: false },
+    attachTo: document.body,
+    global: { stubs: { Teleport: false } },
   })
   wrappers.push(wrapper)
   return wrapper
@@ -40,6 +73,21 @@ it('首次打开时回填部署配置且表单尚未修改', () => {
       .map((field) => field.props('modelValue')),
   ).toEqual([deployment.max_rows_per_call, deployment.rate_limit_per_minute])
   expect(wrapper.findComponent(DtModal).props('dirty')).toBe(false)
+})
+
+it('读取固定版本后允许保存当前部署配置', async () => {
+  const wrapper = open()
+  await flushPromises()
+  expect(
+    vi.mocked(modeling.getModelingVersion).mock.calls.map((args) => args[0]),
+  ).toEqual([deployment.model_version_id])
+  const save = new DOMWrapper(document.body)
+    .findAll('button')
+    .find((button) => button.text() === '保存')
+  if (!save) throw new Error('没有保存按钮')
+  expect(save.attributes('disabled')).toBeUndefined()
+  await save.trigger('click')
+  expect(wrapper.emitted('submit')).toHaveLength(1)
 })
 
 it('切换部署后回填新配置并重建干净基准', async () => {

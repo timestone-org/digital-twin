@@ -3764,6 +3764,51 @@
         "title": "ApiResponse[Page[AcUnitOut]]",
         "type": "object"
       },
+      "ApiResponse_Page_BuiltinModelingTemplateOut__": {
+        "properties": {
+          "code": {
+            "default": 0,
+            "title": "Code",
+            "type": "integer"
+          },
+          "data": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/Page_BuiltinModelingTemplateOut_"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "details": {
+            "anyOf": [
+              {
+                "items": {
+                  "$ref": "#/components/schemas/FieldErrorOut"
+                },
+                "type": "array"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Details"
+          },
+          "message": {
+            "default": "ok",
+            "title": "Message",
+            "type": "string"
+          },
+          "trace_id": {
+            "default": "",
+            "title": "Trace Id",
+            "type": "string"
+          }
+        },
+        "title": "ApiResponse[Page[BuiltinModelingTemplateOut]]",
+        "type": "object"
+      },
       "ApiResponse_Page_DashboardSummaryOut__": {
         "properties": {
           "code": {
@@ -6206,6 +6251,110 @@
         "title": "ApiResponse[Union[Page[RunSummaryOut], CursorPage[RunSummaryOut]]]",
         "type": "object"
       },
+      "ApiResponse_Union_list_ModelBindingOut___Page_ModelBindingOut___": {
+        "properties": {
+          "code": {
+            "default": 0,
+            "title": "Code",
+            "type": "integer"
+          },
+          "data": {
+            "anyOf": [
+              {
+                "items": {
+                  "$ref": "#/components/schemas/ModelBindingOut"
+                },
+                "type": "array"
+              },
+              {
+                "$ref": "#/components/schemas/Page_ModelBindingOut_"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Data"
+          },
+          "details": {
+            "anyOf": [
+              {
+                "items": {
+                  "$ref": "#/components/schemas/FieldErrorOut"
+                },
+                "type": "array"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Details"
+          },
+          "message": {
+            "default": "ok",
+            "title": "Message",
+            "type": "string"
+          },
+          "trace_id": {
+            "default": "",
+            "title": "Trace Id",
+            "type": "string"
+          }
+        },
+        "title": "ApiResponse[Union[list[ModelBindingOut], Page[ModelBindingOut]]]",
+        "type": "object"
+      },
+      "ApiResponse_Union_list_ModelDeploymentOut___Page_ModelDeploymentOut___": {
+        "properties": {
+          "code": {
+            "default": 0,
+            "title": "Code",
+            "type": "integer"
+          },
+          "data": {
+            "anyOf": [
+              {
+                "items": {
+                  "$ref": "#/components/schemas/ModelDeploymentOut"
+                },
+                "type": "array"
+              },
+              {
+                "$ref": "#/components/schemas/Page_ModelDeploymentOut_"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Data"
+          },
+          "details": {
+            "anyOf": [
+              {
+                "items": {
+                  "$ref": "#/components/schemas/FieldErrorOut"
+                },
+                "type": "array"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Details"
+          },
+          "message": {
+            "default": "ok",
+            "title": "Message",
+            "type": "string"
+          },
+          "trace_id": {
+            "default": "",
+            "title": "Trace Id",
+            "type": "string"
+          }
+        },
+        "title": "ApiResponse[Union[list[ModelDeploymentOut], Page[ModelDeploymentOut]]]",
+        "type": "object"
+      },
       "ApiResponse_UploadTicketOut_": {
         "properties": {
           "code": {
@@ -6921,55 +7070,6 @@
         "title": "ApiResponse[list[ModelApiKeyOut]]",
         "type": "object"
       },
-      "ApiResponse_list_ModelBindingOut__": {
-        "properties": {
-          "code": {
-            "default": 0,
-            "title": "Code",
-            "type": "integer"
-          },
-          "data": {
-            "anyOf": [
-              {
-                "items": {
-                  "$ref": "#/components/schemas/ModelBindingOut"
-                },
-                "type": "array"
-              },
-              {
-                "type": "null"
-              }
-            ],
-            "title": "Data"
-          },
-          "details": {
-            "anyOf": [
-              {
-                "items": {
-                  "$ref": "#/components/schemas/FieldErrorOut"
-                },
-                "type": "array"
-              },
-              {
-                "type": "null"
-              }
-            ],
-            "title": "Details"
-          },
-          "message": {
-            "default": "ok",
-            "title": "Message",
-            "type": "string"
-          },
-          "trace_id": {
-            "default": "",
-            "title": "Trace Id",
-            "type": "string"
-          }
-        },
-        "title": "ApiResponse[list[ModelBindingOut]]",
-        "type": "object"
-      },
       "ApiResponse_list_ModelCallStatOut__": {
         "properties": {
           "code": {
@@ -7017,55 +7117,6 @@
           }
         },
         "title": "ApiResponse[list[ModelCallStatOut]]",
-        "type": "object"
-      },
-      "ApiResponse_list_ModelDeploymentOut__": {
-        "properties": {
-          "code": {
-            "default": 0,
-            "title": "Code",
-            "type": "integer"
-          },
-          "data": {
-            "anyOf": [
-              {
-                "items": {
-                  "$ref": "#/components/schemas/ModelDeploymentOut"
-                },
-                "type": "array"
-              },
-              {
-                "type": "null"
-              }
-            ],
-            "title": "Data"
-          },
-          "details": {
-            "anyOf": [
-              {
-                "items": {
-                  "$ref": "#/components/schemas/FieldErrorOut"
-                },
-                "type": "array"
-              },
-              {
-                "type": "null"
-              }
-            ],
-            "title": "Details"
-          },
-          "message": {
-            "default": "ok",
-            "title": "Message",
-            "type": "string"
-          },
-          "trace_id": {
-            "default": "",
-            "title": "Trace Id",
-            "type": "string"
-          }
-        },
-        "title": "ApiResponse[list[ModelDeploymentOut]]",
         "type": "object"
       },
       "ApiResponse_list_NodeOut__": {
@@ -8457,6 +8508,43 @@
         ],
         "title": "BrowseOut",
         "type": "object"
+      },
+      "BuiltinModelingTemplateOut": {
+        "description": "一个内置模板的身份与用途说明。",
+        "properties": {
+          "category": {
+            "$ref": "#/components/schemas/BuiltinTemplateCategory"
+          },
+          "hint": {
+            "title": "Hint",
+            "type": "string"
+          },
+          "key": {
+            "title": "Key",
+            "type": "string"
+          },
+          "label": {
+            "title": "Label",
+            "type": "string"
+          }
+        },
+        "required": [
+          "key",
+          "label",
+          "hint",
+          "category"
+        ],
+        "title": "BuiltinModelingTemplateOut",
+        "type": "object"
+      },
+      "BuiltinTemplateCategory": {
+        "enum": [
+          "prediction",
+          "detection",
+          "analysis",
+          "rule"
+        ],
+        "type": "string"
       },
       "CatalogChoiceOut": {
         "description": "目录里的一个可选项：分类、运算符、时间窗写法共用这一个形状。",
@@ -14261,6 +14349,28 @@
             "title": "Is Orphaned",
             "type": "boolean"
           },
+          "model_name": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Model Name"
+          },
+          "model_version": {
+            "anyOf": [
+              {
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Model Version"
+          },
           "model_version_id": {
             "format": "uuid",
             "title": "Model Version Id",
@@ -14335,6 +14445,28 @@
           "is_orphaned": {
             "title": "Is Orphaned",
             "type": "boolean"
+          },
+          "model_name": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Model Name"
+          },
+          "model_version": {
+            "anyOf": [
+              {
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Model Version"
           },
           "model_version_id": {
             "format": "uuid",
@@ -18054,6 +18186,37 @@
         "title": "Page[AcUnitOut]",
         "type": "object"
       },
+      "Page_BuiltinModelingTemplateOut_": {
+        "properties": {
+          "items": {
+            "items": {
+              "$ref": "#/components/schemas/BuiltinModelingTemplateOut"
+            },
+            "title": "Items",
+            "type": "array"
+          },
+          "page": {
+            "title": "Page",
+            "type": "integer"
+          },
+          "size": {
+            "title": "Size",
+            "type": "integer"
+          },
+          "total": {
+            "title": "Total",
+            "type": "integer"
+          }
+        },
+        "required": [
+          "items",
+          "page",
+          "size",
+          "total"
+        ],
+        "title": "Page[BuiltinModelingTemplateOut]",
+        "type": "object"
+      },
       "Page_DashboardSummaryOut_": {
         "properties": {
           "items": {
@@ -18114,6 +18277,68 @@
           "total"
         ],
         "title": "Page[LlmProviderOut]",
+        "type": "object"
+      },
+      "Page_ModelBindingOut_": {
+        "properties": {
+          "items": {
+            "items": {
+              "$ref": "#/components/schemas/ModelBindingOut"
+            },
+            "title": "Items",
+            "type": "array"
+          },
+          "page": {
+            "title": "Page",
+            "type": "integer"
+          },
+          "size": {
+            "title": "Size",
+            "type": "integer"
+          },
+          "total": {
+            "title": "Total",
+            "type": "integer"
+          }
+        },
+        "required": [
+          "items",
+          "page",
+          "size",
+          "total"
+        ],
+        "title": "Page[ModelBindingOut]",
+        "type": "object"
+      },
+      "Page_ModelDeploymentOut_": {
+        "properties": {
+          "items": {
+            "items": {
+              "$ref": "#/components/schemas/ModelDeploymentOut"
+            },
+            "title": "Items",
+            "type": "array"
+          },
+          "page": {
+            "title": "Page",
+            "type": "integer"
+          },
+          "size": {
+            "title": "Size",
+            "type": "integer"
+          },
+          "total": {
+            "title": "Total",
+            "type": "integer"
+          }
+        },
+        "required": [
+          "items",
+          "page",
+          "size",
+          "total"
+        ],
+        "title": "Page[ModelDeploymentOut]",
         "type": "object"
       },
       "Page_ModelPredictionOut_": {
@@ -22687,10 +22912,32 @@
             "title": "Nodes",
             "type": "array"
           },
+          "pipeline_code": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Pipeline Code"
+          },
           "pipeline_id": {
             "format": "uuid",
             "title": "Pipeline Id",
             "type": "string"
+          },
+          "pipeline_name": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Pipeline Name"
           },
           "publication_error": {
             "anyOf": [
@@ -22902,10 +23149,32 @@
             "title": "Is Source Truncated",
             "type": "boolean"
           },
+          "pipeline_code": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Pipeline Code"
+          },
           "pipeline_id": {
             "format": "uuid",
             "title": "Pipeline Id",
             "type": "string"
+          },
+          "pipeline_name": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Pipeline Name"
           },
           "publication_error": {
             "anyOf": [
@@ -34762,16 +35031,80 @@
       "get": {
         "description": "全部绑定，逐条现算孤儿标志。\n\nArgs: session, _viewer。",
         "operationId": "list_bindings_api_v1_platform_modeling_bindings_get",
+        "parameters": [
+          {
+            "in": "query",
+            "name": "page",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "minimum": 1,
+                  "type": "integer"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Page"
+            }
+          },
+          {
+            "in": "query",
+            "name": "size",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "maximum": 200,
+                  "minimum": 1,
+                  "type": "integer"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Size"
+            }
+          },
+          {
+            "in": "query",
+            "name": "q",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "maxLength": 128,
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Q"
+            }
+          }
+        ],
         "responses": {
           "200": {
             "content": {
               "application/json": {
                 "schema": {
-                  "$ref": "#/components/schemas/ApiResponse_list_ModelBindingOut__"
+                  "$ref": "#/components/schemas/ApiResponse_Union_list_ModelBindingOut___Page_ModelBindingOut___"
                 }
               }
             },
             "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
           }
         },
         "summary": "绑定列表",
@@ -34959,6 +35292,96 @@
         ]
       }
     },
+    "/api/v1/platform/modeling-builtin-templates": {
+      "get": {
+        "operationId": "list_builtin_templates_api_v1_platform_modeling_builtin_templates_get",
+        "parameters": [
+          {
+            "in": "query",
+            "name": "q",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "maxLength": 128,
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Q"
+            }
+          },
+          {
+            "in": "query",
+            "name": "category",
+            "required": false,
+            "schema": {
+              "default": "all",
+              "enum": [
+                "all",
+                "prediction",
+                "detection",
+                "analysis",
+                "rule"
+              ],
+              "title": "Category",
+              "type": "string"
+            }
+          },
+          {
+            "in": "query",
+            "name": "page",
+            "required": false,
+            "schema": {
+              "default": 1,
+              "minimum": 1,
+              "title": "Page",
+              "type": "integer"
+            }
+          },
+          {
+            "in": "query",
+            "name": "size",
+            "required": false,
+            "schema": {
+              "default": 20,
+              "maximum": 200,
+              "minimum": 1,
+              "title": "Size",
+              "type": "integer"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiResponse_Page_BuiltinModelingTemplateOut__"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "内置模板目录",
+        "tags": [
+          "modeling-template"
+        ]
+      }
+    },
     "/api/v1/platform/modeling-commands": {
       "get": {
         "operationId": "find_command_api_v1_platform_modeling_commands_get",
@@ -35100,6 +35523,58 @@
         "parameters": [
           {
             "in": "query",
+            "name": "page",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "minimum": 1,
+                  "type": "integer"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Page"
+            }
+          },
+          {
+            "in": "query",
+            "name": "size",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "maximum": 200,
+                  "minimum": 1,
+                  "type": "integer"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Size"
+            }
+          },
+          {
+            "in": "query",
+            "name": "q",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "maxLength": 128,
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Q"
+            }
+          },
+          {
+            "in": "query",
             "name": "code",
             "required": false,
             "schema": {
@@ -35173,7 +35648,7 @@
             "content": {
               "application/json": {
                 "schema": {
-                  "$ref": "#/components/schemas/ApiResponse_list_ModelDeploymentOut__"
+                  "$ref": "#/components/schemas/ApiResponse_Union_list_ModelDeploymentOut___Page_ModelDeploymentOut___"
                 }
               }
             },
@@ -35737,7 +36212,6 @@
               "anyOf": [
                 {
                   "maxLength": 128,
-                  "minLength": 1,
                   "type": "string"
                 },
                 {
@@ -35992,7 +36466,6 @@
               "anyOf": [
                 {
                   "maxLength": 128,
-                  "minLength": 1,
                   "type": "string"
                 },
                 {
@@ -36701,7 +37174,6 @@
               "anyOf": [
                 {
                   "maxLength": 128,
-                  "minLength": 1,
                   "type": "string"
                 },
                 {
@@ -37170,7 +37642,6 @@
               "anyOf": [
                 {
                   "maxLength": 128,
-                  "minLength": 1,
                   "type": "string"
                 },
                 {
@@ -38206,7 +38677,6 @@
               "anyOf": [
                 {
                   "maxLength": 128,
-                  "minLength": 1,
                   "type": "string"
                 },
                 {

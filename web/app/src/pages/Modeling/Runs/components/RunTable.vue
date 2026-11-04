@@ -99,13 +99,24 @@ function duration(ms: number | null): string {
     @retry="$emit('retry')"
   >
     <template #toolbar><slot name="toolbar" /></template>
+    <template v-if="$slots['pagination']" #pagination
+      ><slot name="pagination"
+    /></template>
     <template #cell-pipeline="{ row }">
       <RouterLink
         class="dt-ml-runs__link block truncate"
         :to="`/modeling/pipelines/${row.pipeline_id}?run_id=${row.id}`"
-        :title="props.pipelineNames.get(row.pipeline_id) ?? row.pipeline_id"
+        :title="
+          row.pipeline_name ??
+          props.pipelineNames.get(row.pipeline_id) ??
+          row.pipeline_id
+        "
       >
-        {{ props.pipelineNames.get(row.pipeline_id) ?? row.pipeline_id }}
+        {{
+          row.pipeline_name ??
+          props.pipelineNames.get(row.pipeline_id) ??
+          row.pipeline_id
+        }}
       </RouterLink>
     </template>
     <template #cell-status="{ row }">

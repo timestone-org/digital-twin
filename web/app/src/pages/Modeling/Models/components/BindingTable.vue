@@ -60,6 +60,11 @@ function paramsOf(row: ModelingBinding): string {
   if (row.param_map.length === 0) return '—'
   return row.param_map.map((item, at) => `${at + 1}→${item.feature}`).join('、')
 }
+function versionLabel(row: ModelingBinding): string {
+  if (row.model_name != null && row.model_version != null)
+    return `${row.model_name} v${row.model_version}`
+  return props.versionLabels.get(row.model_version_id) ?? row.model_version_id
+}
 </script>
 
 <template>
@@ -92,13 +97,8 @@ function paramsOf(row: ModelingBinding): string {
       </span>
     </template>
     <template #cell-version="{ row }">
-      <span
-        class="dt-ml-bindings__clip"
-        :title="props.versionLabels.get(row.model_version_id)"
-      >
-        {{
-          props.versionLabels.get(row.model_version_id) ?? row.model_version_id
-        }}
+      <span class="dt-ml-bindings__clip" :title="versionLabel(row)">
+        {{ versionLabel(row) }}
       </span>
     </template>
     <template #cell-params="{ row }">

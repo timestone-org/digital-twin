@@ -14,6 +14,7 @@ import { describe, expect, expectTypeOf, it } from 'vitest'
 import { MODELING_TASKS } from '@dt/contracts'
 
 import type {
+  ModelingBuiltinTemplate,
   AnomalyDecision,
   OpenModelDetect,
   OpenModelCalculate,
@@ -236,9 +237,18 @@ const NODE_RUN = {
   fitted: true,
 } satisfies Keys<ModelingNodeRun>
 
+const BUILTIN_TEMPLATE = {
+  key: true,
+  label: true,
+  hint: true,
+  category: true,
+} satisfies Keys<ModelingBuiltinTemplate>
+
 const RUN_SUMMARY = {
   id: true,
   pipeline_id: true,
+  pipeline_name: true,
+  pipeline_code: true,
   instance_id: true,
   published_version_id: true,
   auto_publish: true,
@@ -306,6 +316,8 @@ const BINDING = {
   id: true,
   fx_code: true,
   model_version_id: true,
+  model_name: true,
+  model_version: true,
   param_map: true,
   is_enabled: true,
   is_orphaned: true,
@@ -457,6 +469,7 @@ const VERSION_UPDATE = {
 } satisfies Keys<ModelingVersionUpdateInput>
 
 const PAIRS: ReadonlyArray<readonly [string, Record<string, true>]> = [
+  ['BuiltinModelingTemplateOut', BUILTIN_TEMPLATE],
   ['PortOut', PORT],
   ['OperatorOut', OPERATOR],
   ['NodePosition', NODE_POSITION],
@@ -579,6 +592,17 @@ describe('分析建模线形与 openapi 一致', () => {
       'formula',
     ] satisfies ModelingBdmCatalog['kind'][]
     expect(spec.components.schemas['BdmKind']?.enum).toEqual(kinds)
+  })
+  it('内置模板用途与生成类型一致', () => {
+    const categories = {
+      prediction: true,
+      detection: true,
+      analysis: true,
+      rule: true,
+    } satisfies Record<ModelingBuiltinTemplate['category'], true>
+    expect(spec.components.schemas['BuiltinTemplateCategory']?.enum).toEqual(
+      Object.keys(categories),
+    )
   })
   it.each(PAIRS)('%s 的键与线形逐字相等', (name, wire) => {
     const schema = spec.components.schemas[name]

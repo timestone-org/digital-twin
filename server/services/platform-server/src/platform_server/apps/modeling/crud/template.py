@@ -56,8 +56,8 @@ class TemplateCrud(CrudBase[ModelingTemplate]):
         )
         if keyword:
             statement = statement.where(
-                ModelingTemplate.name.contains(keyword, autoescape=True)
-                | ModelingTemplate.code.contains(keyword, autoescape=True)
+                ModelingTemplate.name.icontains(keyword, autoescape=True)
+                | ModelingTemplate.code.icontains(keyword, autoescape=True)
             )
         return await self.list_page(
             session, statement=statement, offset=offset, limit=limit

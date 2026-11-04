@@ -614,6 +614,8 @@ export type {
 export type { PointMatchOut, PointMatchesOut } from './collectSearch'
 
 export type {
+  ModelingBuiltinTemplate,
+  ModelingBuiltinTemplateCategory,
   AnomalyDecision,
   OpenModelDetect,
   OpenModelDetectRequest,

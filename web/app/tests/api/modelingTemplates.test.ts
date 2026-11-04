@@ -6,6 +6,29 @@ import { requestData } from '@/api/client'
 vi.mock('@/api/client', () => ({ requestData: vi.fn().mockResolvedValue({}) }))
 beforeEach(() => vi.clearAllMocks())
 
+it('内置目录在服务端执行分类、关键词和分页，空白检索不发送', async () => {
+  const signal = new AbortController().signal
+  await api.listBuiltinTemplates(
+    { page: 3, size: 20, q: '  回归_%  ', category: 'prediction' },
+    signal,
+  )
+  expect(requestData).toHaveBeenLastCalledWith('/modeling-builtin-templates', {
+    baseUrl: '/api/v1/platform',
+    signal,
+    query: { page: 3, size: 20, q: '回归_%', category: 'prediction' },
+  })
+  await api.listBuiltinTemplates({
+    page: 1,
+    size: 20,
+    q: '  ',
+    category: 'all',
+  })
+  expect(requestData).toHaveBeenLastCalledWith('/modeling-builtin-templates', {
+    baseUrl: '/api/v1/platform',
+    query: { page: 1, size: 20, category: 'all' },
+  })
+})
+
 it('读模板、模型和完整配置时使用平台前缀与有界分页', async () => {
   const controller = new AbortController()
   await api.listTemplates({ page: 2, size: 20, q: '能耗' }, controller.signal)

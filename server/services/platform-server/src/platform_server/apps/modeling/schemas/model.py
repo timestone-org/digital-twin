@@ -118,6 +118,8 @@ class ModelBindingOut(OutputModel):
     fx_code: str
     model_version_id: uuid.UUID
     param_map: list[ParamMapOut]
+    model_name: str | None = None
+    model_version: int | None = None
     is_enabled: bool
     is_orphaned: bool
     created_by_name: str | None

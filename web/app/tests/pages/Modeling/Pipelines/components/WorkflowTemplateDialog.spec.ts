@@ -2,11 +2,12 @@
 import type { ModelingTemplate } from '@dt/contracts'
 import { DtInput, DtSegmented } from '@dt/ui'
 import { flushPromises, mount } from '@vue/test-utils'
-import { afterEach, expect, it, vi } from 'vitest'
+import { afterEach, beforeEach, expect, it, vi } from 'vitest'
 import * as api from '@/api/modelingTemplates'
 import PipelineFormDialog from '@/pages/Modeling/Pipelines/components/PipelineFormDialog.vue'
 import WorkflowTemplateDialog from '@/pages/Modeling/Pipelines/components/WorkflowTemplateDialog.vue'
 import TemplatePicker from '@/pages/Modeling/Pipelines/components/TemplatePicker.vue'
+import { builtinTemplatePage } from '@/testing/modelingBuiltinTemplateFixtures'
 
 const named: ModelingTemplate = {
   id: 'template-1',
@@ -24,6 +25,9 @@ const named: ModelingTemplate = {
 }
 
 afterEach(() => vi.restoreAllMocks())
+beforeEach(() => {
+  vi.spyOn(api, 'listBuiltinTemplates').mockResolvedValue(builtinTemplatePage())
+})
 
 it('新建表单只显示选择模板按钮，命名模板选择后随创建提交', async () => {
   const read = vi
@@ -42,6 +46,7 @@ it('新建表单只显示选择模板按钮，命名模板选择后随创建提�
     .find((button) => button.text() === '选择模板')
     ?.trigger('click')
   const chooser = wrapper.getComponent(WorkflowTemplateDialog)
+  await flushPromises()
   chooser.getComponent(DtSegmented).vm.$emit('update:modelValue', 'saved')
   await flushPromises()
   await chooser
@@ -80,6 +85,7 @@ it('选择模板保留用户输入的工作流名称，取消选择保留原起�
     .find((button) => button.text() === '选择模板')
     ?.trigger('click')
   const chooser = wrapper.getComponent(WorkflowTemplateDialog)
+  await flushPromises()
   chooser
     .getComponent(TemplatePicker)
     .vm.$emit('update:modelValue', 'device_anomaly')

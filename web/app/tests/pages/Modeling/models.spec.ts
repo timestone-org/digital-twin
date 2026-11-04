@@ -291,28 +291,34 @@ describe('模型库', () => {
 
     if (target === 'listModelingVersions') {
       expect(modeling[target]).toHaveBeenCalledWith(
-        { page: 2, size: 200, pipelineId: undefined },
+        { page: 2, size: 20, q: '', pipelineId: undefined },
         expect.any(AbortSignal),
       )
     } else {
-      expect(modeling[target]).toHaveBeenCalledWith({ page: 2, size: 200 })
+      expect(modeling[target]).toHaveBeenCalledWith(
+        { page: 2, size: 20, q: '' },
+        expect.any(AbortSignal),
+      )
     }
     expect(modeling[other]).not.toHaveBeenCalled()
 
     await block?.get('button[role="combobox"]').trigger('click')
     await wrapper
       .findAll('[role="option"]')
-      .find((item) => item.text() === '20 条/页')
+      .find((item) => item.text() === '50 条/页')
       ?.trigger('click')
     await flushPromises()
 
     if (target === 'listModelingVersions') {
       expect(modeling[target]).toHaveBeenLastCalledWith(
-        { page: 1, size: 20, pipelineId: undefined },
+        { page: 1, size: 50, q: '', pipelineId: undefined },
         expect.any(AbortSignal),
       )
     } else {
-      expect(modeling[target]).toHaveBeenLastCalledWith({ page: 1, size: 20 })
+      expect(modeling[target]).toHaveBeenLastCalledWith(
+        { page: 1, size: 50, q: '' },
+        expect.any(AbortSignal),
+      )
     }
     expect(modeling[other]).not.toHaveBeenCalled()
   })

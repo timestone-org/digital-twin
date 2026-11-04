@@ -1,5 +1,5 @@
 /** @fileoverview 模板选择、创建保护和流程图辅助操作的用户契约。 */
-import { DtButton, DtInput, DtModal, DtSegmented } from '@dt/ui'
+import { DtInput, DtModal, DtSegmented } from '@dt/ui'
 import { flushPromises, mount } from '@vue/test-utils'
 import { createPinia, setActivePinia } from 'pinia'
 import { afterEach, beforeEach, expect, it, vi } from 'vitest'
@@ -14,10 +14,17 @@ import AppNavGroupTree from '@/components/layout/AppNavGroupTree.vue'
 import { NAV_ITEMS } from '@/components/layout/navItems'
 import { usePipelineOps } from '@/pages/Modeling/Pipelines/scripts/usePipelineOps'
 import * as modeling from '@/api/modeling'
+import * as templatesApi from '@/api/modelingTemplates'
+import { builtinTemplatePage } from '@/testing/modelingBuiltinTemplateFixtures'
 import { defineComponent } from 'vue'
 import { PIPELINE_TEMPLATES } from '@/pages/Modeling/Pipelines/scripts/templates'
 
-beforeEach(() => setActivePinia(createPinia()))
+beforeEach(() => {
+  setActivePinia(createPinia())
+  vi.spyOn(templatesApi, 'listBuiltinTemplates').mockResolvedValue(
+    builtinTemplatePage(),
+  )
+})
 afterEach(() => vi.restoreAllMocks())
 
 it('工作栏提供配置与历史入口，并准确展示只读和草稿状态', async () => {
@@ -118,13 +125,20 @@ it.each(['regression', 'tree', 'classification'])(
 )
 
 it('模板按用途筛选，选中模板展示配置说明，搜索无结果时可恢复', async () => {
+  vi.mocked(templatesApi.listBuiltinTemplates).mockImplementation((query) =>
+    Promise.resolve(
+      query.q
+        ? { items: [], page: query.page, size: query.size, total: 0 }
+        : builtinTemplatePage(['device_anomaly', 'anomaly_model'], 'detection'),
+    ),
+  )
   const wrapper = mount(TemplatePicker, {
     props: { modelValue: 'regression', disabled: false },
   })
   const filter = wrapper.getComponent(DtSegmented)
   filter.vm.$emit('update:modelValue', 'detection')
   await flushPromises()
-  const options = wrapper.findAllComponents(DtButton)
+  const options = wrapper.findAll('.template-picker__option')
   expect(options).toHaveLength(2)
   expect(options.some((option) => option.text().includes('设备异常检测'))).toBe(
     true,
@@ -138,9 +152,13 @@ it('模板按用途筛选，选中模板展示配置说明，搜索无结果时�
     '无需故障标签',
   )
   await wrapper.get('input').setValue('不存在的模板')
+  await wrapper.get('form').trigger('submit')
+  await flushPromises()
   expect(wrapper.text()).toContain('没有匹配的设计模板')
   await wrapper.get('input').setValue('')
-  expect(wrapper.findAllComponents(DtButton)).toHaveLength(2)
+  await wrapper.get('form').trigger('submit')
+  await flushPromises()
+  expect(wrapper.findAll('.template-picker__option')).toHaveLength(2)
   wrapper.unmount()
 })
 
@@ -160,6 +178,7 @@ it('新建提交选择的模板和名称，再次打开恢复缺省模板并清�
     .findAll('button')
     .find((button) => button.text() === '选择模板')
     ?.trigger('click')
+  await flushPromises()
   wrapper
     .getComponent(TemplatePicker)
     .vm.$emit('update:modelValue', 'device_anomaly')

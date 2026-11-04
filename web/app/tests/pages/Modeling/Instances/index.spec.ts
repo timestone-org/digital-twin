@@ -15,6 +15,7 @@ vi.mock('vue-router', () => ({
 
 interface RecordedRequest {
   path: string
+  url: string
   method: string
   body: unknown
   headers: Headers
@@ -24,6 +25,7 @@ const wrappers: VueWrapper[] = []
 const requests: RecordedRequest[] = []
 let rows: ModelingInstance[] = []
 let onWrite: ((request: RecordedRequest) => Response) | undefined
+let onList: ((url: URL) => Response) | undefined
 let ask = vi.fn().mockResolvedValue(true)
 
 function instance(id: string, overrides: Partial<ModelingInstance> = {}) {
@@ -127,14 +129,18 @@ function handleRequest(
     typeof options?.body === 'string' ? JSON.parse(options.body) : null
   const request = {
     path: url.pathname,
+    url: url.href,
     method: options?.method ?? 'GET',
     body,
     headers: new Headers(options?.headers),
   }
   requests.push(request)
-  return request.method === 'GET'
-    ? listResponse(url)
-    : (onWrite?.(request) ?? response(run, 202))
+  return reply(request, url)
+}
+
+function reply(request: RecordedRequest, url: URL): Response {
+  if (request.method === 'GET') return onList?.(url) ?? listResponse(url)
+  return onWrite?.(request) ?? response(run, 202)
 }
 
 beforeEach(() => {
@@ -143,6 +149,7 @@ beforeEach(() => {
   rows = [instance('实例甲'), instance('实例乙')]
   requests.length = 0
   onWrite = undefined
+  onList = undefined
   ask = vi.fn().mockResolvedValue(true)
   vi.spyOn(ui, 'useConfirm').mockReturnValue({ ...ui.useConfirm(), ask })
   vi.stubGlobal(
@@ -310,4 +317,66 @@ it('权限撤销会清除既有选择并移除批量操作入口', async () => {
   expect(wrapper.find('input[type="checkbox"]').exists()).toBe(false)
   expect(wrapper.find('[aria-label="批量操作"]').exists()).toBe(false)
   expect(writes()).toHaveLength(0)
+})
+
+it('提交检索发送后端q并回第一页，可展示首屏外结果且不再本地过滤', async () => {
+  onList = (url) =>
+    response({
+      items: [instance(url.searchParams.has('q') ? '后端第350条' : '首屏实例')],
+      page: Number(url.searchParams.get('page')),
+      size: 20,
+      total: 350,
+    })
+  const wrapper = await open()
+  await button(wrapper, '下一页').trigger('click')
+  await flushPromises()
+  await wrapper.get('input[type="search"]').setValue('  remote-code  ')
+  expect(requests.filter((request) => request.method === 'GET')).toHaveLength(2)
+  await wrapper.get('form').trigger('submit')
+  await flushPromises()
+  const query = new URL(requests.at(-1)?.url ?? 'http://test').searchParams
+  expect(query.get('q')).toBe('remote-code')
+  expect(query.get('page')).toBe('1')
+  expect(query.get('size')).toBe('20')
+  expect(wrapper.text()).toContain('后端第350条')
+  expect(wrapper.text()).not.toContain('首屏实例')
+  expect(wrapper.get('input[type="search"]').attributes('maxlength')).toBe(
+    '128',
+  )
+})
+
+it('归档末页最后一个实例后只纠正一次页码，返回仍有内容的前页', async () => {
+  let archived = false
+  onList = (url) => {
+    const page = Number(url.searchParams.get('page'))
+    return response({
+      items:
+        page === 1
+          ? [instance('保留实例')]
+          : archived
+            ? []
+            : [instance('末页实例')],
+      page,
+      size: 20,
+      total: archived ? 20 : 21,
+    })
+  }
+  onWrite = () => {
+    archived = true
+    return response(instance('末页实例', { archived_at: stamp }))
+  }
+  const wrapper = await open()
+  await button(wrapper, '下一页').trigger('click')
+  await flushPromises()
+  await selectAll(wrapper)
+  await button(wrapper, '批量归档实例').trigger('click')
+  await flushPromises()
+  expect(writes()).toHaveLength(1)
+  expect(
+    requests
+      .filter((request) => request.method === 'GET')
+      .map((request) => new URL(request.url).searchParams.get('page')),
+  ).toEqual(['1', '2', '2', '1'])
+  expect(wrapper.text()).toContain('保留实例')
+  expect(wrapper.text()).not.toContain('末页实例')
 })

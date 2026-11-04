@@ -75,6 +75,13 @@ interface DtDataViewSelection<TRow extends { id: string }> {
 
 旧编辑器分隔器已移除；大屏与三维编辑器首次打开时将旧像素宽度偏好转换为新布局比例，保留旧存储键供旧版本读取。工作台的项目栏继续使用 `AppShell` 业务导航槽，由外壳统一提供拖动与尺寸记忆。
 
+## 列表分页
+
+`DtDataView` 保留原有 `pagination` 页码配置，也提供 `#pagination` 插槽用于放置
+`DtCursorPager` 等后端游标控件；提供该插槽时不会同时渲染内置页码器。
+插槽内的分页根组件使用 `dt-data-view__pager` 类，保持翻页区域固定在列表底部。
+游标页序仅表示当前浏览位置，不应编造总页数或总记录数。
+
 ## 折叠分区
 
 `DtDisclosure` 使用原生 `details/summary`，默认展开。

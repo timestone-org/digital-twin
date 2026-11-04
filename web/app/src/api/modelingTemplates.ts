@@ -9,6 +9,7 @@ import type {
   ModelingRun,
   ModelingTemplate,
   ModelingTemplateCreateInput,
+  ModelingBuiltinTemplate,
   Page,
 } from '@dt/contracts'
 import { PLATFORM_BASE_URL } from '@/config/app'
@@ -19,6 +20,10 @@ interface Query {
   page: number
   size: number
   q?: string
+}
+
+export interface BuiltinTemplateQuery extends Query {
+  category?: 'all' | ModelingBuiltinTemplate['category']
 }
 export type InstanceArchiveFilter = 'active' | 'archived' | 'all'
 interface InstanceQuery extends Query {
@@ -58,6 +63,15 @@ function write<T>(
 
 export const listTemplates = (query: Query, signal?: AbortSignal) =>
   read<Page<ModelingTemplate>>('/modeling-templates', signal, query)
+export const listBuiltinTemplates = (
+  query: BuiltinTemplateQuery,
+  signal?: AbortSignal,
+) =>
+  read<Page<ModelingBuiltinTemplate>>(
+    '/modeling-builtin-templates',
+    signal,
+    query,
+  )
 export const publishTemplate = (body: ModelingTemplateCreateInput) =>
   write<ModelingTemplate>('/modeling-templates', body)
 export const getTemplateConfiguration = (id: string, signal?: AbortSignal) =>

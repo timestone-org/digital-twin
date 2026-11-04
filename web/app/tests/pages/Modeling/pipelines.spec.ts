@@ -1,5 +1,5 @@
 /**
- * @fileoverview 流水线列表页：取回后渲染、按名称与编码本地过滤、取不全时明说、
+ * @fileoverview 流水线列表页：取回后渲染、后端分页检索、
  * 以及写码决定「新建」露不露面。
  */
 import { PERMISSION_CODES } from '@dt/contracts'
@@ -52,7 +52,7 @@ function page(
   items: ModelingPipelineSummary[],
   total = items.length,
 ): Page<ModelingPipelineSummary> {
-  return { items, page: 1, size: 200, total }
+  return { items, page: 1, size: 20, total }
 }
 
 function signIn(permissions: string[]): void {
@@ -261,11 +261,15 @@ describe('流水线列表', () => {
     expect(wrapper.text()).toContain('配置与训练')
     expect(wrapper.text()).toContain('发布模型')
     expect(wrapper.text()).toContain('历史实例')
-    expect(modeling.listModelingPipelines).toHaveBeenCalledWith({
-      page: 1,
-      size: 200,
-      includeInstances: false,
-    })
+    expect(modeling.listModelingPipelines).toHaveBeenCalledWith(
+      {
+        page: 1,
+        size: 20,
+        q: '',
+        includeInstances: false,
+      },
+      expect.any(AbortSignal),
+    )
     expect(wrapper.find('nav[aria-label="分析建模导航"]').exists()).toBe(false)
     expect(
       NAV_ITEMS.find((item) => item.key === 'modeling')?.children?.map(
@@ -357,31 +361,55 @@ describe('流水线列表', () => {
     expect(wrapper.text()).toContain('energy_log')
   })
 
-  it('搜索只在本地筛，编码也算命中', async () => {
-    vi.spyOn(modeling, 'listModelingPipelines').mockResolvedValue(
-      page([pipeline(), pipeline({ id: 'p2', code: 'other', name: '另一条' })]),
-    )
+  it('后端检索可返回首屏以外的工作流，并按后端结果完整呈现', async () => {
+    const list = vi
+      .spyOn(modeling, 'listModelingPipelines')
+      .mockResolvedValueOnce(page([pipeline()], 350))
+      .mockResolvedValueOnce(
+        page([
+          pipeline({
+            id: 'remote-350',
+            code: 'server-match',
+            name: '后端匹配结果',
+          }),
+        ]),
+      )
     signIn([PERMISSION_CODES.modelingView])
     const wrapper = mount(PipelinesPage)
     await flushPromises()
-
-    await wrapper.find('input[type="search"]').setValue('energy_fit')
-    await flushPromises()
-
+    await wrapper.get('input[type="search"]').setValue('  energy_fit  ')
+    expect(list).toHaveBeenCalledOnce()
     expect(wrapper.text()).toContain('能耗回归')
-    expect(wrapper.text()).not.toContain('另一条')
+    await wrapper.get('form').trigger('submit')
+    await flushPromises()
+    expect(list).toHaveBeenLastCalledWith(
+      { page: 1, size: 20, q: 'energy_fit', includeInstances: false },
+      expect.any(AbortSignal),
+    )
+    expect(wrapper.text()).toContain('后端匹配结果')
+    expect(wrapper.text()).not.toContain('能耗回归')
+    wrapper.unmount()
   })
 
-  it('取回的比库里的少时要明说，否则本地筛选是在拿半份结果冒充全部', async () => {
+  it('分页显示总数，后续资源通过翻页获取', async () => {
     vi.spyOn(modeling, 'listModelingPipelines').mockResolvedValue(
-      page([pipeline()], 7),
+      page([pipeline()], 350),
     )
     signIn([PERMISSION_CODES.modelingView])
-
     const wrapper = mount(PipelinesPage)
     await flushPromises()
-
-    expect(wrapper.text()).toContain('还有 6 条工作流没取回来')
+    expect(wrapper.text()).not.toContain('工作流没取回来')
+    const next = wrapper
+      .findAll('button')
+      .find((item) => item.text() === '下一页')
+    if (!next) throw new Error('缺少下一页')
+    await next.trigger('click')
+    await flushPromises()
+    expect(modeling.listModelingPipelines).toHaveBeenLastCalledWith(
+      { page: 2, size: 20, q: '', includeInstances: false },
+      expect.any(AbortSignal),
+    )
+    wrapper.unmount()
   })
 
   it('只有读码时不给「新建」，并留一句说明', async () => {

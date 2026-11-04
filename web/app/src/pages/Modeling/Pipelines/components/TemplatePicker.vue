@@ -1,15 +1,29 @@
 <script setup lang="ts">
 /** @fileoverview 按用途挑选设计模板并预览配置说明。 */
-import { DtButton, DtCard, DtEmpty, DtInput, DtSegmented, DtTag } from '@dt/ui'
-import { computed, ref } from 'vue'
+import {
+  DtButton,
+  DtCard,
+  DtEmpty,
+  DtInput,
+  DtNotice,
+  DtPagination,
+  DtSegmented,
+  DtSpinner,
+  DtTag,
+} from '@dt/ui'
+import { computed, onMounted, ref, watch } from 'vue'
+import { listBuiltinTemplates } from '@/api/modelingTemplates'
+import { useAsyncList } from '@/composables/useAsyncList'
 import { PIPELINE_TEMPLATES } from '../scripts/templates'
-import { ENERGY_RULE_TEMPLATES } from '../scripts/ruleTemplates'
-import { MODEL_FAMILY_TEMPLATES } from '../scripts/familyTemplates'
 
 const selectedKey = defineModel<string>({ required: true })
-defineProps<{ disabled: boolean }>()
+const props = defineProps<{ disabled: boolean }>()
+type Category = NonNullable<
+  Parameters<typeof listBuiltinTemplates>[0]['category']
+>
 const keyword = ref('')
-const category = ref('all')
+const appliedKeyword = ref('')
+const category = ref<Category>('all')
 const categories = [
   { value: 'all', label: '全部' },
   { value: 'prediction', label: '预测与分类' },
@@ -17,38 +31,37 @@ const categories = [
   { value: 'analysis', label: '探索分析' },
   { value: 'rule', label: '规则计算' },
 ]
-function categoryOf(key: string): string {
-  if (key === 'device_anomaly' || key === 'anomaly_model') return 'detection'
-  if (key === 'clustering_analysis') return 'analysis'
-  if (ENERGY_RULE_TEMPLATES.some((item) => item.key === key)) return 'rule'
-  return 'prediction'
-}
-const familyKeys = new Set(MODEL_FAMILY_TEMPLATES.map((item) => item.key))
-const orderedTemplates = [
-  ...MODEL_FAMILY_TEMPLATES,
-  ...PIPELINE_TEMPLATES.filter((item) => item.key === 'regression'),
-  ...PIPELINE_TEMPLATES.filter(
-    (item) =>
-      item.key !== 'regression' &&
-      item.key !== 'blank' &&
-      !familyKeys.has(item.key),
-  ),
-  ...PIPELINE_TEMPLATES.filter((item) => item.key === 'blank'),
-]
-const visible = computed(() =>
-  orderedTemplates.filter(
-    (item) =>
-      (category.value === 'all' ||
-        (item.key !== 'blank' && categoryOf(item.key) === category.value)) &&
-      `${item.label} ${item.hint}`
-        .toLowerCase()
-        .includes(keyword.value.trim().toLowerCase()),
+const list = useAsyncList((query, signal) =>
+  listBuiltinTemplates(
+    { ...query, q: appliedKeyword.value, category: category.value },
+    signal,
   ),
 )
+async function search(): Promise<void> {
+  if (props.disabled) return
+  appliedKeyword.value = keyword.value.trim()
+  await list.reloadFromFirstPage()
+}
+function setCategory(value: string): void {
+  if (props.disabled) return
+  if (
+    value === 'all' ||
+    value === 'prediction' ||
+    value === 'detection' ||
+    value === 'analysis' ||
+    value === 'rule'
+  )
+    category.value = value
+}
+function select(key: string): void {
+  if (!props.disabled && !list.loading.value) selectedKey.value = key
+}
 const selected = computed(() =>
   PIPELINE_TEMPLATES.find((item) => item.key === selectedKey.value),
 )
 const graph = computed(() => selected.value?.build())
+watch(category, () => void list.reloadFromFirstPage())
+onMounted(() => void list.reload())
 </script>
 
 <template>
@@ -56,44 +69,79 @@ const graph = computed(() => selected.value?.build())
     <div class="flex flex-wrap items-center justify-between gap-3">
       <h2 class="text-section font-semibold">选择设计模板</h2>
       <DtSegmented
-        v-model="category"
+        :model-value="category"
         :options="categories"
+        :disabled="disabled"
         aria-label="模板用途"
+        @update:model-value="setCategory"
       />
     </div>
     <div class="template-picker__body">
       <div class="template-picker__catalog">
-        <DtInput
-          v-model="keyword"
-          type="search"
-          size="sm"
-          placeholder="搜索用途，例如能耗、负荷"
-          aria-label="搜索设计模板"
-        />
+        <form class="flex items-center gap-2" @submit.prevent="void search()">
+          <DtInput
+            v-model="keyword"
+            type="search"
+            size="sm"
+            placeholder="搜索用途，例如能耗、负荷"
+            aria-label="搜索设计模板"
+            :maxlength="128"
+            :disabled="disabled"
+            class="min-w-0 flex-1"
+          />
+          <DtButton
+            type="submit"
+            size="sm"
+            variant="ghost"
+            :disabled="disabled"
+          >
+            搜索
+          </DtButton>
+        </form>
+        <DtNotice v-if="list.error.value" intent="danger">
+          {{ list.error.value }}
+          <DtButton size="sm" variant="ghost" @click="void list.reload()">
+            重试
+          </DtButton>
+        </DtNotice>
+        <DtSpinner v-if="list.loading.value" label="正在加载设计模板" />
         <div
           class="template-picker__options"
           role="group"
           aria-label="设计模板目录"
         >
           <DtButton
-            v-for="item in visible"
+            v-for="item in list.items.value"
             :key="item.key"
             class="template-picker__option"
             size="sm"
             :pressed="selectedKey === item.key"
-            :disabled="disabled"
+            :disabled="disabled || list.loading.value"
             :title="item.label"
-            @click="selectedKey = item.key"
+            @click="select(item.key)"
           >
             {{ item.label }}
           </DtButton>
           <DtEmpty
-            v-if="visible.length === 0"
+            v-if="
+              !list.loading.value &&
+              !list.error.value &&
+              list.items.value.length === 0
+            "
             inline
             title="没有匹配的设计模板"
             hint="试试其他关键词或切换到全部。"
           />
         </div>
+        <DtPagination
+          v-if="list.total.value > 0"
+          :page="list.pager.value.page"
+          :size="list.pager.value.size"
+          :total="list.total.value"
+          aria-label="设计模板分页"
+          @update:page="void list.goToPage($event)"
+          @update:size="void list.setSize($event)"
+        />
       </div>
       <DtCard
         v-if="selected"

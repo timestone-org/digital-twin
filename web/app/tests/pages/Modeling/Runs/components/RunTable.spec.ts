@@ -73,6 +73,25 @@ function interactiveTable() {
 }
 
 describe('运行记录长文本', () => {
+  it('两种视图优先采用后端同行工作流名称，无需完整目录映射', async () => {
+    const wrapper = open(new Map([['p1', '旧目录名称']]))
+    await wrapper.setProps({
+      rows: [
+        {
+          ...RUN,
+          pipeline_name: '后端工作流名称',
+          pipeline_code: 'server_pipeline',
+        },
+      ],
+    })
+    expect(wrapper.get('.dt-ml-runs__link').text()).toBe('后端工作流名称')
+    expect(wrapper.get('.dt-ml-runs__link').attributes('title')).toBe(
+      '后端工作流名称',
+    )
+    await wrapper.setProps({ view: 'card' })
+    expect(wrapper.get('.dt-ml-runs__link').text()).toBe('后端工作流名称')
+    wrapper.unmount()
+  })
   it('长工作流名称截断且完整名称与目标运行仍可访问', () => {
     const name = 'P'.repeat(128)
     const wrapper = open(new Map([['p1', name]]))

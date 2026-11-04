@@ -30,6 +30,7 @@ from platform_server.apps.modeling.schemas import (
     RunOut,
     RunStartIn,
 )
+from platform_server.apps.modeling.schemas.common import SearchText
 from platform_server.apps.modeling.services import (
     Actor,
     RunContext,
@@ -59,7 +60,7 @@ async def list_pipelines(
     session: SessionDep,
     page: PageDep,
     _viewer: ViewDep,
-    q: str | None = None,
+    q: SearchText = None,
     should_include_instances: Annotated[
         bool, Query(alias="include_instances")
     ] = True,

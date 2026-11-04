@@ -51,13 +51,14 @@ export function useDeploymentBatch(
   rows: () => readonly ModelDeployment[],
   onDone: () => Promise<void>,
   isDisabled: () => boolean,
+  scope: () => string = () => '',
 ) {
   const auth = useAuthStore()
   const allowed = computed(() => auth.can([PERMISSION_CODES.modelingPublish]))
   const batch = useModelingBatch(
     rows,
     (row) => row.name,
-    () => allowed.value,
+    () => `${scope()}:${allowed.value}`,
   )
   const selection = computed<DtDataViewSelection<ModelDeployment> | undefined>(
     () =>

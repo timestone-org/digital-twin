@@ -1,6 +1,6 @@
 /** @fileoverview 部署批量启停与删除保留逐项修订、确认和未知结果保护。 */
 import { PERMISSION_CODES } from '@dt/contracts'
-import type { ModelDeployment } from '@dt/contracts'
+import type { ModelDeployment, Page } from '@dt/contracts'
 import * as ui from '@dt/ui'
 import { flushPromises, mount } from '@vue/test-utils'
 import type { VueWrapper } from '@vue/test-utils'
@@ -43,6 +43,9 @@ function deployment(id: string, revision = 1, enabled = true): ModelDeployment {
     updated_at: STAMP,
   }
 }
+function page(items: ModelDeployment[]): Page<ModelDeployment> {
+  return { items, page: 1, size: 20, total: items.length }
+}
 function open() {
   const wrapper = mount(ServicesPage, { global: { stubs: { Teleport: true } } })
   wrappers.push(wrapper)
@@ -63,11 +66,9 @@ beforeEach(() => {
   const confirm = ui.useConfirm()
   ask.mockReset().mockResolvedValue(true)
   vi.spyOn(ui, 'useConfirm').mockReturnValue({ ...confirm, ask })
-  vi.spyOn(modeling, 'listModelDeployments').mockResolvedValue([
-    deployment('d1', 2),
-    deployment('d2', 5),
-  ])
-  vi.spyOn(modeling, 'listAllModelingVersions').mockResolvedValue([])
+  vi.spyOn(modeling, 'listModelDeploymentsPage').mockResolvedValue(
+    page([deployment('d1', 2), deployment('d2', 5)]),
+  )
   vi.spyOn(modeling, 'getModelDeployment').mockImplementation((id) =>
     Promise.resolve(deployment(id, 8)),
   )
@@ -113,13 +114,12 @@ it('批量停用逐项携带所选行修订号，统一确认并刷新一次', a
       message: expect.stringContaining('立即被拒绝'),
     }),
   )
-  expect(modeling.listModelDeployments).toHaveBeenCalledTimes(2)
+  expect(modeling.listModelDeploymentsPage).toHaveBeenCalledTimes(2)
 })
 it('批量启用跳过已启用项，不改变其余配置', async () => {
-  vi.mocked(modeling.listModelDeployments).mockResolvedValue([
-    deployment('d1', 2),
-    deployment('d2', 5, false),
-  ])
+  vi.mocked(modeling.listModelDeploymentsPage).mockResolvedValue(
+    page([deployment('d1', 2), deployment('d2', 5, false)]),
+  )
   const wrapper = open()
   await flushPromises()
   await wrapper.get('input[aria-label="选择本页"]').setValue(true)
@@ -221,7 +221,7 @@ it('明确引用冲突仅保留失败选择并继续下一项', async () => {
 it('缺少旧修订号时通过可取消详情读取补取，卸载后不发写请求', async () => {
   const legacy = deployment('d1')
   delete legacy.revision
-  vi.mocked(modeling.listModelDeployments).mockResolvedValue([legacy])
+  vi.mocked(modeling.listModelDeploymentsPage).mockResolvedValue(page([legacy]))
   let finish: ((row: ModelDeployment) => void) | undefined
   let signal: AbortSignal | undefined
   vi.mocked(modeling.getModelDeployment).mockImplementation((_id, given) => {
@@ -247,12 +247,12 @@ it('缺少旧修订号时通过可取消详情读取补取，卸载后不发写�
   finish?.(deployment('d1', 8))
   await flushPromises()
   expect(modeling.updateModelDeployment).not.toHaveBeenCalled()
-  expect(modeling.listModelDeployments).toHaveBeenCalledOnce()
+  expect(modeling.listModelDeploymentsPage).toHaveBeenCalledOnce()
 })
 it('旧列表补取详情后使用真实修订，拒绝确认不删除服务', async () => {
   const legacy = deployment('d1')
   delete legacy.revision
-  vi.mocked(modeling.listModelDeployments).mockResolvedValue([legacy])
+  vi.mocked(modeling.listModelDeploymentsPage).mockResolvedValue(page([legacy]))
   const wrapper = open()
   await flushPromises()
   await wrapper.get('input[aria-label="选择本页"]').setValue(true)
@@ -272,10 +272,9 @@ it('旧列表补取详情后使用真实修订，拒绝确认不删除服务', a
 it('详情仍没有修订号时明确拒绝该项，继续处理有修订号的服务', async () => {
   const legacy = deployment('d1')
   delete legacy.revision
-  vi.mocked(modeling.listModelDeployments).mockResolvedValue([
-    legacy,
-    deployment('d2', 5),
-  ])
+  vi.mocked(modeling.listModelDeploymentsPage).mockResolvedValue(
+    page([legacy, deployment('d2', 5)]),
+  )
   vi.mocked(modeling.getModelDeployment).mockResolvedValue(legacy)
   const wrapper = open()
   await flushPromises()

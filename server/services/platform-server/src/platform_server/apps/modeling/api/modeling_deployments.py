@@ -7,7 +7,7 @@ from fastapi import APIRouter, Depends, Query, Response, status
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from lib.auth import CallerContext
-from lib.web import ApiResponse, ok
+from lib.web import ApiResponse, Page, ok
 from platform_server.apps.modeling.catalog import MODELING_VIEW
 from platform_server.apps.modeling.deps import (
     WriteGate,
@@ -44,14 +44,16 @@ PublishDep = Annotated[WriteGate, Depends(get_publish_context)]
 
 @deployments.get(
     "",
-    response_model=ApiResponse[list[ModelDeploymentOut]],
+    response_model=ApiResponse[
+        list[ModelDeploymentOut] | Page[ModelDeploymentOut]
+    ],
     summary="对外服务列表",
 )
 async def list_deployments(
     session: SessionDep,
     _viewer: ViewDep,
     query: Annotated[DeploymentListQuery, Query()],
-) -> ApiResponse[list[ModelDeploymentOut]]:
+) -> ApiResponse[list[ModelDeploymentOut] | Page[ModelDeploymentOut]]:
     """全部对外服务。
 
     Args: session, _viewer。

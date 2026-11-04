@@ -169,6 +169,7 @@ function selectionLabel(row: TRow): string {
 defineSlots<{
   toolbar?: () => unknown
   summary?: () => unknown
+  pagination?: () => unknown
   /** 卡片视图里的一张卡。给了就整张卡由调用方渲染，不给走内置 DtDataCard。 */
   card?: (props: { row: TRow; index: number }) => unknown
   [key: `cell-${string}`]: (props: { row: TRow; index: number }) => unknown
@@ -344,16 +345,18 @@ const fieldColumns = computed(() =>
       </div>
     </DtPageState>
 
-    <DtPagination
-      v-if="pagination"
-      class="dt-data-view__pager"
-      :page="pagination.page"
-      :size="pagination.size"
-      :total="pagination.total"
-      :size-options="pagination.sizeOptions"
-      @update:page="emit('update:page', $event)"
-      @update:size="emit('update:size', $event)"
-    />
+    <slot name="pagination">
+      <DtPagination
+        v-if="pagination"
+        class="dt-data-view__pager"
+        :page="pagination.page"
+        :size="pagination.size"
+        :total="pagination.total"
+        :size-options="pagination.sizeOptions"
+        @update:page="emit('update:page', $event)"
+        @update:size="emit('update:size', $event)"
+      />
+    </slot>
   </div>
 </template>
 

@@ -9,6 +9,7 @@
  */
 
 import type {
+  CursorPage,
   ModelApiKey,
   ModelApiKeyMinted,
   ModelCallStat,
@@ -28,6 +29,8 @@ import type {
   ModelingPipelineSummary,
   ModelingRun,
   ModelingRunSummary,
+  ModelingRunStatus,
+  ModelingTask,
   ModelingTrigger,
   ModelingVersion,
   ModelingVersionUpdateInput,
@@ -38,6 +41,7 @@ import type {
 import { PLATFORM_BASE_URL } from '@/config/app'
 
 import {
+  TransportError,
   request,
   requestBytes,
   requestData,
@@ -57,7 +61,51 @@ function idempotent(key: string): Record<'Idempotency-Key', string> {
 export interface ModelingPageQuery {
   page?: number | undefined
   size?: number | undefined
+  q?: string | undefined
   includeInstances?: boolean | undefined
+}
+
+export interface ModelingVersionPageQuery extends ModelingPageQuery {
+  pipelineId?: string | undefined
+  isServable?: boolean | undefined
+  archived?: 'active' | 'archived' | 'all' | undefined
+  task?: ModelingTask | undefined
+}
+
+export interface ModelingRunHistoryQuery {
+  after?: string | undefined
+  limit?: number | undefined
+  q?: string | undefined
+  status?: ModelingRunStatus | undefined
+}
+
+export interface ModelingDeploymentPageQuery extends ModelingPageQuery {
+  isEnabled?: boolean | undefined
+  modelVersionId?: string | undefined
+  instanceId?: string | undefined
+  code?: string | undefined
+}
+
+function keywordQuery(q: string | undefined): { q?: string } {
+  const keyword = q?.trim()
+  return keyword ? { q: keyword } : {}
+}
+
+async function readManagementPage<TRow>(
+  path: string,
+  query: NonNullable<RequestOptions['query']>,
+  signal?: AbortSignal,
+): Promise<Page<TRow>> {
+  const result = await requestData<Page<TRow> | TRow[]>(
+    path,
+    onPlatform({
+      query,
+      ...(signal ? { signal } : {}),
+    }),
+  )
+  if (Array.isArray(result))
+    throw new TransportError(502, '服务端尚未支持分页查询，请更新后端后重试')
+  return result
 }
 
 export interface ModelingPipelineCreateInput {
@@ -142,6 +190,7 @@ export async function listModelingBdmIndicators(
 /** 一页流水线。列表项是摘要，**不带图**。 */
 export async function listModelingPipelines(
   query: ModelingPageQuery = {},
+  signal?: AbortSignal,
 ): Promise<Page<ModelingPipelineSummary>> {
   return await requestData<Page<ModelingPipelineSummary>>(
     '/modeling-pipelines',
@@ -149,10 +198,12 @@ export async function listModelingPipelines(
       query: {
         page: query.page,
         size: query.size,
+        ...keywordQuery(query.q),
         ...(query.includeInstances === undefined
           ? {}
           : { include_instances: query.includeInstances }),
       },
+      ...(signal ? { signal } : {}),
     }),
   )
 }
@@ -293,7 +344,30 @@ export async function listModelingRuns(
         ...(pipelineId === null ? {} : { pipeline_id: pipelineId }),
         page: query.page,
         size: query.size,
+        ...keywordQuery(query.q),
       },
+    }),
+  )
+}
+
+/** 训练记录按游标取一页，游标只原样传递。 */
+export async function listModelingRunHistory(
+  pipelineId: string | null,
+  query: ModelingRunHistoryQuery = {},
+  signal?: AbortSignal,
+): Promise<CursorPage<ModelingRunSummary>> {
+  return requestData(
+    '/modeling-runs',
+    onPlatform({
+      query: {
+        pagination: 'cursor',
+        limit: query.limit ?? 20,
+        ...(pipelineId ? { pipeline_id: pipelineId } : {}),
+        ...(query.after ? { after: query.after } : {}),
+        ...keywordQuery(query.q),
+        ...(query.status ? { status: query.status } : {}),
+      },
+      ...(signal ? { signal } : {}),
     }),
   )
 }
@@ -334,7 +408,7 @@ export async function cancelModelingRun(runId: string): Promise<ModelingRun> {
 
 /** 一页模型版本。给流水线 id 就只看这一条流水线产出的。 */
 export async function listModelingVersions(
-  query: ModelingPageQuery & { pipelineId?: string | undefined } = {},
+  query: ModelingVersionPageQuery = {},
   signal?: AbortSignal,
 ): Promise<Page<ModelingVersionSummary>> {
   return await requestData<Page<ModelingVersionSummary>>(
@@ -344,28 +418,16 @@ export async function listModelingVersions(
         pipeline_id: query.pipelineId,
         page: query.page,
         size: query.size,
+        ...keywordQuery(query.q),
+        ...(query.isServable === undefined
+          ? {}
+          : { is_servable: query.isServable }),
+        ...(query.archived ? { archived: query.archived } : {}),
+        ...(query.task ? { task: query.task } : {}),
       },
       ...(signal === undefined ? {} : { signal }),
     }),
   )
-}
-
-/** 翻完版本列表；运行发布状态与服务下拉都不能拿第一页冒充完整集合。 */
-export async function listAllModelingVersions(
-  signal?: AbortSignal,
-): Promise<ModelingVersionSummary[]> {
-  const size = 200
-  const items: ModelingVersionSummary[] = []
-  let page = 1
-  let total = 1
-  while (items.length < total) {
-    const next = await listModelingVersions({ page, size }, signal)
-    total = next.total
-    if (next.items.length === 0) break
-    items.push(...next.items)
-    page += 1
-  }
-  return items
 }
 
 /** 把一次成功的运行发布成一个模型版本。版本号由后端递增。 */
@@ -418,20 +480,17 @@ export async function retireModelingVersion(
 /** 全部公式绑定。`is_orphaned` 是每次列表时现算的。 */
 export async function listModelingBindings(
   query: ModelingPageQuery = {},
+  signal?: AbortSignal,
 ): Promise<Page<ModelingBinding>> {
-  const bindings = await requestData<ModelingBinding[]>(
+  return readManagementPage(
     '/modeling-bindings',
-    onPlatform(),
+    {
+      page: query.page ?? 1,
+      size: query.size ?? 20,
+      ...keywordQuery(query.q),
+    },
+    signal,
   )
-  const page = query.page ?? 1
-  const size = query.size ?? 20
-  const offset = (page - 1) * size
-  return {
-    items: bindings.slice(offset, offset + size),
-    page,
-    size,
-    total: bindings.length,
-  }
 }
 
 /** 把一个版本绑到一条公式条目上。回执带受影响的台账列。 */
@@ -497,6 +556,28 @@ export async function listModelDeployments(
   return await requestData<ModelDeployment[]>(
     '/modeling-deployments',
     onPlatform(signal === undefined ? {} : { signal }),
+  )
+}
+
+/** 管理列表显式请求后端页，不把兼容数组冒充已分页结果。 */
+export async function listModelDeploymentsPage(
+  query: ModelingDeploymentPageQuery = {},
+  signal?: AbortSignal,
+): Promise<Page<ModelDeployment>> {
+  return readManagementPage(
+    '/modeling-deployments',
+    {
+      page: query.page ?? 1,
+      size: query.size ?? 20,
+      ...keywordQuery(query.q),
+      ...(query.isEnabled === undefined ? {} : { is_enabled: query.isEnabled }),
+      ...(query.code ? { code: query.code } : {}),
+      ...(query.modelVersionId
+        ? { model_version_id: query.modelVersionId }
+        : {}),
+      ...(query.instanceId ? { instance_id: query.instanceId } : {}),
+    },
+    signal,
   )
 }
 

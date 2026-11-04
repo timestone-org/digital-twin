@@ -8,16 +8,15 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from uuid_utils.compat import uuid7
 
 from lib.objectstore import ObjectStore
-from platform_server.apps.dataset.services import formula_library, formula_usage
+from platform_server.apps.dataset.services import formula_usage
+from platform_server.apps.modeling.crud import management_queries as query_crud
+from platform_server.apps.modeling.crud import management_state as state_crud
 from platform_server.apps.modeling.crud import (
-    binding_crud,
     model_artifact_crud,
     model_version_crud,
     node_run_crud,
     pipeline_crud,
 )
-from platform_server.apps.modeling.crud import management_queries as query_crud
-from platform_server.apps.modeling.crud import management_state as state_crud
 from platform_server.apps.modeling.errors import (
     ModelVersionInUse,
     ModelVersionNotFound,
@@ -342,7 +341,7 @@ async def register_formula(
     )
     return ModelFormulaOut(
         formula=registered.formula,
-        binding=_to_binding_out(registered.binding, is_orphaned=False),
+        binding=to_binding_out(registered.binding, is_orphaned=False),
     )
 
 
@@ -410,19 +409,6 @@ async def retire_version_command(
     return CommandResourceOut(id=version_id)
 
 
-async def list_bindings(session: AsyncSession) -> list[ModelBindingOut]:
-    """全部绑定，逐条现算孤儿标志。
-
-    Args: session。
-    """
-    rows = await binding_crud.list_all(session)
-    library = await formula_library.load_library(session)
-    return [
-        _to_binding_out(row, is_orphaned=row.fx_code not in library.entries)
-        for row in rows
-    ]
-
-
 async def bind(
     session: AsyncSession, *, draft: binding_service.BindingDraft, actor: Actor
 ) -> ModelBindingOut:
@@ -433,7 +419,7 @@ async def bind(
     row = await binding_service.create_binding(
         session, draft=draft, actor=actor
     )
-    return _to_binding_out(row, is_orphaned=False)
+    return to_binding_out(row, is_orphaned=False)
 
 
 async def update_binding(
@@ -463,7 +449,7 @@ async def update_binding(
         )
     usages = await formula_usage.find_usages(session, row.fx_code)
     return ModelBindingImpactOut(
-        **_to_binding_out(row, is_orphaned=False).model_dump(),
+        **to_binding_out(row, is_orphaned=False).model_dump(),
         usages=[
             ModelBindingUsageOut(
                 table_code=item.table_code, column_key=item.column_key
@@ -566,7 +552,7 @@ def _as_number(value: Any) -> float | None:
     return float(value)
 
 
-def _to_binding_out(
+def to_binding_out(
     row: ModelingBinding, *, is_orphaned: bool
 ) -> ModelBindingOut:
     return ModelBindingOut(

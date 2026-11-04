@@ -1,16 +1,13 @@
 <script setup lang="ts">
 /** @fileoverview 模型部署的配置、调用说明与调用量。 */
-import type {
-  ModelCallStat,
-  ModelDeployment,
-  ModelingVersionSummary,
-} from '@dt/contracts'
-import { DtButton, DtNotice } from '@dt/ui'
-import { computed, onBeforeUnmount, onMounted, ref } from 'vue'
+import type { ModelCallStat, ModelDeployment } from '@dt/contracts'
+import { DtButton } from '@dt/ui'
+import { computed, onBeforeUnmount, onMounted, ref, watch } from 'vue'
 
 import * as modeling from '@/api/modeling'
 import { AppShell } from '@/components/layout'
-import { describeError } from '@/composables/useAsyncList'
+import { describeError, useAsyncList } from '@/composables/useAsyncList'
+import { BizError } from '@/api/client'
 import { useRacedFetch } from '@/composables/useRacedFetch'
 import { useViewMode } from '@/composables/useViewMode'
 
@@ -20,17 +17,28 @@ import DeploymentTable from './components/DeploymentTable.vue'
 import { useDeploymentOps } from './scripts/useDeploymentOps'
 import { useDeploymentBatch } from './scripts/useDeploymentBatch'
 import ModelingBatchBar from '../components/ModelingBatchBar.vue'
+import { reloadModelingPage } from '../scripts/reloadModelingPage'
+import ServiceFilters from './components/ServiceFilters.vue'
 
 const view = useViewMode('modeling-deployments')
 
-const rows = ref<ModelDeployment[]>([])
-const deploymentsRequest = useRacedFetch()
-const versions = ref<ModelingVersionSummary[]>([])
-const isVersionLoading = ref(true)
-const versionError = ref<string | null>(null)
-const versionRequest = useRacedFetch()
-const isLoading = ref(false)
-const error = ref<string | null>(null)
+const appliedQuery = ref('')
+const status = ref('all')
+const list = useAsyncList<ModelDeployment>((query, signal) =>
+  modeling.listModelDeploymentsPage(
+    {
+      ...query,
+      q: appliedQuery.value,
+      isEnabled:
+        status.value === 'all' ? undefined : status.value === 'enabled',
+    },
+    signal,
+  ),
+)
+const scope = computed(
+  () =>
+    `${list.pager.value.page}:${list.pager.value.size}:${appliedQuery.value}:${status.value}`,
+)
 
 const editing = ref<ModelDeployment | null>(null)
 const inspecting = ref<ModelDeployment | null>(null)
@@ -38,14 +46,16 @@ const stats = ref<ModelCallStat[]>([])
 const isStatsLoading = ref(false)
 const statsError = ref<string | null>(null)
 const statsRequest = useRacedFetch()
+const inspectionRequest = useRacedFetch()
 
 const ops = useDeploymentOps(() => {
   void reload()
 })
 const bulk = useDeploymentBatch(
-  () => rows.value,
+  () => list.items.value,
   reload,
-  () => ops.isBusy.value || isLoading.value,
+  () => ops.isBusy.value || list.loading.value || editing.value !== null,
+  () => scope.value,
 )
 const isWritingBlocked = computed(
   () =>
@@ -53,41 +63,31 @@ const isWritingBlocked = computed(
 )
 
 async function reload(): Promise<void> {
-  isLoading.value = true
-  error.value = null
-  await deploymentsRequest.run(
-    (signal) => modeling.listModelDeployments(signal),
-    {
-      ok: (found) => {
-        rows.value = found
-        if (inspecting.value === null) return
-        const selected = found.find((row) => row.id === inspecting.value?.id)
-        if (selected) void openAccess(selected)
-        else closeAccess()
-      },
-      fail: (caught) => (error.value = describeError(caught)),
-      settled: () => (isLoading.value = false),
-    },
-  )
+  await reloadModelingPage(list)
+  const current = inspecting.value
+  if (list.error.value !== null || current === null) return
+  const selected = list.items.value.find((row) => row.id === current.id)
+  if (selected) await openAccess(selected)
+  else await refreshInspection(current.id)
 }
-
-async function loadVersions(): Promise<void> {
-  isVersionLoading.value = true
-  versionError.value = null
-  await versionRequest.run(
-    (signal) => modeling.listAllModelingVersions(signal),
+async function refreshInspection(id: string): Promise<void> {
+  await inspectionRequest.run(
+    (signal) => modeling.getModelDeployment(id, signal),
     {
-      ok: (found) => (versions.value = found),
-      fail: (caught) => {
-        versions.value = []
-        versionError.value = describeError(caught)
+      ok: (row) => {
+        if (inspecting.value?.id === id) void openAccess(row)
       },
-      settled: () => (isVersionLoading.value = false),
+      fail: (caught) => {
+        if (caught instanceof BizError && caught.status === 404) closeAccess()
+        else statsError.value = `服务详情刷新失败：${describeError(caught)}`
+      },
+      settled: () => {},
     },
   )
 }
 
 async function openAccess(row: ModelDeployment): Promise<void> {
+  inspectionRequest.cancel()
   inspecting.value = row
   stats.value = []
   statsError.value = null
@@ -103,17 +103,13 @@ async function openAccess(row: ModelDeployment): Promise<void> {
 }
 
 function closeAccess(): void {
+  inspectionRequest.cancel()
   statsRequest.cancel()
   inspecting.value = null
 }
 
 function openForm(row: ModelDeployment): void {
-  if (
-    isWritingBlocked.value ||
-    isVersionLoading.value ||
-    versionError.value !== null
-  )
-    return
+  if (isWritingBlocked.value) return
   editing.value = row
 }
 
@@ -142,14 +138,23 @@ async function submitForm(payload: {
   if (done !== null) editing.value = null
 }
 
-onMounted(() => {
-  void reload()
-  void loadVersions()
+async function search(query: string): Promise<void> {
+  appliedQuery.value = query.trim()
+  await list.reloadFromFirstPage()
+}
+async function filterStatus(value: string): Promise<void> {
+  if (!['all', 'enabled', 'disabled'].includes(value)) return
+  status.value = value
+  await list.reloadFromFirstPage()
+}
+watch(scope, () => {
+  editing.value = null
+  closeAccess()
 })
+onMounted(() => void list.reload())
 
 onBeforeUnmount(() => {
-  deploymentsRequest.cancel()
-  versionRequest.cancel()
+  inspectionRequest.cancel()
   statsRequest.cancel()
 })
 </script>
@@ -166,14 +171,16 @@ onBeforeUnmount(() => {
         v-if="bulk.selection.value"
         :selected-count="bulk.batch.selectedCount.value"
         :state="bulk.batch.state.value"
-        scope-label="当前列表全部服务"
+        scope-label="当前页服务"
         @clear="bulk.batch.clear"
         @stop="bulk.batch.stop"
       >
         <DtButton
           size="sm"
           variant="soft"
-          :disabled="!bulk.batch.canRun.value || ops.isBusy.value || isLoading"
+          :disabled="
+            !bulk.batch.canRun.value || ops.isBusy.value || list.loading.value
+          "
           @click="void bulk.toggle(true)"
         >
           批量启用服务
@@ -181,7 +188,9 @@ onBeforeUnmount(() => {
         <DtButton
           size="sm"
           variant="soft"
-          :disabled="!bulk.batch.canRun.value || ops.isBusy.value || isLoading"
+          :disabled="
+            !bulk.batch.canRun.value || ops.isBusy.value || list.loading.value
+          "
           @click="void bulk.toggle(false)"
         >
           批量停用服务
@@ -190,38 +199,45 @@ onBeforeUnmount(() => {
           size="sm"
           variant="soft"
           intent="danger"
-          :disabled="!bulk.batch.canRun.value || ops.isBusy.value || isLoading"
+          :disabled="
+            !bulk.batch.canRun.value || ops.isBusy.value || list.loading.value
+          "
           @click="void bulk.remove()"
         >
           批量删除服务
         </DtButton>
       </ModelingBatchBar>
-      <DtNotice v-if="versionError" intent="warning">
-        模型版本加载失败：{{ versionError }}
-        <DtButton size="xs" variant="ghost" @click="void loadVersions()">
-          重新加载模型版本
-        </DtButton>
-      </DtNotice>
       <DeploymentTable
         v-model:view="view"
         :selection="bulk.selection.value"
         :actions-disabled="isWritingBlocked"
-        :rows="rows"
-        :is-loading="isLoading"
-        :error="error"
+        :rows="list.items.value"
+        :is-loading="list.loading.value"
+        :error="list.error.value"
+        :pagination="list.pager.value"
         @update:selected-ids="bulk.batch.selectedIds.value = $event"
         @access="(row) => void openAccess(row)"
         @edit="(row) => openForm(row)"
         @toggle="(row, isOn) => void toggleDeployment(row, isOn)"
         @remove="(row) => void removeDeployment(row)"
-      />
+        @update:page="void list.goToPage($event)"
+        @update:size="void list.setSize($event)"
+        @retry="void list.reload()"
+      >
+        <template #toolbar
+          ><ServiceFilters
+            :status="status"
+            :disabled="bulk.batch.isBusy.value || ops.isBusy.value"
+            @search="void search($event)"
+            @status="void filterStatus($event)"
+        /></template>
+      </DeploymentTable>
     </div>
 
     <DeploymentFormDialog
       v-if="editing"
       :deployment="editing"
       :is-busy="isWritingBlocked"
-      :versions="versions"
       @submit="(payload) => void submitForm(payload)"
       @close="editing = null"
     />

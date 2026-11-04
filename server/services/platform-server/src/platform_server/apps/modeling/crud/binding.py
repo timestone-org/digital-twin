@@ -5,13 +5,27 @@ models 层跨模块，结构闸拦）。孤儿由读侧每次列表时校验，�
 （docs/MODELING_DESIGN.md §4.5、§7.5）。
 """
 
-from sqlalchemy import select
+from dataclasses import dataclass
+
+from sqlalchemy import Select, func, select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from lib.db import CrudBase
-from platform_server.apps.modeling.models import ModelingBinding
+from platform_server.apps.modeling.models import (
+    ModelingBinding,
+    ModelingModelVersion,
+    ModelingPipeline,
+)
+from platform_server.apps.modeling.schemas.management import BindingListQuery
 
 DEFAULT_ORDER = (ModelingBinding.fx_code.asc(), ModelingBinding.id.asc())
+
+
+@dataclass(frozen=True)
+class BindingRecord:
+    binding: ModelingBinding
+    model_name: str
+    model_version: int
 
 
 class BindingCrud(CrudBase[ModelingBinding]):
@@ -46,15 +60,59 @@ class BindingCrud(CrudBase[ModelingBinding]):
         )
         return list(rows.scalars().all())
 
-    async def list_all(self, session: AsyncSession) -> list[ModelingBinding]:
-        """全部绑定，按公式标识排序。量级是几十条，不分页。
+    async def list_filtered(
+        self, session: AsyncSession, query: BindingListQuery
+    ) -> tuple[list[BindingRecord], int]:
+        statement = _filtered(query.q)
+        page = query.page_params
+        total = 0
+        if page is not None:
+            total = int(
+                await session.scalar(
+                    select(func.count()).select_from(statement.subquery())
+                )
+                or 0
+            )
+            statement = (
+                statement.order_by(
+                    ModelingBinding.created_at.desc(), ModelingBinding.id.desc()
+                )
+                .offset(page.offset)
+                .limit(page.size)
+            )
+        else:
+            statement = statement.order_by(*DEFAULT_ORDER)
+        rows = await session.execute(statement)
+        return [BindingRecord(*row) for row in rows], total
 
-        Args: session。
-        """
-        rows = await session.execute(
-            select(ModelingBinding).order_by(*DEFAULT_ORDER)
+
+def _filtered(keyword: str | None) -> Select[tuple[ModelingBinding, str, int]]:
+    statement = (
+        select(
+            ModelingBinding,
+            ModelingModelVersion.name,
+            ModelingModelVersion.version,
         )
-        return list(rows.scalars().all())
+        .join(
+            ModelingModelVersion,
+            ModelingBinding.model_version_id == ModelingModelVersion.id,
+        )
+        .join(
+            ModelingPipeline,
+            ModelingModelVersion.pipeline_id == ModelingPipeline.id,
+        )
+    )
+    if keyword:
+        statement = statement.where(
+            ModelingBinding.fx_code.icontains(keyword, autoescape=True)
+            | ModelingModelVersion.name.icontains(keyword, autoescape=True)
+            | ModelingModelVersion.description.icontains(
+                keyword, autoescape=True
+            )
+            | ModelingPipeline.name.icontains(keyword, autoescape=True)
+            | ModelingPipeline.code.icontains(keyword, autoescape=True)
+        )
+    return statement
 
 
 binding_crud = BindingCrud()

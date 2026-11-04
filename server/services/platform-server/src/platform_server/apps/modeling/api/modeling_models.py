@@ -34,7 +34,10 @@ from platform_server.apps.modeling.schemas import (
     ModelVersionUpdateIn,
 )
 from platform_server.apps.modeling.schemas.command import CommandResourceOut
-from platform_server.apps.modeling.schemas.management import VersionListQuery
+from platform_server.apps.modeling.schemas.management import (
+    BindingListQuery,
+    VersionListQuery,
+)
 from platform_server.apps.modeling.services import (
     Actor,
     management_queries,
@@ -200,16 +203,20 @@ async def retire_version(
 
 
 @bindings.get(
-    "", response_model=ApiResponse[list[ModelBindingOut]], summary="绑定列表"
+    "",
+    response_model=ApiResponse[list[ModelBindingOut] | Page[ModelBindingOut]],
+    summary="绑定列表",
 )
 async def list_bindings(
-    session: SessionDep, _viewer: ViewDep
-) -> ApiResponse[list[ModelBindingOut]]:
+    session: SessionDep,
+    _viewer: ViewDep,
+    query: Annotated[BindingListQuery, Query()],
+) -> ApiResponse[list[ModelBindingOut] | Page[ModelBindingOut]]:
     """全部绑定，逐条现算孤儿标志。
 
     Args: session, _viewer。
     """
-    return ok(await model_service.list_bindings(session))
+    return ok(await management_queries.list_bindings(session, query))
 
 
 @bindings.post(

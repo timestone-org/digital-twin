@@ -1,10 +1,14 @@
 /** @fileoverview 模型族模板端口完整、数据待配置，选择后无需替换旧模型节点。 */
 import { DtSegmented } from '@dt/ui'
 import type { ModelingGraph } from '@dt/contracts'
-import { mount } from '@vue/test-utils'
-import { expect, it } from 'vitest'
+import { flushPromises, mount } from '@vue/test-utils'
+import { afterEach, expect, it, vi } from 'vitest'
+import * as api from '@/api/modelingTemplates'
+import { builtinTemplatePage } from '@/testing/modelingBuiltinTemplateFixtures'
 import { MODEL_FAMILY_TEMPLATES } from '@/pages/Modeling/Pipelines/scripts/familyTemplates'
 import TemplatePicker from '@/pages/Modeling/Pipelines/components/TemplatePicker.vue'
+
+afterEach(() => vi.restoreAllMocks())
 
 interface Ports {
   inputs: Record<string, string>
@@ -134,9 +138,23 @@ it('聚类只做整批分析，异常模板剔除缺失后进行训练测试切�
   )
 })
 it('模板选择器提供族入口，并可单独筛选探索分析与新异常模型', async () => {
+  const list = vi
+    .spyOn(api, 'listBuiltinTemplates')
+    .mockImplementation((query) =>
+      Promise.resolve(
+        builtinTemplatePage(
+          query.category === 'analysis'
+            ? ['clustering_analysis']
+            : query.category === 'detection'
+              ? ['anomaly_model', 'device_anomaly']
+              : MODEL_FAMILY_TEMPLATES.map((row) => row.key),
+        ),
+      ),
+    )
   const wrapper = mount(TemplatePicker, {
     props: { modelValue: 'regression_model', disabled: false },
   })
+  await flushPromises()
   const general = wrapper
     .findAll('button')
     .find((button) => button.text() === '通用分类模型')
@@ -146,11 +164,15 @@ it('模板选择器提供族入口，并可单独筛选探索分析与新异常�
     'classification_model',
   ])
   wrapper.getComponent(DtSegmented).vm.$emit('update:modelValue', 'analysis')
-  await wrapper.vm.$nextTick()
+  await flushPromises()
+  expect(list).toHaveBeenLastCalledWith(
+    { page: 1, size: 20, q: '', category: 'analysis' },
+    expect.any(AbortSignal),
+  )
   expect(wrapper.findAll('.template-picker__option')).toHaveLength(1)
   expect(wrapper.get('.template-picker__option').text()).toContain('聚类分组')
   wrapper.getComponent(DtSegmented).vm.$emit('update:modelValue', 'detection')
-  await wrapper.vm.$nextTick()
+  await flushPromises()
   expect(
     wrapper
       .findAll('.template-picker__option')

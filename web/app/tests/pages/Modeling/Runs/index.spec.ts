@@ -1,6 +1,10 @@
 /** @fileoverview 训练记录的直接发布、引用保护、筛选与权限。 */
 import { PERMISSION_CODES } from '@dt/contracts'
-import type { ModelDeployment, ModelingRunSummary, Page } from '@dt/contracts'
+import type {
+  ModelDeployment,
+  ModelingRunSummary,
+  CursorPage,
+} from '@dt/contracts'
 import * as ui from '@dt/ui'
 import { flushPromises, mount } from '@vue/test-utils'
 import type { VueWrapper } from '@vue/test-utils'
@@ -30,6 +34,7 @@ const STAMP = '2026-01-01T00:00:00Z'
 const run: ModelingRunSummary = {
   id: 'r1',
   pipeline_id: 'p1',
+  pipeline_name: '能耗工作流',
   status: 'succeeded',
   trigger: 'manual',
   started_at: STAMP,
@@ -121,11 +126,24 @@ beforeEach(() => {
     size: 200,
     total: 1,
   })
-  vi.spyOn(modeling, 'listModelingRuns').mockResolvedValue({
+  vi.spyOn(modeling, 'getModelingPipeline').mockImplementation((id) =>
+    Promise.resolve({
+      id,
+      code: id,
+      name: `工作流 ${id}`,
+      description: null,
+      node_count: 0,
+      source_table_codes: [],
+      created_by_name: null,
+      created_at: STAMP,
+      updated_at: STAMP,
+      graph: { format_version: '1.0', nodes: [], edges: [] },
+    }),
+  )
+  vi.spyOn(modeling, 'listModelingRunHistory').mockResolvedValue({
     items: [run],
-    page: 1,
-    size: 20,
-    total: 1,
+    next: 'cursor:opaque+/=',
+    has_more: true,
   })
   vi.spyOn(workflow, 'deployModelingRun').mockResolvedValue(deployment)
   vi.spyOn(workflow, 'deleteModelingRun').mockResolvedValue()
@@ -146,7 +164,7 @@ it('成功训练直接发布固定入口，无需再次填写模型名称与服�
   expect(ui.useToast().toasts.value.at(-1)?.message).toContain(
     '调用编码：energy',
   )
-  expect(modeling.listModelingRuns).toHaveBeenCalledTimes(2)
+  expect(modeling.listModelingRunHistory).toHaveBeenCalledTimes(2)
 })
 it('取消发布确认时不发请求', async () => {
   ask.mockResolvedValue(false)
@@ -193,16 +211,15 @@ it('删除未引用训练后刷新列表', async () => {
   await flushPromises()
   await menuAction(wrapper, '删除记录')
   await flushPromises()
-  expect(modeling.listModelingRuns).toHaveBeenCalledTimes(2)
+  expect(modeling.listModelingRunHistory).toHaveBeenCalledTimes(2)
 })
 it.each(['pending', 'running', 'cancelling'] as const)(
   '在途%s不能发布或删除',
   async (status) => {
-    vi.mocked(modeling.listModelingRuns).mockResolvedValue({
+    vi.mocked(modeling.listModelingRunHistory).mockResolvedValue({
       items: [{ ...run, status }],
-      page: 1,
-      size: 20,
-      total: 1,
+      next: 'cursor:opaque+/=',
+      has_more: true,
     })
     const wrapper = open()
     await flushPromises()
@@ -232,11 +249,13 @@ it('只读账号没有发布和删除菜单，结果查看仍保留', async () =
 it('筛选工作流重置到第一页并传递取消信号', async () => {
   const wrapper = open()
   await flushPromises()
-  wrapper.getComponent(ui.DtSelect).vm.$emit('update:modelValue', 'p1')
+  await button(wrapper, '筛选工作流').trigger('click')
   await flushPromises()
-  expect(modeling.listModelingRuns).toHaveBeenLastCalledWith(
+  await button(wrapper, '选择工作流 能耗工作流').trigger('click')
+  await flushPromises()
+  expect(modeling.listModelingRunHistory).toHaveBeenLastCalledWith(
     'p1',
-    { page: 1, size: 20 },
+    { limit: 20 },
     expect.any(AbortSignal),
   )
 })
@@ -266,24 +285,24 @@ it('离开页面后迟到发布结果不触发提示或刷新', async () => {
   finish?.(deployment)
   await flushPromises()
   expect(ui.useToast().toasts.value).toHaveLength(0)
-  expect(modeling.listModelingRuns).toHaveBeenCalledTimes(1)
+  expect(modeling.listModelingRunHistory).toHaveBeenCalledTimes(1)
 })
 
 it('刷新图标保留名称、点击刷新和加载禁用语义', async () => {
   const wrapper = open()
   await flushPromises()
-  let finish: ((result: Page<ModelingRunSummary>) => void) | undefined
-  const pending = new Promise<Page<ModelingRunSummary>>((resolve) => {
+  let finish: ((result: CursorPage<ModelingRunSummary>) => void) | undefined
+  const pending = new Promise<CursorPage<ModelingRunSummary>>((resolve) => {
     finish = resolve
   })
-  vi.mocked(modeling.listModelingRuns).mockReturnValueOnce(pending)
+  vi.mocked(modeling.listModelingRunHistory).mockReturnValueOnce(pending)
   const refresh = wrapper.get('button[aria-label="刷新训练状态"]')
   expect(refresh.classes()).toContain('dt-btn--icon-only')
   await refresh.trigger('click')
-  expect(modeling.listModelingRuns).toHaveBeenCalledTimes(2)
+  expect(modeling.listModelingRunHistory).toHaveBeenCalledTimes(2)
   expect(refresh.attributes('aria-busy')).toBe('true')
   expect(refresh.attributes('disabled')).toBeDefined()
-  finish?.({ items: [run], page: 1, size: 20, total: 1 })
+  finish?.({ items: [run], next: null, has_more: false })
   await flushPromises()
   expect(refresh.attributes('aria-busy')).toBeUndefined()
   expect(refresh.attributes('disabled')).toBeUndefined()
@@ -291,11 +310,10 @@ it('刷新图标保留名称、点击刷新和加载禁用语义', async () => {
 
 it('列表的查看结果入口将所选训练ID传到历史结果面', async () => {
   const second = { ...run, id: 'r2', created_at: '2026-11-03T01:00:00Z' }
-  vi.mocked(modeling.listModelingRuns).mockResolvedValue({
+  vi.mocked(modeling.listModelingRunHistory).mockResolvedValue({
     items: [run, second],
-    page: 1,
-    size: 20,
-    total: 2,
+    next: 'cursor:opaque+/=',
+    has_more: true,
   })
   const history = vi
     .spyOn(modeling, 'getModelingRun')
@@ -344,25 +362,24 @@ function stubHistory() {
 
 it('路由切换工作流关闭历史结果并回到第一页，清除查询恢复全部工作流', async () => {
   useRoute().query = { pipeline_id: 'p1' }
-  vi.mocked(modeling.listModelingRuns).mockResolvedValue({
+  vi.mocked(modeling.listModelingRunHistory).mockResolvedValue({
     items: [run],
-    page: 1,
-    size: 20,
-    total: 61,
+    next: 'cursor:opaque+/=',
+    has_more: true,
   })
   stubHistory()
   const wrapper = open()
   await flushPromises()
-  expect(modeling.listModelingRuns).toHaveBeenLastCalledWith(
+  expect(modeling.listModelingRunHistory).toHaveBeenLastCalledWith(
     'p1',
-    { page: 1, size: 20 },
+    { limit: 20 },
     expect.any(AbortSignal),
   )
   await button(wrapper, '下一页').trigger('click')
   await flushPromises()
-  expect(modeling.listModelingRuns).toHaveBeenLastCalledWith(
+  expect(modeling.listModelingRunHistory).toHaveBeenLastCalledWith(
     'p1',
-    { page: 2, size: 20 },
+    { limit: 20, after: 'cursor:opaque+/=' },
     expect.any(AbortSignal),
   )
   await button(wrapper, '查看训练结果').trigger('click')
@@ -376,34 +393,33 @@ it('路由切换工作流关闭历史结果并回到第一页，清除查询恢�
   expect(wrapper.findComponent({ name: 'RunResultsDialog' }).exists()).toBe(
     false,
   )
-  expect(modeling.listModelingRuns).toHaveBeenLastCalledWith(
+  expect(modeling.listModelingRunHistory).toHaveBeenLastCalledWith(
     'p2',
-    { page: 1, size: 20 },
+    { limit: 20 },
     expect.any(AbortSignal),
   )
   useRoute().query = {}
   await flushPromises()
-  expect(modeling.listModelingRuns).toHaveBeenLastCalledWith(
+  expect(modeling.listModelingRunHistory).toHaveBeenLastCalledWith(
     null,
-    { page: 1, size: 20 },
+    { limit: 20 },
     expect.any(AbortSignal),
   )
 })
 
 it('翻页和切换每页数量发出对应查询，数量改变回第一页', async () => {
-  vi.mocked(modeling.listModelingRuns).mockResolvedValue({
+  vi.mocked(modeling.listModelingRunHistory).mockResolvedValue({
     items: [run],
-    page: 1,
-    size: 20,
-    total: 61,
+    next: 'cursor:opaque+/=',
+    has_more: true,
   })
   const wrapper = open()
   await flushPromises()
   await button(wrapper, '下一页').trigger('click')
   await flushPromises()
-  expect(modeling.listModelingRuns).toHaveBeenLastCalledWith(
+  expect(modeling.listModelingRunHistory).toHaveBeenLastCalledWith(
     null,
-    { page: 2, size: 20 },
+    { limit: 20, after: 'cursor:opaque+/=' },
     expect.any(AbortSignal),
   )
   await wrapper.get('button[aria-label="每页条数"]').trigger('click')
@@ -413,9 +429,9 @@ it('翻页和切换每页数量发出对应查询，数量改变回第一页', a
   if (!size) throw new Error('缺少每页50条')
   await size.trigger('click')
   await flushPromises()
-  expect(modeling.listModelingRuns).toHaveBeenLastCalledWith(
+  expect(modeling.listModelingRunHistory).toHaveBeenLastCalledWith(
     null,
-    { page: 1, size: 50 },
+    { limit: 50 },
     expect.any(AbortSignal),
   )
   await wrapper.get('button[aria-label="卡片视图"]').trigger('click')
@@ -423,7 +439,7 @@ it('翻页和切换每页数量发出对应查询，数量改变回第一页', a
 })
 
 it('记录读取失败可从重试按钮恢复列表', async () => {
-  vi.mocked(modeling.listModelingRuns).mockRejectedValueOnce(
+  vi.mocked(modeling.listModelingRunHistory).mockRejectedValueOnce(
     new Error('offline'),
   )
   const wrapper = open()
@@ -431,7 +447,7 @@ it('记录读取失败可从重试按钮恢复列表', async () => {
   expect(wrapper.text()).toContain('请求失败，请重试')
   await button(wrapper, '重试').trigger('click')
   await flushPromises()
-  expect(modeling.listModelingRuns).toHaveBeenCalledTimes(2)
+  expect(modeling.listModelingRunHistory).toHaveBeenCalledTimes(2)
   expect(wrapper.text()).toContain('能耗工作流')
   expect(wrapper.text()).not.toContain('请求失败，请重试')
 })

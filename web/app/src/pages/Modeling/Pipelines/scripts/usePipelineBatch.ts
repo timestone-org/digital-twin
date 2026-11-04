@@ -79,7 +79,7 @@ function usePipelineSelection(
       ? {
           selectedIds: batch.selectedIds.value,
           disabled: batch.isBusy.value || isDisabled(),
-          selectAllLabel: '选择当前筛选结果',
+          selectAllLabel: '选择本页',
           rowLabel: (row) => `工作流 ${row.name}`,
         }
       : undefined,

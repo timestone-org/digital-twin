@@ -1,10 +1,20 @@
-/** @fileoverview 从 platform OpenAPI 生成的异常检测、规则计算与版本元数据契约。 */
+/** @fileoverview 从 platform OpenAPI 生成的分析建模扩展契约。 */
 import type {
   OpenModelInfo,
   OpenModelWarning,
   ModelingOperator,
   ModelingRunSummary,
 } from './modeling'
+export type ModelingBuiltinTemplateCategory =
+  'prediction' | 'detection' | 'analysis' | 'rule'
+
+export type ModelingBuiltinTemplate = {
+  category: ModelingBuiltinTemplateCategory
+  hint: string
+  key: string
+  label: string
+}
+
 export type DetectionRow = Record<string, number | string | null>
 
 export type AnomalyDecision = {

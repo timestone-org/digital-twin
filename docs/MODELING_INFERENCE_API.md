@@ -41,7 +41,7 @@ Content-Type: application/json
 }
 ```
 
-`data` 为具体业务结果，部署列表中为数组；`trace_id` 用于排查调用问题。客户端同时检查 HTTP 状态与业务 `code`，兼容响应中新增的字段。
+`data` 为具体业务结果，部署列表未请求分页时为数组；`trace_id` 用于排查调用问题。客户端同时检查 HTTP 状态与业务 `code`，兼容响应中新增的字段。
 
 ### 1.3 接口总览
 
@@ -61,7 +61,7 @@ Content-Type: application/json
 GET /api/v1/platform/modeling-deployments
 ```
 
-无请求体。不带查询参数时返回全部部署，包括已停用或不可服务的部署；当前接口不分页，`data` 直接为数组，无 `items` 或 `total`。没有部署时返回 `[]`。
+无请求体。不带查询参数时返回全部部署，包括已停用或不可服务的部署；未传 `page` 和 `size` 时，`data` 直接为数组，无 `items` 或 `total`。没有部署时返回 `[]`。
 
 可选查询参数如下；查询全部时全部省略即可。
 
@@ -71,6 +71,13 @@ GET /api/v1/platform/modeling-deployments
 | `model_version_id` | UUID string | 按固定模型版本筛选 |
 | `instance_id` | UUID string | 按来源模型实例筛选 |
 | `is_enabled` | boolean | `true` 仅查询启用项，`false` 仅查询停用项 |
+| `q` | string | 服务名称/编码/说明、固定模型名称或工作流名称/编码，忽略大小写，最多 128 字符 |
+| `page` | integer | 从 1 开始；显式传入即请求分页 |
+| `size` | integer | 每页 1–200 项；显式传入即请求分页 |
+
+请求分页时 `data` 为 `{items,page,size,total}`，缺省的另一项取 `page=1`、`size=20`。
+`q` 去除两端空白，空白等于不检索；`%`、`_` 和反斜杠按字面匹配。
+仅传 `q` 或精确筛选参数仍返回数组，兼容原有调用。
 
 成功响应示例：
 
