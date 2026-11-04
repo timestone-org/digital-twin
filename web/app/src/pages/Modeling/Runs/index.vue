@@ -242,7 +242,7 @@ onBeforeUnmount(() => {
           >
             <DtInput
               v-model="keyword"
-              class="min-w-0 grow basis-80"
+              class="w-80 max-w-full min-w-0 flex-none"
               label="搜索训练记录"
               type="search"
               size="sm"

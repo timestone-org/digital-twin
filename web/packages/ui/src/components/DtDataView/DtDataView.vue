@@ -218,15 +218,16 @@ const fieldColumns = computed(() =>
       class="dt-data-view__bar"
     >
       <div v-if="$slots.toolbar || selection" class="dt-data-view__toolbar">
-        <DtCheckbox
-          v-if="selection"
-          :model-value="pageSelection.all"
-          :indeterminate="pageSelection.some"
-          :label="selection.selectAllLabel ?? '选择本页'"
-          :aria-label="selection.selectAllLabel ?? '选择本页'"
-          :disabled="selectionLocked || rows.length === 0"
-          @update:model-value="selectPage"
-        />
+        <div v-if="selection" class="dt-data-view__selection-control">
+          <DtCheckbox
+            :model-value="pageSelection.all"
+            :indeterminate="pageSelection.some"
+            :label="selection.selectAllLabel ?? '选择本页'"
+            :aria-label="selection.selectAllLabel ?? '选择本页'"
+            :disabled="selectionLocked || rows.length === 0"
+            @update:model-value="selectPage"
+          />
+        </div>
         <slot name="toolbar" />
       </div>
       <div class="dt-data-view__aside">
@@ -258,6 +259,7 @@ const fieldColumns = computed(() =>
           :min-width="layout.minWidth"
           :fixed-layout="layout.fixedLayout"
           :fill="layout.fill"
+          :hidden-header-keys="selection ? ['__selection'] : undefined"
           @update:sort="emit('update:sort', $event)"
         >
           <template v-if="selection" #cell-__selection="{ row }">

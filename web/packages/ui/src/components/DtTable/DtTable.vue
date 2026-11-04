@@ -31,8 +31,16 @@ const props = withDefaults(
      * 默认关：单独使用时高度由外层容器决定，开着会在非 flex 父级里白占一格。
      */
     fill?: boolean | undefined
+    /** 隐去指定列的表头文字，列名仍作为可访问名称保留。 */
+    hiddenHeaderKeys?: readonly string[] | undefined
   }>(),
-  { sort: null, minWidth: '52rem', fixedLayout: false, fill: false },
+  {
+    sort: null,
+    minWidth: '52rem',
+    fixedLayout: false,
+    fill: false,
+    hiddenHeaderKeys: () => [],
+  },
 )
 
 const emit = defineEmits<{ 'update:sort': [value: DtTableSort] }>()
@@ -51,6 +59,9 @@ function onSort(column: DtTableColumn): void {
   if (!column.sortable) return
   const active = props.sort?.key === column.key
   emit('update:sort', { key: column.key, desc: active && !props.sort?.desc })
+}
+function isHeaderHidden(column: DtTableColumn): boolean {
+  return props.hiddenHeaderKeys.includes(column.key)
 }
 </script>
 
@@ -81,21 +92,27 @@ function onSort(column: DtTableColumn): void {
             scope="col"
             :class="`is-${column.align ?? 'left'}`"
             :aria-sort="ariaSort(column)"
+            :aria-label="isHeaderHidden(column) ? column.label : undefined"
           >
             <button
               v-if="column.sortable"
               type="button"
               class="dt-table__sort"
+              :aria-label="isHeaderHidden(column) ? column.label : undefined"
               @click="onSort(column)"
             >
-              {{ column.label }}
+              <template v-if="!isHeaderHidden(column)">{{
+                column.label
+              }}</template>
               <DtIcon
                 v-if="sort?.key === column.key"
                 :name="sort.desc ? 'chevron-down' : 'chevron-up'"
                 :size="12"
               />
             </button>
-            <template v-else>{{ column.label }}</template>
+            <template v-else-if="!isHeaderHidden(column)">{{
+              column.label
+            }}</template>
           </th>
         </tr>
       </thead>

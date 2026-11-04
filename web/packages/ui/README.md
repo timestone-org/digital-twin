@@ -48,6 +48,9 @@ interface DtDataViewSelection<TRow extends { id: string }> {
 `rows` 的 ID，不会新选其他页的记录，原有其他页 ID 保留。分页、筛选与刷新后的
 选择清理由业务页面负责；切换表格和卡片不清空选择。
 
+选择列的表头不显示文字，保留可访问名称；工具栏中的全选控件与紧凑表单控件对齐。
+`DtTable` 可通过 `hiddenHeaderKeys` 隐去指定列的表头文字，列语义和排序按钮的可访问名称保留。
+
 ## 可调整布局与卡片
 
 可调整卡片布局使用 `DtResizableLayout` 与 `DtCard` 组合：

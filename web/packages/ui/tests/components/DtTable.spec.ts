@@ -39,6 +39,25 @@ describe('DtTable', () => {
     expect(headers).toEqual(['名称', '附加'])
   })
 
+  it('指定隐藏的表头没有可见文字，但仍有列语义和可访问名称', () => {
+    const headers = render({ hiddenHeaderKeys: ['extra'] }).findAll('th')
+    expect(headers[0]?.text()).toBe('名称')
+    expect(headers[1]?.text()).toBe('')
+    expect(headers[1]?.attributes('scope')).toBe('col')
+    expect(headers[1]?.attributes('aria-label')).toBe('附加')
+  })
+
+  it('隐藏可排序表头文字时仍可命名并触发排序', async () => {
+    const wrapper = render({ hiddenHeaderKeys: ['name'] })
+    const sort = wrapper.get('th button')
+    expect(sort.text()).toBe('')
+    expect(sort.attributes('aria-label')).toBe('名称')
+    await sort.trigger('click')
+    expect(wrapper.emitted('update:sort')).toEqual([
+      [{ key: 'name', desc: false }],
+    ])
+  })
+
   it('给了插槽的列用插槽渲染', () => {
     expect(
       render()

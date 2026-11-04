@@ -82,6 +82,18 @@ describe('DtDataView', () => {
     ])
   })
 
+  it('选择列表头不显示文字，但列名和每行复选框可被辅助技术识别', async () => {
+    const wrapper = render({
+      selection: { selectedIds: [], rowLabel: (row: Row) => row.name },
+    })
+    const header = wrapper.findAll('thead th')[0]
+    expect(header?.text()).toBe('')
+    expect(header?.attributes('aria-label')).toBe('选择')
+    expect(header?.attributes('scope')).toBe('col')
+    await wrapper.get('input[aria-label="选择 甲"]').setValue(true)
+    expect(wrapper.emitted('update:selectedIds')).toEqual([[['a']]])
+  })
+
   it('卡片视图不渲染 table，但同一批数据都在', () => {
     const wrapper = render({ view: 'card' })
     expect(wrapper.find('table').exists()).toBe(false)

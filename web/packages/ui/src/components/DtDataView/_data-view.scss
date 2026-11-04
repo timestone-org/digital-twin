@@ -38,6 +38,20 @@
     }
   }
 
+  &__bar,
+  &__toolbar {
+    &:has(.dt-data-view__selection-control):has(:deep(.dt-field__label-row)) {
+      align-items: flex-end;
+    }
+  }
+
+  &__selection-control {
+    display: flex;
+    flex-shrink: 0;
+    align-items: center;
+    min-block-size: var(--ctl-h-sm);
+  }
+
   &__aside {
     display: flex;
     flex-wrap: wrap;
