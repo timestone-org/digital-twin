@@ -4,6 +4,7 @@ import asyncio
 
 import pytest
 from asyncua import ua
+from tests.unit.opcua_driver_fakes import make_child, make_driver
 
 from collector_server.apps.collect.drivers.base import (
     BrowseContinuationInvalid,
@@ -14,14 +15,13 @@ from collector_server.apps.collect.drivers.opcua.browse import (
     MAX_BROWSE_CURSORS,
     MAX_BUFFERED_REFERENCES,
 )
-from unit.test_drivers_opcua_driver import _child, _driver
 
 
 async def test_large_folder_reads_and_returns_only_the_requested_page() -> None:
-    driver, clients = _driver()
+    driver, clients = make_driver()
     await driver.connect()
     clients[0].nodes.objects.children = [
-        _child(f"P{index}", is_variable=True) for index in range(10_000)
+        make_child(f"P{index}", is_variable=True) for index in range(10_000)
     ]
     page = await driver.browse_page(None, limit=200)
     assert len(page.items) == 200
@@ -32,10 +32,10 @@ async def test_large_folder_reads_and_returns_only_the_requested_page() -> None:
 async def test_legacy_driver_browse_never_silently_truncates_the_folder() -> (
     None
 ):
-    driver, clients = _driver()
+    driver, clients = make_driver()
     await driver.connect()
     clients[0].nodes.objects.children = [
-        _child(f"P{index}", is_variable=True) for index in range(201)
+        make_child(f"P{index}", is_variable=True) for index in range(201)
     ]
     try:
         with pytest.raises(BrowsePageTooLarge, match="分页"):
@@ -49,9 +49,9 @@ async def test_legacy_driver_browse_never_silently_truncates_the_folder() -> (
 async def test_browsing_keeps_the_browse_budget_and_types_use_request_budget(
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
-    driver, clients = _driver()
+    driver, clients = make_driver()
     await driver.connect()
-    clients[0].nodes.objects.children = [_child("P0", is_variable=True)]
+    clients[0].nodes.objects.children = [make_child("P0", is_variable=True)]
     budgets: list[float | None] = []
     native_timeout = asyncio.timeout
 
@@ -68,10 +68,10 @@ async def test_browsing_keeps_the_browse_budget_and_types_use_request_budget(
 
 
 async def test_continuation_reads_the_next_page_without_rebrowsing() -> None:
-    driver, clients = _driver()
+    driver, clients = make_driver()
     await driver.connect()
     clients[0].nodes.objects.children = [
-        _child(f"P{index}", is_variable=True) for index in range(3)
+        make_child(f"P{index}", is_variable=True) for index in range(3)
     ]
     first = await driver.browse_page(None, limit=2)
     second = await driver.browse_page(
@@ -82,10 +82,10 @@ async def test_continuation_reads_the_next_page_without_rebrowsing() -> None:
 
 
 async def test_continuation_cannot_be_used_for_another_folder() -> None:
-    driver, clients = _driver()
+    driver, clients = make_driver()
     await driver.connect()
     clients[0].nodes.objects.children = [
-        _child(f"P{index}", is_variable=True) for index in range(3)
+        make_child(f"P{index}", is_variable=True) for index in range(3)
     ]
     page = await driver.browse_page(None, limit=2)
     with pytest.raises(BrowseContinuationInvalid, match="重新浏览"):
@@ -97,11 +97,11 @@ async def test_continuation_cannot_be_used_for_another_folder() -> None:
 async def test_compatibility_cache_avoids_rereading_or_typing_all_nodes() -> (
     None
 ):
-    driver, clients = _driver()
+    driver, clients = make_driver()
     await driver.connect()
     clients[0].is_page_limit_ignored = True
     clients[0].nodes.objects.children = [
-        _child(f"P{index}", is_variable=True) for index in range(1000)
+        make_child(f"P{index}", is_variable=True) for index in range(1000)
     ]
     first = await driver.browse_page(None)
     second = await driver.browse_page(
@@ -115,11 +115,11 @@ async def test_compatibility_cache_avoids_rereading_or_typing_all_nodes() -> (
 
 
 async def test_unbounded_device_response_fails_before_reading_types() -> None:
-    driver, clients = _driver()
+    driver, clients = make_driver()
     await driver.connect()
     clients[0].is_page_limit_ignored = True
     clients[0].nodes.objects.children = [
-        _child(f"P{index}", is_variable=True)
+        make_child(f"P{index}", is_variable=True)
         for index in range(MAX_BUFFERED_REFERENCES + 1)
     ]
     with pytest.raises(BrowsePageTooLarge):
@@ -128,10 +128,10 @@ async def test_unbounded_device_response_fails_before_reading_types() -> None:
 
 
 async def test_consumed_continuation_cannot_be_replayed() -> None:
-    driver, clients = _driver()
+    driver, clients = make_driver()
     await driver.connect()
     clients[0].nodes.objects.children = [
-        _child(f"P{index}", is_variable=True) for index in range(4)
+        make_child(f"P{index}", is_variable=True) for index in range(4)
     ]
     first = await driver.browse_page(None, limit=2)
     await driver.browse_page(
@@ -146,10 +146,10 @@ async def test_consumed_continuation_cannot_be_replayed() -> None:
 async def test_disconnect_releases_points_and_invalidates_the_old_session() -> (
     None
 ):
-    driver, clients = _driver()
+    driver, clients = make_driver()
     await driver.connect()
     clients[0].nodes.objects.children = [
-        _child(f"P{index}", is_variable=True) for index in range(3)
+        make_child(f"P{index}", is_variable=True) for index in range(3)
     ]
     first = await driver.browse_page(None, limit=2)
     await driver.disconnect()
@@ -164,10 +164,10 @@ async def test_disconnect_releases_points_and_invalidates_the_old_session() -> (
 
 async def test_expired_continuation_is_released_and_cannot_be_used() -> None:
     now = [0]
-    driver, clients = _driver(clock=lambda: now[0])
+    driver, clients = make_driver(clock=lambda: now[0])
     await driver.connect()
     clients[0].nodes.objects.children = [
-        _child(f"P{index}", is_variable=True) for index in range(3)
+        make_child(f"P{index}", is_variable=True) for index in range(3)
     ]
     first = await driver.browse_page(None, limit=2)
     now[0] = BROWSE_CURSOR_TTL_MS
@@ -180,10 +180,10 @@ async def test_expired_continuation_is_released_and_cannot_be_used() -> None:
 
 
 async def test_cancelling_type_reads_releases_the_new_continuation() -> None:
-    driver, clients = _driver()
+    driver, clients = make_driver()
     await driver.connect()
     clients[0].nodes.objects.children = [
-        _child(f"P{index}", is_variable=True) for index in range(3)
+        make_child(f"P{index}", is_variable=True) for index in range(3)
     ]
     clients[0].type_error = asyncio.CancelledError()
     with pytest.raises(asyncio.CancelledError):
@@ -197,7 +197,7 @@ async def test_cancelling_type_reads_releases_the_new_continuation() -> None:
 async def test_page_size_is_checked_before_asking_the_device(
     limit: int,
 ) -> None:
-    driver, clients = _driver()
+    driver, clients = make_driver()
     await driver.connect()
     with pytest.raises(ValueError, match="页大小"):
         await driver.browse_page(None, limit=limit)
@@ -207,10 +207,10 @@ async def test_page_size_is_checked_before_asking_the_device(
 async def test_cursor_capacity_releases_the_oldest_device_continuation() -> (
     None
 ):
-    driver, clients = _driver()
+    driver, clients = make_driver()
     await driver.connect()
     clients[0].nodes.objects.children = [
-        _child(f"P{i}", is_variable=True) for i in range(3)
+        make_child(f"P{i}", is_variable=True) for i in range(3)
     ]
     first = await driver.browse_page(None, limit=1)
     for _ in range(32):
@@ -227,10 +227,10 @@ async def test_cursor_capacity_releases_the_oldest_device_continuation() -> (
 async def test_device_capacity_is_freed_before_browsing_a_new_folder(
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
-    driver, clients = _driver()
+    driver, clients = make_driver()
     await driver.connect()
     client = clients[0]
-    client.nodes.objects.children = [_child("P0", is_variable=True)] * 2
+    client.nodes.objects.children = [make_child("P0", is_variable=True)] * 2
     native_browse = client.browse
 
     async def browse(parameters: ua.BrowseParameters) -> list[ua.BrowseResult]:
@@ -253,11 +253,11 @@ async def test_device_capacity_is_freed_before_browsing_a_new_folder(
 async def test_compatibility_cache_budget_is_shared_by_all_open_folders() -> (
     None
 ):
-    driver, clients = _driver()
+    driver, clients = make_driver()
     await driver.connect()
     clients[0].is_page_limit_ignored = True
     clients[0].nodes.objects.children = [
-        _child(f"P{i}", is_variable=True) for i in range(10_000)
+        make_child(f"P{i}", is_variable=True) for i in range(10_000)
     ]
     await driver.browse_page(None)
     await driver.browse_page(None)
@@ -270,10 +270,10 @@ async def test_compatibility_cache_budget_is_shared_by_all_open_folders() -> (
 async def test_device_invalid_continuation_has_a_refreshable_domain_error(
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
-    driver, clients = _driver()
+    driver, clients = make_driver()
     await driver.connect()
     clients[0].nodes.objects.children = [
-        _child(f"P{i}", is_variable=True) for i in range(3)
+        make_child(f"P{i}", is_variable=True) for i in range(3)
     ]
     first = await driver.browse_page(None, limit=2)
     native_next = clients[0].browse_next
@@ -296,11 +296,11 @@ async def test_device_invalid_continuation_has_a_refreshable_domain_error(
 
 async def test_compatibility_cursor_expiry_refreshes_after_each_page() -> None:
     now = [0]
-    driver, clients = _driver(clock=lambda: now[0])
+    driver, clients = make_driver(clock=lambda: now[0])
     await driver.connect()
     clients[0].is_page_limit_ignored = True
     clients[0].nodes.objects.children = [
-        _child(f"P{i}", is_variable=True) for i in range(1000)
+        make_child(f"P{i}", is_variable=True) for i in range(1000)
     ]
     first = await driver.browse_page(None)
     now[0] = BROWSE_CURSOR_TTL_MS - 1
@@ -318,10 +318,10 @@ async def test_compatibility_cursor_expiry_refreshes_after_each_page() -> None:
 async def test_bad_device_page_status_releases_the_old_continuation(
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
-    driver, clients = _driver()
+    driver, clients = make_driver()
     await driver.connect()
     clients[0].nodes.objects.children = [
-        _child(f"P{i}", is_variable=True) for i in range(3)
+        make_child(f"P{i}", is_variable=True) for i in range(3)
     ]
     first = await driver.browse_page(None, limit=2)
     native_next = clients[0].browse_next

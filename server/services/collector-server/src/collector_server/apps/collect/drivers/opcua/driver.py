@@ -26,6 +26,7 @@ from collector_server.apps.collect.drivers.base import (
 )
 from collector_server.apps.collect.drivers.opcua import mapping
 from collector_server.apps.collect.drivers.opcua.browse import BrowsePager
+from collector_server.apps.collect.drivers.opcua.initial import read_initial
 from collector_server.apps.collect.drivers.opcua.notifier import (
     DataChangeNotifier,
 )
@@ -368,10 +369,7 @@ class OpcuaDriver:
     async def subscribe(
         self, points: Sequence[PointSpec], on_value: ValueSink
     ) -> SubscribeResult:
-        """订阅一组点位。部分失败只拒失败的那些。
-
-        Args: points, on_value（必须纯同步）。
-        """
+        """订阅并补齐初值。Args: points, on_value（必须纯同步）。"""
         self._remember(points)
         resolved, rejected = resolve_points(points)
         if not resolved:
@@ -409,13 +407,7 @@ class OpcuaDriver:
         return len(taken)
 
     async def read_many(self, point_codes: Sequence[str]) -> list[Sample]:
-        """一次性读取，返回值与入参逐位对齐。
-
-        ⚠ 按 `MAX_NODES_PER_READ` 切批，各批的回包**按批次顺序首尾相接**才
-        与 `queried` 对得上位——拼错是把值配到别的点位上，且不会报错。
-
-        Args: point_codes。
-        """
+        """分批读取并按请求顺序逐位对齐。Args: point_codes。"""
         client = self._require_client()
         now_ms = self._clock()
         queried, nodes = self._nodes_for(point_codes)
@@ -496,11 +488,7 @@ class OpcuaDriver:
         async with asyncio.timeout(self._connection.timeouts.request_s):
             self._subscription = await client.create_subscription(
                 publish_interval_ms(resolved),
-                # cast 的理由 —— asyncua 的回调协议把形参钉成 `val`，而本仓的
-                # 命名闸禁缩写。它按**位置**调回调（源码里是
-                # `datachange_notification(*args)`），名字不参与，因此这里只是
-                # 名字上不兼容。上游若改成按关键字调，
-                # tests/contract/test_asyncua_callback.py 会当场变红。
+                # ⚠ cast 只兼容其 `val` 参数名；按位置回调由契约测试守住。
                 cast("SubscriptionHandler", self._notifier),
             )
         return self._subscription
@@ -511,25 +499,38 @@ class OpcuaDriver:
         batch: Sequence[ResolvedPoint],
         interval_ms: int,
     ) -> tuple[list[str], list[RejectedPoint]]:
-        """订阅同一采样周期的一批点位。
-
-        Args: subscription, batch, interval_ms。
-        """
+        """订阅同周期的一批点位，并主动读取每个点位的初值。"""
         client = self._require_client()
         nodes = [client.get_node(item.node_id) for item in batch]
-        async with asyncio.timeout(self._connection.timeouts.request_s):
-            raw: object = await subscription.subscribe_data_change(
-                nodes,
-                queuesize=QUEUE_SIZE,
-                sampling_interval=ua.Duration(interval_ms),
-            )
+        notifier = self._notifier
+        # ⚠ 首次通知可能早于订阅请求返回，必须先登记映射。
+        if notifier is not None:
+            for item in batch:
+                notifier.stage(item.node_id.to_string(), item.point.point_code)
+        try:
+            async with asyncio.timeout(self._connection.timeouts.request_s):
+                raw: object = await subscription.subscribe_data_change(
+                    nodes,
+                    queuesize=QUEUE_SIZE,
+                    sampling_interval=ua.Duration(interval_ms),
+                )
+        except BaseException:
+            if notifier is not None:
+                for item in batch:
+                    notifier.forget(item.point.point_code)
+            raise
         accepted, rejected = merge_handles(batch, _as_sequence(raw))
         self._handles.update(accepted)
-        for item in batch:
-            if item.point.point_code in accepted and self._notifier is not None:
-                self._notifier.track(
-                    item.node_id.to_string(), item.point.point_code
-                )
+        if notifier is not None:
+            for item in rejected:
+                notifier.forget(item.point_code)
+            notifier.confirm(list(accepted))
+            await read_initial(
+                list(accepted),
+                read_many=self.read_many,
+                notifier=notifier,
+                batch_size=MAX_NODES_PER_READ,
+            )
         return list(accepted), rejected
 
     def _nodes_for(

@@ -92,6 +92,46 @@ def test_a_forgotten_point_stops_reaching_the_pipeline() -> None:
     assert seen == []
 
 
+def test_retracking_a_point_removes_the_previous_address() -> None:
+    notifier, seen = _notifier()
+    notifier.track("ns=2;s=old", "temperature")
+    notifier.track("ns=2;s=new", "temperature")
+    notifier.datachange_notification(
+        StubNode("ns=2;s=old"),
+        1.0,
+        StubNotification(ua.DataValue(Value=ua.Variant(1.0))),
+    )
+    pending = notifier.prepare_initial(["temperature"])
+    notifier.feed_initial(
+        "temperature", (2.0, NOW_MS, "good"), version=pending["temperature"]
+    )
+    assert seen == [("temperature", 2.0, NOW_MS, "good")]
+
+
+def test_forgotten_points_cannot_receive_a_pending_initial_read() -> None:
+    notifier, seen = _notifier()
+    notifier.track("ns=2;s=Temp1", "temperature")
+    pending = notifier.prepare_initial(["temperature"])
+    notifier.forget("temperature")
+    notifier.forget("temperature")
+    notifier.feed_initial(
+        "temperature", (1.0, NOW_MS, "good"), version=pending["temperature"]
+    )
+    assert notifier.prepare_initial(["temperature", "unknown"]) == {}
+    assert seen == []
+
+
+def test_retracking_during_initial_read_invalidates_the_old_result() -> None:
+    notifier, seen = _notifier()
+    notifier.track("ns=2;s=old", "temperature")
+    pending = notifier.prepare_initial(["temperature"])
+    notifier.track("ns=2;s=new", "temperature")
+    notifier.feed_initial(
+        "temperature", (1.0, NOW_MS, "good"), version=pending["temperature"]
+    )
+    assert seen == []
+
+
 def test_client_is_built_with_the_endpoint_and_the_request_budget() -> None:
     client = build_client(
         DriverConnection(endpoint="opc.tcp://10.0.0.9:4840/line-1")
