@@ -8,7 +8,6 @@ from lib.logging import current_traceparent, parse_traceparent
 from lib.web import Page, PageParams
 from platform_server.apps.modeling.crud.template import (
     add_audit,
-    instances,
     lock_pipeline,
     templates,
 )
@@ -50,10 +49,6 @@ async def create_template(
     pipeline = await lock_pipeline(session, payload.pipeline_id)
     if pipeline is None:
         raise PipelineNotFound("模板设计不存在")
-    if await instances.get(session, pipeline.id):
-        raise TemplateUnavailable(
-            "请在模板设计中发布，模型实例只用于配置和训练"
-        )
     graph = require_template_graph(
         PipelineGraph.model_validate(pipeline.graph_json)
     )

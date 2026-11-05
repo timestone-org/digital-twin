@@ -195,7 +195,7 @@ export type ModelingTemplate = {
   is_enabled: boolean
   name: string
   node_count: number
-  pipeline_id: string
+  pipeline_id: string | null
   task:
     'anomaly_detection' | 'classification' | 'regression' | 'rule_calculation'
   updated_at: string

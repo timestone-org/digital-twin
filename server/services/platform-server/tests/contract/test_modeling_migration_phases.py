@@ -15,6 +15,7 @@ STRUCTURES = (
     "modeling_management_20261030",
     "modeling_commands_20261030",
     "modeling_workflow_20261103",
+    "modeling_template_src_20261105",
 )
 INDEXES = (
     "modeling_management_idx_20261030",
@@ -49,12 +50,13 @@ def test_index_failure_keeps_a_completed_structure_revision_to_resume_from():
         ("modeling_commands_idx_20261030", "modeling_commands_20261030"),
         ("modeling_workflow_20261103", "modeling_commands_idx_20261030"),
         ("modeling_workflow_idx_20261103", "modeling_workflow_20261103"),
+        ("modeling_template_src_20261105", "modeling_workflow_idx_20261103"),
     )
     for revision, predecessor in chain:
         script = scripts.get_revision(revision)
         assert script is not None
         assert script.down_revision == predecessor
-    assert scripts.get_current_head() == "modeling_workflow_idx_20261103"
+    assert scripts.get_current_head() == "modeling_template_src_20261105"
 
 
 @pytest.mark.parametrize("revision", STRUCTURES)

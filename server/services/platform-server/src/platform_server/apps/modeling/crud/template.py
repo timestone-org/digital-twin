@@ -4,7 +4,7 @@ import uuid
 from dataclasses import dataclass
 from typing import cast
 
-from sqlalchemy import ColumnElement, Select, func, select
+from sqlalchemy import ColumnElement, Select, func, select, update
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from lib.db import CrudBase
@@ -72,6 +72,18 @@ class TemplateCrud(CrudBase[ModelingTemplate]):
             )
         )
         return (value or 0) + 1
+
+    async def detach_pipeline(
+        self, session: AsyncSession, pipeline_id: uuid.UUID
+    ) -> list[uuid.UUID]:
+        """解除来源引用，保留模板快照及发布时间；Args: session, pipeline_id。"""
+        identities = await session.scalars(
+            update(ModelingTemplate)
+            .where(ModelingTemplate.pipeline_id == pipeline_id)
+            .values(pipeline_id=None, updated_at=ModelingTemplate.updated_at)
+            .returning(ModelingTemplate.id)
+        )
+        return sorted(identities.all())
 
 
 class InstanceCrud(CrudBase[ModelingInstance]):
@@ -153,17 +165,6 @@ async def lock_pipeline(
         select(ModelingPipeline)
         .where(ModelingPipeline.id == pipeline_id)
         .with_for_update()
-    )
-
-
-async def has_templates(session: AsyncSession, pipeline_id: uuid.UUID) -> bool:
-    return (
-        await session.scalar(
-            select(ModelingTemplate.id)
-            .where(ModelingTemplate.pipeline_id == pipeline_id)
-            .limit(1)
-        )
-        is not None
     )
 
 

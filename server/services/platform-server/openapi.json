@@ -16122,9 +16122,17 @@
             "type": "integer"
           },
           "pipeline_id": {
-            "format": "uuid",
-            "title": "Pipeline Id",
-            "type": "string"
+            "anyOf": [
+              {
+                "format": "uuid",
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "description": "来源工作流；来源已删除时为空，模板快照仍可独立使用",
+            "title": "Pipeline Id"
           },
           "task": {
             "description": "此模板快照所产出模型的任务类型",
@@ -38017,7 +38025,7 @@
     },
     "/api/v1/platform/modeling-pipelines/{pipeline_id}": {
       "delete": {
-        "description": "删流水线。还有模型版本时 409。\n\nArgs: pipeline_id, session, _write。",
+        "description": "删流水线。还有模型版本时 409。\n\nArgs: pipeline_id, session, write。",
         "operationId": "delete_pipeline_api_v1_platform_modeling_pipelines__pipeline_id__delete",
         "parameters": [
           {

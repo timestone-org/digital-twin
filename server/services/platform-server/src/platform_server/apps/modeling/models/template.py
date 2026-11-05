@@ -24,9 +24,10 @@ class ModelingTemplate(UuidPrimaryKeyMixin, TimestampMixin, Base):
     """一版已发布的流水线快照。"""
 
     __tablename__ = "modeling_templates"
-    pipeline_id: Mapped[uuid.UUID] = mapped_column(
+    pipeline_id: Mapped[uuid.UUID | None] = mapped_column(
         ForeignKey("platform.modeling_pipelines.id", ondelete="RESTRICT"),
         index=True,
+        nullable=True,
     )
     code: Mapped[str] = mapped_column(Text)
     name: Mapped[str] = mapped_column(Text)

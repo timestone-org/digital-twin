@@ -146,13 +146,13 @@ async def update_pipeline(
     summary="删除流水线",
 )
 async def delete_pipeline(
-    pipeline_id: uuid.UUID, session: SessionDep, _write: ManageDep
+    pipeline_id: uuid.UUID, session: SessionDep, write: ManageDep
 ) -> Response:
     """删流水线。还有模型版本时 409。
 
-    Args: pipeline_id, session, _write。
+    Args: pipeline_id, session, write。
     """
-    await pipeline_service.delete_pipeline(session, pipeline_id)
+    await pipeline_service.delete_pipeline(session, pipeline_id, _actor(write))
     return Response(status_code=status.HTTP_204_NO_CONTENT)
 
 

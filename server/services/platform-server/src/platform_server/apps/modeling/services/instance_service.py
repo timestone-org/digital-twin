@@ -101,6 +101,7 @@ async def require_instance(
 async def lock_instance(
     session: AsyncSession, instance_id: uuid.UUID
 ) -> InstanceRecord:
+    await pipeline_crud.lock(session, instance_id)
     if await instances.lock(session, instance_id) is None:
         raise InstanceNotFound("模型实例不存在")
     return await require_instance(session, instance_id)

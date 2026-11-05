@@ -58,7 +58,9 @@ class ModelingWorkflowCreateIn(InputModel):
 
 class ModelingTemplateOut(OutputModel):
     id: uuid.UUID
-    pipeline_id: uuid.UUID
+    pipeline_id: uuid.UUID | None = Field(
+        description="来源工作流；来源已删除时为空，模板快照仍可独立使用"
+    )
     code: str
     name: str
     description: str | None

@@ -29,42 +29,48 @@ beforeEach(() => {
   vi.spyOn(api, 'listBuiltinTemplates').mockResolvedValue(builtinTemplatePage())
 })
 
-it('新建表单只显示选择模板按钮，命名模板选择后随创建提交', async () => {
-  const read = vi
-    .spyOn(api, 'listTemplates')
-    .mockResolvedValue({ items: [named], page: 1, size: 20, total: 1 })
-  const draft = { id: null, code: 'new_energy', name: '', description: '' }
-  const wrapper = mount(PipelineFormDialog, {
-    props: { draft, isSaving: false },
-    global: { stubs: { teleport: true } },
-  })
-  await flushPromises()
-  expect(wrapper.findComponent(WorkflowTemplateDialog).exists()).toBe(false)
-  expect(read).not.toHaveBeenCalled()
-  await wrapper
-    .findAll('button')
-    .find((button) => button.text() === '选择模板')
-    ?.trigger('click')
-  const chooser = wrapper.getComponent(WorkflowTemplateDialog)
-  await flushPromises()
-  chooser.getComponent(DtSegmented).vm.$emit('update:modelValue', 'saved')
-  await flushPromises()
-  await chooser
-    .get('button[aria-label="选择模板 冷机能耗 v2"]')
-    .trigger('click')
-  await chooser
-    .findAll('button')
-    .find((button) => button.text() === '使用所选模板')
-    ?.trigger('click')
-  expect(wrapper.findComponent(WorkflowTemplateDialog).exists()).toBe(false)
-  expect(wrapper.text()).toContain('冷机能耗 v2')
-  await wrapper.get('form').trigger('submit')
-  expect(wrapper.emitted('submit')?.[0]).toEqual([
-    { ...draft, name: '冷机能耗 v2' },
-    'saved:template-1',
-  ])
-  wrapper.unmount()
-})
+it.each(['source-1', null])(
+  '来源工作流为 %s 的命名模板可选择并随创建提交',
+  async (pipelineId) => {
+    const read = vi.spyOn(api, 'listTemplates').mockResolvedValue({
+      items: [{ ...named, pipeline_id: pipelineId }],
+      page: 1,
+      size: 20,
+      total: 1,
+    })
+    const draft = { id: null, code: 'new_energy', name: '', description: '' }
+    const wrapper = mount(PipelineFormDialog, {
+      props: { draft, isSaving: false },
+      global: { stubs: { teleport: true } },
+    })
+    await flushPromises()
+    expect(wrapper.findComponent(WorkflowTemplateDialog).exists()).toBe(false)
+    expect(read).not.toHaveBeenCalled()
+    await wrapper
+      .findAll('button')
+      .find((button) => button.text() === '选择模板')
+      ?.trigger('click')
+    const chooser = wrapper.getComponent(WorkflowTemplateDialog)
+    await flushPromises()
+    chooser.getComponent(DtSegmented).vm.$emit('update:modelValue', 'saved')
+    await flushPromises()
+    await chooser
+      .get('button[aria-label="选择模板 冷机能耗 v2"]')
+      .trigger('click')
+    await chooser
+      .findAll('button')
+      .find((button) => button.text() === '使用所选模板')
+      ?.trigger('click')
+    expect(wrapper.findComponent(WorkflowTemplateDialog).exists()).toBe(false)
+    expect(wrapper.text()).toContain('冷机能耗 v2')
+    await wrapper.get('form').trigger('submit')
+    expect(wrapper.emitted('submit')?.[0]).toEqual([
+      { ...draft, name: '冷机能耗 v2' },
+      'saved:template-1',
+    ])
+    wrapper.unmount()
+  },
+)
 
 it('选择模板保留用户输入的工作流名称，取消选择保留原起点', async () => {
   const wrapper = mount(PipelineFormDialog, {

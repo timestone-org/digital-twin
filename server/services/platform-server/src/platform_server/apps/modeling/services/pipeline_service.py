@@ -5,13 +5,18 @@ from dataclasses import dataclass
 
 from sqlalchemy.ext.asyncio import AsyncSession
 
+from lib.logging import current_traceparent, parse_traceparent
 from lib.web import Page, PageParams
 from platform_server.apps.modeling.crud import (
     model_version_crud,
     pipeline_crud,
     run_crud,
 )
-from platform_server.apps.modeling.crud.template import has_templates, instances
+from platform_server.apps.modeling.crud.template import (
+    add_audit,
+    instances,
+    templates,
+)
 from platform_server.apps.modeling.errors import (
     PipelineCodeTaken,
     PipelineHasVersions,
@@ -20,6 +25,9 @@ from platform_server.apps.modeling.errors import (
     TemplateUnavailable,
 )
 from platform_server.apps.modeling.models import ModelingPipeline
+from platform_server.apps.modeling.models.template import (
+    ModelingConfigurationAudit,
+)
 from platform_server.apps.modeling.schemas import (
     GraphCheckOut,
     GraphIssueOut,
@@ -137,11 +145,11 @@ async def update_pipeline(
 
 
 async def delete_pipeline(
-    session: AsyncSession, pipeline_id: uuid.UUID
+    session: AsyncSession, pipeline_id: uuid.UUID, actor: Actor
 ) -> None:
-    """删流水线。还有模型版本时 409——版本是交付物，不该被顺手删掉。
+    """删除安全可清理的工作流，模板快照独立保留。
 
-    Args: session, pipeline_id。
+    Args: session, pipeline_id, actor。
     """
     row = await pipeline_crud.lock(session, pipeline_id)
     if row is None:
@@ -152,12 +160,30 @@ async def delete_pipeline(
         raise RunAlreadyActive(
             "工作流仍有训练或模型发布正在进行，请等待完成后删除"
         )
-    if await instances.get(session, pipeline_id) or await has_templates(
-        session, pipeline_id
-    ):
-        raise TemplateUnavailable("这条流水线已用于模板或模型实例，不能删除")
     if await model_version_crud.count_of_pipeline(session, row.id):
         raise PipelineHasVersions("这条流水线下还有模型版本，请先把它们退役")
+    instance = await instances.lock(session, pipeline_id)
+    instance_template_id = str(instance.template_id) if instance else None
+    if instance is not None:
+        await instances.delete(session, instance)
+        await session.flush()
+    template_ids = await templates.detach_pipeline(session, pipeline_id)
+    add_audit(
+        session,
+        ModelingConfigurationAudit(
+            actor_id=actor.user_id,
+            source_ip=actor.source_ip,
+            action="workflow_deleted",
+            target_id=pipeline_id,
+            trace_id=parse_traceparent(current_traceparent()) or "",
+            before_json={
+                "code": row.code,
+                "template_ids": [str(identity) for identity in template_ids],
+                "instance_template_id": instance_template_id,
+            },
+            after_json=None,
+        ),
+    )
     await pipeline_crud.delete(session, row)
 
 

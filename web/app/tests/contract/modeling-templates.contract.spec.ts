@@ -91,6 +91,18 @@ const pairs = [
 ] as const
 
 describe('模板与实例契约', () => {
+  it('模板来源工作流可为空，保留独立快照身份', () => {
+    expect(
+      spec.components.schemas['ModelingTemplateOut']?.properties?.[
+        'pipeline_id'
+      ],
+    ).toMatchObject({
+      anyOf: [{ type: 'string', format: 'uuid' }, { type: 'null' }],
+    })
+    const source: ModelingTemplate['pipeline_id'] = null
+    expect(source).toBeNull()
+  })
+
   it.each(['ModelingTemplateOut', 'ModelingInstanceOut'])(
     '%s 必需声明与模型版本一致的任务类型',
     (name) => {
