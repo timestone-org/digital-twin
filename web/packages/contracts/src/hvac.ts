@@ -66,9 +66,6 @@ export type AcUnitFilters = {
   workshop_id?: string | undefined
 }
 
-/** 一次批量改派的上限，与后端 `MAX_RELOCATE_BATCH` 同值。 */
-export const AC_UNIT_RELOCATE_MAX = 200
-
 /** 不分页的集合响应内层。数据集目录、绑定、达标范围三处同形。 */
 export interface AcItemList<TItem> {
   items: TItem[]
@@ -187,12 +184,6 @@ export interface RawSeries {
   metrics: string[]
   points: SeriesPoint[]
 }
-
-/** 表格一页最多取多少条，与后端 `limit` 的上限同值。 */
-export const RAW_SAMPLES_PAGE_MAX = 200
-
-/** 折线图一次最多要多少个桶，与后端 `max_points` 的上限同值。 */
-export const RAW_SERIES_POINTS_MAX = 2000
 
 /* 开机事件 —— docs/AC_STARTUP_DESIGN.md */
 
@@ -492,9 +483,7 @@ export interface RoomLiveReadings {
   units: AcUnitLiveReading[]
 }
 
-/** 半衰期的允许范围（天），与后端校验同值。 */
-export const MODEL_HALF_LIFE_MIN_DAYS = 7
-export const MODEL_HALF_LIFE_MAX_DAYS = 3650
+/** 半衰期缺省值（天）。 */
 export const MODEL_HALF_LIFE_DEFAULT_DAYS = 180
 
 /* 预测下发 —— 模型的预测写进哪些 OPC UA 点位（docs/AC_PUBLISH_DESIGN.md） */
