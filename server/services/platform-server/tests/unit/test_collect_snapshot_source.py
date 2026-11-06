@@ -117,3 +117,14 @@ def test_a_source_whose_hash_expired_yields_no_readings() -> None:
     # 采集进程死掉后快照跟着过期，大屏于是拿不到值而不是拿着旧值当实时值
     grouped = {SOURCE: ("outlet_temp",)}
     assert decode_rows(grouped, [[None]]) == {}
+
+
+def test_a_non_finite_value_counts_as_corrupt_not_as_a_reading() -> None:
+    # ⚠ 非有限数过不了 hub 那一跳的严格 JSON，放行会让整条发布链路这一拍断掉
+    assert decode_reading(encoded(float("nan"))) is None
+    assert decode_reading(encoded(float("inf"))) is None
+    assert decode_reading(encoded(float("-inf"))) is None
+
+
+def test_a_non_finite_element_inside_an_array_value_is_caught_too() -> None:
+    assert decode_reading(encoded([1.0, float("nan")])) is None

@@ -219,3 +219,16 @@ async def test_a_failed_grant_revoke_is_reported_as_such() -> None:
     client = build_client(recorder([], status_code=500))
 
     assert await client.revoke_grant("b" * 64) is False
+
+
+async def test_an_unsendable_payload_fails_this_batch_without_raising() -> None:
+    # ⚠ 严格 JSON 编码抛的是 ValueError：放它出去，排在后面的主题这一拍全断
+    calls: list[httpx.Request] = []
+    client = build_client(recorder(calls))
+
+    is_published = await client.publish(
+        topic=TOPIC, items=[{"value": float("nan")}]
+    )
+
+    assert is_published is False
+    assert calls == []

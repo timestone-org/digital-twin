@@ -243,6 +243,8 @@ class RealtimeClient:
     ) -> bool:
         """打一次 hub，失败只记日志不抛。
 
+        ⚠ `ValueError` / `TypeError` 来自 httpx 的严格 JSON 编码：一份发不出去的
+        载荷只算这一批失败，不许带走同一拍里排在后面的主题。
         Args: path, payload, action, traceparent。
         """
         try:
@@ -253,7 +255,7 @@ class RealtimeClient:
                 headers=self._headers(traceparent=traceparent),
             )
             response.raise_for_status()
-        except httpx.HTTPError as error:
+        except (httpx.HTTPError, ValueError, TypeError) as error:
             _logger.error(
                 "realtime_call_failed",
                 "调用 realtime-hub 失败",
