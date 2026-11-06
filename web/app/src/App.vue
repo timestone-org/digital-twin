@@ -10,7 +10,7 @@
 import { DtConfirmHost, DtTipHost, DtToastHost } from '@dt/ui'
 
 import { useGlobalTheme } from '@/composables/useGlobalTheme'
-import { useRealtimeSessionBinding } from '@/composables/useRealtimeChannel'
+import { useRealtimeSessionBinding } from '@/composables/useRealtimeSessionBinding'
 import EmbedError from '@/features/embed/EmbedError.vue'
 import AiMcpWriteConfirmHost from '@/components/ai/AiMcpWriteConfirmHost.vue'
 import { useEmbedContext } from '@/features/embed/context'

@@ -6,7 +6,7 @@ import {
   type ClientMessage,
   type ModuleConnectionState,
 } from '@dt/contracts'
-import { ref, watch, type Ref } from 'vue'
+import { ref, type Ref } from 'vue'
 
 import { newClientUuid } from '@/api/idempotency'
 import { clearPointSnapshots, resetPointSnapshots } from '@/runtime/pointStream'
@@ -21,7 +21,6 @@ import {
 } from '@/runtime/realtimeConnection'
 import {
   currentCredential,
-  hasPublicTicket,
   setPublicTicket,
 } from '@/runtime/realtimeCredential'
 import { dispatchFrame } from '@/runtime/realtimeDispatch'
@@ -155,20 +154,6 @@ export function closeRealtimeChannel(): void {
   resetBackoff()
   connectionState.value = 'closed'
   isRejected.value = false
-}
-
-/**
- * 让通道跟着登录态走，应用根调用一次。
- * ⚠ 连接的主体在握手时定死，hub 拒绝换主体，不关的话下一个账号会沿用这条连接。
- */
-export function useRealtimeSessionBinding(): void {
-  const auth = useAuthStore()
-  watch(
-    () => auth.accessToken,
-    (token) => {
-      if (token === null && !hasPublicTicket()) closeRealtimeChannel()
-    },
-  )
 }
 
 /** 取全局唯一的实时通道。 */

@@ -4,14 +4,14 @@ import { mount } from '@vue/test-utils'
 import { createPinia, setActivePinia } from 'pinia'
 
 import App from '@/App.vue'
-import { useRealtimeSessionBinding } from '@/composables/useRealtimeChannel'
+import { useRealtimeSessionBinding } from '@/composables/useRealtimeSessionBinding'
 import {
   activateEmbed,
   resetEmbedContext,
   showEmbedError,
 } from '@/features/embed/context'
 
-vi.mock('@/composables/useRealtimeChannel', () => ({
+vi.mock('@/composables/useRealtimeSessionBinding', () => ({
   useRealtimeSessionBinding: vi.fn(),
 }))
 

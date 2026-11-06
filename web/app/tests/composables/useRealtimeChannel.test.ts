@@ -17,8 +17,8 @@ import {
   closeRealtimeChannel,
   usePublicRealtimeChannel,
   useRealtimeChannel,
-  useRealtimeSessionBinding,
 } from '@/composables/useRealtimeChannel'
+import { useRealtimeSessionBinding } from '@/composables/useRealtimeSessionBinding'
 import { CLOSE_TOKEN_EXPIRED } from '@/runtime/realtimeConnection'
 import {
   REALTIME_AUTH_EXPIRED_CLOSE_CODE,
