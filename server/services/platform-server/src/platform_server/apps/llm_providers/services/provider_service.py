@@ -236,13 +236,17 @@ async def stored_api_key(
 
     ⚠ 只给探测这一条路用，绝不摊进任何出参。解不开时给空串，探测会如实报
     「拒绝了这把密钥」。
+    ⚠ 取完就放掉只读事务：调用方接着要等上游探测，不能握着连接等
+    （database-standard §6）。
 
     Args: session, provider_id, cipher。
     """
     row = await _row(session, provider_id)
     if row.base_url is None or row.api_key_enc is None:
         raise LlmProviderShapeRejected("这一路没有端点，探不了")
-    return row.base_url, cipher.decrypt(row.api_key_enc) or ""
+    stored = row.base_url, cipher.decrypt(row.api_key_enc) or ""
+    await session.rollback()
+    return stored
 
 
 async def _flush_named(session: AsyncSession, name: str) -> None:
