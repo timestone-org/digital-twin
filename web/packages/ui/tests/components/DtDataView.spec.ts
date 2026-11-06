@@ -94,6 +94,14 @@ describe('DtDataView', () => {
     expect(wrapper.emitted('update:selectedIds')).toEqual([[['a']]])
   })
 
+  it('选择列靠左，行内复选框才能与工具条全选控件对齐', () => {
+    const wrapper = render({
+      selection: { selectedIds: [], rowLabel: (row: Row) => row.name },
+    })
+    expect(wrapper.findAll('thead th')[0]?.classes()).toContain('is-left')
+    expect(wrapper.findAll('tbody td')[0]?.classes()).toContain('is-left')
+  })
+
   it('卡片视图不渲染 table，但同一批数据都在', () => {
     const wrapper = render({ view: 'card' })
     expect(wrapper.find('table').exists()).toBe(false)

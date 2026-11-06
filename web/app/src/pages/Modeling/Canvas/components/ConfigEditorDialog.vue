@@ -113,7 +113,7 @@ function setStatus(value: ConfigStatus): void {
   :deep(
     .dt-ml-form__row:not([data-widget='number']):not(
         [data-widget='integer']
-      ):not([data-widget='select']):not([data-widget='switch'])
+      ):not([data-widget='select'])
   ) {
     grid-column: 1 / -1;
   }

@@ -15,13 +15,13 @@ const statuses = [
 
 <template>
   <form
-    class="flex flex-wrap items-end gap-3"
+    class="flex flex-wrap items-center gap-3"
     @submit.prevent="emit('search', keyword.trim())"
   >
     <DtInput
       v-model="keyword"
+      class="w-72 max-w-full"
       type="search"
-      label="搜索已发布模型"
       aria-label="搜索已发布模型"
       :maxlength="128"
       :disabled="disabled"
@@ -38,7 +38,7 @@ const statuses = [
     </DtInput>
     <DtSelect
       :model-value="status"
-      label="服务状态"
+      aria-label="服务状态"
       :options="statuses"
       :display="{ searchable: false }"
       :disabled="disabled"

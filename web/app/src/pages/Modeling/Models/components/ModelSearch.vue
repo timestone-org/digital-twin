@@ -13,7 +13,6 @@ const keyword = ref('')
     <DtInput
       v-model="keyword"
       type="search"
-      :label="label"
       :aria-label="label"
       :maxlength="128"
       :disabled="disabled"

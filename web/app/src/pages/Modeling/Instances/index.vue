@@ -158,12 +158,13 @@ onMounted(() => void list.reload())
       >
         <template #toolbar>
           <form
-            class="flex flex-wrap items-end gap-2"
+            class="flex flex-wrap items-center gap-2"
             @submit.prevent="void search()"
           >
             <DtInput
               v-model="keyword"
-              label="搜索模型"
+              class="w-72 max-w-full"
+              aria-label="搜索模型"
               type="search"
               size="sm"
               placeholder="按名称或编码搜索"
@@ -174,7 +175,7 @@ onMounted(() => void list.reload())
             <DtSelect
               :model-value="archived"
               :options="archiveOptions"
-              label="归档状态"
+              aria-label="归档状态"
               size="sm"
               @update:model-value="setArchiveFilter"
             />

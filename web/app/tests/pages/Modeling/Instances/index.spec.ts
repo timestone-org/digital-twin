@@ -96,7 +96,7 @@ async function selectAll(wrapper: VueWrapper) {
 async function filter(wrapper: VueWrapper, value: string) {
   const field = wrapper
     .findAllComponents(ui.DtSelect)
-    .find((item) => item.props('label') === '归档状态')
+    .find((item) => item.props('ariaLabel') === '归档状态')
   if (!field) throw new Error('没有归档筛选')
   field.vm.$emit('update:modelValue', value)
   await flushPromises()
@@ -379,4 +379,12 @@ it('归档末页最后一个实例后只纠正一次页码，返回仍有内容�
   ).toEqual(['1', '2', '2', '1'])
   expect(wrapper.text()).toContain('保留实例')
   expect(wrapper.text()).not.toContain('末页实例')
+})
+
+it('工具条不占标签行，筛选仍有可访问名称', async () => {
+  const wrapper = await open()
+  const toolbar = wrapper.get('.dt-data-view__toolbar')
+  expect(toolbar.find('.dt-field__label').exists()).toBe(false)
+  expect(toolbar.find('input[aria-label="搜索模型"]').exists()).toBe(true)
+  expect(toolbar.find('[aria-label="归档状态"]').exists()).toBe(true)
 })

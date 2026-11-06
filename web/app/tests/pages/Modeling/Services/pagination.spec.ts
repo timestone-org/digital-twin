@@ -323,3 +323,12 @@ it('后端页读取失败允许显式重试，成功后恢复实际服务端总�
   expect(modeling.listModelDeploymentsPage).toHaveBeenCalledTimes(2)
   expect(wrapper.text()).toContain('共 201 条')
 })
+
+it('工具条不占标签行，筛选仍有可访问名称', async () => {
+  const wrapper = open()
+  await flushPromises()
+  const toolbar = wrapper.get('.dt-data-view__toolbar')
+  expect(toolbar.find('.dt-field__label').exists()).toBe(false)
+  expect(toolbar.find('input[aria-label="搜索已发布模型"]').exists()).toBe(true)
+  expect(toolbar.find('[aria-label="服务状态"]').exists()).toBe(true)
+})

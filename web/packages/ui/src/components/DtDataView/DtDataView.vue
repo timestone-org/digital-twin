@@ -124,7 +124,6 @@ const SELECTION_COLUMN: DtDataColumn = {
   key: '__selection',
   label: '选择',
   width: '3rem',
-  align: 'center',
 }
 const tableColumns = computed(() =>
   props.selection ? [SELECTION_COLUMN, ...props.columns] : props.columns,

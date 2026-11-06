@@ -38,7 +38,9 @@ function setStatus(status: ConfigStatus): void {
     <ParameterField
       v-for="field in legacyFields"
       :key="field.key"
-      :class="{ 'dt-form-grid__wide': field.kind === 'json' }"
+      :class="{
+        'dt-form-grid__wide': field.kind === 'json' || field.kind === 'boolean',
+      }"
       :field="field"
       :value="props.config[field.key]"
       :disabled="props.disabled"
@@ -67,6 +69,7 @@ function setStatus(status: ConfigStatus): void {
     min-width: 0;
   }
   :deep(.dt-ml-form__row[data-widget='json']),
+  :deep(.dt-ml-form__row[data-widget='switch']),
   :deep(.dt-ml-form__row[data-widget='columns']),
   :deep(.dt-ml-form__row[data-widget$='-list']),
   :deep(.dt-ml-form__row[data-widget='column-aggregations']) {
