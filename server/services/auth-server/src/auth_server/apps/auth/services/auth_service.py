@@ -1,5 +1,6 @@
 """会话与个人资料自服务：登录、刷新、登出、注册、改自己的资料与密码。"""
 
+import asyncio
 import uuid
 from dataclasses import dataclass
 
@@ -73,9 +74,12 @@ class AuthService:
         await self.login_limiter.hit(login.strip().lower())
         user = await user_crud.get_by_login(session, login)
         if user is None:
-            self.hasher.verify(password, _TIMING_DECOY)
+            await asyncio.to_thread(self.hasher.verify, password, _TIMING_DECOY)
             raise InvalidCredentials("用户名或密码错误")
-        if not self.hasher.verify(password, user.hashed_password):
+        # argon2 在 C 层释放 GIL，放进线程即可让出 /verify 共用的事件循环
+        if not await asyncio.to_thread(
+            self.hasher.verify, password, user.hashed_password
+        ):
             _logger.info("login_failed", "口令不符", user_id=str(user.id))
             raise InvalidCredentials("用户名或密码错误")
         if not user.is_active:
@@ -153,7 +157,9 @@ class AuthService:
         user = User(
             username=payload.username,
             email=payload.email,
-            hashed_password=self.hasher.hash(payload.password),
+            hashed_password=await asyncio.to_thread(
+                self.hasher.hash, payload.password
+            ),
             full_name=payload.full_name,
             role_id=role.id,
             is_active=True,
@@ -193,11 +199,13 @@ class AuthService:
 
         Args: session, user, payload。
         """
-        if not self.hasher.verify(
-            payload.current_password, user.hashed_password
+        if not await asyncio.to_thread(
+            self.hasher.verify, payload.current_password, user.hashed_password
         ):
             raise InvalidCredentials("当前密码不正确")
-        user.hashed_password = self.hasher.hash(payload.new_password)
+        user.hashed_password = await asyncio.to_thread(
+            self.hasher.hash, payload.new_password
+        )
         await session.flush()
         _logger.info("password_changed", "", user_id=str(user.id))
 
@@ -208,7 +216,9 @@ class AuthService:
         user.last_login_at = self.clock()
         # 升过散列参数的旧口令在这一刻顺带重算，用户无感
         if self.hasher.needs_rehash(user.hashed_password):
-            user.hashed_password = self.hasher.hash(password)
+            user.hashed_password = await asyncio.to_thread(
+                self.hasher.hash, password
+            )
         await session.flush()
         _logger.info("login_succeeded", "", user_id=str(user.id))
 

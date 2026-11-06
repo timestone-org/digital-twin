@@ -9,6 +9,7 @@
 一枚，吊销就永远追不上签发。
 """
 
+import asyncio
 import hashlib
 import secrets
 import uuid
@@ -196,7 +197,9 @@ class ApiKeyService:
             user_id=owner.user.id,
             name=payload.name,
             prefix=minted.prefix,
-            hashed_secret=self.hasher.hash(minted.secret),
+            hashed_secret=await asyncio.to_thread(
+                self.hasher.hash, minted.secret
+            ),
             expires_at=_expiry(now, payload.expires_in_days),
             issued_by=operation.operator.user.id,
         )
@@ -261,7 +264,10 @@ class ApiKeyService:
         digest = _digest(raw)
         if await self._recall(row.id) == digest:
             return
-        if not self.hasher.verify(secret, row.hashed_secret):
+        # argon2 在 C 层释放 GIL，放进线程即可让出 /verify 共用的事件循环
+        if not await asyncio.to_thread(
+            self.hasher.verify, secret, row.hashed_secret
+        ):
             raise TokenInvalid("API 密钥无效或已失效")
         await self._remember(row.id, digest)
 

@@ -1,5 +1,6 @@
 """用户管理面。每个写路径**最先**跑授权不变式（guards），再动数据。"""
 
+import asyncio
 import uuid
 
 from sqlalchemy.exc import IntegrityError
@@ -105,7 +106,7 @@ async def create_user(
     user = User(
         username=payload.username,
         email=payload.email,
-        hashed_password=hasher.hash(payload.password),
+        hashed_password=await asyncio.to_thread(hasher.hash, payload.password),
         full_name=payload.full_name,
         phone=payload.phone,
         is_active=payload.is_active,
@@ -235,7 +236,9 @@ async def reset_password(
     """
     target = await _require_identity(session, user_id)
     _assert_can_touch(operation, target, action="重置密码")
-    target.user.hashed_password = hasher.hash(payload.new_password)
+    target.user.hashed_password = await asyncio.to_thread(
+        hasher.hash, payload.new_password
+    )
     await _flush(session)
     _audit(session, operation, audit.ACTION_PASSWORD_RESET, target.user)
 
