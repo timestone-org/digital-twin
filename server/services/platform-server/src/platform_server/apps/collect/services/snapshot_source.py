@@ -151,27 +151,19 @@ def decode_rows(
     return readings
 
 
-def _refuse_constant(literal: str) -> float:
-    """`json.loads` 遇到 NaN / Infinity 时的回调：一律按损坏抛。
-
-    Args: literal。
-    """
-    raise ValueError(f"非有限数字面量 {literal}")
-
-
 def decode_reading(raw: object) -> PointReading | None:
     """把一个哈希字段解码成读数；缺失或损坏返回 None。
 
     ⚠ 损坏不当成「值是 null」：那会让一次编码事故看起来像现场真的报了空值。
-    ⚠ NaN / Infinity 也算损坏：写侧的 `json.dumps` 会放行，而往 hub 推送走的是
-    严格 JSON，放它进条目就成了一张屏带垮整条发布链路。
+    ⚠ NaN / Infinity 不算损坏，照样是读数：设备确实报了它，点位状态据此分类；
+    推不推得出去由 `point_frames` 判。
     Args: raw。
     """
     if not isinstance(raw, str):
         return None
     try:
-        parsed: object = json.loads(raw, parse_constant=_refuse_constant)
-    except ValueError:
+        parsed: object = json.loads(raw)
+    except json.JSONDecodeError:
         _logger.warning("snapshot_value_corrupt", "快照值不是合法 JSON")
         return None
     if not isinstance(parsed, dict):

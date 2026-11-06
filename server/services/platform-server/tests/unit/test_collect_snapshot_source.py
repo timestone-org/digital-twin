@@ -5,7 +5,10 @@
 """
 
 import json
+import logging
 import uuid
+
+import pytest
 
 from collectwire import (
     FIELD_QUALITY,
@@ -119,12 +122,14 @@ def test_a_source_whose_hash_expired_yields_no_readings() -> None:
     assert decode_rows(grouped, [[None]]) == {}
 
 
-def test_a_non_finite_value_counts_as_corrupt_not_as_a_reading() -> None:
-    # ⚠ 非有限数过不了 hub 那一跳的严格 JSON，放行会让整条发布链路这一拍断掉
-    assert decode_reading(encoded(float("nan"))) is None
-    assert decode_reading(encoded(float("inf"))) is None
-    assert decode_reading(encoded(float("-inf"))) is None
-
-
-def test_a_non_finite_element_inside_an_array_value_is_caught_too() -> None:
-    assert decode_reading(encoded([1.0, float("nan")])) is None
+@pytest.mark.parametrize("value", [float("nan"), float("inf"), float("-inf")])
+def test_a_non_finite_value_is_still_the_reading_collector_wrote(
+    value: float, caplog: pytest.LogCaptureFixture
+) -> None:
+    # ⚠ 设备确实报了这个值、质量位也照实：拦截归推送线形，这里改成「取不到」
+    # 会让点位状态从 good 变 waiting
+    with caplog.at_level(logging.WARNING):
+        reading = decode_reading(encoded(value))
+    assert reading is not None
+    assert reading.quality == "good"
+    assert "snapshot_value_corrupt" not in caplog.messages

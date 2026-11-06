@@ -27,6 +27,7 @@ from platform_server.apps.collect.services.point_frames import (
     error_items,
     index_by_node_key,
     shards,
+    warn_non_finite,
 )
 from platform_server.apps.dashboard.services.publish_plan import (
     DashboardPlan,
@@ -117,11 +118,9 @@ class DashboardPublisher:
             return 0
         is_full_frame = is_full or is_reloaded
         items = await self._items_of(plan, dashboard_id)
-        outgoing = (
-            items
-            if is_full_frame
-            else changed_items(items, self._sent.get(dashboard_id, {}))
-        )
+        fresh = changed_items(items, self._sent.get(dashboard_id, {}))
+        warn_non_finite(fresh, topic=topic_of(dashboard_id))
+        outgoing = items if is_full_frame else fresh
         if not outgoing:
             return 0
         if is_full_frame:
