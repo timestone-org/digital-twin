@@ -6,6 +6,7 @@
 断言的话，错位的变换照样施加，结果是**无异常、无告警的错误预测**（§5.2）。
 """
 
+from collections.abc import Sequence
 from dataclasses import dataclass
 from datetime import datetime
 from typing import Any, Protocol, runtime_checkable
@@ -15,8 +16,10 @@ from platform_server.apps.modeling.operators import (
     Frame,
     FrameColumn,
     OperatorError,
+    PredictionPostprocess,
     registry,
 )
+from platform_server.apps.modeling.operators.frame import numbers_of
 from platform_server.apps.modeling.services.input_defaults import (
     leading_input_defaults,
 )
@@ -45,7 +48,7 @@ _FIELD_CONFIG = "config"
 _FIELD_FITTED = "fitted"
 _FIELD_EXPECTED = "expected_input_columns"
 # 建模那一步产出的那一列的名字，只在编译出来的链路内部用
-_PREDICTION_KEY = "__prediction__"
+PREDICTION_KEY = "__prediction__"
 
 
 @runtime_checkable
@@ -277,6 +280,8 @@ def _apply(step: _Step, frame: Frame, estimator: object | None) -> Frame:
 
     ⚠ 产模型的那一步走 `predict_rows` 而不是 `run`：`run` 是训练路径，它会拿
     这一行重新拟合一次，算出来的东西与线上模型毫无关系——而且不会报任何错。
+    ⚠ 后处理那一步吃的是模型算出的单列，走 `adjust_rows` 而不是 `run`：`run`
+    要的是带 `y_true` 的打分帧，推理时没有真实值。
     ⚠ 通道 B 那一步的拟合结果**不在** `fitted` 里：`fitted` 只有一份列序，
     模型本体要靠 `attach_estimator` 装上。漏装的表现不是报错，是那一步说自己
     「还没有拟合结果」——所以编译期就先拦一道。
@@ -291,12 +296,22 @@ def _apply(step: _Step, frame: Frame, estimator: object | None) -> Frame:
     if step.fitted:
         operator.load_fitted(step.fitted)
     operator.bind_runtime(tz_offset_minutes=0, split_plan=None)
+    if isinstance(operator, PredictionPostprocess):
+        return _rows(
+            (PREDICTION_KEY,),
+            [
+                [value]
+                for value in operator.adjust_rows(
+                    numbers_of(frame, PREDICTION_KEY)
+                )
+            ],
+        )
     channel = registry.get(step.operator).SERVING_CHANNEL
     if channel == CHANNEL_BINARY and estimator is not None:
         operator.attach_estimator(estimator)
     if channel:
         return _rows(
-            (_PREDICTION_KEY,),
+            (PREDICTION_KEY,),
             [[value] for value in operator.predict_rows(frame)],
         )
     produced = operator.run({"frame": frame}).get("frame")
@@ -331,7 +346,7 @@ def _one_row(
 
 def _rows(
     keys: tuple[str, ...],
-    values: list[list[float]],
+    values: Sequence[Sequence[float | None]],
     index: tuple[int, ...] | None = None,
 ) -> Frame:
     """推理时的那几行。

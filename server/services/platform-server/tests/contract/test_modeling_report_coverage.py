@@ -203,6 +203,9 @@ def other_cases(source: Frame) -> dict[str, Case]:
         ),
         "linear_regression": (pair, {}),
         "logistic_regression": (binary, {}),
+        "clamp_prediction": ({"scored": scored()}, {"upper": 10.0}),
+        "replace_prediction": ({"scored": scored()}, {"threshold": 5.0}),
+        "round_prediction": ({"scored": scored()}, {}),
         "regression_metrics": ({"scored": scored()}, {}),
         "residual_analysis": ({"scored": scored()}, {}),
         "tree_regressor": (pair, {}),
@@ -247,7 +250,7 @@ def test_every_registered_operator_has_a_minimal_input_here() -> None:
     """反向遍历的入口：花名册上多一个算子，这张表就得跟着多一行。"""
     assert set(cases()) == set(CODES) - set(UNREACHABLE)
     assert UNREACHABLE == ()
-    assert len(CODES) == 51
+    assert len(CODES) == 54
 
 
 @pytest.mark.parametrize("code", CODES)

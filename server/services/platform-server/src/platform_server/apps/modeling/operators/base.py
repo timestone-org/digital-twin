@@ -38,6 +38,7 @@ CATEGORIES: tuple[str, ...] = (
     "preprocess",
     "feature",
     "model",
+    "postprocess",
     "evaluate",
 )
 

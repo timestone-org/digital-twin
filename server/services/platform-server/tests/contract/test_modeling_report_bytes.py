@@ -8,6 +8,7 @@ import pytest
 
 from contract.modeling_report_bdm import BDM_COLUMNS, bdm_frames, bdm_loads
 from contract.modeling_report_families import family_loads
+from contract.modeling_report_postprocess import postprocess_loads
 from contract.modeling_report_tabular import lookup_frame, tabular_loads
 from platform_server.apps.modeling.operators import (
     CellValue,
@@ -485,6 +486,7 @@ def _evaluate_loads() -> dict[str, tuple[Case, ...]]:
         "residual_analysis": (
             ({"scored": pool["regression_scored"]}, {"bins": 100}),
         ),
+        **postprocess_loads(pool["regression_scored"]),
     }
 
 
@@ -524,7 +526,7 @@ def test_every_registered_operator_has_a_worst_load_here() -> None:
     """反向遍历的入口：花名册上多一个算子，这张表就得跟着多一行。"""
     assert set(loads()) == set(CODES) - set(UNREACHABLE)
     assert UNREACHABLE == ()
-    assert len(CODES) == 51
+    assert len(CODES) == 54
 
 
 def test_the_shared_frames_really_are_the_worst_ones() -> None:

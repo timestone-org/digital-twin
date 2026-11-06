@@ -59,6 +59,25 @@ describe('算子目录筛选', () => {
     expect(wrapper.findAll('.dt-ml-palette__item')).toHaveLength(3)
     wrapper.unmount()
   })
+  it('后处理排在模型之后、评估之前', () => {
+    const wrapper = mount(OperatorPalette, {
+      props: {
+        operators: [
+          operator('regression_metrics', '回归评估', 'evaluate'),
+          operator('clamp_prediction', '预测限幅', 'postprocess'),
+          operator('linear_regression', '线性回归', 'model'),
+        ],
+        isReadonly: false,
+      },
+    })
+    const names = wrapper.findAll('.dt-ml-palette__item').map((item) => {
+      return item.text()
+    })
+    expect(names[0]).toContain('线性回归')
+    expect(names[1]).toContain('预测限幅')
+    expect(names[2]).toContain('回归评估')
+    wrapper.unmount()
+  })
   it('目录保留新增分类，且只读时不能添加算子', () => {
     const wrapper = mount(OperatorPalette, {
       props: {

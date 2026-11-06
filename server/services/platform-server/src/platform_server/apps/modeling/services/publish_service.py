@@ -5,13 +5,10 @@ warning 一句就跳过，用户完全不知道自己上线了一个永远返回
 （docs/MODELING_DESIGN.md D9）。
 """
 
-import sys
 import uuid
 from dataclasses import dataclass, field
 from typing import Any
 
-import numpy
-import sklearn
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from platform_server.apps.modeling.crud import model_version_crud, run_crud
@@ -27,6 +24,7 @@ from platform_server.apps.modeling.operators import (
     CONTRACT_MODEL,
     DTYPE_NUMBER,
     OperatorError,
+    PredictionPostprocess,
     registry,
 )
 from platform_server.apps.modeling.schemas.graph import PipelineGraph
@@ -50,13 +48,10 @@ from platform_server.apps.modeling.services.jsonshape import (
 )
 from platform_server.apps.modeling.services.model_schema import build_schema
 from platform_server.apps.modeling.services.serving import (
+    PREDICTION_KEY,
     SERVING_FORMAT_VERSION,
     compile_model,
 )
-
-# 指纹的线形版本。⚠ 与可服务表示那个版本号**各走各的**：两者形状变化的时机
-# 无关，共用一个的话，升可服务表示会让所有历史指纹看起来也换了口径
-FINGERPRINT_FORMAT_VERSION = "1.0"
 
 
 @dataclass(frozen=True)
@@ -261,7 +256,9 @@ def _refusal(
     if starved:
         return starved
     features = as_texts(publishing.payload.get("feature_keys"))
-    missing = sorted(set(features) - set(_last_expected(steps, entry)))
+    missing = sorted(
+        set(features) - set(_model_expected(publishing, steps, entry))
+    )
     if missing:
         return (
             f"推理链算不出模型要的这几列：{'、'.join(missing)}。"
@@ -358,11 +355,7 @@ def _steps_of(
     flowed: list[str] | None = [item.key for item in entry]
     for node_id in publishing.served:
         record = record_of(publishing.records, node_id)
-        expected = _seen_by(record, flowed, target_key)
-        if as_text(
-            publishing.payload.get("task")
-        ) == "rule_calculation" and publishing.served == [publishing.model_id]:
-            expected = [item.key for item in entry]
+        expected = _expected_of(publishing, node_id, flowed, entry)
         produced = without_target(
             frame_columns_of(record, "outputs", "frame"), target_key
         )
@@ -383,6 +376,30 @@ def _steps_of(
         )
         flowed = produced if produced is not None else flowed
     return steps
+
+
+def _expected_of(
+    publishing: _Publishing,
+    node_id: str,
+    flowed: list[str] | None,
+    entry: tuple[EntryColumn, ...],
+) -> list[str] | None:
+    """这一步推理时该看到的列，三种步骤各有各的来源。
+
+    Args: publishing, node_id, flowed, entry。
+    """
+    operator = registry.get(publishing.graph.node_by_id()[node_id].operator)
+    if issubclass(operator, PredictionPostprocess):
+        return [PREDICTION_KEY]
+    if as_text(
+        publishing.payload.get("task")
+    ) == "rule_calculation" and publishing.served == [publishing.model_id]:
+        return [item.key for item in entry]
+    return _seen_by(
+        record_of(publishing.records, node_id),
+        flowed,
+        as_text(publishing.payload.get("target_key")) or None,
+    )
 
 
 def _seen_by(
@@ -406,16 +423,20 @@ def _seen_by(
     )
 
 
-def _last_expected(
-    steps: list[dict[str, Any]], entry: tuple[EntryColumn, ...]
+def _model_expected(
+    publishing: _Publishing,
+    steps: list[dict[str, Any]],
+    entry: tuple[EntryColumn, ...],
 ) -> list[str]:
     """建模那一步会看到的列。
 
-    Args: steps, entry。
+    ⚠ 按节点找而不是取最后一步：后处理排在模型之后，最后一步看到的是预测值。
+    Args: publishing, steps, entry。
     """
-    if not steps:
-        return [item.key for item in entry]
-    return as_texts(steps[-1]["expected_input_columns"])
+    for step in steps:
+        if step["node_id"] == publishing.model_id:
+            return as_texts(step["expected_input_columns"])
+    return [item.key for item in entry]
 
 
 def _fitted_of(
@@ -523,25 +544,6 @@ def _unservable(
             else CHANNEL_JSON
         ),
     )
-
-
-def fingerprint(
-    row_count: int | None, table_codes: list[str]
-) -> dict[str, Any]:
-    """这个版本是拿什么训出来的、在什么环境里训的。
-
-    ⚠ 记下依赖版本不是留档：跨版本反序列化与跨版本数值差异都会让「同一个模型」
-    算出不同的数，而没有指纹的话没人查得出来。
-    Args: row_count, table_codes。
-    """
-    return {
-        "format_version": FINGERPRINT_FORMAT_VERSION,
-        "python": sys.version.split()[0],
-        "numpy": numpy.__version__,
-        "sklearn": sklearn.__version__,
-        "rows": row_count,
-        "table_codes": sorted(table_codes),
-    }
 
 
 async def require_version(

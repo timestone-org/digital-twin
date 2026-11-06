@@ -8,7 +8,10 @@
 
 from typing import Any
 
-from platform_server.apps.modeling.operators import registry
+from platform_server.apps.modeling.operators import (
+    PredictionPostprocess,
+    registry,
+)
 from platform_server.apps.modeling.services.input_defaults import (
     leading_input_defaults,
 )
@@ -44,6 +47,7 @@ def build_schema(
         "data_period": data_period,
         "inputs": [_input_of(item, filled, task) for item in entry],
         "derived": _derived_of(entry, steps),
+        "postprocess": _postprocess_of(steps),
         "output": {
             "key": as_text(target.get("key")),
             "label": as_text(target.get("label")) or as_text(target.get("key")),
@@ -112,6 +116,25 @@ def _derived_of(
                 {"key": key, "by": operator.CODE, "label": operator.NAME}
             )
     return derived
+
+
+def _postprocess_of(steps: list[dict[str, Any]]) -> list[dict[str, Any]]:
+    """预测值出模型之后还要过的那几步，按执行顺序。只做展示。
+
+    Args: steps。
+    """
+    described: list[dict[str, Any]] = []
+    for step in steps:
+        operator = registry.get(as_text(step.get("operator")))
+        if issubclass(operator, PredictionPostprocess):
+            described.append(
+                {
+                    "operator": operator.CODE,
+                    "label": operator.NAME,
+                    "config": as_dict(step.get("config")),
+                }
+            )
+    return described
 
 
 def entry_keys_of(signature: dict[str, Any], fallback: list[str]) -> list[str]:
