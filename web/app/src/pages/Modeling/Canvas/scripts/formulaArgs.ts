@@ -43,10 +43,9 @@ export interface FormulaContext {
 
 export type FormulaMaker = (context: FormulaContext) => FormulaSpec
 
-/** 四种「代不进」的措辞。合并了就分不清该改配置、该重跑，还是本来就没有。 */
+/** 三种「代不进」的措辞。合并了就分不清该改配置、该重跑，还是本来就没有。 */
 export const NO_BLOCK = '这一步的讲解里没有这一块，代不进实参'
 export const NO_CONFIG = '这次运行没有记下这个参数，代不进实参'
-export const NO_FRAME = '这一步的结果摘要里没有这一路的帧，代不进实参'
 
 type Item = Record<string, unknown>
 
