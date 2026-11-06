@@ -193,7 +193,9 @@ async def cancel_run(session: AsyncSession, run_id: uuid.UUID) -> RunOut:
     （§6.2）。
     Args: session, run_id。
     """
-    run = await require_run(session, run_id)
+    run = await run_crud.get_for_update(session, run_id)
+    if run is None:
+        raise RunNotFound("运行记录不存在")
     if run.status not in ACTIVE_RUN_STATUSES:
         raise RunNotCancellable("这次运行已经结束了，取消不了")
     run.cancel_requested = True

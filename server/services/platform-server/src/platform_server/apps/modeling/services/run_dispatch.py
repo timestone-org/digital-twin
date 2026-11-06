@@ -367,7 +367,7 @@ async def _finish(
     Args: sessions, run_id, outcome。
     """
     async with sessions.session() as session:
-        run = await run_crud.get(session, run_id)
+        run = await run_crud.get_for_update(session, run_id)
         if run is None:
             return
         _apply_terminal(run, outcome)

@@ -1,4 +1,4 @@
-"""运行编排的收尾：编排层抛出的异常必须当场落终态，不能让运行卡在 running。"""
+"""运行编排的收尾：编排异常当场落终态，取消与收尾在行锁上排队。"""
 
 import asyncio
 import uuid
@@ -8,10 +8,12 @@ from dataclasses import dataclass, field, replace
 from typing import Any, cast
 
 import pytest
+from sqlalchemy.ext.asyncio import AsyncSession
 
 from lib.objectstore import ObjectStore, ObjectStoreError
+from platform_server.apps.modeling.errors import RunNotCancellable
 from platform_server.apps.modeling.models import ModelingRun
-from platform_server.apps.modeling.services import run_dispatch
+from platform_server.apps.modeling.services import run_dispatch, run_service
 from platform_server.apps.modeling.services.artifact_store import (
     SealedArtifact,
 )
@@ -25,7 +27,10 @@ from platform_server.apps.modeling.services.run_dispatch import (
     DispatchOptions,
     execute_run,
 )
-from platform_server.apps.modeling.services.run_executor import Sources
+from platform_server.apps.modeling.services.run_executor import (
+    RunOutcome,
+    Sources,
+)
 from platform_server.apps.modeling.services.sessions import Sessions
 from unit.modeling_fakes import DirectRunner, linear_frame, linear_graph
 
@@ -48,11 +53,22 @@ class RowSession:
 class RowSessions:
     """每次都交出同一个会话假件的工厂。"""
 
-    current: RowSession
+    current: object
 
     @asynccontextmanager
-    async def session(self) -> AsyncIterator[RowSession]:
+    async def session(self) -> AsyncIterator[object]:
         yield self.current
+
+
+@dataclass
+class RacingSession:
+    """不加锁读到另一方提交前的快照，加锁才读到提交后的行。"""
+
+    before: ModelingRun
+    after: ModelingRun
+
+    async def get(self, _model: object, _identity: object, **kw: Any) -> Any:
+        return self.after if kw.get("with_for_update") else self.before
 
 
 class ArtifactRunner:
@@ -167,3 +183,28 @@ async def test_a_cancelled_task_is_not_turned_into_a_failure(
     with pytest.raises(asyncio.CancelledError):
         await execute_run(sessions_of(run), run_id=run.id, options=options_of())
     assert run.status == "running"
+
+
+async def test_cancel_is_rejected_once_the_locked_row_is_terminal() -> None:
+    """取消读到 running 的同时 worker 已提交终态：不许把终态改回 cancelling。"""
+    before = pending_run()
+    before.status = "running"
+    after = pending_run()
+    after.status = "succeeded"
+    with pytest.raises(RunNotCancellable):
+        await run_service.cancel_run(
+            cast("AsyncSession", RacingSession(before, after)), after.id
+        )
+    assert (before.status, after.status) == ("running", "succeeded")
+
+
+async def test_finish_writes_through_the_row_lock() -> None:
+    """终态落在加锁读到的行上，与 cancel 的写入串行。"""
+    before = pending_run()
+    after = pending_run()
+    await run_dispatch._finish(  # pyright: ignore[reportPrivateUsage]
+        cast("Sessions", RowSessions(RacingSession(before, after))),
+        after.id,
+        RunOutcome(status="succeeded", nodes=()),
+    )
+    assert (before.status, after.status) == ("pending", "succeeded")
