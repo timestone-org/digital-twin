@@ -63,8 +63,8 @@ def _number_of(one: str) -> int:
     Args: one。
     """
     point = ord(one)
-    for low, _high, base in _RUNS:
+    for low, high, base in _RUNS:
         at = point - base
-        if 0 <= at < _RUNS[[r[2] for r in _RUNS].index(base)][1] - low + 1:
+        if 0 <= at <= high - low:
             return low + at
     return 0
