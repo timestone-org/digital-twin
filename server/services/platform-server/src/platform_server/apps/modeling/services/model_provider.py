@@ -6,7 +6,9 @@
 ⚠ 每批只查一次库：单行写触发的重算批量恒为 1，每批的固定开销必须小。
 """
 
+from collections.abc import Awaitable, Callable
 from dataclasses import dataclass, field
+from functools import partial
 
 from sqlalchemy.ext.asyncio import AsyncSession
 
@@ -79,16 +81,22 @@ class ModelingAnalysisProvider(AnalysisProvider):
     async def _load(
         self, sessions: Sessions, codes: frozenset[str], *, is_preview: bool
     ) -> LoadedModels:
-        loaded: dict[str, AnalysisModel | AnalysisUnavailable] = {}
+        prepared: dict[str, _Servable | AnalysisUnavailable] = {}
         async with sessions.session() as session:
             bindings = await binding_crud.list_by_codes(
                 session, tuple(sorted(codes))
             )
             found = {binding.fx_code: binding for binding in bindings}
             for code in codes:
-                loaded[code] = await self._one(
+                prepared[code] = await self._one(
                     session, found.get(code), is_preview=is_preview
                 )
+        # ⚠ 读对象存储必须等上面的事务释放：存储变慢时不能占着数据库连接等它
+        loaded: dict[str, AnalysisModel | AnalysisUnavailable] = {}
+        for code, item in prepared.items():
+            loaded[code] = (
+                await _compiled(item) if isinstance(item, _Servable) else item
+            )
         return loaded
 
     async def _one(
@@ -97,8 +105,8 @@ class ModelingAnalysisProvider(AnalysisProvider):
         binding: ModelingBinding | None,
         *,
         is_preview: bool,
-    ) -> AnalysisModel | AnalysisUnavailable:
-        """一条绑定编译出来的模型，或一句用不了的原因。
+    ) -> "_Servable | AnalysisUnavailable":
+        """一条绑定要编译的材料，或一句用不了的原因。
 
         Args: session, binding, is_preview。
         """
@@ -115,58 +123,71 @@ class ModelingAnalysisProvider(AnalysisProvider):
             return AnalysisUnavailable(
                 reason=version.unservable_reason or "这个模型版本不可上线"
             )
-        return await self._compiled(session, version, is_preview=is_preview)
+        return await self._servable(session, version, is_preview=is_preview)
 
-    async def _compiled(
+    async def _servable(
         self,
         session: AsyncSession,
         version: ModelVersion,
         *,
         is_preview: bool,
-    ) -> AnalysisModel | AnalysisUnavailable:
-        """编译一个版本。通道 B 先把模型本体从对象存储装回来。
+    ) -> "_Servable | AnalysisUnavailable":
+        """把编译要的东西从库里取齐。通道 B 只取产物元信息，不碰字节。
 
-        ⚠ 加载放在**取数相位**：编译出来的东西在求值期只做算术，那里一次 I/O
-        都不许有（docs/MODELING_DESIGN.md D20）。
         Args: session, version, is_preview。
         """
         if is_preview and version.serving_channel != CHANNEL_JSON:
             return AnalysisUnavailable(
                 reason="二进制模型请通过台账重算查看结果，公式预览暂不支持"
             )
-        try:
-            estimator = (
-                None if is_preview else await self._estimator(session, version)
-            )
-            return compile_model(
-                dict(version.serving_json), estimator=estimator
-            )
-        except ArtifactRejected as error:
-            return AnalysisUnavailable(reason=str(error))
-        except OperatorError as error:
-            return AnalysisUnavailable(reason=str(error))
-
-    async def _estimator(
-        self, session: AsyncSession, version: ModelVersion
-    ) -> object | None:
-        """通道 B 的模型本体；通道 A 给 `None`。
-
-        Args: session, version。
-        """
+        serving = dict(version.serving_json)
         if version.serving_channel != CHANNEL_BINARY:
-            return None
+            return _Servable(serving=serving)
         if self.store is None:
-            raise ArtifactRejected("本部署没有配对象存储，这个模型用不了")
+            return AnalysisUnavailable(
+                reason="本部署没有配对象存储，这个模型用不了"
+            )
         row = await model_artifact_crud.get_by_version(session, version.id)
         if row is None:
-            raise ArtifactRejected("这个模型版本没有留下模型产物，请重新发布")
-        return await artifact_io.fetch(
-            self.store,
-            {
-                "object_key": row.object_key,
-                "digest": row.digest,
-                "format_version": row.format_version,
-                "runtime": dict(row.runtime_json),
-            },
-            self.cache,
+            return AnalysisUnavailable(
+                reason="这个模型版本没有留下模型产物，请重新发布"
+            )
+        return _Servable(
+            serving=serving,
+            fetch=partial(
+                artifact_io.fetch,
+                self.store,
+                {
+                    "object_key": row.object_key,
+                    "digest": row.digest,
+                    "format_version": row.format_version,
+                    "runtime": dict(row.runtime_json),
+                },
+                self.cache,
+            ),
         )
+
+
+@dataclass(frozen=True)
+class _Servable:
+    """离开事务后编译一个版本要的全部材料，不含 ORM 行。"""
+
+    serving: dict[str, object]
+    #: 把通道 B 的模型本体装回来。通道 A 没有这一步
+    fetch: Callable[[], Awaitable[object]] | None = None
+
+
+async def _compiled(item: _Servable) -> AnalysisModel | AnalysisUnavailable:
+    """编译一个版本。通道 B 先把模型本体从对象存储装回来。
+
+    ⚠ 加载放在**取数相位**：编译出来的东西在求值期只做算术，那里一次 I/O
+    都不许有（docs/MODELING_DESIGN.md D20）。
+    Args: item。
+    """
+    try:
+        estimator = None if item.fetch is None else await item.fetch()
+        return compile_model(item.serving, estimator=estimator)
+    except ArtifactRejected as error:
+        return AnalysisUnavailable(reason=str(error))
+    except OperatorError as error:
+        return AnalysisUnavailable(reason=str(error))
