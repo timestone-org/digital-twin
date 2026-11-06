@@ -29,7 +29,7 @@ function parse(): void {
       hint="粘贴数据位置指向的列表，每一项生成一个字段，再改成业务名称"
     />
     <DtNotice v-if="error" intent="warning">{{ error }}</DtNotice>
-    <DtButton size="sm" variant="outline" icon="list" @click="parse">
+    <DtButton size="sm" variant="outline" icon="list-checks" @click="parse">
       按样例生成字段
     </DtButton>
   </div>
