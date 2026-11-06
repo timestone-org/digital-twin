@@ -186,6 +186,7 @@ async def _arrived(
 
     ⚠ 暂存区没有时还要探一次正式前缀：上一次可能搬完了却没提交成，暂存件已删、
     库里没有行，不认它的话重试只会得到「没有收到文件」，字节成了匿名可读的孤儿。
+    最坏情况两边各探三类，共六个 HEAD。
     Args: store, asset_id。
     """
     staged = await _find_staged(store, asset_id)
@@ -242,7 +243,7 @@ async def _find_staged(
 ) -> tuple[str, str, ObjectStat] | None:
     """在暂存区找这个 id 的字节，顺带把类型读回来。
 
-    逐类探而不是让调用方报：素材类型统共三种，一次 finalize 最多三个 HEAD，
+    逐类探而不是让调用方报：素材类型统共三种，暂存区最多三个 HEAD，
     换来的是「键与类型不可能对不上」。
     """
     for kind in kinds():
