@@ -217,8 +217,8 @@ class AuthService:
         password: str,
         login_key: str,
     ) -> None:
-        # 计数按登录入参走，而入参可能是邮箱，只清用户名键会清不到
-        for key in {login_key, user.username.lower()}:
+        # 计数按登录入参走，同一账号的用户名键和邮箱键都可能积着失败次数
+        for key in {login_key, user.username.lower(), user.email.lower()}:
             await self.login_limiter.reset(key)
         user.last_login_at = self.clock()
         # 升过散列参数的旧口令在这一刻顺带重算，用户无感

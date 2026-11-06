@@ -115,6 +115,14 @@ async def test_email_login_also_clears_the_username_count() -> None:
     assert await limiter.hit("alice") == 1
 
 
+async def test_username_login_also_clears_the_email_count() -> None:
+    limiter = build_limiter(InMemoryCache())
+    for _ in range(LIMIT):
+        await limiter.hit("alice@example.com")
+    await login(build_service(limiter), "alice")
+    assert await limiter.hit("alice@example.com") == 1
+
+
 async def test_failed_logins_still_hit_the_limit() -> None:
     service = build_service(build_limiter(InMemoryCache()))
     session = cast("AsyncSession", FakeSession())
