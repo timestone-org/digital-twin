@@ -120,13 +120,6 @@ class ModelRegistry:
         """
         return _is_login_based(self._adapter_of(profile_id))
 
-    def resolves(self, profile_id: str) -> bool:
-        """这个档位名此刻取得出模型吗。
-
-        Args: profile_id。
-        """
-        return any(one.id == profile_id for one in self.adapters())
-
     def supports(self, profile_id: str, kind: ModelKind) -> bool:
         """这一路吃不吃这一档。认不出的档位名按退回的那一路算。
 

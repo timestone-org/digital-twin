@@ -30,10 +30,6 @@ OWNER_MAX_LENGTH = 128
 TITLE_MAX_LENGTH = 200
 EMBEDDING_MODEL_MAX_LENGTH = 128
 
-# 与 `services/memory/ports.py` 的 `Scope` 逐字对齐。⚠ 两处各写一份是因为
-# 一处是数据库约束、一处是类型，而契约测试守着它们不漂
-SCOPES = ("user", "project")
-
 
 class KnowledgeChunk(UuidPrimaryKeyMixin, TimestampMixin, Base):
     """一条记住的东西。"""
