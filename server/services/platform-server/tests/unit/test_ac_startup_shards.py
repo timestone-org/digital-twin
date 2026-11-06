@@ -10,7 +10,6 @@ import pytest
 
 from platform_server.apps.hvac.services.ac_startup_rules import ExtractionRules
 from platform_server.apps.hvac.services.ac_startup_shards import (
-    month_key,
     month_start,
     next_month_start,
     plan_months,
@@ -60,14 +59,9 @@ def test_the_plan_crosses_a_year_boundary() -> None:
     ) == ["2025-12", "2026-01"]
 
 
-def test_the_month_of_a_moment_is_its_utc_month() -> None:
-    """月份键按 UTC 算，与批次区间同一个口径。"""
-    assert month_key(datetime(2026, 3, 31, 23, 59, tzinfo=UTC)) == "2026-03"
-
-
-def test_a_month_key_round_trips_through_its_start() -> None:
-    """月份键 → 月初时刻 → 月份键，逐字回到原样。"""
-    assert month_key(month_start("2026-07")) == "2026-07"
+def test_a_month_key_opens_at_its_first_utc_instant() -> None:
+    """月份键 → 月初 UTC 时刻。"""
+    assert month_start("2026-07") == datetime(2026, 7, 1, tzinfo=UTC)
 
 
 def test_december_rolls_into_the_next_january() -> None:

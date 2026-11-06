@@ -43,6 +43,8 @@ FRESH_TS = NOW - timedelta(days=KEPT_DAYS - 5)
 # 取行窗口的两端，宽到把上面两个时刻都包进去
 EPOCH = datetime(2000, 1, 1, tzinfo=UTC)
 FOREVER = datetime(2100, 1, 1, tzinfo=UTC)
+# 取行上限，远大于任何一条用例写入的行数
+ROW_CEILING = 1000
 
 
 def sessions_of(context: AppContext) -> Sessions:
@@ -82,13 +84,14 @@ async def remaining(context: AppContext, table_id: str) -> list[datetime]:
     Args: context, table_id。
     """
     async with sessions_of(context).session() as session:
-        rows = await record_crud.list_ascending(
+        rows = await record_crud.scan_oldest(
             session,
             window=RecordWindow(
                 table_id=uuid.UUID(table_id),
                 since=EPOCH,
                 until=FOREVER,
             ),
+            limit=ROW_CEILING,
         )
     return sorted(row.ts for row in rows)
 

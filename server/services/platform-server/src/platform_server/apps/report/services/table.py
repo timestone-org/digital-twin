@@ -38,8 +38,9 @@ def build_table(
         ]
         for stamp, row in values
     ]
-    if spec.summary != "none" and values:
-        rows.append(_summary(values, spec, kinds))
+    summary = spec.summary
+    if summary != "none" and values:
+        rows.append(_summary(values, summary, spec, kinds))
     return NodeValue(
         kind="dsTable",
         title=spec.title,
@@ -77,11 +78,10 @@ def _values(
 
 def _summary(
     values: list[tuple[datetime, list[object]]],
+    mode: Aggregation,
     spec: DataNodeSpec,
     kinds: dict[str, str],
 ) -> list[str]:
-    if spec.summary == "none":
-        return []
     labels = {
         "avg": "均值",
         "sum": "合计",
@@ -90,17 +90,17 @@ def _summary(
         "count": "计数",
     }
     return [
-        labels[spec.summary],
+        labels[mode],
         *(
             format_value(
                 _aggregate_column(
                     [row[index] for _, row in values],
                     _display_kind(kinds[key], spec),
-                    spec.summary,
+                    mode,
                 ),
                 (
                     "number"
-                    if spec.summary == "count"
+                    if mode == "count"
                     else _display_kind(kinds[key], spec)
                 ),
                 spec.decimals,
