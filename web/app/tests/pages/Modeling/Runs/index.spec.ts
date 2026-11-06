@@ -451,3 +451,12 @@ it('记录读取失败可从重试按钮恢复列表', async () => {
   expect(wrapper.text()).toContain('能耗工作流')
   expect(wrapper.text()).not.toContain('请求失败，请重试')
 })
+
+it('工具条不占标签行，筛选仍有可访问名称', async () => {
+  const wrapper = open()
+  await flushPromises()
+  const toolbar = wrapper.get('.dt-data-view__toolbar')
+  expect(toolbar.find('.dt-field__label').exists()).toBe(false)
+  expect(toolbar.find('input[aria-label="搜索训练记录"]').exists()).toBe(true)
+  expect(toolbar.find('[aria-label="训练状态"]').exists()).toBe(true)
+})

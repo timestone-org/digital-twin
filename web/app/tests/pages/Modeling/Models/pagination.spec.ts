@@ -219,3 +219,13 @@ it('改变后端检索范围清除选择，但不会解除未知写入锁', asyn
       .element.checked,
   ).toBe(false)
 })
+
+it('两个工具条都不占标签行，搜索仍有可访问名称', async () => {
+  const wrapper = open()
+  await flushPromises()
+  for (const toolbar of wrapper.findAll('.dt-data-view__toolbar')) {
+    expect(toolbar.find('.dt-field__label').exists()).toBe(false)
+  }
+  expect(wrapper.find('input[aria-label="搜索模型版本"]').exists()).toBe(true)
+  expect(wrapper.find('input[aria-label="搜索公式绑定"]').exists()).toBe(true)
+})

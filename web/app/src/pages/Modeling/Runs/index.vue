@@ -237,13 +237,13 @@ onBeforeUnmount(() => {
       >
         <template #toolbar>
           <form
-            class="flex min-w-0 flex-1 flex-wrap items-end gap-2"
+            class="flex min-w-0 flex-1 flex-wrap items-center gap-2"
             @submit.prevent="void search()"
           >
             <DtInput
               v-model="keyword"
               class="w-80 max-w-full min-w-0 flex-none"
-              label="搜索训练记录"
+              aria-label="搜索训练记录"
               type="search"
               size="sm"
               placeholder="工作流、创建者或训练 UUID"
@@ -262,7 +262,7 @@ onBeforeUnmount(() => {
             </DtButton>
             <DtSelect
               :model-value="status"
-              label="训练状态"
+              aria-label="训练状态"
               :options="statusOptions"
               size="sm"
               @update:model-value="setStatus"

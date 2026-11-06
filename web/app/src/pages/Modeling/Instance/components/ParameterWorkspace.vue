@@ -78,6 +78,10 @@ watch(
   align-items: stretch;
   gap: 0.35rem;
 }
+.parameter-nodes .dt-btn {
+  justify-content: flex-start;
+  text-align: left;
+}
 .parameter-panel {
   display: flex;
   flex-direction: column;

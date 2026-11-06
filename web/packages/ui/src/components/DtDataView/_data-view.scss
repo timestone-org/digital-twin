@@ -45,10 +45,12 @@
     }
   }
 
+  // 左缩进 = 面板描边 + 单元格内边距，全选框才与行内复选框同列。
   &__selection-control {
     display: flex;
     flex-shrink: 0;
     align-items: center;
+    padding-inline-start: 13px;
     min-block-size: var(--ctl-h-sm);
   }
 
