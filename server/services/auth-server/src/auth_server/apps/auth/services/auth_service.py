@@ -71,7 +71,8 @@ class AuthService:
 
         Args: session, login（用户名或邮箱）, password。
         """
-        await self.login_limiter.hit(login.strip().lower())
+        login_key = login.strip().lower()
+        await self.login_limiter.hit(login_key)
         user = await user_crud.get_by_login(session, login)
         if user is None:
             await asyncio.to_thread(self.hasher.verify, password, _TIMING_DECOY)
@@ -84,7 +85,7 @@ class AuthService:
             raise InvalidCredentials("用户名或密码错误")
         if not user.is_active:
             raise AccountDisabled("账号已停用，请联系管理员")
-        await self._on_login_success(session, user, password)
+        await self._on_login_success(session, user, password, login_key)
         identity = await load_identity(session, user)
         return self._session_out(identity)
 
@@ -210,9 +211,15 @@ class AuthService:
         _logger.info("password_changed", "", user_id=str(user.id))
 
     async def _on_login_success(
-        self, session: AsyncSession, user: User, password: str
+        self,
+        session: AsyncSession,
+        user: User,
+        password: str,
+        login_key: str,
     ) -> None:
-        await self.login_limiter.reset(user.username.lower())
+        # 计数按登录入参走，而入参可能是邮箱，只清用户名键会清不到
+        for key in {login_key, user.username.lower()}:
+            await self.login_limiter.reset(key)
         user.last_login_at = self.clock()
         # 升过散列参数的旧口令在这一刻顺带重算，用户无感
         if self.hasher.needs_rehash(user.hashed_password):
