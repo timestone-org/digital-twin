@@ -184,3 +184,30 @@ describe('fmtClock', () => {
     expect(fmtClock('刚刚')).toBe(NO_DATA)
   })
 })
+
+describe('舍入后归零的小负数', () => {
+  it.each([
+    ['fmtFixed 整数', () => fmtFixed(-0.4), '0'],
+    ['fmtFixed 一位', () => fmtFixed(-0.04, 1), '0.0'],
+    ['fmtNumber 取整', () => fmtNumber(-0.4, 0), '0'],
+    ['fmtNumber 两位', () => fmtNumber(-0.001), '0'],
+    ['fmtTrim 取整', () => fmtTrim(-0.4, 0), '0'],
+    ['fmtTrim 两位', () => fmtTrim(-0.001), '0'],
+    ['fmtDecimal 一位', () => fmtDecimal(-0.04), '0.0'],
+    ['fmtDecimal 两位', () => fmtDecimal(-0.001, 2), '0.00'],
+    ['fmtKwh', () => fmtKwh(-0.3), '0'],
+  ])('%s 不带负号', (_name, format, expected) => {
+    expect(format()).toBe(expected)
+  })
+
+  it.each([
+    ['fmtFixed', () => fmtFixed(-0.6), '-1'],
+    ['fmtNumber', () => fmtNumber(-1234.5, 1), '-1,234.5'],
+    ['fmtTrim', () => fmtTrim(-0.05), '-0.05'],
+    ['fmtDecimal', () => fmtDecimal(-0.06), '-0.1'],
+    ['fmtKwh 整数档', () => fmtKwh(-0.6), '-1'],
+    ['fmtKwh 压缩档', () => fmtKwh(-1500), '-1.5k'],
+  ])('%s 的非零负数保留符号', (_name, format, expected) => {
+    expect(format()).toBe(expected)
+  })
+})

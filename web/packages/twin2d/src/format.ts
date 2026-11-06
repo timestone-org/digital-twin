@@ -60,17 +60,23 @@ function clampDigits(digits: number, fallback: number): number {
 }
 
 /**
+ * ⚠ 舍入成零的负数去掉负号：不归一的话大屏上会显出「-0」，看着像个坏值。
+ * 要在成文之后判：`-0.04` 只有舍入完才知道是不是零。
+ * @param text 已按位数舍入的数值文本
+ */
+function unsignZero(text: string): string {
+  return /^-0(?:\.0+)?$/.test(text) ? text.slice(1) : text
+}
+
+/**
  * 定点小数，缺值给「—」。
  * @param raw 待格式化的原值
  * @param digits 小数位
  */
 export function fmtFixed(raw: unknown, digits = 0): string {
-  return isPresent(raw) ? raw.toFixed(clampDigits(digits, 0)) : NO_DATA
-}
-
-/** ⚠ -0 归一成 0：不归一的话大屏上会显出「-0」，看着像个坏值。 */
-function unsignZero(value: number): number {
-  return value === 0 ? 0 : value
+  return isPresent(raw)
+    ? unsignZero(raw.toFixed(clampDigits(digits, 0)))
+    : NO_DATA
 }
 
 /**
@@ -80,11 +86,12 @@ function unsignZero(value: number): number {
  */
 export function fmtNumber(raw: unknown, precision = 2): string {
   if (!isPresent(raw)) return NO_DATA
-  const value = unsignZero(raw)
   const digits = clampDigits(precision, 2)
-  return digits <= 0
-    ? Math.round(value).toLocaleString(LOCALE)
-    : value.toLocaleString(LOCALE, { maximumFractionDigits: digits })
+  return unsignZero(
+    digits <= 0
+      ? Math.round(raw).toLocaleString(LOCALE)
+      : raw.toLocaleString(LOCALE, { maximumFractionDigits: digits }),
+  )
 }
 
 /**
@@ -94,10 +101,12 @@ export function fmtNumber(raw: unknown, precision = 2): string {
  */
 export function fmtTrim(raw: unknown, max = 2): string {
   if (!isPresent(raw)) return NO_DATA
-  return unsignZero(raw).toLocaleString(LOCALE, {
-    maximumFractionDigits: clampDigits(max, 2),
-    useGrouping: false,
-  })
+  return unsignZero(
+    raw.toLocaleString(LOCALE, {
+      maximumFractionDigits: clampDigits(max, 2),
+      useGrouping: false,
+    }),
+  )
 }
 
 /**
@@ -113,7 +122,7 @@ export function fmtKwh(raw: unknown, precision = 2): string {
   const abs = Math.abs(raw)
   return Math.round(abs) >= KILO
     ? `${sign}${fmtTrim(abs / KILO, precision)}k`
-    : `${sign}${fmtTrim(abs, 0)}`
+    : unsignZero(`${sign}${fmtTrim(abs, 0)}`)
 }
 
 /**
@@ -128,11 +137,13 @@ export function fmtKwh(raw: unknown, precision = 2): string {
 export function fmtDecimal(raw: unknown, digits = 1, grouping = false): string {
   if (!isPresent(raw)) return NO_DATA
   const fixed = clampDigits(digits, 1)
-  return unsignZero(raw).toLocaleString(LOCALE, {
-    minimumFractionDigits: fixed,
-    maximumFractionDigits: fixed,
-    useGrouping: grouping,
-  })
+  return unsignZero(
+    raw.toLocaleString(LOCALE, {
+      minimumFractionDigits: fixed,
+      maximumFractionDigits: fixed,
+      useGrouping: grouping,
+    }),
+  )
 }
 
 function pad2(value: number): string {
@@ -178,7 +189,7 @@ function enumText(
  */
 function autoText(value: number, precision: number | null): string {
   if (precision !== null) return fmtFixed(value, precision)
-  return Number.isInteger(value) ? String(unsignZero(value)) : fmtTrim(value, 1)
+  return Number.isInteger(value) ? String(value) : fmtTrim(value, 1)
 }
 
 /**
