@@ -2,15 +2,37 @@
 
 import uuid
 from dataclasses import dataclass
+from datetime import UTC, datetime
+from types import SimpleNamespace
+from typing import cast
 
 import pytest
+from sqlalchemy.exc import IntegrityError
+from sqlalchemy.ext.asyncio import AsyncSession
 
-from knowledge_server.apps.knowledge.errors import UnsupportedRawItem
-from knowledge_server.apps.knowledge.schemas import UploadTicketIn
+from knowledge_server.apps.knowledge import crud
+from knowledge_server.apps.knowledge.errors import (
+    DuplicateDocument,
+    UnsupportedRawItem,
+)
+from knowledge_server.apps.knowledge.schemas import (
+    RegisterDocumentIn,
+    UploadTicketIn,
+)
 from knowledge_server.apps.knowledge.services import document_service
-from knowledge_server.apps.knowledge.services.sources import preview_key
+from knowledge_server.apps.knowledge.services.sources import (
+    document_key,
+    preview_key,
+    staging_key,
+)
 from knowledge_server.settings import MAX_RAW_BYTES
-from lib.objectstore import ObjectNotFound, PresignedPost, UploadLimits
+from lib.objectstore import (
+    ObjectNotFound,
+    ObjectStore,
+    ObjectStoreUnavailable,
+    PresignedPost,
+    UploadLimits,
+)
 
 BASE = uuid.UUID("00000000-0000-7000-8000-000000000001")
 DOC = uuid.UUID("00000000-0000-7000-8000-000000000002")
@@ -134,32 +156,111 @@ async def test_the_hash_is_computed_on_our_side() -> None:
     报同一个哈希，第二份会被当成重复丢掉。"""
     store = _Store()
     store.objects["staging"] = b"hello"
-    digest, size = await document_service._hash_and_move(
+    digest, size = await document_service._hashed(
         store,  # pyright: ignore[reportArgumentType]
         "staging",
-        "final",
     )
     assert size == 5
     assert len(digest) == 64
-    assert store.copied == [("staging", "final")]
-    assert store.deleted == ["staging"]
 
 
 async def test_the_same_bytes_always_hash_the_same() -> None:
     store = _Store()
     store.objects["a"] = b"same"
     store.objects["b"] = b"same"
-    first, _ = await document_service._hash_and_move(
+    first, _ = await document_service._hashed(
         store,  # pyright: ignore[reportArgumentType]
         "a",
-        "a2",
     )
-    second, _ = await document_service._hash_and_move(
+    second, _ = await document_service._hashed(
         store,  # pyright: ignore[reportArgumentType]
         "b",
-        "b2",
     )
     assert first == second
+
+
+class _StuckDeleteStore(_Store):
+    """删除总是瞬时失败的对象存储。"""
+
+    async def delete(self, key: str) -> None:
+        raise ObjectStoreUnavailable(key)
+
+
+def _registration(
+    monkeypatch: pytest.MonkeyPatch, *, is_duplicate: bool
+) -> None:
+    """替换登记走到的库操作；重复时唯一键与判重查询口径一致。
+
+    Args: monkeypatch, is_duplicate。
+    """
+
+    async def source(*_args: object) -> SimpleNamespace:
+        return SimpleNamespace(id=uuid.uuid4())
+
+    async def has_hash(*_args: object) -> bool:
+        return is_duplicate
+
+    async def insert(*_args: object) -> None:
+        if is_duplicate:
+            raise IntegrityError("insert", {}, Exception("唯一键冲突"))
+
+    async def row(*_args: object) -> SimpleNamespace:
+        return SimpleNamespace(
+            id=DOC,
+            base_id=BASE,
+            source_id=uuid.uuid4(),
+            title="手册.md",
+            media_type="",
+            byte_size=5,
+            status="pending",
+            failure_reason="",
+            chunk_count=0,
+            object_key="final",
+            created_at=datetime.now(UTC),
+            ready_at=None,
+        )
+
+    monkeypatch.setattr(crud.source, "find_source_by_kind", source)
+    monkeypatch.setattr(crud.document, "has_content_hash", has_hash)
+    monkeypatch.setattr(crud.document, "insert_document", insert)
+    monkeypatch.setattr(crud.document, "get_document", row)
+
+
+async def _register(store: _Store) -> str:
+    made = await document_service.register_upload(
+        cast("AsyncSession", object()),
+        cast("ObjectStore", store),
+        BASE,
+        RegisterDocumentIn(document_id=DOC, filename="手册.md"),
+        (),
+    )
+    return made.title
+
+
+async def test_a_duplicate_leaves_no_bytes_behind(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """⚠ 重复传 N 次的界面提示是对的，而桶里会多出 N 份没人引用的原件。"""
+    _registration(monkeypatch, is_duplicate=True)
+    store = _Store()
+    store.objects[staging_key(BASE, DOC, ".md")] = b"hello"
+
+    with pytest.raises(DuplicateDocument):
+        await _register(store)
+
+    assert store.objects == {}
+
+
+async def test_a_failed_staging_delete_does_not_fail_the_registration(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """⚠ 字节已经挪好，留下的暂存件只是没人引用，不该给用户一个 5xx。"""
+    _registration(monkeypatch, is_duplicate=False)
+    store = _StuckDeleteStore()
+    store.objects[staging_key(BASE, DOC, ".md")] = b"hello"
+
+    assert await _register(store) == "手册.md"
+    assert document_key(BASE, DOC, ".md") in store.objects
 
 
 @dataclass(frozen=True)
