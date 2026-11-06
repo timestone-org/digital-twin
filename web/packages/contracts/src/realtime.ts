@@ -54,12 +54,6 @@ export const REALTIME_HANDSHAKE_REJECTED_CLOSE_CODE = 1008
  */
 export const REALTIME_PUBLIC_GRANT_CLOSE_CODE = 4003
 
-/**
- * 匿名连接名额用尽时服务端的关闭码（ADR-0021）。
- * ⚠ 它是拥挤不是拒绝：照常退避重连。
- */
-export const REALTIME_QUOTA_CLOSE_CODE = 4029
-
 /** 握手时报的第一个子协议：登录态。凭据是 access token。 */
 export const REALTIME_AUTH_SUBPROTOCOL = 'dt.auth'
 

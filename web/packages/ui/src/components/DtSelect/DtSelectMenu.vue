@@ -64,7 +64,7 @@ defineExpose({ el, focusSearch, scrollActiveIntoView })
 
 <template>
   <Teleport :to="to">
-    <div ref="el" class="dt-select-menu" :style="style">
+    <div ref="el" class="dt-select-menu" :style="style" data-dt-nested-overlay>
       <div v-if="search.enabled" class="dt-select-menu__search">
         <DtIcon name="search" :size="13" />
         <input

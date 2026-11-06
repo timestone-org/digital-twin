@@ -31,6 +31,7 @@ interface Matcher {
  * 匹配器按**优先级**排：同一个位置上先命中的赢。
  * ⚠ 代码排第一：反引号里的 `**` 是字面量，不是加粗。
  * ⚠ `**` 排在 `*` 前面同理。
+ * ⚠ 下划线要词边界：点位名与字段名里的 `_` 是字面量（同 CommonMark）。
  */
 const MATCHERS: readonly Matcher[] = [
   { pattern: /`([^`\n]+)`/, build: (m) => ({ kind: 'code', text: at(m, 1) }) },
@@ -39,10 +40,16 @@ const MATCHERS: readonly Matcher[] = [
     build: (m) => linkOf(at(m, 1), at(m, 2)),
   },
   { pattern: /\*\*([\s\S]+?)\*\*/, build: (m) => wrap('strong', at(m, 1)) },
-  { pattern: /__([\s\S]+?)__/, build: (m) => wrap('strong', at(m, 1)) },
+  {
+    pattern: /(?<![\p{L}\p{N}_])__([\s\S]+?)__(?![\p{L}\p{N}_])/u,
+    build: (m) => wrap('strong', at(m, 1)),
+  },
   { pattern: /~~([\s\S]+?)~~/, build: (m) => wrap('del', at(m, 1)) },
   { pattern: /\*([^*\n]+)\*/, build: (m) => wrap('em', at(m, 1)) },
-  { pattern: /_([^_\n]+)_/, build: (m) => wrap('em', at(m, 1)) },
+  {
+    pattern: /(?<![\p{L}\p{N}_])_([^_\n]+)_(?![\p{L}\p{N}_])/u,
+    build: (m) => wrap('em', at(m, 1)),
+  },
 ]
 
 /**

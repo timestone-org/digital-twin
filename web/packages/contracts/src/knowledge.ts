@@ -13,8 +13,6 @@ export type KnowledgeStrategy = (typeof KNOWLEDGE_STRATEGIES)[number]
 /** 知识来源的种类。文件上传只是其中一路。 */
 export const KNOWLEDGE_SOURCE_KINDS = ['upload', 'platform'] as const
 
-export type KnowledgeSourceKind = (typeof KNOWLEDGE_SOURCE_KINDS)[number]
-
 /** 一份文档在摄取管线上走到哪了。 */
 export const KNOWLEDGE_DOCUMENT_STATUSES = [
   'pending',
@@ -376,12 +374,6 @@ export interface KnowledgeChatAdvanceIn {
   tool_results?: KnowledgeChatToolResult[]
   client_tools?: string[]
 }
-
-/** 这套部署没接对话档（领域 23）。⚠ 按码分支，不按 message。 */
-export const KNOWLEDGE_CHAT_UNAVAILABLE_CODE = 42321
-
-/** 范围里点名的知识库不存在（领域 23）。 */
-export const KNOWLEDGE_CHAT_SCOPE_UNKNOWN_CODE = 42322
 
 /** 这个对话在别处改过了，手上这份是旧的（领域 23）。 */
 export const KNOWLEDGE_CHAT_CONFLICT_CODE = 42323

@@ -135,6 +135,17 @@ describe('弹窗行为', () => {
     wrapper.unmount()
   })
 
+  it('⚠ 按住遮罩不夺走焦点：焦点掉到 body 后 Esc 与 Tab 圈养都收不到键', () => {
+    const wrapper = mountModal()
+    const press = new MouseEvent('mousedown', {
+      bubbles: true,
+      cancelable: true,
+    })
+    wrapper.get('.dt-node-modal__backdrop').element.dispatchEvent(press)
+    expect(press.defaultPrevented).toBe(true)
+    wrapper.unmount()
+  })
+
   // ⚠ 弹窗渲染在舞台内却自起一棵 NodeTree：大屏级外观缺省不透传的话，
   //   弹窗里的模块全部落回平台默认——同一个模块在屏上和弹窗里长两个样
   it('大屏级卡片外观缺省原样透传给弹窗里的 NodeTree', () => {

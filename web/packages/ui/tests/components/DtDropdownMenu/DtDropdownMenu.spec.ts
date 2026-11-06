@@ -170,12 +170,13 @@ describe('DtDropdownMenu 选中', () => {
 })
 
 describe('DtDropdownMenu 键盘', () => {
-  it('下行键把焦点移到第一项', async () => {
+  it('展开后焦点在第一项，下行键移到第二项', async () => {
     const wrapper = mountMenu()
     await openMenu(wrapper)
+    expect(document.activeElement).toBe(items()[0])
     pressOnMenu('ArrowDown')
     await nextTick()
-    expect(document.activeElement).toBe(items()[0])
+    expect(document.activeElement).toBe(items()[1])
     wrapper.unmount()
   })
 
@@ -185,14 +186,13 @@ describe('DtDropdownMenu 键盘', () => {
     pressOnMenu('ArrowDown')
     pressOnMenu('ArrowDown')
     await nextTick()
-    expect(document.activeElement).toBe(items()[1])
+    expect(document.activeElement).toBe(items()[2])
     wrapper.unmount()
   })
 
-  it('上行键从头环绕到末项', async () => {
+  it('上行键从首项环绕到末项', async () => {
     const wrapper = mountMenu()
     await openMenu(wrapper)
-    pressOnMenu('ArrowDown')
     pressOnMenu('ArrowUp')
     await nextTick()
     expect(document.activeElement).toBe(items()[2])
@@ -205,7 +205,18 @@ describe('DtDropdownMenu 键盘', () => {
     })
     await openMenu(wrapper)
     pressOnMenu('ArrowDown')
-    pressOnMenu('ArrowDown')
+    await nextTick()
+    expect(document.activeElement).toBe(items()[2])
+    wrapper.unmount()
+  })
+
+  it('首项禁用时展开落在首个可用项，上行键仍到末项', async () => {
+    const wrapper = mountMenu({
+      items: [{ ...EDIT, disabled: true }, CLONE, REMOVE],
+    })
+    await openMenu(wrapper)
+    expect(document.activeElement).toBe(items()[1])
+    pressOnMenu('ArrowUp')
     await nextTick()
     expect(document.activeElement).toBe(items()[2])
     wrapper.unmount()
@@ -252,9 +263,10 @@ describe('DtDropdownMenu 键盘', () => {
     await nextTick()
     await wrapper.find('button').trigger('click')
     await openMenu(wrapper)
+    expect(document.activeElement).toBe(items()[0])
     pressOnMenu('ArrowDown')
     await nextTick()
-    expect(document.activeElement).toBe(items()[0])
+    expect(document.activeElement).toBe(items()[1])
     wrapper.unmount()
   })
 })

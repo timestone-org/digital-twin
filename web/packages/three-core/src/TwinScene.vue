@@ -26,6 +26,7 @@ import {
 import type { TwinSceneSelection } from './pickTargets'
 import { PreviewIsolation } from './previewIsolation'
 import { ModelAnimations } from './modelAnimations'
+import TwinGameHint from './TwinGameHint.vue'
 import TwinPartModal from './TwinPartModal.vue'
 import TwinRoamControls from './TwinRoamControls.vue'
 import { useRoamTour } from './useRoamTour'
@@ -45,7 +46,6 @@ import { SCENE_TOOLS_KEY, useSceneTools } from './useSceneTools'
 import { useStructureTree } from './useStructureTree'
 import { useTwinModelLoad } from './useTwinModelLoad'
 import { useViewpointSwitch } from './useViewpointSwitch'
-import { EMPTY_NODE_INDEX, type NodeIndex } from './nodeIndex'
 import {
   WEBGL_UNAVAILABLE_MESSAGE,
   applyModelPlacement,
@@ -103,7 +103,6 @@ let gameNavigation: GameNavigationControls | null = null
 const isolation = new PreviewIsolation()
 let previewKey = ''
 let targetKey = ''
-let nodeIndex: NodeIndex = EMPTY_NODE_INDEX
 
 /** 模型包围盒对角线；相机、图层与剪裁面都按它定尺度。 */
 function modelSpan(): number {
@@ -123,13 +122,19 @@ const model = useTwinModelLoad({
   asset: () => props.config.model.asset,
   variant: () => props.config.model.variant,
   parts: () => props.config.parts,
-  onReady: (asset, index) => {
+  onBeforeClear: () => {
     isolation.restore()
     targetKey = ''
     previewKey = ''
-    nodeIndex = index
-    // 动画属于模型，换模型整层重建；只换配置走 refreshLayers 里的 apply
+    flight.cancel()
     animations?.dispose()
+    animations = null
+    layers?.parts.dispose()
+    // 树是惰性重算的：真正重建发生在模型摘下之后的那次渲染
+    structure.rebuild()
+  },
+  onReady: (asset) => {
+    // 动画属于模型，换模型整层重建；只换配置走 refreshLayers 里的 apply
     animations = new ModelAnimations(asset.root, asset.clips)
     animations.apply(props.config.model.animations, props.values?.animations)
     sceneCamera.applyInitial(asset.root)
@@ -162,7 +167,7 @@ const tools = useSceneTools({
   core: () => core,
   element: () => containerRef.value,
   config: () => props.config,
-  nodeIndex: () => nodeIndex,
+  nodeIndex: () => model.index(),
   title: () => props.sceneTitle ?? '',
   flight,
 })
@@ -265,8 +270,9 @@ function refreshLayers(): void {
   // ⚠ 摆放要跟着配置重算：只在装载时应用的话，编辑器里改缩放/位移/旋转
   // 会一直到换模型才生效，中间那段是「调了没反应」
   placeModel()
+  tools.reapplyClipping()
   animations?.apply(props.config.model.animations, props.values?.animations)
-  layers?.build(props.config, liveValues(), nodeIndex)
+  layers?.build(props.config, liveValues(), model.index())
   // ⚠ 建完立刻按当前机位算一次：等下一帧的话，配了近距隐藏的元素会先露一帧
   layers?.applyDistanceRules(distanceContextOf(core))
   applyPreview()
@@ -282,7 +288,7 @@ function applyPreview(): void {
     previewKey = ''
     return
   }
-  const box = isolation.apply(root, nodeIndex, names)
+  const box = isolation.apply(root, model.index(), names)
   const key = JSON.stringify(names)
   if (key !== previewKey && box !== null) flight.flyToBox(core, box)
   previewKey = key
@@ -389,13 +395,14 @@ onBeforeUnmount(() => {
   disposeLayers()
   if (core !== null) disposeScene(core)
   core = null
-  nodeIndex = EMPTY_NODE_INDEX
 })
 
 watch(
   [() => props.config.model.asset, () => props.config.model.variant],
   () => void model.load(),
 )
+// 模型清掉时没有 refreshLayers 这一步，靠状态变化摘掉旧模型算出来的剖切面
+watch(() => model.status.value, tools.reapplyClipping)
 watch(() => props.focusView, sceneCamera.applyView)
 watch(() => props.previewNodes, refreshLayers)
 watch(() => props.previewTarget, applyTargetPreview)
@@ -450,13 +457,7 @@ watch(
       @next="roam.next()"
       @prev="roam.prev()"
     />
-    <div
-      v-if="navigationMode === 'game'"
-      class="twin-scene__game-hint"
-      data-test="game-navigation-hint"
-    >
-      单击画面捕获鼠标 · WASD 平移 · 空格上升 · Shift 下降 · 鼠标转向 · Esc 释放
-    </div>
+    <TwinGameHint v-if="navigationMode === 'game'" />
     <TwinPartModal
       :part="detail.part.value"
       :parts="config.parts"
@@ -478,21 +479,5 @@ watch(
   width: 100%;
   height: 100%;
   overflow: hidden;
-
-  &__game-hint {
-    position: absolute;
-    top: 12px;
-    left: 50%;
-    z-index: var(--z-sticky);
-    padding: 5px 10px;
-    font-size: 12px;
-    color: var(--text-secondary);
-    white-space: nowrap;
-    pointer-events: none;
-    background: var(--surface-sunken);
-    border: 1px solid var(--border-default);
-    border-radius: var(--radius-pill);
-    transform: translateX(-50%);
-  }
 }
 </style>

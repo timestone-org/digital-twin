@@ -289,31 +289,6 @@ export function arcDashOffset(percent: number | null): number {
 }
 
 /**
- * 一整段弧的真实长度（用户坐标）。
- * ⚠ 填充用不着它——那一路走 `pathLength` 归一。它是给要按真实长度摆东西的地方用的。
- * @param radius 半径
- * @param spanDeg 张角
- */
-export function arcLength(radius: number, spanDeg: number): number {
-  const { start, end } = arcAngles(spanDeg)
-  return (Math.PI * radius * (end - start)) / 180
-}
-
-/**
- * 弧从起点走到某个百分比处的长度。
- * @param radius 半径
- * @param spanDeg 张角
- * @param percent 量程百分比，`null` = 0
- */
-export function arcLengthAt(
-  radius: number,
-  spanDeg: number,
-  percent: number | null,
-): number {
-  return (arcLength(radius, spanDeg) * fillPercent(percent)) / 100
-}
-
-/**
  * 等距刻度的落点，首尾各占一个（4 个 → 0 / 33.3 / 66.7 / 100）。
  * ⚠ 至少两个：一个刻度会让分母 `count − 1` 变 0，整排刻度全是 NaN 而模板照画。
  * @param count 刻度个数，钳进 [2, 8]，非有限数回落 4

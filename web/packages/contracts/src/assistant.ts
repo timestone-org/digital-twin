@@ -76,8 +76,6 @@ export interface AssistantCapability {
 /** 消息的说话人。`tool` 是工具结果回填的那一条。 */
 export const ASSISTANT_MESSAGE_ROLES = ['user', 'assistant', 'tool'] as const
 
-export type AssistantMessageRole = (typeof ASSISTANT_MESSAGE_ROLES)[number]
-
 /** 步骤的种类。服务端与客户端工具分两档，因为失败含义完全不同。 */
 export const ASSISTANT_STEP_KINDS = [
   'model',

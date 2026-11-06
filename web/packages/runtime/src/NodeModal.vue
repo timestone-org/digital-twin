@@ -91,7 +91,12 @@ function onKeydown(event: KeyboardEvent): void {
     :aria-label="hasTitle ? undefined : '详情'"
     @keydown="onKeydown"
   >
-    <div class="dt-node-modal__backdrop" aria-hidden="true" />
+    <!-- ⚠ 按下不许夺焦：焦点掉到 body 后，根节点的 Esc 与 Tab 圈养都收不到键 -->
+    <div
+      class="dt-node-modal__backdrop"
+      aria-hidden="true"
+      @mousedown.prevent
+    />
 
     <div ref="panelRef" class="dt-node-modal__panel" tabindex="-1">
       <div v-if="hasTitle" class="dt-node-modal__head">

@@ -10,8 +10,6 @@ import {
   arcAngleAt,
   arcAngles,
   arcDashOffset,
-  arcLength,
-  arcLengthAt,
   arcPath,
   arcRadius,
   completionPercent,
@@ -219,13 +217,6 @@ describe('弧度盘那一整条', () => {
     expect(arcAngleAt(50, 270)).toBe(360)
     expect(arcAngleAt(100, 270)).toBe(495)
     expect(arcAngleAt(null, 270)).toBe(225)
-  })
-
-  it('真实弧长按半径与张角算，取一段就按百分比截', () => {
-    expect(arcLength(44.5, 270)).toBeCloseTo(209.701, 3)
-    expect(arcLength(44.5, 180)).toBeCloseTo(139.801, 3)
-    expect(arcLengthAt(44.5, 270, 50)).toBeCloseTo(104.851, 3)
-    expect(arcLengthAt(44.5, 270, null)).toBe(0)
   })
 })
 

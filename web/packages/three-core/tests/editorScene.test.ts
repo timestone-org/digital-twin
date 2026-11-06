@@ -629,6 +629,30 @@ describe('编辑态刻意与运行态不同的地方', () => {
     expect(materialOf(model, 'pump').opacity).toBeCloseTo(0.3)
   })
 
+  it('换模型时部件层先还原，释放的是原几何与原材质', async () => {
+    const model = fakeModel()
+    const mesh = model.getObjectByName('pump') as THREE.Mesh
+    const geometryDispose = vi.spyOn(mesh.geometry, 'dispose')
+    const materialDispose = vi.spyOn(materialOf(model, 'pump'), 'dispose')
+    const parts = [{ id: 'part-pump', nodes: ['pump'], look: { opacity: 0.3 } }]
+    const next = deferred()
+    let call = 0
+    const harness = createScene(twinConfig({ parts }), {
+      loadAsync: () =>
+        call++ === 0 ? Promise.resolve({ scene: model }) : next.promise,
+    })
+    await flushPromises()
+
+    harness.scene.setConfig(
+      twinConfig({ parts, model: { asset: OTHER_ASSET } }),
+    )
+    next.settle(fakeModel('other'))
+    await flushPromises()
+
+    expect(geometryDispose).toHaveBeenCalledTimes(1)
+    expect(materialDispose).toHaveBeenCalledTimes(1)
+  })
+
   it('常态色当场染上，且不动共用材质的别处', async () => {
     const model = fakeModel()
     await ready(

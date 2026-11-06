@@ -4,7 +4,7 @@
  */
 import type { TwinPart } from '@dt/twin-config'
 import type { Object3D } from 'three'
-import { ref, type Ref } from 'vue'
+import { ref, shallowRef, type Ref, type ShallowRef } from 'vue'
 
 import type { ModelVariant } from '@dt/contracts'
 
@@ -29,8 +29,13 @@ export interface TwinModelLoadOptions {
   variant?: () => ModelVariant
   /** 部件清单，用来报「配了但模型里没有」的节点名。 */
   parts: () => readonly TwinPart[]
+  /**
+   * 当前模型即将被释放：宿主撤掉挂在它上面的一切。清空、失败与换模型都走这里。
+   * ⚠ 必须在释放之前：部件层要先把原材质与原几何装回网格，晚了释放的就是克隆件。
+   */
+  onBeforeClear: () => void
   /** 模型挂好了：宿主据此摆放、建层、取景、装动画。 */
-  onReady: (asset: TwinModelAsset, index: NodeIndex) => void
+  onReady: (asset: TwinModelAsset) => void
 }
 
 export interface TwinModelLoad {
@@ -59,16 +64,19 @@ interface LoadState {
   errorMessage: Ref<string>
   missingNodes: Ref<readonly string[]>
   root: Object3D | null
-  index: NodeIndex
+  /** ⚠ 要响应式：搜索结果是 computed，普通字段换了索引它不会重算。 */
+  index: ShallowRef<NodeIndex>
   seq: number
   abort: AbortController | null
 }
 
 /** 把模型与索引清干净，状态回到空态。 */
-function clearModel(state: LoadState, core: SceneCore | null): void {
+function clearModel(state: LoadState, options: TwinModelLoadOptions): void {
+  if (state.root !== null) options.onBeforeClear()
+  const core = options.core()
   if (core !== null) disposeSceneGraph(core.modelRoot)
   state.root = null
-  state.index = EMPTY_NODE_INDEX
+  state.index.value = EMPTY_NODE_INDEX
   state.missingNodes.value = []
   state.errorMessage.value = ''
   state.status.value = 'empty'
@@ -82,13 +90,16 @@ function mountModel(
 ): void {
   const core = options.core()
   if (core === null) return
-  clearModel(state, core)
+  clearModel(state, options)
   state.root = asset.root
   core.modelRoot.add(asset.root)
-  state.index = buildNodeIndex(asset.root)
-  state.missingNodes.value = unmatchedNodeNames(state.index, options.parts())
+  state.index.value = buildNodeIndex(asset.root)
+  state.missingNodes.value = unmatchedNodeNames(
+    state.index.value,
+    options.parts(),
+  )
   state.status.value = 'ready'
-  options.onReady(asset, state.index)
+  options.onReady(asset)
 }
 
 /**
@@ -116,16 +127,16 @@ function abortLoad(state: LoadState): void {
   state.abort?.abort()
   state.abort = null
   state.root = null
-  state.index = EMPTY_NODE_INDEX
+  state.index.value = EMPTY_NODE_INDEX
 }
 
 /** 打成错误态并清掉模型。 */
 function failWith(
   state: LoadState,
-  core: SceneCore | null,
+  options: TwinModelLoadOptions,
   message: string,
 ): void {
-  clearModel(state, core)
+  clearModel(state, options)
   state.status.value = 'error'
   state.errorMessage.value = message
 }
@@ -141,12 +152,11 @@ export function useTwinModelLoad(options: TwinModelLoadOptions): TwinModelLoad {
     errorMessage: ref(''),
     missingNodes: ref<readonly string[]>([]),
     root: null,
-    index: EMPTY_NODE_INDEX,
+    index: shallowRef(EMPTY_NODE_INDEX),
     seq: 0,
     abort: null,
   }
-  const fail = (message: string): void =>
-    failWith(state, options.core(), message)
+  const fail = (message: string): void => failWith(state, options, message)
 
   async function load(): Promise<void> {
     const mine = ++state.seq
@@ -154,7 +164,7 @@ export function useTwinModelLoad(options: TwinModelLoadOptions): TwinModelLoad {
     const controller = new AbortController()
     state.abort = controller
     const url = urlOf(options.asset(), options.variant?.() ?? 'original')
-    if (url === null) return clearModel(state, options.core())
+    if (url === null) return clearModel(state, options)
     if (url === '') return fail('模型地址解析失败：素材引用无效或宿主未注入')
     state.status.value = 'loading'
     state.progressPercent.value = 0
@@ -179,7 +189,7 @@ export function useTwinModelLoad(options: TwinModelLoadOptions): TwinModelLoad {
     errorMessage: state.errorMessage,
     missingNodes: state.missingNodes,
     root: () => state.root,
-    index: () => state.index,
+    index: () => state.index.value,
     load,
     fail,
     abort: () => abortLoad(state),

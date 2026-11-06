@@ -15,7 +15,6 @@ export {
   assetObjectKey,
   assetRef,
   assetUrl,
-  modelVariantKey,
   modelVariantUrl,
   parseAssetRef,
 } from './asset'
@@ -112,7 +111,6 @@ export type {
   KnowledgeRerankCapability,
   KnowledgeSearchResult,
   KnowledgeSource,
-  KnowledgeSourceKind,
   KnowledgeStrategy,
   KnowledgeSyncResult,
   KnowledgeUploadTicket,
@@ -120,8 +118,6 @@ export type {
 } from './knowledge'
 export {
   KNOWLEDGE_CHAT_CONFLICT_CODE,
-  KNOWLEDGE_CHAT_SCOPE_UNKNOWN_CODE,
-  KNOWLEDGE_CHAT_UNAVAILABLE_CODE,
   KNOWLEDGE_DOCUMENT_STATUSES,
   KNOWLEDGE_KEYWORD_LANES,
   KNOWLEDGE_SOURCE_KINDS,
@@ -193,17 +189,12 @@ export {
   AC_METRIC_GROUPS,
   AC_METRIC_LIMITS_MAX,
   AC_MODEL_STATUSES,
-  AC_UNIT_RELOCATE_MAX,
   MODEL_DURATION_DATA_TYPES,
   MODEL_HALF_LIFE_DEFAULT_DAYS,
-  MODEL_HALF_LIFE_MAX_DAYS,
-  MODEL_HALF_LIFE_MIN_DAYS,
   MODEL_NO_PREDICTION,
   MODEL_PUBLISH_STATUSES,
   MODEL_RECOMMENDATION_DATA_TYPE,
   MODEL_RELIABILITIES,
-  RAW_SAMPLES_PAGE_MAX,
-  RAW_SERIES_POINTS_MAX,
   STARTUP_BATCH_STATUSES,
   STARTUP_EXCLUSION_REASON_MAX,
   STARTUP_OUTCOMES,
@@ -362,7 +353,6 @@ export type {
   RuntimeParamTier,
 } from './runtimeParam'
 export {
-  COLLECT_RUNTIME_PARAM_SECTIONS,
   RUNTIME_PARAM_DANGERS,
   RUNTIME_PARAM_KINDS,
   RUNTIME_PARAM_SECTIONS,
@@ -396,7 +386,6 @@ export type {
   PointSample,
   PointState,
   PointValueListener,
-  ProviderRegistry,
   SeriesOutcome,
   SeriesReader,
   SeriesRequest,
@@ -477,7 +466,6 @@ export {
   REALTIME_HANDSHAKE_REJECTED_CLOSE_CODE,
   REALTIME_PUBLIC_GRANT_CLOSE_CODE,
   REALTIME_PUBLIC_SUBPROTOCOL,
-  REALTIME_QUOTA_CLOSE_CODE,
   SERVER_FRAME_TYPES,
   SERVER_SYSTEM_EVENTS,
 } from './realtime'
@@ -542,7 +530,6 @@ export type {
   AssistantReceipts,
   AssistantReceiptsAck,
   AssistantMessage,
-  AssistantMessageRole,
   AssistantModelProfile,
   AssistantMcpWritePrepare,
   AssistantMcpWriteDecision,
@@ -583,7 +570,6 @@ export type {
   LlmProviderKindCode,
   LlmProviderPreset,
   LlmPurpose,
-  LlmPurposeCode,
   LlmRerankDialect,
   LlmRerankDialectCode,
 } from './llm'

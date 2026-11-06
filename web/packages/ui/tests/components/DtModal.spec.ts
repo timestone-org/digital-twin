@@ -162,3 +162,39 @@ describe('填了一半的弹窗', () => {
     wrapper.unmount()
   })
 })
+
+describe('以打开态挂载的弹窗', () => {
+  function mountOpenFrom(trigger: HTMLElement) {
+    trigger.focus()
+    return mount(DtModal, {
+      props: { modelValue: true, title: '批量编辑' },
+      slots: { default: '<input class="field" />' },
+      attachTo: document.body,
+    })
+  }
+
+  function backgroundButton(): HTMLButtonElement {
+    const button = document.createElement('button')
+    document.body.appendChild(button)
+    return button
+  }
+
+  it('焦点进入弹窗，键盘事件才落得到 Esc 与焦点陷阱上', async () => {
+    const button = backgroundButton()
+    const wrapper = mountOpenFrom(button)
+    await nextTick()
+    const panel = document.body.querySelector('.dt-modal__panel')
+    expect(panel?.contains(document.activeElement)).toBe(true)
+    wrapper.unmount()
+    button.remove()
+  })
+
+  it('由父级卸载时焦点归还给打开前的元素', async () => {
+    const button = backgroundButton()
+    const wrapper = mountOpenFrom(button)
+    await nextTick()
+    wrapper.unmount()
+    expect(document.activeElement).toBe(button)
+    button.remove()
+  })
+})

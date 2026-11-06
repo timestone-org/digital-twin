@@ -22,9 +22,6 @@ export const RUNTIME_PARAM_SECTIONS = [
 
 export type RuntimeParamSection = (typeof RUNTIME_PARAM_SECTIONS)[number]
 
-/** 走 `/collect-runtime-params` 路由的分组（读 collect:view、写 collect:manage）。 */
-export const COLLECT_RUNTIME_PARAM_SECTIONS = ['collect', 'archive'] as const
-
 /** 控件类型：数字两种 + 开关。 */
 export const RUNTIME_PARAM_KINDS = ['int', 'float', 'switch'] as const
 export type RuntimeParamKind = (typeof RUNTIME_PARAM_KINDS)[number]

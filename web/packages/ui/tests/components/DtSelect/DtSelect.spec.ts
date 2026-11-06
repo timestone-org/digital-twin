@@ -6,8 +6,10 @@
  */
 import { flushPromises, mount } from '@vue/test-utils'
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
+import { h } from 'vue'
 import type { DtSelectOption } from '@dt/contracts'
 
+import DtModal from '../../../src/components/DtModal/DtModal.vue'
 import DtSelect from '../../../src/components/DtSelect/DtSelect.vue'
 
 const FEW: DtSelectOption[] = [
@@ -312,6 +314,38 @@ describe('DtSelect 搜索', () => {
     const { wrapper, input } = await openWithQuery('选项 7')
     await press('Enter', input)
     expect(wrapper.emitted('update:modelValue')).toEqual([['v7']])
+  })
+
+  it('弹窗里按 Esc 依次清词、收下拉、关弹窗，一下只退一层', async () => {
+    const modal = mount(DtModal, {
+      props: { modelValue: true, title: '表单' },
+      slots: {
+        default: () => h(DtSelect, { modelValue: '', options: MANY }),
+      },
+      attachTo: document.body,
+    })
+    await flushPromises()
+    trigger()?.click()
+    await flushPromises()
+    const input = document.querySelector<HTMLInputElement>(
+      '.dt-select-menu__input',
+    )
+    if (input === null) throw new Error('浮层没有搜索框')
+    input.value = '3'
+    input.dispatchEvent(new Event('input', { bubbles: true }))
+    await flushPromises()
+
+    await press('Escape', input)
+    expect(input.value).toBe('')
+    expect(modal.emitted('update:modelValue')).toBeUndefined()
+
+    await press('Escape', input)
+    expect(document.querySelector('.dt-select-menu')).toBeNull()
+    expect(modal.emitted('update:modelValue')).toBeUndefined()
+
+    await press('Escape', trigger())
+    expect(modal.emitted('update:modelValue')).toEqual([[false]])
+    modal.unmount()
   })
 
   it('有关键词时 Esc 先清关键词，再按才收起', async () => {

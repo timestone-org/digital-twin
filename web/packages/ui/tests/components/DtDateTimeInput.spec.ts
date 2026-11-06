@@ -298,6 +298,30 @@ describe('DtDateTimeInput 面板里的时分', () => {
     ])
   })
 
+  it('⚠ 指针选时分：按下选项不算点外面，抬起才选中并收起日历', async () => {
+    const wrapper = mountInShanghai({ modelValue: '2026-08-12T02:55:00.000Z' })
+    openCalendar()
+    await flushPromises()
+    const hours = document.querySelector('[aria-label="小时"]')
+    hours?.dispatchEvent(new MouseEvent('click', { bubbles: true }))
+    await flushPromises()
+    const option = [...document.querySelectorAll('[role="option"]')].find(
+      (node) => node.textContent?.trim() === '13',
+    )
+    if (option === undefined) throw new Error('找不到 13 点这一项')
+
+    option.dispatchEvent(new Event('pointerdown', { bubbles: true }))
+    await flushPromises()
+    expect(document.querySelector('.dt-calendar')).not.toBeNull()
+
+    option.dispatchEvent(new MouseEvent('click', { bubbles: true }))
+    await flushPromises()
+    expect(wrapper.emitted('update:modelValue')).toEqual([
+      ['2026-08-12T05:55:00.000Z'],
+    ])
+    expect(document.querySelector('.dt-calendar')).toBeNull()
+  })
+
   it('还没选过日子时改时分落在当月 1 号，而不是抛一个没有日期的值', async () => {
     const wrapper = mountInShanghai()
     openCalendar()
