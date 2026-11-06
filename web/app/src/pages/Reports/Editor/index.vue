@@ -19,6 +19,7 @@ import {
   useToast,
   useConfirm,
 } from '@dt/ui'
+import { PERMISSION_CODES } from '@dt/contracts'
 import type {
   ReportBody,
   ReportDocument,
@@ -90,7 +91,7 @@ const isDirty = computed(
 )
 useUnsavedGuard(() => isDirty.value)
 useWorkspaceGuard(confirmLeave)
-const canEdit = computed(() => auth.can(['report:manage']))
+const canEdit = computed(() => auth.can([PERMISSION_CODES.reportManage]))
 const id = computed(() => String(route.params['templateId'] ?? ''))
 const ai = useAiPanel({
   surface: () =>
@@ -293,7 +294,7 @@ async function previewForAssistant(
         :disabled="isBusy"
         @update:model-value="changePeriod"
       />
-      <PermGuard :codes="['report:manage']">
+      <PermGuard :codes="[PERMISSION_CODES.reportManage]">
         <DtButton
           :loading="isBusy"
           :disabled="!template || !period.trim()"
@@ -314,7 +315,7 @@ async function previewForAssistant(
           保存模板
         </DtButton>
       </PermGuard>
-      <PermGuard :codes="['report:render']">
+      <PermGuard :codes="[PERMISSION_CODES.reportRender]">
         <DtButton
           :loading="isBusy"
           size="sm"
