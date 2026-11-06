@@ -6,6 +6,7 @@
 """
 
 import ast
+import math
 from collections.abc import Callable
 from dataclasses import dataclass, field
 from datetime import datetime
@@ -60,11 +61,12 @@ _PREV_WITH_STEPS = 2
 def _safe_pow(left: float, right: float) -> float | None:
     """幂运算，溢出与定义域外收成空。
 
+    ⚠ 不用内建 `pow`：负底数配小数指数时它返回 `complex` 而不是抛异常。
     Args: left, right。
     """
     try:
-        return finite(pow(left, right))
-    except (OverflowError, ValueError, ZeroDivisionError):
+        return finite(math.pow(left, right))
+    except (OverflowError, ValueError):
         return None
 
 

@@ -311,18 +311,6 @@ class RecordCrud(CrudBase[DatasetRecord]):
         )
         return list(rows.scalars().all())
 
-    async def list_ascending(
-        self, session: AsyncSession, *, window: RecordWindow
-    ) -> list[DatasetRecord]:
-        """窗口内的全部行，按 ts 升序。时间窗聚合与跨表 as-of 取值要它。
-
-        Args: session, window。
-        """
-        rows = await session.execute(
-            window.narrow(select(DatasetRecord)).order_by(*OLDEST_FIRST)
-        )
-        return list(rows.scalars().all())
-
     async def whole_stats(
         self,
         session: AsyncSession,

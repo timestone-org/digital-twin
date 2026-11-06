@@ -42,14 +42,6 @@ class ShardRange(ExtractRange):
     month: str
 
 
-def month_key(moment: datetime) -> str:
-    """一个时刻落在哪个月。
-
-    Args: moment。
-    """
-    return moment.astimezone(UTC).strftime(MONTH_FORMAT)
-
-
 def month_start(month: str) -> datetime:
     """月份键对应的月初 UTC 时刻。
 

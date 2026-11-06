@@ -272,6 +272,25 @@ async def test_the_cursor_walks_the_whole_table_without_repeats(
     assert len(seen) == len(set(seen))
 
 
+async def test_the_cursor_does_not_lose_a_row_of_the_same_millisecond(
+    app_client: httpx.AsyncClient,
+) -> None:
+    table_id = await seed_table(app_client)
+    moments = ["2026-08-23T10:00:00.000100Z", "2026-08-23T10:00:00.000900Z"]
+    for moment in moments:
+        await create_record(app_client, table_id, ts=moment, values={"产量": 1})
+
+    first = data_of(await app_client.get(f"{records_url(table_id)}?limit=1"))
+    second = data_of(
+        await app_client.get(
+            f"{records_url(table_id)}?limit=1&after={first['next']}"
+        )
+    )
+
+    rows = {item["row_id"] for item in [*first["items"], *second["items"]]}
+    assert len(rows) == len(moments)
+
+
 async def test_exactly_one_page_of_rows_is_not_reported_as_more(
     app_client: httpx.AsyncClient,
 ) -> None:

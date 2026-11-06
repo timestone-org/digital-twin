@@ -39,7 +39,10 @@ from platform_server.apps.report.services.metrics import (
     resolve_metrics,
 )
 from platform_server.apps.report.services.source import SourceData
-from platform_server.apps.report.services.table import build_table
+from platform_server.apps.report.services.table import (
+    bucket_start,
+    build_table,
+)
 
 
 async def preview(session: AsyncSession, context: PreviewContext) -> PreviewOut:
@@ -265,13 +268,7 @@ def _chart_values(
     zone = ZoneInfo(timezone)
     grouped: dict[datetime, list[object]] = {}
     for row in found.rows:
-        stamp = row.ts.astimezone(zone).replace(
-            minute=0, second=0, microsecond=0
-        )
-        if spec.bucket in ("day", "month"):
-            stamp = stamp.replace(hour=0)
-        if spec.bucket == "month":
-            stamp = stamp.replace(day=1)
+        stamp = bucket_start(row.ts.astimezone(zone), spec.bucket)
         grouped.setdefault(stamp, []).append(row.values.get(key))
     return [
         (stamp, aggregate(values, spec.agg))
