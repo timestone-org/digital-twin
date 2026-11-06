@@ -84,7 +84,8 @@ class Summarizer(Protocol):
         调用越贵，最后贵过它省下来的那点上下文。给了它，喂进去的只有
         「上一段摘要 + 这一个台阶新脱落的那几条」，长度是有界的。
 
-        Args: dropped（这一截全部脱落的消息，按 seq）, through_seq（右边界，
-            钉在台阶上）, previous（上一个台阶的摘要，没有就是 None）。
+        Args: dropped（脱落的消息，按 seq；可全量也可只含 `previous` 之后的
+            新行，更早的会被滤掉）, through_seq（右边界，钉在台阶上）,
+            previous（上一个台阶的摘要，没有就是 None）。
         """
         ...
