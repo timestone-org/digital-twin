@@ -140,6 +140,8 @@ async def get_login_provider(
 
     ⚠ 形态要问过：给一路填端点的供应商存一行登录态，那一行永远没有人读，
     而界面上表现为「登录成功了、消费方却说没登录」。
+    ⚠ 认完就放掉只读事务：接下来的路由要等上游 OAuth 往返，不能握着连接等
+    （database-standard §6）。
 
     Args: provider_id, session。
     """
@@ -149,6 +151,7 @@ async def get_login_provider(
     spec = provider_kind_of(row.kind)
     if spec is None or not spec.is_login_required:
         raise LlmProviderNotLoginBased("这一路不走登录，它填的是端点与密钥")
+    await session.rollback()
     return provider_id
 
 

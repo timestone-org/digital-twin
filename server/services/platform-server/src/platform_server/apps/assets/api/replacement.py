@@ -74,7 +74,7 @@ async def replace(
 
     Args: sessions, store, _actor, dispatcher, asset_id, body。"""
     saved = await replace_content(sessions, store, asset_id, body)
-    dispatcher.after_commit(new_message(asset_id))
+    await dispatcher.dispatch(new_message(asset_id))
     return ok(saved)
 
 
