@@ -151,6 +151,31 @@ describe('画布快捷键', () => {
     },
   )
 
+  it.each(['Delete', 'Enter'])(
+    '右键菜单项获焦时按 %s 归菜单项，画布不响应也不拦默认动作',
+    (key) => {
+      const hooks = actions()
+      setup(hooks)
+      const menu = document.createElement('div')
+      menu.setAttribute('role', 'menu')
+      const item = document.createElement('button')
+      item.setAttribute('role', 'menuitem')
+      menu.append(item)
+      document.body.append(menu)
+      const event = new KeyboardEvent('keydown', {
+        key,
+        bubbles: true,
+        cancelable: true,
+      })
+
+      item.dispatchEvent(event)
+
+      expect(hooks.removeSelected).not.toHaveBeenCalled()
+      expect(hooks.openConfig).not.toHaveBeenCalled()
+      expect(event.defaultPrevented).toBe(false)
+    },
+  )
+
   it('富文本区域里同样不响应', () => {
     const hooks = actions()
     setup(hooks)
