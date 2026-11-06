@@ -167,14 +167,20 @@ describe('落库', () => {
     },
   )
 
-  it('上一次保存还没回来时，第二次保存不发请求', async () => {
-    getMock.mockResolvedValue(payload([node('n1')]))
+  /** 让保存悬着，由用例决定它什么时候回来。 */
+  function holdSaves(): (value: DashboardPayload) => void {
     let finishSave: (value: DashboardPayload) => void = () => {
       throw new Error('保存尚未发起')
     }
     saveMock.mockImplementation(
       () => new Promise((resolve) => (finishSave = resolve)),
     )
+    return (value) => finishSave(value)
+  }
+
+  it('上一次保存还没回来时，第二次等它的结果，不另发请求', async () => {
+    getMock.mockResolvedValue(payload([node('n1')]))
+    const finishSave = holdSaves()
     const page = useTwinEditorPage(
       () => 'd1',
       () => 'n1',
@@ -185,9 +191,48 @@ describe('落库', () => {
     const second = page.save()
     finishSave(payload([node('n1')]))
 
-    expect(await second).toBe(false)
+    expect(await second).toBe(true)
     expect(await first).toBe(true)
     expect(saveMock).toHaveBeenCalledOnce()
+  })
+
+  it('在途那次失败时，等它的调用方拿到同样的失败', async () => {
+    getMock.mockResolvedValue(payload([node('n1')]))
+    saveMock.mockRejectedValue(new Error('boom'))
+    const page = useTwinEditorPage(
+      () => 'd1',
+      () => 'n1',
+    )
+    await flushPromises()
+
+    const results = await Promise.all([page.save(), page.save()])
+
+    expect(results).toEqual([false, false])
+    expect(saveMock).toHaveBeenCalledOnce()
+  })
+
+  it('在途那次之后又改过，等完再存一次，改动不会被算成已保存', async () => {
+    getMock.mockResolvedValue(payload([node('n1')]))
+    const finishSave = holdSaves()
+    const page = useTwinEditorPage(
+      () => 'd1',
+      () => 'n1',
+    )
+    await flushPromises()
+    const doc = page.doc.value
+    if (doc === null) throw new Error('文档没有装上')
+
+    const first = page.save()
+    doc.commit({ ...doc.config.value, parts: [] })
+    const second = page.save()
+    finishSave(payload([node('n1')]))
+    await flushPromises()
+    expect(saveMock).toHaveBeenCalledTimes(2)
+    finishSave(payload([node('n1')]))
+
+    expect(await first).toBe(true)
+    expect(await second).toBe(true)
+    expect(doc.isDirty.value).toBe(false)
   })
 
   it('把改动写回这个节点，其余节点原样带上', async () => {

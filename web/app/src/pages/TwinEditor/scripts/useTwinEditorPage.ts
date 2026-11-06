@@ -15,6 +15,7 @@ import type { ComputedRef, Ref } from 'vue'
 import { useDashboardDoc } from '@/composables/useDashboardDoc'
 import { toLayoutInput } from '@/features/dashboard/editorDoc'
 
+import { createReentrantSave } from './reentrantSave'
 import { createTwinDoc, type TwinDoc } from './twinDoc'
 
 export interface TwinEditorPage {
@@ -94,15 +95,17 @@ function nodesWithTwin(
  * @param file 大屏文档态
  * @param editing 当前的孪生文档；null = 还没读出来
  * @param nodeId 节点 id
+ * @param beforeSave 发送前最后改一次文档的机会
  */
 async function saveTwin(
   file: ReturnType<typeof useDashboardDoc>,
   editing: TwinDoc | null,
   nodeId: string,
+  beforeSave?: (doc: TwinDoc) => void,
 ): Promise<boolean> {
-  if (file.saving.value) return false
   const current = file.dashboard.value
   if (current === null || editing === null) return false
+  beforeSave?.(editing)
   editing.endMerge()
   const snapshot = {
     config: editing.config.value,
@@ -148,12 +151,14 @@ export function useTwinEditorPage(
 
   watch([dashboardId, nodeId], ([id]) => void reload(id), { immediate: true })
 
+  const save = createReentrantSave(
+    () => saveTwin(file, doc.value, nodeId(), beforeSave),
+    () => doc.value?.isDirty.value === true,
+  )
+
   return {
     doc: computed(() => doc.value),
-    save: () => {
-      if (doc.value !== null) beforeSave?.(doc.value)
-      return saveTwin(file, doc.value, nodeId())
-    },
+    save,
     dashboard: file.dashboard,
     node,
     targetSize: computed(() => {
