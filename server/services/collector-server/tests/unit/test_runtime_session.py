@@ -316,6 +316,64 @@ async def test_a_plan_change_queued_behind_a_revoke_subscribes_nothing(
     assert driver.subscribed == ["outlet_temp"]
 
 
+async def _closing_during_a_held_subscribe(
+    session: SourceSession, driver: Any, source: Any
+) -> tuple[asyncio.Task[None], asyncio.Task[None]]:
+    """让 apply 卡在订阅里时开始拆连接。Args: session, driver, source。"""
+    await session._open()
+    driver.has_entered_subscribe.clear()
+    driver.subscribe_gate = asyncio.Event()
+    applying = asyncio.create_task(session.apply(source))
+    await asyncio.wait_for(driver.has_entered_subscribe.wait(), timeout=2)
+    closing = asyncio.create_task(session._close())
+    await _let_others_run()
+    return applying, closing
+
+
+async def test_a_subscribe_answered_during_close_reattaches_on_reconnect(
+    driver: Any, reporter: Any, build_source: Any, build_point: Any
+) -> None:
+    session = _session(build_source(), driver, reporter)
+    applying, closing = await _closing_during_a_held_subscribe(
+        session,
+        driver,
+        build_source(points=(build_point("outlet_temp"), build_point("flow"))),
+    )
+    driver.subscribe_gate.set()
+    await asyncio.gather(applying, closing)
+    driver.subscribed.clear()
+    await session._open()
+    assert driver.subscribed == ["outlet_temp", "flow"]
+
+
+async def test_closing_drops_the_connection_without_waiting_for_a_subscribe(
+    driver: Any, reporter: Any, build_source: Any, build_point: Any
+) -> None:
+    session = _session(build_source(), driver, reporter)
+    applying, closing = await _closing_during_a_held_subscribe(
+        session,
+        driver,
+        build_source(points=(build_point("outlet_temp"), build_point("flow"))),
+    )
+    assert driver.is_connected is False
+    driver.subscribe_gate.set()
+    await asyncio.gather(applying, closing)
+
+
+async def test_a_subscribe_held_during_close_keeps_the_close_waiting(
+    driver: Any, reporter: Any, build_source: Any, build_point: Any
+) -> None:
+    session = _session(build_source(), driver, reporter)
+    applying, closing = await _closing_during_a_held_subscribe(
+        session,
+        driver,
+        build_source(points=(build_point("outlet_temp"), build_point("flow"))),
+    )
+    assert closing.done() is False
+    driver.subscribe_gate.set()
+    await asyncio.gather(applying, closing)
+
+
 async def test_revoking_cuts_the_subscription_off_from_the_sink(
     driver: Any, reporter: Any, build_source: Any
 ) -> None:

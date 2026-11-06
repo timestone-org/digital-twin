@@ -356,12 +356,19 @@ class SourceSession:
         return self._options.max_backoff_s
 
     async def _close(self) -> None:
-        """拆掉取数与连接。"""
+        """拆掉取数与连接。
+
+        ⚠ 先断连再等锁：在途订阅要靠断连尽快失败，反过来会等它把整批订完。
+        清挂载必须排在它之后，否则它返回时写回的点位在重连后被当成已订而跳过。
+        """
         self._poll_generation += 1
-        await self._stop_polling()
-        self._subscribed.clear()
         self._is_online = False
-        await self._driver.disconnect()
+        await self._stop_polling()
+        try:
+            await self._driver.disconnect()
+        finally:
+            async with self._attach_lock:
+                self._subscribed.clear()
 
     async def _pause(self, delay_s: float) -> None:
         """等一段时间，被叫停就提前醒。
