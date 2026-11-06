@@ -3,7 +3,7 @@
 import uuid
 from datetime import UTC, datetime
 
-from sqlalchemy import delete, or_, select
+from sqlalchemy import delete, exists, or_, select
 from sqlalchemy.exc import IntegrityError
 from sqlalchemy.ext.asyncio import AsyncSession
 
@@ -154,11 +154,13 @@ class RunCrud(CrudBase[ModelingRun]):
         keep: int,
         exclude: frozenset[uuid.UUID],
     ) -> list[uuid.UUID]:
-        """一条流水线里排在最近 `keep` 次之外的那些运行 id。
+        """一条流水线里排在最近 `keep` 次之外、还留着节点明细的运行 id。
 
         ⚠ 已发布过模型版本的运行**既不入名单、也不占 `keep` 名额**：让它们参与
         计数只会把还想留着的那 20 次实验提前挤出去（§6.5）。
         ⚠ 排序带第二个键：同一时刻建的两条运行不定序时，分页边界会来回抖。
+        ⚠ 明细已清的运行要先占住 `keep` 名额、取完名单才滤掉：滤在前面的话，
+        在途或没留下明细的新运行不占名额，收敛范围就变了。
         Args: session, pipeline_id, keep, exclude。
         """
         statement = select(ModelingRun.id).where(
@@ -166,8 +168,13 @@ class RunCrud(CrudBase[ModelingRun]):
         )
         if exclude:
             statement = statement.where(ModelingRun.id.not_in(exclude))
+        beyond = (
+            statement.order_by(*NEWEST_FIRST).offset(max(0, keep)).subquery()
+        )
         rows = await session.execute(
-            statement.order_by(*NEWEST_FIRST).offset(max(0, keep))
+            select(beyond.c.id).where(
+                exists().where(ModelingNodeRun.run_id == beyond.c.id)
+            )
         )
         return list(rows.scalars().all())
 
