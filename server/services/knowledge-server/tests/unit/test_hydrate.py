@@ -26,11 +26,14 @@ class _NoTitles:
         return SimpleNamespace(all=list[tuple[uuid.UUID, str]])
 
 
-async def test_a_chunk_spanning_pages_keeps_its_last_page(
-    monkeypatch: pytest.MonkeyPatch,
-) -> None:
-    """⚠ 只报起页的引用会让人翻到第 4 页却找不到那句话。"""
-    stored = json.loads(json.dumps(asdict(Locator(page=4, page_end=6))))
+async def _hydrated_locator(
+    monkeypatch: pytest.MonkeyPatch, locator: Locator
+) -> Locator:
+    """让一条定位走一遍落库 JSON，再读回还原后的样子。
+
+    Args: monkeypatch, locator。
+    """
+    stored = json.loads(json.dumps(asdict(locator)))
 
     async def chunks(
         session: object, ids: Sequence[uuid.UUID]
@@ -53,6 +56,25 @@ async def test_a_chunk_spanning_pages_keeps_its_last_page(
         [Fused(chunk_id=CHUNK, score=1.0, reasons=())],
         limit=1,
     )
+    return hits[0].locator
 
-    assert hits[0].locator.page_end == 6
-    assert hits[0].locator.label() == "第 4–6 页"
+
+async def test_a_chunk_spanning_pages_keeps_its_last_page(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """⚠ 只报起页的引用会让人翻到第 4 页却找不到那句话。"""
+    locator = await _hydrated_locator(monkeypatch, Locator(page=4, page_end=6))
+
+    assert locator.page_end == 6
+    assert locator.label() == "第 4–6 页"
+
+
+async def test_a_chunk_on_one_page_leaves_the_last_page_empty(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """⚠ 切块对同页块也写了止页；出参契约是跨页才有值，读回时要留空。"""
+    locator = await _hydrated_locator(monkeypatch, Locator(page=4, page_end=4))
+
+    assert locator.page == 4
+    assert locator.page_end is None
+    assert locator.label() == "第 4 页"

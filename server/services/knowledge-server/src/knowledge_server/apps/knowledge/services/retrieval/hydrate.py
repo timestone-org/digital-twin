@@ -30,9 +30,12 @@ def _locator(raw: dict[str, Any]) -> Locator:
     Args: raw。
     """
     path = cast("list[object]", raw.get("path") or [])
+    page = _as_int(raw.get("page"))
+    page_end = _as_int(raw.get("page_end"))
     return Locator(
-        page=_as_int(raw.get("page")),
-        page_end=_as_int(raw.get("page_end")),
+        page=page,
+        # ⚠ 切块对同页块也写止页，而出参契约是跨页才有值
+        page_end=None if page_end == page else page_end,
         sheet=str(raw.get("sheet") or ""),
         row=_as_int(raw.get("row")),
         path=tuple(str(one) for one in path),
