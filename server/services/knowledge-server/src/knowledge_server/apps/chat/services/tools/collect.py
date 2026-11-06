@@ -4,7 +4,6 @@ from llmcore.tools.shapes import ToolSpec, object_schema, string_schema
 
 SEARCH_POINTS = "collect.search_points"
 WATCH_POINT = "collect.watch_point"
-COLLECT_TOOLS = (SEARCH_POINTS, WATCH_POINT)
 POINT_QUERY_MAX_CHARS = 80
 
 COLLECT_SPECS = (

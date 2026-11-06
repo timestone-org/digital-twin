@@ -13,7 +13,6 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from knowledge_server.apps.knowledge import crud
 from knowledge_server.apps.knowledge.errors import (
     KnowledgeBaseNotFound,
-    SourceNotFound,
 )
 from knowledge_server.apps.knowledge.models import (
     KnowledgeBase,
@@ -233,19 +232,6 @@ async def add_source(
         session, base_id, body.kind, body.name, body.config
     )
     return source_out(row)
-
-
-async def read_source(
-    session: AsyncSession, source_id: uuid.UUID
-) -> KnowledgeSource:
-    """取一路来源；没有就抛。
-
-    Args: session, source_id。
-    """
-    row = await crud.source.get_source(session, source_id)
-    if row is None:
-        raise SourceNotFound("这一路来源不存在")
-    return row
 
 
 async def drop_base(
