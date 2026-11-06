@@ -17,7 +17,7 @@ from sqlalchemy import delete, select, text
 from sqlalchemy.ext.asyncio import AsyncSession
 from unit.source_fakes import FakeAcSource, full_shape
 
-from lib.db import Database
+from lib.db import Database, PoolProfile
 from lib.errors import Conflict
 from platform_server.apps.hvac.crud import room_crud
 from platform_server.apps.hvac.models import (
@@ -49,6 +49,14 @@ from platform_server.apps.hvac.services.ac_room_configuration import (
 )
 from platform_server.apps.hvac.services.ac_source_reader import AcSourceReader
 from platform_server.apps.hvac.services.ac_startup_rules import ExtractionRules
+
+# ⚠ 这里手工建库，CI 放宽语句超时的环境变量管不到；互斥用例不判耗时，默认 2 秒
+# 预算会被覆盖率全套下的 runner 抖动打穿。
+WAIT_BUDGET_S = 30
+WAIT_PROFILE = PoolProfile(
+    statement_timeout_ms=WAIT_BUDGET_S * 1000,
+    lock_timeout_ms=WAIT_BUDGET_S * 1000,
+)
 
 
 @dataclass(frozen=True)
@@ -128,6 +136,7 @@ async def configuration_case(
         dsn=db_session.get_bind().engine.url.render_as_string(
             hide_password=False
         ),
+        profile=WAIT_PROFILE,
         search_path="platform",
     )
     case = await _seed_case(database)
@@ -243,7 +252,7 @@ async def _write_configuration(
 async def _require_waiting(
     observer: AsyncSession, writer: asyncio.Task[None], process_id: int
 ) -> None:
-    async with asyncio.timeout(2):
+    async with asyncio.timeout(WAIT_BUDGET_S):
         while not writer.done():
             blocked = await observer.scalar(
                 text("SELECT cardinality(pg_blocking_pids(:process_id)) > 0"),
@@ -253,6 +262,19 @@ async def _require_waiting(
                 return
     await writer
     pytest.fail("配置写入越过了终态快照的事务边界")
+
+
+async def test_concurrency_sessions_outlast_runner_stalls(
+    configuration_case: ConfigurationCase,
+) -> None:
+    async with configuration_case.database.session() as session:
+        budget = await session.scalar(
+            text(
+                "SELECT extract(epoch FROM "
+                "current_setting('statement_timeout')::interval)"
+            )
+        )
+    assert budget == WAIT_BUDGET_S
 
 
 @pytest.mark.parametrize(
@@ -398,7 +420,7 @@ async def test_snapshot_and_writer_finish_before_observer_teardown(
             )
         )
         try:
-            async with asyncio.timeout(2):
+            async with asyncio.timeout(WAIT_BUDGET_S):
                 await delayed.reached.wait()
             binding = await verification.scalar(
                 select(AcDataBinding).where(
