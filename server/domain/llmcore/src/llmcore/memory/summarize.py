@@ -125,10 +125,9 @@ class ModelSummarizer:
             # 一个本来能跑完的回合发不出任何一句
             _logger.warning(
                 "summary_fold_failed",
-                extra={
-                    "through_seq": through_seq,
-                    "reason": type(error).__name__,
-                },
+                "摘要折叠失败，本轮不更新摘要",
+                through_seq=through_seq,
+                reason=type(error).__name__,
             )
             return None
         text = text_of(answer)[:MAX_SUMMARY_CHARS].strip()

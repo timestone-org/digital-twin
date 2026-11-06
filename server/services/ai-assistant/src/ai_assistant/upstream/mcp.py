@@ -266,7 +266,9 @@ class McpCatalog:
             breaker.record_failure("list")
             # ⚠ 只记 server 名，**不记回包正文与工具描述**：那是外部可控的
             # 长文本，记全文既胀日志，又把可能的注入内容搬进另一条链路
-            _logger.warning("mcp_list_failed", extra={"server": server.name})
+            _logger.warning(
+                "mcp_list_failed", "MCP 工具目录拉取失败", server=server.name
+            )
             return ()
         breaker.record_success()
         return tuple(listed)
