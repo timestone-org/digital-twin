@@ -323,12 +323,16 @@ class OpcuaDriver:
     async def connect(self) -> None:
         """建会话。
 
-        ⚠ 外面这层 `asyncio.timeout` 不能省：asyncua 的 `timeout` 只管单次
-        请求，TCP 建连卡住时它不会醒——而工控网上「连着不响应」是常态。
+        ⚠ `asyncio.timeout` 不能省：asyncua 只管单次请求，TCP 卡住时不会醒，这在
+        工控网是常态。它的清理只收 `Exception`，超时取消绕过它，这里关 socket。
         """
         client = self._factory(self._connection)
-        async with asyncio.timeout(self._connection.timeouts.connect_s):
-            await client.connect()
+        try:
+            async with asyncio.timeout(self._connection.timeouts.connect_s):
+                await client.connect()
+        except BaseException:
+            client.disconnect_socket()
+            raise
         self._client = client
         self._browser = BrowsePager(
             client,

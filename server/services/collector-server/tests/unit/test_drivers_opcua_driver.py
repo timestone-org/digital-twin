@@ -4,6 +4,8 @@
 别的点位上（COLLECT_DESIGN.md §4.1）。
 """
 
+import asyncio
+
 import pytest
 from asyncua import ua
 
@@ -167,6 +169,29 @@ async def test_heartbeat_asks_the_connection() -> None:
     await made.connect()
     await made.healthcheck()
     assert built[0].is_checked is True
+
+
+async def test_a_connect_timeout_closes_the_half_open_socket() -> None:
+    made, built = make_driver(connect_s=0.01, is_connect_hung=True)
+    with pytest.raises(TimeoutError):
+        await made.connect()
+    assert built[0].is_socket_closed is True
+
+
+async def test_a_cancelled_connect_closes_the_half_open_socket() -> None:
+    made, built = make_driver(is_connect_hung=True)
+    connecting = asyncio.create_task(made.connect())
+    await asyncio.sleep(0)
+    connecting.cancel()
+    with pytest.raises(asyncio.CancelledError):
+        await connecting
+    assert built[0].is_socket_closed is True
+
+
+async def test_a_successful_connect_keeps_its_socket() -> None:
+    made, built = make_driver()
+    await made.connect()
+    assert built[0].is_socket_closed is False
 
 
 async def test_disconnect_clears_the_session() -> None:

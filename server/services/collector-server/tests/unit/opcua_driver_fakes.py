@@ -1,5 +1,6 @@
 """OPC UA 驱动测试共用的客户端与订阅假件。"""
 
+import asyncio
 from collections.abc import Callable
 from types import SimpleNamespace
 
@@ -114,6 +115,8 @@ class FakeClient:
         self.is_page_limit_ignored = False
         self.is_connected = False
         self.is_checked = False
+        self.is_connect_hung = False
+        self.is_socket_closed = False
         self.nodes = FakeShortcuts(FakeNode(ua.NodeId(85)))
         self.subscription = FakeSubscription()
         # 寻址串 → 现场回的读数；表里没有的回一条坏读数
@@ -172,10 +175,15 @@ class FakeClient:
         return self._page(references, limit)
 
     async def connect(self) -> None:
+        if self.is_connect_hung:
+            await asyncio.Event().wait()
         self.is_connected = True
 
     async def disconnect(self) -> None:
         self.is_connected = False
+
+    def disconnect_socket(self) -> None:
+        self.is_socket_closed = True
 
     async def check_connection(self) -> None:
         self.is_checked = True
@@ -237,19 +245,24 @@ def make_spec(code: str, interval_ms: int = 1000) -> PointSpec:
 
 
 def make_driver(
-    *, clock: Clock = lambda: NOW_MS, request_s: float = 3.0
+    *,
+    clock: Clock = lambda: NOW_MS,
+    request_s: float = 3.0,
+    connect_s: float = 5.0,
+    is_connect_hung: bool = False,
 ) -> tuple[OpcuaDriver, list[FakeClient]]:
     built: list[FakeClient] = []
 
     def factory(connection: DriverConnection) -> FakeClient:
         client = FakeClient(connection)
+        client.is_connect_hung = is_connect_hung
         built.append(client)
         return client
 
     made = OpcuaDriver(
         connection=DriverConnection(
             endpoint="opc.tcp://127.0.0.1:4840/x",
-            timeouts=DriverTimeouts(request_s=request_s),
+            timeouts=DriverTimeouts(request_s=request_s, connect_s=connect_s),
         ),
         client_factory=factory,
         clock=clock,
