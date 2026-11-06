@@ -9,7 +9,6 @@ import type { Twin2dConfig } from '@dt/twin2d'
 import { describe, expect, it } from 'vitest'
 
 import {
-  addMark,
   alignMarks,
   distributeMarks,
   duplicateMarks,
@@ -40,31 +39,6 @@ function configOf(): Twin2dConfig {
 function idsOf(config: Twin2dConfig): string[] {
   return config.marks.map((mark) => mark.id)
 }
-
-describe('新增', () => {
-  it('追加在末尾并交出新 id', () => {
-    const next = addMark(configOf(), { kind: 'text', text: '注' }, () => 'm9')
-
-    expect(next.id).toBe('m9')
-    expect(idsOf(next.config)).toEqual(['m1', 'm2', 'm3', 'm9'])
-  })
-
-  // ⚠ 三档之外的 kind 会被归一化整条丢掉，这时不许交出一个指不到实处的 id
-  it('kind 认不出时落不了地，原样返回并交出 null', () => {
-    const config = configOf()
-
-    const next = addMark(config, { text: '注' }, () => 'm9')
-
-    expect(next.id).toBeNull()
-    expect(next.config).toBe(config)
-  })
-
-  it('改完再归一化不变形', () => {
-    const next = addMark(configOf(), { kind: 'rect' }, () => 'm9').config
-
-    expect(normalizeTwin2dConfig(next)).toEqual(next)
-  })
-})
 
 describe('改值', () => {
   it('只换被点名的那一条', () => {

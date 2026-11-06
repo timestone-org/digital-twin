@@ -40,8 +40,6 @@ import {
   twin2dNodeStyleUsage,
   updateEdgeStyle,
   updateNodeStyle,
-  updatePort,
-  updateSlot,
   updateVariant,
   writeEdgeStyle,
   writeNodeStyle,
@@ -434,29 +432,6 @@ describe('端口', () => {
     ).toBe('extra')
   })
 
-  it('改端口按 id 寻址，端口不在就原样返回入参那份配置', () => {
-    const config = configOf()
-    const added = addPort(
-      config,
-      styleOf(config, 'custom'),
-      { id: 'A' },
-      idSeq(),
-    )
-    const port = added.config.styles.at(0)?.ports.at(0)
-    const style = styleOf(added.config, 'custom')
-    const renamed =
-      port === undefined
-        ? added.config
-        : updatePort(added.config, style, { ...port, name: '一号' })
-    const missing =
-      port === undefined
-        ? added.config
-        : updatePort(added.config, style, { ...port, id: '没有这个' })
-
-    expect(renamed.styles.at(0)?.ports.at(0)?.name).toBe('一号')
-    expect(missing).toBe(added.config)
-  })
-
   it('删端口；删不存在的原样返回入参那份配置', () => {
     const config = configOf()
     const added = addPort(
@@ -530,29 +505,6 @@ describe('槽位', () => {
 
     expect(twice.id).toBeNull()
     expect(twice.config).toBe(once.config)
-  })
-
-  it('改槽位按键寻址，槽位不在就原样返回入参那份配置', () => {
-    const config = configOf()
-    const added = addSlot(
-      config,
-      styleOf(config, 'custom'),
-      { key: 'power' },
-      idSeq(),
-    )
-    const slot = added.config.styles.at(0)?.slots.at(0)
-    const style = styleOf(added.config, 'custom')
-    const labelled =
-      slot === undefined
-        ? added.config
-        : updateSlot(added.config, style, { ...slot, label: '有功功率' })
-    const missing =
-      slot === undefined
-        ? added.config
-        : updateSlot(added.config, style, { ...slot, key: '没有这个' })
-
-    expect(labelled.styles.at(0)?.slots.at(0)?.label).toBe('有功功率')
-    expect(missing).toBe(added.config)
   })
 
   it('删槽位；删不存在的原样返回入参那份配置', () => {
@@ -711,29 +663,15 @@ describe('只动点名的那一条', () => {
     expect(nextEdge.edgeStyles.at(1)?.name).toBe('换过')
   })
 
-  it('端口、槽位与变体三张表里别的条目也连引用都不换', () => {
+  it('变体表里别的条目也连引用都不换', () => {
     const config = pairsConfig()
     const style = styleOf(config, 's2')
-    const port = style.ports.at(1)
-    const slot = style.slots.at(1)
     const variant = style.variants.at(1)
-    const withPort =
-      port === undefined
-        ? config
-        : updatePort(config, style, { ...port, name: '换过' })
-    const withSlot =
-      slot === undefined
-        ? config
-        : updateSlot(config, style, { ...slot, label: '换过' })
     const withVariant =
       variant === undefined
         ? config
         : updateVariant(config, style, { ...variant, rootPatch: { lift: 2 } })
 
-    expect(styleOf(withPort, 's2').ports.at(0)).toBe(style.ports.at(0))
-    expect(styleOf(withPort, 's2').ports.at(1)?.name).toBe('换过')
-    expect(styleOf(withSlot, 's2').slots.at(0)).toBe(style.slots.at(0))
-    expect(styleOf(withSlot, 's2').slots.at(1)?.label).toBe('换过')
     expect(styleOf(withVariant, 's2').variants.at(0)).toBe(style.variants.at(0))
     expect(styleOf(withVariant, 's2').variants.at(1)?.rootPatch).toEqual({
       lift: 2,

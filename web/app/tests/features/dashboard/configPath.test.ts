@@ -4,12 +4,7 @@
  */
 import { describe, expect, it } from 'vitest'
 
-import {
-  appendConfigRow,
-  readConfigAt,
-  removeConfigRow,
-  writeConfigAt,
-} from '@/features/dashboard/configPath'
+import { readConfigAt, writeConfigAt } from '@/features/dashboard/configPath'
 
 describe('按路径读', () => {
   it('读得到嵌套对象与数组里的值', () => {
@@ -58,31 +53,5 @@ describe('按路径写', () => {
 
     expect(writeConfigAt(config, [], { b: 2 })).toEqual({ b: 2 })
     expect(writeConfigAt(config, [], 7)).toBe(config)
-  })
-})
-
-describe('数组行的增删', () => {
-  it('追加一行', () => {
-    expect(appendConfigRow({ rows: [{ a: 1 }] }, ['rows'], { a: 2 })).toEqual({
-      rows: [{ a: 1 }, { a: 2 }],
-    })
-  })
-
-  it('路径上没有数组时从空表开始追加', () => {
-    expect(appendConfigRow({}, ['rows'], { a: 1 })).toEqual({
-      rows: [{ a: 1 }],
-    })
-  })
-
-  it('删中间一行，其余整体前移而不是留个洞', () => {
-    expect(
-      removeConfigRow({ rows: [{ a: 1 }, { a: 2 }, { a: 3 }] }, ['rows'], 1),
-    ).toEqual({ rows: [{ a: 1 }, { a: 3 }] })
-  })
-
-  it('路径上不是数组时原样返回', () => {
-    const config = { rows: 7 }
-
-    expect(removeConfigRow(config, ['rows'], 0)).toBe(config)
   })
 })

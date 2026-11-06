@@ -20,7 +20,6 @@ import type {
   Twin2dNodeStyle,
   Twin2dPrim,
   Twin2dPrimKind,
-  Twin2dPrimPatch,
 } from '@dt/twin2d'
 
 import { freshTwin2dId, newTwin2dId, orderList } from './nodeOps'
@@ -488,34 +487,6 @@ function withNode(
 }
 
 /**
- * 给一个节点加一枚追加图元（`layers`），追加在末尾。
- * ⚠ 新 id 要同时避开**样式里**那棵树：两边是并起来渲染的（`[...style.prims,
- * ...node.layers]`），撞了 id 会让节点级覆盖与变体补丁同时打在两枚图元上。
- * 样式悬空时传 null——那种节点整个不画，重不重名都无所谓。
- * @param config 当前配置
- * @param nodeId 节点 id
- * @param style 这个节点用的样式；解析不到给 null
- * @param seed 新图元的种子（至少给 `kind`）
- * @param makeId id 工厂，缺省随机
- */
-export function addNodeLayer(
-  config: Twin2dConfig,
-  nodeId: string,
-  style: Twin2dNodeStyle | null,
-  seed: Twin2dPrimSeed,
-  makeId: Twin2dIdFactory = newTwin2dId,
-): Twin2dAdded {
-  const node = config.nodes.find((row) => row.id === nodeId)
-  if (node === undefined) return { config, id: null }
-  const taken = new Set<string>()
-  collectIds(node.layers, taken)
-  if (style !== null) collectIds(style.prims, taken)
-  const id = freshTwin2dId(TWIN_2D_PRIM_ID_PREFIX, taken, makeId)
-  const layers = [...node.layers, ...normalizePrims([{ ...seed, id }], 0)]
-  return { config: writeNode(config, { ...node, layers }), id }
-}
-
-/**
  * 换掉一个节点上的一枚追加图元，按 `next.id` 寻址。
  * @param config 当前配置
  * @param nodeId 节点 id
@@ -535,61 +506,5 @@ export function updateNodeLayer(
         list.map((prim) => (prim.id === next.id ? next : prim)),
       ),
     }
-  })
-}
-
-/**
- * 删掉一个节点上的一枚追加图元，连它的子树。
- * @param config 当前配置
- * @param nodeId 节点 id
- * @param primId 要删的图元
- */
-export function removeNodeLayer(
-  config: Twin2dConfig,
-  nodeId: string,
-  primId: string,
-): Twin2dConfig {
-  return withNode(config, nodeId, (node) => {
-    const layers = dropPrim(node.layers, primId)
-    return layers === node.layers ? null : { ...node, layers }
-  })
-}
-
-/**
- * 写一条节点级覆盖补丁（`patch[primId]`），整条换掉。
- * ⚠ 浅覆盖里「不覆盖」与「覆盖成缺省值」是两回事：清掉一格要把那个**键整个去掉**
- * 再写回来，写一个缺省值进去会把样式改过的那一格一起按回缺省。
- * @param config 当前配置
- * @param nodeId 节点 id
- * @param primId 被覆盖的图元 id
- * @param patch 这一条覆盖的新内容
- */
-export function setNodePrimPatch(
-  config: Twin2dConfig,
-  nodeId: string,
-  primId: string,
-  patch: Twin2dPrimPatch,
-): Twin2dConfig {
-  return withNode(config, nodeId, (node) => ({
-    ...node,
-    patch: { ...node.patch, [primId]: patch },
-  }))
-}
-
-/**
- * 撤掉整条节点级覆盖补丁。
- * @param config 当前配置
- * @param nodeId 节点 id
- * @param primId 被覆盖的图元 id
- */
-export function clearNodePrimPatch(
-  config: Twin2dConfig,
-  nodeId: string,
-  primId: string,
-): Twin2dConfig {
-  return withNode(config, nodeId, (node) => {
-    if (node.patch[primId] === undefined) return null
-    const kept = Object.entries(node.patch).filter(([key]) => key !== primId)
-    return { ...node, patch: Object.fromEntries(kept) }
   })
 }

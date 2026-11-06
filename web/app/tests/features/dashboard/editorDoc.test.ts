@@ -24,7 +24,6 @@ import {
   setGeometry,
   setVisible,
   setVisibleBatch,
-  setZIndex,
   siblingCount,
   sortNodes,
   subtreeIds,
@@ -241,7 +240,6 @@ describe('改节点', () => {
     expect(moved[1]).toBe(nodes[1])
     expect(moved[0]?.x).toBe(10)
     expect(setVisible(nodes, 'a', false)[0]?.isVisible).toBe(false)
-    expect(setZIndex(nodes, 'a', 9)[0]?.zIndex).toBe(9)
   })
 
   it('按路径写配置，深层键逐层复制而不是就地改', () => {

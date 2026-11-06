@@ -510,24 +510,6 @@ export function addPort(
 }
 
 /**
- * 换掉一份样式里的一个端口，按 `next.id` 寻址；端口不在就原样返回入参那份配置。
- * ⚠ 改 id 得走「删 + 加」：连线端点按 id 挂，在这里顺手换掉 id 会让挂在它上头的线
- * 悄悄改挂到「朝向对方中心」那一档去，而线还在、图还画得出来。
- * @param config 当前配置
- * @param style 当下生效的那一份样式
- * @param next 整个新端口
- */
-export function updatePort(
-  config: Twin2dConfig,
-  style: Twin2dNodeStyle,
-  next: Twin2dPort,
-): Twin2dConfig {
-  if (!style.ports.some((port) => port.id === next.id)) return config
-  const ports = style.ports.map((port) => (port.id === next.id ? next : port))
-  return writeNodeStyle(config, { ...style, ports })
-}
-
-/**
  * 删掉一份样式里的一个端口。
  * ⚠ 挂在它上头的连线**不跟着删**：端点解析的第三档是「朝向对方中心」，所以线还在，
  * 只是从节点正中出去。诊断面按 `edge-port-missing` 报它。
@@ -569,24 +551,6 @@ export function addSlot(
   if (key === '') return { config, id: null }
   const slots = [...style.slots, ...normalizeSlots([{ ...seed, key }])]
   return { config: writeNodeStyle(config, { ...style, slots }), id: key }
-}
-
-/**
- * 换掉一份样式里的一个槽位，按 `next.key` 寻址；槽位不在就原样返回入参那份配置。
- * ⚠ 改槽键得走「删 + 加」：`txt` 图元的 slot 来源、图元与变体的条件、派生槽算式
- * 四处都按键寻址，在这里顺手换掉键，那四处会一起指空——表现是那一格永远显示占位符。
- * @param config 当前配置
- * @param style 当下生效的那一份样式
- * @param next 整个新槽位
- */
-export function updateSlot(
-  config: Twin2dConfig,
-  style: Twin2dNodeStyle,
-  next: Twin2dSlot,
-): Twin2dConfig {
-  if (!style.slots.some((slot) => slot.key === next.key)) return config
-  const slots = style.slots.map((slot) => (slot.key === next.key ? next : slot))
-  return writeNodeStyle(config, { ...style, slots })
 }
 
 /**

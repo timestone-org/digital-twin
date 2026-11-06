@@ -11,7 +11,6 @@ import type { AcMetric, RawSeries } from '@dt/contracts'
 import {
   MAX_CHARTED_METRICS,
   defaultMetrics,
-  defaultRange,
   rangeOfLastHours,
   rangeProblem,
   toChartSeries,
@@ -32,13 +31,6 @@ function metric(over: Partial<AcMetric> & { key: string }): AcMetric {
 }
 
 describe('时间区间', () => {
-  it('默认区间是截止此刻往前 6 小时，两端都是 UTC RFC3339', () => {
-    expect(defaultRange(NOW)).toEqual({
-      from: '2026-08-12T00:00:00.000Z',
-      to: '2026-08-12T06:00:00.000Z',
-    })
-  })
-
   it('预设按小时回看', () => {
     expect(rangeOfLastHours(1, NOW).from).toBe('2026-08-12T05:00:00.000Z')
     expect(rangeOfLastHours(24, NOW).from).toBe('2026-08-11T06:00:00.000Z')
@@ -68,7 +60,7 @@ describe('时间区间', () => {
   })
 
   it('正常区间没有问题', () => {
-    expect(rangeProblem(defaultRange(NOW))).toBeNull()
+    expect(rangeProblem(rangeOfLastHours(6, NOW))).toBeNull()
   })
 })
 

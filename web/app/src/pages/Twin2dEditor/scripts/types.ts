@@ -46,19 +46,3 @@ export type Twin2dSelection =
 
 /** 画布这一段的选中值，供大纲与检查器共用。 */
 export const TWIN_2D_SELECT_CANVAS: Twin2dSelection = { kind: 'canvas' }
-
-/**
- * 两个选中是不是同一个。⚠ 选中态是对象，`===` 比不出来。
- * @param left 一个选中；null 表示没有
- * @param right 另一个选中；null 表示没有
- */
-export function isSameTwin2dSelection(
-  left: Twin2dSelection | null,
-  right: Twin2dSelection | null,
-): boolean {
-  if (left === null || right === null) return left === right
-  if (left.kind !== right.kind) return false
-  const leftId = 'id' in left ? left.id : ''
-  const rightId = 'id' in right ? right.id : ''
-  return leftId === rightId
-}

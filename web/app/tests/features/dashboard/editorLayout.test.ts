@@ -6,11 +6,7 @@ import { describe, expect, it } from 'vitest'
 import type { DashboardNodePayload, ModuleManifest } from '@dt/contracts'
 import { CONTAINER_CONFIG_KEY } from '@dt/modules'
 
-import {
-  contentSizeOf,
-  hitTest,
-  layoutFrames,
-} from '@/features/dashboard/editorLayout'
+import { contentSizeOf, layoutFrames } from '@/features/dashboard/editorLayout'
 
 const PAD = 10
 
@@ -145,37 +141,6 @@ describe('排版', () => {
     const kid = layoutFrames(nodes).frames.find((frame) => frame.id === 'kid')
 
     expect(kid?.left).toBe(5)
-  })
-})
-
-describe('命中测试', () => {
-  const frames = layoutFrames(
-    [
-      node({ id: 'under', x: 0, y: 0, w: 200, h: 200, zIndex: 0 }),
-      node({ id: 'over', x: 50, y: 50, w: 50, h: 50, zIndex: 1 }),
-      node({
-        id: 'gone',
-        x: 0,
-        y: 0,
-        w: 200,
-        h: 200,
-        zIndex: 2,
-        isVisible: false,
-      }),
-    ],
-    getManifest,
-  ).frames
-
-  it('取最上面那个', () => {
-    expect(hitTest(frames, { x: 60, y: 60 })).toBe('over')
-  })
-
-  it('不可见的节点不参与命中', () => {
-    expect(hitTest(frames, { x: 10, y: 10 })).toBe('under')
-  })
-
-  it('点在所有矩形之外时给 null', () => {
-    expect(hitTest(frames, { x: 900, y: 900 })).toBeNull()
   })
 })
 

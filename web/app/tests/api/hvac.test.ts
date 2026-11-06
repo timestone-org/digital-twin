@@ -64,8 +64,6 @@ describe('每一条都打 platform 前缀', () => {
     ['listAcDataBindings', () => hvac.listAcDataBindings('a1')],
     ['putAcDataBinding', () => hvac.putAcDataBinding('a1', 'raw_minute', 'V1')],
     ['deleteAcDataBinding', () => hvac.deleteAcDataBinding('a1', 'raw_minute')],
-    ['listAcMetricLimits', () => hvac.listAcMetricLimits('a1')],
-    ['putAcMetricLimits', () => hvac.putAcMetricLimits('a1', [])],
     ['listStartupEpisodes', () => hvac.listStartupEpisodes('r1')],
     ['getStartupBatches', () => hvac.getStartupBatches('r1')],
     [
@@ -240,42 +238,6 @@ describe('数据源绑定', () => {
   })
 })
 
-describe('达标范围', () => {
-  it('列表挂在空调下', async () => {
-    await hvac.listAcMetricLimits('a1')
-    expect(call()[0]).toBe('/ac-units/a1/metric-limits')
-  })
-
-  it('写入是覆盖式整包：没带上的指标会被清掉，所以必须送全量', async () => {
-    const limits = [
-      { metric: 'workshop_temp_avg', lower_limit: '20.15', upper_limit: '24' },
-      { metric: 'workshop_humidity_avg', lower_limit: null, upper_limit: '65' },
-    ]
-    await hvac.putAcMetricLimits('a1', limits)
-    const [path, options] = call()
-    expect(path).toBe('/ac-units/a1/metric-limits')
-    expect(options.method).toBe('PUT')
-    expect(options.body).toEqual({ items: limits })
-  })
-
-  it('上下限原样透传字符串，不在封装层转成数字', async () => {
-    const limits = [
-      { metric: 'workshop_temp_avg', lower_limit: '20.15', upper_limit: null },
-    ]
-    await hvac.putAcMetricLimits('a1', limits)
-    const body = call()[1].body as { items: { lower_limit: unknown }[] }
-    expect(body.items[0]?.lower_limit).toBe('20.15')
-  })
-
-  it('写入的返回值也剥掉 items 外壳', async () => {
-    const saved = [
-      { metric: 'workshop_temp_avg', lower_limit: '20.15', upper_limit: null },
-    ]
-    requestMock.mockResolvedValue({ items: saved })
-    await expect(hvac.putAcMetricLimits('a1', [])).resolves.toEqual(saved)
-  })
-})
-
 describe('原始数据', () => {
   it('表格按区间取，区间两端都必须给', async () => {
     await hvac.listRawSamples('a1', { from: FROM, to: TO })
@@ -411,13 +373,6 @@ describe('达标时长模型面', () => {
     })
   })
 
-  it('改服务组合走 PATCH', async () => {
-    await hvac.patchAcModel('m1', { serving_sets: [['K11', 'K12']] })
-    const [url, options] = call()
-    expect(url).toBe('/ac-models/m1')
-    expect(options.method).toBe('PATCH')
-  })
-
   it('重训是动作端点 POST :retrain', async () => {
     await hvac.retrainAcModel('m1')
     expect(call()[0]).toBe('/ac-models/m1:retrain')
@@ -443,17 +398,6 @@ describe('达标时长模型面', () => {
       page: 3,
       size: 50,
     })
-  })
-
-  it('试算是动作端点 POST :predict', async () => {
-    await hvac.predictWithAcModel('m1', {
-      running_set: ['K11'],
-      readings: { K11: { workshop_temp_avg: 30 } },
-      idle_minutes: 390,
-    })
-    expect(call()[0]).toBe('/ac-models/m1:predict')
-    expect(call()[1].method).toBe('POST')
-    expect(call()[1].baseUrl).toBe(PLATFORM_BASE_URL)
   })
 
   it('推荐是动作端点 POST :recommend', async () => {
