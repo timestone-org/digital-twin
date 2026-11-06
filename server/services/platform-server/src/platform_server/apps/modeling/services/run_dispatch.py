@@ -10,6 +10,7 @@ from dataclasses import dataclass
 from datetime import UTC, datetime, timedelta
 from typing import TYPE_CHECKING, Any
 
+from lib.errors import AppError
 from lib.logging import get_logger
 from lib.objectstore import ObjectStore, ObjectStoreError
 from platform_server.apps.modeling.crud import node_run_crud, run_crud
@@ -47,6 +48,7 @@ RUN_ORPHANED = "orphaned"
 RUN_BUSY = "busy"
 
 INTERRUPTED_REASON = "上一次执行中断了，请重新运行"
+ORCHESTRATION_REASON = "运行中途出错了，请重新运行"
 
 
 @dataclass(frozen=True)
@@ -94,32 +96,65 @@ async def execute_run(
             status="failed",
             pipeline_id=claimed.pipeline_id,
         )
-    sources = await _load_sources(
-        sessions, claimed, options.bdm_connection, pool=options.pool
-    )
-    outcome = await execute_graph(
-        claimed.graph,
-        execution=Execution(
-            sources=sources,
-            tz_offset_minutes=options.tz_offset_minutes,
-            runner=options.runner,
-            should_cancel=lambda: _is_cancelled(sessions, run_id),
-            on_node_finished=lambda node: _persist(
-                sessions,
-                run_id,
-                node,
-                _Sinks(
-                    store=options.store,
-                    is_keeping_frames=claimed.is_keeping_frames,
-                ),
-            ),
-        ),
-    )
+    outcome = await _run_claimed(sessions, run_id, claimed, options)
     await _finish(sessions, run_id, outcome)
     return DispatchReport(
         outcome=RUN_DONE,
         status=outcome.status,
         pipeline_id=claimed.pipeline_id,
+    )
+
+
+async def _run_claimed(
+    sessions: Sessions,
+    run_id: uuid.UUID,
+    claimed: "_Claimed",
+    options: DispatchOptions,
+) -> RunOutcome:
+    """取数并跑图，编排层的异常落成一次失败。
+
+    ⚠ 这里漏出去的异常没有人收尾：消息已确认，运行会卡在 running 锁住流水线。
+    Args: sessions, run_id, claimed, options。
+    """
+    try:
+        sources = await _load_sources(
+            sessions, claimed, options.bdm_connection, pool=options.pool
+        )
+        return await execute_graph(
+            claimed.graph,
+            execution=Execution(
+                sources=sources,
+                tz_offset_minutes=options.tz_offset_minutes,
+                runner=options.runner,
+                should_cancel=lambda: _is_cancelled(sessions, run_id),
+                on_node_finished=lambda node: _persist(
+                    sessions,
+                    run_id,
+                    node,
+                    _Sinks(
+                        store=options.store,
+                        is_keeping_frames=claimed.is_keeping_frames,
+                    ),
+                ),
+            ),
+        )
+    except Exception as error:
+        _logger.error(
+            "modeling_run_orchestration_failed",
+            "运行编排抛出异常",
+            run_id=str(run_id),
+            error=error,
+        )
+        return _orchestration_failed(error)
+
+
+def _orchestration_failed(error: Exception) -> RunOutcome:
+    """编排失败的结论。只有自带人话的异常才把原文给用户。Args: error。"""
+    is_readable = isinstance(error, (AppError, ObjectStoreError))
+    return RunOutcome(
+        status="failed",
+        nodes=(),
+        error_text=str(error) if is_readable else ORCHESTRATION_REASON,
     )
 
 
