@@ -18,7 +18,6 @@ import {
   linearGradient,
   markLineRef,
   resolvePalette,
-  textFactory,
   tooltipStyle,
   TRANSPARENT_BG,
   valueAxis,
@@ -502,19 +501,6 @@ describe('resolvePalette', () => {
     expect(resolvePalette({}, theme({ palette: ['t'] }), () => '')).toEqual([
       't',
     ])
-  })
-})
-
-describe('textFactory', () => {
-  it('把单位与小数位绑进同一个取值器', () => {
-    const format = textFactory({ unit: 'kW', precision: 1 })
-
-    expect(format(1.26)).toBe('1.3kW')
-    expect(format(null)).toBe('—')
-  })
-
-  it('没配时最多两位、不带单位', () => {
-    expect(textFactory({})(1.239)).toBe('1.24')
   })
 })
 

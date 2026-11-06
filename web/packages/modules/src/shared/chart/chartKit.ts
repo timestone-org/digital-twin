@@ -597,16 +597,3 @@ export function resolvePalette(
     .filter((color) => !!color)
   return override.length ? override : theme.palette
 }
-
-/**
- * 把 `config.unit` 与 `config.precision` 绑进一个取值器，
- * 供 tooltip 与数值标签共用同一套口径。
- * @param config 模块整份配置
- */
-export function textFactory(
-  config: Record<string, unknown>,
-): (value: unknown) => string {
-  const unit = readText(config.unit)
-  const precision = readNumber(config.precision, 2)
-  return (value: unknown) => valueText(value, precision, unit)
-}

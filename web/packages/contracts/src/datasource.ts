@@ -103,19 +103,6 @@ export interface DataSourceProvider {
 }
 
 /**
- * provider 注册表。应用壳在启动时装配好再注入运行时，
- * 「新增一种取数方式」因此不必碰渲染层。
- */
-export interface ProviderRegistry {
-  /** 登记一个 provider；同 `kind` 重复登记后者覆盖前者。 */
-  register(provider: DataSourceProvider): void
-  /** 按来源种类取 provider；没登记过返回 undefined。 */
-  get(kind: BindingSourceKind): DataSourceProvider | undefined
-  /** 清空。⚠ 只给测试用：生产路径调用它等于把大屏的取数全部摘掉。 */
-  reset(): void
-}
-
-/**
  * 一条时序槽要取的那段序列。
  * ⚠ `detail` 是绑定上的取数说明**原文**：判别它是哪一支、拆成哪个端点的参数，
  * 是取数适配器的事。发起取数的那一层只按清单的时序声明挑槽，对来源种类无感知

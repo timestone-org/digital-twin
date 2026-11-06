@@ -17,7 +17,6 @@ import {
   cellText,
   columnsTemplateOf,
   emptyStateOf,
-  readTableColumns,
   readTableRows,
   rowDisplayName,
   scanTableColumns,
@@ -62,9 +61,13 @@ function cellAt(view: TableView, row: number, col: number) {
   return view.rows[row]?.cells[col]
 }
 
+function columnsOf(raw: unknown): TableColumn[] {
+  return scanTableColumns(raw).columns
+}
+
 describe('列的归一化', () => {
   it('列键认不出的整条丢掉，认得出的按声明序留下', () => {
-    const columns = readTableColumns([
+    const columns = columnsOf([
       { key: 'c2', name: '甲' },
       { key: 'c9', name: '不存在的列键' },
       { key: 'c1', name: '乙' },
@@ -89,7 +92,7 @@ describe('列的归一化', () => {
   })
 
   it('缺什么补什么：名字与单位空着、对齐回落右对齐、宽度回落 0', () => {
-    const [column] = readTableColumns([{ key: 'c4' }])
+    const [column] = columnsOf([{ key: 'c4' }])
 
     expect(column).toEqual({
       key: 'c4',
@@ -102,19 +105,15 @@ describe('列的归一化', () => {
   })
 
   it('单位不去首尾空格，列名去', () => {
-    const [column] = readTableColumns([
-      { key: 'c1', name: '  功率  ', unit: '° C' },
-    ])
+    const [column] = columnsOf([{ key: 'c1', name: '  功率  ', unit: '° C' }])
 
     expect(column?.name).toBe('功率')
     expect(column?.unit).toBe('° C')
   })
 
   it('小数位与列宽夹回可配区间，脏值不让整条 CSS 声明作废', () => {
-    const [wide] = readTableColumns([
-      { key: 'c1', precision: 200, width: 9999 },
-    ])
-    const [narrow] = readTableColumns([{ key: 'c2', precision: -3, width: -8 }])
+    const [wide] = columnsOf([{ key: 'c1', precision: 200, width: 9999 }])
+    const [narrow] = columnsOf([{ key: 'c2', precision: -3, width: -8 }])
 
     expect(wide?.precision).toBe(6)
     expect(wide?.width).toBe(480)
@@ -123,7 +122,7 @@ describe('列的归一化', () => {
   })
 
   it('留空的小数位是 null 而不是 0——那是「跟随整块」', () => {
-    expect(readTableColumns([{ key: 'c1' }])[0]?.precision).toBeNull()
+    expect(columnsOf([{ key: 'c1' }])[0]?.precision).toBeNull()
   })
 })
 
@@ -297,9 +296,7 @@ describe('值规则', () => {
 describe('列宽模板', () => {
   it('行名列打头，逐列跟在后面；定宽的写 px、不定宽的分剩下的', () => {
     expect(
-      columnsTemplateOf(
-        readTableColumns([{ key: 'c1', width: 90 }, { key: 'c2' }]),
-      ),
+      columnsTemplateOf(columnsOf([{ key: 'c1', width: 90 }, { key: 'c2' }])),
     ).toBe('minmax(0, 1.6fr) minmax(0, 90px) minmax(0, 1fr)')
   })
 
@@ -317,13 +314,13 @@ describe('列宽模板', () => {
 describe('空态与截断', () => {
   it('一列都没启用与一行都没配各说各的', () => {
     expect(emptyStateOf({}, [], 3).text).toBe(TABLE_NO_COLUMN_TEXT)
-    expect(emptyStateOf({}, readTableColumns(TWO_COLUMNS), 0).text).toBe(
+    expect(emptyStateOf({}, columnsOf(TWO_COLUMNS), 0).text).toBe(
       TABLE_EMPTY_TEXT,
     )
   })
 
   it('空态文案可换，一串空格不算换', () => {
-    const columns = readTableColumns(TWO_COLUMNS)
+    const columns = columnsOf(TWO_COLUMNS)
 
     expect(emptyStateOf({ emptyText: '未接设备' }, columns, 0).text).toBe(
       '未接设备',

@@ -15,7 +15,6 @@ export {
   assetObjectKey,
   assetRef,
   assetUrl,
-  modelVariantKey,
   modelVariantUrl,
   parseAssetRef,
 } from './asset'
@@ -396,7 +395,6 @@ export type {
   PointSample,
   PointState,
   PointValueListener,
-  ProviderRegistry,
   SeriesOutcome,
   SeriesReader,
   SeriesRequest,

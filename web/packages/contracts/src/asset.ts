@@ -69,23 +69,6 @@ export function assetObjectKey(kind: AssetKind, assetId: string): string {
 }
 
 /**
- * 某一档模型的对象键。`original` 就是这一类的基准键。
- *
- * ⚠ 派生档与原件同住 `models/{id}/` 这个前缀：删素材删的是整前缀，派生件因此
- * 跟着一起走，不会留下没有任何一行指向的孤儿对象。
- * @param assetId 素材 id
- * @param variant 压缩档
- */
-export function modelVariantKey(
-  assetId: string,
-  variant: ModelVariant,
-): string {
-  return variant === 'original'
-    ? assetObjectKey('model', assetId)
-    : `models/${assetId}/${variant}`
-}
-
-/**
  * 某一档模型的取回地址；引用不合法给空串。
  * @param base 取回前缀，末尾带斜杠（例 `/oss/`）
  * @param ref 落库的引用串

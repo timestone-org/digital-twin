@@ -447,7 +447,7 @@ echarts 自带的 `AriaComponent` 未注册（注册它要改 `echarts.ts` 与 `
 - ⚠ **`--state-idle` 没有 `-rgb` 伴生变量**（`tokens.scss` 只有 text-title / accent-primary / accent-secondary / state-success / state-warning / state-danger / state-info / neutral-fg 八个），`rgba(var(--state-idle-rgb), .45)` 整条声明作废。要半透明用 `withAlpha()`。
 - ⚠ **绝不写 `color: ''`**：echarts 会把空串当成一种颜色画出**透明的线**，而不是回退默认色。取不到就省掉那个键——用 `withColor()`。
 - ⚠ **`.ts` 里的色值字面量那道闸拦不住**：`check_ts_style.py:309-313` 的 `_styled_files()` 只扫 `.vue` 与 `src` 下的 `.scss/.css`。图表的 option 全在 `.ts` 里，「零色值字面量」在这里靠约定 + 评审 + 单测兜。
-- **数值格式化统一走 `textFactory(config)`**（绑 `unit` + `precision`），tooltip 与数值标签共用一份口径。⚠ 小数位必须夹到 `[0,6]`：手编的 config 绕得过面板 `min`/`max`，越界会让 `toLocaleString` 抛 `RangeError`（`chartKit` 已夹）。
+- **数值格式化统一走 `valueText(value, precision, unit)`**，tooltip 与数值标签共用一份口径。⚠ 小数位必须夹到 `[0,6]`：手编的 config 绕得过面板 `min`/`max`，越界会让 `toLocaleString` 抛 `RangeError`（`chartKit` 已夹）。
 - ⚠ **`.vue` 里禁 `new Date(` / `toLocaleString(` / `toLocaleDateString(`**（`check_ts_style.py:54-56` 的 `INLINE_FORMAT`，`check_formatting_is_centralised` 只扫 `.vue`）。时间轴刻度格式化必须写在 `option.ts` 里。
 - ⚠ **tooltip 的函数 formatter 返回值被 echarts 原样 `innerHTML`**，拼进去的类目名/系列名/单位全是编辑器里的自由输入 → 能编辑大屏的用户可以让只读访客悬停即中招。**必须过 `escapeHtml()`**。反过来，**别拿它转义 series label / axisLabel**：canvas 不解析 HTML 实体，单位里的 `&` 会显示成字面量 `&amp;`。
 - **换肤必须整图重算**：canvas 不吃 CSS 级联，只换 series 改不掉轴、图例与提示框的颜色。`useEChart.ts:136` 已把 `useThemeRedraw` 接到 `refresh(true)`。

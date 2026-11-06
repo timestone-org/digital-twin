@@ -3,7 +3,7 @@
  * ⚠ 颜色只给 CSS 变量引用，不给具体色值——换肤时由级联自动重着色，
  * 而算出来的十六进制会原地钉死在那一套配色上。
  */
-import type { ConfigField, ConfigOption } from '@dt/contracts'
+import type { ConfigOption } from '@dt/contracts'
 
 import {
   readArray,
@@ -194,49 +194,3 @@ export const LEVEL_OPTIONS: ConfigOption[] = [
   { value: 'warning', label: '警告（黄）' },
   { value: 'danger', label: '危险（红）' },
 ]
-
-/**
- * 生成「阈值规则」配置字段，模块直接铺进自己的 `configSchema`。
- * @param key 字段键
- * @param label 字段标签
- * @param help 标签旁的说明
- */
-export function thresholdsConfigField(
-  key = 'thresholds',
-  label = '阈值规则',
-  help = '按声明顺序取首个命中，高危规则放前面；缺值与非数不告警。',
-): ConfigField {
-  return {
-    key,
-    label,
-    type: 'array',
-    help,
-    itemSchema: [
-      {
-        key: 'op',
-        label: '判断',
-        type: 'enum',
-        default: 'gt',
-        options: OP_OPTIONS,
-      },
-      { key: 'value', label: '阈值', type: 'number', default: 0 },
-      {
-        key: 'value2',
-        label: '阈值上界',
-        type: 'number',
-        when: { key: 'op', in: ['between', 'outside'] },
-      },
-      {
-        key: 'level',
-        label: '严重度',
-        type: 'enum',
-        default: 'warning',
-        options: LEVEL_OPTIONS,
-      },
-      { key: 'label', label: '告警文案', type: 'string', default: '' },
-      { key: 'blink', label: '闪烁', type: 'boolean', default: false },
-    ],
-    itemLabelKey: 'level',
-    default: [],
-  }
-}

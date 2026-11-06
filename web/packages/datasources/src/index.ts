@@ -5,13 +5,12 @@ export {
   isDataSourceError,
 } from './errors'
 export type { DataSlot, DataSlotError, DataSlotOk } from './slot'
-export { errorSlot, okSlot, readHistorySlot } from './slot'
+export { errorSlot, okSlot } from './slot'
 export {
   __resetProviders,
   getProvider,
   hasProvider,
   listProviders,
-  providerRegistry,
   registerProvider,
 } from './registry'
 export type { RealtimePorts } from './realtime/provider'

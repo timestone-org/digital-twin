@@ -74,21 +74,6 @@ export function readLooseNumber(raw: unknown): number | null {
   return null
 }
 
-/**
- * 「留空 = 自动」的尺寸值：数字串收成数字，其余非空串原样透传；
- * 空值与既非数字也非字符串的脏值一律 undefined（= 交回自动）。
- * ⚠ 透传是有意的：echarts 的 grid 四边认百分比串（`5%`），值轴 min/max 认
- * `dataMin` / `dataMax`；收成数字会把这两种写法一起吃掉。
- * @param raw 配置里读出来的原值
- */
-export function readSizeToken(raw: unknown): number | string | undefined {
-  if (typeof raw !== 'number' && typeof raw !== 'string') return undefined
-  const text = String(raw).trim()
-  if (text === '') return undefined
-  const parsed = Number(text)
-  return Number.isFinite(parsed) ? parsed : text
-}
-
 function isRecord(raw: unknown): raw is Record<string, unknown> {
   return typeof raw === 'object' && raw !== null && !Array.isArray(raw)
 }
