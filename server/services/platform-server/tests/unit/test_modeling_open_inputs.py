@@ -38,6 +38,17 @@ def test_prediction_does_not_coerce_a_numeric_string() -> None:
 
 
 @pytest.mark.parametrize(
+    "value", [float("inf"), float("-inf"), float("nan"), 10**400]
+)
+def test_prediction_rejects_a_number_that_is_not_finite(
+    value: float | int,
+) -> None:
+    payload = OpenModelPredictIn.model_validate({"rows": [{"x": value}]})
+    with pytest.raises(PredictRequestInvalid):
+        _as_number(payload.rows[0]["x"], "x", 0)
+
+
+@pytest.mark.parametrize(
     "value",
     [
         "2026-11-04",

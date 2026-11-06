@@ -1,5 +1,6 @@
 """模型对外调用的部署校验、账号配额与计算记录；见 ADR-0062。"""
 
+import math
 import time
 import uuid
 from dataclasses import dataclass, field, replace
@@ -326,7 +327,15 @@ def _as_number(value: object, key: str, index: int) -> float | None:
         return None
     if isinstance(value, bool) or not isinstance(value, (int, float)):
         raise PredictRequestInvalid(f"第 {index + 1} 行的「{key}」不是一个数")
-    return float(value)
+    try:
+        number = float(value)
+    except OverflowError:
+        number = math.inf
+    if not math.isfinite(number):
+        raise PredictRequestInvalid(
+            f"第 {index + 1} 行的「{key}」不是一个有限的数"
+        )
+    return number
 
 
 def _row_moment(row: OpenModelRow, index: int) -> datetime | None:
