@@ -257,6 +257,7 @@ async def test_an_interrupted_run_without_details_is_still_converged(
         run.status = "failed"
         run.finished_at = datetime.now(UTC)
         run.error_text = INTERRUPTED_REASON
+        run.publication_status = "skipped"
     await drive_run(
         worker_sessions,
         uuid.UUID((await _start(app_client, created["id"]))["id"]),
