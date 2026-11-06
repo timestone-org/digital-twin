@@ -133,7 +133,7 @@ def _enqueue_after_commit(
     """排一次提交后的投递。
 
     ⚠ 钩子失败只记日志、不回滚已落库的运行行：那一行的状态是 `pending`，
-    在途集合里占着位，保留期清理的心跳判定会把它收成 `failed` 并说明原因。
+    在途集合里占着位，由 `schedule_worker` 按 `dispatch_after` 补偿重投。
     比起「响应 500 但运行行已经在库里」，这个方向更容易解释。
     Args: session, run_id, context。
     """
