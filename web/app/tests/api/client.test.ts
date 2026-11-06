@@ -249,6 +249,20 @@ describe('request', () => {
 })
 
 describe('信封校验', () => {
+  it('读响应体时超时报超时，不报格式异常', async () => {
+    const response = new Response('{}')
+    vi.spyOn(response, 'json').mockRejectedValue(
+      new DOMException('timed out', 'TimeoutError'),
+    )
+    fetchMock.mockResolvedValue(response)
+
+    const caught = await request('/x').catch((error: unknown) => error)
+
+    expect(caught).toBeInstanceOf(TransportError)
+    expect((caught as TransportError).message).toBe('请求超时，请稍后重试')
+    expect((caught as TransportError).status).toBe(0)
+  })
+
   it('不是信封形状的 JSON 一律判格式异常', async () => {
     // 反代挂掉时会返回别的形状的 JSON；放它进业务层就会崩在深层组件里
     fetchMock.mockResolvedValue(envelope({ detail: 'Not Found' }, 404))
@@ -347,6 +361,28 @@ describe('取字节', () => {
 
     await expect(requestBytes('/x')).rejects.toBeInstanceOf(TransportError)
     expect(seen).toEqual(['out'])
+  })
+
+  it('读字节时超时报超时', async () => {
+    const response = new Response('bytes')
+    vi.spyOn(response, 'blob').mockRejectedValue(
+      new DOMException('timed out', 'TimeoutError'),
+    )
+    fetchMock.mockResolvedValue(response)
+
+    const caught = await requestBytes('/x').catch((error: unknown) => error)
+
+    expect(caught).toBeInstanceOf(TransportError)
+    expect((caught as TransportError).message).toBe('请求超时，请稍后重试')
+  })
+
+  it('读字节时被调用方中止，原样抛出', async () => {
+    const aborted = new DOMException('aborted', 'AbortError')
+    const response = new Response('bytes')
+    vi.spyOn(response, 'blob').mockRejectedValue(aborted)
+    fetchMock.mockResolvedValue(response)
+
+    await expect(requestBytes('/x')).rejects.toBe(aborted)
   })
 
   it('非 2xx 一律抛，不把错误页当成图', async () => {
