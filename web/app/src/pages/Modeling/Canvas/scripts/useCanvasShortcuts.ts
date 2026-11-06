@@ -1,13 +1,14 @@
 /**
  * @fileoverview 画布的键盘操作。
  *
- * ⚠ 在输入框里打字时一律不响应：不判这一条的话，用户在参数弹窗里按退格删字，
- * 画布上的节点会跟着一起没（本仓编辑器已经吃过这个亏）。
+ * ⚠ 输入框、下拉与弹窗里的按键一律不响应：不判这一条的话，用户在参数弹窗里按
+ * 退格删字，画布上的节点会跟着一起没（本仓编辑器已经吃过这个亏）。
  * ⚠ 监听挂在 window 上，卸载必须摘——画布是个整屏页面，留着的监听会在别的页面
  * 上继续吃按键。
  */
 import { onBeforeUnmount, onMounted, ref } from 'vue'
 import { useWorkspacePage } from '@/features/workspace/context'
+import { ownsKeyboard } from '@/utils/keyboardOwner'
 
 /** 方向键一下挪多少；按住 Shift 挪一大格。 */
 const NUDGE_STEP = 8
@@ -55,13 +56,6 @@ const READONLY_SAFE = new Set<SimpleAction>([
   'fit',
 ])
 
-/** 焦点在能打字的地方吗。 */
-function isTyping(target: EventTarget | null): boolean {
-  if (!(target instanceof HTMLElement)) return false
-  if (target.isContentEditable) return true
-  return ['INPUT', 'TEXTAREA', 'SELECT'].includes(target.tagName)
-}
-
 /** 带修饰键的那几下。⚠ Mac 上是 metaKey，Windows/Linux 上是 ctrlKey，都要认。 */
 function withModifier(event: KeyboardEvent): SimpleAction | null {
   const key = event.key.toLowerCase()
@@ -101,7 +95,7 @@ export function useCanvasShortcuts(actions: ShortcutActions): void {
   const active = page?.active ?? ref(true)
   function onKey(event: KeyboardEvent): void {
     if (!active.value) return
-    if (isTyping(event.target)) return
+    if (ownsKeyboard(event.target)) return
     const nudge = event.metaKey || event.ctrlKey ? null : nudgeOf(event)
     if (nudge !== null) {
       if (!actions.canEdit()) return

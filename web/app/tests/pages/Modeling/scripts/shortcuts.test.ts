@@ -109,6 +109,48 @@ describe('画布快捷键', () => {
     },
   )
 
+  it('下拉触发器获焦时方向键翻选项，不挪节点', () => {
+    const hooks = actions()
+    setup(hooks)
+    const trigger = document.createElement('button')
+    trigger.setAttribute('role', 'combobox')
+    document.body.append(trigger)
+
+    trigger.dispatchEvent(
+      new KeyboardEvent('keydown', {
+        key: 'ArrowDown',
+        bubbles: true,
+        cancelable: true,
+      }),
+    )
+
+    expect(hooks.nudge).not.toHaveBeenCalled()
+  })
+
+  it.each(['Delete', 'Enter'])(
+    '弹窗里的按钮按 %s 归按钮，画布不响应也不拦默认动作',
+    (key) => {
+      const hooks = actions()
+      setup(hooks)
+      const dialog = document.createElement('div')
+      dialog.setAttribute('role', 'dialog')
+      const button = document.createElement('button')
+      dialog.append(button)
+      document.body.append(dialog)
+      const event = new KeyboardEvent('keydown', {
+        key,
+        bubbles: true,
+        cancelable: true,
+      })
+
+      button.dispatchEvent(event)
+
+      expect(hooks.removeSelected).not.toHaveBeenCalled()
+      expect(hooks.openConfig).not.toHaveBeenCalled()
+      expect(event.defaultPrevented).toBe(false)
+    },
+  )
+
   it('富文本区域里同样不响应', () => {
     const hooks = actions()
     setup(hooks)
