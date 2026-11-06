@@ -29,11 +29,11 @@ from ai_assistant.apps.chat.services.context_stream import (
 )
 from ai_assistant.apps.chat.services.context_summary import summary_partition
 from llmcore.errors import ModelRejected
-from llmcore.memory import Summary, summarize
+from llmcore.memory import HistoryRow, Summary, summarize
 from llmcore.output.events import EVENT_CONTEXT, frame
 from llmcore.output.payloads import ContextPayload
 from llmcore.ports import ModelChoice
-from llmcore.testing import asks
+from llmcore.testing import asks, tool_call
 from llmcore.tools.shapes import ToolSpec
 from llmcore.turn.loop import TurnDeps
 from llmcore.turn.types import TurnOutcome
@@ -175,6 +175,42 @@ def test_split_never_leaves_orphaned_tool_results() -> None:
         if isinstance(message, ToolMessage)
     )
     assert any(message.content == "当前要求" for message in kept)
+
+
+def _oversized_last_batch() -> list[BaseMessage]:
+    return [
+        HumanMessage(content="旧要求" * 500),
+        AIMessage(content="旧结论"),
+        HumanMessage(content="中段要求"),
+        AIMessage(
+            content="",
+            tool_calls=[tool_call("read", "t1"), tool_call("read", "t2")],
+        ),
+        ToolMessage(content="结果" * 600, tool_call_id="t1"),
+        ToolMessage(content="结果" * 600, tool_call_id="t2"),
+    ]
+
+
+def test_split_falls_back_to_the_last_safe_cut_before_the_final_batch() -> None:
+    messages = _oversized_last_batch()
+    dropped, kept = split_messages(messages, 1000, None)
+    assert dropped == messages[:3]
+    assert kept == messages[3:]
+
+
+async def test_oversized_last_batch_still_folds_the_earlier_turns() -> None:
+    messages = _oversized_last_batch()
+    model = AsyncMock()
+    model.respond.return_value = AIMessage(content="完成")
+    updates: list[ContextPayload] = []
+    context = _context(model, updates)
+
+    await context.respond(choice=ModelChoice(), messages=messages, tools=[])
+
+    sent = model.respond.await_args.kwargs["messages"]
+    assert messages[0] not in sent
+    assert messages[3:] == sent[-3:]
+    assert context.compression_count == 1
 
 
 def test_tool_facts_are_available_to_the_compaction_summary() -> None:
@@ -488,6 +524,20 @@ def test_summary_inputs_are_bounded_even_for_small_model_windows() -> None:
     assert len(summary.text) < len(previous.text)
     assert sum(len(row.content_json["text"]) for row in bounded) < 500
     assert "[中间内容已省略]" in bounded[1].content_json["text"]
+
+
+def test_long_history_does_not_dilute_the_newly_dropped_rows() -> None:
+    fresh_text = "口径：T001 按小时均值" + "细节" * 100
+    rows = [
+        HistoryRow(role="user", seq=seq, content_json={"text": fresh_text})
+        for seq in range(400)
+    ]
+    previous = Summary(through_seq=390, text="旧摘要", model="default:summary")
+
+    bounded, _ = bounded_fold(rows, previous, 32768)
+
+    assert [row.seq for row in bounded] == list(range(390, 400))
+    assert all(row.content_json["text"] == fresh_text for row in bounded)
 
 
 def test_base_tool_argument_schema_counts_toward_the_context_budget() -> None:
