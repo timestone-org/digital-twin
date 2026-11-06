@@ -21,7 +21,7 @@ from platform_server.apps.dataset.formula.complete_windows import (
 from platform_server.apps.dataset.formula.errors import FormulaError
 from platform_server.apps.dataset.formula.evaluator import ExternalKey
 from platform_server.apps.dataset.formula.refs import FormulaDeps, WindowRef
-from platform_server.apps.dataset.formula.values import to_number
+from platform_server.apps.dataset.formula.values import finite, to_number
 from platform_server.apps.dataset.formula.windows import (
     WindowSpec,
     window_lower_bound,
@@ -295,7 +295,7 @@ def _aggregate(func: str, rows: list[RowSnapshot], key: str) -> object:
     reducer = _SERIES_REDUCERS.get(func)
     if reducer is None:  # pragma: no cover - 名单由契约测试锁死
         raise FormulaError(f"未实现的窗口函数 {func}")
-    return reducer(series) if series else None
+    return finite(reducer(series)) if series else None
 
 
 def _first_present(rows: list[RowSnapshot], key: str) -> object:
@@ -326,4 +326,5 @@ def _whole_value(func: str, stats: WholeStats | None) -> object:
     deriver = _WHOLE_DERIVERS.get(func)
     if deriver is None:  # pragma: no cover - 名单由契约测试锁死
         raise FormulaError(f"未实现的整列聚合函数 {func}")
-    return deriver(stats)
+    value = deriver(stats)
+    return None if value is None else finite(value)

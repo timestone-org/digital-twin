@@ -217,3 +217,37 @@ def test_a_string_against_a_number_goes_through_the_numeric_reading() -> None:
 def test_a_power_that_overflows_is_blank() -> None:
     assert compute("POW(10, 400)") is None
     assert compute("10 ** 400") is None
+
+
+@pytest.mark.parametrize(
+    "source", ["(0 - 4) ** 0.5", "{x} ** 0.5", "{x} ** (1 / 3)"]
+)
+def test_a_negative_base_with_a_fractional_exponent_is_blank(
+    source: str,
+) -> None:
+    assert compute(source, x=-4.0) is None
+
+
+def test_powers_inside_the_domain_keep_their_values() -> None:
+    assert compute("{x} ** 2", x=-3.0) == 9.0
+    assert compute("{x} ** 0.5", x=4.0) == 2.0
+    assert compute("{x} ** -1", x=0.0) is None
+
+
+@pytest.mark.parametrize(
+    "source",
+    [
+        "SUM(1.7e308, 1.7e308)",
+        "AVG(1.7e308, 1.7e308)",
+        "MEDIAN(1.7e308, 1.7e308)",
+        "VAR(1e200, -1e200)",
+        "VARP(1e200, -1e200)",
+        "STDEV(1e200, -1e200)",
+    ],
+)
+def test_an_aggregate_that_overflows_is_blank(source: str) -> None:
+    assert compute(source) is None
+
+
+def test_a_rounding_that_overflows_is_blank() -> None:
+    assert compute("ROUND(1.7e308, -308)") is None

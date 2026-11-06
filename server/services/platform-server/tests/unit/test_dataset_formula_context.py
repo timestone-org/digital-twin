@@ -241,3 +241,16 @@ def test_a_trial_run_reads_every_history_reference_as_unknown() -> None:
     externals = build_externals(parsed.deps, empty_cache(), None)
     assert set(externals.values()) == {None}
     assert len(externals) == 4
+
+
+@pytest.mark.parametrize("function", ["SUM_OVER", "AVG_OVER"])
+def test_a_window_aggregate_that_overflows_is_blank(function: str) -> None:
+    cache = window_cache(row(0.5, a=1.7e308), row(0.25, a=1.7e308))
+    assert compute(f"{function}({{a}}, '1h')", cache) is None
+
+
+def test_a_whole_column_total_that_overflows_is_blank() -> None:
+    stats = WholeStats().fold(1.7e308).fold(1.7e308)
+    cache = HistoryCache(tz=UTC, whole_stats={"a": stats})
+    assert compute("SUM_ALL({a})", cache) is None
+    assert compute("AVG_ALL({a})", cache) is None
