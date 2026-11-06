@@ -204,6 +204,20 @@ class CredentialStore:
         ):
             return await self._waited(provider_id, stale)
         try:
+            # ⚠ 手上这份是抢锁之前读的：上一位持锁人可能刚换完，它的
+            # refresh_token 已经作废，拿去再刷会把好好的登录标成失效
+            current = await self._bundle(provider_id)
+            if not current.is_stale(skew_s=REFRESH_SKEW_S):
+                return current
+            return await self._exchanged(provider_id, current)
+        finally:
+            await self._cache.delete_if_owner(key, holder)
+
+    async def _exchanged(
+        self, provider_id: uuid.UUID, stale: TokenBundle
+    ) -> TokenBundle:
+        """向上游换一份新的并落库。调用方持有续期锁。"""
+        try:
             fresh = await self._oauth.refresh(stale.refresh_token)
         except LlmLoginRejected as error:
             await self._mark_failed(provider_id, str(error))
@@ -218,7 +232,6 @@ class CredentialStore:
             "模型账号凭据已续期",
             provider_id=str(provider_id),
         )
-        await self._cache.delete_if_owner(key, holder)
         return fresh
 
     async def _waited(
