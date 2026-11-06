@@ -251,6 +251,23 @@ async def test_a_duplicate_leaves_no_bytes_behind(
     assert store.objects == {}
 
 
+async def test_a_registration_moves_the_bytes_out_of_staging(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """⚠ 挪完不删暂存的话，每次登记都在桶里多留一份没人引用的原件。"""
+    _registration(monkeypatch, is_duplicate=False)
+    store = _Store()
+    staging = staging_key(BASE, DOC, ".md")
+    final = document_key(BASE, DOC, ".md")
+    store.objects[staging] = b"hello"
+
+    assert await _register(store) == "手册.md"
+
+    assert store.objects == {final: b"hello"}
+    assert store.copied == [(staging, final)]
+    assert store.deleted == [staging]
+
+
 async def test_a_failed_staging_delete_does_not_fail_the_registration(
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
