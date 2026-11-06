@@ -110,6 +110,8 @@ class SourceSession:
         self._reporter = reporter
         self._stopped = asyncio.Event()
         self._subscribed: set[str] = set()
+        # 串行点位挂载：`_subscribed` 要等 subscribe 返回才更新，并发就会重订
+        self._attach_lock = asyncio.Lock()
         self._poller: PollLoop | None = None
         # ⚠ 强引用：事件循环只持有任务的弱引用，丢了引用的任务可能随时消失
         self._poll_task: asyncio.Task[None] | None = None
@@ -181,6 +183,19 @@ class SourceSession:
 
         Args: source。
         """
+        async with self._attach_lock:
+            await self._retarget(source)
+        if self._is_online:
+            # ⚠ 这一次补报不能省：运行态只在建连那一刻写过一次，而点位往往是
+            # 之后才导进来的。不补，那一行就永远停在建连时的点位数，界面报
+            # 「全都没订上」，而现场其实一直在推值——一个不报错的假故障
+            await self._reporter.report(self._status(STATE_ONLINE))
+
+    async def _retarget(self, source: PlanSource) -> None:
+        """换上新计划并对齐挂载。调用方持有 `_attach_lock`。
+
+        Args: source。
+        """
         if self._is_online and not self._wants_subscribe():
             self._poll_generation += 1
             await self._stop_polling()
@@ -190,12 +205,7 @@ class SourceSession:
         if removed:
             await self._driver.unsubscribe(removed)
             self._subscribed -= set(removed)
-        if self._is_online:
-            await self._attach()
-            # ⚠ 这一次补报不能省：运行态只在建连那一刻写过一次，而点位往往是
-            # 之后才导进来的。不补，那一行就永远停在建连时的点位数，界面报
-            # 「全都没订上」，而现场其实一直在推值——一个不报错的假故障
-            await self._reporter.report(self._status(STATE_ONLINE))
+        await self._attach()
 
     async def _open(self) -> None:
         """建连并挂上取数。"""
@@ -208,15 +218,19 @@ class SourceSession:
             raise ValueError("这个数据源没有可读取的有效点位")
         await self._driver.connect()
         self._is_online = True
-        await self._attach()
+        async with self._attach_lock:
+            await self._attach()
         await self._reporter.report(self._status(STATE_ONLINE))
 
     async def _attach(self) -> None:
-        """按能力与配置选订阅还是轮询。
+        """按能力与配置选订阅还是轮询，调用方持有 `_attach_lock`。
 
         ⚠ 驱动不支持订阅时**自动降级为轮询**，降级方向是显式的：宁可多问
         几次，也不要静默变成一个不产值的会话（COLLECT_DESIGN.md §4.1）。
+        ⚠ 在线状态要在拿到锁之后再判：排队期间会话可能已被撤销。
         """
+        if not self._is_online:
+            return
         specs = specs_of(self._source)
         self._loaded_count = self._driver.load_points(specs)
         if self._wants_subscribe():
@@ -244,7 +258,7 @@ class SourceSession:
         """
         if not specs:
             return
-        result = await self._driver.subscribe(specs, self._sink)
+        result = await self._driver.subscribe(specs, self._revocable_sink)
         self._subscribed.update(result.accepted)
         for refused in result.rejected:
             _logger.error(
@@ -254,6 +268,16 @@ class SourceSession:
                 point_code=refused.point_code,
                 detail=refused.detail,
             )
+
+    def _revocable_sink(
+        self, point_code: str, value: object, ts_ms: int, quality: Quality
+    ) -> None:
+        """订阅取数的读数出口，撤销后不再放行。
+
+        Args: point_code, value, ts_ms, quality。
+        """
+        if not self._stopped.is_set():
+            self._sink(point_code, value, ts_ms, quality)
 
     async def _start_polling(self) -> None:
         """起轮询循环。"""
