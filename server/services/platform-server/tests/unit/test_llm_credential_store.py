@@ -16,6 +16,7 @@ import pytest
 from lib.crypto import SecretCipher
 from lib.testing import InMemoryCache
 from platform_server.apps.llm_providers import crud
+from platform_server.apps.llm_providers.enums import AUTH_MODE_CHATGPT
 from platform_server.apps.llm_providers.errors import (
     LlmCredentialStale,
     LlmLoginRejected,
@@ -23,6 +24,7 @@ from platform_server.apps.llm_providers.errors import (
 )
 from platform_server.apps.llm_providers.models import LlmProviderCredential
 from platform_server.apps.llm_providers.services.credential_store import (
+    REFRESH_REJECTED_BACKOFF_S,
     CredentialStore,
     masked,
 )
@@ -30,6 +32,8 @@ from platform_server.apps.llm_providers.services.tokens import TokenBundle
 
 PROVIDER = uuid.UUID("0192f0aa-0000-7000-8000-000000000003")
 LOCK_KEY = f"llm-credential-refresh:{PROVIDER}"
+BACKOFF_KEY = f"llm-credential-refresh-rejected:{PROVIDER}"
+ROW_VERSION_AFTER_ONE_FAILURE = 2
 CIPHER = SecretCipher("k" * 32, label="test")
 
 
@@ -150,6 +154,72 @@ async def test_a_failed_refresh_lets_go_of_the_lock(
 
     # ⚠ 锁留满 TTL 的话，上游恢复后这十几秒里所有人仍拿回过期令牌
     assert LOCK_KEY not in cache.store
+
+
+async def test_a_rejected_refresh_is_not_retried_inside_the_backoff(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    oauth = FakeOAuth(error=LlmLoginRejected("作废了"))
+    store, cache = build_store(monkeypatch, oauth=oauth)
+
+    for _ in range(3):
+        with pytest.raises(LlmCredentialStale):
+            await store.lease(PROVIDER)
+
+    # ⚠ 每次租用都拿废令牌打一次上游的话，消费方的每次调用都成了一次重放
+    assert oauth.used == ["old"]
+    assert cache.row.row_version == ROW_VERSION_AFTER_ONE_FAILURE
+    assert cache.ttl_s[BACKOFF_KEY] == REFRESH_REJECTED_BACKOFF_S
+    assert LOCK_KEY not in cache.store
+
+
+async def test_a_rejected_refresh_is_retried_once_the_backoff_ends(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    oauth = FakeOAuth(error=LlmLoginRejected("上游 503"))
+    store, cache = build_store(monkeypatch, oauth=oauth)
+    with pytest.raises(LlmCredentialStale):
+        await store.lease(PROVIDER)
+
+    await cache.delete(BACKOFF_KEY)
+    oauth.error = None
+    leased = await store.lease(PROVIDER)
+
+    # ⚠ 上游的 429/5xx 也判成拒绝：按失败状态永久短路的话，这一路只能重新登录
+    assert oauth.used == ["old", "old"]
+    assert leased.access_token == "access-of-old-next"
+
+
+async def test_a_login_made_inside_the_backoff_is_leased_at_once(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    oauth = FakeOAuth(error=LlmLoginRejected("作废了"))
+    store, _ = build_store(monkeypatch, oauth=oauth)
+    with pytest.raises(LlmCredentialStale):
+        await store.lease(PROVIDER)
+
+    await store.save(
+        PROVIDER,
+        bundle("relogged", is_stale=False),
+        auth_mode=AUTH_MODE_CHATGPT,
+        actor="tester",
+    )
+    leased = await store.lease(PROVIDER)
+
+    assert oauth.used == ["old"]
+    assert leased.access_token == "access-of-relogged"
+
+
+async def test_an_unreachable_upstream_starts_no_backoff(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    oauth = FakeOAuth(error=LlmLoginUpstreamUnavailable("连不上"))
+    store, cache = build_store(monkeypatch, oauth=oauth)
+
+    with pytest.raises(LlmLoginUpstreamUnavailable):
+        await store.lease(PROVIDER)
+
+    assert BACKOFF_KEY not in cache.store
 
 
 def test_a_credential_row_belongs_to_one_provider_only() -> None:
