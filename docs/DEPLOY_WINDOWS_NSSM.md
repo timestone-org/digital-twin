@@ -622,11 +622,10 @@ PLATFORM_OBJECTSTORE_* Field required」；knowledge 少给 worker 的表现更�
 | `ASSISTANT_AUTH_BASE_URL` | `http://auth-server:8004` | `http://127.0.0.1:8004` |
 | `ASSISTANT_KNOWLEDGE_BASE_URL` | `http://knowledge-server:8009` | `http://127.0.0.1:8009`（不装知识库就留空）|
 | `KNOWLEDGE_PLATFORM_BASE_URL` | `http://platform-server:8005` | `http://127.0.0.1:8005` |
-| `REALTIME_AUTH_BASE_URL` | `http://auth-server:8001` ⚠ | `http://127.0.0.1:8004` |
+| `REALTIME_AUTH_BASE_URL` | `http://auth-server:8004` | `http://127.0.0.1:8004` |
 | `ASSISTANT_MODEL_BASE_URL` / `KNOWLEDGE_*_BASE_URL` | 供应商端点 | 按供应商填；本机自建的推理端点也要写成 `127.0.0.1`，不是服务名 |
 
-⚠ **`REALTIME_AUTH_BASE_URL` 的代码默认值端口是错的（8001，auth 实际在 8004）**，
-compose 里靠显式覆盖遮住了。这里漏写的表现是：主题登记 fail-closed 被拒，
+⚠ **`REALTIME_AUTH_BASE_URL` 漏写的表现是**：主题登记 fail-closed 被拒，
 大屏订阅不到任何主题，而 auth 与 realtime 单看都健康。
 
 ⚠ **`ASSISTANT_KNOWLEDGE_BASE_URL` 留空是合法的**，语义是「这套部署没接知识库」：
@@ -1472,7 +1471,7 @@ Restart-Service dt-auth, dt-platform, dt-realtime, dt-opcua, dt-assistant, dt-kn
 | 首页能开，**刷新/直接输地址 404 或 403** | `root` 用了反斜杠，或 `try_files` 被改成试目录 | 见 §8.2 的两条告诫 |
 | WS **每 25~30 秒断一次重连** | 那条 location 误 `include proxy-common.conf`（25s 读超时套在长连接上）| 恢复成逐条写全、`proxy_read_timeout 3600s` |
 | WS **握手一律失败** | `REALTIME_JWT_SECRET` ≠ `AUTH_JWT_SECRET` | 改成同值并重启 `dt-realtime` |
-| 大屏**订不到任何主题**，auth 与 realtime 都健康 | `REALTIME_AUTH_BASE_URL` 用了代码默认值（端口 8001 是错的）| 显式写成 `http://127.0.0.1:8004` |
+| 大屏**订不到任何主题**，auth 与 realtime 都健康 | `REALTIME_AUTH_BASE_URL` 还是容器默认值| 显式写成 `http://127.0.0.1:8004` |
 | 3D 模型 / 图片 / 图标 **403** | MinIO 匿名前缀没设（`minio-init` 那步从没在这台跑过）| §4.4，`__probe__` 回 404 才算对 |
 | 素材**上传 404** | `/oss/` 的桶名 rewrite、`PLATFORM_OBJECTSTORE_PUBLIC_BASE`、前端 `ASSET_BASE_URL` 三处分叉 | 三处必须同为 `/oss/` + 同一个桶 |
 | 模型三档都报 **`WinError 2`** | Node 路径无效或服务账户的 PATH 找不到它 | §5.4：配置实际 `node.exe` 路径，重启 worker 后重压 |

@@ -74,7 +74,7 @@ class Settings(AppSettings, PostgresSettings, RedisSettings):
 
     # 登记主题时回调 auth-server 校验声明的权限码是否存在于目录。
     # ⚠ 不可达时 fail-closed（拒绝登记），理由见 CONTEXT.md §7。
-    auth_base_url: str = "http://auth-server:8001"
+    auth_base_url: str = "http://auth-server:8004"
     auth_timeout_s: float = Field(default=2.0, gt=0)
 
     # 权限上下文的复核间隔。到点重新取一次调用者的权限码，不再满足的主题
