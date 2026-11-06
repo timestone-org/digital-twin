@@ -90,7 +90,7 @@ async def _declare(registry: TopicRegistry, *, code: str) -> None:
 
 
 async def test_losing_a_declare_race_with_the_same_code_succeeds() -> None:
-    await _declare(_registry(winner_code=CODE), code=CODE)
+    assert await _declare(_registry(winner_code=CODE), code=CODE) is None
 
 
 async def test_losing_a_declare_race_with_another_code_conflicts() -> None:

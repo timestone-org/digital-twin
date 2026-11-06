@@ -137,7 +137,7 @@ async def test_starting_twice_is_idempotent() -> None:
 
 async def test_stopping_a_listener_that_never_started_is_safe() -> None:
     listener = _listener([], ConnectionRegistry())
-    await listener.stop()
+    assert await listener.stop() is None
     # 没起过也能安全停：关停路径不该依赖启动是否发生过
 
 
