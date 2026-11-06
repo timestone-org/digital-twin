@@ -485,12 +485,14 @@ async def _release(container: Container) -> None:
     Args: container。
     """
     await container.stream.close()
+    await container.cache.close()
     await container.nodes.close()
     await container.ac_publish_lease.close()
     await container.ac_daily_lease.close()
     await container.dataset.lease.close()
     await container.dataset.retention_lease.close()
     await container.ac_source.dispose()
+    await container.history_database.dispose()
     await container.database.dispose()
 
 

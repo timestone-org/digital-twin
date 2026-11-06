@@ -134,20 +134,20 @@ async def test_the_topic_list_comes_back_as_the_hub_reported_it() -> None:
     assert calls[0].url.params["publisher"] == "platform-publisher"
 
 
-async def test_an_unreachable_hub_lists_no_topics_instead_of_raising() -> None:
-    # ⚠ 空清单只会导致补登记，不会导致注销——这个不对称是刻意的
+async def test_an_unreachable_hub_answers_none_instead_of_raising() -> None:
+    # ⚠ 空列表是「hub 上一个都没有」，会触发全量补登记；问不到必须分得开
     calls: list[httpx.Request] = []
     client = build_client(recorder(calls, status_code=503))
-    assert await client.topics("platform-publisher") == []
+    assert await client.topics("platform-publisher") is None
 
 
 async def test_a_reshaped_envelope_lands_in_the_same_bucket_as_a_failure() -> (
     None
 ):
-    # 信封变形与 hub 不可达对对账是同一件事：这一轮问不到，只补登记不注销
+    # 信封变形与 hub 不可达对对账是同一件事：这一轮问不到
     calls: list[httpx.Request] = []
     client = build_client(recorder(calls, body={"topics": [TOPIC]}))
-    assert await client.topics("platform-publisher") == []
+    assert await client.topics("platform-publisher") is None
 
 
 def test_the_traceparent_has_the_shape_the_hub_passes_through() -> None:
@@ -189,18 +189,24 @@ async def test_listing_grants_asks_for_this_publisher_only() -> None:
     assert calls[0].url.params["publisher"] == "platform-x"
 
 
-async def test_an_unreachable_hub_yields_an_empty_grant_list() -> None:
-    # ⚠ 空清单只会导致补登记（幂等），不会导致注销——注销以 hub 的清单为输入
+async def test_an_unreachable_hub_yields_no_grant_list() -> None:
+    # ⚠ 空列表是「hub 上一条都没有」，会触发全量补登记；问不到必须分得开
     client = build_client(recorder([], status_code=503))
 
-    assert await client.grants("platform-x") == []
+    assert await client.grants("platform-x") is None
 
 
 async def test_a_malformed_grant_envelope_is_not_read_as_empty() -> None:
     # 信封变形时要响亮失败并按「这一轮问不到」处理，而不是让空集合流下去
     client = build_client(recorder([], body={"data": {"nope": []}}))
 
-    assert await client.grants("platform-x") == []
+    assert await client.grants("platform-x") is None
+
+
+async def test_a_failing_grant_list_answers_none_not_empty() -> None:
+    calls: list[httpx.Request] = []
+    client = build_client(recorder(calls, status_code=500))
+    assert await client.grants("platform-x") is None
 
 
 async def test_revoking_a_grant_deletes_by_fingerprint() -> None:
@@ -219,3 +225,16 @@ async def test_a_failed_grant_revoke_is_reported_as_such() -> None:
     client = build_client(recorder([], status_code=500))
 
     assert await client.revoke_grant("b" * 64) is False
+
+
+async def test_an_unsendable_payload_fails_this_batch_without_raising() -> None:
+    # ⚠ 严格 JSON 编码抛的是 ValueError：放它出去，排在后面的主题这一拍全断
+    calls: list[httpx.Request] = []
+    client = build_client(recorder(calls))
+
+    is_published = await client.publish(
+        topic=TOPIC, items=[{"value": float("nan")}]
+    )
+
+    assert is_published is False
+    assert calls == []

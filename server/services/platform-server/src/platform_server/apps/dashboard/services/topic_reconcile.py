@@ -50,10 +50,15 @@ class TopicReconciler:
         真源。
         ⚠ 单条失败不重试也不抛：下一轮还会再对一次。这一层重试会与「hub 正在
         重启」撞在一起，把一拍拖成一串超时。
+        ⚠ 清单取不到就整轮跳过：问不到不等于全部缺失，逐条补登记在 hub 卡死时
+        每条都要等满超时。
         """
         live = await self._dashboards.live_ids()
         expected = {topic_of(dashboard_id) for dashboard_id in live}
-        actual = set(await self._realtime.topics(PUBLISHER_NAME))
+        listed = await self._realtime.topics(PUBLISHER_NAME)
+        if listed is None:
+            return 0, 0
+        actual = set(listed)
         declared = await self._declare_missing(live, actual)
         revoked = await self._revoke_extra(expected, actual)
         _logger.info(
@@ -90,8 +95,8 @@ class TopicReconciler:
     async def _revoke_extra(self, expected: set[str], actual: set[str]) -> int:
         """注销大屏已经不在、主题还挂着的那些。
 
-        ⚠ 方向单向：以 hub 的清单为输入。取不到清单时输入为空，于是什么都不
-        注销——宁可多留一个空主题，也不要因为一次超时把全量主题清光。
+        ⚠ 方向单向：以 hub 的清单为输入，取不到清单的那一轮走不到这里——宁可
+        多留一个空主题，也不要因为一次超时把全量主题清光。
         Args: expected, actual。
         """
         revoked = 0

@@ -155,6 +155,8 @@ def decode_reading(raw: object) -> PointReading | None:
     """把一个哈希字段解码成读数；缺失或损坏返回 None。
 
     ⚠ 损坏不当成「值是 null」：那会让一次编码事故看起来像现场真的报了空值。
+    ⚠ NaN / Infinity 不算损坏，照样是读数：设备确实报了它，点位状态据此分类；
+    推不推得出去由 `point_frames` 判。
     Args: raw。
     """
     if not isinstance(raw, str):
