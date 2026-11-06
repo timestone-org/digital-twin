@@ -21,10 +21,7 @@ from typing import cast
 
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from knowledge_server.apps.knowledge.services.llm import (
-    Answerer,
-    AnswerUnavailable,
-)
+from knowledge_server.apps.knowledge.services.llm import Answerer
 from knowledge_server.apps.knowledge.services.reranking import (
     NullReranker,
     Reranker,
@@ -91,14 +88,12 @@ class Agentic:
         seen: dict[str, Hit] = {}
         rounds = 0
         is_complete = False
-        query = request.query
         while rounds < self.max_rounds and not is_complete:
             rounds += 1
-            for one in await self._round(session, request, query):
+            for one in await self._round(session, request):
                 seen[str(one.chunk_id)] = one
             found = list(seen.values())
             is_complete = await self._is_enough(request.query, found)
-            query = request.query
         hits, note = await self._ranked(request, list(seen.values()))
         return RetrievalResult(
             hits=hits,
@@ -136,14 +131,14 @@ class Agentic:
         )
 
     async def _round(
-        self, session: AsyncSession, request: RetrievalRequest, query: str
+        self, session: AsyncSession, request: RetrievalRequest
     ) -> list[Hit]:
         """改写一次，把改出来的每条检索式各跑一遍混合召回。
 
-        Args: session, request, query。
+        Args: session, request。
         """
         made: list[Hit] = []
-        for one in await self._rewritten(query):
+        for one in await self._rewritten(request.query):
             found = await self.hybrid.retrieve(
                 session,
                 RetrievalRequest(
@@ -161,10 +156,7 @@ class Agentic:
 
         Args: query。
         """
-        try:
-            reply = await self.answerer.complete(_REWRITE_SYSTEM, query)
-        except AnswerUnavailable:
-            raise
+        reply = await self.answerer.complete(_REWRITE_SYSTEM, query)
         rows = _parsed_queries(reply)
         return rows[:MAX_QUERIES] or [query]
 

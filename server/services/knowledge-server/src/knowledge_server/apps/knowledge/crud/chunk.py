@@ -3,10 +3,8 @@
 import uuid
 from collections.abc import Sequence
 from dataclasses import asdict
-from typing import Any, cast
 
 from sqlalchemy import delete, func, select
-from sqlalchemy.engine import CursorResult
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from knowledge_server.apps.knowledge.models import KnowledgeChunk
@@ -78,16 +76,3 @@ async def count_chunks(session: AsyncSession, base_id: uuid.UUID) -> int:
         .where(KnowledgeChunk.base_id == base_id)
     )
     return int(found.scalar_one())
-
-
-async def drop_chunks(session: AsyncSession, document_id: uuid.UUID) -> int:
-    """删掉一份文档的全部块。块向量随外键级联。
-
-    Args: session, document_id。
-    """
-    done = await session.execute(
-        delete(KnowledgeChunk).where(KnowledgeChunk.document_id == document_id)
-    )
-    # cast 的理由 —— DML 的 execute 运行期返回 CursorResult，而 AsyncSession
-    # 的静态签名只承诺 Result，`rowcount` 在后者上不存在
-    return max(0, cast("CursorResult[Any]", done).rowcount)

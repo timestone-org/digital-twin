@@ -53,6 +53,7 @@ from knowledge_server.apps.knowledge.services.sources import (
 )
 from knowledge_server.settings import MAX_RAW_BYTES
 from lib.db import after_commit
+from lib.logging import get_logger
 from lib.objectstore import (
     ObjectNotFound,
     ObjectStore,
@@ -64,6 +65,9 @@ from lib.stream import StreamGroup, StreamLike
 from lib.utils.ids import uuid7
 from lib.web import Page, PageParams
 
+_logger = get_logger("knowledge.document")
+
+DUPLICATE_CONTENT = "这份内容已经在这个库里了"
 # 直传凭证的存活时长。⚠ 短一点：这张表单能往我们的桶里写字节，签出去之后
 # 谁拿到都能用
 UPLOAD_TTL_S = 15 * 60
@@ -176,24 +180,58 @@ async def _presign(
         raise ObjectStoreError("对象存储暂时不可用") from error
 
 
-async def _hash_and_move(
-    store: ObjectStore, staging: str, final: str
-) -> tuple[str, int]:
-    """把暂存的字节读一遍算哈希，再挪到正式键。
+async def _hashed(store: ObjectStore, staging: str) -> tuple[str, int]:
+    """读一遍暂存的字节，回内容哈希与字节数。
 
     ⚠ 哈希在**服务端**算，不信客户端报的：客户端报什么我们就存什么的话，
     去重就成了一句空话——两份不同内容报同一个哈希，第二份会被当成重复丢掉。
 
-    ⚠ 挪完删暂存件。删失败只留下一份没人引用的字节，不影响正确性，
-    所以不因此让整次登记失败。
-
-    Args: store, staging, final。
+    Args: store, staging。
     """
     content = await store.get_bytes(staging)
-    digest = hashlib.sha256(content).hexdigest()
+    return (hashlib.sha256(content).hexdigest(), len(content))
+
+
+async def _drop_staging(store: ObjectStore, staging: str) -> None:
+    """尽力删暂存件。
+
+    ⚠ 删失败只留下一份没人引用的字节，不影响正确性，
+    所以不因此让整次登记失败。
+
+    Args: store, staging。
+    """
+    try:
+        await store.delete(staging)
+    except ObjectStoreError as error:
+        _logger.warning(
+            "knowledge_staging_left",
+            "暂存原件清理失败",
+            key=staging,
+            error_type=type(error).__name__,
+        )
+
+
+async def _admit(
+    session: AsyncSession,
+    store: ObjectStore,
+    base_id: uuid.UUID,
+    staging: str,
+    final: str,
+) -> tuple[str, int]:
+    """判重，不重复才把暂存件挪进正式键；回内容哈希与字节数。
+
+    ⚠ 判重在挪件**之前**：撞唯一键时事务已失败，无从核对正式键归不归自己，
+    而同一文档 id 的并发登记里它就是胜出方的原件，不能在那时删。
+
+    Args: session, store, base_id, staging, final。
+    """
+    digest, size = await _hashed(store, staging)
+    if await crud.document.has_content_hash(session, base_id, digest):
+        await _drop_staging(store, staging)
+        raise DuplicateDocument(DUPLICATE_CONTENT)
     await store.copy(staging, final)
-    await store.delete(staging)
-    return (digest, len(content))
+    await _drop_staging(store, staging)
+    return (digest, size)
 
 
 async def register_upload(
@@ -218,7 +256,7 @@ async def register_upload(
     suffix = _checked_suffix(body.filename, external)
     staging = staging_key(base_id, body.document_id, suffix)
     final = document_key(base_id, body.document_id, suffix)
-    digest, size = await _hash_and_move(store, staging, final)
+    digest, size = await _admit(session, store, base_id, staging, final)
     try:
         await crud.document.insert_document(
             session,
@@ -238,7 +276,7 @@ async def register_upload(
         # ⚠ 翻成一句人话再抛。不翻的话冒上去的是一条 500，而那句里写着
         # 「duplicate key value violates unique constraint」——用户看不懂，
         # 而它其实是一件完全正常的事：这份内容已经在库里了
-        raise DuplicateDocument("这份内容已经在这个库里了") from error
+        raise DuplicateDocument(DUPLICATE_CONTENT) from error
     row = await crud.document.get_document(session, body.document_id)
     # pragma 理由：刚 flush 进去的行，取不到即数据库出了别的问题
     if row is None:  # pragma: no cover

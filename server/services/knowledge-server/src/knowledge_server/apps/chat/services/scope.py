@@ -49,11 +49,6 @@ class BaseScope:
 
     bases: tuple[ScopeBase, ...] | None
 
-    @property
-    def is_all(self) -> bool:
-        """不限库吗。"""
-        return self.bases is None
-
     def ids(self) -> tuple[uuid.UUID, ...] | None:
         """范围里那几个库的 id；不限库时给 `None`。"""
         if self.bases is None:
