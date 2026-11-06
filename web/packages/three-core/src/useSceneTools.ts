@@ -68,6 +68,8 @@ export interface SceneTools {
   measured: ComputedRef<number>
   /** 把镜头飞到这条命中的几何上。 */
   locate: (hit: TwinSearchHit) => void
+  /** 模型或摆放变了：按当前轴与位置重算剖切面；没开剖切时什么都不做。 */
+  reapplyClipping: () => void
   /** 导出当前画面为 PNG。 */
   screenshot: () => void
   toggleMeasure: () => void
@@ -103,10 +105,11 @@ export function useSceneTools(options: SceneToolsOptions): SceneTools {
     measureDistance(points.value[0] ?? null, points.value[1] ?? null),
   )
 
+  const clip = (): void =>
+    applyClipping(options.core(), clipAxis.value, clipRatio.value)
+
   // ⚠ 轴或位置一改就重算：交给宿主去调的话，漏一处的表现是「拖了滑块没反应」
-  watch([clipAxis, clipRatio], () =>
-    applyClipping(options.core(), clipAxis.value, clipRatio.value),
-  )
+  watch([clipAxis, clipRatio], clip)
 
   return {
     query,
@@ -125,6 +128,10 @@ export function useSceneTools(options: SceneToolsOptions): SceneTools {
       // 模型对不上，由诊断面板去说，这里乱飞一下只会让人更糊涂
       if (core === null || box === null) return
       options.flight.flyToBox(core, box)
+    },
+
+    reapplyClipping: () => {
+      if (clipAxis.value !== 'none') clip()
     },
 
     screenshot: () => saveScreenshot(options.core(), options.title()),

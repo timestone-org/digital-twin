@@ -148,6 +148,26 @@ describe('剖切', () => {
     expect(core.renderer.clippingPlanes).toEqual([])
   })
 
+  it('reapplyClipping 按模型当下的范围沿用当前轴与位置', async () => {
+    const { tools, core } = setup(null)
+    tools.clipAxis.value = 'x'
+    await nextTick()
+
+    core.modelRoot.add(modelOf('pump'))
+    tools.reapplyClipping()
+
+    expect(core.renderer.clippingPlanes).toHaveLength(1)
+  })
+
+  it('没开剖切时 reapplyClipping 不动渲染器', () => {
+    const { tools, core } = setup()
+    const before = core.renderer.clippingPlanes
+
+    tools.reapplyClipping()
+
+    expect(core.renderer.clippingPlanes).toBe(before)
+  })
+
   it('模型还没加载时不炸，也不留下平面', async () => {
     const { tools, core } = setup(null)
 

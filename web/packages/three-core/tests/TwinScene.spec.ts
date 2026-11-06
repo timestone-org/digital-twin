@@ -493,6 +493,169 @@ describe('快速切模型的竞态', () => {
   })
 })
 
+describe('模型清空与装载失败', () => {
+  function originalsOf(model: THREE.Object3D): {
+    geometry: ReturnType<typeof vi.spyOn>
+    material: ReturnType<typeof vi.spyOn>
+  } {
+    const mesh = model.getObjectByName('pump')
+    if (!(mesh instanceof THREE.Mesh)) throw new Error('模型里没有 pump')
+    return {
+      geometry: vi.spyOn(mesh.geometry as THREE.BufferGeometry, 'dispose'),
+      material: vi.spyOn(mesh.material as THREE.Material, 'dispose'),
+    }
+  }
+
+  const NO_MODEL = { model: { asset: '' } }
+  const BROKEN_MODEL = { model: { asset: OTHER_ASSET } }
+  // fakeModel 的根没有名字，结构树默认只展到这一层
+  const TREE_ROOT_LABEL = '无名分组'
+
+  it('素材清空后结构树不再列旧模型', async () => {
+    const wrapper = mountScene({ showStructureTree: true })
+    await flushPromises()
+    expect(wrapper.text()).toContain(TREE_ROOT_LABEL)
+
+    await wrapper.setProps({ config: config(NO_MODEL) })
+    await flushPromises()
+
+    expect(wrapper.text()).not.toContain(TREE_ROOT_LABEL)
+    wrapper.unmount()
+  })
+
+  it('换到装载失败的素材后结构树不再列旧模型', async () => {
+    const wrapper = mountScene({ showStructureTree: true })
+    await flushPromises()
+    expect(wrapper.text()).toContain(TREE_ROOT_LABEL)
+
+    seam.loadTwinModel.mockRejectedValueOnce(new Error('404'))
+    await wrapper.setProps({ config: config(BROKEN_MODEL) })
+    await flushPromises()
+
+    expect(wrapper.text()).toContain('404')
+    expect(wrapper.text()).not.toContain(TREE_ROOT_LABEL)
+    wrapper.unmount()
+  })
+
+  it('装载失败后搜索不再命中旧模型的节点', async () => {
+    const wrapper = mountScene({ showSceneTools: true })
+    await flushPromises()
+    await wrapper.get('input[type="search"]').setValue('pump')
+    expect(wrapper.get('[data-test="twin-scene-tools"]').text()).toContain(
+      'pump',
+    )
+
+    seam.loadTwinModel.mockRejectedValueOnce(new Error('404'))
+    await wrapper.setProps({ config: config({ ...BROKEN_MODEL, parts: [] }) })
+    await flushPromises()
+
+    expect(wrapper.get('[data-test="twin-scene-tools"]').text()).not.toContain(
+      'pump',
+    )
+    wrapper.unmount()
+  })
+
+  it('换模型时释放的是原几何与原材质，部件层的克隆件先还原', async () => {
+    const model = fakeModel()
+    const originals = originalsOf(model)
+    seam.loadTwinModel.mockResolvedValueOnce(assetOf(model))
+    const parts = [{ id: 'part-pump', nodes: ['pump'], look: { opacity: 0.3 } }]
+    const wrapper = mountScene({ config: config({ parts }) })
+    await flushPromises()
+
+    await wrapper.setProps({
+      config: config({ parts, model: { asset: OTHER_ASSET } }),
+    })
+    await flushPromises()
+
+    expect(originals.geometry).toHaveBeenCalledTimes(1)
+    expect(originals.material).toHaveBeenCalledTimes(1)
+    wrapper.unmount()
+  })
+
+  it('素材清空时原几何与原材质同样被释放', async () => {
+    const model = fakeModel()
+    const originals = originalsOf(model)
+    seam.loadTwinModel.mockResolvedValueOnce(assetOf(model))
+    const parts = [{ id: 'part-pump', nodes: ['pump'], look: { opacity: 0.3 } }]
+    const wrapper = mountScene({ config: config({ parts }) })
+    await flushPromises()
+
+    await wrapper.setProps({ config: config({ ...NO_MODEL, parts }) })
+    await flushPromises()
+
+    expect(originals.geometry).toHaveBeenCalledTimes(1)
+    expect(originals.material).toHaveBeenCalledTimes(1)
+    wrapper.unmount()
+  })
+})
+
+describe('剖切随模型与摆放重算', () => {
+  async function pickClipAxis(wrapper: ReturnType<typeof mountScene>) {
+    await wrapper.get('[aria-label="剖切轴"]').trigger('click')
+    await flushPromises()
+    const option = [...document.querySelectorAll('[role="option"]')].find(
+      (node) => node.textContent?.trim() === 'X 轴',
+    )
+    if (option === undefined) throw new Error('没有 X 轴选项')
+    option.dispatchEvent(new MouseEvent('click', { bubbles: true }))
+    await flushPromises()
+  }
+
+  it('加载中选好的轴在模型到达后生效', async () => {
+    const pending = deferred<TwinModelAsset>()
+    seam.loadTwinModel.mockReturnValueOnce(pending.promise)
+    const wrapper = mountScene({ showSceneTools: true })
+    await flushPromises()
+    await pickClipAxis(wrapper)
+    expect(renderer.clippingPlanes).toHaveLength(0)
+
+    pending.settle(assetOf(fakeModel()))
+    await flushPromises()
+
+    expect(renderer.clippingPlanes).toHaveLength(1)
+    wrapper.unmount()
+  })
+
+  it('改摆放后平面跟着模型走', async () => {
+    const wrapper = mountScene({ showSceneTools: true })
+    await flushPromises()
+    await pickClipAxis(wrapper)
+    const before = renderer.clippingPlanes[0]?.constant
+
+    await wrapper.setProps({
+      config: config({
+        model: { asset: ASSET, position: [50, 0, 0] },
+      }),
+    })
+    await flushPromises()
+
+    expect(renderer.clippingPlanes[0]?.constant).not.toBe(before)
+    wrapper.unmount()
+  })
+
+  it('模型清掉后不留下旧模型的平面', async () => {
+    const wrapper = mountScene({ showSceneTools: true })
+    await flushPromises()
+    await pickClipAxis(wrapper)
+    expect(renderer.clippingPlanes).toHaveLength(1)
+
+    await wrapper.setProps({ config: config({ model: { asset: '' } }) })
+    await flushPromises()
+
+    expect(renderer.clippingPlanes).toHaveLength(0)
+    wrapper.unmount()
+  })
+
+  it('没开剖切时模型到达也不设平面', async () => {
+    const wrapper = mountScene({ showSceneTools: true })
+    await flushPromises()
+
+    expect(renderer.clippingPlanes).toHaveLength(0)
+    wrapper.unmount()
+  })
+})
+
 describe('快照登记', () => {
   it('挂载即以渲染器画布为 host 登记，卸载即注销', async () => {
     const wrapper = mountScene()
