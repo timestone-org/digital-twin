@@ -6,7 +6,7 @@
 from __future__ import annotations
 
 import uuid
-from dataclasses import dataclass
+from dataclasses import dataclass, replace
 from datetime import UTC, datetime, timedelta
 from typing import TYPE_CHECKING, Any
 
@@ -97,10 +97,10 @@ async def execute_run(
             pipeline_id=claimed.pipeline_id,
         )
     outcome = await _run_claimed(sessions, run_id, claimed, options)
-    await _finish(sessions, run_id, outcome)
+    status = await _finish(sessions, run_id, outcome)
     return DispatchReport(
         outcome=RUN_DONE,
-        status=outcome.status,
+        status=status,
         pipeline_id=claimed.pipeline_id,
     )
 
@@ -113,7 +113,8 @@ async def _run_claimed(
 ) -> RunOutcome:
     """取数并跑图，编排层的异常落成一次失败。
 
-    ⚠ 这里漏出去的异常没有人收尾：消息已确认，运行会卡在 running 锁住流水线。
+    ⚠ 编排层的异常必须在这里变成结论：出错节点的现场就在手上，放出去的话
+    只能等重新认领，原因也只剩「上一次执行中断」。
     Args: sessions, run_id, claimed, options。
     """
     try:
@@ -360,17 +361,26 @@ def _interrupted() -> RunOutcome:
 
 async def _finish(
     sessions: Sessions, run_id: uuid.UUID, outcome: RunOutcome
-) -> None:
-    """把终态写到运行行上。
+) -> str:
+    """把终态写到运行行上，回真正落下的状态。
 
     ⚠ 终态必须带 `finished_at`：空着会被界面与保留期清理一起当成「还在跑」。
+    ⚠ 取消旗标在行锁内重读：最后一次边界检查之后才到的取消已经答复过用户，
+    这里不认的话跑成了的运行还会接着自动发布。
+    ⚠ 写不进库就让异常出去：消费循环据此不确认消息，由重新认领来收尾。
     Args: sessions, run_id, outcome。
     """
     async with sessions.session() as session:
         run = await run_crud.get_for_update(session, run_id)
         if run is None:
-            return
-        _apply_terminal(run, outcome)
+            return outcome.status
+        landed = (
+            replace(outcome, status="cancelled")
+            if outcome.status == "succeeded" and run.cancel_requested
+            else outcome
+        )
+        _apply_terminal(run, landed)
+        return landed.status
 
 
 def _apply_terminal(run: ModelingRun, outcome: RunOutcome) -> None:

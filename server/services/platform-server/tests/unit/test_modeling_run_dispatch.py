@@ -97,6 +97,13 @@ class BrokenStore:
         raise ObjectStoreError("对象存储操作失败")
 
 
+class InMemoryStore:
+    """写字节一律成功的对象存储。"""
+
+    async def put_bytes(self, *_args: object, **_kwargs: object) -> None:
+        return None
+
+
 def pending_run() -> ModelingRun:
     return ModelingRun(
         id=uuid.uuid4(),
@@ -208,3 +215,58 @@ async def test_finish_writes_through_the_row_lock() -> None:
         RunOutcome(status="succeeded", nodes=()),
     )
     assert (before.status, after.status) == ("pending", "succeeded")
+
+
+async def test_a_cancel_after_the_last_boundary_still_lands_cancelled(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """最后一次边界检查之后才到的取消：行锁内认下，不落 succeeded、不发布。"""
+    with_frames(monkeypatch)
+    run = pending_run()
+
+    async def cancelled_too_late(*_args: object) -> bool:
+        run.cancel_requested = True
+        run.status = "cancelling"
+        return False
+
+    monkeypatch.setattr(run_dispatch, "_is_cancelled", cancelled_too_late)
+    report = await execute_run(
+        sessions_of(run), run_id=run.id, options=options_of(InMemoryStore())
+    )
+    assert report.status == "cancelled"
+    assert run.status == "cancelled"
+    assert run.publication_status == "skipped"
+    assert run.finished_at is not None
+
+
+async def test_a_failure_keeps_its_verdict_when_cancel_was_requested() -> None:
+    """取消只改写「跑成了」：失败的结论和原因要留着。"""
+    run = pending_run()
+    run.status = "cancelling"
+    run.cancel_requested = True
+    status = await run_dispatch._finish(  # pyright: ignore[reportPrivateUsage]
+        sessions_of(run),
+        run.id,
+        RunOutcome(status="failed", nodes=(), error_text="算不动"),
+    )
+    assert status == "failed"
+    assert (run.status, run.error_text) == ("failed", "算不动")
+
+
+async def test_a_failed_finish_escapes_so_the_message_stays_pending(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """终态写不进库不许吞掉：吞了消息就被确认，运行卡在 running。"""
+    with_frames(monkeypatch)
+    run = pending_run()
+
+    async def unreachable(*_args: object) -> str:
+        raise ConnectionError("数据库连不上")
+
+    monkeypatch.setattr(run_dispatch, "_finish", unreachable)
+    with pytest.raises(ConnectionError):
+        await execute_run(
+            sessions_of(run),
+            run_id=run.id,
+            options=options_of(InMemoryStore()),
+        )
