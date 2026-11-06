@@ -4,6 +4,7 @@
 形状变了那边就静默推不动——而它的报错落在别人的日志里。
 """
 
+import asyncio
 from typing import Any
 
 import httpx
@@ -18,6 +19,7 @@ pytestmark = [
 
 TOPICS = f"{INTERNAL_PREFIX}/realtime/topics"
 PUBLISH = f"{INTERNAL_PREFIX}/realtime/publish"
+CONCURRENT_DECLARES = 8
 DECLARED: dict[str, Any] = {
     "topic": "opcua:3fa85f64",
     "required_code": "opcua:view",
@@ -33,6 +35,19 @@ async def test_declaring_a_topic_twice_with_the_same_code_is_idempotent(
     assert first.status_code == 200
     # ⚠ 幂等：注销走 at-least-once，推送方重试是正常路径
     assert second.status_code == 200
+
+
+async def test_concurrent_declares_of_one_topic_all_succeed(
+    client: httpx.AsyncClient,
+) -> None:
+    # ⚠ 建实例的登记与对账会并发：撞唯一约束不该变成 500
+    responses = await asyncio.gather(
+        *(
+            client.post(TOPICS, json=DECLARED)
+            for _ in range(CONCURRENT_DECLARES)
+        )
+    )
+    assert {response.status_code for response in responses} == {200}
 
 
 async def test_declaring_the_same_topic_with_another_code_conflicts(

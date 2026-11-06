@@ -3,6 +3,7 @@
 from datetime import datetime
 
 from sqlalchemy import select, update
+from sqlalchemy.dialects.postgresql import insert
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from lib.db import CrudBase
@@ -26,6 +27,32 @@ class TopicCrud(CrudBase[TopicDeclaration]):
             select(TopicDeclaration).where(TopicDeclaration.topic == topic)
         )
         return result.scalars().one_or_none()
+
+    async def insert_if_absent(
+        self,
+        session: AsyncSession,
+        *,
+        topic: str,
+        required_code: str,
+        publisher: str,
+    ) -> bool:
+        """登记一条声明；主题已存在时什么都不做。返回是否真的插入了一行。
+
+        ⚠ 走 `ON CONFLICT DO NOTHING` 而不是「先查再插」：建实例的登记与对账
+        并发时，先查再插会在提交那一刻撞唯一约束，幂等的重复登记变成 500。
+
+        Args: session, topic, required_code, publisher。
+        """
+        statement = (
+            insert(TopicDeclaration)
+            .values(
+                topic=topic, required_code=required_code, publisher=publisher
+            )
+            .on_conflict_do_nothing(index_elements=[TopicDeclaration.topic])
+            .returning(TopicDeclaration.id)
+        )
+        result = await session.execute(statement)
+        return result.scalar_one_or_none() is not None
 
     async def list_by_publisher(
         self, session: AsyncSession, publisher: str
