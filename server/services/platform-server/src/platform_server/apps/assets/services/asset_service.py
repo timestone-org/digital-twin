@@ -160,21 +160,10 @@ async def finalize_upload(
     """
     existing = await crud.get(session, asset_id)
     if existing is not None:
-        return _present(existing)
+        rows = await crud.asset_variant.list_for_asset(session, asset_id)
+        return _present(existing, rows)
 
-    staged = await _find_staged(store, asset_id)
-    if staged is None:
-        raise AssetUploadMissing("没有收到上传的文件，请重新上传")
-    kind, key, stat = staged
-    spec = kind_spec_of(kind)
-    if spec is None:  # pragma: no cover - 键由本服务铸造，类型必在目录里
-        raise AssetKindUnknown(f"没有「{kind}」这类素材")
-    if stat.size_bytes > spec.max_bytes:
-        raise AssetTooLarge(
-            f"{spec.label}最大 {spec.max_bytes // (1024 * 1024)} MB"
-        )
-
-    await _promote(store, key, keys.object_key(kind, asset_id))
+    kind, stat = await _arrived(store, asset_id)
     await crud.insert_if_absent(
         session,
         crud.AssetWrite(
@@ -188,6 +177,33 @@ async def finalize_upload(
         ),
     )
     return await _settled(session, asset_id, kind)
+
+
+async def _arrived(
+    store: ObjectStore, asset_id: uuid.UUID
+) -> tuple[str, ObjectStat]:
+    """让这个 id 的字节进到正式前缀，给回它的类型与元信息。
+
+    ⚠ 暂存区没有时还要探一次正式前缀：上一次可能搬完了却没提交成，暂存件已删、
+    库里没有行，不认它的话重试只会得到「没有收到文件」，字节成了匿名可读的孤儿。
+    Args: store, asset_id。
+    """
+    staged = await _find_staged(store, asset_id)
+    if staged is None:
+        promoted = await _find_promoted(store, asset_id)
+        if promoted is None:
+            raise AssetUploadMissing("没有收到上传的文件，请重新上传")
+        return promoted
+    kind, key, stat = staged
+    spec = kind_spec_of(kind)
+    if spec is None:  # pragma: no cover - 键由本服务铸造，类型必在目录里
+        raise AssetKindUnknown(f"没有「{kind}」这类素材")
+    if stat.size_bytes > spec.max_bytes:
+        raise AssetTooLarge(
+            f"{spec.label}最大 {spec.max_bytes // (1024 * 1024)} MB"
+        )
+    await _promote(store, key, keys.object_key(kind, asset_id))
+    return kind, stat
 
 
 async def _settled(
@@ -234,6 +250,17 @@ async def _find_staged(
         stat = await _stat(store, key)
         if stat is not None:
             return kind, key, stat
+    return None
+
+
+async def _find_promoted(
+    store: ObjectStore, asset_id: uuid.UUID
+) -> tuple[str, ObjectStat] | None:
+    """在正式前缀找这个 id 的字节，顺带把类型读回来。"""
+    for kind in kinds():
+        stat = await _stat(store, keys.object_key(kind, asset_id))
+        if stat is not None:
+            return kind, stat
     return None
 
 
