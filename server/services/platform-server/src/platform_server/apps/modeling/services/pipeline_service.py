@@ -39,11 +39,14 @@ from platform_server.apps.modeling.schemas import (
     PipelineUpdateIn,
 )
 from platform_server.apps.modeling.services import presenters
+from platform_server.apps.modeling.services.constraints import violates
 from platform_server.apps.modeling.services.graph_check import check_graph
 from platform_server.apps.modeling.services.graph_walk import (
     known_columns_by_node,
     source_table_codes,
 )
+
+_CODE_CONSTRAINT = "uq_modeling_pipelines_code"
 
 
 @dataclass(frozen=True)
@@ -117,6 +120,8 @@ async def create_pipeline(
     try:
         await session.flush()
     except IntegrityError as error:
+        if not violates(error, _CODE_CONSTRAINT):
+            raise
         raise PipelineCodeTaken("这个流水线编码已经被占用了") from error
     return presenters.to_pipeline_out(row)
 
