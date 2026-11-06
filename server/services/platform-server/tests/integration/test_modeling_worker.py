@@ -5,6 +5,7 @@ Postgres 答得出来——假件里它就是一句注释。
 """
 
 import uuid
+from datetime import UTC, datetime
 from typing import Any
 
 import httpx
@@ -26,6 +27,7 @@ from integration.modeling_helpers import (
 from integration.test_modeling_api import _seed_ledger
 from platform_server.apps.modeling.crud import node_run_crud, run_crud
 from platform_server.apps.modeling.services.retention import (
+    LEFTOVER_REASONS,
     RetentionOptions,
     converge_pipeline,
     reap_stale,
@@ -64,6 +66,20 @@ async def test_starting_a_run_only_enqueues_it(
     assert run["status"] == "pending"
     assert run["nodes"] == []
     assert run["started_at"] is None
+
+
+async def _beyond_keep(
+    sessions: MakerSessions, pipeline_id: str, keep: int
+) -> list[uuid.UUID]:
+    """收敛名单。Args: sessions, pipeline_id, keep。"""
+    async with sessions.session() as session:
+        return await run_crud.ids_beyond_keep(
+            session,
+            pipeline_id=uuid.UUID(pipeline_id),
+            keep=keep,
+            exclude=frozenset(),
+            leftover_reasons=LEFTOVER_REASONS,
+        )
 
 
 async def test_a_second_run_is_rejected_by_the_database(
@@ -196,6 +212,56 @@ async def test_converge_keeps_only_the_newest_node_details(
         data_of(await app_client.get(f"{RUNS}/{first['id']}"))["id"]
         == first["id"]
     )
+
+
+async def test_a_converged_run_leaves_the_list_but_keeps_its_slot(
+    app_client: httpx.AsyncClient,
+    db_session: AsyncSession,
+    worker_sessions: MakerSessions,
+) -> None:
+    """收敛过的运行不再进名单，但仍占 `keep` 名额，收敛范围不变。"""
+    await _seed_ledger(app_client, db_session, "energy_q8")
+    graph = linear_graph("energy_q8")
+    graph["nodes"] = [graph["nodes"][0]]
+    graph["edges"] = []
+    created = await create_pipeline(app_client, "q8", graph)
+    ids: list[uuid.UUID] = []
+    for _ in range(3):
+        run = await _start(app_client, created["id"])
+        ids.append(uuid.UUID(run["id"]))
+        await drive_run(worker_sessions, ids[-1])
+
+    await converge_pipeline(
+        worker_sessions, pipeline_id=uuid.UUID(created["id"]), keep=2
+    )
+    assert await _beyond_keep(worker_sessions, created["id"], 2) == []
+    # 第一条明细已清仍占名额：keep=1 时只轮到第二条，第一条不重复进名单
+    assert await _beyond_keep(worker_sessions, created["id"], 1) == [ids[1]]
+
+
+async def test_an_interrupted_run_without_details_is_still_converged(
+    app_client: httpx.AsyncClient,
+    db_session: AsyncSession,
+    worker_sessions: MakerSessions,
+) -> None:
+    """字节写进存储、节点行没落上就断掉的运行：没有明细也要清字节。"""
+    await _seed_ledger(app_client, db_session, "energy_q9")
+    graph = linear_graph("energy_q9")
+    graph["nodes"] = [graph["nodes"][0]]
+    graph["edges"] = []
+    created = await create_pipeline(app_client, "q9", graph)
+    first = uuid.UUID((await _start(app_client, created["id"]))["id"])
+    async with worker_sessions.session() as session:
+        run = await run_crud.get(session, first)
+        assert run is not None
+        run.status = "failed"
+        run.finished_at = datetime.now(UTC)
+        run.error_text = INTERRUPTED_REASON
+    await drive_run(
+        worker_sessions,
+        uuid.UUID((await _start(app_client, created["id"]))["id"]),
+    )
+    assert await _beyond_keep(worker_sessions, created["id"], 1) == [first]
 
 
 def _options(*, keep: int, days: int) -> RetentionOptions:
