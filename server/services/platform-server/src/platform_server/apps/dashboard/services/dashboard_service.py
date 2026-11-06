@@ -2,6 +2,7 @@
 
 import uuid
 
+from sqlalchemy.exc import DBAPIError
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from lib.logging import get_logger
@@ -44,6 +45,9 @@ from platform_server.apps.dashboard.services.validation import (
 )
 
 _logger = get_logger("platform.dashboard.dashboard")
+
+# 排队等行锁耗尽预算的 SQLSTATE：语句超时、锁超时
+LOCK_WAIT_EXPIRED = frozenset({"57014", "55P03"})
 
 
 async def list_dashboards(
@@ -200,9 +204,18 @@ async def locked_dashboard(
 
     ⚠ 推进 `row_version` 的写路径一律走它：版本号是 Python 侧读后加一，不锁的
     话两个事务都能通过版本断言、都写成同一个新版本，后到者静默盖掉先到者。
+    ⚠ 排队等锁吃的是语句预算：默认 2s 的 `statement_timeout` 先于 3s 的
+    `lock_timeout` 到期，等不到锁时多半是 57014，两种都按冲突答。
     Args: session, dashboard_id。
     """
-    dashboard = await dashboard_crud.get_locked(session, dashboard_id)
+    try:
+        dashboard = await dashboard_crud.get_locked(session, dashboard_id)
+    except DBAPIError as error:
+        if getattr(error.orig, "sqlstate", None) not in LOCK_WAIT_EXPIRED:
+            raise
+        raise VersionConflict(
+            "大屏正被其他人保存，请稍后重新加载再试"
+        ) from error
     if dashboard is None:
         raise DashboardNotFound("大屏不存在")
     return dashboard

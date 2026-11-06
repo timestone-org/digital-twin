@@ -8,12 +8,14 @@ import uuid
 from collections.abc import AsyncIterator, Awaitable, Callable
 
 import pytest
+from sqlalchemy.exc import DBAPIError
 from sqlalchemy.ext.asyncio import AsyncEngine, AsyncSession
 
 from platform_server.apps.dashboard.errors import (
     BindingNotFound,
     DashboardNotFound,
     NodeNotFound,
+    VersionConflict,
 )
 from platform_server.apps.dashboard.models import Dashboard, DashboardNode
 from platform_server.apps.dashboard.schemas import (
@@ -54,6 +56,46 @@ async def engine() -> AsyncIterator[AsyncEngine]:
 async def session(engine: AsyncEngine) -> AsyncIterator[AsyncSession]:
     async with AsyncSession(engine, expire_on_commit=False) as opened:
         yield opened
+
+
+class QueuedStatementError(Exception):
+    """驱动层错误的最小形状：与 asyncpg 适配层同样把状态码挂在 `sqlstate`。"""
+
+    def __init__(self, sqlstate: str) -> None:
+        super().__init__(sqlstate)
+        self.sqlstate = sqlstate
+
+
+def fail_with(
+    session: AsyncSession, sqlstate: str, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """让这个会话的下一条语句以给定 SQLSTATE 失败。
+
+    Args: session, sqlstate, monkeypatch。
+    """
+
+    async def execute(*_args: object, **_kwargs: object) -> None:
+        raise DBAPIError("SELECT", {}, QueuedStatementError(sqlstate))
+
+    monkeypatch.setattr(session, "execute", execute)
+
+
+# 57014 是默认口径下真正会出现的：statement_timeout 2s 先于 lock_timeout 3s 到期
+@pytest.mark.parametrize("sqlstate", ["57014", "55P03"])
+async def test_a_lock_wait_that_runs_out_answers_the_conflict(
+    session: AsyncSession, sqlstate: str, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    fail_with(session, sqlstate, monkeypatch)
+    with pytest.raises(VersionConflict):
+        await dashboard_service.locked_dashboard(session, MISSING)
+
+
+async def test_any_other_database_failure_is_not_dressed_up_as_a_conflict(
+    session: AsyncSession, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    fail_with(session, "08006", monkeypatch)
+    with pytest.raises(DBAPIError):
+        await dashboard_service.locked_dashboard(session, MISSING)
 
 
 async def _update_dashboard(

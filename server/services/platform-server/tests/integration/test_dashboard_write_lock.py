@@ -30,6 +30,7 @@ from platform_server.apps.dashboard.schemas import (
     ReplaceLayoutIn,
 )
 from platform_server.apps.dashboard.services import (
+    dashboard_service,
     load_module_catalog,
     node_service,
 )
@@ -62,16 +63,16 @@ class Screen:
     """提交到独立事务、供并发写的一张空大屏。"""
 
     database: Database
+    dsn: str
     project_id: uuid.UUID
     dashboard_id: uuid.UUID
 
 
 @pytest.fixture
 async def screen(db_session: AsyncSession) -> AsyncIterator[Screen]:
+    dsn = db_session.get_bind().engine.url.render_as_string(hide_password=False)
     database = Database(
-        dsn=db_session.get_bind().engine.url.render_as_string(
-            hide_password=False
-        ),
+        dsn=dsn,
         profile=WAIT_PROFILE,
         search_path="platform",
     )
@@ -82,7 +83,7 @@ async def screen(db_session: AsyncSession) -> AsyncIterator[Screen]:
         dashboard = Dashboard(project_id=project.id, name="主屏")
         session.add(dashboard)
         await session.flush()
-        case = Screen(database, project.id, dashboard.id)
+        case = Screen(database, dsn, project.id, dashboard.id)
     try:
         yield case
     finally:
@@ -225,6 +226,36 @@ async def test_a_node_write_queued_behind_a_delete_answers_404(
 
     with pytest.raises(NodeNotFound):
         await later
+
+
+@pytest.mark.parametrize(
+    ("statement_ms", "lock_ms"),
+    [(200, 3000), (3000, 200)],
+    ids=["statement_timeout_first", "lock_timeout_first"],
+)
+async def test_a_write_that_runs_out_of_wait_budget_gets_a_conflict(
+    screen: Screen, statement_ms: int, lock_ms: int
+) -> None:
+    # ⚠ 默认预算是前一档：排队的 FOR UPDATE 先撞语句超时，不是撞锁超时
+    tight = Database(
+        dsn=screen.dsn,
+        profile=PoolProfile(
+            statement_timeout_ms=statement_ms, lock_timeout_ms=lock_ms
+        ),
+        search_path="platform",
+    )
+    try:
+        async with screen.database.session() as holder:
+            await dashboard_service.locked_dashboard(
+                holder, screen.dashboard_id
+            )
+            with pytest.raises(VersionConflict):
+                async with tight.session() as queued:
+                    await dashboard_service.locked_dashboard(
+                        queued, screen.dashboard_id
+                    )
+    finally:
+        await tight.dispose()
 
 
 async def _touch(case: Screen, node_id: uuid.UUID) -> None:
