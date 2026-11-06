@@ -9,6 +9,7 @@ from collections.abc import Sequence
 from dataclasses import dataclass
 
 from pydantic import SecretStr
+from sqlalchemy.exc import IntegrityError
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from lib.logging import get_logger
@@ -45,10 +46,12 @@ from platform_server.apps.collect.services.state_source import (
 )
 from platform_server.apps.collect.services.transactions import (
     release_read_transaction,
+    violated_constraint,
 )
 
 _logger = get_logger("platform.collect.source")
 MIN_MODBUS_POLL_INTERVAL_MS = 1000
+SOURCE_CODE_CONSTRAINT = "uq_collect_sources_code"
 
 
 @dataclass(frozen=True)
@@ -165,13 +168,26 @@ async def create_source(
     )
     validate_http_source(source, context.cipher)
     source_crud.add(session, source)
-    await session.flush()
+    await _flush_new_source(session, payload.code)
     presented = await _present(session, source)
     await _commit(session)
     _logger.info(
         "collect_source_created", "数据源已创建", source_id=str(source.id)
     )
     return (await attach_runtime(context.states, [presented]))[0]
+
+
+async def _flush_new_source(session: AsyncSession, code: str) -> None:
+    """落新数据源。并发撞上同编码按 409 收敛：查重那一步挡不住同时到的请求。
+
+    Args: session, code。
+    """
+    try:
+        await session.flush()
+    except IntegrityError as error:
+        if violated_constraint(error) != SOURCE_CODE_CONSTRAINT:
+            raise
+        raise SourceCodeTaken(f"数据源编码已被占用：{code}") from error
 
 
 async def update_source(

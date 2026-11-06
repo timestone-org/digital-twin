@@ -7,6 +7,7 @@
 import uuid
 from typing import Any, cast
 
+from sqlalchemy.exc import IntegrityError
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from lib.crypto import SecretCipher
@@ -33,6 +34,8 @@ from platform_server.apps.llm_providers.schemas import (
 )
 
 _logger = get_logger("platform.llm_providers")
+
+NAME_CONSTRAINT = "uq_llm_providers_name"
 
 
 def key_hint(api_key: str) -> str:
@@ -174,7 +177,7 @@ async def create_provider(
     )
     # ⚠ flush 不 commit：事务由依赖注入收口，提前 commit 取 id
     # 会把一次写拆成两段
-    await session.flush()
+    await _flush_named(session, body.name)
     _logger.info("llm_provider_created", "新建了一路模型供应商", actor=actor)
     return provider_out(row, [])
 
@@ -205,7 +208,7 @@ async def update_provider(
         row.api_key_enc = cipher.encrypt(secret)
         row.api_key_hint = key_hint(secret)
     row.updated_by = actor
-    await session.flush()
+    await _flush_named(session, row.name)
     _logger.info("llm_provider_updated", "改了一路模型供应商", actor=actor)
     return provider_out(
         row, await crud.assignment.purposes_of(session, provider_id)
@@ -240,6 +243,20 @@ async def stored_api_key(
     if row.base_url is None or row.api_key_enc is None:
         raise LlmProviderShapeRejected("这一路没有端点，探不了")
     return row.base_url, cipher.decrypt(row.api_key_enc) or ""
+
+
+async def _flush_named(session: AsyncSession, name: str) -> None:
+    """落这一路。并发撞上同名按 409 收敛：查重那一步挡不住同时到的请求。
+
+    Args: session, name。
+    """
+    try:
+        await session.flush()
+    except IntegrityError as error:
+        cause = getattr(error.orig, "__cause__", None)
+        if getattr(cause, "constraint_name", None) != NAME_CONSTRAINT:
+            raise
+        raise LlmProviderNameTaken(f"已经有一路叫「{name}」的供应商") from error
 
 
 def _apply_plain_fields(row: LlmProvider, body: LlmProviderUpdateIn) -> None:

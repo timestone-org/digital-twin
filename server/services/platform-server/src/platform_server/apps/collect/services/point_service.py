@@ -8,6 +8,7 @@ IO（database-standard §6），而寻址串校验要往返一趟现场设备。
 import uuid
 from collections.abc import Sequence
 
+from sqlalchemy.exc import IntegrityError
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from lib.errors.base import FieldError
@@ -43,10 +44,12 @@ from platform_server.apps.collect.services.http_profile import (
 from platform_server.apps.collect.services.presenters import to_point_out
 from platform_server.apps.collect.services.transactions import (
     release_read_transaction,
+    violated_constraint,
 )
 from timeseries import compose_node_key
 
 _logger = get_logger("platform.collect.point")
+POINT_CODE_CONSTRAINT = "uq_collect_points_source_id_code"
 
 
 async def list_points(
@@ -278,7 +281,7 @@ async def _insert_points(
     created = [_new_point(source_id, item) for item in payload.items]
     for point in created:
         point_crud.add(session, point)
-    await session.flush()
+    await _flush_new_points(session)
     _logger.info(
         "collect_points_created",
         "点位已创建",
@@ -286,6 +289,21 @@ async def _insert_points(
         point_total=len(created),
     )
     return created
+
+
+async def _flush_new_points(session: AsyncSession) -> None:
+    """落这一批。并发撞上同编码按 409 收敛：查重那一步挡不住同时到的请求。
+
+    Args: session。
+    """
+    try:
+        await session.flush()
+    except IntegrityError as error:
+        if violated_constraint(error) != POINT_CODE_CONSTRAINT:
+            raise
+        raise PointCodeTaken(
+            "有点位编码刚被其他请求创建，本批未保存，请刷新后重试"
+        ) from error
 
 
 def _raise_if_duplicated_in_batch(payload: PointCreateIn) -> None:

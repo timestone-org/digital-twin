@@ -4,6 +4,7 @@
 握着数据库连接等它，等于把连接与锁一起长期占住。而工控网的往返是秒级的。
 """
 
+from sqlalchemy.exc import IntegrityError
 from sqlalchemy.ext.asyncio import AsyncSession
 
 
@@ -15,3 +16,12 @@ async def release_read_transaction(session: AsyncSession) -> None:
     Args: session。
     """
     await session.rollback()
+
+
+def violated_constraint(error: IntegrityError) -> str | None:
+    """这次完整性错误撞的是哪条约束；驱动没给就是 `None`。
+
+    Args: error。
+    """
+    cause = getattr(error.orig, "__cause__", None)
+    return getattr(cause, "constraint_name", None)
