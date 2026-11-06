@@ -17,7 +17,7 @@ const source: ApiSource = {
   offset: 0,
 }
 afterEach(() => vi.restoreAllMocks())
-function setup(sources: ApiSource[] = [source]) {
+function setup(sources: ApiSource[] = [source], teleport = true) {
   vi.spyOn(api, 'reportApiConnections').mockResolvedValue([
     { code: 'ems', name: '能管接口' },
   ])
@@ -28,7 +28,7 @@ function setup(sources: ApiSource[] = [source]) {
       document: { type: 'doc' },
       disabled: false,
     },
-    global: { stubs: { teleport: true } },
+    global: { stubs: { teleport } },
   })
 }
 it('配置后保留报告期参数并可复制独立来源', async () => {
@@ -211,4 +211,98 @@ it('映射字段和报告期参数可修改，连接错误能原位重试', asyn
     }),
   ])
   wrapper.unmount()
+})
+
+function button(wrapper: ReturnType<typeof setup>, text: string) {
+  return wrapper
+    .findAllComponents(DtButton)
+    .find((item) => item.text() === text)
+}
+function textarea(wrapper: ReturnType<typeof setup>, label: string) {
+  return wrapper
+    .findAllComponents(DtTextarea)
+    .find((item) => item.props('label') === label)
+}
+it('日期参数写入查询参数，POST 时写入请求体', async () => {
+  const wrapper = setup([source], false)
+  await button(wrapper, '配置')?.trigger('click')
+  await flushPromises()
+  const inputs = wrapper.findAllComponents(DtInput)
+  inputs
+    .find((item) => item.props('label') === '参数名')
+    ?.vm.$emit('update:modelValue', 'last_month')
+  inputs
+    .find((item) => item.props('label') === '偏移量')
+    ?.vm.$emit('update:modelValue', '-1')
+  await flushPromises()
+  await button(wrapper, '加入参数')?.trigger('click')
+  await flushPromises()
+  expect(
+    textarea(wrapper, '查询参数（JSON 对象）')?.props('modelValue'),
+  ).toContain('"last_month": "{{month-1}}"')
+  wrapper
+    .findAllComponents(DtSelect)
+    .find((item) => item.props('label') === '请求方式')
+    ?.vm.$emit('update:modelValue', 'POST')
+  await flushPromises()
+  wrapper
+    .findAllComponents(DtInput)
+    .find((item) => item.props('label') === '参数名')
+    ?.vm.$emit('update:modelValue', 'year')
+  await flushPromises()
+  await button(wrapper, '加入参数')?.trigger('click')
+  await flushPromises()
+  expect(
+    textarea(wrapper, '请求体（JSON 对象）')?.props('modelValue'),
+  ).toContain('"year": "{{month-1}}"')
+})
+it('列表响应按样例生成字段并保存响应形状', async () => {
+  const wrapper = setup()
+  await button(wrapper, '配置')?.trigger('click')
+  await flushPromises()
+  wrapper
+    .findAllComponents(DtSelect)
+    .find((item) => item.props('label') === '响应形状')
+    ?.vm.$emit('update:modelValue', 'single')
+  await flushPromises()
+  textarea(wrapper, '响应样例')?.vm.$emit(
+    'update:modelValue',
+    '["1.2", "2026年11月"]',
+  )
+  await flushPromises()
+  await button(wrapper, '按样例生成字段')?.trigger('click')
+  await flushPromises()
+  await button(wrapper, '应用数据源')?.trigger('click')
+  const [[saved]] = wrapper.emitted('update:modelValue') as [[ApiSource[]]]
+  expect(saved[0]).toMatchObject({ row_shape: 'single' })
+  expect(saved[0]?.columns).toEqual([
+    { key: 'item_1', name: '第1项', pointer: '/0', data_type: 'number' },
+    { key: 'item_2', name: '第2项', pointer: '/1', data_type: 'text' },
+  ])
+})
+it('列表来源一键生成指标，没有新指标时给出提示', async () => {
+  const list: ApiSource = { ...source, row_shape: 'single' }
+  const wrapper = setup([list])
+  await button(wrapper, '生成指标')?.trigger('click')
+  expect(wrapper.emitted('create-metrics')).toEqual([
+    [
+      [
+        {
+          name: '能耗_用电量',
+          table: 'api:energy',
+          key: 'value',
+          mode: 'latest',
+        },
+      ],
+    ],
+  ])
+  await wrapper.setProps({
+    metrics: [{ name: '能耗_用电量', table: 'api:energy', key: 'value' }],
+  })
+  await button(wrapper, '生成指标')?.trigger('click')
+  expect(wrapper.text()).toContain('字段都已有指标')
+  expect(wrapper.emitted('create-metrics')).toHaveLength(1)
+})
+it('普通来源不提供生成指标入口', () => {
+  expect(button(setup(), '生成指标')).toBeUndefined()
 })

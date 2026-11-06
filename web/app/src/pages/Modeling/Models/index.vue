@@ -3,14 +3,14 @@
  * @fileoverview 模型库：已发布的版本、它们绑到哪条台账公式上，以及启停与换绑。
  * 见 docs/MODELING_DESIGN.md §6。
  *
- * 两张表各自成件（`components/`），这一页只做编排与取数。
+ * 两张表各自成件（`components/`），这一页只做编排、取数与页签切换。
  */
 import type {
   ModelingBinding,
   ModelingVersion,
   ModelingVersionSummary,
 } from '@dt/contracts'
-import { DtButton, useToast } from '@dt/ui'
+import { DtButton, DtSegmented, useToast } from '@dt/ui'
 import { computed, onBeforeUnmount, onMounted, ref, watch } from 'vue'
 import { useRoute } from 'vue-router'
 import { useRunOps } from '../scripts/useRunOps'
@@ -36,6 +36,10 @@ import { reloadModelingPage } from '../scripts/reloadModelingPage'
 
 // 初始每页条数
 const PAGE_SIZE = 20
+const TABS = [
+  { value: 'versions', label: '模型版本' },
+  { value: 'bindings', label: '公式绑定' },
+]
 
 const route = useRoute()
 const workflowId = computed(() => {
@@ -43,6 +47,7 @@ const workflowId = computed(() => {
   return typeof value === 'string' ? value : undefined
 })
 const runOps = useRunOps(refresh)
+const activeTab = ref('versions')
 const versionView = useViewMode('modeling-versions')
 const bindingView = useViewMode('modeling-bindings')
 const binding = ref<ModelingVersionSummary | null>(null)
@@ -199,9 +204,18 @@ onBeforeUnmount(versionRead.cancel)
   >
     <!-- h-full + min-h-0 见 AppShell 的契约：main 不滚，高度由页面自己吃满 -->
     <div
-      class="dt-ml-models flex h-full min-h-0 flex-col gap-4 overflow-hidden"
+      class="dt-ml-models flex h-full min-h-0 flex-col gap-3 overflow-hidden"
     >
-      <section class="dt-ml-models__block">
+      <DtSegmented
+        v-model="activeTab"
+        class="shrink-0"
+        :options="TABS"
+        variant="tabs"
+        aria-label="模型分区"
+      />
+
+      <!-- ⚠ 用 v-show：搜索词、勾选与进行中的批量状态都在子组件里，切走不能丢 -->
+      <section v-show="activeTab === 'versions'" class="dt-ml-models__block">
         <ModelingBatchBar
           v-if="versionBulk.selection.value"
           :selected-count="versionBulk.batch.selectedCount.value"
@@ -255,7 +269,6 @@ onBeforeUnmount(versionRead.cancel)
           @rename="(row) => void openRename(row)"
         >
           <template #toolbar>
-            <h2 class="dt-ml-models__title">模型版本</h2>
             <ModelSearch
               label="搜索模型版本"
               :disabled="
@@ -267,7 +280,7 @@ onBeforeUnmount(versionRead.cancel)
         </VersionTable>
       </section>
 
-      <section class="dt-ml-models__block">
+      <section v-show="activeTab === 'bindings'" class="dt-ml-models__block">
         <ModelingBatchBar
           v-if="bindingBulk.selection.value"
           :selected-count="bindingBulk.batch.selectedCount.value"
@@ -333,7 +346,6 @@ onBeforeUnmount(versionRead.cancel)
           @unbind="(row) => !isWriting && void ops.unbind(row.id)"
         >
           <template #toolbar>
-            <h2 class="dt-ml-models__title">公式绑定</h2>
             <ModelSearch
               label="搜索公式绑定"
               :disabled="
@@ -387,12 +399,6 @@ onBeforeUnmount(versionRead.cancel)
     :deep(.dt-data-view.is-fill .dt-data-view__grid) {
       min-height: 0;
     }
-  }
-
-  &__title {
-    margin: 0;
-    color: var(--text-title);
-    font-size: var(--ctl-fs-md);
   }
 }
 </style>

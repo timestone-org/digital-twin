@@ -13,6 +13,7 @@ from pydantic_core import ErrorDetails
 
 from platform_server.apps.modeling.operators import (
     OperatorBase,
+    PredictionPostprocess,
     registry,
 )
 from platform_server.apps.modeling.schemas.graph import (
@@ -31,11 +32,14 @@ from platform_server.apps.modeling.services.graph_walk import (
 COLUMN_WIDGET = "column"
 # 少于两个节点时谈不上「谁没连进来」
 _MIN_CONNECTED_NODES = 2
+# 后处理能接的模型任务：分类的预测值是类别、异常与规则的打分帧没有预测列
+_POSTPROCESS_TASKS = ("regression",)
 # 报「上游没有这一列」时最多把现有列名列出这么多个。⚠ 必须封顶：一张宽表能把
 # 一句提示撑成整屏，而用户要的只是「原来上游是这几列」
 _LISTED_KEYS = 8
 
 # pydantic 的报错类型 → 一句中文。它是给最终用户看的，不能出现英文与类型名
+_VALUE_ERROR_PREFIX = "Value error, "
 _COMPLAINTS: dict[str, str] = {
     "missing": "是必填的",
     "extra_forbidden": "这个算子不认识",
@@ -85,6 +89,7 @@ def check_graph(graph: PipelineGraph) -> list[GraphIssue]:
         + _check_isolated(graph)
         + _check_columns(graph, nodes)
         + _check_fit_before_split(graph, nodes)
+        + _check_postprocess(graph, nodes)
     )
 
 
@@ -101,6 +106,7 @@ def check_graph_structure(graph: PipelineGraph) -> list[GraphIssue]:
         + _check_acyclic(graph)
         + _check_isolated(graph)
         + _check_fit_before_split(graph, graph.node_by_id())
+        + _check_postprocess(graph, graph.node_by_id())
     )
 
 
@@ -332,6 +338,68 @@ def _check_fit_before_split(
     return issues
 
 
+def _is_postprocess(node: GraphNode) -> bool:
+    return issubclass(registry.get(node.operator), PredictionPostprocess)
+
+
+def _check_postprocess(
+    graph: PipelineGraph, nodes: dict[str, GraphNode]
+) -> list[GraphIssue]:
+    """后处理只能串在回归模型的打分口之后，且不许分叉。
+
+    ⚠ 推理链是按拓扑序排成的一条直线：两条并排的后处理在界面上是两路，线上却会
+    先后都过一遍，算出的数与任何一路的评估都对不上。
+    Args: graph, nodes。
+    """
+    issues: list[GraphIssue] = []
+    feeders: set[tuple[str, str]] = set()
+    for edge in graph.edges:
+        if not _is_postprocess(nodes[edge.to_node]):
+            continue
+        feeder = (edge.from_node, edge.from_port)
+        if feeder in feeders:
+            issues.append(
+                GraphIssue(
+                    "一个打分输出只能接一条后处理链，请把后处理首尾串起来",
+                    node_id=edge.to_node,
+                )
+            )
+        feeders.add(feeder)
+        if not _reaches_regression(graph, nodes, edge):
+            issues.append(
+                GraphIssue(
+                    "后处理只能接在回归模型的「测试打分」输出之后",
+                    node_id=edge.to_node,
+                )
+            )
+    return issues
+
+
+def _reaches_regression(
+    graph: PipelineGraph, nodes: dict[str, GraphNode], edge: GraphEdge
+) -> bool:
+    """沿后处理链往上走，看源头是不是回归模型的打分口。
+
+    ⚠ 带 `seen`：环要到 `_check_acyclic` 才报，这里不能先转死。
+    Args: graph, nodes, edge。
+    """
+    seen: set[str] = set()
+    current: GraphEdge | None = edge
+    while current is not None and current.from_node not in seen:
+        source = nodes[current.from_node]
+        seen.add(current.from_node)
+        if not _is_postprocess(source):
+            operator = registry.get(source.operator)
+            return (
+                operator.MODEL_TASK in _POSTPROCESS_TASKS
+                and current.from_port == "scored"
+            )
+        current = next(
+            (item for item in graph.edges if item.to_node == source.id), None
+        )
+    return False
+
+
 @dataclass(frozen=True)
 class _ColumnField:
     """一个列引用参数：图里存的键名，以及给人看的标题。"""
@@ -419,7 +487,11 @@ def _complaint_of(item: ErrorDetails) -> str:
     """
     kind = str(item["type"])
     said = _COMPLAINTS.get(kind)
-    return said if said is not None else str(item["msg"])
+    return (
+        said
+        if said is not None
+        else str(item["msg"]).removeprefix(_VALUE_ERROR_PREFIX)
+    )
 
 
 def _field_of(item: ErrorDetails, titles: dict[str, str]) -> str:

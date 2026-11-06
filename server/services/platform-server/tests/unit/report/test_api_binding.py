@@ -11,6 +11,7 @@ from unittest.mock import AsyncMock
 import pytest
 from docx.oxml import parse_xml
 from sqlalchemy.ext.asyncio import AsyncSession
+from unit.report.api_source_fakes import read, source
 
 from platform_server.apps.dataset.services import ColumnSpec, EffectiveRow
 from platform_server.apps.report.errors import ReportInvalid
@@ -374,3 +375,65 @@ async def test_formula_result_type_controls_inline_presentation(
     async with AsyncSession() as session:
         result = await preview(session, PreviewContext(body, "2026-09", "UTC"))
     assert result.nodes["content.0.content.0"].text == expected
+
+
+def list_template(wanted, count):
+    return TemplateBody(
+        name="能管月报",
+        api_sources=[wanted],
+        metrics=[
+            MetricDef(
+                name=f"取值{index}",
+                table="api:usage",
+                key=f"item_{index}",
+                mode="latest",
+            )
+            for index in range(count)
+        ],
+        doc_json=DocumentNode(
+            type="doc",
+            content=[
+                DocumentNode(
+                    type="paragraph",
+                    content=[
+                        DocumentNode(
+                            type="metricRef",
+                            attrs={
+                                "expr": f"{{取值{index}}}",
+                                "precision": None,
+                            },
+                        )
+                        for index in range(count)
+                    ],
+                )
+            ],
+        ),
+    )
+
+
+async def test_flat_list_items_reach_the_word_document_one_by_one():
+    values = ["1.2", "2.3", "2026年11月", "增长", "5.6", "6.7", "7.8"]
+    columns = [
+        {
+            "key": f"item_{index}",
+            "name": f"取值{index}",
+            "pointer": f"/{index}",
+            "data_type": "text" if index in (2, 3) else "number",
+        }
+        for index in range(len(values))
+    ]
+    wanted = source(rows_pointer="", row_shape="single", columns=columns)
+    data = await read(values, wanted=wanted)
+    body = list_template(wanted, len(values))
+    context = PreviewContext(body, "2026-10", "UTC", api_data=data)
+    async with AsyncSession() as session:
+        result = await preview(session, context)
+
+    assert [metric.value for metric in result.metrics] == values
+    assert [metric.error for metric in result.metrics] == [None] * len(values)
+    generated = build_docx(context.template, result)
+    with zipfile.ZipFile(io.BytesIO(generated.payload)) as archive:
+        xml = parse_xml(archive.read("word/document.xml"))
+    namespace = "http://schemas.openxmlformats.org/wordprocessingml/2006/main"
+    text = "".join(item.text or "" for item in xml.iter(f"{{{namespace}}}t"))
+    assert text == "".join(values)

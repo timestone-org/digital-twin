@@ -65,12 +65,14 @@ from platform_server.apps.modeling.services.management_guard import (
 from platform_server.apps.modeling.services.pipeline_service import Actor
 from platform_server.apps.modeling.services.publish_service import (
     Publishable,
-    fingerprint,
     graph_of_run,
     inspect_run,
     model_artifact,
     require_publishable_run,
     require_version,
+)
+from platform_server.apps.modeling.services.version_fingerprint import (
+    fingerprint,
 )
 from platform_server.settings import API_PREFIX
 

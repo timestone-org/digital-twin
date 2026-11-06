@@ -94,3 +94,81 @@ function validateColumns(columns: readonly ApiColumn[]): void {
     keys.add(column.key)
   }
 }
+
+export type DateUnit = 'year' | 'month' | 'day'
+/** 拼出日期变量，语法与后端 `api_variable.py` 一致。 */
+export function dateToken(
+  unit: DateUnit,
+  shift: number,
+  layout: string,
+): string {
+  const moved = shift === 0 ? '' : shift > 0 ? `+${shift}` : String(shift)
+  return `{{${unit}${moved}${layout ? `:${layout}` : ''}}}`
+}
+function listItemType(item: unknown): NonNullable<ApiColumn['data_type']> {
+  if (typeof item === 'boolean') return 'boolean'
+  if (typeof item === 'number') return 'number'
+  if (typeof item === 'string' && item.trim() && !Number.isNaN(Number(item)))
+    return 'number'
+  if (item === null || typeof item === 'string') return 'text'
+  throw new Error('列表的每一项须为数字、文本或是否值')
+}
+/** 由响应样例生成映射列；同位置已有的编码与名称保留，避免断开指标引用。 */
+export function columnsFromSample(
+  text: string,
+  existing: readonly ApiColumn[],
+): ApiColumn[] {
+  let value: unknown
+  try {
+    value = JSON.parse(text)
+  } catch {
+    throw new Error('响应样例须为 JSON 列表')
+  }
+  if (!Array.isArray(value) || !value.length || value.length > 50)
+    throw new Error('响应样例须为 1～50 项的 JSON 列表')
+  const items: unknown[] = value
+  return items.map((item, index) => {
+    const pointer = `/${index}`
+    const kept = existing.find((column) => column.pointer === pointer)
+    return {
+      key: kept?.key ?? `item_${index + 1}`,
+      name: kept?.name ?? `第${index + 1}项`,
+      pointer,
+      data_type: listItemType(item),
+    }
+  })
+}
+const MAX_METRIC_NAME = 64
+/** 为来源里尚无指标的列各建一条取值指标。 */
+export function metricsForSource(
+  source: ApiSource,
+  metrics: readonly ReportMetric[],
+): ReportMetric[] {
+  const table = `api:${source.code}`
+  const names = new Set(metrics.map((metric) => metric.name))
+  const created: ReportMetric[] = []
+  for (const column of source.columns) {
+    if (metrics.some((item) => item.table === table && item.key === column.key))
+      continue
+    const name = `${source.name}_${column.name}`
+      .replace(/[{}]/gu, '')
+      .slice(0, MAX_METRIC_NAME)
+    if (names.has(name)) continue
+    names.add(name)
+    created.push({ name, table, key: column.key, mode: 'latest' })
+  }
+  return created
+}
+/** 列表来源的数字按接口原样进正文，其余沿用默认两位小数。 */
+export function metricRefAttrs(
+  expr: string,
+  metrics: readonly ReportMetric[],
+  sources: readonly ApiSource[],
+): { expr: string; precision: number | null } {
+  const metric = metrics.find((item) => `{${item.name}}` === expr)
+  const isList = sources.some(
+    (source) =>
+      source.row_shape === 'single' && `api:${source.code}` === metric?.table,
+  )
+  return { expr, precision: isList ? null : 2 }
+}

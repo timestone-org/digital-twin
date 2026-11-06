@@ -2,10 +2,11 @@
 
 import json
 import re
-from collections.abc import Sequence
+from collections.abc import Callable, Sequence
 from dataclasses import dataclass
-from datetime import UTC, datetime
+from datetime import UTC, date, datetime
 from decimal import Decimal, InvalidOperation
+from urllib.parse import quote
 from zoneinfo import ZoneInfo
 
 import httpx
@@ -18,6 +19,11 @@ from platform_server.apps.report.schemas.api_source import (
     ReportApiColumn,
     ReportApiConnection,
     ReportApiSource,
+)
+from platform_server.apps.report.schemas.api_variable import (
+    VARIABLE,
+    format_date_variable,
+    parse_date_variable,
 )
 from platform_server.apps.report.schemas.common import Granularity
 from platform_server.apps.report.services.api_request import (
@@ -41,7 +47,6 @@ MAX_NUMBER_DIGITS = 100
 MAX_NUMBER_EXPONENT = 100
 MAX_TEXT_CHARACTERS = 10_000
 MAX_MAPPED_BYTES = 2_000_000
-_VARIABLE = re.compile(r"\{\{\s*([A-Za-z_]+)\s*\}\}")
 _STAMP = re.compile(
     r"\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}(?:\.\d+)?(?:Z|[+-]\d{2}:\d{2})"
 )
@@ -63,11 +68,23 @@ def _pointer(document: ApiJson, pointer: str) -> ApiJson:
     return value
 
 
+def _parse(payload: bytes | str) -> ApiJson:
+    return json.loads(payload, parse_float=Decimal, parse_constant=Decimal)
+
+
+def _unwrapped(document: ApiJson) -> ApiJson:
+    """解开上游把 JSON 串再序列化一次的响应，ASP.NET 按 Accept 协商时常见。"""
+    if not isinstance(document, str) or document.lstrip()[:1] not in ("[", "{"):
+        return document
+    try:
+        return _parse(document)
+    except ValueError:
+        return document
+
+
 def _json(payload: bytes) -> ApiJson:
     try:
-        document: ApiJson = json.loads(
-            payload, parse_float=Decimal, parse_constant=Decimal
-        )
+        document = _unwrapped(_parse(payload))
     except (ValueError, RecursionError, InvalidOperation):
         raise ReportInvalid("API 响应不是合法 JSON") from None
     pending = [(document, 0)]
@@ -170,7 +187,11 @@ def _mapped(
     selected = _pointer(_json(payload), source.rows_pointer)
     if not isinstance(selected, (dict, list)):
         raise ReportInvalid("API 记录路径必须指向对象或数组")
-    rows = selected if isinstance(selected, list) else [selected]
+    rows = (
+        selected
+        if isinstance(selected, list) and source.row_shape == "auto"
+        else [selected]
+    )
     if len(rows) > MAX_ROWS:
         raise ReportInvalid("API 响应超过 1000 行，请缩小查询范围")
     budget = _MappingBudget()
@@ -199,20 +220,39 @@ def _mapped(
     )
 
 
-def _expand(value: str, variables: dict[str, str]) -> str:
-    def replace(match: re.Match[str]) -> str:
-        key = match.group(1)
-        if key not in variables:
-            raise ReportInvalid("API 参数包含不支持的报告期变量")
-        return variables[key]
+@dataclass(frozen=True)
+class _Variables:
+    """一次请求的变量取值；base 是偏移后的报告期起始业务日期。"""
 
-    expanded = _VARIABLE.sub(replace, value)
+    values: dict[str, str]
+    base: date
+
+    def resolve(self, token: str) -> str:
+        if token in self.values:
+            return self.values[token]
+        variable = parse_date_variable(token)
+        if variable is None:
+            raise ReportInvalid("API 参数包含不支持的报告期变量")
+        try:
+            return format_date_variable(variable, self.base)
+        except (ValueError, OverflowError):
+            raise ReportInvalid("API 日期变量超出可计算范围") from None
+
+
+def _expand(
+    value: str,
+    variables: _Variables,
+    escape: Callable[[str], str] = str,
+) -> str:
+    expanded = VARIABLE.sub(
+        lambda found: escape(variables.resolve(found.group(1))), value
+    )
     if "{{" in expanded or "}}" in expanded:
         raise ReportInvalid("API 参数包含不支持的报告期变量")
     return expanded
 
 
-def _expand_body(value: JsonValue, variables: dict[str, str]) -> JsonValue:
+def _expand_body(value: JsonValue, variables: _Variables) -> JsonValue:
     if isinstance(value, str):
         return _expand(value, variables)
     if isinstance(value, dict):
@@ -222,6 +262,10 @@ def _expand_body(value: JsonValue, variables: dict[str, str]) -> JsonValue:
     if isinstance(value, list):
         return [_expand_body(child, variables) for child in value]
     return value
+
+
+def _escape_path(value: str) -> str:
+    return quote(value, safe="")
 
 
 @dataclass(frozen=True)
@@ -246,17 +290,22 @@ def _request(
         raise ReportInvalid(
             "API 报告期格式与模板周期不匹配，请检查报告期"
         ) from None
-    variables = {
-        "period": format_period(since.astimezone(zone), period.granularity),
-        "start": format_rfc3339(since),
-        "end": format_rfc3339(until),
-        "timezone": period.timezone,
-    }
+    local_start = since.astimezone(zone)
+    variables = _Variables(
+        values={
+            "period": format_period(local_start, period.granularity),
+            "start": format_rfc3339(since),
+            "end": format_rfc3339(until),
+            "timezone": period.timezone,
+        },
+        base=local_start.date(),
+    )
     body = source.body
     return (
         ApiRequest(
             source=source,
             connection=connection,
+            path=_expand(source.path, variables, _escape_path),
             query={
                 key: _expand(value, variables)
                 for key, value in source.query.items()

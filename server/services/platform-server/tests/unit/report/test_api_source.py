@@ -427,3 +427,118 @@ async def test_empty_dns_answer_is_a_dependency_error(monkeypatch):
     )
     with pytest.raises(ReportApiReadFailed, match="未能解析"):
         await reader.fetch([source()], "2026-10", "month", "UTC")
+
+
+LIST_RESPONSE = ["1.2", "2.3", "2026年11月", "增长", "5.6", "6.7", "7.8"]
+
+
+def list_source(**changes):
+    columns = [
+        {
+            "key": f"item_{index + 1}",
+            "name": f"取值{index + 1}",
+            "pointer": f"/{index}",
+            "data_type": "text" if index in (2, 3) else "number",
+        }
+        for index in range(len(LIST_RESPONSE))
+    ]
+    return source(
+        rows_pointer="", row_shape="single", columns=columns, **changes
+    )
+
+
+async def test_flat_list_is_one_row_with_one_value_per_item():
+    found = await read(LIST_RESPONSE, wanted=list_source())
+
+    data = found["api:usage"]
+    assert len(data.rows) == 1
+    assert data.rows[0].values == {
+        "item_1": Decimal("1.2"),
+        "item_2": Decimal("2.3"),
+        "item_3": "2026年11月",
+        "item_4": "增长",
+        "item_5": Decimal("5.6"),
+        "item_6": Decimal("6.7"),
+        "item_7": Decimal("7.8"),
+    }
+
+
+async def test_flat_list_shorter_than_mapping_fails_visibly():
+    with pytest.raises(ReportInvalid, match="缺少已配置的字段"):
+        await read(LIST_RESPONSE[:3], wanted=list_source())
+
+
+async def test_list_stays_multi_row_without_single_shape():
+    wanted = source(
+        rows_pointer="",
+        columns=[{"key": "v", "name": "值", "pointer": ""}],
+    )
+    found = await read(["1", "2"], wanted=wanted)
+
+    assert len(found["api:usage"].rows) == 2
+
+
+async def test_date_variables_expand_in_path_query_and_body():
+    seen: list[httpx.Request] = []
+
+    def respond(request: httpx.Request) -> httpx.Response:
+        seen.append(request)
+        return httpx.Response(200, json=LIST_RESPONSE)
+
+    reader = ApiSourceReader(
+        [connection()], transport=httpx.MockTransport(respond)
+    )
+    wanted = list_source(
+        path="/report/{{year}}/{{month-1:M}}",
+        method="POST",
+        query={"last_year": "{{year-1}}", "day": "{{day}}"},
+        body={"label": "{{month:YYYY年M月}}"},
+    )
+    await reader.fetch([wanted], "2026-01", "month", "Asia/Shanghai")
+
+    assert seen[0].url.path.endswith("/report/2026/12")
+    assert dict(seen[0].url.params) == {"last_year": "2025", "day": "01"}
+    assert json.loads(seen[0].content) == {"label": "2026年1月"}
+
+
+async def test_date_variables_follow_source_offset_across_new_year():
+    seen: list[httpx.Request] = []
+
+    def respond(request: httpx.Request) -> httpx.Response:
+        seen.append(request)
+        return httpx.Response(200, json=LIST_RESPONSE)
+
+    reader = ApiSourceReader(
+        [connection()], transport=httpx.MockTransport(respond)
+    )
+    wanted = list_source(offset=-1, query={"month": "{{month:YYYY-MM}}"})
+    await reader.fetch([wanted], "2026-01", "month", "Asia/Shanghai")
+
+    assert dict(seen[0].url.params) == {"month": "2025-12"}
+
+
+async def test_path_variable_values_cannot_add_path_segments():
+    seen: list[httpx.Request] = []
+
+    def respond(request: httpx.Request) -> httpx.Response:
+        seen.append(request)
+        return httpx.Response(200, json=LIST_RESPONSE)
+
+    reader = ApiSourceReader(
+        [connection()], transport=httpx.MockTransport(respond)
+    )
+    wanted = list_source(path="/zones/{{timezone}}")
+    await reader.fetch([wanted], "2026-01", "month", "Asia/Shanghai")
+
+    assert seen[0].url.raw_path.endswith(b"/zones/Asia%2FShanghai")
+
+
+async def test_json_encoded_as_a_string_is_unwrapped_once():
+    found = await read(json.dumps(LIST_RESPONSE), wanted=list_source())
+
+    assert found["api:usage"].rows[0].values["item_4"] == "增长"
+
+
+async def test_plain_string_response_is_still_rejected():
+    with pytest.raises(ReportInvalid, match="对象或数组"):
+        await read("[not json", wanted=list_source())

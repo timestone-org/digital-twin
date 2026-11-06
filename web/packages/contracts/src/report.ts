@@ -147,6 +147,7 @@ export interface ReportSchemas {
     offset?: number
     path: string
     query?: Record<string, string>
+    row_shape?: 'auto' | 'single'
     rows_pointer?: string
     time_pointer?: string | null
   }

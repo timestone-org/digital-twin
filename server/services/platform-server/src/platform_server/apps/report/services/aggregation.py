@@ -84,8 +84,12 @@ def format_value(
     """按类型格式化值。Args: value, kind, precision, unit。"""
     if value is None:
         return "—"
-    if kind == "number" and precision is not None:
-        return format_number(value, precision, unit)
+    if kind == "number":
+        return (
+            f"{value}{unit}"
+            if precision is None
+            else format_number(value, precision, unit)
+        )
     if kind == "boolean":
         return "true" if value is True else "false"
     return str(value)

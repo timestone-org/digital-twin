@@ -5,11 +5,12 @@ from datetime import UTC, datetime
 from types import SimpleNamespace
 
 import pytest
-from pydantic import ValidationError
+from pydantic import SecretStr, ValidationError
 from unit.wiring_fakes import build_settings
 
 from platform_server.apps.report.api.renders import runtime
 from platform_server.apps.report.models import ReportTemplate
+from platform_server.apps.report.schemas.api_source import ReportApiConnection
 from platform_server.apps.report.schemas.template import TemplateBody
 from platform_server.apps.report.services.template_service import to_output
 from platform_server.settings import Settings
@@ -85,3 +86,36 @@ async def test_runtime_catalog_never_exposes_connection_secrets() -> None:
     wire = result.model_dump_json()
     assert "server-only-test-value" not in wire
     assert "private.example.test" not in wire
+
+
+def bdm_settings(*declared: ReportApiConnection):
+    return build_settings().model_copy(
+        update={
+            "bdm_enabled": True,
+            "bdm_base_url": "http://10.0.0.9:8080",
+            "bdm_api_key": SecretStr("k" * 32),
+            "report_api_connections": list(declared),
+        }
+    )
+
+
+def test_enabled_bdm_is_offered_as_report_connection():
+    found = bdm_settings().report_connections
+
+    assert [(item.code, item.name) for item in found] == [("bdm", "能管系统")]
+    assert found[0].base_url == "http://10.0.0.9:8080"
+    assert found[0].headers["X-API-Key"].get_secret_value() == "k" * 32
+
+
+def test_disabled_bdm_adds_no_report_connection():
+    assert build_settings().report_connections == ()
+
+
+def test_declared_connection_wins_over_derived_bdm():
+    declared = ReportApiConnection(
+        code="bdm", name="能管报表", base_url="http://10.0.0.1"
+    )
+
+    found = bdm_settings(declared).report_connections
+
+    assert [item.name for item in found] == ["能管报表"]

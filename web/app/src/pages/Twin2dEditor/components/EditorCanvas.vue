@@ -108,8 +108,8 @@ const view = ref<Twin2dViewport>({ ...TWIN_2D_IDENTITY_VIEW })
 const measured = ref<Twin2dViewBox>({ width: 0, height: 0 })
 
 let observer: ResizeObserver | null = null
-/** 已经自动取过一次景；之后容器再变尺寸也不动用户调好的视口。 */
-let framed = false
+/** 用户动过视口；之后容器再变尺寸也不动用户调好的取景。 */
+let adjusted = false
 
 const box = computed<Twin2dViewBox>(() => props.hostSize ?? measured.value)
 
@@ -122,8 +122,18 @@ function setView(next: Twin2dViewport): void {
   emit('viewChange', next)
 }
 
-/** 取景：整张画布等比缩进容器并居中。 */
+/**
+ * 用户亲手改视口：缩放与平移都走这里。
+ * @param next 新视口
+ */
+function adjustView(next: Twin2dViewport): void {
+  adjusted = true
+  setView(next)
+}
+
+/** 取景：整张画布等比缩进容器并居中，之后重新跟随容器尺寸。 */
 function fit(): void {
+  adjusted = false
   setView(fitView(props.canvas, box.value))
 }
 
@@ -132,7 +142,7 @@ function fit(): void {
  * @param factor 这一次的倍率，放大给一档、缩小给它的倒数
  */
 function zoomBy(factor: number): void {
-  setView(zoomByFactor(view.value, box.value, factor))
+  adjustView(zoomByFactor(view.value, box.value, factor))
 }
 
 /**
@@ -186,10 +196,10 @@ function startPan(event: PointerEvent): void {
     kind: 'pan',
     event,
     onMove: (frame) => {
-      setView(moved(frame))
+      adjustView(moved(frame))
     },
     onEnd: (frame, end) => {
-      setView(end === 'cancelled' ? base : moved(frame))
+      adjustView(end === 'cancelled' ? base : moved(frame))
     },
   })
 }
@@ -236,7 +246,7 @@ function onWheel(event: WheelEvent): void {
   const el = host.value
   if (el === null) return
   const anchor = localPoint(el.getBoundingClientRect(), event)
-  setView(zoomByWheel(view.value, event.deltaY, anchor))
+  adjustView(zoomByWheel(view.value, event.deltaY, anchor))
 }
 
 /**
@@ -307,12 +317,11 @@ onBeforeUnmount(() => {
 
 watch(() => props.fitRequest, fit)
 
-// 头一次量到非零尺寸时自动取一次景：首帧是 0×0，那时取景只会得到单位视口
+// ⚠ 用户动手前容器每变一次都重新取景：分栏展开前量到的是窄容器，只取一次景图就缩在角上
 watch(
   box,
   (current) => {
-    if (framed || current.width <= 0 || current.height <= 0) return
-    framed = true
+    if (adjusted || current.width <= 0 || current.height <= 0) return
     fit()
   },
   { immediate: true },

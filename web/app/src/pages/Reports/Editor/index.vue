@@ -41,6 +41,7 @@ import PreviewPanel from './components/PreviewPanel.vue'
 import PageDialog from './components/PageDialog.vue'
 import TemplateSettingsCard from './components/TemplateSettingsCard.vue'
 import ApiSourcePanel from './components/ApiSourcePanel.vue'
+import { metricRefAttrs } from './scripts/apiSourceForm'
 import { createReportSurface } from './scripts/aiSurface'
 import { currentReportPeriod } from '../scripts/reportPeriod'
 import {
@@ -398,7 +399,11 @@ async function previewForAssistant(
               @insert="
                 insert({
                   type: 'metricRef',
-                  attrs: { expr: $event, precision: 2 },
+                  attrs: metricRefAttrs(
+                    $event,
+                    draft.metrics ?? [],
+                    draft.api_sources ?? [],
+                  ),
                 })
               "
             />
@@ -409,6 +414,9 @@ async function previewForAssistant(
               :document="draft.doc_json ?? { type: 'doc' }"
               :disabled="!canEdit || isBusy"
               @update:model-value="draft.api_sources = $event"
+              @create-metrics="
+                draft.metrics = [...(draft.metrics ?? []), ...$event]
+              "
             />
             <DtButton
               v-if="canEdit && section === 'data'"

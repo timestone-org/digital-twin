@@ -152,13 +152,13 @@ async function consume(
     }
   }
 }
-it('51个算子的必填选择和默认值经真实Modal事件后能校验、执行、展示每路结果', async () => {
-  expect(catalog).toHaveLength(51)
+it('54个算子的必填选择和默认值经真实Modal事件后能校验、执行、展示每路结果', async () => {
+  expect(catalog).toHaveLength(54)
   const submissions: ConfigSubmission[] = []
   for (const entry of catalog) submissions.push(await configure(entry))
   const checked = await backendResults(submissions)
   expect(checked.errors).toEqual([])
-  expect(checked.results).toHaveLength(51)
+  expect(checked.results).toHaveLength(54)
   for (const result of checked.results) {
     const entry = catalog.find((item) => item.operator.code === result.code)
     if (!entry) throw new Error(`缺少结果算子 ${result.code}`)

@@ -180,6 +180,30 @@ describe('取景', () => {
     expect(stageStyleOf(wrapper)).toContain('width: 400px')
   })
 
+  it('容器在用户动手之前变大时重新取景，图不缩在角上', async () => {
+    const wrapper = mountCanvas({ width: 300, height: 200 })
+
+    await wrapper.setProps({ hostSize: { width: 1000, height: 800 } })
+
+    expect(lastView(wrapper)).toEqual(
+      fitView(CANVAS, { width: 1000, height: 800 }),
+    )
+  })
+
+  it('用户缩放过之后容器再变大不动视口', async () => {
+    const wrapper = mountCanvas({ width: 300, height: 200 })
+    await wrapper.get('[data-test="canvas-host"]').trigger('wheel', {
+      deltaY: -100,
+      clientX: 100,
+      clientY: 100,
+    })
+    const adjusted = lastView(wrapper)
+
+    await wrapper.setProps({ hostSize: { width: 1000, height: 800 } })
+
+    expect(lastView(wrapper)).toEqual(adjusted)
+  })
+
   it('容器 0×0 时既不取景也不产出 NaN', () => {
     const wrapper = mountCanvas({ width: 0, height: 0 })
 

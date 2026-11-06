@@ -13,6 +13,7 @@ import { computed, ref, watch } from 'vue'
 
 import PermGuard from '@/components/PermGuard.vue'
 
+import { postprocessText } from '../scripts/postprocessText'
 import SignatureTable from './SignatureTable.vue'
 
 const props = defineProps<{
@@ -29,6 +30,9 @@ const fxCode = ref('')
 
 const inputs = computed(() => props.version?.signature.inputs ?? [])
 const derived = computed(() => props.version?.signature.derived ?? [])
+const postprocess = computed(() =>
+  (props.version?.signature.postprocess ?? []).map(postprocessText),
+)
 const metrics = computed(() =>
   Object.entries(props.version?.metrics ?? {}).filter(
     ([, value]) => value !== null,
@@ -77,6 +81,13 @@ watch(
           <code v-for="item in derived" :key="item.key">{{ item.label }}</code>
           ——这些**不用**调用方提供。
         </p>
+      </section>
+
+      <section v-if="postprocess.length > 0">
+        <h4 class="dt-ml-detail__title">预测值的后处理</h4>
+        <ol class="dt-ml-detail__steps">
+          <li v-for="text in postprocess" :key="text">{{ text }}</li>
+        </ol>
       </section>
 
       <section v-if="metrics.length > 0">
@@ -167,6 +178,13 @@ watch(
       font-family: var(--font-mono);
       font-size: var(--ctl-hint-fs-md);
     }
+  }
+
+  &__steps {
+    margin: 0;
+    padding-left: 1.25rem;
+    color: var(--text-secondary);
+    font-size: var(--ctl-hint-fs-md);
   }
 
   &__derived,

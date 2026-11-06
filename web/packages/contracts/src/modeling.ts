@@ -17,6 +17,7 @@ export const MODELING_CATEGORIES = [
   'preprocess',
   'feature',
   'model',
+  'postprocess',
   'evaluate',
 ] as const
 export type ModelingCategory = (typeof MODELING_CATEGORIES)[number]
@@ -297,6 +298,13 @@ export interface ModelingSignatureDerived {
   label: string
 }
 
+/** 预测值出模型之后还要过的一步。只做展示。 */
+export interface ModelingSignaturePostprocess {
+  operator: string
+  label: string
+  config: Record<string, unknown>
+}
+
 /**
  * 模型签名：面向人与第三方系统的输入输出说明。
  *
@@ -307,6 +315,8 @@ export interface ModelingSignature {
   requires_timestamp?: boolean
   inputs: ModelingSignatureInput[]
   derived: ModelingSignatureDerived[]
+  /** 早于后处理的历史版本没有这个键。 */
+  postprocess?: ModelingSignaturePostprocess[]
   output: {
     key: string
     label: string

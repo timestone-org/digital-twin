@@ -22382,6 +22382,15 @@
             "title": "Query",
             "type": "object"
           },
+          "row_shape": {
+            "default": "auto",
+            "enum": [
+              "auto",
+              "single"
+            ],
+            "title": "Row Shape",
+            "type": "string"
+          },
           "rows_pointer": {
             "default": "",
             "maxLength": 1024,

@@ -715,8 +715,8 @@ describe('骨架表的边界', () => {
     ).toEqual([])
   })
 
-  it('51 个算子逐个都登记了', () => {
-    expect(formulaCodes()).toHaveLength(51)
+  it('54 个算子逐个都登记了', () => {
+    expect(formulaCodes()).toHaveLength(54)
     for (const code of [
       'split_dataset',
       'linear_regression',

@@ -18,6 +18,10 @@ from collectwire.http import (
     validate_http_endpoint,
     validate_http_pointer,
 )
+from platform_server.apps.report.schemas.api_variable import (
+    VARIABLE,
+    is_known_variable,
+)
 from platform_server.apps.report.schemas.common import Code, InputModel, Label
 
 MAX_COLUMNS = 50
@@ -25,7 +29,6 @@ MAX_CONFIG_BYTES = 65_536
 MIN_HEADER_CHARACTER = 32
 MAX_HEADER_CHARACTER = 126
 _HEADER_NAME = re.compile(r"^[!#$%&'*+.^_`|~0-9a-zA-Z-]+$")
-_VARIABLE = re.compile(r"\{\{\s*(period|start|end|timezone)\s*\}\}")
 
 
 def _pointer(value: str) -> str:
@@ -37,7 +40,12 @@ def _pointer(value: str) -> str:
 
 def _validate_variables(value: JsonValue) -> None:
     if isinstance(value, str):
-        plain = _VARIABLE.sub("", value)
+        plain = VARIABLE.sub(
+            lambda found: (
+                "" if is_known_variable(found.group(1)) else found.group()
+            ),
+            value,
+        )
         if "{{" in plain or "}}" in plain:
             raise ValueError("API 参数包含不支持的报告期变量")
     elif isinstance(value, dict):
@@ -118,6 +126,7 @@ class ReportApiSource(InputModel):
     query: dict[str, str] = Field(default_factory=dict)
     body: dict[str, JsonValue] | None = None
     rows_pointer: str = Field(default="", max_length=1024)
+    row_shape: Literal["auto", "single"] = "auto"
     time_pointer: str | None = Field(default=None, max_length=1024)
     columns: list[ReportApiColumn] = Field(min_length=1, max_length=MAX_COLUMNS)
     offset: int = Field(default=0, ge=-120, le=120)
@@ -135,6 +144,7 @@ class ReportApiSource(InputModel):
             or urlsplit(decoded).netloc
         ):
             raise ValueError("API 路径须为不含跳转、查询参数和片段的相对路径")
+        _validate_variables(path)
         return path
 
     @field_validator("rows_pointer", "time_pointer")

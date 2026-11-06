@@ -40,6 +40,7 @@ import {
   textAt,
 } from './formulaArgs'
 import { CLEAN_FORMULAS } from './formulaClean'
+import { POSTPROCESS_FORMULAS } from './formulaPostprocess'
 import { EVAL_FORMULAS } from './formulaEval'
 import { FEATURE_FORMULAS } from './formulaFeature'
 import { PREPARATION_FORMULAS } from './formulaPreparation'
@@ -514,6 +515,7 @@ const CATALOG: Record<string, readonly FormulaMaker[]> = {
   ...TABLE_FORMULAS,
   ...VALUE_FORMULAS,
   ...SEQUENCE_STATS_FORMULAS,
+  ...POSTPROCESS_FORMULAS,
   split_dataset: [splitSize, splitOrder],
   split_samples: [splitSamples],
   linear_regression: [linearPredict, linearFit],

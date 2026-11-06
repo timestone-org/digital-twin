@@ -66,6 +66,7 @@ export type {
   ModelingServingChannel,
   ModelingSignature,
   ModelingSignatureDerived,
+  ModelingSignaturePostprocess,
   ModelingSignatureInput,
   ModelingTask,
   ModelingTrigger,

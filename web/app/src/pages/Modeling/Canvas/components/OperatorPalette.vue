@@ -31,6 +31,7 @@ const CATEGORY_LABELS: Record<string, string> = {
   preprocess: '预处理',
   feature: '特征',
   model: '模型',
+  postprocess: '后处理',
   evaluate: '评估',
 }
 const CATEGORY_ORDER: readonly ModelingCategory[] = [
@@ -38,6 +39,7 @@ const CATEGORY_ORDER: readonly ModelingCategory[] = [
   'preprocess',
   'feature',
   'model',
+  'postprocess',
   'evaluate',
 ]
 
