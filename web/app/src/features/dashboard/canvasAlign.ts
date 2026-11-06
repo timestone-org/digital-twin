@@ -35,16 +35,6 @@ export function rectsOverlap(a: NodeBox, b: NodeBox): boolean {
   )
 }
 
-/** 矩形是否完全落在本层边界内。 */
-export function isInBounds(rect: NodeBox, design: DesignSize): boolean {
-  return (
-    rect.x >= -EPS &&
-    rect.y >= -EPS &&
-    rect.x + rect.w <= design.width + EPS &&
-    rect.y + rect.h <= design.height + EPS
-  )
-}
-
 /** 带身份的矩形，供找空位/整理时排除自己与回写。 */
 export interface PlacedRect extends NodeBox {
   id: string

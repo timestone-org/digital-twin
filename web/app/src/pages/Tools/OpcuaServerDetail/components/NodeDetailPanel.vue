@@ -6,8 +6,7 @@
  * 把「当前值」压在一堆字段下面，等于让最常用的信息最难找。
  *
  * ⚠ 写值改的是**上位系统读到的现场数据**，不是本地草稿，所以要二次确认。
- * ⚠ 取值走可替换的 `useNodeValue`：现在是轮询，PR-7 换成 WebSocket 时
- * 这个组件一行不用改。
+ * 取值来源封在 `useNodeValue`，组件不感知传输方式。
  */
 import { computed, ref, toRef, watch } from 'vue'
 

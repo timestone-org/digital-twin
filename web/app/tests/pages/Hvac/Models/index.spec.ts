@@ -435,6 +435,84 @@ describe('训练中轮询', () => {
     expect(hvac.listAcModels).toHaveBeenCalledTimes(2)
   })
 
+  it('在途的轮询响应在卸载后回来，不再拉起定时器', async () => {
+    vi.useFakeTimers()
+    vi.mocked(hvac.listAcModels).mockResolvedValueOnce([
+      model({ status: 'training', metrics: null }),
+    ])
+    let answer: (items: ReturnType<typeof model>[]) => void = () => undefined
+    vi.mocked(hvac.listAcModels).mockImplementationOnce(
+      () =>
+        new Promise((resolve) => {
+          answer = resolve
+        }),
+    )
+    const wrapper = mount(ModelsPage, { attachTo: document.body })
+    await vi.advanceTimersByTimeAsync(5000)
+    expect(hvac.listAcModels).toHaveBeenCalledTimes(2)
+
+    wrapper.unmount()
+    answer([model({ status: 'training', metrics: null })])
+    await vi.advanceTimersByTimeAsync(15000)
+
+    expect(hvac.listAcModels).toHaveBeenCalledTimes(2)
+  })
+
+  it('重训响应在卸载后才回来，不再取数也不再起表', async () => {
+    vi.useFakeTimers()
+    vi.mocked(hvac.listAcModels).mockResolvedValue([model()])
+    let answer: (found: ReturnType<typeof model>) => void = () => undefined
+    vi.spyOn(hvac, 'retrainAcModel').mockImplementation(
+      () =>
+        new Promise((resolve) => {
+          answer = resolve
+        }),
+    )
+    const wrapper = mount(ModelsPage, { attachTo: document.body })
+    await vi.advanceTimersByTimeAsync(0)
+    wrapper
+      .findAll('button')
+      .find((item) => item.text() === '重训')
+      ?.element.click()
+    await vi.advanceTimersByTimeAsync(0)
+    expect(hvac.retrainAcModel).toHaveBeenCalledOnce()
+    const before = vi.mocked(hvac.listAcModels).mock.calls.length
+
+    wrapper.unmount()
+    vi.mocked(hvac.listAcModels).mockResolvedValue([
+      model({ status: 'training', metrics: null }),
+    ])
+    answer(model({ status: 'queued' }))
+    await vi.advanceTimersByTimeAsync(15000)
+
+    expect(hvac.listAcModels).toHaveBeenCalledTimes(before)
+  })
+
+  it('响应慢于轮询间隔时跳过新一拍，慢响应照样落地', async () => {
+    vi.useFakeTimers()
+    vi.mocked(hvac.listAcModels).mockResolvedValueOnce([
+      model({ status: 'training', metrics: null }),
+    ])
+    let answer: (items: ReturnType<typeof model>[]) => void = () => undefined
+    vi.mocked(hvac.listAcModels).mockImplementationOnce(
+      () =>
+        new Promise((resolve) => {
+          answer = resolve
+        }),
+    )
+    vi.mocked(hvac.listAcModels).mockResolvedValue([
+      model({ status: 'training', metrics: null }),
+    ])
+    const wrapper = mount(ModelsPage, { attachTo: document.body })
+    await vi.advanceTimersByTimeAsync(15000)
+    expect(hvac.listAcModels).toHaveBeenCalledTimes(2)
+
+    answer([model({ name: '慢响应带来的行' })])
+    await vi.advanceTimersByTimeAsync(0)
+
+    expect(wrapper.text()).toContain('慢响应带来的行')
+  })
+
   it('⚠ 轮询刷新不重置左栏选中', async () => {
     vi.useFakeTimers()
     vi.mocked(hvac.listRooms).mockResolvedValue(

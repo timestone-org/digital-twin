@@ -14,14 +14,11 @@ import type {
   AcModelPublication,
   AcModelPublicationInput,
   ModelPublishResult,
-  ModelPredictInput,
-  ModelPredictResult,
   ModelPrediction,
   ModelRecommendInput,
   ModelRecommendResult,
   AcDataset,
   AcItemList,
-  AcMetricLimit,
   AcSourceObject,
   AcUnit,
   AcUnitFilters,
@@ -305,36 +302,6 @@ export async function deleteAcDataBinding(
   )
 }
 
-/* 达标范围 */
-
-export async function listAcMetricLimits(
-  acUnitId: string,
-): Promise<AcMetricLimit[]> {
-  const data = await requestData<AcItemList<AcMetricLimit>>(
-    `/ac-units/${acUnitId}/metric-limits`,
-    onPlatform(),
-  )
-  return data.items
-}
-
-/**
- * 覆盖式写一台空调的全部达标范围。
- * ⚠ 覆盖式：`limits` 里没出现的指标会被**清除**，不是「没给就是不改」。
- * 提交前必须把界面上现存的每一项都带上。
- * @param acUnitId 空调 id
- * @param limits 全量的达标范围，条数上限 `AC_METRIC_LIMITS_MAX`
- */
-export async function putAcMetricLimits(
-  acUnitId: string,
-  limits: readonly AcMetricLimit[],
-): Promise<AcMetricLimit[]> {
-  const data = await requestData<AcItemList<AcMetricLimit>>(
-    `/ac-units/${acUnitId}/metric-limits`,
-    onPlatform({ method: 'PUT', body: { items: limits } }),
-  )
-  return data.items
-}
-
 /* 开机事件 */
 
 // ⚠ 用 type 而不是 interface：要当 `query` 传给 request（同 AcUnitFilters）
@@ -463,23 +430,6 @@ export async function getAcModel(modelId: string): Promise<AcModel> {
   return await requestData<AcModel>(`/ac-models/${modelId}`, onPlatform())
 }
 
-export interface AcModelPatchInput {
-  name?: string
-  description?: string
-  serving_sets?: string[][]
-}
-
-/** 改名、改描述或改服务组合。⚠ 改组合就地重汇总评估，不触发重训。 */
-export async function patchAcModel(
-  modelId: string,
-  input: AcModelPatchInput,
-): Promise<AcModel> {
-  return await requestData<AcModel>(
-    `/ac-models/${modelId}`,
-    onPlatform({ method: 'PATCH', body: input }),
-  )
-}
-
 export async function deleteAcModel(modelId: string): Promise<void> {
   // ⚠ 走 request 而不是 requestData：这条返回 204，没有 data
   await request<null>(`/ac-models/${modelId}`, onPlatform({ method: 'DELETE' }))
@@ -509,17 +459,6 @@ export async function listModelPredictions(
   return await requestData<Page<ModelPrediction>>(
     `/ac-models/${modelId}/predictions`,
     onPlatform({ query }),
-  )
-}
-
-/** 试算：纯计算立刻返回，不训练也不碰外库。 */
-export async function predictWithAcModel(
-  modelId: string,
-  input: ModelPredictInput,
-): Promise<ModelPredictResult> {
-  return await requestData<ModelPredictResult>(
-    `/ac-models/${modelId}:predict`,
-    onPlatform({ method: 'POST', body: input }),
   )
 }
 

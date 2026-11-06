@@ -109,6 +109,19 @@ function bearerToken(options: RequestOptions): string | null {
   return options.credentialOverride?.bearerToken ?? hooks.getToken()
 }
 
+/** 取回的错误是不是超时信号；响应体读取阶段同样会被它中断。 */
+function isTimeout(error: unknown): boolean {
+  return error instanceof DOMException && error.name === 'TimeoutError'
+}
+
+/**
+ * 超时的传输层错误。
+ * @param status 响应头已到时的 HTTP 状态码，还没到时给 0
+ */
+function timeoutError(status: number): TransportError {
+  return new TransportError(status, '请求超时，请稍后重试')
+}
+
 /**
  * 校验响应体确实是统一信封。
  * ⚠ 不用 `as` 断言：反代挂了会返回一段 HTML 或别的形状的 JSON，断言会让它
@@ -132,7 +145,8 @@ async function readEnvelope<T>(
   let body: unknown
   try {
     body = await response.json()
-  } catch {
+  } catch (error) {
+    if (isTimeout(error)) throw timeoutError(response.status)
     throw new TransportError(response.status, '服务端响应格式异常')
   }
   if (!isEnvelope(body)) {
@@ -169,9 +183,7 @@ async function send(
       signal,
     })
   } catch (error) {
-    if (error instanceof DOMException && error.name === 'TimeoutError') {
-      throw new TransportError(0, '请求超时，请稍后重试')
-    }
+    if (isTimeout(error)) throw timeoutError(0)
     throw new TransportError(0, '无法连接服务器，请检查网络')
   }
 }
@@ -283,7 +295,7 @@ export async function requestBytes(
  * body 不是信封（网关的 HTML 错误页之类）时才退回那句通用话。
  */
 async function unwrapBytes(response: Response): Promise<Blob> {
-  if (response.ok) return await response.blob()
+  if (response.ok) return await readBlob(response)
   const envelope = await readErrorEnvelope(response)
   if (envelope === null) {
     throw new TransportError(response.status, '这个文件取不回来')
@@ -295,6 +307,15 @@ async function unwrapBytes(response: Response): Promise<Blob> {
     envelope.trace_id,
     readDetails(envelope),
   )
+}
+
+async function readBlob(response: Response): Promise<Blob> {
+  try {
+    return await response.blob()
+  } catch (error) {
+    if (isTimeout(error)) throw timeoutError(response.status)
+    throw error
+  }
 }
 
 /** 失败响应体是不是一个信封；不是就给 null，由调用方退回通用话。 */

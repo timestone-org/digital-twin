@@ -147,31 +147,6 @@ export function layoutFrames(
   }
 }
 
-/**
- * 命中测试：给定设计坐标，取**最上面**那个可见节点的 id。
- * ⚠ 从后往前扫：`frames` 是先序，后面的画在上面，正着扫会永远命中最底下那个。
- * @param frames 排版结果
- * @param at 设计坐标系里的点
- */
-export function hitTest(
-  frames: readonly EditorFrame[],
-  at: { x: number; y: number },
-): string | null {
-  for (let index = frames.length - 1; index >= 0; index -= 1) {
-    const frame = frames[index]
-    if (frame === undefined || !frame.isVisible) continue
-    if (
-      at.x >= frame.left &&
-      at.x <= frame.left + frame.width &&
-      at.y >= frame.top &&
-      at.y <= frame.top + frame.height
-    ) {
-      return frame.id
-    }
-  }
-  return null
-}
-
 /** 把容器的内容区尺寸交给调用方，用来夹住子节点的拖动范围。 */
 export function contentSizeOf(
   node: DashboardNodePayload,

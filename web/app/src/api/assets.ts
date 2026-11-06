@@ -12,7 +12,7 @@
  */
 import type { AssetKind } from '@dt/contracts'
 
-import { ASSET_BASE_URL, PLATFORM_BASE_URL } from '@/config/app'
+import { PLATFORM_BASE_URL } from '@/config/app'
 import { request, requestData } from './client'
 import { postUploadForm } from './upload'
 import type { UploadOptions } from './upload'
@@ -29,9 +29,6 @@ export type {
   UploadTicket,
   VariantStatus,
 } from './assetsWire'
-
-/** 没等到上传的字节（领域 15）。⚠ 按码分支，不按 message。 */
-export const ASSET_UPLOAD_MISSING_CODE = 41505
 
 const ASSETS_PATH = '/assets'
 
@@ -190,11 +187,6 @@ export async function uploadAsset(
   const ticket = await presignUpload(kind, file)
   await putAssetBytes(ticket, file, options)
   return finalizeUpload(ticket.assetId, options.name?.trim() || file.name)
-}
-
-/** 素材字节的取回前缀，给 `assetUrl` 用。 */
-export function assetBaseUrl(): string {
-  return ASSET_BASE_URL
 }
 
 /**

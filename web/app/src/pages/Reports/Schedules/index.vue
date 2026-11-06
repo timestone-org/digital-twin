@@ -12,6 +12,7 @@ import {
   useConfirm,
   DtIconButton,
 } from '@dt/ui'
+import { PERMISSION_CODES } from '@dt/contracts'
 import type {
   DtDataColumn,
   ReportSchedule,
@@ -161,7 +162,7 @@ async function remove(id: string): Promise<void> {
         label="刷新"
         @click="list.reload"
       />
-      <PermGuard :codes="['report:schedule']">
+      <PermGuard :codes="[PERMISSION_CODES.reportSchedule]">
         <DtButton
           size="sm"
           icon="plus"
@@ -211,7 +212,7 @@ async function remove(id: string): Promise<void> {
           row.last_run_period ?? '尚未生成'
         }}</template>
         <template #cell-actions="{ row }">
-          <PermGuard :codes="['report:schedule']">
+          <PermGuard :codes="[PERMISSION_CODES.reportSchedule]">
             <DtIconButton
               size="sm"
               variant="ghost"

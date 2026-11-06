@@ -9,7 +9,6 @@ import {
   clampRect,
   distributeRects,
   findFreeSlot,
-  isInBounds,
   rectsOverlap,
   tidyRects,
 } from '@/features/dashboard/canvasAlign'
@@ -23,13 +22,10 @@ describe('夹边界', () => {
     ).toEqual({ x: 0, y: 776, w: 1000, h: 24 })
   })
 
-  it('相交与出界判定', () => {
+  it('相交判定', () => {
     expect(
       rectsOverlap({ x: 0, y: 0, w: 10, h: 10 }, { x: 9, y: 9, w: 10, h: 10 }),
     ).toBe(true)
-    expect(isInBounds({ x: 990, y: 0, w: 20, h: 10 }, DESIGN)).toBe(false)
-    // 亚像素超出算在界内，免得缩放算术的浮点尾巴触发越界提示
-    expect(isInBounds({ x: 990.3, y: 0, w: 10, h: 10 }, DESIGN)).toBe(true)
   })
 })
 

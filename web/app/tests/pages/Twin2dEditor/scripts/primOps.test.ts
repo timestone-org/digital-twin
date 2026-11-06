@@ -13,16 +13,12 @@ import { describe, expect, it } from 'vitest'
 
 import type { Twin2dIdFactory } from '@/pages/Twin2dEditor/scripts/nodeOps'
 import {
-  addNodeLayer,
   addPrim,
-  clearNodePrimPatch,
   duplicatePrim,
   findTwin2dPrim,
   movePrim,
   orderPrims,
-  removeNodeLayer,
   removePrim,
-  setNodePrimPatch,
   twin2dPrimHeight,
   twin2dPrimMoveBlock,
   twin2dPrimSpotBlock,
@@ -37,15 +33,6 @@ function idSeq(): Twin2dIdFactory {
   return (prefix) => {
     seq += 1
     return `${prefix}-${seq}`
-  }
-}
-
-/** 头一号固定发这个，之后才按前缀发号；用来逼出「新 id 撞上了」那一支。 */
-function firstThen(first: string): Twin2dIdFactory {
-  let seq = 0
-  return (prefix) => {
-    seq += 1
-    return seq === 1 ? first : `${prefix}-${seq}`
   }
 }
 
@@ -86,6 +73,22 @@ function configOf(): Twin2dConfig {
     nodes: [
       { id: 'n1', styleId: 'sty' },
       { id: 'n2', styleId: 'sty' },
+    ],
+  })
+}
+
+/** 头一个节点带两枚追加图元的配置。 */
+function withLayers(): Twin2dConfig {
+  return normalizeTwin2dConfig({
+    nodes: [
+      {
+        id: 'n1',
+        layers: [
+          { id: 'l1', kind: 'txt' },
+          { id: 'l2', kind: 'vec' },
+        ],
+      },
+      { id: 'n2' },
     ],
   })
 }
@@ -565,46 +568,8 @@ describe('跨级搬家', () => {
 })
 
 describe('节点级追加图元', () => {
-  it('新 id 要避开样式里那棵树', () => {
-    const config = configOf()
-    const added = addNodeLayer(
-      config,
-      'n1',
-      styleOf(config),
-      { kind: 'txt' },
-      firstThen('a2x'),
-    )
-
-    expect(added.id).toBe('prim-2')
-    expect(idsOf(layersOf(added.config))).toEqual(['prim-2'])
-  })
-
-  it('样式解析不到时也加得进去', () => {
-    const config = configOf()
-    const added = addNodeLayer(config, 'n1', null, { kind: 'vec' }, idSeq())
-
-    expect(added.id).toBe('prim-1')
-    expect(normalizeTwin2dConfig(added.config)).toEqual(added.config)
-  })
-
-  it('节点不在就原样返回入参那份配置', () => {
-    const config = configOf()
-    const added = addNodeLayer(
-      config,
-      '没有这个',
-      null,
-      { kind: 'txt' },
-      idSeq(),
-    )
-
-    expect(added.id).toBeNull()
-    expect(added.config).toBe(config)
-  })
-
   it('换掉一枚追加图元；同层别的那些与别的节点都不动', () => {
-    const config = configOf()
-    const one = addNodeLayer(config, 'n1', null, { kind: 'txt' }, idSeq())
-    const added = addNodeLayer(one.config, 'n1', null, { kind: 'vec' }, idSeq())
+    const added = { config: withLayers() }
     const layer = layersOf(added.config).at(1)
     const next =
       layer === undefined
@@ -619,48 +584,5 @@ describe('节点级追加图元', () => {
     expect(layersOf(next).at(0)).toBe(layersOf(added.config).at(0))
     expect(next.nodes.at(1)).toBe(added.config.nodes.at(1))
     expect(missing).toBe(added.config)
-  })
-
-  it('删一枚追加图元；不在就原样返回', () => {
-    const config = configOf()
-    const added = addNodeLayer(config, 'n1', null, { kind: 'txt' }, idSeq())
-
-    expect(layersOf(removeNodeLayer(added.config, 'n1', 'prim-1'))).toEqual([])
-    expect(removeNodeLayer(added.config, 'n1', '没有这个')).toBe(added.config)
-    expect(removeNodeLayer(added.config, '没有这个', 'prim-1')).toBe(
-      added.config,
-    )
-  })
-})
-
-describe('节点级覆盖补丁', () => {
-  it('整条写进去，再整条撤掉', () => {
-    const config = configOf()
-    const set = setNodePrimPatch(config, 'n1', 'a1', { hidden: true })
-    const cleared = clearNodePrimPatch(set, 'n1', 'a1')
-
-    expect(set.nodes.at(0)?.patch).toEqual({ a1: { hidden: true } })
-    expect(cleared.nodes.at(0)?.patch).toEqual({})
-    expect(normalizeTwin2dConfig(set)).toEqual(set)
-  })
-
-  it('撤掉一条不存在的覆盖就原样返回入参那份配置', () => {
-    const config = configOf()
-
-    expect(clearNodePrimPatch(config, 'n1', 'a1')).toBe(config)
-    expect(setNodePrimPatch(config, '没有这个', 'a1', {})).toBe(config)
-  })
-
-  it('只撤掉点名的那一条，别的覆盖原样留着', () => {
-    const config = configOf()
-    const two = setNodePrimPatch(
-      setNodePrimPatch(config, 'n1', 'a1', { hidden: true }),
-      'n1',
-      'b',
-      { opacity: 0.5 },
-    )
-    const cleared = clearNodePrimPatch(two, 'n1', 'a1')
-
-    expect(cleared.nodes.at(0)?.patch).toEqual({ b: { opacity: 0.5 } })
   })
 })

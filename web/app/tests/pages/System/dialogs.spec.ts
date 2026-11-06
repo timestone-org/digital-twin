@@ -488,6 +488,48 @@ describe('RuleFormDialog', () => {
   })
 })
 
+describe('RuleFormDialog 编辑', () => {
+  it('清空描述时把空串发出去，后端才会真的清掉', async () => {
+    const update = vi.spyOn(admin, 'updateRouteRule').mockResolvedValue({
+      id: 'x',
+    } as never)
+    const rule = {
+      id: 'x',
+      path_pattern: '/api/v1/a',
+      http_method: 'GET',
+      match_mode: 'exact',
+      priority: 500,
+      is_enabled: true,
+      permission_codes: [],
+      description: '旧描述',
+    }
+    const wrapper = mount(RuleFormDialog, {
+      props: { modelValue: true, rule: rule as never },
+    })
+    await flushPromises()
+    const field = [
+      ...document.querySelectorAll<HTMLInputElement | HTMLTextAreaElement>(
+        'input, textarea',
+      ),
+    ].find((node) => node.value === '旧描述')
+    if (field === undefined) throw new Error('找不到描述输入框')
+
+    field.value = ''
+    field.dispatchEvent(new Event('input'))
+    await flushPromises()
+    ;[...document.querySelectorAll('button')]
+      .find((node) => node.textContent?.includes('保存'))
+      ?.click()
+    await flushPromises()
+
+    expect(update).toHaveBeenCalledWith(
+      'x',
+      expect.objectContaining({ description: '' }),
+    )
+    wrapper.unmount()
+  })
+})
+
 describe('弹窗的取消与失败路径', () => {
   function clickButton(text: string): void {
     const button = [...document.querySelectorAll('button')].find(

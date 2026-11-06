@@ -292,22 +292,6 @@ export async function startModelingRun(
   )
 }
 
-/**
- * 某个端口那份全量结果的下载地址。
- *
- * 仅用于展示地址；实际下载经 `readModelingFrame` 携带身份。
- * ⚠ 这条要 `modeling:view` **且** `dataset:record:export`——那份 CSV 里是台账
- * 原始数据（docs/MODELING_PLATFORM_DESIGN.md D12）。
- */
-export function modelingFrameUrl(
-  runId: string,
-  nodeId: string,
-  port: string,
-): string {
-  const query = new URLSearchParams({ port })
-  return `${PLATFORM_BASE_URL}/modeling-runs/${runId}/frames/${nodeId}?${query.toString()}`
-}
-
 export interface ModelingFrameTarget {
   readonly runId: string
   readonly nodeId: string
@@ -549,16 +533,6 @@ export async function registerModelingFormula(
   )
 }
 
-/** 全部对外服务。 */
-export async function listModelDeployments(
-  signal?: AbortSignal,
-): Promise<ModelDeployment[]> {
-  return await requestData<ModelDeployment[]>(
-    '/modeling-deployments',
-    onPlatform(signal === undefined ? {} : { signal }),
-  )
-}
-
 /** 管理列表显式请求后端页，不把兼容数组冒充已分页结果。 */
 export async function listModelDeploymentsPage(
   query: ModelingDeploymentPageQuery = {},
@@ -646,17 +620,6 @@ export async function createModelApiKey(
       body: input,
       headers: idempotent(newIdempotencyKey()),
     }),
-  )
-}
-
-/** 撤销一把钥匙。立刻生效。 */
-export async function revokeModelApiKey(
-  deploymentId: string,
-  keyId: string,
-): Promise<ModelApiKey> {
-  return await requestData<ModelApiKey>(
-    `/modeling-deployments/${deploymentId}/api-keys/${keyId}:revoke`,
-    onPlatform({ method: 'POST', headers: idempotent(newIdempotencyKey()) }),
   )
 }
 

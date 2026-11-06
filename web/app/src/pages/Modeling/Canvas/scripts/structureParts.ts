@@ -21,7 +21,6 @@ export const MAX_IMPORTANCES = 60
 export const MAX_RANGES = 60
 export const MAX_TREE_NODES = 31
 export const MAX_PDP = 10
-export const MAX_LOADINGS = 20
 export const MAX_LOADING_WIDTH = 20
 export const MAX_EXPLAINED = 20
 

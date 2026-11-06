@@ -11,9 +11,12 @@ import { useRoute, useRouter } from 'vue-router'
 import type { AcModel, ModelPrediction } from '@dt/contracts'
 import { DtNotice, DtSegmented, DtTag, useConfirm, useToast } from '@dt/ui'
 
+import { BizError } from '@/api/client'
 import * as hvac from '@/api/hvac'
 import { AppShell } from '@/components/layout'
 import { describeError, useAsyncList } from '@/composables/useAsyncList'
+import { useBusyPolling } from '@/composables/useBusyPolling'
+import { useRacedFetch } from '@/composables/useRacedFetch'
 import DetailActions from './components/DetailActions.vue'
 import MetricsPanel from './components/MetricsPanel.vue'
 import PublicationPanel from './components/PublicationPanel.vue'
@@ -38,13 +41,14 @@ const route = useRoute()
 const router = useRouter()
 const toast = useToast()
 const confirm = useConfirm()
+const fetcher = useRacedFetch()
+const polling = useBusyPolling(load, POLL_INTERVAL_MS)
 
 const modelId = computed(() => String(route.params['modelId'] ?? ''))
 const model = ref<AcModel | null>(null)
 const error = ref<string | null>(null)
 const isLiveTestOpen = ref(false)
 const tab = ref<string>(TAB_METRICS)
-let pollTimer: ReturnType<typeof setInterval> | null = null
 
 /** 全页唯一的组合过滤；空串 = 全部。组合键是 `+` 拼的，后端要逗号分隔。 */
 const setFilter = ref('')
@@ -105,41 +109,28 @@ onMounted(() => {
   outOfFold.reload()
 })
 
-onBeforeUnmount(() => {
-  stopPolling()
-})
+onBeforeUnmount(() => fetcher.cancel())
 
 async function load(): Promise<void> {
-  try {
-    const found = await hvac.getAcModel(modelId.value)
-    const wasBusy = model.value ? isModelBusy(model.value) : false
-    model.value = found
-    error.value = null
-    syncPolling(found)
-    // 训练刚结束这一刻，折外预测已整体换掉，两处都跟着刷新
-    if (wasBusy && !isModelBusy(found)) {
-      void predictions.reload()
-      outOfFold.reload()
-    }
-  } catch (caught) {
-    error.value = describeError(caught)
-  }
-}
-
-function syncPolling(found: AcModel): void {
-  if (isModelBusy(found) && pollTimer === null) {
-    pollTimer = setInterval(() => {
-      void load()
-    }, POLL_INTERVAL_MS)
-  }
-  if (!isModelBusy(found)) stopPolling()
-}
-
-function stopPolling(): void {
-  if (pollTimer !== null) {
-    clearInterval(pollTimer)
-    pollTimer = null
-  }
+  if (polling.isDisposed()) return
+  await fetcher.run(() => hvac.getAcModel(modelId.value), {
+    ok: (found) => {
+      const wasBusy = model.value ? isModelBusy(model.value) : false
+      model.value = found
+      error.value = null
+      polling.sync(isModelBusy(found))
+      // 训练刚结束这一刻，折外预测已整体换掉，两处都跟着刷新
+      if (wasBusy && !isModelBusy(found)) {
+        void predictions.reload()
+        outOfFold.reload()
+      }
+    },
+    fail: (caught) => {
+      error.value = describeError(caught)
+      if (caught instanceof BizError && caught.status === 404) polling.stop()
+    },
+    settled: () => undefined,
+  })
 }
 
 async function retrain(): Promise<void> {

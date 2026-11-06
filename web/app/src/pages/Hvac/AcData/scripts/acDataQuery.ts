@@ -9,8 +9,6 @@ import type { DtChartPoint, DtChartSeries } from '@dt/ui'
 export const MAX_CHARTED_METRICS = 8
 
 const HOUR_MS = 3_600_000
-/** 默认回看多久。取 6 小时：够看出一班的走势，又不至于一进页面就拉一整天。 */
-const DEFAULT_SPAN_HOURS = 6
 
 export interface RawRangeValue {
   from: string
@@ -48,14 +46,6 @@ export function rangeOfLastHours(hours: number, now: Date): RawRangeValue {
  */
 export function recentRange(hours: number): RawRangeValue {
   return rangeOfLastHours(hours, new Date())
-}
-
-/**
- * 默认区间：够看出一班的走势，又不至于一进页面就拉一整天。
- * @param now 当前时刻
- */
-export function defaultRange(now: Date): RawRangeValue {
-  return rangeOfLastHours(DEFAULT_SPAN_HOURS, now)
 }
 
 /**
