@@ -142,7 +142,7 @@ def test_all_zero_over_has_three_outcomes() -> None:
 
 
 def test_rows_outside_the_window_do_not_count() -> None:
-    cache = window_cache(row(0.5, a=1), row(5, a=100))
+    cache = window_cache(row(5, a=100), row(0.5, a=1))
     assert compute("SUM_OVER({a}, '1h')", cache) == 1.0
 
 

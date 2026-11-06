@@ -6,7 +6,8 @@
 （docs/DATASET_DESIGN.md §5.6）。
 """
 
-from collections.abc import Callable, Iterable
+from bisect import bisect_left, bisect_right
+from collections.abc import Callable, Iterable, Sequence
 from dataclasses import dataclass, field
 from datetime import UTC, datetime, tzinfo
 
@@ -188,7 +189,7 @@ def _window_value(
     # 当前行参与本表窗口：仅当它确实持有该列的值——公式列引用自身窗口时不成立，
     # 这正是 `SUM_OVER({自己}, '1y')` 不构成环的原因
     if current.values.get(ref.key) is not None or ref.spec.step_s is not None:
-        rows = sorted([*rows, current], key=lambda row: row.ts)
+        rows = [*rows, current]
     return _window_aggregate(ref, rows, current.ts, cache.tz)
 
 
@@ -207,16 +208,24 @@ def _window_aggregate(
 
 
 def _slice_window(
-    rows: Iterable[RowSnapshot], ts: datetime, spec: WindowSpec, tz: tzinfo
+    rows: Sequence[RowSnapshot], ts: datetime, spec: WindowSpec, tz: tzinfo
 ) -> list[RowSnapshot]:
-    """从一串升序的行里切出 `(下界, ts]`。
+    """从一串升序的行里二分切出 `(下界, ts]`，今日窗下界闭。
 
-    Args: rows, ts, spec, tz。
+    Args: rows（⚠ 必须按 ts 升序）, ts, spec, tz。
     """
     lower = window_lower_bound(ts, spec, tz)
-    if spec.is_today:
-        return [row for row in rows if lower <= row.ts <= ts]
-    return [row for row in rows if lower < row.ts <= ts]
+    locate = bisect_left if spec.is_today else bisect_right
+    start = locate(rows, lower, key=_row_ts)
+    return list(rows[start : bisect_right(rows, ts, key=_row_ts)])
+
+
+def _row_ts(row: RowSnapshot) -> datetime:
+    """二分用的键。
+
+    Args: row。
+    """
+    return row.ts
 
 
 def _as_of(
