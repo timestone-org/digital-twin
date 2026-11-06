@@ -15,6 +15,8 @@ from dataclasses import dataclass
 from datetime import datetime, timedelta
 from typing import Any
 
+from anyio import CancelScope
+
 from lib.auth import JwtCodec, TokenError
 from lib.errors import AppError
 from lib.logging import get_logger
@@ -222,15 +224,22 @@ class SessionService:
         is_added = await self._connections.add(connection, quota=self._quota)
         if not is_added:
             raise AnonymousQuotaExceeded("公开链接的并发连接数已达上限")
-        await send(
-            {
-                "type": TYPE_SYSTEM,
-                "event": "connected",
-                "connection_id": str(connection.id),
-                # ⚠ 明确告知何时该换票，客户端不必自己解 token 猜
-                "reauth_before": handshake.expires_at.isoformat(),
-            }
-        )
+        try:
+            await send(
+                {
+                    "type": TYPE_SYSTEM,
+                    "event": "connected",
+                    "connection_id": str(connection.id),
+                    # ⚠ 明确告知何时该换票，客户端不必自己解 token 猜
+                    "reauth_before": handshake.expires_at.isoformat(),
+                }
+            )
+        except BaseException:
+            # ⚠ 调用方拿不到连接，它的 finally 摘不到这一条。这里不收回的话
+            # 登记会永久留下：close 还没挂上，到期复核也摘不掉
+            with CancelScope(shield=True):
+                await self._connections.remove(connection.id)
+            raise
         return connection
 
     async def close(self, connection_id: uuid.UUID) -> None:
