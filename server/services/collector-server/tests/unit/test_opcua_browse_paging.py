@@ -4,7 +4,6 @@ import asyncio
 
 import pytest
 from asyncua import ua
-from tests.unit.opcua_driver_fakes import make_child, make_driver
 
 from collector_server.apps.collect.drivers.base import (
     BrowseContinuationInvalid,
@@ -15,6 +14,7 @@ from collector_server.apps.collect.drivers.opcua.browse import (
     MAX_BROWSE_CURSORS,
     MAX_BUFFERED_REFERENCES,
 )
+from unit.opcua_driver_fakes import make_child, make_driver
 
 
 async def test_large_folder_reads_and_returns_only_the_requested_page() -> None:

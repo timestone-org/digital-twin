@@ -6,14 +6,6 @@
 
 import pytest
 from asyncua import ua
-from tests.unit.opcua_driver_fakes import (
-    MAX_NODES,
-    NOW_MS,
-    make_child,
-    make_driver,
-    make_readings,
-    make_spec,
-)
 
 from collector_server.apps.collect.drivers.base import (
     DriverConnection,
@@ -23,6 +15,14 @@ from collector_server.apps.collect.drivers.base import (
 )
 from collector_server.apps.collect.drivers.opcua import driver as opcua_driver
 from collector_server.apps.collect.drivers.opcua.driver import OpcuaDriver
+from unit.opcua_driver_fakes import (
+    MAX_NODES,
+    NOW_MS,
+    make_child,
+    make_driver,
+    make_readings,
+    make_spec,
+)
 
 
 def test_unparsable_address_is_rejected_alone() -> None:

@@ -5,15 +5,15 @@ from datetime import UTC, datetime
 
 import pytest
 from asyncua import ua
-from tests.unit.opcua_driver_fakes import (
+
+from collector_server.apps.collect.drivers.base import PointSpec
+from unit.opcua_driver_fakes import (
     MAX_NODES,
     NOW_MS,
     make_driver,
     make_readings,
     make_spec,
 )
-
-from collector_server.apps.collect.drivers.base import PointSpec
 
 
 async def test_first_notification_before_subscribe_returns_is_kept() -> None:
