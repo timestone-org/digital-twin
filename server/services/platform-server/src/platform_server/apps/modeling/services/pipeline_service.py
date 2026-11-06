@@ -3,6 +3,7 @@
 import uuid
 from dataclasses import dataclass
 
+from sqlalchemy.exc import IntegrityError
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from lib.logging import current_traceparent, parse_traceparent
@@ -113,7 +114,10 @@ async def create_pipeline(
             created_by_name=actor.name,
         ),
     )
-    await session.flush()
+    try:
+        await session.flush()
+    except IntegrityError as error:
+        raise PipelineCodeTaken("这个流水线编码已经被占用了") from error
     return presenters.to_pipeline_out(row)
 
 

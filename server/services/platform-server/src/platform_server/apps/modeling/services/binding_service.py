@@ -10,6 +10,7 @@ import uuid
 from collections.abc import Sequence
 from dataclasses import dataclass
 
+from sqlalchemy.exc import IntegrityError
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from platform_server.apps.dataset.services import formula_library
@@ -85,7 +86,12 @@ async def create_binding(
             created_by_name=actor.name,
         ),
     )
-    await session.flush()
+    try:
+        await session.flush()
+    except IntegrityError as error:
+        raise BindingCodeTaken(
+            "这条公式条目已经绑过一个模型版本了"
+        ) from error
     return row
 
 
