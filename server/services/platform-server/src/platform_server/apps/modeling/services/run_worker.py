@@ -179,8 +179,11 @@ class RunConsumer:
             self._idle.set()
 
     async def _process(self, message: run_queue.RunMessage) -> bool:
-        """跑一次运行。异常一律记录，循环必须活着。
+        """跑一次运行，回这条消息能不能确认。
 
+        ⚠ 编排抛到这里说明终态没落上（认领或收尾时依赖不可用）：确认了就再没有
+        人收尾，所以留着等重新认领。心跳陈旧前重新认领只会判 busy，超过后落
+        `failed`，最坏约 `stale_after_s`。
         Args: message。
         """
         options = self._options
@@ -199,14 +202,14 @@ class RunConsumer:
                     stale_after_s=options.stale_after_s,
                 ),
             )
-        except Exception as error:  # pragma: no cover - 依赖同时不可用
+        except Exception as error:
             _logger.error(
                 "modeling_run_error",
-                "运行编排抛出异常",
+                "运行编排抛出异常，消息保留待确认",
                 run_id=str(message.run_id),
                 error=error,
             )
-            return True
+            return False
         if report.outcome == RUN_BUSY:
             return False
         _log_report(message, report.outcome, report.status)

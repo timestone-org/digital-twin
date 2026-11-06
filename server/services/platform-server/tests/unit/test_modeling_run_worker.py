@@ -195,10 +195,10 @@ async def test_publication_failure_keeps_message_pending_and_loop_alive(
     assert completed == [identities[1]]
 
 
-async def test_an_orchestration_error_keeps_the_loop_alive(
+async def test_an_orchestration_error_keeps_the_message_pending(
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
-    """编排抛异常时记录并确认——一次抖动不该让整条消费循环停掉。"""
+    """终态没落上时不确认：确认了就没有人再收尾，运行卡在 running。"""
     stream = InMemoryStream()
     await stream.publish(
         TARGET.stream, run_queue.new_message(uuid.uuid4()).to_fields()
@@ -209,7 +209,8 @@ async def test_an_orchestration_error_keeps_the_loop_alive(
         dispatch,
     )
     await consumer_of(stream)._tick()
-    assert len(stream.acked) == 1
+    assert len(dispatch.seen) == 1
+    assert stream.acked == []
 
 
 async def test_stopping_skips_the_rest_of_the_batch(
