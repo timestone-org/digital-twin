@@ -140,6 +140,34 @@ class TestFoldInput:
     def test_an_empty_stretch_folds_to_nothing(self) -> None:
         assert summarize._fold_input([], None) == ""
 
+    def test_overflow_trims_the_new_rows_not_the_previous_summary(self) -> None:
+        previous = Summary(through_seq=1, text="更早的结论", model=STAMP)
+        rows = [
+            _row("user", "开头" * summarize.MAX_FOLD_CHARS, 1),
+            _row("user", "最新一句", 2),
+        ]
+        body = summarize._fold_input(rows, previous)
+        assert body.startswith("【已有摘要】\n更早的结论\n\n【新的这一截】\n")
+        assert body.endswith("最新一句")
+        assert len(body) == summarize.MAX_FOLD_CHARS
+
+    def test_overflow_without_a_previous_summary_keeps_the_tail(self) -> None:
+        rows = [
+            _row("user", "开头" * summarize.MAX_FOLD_CHARS, 1),
+            _row("user", "最新一句", 2),
+        ]
+        body = summarize._fold_input(rows, None)
+        assert body.endswith("最新一句")
+        assert len(body) == summarize.MAX_FOLD_CHARS
+
+    def test_an_oversized_previous_summary_still_respects_the_cap(self) -> None:
+        previous = Summary(
+            through_seq=1, text="结论" * summarize.MAX_FOLD_CHARS, model=STAMP
+        )
+        body = summarize._fold_input(_talk(3), previous)
+        assert body.startswith("【已有摘要】\n结论")
+        assert len(body) == summarize.MAX_FOLD_CHARS
+
 
 class TestModelSummarizer:
     """真折那一路：折得出来就落一段，折不出来给 None。"""

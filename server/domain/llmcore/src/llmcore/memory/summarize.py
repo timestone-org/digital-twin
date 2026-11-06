@@ -243,12 +243,17 @@ def _fold_input(dropped: Sequence[HistoryRow], previous: Summary | None) -> str:
     fresh = [row for row in dropped if row.seq >= edge]
     lines = [_line_of(row) for row in fresh]
     body = "\n".join(one for one in lines if one)
+    head = ""
     if previous is not None:
-        body = f"【已有摘要】\n{previous.text}\n\n【新的这一截】\n{body}"
-    if not body.strip():
+        head = f"【已有摘要】\n{previous.text}\n\n【新的这一截】\n"
+    if not (head + body).strip():
         return ""
+    # ⚠ 已有摘要不参与截断：它是此前所有结论的唯一留存，切掉就再也找不回来
+    room = MAX_FOLD_CHARS - len(head)
+    if room <= 0:
+        return head[:MAX_FOLD_CHARS]
     # 超长时留**尾部**：新的那一截比更早的那一截更可能还在被引用
-    return body[-MAX_FOLD_CHARS:]
+    return head + body[-room:]
 
 
 def _line_of(row: HistoryRow) -> str:

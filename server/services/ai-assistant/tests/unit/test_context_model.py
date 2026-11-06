@@ -540,6 +540,22 @@ def test_long_history_does_not_dilute_the_newly_dropped_rows() -> None:
     assert all(row.content_json["text"] == fresh_text for row in bounded)
 
 
+def test_a_large_window_keeps_the_previous_summary_in_the_fold_input() -> None:
+    rows = [
+        HistoryRow(role="tool", seq=seq, content_json={"text": "回执" * 3000})
+        for seq in range(400)
+    ]
+    previous = Summary(
+        through_seq=390, text="已定口径：T001", model="default:summary"
+    )
+
+    bounded, kept = bounded_fold(rows, previous, 128000)
+    body = summarize._fold_input(bounded, kept)
+
+    assert "已定口径：T001" in body
+    assert len(body) == summarize.MAX_FOLD_CHARS
+
+
 def test_base_tool_argument_schema_counts_toward_the_context_budget() -> None:
     class SearchArgs(BaseModel):
         query: str = Field(description="温度标识与允许范围" * 300)
