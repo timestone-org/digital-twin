@@ -25,6 +25,7 @@ from auth_server.apps.auth.schemas import (
     UserDetailOut,
 )
 from auth_server.apps.auth.services.api_key_service import ApiKeyService
+from auth_server.apps.auth.services.bounded_hasher import BoundedHasher
 from auth_server.apps.auth.services.identity import (
     Identity,
     load_identity,
@@ -35,7 +36,6 @@ from auth_server.apps.auth.services.token_service import (
     TokenPair,
     TokenService,
 )
-from lib.auth import PasswordHasher
 from lib.errors import Conflict, InfraError
 from lib.logging import get_logger
 from lib.ratelimit import FixedWindowLimiter
@@ -56,7 +56,7 @@ class AuthService:
 
     tokens: TokenService
     api_keys: ApiKeyService
-    hasher: PasswordHasher
+    hasher: BoundedHasher
     login_limiter: FixedWindowLimiter
     signup_limiter: FixedWindowLimiter
     signup_enabled: bool
@@ -70,17 +70,18 @@ class AuthService:
 
         Args: session, login（用户名或邮箱）, password。
         """
-        await self.login_limiter.hit(login.strip().lower())
+        login_key = login.strip().lower()
+        await self.login_limiter.hit(login_key)
         user = await user_crud.get_by_login(session, login)
         if user is None:
-            self.hasher.verify(password, _TIMING_DECOY)
+            await self.hasher.verify(password, _TIMING_DECOY)
             raise InvalidCredentials("用户名或密码错误")
-        if not self.hasher.verify(password, user.hashed_password):
+        if not await self.hasher.verify(password, user.hashed_password):
             _logger.info("login_failed", "口令不符", user_id=str(user.id))
             raise InvalidCredentials("用户名或密码错误")
         if not user.is_active:
             raise AccountDisabled("账号已停用，请联系管理员")
-        await self._on_login_success(session, user, password)
+        await self._on_login_success(session, user, password, login_key)
         identity = await load_identity(session, user)
         return self._session_out(identity)
 
@@ -153,7 +154,7 @@ class AuthService:
         user = User(
             username=payload.username,
             email=payload.email,
-            hashed_password=self.hasher.hash(payload.password),
+            hashed_password=await self.hasher.hash(payload.password),
             full_name=payload.full_name,
             role_id=role.id,
             is_active=True,
@@ -193,22 +194,28 @@ class AuthService:
 
         Args: session, user, payload。
         """
-        if not self.hasher.verify(
+        if not await self.hasher.verify(
             payload.current_password, user.hashed_password
         ):
             raise InvalidCredentials("当前密码不正确")
-        user.hashed_password = self.hasher.hash(payload.new_password)
+        user.hashed_password = await self.hasher.hash(payload.new_password)
         await session.flush()
         _logger.info("password_changed", "", user_id=str(user.id))
 
     async def _on_login_success(
-        self, session: AsyncSession, user: User, password: str
+        self,
+        session: AsyncSession,
+        user: User,
+        password: str,
+        login_key: str,
     ) -> None:
-        await self.login_limiter.reset(user.username.lower())
+        # 计数按登录入参走，同一账号的用户名键和邮箱键都可能积着失败次数
+        for key in {login_key, user.username.lower(), user.email.lower()}:
+            await self.login_limiter.reset(key)
         user.last_login_at = self.clock()
         # 升过散列参数的旧口令在这一刻顺带重算，用户无感
         if self.hasher.needs_rehash(user.hashed_password):
-            user.hashed_password = self.hasher.hash(password)
+            user.hashed_password = await self.hasher.hash(password)
         await session.flush()
         _logger.info("login_succeeded", "", user_id=str(user.id))
 

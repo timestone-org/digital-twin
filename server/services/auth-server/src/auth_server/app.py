@@ -50,6 +50,16 @@ def _hooks(container: Container) -> tuple[LifespanHook, ...]:
             startup_order=10,
         ),
         LifespanHook(
+            name="password_hasher",
+            shutdown=container.hasher.close,
+            shutdown_order=50,
+        ),
+        LifespanHook(
+            name="api_key_hasher",
+            shutdown=container.api_keys.hasher.close,
+            shutdown_order=50,
+        ),
+        LifespanHook(
             name="cache",
             shutdown=container.cache.close,
             # 连接池最后关：在途请求还要用它

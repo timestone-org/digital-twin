@@ -18,6 +18,7 @@ from auth_server.apps.auth.services.api_key_service import (
     mint_key,
     parse_api_key,
 )
+from auth_server.apps.auth.services.bounded_hasher import BoundedHasher
 from lib.auth import PasswordHasher
 from lib.cache import CacheLike
 from lib.testing import FrozenClock, InMemoryCache, UnavailableCache
@@ -31,7 +32,7 @@ HASHER = PasswordHasher()
 
 def build_service(cache: CacheLike, clock: FrozenClock) -> ApiKeyService:
     return ApiKeyService(
-        hasher=HASHER,
+        hasher=BoundedHasher(HASHER, max_concurrency=2, name="test"),
         cache=cache,
         clock=clock,
         verify_cache_ttl_s=60,
