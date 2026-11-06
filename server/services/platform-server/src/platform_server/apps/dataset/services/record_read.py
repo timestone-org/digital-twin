@@ -14,7 +14,7 @@ from datetime import datetime
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from lib.errors.base import FieldError, ValidationFailed
-from lib.utils.timeutils import format_rfc3339, to_utc
+from lib.utils.timeutils import to_utc
 from lib.web import CursorPage, CursorParams, decode_cursor, encode_cursor
 from platform_server.apps.dataset.crud import (
     RecordWindow,
@@ -294,7 +294,7 @@ def _require_keys(keys: list[str]) -> list[str]:
             FieldError(
                 field="keys",
                 code="empty_keys",
-                message="用逗号分隔要取的列 key",
+                message="用重复的 keys 参数点名要取的列",
             ),
         ),
     )
@@ -303,13 +303,14 @@ def _require_keys(keys: list[str]) -> list[str]:
 def _next_cursor(scan: WindowScan) -> str | None:
     """下一页的锚点；没有下一页给 None。
 
+    ⚠ 锚点保留微秒：ts 列是微秒精度，截到毫秒会跳过同一毫秒内排在其后的行。
     Args: scan。
     """
     if not scan.is_truncated or not scan.rows:
         return None
     last = scan.rows[-1]
     return encode_cursor(
-        {_CURSOR_TS: format_rfc3339(last.ts), _CURSOR_ROW: str(last.row_id)}
+        {_CURSOR_TS: last.ts.isoformat(), _CURSOR_ROW: str(last.row_id)}
     )
 
 

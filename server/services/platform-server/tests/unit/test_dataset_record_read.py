@@ -110,3 +110,24 @@ def test_a_naive_moment_is_read_as_utc() -> None:
     filters = record_read.parse_filters(since="2026-08-23T10:00:00", until=None)
 
     assert filters.since == datetime(2026, 8, 23, 10, tzinfo=UTC)
+
+
+def test_a_page_anchor_keeps_the_microseconds_of_the_last_row() -> None:
+    last = DatasetRecord(
+        table_id=TABLE_ID,
+        ts=datetime(2026, 8, 23, 1, 2, 3, 123456, tzinfo=UTC),
+        row_id=uuid.uuid4(),
+        values_json={},
+        source="manual",
+    )
+    scan = record_read.WindowScan(rows=[last], is_truncated=True, limit=1)
+    assert record_read._anchor_of(record_read._next_cursor(scan)) == (
+        last.ts,
+        last.row_id,
+    )
+
+
+def test_the_empty_keys_hint_names_the_repeated_parameter() -> None:
+    with pytest.raises(ValidationFailed) as caught:
+        record_read._require_keys([" "])
+    assert caught.value.details[0].message == "用重复的 keys 参数点名要取的列"
