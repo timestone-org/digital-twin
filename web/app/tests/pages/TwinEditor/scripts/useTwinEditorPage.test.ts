@@ -167,6 +167,29 @@ describe('落库', () => {
     },
   )
 
+  it('上一次保存还没回来时，第二次保存不发请求', async () => {
+    getMock.mockResolvedValue(payload([node('n1')]))
+    let finishSave: (value: DashboardPayload) => void = () => {
+      throw new Error('保存尚未发起')
+    }
+    saveMock.mockImplementation(
+      () => new Promise((resolve) => (finishSave = resolve)),
+    )
+    const page = useTwinEditorPage(
+      () => 'd1',
+      () => 'n1',
+    )
+    await flushPromises()
+
+    const first = page.save()
+    const second = page.save()
+    finishSave(payload([node('n1')]))
+
+    expect(await second).toBe(false)
+    expect(await first).toBe(true)
+    expect(saveMock).toHaveBeenCalledOnce()
+  })
+
   it('把改动写回这个节点，其余节点原样带上', async () => {
     getMock.mockResolvedValue(payload([node('n1'), node('n2')]))
     saveMock.mockResolvedValue(payload([node('n1'), node('n2')]))

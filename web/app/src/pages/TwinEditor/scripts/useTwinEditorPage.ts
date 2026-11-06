@@ -100,6 +100,7 @@ async function saveTwin(
   editing: TwinDoc | null,
   nodeId: string,
 ): Promise<boolean> {
+  if (file.saving.value) return false
   const current = file.dashboard.value
   if (current === null || editing === null) return false
   editing.endMerge()
