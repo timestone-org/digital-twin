@@ -26,6 +26,10 @@ from collector_server.apps.collect.drivers.base import (
 )
 from collector_server.apps.collect.drivers.opcua import mapping
 from collector_server.apps.collect.drivers.opcua.browse import BrowsePager
+from collector_server.apps.collect.drivers.opcua.connection import (
+    close_session,
+    open_session,
+)
 from collector_server.apps.collect.drivers.opcua.initial import read_initial
 from collector_server.apps.collect.drivers.opcua.notifier import (
     DataChangeNotifier,
@@ -321,18 +325,9 @@ class OpcuaDriver:
         return mapping.category_of(error)
 
     async def connect(self) -> None:
-        """建会话。
-
-        ⚠ `asyncio.timeout` 不能省：asyncua 只管单次请求，TCP 卡住时不会醒，这在
-        工控网是常态。它的清理只收 `Exception`，超时取消绕过它，这里关 socket。
-        """
+        """建会话。"""
         client = self._factory(self._connection)
-        try:
-            async with asyncio.timeout(self._connection.timeouts.connect_s):
-                await client.connect()
-        except BaseException:
-            client.disconnect_socket()
-            raise
+        await open_session(client, self._connection.timeouts)
         self._client = client
         self._browser = BrowsePager(
             client,
@@ -353,16 +348,7 @@ class OpcuaDriver:
                 await browser.close()
         finally:
             if client is not None:
-                await self._disconnect_client(client)
-
-    async def _disconnect_client(self, client: Client) -> None:
-        try:
-            async with asyncio.timeout(self._connection.timeouts.request_s):
-                await client.disconnect()
-        except Exception as error:
-            _logger.warning(
-                "driver_disconnect_failed", "断开会话时出错", error=error
-            )
+                await close_session(client, self._connection.timeouts)
 
     async def healthcheck(self) -> None:
         """心跳探针：探不到就抛，由会话循环判断线。"""

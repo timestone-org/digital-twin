@@ -116,7 +116,11 @@ class FakeClient:
         self.is_connected = False
         self.is_checked = False
         self.is_connect_hung = False
+        self.is_disconnect_hung = False
+        self.is_disconnect_requested = False
         self.is_socket_closed = False
+        # 真实现建完会话才有非空令牌，半成品连接要靠它分辨该不该发 CloseSession
+        self.protocol = SimpleNamespace(authentication_token=ua.NodeId())
         self.nodes = FakeShortcuts(FakeNode(ua.NodeId(85)))
         self.subscription = FakeSubscription()
         # 寻址串 → 现场回的读数；表里没有的回一条坏读数
@@ -180,7 +184,13 @@ class FakeClient:
         self.is_connected = True
 
     async def disconnect(self) -> None:
-        self.is_connected = False
+        self.is_disconnect_requested = True
+        try:
+            if self.is_disconnect_hung:
+                await asyncio.Event().wait()
+            self.is_connected = False
+        finally:
+            self.disconnect_socket()
 
     def disconnect_socket(self) -> None:
         self.is_socket_closed = True
@@ -244,18 +254,25 @@ def make_spec(code: str, interval_ms: int = 1000) -> PointSpec:
     )
 
 
+def grant_server_session(client: FakeClient) -> None:
+    """让假客户端处于「服务端已发会话令牌」。Args: client。"""
+    client.protocol.authentication_token = ua.NodeId(1000)
+
+
 def make_driver(
     *,
     clock: Clock = lambda: NOW_MS,
     request_s: float = 3.0,
     connect_s: float = 5.0,
     is_connect_hung: bool = False,
+    prepare: Callable[[FakeClient], None] = lambda _client: None,
 ) -> tuple[OpcuaDriver, list[FakeClient]]:
     built: list[FakeClient] = []
 
     def factory(connection: DriverConnection) -> FakeClient:
         client = FakeClient(connection)
         client.is_connect_hung = is_connect_hung
+        prepare(client)
         built.append(client)
         return client
 
