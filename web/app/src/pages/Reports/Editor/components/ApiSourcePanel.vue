@@ -16,8 +16,11 @@ import { reportApiConnections } from '@/api/reports'
 import { useRacedFetch } from '@/composables/useRacedFetch'
 import { describeError } from '@/composables/useAsyncList'
 import { useFormDirty } from '@/composables/useFormDirty'
+import ApiDateParam from './ApiDateParam.vue'
+import ApiListMapping from './ApiListMapping.vue'
 import {
   jsonObject,
+  metricsForSource,
   queryObject,
   sourceIsUsed,
   validateSource,
@@ -31,7 +34,10 @@ const props = defineProps<{
   document: ReportDocument
   disabled: boolean
 }>()
-const emit = defineEmits<{ 'update:modelValue': [value: ApiSource[]] }>()
+const emit = defineEmits<{
+  'update:modelValue': [value: ApiSource[]]
+  'create-metrics': [value: ReportMetric[]]
+}>()
 const isOpen = ref(false)
 const editing = ref<string | null>(null)
 const connections = ref<{ code: string; name: string }[]>([])
@@ -57,6 +63,10 @@ const TYPES = [
   { value: 'text', label: '文本' },
   { value: 'boolean', label: '是/否' },
 ]
+const SHAPES = [
+  { value: 'auto', label: '对象或数组（一条记录一行）' },
+  { value: 'single', label: '列表（每一项是一个数据）' },
+]
 function emptySource(): ApiSource {
   return {
     code: '',
@@ -67,6 +77,7 @@ function emptySource(): ApiSource {
     query: {},
     body: null,
     rows_pointer: '',
+    row_shape: 'auto',
     time_pointer: null,
     columns: [],
     offset: 0,
@@ -122,6 +133,37 @@ function copyIdentity(next: ApiSource): void {
   }
   next.code = code
   next.name = `${next.name} 副本`
+}
+function setShape(value: string): void {
+  if (value === 'auto' || value === 'single') form.value.row_shape = value
+}
+function applySample(parsed: ApiColumn[]): void {
+  columns.value = parsed.map((column) => ({
+    ...column,
+    id: `column-${++columnSequence}`,
+  }))
+}
+function addDateParam(name: string, token: string): void {
+  error.value = ''
+  try {
+    if (form.value.method === 'POST') {
+      const next = { ...jsonObject(body.value, '请求体'), [name]: token }
+      body.value = JSON.stringify(next, null, 2)
+    } else {
+      const next = { ...queryObject(query.value), [name]: token }
+      query.value = JSON.stringify(next, null, 2)
+    }
+  } catch (caught) {
+    error.value =
+      caught instanceof Error ? caught.message : describeError(caught)
+  }
+}
+function createMetrics(source: ApiSource): void {
+  const created = metricsForSource(source, props.metrics)
+  panelError.value = created.length
+    ? ''
+    : `“${source.name}”的字段都已有指标，或与现有指标重名。`
+  if (created.length) emit('create-metrics', created)
 }
 function addColumn(): void {
   columns.value = [
@@ -213,6 +255,7 @@ onBeforeUnmount(() => raced.cancel())
         <p class="text-sm text-secondary">
           {{ source.method }} · {{ source.columns.length }} 个字段 ·
           {{ source.offset ? `偏移 ${source.offset} 期` : '本期' }}
+          {{ source.row_shape === 'single' ? '· 列表' : '' }}
         </p>
         <div v-if="!disabled" class="flex gap-2">
           <DtButton
@@ -230,6 +273,15 @@ onBeforeUnmount(() => raced.cancel())
             @click="open(source, true)"
           >
             复制
+          </DtButton>
+          <DtButton
+            v-if="source.row_shape === 'single'"
+            size="sm"
+            variant="ghost"
+            icon="plus"
+            @click="createMetrics(source)"
+          >
+            生成指标
           </DtButton>
           <DtIconButton
             size="sm"
@@ -290,8 +342,8 @@ onBeforeUnmount(() => raced.cancel())
             v-model="form.path"
             class="dt-form-grid__wide"
             label="API 相对路径"
-            placeholder="/api/energy/monthly"
-            hint="相对于所选连接，查询参数在下方填写"
+            placeholder="/api/report/monthly"
+            hint="相对于所选连接，可写日期变量，如 /report/{{year}}/{{month}}；查询参数在下方填写"
           />
           <DtInput
             :model-value="String(form.offset ?? 0)"
@@ -312,6 +364,7 @@ onBeforeUnmount(() => raced.cancel())
         >
           刷新连接目录
         </DtButton>
+        <ApiDateParam @add="addDateParam" />
         <div class="dt-form-grid">
           <DtTextarea
             v-model="query"
@@ -333,13 +386,21 @@ onBeforeUnmount(() => raced.cancel())
             可用报告期参数：{{ period }} 报告期、{{ start }} 开始、{{
               end
             }}
-            结束、{{ timezone }} 时区。时间范围为 [开始, 结束)。
+            结束、{{ timezone }} 时区。时间范围为 [开始, 结束)。 日期可写
+            {{ year }}、{{ month - 1 }}、{{ month-1:YYYY-MM }}，
+            跨年取上月请用最后一种。
           </p>
           <DtInput
             v-model="form.rows_pointer"
             label="数据位置（JSON Pointer）"
             placeholder="/data/items"
             hint="空值代表整个响应；对象作为一行，数组作为多行"
+          />
+          <DtSelect
+            :model-value="form.row_shape ?? 'auto'"
+            label="响应形状"
+            :options="SHAPES"
+            @update:model-value="setShape"
           />
           <DtInput
             :model-value="form.time_pointer ?? ''"
@@ -351,6 +412,11 @@ onBeforeUnmount(() => raced.cancel())
         </div>
         <div class="flex flex-col gap-3">
           <strong>映射字段</strong>
+          <ApiListMapping
+            v-if="form.row_shape === 'single'"
+            :columns="columns"
+            @parsed="applySample"
+          />
           <p class="text-sm text-secondary">
             例如数据位置为 /data/items，每行的 /energy
             映射为“用电量”；根值用空字符串。字段编码保存后供指标选择。

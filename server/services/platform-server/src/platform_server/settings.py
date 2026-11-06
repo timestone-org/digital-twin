@@ -46,6 +46,8 @@ LEASE_TTL_FLOOR_S = 5
 PUBLISH_MAX_ITEMS_CEILING = 500
 BDM_KEY_MIN_LENGTH = 32
 BDM_KEY_MAX_LENGTH = 256
+BDM_CONNECTION_CODE = "bdm"
+BDM_CONNECTION_NAME = "能管系统"
 MAX_TCP_PORT = 65535
 
 
@@ -80,6 +82,27 @@ class Settings(
         if len({item.code for item in given}) != len(given):
             raise ValueError("报告 API 连接编码不能重复")
         return given
+
+    @property
+    def report_connections(self) -> tuple[ReportApiConnection, ...]:
+        """报告可选连接；启用能管时补上同一组地址与密钥，部署同名项优先。"""
+        declared = tuple(self.report_api_connections)
+        if (
+            not self.bdm_enabled
+            or self.bdm_base_url is None
+            or self.bdm_api_key is None
+            or any(item.code == BDM_CONNECTION_CODE for item in declared)
+        ):
+            return declared
+        return (
+            ReportApiConnection(
+                code=BDM_CONNECTION_CODE,
+                name=BDM_CONNECTION_NAME,
+                base_url=self.bdm_base_url,
+                headers={"X-API-Key": self.bdm_api_key},
+            ),
+            *declared,
+        )
 
     app_name: str = SERVICE_NAME
     app_http_port: int = 8005

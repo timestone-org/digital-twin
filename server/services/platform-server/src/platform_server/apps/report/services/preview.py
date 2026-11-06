@@ -152,6 +152,15 @@ async def _node_value(
     return result
 
 
+def _precision(node: DocumentNode) -> int | None:
+    """正文数字的小数位；显式 null 表示按原值输出。Args: node。"""
+    if node.type != "metricRef":
+        return None
+    if "precision" in node.attrs and node.attrs["precision"] is None:
+        return None
+    return int(number_attr(node, "precision", 2))
+
+
 def _text_node(node: DocumentNode, metrics: list[MetricValue]) -> NodeValue:
     expression = text_attr(node, "expr")
     references = report_formula.metric_references(expression)
@@ -162,11 +171,7 @@ def _text_node(node: DocumentNode, metrics: list[MetricValue]) -> NodeValue:
     text = format_value(
         value,
         value_kind(value),
-        (
-            int(number_attr(node, "precision", 2))
-            if node.type == "metricRef"
-            else None
-        ),
+        _precision(node),
         text_attr(node, "unit") if node.type == "metricRef" else "",
     )
     return NodeValue(kind=node.type, text=text)

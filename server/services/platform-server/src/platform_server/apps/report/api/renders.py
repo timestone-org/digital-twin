@@ -93,7 +93,7 @@ async def runtime(
             timezone=container.settings.dataset_bucket_timezone,
             api_connections=[
                 ReportApiConnectionOut(code=item.code, name=item.name)
-                for item in container.settings.report_api_connections
+                for item in container.settings.report_connections
             ],
         )
     )

@@ -121,6 +121,6 @@ async def preview_template(
             template_id,
             payload,
             container.settings.dataset_bucket_timezone,
-            connections=container.settings.report_api_connections,
+            connections=container.settings.report_connections,
         )
     )

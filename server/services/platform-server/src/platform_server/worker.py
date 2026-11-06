@@ -504,7 +504,7 @@ def _report_consumers(
         stream=container.stream,
         store=container.object_store,
         consumer=settings.app_instance,
-        connections=tuple(settings.report_api_connections),
+        connections=settings.report_connections,
     )
     return (
         ReportWorker(options, pool),

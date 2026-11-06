@@ -34,6 +34,7 @@ class ApiRequest:
 
     source: ReportApiSource
     connection: ReportApiConnection
+    path: str
     query: dict[str, str]
     body: dict[str, JsonValue] | None
 
@@ -75,7 +76,7 @@ async def _read_bytes(response: httpx.Response) -> bytes:
 
 
 async def _fetch(client: httpx.AsyncClient, wanted: ApiRequest) -> bytes:
-    endpoint = wanted.connection.base_url + wanted.source.path
+    endpoint = wanted.connection.base_url + wanted.path
     pinned = await _pinned_url(endpoint)
     original = httpx.URL(endpoint)
     headers = {

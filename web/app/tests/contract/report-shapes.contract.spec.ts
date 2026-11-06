@@ -214,6 +214,7 @@ const shapes = {
     query: true,
     body: true,
     rows_pointer: true,
+    row_shape: true,
     time_pointer: true,
     columns: true,
     offset: true,
