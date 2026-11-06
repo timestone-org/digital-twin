@@ -368,11 +368,20 @@ describe('跟随登录态', () => {
     return () => scope.stop()
   }
 
+  function storeUser(id: string): void {
+    localStorage.setItem(STORAGE_KEYS.user, JSON.stringify({ id }))
+  }
+
   /** 别的标签登出：存储被清，回到前台时跟上。 */
   function logoutElsewhere(): void {
     localStorage.removeItem(STORAGE_KEYS.accessToken)
     document.dispatchEvent(new Event('visibilitychange'))
   }
+
+  beforeEach(() => {
+    storeUser('u-a')
+    setActivePinia(createPinia())
+  })
 
   it.each([
     ['主动登出', () => void useAuthStore().logout()],
@@ -405,12 +414,55 @@ describe('跟随登录态', () => {
     unbind()
   })
 
+  it('别的标签从 A 直接换成 B，不经过登出也要关掉 A 的连接', async () => {
+    const unbind = bind()
+    useRealtimeChannel()
+    const socket = latest()
+
+    localStorage.setItem(STORAGE_KEYS.accessToken, 'tok-b')
+    storeUser('u-b')
+    document.dispatchEvent(new Event('visibilitychange'))
+    await nextTick()
+
+    expect(socket.closed).toBe(true)
+    useRealtimeChannel()
+    expect(latest().protocols).toEqual([AUTH_SUBPROTOCOL, 'tok-b'])
+    unbind()
+  })
+
   it('令牌轮换不断连接', async () => {
     const unbind = bind()
     useRealtimeChannel()
     const socket = latest()
 
     useAuthStore().accessToken = 'tok-2'
+    await nextTick()
+
+    expect(socket.closed).toBe(false)
+    unbind()
+  })
+
+  it('同一账号换一份用户资料不断连接', async () => {
+    const unbind = bind()
+    useRealtimeChannel()
+    const socket = latest()
+    const auth = useAuthStore()
+
+    auth.user = { id: 'u-a', permissions: ['dashboard:view'] } as never
+    await nextTick()
+
+    expect(socket.closed).toBe(false)
+    unbind()
+  })
+
+  it('用户资料从无到有不断连接', async () => {
+    localStorage.removeItem(STORAGE_KEYS.user)
+    setActivePinia(createPinia())
+    const unbind = bind()
+    useRealtimeChannel()
+    const socket = latest()
+
+    useAuthStore().user = { id: 'u-a' } as never
     await nextTick()
 
     expect(socket.closed).toBe(false)
