@@ -9,7 +9,9 @@ import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 import { enableAutoUnmount, flushPromises, mount } from '@vue/test-utils'
 import { DtConfirmHost, DtToastHost, useToast } from '@dt/ui'
 
+import { BizError, TransportError } from '@/api/client'
 import * as hvac from '@/api/hvac'
+import DetailActions from '@/pages/Hvac/ModelDetail/components/DetailActions.vue'
 import DetailPage from '@/pages/Hvac/ModelDetail/index.vue'
 import { useAuthStore } from '@/stores/auth'
 import {
@@ -387,6 +389,58 @@ describe('训练中', () => {
     await vi.advanceTimersByTimeAsync(15000)
     expect(hvac.getAcModel).toHaveBeenCalledTimes(2)
   })
+
+  it('响应慢于轮询间隔时跳过新一拍，慢响应照样落地', async () => {
+    vi.useFakeTimers()
+    vi.mocked(hvac.getAcModel).mockResolvedValueOnce(
+      model({ status: 'training' }),
+    )
+    let answer: (found: ReturnType<typeof model>) => void = () => undefined
+    vi.mocked(hvac.getAcModel).mockImplementationOnce(
+      () =>
+        new Promise((resolve) => {
+          answer = resolve
+        }),
+    )
+    vi.mocked(hvac.getAcModel).mockResolvedValue(model({ status: 'training' }))
+    const wrapper = mount(DetailPage, { attachTo: document.body })
+    await vi.advanceTimersByTimeAsync(15000)
+    expect(hvac.getAcModel).toHaveBeenCalledTimes(2)
+
+    answer(model({ status: 'failed', error: '慢响应带来的结论' }))
+    await vi.advanceTimersByTimeAsync(0)
+
+    expect(wrapper.text()).toContain('慢响应带来的结论')
+  })
+
+  it('模型被删后 404 就停表，不再一直请求', async () => {
+    vi.useFakeTimers()
+    vi.mocked(hvac.getAcModel)
+      .mockResolvedValueOnce(model({ status: 'training' }))
+      .mockRejectedValue(new BizError(404001, '模型不存在', 404, 'trace'))
+    mount(DetailPage, { attachTo: document.body })
+    await vi.advanceTimersByTimeAsync(5000)
+    expect(hvac.getAcModel).toHaveBeenCalledTimes(2)
+
+    await vi.advanceTimersByTimeAsync(15000)
+
+    expect(hvac.getAcModel).toHaveBeenCalledTimes(2)
+  })
+
+  it('暂时取数失败不停表，下一拍继续', async () => {
+    vi.useFakeTimers()
+    vi.mocked(hvac.getAcModel)
+      .mockResolvedValueOnce(model({ status: 'training' }))
+      .mockRejectedValueOnce(
+        new TransportError(0, '无法连接服务器，请检查网络'),
+      )
+      .mockResolvedValue(model({ status: 'training' }))
+    mount(DetailPage, { attachTo: document.body })
+
+    await vi.advanceTimersByTimeAsync(10000)
+
+    expect(hvac.getAcModel).toHaveBeenCalledTimes(3)
+  })
 })
 
 describe('卸载', () => {
@@ -411,6 +465,29 @@ describe('卸载', () => {
     await vi.advanceTimersByTimeAsync(15000)
 
     expect(hvac.getAcModel).toHaveBeenCalledTimes(2)
+  })
+
+  it('重训响应在卸载后才回来，不再取数也不再起表', async () => {
+    vi.useFakeTimers()
+    vi.mocked(hvac.getAcModel).mockResolvedValue(model({ status: 'training' }))
+    let answer: (found: ReturnType<typeof model>) => void = () => undefined
+    vi.spyOn(hvac, 'retrainAcModel').mockImplementation(
+      () =>
+        new Promise((resolve) => {
+          answer = resolve
+        }),
+    )
+    const wrapper = mount(DetailPage, { attachTo: document.body })
+    await vi.advanceTimersByTimeAsync(0)
+    wrapper.findComponent(DetailActions).vm.$emit('retrain')
+    await vi.advanceTimersByTimeAsync(0)
+    const before = vi.mocked(hvac.getAcModel).mock.calls.length
+
+    wrapper.unmount()
+    answer(model({ status: 'queued' }))
+    await vi.advanceTimersByTimeAsync(15000)
+
+    expect(hvac.getAcModel).toHaveBeenCalledTimes(before)
   })
 })
 

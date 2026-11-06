@@ -13,6 +13,7 @@ import { DtEmpty, DtResizableLayout, useConfirm, useToast } from '@dt/ui'
 import * as hvac from '@/api/hvac'
 import { AppShell } from '@/components/layout'
 import { describeError } from '@/composables/useAsyncList'
+import { useBusyPolling } from '@/composables/useBusyPolling'
 import { useRacedFetch } from '@/composables/useRacedFetch'
 import { useViewMode } from '@/composables/useViewMode'
 import CreateModelDialog from './components/CreateModelDialog.vue'
@@ -35,6 +36,7 @@ const router = useRouter()
 const toast = useToast()
 const confirm = useConfirm()
 const fetcher = useRacedFetch()
+const polling = useBusyPolling(load, POLL_INTERVAL_MS)
 const view = useViewMode('hvac-models')
 
 const models = ref<AcModel[]>([])
@@ -44,7 +46,6 @@ const error = ref<string | null>(null)
 const isCreating = ref(false)
 const roomId = ref('')
 const sort = ref<DtTableSort | null>(null)
-let pollTimer: ReturnType<typeof setInterval> | null = null
 
 const listing = computed(() => buildRoomListing(rooms.value, models.value))
 const current = computed(
@@ -73,18 +74,16 @@ onMounted(() => {
   void loadRooms()
 })
 
-onBeforeUnmount(() => {
-  stopPolling()
-  fetcher.cancel()
-})
+onBeforeUnmount(() => fetcher.cancel())
 
 async function load(): Promise<void> {
+  if (polling.isDisposed()) return
   loading.value = true
   await fetcher.run(() => hvac.listAcModels(), {
     ok: (items) => {
       models.value = items
       error.value = null
-      syncPolling(items)
+      polling.sync(items.some(isModelBusy))
     },
     fail: (caught) => {
       error.value = describeError(caught)
@@ -132,24 +131,6 @@ function selectRoom(id: string): void {
   roomId.value = id
   if (id === '' || wantedRoomId() === id) return
   void router.replace({ query: { ...route.query, room: id } })
-}
-
-/** 有训练中的行才轮询；全部到终态就停，不给后端白打点。 */
-function syncPolling(items: readonly AcModel[]): void {
-  const busy = items.some(isModelBusy)
-  if (busy && pollTimer === null) {
-    pollTimer = setInterval(() => {
-      void load()
-    }, POLL_INTERVAL_MS)
-  }
-  if (!busy) stopPolling()
-}
-
-function stopPolling(): void {
-  if (pollTimer !== null) {
-    clearInterval(pollTimer)
-    pollTimer = null
-  }
 }
 
 function open(row: ModelRow): void {
