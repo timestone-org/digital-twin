@@ -114,6 +114,8 @@ async def _serve(
         # 可重试的那一档
         await websocket.close(code=CLOSE_ANONYMOUS_QUOTA)
         return
+    except WebSocketDisconnect:
+        return
     # 复核任务要能主动断掉授权已被撤回的匿名连接，而它手上只有连接对象
     connection.close = lambda code: websocket.close(code=code)
     try:

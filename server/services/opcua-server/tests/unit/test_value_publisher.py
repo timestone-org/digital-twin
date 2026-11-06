@@ -215,3 +215,29 @@ async def test_a_flush_failure_does_not_stop_the_loop() -> None:
         assert await _eventually(lambda: realtime.calls >= 2)
     finally:
         await publisher.stop()
+
+
+async def test_a_failing_instance_does_not_cost_the_others_their_values() -> (
+    None
+):
+    # ⚠ flush 已经整批取走 pending，中途抛出的话排在后面的实例当窗全丢
+    class FailingFirst(FakeRealtime):
+        async def publish(
+            self,
+            instance_id: uuid.UUID,
+            items: list[dict[str, object]],
+            *,
+            traceparent: str | None = None,
+        ) -> bool:
+            if instance_id == INSTANCE:
+                raise TypeError("not JSON serializable")
+            return await super().publish(
+                instance_id, items, traceparent=traceparent
+            )
+
+    realtime = FailingFirst()
+    publisher = _publisher(realtime)
+    await publisher.record(INSTANCE, "temp", 1)
+    await publisher.record(OTHER, "temp", 2)
+    await publisher.flush()
+    assert realtime.calls == [(OTHER, [{"identifier": "temp", "value": 2}])]

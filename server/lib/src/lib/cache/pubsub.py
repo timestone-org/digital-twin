@@ -61,11 +61,12 @@ class PubSub:
 
         ⚠ 信封里必须带 `traceparent`：pub/sub 是跨进程的异步交接，
         contextvars 传不过去。不带它，链路就在这里齐断：发送侧握着一条完整
-        的调用链，而订阅方那边只剩一段无根的日志。
+        的调用链，而订阅方那边只剩一段无根的日志。载荷已带的 traceparent
+        优先：跨服务那一段的上游 span 只有调用方知道，当前上下文顶替不了。
 
         Args: channel, payload。
         """
-        envelope = {**payload, TRACEPARENT_KEY: _traceparent()}
+        envelope = {TRACEPARENT_KEY: _traceparent(), **payload}
         try:
             sent = await self._client.publish(channel, json.dumps(envelope))
             return int(sent)

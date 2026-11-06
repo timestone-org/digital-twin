@@ -92,7 +92,6 @@ async def _run_deadline(
         user_id=uuid.uuid4(),
         codes=frozenset({"opcua:view"}),
         expires_at=OLD_EXPIRY,
-        checked_at=NOW,
         send=send,
         send_frame=send_frame,
     )

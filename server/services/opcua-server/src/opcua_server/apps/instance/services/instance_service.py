@@ -227,11 +227,10 @@ class InstanceService:
         """端口池占用情况。"""
         allocator = self._supervisor.ports
         async with self._database.session() as session:
-            used = len(await instance_crud.taken_ports(session))
-            count = await instance_crud.count_all(session)
-        total = len(allocator.pool)
-        async with self._database.session() as session:
             occupied = await instance_crud.taken_ports(session)
+            count = await instance_crud.count_all(session)
+        used = len(occupied)
+        total = len(allocator.pool)
         free = [port for port in allocator.pool if port not in occupied]
         return PortPoolOut(
             free_ports=free,

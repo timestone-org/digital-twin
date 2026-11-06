@@ -35,7 +35,6 @@ def _connection() -> tuple[Connection, list[dict[str, object]]]:
             user_id=uuid.uuid4(),
             codes=frozenset({"opcua:view"}),
             expires_at=now + timedelta(minutes=15),
-            checked_at=now,
             send=send,
             send_frame=send_frame,
         ),
@@ -78,7 +77,7 @@ async def test_the_topic_index_does_not_keep_empty_buckets() -> None:
     await registry.add(connection)
     await registry.bind(connection.id, "opcua:1")
     await registry.remove(connection.id)
-    assert tuple(registry.topics()) == ()
+    assert registry._by_topic == {}
 
 
 async def test_unbinding_the_last_holder_drops_the_topic() -> None:
@@ -87,28 +86,14 @@ async def test_unbinding_the_last_holder_drops_the_topic() -> None:
     await registry.add(connection)
     await registry.bind(connection.id, "opcua:1")
     await registry.unbind(connection.id, "opcua:1")
-    assert tuple(registry.topics()) == ()
+    assert registry._by_topic == {}
 
 
 async def test_binding_an_unknown_connection_does_nothing() -> None:
     # 摘除与订阅可能竞争：连接已经没了还来一条 bind，不该凭空建出索引项
     registry = ConnectionRegistry()
     await registry.bind(uuid.uuid4(), "opcua:1")
-    assert tuple(registry.topics()) == ()
-
-
-async def test_refreshing_codes_replaces_the_held_set() -> None:
-    registry = ConnectionRegistry()
-    connection, _sent = _connection()
-    await registry.add(connection)
-    now = utcnow()
-    await registry.refresh_codes(
-        connection.id, codes=frozenset({"opcua:manage"}), checked_at=now
-    )
-    refreshed = await registry.get(connection.id)
-    assert refreshed is not None
-    assert refreshed.codes == frozenset({"opcua:manage"})
-    assert refreshed.checked_at == now
+    assert registry._by_topic == {}
 
 
 def _anonymous(ticket_hash: str) -> Connection:
@@ -124,7 +109,6 @@ def _anonymous(ticket_hash: str) -> Connection:
         user_id=None,
         codes=frozenset(),
         expires_at=now + timedelta(minutes=15),
-        checked_at=now,
         send=send,
         send_frame=send_frame,
         grant=GrantedTopic(

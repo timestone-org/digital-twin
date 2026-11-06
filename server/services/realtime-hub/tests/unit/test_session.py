@@ -4,10 +4,12 @@
 信封字典出，传输由调用方注入。真实连接那条路径另有契约用例守。
 """
 
+import asyncio
 import json
 import uuid
 from datetime import timedelta
 
+import anyio
 import pytest
 from realtime_hub.apps.channel.errors import (
     SubscriptionDenied,
@@ -18,6 +20,7 @@ from realtime_hub.apps.channel.services import (
     AuthenticationRejected,
     Connection,
     ConnectionRegistry,
+    Handshake,
     PublicAccess,
     SessionDeps,
     SessionService,
@@ -361,7 +364,6 @@ def test_expiry_and_reauth_windows() -> None:
         user_id=uuid.uuid4(),
         codes=frozenset(),
         expires_at=now + timedelta(seconds=REAUTH_LEAD_S - 1),
-        checked_at=now,
         send=send,
         send_frame=send_frame,
     )
@@ -380,3 +382,51 @@ async def test_a_forged_token_is_rejected() -> None:
     raw, _claims = forged.issue(subject=USER, token_type="access", ttl_s=900)
     with pytest.raises(AuthenticationRejected):
         await service.authenticate(raw)
+
+
+def _handshake() -> Handshake:
+    return Handshake(
+        user_id=uuid.UUID(USER),
+        codes=frozenset(),
+        expires_at=utcnow() + timedelta(minutes=15),
+    )
+
+
+async def _discard_frame(_frame: str) -> None:
+    return None
+
+
+async def test_a_failed_connected_frame_leaves_nothing_registered() -> None:
+    # ⚠ 对端在 accept 后立刻断开时，发 connected 那一帧就抛。此时收发循环的
+    # finally 还没进去，登记只能由 open 自己收回，否则永远占着匿名名额
+    service, connections = _service()
+
+    async def send(_message: dict[str, object]) -> None:
+        raise ConnectionError("peer gone")
+
+    with pytest.raises(ConnectionError):
+        await service.open(_handshake(), send=send, send_frame=_discard_frame)
+    assert await connections.all_connections() == ()
+
+
+async def test_a_cancelled_connected_frame_is_still_rolled_back() -> None:
+    # ⚠ 取消域在每个挂起点重新送达：表锁被占着时，没有屏蔽的摘除断在抢锁上
+    service, connections = _service()
+    is_sending = asyncio.Event()
+
+    async def send(_message: dict[str, object]) -> None:
+        is_sending.set()
+        await asyncio.Event().wait()
+
+    async def open_until_cancelled() -> None:
+        with anyio.move_on_after(0.02):
+            await service.open(
+                _handshake(), send=send, send_frame=_discard_frame
+            )
+
+    async with asyncio.TaskGroup() as group:
+        group.create_task(open_until_cancelled())
+        await is_sending.wait()
+        async with connections._lock:
+            await asyncio.sleep(0.05)
+    assert await connections.all_connections() == ()

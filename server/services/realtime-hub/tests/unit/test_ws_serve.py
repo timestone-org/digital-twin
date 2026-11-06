@@ -11,7 +11,7 @@ from datetime import timedelta
 from typing import Any, cast
 
 import anyio
-from fastapi import WebSocket
+from fastapi import WebSocket, WebSocketDisconnect
 from realtime_hub.apps.channel.api.ws import _serve
 from realtime_hub.apps.channel.services import (
     Connection,
@@ -42,7 +42,6 @@ class SlowSession:
             user_id=handshake.user_id,
             codes=handshake.codes,
             expires_at=handshake.expires_at,
-            checked_at=utcnow(),
             send=send,
             send_frame=send_frame,
         )
@@ -95,3 +94,27 @@ async def test_a_cancelled_connection_still_gets_swept() -> None:
         await _serve(cast("WebSocket", SilentSocket()), container, _handshake())
 
     assert len(session.closed) == 1
+
+
+class VanishingSession:
+    """发 connected 帧时对端已经走了的会话。"""
+
+    def __init__(self) -> None:
+        self.closed: list[uuid.UUID] = []
+
+    async def open(
+        self, _handshake: Handshake, **_transport: Any
+    ) -> Connection:
+        raise WebSocketDisconnect(code=1006)
+
+    async def close(self, connection_id: uuid.UUID) -> None:
+        self.closed.append(connection_id)
+
+
+async def test_a_peer_that_left_during_open_ends_quietly() -> None:
+    session = VanishingSession()
+    container = cast("Container", type("C", (), {"session": session})())
+
+    await _serve(cast("WebSocket", SilentSocket()), container, _handshake())
+
+    assert session.closed == []

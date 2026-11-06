@@ -134,3 +134,44 @@ def test_unwrap_peels_datavalue_and_variant() -> None:
     # asyncua 的通知值包着 DataValue(Variant(...))，推给页面前要剥成裸值
     wrapped = ua.DataValue(Value=ua.Variant(5.5))
     assert _unwrap(wrapped) == 5.5
+
+
+def test_unwrap_turns_bytes_into_text() -> None:
+    # ⚠ byte_string 节点的值是 bytes，进 JSON 信封会让整批推送抛 TypeError
+    assert _unwrap(b"abc") == "abc"
+    assert _unwrap(ua.Variant("字节".encode())) == "字节"
+    assert _unwrap(ua.DataValue(Value=ua.Variant(b""))) == ""
+
+
+def test_unwrap_replaces_bytes_that_are_not_utf8() -> None:
+    assert _unwrap(b"\xff") == "\ufffd"
+
+
+def test_unwrap_reaches_into_array_values() -> None:
+    assert _unwrap(ua.Variant([b"a", b"b"])) == ["a", "b"]
+    assert _unwrap([1.5, 2.5]) == [1.5, 2.5]
+
+
+async def test_a_pending_callback_is_held_until_it_finishes() -> None:
+    release = asyncio.Event()
+    seen: list[str] = []
+
+    async def on_change(
+        _instance_id: uuid.UUID, identifier: str, _value: object
+    ) -> None:
+        await release.wait()
+        seen.append(identifier)
+
+    watcher = ValueWatcher(instance_id=INSTANCE, on_change=on_change)
+    await watcher.watch(
+        _Server(_Subscription()), {"temp": _Node("ns=2;s=temp")}
+    )
+    watcher.datachange_notification(_Node("ns=2;s=temp"), 1.0, None)
+    await watcher.stop()
+    assert len(watcher._running) == 1
+
+    release.set()
+    await asyncio.gather(*watcher._running)
+    await asyncio.sleep(0)
+    assert seen == ["temp"]
+    assert watcher._running == set()
