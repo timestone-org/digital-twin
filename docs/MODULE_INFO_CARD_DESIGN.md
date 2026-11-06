@@ -902,7 +902,7 @@ bindings: [{
 | `shared/config.ts` | **用** | `readText` / `readTrimmedText` / `readBoolean` / `readNumber` / `readEnum` / `readLooseNumber` / `readArray` / `readRecord` / `configDefaults`。⚠ `readNumber` 的 `fallback` **必填**；⚠ `readEnum` 只认字符串字面量，不做数字/布尔的字符串化 |
 | `shared/interaction.ts` | **用** | `rowClickEmitter(emit)`，空值不上抛；`.stop` 由模板写 |
 | `shared/assetImage.ts` | **用** | `resolveImageValue(value)`。⚠ 精确行为：只有 **`asset:` 引用**在解析不出时返回空串（未注入 resolver 时 `resolver(text)` 为空），**普通 URL 与 CSS 值原样透传**。所以「测试环境里 `item.icon` 填 URL 渲染不出来」是错的，它渲染得出来；模板仍要 `v-if` 判空再画 `<img>`，否则素材引用那一档出碎图 |
-| `shared/container.ts` / `shared/background.ts` / `shared/tagSource.ts` | **不用** | 不是容器、不画背景图层、取值走注入的绑定求值不自读点位快照 |
+| `shared/container.ts` / `shared/background.ts` | **不用** | 不是容器、不画背景图层 |
 | `shared/chart/*` | **不用** | 四个模块一个都不碰。⚠ `packages/modules/src/index.ts` 刻意不导出 `shared/chart/*`——`check_bundle_budget.py` 的 `HEAVY` 名单含 echarts，barrel 一 re-export 就把它焊进首屏静态图 |
 
 ---
