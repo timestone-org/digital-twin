@@ -32,6 +32,7 @@ def _locator(raw: dict[str, Any]) -> Locator:
     path = cast("list[object]", raw.get("path") or [])
     return Locator(
         page=_as_int(raw.get("page")),
+        page_end=_as_int(raw.get("page_end")),
         sheet=str(raw.get("sheet") or ""),
         row=_as_int(raw.get("row")),
         path=tuple(str(one) for one in path),
