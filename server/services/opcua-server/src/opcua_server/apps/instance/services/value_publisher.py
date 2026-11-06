@@ -82,6 +82,8 @@ class ValuePublisher:
 
         ⚠ 先整体取走再逐个推：推送是外部 IO，占着锁做它会把这段时间内所有
         写值都堵在 `record` 上。
+        ⚠ 逐实例兜底：批次已经取走，一台抛错不接住的话，排在它后面的实例当窗
+        的值全丢。
         """
         async with self._lock:
             batch = self._pending
@@ -89,7 +91,17 @@ class ValuePublisher:
             self._pending = {}
             self._trace = {}
         for instance_id, values in batch.items():
-            await self._publish(instance_id, values, traces.get(instance_id))
+            try:
+                await self._publish(
+                    instance_id, values, traces.get(instance_id)
+                )
+            except Exception as error:
+                _logger.error(
+                    "value_publish_failed",
+                    "一个实例的值变化推送失败，其余实例照常",
+                    instance_id=str(instance_id),
+                    error_type=type(error).__name__,
+                )
 
     async def _run(self) -> None:
         """按窗口周期冲刷。

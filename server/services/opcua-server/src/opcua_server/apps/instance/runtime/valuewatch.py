@@ -12,7 +12,7 @@
 import asyncio
 import uuid
 from collections.abc import Awaitable, Callable
-from typing import Any
+from typing import Any, cast
 
 from asyncua import ua
 
@@ -127,14 +127,19 @@ class ValueWatcher:
 
 
 def _unwrap(value: object) -> object:
-    """把 asyncua 的包装值剥成裸值。
+    """把 asyncua 的包装值剥成可进 JSON 的裸值。
+
+    ⚠ bytes 要转文本：推送走 JSON，一个 byte_string 节点的 bytes 会让整批
+    序列化抛错。编码与 `datatypes._coerce_bytes` 的 UTF-8 约定对称。
 
     Args: value。
     """
-    if isinstance(value, ua.DataValue):
+    if isinstance(value, ua.DataValue | ua.Variant):
         return _unwrap(value.Value)
-    if isinstance(value, ua.Variant):
-        return value.Value
+    if isinstance(value, bytes):
+        return value.decode("utf-8", errors="replace")
+    if isinstance(value, list):
+        return [_unwrap(item) for item in cast("list[object]", value)]
     return value
 
 

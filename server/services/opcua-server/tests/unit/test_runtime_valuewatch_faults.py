@@ -134,3 +134,19 @@ def test_unwrap_peels_datavalue_and_variant() -> None:
     # asyncua 的通知值包着 DataValue(Variant(...))，推给页面前要剥成裸值
     wrapped = ua.DataValue(Value=ua.Variant(5.5))
     assert _unwrap(wrapped) == 5.5
+
+
+def test_unwrap_turns_bytes_into_text() -> None:
+    # ⚠ byte_string 节点的值是 bytes，进 JSON 信封会让整批推送抛 TypeError
+    assert _unwrap(b"abc") == "abc"
+    assert _unwrap(ua.Variant("字节".encode())) == "字节"
+    assert _unwrap(ua.DataValue(Value=ua.Variant(b""))) == ""
+
+
+def test_unwrap_replaces_bytes_that_are_not_utf8() -> None:
+    assert _unwrap(b"\xff") == "\ufffd"
+
+
+def test_unwrap_reaches_into_array_values() -> None:
+    assert _unwrap(ua.Variant([b"a", b"b"])) == ["a", "b"]
+    assert _unwrap([1.5, 2.5]) == [1.5, 2.5]
