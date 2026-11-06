@@ -4,6 +4,9 @@
  */
 import { onBeforeUnmount } from 'vue'
 
+// 嵌套浮层挂在 body 或弹窗面板上，不在外层浮层子树里，靠根节点这个属性认出来
+const NESTED_OVERLAY_SELECTOR = '[data-dt-nested-overlay]'
+
 export interface OverlayTracking {
   /** 开始跟踪。`insides` 每次事件重新求值——浮层是 teleport 的，节点会换。 */
   start: (insides: () => readonly (HTMLElement | null)[]) => void
@@ -15,6 +18,13 @@ export interface OverlayTrackingOptions {
   onOutside: () => void
 }
 
+function isInNestedOverlay(target: Node): boolean {
+  return (
+    target instanceof Element &&
+    target.closest(NESTED_OVERLAY_SELECTOR) !== null
+  )
+}
+
 export function useOverlayTracking(
   options: OverlayTrackingOptions,
 ): OverlayTracking {
@@ -24,7 +34,8 @@ export function useOverlayTracking(
     const target = event.target
     if (!(target instanceof Node)) return
     const hit = insides().some((node) => node?.contains(target) === true)
-    if (!hit) options.onOutside()
+    if (hit || isInNestedOverlay(target)) return
+    options.onOutside()
   }
 
   function start(next: () => readonly (HTMLElement | null)[]): void {
