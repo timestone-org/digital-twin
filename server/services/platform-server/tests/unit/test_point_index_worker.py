@@ -14,6 +14,8 @@ async def test_a_drain_that_runs_out_of_time_does_not_raise() -> None:
     # ⚠ 抛出去的话关停序列就此中断：其余任务不取消、租约不让、连接池不关
     await asyncio.wait_for(worker.drain(0.01), timeout=2)
 
+    assert worker._idle.is_set() is False
+
 
 async def test_a_drain_returns_at_once_when_idle() -> None:
     worker = PointIndexWorker(database=cast(Any, object()), cipher=None)
@@ -21,3 +23,5 @@ async def test_a_drain_returns_at_once_when_idle() -> None:
     await worker.run()
 
     await asyncio.wait_for(worker.drain(5.0), timeout=2)
+
+    assert worker._idle.is_set() is True
