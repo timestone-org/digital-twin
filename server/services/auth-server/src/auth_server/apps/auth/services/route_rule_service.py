@@ -27,6 +27,7 @@ from auth_server.apps.auth.services.grant_service import (
 from auth_server.apps.auth.services.identity import Operation
 from auth_server.apps.auth.services.matching import RuleView
 from auth_server.apps.auth.services.presenters import to_route_rule_out
+from lib.db import after_commit
 from lib.errors import Conflict, NotFound
 from lib.utils.timeutils import Clock, utcnow
 from lib.web import Page, PageParams
@@ -37,7 +38,7 @@ DEFAULT_CACHE_TTL_S = 10.0
 
 @dataclass
 class RouteRuleCache:
-    """闸 1 的规则缓存。写路径改完即失效，读路径按 TTL 兜底。"""
+    """闸 1 的规则缓存。写路径提交后失效，读路径按 TTL 兜底。"""
 
     ttl_s: float = DEFAULT_CACHE_TTL_S
     clock: Clock = utcnow
@@ -141,7 +142,7 @@ async def create_rule(
         rule,
         audit.Change(after=_snapshot(rule)),
     )
-    cache.invalidate()
+    _invalidate_after_commit(session, cache)
     return to_route_rule_out(rule)
 
 
@@ -173,7 +174,7 @@ async def update_rule(
         rule,
         audit.Change(before=before, after=_snapshot(rule)),
     )
-    cache.invalidate()
+    _invalidate_after_commit(session, cache)
     return to_route_rule_out(rule)
 
 
@@ -197,7 +198,16 @@ async def delete_rule(
         audit.Change(before=_snapshot(rule)),
     )
     await route_rule_crud.delete(session, rule)
-    cache.invalidate()
+    _invalidate_after_commit(session, cache)
+
+
+def _invalidate_after_commit(
+    session: AsyncSession, cache: RouteRuleCache
+) -> None:
+    async def invalidate() -> None:
+        cache.invalidate()
+
+    after_commit(session, invalidate)
 
 
 async def _require_rule(session: AsyncSession, rule_id: uuid.UUID) -> RouteRule:

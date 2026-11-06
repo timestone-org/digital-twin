@@ -19,6 +19,7 @@ from auth_server.container import Container, build_container
 from auth_server.settings import Settings
 from lib.auth import PasswordHasher
 from lib.config import load_settings
+from lib.db import run_after_commit_hooks
 from lib.logging import configure_logging
 from lib.testing import InMemoryCache
 
@@ -116,6 +117,7 @@ async def app_client(
                 raise
             else:
                 await session.commit()
+                await run_after_commit_hooks(session)
 
     application.dependency_overrides[get_session] = override
     transport = httpx.ASGITransport(app=application)
