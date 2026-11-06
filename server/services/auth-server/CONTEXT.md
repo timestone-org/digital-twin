@@ -215,6 +215,11 @@
 Redis 不可达时**退回逐次 argon2 而不是拒绝**——这一层是性能件，让它 fail-closed
 等于 Redis 一抖第三方系统就全线写不进值。
 
+⚠ argon2 走两条独立的小线程池（`BoundedHasher`），不走默认执行器。argon2 在 C 层
+释放 GIL，线程足以让出事件循环；每路约占 64MiB，线程数就是内存上限，所以并发受
+`AUTH_ARGON2_PASSWORD_MAX_CONCURRENCY` 与 `AUTH_ARGON2_API_KEY_MAX_CONCURRENCY`
+约束。API 密钥单独一条，登录突发时 `/verify` 的缓存未命中不用排在登录后面。
+
 ### 7.3 嵌入会话
 
 `POST /api/v1/auth/sessions:from-api-key` 只接受 `Authorization: Bearer dtk_…`，

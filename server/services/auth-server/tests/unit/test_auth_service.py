@@ -17,6 +17,7 @@ from auth_server.apps.auth.schemas import SessionOut
 from auth_server.apps.auth.services import auth_service as auth_module
 from auth_server.apps.auth.services.api_key_service import ApiKeyService
 from auth_server.apps.auth.services.auth_service import AuthService
+from auth_server.apps.auth.services.bounded_hasher import BoundedHasher
 from auth_server.apps.auth.services.identity import Identity
 from auth_server.apps.auth.services.token_service import TokenService
 from lib.auth import PasswordHasher
@@ -60,7 +61,7 @@ def build_service(limiter: FixedWindowLimiter) -> AuthService:
     return AuthService(
         tokens=cast("TokenService", None),
         api_keys=cast("ApiKeyService", None),
-        hasher=HASHER,
+        hasher=BoundedHasher(HASHER, max_concurrency=2, name="test"),
         login_limiter=limiter,
         signup_limiter=limiter,
         signup_enabled=False,

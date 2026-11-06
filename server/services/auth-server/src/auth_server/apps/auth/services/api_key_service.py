@@ -9,7 +9,6 @@
 一枚，吊销就永远追不上签发。
 """
 
-import asyncio
 import hashlib
 import secrets
 import uuid
@@ -35,6 +34,7 @@ from auth_server.apps.auth.services.audit import (
     Entry,
     record,
 )
+from auth_server.apps.auth.services.bounded_hasher import BoundedHasher
 from auth_server.apps.auth.services.guards import assert_target_not_higher
 from auth_server.apps.auth.services.identity import (
     Identity,
@@ -42,7 +42,6 @@ from auth_server.apps.auth.services.identity import (
     load_identity_by_id,
 )
 from auth_server.apps.auth.services.presenters import to_api_key_out
-from lib.auth import PasswordHasher
 from lib.cache import CacheLike
 from lib.errors import DependencyUnavailable, NotFound
 from lib.logging import get_logger
@@ -139,7 +138,7 @@ async def list_keys(
 class ApiKeyService:
     """密钥的签发、认证与吊销。"""
 
-    hasher: PasswordHasher
+    hasher: BoundedHasher
     cache: CacheLike
     clock: Clock
     verify_cache_ttl_s: int
@@ -197,9 +196,7 @@ class ApiKeyService:
             user_id=owner.user.id,
             name=payload.name,
             prefix=minted.prefix,
-            hashed_secret=await asyncio.to_thread(
-                self.hasher.hash, minted.secret
-            ),
+            hashed_secret=await self.hasher.hash(minted.secret),
             expires_at=_expiry(now, payload.expires_in_days),
             issued_by=operation.operator.user.id,
         )
@@ -264,10 +261,7 @@ class ApiKeyService:
         digest = _digest(raw)
         if await self._recall(row.id) == digest:
             return
-        # argon2 在 C 层释放 GIL，放进线程即可让出 /verify 共用的事件循环
-        if not await asyncio.to_thread(
-            self.hasher.verify, secret, row.hashed_secret
-        ):
+        if not await self.hasher.verify(secret, row.hashed_secret):
             raise TokenInvalid("API 密钥无效或已失效")
         await self._remember(row.id, digest)
 

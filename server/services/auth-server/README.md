@@ -49,7 +49,8 @@ AUTH_TEST_SKIP_DB=true uv run pytest -q       # 显式跳过打真库的层
 - `tests/integration` —— 打**真实 Postgres**。每条用例包在一个回滚事务里。
   SQLite 上全绿的迁移与查询可以在生产直接失败，所以这一层不用 SQLite。
 
-> ⚠ `tests/conftest.py` 里的散列器必须与种子账号**同参**：参数不同会让每次
+> ⚠ 测试容器的散列器必须与种子账号**同参**，所以 `tests/conftest.py` 不替换它：
+> 参数不同会让每次
 > 登录都判 `needs_rehash` 为真，于是每条用例都去 UPDATE 同一行口令散列，
 > 跨用例抢锁并偶发 lock timeout。
 

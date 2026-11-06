@@ -1,6 +1,5 @@
 """会话与个人资料自服务：登录、刷新、登出、注册、改自己的资料与密码。"""
 
-import asyncio
 import uuid
 from dataclasses import dataclass
 
@@ -26,6 +25,7 @@ from auth_server.apps.auth.schemas import (
     UserDetailOut,
 )
 from auth_server.apps.auth.services.api_key_service import ApiKeyService
+from auth_server.apps.auth.services.bounded_hasher import BoundedHasher
 from auth_server.apps.auth.services.identity import (
     Identity,
     load_identity,
@@ -36,7 +36,6 @@ from auth_server.apps.auth.services.token_service import (
     TokenPair,
     TokenService,
 )
-from lib.auth import PasswordHasher
 from lib.errors import Conflict, InfraError
 from lib.logging import get_logger
 from lib.ratelimit import FixedWindowLimiter
@@ -57,7 +56,7 @@ class AuthService:
 
     tokens: TokenService
     api_keys: ApiKeyService
-    hasher: PasswordHasher
+    hasher: BoundedHasher
     login_limiter: FixedWindowLimiter
     signup_limiter: FixedWindowLimiter
     signup_enabled: bool
@@ -75,12 +74,9 @@ class AuthService:
         await self.login_limiter.hit(login_key)
         user = await user_crud.get_by_login(session, login)
         if user is None:
-            await asyncio.to_thread(self.hasher.verify, password, _TIMING_DECOY)
+            await self.hasher.verify(password, _TIMING_DECOY)
             raise InvalidCredentials("用户名或密码错误")
-        # argon2 在 C 层释放 GIL，放进线程即可让出 /verify 共用的事件循环
-        if not await asyncio.to_thread(
-            self.hasher.verify, password, user.hashed_password
-        ):
+        if not await self.hasher.verify(password, user.hashed_password):
             _logger.info("login_failed", "口令不符", user_id=str(user.id))
             raise InvalidCredentials("用户名或密码错误")
         if not user.is_active:
@@ -158,9 +154,7 @@ class AuthService:
         user = User(
             username=payload.username,
             email=payload.email,
-            hashed_password=await asyncio.to_thread(
-                self.hasher.hash, payload.password
-            ),
+            hashed_password=await self.hasher.hash(payload.password),
             full_name=payload.full_name,
             role_id=role.id,
             is_active=True,
@@ -200,13 +194,11 @@ class AuthService:
 
         Args: session, user, payload。
         """
-        if not await asyncio.to_thread(
-            self.hasher.verify, payload.current_password, user.hashed_password
+        if not await self.hasher.verify(
+            payload.current_password, user.hashed_password
         ):
             raise InvalidCredentials("当前密码不正确")
-        user.hashed_password = await asyncio.to_thread(
-            self.hasher.hash, payload.new_password
-        )
+        user.hashed_password = await self.hasher.hash(payload.new_password)
         await session.flush()
         _logger.info("password_changed", "", user_id=str(user.id))
 
@@ -223,9 +215,7 @@ class AuthService:
         user.last_login_at = self.clock()
         # 升过散列参数的旧口令在这一刻顺带重算，用户无感
         if self.hasher.needs_rehash(user.hashed_password):
-            user.hashed_password = await asyncio.to_thread(
-                self.hasher.hash, password
-            )
+            user.hashed_password = await self.hasher.hash(password)
         await session.flush()
         _logger.info("login_succeeded", "", user_id=str(user.id))
 

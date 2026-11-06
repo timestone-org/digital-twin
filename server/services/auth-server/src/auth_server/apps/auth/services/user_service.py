@@ -1,6 +1,5 @@
 """用户管理面。每个写路径**最先**跑授权不变式（guards），再动数据。"""
 
-import asyncio
 import uuid
 
 from sqlalchemy.exc import IntegrityError
@@ -19,6 +18,7 @@ from auth_server.apps.auth.schemas import (
     UserUpdateIn,
 )
 from auth_server.apps.auth.services import audit, guards
+from auth_server.apps.auth.services.bounded_hasher import BoundedHasher
 from auth_server.apps.auth.services.identity import (
     Identity,
     Operation,
@@ -29,7 +29,6 @@ from auth_server.apps.auth.services.presenters import (
     to_user_detail,
     to_user_list_item,
 )
-from lib.auth import PasswordHasher
 from lib.errors import Conflict, NotFound
 from lib.web import Page, PageParams
 
@@ -88,7 +87,7 @@ async def create_user(
     operation: Operation,
     *,
     payload: UserCreateIn,
-    hasher: PasswordHasher,
+    hasher: BoundedHasher,
 ) -> UserDetailOut:
     """建号。目标角色的权限集不得超过操作者。
 
@@ -106,7 +105,7 @@ async def create_user(
     user = User(
         username=payload.username,
         email=payload.email,
-        hashed_password=await asyncio.to_thread(hasher.hash, payload.password),
+        hashed_password=await hasher.hash(payload.password),
         full_name=payload.full_name,
         phone=payload.phone,
         is_active=payload.is_active,
@@ -228,7 +227,7 @@ async def reset_password(
     *,
     user_id: uuid.UUID,
     payload: ResetPasswordIn,
-    hasher: PasswordHasher,
+    hasher: BoundedHasher,
 ) -> None:
     """管理员重置他人密码。⚠ 不加「目标不高于自身」就等于可以接管全权账号。
 
@@ -236,9 +235,7 @@ async def reset_password(
     """
     target = await _require_identity(session, user_id)
     _assert_can_touch(operation, target, action="重置密码")
-    target.user.hashed_password = await asyncio.to_thread(
-        hasher.hash, payload.new_password
-    )
+    target.user.hashed_password = await hasher.hash(payload.new_password)
     await _flush(session)
     _audit(session, operation, audit.ACTION_PASSWORD_RESET, target.user)
 
