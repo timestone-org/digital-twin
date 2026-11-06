@@ -86,6 +86,17 @@ async def test_an_unanswered_list_skips_the_round_instead_of_declaring() -> (
     assert realtime.declared == []
 
 
+async def test_a_skipped_round_is_made_up_once_the_list_answers_again() -> None:
+    # 跳过是安全的前提：不动 hub 上已有的主题，缺的下一轮补齐
+    reconciler, realtime = build(
+        ids=[SOURCE_A], known=[topic_of(SOURCE_B)], is_reachable=False
+    )
+    await reconciler.reconcile()
+    realtime.is_reachable = True
+    assert await reconciler.reconcile() == (1, 1)
+    assert realtime.known_topics == [topic_of(SOURCE_A)]
+
+
 async def test_a_disabled_source_still_keeps_its_topic() -> None:
     # 停用的数据源照样要能打开配置页看它「为什么没有值」；清单不按启用态过滤，
     # 故对账拿到什么就登记什么

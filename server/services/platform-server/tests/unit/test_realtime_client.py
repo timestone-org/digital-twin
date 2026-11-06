@@ -203,6 +203,12 @@ async def test_a_malformed_grant_envelope_is_not_read_as_empty() -> None:
     assert await client.grants("platform-x") is None
 
 
+async def test_a_failing_grant_list_answers_none_not_empty() -> None:
+    calls: list[httpx.Request] = []
+    client = build_client(recorder(calls, status_code=500))
+    assert await client.grants("platform-x") is None
+
+
 async def test_revoking_a_grant_deletes_by_fingerprint() -> None:
     calls: list[httpx.Request] = []
     client = build_client(recorder(calls))

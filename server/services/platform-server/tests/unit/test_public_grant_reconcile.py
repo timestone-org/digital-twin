@@ -120,6 +120,17 @@ async def test_an_unanswered_list_skips_the_round_instead_of_declaring() -> (
     assert realtime.granted == []
 
 
+async def test_a_skipped_round_is_made_up_once_the_list_answers_again() -> None:
+    # 跳过是安全的前提：不动 hub 上已有的授权，缺的下一轮补齐
+    stale = ticket_fingerprint(OTHER_TOKEN)
+    realtime = FakeRealtime(known_grants=[stale], is_reachable=False)
+    reconciler = build_reconciler([(FIRST, TOKEN)], realtime)
+    await reconciler.reconcile()
+    realtime.is_reachable = True
+    assert await reconciler.reconcile() == (1, 1)
+    assert realtime.known_grants == [ticket_fingerprint(TOKEN)]
+
+
 async def test_two_published_screens_get_one_grant_each() -> None:
     realtime = FakeRealtime()
     declared, _revoked = await build_reconciler(
