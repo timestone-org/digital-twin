@@ -2,7 +2,7 @@
 
 import asyncio
 import uuid
-from collections.abc import AsyncIterator
+from collections.abc import AsyncGenerator
 from contextlib import asynccontextmanager
 from types import SimpleNamespace
 from typing import cast
@@ -11,7 +11,7 @@ from langchain_core.messages import AIMessage, HumanMessage
 from sqlalchemy.dialects import postgresql
 from sqlalchemy.exc import IntegrityError
 from sqlalchemy.ext.asyncio import AsyncSession
-from sqlalchemy.sql.base import Executable
+from sqlalchemy.sql import ClauseElement
 
 from knowledge_server.apps.chat.models import ChatMessage
 from knowledge_server.apps.chat.services.advance_persist import (
@@ -31,7 +31,7 @@ class _Database:
         self.row_lock = asyncio.Lock()
 
     @asynccontextmanager
-    async def session(self) -> AsyncIterator[AsyncSession]:
+    async def session(self) -> AsyncGenerator[AsyncSession]:
         opened = _Transaction(self)
         try:
             yield cast("AsyncSession", opened)
@@ -50,14 +50,15 @@ class _Transaction:
         self.pending: list[ChatMessage] = []
         self.holds_lock = False
 
-    async def execute(self, statement: Executable) -> SimpleNamespace:
+    async def execute(self, statement: ClauseElement) -> SimpleNamespace:
         text = str(statement.compile(dialect=postgresql.dialect()))
         if "FOR UPDATE" in text:
             await self.database.row_lock.acquire()
             self.holds_lock = True
         await asyncio.sleep(0)
         rows = list(self.database.committed)
-        return SimpleNamespace(scalars=lambda: SimpleNamespace(all=lambda: rows))
+        found = SimpleNamespace(all=lambda: rows)
+        return SimpleNamespace(scalars=lambda: found)
 
     def add(self, row: ChatMessage) -> None:
         self.pending.append(row)
