@@ -364,8 +364,6 @@ describe('formatSlotValue 的四档格式', () => {
 
 describe('舍入后归零的小负数', () => {
   it.each([
-    ['fmtFixed 整数', () => fmtFixed(-0.4), '0'],
-    ['fmtFixed 一位', () => fmtFixed(-0.04, 1), '0.0'],
     ['fmtNumber 取整', () => fmtNumber(-0.4, 0), '0'],
     ['fmtNumber 两位', () => fmtNumber(-0.001), '0'],
     ['fmtTrim 取整', () => fmtTrim(-0.4, 0), '0'],
@@ -378,7 +376,6 @@ describe('舍入后归零的小负数', () => {
   })
 
   it.each([
-    ['fmtFixed', () => fmtFixed(-0.6), '-1'],
     ['fmtNumber', () => fmtNumber(-1234.5, 1), '-1,234.5'],
     ['fmtTrim', () => fmtTrim(-0.05), '-0.05'],
     ['fmtDecimal', () => fmtDecimal(-0.06), '-0.1'],

@@ -56,9 +56,7 @@ function unsignZero(text: string): string {
  * @param digits 小数位
  */
 export function fmtFixed(raw: unknown, digits = 0): string {
-  return isPresent(raw)
-    ? unsignZero(raw.toFixed(clampDigits(digits, 0)))
-    : NO_DATA
+  return isPresent(raw) ? raw.toFixed(clampDigits(digits, 0)) : NO_DATA
 }
 
 /**
