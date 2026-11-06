@@ -2,8 +2,8 @@
 
 主题名与它要求的权限码是**业务口径**，不在这里——本模块只认「一个不透明的
 主题字符串」，与 hub 对主题的态度一致（ADR-0007）。
-⚠ 每一处失败都只记日志并回 False（取清单回 None）：hub 不可达降级为「没有实时通道」，绝不
-降级为「大屏打不开」（DASHBOARD_DESIGN §6）。
+⚠ 每一处失败都只记日志并回 False（取清单回 None）：hub 不可达降级为「没有
+实时通道」，绝不降级为「大屏打不开」（DASHBOARD_DESIGN §6）。
 """
 
 from typing import Any, Protocol
