@@ -20,7 +20,7 @@ from platform_server.apps.hvac.crud import (
     ac_startup_batch_crud,
     ac_startup_episode_crud,
 )
-from platform_server.apps.hvac.models import AcStartupBatch, AcStartupEpisode
+from platform_server.apps.hvac.models import AcStartupBatch
 from platform_server.apps.hvac.schemas import TimeWindow
 from platform_server.apps.hvac.services.ac_room_configuration import (
     load_configuration,
@@ -29,11 +29,9 @@ from platform_server.apps.hvac.services.ac_startup_extract import (
     ExtractionContext,
     batch_context,
     extract_window,
+    to_episode_row,
 )
-from platform_server.apps.hvac.services.ac_startup_rules import (
-    LOGIC_VERSION,
-    Episode,
-)
+from platform_server.apps.hvac.services.ac_startup_rules import LOGIC_VERSION
 from platform_server.apps.hvac.services.ac_startup_shards import daily_range
 
 _logger = get_logger("platform.hvac.ac_startup_daily")
@@ -202,7 +200,7 @@ async def _append(
         session,
         batch_id=batch.id,
         window=TimeWindow(start=window.write_start, end=window.write_end),
-        episodes=[_to_row(batch, episode) for episode in episodes],
+        episodes=[to_episode_row(batch, episode) for episode in episodes],
     )
     await _extend(session, batch, until=bounds.end)
     return DailyRun(
@@ -227,26 +225,6 @@ async def _extend(
         session, batch.id
     )
     await session.flush()
-
-
-def _to_row(batch: AcStartupBatch, episode: Episode) -> AcStartupEpisode:
-    """抽取结果 → 事件行。
-
-    Args: batch, episode。
-    """
-    return AcStartupEpisode(
-        batch_id=batch.id,
-        room_id=batch.room_id,
-        started_at=episode.started_at,
-        running_set=list(episode.running_set),
-        complied_at=episode.complied_at,
-        duration_minutes=episode.duration_minutes,
-        outcome=episode.outcome,
-        readings={
-            serial: dict(values) for serial, values in episode.readings.items()
-        },
-        idle_minutes=episode.idle_minutes,
-    )
 
 
 async def rooms_with_current_batch(session: AsyncSession) -> list[uuid.UUID]:

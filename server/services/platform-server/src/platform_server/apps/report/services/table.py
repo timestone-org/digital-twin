@@ -127,7 +127,7 @@ def _groups(
 ) -> dict[datetime, dict[str, list[object]]]:
     grouped: dict[datetime, dict[str, list[object]]] = {}
     for row in found.rows:
-        stamp = _bucket(row.ts.astimezone(ZoneInfo(timezone)), spec.bucket)
+        stamp = bucket_start(row.ts.astimezone(ZoneInfo(timezone)), spec.bucket)
         if stamp not in grouped:
             grouped[stamp] = {key: [] for key in spec.keys}
         for key in spec.keys:
@@ -135,7 +135,8 @@ def _groups(
     return grouped
 
 
-def _bucket(stamp: datetime, bucket: str) -> datetime:
+def bucket_start(stamp: datetime, bucket: str) -> datetime:
+    """本地时刻所在桶的起点。Args: stamp, bucket。"""
     if bucket == "none":
         return stamp
     stamp = stamp.replace(minute=0, second=0, microsecond=0)

@@ -121,7 +121,7 @@ async def run_shard(
     )
     await ac_startup_episode_crud.upsert_many(
         session,
-        [_to_row(batch, episode) for episode in episodes],
+        [to_episode_row(batch, episode) for episode in episodes],
     )
     await ac_startup_shard_crud.mark(
         session,
@@ -193,7 +193,7 @@ async def extract_window(
     return [item for item in found if window.owns(item.started_at)]
 
 
-def _to_row(batch: AcStartupBatch, episode: Episode) -> AcStartupEpisode:
+def to_episode_row(batch: AcStartupBatch, episode: Episode) -> AcStartupEpisode:
     """抽取结果 → 事件行。
 
     Args: batch, episode。
