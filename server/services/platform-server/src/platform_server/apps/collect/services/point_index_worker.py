@@ -34,9 +34,18 @@ class PointIndexWorker:
         self._stopped.set()
 
     async def drain(self, timeout_s: float) -> None:
-        """等待当前批次收尾。Args: timeout_s。"""
-        async with asyncio.timeout(timeout_s):
-            await self._idle.wait()
+        """等待当前批次收尾；超时就放弃等待。
+
+        ⚠ 超时不许抛：worker 的关停序列排在它后面，抛出去就不再让租约。
+        Args: timeout_s。
+        """
+        try:
+            async with asyncio.timeout(timeout_s):
+                await self._idle.wait()
+        except TimeoutError:
+            _logger.warning(
+                "point_index_drain_timeout", "点位索引批次未能在宽限期内收尾"
+            )
 
     async def run(self) -> None:
         """周期对账，不让一次失败终止后续索引。"""
