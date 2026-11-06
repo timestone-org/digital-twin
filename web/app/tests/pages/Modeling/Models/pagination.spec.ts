@@ -229,3 +229,37 @@ it('两个工具条都不占标签行，搜索仍有可访问名称', async () =
   expect(wrapper.find('input[aria-label="搜索模型版本"]').exists()).toBe(true)
   expect(wrapper.find('input[aria-label="搜索公式绑定"]').exists()).toBe(true)
 })
+
+it('用页签切换模型版本与公式绑定，同一时间只显示一张表', async () => {
+  const wrapper = open()
+  await flushPromises()
+  const blocks = wrapper.findAll<HTMLElement>('.dt-ml-models__block')
+  const tabs = wrapper.get('[aria-label="模型分区"]')
+  const shown = () =>
+    blocks.map((block) => block.element.style.display !== 'none')
+  expect(tabs.findAll('button').map((item) => item.text())).toEqual([
+    '模型版本',
+    '公式绑定',
+  ])
+  expect(shown()).toEqual([true, false])
+  await button(wrapper, '公式绑定').trigger('click')
+  expect(shown()).toEqual([false, true])
+  await button(wrapper, '模型版本').trigger('click')
+  expect(shown()).toEqual([true, false])
+})
+
+it('切换页签保留另一张表的搜索词，不重新取数', async () => {
+  const wrapper = open()
+  await flushPromises()
+  const input = wrapper.get<HTMLInputElement>(
+    'input[aria-label="搜索模型版本"]',
+  )
+  await input.setValue('冷机')
+  const list = vi.mocked(modeling.listModelingVersions)
+  const calls = list.mock.calls.length
+  await button(wrapper, '公式绑定').trigger('click')
+  await button(wrapper, '模型版本').trigger('click')
+  await flushPromises()
+  expect(input.element.value).toBe('冷机')
+  expect(list.mock.calls.length).toBe(calls)
+})

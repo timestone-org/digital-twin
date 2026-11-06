@@ -277,9 +277,13 @@ describe('模型库', () => {
     signIn([PERMISSION_CODES.modelingView])
     const wrapper = open()
     await flushPromises()
+    await wrapper
+      .findAll('[aria-label="模型分区"] button')
+      .find((item) => item.text() === title)
+      ?.trigger('click')
     const block = wrapper
-      .findAll('.dt-ml-models__block')
-      .find((item) => item.find('h2').text() === title)
+      .findAll<HTMLElement>('.dt-ml-models__block')
+      .find((item) => item.element.style.display !== 'none')
     const next = block
       ?.findAll('button')
       .find((item) => item.text() === '下一页')
