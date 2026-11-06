@@ -5,16 +5,19 @@
  * ⚠ 宿主挂在这里而不是 AppShell：登录页与 403/404 不套壳，但它们同样要能弹消息。
  * 换肤注入同理挂在这里：它写的是文档根，不套壳的页面也要跟着变。
  * DtTipHost 接管全局的原生 title 提示，同样得盖住不套壳的页面。
+ * 实时通道绑登录态也在这里：登出的三条路径都要覆盖，store 又不能反向依赖通道。
  */
 import { DtConfirmHost, DtTipHost, DtToastHost } from '@dt/ui'
 
 import { useGlobalTheme } from '@/composables/useGlobalTheme'
+import { useRealtimeSessionBinding } from '@/composables/useRealtimeChannel'
 import EmbedError from '@/features/embed/EmbedError.vue'
 import AiMcpWriteConfirmHost from '@/components/ai/AiMcpWriteConfirmHost.vue'
 import { useEmbedContext } from '@/features/embed/context'
 import WorkspaceView from '@/features/workspace/WorkspaceView.vue'
 
 useGlobalTheme()
+useRealtimeSessionBinding()
 const embed = useEmbedContext()
 </script>
 

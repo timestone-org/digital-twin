@@ -1,13 +1,19 @@
 /** @fileoverview 应用根在嵌入授权失败时必须用明确错误接管路由页面。 */
-import { afterEach, beforeEach, describe, expect, it } from 'vitest'
+import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 import { mount } from '@vue/test-utils'
+import { createPinia, setActivePinia } from 'pinia'
 
 import App from '@/App.vue'
+import { useRealtimeSessionBinding } from '@/composables/useRealtimeChannel'
 import {
   activateEmbed,
   resetEmbedContext,
   showEmbedError,
 } from '@/features/embed/context'
+
+vi.mock('@/composables/useRealtimeChannel', () => ({
+  useRealtimeSessionBinding: vi.fn(),
+}))
 
 const global = {
   stubs: {
@@ -22,6 +28,8 @@ const global = {
 beforeEach(() => {
   localStorage.clear()
   resetEmbedContext()
+  setActivePinia(createPinia())
+  vi.mocked(useRealtimeSessionBinding).mockClear()
 })
 
 afterEach(() => {
@@ -34,6 +42,12 @@ describe('App', () => {
     expect(
       mount(App, { global }).find('[data-test="route-page"]').exists(),
     ).toBe(true)
+  })
+
+  it('应用根把实时通道绑到登录态上', () => {
+    mount(App, { global })
+
+    expect(useRealtimeSessionBinding).toHaveBeenCalledOnce()
   })
 
   it('嵌入失败时隐藏路由页面并展示原因', () => {

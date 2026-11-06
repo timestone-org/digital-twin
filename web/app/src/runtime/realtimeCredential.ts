@@ -33,6 +33,11 @@ export function setPublicTicket(next: string | null): boolean {
   return true
 }
 
+/** 现在这条连接是不是走公开令牌。 */
+export function hasPublicTicket(): boolean {
+  return ticket !== null
+}
+
 /**
  * 当前该拿什么去握手；一样都没有时给 null（此时**不该**建连接）。
  * @param accessToken 登录态的访问令牌，没登录给 null

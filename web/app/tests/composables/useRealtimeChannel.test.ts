@@ -11,11 +11,13 @@
  */
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 import { createPinia, setActivePinia } from 'pinia'
+import { effectScope, nextTick } from 'vue'
 
 import {
   closeRealtimeChannel,
   usePublicRealtimeChannel,
   useRealtimeChannel,
+  useRealtimeSessionBinding,
 } from '@/composables/useRealtimeChannel'
 import { CLOSE_TOKEN_EXPIRED } from '@/runtime/realtimeConnection'
 import {
@@ -356,6 +358,75 @@ describe('实时通道', () => {
     socket.emit('close', { code: 1006 })
     vi.advanceTimersByTime(60_000)
     expect(FakeSocket.instances).toHaveLength(1)
+  })
+})
+
+describe('跟随登录态', () => {
+  function bind(): () => void {
+    const scope = effectScope()
+    scope.run(() => useRealtimeSessionBinding())
+    return () => scope.stop()
+  }
+
+  /** 别的标签登出：存储被清，回到前台时跟上。 */
+  function logoutElsewhere(): void {
+    localStorage.removeItem(STORAGE_KEYS.accessToken)
+    document.dispatchEvent(new Event('visibilitychange'))
+  }
+
+  it.each([
+    ['主动登出', () => void useAuthStore().logout()],
+    ['401 清会话', () => useAuthStore().clear()],
+    ['其他标签登出', logoutElsewhere],
+  ])('%s 后关掉连接，不留给下一个账号', async (_name, endSession) => {
+    const unbind = bind()
+    useRealtimeChannel()
+    const socket = latest()
+
+    endSession()
+    await nextTick()
+
+    expect(socket.closed).toBe(true)
+    unbind()
+  })
+
+  it('换账号后用新账号的令牌重新握手', async () => {
+    const unbind = bind()
+    useRealtimeChannel()
+    const auth = useAuthStore()
+
+    auth.clear()
+    await nextTick()
+    auth.accessToken = 'tok-2'
+    useRealtimeChannel()
+
+    expect(FakeSocket.instances).toHaveLength(2)
+    expect(latest().protocols).toEqual([AUTH_SUBPROTOCOL, 'tok-2'])
+    unbind()
+  })
+
+  it('令牌轮换不断连接', async () => {
+    const unbind = bind()
+    useRealtimeChannel()
+    const socket = latest()
+
+    useAuthStore().accessToken = 'tok-2'
+    await nextTick()
+
+    expect(socket.closed).toBe(false)
+    unbind()
+  })
+
+  it('公开连接不跟登录态走', async () => {
+    const unbind = bind()
+    usePublicRealtimeChannel('pub-1')
+    const socket = latest()
+
+    useAuthStore().clear()
+    await nextTick()
+
+    expect(socket.closed).toBe(false)
+    unbind()
   })
 })
 
