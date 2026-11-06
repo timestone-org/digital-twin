@@ -4,10 +4,30 @@
 不抛。抛的话，该副本上所有连接会一起停止收数据，而起因只是别人发错了一条。
 """
 
-from lib.cache.pubsub import TRACEPARENT_KEY, _decode, _traceparent
+import json
+
+from lib.cache.pubsub import TRACEPARENT_KEY, PubSub, _decode, _traceparent
 from lib.logging.context import bind_log_context, reset_log_context
 
 VALID = {"channel": "t.demo", "data": '{"seq": 3}'}
+EXPLICIT_TRACEPARENT = f"00-{'c' * 32}-{'d' * 16}-01"
+
+
+class _RecordingRedis:
+    """记下发布内容的假 Redis。"""
+
+    def __init__(self) -> None:
+        self.published: list[str] = []
+
+    async def publish(self, _channel: str, message: str) -> int:
+        self.published.append(message)
+        return 1
+
+
+def _pubsub(client: _RecordingRedis) -> PubSub:
+    pubsub = PubSub(url="redis://unused:6379/0")
+    pubsub._client = client  # type: ignore[assignment]  # 测试注入
+    return pubsub
 
 
 def test_decodes_a_well_formed_message() -> None:
@@ -52,3 +72,25 @@ def test_traceparent_carries_the_current_trace() -> None:
 def test_the_envelope_key_is_the_contract_name() -> None:
     # 与 api-contract §10 的消息契约同名，改名即是破坏性变更
     assert TRACEPARENT_KEY == "traceparent"
+
+
+async def test_publish_keeps_the_callers_traceparent() -> None:
+    # ⚠ 推送方的 span 经 HTTP 头跨服务而来，本进程的上下文顶替它就断了链
+    client = _RecordingRedis()
+    payload = {"seq": 1, TRACEPARENT_KEY: EXPLICIT_TRACEPARENT}
+    await _pubsub(client).publish("t.demo", payload)
+    assert json.loads(client.published[0])[TRACEPARENT_KEY] == (
+        EXPLICIT_TRACEPARENT
+    )
+
+
+async def test_publish_fills_in_the_traceparent_when_it_is_absent() -> None:
+    client = _RecordingRedis()
+    token = bind_log_context(trace_id="e" * 32, span_id="f" * 16)
+    try:
+        await _pubsub(client).publish("t.demo", {"seq": 1})
+    finally:
+        reset_log_context(token)
+    assert json.loads(client.published[0])[TRACEPARENT_KEY] == (
+        f"00-{'e' * 32}-{'f' * 16}-01"
+    )
