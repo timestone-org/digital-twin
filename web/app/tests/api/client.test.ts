@@ -260,7 +260,8 @@ describe('信封校验', () => {
 
     expect(caught).toBeInstanceOf(TransportError)
     expect((caught as TransportError).message).toBe('请求超时，请稍后重试')
-    expect((caught as TransportError).status).toBe(0)
+    // ⚠ 响应头已经到了：报 0 会被台账取数当成断网而保留陈旧值
+    expect((caught as TransportError).status).toBe(200)
   })
 
   it('不是信封形状的 JSON 一律判格式异常', async () => {
@@ -374,6 +375,7 @@ describe('取字节', () => {
 
     expect(caught).toBeInstanceOf(TransportError)
     expect((caught as TransportError).message).toBe('请求超时，请稍后重试')
+    expect((caught as TransportError).status).toBe(200)
   })
 
   it('读字节时被调用方中止，原样抛出', async () => {

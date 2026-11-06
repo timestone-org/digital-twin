@@ -114,8 +114,12 @@ function isTimeout(error: unknown): boolean {
   return error instanceof DOMException && error.name === 'TimeoutError'
 }
 
-function timeoutError(): TransportError {
-  return new TransportError(0, '请求超时，请稍后重试')
+/**
+ * 超时的传输层错误。
+ * @param status 响应头已到时的 HTTP 状态码，还没到时给 0
+ */
+function timeoutError(status: number): TransportError {
+  return new TransportError(status, '请求超时，请稍后重试')
 }
 
 /**
@@ -142,7 +146,7 @@ async function readEnvelope<T>(
   try {
     body = await response.json()
   } catch (error) {
-    if (isTimeout(error)) throw timeoutError()
+    if (isTimeout(error)) throw timeoutError(response.status)
     throw new TransportError(response.status, '服务端响应格式异常')
   }
   if (!isEnvelope(body)) {
@@ -179,7 +183,7 @@ async function send(
       signal,
     })
   } catch (error) {
-    if (isTimeout(error)) throw timeoutError()
+    if (isTimeout(error)) throw timeoutError(0)
     throw new TransportError(0, '无法连接服务器，请检查网络')
   }
 }
@@ -309,7 +313,7 @@ async function readBlob(response: Response): Promise<Blob> {
   try {
     return await response.blob()
   } catch (error) {
-    if (isTimeout(error)) throw timeoutError()
+    if (isTimeout(error)) throw timeoutError(response.status)
     throw error
   }
 }
