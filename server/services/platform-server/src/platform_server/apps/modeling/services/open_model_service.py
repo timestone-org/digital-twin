@@ -237,6 +237,7 @@ async def predict(
         predictions = compiled.predict_many(rows)
     except OperatorError as error:
         raise PredictRequestInvalid(str(error)) from error
+    _require_finite(predictions)
     return OpenModelPredictOut(
         model=OpenModelInfoOut(
             code=resolved.deployment.code, version=resolved.version.version
@@ -244,6 +245,18 @@ async def predict(
         predictions=predictions,
         warnings=_warnings_of(payload.rows, resolved.version),
     )
+
+
+def _require_finite(predictions: list[float | None]) -> None:
+    """有限输入也可能算溢出；放行的话响应里是 null，记录却是成功。
+
+    Args: predictions。
+    """
+    for index, value in enumerate(predictions):
+        if value is not None and not math.isfinite(value):
+            raise PredictRequestInvalid(
+                f"第 {index + 1} 行算出的结果超出了数值范围"
+            )
 
 
 async def _compiled(
