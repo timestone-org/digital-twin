@@ -33,6 +33,8 @@ NO_ABILITIES = DriverCapabilities(
     is_browse_supported=False,
     is_write_supported=False,
 )
+# 足够让排队的任务走到下一个等待点；纯调度，不依赖时间
+PLENTY_OF_TURNS = 20
 
 
 async def _until(is_done: Any, *, timeout_s: float = 3.0) -> None:
@@ -245,6 +247,149 @@ async def test_configuration_errors_wait_the_full_backoff(
     session = _session(build_source(), driver, reporter)
     delay_s = await session._on_failure(ValueError("寻址串写错了"), 1)
     assert delay_s == OPTIONS.max_backoff_s
+
+
+async def _let_others_run() -> None:
+    """让已就绪的任务各走到下一个等待点。"""
+    for _ in range(PLENTY_OF_TURNS):
+        await asyncio.sleep(0)
+
+
+async def _opening_held_in_subscribe(
+    session: SourceSession, driver: Any
+) -> asyncio.Task[None]:
+    """起 `_open` 并等它卡在订阅里。Args: session, driver。"""
+    driver.subscribe_gate = asyncio.Event()
+    opening = asyncio.create_task(session._open())
+    await asyncio.wait_for(driver.has_entered_subscribe.wait(), timeout=2)
+    return opening
+
+
+async def test_a_plan_change_during_the_first_subscribe_adds_only_the_new_point(
+    driver: Any, reporter: Any, build_source: Any, build_point: Any
+) -> None:
+    session = _session(build_source(), driver, reporter)
+    opening = await _opening_held_in_subscribe(session, driver)
+    applying = asyncio.create_task(
+        session.apply(
+            build_source(
+                points=(build_point("outlet_temp"), build_point("flow"))
+            )
+        )
+    )
+    await _let_others_run()
+    driver.subscribe_gate.set()
+    await asyncio.gather(opening, applying)
+    assert driver.subscribed == ["outlet_temp", "flow"]
+
+
+async def test_a_point_removed_during_the_first_subscribe_is_unsubscribed(
+    driver: Any, reporter: Any, build_source: Any, build_point: Any
+) -> None:
+    session = _session(
+        build_source(points=(build_point("a"), build_point("b"))),
+        driver,
+        reporter,
+    )
+    opening = await _opening_held_in_subscribe(session, driver)
+    applying = asyncio.create_task(
+        session.apply(build_source(points=(build_point("a"),)))
+    )
+    await _let_others_run()
+    driver.subscribe_gate.set()
+    await asyncio.gather(opening, applying)
+    assert driver.unsubscribed == ["b"]
+
+
+async def test_a_plan_change_queued_behind_a_revoke_subscribes_nothing(
+    driver: Any, reporter: Any, build_source: Any, build_point: Any
+) -> None:
+    session = _session(build_source(), driver, reporter)
+    opening = await _opening_held_in_subscribe(session, driver)
+    applying = asyncio.create_task(
+        session.apply(build_source(points=(build_point("flow"),)))
+    )
+    await _let_others_run()
+    session.revoke()
+    driver.subscribe_gate.set()
+    await asyncio.gather(opening, applying)
+    assert driver.subscribed == ["outlet_temp"]
+
+
+async def _closing_during_a_held_subscribe(
+    session: SourceSession, driver: Any, source: Any
+) -> tuple[asyncio.Task[None], asyncio.Task[None]]:
+    """让 apply 卡在订阅里时开始拆连接。Args: session, driver, source。"""
+    await session._open()
+    driver.has_entered_subscribe.clear()
+    driver.subscribe_gate = asyncio.Event()
+    applying = asyncio.create_task(session.apply(source))
+    await asyncio.wait_for(driver.has_entered_subscribe.wait(), timeout=2)
+    closing = asyncio.create_task(session._close())
+    await _let_others_run()
+    return applying, closing
+
+
+async def test_a_subscribe_answered_during_close_reattaches_on_reconnect(
+    driver: Any, reporter: Any, build_source: Any, build_point: Any
+) -> None:
+    session = _session(build_source(), driver, reporter)
+    applying, closing = await _closing_during_a_held_subscribe(
+        session,
+        driver,
+        build_source(points=(build_point("outlet_temp"), build_point("flow"))),
+    )
+    driver.subscribe_gate.set()
+    await asyncio.gather(applying, closing)
+    driver.subscribed.clear()
+    await session._open()
+    assert driver.subscribed == ["outlet_temp", "flow"]
+
+
+async def test_closing_drops_the_connection_without_waiting_for_a_subscribe(
+    driver: Any, reporter: Any, build_source: Any, build_point: Any
+) -> None:
+    session = _session(build_source(), driver, reporter)
+    applying, closing = await _closing_during_a_held_subscribe(
+        session,
+        driver,
+        build_source(points=(build_point("outlet_temp"), build_point("flow"))),
+    )
+    assert driver.is_connected is False
+    driver.subscribe_gate.set()
+    await asyncio.gather(applying, closing)
+
+
+async def test_a_subscribe_held_during_close_keeps_the_close_waiting(
+    driver: Any, reporter: Any, build_source: Any, build_point: Any
+) -> None:
+    session = _session(build_source(), driver, reporter)
+    applying, closing = await _closing_during_a_held_subscribe(
+        session,
+        driver,
+        build_source(points=(build_point("outlet_temp"), build_point("flow"))),
+    )
+    assert closing.done() is False
+    driver.subscribe_gate.set()
+    await asyncio.gather(applying, closing)
+
+
+async def test_revoking_cuts_the_subscription_off_from_the_sink(
+    driver: Any, reporter: Any, build_source: Any
+) -> None:
+    seen: list[object] = []
+    session = SourceSession(
+        source=build_source(),
+        driver=driver,
+        sink=lambda _code, value, _ts_ms, _quality: seen.append(value),
+        options=OPTIONS,
+        reporter=reporter,
+    )
+    await session._open()
+    driver.sink("outlet_temp", 1.0, 1, "good")
+    session.revoke()
+    driver.sink("outlet_temp", 2.0, 2, "good")
+    assert seen == [1.0]
 
 
 async def test_stopping_closes_the_connection(

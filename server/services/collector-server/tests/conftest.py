@@ -339,6 +339,9 @@ class FakeDriver:
         self.classified: list[BaseException] = []
         # 用事件而不是轮询等：慢机器上「睡一小会儿再看」必然偶发失败
         self.has_polled = asyncio.Event()
+        self.has_entered_subscribe = asyncio.Event()
+        # 设了就把 subscribe 卡在这里，模拟大数据源首次订阅的几秒
+        self.subscribe_gate: asyncio.Event | None = None
 
     def load_points(self, points: list[PointSpec]) -> int:
         self.loaded = [point.point_code for point in points]
@@ -365,6 +368,9 @@ class FakeDriver:
         self.sink = on_value
         codes = [point.point_code for point in points]
         self.subscribed.extend(codes)
+        self.has_entered_subscribe.set()
+        if self.subscribe_gate is not None:
+            await self.subscribe_gate.wait()
         refused = {item.point_code for item in self.rejected}
         return SubscribeResult(
             accepted=tuple(code for code in codes if code not in refused),
