@@ -142,6 +142,7 @@ async def test_shutdown_stops_intake_then_drains_then_releases() -> None:
         "stop",
         "drain",
         "stream",
+        "cache",
         # ⚠ 四把租约都要在关连接池之前让出来：让位要连得上 Redis，排在后面就
         # 只能等它自然过期，接任的副本白等一整个 TTL
         "lease",
@@ -149,6 +150,7 @@ async def test_shutdown_stops_intake_then_drains_then_releases() -> None:
         "lease",
         "lease",
         "ac_source",
+        "history_database",
         "database",
     ]
     assert consumer.drained == [1.5]
@@ -173,6 +175,7 @@ async def test_every_consumer_stops_before_any_resource_closes() -> None:
     assert sorted(ledger[2:4]) == ["drain", "drain"]
     assert ledger[4:] == [
         "stream",
+        "cache",
         # ⚠ 四把租约都要在关连接池之前让出来：让位要连得上 Redis，排在后面就
         # 只能等它自然过期，接任的副本白等一整个 TTL
         "lease",
@@ -180,6 +183,7 @@ async def test_every_consumer_stops_before_any_resource_closes() -> None:
         "lease",
         "lease",
         "ac_source",
+        "history_database",
         "database",
     ]
 
@@ -201,6 +205,7 @@ async def test_resources_are_released_even_when_the_wait_blows_up() -> None:
         "stop",
         "drain",
         "stream",
+        "cache",
         # ⚠ 四把租约都要在关连接池之前让出来：让位要连得上 Redis，排在后面就
         # 只能等它自然过期，接任的副本白等一整个 TTL
         "lease",
@@ -208,6 +213,7 @@ async def test_resources_are_released_even_when_the_wait_blows_up() -> None:
         "lease",
         "lease",
         "ac_source",
+        "history_database",
         "database",
     ]
 
@@ -277,6 +283,7 @@ async def test_serving_wires_the_container_and_shuts_it_down(
     assert ledger[4:8] == ["lease_released"] * 4
     assert ledger[8:] == [
         "stream",
+        "cache",
         # ⚠ 四把租约都要在关连接池之前让出来：让位要连得上 Redis，排在后面就
         # 只能等它自然过期，接任的副本白等一整个 TTL
         "lease",
@@ -284,6 +291,7 @@ async def test_serving_wires_the_container_and_shuts_it_down(
         "lease",
         "lease",
         "ac_source",
+        "history_database",
         "database",
     ]
 
