@@ -193,6 +193,13 @@ function apply(action: SelectAction): void {
   }
 }
 
+/** 下拉这一层消费掉的 Esc 不往外冒，否则外层弹窗跟着一起关。 */
+function stopsAtSelect(action: SelectAction): boolean {
+  return (
+    action.kind === 'clear-query' || (action.kind === 'close' && action.stop)
+  )
+}
+
 function onKeydown(event: KeyboardEvent): void {
   if (props.disabled === true) return
   const action = resolveKey(event.key, {
@@ -202,7 +209,7 @@ function onKeydown(event: KeyboardEvent): void {
   })
   if (action === null) return
   event.preventDefault()
-  if (action.kind === 'close' && action.stop) event.stopPropagation()
+  if (stopsAtSelect(action)) event.stopPropagation()
   apply(action)
 }
 
