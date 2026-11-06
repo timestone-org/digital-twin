@@ -19,7 +19,6 @@ from collectwire import (
     FIELD_VALUE,
     CollectPlan,
 )
-from lib.errors import AppError
 from lib.logging import get_logger
 from timeseries import Quality
 
@@ -233,7 +232,7 @@ class SnapshotSink:
         self._buffers.pop(source_id, None)
         try:
             await self._store.drop(source_id)
-        except AppError as error:
+        except Exception as error:
             _logger.warning(
                 "snapshot_drop_failed",
                 "停采数据源的快照没能删掉，改由 TTL 到期回收",

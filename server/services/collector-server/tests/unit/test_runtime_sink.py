@@ -62,6 +62,7 @@ class RecordingStore:
         failures: int = 0,
         drop_failures: int = 0,
         touch_failures: int = 0,
+        drop_error: Exception | None = None,
     ) -> None:
         self.writes: list[tuple[UUID, dict[str, str]]] = []
         # 每一拍写出去的是哪一批。批数 = 这一拍打了几次 Redis
@@ -71,6 +72,9 @@ class RecordingStore:
         self.failures = failures
         self.drop_failures = drop_failures
         self.touch_failures = touch_failures
+        self.drop_error = drop_error or DependencyUnavailable(
+            "缓存服务暂时不可用"
+        )
 
     async def write_many(
         self, batch: Mapping[UUID, Mapping[str, str]], *, ttl_s: int
@@ -94,7 +98,7 @@ class RecordingStore:
     async def drop(self, source_id: UUID) -> None:
         if self.drop_failures > 0:
             self.drop_failures -= 1
-            raise DependencyUnavailable("缓存服务暂时不可用")
+            raise self.drop_error
         self.dropped.append(source_id)
 
     async def ping(self) -> bool:
@@ -340,10 +344,15 @@ async def test_a_drop_never_lands_while_a_write_is_in_flight(
     assert store.order == ["write", "drop"]
 
 
+@pytest.mark.parametrize(
+    "drop_error",
+    [DependencyUnavailable("缓存服务暂时不可用"), OSError("连接被重置")],
+    ids=["app-error", "not-an-app-error"],
+)
 async def test_a_snapshot_that_cannot_be_dropped_never_kills_the_flush(
-    build_plan: Any, build_plan_view: Any
+    drop_error: Exception, build_plan: Any, build_plan_view: Any
 ) -> None:
-    store = RecordingStore(drop_failures=1)
+    store = RecordingStore(drop_failures=1, drop_error=drop_error)
     sink = SnapshotSink(
         store=store,
         interval_ms=50,
