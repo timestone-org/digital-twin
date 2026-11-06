@@ -6,6 +6,7 @@
 """
 
 import asyncio
+import os
 import sys
 import uuid
 from collections.abc import AsyncIterator, Callable
@@ -21,7 +22,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from lib.db import Database
 from lib.stream import StreamEntry, StreamGroup
 from lib.testing import FakeObjectStore
-from platform_server.apps.assets import keys
+from platform_server.apps.assets import keys, variants
 from platform_server.apps.assets.services import compress_worker
 from platform_server.apps.assets.services.compress_queue import new_message
 
@@ -372,6 +373,51 @@ async def test_a_hung_subprocess_is_killed_and_reaped(
         )
 
 
+def pid_in(path: Path) -> int | None:
+    text = path.read_text() if path.exists() else ""
+    return int(text) if text else None
+
+
+async def written_pid(path: Path) -> int:
+    """等子进程把自己的 pid 写出来。"""
+    for _ in range(1000):
+        await asyncio.sleep(0.01)
+        found = await asyncio.to_thread(pid_in, path)
+        if found is not None:
+            return found
+    raise AssertionError("子进程没有起来")
+
+
+async def test_a_cancelled_compression_takes_its_subprocess_down(
+    tmp_path: Path,
+) -> None:
+    pid_file = tmp_path / "pid"
+    script = script_that(
+        tmp_path,
+        "import os, pathlib, sys, time\n"
+        f"pathlib.Path({str(pid_file)!r}).write_text(str(os.getpid()))\n"
+        "time.sleep(30)\n",
+    )
+    running = asyncio.create_task(
+        compress_worker.run_compressor(
+            script=script,
+            node=sys.executable,
+            source=tmp_path / "in.glb",
+            output=tmp_path / "out.glb",
+            ratio=1.0,
+        )
+    )
+    pid = await written_pid(pid_file)
+
+    running.cancel()
+    with pytest.raises(asyncio.CancelledError):
+        await running
+
+    # ⚠ 留着不杀的话，那个孤儿会跟接手的 worker 抢同一批 CPU 与内存
+    with pytest.raises(ProcessLookupError):
+        os.kill(pid, 0)
+
+
 # ---- 消费循环 ----
 
 
@@ -390,6 +436,8 @@ class FakeStream:
     acked: list[str] = field(default_factory=list[str])
     groups: list[str] = field(default_factory=list[str])
     on_empty: Callable[[], None] | None = None
+    stale: list[StreamEntry] = field(default_factory=list[StreamEntry])
+    claim_idles: list[int] = field(default_factory=list[int])
 
     async def publish(self, stream: str, fields: dict[str, str]) -> str:
         del fields
@@ -411,8 +459,10 @@ class FakeStream:
     async def claim_stale(
         self, target: StreamGroup, *, min_idle_ms: int, count: int
     ) -> list[StreamEntry]:
-        del target, min_idle_ms, count
-        return []
+        del target, count
+        self.claim_idles.append(min_idle_ms)
+        claimed, self.stale = self.stale, []
+        return claimed
 
     async def ack(self, target: StreamGroup, entry_id: str) -> None:
         del target
@@ -491,6 +541,53 @@ async def test_a_failing_job_is_still_acked() -> None:
 
     # ⚠ 失败已经写进那一行了，重投也压不动——不确认就是让它永远转下去
     assert stream.acked == ["2-2"]
+
+
+async def test_an_entry_left_by_a_dead_consumer_is_picked_up() -> None:
+    stream = FakeStream(stale=[entry("3-3")])
+    spy = SpyCompressor()
+
+    await run_once(stream, spy)
+
+    # ⚠ 进程被杀时消息留在待确认表里，不认领的话那几档永远停在 pending
+    assert spy.seen == [ASSET_ID]
+    assert stream.acked == ["3-3"]
+
+
+async def test_a_running_job_is_never_claimed_away() -> None:
+    stream = FakeStream()
+
+    await run_once(stream, SpyCompressor())
+
+    # ⚠ 认领门槛短于跑满全部档的时长的话，别的副本会把还在跑的任务抢走重压
+    longest_job_ms = (
+        len(variants.derived()) * compress_worker.COMPRESS_TIMEOUT_S * 1000
+    )
+    assert min(stream.claim_idles) > longest_job_ms
+
+
+async def test_a_cancelled_job_stays_unacked() -> None:
+    started = asyncio.Event()
+
+    @dataclass
+    class HungCompressor:
+        async def compress(self, asset_id: uuid.UUID) -> None:
+            del asset_id
+            started.set()
+            await asyncio.Event().wait()
+
+    stream = FakeStream(batches=[[entry("4-4")]])
+    loop = consumer(stream, cast(Any, HungCompressor()))
+    running = asyncio.create_task(loop.run())
+    await asyncio.wait_for(started.wait(), timeout=5)
+
+    running.cancel()
+    with pytest.raises(asyncio.CancelledError):
+        await running
+
+    # ⚠ 宽限期到点被取消的任务没跑完：确认掉的话就再也没有人接手
+    assert stream.acked == []
+    await asyncio.wait_for(loop.drain(5.0), timeout=2)
 
 
 async def test_the_consumer_registers_its_group() -> None:

@@ -15,6 +15,7 @@
 import asyncio
 import tempfile
 import uuid
+from contextlib import suppress
 from dataclasses import dataclass
 from pathlib import Path
 
@@ -37,6 +38,9 @@ _logger = get_logger("platform.assets.compress_worker")
 COMPRESS_TIMEOUT_S = 30 * 60
 #: 取消之后再等多久才 kill
 KILL_GRACE_S = 5.0
+#: 待确认多久才算没人管了。⚠ 要长于一条任务跑满全部档的时长，否则别的副本会把
+#: 还在跑的任务抢走重压
+CLAIM_IDLE_MS = 2 * 60 * 60 * 1000
 
 
 @dataclass(frozen=True)
@@ -50,6 +54,7 @@ class CompressOptions:
     node: str = "node"
     block_ms: int = 5_000
     batch: int = 1
+    claim_idle_ms: int = CLAIM_IDLE_MS
 
 
 async def run_compressor(
@@ -81,14 +86,29 @@ async def run_compressor(
         async with asyncio.timeout(COMPRESS_TIMEOUT_S):
             _, stderr = await process.communicate()
     except TimeoutError:
-        process.kill()
-        # ⚠ kill 之后仍要 wait：不回收的话子进程留成僵尸，而 worker 跑几天
-        # 之后进程表就满了
-        await asyncio.wait_for(process.wait(), KILL_GRACE_S)
+        await _reap(process)
         raise RuntimeError("压缩超时，模型可能过大") from None
+    except asyncio.CancelledError:
+        # ⚠ 收不回来也要接着抛取消：这里冒出的 TimeoutError 是 OSError 的子类，
+        # 上层会把一次关停当成压缩失败写进那一行
+        with suppress(TimeoutError):
+            await _reap(process)
+        raise
     if process.returncode != 0:
         reason = stderr.decode("utf-8", "replace").strip()
         raise RuntimeError(reason or "压缩失败")
+
+
+async def _reap(process: asyncio.subprocess.Process) -> None:
+    """杀掉子进程并回收。
+
+    ⚠ kill 之后仍要 wait：不回收的话子进程留成僵尸，而 worker 跑几天之后进程表
+    就满了。
+    Args: process。
+    """
+    with suppress(ProcessLookupError):
+        process.kill()
+    await asyncio.wait_for(process.wait(), KILL_GRACE_S)
 
 
 # ⚠ 文件读写挪进线程：一个 200MB 的模型在事件循环里读一次，这条 worker 上
@@ -281,11 +301,7 @@ class CompressConsumer:
         _logger.info("asset_compress_worker_started", "模型压缩消费者已启动")
         while not self._is_stopping:
             try:
-                entries = await self._stream.read_group(
-                    self._options.target,
-                    count=self._options.batch,
-                    block_ms=self._options.block_ms,
-                )
+                entries = await self._fetch()
             except Exception as error:
                 _logger.error(
                     "asset_compress_read_failed", "取压缩任务失败", error=error
@@ -295,9 +311,39 @@ class CompressConsumer:
             for entry in entries:
                 await self._handle(entry)
 
+    async def _fetch(self) -> list[StreamEntry]:
+        """先认领滞留的，再取新的。
+
+        ⚠ 认领这一步不能省：宽限期到点被取消、或进程被杀的那一条只留在待确认
+        表里，而 `read_group` 只取新消息，那几档会永远停在 `pending`。
+        """
+        options = self._options
+        claimed = await self._stream.claim_stale(
+            options.target,
+            min_idle_ms=options.claim_idle_ms,
+            count=options.batch,
+        )
+        if claimed:
+            return claimed
+        return await self._stream.read_group(
+            options.target, count=options.batch, block_ms=options.block_ms
+        )
+
     async def _handle(self, entry: StreamEntry) -> None:
-        """跑一条并确认。⚠ 无论成败都确认：失败已经写进那一行，重投也压不动。"""
+        """跑一条并确认。
+
+        ⚠ 成败都确认：失败已经写进那一行，重投也压不动。被取消不算跑完，不确认，
+        留给下一次认领；消费者按 `status` 幂等，已压好的档不会重压。
+        """
         self._idle.clear()
+        try:
+            await self._run_job(entry)
+            await self._ack(entry)
+        finally:
+            self._idle.set()
+
+    async def _run_job(self, entry: StreamEntry) -> None:
+        """解码并压缩一条消息。普通异常记录后吞掉，取消照常穿透。"""
         try:
             message = decode(entry.fields)
             if message is None:
@@ -315,9 +361,6 @@ class CompressConsumer:
                 entry_id=entry.entry_id,
                 error=error,
             )
-        finally:
-            await self._ack(entry)
-            self._idle.set()
 
     async def _ack(self, entry: StreamEntry) -> None:
         try:
