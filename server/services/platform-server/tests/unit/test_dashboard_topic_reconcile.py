@@ -72,9 +72,18 @@ async def test_an_unreachable_hub_revokes_nothing() -> None:
     assert (declared, revoked) == (0, 0)
 
 
+async def test_an_unanswered_list_skips_the_round_instead_of_declaring() -> (
+    None
+):
+    # ⚠ hub 卡死时每条登记都要等满超时，串行补全量会把一拍拖过租约 TTL
+    realtime = FakeRealtime(is_reachable=False)
+    assert await build_reconciler([FIRST], realtime).reconcile() == (0, 0)
+    assert realtime.declared == []
+
+
 async def test_a_failed_declare_is_not_counted_as_declared() -> None:
     # 计数是对账的唯一可观测量，多算一次就等于把失败记成成功
-    realtime = FakeRealtime(is_reachable=False)
+    realtime = FakeRealtime(is_reachable=False, is_listable_when_down=True)
     declared, _revoked = await build_reconciler([FIRST], realtime).reconcile()
     assert realtime.declared == [
         (topic_of(FIRST), DASHBOARD_VIEW, PUBLISHER_NAME)

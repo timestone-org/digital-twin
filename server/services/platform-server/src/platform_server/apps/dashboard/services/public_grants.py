@@ -79,13 +79,18 @@ class PublicGrantReconciler:
         「主题未登记」拒掉这次登记。排错了不会坏，只是要多等一轮。
         ⚠ 单条失败不重试也不抛：下一轮还会再对一次。这一层重试会与「hub 正在
         重启」撞在一起，把一拍拖成一串超时。
+        ⚠ 清单取不到就整轮跳过：问不到不等于全部缺失，逐条补登记在 hub 卡死时
+        每条都要等满超时。
         """
         published = await self._dashboards.published()
         expected = {
             ticket_fingerprint(token): topic_of(dashboard_id)
             for dashboard_id, token in published
         }
-        actual = set(await self._realtime.grants(PUBLISHER_NAME))
+        listed = await self._realtime.grants(PUBLISHER_NAME)
+        if listed is None:
+            return 0, 0
+        actual = set(listed)
         declared = await self._declare_missing(expected, actual)
         revoked = await self._revoke_extra(expected, actual)
         _logger.info(
@@ -122,8 +127,8 @@ class PublicGrantReconciler:
     ) -> int:
         """注销已经撤回、授权还挂着的那些。
 
-        ⚠ 方向单向：以 hub 的清单为输入。取不到清单时输入为空，于是什么都不
-        注销——宁可多留一条授权一轮，也不要因为一次超时把全量公开链接清光。
+        ⚠ 方向单向：以 hub 的清单为输入，取不到清单的那一轮走不到这里——宁可
+        多留一条授权一轮，也不要因为一次超时把全量公开链接清光。
         Args: expected, actual。
         """
         revoked = 0

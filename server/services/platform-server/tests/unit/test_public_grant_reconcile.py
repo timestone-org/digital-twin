@@ -99,7 +99,7 @@ async def test_an_already_declared_grant_is_left_alone() -> None:
 
 
 async def test_an_unreachable_hub_revokes_nothing() -> None:
-    # 取不到清单时输入为空：宁可多留一条授权一轮，也不要把全量公开链接清光
+    # 取不到清单时什么都不注销：宁可多留一条授权一轮，也不要把全量公开链接清光
     realtime = FakeRealtime(
         known_grants=[ticket_fingerprint(OTHER_TOKEN)], is_reachable=False
     )
@@ -108,6 +108,16 @@ async def test_an_unreachable_hub_revokes_nothing() -> None:
     ).reconcile()
     assert realtime.revoked_grants == []
     assert (declared, revoked) == (0, 0)
+
+
+async def test_an_unanswered_list_skips_the_round_instead_of_declaring() -> (
+    None
+):
+    # ⚠ hub 卡死时每条登记都要等满超时，串行补全量会把一拍拖过租约 TTL
+    realtime = FakeRealtime(is_reachable=False)
+    reconciler = build_reconciler([(FIRST, TOKEN)], realtime)
+    assert await reconciler.reconcile() == (0, 0)
+    assert realtime.granted == []
 
 
 async def test_two_published_screens_get_one_grant_each() -> None:

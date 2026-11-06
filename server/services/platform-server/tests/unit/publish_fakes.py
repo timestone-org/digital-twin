@@ -93,6 +93,8 @@ class FakeRealtime:
         default_factory=list[tuple[str, list[dict[str, Any]], str | None]]
     )
     is_reachable: bool = True
+    # 只有写挂、读还通：登记失败的计数口径要靠它走到逐条登记那一步
+    is_listable_when_down: bool = False
 
     async def declare(
         self, *, topic: str, required_code: str, publisher: str
@@ -102,10 +104,12 @@ class FakeRealtime:
             self.known_topics.append(topic)
         return self.is_reachable
 
-    async def topics(self, publisher: str) -> list[str]:
+    async def topics(self, publisher: str) -> list[str] | None:
         del publisher
-        # ⚠ 不可达时回空列表，与真实现一致：那只会导致补登记，不会导致注销
-        return list(self.known_topics) if self.is_reachable else []
+        # ⚠ 不可达时回 None，与真实现一致：这一轮问不到，不是一个主题都没有
+        if self.is_reachable or self.is_listable_when_down:
+            return list(self.known_topics)
+        return None
 
     async def revoke(self, topic: str) -> bool:
         self.revoked.append(topic)
@@ -121,10 +125,12 @@ class FakeRealtime:
             self.known_grants.append(ticket_hash)
         return self.is_reachable
 
-    async def grants(self, publisher: str) -> list[str]:
+    async def grants(self, publisher: str) -> list[str] | None:
         del publisher
-        # ⚠ 不可达时回空列表，与真实现一致：只会补登记，不会注销
-        return list(self.known_grants) if self.is_reachable else []
+        # ⚠ 不可达时回 None，与真实现一致：这一轮问不到，不是一条授权都没有
+        if self.is_reachable or self.is_listable_when_down:
+            return list(self.known_grants)
+        return None
 
     async def revoke_grant(self, ticket_hash: str) -> bool:
         self.revoked_grants.append(ticket_hash)

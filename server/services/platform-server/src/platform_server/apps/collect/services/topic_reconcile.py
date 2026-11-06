@@ -67,10 +67,15 @@ class CollectTopicReconciler:
         投影，反过来拿它去改数据源表就是把通道服务当成了业务真源。
         ⚠ 单条失败不重试也不抛：下一轮还会再对一次。这一层重试会与「hub 正在
         重启」撞在一起，把一拍拖成一串超时。
+        ⚠ 清单取不到就整轮跳过：问不到不等于全部缺失，逐条补登记在 hub 卡死时
+        每条都要等满超时。
         """
         live = await self._sources.live_ids()
         expected = {topic_of(source_id) for source_id in live}
-        actual = set(await self._realtime.topics(PUBLISHER_NAME))
+        listed = await self._realtime.topics(PUBLISHER_NAME)
+        if listed is None:
+            return 0, 0
+        actual = set(listed)
         declared = await self._declare_missing(live, actual)
         revoked = await self._revoke_extra(expected, actual)
         _logger.info(
