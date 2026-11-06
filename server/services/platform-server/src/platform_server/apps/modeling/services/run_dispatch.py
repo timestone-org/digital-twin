@@ -108,7 +108,7 @@ async def execute_run(
 async def _run_claimed(
     sessions: Sessions,
     run_id: uuid.UUID,
-    claimed: "_Claimed",
+    claimed: _Claimed,
     options: DispatchOptions,
 ) -> RunOutcome:
     """取数并跑图，编排层的异常落成一次失败。

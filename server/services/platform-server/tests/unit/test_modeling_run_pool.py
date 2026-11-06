@@ -110,10 +110,10 @@ async def test_time_spent_waiting_for_the_slot_is_not_on_the_clock() -> None:
         await asyncio.sleep(0.1)
         assert not waiting.done()
         assert not executor.closed
+        executor.entered.clear()
         executor.pending[0].set_result(NodeResult(outputs={"ok": True}))
         assert (await running).outputs == {"ok": True}
-        while len(executor.pending) < 2:
-            await asyncio.sleep(0)
+        await asyncio.wait_for(executor.entered.wait(), timeout=5)
         executor.pending[1].set_result(NodeResult(outputs={"next": True}))
         assert (await waiting).outputs == {"next": True}
     finally:

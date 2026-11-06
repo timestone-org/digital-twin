@@ -89,9 +89,7 @@ async def create_binding(
     try:
         await session.flush()
     except IntegrityError as error:
-        raise BindingCodeTaken(
-            "这条公式条目已经绑过一个模型版本了"
-        ) from error
+        raise BindingCodeTaken("这条公式条目已经绑过一个模型版本了") from error
     return row
 
 
