@@ -100,9 +100,11 @@ async def login(service: AuthService, identifier: str) -> None:
 async def test_successful_logins_never_exhaust_the_limit(
     identifier: str,
 ) -> None:
-    service = build_service(build_limiter(InMemoryCache()))
+    limiter = build_limiter(InMemoryCache())
+    service = build_service(limiter)
     for _ in range(LIMIT + 1):
         await login(service, identifier)
+    assert await limiter.hit(identifier.strip().lower()) == 1
 
 
 async def test_email_login_also_clears_the_username_count() -> None:
