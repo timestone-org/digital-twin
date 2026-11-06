@@ -127,7 +127,7 @@ async def update_dashboard(
 
     Args: session, dashboard_id, payload。
     """
-    dashboard = await require_dashboard(session, dashboard_id)
+    dashboard = await locked_dashboard(session, dashboard_id)
     dashboard_crud.apply_changes(dashboard, given_changes(payload))
     bump_version(dashboard)
     await session.flush()
@@ -188,6 +188,21 @@ async def require_dashboard(
     Args: session, dashboard_id。
     """
     dashboard = await dashboard_crud.get(session, dashboard_id)
+    if dashboard is None:
+        raise DashboardNotFound("大屏不存在")
+    return dashboard
+
+
+async def locked_dashboard(
+    session: AsyncSession, dashboard_id: uuid.UUID
+) -> Dashboard:
+    """取大屏并锁到本事务结束，取不到即 404。
+
+    ⚠ 推进 `row_version` 的写路径一律走它：版本号是 Python 侧读后加一，不锁的
+    话两个事务都能通过版本断言、都写成同一个新版本，后到者静默盖掉先到者。
+    Args: session, dashboard_id。
+    """
+    dashboard = await dashboard_crud.get_locked(session, dashboard_id)
     if dashboard is None:
         raise DashboardNotFound("大屏不存在")
     return dashboard

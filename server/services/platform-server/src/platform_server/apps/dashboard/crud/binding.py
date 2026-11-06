@@ -7,7 +7,10 @@ from sqlalchemy import delete, select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from lib.db import CrudBase
-from platform_server.apps.dashboard.models import DashboardBinding
+from platform_server.apps.dashboard.models import (
+    DashboardBinding,
+    DashboardNode,
+)
 
 BINDING_ORDER = (
     DashboardBinding.field_key.asc(),
@@ -20,6 +23,22 @@ class BindingCrud(CrudBase[DashboardBinding]):
 
     def __init__(self) -> None:
         super().__init__(DashboardBinding)
+
+    async def dashboard_id_of(
+        self, session: AsyncSession, binding_id: uuid.UUID
+    ) -> uuid.UUID | None:
+        """绑定所在的大屏，只读这一列，不把绑定载入身份映射。
+
+        Args: session, binding_id。
+        """
+        rows = await session.execute(
+            select(DashboardNode.dashboard_id)
+            .join(
+                DashboardBinding, DashboardBinding.node_id == DashboardNode.id
+            )
+            .where(DashboardBinding.id == binding_id)
+        )
+        return rows.scalar_one_or_none()
 
     async def list_by_nodes(
         self, session: AsyncSession, node_ids: Sequence[uuid.UUID]

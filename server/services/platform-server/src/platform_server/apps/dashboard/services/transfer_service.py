@@ -37,6 +37,7 @@ from platform_server.apps.dashboard.schemas.transfer import (
 )
 from platform_server.apps.dashboard.services.dashboard_service import (
     bump_version,
+    locked_dashboard,
     present_dashboard,
     require_dashboard,
 )
@@ -424,7 +425,7 @@ async def _overwrite_target(
     """
     if target_dashboard_id is None:
         return None
-    dashboard = await require_dashboard(session, target_dashboard_id)
+    dashboard = await locked_dashboard(session, target_dashboard_id)
     if dashboard.project_id != project_id:
         raise ImportTargetMismatch("要覆盖的大屏不在这个项目下")
     return dashboard

@@ -22,6 +22,23 @@ class DashboardCrud(CrudBase[Dashboard]):
     def __init__(self) -> None:
         super().__init__(Dashboard)
 
+    async def get_locked(
+        self, session: AsyncSession, dashboard_id: uuid.UUID
+    ) -> Dashboard | None:
+        """按主键取一行并锁到本事务结束。
+
+        ⚠ `populate_existing` 不能省：身份映射里若已有这一行，SQLAlchemy 会把
+        **加锁之前**的属性原样交回来，锁拿到了，版本号却还是旧的。
+        Args: session, dashboard_id。
+        """
+        rows = await session.execute(
+            select(Dashboard)
+            .where(Dashboard.id == dashboard_id)
+            .with_for_update()
+            .execution_options(populate_existing=True)
+        )
+        return rows.scalar_one_or_none()
+
     async def node_counts(
         self, session: AsyncSession, dashboard_ids: frozenset[uuid.UUID]
     ) -> dict[uuid.UUID, int]:
