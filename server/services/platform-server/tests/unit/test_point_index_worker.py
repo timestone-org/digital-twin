@@ -11,7 +11,7 @@ from platform_server.apps.collect.services.point_index_worker import (
 async def test_a_drain_that_runs_out_of_time_does_not_raise() -> None:
     worker = PointIndexWorker(database=cast(Any, object()), cipher=None)
 
-    # ⚠ 抛出去的话 worker 的关停序列就此中断：其余任务不取消、租约不让、连接池不关
+    # ⚠ 抛出去的话关停序列就此中断：其余任务不取消、租约不让、连接池不关
     await asyncio.wait_for(worker.drain(0.01), timeout=2)
 
 

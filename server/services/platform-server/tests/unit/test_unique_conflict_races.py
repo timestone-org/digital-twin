@@ -85,12 +85,20 @@ def provider_payload() -> LlmProviderIn:
     )
 
 
+def ignore(*_args: object) -> None:
+    return None
+
+
+def second_of(_session: object, row: LlmProvider) -> LlmProvider:
+    return row
+
+
 def install_point_fakes(monkeypatch: pytest.MonkeyPatch) -> None:
     async def taken_codes(*_args: object) -> set[str]:
         return set()
 
     monkeypatch.setattr(point_crud, "taken_codes", taken_codes)
-    monkeypatch.setattr(point_crud, "add", lambda *_args: None)
+    monkeypatch.setattr(point_crud, "add", ignore)
 
 
 def install_source_fakes(monkeypatch: pytest.MonkeyPatch) -> None:
@@ -98,7 +106,7 @@ def install_source_fakes(monkeypatch: pytest.MonkeyPatch) -> None:
         return None
 
     monkeypatch.setattr(source_crud, "get_by_code", get_by_code)
-    monkeypatch.setattr(source_crud, "add", lambda *_args: None)
+    monkeypatch.setattr(source_crud, "add", ignore)
 
 
 def install_provider_fakes(monkeypatch: pytest.MonkeyPatch) -> None:
@@ -116,7 +124,7 @@ def install_provider_fakes(monkeypatch: pytest.MonkeyPatch) -> None:
 
     monkeypatch.setattr(crud.provider, "by_name", by_name)
     monkeypatch.setattr(crud.provider, "get", get)
-    monkeypatch.setattr(crud.provider, "add", lambda _session, row: row)
+    monkeypatch.setattr(crud.provider, "add", second_of)
 
 
 async def test_racing_point_codes_read_as_taken(
