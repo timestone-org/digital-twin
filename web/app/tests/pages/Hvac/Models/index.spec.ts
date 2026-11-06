@@ -435,6 +435,29 @@ describe('训练中轮询', () => {
     expect(hvac.listAcModels).toHaveBeenCalledTimes(2)
   })
 
+  it('在途的轮询响应在卸载后回来，不再拉起定时器', async () => {
+    vi.useFakeTimers()
+    vi.mocked(hvac.listAcModels).mockResolvedValueOnce([
+      model({ status: 'training', metrics: null }),
+    ])
+    let answer: (items: ReturnType<typeof model>[]) => void = () => undefined
+    vi.mocked(hvac.listAcModels).mockImplementationOnce(
+      () =>
+        new Promise((resolve) => {
+          answer = resolve
+        }),
+    )
+    const wrapper = mount(ModelsPage, { attachTo: document.body })
+    await vi.advanceTimersByTimeAsync(5000)
+    expect(hvac.listAcModels).toHaveBeenCalledTimes(2)
+
+    wrapper.unmount()
+    answer([model({ status: 'training', metrics: null })])
+    await vi.advanceTimersByTimeAsync(15000)
+
+    expect(hvac.listAcModels).toHaveBeenCalledTimes(2)
+  })
+
   it('⚠ 轮询刷新不重置左栏选中', async () => {
     vi.useFakeTimers()
     vi.mocked(hvac.listRooms).mockResolvedValue(

@@ -14,6 +14,7 @@ import { DtNotice, DtSegmented, DtTag, useConfirm, useToast } from '@dt/ui'
 import * as hvac from '@/api/hvac'
 import { AppShell } from '@/components/layout'
 import { describeError, useAsyncList } from '@/composables/useAsyncList'
+import { useRacedFetch } from '@/composables/useRacedFetch'
 import DetailActions from './components/DetailActions.vue'
 import MetricsPanel from './components/MetricsPanel.vue'
 import PublicationPanel from './components/PublicationPanel.vue'
@@ -38,6 +39,7 @@ const route = useRoute()
 const router = useRouter()
 const toast = useToast()
 const confirm = useConfirm()
+const fetcher = useRacedFetch()
 
 const modelId = computed(() => String(route.params['modelId'] ?? ''))
 const model = ref<AcModel | null>(null)
@@ -107,23 +109,27 @@ onMounted(() => {
 
 onBeforeUnmount(() => {
   stopPolling()
+  fetcher.cancel()
 })
 
 async function load(): Promise<void> {
-  try {
-    const found = await hvac.getAcModel(modelId.value)
-    const wasBusy = model.value ? isModelBusy(model.value) : false
-    model.value = found
-    error.value = null
-    syncPolling(found)
-    // 训练刚结束这一刻，折外预测已整体换掉，两处都跟着刷新
-    if (wasBusy && !isModelBusy(found)) {
-      void predictions.reload()
-      outOfFold.reload()
-    }
-  } catch (caught) {
-    error.value = describeError(caught)
-  }
+  await fetcher.run(() => hvac.getAcModel(modelId.value), {
+    ok: (found) => {
+      const wasBusy = model.value ? isModelBusy(model.value) : false
+      model.value = found
+      error.value = null
+      syncPolling(found)
+      // 训练刚结束这一刻，折外预测已整体换掉，两处都跟着刷新
+      if (wasBusy && !isModelBusy(found)) {
+        void predictions.reload()
+        outOfFold.reload()
+      }
+    },
+    fail: (caught) => {
+      error.value = describeError(caught)
+    },
+    settled: () => undefined,
+  })
 }
 
 function syncPolling(found: AcModel): void {

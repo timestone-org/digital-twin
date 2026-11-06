@@ -75,6 +75,7 @@ onMounted(() => {
 
 onBeforeUnmount(() => {
   stopPolling()
+  fetcher.cancel()
 })
 
 async function load(): Promise<void> {

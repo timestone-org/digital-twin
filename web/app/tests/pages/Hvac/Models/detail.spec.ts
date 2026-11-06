@@ -389,6 +389,31 @@ describe('训练中', () => {
   })
 })
 
+describe('卸载', () => {
+  it('在途的轮询响应在卸载后回来，不再拉起定时器', async () => {
+    vi.useFakeTimers()
+    vi.mocked(hvac.getAcModel).mockResolvedValueOnce(
+      model({ status: 'training' }),
+    )
+    let answer: (found: ReturnType<typeof model>) => void = () => undefined
+    vi.mocked(hvac.getAcModel).mockImplementationOnce(
+      () =>
+        new Promise((resolve) => {
+          answer = resolve
+        }),
+    )
+    const wrapper = mount(DetailPage, { attachTo: document.body })
+    await vi.advanceTimersByTimeAsync(5000)
+    expect(hvac.getAcModel).toHaveBeenCalledTimes(2)
+
+    wrapper.unmount()
+    answer(model({ status: 'training' }))
+    await vi.advanceTimersByTimeAsync(15000)
+
+    expect(hvac.getAcModel).toHaveBeenCalledTimes(2)
+  })
+})
+
 describe('操作', () => {
   it('重训入队后提示并刷新详情', async () => {
     vi.spyOn(hvac, 'retrainAcModel').mockResolvedValue(
