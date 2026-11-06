@@ -52,7 +52,6 @@ def _connection(
         user_id=uuid.uuid4(),
         codes=frozenset(),
         expires_at=now + timedelta(minutes=15),
-        checked_at=now,
         send=send,
         send_frame=send_frame,
     )
@@ -140,7 +139,6 @@ async def test_stopping_a_listener_that_never_started_is_safe() -> None:
     listener = _listener([], ConnectionRegistry())
     await listener.stop()
     # 没起过也能安全停：关停路径不该依赖启动是否发生过
-    assert tuple(ConnectionRegistry().topics()) == ()
 
 
 async def test_an_aliased_connection_sees_its_own_topic_name() -> None:

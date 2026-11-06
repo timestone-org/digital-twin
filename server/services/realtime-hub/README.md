@@ -41,7 +41,6 @@ tests/{unit,integration,contract,e2e}
 |---|---|
 | `REALTIME_SERVICE_KEY` | 内部端点的服务级密钥。**不给默认值**，未配置即拒绝一切内部调用 |
 | `REALTIME_AUTH_BASE_URL` | auth-server 地址，登记主题时校验声明的权限码 |
-| `REALTIME_PERMISSION_TTL` | 权限上下文复核间隔，默认 60 秒 |
 
 完整清单随骨架落地补齐。
 

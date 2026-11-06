@@ -42,7 +42,6 @@ class SlowSession:
             user_id=handshake.user_id,
             codes=handshake.codes,
             expires_at=handshake.expires_at,
-            checked_at=utcnow(),
             send=send,
             send_frame=send_frame,
         )

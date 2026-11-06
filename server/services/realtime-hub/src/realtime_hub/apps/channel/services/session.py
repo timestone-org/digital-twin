@@ -210,13 +210,11 @@ class SessionService:
 
         Args: handshake, send（控制帧）, send_frame（已编码的数据帧）。
         """
-        now = utcnow()
         connection = Connection(
             id=uuid.uuid4(),
             user_id=handshake.user_id,
             codes=handshake.codes,
             expires_at=handshake.expires_at,
-            checked_at=now,
             send=send,
             send_frame=send_frame,
             grant=handshake.grant,
@@ -368,7 +366,6 @@ class SessionService:
             raise AuthenticationRejected("reauth 的令牌不属于本连接的用户")
         connection.codes = handshake.codes
         connection.expires_at = handshake.expires_at
-        connection.checked_at = utcnow()
         connection.credential_changed.set()
         await self.revoke_unauthorized(connection)
 
@@ -385,7 +382,6 @@ class SessionService:
             raise AuthenticationRejected("reauth 的票据不属于本连接")
         handshake = await self.authenticate_public(ticket)
         connection.expires_at = handshake.expires_at
-        connection.checked_at = utcnow()
         connection.credential_changed.set()
 
     async def revoke_unauthorized(self, connection: Connection) -> int:

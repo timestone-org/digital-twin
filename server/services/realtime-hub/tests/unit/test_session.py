@@ -364,7 +364,6 @@ def test_expiry_and_reauth_windows() -> None:
         user_id=uuid.uuid4(),
         codes=frozenset(),
         expires_at=now + timedelta(seconds=REAUTH_LEAD_S - 1),
-        checked_at=now,
         send=send,
         send_frame=send_frame,
     )

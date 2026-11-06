@@ -66,7 +66,6 @@ def _anonymous(
         user_id=None,
         codes=frozenset(),
         expires_at=now + timedelta(seconds=ttl_s),
-        checked_at=now,
         send=send,
         send_frame=send_frame,
         grant=GrantedTopic(
@@ -96,7 +95,6 @@ def _logged_in() -> Connection:
         codes=frozenset({"dashboard:view"}),
         # 已经过期也不关：登录态的到期由收发循环与换票那条路负责
         expires_at=now - timedelta(seconds=1),
-        checked_at=now,
         send=send,
         send_frame=send_frame,
         close=close,
@@ -260,7 +258,6 @@ async def test_a_connection_that_cannot_be_closed_is_skipped() -> None:
             user_id=None,
             codes=frozenset(),
             expires_at=now + timedelta(seconds=60),
-            checked_at=now,
             send=send,
             send_frame=send_frame,
             grant=GrantedTopic(
@@ -292,7 +289,6 @@ async def test_a_connection_without_a_close_port_is_skipped() -> None:
             user_id=None,
             codes=frozenset(),
             expires_at=now + timedelta(seconds=60),
-            checked_at=now,
             send=send,
             send_frame=send_frame,
             grant=GrantedTopic(

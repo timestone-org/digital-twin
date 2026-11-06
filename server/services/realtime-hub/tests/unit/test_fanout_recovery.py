@@ -63,7 +63,6 @@ def make_connection(
         user_id=uuid.UUID(int=2),
         codes=frozenset(),
         expires_at=datetime(2030, 1, 1, tzinfo=UTC),
-        checked_at=datetime(2026, 1, 1, tzinfo=UTC),
         send=send,
         send_frame=send_frame,
     )
