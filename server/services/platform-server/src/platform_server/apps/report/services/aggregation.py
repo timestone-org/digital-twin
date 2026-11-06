@@ -70,12 +70,14 @@ def format_number(value: object, precision: int = 2, unit: str = "") -> str:
     if value is None:
         return "—"
     number = decimal_value(value)
-    text = (
-        str(value)
-        if number is None
-        else f"{number:.{max(0, min(12, precision))}f}"
-    )
+    text = str(value) if number is None else _fixed(number, precision)
     return f"{text}{unit}"
+
+
+def _fixed(number: Decimal, precision: int) -> str:
+    """定点写法，舍入成零时不留负号。Args: number, precision。"""
+    text = f"{number:.{max(0, min(12, precision))}f}"
+    return text.removeprefix("-") if Decimal(text).is_zero() else text
 
 
 def format_value(

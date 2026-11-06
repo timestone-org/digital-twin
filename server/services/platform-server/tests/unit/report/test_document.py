@@ -83,3 +83,10 @@ def test_node_paths_include_table_cells():
     )
     found = list(walk_nodes(root))
     assert found[-1][0] == "content.0.content.0.content.0.content.0"
+
+
+def test_a_number_rounded_to_zero_loses_its_sign():
+    assert format_number("-0.026", 1) == "0.0"
+    assert format_number("-0.4", 0, "kW") == "0kW"
+    assert format_number("-0.06", 1) == "-0.1"
+    assert format_number("-1.26", 1) == "-1.3"
