@@ -13,8 +13,6 @@ API_PREFIX = "/api/v1/realtime"
 INTERNAL_PREFIX = "/internal/v1"
 DB_SCHEMA = "realtime"
 
-# 权限复核间隔的下限。低于它就是每条消息都去查一遍权限，长连接的意义没了
-PERMISSION_TTL_FLOOR_S = 5
 # 一条推送里最多带几个条目。再多就该由推送方分片——分片是推送方的事
 PAYLOAD_ITEM_CEILING = 5000
 # 匿名连接存活时长的下限。再短就是每分钟重连一次，而重连要走一次握手
@@ -74,12 +72,9 @@ class Settings(AppSettings, PostgresSettings, RedisSettings):
 
     # 登记主题时回调 auth-server 校验声明的权限码是否存在于目录。
     # ⚠ 不可达时 fail-closed（拒绝登记），理由见 CONTEXT.md §7。
-    auth_base_url: str = "http://auth-server:8001"
+    auth_base_url: str = "http://auth-server:8004"
     auth_timeout_s: float = Field(default=2.0, gt=0)
 
-    # 权限上下文的复核间隔。到点重新取一次调用者的权限码，不再满足的主题
-    # 就地退订——⚠ 不断整条连接，那会牵连用户正在看的其它无关主题。
-    permission_ttl_s: int = Field(default=60, ge=PERMISSION_TTL_FLOOR_S)
     # 单条推送的条目上限。超出即拒绝，让推送方去分片。
     max_payload_items: int = Field(default=500, ge=1, le=PAYLOAD_ITEM_CEILING)
     # 跨副本扇出走**一条**频道，主题写在消息里由各副本自己筛。

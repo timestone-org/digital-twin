@@ -120,6 +120,8 @@ watch(
     previouslyFocused?.focus()
     previouslyFocused = null
   },
+  // ⚠ 父级 v-if 控制挂载时一上来就是打开态，不立即跑一次焦点就进不了弹窗
+  { immediate: true },
 )
 
 // 组件在弹窗开着时被卸载（路由切走）也要把焦点还回去

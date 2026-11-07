@@ -3,7 +3,7 @@
 import uuid
 from datetime import UTC, datetime
 
-from sqlalchemy import delete, or_, select
+from sqlalchemy import delete, exists, or_, select
 from sqlalchemy.exc import IntegrityError
 from sqlalchemy.ext.asyncio import AsyncSession
 
@@ -153,21 +153,34 @@ class RunCrud(CrudBase[ModelingRun]):
         pipeline_id: uuid.UUID,
         keep: int,
         exclude: frozenset[uuid.UUID],
+        leftover_reasons: frozenset[str],
     ) -> list[uuid.UUID]:
-        """一条流水线里排在最近 `keep` 次之外的那些运行 id。
+        """一条流水线里排在最近 `keep` 次之外、还有东西可收敛的运行 id。
 
         ⚠ 已发布过模型版本的运行**既不入名单、也不占 `keep` 名额**：让它们参与
         计数只会把还想留着的那 20 次实验提前挤出去（§6.5）。
         ⚠ 排序带第二个键：同一时刻建的两条运行不定序时，分页边界会来回抖。
-        Args: session, pipeline_id, keep, exclude。
+        ⚠ 明细已清的运行要先占住 `keep` 名额、取完名单才滤掉：滤在前面的话，
+        在途或没留下明细的新运行不占名额，收敛范围就变了。
+        ⚠ 没有明细不等于已收敛：字节写进存储、节点行没落上就断掉的运行同样没有
+        明细，它们靠失败原因 `leftover_reasons` 留在名单里。
+        Args: session, pipeline_id, keep, exclude, leftover_reasons。
         """
-        statement = select(ModelingRun.id).where(
+        statement = select(ModelingRun.id, ModelingRun.error_text).where(
             ModelingRun.pipeline_id == pipeline_id
         )
         if exclude:
             statement = statement.where(ModelingRun.id.not_in(exclude))
+        beyond = (
+            statement.order_by(*NEWEST_FIRST).offset(max(0, keep)).subquery()
+        )
         rows = await session.execute(
-            statement.order_by(*NEWEST_FIRST).offset(max(0, keep))
+            select(beyond.c.id).where(
+                or_(
+                    exists().where(ModelingNodeRun.run_id == beyond.c.id),
+                    beyond.c.error_text.in_(leftover_reasons),
+                )
+            )
         )
         return list(rows.scalars().all())
 

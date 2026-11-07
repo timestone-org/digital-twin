@@ -6,6 +6,7 @@
 """
 
 from datetime import UTC, datetime
+from zoneinfo import ZoneInfo
 
 import pytest
 
@@ -142,8 +143,57 @@ def test_all_zero_over_has_three_outcomes() -> None:
 
 
 def test_rows_outside_the_window_do_not_count() -> None:
-    cache = window_cache(row(0.5, a=1), row(5, a=100))
+    cache = window_cache(row(5, a=100), row(0.5, a=1))
     assert compute("SUM_OVER({a}, '1h')", cache) == 1.0
+
+
+def test_a_rolling_window_leaves_out_rows_on_its_lower_bound() -> None:
+    # 同刻两行都要排除：下界是开的，不是「跳过一行」
+    cache = window_cache(row(1, a=100), row(1, a=100), row(0.5, a=1))
+    assert compute("SUM_OVER({a}, '1h')", cache) == 1.0
+
+
+def test_a_rolling_window_takes_rows_stamped_at_the_current_moment() -> None:
+    cache = window_cache(row(0.5, a=1), row(0, a=2), row(0, a=4))
+    assert compute("SUM_OVER({a}, '1h')", cache) == 7.0
+
+
+def test_a_rolling_window_leaves_out_rows_after_the_current_moment() -> None:
+    cache = window_cache(row(0.5, a=1), row(-0.5, a=100))
+    assert compute("SUM_OVER({a}, '1h')", cache) == 1.0
+
+
+def test_a_cross_table_window_shares_the_rolling_bounds() -> None:
+    rows = [row(1, a=100), row(0.5, a=1), row(0, a=2), row(-0.5, a=100)]
+    cache = HistoryCache(tz=UTC, external_rows={"src": rows})
+    assert compute("SUM_OVER({src.a}, '1h')", cache) == 3.0
+
+
+def today_cache(*rows: RowSnapshot) -> HistoryCache:
+    """一份按东八区算「今日」的缓存：NOW 的当地零点在 20 小时之前。
+
+    Args: rows。
+    """
+    return HistoryCache(
+        tz=ZoneInfo("Asia/Shanghai"), window_rows={"today": list(rows)}
+    )
+
+
+def test_a_today_window_takes_rows_on_local_midnight() -> None:
+    # 与滚动窗相反：零点那一桶属于今天。这一刻在 UTC 上还是昨天，只有按业务
+    # 时区才算今天
+    cache = today_cache(row(20, a=1), row(20, a=2), row(1, a=4))
+    assert compute("SUM_OVER({a}, 'today')", cache) == 7.0
+
+
+def test_a_today_window_leaves_out_rows_before_local_midnight() -> None:
+    cache = today_cache(row(20.5, a=100), row(1, a=4))
+    assert compute("SUM_OVER({a}, 'today')", cache) == 4.0
+
+
+def test_a_today_window_stops_at_the_current_moment() -> None:
+    cache = today_cache(row(1, a=4), row(0, a=2), row(-0.5, a=100))
+    assert compute("SUM_OVER({a}, 'today')", cache) == 6.0
 
 
 def test_the_whole_column_family_derives_from_one_set_of_statistics() -> None:
@@ -241,3 +291,16 @@ def test_a_trial_run_reads_every_history_reference_as_unknown() -> None:
     externals = build_externals(parsed.deps, empty_cache(), None)
     assert set(externals.values()) == {None}
     assert len(externals) == 4
+
+
+@pytest.mark.parametrize("function", ["SUM_OVER", "AVG_OVER"])
+def test_a_window_aggregate_that_overflows_is_blank(function: str) -> None:
+    cache = window_cache(row(0.5, a=1.7e308), row(0.25, a=1.7e308))
+    assert compute(f"{function}({{a}}, '1h')", cache) is None
+
+
+def test_a_whole_column_total_that_overflows_is_blank() -> None:
+    stats = WholeStats().fold(1.7e308).fold(1.7e308)
+    cache = HistoryCache(tz=UTC, whole_stats={"a": stats})
+    assert compute("SUM_ALL({a})", cache) is None
+    assert compute("AVG_ALL({a})", cache) is None

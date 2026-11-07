@@ -42,11 +42,6 @@ export type {
   KnowledgeUploadTicket,
 } from './knowledgeWire'
 
-/** 这份内容已经在这个库里了（领域 23）。⚠ 按码分支，不按 message。 */
-export const KNOWLEDGE_DUPLICATE_CODE = 42308
-/** 这个库还检索不了（没配嵌入档 / 还没建过索引）。 */
-export const KNOWLEDGE_RETRIEVAL_UNAVAILABLE_CODE = 42306
-
 const BASES = '/knowledge-bases'
 const DOCUMENTS = '/documents'
 const SOURCES = '/sources'

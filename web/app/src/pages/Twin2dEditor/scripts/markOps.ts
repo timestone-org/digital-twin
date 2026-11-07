@@ -20,7 +20,6 @@ import {
   twin2dRemoval,
 } from './nodeOps'
 import type {
-  Twin2dAdded,
   Twin2dAlignEdge,
   Twin2dCopied,
   Twin2dDistributeAxis,
@@ -85,28 +84,6 @@ function withMarkDeltas(
       return movedMark(mark, at)
     }),
   }
-}
-
-/**
- * 新增一条标注，追加在末尾。
- * ⚠ `kind` 必须是三档之一：归一化认不出 kind 就把整条丢掉，所以这里交出的是原样的
- * 配置与 `id: null`，而不是一个指不到实处的 id。
- * @param config 当前配置
- * @param seed 新标注的种子（至少给 `kind`）
- * @param makeId id 工厂，缺省随机
- */
-export function addMark(
-  config: Twin2dConfig,
-  seed: Partial<Omit<Twin2dMark, 'id'>>,
-  makeId: Twin2dIdFactory = newTwin2dId,
-): Twin2dAdded {
-  const id = freshTwin2dId(TWIN_2D_MARK_ID_PREFIX, idsOf(config.marks), makeId)
-  const next = normalizeTwin2dConfig({
-    ...config,
-    marks: [...config.marks, { ...seed, id }],
-  })
-  const landed = next.marks.some((mark) => mark.id === id)
-  return landed ? { config: next, id } : { config, id: null }
 }
 
 /**

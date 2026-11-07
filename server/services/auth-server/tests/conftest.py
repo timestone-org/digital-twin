@@ -17,15 +17,10 @@ from auth_server.app import build_app
 from auth_server.apps.auth.deps import get_session
 from auth_server.container import Container, build_container
 from auth_server.settings import Settings
-from lib.auth import PasswordHasher
 from lib.config import load_settings
+from lib.db import run_after_commit_hooks
 from lib.logging import configure_logging
 from lib.testing import InMemoryCache
-
-# ⚠ 必须与种子账号同参：参数不同会让每次登录都判 needs_rehash 为真，
-# 于是每条用例都去 UPDATE 同一行口令散列，跨用例抢锁并偶发 lock timeout。
-# 「测试跑得快」不值得用一个只在测试里存在的写放大来换。
-TEST_HASHER = PasswordHasher()
 
 
 def _reachable(host: str, port: int) -> bool:
@@ -72,7 +67,7 @@ async def container(settings: Settings) -> AsyncIterator[Container]:
         settings=built.settings,
         database=built.database,
         cache=built.cache,
-        hasher=TEST_HASHER,
+        hasher=built.hasher,
         tokens=built.tokens,
         api_keys=built.api_keys,
         auth=built.auth,
@@ -116,6 +111,7 @@ async def app_client(
                 raise
             else:
                 await session.commit()
+                await run_after_commit_hooks(session)
 
     application.dependency_overrides[get_session] = override
     transport = httpx.ASGITransport(app=application)
@@ -142,7 +138,7 @@ def _with_test_doubles(built: Container) -> Container:
         refresh_ttl_s=built.tokens.refresh_ttl_s,
     )
     api_keys = built.api_keys.__class__(
-        hasher=TEST_HASHER,
+        hasher=built.api_keys.hasher,
         cache=cache,
         clock=built.api_keys.clock,
         verify_cache_ttl_s=built.api_keys.verify_cache_ttl_s,
@@ -151,7 +147,7 @@ def _with_test_doubles(built: Container) -> Container:
     auth = built.auth.__class__(
         tokens=tokens,
         api_keys=api_keys,
-        hasher=TEST_HASHER,
+        hasher=built.auth.hasher,
         login_limiter=_relimit(built.auth.login_limiter, cache),
         signup_limiter=_relimit(built.auth.signup_limiter, cache),
         signup_enabled=built.auth.signup_enabled,
@@ -170,7 +166,7 @@ def _with_test_doubles(built: Container) -> Container:
         settings=built.settings,
         database=built.database,
         cache=built.cache,
-        hasher=TEST_HASHER,
+        hasher=built.hasher,
         tokens=tokens,
         api_keys=api_keys,
         auth=auth,

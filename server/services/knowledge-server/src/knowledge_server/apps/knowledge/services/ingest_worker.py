@@ -106,7 +106,22 @@ class IngestConsumer:
         while not self._is_stopping:
             entries = await self._taken()
             for entry in entries:
-                await self._handle(entry)
+                await self._handle_guarded(entry)
+
+    async def _handle_guarded(self, entry: StreamEntry) -> None:
+        """跑一条；收场本身出错时不确认，留给重新认领，循环继续。
+
+        Args: entry。
+        """
+        try:
+            await self._handle(entry)
+        except Exception as error:
+            _logger.error(
+                "knowledge_ingest_handle_failed",
+                "摄取任务收场失败，未确认，会被重新认领",
+                entry_id=entry.entry_id,
+                error=error,
+            )
 
     async def _taken(self) -> list[StreamEntry]:
         """取一批：先认领掉队的，没有再等新的。"""

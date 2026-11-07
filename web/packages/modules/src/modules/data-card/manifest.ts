@@ -11,7 +11,6 @@ import type { BindingRowLabel, ConfigField } from '@dt/contracts'
 import { CARD_PART_KIND_KEY, CARD_PART_PLACE_KEY } from '../../cardParts/define'
 import { scrollConfigFields } from '../../shared/scroll'
 import { valueRulesField } from '../../shared/valueRules'
-import { CARD_SLOT_DOCS } from '../../cardParts/types'
 import { defineModule } from '../../registry'
 import type { CardCell } from './cells'
 import {
@@ -464,6 +463,3 @@ export default defineModule({
   },
   component: () => import('./Component.vue'),
 })
-
-/** 子槽的意思，随清单一起给人与模型看。 */
-export const CARD_SLOT_HELP = CARD_SLOT_DOCS

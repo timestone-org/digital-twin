@@ -10,11 +10,9 @@ from pydantic import Field, model_validator
 
 from knowledge_server.apps.chat.schemas.common import InputModel
 
-# 一次回填最多带几条。对话面只有 `user.ask` 一个客户端工具，且它必须单独成批，
-# 故实际永远是 1；留余量只为不把「多问了一句」判成 400
+# 一次回填最多带几条。留余量只为不把「多问了一句」判成 400
 MAX_TOOL_RESULTS = 8
 MAX_USER_TEXT = 4000
-MAX_TOOL_OUTPUT_CHARS = 8_000
 
 
 class ToolResultIn(InputModel):
@@ -34,8 +32,8 @@ class ChatAdvanceIn(InputModel):
     tool_results: list[ToolResultIn] = Field(
         default_factory=list[ToolResultIn], max_length=MAX_TOOL_RESULTS
     )
-    # 这一页实现了哪些客户端工具（前端自报）。⚠ 对话页只会报 `user.ask`；
-    # 没报的模型看不见，于是它只能在正文里问——那正是设计里不许的自由文本反问
+    # 这一页实现了哪些客户端工具（前端自报）。⚠ 没报的模型看不见：没报
+    # `user.ask` 时它只能在正文里问——那正是设计里不许的自由文本反问
     client_tools: list[Annotated[str, Field(min_length=1, max_length=64)]] = (
         Field(default_factory=list[str], max_length=8)
     )

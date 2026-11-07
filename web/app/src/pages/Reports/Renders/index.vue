@@ -11,6 +11,7 @@ import {
   DtTag,
   DtIconButton,
 } from '@dt/ui'
+import { PERMISSION_CODES } from '@dt/contracts'
 import type { DtDataColumn, ReportRender } from '@dt/contracts'
 import * as api from '@/api/reports'
 import { AppShell } from '@/components/layout'
@@ -179,7 +180,7 @@ async function download(id: string): Promise<void> {
           >
         </template>
         <template #cell-actions="{ row }">
-          <PermGuard :codes="['report:render']">
+          <PermGuard :codes="[PERMISSION_CODES.reportRender]">
             <DtIconButton
               v-if="row.status === 'succeeded' && row.kind === 'render'"
               size="sm"

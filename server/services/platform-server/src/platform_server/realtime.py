@@ -2,8 +2,8 @@
 
 主题名与它要求的权限码是**业务口径**，不在这里——本模块只认「一个不透明的
 主题字符串」，与 hub 对主题的态度一致（ADR-0007）。
-⚠ 每一处失败都只记日志并回 False：hub 不可达降级为「没有实时通道」，绝不
-降级为「大屏打不开」（DASHBOARD_DESIGN §6）。
+⚠ 每一处失败都只记日志并回 False（取清单回 None）：hub 不可达降级为「没有
+实时通道」，绝不降级为「大屏打不开」（DASHBOARD_DESIGN §6）。
 """
 
 from typing import Any, Protocol
@@ -39,7 +39,7 @@ class TopicRegistrar(Protocol):
         self, *, topic: str, required_code: str, publisher: str
     ) -> bool: ...
 
-    async def topics(self, publisher: str) -> list[str]: ...
+    async def topics(self, publisher: str) -> list[str] | None: ...
 
     async def revoke(self, topic: str) -> bool: ...
 
@@ -51,7 +51,7 @@ class PublicGrantRegistrar(Protocol):
         self, *, ticket_hash: str, topic: str, publisher: str
     ) -> bool: ...
 
-    async def grants(self, publisher: str) -> list[str]: ...
+    async def grants(self, publisher: str) -> list[str] | None: ...
 
     async def revoke_grant(self, ticket_hash: str) -> bool: ...
 
@@ -92,13 +92,13 @@ class RealtimeClient:
             action="declare",
         )
 
-    async def topics(self, publisher: str) -> list[str]:
-        """列出本推送方在 hub 上登记的全部主题。对账用。
+    async def topics(self, publisher: str) -> list[str] | None:
+        """列出本推送方在 hub 上登记的全部主题，取不到回 None。对账用。
 
-        ⚠ 取不到时返回**空列表**而不是抛：对账跑在发布循环里，hub 不可达时
-        应当安静跳过这一轮，而不是让整个循环出错。
-        ⚠ 空列表在对账里只会导致「补登记」，不会导致「注销」——注销的方向以
-        hub 的清单为输入，输入为空就什么都不注销。这个不对称是刻意的。
+        ⚠ 取不到不抛：对账跑在发布循环里，hub 不可达时应当安静跳过这一轮，而
+        不是让整个循环出错。
+        ⚠ None 不能折成空列表：对账会把空清单读成「全部缺失」，hub 卡死时逐条
+        重登记、每条等满超时，一拍就拖过租约 TTL。
 
         Args: publisher。
         """
@@ -118,7 +118,7 @@ class RealtimeClient:
                 "取主题清单失败，本轮对账跳过",
                 error_type=type(error).__name__,
             )
-            return []
+            return None
 
     async def revoke(self, topic: str) -> bool:
         """注销一个主题。返回是否注销成功。
@@ -164,11 +164,10 @@ class RealtimeClient:
             action="declare_grant",
         )
 
-    async def grants(self, publisher: str) -> list[str]:
-        """列出本推送方在 hub 上登记的全部匿名授权指纹。对账用。
+    async def grants(self, publisher: str) -> list[str] | None:
+        """列出本推送方在 hub 上登记的全部匿名授权指纹，取不到回 None。对账用。
 
-        ⚠ 取不到时返回**空列表**而不是抛，与 `topics` 同口径：空清单只会导致
-        补登记（幂等），不会导致注销——注销的方向以 hub 的清单为输入。
+        ⚠ 与 `topics` 同口径：None 表示这一轮问不到，不是「一条都没有」。
 
         Args: publisher。
         """
@@ -188,7 +187,7 @@ class RealtimeClient:
                 "取匿名授权清单失败，本轮对账跳过",
                 error_type=type(error).__name__,
             )
-            return []
+            return None
 
     async def revoke_grant(self, ticket_hash: str) -> bool:
         """注销一枚票据的匿名授权。返回是否注销成功。
@@ -243,6 +242,8 @@ class RealtimeClient:
     ) -> bool:
         """打一次 hub，失败只记日志不抛。
 
+        ⚠ `ValueError` / `TypeError` 来自 httpx 的严格 JSON 编码：一份发不出去的
+        载荷只算这一批失败，不许带走同一拍里排在后面的主题。
         Args: path, payload, action, traceparent。
         """
         try:
@@ -253,7 +254,7 @@ class RealtimeClient:
                 headers=self._headers(traceparent=traceparent),
             )
             response.raise_for_status()
-        except httpx.HTTPError as error:
+        except (httpx.HTTPError, ValueError, TypeError) as error:
             _logger.error(
                 "realtime_call_failed",
                 "调用 realtime-hub 失败",

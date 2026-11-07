@@ -12,7 +12,7 @@ from platform_server.apps.dashboard.errors import (
     BindingNotFound,
     FieldKeyTaken,
 )
-from platform_server.apps.dashboard.models import DashboardBinding
+from platform_server.apps.dashboard.models import Dashboard, DashboardBinding
 from platform_server.apps.dashboard.schemas import (
     BindingCreateIn,
     BindingOut,
@@ -21,10 +21,13 @@ from platform_server.apps.dashboard.schemas import (
 from platform_server.apps.dashboard.services.changes import given_changes
 from platform_server.apps.dashboard.services.dashboard_service import (
     bump_version,
-    require_dashboard,
+    locked_dashboard,
 )
 from platform_server.apps.dashboard.services.drafts import binding_draft_of
-from platform_server.apps.dashboard.services.node_service import require_node
+from platform_server.apps.dashboard.services.node_service import (
+    locked_node,
+    require_node,
+)
 from platform_server.apps.dashboard.services.presenters import to_binding_out
 from platform_server.apps.dashboard.services.state import (
     DashboardState,
@@ -64,8 +67,7 @@ async def create_binding(
 
     Args: session, node_id, payload, context。
     """
-    node = await require_node(session, node_id)
-    dashboard = await require_dashboard(session, node.dashboard_id)
+    node, dashboard = await locked_node(session, node_id)
     state = await load_state(session, dashboard.id)
     binding = DashboardBinding(
         id=payload.id or uuid7(),
@@ -99,9 +101,7 @@ async def update_binding(
 
     Args: session, binding_id, payload, context。
     """
-    binding = await require_binding(session, binding_id)
-    node = await require_node(session, binding.node_id)
-    dashboard = await require_dashboard(session, node.dashboard_id)
+    binding, dashboard = await locked_binding(session, binding_id)
     state = await load_state(session, dashboard.id)
     binding_crud.apply_changes(binding, given_changes(payload))
     await _check(state=state, binding=binding, context=context)
@@ -120,14 +120,27 @@ async def delete_binding(
 
     Args: session, binding_id。
     """
-    binding = await require_binding(session, binding_id)
-    node = await require_node(session, binding.node_id)
-    dashboard = await require_dashboard(session, node.dashboard_id)
+    binding, dashboard = await locked_binding(session, binding_id)
     bump_version(dashboard)
     _logger.info(
         "dashboard_binding_deleted", "绑定已删除", binding_id=str(binding.id)
     )
     await binding_crud.delete(session, binding)
+
+
+async def locked_binding(
+    session: AsyncSession, binding_id: uuid.UUID
+) -> tuple[DashboardBinding, Dashboard]:
+    """取绑定并锁住它所在的大屏，取不到即 404。
+
+    ⚠ 绑定实体必须在锁之后才载入，理由同 `locked_node`。
+    Args: session, binding_id。
+    """
+    dashboard_id = await binding_crud.dashboard_id_of(session, binding_id)
+    if dashboard_id is None:
+        raise BindingNotFound("绑定不存在")
+    dashboard = await locked_dashboard(session, dashboard_id)
+    return await require_binding(session, binding_id), dashboard
 
 
 async def require_binding(

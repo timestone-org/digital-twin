@@ -1,5 +1,6 @@
 """模型对外调用的部署校验、账号配额与计算记录；见 ADR-0062。"""
 
+import math
 import time
 import uuid
 from dataclasses import dataclass, field, replace
@@ -236,6 +237,7 @@ async def predict(
         predictions = compiled.predict_many(rows)
     except OperatorError as error:
         raise PredictRequestInvalid(str(error)) from error
+    _require_finite(predictions)
     return OpenModelPredictOut(
         model=OpenModelInfoOut(
             code=resolved.deployment.code, version=resolved.version.version
@@ -243,6 +245,18 @@ async def predict(
         predictions=predictions,
         warnings=_warnings_of(payload.rows, resolved.version),
     )
+
+
+def _require_finite(predictions: list[float | None]) -> None:
+    """有限输入也可能算溢出；放行的话响应里是 null，记录却是成功。
+
+    Args: predictions。
+    """
+    for index, value in enumerate(predictions):
+        if value is not None and not math.isfinite(value):
+            raise PredictRequestInvalid(
+                f"第 {index + 1} 行算出的结果超出了数值范围"
+            )
 
 
 async def _compiled(
@@ -326,7 +340,15 @@ def _as_number(value: object, key: str, index: int) -> float | None:
         return None
     if isinstance(value, bool) or not isinstance(value, (int, float)):
         raise PredictRequestInvalid(f"第 {index + 1} 行的「{key}」不是一个数")
-    return float(value)
+    try:
+        number = float(value)
+    except OverflowError:
+        number = math.inf
+    if not math.isfinite(number):
+        raise PredictRequestInvalid(
+            f"第 {index + 1} 行的「{key}」不是一个有限的数"
+        )
+    return number
 
 
 def _row_moment(row: OpenModelRow, index: int) -> datetime | None:

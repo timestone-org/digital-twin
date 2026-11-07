@@ -12,7 +12,7 @@ from platform_server.apps.dashboard.errors import (
     ClientKeyTaken,
     NodeNotFound,
 )
-from platform_server.apps.dashboard.models import DashboardNode
+from platform_server.apps.dashboard.models import Dashboard, DashboardNode
 from platform_server.apps.dashboard.schemas import (
     NodeCreateIn,
     NodeOut,
@@ -21,6 +21,7 @@ from platform_server.apps.dashboard.schemas import (
 from platform_server.apps.dashboard.services.changes import given_changes
 from platform_server.apps.dashboard.services.dashboard_service import (
     bump_version,
+    locked_dashboard,
     require_dashboard,
 )
 from platform_server.apps.dashboard.services.drafts import NodeDraft
@@ -76,7 +77,7 @@ async def create_node(
 
     Args: session, dashboard_id, payload, context。
     """
-    dashboard = await require_dashboard(session, dashboard_id)
+    dashboard = await locked_dashboard(session, dashboard_id)
     state = await load_state(session, dashboard.id)
     node = DashboardNode(
         id=uuid7(),
@@ -111,8 +112,7 @@ async def update_node(
 
     Args: session, node_id, payload, context。
     """
-    node = await require_node(session, node_id)
-    dashboard = await require_dashboard(session, node.dashboard_id)
+    node, dashboard = await locked_node(session, node_id)
     state = await load_state(session, dashboard.id)
     node_crud.apply_changes(node, given_changes(payload))
     await _check(state=state, node=node, context=context)
@@ -127,8 +127,7 @@ async def delete_node(session: AsyncSession, *, node_id: uuid.UUID) -> None:
 
     Args: session, node_id。
     """
-    node = await require_node(session, node_id)
-    dashboard = await require_dashboard(session, node.dashboard_id)
+    node, dashboard = await locked_node(session, node_id)
     bump_version(dashboard)
     _logger.info("dashboard_node_deleted", "节点已删除", node_id=str(node.id))
     await node_crud.delete(session, node)
@@ -145,6 +144,22 @@ async def require_node(
     if node is None:
         raise NodeNotFound("画布节点不存在")
     return node
+
+
+async def locked_node(
+    session: AsyncSession, node_id: uuid.UUID
+) -> tuple[DashboardNode, Dashboard]:
+    """取节点并锁住它所在的大屏，取不到即 404。
+
+    ⚠ 节点实体必须在锁之后才载入：先载入的话身份映射里留的是别的事务提交之前
+    的旧值，校验看的就是旧树。
+    Args: session, node_id。
+    """
+    dashboard_id = await node_crud.dashboard_id_of(session, node_id)
+    if dashboard_id is None:
+        raise NodeNotFound("画布节点不存在")
+    dashboard = await locked_dashboard(session, dashboard_id)
+    return await require_node(session, node_id), dashboard
 
 
 async def _check(

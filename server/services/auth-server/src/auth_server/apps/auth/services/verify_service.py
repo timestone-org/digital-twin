@@ -35,6 +35,13 @@ from auth_server.apps.auth.services.token_service import (
 )
 from auth_server.settings import API_PREFIX
 from lib.auth import (
+    HEADER_EXPIRES,
+    HEADER_PERMISSIONS,
+    HEADER_ROLE,
+    HEADER_SIGNATURE,
+    HEADER_TRUNCATED,
+    HEADER_USER_ID,
+    HEADER_USERNAME,
     MAX_PERMISSION_HEADER_BYTES,
     SignedContext,
     encode_identity,
@@ -45,14 +52,6 @@ from lib.logging import get_logger
 from lib.utils.timeutils import Clock
 
 _logger = get_logger("auth.verify")
-
-HEADER_USER_ID = "X-Auth-User-Id"
-HEADER_USERNAME = "X-Auth-Username"
-HEADER_ROLE = "X-Auth-Role"
-HEADER_PERMISSIONS = "X-Auth-Permissions"
-HEADER_TRUNCATED = "X-Auth-Permissions-Truncated"
-HEADER_EXPIRES = "X-Auth-Exp"
-HEADER_SIGNATURE = "X-Auth-Sig"
 
 
 @dataclass(frozen=True)

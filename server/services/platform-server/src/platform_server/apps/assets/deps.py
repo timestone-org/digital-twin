@@ -7,9 +7,10 @@
 from dataclasses import dataclass
 from typing import Annotated
 
-from fastapi import BackgroundTasks, Depends
+from fastapi import Depends
+from sqlalchemy.ext.asyncio import AsyncSession
 
-from lib.db import Database
+from lib.db import after_commit
 from lib.stream import StreamGroup, StreamLike
 from platform_server.apps.assets.services.compress_queue import (
     CompressMessage,
@@ -39,39 +40,42 @@ __all__ = [
 
 @dataclass(frozen=True)
 class CompressDispatcher:
-    """提交后投压缩任务用的那只手。
+    """投压缩任务用的那只手。
 
-    ⚠ 走 `BackgroundTasks` 而不是在处理函数里直接投：请求的事务在依赖退出时
-    才提交，处理函数里投出去的话，worker 可能先于提交读到——那时素材行还不
-    存在，它只能把这条当成「素材已删」丢掉，而字节其实好好地躺在桶里。
+    ⚠ 请求事务要到依赖退出时才提交，而 `BackgroundTasks` 跑在响应里，比提交
+    早。提交前投出去的话，worker 读到的还是旧库：素材行不存在就当成已删，
+    各档还是 `ready` 就全部跳过，而消息已被确认，那几档永远停在 `pending`。
     """
 
     stream: StreamLike
     target: StreamGroup
-    database: Database
-    tasks: BackgroundTasks
 
-    def after_commit(self, message: CompressMessage) -> None:
-        """排一次提交后的压缩投递。
+    def after_commit(
+        self, session: AsyncSession, message: CompressMessage
+    ) -> None:
+        """登记一次提交后的压缩投递。
+
+        Args: session（持有这次写的请求事务）, message。
+        """
+        after_commit(session, lambda: self.dispatch(message))
+
+    async def dispatch(self, message: CompressMessage) -> None:
+        """立刻投递。只给事务已经提交的调用方用。
 
         Args: message。
         """
-        self.tasks.add_task(
-            dispatch_compression,
-            self.stream,
-            target=self.target,
-            message=message,
+        await dispatch_compression(
+            self.stream, target=self.target, message=message
         )
 
 
 def get_compress_dispatcher(
     container: Annotated[Container, Depends(get_container)],
-    tasks: BackgroundTasks,
     stream: Annotated[StreamLike, Depends(get_stream)],
 ) -> CompressDispatcher:
-    """装出提交后投递用的那只手。测试用 `dependency_overrides` 换成假件。
+    """装出投压缩任务用的那只手。测试用 `dependency_overrides` 换成假件。
 
-    Args: container, tasks, stream。
+    Args: container, stream。
     """
     settings = container.settings
     return CompressDispatcher(
@@ -81,8 +85,6 @@ def get_compress_dispatcher(
             group=settings.assetcompress_group,
             consumer=settings.app_instance,
         ),
-        database=container.database,
-        tasks=tasks,
     )
 
 

@@ -12,7 +12,6 @@ import {
   getProvider,
   hasProvider,
   listProviders,
-  providerRegistry,
   registerProvider,
 } from '../src/registry'
 
@@ -88,26 +87,5 @@ describe('provider 注册表', () => {
 
     expect(listProviders()).toEqual([])
     expect(hasProvider('static')).toBe(false)
-  })
-})
-
-describe('contracts 口径的注册表面', () => {
-  it('与模块级函数共用同一份登记', () => {
-    const provider = fakeProvider('opcua')
-    providerRegistry.register(provider)
-
-    expect(getProvider('opcua')).toBe(provider)
-    expect(providerRegistry.get('opcua')).toBe(provider)
-  })
-
-  it('未登记的来源按契约返回 undefined，交由求值层给出 error 槽', () => {
-    expect(providerRegistry.get('archive')).toBeUndefined()
-  })
-
-  it('reset 摘掉全部登记', () => {
-    providerRegistry.register(fakeProvider('static'))
-    providerRegistry.reset()
-
-    expect(providerRegistry.get('static')).toBeUndefined()
   })
 })

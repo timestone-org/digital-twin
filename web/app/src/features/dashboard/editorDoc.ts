@@ -251,15 +251,6 @@ export function setVisibleBatch(
   )
 }
 
-/** 改 z 序。 */
-export function setZIndex(
-  nodes: readonly DashboardNodePayload[],
-  nodeId: string,
-  zIndex: number,
-): DashboardNodePayload[] {
-  return replaceNode(nodes, nodeId, (node) => ({ ...node, zIndex }))
-}
-
 /** 批量改几何：对齐/分布/多选拖动一次落一笔，撤销也只有一步。 */
 export function setGeometryBatch(
   nodes: readonly DashboardNodePayload[],

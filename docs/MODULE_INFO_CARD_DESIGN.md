@@ -19,7 +19,7 @@
 | 2 | `entity-gauge` **本期做**，与 `target-progress` 一起进 `gauge-card` | 它的 arc / linear / tank / thermometer 四档是纯 SVG + CSS，`index.ts` 与 `Component.vue` 零 echarts 依赖（对照 `efficiency-overview/Component.vue` 真的 `import` 了 `shared/chart/echarts`）。「暂不迁 echarts 模块」这条豁免覆盖不到它 |
 | 3 | 行结构改成**声明式**：`lead ｜ 最多三段 lines ｜ tail` 外加一条扩展指标行 | 固定纵向段序表达不出四个参考模块的真实排版（`.vsl-meta-row` / `.tl-row2` / `.al-row` / `.src-foot` 全是「同一行左右分列」）。逐个取值见 §2.2 |
 | 4 | 每行**两个**徽章位：`badge` + `tag` | `source-list` 的 `.src-meta` 与 `terminal-list-v2` 的 `.tl-row1` 同时挂 `StatusBadge` 与一个分类文字 chip。单选枚举装不下两个，选了 device 就整片丢掉分类标签 |
-| 5 | 值驱动的颜色走**模块自带的规则表**（带 `color` 子字段） | `shared/thresholds.ts` 的 `levelColor` 是四色硬映射，`thresholdsConfigField` 的行里只有 `op/value/value2/level/label/blink`，没有颜色。能源类型五色、水温色相梯度、工单三档状态色一条都配不出来。见 §3 |
+| 5 | 值驱动的颜色走**模块自带的规则表**（带 `color` 子字段） | `shared/thresholds.ts` 的 `levelColor` 是四色硬映射，`ThresholdRule` 的行里只有 `op/value/value2/level/label/blink`，没有颜色。能源类型五色、水温色相梯度、工单三档状态色一条都配不出来。见 §3 |
 | 6 | `metric-card` **并存**，不加 `replacedBy` | 三处不等价（`density` 的行/列不同 gap、`showStatusDot` 的 normal 档、`valueColor` 缺省值）正是并存的理由，见 §1.4 |
 | 7 | 每模块顶层字段 **上限 35 个**、行内子字段 **≤10 个**（绑定子槽另计，它摊在绑点面板上）；三套阈值输入收成**一张整块规则表** | `PropertyPanel.vue` 只有 `section` + `h3`，**没有折叠**；`ArrayControl.vue` 也不折行——每行一个描边 div，可见子字段全部同时渲染。行内再嵌 9 个阈值子字段，10 项的模块会一次摊出几百个控件 |
 | 8 | 每轮 PR 的覆盖目标是 **行 95 / 分支 90** | `web/vitest.config.ts:63` 有一条 per-glob 阈值 `'packages/*/src/**/*.ts': { lines: 95, branches: 90 }`。四个模块的取值逻辑全落在这个 glob 里，先红的是它而不是全局的 80/75 |
@@ -308,7 +308,7 @@ icon: {
 
 `shared/thresholds.ts` 的 `LEVEL_VAR` 是四色硬映射（`normal → --state-success` /
 `info → --state-info` / `warning → --state-warning` / `danger → --state-danger`），
-`thresholdsConfigField()` 的 `itemSchema` 只有 `op` / `value` / `value2` / `level` / `label` / `blink`，
+`ThresholdRule` 的字段只有 `op` / `value` / `value2` / `level` / `label` / `blink`，
 **没有颜色**。于是：
 
 - `source-list` 的 `KIND_VAR` 五色（`--chart-series-2/3/4` / `--state-warning` / `--chart-cold`）配不出来；
@@ -890,7 +890,7 @@ bindings: [{
 
 | 件 | 用不用 | 怎么用 |
 |---|---|---|
-| `shared/thresholds.ts` | **只用求值器与常量** | `evaluateThresholds`（逐条调用，§3.2）· `THRESHOLD_OPS` / `THRESHOLD_LEVELS` / `SEVERITY_RANK`（`rowSort: 'severity'` 用它）/ `levelColor`（规则 `color` 空串时的回落）/ `isAlarmLevel`（`rowFilter: 'alarm'` 用它）。⚠ **不用 `thresholdsConfigField`**：它的行里没有颜色（§3.1）。⚠ **一个字都不改这个文件** |
+| `shared/thresholds.ts` | **只用求值器与常量** | `evaluateThresholds`（逐条调用，§3.2）· `THRESHOLD_OPS` / `THRESHOLD_LEVELS` / `SEVERITY_RANK`（`rowSort: 'severity'` 用它）/ `levelColor`（规则 `color` 空串时的回落）/ `isAlarmLevel`（`rowFilter: 'alarm'` 用它）。⚠ 规则行里没有颜色，配置字段由模块自己声明（§3.1）。⚠ **一个字都不改这个文件** |
 | `shared/format.ts` | **用** | `NO_DATA` / `isPresent` / `toNumOrNull` / `fmtNumber`（千分位）/ `fmtTrim`（去尾零）/ `fmtDecimal`（补零）/ `fmtKwh` / `fmtClock`。⚠ `.vue` 里禁 `new Date(` 与 `toLocaleString(`（`check_ts_style.py` 的 `check_formatting_is_centralised` 只扫 `_components()`），全部走这里 |
 | `shared/status.ts` | **用** | `DEVICE_STATUSES` / `toDeviceStatus` / `STATUS_LABEL`，`badge.kind: 'device'` 那一档。⚠ 缺值恒 `unknown`，连 `fallback` 都不给用 |
 | `shared/StatusBadge.vue` | **用** | `badge.kind: 'device'` 直接渲染它（props 就 `status` 与可选 `label`），不再自绘。参考仓 `metric-status-table` 自绘的那套无圆点无动画徽章，正是 `badge.kind: 'rule'` + `style: 'outline'` 那一档 |
@@ -902,7 +902,7 @@ bindings: [{
 | `shared/config.ts` | **用** | `readText` / `readTrimmedText` / `readBoolean` / `readNumber` / `readEnum` / `readLooseNumber` / `readArray` / `readRecord` / `configDefaults`。⚠ `readNumber` 的 `fallback` **必填**；⚠ `readEnum` 只认字符串字面量，不做数字/布尔的字符串化 |
 | `shared/interaction.ts` | **用** | `rowClickEmitter(emit)`，空值不上抛；`.stop` 由模板写 |
 | `shared/assetImage.ts` | **用** | `resolveImageValue(value)`。⚠ 精确行为：只有 **`asset:` 引用**在解析不出时返回空串（未注入 resolver 时 `resolver(text)` 为空），**普通 URL 与 CSS 值原样透传**。所以「测试环境里 `item.icon` 填 URL 渲染不出来」是错的，它渲染得出来；模板仍要 `v-if` 判空再画 `<img>`，否则素材引用那一档出碎图 |
-| `shared/container.ts` / `shared/background.ts` / `shared/tagSource.ts` | **不用** | 不是容器、不画背景图层、取值走注入的绑定求值不自读点位快照 |
+| `shared/container.ts` / `shared/background.ts` | **不用** | 不是容器、不画背景图层 |
 | `shared/chart/*` | **不用** | 四个模块一个都不碰。⚠ `packages/modules/src/index.ts` 刻意不导出 `shared/chart/*`——`check_bundle_budget.py` 的 `HEAVY` 名单含 echarts，barrel 一 re-export 就把它焊进首屏静态图 |
 
 ---

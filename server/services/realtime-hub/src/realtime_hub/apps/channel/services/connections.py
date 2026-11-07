@@ -7,7 +7,7 @@
 
 import asyncio
 import uuid
-from collections.abc import Awaitable, Callable, Iterable
+from collections.abc import Awaitable, Callable
 from dataclasses import dataclass, field
 from datetime import datetime
 
@@ -58,12 +58,10 @@ class Connection:
     # ⚠ 匿名连接没有用户：公开链接的持有者不是任何一个人（ADR-0021）。
     # 用哨兵 UUID 顶替的话，订阅表里会出现一个不存在的「用户」
     user_id: uuid.UUID | None
-    # 该连接当前持有的权限码。⚠ 它会随 TTL 复核而变，不是握手时定死的
+    # 该连接当前持有的权限码。⚠ 它会随换票而变，不是握手时定死的
     codes: frozenset[str]
     # token 的到期时刻，逾期未 reauth 即关连接（close 4001）
     expires_at: datetime
-    # 上一次复核权限的时刻
-    checked_at: datetime
     send: SendFn
     send_frame: SendFrameFn
     # 匿名连接的授权；登录态连接为 None
@@ -226,7 +224,7 @@ class ConnectionRegistry:
             return self._by_id.get(connection_id)
 
     async def all_connections(self) -> tuple[Connection, ...]:
-        """本副本上的全部连接快照，供 TTL 复核逐条走一遍。"""
+        """本副本上的全部连接快照。"""
         async with self._lock:
             return tuple(self._by_id.values())
 
@@ -236,28 +234,6 @@ class ConnectionRegistry:
             return tuple(
                 item for item in self._by_id.values() if item.grant is not None
             )
-
-    async def refresh_codes(
-        self,
-        connection_id: uuid.UUID,
-        *,
-        codes: frozenset[str],
-        checked_at: datetime,
-    ) -> None:
-        """复核后写回权限码与复核时刻。
-
-        Args: connection_id, codes, checked_at。
-        """
-        async with self._lock:
-            connection = self._by_id.get(connection_id)
-            if connection is None:
-                return
-            connection.codes = codes
-            connection.checked_at = checked_at
-
-    def topics(self) -> Iterable[str]:
-        """本副本当前有人订的全部主题。扇出订阅要按它决定听哪些频道。"""
-        return tuple(self._by_topic)
 
     async def close_all(self) -> None:
         """关停时清空。连接本身由 WS 层各自关闭，这里只丢索引。"""

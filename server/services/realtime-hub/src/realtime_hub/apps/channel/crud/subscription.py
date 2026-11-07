@@ -93,17 +93,3 @@ class SubscriptionCrud(CrudBase[Subscription]):
         total = int(counted.scalar_one())
         await session.execute(delete(Subscription).where(condition))
         return total
-
-    async def topics_of(
-        self, session: AsyncSession, connection_id: uuid.UUID
-    ) -> list[str]:
-        """某条连接当前订着哪些主题。权限复核要逐个重判。
-
-        Args: session, connection_id。
-        """
-        result = await session.execute(
-            select(Subscription.topic).where(
-                Subscription.connection_id == connection_id
-            )
-        )
-        return list(result.scalars().all())

@@ -77,7 +77,10 @@ class _Progress:
     def retry(self, attempt: int) -> None:
         if self.sink is None:
             return
-        notice = f"模型暂未响应（第 {attempt}/5 次失败），10 秒后重试。"
+        notice = (
+            f"模型暂未响应（第 {attempt}/{MAX_FAILURES} 次失败），"
+            f"{int(RETRY_DELAY_S)} 秒后重试。"
+        )
         self.sink("reasoning", f"\n\n{notice}\n\n")
         if self.has_text:
             self.sink("text", "\n\n（上段响应中断，正在重新生成。）\n\n")

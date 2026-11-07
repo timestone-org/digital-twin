@@ -27,7 +27,7 @@ def _median(args: list[object]) -> object:
     middle = len(numbers) // 2
     if len(numbers) % 2:
         return numbers[middle]
-    return (numbers[middle - 1] + numbers[middle]) / 2
+    return finite((numbers[middle - 1] + numbers[middle]) / 2)
 
 
 def _variance(name: str, *, is_sample: bool) -> ScalarImpl:
@@ -42,7 +42,10 @@ def _variance(name: str, *, is_sample: bool) -> ScalarImpl:
         if size == 0 or (is_sample and size < _MIN_SAMPLE_SIZE):
             return None
         mean = sum(numbers) / size
-        squares = sum((value - mean) ** 2 for value in numbers)
+        try:
+            squares = sum((value - mean) ** 2 for value in numbers)
+        except OverflowError:
+            return None
         return finite(squares / (size - 1 if is_sample else size))
 
     return compute

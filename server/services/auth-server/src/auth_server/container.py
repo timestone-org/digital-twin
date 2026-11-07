@@ -5,6 +5,7 @@ from dataclasses import dataclass
 from auth_server.apps.auth.services import (
     ApiKeyService,
     AuthService,
+    BoundedHasher,
     RouteRuleCache,
     TokenService,
     VerifyService,
@@ -24,7 +25,7 @@ class Container:
     settings: Settings
     database: Database
     cache: Cache
-    hasher: PasswordHasher
+    hasher: BoundedHasher
     tokens: TokenService
     api_keys: ApiKeyService
     auth: AuthService
@@ -59,18 +60,34 @@ def _build_tokens(settings: Settings, cache: Cache) -> TokenService:
     )
 
 
+def _build_hashers(settings: Settings) -> tuple[BoundedHasher, BoundedHasher]:
+    hasher = PasswordHasher()
+    return (
+        BoundedHasher(
+            hasher,
+            max_concurrency=settings.argon2_password_max_concurrency,
+            name="password",
+        ),
+        BoundedHasher(
+            hasher,
+            max_concurrency=settings.argon2_api_key_max_concurrency,
+            name="api-key",
+        ),
+    )
+
+
 def _build_auth(
     settings: Settings,
     *,
     cache: Cache,
     tokens: TokenService,
     api_keys: ApiKeyService,
-    clock: Clock,
+    hasher: BoundedHasher,
 ) -> AuthService:
     return AuthService(
         tokens=tokens,
         api_keys=api_keys,
-        hasher=api_keys.hasher,
+        hasher=hasher,
         login_limiter=FixedWindowLimiter(
             cache=cache,
             namespace="login",
@@ -86,7 +103,7 @@ def _build_auth(
         ),
         signup_enabled=settings.signup_enabled,
         signup_default_role=settings.signup_default_role,
-        clock=clock,
+        clock=api_keys.clock,
     )
 
 
@@ -96,11 +113,11 @@ def build_container(settings: Settings, *, clock: Clock = utcnow) -> Container:
     Args: settings, clock（测试注入固定时钟）。
     """
     cache = Cache(url=settings.url(), timeout_s=settings.redis_timeout_s)
-    hasher = PasswordHasher()
+    hasher, api_key_hasher = _build_hashers(settings)
     tokens = _build_tokens(settings, cache)
     rules = RouteRuleCache(clock=clock)
     api_keys = ApiKeyService(
-        hasher=hasher,
+        hasher=api_key_hasher,
         cache=cache,
         clock=clock,
         verify_cache_ttl_s=settings.api_key_verify_cache_ttl_s,
@@ -118,7 +135,7 @@ def build_container(settings: Settings, *, clock: Clock = utcnow) -> Container:
             cache=cache,
             tokens=tokens,
             api_keys=api_keys,
-            clock=clock,
+            hasher=hasher,
         ),
         verify=VerifyService(
             tokens=tokens,

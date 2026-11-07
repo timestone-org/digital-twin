@@ -49,7 +49,6 @@ export const LLM_PURPOSES = [
   'knowledge.embedding',
   'knowledge.rerank',
 ] as const
-export type LlmPurposeCode = (typeof LLM_PURPOSES)[number]
 
 /** 一套重排线形：打端点根下的哪个路径、请求体长什么样。 */
 export interface LlmRerankDialect {

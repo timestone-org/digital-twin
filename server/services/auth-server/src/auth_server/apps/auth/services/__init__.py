@@ -8,6 +8,7 @@ from auth_server.apps.auth.services.api_key_service import (
     looks_like_api_key,
 )
 from auth_server.apps.auth.services.auth_service import AuthService
+from auth_server.apps.auth.services.bounded_hasher import BoundedHasher
 from auth_server.apps.auth.services.identity import (
     Identity,
     Operation,
@@ -39,6 +40,7 @@ __all__ = [
     "AccessToken",
     "ApiKeyService",
     "AuthService",
+    "BoundedHasher",
     "Decision",
     "DecisionReason",
     "Identity",

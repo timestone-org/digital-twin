@@ -31,6 +31,7 @@ from platform_server.apps.collect.services.point_frames import (
     error_items,
     index_by_node_key,
     shards,
+    warn_non_finite,
 )
 from platform_server.apps.collect.services.snapshot_source import (
     SnapshotSource,
@@ -133,7 +134,9 @@ class SourceLivePublisher:
             or self.ticker() - entry.last_full_at_s >= LIVE_HEARTBEAT_S
         )
         items = await self._items_of(source_id, node_keys)
-        outgoing = items if is_full else changed_items(items, entry.sent)
+        fresh = changed_items(items, entry.sent)
+        warn_non_finite(fresh, topic=topic_of(source_id))
+        outgoing = items if is_full else fresh
         if not outgoing:
             return 0
         if is_full:

@@ -120,22 +120,7 @@ class RealtimeClient:
 
         Args: instance_id。
         """
-        topic = topic_of(instance_id)
-        try:
-            client = self._client()
-            response = await client.delete(
-                f"{TOPICS_PATH}/{topic}", headers=self._headers()
-            )
-            response.raise_for_status()
-        except httpx.HTTPError as error:
-            _logger.error(
-                "topic_revoke_failed",
-                "注销主题失败，留下了一个空主题",
-                topic=topic,
-                error_type=type(error).__name__,
-            )
-            return False
-        return True
+        return await self.revoke_topic(topic_of(instance_id))
 
     async def publish(
         self,

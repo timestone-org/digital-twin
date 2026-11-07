@@ -31,8 +31,6 @@ _logger = get_logger("platform.llm_providers.login")
 _KEY_PREFIX = "platform:llm-device-login"
 # 句柄的字节数。它是这次登录的唯一凭证，短了就能被猜
 _REF_BYTES = 24
-# 抬高间隔后续多久。⚠ 比上游的码有效期长没关系：真过期了上游会回 expired_token
-_KEEP_TTL_S = 900
 
 
 class CredentialSink(Protocol):
@@ -139,7 +137,6 @@ class DeviceLogin:
             interval_s=pending.interval_s,
         )
         if polled.grant is None:
-            await self._keep(ref, pending, polled.interval_s)
             return LoginProgress(is_done=False, interval_s=polled.interval_s)
         bundle = await self._oauth.exchange_code(polled.grant)
         await self._store.save(
@@ -156,25 +153,6 @@ class DeviceLogin:
             provider_id=str(pending.provider_id),
         )
         return LoginProgress(is_done=True, interval_s=polled.interval_s)
-
-    async def _keep(self, ref: str, pending: _Pending, interval_s: int) -> None:
-        """把抬高后的轮询间隔写回去。
-
-        ⚠ 不写回的话，下一次轮询又按老间隔来，`slow_down` 于是永远不生效。
-        """
-        if interval_s == pending.interval_s:
-            return
-        await self._cache.set_json(
-            _key(ref),
-            _pending_json(
-                pending.provider_id,
-                device_auth_id=pending.device_auth_id,
-                user_code=pending.user_code,
-                interval_s=interval_s,
-            ),
-            # 剩余有效期这里拿不到，续一个够长的窗口；上游那边到点自己会拒
-            ttl_s=_KEEP_TTL_S,
-        )
 
 
 def _key(ref: str) -> str:

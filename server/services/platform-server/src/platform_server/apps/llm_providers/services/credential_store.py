@@ -12,6 +12,9 @@
 
 ⚠ 续期被拒（refresh_token 作废）不删行：删了的话界面上是「从来没登录过」，
 而真实情况是「登录过、需要重新来一次」——后者要告诉人，前者不用。
+
+⚠ 续期被拒后退避一段时间：失败要放锁，而放了锁又不退避的话，每次租用都会拿
+同一张废令牌再打一次上游。
 """
 
 import asyncio
@@ -47,10 +50,14 @@ SessionFactory = Callable[[], AbstractAsyncContextManager[AsyncSession]]
 REFRESH_SKEW_S = 300
 # 续期锁的存活时间，必须长于一次续期往返
 REFRESH_LOCK_TTL_S = 15
+# 续期被拒后多久内不再问上游。⚠ 不能按 last_error 永久短路：上游的 429/5xx
+# 也判成拒绝，永久短路的话一次抖动就得人工重新登录
+REFRESH_REJECTED_BACKOFF_S = 60
 # 没拿到锁的人等多久再读库
 REFRESH_WAIT_S = 1.0
 # 账号标识只留尾巴，前面打码
 ACCOUNT_TAIL_CHARS = 6
+_RELOGIN_HINT = "这一路订阅账号的登录已失效，去模型管理页重新登录一次"
 
 
 @dataclass(frozen=True)
@@ -189,9 +196,7 @@ class CredentialStore:
             found = TokenBundle.from_cipher_text(row.token_enc, self._cipher)
         if found is None:
             # 换过加密密钥的部署会走到这里：行还在，但那一份再也解不开了
-            raise LlmCredentialStale(
-                "这一路订阅账号的登录已失效，去模型管理页重新登录一次"
-            )
+            raise LlmCredentialStale(_RELOGIN_HINT)
         return found
 
     async def _refreshed(
@@ -204,12 +209,31 @@ class CredentialStore:
         ):
             return await self._waited(provider_id, stale)
         try:
+            # ⚠ 手上这份是抢锁之前读的：上一位持锁人可能刚换完，它的
+            # refresh_token 已经作废，拿去再刷会把好好的登录标成失效
+            current = await self._bundle(provider_id)
+            if not current.is_stale(skew_s=REFRESH_SKEW_S):
+                return current
+            if await self._cache.exists(_backoff_key(provider_id)):
+                raise LlmCredentialStale(_RELOGIN_HINT)
+            return await self._exchanged(provider_id, current)
+        finally:
+            await self._cache.delete_if_owner(key, holder)
+
+    async def _exchanged(
+        self, provider_id: uuid.UUID, stale: TokenBundle
+    ) -> TokenBundle:
+        """向上游换一份新的并落库。调用方持有续期锁。"""
+        try:
             fresh = await self._oauth.refresh(stale.refresh_token)
         except LlmLoginRejected as error:
             await self._mark_failed(provider_id, str(error))
-            raise LlmCredentialStale(
-                "这一路订阅账号的登录已失效，去模型管理页重新登录一次"
-            ) from error
+            await self._cache.set_if_absent(
+                _backoff_key(provider_id),
+                "1",
+                ttl_s=REFRESH_REJECTED_BACKOFF_S,
+            )
+            raise LlmCredentialStale(_RELOGIN_HINT) from error
         await self.save(
             provider_id, fresh, auth_mode=AUTH_MODE_CHATGPT, actor=None
         )
@@ -218,7 +242,6 @@ class CredentialStore:
             "模型账号凭据已续期",
             provider_id=str(provider_id),
         )
-        await self._cache.delete_if_owner(key, holder)
         return fresh
 
     async def _waited(
@@ -246,6 +269,14 @@ class CredentialStore:
                 return
             row.last_error = reason
             row.row_version = _next_version(row.row_version)
+
+
+def _backoff_key(provider_id: uuid.UUID) -> str:
+    """这一路续期被拒后的退避标记。
+
+    Args: provider_id。
+    """
+    return f"llm-credential-refresh-rejected:{provider_id}"
 
 
 def _apply(

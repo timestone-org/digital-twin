@@ -6,7 +6,8 @@
 （docs/DATASET_DESIGN.md §5.6）。
 """
 
-from collections.abc import Callable, Iterable
+from bisect import bisect_left, bisect_right
+from collections.abc import Callable, Iterable, Sequence
 from dataclasses import dataclass, field
 from datetime import UTC, datetime, tzinfo
 
@@ -21,7 +22,7 @@ from platform_server.apps.dataset.formula.complete_windows import (
 from platform_server.apps.dataset.formula.errors import FormulaError
 from platform_server.apps.dataset.formula.evaluator import ExternalKey
 from platform_server.apps.dataset.formula.refs import FormulaDeps, WindowRef
-from platform_server.apps.dataset.formula.values import to_number
+from platform_server.apps.dataset.formula.values import finite, to_number
 from platform_server.apps.dataset.formula.windows import (
     WindowSpec,
     window_lower_bound,
@@ -188,7 +189,7 @@ def _window_value(
     # 当前行参与本表窗口：仅当它确实持有该列的值——公式列引用自身窗口时不成立，
     # 这正是 `SUM_OVER({自己}, '1y')` 不构成环的原因
     if current.values.get(ref.key) is not None or ref.spec.step_s is not None:
-        rows = sorted([*rows, current], key=lambda row: row.ts)
+        rows = [*rows, current]
     return _window_aggregate(ref, rows, current.ts, cache.tz)
 
 
@@ -207,16 +208,24 @@ def _window_aggregate(
 
 
 def _slice_window(
-    rows: Iterable[RowSnapshot], ts: datetime, spec: WindowSpec, tz: tzinfo
+    rows: Sequence[RowSnapshot], ts: datetime, spec: WindowSpec, tz: tzinfo
 ) -> list[RowSnapshot]:
-    """从一串升序的行里切出 `(下界, ts]`。
+    """从一串升序的行里二分切出 `(下界, ts]`，今日窗下界闭。
 
-    Args: rows, ts, spec, tz。
+    Args: rows（⚠ 必须按 ts 升序）, ts, spec, tz。
     """
     lower = window_lower_bound(ts, spec, tz)
-    if spec.is_today:
-        return [row for row in rows if lower <= row.ts <= ts]
-    return [row for row in rows if lower < row.ts <= ts]
+    locate = bisect_left if spec.is_today else bisect_right
+    start = locate(rows, lower, key=_row_ts)
+    return list(rows[start : bisect_right(rows, ts, key=_row_ts)])
+
+
+def _row_ts(row: RowSnapshot) -> datetime:
+    """二分用的键。
+
+    Args: row。
+    """
+    return row.ts
 
 
 def _as_of(
@@ -295,7 +304,7 @@ def _aggregate(func: str, rows: list[RowSnapshot], key: str) -> object:
     reducer = _SERIES_REDUCERS.get(func)
     if reducer is None:  # pragma: no cover - 名单由契约测试锁死
         raise FormulaError(f"未实现的窗口函数 {func}")
-    return reducer(series) if series else None
+    return finite(reducer(series)) if series else None
 
 
 def _first_present(rows: list[RowSnapshot], key: str) -> object:
@@ -326,4 +335,5 @@ def _whole_value(func: str, stats: WholeStats | None) -> object:
     deriver = _WHOLE_DERIVERS.get(func)
     if deriver is None:  # pragma: no cover - 名单由契约测试锁死
         raise FormulaError(f"未实现的整列聚合函数 {func}")
-    return deriver(stats)
+    value = deriver(stats)
+    return None if value is None else finite(value)

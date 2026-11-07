@@ -101,14 +101,19 @@ async function onSubmit(): Promise<void> {
     priority: Number(form.value.priority),
     is_enabled: form.value.is_enabled,
     permission_codes: [...selected.value],
-    description: form.value.description || undefined,
   }
   try {
     if (props.rule) {
-      await admin.updateRouteRule(props.rule.id, payload)
+      await admin.updateRouteRule(props.rule.id, {
+        ...payload,
+        description: form.value.description,
+      })
       emit('saved', '规则已更新')
     } else {
-      await admin.createRouteRule(payload)
+      await admin.createRouteRule({
+        ...payload,
+        description: form.value.description || undefined,
+      })
       emit('saved', '规则已创建')
     }
     emit('update:modelValue', false)

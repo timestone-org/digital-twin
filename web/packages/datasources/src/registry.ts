@@ -3,11 +3,7 @@
  * 渲染层一行不用碰（docs/DASHBOARD_DESIGN.md §5.5）。
  * ⚠ 这里不许 import 任何具体 provider——注册表一旦认识实现，那条缝就焊死了。
  */
-import type {
-  BindingSourceKind,
-  DataSourceProvider,
-  ProviderRegistry,
-} from '@dt/contracts'
+import type { BindingSourceKind, DataSourceProvider } from '@dt/contracts'
 
 import { DataSourceError } from './errors'
 
@@ -54,15 +50,4 @@ export function listProviders(): readonly DataSourceProvider[] {
 /** ⚠ 只给测试用：生产路径调用它等于把大屏的取数一次全摘掉。 */
 export function __resetProviders(): void {
   providers.clear()
-}
-
-/**
- * contracts 口径的注册表面，供应用壳装配好后注入运行时。
- * ⚠ 它的 `get` 按契约在未登记时返回 undefined，调用方必须据此给出 error 槽；
- * 本包内部一律走会抛的 `getProvider`。
- */
-export const providerRegistry: ProviderRegistry = {
-  register: registerProvider,
-  get: (kind) => providers.get(kind),
-  reset: __resetProviders,
 }

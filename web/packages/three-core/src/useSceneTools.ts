@@ -68,6 +68,8 @@ export interface SceneTools {
   measured: ComputedRef<number>
   /** 把镜头飞到这条命中的几何上。 */
   locate: (hit: TwinSearchHit) => void
+  /** 模型或摆放变了：按当前轴与位置重算剖切面；没开剖切时什么都不做。 */
+  reapplyClipping: () => void
   /** 导出当前画面为 PNG。 */
   screenshot: () => void
   toggleMeasure: () => void
@@ -86,14 +88,34 @@ function legendOf(options: SceneToolsOptions): TwinLegendEntry[] {
   return collectSceneLegend(config.flows, config.parts)
 }
 
+/** 剖切的状态与重算。 */
+function useClipping(
+  options: SceneToolsOptions,
+): Pick<SceneTools, 'clipAxis' | 'clipRatio' | 'reapplyClipping'> {
+  const clipAxis = ref<TwinClipAxis>('none')
+  const clipRatio = ref(0.5)
+  const clip = (): void =>
+    applyClipping(options.core(), clipAxis.value, clipRatio.value)
+
+  // ⚠ 轴或位置一改就重算：交给宿主去调的话，漏一处的表现是「拖了滑块没反应」
+  watch([clipAxis, clipRatio], clip)
+
+  return {
+    clipAxis,
+    clipRatio,
+    reapplyClipping: () => {
+      if (clipAxis.value !== 'none') clip()
+    },
+  }
+}
+
 /**
  * 装上场景工具。
  * @param options 场景内核、配置、节点索引与标题
  */
 export function useSceneTools(options: SceneToolsOptions): SceneTools {
   const query = ref('')
-  const clipAxis = ref<TwinClipAxis>('none')
-  const clipRatio = ref(0.5)
+  const clipping = useClipping(options)
   const measuring = ref(false)
   const legendOpen = ref(false)
   const points = ref<readonly Point[]>([])
@@ -103,19 +125,13 @@ export function useSceneTools(options: SceneToolsOptions): SceneTools {
     measureDistance(points.value[0] ?? null, points.value[1] ?? null),
   )
 
-  // ⚠ 轴或位置一改就重算：交给宿主去调的话，漏一处的表现是「拖了滑块没反应」
-  watch([clipAxis, clipRatio], () =>
-    applyClipping(options.core(), clipAxis.value, clipRatio.value),
-  )
-
   return {
     query,
     legendOpen,
     hits: computed(() => result.value.hits),
     total: computed(() => result.value.total),
     legend: computed(() => legendOf(options)),
-    clipAxis,
-    clipRatio,
+    ...clipping,
     measuring,
     measured,
     locate: (hit) => {

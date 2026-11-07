@@ -4,25 +4,9 @@
 // 渲染组件由模块清单异步 import。守这条的用例在
 // app/tests/contract/startup-graph.contract.spec.ts。
 export { default as TwinScene } from './TwinScene.vue'
-export { AnchorLayer } from './anchorLayer'
-export { ArrowLayer } from './arrowLayer'
-export { FlowLayer } from './flowLayer'
-export { PanelLayer } from './panelLayer'
-export { SceneEffectsLayer } from './sceneEffects'
-export { MAX_FRAME_S, createFrameClock } from './frameClock'
-export type { FrameClock } from './frameClock'
-export { SceneLayers } from './sceneLayers'
+export { MAX_FRAME_S } from './frameClock'
 export type { SceneLayerValues } from './sceneLayers'
-export {
-  EMPTY_NODE_INDEX,
-  applyPartVisibility,
-  buildNodeIndex,
-  meshesOfNames,
-  objectsOfNames,
-  unmatchedNodeNames,
-} from './nodeIndex'
-export type { NodeIndex } from './nodeIndex'
-export { createGltfSource, loadTwinModel } from './modelLoader'
+export { loadTwinModel } from './modelLoader'
 export type {
   GltfSource,
   TwinModelAsset,
@@ -30,36 +14,21 @@ export type {
 } from './modelLoader'
 export {
   WEBGL_UNAVAILABLE_MESSAGE,
-  applyCameraPose,
-  applyModelPlacement,
-  boundingDiagonal,
-  clampPixelRatio,
   createSceneCore,
   createWebGLRenderer,
   disposeScene,
   disposeSceneGraph,
   frameObject,
-  horizontalSpanOf,
-  modelFrameOrigin,
   renderScene,
-  resizeScene,
 } from './sceneCore'
 export type {
-  ModelFrame,
-  ModelPlacement,
   SceneCore,
   SceneCoreOptions,
   SceneRenderer,
   SceneRendererFactory,
 } from './sceneCore'
-export {
-  glSnapshotsWithin,
-  registerCoreSnapshot,
-  registerGlSnapshot,
-  snapshotSceneCore,
-} from './glCapture'
+export { registerGlSnapshot } from './glCapture'
 export type { GlSnapshotSource } from './glCapture'
-export { ACCENT_COLOR_TOKEN, resolveColorSpec } from './themeColor'
 export {
   configureTwinModelHost,
   resetTwinModelHost,
@@ -67,10 +36,7 @@ export {
 } from './host'
 export type { TwinModelHost } from './host'
 export { EditorScene } from './editorScene'
-export { GameNavigationControls } from './gameNavigationControls'
-export type { GameNavigationOptions } from './gameNavigationControls'
-export { TransformGizmo } from './transformGizmo'
-export type { GizmoChange, GizmoKind, GizmoMode } from './transformGizmo'
+export type { GizmoChange, GizmoMode } from './transformGizmo'
 export type {
   EditorSceneCallbacks,
   EditorSceneOptions,
@@ -81,8 +47,6 @@ export type {
 export type { TwinSceneEntityKind, TwinSceneSelection } from './pickTargets'
 export { useRenderLoop } from './useRenderLoop'
 export type { RenderLoop, RenderLoopOptions } from './useRenderLoop'
-export { useRoamTour } from './useRoamTour'
-export type { RoamTourController, RoamTourDeps } from './useRoamTour'
 
 export type { ModelAnimationEntry } from './animationCatalog'
 

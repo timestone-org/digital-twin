@@ -13,6 +13,7 @@ import {
   useConfirm,
   DtIconButton,
 } from '@dt/ui'
+import { PERMISSION_CODES } from '@dt/contracts'
 import type { DtDataColumn, ReportTemplateSummary } from '@dt/contracts'
 import * as api from '@/api/reports'
 import PermGuard from '@/components/PermGuard.vue'
@@ -101,7 +102,7 @@ async function remove(id: string): Promise<void> {
       <RouterLink to="/reports/schedules">
         <DtButton variant="ghost" size="sm" icon="calendar">定时规则</DtButton>
       </RouterLink>
-      <PermGuard :codes="['report:manage']">
+      <PermGuard :codes="[PERMISSION_CODES.reportManage]">
         <DtButton
           variant="ghost"
           size="sm"
@@ -157,7 +158,7 @@ async function remove(id: string): Promise<void> {
           }}</DtTag>
         </template>
         <template #cell-actions="{ row }">
-          <PermGuard :codes="['report:manage']">
+          <PermGuard :codes="[PERMISSION_CODES.reportManage]">
             <DtIconButton
               size="sm"
               variant="ghost"

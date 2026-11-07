@@ -16,10 +16,14 @@
 放在其中一条那边会让另一条反向 import，而那是一个 import 期的环。
 """
 
+import math
 from collections.abc import Iterable, Mapping, Sequence
-from typing import Any
+from typing import Any, cast
 
+from lib.logging import get_logger
 from platform_server.apps.collect.services.snapshot_source import PointReading
+
+_logger = get_logger("platform.collect.frames")
 
 # 条目的状态，闭合集合。⚠ 字符串不是数字：数字枚举在两个仓之间对不上号时
 # 没有任何提示（api-contract §4.2）
@@ -35,10 +39,11 @@ KEY_TIMESTAMP_MS = "timestampMs"
 KEY_QUALITY = "quality"
 KEY_ERROR = "errorMessage"
 
-# 两种取不到的原因，分开写：一个是「采集侧没报过它」，一个是「我们读不到」，
-# 处置完全不同——前者去查点位配置，后者去看 Redis
+# 取不到的原因分开写，处置完全不同：「采集侧没报过它」去查点位配置，「我们读
+# 不到」去看 Redis，「不是有限数」去查现场设备
 MISSING_REASON = "点位暂无快照值，采集侧还没上报过它"
 UNAVAILABLE_REASON = "点位快照暂时读不到"
+NON_FINITE_REASON = "点位读数不是有限数，无法展示"
 
 Item = dict[str, Any]
 
@@ -75,6 +80,22 @@ def changed_items(
     return [item for item in items if sent.get(_node_key_of(item)) != item]
 
 
+def warn_non_finite(fresh: Iterable[Item], *, topic: str) -> None:
+    """这批新变化里有非有限读数时按批记一条。
+
+    ⚠ 只传与上一次推送不同的条目：值不变时它每拍都还在，逐拍记会淹没日志。
+    Args: fresh, topic。
+    """
+    points = sum(item.get(KEY_ERROR) == NON_FINITE_REASON for item in fresh)
+    if points:
+        _logger.warning(
+            "point_value_non_finite",
+            "点位读数不是有限数，按取不到推送",
+            topic=topic,
+            points=points,
+        )
+
+
 def shards(items: Sequence[Item], size: int) -> list[list[Item]]:
     """按上限切片。
 
@@ -102,6 +123,8 @@ def _item_of(node_key: str, reading: PointReading | None) -> Item:
     """
     if reading is None:
         return _error_item(node_key, reason=MISSING_REASON)
+    if not _is_finite(reading.value):
+        return _error_item(node_key, reason=NON_FINITE_REASON)
     return {
         KEY_NODE: node_key,
         KEY_STATE: POINT_STATE_OK,
@@ -111,6 +134,23 @@ def _item_of(node_key: str, reading: PointReading | None) -> Item:
         KEY_TIMESTAMP_MS: reading.timestamp_ms,
         KEY_QUALITY: reading.quality,
     }
+
+
+def _is_finite(value: object) -> bool:
+    """值里是否没有 NaN / Infinity，数组与对象逐层看。
+
+    ⚠ 拦在这里而不是快照解码：hub 那一跳是严格 JSON，一个发不出去的值会让整批
+    失败；而解码处拦掉会让点位状态也跟着变成「等待」，它其实采到了。
+    Args: value。
+    """
+    if isinstance(value, float):
+        return math.isfinite(value)
+    if isinstance(value, list):
+        return all(_is_finite(part) for part in cast("list[object]", value))
+    if isinstance(value, dict):
+        parts = cast("dict[str, object]", value).values()
+        return all(_is_finite(part) for part in parts)
+    return True
 
 
 def _error_item(node_key: str, *, reason: str) -> Item:

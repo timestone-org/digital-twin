@@ -838,6 +838,8 @@ export class EditorScene {
   private clearModel(): void {
     this.isolation.restore()
     this.on.modelAnimations?.([])
+    // ⚠ 先还原部件层：克隆材质与排序几何还挂在网格上时释放，原件就漏了
+    this.layers?.parts.dispose()
     if (this.core !== null) disposeSceneGraph(this.core.modelRoot)
     this.modelObject = null
     this.nodeIndex = EMPTY_NODE_INDEX

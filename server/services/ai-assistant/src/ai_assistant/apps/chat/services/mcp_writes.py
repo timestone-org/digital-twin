@@ -166,11 +166,7 @@ class McpWriteService:
             raise Conflict("MCP 工具名无效")
         headers = await self._fresh_headers(pending, policy)
         await self._deps.catalog.refresh_server(pieces[1])
-        tool = (
-            self._deps.catalog.find(pieces[1], pieces[2])
-            if len(pieces) == MCP_NAME_SEGMENTS
-            else None
-        )
+        tool = self._deps.catalog.find(pieces[1], pieces[2])
         if tool is None:
             raise Conflict("该 MCP 工具已不可用")
         await self._deps.platform.read_mcp_target(

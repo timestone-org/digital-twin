@@ -10,6 +10,7 @@ import uuid
 from collections.abc import Sequence
 from dataclasses import dataclass
 
+from sqlalchemy.exc import IntegrityError
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from platform_server.apps.dataset.services import formula_library
@@ -25,6 +26,7 @@ from platform_server.apps.modeling.models import (
     ModelingBinding,
     ModelVersion,
 )
+from platform_server.apps.modeling.services.constraints import violates
 from platform_server.apps.modeling.services.jsonshape import (
     as_dict,
     as_list,
@@ -39,6 +41,7 @@ from platform_server.apps.modeling.services.pipeline_service import Actor
 
 # 只有列形参进得了特征矩阵：值形参是一个表达式的位置，不是一列数
 PARAM_COLUMN = "column"
+_CODE_CONSTRAINT = "uq_modeling_bindings_fx_code"
 
 
 @dataclass(frozen=True)
@@ -85,7 +88,12 @@ async def create_binding(
             created_by_name=actor.name,
         ),
     )
-    await session.flush()
+    try:
+        await session.flush()
+    except IntegrityError as error:
+        if not violates(error, _CODE_CONSTRAINT):
+            raise
+        raise BindingCodeTaken("这条公式条目已经绑过一个模型版本了") from error
     return row
 
 

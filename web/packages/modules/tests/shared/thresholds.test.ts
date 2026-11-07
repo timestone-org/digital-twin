@@ -13,7 +13,6 @@ import {
   isAlarmLevel,
   levelColor,
   normalizeRules,
-  thresholdsConfigField,
   type ThresholdRule,
 } from '../../src/shared/thresholds'
 
@@ -249,38 +248,5 @@ describe('normalizeRules', () => {
     const rules = normalizeRules([{ op: 'gte', value: 80, level: 'danger' }])
 
     expect(evaluateThresholds(80, rules)?.level).toBe('danger')
-  })
-})
-
-describe('thresholdsConfigField', () => {
-  it('缺省生成 thresholds 数组字段，缺省值是空表', () => {
-    const field = thresholdsConfigField()
-
-    expect(field.key).toBe('thresholds')
-    expect(field.type).toBe('array')
-    expect(field.default).toEqual([])
-    expect(field.itemLabelKey).toBe('level')
-  })
-
-  it('子字段齐全，上界只在区间档显示', () => {
-    const item = thresholdsConfigField().itemSchema ?? []
-
-    expect(item.map((field) => field.key)).toEqual([
-      'op',
-      'value',
-      'value2',
-      'level',
-      'label',
-      'blink',
-    ])
-    expect(item[2]?.when).toEqual({ key: 'op', in: ['between', 'outside'] })
-  })
-
-  it('键与文案可改', () => {
-    const field = thresholdsConfigField('alarms', '报警线', '说明')
-
-    expect(field.key).toBe('alarms')
-    expect(field.label).toBe('报警线')
-    expect(field.help).toBe('说明')
   })
 })

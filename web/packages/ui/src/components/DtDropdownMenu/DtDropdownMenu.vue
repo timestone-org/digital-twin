@@ -25,7 +25,6 @@ const props = withDefaults(
 const emit = defineEmits<{ select: [item: DtMenuItem] }>()
 
 const menuEl = ref<HTMLElement | null>(null)
-const activeIndex = ref(-1)
 
 const enabled = computed(() =>
   props.items.filter((item) => item.disabled !== true),
@@ -35,11 +34,6 @@ function itemElements(): HTMLElement[] {
   const root = menuEl.value
   if (root === null) return []
   return [...root.querySelectorAll<HTMLElement>('[role="menuitem"]')]
-}
-
-function focusAt(index: number): void {
-  activeIndex.value = index
-  itemElements()[index]?.focus()
 }
 
 /** 从 from 沿 step 找下一个可用项（环绕）；全禁用返回 -1。 */
@@ -64,26 +58,20 @@ function onKeydown(event: KeyboardEvent, close: () => void): void {
   if (event.key === 'ArrowDown' || event.key === 'ArrowUp') {
     event.preventDefault()
     const step = event.key === 'ArrowDown' ? 1 : -1
-    const target = nextEnabled(activeIndex.value, step)
-    if (target >= 0) focusAt(target)
+    const elements = itemElements()
+    const focused = elements.findIndex(
+      (element) => element === document.activeElement,
+    )
+    const target = nextEnabled(focused, step)
+    if (target >= 0) elements[target]?.focus()
     return
   }
   if (event.key === 'Tab') close()
 }
-
-/** 展开时高亮回到第一个可用项，免得上次的位置串到这次。 */
-function onOpened(): void {
-  activeIndex.value = -1
-}
 </script>
 
 <template>
-  <DtPopover
-    :side="'bottom'"
-    :align="align"
-    :disabled="disabled"
-    @update:open="onOpened"
-  >
+  <DtPopover :side="'bottom'" :align="align" :disabled="disabled">
     <template #default="{ toggle, isOpen, panelId }">
       <slot
         name="trigger"

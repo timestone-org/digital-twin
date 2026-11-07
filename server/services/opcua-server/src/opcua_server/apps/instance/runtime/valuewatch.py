@@ -12,7 +12,7 @@
 import asyncio
 import uuid
 from collections.abc import Awaitable, Callable
-from typing import Any
+from typing import Any, cast
 
 from asyncua import ua
 
@@ -39,6 +39,8 @@ class ValueWatcher:
         # asyncua 的 NodeId → 我们的节点标识。回调只给 Node，得自己映回去
         self._identifiers: dict[str, str] = {}
         self._subscription: Any = None
+        # 在途的回调任务。⚠ asyncio 只持弱引用，要自己持住直到完成
+        self._running: set[asyncio.Future[None]] = set()
 
     async def watch(self, server: Any, nodes: dict[str, Any]) -> None:
         """订阅这批节点的值变化。
@@ -115,37 +117,33 @@ class ValueWatcher:
 
         ⚠ 它是**同步**的：不能在这里 await。把活儿交给 ValuePublisher 的
         `record`，而 record 需要 await——所以这里派一个任务出去。
-        ⚠ 任务句柄存进集合再在完成时移除：asyncio 只持弱引用，不存的话它可能
-        在运行中被 GC 掉，表现是「有些值变化没推出去」且没有任何报错。
+        ⚠ 任务句柄存进集合再在完成时移除：不存的话它可能在运行中被 GC 掉，
+        表现是「有些值变化没推出去」且没有任何报错。
 
         Args: node, value, _data。
         """
         identifier = self._identifiers.get(str(node.nodeid.to_string()))
         if identifier is None:
             return
-        _spawn(self._on_change(self._instance_id, identifier, _unwrap(value)))
+        task = asyncio.ensure_future(
+            self._on_change(self._instance_id, identifier, _unwrap(value))
+        )
+        self._running.add(task)
+        task.add_done_callback(self._running.discard)
 
 
 def _unwrap(value: object) -> object:
-    """把 asyncua 的包装值剥成裸值。
+    """把 asyncua 的包装值剥成可进 JSON 的裸值。
+
+    ⚠ bytes 要转文本：推送走 JSON，一个 byte_string 节点的 bytes 会让整批
+    序列化抛错。编码与 `datatypes._coerce_bytes` 的 UTF-8 约定对称。
 
     Args: value。
     """
-    if isinstance(value, ua.DataValue):
+    if isinstance(value, ua.DataValue | ua.Variant):
         return _unwrap(value.Value)
-    if isinstance(value, ua.Variant):
-        return value.Value
+    if isinstance(value, bytes):
+        return value.decode("utf-8", errors="replace")
+    if isinstance(value, list):
+        return [_unwrap(item) for item in cast("list[object]", value)]
     return value
-
-
-_running: set[Any] = set()
-
-
-def _spawn(coroutine: Awaitable[None]) -> None:
-    """把协程派成任务并持住引用直到完成。
-
-    Args: coroutine。
-    """
-    task = asyncio.ensure_future(coroutine)
-    _running.add(task)
-    task.add_done_callback(_running.discard)

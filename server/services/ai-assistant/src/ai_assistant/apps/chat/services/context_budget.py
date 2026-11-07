@@ -77,16 +77,23 @@ def split_messages(
         cut < max(0, len(candidates) - MIN_RECENT_MESSAGES)
         and tokens_of([*pinned, *candidates[cut:]]) > target
     ):
-        cut += 1
-        while cut < len(candidates) and isinstance(
-            candidates[cut], ToolMessage
-        ):
-            cut += 1
-    if cut >= len(candidates):
-        return [], list(messages)
+        boundary = _next_boundary(candidates, cut)
+        if boundary >= len(candidates):
+            break
+        cut = boundary
     dropped = candidates[:cut]
     kept_ids = {id(message) for message in [*pinned, *candidates[cut:]]}
     return dropped, [message for message in messages if id(message) in kept_ids]
+
+
+def _next_boundary(candidates: Sequence[BaseMessage], cut: int) -> int:
+    """下一个不拆工具批次的切点；Args: candidates, cut。"""
+    boundary = cut + 1
+    while boundary < len(candidates) and isinstance(
+        candidates[boundary], ToolMessage
+    ):
+        boundary += 1
+    return boundary
 
 
 def rows_of(messages: Sequence[BaseMessage], start: int) -> list[HistoryRow]:
@@ -117,7 +124,10 @@ def bounded_fold(
     rows: Sequence[HistoryRow], previous: Summary | None, max_tokens: int
 ) -> tuple[list[HistoryRow], Summary | None]:
     """摘要输入有界；Args: rows, previous, max_tokens。"""
-    allowance = max(1, int(max_tokens * 0.35) // max(1, len(rows)))
+    # ⚠ 只摊给 previous 之后的新行：折叠本来就不看旧行，留着只会稀释份额
+    edge = previous.through_seq if previous is not None else 0
+    fresh = [row for row in rows if row.seq >= edge]
+    allowance = max(1, int(max_tokens * 0.35) // max(1, len(fresh)))
     bounded = [
         HistoryRow(
             role="assistant" if row.role == "tool" else row.role,
@@ -127,7 +137,7 @@ def bounded_fold(
                 "text": _excerpt(_fold_text(row), allowance),
             },
         )
-        for row in rows
+        for row in fresh
     ]
     if previous is not None and len(previous.text) > int(max_tokens * 0.2):
         previous = Summary(

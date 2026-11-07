@@ -223,14 +223,6 @@ export function scanTableColumns(raw: unknown): ColumnScan {
 }
 
 /**
- * 列表的归一化，只要列。
- * @param raw `config[TABLE_COLUMNS_KEY]` 的原值
- */
-export function readTableColumns(raw: unknown): TableColumn[] {
-  return scanTableColumns(raw).columns
-}
-
-/**
  * 行列表的归一化：脏行不丢、只补默认。
  * ⚠ 丢一行会让它之后每一条绑定改喂前一行，而绑定的 `fieldKey` 是按下标拼的。
  * @param raw `config[TABLE_ROWS_KEY]` 的原值

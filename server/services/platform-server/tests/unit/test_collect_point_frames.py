@@ -6,6 +6,10 @@
 判就会每天被误标 23 小时，而它的值一直是对的。
 """
 
+import json
+
+import pytest
+
 from platform_server.apps.collect.services import PointReading
 from platform_server.apps.collect.services.point_frames import (
     KEY_ERROR,
@@ -15,6 +19,7 @@ from platform_server.apps.collect.services.point_frames import (
     KEY_TIMESTAMP_MS,
     KEY_VALUE,
     MISSING_REASON,
+    NON_FINITE_REASON,
     POINT_STATE_ERROR,
     POINT_STATE_OK,
     POINT_STATES,
@@ -80,6 +85,48 @@ def test_a_point_without_a_snapshot_says_so_and_carries_no_value() -> None:
             KEY_ERROR: MISSING_REASON,
         }
     ]
+
+
+@pytest.mark.parametrize(
+    "value",
+    [
+        float("nan"),
+        float("inf"),
+        float("-inf"),
+        [1.0, float("nan")],
+        {"raw": [float("inf")]},
+    ],
+)
+def test_a_non_finite_value_is_pushed_as_unavailable(value: object) -> None:
+    # ⚠ 往 hub 走的是严格 JSON：放它进条目，这一屏整批都发不出去
+    items = build_items([OUTLET], {OUTLET: reading(value)})
+    assert items == [
+        {
+            KEY_NODE: OUTLET,
+            KEY_STATE: POINT_STATE_ERROR,
+            KEY_ERROR: NON_FINITE_REASON,
+        }
+    ]
+    json.dumps(items, allow_nan=False)
+
+
+def test_an_overflowing_number_literal_is_non_finite_too() -> None:
+    # `1e999` 不走 `parse_constant`，解出来却同样是 inf
+    items = build_items([OUTLET], {OUTLET: reading(json.loads("1e999"))})
+    assert items[0][KEY_STATE] == POINT_STATE_ERROR
+
+
+@pytest.mark.parametrize("value", [[1.0, 2.0], {"raw": 1.5}, None, True, "NaN"])
+def test_finite_values_of_any_shape_pass_through(value: object) -> None:
+    items = build_items([OUTLET], {OUTLET: reading(value)})
+    assert items[0][KEY_STATE] == POINT_STATE_OK
+
+
+def test_a_steady_non_finite_value_is_not_a_change() -> None:
+    # ⚠ `nan != nan`：条目里留着原值的话，它每拍都算一次变化
+    previous = build_items([OUTLET], {OUTLET: reading(float("nan"))})
+    current = build_items([OUTLET], {OUTLET: reading(float("nan"))})
+    assert changed_items(current, index_by_node_key(previous)) == []
 
 
 def test_the_items_keep_the_order_of_the_plan() -> None:

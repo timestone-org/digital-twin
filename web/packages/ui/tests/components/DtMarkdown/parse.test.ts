@@ -106,6 +106,26 @@ describe('块', () => {
 })
 
 describe('行内', () => {
+  it.each([
+    ['两个点位名', 'K1_TT 与 K2_TT 的温差'],
+    ['字段名之间', 'a_b c_d'],
+    ['蛇形字段名', 'node_key_value'],
+    ['单词内成对', 'foo_bar_baz'],
+    ['单词内双下划线', 'foo__bar__baz'],
+    ['紧贴中文', '温度_平均_值'],
+  ])('词内下划线按字面保留：%s', (_name, text) => {
+    expect(parseInline(text)).toEqual([{ kind: 'text', text }])
+  })
+
+  it.each([
+    ['空格包围', '看 _强调_ 这里', 'em'],
+    ['行首行尾', '_强调_', 'em'],
+    ['紧贴标点', '（_强调_）', 'em'],
+    ['双下划线', '看 __要紧__ 这里', 'strong'],
+  ])('词外的下划线仍是强调：%s', (_name, text, kind) => {
+    expect(parseInline(text).some((span) => span.kind === kind)).toBe(true)
+  })
+
   it('粗体、行内代码、链接各归各', () => {
     const spans = parseInline('**要紧**：写 `items` 见 [文档](https://a.b)')
 

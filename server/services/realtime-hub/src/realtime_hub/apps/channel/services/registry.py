@@ -14,7 +14,6 @@ from realtime_hub.apps.channel.errors import (
     TopicNotDeclared,
     UnknownPermissionCode,
 )
-from realtime_hub.apps.channel.models import TopicDeclaration
 from realtime_hub.apps.channel.services.code_catalog import CodeCatalog
 
 _logger = get_logger("realtime.registry")
@@ -50,21 +49,22 @@ class TopicRegistry:
                 f"权限码 {required_code} 不在权限码目录里"
             )
         async with self._database.session() as session:
-            existing = await self._topics.get_by_topic(session, topic)
-            if existing is not None:
-                if existing.required_code != required_code:
+            is_inserted = await self._topics.insert_if_absent(
+                session,
+                topic=topic,
+                required_code=required_code,
+                publisher=publisher,
+            )
+            if not is_inserted:
+                existing = await self._topics.get_by_topic(session, topic)
+                if (
+                    existing is not None
+                    and existing.required_code != required_code
+                ):
                     raise TopicAlreadyDeclared(
                         "该主题已被登记，且声明的权限码与本次不同"
                     )
                 return
-            self._topics.add(
-                session,
-                TopicDeclaration(
-                    topic=topic,
-                    required_code=required_code,
-                    publisher=publisher,
-                ),
-            )
         _logger.info(
             "topic_declared",
             "主题已登记",

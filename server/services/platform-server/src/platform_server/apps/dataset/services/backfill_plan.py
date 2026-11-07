@@ -273,17 +273,6 @@ def guard_bucket(
     return grid.shift(reach, -_GUARD_GAP)
 
 
-def count_buckets(
-    grid: BucketGrid, first: datetime, last: datetime, *, ceiling: int
-) -> int:
-    """闭区间里有多少个桶；数过 `ceiling` 就不再往下数。
-
-    ⚠ 紧凑身份段直接计数，不为计数展开最多 20 万个桶。
-    Args: grid, first, last, ceiling。
-    """
-    return grid.count(first, last, ceiling)
-
-
 def slice_batches(plan: BackfillPlan) -> Iterator[BackfillBatch]:
     """把整段切成一批批，每批 `BATCH_BUCKETS` 个桶。
 

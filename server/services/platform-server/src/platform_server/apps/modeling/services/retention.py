@@ -23,6 +23,7 @@ from platform_server.apps.modeling.crud import (
 from platform_server.apps.modeling.services.artifact_store import run_prefix
 from platform_server.apps.modeling.services.run_dispatch import (
     INTERRUPTED_REASON,
+    ORCHESTRATION_REASON,
 )
 from platform_server.apps.modeling.services.sessions import Sessions
 
@@ -30,6 +31,8 @@ _logger = get_logger("platform.modeling.retention")
 
 # 一趟最多收多少条，防一次扫死一张表
 SWEEP_MAX_RUNS = 2000
+# 只有编排半路断掉的运行会留下没有节点行的字节
+LEFTOVER_REASONS = frozenset({INTERRUPTED_REASON, ORCHESTRATION_REASON})
 
 
 @dataclass(frozen=True)
@@ -60,7 +63,11 @@ async def converge_pipeline(
             session, pipeline_id
         )
         stale = await run_crud.ids_beyond_keep(
-            session, pipeline_id=pipeline_id, keep=keep, exclude=published
+            session,
+            pipeline_id=pipeline_id,
+            keep=keep,
+            exclude=published,
+            leftover_reasons=LEFTOVER_REASONS,
         )
         removed = 0
         for run_id in stale:

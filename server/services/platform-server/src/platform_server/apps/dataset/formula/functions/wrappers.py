@@ -88,6 +88,6 @@ def aggregate(name: str, reducer: Callable[[list[float]], float]) -> ScalarImpl:
 
     def compute(args: list[object]) -> object:
         numbers = numbers_of(args, name)
-        return reducer(numbers) if numbers else None
+        return finite(reducer(numbers)) if numbers else None
 
     return compute

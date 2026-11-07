@@ -28,6 +28,20 @@ class NodeCrud(CrudBase[DashboardNode]):
     def __init__(self) -> None:
         super().__init__(DashboardNode)
 
+    async def dashboard_id_of(
+        self, session: AsyncSession, node_id: uuid.UUID
+    ) -> uuid.UUID | None:
+        """节点所在的大屏，只读这一列，不把节点载入身份映射。
+
+        Args: session, node_id。
+        """
+        rows = await session.execute(
+            select(DashboardNode.dashboard_id).where(
+                DashboardNode.id == node_id
+            )
+        )
+        return rows.scalar_one_or_none()
+
     async def list_by_dashboard(
         self, session: AsyncSession, dashboard_id: uuid.UUID
     ) -> list[DashboardNode]:

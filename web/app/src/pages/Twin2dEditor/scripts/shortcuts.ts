@@ -15,6 +15,7 @@ import { TWIN_2D_DEFAULT_GRID } from '@dt/twin2d'
 import type { Pt } from '@dt/twin2d'
 import { onMounted, onUnmounted } from 'vue'
 import { useWorkspacePage } from '@/features/workspace/context'
+import { ownsKeyboard } from '@/utils/keyboardOwner'
 
 /**
  * 数字键 1..6 对应的工具。
@@ -45,16 +46,8 @@ const COARSE_FACTOR = 10
  * 焦点算不算落在「该独占键盘」的东西里。
  * ⚠ 逐字口径见文件头那条：按最近可交互祖先判，只看 tagName 会静默挪节点。
  */
-const INTERACTIVE_SELECTOR =
-  'input, textarea, select, [contenteditable]:not([contenteditable="false"]),' +
-  ' [role="combobox"], [role="listbox"], [role="dialog"]'
-
 export function isTwin2dFormFocused(): boolean {
-  const active = document.activeElement
-  return (
-    active instanceof HTMLElement &&
-    active.closest(INTERACTIVE_SELECTOR) !== null
-  )
+  return ownsKeyboard(document.activeElement)
 }
 
 /** 一次按键落到哪个动作上。 */

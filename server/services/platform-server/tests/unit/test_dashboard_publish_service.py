@@ -4,9 +4,12 @@
 那批数据就永远补不回来，而日志里只有一条推送失败。
 """
 
+import logging
 import uuid
 from collections.abc import Mapping, Sequence
 from dataclasses import dataclass, field
+
+import pytest
 
 from lib.errors import DependencyUnavailable
 from platform_server.apps.collect.services import PointReading
@@ -268,6 +271,17 @@ async def test_a_deleted_dashboard_is_pushed_nothing_and_forgotten() -> None:
     del harness.plans.plans[DASHBOARD]
     await harness.publisher.publish_once()
     assert len(harness.frames()) == 1
+
+
+async def test_a_non_finite_point_warns_once_not_every_tick(
+    caplog: pytest.LogCaptureFixture,
+) -> None:
+    harness = build_harness(readings={OUTLET: reading(float("nan"))})
+    harness.watch((DASHBOARD, VIEWER))
+    with caplog.at_level(logging.WARNING):
+        await harness.publisher.publish_once()
+        await harness.publisher.publish_once()
+    assert caplog.messages.count("point_value_non_finite") == 1
 
 
 async def test_a_point_without_a_snapshot_is_pushed_as_unreadable() -> None:

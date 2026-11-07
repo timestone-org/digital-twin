@@ -32,13 +32,20 @@ class NodePool:
         self._executor = self._factory()
         self._slot = asyncio.Semaphore(1)
 
-    async def run[Result](self, job: Callable[[], Result]) -> Result:
-        """在独占执行槽运行纯计算；执行中取消时回收旧池。Args: job。"""
+    async def run[Result](
+        self, job: Callable[[], Result], *, timeout_s: float | None = None
+    ) -> Result:
+        """在独占执行槽运行纯计算；执行中超时或取消时回收旧池。
+
+        ⚠ 时限在拿到槽之后才起算：训练与规则共用一个槽，排队不算这一步超时。
+        Args: job, timeout_s。
+        """
         async with self._slot:
             try:
-                return await asyncio.get_running_loop().run_in_executor(
-                    self._executor, job
-                )
+                async with asyncio.timeout(timeout_s):
+                    return await asyncio.get_running_loop().run_in_executor(
+                        self._executor, job
+                    )
             except (Exception, asyncio.CancelledError):
                 self.recycle()
                 raise
@@ -83,5 +90,6 @@ class PooledRunner:
 
         Args: payload。
         """
-        async with asyncio.timeout(self._timeout_s):
-            return await self._pool.run(partial(run_node_payload, payload))
+        return await self._pool.run(
+            partial(run_node_payload, payload), timeout_s=self._timeout_s
+        )

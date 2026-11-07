@@ -509,12 +509,6 @@ export function axisRowCounts(
   return { [AXIS_SLOT_KEY]: readAxisItems(config[AXIS_ITEMS_KEY]).length }
 }
 
-/** 出厂量程，清单与用例共用这一对。 */
-export const AXIS_DEFAULT_RANGE: AxisRange = {
-  min: RADAR_AXIS_MIN_DEFAULT,
-  max: RADAR_AXIS_MAX_DEFAULT,
-}
-
 /**
  * 一根轴上某个读数的文案：逐轴单位与小数位优先，缺了才用整块那一份。
  * @param value 读数原值

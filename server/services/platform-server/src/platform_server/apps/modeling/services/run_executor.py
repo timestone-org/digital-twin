@@ -159,6 +159,8 @@ async def execute_graph(
             skipped = _skipped(order[ordinal + 1 :], nodes, ordinal + 1)
             await _persist_all(execution, skipped)
             return _failed(outcomes + skipped, outcome, context)
+    if await execution.should_cancel():
+        return _cancelled(outcomes, context)
     return _succeeded(outcomes, context)
 
 

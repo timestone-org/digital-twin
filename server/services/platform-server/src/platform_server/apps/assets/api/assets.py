@@ -154,7 +154,7 @@ async def finalize(
     request = FinalizeRequest(name=body.name, actor=actor.username)
     saved = await finalize_upload(session, store, asset_id, request)
     if needs_compression(saved):
-        dispatcher.after_commit(new_message(asset_id))
+        dispatcher.after_commit(session, new_message(asset_id))
     return ok(saved)
 
 
@@ -177,7 +177,7 @@ async def recompress(
     """
     del actor
     saved = await request_recompression(session, asset_id)
-    dispatcher.after_commit(new_message(asset_id))
+    dispatcher.after_commit(session, new_message(asset_id))
     return ok(saved, message="已排进压缩队列")
 
 

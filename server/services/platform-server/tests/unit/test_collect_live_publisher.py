@@ -4,6 +4,7 @@
 整批标成取不到。少任何一条，配置页上「有值 / 没值 / 值是旧的」就分不开。
 """
 
+import logging
 import uuid
 from collections.abc import Sequence
 from dataclasses import dataclass
@@ -13,6 +14,7 @@ import pytest
 from lib.errors import DependencyUnavailable
 from platform_server.apps.collect.services.live_plan import LivePlan
 from platform_server.apps.collect.services.live_publisher import (
+    LIVE_HEARTBEAT_S,
     LiveOptions,
     SourceLivePublisher,
 )
@@ -131,6 +133,20 @@ async def test_nobody_watching_means_nothing_is_pushed() -> None:
     report = await harness.publisher.publish_once()
     assert (report.sources, report.items) == (0, 0)
     assert harness.realtime.published == []
+
+
+async def test_a_non_finite_point_warns_once_across_heartbeats(
+    caplog: pytest.LogCaptureFixture,
+) -> None:
+    # 心跳全量会把它再推一遍，但这不是一次新情况
+    harness = build_harness()
+    harness.snapshots.readings[KEY_A] = reading(float("inf"))
+    with caplog.at_level(logging.WARNING):
+        await harness.publisher.publish_once()
+        harness.ticker.now_s = LIVE_HEARTBEAT_S
+        await harness.publisher.publish_once()
+    assert len(harness.realtime.published) == 2
+    assert caplog.messages.count("point_value_non_finite") == 1
 
 
 async def test_a_new_watcher_gets_the_whole_list_at_once() -> None:

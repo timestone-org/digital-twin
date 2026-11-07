@@ -5,7 +5,10 @@
 """
 
 import json
+import logging
 import uuid
+
+import pytest
 
 from collectwire import (
     FIELD_QUALITY,
@@ -117,3 +120,16 @@ def test_a_source_whose_hash_expired_yields_no_readings() -> None:
     # 采集进程死掉后快照跟着过期，大屏于是拿不到值而不是拿着旧值当实时值
     grouped = {SOURCE: ("outlet_temp",)}
     assert decode_rows(grouped, [[None]]) == {}
+
+
+@pytest.mark.parametrize("value", [float("nan"), float("inf"), float("-inf")])
+def test_a_non_finite_value_is_still_the_reading_collector_wrote(
+    value: float, caplog: pytest.LogCaptureFixture
+) -> None:
+    # ⚠ 设备确实报了这个值、质量位也照实：拦截归推送线形，这里改成「取不到」
+    # 会让点位状态从 good 变 waiting
+    with caplog.at_level(logging.WARNING):
+        reading = decode_reading(encoded(value))
+    assert reading is not None
+    assert reading.quality == "good"
+    assert "snapshot_value_corrupt" not in caplog.messages

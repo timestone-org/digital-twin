@@ -69,12 +69,32 @@ async def test_a_deleted_source_has_its_topic_revoked() -> None:
 
 
 async def test_an_unreachable_hub_revokes_nothing() -> None:
-    # ⚠ 取不到清单时输入为空：宁可多留一个空主题，也不要一次超时把全量清光
+    # ⚠ 取不到清单时什么都不注销：宁可多留一个空主题，也不要一次超时把全量清光
     reconciler, realtime = build(
         ids=[SOURCE_A], known=[topic_of(SOURCE_B)], is_reachable=False
     )
     _, revoked = await reconciler.reconcile()
     assert (revoked, realtime.revoked) == (0, [])
+
+
+async def test_an_unanswered_list_skips_the_round_instead_of_declaring() -> (
+    None
+):
+    # ⚠ hub 卡死时每条登记都要等满超时，串行补全量会把一拍拖过租约 TTL
+    reconciler, realtime = build(ids=[SOURCE_A], known=[], is_reachable=False)
+    assert await reconciler.reconcile() == (0, 0)
+    assert realtime.declared == []
+
+
+async def test_a_skipped_round_is_made_up_once_the_list_answers_again() -> None:
+    # 跳过是安全的前提：不动 hub 上已有的主题，缺的下一轮补齐
+    reconciler, realtime = build(
+        ids=[SOURCE_A], known=[topic_of(SOURCE_B)], is_reachable=False
+    )
+    await reconciler.reconcile()
+    realtime.is_reachable = True
+    assert await reconciler.reconcile() == (1, 1)
+    assert realtime.known_topics == [topic_of(SOURCE_A)]
 
 
 async def test_a_disabled_source_still_keeps_its_topic() -> None:

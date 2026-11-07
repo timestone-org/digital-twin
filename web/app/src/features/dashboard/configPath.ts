@@ -79,39 +79,3 @@ function descend(current: unknown, rest: ConfigPath, value: unknown): unknown {
   if (head === undefined) return value
   return writeInto(current, head, tail, value)
 }
-
-/**
- * 删掉数组里的一行，返回新的配置对象。
- * @param root 配置对象
- * @param path 指向数组的路径
- * @param index 行号
- */
-export function removeConfigRow(
-  root: Record<string, unknown>,
-  path: ConfigPath,
-  index: number,
-): Record<string, unknown> {
-  const rows = readConfigAt(root, path)
-  if (!isUnknownArray(rows)) return root
-  return writeConfigAt(
-    root,
-    path,
-    rows.filter((_row, at) => at !== index),
-  )
-}
-
-/**
- * 往数组末尾追加一行，返回新的配置对象。
- * @param root 配置对象
- * @param path 指向数组的路径
- * @param row 新行
- */
-export function appendConfigRow(
-  root: Record<string, unknown>,
-  path: ConfigPath,
-  row: unknown,
-): Record<string, unknown> {
-  const rows = readConfigAt(root, path)
-  const current: readonly unknown[] = isUnknownArray(rows) ? rows : []
-  return writeConfigAt(root, path, [...current, row])
-}

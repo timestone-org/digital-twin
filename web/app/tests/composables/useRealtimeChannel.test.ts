@@ -11,12 +11,14 @@
  */
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 import { createPinia, setActivePinia } from 'pinia'
+import { effectScope, nextTick } from 'vue'
 
 import {
   closeRealtimeChannel,
   usePublicRealtimeChannel,
   useRealtimeChannel,
 } from '@/composables/useRealtimeChannel'
+import { useRealtimeSessionBinding } from '@/composables/useRealtimeSessionBinding'
 import { CLOSE_TOKEN_EXPIRED } from '@/runtime/realtimeConnection'
 import {
   REALTIME_AUTH_EXPIRED_CLOSE_CODE,
@@ -356,6 +358,127 @@ describe('实时通道', () => {
     socket.emit('close', { code: 1006 })
     vi.advanceTimersByTime(60_000)
     expect(FakeSocket.instances).toHaveLength(1)
+  })
+})
+
+describe('跟随登录态', () => {
+  function bind(): () => void {
+    const scope = effectScope()
+    scope.run(() => useRealtimeSessionBinding())
+    return () => scope.stop()
+  }
+
+  function storeUser(id: string): void {
+    localStorage.setItem(STORAGE_KEYS.user, JSON.stringify({ id }))
+  }
+
+  /** 别的标签登出：存储被清，回到前台时跟上。 */
+  function logoutElsewhere(): void {
+    localStorage.removeItem(STORAGE_KEYS.accessToken)
+    document.dispatchEvent(new Event('visibilitychange'))
+  }
+
+  beforeEach(() => {
+    storeUser('u-a')
+    setActivePinia(createPinia())
+  })
+
+  it.each([
+    ['主动登出', () => void useAuthStore().logout()],
+    ['401 清会话', () => useAuthStore().clear()],
+    ['其他标签登出', logoutElsewhere],
+  ])('%s 后关掉连接，不留给下一个账号', async (_name, endSession) => {
+    const unbind = bind()
+    useRealtimeChannel()
+    const socket = latest()
+
+    endSession()
+    await nextTick()
+
+    expect(socket.closed).toBe(true)
+    unbind()
+  })
+
+  it('换账号后用新账号的令牌重新握手', async () => {
+    const unbind = bind()
+    useRealtimeChannel()
+    const auth = useAuthStore()
+
+    auth.clear()
+    await nextTick()
+    auth.accessToken = 'tok-2'
+    useRealtimeChannel()
+
+    expect(FakeSocket.instances).toHaveLength(2)
+    expect(latest().protocols).toEqual([AUTH_SUBPROTOCOL, 'tok-2'])
+    unbind()
+  })
+
+  it('别的标签从 A 直接换成 B，不经过登出也要关掉 A 的连接', async () => {
+    const unbind = bind()
+    useRealtimeChannel()
+    const socket = latest()
+
+    localStorage.setItem(STORAGE_KEYS.accessToken, 'tok-b')
+    storeUser('u-b')
+    document.dispatchEvent(new Event('visibilitychange'))
+    await nextTick()
+
+    expect(socket.closed).toBe(true)
+    useRealtimeChannel()
+    expect(latest().protocols).toEqual([AUTH_SUBPROTOCOL, 'tok-b'])
+    unbind()
+  })
+
+  it('令牌轮换不断连接', async () => {
+    const unbind = bind()
+    useRealtimeChannel()
+    const socket = latest()
+
+    useAuthStore().accessToken = 'tok-2'
+    await nextTick()
+
+    expect(socket.closed).toBe(false)
+    unbind()
+  })
+
+  it('同一账号换一份用户资料不断连接', async () => {
+    const unbind = bind()
+    useRealtimeChannel()
+    const socket = latest()
+    const auth = useAuthStore()
+
+    auth.user = { id: 'u-a', permissions: ['dashboard:view'] } as never
+    await nextTick()
+
+    expect(socket.closed).toBe(false)
+    unbind()
+  })
+
+  it('用户资料从无到有不断连接', async () => {
+    localStorage.removeItem(STORAGE_KEYS.user)
+    setActivePinia(createPinia())
+    const unbind = bind()
+    useRealtimeChannel()
+    const socket = latest()
+
+    useAuthStore().user = { id: 'u-a' } as never
+    await nextTick()
+
+    expect(socket.closed).toBe(false)
+    unbind()
+  })
+
+  it('公开连接不跟登录态走', async () => {
+    const unbind = bind()
+    usePublicRealtimeChannel('pub-1')
+    const socket = latest()
+
+    useAuthStore().clear()
+    await nextTick()
+
+    expect(socket.closed).toBe(false)
+    unbind()
   })
 })
 

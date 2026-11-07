@@ -51,6 +51,11 @@ class Settings(AppSettings, PostgresSettings, RedisSettings):
     # 变成写链路，而这个字段只需要回答「这枚密钥还有人用吗」。
     api_key_touch_interval_s: int = Field(default=60, ge=1)
 
+    # argon2 两条通道的并发上限。每路约占 64MiB，默认合计 4 路约 256MiB。
+    # API 密钥单独一条：登录突发时 /verify 的缓存未命中不必排在它们后面。
+    argon2_password_max_concurrency: int = Field(default=2, ge=1)
+    argon2_api_key_max_concurrency: int = Field(default=2, ge=1)
+
     login_max_attempts: int = 10
     login_window_s: int = 300
 

@@ -182,6 +182,19 @@ async def test_cancelling_stops_at_the_next_node_boundary() -> None:
     ] * 4
 
 
+async def test_a_cancel_during_the_last_node_still_cancels_the_run() -> None:
+    """最后一个节点跑着时点的取消，不能落成 succeeded 再走自动发布。"""
+    graph = linear_graph()
+    execution = execution_of(
+        DirectRunner(),
+        frames={"s": linear_frame(50)},
+        cancel_after=len(graph.nodes),
+    )
+    outcome = await execute_graph(graph, execution=execution)
+    assert outcome.status == "cancelled"
+    assert [item.status for item in outcome.nodes] == ["succeeded"] * 6
+
+
 async def test_run_previews_stay_within_the_budget() -> None:
     """一次运行的全部摘要合计不超过预算。"""
     total = sum(

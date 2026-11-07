@@ -20,7 +20,10 @@ def _round(args: list[object]) -> object:
     if value is None:
         return None
     digits = to_number(args[1] if len(args) > 1 else 0, where="ROUND 的小数位")
-    return round(value, int(digits or 0))
+    try:
+        return round(value, int(digits or 0))
+    except OverflowError:
+        return None
 
 
 def _sign(value: float) -> float:

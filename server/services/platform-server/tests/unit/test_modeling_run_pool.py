@@ -95,23 +95,46 @@ async def test_cancelling_waiter_preserves_running_job() -> None:
         pool.shutdown()
 
 
-async def test_waiting_timeout_does_not_recycle_active_job() -> None:
+async def test_time_spent_waiting_for_the_slot_is_not_on_the_clock() -> None:
     executor = PendingExecutor()
     pool = NodePool(factory=lambda: executor)
     running = asyncio.create_task(
         PooledRunner(pool, timeout_s=5).run(payload())
     )
+    waiting = None
     try:
         await asyncio.wait_for(executor.entered.wait(), timeout=5)
-        with pytest.raises(TimeoutError):
-            await PooledRunner(pool, timeout_s=0.01).run(payload())
+        waiting = asyncio.create_task(
+            PooledRunner(pool, timeout_s=0.05).run(payload())
+        )
+        await asyncio.sleep(0.1)
+        assert not waiting.done()
         assert not executor.closed
-        assert len(executor.pending) == 1
+        executor.entered.clear()
         executor.pending[0].set_result(NodeResult(outputs={"ok": True}))
         assert (await running).outputs == {"ok": True}
+        await asyncio.wait_for(executor.entered.wait(), timeout=5)
+        executor.pending[1].set_result(NodeResult(outputs={"next": True}))
+        assert (await waiting).outputs == {"next": True}
     finally:
         running.cancel()
-        await asyncio.gather(running, return_exceptions=True)
+        if waiting is not None:
+            waiting.cancel()
+        await asyncio.gather(
+            *(task for task in (running, waiting) if task is not None),
+            return_exceptions=True,
+        )
+        pool.shutdown()
+
+
+async def test_a_job_over_its_limit_recycles_the_pool() -> None:
+    executor = PendingExecutor()
+    pool = NodePool(factory=lambda: executor)
+    try:
+        with pytest.raises(TimeoutError):
+            await PooledRunner(pool, timeout_s=0.01).run(payload())
+        assert executor.closed
+    finally:
         pool.shutdown()
 
 
