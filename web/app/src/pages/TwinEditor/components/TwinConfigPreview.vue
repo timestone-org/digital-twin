@@ -362,6 +362,7 @@ watch(
     border-radius: var(--radius-md);
     background: var(--surface-base);
     box-shadow: var(--fx-shadow-menu);
+    animation: dt-overlay-enter var(--motion-enter) var(--motion-ease-enter);
 
     > :not(.config-preview__card) {
       flex-shrink: 0;

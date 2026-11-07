@@ -141,6 +141,7 @@ defineExpose({ el, focusSearch, scrollActiveIntoView })
   border-radius: var(--radius-md);
   box-shadow: var(--fx-shadow-menu);
   backdrop-filter: blur(6px);
+  animation: dt-overlay-enter var(--motion-fast) var(--motion-ease-enter);
 
   &__search {
     display: flex;

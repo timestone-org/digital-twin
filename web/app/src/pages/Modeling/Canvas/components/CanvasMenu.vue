@@ -154,6 +154,7 @@ onUnmounted(stopListening)
   border-radius: var(--radius-md);
   background: var(--surface-panel);
   box-shadow: var(--fx-shadow-menu);
+  animation: dt-overlay-enter var(--motion-fast) var(--motion-ease-enter);
 
   &__item {
     display: flex;

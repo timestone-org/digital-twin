@@ -5,7 +5,7 @@
  * 习惯性动作，所以第一次只提示、再按一次才真的丢。「关闭」按钮不在此列——
  * 那是瞄准了才点得中的目标。
  */
-import { describe, expect, it } from 'vitest'
+import { afterEach, describe, expect, it } from 'vitest'
 import { mount } from '@vue/test-utils'
 import { defineComponent, h, KeepAlive, nextTick, ref } from 'vue'
 
@@ -196,5 +196,61 @@ describe('以打开态挂载的弹窗', () => {
     wrapper.unmount()
     expect(document.activeElement).toBe(button)
     button.remove()
+  })
+})
+
+describe('出现与离开的动效', () => {
+  // ⚠ VTU 默认把 Transition 桩掉，不关掉的话这里断言的类名永远不存在
+  const realTransition = { stubs: { transition: false } }
+
+  // 离场中的节点在卸载后还会留一帧，不清掉下一条用例会查到它
+  afterEach(() => {
+    document.body.innerHTML = ''
+  })
+
+  function root(): HTMLElement {
+    const found = document.body.querySelector<HTMLElement>('.dt-modal')
+    if (found === null) throw new Error('弹窗不在页面上')
+    return found
+  }
+
+  it('挂载时就开着的弹窗也播入场，否则 v-if 包着的弹窗全部直出', () => {
+    const wrapper = mount(DtModal, {
+      props: { modelValue: true, title: '编辑' },
+      attachTo: document.body,
+      global: realTransition,
+    })
+    expect(root().classList).toContain('dt-modal-enter-active')
+    wrapper.unmount()
+  })
+
+  it('关闭时走离场，而不是立刻摘掉节点', async () => {
+    const wrapper = mount(DtModal, {
+      props: { modelValue: true, title: '编辑' },
+      attachTo: document.body,
+      global: realTransition,
+    })
+    await wrapper.setProps({ modelValue: false })
+    expect(root().classList).toContain('dt-modal-leave-active')
+    wrapper.unmount()
+  })
+
+  it('页面被 KeepAlive 收起时不播离场，弹窗不许留在下一个页面上', async () => {
+    const visible = ref(true)
+    const page = defineComponent({
+      setup: () => () => h(DtModal, { modelValue: true, title: '编辑' }),
+    })
+    const host = defineComponent({
+      setup: () => () => h(KeepAlive, () => (visible.value ? h(page) : null)),
+    })
+    const wrapper = mount(host, {
+      attachTo: document.body,
+      global: realTransition,
+    })
+    visible.value = false
+    await nextTick()
+    expect(root().classList).not.toContain('dt-modal-leave-active')
+    expect(root().style.display).toBe('none')
+    wrapper.unmount()
   })
 })

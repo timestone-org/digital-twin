@@ -18,7 +18,9 @@ describe('点位绑定选择', () => {
       expect(wrapper.emitted('submit')).toEqual([[operation !== 'copy']])
       await wrapper.setProps({ open: false })
       await wrapper.setProps({ open: true })
-      expect(checkbox.element.checked).toBe(operation === 'copy')
+      // 重开是一个新节点：弹窗走 v-if，上一轮取到的已经离开页面
+      const reopened = wrapper.get<HTMLInputElement>('input[type=checkbox]')
+      expect(reopened.element.checked).toBe(operation === 'copy')
       wrapper.unmount()
     },
   )

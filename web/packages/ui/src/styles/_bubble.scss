@@ -16,6 +16,25 @@
   backdrop-filter: blur(6px);
 }
 
+/// 入场：从触发器一侧滑出。调用处要有 `&--<方向>` 修饰类。
+@mixin bubble-enter {
+  animation: dt-overlay-enter var(--motion-fast) var(--motion-ease-enter);
+
+  &--top {
+    --dt-overlay-y: 4px;
+  }
+
+  &--left {
+    --dt-overlay-x: 4px;
+    --dt-overlay-y: 0;
+  }
+
+  &--right {
+    --dt-overlay-x: -4px;
+    --dt-overlay-y: 0;
+  }
+}
+
 /// 旋转 45° 的方块箭头，只留朝外的两条边，接缝处正好被面压住。
 /// 调用处要给 `--_arrow`（箭头沿气泡起边的偏移）与 `&--<方向>` 修饰类。
 /// @param $size 箭头方块边长

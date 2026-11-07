@@ -160,6 +160,7 @@ defineExpose({ open: requestOpen, close: requestClose, toggle })
 
     @include bubble.bubble-surface(var(--radius-md));
     @include bubble.bubble-arrow;
+    @include bubble.bubble-enter;
     @include ctl.focus-ring;
   }
 }

@@ -107,6 +107,7 @@ watch(hasContent, (available) => {
 
     @include bubble.bubble-surface;
     @include bubble.bubble-arrow;
+    @include bubble.bubble-enter;
   }
 }
 </style>

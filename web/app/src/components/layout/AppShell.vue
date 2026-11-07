@@ -96,6 +96,7 @@ watch(
             :class="[
               focusMode ? 'p-2' : isCompact ? 'p-3' : 'p-5',
               { 'pt-5': workspace && !embed.isEmbedded.value },
+              { 'dt-animate-surface-in': !focusMode },
             ]"
           >
             <slot />

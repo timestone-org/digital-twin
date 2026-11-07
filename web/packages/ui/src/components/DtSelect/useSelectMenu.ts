@@ -71,7 +71,7 @@ export function useSelectMenu(options: SelectMenuOptions): SelectMenu {
    * ⚠ 在 DtModal 里必须挂进弹窗面板：挂 body 的话浮层是面板的**兄弟节点**，
    * 一来焦点跑出弹窗的焦点陷阱（再按 Tab 直接离开弹窗），二来面板挂着
    * `aria-modal="true"`，读屏会忽略面板之外的一切，整个选项列表对读屏不存在。
-   * 面板没有 transform / filter，fixed 定位仍相对视口，也不会被 overflow 裁掉。
+   * 面板静止时没有 transform / filter，fixed 定位仍相对视口，也不会被 overflow 裁掉。
    */
   function resolveHost(): string | HTMLElement {
     return root.value?.closest<HTMLElement>('.dt-modal__panel') ?? 'body'

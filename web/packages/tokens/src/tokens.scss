@@ -152,6 +152,14 @@
   --z-confirm: 550;
   --z-toast: 600;
 
+  /* —— 动效标尺：只管「框体出现与离开」这一类一次性过渡 ——
+   * 不进主题轴：换肤换的是观感，节奏全站只有一份。 */
+  --motion-fast: 120ms;
+  --motion-enter: 220ms;
+  --motion-exit: 140ms;
+  --motion-ease-enter: cubic-bezier(0.16, 1, 0.3, 1);
+  --motion-ease-exit: cubic-bezier(0.4, 0, 1, 1);
+
   /* —— 卡片复合层（默认引用语义层）—— */
   --card-bg: var(--surface-panel);
   --card-border: var(--border-default);
@@ -175,4 +183,23 @@
    * ⚠ 只给字体族，等宽数字要消费处自己配 font-variant-numeric。 */
   --font-digit-base: var(--font-family-harmony);
   --font-digit: var(--font-digit-base);
+}
+
+/* 系统要求减少动态时压成 0：Vue 的 Transition 读到 0 就不等待，组件不用各写一支分支。 */
+@media (prefers-reduced-motion: reduce) {
+  :root {
+    --motion-fast: 0ms;
+    --motion-enter: 0ms;
+    --motion-exit: 0ms;
+  }
+}
+
+/* 框体入场。放这里是因为 scoped 块内的 keyframes 会被加 hash，跨组件复用必然失配。
+ * ⚠ 只平移、不缩放，也不加 fill：浮层靠 offsetWidth 量尺寸，而动画结束后留着 transform
+ * 会让框体里 position: fixed 的下拉改以框体为基准。 */
+@keyframes dt-overlay-enter {
+  from {
+    opacity: 0;
+    transform: translate(var(--dt-overlay-x, 0), var(--dt-overlay-y, -4px));
+  }
 }

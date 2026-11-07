@@ -144,7 +144,7 @@ function onKeydown(event: KeyboardEvent): void {
   inset: 0;
   background: color-mix(in srgb, var(--surface-base) 45%, transparent);
   backdrop-filter: blur(8px) saturate(0.85);
-  animation: dt-node-modal-fade 0.18s ease both;
+  animation: dt-node-modal-fade var(--motion-enter) linear both;
 }
 
 /* 不支持 backdrop-filter 的环境靠加厚底色达到同样的隔离观感 */
@@ -164,7 +164,8 @@ function onKeydown(event: KeyboardEvent): void {
   border-radius: var(--radius-md);
   background: var(--surface-panel);
   box-shadow: var(--fx-shadow-modal);
-  animation: dt-node-modal-rise 0.2s ease both;
+  animation: dt-node-modal-rise var(--motion-enter) var(--motion-ease-enter)
+    both;
 }
 
 .dt-node-modal__panel:focus {

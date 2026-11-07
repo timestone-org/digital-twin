@@ -93,6 +93,7 @@ onBeforeUnmount(() => {
 .dt-confirm-bubble {
   @include bubble.bubble-surface(var(--radius-lg));
   @include bubble.bubble-arrow(7px);
+  @include bubble.bubble-enter;
   box-sizing: border-box;
   width: min(264px, calc(100vw - 16px));
   padding: 12px;

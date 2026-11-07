@@ -80,7 +80,7 @@ onBeforeUnmount(() => {
 <template>
   <div
     ref="host"
-    class="fixed inset-0 z-50 overflow-hidden bg-surface-base text-text-primary"
+    class="dt-animate-surface-in fixed inset-0 z-50 overflow-hidden bg-surface-base text-text-primary"
     role="dialog"
     aria-modal="true"
     aria-label="预览"

@@ -220,6 +220,7 @@ const liveLabel = computed(() => {
     border: 1px solid var(--border-default);
     border-radius: var(--radius-md);
     box-shadow: var(--fx-shadow-menu);
+    animation: dt-overlay-enter var(--motion-enter) var(--motion-ease-enter);
   }
 
   &__bar {

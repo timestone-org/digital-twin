@@ -13,6 +13,11 @@
  * 而这两条路径都不是「我要关掉它」的意思——点弹窗外面纯属误触，一律不关；
  * Esc 可能只是习惯性动作，所以第一次只提示、再按一次才真的丢。
  * 「关闭」按钮与页面自己的取消键不在此列：那是瞄准了才点得中的目标。
+ *
+ * ⚠ 淡入淡出分别挂在遮罩与面板上，不挂根节点：根上的 opacity 会让遮罩的
+ * backdrop-filter 在动画期间失效，结束那一帧模糊才突然出现。
+ *
+ * ⚠ 页面被 KeepAlive 收起时不播离场（`:css`）：那一瞬弹窗会盖在下一个页面上。
  */
 import {
   nextTick,
@@ -132,50 +137,53 @@ onBeforeUnmount(() => {
 
 <template>
   <Teleport to="body">
-    <div
-      v-if="modelValue"
-      v-show="isActive"
-      class="dt-modal"
-      :class="`dt-modal--${layer}`"
-      @keydown="onKeydown"
-    >
-      <div class="dt-modal__backdrop" @click="onBackdrop" />
+    <Transition name="dt-modal" appear :css="isActive">
       <div
-        ref="panel"
-        class="dt-modal__panel"
-        :style="{ width }"
-        role="dialog"
-        aria-modal="true"
-        :aria-label="title"
-        tabindex="-1"
+        v-if="modelValue"
+        v-show="isActive"
+        class="dt-modal"
+        :class="`dt-modal--${layer}`"
+        @keydown="onKeydown"
       >
-        <header class="dt-modal__head">
-          <div>
-            <h2 class="dt-modal__title">{{ title }}</h2>
-            <p v-if="description" class="dt-modal__desc">{{ description }}</p>
-          </div>
-          <DtButton
-            variant="ghost"
-            intent="neutral"
-            size="sm"
-            icon="close"
-            aria-label="关闭"
-            @click="close"
-          />
-        </header>
+        <div class="dt-modal__backdrop" @click="onBackdrop" />
+        <div
+          ref="panel"
+          class="dt-modal__panel"
+          :style="{ width }"
+          role="dialog"
+          aria-modal="true"
+          :aria-label="title"
+          tabindex="-1"
+        >
+          <header class="dt-modal__head">
+            <div>
+              <h2 class="dt-modal__title">{{ title }}</h2>
+              <p v-if="description" class="dt-modal__desc">{{ description }}</p>
+            </div>
+            <DtButton
+              variant="ghost"
+              intent="neutral"
+              size="sm"
+              icon="close"
+              aria-label="关闭"
+              @click="close"
+            />
+          </header>
 
-        <!-- 提示挂在正文外面：正文能滚，滚下去之后这条就看不见了 -->
-        <p v-if="isGuardShown && dirty" class="dt-modal__guard" role="alert">
-          有还没提交的内容。点弹窗外面不会关闭它；再按一次 Esc 会放弃这些内容。
-        </p>
+          <!-- 提示挂在正文外面：正文能滚，滚下去之后这条就看不见了 -->
+          <p v-if="isGuardShown && dirty" class="dt-modal__guard" role="alert">
+            有还没提交的内容。点弹窗外面不会关闭它；再按一次 Esc
+            会放弃这些内容。
+          </p>
 
-        <div class="dt-modal__body"><slot /></div>
+          <div class="dt-modal__body"><slot /></div>
 
-        <footer v-if="$slots.footer" class="dt-modal__foot">
-          <slot name="footer" />
-        </footer>
+          <footer v-if="$slots.footer" class="dt-modal__foot">
+            <slot name="footer" />
+          </footer>
+        </div>
       </div>
-    </div>
+    </Transition>
   </Teleport>
 </template>
 
@@ -283,6 +291,49 @@ onBeforeUnmount(() => {
     &__foot {
       padding: 12px;
     }
+  }
+}
+
+// 根节点上没有属性在变，这两条时长是写给 Vue 读的：它只看根节点来决定等多久
+.dt-modal-enter-active {
+  transition-duration: var(--motion-enter);
+
+  .dt-modal__backdrop {
+    transition: opacity var(--motion-enter) linear;
+  }
+
+  .dt-modal__panel {
+    transition:
+      opacity var(--motion-enter) var(--motion-ease-enter),
+      transform var(--motion-enter) var(--motion-ease-enter);
+  }
+}
+
+.dt-modal-leave-active {
+  transition-duration: var(--motion-exit);
+  // 离场期间不再接指针：点击要落到下面的页面上，而不是一个正在消失的遮罩
+  pointer-events: none;
+
+  .dt-modal__backdrop {
+    transition: opacity var(--motion-exit) linear;
+  }
+
+  .dt-modal__panel {
+    transition:
+      opacity var(--motion-exit) var(--motion-ease-exit),
+      transform var(--motion-exit) var(--motion-ease-exit);
+  }
+}
+
+.dt-modal-enter-from,
+.dt-modal-leave-to {
+  .dt-modal__backdrop {
+    opacity: 0;
+  }
+
+  .dt-modal__panel {
+    opacity: 0;
+    transform: translateY(12px) scale(0.98);
   }
 }
 </style>

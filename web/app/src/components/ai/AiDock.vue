@@ -214,7 +214,7 @@ onUnmounted(() => {
   box-shadow:
     var(--fx-shadow-modal),
     0 0 0 1px rgba(var(--accent-primary-rgb), 0.08);
-  animation: ai-dock-in 0.22s ease;
+  animation: ai-dock-in var(--motion-enter) var(--motion-ease-enter);
   transform-origin: bottom right;
 }
 

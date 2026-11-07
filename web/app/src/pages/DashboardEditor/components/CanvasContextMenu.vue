@@ -164,6 +164,7 @@ onUnmounted(stopListening)
   background: var(--surface-panel);
   box-shadow: var(--fx-shadow-menu);
   backdrop-filter: blur(12px);
+  animation: dt-overlay-enter var(--motion-fast) var(--motion-ease-enter);
 
   &__item {
     display: flex;

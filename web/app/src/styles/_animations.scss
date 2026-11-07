@@ -137,6 +137,13 @@
     animation: dt-rise-in 0.7s cubic-bezier(0.16, 1, 0.3, 1) both;
   }
 
+  // 页面与全屏框体的入场。时长走 token，减少动态时由 tokens.scss 统一压成 0
+  .dt-animate-surface-in {
+    --dt-overlay-y: 6px;
+
+    animation: dt-overlay-enter var(--motion-enter) var(--motion-ease-enter);
+  }
+
   .dt-animate-scan-y {
     animation: dt-scan-y 5s linear infinite;
   }

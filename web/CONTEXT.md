@@ -204,6 +204,9 @@ api client ── 401 → 先 refresh 再重试一次 → 仍失败才登出
   库内部同理（`DtModal` 的关闭按钮用 `DtButton`）。带业务语义的组合件才留在页面。
 - **`app/` 可以用 Tailwind，`packages/*` 一律不许**——包要能脱离本应用活着。
 - 组件样式一律 **SCSS**，取值只来自 `@dt/tokens` 的 CSS 变量。
+- 框体出现的动效走 `@dt/tokens` 的 `--motion-*` 与全局 `dt-overlay-enter`：
+  弹窗（`DtModal`）有进出场，锚定浮层只有入场，页面主区用 `dt-animate-surface-in`。
+  入场只平移不缩放、不留 fill，理由见 `tokens.scss`；减少动态时由 token 统一压成 0。
 
 ## 6. 目录约定
 
