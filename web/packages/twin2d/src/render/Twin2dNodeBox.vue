@@ -12,6 +12,7 @@ import { injectVars } from '../paintCommon'
 import { centerBoxOf, nodeTransformCss } from '../transform'
 import { applyVariants, nodeFields } from '../variants'
 import Twin2dPrimView from './Twin2dPrimView.vue'
+import { flipHoverPopups } from './hoverPopupFlip'
 import type { Twin2dSlotValues } from '../expr'
 import type { Twin2dDefaultStatus, Twin2dState, Twin2dStatus } from '../kinds'
 import type { Twin2dPaintCtx } from '../paintCommon'
@@ -81,6 +82,15 @@ const props = withDefaults(
  * 又不准（§9.3 那张表）。模板事件绑定由 Vue 自己摘，零清理代码。
  */
 const hovered = ref(false)
+
+/** 节点根元素，进入时量悬浮卡要不要翻到另一侧（§9.3）。 */
+const rootEl = ref<HTMLElement | null>(null)
+
+/** 进入节点：先在卡片仍透明时决定朝向，再置 hover。 */
+function handleEnter(): void {
+  if (rootEl.value !== null) flipHoverPopups(rootEl.value)
+  hovered.value = true
+}
 
 /**
  * 局部渐变 id 的缺省前缀。
@@ -225,12 +235,13 @@ const rootClasses = computed(() => ['t2-node', `t2-node--${status.value}`])
 
 <template>
   <div
+    ref="rootEl"
     :class="rootClasses"
     :style="rootStyle"
     data-test="node"
     :data-id="node.id"
     :data-status="status"
-    @mouseenter="hovered = true"
+    @mouseenter="handleEnter"
     @mouseleave="hovered = false"
   >
     <Twin2dPrimView
