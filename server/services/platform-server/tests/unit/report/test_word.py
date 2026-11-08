@@ -33,9 +33,11 @@ def test_word_contains_resolved_text_and_native_chart():
             "content.2": NodeValue(
                 kind="bar",
                 title="能耗",
+                categories=["08-01"],
                 series=[
                     ChartSeries(
                         name="能耗",
+                        values=["123.45"],
                         points=[
                             SeriesPoint(
                                 ts=datetime(2026, 8, 1, tzinfo=UTC),

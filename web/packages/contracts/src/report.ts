@@ -1,6 +1,10 @@
 /** @fileoverview 从 platform OpenAPI 生成的报告契约。 */
 export interface ReportSchemas {
-  ChartSeries: { name: string; points: ReportSchemas['SeriesPoint'][] }
+  ChartSeries: {
+    name: string
+    points: ReportSchemas['SeriesPoint'][]
+    values?: (string | null)[]
+  }
   DocumentMark: {
     attrs?: Record<string, ReportSchemas['JsonValue']>
     type: string
@@ -49,6 +53,7 @@ export interface ReportSchemas {
     value_kind?: 'number' | 'text' | 'boolean' | 'empty'
   }
   NodeValue: {
+    categories?: string[]
     columns?: string[]
     is_stale?: boolean
     is_truncated?: boolean
@@ -57,6 +62,7 @@ export interface ReportSchemas {
     series?: ReportSchemas['ChartSeries'][]
     text?: string
     title?: string
+    x_axis?: 'time' | 'category' | 'field'
   }
   PageSettings: {
     font_family?: string

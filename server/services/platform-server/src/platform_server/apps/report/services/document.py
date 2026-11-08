@@ -206,6 +206,8 @@ def _data_node_issues(
             _check_api_metric(metric, sources)
             if node.type == "dsChart":
                 _check_chart_column(metric, sources)
+        if node.type == "dsChart":
+            _check_chart_axis(spec, sources)
     except ValidationError as error:
         field = ".".join(str(part) for part in error.errors()[0]["loc"])
         return [
@@ -229,3 +231,22 @@ def _check_chart_column(
         for column in source.columns
     ):
         raise ValueError("图表只能选择数字类型的数据字段")
+
+
+def _check_chart_axis(
+    spec: DataNodeSpec, sources: dict[str, ReportApiSource]
+) -> None:
+    """横轴模式与图表类型的组合约束。Args: spec, sources。"""
+    if spec.kind == "pie" and spec.x_axis == "time":
+        raise ValueError("饼图请选择按分类字段或按数据字段展示")
+    if spec.x_axis != "category":
+        return
+    if not spec.category_key:
+        raise ValueError("请选择横轴的分类字段")
+    if len({item.table for item in spec.series}) > 1:
+        raise ValueError("按分类展示时所有序列必须来自同一个数据来源")
+    source = sources.get(spec.series[0].table)
+    if source is not None and spec.category_key not in {
+        column.key for column in source.columns
+    }:
+        raise ValueError("横轴分类字段不在该 API 的映射列中")

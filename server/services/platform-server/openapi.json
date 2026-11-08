@@ -8656,6 +8656,20 @@
             },
             "title": "Points",
             "type": "array"
+          },
+          "values": {
+            "items": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ]
+            },
+            "title": "Values",
+            "type": "array"
           }
         },
         "required": [
@@ -17192,6 +17206,13 @@
       "NodeValue": {
         "description": "业务节点的展示结果。",
         "properties": {
+          "categories": {
+            "items": {
+              "type": "string"
+            },
+            "title": "Categories",
+            "type": "array"
+          },
           "columns": {
             "items": {
               "type": "string"
@@ -17238,6 +17259,16 @@
           "title": {
             "default": "",
             "title": "Title",
+            "type": "string"
+          },
+          "x_axis": {
+            "default": "time",
+            "enum": [
+              "time",
+              "category",
+              "field"
+            ],
+            "title": "X Axis",
             "type": "string"
           }
         },

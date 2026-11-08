@@ -35,7 +35,7 @@ from platform_server.apps.report.services.typography import (
     set_font_size,
 )
 
-_NATIVE_CHART_POINT_LIMIT = 12
+_NATIVE_CHART_POINT_LIMIT = 366
 
 
 class BlockParent(Protocol):
@@ -314,13 +314,11 @@ def _draw_chart(
     path: str,
 ) -> None:
     native = text_attr(node, "render", "native") == "native"
-    point_count = len(
-        {point.ts for series in value.series for point in series.points}
-    )
     if (
         native
-        and point_count > _NATIVE_CHART_POINT_LIMIT
-        and _dense_chart(document, value, state.preview.timezone)
+        and value.kind != "pie"
+        and len(value.categories) > _NATIVE_CHART_POINT_LIMIT
+        and _dense_chart(document, value)
     ):
         state.warnings.append(
             f"{path}：高密度趋势已生成高清图像，保留全部数据点"
@@ -328,12 +326,12 @@ def _draw_chart(
         return
     if native:
         try:
-            add_chart(document, value, state.preview.timezone)
+            add_chart(document, value)
             return
         except ValueError:
             state.warnings.append(f"{path}：原生图表失败，已尝试位图")
     try:
-        payload = render_chart(value, state.preview.timezone)
+        payload = render_chart(value)
         document.add_picture(io.BytesIO(payload), width=Cm(14))
         document.paragraphs[-1].paragraph_format.line_spacing = 1.0
     except (ValueError, RuntimeError):
@@ -341,12 +339,10 @@ def _draw_chart(
         document.add_paragraph("[图表不可用]")
 
 
-def _dense_chart(
-    document: WordDocument, value: NodeValue, timezone: str
-) -> bool:
-    """固定密集图表排版。Args: document, value, timezone。"""
+def _dense_chart(document: WordDocument, value: NodeValue) -> bool:
+    """固定密集图表排版。Args: document, value。"""
     try:
-        payload = render_chart(value, timezone)
+        payload = render_chart(value)
     except (ValueError, RuntimeError):
         return False
     document.add_picture(io.BytesIO(payload), width=Cm(14))

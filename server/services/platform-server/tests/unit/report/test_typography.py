@@ -150,7 +150,7 @@ def test_dense_chart_uses_readable_image_with_native_fallback(
             ts=datetime(2026, 8, 1, tzinfo=UTC) + timedelta(hours=index),
             value=str(index),
         )
-        for index in range(13)
+        for index in range(367)
     ]
     document = render(
         [DocumentNode(type="dsChart")],
@@ -158,7 +158,14 @@ def test_dense_chart_uses_readable_image_with_native_fallback(
             "content.0": NodeValue(
                 kind="line",
                 title="温度趋势",
-                series=[ChartSeries(name="温度", points=points)],
+                categories=[str(index) for index in range(367)],
+                series=[
+                    ChartSeries(
+                        name="温度",
+                        values=[point.value for point in points],
+                        points=points,
+                    )
+                ],
             )
         },
     )
