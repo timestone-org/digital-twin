@@ -12,6 +12,9 @@ from platform_server.apps.report.services.chart_theme import (
     CHART_HEIGHT_EMU,
     GRID_COLOR,
     SERIES_COLORS,
+    TABLE_BORDER_COLOR,
+    TABLE_HEAD_COLOR,
+    TABLE_ZEBRA_COLOR,
 )
 
 ROOT = Path(__file__).resolve().parents[5]
@@ -42,3 +45,9 @@ def test_chart_height_matches_word():
     found = re.search(r"REPORT_CHART_HEIGHT_CM\s*=\s*([\d.]+)", THEME)
     assert found
     assert round(CHART_HEIGHT_EMU / EMU_PER_CM, 2) == float(found.group(1))
+
+
+def test_table_colors_match_word():
+    block = _block("REPORT_TABLE_COLORS").upper()
+    for color in (TABLE_BORDER_COLOR, TABLE_HEAD_COLOR, TABLE_ZEBRA_COLOR):
+        assert f"#{color}" in block

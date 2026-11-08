@@ -20,6 +20,12 @@ export const REPORT_SERIES_COLORS = [
 /** Word 里图表固定高 2 800 000 EMU。 */
 export const REPORT_CHART_HEIGHT_CM = 7.78
 export const REPORT_PRINT_COLORS = { text: '#595959', grid: '#D9D9D9' }
+/** Word 表格的边框、表头底与隔行底。 */
+export const REPORT_TABLE_COLORS = {
+  border: '#D9D9D9',
+  head: '#E8EEF4',
+  zebra: '#F7F9FB',
+}
 
 export interface ChartColors {
   text: string

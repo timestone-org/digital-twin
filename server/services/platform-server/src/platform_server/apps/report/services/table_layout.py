@@ -10,6 +10,11 @@ from docx.shared import Emu, Pt
 from docx.table import Table
 from docx.text.paragraph import Paragraph
 
+from platform_server.apps.report.services.chart_theme import (
+    TABLE_BORDER_COLOR,
+    TABLE_HEAD_COLOR,
+    TABLE_ZEBRA_COLOR,
+)
 from platform_server.apps.report.services.ooxml import append_property
 from platform_server.apps.report.services.typography import set_font_size
 
@@ -48,7 +53,7 @@ def format_table(
     for column in table.columns:
         column.width = Emu(int(width / len(table.columns)))
     borders = "".join(
-        f'<w:{edge} w:val="single" w:sz="4" w:color="D9D9D9"/>'
+        f'<w:{edge} w:val="single" w:sz="4" w:color="{TABLE_BORDER_COLOR}"/>'
         for edge in ("top", "left", "bottom", "right", "insideH", "insideV")
     )
     append_property(
@@ -67,9 +72,9 @@ def format_table(
 def _format_cell(cell: Cell, index: int, has_header: bool) -> None:
     """设置单元格留白和数字对齐。Args: cell, index。"""
     color = (
-        "E8EEF4"
+        TABLE_HEAD_COLOR
         if index == 0 and has_header
-        else ("F7F9FB" if index % 2 == 0 else "FFFFFF")
+        else (TABLE_ZEBRA_COLOR if index % 2 == 0 else "FFFFFF")
     )
     append_property(
         cell,

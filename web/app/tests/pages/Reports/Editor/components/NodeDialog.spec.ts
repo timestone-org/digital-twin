@@ -111,6 +111,15 @@ function button(wrapper: VueWrapper, label: string) {
     .findAllComponents(DtButton)
     .find((item) => item.text() === label)
 }
+function values(options: unknown): unknown[] {
+  return Array.isArray(options)
+    ? options.map((option: unknown) =>
+        option !== null && typeof option === 'object' && 'value' in option
+          ? option.value
+          : undefined,
+      )
+    : []
+}
 function inserted(wrapper: VueWrapper, index = 0): unknown {
   return wrapper.emitted('insert')?.[index]?.[0]
 }
@@ -120,11 +129,10 @@ it('选 API 来源即带出首个数值字段，可再添加序列并插入时�
   await kind(wrapper, 'bar')
   await choose(wrapper, '数据来源', 'api:energy')
   expect(select(wrapper, '字段')[0]?.props('modelValue')).toBe('power')
-  expect(
-    select(wrapper, '字段')[0]
-      ?.props('options')
-      .map((option) => option.value),
-  ).toEqual(['power', 'water'])
+  expect(values(select(wrapper, '字段')[0]?.props('options'))).toEqual([
+    'power',
+    'water',
+  ])
   await button(wrapper, '添加序列')?.trigger('click')
   await flushPromises()
   await button(wrapper, '插入正文')?.trigger('click')
@@ -168,11 +176,9 @@ it('按分类展示必须先选分类字段，未选时说明原因并禁止插�
   await choose(wrapper, '横轴', 'category')
   expect(wrapper.text()).toContain('请选择横轴的分类字段')
   expect(button(wrapper, '插入正文')?.props('disabled')).toBe(true)
-  expect(
-    select(wrapper, '分类字段')[0]
-      ?.props('options')
-      .map((option) => option.value),
-  ).toContain('shop')
+  expect(values(select(wrapper, '分类字段')[0]?.props('options'))).toContain(
+    'shop',
+  )
   await choose(wrapper, '分类字段', 'shop')
   await choose(wrapper, '聚合方式', 'sum')
   await button(wrapper, '插入正文')?.trigger('click')
@@ -263,12 +269,11 @@ it('编辑既有图表保留其余属性，节点级偏移并入各序列，取�
     },
   }
   const wrapper = open({ node })
-  expect(
-    wrapper
-      .findComponent(DtSegmented)
-      .props('options')
-      .map((option) => option.value),
-  ).toEqual(['line', 'bar', 'pie'])
+  expect(values(wrapper.findComponent(DtSegmented).props('options'))).toEqual([
+    'line',
+    'bar',
+    'pie',
+  ])
   await kind(wrapper, 'bar')
   await button(wrapper, '应用修改')?.trigger('click')
   expect(inserted(wrapper)).toMatchObject({
