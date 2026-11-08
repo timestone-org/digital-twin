@@ -65,13 +65,15 @@ def _series_xml(
     shape = (
         f'<c:spPr>{_fill(color)}<a:ln w="19050">{_fill(color)}</a:ln></c:spPr>'
     )
+    # Word 对折线缺省按平滑曲线画，编辑器是直线段，故显式关掉。
+    smooth = '<c:smooth val="0"/>' if kind != "bar" else ""
     marker = (
         '<c:marker><c:symbol val="none"/></c:marker>' if kind != "bar" else ""
     )
     return (
         f'<c:ser><c:idx val="{index}"/><c:order val="{index}"/>'
         f"<c:tx><c:v>{escape(series.name)}</c:v></c:tx>{shape}{marker}"
-        f"{_categories(categories)}{_values(series.values)}</c:ser>"
+        f"{_categories(categories)}{_values(series.values)}{smooth}</c:ser>"
     )
 
 
@@ -83,7 +85,8 @@ def _pie_xml(series: ChartSeries, categories: list[str]) -> str:
         for index in range(len(categories))
     )
     labels = (
-        '<c:dLbls><c:showLegendKey val="0"/><c:showVal val="0"/>'
+        '<c:dLbls><c:dLblPos val="outEnd"/>'
+        '<c:showLegendKey val="0"/><c:showVal val="0"/>'
         '<c:showCatName val="0"/><c:showSerName val="0"/>'
         '<c:showPercent val="1"/><c:showBubbleSize val="0"/></c:dLbls>'
     )
@@ -164,7 +167,7 @@ def _axis(
         f'<c:{kind}><c:axId val="{axis_id}"/><c:scaling>'
         '<c:orientation val="minMax"/></c:scaling>'
         f'<c:delete val="0"/><c:axPos val="{position}"/>{grid}'
-        '<c:numFmt formatCode="0.##" sourceLinked="0"/>'
+        '<c:numFmt formatCode="General" sourceLinked="0"/>'
         '<c:majorTickMark val="none"/><c:minorTickMark val="none"/>'
         '<c:tickLblPos val="nextTo"/>'
         f'<c:spPr><a:ln w="6350">{_fill(GRID_COLOR)}</a:ln></c:spPr>'

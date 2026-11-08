@@ -15,6 +15,7 @@ from platform_server.apps.report.schemas.api_source import (
     ReportApiSource,
 )
 from platform_server.apps.report.schemas.document import DocumentNode
+from platform_server.apps.report.schemas.nodes import DataNodeSpec
 from platform_server.apps.report.schemas.preview import (
     ChartSeries,
     NodeValue,
@@ -28,6 +29,7 @@ from platform_server.apps.report.services.docx_builder import build_docx
 from platform_server.apps.report.services.metrics import PreviewContext
 from platform_server.apps.report.services.preview import preview
 from platform_server.apps.report.services.source import SourceData
+from platform_server.apps.report.services.table import build_table
 
 
 def chart_body(api_sources=(), **attrs):
@@ -281,3 +283,43 @@ def test_word_embeds_native_pie_with_caption():
     with zipfile.ZipFile(io.BytesIO(result.payload)) as archive:
         assert b"<c:pieChart>" in archive.read("word/charts/chart1.xml")
     assert not result.warnings
+
+
+def test_native_line_is_straight_and_axis_has_no_trailing_dot():
+    xml = chart_xml(
+        NodeValue(
+            kind="line",
+            categories=["a", "b"],
+            series=[ChartSeries(name="值", points=[], values=["1", "2"])],
+        )
+    ).decode()
+    assert '<c:smooth val="0"/></c:ser>' in xml
+    assert 'formatCode="0.##"' not in xml
+
+
+def test_pie_percent_labels_sit_outside_slices():
+    assert '<c:dLblPos val="outEnd"/>' in chart_xml(pie_node()).decode()
+
+
+@pytest.mark.parametrize(
+    ("bucket", "label"),
+    [("day", "2026-09-01"), ("hour", "2026-09-01 08:00"), ("month", "2026-09")],
+)
+def test_table_auto_time_label_follows_bucket(bucket, label):
+    data = SourceData(
+        rows=(
+            EffectiveRow(
+                ts=datetime(2026, 9, 1, tzinfo=UTC),
+                source="t",
+                values={"v": "1"},
+            ),
+        ),
+        columns=(ColumnSpec("v", "值", "number", None),),
+        is_truncated=False,
+    )
+    table = build_table(
+        data,
+        DataNodeSpec(table="t", keys=["v"], bucket=bucket),
+        "Asia/Shanghai",
+    )
+    assert table.rows[0][0] == label
