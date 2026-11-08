@@ -6,7 +6,7 @@
 import { TWIN_2D_CIRCUIT_STYLES } from './circuit'
 import { TWIN_2D_MISC_STYLES } from './nodesMisc'
 import { TWIN_2D_VESSEL_STYLES } from './nodesVessel'
-import { TWIN_2D_PRESET_SCALE, twin2dScaleNodeStyle } from './scale'
+import { twin2dShipNodeStyle } from './scale'
 import {
   TWIN_2D_SUBTYPED_SOURCE_STYLES,
   TWIN_2D_SUBTYPED_TERMINAL_STYLES,
@@ -14,7 +14,7 @@ import {
 import type { Twin2dNodeStyle } from '../types'
 
 /**
- * 四个设备族的出厂尺度：各族按参考尺度产样式，出厂前整体缩一档（§7.13）。
+ * 四个设备族的出厂尺度：各族按参考尺度产样式，出厂前整体缩一档、悬浮卡再放大一档（§7.13）。
  * ⚠ 缩放只在这一处过：搬回各族文件里逐个改字面量，就把「参考取值」与「出厂取值」
  * 揉成了一份，而 `twin2d-preset-fidelity.spec.ts` 锁的正是前者。
  */
@@ -23,7 +23,7 @@ const SCALED_DEVICE_STYLES: readonly Twin2dNodeStyle[] = [
   ...TWIN_2D_VESSEL_STYLES,
   ...TWIN_2D_SUBTYPED_TERMINAL_STYLES,
   ...TWIN_2D_MISC_STYLES,
-].map((style) => twin2dScaleNodeStyle(style, TWIN_2D_PRESET_SCALE))
+].map(twin2dShipNodeStyle)
 
 /**
  * 19 个预置节点样式：11 种节点类型（源 4 / 容器 2 / 末端 3 / 换热与标注 2）加 8 枚电路符号。

@@ -1140,7 +1140,10 @@ export const TWIN_2D_PALETTE = {
 `TWIN_2D_PRESET_SCALE`：
 
 - **节点样式**在 `presets/nodes.ts` 合成 `TWIN_2D_BUILTIN_NODE_STYLES` 时过一道
-  `twin2dScaleNodeStyle()`；
+  `twin2dShipNodeStyle()`：先 `twin2dScaleNodeStyle()` 整体缩到 0.75，再用
+  `twin2dScalePrimTree()` 把源类的悬浮卡 `energy-tip`（连同子树与指向它们的变体补丁）
+  放大 `TWIN_2D_TIP_SCALE = 1.5`——卡片整体压到 12px 地板后，在被 `contain` 再缩一次的
+  大屏格子里读不清，而节点本身不该跟着变大；
 - **出厂面的传感器药丸**在 `presets/scale.ts` 的 `twin2dShippedSensorPill()` 里过一道
   （下面那条「两分」）。
 

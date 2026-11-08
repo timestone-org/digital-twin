@@ -45,6 +45,16 @@ export const TWIN_2D_PRESET_SCALE = 0.75
 /** 字号地板：缩到这个数就不再往下缩 */
 export const TWIN_2D_PRESET_MIN_FONT_SIZE = 12
 
+/**
+ * 悬浮卡在出厂尺度之上再放大的倍数。
+ * ⚠ 卡片整体缩到 12px 地板后，在被 `contain` 再缩一次的大屏格子里读不清；只放大卡片，
+ * 节点本身仍是出厂尺度。
+ */
+export const TWIN_2D_TIP_SCALE = 1.5
+
+/** 源类样式里悬浮卡图元的 id */
+const TIP_PRIM_ID = 'energy-tip'
+
 /** 长度缩完定到 0.01 设计像素 */
 const LENGTH_DIGITS = 2
 /** 节点盒的最小边长 */
@@ -517,6 +527,62 @@ export function twin2dScaleNodeStyle(
     ports: style.ports.map((port) => scalePort(port, scale)),
     variants: style.variants.map((one) => scaleVariant(one, coords, scale)),
   }
+}
+
+// 一枚图元连同子树的全部 id：变体补丁按 id 寻址，放大子树就要连补丁一起放大
+function primIdsOf(prim: Twin2dPrim, into: Set<string>): Set<string> {
+  into.add(prim.id)
+  if (prim.kind === 'box') {
+    for (const child of prim.children) primIdsOf(child, into)
+  }
+  return into
+}
+
+/**
+ * 只把一枚顶层图元的子树与指向它们的变体补丁等比缩放，其余图元与节点根覆盖不动。
+ * 样式里没有这枚图元时原样返回。
+ * @param style 节点样式
+ * @param primId 顶层图元 id
+ * @param scale 缩放比
+ */
+export function twin2dScalePrimTree(
+  style: Twin2dNodeStyle,
+  primId: string,
+  scale: number,
+): Twin2dNodeStyle {
+  const target = style.prims.find((prim) => prim.id === primId)
+  if (target === undefined) return style
+  const ids = primIdsOf(target, new Set<string>())
+  const coords = vecCoordsOf([target], new Map<string, Twin2dVecCoord>())
+  const variants = style.variants.map((variant): Twin2dVariant => {
+    const patch: Record<string, Twin2dPrimPatch> = {}
+    for (const [id, one] of Object.entries(variant.patch)) {
+      patch[id] = ids.has(id)
+        ? scalePrimPatch(one, coords.get(id) ?? 'px', scale)
+        : one
+    }
+    return { ...variant, patch }
+  })
+  return {
+    ...style,
+    prims: style.prims.map((prim) =>
+      prim.id === primId ? scalePrim(prim, scale) : prim,
+    ),
+    variants,
+  }
+}
+
+/**
+ * 一份设备族样式的出厂形态：整体缩到 `TWIN_2D_PRESET_SCALE`，悬浮卡再放大
+ * `TWIN_2D_TIP_SCALE`。汇总面与断言它的用例都走这一处。
+ * @param style 参考尺度的样式
+ */
+export function twin2dShipNodeStyle(style: Twin2dNodeStyle): Twin2dNodeStyle {
+  return twin2dScalePrimTree(
+    twin2dScaleNodeStyle(style, TWIN_2D_PRESET_SCALE),
+    TIP_PRIM_ID,
+    TWIN_2D_TIP_SCALE,
+  )
 }
 
 /**

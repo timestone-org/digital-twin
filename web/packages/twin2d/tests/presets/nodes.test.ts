@@ -25,7 +25,9 @@ import { TWIN_2D_VESSEL_STYLES } from '../../src/presets/nodesVessel'
 import {
   TWIN_2D_PRESET_MIN_FONT_SIZE,
   TWIN_2D_PRESET_SCALE,
+  TWIN_2D_TIP_SCALE,
   twin2dScaleNodeStyle,
+  twin2dShipNodeStyle,
 } from '../../src/presets/scale'
 import {
   TWIN_2D_SOURCE_SUBTYPE_DEFS,
@@ -113,9 +115,9 @@ const NODE_TYPE_STYLES = TWIN_2D_BUILTIN_NODE_STYLES.slice(0, 11)
 /** 承载边框 / 圆角 / 选中态的那一枚图元的 id。 */
 const FRAME_PRIM_ID = 'frame'
 
-/** 汇总面上那一道出厂缩放，与 `nodes.ts` 绑的是同一个比例。 */
+/** 汇总面上那一道出厂缩放，与 `nodes.ts` 走的是同一个函数。 */
 function shippedOf(style: Twin2dNodeStyle): Twin2dNodeStyle {
-  return twin2dScaleNodeStyle(style, TWIN_2D_PRESET_SCALE)
+  return twin2dShipNodeStyle(style)
 }
 
 // 一枚 txt 图元的字号；取不到给 null，与「这一枚跟随主题」区分不开时用例自己会红
@@ -513,5 +515,50 @@ describe('出厂尺度：设备族整体缩一档、电路符号不缩', () => {
     for (const style of TWIN_2D_BUILTIN_NODE_STYLES) {
       expect(normalizeNodeStyle(structuredClone(style))).toEqual(style)
     }
+  })
+})
+
+describe('悬浮卡在出厂尺度上再放大一档', () => {
+  const source = TWIN_2D_SUBTYPED_SOURCE_STYLES[0]
+  if (source === undefined) throw new Error('源类样式是空的')
+  const base = twin2dScaleNodeStyle(source, TWIN_2D_PRESET_SCALE)
+  const shipped = twin2dShipNodeStyle(source)
+
+  function primOf(style: Twin2dNodeStyle, id: string): Twin2dPrim {
+    const prim = flatPrims(style.prims).find((one) => one.id === id)
+    if (prim === undefined) throw new Error(`缺图元 ${id}`)
+    return prim
+  }
+
+  it('卡片字号与最小宽度按倍数放大', () => {
+    expect(fontSizeOf(shipped, 'tip-title')).toBe(
+      (fontSizeOf(base, 'tip-title') ?? 0) * TWIN_2D_TIP_SCALE,
+    )
+    const tip = primOf(shipped, 'energy-tip')
+    const baseTip = primOf(base, 'energy-tip')
+    expect(tip.minWidth).toBe(Number(baseTip.minWidth) * TWIN_2D_TIP_SCALE)
+  })
+
+  // hover 变体里卡片那条补丁的 abs 落点上沿
+  function hoverTipTop(style: Twin2dNodeStyle): unknown {
+    const at = style.variants.find((one) => one.id === 'hover')?.patch[
+      'energy-tip'
+    ]?.at
+    if (at?.kind !== 'abs') throw new Error('hover 补丁没有卡片落点')
+    return at.top
+  }
+
+  it('hover 补丁里卡片的落点一起放大', () => {
+    expect(hoverTipTop(shipped)).toBe(
+      Number(hoverTipTop(base)) * TWIN_2D_TIP_SCALE,
+    )
+  })
+
+  it('节点外框、盒尺寸与外框的 hover 补丁不动', () => {
+    const hover = shipped.variants.find((one) => one.id === 'hover')
+    const baseHover = base.variants.find((one) => one.id === 'hover')
+    expect(hover?.patch['frame']).toEqual(baseHover?.patch['frame'])
+    expect(primOf(shipped, 'frame')).toEqual(primOf(base, 'frame'))
+    expect(shipped.size).toEqual(base.size)
   })
 })
