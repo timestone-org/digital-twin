@@ -12,6 +12,7 @@ import { defineComponent, h } from 'vue'
 
 import Twin2dNodeBox from '../../src/render/Twin2dNodeBox.vue'
 import Twin2dPrimView from '../../src/render/Twin2dPrimView.vue'
+import { pin } from '../../src/testing/layoutPin'
 import type { Twin2dSlotValues } from '../../src/expr'
 import type { Twin2dStatus } from '../../src/kinds'
 import type { Twin2dIconResolver, Twin2dSlotRead } from '../../src/paintText'
@@ -367,6 +368,45 @@ describe('生效状态三级', () => {
 })
 
 describe('hover 自检', () => {
+  it('进入时先把会越出舞台下沿的悬浮卡翻到节点上方', async () => {
+    const stage = document.createElement('div')
+    stage.className = 't2-stage'
+    const viewport = document.createElement('div')
+    viewport.className = 't2-stage__viewport'
+    stage.append(viewport)
+    document.body.append(stage)
+    const tip = boxOf({
+      id: 'tip',
+      at: {
+        kind: 'abs',
+        left: '50%',
+        right: null,
+        top: null,
+        bottom: -10,
+        tx: '-50%',
+        ty: '100%',
+      },
+      opacity: 0,
+      pointerEvents: 'none',
+    })
+    const wrapper = mount(Twin2dNodeBox, {
+      props: { node: nodeOf(), nodeStyle: styleOf({ prims: [tip] }) },
+      attachTo: viewport,
+    })
+    const card = wrapper.get('.t2-prim').element
+    if (!(card instanceof HTMLElement)) throw new Error('卡片不是 HTML 元素')
+    pin(stage, 0, 600)
+    pin(viewport, 0, 600)
+    pin(wrapper.get('[data-test="node"]').element, 500, 60)
+    pin(card, 570, 80)
+
+    await wrapper.trigger('mouseenter')
+
+    expect(card.style.getPropertyValue('translate')).toBe('0 -160px')
+    wrapper.unmount()
+    stage.remove()
+  })
+
   it('mouseenter 让 hover 变体的补丁落到对应子图元上', async () => {
     const nodeStyle = styleOf({ variants: [hoverVariant()] })
     const wrapper = render({ nodeStyle })

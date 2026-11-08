@@ -1344,6 +1344,14 @@ Twin2dNodeBox.vue 的根元素上一对 @mouseenter / @mouseleave，
 
 ⚠ hover 变体同时抬 `rootPatch.z`（#14），否则悬浮卡被右邻节点整块盖住。
 
+**悬浮卡避让**：`mouseenter` 那一刻、hover 变体重绘之前，节点根下「静止态 `opacity` 为 0、
+`pointerEvents:'none'`、绝对定位」的直接子图元被认作悬浮卡。卡片整个在节点上方或下方、
+越出舞台（`.t2-stage` 的裁切框）且翻到另一侧越界更少时，用独立的 CSS `translate`
+把它以节点为轴镜像过去，卡片里绝对定位的子图元（箭头）以卡片中线对折，矢量件再加
+`scale: 1 -1` 让尖朝向节点。几何在 `popupFlip.ts`，DOM 一侧在 `render/hoverPopupFlip.ts`。
+这是渲染层的通用行为，不看 `styleId`，样式数据零改动；只做竖轴，水平方向不避让。
+⚠ 用 `translate` / `scale` 两条独立属性而不是改 `transform`：后者归 Vue 管，下次重绘就被冲掉。
+
 `transition` 是图元字段（§4.2），由 `paintCommon.ts` 输出成一条 `transition` 声明；
 `prefers-reduced-motion` 只关 keyframes，不关 transition（#17）。
 
