@@ -102,6 +102,7 @@ function pieOption(frame: ChartFrame, colors: ChartColors): EChartsOption {
         name: first?.name ?? '',
         radius: '65%',
         center: ['50%', '45%'],
+        percentPrecision: 0,
         label: { formatter: '{d}%', color: colors.text },
         data: frame.categories.flatMap((name, index) => {
           const value = first?.values[index] ?? null
@@ -110,6 +111,11 @@ function pieOption(frame: ChartFrame, colors: ChartColors): EChartsOption {
       },
     ],
   }
+}
+
+/** Word 横轴每隔若干类目标一个字（tickLblSkip），约 6 个标签。 */
+export function labelStep(count: number): number {
+  return Math.max(1, Math.ceil(count / 6))
 }
 
 function axisOption(
@@ -123,13 +129,15 @@ function axisOption(
     xAxis: {
       type: 'category',
       data: frame.categories,
-      axisLabel: { color: colors.text, hideOverlap: true },
+      axisLabel: {
+        color: colors.text,
+        interval: labelStep(frame.categories.length) - 1,
+      },
       axisLine: line,
       axisTick: { show: false },
     },
     yAxis: {
       type: 'value',
-      scale: node.kind !== 'bar',
       axisLabel: { color: colors.text },
       axisLine: { show: true, ...line },
       splitLine: line,
@@ -140,6 +148,7 @@ function axisOption(
       data: item.values,
       connectNulls: false,
       showSymbol: false,
+      barCategoryGap: '60%',
       lineStyle: { width: 2 },
     })),
   }
@@ -172,6 +181,9 @@ export function reportChartOption(
     legend: {
       show: legend,
       type: 'scroll',
+      icon: 'rect',
+      itemWidth: node.kind === 'line' ? 18 : 8,
+      itemHeight: node.kind === 'line' ? 2 : 8,
       bottom: 0,
       textStyle: { color: colors.text },
     },

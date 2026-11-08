@@ -5,6 +5,7 @@ import {
   chartFrame,
   hasChartData,
   hasLegend,
+  labelStep,
   reportChartOption,
 } from '@/pages/Reports/Editor/scripts/reportChartTheme'
 import { paperFontStack } from '@/pages/Reports/Editor/scripts/paperFont'
@@ -77,4 +78,14 @@ it('中文字体名补上系统同款回落，缺省为宋体', () => {
     '"宋体", "SimSun", "Songti SC", "STSong", serif',
   )
   expect(paperFontStack('Arial')).toBe('"Arial", sans-serif')
+})
+
+it('横轴标签间隔、柱宽与饼图百分比位数按 Word 口径', () => {
+  expect([1, 6, 7, 30].map(labelStep)).toEqual([1, 1, 2, 5])
+  const option = reportChartOption(
+    { ...LINE, categories: Array.from({ length: 30 }, (_, day) => `${day}`) },
+    REPORT_PRINT_COLORS,
+  )
+  expect(option.xAxis).toMatchObject({ axisLabel: { interval: 4 } })
+  expect(option.yAxis).not.toHaveProperty('scale')
 })
