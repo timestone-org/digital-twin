@@ -44,6 +44,7 @@ import TemplateSettingsCard from './components/TemplateSettingsCard.vue'
 import ApiSourcePanel from './components/ApiSourcePanel.vue'
 import { metricRefAttrs } from './scripts/apiSourceForm'
 import { createReportSurface } from './scripts/aiSurface'
+import type { DocumentPreview } from './scripts/documentPreview'
 import { currentReportPeriod } from '../scripts/reportPeriod'
 import {
   blankReport,
@@ -66,7 +67,11 @@ const preview = ref<ReportPreview | null>(null)
 const error = ref('')
 const isBusy = ref(false)
 const isNodeOpen = ref(false)
-const editor = ref<{ insert: (node: ReportDocument) => boolean } | null>(null)
+const editor = ref<{
+  insert: (node: ReportDocument) => boolean
+  signatures: () => Record<string, string>
+} | null>(null)
+const documentPreview = ref<DocumentPreview | null>(null)
 const raced = useRacedFetch()
 const periods = useRacedFetch()
 const trials = useRacedFetch()
@@ -106,14 +111,28 @@ const ai = useAiPanel({
       validate: api.validateReport,
       preview: previewForAssistant,
       showPreview: (value) => {
-        preview.value = value
-        previewStale.value = false
-        section.value = 'check'
+        showPreview(value, editor.value?.signatures() ?? {})
       },
     }),
   refId: () => id.value || null,
 })
 watch(id, load, { immediate: true })
+watch(period, (value) => {
+  if (documentPreview.value?.period !== value) documentPreview.value = null
+})
+function showPreview(
+  value: ReportPreview,
+  signatures: Record<string, string>,
+): void {
+  preview.value = value
+  previewStale.value = false
+  section.value = 'check'
+  documentPreview.value = {
+    period: value.period,
+    nodes: value.nodes,
+    signatures,
+  }
+}
 watch(
   [() => JSON.stringify(draft.value), period],
   () => {
@@ -128,6 +147,7 @@ function load(): void {
   periods.cancel()
   template.value = null
   preview.value = null
+  documentPreview.value = null
   previewStale.value = false
   period.value = ''
   periodTimezone.value = null
@@ -222,6 +242,7 @@ async function trial(): Promise<void> {
   error.value = ''
   isBusy.value = true
   const signature = JSON.stringify([draft.value, period.value])
+  const signatures = editor.value?.signatures() ?? {}
   await trials.run(
     (signal) => api.previewReport(id.value, period.value, draft.value, signal),
     {
@@ -230,9 +251,7 @@ async function trial(): Promise<void> {
           previewStale.value = true
           return
         }
-        preview.value = value
-        previewStale.value = false
-        section.value = 'check'
+        showPreview(value, signatures)
       },
       fail: (caught) => {
         error.value = describeError(caught)
@@ -345,6 +364,10 @@ async function previewForAssistant(
           isDirty ? '有未保存修改' : '模板已保存'
         }}</DtTag>
         <p>① 配置数据来源和指标 · ② 插入正文 · ③ 试算核对后生成 Word</p>
+        <p v-if="documentPreview">
+          正文显示 {{ documentPreview.period }} 的试算数据，版式与生成的 Word
+          一致；改过配置的内容需重新试算。
+        </p>
       </div>
       <DtResizableLayout
         v-if="template"
@@ -366,6 +389,8 @@ async function previewForAssistant(
             :disabled="!canEdit || isBusy"
             :save-document="save"
             :metrics="draft.metrics ?? []"
+            :api-sources="draft.api_sources ?? []"
+            :document-preview="documentPreview"
             @update:model-value="draft.doc_json = $event"
             @update:page="draft.page_json = $event"
           />
@@ -448,6 +473,7 @@ async function previewForAssistant(
       <NodeDialog
         v-model="isNodeOpen"
         :metrics="draft.metrics ?? []"
+        :api-sources="draft.api_sources ?? []"
         @insert="insert"
       />
       <AiDock

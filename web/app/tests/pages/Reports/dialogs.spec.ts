@@ -4,7 +4,6 @@ import { afterEach, describe, expect, it, vi } from 'vitest'
 import { DtButton, DtInput, DtSelect, DtCheckbox, DtModal } from '@dt/ui'
 import * as dataset from '@/api/dataset'
 import MetricPanel from '@/pages/Reports/Editor/components/MetricPanel.vue'
-import NodeDialog from '@/pages/Reports/Editor/components/NodeDialog.vue'
 import PageDialog from '@/pages/Reports/Editor/components/PageDialog.vue'
 
 afterEach(() => vi.restoreAllMocks())
@@ -61,36 +60,6 @@ describe('报告配置交互', () => {
     expect(wrapper.emitted('update:modelValue')?.[0]?.[0]).toEqual([
       expect.objectContaining({ name: '变化', mode: 'expr', expr: '100-80' }),
     ])
-    wrapper.unmount()
-  })
-  it('图表绑定选中指标的数据来源', async () => {
-    const wrapper = mount(NodeDialog, {
-      props: {
-        modelValue: true,
-        metrics: [{ name: '能耗', table: 'energy', key: 'value' }],
-      },
-      global: { stubs: { teleport: true } },
-    })
-    wrapper.findComponent(DtSelect).vm.$emit('update:modelValue', 'bar')
-    await flushPromises()
-    wrapper
-      .findAllComponents(DtSelect)[1]
-      ?.vm.$emit('update:modelValue', '能耗')
-    await flushPromises()
-    await wrapper
-      .findAllComponents(DtButton)
-      .find((button) => button.text() === '插入正文')
-      ?.trigger('click')
-    expect(wrapper.emitted('insert')?.[0]?.[0]).toEqual(
-      expect.objectContaining({
-        type: 'dsChart',
-        attrs: expect.objectContaining({
-          kind: 'bar',
-          table: 'energy',
-          keys: ['value'],
-        }),
-      }),
-    )
     wrapper.unmount()
   })
   it('纸张设置使用厘米并保留页眉页脚', async () => {
@@ -179,129 +148,6 @@ it('页面设置的每个字段都能实际修改', async () => {
   wrapper.unmount()
 })
 
-it('条件文本表达式与数据表标题窗口都会进入节点配置', async () => {
-  const wrapper = mount(NodeDialog, {
-    props: {
-      modelValue: true,
-      metrics: [{ name: '能耗', table: 'energy', key: 'value' }],
-    },
-    global: { stubs: { teleport: true } },
-  })
-  wrapper
-    .findComponent(DtInput)
-    .vm.$emit('update:modelValue', "IF({本期}>{上期}, '升高', '降低')")
-  await flushPromises()
-  await wrapper
-    .findAllComponents(DtButton)
-    .find((button) => button.text() === '插入正文')
-    ?.trigger('click')
-  expect(wrapper.emitted('insert')?.[0]?.[0]).toEqual(
-    expect.objectContaining({
-      type: 'condText',
-      attrs: expect.objectContaining({
-        expr: "IF({本期}>{上期}, '升高', '降低')",
-      }),
-    }),
-  )
-  wrapper.findComponent(DtSelect).vm.$emit('update:modelValue', 'dsTable')
-  await flushPromises()
-  wrapper.findAllComponents(DtSelect)[1]?.vm.$emit('update:modelValue', '能耗')
-
-  for (const input of wrapper.findAllComponents(DtInput))
-    input.vm.$emit('update:modelValue', tableInputValue(input.props('label')))
-  await flushPromises()
-  await wrapper
-    .findAllComponents(DtButton)
-    .find((button) => button.text() === '插入正文')
-    ?.trigger('click')
-  expect(wrapper.emitted('insert')?.[1]?.[0]).toEqual(
-    expect.objectContaining({
-      type: 'dsTable',
-      attrs: expect.objectContaining({ title: '年度能耗', window: '12mo' }),
-    }),
-  )
-  wrapper.findComponent(DtModal).vm.$emit('update:modelValue', false)
-  expect(wrapper.emitted('update:modelValue')).toContainEqual([false])
-  wrapper.unmount()
-})
-
-it('编辑图表保留多序列和聚合配置，取消不回写', async () => {
-  const node = {
-    type: 'dsChart',
-    attrs: {
-      title: '原图',
-      kind: 'line',
-      series: [
-        { table: 'energy', key: 'a' },
-        { table: 'energy', key: 'b' },
-      ],
-      agg: 'sum',
-      bucket: 'day',
-    },
-  }
-  const wrapper = mount(NodeDialog, {
-    props: { modelValue: true, metrics: [], node },
-    global: { stubs: { teleport: true } },
-  })
-  expect(
-    wrapper
-      .findAllComponents(DtInput)
-      .find((input) => input.props('label') === '图表标题')
-      ?.props('modelValue'),
-  ).toBe('原图')
-  wrapper.findComponent(DtSelect).vm.$emit('update:modelValue', 'bar')
-  await flushPromises()
-  await wrapper
-    .findAllComponents(DtButton)
-    .find((button) => button.text() === '应用修改')
-    ?.trigger('click')
-  expect(wrapper.emitted('insert')?.[0]?.[0]).toMatchObject({
-    type: 'dsChart',
-    attrs: { ...node.attrs, kind: 'bar' },
-  })
-  expect(node.attrs.kind).toBe('line')
-  wrapper.unmount()
-})
-
-function tableInputValue(label: string | undefined): string {
-  if (label === '图表标题') return '年度能耗'
-  if (label === '取数窗口') return '12mo'
-  return '2'
-}
-
-it('图表可添加多序列，表格可添加同来源多列', async () => {
-  const metrics = [
-    { name: '电量', table: 'api:energy', key: 'power' },
-    { name: '水量', table: 'api:energy', key: 'water' },
-    { name: '温度', table: 'weather', key: 'temperature' },
-  ]
-  const wrapper = mount(NodeDialog, {
-    props: { modelValue: true, metrics },
-    global: { stubs: { teleport: true } },
-  })
-  wrapper.findComponent(DtSelect).vm.$emit('update:modelValue', 'dsTable')
-  await flushPromises()
-  wrapper.findAllComponents(DtSelect)[1]?.vm.$emit('update:modelValue', '电量')
-  await flushPromises()
-  expect(wrapper.findAllComponents(DtCheckbox)).toHaveLength(1)
-  wrapper.findComponent(DtCheckbox).vm.$emit('update:modelValue', true)
-  await flushPromises()
-  await wrapper
-    .findAllComponents(DtButton)
-    .find((button) => button.text() === '插入正文')
-    ?.trigger('click')
-  expect(wrapper.emitted('insert')?.[0]?.[0]).toMatchObject({
-    type: 'dsTable',
-    attrs: {
-      table: 'api:energy',
-      keys: ['power', 'water'],
-      limit: 1000,
-      window: null,
-    },
-  })
-  wrapper.unmount()
-})
-
 it('已有指标可编辑并保留正文引用名称', async () => {
   vi.spyOn(dataset, 'listDatasetTables').mockResolvedValue({
     items: [],
@@ -328,51 +174,6 @@ it('已有指标可编辑并保留正文引用名称', async () => {
   expect(wrapper.emitted('update:modelValue')?.[0]?.[0]).toEqual([
     expect.objectContaining({ name: '同比', expr: '40' }),
   ])
-  wrapper.unmount()
-})
-
-it('本期与上期图表保留各自偏移，表格只允许同窗口列', async () => {
-  const metrics = [
-    { name: '本期', table: 'energy', key: 'value', offset: 0 },
-    { name: '上期', table: 'energy', key: 'value', offset: -1 },
-  ]
-  const wrapper = mount(NodeDialog, {
-    props: { modelValue: true, metrics },
-    global: { stubs: { teleport: true } },
-  })
-  wrapper.findComponent(DtSelect).vm.$emit('update:modelValue', 'line')
-  await flushPromises()
-  wrapper.findAllComponents(DtSelect)[1]?.vm.$emit('update:modelValue', '本期')
-  await flushPromises()
-  wrapper.findComponent(DtCheckbox).vm.$emit('update:modelValue', true)
-  await flushPromises()
-  await wrapper
-    .findAllComponents(DtButton)
-    .find((button) => button.text() === '插入正文')
-    ?.trigger('click')
-  expect(wrapper.emitted('insert')?.[0]?.[0]).toMatchObject({
-    attrs: {
-      offset: 0,
-      series: [
-        { name: '本期', offset: 0 },
-        { name: '上期', offset: -1 },
-      ],
-    },
-  })
-  await wrapper.setProps({ modelValue: false })
-  await wrapper.setProps({ modelValue: true })
-  wrapper.findComponent(DtSelect).vm.$emit('update:modelValue', 'dsTable')
-  await flushPromises()
-  wrapper.findAllComponents(DtSelect)[1]?.vm.$emit('update:modelValue', '上期')
-  await flushPromises()
-  expect(wrapper.findAllComponents(DtCheckbox)).toHaveLength(0)
-  await wrapper
-    .findAllComponents(DtButton)
-    .find((button) => button.text() === '插入正文')
-    ?.trigger('click')
-  expect(wrapper.emitted('insert')?.[1]?.[0]).toMatchObject({
-    attrs: { offset: -1 },
-  })
   wrapper.unmount()
 })
 

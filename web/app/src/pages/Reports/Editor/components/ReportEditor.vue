@@ -16,10 +16,21 @@ import type {
 } from '@umoteam/editor'
 import type { Editor as TiptapEditor } from '@tiptap/core'
 import '@umoteam/editor/style'
-import type { ReportDocument, ReportPage, ReportMetric } from '@dt/contracts'
+import type {
+  ReportBody,
+  ReportDocument,
+  ReportPage,
+  ReportMetric,
+} from '@dt/contracts'
 import { UMO_ASSETS_DIR } from '../../../../../umoAssets.shared'
-import { businessExtensions } from '../scripts/businessNodes'
+import { createBusinessExtensions } from '../scripts/businessNodes'
 import { reportTypography } from '../scripts/reportTypography'
+import {
+  createPreviewStore,
+  previewSignatures,
+  type DocumentPreview,
+} from '../scripts/documentPreview'
+import { paperFontStack, REPORT_DEFAULT_PAGE } from '../scripts/paperFont'
 import NodeDialog from './NodeDialog.vue'
 import { documentFrom } from '../../scripts/reportDocument'
 
@@ -31,8 +42,17 @@ const props = withDefaults(
     metrics?: ReportMetric[]
     title?: string
     saveDocument?: () => Promise<boolean>
+    documentPreview?: DocumentPreview | null
+    apiSources?: NonNullable<ReportBody['api_sources']>
   }>(),
-  { disabled: false, page: () => ({}), title: '', metrics: () => [] },
+  {
+    disabled: false,
+    page: () => ({}),
+    title: '',
+    metrics: () => [],
+    documentPreview: null,
+    apiSources: () => [],
+  },
 )
 
 const emit = defineEmits<{
@@ -41,6 +61,7 @@ const emit = defineEmits<{
 }>()
 
 const editorRef = ref<UmoEditorInstance | null>(null)
+const previewStore = createPreviewStore()
 const tiptap = shallowRef<TiptapEditor | null>(null)
 const editingNode = ref<ReportDocument | null>(null)
 const isEditingNode = ref(false)
@@ -185,7 +206,7 @@ function initialOptions(): UmoEditorOptions {
       readOnly: props.disabled,
       title: props.title,
     },
-    extensions: [...businessExtensions, reportTypography],
+    extensions: [...createBusinessExtensions(previewStore), reportTypography],
     locale: 'zh-CN',
     onSave: async () => {
       if (!props.saveDocument) {
@@ -217,6 +238,19 @@ function onChanged(): void {
   const document = documentFrom(json)
   emitted = JSON.stringify(document)
   emit('update:modelValue', document)
+  previewStore.refresh()
+}
+
+watch(
+  () => props.documentPreview,
+  (value) => previewStore.set(value),
+  { immediate: true },
+)
+
+/** 编辑器当前正文的业务节点指纹，试算发起时记下。 */
+function signatures(): Record<string, string> {
+  const json = editorRef.value?.getJSON()
+  return json ? previewSignatures(documentFrom(json)) : {}
 }
 
 watch(
@@ -233,8 +267,10 @@ watch(
 )
 
 const paperStyle = computed(() => ({
-  '--report-body-font': props.page.font_family ?? 'var(--font-sans)',
-  '--report-body-size': `${props.page.font_size_pt ?? 11}pt`,
+  '--report-body-font': paperFontStack(
+    props.page.font_family ?? REPORT_DEFAULT_PAGE.fontFamily,
+  ),
+  '--report-body-size': `${props.page.font_size_pt ?? REPORT_DEFAULT_PAGE.fontSizePt}pt`,
 }))
 
 const THEME_ATTRIBUTE = 'theme-mode'
@@ -274,7 +310,7 @@ function insert(node: ReportDocument): boolean {
   return current.chain().focus().insertContent(editorDocument(node)).run()
 }
 
-defineExpose({ insert })
+defineExpose({ insert, signatures })
 </script>
 
 <template>
@@ -283,6 +319,7 @@ defineExpose({ insert })
       v-model="isEditingNode"
       :node="editingNode"
       :metrics="props.metrics"
+      :api-sources="props.apiSources"
       @insert="updateNode"
     />
     <UmoEditor
@@ -340,6 +377,54 @@ defineExpose({ insert })
 .umo-dt-theme .umo-editor-content .umo-editor {
   font-family: var(--report-body-font);
   font-size: var(--report-body-size);
+  line-height: 1.65;
+}
+
+/* 以下数值与 services/typography.py、table_layout.py 逐项对应。 */
+.umo-dt-theme .umo-editor-content .umo-editor > * + *:not(.umo-floating-node) {
+  margin-top: 6pt;
+}
+
+.umo-dt-theme .umo-editor-content :is(h1, h2, h3, h4, h5, h6) {
+  color: var(--fx-const-ink);
+  font-weight: 700;
+  line-height: 1.4;
+}
+
+.umo-dt-theme .umo-editor-content .umo-editor > :is(h1, h2) {
+  margin-top: 16pt;
+}
+
+.umo-dt-theme .umo-editor-content .umo-editor > :is(h3, h4, h5, h6) {
+  margin-top: 10pt;
+}
+
+.umo-dt-theme .umo-editor-content h1 {
+  font-size: 18pt;
+}
+
+.umo-dt-theme .umo-editor-content h2 {
+  font-size: 15pt;
+}
+
+.umo-dt-theme .umo-editor-content h3 {
+  font-size: 13pt;
+}
+
+.umo-dt-theme .umo-editor-content h4 {
+  font-size: 12pt;
+}
+
+.umo-dt-theme .umo-editor-content :is(h5, h6) {
+  font-size: 11pt;
+}
+
+/* Word 把正文第一段一级标题设为「标题」样式：22pt 居中。 */
+.umo-dt-theme .umo-editor-content .umo-editor > h1:first-child {
+  margin-top: 0;
+  margin-bottom: 8pt;
+  font-size: 22pt;
+  text-align: center;
 }
 
 .umo-dt-theme .umo-status-bar {
@@ -376,8 +461,7 @@ defineExpose({ insert })
   &[data-report-node='condText'] {
     border-style: dashed;
   }
-  &[data-report-node='dsChart'],
-  &[data-report-node='dsTable'] {
+  &.report-data-block {
     display: block;
     padding: 1.25em;
     margin: 0.75em 0;
@@ -386,12 +470,72 @@ defineExpose({ insert })
   &[data-report-node='dsTable'] {
     border-style: double;
   }
+  &.report-data-node--value {
+    color: inherit;
+    font-family: inherit;
+    font-size: inherit;
+    background: transparent;
+  }
+  &.report-data-node--value:not(.report-data-block) {
+    padding: 0;
+    margin: 0;
+    border: 0;
+    border-bottom: 1px dotted var(--accent-primary);
+    border-radius: 0;
+  }
+  &.report-data-block.report-data-node--value {
+    padding: 0;
+    border: 0;
+    border-radius: 0;
+  }
   &:hover,
   &:focus-visible,
   &.ProseMirror-selectednode {
     outline: 2px solid var(--accent-primary);
     outline-offset: 2px;
+  }
+  &:not(.report-data-node--value):is(
+      :hover,
+      :focus-visible,
+      .ProseMirror-selectednode
+    ) {
     background: var(--surface-raised);
+  }
+}
+
+.umo-dt-theme .report-node-caption {
+  font-size: 10.5pt;
+  font-weight: 700;
+  line-height: 1.4;
+  margin-bottom: 6pt;
+  &:empty {
+    display: none;
+  }
+}
+
+.umo-dt-theme .report-paper-table {
+  width: 100%;
+  border-collapse: collapse;
+  table-layout: fixed;
+  font-size: 10.5pt;
+  line-height: 15pt;
+  th,
+  td {
+    padding: 2pt 5pt;
+    border: 0.5pt solid #d9d9d9;
+    vertical-align: middle;
+    overflow-wrap: anywhere;
+  }
+  th {
+    background: #e8eef4;
+    font-weight: 700;
+    text-align: center;
+  }
+  tbody tr:nth-child(even) td {
+    background: #f7f9fb;
+  }
+  td.is-number {
+    text-align: right;
   }
 }
 </style>

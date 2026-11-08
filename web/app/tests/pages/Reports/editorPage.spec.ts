@@ -21,8 +21,12 @@ vi.mock('@/pages/Reports/Editor/components/ReportEditor.vue', async () => {
   return {
     default: defineComponent({
       name: 'ReportEditorStub',
+      props: { documentPreview: { type: Object, default: null } },
       setup(_, { expose }) {
-        expose({ insert: vi.fn() })
+        expose({
+          insert: vi.fn(),
+          signatures: vi.fn(() => ({ 'content.0': 'signed' })),
+        })
         return () => h('div', '报告正文编辑器')
       },
     }),
@@ -283,6 +287,15 @@ it('保存、试算、生成及配置修改走完整页面接线', async () => {
   await wrapper.find('input[aria-label="报告期"]').setValue('2026-08')
   await click('试算')
   expect(wrapper.text()).toContain('报告期 2026-08')
+  expect(
+    wrapper
+      .findComponent({ name: 'ReportEditorStub' })
+      .props('documentPreview'),
+  ).toMatchObject({
+    period: '2026-08',
+    signatures: { 'content.0': 'signed' },
+  })
+  expect(wrapper.text()).toContain('正文显示 2026-08 的试算数据')
   await click('生成已保存模板')
   expect(api.generateReport).toHaveBeenCalledWith('r1', '2026-08')
   wrapper.findComponent(DtSelect).vm.$emit('update:modelValue', 'year')
