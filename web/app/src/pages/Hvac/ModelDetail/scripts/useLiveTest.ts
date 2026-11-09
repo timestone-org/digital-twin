@@ -26,6 +26,7 @@ export function useLiveTest(model: () => AcModel | null) {
   const state = createLiveState()
   const clock = useLiveClock()
   const actions = createLiveActions(model, state)
+  onBeforeUnmount(actions.cancel)
   return {
     ...state,
     ...derive(model, state),
@@ -38,7 +39,10 @@ export function useLiveTest(model: () => AcModel | null) {
       clock.start()
       actions.start()
     },
-    stop: clock.stop,
+    stop: (): void => {
+      clock.stop()
+      actions.cancel()
+    },
   }
 }
 
