@@ -1,6 +1,6 @@
 """回合步数上限：图的递归上限错误在这里换成领域错误。"""
 
-from collections.abc import Iterator
+from collections.abc import Generator
 from contextlib import contextmanager
 
 from langgraph.errors import GraphRecursionError
@@ -12,7 +12,7 @@ STEP_LIMIT_MESSAGE = "这一轮的步骤太多，已停下，请把问题拆小�
 
 
 @contextmanager
-def step_ceiling() -> Iterator[None]:
+def step_ceiling() -> Generator[None]:
     """把 langgraph 的递归上限错误换成 `TurnStepLimitReached`。
 
     ⚠ 两个服务的 `:advance` 只把 AppError 落成 error 帧，裸的
