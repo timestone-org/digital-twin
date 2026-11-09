@@ -51,8 +51,8 @@ function styleResolver(
 
 /**
  * 节点引的样式既不在文档里也不在预置库里。
- * ⚠ 渲染层对这种节点是「落 `__fallback` 兜底样式」——不报出来的话，用户看到的是
- * 一条 3px 竖条加显示名，而配置里明明选着某个具体样式。
+ * ⚠ 渲染层对这种节点是整个不画、绑定行也不出——不报出来的话，用户看到的是节点
+ * 凭空消失，而配置里明明选着某个具体样式。
  */
 function danglingStyles(
   config: Twin2dConfig,
@@ -64,7 +64,7 @@ function danglingStyles(
     .map((ref) => ({
       level: 'error' as const,
       code: 'dangling-style' as const,
-      message: `找不到节点样式 ${ref.node.styleId}，这个节点会落到 __fallback 兜底样式`,
+      message: `找不到节点样式 ${ref.node.styleId}，这个节点不会显示，读数也不会绑定`,
       at: `nodes[${ref.index}].styleId`,
     }))
 }

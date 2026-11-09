@@ -96,7 +96,7 @@ describe('渲染', () => {
     expect(row.get('[data-test="diagnostics-at"]').text()).toBe(
       'nodes[1].styleId',
     )
-    expect(row.text()).toContain('__fallback 兜底样式')
+    expect(row.text()).toContain('不会显示')
   })
 
   // ⚠ 只靠颜色分两档的话，色觉障碍与黑白截图两种情形下这两档完全一样

@@ -286,7 +286,7 @@ describe('collectTwin2dIssues', () => {
       {
         level: 'error',
         code: 'dangling-style',
-        message: '找不到节点样式 st-gone，这个节点会落到 __fallback 兜底样式',
+        message: '找不到节点样式 st-gone，这个节点不会显示，读数也不会绑定',
         at: 'nodes[0].styleId',
       },
     ])
