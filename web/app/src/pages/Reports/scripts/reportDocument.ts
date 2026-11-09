@@ -83,3 +83,11 @@ export const GRANULARITIES = [
   { value: 'quarter', label: '季报' },
   { value: 'year', label: '年报' },
 ]
+
+/**
+ * 周期代码的中文名；认不出的原样显示。
+ * @param value 周期代码，如 month
+ */
+export function granularityLabel(value: string): string {
+  return GRANULARITIES.find((item) => item.value === value)?.label ?? value
+}

@@ -23,6 +23,7 @@ import { AppShell } from '@/components/layout'
 import PermGuard from '@/components/PermGuard.vue'
 import { useAsyncList, describeError } from '@/composables/useAsyncList'
 import { useViewMode } from '@/composables/useViewMode'
+import { granularityLabel } from '../scripts/reportDocument'
 import EditScheduleDialog from './components/EditScheduleDialog.vue'
 import {
   emptyScheduleErrors,
@@ -31,6 +32,7 @@ import {
 
 const COLUMNS: readonly DtDataColumn[] = [
   { key: 'name', label: '规则名称', card: 'title' },
+  { key: 'template', label: '报告模板' },
   { key: 'granularity', label: '周期' },
   { key: 'delay', label: '期末延迟' },
   { key: 'enabled', label: '状态' },
@@ -59,15 +61,37 @@ const CREATE_LABEL = '新建规则'
 const options = computed(() =>
   templates.value.map((row) => ({ value: row.id, label: row.name })),
 )
-onMounted(async () => {
-  await list.reload()
+/** 新建时选中的模板；规则的周期跟着它走。 */
+const pickedTemplate = computed(() =>
+  templates.value.find((row) => row.id === templateId.value),
+)
+/**
+ * 规则生成的是哪个模板。
+ * @param id 模板 id
+ */
+function templateName(id: string): string {
+  return templates.value.find((row) => row.id === id)?.name ?? '—'
+}
+// ⚠ 三条各取各的：运行开关那一条还要解析 API 连接，会单独失败，不能连累模板目录
+onMounted(() => {
+  void list.reload()
+  void loadRuntime()
+  void loadTemplates()
+})
+async function loadRuntime(): Promise<void> {
   try {
     runtime.value = (await api.reportRuntime()).is_schedule_enabled
+  } catch (caught) {
+    error.value = describeError(caught)
+  }
+}
+async function loadTemplates(): Promise<void> {
+  try {
     templates.value = await api.listReportChoices()
   } catch (caught) {
     error.value = describeError(caught)
   }
-})
+}
 async function create(): Promise<void> {
   const template = templates.value.find((row) => row.id === templateId.value)
   if (isCreating.value || !template) return
@@ -84,6 +108,10 @@ async function create(): Promise<void> {
       is_enabled: true,
     })
     isOpen.value = false
+    // 建成了才清空：失败后关窗再开要留着刚填的，省得重填
+    name.value = ''
+    templateId.value = ''
+    delay.value = '24'
     await list.reload()
   } catch (caught) {
     createError.value = describeError(caught)
@@ -199,8 +227,11 @@ async function remove(id: string): Promise<void> {
         @retry="list.reload"
       >
         <template #cell-name="{ row }"> {{ row.name }} </template>
+        <template #cell-template="{ row }">
+          {{ templateName(row.template_id) }}
+        </template>
         <template #cell-granularity="{ row }">
-          <DtTag intent="info">{{ row.granularity }}</DtTag>
+          <DtTag intent="info">{{ granularityLabel(row.granularity) }}</DtTag>
         </template>
         <template #cell-delay="{ row }">{{ row.delay_hours }} 小时</template>
         <template #cell-enabled="{ row }">
@@ -267,6 +298,11 @@ async function remove(id: string): Promise<void> {
           label="报告模板"
           size="sm"
           :disabled="isCreating"
+          :hint="
+            pickedTemplate
+              ? `周期随模板：${granularityLabel(pickedTemplate.granularity)}`
+              : undefined
+          "
         />
         <DtInput
           v-model="delay"

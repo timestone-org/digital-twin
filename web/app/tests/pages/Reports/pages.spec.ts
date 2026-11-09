@@ -528,3 +528,100 @@ it('生成记录显示警告并把真实文件交给下载器', async () => {
   await flushPromises()
   wrapper.unmount()
 })
+
+describe('定时规则列表的呈现', () => {
+  const rule: ReportSchedule = {
+    id: 's1',
+    template_id: 'r1',
+    name: '审计月报定时',
+    granularity: 'month',
+    delay_hours: 24,
+    is_enabled: true,
+    row_version: 1,
+    last_run_period: null,
+    created_at: stamp,
+    updated_at: stamp,
+  }
+
+  function mockList(items: ReportSchedule[] = [rule]): void {
+    signIn(['report:view', 'report:schedule'])
+    vi.spyOn(api, 'listReportSchedules').mockResolvedValue({
+      items,
+      page: 1,
+      size: 20,
+      total: items.length,
+    })
+  }
+
+  it('⚠ 每条规则说出生成哪个模板，周期写中文不露英文代码', async () => {
+    mockList()
+    vi.spyOn(api, 'reportRuntime').mockResolvedValue({
+      is_schedule_enabled: true,
+      timezone: 'UTC',
+    })
+    const wrapper = mount(Schedules, { global: { stubs: { teleport: true } } })
+    await flushPromises()
+    expect(wrapper.text()).toContain('能耗月报')
+    expect(wrapper.text()).toContain('月报')
+    expect(wrapper.text()).not.toContain('month')
+    wrapper.unmount()
+  })
+
+  it('⚠ 运行开关取不到时模板目录照样可用', async () => {
+    mockList([])
+    vi.spyOn(api, 'reportRuntime').mockRejectedValue(new Error('boom'))
+    const wrapper = mount(Schedules, { global: { stubs: { teleport: true } } })
+    await flushPromises()
+    expect(wrapper.text()).toContain('请求失败')
+    await wrapper
+      .findAllComponents(DtButton)
+      .find((button) => button.text() === '新建规则')
+      ?.trigger('click')
+    await flushPromises()
+    const select = wrapper
+      .findAllComponents(DtSelect)
+      .find((item) => item.props('label') === '报告模板')
+    expect(JSON.stringify(select?.props('options'))).toContain('能耗月报')
+    wrapper.unmount()
+  })
+
+  it('建完一条再点「新建规则」是一张空白表单', async () => {
+    mockList()
+    vi.spyOn(api, 'reportRuntime').mockResolvedValue({
+      is_schedule_enabled: true,
+      timezone: 'UTC',
+    })
+    vi.spyOn(api, 'createReportSchedule').mockResolvedValue(rule)
+    const wrapper = mount(Schedules, { global: { stubs: { teleport: true } } })
+    await flushPromises()
+    const click = async (label: string) => {
+      await wrapper
+        .findAllComponents(DtButton)
+        .find((button) => button.text() === label)
+        ?.trigger('click')
+      await flushPromises()
+    }
+    const input = (label: string) =>
+      wrapper
+        .findAllComponents(DtInput)
+        .find((item) => item.props('label') === label)
+    await click('新建规则')
+    input('规则名称')?.vm.$emit('update:modelValue', '审计月报定时')
+    wrapper
+      .findAllComponents(DtSelect)
+      .find((select) => select.props('label') === '报告模板')
+      ?.vm.$emit('update:modelValue', 'r1')
+    await flushPromises()
+    await click('创建规则')
+    expect(api.createReportSchedule).toHaveBeenCalledTimes(1)
+    await click('新建规则')
+    expect(input('规则名称')?.props('modelValue')).toBe('')
+    expect(
+      wrapper
+        .findAllComponents(DtSelect)
+        .find((select) => select.props('label') === '报告模板')
+        ?.props('modelValue'),
+    ).toBe('')
+    wrapper.unmount()
+  })
+})
