@@ -129,3 +129,54 @@ async def test_the_insert_yields_to_the_unique_constraint() -> None:
 
 async def test_a_returned_row_means_the_insert_happened() -> None:
     assert await _insert(_RecordingSession(inserted="row-id")) is True
+
+
+class _CountingTopics:
+    """按主题回声明码的假表，记下被问了几次。"""
+
+    def __init__(self, declared: dict[str, str]) -> None:
+        self._declared = declared
+        self.calls = 0
+
+    async def required_codes_of(
+        self, _session: object, topics: frozenset[str]
+    ) -> dict[str, str]:
+        self.calls += 1
+        return {
+            topic: code
+            for topic, code in self._declared.items()
+            if topic in topics
+        }
+
+
+async def test_denied_topics_asks_the_table_once_for_all_topics() -> None:
+    # ⚠ 换票时按主题逐个开事务，一面墙同时换票就是 K×连接数次单行查询
+    topics = _CountingTopics({"a:1": CODE, "a:2": OTHER_CODE})
+    registry = TopicRegistry(
+        database=cast("Database", _RacedDatabase()),
+        catalog=cast("Any", _Catalog()),
+        topics=cast("TopicCrud", topics),
+    )
+
+    denied = await registry.denied_topics(
+        topics=frozenset({"a:1", "a:2", "gone:3"}), codes=frozenset({CODE})
+    )
+
+    assert (denied, topics.calls) == (frozenset({"a:2", "gone:3"}), 1)
+
+
+async def test_required_codes_of_is_one_in_query() -> None:
+    session = _RecordingSession(inserted=None)
+    session.tuples = lambda: session  # type: ignore[attr-defined]  # 测试注入
+    session.all = lambda: [("a:1", CODE)]  # type: ignore[attr-defined]  # 同上
+
+    codes = await TopicCrud().required_codes_of(
+        cast("Any", session), frozenset({"a:1", "a:2"})
+    )
+
+    compiled = str(session.statements[0].compile(dialect=postgresql.dialect()))
+    assert (codes, len(session.statements), " IN " in compiled) == (
+        {"a:1": CODE},
+        1,
+        True,
+    )

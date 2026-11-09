@@ -75,6 +75,7 @@ class FakeRegistry:
     def __init__(self, *, topic: str = "opcua:1", code: str = "opcua:view"):
         self.topic = topic
         self.code = code
+        self.denied_calls = 0
 
     async def authorize(self, *, topic: str, codes: frozenset[str]) -> str:
         if topic != self.topic:
@@ -82,6 +83,14 @@ class FakeRegistry:
         if self.code not in codes:
             raise SubscriptionDenied("码不够")
         return self.code
+
+    async def denied_topics(
+        self, *, topics: frozenset[str], codes: frozenset[str]
+    ) -> frozenset[str]:
+        self.denied_calls += 1
+        if self.code in codes:
+            return frozenset(topic for topic in topics if topic != self.topic)
+        return topics
 
 
 class FakeGrants:
@@ -311,6 +320,19 @@ async def test_reauth_drops_subscriptions_that_no_longer_qualify() -> None:
     revoked = [item for item in sent if item.get("event") == "unsubscribed"]
     assert len(revoked) == 1
     assert revoked[0]["reason"] == "permission_revoked"
+
+
+async def test_reauth_rechecks_all_topics_in_one_registry_call() -> None:
+    registry = FakeRegistry()
+    service, _connections = _service(registry=registry)
+    connection, _sent = await _open(service)
+    await service.dispatch(
+        connection, {"action": "subscribe", "topic": "opcua:1"}
+    )
+
+    await service.dispatch(connection, {"action": "reauth", "token": _token()})
+
+    assert registry.denied_calls == 1
 
 
 async def test_reauth_with_another_users_token_is_rejected() -> None:

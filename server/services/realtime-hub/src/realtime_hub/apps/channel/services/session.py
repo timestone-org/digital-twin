@@ -418,25 +418,21 @@ class SessionService:
         if connection.grant is not None:
             return 0
         revoked = 0
-        for topic in tuple(connection.topics):
-            try:
-                await self._registry.authorize(
-                    topic=topic, codes=connection.codes
-                )
-            except AppError:
-                await self._connections.unbind(connection.id, topic)
-                await self._journal.forget(
-                    connection_id=connection.id, topic=topic
-                )
-                await connection.send(
-                    {
-                        "type": TYPE_SYSTEM,
-                        "event": "unsubscribed",
-                        "topic": topic,
-                        "reason": "permission_revoked",
-                    }
-                )
-                revoked += 1
+        denied = await self._registry.denied_topics(
+            topics=frozenset(connection.topics), codes=connection.codes
+        )
+        for topic in sorted(denied):
+            await self._connections.unbind(connection.id, topic)
+            await self._journal.forget(connection_id=connection.id, topic=topic)
+            await connection.send(
+                {
+                    "type": TYPE_SYSTEM,
+                    "event": "unsubscribed",
+                    "topic": topic,
+                    "reason": "permission_revoked",
+                }
+            )
+            revoked += 1
         if revoked:
             _logger.info(
                 "subscriptions_revoked",
