@@ -10,9 +10,12 @@ const columns = computed(() =>
     label,
   })),
 )
+// ⚠ 行键带上序号：两行取值相同（同样的零读数、没有时间列）很常见，只拿内容
+// 拼键会撞键，重新试算时 Vue 打错补丁，旧行混在新结果里。一次试算是一份不变的
+// 快照，序号在这一份里是稳定的
 const rows = computed(() =>
-  (props.node.rows ?? []).map((row) => ({
-    id: row.join('\u001f'),
+  (props.node.rows ?? []).map((row, index) => ({
+    id: `${index}:${row.join('\u001f')}`,
     values: Object.fromEntries(
       row.map((value, index) => [`column${index}`, value]),
     ),
