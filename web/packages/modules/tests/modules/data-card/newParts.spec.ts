@@ -145,6 +145,34 @@ describe('附加字段', () => {
     expect(wrapper.find('.dc-extra__unit').exists()).toBe(false)
   })
 
+  // ⚠ 读数自带 `color` 声明，配色写在外层会被它压住，必须直接写在读数上
+  it('读数色直接写在读数上，占位符不吃读数色', async () => {
+    const painted = await card(
+      [
+        {
+          kind: 'extra',
+          'extra-slot': 'extra1',
+          'extra-color': 'var(--state-success)',
+        },
+      ],
+      [{ extra1: 12 }],
+    )
+    const empty = await card([
+      {
+        kind: 'extra',
+        'extra-slot': 'extra1',
+        'extra-color': 'var(--state-success)',
+      },
+    ])
+
+    expect(painted.find('.dc-extra__num').attributes('style')).toContain(
+      'var(--state-success)',
+    )
+    expect(
+      empty.find('.dc-extra__num').attributes('style') ?? '',
+    ).not.toContain('var(--state-success)')
+  })
+
   it('标签留空时只画读数', async () => {
     const wrapper = await card(
       [{ kind: 'extra', 'extra-slot': 'extra1' }],
