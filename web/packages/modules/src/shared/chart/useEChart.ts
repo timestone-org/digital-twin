@@ -101,11 +101,48 @@ function clickHandler(opts: UseEChartOptions): (raw: unknown) => void {
   }
 }
 
+/**
+ * 建实例；拉 chunk 失败时给 `null`，由调用方记下容器、下一帧重试。
+ * @param el 承载画布的元素
+ * @param dpr 位图分辨率倍率
+ */
+async function tryCreate(
+  el: HTMLElement,
+  dpr: number,
+): Promise<ChartHandle | null> {
+  try {
+    return await createChart(el, { devicePixelRatio: dpr })
+  } catch {
+    return null
+  }
+}
+
+/**
+ * 给新建的实例接上点击、画首帧全量，并跟着容器尺寸重排。
+ * @param instance 刚建好的实例
+ * @param el 承载画布的元素
+ * @param opts 构建器与点击回调
+ */
+function install(
+  instance: ChartHandle,
+  el: HTMLElement,
+  opts: UseEChartOptions,
+): ResizeObserver {
+  // 事件必须每次重建都重新注册：实例是 dispose 后新建的，监听不会跟着活过来
+  if (opts.onItemClick) instance.onClick(clickHandler(opts))
+  paint(instance, opts, true)
+  const observer = new ResizeObserver(() => instance.resize())
+  observer.observe(el)
+  return observer
+}
+
 /** 实例与观察者的持有者，不碰 Vue 生命周期。 */
 function createBinder(opts: UseEChartOptions) {
   let chart: ChartHandle | null = null
   let observer: ResizeObserver | null = null
   let boundEl: HTMLElement | null = null
+  // 建实例失败的那个容器；下一帧刷新时在它上面重试，不让图区永久空白
+  let failedEl: HTMLElement | null = null
   // 当前这个实例是按哪个分辨率倍率建的；echarts 只在 init 时读它，比值变了只能重建
   let builtDpr = 0
   // 建实例要 await 动态 import；期间容器换了或已卸载，回来的实例必须当场扔掉
@@ -113,8 +150,10 @@ function createBinder(opts: UseEChartOptions) {
 
   /** 刷新一帧；只有全量那一档复查缩放比，值刷新每秒都来、量布局不值当。 */
   function refresh(full: boolean): void {
-    if (full && boundEl && chart && dprDrifted(boundEl, builtDpr)) {
-      void attach(boundEl)
+    const drifted = full && boundEl && chart && dprDrifted(boundEl, builtDpr)
+    const rebuild = failedEl ?? (drifted ? boundEl : null)
+    if (rebuild) {
+      void attach(rebuild)
       return
     }
     if (chart) paint(chart, opts, full)
@@ -127,6 +166,7 @@ function createBinder(opts: UseEChartOptions) {
     chart?.dispose()
     chart = null
     boundEl = null
+    failedEl = null
   }
 
   async function attach(el: HTMLElement): Promise<void> {
@@ -134,17 +174,15 @@ function createBinder(opts: UseEChartOptions) {
     const token = generation
     boundEl = el
     builtDpr = chartDprOf(el)
-    const instance = await createChart(el, { devicePixelRatio: builtDpr })
-    if (token !== generation) {
-      instance.dispose()
+    const instance = await tryCreate(el, builtDpr)
+    // 期间被换掉的实例当场扔掉；建失败的容器记下来，下一帧刷新重试
+    if (token !== generation || instance === null) {
+      instance?.dispose()
+      if (token === generation) failedEl = el
       return
     }
     chart = instance
-    // 事件必须每次重建都重新注册：实例是 dispose 后新建的，监听不会跟着活过来
-    if (opts.onItemClick) instance.onClick(clickHandler(opts))
-    paint(instance, opts, true)
-    observer = new ResizeObserver(() => instance.resize())
-    observer.observe(el)
+    observer = install(instance, el, opts)
   }
 
   return {

@@ -173,3 +173,22 @@ describe('createChart', () => {
     expect(echarts.dispose).toHaveBeenCalledTimes(1)
   })
 })
+
+describe('装配失败', () => {
+  // ⚠ 一次网络抖动或换版后旧标签页拉 chunk 失败，不许把整个标签页的图表钉死成空白
+  it('注册失败不缓存，下一次建图重新装配', async () => {
+    vi.resetModules()
+    const fresh = await import('../../../src/shared/chart/echarts')
+    echarts.use.mockImplementationOnce(() => {
+      throw new Error('chunk 拉不下来')
+    })
+
+    await expect(
+      fresh.createChart(document.createElement('div')),
+    ).rejects.toThrow('chunk 拉不下来')
+    await expect(
+      fresh.createChart(document.createElement('div')),
+    ).resolves.toBeDefined()
+    expect(echarts.use).toHaveBeenCalledTimes(2)
+  })
+})

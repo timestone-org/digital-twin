@@ -206,6 +206,29 @@ describe('挂载与释放', () => {
   })
 })
 
+describe('建实例失败', () => {
+  // ⚠ 失败了不许把容器记成「已绑定」：否则之后同一个容器再也不会重试，图区永久空白
+  it('建实例失败后，下一帧刷新在同一个容器上重试', async () => {
+    echarts.createChart.mockImplementationOnce(() =>
+      Promise.reject(new Error('chunk 拉不下来')),
+    )
+    const wrapper = await mountChart({ values: { a: 1 } })
+
+    expect(echarts.handles).toHaveLength(0)
+
+    await wrapper.setProps({ values: { a: 2 } })
+    await flushPromises()
+
+    expect(echarts.createChart).toHaveBeenCalledTimes(2)
+    expect(echarts.createChart.mock.calls[1]?.[0]).toBe(
+      wrapper.get('.canvas').element,
+    )
+    expect(lastUpdate()).toEqual({ notMerge: true })
+
+    wrapper.unmount()
+  })
+})
+
 describe('刷新口径', () => {
   it('配置变了全量重建——结构与配色都要重算', async () => {
     const wrapper = await mountChart({ config: { title: '甲' } })
