@@ -46,7 +46,7 @@ const MAX_DECIMALS = 10
 const MAX_PANEL_WIDTH = 1200
 /** 卡片最小高度 0 = 自适应；上限同宽度 */
 const MAX_PANEL_HEIGHT = 1200
-/** 字段分列上限：三列以上每格窄到放不下一个带单位的读数 */
+/** 字段分列上限：四列以上每格窄到放不下一个带单位的读数 */
 export const MAX_PANEL_COLUMNS = 4
 /** 阈值档上限：再多用户自己也读不出牌上现在是哪一档 */
 const MAX_LEVELS = 6

@@ -117,7 +117,8 @@ export function partAppearance(
 
 /**
  * 一档在图例上显示的文字：配了说明就用说明，否则按条件拼一句。
- * ⚠ 拼出来的那句是给人核对用的，必须与 `hits` 的口径逐字一致（含上界不含）。
+ * ⚠ 拼出来的那句是给人核对用的，条件要与 `hits` 一致；区间档「下界含、上界不含」
+ * 这一点由编辑器的档位说明交代，`a ~ b` 本身看不出来。
  * @param stop 归一化后的档位
  */
 export function tintStopText(stop: TwinTintStop): string {

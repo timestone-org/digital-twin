@@ -1,6 +1,6 @@
 /**
- * @fileoverview 归一化吞不掉的那两类错：重复 id 与悬空引用。
- * 归一化只管形状，这两样必须响亮报出去——静默降级对人尚可忍受，对 Agent 是致命的（ADR-0012 四）。
+ * @fileoverview 归一化吞不掉的那几类错：重复 id、悬空引用与画不出来的配置。
+ * 归一化只管形状，这些必须响亮报出去——静默降级对人尚可忍受，对 Agent 是致命的（ADR-0012）。
  */
 import { MIN_ROAM_TOUR_STOPS } from './normalizeScene'
 import { partFocusView } from './cameraSelect'

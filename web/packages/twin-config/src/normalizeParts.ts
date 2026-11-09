@@ -165,10 +165,7 @@ export const DEFAULT_PART_DETAIL: TwinPartDetail = Object.freeze({
 })
 
 /**
- * 部件的点击动作。
- * ⚠ 远距缺省是 `approach`（先把部件框进画面），与两段式点击本来的行为一致；
- * 近距缺省是 `none`：缺省就弹窗的话，一份还没配过详情字段的配置会在每次点击
- * 部件时弹出一张空卡片。
+ * 部件的点击动作；缺省值及其理由见 `DEFAULT_PART_CLICK`。
  * @param raw 落库的点击动作
  */
 export function normalizePartClick(raw: unknown): TwinPartClick {
