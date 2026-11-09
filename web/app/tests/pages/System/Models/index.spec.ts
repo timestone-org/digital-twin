@@ -281,6 +281,20 @@ describe('模型管理页', () => {
     expect(wrapper.text()).toContain('当前：百炼 / qwen-plus')
   })
 
+  it('同一用途连点两下保存只发一次', async () => {
+    const assign = vi
+      .spyOn(llm, 'assignPurpose')
+      .mockResolvedValue(
+        purpose({ provider_id: 'p1', provider_name: '百炼', model_name: 'm' }),
+      )
+    const wrapper = await renderWithHosts()
+    const board = wrapper.findComponent(PurposeBoard)
+    board.vm.$emit('assign', 'assistant.chat', 'p1', 'm')
+    board.vm.$emit('assign', 'assistant.chat', 'p1', 'm')
+    await flushPromises()
+    expect(assign).toHaveBeenCalledTimes(1)
+  })
+
   it('订阅账号那一节只在目录里真配了那一路且持 llm:manage 时出现', async () => {
     // ⚠ 登录态挂在那一行供应商上（ADR-0041）：目录里一路都没有时摆出登录键，
     // 点下去是一条指不回任何地方的错

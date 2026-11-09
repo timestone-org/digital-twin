@@ -222,3 +222,30 @@ describe('用途分配板', () => {
     expect(wrapper.text()).not.toContain('沿用该服务环境变量')
   })
 })
+
+describe('用途分配板的草稿', () => {
+  it('保存一行后父层换掉整组用途，另一行没存的草稿不丢', async () => {
+    const vision = purpose({ purpose: 'assistant.vision', label: '看图' })
+    const wrapper = render([purpose(), vision], [provider()])
+    const chat = wrapper.find('[data-purpose="assistant.chat"]')
+    const other = wrapper.find('[data-purpose="assistant.vision"]')
+    selectAt(chat, 0).$emit('update:modelValue', 'p1')
+    selectAt(other, 0).$emit('update:modelValue', 'p1')
+    await nextTick()
+    selectAt(other, 1).$emit('update:modelValue', 'qwen-vl')
+    await nextTick()
+    await wrapper.setProps({
+      purposes: [
+        purpose({
+          provider_id: 'p1',
+          provider_name: '百炼',
+          model_name: 'qwen-plus',
+        }),
+        { ...vision },
+      ],
+    })
+    const after = wrapper.find('[data-purpose="assistant.vision"]')
+    expect(selectAt(after, 0).modelValue).toBe('p1')
+    expect(selectAt(after, 1).modelValue).toBe('qwen-vl')
+  })
+})

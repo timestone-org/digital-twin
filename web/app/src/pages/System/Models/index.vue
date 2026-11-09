@@ -100,17 +100,24 @@ async function remove(provider: LlmProvider): Promise<void> {
   }
 }
 
+/** 在途的用途写入；连点保存时第二下直接丢掉，不发两个 PUT。 */
+const assigning = new Set<string>()
+
 async function assign(
   purpose: string,
   providerId: string,
   modelName: string,
 ): Promise<void> {
+  if (assigning.has(purpose)) return
+  assigning.add(purpose)
   try {
     await catalog.assign(purpose, providerId, modelName)
     toast.success('用途已更新，两侧十秒内生效')
     await catalog.reloadEffective()
   } catch (caught) {
     toast.error(describeError(caught))
+  } finally {
+    assigning.delete(purpose)
   }
 }
 
