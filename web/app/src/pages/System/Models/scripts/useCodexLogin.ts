@@ -146,7 +146,7 @@ export function useCodexLogin(
     })
   }
 
-  async function refresh(): Promise<void> {
+  async function readStatus(): Promise<void> {
     status.value = await readCredential(providerRef())
   }
 
@@ -155,7 +155,7 @@ export function useCodexLogin(
     pending,
     isBusy,
     error,
-    refresh,
+    refresh: () => guarded({ isBusy, error }, readStatus),
     begin,
     cancel: () => {
       polling.stop()
@@ -165,7 +165,7 @@ export function useCodexLogin(
       guarded({ isBusy, error }, async () => {
         await forgetCredential(providerRef())
         status.value = null
-        await refresh()
+        await readStatus()
       }),
   }
 }

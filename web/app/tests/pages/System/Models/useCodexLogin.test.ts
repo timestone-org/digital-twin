@@ -248,3 +248,14 @@ describe('设备码登录', () => {
     scope.stop()
   })
 })
+
+describe('读登录态', () => {
+  it('读失败把原因摆出来，不留一个没人接的拒绝', async () => {
+    vi.mocked(api.readCredential).mockRejectedValue(new Error('读不到登录态'))
+    const scope = effectScope()
+    const login = scope.run(() => useCodexLogin(() => PROVIDER_REF))
+    await expect(login?.refresh()).resolves.toBeUndefined()
+    expect(login?.error.value).toBe('读不到登录态')
+    scope.stop()
+  })
+})
