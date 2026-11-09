@@ -30,7 +30,7 @@ from ai_assistant.apps.chat.services.session_service import require_session
 from ai_assistant.deps import get_session, require
 from ai_assistant.settings import API_PREFIX
 from lib.auth import CallerContext
-from lib.errors import AppError, ValidationFailed
+from lib.errors import AppError, InfraError, ValidationFailed
 from lib.logging import current_log_context, get_logger
 from llmcore.output import events
 from llmcore.output.payloads import ContextPayload
@@ -112,6 +112,11 @@ async def _frames(
     except AppError as error:
         _logger.warning("turn_failed", "回合失败", code=error.code)
         yield events.error_frame(error.code, str(error), trace_id)
+    except Exception as error:  # 理由：开流后改不了状态码，只能落成 error 帧
+        _logger.error("turn_crashed", "回合异常中断", error=error)
+        yield events.error_frame(
+            InfraError.code, "助手内部错误，请稍后重试", trace_id
+        )
 
 
 def _frame_of(item: advance_service.AdvanceEvent) -> str:
