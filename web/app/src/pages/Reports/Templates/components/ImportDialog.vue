@@ -24,6 +24,8 @@ const emit = defineEmits<{
 }>()
 const imported = ref<ReportSchemas['ImportResultOut'] | null>(null)
 const busy = ref(false)
+/** 建模板的请求在飞；只有这一步关窗会丢回执，转换中关窗不受影响。 */
+const creating = ref(false)
 const status = ref('选择不超过 10 MB 的 .docx 文件')
 const error = ref('')
 const name = ref('')
@@ -75,6 +77,15 @@ function restoreForAccount(): void {
   }
   isRestoring = false
   if (props.modelValue && record) void resume()
+}
+/**
+ * 弹窗的开合请求。⚠ 创建在飞时不许关：关窗会作废这次请求，模板照样建出来，
+ * 界面却既不跳转也不清恢复记录。
+ * @param open 要开还是要关
+ */
+function onModelValue(open: boolean): void {
+  if (!open && creating.value) return
+  emit('update:modelValue', open)
 }
 function reset(): void {
   stop()
@@ -171,6 +182,7 @@ async function create(): Promise<void> {
   const result = imported.value
   if (!result) return
   busy.value = true
+  creating.value = true
   await raced.run(
     () =>
       api.createReport({
@@ -181,8 +193,8 @@ async function create(): Promise<void> {
       }),
     {
       ok: (report) => {
-        writeImportRecovery(identity.value, null)
-        jobId.value = null
+        // 清掉这一份导入：留着的话下次打开还能拿同一份内容再建一次
+        discard()
         emit('created', report)
         emit('update:modelValue', false)
       },
@@ -191,6 +203,7 @@ async function create(): Promise<void> {
       },
       settled: () => {
         busy.value = false
+        creating.value = false
       },
     },
   )
@@ -202,7 +215,8 @@ async function create(): Promise<void> {
     :model-value="modelValue"
     width="46rem"
     title="从 Word 导入报告模板"
-    @update:model-value="emit('update:modelValue', $event)"
+    :close-on-backdrop="!creating"
+    @update:model-value="onModelValue"
   >
     <div class="flex flex-col gap-3">
       <DtFilePicker
