@@ -73,7 +73,13 @@ describe('校验', () => {
     expect(validateTableForm(filled({ code }), false).code).not.toBe('')
   })
 
-  it.each([['energy'], ['a.b-c_d'], ['9lives']])('编码 %s 合法', (code) => {
+  it('⚠ 编码不许带点号：跨表引用按第一个点号切，带点的表别的公式引用不到', () => {
+    expect(
+      validateTableForm(filled({ code: 'plant.energy' }), false).code,
+    ).toBe('只能用字母、数字与 _ -，且以字母或数字开头')
+  })
+
+  it.each([['energy'], ['a-b_c-d'], ['9lives']])('编码 %s 合法', (code) => {
     expect(validateTableForm(filled({ code }), false).code).toBe('')
   })
 

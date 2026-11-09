@@ -135,6 +135,13 @@ describe('建表 / 改表弹窗', () => {
     )
   })
 
+  it('保留期上限与后端同界：一百年，再长请留空', async () => {
+    await open(null)
+    const spin = document.body.querySelectorAll('[role="spinbutton"]')
+    const retention = spin[spin.length - 1]
+    expect(retention?.getAttribute('aria-valuemax')).toBe('36500')
+  })
+
   it('改表走 PATCH，且提交的补丁里没有 code', async () => {
     const wrapper = await open(summary())
     await save()
