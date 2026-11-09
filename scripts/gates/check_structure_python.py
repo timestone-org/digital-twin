@@ -31,7 +31,8 @@ DOMAIN = SERVER / "domain"
 # 「把它整个目录拷到一个完全无关的新项目里，还成不成立」。
 PROJECT_NOUNS = re.compile(
     r"数字孪生|孪生|digitaltwin|大屏|看板|dashboard|opcua|点位|台账"
-    r"|dataset|归档|报表|modeling|auth-server|platform-server",
+    r"|dataset|归档|报表|modeling|auth-server|platform-server"
+    r"|助手|知识库|assistant|knowledge",
     re.IGNORECASE,
 )
 FORBIDDEN_SERVICE_PACKAGES = frozenset({"core", "config", "utils"})
