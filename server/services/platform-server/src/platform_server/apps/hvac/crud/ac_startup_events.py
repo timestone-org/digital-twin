@@ -87,16 +87,15 @@ class AcStartupEpisodeCrud(CrudBase[AcStartupEpisode]):
         Args: session, batch_id, window, episodes。
         """
         stale = await session.execute(
-            select(AcStartupEpisode.id).where(
+            delete(AcStartupEpisode)
+            .where(
                 AcStartupEpisode.batch_id == batch_id,
                 AcStartupEpisode.started_at >= window.start,
                 AcStartupEpisode.started_at < window.end,
             )
+            .returning(AcStartupEpisode.id)
         )
         found = list(stale.scalars().all())
-        await session.execute(
-            delete(AcStartupEpisode).where(AcStartupEpisode.id.in_(found))
-        )
         await session.flush()
         session.add_all(episodes)
         await session.flush()
@@ -310,16 +309,14 @@ class AcStartupExclusionCrud(CrudBase[AcStartupExclusion]):
         Args: session, room_id, started_at。
         """
         rows = await session.execute(
-            select(AcStartupExclusion.id).where(
+            delete(AcStartupExclusion)
+            .where(
                 AcStartupExclusion.room_id == room_id,
                 AcStartupExclusion.started_at == started_at,
             )
+            .returning(AcStartupExclusion.id)
         )
-        found = list(rows.scalars().all())
-        await session.execute(
-            delete(AcStartupExclusion).where(AcStartupExclusion.id.in_(found))
-        )
-        return len(found)
+        return len(rows.scalars().all())
 
 
 def _episode_values(episode: AcStartupEpisode) -> dict[str, object]:
