@@ -68,3 +68,19 @@ def test_the_first_autumn_occurrence_does_not_close_the_repeated_hour() -> None:
     assert window is not None
     assert window.starts == (datetime(2026, 11, 1, 4, 0, tzinfo=UTC),)
     assert window.range_end == datetime(2026, 11, 1, 5, 0, tzinfo=UTC)
+
+
+def test_an_off_grid_watermark_resumes_on_the_floor() -> None:
+    # 15 分钟表改成 1 小时后，旧水位 02:15Z 不在新网格上；照常移格会抛异常，
+    # 这张表从此再也不采
+    table = aggregate_table(3_600_000)
+    table.last_collected_ts = datetime(2026, 8, 24, 2, 15, tzinfo=UTC)
+    window = _window_of(
+        table,
+        now=datetime(2026, 8, 24, 5, 30, tzinfo=UTC),
+        timezone="Asia/Shanghai",
+        limits=RunLimits(recompute_tail_buckets=1, max_buckets_per_tick=240),
+    )
+    assert window is not None
+    assert window.starts[0] == datetime(2026, 8, 24, 2, 0, tzinfo=UTC)
+    assert window.starts[-1] == datetime(2026, 8, 24, 4, 0, tzinfo=UTC)

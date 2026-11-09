@@ -34,6 +34,7 @@ from platform_server.apps.dataset.services.buckets import (
     bucket_sequence,
     collected_row_id,
     last_closed_bucket,
+    resume_bucket,
     shift_bucket,
 )
 from platform_server.apps.dataset.services.dirty import (
@@ -347,9 +348,9 @@ def _first_bucket(
     watermark = table.last_collected_ts
     if watermark is None:
         return last_closed
-    # 水位已经是持久化身份；春季缺口的身份不保证再次对齐后仍是自身。
+    # ⚠ 改过周期的表水位不在新网格上，直接移格会抛异常，这张表从此再也不采
     return shift_bucket(
-        watermark,
+        resume_bucket(watermark, interval=interval, timezone=timezone),
         steps=1 - limits.recompute_tail_buckets,
         interval=interval,
         timezone=timezone,
