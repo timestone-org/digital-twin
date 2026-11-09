@@ -33,3 +33,38 @@ describe('UserFormDialog 的回车提交', () => {
     expect(create).toHaveBeenCalledTimes(1)
   })
 })
+
+describe('UserFormDialog 的默认角色', () => {
+  it('新建时不动角色就存，落在权限最少的那个上而不是列表第一个', async () => {
+    const create = vi
+      .spyOn(admin, 'createUser')
+      .mockResolvedValue({ id: 'u1' } as never)
+    const role = (id: string, name: string, permissions: string[]) => ({
+      id,
+      name,
+      description: null,
+      is_builtin: true,
+      created_at: '',
+      updated_at: '',
+      permissions,
+      user_count: 0,
+    })
+    mount(UserFormDialog, {
+      props: {
+        modelValue: true,
+        user: null,
+        roles: [
+          role('r-admin', 'admin', ['user:grant', 'role:manage', 'user:view']),
+          role('r-viewer', 'viewer', ['user:view']),
+        ],
+      },
+      attachTo: document.body,
+    })
+    await flushPromises()
+    document.querySelector('form')?.dispatchEvent(new Event('submit'))
+    await flushPromises()
+    expect(create).toHaveBeenCalledWith(
+      expect.objectContaining({ role_id: 'r-viewer' }),
+    )
+  })
+})
