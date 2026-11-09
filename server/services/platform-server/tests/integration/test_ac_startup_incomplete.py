@@ -85,7 +85,11 @@ async def test_a_shard_of_a_failed_batch_never_stays_pending(
     """一片失败之后，还在路上的那些分片必须各自落一个终态。"""
     room_id = await make_room(db_session, "半路判失败")
     plan = await request_rebuild(
-        db_session, room_id=room_id, window=WINDOW, rules=RULES
+        db_session,
+        room_id=room_id,
+        window=WINDOW,
+        rules=RULES,
+        timezone="Asia/Shanghai",
     )
     await fail_shard(db_session, plan.messages[0], reason="外部数据源不可用")
     assert await finalize_if_complete(db_session, plan.batch.id) is not None
@@ -111,7 +115,11 @@ async def test_an_extra_shard_row_cannot_stand_in_for_one_that_never_ran(
     """
     room_id = await make_room(db_session, "凑数")
     plan = await request_rebuild(
-        db_session, room_id=room_id, window=WINDOW, rules=RULES
+        db_session,
+        room_id=room_id,
+        window=WINDOW,
+        rules=RULES,
+        timezone="Asia/Shanghai",
     )
     await ac_startup_shard_crud.mark(
         db_session,
@@ -135,7 +143,11 @@ async def test_the_database_refuses_to_make_an_incomplete_batch_current(
     """⚠ 缺着片就切成当前批次，绕开应用直接改库也不行。"""
     room_id = await make_room(db_session, "缺片上台")
     plan = await request_rebuild(
-        db_session, room_id=room_id, window=WINDOW, rules=RULES
+        db_session,
+        room_id=room_id,
+        window=WINDOW,
+        rules=RULES,
+        timezone="Asia/Shanghai",
     )
     with pytest.raises(IntegrityError):
         await db_session.execute(
@@ -154,7 +166,11 @@ async def test_the_database_refuses_a_current_batch_that_is_still_running(
     """还在跑的批次不许挂当前批次的牌子：页面拿到的会是半份数据。"""
     room_id = await make_room(db_session, "跑着上台")
     plan = await request_rebuild(
-        db_session, room_id=room_id, window=WINDOW, rules=RULES
+        db_session,
+        room_id=room_id,
+        window=WINDOW,
+        rules=RULES,
+        timezone="Asia/Shanghai",
     )
     with pytest.raises(IntegrityError):
         await db_session.execute(
@@ -177,7 +193,11 @@ async def test_the_episode_count_grows_as_the_shards_finish(
     """
     room_id = await make_room(db_session, "边跑边计数")
     plan = await request_rebuild(
-        db_session, room_id=room_id, window=WINDOW, rules=RULES
+        db_session,
+        room_id=room_id,
+        window=WINDOW,
+        rules=RULES,
+        timezone="Asia/Shanghai",
     )
     await ac_startup_episode_crud.upsert_many(
         db_session,

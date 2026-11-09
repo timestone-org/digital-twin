@@ -72,7 +72,7 @@ async def stale_flags(
     session: AsyncSession,
     models: list[AcModel],
     *,
-    timezone: str = "Asia/Shanghai",
+    timezone: str,
 ) -> dict[uuid.UUID, bool]:
     """一批模型的「数据已更新」位。
 

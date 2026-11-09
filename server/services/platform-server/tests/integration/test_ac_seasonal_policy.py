@@ -27,6 +27,7 @@ async def test_changing_limits_invalidates_an_extracted_batch(
         room_id=room_id,
         window=TimeWindow(start=BASE, end=BASE.replace(month=4)),
         rules=ExtractionRules(),
+        timezone="Asia/Shanghai",
     )
     plan.batch.status = "ready"
     plan.batch.shard_done = plan.batch.shard_total

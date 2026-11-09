@@ -164,7 +164,7 @@ async def _load_inputs(
     session: AsyncSession,
     room_id: uuid.UUID,
     *,
-    timezone: str = "Asia/Shanghai",
+    timezone: str,
 ) -> _Inputs:
     """读出当前批次的可用事件（剔除人工排除）与房间机组。
 

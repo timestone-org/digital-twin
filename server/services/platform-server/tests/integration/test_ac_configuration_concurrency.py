@@ -455,6 +455,7 @@ async def _rebuild(case: ConfigurationCase, ready: asyncio.Future[int]) -> None:
                 end=datetime(2026, 2, 1, tzinfo=UTC),
             ),
             rules=ExtractionRules(),
+            timezone="Asia/Shanghai",
         )
 
 

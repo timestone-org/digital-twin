@@ -73,9 +73,9 @@ class PredictResult:
     # 答话的是这个组合的专属子模型，还是房间共用模型在兜底
     is_dedicated: bool
     trained_at: datetime
+    timezone: str
     effective_at: datetime | None = None
     compliance: tuple[EffectiveComplianceOut, ...] = ()
-    timezone: str = "Asia/Shanghai"
 
 
 @dataclass(frozen=True)
@@ -98,9 +98,9 @@ class RecommendResult:
 
     entries: list[RecommendEntry]
     trained_at: datetime
+    timezone: str
     effective_at: datetime | None = None
     compliance: tuple[EffectiveComplianceOut, ...] = ()
-    timezone: str = "Asia/Shanghai"
 
 
 async def predict(
@@ -108,11 +108,11 @@ async def predict(
     model_id: uuid.UUID,
     payload: PredictIn,
     *,
-    timezone: str = "Asia/Shanghai",
+    timezone: str,
 ) -> PredictResult:
     """试算：读工件、算特征、出三分位。
 
-    Args: session, model_id, payload。
+    Args: session, model_id, payload, timezone（业务时区，取自配置）。
     """
     model, bundle = await _load_bundle(session, model_id, timezone=timezone)
     at = payload.at or utcnow()
@@ -146,13 +146,13 @@ async def recommend(
     model_id: uuid.UUID,
     payload: RecommendIn,
     *,
-    timezone: str = "Asia/Shanghai",
+    timezone: str,
 ) -> RecommendResult:
     """同一个起始条件下让全部服务组合同台比，排好序、第一名带推荐标。
 
     排序口径（AC_MODEL_DESIGN §5.4）：p50 快者优先，再比 p90，
     最后少开机组优先——同样快就选省电的。
-    Args: session, model_id, payload。
+    Args: session, model_id, payload, timezone（业务时区，取自配置）。
     """
     model, bundle = await _load_bundle(session, model_id, timezone=timezone)
     at = payload.at or utcnow()

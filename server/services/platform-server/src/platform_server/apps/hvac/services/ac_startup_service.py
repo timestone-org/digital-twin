@@ -169,7 +169,7 @@ async def request_rebuild(
     room_id: uuid.UUID,
     window: TimeWindow,
     rules: ExtractionRules,
-    timezone: str = "Asia/Shanghai",
+    timezone: str,
 ) -> RebuildPlan:
     """建一个新批次并登记它的分片。只入队，不在这里抽取。
 

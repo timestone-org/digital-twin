@@ -93,7 +93,11 @@ async def test_a_room_with_startup_history_is_rejected_with_409(
     db_session.add(unit)
     await db_session.flush()
     await request_rebuild(
-        db_session, room_id=room.id, window=WINDOW, rules=ExtractionRules()
+        db_session,
+        room_id=room.id,
+        window=WINDOW,
+        rules=ExtractionRules(),
+        timezone="Asia/Shanghai",
     )
     removed = await app_client.delete(f"{PREFIX}/ac-units/{unit.id}")
     assert removed.status_code == 204, removed.text

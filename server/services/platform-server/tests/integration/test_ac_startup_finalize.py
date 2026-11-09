@@ -190,7 +190,11 @@ async def test_a_batch_becomes_current_only_after_every_shard_is_done(
     """还没跑完就切换，页面会看到半份数据——那比看到旧数据危险得多。"""
     room_id = await make_room(db_session, "半份")
     plan = await request_rebuild(
-        db_session, room_id=room_id, window=WINDOW, rules=RULES
+        db_session,
+        room_id=room_id,
+        window=WINDOW,
+        rules=RULES,
+        timezone="Asia/Shanghai",
     )
     context = context_for(crossing_rows())
     await run_shard(db_session, context, plan.messages[0])
@@ -213,7 +217,11 @@ async def test_finalizing_twice_does_not_redo_the_swap(
     """两个 worker 同时跑完最后两片时，收尾只能生效一次。"""
     room_id = await make_room(db_session, "并发收尾")
     plan = await request_rebuild(
-        db_session, room_id=room_id, window=WINDOW, rules=RULES
+        db_session,
+        room_id=room_id,
+        window=WINDOW,
+        rules=RULES,
+        timezone="Asia/Shanghai",
     )
     context = context_for(crossing_rows())
     for message in plan.messages:
@@ -228,7 +236,11 @@ async def test_a_failed_shard_leaves_the_previous_batch_serving(
     """⚠ 一片失败只让新批次判失败，上一批次一动不动，页面照常显示完整数据。"""
     room_id = await make_room(db_session, "失败")
     first = await request_rebuild(
-        db_session, room_id=room_id, window=WINDOW, rules=RULES
+        db_session,
+        room_id=room_id,
+        window=WINDOW,
+        rules=RULES,
+        timezone="Asia/Shanghai",
     )
     context = context_for(crossing_rows())
     for message in first.messages:
@@ -236,7 +248,11 @@ async def test_a_failed_shard_leaves_the_previous_batch_serving(
     await finalize_if_complete(db_session, first.batch.id)
 
     second = await request_rebuild(
-        db_session, room_id=room_id, window=WINDOW, rules=RULES
+        db_session,
+        room_id=room_id,
+        window=WINDOW,
+        rules=RULES,
+        timezone="Asia/Shanghai",
     )
     await run_shard(db_session, context, second.messages[0])
     await ac_startup_shard_crud.mark(
@@ -287,7 +303,11 @@ async def test_unmatched_exclusions_are_counted_on_the_batch(
     )
     await db_session.flush()
     plan = await request_rebuild(
-        db_session, room_id=room_id, window=WINDOW, rules=RULES
+        db_session,
+        room_id=room_id,
+        window=WINDOW,
+        rules=RULES,
+        timezone="Asia/Shanghai",
     )
     context = context_for(crossing_rows())
     for message in plan.messages:
@@ -306,7 +326,11 @@ async def test_finalizing_keeps_only_the_three_newest_batches(
     batch_ids: list[uuid.UUID] = []
     for index in range(4):
         plan = await request_rebuild(
-            db_session, room_id=room_id, window=WINDOW, rules=RULES
+            db_session,
+            room_id=room_id,
+            window=WINDOW,
+            rules=RULES,
+            timezone="Asia/Shanghai",
         )
         # ⚠ now() 取的是事务开始时刻，同一个事务里建的批次时间会一模一样
         plan.batch.created_at = datetime(2026, 5, 1, tzinfo=UTC) + timedelta(
@@ -332,7 +356,11 @@ async def test_a_late_message_for_a_finished_batch_is_recorded_as_skipped(
     """
     room_id = await make_room(db_session, "迟到")
     plan = await request_rebuild(
-        db_session, room_id=room_id, window=WINDOW, rules=RULES
+        db_session,
+        room_id=room_id,
+        window=WINDOW,
+        rules=RULES,
+        timezone="Asia/Shanghai",
     )
     context = context_for(crossing_rows())
     for message in plan.messages:
@@ -375,7 +403,11 @@ async def test_a_room_with_no_bound_units_yields_no_episodes(
     db_session.add(room)
     await db_session.flush()
     plan = await request_rebuild(
-        db_session, room_id=room.id, window=WINDOW, rules=RULES
+        db_session,
+        room_id=room.id,
+        window=WINDOW,
+        rules=RULES,
+        timezone="Asia/Shanghai",
     )
     context = context_for(crossing_rows())
     run = await run_shard(db_session, context, plan.messages[0])
@@ -415,7 +447,11 @@ async def test_a_failed_shard_records_its_reason(
     """失败原因要落库给人看，只留日志的话页面上什么都看不到。"""
     room_id = await make_room(db_session, "失败原因")
     plan = await request_rebuild(
-        db_session, room_id=room_id, window=WINDOW, rules=RULES
+        db_session,
+        room_id=room_id,
+        window=WINDOW,
+        rules=RULES,
+        timezone="Asia/Shanghai",
     )
     await fail_shard(db_session, plan.messages[0], reason="外部数据源不可用")
     shards = await ac_startup_shard_crud.list_by_batch(
@@ -432,7 +468,11 @@ async def test_a_very_long_failure_reason_is_trimmed(
     """原因超长时截断，否则会撞上分片表的 CHECK 而把失败本身也弄丢。"""
     room_id = await make_room(db_session, "超长原因")
     plan = await request_rebuild(
-        db_session, room_id=room_id, window=WINDOW, rules=RULES
+        db_session,
+        room_id=room_id,
+        window=WINDOW,
+        rules=RULES,
+        timezone="Asia/Shanghai",
     )
     await fail_shard(db_session, plan.messages[0], reason="错" * 900)
     shards = await ac_startup_shard_crud.list_by_batch(
@@ -449,7 +489,11 @@ async def test_a_configuration_change_is_not_logged_as_a_shard_failure(
     """⚠ 抽取期间改了配置是人的操作，不能在日志里记成「有分片失败」的 ERROR。"""
     room_id = await make_room(db_session, "改配置")
     plan = await request_rebuild(
-        db_session, room_id=room_id, window=WINDOW, rules=RULES
+        db_session,
+        room_id=room_id,
+        window=WINDOW,
+        rules=RULES,
+        timezone="Asia/Shanghai",
     )
     context = context_for(crossing_rows())
     for message in plan.messages:
@@ -474,7 +518,11 @@ async def test_a_fetch_that_hits_the_row_limit_fails_the_shard(
     """⚠ 取数撞上行数上限说明尾部被截掉了，不能悄悄把这一片记成跑完。"""
     room_id = await make_room(db_session, "截断")
     plan = await request_rebuild(
-        db_session, room_id=room_id, window=WINDOW, rules=RULES
+        db_session,
+        room_id=room_id,
+        window=WINDOW,
+        rules=RULES,
+        timezone="Asia/Shanghai",
     )
     context = ExtractionContext(
         reader=StubReader(crossing_rows()), rules=RULES, max_rows=5
@@ -489,7 +537,11 @@ async def test_an_empty_failure_reason_still_records_the_failure(
     """⚠ 空原因会撞上分片表的 CHECK，失败本身落不了库，批次就永远停在跑中。"""
     room_id = await make_room(db_session, "空原因")
     plan = await request_rebuild(
-        db_session, room_id=room_id, window=WINDOW, rules=RULES
+        db_session,
+        room_id=room_id,
+        window=WINDOW,
+        rules=RULES,
+        timezone="Asia/Shanghai",
     )
     await fail_shard(db_session, plan.messages[0], reason="")
     shards = await ac_startup_shard_crud.list_by_batch(
@@ -509,7 +561,11 @@ async def test_an_empty_window_is_rejected_before_a_batch_exists(
     empty = TimeWindow(start=WINDOW.start, end=WINDOW.start)
     with pytest.raises(TimeRangeInvalid):
         await request_rebuild(
-            db_session, room_id=room_id, window=empty, rules=RULES
+            db_session,
+            room_id=room_id,
+            window=empty,
+            rules=RULES,
+            timezone="Asia/Shanghai",
         )
 
 
@@ -519,7 +575,11 @@ async def test_publishing_a_plan_puts_every_shard_on_the_stream(
     """入队要把每一片都投出去，少一片就少跑一个月。"""
     room_id = await make_room(db_session, "投递")
     plan = await request_rebuild(
-        db_session, room_id=room_id, window=WINDOW, rules=RULES
+        db_session,
+        room_id=room_id,
+        window=WINDOW,
+        rules=RULES,
+        timezone="Asia/Shanghai",
     )
     published = await publish_shards(
         cast(StreamLike, stream),
