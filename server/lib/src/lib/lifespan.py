@@ -66,11 +66,11 @@ class LifespanHook:
 
 @dataclass
 class ReadinessGate:
-    """就绪闸。关停一开始就置否，让编排器先摘流量再 drain。
+    """就绪闸。lifespan 关停一开始就置否。
 
-    ⚠ api 角色的关停由 uvicorn 驱动：它先停止监听、等连接收完，最后才跑
-    lifespan 关停，所以那时置否已没有人来问 `/ready`；不监听端口的角色在
-    收到信号后立刻置否。
+    ⚠ 只有经 `create_app` 起的 HTTP 进程用它，而那里的关停由 uvicorn 驱动：
+    它先停止监听、等连接收完，最后才跑 lifespan 关停，所以置否时已没有人来问
+    `/ready`。它保证不了「先摘流量再停止监听」。
     """
 
     is_ready: bool = False
