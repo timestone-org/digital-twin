@@ -347,7 +347,6 @@ function submit(): void {
         v-model="extraOptions"
         v-model:username="username"
         v-model:credential="credential"
-        v-model:is-cleared="isCredentialCleared"
         :is-edit="isEdit"
         :has-credential="source?.has_credential ?? false"
       />

@@ -278,7 +278,7 @@ describe('HTTP 认证', () => {
     expect(JSON.stringify(created)).not.toContain('undefined')
     expect(created).toMatchObject({ options_json: { method: 'GET' } })
   })
-  it('OAuth scope 与清空凭据开关生效，缺失凭据明确拒绝', async () => {
+  it('OAuth scope 生效；HTTP 不再给一个只会卡住保存的「清空凭据」开关', async () => {
     const wrapper = await render({
       ...httpSource(),
       username: 'client',
@@ -294,16 +294,12 @@ describe('HTTP 认证', () => {
     expect(wrapper.emitted('update')?.[0]?.[0]).toMatchObject({
       options_json: { scope: 'read:metrics' },
     })
-    const clear = wrapper
-      .findAll('[role="switch"]')
-      .find((node) => node.text().includes('删掉已保存'))
-    if (clear === undefined) throw new Error('没有清空凭据开关')
-    await clear.trigger('click')
-    await press(wrapper, '保存')
-    expect(wrapper.text()).toContain('请填写认证凭据')
+    // ⚠ 选了认证方式就必须有凭据，开关一开只会落到「请填写认证凭据」且输入框被禁用；
+    // 要清凭据就把认证方式改成「无认证」，那会显式发 credential: null
+    expect(wrapper.text()).not.toContain('删掉已保存')
     expect(
       wrapper.find('input[type="password"]').attributes('disabled'),
-    ).toBeDefined()
+    ).toBeUndefined()
   })
   it('POST 改 GET 时移除旧请求体；切协议不携带另一种协议的连接选项', async () => {
     const wrapper = await httpForm()
