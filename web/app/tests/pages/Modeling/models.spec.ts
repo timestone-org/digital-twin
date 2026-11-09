@@ -424,3 +424,90 @@ describe('换绑回执里的影响面', () => {
     expect(text).toContain('还没有台账列引用')
   })
 })
+
+describe('绑公式弹窗', () => {
+  /** 带入口契约的版本详情：入口两列，独热之后的特征列有三列。 */
+  function detailed(): ModelingVersion {
+    return {
+      ...version({ feature_keys: ['temp', 'shift=day', 'shift=night'] }),
+      signature: {
+        format_version: '2.0',
+        inputs: [
+          {
+            key: 'temp',
+            label: '温度',
+            unit: '',
+            dtype: 'float',
+            is_required: true,
+            default_on_missing: null,
+            training_stats: {},
+          },
+          {
+            key: 'shift',
+            label: '班次',
+            unit: '',
+            dtype: 'str',
+            is_required: true,
+            default_on_missing: null,
+            training_stats: {},
+          },
+        ],
+        derived: [],
+        output: {
+          key: 'power',
+          label: '功率',
+          unit: '',
+          dtype: 'float',
+          task: 'regression',
+        },
+      },
+      metrics: {},
+      fingerprint: {},
+      description: null,
+    }
+  }
+
+  async function openBind() {
+    stub([version({ feature_keys: ['temp', 'shift=day', 'shift=night'] })], [])
+    vi.spyOn(modeling, 'getModelingVersion').mockResolvedValue(detailed())
+    signIn([PERMISSION_CODES.modelingView, PERMISSION_CODES.modelingPublish])
+    const wrapper = open()
+    await flushPromises()
+    await wrapper
+      .findAll('button')
+      .find((b) => b.text() === '绑公式')
+      ?.trigger('click')
+    await flushPromises()
+    return wrapper
+  }
+
+  it('形参按入口契约逐位列出，不是特征工程之后的列', async () => {
+    const wrapper = await openBind()
+
+    const items = wrapper
+      .findAll('.dt-ml-bind__params li')
+      .map((li) => li.text())
+    expect(items).toEqual([
+      '第 1 个参数 → 温度（temp）',
+      '第 2 个参数 → 班次（shift）',
+    ])
+  })
+
+  it('绑定失败时弹窗不关，填好的编码还在', async () => {
+    const wrapper = await openBind()
+    vi.spyOn(modeling, 'createModelingBinding').mockRejectedValue(
+      new Error('公式库里没有这条条目'),
+    )
+    await wrapper.get('.dt-modal input').setValue('predict_power')
+    await wrapper
+      .findAll('button')
+      .find((b) => b.text() === '绑定')
+      ?.trigger('click')
+    await flushPromises()
+
+    expect(wrapper.find('.dt-ml-bind__params').exists()).toBe(true)
+    expect(wrapper.get<HTMLInputElement>('.dt-modal input').element.value).toBe(
+      'predict_power',
+    )
+  })
+})

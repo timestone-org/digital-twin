@@ -2,16 +2,16 @@
 /**
  * @fileoverview 把一个模型版本绑到一条台账公式上。
  *
- * ⚠ 形参按**位置**对应特征列，不按名字：公式里 `PREDICT('code', a, b)` 的 a、b
- * 依次喂给版本的第 1、2 个特征列。界面上把这层对应关系明写出来，否则用户只能
- * 从算错的结果里反推（MODELING_DESIGN §6.4）。
+ * ⚠ 形参按**位置**对应入口契约（签名的 `inputs`，特征工程之前的列），不按名字，
+ * 也不是 `feature_keys`：带独热或时间特征的链上两者个数就不同
+ * （docs/MODELING_PLATFORM_DESIGN.md D4）。只有早于签名 2.0 的版本才退回特征列。
  */
-import type { ModelingVersionSummary } from '@dt/contracts'
+import type { ModelingVersion } from '@dt/contracts'
 import { DtButton, DtInput, DtModal, DtNotice } from '@dt/ui'
 import { computed, ref, watch } from 'vue'
 
 const props = defineProps<{
-  version: ModelingVersionSummary | null
+  version: ModelingVersion | null
   isBusy: boolean
 }>()
 
@@ -22,9 +22,16 @@ const emit = defineEmits<{
 
 const fxCode = ref('')
 
+/** 按位置排好的形参：入口契约优先，旧版本没有契约时退回特征列。 */
+const slots = computed(() => {
+  const inputs = props.version?.signature.inputs ?? []
+  if (inputs.length > 0)
+    return inputs.map((item) => ({ key: item.key, label: item.label }))
+  return (props.version?.feature_keys ?? []).map((key) => ({ key, label: '' }))
+})
+
 const signature = computed(() => {
-  const keys = props.version?.feature_keys ?? []
-  const args = keys.map((_, at) => `参数${at + 1}`).join(', ')
+  const args = slots.value.map((_, at) => `参数${at + 1}`).join(', ')
   return `PREDICT('${fxCode.value || '公式编码'}'${args ? `, ${args}` : ''})`
 })
 
@@ -56,14 +63,19 @@ watch(
       <DtInput
         v-model="fxCode"
         label="公式编码"
-        hint="台账列里用 PREDICT('编码', …) 引用它；编码在公式库里唯一"
+        hint="填公式库里已有的自定义公式编码；还没有的话先在版本详情里「注册为公式」"
         required
       />
       <section v-if="props.version" class="dt-ml-bind__params">
-        <h4>形参按位置对应特征列</h4>
+        <h4>形参按位置对应入口列</h4>
         <ol>
-          <li v-for="(key, at) in props.version.feature_keys" :key="key">
-            第 {{ at + 1 }} 个参数 → <code>{{ key }}</code>
+          <li v-for="(slot, at) in slots" :key="slot.key">
+            第 {{ at + 1 }} 个参数 →
+            <template v-if="slot.label && slot.label !== slot.key">
+              {{ slot.label }}（<code>{{ slot.key }}</code
+              >）
+            </template>
+            <code v-else>{{ slot.key }}</code>
           </li>
         </ol>
         <p class="dt-ml-bind__signature">{{ signature }}</p>

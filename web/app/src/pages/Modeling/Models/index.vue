@@ -50,7 +50,8 @@ const runOps = useRunOps(refresh)
 const activeTab = ref('versions')
 const versionView = useViewMode('modeling-versions')
 const bindingView = useViewMode('modeling-bindings')
-const binding = ref<ModelingVersionSummary | null>(null)
+// 绑定弹窗要入口契约（签名），列表那份没有——同详情一样现取
+const binding = ref<ModelingVersion | null>(null)
 // 详情要签名与指纹，列表那份没有——点开时按 id 现取一次
 const detail = ref<ModelingVersion | null>(null)
 const renaming = ref<ModelingVersion | null>(null)
@@ -174,12 +175,14 @@ async function register(fxCode: string): Promise<void> {
 async function submitBind(fxCode: string): Promise<void> {
   const version = binding.value
   if (version === null || isWriting.value) return
-  await ops.bind(fxCode, version.id)
-  binding.value = null
+  if (await ops.bind(fxCode, version.id)) binding.value = null
 }
 
-function openBinding(row: ModelingVersionSummary): void {
-  if (!isWriting.value) binding.value = row
+async function openBinding(row: ModelingVersionSummary): Promise<void> {
+  if (isWriting.value) return
+  await readVersion(row, (version) => {
+    if (!isWriting.value) binding.value = version
+  })
 }
 
 async function openRename(row: ModelingVersionSummary): Promise<void> {
@@ -262,7 +265,7 @@ onBeforeUnmount(versionRead.cancel)
           @update:page="(page) => void versions.goToPage(page)"
           @update:size="(size) => void versions.setSize(size)"
           @detail="(row) => void openDetail(row)"
-          @bind="openBinding"
+          @bind="(row) => void openBinding(row)"
           @retire="(row) => !isWriting && void versionOps.retire(row)"
           @remove="(row) => !isWriting && void versionOps.remove(row)"
           @deploy="(row) => !isWriting && void runOps.publish(row.run_id)"
