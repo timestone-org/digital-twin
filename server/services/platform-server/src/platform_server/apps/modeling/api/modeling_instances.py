@@ -7,7 +7,7 @@ from fastapi import APIRouter, Depends, Query, Response
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from lib.auth import CallerContext
-from lib.web import ApiResponse, CursorPage, Page, PageParams, ok, page_params
+from lib.web import ApiResponse, CursorPage, Page, ok
 from platform_server.apps.modeling.catalog import MODELING_VIEW
 from platform_server.apps.modeling.configuration_deps import (
     ConfigurationWriteContext,
@@ -48,7 +48,6 @@ router = APIRouter(
     prefix=f"{API_PREFIX}/modeling-instances", tags=["modeling-instance"]
 )
 SessionDep = Annotated[AsyncSession, Depends(get_session)]
-PageDep = Annotated[PageParams, Depends(page_params)]
 ViewDep = Annotated[CallerContext, Depends(require(MODELING_VIEW))]
 WriteDep = Annotated[ConfigurationWriteContext, Depends(get_instance_write)]
 PublishDep = Annotated[ConfigurationWriteContext, Depends(get_instance_publish)]

@@ -74,16 +74,6 @@ class DeploymentCrud(CrudBase[ModelingDeployment]):
         )
         return rows.scalars().first()
 
-    async def list_all(self, session: AsyncSession) -> list[ModelingDeployment]:
-        """全部部署，最新的在前。
-
-        Args: session。
-        """
-        rows = await session.execute(
-            select(ModelingDeployment).order_by(*DEPLOYMENT_ORDER)
-        )
-        return list(rows.scalars().all())
-
 
 class ApiKeyCrud(CrudBase[ModelingApiKey]):
     """`modeling_api_keys` 的数据访问。"""

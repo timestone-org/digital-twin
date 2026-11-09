@@ -8,7 +8,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 
 from lib.auth import CallerContext
 from lib.objectstore import ObjectStore
-from lib.web import ApiResponse, CursorPage, Page, PageParams, ok, page_params
+from lib.web import ApiResponse, CursorPage, Page, ok
 from platform_server.apps.modeling.catalog import (
     DATASET_MANAGE,
     MODELING_PUBLISH,
@@ -57,7 +57,6 @@ bindings = APIRouter(
 )
 
 SessionDep = Annotated[AsyncSession, Depends(get_session)]
-PageDep = Annotated[PageParams, Depends(page_params)]
 ViewDep = Annotated[CallerContext, Depends(require(MODELING_VIEW))]
 PublishDep = Annotated[WriteGate, Depends(get_publish_context)]
 StoreDep = Annotated[ObjectStore, Depends(get_object_store)]

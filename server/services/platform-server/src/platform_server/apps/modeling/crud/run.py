@@ -108,28 +108,6 @@ class RunCrud(CrudBase[ModelingRun]):
             .limit(1)
         )
 
-    async def page(
-        self,
-        session: AsyncSession,
-        *,
-        pipeline_id: uuid.UUID | None,
-        offset: int,
-        limit: int,
-    ) -> tuple[list[ModelingRun], int]:
-        """按流水线筛一页运行记录。
-
-        Args: session, pipeline_id, offset, limit。
-        """
-        statement = select(ModelingRun)
-        if pipeline_id is not None:
-            statement = statement.where(ModelingRun.pipeline_id == pipeline_id)
-        return await self.list_page(
-            session,
-            statement=statement.order_by(*NEWEST_FIRST),
-            offset=offset,
-            limit=limit,
-        )
-
     async def stale_ids(
         self, session: AsyncSession, *, before: datetime, limit: int
     ) -> list[uuid.UUID]:
