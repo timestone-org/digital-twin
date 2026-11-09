@@ -4,9 +4,10 @@ import type { DatasetBackfillJob, DatasetTable } from '@dt/contracts'
 import * as dataset from '@/api/dataset'
 import { describeError } from '@/composables/useAsyncList'
 import { useRacedFetch, type RacedFetch } from '@/composables/useRacedFetch'
-import { useBackfillActions } from './useBackfillActions'
+import { useBackfillActions, type BackfillState } from './useBackfillActions'
 
-function createState() {
+/** 一份空白的回填状态。 */
+function createState(): BackfillState {
   return {
     isOpen: ref(false),
     job: ref<DatasetBackfillJob | null>(null),
@@ -19,17 +20,28 @@ function createState() {
     notice: ref<string | null>(null),
   }
 }
+
 interface ReadContext {
   table: () => DatasetTable
-  state: ReturnType<typeof createState>
+  state: BackfillState
   raced: RacedFetch
   timer: ReturnType<typeof setTimeout> | null
   disposed: boolean
 }
+
+/**
+ * 停掉轮询定时器。
+ * @param ctx 读取上下文
+ */
 function stopPolling(ctx: ReadContext): void {
   if (ctx.timer !== null) clearTimeout(ctx.timer)
   ctx.timer = null
 }
+
+/**
+ * 只在弹窗开着、任务运行中、没有写在飞且结果不是未知时排下一次读。
+ * @param ctx 读取上下文
+ */
 function schedule(ctx: ReadContext): void {
   stopPolling(ctx)
   const { isOpen, job, uncertain, busy } = ctx.state
@@ -45,6 +57,11 @@ function schedule(ctx: ReadContext): void {
     }, 2000)
   }
 }
+
+/**
+ * 读一次实际任务；失败置 `uncertain` 锁写，不把「读不到」当成「没有任务」。
+ * @param ctx 读取上下文
+ */
 async function refresh(ctx: ReadContext): Promise<void> {
   if (
     ctx.disposed ||
@@ -75,6 +92,11 @@ async function refresh(ctx: ReadContext): Promise<void> {
     },
   )
 }
+
+/**
+ * 换表即清空重读，关窗停读，卸载作废一切。
+ * @param ctx 读取上下文
+ */
 function installLifecycle(ctx: ReadContext): void {
   const { isOpen, job, since, until, error, notice, uncertain, loading } =
     ctx.state
@@ -109,6 +131,11 @@ function installLifecycle(ctx: ReadContext): void {
     stopPolling(ctx)
   })
 }
+
+/**
+ * 装上一张台账的历史桶回填面板。
+ * @param table 取当前台账；随路由换人，故是个函数
+ */
 export function useDatasetBackfill(table: () => DatasetTable) {
   const state = createState()
   const ctx: ReadContext = {
