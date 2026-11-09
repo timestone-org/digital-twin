@@ -154,6 +154,25 @@ describe('自装配', () => {
   })
 })
 
+describe('空屏', () => {
+  // ⚠ 一个节点都没有的屏整片黑：跳过来的人分不清是没内容还是没加载出来
+  it('一个节点都没有时说这张屏还没有内容', async () => {
+    dashboard.value = { ...PAYLOAD, nodes: [] }
+    const wrapper = mount(DashboardView)
+    await flushPromises()
+
+    expect(wrapper.find('[data-test="dashboard-empty"]').exists()).toBe(true)
+    expect(wrapper.text()).toContain('这张大屏还没有内容')
+  })
+
+  it('有节点时不摆空态', async () => {
+    const wrapper = mount(DashboardView)
+    await flushPromises()
+
+    expect(wrapper.find('[data-test="dashboard-empty"]').exists()).toBe(false)
+  })
+})
+
 describe('嵌入外壳', () => {
   it('普通运行态保留返回工作台入口，嵌入态不显示', async () => {
     const normal = mount(DashboardView)

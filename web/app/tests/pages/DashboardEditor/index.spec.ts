@@ -333,11 +333,42 @@ describe('版本冲突', () => {
     await buttonWith(wrapper, '保存')?.trigger('click')
     await flushPromises()
 
+    confirmSpy.mockResolvedValue(true)
     await buttonWith(wrapper, '重新加载')?.trigger('click')
     await flushPromises()
 
+    expect(confirmSpy.mock.calls.at(-1)?.[0].title).toBe('重新加载')
     expect(wrapper.text()).not.toContain(VERSION_CONFLICT_MESSAGE)
     expect(load).toHaveBeenCalledTimes(2)
+  })
+
+  // ⚠ 重新加载用服务器版本整份盖掉画布与撤销栈，且就摆在保存旁边
+  it('有未保存改动时点重新加载先确认，取消就不重新拉取', async () => {
+    const load = vi
+      .spyOn(dashboardApi, 'getDashboard')
+      .mockResolvedValue(payload({ nodes: [] }))
+    const wrapper = await mountEditor()
+    await wrapper.findAll('.dt-lib__item')[0]?.trigger('click')
+
+    await buttonWith(wrapper, '重新加载')?.trigger('click')
+    await flushPromises()
+
+    expect(confirmSpy).toHaveBeenCalledTimes(1)
+    expect(load).toHaveBeenCalledTimes(1)
+    expect(wrapper.findAll('.dt-node')).toHaveLength(1)
+  })
+})
+
+describe('工具条吸附', () => {
+  // ⚠ 工具条与页面设置是同一份吸附设置：一边存得下、一边重开就丢，两处会对不上
+  it('工具条上切参考线与页面设置一样落进草稿，标成未保存', async () => {
+    const wrapper = await mountEditor()
+
+    expect(wrapper.text()).not.toContain('未保存')
+    await wrapper.get('[data-test="snap-guides"]').trigger('click')
+    await flushPromises()
+
+    expect(wrapper.text()).toContain('未保存')
   })
 })
 

@@ -672,7 +672,15 @@ export default defineModule({
         },
       ],
     },
-    { ...valueRulesField('rules', '取值规则'), group: '告警' },
+    {
+      ...valueRulesField(
+        'rules',
+        '取值规则',
+        undefined,
+        '留空跟随严重度语义色；水温梯度、能源类型这类非严重度的配色填这里。',
+      ),
+      group: '告警',
+    },
     {
       key: 'statusDot',
       label: '状态点',

@@ -9,7 +9,7 @@ export default defineCardPart({
   kind: 'badge',
   label: '状态徽标',
   icon: 'activity',
-  hint: '按 `state` 槽画运行 / 待机 / 报警 / 离线。没接这一槽时画「未知」，不隐藏——设备状态位空着本身就要看得见。',
+  hint: '按 `state` 槽画运行 / 待机 / 报警 / 离线。没接这一槽时画缺值占位并在悬停里说明原因（设计态显示「未知」），不隐藏——设备状态位空着本身就要看得见。',
   slots: ['state'],
   fields: [
     {

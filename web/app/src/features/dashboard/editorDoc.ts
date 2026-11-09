@@ -24,6 +24,10 @@ import { readConfigAt, writeConfigAt, type ConfigPath } from './configPath'
 const NEW_NODE_ORIGIN = { x: 80, y: 80 }
 const NEW_NODE_CASCADE_PX = 24
 const NEW_NODE_CASCADE_LIMIT = 12
+/** 一串错开排满之后，下一串整体右移这么多再从头错开，免得全压在同一点。 */
+const NEW_NODE_WRAP_PX = 160
+/** 串数封顶后回到第一串：落点不随节点数无限右移出设计稿。 */
+const NEW_NODE_WRAP_LIMIT = 5
 
 /** 节点几何的可改部分。 */
 export interface NodeGeometry {
@@ -100,7 +104,11 @@ export function createNode(input: {
   zIndex: number
 }): DashboardNodePayload {
   const step =
-    Math.min(input.siblingCount, NEW_NODE_CASCADE_LIMIT) * NEW_NODE_CASCADE_PX
+    (input.siblingCount % NEW_NODE_CASCADE_LIMIT) * NEW_NODE_CASCADE_PX
+  const wrap =
+    (Math.floor(input.siblingCount / NEW_NODE_CASCADE_LIMIT) %
+      NEW_NODE_WRAP_LIMIT) *
+    NEW_NODE_WRAP_PX
   const moment = draftMoment()
   return {
     id: newClientUuid(),
@@ -110,7 +118,7 @@ export function createNode(input: {
     // 而 id 已经由前端保证唯一，再造一个本地键只是多一处可能撞的东西
     clientKey: null,
     moduleType: input.manifest.type,
-    x: NEW_NODE_ORIGIN.x + step,
+    x: NEW_NODE_ORIGIN.x + step + wrap,
     y: NEW_NODE_ORIGIN.y + step,
     w: input.manifest.defaultSize.width,
     h: input.manifest.defaultSize.height,

@@ -13,6 +13,7 @@ import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 import { __resetCardParts } from '../../../src/cardParts/registry'
 import Component from '../../../src/modules/data-card/Component.vue'
 import { registerBuiltinCardParts } from '../../../src/modules/data-card/parts'
+import ScrollList from '../../../src/shared/ScrollList.vue'
 
 /**
  * 摆一张卡片。
@@ -143,6 +144,34 @@ describe('附加字段', () => {
 
     expect(wrapper.find('.dc-extra__num').text()).toBe('—')
     expect(wrapper.find('.dc-extra__unit').exists()).toBe(false)
+  })
+
+  // ⚠ 读数自带 `color` 声明，配色写在外层会被它压住，必须直接写在读数上
+  it('读数色直接写在读数上，占位符不吃读数色', async () => {
+    const painted = await card(
+      [
+        {
+          kind: 'extra',
+          'extra-slot': 'extra1',
+          'extra-color': 'var(--state-success)',
+        },
+      ],
+      [{ extra1: 12 }],
+    )
+    const empty = await card([
+      {
+        kind: 'extra',
+        'extra-slot': 'extra1',
+        'extra-color': 'var(--state-success)',
+      },
+    ])
+
+    expect(painted.find('.dc-extra__num').attributes('style')).toContain(
+      'var(--state-success)',
+    )
+    expect(
+      empty.find('.dc-extra__num').attributes('style') ?? '',
+    ).not.toContain('var(--state-success)')
   })
 
   it('标签留空时只画读数', async () => {
@@ -323,6 +352,23 @@ describe('分组', () => {
 
     expect(wrapper.findAll('.dc-tabs__one')).toHaveLength(2)
     expect(wrapper.findAll('.dc-cell')).toHaveLength(2)
+  })
+
+  // ⚠ 滚一圈的时长按「秒/项 × 项数」算，项数要数摆出来的那几格，不是全量
+  it('页签档滚动按选中那一组的格数计时', async () => {
+    const wrapper = mount(Component, {
+      props: {
+        config: { cells: CELLS, parts: [{ kind: 'label' }], grouping: 'tabs' },
+        values: { cellValues: [{}, {}, {}] },
+      },
+    })
+    await vi.dynamicImportSettled()
+    await flushPromises()
+    const list = wrapper.findComponent(ScrollList)
+
+    expect(list.props('itemCount')).toBe(2)
+    await wrapper.findAll('.dc-tabs__one')[1]?.trigger('click')
+    expect(list.props('itemCount')).toBe(1)
   })
 
   it('点页签换组', async () => {
@@ -544,6 +590,17 @@ describe('分段格子条', () => {
 })
 
 describe('名称的前导圆点', () => {
+  // ⚠ 弹性盒里裸文字是匿名项，省略号不生效、长名会被硬切；文字必须自成一项
+  it('带圆点时名称包成独立的一段，长名才有省略号', async () => {
+    const on = await card(
+      [{ kind: 'label', 'label-dot': true }],
+      [{}],
+      [{ label: '1#机组冷却水回水温度' }],
+    )
+
+    expect(on.find('.dc-label__text').text()).toBe('1#机组冷却水回水温度')
+  })
+
   it('开了才画，圆点跟格基色', async () => {
     const on = await card(
       [{ kind: 'label', 'label-dot': true }],

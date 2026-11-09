@@ -236,6 +236,26 @@ describe('浮层的落点与尺寸', () => {
     expect(await titleStyle({ titlePosition: 'middle' })).toContain('top: 12px')
   })
 
+  // ⚠ 场景工具条与视点条都钉在上沿 12px：标题不让开就叠在它们上面
+  it('开了场景工具条时左上角的标题让到工具条下方', async () => {
+    const style = await titleStyle({ showSceneTools: true })
+
+    expect(style).toContain('top: 52px')
+  })
+
+  it('有视点条时右上角的标题让到视点条下方', async () => {
+    const style = await titleStyle({
+      titlePosition: 'top-right',
+      [TWIN_CONFIG_KEY]: {
+        ...TWIN,
+        cameras: [{ id: 'c1', name: '正面' }],
+        viewpoints: { enabled: true },
+      },
+    })
+
+    expect(style).toContain('top: 52px')
+  })
+
   it('标题字号按配置上屏，越界先夹回区间', async () => {
     expect(await titleStyle({ titleFontSize: 28 })).toContain('font-size: 28px')
     expect(await titleStyle({ titleFontSize: 999 })).toContain(

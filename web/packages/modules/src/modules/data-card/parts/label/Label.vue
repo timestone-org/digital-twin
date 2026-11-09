@@ -38,7 +38,7 @@ const style = computed<CSSProperties>(() => ({
     :style="style"
   >
     <i v-if="hasDot" class="dc-label__dot" aria-hidden="true" />
-    {{ cell.label }}
+    <span class="dc-label__text">{{ cell.label }}</span>
   </span>
 </template>
 
@@ -77,6 +77,14 @@ const style = computed<CSSProperties>(() => ({
   display: flex;
   align-items: center;
   gap: 5px;
+}
+
+/* ⚠ 弹性盒下文字要自成一项并能缩到 0，省略号才落得下来 */
+.dc-label__text {
+  min-width: 0;
+  overflow: hidden;
+  white-space: nowrap;
+  text-overflow: ellipsis;
 }
 
 /* ⚠ 圆点吃格基色而不是文字色：文字多半是次要灰，圆点要的是那一格的身份色 */

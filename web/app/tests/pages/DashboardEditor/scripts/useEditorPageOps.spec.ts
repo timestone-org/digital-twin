@@ -114,6 +114,7 @@ interface Harness {
   ops: EditorPageOps
   picking: ReturnType<typeof ref<string | null>>
   toast: { error: ReturnType<typeof vi.fn>; success: ReturnType<typeof vi.fn> }
+  confirm: { ask: ReturnType<typeof vi.fn> }
   wrapper: ReturnType<typeof mount>
 }
 
@@ -128,6 +129,7 @@ function setup(
   let meta!: EditorMeta
   let ops!: EditorPageOps
   const toast = { error: vi.fn(), success: vi.fn() }
+  const confirm = { ask: vi.fn(() => Promise.resolve(false)) }
   const host = defineComponent({
     setup() {
       editor = useDashboardEditor(() => MANIFEST)
@@ -159,7 +161,7 @@ function setup(
         arrange,
         file,
         meta,
-        confirm: { ask: vi.fn(() => Promise.resolve(false)) },
+        confirm,
         toast,
         dashboardId: () => targetDashboardId,
         pickingFieldKey: picking,
@@ -169,7 +171,7 @@ function setup(
     },
   })
   const wrapper = mount(host)
-  return { editor, meta, file, ops, picking, toast, wrapper }
+  return { editor, meta, file, ops, picking, toast, confirm, wrapper }
 }
 
 beforeEach(() => {
@@ -182,6 +184,24 @@ afterEach(() => {
 })
 
 describe('重新加载', () => {
+  // ⚠ 重新加载会用服务器版本整份盖掉画布与撤销栈：有未保存改动时必须先问
+  it('有未保存改动时先确认，取消就什么都不丢', async () => {
+    const ctx = setup([node('a')])
+    ctx.meta.setTheme('light')
+
+    expect(await ctx.ops.confirmReload()).toBe(false)
+    expect(ctx.confirm.ask).toHaveBeenCalledTimes(1)
+    ctx.wrapper.unmount()
+  })
+
+  it('没有未保存改动时不问，直接放行', async () => {
+    const ctx = setup([node('a')])
+
+    expect(await ctx.ops.confirmReload()).toBe(true)
+    expect(ctx.confirm.ask).not.toHaveBeenCalled()
+    ctx.wrapper.unmount()
+  })
+
   it.each([{ __base: 'cobalt-deep' }, {}])(
     '同一大屏重载采用服务器主题 %j，并清除未保存主题和布局',
     async (themeJson) => {

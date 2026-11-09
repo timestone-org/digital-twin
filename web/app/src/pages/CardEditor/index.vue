@@ -8,7 +8,7 @@
  */
 import type { ConfigField } from '@dt/contracts'
 import { getCardPart, getModule, readText } from '@dt/modules'
-import type { GetModuleManifest } from '@dt/runtime'
+import { resolveModuleConfig, type GetModuleManifest } from '@dt/runtime'
 import {
   DtButton,
   DtNotice,
@@ -69,9 +69,21 @@ const getManifest: GetModuleManifest = (moduleType: string) =>
 
 const moduleType = computed(() => page.node.value?.moduleType ?? '')
 const manifest = computed(() => getModule(moduleType.value))
-const config = computed<Record<string, unknown>>(
-  () => page.node.value?.configJson ?? {},
-)
+/**
+ * 这一页改的配置：落库那份，缺了部件表或格表时补上清单缺省。
+ * ⚠ 刚拖上来的卡片只存了外壳样式，画布上那两件部件与一格全来自缺省：照落库读
+ * 左栏是空表，加一件就写出只有一件的表、把缺省那两件顶掉。只补这两张表，
+ * 其余键仍留给渲染时铺缺省——全量写回会把缺省钉死在存量节点上。
+ */
+const config = computed<Record<string, unknown>>(() => {
+  const stored = page.node.value?.configJson ?? {}
+  const resolved = resolveModuleConfig(manifest.value, stored)
+  return {
+    ...stored,
+    [PARTS_KEY]: resolved[PARTS_KEY],
+    [CELLS_KEY]: resolved[CELLS_KEY],
+  }
+})
 
 const size = computed(() => ({
   width: page.node.value?.w ?? manifest.value?.defaultSize.width ?? 420,
@@ -166,7 +178,8 @@ function onAddPart(): void {
   const first = readText(kinds?.options?.[0]?.value)
   if (first === '') return
   write(addPart(config.value, first))
-  activeKey.value = `part:${String(partsOf(config.value).length)}`
+  // 新的那一件落在末尾，写完之后表长已经加一，下标是表长减一
+  activeKey.value = `part:${String(partsOf(config.value).length - 1)}`
 }
 
 function onRemovePart(index: number): void {
@@ -200,6 +213,22 @@ async function save(): Promise<void> {
   if (await page.save()) toast.success('已保存')
 }
 
+/** 冲突之后的出路：丢掉本地改动、重取库里的那份；脏着先问一句。 */
+async function reload(): Promise<void> {
+  if (page.isDirty.value) {
+    const ok = await confirm.ask({
+      title: '重新加载',
+      message: '这一页没保存的改动会被库里的版本覆盖。',
+      confirmText: '重新加载',
+      danger: true,
+    })
+    if (!ok) return
+  }
+  await page.load()
+}
+
+const backTo = computed(() => `/dashboards/${dashboardId.value}/edit`)
+
 function back(): void {
   void router.push({
     name: 'dashboard-editor',
@@ -207,7 +236,10 @@ function back(): void {
   })
 }
 
-watch([dashboardId, nodeId], () => void page.load())
+watch([dashboardId, nodeId], () => {
+  activeKey.value = 'part:0'
+  void page.load()
+})
 onMounted(() => void page.load())
 onBeforeUnmount(page.dispose)
 useUnsavedGuard(() => page.isDirty.value)
@@ -223,7 +255,7 @@ useSubEditorRouteGuard(() => page.isDirty.value, {
   <AppShell
     title="自定义卡片"
     :subtitle="manifest?.displayName ?? ''"
-    back-to="/"
+    :back-to="backTo"
     back-label="回大屏"
   >
     <template #actions>
@@ -231,7 +263,7 @@ useSubEditorRouteGuard(() => page.isDirty.value, {
       <DtIconButton
         size="sm"
         :loading="page.saving.value"
-        :disabled="!page.isDirty.value"
+        :disabled="!page.isDirty.value || page.conflict.value !== null"
         data-test="save-card"
         variant="solid"
         intent="primary"
@@ -244,6 +276,14 @@ useSubEditorRouteGuard(() => page.isDirty.value, {
     <div class="flex h-full min-h-0 flex-col gap-2">
       <DtNotice v-if="page.conflict.value !== null" intent="warning">
         {{ page.conflict.value }}
+        <DtButton
+          size="sm"
+          variant="outline"
+          data-test="reload-card"
+          @click="reload"
+        >
+          重新加载
+        </DtButton>
       </DtNotice>
       <DtNotice v-else-if="page.error.value !== null" intent="danger">
         {{ page.error.value }}

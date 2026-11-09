@@ -836,9 +836,30 @@ describe('迟滞', () => {
 
     expect(held.entries.map((entry) => entry.key)).toEqual(['a'])
     expect(held.entries[0]?.active).toBe(false)
-    expect(held.nextWakeMs).toBe(4000)
+    expect(held.nextWakeMs).toBe(5000)
     expect(dropped.entries).toEqual([])
     expect(dropped.nextWakeMs).toBeNull()
+  })
+
+  it('迟滞从清除那一刻起算，长告警清除后同样多留', () => {
+    const start = reconcileHold([], ['a'], 0, 5000)
+    const still = reconcileHold(start.entries, ['a'], 60000, 5000)
+    const cleared = reconcileHold(still.entries, [], 60000, 5000)
+    const held = reconcileHold(cleared.entries, [], 62000, 5000)
+    const dropped = reconcileHold(held.entries, [], 65001, 5000)
+
+    expect(held.entries.map((entry) => entry.key)).toEqual(['a'])
+    expect(held.nextWakeMs).toBe(3000)
+    expect(dropped.entries).toEqual([])
+  })
+
+  it('长告警在迟滞窗内重新命中，起始时刻不重置', () => {
+    const start = reconcileHold([], ['a'], 0, 5000)
+    const cleared = reconcileHold(start.entries, [], 60000, 5000)
+    const back = reconcileHold(cleared.entries, ['a'], 62000, 5000)
+
+    expect(back.entries[0]?.since).toBe(0)
+    expect(back.entries[0]?.clearedAt).toBeNull()
   })
 
   it('迟滞关掉时清除即走', () => {
@@ -850,8 +871,8 @@ describe('迟滞', () => {
 
   it('下一次该醒来的是最早到期的那一条', () => {
     const seeded = [
-      { key: 'a', since: 0, active: false },
-      { key: 'b', since: 500, active: false },
+      { key: 'a', since: 0, active: false, clearedAt: 0 },
+      { key: 'b', since: 500, active: false, clearedAt: 500 },
     ]
     const result = reconcileHold(seeded, [], 600, 1000)
 
@@ -881,8 +902,8 @@ describe('迟滞', () => {
   it('迟滞表摊成「行键到起始时刻」', () => {
     expect(
       sinceMap([
-        { key: 'a', since: 1, active: true },
-        { key: 'b', since: 2, active: false },
+        { key: 'a', since: 1, active: true, clearedAt: null },
+        { key: 'b', since: 2, active: false, clearedAt: 3 },
       ]),
     ).toEqual({ a: 1, b: 2 })
   })

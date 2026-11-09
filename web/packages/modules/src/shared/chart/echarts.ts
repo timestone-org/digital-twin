@@ -152,7 +152,11 @@ export async function createChart(
   host: HTMLElement,
   init: ChartInit = {},
 ): Promise<ChartHandle> {
-  core ??= registerOnce()
+  // ⚠ 失败不缓存：拉 chunk 失败一次就钉死的话，整个标签页的图表直到刷新都是空白
+  core ??= registerOnce().catch((error: unknown) => {
+    core = null
+    throw error
+  })
   const instance = (await core).init(host, undefined, init)
   return {
     setOption: (option, update) => {

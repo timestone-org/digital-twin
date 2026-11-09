@@ -9,7 +9,12 @@ import type { ModuleMeta } from '@dt/contracts'
 import { computed, type CSSProperties } from 'vue'
 
 import { bannerBackground } from '../../shared/background'
-import { readBoolean, readNumber, readText } from '../../shared/config'
+import {
+  readBoolean,
+  readNumber,
+  readText,
+  readTrimmedText,
+} from '../../shared/config'
 import {
   CONTAINER_CONFIG_KEY,
   readContainerLayout,
@@ -37,8 +42,8 @@ function toPercent(ratio: number): string {
   return `${Math.round(ratio * 1000) / 10}%`
 }
 
-const accent = computed(() =>
-  readText(props.config.accent, 'var(--accent-primary)'),
+const accent = computed(
+  () => readTrimmedText(props.config.accent) || 'var(--accent-primary)',
 )
 const background = computed(() => readText(props.config.background))
 /** 底图那一层的 `background` 值；地址会被铺成整条贴底的横幅。 */

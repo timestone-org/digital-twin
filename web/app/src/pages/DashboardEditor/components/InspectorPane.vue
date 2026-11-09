@@ -14,7 +14,7 @@ import type {
   InteractionRule,
   ModuleManifest,
 } from '@dt/contracts'
-import type { GetModuleManifest } from '@dt/runtime'
+import { resolveModuleConfig, type GetModuleManifest } from '@dt/runtime'
 import { DtEmpty, DtSegmented } from '@dt/ui'
 import { computed, ref, watch } from 'vue'
 
@@ -76,6 +76,17 @@ const hasOwnConfig = computed(() => {
 const hasBindings = computed(() => (manifest.value?.bindings ?? []).length > 0)
 
 /**
+ * 铺过清单缺省的配置，与专属页、渲染器读的是同一份。
+ * ⚠ 不能拿落库配置去问行数：刚拖上来的节点只存了外壳样式，画布上看得见的
+ * 缺省实体在这里会算成 0 行，绑点页就成了「暂无可绑定字段」。
+ */
+const resolvedConfig = computed(() =>
+  props.selected === null
+    ? {}
+    : resolveModuleConfig(manifest.value, props.selected.configJson),
+)
+
+/**
  * 数组槽的行名，由清单自述——本面板不认识任何具体模块。
  * 清单没给或算不出来时给 undefined，绑点面板退回「第 N 行」。
  */
@@ -83,9 +94,8 @@ const rowLabels = computed<
   Readonly<Record<string, BindingRowLabel>> | undefined
 >(() => {
   const resolve = manifest.value?.bindingRowLabels
-  const node = props.selected
-  if (resolve === undefined || node === null) return undefined
-  return resolve(node.configJson)
+  if (resolve === undefined || props.selected === null) return undefined
+  return resolve(resolvedConfig.value)
 })
 
 /**
@@ -94,9 +104,8 @@ const rowLabels = computed<
  */
 const rowCounts = computed<Readonly<Record<string, number>> | undefined>(() => {
   const resolve = manifest.value?.bindingRowCounts
-  const node = props.selected
-  if (resolve === undefined || node === null) return undefined
-  return resolve(node.configJson)
+  if (resolve === undefined || props.selected === null) return undefined
+  return resolve(resolvedConfig.value)
 })
 
 /** 页签表。通用与联动恒在：任何节点都能被联动显隐，也都有几何与外观。 */
@@ -148,8 +157,10 @@ function onTab(value: string): void {
         @update:model-value="onTab"
       />
 
+      <!-- ⚠ 按节点 id 重建：同类节点之间切换时复用面板，控件里的本地草稿会带过去 -->
       <NodeCommonPanel
         v-if="tab === 'common'"
+        :key="`common-${selected.id}`"
         :node="selected"
         :manifest="manifest"
         :layer="layer"
@@ -161,6 +172,7 @@ function onTab(value: string): void {
       />
       <PropertyPanel
         v-else-if="tab === 'config'"
+        :key="`config-${selected.id}`"
         :node="selected"
         :manifest="manifest"
         @config="(path, value, live) => emit('config', path, value, live)"
@@ -168,6 +180,7 @@ function onTab(value: string): void {
       />
       <BindingPanel
         v-else-if="tab === 'binding'"
+        :key="`binding-${selected.id}`"
         :specs="manifest?.bindings ?? []"
         :bindings="selected.bindings"
         :row-labels="rowLabels"

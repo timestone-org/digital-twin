@@ -584,7 +584,7 @@ export default defineModule({
       group: '配色',
       default: '',
       span: 'half',
-      placeholder: '留空时跟随读数颜色',
+      placeholder: '留空时跟随主题强调色',
       help: '设置模块的默认填充色；单个仪表的固定颜色与规则颜色优先级更高。',
     },
     {
@@ -604,9 +604,17 @@ export default defineModule({
       group: '格式',
       default: true,
       span: 'half',
-      help: '读数、刻度与目标标签共用此文字颜色。',
+      help: '读数、刻度与目标标签共用此千分位设置。',
     },
-    { ...valueRulesField('rules', '取值规则'), group: '告警' },
+    {
+      ...valueRulesField(
+        'rules',
+        '取值规则',
+        undefined,
+        '留空跟随严重度语义色；量程分区、介质类别这类非严重度的配色填这里。',
+      ),
+      group: '告警',
+    },
   ],
   bindings: [
     {
@@ -630,7 +638,7 @@ export default defineModule({
   ownsStatusDisplay: true,
   // 点某一个仪表上抛它的联动值（配了联动值的才抛）
   emitsInteractions: true,
-  // 整块可点由宿主接管；仪表内点击在模板里 `.stop`，否则同一次点击会被兜底再抛一次
+  // 整块可点由宿主接管；仪表内点击仅在配了联动值时阻止冒泡，否则同一次点击会被兜底再抛一次
   hostClickable: true,
   bindingRowLabels: (config) =>
     rowLabels(readGaugeItems(config[GAUGE_ITEMS_KEY])),

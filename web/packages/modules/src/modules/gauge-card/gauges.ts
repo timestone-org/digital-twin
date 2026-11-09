@@ -33,6 +33,12 @@ import {
   isPresent,
   NO_DATA,
 } from '../../shared/format'
+import {
+  CELL_STATES,
+  cellState,
+  type CellState,
+  reasonOf as slotReasonOf,
+} from '../../shared/slotState'
 
 import {
   arcDashOffset,
@@ -70,12 +76,9 @@ export const GAUGE_ITEMS_KEY = 'items'
 export const GAUGE_SLOT_FIELDS = ['value', 'aux'] as const
 export type GaugeSlotField = (typeof GAUGE_SLOT_FIELDS)[number]
 
-/**
- * 一个仪表此刻处在哪一档。
- * ⚠ `unbound` 与 `pending` 必须分开：前者要去配绑定，后者只要再等一会儿。
- */
-export const GAUGE_STATES = ['ok', 'pending', 'error', 'unbound'] as const
-export type GaugeState = (typeof GAUGE_STATES)[number]
+/** 一个仪表此刻处在哪一档；四档口径与卡片族共用 `shared/slotState.ts`。 */
+export const GAUGE_STATES = CELL_STATES
+export type GaugeState = CellState
 
 /** 各档没有值时给看的人的一句话，鼠标停上去才看得全。 */
 export const GAUGE_REASONS: Record<Exclude<GaugeState, 'ok'>, string> = {
@@ -283,23 +286,8 @@ export function readGaugeItems(raw: unknown): GaugeItem[] {
   return readArray(raw).map(toItem)
 }
 
-/**
- * 这一个仪表落在哪一档。
- * @param slot 这一槽的取数结论
- * @param raw 注入袋里这一个的原值
- * @param hasSlots 运行时下发了逐槽结论没有
- */
-export function gaugeState(
-  slot: ModuleSlotMeta | undefined,
-  raw: unknown,
-  hasSlots: boolean,
-): GaugeState {
-  if (slot !== undefined) return slot.state
-  // ⚠ 没下发结论时只能退回「有没有值」这一条判据：设计态画布与独立挂载走这里。
-  //   此时把没有值一律说成 unbound 是诚实的——那两处本来就没有取数
-  if (!hasSlots) return raw === undefined ? 'unbound' : 'ok'
-  return 'unbound'
-}
+/** 这一个仪表落在哪一档。 */
+export const gaugeState = cellState
 
 /**
  * 没有值的那一句话；`error` 档带上取数侧给的原因。
@@ -310,10 +298,7 @@ export function reasonOf(
   state: GaugeState,
   slot: ModuleSlotMeta | undefined,
 ): string {
-  if (state === 'ok') return ''
-  const base = GAUGE_REASONS[state]
-  const detail = slot?.message ?? ''
-  return detail === '' ? base : `${base}：${detail}`
+  return slotReasonOf(state, slot, GAUGE_REASONS)
 }
 
 /**
@@ -353,7 +338,7 @@ function scaleText(value: number, scale: GaugeScale): string {
  */
 function tickText(value: number, scale: GaugeScale): string {
   if (scale.wan) return `${fmtDecimal(value / WAN, scale.wanDigits)}万`
-  return fmtNumber(value, 0)
+  return scale.grouping ? fmtNumber(value, 0) : fmtTrim(value, 0)
 }
 
 /**

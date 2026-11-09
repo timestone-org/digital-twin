@@ -31,6 +31,8 @@ import {
   type SeriesView,
 } from '../../../src/modules/trend-chart/series'
 
+import { stackWarningOf } from '../../../src/modules/trend-chart/option'
+
 type Slots = Record<string, ModuleSlotMeta>
 
 const TWO = [
@@ -243,6 +245,33 @@ describe('序列与实时末值', () => {
     )
 
     expect(views[0]?.points).toHaveLength(1)
+  })
+
+  // ⚠ 各条末值的采样时刻几乎不会逐毫秒相同，接上去的尾点会让堆叠永远对不齐
+  it('堆叠面积档不接实时末值，各条停在共有的最后一个历史桶上', () => {
+    const config = { [SERIES_ITEMS_KEY]: TWO, chartStyle: 'stackedArea' }
+    const views = build(
+      config,
+      [row(1, points(1, 2), 9), row(1, points(3, 4), 8)],
+      {
+        ...allOk(2),
+        [latestFieldKey(0)]: { state: 'ok', timestampMs: 1_060_100 },
+        [latestFieldKey(1)]: { state: 'ok', timestampMs: 1_060_250 },
+      },
+    )
+
+    expect(views.map((view) => view.points.length)).toEqual([2, 2])
+    expect(stackWarningOf(config, views)).toBe('')
+  })
+
+  it('折线档照常接实时末值', () => {
+    const config = { [SERIES_ITEMS_KEY]: [{}], chartStyle: 'line' }
+    const views = build(config, [row(1, points(1, 2), 9)], {
+      ...allOk(1),
+      [latestFieldKey(0)]: { state: 'ok', timestampMs: 1_120_000 },
+    })
+
+    expect(views[0]?.points).toHaveLength(3)
   })
 
   it('一个历史点都没有时，末值自己就是那条线的唯一一个点', () => {

@@ -438,7 +438,8 @@ describe('空剪贴板', () => {
 
     expect(actions.pasteClipboard()).toBe(false)
 
-    expect(notify).toHaveBeenCalledWith('剪贴板里没有可粘贴的模块')
+    // ⚠ 粘贴落空是一句警告：走成功提示的话绿色的勾与文案自相矛盾
+    expect(notify).toHaveBeenCalledWith('剪贴板里没有可粘贴的模块', 'warning')
   })
 })
 

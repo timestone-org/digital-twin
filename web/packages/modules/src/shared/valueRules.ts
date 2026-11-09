@@ -130,11 +130,13 @@ export function evaluateValueRules(
  * @param key 字段键
  * @param label 字段标签
  * @param help 标签旁的说明
+ * @param colorHelp 规则行「颜色」一项的说明，模块按自己的配色场景举例
  */
 export function valueRulesField(
   key = 'rules',
   label = '值规则',
   help = '按声明顺序取首个命中，高危规则放前面；颜色留空跟随严重度语义色，填则只填 var(--…)。',
+  colorHelp = '留空跟随严重度语义色；能源类型、水温梯度这类非严重度的配色填这里。',
 ): ConfigField {
   return {
     key,
@@ -168,7 +170,7 @@ export function valueRulesField(
         label: '颜色',
         type: 'color',
         default: '',
-        help: '留空跟随严重度语义色；能源类型、水温梯度这类非严重度的配色填这里。',
+        help: colorHelp,
       },
       { key: 'label', label: '文案', type: 'string', default: '' },
       { key: 'blink', label: '闪烁', type: 'boolean', default: false },

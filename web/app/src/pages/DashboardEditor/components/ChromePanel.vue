@@ -31,6 +31,7 @@ import {
   type EditorGridConfig,
   type SnapConfig,
 } from '@/features/dashboard/canvasSnap'
+import { DESIGN_EXTENT_RANGE } from '@/features/dashboard/designExtent'
 import { parseInteractionRules } from '@/features/dashboard/interactionRules'
 import { dashboardThemeId } from '@/features/dashboard/useDashboardTheme'
 import type { EditorMetaDraft } from '../scripts/useEditorMeta'
@@ -179,7 +180,7 @@ function cardOf(draft: EditorMetaDraft | null): CardChrome {
             size="sm"
             label="设计宽度"
             :model-value="draft.designWidth"
-            :min="320"
+            :range="DESIGN_EXTENT_RANGE"
             data-test="chrome-design-width"
             @update:model-value="onDesignWidth"
           />
@@ -187,7 +188,7 @@ function cardOf(draft: EditorMetaDraft | null): CardChrome {
             size="sm"
             label="设计高度"
             :model-value="draft.designHeight"
-            :min="240"
+            :range="DESIGN_EXTENT_RANGE"
             data-test="chrome-design-height"
             @update:model-value="onDesignHeight"
           />

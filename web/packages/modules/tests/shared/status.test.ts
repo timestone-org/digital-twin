@@ -12,6 +12,13 @@ import {
 } from '../../src/shared/status'
 
 describe('toDeviceStatus', () => {
+  // ⚠ 词表是普通对象：不拦的话 `constructor` 会查出 Object 本身，徽标类名与文案全坏
+  it('撞上原型链上的键名时按认不出处理', () => {
+    expect(toDeviceStatus('constructor')).toBe('unknown')
+    expect(toDeviceStatus('__proto__')).toBe('unknown')
+    expect(toDeviceStatus('valueOf')).toBe('unknown')
+  })
+
   it('缺值恒为 unknown，fallback 也顶不掉', () => {
     expect(toDeviceStatus(null)).toBe('unknown')
     expect(toDeviceStatus(undefined)).toBe('unknown')

@@ -304,6 +304,52 @@ describe('历史档', () => {
     ])
   })
 
+  // ⚠ 折线不进堆，也就不进分母：把达标率加进产量的合计，柱堆就到不了 100%
+  it('百分比的分母不算折线行，折线行本身不给占比', () => {
+    const config = {
+      [BAR_ITEMS_KEY]: [
+        { name: 'A' },
+        { name: 'B' },
+        { name: '达标率', plot: 'line' },
+      ],
+    }
+    const view = historyView(config, [
+      [{ t: BASE, v: 300 }],
+      [{ t: BASE, v: 100 }],
+      [{ t: BASE, v: 95 }],
+    ])
+
+    expect(view.series.map((series) => series.shares)).toEqual([
+      [75],
+      [25],
+      [null],
+    ])
+  })
+
+  it('百分比按堆分别归一，每个堆各自到 100%', () => {
+    const config = {
+      [BAR_ITEMS_KEY]: [
+        { name: 'A', stack: 'g1' },
+        { name: 'B', stack: 'g1' },
+        { name: 'C', stack: 'g2' },
+        { name: 'D', stack: 'g2' },
+      ],
+    }
+    const view = historyView(config, [
+      [{ t: BASE, v: 30 }],
+      [{ t: BASE, v: 10 }],
+      [{ t: BASE, v: 1 }],
+      [{ t: BASE, v: 3 }],
+    ])
+
+    expect(view.series.map((series) => series.shares)).toEqual([
+      [75],
+      [25],
+      [25],
+      [75],
+    ])
+  })
+
   it('一整列加起来不大于 0 时也整列留空：占比对零和没有几何意义', () => {
     const view = historyView(BASE_CONFIG, [
       [{ t: BASE, v: 10 }],
