@@ -195,4 +195,30 @@ describe('逐次MCP写确认界面', () => {
     expect(document.querySelector('[role="dialog"]')).toBeNull()
     expect(api.decideMcpWrite).toHaveBeenCalledTimes(1)
   })
+
+  it('上一笔失败的提示还开着时，下一笔写入照样问人而不是直接拒绝', async () => {
+    vi.mocked(api.decideMcpWrite)
+      .mockResolvedValueOnce({ call_id: 'w1', output: null, error: '失败' })
+      .mockResolvedValueOnce({ call_id: 'w2', output: { ok: 1 }, error: null })
+    vi.mocked(api.prepareMcpWrite)
+      .mockResolvedValueOnce(PREPARED)
+      .mockResolvedValueOnce({
+        ...PREPARED,
+        call_id: 'w2',
+        target: '第二笔目标',
+      })
+    const { result } = await open()
+    const failed = expect(result).rejects.toThrow('失败')
+    button('确认并执行一次').click()
+    await failed
+    await flushPromises()
+    const second = runMcpWrite('s1', { ...CALL, call_id: 'w2' })
+    await vi.waitFor(() =>
+      expect(document.body.textContent).toContain('第二笔目标'),
+    )
+    button('确认并执行一次').click()
+    await expect(second).resolves.toEqual({ ok: 1 })
+    const decided = vi.mocked(api.decideMcpWrite).mock.calls
+    expect(decided).toHaveLength(2)
+  })
 })
