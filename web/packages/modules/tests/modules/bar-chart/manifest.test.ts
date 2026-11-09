@@ -203,6 +203,9 @@ describe('配置字段', () => {
 
   it('堆叠分组的说明写明只在历史档生效——行内 when 判的是本行，管不到顶层那一档', () => {
     expect(itemField('stack')?.help).toContain('历史档')
+    // ⚠ 堆叠与百分比档里留空的行归入默认组，不能说成无条件「不堆叠」
+    expect(itemField('stack')?.placeholder).not.toBe('留空不堆叠')
+    expect(itemField('stack')?.help).toContain('默认组')
     expect(Object.keys(itemField('stack') ?? {})).not.toContain('when')
   })
 
