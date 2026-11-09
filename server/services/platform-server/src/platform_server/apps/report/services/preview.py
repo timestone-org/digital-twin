@@ -1,30 +1,26 @@
 """试算编排：冻结数据取值、指标求值与正文节点折算。"""
 
 from datetime import UTC, datetime
-from zoneinfo import ZoneInfo
 
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from lib.errors import AppError
 from platform_server.apps.dataset.services import report_formula
 from platform_server.apps.report.schemas.document import DocumentNode, MetricDef
-from platform_server.apps.report.schemas.nodes import DataNodeSpec, SeriesSpec
+from platform_server.apps.report.schemas.nodes import DataNodeSpec
 from platform_server.apps.report.schemas.preview import (
-    ChartSeries,
     MetricValue,
     NodeValue,
     PreviewOut,
     ReportApiResult,
-    SeriesPoint,
 )
 from platform_server.apps.report.services.aggregation import (
-    aggregate,
     decimal_value,
     format_value,
     formula_values,
     value_kind,
-    wire_value,
 )
+from platform_server.apps.report.services.chart_data import chart_node
 from platform_server.apps.report.services.document import (
     BUSINESS_NODES,
     number_attr,
@@ -38,11 +34,7 @@ from platform_server.apps.report.services.metrics import (
     metric_window,
     resolve_metrics,
 )
-from platform_server.apps.report.services.source import SourceData
-from platform_server.apps.report.services.table import (
-    bucket_start,
-    build_table,
-)
+from platform_server.apps.report.services.table import build_table
 
 
 async def preview(session: AsyncSession, context: PreviewContext) -> PreviewOut:
@@ -133,7 +125,7 @@ async def _node_value(
         return _text_node(node, metrics)
     spec = DataNodeSpec.model_validate(node.attrs)
     if node.type == "dsChart":
-        return await _chart_node(session, context, spec)
+        return await chart_node(session, context, spec)
     metric = MetricDef(
         name="表格",
         table=spec.table,
@@ -196,86 +188,3 @@ def _expression_value(expression: str, metrics: list[MetricValue]) -> object:
             else direct.value
         )
     return report_formula.evaluate_metrics(expression, formula_values(metrics))
-
-
-async def _chart_node(
-    session: AsyncSession, context: PreviewContext, spec: DataNodeSpec
-) -> NodeValue:
-    if not spec.series:
-        raise ValueError("图表尚未配置数据序列")
-    results = [
-        await _chart_series(session, context, spec, item)
-        for item in spec.series
-    ]
-    return NodeValue(
-        kind=spec.kind,
-        title=spec.title,
-        series=[result[0] for result in results],
-        is_truncated=any(result[1] for result in results),
-        is_stale=any(result[2] for result in results),
-    )
-
-
-async def _chart_series(
-    session: AsyncSession,
-    context: PreviewContext,
-    spec: DataNodeSpec,
-    item: SeriesSpec,
-) -> tuple[ChartSeries, bool, bool]:
-    metric = MetricDef(
-        name="图表",
-        table=item.table,
-        key=item.key,
-        window=spec.window,
-        offset=spec.offset + item.offset,
-        anchor=spec.anchor,
-    )
-    found = await context.read(
-        session, await metric_window(session, context, metric)
-    )
-    column = next(
-        (column for column in found.columns if column.key == item.key), None
-    )
-    if column is None:
-        raise ValueError("图表引用的数据字段不存在")
-    if column.data_type != "number":
-        raise ValueError("图表只能选择数字类型的数据字段")
-    remaining = MAX_OUTPUT_VALUES - context.output_values
-    if remaining <= 0:
-        raise ValueError("报告展示数据总量达到上限")
-    values = _chart_values(found, item.key, spec, context.timezone)
-    limit = min(spec.limit, remaining)
-    kept = values[-limit:]
-    if spec.order == "desc":
-        kept.reverse()
-    points = [
-        SeriesPoint(ts=stamp, value=_chart_number(value))
-        for stamp, value in kept
-    ]
-    context.output_values += len(points)
-    return (
-        ChartSeries(name=item.name or item.key, points=points),
-        found.is_truncated or len(values) > limit,
-        found.is_stale,
-    )
-
-
-def _chart_values(
-    found: SourceData, key: str, spec: DataNodeSpec, timezone: str
-) -> list[tuple[datetime, object]]:
-    if spec.bucket == "none":
-        return [(row.ts, row.values.get(key)) for row in found.rows]
-    zone = ZoneInfo(timezone)
-    grouped: dict[datetime, list[object]] = {}
-    for row in found.rows:
-        stamp = bucket_start(row.ts.astimezone(zone), spec.bucket)
-        grouped.setdefault(stamp, []).append(row.values.get(key))
-    return [
-        (stamp, aggregate(values, spec.agg))
-        for stamp, values in sorted(grouped.items())
-    ]
-
-
-def _chart_number(value: object) -> str | None:
-    resolved = wire_value(value)
-    return str(int(resolved)) if isinstance(resolved, bool) else resolved

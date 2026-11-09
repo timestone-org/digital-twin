@@ -6,6 +6,7 @@ import type { ReportPreview } from '@dt/contracts'
 import { formatDateTime } from '@/utils/datetime'
 import ReportChart from './ReportChart.vue'
 import ReportTable from './ReportTable.vue'
+import { hasChartData } from '../scripts/reportChartTheme'
 const props = defineProps<{ preview: ReportPreview }>()
 const apiViews = computed(() =>
   (props.preview.api_results ?? []).map((result) => ({
@@ -13,22 +14,19 @@ const apiViews = computed(() =>
     node: { kind: 'dsTable', columns: result.columns, rows: result.rows },
   })),
 )
-const DATA_NODE_KINDS = new Set(['line', 'bar', 'dsChart', 'dsTable'])
+const DATA_NODE_KINDS = new Set(['line', 'bar', 'pie', 'dsChart', 'dsTable'])
 const nodeViews = computed(() =>
   Object.entries(props.preview.nodes).map(([path, node]) => {
-    const hasChartData =
-      node.series?.some((series) =>
-        series.points.some((point) => point.value !== null),
-      ) ?? false
+    const hasChart = hasChartData(node)
     const hasTableData = (node.rows?.length ?? 0) > 0
     return {
       path,
       node,
-      hasChartData,
+      hasChartData: hasChart,
       hasTableData,
       isEmpty:
         DATA_NODE_KINDS.has(node.kind) &&
-        !hasChartData &&
+        !hasChart &&
         !hasTableData &&
         !node.text,
     }

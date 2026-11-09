@@ -1,22 +1,34 @@
 /** @fileoverview 四类原子业务节点；DOM 文本不拼接 HTML。 */
-import { businessNodeView } from './businessNodeView'
+import { createBusinessNodeView } from './businessNodeView'
 import { Node, mergeAttributes } from '@tiptap/core'
 import type { Attributes } from '@tiptap/core'
+import type { PreviewStore } from './documentPreview'
 
-export const businessExtensions = [
-  'metricRef',
-  'condText',
-  'dsChart',
-  'dsTable',
-].map((kind) =>
-  Node.create({
+/**
+ * 四类业务节点扩展。
+ * @param store 正文试算结果；缺省时节点只显示占位
+ */
+export function createBusinessExtensions(store: PreviewStore | null = null) {
+  const view = createBusinessNodeView(store)
+  return ['metricRef', 'condText', 'dsChart', 'dsTable'].map((kind) =>
+    businessNode(kind, view),
+  )
+}
+
+export const businessExtensions = createBusinessExtensions()
+
+function businessNode(
+  kind: string,
+  view: ReturnType<typeof createBusinessNodeView>,
+) {
+  return Node.create({
     name: kind,
     group: kind === 'metricRef' || kind === 'condText' ? 'inline' : 'block',
     inline: kind === 'metricRef' || kind === 'condText',
     atom: true,
     addAttributes: defaultAttributes,
     addNodeView() {
-      return businessNodeView
+      return view
     },
     parseHTML() {
       return [{ tag: `span[data-report-node="${kind}"]` }]
@@ -42,8 +54,8 @@ export const businessExtensions = [
         label,
       ]
     },
-  }),
-)
+  })
+}
 
 function defaultAttributes(): Attributes {
   const defaults: Record<string, { default: unknown }> = {
@@ -58,6 +70,8 @@ function defaultAttributes(): Attributes {
     offset: { default: 0 },
     anchor: { default: 'period' },
     kind: { default: 'line' },
+    x_axis: { default: 'time' },
+    category_key: { default: '' },
     limit: { default: 1000 },
     bucket: { default: 'none' },
     agg: { default: 'avg' },

@@ -1,10 +1,18 @@
 <script setup lang="ts">
-/** @fileoverview ECharts 试算视图，缺失值保留断点，卸载释放实例。 */
+/** @fileoverview 报告图表视图，纸面模式用印刷色与 Word 同尺寸，卸载释放实例。 */
 import { computed, onBeforeUnmount, onMounted, ref, watch } from 'vue'
 import type { ECharts, EChartsOption } from 'echarts'
 import type { ReportSchemas } from '@dt/contracts'
 import { observeThemeChange, readToken } from '@dt/tokens'
-const props = defineProps<{ node: ReportSchemas['NodeValue'] }>()
+import {
+  REPORT_CHART_HEIGHT_CM,
+  REPORT_PRINT_COLORS,
+  reportChartOption,
+} from '../scripts/reportChartTheme'
+const props = withDefaults(
+  defineProps<{ node: ReportSchemas['NodeValue']; paper?: boolean }>(),
+  { paper: false },
+)
 const host = ref<HTMLElement | null>(null)
 let chart: ECharts | null = null
 let observer: ResizeObserver | null = null
@@ -13,38 +21,22 @@ let detachTheme: (() => void) | null = null
 const textColor = ref('')
 const gridColor = ref('')
 function readColors(): void {
-  if (!host.value) return
+  if (!host.value || props.paper) return
   const fallback = getComputedStyle(host.value).color
   textColor.value = readToken('--text-secondary', fallback, host.value)
   gridColor.value = readToken('--border-subtle', fallback, host.value)
 }
-const option = computed<EChartsOption>(() => ({
-  backgroundColor: 'transparent',
-  textStyle: { color: textColor.value },
-  tooltip: { trigger: 'axis', renderMode: 'richText' },
-  legend: { type: 'scroll', bottom: 0, textStyle: { color: textColor.value } },
-  grid: { left: 45, right: 15, top: 25, bottom: 65 },
-  xAxis: {
-    type: 'time',
-    axisLabel: { color: textColor.value },
-    axisLine: { lineStyle: { color: gridColor.value } },
-  },
-  yAxis: {
-    type: 'value',
-    scale: true,
-    axisLabel: { color: textColor.value },
-    splitLine: { lineStyle: { color: gridColor.value } },
-  },
-  series: (props.node.series ?? []).map((series) => ({
-    name: series.name,
-    type: props.node.kind === 'bar' ? 'bar' : 'line',
-    connectNulls: false,
-    data: series.points.map((point) => [
-      point.ts,
-      point.value === null ? null : Number(point.value),
-    ]),
-  })),
-}))
+const option = computed<EChartsOption>(() =>
+  reportChartOption(
+    props.node,
+    props.paper
+      ? REPORT_PRINT_COLORS
+      : { text: textColor.value, grid: gridColor.value },
+  ),
+)
+const style = computed(() =>
+  props.paper ? { height: `${REPORT_CHART_HEIGHT_CM}cm` } : undefined,
+)
 onMounted(async () => {
   const echarts = await import('echarts')
   if (disposed || !host.value) return
@@ -66,7 +58,8 @@ onBeforeUnmount(() => {
 <template>
   <div
     ref="host"
-    class="h-64 w-full"
+    :class="props.paper ? 'w-full' : 'h-64 w-full'"
+    :style="style"
     role="img"
     :aria-label="node.title || '报告数据图表'"
   ></div>

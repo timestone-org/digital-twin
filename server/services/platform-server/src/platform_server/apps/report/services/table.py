@@ -12,6 +12,13 @@ from platform_server.apps.report.services.aggregation import (
 )
 from platform_server.apps.report.services.source import SourceData
 
+_AUTO_FORMATS = {
+    "none": "%Y-%m-%d %H:%M",
+    "hour": "%Y-%m-%d %H:00",
+    "day": "%Y-%m-%d",
+    "month": "%Y-%m",
+}
+
 
 def build_table(
     found: SourceData, spec: DataNodeSpec, timezone: str
@@ -153,7 +160,6 @@ def _time_label(stamp: datetime, spec: DataNodeSpec) -> str:
         "time": "%H:%M",
         "month": "%Y-%m",
     }
-    selected = spec.time_format
-    if selected == "auto":
-        selected = "month" if spec.bucket == "month" else "datetime"
-    return stamp.strftime(formats[selected])
+    if spec.time_format != "auto":
+        return stamp.strftime(formats[spec.time_format])
+    return stamp.strftime(_AUTO_FORMATS[spec.bucket])

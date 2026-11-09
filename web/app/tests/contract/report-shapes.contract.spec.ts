@@ -23,7 +23,7 @@ const spec = JSON.parse(
   }
 }
 const shapes = {
-  ChartSeries: { name: true, points: true } satisfies Record<
+  ChartSeries: { name: true, points: true, values: true } satisfies Record<
     keyof ReportSchemas['ChartSeries'],
     true
   >,
@@ -78,6 +78,7 @@ const shapes = {
     value: true,
   } satisfies Record<keyof ReportSchemas['MetricValue'], true>,
   NodeValue: {
+    categories: true,
     columns: true,
     is_truncated: true,
     is_stale: true,
@@ -86,6 +87,7 @@ const shapes = {
     series: true,
     text: true,
     title: true,
+    x_axis: true,
   } satisfies Record<keyof ReportSchemas['NodeValue'], true>,
   PageSettings: {
     font_family: true,

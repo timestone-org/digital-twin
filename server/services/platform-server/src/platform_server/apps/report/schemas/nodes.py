@@ -27,7 +27,9 @@ class DataNodeSpec(BaseModel):
         default_factory=list[SeriesSpec], max_length=20
     )
     title: str = Field(default="", max_length=256)
-    kind: Literal["line", "bar"] = "line"
+    kind: Literal["line", "bar", "pie"] = "line"
+    x_axis: Literal["time", "category", "field"] = "time"
+    category_key: str = Field(default="", max_length=64)
     window: str | None = Field(default=None, max_length=16)
     offset: int = Field(default=0, ge=-120, le=120)
     anchor: Literal["period", "latest"] = "period"

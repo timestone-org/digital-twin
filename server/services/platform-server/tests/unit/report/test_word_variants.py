@@ -133,9 +133,11 @@ def test_raster_charts_are_real_png(kind):
     node = NodeValue(
         kind=kind,
         title="能耗",
+        categories=["08-01", "08-02", "08-03"],
         series=[
             ChartSeries(
                 name="能耗",
+                values=["10", None, "12"],
                 points=[
                     SeriesPoint(
                         ts=datetime(2026, 8, day, tzinfo=UTC), value=value
@@ -145,7 +147,7 @@ def test_raster_charts_are_real_png(kind):
             )
         ],
     )
-    result = render_chart(node, "Asia/Shanghai")
+    result = render_chart(node)
     assert result.startswith(b"\x89PNG\r\n\x1a\n")
     assert len(result) > 1000
 
@@ -162,9 +164,11 @@ def test_explicit_raster_and_empty_business_blocks():
     chart = NodeValue(
         kind="line",
         title="趋势",
+        categories=["08-01"],
         series=[
             ChartSeries(
                 name="值",
+                values=["1"],
                 points=[
                     SeriesPoint(ts=datetime(2026, 8, 1, tzinfo=UTC), value="1")
                 ],

@@ -62,6 +62,7 @@ class ChartSeries(OutputModel):
 
     name: str
     points: list[SeriesPoint]
+    values: list[str | None] = Field(default_factory=list[str | None])
 
 
 class NodeValue(OutputModel):
@@ -73,6 +74,8 @@ class NodeValue(OutputModel):
     columns: list[str] = Field(default_factory=list[str])
     rows: list[list[str]] = Field(default_factory=list[list[str]])
     series: list[ChartSeries] = Field(default_factory=list[ChartSeries])
+    x_axis: Literal["time", "category", "field"] = "time"
+    categories: list[str] = Field(default_factory=list[str])
     is_truncated: bool = False
     is_stale: bool = False
 

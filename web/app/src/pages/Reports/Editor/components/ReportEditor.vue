@@ -1,13 +1,6 @@
 <script setup lang="ts">
 /** @fileoverview Umo Editor 报告正文壳，保留结构化业务节点与页面设置。 */
-import {
-  computed,
-  onBeforeUnmount,
-  onMounted,
-  ref,
-  shallowRef,
-  watch,
-} from 'vue'
+import { onBeforeUnmount, onMounted, ref, shallowRef, watch } from 'vue'
 import { UmoEditor } from '@umoteam/editor'
 import type {
   UmoCreatedPayload,
@@ -16,11 +9,22 @@ import type {
 } from '@umoteam/editor'
 import type { Editor as TiptapEditor } from '@tiptap/core'
 import '@umoteam/editor/style'
-import type { ReportDocument, ReportPage, ReportMetric } from '@dt/contracts'
+import type {
+  ReportBody,
+  ReportDocument,
+  ReportPage,
+  ReportMetric,
+} from '@dt/contracts'
 import { UMO_ASSETS_DIR } from '../../../../../umoAssets.shared'
-import { businessExtensions } from '../scripts/businessNodes'
+import { createBusinessExtensions } from '../scripts/businessNodes'
 import { reportTypography } from '../scripts/reportTypography'
+import {
+  createPreviewStore,
+  previewSignatures,
+  type DocumentPreview,
+} from '../scripts/documentPreview'
 import NodeDialog from './NodeDialog.vue'
+import ReportPaperTheme from './ReportPaperTheme.vue'
 import { documentFrom } from '../../scripts/reportDocument'
 
 const props = withDefaults(
@@ -31,8 +35,17 @@ const props = withDefaults(
     metrics?: ReportMetric[]
     title?: string
     saveDocument?: () => Promise<boolean>
+    documentPreview?: DocumentPreview | null
+    apiSources?: NonNullable<ReportBody['api_sources']>
   }>(),
-  { disabled: false, page: () => ({}), title: '', metrics: () => [] },
+  {
+    disabled: false,
+    page: () => ({}),
+    title: '',
+    metrics: () => [],
+    documentPreview: null,
+    apiSources: () => [],
+  },
 )
 
 const emit = defineEmits<{
@@ -41,6 +54,7 @@ const emit = defineEmits<{
 }>()
 
 const editorRef = ref<UmoEditorInstance | null>(null)
+const previewStore = createPreviewStore()
 const tiptap = shallowRef<TiptapEditor | null>(null)
 const editingNode = ref<ReportDocument | null>(null)
 const isEditingNode = ref(false)
@@ -185,7 +199,7 @@ function initialOptions(): UmoEditorOptions {
       readOnly: props.disabled,
       title: props.title,
     },
-    extensions: [...businessExtensions, reportTypography],
+    extensions: [...createBusinessExtensions(previewStore), reportTypography],
     locale: 'zh-CN',
     onSave: async () => {
       if (!props.saveDocument) {
@@ -217,6 +231,19 @@ function onChanged(): void {
   const document = documentFrom(json)
   emitted = JSON.stringify(document)
   emit('update:modelValue', document)
+  previewStore.refresh()
+}
+
+watch(
+  () => props.documentPreview,
+  (value) => previewStore.set(value),
+  { immediate: true },
+)
+
+/** 编辑器当前正文的业务节点指纹，试算发起时记下。 */
+function signatures(): Record<string, string> {
+  const json = editorRef.value?.getJSON()
+  return json ? previewSignatures(documentFrom(json)) : {}
 }
 
 watch(
@@ -231,11 +258,6 @@ watch(
   () => props.disabled,
   (disabled) => editorRef.value?.setReadOnly?.(disabled),
 )
-
-const paperStyle = computed(() => ({
-  '--report-body-font': props.page.font_family ?? 'var(--font-sans)',
-  '--report-body-size': `${props.page.font_size_pt ?? 11}pt`,
-}))
 
 const THEME_ATTRIBUTE = 'theme-mode'
 let previousTheme: string | null = null
@@ -274,15 +296,16 @@ function insert(node: ReportDocument): boolean {
   return current.chain().focus().insertContent(editorDocument(node)).run()
 }
 
-defineExpose({ insert })
+defineExpose({ insert, signatures })
 </script>
 
 <template>
-  <div class="umo-dt-theme" :style="paperStyle" @report-node-edit="editNode">
+  <ReportPaperTheme :page="props.page" @report-node-edit="editNode">
     <NodeDialog
       v-model="isEditingNode"
       :node="editingNode"
       :metrics="props.metrics"
+      :api-sources="props.apiSources"
       @insert="updateNode"
     />
     <UmoEditor
@@ -295,103 +318,5 @@ defineExpose({ insert })
       @changed:page-margin="onPageMargin"
       @changed:page-watermark="onPageWatermark"
     />
-  </div>
+  </ReportPaperTheme>
 </template>
-
-<style lang="scss">
-.umo-dt-theme {
-  height: 100%;
-  min-height: 0;
-  overflow: hidden;
-  border: 1px solid var(--card-border);
-  border-radius: var(--card-radius);
-  --umo-container-background: var(--surface-base);
-  --umo-color-white: var(--surface-panel);
-  --umo-color-black: var(--text-primary);
-  --umo-button-hover-background: var(--surface-raised);
-  --umo-mask-color: var(--surface-overlay);
-  --umo-shadow: var(--fx-shadow-menu);
-  --umo-font-family: var(--font-sans);
-  --td-font-family: var(--font-sans);
-  --umo-text-color: var(--text-primary);
-  --umo-text-color-light: var(--text-secondary);
-  --umo-text-color-disabled: var(--text-disabled);
-  --umo-border-color: var(--border-default);
-  --umo-border-color-light: var(--border-subtle);
-  --umo-border-color-dark: var(--border-strong);
-  --umo-primary-color: var(--accent-primary);
-  --umo-error-color: var(--state-danger);
-  --umo-warning-color: var(--state-warning);
-  --umo-radius: var(--radius-sm);
-  --umo-radius-medium: var(--radius-md);
-  --umo-scrollbar-thumb-color: var(--border-default);
-  --umo-scrollbar-thumb-hover-color: var(--border-hover);
-}
-
-.umo-dt-theme > * {
-  height: 100%;
-}
-
-.umo-dt-theme .umo-page-content {
-  color: var(--fx-const-ink);
-  background: var(--fx-const-paper);
-}
-
-.umo-dt-theme .umo-editor-content .umo-editor {
-  font-family: var(--report-body-font);
-  font-size: var(--report-body-size);
-}
-
-.umo-dt-theme .umo-status-bar {
-  height: auto;
-  min-height: 30px;
-  flex-shrink: 0;
-  flex-wrap: wrap;
-  row-gap: 4px;
-}
-
-.umo-dt-theme .umo-status-bar-left,
-.umo-dt-theme .umo-status-bar-right {
-  min-width: 0;
-  max-width: 100%;
-  flex-wrap: wrap;
-}
-</style>
-
-<style lang="scss">
-.umo-dt-theme .report-data-node {
-  display: inline-block;
-  max-width: 100%;
-  padding: 0.15em 0.55em;
-  margin: 0.15em;
-  border: 1px solid var(--accent-primary);
-  border-radius: var(--radius-sm);
-  background: var(--surface-panel);
-  color: var(--text-primary);
-  font-family: var(--font-sans);
-  font-size: 0.9em;
-  cursor: pointer;
-  white-space: normal;
-  overflow-wrap: anywhere;
-  &[data-report-node='condText'] {
-    border-style: dashed;
-  }
-  &[data-report-node='dsChart'],
-  &[data-report-node='dsTable'] {
-    display: block;
-    padding: 1.25em;
-    margin: 0.75em 0;
-    border-left-width: 4px;
-  }
-  &[data-report-node='dsTable'] {
-    border-style: double;
-  }
-  &:hover,
-  &:focus-visible,
-  &.ProseMirror-selectednode {
-    outline: 2px solid var(--accent-primary);
-    outline-offset: 2px;
-    background: var(--surface-raised);
-  }
-}
-</style>
