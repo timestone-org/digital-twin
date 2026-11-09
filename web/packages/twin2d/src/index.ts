@@ -381,6 +381,7 @@ export {
   svgGradientAttrs,
   svgGradientDomId,
   svgPaintLayers,
+  svgPrimIdPrefix,
   svgShapeAttrs,
   svgShapeTag,
   svgStopAttrs,
