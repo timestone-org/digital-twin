@@ -296,6 +296,17 @@ describe('切对话', () => {
     expect(wrapper.text()).toContain('早先问过')
   })
 
+  it('再点一下已选中的那条不重放、不打断正在跑的回合', async () => {
+    const wrapper = await render()
+
+    await wrapper.find('button[title="锅炉那几台"]').trigger('click')
+    await flushPromises()
+    await wrapper.find('button[title="锅炉那几台"]').trigger('click')
+    await flushPromises()
+
+    expect(api.readSession).toHaveBeenCalledTimes(1)
+  })
+
   it('慢回来的那一次不许盖后选的', async () => {
     // ⚠ 不防的话，时间线上是上一个对话的历史而标题是这一个的
     api.listSessions.mockResolvedValue([

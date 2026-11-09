@@ -71,6 +71,15 @@ export async function select(
   state: KnowledgeChatState,
   sessionId: string | null,
 ): Promise<void> {
+  // ⚠ 再点已选中的那条什么都不做：clear 会掐掉正在跑的回合，工具调用没回执会锁死会话。
+  // 回放失败时仍允许重点一次来重试
+  if (
+    sessionId !== null &&
+    sessionId === state.selectedId.value &&
+    state.error.value === ''
+  ) {
+    return
+  }
   state.chat.clear()
   state.pendingSession.value = null
   state.selectedId.value = sessionId
