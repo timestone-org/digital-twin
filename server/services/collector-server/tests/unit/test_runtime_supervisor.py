@@ -516,3 +516,43 @@ async def test_the_plan_can_shorten_its_own_refresh_interval(
     now["ms"] += 6_000
     assert supervisor._is_plan_due() is True
     await supervisor.stop()
+
+
+async def test_losing_the_lease_mid_converge_revokes_the_live_sessions(
+    build_plan: Any, build_source: Any
+) -> None:
+    # 拆着一条慢会话时丢了主：其余活着的会话要当场撤销，不等收敛走完
+    lease = FakeLease()
+    first, second, third = (build_source(uuid4()) for _ in range(3))
+    plans = [
+        build_plan(sources=(first, second, third)),
+        build_plan(version="v2", sources=(third,)),
+    ]
+    supervisor, built = _supervisor(
+        lease, FakeFetcher(plans), renew_interval_s=0.01
+    )
+    await supervisor.tick()
+    release = asyncio.Event()
+    entered = _hang_stop(built[0], release)
+    ticking = asyncio.create_task(supervisor.tick())
+    await asyncio.wait_for(entered.wait(), timeout=1)
+    lease.answers = [False]
+    await _until(lambda: built[2].is_online is False)
+    release.set()
+    await asyncio.wait_for(ticking, timeout=1)
+    assert built[1].reported_stopped == 0
+    assert supervisor.is_online(third.source_id) is False
+
+
+async def test_a_failed_offline_report_does_not_stop_the_teardown(
+    build_plan: Any,
+) -> None:
+    supervisor, built = _supervisor(FakeLease(), FakeFetcher([build_plan()]))
+    await supervisor.tick()
+
+    async def refuse() -> None:
+        raise ConnectionError("库暂时连不上")
+
+    built[0].report_stopped = refuse
+    await supervisor.stop()
+    assert built[0].is_stopped is True
