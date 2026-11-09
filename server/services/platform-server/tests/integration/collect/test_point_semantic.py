@@ -201,6 +201,36 @@ async def test_one_search_finds_opcua_and_plc_with_distinct_sources(
     assert [one.source_id for one in plc_only.items] == [uuid.UUID(plc["id"])]
 
 
+async def test_an_http_point_is_not_labelled_opc_ua(
+    app_context: AppContext,
+) -> None:
+    # ⚠ 除 Modbus 外一律写成 OPC UA 的话，搜「OPC UA」会把 HTTP 点位也捞出来
+    http = await create_source(
+        app_context.client,
+        code="weather-api",
+        name="气象接口",
+        protocol="http",
+        endpoint="https://api.example.test/readings",
+        read_mode="poll",
+        options_json={"auth_type": "none"},
+        is_enabled=False,
+    )
+    await create_points(
+        app_context.client,
+        http["id"],
+        point_item("temp", name="室外温度", address="/temp"),
+    )
+    pending = await point_semantic.pending(app_context.session, "model-a")
+    contents = [one.content for one in pending]
+    assert contents, "HTTP 点位没有进待嵌入清单"
+    assert all("OPC UA" not in one for one in contents)
+    assert any("HTTP" in one for one in contents)
+    found = await PointSearch(app_context.sessions, None).search(
+        "OPC UA", None, 6
+    )
+    assert [one.source_id for one in found.items] == []
+
+
 async def test_description_roundtrips_and_explicit_null_clears(
     app_context: AppContext,
 ) -> None:
