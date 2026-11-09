@@ -56,11 +56,14 @@ function styleLabel(element: HTMLElement, valueEl: HTMLElement): void {
   valueEl.style.fontVariantNumeric = 'tabular-nums'
 }
 
-/** 取不到就说取不到，不拿空串冒充读数。 */
+/**
+ * 读数正文（不含前缀）；取不到就说取不到，不拿空串冒充读数。
+ * ⚠ 前缀另成一节画在读数前面：拼进强调色的读数里，会和锚点名连成一串。
+ */
 function anchorText(anchor: TwinAnchor, values: TwinAnchorValues): string {
   const entry = values[anchor.id]
   if (entry === undefined) return NO_VALUE_TEXT
-  const text = formatAnchorText(anchor, entry.value)
+  const text = formatAnchorText({ ...anchor, label: '' }, entry.value)
   return text === '' ? NO_VALUE_TEXT : text
 }
 
@@ -161,9 +164,16 @@ export class AnchorLayer {
     const element = document.createElement('div')
     const nameEl = document.createElement('span')
     nameEl.textContent = anchor.name
+    element.append(nameEl)
+    const prefix = anchor.label.trim()
+    if (prefix !== '') {
+      const prefixEl = document.createElement('span')
+      prefixEl.textContent = prefix
+      element.append(prefixEl)
+    }
     const valueEl = document.createElement('span')
     valueEl.textContent = NO_VALUE_TEXT
-    element.append(nameEl, valueEl)
+    element.append(valueEl)
     styleLabel(element, valueEl)
     const label = new CSS2DObject(element)
     this.group.add(dot, label)

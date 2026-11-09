@@ -143,6 +143,23 @@ describe('读数', () => {
     expect(labelTexts(layer)).toEqual(['出口温度36.5 ℃'])
   })
 
+  // ⚠ 前缀拼进强调色的读数里，会和锚点名连成一串「罐顶罐温 26.5 ℃」
+  it('读数前缀单独成一节，不混进强调色的读数里', () => {
+    const layer = layerOn(host())
+    layer.build([anchor({ name: '罐顶', label: '罐温' })])
+
+    layer.setValues({ a1: { value: 26.48 } })
+
+    const element = layer.group.children.find(
+      (child): child is THREE.Object3D & { element: HTMLElement } =>
+        'element' in child,
+    )?.element
+    const parts = [...(element?.children ?? [])].map(
+      (child) => child.textContent,
+    )
+    expect(parts).toEqual(['罐顶', '罐温', '26.5 ℃'])
+  })
+
   it('有值但拼不出任何文本时也给占位符，不留空白', () => {
     const layer = layerOn(host())
     layer.build([anchor({ name: '', label: '', unit: '', decimals: null })])
