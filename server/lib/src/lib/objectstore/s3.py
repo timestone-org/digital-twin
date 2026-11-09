@@ -12,6 +12,7 @@ from typing import TYPE_CHECKING, Any, cast
 
 import boto3
 from boto3.exceptions import Boto3Error, RetriesExceededError
+from boto3.s3.transfer import TransferConfig
 from botocore.client import Config as BotoConfig
 from botocore.exceptions import (
     BotoCoreError,
@@ -51,6 +52,9 @@ _TEMPORARY_CODES = frozenset(
     }
 )
 _TEMPORARY_STATUSES = frozenset({"408", "429", "500", "502", "503", "504"})
+# ⚠ 托管下载默认把每次 get_object 再包 5 次重试，与客户端的重试相乘；
+# 重试只留客户端那一层
+_TRANSFER = TransferConfig(num_download_attempts=1)
 _TEMPORARY_ERRORS = (
     ConnectTimeoutError,
     ReadTimeoutError,
@@ -122,6 +126,7 @@ class S3ObjectStore:
             Bucket=self._bucket,
             Key=key,
             Filename=str(path),
+            Config=_TRANSFER,
             key=key,
             is_read=True,
         )

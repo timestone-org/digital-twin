@@ -393,17 +393,24 @@ async def test_download_streams_straight_into_the_file(tmp_path: Path) -> None:
     client = FakeClient()
     target = tmp_path / "original.glb"
     await store(client).download_to("models/x/original", target)
-    assert client.calls == [
-        (
-            "download_file",
-            {
-                "Bucket": BUCKET,
-                "Key": "models/x/original",
-                "Filename": str(target),
-            },
-        )
-    ]
+    ((name, kwargs),) = client.calls
+    assert name == "download_file"
+    assert {k: v for k, v in kwargs.items() if k != "Config"} == {
+        "Bucket": BUCKET,
+        "Key": "models/x/original",
+        "Filename": str(target),
+    }
     assert target.read_bytes() == b"streamed"
+
+
+async def test_the_managed_download_adds_no_retries_of_its_own(
+    tmp_path: Path,
+) -> None:
+    # 托管传输默认把每次 get_object 再包 5 次重试，与客户端自己的重试相乘
+    client = FakeClient()
+    await store(client).download_to("k", tmp_path / "out")
+    ((_, kwargs),) = client.calls
+    assert kwargs["Config"].num_download_attempts == 1
 
 
 async def test_a_download_of_a_missing_key_is_its_own_error(
