@@ -20,10 +20,8 @@ import { useConfirm, useToast } from '@dt/ui'
 import * as collect from '@/api/collect'
 import { describeError } from '@/composables/useAsyncList'
 import { downloadCsv } from '@/utils/downloadJson'
+import { listAllPoints } from './listAllPoints'
 import { pointsToCsv } from './pointCsv'
-
-/** 拉全量点位时一次取多少条。⚠ 与后端单页上限对齐，取大了会被 422。 */
-const PAGE_SIZE = 100
 
 interface Deps {
   toast: ReturnType<typeof useToast>
@@ -56,23 +54,6 @@ function warnUnverified(
   if (checks.some((check) => check.status === 'unverified')) {
     deps.toast.warning('寻址串这次没能到现场确认，采集起来之后请核对是否有值')
   }
-}
-
-/** 翻完这个数据源下的全部点位。 */
-async function fetchAll(deps: Deps): Promise<CollectPoint[]> {
-  const all: CollectPoint[] = []
-  let page = 1
-  for (;;) {
-    const chunk = await collect.listPoints({
-      sourceId: deps.sourceId(),
-      page,
-      size: PAGE_SIZE,
-    })
-    all.push(...chunk.items)
-    if (all.length >= chunk.total || chunk.items.length === 0) break
-    page += 1
-  }
-  return all
 }
 
 async function createPoint(
@@ -158,7 +139,7 @@ async function writeValue(
 
 async function exportPoints(deps: Deps, sourceCode: string): Promise<void> {
   try {
-    const all = await fetchAll(deps)
+    const all = await listAllPoints(deps.sourceId())
     downloadCsv(pointsToCsv(all), `${sourceCode}-点位`)
     deps.toast.success(`已导出 ${all.length} 个点位`)
   } catch (caught) {
@@ -182,6 +163,6 @@ export function usePointOps(sourceId: () => string): PointOps {
     remove: (point) => removePoint(deps, point),
     write: (point, payload) => writeValue(deps, point, payload),
     exportCsv: (sourceCode) => exportPoints(deps, sourceCode),
-    fetchAll: () => fetchAll(deps),
+    fetchAll: () => listAllPoints(deps.sourceId()),
   }
 }
