@@ -99,12 +99,22 @@ onMounted(() => {
   if (props.autosize) resize()
 })
 
-/** 非有限的 maxlength（NaN / Infinity）不显示计数；超长时截到 0，不露负数。 */
-const remaining = computed<number | null>(() => {
+/** 非有限的 maxlength（NaN / Infinity）视为没有上限。 */
+const limit = computed<number | null>(() => {
   const max = props.maxlength
-  if (max === undefined || !Number.isFinite(max)) return null
-  return Math.max(0, max - props.modelValue.length)
+  return max === undefined || !Number.isFinite(max) ? null : max
 })
+
+/** 剩余字数；超长时截到 0，不露负数。 */
+const remaining = computed<number | null>(() =>
+  limit.value === null
+    ? null
+    : Math.max(0, limit.value - props.modelValue.length),
+)
+
+const isOverLimit = computed(
+  () => limit.value !== null && props.modelValue.length > limit.value,
+)
 
 const announcement = computed(() => {
   const left = remaining.value
@@ -153,17 +163,18 @@ defineExpose({ textareaEl })
           @compositionstart="onCompositionStart"
           @compositionend="onCompositionEnd"
         />
-        <span
-          v-if="remaining !== null"
-          class="dt-textarea__count"
-          aria-hidden="true"
-        >
-          {{ remaining }}
-        </span>
         <span class="dt-textarea__live" aria-live="polite">
           {{ announcement }}
         </span>
       </div>
+      <span
+        v-if="limit !== null"
+        class="dt-textarea__count"
+        :class="{ 'dt-textarea__count--over': isOverLimit }"
+        aria-hidden="true"
+      >
+        {{ modelValue.length }} / {{ limit }}
+      </span>
     </template>
   </DtField>
 </template>
@@ -225,14 +236,19 @@ defineExpose({ textareaEl })
     line-height: 1.6;
   }
 
-  // 计数是给看得见的人的余光用的，读屏走下面那个 live 区，别读两遍
+  // 计数是给看得见的人的余光用的，读屏走 live 区，别读两遍；
+  // 排在框外：框内右下角正是原生拖拽把手
   &__count {
-    position: absolute;
-    right: 8px;
-    bottom: 4px;
+    align-self: flex-end;
+    margin-top: -2px;
     font-size: var(--ctl-hint-fs-sm);
+    line-height: var(--line-height-body);
     color: var(--text-disabled);
-    pointer-events: none;
+    font-variant-numeric: tabular-nums;
+
+    &--over {
+      color: var(--state-danger);
+    }
   }
 
   &__live {
