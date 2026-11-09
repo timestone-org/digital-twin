@@ -55,7 +55,11 @@ async def preview(session: AsyncSession, context: PreviewContext) -> PreviewOut:
             warnings=[issue.message for issue in checked.issues],
         )
     metrics = await resolve_metrics(session, context)
-    warnings = [f"{item.name}：{item.error}" for item in metrics if item.error]
+    # 没被任何指标引用的来源取数失败也要拦住：出稿那一路会因为它整份失败
+    warnings = list(dict.fromkeys(context.api_errors.values()))
+    warnings.extend(
+        f"{item.name}：{item.error}" for item in metrics if item.error
+    )
     warnings.extend(
         f"{item.name}：取数已截断" for item in metrics if item.is_truncated
     )
@@ -95,7 +99,20 @@ async def preview(session: AsyncSession, context: PreviewContext) -> PreviewOut:
 def _api_results(context: PreviewContext) -> list[ReportApiResult]:
     results: list[ReportApiResult] = []
     for source in context.template.api_sources:
-        found = context.api_data.get(f"api:{source.code}")
+        key = f"api:{source.code}"
+        if key in context.api_errors:
+            results.append(
+                ReportApiResult(
+                    source_code=source.code,
+                    name=source.name,
+                    row_count=0,
+                    columns=[],
+                    rows=[],
+                    error=context.api_errors[key],
+                )
+            )
+            continue
+        found = context.api_data.get(key)
         if found is None:
             continue
         results.append(

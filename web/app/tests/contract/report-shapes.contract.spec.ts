@@ -231,6 +231,7 @@ const shapes = {
     row_count: true,
     columns: true,
     rows: true,
+    error: true,
   } satisfies Record<keyof ReportSchemas['ReportApiResult'], true>,
   Watermark: {
     font_size_pt: true,

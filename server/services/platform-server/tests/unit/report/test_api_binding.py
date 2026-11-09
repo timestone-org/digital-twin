@@ -167,23 +167,47 @@ async def test_trial_fetches_api_after_ending_database_transaction(monkeypatch):
     reader.assert_awaited_once()
 
 
-async def test_trial_propagates_safe_api_failure(monkeypatch):
-    body = api_template()
+async def test_trial_degrades_per_api_source(monkeypatch):
+    # ⚠ 一个来源连不上就整份试算 503 的话，台账指标、图表与表格一样都核对不了
+    broken = ReportApiSource(
+        code="broken",
+        name="能管月度能耗",
+        connection="ems",
+        path="/broken",
+        columns=[{"key": "value", "name": "用量", "pointer": "/amount"}],
+    )
+    body = api_template(
+        metrics=[
+            MetricDef(name="总量", table="api:energy", key="value", agg="sum"),
+            MetricDef(name="断开", table="api:broken", key="value", agg="sum"),
+        ]
+    )
+    body.api_sources.append(broken)
     monkeypatch.setattr(
         template_preview,
         "require_template",
         AsyncMock(return_value=SimpleNamespace(body_json=body.model_dump())),
     )
+
+    async def fetch(sources, *_arguments):
+        if sources[0].code == "broken":
+            raise ReportInvalid("数据来源「能管月度能耗」：API 取数超时")
+        return api_snapshot()
+
     monkeypatch.setattr(
-        template_preview,
-        "fetch_api_sources",
-        AsyncMock(side_effect=ReportInvalid("API 字段映射缺失")),
+        template_preview, "fetch_api_sources", AsyncMock(side_effect=fetch)
     )
     async with AsyncSession() as session:
-        with pytest.raises(ReportInvalid, match="字段映射缺失"):
-            await template_preview.preview_template(
-                session, uuid.uuid4(), PreviewIn(period="2026-09"), "UTC"
-            )
+        result = await template_preview.preview_template(
+            session, uuid.uuid4(), PreviewIn(period="2026-09"), "UTC"
+        )
+    by_name = {metric.name: metric for metric in result.metrics}
+    assert by_name["总量"].error is None
+    assert "API 取数超时" in (by_name["断开"].error or "")
+    results = {item.source_code: item for item in result.api_results}
+    assert results["energy"].error is None
+    assert "API 取数超时" in (results["broken"].error or "")
+    assert not result.is_valid
 
 
 def precise_inline_context(value):
