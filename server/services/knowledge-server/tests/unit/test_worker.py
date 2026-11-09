@@ -136,7 +136,7 @@ def test_consumers_are_an_explicit_tuple(settings: Settings) -> None:
     assert isinstance(runtime.consumers, tuple)
     assert len(runtime.consumers) == 1
     assert runtime.pool is not None
-    runtime.pool.shutdown(wait=False)
+    runtime.pool.close()
 
 
 def test_ingest_consumers_are_unique_even_when_instance_is_blank(

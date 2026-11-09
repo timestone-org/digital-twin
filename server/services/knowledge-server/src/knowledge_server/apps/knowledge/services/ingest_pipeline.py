@@ -511,12 +511,24 @@ async def ingest(
             document.base_id,
             list(zip(chunk_ids, [one.text for one in chunks], strict=True)),
         )
+    await _finished(sessions, deps, document, len(chunks))
+    return READY
+
+
+async def _finished(
+    sessions: Sessions, deps: IngestDeps, document: _Pending, chunk_count: int
+) -> None:
+    """置 ready，并给还没钉嵌入档的库补上这一档。
+
+    ⚠ 建库那一刻没接嵌入档的话库上那一格是空的，而它就是「建没建过索引」的
+    判据：不补上，这个库永远被当成只能靠关键词命中。
+
+    Args: sessions, deps, document, chunk_count。
+    """
     async with sessions() as session:
         await crud.document.mark_ready(
-            session, document.document_id, len(chunks), datetime.now(UTC)
+            session, document.document_id, chunk_count, datetime.now(UTC)
         )
-        # ⚠ 建库那一刻没接嵌入档的话库上那一格是空的，而它就是「建没建过索引」
-        # 的判据：不补上，这个库永远被当成只能靠关键词命中
         if deps.embedder.model is not None:
             await crud.knowledge_base.pin_embedding(
                 session,
@@ -524,7 +536,6 @@ async def ingest(
                 deps.embedder.model,
                 deps.embedder.dimensions,
             )
-    return READY
 
 
 async def mark_failed(

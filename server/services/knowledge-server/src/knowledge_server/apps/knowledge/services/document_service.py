@@ -263,6 +263,25 @@ async def _admit(
     return (digest, size)
 
 
+async def _upload_source(
+    session: AsyncSession, base_id: uuid.UUID, document_id: uuid.UUID
+) -> uuid.UUID:
+    """这个库的上传通道；这个文档 id 已经登记过就当场拒。
+
+    ⚠ 第一次登记已把暂存件挪走，不先拒的话再登记一次只会撞「原件不在」。
+
+    Args: session, base_id, document_id。
+    """
+    source = await crud.source.find_source_by_kind(
+        session, base_id, UPLOAD_KIND
+    )
+    if source is None:
+        raise SourceNotFound("这个库没有上传通道")
+    if await crud.document.get_document(session, document_id) is not None:
+        raise DuplicateDocument("这份文档已经登记过了")
+    return source.id
+
+
 async def register_upload(
     session: AsyncSession,
     store: ObjectStore,
@@ -277,14 +296,7 @@ async def register_upload(
 
     Args: session, store, base_id, body, external。
     """
-    source = await crud.source.find_source_by_kind(
-        session, base_id, UPLOAD_KIND
-    )
-    if source is None:
-        raise SourceNotFound("这个库没有上传通道")
-    if await crud.document.get_document(session, body.document_id) is not None:
-        # ⚠ 第一次登记已把暂存件挪走，再登记一次只会撞「原件不在」
-        raise DuplicateDocument("这份文档已经登记过了")
+    source_id = await _upload_source(session, base_id, body.document_id)
     suffix = _checked_suffix(body.filename, external)
     staging = staging_key(base_id, body.document_id, suffix)
     final = document_key(base_id, body.document_id, suffix)
@@ -295,7 +307,7 @@ async def register_upload(
             crud.document.DocumentWrite(
                 document_id=body.document_id,
                 base_id=base_id,
-                source_id=source.id,
+                source_id=source_id,
                 external_ref=final,
                 title=body.filename,
                 media_type="",

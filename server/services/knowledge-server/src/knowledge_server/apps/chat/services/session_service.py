@@ -161,7 +161,10 @@ async def update_session(
     Args: session, chat_session_id, caller, payload。
     """
     chat_session = await require_session(
-        session, chat_session_id=chat_session_id, caller=caller, for_update=True
+        session,
+        chat_session_id=chat_session_id,
+        caller=caller,
+        should_lock=True,
     )
     _require_version(chat_session, payload.expected_version)
     changes = payload.model_dump(exclude_unset=True)
@@ -234,13 +237,13 @@ async def require_session(
     *,
     chat_session_id: uuid.UUID,
     caller: CallerContext,
-    for_update: bool = False,
+    should_lock: bool = False,
 ) -> ChatSession:
     """取会话，看不见即 404。
 
     ⚠ 别人的会话回 404 而不是 403：403 等于逐个 id 回答「这条对话确实存在」。
 
-    Args: session, chat_session_id, caller, for_update（要改它就先锁行）。
+    Args: session, chat_session_id, caller, should_lock（要改它就先锁行）。
     """
     chat_session = (
         await session.get(
@@ -249,7 +252,7 @@ async def require_session(
             with_for_update=True,
             populate_existing=True,
         )
-        if for_update
+        if should_lock
         else await session_crud.get(session, chat_session_id)
     )
     if chat_session is None or chat_session.user_id != visible_owner(caller):

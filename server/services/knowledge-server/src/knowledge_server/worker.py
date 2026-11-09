@@ -161,7 +161,7 @@ async def _shutdown(
     if runtime.pool is not None:
         # ⚠ 不等在跑的那一个：drain 已经等过一轮了，再等下去只会让编排器的
         # 强杀先到
-        runtime.pool.shutdown(wait=False, cancel_futures=True)
+        runtime.pool.close()
     await runtime.container.stream.close()
     await runtime.container.cache.close()
     await runtime.container.database.dispose()

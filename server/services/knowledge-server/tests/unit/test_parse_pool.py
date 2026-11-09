@@ -52,7 +52,7 @@ async def test_a_timed_out_parse_does_not_starve_the_next_one() -> None:
 
         assert made.blocks
     finally:
-        pool.shutdown(wait=False, cancel_futures=True)
+        pool.close()
 
 
 def test_recycling_kills_the_process_that_was_stuck() -> None:
@@ -67,4 +67,4 @@ def test_recycling_kills_the_process_that_was_stuck() -> None:
 
         assert pool.submit(abs, -1).result(timeout=30) == 1
     finally:
-        pool.shutdown(wait=False, cancel_futures=True)
+        pool.close()

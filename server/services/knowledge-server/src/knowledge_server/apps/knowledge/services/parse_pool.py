@@ -63,12 +63,7 @@ class RecyclingPool(Executor):
             killed=len(stale),
         )
 
-    def shutdown(
-        self, wait: bool = True, *, cancel_futures: bool = False
-    ) -> None:
-        """关掉此刻那一池。
-
-        Args: wait, cancel_futures。
-        """
+    def close(self) -> None:
+        """关掉此刻那一池，不等在跑的那一份、排队的一并取消。"""
         with self._lock:
-            self._inner.shutdown(wait=wait, cancel_futures=cancel_futures)
+            self._inner.shutdown(wait=False, cancel_futures=True)

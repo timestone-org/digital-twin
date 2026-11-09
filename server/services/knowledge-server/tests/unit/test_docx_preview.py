@@ -394,7 +394,6 @@ async def _gone(pid: int) -> bool:
     return False
 
 
-@pytest.mark.skipif(not hasattr(os, "killpg"), reason="只在 POSIX 上有进程组")
 async def test_a_timeout_kills_the_converter_that_the_launcher_forked(
     tmp_path: Path,
 ) -> None:
