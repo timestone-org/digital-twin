@@ -116,8 +116,18 @@ def test_wildcard_method_matches_everything() -> None:
         ("/", "/"),
         ("", "/"),
         ("/a#frag", "/a"),
+        ("/a/%62?x=%31", "/a/b"),
+        ("/a/b%2F", "/a/b"),
     ],
-    ids=["query", "trailing-slash", "root", "empty", "fragment"],
+    ids=[
+        "query",
+        "trailing-slash",
+        "root",
+        "empty",
+        "fragment",
+        "percent-encoded",
+        "encoded-trailing-slash",
+    ],
 )
 def test_path_normalization(raw: str, expected: str) -> None:
     assert normalize_path(raw) == expected
