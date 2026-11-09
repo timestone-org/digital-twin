@@ -104,11 +104,15 @@ async function remove(id: string): Promise<void> {
 <template>
   <AppShell title="自动报告" subtitle="模板与报告期生成 Word 文档">
     <template #actions>
-      <RouterLink to="/reports/renders">
-        <DtButton variant="ghost" size="sm" icon="activity">生成记录</DtButton>
+      <RouterLink v-slot="{ navigate }" to="/reports/renders" custom>
+        <DtButton variant="ghost" size="sm" icon="activity" @click="navigate">
+          生成记录
+        </DtButton>
       </RouterLink>
-      <RouterLink to="/reports/schedules">
-        <DtButton variant="ghost" size="sm" icon="calendar">定时规则</DtButton>
+      <RouterLink v-slot="{ navigate }" to="/reports/schedules" custom>
+        <DtButton variant="ghost" size="sm" icon="calendar" @click="navigate">
+          定时规则
+        </DtButton>
       </RouterLink>
       <PermGuard :codes="[PERMISSION_CODES.reportManage]">
         <DtButton

@@ -133,8 +133,10 @@ async function download(row: ReportRender): Promise<void> {
     subtitle="任务状态与 Word 产物"
   >
     <template #actions>
-      <RouterLink to="/reports">
-        <DtButton variant="ghost" size="sm" icon="table">报告模板</DtButton>
+      <RouterLink v-slot="{ navigate }" to="/reports" custom>
+        <DtButton variant="ghost" size="sm" icon="table" @click="navigate">
+          报告模板
+        </DtButton>
       </RouterLink>
       <DtIconButton
         size="sm"
