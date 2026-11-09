@@ -86,11 +86,6 @@ function nodesWithTwin(
 }
 
 /**
- * 装上一页的状态。
- * @param dashboardId 大屏 id
- * @param nodeId 要编辑的节点 id
- */
-/**
  * 把这一份孪生配置写回它所在的大屏节点。
  * @param file 大屏文档态
  * @param editing 当前的孪生文档；null = 还没读出来
@@ -120,6 +115,12 @@ async function saveTwin(
   return true
 }
 
+/**
+ * 装上一页的状态。
+ * @param dashboardId 大屏 id
+ * @param nodeId 要编辑的节点 id
+ * @param beforeSave 发送前最后改一次文档的机会
+ */
 export function useTwinEditorPage(
   dashboardId: () => string,
   nodeId: () => string,

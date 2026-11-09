@@ -4,8 +4,7 @@ import type { BindingPayload } from '@dt/contracts'
 import { collectTwinConfigIssues } from '@dt/twin-config'
 import type { TwinConfig, TwinNavigationMode, Vec3 } from '@dt/twin-config'
 import { DtPageState, DtResizableLayout, useConfirm, useToast } from '@dt/ui'
-import type { ModelAnimationEntry } from '@dt/three-core'
-import { computed, ref, watch, provide } from 'vue'
+import { computed, ref, provide } from 'vue'
 import { useRoute } from 'vue-router'
 import { useWorkspaceGuard } from '@/features/workspace/useWorkspaceGuard'
 import { migrateLegacyEditorLayout } from '@/features/workspace/legacyEditorLayout'
@@ -37,6 +36,9 @@ import { useBulkParts } from './scripts/useBulkParts'
 import { useGizmoMode } from './scripts/useGizmoMode'
 import { useTwinAi } from './scripts/useTwinAi'
 import { useTwinEditorPage } from './scripts/useTwinEditorPage'
+import { useTwinAnimationSelection } from './scripts/useTwinAnimationSelection'
+import { applyBatchBindings, applyBatchConfig } from './scripts/batchApply'
+import { removeMissingAnimations } from './scripts/missingAnimations'
 import { useUnsavedGuard } from '@/composables/useUnsavedGuard'
 
 // ⚠ 子编辑器直接刷新时也必须安装模块，否则模型地址无法解析。
@@ -54,11 +56,6 @@ const confirm = useConfirm()
 const dashboardId = computed(() => String(route.params.dashboardId ?? ''))
 const nodeId = computed(() => String(route.params.nodeId ?? ''))
 
-import {
-  missingAnimationNames,
-  removeMissingAnimations,
-} from './scripts/missingAnimations'
-
 const page = useTwinEditorPage(
   () => dashboardId.value,
   () => nodeId.value,
@@ -75,24 +72,6 @@ const configPreviewRef = ref<InstanceType<typeof TwinConfigPreview> | null>(
 provide(TWIN_PREVIEW_INTENT, (mode) => {
   configPreviewRef.value?.showPartMode(mode)
 })
-const modelStatus = ref('empty')
-const animationClips = ref<readonly ModelAnimationEntry[]>([])
-const selectedAnimation = ref<string | null>(null)
-const animationTest = ref<'live' | 'play' | 'pause' | 'reset'>('live')
-const currentAnimation = computed(
-  () =>
-    animationClips.value.find(
-      (item) => item.name === selectedAnimation.value,
-    ) ?? null,
-)
-watch(selection, () => {
-  selectedAnimation.value = null
-  animationTest.value = 'live'
-})
-function selectAnimation(name: string): void {
-  selectedAnimation.value = name
-  animationTest.value = 'live'
-}
 const showIssues = ref(false)
 const focusMode = ref(false)
 const batchOpen = ref(false)
@@ -107,27 +86,19 @@ const roamPreviewing = ref(false)
 /** 视口回传的世界坐标基准原点。 */
 const frameOrigin = ref<Vec3>([0, 0, 0])
 const config = computed(() => page.doc.value?.config.value ?? null)
-const missingAnimations = computed(() =>
-  config.value === null
-    ? new Set<string>()
-    : missingAnimationNames(
-        config.value.model.animations,
-        animationClips.value,
-        modelStatus.value,
-      ),
+const {
+  modelStatus,
+  animationClips,
+  selectedAnimation,
+  animationTest,
+  currentAnimation,
+  missingAnimations,
+  selectAnimation,
+  resetAnimation,
+} = useTwinAnimationSelection(
+  () => config.value,
+  () => selection.value,
 )
-watch(
-  [() => config.value?.model.asset, () => config.value?.model.variant],
-  () => {
-    modelStatus.value = 'loading'
-    animationClips.value = []
-  },
-  { flush: 'sync' },
-)
-watch(missingAnimations, (missing) => {
-  if (selectedAnimation.value !== null && missing.has(selectedAnimation.value))
-    selectedAnimation.value = null
-})
 
 const isDirty = computed(
   () =>
@@ -201,8 +172,7 @@ const ai = useTwinAi(
 )
 
 function select(next: TwinSelection): void {
-  selectedAnimation.value = null
-  animationTest.value = 'live'
+  resetAnimation()
   selection.value = next
 }
 
@@ -225,29 +195,15 @@ function createFolderWith(payload: { kind: TwinEntityKind; id: string }): void {
     actions.value?.addFolderWithItem(payload.kind, payload.id) ?? null
 }
 
-function applyBatchConfig(next: TwinConfig): void {
+function onBatchConfig(next: TwinConfig): void {
   const doc = page.doc.value
-  if (doc === null) return
-  const count = doc.config.value.parts.filter(
-    (part) =>
-      JSON.stringify(part) !==
-      JSON.stringify(next.parts.find((item) => item.id === part.id)),
-  ).length
-  if (count === 0) return
-  doc.commit(next)
-  toast.success(`已更新 ${count} 个部件，可整体撤销`)
+  const count = doc === null ? 0 : applyBatchConfig(doc, next)
+  if (count > 0) toast.success(`已更新 ${count} 个部件，可整体撤销`)
 }
-function applyBatchBindings(next: readonly BindingPayload[]): void {
+function onBatchBindings(next: readonly BindingPayload[]): void {
   const doc = page.doc.value
-  if (doc === null) return
-  const count = next.filter(
-    (item) =>
-      doc.bindings.value.find((old) => old.id === item.id)?.nodeKey !==
-      item.nodeKey,
-  ).length
-  if (count === 0) return
-  doc.commitBindings(next)
-  toast.success(`已替换 ${count} 条草稿绑定，可整体撤销`)
+  const count = doc === null ? 0 : applyBatchBindings(doc, next)
+  if (count > 0) toast.success(`已替换 ${count} 条草稿绑定，可整体撤销`)
 }
 
 async function save(): Promise<void> {
@@ -485,8 +441,8 @@ useUnsavedGuard(() => page.doc.value?.isDirty.value === true)
       :selection="selection"
       :animation="selectedAnimation"
       @update:open="batchOpen = $event"
-      @copy="applyBatchConfig"
-      @replace="applyBatchBindings"
+      @copy="onBatchConfig"
+      @replace="onBatchBindings"
     />
     <TwinOverlays
       :bulk="bulk"
