@@ -16,6 +16,11 @@ METRIC_FAN_FREQUENCY = "fan_frequency"
 METRIC_WORKSHOP_TEMP = "workshop_temp_avg"
 METRIC_WORKSHOP_HUMIDITY = "workshop_humidity_avg"
 
+# 摄氏读数的可信区间，超出即判为尖峰（实测有 273305 这类值）；训练、实时读数
+# 与试算入参共用这一份
+MIN_PLAUSIBLE_CELSIUS = -20.0
+MAX_PLAUSIBLE_CELSIUS = 60.0
+
 
 @dataclass(frozen=True)
 class MetricBand:

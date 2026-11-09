@@ -1,10 +1,15 @@
 """达标时长模型面的对外模型。口径见 docs/AC_MODEL_DESIGN.md §5。"""
 
 import uuid
+from typing import Annotated
 
 from pydantic import Field
 
 from platform_server.apps.hvac.model_statuses import MIN_HALF_LIFE_DAYS
+from platform_server.apps.hvac.rooms import (
+    MAX_PLAUSIBLE_CELSIUS,
+    MIN_PLAUSIBLE_CELSIUS,
+)
 from platform_server.apps.hvac.schemas.ac_compliance import (
     EffectiveComplianceOut,
 )
@@ -130,14 +135,28 @@ class ModelPredictionOut(OutputModel):
     fold: int
 
 
+# ⚠ 温度按训练同一可信区间拦：区间外的值训练里从没见过，靠近 -265.5 还会让
+# 焓值公式除零或溢出；JSON 里的 Infinity/NaN 一律拒绝
+Celsius = Annotated[
+    float,
+    Field(
+        ge=MIN_PLAUSIBLE_CELSIUS,
+        le=MAX_PLAUSIBLE_CELSIUS,
+        allow_inf_nan=False,
+    ),
+]
+# 湿度不限区间：实时读数不过滤湿度，预填进草稿的越界值照常能试算
+FiniteFloat = Annotated[float, Field(allow_inf_nan=False)]
+
+
 class PredictReadingsIn(InputModel):
     """试算时一台机组的读数。⚠ 缺测就省略字段，不要填 0——0 是真实读数。"""
 
-    workshop_temp_avg: float | None = None
-    workshop_humidity_avg: float | None = None
-    fresh_air_temp: float | None = None
-    fresh_air_humidity: float | None = None
-    chilled_water_supply_temp: float | None = None
+    workshop_temp_avg: Celsius | None = None
+    workshop_humidity_avg: FiniteFloat | None = None
+    fresh_air_temp: Celsius | None = None
+    fresh_air_humidity: FiniteFloat | None = None
+    chilled_water_supply_temp: Celsius | None = None
 
 
 class PredictIn(InputModel):

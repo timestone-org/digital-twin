@@ -114,6 +114,35 @@ async def test_predict_reports_the_instant_probability(
     assert 0.0 <= found["instant_probability"] <= 1.0
 
 
+@pytest.mark.parametrize(
+    "raw_reading",
+    ['{"workshop_temp_avg": -265.5}', '{"workshop_temp_avg": Infinity}'],
+)
+async def test_predict_rejects_an_implausible_reading(
+    app_client: httpx.AsyncClient,
+    db_session: AsyncSession,
+    sign: SignHeaders,
+    raw_reading: str,
+) -> None:
+    """⚠ 假想读数越界或是 Infinity 时是校验失败，不能在特征里炸成 500。"""
+    seeded = await seed_room(db_session)
+    manager = sign([AC_MANAGE])
+    data = await create_model(app_client, manager, seeded)
+    model_id = uuid.UUID(data["id"])
+    await _mark_trained(db_session, model_id, running_set=[seeded.serials[0]])
+    serial = seeded.serials[0]
+    body = (
+        f'{{"running_set": ["{serial}"], '
+        f'"readings": {{"{serial}": {raw_reading}}}}}'
+    )
+    response = await app_client.post(
+        f"{PREFIX}/ac-models/{model_id}:predict",
+        content=body,
+        headers={**sign([AC_VIEW]), "Content-Type": "application/json"},
+    )
+    assert response.status_code == 400, response.text
+
+
 async def test_recommend_ranks_every_serving_set(
     app_client: httpx.AsyncClient, db_session: AsyncSession, sign: SignHeaders
 ) -> None:

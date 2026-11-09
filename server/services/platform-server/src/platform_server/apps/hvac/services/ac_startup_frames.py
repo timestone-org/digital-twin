@@ -8,9 +8,11 @@ from collections.abc import Mapping, Sequence
 from datetime import datetime
 
 from platform_server.apps.hvac.rooms import (
+    MAX_PLAUSIBLE_CELSIUS,
     METRIC_FAN_FREQUENCY,
     METRIC_WORKSHOP_HUMIDITY,
     METRIC_WORKSHOP_TEMP,
+    MIN_PLAUSIBLE_CELSIUS,
     MetricBand,
     RoomUnit,
 )
@@ -31,10 +33,6 @@ DECISION_METRICS = (
     METRIC_WORKSHOP_TEMP,
     METRIC_WORKSHOP_HUMIDITY,
 )
-
-# 车间温度的合理区间，超出即判为尖峰（实测有 273305 这类值）
-MIN_PLAUSIBLE_CELSIUS = -20.0
-MAX_PLAUSIBLE_CELSIUS = 60.0
 
 
 def build_frames(
