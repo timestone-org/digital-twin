@@ -709,6 +709,7 @@
   "paths": {
     "/api/v1/hierarchy/capabilities": {
       "get": {
+        "description": "报出编辑器要遵守的上限。Args: _caller。",
         "operationId": "capabilities_api_v1_hierarchy_capabilities_get",
         "responses": {
           "200": {
@@ -749,6 +750,7 @@
     },
     "/api/v1/hierarchy/projects": {
       "get": {
+        "description": "分页列出当前账号的项目。Args: service, caller, page, size, q。",
         "operationId": "list_projects_api_v1_hierarchy_projects_get",
         "parameters": [
           {
@@ -815,6 +817,7 @@
         ]
       },
       "post": {
+        "description": "新建项目。Args: body, response, service, caller, key。",
         "operationId": "create_project_api_v1_hierarchy_projects_post",
         "parameters": [
           {
@@ -875,6 +878,7 @@
     },
     "/api/v1/hierarchy/projects/{project_id}": {
       "delete": {
+        "description": "删除项目。Args: project_id, service, caller。",
         "operationId": "delete_project_api_v1_hierarchy_projects__project_id__delete",
         "parameters": [
           {
@@ -909,6 +913,7 @@
         ]
       },
       "get": {
+        "description": "读一个项目。Args: project_id, service, caller。",
         "operationId": "get_project_api_v1_hierarchy_projects__project_id__get",
         "parameters": [
           {
@@ -950,6 +955,7 @@
         ]
       },
       "put": {
+        "description": "按乐观版本号保存。Args: project_id, body, service, caller。",
         "operationId": "save_project_api_v1_hierarchy_projects__project_id__put",
         "parameters": [
           {
@@ -1003,6 +1009,7 @@
     },
     "/api/v1/hierarchy/projects/{project_id}/versions": {
       "get": {
+        "description": "列出历史版本。Args: project_id, service, caller, after, limit。",
         "operationId": "history_api_v1_hierarchy_projects__project_id__versions_get",
         "parameters": [
           {
@@ -1075,6 +1082,7 @@
     },
     "/api/v1/hierarchy/projects/{project_id}:restore": {
       "post": {
+        "description": "恢复到某个历史版本。Args: project_id, body, service, caller。",
         "operationId": "restore_api_v1_hierarchy_projects__project_id__restore_post",
         "parameters": [
           {

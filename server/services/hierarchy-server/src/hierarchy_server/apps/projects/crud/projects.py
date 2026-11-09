@@ -15,6 +15,10 @@ from hierarchy_server.apps.projects.schemas.projects import HISTORY_LIMIT
 async def find_project(
     session: AsyncSession, owner: UUID, project_id: UUID
 ) -> Project | None:
+    """取属于该账号的项目，不属于则当作不存在。
+
+    Args: session, owner, project_id。
+    """
     return await session.scalar(
         select(Project).where(
             Project.id == project_id, Project.owner_id == owner
@@ -59,6 +63,7 @@ async def list_projects(
 async def insert_project(
     session: AsyncSession, values: Mapping[str, object]
 ) -> bool:
+    """插入项目，主键冲突时不动；返回是否真的插入。Args: session, values。"""
     statement = (
         insert(Project)
         .values(**values)
@@ -134,6 +139,7 @@ async def list_versions(
 async def find_version(
     session: AsyncSession, project_id: UUID, revision: int
 ) -> Version | None:
+    """取某个历史版本的完整快照。Args: session, project_id, revision。"""
     return await session.scalar(
         select(Version).where(
             Version.project_id == project_id, Version.revision == revision
@@ -144,6 +150,10 @@ async def find_version(
 async def remove_project(
     session: AsyncSession, owner: UUID, project_id: UUID
 ) -> None:
+    """删除属于该账号的项目，不存在也不报错。
+
+    Args: session, owner, project_id。
+    """
     await session.execute(
         delete(Project).where(
             Project.id == project_id, Project.owner_id == owner
