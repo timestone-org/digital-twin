@@ -396,3 +396,13 @@ async def test_a_listing_probe_that_crashes_is_handed_back() -> None:
     with pytest.raises(RuntimeError):
         await catalog.refresh_server("weather")
     assert breaker.allow() is True
+
+
+async def test_a_crash_while_closed_neither_counts_nor_opens() -> None:
+    """⚠ 合上时的意外退出不是探测：既不记失败，也不该碰断路器的状态。"""
+    catalog = _catalog(_crashing)
+    breaker = catalog.breakers["weather"]
+    for _ in range(3):
+        with pytest.raises(RuntimeError):
+            await catalog.call("weather", "temp", {})
+    assert breaker.state == "closed"
