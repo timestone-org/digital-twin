@@ -30,6 +30,7 @@ from knowledge_server.apps.chat.services.citations import (
     Cited,
     Ledger,
     as_json,
+    carried_of,
     with_figures,
 )
 from knowledge_server.apps.chat.services.context import (
@@ -218,6 +219,8 @@ class LoadedContext:
     summary: Summary | None
     # 这个会话此刻的检索范围。⚠ 每一轮现读：用户可能在两轮之间刚改过它
     scope: BaseScope
+    # 上一次停在等浏览器时已发的角标；没停过就是空的
+    carried: tuple[Cited, ...] = ()
 
 
 async def load_context(
@@ -240,7 +243,26 @@ async def load_context(
         scope=await scope_service.resolve(
             session, row.base_scope_ids if row is not None else None
         ),
+        carried=await _carried(session, rows),
     )
+
+
+async def _carried(
+    session: AsyncSession, rows: list[ChatMessage]
+) -> tuple[Cited, ...]:
+    """最后一条消息若停在等浏览器，取回它记下的角标账本。
+
+    Args: session, rows（按序号升序）。
+    """
+    if not rows:
+        return ()
+    steps = await session_crud.steps_of(session, [rows[-1].id])
+    waiting = [
+        one
+        for one in steps.get(rows[-1].id, [])
+        if one.state == "awaiting_client"
+    ]
+    return tuple(carried_of(waiting[-1].input_json)) if waiting else ()
 
 
 def _history_row(row: ChatMessage) -> HistoryRow:
@@ -323,6 +345,8 @@ async def advance(
     loaded, messages = await _opened(deps, chat_session_id, payload, selected)
     # ⚠ 注册表按这一轮读到的范围现造：范围改了下一轮就跟着改，不留隔夜的那份
     ledger = Ledger()
+    if payload.tool_results:
+        ledger.seed(loaded.carried)
     registry = deps.tools(loaded.scope, ledger)
     specs = _turn_specs(registry.specs, payload.client_tools)
     turn = _turn_deps(deps, loaded, selected, registry, specs)
@@ -408,6 +432,7 @@ async def _stored(
             outcome=outcome,
             steps=produced,
             citations=as_json(cited),
+            ledger=as_json(ledger.issued) if outcome.is_waiting else [],
         ),
     )
     return cited

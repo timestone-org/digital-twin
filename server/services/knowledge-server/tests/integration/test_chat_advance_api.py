@@ -23,7 +23,10 @@ from knowledge_server.apps.chat.services.advance_service import AdvanceDeps
 from knowledge_server.apps.chat.services.citations import Ledger
 from knowledge_server.apps.chat.services.scope import BaseScope
 from knowledge_server.apps.chat.services.tools import ToolDeps, build_registry
-from knowledge_server.apps.chat.services.tools.client import ASK_TOOL
+from knowledge_server.apps.chat.services.tools.client import (
+    ASK_TOOL,
+    ClientTools,
+)
 from knowledge_server.apps.knowledge import crud
 from knowledge_server.apps.knowledge.crud.figure import FigureWrite
 from knowledge_server.apps.knowledge.models import (
@@ -473,3 +476,130 @@ async def test_skill_roundtrip_persists_conversation_and_receipts(
     assert body["name"] == "knowledge-retrieval"
     assert body["ok"] is True
     assert body["instructions"]
+
+
+def _hit_on(document_id: uuid.UUID, chunk_id: uuid.UUID) -> HitOut:
+    return HitOut(
+        chunk_id=chunk_id,
+        document_id=document_id,
+        document_title="冷却水系统操作规程",
+        text="冷凝器出口温度不得高于 65 ℃",
+        heading_path="二、运行参数",
+        locator=LocatorOut(
+            page=2, page_end=3, label="第 2–3 页 · 二、运行参数"
+        ),
+        score=0.9,
+        why="关键词命中",
+    )
+
+
+def _search_call(call_id: str) -> AIMessage:
+    return AIMessage(
+        content="",
+        tool_calls=[{"id": call_id, "name": "kb.search", "args": {}}],
+    )
+
+
+async def test_a_marker_issued_before_a_pause_still_resolves_after_it(
+    db_stack: DbStack,
+) -> None:
+    """⚠ 停下来问用户之后，续跑是另一次请求：角标账本若每次请求重开一本，
+    暂停前发的 ① 在续跑的答案里就解析不出来，整块依据连同插图一起消失。"""
+    document_id, chunk_id, _figure_id = await _seeded_with_a_figure(db_stack)
+    _install(
+        db_stack,
+        ScriptedChat(
+            script=[
+                _search_call("t1"),
+                asks(ASK_TOOL, "q1", question="哪台", options=[]),
+                AIMessage(content="上限是 65 ℃①"),
+            ]
+        ),
+        tools=lambda _scope, ledger: registry_of(
+            (
+                _MarkingSearch(_hit_on(document_id, chunk_id), ledger),
+                ClientTools(),
+            )
+        ),
+    )
+    session_id = await _new_session(db_stack.client)
+    await _advance(db_stack.client, session_id, user_text="上限多少")
+    paused = await db_stack.client.get(f"{URL}/{session_id}")
+    waiting = paused.json()["data"]["messages"][-1]["steps"][-1]
+    # 账本只给服务端续跑用，不透给详情出参
+    assert waiting["state"] == "awaiting_client"
+    assert set(waiting["input_json"]) == {"calls"}
+
+    events = await _advance(
+        db_stack.client,
+        session_id,
+        tool_results=[{"call_id": "q1", "output": {"picked": ["k1"]}}],
+    )
+
+    live = [body for name, body in events if name == "citations"]
+    assert len(live) == 1
+    cited = live[0]["items"]
+    assert [one["chunk_id"] for one in cited] == [str(chunk_id)]
+    assert cited[0]["page_end"] == 3
+    assert len(cited[0]["figures"]) == 1
+    detail = await db_stack.client.get(f"{URL}/{session_id}")
+    assert detail.json()["data"]["messages"][-1]["citations"] == cited
+
+
+async def test_a_search_after_a_pause_continues_the_numbering(
+    db_stack: DbStack,
+) -> None:
+    """⚠ 续跑里再查一次，新的那条要领 ②：从 ① 重新编的话，同一个 ① 在
+    这一回合里指着两段不同的话，用户点开的是另一段依据。"""
+    async with db_stack.sessions() as session:
+        first = await _seeded_chunk(session)
+        second = await _seeded_chunk(session)
+        await session.commit()
+        hits = [
+            _hit_on(first.document_id, first.id),
+            _hit_on(second.document_id, second.id),
+        ]
+    marks: list[str] = []
+
+    @dataclass(frozen=True)
+    class _Next:
+        ledger: Ledger
+        name = "next"
+
+        def specs(self) -> tuple[ToolSpec, ...]:
+            return _MarkingSearch(hits[0], self.ledger).specs()
+
+        async def run(self, name: str, arguments: dict[str, Any]) -> Any:
+            del name, arguments
+            made = self.ledger.mark(hits[len(marks)], "现场资料", "段")
+            marks.append(made)
+            return {"mark": made}
+
+    _install(
+        db_stack,
+        ScriptedChat(
+            script=[
+                _search_call("t1"),
+                asks(ASK_TOOL, "q1", question="哪台", options=[]),
+                _search_call("t2"),
+                AIMessage(content="一是①，二是②"),
+            ]
+        ),
+        tools=lambda _scope, ledger: registry_of(
+            (_Next(ledger), ClientTools())
+        ),
+    )
+    session_id = await _new_session(db_stack.client)
+    await _advance(db_stack.client, session_id, user_text="上限多少")
+    events = await _advance(
+        db_stack.client,
+        session_id,
+        tool_results=[{"call_id": "q1", "output": {"picked": ["k1"]}}],
+    )
+
+    assert marks == ["①", "②"]
+    cited = next(body for name, body in events if name == "citations")
+    assert [one["chunk_id"] for one in cited["items"]] == [
+        str(first.id),
+        str(second.id),
+    ]

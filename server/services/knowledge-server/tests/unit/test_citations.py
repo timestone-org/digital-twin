@@ -4,9 +4,11 @@
 """
 
 import uuid
+from dataclasses import replace
 
 import pytest
 
+from knowledge_server.apps.chat.services import citations
 from knowledge_server.apps.chat.services.citations import Ledger
 from knowledge_server.apps.chat.services.markers import (
     MAX_CIRCLED,
@@ -125,3 +127,29 @@ def test_a_character_from_no_run_is_not_a_marker() -> None:
     """⚠ 认不出的字符给 0 而不是抛：模型偶尔会写一个别的圈字符（㊾ 之外的、
     或者带圈的字母），而为它整轮失败比少画一条引用糟得多。"""
     assert numbers_in("见Ⓐ与①。") == [1]
+
+
+def test_a_carried_ledger_with_a_gap_is_only_taken_up_to_the_gap() -> None:
+    """⚠ 序号断了的那一截接不上：接上的话，后面那几条的序号与自己的角标
+    对不上，解析出来就是另一段话。"""
+    made = citations.Ledger()
+    first = citations.Cited(
+        marker="①",
+        chunk_id=uuid.uuid4(),
+        document_id=uuid.uuid4(),
+        document_title="t",
+        base_name="b",
+        heading_path="",
+        where="",
+        page=None,
+        page_end=None,
+        text="甲",
+    )
+    made.seed([first, replace(first, marker="③")])
+    assert [one.marker for one in made.issued] == ["①"]
+
+
+def test_a_malformed_carried_ledger_is_dropped_whole() -> None:
+    assert citations.carried_of({"ledger": [{"marker": "①"}]}) == []
+    assert citations.carried_of({"ledger": "x"}) == []
+    assert citations.carried_of(None) == []

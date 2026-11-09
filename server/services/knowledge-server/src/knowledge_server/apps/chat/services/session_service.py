@@ -29,6 +29,7 @@ from knowledge_server.apps.chat.schemas import (
     ChatStepOut,
 )
 from knowledge_server.apps.chat.services import scope as scope_service
+from knowledge_server.apps.chat.services.citations import CARRIED_KEY
 from knowledge_server.apps.chat.services.scope import BaseScope
 from lib.auth import CallerContext
 from lib.logging import get_logger
@@ -261,12 +262,24 @@ def _to_message_out(
         content_json=message.content_json,
         usage_json=message.usage_json,
         created_at=message.created_at,
-        steps=[ChatStepOut.model_validate(step) for step in steps],
+        steps=[_step_out(step) for step in steps],
         citations=[
             ChatCitationOut.model_validate(one)
             for one in message.citations_json or []
         ],
     )
+
+
+def _step_out(step: ChatStep) -> ChatStepOut:
+    """一行步骤摊成出参，摘掉只给服务端续跑用的角标账本。
+
+    Args: step。
+    """
+    made = ChatStepOut.model_validate(step)
+    if made.input_json is None or CARRIED_KEY not in made.input_json:
+        return made
+    kept = {k: v for k, v in made.input_json.items() if k != CARRIED_KEY}
+    return made.model_copy(update={"input_json": kept})
 
 
 def _to_session_out(
