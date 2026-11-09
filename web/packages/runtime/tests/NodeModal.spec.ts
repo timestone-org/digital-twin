@@ -224,4 +224,25 @@ describe('弹窗行为', () => {
     expect(bigBody.attributes('style')).toContain('width: 1824px')
     huge.unmount()
   })
+
+  it('钳小了就滚动，被裁掉的那部分仍够得着', () => {
+    const tall = mount(NodeModal, {
+      props: {
+        nodes: [node('tall', null, { w: 600, h: 2000 })],
+        rootId: 'tall',
+        design: { width: 1920, height: 1080 },
+        getManifest,
+      },
+    })
+    const style = tall.get('.dt-node-modal__body').attributes('style')
+    expect(style).toContain('height: 984px')
+    expect(style).toContain('overflow: auto')
+    tall.unmount()
+
+    const fits = mountModal()
+    expect(fits.get('.dt-node-modal__body').attributes('style')).toContain(
+      'overflow: hidden',
+    )
+    fits.unmount()
+  })
 })
