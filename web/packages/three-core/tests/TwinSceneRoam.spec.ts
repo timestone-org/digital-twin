@@ -197,3 +197,46 @@ describe('逐帧开销', () => {
     wrapper.unmount()
   })
 })
+
+describe('闲置自动开播', () => {
+  // ⚠ 视点条是用户在操作：只停播不重新计闲置的话，装上时的那个计时器照旧到点开播
+  it('点视点条之后闲置计时从这一下重新算', async () => {
+    const IDLE_MS = 5000
+    vi.useFakeTimers({ toFake: ['setTimeout', 'clearTimeout'] })
+    try {
+      const wrapper = mount(TwinScene, {
+        props: {
+          config: normalizeTwinConfig({
+            model: { asset: ASSET },
+            cameras: [
+              { id: 'c1', name: '一号', position: [10, 0, 0] },
+              { id: 'c2', name: '二号', position: [0, 0, 10] },
+            ],
+            viewpoints: { enabled: true },
+            roamTour: {
+              items: ['c1', 'c2'],
+              enabled: true,
+              showControls: true,
+              idleAutoplay: true,
+              idleAutoplayDelayMs: IDLE_MS,
+            },
+          }),
+        },
+        attachTo: document.body,
+      })
+      await flushPromises()
+      vi.advanceTimersByTime(IDLE_MS - 100)
+      await wrapper.find('.twin-viewpoints button').trigger('click')
+      vi.advanceTimersByTime(200)
+      await flushPromises()
+
+      expect(wrapper.find(CONTROLS).text()).toContain('播放漫游')
+      vi.advanceTimersByTime(IDLE_MS)
+      await flushPromises()
+      expect(wrapper.find(CONTROLS).text()).toContain('暂停漫游')
+      wrapper.unmount()
+    } finally {
+      vi.useRealTimers()
+    }
+  })
+})
