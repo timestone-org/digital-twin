@@ -210,7 +210,10 @@ watch(
     void loadUnits()
   },
 )
-watch([outcome, combination], () => void episodes.reload())
+// 换车间作废房间时组合也跟着清空，这时没有房间可取
+watch([outcome, combination], () => {
+  if (picker.roomId.value !== '') void episodes.reload()
+})
 watch(serial, loadCurve)
 // 抽取在跑就回读进度；跑完那一刻事件列表也换成新的一批
 watch(

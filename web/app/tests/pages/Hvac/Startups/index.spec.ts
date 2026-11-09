@@ -940,6 +940,29 @@ describe('换房间与轮询', () => {
     expect(last?.[1]?.running_set).toBeUndefined()
   })
 
+  it('⚠ 带着组合筛选换车间、房间被作废时，不拿空房间去取事件', async () => {
+    vi.mocked(hvac.listWorkshops).mockResolvedValue(
+      page([workshop(), { ...workshop(), id: 'w2', name: '西车间' }]),
+    )
+    const west = { id: 'w2', name: '西车间' }
+    vi.mocked(hvac.listRooms).mockImplementation((query) =>
+      Promise.resolve(
+        query?.workshop_id === 'w2'
+          ? page([{ ...room('r9', '仓库', 1), workshop: west }])
+          : page([room('r1', '注塑房', 2)]),
+      ),
+    )
+    vi.mocked(hvac.getStartupBatches).mockResolvedValue(twoCombinations())
+    await open()
+    await selectRoom()
+    await pickCombination('K02')
+    await pick('车间', '西车间')
+    const rooms = vi
+      .mocked(hvac.listStartupEpisodes)
+      .mock.calls.map((call) => call[0])
+    expect(rooms).not.toContain('')
+  })
+
   it('⚠ 换房间后批次取数失败，不再摆着上一个房间的批次与覆盖度', async () => {
     twoRooms()
     vi.mocked(hvac.getStartupBatches)
