@@ -118,6 +118,40 @@ describe('三条失败边界', () => {
     expect(wrapper.text()).toContain('渲染失败')
   })
 
+  // ⚠ 一帧坏数据不该让这一件永远停在占位上：数据好了要自己恢复
+  it('渲染抛错后换了读数，部件重新画出来', async () => {
+    const Picky = defineComponent({
+      props: {
+        part: { type: Object, required: true },
+        cell: { type: Object, required: true },
+        meta: { type: Object, required: true },
+      },
+      setup: (props) => () => {
+        const values = props.cell.values as Record<string, unknown>
+        if (values.value === 'bad') throw new Error('坏形状')
+        return h('i', { 'data-test': 'probe' }, String(values.value))
+      },
+    })
+    register('meter', () => Promise.resolve({ default: Picky }))
+    const wrapper = mount(CardPartRenderer, {
+      props: {
+        kind: 'meter',
+        row: { kind: 'meter' },
+        cell: { ...CELL, values: { value: 'bad' } },
+        meta: META,
+      },
+    })
+    await flushPromises()
+    await flushPromises()
+
+    expect(wrapper.text()).toContain('渲染失败')
+
+    await wrapper.setProps({ cell: { ...CELL, values: { value: 7 } } })
+    await flushPromises()
+
+    expect(wrapper.find('[data-test="probe"]').text()).toBe('7')
+  })
+
   /**
    * ⚠ 契约允许 `Promise.resolve({ default: C })`（第三方部件不走 `import()` 时就是它）。
    * 装配点不自己剥 `default` 的话，Vue 会把整个 `{ default: C }` 当组件，

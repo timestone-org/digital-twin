@@ -93,6 +93,15 @@ watch(
   { immediate: true },
 )
 
+// ⚠ 只认配置行与读数的身份：一帧坏数据拦下后，数据或配置一变就再试一次，
+//   不至于让这一件停在占位上直到刷新整屏
+watch(
+  () => [props.row, props.cell.values] as const,
+  () => {
+    renderFailure.value = null
+  },
+)
+
 /** 画不出来时说得出为什么。⚠ 三种成因分开说：它们的排查方向完全不同。 */
 const excuse = computed<string | null>(() => {
   if (definition.value === undefined) return `没有「${props.kind}」这种部件`
