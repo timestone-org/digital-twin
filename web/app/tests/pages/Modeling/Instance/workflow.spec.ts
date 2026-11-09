@@ -259,7 +259,9 @@ it('加载与写入失败给出可重试反馈', async () => {
   )
   const wrapper = await openPage()
   expect(wrapper.text()).toContain('请求失败')
-  await button(wrapper, '重新加载').trigger('click')
+  // 没加载出实例时只给页面态那一个重试，不再叠一条同样的红条
+  expect(wrapper.text().split('请求失败').length - 1).toBe(1)
+  await button(wrapper, '重试').trigger('click')
   await flushPromises()
   vi.mocked(api.trainInstance).mockRejectedValueOnce(new Error('offline'))
   await button(wrapper, '开始训练').trigger('click')
