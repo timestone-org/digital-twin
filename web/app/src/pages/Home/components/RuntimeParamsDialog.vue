@@ -1,6 +1,6 @@
 <script setup lang="ts">
 /**
- * @fileoverview 大屏推送的四项运行旋钮：读有效值、整组写覆盖值、整组恢复默认。
+ * @fileoverview 大屏推送的三项运行旋钮：读有效值、整组写覆盖值、整组恢复默认。
  *
  * ⚠ 「恢复默认」是**删掉覆盖行**，此后这几项重新跟随环境变量——不是写回一份
  * 硬编码默认值。文案说错会让运维以为改完就再也回不到 .env 的取值了。
@@ -37,7 +37,7 @@ interface ParamField {
 }
 
 /**
- * 四项旋钮的呈现登记。键与后端 `apps/runtime_params/catalog.py` 逐字一致——
+ * 三项旋钮的呈现登记。键与后端 `apps/runtime_params/catalog.py` 逐字一致——
  * 对不上的项这里不画，不会静默提交一个后端不认的键。
  */
 const DASHBOARD_PARAM_FIELDS: readonly ParamField[] = [
