@@ -8,12 +8,15 @@
 import json
 import uuid
 from collections.abc import Sequence
+from datetime import UTC, datetime
 from typing import Any
 
 import pytest
 from langchain_core.messages import AIMessage, BaseMessage, ToolMessage
+from sqlalchemy import update
 
 from ai_assistant.apps.chat.catalog import ASSISTANT_USE
+from ai_assistant.apps.chat.models import ChatSession
 from ai_assistant.apps.chat.services.perception import vision
 from ai_assistant.llm.ports import ModelKind
 from integration.advance_support import (
@@ -443,3 +446,27 @@ async def test_the_plan_reaches_the_next_rounds_prompt(
     assert "## 当前计划" in state
     assert "你正在做第 1 项：**绑温度槽**" in state
     assert "## 当前计划" not in str(seen[0].content)
+
+
+async def test_a_new_turn_moves_the_session_to_the_top(
+    db_stack: DbStack,
+) -> None:
+    """⚠ 列表按 `updated_at` 排：续聊不顶它的话，上周开的会话今天接着聊，
+    仍沉在列表下面、挂着上周的时间。版本号不跟着动——它守的是标题与归档。"""
+    _install(db_stack, ScriptedChat(reply=AIMessage(content="好")))
+    session_id = await _new_session(db_stack.client)
+    long_ago = datetime(2020, 1, 1, tzinfo=UTC)
+    async with db_stack.sessions() as session:
+        await session.execute(
+            update(ChatSession)
+            .where(ChatSession.id == uuid.UUID(session_id))
+            .values(updated_at=long_ago)
+        )
+        await session.commit()
+    before = await db_stack.client.get(f"{SESSIONS_URL}/{session_id}")
+
+    await _advance(db_stack.client, session_id, user_text="在吗")
+
+    after = (await db_stack.client.get(f"{SESSIONS_URL}/{session_id}")).json()
+    assert datetime.fromisoformat(after["data"]["updated_at"]) > long_ago
+    assert after["data"]["row_version"] == before.json()["data"]["row_version"]
