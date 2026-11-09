@@ -131,6 +131,16 @@ async function afterWrite(message: string): Promise<void> {
 }
 
 async function toggleActive(user: UserListItem): Promise<void> {
+  // 停用即刻踢掉对方所有会话，先问；启用没有副作用，不问
+  if (user.is_active) {
+    const ok = await confirm.ask({
+      title: '停用账号',
+      message: `停用后「${user.username}」立刻不能登录，已登录的会话也会失效。`,
+      confirmText: '停用',
+      danger: true,
+    })
+    if (!ok) return
+  }
   try {
     await admin.setUserActive(user.id, !user.is_active)
     await afterWrite(user.is_active ? '账号已停用' : '账号已启用')

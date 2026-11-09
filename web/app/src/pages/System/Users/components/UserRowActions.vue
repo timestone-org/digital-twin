@@ -5,11 +5,13 @@
  * 也跟着消失。因此 class 要显式落到内层 div 上——PermGuard 渲染的是插槽
  * fragment，自动透传落不下来。
  */
+import { computed } from 'vue'
 import type { UserListItem } from '@dt/contracts'
 import { PERMISSION_CODES } from '@dt/contracts'
 import { DtButton } from '@dt/ui'
 
 import PermGuard from '@/components/PermGuard.vue'
+import { useAuthStore } from '@/stores/auth'
 
 // 六个动作合起来要的码：一个都够不着就整条不渲染
 const ANY_ACTION_CODES: readonly string[] = [
@@ -30,6 +32,10 @@ const emit = defineEmits<{
 }>()
 
 defineOptions({ inheritAttrs: false })
+
+const auth = useAuthStore()
+// 服务端拒绝对自己停用、删除与改派角色（40109）：自己那一行不摆这三颗，免得点了必败
+const isSelf = computed(() => auth.user?.id === props.user.id)
 </script>
 
 <template>
@@ -48,6 +54,7 @@ defineOptions({ inheritAttrs: false })
           @click="emit('edit', props.user)"
         />
         <DtButton
+          v-if="!isSelf"
           variant="ghost"
           intent="neutral"
           size="sm"
@@ -68,6 +75,7 @@ defineOptions({ inheritAttrs: false })
       </PermGuard>
       <PermGuard :codes="[PERMISSION_CODES.userGrant]">
         <DtButton
+          v-if="!isSelf"
           variant="ghost"
           intent="neutral"
           size="sm"
@@ -88,6 +96,7 @@ defineOptions({ inheritAttrs: false })
       </PermGuard>
       <PermGuard :codes="[PERMISSION_CODES.userDelete]">
         <DtButton
+          v-if="!isSelf"
           variant="ghost"
           intent="danger"
           size="sm"

@@ -460,6 +460,9 @@ describe('路由规则页', () => {
       .mockResolvedValue(rule({ is_enabled: false }))
     const wrapper = await render(['route_rule:view', 'route_rule:manage'])
     await wrapper.findAll('[aria-label="停用"]')[0]?.trigger('click')
+    // 停用会先确认；这里只验确认之后的写入
+    await flushPromises()
+    useConfirm().resolve(true)
     await flushPromises()
     expect(update).toHaveBeenCalledWith('x1', { is_enabled: false })
     expect(admin.listRouteRules).toHaveBeenCalledTimes(2)
@@ -634,6 +637,17 @@ describe('路由规则页 · 交互', () => {
     expect(admin.listRouteRules).toHaveBeenCalledTimes(2)
   })
 
+  it('启停规则先确认，说清立即对所有请求生效；取消就不发', async () => {
+    const update = vi.spyOn(admin, 'updateRouteRule')
+    const wrapper = await open()
+    await wrapper.find('[aria-label="停用"]').trigger('click')
+    await flushPromises()
+    expect(document.body.textContent).toContain('立即对所有请求生效')
+    useConfirm().resolve(false)
+    await flushPromises()
+    expect(update).not.toHaveBeenCalled()
+  })
+
   it('搜索框回车即查询', async () => {
     const wrapper = await open()
     const search = wrapper.findAll('input')[0]
@@ -651,6 +665,9 @@ describe('路由规则页 · 交互', () => {
       .mockResolvedValue(rule({ is_enabled: false }))
     const wrapper = await open()
     await wrapper.find('[aria-label="停用"]').trigger('click')
+    // 停用会先确认；这里只验确认之后的写入
+    await flushPromises()
+    useConfirm().resolve(true)
     await flushPromises()
     expect(update).toHaveBeenCalledWith('x1', { is_enabled: false })
     expect(document.body.textContent).toContain('规则已停用')
@@ -663,6 +680,9 @@ describe('路由规则页 · 交互', () => {
     )
     const wrapper = await open()
     await wrapper.find('[aria-label="停用"]').trigger('click')
+    // 停用会先确认；这里只验确认之后的写入
+    await flushPromises()
+    useConfirm().resolve(true)
     await flushPromises()
     expect(document.body.textContent).toContain('内置规则不可改')
   })
@@ -792,6 +812,9 @@ describe('路由规则页 · 判定链卡片', () => {
       .mockResolvedValue(rule({ is_enabled: false }))
     const wrapper = await renderCards()
     await wrapper.find('.rule-card [aria-label="停用"]').trigger('click')
+    // 停用会先确认；这里只验确认之后的写入
+    await flushPromises()
+    useConfirm().resolve(true)
     await flushPromises()
     expect(update).toHaveBeenCalledWith('x1', { is_enabled: false })
   })
