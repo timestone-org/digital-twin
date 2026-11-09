@@ -29,6 +29,11 @@ def _route_template(request: Request) -> str:
     return path if isinstance(path, str) else request.url.path
 
 
+def _since(started: float) -> float:
+    """从 `started` 到此刻的毫秒数。"""
+    return round((time.perf_counter() - started) * 1000, 3)
+
+
 class RequestContextMiddleware(BaseHTTPMiddleware):
     """绑定 trace 上下文并输出访问日志。装配由 create_app 单点负责。"""
 
@@ -51,28 +56,31 @@ class RequestContextMiddleware(BaseHTTPMiddleware):
         started = time.perf_counter()
         try:
             response = await call_next(request)
-        finally:
-            elapsed_ms = round((time.perf_counter() - started) * 1000, 3)
+        except Exception:
+            # ⚠ 未处理异常由外层的 ServerErrorMiddleware 落成 500，这里只补
+            # 访问日志；不复位上下文，那边回包里的 trace_id 还要用它
+            self._log_access(request, SERVER_ERROR_STATUS, _since(started))
+            raise
         response.headers[TRACEPARENT_HEADER] = f"00-{trace_id}-{span_id}-01"
-        self._log_access(request, response, elapsed_ms)
+        self._log_access(request, response.status_code, _since(started))
         reset_log_context(token)
         return response
 
     def _log_access(
-        self, request: Request, response: Response, elapsed_ms: float
+        self, request: Request, status: int, elapsed_ms: float
     ) -> None:
         if request.url.path in self._health_paths:
             return
         fields = {
             "http_method": request.method,
             "route": _route_template(request),
-            "status": response.status_code,
+            "status": status,
             "duration_ms": elapsed_ms,
         }
         # 4xx 是调用方的问题，不是需要人介入的故障
-        if response.status_code >= SERVER_ERROR_STATUS:
+        if status >= SERVER_ERROR_STATUS:
             _logger.error("http_request", "请求处理失败", **fields)
-        elif response.status_code >= CLIENT_ERROR_STATUS:
+        elif status >= CLIENT_ERROR_STATUS:
             _logger.warning("http_request", "请求被拒绝", **fields)
         else:
             _logger.debug("http_request", "", **fields)
