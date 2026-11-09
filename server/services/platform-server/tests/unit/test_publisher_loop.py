@@ -28,6 +28,7 @@ class SpyLane:
     ticks: int = 0
     forgotten: int = 0
     failure: Exception | None = None
+    stall_s: float = 0.0
     target_ticks: int = 1
     rounds: list[tuple[int, int]] = field(default_factory=list[tuple[int, int]])
     sizes: list[int] = field(default_factory=list[int])
@@ -35,6 +36,8 @@ class SpyLane:
 
     async def publish(self) -> None:
         self.ticks += 1
+        if self.stall_s:
+            await asyncio.sleep(self.stall_s)
         if self.ticks >= self.target_ticks:
             self.reached.set()
         if self.failure is not None:
@@ -93,10 +96,11 @@ def build_harness(
     is_renewable: bool = True,
     reconcile_interval_s: float = RECONCILE_INTERVAL_S,
     knobs: FakeKnobs | None = None,
+    lease_ttl_s: float | None = None,
 ) -> Harness:
     """装一套循环，两条链路各一件假件。
 
-    Args: is_grantable, is_renewable, reconcile_interval_s, knobs。
+    Args: is_grantable, is_renewable, reconcile_interval_s, knobs, lease_ttl_s。
     """
     lease = FakeLease(is_grantable=is_grantable, is_renewable=is_renewable)
     dashboards = SpyLane(name="dashboard")
@@ -105,7 +109,9 @@ def build_harness(
         lease=lease,
         lanes=(dashboards.as_lane(), collect.as_lane()),
         options=LoopOptions(
-            window_s=WINDOW_S, reconcile_interval_s=reconcile_interval_s
+            window_s=WINDOW_S,
+            reconcile_interval_s=reconcile_interval_s,
+            lease_ttl_s=lease_ttl_s,
         ),
         read_knobs=None if knobs is None else knobs.read,
     )
@@ -317,3 +323,19 @@ def test_a_mistyped_value_falls_back_instead_of_zero() -> None:
     )
     assert knobs.max_items == 200
     assert knobs.window_s == 0.1
+
+
+async def test_a_stalled_lane_cannot_outlive_the_lease() -> None:
+    # ⚠ 一拍只续一次租约：hub 卡住时一拍拖过 TTL，热备接手而我们还在推
+    harness = build_harness(lease_ttl_s=0.2)
+    harness.publisher.stall_s = 5.0
+    await asyncio.wait_for(harness.runtime.tick(), timeout=1.0)
+    assert harness.collect.ticks == 0
+
+
+async def test_an_overrun_tick_drops_every_lane_cache() -> None:
+    # 推到一半被截断，「已经推过什么」不再可信，下一拍从全量帧重来
+    harness = build_harness(lease_ttl_s=0.2)
+    harness.publisher.stall_s = 5.0
+    await harness.runtime.tick()
+    assert (harness.publisher.forgotten, harness.collect.forgotten) == (1, 1)

@@ -75,12 +75,26 @@ _SPAN_ID_LENGTH = 16
 Wait = Callable[[], Awaitable[None]]
 
 
+# 一拍的预算占租约 TTL 的比例：留出余量给续租那次往返
+_TICK_BUDGET_SHARE = 0.8
+
+
 @dataclass(frozen=True)
 class LoopOptions:
-    """循环的节奏。"""
+    """循环的节奏。`lease_ttl_s` 给了才给一拍设预算。"""
 
     window_s: float
     reconcile_interval_s: float
+    lease_ttl_s: float | None = None
+
+    def tick_budget_s(self) -> float | None:
+        """一拍最多跑多久：跑完再等一个窗口，下一次续租仍要落在 TTL 之内。"""
+        if self.lease_ttl_s is None:
+            return None
+        return max(
+            self.lease_ttl_s * _TICK_BUDGET_SHARE - self.window_s,
+            self.lease_ttl_s * (1 - _TICK_BUDGET_SHARE),
+        )
 
 
 ReadKnobs = Callable[[], Awaitable[PublishKnobs]]
@@ -172,10 +186,29 @@ class PublisherRuntime:
             is_due = self._is_reconcile_due()
             if is_due:
                 await self._refresh_knobs()
-            for lane in self._lanes:
-                await self._run_lane(lane, is_reconcile_due=is_due)
+            await self._run_lanes(is_reconcile_due=is_due)
         finally:
             reset_log_context(token)
+
+    async def _run_lanes(self, *, is_reconcile_due: bool) -> None:
+        """在一拍的预算内跑完每条链路。
+
+        ⚠ 一拍只续一次租约：hub 卡住时逐个 2s 超时能把一拍拖过 TTL，热备接手
+        而我们还在推，就是同一个主题两份值。超了预算就截断并丢掉缓存。
+        Args: is_reconcile_due。
+        """
+        try:
+            async with asyncio.timeout(self._options.tick_budget_s()):
+                for lane in self._lanes:
+                    await self._run_lane(
+                        lane, is_reconcile_due=is_reconcile_due
+                    )
+        except TimeoutError:
+            self._forget_all()
+            _logger.warning(
+                "publisher_tick_overran",
+                "这一拍超出租约预算，已截断，下一拍从全量帧重来",
+            )
 
     async def _refresh_knobs(self) -> None:
         """跟对账同节奏重读运行参数，推给循环与每条链路。
@@ -193,7 +226,8 @@ class PublisherRuntime:
                 error_type=type(error).__name__,
             )
             return
-        self._options = LoopOptions(
+        self._options = replace(
+            self._options,
             window_s=knobs.window_s,
             reconcile_interval_s=knobs.reconcile_interval_s,
         )
@@ -295,6 +329,7 @@ def build_runtime(container: Container) -> PublisherRuntime:
         options=LoopOptions(
             window_s=settings.publish_window_ms / MS_PER_S,
             reconcile_interval_s=settings.publish_reconcile_interval_s,
+            lease_ttl_s=settings.publish_lease_ttl_s,
         ),
         read_knobs=lambda: read_knobs(container.database, settings),
     )
