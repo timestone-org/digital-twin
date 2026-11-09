@@ -5,6 +5,7 @@
 import { MIN_ROAM_TOUR_STOPS } from './normalizeScene'
 import { partFocusView } from './cameraSelect'
 import { panelFieldSpan, panelKindUsesRange } from './panelGraph'
+import { roamTourStops } from './roamTimeline'
 import {
   MAX_ASSEMBLY_DEPTH,
   hasFieldedDescendant,
@@ -395,12 +396,10 @@ function danglingRoamCameras(
  * ⚠ 一段都摊不出来时运行态整条不播——不报出来的话，用户看到的是「开关明明
  * 开着，镜头却一动不动」。
  */
-function shortRoamTour(
-  config: TwinConfig,
-  known: ReadonlySet<string>,
-): TwinConfigIssue[] {
+function shortRoamTour(config: TwinConfig): TwinConfigIssue[] {
   const tour = config.roamTour
-  const usable = tour.items.filter((id) => known.has(id))
+  // ⚠ 与真正起播的轨迹同一份过滤：悬空的与解不出姿态的都不算一站
+  const usable = roamTourStops(config.cameras, tour)
   if (!tour.enabled || usable.length >= MIN_ROAM_TOUR_STOPS) return []
   return [
     {
@@ -452,7 +451,7 @@ export function collectTwinConfigIssues(config: TwinConfig): TwinConfigIssue[] {
     ...danglingPanelAnchors(config, anchorIds),
     ...danglingFlowAnchors(config, anchorIds),
     ...shortFlows(config, anchorIds),
-    ...shortRoamTour(config, cameraIds),
+    ...shortRoamTour(config),
     ...danglingPartCameras(config, cameraIds),
     ...danglingPartParents(config),
     ...partFocusWithoutTarget(config, cameraIds),

@@ -14,8 +14,8 @@ import RoamSegmentFields from '@/pages/TwinEditor/components/fields/RoamSegmentF
 
 const CONFIG = normalizeTwinConfig({
   cameras: [
-    { id: 'c1', name: '全景' },
-    { id: 'c2', name: '俯视' },
+    { id: 'c1', name: '全景', position: [10, 0, 0] },
+    { id: 'c2', name: '俯视', position: [0, 10, 0] },
   ],
 })
 
