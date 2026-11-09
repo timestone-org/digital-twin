@@ -50,6 +50,9 @@ export const TWIN_2D_DROP_SNAP_PX = 10
  */
 const FALLBACK_ROUTE: Twin2dRouteKind = 'orthogonal'
 
+/** 钉周长参数时保留的精度：千分之一圈。 */
+const PERIM_T_SCALE = 1000
+
 /** 编辑器恒按正向画：反向只是运行态的数据，文档里的形状不跟着变。 */
 const NOT_REVERSED = false
 
@@ -418,7 +421,9 @@ function endpointOn(pair: NodePair, at: Pt, threshold: number): Twin2dEndpoint {
   // 转过 90° 的节点上端点会落到相邻的那条边
   const local = invertNodeTransform(at, pair.node, pair.style.size)
   const t = projectToPerimT(centerBoxOf(pair.node, pair.style.size), local)
-  return { nodeId: pair.node.id, portId: '', t }
+  // 留三位小数：一圈千分之一远小于一个像素，原样落浮点尾巴只会让检查器读出一长串
+  const rounded = Math.round(t * PERIM_T_SCALE) / PERIM_T_SCALE
+  return { nodeId: pair.node.id, portId: '', t: rounded }
 }
 
 /**

@@ -434,6 +434,20 @@ describe('端点落到哪', () => {
     ).toEqual({ nodeId: 'a', portId: '', t: 0.125 })
   })
 
+  // ⚠ 原样落浮点尾巴的话，检查器上读出来是 0.6250002698887671，库里也存这一串
+  it('钉下的周长参数只留三位小数', () => {
+    const config = doc()
+
+    const end = dropEndpoint(
+      config.nodes,
+      config.styles,
+      { x: 33.3333, y: 5 },
+      10,
+    )
+
+    expect(end?.t).toBe(0.083)
+  })
+
   it('落在空白处时一端都不给：文档里没有不挂节点的端点', () => {
     const config = doc()
 
