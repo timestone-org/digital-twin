@@ -15,6 +15,12 @@ from uuid import uuid4
 import pytest
 from asyncua import Client
 
+from lib.logging import (
+    bind_log_context,
+    current_log_context,
+    new_trace_id,
+    reset_log_context,
+)
 from opcua_server.apps.instance.runtime.addressspace import (
     CUSTOM_NAMESPACE_INDEX,
     NodeDefinition,
@@ -143,3 +149,45 @@ async def test_a_hot_added_node_is_watched_too(
     await running.write_value(added.identifier, 3.25)
     assert await _eventually(lambda: any(item[2] == 3.25 for item in seen))
     assert seen[-1][1] == added.identifier
+
+
+async def test_a_change_does_not_inherit_the_trace_of_the_start_request(
+    pki: PkiStore,
+) -> None:
+    """⚠ 内部订阅的循环是起实例那一刻建的，会抄走那次请求的上下文。
+
+    不另开链路的话，这台实例之后每一次值变化都挂在「启动」那条 trace 上。
+    """
+    start_trace = new_trace_id()
+    traces: list[str | None] = []
+
+    async def on_change(
+        _instance_id: uuid.UUID, _identifier: str, _value: object
+    ) -> None:
+        traces.append(current_log_context().trace_id)
+
+    running = RunningInstance(
+        InstanceSpec(
+            instance_id=uuid4(),
+            name="plant-trace",
+            port=_free_port(),
+            namespace_uri="urn:digitaltwin:test",
+            host=LOOPBACK,
+            nodes=(TEMPERATURE,),
+            security=OPEN_PROFILE,
+        ),
+        pki=pki,
+        on_value_change=on_change,
+    )
+    token = bind_log_context(trace_id=start_trace)
+    try:
+        await running.start()
+    finally:
+        reset_log_context(token)
+    try:
+        await running.write_value(TEMPERATURE.identifier, 12.5)
+        assert await _eventually(lambda: len(traces) >= 2)
+    finally:
+        await running.stop()
+    assert start_trace not in traces
+    assert all(trace is not None for trace in traces)
