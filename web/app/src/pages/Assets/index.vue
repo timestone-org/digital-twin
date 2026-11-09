@@ -144,6 +144,7 @@ onMounted(() => void library.reload(page.kind.value))
             intent="neutral"
             size="sm"
             class="dt-assets__open"
+            :title="row.name"
             @click="page.openDetail(row)"
           >
             {{ row.name }}
