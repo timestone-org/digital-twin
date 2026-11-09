@@ -227,7 +227,7 @@ function onKeydown(event: KeyboardEvent): void {
   outline-offset: 1px;
 }
 
-/* 内容区是 NodeTree 的绝对定位基准；超出裁断，绝不顶出舞台 */
+/* 内容区是 NodeTree 的定位基准；溢出方式随钳制走内联样式，绝不顶出舞台 */
 .dt-node-modal__body {
   position: relative;
   border-radius: 0 0 var(--radius-md) var(--radius-md);
