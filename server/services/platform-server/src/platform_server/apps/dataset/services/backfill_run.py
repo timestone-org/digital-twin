@@ -38,6 +38,7 @@ from platform_server.apps.dataset.services.aggregate import (
 from platform_server.apps.dataset.services.backfill_jobs import (
     STATUS_CANCELLED,
     STATUS_DONE,
+    LOCK_TTL_S,
     STATUS_FAILED,
     BackfillJobs,
     BackfillJobState,
@@ -57,6 +58,7 @@ from platform_server.apps.dataset.services.collect_run import (
 from platform_server.apps.dataset.services.collector import Sessions
 from platform_server.apps.dataset.services.dirty import DatasetDirtyLog
 from platform_server.apps.dataset.services.record_compute import (
+    RecomputeOutcome,
     build_scope,
     recompute_range,
 )
@@ -67,6 +69,8 @@ _logger = get_logger("platform.dataset.backfill")
 # 进程收摊时那一句。⚠ 与「失败」共用一个状态是有意的：没跑完就是没跑完，
 # 而它与用户按下的取消在界面上的处置完全不同
 _STOPPED_MESSAGE = "回填中断（服务正在关停）；已写入的部分有效，重发即可续跑"
+# 收尾重算的预算。⚠ 必须短于单飞锁的有效期：重算中途不续锁
+RECOMPUTE_TIMEOUT_S = LOCK_TTL_S * 0.8
 
 
 @dataclass(frozen=True)
@@ -243,24 +247,29 @@ async def _recompute_tail(
     空着，发布器在这个窗口里读到的是一片空的公式列（§16）。
     Args: context, plan, state, columns。
     """
-    if not state.written_rows:
+    # ⚠ 失败（锁丢了、进程关停）就不再重算：锁可能已在别的任务手上
+    if not state.written_rows or state.status == STATUS_FAILED:
         return
     table_id = uuid.UUID(state.table_id)
-    # ⚠ 进重算之前先续一次锁：这一趟可能跑上几分钟且中途没有续锁的缝，
-    # 不续的话锁会在半路过期，下一个回填就能插进来跟它同时改写同一段
-    await context.jobs.renew(table_id, context.token)
-    async with context.sessions.session() as session:
-        scope = await _compile(session, columns, plan.timezone, state)
-        if scope is None:
-            return
-        outcome = await recompute_range(
-            session,
-            scope,
-            table_id=table_id,
-            window=RecordWindow(
-                table_id=table_id, since=plan.first, until=utcnow()
-            ),
+    # ⚠ 进重算之前先续一次锁，且整趟限时在锁的有效期之内：中途没有续锁的缝，
+    # 锁在半路过期的话下一个回填就能插进来跟它同时改写同一段
+    if not await context.jobs.renew(table_id, context.token):
+        state.fail(
+            "单飞锁已失去", "回填中止：这张台账的回填锁已经不在本次任务手上"
         )
+        return
+    try:
+        async with asyncio.timeout(RECOMPUTE_TIMEOUT_S):
+            outcome = await _recompute_window(context, plan, state, columns)
+    except TimeoutError:
+        state.is_recompute_truncated = True
+        state.notes.append(
+            f"收尾重算超过 {RECOMPUTE_TIMEOUT_S:g} 秒被中止，**重算没做完**，"
+            "请对回填区间之后再手动重算一次"
+        )
+        return
+    if outcome is None:
+        return
     _record_recompute(state, outcome.recomputed, outcome.failed)
     state.is_recompute_truncated = outcome.is_truncated
     if outcome.is_truncated:
@@ -270,6 +279,31 @@ async def _recompute_tail(
         )
     if outcome.recomputed:
         await context.dirty.mark(state.table_code)
+
+
+async def _recompute_window(
+    context: BackfillContext,
+    plan: BackfillPlan,
+    state: BackfillJobState,
+    columns: list[DatasetColumn],
+) -> RecomputeOutcome | None:
+    """在一个事务里重算 `[回填起点, 此刻]`；没有可算的公式给 None。
+
+    Args: context, plan, state, columns。
+    """
+    table_id = uuid.UUID(state.table_id)
+    async with context.sessions.session() as session:
+        scope = await _compile(session, columns, plan.timezone, state)
+        if scope is None:
+            return None
+        return await recompute_range(
+            session,
+            scope,
+            table_id=table_id,
+            window=RecordWindow(
+                table_id=table_id, since=plan.first, until=utcnow()
+            ),
+        )
 
 
 def finish_message(state: BackfillJobState) -> str:
