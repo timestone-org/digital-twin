@@ -5,6 +5,7 @@
 
 import pytest
 
+import collectwire
 from collectwire import DATA_TYPES
 from platform_server.apps.collect.protocols import (
     PROTOCOLS,
@@ -21,6 +22,11 @@ def test_the_closed_sets_are_sorted_and_complete() -> None:
     assert PROTOCOLS == ("http", "modbus_tcp", "opcua")
     assert READ_MODES == ("poll", "subscribe")
     assert DATA_TYPES == ("bool", "float", "int", "string")
+
+
+def test_the_read_modes_match_what_the_collector_understands() -> None:
+    # 配置面存下 collector 不认识的读取模式，采集起来才会暴露
+    assert set(READ_MODES) == set(collectwire.READ_MODES)
 
 
 def test_a_check_constraint_list_quotes_every_value() -> None:

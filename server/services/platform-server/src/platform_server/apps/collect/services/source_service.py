@@ -12,6 +12,7 @@ from pydantic import SecretStr
 from sqlalchemy.exc import IntegrityError
 from sqlalchemy.ext.asyncio import AsyncSession
 
+from collectwire import READ_MODE_POLL
 from lib.logging import get_logger
 from lib.web import Page, PageParams
 from platform_server.apps.collect.crud import (
@@ -276,7 +277,10 @@ def _validate_modbus_profile(
     """
     if protocol != "modbus_tcp":
         return
-    if read_mode != "poll" or poll_interval_ms < MIN_MODBUS_POLL_INTERVAL_MS:
+    if (
+        read_mode != READ_MODE_POLL
+        or poll_interval_ms < MIN_MODBUS_POLL_INTERVAL_MS
+    ):
         raise SourceInvalid("Modbus TCP 必须轮询，周期不得小于 1000ms")
     if username is not None or has_credential:
         raise SourceInvalid("Modbus TCP 不接受账号与口令")

@@ -1,5 +1,6 @@
 """HTTP 采集配置与点位寻址的静态校验，现场连接仍归 collector。"""
 
+from collectwire import READ_MODE_POLL
 from collectwire.http import (
     HttpOptions,
     validate_http_endpoint,
@@ -23,7 +24,7 @@ def validate_http_source(
     if source.protocol != "http":
         return
     if (
-        source.read_mode != "poll"
+        source.read_mode != READ_MODE_POLL
         or source.poll_interval_ms < MIN_HTTP_POLL_INTERVAL_MS
     ):
         raise SourceInvalid("HTTP 必须轮询，周期不得小于 1000ms")
