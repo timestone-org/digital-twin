@@ -3,7 +3,7 @@
 from typing import cast
 
 from docx.document import Document
-from docx.enum.text import WD_ALIGN_PARAGRAPH
+from docx.enum.text import WD_ALIGN_PARAGRAPH, WD_LINE_SPACING
 from docx.oxml.ns import qn
 from docx.shared import Pt, RGBColor
 from docx.styles.style import ParagraphStyle
@@ -66,6 +66,8 @@ def apply_typography(document: Document, page: PageSettings) -> None:
         style.font.italic = False
         style.paragraph_format.widow_control = True
         style.paragraph_format.line_spacing = Pt(page.font_size_pt * 1.65)
+        # ⚠ 至少而非固定：固定行距会把行内放大的字裁掉，编辑器里却随内容长高
+        style.paragraph_format.line_spacing_rule = WD_LINE_SPACING.AT_LEAST
         style.paragraph_format.space_after = Pt(6)
     remove_property(document.styles["Title"], "pPr", "pBdr")
     _title_styles(document)
@@ -87,6 +89,7 @@ def _title_styles(document: Document) -> None:
         set_font_size(style.font, size)
         style.font.bold = name in ("Title", "Caption")
         style.paragraph_format.line_spacing = Pt(size * 1.4)
+        style.paragraph_format.line_spacing_rule = WD_LINE_SPACING.AT_LEAST
         style.paragraph_format.keep_with_next = name not in ("Header", "Footer")
         style.paragraph_format.space_after = Pt(14 if name == "Title" else 6)
         if name in ("Title", "Header", "Footer"):
@@ -105,6 +108,7 @@ def _heading_style(
     style.font.color.rgb = RGBColor(0, 0, 0)
     paragraph = style.paragraph_format
     paragraph.line_spacing = Pt(size * 1.4)
+    paragraph.line_spacing_rule = WD_LINE_SPACING.AT_LEAST
     paragraph.space_before = Pt(16 if level in (1, 2) else 10)
     paragraph.space_after = Pt(6)
     paragraph.keep_with_next = True
