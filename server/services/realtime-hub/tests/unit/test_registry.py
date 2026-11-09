@@ -180,3 +180,13 @@ async def test_required_codes_of_is_one_in_query() -> None:
         1,
         True,
     )
+
+
+async def test_no_topics_means_no_query() -> None:
+    session = _RecordingSession(inserted=None)
+
+    codes = await TopicCrud().required_codes_of(
+        cast("Any", session), frozenset()
+    )
+
+    assert (codes, session.statements) == ({}, [])
