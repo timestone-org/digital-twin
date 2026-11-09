@@ -16,6 +16,8 @@ from openai import (
     RateLimitError,
 )
 
+import llmcore
+from lib.errors import AppError
 from llmcore.errors import (
     ModelRejected,
     ModelUnavailable,
@@ -213,3 +215,26 @@ def test_the_free_text_message_never_reaches_the_log() -> None:
 def test_a_body_less_rejection_yields_nothing_rather_than_blowing_up() -> None:
     """端点回一句纯文本 400 是常事；取不到细节不该把这条链路再炸一次。"""
     assert detail_of(_bad_request()) == {}
+
+
+def _own_codes() -> dict[str, list[int]]:
+    """llmcore 里每个自己声明了错误码的 AppError 子类。
+
+    ⚠ 靠顶部 `import llmcore` 把各子模块的错误类都载进来，否则子类表不全。
+    """
+    found: dict[str, list[int]] = {}
+    pending: list[type[AppError]] = [AppError]
+    while pending:
+        cls = pending.pop()
+        pending.extend(cls.__subclasses__())
+        if cls.__module__.startswith("llmcore") and "code" in vars(cls):
+            found.setdefault(cls.__qualname__, []).append(int(cls.code))
+    return found
+
+
+def test_every_llmcore_error_code_is_unique() -> None:
+    """⚠ 两个错误共用一个码，客户端与日志分不清「没接重排」与「要重新登录」。"""
+    assert llmcore.RerankUnavailable is not None
+    codes = [code for many in _own_codes().values() for code in many]
+    assert codes
+    assert len(codes) == len(set(codes))
