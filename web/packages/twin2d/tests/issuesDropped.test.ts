@@ -307,7 +307,7 @@ describe('dangling-sprite', () => {
           id: 'st',
           prims: [
             { id: 'i0', kind: 'ico', src: { kind: 'sprite', id: 'ico-hx' } },
-            { id: 'i1', kind: 'ico', src: { kind: 'name', name: 'pump' } },
+            { id: 'i1', kind: 'ico', src: { kind: 'name', name: 'gauge' } },
             { id: 'i2', kind: 'ico' },
             { id: 't0', kind: 'txt' },
           ],

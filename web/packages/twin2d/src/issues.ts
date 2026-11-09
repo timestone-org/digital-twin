@@ -9,6 +9,8 @@
  * 同一份文档里若两族都有，先按丢弃那一族把脏条目清掉，下标才会重合。
  * 口径见 docs/MODULE_TWIN_2D_DESIGN.md §4.2、§7 #45、§9.5。
  */
+import { isIconName } from '@dt/ui'
+
 import { collectTwin2dDroppedIssues } from './issuesDropped'
 import { normalizeTwin2dConfig } from './normalize'
 import {
@@ -263,6 +265,28 @@ function danglingGradients(sites: readonly Twin2dPrimSite[]): Twin2dIssue[] {
   })
 }
 
+/**
+ * `ico` 图元按名字引了一枚图标库里没登记的图标。
+ * ⚠ 未登记的名字 DtIcon 一个像素都不画、也不出声；检查器的下拉挡得住手选，挡不住
+ * 助手与导入直接写进来的名字。
+ * @param sites 文档里的全部图元落点
+ */
+function danglingIconNames(sites: readonly Twin2dPrimSite[]): Twin2dIssue[] {
+  return sites.flatMap((site) => {
+    const prim = site.prim
+    if (prim.kind !== 'ico' || prim.src.kind !== 'name') return []
+    if (isIconName(prim.src.name)) return []
+    return [
+      {
+        level: 'error' as const,
+        code: 'dangling-icon-name' as const,
+        message: `图标库里没有 ${prim.src.name}，这个图标会整个消失`,
+        at: `${site.at}.src.name`,
+      },
+    ]
+  })
+}
+
 function isOutsideCanvas(
   point: Twin2dWaypoint,
   width: number,
@@ -355,6 +379,7 @@ export function collectTwin2dIssues(
     ...danglingPatchKeys(config, styleFor),
     ...danglingVariantKeys(config),
     ...danglingGradients(sites),
+    ...danglingIconNames(sites),
     ...outOfCanvasNodes(config, styleFor),
     ...outOfCanvasWaypoints(config),
     ...collectTwin2dDroppedIssues(raw, config),
