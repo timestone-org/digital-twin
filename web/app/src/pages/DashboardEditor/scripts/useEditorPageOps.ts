@@ -53,6 +53,8 @@ export interface EditorPageOps {
   removeNode: (nodeId: string) => Promise<void>
   removeSelected: () => Promise<void>
   reload: () => Promise<void>
+  /** 手动重新加载前的确认：有未保存改动时先问，干净时直接放行。 */
+  confirmReload: () => Promise<boolean>
   /** 保存两条轴。⚠ 回执带失败原因：助手那条保存工具靠它把 409 如实抛出去。 */
   save: () => Promise<SaveOutcome>
   changeSelectedGeometry: (
@@ -114,6 +116,22 @@ async function reload(deps: EditorPageOpsDeps): Promise<void> {
   deps.meta.reset(loaded)
 }
 
+function addModule(deps: EditorPageOpsDeps, manifest: ModuleManifest): void {
+  if (!deps.actions.addModule(manifest)) {
+    deps.toast.error('这类钉位模块每张大屏最多一个')
+  }
+}
+
+async function confirmReload(deps: EditorPageOpsDeps): Promise<boolean> {
+  if (!deps.editor.isDirty.value && !deps.meta.isDirty.value) return true
+  return deps.confirm.ask({
+    title: '重新加载',
+    message: '未保存的改动会被服务器版本覆盖，撤销记录也会一并清空。',
+    confirmText: '重新加载',
+    danger: true,
+  })
+}
+
 /** 草稿流与离开守卫装在本工厂：要的（编辑器/载荷/元数据/确认框）恰与这里的依赖重合。 */
 function installDraftFlow(deps: EditorPageOpsDeps): void {
   useEditorDraftFlow({
@@ -143,14 +161,11 @@ export function createEditorPageOps(deps: EditorPageOpsDeps): EditorPageOps {
   return {
     openSubEditor: (nodeId: string) =>
       openSubEditor(editor, deps.getManifest, enterSubEditor, nodeId),
-    addModule: (manifest) => {
-      if (!actions.addModule(manifest)) {
-        toast.error('这类钉位模块每张大屏最多一个')
-      }
-    },
+    addModule: (manifest) => addModule(deps, manifest),
     removeNode: (nodeId) => removeNode(deps, nodeId),
     removeSelected: () => removeSelected(deps),
     reload: () => reload(deps),
+    confirmReload: () => confirmReload(deps),
     save: () => saveDashboardWithFeedback(deps),
     changeSelectedGeometry: (geometry, isContinuous) => {
       const node = editor.selected.value

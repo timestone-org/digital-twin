@@ -152,6 +152,11 @@ const editing = useEditorVisibility(
   ops.reload,
 )
 
+/** 工具条上的手动重新加载；换屏那一路由 `useEditorVisibility` 直接加载、不问。 */
+async function reloadFromToolbar(): Promise<void> {
+  if (await ops.confirmReload()) editing.reload()
+}
+
 onUnmounted(file.dispose)
 </script>
 
@@ -174,7 +179,7 @@ onUnmounted(file.dispose)
         :snap="snap"
         @undo="editor.undo"
         @redo="editor.redo"
-        @reload="editing.reload"
+        @reload="reloadFromToolbar"
         @save="extras.saveWithThumbnail"
         @update:zoom="zoom = $event"
         @set-snap="snap = { ...snap, ...$event }"
