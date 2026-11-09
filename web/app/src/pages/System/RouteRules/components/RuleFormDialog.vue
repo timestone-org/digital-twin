@@ -178,7 +178,7 @@ async function onSubmit(): Promise<void> {
         <p class="m-0 mb-2 text-xs font-semibold text-text-secondary">
           需要的权限码
           <span class="font-normal text-text-disabled">
-            （一个都不选 = 任意已登录用户放行，**不是**匿名放行）
+            （一个都不选 = 任意已登录用户放行，<strong>不是</strong>匿名放行）
           </span>
         </p>
         <PermissionCodePicker
