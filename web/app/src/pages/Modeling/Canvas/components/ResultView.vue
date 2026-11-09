@@ -411,17 +411,14 @@ function jump(target: string): void {
     gap: 0.75rem;
   }
 
-  // ⚠ 贴住弹窗正文的上内边距（DtModal 正文 18px 20px）：只写 top:0 的话，内边距那一条
-  // 露着缝，往下滚的内容会从签条上方透出来；底色也要不透明
   &__anchors {
     position: sticky;
-    top: -18px;
+    top: 0;
     z-index: 1;
     display: flex;
     flex-wrap: wrap;
     gap: 0.5rem;
-    margin: -18px -20px 0;
-    padding: calc(18px + 0.25rem) 20px 0.375rem;
+    padding: 0.25rem 0 0.375rem;
     border-bottom: 1px solid var(--border-subtle);
     background: var(--surface-base);
   }
