@@ -36,8 +36,11 @@ _BIN_SYMBOLS: dict[type[ast.operator], str] = {
     ast.Sub: "−",
     ast.Mult: "×",
     ast.Mod: "mod",
-    ast.FloorDiv: "÷",
+    # ⚠ 不能也画成 ÷：那是真除法（分式）在线性文本里的读法，两者算出来不同
+    ast.FloorDiv: "整除",
 }
+# 乘法档里不满足结合律的运算：右操作数要更紧，`a × (b mod c)` ≠ `a × b mod c`
+_NON_ASSOCIATIVE_MUL = ("mod", "整除")
 _CMP_SYMBOLS: dict[type[ast.cmpop], str] = {
     ast.Eq: "=",
     ast.NotEq: "≠",
@@ -263,13 +266,12 @@ class _Builder:
         if symbol is None:  # pragma: no cover - 解析期白名单已拦
             raise FormulaError(f"无法渲染的运算符 {type(node.op).__name__}")
         prec = _PREC_ADD if symbol in ("+", "−") else _PREC_MUL
-        # 右操作数在减法与取余下要更紧的优先级：a − (b − c) ≠ a − b − c
-        tighter = prec + (1 if symbol in ("−", "mod") else 0)
+        right = self.visit(node.right)
         return {
             "t": "bin",
             "op": symbol,
             "l": _wrap(self.visit(node.left), prec),
-            "r": _wrap(self.visit(node.right), tighter),
+            "r": _wrap(right, prec + _right_tightening(symbol, right)),
         }
 
     def _unaryop(self, node: ast.UnaryOp) -> NotationNode:
@@ -438,6 +440,21 @@ def _power(base: NotationNode, exponent: NotationNode) -> NotationNode:
     return {"t": "pow", "base": base, "exp": exponent}
 
 
+def _right_tightening(symbol: str, right: NotationNode) -> int:
+    """右操作数要不要比本档更紧（1 = 要）。
+
+    ⚠ 减法与乘法档里的取余、整除不满足结合律：`a − (b − c)` ≠ `a − b − c`；
+    乘号右边是取余或整除时同理。
+    Args: symbol, right。
+    """
+    if symbol == "−" or symbol in _NON_ASSOCIATIVE_MUL:
+        return 1
+    is_loose_mul = right.get("t") == "bin" and right.get("op") in (
+        _NON_ASSOCIATIVE_MUL
+    )
+    return 1 if symbol == "×" and is_loose_mul else 0
+
+
 _NODE_PREC = {
     "logic": _PREC_LOGIC,
     "not": _PREC_NOT,
@@ -495,6 +512,31 @@ def _operand(node: NotationNode) -> str:
     return f"({inner})" if node.get("t") == "cases" else inner
 
 
+def _side(node: NotationNode, min_prec: int) -> str:
+    """线性文本里的一个操作数，优先级不够就补括号。
+
+    ⚠ 分式在二维里是原子，摊成一行的 `a ÷ b` 却是乘法档：不补括号
+    `a ÷ (b × c)` 会念成 `a ÷ b × c`。
+    Args: node, min_prec。
+    """
+    text = _operand(node)
+    if node.get("t") in ("paren", "cases"):
+        return text
+    prec = _PREC_MUL if node.get("t") == "frac" else _prec(node)
+    return text if prec >= min_prec else f"({text})"
+
+
+def _plain_bin(node: NotationNode) -> str:
+    """二元运算摊成一行；取余、整除右边的分式要括起来。
+
+    Args: node。
+    """
+    right: NotationNode = node["r"]
+    tighter = node["op"] in _NON_ASSOCIATIVE_MUL
+    rendered = _side(right, _PREC_MUL + 1) if tighter else _operand(right)
+    return f"{_operand(node['l'])} {node['op']} {rendered}"
+
+
 def _plain_cases(node: NotationNode) -> str:
     """分段函数摊成一行。
 
@@ -519,10 +561,10 @@ _PLAIN: dict[str, Callable[[NotationNode], str]] = {
     "num": lambda node: str(node["v"]),
     "text": lambda node: str(node["v"]),
     "paren": lambda node: f"({_operand(node['x'])})",
-    "frac": lambda node: f"{_operand(node['num'])} ÷ {_operand(node['den'])}",
-    "bin": lambda node: (
-        f"{_operand(node['l'])} {node['op']} {_operand(node['r'])}"
+    "frac": lambda node: (
+        f"{_side(node['num'], _PREC_MUL)} ÷ {_side(node['den'], _PREC_MUL + 1)}"
     ),
+    "bin": _plain_bin,
     "cmp": lambda node: (
         f"{_operand(node['l'])} {node['op']} {_operand(node['r'])}"
     ),
@@ -531,7 +573,9 @@ _PLAIN: dict[str, Callable[[NotationNode], str]] = {
     ),
     "neg": lambda node: f"−{_operand(node['x'])}",
     "not": lambda node: f"非 {_operand(node['x'])}",
-    "pow": lambda node: f"{_operand(node['base'])}^{_operand(node['exp'])}",
+    "pow": lambda node: (
+        f"{_side(node['base'], _PREC_POW)}^{_operand(node['exp'])}"
+    ),
     "sqrt": lambda node: f"√({_operand(node['x'])})",
     "prev": _plain_prev,
     "agg": lambda node: (
