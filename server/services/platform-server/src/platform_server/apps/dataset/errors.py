@@ -28,6 +28,16 @@ class DatasetRecordNotFound(AppError):
     http_status = 404
 
 
+class DatasetRecordSlotTaken(AppError):
+    """按周期聚合的台账上，这个桶在查与插之间被别的写入占了。
+
+    ⚠ 不是 400：请求本身合法，刷新后再录就会并进那一行。
+    """
+
+    code = 41208
+    http_status = 409
+
+
 class DatasetTableCodeTaken(AppError):
     """台账编码已被占用。"""
 

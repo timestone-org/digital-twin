@@ -5,6 +5,7 @@
 """
 
 from datetime import timedelta
+from unittest.mock import AsyncMock
 
 import pytest
 from conftest import AppContext
@@ -18,6 +19,7 @@ from integration.collector_helpers import (
 )
 from integration.dataset_helpers import (
     HTTP_BAD_REQUEST,
+    HTTP_CONFLICT,
     HTTP_CREATED,
     ArchiveWriter,
     Sample,
@@ -27,11 +29,13 @@ from integration.dataset_helpers import (
     record_url,
     records_url,
 )
+from platform_server.apps.dataset.crud import record_crud
 from platform_server.apps.dataset.services.dirty import DatasetDirtyLog
 
 pytestmark = pytest.mark.requires_postgres
 
 RECORD_INVALID = 41213
+RECORD_SLOT_TAKEN = 41208
 OFF_GRID = CLOSED + timedelta(minutes=25, seconds=36)
 
 
@@ -134,3 +138,27 @@ async def test_a_manual_row_on_a_bucket_refuses_to_move_away(
 
     assert response.status_code == HTTP_BAD_REQUEST
     assert code_of(response) == RECORD_INVALID
+
+
+async def test_a_bucket_taken_in_between_is_a_conflict_not_a_crash(
+    app_context: AppContext,
+    archive: ArchiveWriter,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    # ⚠ 先查后插挡不住同时到的两次写：后到的那个只会在插入时撞主键
+    table_id = await _table_with_point_and_manual(app_context, archive)
+    await create_record(
+        app_context.client,
+        table_id,
+        ts=OFF_GRID.isoformat(),
+        values={"备注值": 1},
+    )
+    monkeypatch.setattr(record_crud, "get_one", AsyncMock(return_value=None))
+
+    response = await app_context.client.post(
+        records_url(table_id),
+        json={"ts": OFF_GRID.isoformat(), "values": {"备注值": 2}},
+    )
+
+    assert response.status_code == HTTP_CONFLICT, response.text
+    assert code_of(response) == RECORD_SLOT_TAKEN

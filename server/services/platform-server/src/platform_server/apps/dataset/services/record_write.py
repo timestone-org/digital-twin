@@ -15,6 +15,7 @@ from datetime import datetime, tzinfo
 from typing import Any
 from zoneinfo import ZoneInfo
 
+from sqlalchemy.exc import IntegrityError
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from lib.errors.base import FieldError
@@ -30,6 +31,7 @@ from platform_server.apps.dataset.crud.table import AGGREGATE_MODE
 from platform_server.apps.dataset.errors import (
     DatasetRecordInvalid,
     DatasetRecordNotFound,
+    DatasetRecordSlotTaken,
 )
 from platform_server.apps.dataset.models import (
     DatasetColumn,
@@ -80,6 +82,8 @@ from platform_server.apps.dataset.services.table_service import (
     require_table,
 )
 
+# 数据行主键的约束名
+_RECORD_KEY = "pk_dataset_records"
 _logger = get_logger("platform.dataset.record")
 
 
@@ -219,8 +223,27 @@ async def _insert(
     record.computed_json = computed
     record.compute_error = errors or None
     record_crud.add(session, record)
-    await session.flush()
+    await _flush_new(session)
     return record
+
+
+async def _flush_new(session: AsyncSession) -> None:
+    """flush 新插的一行；桶上那一行被别的写入抢先占了就报冲突。
+
+    ⚠ 桶上的行标识是确定的：先查后插挡不住同时到的两次写，后到的撞主键。
+    ⚠ 超表的约束名带分块前缀（如 `1311_1311_pk_dataset_records`），只能比后缀。
+    Args: session。
+    """
+    try:
+        await session.flush()
+    except IntegrityError as error:
+        cause = getattr(error.orig, "__cause__", None)
+        name = getattr(cause, "constraint_name", None)
+        if not (isinstance(name, str) and name.endswith(_RECORD_KEY)):
+            raise
+        raise DatasetRecordSlotTaken(
+            "这个时段刚有人录入，请刷新后再试"
+        ) from error
 
 
 def _require_some_value(
