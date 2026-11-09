@@ -16,6 +16,7 @@ from platform_server.apps.hvac.modeling.curation import (
 from platform_server.apps.hvac.modeling.features import (
     EpisodeSample,
     StartConditions,
+    instant_compliance,
 )
 from platform_server.apps.hvac.modeling.training import (
     MIN_SAMPLES,
@@ -75,21 +76,27 @@ def episode(
 
 def test_an_in_band_start_that_claims_a_duration_is_dropped() -> None:
     """开机那一刻就已达标，却记着 12 分钟——两者只能有一个是真的。"""
-    found = curate([episode(temperature=24.0, minutes=12)], units=UNITS)
+    found = curate(
+        [episode(temperature=24.0, minutes=12)], units=UNITS, timezone=TZ
+    )
     assert found.kept == ()
     assert found.contradictory_count == 1
 
 
 def test_an_in_band_start_with_zero_duration_stays() -> None:
     """开机即达标、时长 0：这正是现网近半样本的样子，一条都不能少。"""
-    found = curate([episode(temperature=24.0, minutes=0)], units=UNITS)
+    found = curate(
+        [episode(temperature=24.0, minutes=0)], units=UNITS, timezone=TZ
+    )
     assert len(found.kept) == 1
     assert found.contradictory_count == 0
 
 
 def test_an_out_of_band_start_keeps_its_duration() -> None:
     """带外开机记着时长，是这个模型要学的主线，不许碰。"""
-    found = curate([episode(temperature=29.0, minutes=20)], units=UNITS)
+    found = curate(
+        [episode(temperature=29.0, minutes=20)], units=UNITS, timezone=TZ
+    )
     assert len(found.kept) == 1
 
 
@@ -98,7 +105,9 @@ def test_an_out_of_band_start_with_zero_duration_is_counted_not_dropped() -> (
 ):
     """⚠ 反方向同样是标签过期的证据，但剔它会在达标范围收窄后删掉整批零样本
     ——那是「批次该重抽」的信号，不该由训练替人做决定，只数出来。"""
-    found = curate([episode(temperature=29.0, minutes=0)], units=UNITS)
+    found = curate(
+        [episode(temperature=29.0, minutes=0)], units=UNITS, timezone=TZ
+    )
     assert len(found.kept) == 1
     assert found.contradictory_count == 0
     assert found.unexplained_zero_count == 1
@@ -107,15 +116,17 @@ def test_an_out_of_band_start_with_zero_duration_is_counted_not_dropped() -> (
 def test_only_one_metric_out_of_band_is_enough_to_be_uncompliant() -> None:
     """达标要每一项都在带内：温度合格、湿度超限就不算达标。"""
     assert not is_instantly_compliant(
-        episode(temperature=24.0, minutes=0, humidity=70.0), UNITS
+        episode(temperature=24.0, minutes=0, humidity=70.0),
+        UNITS,
+        timezone=TZ,
     )
 
 
 def test_a_missing_reading_is_not_read_as_compliant() -> None:
     """⚠ 缺测不是达标：读不到湿度就不能替它作证，那条 12 分钟得留着。"""
     sample = episode(temperature=24.0, minutes=12, humidity=None)
-    assert not is_instantly_compliant(sample, UNITS)
-    assert len(curate([sample], units=UNITS).kept) == 1
+    assert not is_instantly_compliant(sample, UNITS, timezone=TZ)
+    assert len(curate([sample], units=UNITS, timezone=TZ).kept) == 1
 
 
 def test_a_unit_absent_from_the_readings_is_not_read_as_compliant() -> None:
@@ -124,7 +135,7 @@ def test_a_unit_absent_from_the_readings_is_not_read_as_compliant() -> None:
         serial="K09", bands={METRIC_WORKSHOP_TEMP: _TEMPERATURE_BAND}
     )
     sample = episode(temperature=24.0, minutes=12)
-    assert not is_instantly_compliant(sample, (*UNITS, extra))
+    assert not is_instantly_compliant(sample, (*UNITS, extra), timezone=TZ)
 
 
 def test_a_unit_without_any_band_never_blocks_compliance() -> None:
@@ -132,12 +143,34 @@ def test_a_unit_without_any_band_never_blocks_compliance() -> None:
     free = RoomUnit(serial="K03", bands={})
     sample = episode(temperature=24.0, minutes=0)
     sample.conditions.readings["K03"] = {}
-    assert is_instantly_compliant(sample, (*UNITS, free))
+    assert is_instantly_compliant(sample, (*UNITS, free), timezone=TZ)
 
 
 def test_an_empty_unit_list_never_reports_compliant() -> None:
     """⚠ `all()` 在空序列上恒真：照搬就会把非零时长的样本全剔光。"""
-    assert not is_instantly_compliant(episode(temperature=24.0, minutes=12), ())
+    assert not is_instantly_compliant(
+        episode(temperature=24.0, minutes=12), (), timezone=TZ
+    )
+
+
+@pytest.mark.parametrize(
+    ("units", "sample"),
+    [
+        ((), episode(temperature=24.0, minutes=0)),
+        (UNITS, episode(temperature=24.0, minutes=0, humidity=None)),
+        (UNITS, episode(temperature=29.0, minutes=0)),
+        (UNITS, episode(temperature=24.0, minutes=0)),
+    ],
+)
+def test_curation_and_the_mixture_share_one_compliance_rule(
+    units: tuple[RoomUnit, ...], sample: EpisodeSample
+) -> None:
+    """⚠ 甄别与混合模型的「已知达标」必须是同一份判定，否则两边悄悄对不上。"""
+    expected = (
+        instant_compliance(sample.conditions, units=units, timezone=TZ) == 1.0
+    )
+    found = is_instantly_compliant(sample, units, timezone=TZ)
+    assert found is expected
 
 
 def test_the_count_says_how_many_were_dropped() -> None:
@@ -145,7 +178,7 @@ def test_the_count_says_how_many_were_dropped() -> None:
     rows = [
         episode(temperature=24.0, minutes=at % 3, index=at) for at in range(9)
     ]
-    found = curate(rows, units=UNITS)
+    found = curate(rows, units=UNITS, timezone=TZ)
     assert found.contradictory_count == 6
     assert found.unexplained_zero_count == 0
     assert len(found.kept) == 3
@@ -157,7 +190,7 @@ def test_a_fresh_batch_shows_zero_on_both_counters() -> None:
         episode(temperature=24.0, minutes=0, index=0),
         episode(temperature=29.0, minutes=20, index=1),
     ]
-    found = curate(rows, units=UNITS)
+    found = curate(rows, units=UNITS, timezone=TZ)
     assert found.contradictory_count == 0
     assert found.unexplained_zero_count == 0
     assert len(found.kept) == 2
@@ -169,7 +202,7 @@ def test_durations_over_the_normal_operation_limit_are_excluded() -> None:
         episode(temperature=29.0, minutes=61, index=1),
         episode(temperature=29.0, minutes=100, index=2),
     ]
-    found = curate(rows, units=UNITS)
+    found = curate(rows, units=UNITS, timezone=TZ)
     assert [row.duration_minutes for row in found.kept] == [60]
     assert found.overlong_episode_count == 2
 
