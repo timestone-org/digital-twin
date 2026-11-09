@@ -16,13 +16,14 @@ import contextlib
 import socket
 from collections.abc import Generator
 from dataclasses import dataclass, field
+from datetime import timedelta
 from typing import Any, cast
 from uuid import UUID
 
 from asyncua import Server, ua
 
 from lib.logging import get_logger
-from lib.utils.timeutils import Clock, utcnow
+from lib.utils.timeutils import Clock, to_utc, utcnow
 from opcua_server.apps.instance.errors import (
     InstanceAlreadyRunning,
     InstanceNotRunning,
@@ -43,7 +44,7 @@ from opcua_server.apps.instance.runtime.addressspace import (
     subtree_of,
     write_node_value,
 )
-from opcua_server.apps.instance.runtime.pki import PkiStore
+from opcua_server.apps.instance.runtime.pki import CertificateMaterial, PkiStore
 from opcua_server.apps.instance.runtime.sessions import (
     SessionRecord,
     SessionRegistry,
@@ -62,6 +63,8 @@ LISTEN_PROBE_TIMEOUT_S = 1.0
 LISTEN_READY_BUDGET_S = 3.0
 # 停止时等 asyncua 收尾的上限，超时就记一条并往下走，不无限等
 STOP_TIMEOUT_S = 10.0
+# 服务器证书离到期不足这么多天就每次启动告警一次
+CERT_EXPIRY_WARNING_DAYS = 30
 
 # 监听全网卡时的绑定地址；探活要把它换成回环
 BIND_ALL = "0.0.0.0"  # noqa: S104  # 这是常量定义，绑定发生在 InstanceSpec.host
@@ -189,6 +192,8 @@ class RunningInstance:
         """
         self.spec = spec
         self._pki = pki
+        self._clock = clock
+        self._certificate: CertificateMaterial | None = None
         self._watcher = _make_watcher(spec.instance_id, on_value_change)
         self._registry = SessionRegistry(clock=clock)
         self._server: Server | None = None
@@ -200,6 +205,11 @@ class RunningInstance:
     def registry(self) -> SessionRegistry:
         """本实例的会话表。"""
         return self._registry
+
+    @property
+    def certificate(self) -> CertificateMaterial | None:
+        """本次启动装上的服务器证书元信息；还没起过就是 None。"""
+        return self._certificate
 
     def sessions(self) -> list[SessionRecord]:
         """当前在线会话。"""
@@ -276,6 +286,16 @@ class RunningInstance:
         loader = cast(Any, server)
         await loader.load_certificate(str(material.certificate_path))
         await loader.load_private_key(str(material.private_key_path))
+        self._certificate = material
+        remaining = material.not_valid_after - to_utc(self._clock())
+        if remaining < timedelta(days=CERT_EXPIRY_WARNING_DAYS):
+            # ⚠ 不自动换发：换了证书上位机要重新信任，换发必须是显式动作
+            _logger.warning(
+                "opcua_server_cert_expiring",
+                "服务器证书即将到期或已过期，上位机届时会拒绝连接",
+                instance_id=str(self.spec.instance_id),
+                expires_at=material.not_valid_after.isoformat(),
+            )
 
     async def stop(self) -> None:
         """停监听并清空节点表。未在跑则无操作。"""

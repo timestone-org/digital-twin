@@ -1,6 +1,8 @@
 """实例面的语义：幂等键、待重启、端口池、以及「在跑」以什么为准。"""
 
-from collections.abc import Callable
+import contextlib
+from collections.abc import AsyncIterator, Callable
+from typing import Any
 
 import httpx
 import pytest
@@ -10,6 +12,8 @@ from opcua_server.apps.instance.deps import (
     PERM_OPERATE,
     PERM_VIEW,
 )
+from opcua_server.apps.instance.runtime.instance import RunningInstance
+from opcua_server.apps.instance.runtime.pki import fingerprint_of
 from opcua_server.settings import API_PREFIX, Settings
 
 pytestmark = pytest.mark.requires_postgres
@@ -164,12 +168,16 @@ async def test_namespace_change_marks_pending_restart(
     Args: client, sign_headers。
     """
     data = await _create(client, sign_headers, "ns")
+    await client.post(
+        f"{INSTANCES}/{data['id']}:start", headers=sign_headers(PERM_OPERATE)
+    )
     response = await client.put(
         f"{INSTANCES}/{data['id']}",
         json={"namespace_uri": "urn:test:changed"},
         headers=sign_headers(PERM_MANAGE),
     )
     assert response.json()["data"]["has_pending_restart"] is True
+    assert response.json()["data"]["pending_fields"] == ["namespace_uri"]
 
 
 @pytest.mark.usefixtures("clean_tables")
@@ -336,3 +344,150 @@ async def test_port_pool_lists_the_free_ports(
     assert taken not in body["free_ports"]
     assert set(body["free_ports"]) <= set(settings.ports())
     assert len(body["free_ports"]) == body["available"]
+
+
+@pytest.mark.usefixtures("clean_tables")
+async def test_a_stopped_instance_is_never_pending_restart(
+    client: httpx.AsyncClient, sign_headers: Headers
+) -> None:
+    """没在跑的实例下次起来读的就是新配置，无所谓「待重启」。
+
+    Args: client, sign_headers。
+    """
+    data = await _create(client, sign_headers, "idle")
+    response = await client.put(
+        f"{INSTANCES}/{data['id']}",
+        json={"namespace_uri": "urn:test:idle-changed"},
+        headers=sign_headers(PERM_MANAGE),
+    )
+    assert response.json()["data"]["has_pending_restart"] is False
+
+
+@pytest.mark.usefixtures("clean_tables")
+async def test_starting_a_running_instance_keeps_it_pending(
+    client: httpx.AsyncClient, sign_headers: Headers
+) -> None:
+    """⚠ 对已在跑的实例再点一次启动并没有重建服务器，待重启标记不许被清掉。
+
+    Args: client, sign_headers。
+    """
+    data = await _create(client, sign_headers, "again")
+    start = f"{INSTANCES}/{data['id']}:start"
+    await client.post(start, headers=sign_headers(PERM_OPERATE))
+    await client.put(
+        f"{INSTANCES}/{data['id']}",
+        json={"namespace_uri": "urn:test:again-changed"},
+        headers=sign_headers(PERM_MANAGE),
+    )
+    await client.post(start, headers=sign_headers(PERM_OPERATE))
+    detail = await client.get(
+        f"{INSTANCES}/{data['id']}", headers=sign_headers(PERM_VIEW)
+    )
+    assert detail.json()["data"]["has_pending_restart"] is True
+    await client.post(
+        f"{INSTANCES}/{data['id']}:restart", headers=sign_headers(PERM_OPERATE)
+    )
+    detail = await client.get(
+        f"{INSTANCES}/{data['id']}", headers=sign_headers(PERM_VIEW)
+    )
+    assert detail.json()["data"]["has_pending_restart"] is False
+
+
+@pytest.mark.usefixtures("clean_tables")
+async def test_a_security_policy_change_is_listed_as_pending(
+    client: httpx.AsyncClient, sign_headers: Headers
+) -> None:
+    """改安全策略要重启才生效，保存时 pending_fields 必须逐项说出来。
+
+    Args: client, sign_headers。
+    """
+    data = await _create(client, sign_headers, "policy")
+    await client.post(
+        f"{INSTANCES}/{data['id']}:start", headers=sign_headers(PERM_OPERATE)
+    )
+    response = await client.put(
+        f"{INSTANCES}/{data['id']}",
+        json={"security_policies": ["Basic256Sha256_SignAndEncrypt"]},
+        headers=sign_headers(PERM_MANAGE),
+    )
+    assert response.json()["data"]["pending_fields"] == ["security_policies"]
+
+
+@pytest.mark.usefixtures("clean_tables")
+async def test_the_server_certificate_is_recorded_after_the_first_start(
+    client: httpx.AsyncClient, sign_headers: Headers, settings: Settings
+) -> None:
+    """首次启动自签的服务器证书，指纹、主体与有效期末要落进出参。
+
+    ⚠ 上位机要靠这个指纹在 SCADA 侧信任服务器，一直是 null 等于没法配。
+
+    Args: client, sign_headers, settings。
+    """
+    data = await _create(client, sign_headers, "cert")
+    await client.post(
+        f"{INSTANCES}/{data['id']}:start", headers=sign_headers(PERM_OPERATE)
+    )
+    detail = await client.get(
+        f"{INSTANCES}/{data['id']}", headers=sign_headers(PERM_VIEW)
+    )
+    certificate = detail.json()["data"]["certificate"]
+    der = (settings.pki_dir / f"{data['id']}.der").read_bytes()
+    assert certificate["fingerprint"] == fingerprint_of(der)
+    assert certificate["subject"]
+    assert certificate["expires_at"]
+
+
+class _TrackingDatabase:
+    """数着此刻开着几个事务的数据库外壳。"""
+
+    def __init__(self, inner: Any) -> None:
+        self.inner = inner
+        self.open = 0
+
+    @contextlib.asynccontextmanager
+    async def session(self) -> AsyncIterator[Any]:
+        async with self.inner.session() as session:
+            self.open += 1
+            try:
+                yield session
+            finally:
+                self.open -= 1
+
+
+@pytest.mark.usefixtures("clean_tables")
+async def test_listening_probes_run_outside_any_transaction(
+    app: httpx.ASGITransport,
+    client: httpx.AsyncClient,
+    sign_headers: Headers,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """⚠ 探活是 IO：放进事务会让连接（改配置时还有行锁）陪着它等。
+
+    Args: app, client, sign_headers, monkeypatch。
+    """
+    data = await _create(client, sign_headers, "probe")
+    await client.post(
+        f"{INSTANCES}/{data['id']}:start", headers=sign_headers(PERM_OPERATE)
+    )
+    service = app.app.state.container.instances  # type: ignore[attr-defined]
+    tracking = _TrackingDatabase(service._database)
+    monkeypatch.setattr(service, "_database", tracking)
+    seen: list[int] = []
+    original = RunningInstance.is_listening
+
+    async def probe(self: RunningInstance, **kwargs: Any) -> bool:
+        seen.append(tracking.open)
+        return await original(self, **kwargs)
+
+    monkeypatch.setattr(RunningInstance, "is_listening", probe)
+    await client.get(INSTANCES, headers=sign_headers(PERM_VIEW))
+    await client.get(
+        f"{INSTANCES}/{data['id']}", headers=sign_headers(PERM_VIEW)
+    )
+    await client.put(
+        f"{INSTANCES}/{data['id']}",
+        json={"description": "探活不进事务"},
+        headers=sign_headers(PERM_MANAGE),
+    )
+    assert seen
+    assert set(seen) == {0}

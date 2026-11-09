@@ -92,6 +92,22 @@ class NodeCrud(CrudBase[Node]):
         )
         return list(result.scalars().all())
 
+    async def count_by_instances(
+        self, session: AsyncSession, instance_ids: Collection[uuid.UUID]
+    ) -> dict[uuid.UUID, int]:
+        """一批实例各自的节点数，一次查询；没有节点的实例不在结果里。
+
+        Args: session, instance_ids。
+        """
+        if not instance_ids:
+            return {}
+        result = await session.execute(
+            select(Node.instance_id, func.count())
+            .where(Node.instance_id.in_(list(instance_ids)))
+            .group_by(Node.instance_id)
+        )
+        return {instance_id: int(count) for instance_id, count in result.all()}
+
     async def count_of_instance(
         self, session: AsyncSession, instance_id: uuid.UUID
     ) -> int:

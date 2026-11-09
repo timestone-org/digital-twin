@@ -71,6 +71,12 @@ def pending_fields_of(
         "is_anonymous_allowed": (
             row.is_anonymous_allowed != spec.security.allow_anonymous
         ),
+        # ⚠ 运行时只认「是否放行无安全传输」这一位，比到这一位为止：比整张
+        # 策略表会报一个重启了也不会变的差异
+        "security_policies": (
+            ("NoSecurity" in row.security_policies)
+            != spec.security.allow_insecure_transport
+        ),
     }
     return sorted(name for name, differs in differences.items() if differs)
 
