@@ -356,10 +356,10 @@ function submit(): void {
     </div>
 
     <template #footer>
-      <DtButton variant="ghost" :disabled="busy" @click="close(false)">
+      <DtButton variant="ghost" :disabled="busy ?? false" @click="close(false)">
         取消
       </DtButton>
-      <DtButton :loading="busy" @click="submit">保存</DtButton>
+      <DtButton :loading="busy ?? false" @click="submit">保存</DtButton>
     </template>
   </DtModal>
 </template>
