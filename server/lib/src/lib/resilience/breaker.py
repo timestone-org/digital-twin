@@ -10,6 +10,10 @@
 
 ⚠ 打开状态必须**明确暴露**（日志 + 状态可读），否则表现成「下游明明好了但我
 这边还在报错」，而没人知道是断路器还没合上（runtime-resilience §4.3）。
+
+⚠ 探测有**租期**：拿到探测的调用若既不报成功也不报失败（被取消、被调用方
+当成「我们自己的错」吞掉），过一个冷却期就当它丢了、再放下一个。没有租期时
+一次丢失的探测会让断路器一直关到进程重启。
 """
 
 from dataclasses import dataclass, field
@@ -47,6 +51,7 @@ class CircuitBreaker:
     _opened_at: datetime | None = field(default=None, init=False)
     # 半开期间是否已经有一个探测在路上
     _is_probing: bool = field(default=False, init=False)
+    _probe_started_at: datetime | None = field(default=None, init=False)
 
     @property
     def state(self) -> BreakerState:
@@ -59,10 +64,28 @@ class CircuitBreaker:
         self._settle()
         if self._state == "closed":
             return True
-        if self._state == "half_open" and not self._is_probing:
-            self._is_probing = True
-            return True
-        return False
+        if self._state != "half_open":
+            return False
+        if self._is_probing and not self._probe_expired():
+            return False
+        if self._is_probing:
+            _logger.warning(
+                "breaker_probe_expired",
+                "探测迟迟没有回报，当它丢了再放一个",
+                breaker=self.name,
+            )
+        self._is_probing = True
+        self._probe_started_at = self.clock()
+        return True
+
+    def release_probe(self) -> None:
+        """交还没用出结论的探测：既不算成功也不算失败，下一个调用接着探。
+
+        给「调用被取消」「端点答了但判我们发错了」这类说明不了下游好坏的结局用；
+        合上状态下什么都不改，连续失败计数照旧。
+        """
+        self._is_probing = False
+        self._probe_started_at = None
 
     def guard(self) -> None:
         """不能发就抛。给「调用前挡一道」的写法用。"""
@@ -75,7 +98,7 @@ class CircuitBreaker:
         self._state = "closed"
         self._failures = 0
         self._opened_at = None
-        self._is_probing = False
+        self.release_probe()
         if was_open:
             _logger.info(
                 "breaker_closed", "下游恢复，断路器合上", breaker=self.name
@@ -89,7 +112,7 @@ class CircuitBreaker:
         Args: reason。
         """
         is_probe = self._state == "half_open"
-        self._is_probing = False
+        self.release_probe()
         self._failures += 1
         # 半开时的一次失败直接重新打开：探测就是拿来判断「好没好」的
         if is_probe or self._failures >= self.failure_threshold:
@@ -107,6 +130,13 @@ class CircuitBreaker:
             reason=reason,
         )
 
+    def _probe_expired(self) -> bool:
+        """在路上的探测是否已超过一个冷却期没有回报。"""
+        if self._probe_started_at is None:
+            return True
+        elapsed = (self.clock() - self._probe_started_at).total_seconds()
+        return elapsed >= self.reset_after_s
+
     def _settle(self) -> None:
         """打开且冷却够了就转半开。"""
         if self._state != "open" or self._opened_at is None:
@@ -115,7 +145,7 @@ class CircuitBreaker:
         if elapsed < self.reset_after_s:
             return
         self._state = "half_open"
-        self._is_probing = False
+        self.release_probe()
         _logger.info(
             "breaker_half_open", "冷却结束，放一个探测", breaker=self.name
         )
