@@ -18,6 +18,7 @@ from asyncua import Client
 from lib.logging import (
     bind_log_context,
     current_log_context,
+    new_span_id,
     new_trace_id,
     reset_log_context,
 )
@@ -158,13 +159,15 @@ async def test_a_change_does_not_inherit_the_trace_of_the_start_request(
 
     不另开链路的话，这台实例之后每一次值变化都挂在「启动」那条 trace 上。
     """
-    start_trace = new_trace_id()
+    start_trace, start_span = new_trace_id(), new_span_id()
     traces: list[str | None] = []
+    spans: list[str | None] = []
 
     async def on_change(
         _instance_id: uuid.UUID, _identifier: str, _value: object
     ) -> None:
         traces.append(current_log_context().trace_id)
+        spans.append(current_log_context().span_id)
 
     running = RunningInstance(
         InstanceSpec(
@@ -179,7 +182,7 @@ async def test_a_change_does_not_inherit_the_trace_of_the_start_request(
         pki=pki,
         on_value_change=on_change,
     )
-    token = bind_log_context(trace_id=start_trace)
+    token = bind_log_context(trace_id=start_trace, span_id=start_span)
     try:
         await running.start()
     finally:
@@ -191,3 +194,5 @@ async def test_a_change_does_not_inherit_the_trace_of_the_start_request(
         await running.stop()
     assert start_trace not in traces
     assert all(trace is not None for trace in traces)
+    # 新链路配旧 span 会拼出一条指向别家父节点的 traceparent
+    assert start_span not in spans

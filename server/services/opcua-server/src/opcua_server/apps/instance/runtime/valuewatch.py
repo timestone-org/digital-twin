@@ -17,7 +17,12 @@ from typing import Any, cast
 
 from asyncua import ua
 
-from lib.logging import bind_log_context, get_logger, new_trace_id
+from lib.logging import (
+    bind_log_context,
+    get_logger,
+    new_span_id,
+    new_trace_id,
+)
 
 _logger = get_logger("opcua.valuewatch")
 
@@ -129,7 +134,9 @@ class ValueWatcher:
         if identifier is None:
             return
         context = contextvars.copy_context()
-        context.run(bind_log_context, trace_id=new_trace_id())
+        context.run(
+            bind_log_context, trace_id=new_trace_id(), span_id=new_span_id()
+        )
         task = asyncio.get_running_loop().create_task(
             self._deliver(identifier, _unwrap(value)), context=context
         )
