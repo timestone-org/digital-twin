@@ -5,6 +5,7 @@
 """
 
 import uuid
+from typing import Any
 
 import httpx
 import pytest
@@ -114,17 +115,10 @@ async def test_predict_reports_the_instant_probability(
     assert 0.0 <= found["instant_probability"] <= 1.0
 
 
-@pytest.mark.parametrize(
-    "raw_reading",
-    ['{"workshop_temp_avg": -265.5}', '{"workshop_temp_avg": Infinity}'],
-)
-async def test_predict_rejects_an_implausible_reading(
-    app_client: httpx.AsyncClient,
-    db_session: AsyncSession,
-    sign: SignHeaders,
-    raw_reading: str,
+async def test_predict_rejects_an_infinite_reading(
+    app_client: httpx.AsyncClient, db_session: AsyncSession, sign: SignHeaders
 ) -> None:
-    """⚠ 假想读数越界或是 Infinity 时是校验失败，不能在特征里炸成 500。"""
+    """⚠ JSON 里的 Infinity 是校验失败，不能在推理里炸成 500。"""
     seeded = await seed_room(db_session)
     manager = sign([AC_MANAGE])
     data = await create_model(app_client, manager, seeded)
@@ -133,7 +127,7 @@ async def test_predict_rejects_an_implausible_reading(
     serial = seeded.serials[0]
     body = (
         f'{{"running_set": ["{serial}"], '
-        f'"readings": {{"{serial}": {raw_reading}}}}}'
+        f'"readings": {{"{serial}": {{"workshop_temp_avg": Infinity}}}}}}'
     )
     response = await app_client.post(
         f"{PREFIX}/ac-models/{model_id}:predict",
@@ -141,6 +135,34 @@ async def test_predict_rejects_an_implausible_reading(
         headers={**sign([AC_VIEW]), "Content-Type": "application/json"},
     )
     assert response.status_code == 400, response.text
+
+
+async def test_an_implausible_temperature_counts_as_missing(
+    app_client: httpx.AsyncClient, db_session: AsyncSession, sign: SignHeaders
+) -> None:
+    """⚠ 越出可信区间的温度按缺测算，与训练同口径：-265.5 曾让焓值公式除零。"""
+    seeded = await seed_room(db_session)
+    manager = sign([AC_MANAGE])
+    data = await create_model(app_client, manager, seeded)
+    model_id = uuid.UUID(data["id"])
+    await _mark_trained(db_session, model_id, running_set=[seeded.serials[0]])
+    serial = seeded.serials[0]
+    path = f"{PREFIX}/ac-models/{model_id}:predict"
+    viewer = sign([AC_VIEW])
+    results: list[dict[str, Any]] = []
+    for readings in (
+        {serial: {"workshop_temp_avg": -265.5, "workshop_humidity_avg": 50}},
+        {serial: {"workshop_humidity_avg": 50}},
+    ):
+        response = await app_client.post(
+            path,
+            json={"running_set": [serial], "readings": readings},
+            headers=viewer,
+        )
+        assert response.status_code == 200, response.text
+        found = response.json()["data"]
+        results.append({key: found[key] for key in ("p10", "p50", "p90")})
+    assert results[0] == results[1]
 
 
 async def test_recommend_ranks_every_serving_set(

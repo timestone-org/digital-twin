@@ -20226,8 +20226,6 @@
           "chilled_water_supply_temp": {
             "anyOf": [
               {
-                "maximum": 60.0,
-                "minimum": -20.0,
                 "type": "number"
               },
               {
@@ -20250,8 +20248,6 @@
           "fresh_air_temp": {
             "anyOf": [
               {
-                "maximum": 60.0,
-                "minimum": -20.0,
                 "type": "number"
               },
               {
@@ -20274,8 +20270,6 @@
           "workshop_temp_avg": {
             "anyOf": [
               {
-                "maximum": 60.0,
-                "minimum": -20.0,
                 "type": "number"
               },
               {
