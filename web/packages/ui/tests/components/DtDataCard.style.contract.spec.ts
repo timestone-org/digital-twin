@@ -35,6 +35,17 @@ describe('DtDataCard 抬头', () => {
     expect(body).toMatch(/min-width:\s*0/)
   })
 
+  it('名称行里不换行的内容就地裁掉，不压到右侧操作上', () => {
+    const body = ruleBody('.dt-data-view__card-title')
+    expect(body).toMatch(/overflow:\s*hidden/)
+  })
+
+  it('名称行四周给焦点环留出 4px，裁切不切掉链接与按钮的焦点环', () => {
+    const body = ruleBody('.dt-data-view__card-title')
+    expect(body).toMatch(/margin:\s*-4px/)
+    expect(body).toMatch(/padding:\s*4px/)
+  })
+
   it('副行装不下时截成省略号，而不是撑宽抬头', () => {
     const body = ruleBody('.dt-data-view__card-meta')
     expect(body).toMatch(/white-space:\s*nowrap/)

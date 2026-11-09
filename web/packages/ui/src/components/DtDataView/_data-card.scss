@@ -8,10 +8,15 @@
     min-width: 0;
   }
 
+  // 抬头宽度跟着操作走，不换行的名称（等宽编号标签）不裁就压到操作按钮上；
+  // 四周 4px 留给焦点环（outline 2px + offset 2px）
   &__card-title {
     display: flex;
     align-items: center;
     gap: 8px;
+    overflow: hidden;
+    margin: -4px;
+    padding: 4px;
     font-family: var(--font-display);
     font-size: var(--font-size-section);
     font-weight: 600;
