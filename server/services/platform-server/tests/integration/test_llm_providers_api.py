@@ -217,6 +217,29 @@ async def test_editing_models_that_keeps_assignments_valid_is_fine(
     assert response.status_code == httpx.codes.OK, response.text
 
 
+async def test_an_already_orphaned_assignment_does_not_lock_the_form(
+    llm_context: AppContext,
+) -> None:
+    # ⚠ 存量库里可能已有指空的分配；表单每次保存都整份带上模型清单，拦它就是
+    # 连换密钥、改名都存不进去
+    created = await _create(llm_context.client)
+    await llm_context.client.put(
+        f"{PURPOSES}/assistant.chat",
+        json={"provider_id": created["id"], "model_name": "qwen-plus"},
+    )
+    row = (await llm_context.session.execute(select(LlmProvider))).scalar_one()
+    row.models_json = [{"name": "qwen-max", "kind": "chat"}]
+    await llm_context.session.flush()
+    response = await llm_context.client.patch(
+        f"{PROVIDERS}/{created['id']}",
+        json={
+            "name": "百炼二号",
+            "models": [{"name": "qwen-max", "kind": "chat"}],
+        },
+    )
+    assert response.status_code == httpx.codes.OK, response.text
+
+
 @pytest.mark.parametrize(
     ("purpose", "model", "expected"),
     [

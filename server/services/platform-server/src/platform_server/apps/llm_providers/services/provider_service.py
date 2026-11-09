@@ -262,8 +262,11 @@ async def _raise_if_orphaning(
 ) -> None:
     """新的模型清单会不会让指着这一路的用途落空；会就 409。
 
+    ⚠ 只拦这次改出来的落空：表单每次都整份带上模型清单，存量里本就指空的
+    分配也拦的话，这一路连换密钥、改名都存不进去。
     Args: session, row, models（新清单）。
     """
+    current = models_of(row)
     for assigned in await crud.assignment.for_provider(session, row.id):
         spec = purpose_of(assigned.purpose)
         if spec is None:
@@ -271,7 +274,11 @@ async def _raise_if_orphaning(
         rejected = assignment_mismatch(
             spec, row.name, models, assigned.model_name
         )
-        if rejected is not None:
+        was_valid = (
+            assignment_mismatch(spec, row.name, current, assigned.model_name)
+            is None
+        )
+        if rejected is not None and was_valid:
             raise LlmProviderInUse(
                 f"用途「{spec.label}」指着「{assigned.model_name}」，"
                 f"改完后{rejected}——先把这个用途改指别处"
