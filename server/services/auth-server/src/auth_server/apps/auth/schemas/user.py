@@ -11,6 +11,7 @@ from pydantic import BaseModel, ConfigDict, EmailStr, Field, StringConstraints
 
 from auth_server.apps.auth.schemas.common import (
     InputModel,
+    NotNull,
     OutputModel,
     Trimmed,
     Utc,
@@ -102,7 +103,7 @@ class RegistrationIn(InputModel):
 class UserUpdateIn(InputModel):
     """管理员改他人资料。缺省的字段表示本次不涉及。"""
 
-    email: EmailStr | None = None
+    email: Annotated[EmailStr | None, NotNull] = None
     full_name: DisplayName | None = None
     avatar_url: Url | None = None
     phone: Phone | None = None
@@ -111,7 +112,7 @@ class UserUpdateIn(InputModel):
 class MeUpdateIn(InputModel):
     """改自己的资料。改不了启停、角色与权限，因此不要求权限码。"""
 
-    email: EmailStr | None = None
+    email: Annotated[EmailStr | None, NotNull] = None
     full_name: DisplayName | None = None
     avatar_url: Url | None = None
     phone: Phone | None = None
