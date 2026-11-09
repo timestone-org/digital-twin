@@ -85,7 +85,7 @@ from platform_server.settings import Settings
 
 _logger = get_logger("platform.worker")
 
-# 一天与一分钟的秒数，清理周期与时区偏移换算用
+# 一天的秒数，清理周期用
 _DAY_S = 86400.0
 
 Wait = Callable[[], Awaitable[None]]
