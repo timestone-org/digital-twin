@@ -19,7 +19,7 @@ const emit = defineEmits<{ adopt: []; dismiss: [] }>()
   <div class="proposal">
     <div class="proposal__head">
       <span class="proposal__title">助手的公式提议</span>
-      <DtTag :tone="proposal.isExisting ? 'info' : 'warning'" size="sm">
+      <DtTag :intent="proposal.isExisting ? 'info' : 'warning'" size="sm">
         {{ proposal.isExisting ? '改现有列' : '新建一列' }}
       </DtTag>
     </div>
