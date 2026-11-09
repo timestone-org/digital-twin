@@ -45,7 +45,7 @@ function state(unit: { id: string }): ConfigState {
       options: computed(() => []),
       loading: ref(false),
       error: ref<string | null>(null),
-      load: async () => undefined,
+      load: () => Promise.resolve(),
     },
   }
 }

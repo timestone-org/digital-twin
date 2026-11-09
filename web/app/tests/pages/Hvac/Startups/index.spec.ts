@@ -952,7 +952,10 @@ describe('换房间与轮询', () => {
     expect(wrapper.text()).toContain('555 条事件')
     await pick('房间', '装配房')
     expect(wrapper.text()).not.toContain('555 条事件')
-    expect(wrapper.text()).not.toContain('42')
+    // 断言落在左栏条目上：整页文本里混着顶栏的时钟，数字随便撞
+    expect(
+      document.querySelectorAll('[aria-label="组合覆盖"] li > button'),
+    ).toHaveLength(0)
   })
 
   it('⚠ 抽取进行中定时回读进度，跑完后刷新事件且不再轮询', async () => {
