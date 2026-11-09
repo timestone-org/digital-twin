@@ -387,11 +387,11 @@ function refExtentOf(
   const refs = refLinesOf(config, layout.resolve)
   const carrier = views[markLineCarrier(views, layout.dualAxis)]
   if (refs.length === 0 || carrier === undefined) return null
-  const values = refs.map((ref) => ref.value)
+  const marks = refs.map((ref) => ref.value)
   return {
     axis: axisIndexOf(carrier, layout.dualAxis),
-    min: Math.min(...values),
-    max: Math.max(...values),
+    min: Math.min(...marks),
+    max: Math.max(...marks),
   }
 }
 

@@ -535,15 +535,15 @@ function refExtentOf(
 ): { axis: number; dataMin: number; dataMax: number } | null {
   if (layout.percent || layout.diverging) return null
   const host = view.series[refHostIndex(view)]
-  const values = readArray(config.refLines).flatMap((row) => {
+  const marks = readArray(config.refLines).flatMap((row) => {
     const value = readLooseNumber(readRecord(row).value)
     return value === null ? [] : [value]
   })
-  if (host === undefined || values.length === 0) return null
+  if (host === undefined || marks.length === 0) return null
   return {
     axis: host.item.axis === 'right' && layout.hasRight ? 1 : 0,
-    dataMin: Math.min(...values),
-    dataMax: Math.max(...values),
+    dataMin: Math.min(...marks),
+    dataMax: Math.max(...marks),
   }
 }
 
