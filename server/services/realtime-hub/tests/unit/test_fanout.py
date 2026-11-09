@@ -254,3 +254,76 @@ async def test_a_stalled_socket_is_dropped_instead_of_stalling_the_replica(
         (good,),
         [fanout.CLOSE_TRY_AGAIN],
     )
+
+
+async def test_a_briefly_stalled_socket_still_gets_its_close_frame(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    # ⚠ 对端卡了几秒又恢复（Wi-Fi 抖动），保活不会判它死；关闭帧若在那之前
+    # 就放弃，它就成了摘了索引、却还连着的僵尸：屏上停在旧值，没有一处报错
+    monkeypatch.setattr(fanout, "SEND_TIMEOUT_S", 0.05)
+    monkeypatch.setattr(fanout, "CLOSE_TIMEOUT_S", 0.05)
+    connections = ConnectionRegistry()
+    stalled = _connection([])
+    drained = asyncio.Event()
+    is_closing = asyncio.Event()
+    is_closed = asyncio.Event()
+    closed: list[int] = []
+
+    async def stuck_until_drained(_frame: str) -> None:
+        await drained.wait()
+
+    async def close_after_drain(code: int) -> None:
+        is_closing.set()
+        await drained.wait()
+        closed.append(code)
+        is_closed.set()
+
+    stalled.send_frame = stuck_until_drained
+    stalled.close = close_after_drain
+    await connections.add(stalled)
+    await connections.bind(stalled.id, "test:1")
+    listener = _listener([{"topic": "test:1", "seq": 1}], connections)
+
+    await listener.start()
+    try:
+        async with asyncio.timeout(1):
+            await is_closing.wait()
+        await asyncio.sleep(0.2)
+        drained.set()
+        async with asyncio.timeout(1):
+            await is_closed.wait()
+    finally:
+        await listener.stop()
+
+    assert closed == [fanout.CLOSE_TRY_AGAIN]
+
+
+async def test_stop_does_not_wait_for_pending_slow_closes(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    monkeypatch.setattr(fanout, "SEND_TIMEOUT_S", 0.05)
+    connections = ConnectionRegistry()
+    stalled = _connection([])
+    is_closing = asyncio.Event()
+
+    async def never_drains(_frame: str) -> None:
+        await asyncio.Event().wait()
+
+    async def never_closes(_code: int) -> None:
+        is_closing.set()
+        await asyncio.Event().wait()
+
+    stalled.send_frame = never_drains
+    stalled.close = never_closes
+    await connections.add(stalled)
+    await connections.bind(stalled.id, "test:1")
+    listener = _listener([{"topic": "test:1", "seq": 1}], connections)
+    await listener.start()
+    async with asyncio.timeout(1):
+        await is_closing.wait()
+
+    async with asyncio.timeout(1):
+        await listener.stop()
+
+    assert listener._closing == set()
