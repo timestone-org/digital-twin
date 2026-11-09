@@ -41,6 +41,8 @@ KILL_GRACE_S = 5.0
 #: 待确认多久才算没人管了。⚠ 要长于一条任务跑满全部档的时长，否则别的副本会把
 #: 还在跑的任务抢走重压
 CLAIM_IDLE_MS = 2 * 60 * 60 * 1000
+#: 一次阻塞读等多久。⚠ 与其它消费循环共用一个 Redis 客户端，套接字超时按它定
+COMPRESS_BLOCK_MS = 5_000
 
 
 @dataclass(frozen=True)
@@ -52,7 +54,7 @@ class CompressOptions:
     script: Path
     #: node 可执行文件
     node: str = "node"
-    block_ms: int = 5_000
+    block_ms: int = COMPRESS_BLOCK_MS
     batch: int = 1
     claim_idle_ms: int = CLAIM_IDLE_MS
 
