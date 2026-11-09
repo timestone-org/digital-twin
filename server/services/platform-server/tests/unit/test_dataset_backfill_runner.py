@@ -253,6 +253,9 @@ async def test_a_lost_lock_before_the_tail_recompute_skips_it(
     # ⚠ 锁丢了还接着重算，就是两个任务同时改写同一段
     recompute = AsyncMock()
     monkeypatch.setattr(backfill_run, "recompute_range", recompute)
+    monkeypatch.setattr(
+        backfill_run, "_compile", AsyncMock(return_value=object())
+    )
     context, plan, state = a_tail_case(LostLockJobs(store=InMemoryCache()))
 
     await backfill_run._recompute_tail(context, plan, state, [])
@@ -264,9 +267,15 @@ async def test_a_lost_lock_before_the_tail_recompute_skips_it(
 async def test_a_failed_job_does_not_run_the_tail_recompute(
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
+    # ⚠ 锁仍在手、且有可算的公式：拦住重算的只能是失败态本身
     recompute = AsyncMock()
     monkeypatch.setattr(backfill_run, "recompute_range", recompute)
-    context, plan, state = a_tail_case(BackfillJobs(store=InMemoryCache()))
+    monkeypatch.setattr(
+        backfill_run, "_compile", AsyncMock(return_value=object())
+    )
+    jobs = BackfillJobs(store=InMemoryCache())
+    context, plan, state = a_tail_case(jobs)
+    assert await jobs.claim(TABLE_ID, "token")
     state.fail("单飞锁已失去", "回填中止")
 
     await backfill_run._recompute_tail(context, plan, state, [])
