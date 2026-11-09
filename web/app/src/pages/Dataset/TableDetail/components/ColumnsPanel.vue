@@ -46,7 +46,7 @@ const mismatch = computed(() => {
 const period = computed(() => {
   const table = props.table
   if (table === null || table.collect_mode !== 'aggregate') return null
-  return `点位列每 ${formatInterval(table.collect_interval_ms)} 从点位历史汇总出一个数。`
+  return `点位列每 ${formatInterval(table.collect_interval_ms)}从点位历史汇总出一个数。`
 })
 </script>
 

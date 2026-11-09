@@ -54,7 +54,7 @@ export function collectSummary(table: DatasetTableSummary): CollectSummary {
     const every = formatInterval(table.collect_interval_ms)
     return {
       label: `自动采集 · 每 ${every}`,
-      hint: `每 ${every} 从点位历史汇总出一行。`,
+      hint: `每 ${every}从点位历史汇总出一行。`,
     }
   }
   return {

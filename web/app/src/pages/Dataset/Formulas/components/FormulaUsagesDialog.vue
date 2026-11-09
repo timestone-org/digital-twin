@@ -15,6 +15,9 @@ import type { DtDataViewLayout } from '@dt/ui'
 
 import type { FormulaUsageRow } from '../scripts/formulaView'
 
+const USAGES_HINT =
+  '下面这些列即刻按新口径算。标「间接」的那几列是被别的库公式带进来的，改这一列救不了、要去改那条公式。新口径落到历史行上，要在各自的台账详情页重算。'
+
 const COLUMNS: readonly DtDataColumn[] = [
   { key: 'table_name', label: '台账', width: '12rem', card: 'title' },
   { key: 'column_name', label: '列', width: '10rem', card: 'meta' },
@@ -63,10 +66,9 @@ const emit = defineEmits<{
     @update:model-value="emit('update:modelValue', $event)"
   >
     <div class="flex flex-col gap-3">
+      <!-- 中文句子不在模板里折行：折行处的空白会渲染成一个可见空格 -->
       <p class="text-xs leading-relaxed text-text-secondary">
-        下面这些列即刻按新口径算。标「间接」的那几列是被别的库公式带进来的，
-        改这一列救不了、要去改那条公式。新口径落到历史行上，要在各自的台账
-        详情页重算。
+        {{ USAGES_HINT }}
       </p>
 
       <DtDataView
@@ -104,10 +106,12 @@ const emit = defineEmits<{
         </template>
 
         <template #cell-actions="{ row }">
-          <RouterLink :to="`/datasets/${row.table_id}`">
-            <DtButton variant="ghost" intent="neutral" size="sm">
-              去台账
-            </DtButton>
+          <!-- 链接本身画成按钮样，不在 <a> 里再套 <button>：交互元素嵌套、Tab 要停两次 -->
+          <RouterLink
+            :to="`/datasets/${row.table_id}`"
+            class="inline-flex h-7 items-center rounded-md px-2 text-xs text-text-secondary transition-colors hover:bg-accent-primary/10 hover:text-text-primary"
+          >
+            去台账
           </RouterLink>
         </template>
       </DtDataView>
