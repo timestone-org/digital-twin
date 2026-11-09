@@ -46,6 +46,9 @@ MAX_ROUNDS = 3
 # 一次改写出几条检索式
 MAX_QUERIES = 3
 
+_CEILING_NOTE = "到了轮数上限，这批资料可能没覆盖全"
+_STALLED_NOTE = "再查一轮也没有新资料，这批资料可能没覆盖全"
+
 _REWRITE_SYSTEM = (
     "你在为一个工业资料知识库改写检索式。把用户的问题拆成 1-3 条**互不重复**"
     "的检索式，每条尽量短。设备编号、型号、标准号要原样保留——它们在向量空间"
@@ -86,32 +89,44 @@ class Agentic:
         """
         if not self.answerer.can_answer:
             raise RetrievalUnavailable("这套部署没接对话档，agentic 策略用不了")
-        seen: dict[str, Hit] = {}
-        rounds = 0
-        is_complete = False
-        while rounds < self.max_rounds and not is_complete:
-            rounds += 1
-            for one in await self._round(session, request):
-                seen[str(one.chunk_id)] = one
-            found = list(seen.values())
-            await released(session)
-            is_complete = await self._is_enough(request.query, found)
-        hits, note = await self._ranked(request, list(seen.values()))
+        pool, rounds, is_complete, stop_note = await self._gathered(
+            session, request
+        )
+        hits, note = await self._ranked(request, pool)
         return RetrievalResult(
             hits=hits,
             strategy=self.name,
             rounds=rounds,
             is_complete=is_complete,
             answer=await self._answer(request.query, hits),
-            note="；".join(
-                one
-                for one in (
-                    "" if is_complete else "到了轮数上限，这批资料可能没覆盖全",
-                    note,
-                )
-                if one
-            ),
+            note="；".join(one for one in (stop_note, note) if one),
         )
+
+    async def _gathered(
+        self, session: AsyncSession, request: RetrievalRequest
+    ) -> tuple[list[Hit], int, bool, str]:
+        """一轮轮改写、召回、评分，回攒下的池子、跑了几轮、够不够与停下的原因。
+
+        ⚠ 一轮下来没有一条新片段就停：再查一轮也只会是同一批，而那一轮的模型
+        调用与召回是白花的。
+
+        Args: session, request。
+        """
+        seen: dict[str, Hit] = {}
+        tried: list[str] = []
+        for rounds in range(1, self.max_rounds + 1):
+            before = len(seen)
+            found = await self._round(
+                session, request, tried, list(seen.values())
+            )
+            for one in found:
+                seen[str(one.chunk_id)] = one
+            await released(session)
+            if rounds > 1 and len(seen) == before:
+                return (list(seen.values()), rounds, False, _STALLED_NOTE)
+            if await self._is_enough(request.query, list(seen.values())):
+                return (list(seen.values()), rounds, True, "")
+        return (list(seen.values()), self.max_rounds, False, _CEILING_NOTE)
 
     async def _ranked(
         self, request: RetrievalRequest, pool: list[Hit]
@@ -133,33 +148,44 @@ class Agentic:
         )
 
     async def _round(
-        self, session: AsyncSession, request: RetrievalRequest
+        self,
+        session: AsyncSession,
+        request: RetrievalRequest,
+        tried: list[str],
+        found: list[Hit],
     ) -> list[Hit]:
         """改写一次，把改出来的每条检索式各跑一遍混合召回。
 
-        Args: session, request。
+        Args: session, request, tried（试过的检索式，本轮的会追加进去）,
+        found（此前查到的片段）。
         """
         await released(session)
+        queries = await self._rewritten(request.query, tried, found)
+        tried.extend(queries)
         made: list[Hit] = []
-        for one in await self._rewritten(request.query):
-            found = await self.hybrid.retrieve(
+        for one in queries:
+            got = await self.hybrid.retrieve(
                 session,
                 RetrievalRequest(
                     base_id=request.base_id, query=one, limit=request.limit
                 ),
             )
-            made.extend(found.hits)
+            made.extend(got.hits)
         return made
 
-    async def _rewritten(self, query: str) -> list[str]:
+    async def _rewritten(
+        self, query: str, tried: list[str], found: list[Hit]
+    ) -> list[str]:
         """把问题改写成几条检索式；改不出来就用原句。
 
         ⚠ 改不出来**退回原句**而不是抛：改写只是锦上添花，而一次 JSON 解析
         失败不该让整次提问失败。
 
-        Args: query。
+        Args: query, tried（试过的检索式）, found（此前查到的片段）。
         """
-        reply = await self.answerer.complete(_REWRITE_SYSTEM, query)
+        reply = await self.answerer.complete(
+            _REWRITE_SYSTEM, _rewrite_prompt(query, tried, found)
+        )
         rows = _parsed_queries(reply)
         return rows[:MAX_QUERIES] or [query]
 
@@ -188,6 +214,30 @@ class Agentic:
         return await self.answerer.complete(
             _ANSWER_SYSTEM, _as_prompt(query, list(hits))
         )
+
+
+def _rewrite_prompt(query: str, tried: list[str], found: list[Hit]) -> str:
+    """改写那一次的提问；补检的那几轮带上试过什么、查到了什么。
+
+    ⚠ 不带的话，确定性的模型每一轮都回同一批检索式、召回同一批片段——补检
+    这件事根本没发生。
+
+    Args: query, tried, found。
+    """
+    if not tried:
+        return query
+    seen = sorted(
+        {f"{one.document_title} {one.heading_path}".strip() for one in found}
+    )
+    return "\n".join(
+        (
+            query,
+            "",
+            f"已经试过的检索式：{'；'.join(tried)}",
+            f"已经查到的资料：{'；'.join(seen) or '一条都没有'}",
+            "这些还不够回答。换几条与上面不同的检索式，去找还缺的那部分。",
+        )
+    )
 
 
 def _parsed_queries(reply: str) -> list[str]:

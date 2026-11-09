@@ -136,11 +136,12 @@ async def test_it_keeps_going_while_the_grader_says_not_enough() -> None:
 async def test_hitting_the_ceiling_says_so() -> None:
     """⚠ 到顶就把手上最好的那一批**连同「我没查全」一起**交出去，
     而不是装作查完了。"""
-    hybrid = _Hybrid(batches=[(_hit("甲"),)])
+    hybrid = _Hybrid(batches=[(_hit(str(one)),) for one in range(9)])
     made = await _agentic(hybrid, _Answerer(grade="no")).retrieve(
         _Session(),  # pyright: ignore[reportArgumentType]
         _request(),
     )
+    assert made.rounds == 3
     assert made.is_complete is False
     assert "轮数上限" in made.note
 
@@ -299,3 +300,33 @@ async def test_no_transaction_stays_open_across_a_model_call() -> None:
     )
     assert answerer.open_during_calls
     assert not any(answerer.open_during_calls)
+
+
+async def test_a_retry_round_is_told_what_was_already_tried() -> None:
+    """⚠ 每一轮都只拿原句去改写的话，确定性的模型回同一批检索式、召回同一批
+    片段——补检这件事根本没发生，只是多花了两轮模型钱。"""
+    answerer = _Answerer(grade="no")
+    hybrid = _Hybrid(batches=[(_hit("甲"),), (_hit("乙"),), (_hit("丙"),)])
+    await _agentic(hybrid, answerer).retrieve(
+        _Session(),  # pyright: ignore[reportArgumentType]
+        _request(),
+    )
+    rewrites = [
+        user for system, user in answerer.seen if "改写检索式" in system
+    ]
+    assert len(rewrites) >= 2
+    assert "出口温度" not in rewrites[0].replace("出口温度多少", "")
+    assert "出口温度" in rewrites[1].replace("出口温度多少", "")
+    assert "手册.md" in rewrites[1]
+
+
+async def test_a_round_that_finds_nothing_new_ends_the_loop() -> None:
+    """⚠ 一轮下来一条新片段都没有，再查一轮也只会是同一批。"""
+    same = _hit("甲")
+    hybrid = _Hybrid(batches=[(same,), (same,), (same,)])
+    made = await _agentic(hybrid, _Answerer(grade="no")).retrieve(
+        _Session(),  # pyright: ignore[reportArgumentType]
+        _request(),
+    )
+    assert made.rounds == 2
+    assert made.is_complete is False
