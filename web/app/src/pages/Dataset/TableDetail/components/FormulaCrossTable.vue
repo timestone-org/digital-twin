@@ -36,9 +36,15 @@ const options = computed(() =>
   props.tables.map((one) => ({ value: one.code, label: one.name })),
 )
 
-/** 取一份 code → id 换算表。 */
-async function loadIds(): Promise<Map<string, string>> {
-  const page = await dataset.listDatasetTables({ size: TABLE_PAGE_SIZE })
+/**
+ * 取一份 code → id 换算表。
+ * @param signal 被顶掉或关窗时中止
+ */
+async function loadIds(signal: AbortSignal): Promise<Map<string, string>> {
+  const page = await dataset.listDatasetTables(
+    { size: TABLE_PAGE_SIZE },
+    signal,
+  )
   idsByCode = new Map(page.items.map((one) => [one.code, one.id]))
   return idsByCode
 }

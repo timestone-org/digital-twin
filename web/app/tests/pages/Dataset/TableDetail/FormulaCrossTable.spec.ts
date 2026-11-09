@@ -93,6 +93,10 @@ describe('选一张表', () => {
   it('选了就按 code 换出 id，再取那张表的列', async () => {
     const wrapper = open()
     await pick(wrapper, 'water')
+    expect(dataset.listDatasetTables).toHaveBeenCalledWith(
+      expect.anything(),
+      expect.any(AbortSignal),
+    )
     expect(dataset.listDatasetColumns).toHaveBeenCalledWith(
       'w1',
       expect.any(AbortSignal),
