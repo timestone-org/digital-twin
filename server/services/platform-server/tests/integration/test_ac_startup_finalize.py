@@ -439,6 +439,23 @@ async def test_a_very_long_failure_reason_is_trimmed(
     assert len(failed.error) == 500
 
 
+async def test_an_empty_failure_reason_still_records_the_failure(
+    db_session: AsyncSession,
+) -> None:
+    """⚠ 空原因会撞上分片表的 CHECK，失败本身落不了库，批次就永远停在跑中。"""
+    room_id = await make_room(db_session, "空原因")
+    plan = await request_rebuild(
+        db_session, room_id=room_id, window=WINDOW, rules=RULES
+    )
+    await fail_shard(db_session, plan.messages[0], reason="")
+    shards = await ac_startup_shard_crud.list_by_batch(
+        db_session, plan.batch.id
+    )
+    failed = next(item for item in shards if item.month == "2026-01")
+    assert failed.status == SHARD_STATUS_FAILED
+    assert failed.error
+
+
 async def test_an_empty_window_is_rejected_before_a_batch_exists(
     db_session: AsyncSession,
 ) -> None:

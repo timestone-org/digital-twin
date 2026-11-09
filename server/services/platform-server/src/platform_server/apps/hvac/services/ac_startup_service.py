@@ -349,18 +349,20 @@ async def fail_shard(
     见——批次判失败、上一批次照常服务，人看到了再重新触发。
     Args: session, message, reason。
     """
+    # ⚠ 空原因会撞上分片表的 CHECK，失败本身就落不了库
+    text = reason.strip()[:_MAX_REASON] or "未说明原因"
     await ac_startup_shard_crud.mark(
         session,
         AcStartupShard(batch_id=message.batch_id, month=message.month),
         status=SHARD_STATUS_FAILED,
-        error=reason[:_MAX_REASON],
+        error=text,
     )
     _logger.error(
         "ac_startup_shard_failed",
         "分片抽取失败",
         batch_id=str(message.batch_id),
         month=message.month,
-        reason=reason[:_MAX_REASON],
+        reason=text,
     )
 
 

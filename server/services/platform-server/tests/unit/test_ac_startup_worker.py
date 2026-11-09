@@ -125,10 +125,12 @@ def entry(entry_id: str, *, month: str = "2026-01") -> StreamEntry:
     )
 
 
-def build_consumer(stream: FakeStream) -> ShardConsumer:
+def build_consumer(
+    stream: FakeStream, *, shard_timeout_s: float = 5.0
+) -> ShardConsumer:
     """一个装着假件的消费者。
 
-    Args: stream。
+    Args: stream, shard_timeout_s。
     """
     return ShardConsumer(
         database=cast(Database, FakeDatabase()),
@@ -144,7 +146,7 @@ def build_consumer(stream: FakeStream) -> ShardConsumer:
             prefetch=4,
             block_ms=10,
             claim_idle_ms=10,
-            shard_timeout_s=5.0,
+            shard_timeout_s=shard_timeout_s,
         ),
     )
 
@@ -296,6 +298,32 @@ async def test_a_failing_shard_is_recorded_and_the_loop_survives(
     await build_consumer(stream)._tick()
     assert calls == ["fail:2026-01:外部数据", "finalize"]
     assert stream.acked == ["1-0"]
+
+
+async def test_a_timed_out_shard_is_recorded_with_a_reason(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """⚠ 超时的 TimeoutError 文本为空，原因必须另给，否则落库被拒。"""
+    reasons: list[str] = []
+
+    async def slow(
+        _session: object, _context: object, _message: ShardMessage
+    ) -> ShardRun:
+        await asyncio.sleep(1.0)
+        return ShardRun(outcome=SHARD_RUN_EXTRACTED, episode_count=0)
+
+    async def record(
+        _session: object, _message: ShardMessage, *, reason: str
+    ) -> None:
+        reasons.append(reason)
+
+    monkeypatch.setattr(ac_startup_worker, "run_shard", slow)
+    monkeypatch.setattr(ac_startup_worker, "fail_shard", record)
+    monkeypatch.setattr(ac_startup_worker, "finalize_if_complete", _no_finalize)
+    stream = FakeStream(batches=[[entry("1-0")]])
+    await build_consumer(stream, shard_timeout_s=0.01)._tick()
+    assert len(reasons) == 1
+    assert reasons[0].strip()
 
 
 async def test_claimed_messages_are_taken_before_new_ones(
