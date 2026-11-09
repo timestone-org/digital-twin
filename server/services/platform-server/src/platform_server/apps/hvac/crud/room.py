@@ -3,11 +3,18 @@
 import uuid
 from dataclasses import dataclass
 
-from sqlalchemy import Select, func, select
+from sqlalchemy import Select, exists, func, select, union_all
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from lib.db import CrudBase
-from platform_server.apps.hvac.models import AcUnit, Room, Workshop
+from platform_server.apps.hvac.models import (
+    AcModel,
+    AcStartupBatch,
+    AcStartupExclusion,
+    AcUnit,
+    Room,
+    Workshop,
+)
 
 SORTABLE = {"name": Room.name, "created_at": Room.created_at}
 DEFAULT_ORDER = (Room.name.asc(),)
@@ -49,6 +56,23 @@ class RoomCrud(CrudBase[Room]):
                 .order_by(Room.id)
                 .with_for_update(read=should_share)
             )
+
+    async def has_history(
+        self, session: AsyncSession, room_id: uuid.UUID
+    ) -> bool:
+        """房间是否还挂着模型、抽取批次或剔除记录。
+
+        Args: session, room_id。
+        """
+        dependents = union_all(
+            select(AcModel.id).where(AcModel.room_id == room_id),
+            select(AcStartupBatch.id).where(AcStartupBatch.room_id == room_id),
+            select(AcStartupExclusion.id).where(
+                AcStartupExclusion.room_id == room_id
+            ),
+        )
+        result = await session.execute(select(exists(dependents)))
+        return bool(result.scalar_one())
 
     async def locations(
         self, session: AsyncSession, room_ids: frozenset[uuid.UUID]
