@@ -36,6 +36,7 @@ from realtime_hub.apps.channel.services.session import (
 )
 from realtime_hub.apps.channel.services.user_codes import AccountUnusable
 from sqlalchemy.exc import OperationalError
+from starlette.websockets import WebSocketDisconnect
 
 from lib.auth import JwtCodec
 from lib.errors import DependencyUnavailable
@@ -320,6 +321,33 @@ async def test_reauth_drops_subscriptions_that_no_longer_qualify() -> None:
     revoked = [item for item in sent if item.get("event") == "unsubscribed"]
     assert len(revoked) == 1
     assert revoked[0]["reason"] == "permission_revoked"
+
+
+async def test_a_peer_leaving_mid_action_stays_a_clean_disconnect() -> None:
+    # ⚠ 对端在动作中途断开时，再回一帧 error 会撞上 starlette 的「已关闭」
+    # RuntimeError，收发循环认不出它，干净的断开就成了一条未处理异常
+    service, _connections = _service()
+    connection, _sent = await _open(service)
+    await service.dispatch(
+        connection, {"action": "subscribe", "topic": "opcua:1"}
+    )
+    is_gone: list[bool] = []
+
+    async def send(_message: dict[str, object]) -> None:
+        if is_gone:
+            raise RuntimeError(
+                'Cannot call "send" once a close message has been sent.'
+            )
+        is_gone.append(True)
+        raise WebSocketDisconnect(code=1006)
+
+    connection.send = send
+
+    with pytest.raises(WebSocketDisconnect):
+        await service.dispatch(
+            connection,
+            {"action": "reauth", "token": _token(codes=("other:x",))},
+        )
 
 
 async def test_reauth_rechecks_all_topics_in_one_registry_call() -> None:

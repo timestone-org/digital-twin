@@ -277,18 +277,7 @@ class SessionService:
         except Exception as error:
             # ⚠ 库抖动、外键竞态这类非领域异常也只回 error 帧：放它冒出去，
             # 整条连接会以 1011 断掉，用户正在看的全部主题一起黑屏
-            _logger.warning(
-                "ws_action_failed",
-                "处理客户端动作时依赖失败，已回错误帧",
-                action=str(action),
-                error_type=type(error).__name__,
-            )
-            await _send_error(
-                connection,
-                req_id,
-                DependencyUnavailable.code,
-                "服务暂时不可用，请稍后重试",
-            )
+            await _reply_unavailable(connection, req_id, action, error)
             return
         await connection.send(
             {"type": TYPE_ACK, "req_id": req_id, "action": action}
@@ -452,6 +441,33 @@ async def _send_error(
     """
     await connection.send(
         {"type": TYPE_ERROR, "req_id": req_id, "code": code, "message": message}
+    )
+
+
+async def _reply_unavailable(
+    connection: Connection, req_id: object, action: object, error: Exception
+) -> None:
+    """非领域异常回一帧 50001；连这一帧都发不出去就把原异常交回收发循环。
+
+    ⚠ 发不出去说明连接本身没了（对端断开时 starlette 先抛断开、再发就抛
+    RuntimeError）：吞掉原异常的话，干净的断开会变成一条未处理异常。
+
+    Args: connection, req_id, action, error。
+    """
+    try:
+        await _send_error(
+            connection,
+            req_id,
+            DependencyUnavailable.code,
+            "服务暂时不可用，请稍后重试",
+        )
+    except Exception:
+        raise error from None
+    _logger.warning(
+        "ws_action_failed",
+        "处理客户端动作时依赖失败，已回错误帧",
+        action=str(action),
+        error_type=type(error).__name__,
     )
 
 
