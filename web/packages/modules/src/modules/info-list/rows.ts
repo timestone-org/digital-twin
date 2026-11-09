@@ -232,6 +232,8 @@ export interface HoldEntry {
   /** 这一行第一次命中的时刻，UTC 毫秒；持续命中期间不变。 */
   since: number
   active: boolean
+  /** 这一行清除的时刻，UTC 毫秒；命中期间为 `null`。迟滞从它起算。 */
+  clearedAt: number | null
 }
 
 /** 一次迟滞缝合的结论。 */
@@ -794,13 +796,20 @@ export function reconcileHold(
     key,
     since: before.get(key)?.since ?? nowMs,
     active: true,
+    clearedAt: null,
   }))
   let earliest = Number.POSITIVE_INFINITY
   for (const entry of prev) {
     if (holdMs <= 0 || active.has(entry.key)) continue
-    const due = entry.since + holdMs
+    const clearedAt = entry.clearedAt ?? nowMs
+    const due = clearedAt + holdMs
     if (due <= nowMs) continue
-    entries.push({ key: entry.key, since: entry.since, active: false })
+    entries.push({
+      key: entry.key,
+      since: entry.since,
+      active: false,
+      clearedAt,
+    })
     earliest = Math.min(earliest, due)
   }
   const wake = earliest === Number.POSITIVE_INFINITY ? null : earliest - nowMs
