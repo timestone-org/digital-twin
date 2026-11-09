@@ -338,7 +338,7 @@ function scaleText(value: number, scale: GaugeScale): string {
  */
 function tickText(value: number, scale: GaugeScale): string {
   if (scale.wan) return `${fmtDecimal(value / WAN, scale.wanDigits)}万`
-  return fmtNumber(value, 0)
+  return scale.grouping ? fmtNumber(value, 0) : fmtTrim(value, 0)
 }
 
 /**

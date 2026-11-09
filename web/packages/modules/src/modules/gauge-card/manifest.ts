@@ -584,7 +584,7 @@ export default defineModule({
       group: '配色',
       default: '',
       span: 'half',
-      placeholder: '留空时跟随读数颜色',
+      placeholder: '留空时跟随主题强调色',
       help: '设置模块的默认填充色；单个仪表的固定颜色与规则颜色优先级更高。',
     },
     {
@@ -604,7 +604,7 @@ export default defineModule({
       group: '格式',
       default: true,
       span: 'half',
-      help: '读数、刻度与目标标签共用此文字颜色。',
+      help: '读数、刻度与目标标签共用此千分位设置。',
     },
     {
       ...valueRulesField(
