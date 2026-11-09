@@ -26,8 +26,14 @@ const fxCode = ref('')
 const slots = computed(() => {
   const inputs = props.version?.signature.inputs ?? []
   if (inputs.length > 0)
-    return inputs.map((item) => ({ key: item.key, label: item.label }))
-  return (props.version?.feature_keys ?? []).map((key) => ({ key, label: '' }))
+    return inputs.map((item) => ({
+      key: item.key,
+      text:
+        item.label && item.label !== item.key
+          ? `${item.label}（${item.key}）`
+          : item.key,
+    }))
+  return (props.version?.feature_keys ?? []).map((key) => ({ key, text: key }))
 })
 
 const signature = computed(() => {
@@ -70,12 +76,7 @@ watch(
         <h4>形参按位置对应入口列</h4>
         <ol>
           <li v-for="(slot, at) in slots" :key="slot.key">
-            第 {{ at + 1 }} 个参数 →
-            <template v-if="slot.label && slot.label !== slot.key">
-              {{ slot.label }}（<code>{{ slot.key }}</code
-              >）
-            </template>
-            <code v-else>{{ slot.key }}</code>
+            第 {{ at + 1 }} 个参数 → {{ slot.text }}
           </li>
         </ol>
         <p class="dt-ml-bind__signature">{{ signature }}</p>
@@ -108,10 +109,6 @@ watch(
       padding-left: 1.25rem;
       color: var(--text-primary);
       font-size: var(--ctl-fs-sm);
-    }
-
-    code {
-      font-family: var(--font-mono);
     }
   }
 

@@ -178,9 +178,9 @@ onMounted(() => void list.reload())
   >
     <template #actions>
       <RouterLink v-slot="{ navigate }" to="/modeling/instances" custom>
-        <DtButton variant="ghost" size="sm" @click="navigate"
-          >历史实例</DtButton
-        >
+        <DtButton variant="ghost" size="sm" @click="navigate">
+          历史实例
+        </DtButton>
       </RouterLink>
       <PermGuard :codes="[PERMISSION_CODES.modelingManage]" explain>
         <DtIconButton
