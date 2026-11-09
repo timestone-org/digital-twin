@@ -61,6 +61,7 @@ const hasSelection = computed(() => tree.selectedCount.value > 0)
  */
 async function toggle(address: string): Promise<void> {
   const outcome = await tree.toggle(address)
+  if (outcome.isSkipped) return
   if (outcome.error !== null) {
     toast.error(outcome.error)
     return

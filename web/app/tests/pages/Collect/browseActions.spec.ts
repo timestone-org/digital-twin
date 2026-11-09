@@ -156,8 +156,10 @@ describe('浏览请求隔离', () => {
       ],
       is_truncated: false,
     })
-    await pending
+    const outcome = await pending
     expect(tree.selectedCount.value).toBe(0)
+    // ⚠ 被作废的勾选不是「这个节点下面没有点位」，界面不能据此提示
+    expect(outcome.isSkipped).toBe(true)
     unmount()
   })
 

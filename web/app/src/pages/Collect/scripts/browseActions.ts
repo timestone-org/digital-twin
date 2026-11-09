@@ -34,9 +34,18 @@ export interface ToggleOutcome {
   changed: number
   total: number
   error: string | null
+  /** 这次勾选没有真正发生（请求被作废、节点正在加载、点位已建），界面不该据此提示。 */
+  isSkipped: boolean
 }
 
-const NOOP: ToggleOutcome = { isWhole: true, changed: 0, total: 0, error: null }
+const NOOP: ToggleOutcome = {
+  isWhole: true,
+  changed: 0,
+  total: 0,
+  error: null,
+  isSkipped: false,
+}
+const SKIPPED: ToggleOutcome = { ...NOOP, isSkipped: true }
 
 function requestFor(ctx: Ctx, address: string | null): RacedFetch {
   const existing = ctx.requests.get(address)
@@ -213,16 +222,16 @@ export async function toggle(
   address: string,
 ): Promise<ToggleOutcome> {
   const node = findNode(ctx.roots.value, address)
-  if (node === null || node.isLoading) return NOOP
+  if (node === null || node.isLoading) return SKIPPED
   if (node.isVariable) {
-    if (ctx.taken.value.has(address)) return NOOP
+    if (ctx.taken.value.has(address)) return SKIPPED
     toggleOne(ctx, address)
-    return { isWhole: true, changed: 1, total: 1, error: null }
+    return { ...NOOP, changed: 1, total: 1 }
   }
   if (ctx.states.get(address) === 'all')
     return outcomeOf(true, pick(ctx, node, false), node)
   const loaded = await loadSubtree(ctx, node)
-  if (loaded === null) return NOOP
+  if (loaded === null) return SKIPPED
   if (loaded.error !== null) return loaded
   node.isOpen = true
   return outcomeOf(loaded.isWhole, pick(ctx, node, true), node)
@@ -233,5 +242,5 @@ function outcomeOf(
   changed: number,
   node: TreeNode,
 ): ToggleOutcome {
-  return { isWhole, changed, total: variablesUnder(node).length, error: null }
+  return { ...NOOP, isWhole, changed, total: variablesUnder(node).length }
 }
