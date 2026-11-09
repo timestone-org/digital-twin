@@ -36,6 +36,7 @@ from platform_server.apps.modeling.operators.reporting import ReportBlock
 from platform_server.apps.modeling.operators.windowblocks import (
     LagRun,
     RollingRun,
+    is_out_of_order,
     lag_blocks,
     rolling_blocks,
     valid_counts,
@@ -155,6 +156,7 @@ class LagFeature(OperatorBase):
             configured=len(config.lags),
             kept=len(result.columns),
             rows=frame.row_count,
+            is_out_of_order=is_out_of_order(frame.index),
         )
 
 
@@ -279,6 +281,7 @@ class RollingFeature(OperatorBase):
                 key: valid_counts(numbers_of(frame, key), config.window)
                 for key in config.columns
             },
+            is_out_of_order=is_out_of_order(frame.index),
         )
 
 
