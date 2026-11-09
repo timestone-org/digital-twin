@@ -52,7 +52,7 @@ function duration(ms: number | null): string {
       v-if="props.runs.length === 0"
       inline
       title="还没有跑过"
-      hint="摆好算子、连上线，然后点右上角的「运行」。"
+      hint="摆好算子、连上线，然后点右上角的「开始训练」。"
     />
     <button
       v-for="run in props.runs"
@@ -77,7 +77,11 @@ function duration(ms: number | null): string {
         </span>
         <span v-if="run.created_by_name">{{ run.created_by_name }}</span>
       </span>
-      <span v-if="run.error_text" class="dt-ml-runs__error">
+      <span
+        v-if="run.error_text"
+        class="dt-ml-runs__error"
+        :title="run.error_text"
+      >
         {{ run.error_text }}
       </span>
     </button>
