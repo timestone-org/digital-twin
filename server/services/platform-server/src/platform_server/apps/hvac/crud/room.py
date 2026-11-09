@@ -143,8 +143,9 @@ class RoomCrud(CrudBase[Room]):
         if workshop_id is not None:
             statement = statement.where(Room.workshop_id == workshop_id)
         if keyword:
-            pattern = f"%{keyword.lower()}%"
-            statement = statement.where(func.lower(Room.name).like(pattern))
+            statement = statement.where(
+                Room.name.icontains(keyword, autoescape=True)
+            )
         return statement
 
 

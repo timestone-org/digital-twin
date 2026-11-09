@@ -244,3 +244,17 @@ async def test_units_are_listed_in_serial_order_by_default(
     )
     serials = [item["serial"] for item in response.json()["data"]["items"]]
     assert serials == ["AC-Z-1", "AC-Z-2"]
+
+
+async def test_an_underscore_in_a_search_matches_literally(
+    app_client: httpx.AsyncClient,
+) -> None:
+    """⚠ 设备编号常带 `_`：不转义的话搜 `K_1` 会连 `KA1` 一起命中。"""
+    room = await build_room(app_client, "通配")
+    await add_unit(app_client, room_id=room, serial="K_1", name="甲")
+    await add_unit(app_client, room_id=room, serial="KA1", name="乙")
+    found = await app_client.get(
+        f"{PREFIX}/ac-units", params={"room_id": room, "q": "K_1"}
+    )
+    serials = [item["serial"] for item in found.json()["data"]["items"]]
+    assert serials == ["K_1"]

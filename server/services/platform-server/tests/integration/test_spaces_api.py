@@ -221,3 +221,24 @@ async def test_page_size_beyond_the_ceiling_is_400(
         f"{PREFIX}/workshops", params={"size": 1_000_000}
     )
     assert response.status_code == 400
+
+
+async def test_wildcards_in_a_search_match_literally(
+    app_client: httpx.AsyncClient,
+) -> None:
+    """⚠ `_` 与 `%` 按字面匹配：不转义的话 `_` 能命中每一行。"""
+    workshop = await create_workshop(app_client, "通配车间")
+    await create_workshop(app_client, "通配_车间")
+    await create_workshop(app_client, "通配%车间")
+    await create_room(app_client, workshop_id=workshop, name="A1")
+    await create_room(app_client, workshop_id=workshop, name="B_1")
+    rooms = await app_client.get(
+        f"{PREFIX}/rooms", params={"workshop_id": workshop, "q": "_"}
+    )
+    assert [item["name"] for item in rooms.json()["data"]["items"]] == ["B_1"]
+    for keyword, expected in (("_", "通配_车间"), ("%", "通配%车间")):
+        found = await app_client.get(
+            f"{PREFIX}/workshops", params={"q": keyword}
+        )
+        names = [item["name"] for item in found.json()["data"]["items"]]
+        assert names == [expected]
