@@ -335,3 +335,31 @@ async def test_a_run_cancelled_before_pickup_skips_the_data_fetch(
     assert fetched == []
     detail = data_of(await app_client.get(f"{RUNS}/{run['id']}"))
     assert detail["status"] == "cancelled"
+
+
+async def test_the_reaper_does_not_overwrite_a_run_that_just_finished(
+    app_client: httpx.AsyncClient,
+    worker_sessions: MakerSessions,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """名单取出来之后才落定的运行，按行锁重读一遍，不再被改回 failed。"""
+    created = await create_pipeline(app_client, "q6b", linear_graph("any"))
+    run = await _start(app_client, created["id"])
+    identity = uuid.UUID(run["id"])
+    async with worker_sessions.session() as session:
+        row = await run_crud.get(session, identity)
+        assert row is not None
+        row.status = "succeeded"
+        row.finished_at = row.created_at
+
+    async def listed(*args: object, **kwargs: object) -> list[uuid.UUID]:
+        del args, kwargs
+        return [identity]
+
+    monkeypatch.setattr(run_crud, "stale_ids", listed)
+    reaped = await reap_stale(
+        worker_sessions, options=_options(keep=20, days=90)
+    )
+    assert reaped == 0
+    detail = data_of(await app_client.get(f"{RUNS}/{run['id']}"))
+    assert detail["status"] == "succeeded"

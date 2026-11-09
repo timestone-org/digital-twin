@@ -20,6 +20,8 @@ from platform_server.apps.modeling.crud import (
     node_run_crud,
     run_crud,
 )
+from platform_server.apps.modeling.models import ModelingRun
+from platform_server.apps.modeling.protocols import ACTIVE_RUN_STATUSES
 from platform_server.apps.modeling.services.artifact_store import run_prefix
 from platform_server.apps.modeling.services.run_dispatch import (
     INTERRUPTED_REASON,
@@ -123,24 +125,52 @@ async def reap_stale(sessions: Sessions, *, options: RetentionOptions) -> int:
 
     ⚠ 不落终态的话，那条部分唯一索引会把这条流水线**永久**锁在「已有运行在途」
     上——用户再也发不起第二次，而界面上那次运行看起来一直在跑。
+    ⚠ 逐条加行锁重读：取名单之后才落定、或刚续上心跳的运行不能被改回 failed。
     Args: sessions, options。
     """
     before = datetime.now(UTC) - timedelta(minutes=options.stale_minutes)
+    reaped = 0
     async with sessions.session() as session:
         stale = await run_crud.stale_ids(
             session, before=before, limit=SWEEP_MAX_RUNS
         )
         for run_id in stale:
-            run = await run_crud.get(session, run_id)
-            if run is None:
+            run = await run_crud.get_for_update(session, run_id)
+            if run is None or not _is_still_stale(run, before):
                 continue
-            run.status = "failed"
-            run.finished_at = datetime.now(UTC)
-            run.error_text = INTERRUPTED_REASON
-            if run.publication_status == "pending":
-                run.publication_status = "skipped"
-                run.publication_error = "训练已中断，已保留现有发布模型"
-        return len(stale)
+            _mark_interrupted(run)
+            reaped += 1
+        return reaped
+
+
+def _is_still_stale(run: ModelingRun, before: datetime) -> bool:
+    """行锁内再判一次：还在途且心跳仍然陈旧。
+
+    Args: run, before。
+    """
+    return (
+        run.status in ACTIVE_RUN_STATUSES
+        and run.heartbeat_at is not None
+        and run.heartbeat_at < before
+    )
+
+
+def _mark_interrupted(run: ModelingRun) -> None:
+    """落成「上一次执行中断」的终态，连同时长与待发布的那一笔。
+
+    Args: run。
+    """
+    finished = datetime.now(UTC)
+    run.status = "failed"
+    run.finished_at = finished
+    run.error_text = INTERRUPTED_REASON
+    if run.started_at is not None:
+        run.duration_ms = int(
+            (finished - run.started_at).total_seconds() * 1000
+        )
+    if run.publication_status == "pending":
+        run.publication_status = "skipped"
+        run.publication_error = "训练已中断，已保留现有发布模型"
 
 
 class ModelingRetention:
