@@ -26,6 +26,27 @@ function markFrom(
   const parsed = documentFrom(value)
   return { type: parsed.type, ...(parsed.attrs ? { attrs: parsed.attrs } : {}) }
 }
+/**
+ * 正文的规范形：键排序、去掉空值与空的 marks。服务端存的形状与 Umo 吐出来的
+ * 形状键序不同、空值写法不同，语义却一样；比较「改没改」只能比这个。
+ * @param value 一份正文或其中一个节点
+ */
+export function canonicalDocument(value: unknown): string {
+  return JSON.stringify(canonicalValue(value))
+}
+
+function canonicalValue(value: unknown): unknown {
+  if (Array.isArray(value)) return value.map(canonicalValue)
+  if (!isRecord(value)) return value
+  const out: Record<string, unknown> = {}
+  for (const key of Object.keys(value).sort()) {
+    const item = value[key]
+    if (item === null || item === undefined) continue
+    if (key === 'marks' && Array.isArray(item) && item.length === 0) continue
+    out[key] = canonicalValue(item)
+  }
+  return out
+}
 export function blankReport(name = '新报告'): ReportBody {
   return {
     name,
