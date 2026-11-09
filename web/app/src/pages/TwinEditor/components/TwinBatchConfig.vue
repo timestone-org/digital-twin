@@ -216,7 +216,7 @@ function apply(): void {
           <DtInput
             v-model="keyword"
             size="sm"
-            label="目标对象"
+            label="筛选目标"
             placeholder="搜索名称或标识"
           />
           <div class="flex items-center justify-between gap-2 text-xs">
@@ -301,14 +301,17 @@ function apply(): void {
       <p class="text-xs text-text-secondary">
         应用后进入草稿，撤销一次恢复整批；点击页面保存后才持久化，不会写入设备值。
       </p>
-      <div class="flex justify-end gap-2">
-        <DtButton size="sm" variant="ghost" @click="emit('update:open', false)">
-          取消
-        </DtButton>
-        <DtButton size="sm" :disabled="!canApply" @click="apply">
-          应用到草稿
-        </DtButton>
-      </div>
     </div>
+
+    <template #footer>
+      <DtButton
+        variant="ghost"
+        intent="neutral"
+        @click="emit('update:open', false)"
+      >
+        取消
+      </DtButton>
+      <DtButton :disabled="!canApply" @click="apply"> 应用到草稿 </DtButton>
+    </template>
   </DtModal>
 </template>
