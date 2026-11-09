@@ -525,7 +525,7 @@ def _folds(
         train = (
             list(range(start))
             if method == "forward_chain"
-            else [item for item in range(row_count) if item not in set(test)]
+            else [*range(start), *range(stop, row_count)]
         )
         if train:
             made.append((train, test))
