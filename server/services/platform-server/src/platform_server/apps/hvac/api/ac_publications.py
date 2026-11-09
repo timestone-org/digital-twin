@@ -17,7 +17,9 @@ from lib.auth import CallerContext
 from lib.web import ApiResponse, ok
 from platform_server.apps.hvac.catalog import AC_MANAGE, AC_VIEW
 from platform_server.apps.hvac.deps import (
+    WriteGate,
     get_ac_source_reader,
+    get_manage_gate,
     get_node_writer,
     get_session,
     get_sessions,
@@ -50,6 +52,7 @@ ReaderDep = Annotated[AcSourceReader, Depends(get_ac_source_reader)]
 SessionsDep = Annotated[Sessions, Depends(get_sessions)]
 ViewDep = Annotated[CallerContext, Depends(require(AC_VIEW))]
 ManageDep = Annotated[CallerContext, Depends(require(AC_MANAGE))]
+GateDep = Annotated[WriteGate, Depends(get_manage_gate)]
 
 _PUBLICATION = "/ac-models/{model_id}/publication"
 
@@ -123,19 +126,38 @@ async def publish_now(
     sessions: SessionsDep,
     reader: ReaderDep,
     nodes: NodesDep,
-    _manager: ManageDep,
+    gate: GateDep,
 ) -> ApiResponse[PublishOut]:
-    """按当前实时工况算一次并写进点位。
+    """按当前实时工况算一次并写进点位。带幂等键的重试拿回首次那一拍的结论。
 
     ⚠ 走的是与每分钟那条循环**完全相同**的代码路径，只是不经租约。两条路
     分开写的话，页面上试通了、循环里还是不通。
 
-    Args: model_id, sessions, reader, nodes, _manager。
+    Args: model_id, sessions, reader, nodes, gate。
+    """
+    out = await gate.run_once(
+        endpoint="hvac_ac_model_publish",
+        model=PublishOut,
+        action=lambda: _publish(sessions, reader, nodes, model_id=model_id),
+    )
+    return ok(out)
+
+
+async def _publish(
+    sessions: Sessions,
+    reader: AcSourceReader,
+    nodes: NodeWriter,
+    *,
+    model_id: uuid.UUID,
+) -> PublishOut:
+    """下发一次并给出对外结论。
+
+    Args: sessions, reader, nodes, model_id。
     """
     outcome = await ac_publish_service.publish_once(
         sessions, reader, nodes, model_id=model_id
     )
-    return ok(_published(outcome))
+    return _published(outcome)
 
 
 def _published(outcome: ac_publish_service.PublishOutcome) -> PublishOut:

@@ -15,9 +15,10 @@ from lib.web import ApiResponse, Page, PageParams, ok, page_params
 from platform_server.apps.hvac.catalog import AC_MANAGE, AC_VIEW
 from platform_server.apps.hvac.deps import (
     Dispatcher,
-    get_caller,
+    WriteGate,
     get_dispatcher,
     get_hvac_timezone,
+    get_manage_gate,
     get_session,
     require,
 )
@@ -47,7 +48,7 @@ SessionDep = Annotated[AsyncSession, Depends(get_session)]
 TimezoneDep = Annotated[str, Depends(get_hvac_timezone)]
 PageDep = Annotated[PageParams, Depends(page_params)]
 DispatchDep = Annotated[Dispatcher, Depends(get_dispatcher)]
-CallerDep = Annotated[CallerContext, Depends(get_caller)]
+GateDep = Annotated[WriteGate, Depends(get_manage_gate)]
 ViewDep = Annotated[CallerContext, Depends(require(AC_VIEW))]
 ManageDep = Annotated[CallerContext, Depends(require(AC_MANAGE))]
 
@@ -81,19 +82,43 @@ async def create_ac_model(
     session: SessionDep,
     timezone: TimezoneDep,
     dispatcher: DispatchDep,
-    caller: CallerDep,
-    _manager: ManageDep,
+    gate: GateDep,
 ) -> ApiResponse[AcModelOut]:
-    """建一个模型并排进训练队列，立刻返回。
+    """建一个模型并排进训练队列，立刻返回。带幂等键的重试拿回首次结果。
 
-    Args: payload, session, dispatcher, caller, _manager。
+    Args: payload, session, timezone, dispatcher, gate。
+    """
+    out = await gate.run_once(
+        endpoint="hvac_ac_model_create",
+        model=AcModelOut,
+        action=lambda: _create(
+            session,
+            payload,
+            created_by=gate.caller.username,
+            timezone=timezone,
+            dispatcher=dispatcher,
+        ),
+    )
+    return ok(out, message="训练已排队")
+
+
+async def _create(
+    session: AsyncSession,
+    payload: AcModelCreateIn,
+    *,
+    created_by: str,
+    timezone: str,
+    dispatcher: Dispatcher,
+) -> AcModelOut:
+    """建模、排一次提交后的训练投递，给出对外形态。
+
+    Args: session, payload, created_by, timezone, dispatcher。
     """
     model, message = await ac_model_service.create_model(
-        session, payload, created_by=caller.username
+        session, payload, created_by=created_by
     )
     dispatcher.after_commit_training(message)
-    out = await _present(session, model.id, timezone=timezone)
-    return ok(out, message="训练已排队")
+    return await _present(session, model.id, timezone=timezone)
 
 
 @router.get(
@@ -165,18 +190,36 @@ async def retrain_ac_model(
     session: SessionDep,
     timezone: TimezoneDep,
     dispatcher: DispatchDep,
-    _manager: ManageDep,
+    gate: GateDep,
 ) -> ApiResponse[AcModelOut]:
-    """按当前配置与当前批次重训，立刻返回。
+    """按当前配置与当前批次重训，立刻返回。带幂等键的重试拿回首次结果。
 
-    Args: model_id, session, dispatcher, _manager。
+    Args: model_id, session, timezone, dispatcher, gate。
+    """
+    out = await gate.run_once(
+        endpoint="hvac_ac_model_retrain",
+        model=AcModelOut,
+        action=lambda: _retrain(
+            session, model_id, timezone=timezone, dispatcher=dispatcher
+        ),
+    )
+    return ok(out, message="重训已排队")
+
+
+async def _retrain(
+    session: AsyncSession,
+    model_id: uuid.UUID,
+    *,
+    timezone: str,
+    dispatcher: Dispatcher,
+) -> AcModelOut:
+    """排一次重训、排一次提交后的训练投递，给出对外形态。
+
+    Args: session, model_id, timezone, dispatcher。
     """
     _, message = await ac_model_service.request_retrain(session, model_id)
     dispatcher.after_commit_training(message)
-    return ok(
-        await _present(session, model_id, timezone=timezone),
-        message="重训已排队",
-    )
+    return await _present(session, model_id, timezone=timezone)
 
 
 @router.get(

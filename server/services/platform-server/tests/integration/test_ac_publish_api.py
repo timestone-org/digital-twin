@@ -427,3 +427,24 @@ async def test_the_vendor_read_runs_outside_any_transaction(
     )
     assert reader.open_during_fetch
     assert set(reader.open_during_fetch) == {0}
+
+
+async def test_a_retried_publish_returns_the_first_outcome(
+    app_client: httpx.AsyncClient,
+    db_session: AsyncSession,
+    sign: SignHeaders,
+    node_writer: FakeNodeWriter,
+    ac_source: FakeAcSource,
+) -> None:
+    """带幂等键的重试拿回首次那一拍的结论，不再多写一遍点位。"""
+    ac_source.samples = [_sample_row()]
+    bound = await _bound_model(app_client, db_session, sign, node_writer)
+    path = f"{PREFIX}/ac-models/{bound.model_id}/publication:publish"
+    headers = {**sign([AC_MANAGE]), "Idempotency-Key": "publish-1"}
+    first = await app_client.post(path, headers=headers)
+    written = len(node_writer.writes)
+    second = await app_client.post(path, headers=headers)
+    assert first.status_code == OK, first.text
+    assert second.status_code == OK, second.text
+    assert second.json()["data"] == first.json()["data"]
+    assert len(node_writer.writes) == written

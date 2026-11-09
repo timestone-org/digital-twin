@@ -9,8 +9,10 @@ from typing import Annotated
 
 from fastapi import BackgroundTasks, Depends
 
+from lib.auth import CallerContext
 from lib.db import Database
 from lib.stream import StreamGroup, StreamLike
+from platform_server.apps.hvac.catalog import AC_MANAGE
 from platform_server.apps.hvac.services.ac_model_queue import TrainMessage
 from platform_server.apps.hvac.services.ac_model_service import (
     dispatch_training,
@@ -23,8 +25,10 @@ from platform_server.apps.hvac.services.ac_startup_service import (
 )
 from platform_server.container import Container
 from platform_server.deps import (
+    WriteGate,
     get_caller,
     get_container,
+    get_idempotency_key,
     get_session,
     require,
 )
@@ -32,10 +36,12 @@ from platform_server.opcua import NodeWriter
 
 __all__ = [
     "Dispatcher",
+    "WriteGate",
     "get_ac_source_reader",
     "get_caller",
     "get_container",
     "get_dispatcher",
+    "get_manage_gate",
     "get_node_writer",
     "get_session",
     "get_sessions",
@@ -151,3 +157,19 @@ def get_node_writer(
     Args: container。
     """
     return container.nodes
+
+
+def get_manage_gate(
+    container: Annotated[Container, Depends(get_container)],
+    caller: Annotated[CallerContext, Depends(require(AC_MANAGE))],
+    idempotency_key: Annotated[str | None, Depends(get_idempotency_key)],
+) -> WriteGate:
+    """长任务入口用的写上下文：`ac:manage` 身份 + 可选的幂等键。
+
+    Args: container, caller, idempotency_key。
+    """
+    return WriteGate(
+        idempotency=container.idempotency,
+        idempotency_key=idempotency_key,
+        caller=caller,
+    )

@@ -17,9 +17,11 @@ from platform_server.apps.hvac.catalog import AC_MANAGE, AC_VIEW
 from platform_server.apps.hvac.crud import EpisodePage
 from platform_server.apps.hvac.deps import (
     Dispatcher,
+    WriteGate,
     get_ac_source_reader,
     get_caller,
     get_dispatcher,
+    get_manage_gate,
     get_session,
     require,
 )
@@ -58,6 +60,7 @@ ReaderDep = Annotated[AcSourceReader, Depends(get_ac_source_reader)]
 CursorDep = Annotated[CursorParams, Depends(cursor_params)]
 FiltersDep = Annotated[EpisodePage, Depends(episode_filters)]
 DispatchDep = Annotated[Dispatcher, Depends(get_dispatcher)]
+GateDep = Annotated[WriteGate, Depends(get_manage_gate)]
 CallerDep = Annotated[CallerContext, Depends(get_caller)]
 ViewDep = Annotated[CallerContext, Depends(require(AC_VIEW))]
 ManageDep = Annotated[CallerContext, Depends(require(AC_MANAGE))]
@@ -119,13 +122,37 @@ async def rebuild_startup_batches(
     room_id: uuid.UUID,
     payload: StartupRebuildIn,
     session: SessionDep,
+    *,
     reader: ReaderDep,
     dispatcher: DispatchDep,
-    _manager: ManageDep,
+    gate: GateDep,
 ) -> ApiResponse[StartupRebuildOut]:
     """建一个新批次并把分片排进队列，立刻返回批次 id。
 
-    Args: room_id, payload, session, reader, dispatcher, _manager。
+    带幂等键的重试拿回首次结果，而不是撞上「已有批次在跑」。
+    Args: room_id, payload, session, reader, dispatcher, gate。
+    """
+    out = await gate.run_once(
+        endpoint="hvac_startup_rebuild",
+        model=StartupRebuildOut,
+        action=lambda: _rebuild(
+            session, reader, dispatcher, room_id=room_id, payload=payload
+        ),
+    )
+    return ok(out, message="重算已排队")
+
+
+async def _rebuild(
+    session: AsyncSession,
+    reader: AcSourceReader,
+    dispatcher: Dispatcher,
+    *,
+    room_id: uuid.UUID,
+    payload: StartupRebuildIn,
+) -> StartupRebuildOut:
+    """定区间、建批次、排一次提交后的分片投递。
+
+    Args: session, reader, dispatcher, room_id, payload。
     """
     resolved = await ac_startup_service.resolve_window(
         session, reader, room_id=room_id, asked=payload
@@ -134,7 +161,7 @@ async def rebuild_startup_batches(
         session, room_id=room_id, resolved=resolved, timezone=reader.timezone
     )
     dispatcher.after_commit(plan.dispatch())
-    return ok(_to_rebuild_out(plan, resolved), message="重算已排队")
+    return _to_rebuild_out(plan, resolved)
 
 
 async def _queue(
