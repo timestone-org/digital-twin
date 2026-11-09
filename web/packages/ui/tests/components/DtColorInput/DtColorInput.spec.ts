@@ -77,6 +77,17 @@ describe('DtColorInput 取值', () => {
     wrapper.unmount()
   })
 
+  it.each([
+    [{ label: '填充色' }, '填充色取值'],
+    [{}, '颜色取值'],
+  ] as const)('文本框有自己的可读名称 %j', (props, name) => {
+    const wrapper = mountColor({ ...props, allowText: true })
+    expect(
+      wrapper.get('.dt-color__text input').attributes('aria-label'),
+    ).toBe(name)
+    wrapper.unmount()
+  })
+
   it('allowText=false 时只剩色块', () => {
     const wrapper = mountColor({ allowText: false })
     expect(wrapper.find('input[type="text"]').exists()).toBe(false)
