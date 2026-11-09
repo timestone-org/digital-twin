@@ -1438,7 +1438,7 @@
           },
           "priority": {
             "default": 0,
-            "maximum": 999.0,
+            "maximum": 2147483647.0,
             "minimum": 0.0,
             "title": "Priority",
             "type": "integer"
@@ -1636,7 +1636,7 @@
           "priority": {
             "anyOf": [
               {
-                "maximum": 999.0,
+                "maximum": 2147483647.0,
                 "minimum": 0.0,
                 "type": "integer"
               },

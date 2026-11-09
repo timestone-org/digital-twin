@@ -9,6 +9,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from auth_server.apps.auth.crud import role_crud, user_crud
 from auth_server.apps.auth.errors import (
     AccountDisabled,
+    CurrentPasswordIncorrect,
     InvalidCredentials,
     SignupDisabled,
     TokenInvalid,
@@ -208,7 +209,7 @@ class AuthService:
         if not await self.hasher.verify(
             payload.current_password, user.hashed_password
         ):
-            raise InvalidCredentials("当前密码不正确")
+            raise CurrentPasswordIncorrect("当前密码不正确")
         user.hashed_password = await self.hasher.hash(payload.new_password)
         await session.flush()
         _logger.info("password_changed", "", user_id=str(user.id))
