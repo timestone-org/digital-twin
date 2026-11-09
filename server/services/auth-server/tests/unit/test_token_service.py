@@ -2,6 +2,7 @@
 
 import asyncio
 import uuid
+from datetime import timedelta
 
 import pytest
 
@@ -93,6 +94,16 @@ async def test_concurrent_refreshes_of_one_token_let_only_one_through() -> None:
     )
     assert sum(outcome == USER for outcome in outcomes) == 1
     assert sum(isinstance(o, RefreshTokenRejected) for o in outcomes) == 1
+
+
+async def test_a_refresh_token_with_no_lifetime_left_is_invalid() -> None:
+    """解码放行、但按调用方时钟已到期：不能拿 0 秒的 TTL 去占位。"""
+    service = make_service(InMemoryCache())
+    pair = service.issue_pair(USER, now=utcnow())
+    with pytest.raises(TokenInvalid):
+        await service.consume_refresh(
+            pair.refresh_token, now=utcnow() + timedelta(hours=1)
+        )
 
 
 async def test_revoked_refresh_token_is_rejected() -> None:
