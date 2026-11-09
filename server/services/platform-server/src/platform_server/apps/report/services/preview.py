@@ -147,7 +147,7 @@ async def _node_value(
         # ⚠ 空表达式在校验里只是提示；交给公式引擎会抛错并让每次出稿失败
         if not text_attr(node, "expr"):
             return NodeValue(kind=node.type, text=UNCONFIGURED_TEXT)
-        return _text_node(node, metrics)
+        return _text_node(node, metrics, context.template.metrics)
     spec = DataNodeSpec.model_validate(node.attrs)
     if node.type == "dsChart":
         return await chart_node(session, context, spec)
@@ -181,7 +181,11 @@ def _precision(node: DocumentNode) -> int | None:
     return int(number_attr(node, "precision", 2))
 
 
-def _text_node(node: DocumentNode, metrics: list[MetricValue]) -> NodeValue:
+def _text_node(
+    node: DocumentNode,
+    metrics: list[MetricValue],
+    definitions: list[MetricDef],
+) -> NodeValue:
     expression = text_attr(node, "expr")
     references = report_formula.metric_references(expression)
     by_name = {metric.name: metric for metric in metrics}
@@ -192,9 +196,31 @@ def _text_node(node: DocumentNode, metrics: list[MetricValue]) -> NodeValue:
         value,
         value_kind(value),
         _precision(node),
-        text_attr(node, "unit") if node.type == "metricRef" else "",
+        _unit(node, expression, definitions),
     )
     return NodeValue(kind=node.type, text=text)
+
+
+def _unit(
+    node: DocumentNode, expression: str, definitions: list[MetricDef]
+) -> str:
+    """正文数字的单位：节点自己的优先，没填时回落到直接引用的那个指标。
+
+    Args: node, expression, definitions。
+    """
+    if node.type != "metricRef":
+        return ""
+    own = text_attr(node, "unit")
+    if own:
+        return own
+    return next(
+        (
+            definition.unit or ""
+            for definition in definitions
+            if expression.strip() == f"{{{definition.name}}}"
+        ),
+        "",
+    )
 
 
 def _expression_value(expression: str, metrics: list[MetricValue]) -> object:

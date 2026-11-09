@@ -253,6 +253,25 @@ async def test_direct_metric_reference_preserves_decimal_precision(value):
     assert result.nodes["content.0.content.1"].text == f"{value} kWh"
 
 
+async def test_a_metric_ref_without_its_own_unit_uses_the_metric_unit():
+    # ⚠ 单位写在指标定义上、插入的节点自己没带单位：不回落的话正文只有裸数
+    context = precise_inline_context("25.5")
+    context.template.metrics[0].unit = "℃"
+    node = context.template.doc_json.content[0].content[1]
+    node.attrs["unit"] = ""
+    async with AsyncSession() as session:
+        result = await preview(session, context)
+    assert result.nodes["content.0.content.1"].text == "25.500℃"
+
+
+async def test_a_metric_ref_unit_of_its_own_wins_over_the_metric_unit():
+    context = precise_inline_context("25.5")
+    context.template.metrics[0].unit = "℃"
+    async with AsyncSession() as session:
+        result = await preview(session, context)
+    assert result.nodes["content.0.content.1"].text == "25.500 kWh"
+
+
 async def test_word_inline_paragraph_uses_exact_metric_value():
     context = precise_inline_context("9007199254740993.125")
     async with AsyncSession() as session:
