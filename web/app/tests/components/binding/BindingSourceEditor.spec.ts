@@ -209,6 +209,34 @@ describe('历史序列', () => {
     })
   })
 
+  it('清空自然日时区就是跟随缺省：输入框留空，不被立刻填回 Asia/Shanghai', async () => {
+    const wrapper = mountEditor(
+      binding({
+        sourceKind: 'dataset',
+        detailJson: {
+          datasetKey: 'ds:nyyh:输入',
+          range: { lastWindow: 'today' },
+          timezone: 'UTC',
+        },
+      }),
+    )
+    const timezoneInput = () =>
+      wrapper
+        .findAllComponents(DtInput)
+        .find((input) => input.props('label') === '自然日时区')
+
+    timezoneInput()?.vm.$emit('update:modelValue', '')
+    const next = written(wrapper)
+    expect(next.detailJson).toEqual({
+      datasetKey: 'ds:nyyh:输入',
+      range: { lastWindow: 'today' },
+    })
+    await wrapper.setProps({ binding: next })
+
+    expect(timezoneInput()?.props('modelValue')).toBe('')
+    expect(timezoneInput()?.props('error')).toBeUndefined()
+  })
+
   it('相对窗只常驻显示名称，格式示例收进按需说明', () => {
     const wrapper = mountEditor(
       binding({

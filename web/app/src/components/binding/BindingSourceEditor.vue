@@ -173,11 +173,10 @@ const datasetDetail = computed<DatasetBindingDetail | null>(() => {
   return detail !== null && 'datasetKey' in detail ? detail : null
 })
 const datasetKey = computed(() => datasetDetail.value?.datasetKey ?? '')
-const datasetTimezone = computed(
-  () => datasetDetail.value?.timezone ?? DEFAULT_CALENDAR_TIMEZONE,
-)
+// 留空 = 跟缺省走；缺省只当占位符显示，不当值填回——否则一清空就被立刻填回去
+const datasetTimezone = computed(() => datasetDetail.value?.timezone ?? '')
 const datasetTimezoneError = computed(() =>
-  isValidIanaTimezone(datasetTimezone.value)
+  datasetTimezone.value === '' || isValidIanaTimezone(datasetTimezone.value)
     ? undefined
     : '请输入有效的 IANA 时区',
 )
@@ -408,7 +407,7 @@ function writeDataset(
         :error="datasetTimezoneError"
         size="sm"
         aria-label="自然日时区"
-        placeholder="Asia/Shanghai"
+        :placeholder="DEFAULT_CALENDAR_TIMEZONE"
         @update:model-value="writeDatasetTimezone"
       />
     </template>

@@ -262,7 +262,9 @@ describe('台账表列选择', () => {
     const { wrapper, current } = mountEditor('ds:energy:heat')
     await flushPromises()
 
-    expect(wrapper.text()).toContain('台账清单没取到：请求失败，请重试。')
+    // 台账下拉明明有内容，说「台账清单没取到」是把人引向错的地方
+    expect(wrapper.text()).toContain('这张台账的列没取到：请求失败，请重试。')
+    expect(wrapper.text()).not.toContain('台账清单没取到')
     expect(current.value.detailJson).toEqual({
       datasetKey: 'ds:energy:heat',
       range: { lastWindow: '7d' },
