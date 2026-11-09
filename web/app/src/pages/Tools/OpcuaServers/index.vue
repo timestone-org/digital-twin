@@ -200,6 +200,7 @@ onMounted(() => {
                 v-if="!row.is_running"
                 size="sm"
                 variant="ghost"
+                :disabled="ops.acting.value"
                 @click="ops.act(row, 'start')"
               >
                 启动
@@ -208,6 +209,7 @@ onMounted(() => {
                 v-else
                 size="sm"
                 variant="ghost"
+                :disabled="ops.acting.value"
                 @click="ops.act(row, 'stop')"
               >
                 停止
