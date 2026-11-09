@@ -8,12 +8,16 @@
 """
 
 import uuid
+from collections.abc import AsyncIterator, Sequence
+from contextlib import asynccontextmanager
 from datetime import datetime
-from typing import Any, Protocol
+from typing import Any, Protocol, cast
 
 import httpx
 import pytest
 from sqlalchemy.ext.asyncio import AsyncSession
+from unit.opcua_fakes import FakeNodeWriter
+from unit.source_fakes import FakeAcSource
 
 from integration.ac_model_helpers import (
     PREFIX,
@@ -31,7 +35,13 @@ from platform_server.apps.hvac.publications import (
     PUBLISH_STATUS_FAILED,
     PUBLISH_STATUS_OK,
 )
-from platform_server.opcua import OpcuaCallFailed
+from platform_server.apps.hvac.schemas import TimeWindow
+from platform_server.apps.hvac.services.ac_publish_service import publish_once
+from platform_server.apps.hvac.services.ac_source_reader import (
+    AcSourceReader,
+    SourceRow,
+)
+from platform_server.opcua import NodeWriter, OpcuaCallFailed
 
 pytestmark = pytest.mark.requires_postgres
 
@@ -354,3 +364,66 @@ async def test_a_set_the_artifact_cannot_answer_gets_the_sentinel_alone(
     data = await _publish(app_client, sign, str(model["id"]))
     durations = [item for item in data["items"] if item["set_key"] is not None]
     assert {item["set_key"] for item in durations} == set(keys)
+
+
+class TrackedSessions:
+    """把用例那条回滚事务包成 `Sessions`，并记下此刻开着几个。"""
+
+    def __init__(self, session: AsyncSession) -> None:
+        self._session = session
+        self.open_count = 0
+
+    @asynccontextmanager
+    async def session(self) -> AsyncIterator[AsyncSession]:
+        self.open_count += 1
+        try:
+            yield self._session
+        finally:
+            self.open_count -= 1
+
+
+class GuardedReader(AcSourceReader):
+    """取数时记下有没有事务开着。"""
+
+    def __init__(self, sessions: TrackedSessions, source: FakeAcSource) -> None:
+        super().__init__(source=source, timezone="Asia/Shanghai")
+        self._sessions = sessions
+        self.open_during_fetch: list[int] = []
+
+    async def fetch_samples(
+        self,
+        *,
+        source_object: str,
+        columns: Sequence[str],
+        window: TimeWindow,
+        row_limit: int,
+    ) -> list[SourceRow]:
+        self.open_during_fetch.append(self._sessions.open_count)
+        return await super().fetch_samples(
+            source_object=source_object,
+            columns=columns,
+            window=window,
+            row_limit=row_limit,
+        )
+
+
+async def test_the_vendor_read_runs_outside_any_transaction(
+    app_client: httpx.AsyncClient,
+    db_session: AsyncSession,
+    sign: SignHeaders,
+    node_writer: FakeNodeWriter,
+    ac_source: FakeAcSource,
+) -> None:
+    """⚠ 打厂商外库时不许开着事务：每分钟每个模型都在等外库，池会被占满。"""
+    ac_source.samples = [_sample_row()]
+    bound = await _bound_model(app_client, db_session, sign, node_writer)
+    sessions = TrackedSessions(db_session)
+    reader = GuardedReader(sessions, ac_source)
+    await publish_once(
+        sessions,
+        reader,
+        cast(NodeWriter, node_writer),
+        model_id=uuid.UUID(bound.model_id),
+    )
+    assert reader.open_during_fetch
+    assert set(reader.open_during_fetch) == {0}
