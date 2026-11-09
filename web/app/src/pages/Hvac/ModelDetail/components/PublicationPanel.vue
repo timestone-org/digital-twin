@@ -128,6 +128,11 @@ async function publishNow(): Promise<void> {
 
 <template>
   <div class="flex min-w-0 flex-col gap-3">
+    <!-- ⚠ 没训练成功过的模型照样能存绑定并自动下发，写进点位的却是「无预测」
+         占位值与 -1；必须说在前面 -->
+    <DtNotice v-if="!state.hasArtifact.value" intent="warning">
+      这个模型还没有训练成功过：下发只会写入「无预测」占位值，训练成功前不要打开自动下发。
+    </DtNotice>
     <DtNotice v-if="state.error.value" intent="danger">
       {{ state.error.value }}
     </DtNotice>
@@ -267,6 +272,7 @@ async function publishNow(): Promise<void> {
         :disabled="
           state.saved.value === null ||
           !state.saved.value.is_fully_bound ||
+          !state.hasArtifact.value ||
           state.isPublishing.value
         "
         @click="publishNow"

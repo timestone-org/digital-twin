@@ -432,4 +432,17 @@ describe('点位绑定页签', () => {
     await flushPromises()
     expect(remove).toHaveBeenCalledTimes(1)
   })
+
+  it('⚠ 模型还没有训练成功的产物时说清下发写的是占位值，并按不了「立刻下发一次」', async () => {
+    vi.mocked(hvac.getAcModel).mockResolvedValue(
+      model({ status: 'failed', trained_at: null }),
+    )
+    vi.spyOn(hvac, 'getModelPublication').mockResolvedValue(publication())
+    const wrapper = await openTab()
+    expect(wrapper.text()).toContain('还没有训练成功')
+    const button = wrapper
+      .findAll('button')
+      .find((node) => node.text() === '立刻下发一次')
+    expect(button?.attributes('disabled')).toBeDefined()
+  })
 })

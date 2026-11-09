@@ -45,6 +45,8 @@ export interface PublicationDerived {
   servingKeys: ComputedRef<readonly string[]>
   isDirty: ComputedRef<boolean>
   isFullyBound: ComputedRef<boolean>
+  /** 有没有训练成功过的产物；没有时下发写进去的是「无预测」占位值。 */
+  hasArtifact: ComputedRef<boolean>
 }
 
 /**
@@ -67,5 +69,6 @@ export function derive(
     isFullyBound: computed(() =>
       isDraftFullyBound(state.draft.value, servingKeys.value),
     ),
+    hasArtifact: computed(() => (model()?.trained_at ?? null) !== null),
   }
 }
