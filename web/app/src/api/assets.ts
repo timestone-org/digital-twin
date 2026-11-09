@@ -108,9 +108,15 @@ export async function listAssetKinds(): Promise<AssetKindSpec[]> {
 }
 
 /** 取一个素材。 */
-export async function getAsset(assetId: string): Promise<Asset> {
+export async function getAsset(
+  assetId: string,
+  signal?: AbortSignal,
+): Promise<Asset> {
   return toAsset(
-    await requestData<unknown>(`${ASSETS_PATH}/${assetId}`, onPlatform()),
+    await requestData<unknown>(
+      `${ASSETS_PATH}/${assetId}`,
+      onPlatform(signal === undefined ? {} : { signal }),
+    ),
   )
 }
 
