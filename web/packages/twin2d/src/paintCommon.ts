@@ -133,10 +133,32 @@ function transformCss(
   return parts.length === 0 ? null : parts.join(' ')
 }
 
+/** 只钉一侧的绝对定位盒在 `auto` 宽度下改按内容取宽 */
+const CONTENT_WIDTH = 'max-content'
+
+/**
+ * 宽度那一项。
+ * ⚠ 绝对定位又只钉了 left / right 其中一侧时，`auto` 宽度是「包含块宽减去偏移」封顶的
+ * 收缩适配：`left: 50%` 的悬浮卡最多只有节点半个宽，内容一长就换行。改成 `max-content`
+ * 按内容撑开，`maxWidth` 照样封顶。两侧都钉着的是「拉满两边」的写法，原样 `auto`。
+ * @param prim 图元
+ * @param placed 摆位产出的定位样式
+ */
+function widthCss(prim: Twin2dPrim, placed: Record<string, string>): string {
+  const width = lenToCss(prim.size.w)
+  if (width !== 'auto' || placed['position'] !== 'absolute') return width
+  const pinnedLeft = placed['left'] !== undefined
+  const pinnedRight = placed['right'] !== undefined
+  return pinnedLeft === pinnedRight ? width : CONTENT_WIDTH
+}
+
 // fill 一档的几何由四向 inset 定死，再给宽高会与 right/bottom 打架
-function sizeCss(prim: Twin2dPrim): Record<string, string> {
+function sizeCss(
+  prim: Twin2dPrim,
+  placed: Record<string, string>,
+): Record<string, string> {
   if (prim.at.kind === 'fill') return {}
-  return { width: lenToCss(prim.size.w), height: lenToCss(prim.size.h) }
+  return { width: widthCss(prim, placed), height: lenToCss(prim.size.h) }
 }
 
 // 宽度上下限：null 是「不设限」，与显式 0 区分得开，故不给缺省
@@ -180,7 +202,7 @@ export function paintBase(
   const placed = placementCss(prim.at, ctx.boxW, ctx.boxH)
   const style: Record<string, string> = {
     ...placed,
-    ...sizeCss(prim),
+    ...sizeCss(prim, placed),
     ...widthLimitCss(prim.minWidth, prim.maxWidth),
     'z-index': String(prim.z),
     opacity: String(prim.opacity),

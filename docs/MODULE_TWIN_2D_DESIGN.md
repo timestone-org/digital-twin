@@ -1141,7 +1141,10 @@ export const TWIN_2D_PALETTE = {
 `TWIN_2D_PRESET_SCALE`：
 
 - **节点样式**在 `presets/nodes.ts` 合成 `TWIN_2D_BUILTIN_NODE_STYLES` 时过一道
-  `twin2dScaleNodeStyle()`；
+  `twin2dShipNodeStyle()`：先 `twin2dScaleNodeStyle()` 整体缩到 0.75，再用
+  `twin2dScalePrimTree()` 把源类的悬浮卡 `energy-tip`（连同子树与指向它们的变体补丁）
+  放大 `TWIN_2D_TIP_SCALE = 1.5`——卡片整体压到 12px 地板后，在被 `contain` 再缩一次的
+  大屏格子里读不清，而节点本身不该跟着变大；
 - **出厂面的传感器药丸**在 `presets/scale.ts` 的 `twin2dShippedSensorPill()` 里过一道
   （下面那条「两分」）。
 
@@ -1356,6 +1359,11 @@ Twin2dNodeBox.vue 的根元素上一对 @mouseenter / @mouseleave，
 `scale: 1 -1` 让尖朝向节点。几何在 `popupFlip.ts`，DOM 一侧在 `render/hoverPopupFlip.ts`。
 这是渲染层的通用行为，不看 `styleId`，样式数据零改动；只做竖轴，水平方向不避让。
 ⚠ 用 `translate` / `scale` 两条独立属性而不是改 `transform`：后者归 Vue 管，下次重绘就被冲掉。
+
+**悬浮卡按内容取宽**：绝对定位又只钉了 `left` / `right` 其中一侧、宽度为 `auto` 的图元，
+`paintCommon` 输出 `width: max-content`。CSS 里这种盒的 `auto` 宽度是「包含块宽减去偏移」
+封顶的收缩适配，`left: 50%` 的悬浮卡最多只有节点半个宽，说明字一长就换行；`max-content`
+按内容撑开，`maxWidth` 照样封顶。两侧都钉着的是「拉满两边」的写法，仍出 `auto`。
 
 `transition` 是图元字段（§4.2），由 `paintCommon.ts` 输出成一条 `transition` 声明；
 `prefers-reduced-motion` 只关 keyframes，不关 transition（#17）。

@@ -154,6 +154,43 @@ describe('paintBase 的 hidden', () => {
 })
 
 describe('paintBase 的尺寸与宽度上下限', () => {
+  // abs 摆位：只给 left 或 right 其中一侧
+  function absAt(left: number | null, right: number | null): Twin2dPlacement {
+    return {
+      kind: 'abs',
+      left,
+      right,
+      top: 0,
+      bottom: null,
+      tx: '0',
+      ty: '0',
+    }
+  }
+
+  it('绝对定位只钉一侧的 auto 宽度按内容撑开，悬浮卡不再被节点宽挤得换行', () => {
+    const size = { w: 'auto', h: 'auto' } as const
+    expect(
+      paintBase(prim({ at: absAt(0, null), size }), CTX).style['width'],
+    ).toBe('max-content')
+    expect(
+      paintBase(prim({ at: absAt(null, 0), size }), CTX).style['width'],
+    ).toBe('max-content')
+  })
+
+  it('两侧都钉着是拉满两边，仍是 auto；给了定宽或在文档流里也不动', () => {
+    const size = { w: 'auto', h: 'auto' } as const
+    expect(paintBase(prim({ at: absAt(0, 0), size }), CTX).style['width']).toBe(
+      'auto',
+    )
+    expect(
+      paintBase(prim({ at: absAt(0, null), size: { w: 40, h: 'auto' } }), CTX)
+        .style['width'],
+    ).toBe('40px')
+    expect(
+      paintBase(prim({ at: { kind: 'flow' }, size }), CTX).style['width'],
+    ).toBe('auto')
+  })
+
   it('裸数按设计像素、串形原样，两项都出', () => {
     const out = paintBase(prim({ size: { w: 34, h: '2em' } }), CTX)
     expect(out.style['width']).toBe('34px')
