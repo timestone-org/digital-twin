@@ -298,7 +298,7 @@ describe('DtDateTimeInput 面板里的时分', () => {
     ])
   })
 
-  it('⚠ 指针选时分：按下选项不算点外面，抬起才选中并收起日历', async () => {
+  it('⚠ 指针选时分：按下选项不算点外面，抬起才选中，日历留着接着选', async () => {
     const wrapper = mountInShanghai({ modelValue: '2026-08-12T02:55:00.000Z' })
     openCalendar()
     await flushPromises()
@@ -319,7 +319,22 @@ describe('DtDateTimeInput 面板里的时分', () => {
     expect(wrapper.emitted('update:modelValue')).toEqual([
       ['2026-08-12T05:55:00.000Z'],
     ])
-    expect(document.querySelector('.dt-calendar')).toBeNull()
+    expect(document.querySelector('.dt-calendar')).not.toBeNull()
+  })
+
+  it('改完小时面板不收起，紧接着能改分钟', async () => {
+    const wrapper = mountInShanghai({ modelValue: '2026-08-12T02:55:00.000Z' })
+    openCalendar()
+    await flushPromises()
+    await pickTime('小时', '14')
+    expect(document.querySelector('.dt-calendar')).not.toBeNull()
+    await wrapper.setProps({
+      modelValue: wrapper.emitted('update:modelValue')?.[0]?.[0],
+    })
+    await pickTime('分钟', '35')
+    expect(wrapper.emitted('update:modelValue')?.[1]).toEqual([
+      '2026-08-12T06:35:00.000Z',
+    ])
   })
 
   it('还没选过日子时改时分落在当月 1 号，而不是抛一个没有日期的值', async () => {

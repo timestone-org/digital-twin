@@ -36,7 +36,8 @@ const props = withDefaults(
   { size: 'sm' },
 )
 
-const emit = defineEmits<{ pick: [local: string] }>()
+// pick = 选定日子、可以收起；change = 只改了时分，面板留着接着选
+const emit = defineEmits<{ pick: [local: string]; change: [local: string] }>()
 
 // 翻月只改「正在看哪一月」，不动取值；没翻过就跟着取值走，取值也没有才落在当月
 const thisMonth = currentCursor()
@@ -64,23 +65,23 @@ const activeDay = computed(() => {
   return sameMonth ? found.day : 0
 })
 
-function emitAt(day: number, nextHour: number, nextMinute: number): void {
+function localAt(day: number, nextHour: number, nextMinute: number): string {
   const local = joinLocalMinute({
     ...cursor.value,
     day,
     hour: nextHour,
     minute: nextMinute,
   })
-  emit('pick', clampLocal(local, props.min, props.max))
+  return clampLocal(local, props.min, props.max)
 }
 
 function pickDay(day: number): void {
-  emitAt(day, hour.value, minute.value)
+  emit('pick', localAt(day, hour.value, minute.value))
 }
 
 /** 还没选过日子时，改时分就落在当前翻到这个月的 1 号。 */
 function pickTime(nextHour: number, nextMinute: number): void {
-  emitAt(parts.value?.day ?? 1, nextHour, nextMinute)
+  emit('change', localAt(parts.value?.day ?? 1, nextHour, nextMinute))
 }
 
 function labelOf(day: number): string {

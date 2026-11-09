@@ -128,6 +128,7 @@ function onPick(local: string): void {
             :max="localMax"
             :size="size"
             @pick="(onPick($event), close())"
+            @change="onPick"
           />
         </template>
       </DtPopover>
