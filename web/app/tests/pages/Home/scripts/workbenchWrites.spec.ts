@@ -260,6 +260,12 @@ describe('读导入文件', () => {
     })
   })
 
+  it('不是合法 JSON 的文件说清楚，而不是一句「请求失败」', async () => {
+    const file = new File(['{oops'], 'x.json')
+
+    await expect(readExportFile(file)).rejects.toThrow('不是合法的 JSON')
+  })
+
   it('形状不对的文件在这一步就拒，不让它流到导入端点', async () => {
     const file = new File([JSON.stringify({ name: 1 })], 'x.json')
 

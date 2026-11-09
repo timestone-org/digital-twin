@@ -8,6 +8,7 @@
  */
 import type { DashboardExportPayload, UnresolvedBinding } from '@dt/contracts'
 
+import { TransportError } from '@/api/client'
 import { createDashboard } from '@/api/dashboard'
 import { instantiateDashboardTemplate } from '@/api/dashboardTemplates'
 import { duplicateDashboard, importDashboard } from '@/api/dashboardTransfer'
@@ -106,6 +107,11 @@ export async function importInto(
 export async function readExportFile(
   file: File,
 ): Promise<DashboardExportPayload> {
-  const raw: unknown = JSON.parse(await file.text())
+  let raw: unknown
+  try {
+    raw = JSON.parse(await file.text())
+  } catch {
+    throw new TransportError(0, '导出包格式不对：不是合法的 JSON')
+  }
   return parseExportPackage(raw)
 }
