@@ -3,6 +3,7 @@
  *
  * ⚠ 三个监听必须成对装卸，且回调要具名——内联箭头的那个 `removeEventListener`
  * 摘不掉，每次挂载都会往元素上多留一个，表现是切几次大屏之后一次点击触发多回。
+ * ⚠ 监听挂在视口根上，视点条、漫游、工具条的点击也会冒泡上来：只认落在画布上的那一下。
  */
 import type { TwinPart } from '@dt/twin-config'
 import type * as THREE from 'three'
@@ -41,7 +42,14 @@ export interface PartClickDeps {
 export function usePartClick(deps: PartClickDeps): void {
   const gesture = new ClickGesture()
 
+  /** 这一下是不是直接点在 WebGL 画布上（而不是叠在上面的按钮）。 */
+  function onCanvas(event: PointerEvent): boolean {
+    const core = deps.core()
+    return core !== null && event.target === core.renderer.domElement
+  }
+
   function onPointerDown(event: PointerEvent): void {
+    if (!onCanvas(event)) return gesture.cancel()
     gesture.down(event)
   }
 
@@ -54,6 +62,7 @@ export function usePartClick(deps: PartClickDeps): void {
     const core = deps.core()
     const parts = deps.parts()
     if (element === null || core === null || parts === null) return
+    if (!onCanvas(event)) return gesture.cancel()
     if (!gesture.isClick(event)) return
     if (deps.intercept?.(event) === true) return
 

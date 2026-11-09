@@ -757,16 +757,32 @@ function viewportOf(): HTMLElement {
   return element
 }
 
+/**
+ * 按在视口画布上；`element` 只用来认这是哪一次挂载。
+ * ⚠ 真浏览器里点模型时事件目标是画布：覆盖层都不接指针事件。
+ */
 function press(element: HTMLElement, x: number, y: number): void {
-  element.dispatchEvent(
+  surfaceOf(element).dispatchEvent(
     new MouseEvent('pointerdown', { clientX: x, clientY: y, bubbles: true }),
   )
 }
 
 function release(element: HTMLElement, x: number, y: number): void {
-  element.dispatchEvent(
+  surfaceOf(element).dispatchEvent(
     new MouseEvent('pointerup', { clientX: x, clientY: y, bubbles: true }),
   )
+}
+
+function surfaceOf(element: HTMLElement): HTMLElement {
+  return element.contains(renderer.domElement) ? renderer.domElement : element
+}
+
+function clickOn(target: Element, x: number, y: number): void {
+  for (const type of ['pointerdown', 'pointerup']) {
+    target.dispatchEvent(
+      new MouseEvent(type, { clientX: x, clientY: y, bubbles: true }),
+    )
+  }
 }
 
 describe('部件点击', () => {
@@ -835,6 +851,38 @@ describe('部件点击', () => {
     release(element, 50, 50)
 
     expect(wrapper.emitted('partClick')).toBeUndefined()
+    wrapper.unmount()
+  })
+
+  // ⚠ 覆盖层按钮在模型前面：冒泡到视口根的那一下若也判部件，点视点会顺手触发联动
+  it('点在覆盖层按钮上不判部件点击', async () => {
+    const wrapper = mountScene({
+      config: config({
+        parts: [
+          {
+            id: 'part-pump',
+            name: '泵',
+            nodes: ['pump'],
+            click: { near: 'detail' },
+          },
+        ],
+        cameras: [
+          { id: 'cam-a', name: 'A', position: [6, 6, 6], target: [0, 0, 0] },
+        ],
+        viewpoints: { enabled: true },
+      }),
+    })
+    await flushPromises()
+    viewportOf()
+    const button = document.querySelector('.twin-viewpoints button')
+    if (button === null) throw new Error('视点条没显示')
+
+    clickOn(button, 50, 50)
+
+    expect(wrapper.emitted('partClick')).toBeUndefined()
+    expect(
+      document.querySelector('[data-test="part-modal-data"]'),
+    ).toBeNull()
     wrapper.unmount()
   })
 
