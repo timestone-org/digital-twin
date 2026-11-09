@@ -10,6 +10,8 @@ from hierarchy_server.apps.projects.schemas.graph import HierarchyDocument
 from lib.utils.timeutils import format_rfc3339
 
 MAX_REVISION: int = 2147483647
+# 每个项目保留的历史版本数，裁剪、分页上限与能力端点共用这一个
+HISTORY_LIMIT: int = 50
 Utc = Annotated[
     datetime,
     PlainSerializer(format_rfc3339, return_type=str),

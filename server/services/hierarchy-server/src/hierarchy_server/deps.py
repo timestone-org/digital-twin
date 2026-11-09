@@ -17,12 +17,14 @@ def get_container(request: Request) -> Container:
 
 
 def signing_secret(request: Request) -> str:
+    """边缘签名头的验签密钥。Args: request。"""
     return get_container(
         request
     ).settings.edge_signing_secret.get_secret_value()
 
 
 def service_key(request: Request) -> str:
+    """内部接口的服务级密钥。Args: request。"""
     return get_container(request).settings.edge_service_key.get_secret_value()
 
 
@@ -31,6 +33,7 @@ def get_idempotency_key(
         str | None, Header(alias="Idempotency-Key", max_length=128)
     ] = None,
 ) -> str | None:
+    """读取可选的 `Idempotency-Key` 头。Args: key。"""
     return key
 
 

@@ -26,6 +26,13 @@ RECONNECT_BASE_S = 1.0
 RECONNECT_MAX_S = 30.0
 CLOSE_TIMEOUT_S = 1.0
 CLOSE_TRY_AGAIN = 1013
+# 单条连接发一帧的上限。⚠ 对端在 TCP 层不读时 send 会一直挂到保活判死
+# （约 40s），不限时的话整个副本的扇出都排在它后面
+SEND_TIMEOUT_S = 2.0
+# 后台关闭慢连接的上限。⚠ 必须长过 uvicorn 保活判死（ping 20s + 超时 20s）：
+# 对端只是卡了几秒又恢复时，保活不会断它，关闭帧放弃得早就留下一条摘了索引
+# 却还连着的僵尸连接，屏上停在旧值
+SLOW_CLOSE_TIMEOUT_S = 60.0
 
 
 class FanoutListener:
@@ -40,6 +47,8 @@ class FanoutListener:
         self._task: asyncio.Task[None] | None = None
         self._retry_delay_s = RECONNECT_BASE_S
         self._needs_resync = False
+        # 后台关闭慢连接的任务。⚠ 存强引用，见模块头
+        self._closing: set[asyncio.Task[None]] = set()
 
     async def start(self) -> None:
         """起后台任务。重复调用是幂等的。"""
@@ -61,6 +70,11 @@ class FanoutListener:
         task.cancel()
         with contextlib.suppress(asyncio.CancelledError):
             await task
+        # 后台关闭最长要等 SLOW_CLOSE_TIMEOUT_S，关停时不等它们
+        closing = tuple(self._closing)
+        for item in closing:
+            item.cancel()
+        await asyncio.gather(*closing, return_exceptions=True)
 
     async def _run(self) -> None:
         """监听中断后退避重建订阅，直到关停取消任务。"""
@@ -106,7 +120,9 @@ class FanoutListener:
     async def _resync_clients(self) -> None:
         """关闭本副本连接，借客户端重连触发推送方全量同步。"""
         connections = await self._connections.all_connections()
-        await asyncio.gather(*(_close_for_resync(item) for item in connections))
+        await asyncio.gather(
+            *(_close_for_resync(item, CLOSE_TIMEOUT_S) for item in connections)
+        )
 
     async def _deliver(self, envelope: dict[str, Any]) -> None:
         """把一条信封发给本副本上订了它的连接。
@@ -122,12 +138,12 @@ class FanoutListener:
         targets = await self._connections.subscribers(topic)
         if not targets:
             return
-        # ⚠ 并发发送并**逐条兜住异常**：一条慢或已死的连接不该拖住同主题的
+        # ⚠ 并发、逐条限时发送并**逐条兜住异常**：一条慢或已死的连接不该拖住
         # 其它订阅者，更不该让这一轮扇出整个失败
         frames = encode_per_name(envelope, topic, targets)
         results = await asyncio.gather(
             *(
-                item.send_frame(frames[item.outgoing_topic(topic)])
+                self._send_bounded(item, frames[item.outgoing_topic(topic)])
                 for item in targets
             ),
             return_exceptions=True,
@@ -142,13 +158,41 @@ class FanoutListener:
                 failed=failed,
             )
 
+    async def _send_bounded(self, connection: Connection, frame: str) -> None:
+        """限时发一帧；超时就把这条连接摘掉并在后台关闭，再把超时抛给调用方。
 
-async def _close_for_resync(connection: Connection) -> None:
-    """限时关闭一条连接；单条失败不阻塞其它连接。Args: connection。"""
+        ⚠ 不在这里 await 关闭：close 也走同一个 send，会卡在同一处背压上。
+        先摘索引，后续扇出就不再等它；取消是安全的，背压时一个字节都还没写出。
+
+        Args: connection, frame。
+        """
+        try:
+            async with asyncio.timeout(SEND_TIMEOUT_S):
+                await connection.send_frame(frame)
+        except TimeoutError:
+            await self._connections.remove(connection.id)
+            _logger.warning(
+                "fanout_slow_consumer_dropped",
+                "连接发送超时，已摘除并关闭",
+                connection_id=str(connection.id),
+            )
+            task = asyncio.create_task(
+                _close_for_resync(connection, SLOW_CLOSE_TIMEOUT_S)
+            )
+            self._closing.add(task)
+            task.add_done_callback(self._closing.discard)
+            raise
+
+
+async def _close_for_resync(connection: Connection, timeout_s: float) -> None:
+    """限时关闭一条连接；单条失败不阻塞其它连接。
+
+    Args: connection, timeout_s。
+    """
     if connection.close is None:
         return
     try:
-        async with asyncio.timeout(CLOSE_TIMEOUT_S):
+        async with asyncio.timeout(timeout_s):
             await connection.close(CLOSE_TRY_AGAIN)
     except Exception as error:
         _logger.warning(

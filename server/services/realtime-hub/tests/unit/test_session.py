@@ -34,8 +34,12 @@ from realtime_hub.apps.channel.services.session import (
     TYPE_ERROR,
     TYPE_SYSTEM,
 )
+from realtime_hub.apps.channel.services.user_codes import AccountUnusable
+from sqlalchemy.exc import OperationalError
+from starlette.websockets import WebSocketDisconnect
 
 from lib.auth import JwtCodec
+from lib.errors import DependencyUnavailable
 from lib.utils.timeutils import utcnow
 
 SECRET = "unit-test-secret-0123456789abcdef"
@@ -72,6 +76,7 @@ class FakeRegistry:
     def __init__(self, *, topic: str = "opcua:1", code: str = "opcua:view"):
         self.topic = topic
         self.code = code
+        self.denied_calls = 0
 
     async def authorize(self, *, topic: str, codes: frozenset[str]) -> str:
         if topic != self.topic:
@@ -79,6 +84,14 @@ class FakeRegistry:
         if self.code not in codes:
             raise SubscriptionDenied("码不够")
         return self.code
+
+    async def denied_topics(
+        self, *, topics: frozenset[str], codes: frozenset[str]
+    ) -> frozenset[str]:
+        self.denied_calls += 1
+        if self.code in codes:
+            return frozenset(topic for topic in topics if topic != self.topic)
+        return topics
 
 
 class FakeGrants:
@@ -210,6 +223,52 @@ async def test_a_denied_subscribe_only_returns_an_error_frame() -> None:
     assert await connections.subscribers("opcua:404") == ()
 
 
+class BrokenRegistry(FakeRegistry):
+    """判权那一步撞上库抖动的假主题表。"""
+
+    async def authorize(self, **_kwargs: object) -> str:
+        raise OperationalError("SELECT 1", {}, ConnectionError("pg gone"))
+
+
+async def test_a_db_blip_on_subscribe_is_an_error_frame_not_a_disconnect() -> (
+    None
+):
+    # ⚠ 一次订阅撞上库抖动不该把这条连接上的其它主题一起断掉（CONTEXT §6）
+    service, connections = _service(registry=BrokenRegistry())
+    connection, sent = await _open(service)
+
+    await service.dispatch(
+        connection, {"action": "subscribe", "topic": "opcua:1", "req_id": "c"}
+    )
+
+    assert (
+        sent[-1]["type"],
+        sent[-1]["code"],
+        sent[-1]["req_id"],
+        await connections.subscribers("opcua:1"),
+    ) == (TYPE_ERROR, DependencyUnavailable.code, "c", ())
+
+
+async def test_a_failed_journal_write_leaves_no_live_subscription() -> None:
+    # ⚠ 回了 error 帧却照样收数据，客户端与服务端对「订没订上」各说各话
+    service, connections = _service()
+    connection, sent = await _open(service)
+
+    async def broken_record(**_kwargs: object) -> None:
+        raise OperationalError("INSERT", {}, ConnectionError("pg gone"))
+
+    service._journal.record = broken_record  # type: ignore[method-assign]  # 测试注入
+
+    await service.dispatch(
+        connection, {"action": "subscribe", "topic": "opcua:1"}
+    )
+
+    assert (sent[-1]["type"], await connections.subscribers("opcua:1")) == (
+        TYPE_ERROR,
+        (),
+    )
+
+
 async def test_an_unknown_action_is_a_client_error_not_a_disconnect() -> None:
     service, _connections = _service()
     connection, sent = await _open(service)
@@ -262,6 +321,46 @@ async def test_reauth_drops_subscriptions_that_no_longer_qualify() -> None:
     revoked = [item for item in sent if item.get("event") == "unsubscribed"]
     assert len(revoked) == 1
     assert revoked[0]["reason"] == "permission_revoked"
+
+
+async def test_a_peer_leaving_mid_action_stays_a_clean_disconnect() -> None:
+    # ⚠ 对端在动作中途断开时，再回一帧 error 会撞上 starlette 的「已关闭」
+    # RuntimeError，收发循环认不出它，干净的断开就成了一条未处理异常
+    service, _connections = _service()
+    connection, _sent = await _open(service)
+    await service.dispatch(
+        connection, {"action": "subscribe", "topic": "opcua:1"}
+    )
+    is_gone: list[bool] = []
+
+    async def send(_message: dict[str, object]) -> None:
+        if is_gone:
+            raise RuntimeError(
+                'Cannot call "send" once a close message has been sent.'
+            )
+        is_gone.append(True)
+        raise WebSocketDisconnect(code=1006)
+
+    connection.send = send
+
+    with pytest.raises(WebSocketDisconnect):
+        await service.dispatch(
+            connection,
+            {"action": "reauth", "token": _token(codes=("other:x",))},
+        )
+
+
+async def test_reauth_rechecks_all_topics_in_one_registry_call() -> None:
+    registry = FakeRegistry()
+    service, _connections = _service(registry=registry)
+    connection, _sent = await _open(service)
+    await service.dispatch(
+        connection, {"action": "subscribe", "topic": "opcua:1"}
+    )
+
+    await service.dispatch(connection, {"action": "reauth", "token": _token()})
+
+    assert registry.denied_calls == 1
 
 
 async def test_reauth_with_another_users_token_is_rejected() -> None:
@@ -347,6 +446,35 @@ async def test_auth_being_unreachable_fails_the_handshake_closed() -> None:
 
     with pytest.raises(UserCodesUnavailable):
         await service.authenticate(_token())
+
+
+async def test_a_deactivated_account_fails_the_handshake_as_rejected() -> None:
+    # ⚠ 停用不是「auth 不可达」：归成后者，客户端会按 1013 无休止地重连
+    codes = FakeUserCodes()
+    codes.error = AccountUnusable("账号已停用")
+    service, _connections = _service(codes=codes)
+
+    with pytest.raises(AuthenticationRejected):
+        await service.authenticate(_token())
+
+
+async def test_reauth_for_a_deactivated_account_drops_all_topics() -> None:
+    # ⚠ 换票被拒还留着老码的话，停用的人能在这条连接上一直收到令牌到期为止
+    codes = FakeUserCodes()
+    service, connections = _service(codes=codes)
+    connection, sent = await _open(service)
+    await service.dispatch(
+        connection, {"action": "subscribe", "topic": "opcua:1"}
+    )
+    codes.error = AccountUnusable("账号已停用")
+
+    await service.dispatch(connection, {"action": "reauth", "token": _token()})
+
+    assert (
+        sent[-1]["type"],
+        connection.codes,
+        await connections.subscribers("opcua:1"),
+    ) == (TYPE_ERROR, frozenset(), ())
 
 
 def test_expiry_and_reauth_windows() -> None:

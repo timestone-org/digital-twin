@@ -18,7 +18,7 @@ from typing import Any
 from anyio import CancelScope
 
 from lib.auth import JwtCodec, TokenError
-from lib.errors import AppError
+from lib.errors import AppError, DependencyUnavailable
 from lib.logging import get_logger
 from lib.utils.timeutils import utcnow
 from realtime_hub.apps.channel.errors import SubscriptionDenied
@@ -36,7 +36,10 @@ from realtime_hub.apps.channel.services.grants import (
 )
 from realtime_hub.apps.channel.services.journal import SubscriptionJournal
 from realtime_hub.apps.channel.services.registry import TopicRegistry
-from realtime_hub.apps.channel.services.user_codes import UserCodeSource
+from realtime_hub.apps.channel.services.user_codes import (
+    AccountUnusable,
+    UserCodeSource,
+)
 
 _logger = get_logger("realtime.session")
 
@@ -156,10 +159,12 @@ class SessionService:
         except TokenError as error:
             raise AuthenticationRejected(str(error)) from error
         user_id = _as_uuid(claims.subject)
+        try:
+            codes = await self._codes.codes_of(user_id)
+        except AccountUnusable as error:
+            raise AccountRejected(str(error)) from error
         return Handshake(
-            user_id=user_id,
-            codes=await self._codes.codes_of(user_id),
-            expires_at=claims.expires_at,
+            user_id=user_id, codes=codes, expires_at=claims.expires_at
         )
 
     async def authenticate_public(self, ticket: str) -> Handshake:
@@ -267,14 +272,12 @@ class SessionService:
         try:
             await self._apply(connection, action, topic, message)
         except AppError as error:
-            await connection.send(
-                {
-                    "type": TYPE_ERROR,
-                    "req_id": req_id,
-                    "code": error.code,
-                    "message": str(error),
-                }
-            )
+            await _send_error(connection, req_id, error.code, str(error))
+            return
+        except Exception as error:
+            # ⚠ 库抖动、外键竞态这类非领域异常也只回 error 帧：放它冒出去，
+            # 整条连接会以 1011 断掉，用户正在看的全部主题一起黑屏
+            await _reply_unavailable(connection, req_id, action, error)
             return
         await connection.send(
             {"type": TYPE_ACK, "req_id": req_id, "action": action}
@@ -327,12 +330,14 @@ class SessionService:
 
         Args: connection, topic, alias。
         """
-        await self._connections.bind(connection.id, topic, alias=alias)
+        # ⚠ 先记账后挂上：记账失败时调用方回的是 error 帧，挂在前面就会
+        # 一边说没订上、一边照样收数据
         await self._journal.record(
             connection_id=connection.id,
             user_id=connection.user_id,
             topic=topic,
         )
+        await self._connections.bind(connection.id, topic, alias=alias)
 
     async def _unsubscribe(self, connection: Connection, topic: str) -> None:
         """退订一个主题。匿名连接说的是别名，落到真主题上。
@@ -359,7 +364,14 @@ class SessionService:
         if connection.grant is not None:
             await self._reauth_public(connection, token)
             return
-        handshake = await self.authenticate(token)
+        try:
+            handshake = await self.authenticate(token)
+        except AccountRejected:
+            # ⚠ 账号已停用：清空这条连接手上的码并退掉全部订阅，不能让它靠
+            # 老码一直收到令牌到期为止
+            connection.codes = frozenset()
+            await self.revoke_unauthorized(connection)
+            raise
         if handshake.user_id != connection.user_id:
             # ⚠ 不许换成别人的票：那等于在一条已建立的连接上换了主体，
             # 而订阅关系还挂在原来那个人身上
@@ -395,25 +407,21 @@ class SessionService:
         if connection.grant is not None:
             return 0
         revoked = 0
-        for topic in tuple(connection.topics):
-            try:
-                await self._registry.authorize(
-                    topic=topic, codes=connection.codes
-                )
-            except AppError:
-                await self._connections.unbind(connection.id, topic)
-                await self._journal.forget(
-                    connection_id=connection.id, topic=topic
-                )
-                await connection.send(
-                    {
-                        "type": TYPE_SYSTEM,
-                        "event": "unsubscribed",
-                        "topic": topic,
-                        "reason": "permission_revoked",
-                    }
-                )
-                revoked += 1
+        denied = await self._registry.denied_topics(
+            topics=frozenset(connection.topics), codes=connection.codes
+        )
+        for topic in sorted(denied):
+            await self._connections.unbind(connection.id, topic)
+            await self._journal.forget(connection_id=connection.id, topic=topic)
+            await connection.send(
+                {
+                    "type": TYPE_SYSTEM,
+                    "event": "unsubscribed",
+                    "topic": topic,
+                    "reason": "permission_revoked",
+                }
+            )
+            revoked += 1
         if revoked:
             _logger.info(
                 "subscriptions_revoked",
@@ -422,6 +430,45 @@ class SessionService:
                 revoked=revoked,
             )
         return revoked
+
+
+async def _send_error(
+    connection: Connection, req_id: object, code: int, message: str
+) -> None:
+    """回一帧 error。
+
+    Args: connection, req_id, code, message。
+    """
+    await connection.send(
+        {"type": TYPE_ERROR, "req_id": req_id, "code": code, "message": message}
+    )
+
+
+async def _reply_unavailable(
+    connection: Connection, req_id: object, action: object, error: Exception
+) -> None:
+    """非领域异常回一帧 50001；连这一帧都发不出去就把原异常交回收发循环。
+
+    ⚠ 发不出去说明连接本身没了（对端断开时 starlette 先抛断开、再发就抛
+    RuntimeError）：吞掉原异常的话，干净的断开会变成一条未处理异常。
+
+    Args: connection, req_id, action, error。
+    """
+    try:
+        await _send_error(
+            connection,
+            req_id,
+            DependencyUnavailable.code,
+            "服务暂时不可用，请稍后重试",
+        )
+    except Exception:
+        raise error from None
+    _logger.warning(
+        "ws_action_failed",
+        "处理客户端动作时依赖失败，已回错误帧",
+        action=str(action),
+        error_type=type(error).__name__,
+    )
 
 
 def needs_reauth(connection: Connection, *, now: datetime) -> bool:
@@ -445,6 +492,10 @@ class AuthenticationRejected(AppError):
 
     code = 42006
     http_status = 401
+
+
+class AccountRejected(AuthenticationRejected):
+    """令牌本身合法，但它对应的账号已删除或已停用。"""
 
 
 class BadRequest(AppError):

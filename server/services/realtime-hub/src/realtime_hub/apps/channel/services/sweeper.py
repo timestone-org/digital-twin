@@ -29,6 +29,9 @@ from realtime_hub.apps.channel.services.session import (
 
 _logger = get_logger("realtime.sweeper")
 
+# 关一条匿名连接的上限。⚠ 对端在 TCP 层不读时 close 会一直挂到保活判死
+CLOSE_TIMEOUT_S = 1.0
+
 
 class PublicConnectionSweeper:
     """按周期复核本副本上的匿名连接。"""
@@ -106,20 +109,24 @@ class PublicConnectionSweeper:
                 if item.grant is not None
             )
         )
-        closed = 0
+        doomed: list[tuple[Connection, int]] = []
         for connection in anonymous:
             grant = connection.grant
             if grant is None:  # pragma: no cover - anonymous() 已经筛过
                 continue
             if connection.id in expired:
-                closed += await self._close(connection, CLOSE_TOKEN_EXPIRED)
+                doomed.append((connection, CLOSE_TOKEN_EXPIRED))
                 continue
             # ⚠ 主题变了也要断：同一枚票据改指另一张屏是不该发生的，真发生了
             # 就说明推送方那边换了口径，而这条连接还订在旧主题上
             if alive.get(grant.ticket_hash) != grant.topic:
-                closed += await self._close(
-                    connection, CLOSE_PUBLIC_GRANT_REVOKED
-                )
+                doomed.append((connection, CLOSE_PUBLIC_GRANT_REVOKED))
+        # ⚠ 并发关：逐条等的话，一批卡住的对端会把整轮复核拖成几十秒
+        closed = sum(
+            await asyncio.gather(
+                *(self._close(item, code) for item, code in doomed)
+            )
+        )
         if closed:
             _logger.info(
                 "public_connections_closed",
@@ -129,18 +136,29 @@ class PublicConnectionSweeper:
             )
         return closed
 
-    @staticmethod
-    async def _close(connection: Connection, code: int) -> int:
-        """关掉一条连接，返回 1 表示确实动了手。
+    async def _close(self, connection: Connection, code: int) -> int:
+        """限时关掉一条连接，返回 1 表示确实动了手。
 
         ⚠ 关不掉只记日志：对端可能已经走了，而摘除由收发循环的 finally 负责。
+        ⚠ 超时则先摘索引：关闭帧发不出去，也不能让它继续收到已撤回的数据。
 
         Args: connection, code。
         """
         if connection.close is None:
             return 0
         try:
-            await connection.close(code)
+            async with asyncio.timeout(CLOSE_TIMEOUT_S):
+                await connection.close(code)
+        except TimeoutError:
+            await self._connections.remove(connection.id)
+            # ⚠ 叫醒期限驱动：它见连接已摘就收尾整个收发循环。只摘不叫醒，
+            # 它要睡到票据到期，这期间对端恢复了也只会对着一块停住的屏
+            connection.credential_changed.set()
+            _logger.warning(
+                "public_connection_close_timed_out",
+                "关闭匿名连接超时，已摘除",
+            )
+            return 0
         except Exception as error:
             _logger.warning(
                 "public_connection_close_failed",

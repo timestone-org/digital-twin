@@ -5,6 +5,10 @@ from uuid import UUID, uuid4
 
 import pytest
 from conftest import headers
+from sqlalchemy.exc import InvalidRequestError
+
+from hierarchy_server.apps.projects.crud import projects as crud
+from hierarchy_server.container import build_container
 
 BASE = "/api/v1/hierarchy"
 pytestmark = [pytest.mark.requires_postgres, pytest.mark.requires_redis]
@@ -182,3 +186,22 @@ async def test_capability_and_unsupplied_idempotency_key(client, document):
     )
     assert missing.status_code == 404
     await client.delete(f"{BASE}/projects/{project['id']}")
+
+
+async def test_history_listing_does_not_load_snapshots(
+    client, document, settings
+):
+    # ⚠ 历史面板只要版本号与时刻；把每份整图快照读出来再丢掉是白搬数据
+    project = await create(client, document)
+    database = build_container(settings).database
+    try:
+        async with database.session() as session:
+            versions = await crud.list_versions(
+                session, UUID(project["id"]), None, 10
+            )
+            assert [version.revision for version in versions] == [1]
+            with pytest.raises(InvalidRequestError):
+                _ = versions[0].document
+    finally:
+        await database.dispose()
+        await client.delete(f"{BASE}/projects/{project['id']}")

@@ -28,6 +28,21 @@ class TopicCrud(CrudBase[TopicDeclaration]):
         )
         return result.scalars().one_or_none()
 
+    async def required_codes_of(
+        self, session: AsyncSession, topics: frozenset[str]
+    ) -> dict[str, str]:
+        """一批主题各自声明的码，一条 `IN` 查询；未登记的主题不在结果里。
+
+        Args: session, topics。
+        """
+        if not topics:
+            return {}
+        statement = select(
+            TopicDeclaration.topic, TopicDeclaration.required_code
+        ).where(TopicDeclaration.topic.in_(topics))
+        result = await session.execute(statement)
+        return dict(result.tuples().all())
+
     async def insert_if_absent(
         self,
         session: AsyncSession,

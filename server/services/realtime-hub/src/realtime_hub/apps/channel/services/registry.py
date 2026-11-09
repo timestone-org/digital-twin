@@ -117,3 +117,18 @@ class TopicRegistry:
         if declaration.required_code not in codes:
             raise SubscriptionDenied("没有订阅该主题的权限")
         return declaration.required_code
+
+    async def denied_topics(
+        self, *, topics: frozenset[str], codes: frozenset[str]
+    ) -> frozenset[str]:
+        """一批主题里，这个持码集合已经订不了的那些（未登记或码不够）。
+
+        ⚠ 一次查询判全部：换票时逐个 `authorize` 是每个主题一个事务。
+
+        Args: topics, codes。
+        """
+        async with self._database.session() as session:
+            declared = await self._topics.required_codes_of(session, topics)
+        return frozenset(
+            topic for topic in topics if declared.get(topic) not in codes
+        )
