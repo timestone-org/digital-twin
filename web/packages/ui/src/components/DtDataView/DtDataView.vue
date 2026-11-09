@@ -102,6 +102,7 @@ const isFirstLoad = computed(() => props.loading && props.rows.length === 0)
 const empty = computed(() => ({
   title: props.empty?.title ?? '暂无数据',
   hint: props.empty?.hint,
+  icon: props.empty?.icon,
 }))
 
 /**
@@ -271,6 +272,7 @@ const fieldColumns = computed(() =>
         :empty="rows.length === 0"
         :empty-title="empty.title"
         :empty-hint="empty.hint"
+        :empty-icon="empty.icon"
         @retry="emit('retry')"
       >
         <DtTable
@@ -309,6 +311,7 @@ const fieldColumns = computed(() =>
       :empty="rows.length === 0"
       :empty-title="empty.title"
       :empty-hint="empty.hint"
+      :empty-icon="empty.icon"
       @retry="emit('retry')"
     >
       <div

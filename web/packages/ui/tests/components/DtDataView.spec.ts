@@ -11,6 +11,7 @@ import { afterEach, describe, expect, it } from 'vitest'
 import type { DtDataColumn } from '@dt/contracts'
 
 import DtDataView from '../../src/components/DtDataView/DtDataView.vue'
+import DtPageState from '../../src/components/DtPageState/DtPageState.vue'
 
 interface Row {
   id: string
@@ -210,6 +211,16 @@ describe('DtDataView', () => {
     const wrapper = render({ rows: [], empty: { title: '还没有账号' } })
     expect(wrapper.text()).toContain('还没有账号')
   })
+
+  it.each(['table', 'card'])(
+    '空态图标可以按场景改，%s 视图同样生效',
+    (view) => {
+      const wrapper = render({ rows: [], view, empty: { icon: 'folder-open' } })
+      expect(wrapper.findComponent(DtPageState).props('emptyIcon')).toBe(
+        'folder-open',
+      )
+    },
+  )
 
   it('最小宽度透传给表格', () => {
     const wrapper = render({ layout: { minWidth: '70rem' } })

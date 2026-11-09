@@ -81,6 +81,8 @@ export type DtDataViewMode = (typeof DT_DATA_VIEW_MODES)[number]
 export interface DtDataViewEmpty {
   title?: string | undefined
   hint?: string | undefined
+  /** 已在 DtIcon 注册表登记的名字；缺省沿用 DtPageState 的空态图标。 */
+  icon?: string | undefined
 }
 
 export interface DtSegmentedOption {
