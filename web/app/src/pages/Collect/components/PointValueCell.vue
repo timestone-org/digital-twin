@@ -9,6 +9,7 @@ import { computed } from 'vue'
 import type { PointSample } from '@dt/contracts'
 import { DtTag, DtTooltip } from '@dt/ui'
 
+import { formatTimestampMs } from '@/utils/datetime'
 import { formatSample } from '../scripts/liveFormat'
 
 const props = defineProps<{
@@ -18,6 +19,11 @@ const props = defineProps<{
 }>()
 
 const look = computed(() => formatSample(props.sample, props.unit))
+const sampledAt = computed(() =>
+  props.sample?.state === 'ok'
+    ? `采样时间：${formatTimestampMs(props.sample.timestampMs)}`
+    : undefined,
+)
 </script>
 
 <template>
@@ -32,8 +38,11 @@ const look = computed(() => formatSample(props.sample, props.unit))
         {{ look.badge }}
       </DtTag>
     </div>
-    <span v-if="look.at" class="text-2xs text-text-secondary">{{
-      look.at
-    }}</span>
+    <span
+      v-if="look.at"
+      class="text-2xs text-text-secondary"
+      :title="sampledAt"
+      >{{ look.at }}</span
+    >
   </div>
 </template>
