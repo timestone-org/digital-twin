@@ -29,7 +29,15 @@ describe('颜色图例', () => {
   it('每个种类只列一次——十条能流共用一套种类是常态', () => {
     const legend = collectSceneLegend(flowsOf('water', 'water', 'steam'), [])
 
-    expect(legend.map((item) => item.label)).toEqual(['water', 'steam'])
+    expect(legend.map((item) => item.label)).toEqual(['水', '蒸汽'])
+  })
+
+  // ⚠ 中文大屏的图例上出现 water / electricity 是在露内部代码
+  it('认得的种类显示中文名，旧别名也认得，不认识的原样显示', () => {
+    const legend = collectSceneLegend(flowsOf('electricity', '冷却水'), [])
+
+    expect(legend.map((item) => item.label)).toEqual(['电', '冷却水'])
+    expect(collectSceneLegend(flowsOf('Power'), [])[0]?.label).toBe('电')
   })
 
   // 缺省色代表什么本身没有含义，列出来只会让人去猜

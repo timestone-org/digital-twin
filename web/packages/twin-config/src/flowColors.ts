@@ -21,6 +21,38 @@ export const FLOW_KIND_COLORS: Readonly<Record<string, string>> = {
   air: '#8fe3a5',
 }
 
+/**
+ * 编辑器可选的能源种类与中文名，按下拉的显示顺序；图例的中文名也取这一份。
+ * ⚠ `power` 是 `electricity` 的旧别名，不再给人选，但图例照样认得它。
+ */
+export const FLOW_KIND_OPTIONS = [
+  { kind: 'water', label: '水' },
+  { kind: 'steam', label: '蒸汽' },
+  { kind: 'electricity', label: '电' },
+  { kind: 'gas', label: '燃气' },
+  { kind: 'oil', label: '油' },
+  { kind: 'heat', label: '热' },
+  { kind: 'cold', label: '冷' },
+  { kind: 'air', label: '空气' },
+] as const
+
+/** 种类码 → 中文名。 */
+const FLOW_KIND_LABELS: Readonly<Record<string, string>> = {
+  ...Object.fromEntries(
+    FLOW_KIND_OPTIONS.map((option) => [option.kind, option.label]),
+  ),
+  power: '电',
+}
+
+/**
+ * 种类名 → 给人看的中文名；不认识的种类原样给出。
+ * @param kind 能源种类
+ */
+export function flowKindLabel(kind: string): string {
+  const trimmed = kind.trim()
+  return FLOW_KIND_LABELS[trimmed.toLowerCase()] ?? trimmed
+}
+
 /** 只有这个形状的种类名才拿去拼 CSS 变量名。 */
 const KIND_TOKEN_RE = /^[a-z0-9-]+$/
 

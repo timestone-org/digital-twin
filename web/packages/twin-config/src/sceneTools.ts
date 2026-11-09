@@ -2,7 +2,7 @@
  * @fileoverview 运行态场景工具里能提纯的那一半：颜色图例、截图文件名、剖切平面、
  * 场景内搜索、两点测距。不碰 three、不碰 DOM、不读时钟——时间戳由调用方喂进来。
  */
-import { flowKindColor, flowKindToken } from './flowColors'
+import { flowKindColor, flowKindLabel, flowKindToken } from './flowColors'
 import { tintStopText } from './partTint'
 import type { TwinFlowLink, TwinPart, TwinPartTint } from './types'
 
@@ -26,8 +26,9 @@ export interface TwinLegendEntry {
  *
  * ⚠ 同一个含义只列一次：十条能流共用一套种类、几十个部件共用一套染色档位都是
  * 常态，逐条列出来的图例没法看。
- * ⚠ 没写种类的流、没写说明的档位照样进图例——档位那一侧有 `tintStopText` 按
- * 条件拼一句兜底，而「一个没有任何说明的色块」等于没有图例。
+ * ⚠ 没写说明的档位照样进图例——`tintStopText` 按条件拼一句兜底，而「一个没有
+ * 任何说明的色块」等于没有图例。没写种类的流不进：缺省色本身没有含义，列出来只会让人去猜。
+ * ⚠ 种类给中文名，不认识的才原样显示：中文大屏上冒出「water」是在露内部代码。
  *
  * @param flows 归一化后的能量流
  * @param parts 归一化后的部件，取它们的状态染色档位
@@ -45,12 +46,12 @@ export function collectSceneLegend(
     out.push(entry)
   }
   for (const flow of flows) {
-    const label = flow.kind.trim()
+    const kind = flow.kind.trim()
     push({
       group: '能量流',
-      label,
-      token: flowKindToken(label),
-      color: flowKindColor(label),
+      label: flowKindLabel(kind),
+      token: flowKindToken(kind),
+      color: flowKindColor(kind),
     })
   }
   for (const part of parts) {
