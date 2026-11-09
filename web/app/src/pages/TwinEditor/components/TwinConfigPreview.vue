@@ -23,6 +23,7 @@ import {
   type PreviewSample,
 } from '../scripts/previewData'
 import { roamPreviewOf } from '../scripts/previewContext'
+import { useRememberedOpen } from '../scripts/rememberedOpen'
 const props = defineProps<{
   node: DashboardNodePayload | null
   config: TwinConfig
@@ -42,6 +43,8 @@ const emit = defineEmits<{
 const PanelPreview = defineAsyncComponent(
   async () => (await import('@dt/three-core')).TwinPanelPreview,
 )
+/** 配置预览开合的存储键。 */
+const PREVIEW_OPEN_KEY = 'dt.twin-editor.preview'
 const partMode = ref('model')
 const segmentKey = ref('')
 const progress = ref({ segmentIndex: 0, percent: 0, playing: false })
@@ -141,7 +144,9 @@ defineExpose({
   playRoam: () => issue('roam-play'),
   stopRoam: () => issue('roam-stop'),
 })
-const open = ref(true)
+// ⚠ 收起要记住、换选中不重开：它钉在视口右下角，一点大纲就弹回来会盖住刚选中的东西。
+//   只有显式的预览动作（部件点击/详情预览、漫游试播）才替用户打开
+const open = useRememberedOpen(PREVIEW_OPEN_KEY, true)
 const wide = ref(false)
 const mode = ref('configure')
 const preview = computed(() =>
@@ -206,7 +211,6 @@ const options = [
 watch(
   () => [props.selection, props.animation, props.testMode],
   () => {
-    open.value = true
     mode.value = 'configure'
   },
 )
