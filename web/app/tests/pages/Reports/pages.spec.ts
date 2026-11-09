@@ -625,3 +625,36 @@ describe('定时规则列表的呈现', () => {
     wrapper.unmount()
   })
 })
+
+it('⚠ 模板编码不合规时就地说在那一格，不发请求', async () => {
+  signIn(['report:view', 'report:manage'])
+  vi.spyOn(api, 'listReports').mockResolvedValue({
+    items: [],
+    page: 1,
+    size: 20,
+    total: 0,
+  })
+  const createReport = vi.spyOn(api, 'createReport')
+  const wrapper = mount(Templates, { global: { stubs: { teleport: true } } })
+  await flushPromises()
+  await wrapper
+    .findAllComponents(DtButton)
+    .find((button) => button.text() === '新建模板')
+    ?.trigger('click')
+  await flushPromises()
+  const input = (label: string) =>
+    wrapper
+      .findAllComponents(DtInput)
+      .find((item) => item.props('label') === label)
+  input('报告名称')?.vm.$emit('update:modelValue', '月报')
+  input('模板编码')?.vm.$emit('update:modelValue', '1bad code')
+  await flushPromises()
+  await wrapper
+    .findAllComponents(DtButton)
+    .find((button) => button.text() === '创建并编辑')
+    ?.trigger('click')
+  await flushPromises()
+  expect(createReport).not.toHaveBeenCalled()
+  expect(input('模板编码')?.props('error')).toBeTruthy()
+  wrapper.unmount()
+})

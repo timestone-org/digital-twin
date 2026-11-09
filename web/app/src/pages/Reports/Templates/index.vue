@@ -46,7 +46,10 @@ const isImportOpen = ref(false)
 const name = ref('')
 const code = ref('')
 const error = ref('')
+const codeError = ref('')
 const isSaving = ref(false)
+/** 模板编码的口径，与后端校验同一条正则。 */
+const CODE_PATTERN = /^[A-Za-z_][A-Za-z0-9_]*$/
 watch(keyword, () => void list.reloadFromFirstPage())
 const emptyState = computed(() =>
   listEmptyState({
@@ -61,6 +64,11 @@ const emptyState = computed(() =>
 )
 onMounted(() => void list.reload())
 async function create(): Promise<void> {
+  // 先在这一格说清：交给后端只会得到一句不指向字段的「参数校验失败」
+  codeError.value = CODE_PATTERN.test(code.value)
+    ? ''
+    : '只能用英文字母、数字和下划线，且不能以数字开头'
+  if (codeError.value !== '') return
   isSaving.value = true
   error.value = ''
   try {
@@ -183,6 +191,7 @@ async function remove(id: string): Promise<void> {
           label="模板编码"
           size="sm"
           hint="字母开头，使用英文字母、数字、下划线"
+          :error="codeError"
         />
         <DtNotice v-if="error" intent="danger">
           {{ error }}
