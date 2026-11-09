@@ -138,7 +138,12 @@ export function useCanvasPage() {
     operatorMap,
     runtime,
     loadRuns: (pipelineId: string) => loadCanvasRuns(state, pipelineId),
-    open: (pipelineId: string) => openCanvasPage(state, pipelineId),
+    /** 进页面：读回来时已直接校验过一次，换图排下的那次防抖校验作废。 */
+    open: async (pipelineId: string) => {
+      const isLoaded = await openCanvasPage(state, pipelineId)
+      check.cancel()
+      return isLoaded
+    },
     replay: (runId: string) => replayCanvasRun(state, runId),
     backToEditing: (current: ModelingGraph | null) =>
       backToEditing(state, current),

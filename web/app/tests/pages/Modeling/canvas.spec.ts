@@ -1080,6 +1080,21 @@ describe('保存前的整图校验', () => {
     edge_id: '',
   }
 
+  it('进页面只校验一次，不是一次直发再加一次防抖', async () => {
+    vi.useFakeTimers()
+    try {
+      stubApi()
+      signIn(WRITER)
+      open()
+      await vi.runOnlyPendingTimersAsync()
+      await vi.advanceTimersByTimeAsync(1000)
+
+      expect(modeling.validateModelingGraph).toHaveBeenCalledTimes(1)
+    } finally {
+      vi.useRealTimers()
+    }
+  })
+
   it('图一改就自动校验，问题逐条挂在画布上', async () => {
     vi.useFakeTimers()
     try {
