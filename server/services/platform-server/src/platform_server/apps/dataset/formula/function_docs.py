@@ -91,7 +91,7 @@ FUNCTION_DOCS: tuple[FunctionDoc, ...] = (
         category="math",
         signature="MOD(x, 除数)",
         description=(
-            "取余；除数为 0 返回空。符号随**除数**（与电子表格的 MOD 一致，-1 "
+            "取余；除数为 0 返回空。符号随除数（与电子表格的 MOD 一致，-1 "
             "除以 3 得 2）"
         ),
         example="MOD({累计分钟}, 60)",
@@ -143,7 +143,7 @@ FUNCTION_DOCS: tuple[FunctionDoc, ...] = (
         category="explog",
         signature="LOG(x, 底数)",
         description=(
-            "指定底的对数。**只给一个参数时取自然对数**（工程里 log 常指 ln）"
+            "指定底的对数。只给一个参数时取自然对数（工程里 log 常指 ln）"
             "；要十进制请明确用 LOG10"
         ),
         example="LOG({值}, 2)",
@@ -162,7 +162,7 @@ FUNCTION_DOCS: tuple[FunctionDoc, ...] = (
         name="SIN",
         category="trig",
         signature="SIN(弧度)",
-        description="正弦。参数是**弧度**——手上是角度请套 RADIANS",
+        description="正弦。参数是弧度——手上是角度请套 RADIANS",
         example="SIN(RADIANS({角度}))",
         args=("弧度",),
     ),

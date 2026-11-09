@@ -56,7 +56,9 @@ async def test_a_manual_column_refuses_a_correction(
     # ⚠ 静默忽略的话，用户改完看到的还是原值，而界面上没有任何东西说它没生效
     table = await create_table(app_client)
     await create_column(app_client, table["id"], key="产量")
-    created = await create_record(app_client, str(table["id"]), ts=MOMENT)
+    created = await create_record(
+        app_client, str(table["id"]), ts=MOMENT, values={"产量": 1}
+    )
 
     response = await app_client.put(
         overrides_url(str(table["id"]), created["record"]["row_id"], MOMENT),
@@ -78,7 +80,9 @@ async def test_a_formula_column_refuses_a_correction(
         source="formula",
         formula="{产量} * 2",
     )
-    created = await create_record(app_client, str(table["id"]), ts=MOMENT)
+    created = await create_record(
+        app_client, str(table["id"]), ts=MOMENT, values={"产量": 1}
+    )
 
     response = await app_client.put(
         overrides_url(str(table["id"]), created["record"]["row_id"], MOMENT),

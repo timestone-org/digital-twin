@@ -87,12 +87,15 @@ const nodeViews = computed(() =>
         :title="`API · ${source.name}`"
         padding="sm"
       >
-        <p class="mb-2 text-sm text-secondary">
+        <DtNotice v-if="source.error" intent="danger">
+          {{ source.error }}
+        </DtNotice>
+        <p v-else class="mb-2 text-sm text-secondary">
           本次获取 {{ source.row_count }} 行，以下展示前
           {{ source.rows.length }} 行映射结果。
         </p>
         <ReportTable v-if="source.rows.length" :node="source.node" />
-        <DtNotice v-else intent="info">
+        <DtNotice v-else-if="!source.error" intent="info">
           API 已返回，本期暂无匹配数据。请核对参数、数据位置与报告期。
         </DtNotice>
       </DtCard>

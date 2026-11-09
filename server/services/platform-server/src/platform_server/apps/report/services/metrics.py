@@ -51,6 +51,8 @@ class PreviewContext:
     api_data: dict[str, SourceData] = field(
         default_factory=dict[str, SourceData]
     )
+    #: 试算时取数失败的来源 → 原因；引用它的指标与节点按这句报错
+    api_errors: dict[str, str] = field(default_factory=dict[str, str])
 
     async def read(
         self, session: AsyncSession, window: SourceWindow
@@ -63,6 +65,8 @@ class PreviewContext:
             if remaining <= 0:
                 raise ValueError("本次报告取数总量已达到上限，请缩小时间窗")
             bounded = replace(window, limit=min(window.limit, remaining))
+            if window.table in self.api_errors:
+                raise ValueError(self.api_errors[window.table])
             if window.table.startswith("api:"):
                 found = self.api_data.get(window.table)
                 if found is None:

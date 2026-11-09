@@ -20,7 +20,10 @@ from platform_server.apps.report.schemas.preview import NodeValue, PreviewOut
 from platform_server.apps.report.schemas.template import TemplateBody
 from platform_server.apps.report.services.chart_ooxml import add_chart
 from platform_server.apps.report.services.chart_raster import render_chart
-from platform_server.apps.report.services.document import text_attr
+from platform_server.apps.report.services.document import (
+    node_label,
+    text_attr,
+)
 from platform_server.apps.report.services.docx_layout import (
     apply_paragraph_layout,
     normalize_text_color,
@@ -145,7 +148,7 @@ def _block(
     ):
         _container_block(state, parent, node, path)
         return
-    state.warnings.append(f"{path}：不支持的节点 {node.type}")
+    state.warnings.append(f"{node_label(path, node)}：不支持，未写入")
     if node.text:
         parent.add_paragraph(node.text)
 
@@ -193,7 +196,7 @@ def _paragraph(
             )
         else:
             state.warnings.append(
-                f"{child_path}：行内节点 {child.type} 无法保留"
+                f"{node_label(child_path, child)}：行内无法保留"
             )
 
 
@@ -299,7 +302,7 @@ def _business_block(
         parent.add_paragraph(value.title).style = "Caption"
     if node.type == "dsChart":
         if not isinstance(parent, WordDocument):
-            state.warnings.append(f"{path}：表格内图表未生成")
+            state.warnings.append(f"{node_label(path, node)}：表格内图表未生成")
             return
         _draw_chart(state, parent, node, value, path)
     else:
@@ -321,7 +324,8 @@ def _draw_chart(
         and _dense_chart(document, value)
     ):
         state.warnings.append(
-            f"{path}：高密度趋势已生成高清图像，保留全部数据点"
+            f"{node_label(path, node)}："
+            "高密度趋势已生成高清图像，保留全部数据点"
         )
         return
     if native:
@@ -329,13 +333,17 @@ def _draw_chart(
             add_chart(document, value)
             return
         except ValueError:
-            state.warnings.append(f"{path}：原生图表失败，已尝试位图")
+            state.warnings.append(
+                f"{node_label(path, node)}：原生图表失败，已尝试位图"
+            )
     try:
         payload = render_chart(value)
         document.add_picture(io.BytesIO(payload), width=Cm(14))
         document.paragraphs[-1].paragraph_format.line_spacing = 1.0
     except (ValueError, RuntimeError):
-        state.warnings.append(f"{path}：位图生成失败，请检查中文字体")
+        state.warnings.append(
+            f"{node_label(path, node)}：位图生成失败，请检查中文字体"
+        )
         document.add_paragraph("[图表不可用]")
 
 

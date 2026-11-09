@@ -130,6 +130,32 @@ async def test_a_required_column_left_empty_is_a_client_error(
     assert code_of(response) == RECORD_INVALID
 
 
+async def test_a_row_without_a_single_value_is_a_client_error(
+    app_client: httpx.AsyncClient,
+) -> None:
+    # 一格都没填的行存下去就是一行永远解释不清的空记录
+    table_id = await seed_table(app_client)
+
+    response = await app_client.post(
+        records_url(table_id), json={"ts": FIRST_MOMENT, "values": {"产量": ""}}
+    )
+
+    assert response.status_code == HTTP_BAD_REQUEST
+    assert code_of(response) == RECORD_INVALID
+
+
+async def test_a_default_value_is_enough_to_make_a_row(
+    app_client: httpx.AsyncClient,
+) -> None:
+    table_id = await seed_table(app_client, default_value=3)
+
+    created = await create_record(
+        app_client, table_id, ts=FIRST_MOMENT, values={}
+    )
+
+    assert created["record"]["values"] == {"产量": 3.0}
+
+
 async def test_editing_one_column_keeps_the_collected_value(
     app_client: httpx.AsyncClient,
 ) -> None:

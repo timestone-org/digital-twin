@@ -90,7 +90,7 @@ def test_the_consumer_takes_its_identity_from_config() -> None:
     assert options.target.stream == "platform:ac-startup:shards"
     assert options.target.group == "ac-startup-workers"
     assert options.target.consumer == "worker-1"
-    assert options.prefetch == 8
+    assert options.prefetch == 1
     assert options.shard_timeout_s == 300.0
 
 

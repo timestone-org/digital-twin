@@ -181,6 +181,9 @@ class DatasetCollector:
             outcome = await self._collect_one(table_id, knobs, now)
             if outcome is not None:
                 outcomes.append(outcome)
+            # ⚠ 一拍可能长过 TTL：逐表之间续一次，续不上就把剩下的表留给接任者
+            if not await self._hold_lease():
+                break
             # ⚠ 逐表之间主动让出：这条循环与另外五条消费循环共用一个事件循环，
             # 几十张表连着算会把同进程的 /health 一起卡住
             await asyncio.sleep(0)
@@ -231,22 +234,23 @@ class DatasetCollector:
 
         ⚠ renew-or-die：续不上立刻判非 leader。接任者从水位往下接着算，手上没有
         任何需要交接的状态——写入是按桶身份幂等的。
+        ⚠ 续不上时当场按 NX 再抢一次：间隔可以配得比 TTL 长，那时键早已过期，
+        不重抢就是每隔一拍空过一拍；NX 抢不走别的副本手上的活租约。
         """
-        if self._is_leader:
-            if await self._lease.renew():
-                return True
-            self._is_leader = False
-            _logger.error(
-                "dataset_collect_lease_lost", "租约续期失败，立刻停止采集"
-            )
-            return False
+        if self._is_leader and await self._lease.renew():
+            return True
+        was_leader = self._is_leader
         is_acquired = await self._lease.acquire()
-        if is_acquired:
+        self._is_leader = is_acquired
+        if is_acquired and not was_leader:
             _logger.info(
                 "dataset_collect_lease_acquired",
                 "接管台账采集，本副本成为 leader",
             )
-        self._is_leader = is_acquired
+        if was_leader and not is_acquired:
+            _logger.warning(
+                "dataset_collect_lease_lost", "租约续期失败，立刻停止采集"
+            )
         return is_acquired
 
     async def _pause(self, delay_s: float) -> None:

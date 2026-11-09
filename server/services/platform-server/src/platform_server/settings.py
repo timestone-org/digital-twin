@@ -248,9 +248,10 @@ class Settings(
     acstartup_stream: str = "platform:ac-startup:shards"
     acstartup_group: str = "ac-startup-workers"
     acstartup_block_ms: int = 5000
-    # 多久没确认就算滞留，可以被别的消费者认领回来
-    acstartup_claim_idle_ms: int = 60000
-    acstartup_prefetch: int = 8
+    # 多久没确认就算滞留，可以被别的消费者认领回来。⚠ 要长过 prefetch × 一片的
+    # 预算：逐条处理时最后一条在 PEL 里滞留得最久，门槛更短就会被别的副本重跑
+    acstartup_claim_idle_ms: int = 360000
+    acstartup_prefetch: int = 1
     # ⚠ 一片的总预算必须大于它内部全部外库查询之和：6 台 × 15 s 查询超时 = 90 s
     acstartup_shard_timeout_s: float = 300.0
     # 一台空调一片最多取多少行；一个月按分钟采样约 4.5 万行
@@ -268,8 +269,8 @@ class Settings(
     acmodel_stream: str = "platform:ac-model:train"
     acmodel_group: str = "ac-model-trainers"
     acmodel_block_ms: int = 5000
-    # 训练要跑几十秒，认领门槛要比它长得多，否则跑到一半就被别人抢走重训
-    acmodel_claim_idle_ms: int = 300000
+    # ⚠ 认领门槛要长过训练总预算，否则跑到一半就被别人抢走重训
+    acmodel_claim_idle_ms: int = 1200000
     acmodel_prefetch: int = 1
     # 一次训练的总预算。⚠ 真实房间全史上万条可用事件，18 次拟合在竞争负载下
     # 是分钟级；这条线是硬故障线，穿了按不可重试标失败
@@ -381,7 +382,8 @@ class Settings(
     acdaily_stream: str = "platform:ac-startup:daily"
     acdaily_group: str = "ac-startup-daily-workers"
     acdaily_block_ms: int = 5000
-    acdaily_claim_idle_ms: int = 300000
+    # ⚠ 认领门槛要长过一天窗口的预算，理由同 acstartup_claim_idle_ms
+    acdaily_claim_idle_ms: int = 360000
     acdaily_prefetch: int = 1
     # 一天的窗口比一个月的分片小得多，但仍要大于它内部全部外库查询之和
     acdaily_timeout_s: float = 300.0

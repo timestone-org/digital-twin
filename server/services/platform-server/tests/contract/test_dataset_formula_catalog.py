@@ -196,3 +196,11 @@ def test_the_library_call_prefix_is_banned_from_both_identifier_rules() -> None:
     # 「调用库公式要带括号」——指向一个用户根本没写过的东西
     assert FX_CODE_RE.match("a@b") is None
     assert COLUMN_KEY_RE.match("a@b") is None
+
+
+def test_the_panel_texts_carry_no_markdown_markers() -> None:
+    # ⚠ 前端按纯文本渲染：`**` 会原样出现在面板里
+    texts = [*RULES]
+    for function in build_catalog(EMPTY_LIBRARY).functions:
+        texts.extend((function.doc.description, function.doc.example))
+    assert [text for text in texts if "**" in text] == []

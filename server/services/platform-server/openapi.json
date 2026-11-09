@@ -22363,6 +22363,17 @@
             "title": "Columns",
             "type": "array"
           },
+          "error": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Error"
+          },
           "name": {
             "title": "Name",
             "type": "string"

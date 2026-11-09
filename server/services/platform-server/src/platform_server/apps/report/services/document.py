@@ -41,6 +41,33 @@ def walk_nodes(root: DocumentNode) -> Iterator[tuple[str, DocumentNode]]:
             stack.append((child_path, node.content[index], depth + 1))
 
 
+# 业务节点在提示里的叫法
+_NODE_NAMES = {
+    "metricRef": "数字",
+    "condText": "条件文本",
+    "dsChart": "图表",
+    "dsTable": "表格",
+}
+
+
+def node_label(path: str, node: DocumentNode) -> str:
+    """把内容路径换成用户在正文里认得出的说法，如「第 3 段的图表「趋势」」。
+
+    Args: path（`walk_nodes` 给的内容路径）, node。
+    """
+    parts = path.split(".")
+    where = (
+        f"第 {int(parts[1]) + 1} 段的"
+        if len(parts) > 1 and parts[1].isdigit()
+        else ""
+    )
+    name = _NODE_NAMES.get(node.type, f"节点 {node.type}")
+    if node.type == "metricRef" and text_attr(node, "expr"):
+        return f"{where}{name} {text_attr(node, 'expr')}"
+    title = text_attr(node, "title")
+    return f"{where}{name}「{title}」" if title else f"{where}{name}"
+
+
 def text_attr(node: DocumentNode, key: str, default: str = "") -> str:
     value = node.attrs.get(key)
     return value if isinstance(value, str) else default

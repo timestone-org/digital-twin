@@ -379,6 +379,8 @@ async def test_deleting_a_formula_a_column_uses_is_refused(
 
     assert response.status_code == HTTP_CONFLICT
     assert "班次台账" in response.json()["message"]
+    # ⚠ 停用同样被「还有列在用」挡着，指给用户一条走不通的路等于没指
+    assert "停用" not in response.json()["message"]
 
 
 async def test_deleting_a_formula_only_another_formula_calls_is_refused(

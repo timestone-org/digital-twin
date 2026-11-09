@@ -247,7 +247,7 @@ key 里混进一个花括号就**永远引用不到这一列**：`{a}b}` 会先�
 |---|---|---|---|
 | `table_id` | `uuid` | NO | 对齐 `dataset_tables.id`，**不建外键**（超表上的外键拖慢每一次写入；删表由应用显式清行） |
 | `ts` | `timestamptz` | NO | 桶起点；**分区列** |
-| `row_id` | `uuid` | NO | 采集来源由 uuid5 派生（D2），人工/导入来源用 uuid7 |
+| `row_id` | `uuid` | NO | 采集来源由 uuid5 派生（D2）；按周期聚合台账上的人工录入对齐到桶、取同一个 uuid5（桶上已有行就并进去），其余人工/导入来源用 uuid7 |
 | `values_json` | `jsonb` | **NO** | 原始值 `{列key: 值}`——人工录入或点位聚合结果。**公式重算绝不写这一列** |
 | `overrides_json` | `jsonb` | YES | 人工修正 `{列key: {v, by, by_name, at, reason?}}`。**采集与重算绝不覆盖** |
 | `computed_json` | `jsonb` | YES | 公式结果 |

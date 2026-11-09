@@ -38,6 +38,25 @@ def test_a_syntax_error_becomes_a_formula_error() -> None:
         parse_formula("{a} +")
 
 
+@pytest.mark.parametrize(
+    ("source", "hint"),
+    [
+        ("{a} - (", "括号没有闭合"),
+        ("{a})", "多了一个右括号"),
+        ("({a}]", "括号不配对"),
+        ("'abc", "引号没有闭合"),
+        ("{a} +", "写法有误"),
+    ],
+)
+def test_a_syntax_error_speaks_chinese(source: str, hint: str) -> None:
+    # ⚠ 界面是中文的：把 CPython 的英文原话透出去，用户看不懂哪里错
+    with pytest.raises(FormulaError) as caught:
+        parse_formula(source)
+    message = str(caught.value)
+    assert hint in message
+    assert not any("a" <= char.lower() <= "z" for char in message)
+
+
 def test_deep_nesting_becomes_a_formula_error_not_a_crash() -> None:
     # ⚠ 校验端点只要读权限就能调，不接住 RecursionError 就是白送的 DoS
     with pytest.raises(FormulaError, match="嵌套过深"):

@@ -127,7 +127,10 @@ async def test_a_series_skips_the_periods_that_have_no_value(
     # ⚠ 空桶不填 0、不结转：结转会让断采期间的曲线看起来一切正常
     table = await create_table(app_client)
     await create_column(app_client, table["id"], key="产量")
-    await create_record(app_client, str(table["id"]), ts=HOURS[0])
+    await create_column(app_client, table["id"], key="备注", name="备注")
+    await create_record(
+        app_client, str(table["id"]), ts=HOURS[0], values={"备注": 1}
+    )
     await create_record(
         app_client, str(table["id"]), ts=HOURS[1], values={"产量": 2}
     )

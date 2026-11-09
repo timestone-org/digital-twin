@@ -4,13 +4,18 @@
 行标识与录入署名原样带过去，前端持有的引用不会失效。
 ⚠ 两份 JSONB 都是**合并写**而不是整体覆盖：只覆盖本次显式提交过的录入列，
 点位汇总列的采集原值与已删列的残值一律留着（§4.3a）。
+⚠ 按周期聚合的台账上录入一行要对齐到桶、并落在采集那一行的 `row_id` 上：
+否则同一个桶长出第二行，而两行看起来都对（§14.1 D-B）。
 """
 
 import uuid
+from collections.abc import Sequence
 from dataclasses import dataclass
 from datetime import datetime, tzinfo
 from typing import Any
+from zoneinfo import ZoneInfo
 
+from sqlalchemy.exc import IntegrityError
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from lib.errors.base import FieldError
@@ -22,11 +27,17 @@ from platform_server.apps.dataset.crud import (
     column_crud,
     record_crud,
 )
+from platform_server.apps.dataset.crud.table import AGGREGATE_MODE
 from platform_server.apps.dataset.errors import (
     DatasetRecordInvalid,
     DatasetRecordNotFound,
+    DatasetRecordSlotTaken,
 )
-from platform_server.apps.dataset.models import DatasetRecord
+from platform_server.apps.dataset.models import (
+    DatasetColumn,
+    DatasetRecord,
+    DatasetTable,
+)
 from platform_server.apps.dataset.schemas import (
     RecomputeIn,
     RecomputeOut,
@@ -35,7 +46,12 @@ from platform_server.apps.dataset.schemas import (
     RecordUpdateIn,
     RecordWriteOut,
 )
-from platform_server.apps.dataset.services.buckets import COLLECT_SOURCE
+from platform_server.apps.dataset.services.buckets import (
+    COLLECT_SOURCE,
+    bucket_interval,
+    bucket_start,
+    collected_row_id,
+)
 from platform_server.apps.dataset.services.dirty import (
     DatasetDirtyLog,
     mark_dirty,
@@ -66,6 +82,8 @@ from platform_server.apps.dataset.services.table_service import (
     require_table,
 )
 
+# 数据行主键的约束名
+_RECORD_KEY = "pk_dataset_records"
 _logger = get_logger("platform.dataset.record")
 
 
@@ -101,7 +119,7 @@ async def create_record(
     table_id: uuid.UUID,
     payload: RecordCreateIn,
 ) -> RecordWriteOut:
-    """录入一行。新建不做合并——没有既有值可留。
+    """录入一行。按周期聚合的台账上那个桶已有行时合并进去，口径同编辑。
 
     Args: session, writer, table_id, payload。
     """
@@ -111,17 +129,12 @@ async def create_record(
         session, columns=columns, timezone=writer.timezone
     )
     values = sanitize(payload.values, columns, actor=writer.actor)
-    stamp = _stamp(payload.ts)
-    computed, errors = await compute_row(
-        session,
-        scope,
-        RowTarget(table_id=table.id, ts=stamp, current_values=values.effective),
-    )
-    record = _new_record(table.id, stamp, values, writer.actor)
-    record.computed_json = computed
-    record.compute_error = errors or None
-    record_crud.add(session, record)
-    await session.flush()
+    _require_some_value(values, columns)
+    slot = await _slot_of(session, writer, table, _stamp(payload.ts))
+    if slot.existing is not None:
+        record = await _merge_into(session, scope, slot.existing, values)
+    else:
+        record = await _insert(session, scope, slot, values, writer.actor)
     mark_dirty(session, writer.dirty, table.code)
     _logger.info(
         "dataset_record_created",
@@ -130,6 +143,131 @@ async def create_record(
         row_id=str(record.row_id),
     )
     return await write_out(session, scope, record)
+
+
+@dataclass(frozen=True)
+class _Slot:
+    """新录入的一行落在哪：台账、数据时间、行标识，以及那个桶里已有的行。"""
+
+    table_id: uuid.UUID
+    ts: datetime
+    row_id: uuid.UUID
+    existing: DatasetRecord | None = None
+
+
+async def _slot_of(
+    session: AsyncSession,
+    writer: RecordWriter,
+    table: DatasetTable,
+    stamp: datetime,
+) -> _Slot:
+    """人工台账原样用给定时刻；按周期聚合的台账对齐到桶、取采集那一行的身份。
+
+    Args: session, writer, table, stamp。
+    """
+    if table.collect_mode != AGGREGATE_MODE:
+        return _Slot(table_id=table.id, ts=stamp, row_id=uuid7())
+    bucket = bucket_start(
+        stamp,
+        interval=bucket_interval(table.collect_interval_ms),
+        timezone=_zone_name(writer.timezone),
+    )
+    row_id = collected_row_id(table.id, bucket)
+    existing = await record_crud.get_one(
+        session, table_id=table.id, row_id=row_id, ts=bucket
+    )
+    return _Slot(table_id=table.id, ts=bucket, row_id=row_id, existing=existing)
+
+
+async def _merge_into(
+    session: AsyncSession,
+    scope: ComputeScope,
+    record: DatasetRecord,
+    values: SanitizedValues,
+) -> DatasetRecord:
+    """把一次录入合并进同一个桶里已有的那一行，口径与编辑相同。
+
+    Args: session, scope, record, values。
+    """
+    return await _persist(
+        session,
+        scope,
+        record,
+        _Draft(
+            ts=record.ts,
+            values=merge_values(record.values_json, values),
+            overrides=merge_overrides(record.overrides_json, values),
+        ),
+    )
+
+
+async def _insert(
+    session: AsyncSession,
+    scope: ComputeScope,
+    slot: _Slot,
+    values: SanitizedValues,
+    actor: Actor,
+) -> DatasetRecord:
+    """按落点新插一行并算好公式列。
+
+    Args: session, scope, slot, values, actor。
+    """
+    computed, errors = await compute_row(
+        session,
+        scope,
+        RowTarget(
+            table_id=slot.table_id, ts=slot.ts, current_values=values.effective
+        ),
+    )
+    record = _new_record(slot, values, actor)
+    record.computed_json = computed
+    record.compute_error = errors or None
+    record_crud.add(session, record)
+    await _flush_new(session)
+    return record
+
+
+async def _flush_new(session: AsyncSession) -> None:
+    """flush 新插的一行；桶上那一行被别的写入抢先占了就报冲突。
+
+    ⚠ 桶上的行标识是确定的：先查后插挡不住同时到的两次写，后到的撞主键。
+    ⚠ 超表的约束名带分块前缀（如 `1311_1311_pk_dataset_records`），只能比后缀。
+    Args: session。
+    """
+    try:
+        await session.flush()
+    except IntegrityError as error:
+        cause = getattr(error.orig, "__cause__", None)
+        name = getattr(cause, "constraint_name", None)
+        if not (isinstance(name, str) and name.endswith(_RECORD_KEY)):
+            raise
+        raise DatasetRecordSlotTaken(
+            "这个时段刚有人录入，请刷新后再试"
+        ) from error
+
+
+def _require_some_value(
+    values: SanitizedValues, columns: Sequence[DatasetColumn]
+) -> None:
+    """有录入列的台账上，一格值都没有的新行拒收。
+
+    ⚠ 没有录入列的台账除外：只有公式列的行本就不带原值，只有点位列的行由采集
+    填、由人工修正改，空着建出来是它的正常形态。
+    Args: values, columns。
+    """
+    has_inputs = any(column.source == "manual" for column in columns)
+    has_value = values.overrides or any(
+        value is not None for value in values.values.values()
+    )
+    if not has_inputs or has_value:
+        return
+    message = "至少填一格"
+    raise DatasetRecordInvalid(
+        message,
+        details=(
+            FieldError(field="values", code="empty_record", message=message),
+        ),
+    )
 
 
 async def update_record(
@@ -171,15 +309,20 @@ async def update_record(
 
 
 def _require_bucket_kept(record: DatasetRecord, stamp: datetime) -> None:
-    """采集行不许改数据时间。
+    """行标识由桶派生的行（采集行与落在桶上的录入行）不许改数据时间。
 
-    ⚠ 采集行的 row_id 由桶派生：挪走之后下一拍会在原桶再插一行同 row_id 的
+    ⚠ 这种行的 row_id 由桶派生：挪走之后下一拍会在原桶再插一行同 row_id 的
     行，按 row_id 取行从此不确定。
     Args: record, stamp。
     """
-    if record.source != COLLECT_SOURCE or stamp == record.ts:
+    if stamp == record.ts:
         return
-    message = "采集行的数据时间由桶决定，不能改"
+    is_bucket_row = record.source == COLLECT_SOURCE or (
+        record.row_id == collected_row_id(record.table_id, record.ts)
+    )
+    if not is_bucket_row:
+        return
+    message = "这一行的数据时间由桶决定，不能改"
     raise DatasetRecordInvalid(
         message,
         details=(FieldError(field="ts", code="ts_immutable", message=message),),
@@ -346,19 +489,16 @@ def _moved_record(record: DatasetRecord, draft: _Draft) -> DatasetRecord:
 
 
 def _new_record(
-    table_id: uuid.UUID,
-    stamp: datetime,
-    values: SanitizedValues,
-    actor: Actor,
+    slot: _Slot, values: SanitizedValues, actor: Actor
 ) -> DatasetRecord:
     """按清洗结果装出一行。
 
-    Args: table_id, stamp, values, actor。
+    Args: slot, values, actor。
     """
     return DatasetRecord(
-        table_id=table_id,
-        ts=stamp,
-        row_id=uuid7(),
+        table_id=slot.table_id,
+        ts=slot.ts,
+        row_id=slot.row_id,
         values_json=values.values,
         overrides_json=values.overrides or None,
         source="manual",
@@ -424,6 +564,14 @@ def _moment(given: datetime | None) -> datetime | None:
     Args: given。
     """
     return None if given is None else to_utc(given)
+
+
+def _zone_name(zone: tzinfo) -> str:
+    """桶网格要的时区名。
+
+    Args: zone。
+    """
+    return zone.key if isinstance(zone, ZoneInfo) else str(zone)
 
 
 def _stamp(given: datetime | None) -> datetime:

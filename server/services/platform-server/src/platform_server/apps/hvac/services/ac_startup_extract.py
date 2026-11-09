@@ -4,6 +4,7 @@
 """
 
 import uuid
+from collections.abc import Sequence
 from dataclasses import dataclass, replace
 from functools import partial
 
@@ -26,6 +27,7 @@ from platform_server.apps.hvac.models import (
 )
 from platform_server.apps.hvac.schemas import TimeWindow
 from platform_server.apps.hvac.services.ac_room_configuration import (
+    BoundUnit,
     RoomConfiguration,
     load_bound_units,
     restore_configuration,
@@ -238,7 +240,16 @@ async def resolve_source_extent(
     的历史整段切掉，而那正是样本最多的一段。
     Args: session, reader, room_id。
     """
-    units = await load_bound_units(session, room_id)
+    return await merge_extents(reader, await load_bound_units(session, room_id))
+
+
+async def merge_extents(
+    reader: AcSourceReader, units: Sequence[BoundUnit]
+) -> SourceExtent | None:
+    """逐个对象问外库跨度再取并集；只碰外库，不碰会话。
+
+    Args: reader, units。
+    """
     if not units:
         return None
     found = [
