@@ -118,7 +118,7 @@ describe('懒加载', () => {
 })
 
 describe('列表已知没有图', () => {
-  it('不挂 observer、不取图，直接画占位——没有图的屏不再换来一条 404', async () => {
+  it('不挂 observer、不取图，直接画占位——没有图的屏不发必然 404 的请求', async () => {
     const fetch = vi
       .spyOn(thumbnailApi, 'getDashboardThumbnail')
       .mockResolvedValue(null)

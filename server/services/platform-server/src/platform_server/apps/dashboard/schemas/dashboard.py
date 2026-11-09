@@ -47,7 +47,7 @@ class DashboardFieldsOut(OutputModel):
 class DashboardSummaryOut(DashboardFieldsOut):
     """列表页的大屏条目：不带节点树。"""
 
-    #: 有没有存过缩略图。工作台据此决定取不取图，没有图的屏不再换来一条 404
+    #: 有没有存过缩略图。工作台据此决定取不取图，没有图的屏不发必然 404 的请求
     has_thumbnail: bool
 
 
