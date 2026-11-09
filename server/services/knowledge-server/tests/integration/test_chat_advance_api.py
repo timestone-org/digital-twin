@@ -603,3 +603,18 @@ async def test_a_search_after_a_pause_continues_the_numbering(
         str(first.id),
         str(second.id),
     ]
+
+
+async def test_an_unexpected_failure_still_ends_with_an_error_frame(
+    db_stack: DbStack,
+) -> None:
+    """⚠ 只接业务异常的话，其余的异常让流直接断掉：前端读到的是「连接中断」
+    而不是「这一轮没跑完」，日志里也只剩一段没有事件名的堆栈。"""
+    _install(db_stack, ScriptedChat(error=RuntimeError("内部细节不许外泄")))
+    session_id = await _new_session(db_stack.client)
+
+    events = await _advance(db_stack.client, session_id, user_text="上限多少")
+
+    assert events[-1][0] == "error"
+    assert events[-1][1]["code"] == 52325
+    assert "内部细节" not in events[-1][1]["message"]

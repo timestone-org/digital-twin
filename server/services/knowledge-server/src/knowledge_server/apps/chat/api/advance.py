@@ -17,6 +17,7 @@ from fastapi.responses import StreamingResponse
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from knowledge_server.apps.chat.deps import get_advance_deps
+from knowledge_server.apps.chat.errors import ChatTurnFailed
 from knowledge_server.apps.chat.schemas import ChatAdvanceIn
 from knowledge_server.apps.chat.services import advance_service
 from knowledge_server.apps.chat.services.citations import (
@@ -85,6 +86,12 @@ async def _frames(
     except AppError as error:
         _logger.warning("kb_turn_failed", "回合失败", code=error.code)
         yield events.error_frame(error.code, str(error), trace_id)
+    # ⚠ 只接 `Exception`：客户端断开时的取消要照常往上传
+    except Exception as error:
+        _logger.error("kb_turn_crashed", "回合异常终止", error=error)
+        yield events.error_frame(
+            ChatTurnFailed.code, "这一轮没跑完，请重试", trace_id
+        )
 
 
 def _frame_of(item: TurnEvent | SessionTitled | CitationsFound) -> str:

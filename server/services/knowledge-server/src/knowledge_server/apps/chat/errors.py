@@ -51,3 +51,13 @@ class ChatContextTooLarge(AppError):
 
     code = 42324
     http_status = 413
+
+
+class ChatTurnFailed(AppError):
+    """回合中途撞上了意料之外的错，这一轮没跑完。
+
+    ⚠ 只经 `error` 事件出去，不带异常原文：原文里可能有连接串与内网地址。
+    """
+
+    code = 52325
+    http_status = 500
