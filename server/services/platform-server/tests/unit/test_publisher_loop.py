@@ -339,3 +339,24 @@ async def test_an_overrun_tick_drops_every_lane_cache() -> None:
     harness.publisher.stall_s = 5.0
     await harness.runtime.tick()
     assert (harness.publisher.forgotten, harness.collect.forgotten) == (1, 1)
+
+
+@dataclass
+class StalledKnobs:
+    """读运行参数时卡住，模拟连接池等不到连接。"""
+
+    stall_s: float
+
+    async def read(self) -> PublishKnobs:
+        await asyncio.sleep(self.stall_s)
+        return TUNED
+
+
+async def test_a_stalled_param_read_cannot_outlive_the_lease() -> None:
+    # ⚠ 读参数也是一次库 IO：放在预算外，它卡住时一拍照样拖过 TTL
+    harness = build_harness(lease_ttl_s=0.2)
+    harness.runtime._read_knobs = StalledKnobs(
+        stall_s=5.0
+    ).read  # 理由 —— 换读口
+    await asyncio.wait_for(harness.runtime.tick(), timeout=1.0)
+    assert harness.runtime._options.window_s == WINDOW_S  # 理由 —— 沿用原节奏

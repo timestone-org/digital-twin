@@ -183,10 +183,7 @@ class PublisherRuntime:
         try:
             if not await self._hold_lease():
                 return
-            is_due = self._is_reconcile_due()
-            if is_due:
-                await self._refresh_knobs()
-            await self._run_lanes(is_reconcile_due=is_due)
+            await self._run_lanes(is_reconcile_due=self._is_reconcile_due())
         finally:
             reset_log_context(token)
 
@@ -194,11 +191,14 @@ class PublisherRuntime:
         """在一拍的预算内跑完每条链路。
 
         ⚠ 一拍只续一次租约：hub 卡住时逐个 2s 超时能把一拍拖过 TTL，热备接手
-        而我们还在推，就是同一个主题两份值。超了预算就截断并丢掉缓存。
+        而我们还在推，就是同一个主题两份值。超了预算就截断并丢掉缓存。重读
+        运行参数也是一次库 IO，一并算在预算里。
         Args: is_reconcile_due。
         """
         try:
             async with asyncio.timeout(self._options.tick_budget_s()):
+                if is_reconcile_due:
+                    await self._refresh_knobs()
                 for lane in self._lanes:
                     await self._run_lane(
                         lane, is_reconcile_due=is_reconcile_due
