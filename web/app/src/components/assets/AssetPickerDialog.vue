@@ -128,6 +128,8 @@ watch(
     selectedId.value = ''
     draftKeyword.value = ''
     stopDebounce()
+    // ⚠ 关键词跟着搜索框一起清：只清框的话，上一次的词还在库里筛着列表
+    library.keyword.value = ''
     void library.reload(kind)
   },
   { immediate: true },

@@ -249,6 +249,28 @@ describe('翻页与搜索', () => {
     })
   })
 
+  it('关了再开，上一次的关键词不再悄悄筛着列表', async () => {
+    vi.useFakeTimers()
+    const wrapper = await render()
+    const box = query('input[type="search"]')
+    if (!(box instanceof HTMLInputElement)) throw new Error('搜索框不是 input')
+    box.value = '泵'
+    box.dispatchEvent(new Event('input'))
+    await vi.advanceTimersByTimeAsync(400)
+    vi.useRealTimers()
+    await flushPromises()
+
+    await wrapper.setProps({ modelValue: false })
+    await wrapper.setProps({ modelValue: true })
+    await flushPromises()
+
+    expect(api.listAssets).toHaveBeenLastCalledWith('model', {
+      limit: 50,
+      offset: 0,
+      q: '',
+    })
+  })
+
   it('只读账号没有上传与删除入口', async () => {
     grant(['asset:view'])
     await render()
