@@ -42,9 +42,9 @@ import { computed } from 'vue'
 
 import {
   TWIN_2D_UNIT_RANGE,
-  enumOptions,
   fieldsChanged,
   twin2dFontWith,
+  twin2dRouteOptions,
 } from '../../scripts/inspectorFields'
 import {
   restoreBuiltinEdgeStyle,
@@ -88,8 +88,6 @@ const ROUTE_LABELS: Readonly<Record<Twin2dEdgeRoute, string>> = {
   bezier: '贝塞尔曲线',
   straight: '直连',
 }
-
-const ROUTE_OPTIONS = enumOptions(TWIN_2D_EDGE_ROUTES, ROUTE_LABELS)
 
 /**
  * 打开底板时给的那一份。
@@ -297,7 +295,7 @@ function endMerge(): void {
     <div class="grid grid-cols-2 gap-1.5">
       <DtSelect
         :model-value="edgeStyle.route"
-        :options="ROUTE_OPTIONS"
+        :options="twin2dRouteOptions(edgeStyle.route, ROUTE_LABELS)"
         label="走线"
         size="sm"
         data-test="edge-style-route"

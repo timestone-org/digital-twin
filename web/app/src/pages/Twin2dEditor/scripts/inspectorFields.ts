@@ -1,12 +1,14 @@
 /**
- * @fileoverview 四个检查器与各自的字段控件共用的三件小事：闭合取值表摆成选项、
- * 补丁与现值的比对，以及两个反复出现的数字取值域。
+ * @fileoverview 四个检查器与各自的字段控件共用的几件小事：闭合取值表摆成选项（含走线
+ * 那一张）、补丁与现值的比对，以及两个反复出现的数字取值域。
  *
  * ⚠ 收成一份不是为了少写几行：四个检查器是分头写的，同一件事各写一份的话，
  * 有一份改了口径（比如「与现值相同就不记一帧」漏了某一类值）就只有那一个面板出错，
  * 而两个面板看起来一模一样。
  */
 import type { DtNumberRange, DtSegmentedOption, FontValue } from '@dt/contracts'
+import { TWIN_2D_EDGE_ROUTES } from '@dt/twin2d'
+import type { Twin2dEdgeRoute } from '@dt/twin2d'
 
 /** 0..1 的量纲：周长参数、不透明度与沿线位置共用，一格 0.05。 */
 export const TWIN_2D_UNIT_RANGE: Readonly<DtNumberRange> = Object.freeze({
@@ -30,6 +32,26 @@ export function enumOptions<T extends string>(
   labels: Readonly<Record<T, string>>,
 ): readonly DtSegmentedOption[] {
   return list.map((value) => ({ value, label: labels[value] }))
+}
+
+/** 与正交同一条路由的那一档；只为存量文档留着。 */
+const ROUTE_ALIAS_OF_ORTHOGONAL: Twin2dEdgeRoute = 'step'
+
+/**
+ * 走线下拉的选项。
+ * ⚠ `step` 与 `orthogonal` 画出来是同一条线：两档并排摆着，选哪个都一样，像是坏了；
+ * 只在当前取值就是它时才补上，不补的话存量那一档在下拉里显示成空白。
+ * @param current 当前取值
+ * @param labels 每一档的中文名
+ */
+export function twin2dRouteOptions(
+  current: Twin2dEdgeRoute,
+  labels: Readonly<Record<Twin2dEdgeRoute, string>>,
+): readonly DtSegmentedOption[] {
+  const shown = TWIN_2D_EDGE_ROUTES.filter(
+    (route) => route !== ROUTE_ALIAS_OF_ORTHOGONAL || route === current,
+  )
+  return enumOptions(shown, labels)
 }
 
 /**
