@@ -9,6 +9,7 @@ import type { Twin2dConfig } from '@dt/twin2d'
 import { describe, expect, it } from 'vitest'
 
 import {
+  addMark,
   alignMarks,
   distributeMarks,
   duplicateMarks,
@@ -39,6 +40,40 @@ function configOf(): Twin2dConfig {
 function idsOf(config: Twin2dConfig): string[] {
   return config.marks.map((mark) => mark.id)
 }
+
+describe('新增', () => {
+  it('三档各落一条，摆在画布正中，追加在末尾', () => {
+    const base = normalizeTwin2dConfig({
+      canvas: { width: 800, height: 600 },
+      marks: [{ id: 'm1', kind: 'rect' }],
+    })
+    const make = idSeries('mark-')
+
+    const rect = addMark(base, 'rect', make)
+    const line = addMark(rect.config, 'line', make)
+    const text = addMark(line.config, 'text', make)
+
+    expect(idsOf(text.config)).toEqual(['m1', 'mark-1', 'mark-2', 'mark-3'])
+    const [, box, rule, word] = text.config.marks
+    expect(box).toMatchObject({ kind: 'rect', x: 340, y: 260, w: 120, h: 80 })
+    expect(rule).toMatchObject({ kind: 'line', x: 340, y: 300, x2: 460 })
+    expect(rule?.y2).toBe(300)
+    expect(word?.kind).toBe('text')
+    // ⚠ 空文字的文字标注画出来什么都没有，加完找不到它在哪
+    expect(word?.text).not.toBe('')
+    expect(text.id).toBe('mark-3')
+  })
+
+  it('id 撞了就再发一个', () => {
+    const base = normalizeTwin2dConfig({
+      marks: [{ id: 'mark-1', kind: 'rect' }],
+    })
+
+    const added = addMark(base, 'rect', idSeries('mark-'))
+
+    expect(added.id).toBe('mark-2')
+  })
+})
 
 describe('改值', () => {
   it('只换被点名的那一条', () => {

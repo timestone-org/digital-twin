@@ -438,6 +438,50 @@ describe('动作条', () => {
   })
 })
 
+// ⚠ 标注没有别的新建入口（调色板里只有节点样式）：这一段不摆「新加」键的话，标注
+// 只能由助手或导入写进来，检查器与手柄都在，却永远选不到第一条
+describe('新加标注', () => {
+  it.each([
+    ['rect', '辅助框'],
+    ['line', '辅助线'],
+    ['text', '文字'],
+  ] as const)('「%s」那一枚加一条并选中它', async (kind, label) => {
+    const harness = mountOutline()
+
+    const key = actionKey(harness, `add-${kind}`)
+    expect(key.text()).toContain(label)
+    await key.trigger('click')
+
+    const next = lastChange(harness)
+    expect(next.marks).toHaveLength(CONFIG.marks.length + 1)
+    const added = next.marks[next.marks.length - 1]
+    expect(added?.kind).toBe(kind)
+    expect(harness.selection.idsOf('marks')).toEqual([added?.id])
+  })
+
+  it('一条标注都没有时也摆着新加键，并说清怎么加', () => {
+    const harness = mountOutline(normalizeTwin2dConfig({}))
+
+    expect(
+      harness.wrapper.find('[data-test="outline-adds-marks"]').exists(),
+    ).toBe(true)
+    expect(
+      harness.wrapper.get('[data-test="outline-empty-marks"]').text(),
+    ).toContain('辅助框')
+  })
+
+  it('节点与连线那两段没有这一排', () => {
+    const harness = mountOutline()
+
+    expect(
+      harness.wrapper.find('[data-test="outline-adds-nodes"]').exists(),
+    ).toBe(false)
+    expect(
+      harness.wrapper.find('[data-test="outline-adds-edges"]').exists(),
+    ).toBe(false)
+  })
+})
+
 describe('样式那一段的动作', () => {
   it('轴上空着时一枚键都不出', () => {
     const harness = mountOutline()

@@ -7,7 +7,7 @@
  *   的偏移，只挪 `x/y` 的表现是一拖起点线就越拉越长，而每一处取值都是「对」的。
  */
 import { normalizeTwin2dConfig } from '@dt/twin2d'
-import type { Pt, Twin2dConfig, Twin2dMark } from '@dt/twin2d'
+import type { Pt, Twin2dConfig, Twin2dMark, Twin2dMarkKind } from '@dt/twin2d'
 
 import { markSnapBox } from './entityBoxes'
 import {
@@ -20,6 +20,7 @@ import {
   twin2dRemoval,
 } from './nodeOps'
 import type {
+  Twin2dAdded,
   Twin2dAlignEdge,
   Twin2dCopied,
   Twin2dDistributeAxis,
@@ -31,6 +32,29 @@ import type { Twin2dSnapBox } from './snapping'
 
 /** 标注 id 的前缀。 */
 export const TWIN_2D_MARK_ID_PREFIX = 'mark'
+
+/** 新加一条标注的盒尺寸（设计像素）。 */
+const NEW_MARK_SIZE = { w: 120, h: 80 }
+
+/** 新加的文字标注的起手文字。 */
+const NEW_MARK_TEXT = '文字'
+
+/**
+ * 新标注的种子：摆在画布正中。
+ * ⚠ 文字标注起手就带字：空文字画出来什么都没有，加完找不到它在哪。
+ * @param config 当前配置
+ * @param kind 标注哪一档
+ */
+function markSeed(config: Twin2dConfig, kind: Twin2dMarkKind): object {
+  const { width, height } = config.canvas
+  const x = width / 2 - NEW_MARK_SIZE.w / 2
+  const y = height / 2 - NEW_MARK_SIZE.h / 2
+  if (kind === 'line') {
+    return { kind, x, y: height / 2, x2: x + NEW_MARK_SIZE.w, y2: height / 2 }
+  }
+  const text = kind === 'text' ? NEW_MARK_TEXT : ''
+  return { kind, x, y, ...NEW_MARK_SIZE, text }
+}
 
 /** 一张表里现有的全部 id。 */
 function idsOf(list: readonly { id: string }[]): Set<string> {
@@ -84,6 +108,27 @@ function withMarkDeltas(
       return movedMark(mark, at)
     }),
   }
+}
+
+/**
+ * 新加一条标注，追加在末尾（= 同一层里画在最上面）。
+ * ⚠ 种子只给要紧的几项，其余交给归一化补缺省，与 `addNode` 同一个理由。
+ * @param config 当前配置
+ * @param kind 标注哪一档
+ * @param makeId id 工厂，缺省随机
+ */
+export function addMark(
+  config: Twin2dConfig,
+  kind: Twin2dMarkKind,
+  makeId: Twin2dIdFactory = newTwin2dId,
+): Twin2dAdded {
+  const id = freshTwin2dId(TWIN_2D_MARK_ID_PREFIX, idsOf(config.marks), makeId)
+  const next = normalizeTwin2dConfig({
+    ...config,
+    marks: [...config.marks, { ...markSeed(config, kind), id }],
+  })
+  const landed = next.marks.some((mark) => mark.id === id)
+  return landed ? { config: next, id } : { config, id: null }
 }
 
 /**
