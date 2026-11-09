@@ -56,6 +56,7 @@ import {
   cellText,
   readBarFormat,
   shareText,
+  stackKeyOf,
   type BarChartView,
   type BarFormat,
   type BarItem,
@@ -77,9 +78,6 @@ import {
  * 每根柱缩到 1/N 宽、还偏在自己那一格里——屏上像一排随机错位的细线。
  */
 const LIVE_STACK = '__live__'
-
-/** 堆叠档里没写分组名的那几行共用的堆名。 */
-const DEFAULT_STACK = '__stacked__'
 
 /** 百分比档的值轴量程固定 0–100。 */
 const PERCENT_MAX = 100
@@ -153,6 +151,15 @@ function isDrawable(series: BarSeriesView): boolean {
 }
 
 /**
+ * 这一行画的是占比还是读数：百分比档里折线不进堆、没有占比，照画读数。
+ * @param series 这一行
+ * @param layout 几何与取数口径
+ */
+function drawsShare(series: BarSeriesView, layout: BarLayout): boolean {
+  return layout.percent && series.item.plot !== 'line'
+}
+
+/**
  * 这一行归到哪个堆。
  * ⚠ 折线永远不堆；实时档一律共用一个堆位（见 `LIVE_STACK`）；
  * 并排档只有显式写了分组名的那几行才堆——「留空不堆叠」是面板上写着的语义。
@@ -168,7 +175,7 @@ function stackOf(
   if (series.item.plot === 'line') return ''
   if (view.source === 'live') return LIVE_STACK
   if (layout.style === 'stacked' || layout.percent) {
-    return series.item.stack || DEFAULT_STACK
+    return stackKeyOf(series.item)
   }
   return series.item.stack
 }
@@ -220,7 +227,7 @@ function labelFormatter(
   return (params: { value: unknown }) => {
     const value = params.value
     if (typeof value !== 'number' || !Number.isFinite(value)) return ''
-    return layout.percent
+    return drawsShare(series, layout)
       ? shareText(value)
       : cellText(value, series.item, layout.format)
   }
@@ -239,7 +246,7 @@ function seriesData(
   layout: BarLayout,
   showLabel: boolean,
 ): unknown[] {
-  const column = layout.percent ? series.shares : series.data
+  const column = drawsShare(series, layout) ? series.shares : series.data
   const negative = layout.horizontal ? 'left' : 'bottom'
   return column.map((value) =>
     showLabel && value !== null && value < 0
@@ -420,7 +427,9 @@ function tooltipLine(
 ): string {
   // 缺格写「—」而不是留一行空白：那一格是「没采到」，不是「没有这一行」
   const text = cellText(series.data[cell] ?? null, series.item, layout.format)
-  const share = layout.percent ? shareText(series.shares[cell] ?? null) : ''
+  const share = drawsShare(series, layout)
+    ? shareText(series.shares[cell] ?? null)
+    : ''
   const tail = share === '' ? '' : `${JOIN}${escapeHtml(share)}`
   return `${escapeHtml(series.legendName)} ${escapeHtml(text || NO_DATA)}${tail}`
 }
@@ -483,12 +492,28 @@ function labelInterval(config: Record<string, unknown>): number | 'auto' {
   return raw === null || raw < 0 ? 'auto' : Math.trunc(raw)
 }
 
-/** 值轴的刻度文案：百分比档写百分号，其余走整块的单位与小数位。 */
-function axisTextOf(layout: BarLayout): (value: number) => string {
+/**
+ * 值轴的刻度文案：画占比的轴写百分号，其余走整块的单位与小数位。
+ * @param share 这条轴上画的是不是占比
+ * @param layout 几何与取数口径
+ */
+function axisTextOf(
+  share: boolean,
+  layout: BarLayout,
+): (value: number) => string {
   return (value: number) =>
-    layout.percent
-      ? shareText(value)
-      : cellText(value, AXIS_ITEM, layout.format)
+    share ? shareText(value) : cellText(value, AXIS_ITEM, layout.format)
+}
+
+/**
+ * 右轴上画的是不是占比：百分比档里右轴只挂折线时，它画的是读数，不钉 0–100。
+ * @param view 这一块的取值结果
+ * @param layout 几何与取数口径
+ */
+function rightDrawsShare(view: BarChartView, layout: BarLayout): boolean {
+  return view.series.some(
+    (series) => series.item.axis === 'right' && drawsShare(series, layout),
+  )
 }
 
 /**
@@ -505,21 +530,29 @@ function valueAxes(
   layout: BarLayout,
 ): OptionFragment[] {
   const bound = layout.diverging ? symmetricBound(view) : undefined
-  const shared = {
+  const common = {
     labelFontSize: readNumber(config.axisLabelFontSize, 11),
     nameFontSize: readNumber(config.axisNameFontSize, 11),
-    axisLabelFormatter: axisTextOf(layout),
     scale: readBoolean(config.yScale, false),
-    ...(layout.percent ? { min: 0, max: PERCENT_MAX } : {}),
     ...(bound === undefined ? {} : { min: -bound, max: bound }),
   }
+  const ofShare = (share: boolean) => ({
+    ...common,
+    axisLabelFormatter: axisTextOf(share, layout),
+    ...(share ? { min: 0, max: PERCENT_MAX } : {}),
+  })
   const name = readTrimmedText(
     layout.horizontal ? config.xAxisName : config.yAxisName,
   )
-  const axes = [valueAxis(theme, { ...shared, name })]
+  const axes = [valueAxis(theme, { ...ofShare(layout.percent), name })]
   // 右轴不再画一遍分隔线：两套刻度的横线交错在一起，图上像蒙了一层网格
   if (layout.hasRight) {
-    axes.push(valueAxis(theme, { ...shared, splitLine: false }))
+    axes.push(
+      valueAxis(theme, {
+        ...ofShare(rightDrawsShare(view, layout)),
+        splitLine: false,
+      }),
+    )
   }
   return axes
 }

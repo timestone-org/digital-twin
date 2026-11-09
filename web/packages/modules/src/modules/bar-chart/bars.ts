@@ -402,6 +402,42 @@ function columnsOf(
   return columns
 }
 
+/** 堆叠与百分比档里没写分组名的那几行共用的堆名。 */
+export const DEFAULT_STACK = '__stacked__'
+
+/**
+ * 这一行在堆叠与百分比档里归到哪个堆；折线不进堆，给空串。
+ * @param item 归一化后的这一行
+ */
+export function stackKeyOf(item: BarItem): string {
+  if (item.plot === 'line') return ''
+  return item.stack || DEFAULT_STACK
+}
+
+/**
+ * 历史档逐行的占比分母：同一个堆的柱行按列合计，折线行没有分母。
+ * ⚠ 分母必须与 `stackOf` 同一套分堆：跨堆或带上折线一起合计，每个堆就到不了 100%。
+ * @param raws 逐行的状态与配置
+ * @param data 逐行对齐到类目上的读数
+ * @param width 类目数
+ */
+function historyTotals(
+  raws: readonly RawRow[],
+  data: readonly (number | null)[][],
+  width: number,
+): ((number | null)[] | null)[] {
+  const byStack = new Map<string, (number | null)[][]>()
+  raws.forEach((raw, at) => {
+    const key = stackKeyOf(raw.item)
+    if (key === '') return
+    byStack.set(key, [...(byStack.get(key) ?? []), data[at] ?? []])
+  })
+  const totals = new Map(
+    [...byStack].map(([key, rows]) => [key, totalsOf(columnsOf(rows, width))]),
+  )
+  return raws.map((raw) => totals.get(stackKeyOf(raw.item)) ?? null)
+}
+
 /**
  * 实时档：类目 = 各行的名字，一行只在自己那一格上有读数。
  * ⚠ 分母取的是**全部行的合计**：实时档每一列只有一个读数，按列归一会让每一根柱
@@ -411,7 +447,7 @@ function columnsOf(
 function liveGrid(raws: readonly RawRow[]): {
   categories: string[]
   data: (number | null)[][]
-  totals: (number | null)[]
+  totals: ((number | null)[] | null)[]
 } {
   const width = raws.length
   const data = raws.map((raw, at) =>
@@ -420,6 +456,7 @@ function liveGrid(raws: readonly RawRow[]): {
     ),
   )
   const numbers = raws
+    .filter((raw) => stackKeyOf(raw.item) !== '')
     .map((raw) => (raw.state === 'ok' ? raw.value : null))
     .filter((value): value is number => value !== null)
   const sum = numbers.reduce((total, value) => total + value, 0)
@@ -430,7 +467,11 @@ function liveGrid(raws: readonly RawRow[]): {
   return {
     categories: raws.map((raw) => raw.name),
     data,
-    totals: Array.from({ length: width }, () => shared),
+    totals: raws.map((raw) =>
+      stackKeyOf(raw.item) === ''
+        ? null
+        : Array.from({ length: width }, () => shared),
+    ),
   }
 }
 
@@ -441,7 +482,7 @@ function liveGrid(raws: readonly RawRow[]): {
 function historyGrid(raws: readonly RawRow[]): {
   categories: string[]
   data: (number | null)[][]
-  totals: (number | null)[]
+  totals: ((number | null)[] | null)[]
 } {
   const grid = buildGrid(raws.map((raw) => raw.points))
   const data = raws.map((raw) =>
@@ -450,7 +491,7 @@ function historyGrid(raws: readonly RawRow[]): {
   return {
     categories: grid.labels,
     data,
-    totals: totalsOf(columnsOf(data, grid.stamps.length)),
+    totals: historyTotals(raws, data, grid.stamps.length),
   }
 }
 
@@ -478,7 +519,7 @@ export function buildBarViews(input: BarViewsInput): BarChartView {
       item: raw.item,
       data,
       shares: data.map((value, cell) => {
-        const total = grid.totals[cell] ?? null
+        const total = grid.totals[at]?.[cell] ?? null
         return value === null || total === null ? null : (value / total) * 100
       }),
     }

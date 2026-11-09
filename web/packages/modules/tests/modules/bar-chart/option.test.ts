@@ -283,6 +283,30 @@ describe('百分比档', () => {
     expect(asRecord(asArray(option.yAxis)[0]).max).toBe(100)
   })
 
+  // ⚠ 折线不进堆、没有占比：画读数，挂在右轴上时右轴也不钉 0–100
+  it('折线行照画读数，只挂折线的右轴不钉占比量程', () => {
+    const config = {
+      [BAR_ITEMS_KEY]: [
+        { name: 'A' },
+        { name: 'B' },
+        { name: '达标率', plot: 'line', axis: 'right' },
+      ],
+      precision: 0,
+      chartStyle: 'percent',
+    }
+    const view = historyView(config, [
+      [{ t: BASE, v: 300 }],
+      [{ t: BASE, v: 100 }],
+      [{ t: BASE, v: 120 }],
+    ])
+    const option = optionOf(config, view)
+    const right = asRecord(asArray(option.yAxis)[1])
+
+    expect(seriesAt(option, 0).data).toEqual([75])
+    expect(seriesAt(option, 2).data).toEqual([120])
+    expect(right.max).toBeUndefined()
+  })
+
   it('一整列全缺时那一列留空，而不是一排 0%', () => {
     const config = { ...BASE_CONFIG, chartStyle: 'percent' }
     const view = historyView(config, [
