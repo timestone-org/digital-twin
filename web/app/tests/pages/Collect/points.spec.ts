@@ -743,25 +743,27 @@ describe('批量开关记录历史', () => {
   })
 
   it('⚠ 一次最多 4 个请求在途：每个改动都会触发重新下发采集计划', async () => {
-    let running = 0
-    let peak = 0
-    vi.spyOn(collectApi, 'updatePoint').mockImplementation(async () => {
-      running += 1
-      peak = Math.max(peak, running)
-      await new Promise((done) => setTimeout(done, 1))
-      running -= 1
-      return SAVED
-    })
+    const pending: (() => void)[] = []
+    vi.spyOn(collectApi, 'updatePoint').mockImplementation(
+      () =>
+        new Promise((done) => {
+          pending.push(() => done(SAVED))
+        }),
+    )
     const rows = Array.from({ length: 10 }, (_, index) =>
       point({ id: `p${index}`, name: `点${index}`, code: `c${index}` }),
     )
     const wrapper = await render(rows)
     await clickByText(wrapper, '全选本页')
     await clickByText(wrapper, '批量开启记录历史')
-    await vi.waitFor(() =>
-      expect(toastSuccess).toHaveBeenCalledWith('已开启记录历史：10 个点位'),
-    )
-    expect(peak).toBeLessThanOrEqual(4)
+    let peak = 0
+    while (pending.length > 0) {
+      peak = Math.max(peak, pending.length)
+      pending.shift()?.()
+      await flushPromises()
+    }
+    expect(peak).toBe(4)
+    expect(toastSuccess).toHaveBeenCalledWith('已开启记录历史：10 个点位')
   })
 
   it('⚠ 部分失败要报出失败个数，静默吞掉会让人以为整批都改成了', async () => {

@@ -193,15 +193,17 @@ async function submit(): Promise<void> {
         v-if="state.outcome.value"
         :intent="state.outcome.value.failures.length ? 'danger' : 'success'"
         icon="check"
-        >{{ outcomeMessage }}</DtNotice
       >
+        {{ outcomeMessage }}
+      </DtNotice>
       <DtNotice
         v-for="failure in failureNotices"
         :key="failure.id"
         intent="danger"
         icon="alert-circle"
-        >{{ failure.message }}</DtNotice
       >
+        {{ failure.message }}
+      </DtNotice>
       <p class="m-0 text-sm text-text-secondary">
         粘贴接口 JSON
         响应样例，选择需要采集的字段。一个响应可解析多个点位；每个点位均可用于实时展示、历史归档与业务绑定。

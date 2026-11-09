@@ -77,7 +77,7 @@ it('查询项目在途时列表显示加载态，卡片不被禁用', async () =
   vi.spyOn(api, 'listProjects').mockReturnValue(new Promise(() => undefined))
   void parent.state.search()
   await wrapper.vm.$nextTick()
-  expect(wrapper.getComponent(DtDataView).props('loading')).toBe(true)
+  expect(wrapper.findComponent(DtDataView).props('loading')).toBe(true)
   expect(
     wrapper.get('.dt-data-view__grid > button').attributes('disabled'),
   ).toBeUndefined()

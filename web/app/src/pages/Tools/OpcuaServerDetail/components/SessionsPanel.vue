@@ -18,6 +18,7 @@ import * as opcua from '@/api/opcua'
 import { describeError } from '@/composables/useAsyncList'
 import { useRacedFetch } from '@/composables/useRacedFetch'
 import { useViewMode } from '@/composables/useViewMode'
+import { formatTimestampMs } from '@/utils/datetime'
 
 const props = defineProps<{ instance: OpcuaInstance }>()
 
@@ -65,9 +66,7 @@ function since(connectedAt: string): string {
 }
 
 /** 上一份成功数据的时刻，失败时告诉人表里是哪一刻的。 */
-const fetchedAt = computed(() =>
-  new Date(now.value).toLocaleTimeString('zh-CN', { hour12: false }),
-)
+const fetchedAt = computed(() => formatTimestampMs(now.value))
 
 const rows = computed(() =>
   sessions.value.map((session) => ({ id: session.session_id, ...session })),
