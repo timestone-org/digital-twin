@@ -359,6 +359,19 @@ describe('版本冲突', () => {
   })
 })
 
+describe('工具条吸附', () => {
+  // ⚠ 工具条与页面设置是同一份吸附设置：一边存得下、一边重开就丢，两处会对不上
+  it('工具条上切参考线与页面设置一样落进草稿，标成未保存', async () => {
+    const wrapper = await mountEditor()
+
+    expect(wrapper.text()).not.toContain('未保存')
+    await wrapper.get('[data-test="snap-guides"]').trigger('click')
+    await flushPromises()
+
+    expect(wrapper.text()).toContain('未保存')
+  })
+})
+
 describe('撤销与删除', () => {
   it('加了一个模块之后能撤销回去', async () => {
     const wrapper = await mountEditor()

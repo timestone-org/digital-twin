@@ -183,7 +183,7 @@ onUnmounted(file.dispose)
         @reload="reloadFromToolbar"
         @save="extras.saveWithThumbnail"
         @update:zoom="zoom = $event"
-        @set-snap="snap = { ...snap, ...$event }"
+        @set-snap="chrome.setSnap"
         @tidy="arrange.tidyTopLevel"
         @help="extras.helpOpen.value = true"
         @preview="extras.previewOpen.value = true"
