@@ -167,3 +167,33 @@ it('退出漫游配置后停止播放，镜头交还配置预览', async () => {
   ])
   wrapper.unmount()
 })
+
+describe('逐帧开销', () => {
+  // ⚠ 漫游每帧都要模型体量：每帧重量包围盒等于每帧遍历整棵模型树
+  it('漫游播放中不逐帧重量模型包围盒', async () => {
+    let nextFrame: FrameRequestCallback = () => undefined
+    vi.spyOn(globalThis, 'requestAnimationFrame').mockImplementation(
+      (callback) => {
+        nextFrame = callback
+        return 1
+      },
+    )
+    vi.spyOn(globalThis, 'cancelAnimationFrame').mockImplementation(
+      () => undefined,
+    )
+    const wrapper = mountScene({ enabled: true, showControls: true })
+    await flushPromises()
+    const toggle = wrapper
+      .findAll('button')
+      .find((item) => item.text() === '播放漫游')
+    await toggle?.trigger('click')
+    nextFrame(16)
+    const measure = vi.spyOn(THREE.Box3.prototype, 'setFromObject')
+
+    for (let timeMs = 32; timeMs <= 200; timeMs += 16) nextFrame(timeMs)
+
+    expect(wrapper.find(CONTROLS).text()).toContain('暂停漫游')
+    expect(measure).not.toHaveBeenCalled()
+    wrapper.unmount()
+  })
+})

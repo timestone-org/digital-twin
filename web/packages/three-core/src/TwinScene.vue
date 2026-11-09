@@ -104,10 +104,15 @@ const isolation = new PreviewIsolation()
 let previewKey = ''
 let targetKey = ''
 
-/** 模型包围盒对角线；相机、图层与剪裁面都按它定尺度。 */
+/** 摆放之后量下的模型包围盒对角线；`placeModel` 里更新。 */
+let spanCache = 0
+
+/**
+ * 模型包围盒对角线；相机、图层与剪裁面都按它定尺度。
+ * ⚠ 读缓存不现量：漫游与游戏档每帧都要它，现量等于每帧遍历整棵模型树。
+ */
 function modelSpan(): number {
-  const root = model.root()
-  return root === null ? 0 : boundingDiagonal(root)
+  return model.root() === null ? 0 : spanCache
 }
 const sceneCamera = useSceneCamera({
   core: () => core,
@@ -123,6 +128,7 @@ const model = useTwinModelLoad({
   variant: () => props.config.model.variant,
   parts: () => props.config.parts,
   onBeforeClear: () => {
+    spanCache = 0
     isolation.restore()
     targetKey = ''
     previewKey = ''
@@ -343,7 +349,8 @@ function placeModel(): void {
   const root = model.root()
   if (root !== null) {
     applyModelPlacement(root, props.config.model)
-    layers?.setWorldScale(modelSpan())
+    spanCache = boundingDiagonal(root)
+    layers?.setWorldScale(spanCache)
   }
   const origin = modelFrameOrigin(props.config.model, root)
   layers?.setFrameOrigin(origin)
