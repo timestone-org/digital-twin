@@ -37,8 +37,8 @@ const props = defineProps<{
   modelValue: boolean
   point: CollectPoint | null
   protocol?: CollectProtocol | undefined
-  /** 新建时预填的寻址串，从地址空间挑来的那条。 */
-  presetAddress?: string | undefined
+  /** 新建在途时为真：保存按钮转圈，弹窗不许关。 */
+  busy?: boolean
 }>()
 const emit = defineEmits<{
   'update:modelValue': [value: boolean]
@@ -70,12 +70,12 @@ const description = ref('')
 const address = ref('')
 const dataType = ref<CollectDataType>('float')
 const unit = ref('')
-const samplingIntervalMs = ref(1000)
-const deadband = ref(0)
+const samplingIntervalMs = ref<number | undefined>(1000)
+const deadband = ref<number | undefined>(0)
 const archiveEnabled = ref(true)
-const archiveMaxIntervalMs = ref(60_000)
+const archiveMaxIntervalMs = ref<number | undefined>(60_000)
 /** 0 表示跟随全局保留策略。后端用 null 表达同一件事。 */
-const retentionDays = ref(0)
+const retentionDays = ref<number | undefined>(0)
 
 const error = ref<string | null>(null)
 
@@ -125,9 +125,9 @@ const DEFAULTS: FormValues = {
   retentionDays: 0,
 }
 
-/** 表单的初始取值：编辑时来自点位，新建时用默认值 + 挑来的寻址串。 */
-function valuesOf(target: CollectPoint | null, preset: string): FormValues {
-  if (target === null) return { ...DEFAULTS, address: preset }
+/** 表单的初始取值：编辑时来自点位，新建时用默认值。 */
+function valuesOf(target: CollectPoint | null): FormValues {
+  if (target === null) return { ...DEFAULTS }
   return {
     code: target.code,
     name: target.name,
@@ -144,7 +144,7 @@ function valuesOf(target: CollectPoint | null, preset: string): FormValues {
 }
 
 function reset(): void {
-  const values = valuesOf(props.point, props.presetAddress ?? '')
+  const values = valuesOf(props.point)
   error.value = null
   code.value = values.code
   name.value = values.name
@@ -160,7 +160,7 @@ function reset(): void {
 }
 
 watch(
-  () => [props.modelValue, props.point, props.presetAddress] as const,
+  () => [props.modelValue, props.point] as const,
   ([open]) => {
     if (open) reset()
   },
@@ -194,26 +194,67 @@ function validate(): string | null {
     const problem = validateHttpPointer(address.value.trim())
     if (problem !== null) return problem
   }
-  if (samplingIntervalMs.value < COLLECT_MIN_INTERVAL_MS)
+  const numbers = numberFields()
+  if (typeof numbers === 'string') return numbers
+  if (numbers.sampling < COLLECT_MIN_INTERVAL_MS)
     return `采样周期不能小于 ${COLLECT_MIN_INTERVAL_MS} 毫秒`
   return null
 }
 
+/** 显示着的框照实取；藏起来的框清空了也按默认值算，不拿看不见的框报错。 */
+function shownOr(
+  isShown: boolean,
+  value: number | undefined,
+  fallback: number,
+): number | undefined {
+  return isShown ? value : (value ?? fallback)
+}
+
+/** 数字框的取值；清空的框是 undefined，给出要补填的那一项。 */
+function numberFields() {
+  const archived = archiveEnabled.value
+  const sampling = samplingIntervalMs.value
+  const band = isNumeric.value
+    ? shownOr(archived, deadband.value, DEFAULTS.deadband)
+    : 0
+  const heartbeat = shownOr(
+    archived,
+    archiveMaxIntervalMs.value,
+    DEFAULTS.archiveMaxIntervalMs,
+  )
+  const retention = shownOr(
+    archived,
+    retentionDays.value,
+    DEFAULTS.retentionDays,
+  )
+  if (sampling === undefined) return '请填写采样周期'
+  if (band === undefined) return '请填写归档死区'
+  if (heartbeat === undefined) return '请填写归档心跳'
+  if (retention === undefined) return '请填写保留天数'
+  return { sampling, band, heartbeat, retention }
+}
+
+function close(open: boolean): void {
+  if (!open && props.busy === true) return
+  emit('update:modelValue', open)
+}
+
 function submit(): void {
+  if (props.busy === true) return
   error.value = validate()
-  if (error.value !== null) return
+  const numbers = numberFields()
+  if (error.value !== null || typeof numbers === 'string') return
   const shared = {
     name: name.value.trim(),
     description: description.value.trim() || null,
     address: address.value.trim(),
     data_type: dataType.value,
     unit: unit.value.trim() === '' ? null : unit.value.trim(),
-    sampling_interval_ms: samplingIntervalMs.value,
-    deadband: isNumeric.value ? deadband.value : 0,
+    sampling_interval_ms: numbers.sampling,
+    deadband: numbers.band,
     archive_enabled: archiveEnabled.value,
-    archive_max_interval_ms: archiveMaxIntervalMs.value,
-    archive_retention_days:
-      retentionDays.value > 0 ? retentionDays.value : null,
+    archive_max_interval_ms: numbers.heartbeat,
+    archive_retention_days: numbers.retention > 0 ? numbers.retention : null,
   }
   if (props.point === null)
     emit('create', { code: code.value.trim(), ...shared })
@@ -227,7 +268,7 @@ function submit(): void {
     :dirty="isDirty"
     :title="isEdit ? '编辑点位' : '新建点位'"
     width="48rem"
-    @update:model-value="emit('update:modelValue', $event)"
+    @update:model-value="close"
   >
     <div class="dt-form-grid">
       <DtNotice v-if="error" intent="danger" icon="alert-circle">
@@ -301,13 +342,6 @@ function submit(): void {
         <DtField label="采样周期（毫秒）">
           <DtNumberInput v-model="samplingIntervalMs" :range="SAMPLING_RANGE" />
         </DtField>
-        <DtField
-          v-if="isNumeric"
-          label="死区"
-          hint="变化超过它才算一次新值。填 0 表示每次变化都记。"
-        >
-          <DtNumberInput v-model="deadband" :range="DEADBAND_RANGE" />
-        </DtField>
       </div>
 
       <DtField label="归档">
@@ -315,6 +349,14 @@ function submit(): void {
       </DtField>
 
       <div v-if="archiveEnabled" class="dt-form-grid dt-form-grid__wide">
+        <!-- 死区只在归档准入里用，不影响实时值的刷新 -->
+        <DtField
+          v-if="isNumeric"
+          label="归档死区"
+          hint="变化不超过它就不落库；0 表示每次变化都记。"
+        >
+          <DtNumberInput v-model="deadband" :range="DEADBAND_RANGE" />
+        </DtField>
         <DtField
           label="归档心跳（毫秒）"
           hint="值不变时也至少每隔这么久落一条，曲线才不会断成一段一段。"
@@ -331,10 +373,10 @@ function submit(): void {
     </div>
 
     <template #footer>
-      <DtButton variant="ghost" @click="emit('update:modelValue', false)">
+      <DtButton variant="ghost" :disabled="busy ?? false" @click="close(false)">
         取消
       </DtButton>
-      <DtButton @click="submit">保存</DtButton>
+      <DtButton :loading="busy ?? false" @click="submit">保存</DtButton>
     </template>
   </DtModal>
 </template>

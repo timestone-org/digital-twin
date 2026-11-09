@@ -196,6 +196,8 @@ describe('实例表单', () => {
     expect(text).toContain('编辑实例')
     // 名称只在新建时可填
     expect(text).not.toContain('字母开头')
+    // 匿名访问与端点、命名空间、安全策略一样要重启才生效
+    expect(text).toContain('匿名访问')
   })
 
   it('编辑提交的载荷不含名称——名称不可改', async () => {
@@ -269,9 +271,9 @@ describe('节点表单', () => {
     await flushPromises()
     // DtSelect 是自绘组合框，选项在 props 上而不是 <option> 元素里
     const labels = selectLabels(wrapper, 0)
-    expect(labels).toContain('variable')
-    expect(labels).toContain('object')
-    expect(labels).not.toContain('method')
+    expect(labels).toContain('变量')
+    expect(labels).toContain('对象')
+    expect(labels).not.toContain('方法')
   })
 
   it('标识为空时提交按钮不可用', async () => {
@@ -322,7 +324,7 @@ describe('节点表单', () => {
       attachTo: document.body,
     })
     await flushPromises()
-    await pickInSelect(0, 'object')
+    await pickInSelect(0, '对象')
     expect(document.body.textContent).not.toContain('访问权限')
     fillModal({ 0: 'Plant', 1: 'Plant' })
     await flushPromises()
@@ -509,19 +511,19 @@ describe('地址空间的写入路径', () => {
     expect(await writeDraft(wrapper, '12')).toBe('12')
   })
 
-  it('布尔类型认 true 与 1', async () => {
+  it('布尔类型认 true', async () => {
     const wrapper = await explorer([node({ data_type: 'boolean' })], 'boolean')
     expect(await writeDraft(wrapper, 'true')).toBe(true)
   })
 
-  it('布尔类型的其它输入一律为 false', async () => {
+  it('⚠ 布尔类型的其它输入不下发，不许悄悄当成 false 写进现场', async () => {
     const wrapper = await explorer([node({ data_type: 'boolean' })], 'boolean')
-    expect(await writeDraft(wrapper, 'nope')).toBe(false)
+    expect(await writeDraft(wrapper, 'nope')).toBeUndefined()
   })
 
-  it('数值类型收到非数字时按原样送出，不静默变成 NaN', async () => {
+  it('数值类型收到非数字时拦在提交前，不静默变成 NaN 或原样送出', async () => {
     const wrapper = await explorer([node()], 'double')
-    expect(await writeDraft(wrapper, 'abc')).toBe('abc')
+    expect(await writeDraft(wrapper, 'abc')).toBeUndefined()
   })
 
   it('写值失败时给出反馈', async () => {

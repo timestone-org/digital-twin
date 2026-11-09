@@ -1,4 +1,5 @@
 /** @fileoverview 层级图导入边界校验与逻辑层级。 */
+import { required } from './required'
 import type { GraphDocument, GraphEdge, GraphNode, Issue } from './types'
 export class DomainError extends Error {
   code: string
@@ -110,8 +111,6 @@ export function ranks(document: GraphDocument): Map<string, number> {
     )
   return result
 }
-
-import { required } from './required'
 
 function parseNodes(values: unknown[]): GraphNode[] {
   const ids = new Set<string>(),

@@ -22,6 +22,7 @@ interface Ctx {
   writing: Ref<CollectPoint | null>
   exporting: Ref<boolean>
   writeBusy: Ref<boolean>
+  formBusy: Ref<boolean>
 }
 
 export interface PointEditing {
@@ -32,6 +33,8 @@ export interface PointEditing {
   importOpen: Ref<boolean>
   exporting: Ref<boolean>
   writeBusy: Ref<boolean>
+  /** 建 / 改请求在途；在途时再点保存不再发请求。 */
+  formBusy: Ref<boolean>
   openCreate: () => void
   openEdit: (point: CollectPoint) => void
   openWrite: (point: CollectPoint) => void
@@ -41,18 +44,30 @@ export interface PointEditing {
   exportCsv: (sourceCode: string) => Promise<void>
 }
 
-async function create(ctx: Ctx, item: CollectPointItemInput): Promise<void> {
-  if (!(await ctx.ops.create(item))) return
+/** 在途守卫：同一时刻只跑一个建 / 改请求，成功才关弹窗刷新。 */
+async function submitForm(
+  ctx: Ctx,
+  send: () => Promise<boolean>,
+): Promise<void> {
+  if (ctx.formBusy.value) return
+  ctx.formBusy.value = true
+  try {
+    if (!(await send())) return
+  } finally {
+    ctx.formBusy.value = false
+  }
   ctx.formOpen.value = false
   await ctx.reload()
+}
+
+async function create(ctx: Ctx, item: CollectPointItemInput): Promise<void> {
+  await submitForm(ctx, () => ctx.ops.create(item))
 }
 
 async function update(ctx: Ctx, input: CollectPointUpdateInput): Promise<void> {
   const target = ctx.editing.value
   if (target === null) return
-  if (!(await ctx.ops.update(target.id, input))) return
-  ctx.formOpen.value = false
-  await ctx.reload()
+  await submitForm(ctx, () => ctx.ops.update(target.id, input))
 }
 
 async function write(
@@ -99,6 +114,7 @@ export function usePointEditing(
     writing: ref<CollectPoint | null>(null),
     exporting: ref(false),
     writeBusy: ref(false),
+    formBusy: ref(false),
   }
   return {
     formOpen: ctx.formOpen,
@@ -108,6 +124,7 @@ export function usePointEditing(
     importOpen: ref(false),
     exporting: ctx.exporting,
     writeBusy: ctx.writeBusy,
+    formBusy: ctx.formBusy,
     openCreate: () => {
       ctx.editing.value = null
       ctx.formOpen.value = true

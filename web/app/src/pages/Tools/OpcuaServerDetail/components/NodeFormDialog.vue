@@ -19,6 +19,7 @@ import { OPCUA_CREATABLE_NODE_CLASSES } from '@dt/contracts'
 import { DtButton, DtField, DtInput, DtModal, DtNotice, DtSelect } from '@dt/ui'
 
 import { useFormDirty } from '@/composables/useFormDirty'
+import { classLabel } from '@/pages/Tools/OpcuaServerDetail/scripts/nodeFacts'
 import {
   CREATABLE_DATA_TYPES,
   parseInitialValue,
@@ -66,7 +67,10 @@ watch(
 )
 
 const classOptions = computed(() =>
-  OPCUA_CREATABLE_NODE_CLASSES.map((value) => ({ value, label: value })),
+  OPCUA_CREATABLE_NODE_CLASSES.map((value) => ({
+    value,
+    label: classLabel(value),
+  })),
 )
 const typeOptions = computed(() =>
   CREATABLE_DATA_TYPES.map((value) => ({ value, label: value })),

@@ -1,24 +1,17 @@
 /** @fileoverview JSON 点位映射导入的编码预检与批量提交。 */
 import { ref, type Ref } from 'vue'
 import type { CollectPointItemInput } from '@dt/contracts'
-import * as collect from '@/api/collect'
 import { describeError } from '@/composables/useAsyncList'
 import { useRacedFetch } from '@/composables/useRacedFetch'
 import { importPoints, type ImportOutcome } from './pointImport'
+import { listAllPoints } from './listAllPoints'
 
 async function scanExisting(
   sourceId: string,
   signal: AbortSignal,
 ): Promise<Set<string>> {
-  const codes = new Set<string>()
-  for (let page = 1; ; page += 1) {
-    const chunk = await collect.listPoints(
-      { sourceId, page, size: 100 },
-      signal,
-    )
-    for (const point of chunk.items) codes.add(point.code)
-    if (codes.size >= chunk.total || chunk.items.length === 0) return codes
-  }
+  const points = await listAllPoints(sourceId, signal)
+  return new Set(points.map((point) => point.code))
 }
 
 interface ImportContext {

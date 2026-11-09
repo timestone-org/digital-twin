@@ -56,7 +56,7 @@ const COLUMNS: readonly DtDataColumn[] = [
       :class="{ 'project-table': view === 'table' }"
       :columns="COLUMNS"
       :rows="projects.items.value"
-      :loading="projects.loading.value"
+      :loading="projects.loading.value || projects.listLoading.value"
       :error="projects.error.value || null"
       :layout="{
         minWidth: '0',

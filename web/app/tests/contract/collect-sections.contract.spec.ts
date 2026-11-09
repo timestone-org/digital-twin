@@ -50,7 +50,7 @@ function emitNames(component: unknown): string[] {
 }
 
 const PANELS = [
-  ['已导入节点', NodeTable],
+  ['点位', NodeTable],
   ['在线浏览', BrowsePanel],
 ] as const
 
@@ -82,20 +82,19 @@ describe('弹窗的对外面', () => {
     ])
   })
 
-  it('HTTP 认证秘密使用独立字段并保留清空状态', () => {
+  it('HTTP 认证秘密使用独立字段；清凭据走「无认证」，不另设开关', () => {
     expect(propNames(HttpSourceFields)).toEqual(
       expect.arrayContaining([
         'modelValue',
         'username',
         'credential',
-        'isCleared',
         'hasCredential',
         'isEdit',
       ]),
     )
+    expect(propNames(HttpSourceFields)).not.toContain('isCleared')
     expect(emitNames(HttpSourceFields).sort()).toEqual([
       'update:credential',
-      'update:isCleared',
       'update:modelValue',
       'update:username',
     ])
@@ -116,7 +115,7 @@ describe('弹窗的对外面', () => {
 
   it('旧调用方省略 loading 时默认空闲，创建与取消仍可操作', async () => {
     const wrapper = mount(SourceFormDialog, {
-      props: { modelValue: true, source: null },
+      props: { modelValue: true, source: null, fixedProtocol: 'opcua' },
       global: { stubs: { Teleport: true } },
     })
     try {
@@ -135,11 +134,11 @@ describe('弹窗的对外面', () => {
     }
   })
 
-  it('点位表单收 point 与预填的寻址串，抛建与改两种意图', () => {
+  it('点位表单收 point 与在途标记，抛建与改两种意图', () => {
     expect(propNames(PointFormDialog).sort()).toEqual([
+      'busy',
       'modelValue',
       'point',
-      'presetAddress',
       'protocol',
     ])
     expect(emitNames(PointFormDialog).sort()).toEqual([

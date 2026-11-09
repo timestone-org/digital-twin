@@ -8,6 +8,7 @@ import { describe, expect, it } from 'vitest'
 import { isIconName } from '@dt/ui'
 
 import {
+  classLabel,
   FALLBACK_NODE_ICON,
   NODE_ICON_NAMES,
   accessLabels,
@@ -107,5 +108,15 @@ describe('值的展示', () => {
   it('数组与结构体 JSON 化，不许落成 [object Object]', () => {
     expect(displayValue([1, 2])).toBe('[1,2]')
     expect(displayValue({ a: 1 })).toBe('{"a":1}')
+  })
+})
+
+describe('节点类别', () => {
+  it('翻成中文，认不出的原样给回', () => {
+    expect(classLabel('object')).toBe('对象')
+    expect(classLabel('variable')).toBe('变量')
+    expect(classLabel('property')).toBe('属性')
+    expect(classLabel('method')).toBe('方法')
+    expect(classLabel('view')).toBe('view')
   })
 })

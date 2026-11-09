@@ -10,14 +10,7 @@ import { computed, onMounted, ref } from 'vue'
 import { RouterView, useRoute } from 'vue-router'
 import type { OpcuaInstance } from '@dt/contracts'
 import { PERMISSION_CODES } from '@dt/contracts'
-import {
-  DtButton,
-  DtNotice,
-  DtPageState,
-  DtTag,
-  useConfirm,
-  useToast,
-} from '@dt/ui'
+import { DtButton, DtNotice, DtPageState, DtTag } from '@dt/ui'
 
 import * as opcua from '@/api/opcua'
 import PermGuard from '@/components/PermGuard.vue'
@@ -25,12 +18,12 @@ import type { AppTabItem } from '@/components/layout'
 import { AppShell, AppTabNav } from '@/components/layout'
 import { describeError } from '@/composables/useAsyncList'
 import { useRacedFetch } from '@/composables/useRacedFetch'
-import InstanceStatusTag from '../OpcuaServers/components/InstanceStatusTag.vue'
-import { pendingFieldLabels } from '../OpcuaServers/scripts/pendingFields'
+import InstanceStatusTag from '../components/InstanceStatusTag.vue'
+import { pendingFieldLabels } from '../scripts/pendingFields'
+import type { InstanceVerb } from '../scripts/useInstanceActions'
+import { useInstanceActions } from '../scripts/useInstanceActions'
 
 const route = useRoute()
-const toast = useToast()
-const confirm = useConfirm()
 const raced = useRacedFetch()
 
 const instanceId = computed(() => String(route.params.instanceId ?? ''))
@@ -82,30 +75,11 @@ async function load(): Promise<void> {
   })
 }
 
-/** ⚠ 停与重启会断开该实例上全部上位机会话，必须先确认。 */
-async function act(verb: 'start' | 'stop' | 'restart'): Promise<void> {
-  const target = instance.value
-  if (target === null) return
-  if (verb !== 'start') {
-    const ok = await confirm.ask({
-      title: verb === 'stop' ? '停止实例' : '重启实例',
-      message:
-        `当前有 ${target.session_count} 个上位机会话，` +
-        '这些连接会全部断开，需要对方自行重连。',
-      confirmText: verb === 'stop' ? '停止' : '重启',
-      danger: true,
-    })
-    if (!ok) return
-  }
-  try {
-    await opcua.actOnInstance(target.id, verb)
-    toast.success(
-      { start: '实例已启动', stop: '实例已停止', restart: '实例已重启' }[verb],
-    )
-    await load()
-  } catch (caught) {
-    toast.error(describeError(caught))
-  }
+const actions = useInstanceActions(load)
+const busy = computed(() => loading.value || actions.pending.value)
+
+function act(verb: InstanceVerb): void {
+  if (instance.value !== null) void actions.act(instance.value, verb)
 }
 
 onMounted(() => {
@@ -118,14 +92,29 @@ onMounted(() => {
     <template #actions>
       <PermGuard :codes="[PERMISSION_CODES.opcuaOperate]" explain>
         <div v-if="instance" class="flex items-center gap-2">
-          <DtButton v-if="!instance.is_running" size="sm" @click="act('start')">
+          <DtButton
+            v-if="!instance.is_running"
+            size="sm"
+            :disabled="busy"
+            @click="act('start')"
+          >
             启动
           </DtButton>
           <template v-else>
-            <DtButton size="sm" variant="outline" @click="act('restart')">
+            <DtButton
+              size="sm"
+              variant="outline"
+              :disabled="busy"
+              @click="act('restart')"
+            >
               重启
             </DtButton>
-            <DtButton size="sm" variant="outline" @click="act('stop')">
+            <DtButton
+              size="sm"
+              variant="outline"
+              :disabled="busy"
+              @click="act('stop')"
+            >
               停止
             </DtButton>
           </template>
@@ -133,8 +122,9 @@ onMounted(() => {
       </PermGuard>
     </template>
 
+    <!-- 起停后的重取不进整页加载态：那会卸掉分区里的选择、搜索与写值草稿 -->
     <DtPageState
-      :loading="loading"
+      :loading="loading && instance === null"
       :error="error"
       :empty="instance === null && !loading && error === null"
       empty-title="实例不存在"

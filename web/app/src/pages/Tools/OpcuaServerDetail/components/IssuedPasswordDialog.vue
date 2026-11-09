@@ -32,9 +32,12 @@ async function copy(): Promise<void> {
 </script>
 
 <template>
+  <!-- 唯一一份明文：点遮罩不关，Esc 先提示一次，只有明确的关闭动作才关 -->
   <DtModal
     :model-value="issued !== null"
     title="口令只显示这一次"
+    :close-on-backdrop="false"
+    :dirty="true"
     @update:model-value="emit('close')"
   >
     <DtNotice intent="warning" icon="alert-triangle">

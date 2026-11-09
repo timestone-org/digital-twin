@@ -251,7 +251,11 @@ onMounted(() => {
       </DtDataView>
     </DtCard>
 
-    <DtModal v-model="credentialFormOpen" title="新建接入凭据">
+    <DtModal
+      v-model="credentialFormOpen"
+      title="新建接入凭据"
+      :dirty="newUsername.trim() !== ''"
+    >
       <div class="flex flex-col gap-3">
         <DtNotice intent="warning" icon="alert-triangle">
           口令由服务端生成，创建后只显示这一次，关掉就再也取不回来。
@@ -270,7 +274,11 @@ onMounted(() => {
       </template>
     </DtModal>
 
-    <DtModal v-model="certificateFormOpen" title="添加信任证书">
+    <DtModal
+      v-model="certificateFormOpen"
+      title="添加信任证书"
+      :dirty="certificatePem.trim() !== ''"
+    >
       <DtField label="证书 PEM" required>
         <DtTextarea v-model="certificatePem" :rows="8" />
       </DtField>

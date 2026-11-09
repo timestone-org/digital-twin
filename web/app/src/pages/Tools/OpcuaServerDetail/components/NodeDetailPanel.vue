@@ -29,10 +29,13 @@ import { describeError } from '@/composables/useAsyncList'
 import { copyText } from '@/utils/clipboard'
 import {
   accessLabels,
+  classLabel,
   displayValue,
   isWritable,
   valueRankLabel,
 } from '../scripts/nodeFacts'
+import type { ParsedInitialValue } from '../scripts/nodeInitialValue'
+import { parseInitialValue } from '../scripts/nodeInitialValue'
 import { useNodeValue } from '../scripts/useNodeValue'
 
 const props = defineProps<{
@@ -73,24 +76,31 @@ const TEXTUAL_TYPES = new Set<string>([
 ])
 
 /**
+ * 把输入框里的字符串还原成该节点数据类型对应的值，口径与建节点的初值同一份。
+ * ⚠ 不做「看起来像数字就转成数字」的猜测：字符串节点写 `"12"` 与数值节点
+ * 写 `12` 是两件事。布尔只认 true / false：把 `True`、`yes` 当 false 写下去，
+ * 现场拿到的是与本意相反的值。
+ */
+const parsedDraft = computed<ParsedInitialValue>(() => {
+  const type = props.node.data_type
+  if (type === null || TEXTUAL_TYPES.has(type))
+    return { value: draft.value, error: null }
+  return parseInitialValue(draft.value, type)
+})
+
+/**
  * ⚠ 空输入不许下发：数值类型下 `Number('')` 是 0，那会是一次真实的写值，
  * 上位机立刻读到 0。切换节点会清掉草稿，此时按钮必须是灰的。
  */
-const canSubmitDraft = computed(() => draft.value !== '')
-
-/**
- * 把输入框里的字符串还原成该节点数据类型对应的值。
- * ⚠ 不做「看起来像数字就转成数字」的猜测：字符串节点写 `"12"` 与数值节点
- * 写 `12` 是两件事，猜错了上位机拿到的类型就不对。
- */
-function parseDraft(): unknown {
-  const raw = draft.value
-  const type = props.node.data_type
-  if (type === 'boolean') return raw === 'true' || raw === '1'
-  if (type === null || TEXTUAL_TYPES.has(type)) return raw
-  const parsed = Number(raw)
-  return Number.isNaN(parsed) ? raw : parsed
-}
+const canSubmitDraft = computed(
+  () =>
+    draft.value !== '' &&
+    parsedDraft.value.error === null &&
+    parsedDraft.value.value !== undefined,
+)
+const draftError = computed(() =>
+  draft.value === '' ? undefined : (parsedDraft.value.error ?? undefined),
+)
 
 async function copyNodeId(): Promise<void> {
   const ok = await copyText(props.node.node_id)
@@ -100,17 +110,19 @@ async function copyNodeId(): Promise<void> {
 
 /** ⚠ 写值有真实副作用，先确认再写。 */
 async function write(): Promise<void> {
+  if (!canSubmitDraft.value) return
+  const value = parsedDraft.value.value
   const ok = await confirm.ask({
     title: '写入节点值',
     message:
-      `「${props.node.browse_name}」的值会立刻变成 ${displayValue(parseDraft())}，` +
+      `「${props.node.browse_name}」的值会立刻变成 ${displayValue(value)}，` +
       '正在读它的上位机下一次采样就会拿到新值。',
     confirmText: '写入',
     danger: true,
   })
   if (!ok) return
   try {
-    await opcua.writeNodeValue(props.instanceId, props.node.id, parseDraft())
+    await opcua.writeNodeValue(props.instanceId, props.node.id, value)
     toast.success('值已写入')
     await live.refresh()
   } catch (caught) {
@@ -124,7 +136,7 @@ async function write(): Promise<void> {
     <header class="flex flex-col gap-1.5">
       <div class="flex flex-wrap items-center gap-2">
         <h3 class="m-0 text-base font-medium">{{ node.browse_name }}</h3>
-        <DtTag size="sm">{{ node.node_class }}</DtTag>
+        <DtTag size="sm">{{ classLabel(node.node_class) }}</DtTag>
         <DtTag v-if="node.data_type" mono size="sm">
           {{ node.data_type }}
         </DtTag>
@@ -186,13 +198,14 @@ async function write(): Promise<void> {
         <DtNotice intent="warning" icon="alert-triangle">
           写值会立刻改变上位系统读到的现场数据。
         </DtNotice>
-        <div class="flex items-center gap-2">
+        <div class="flex items-start gap-2">
           <DtInput
             v-model="draft"
             class="flex-1"
             size="sm"
             aria-label="要写入的值"
             placeholder="要写入的值"
+            :error="draftError"
           />
           <DtButton size="sm" :disabled="!canSubmitDraft" @click="write">
             写入

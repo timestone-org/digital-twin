@@ -1,10 +1,10 @@
 /** @fileoverview 浏览器已建点位索引的分页读取与切源取消。 */
 import { onBeforeUnmount, ref } from 'vue'
 
-import * as collect from '@/api/collect'
+import { describeError } from '@/composables/useAsyncList'
 import { useRacedFetch } from '@/composables/useRacedFetch'
 
-const SCAN_PAGE_SIZE = 100
+import { listAllPoints } from './listAllPoints'
 
 interface TakenPoints {
   addresses: Set<string>
@@ -15,47 +15,40 @@ interface TakenPoints {
 export function useBrowseTaken(sourceId: () => string) {
   const addresses = ref(new Set<string>())
   const codes = ref(new Set<string>())
+  /** 已建清单没取到的原因；此时「已建」锁与撞码检查都失效，界面要说出来。 */
+  const error = ref<string | null>(null)
   const request = useRacedFetch()
 
   async function load(): Promise<void> {
     const currentSource = sourceId()
     addresses.value = new Set()
     codes.value = new Set()
+    error.value = null
     await request.run((signal) => scanExisting(currentSource, signal), {
       ok: (points) => {
         addresses.value = points.addresses
         codes.value = points.codes
       },
-      fail: () => {
+      fail: (caught) => {
         addresses.value = new Set()
         codes.value = new Set()
+        error.value = describeError(caught)
       },
       settled: () => {},
     })
   }
 
   onBeforeUnmount(() => request.cancel())
-  return { addresses, codes, load }
+  return { addresses, codes, error, load }
 }
 
 async function scanExisting(
   sourceId: string,
   signal: AbortSignal,
 ): Promise<TakenPoints> {
-  const addresses = new Set<string>()
-  const codes = new Set<string>()
-  let page = 1
-  while (!signal.aborted) {
-    const chunk = await collect.listPoints(
-      { sourceId, page, size: SCAN_PAGE_SIZE },
-      signal,
-    )
-    for (const point of chunk.items) {
-      addresses.add(point.address)
-      codes.add(point.code)
-    }
-    if (codes.size >= chunk.total || chunk.items.length === 0) break
-    page += 1
+  const points = await listAllPoints(sourceId, signal)
+  return {
+    addresses: new Set(points.map((point) => point.address)),
+    codes: new Set(points.map((point) => point.code)),
   }
-  return { addresses, codes }
 }

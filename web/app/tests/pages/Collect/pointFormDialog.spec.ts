@@ -14,13 +14,14 @@ import type { CollectProtocol } from '@dt/contracts'
 
 async function render(
   protocol: CollectProtocol = 'opcua',
+  busy = false,
 ): Promise<VueWrapper> {
   const wrapper = mount(PointFormDialog, {
     props: {
       modelValue: true,
       point: null,
-      presetAddress: undefined,
       protocol,
+      busy,
     },
     attachTo: document.body,
     global: { stubs: { Teleport: true } },
@@ -177,3 +178,60 @@ it.each(['', 'pump:freq', 'pump freq', 'a'.repeat(65)])(
     wrapper.unmount()
   },
 )
+
+describe('提交在途', () => {
+  it('保存在途时按钮转圈、点外面与取消都关不掉', async () => {
+    const wrapper = await render('opcua', true)
+    const buttons = wrapper.findAll('button')
+    const save = buttons.find((one) => one.text() === '保存')
+    const cancel = buttons.find((one) => one.text() === '取消')
+    expect(save?.attributes('aria-busy')).toBe('true')
+    expect(cancel?.attributes('disabled')).toBeDefined()
+    await wrapper.find('.dt-modal__backdrop').trigger('click')
+    await save?.trigger('click')
+    expect(wrapper.emitted('update:modelValue')).toBeUndefined()
+    expect(wrapper.emitted('create')).toBeUndefined()
+  })
+})
+
+it('清空采样周期提交时拦下，不靠后端默认值悄悄补上', async () => {
+  const wrapper = await render()
+  await wrapper.find('input[placeholder="如：outlet_temp"]').setValue('temp')
+  await wrapper.find('input[placeholder="如：出口温度"]').setValue('出口温度')
+  await wrapper
+    .find('input[placeholder="ns=2;s=Plant1.OutletTemp"]')
+    .setValue('ns=2;s=temp')
+  wrapper
+    .findAllComponents(DtNumberInput)[0]
+    ?.vm.$emit('update:modelValue', undefined)
+  await wrapper
+    .findAll('button')
+    .find((one) => one.text() === '保存')
+    ?.trigger('click')
+  expect(wrapper.emitted('create')).toBeUndefined()
+  expect(wrapper.text()).toContain('请填写采样周期')
+  wrapper.unmount()
+})
+
+it('死区只管归档：关掉归档时不显示，提交照旧带上原值', async () => {
+  const wrapper = await render()
+  expect(wrapper.text()).toContain('归档死区')
+  await wrapper.find('input[placeholder="如：outlet_temp"]').setValue('temp')
+  await wrapper.find('input[placeholder="如：出口温度"]').setValue('出口温度')
+  await wrapper
+    .find('input[placeholder="ns=2;s=Plant1.OutletTemp"]')
+    .setValue('ns=2;s=temp')
+  setNumberInputs(wrapper, [1000, 0.5])
+  wrapper.findComponent(DtSwitch).vm.$emit('update:modelValue', false)
+  await flushPromises()
+  expect(wrapper.text()).not.toContain('归档死区')
+  await wrapper
+    .findAll('button')
+    .find((one) => one.text() === '保存')
+    ?.trigger('click')
+  expect(wrapper.emitted('create')?.[0]?.[0]).toMatchObject({
+    archive_enabled: false,
+    deadband: 0.5,
+  })
+  wrapper.unmount()
+})

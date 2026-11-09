@@ -1,6 +1,7 @@
 /** @fileoverview HTTP JSON 样例的叶子路径、类型预览与点位草稿。 */
 import type { CollectDataType } from '@dt/contracts'
 import { COLLECT_POINT_BATCH_MAX } from '@dt/contracts'
+import type { Romanize } from './browseTree'
 import type { ImportDraft } from './importDrafts'
 
 const MAX_DEPTH = 32
@@ -41,8 +42,16 @@ function escapeSegment(value: string): string {
   return value.replaceAll('~', '~0').replaceAll('/', '~1')
 }
 
-function suggestCode(parts: readonly string[], order: number): string {
+/** 不全是可打印 ASCII 的键名段，交给转写。 */
+const NON_ASCII = /[^\u0020-\u007e]/
+
+function suggestCode(
+  parts: readonly string[],
+  order: number,
+  romanize: Romanize,
+): string {
   const code = parts
+    .map((part) => (NON_ASCII.test(part) ? romanize(part) || part : part))
     .join('_')
     .replace(/[^A-Za-z0-9._-]+/g, '_')
     .replace(/^_+|_+$/g, '')
@@ -58,6 +67,7 @@ function addLeaf(
   result: HttpSampleResult,
   parts: readonly string[],
   value: unknown,
+  romanize: Romanize,
 ): void {
   const fieldType = valueType(value)
   if (fieldType === null) {
@@ -70,7 +80,7 @@ function addLeaf(
     )
   const isUnsafeInteger = isUnsafeIntegerValue(value)
   if (isUnsafeInteger) result.unsafeIntegers += 1
-  const base = suggestCode(parts, result.rows.length + 1)
+  const base = suggestCode(parts, result.rows.length + 1, romanize)
   const used = new Set(result.rows.map((row) => row.code))
   let code = base
   for (let suffix = 2; used.has(code); suffix += 1) code = `${base}_${suffix}`
@@ -91,24 +101,33 @@ function walk(
   result: HttpSampleResult,
   parts: readonly string[],
   value: unknown,
+  romanize: Romanize,
 ): void {
   if (parts.length > MAX_DEPTH)
     throw new Error(`JSON 层级不能超过 ${MAX_DEPTH} 层`)
   if (Array.isArray(value)) {
     value.forEach((item: unknown, index) =>
-      walk(result, [...parts, String(index)], item),
+      walk(result, [...parts, String(index)], item, romanize),
     )
     return
   }
   if (typeof value === 'object' && value !== null) {
     for (const [key, item] of Object.entries(value))
-      walk(result, [...parts, key], item)
+      walk(result, [...parts, key], item, romanize)
     return
   }
-  addLeaf(result, parts, value)
+  addLeaf(result, parts, value, romanize)
 }
 
-export function parseHttpSample(sample: string): HttpSampleResult {
+/**
+ * 解析 JSON 样例，每个叶子给一行草稿。
+ * @param sample 样例原文
+ * @param romanize 中文键名的转写（与 OPC UA 导入同一份拼音），缺省不转写
+ */
+export function parseHttpSample(
+  sample: string,
+  romanize: Romanize = () => '',
+): HttpSampleResult {
   const result: HttpSampleResult = {
     rows: [],
     skippedNulls: 0,
@@ -119,7 +138,7 @@ export function parseHttpSample(sample: string): HttpSampleResult {
     return { ...result, error: '样例 JSON 不能超过 1 MiB' }
   try {
     const value: unknown = JSON.parse(sample)
-    walk(result, [], value)
+    walk(result, [], value, romanize)
     return result
   } catch (caught) {
     return {

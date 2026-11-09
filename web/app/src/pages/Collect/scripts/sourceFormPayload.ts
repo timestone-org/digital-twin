@@ -19,6 +19,7 @@ import {
   validateHttpEndpoint,
   validateHttpOptions,
 } from './httpSourceOptions'
+import { validateModbusOptions } from './modbusOptions'
 
 /** 编码只能用字母数字与 . _ -，且以字母或数字开头。它是数据源的身份。 */
 const CODE_PATTERN = /^[A-Za-z0-9][A-Za-z0-9._-]*$/
@@ -33,6 +34,7 @@ export interface SourceFormValues {
   securityMode: string
   securityPolicy: string
   readMode: 'poll' | 'subscribe'
+  /** 输入框清空时是 NaN，校验当成没填。 */
   pollIntervalMs: number
   username: string
   /** 空串 = 这次不改口令。 */
@@ -61,6 +63,9 @@ export function validateSourceForm(
     validateSecurity(values) ??
     validateEndpoint(values.endpoint, values.protocol) ??
     validateHttpForm(values, isEdit) ??
+    (values.protocol === 'modbus_tcp'
+      ? validateModbusOptions(values.extraOptions)
+      : null) ??
     validatePollInterval(values)
   )
 }
@@ -91,6 +96,7 @@ function validateSecurity(values: SourceFormValues): string | null {
 }
 
 function validatePollInterval(values: SourceFormValues): string | null {
+  if (!Number.isFinite(values.pollIntervalMs)) return '请填写轮询周期'
   if (values.pollIntervalMs < COLLECT_MIN_INTERVAL_MS)
     return `轮询周期不能小于 ${COLLECT_MIN_INTERVAL_MS} 毫秒`
   if (values.protocol !== 'opcua' && values.pollIntervalMs < 1000)

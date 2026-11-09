@@ -130,12 +130,8 @@ function drag(event: DragEvent, kind: NodeKind) {
         >
           返回编辑
         </DtButton>
-        <DtButton
-          size="sm"
-          :disabled="busy"
-          :loading="busy"
-          @click="emit('draw')"
-        >
+        <!-- 只禁用不转圈：busy 也覆盖导出与加载项目，转圈会让人以为在出图 -->
+        <DtButton size="sm" :disabled="busy" @click="emit('draw')">
           <template #leading><DtIcon name="eye" :size="16" /></template>
           {{ mode === 'drawing' ? '重新生成' : '生成层级图' }}
         </DtButton>
@@ -195,13 +191,14 @@ function drag(event: DragEvent, kind: NodeKind) {
           </DtButton>
           <DtButton
             size="sm"
-            variant="ghost"
+            variant="outline"
             draggable="true"
             :disabled="busy"
             title="组织公共连接，不占逻辑层级"
             @dragstart="drag($event, 'junction')"
             @click="emit('add', 'junction')"
           >
+            <template #leading><DtIcon name="plus" :size="14" /></template>
             汇流点
           </DtButton>
         </div>

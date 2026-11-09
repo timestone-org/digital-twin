@@ -31,7 +31,7 @@ import * as opcua from '@/api/opcua'
 import PermGuard from '@/components/PermGuard.vue'
 import { describeError } from '@/composables/useAsyncList'
 import { useRacedFetch } from '@/composables/useRacedFetch'
-import { pendingSummary } from '../../OpcuaServers/scripts/pendingFields'
+import { pendingSummary } from '../../scripts/pendingFields'
 import {
   ancestorIds,
   buildNodeTree,

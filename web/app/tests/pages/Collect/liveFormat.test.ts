@@ -48,6 +48,28 @@ describe('读数的三档', () => {
     expect(look.badge).toBeNull()
   })
 
+  it('⚠ 不是今天的采样带上月日，三天前的值不会看着像刚刚', () => {
+    const threeDaysAgo = new Date(2026, 7, 13, 14, 3, 22).getTime()
+    const now = new Date(2026, 7, 16, 10, 0, 0).getTime()
+    const look = formatSample(
+      { state: 'ok', value: 1, timestampMs: threeDaysAgo, quality: 'good' },
+      null,
+      now,
+    )
+    expect(look.at).toBe('08-13 14:03:22')
+  })
+
+  it('今天的采样只给时分秒', () => {
+    const earlier = new Date(2026, 7, 16, 9, 5, 0).getTime()
+    const now = new Date(2026, 7, 16, 10, 0, 0).getTime()
+    const look = formatSample(
+      { state: 'ok', value: 1, timestampMs: earlier, quality: 'good' },
+      null,
+      now,
+    )
+    expect(look.at).toBe('09:05:00')
+  })
+
   it('正常现值没有徽标', () => {
     expect(formatSample(ok(12), '℃').badge).toBeNull()
   })

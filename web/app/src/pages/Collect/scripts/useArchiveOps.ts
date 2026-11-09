@@ -15,6 +15,8 @@ import { useToast } from '@dt/ui'
 import * as collect from '@/api/collect'
 import { describeError } from '@/composables/useAsyncList'
 
+import { runBounded } from './runBounded'
+
 interface Ctx {
   toast: ReturnType<typeof useToast>
   reload: () => Promise<void>
@@ -69,8 +71,8 @@ async function batchArchive(ctx: Ctx, next: boolean): Promise<void> {
   if (ids.length === 0 || ctx.batchBusy.value) return
   ctx.batchBusy.value = true
   try {
-    const results = await Promise.allSettled(
-      ids.map((id) => collect.updatePoint(id, { archive_enabled: next })),
+    const results = await runBounded(ids, (id) =>
+      collect.updatePoint(id, { archive_enabled: next }),
     )
     const failed = results.filter((one) => one.status === 'rejected').length
     if (failed === 0) {

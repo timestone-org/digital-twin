@@ -2,7 +2,6 @@
 import { computed, onScopeDispose, ref, type ComputedRef, type Ref } from 'vue'
 import type { CollectPointImportItemInput } from '@dt/contracts'
 
-import * as collect from '@/api/collect'
 import { describeError } from '@/composables/useAsyncList'
 import { useRacedFetch, type RacedFetch } from '@/composables/useRacedFetch'
 import {
@@ -11,9 +10,7 @@ import {
   type ParseResult,
   type ParsedRow,
 } from './pointCsv'
-
-/** 扫已有编码时一次取多少条。⚠ 与后端单页上限对齐，取大了会被 422。 */
-const SCAN_PAGE_SIZE = 100
+import { listAllPoints } from './listAllPoints'
 
 /** 表格里的一条「读不了」。`id` 只是给表格做键。 */
 export interface ErrorRow {
@@ -178,20 +175,6 @@ async function scanExisting(
   sourceId: string,
   signal: AbortSignal,
 ): Promise<Set<string>> {
-  const codes = new Set<string>()
-  let page = 1
-  for (;;) {
-    const chunk = await collect.listPoints(
-      {
-        sourceId,
-        page,
-        size: SCAN_PAGE_SIZE,
-      },
-      signal,
-    )
-    for (const point of chunk.items) codes.add(point.code)
-    if (codes.size >= chunk.total || chunk.items.length === 0) break
-    page += 1
-  }
-  return codes
+  const points = await listAllPoints(sourceId, signal)
+  return new Set(points.map((point) => point.code))
 }

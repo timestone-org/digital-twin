@@ -40,6 +40,18 @@ export function iconOfClass(nodeClass: string): string {
   return CLASS_ICONS[nodeClass] ?? FALLBACK_NODE_ICON
 }
 
+const CLASS_LABELS: Record<string, string> = {
+  object: '对象',
+  variable: '变量',
+  property: '属性',
+  method: '方法',
+}
+
+/** 节点类别的中文名；认不出的原样给回，不藏。@param nodeClass 节点类别 */
+export function classLabel(nodeClass: string): string {
+  return CLASS_LABELS[nodeClass] ?? nodeClass
+}
+
 /** AccessLevel 是位掩码。这里只翻译本服务真正会用到的四位。 */
 const ACCESS_BITS: readonly { bit: number; label: string }[] = [
   { bit: 0b0001, label: '可读' },

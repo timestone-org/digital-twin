@@ -1,14 +1,10 @@
 <script setup lang="ts">
-/** @fileoverview HTTP 请求、认证与响应限制的配置字段。 */
+/**
+ * @fileoverview HTTP 请求、认证与响应限制的配置字段。
+ * 清掉已存凭据 = 认证方式改成「无认证」（提交时显式发 null）；选了认证方式就必须有凭据。
+ */
 import { computed } from 'vue'
-import {
-  DtField,
-  DtInput,
-  DtNumberInput,
-  DtSelect,
-  DtSwitch,
-  DtTextarea,
-} from '@dt/ui'
+import { DtField, DtInput, DtNumberInput, DtSelect, DtTextarea } from '@dt/ui'
 import {
   HTTP_AUTH_OPTIONS,
   HTTP_METHOD_OPTIONS,
@@ -23,7 +19,6 @@ const SAMPLES = {
 } as const
 const username = defineModel<string>('username', { required: true })
 const credential = defineModel<string>('credential', { required: true })
-const isCleared = defineModel<boolean>('isCleared', { required: true })
 
 function field(key: string, fallback = '') {
   return computed<string>({
@@ -55,14 +50,14 @@ const tokenEndpoint = field('token_endpoint')
 const scope = field('scope')
 const timeoutNumber = computed({
   get: () => Number(timeout.value),
-  set: (value: number) => {
-    timeout.value = String(value)
+  set: (value: number | undefined) => {
+    timeout.value = value === undefined ? '' : String(value)
   },
 })
 const responseLimitNumber = computed({
   get: () => Number(responseLimit.value),
-  set: (value: number) => {
-    responseLimit.value = String(value)
+  set: (value: number | undefined) => {
+    responseLimit.value = value === undefined ? '' : String(value)
   },
 })
 const hasUsername = computed(() =>
@@ -136,15 +131,11 @@ const credentialLabel = computed(() => {
         <DtInput
           v-model="credential"
           type="password"
-          :disabled="isCleared"
           :placeholder="
             isEdit && hasCredential ? '留空表示不修改认证凭据' : '填写认证凭据'
           "
           autocomplete="new-password"
         />
-      </DtField>
-      <DtField v-if="isEdit && hasCredential" label="清空认证凭据">
-        <DtSwitch v-model="isCleared" label="删掉已保存的认证凭据" />
       </DtField>
     </template>
     <DtTextarea

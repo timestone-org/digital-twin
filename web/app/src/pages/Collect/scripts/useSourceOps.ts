@@ -18,10 +18,14 @@ import { useToast } from '@dt/ui'
 import * as collect from '@/api/collect'
 import { describeError } from '@/composables/useAsyncList'
 
+/** 数据源头部在跑的那个动作。 */
+export type SourceBusyAction = 'toggle' | 'test'
+
 interface Ctx {
   toast: ReturnType<typeof useToast>
   reload: () => Promise<void>
   busyId: Ref<string | null>
+  busyAction: Ref<SourceBusyAction | null>
   formOpen: Ref<boolean>
   formSaving: Ref<boolean>
   formSource: Ref<CollectSource | null>
@@ -30,6 +34,8 @@ interface Ctx {
 export interface SourceOps {
   /** 正在做启停 / 连通性测试的源 id（按钮 loading）。 */
   busyId: Ref<string | null>
+  /** 在跑的是启停还是连通性测试；只让那一个按钮转圈。 */
+  busyAction: Ref<SourceBusyAction | null>
   formOpen: Ref<boolean>
   formSaving: Ref<boolean>
   formSource: Ref<CollectSource | null>
@@ -48,6 +54,7 @@ async function setEnabled(
   next: boolean,
 ): Promise<void> {
   ctx.busyId.value = source.id
+  ctx.busyAction.value = 'toggle'
   try {
     await collect.updateSource(source.id, { is_enabled: next })
     ctx.toast.success(
@@ -60,11 +67,13 @@ async function setEnabled(
     ctx.toast.error(describeError(caught))
   } finally {
     ctx.busyId.value = null
+    ctx.busyAction.value = null
   }
 }
 
 async function test(ctx: Ctx, source: CollectSource): Promise<void> {
   ctx.busyId.value = source.id
+  ctx.busyAction.value = 'test'
   try {
     const result = await collect.testSource(source.id)
     if (result.is_reachable) ctx.toast.success(`「${source.name}」连得上`)
@@ -73,6 +82,7 @@ async function test(ctx: Ctx, source: CollectSource): Promise<void> {
     ctx.toast.error(describeError(caught))
   } finally {
     ctx.busyId.value = null
+    ctx.busyAction.value = null
   }
 }
 
@@ -124,12 +134,14 @@ export function useSourceOps(reload: () => Promise<void>): SourceOps {
     toast: useToast(),
     reload,
     busyId: ref<string | null>(null),
+    busyAction: ref<SourceBusyAction | null>(null),
     formOpen: ref(false),
     formSaving: ref(false),
     formSource: ref<CollectSource | null>(null),
   }
   return {
     busyId: ctx.busyId,
+    busyAction: ctx.busyAction,
     formOpen: ctx.formOpen,
     formSaving: ctx.formSaving,
     formSource: ctx.formSource,
