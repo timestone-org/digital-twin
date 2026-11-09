@@ -128,3 +128,13 @@ async def test_corrupt_json_reads_as_none_rather_than_raising() -> None:
     cache = InMemoryCache()
     cache.store["k"] = "{not json"
     assert await cache.get_json("k") is None
+
+
+async def test_the_fake_cache_sees_set_keys_like_redis_does() -> None:
+    """⚠ 真 Redis 的 EXISTS/DEL 认集合键；假件不认的话比真件宽，用例会假绿。"""
+    cache = InMemoryCache()
+    await cache.add_to_set("k", "a")
+    assert await cache.exists("k") is True
+    await cache.delete("k")
+    assert await cache.exists("k") is False
+    assert "k" not in cache.sets
