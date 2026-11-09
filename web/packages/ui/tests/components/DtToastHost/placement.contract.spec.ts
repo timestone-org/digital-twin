@@ -26,6 +26,10 @@ const CSS = compileString(STYLE, {
   loadPaths: [join(process.cwd(), 'packages', 'ui', 'src', 'styles')],
 }).css
 
+/** 页签被 KeepAlive 收起时弹窗只是 v-show 藏起，节点还在 body 里。 */
+const OPEN_MODAL_SELECTOR =
+  'body:has(.dt-modal:not([style*="display: none"])) .dt-toasts'
+
 /** 取一条选择器的声明块；没有这条规则时返回空串。 */
 function ruleBody(selector: string): string {
   const start = CSS.indexOf(`${selector} {`)
@@ -40,8 +44,13 @@ describe('消息的位置', () => {
   })
 
   it('有弹窗开着时改挂右上角', () => {
-    const body = ruleBody('body:has(.dt-modal) .dt-toasts')
+    const body = ruleBody(OPEN_MODAL_SELECTOR)
     expect(body).toMatch(/top:\s*20px/)
     expect(body).toMatch(/bottom:\s*auto/)
+  })
+
+  it('被收起的页签里挂着的弹窗（v-show 藏起）不算开着', () => {
+    expect(CSS).not.toContain('body:has(.dt-modal) .dt-toasts')
+    expect(ruleBody(OPEN_MODAL_SELECTOR)).not.toBe('')
   })
 })
