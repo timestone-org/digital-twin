@@ -28,6 +28,16 @@ FX_CALL_RE = re.compile(r"@([^\s@{}()\[\],:.'\"]+)\s*\(")
 _STRING_RE = re.compile(r"'(?:[^'\\]|\\.)*'|\"(?:[^\"\\]|\\.)*\"")
 
 _REF_PLACEHOLDER_FMT = "_c{}_"
+# CPython 语法错误原话的片段 → 中文说法。⚠ 不带列号：占位替换改过原文长度，
+# 报出来的位置对不上用户写的那一串
+_SYNTAX_HINTS = (
+    ("was never closed", "括号没有闭合，缺少配对的右括号"),
+    ("unmatched", "多了一个右括号，找不到与它配对的左括号"),
+    ("does not match opening", "括号不配对，左右括号的种类不一致"),
+    ("unterminated string", "引号没有闭合"),
+    ("unexpected EOF", "公式没写完"),
+)
+_SYNTAX_FALLBACK = "写法有误，请检查括号、逗号与运算符是否完整"
 _FX_PLACEHOLDER_FMT = "_fx{}_"
 _MISSING_PARENS = (
     "调用库公式要带括号，写作 @公式标识(实参)；零参公式也要写成 @公式标识()"
@@ -95,10 +105,22 @@ def to_expression(
     try:
         tree = ast.parse(substituted, mode="eval")
     except SyntaxError as error:
-        raise FormulaError(f"公式语法错误：{error.msg}") from error
+        raise FormulaError(f"公式语法错误：{_syntax_hint(error)}") from error
     except RecursionError as error:
         raise FormulaError("公式嵌套过深，请拆成多列分步计算") from error
     return tree, placeholders, codes
+
+
+def _syntax_hint(error: SyntaxError) -> str:
+    """把 CPython 的英文语法错误换成中文说法。
+
+    Args: error。
+    """
+    message = error.msg or ""
+    for fragment, hint in _SYNTAX_HINTS:
+        if fragment in message:
+            return hint
+    return _SYNTAX_FALLBACK
 
 
 def intern_ref(key: str, placeholders: dict[str, str]) -> str:
