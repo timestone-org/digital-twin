@@ -4,6 +4,10 @@ from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from lib.db import CrudBase
+from platform_server.apps.dataset.crud.table import (
+    LIKE_ESCAPE,
+    contains_pattern,
+)
 from platform_server.apps.dataset.models import DatasetFormula
 
 # 列表页与插入面板都按分类分组，组内按名称。第三排序键钉住同名条目的先后
@@ -48,10 +52,10 @@ class FormulaCrud(CrudBase[DatasetFormula]):
         if category:
             statement = statement.where(DatasetFormula.category == category)
         if keyword:
-            like = f"%{keyword}%"
+            like = contains_pattern(keyword)
             statement = statement.where(
-                DatasetFormula.code.ilike(like)
-                | DatasetFormula.name.ilike(like)
+                DatasetFormula.code.ilike(like, escape=LIKE_ESCAPE)
+                | DatasetFormula.name.ilike(like, escape=LIKE_ESCAPE)
             )
         rows = await session.execute(statement)
         return list(rows.scalars().all())

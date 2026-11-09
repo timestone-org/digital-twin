@@ -514,3 +514,15 @@ async def test_seeding_never_overwrites_a_preset_someone_edited(
     assert added == len(missing)
     assert row.code in present
     assert (row.expression, row.is_enabled) == ("1 + 1", False)
+
+
+async def test_an_underscore_in_the_search_is_a_literal_not_a_wildcard(
+    app_client: httpx.AsyncClient,
+) -> None:
+    # ⚠ 不转义的话 `_` 匹配任意一个字符，搜「z_q」会把 zzxq 一并带出来
+    wanted = await create_formula(app_client, code="zz_q", name="下划线")
+    await create_formula(app_client, code="zzxq", name="无下划线")
+
+    listed = data_of(await app_client.get(FORMULAS, params={"q": "z_q"}))
+
+    assert [item["id"] for item in listed] == [wanted["id"]]
