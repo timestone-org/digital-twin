@@ -74,9 +74,10 @@ export function twinBindingRows(config: TwinConfig): TwinBindingRow[] {
     label: nameOr(item.name, item.id),
   }))
   // 信息牌按**扁平化后**的字段序，不是按牌
+  const panelNames = namesById(config.panels)
   const panels = flattenPanelFields(config.panels).map((entry) => ({
     id: entry.valueKey,
-    label: `${nameOr(panelNameOf(config, entry.panelId), entry.panelId)} · ${nameOr(entry.field.label, entry.field.key)}`,
+    label: `${nameOr(panelNames.get(entry.panelId) ?? '', entry.panelId)} · ${nameOr(entry.field.label, entry.field.key)}`,
   }))
   const arrows = config.arrows.map((item) => ({
     id: item.id,
@@ -112,8 +113,17 @@ export function twinBindingRows(config: TwinConfig): TwinBindingRow[] {
   ]
 }
 
-function panelNameOf(config: TwinConfig, panelId: string): string {
-  return config.panels.find((item) => item.id === panelId)?.name ?? ''
+/**
+ * id → 名字的一次性查表；同 id 重复时取先出现的那个，与逐个 `find` 的结果一致。
+ * ⚠ 不逐字段 `find`：字段数 × 实体数，而编辑器每次写配置都要把绑定行重算几遍。
+ */
+function namesById(
+  items: readonly { id: string; name: string }[],
+): ReadonlyMap<string, string> {
+  const names = new Map<string, string>()
+  for (const item of items)
+    if (!names.has(item.id)) names.set(item.id, item.name)
+  return names
 }
 
 /**
@@ -124,14 +134,11 @@ function panelNameOf(config: TwinConfig, panelId: string): string {
 function partFieldEntities(
   config: TwinConfig,
 ): { id: string; label: string }[] {
+  const partNames = namesById(config.parts)
   return flattenPartFields(config.parts).map((entry) => ({
     id: entry.valueKey,
-    label: `${nameOr(partNameOf(config, entry.partId), entry.partId)} · ${nameOr(entry.field.label, entry.field.key)}`,
+    label: `${nameOr(partNames.get(entry.partId) ?? '', entry.partId)} · ${nameOr(entry.field.label, entry.field.key)}`,
   }))
-}
-
-function partNameOf(config: TwinConfig, partId: string): string {
-  return config.parts.find((item) => item.id === partId)?.name ?? ''
 }
 
 /**
@@ -237,9 +244,12 @@ export function twinRowCounts(config: TwinConfig): Record<string, number> {
   return counts
 }
 
-/** 一份配置里某个槽的实体 id，按文档序。 */
-function entityIdsOf(config: TwinConfig, slotKey: string): string[] {
-  return twinBindingRows(config)
+/** 一份绑定行里某个槽的实体 id，按文档序。 */
+function entityIdsOf(
+  rows: readonly TwinBindingRow[],
+  slotKey: string,
+): string[] {
+  return rows
     .filter((row) => row.slotKey === slotKey)
     .map((row) => row.entityId)
 }
@@ -260,12 +270,15 @@ export function remapTwinBindings<T extends { fieldKey: string }>(
   after: TwinConfig,
   bindings: readonly T[],
 ): T[] {
+  // 前后两份各摊一次：逐槽重摊的话每次写配置要把整份绑定行重算十几遍
+  const beforeRows = twinBindingRows(before)
+  const afterRows = twinBindingRows(after)
   let moved = [...bindings]
   for (const slotKey of ARRAY_SLOTS) {
     moved = remapBindingRows(
       slotKey,
-      entityIdsOf(before, slotKey),
-      entityIdsOf(after, slotKey),
+      entityIdsOf(beforeRows, slotKey),
+      entityIdsOf(afterRows, slotKey),
       moved,
     )
   }
