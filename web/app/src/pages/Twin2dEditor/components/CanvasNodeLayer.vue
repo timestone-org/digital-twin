@@ -360,17 +360,19 @@ function onNodeDown(view: NodeView, event: PointerEvent): void {
 
 <template>
   <div class="t2e-nodes" data-test="node-layer" :style="chromeVars">
-    <Twin2dNodeBox
-      v-for="view in views"
-      :key="view.node.id"
-      class="t2e-node"
-      :class="{ 't2e-node--picked': view.picked }"
-      :node="view.node"
-      :node-style="view.style"
-      :id-prefix="view.node.id"
-      :resolve-icon="iconResolver"
-      @pointerdown="onNodeDown(view, $event)"
-    />
+    <div class="t2e-node-boxes" data-test="node-boxes">
+      <Twin2dNodeBox
+        v-for="view in views"
+        :key="view.node.id"
+        class="t2e-node"
+        :class="{ 't2e-node--picked': view.picked }"
+        :node="view.node"
+        :node-style="view.style"
+        :id-prefix="view.node.id"
+        :resolve-icon="iconResolver"
+        @pointerdown="onNodeDown(view, $event)"
+      />
+    </div>
     <span
       v-for="guide in guideLines"
       :key="guide.key"
@@ -408,6 +410,15 @@ function onNodeDown(view: NodeView, event: PointerEvent): void {
 .t2e-nodes {
   position: absolute;
   inset: 0;
+  pointer-events: none;
+}
+
+// ⚠ 节点盒自己的 z-index（悬停变体常带 `z: 30`）必须关在这一格里：放出去的话悬停的
+// 节点盖住自己的引脚点与旋转柄，按下去拖走的是节点，连线一根也拉不出来
+.t2e-node-boxes {
+  position: absolute;
+  inset: 0;
+  isolation: isolate;
   pointer-events: none;
 }
 

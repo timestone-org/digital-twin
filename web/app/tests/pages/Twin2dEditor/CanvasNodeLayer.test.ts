@@ -239,6 +239,19 @@ describe('画节点', () => {
     expect(wrapper.findAll('[data-test="node"]')).toHaveLength(1)
   })
 
+  // ⚠ 悬停变体会给节点盒写 `z-index: 30`：节点盒与引脚点同处一格叠放的话，悬停的
+  // 节点盖住自己的引脚，按下去拖走的是节点而不是拉出一根线（happy-dom 量不出叠放，
+  // 这里钉结构：节点盒关在自己那一格里，引脚与旋转柄在格子外面）
+  it('节点盒关在自己的叠放格里，引脚点不与它们同格', () => {
+    const { wrapper } = mountLayer({ nodes: [makeNode()], selectedIds: ['n1'] })
+
+    const boxes = wrapper.get('[data-test="node-boxes"]').element
+    expect(boxes.contains(nodeEl(wrapper, 'n1'))).toBe(true)
+    const port = wrapper.get('[data-test="node-port"]').element
+    expect(boxes.contains(port)).toBe(false)
+    expect(port.parentElement).toBe(boxes.parentElement)
+  })
+
   it('选中的节点带选中类，没选中的不带', () => {
     const { wrapper } = mountLayer({
       nodes: [makeNode(), NODE_B],
