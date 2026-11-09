@@ -26,6 +26,7 @@ from integration.modeling_helpers import (
 )
 from integration.test_modeling_api import _seed_ledger
 from platform_server.apps.modeling.crud import node_run_crud, run_crud
+from platform_server.apps.modeling.services import run_dispatch
 from platform_server.apps.modeling.services.retention import (
     LEFTOVER_REASONS,
     RetentionOptions,
@@ -312,3 +313,25 @@ async def test_the_sweep_drops_an_old_finished_unpublished_run(
         worker_sessions, options=_options(keep=20, days=90), store=None
     )
     assert removed == 1
+
+
+async def test_a_run_cancelled_before_pickup_skips_the_data_fetch(
+    app_client: httpx.AsyncClient,
+    worker_sessions: MakerSessions,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """取消在认领之前：不再整趟取数，也不先翻回 running。"""
+    created = await create_pipeline(app_client, "q4b", linear_graph("any"))
+    run = await _start(app_client, created["id"])
+    await app_client.post(f"{RUNS}/{run['id']}:cancel")
+    fetched: list[object] = []
+
+    async def prefetch(*args: object, **kwargs: object) -> object:
+        fetched.append((args, kwargs))
+        raise AssertionError("取消了的运行不该取数")
+
+    monkeypatch.setattr(run_dispatch.frame_source, "prefetch", prefetch)
+    await drive_run(worker_sessions, uuid.UUID(run["id"]))
+    assert fetched == []
+    detail = data_of(await app_client.get(f"{RUNS}/{run['id']}"))
+    assert detail["status"] == "cancelled"
