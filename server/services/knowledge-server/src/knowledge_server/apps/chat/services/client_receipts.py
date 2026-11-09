@@ -1,4 +1,4 @@
-"""浏览器带回来的工具回执，要对得上此刻停着等它的那一批调用。
+"""回合停下来等浏览器之后的那一头：回执对不对得上，账本怎么接回来。
 
 ⚠ 只认**最后一条消息**上那一步待续：回合续跑之后，最后一条消息换成了续跑那一轮
 的，旧的待续已经结算——同一份回执再来一遍就对不上，于是重试与连点不会再跑一轮。
@@ -12,6 +12,8 @@ from sqlalchemy.ext.asyncio import AsyncSession
 
 from knowledge_server.apps.chat.crud import session_crud
 from knowledge_server.apps.chat.errors import ChatToolResultMismatch
+from knowledge_server.apps.chat.models import ChatMessage
+from knowledge_server.apps.chat.services.citations import Cited, carried_of
 
 # 待续那一步的状态
 AWAITING = "awaiting_client"
@@ -57,3 +59,19 @@ async def _pending_calls(
                 if isinstance(call_id, str):
                     found.add(call_id)
     return found
+
+
+async def carried_ledger(
+    session: AsyncSession, rows: list[ChatMessage]
+) -> tuple[Cited, ...]:
+    """最后一条消息若停在等浏览器，取回它记下的角标账本。
+
+    Args: session, rows（按序号升序）。
+    """
+    if not rows:
+        return ()
+    steps = await session_crud.steps_of(session, [rows[-1].id])
+    waiting = [
+        one for one in steps.get(rows[-1].id, []) if one.state == AWAITING
+    ]
+    return tuple(carried_of(waiting[-1].input_json)) if waiting else ()
