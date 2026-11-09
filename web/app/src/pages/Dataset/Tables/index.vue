@@ -40,20 +40,22 @@ import { useDatasetSwitches } from './scripts/useDatasetSwitches'
 import { matchesKeyword, retentionLabel } from './scripts/tableView'
 import { useTableOps } from './scripts/useTableOps'
 
+// ⚠ 固定列宽之和加最小表宽要装得进 1280 宽屏的内容区（约 64rem）：装不下时
+// 横向滚动条在这里看不见，最右的操作列整列消失
 const COLUMNS: readonly DtDataColumn[] = [
   { key: 'name', label: '名称', card: 'title' },
-  { key: 'code', label: '编码', width: '11rem', card: 'meta' },
-  { key: 'collect', label: '取数方式', width: '14rem' },
-  { key: 'column_count', label: '列数', width: '4.5rem', align: 'right' },
-  { key: 'retention', label: '保留期', width: '8rem' },
-  { key: 'status', label: '状态', width: '5rem' },
-  { key: 'created_at', label: '创建时间', width: '11rem' },
+  { key: 'code', label: '编码', width: '12rem', card: 'meta' },
+  { key: 'collect', label: '取数方式', width: '11rem' },
+  { key: 'column_count', label: '列数', width: '4rem', align: 'right' },
+  { key: 'retention', label: '保留期', width: '7rem' },
+  { key: 'status', label: '状态', width: '4.5rem' },
+  { key: 'created_at', label: '创建时间', width: '10rem' },
   {
     key: 'actions',
     label: '操作',
     align: 'right',
     // 三枚图标：进详情、改、删
-    width: '8rem',
+    width: '7rem',
     card: 'actions',
   },
 ]
@@ -166,7 +168,7 @@ onMounted(() => {
         :error="list.error.value"
         :empty="emptyState"
         :layout="{
-          minWidth: '72rem',
+          minWidth: '62rem',
           fixedLayout: true,
           cardColumns: 3,
           cardMinWidth: '20rem',
@@ -210,7 +212,8 @@ onMounted(() => {
 
         <template #cell-code="{ row }">
           <DtTag mono size="sm" class="max-w-full" :title="row.code">
-            <span class="min-w-0 truncate">{{ row.code }}</span>
+            <!-- leading-normal：标签的行高等于字号，截断裁掉基线以下，下划线就没了 -->
+            <span class="min-w-0 truncate leading-normal">{{ row.code }}</span>
           </DtTag>
         </template>
 
