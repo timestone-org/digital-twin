@@ -66,7 +66,12 @@ class LifespanHook:
 
 @dataclass
 class ReadinessGate:
-    """就绪闸。收到 SIGTERM 后立刻置否，让编排器先摘流量再 drain。"""
+    """就绪闸。关停一开始就置否，让编排器先摘流量再 drain。
+
+    ⚠ api 角色的关停由 uvicorn 驱动：它先停止监听、等连接收完，最后才跑
+    lifespan 关停，所以那时置否已没有人来问 `/ready`；不监听端口的角色在
+    收到信号后立刻置否。
+    """
 
     is_ready: bool = False
     reason: str = "starting"
@@ -86,30 +91,47 @@ class LifespanRunner:
 
     hooks: Sequence[LifespanHook]
     gate: ReadinessGate = field(default_factory=ReadinessGate)
+    # 整个关停的总预算，不是每个钩子各一份
     drain_timeout_s: float = 20.0
+    # 总预算花光后每个钩子仍保底的时长：排在最后的 flush 与让租约也要有一片
+    drain_floor_s: float = 1.0
 
     async def startup(self) -> None:
-        """按 `startup_order` 升序执行，任一失败即向上抛。"""
+        """按 `startup_order` 升序执行；任一失败先停掉已走过的，再向上抛。"""
+        reached: list[LifespanHook] = []
         for hook in sorted(self.hooks, key=lambda item: item.startup_order):
-            if hook.startup is None:
-                continue
-            await hook.startup()
-            _logger.info("component_started", "", component=hook.name)
+            if hook.startup is not None:
+                try:
+                    await hook.startup()
+                except BaseException:
+                    self.gate.close("startup_failed")
+                    await self._stop_all(reached)
+                    raise
+                _logger.info("component_started", "", component=hook.name)
+            reached.append(hook)
         self.gate.open()
 
     async def shutdown(self) -> None:
         """摘就绪 → 按 `shutdown_order` 升序停 → 单钩子超时不阻断其余。"""
         self.gate.close("shutting_down")
-        for hook in sorted(self.hooks, key=lambda item: item.shutdown_order):
-            if hook.shutdown is None:
-                continue
-            await self._stop_one(hook)
+        await self._stop_all(self.hooks)
 
-    async def _stop_one(self, hook: LifespanHook) -> None:
+    async def _stop_all(self, hooks: Sequence[LifespanHook]) -> None:
+        """在同一份总预算里按 `shutdown_order` 升序逐个停。
+
+        Args: hooks。
+        """
+        loop = asyncio.get_running_loop()
+        deadline = loop.time() + self.drain_timeout_s
+        for hook in sorted(hooks, key=lambda item: item.shutdown_order):
+            budget = max(deadline - loop.time(), self.drain_floor_s)
+            await self._stop_one(hook, budget)
+
+    async def _stop_one(self, hook: LifespanHook, budget_s: float) -> None:
         if hook.shutdown is None:
             return
         try:
-            async with asyncio.timeout(self.drain_timeout_s):
+            async with asyncio.timeout(budget_s):
                 await hook.shutdown()
         # 一个组件停不下来不该阻断其余组件让位与 flush
         except Exception as error:
