@@ -95,6 +95,8 @@ export interface DashboardPatchInput {
   themeJson?: Record<string, unknown> | undefined
   /** 页面级外观袋子（卡片缺省/屏幕特效/编辑器吸附等段都住这里）；整包替换。 */
   chromeJson?: Record<string, unknown> | undefined
+  /** 版本断言：给了就要求库里还是这一版，否则 409（ADR-0012）；不给是旧口径的直接覆盖。 */
+  expectedVersion?: number | undefined
 }
 
 /** 自检发现的一处悬空引用。`field` 用点号与方括号表达路径。 */
@@ -251,6 +253,8 @@ export async function updateDashboard(
   if (patch.designHeight !== undefined) body.design_height = patch.designHeight
   if (patch.themeJson !== undefined) body.theme_json = patch.themeJson
   if (patch.chromeJson !== undefined) body.chrome_json = patch.chromeJson
+  if (patch.expectedVersion !== undefined)
+    body.expected_version = patch.expectedVersion
   const wire = await requestData<DashboardWire>(
     `/dashboards/${dashboardId}`,
     onPlatform({ method: 'PATCH', body, headers: idempotent(key) }),

@@ -234,6 +234,22 @@ describe('保存', () => {
     expect(doc.dashboard.value?.rowVersion).toBe(8)
   })
 
+  it('元数据保存也带上当前行版本，别人先改过就撞冲突而不是覆盖', async () => {
+    vi.spyOn(dashboardApi, 'getDashboard').mockResolvedValue(payload('d1', 7))
+    const patch = vi
+      .spyOn(dashboardApi, 'updateDashboard')
+      .mockResolvedValue(payload('d1', 8))
+    const doc = useDashboardDoc()
+    await doc.load('d1')
+
+    await doc.saveMeta({ name: '改过' })
+
+    expect(patch).toHaveBeenCalledWith('d1', {
+      name: '改过',
+      expectedVersion: 7,
+    })
+  })
+
   it('还没加载出大屏时不发请求', async () => {
     const replace = vi.spyOn(dashboardApi, 'replaceLayout')
     const doc = useDashboardDoc()
