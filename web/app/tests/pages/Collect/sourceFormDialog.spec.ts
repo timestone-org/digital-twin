@@ -10,11 +10,12 @@ import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 import { enableAutoUnmount, flushPromises, mount } from '@vue/test-utils'
 import type { VueWrapper } from '@vue/test-utils'
 import type {
+  CollectProtocol,
   CollectSource,
   CollectSourceCreateInput,
   CollectSourceUpdateInput,
 } from '@dt/contracts'
-import { DtNumberInput, DtSelect } from '@dt/ui'
+import { DtNumberInput } from '@dt/ui'
 
 import SourceFormDialog from '@/pages/Collect/components/SourceFormDialog.vue'
 
@@ -51,9 +52,12 @@ function source(): CollectSource {
   }
 }
 
-async function render(target: CollectSource | null): Promise<VueWrapper> {
+async function render(
+  target: CollectSource | null,
+  fixedProtocol: CollectProtocol = target?.protocol ?? 'opcua',
+): Promise<VueWrapper> {
   const wrapper = mount(SourceFormDialog, {
-    props: { modelValue: true, source: target },
+    props: { modelValue: true, source: target, fixedProtocol },
     attachTo: document.body,
     global: { stubs: { Teleport: true } },
   })
@@ -135,12 +139,8 @@ describe('新建', () => {
   })
 
   it('Modbus TCP 默认只读轮询且先以停用状态保存', async () => {
-    const wrapper = await render(null)
-    wrapper
-      .findAllComponents(DtSelect)[0]
-      ?.vm.$emit('update:modelValue', 'modbus_tcp')
-    await flushPromises()
-    await fill(wrapper, '1号生产线', '二号线 PLC')
+    const wrapper = await render(null, 'modbus_tcp')
+    await fill(wrapper, 'Modbus 网关', '二号线 PLC')
     await fill(wrapper, 'modbus.tcp://host:502', 'modbus.tcp://10.0.0.9:502')
     await fill(wrapper, 'plant1_plc', 'line2_modbus')
     await submit(wrapper, '创建')

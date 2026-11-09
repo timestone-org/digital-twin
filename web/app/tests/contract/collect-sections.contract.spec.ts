@@ -115,7 +115,7 @@ describe('弹窗的对外面', () => {
 
   it('旧调用方省略 loading 时默认空闲，创建与取消仍可操作', async () => {
     const wrapper = mount(SourceFormDialog, {
-      props: { modelValue: true, source: null },
+      props: { modelValue: true, source: null, fixedProtocol: 'opcua' },
       global: { stubs: { Teleport: true } },
     })
     try {

@@ -14,7 +14,7 @@ async function render(
   source: CollectSource | null = null,
 ): Promise<VueWrapper> {
   const wrapper = mount(SourceFormDialog, {
-    props: { modelValue: true, source },
+    props: { modelValue: true, source, fixedProtocol: 'http' },
     attachTo: document.body,
     global: { stubs: { Teleport: true } },
   })
@@ -43,9 +43,8 @@ async function press(wrapper: VueWrapper, label: string): Promise<void> {
 }
 async function httpForm(): Promise<VueWrapper> {
   const wrapper = await render()
-  await choose(wrapper, '[role="combobox"]', 'HTTP / HTTPS')
   await wrapper
-    .find('input[placeholder="如：1号生产线 PLC"]')
+    .find('input[placeholder="如：能源平台接口"]')
     .setValue('HTTP 能源接口')
   await wrapper
     .find('input[placeholder="如：plant1_plc"]')
@@ -115,7 +114,7 @@ describe('HTTP 请求配置', () => {
     await press(wrapper, '取消')
     expect(wrapper.emitted('update:modelValue')?.[0]).toEqual([false])
   })
-  it.each(['协议', '采集模式', '轮询间隔（毫秒）'])(
+  it.each(['采集模式', '轮询间隔（毫秒）'])(
     '%s 的可见标签关联真实控件',
     async (label) => {
       const wrapper = await httpForm()
@@ -131,8 +130,9 @@ describe('HTTP 请求配置', () => {
       )
     },
   )
-  it('协议可从真实下拉选中，固定轮询并提交 GET 默认配置', async () => {
+  it('协议由页面定死并只读展示，固定轮询并提交 GET 默认配置', async () => {
     const wrapper = await httpForm()
+    expect(wrapper.text()).toContain('协议：HTTP / HTTPS')
     expect(wrapper.text()).toContain('认证方式')
     expect(wrapper.text()).toContain('轮询')
     expect(
@@ -301,7 +301,7 @@ describe('HTTP 认证', () => {
       wrapper.find('input[type="password"]').attributes('disabled'),
     ).toBeUndefined()
   })
-  it('POST 改 GET 时移除旧请求体；切协议不携带另一种协议的连接选项', async () => {
+  it('POST 改 GET 时移除旧请求体', async () => {
     const wrapper = await httpForm()
     await choose(wrapper, '[aria-label="HTTP 请求方法"]', 'POST（查询接口）')
     await wrapper
@@ -313,14 +313,5 @@ describe('HTTP 认证', () => {
     if (typeof payload !== 'object' || payload === null)
       throw new Error('没有创建请求')
     expect(Reflect.get(payload, 'options_json')).not.toHaveProperty('body_json')
-    await choose(wrapper, '[role="combobox"]', 'Modbus TCP（只读）')
-    await wrapper
-      .find('input[placeholder="modbus.tcp://host:502"]')
-      .setValue('modbus.tcp://10.0.0.2:502')
-    await press(wrapper, '创建')
-    expect(wrapper.emitted('create')?.[1]?.[0]).toMatchObject({
-      protocol: 'modbus_tcp',
-      options_json: {},
-    })
   })
 })

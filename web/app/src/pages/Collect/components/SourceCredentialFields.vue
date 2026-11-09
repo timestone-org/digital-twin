@@ -23,7 +23,7 @@ const isCleared = defineModel<boolean>('isCleared', { required: true })
 
 <template>
   <div class="grid grid-cols-1 gap-3 sm:grid-cols-2">
-    <DtField label="用户名" hint="匿名连接可留空。">
+    <DtField label="用户名">
       <DtInput v-model="username" placeholder="匿名连接可留空" />
     </DtField>
     <DtField
