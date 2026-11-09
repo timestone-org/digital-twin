@@ -8,6 +8,7 @@
 而原件其实好好的。
 """
 
+import asyncio
 import hashlib
 import uuid
 from collections.abc import Sequence
@@ -22,10 +23,12 @@ from knowledge_server.apps.knowledge.errors import (
     DocumentNotFound,
     DuplicateDocument,
     FigureBytesGone,
+    ObjectStoreDown,
     RawBytesGone,
     RawItemAbsent,
     SourceNotFound,
     UnsupportedRawItem,
+    UploadNotFound,
 )
 from knowledge_server.apps.knowledge.models import KnowledgeDocument
 from knowledge_server.apps.knowledge.schemas import (
@@ -177,7 +180,7 @@ async def _presign(
             ttl_s=UPLOAD_TTL_S,
         )
     except ObjectStoreError as error:
-        raise ObjectStoreError("对象存储暂时不可用") from error
+        raise ObjectStoreDown("对象存储暂时不可用，请稍后再试") from error
 
 
 async def _hashed(store: ObjectStore, staging: str) -> tuple[str, int]:
@@ -186,10 +189,27 @@ async def _hashed(store: ObjectStore, staging: str) -> tuple[str, int]:
     ⚠ 哈希在**服务端**算，不信客户端报的：客户端报什么我们就存什么的话，
     去重就成了一句空话——两份不同内容报同一个哈希，第二份会被当成重复丢掉。
 
+    ⚠ 哈希放进线程里算：几十兆的原件在事件循环上算一遍要上百毫秒，期间连探针
+    都答不了。
+
     Args: store, staging。
     """
-    content = await store.get_bytes(staging)
-    return (hashlib.sha256(content).hexdigest(), len(content))
+    try:
+        content = await store.get_bytes(staging)
+    except ObjectNotFound as error:
+        raise UploadNotFound("没有找到这次直传的原件，请重新上传") from error
+    except ObjectStoreError as error:
+        raise ObjectStoreDown("对象存储暂时不可用，请稍后再试") from error
+    digest = await asyncio.to_thread(_sha256_of, content)
+    return (digest, len(content))
+
+
+def _sha256_of(content: bytes) -> str:
+    """一段字节的 SHA-256 十六进制串。
+
+    Args: content。
+    """
+    return hashlib.sha256(content).hexdigest()
 
 
 async def _drop_staging(store: ObjectStore, staging: str) -> None:
@@ -229,7 +249,10 @@ async def _admit(
     if await crud.document.has_content_hash(session, base_id, digest):
         await _drop_staging(store, staging)
         raise DuplicateDocument(DUPLICATE_CONTENT)
-    await store.copy(staging, final)
+    try:
+        await store.copy(staging, final)
+    except ObjectStoreError as error:
+        raise ObjectStoreDown("对象存储暂时不可用，请稍后再试") from error
     await _drop_staging(store, staging)
     return (digest, size)
 
@@ -253,6 +276,9 @@ async def register_upload(
     )
     if source is None:
         raise SourceNotFound("这个库没有上传通道")
+    if await crud.document.get_document(session, body.document_id) is not None:
+        # ⚠ 第一次登记已把暂存件挪走，再登记一次只会撞「原件不在」
+        raise DuplicateDocument("这份文档已经登记过了")
     suffix = _checked_suffix(body.filename, external)
     staging = staging_key(base_id, body.document_id, suffix)
     final = document_key(base_id, body.document_id, suffix)
