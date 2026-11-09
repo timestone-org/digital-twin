@@ -283,6 +283,18 @@ async def test_a_node_warning_names_the_node_instead_of_its_path():
     assert not any("content." in item for item in result.warnings)
 
 
+async def test_two_nodes_with_the_same_label_warn_once():
+    # ⚠ 前端按提示原文做列表键：同一段里两处一样的数字报同一句，键就撞了
+    context = precise_inline_context("25.5")
+    paragraph = context.template.doc_json.content[0]
+    paragraph.content.append(paragraph.content[1].model_copy(deep=True))
+    context.api_errors["api:energy"] = "数据来源「能源接口」：API 取数超时"
+    async with AsyncSession() as session:
+        result = await preview(session, context)
+    assert len(result.nodes) == 2
+    assert len(result.warnings) == len(set(result.warnings))
+
+
 async def test_word_inline_paragraph_uses_exact_metric_value():
     context = precise_inline_context("9007199254740993.125")
     async with AsyncSession() as session:

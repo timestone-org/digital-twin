@@ -79,7 +79,8 @@ async def preview(session: AsyncSession, context: PreviewContext) -> PreviewOut:
         timezone=context.timezone,
         metrics=metrics,
         nodes=nodes,
-        warnings=warnings,
+        # ⚠ 去重：同一段里两处一样的节点报同一句，而前端按原文做列表键
+        warnings=list(dict.fromkeys(warnings)),
         api_results=_api_results(context),
         checked_at=datetime.now(UTC),
     )
