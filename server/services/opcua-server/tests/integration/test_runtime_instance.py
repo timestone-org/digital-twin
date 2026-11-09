@@ -7,6 +7,7 @@
 
 import asyncio
 import contextlib
+import logging
 import socket
 from collections.abc import AsyncIterator, Callable
 from pathlib import Path
@@ -337,4 +338,32 @@ async def test_duplicate_identifiers_are_rejected(pki: PkiStore) -> None:
     with pytest.raises(Exception, match="重复"):
         await running.start()
     with contextlib.suppress(Exception):
+        await running.stop()
+
+
+@pytest.mark.parametrize(
+    ("valid_days", "is_warned"), [(10, True), (825, False)], ids=["near", "far"]
+)
+async def test_a_certificate_near_expiry_is_warned_at_start(
+    tmp_path: Path,
+    caplog: pytest.LogCaptureFixture,
+    valid_days: int,
+    is_warned: bool,
+) -> None:
+    """证书快到期时每次启动都要响亮告警：过期那天上位机会一齐断开。"""
+    running = RunningInstance(
+        _spec(_free_port(), nodes=(TEMPERATURE,)),
+        pki=PkiStore(tmp_path, valid_days=valid_days),
+    )
+    with caplog.at_level(logging.WARNING):
+        await running.start()
+    try:
+        assert running.certificate is not None
+        warned = [
+            record
+            for record in caplog.records
+            if record.getMessage() == "opcua_server_cert_expiring"
+        ]
+        assert bool(warned) is is_warned
+    finally:
         await running.stop()
