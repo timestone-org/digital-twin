@@ -151,6 +151,9 @@ class PublicConnectionSweeper:
                 await connection.close(code)
         except TimeoutError:
             await self._connections.remove(connection.id)
+            # ⚠ 叫醒期限驱动：它见连接已摘就收尾整个收发循环。只摘不叫醒，
+            # 它要睡到票据到期，这期间对端恢复了也只会对着一块停住的屏
+            connection.credential_changed.set()
             _logger.warning(
                 "public_connection_close_timed_out",
                 "关闭匿名连接超时，已摘除",

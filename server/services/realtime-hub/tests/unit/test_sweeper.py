@@ -8,8 +8,13 @@
 import asyncio
 import uuid
 from datetime import timedelta
+from typing import cast
 
 import pytest
+from fastapi import WebSocket
+from realtime_hub.apps.channel.api.ws import (
+    _pump,
+)  # pyright: ignore[reportPrivateUsage]  # 收发循环无公开入口
 from realtime_hub.apps.channel.services import (
     Connection,
     ConnectionRegistry,
@@ -23,6 +28,7 @@ from realtime_hub.apps.channel.services.session import (
     CLOSE_PUBLIC_GRANT_REVOKED,
     CLOSE_TOKEN_EXPIRED,
 )
+from realtime_hub.container import Container
 
 from lib.utils.timeutils import utcnow
 
@@ -331,3 +337,42 @@ async def test_a_stuck_close_neither_stalls_the_sweep_nor_keeps_the_feed(
         [CLOSE_PUBLIC_GRANT_REVOKED],
         None,
     )
+
+
+class _SilentSocket:
+    """不收帧、关闭也卡住的 socket：对端在 TCP 层停读的样子。"""
+
+    async def receive_text(self) -> str:
+        await asyncio.Event().wait()
+        raise AssertionError("静默连接不会收到入站帧")
+
+    async def close(self, _code: int) -> None:
+        await asyncio.Event().wait()
+
+
+async def test_a_stuck_close_still_ends_that_connections_loop(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    # ⚠ 摘了索引但收发循环还在，就是一条不再收数据、也没被告知撤回的僵尸：
+    # 屏上停在旧值直到票据到期（默认一小时），对端恢复了也不会重连
+    monkeypatch.setattr(sweeper_module, "CLOSE_TIMEOUT_S", 0.05)
+    connections = ConnectionRegistry()
+    stuck, _closed = _anonymous()
+    socket = _SilentSocket()
+    stuck.close = socket.close
+    await connections.add(stuck)
+    container = cast(
+        "Container",
+        type(
+            "FakeContainer", (), {"connections": connections, "session": None}
+        )(),
+    )
+    loop = asyncio.create_task(
+        _pump(cast("WebSocket", socket), container, connection_id=stuck.id)
+    )
+    await asyncio.sleep(0)
+
+    await _sweeper(connections, {}).sweep_once()
+
+    async with asyncio.timeout(1):
+        await loop
