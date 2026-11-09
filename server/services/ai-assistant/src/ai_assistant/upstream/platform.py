@@ -116,25 +116,6 @@ class PlatformClient:
         """按页读取数据源；Args: headers, query。"""
         return await self._get(_SOURCES, query, headers)
 
-    async def search_points(
-        self,
-        headers: dict[str, str],
-        *,
-        keyword: str | None = None,
-        source_id: str | None = None,
-        page: int = 1,
-    ) -> list[object]:
-        """按关键词与数据源翻一页点位。
-
-        Args: headers, keyword, source_id, page。
-        """
-        query: dict[str, Any] = {"page": page, "size": self._page_size}
-        if keyword:
-            query["q"] = keyword
-        if source_id:
-            query["source_id"] = source_id
-        return _items_of(await self._get(_POINTS, query, headers))
-
     async def match_points(
         self,
         headers: dict[str, str],
