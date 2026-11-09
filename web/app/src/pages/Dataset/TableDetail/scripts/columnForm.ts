@@ -84,12 +84,6 @@ function defaultValueText(value: unknown): string {
   return JSON.stringify(value)
 }
 
-/**
- * 把一列铺进表单；`null` 即新增。
- * ⚠ 铺值收在这里而不是弹窗里：弹窗那侧只剩「写进各自的 ref」，于是
- * 「哪个字段缺省成什么」有且只有一处答案。
- * @param column 要编辑的列，`null` 表示新增
- */
 /** 打开弹窗时的预填（助手的提议走这条）。两格都可缺席。 */
 export interface ColumnFormSeed {
   formula?: string
