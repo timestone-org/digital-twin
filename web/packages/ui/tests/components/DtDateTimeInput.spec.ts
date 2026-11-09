@@ -174,6 +174,14 @@ describe('DtDateTimeInput 日历浮层', () => {
     wrapper.unmount()
   })
 
+  it('日格是 role=group：没有 row/gridcell 的 grid 是无效 ARIA', async () => {
+    mountInShanghai({ modelValue: '2026-08-12T02:55:00.000Z' })
+    openCalendar()
+    await flushPromises()
+    const grid = document.querySelector('.dt-calendar__grid')
+    expect(grid?.getAttribute('role')).toBe('group')
+  })
+
   it('面板停在取值所在的那个月', async () => {
     mountInShanghai({ modelValue: '2026-08-12T02:55:00.000Z' })
     openCalendar()

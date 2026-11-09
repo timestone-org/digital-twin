@@ -111,7 +111,7 @@ function labelOf(day: number): string {
       </button>
     </div>
 
-    <div class="dt-calendar__grid" role="grid" aria-label="选择日期">
+    <div class="dt-calendar__grid" role="group" aria-label="选择日期">
       <span
         v-for="name in WEEKDAYS"
         :key="name"
