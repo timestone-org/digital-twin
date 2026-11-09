@@ -99,11 +99,16 @@ function select(item: DtMenuItem): void {
     <DtButton variant="soft" size="sm" @click="emit('open', row)"
       >打开工作流</DtButton
     >
-    <RouterLink :to="`/modeling/runs?pipeline_id=${row.id}`">
+    <RouterLink
+      v-slot="{ navigate }"
+      :to="`/modeling/runs?pipeline_id=${row.id}`"
+      custom
+    >
       <DtIconButton
         icon="list-checks"
         label="训练记录"
         tooltip="查看此工作流的训练记录"
+        @click="navigate"
       />
     </RouterLink>
     <DtDropdownMenu

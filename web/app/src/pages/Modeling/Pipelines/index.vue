@@ -177,8 +177,10 @@ onMounted(() => void list.reload())
     subtitle="创建工作流 → 训练生成模型 → 发布调用；每个工作流保留一个发布入口"
   >
     <template #actions>
-      <RouterLink to="/modeling/instances">
-        <DtButton variant="ghost" size="sm">历史实例</DtButton>
+      <RouterLink v-slot="{ navigate }" to="/modeling/instances" custom>
+        <DtButton variant="ghost" size="sm" @click="navigate"
+          >历史实例</DtButton
+        >
       </RouterLink>
       <PermGuard :codes="[PERMISSION_CODES.modelingManage]" explain>
         <DtIconButton

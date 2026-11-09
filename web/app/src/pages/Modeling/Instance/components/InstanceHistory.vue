@@ -84,8 +84,14 @@ const versionColumns: readonly DtDataColumn[] = [
 
       <template #cell-actions="{ row }">
         <div class="flex gap-2">
-          <RouterLink :to="`/modeling/pipelines/${id}?run_id=${row.id}`">
-            <DtButton size="sm" variant="ghost"> 查看结果 </DtButton>
+          <RouterLink
+            v-slot="{ navigate }"
+            :to="`/modeling/pipelines/${id}?run_id=${row.id}`"
+            custom
+          >
+            <DtButton size="sm" variant="ghost" @click="navigate">
+              查看结果
+            </DtButton>
           </RouterLink>
 
           <PermGuard :codes="[PERMISSION_CODES.modelingRun]">

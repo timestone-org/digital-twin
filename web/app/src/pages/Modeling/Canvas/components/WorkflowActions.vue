@@ -21,22 +21,35 @@ const ops = useRunOps(() => emit('published'))
 
 <template>
   <template v-if="pipeline">
-    <RouterLink :to="`/modeling/runs?pipeline_id=${pipeline.id}`"
-      ><DtIconButton
+    <!-- ⚠ custom：不然渲染成 <a> 里套 <button>，Tab 停两次、读屏读成「链接，按钮」 -->
+    <RouterLink
+      v-slot="{ navigate }"
+      :to="`/modeling/runs?pipeline_id=${pipeline.id}`"
+      custom
+    >
+      <DtIconButton
         size="sm"
         variant="ghost"
         icon="list-checks"
         label="训练记录"
         tooltip="查看训练记录"
-    /></RouterLink>
-    <RouterLink :to="`/modeling/models?pipeline_id=${pipeline.id}`"
-      ><DtIconButton
+        @click="navigate"
+      />
+    </RouterLink>
+    <RouterLink
+      v-slot="{ navigate }"
+      :to="`/modeling/models?pipeline_id=${pipeline.id}`"
+      custom
+    >
+      <DtIconButton
         size="sm"
         variant="ghost"
         icon="layers"
         label="训练模型"
         tooltip="查看训练模型"
-    /></RouterLink>
+        @click="navigate"
+      />
+    </RouterLink>
     <PermGuard
       v-if="run?.status === 'succeeded'"
       :codes="[PERMISSION_CODES.modelingPublish]"
