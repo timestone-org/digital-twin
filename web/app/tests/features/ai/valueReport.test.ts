@@ -251,3 +251,19 @@ it('历史末值使用与图表一致的定值变换', () => {
     }).items[0]?.value,
   ).toBe(1)
 })
+
+it('实时点位末值与画布一样过定值变换', () => {
+  const bound = binding('a', { transformJson: { scale: 0.001 } })
+  const reading: PointSample = { ...READING, value: 12_000 }
+  expect(report([bound], () => reading).items[0]?.value).toBe(12)
+})
+
+it('常量绑定同样过定值变换', () => {
+  const bound = binding('a', {
+    sourceKind: 'static',
+    nodeKey: null,
+    staticValueJson: 5,
+    transformJson: { offset: 1 },
+  })
+  expect(report([bound]).items[0]?.value).toBe(6)
+})
