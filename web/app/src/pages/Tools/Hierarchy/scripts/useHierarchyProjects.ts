@@ -13,6 +13,7 @@ export function useHierarchyProjects(
     total: state.total,
     query: state.query,
     loading: state.loading,
+    listLoading: state.listLoading,
     error: state.error,
     refresh: controller.refresh,
     search: controller.search,

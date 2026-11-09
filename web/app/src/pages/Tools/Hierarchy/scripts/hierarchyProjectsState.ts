@@ -14,6 +14,7 @@ export function createState(saving: ReturnType<typeof useHierarchySaving>) {
     total = ref(0),
     query = ref(''),
     loading = ref(false),
+    listLoading = ref(false),
     error = ref('')
   const listRequest = useRacedFetch(),
     projectRequest = useRacedFetch(),
@@ -30,6 +31,7 @@ export function createState(saving: ReturnType<typeof useHierarchySaving>) {
     total,
     query,
     loading,
+    listLoading,
     error,
     listRequest,
     projectRequest,
@@ -69,6 +71,7 @@ export class Controller {
   }
   refresh = async () => {
     if (!this.state.alive) return
+    this.state.listLoading.value = true
     await this.state.listRequest.run(
       (signal) =>
         api.listProjects(
@@ -82,7 +85,9 @@ export class Controller {
           this.state.error.value = ''
         },
         fail: this.state.fail,
-        settled: () => undefined,
+        settled: () => {
+          if (this.state.alive) this.state.listLoading.value = false
+        },
       },
     )
   }
