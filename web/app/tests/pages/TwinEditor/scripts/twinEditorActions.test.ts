@@ -178,6 +178,85 @@ describe('单例段', () => {
   })
 })
 
+describe('检查器里连续改同一个字段', () => {
+  /** 把第一张牌的名字改成 `name`，与检查器发上来的整段替换同形。 */
+  function renamePanel(
+    actions: ReturnType<typeof setup>['actions'],
+    doc: ReturnType<typeof setup>['doc'],
+    name: string,
+  ): void {
+    actions.patchInspector({
+      panels: doc.config.value.panels.map((panel, index) =>
+        index === 0 ? { ...panel, name } : panel,
+      ),
+    })
+  }
+
+  // ⚠ 输入框每敲一个字发一次：各记一帧的话改个名要撤十几下，还会把早先的结构改动挤出撤销栈
+  it('逐字输入合成一次撤销', () => {
+    const { actions, doc } = setup({ panels: [{ id: 'p1', name: '' }] })
+
+    renamePanel(actions, doc, '一')
+    renamePanel(actions, doc, '一号')
+    renamePanel(actions, doc, '一号泵')
+    doc.undo()
+
+    expect(doc.config.value.panels[0]?.name).toBe('')
+    expect(doc.canUndo.value).toBe(false)
+  })
+
+  it('换了一个字段就另起一帧', () => {
+    const { actions, doc } = setup({ panels: [{ id: 'p1', name: '' }] })
+
+    renamePanel(actions, doc, '泵')
+    actions.patchInspector({
+      panels: doc.config.value.panels.map((panel) => ({
+        ...panel,
+        position: [1, 2, 3],
+      })),
+    })
+    doc.undo()
+
+    expect(doc.config.value.panels[0]?.name).toBe('泵')
+    expect(doc.config.value.panels[0]?.position).toEqual([0, 0, 0])
+  })
+
+  it('换了一个实体就另起一帧', () => {
+    const { actions, doc } = setup({
+      anchors: [
+        { id: 'a1', name: '' },
+        { id: 'a2', name: '' },
+      ],
+    })
+    const rename = (id: string, name: string): void =>
+      actions.patchInspector({
+        anchors: doc.config.value.anchors.map((anchor) =>
+          anchor.id === id ? { ...anchor, name } : anchor,
+        ),
+      })
+
+    rename('a1', '甲')
+    rename('a2', '乙')
+    doc.undo()
+
+    expect(doc.config.value.anchors.map((anchor) => anchor.name)).toEqual([
+      '甲',
+      '',
+    ])
+  })
+
+  it('中间插了别的操作就不再并进去', () => {
+    const { actions, doc } = setup({ panels: [{ id: 'p1', name: '' }] })
+
+    renamePanel(actions, doc, '一')
+    actions.add('anchors')
+    renamePanel(actions, doc, '一号')
+    doc.undo()
+
+    expect(doc.config.value.panels[0]?.name).toBe('一')
+  })
+})
+
 describe('文件夹', () => {
   const FOLDERED = {
     anchors: [{ id: 'a1' }, { id: 'a2' }],

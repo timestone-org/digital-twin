@@ -16,6 +16,7 @@ import {
   updateEntity,
 } from './entityOps'
 import { addPartsFromNodes } from './bulkParts'
+import { inspectorMergeKey } from './inspectorMerge'
 import {
   addFolder,
   moveIntoFolder,
@@ -40,6 +41,8 @@ export interface TwinEditorActions {
   move: (kind: TwinEntityKind, id: string, delta: number) => void
   /** 换掉配置里的某个单例段（模型、视点切换控件）。 */
   patchConfig: (patch: Partial<TwinConfig>) => void
+  /** 检查器的写入：同一个实体的同一组字段连续改合成一次撤销。 */
+  patchInspector: (patch: Partial<TwinConfig>) => void
   /** 在某段下新建一个空夹；返回夹 id，供上层立刻进入就地重命名。 */
   addFolder: (kind: TwinEntityKind) => string
   renameFolder: (id: string, name: string) => void
@@ -171,6 +174,13 @@ export function createTwinEditorActions(
 
     patchConfig: (patch) => {
       doc.commit({ ...doc.config.value, ...patch })
+    },
+
+    patchInspector: (patch) => {
+      const key = inspectorMergeKey(doc.config.value, patch)
+      const next = { ...doc.config.value, ...patch }
+      if (key === null) doc.commit(next)
+      else doc.commitMerged(next, key)
     },
 
     transformEntity: (change) => applyTransform(doc, change),

@@ -4,7 +4,7 @@ import type { BindingPayload } from '@dt/contracts'
 import { collectTwinConfigIssues } from '@dt/twin-config'
 import type { TwinConfig, TwinNavigationMode, Vec3 } from '@dt/twin-config'
 import { DtPageState, DtResizableLayout, useConfirm, useToast } from '@dt/ui'
-import { computed, ref, provide } from 'vue'
+import { computed, ref, provide, watch } from 'vue'
 import { useRoute } from 'vue-router'
 import { useWorkspaceGuard } from '@/features/workspace/useWorkspaceGuard'
 import { migrateLegacyEditorLayout } from '@/features/workspace/legacyEditorLayout'
@@ -170,6 +170,9 @@ const ai = useTwinAi(
   () => selection.value,
   () => viewportRef.value?.stageEl() ?? null,
 )
+
+// 换了选中就断开检查器的合并段：回到同一个字段再改，是另一次编辑
+watch(selection, () => page.doc.value?.endMerge())
 
 function select(next: TwinSelection): void {
   resetAnimation()
@@ -394,7 +397,7 @@ useUnsavedGuard(() => page.doc.value?.isDirty.value === true)
               :available="currentAnimation !== null"
               :is-dirty="isDirty"
               :test-mode="animationTest"
-              @patch="actions?.patchConfig($event)"
+              @patch="actions?.patchInspector($event)"
               @pick="binding.pickingFieldKey.value = $event"
               @drop="binding.drop"
               @test="animationTest = $event"
@@ -411,7 +414,7 @@ useUnsavedGuard(() => page.doc.value?.isDirty.value === true)
               :frame-origin="frameOrigin"
               :bindings="binding.bindings.value"
               :is-dirty="isDirty"
-              @patch="actions?.patchConfig($event)"
+              @patch="actions?.patchInspector($event)"
               @request-pick="viewport.requestPick"
               @cancel-pick="viewport.cancelPick"
               @capture-camera="viewport.captureCamera"
