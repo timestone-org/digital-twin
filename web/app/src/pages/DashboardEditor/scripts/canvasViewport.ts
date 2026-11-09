@@ -81,11 +81,17 @@ export function rectStyleOf(rect: ModuleRect | null): CSSProperties {
 /** 栅格导引线的最小周期（设计像素）：再密就是一片噪点，不如不画。 */
 const GRID_MIN_PERIOD_PX = 4
 
-/** 吸附导引背景：两道 repeating-gradient 画出栅格线，色值走 token。 */
+/**
+ * 吸附导引背景：两道 repeating-gradient 画出栅格线，色值走 token。
+ * ⚠ 线宽按屏幕像素折算：舞台整体缩放，1 设计像素的线在 1/3 倍率下只剩 0.33
+ * 屏幕像素，有的列整条消失、有的叠成两条。
+ * @param scale 舞台此刻的生效倍率
+ */
 export function gridBackgroundStyle(
   design: DesignSize,
   grid: EditorGridConfig,
   snap: SnapConfig,
+  scale = 1,
 ): CSSProperties {
   const guide = gridGuide(design, grid, snap)
   if (
@@ -95,11 +101,13 @@ export function gridBackgroundStyle(
   ) {
     return {}
   }
-  const line = 'var(--border-subtle) 0 1px'
+  const width = scale > 0 ? 1 / scale : 1
+  const px = `${String(Math.round(width * 100) / 100)}px`
+  const line = `var(--border-subtle) 0 ${px}`
   return {
     backgroundImage:
-      `repeating-linear-gradient(to right, ${line}, transparent 1px ${guide.colPeriod}px), ` +
-      `repeating-linear-gradient(to bottom, ${line}, transparent 1px ${guide.rowPeriod}px)`,
+      `repeating-linear-gradient(to right, ${line}, transparent ${px} ${guide.colPeriod}px), ` +
+      `repeating-linear-gradient(to bottom, ${line}, transparent ${px} ${guide.rowPeriod}px)`,
     backgroundPosition: `${guide.offsetX}px ${guide.offsetY}px`,
   }
 }

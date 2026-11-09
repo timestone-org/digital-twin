@@ -3,7 +3,7 @@
  * `EditorCanvas.vue` 只剩 props/emits 与模板。共享类型与纯工厂在 `canvasWiring.ts`，
  * 指针手势在 `canvasWiringHandlers.ts`。
  */
-import { computed, type ComputedRef } from 'vue'
+import { computed, type ComputedRef, type CSSProperties } from 'vue'
 import type { ModuleRect, NodeBox } from '@dt/runtime'
 
 import { topMostIds } from '@/features/dashboard/editorDoc'
@@ -90,6 +90,11 @@ function highlightOf(
   )
 }
 
+/** 栅格导引背景；线宽按舞台此刻的倍率折回屏幕像素。 */
+function gridStyleOf(props: CanvasWiringProps, scale: number): CSSProperties {
+  return gridBackgroundStyle(props.design, props.grid, props.snap, scale)
+}
+
 export function useCanvasWiring(
   props: CanvasWiringProps,
   emit: CanvasEmit,
@@ -125,9 +130,7 @@ export function useCanvasWiring(
     readout: drag.readout,
     marqueeBox: marquee.box,
     highlight: highlightOf(ctx, drag, palette),
-    gridStyle: computed(() =>
-      gridBackgroundStyle(props.design, props.grid, props.snap),
-    ),
+    gridStyle: computed(() => gridStyleOf(props, viewport.effScale.value)),
     palette,
     ...grabHandlersOf(ctx, drag),
     ...surfaceHandlersOf(ctx, marquee),
