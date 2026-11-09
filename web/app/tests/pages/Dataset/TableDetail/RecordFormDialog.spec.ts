@@ -185,6 +185,28 @@ describe('提交', () => {
     expect(wrapper.emitted('saved')?.[0]).toEqual(['数据行已录入', true])
   })
 
+  it('⚠ 新建时一格都没填就拦下，不落一整行空值', async () => {
+    const wrapper = await open(null)
+    await save()
+    expect(dataset.createDatasetRecord).not.toHaveBeenCalled()
+    expect(document.body.textContent).toContain('至少填一格')
+    expect(wrapper.emitted('update:modelValue')).toBeUndefined()
+  })
+
+  it('单位写进标签，必填的人工录入列打上必填标记', async () => {
+    mount(RecordFormDialog, {
+      props: {
+        modelValue: true,
+        tableId: 't1',
+        columns: [column({ unit: 'm³', is_required: true })],
+        record: null,
+      },
+    })
+    await flushPromises()
+    expect(document.body.textContent).toContain('进水量（m³）')
+    expect(inputs()[0]?.required).toBe(true)
+  })
+
   it('⚠ 后端的取值裁定原样转述，不在前端再写一份规则', async () => {
     vi.mocked(dataset.updateDatasetRecord).mockRejectedValue(
       new (await import('@/api/client')).BizError(

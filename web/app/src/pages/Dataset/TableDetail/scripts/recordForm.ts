@@ -15,15 +15,21 @@ import type { DatasetColumn, DatasetRecord } from '@dt/contracts'
 import type { DatasetRecordInput } from '@/api/dataset'
 
 /**
- * 表单态。文本与布尔分成两份而不是一个联合值的字典：合成一份的话，模板里
- * 每次取值都要断言成 string 或 boolean，而本仓禁止 `as`。
+ * 表单态。布尔列也记成文本（`''` 空 / `'true'` / `'false'`）：开关只有两态，
+ * 表达不了「没填」，保存时会把空格子静默写成「否」。
  */
 export interface RecordFormState {
   /** 数据时间，UTC RFC3339；空串 = 还没选。 */
   ts: string
   texts: Record<string, string>
-  flags: Record<string, boolean>
 }
+
+/** 布尔列的三态选项。 */
+export const BOOL_OPTIONS = [
+  { value: '', label: '空' },
+  { value: 'true', label: '是' },
+  { value: 'false', label: '否' },
+] as const
 
 /** 能填的那几列：公式列由后端算，不接受手填。 */
 export function writableColumns(
@@ -54,15 +60,17 @@ function toText(value: unknown): string {
 }
 
 /**
- * 一个原始值 → 表单里的开关位。
+ * 一个原始值 → 布尔列的三态文本；空值保持空。
  * @param value 原始值
  */
-function toFlag(value: unknown): boolean {
-  if (typeof value === 'boolean') return value
-  if (typeof value === 'number') return value !== 0
-  if (typeof value === 'string')
-    return ['true', '1', 'yes', '是'].includes(value)
-  return false
+function toBoolText(value: unknown): string {
+  if (value === null || value === undefined || value === '') return ''
+  if (typeof value === 'boolean') return String(value)
+  if (typeof value === 'number') return String(value !== 0)
+  if (typeof value === 'string') {
+    return String(['true', '1', 'yes', '是'].includes(value))
+  }
+  return ''
 }
 
 /**
@@ -81,14 +89,31 @@ export function recordFormOf(
   const form: RecordFormState = {
     ts: record === null ? now.toISOString() : record.ts,
     texts: {},
-    flags: {},
   }
   for (const column of writableColumns(columns)) {
     const seeded = seedOf(record, column)
-    if (column.data_type === 'bool') form.flags[column.key] = toFlag(seeded)
-    else form.texts[column.key] = toText(seeded)
+    form.texts[column.key] =
+      column.data_type === 'bool' ? toBoolText(seeded) : seedText(seeded, column)
   }
   return form
+}
+
+/**
+ * 一格非布尔列的初值文本。
+ * ⚠ 只有点位汇总列按 `decimals` 收齐浮点噪声：它没动过就不提交；人工录入列
+ * 整份提交，在这里收位等于改了库里的值。
+ * @param value 原始值
+ * @param column 列定义
+ */
+function seedText(value: unknown, column: DatasetColumn): string {
+  if (
+    column.source === 'point' &&
+    typeof value === 'number' &&
+    column.decimals !== null
+  ) {
+    return value.toFixed(column.decimals)
+  }
+  return toText(value)
 }
 
 /**
@@ -109,10 +134,10 @@ function seedOf(record: DatasetRecord | null, column: DatasetColumn): unknown {
  * @param column 列定义
  */
 function valueOf(form: RecordFormState, column: DatasetColumn): unknown {
-  if (column.data_type === 'bool') return form.flags[column.key] ?? false
   const text = form.texts[column.key] ?? ''
   // 空串一律作空值：对点位列它是「撤销这一格的修正」，对录入列是「清空」
-  return text === '' ? null : text
+  if (text === '') return null
+  return column.data_type === 'bool' ? text === 'true' : text
 }
 
 /**
@@ -135,6 +160,14 @@ export function toRecordInput(
 }
 
 /**
+ * 一格都没填：新建这样一行只会落下一整行空值。
+ * @param input 提交载荷
+ */
+export function isBlankInput(input: DatasetRecordInput): boolean {
+  return Object.values(input.values).every((value) => value === null)
+}
+
+/**
  * 这一格被动过没有。
  * @param form 此刻的表单态
  * @param opened 打开表单那一刻的表单态
@@ -145,11 +178,6 @@ function isTouched(
   opened: RecordFormState,
   column: DatasetColumn,
 ): boolean {
-  if (column.data_type === 'bool') {
-    return (
-      (form.flags[column.key] ?? false) !== (opened.flags[column.key] ?? false)
-    )
-  }
   return (form.texts[column.key] ?? '') !== (opened.texts[column.key] ?? '')
 }
 
