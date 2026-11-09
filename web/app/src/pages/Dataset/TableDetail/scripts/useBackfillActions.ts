@@ -1,28 +1,11 @@
 /** @fileoverview 回填写操作逐次确认与未知结果处理；业务权限仍由后台强制检查。 */
-import type { Ref } from 'vue'
 import type { DatasetBackfillJob, DatasetTable } from '@dt/contracts'
-import { ERROR_CODES, PERMISSION_CODES } from '@dt/contracts'
+import { PERMISSION_CODES } from '@dt/contracts'
 import { useConfirm, type DtConfirmRequest } from '@dt/ui'
 import * as dataset from '@/api/dataset'
-import { BizError, TransportError } from '@/api/client'
-import { describeError } from '@/composables/useAsyncList'
 import { useAuthStore } from '@/stores/auth'
+import { applyWriteError, type BackfillState } from './backfillState'
 import { backfillRangeProblem, backfillTime } from './backfillView'
-
-/** 回填面板的状态；读与写两半共用这一份。 */
-export interface BackfillState {
-  isOpen: Ref<boolean>
-  job: Ref<DatasetBackfillJob | null>
-  since: Ref<string>
-  until: Ref<string>
-  loading: Ref<boolean>
-  /** 正在等确认或写请求在飞。 */
-  busy: Ref<boolean>
-  /** 上一次写或读的结果不明：此时禁止再发写，免得重复启动。 */
-  uncertain: Ref<boolean>
-  error: Ref<string | null>
-  notice: Ref<string | null>
-}
 
 /** 写这一半还要读那一半给的几个回调。 */
 interface BackfillActionState extends BackfillState {
@@ -89,34 +72,6 @@ function canResume(ctx: ActionContext, id: string, agreed: boolean): boolean {
   if (!agreed) return false
   if (writeAllowed(ctx, id) && ctx.state.isOpen.value) return true
   releaseUndispatched(ctx, id)
-  return false
-}
-
-/**
- * 写失败的落点。409 冲突返回 true，调用方据此去读实际任务；超时、5xx 与传输错误
- * 结果未知，置 `uncertain` 锁写，不许用户再点一次重复启动。
- * @param state 回填状态
- * @param caught 写请求抛出的错误
- */
-function applyWriteError(state: BackfillActionState, caught: unknown): boolean {
-  if (
-    caught instanceof BizError &&
-    (caught.code === ERROR_CODES.datasetBackfillBusy ||
-      caught.code === ERROR_CODES.datasetBackfillNotRunning)
-  ) {
-    state.notice.value =
-      caught.code === ERROR_CODES.datasetBackfillBusy
-        ? '已有任务正在执行，尝试重新读取实际进度。'
-        : '任务已不在运行，尝试重新读取实际状态。'
-    return true
-  }
-  state.uncertain.value =
-    caught instanceof TransportError ||
-    !(caught instanceof BizError) ||
-    caught.status >= 500
-  state.error.value = state.uncertain.value
-    ? `操作状态未确认：${describeError(caught)}。请手动刷新进度核查，不要重复启动。`
-    : describeError(caught)
   return false
 }
 

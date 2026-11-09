@@ -4,7 +4,8 @@ import type { DatasetBackfillJob, DatasetTable } from '@dt/contracts'
 import * as dataset from '@/api/dataset'
 import { describeError } from '@/composables/useAsyncList'
 import { useRacedFetch, type RacedFetch } from '@/composables/useRacedFetch'
-import { useBackfillActions, type BackfillState } from './useBackfillActions'
+import type { BackfillState } from './backfillState'
+import { useBackfillActions } from './useBackfillActions'
 
 /** 一份空白的回填状态。 */
 function createState(): BackfillState {

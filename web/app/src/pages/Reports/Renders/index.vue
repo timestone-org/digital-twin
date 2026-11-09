@@ -187,11 +187,12 @@ async function download(row: ReportRender): Promise<void> {
           </DtTag>
         </template>
         <template #cell-warnings="{ row }">
-          <span
+          <p
             v-if="!row.error && row.warnings.length === 0"
-            class="text-xs text-text-disabled"
-            >无提示</span
+            class="m-0 text-xs text-text-disabled"
           >
+            无提示
+          </p>
           <DtButton
             v-else
             variant="ghost"
