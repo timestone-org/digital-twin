@@ -395,7 +395,8 @@ class RunningInstance:
 
         先从内部映射摘掉再动地址空间：这样并发的读写在摘掉那一刻起就拿到
         `NodeNotFound`，而不是拿到一个指向已删节点的句柄。地址空间那步失败
-        时把映射放回去——否则管理面以为删了、上位机却还能读到。
+        时只把失败的那一个放回去：已经删掉的后代不许回到映射里，否则重试
+        会再删一次已删的节点、必然失败，这个节点就永远删不掉。
 
         ⚠ 连后代一起删，是为了与库对齐：`opcua_nodes.parent_id` 上挂着
         `ON DELETE CASCADE`，只删自己会让子节点在库里没了、地址空间里还在。
@@ -406,21 +407,21 @@ class RunningInstance:
             server = self._require_running()
             if identifier not in self._nodes:
                 raise NodeNotFound(f"节点 {identifier} 不存在于本实例")
-            removed: dict[str, BuiltNode] = {}
-            try:
-                for target in subtree_of(self._nodes, identifier):
-                    node = self._nodes.pop(target)
-                    removed[target] = node
+            removed = 0
+            for target in subtree_of(self._nodes, identifier):
+                node = self._nodes.pop(target)
+                try:
                     await delete_node(server, node)
-            except Exception:
-                self._nodes.update(removed)
-                raise
+                except Exception:
+                    self._nodes[target] = node
+                    raise
+                removed += 1
         _logger.info(
             "opcua_node_removed",
             "运行中删节点",
             instance_id=str(self.spec.instance_id),
             identifier=identifier,
-            removed=len(removed),
+            removed=removed,
         )
 
     def _require_running(self) -> Server:
