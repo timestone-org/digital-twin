@@ -1,5 +1,6 @@
 """API 出稿的事务边界、必要数据失败与不可变映射快照。"""
 
+import logging
 import uuid
 from contextlib import asynccontextmanager
 from types import SimpleNamespace
@@ -152,3 +153,26 @@ async def test_mapping_failure_propagates_from_execute(monkeypatch):
     with pytest.raises(ReportInvalid, match="字段缺失"):
         await consumer.execute(row.id)
     pool.run.assert_not_awaited()
+
+
+async def test_a_db_outage_on_the_failure_write_keeps_the_consumer(
+    monkeypatch, caplog
+):
+    consumer, row, _sessions, pool, _completed = assemble_worker(monkeypatch)
+    monkeypatch.setattr(
+        worker.renders, "claim", AsyncMock(side_effect=OSError("db down"))
+    )
+    monkeypatch.setattr(
+        worker.renders, "finish", AsyncMock(side_effect=OSError("db down"))
+    )
+    with caplog.at_level(logging.ERROR):
+        await consumer._handle(
+            {
+                "envelope_version": "1",
+                "traceparent": TRACE,
+                "render_id": str(row.id),
+            }
+        )
+    pool.run.assert_not_awaited()
+    events = [record.getMessage() for record in caplog.records]
+    assert "report_failure_record_failed" in events
