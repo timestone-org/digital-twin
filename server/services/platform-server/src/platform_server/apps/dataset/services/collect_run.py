@@ -327,9 +327,11 @@ def _window_of(
         return None
     # ⚠ 先把右界压到上限之内再展开：停机一个月的 1 秒表展开出来是几百万个桶，
     # 而那一串在算出上限之前就已经把内存吃掉了
+    # ⚠ 上限至少要比尾部重算多一格，否则每拍只重写旧桶，水位停住甚至倒退
+    span = max(limits.max_buckets_per_tick, limits.recompute_tail_buckets + 1)
     reachable = shift_bucket(
         first,
-        steps=limits.max_buckets_per_tick - 1,
+        steps=span - 1,
         interval=interval,
         timezone=timezone,
     )
