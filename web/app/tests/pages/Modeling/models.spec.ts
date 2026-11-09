@@ -19,9 +19,13 @@ import { useAuthStore } from '@/stores/auth'
 
 const STAMP = '2026-01-01T00:00:00.000Z'
 
+/** 地址栏的查询串；带工作流筛选的那条用例会改它。 */
+const query: Record<string, string> = {}
+const replace = vi.fn()
+
 vi.mock('vue-router', () => ({
-  useRouter: () => ({ replace: vi.fn(), push: vi.fn() }),
-  useRoute: () => ({ path: '/modeling/models', query: {} }),
+  useRouter: () => ({ replace, push: vi.fn() }),
+  useRoute: () => ({ path: '/modeling/models', query }),
   RouterLink: { template: '<a><slot /></a>' },
 }))
 
@@ -101,6 +105,8 @@ function open() {
 
 beforeEach(() => {
   setActivePinia(createPinia())
+  for (const key of Object.keys(query)) delete query[key]
+  replace.mockReset()
 })
 
 afterEach(() => {
@@ -509,5 +515,33 @@ describe('绑公式弹窗', () => {
     expect(wrapper.get<HTMLInputElement>('.dt-modal input').element.value).toBe(
       'predict_power',
     )
+  })
+})
+
+describe('从画布带着工作流筛选进来', () => {
+  it('摆出筛选并能一键清掉', async () => {
+    query['pipeline_id'] = 'p1'
+    stub([version()], [])
+    signIn([PERMISSION_CODES.modelingView])
+    const wrapper = open()
+    await flushPromises()
+
+    const chip = wrapper
+      .findAll('button')
+      .find((b) => b.text() === '仅当前工作流')
+    expect(chip).toBeDefined()
+    await chip?.trigger('click')
+
+    expect(replace).toHaveBeenCalledWith({ query: {} })
+    expect(wrapper.text()).toContain('公式绑定不按工作流筛选')
+  })
+
+  it('没有筛选时不摆', async () => {
+    stub([version()], [])
+    signIn([PERMISSION_CODES.modelingView])
+    const wrapper = open()
+    await flushPromises()
+
+    expect(wrapper.text()).not.toContain('仅当前工作流')
   })
 })

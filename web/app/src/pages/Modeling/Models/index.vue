@@ -12,7 +12,7 @@ import type {
 } from '@dt/contracts'
 import { DtButton, DtSegmented, useToast } from '@dt/ui'
 import { computed, onBeforeUnmount, onMounted, ref, watch } from 'vue'
-import { useRoute } from 'vue-router'
+import { useRoute, useRouter } from 'vue-router'
 import { useRunOps } from '../scripts/useRunOps'
 import ModelingBatchBar from '../components/ModelingBatchBar.vue'
 
@@ -42,6 +42,7 @@ const TABS = [
 ]
 
 const route = useRoute()
+const router = useRouter()
 const workflowId = computed(() => {
   const value = route.query['pipeline_id']
   return typeof value === 'string' ? value : undefined
@@ -272,6 +273,17 @@ onBeforeUnmount(versionRead.cancel)
           @rename="(row) => void openRename(row)"
         >
           <template #toolbar>
+            <!-- 从画布跳来时带着工作流筛选，不摆出来的话用户看不出列表被收窄了 -->
+            <DtButton
+              v-if="workflowId"
+              size="sm"
+              variant="soft"
+              icon="close"
+              title="清除筛选，显示全部工作流的模型版本"
+              @click="void router.replace({ query: {} })"
+            >
+              仅当前工作流
+            </DtButton>
             <ModelSearch
               label="搜索模型版本"
               :disabled="
@@ -349,6 +361,9 @@ onBeforeUnmount(versionRead.cancel)
           @unbind="(row) => !isWriting && void ops.unbind(row.id)"
         >
           <template #toolbar>
+            <span v-if="workflowId" class="text-caption text-text-secondary">
+              公式绑定不按工作流筛选，这里是全部工作流的
+            </span>
             <ModelSearch
               label="搜索公式绑定"
               :disabled="
