@@ -517,6 +517,33 @@ function rightDrawsShare(view: BarChartView, layout: BarLayout): boolean {
 }
 
 /**
+ * 参考线要并进哪条值轴的量程：挂线那条系列所在的轴。
+ * ⚠ echarts 只按系列数据算轴范围：阈值在数据之外时，线会落到绘图区外面。
+ * 百分比档不画参考线、正负对称档量程已钉死，两档都不并。
+ * @param config 该节点落库的配置
+ * @param view 这一块的取值结果
+ * @param layout 几何与取数口径
+ */
+function refExtentOf(
+  config: Record<string, unknown>,
+  view: BarChartView,
+  layout: BarLayout,
+): { axis: number; dataMin: number; dataMax: number } | null {
+  if (layout.percent || layout.diverging) return null
+  const host = view.series[refHostIndex(view)]
+  const values = readArray(config.refLines).flatMap((row) => {
+    const value = readLooseNumber(readRecord(row).value)
+    return value === null ? [] : [value]
+  })
+  if (host === undefined || values.length === 0) return null
+  return {
+    axis: host.item.axis === 'right' && layout.hasRight ? 1 : 0,
+    dataMin: Math.min(...values),
+    dataMax: Math.max(...values),
+  }
+}
+
+/**
  * 一到两条值轴；只有真有行挂在右轴上时才出第二条。
  * @param config 该节点落库的配置
  * @param theme 当前主题色
@@ -541,15 +568,21 @@ function valueAxes(
     axisLabelFormatter: axisTextOf(share, layout),
     ...(share ? { min: 0, max: PERCENT_MAX } : {}),
   })
+  const refs = refExtentOf(config, view, layout)
+  const extentOf = (axis: number) =>
+    refs?.axis === axis ? { dataMin: refs.dataMin, dataMax: refs.dataMax } : {}
   const name = readTrimmedText(
     layout.horizontal ? config.xAxisName : config.yAxisName,
   )
-  const axes = [valueAxis(theme, { ...ofShare(layout.percent), name })]
+  const axes = [
+    valueAxis(theme, { ...ofShare(layout.percent), ...extentOf(0), name }),
+  ]
   // 右轴不再画一遍分隔线：两套刻度的横线交错在一起，图上像蒙了一层网格
   if (layout.hasRight) {
     axes.push(
       valueAxis(theme, {
         ...ofShare(rightDrawsShare(view, layout)),
+        ...extentOf(1),
         splitLine: false,
       }),
     )

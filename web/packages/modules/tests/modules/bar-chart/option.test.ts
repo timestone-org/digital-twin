@@ -435,6 +435,28 @@ describe('参考线', () => {
     expect(Object.keys(seriesAt(option, 1))).toContain('markLine')
   })
 
+  // ⚠ echarts 只按系列数据算轴范围，阈值高过最高的柱时线落到绘图区外面
+  it('参考值并进值轴的范围；横向档并进的是横轴', () => {
+    const config = { ...BASE_CONFIG, refLines: [{ value: 500 }] }
+    const option = optionOf(config, liveView(config, [300, 100]))
+    const flat = { ...config, chartStyle: 'horizontal' }
+    const sideways = optionOf(flat, liveView(flat, [300, 100]))
+
+    expect(asRecord(asArray(option.yAxis)[0]).dataMax).toBe(500)
+    expect(asRecord(asArray(sideways.xAxis)[0]).dataMax).toBe(500)
+  })
+
+  it('百分比档不画参考线，也不把它并进量程', () => {
+    const config = {
+      ...BASE_CONFIG,
+      chartStyle: 'percent',
+      refLines: [{ value: 500 }],
+    }
+    const option = optionOf(config, liveView(config, [300, 100]))
+
+    expect(asRecord(asArray(option.yAxis)[0]).dataMax).toBeUndefined()
+  })
+
   it('一条都画不出来时谁也不挂，不给一条空系列硬塞参考线', () => {
     const config = { ...BASE_CONFIG, refLines: [{ value: 50 }] }
     const view = liveView(config, [1], ['error'])

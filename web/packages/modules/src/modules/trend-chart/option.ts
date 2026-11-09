@@ -336,6 +336,7 @@ function valueAxes(
   config: Record<string, unknown>,
   theme: ChartTheme,
   dualAxis: boolean,
+  refs: RefExtent | null,
 ): OptionFragment[] {
   const precision = readNumber(config.precision, 2)
   const shared = {
@@ -344,17 +345,54 @@ function valueAxes(
     nameFontSize: LABEL_FONT_SIZE,
     axisLabelFormatter: (value: number) => valueText(value, precision),
   }
-  const left = valueAxis(theme, { ...shared, ...axisName(config.yAxisName) })
+  const extentOf = (axis: number) =>
+    refs?.axis === axis ? { dataMin: refs.min, dataMax: refs.max } : {}
+  const left = valueAxis(theme, {
+    ...shared,
+    ...axisName(config.yAxisName),
+    ...extentOf(0),
+  })
   if (!dualAxis) return [left]
   return [
     left,
     valueAxis(theme, {
       ...shared,
       ...axisName(config.rightAxisName),
+      ...extentOf(1),
       // 右轴自己不再画一遍分隔线：两套横线叠在一起，网格会变成双份
       splitLine: false,
     }),
   ]
+}
+
+/** 参考线落在哪根值轴上、值的上下界。 */
+interface RefExtent {
+  axis: number
+  min: number
+  max: number
+}
+
+/**
+ * 参考线要并进哪根轴的量程。
+ * ⚠ echarts 只按系列数据算轴范围：阈值在数据之外时，线会落到绘图区外面。
+ * @param config 该节点落库的配置
+ * @param views 这一块的全部系列
+ * @param layout 几何与配色口径
+ */
+function refExtentOf(
+  config: Record<string, unknown>,
+  views: readonly SeriesView[],
+  layout: TrendLayout,
+): RefExtent | null {
+  const refs = refLinesOf(config, layout.resolve)
+  const carrier = views[markLineCarrier(views, layout.dualAxis)]
+  if (refs.length === 0 || carrier === undefined) return null
+  const values = refs.map((ref) => ref.value)
+  return {
+    axis: axisIndexOf(carrier, layout.dualAxis),
+    min: Math.min(...values),
+    max: Math.max(...values),
+  }
 }
 
 /**
@@ -571,7 +609,12 @@ export function buildTrendOption(
     tooltip: tooltipOf(config, views, theme),
     legend: legendOf(views, layout, showLegend),
     xAxis: timeAxis(config, theme, spanOf(views)),
-    yAxis: valueAxes(config, theme, dualAxis),
+    yAxis: valueAxes(
+      config,
+      theme,
+      dualAxis,
+      refExtentOf(config, views, layout),
+    ),
     ...(showZoom
       ? {
           dataZoom: dataZoomSlider(theme, { xAxisIndex: 0, bottom: band.zoom }),
