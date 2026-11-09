@@ -310,15 +310,11 @@ describe('当前值的四种情形', () => {
 })
 
 describe('实时值的覆盖范围', () => {
-  it('⚠ 点位比上限多时如实说明，否则那些行看起来像坏了', async () => {
+  it('实时值覆盖全部点位，不再出「只覆盖前 N 个」的提示', async () => {
     const text = (
-      await render([point()], { point_count: 1500, live_point_limit: 1000 })
+      await render([point()], { point_count: 1500, live_point_limit: 1500 })
     ).text()
-    expect(text).toContain('实时值只覆盖')
-  })
-
-  it('没超上限时不出这条', async () => {
-    expect((await render()).text()).not.toContain('实时值只覆盖')
+    expect(text).not.toContain('实时值只覆盖')
   })
 })
 
