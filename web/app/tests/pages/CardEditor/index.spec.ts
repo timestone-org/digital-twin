@@ -62,7 +62,9 @@ vi.mock('@/pages/CardEditor/scripts/useCardEditorPage', async () => {
 })
 
 import CardEditor from '@/pages/CardEditor/index.vue'
+import { AppShell } from '@/components/layout'
 import FieldsPane from '@/pages/CardEditor/components/FieldsPane.vue'
+import StructurePane from '@/pages/CardEditor/components/StructurePane.vue'
 import { CELLS_KEY, PARTS_KEY } from '@/pages/CardEditor/scripts/cardDraft'
 import type { CardEditorPage } from '@/pages/CardEditor/scripts/useCardEditorPage'
 
@@ -243,6 +245,23 @@ describe('取数三态', () => {
   })
 
   // ⚠ 冲突排在错误前面：版本撞了还继续存就是拿旧的盖新的
+  // ⚠ 冲突之后再存只会再撞一次：保存要挡住，出路是重新加载
+  it('冲突时保存是灰的，冲突条里给重新加载', async () => {
+    controls.conflict.value = '版本旧了，请重新加载'
+    controls.isDirty.value = true
+    confirmAsk.mockResolvedValue(true)
+    const wrapper = await mountPage()
+
+    expect(
+      wrapper.find('[data-test="save-card"]').attributes('disabled'),
+    ).toBeDefined()
+    await wrapper.find('[data-test="reload-card"]').trigger('click')
+    await flushPromises()
+
+    expect(confirmAsk).toHaveBeenCalledTimes(1)
+    expect(controls.load).toHaveBeenCalledTimes(2)
+  })
+
   it('冲突时摆冲突那一条，压过普通错误', async () => {
     controls.conflict.value = '版本旧了，请重新加载'
     controls.error.value = '别的错'
@@ -266,6 +285,33 @@ describe('左栏动作', () => {
     await nextTick()
 
     expect(rowTexts(wrapper, 'part')).toHaveLength(before + 1)
+    expect(wrapper.findComponent(StructurePane).props('activeKey')).toBe(
+      `part:${String(before)}`,
+    )
+  })
+
+  // ⚠ 刚拖上来的卡片只存了外壳样式，部件与格都还在清单缺省里：左栏读落库配置
+  //   就是一张空表，而加一件会写出只有一件的表、把缺省那两件一起顶掉
+  it('落库配置里没有部件表时，左栏列出清单缺省的部件与格', async () => {
+    controls.config.value = { title: '新卡片' }
+    const wrapper = await mountPage()
+
+    expect(rowTexts(wrapper, 'part')).toHaveLength(2)
+    expect(rowTexts(wrapper, 'cell')).toHaveLength(1)
+  })
+
+  it('在缺省部件之上加一件，缺省那两件照样留着', async () => {
+    controls.config.value = { title: '新卡片' }
+    const wrapper = await mountPage()
+
+    await wrapper
+      .findAll('button')
+      .filter((one) => one.text() === '加部件')[0]
+      ?.trigger('click')
+    await nextTick()
+
+    const parts = controls.config.value[PARTS_KEY]
+    expect(Array.isArray(parts) ? parts.length : 0).toBe(3)
   })
 
   it('加格时名字按序号起，免得一排「未命名」分不清', async () => {
@@ -434,6 +480,14 @@ describe('保存与离开', () => {
     await flushPromises()
 
     expect(toastSuccess).not.toHaveBeenCalled()
+  })
+
+  it('顶栏的返回键回的是这张屏的编辑页，不是工作台', async () => {
+    const wrapper = await mountPage()
+
+    expect(wrapper.findComponent(AppShell).props('backTo')).toBe(
+      '/dashboards/d1/edit',
+    )
   })
 
   it('回大屏跳回这张屏的编辑页', async () => {
