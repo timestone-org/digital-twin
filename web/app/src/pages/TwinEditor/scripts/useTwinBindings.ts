@@ -14,6 +14,7 @@ import { computed, ref, type ComputedRef, type Ref } from 'vue'
 import { createBinding } from '@/features/dashboard/editorDoc'
 import type { ReadPointSample } from '@/runtime/bindingReader'
 
+import { twinPickLabel } from './pickLabel'
 import { createTwinBindingActions } from './twinBindingActions'
 import type { TwinDoc } from './twinDoc'
 import { useTwinLiveValues } from './useTwinLiveValues'
@@ -27,6 +28,8 @@ export interface TwinBindings {
   removeRow: (slotKey: string, rowIndex: number) => void
   /** 正在给哪个槽挑点位；null = 挑点弹窗没开。 */
   pickingFieldKey: Ref<string | null>
+  /** 正在挑点位的那一行给人看的名字；弹窗没开时是 null。 */
+  pickingLabel: ComputedRef<string | null>
   /** 挑点弹窗回来的那一下。 */
   pickPoint: (point: CollectPoint) => void
   /** 弹窗的开关回传；关上时结束这一次挑点。 */
@@ -109,6 +112,12 @@ export function useTwinBindings(
     removeRow: (slotKey, rowIndex) =>
       actions.value?.removeRow(slotKey, rowIndex),
     pickingFieldKey,
+    pickingLabel: computed(() => {
+      const fieldKey = pickingFieldKey.value
+      const current = config()
+      if (fieldKey === null) return null
+      return current === null ? fieldKey : twinPickLabel(current, fieldKey)
+    }),
     pickPoint: (point) => {
       const fieldKey = pickingFieldKey.value
       pickingFieldKey.value = null

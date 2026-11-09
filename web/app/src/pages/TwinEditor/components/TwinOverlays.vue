@@ -37,7 +37,7 @@ const emit = defineEmits<{
 
   <PointPickerDialog
     :model-value="binding.pickingFieldKey.value !== null"
-    :field-key="binding.pickingFieldKey.value"
+    :field-key="binding.pickingLabel.value"
     @update:model-value="binding.closePicker"
     @pick="binding.pickPoint"
   />
