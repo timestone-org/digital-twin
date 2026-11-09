@@ -281,9 +281,11 @@ defineExpose({
 </template>
 
 <style scoped lang="scss">
+// ⚠ 让到视口工具条（顶左，约 46px 高）与拾取提示（顶中）的下方：叠在顶上会
+// 盖住拾取提示和它的「取消」，只剩 Esc 能退出拾取
 .twin-viewport__data-warning {
   position: absolute;
-  inset: 8px 8px auto;
+  inset: 52px 8px auto;
   z-index: 2;
 }
 
