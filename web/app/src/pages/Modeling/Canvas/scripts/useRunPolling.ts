@@ -13,6 +13,7 @@ import {
   isSettled,
   schedule,
   stopPolling,
+  tick,
 } from './runPollState'
 import { loadPreview } from './runPreviews'
 
@@ -124,6 +125,14 @@ export function useRunPolling() {
         { previews, errors: previewErrors },
         toast,
       ),
+    /** 现在就重读一次正看着的运行（例如手动发布之后），没跑完的照常接着轮询。 */
+    refresh: async () => {
+      const current = state.run.value
+      if (current === null || state.isDisposed) return
+      if (state.timer.value !== null) clearTimeout(state.timer.value)
+      state.timer.value = null
+      await tick(current.id, state)
+    },
     start: createStarter(state, isStarting, toast, watchRun),
     cancel: () => cancel(state, toast),
   }

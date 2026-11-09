@@ -17,6 +17,7 @@ import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 
 import * as dataset from '@/api/dataset'
 import * as modeling from '@/api/modeling'
+import * as workflow from '@/api/modelingWorkflow'
 import CanvasPage from '@/pages/Modeling/Canvas/index.vue'
 import { useAuthStore } from '@/stores/auth'
 
@@ -1454,6 +1455,41 @@ describe('运行结束之后', () => {
 
     expect(wrapper.text()).toContain('自动发布没有成功')
     expect(wrapper.text()).toContain('模型输入输出签名已改变')
+  })
+
+  it('照提示点「发布本次模型」发成之后，发布失败的提示随之撤下', async () => {
+    stubApi()
+    const failed = {
+      ...runOf('succeeded'),
+      auto_publish: true,
+      publication_status: 'failed' as const,
+      publication_error: '模型输入输出签名已改变，请核对并显式确认',
+    }
+    vi.spyOn(modeling, 'getModelingRun')
+      .mockResolvedValueOnce(failed)
+      .mockResolvedValue({
+        ...failed,
+        publication_status: 'published',
+        publication_error: null,
+      })
+    vi.spyOn(workflow, 'deployModelingRun').mockResolvedValue({
+      code: 'p1',
+    } as never)
+    query['run_id'] = 'r1'
+    signIn([...WRITER, PERMISSION_CODES.modelingPublish])
+    const wrapper = open()
+    await flushPromises()
+
+    await wrapper
+      .findAll('button')
+      .find((b) => b.text() === '发布本次模型')
+      ?.trigger('click')
+    await flushPromises()
+    useConfirm().resolve(true)
+    await flushPromises()
+
+    expect(workflow.deployModelingRun).toHaveBeenCalledOnce()
+    expect(wrapper.text()).not.toContain('自动发布没有成功')
   })
 
   it('改名框里输入法回车上屏不会把弹窗提交掉', async () => {

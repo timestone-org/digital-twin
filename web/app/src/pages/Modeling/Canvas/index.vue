@@ -174,6 +174,12 @@ function applyRename(alias: string): void {
   renameNodeId.value = null
 }
 
+/** 手动发布成了：历史列表与正看着的这次运行都现取，发布失败的提示才会撤下。 */
+function onPublished(): void {
+  void page.loadRuns(pipelineId.value)
+  void page.runner.refresh()
+}
+
 /** 打开训练历史：列表在发起运行那一刻拉过，之后跑完的状态要现取。 */
 function openHistory(): void {
   isHistoryOpen.value = true
@@ -264,7 +270,7 @@ watch(
         :pipeline="page.doc.pipeline.value"
         :run="page.runner.run.value"
         :is-readonly="isReadonly"
-        @published="void page.loadRuns(pipelineId)"
+        @published="onPublished"
       />
       <DtButton
         v-if="page.isReplaying.value"

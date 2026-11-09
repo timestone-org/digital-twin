@@ -64,11 +64,12 @@ export function schedule(runId: string, state: PollState): void {
  * ⚠ 跑到终态时不走 `stopPolling`：那会推进代号，把在飞的「再训练一次」与节点
  * 结果读取一并作废；终态只是不再排下一拍。
  */
-async function tick(runId: string, state: PollState): Promise<void> {
+export async function tick(runId: string, state: PollState): Promise<void> {
   await state.polling.run((signal) => modeling.getModelingRun(runId, signal), {
     ok: (next) => {
       state.run.value = next
       state.failures = 0
+      state.staleReason.value = null
     },
     fail: (caught) => {
       state.failures += 1
