@@ -24,7 +24,10 @@ import { describeError } from '@/composables/useAsyncList'
 import { useBusyPolling } from '@/composables/useBusyPolling'
 import { useCursorPages } from '@/composables/useCursorPages'
 import { useRacedFetch } from '@/composables/useRacedFetch'
-import { useLocationPicker } from '@/features/hvac/useLocationPicker'
+import {
+  PARTIAL_WORKSHOPS_HINT,
+  useLocationPicker,
+} from '@/features/hvac/useLocationPicker'
 import BatchStatusStrip from './components/BatchStatusStrip.vue'
 import CoverageSidebar from './components/CoverageSidebar.vue'
 import EpisodeCurveDialog from './components/EpisodeCurveDialog.vue'
@@ -247,6 +250,9 @@ onMounted(() => {
 
       <DtNotice v-if="picker.error.value" intent="danger">
         {{ picker.error.value }}
+      </DtNotice>
+      <DtNotice v-else-if="picker.isWorkshopListPartial.value" intent="warning">
+        {{ PARTIAL_WORKSHOPS_HINT }}
       </DtNotice>
       <DtNotice v-else-if="picker.roomId.value === ''" intent="info">
         先选一个房间——开机事件是房间级的，不是某一台空调的。

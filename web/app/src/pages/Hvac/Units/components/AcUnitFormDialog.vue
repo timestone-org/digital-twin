@@ -13,7 +13,10 @@ import { useFormDirty } from '@/composables/useFormDirty'
 
 import * as hvac from '@/api/hvac'
 import { describeError } from '@/composables/useAsyncList'
-import { useLocationPicker } from '@/features/hvac/useLocationPicker'
+import {
+  PARTIAL_WORKSHOPS_HINT,
+  useLocationPicker,
+} from '@/features/hvac/useLocationPicker'
 
 const props = defineProps<{
   modelValue: boolean
@@ -33,6 +36,7 @@ const {
   workshopOptions,
   roomOptions,
   loadWorkshops,
+  isWorkshopListPartial,
   select,
 } = useLocationPicker()
 const serial = ref('')
@@ -132,6 +136,9 @@ async function save(): Promise<void> {
       />
       <DtNotice v-if="workshopId !== '' && rooms.length === 0" intent="warning">
         这个车间下还没有房间，请先到「空间配置」建一个。
+      </DtNotice>
+      <DtNotice v-if="isWorkshopListPartial" intent="warning">
+        {{ PARTIAL_WORKSHOPS_HINT }}
       </DtNotice>
       <DtNotice v-if="error" intent="danger">{{ error }}</DtNotice>
     </form>
