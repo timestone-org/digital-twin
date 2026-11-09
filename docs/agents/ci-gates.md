@@ -97,7 +97,7 @@ PR 上另有 `logic-version.yml` 检查抽取逻辑版本一致性。
 |---|---|
 | api-contract §1 URL 形状、§5.2 分页上限、§6 序列化口径、§4.1 错误码 | `check_api_contract.py`（读提交进仓的 `openapi.json`） |
 | 同 §9 openapi 与代码逐字节一致 | `contracts` 作业的 `python -m scripts.export_openapi --check`（每个服务各一次）；本地由 `check_openapi_sync.py` 跑同一批命令——它从 `ci.yml` 里现读，不另抄一份 |
-| database-standard §5 扩展—收缩、lock_timeout、禁回填/改名/改类型 | `check_migrations.py` |
+| database-standard §5 扩展—收缩、lock_timeout、禁回填/改名/改类型；§5.2 存量表加约束必须分两步（CHECK/外键先 `NOT VALID` 再 `VALIDATE`，唯一约束走 `USING INDEX`） | `check_migrations.py` |
 | 同 §5.5 可逆性 | `contracts` 作业的 `upgrade → downgrade → upgrade` |
 
 ### 运行时与配置
