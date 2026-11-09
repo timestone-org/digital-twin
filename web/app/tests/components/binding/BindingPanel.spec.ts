@@ -65,6 +65,34 @@ describe('空态', () => {
 
     expect(wrapper.text()).toContain('无需数据绑定')
   })
+
+  // ⚠ 「暂无可绑定字段」只属于按对象筛行那一路：没筛的话一行都没有的数组槽
+  //   也要露出段头与「新增一行」，否则第一条绑定永远加不上
+  it('没有筛行时，零行的数组槽照样摆出段头与新增一行', () => {
+    const wrapper = mount(BindingPanel, {
+      props: { specs: SPECS.slice(1), bindings: [] },
+    })
+
+    expect(wrapper.text()).not.toContain('暂无可绑定字段')
+    expect(wrapper.text()).toContain('多行')
+    expect(
+      wrapper
+        .findAll('button')
+        .some((item) => item.attributes('aria-label') === '新增一行'),
+    ).toBe(true)
+  })
+
+  it('筛行之后一行都不剩时才说暂无可绑定字段', () => {
+    const wrapper = mount(BindingPanel, {
+      props: {
+        specs: SPECS.slice(1),
+        bindings: [row(0)],
+        visibleRows: { rows: [] },
+      },
+    })
+
+    expect(wrapper.text()).toContain('暂无可绑定字段')
+  })
 })
 
 describe('槽位由声明摆出', () => {
