@@ -39,10 +39,10 @@ def _services(path: Path) -> dict[str, Mapping]:
     selected: dict[str, Mapping] = {}
     for name, raw in services.items():
         service = _mapping(raw)
-        build = service.get("build")
-        if isinstance(build, dict) and _mapping(build).get("context") == (
-            "../server"
-        ):
+        build: object = service.get("build", {})
+        if isinstance(build, str):
+            continue
+        if _mapping(build).get("context") == "../server":
             selected[name] = service
     return selected
 
