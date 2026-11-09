@@ -91,6 +91,41 @@ class SessionCrud(CrudBase[ChatSession]):
         )
         return int(found.scalar_one())
 
+    async def last_message_id(
+        self, session: AsyncSession, chat_session_id: uuid.UUID
+    ) -> uuid.UUID | None:
+        """这次对话最后一条消息的 id；还没有消息时是 `None`。
+
+        Args: session, chat_session_id。
+        """
+        found = await session.execute(
+            select(ChatMessage.id)
+            .where(ChatMessage.session_id == chat_session_id)
+            .order_by(ChatMessage.seq.desc())
+            .limit(1)
+        )
+        return found.scalar_one_or_none()
+
+    async def settle_waiting(
+        self, session: AsyncSession, chat_session_id: uuid.UUID, state: str
+    ) -> None:
+        """回执到了：把这次对话里停着等浏览器的那一步结算成终态。
+
+        Args: session, chat_session_id, state（succeeded / failed）。
+        """
+        await session.execute(
+            update(ChatStep)
+            .where(
+                ChatStep.state == "awaiting_client",
+                ChatStep.message_id.in_(
+                    select(ChatMessage.id).where(
+                        ChatMessage.session_id == chat_session_id
+                    )
+                ),
+            )
+            .values(state=state)
+        )
+
     async def messages_of(
         self, session: AsyncSession, chat_session_id: uuid.UUID
     ) -> list[ChatMessage]:

@@ -19,7 +19,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from knowledge_server.apps.chat.deps import get_advance_deps
 from knowledge_server.apps.chat.errors import ChatTurnFailed
 from knowledge_server.apps.chat.schemas import ChatAdvanceIn
-from knowledge_server.apps.chat.services import advance_service
+from knowledge_server.apps.chat.services import advance_service, client_receipts
 from knowledge_server.apps.chat.services.citations import (
     CitationsFound,
     as_json,
@@ -62,6 +62,9 @@ async def advance_turn(
     Args: session_id, payload, session, deps, caller。
     """
     await require_session(session, chat_session_id=session_id, caller=caller)
+    await client_receipts.require_pending(
+        session, session_id, [one.call_id for one in payload.tool_results]
+    )
     stream = _frames(deps, session_id, payload)
     return StreamingResponse(
         stream, media_type="text/event-stream", headers=_STREAM_HEADERS

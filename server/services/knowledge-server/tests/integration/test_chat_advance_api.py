@@ -659,3 +659,85 @@ async def test_the_next_sequence_number_comes_from_the_largest_one(
     await _advance(db_stack.client, str(session_id), user_text="还在吗")
     async with db_stack.sessions() as session:
         assert await session_crud.max_seq(session, session_id) == 4
+
+
+async def _paused(stack: DbStack) -> str:
+    """开一条会话并让它停在一次反问上，回会话 id。"""
+    _install(
+        stack,
+        ScriptedChat(
+            script=[
+                asks(ASK_TOOL, "q1", question="哪台", options=[]),
+                AIMessage(content="1 号锅炉"),
+            ]
+        ),
+    )
+    session_id = await _new_session(stack.client)
+    await _advance(stack.client, session_id, user_text="上限多少")
+    return session_id
+
+
+async def _messages(stack: DbStack, session_id: str) -> list[dict[str, Any]]:
+    detail = await stack.client.get(f"{URL}/{session_id}")
+    return list(detail.json()["data"]["messages"])
+
+
+async def test_a_receipt_for_an_unknown_call_is_refused_up_front(
+    db_stack: DbStack,
+) -> None:
+    """⚠ 对不上的回执照收的话，旧标签页回传一个过期的 id 也会跑一整轮模型，
+    而那条工具消息在拼上下文时被悄悄丢掉。"""
+    session_id = await _paused(db_stack)
+    before = await _messages(db_stack, session_id)
+
+    response = await db_stack.client.post(
+        f"{URL}/{session_id}:advance",
+        json={
+            "client_tools": [ASK_TOOL],
+            "tool_results": [{"call_id": "nope", "output": {}}],
+        },
+    )
+
+    assert response.status_code == 409
+    assert response.json()["code"] == 42326
+    assert len(await _messages(db_stack, session_id)) == len(before)
+
+
+async def test_the_same_receipt_twice_runs_only_one_turn(
+    db_stack: DbStack,
+) -> None:
+    """⚠ 网络重试或连点一次，同一份回执再来一遍：照收就是两轮模型计费、
+    两条同 id 的工具消息与两段答案。"""
+    session_id = await _paused(db_stack)
+    body = {
+        "client_tools": [ASK_TOOL],
+        "tool_results": [{"call_id": "q1", "output": {"picked": ["k1"]}}],
+    }
+    first = await db_stack.client.post(f"{URL}/{session_id}:advance", json=body)
+    assert first.status_code == 200
+
+    second = await db_stack.client.post(
+        f"{URL}/{session_id}:advance", json=body
+    )
+
+    assert second.status_code == 409
+
+
+async def test_an_answered_pause_reads_back_as_settled(
+    db_stack: DbStack,
+) -> None:
+    """⚠ 不结算的话，回放时那一步永远是「没跑完」，而用户明明已经选过了。"""
+    session_id = await _paused(db_stack)
+    await _advance(
+        db_stack.client,
+        session_id,
+        tool_results=[{"call_id": "q1", "output": {"picked": ["k1"]}}],
+    )
+
+    states = [
+        step["state"]
+        for message in await _messages(db_stack, session_id)
+        for step in message["steps"]
+    ]
+    assert "awaiting_client" not in states
+    assert "succeeded" in states

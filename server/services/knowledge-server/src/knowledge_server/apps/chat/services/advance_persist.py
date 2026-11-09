@@ -47,6 +47,8 @@ class TurnRecord:
     # 停下来等浏览器时这一回合已发的角标（`citations.as_json` 的形状）。
     # 续跑那次请求靠它接着编号；回合结束时是空表
     ledger: list[dict[str, Any]] = field(default_factory=list[dict[str, Any]])
+    # 续跑时上一步待续结算成什么（succeeded / failed）；发话时是 `None`
+    settled: str | None = None
 
 
 async def persist(
@@ -62,6 +64,10 @@ async def persist(
     async with sessions() as session:
         await session_crud.lock_session(session, chat_session_id)
         await session_crud.touch_session(session, chat_session_id)
+        if record.settled is not None:
+            await session_crud.settle_waiting(
+                session, chat_session_id, record.settled
+            )
         seq = await session_crud.max_seq(session, chat_session_id)
         written: list[ChatMessage] = []
         for message in [*record.incoming, *record.outcome.messages]:

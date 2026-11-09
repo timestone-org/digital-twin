@@ -61,3 +61,14 @@ class ChatTurnFailed(AppError):
 
     code = 52325
     http_status = 500
+
+
+class ChatToolResultMismatch(AppError):
+    """回执对不上此刻停着等浏览器的那一批调用：id 不认识、或已经答过了。
+
+    ⚠ 在开流之前拒：照收的话，一个过期标签页或一次重试会再跑一整轮模型，
+    而那条对不上的工具消息在拼上下文时被悄悄丢掉。
+    """
+
+    code = 42326
+    http_status = 409
