@@ -144,6 +144,7 @@ describe('个人资料页', () => {
     const inputs = wrapper.findAll('input')
     await inputs[3]?.setValue('Old123456789')
     await inputs[4]?.setValue('New123456789')
+    await inputs[5]?.setValue('New123456789')
     await wrapper.findAll('form')[1]?.trigger('submit')
     await flushPromises()
     expect(wrapper.text()).toContain('密码已修改')

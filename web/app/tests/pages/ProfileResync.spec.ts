@@ -66,3 +66,54 @@ describe('个人资料表单回填', () => {
     expect(wrapper.findAll('input')[2]?.element.value).toBe('13800000000')
   })
 })
+
+describe('改密码的本地校验', () => {
+  async function submitPasswords(
+    current: string,
+    next: string,
+    confirm: string,
+  ) {
+    vi.spyOn(authApi, 'fetchMe').mockResolvedValue(user('old@x.com'))
+    const change = vi.spyOn(authApi, 'changeMyPassword').mockResolvedValue()
+    const wrapper = mount(ProfilePage)
+    await flushPromises()
+    const inputs = wrapper.findAll('input')
+    await inputs[3]?.setValue(current)
+    await inputs[4]?.setValue(next)
+    await inputs[5]?.setValue(confirm)
+    await wrapper.findAll('form')[1]?.trigger('submit')
+    await flushPromises()
+    return { wrapper, change }
+  }
+
+  it('两次新密码不一致就不发', async () => {
+    const { wrapper, change } = await submitPasswords(
+      'Old1234567',
+      'New1234567',
+      'New7654321',
+    )
+    expect(change).not.toHaveBeenCalled()
+    expect(wrapper.text()).toContain('两次输入的新密码不一致')
+  })
+
+  it('新旧相同就不发', async () => {
+    const { wrapper, change } = await submitPasswords(
+      'Same123456',
+      'Same123456',
+      'Same123456',
+    )
+    expect(change).not.toHaveBeenCalled()
+    expect(wrapper.text()).toContain('新密码不能与当前密码相同')
+  })
+
+  it('成功提示在下一次改动时收掉', async () => {
+    const { wrapper } = await submitPasswords(
+      'Old1234567',
+      'New1234567',
+      'New1234567',
+    )
+    expect(wrapper.text()).toContain('密码已修改')
+    await wrapper.findAll('input')[3]?.setValue('x')
+    expect(wrapper.text()).not.toContain('密码已修改')
+  })
+})
