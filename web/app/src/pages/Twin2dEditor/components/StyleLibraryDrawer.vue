@@ -64,6 +64,7 @@ import {
   exportTwin2dStylePackage,
   importTwin2dStyles,
   readTwin2dStylePackage,
+  twin2dFileText,
   twin2dStylePackageText,
 } from '../scripts/stylePackage'
 import type {
@@ -273,23 +274,11 @@ function reportText(what: string, report: Twin2dImportReport): string {
 }
 
 /**
- * 读出文件全文；读不出（选完之后被删、权限被收回）给 null。
- * @param file 用户选中的那一份
- */
-async function textOf(file: File): Promise<string | null> {
-  try {
-    return await file.text()
-  } catch {
-    return null
-  }
-}
-
-/**
  * 读一份样式包并并进当前配置。
  * @param file 用户选中的那一份 JSON
  */
 async function importFrom(file: File): Promise<void> {
-  const text = await textOf(file)
+  const text = await twin2dFileText(file)
   if (text === null) {
     toast.error('读不出这个文件')
     return
