@@ -39,9 +39,18 @@ _ASSETS = "/api/v1/platform/assets"
 
 
 class PlatformUnavailable(DependencyUnavailable):
-    """platform 没答上来。"""
+    """platform 没答上来。
+
+    `upstream_status` 是 platform 回的 HTTP 状态；超时与不可达时为 None。
+    ⚠ 4xx 也走这一类，调用方要按真实状态答（如 403/404）时读它。
+    """
 
     code = 52210
+
+    def __init__(self, message: str, *, upstream_status: int | None = None):
+        """Args: message, upstream_status。"""
+        super().__init__(message)
+        self.upstream_status = upstream_status
 
 
 class _Envelope(BaseModel):
@@ -380,7 +389,9 @@ class PlatformClient:
                 path=path,
                 error_type=type(error).__name__,
             )
-            raise PlatformUnavailable(_reason(error)) from error
+            raise PlatformUnavailable(
+                _reason(error), upstream_status=_status_of(error)
+            ) from error
 
     async def _fresh(self, headers: dict[str, str]) -> dict[str, str]:
         """把快到期的身份头换成新的。没接续签件时原样交回。
@@ -453,6 +464,13 @@ def _code_of(row: object) -> str | None:
         return None
     code = cast("dict[str, object]", row).get("code")
     return code if isinstance(code, str) else None
+
+
+def _status_of(error: Exception) -> int | None:
+    """上游回的 HTTP 状态；没回到响应时给 None。Args: error。"""
+    if isinstance(error, httpx.HTTPStatusError):
+        return error.response.status_code
+    return None
 
 
 def _reason(error: Exception) -> str:

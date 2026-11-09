@@ -158,12 +158,24 @@ async def test_changed_or_stale_confirmation_is_not_dispatched(
     assert stack.external.dispatches == []
 
 
-@pytest.mark.parametrize("status", [403, 404])
+@pytest.mark.parametrize(("status", "answered"), [(403, 403), (404, 404)])
 async def test_target_revalidation_failure_does_not_dispatch(
-    db_mcp_stack: Stack, status: int
+    db_mcp_stack: Stack, status: int, answered: int
 ) -> None:
+    """目标没了或无权访问要按真实状态答，不能报成「依赖不可用、请重试」。"""
     ticket = await db_mcp_stack.prepare()
     db_mcp_stack.external.target_status = status
+    response = await db_mcp_stack.decide(ticket)
+    assert response.status_code == answered
+    assert response.json()["code"] != 52210
+    assert db_mcp_stack.external.dispatches == []
+
+
+async def test_an_unavailable_platform_still_reads_as_retryable(
+    db_mcp_stack: Stack,
+) -> None:
+    ticket = await db_mcp_stack.prepare()
+    db_mcp_stack.external.target_status = 503
     assert (await db_mcp_stack.decide(ticket)).status_code == 503
     assert db_mcp_stack.external.dispatches == []
 

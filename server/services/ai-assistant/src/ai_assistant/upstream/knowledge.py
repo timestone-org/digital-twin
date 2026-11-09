@@ -13,7 +13,7 @@
 越少，它被当成越权通道的可能就越小。
 """
 
-from typing import Any
+from typing import Any, cast
 from urllib.parse import quote
 
 import httpx
@@ -29,9 +29,17 @@ _BASES = "/api/v1/knowledge/knowledge-bases"
 
 
 class KnowledgeUnavailable(DependencyUnavailable):
-    """知识库没答上来。"""
+    """知识库没答上来。
+
+    `upstream_status` 是知识库回的 HTTP 状态；超时与不可达时为 None。
+    """
 
     code = 52211
+
+    def __init__(self, message: str, *, upstream_status: int | None = None):
+        """Args: message, upstream_status。"""
+        super().__init__(message)
+        self.upstream_status = upstream_status
 
 
 class _Envelope(BaseModel):
@@ -139,7 +147,9 @@ class KnowledgeClient:
                 path=path,
                 error_type=type(error).__name__,
             )
-            raise KnowledgeUnavailable("知识库暂时不可用") from error
+            raise KnowledgeUnavailable(
+                _reason(error), upstream_status=_status_of(error)
+            ) from error
 
 
 def _with_trace(headers: dict[str, str]) -> dict[str, str]:
@@ -150,3 +160,41 @@ def _with_trace(headers: dict[str, str]) -> dict[str, str]:
     Args: headers。
     """
     return {**headers, "traceparent": current_traceparent()}
+
+
+def _status_of(error: Exception) -> int | None:
+    """上游回的 HTTP 状态；没回到响应时给 None。Args: error。"""
+    if isinstance(error, httpx.HTTPStatusError):
+        return error.response.status_code
+    return None
+
+
+def _reason(error: Exception) -> str:
+    """给模型与界面看的失败原因。
+
+    ⚠ 4xx 带上状态与上游那句话：把填错的库 id 读成「暂时不可用」，助手会告诉
+    用户知识库挂了，而该做的是换一个 id。
+
+    Args: error。
+    """
+    if (
+        not isinstance(error, httpx.HTTPStatusError)
+        or not error.response.is_client_error
+    ):
+        return "知识库暂时不可用"
+    status = error.response.status_code
+    return f"知识库回了 {status}{_said(error.response)}"
+
+
+def _said(response: httpx.Response) -> str:
+    """上游信封里那句话，取不出就不带。Args: response。"""
+    try:
+        body: object = response.json()
+    except ValueError:
+        return ""
+    if not isinstance(body, dict):
+        return ""
+    message = cast("dict[str, object]", body).get("message")
+    if not isinstance(message, str) or not message.strip():
+        return ""
+    return f"：{message.strip()}"
