@@ -30,8 +30,8 @@ import {
 
 import { TransportError } from './client'
 
-/** 列表页的大屏条目，不带节点树。 */
-export interface DashboardSummaryWire {
+/** 列表条目与整张大屏共有的那几列。 */
+export interface DashboardFieldsWire {
   id: string
   project_id: string
   name: string
@@ -46,8 +46,13 @@ export interface DashboardSummaryWire {
   updated_at: string
 }
 
+/** 列表页的大屏条目，不带节点树。 */
+export interface DashboardSummaryWire extends DashboardFieldsWire {
+  has_thumbnail: boolean
+}
+
 /** 加载一张大屏，运行时与编辑器共用。 */
-export interface DashboardWire extends DashboardSummaryWire {
+export interface DashboardWire extends DashboardFieldsWire {
   theme_json: Record<string, unknown>
   chrome_json: Record<string, unknown>
   nodes: NodeWire[]
@@ -118,6 +123,8 @@ export interface DashboardSummary {
   nodeCount: number
   createdAt: string
   updatedAt: string
+  /** 存没存过缩略图；缺省 = 不知道，照常去取。只有列表端点回这一列。 */
+  hasThumbnail?: boolean
 }
 
 /** 普通对象（不含数组与 null）。绑定各处的 JSON blob 都先过它。 */
@@ -376,7 +383,7 @@ export function toNode(wire: NodeWire): DashboardNodePayload {
  */
 export function toDashboard(wire: DashboardWire): DashboardPayload {
   return {
-    ...toDashboardSummary(wire),
+    ...dashboardFields(wire),
     themeJson: wire.theme_json,
     chromeJson: wire.chrome_json,
     nodes: wire.nodes.map(toNode),
@@ -384,12 +391,10 @@ export function toDashboard(wire: DashboardWire): DashboardPayload {
 }
 
 /**
- * 列表项的载荷。
- * @param wire 线上的大屏条目
+ * 列表条目与整张大屏共有的那几列。
+ * @param wire 线上的大屏
  */
-export function toDashboardSummary(
-  wire: DashboardSummaryWire,
-): DashboardSummary {
+function dashboardFields(wire: DashboardFieldsWire): DashboardSummary {
   return {
     id: wire.id,
     projectId: wire.project_id,
@@ -404,6 +409,16 @@ export function toDashboardSummary(
     createdAt: wire.created_at,
     updatedAt: wire.updated_at,
   }
+}
+
+/**
+ * 列表项的载荷。
+ * @param wire 线上的大屏条目
+ */
+export function toDashboardSummary(
+  wire: DashboardSummaryWire,
+): DashboardSummary {
+  return { ...dashboardFields(wire), hasThumbnail: wire.has_thumbnail }
 }
 
 /**

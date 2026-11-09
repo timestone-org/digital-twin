@@ -11,6 +11,7 @@ import { PERMISSION_CODES } from '@dt/contracts'
 
 import type { DashboardSummary } from '@/api/dashboardWire'
 import DashboardCard from '@/pages/Home/components/DashboardCard.vue'
+import DashboardThumbnail from '@/pages/Home/components/DashboardThumbnail.vue'
 import { useAuthStore } from '@/stores/auth'
 
 vi.mock('@/api/dashboardThumbnail', () => ({
@@ -103,6 +104,14 @@ describe('卡片展示', () => {
     })
     const mask = wrapper.get('[data-test="card-busy"]')
     expect(mask.text()).toContain('复制中…')
+  })
+
+  it('把列表报的「有没有缩略图」交给缩略图，没有图的屏不去取', () => {
+    const bare = render({ hasThumbnail: false })
+    expect(bare.getComponent(DashboardThumbnail).props('hasThumbnail')).toBe(
+      false,
+    )
+    bare.unmount()
   })
 
   it('不忙时没有遮罩', () => {
