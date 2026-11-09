@@ -287,6 +287,18 @@ it('部署完成即可使用用户 APIKey，无需签发部署密钥', async () 
   expect(wrapper.emitted('close')).toHaveLength(1)
 })
 
+it('服务编码写法不对时当场说明，不只是把按钮置灰', async () => {
+  const wrapper = mount(DeployDialog, {
+    props: { instanceId: versionSummary.pipeline_id, version: versionSummary },
+    global: { stubs: { teleport: true } },
+  })
+  wrappers.push(wrapper)
+  await wrapper.findAll('input')[1]?.setValue('Local_Service')
+
+  expect(wrapper.text()).toContain('只能用小写字母、数字或连字符')
+  expect(button(wrapper, '部署模型').attributes('disabled')).toBeDefined()
+})
+
 it('部署进行中 X 关闭不会丢掉部署结果', async () => {
   let finish: ((value: typeof deployment) => void) | undefined
   vi.mocked(api.deployInstance).mockImplementation(
