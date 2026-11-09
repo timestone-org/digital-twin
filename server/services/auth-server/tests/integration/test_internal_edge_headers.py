@@ -137,3 +137,39 @@ async def test_a_deactivated_account_cannot_renew(
     # 续签读的是**当下**的库；停用之后还能续，等于停用要等一个回合才生效
     assert response.status_code == 401
     assert "x-auth-sig" not in response.headers
+
+
+async def test_a_deactivated_account_has_no_permissions_to_hand_out(
+    app_client: httpx.AsyncClient,
+) -> None:
+    token = await admin_token(app_client)
+    auth = {"Authorization": f"Bearer {token}"}
+    role_id = (
+        await app_client.get(f"{API_PREFIX}/roles", headers=auth)
+    ).json()["data"]["items"][0]["id"]
+    created = await app_client.post(
+        f"{API_PREFIX}/users",
+        headers=auth,
+        json={
+            "username": "codes_probe",
+            "email": "codes_probe@example.com",
+            "password": "Probe123456",
+            "role_id": role_id,
+        },
+    )
+    user_id = created.json()["data"]["id"]
+    active = await app_client.get(
+        f"{INTERNAL_PREFIX}/users/{user_id}/permissions"
+    )
+    await app_client.post(
+        f"{API_PREFIX}/users/{user_id}:deactivate", headers=auth
+    )
+
+    response = await app_client.get(
+        f"{INTERNAL_PREFIX}/users/{user_id}/permissions"
+    )
+
+    # realtime-hub 靠它判 WS 握手；停用后还给码，等于停用要等 access 过期才生效
+    assert active.status_code == 200
+    assert response.status_code == 401
+    assert response.json()["code"] == 40104

@@ -101,7 +101,7 @@ async def reissue_edge_headers(
 async def read_user_permissions(
     user_id: uuid.UUID, session: SessionDep
 ) -> ApiResponse[UserDetailOut] | Response:
-    """上游验签失败时的回退查询。
+    """上游验签失败时的回退查询。账号已停用时 401，与 `/verify` 同口径。
 
     Args: user_id, session。
     """
@@ -111,6 +111,8 @@ async def read_user_permissions(
             status_code=status.HTTP_404_NOT_FOUND,
             headers={HEADER_USER_LOOKUP: "miss"},
         )
+    if not identity.user.is_active:
+        raise AccountDisabled("账号已停用")
     return ok(to_user_detail(identity))
 
 
