@@ -29,18 +29,29 @@ const loading = ref(false)
 /** 取不到列时的一句实话，不是错误弹窗。 */
 const failure = ref('')
 const raced = useRacedFetch()
+/** code → id 的换算表；整份台账清单只在头一次或认不出时取。 */
+let idsByCode: Map<string, string> | null = null
 
 const options = computed(() =>
   props.tables.map((one) => ({ value: one.code, label: one.name })),
 )
 
+/** 取一份 code → id 换算表。 */
+async function loadIds(): Promise<Map<string, string>> {
+  const page = await dataset.listDatasetTables({ size: TABLE_PAGE_SIZE })
+  idsByCode = new Map(page.items.map((one) => [one.code, one.id]))
+  return idsByCode
+}
+
 /**
- * code → id。目录只给 code，取列定义要 id。
+ * code → id。目录只给 code，取列定义要 id。缓存里认不出就重取一次清单：
+ * 那张表可能是打开编辑器之后才建的。
  * @param code 台账编码
  */
 async function idOf(code: string): Promise<string | null> {
-  const page = await dataset.listDatasetTables({ size: TABLE_PAGE_SIZE })
-  return page.items.find((one) => one.code === code)?.id ?? null
+  const cached = idsByCode?.get(code)
+  if (cached !== undefined) return cached
+  return (await loadIds()).get(code) ?? null
 }
 
 function onPick(code: string): void {

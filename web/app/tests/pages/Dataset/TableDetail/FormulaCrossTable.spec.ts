@@ -122,6 +122,33 @@ describe('选一张表', () => {
   })
 })
 
+describe('code → id 只换一次', () => {
+  it('来回切表不再每次都拉整份台账清单', async () => {
+    const wrapper = open()
+    await pick(wrapper, 'water')
+    await pick(wrapper, 'power')
+    await pick(wrapper, 'water')
+    expect(dataset.listDatasetTables).toHaveBeenCalledTimes(1)
+    expect(dataset.listDatasetColumns).toHaveBeenLastCalledWith('w1')
+  })
+
+  it('清单里没有这张表时重取一次，新建的表照样认得出', async () => {
+    vi.mocked(dataset.listDatasetTables)
+      .mockResolvedValueOnce({ items: [], total: 0, page: 1, size: 200 })
+      .mockResolvedValueOnce({
+        items: [summary('water', 'w1')],
+        total: 1,
+        page: 1,
+        size: 200,
+      })
+    const wrapper = open()
+    await pick(wrapper, 'water')
+    expect(wrapper.text()).toContain('这张台账已经不在了')
+    await pick(wrapper, 'water')
+    expect(dataset.listDatasetColumns).toHaveBeenCalledWith('w1')
+  })
+})
+
 describe('降级', () => {
   it('⚠ code 换不出 id（那张表刚被删了）说的是「换一张」', async () => {
     vi.mocked(dataset.listDatasetTables).mockResolvedValue({
