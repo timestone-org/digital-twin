@@ -526,3 +526,21 @@ async def test_an_underscore_in_the_search_is_a_literal_not_a_wildcard(
     listed = data_of(await app_client.get(FORMULAS, params={"q": "z_q"}))
 
     assert [item["id"] for item in listed] == [wanted["id"]]
+
+
+async def test_a_misspelt_parameter_field_is_refused_not_ignored(
+    app_client: httpx.AsyncClient,
+) -> None:
+    # ⚠ 忽略的话 kind 退回 column、default 退回空，存下去的是另一条公式
+    response = await app_client.post(
+        FORMULAS,
+        json=formula_body(
+            expression="{被减数} - {减数}",
+            params=[
+                {"name": "被减数"},
+                {"name": "减数", "knd": "value", "defualt": 1},
+            ],
+        ),
+    )
+
+    assert response.status_code == HTTP_BAD_REQUEST
