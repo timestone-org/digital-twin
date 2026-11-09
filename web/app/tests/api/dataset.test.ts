@@ -134,6 +134,20 @@ describe('台账的读写', () => {
   })
 })
 
+describe('台账与列清单可取消', () => {
+  it('台账清单把取消信号传给 HTTP 客户端', async () => {
+    const controller = new AbortController()
+    await dataset.listDatasetTables({}, controller.signal)
+    expect(call()[1].signal).toBe(controller.signal)
+  })
+
+  it('列清单把取消信号传给 HTTP 客户端', async () => {
+    const controller = new AbortController()
+    await dataset.listDatasetColumns('t1', controller.signal)
+    expect(call()[1].signal).toBe(controller.signal)
+  })
+})
+
 describe('数据行的读写', () => {
   it('记录读取把取消信号传给 HTTP 客户端', async () => {
     const controller = new AbortController()

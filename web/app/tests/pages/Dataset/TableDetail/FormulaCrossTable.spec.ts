@@ -93,7 +93,10 @@ describe('选一张表', () => {
   it('选了就按 code 换出 id，再取那张表的列', async () => {
     const wrapper = open()
     await pick(wrapper, 'water')
-    expect(dataset.listDatasetColumns).toHaveBeenCalledWith('w1')
+    expect(dataset.listDatasetColumns).toHaveBeenCalledWith(
+      'w1',
+      expect.any(AbortSignal),
+    )
     expect(wrapper.text()).toContain('inflow 列')
   })
 
@@ -129,7 +132,10 @@ describe('code → id 只换一次', () => {
     await pick(wrapper, 'power')
     await pick(wrapper, 'water')
     expect(dataset.listDatasetTables).toHaveBeenCalledTimes(1)
-    expect(dataset.listDatasetColumns).toHaveBeenLastCalledWith('w1')
+    expect(dataset.listDatasetColumns).toHaveBeenLastCalledWith(
+      'w1',
+      expect.any(AbortSignal),
+    )
   })
 
   it('清单里没有这张表时重取一次，新建的表照样认得出', async () => {
@@ -145,7 +151,10 @@ describe('code → id 只换一次', () => {
     await pick(wrapper, 'water')
     expect(wrapper.text()).toContain('这张台账已经不在了')
     await pick(wrapper, 'water')
-    expect(dataset.listDatasetColumns).toHaveBeenCalledWith('w1')
+    expect(dataset.listDatasetColumns).toHaveBeenCalledWith(
+      'w1',
+      expect.any(AbortSignal),
+    )
   })
 })
 
