@@ -83,6 +83,19 @@ describe('AppTopbar · 标题与插槽', () => {
     expect(wrapper.get('p').text()).toBe('账号与角色')
   })
 
+  it('标题被截断时悬停能看到全名', () => {
+    const wrapper = mount(AppTopbar, {
+      props: { title: '审计-全量模块大屏', subtitle: '拖动模块调整布局' },
+    })
+    expect(wrapper.get('h1').attributes('title')).toBe('审计-全量模块大屏')
+    expect(wrapper.get('p').attributes('title')).toBe('拖动模块调整布局')
+  })
+
+  it('标题区收缩有下限，宽工具条压不成一个字', () => {
+    const wrapper = mount(AppTopbar, { props: { title: '审计大屏' } })
+    expect(wrapper.get('h1').element.closest('.min-w-32')).not.toBeNull()
+  })
+
   it('actions 槽落在右侧', () => {
     const wrapper = mount(AppTopbar, {
       slots: { actions: '<span class="probe">新建</span>' },

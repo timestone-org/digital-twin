@@ -25,6 +25,14 @@ const embed = useEmbedContext()
 
 const backText = computed(() => props.backLabel ?? '返回')
 
+// 标题区收缩的下限：有标题时留够认出几个字，带返回钮再加上钮宽
+const titleFloor = computed(() => {
+  const hasTitle = props.title !== undefined && props.title !== ''
+  if (props.compact === true || !hasTitle)
+    return props.backTo ? 'min-w-8' : 'min-w-0'
+  return props.backTo ? 'min-w-44' : 'min-w-32'
+})
+
 // 初值在 setup 里就取：只在 onMounted 里赋值的话时钟位置会空一帧
 const now = ref(formatTimeOfDay())
 let timer: ReturnType<typeof setInterval> | null = null
@@ -55,11 +63,12 @@ onBeforeUnmount(() => {
       shrink-[1000]：装不下时标题先让——它是说明性的，可以截断；右侧 actions 槽里
       是要点的控件。两边同为 shrink-1 时按内容宽度按比例分摊，宽工具条的页面
       （大屏编辑器）在 1440 下就是「标题还剩一半、保存钮已经滚出屏外」。标题让
-      到底（min-w-0）之后才轮到 actions 收缩，那时工具条自己的横向滚动才接手。
+      到底之后才轮到 actions 收缩，那时工具条自己的横向滚动才接手。
+      ⚠ 让也有底：不留下限时宽工具条会把标题压成一个字（「审…」），全名靠 title 悬停看。
     -->
     <div
-      class="relative z-10 flex min-w-0 items-center gap-3"
-      :class="[compact ? 'flex-1' : 'shrink-[1000]', { 'min-w-8': backTo }]"
+      class="relative z-10 flex items-center gap-3"
+      :class="[compact ? 'flex-1' : 'shrink-[1000]', titleFloor]"
     >
       <slot name="navigation" />
       <!--
@@ -80,10 +89,15 @@ onBeforeUnmount(() => {
         <h1
           v-if="title"
           class="dt-glow-text truncate text-xl font-semibold tracking-wide"
+          :title="title"
         >
           {{ title }}
         </h1>
-        <p v-if="subtitle" class="truncate text-xs text-text-disabled">
+        <p
+          v-if="subtitle"
+          class="truncate text-xs text-text-disabled"
+          :title="subtitle"
+        >
           {{ subtitle }}
         </p>
       </div>
