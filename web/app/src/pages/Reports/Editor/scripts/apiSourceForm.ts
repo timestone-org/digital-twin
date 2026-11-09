@@ -161,16 +161,22 @@ export function metricsForSource(
   }
   return created
 }
-/** 列表来源的数字按接口原样进正文，其余沿用默认两位小数。 */
+/** 插入指标数字节点的属性：列表来源的数字按接口原样进正文，其余默认两位小数；带上指标的单位。 */
 export function metricRefAttrs(
   expr: string,
   metrics: readonly ReportMetric[],
   sources: readonly ApiSource[],
-): { expr: string; precision: number | null } {
+): { expr: string; precision: number | null; unit?: string } {
   const metric = metrics.find((item) => `{${item.name}}` === expr)
   const isList = sources.some(
     (source) =>
       source.row_shape === 'single' && `api:${source.code}` === metric?.table,
   )
-  return { expr, precision: isList ? null : 2 }
+  // 服务端只按节点上的单位排版：不带过去的话，指标上配的单位一处都不显示
+  const unit = metric?.unit?.trim() ?? ''
+  return {
+    expr,
+    precision: isList ? null : 2,
+    ...(unit === '' ? {} : { unit }),
+  }
 }

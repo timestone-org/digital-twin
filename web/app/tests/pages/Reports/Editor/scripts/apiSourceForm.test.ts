@@ -170,4 +170,16 @@ describe('能管列表接口配置', () => {
     expect(metricRefAttrs('{台账值}', metrics, [list]).precision).toBe(2)
     expect(metricRefAttrs('{列表值}', metrics, [source]).precision).toBe(2)
   })
+  it('⚠ 指标配了单位时插入的数字节点带上它，否则正文与 Word 里只剩裸数', () => {
+    const metrics = [
+      { name: '本期平均温度', table: 'ledger', key: 'temp', unit: '℃' },
+      { name: '次数', table: 'ledger', key: 'cnt' },
+    ]
+    expect(metricRefAttrs('{本期平均温度}', metrics, [])).toEqual({
+      expr: '{本期平均温度}',
+      precision: 2,
+      unit: '℃',
+    })
+    expect(metricRefAttrs('{次数}', metrics, [])).not.toHaveProperty('unit')
+  })
 })
