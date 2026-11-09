@@ -28,6 +28,7 @@ from integration.dataset_helpers import (
     create_column,
     records_url,
 )
+from platform_server.apps.dataset.services import record_history
 from platform_server.apps.dataset.services.dirty import DatasetDirtyLog
 
 pytestmark = pytest.mark.requires_postgres
@@ -341,3 +342,49 @@ async def test_the_formula_columns_are_recomputed_for_what_was_written(
     # ⚠ 公式结果落在 `computed` 而不是 `values`：原始值与计算值分列存，
     # 改公式重算只覆盖后者（§4.3a）
     assert row["computed"]["翻倍"] == 42.0
+
+
+async def test_a_formula_history_over_the_cap_still_commits_the_raw_rows(
+    app_context: AppContext,
+    archive: ArchiveWriter,
+    dirty: DatasetDirtyLog,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    # ⚠ 公式历史触顶只该让公式列这一拍不重算；连原始采集一起回滚，
+    # 这张表从此一行也写不进去、水位也不动
+    table = await aggregate_table(app_context.client)
+    await create_column(
+        app_context.client,
+        table["id"],
+        key="均温",
+        name="均温",
+        source="point",
+        node_key=archive.node_key(POINT),
+        agg="avg",
+    )
+    await create_column(
+        app_context.client,
+        table["id"],
+        key="日累计",
+        name="日累计",
+        source="formula",
+        formula="SUM_OVER({均温}, '1d')",
+    )
+    await archive.write(
+        POINT,
+        [
+            Sample(ts=CLOSED - HOUR + timedelta(minutes=5), value_num=20.0),
+            Sample(ts=CLOSED + timedelta(minutes=5), value_num=21.0),
+        ],
+    )
+    runner = (dirty, archive)
+    await run_pass(app_context, runner, table_id=table["id"], now=NOW - HOUR)
+    monkeypatch.setattr(record_history, "MAX_FORMULA_HISTORY_ROWS", 0)
+
+    outcome = await run_pass(app_context, runner, table_id=table["id"])
+
+    assert outcome is not None
+    assert outcome.written == 1
+    rows = await rows_of(app_context.client, table["id"])
+    assert sorted(row["values"]["均温"] for row in rows) == [20.0, 21.0]
+    assert await watermark_of(app_context, table["id"]) == CLOSED

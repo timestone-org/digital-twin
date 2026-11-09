@@ -21,6 +21,7 @@ from platform_server.apps.dataset.crud import (
     record_crud,
     table_crud,
 )
+from platform_server.apps.dataset.errors import DatasetRecordInvalid
 from platform_server.apps.dataset.models import DatasetColumn, DatasetTable
 from platform_server.apps.dataset.services.aggregate import (
     BucketWindow,
@@ -176,21 +177,31 @@ async def _recompute(
     """
     if not any(column.source == FORMULA_SOURCE for column in columns):
         return
-    plan = await build_scope(
-        session, columns=columns, timezone=ZoneInfo(context.timezone)
-    )
-    if plan.plan.is_empty:
-        return
-    await recompute_range(
-        session,
-        plan,
-        table_id=table.id,
-        window=RecordWindow(
+    try:
+        plan = await build_scope(
+            session, columns=columns, timezone=ZoneInfo(context.timezone)
+        )
+        if plan.plan.is_empty:
+            return
+        await recompute_range(
+            session,
+            plan,
             table_id=table.id,
-            since=window.starts[0],
-            until=window.starts[-1],
-        ),
-    )
+            window=RecordWindow(
+                table_id=table.id,
+                since=window.starts[0],
+                until=window.starts[-1],
+            ),
+        )
+    except DatasetRecordInvalid as error:
+        # ⚠ 公式历史触顶在写公式值之前就抛：吞掉它，原始行与水位照常提交，
+        # 否则整张表从此一行也采不进去；公式列留待手动重算
+        _logger.warning(
+            "dataset_collect_recompute_skipped",
+            "公式列本拍未重算，原始采集照常写入",
+            table_code=table.code,
+            error_type=type(error).__name__,
+        )
 
 
 def point_columns(
