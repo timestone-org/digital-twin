@@ -290,6 +290,20 @@ describe('只读与嵌套配置类型', () => {
     wrapper.unmount()
   })
 
+  it('自定义相对时刻不在常用档里时，下拉显示「常用档」而不是默认占位', () => {
+    const wrapper = mount(MomentInput, {
+      props: {
+        modelValue: '-12h',
+        label: '起始时刻',
+        hint: '',
+        isReadonly: false,
+      },
+    })
+    expect(wrapper.text()).toContain('常用档')
+    expect(wrapper.text()).not.toContain('请选择')
+    wrapper.unmount()
+  })
+
   it('只读时刻不提供可修改的模式按钮', async () => {
     const wrapper = mount(MomentInput, {
       props: {
