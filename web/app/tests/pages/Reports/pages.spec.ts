@@ -9,6 +9,7 @@ import {
   DtSelect,
   DtModal,
   useConfirm,
+  useToast,
 } from '@dt/ui'
 import type {
   AuthUser,
@@ -508,7 +509,16 @@ it('生成记录显示警告并把真实文件交给下载器', async () => {
     .find((button) => button.text() === '下载 Word')
     ?.trigger('click')
   await flushPromises()
-  expect(wrapper.text()).toContain('产物不可用')
+  // ⚠ 一个产物下不下来只是一条提示：整张列表不许被换成「加载失败」
+  expect(
+    useToast().toasts.value.some((item) => item.message.includes('产物不可用')),
+  ).toBe(true)
+  expect(wrapper.text()).not.toContain('加载失败')
+  expect(
+    wrapper
+      .findAllComponents(DtButton)
+      .some((button) => button.text() === '下载 Word'),
+  ).toBe(true)
   await wrapper
     .findAllComponents(DtButton)
     .find((button) => button.text() === '刷新')

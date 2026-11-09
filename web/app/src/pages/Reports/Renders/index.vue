@@ -10,6 +10,7 @@ import {
   DtNotice,
   DtTag,
   DtIconButton,
+  useToast,
 } from '@dt/ui'
 import { PERMISSION_CODES } from '@dt/contracts'
 import type { DtDataColumn, ReportRender } from '@dt/contracts'
@@ -102,11 +103,17 @@ async function prevPage(): Promise<void> {
   trail.value = trail.value.slice(0, -1)
   await reload()
 }
+const toast = useToast()
+/**
+ * 下载一份产物。⚠ 失败走吐司不走 error：error 是列表取数那一格，写进去整张列表
+ * 会被换成「加载失败」，下一次轮询又把那句话冲掉。
+ * @param id 生成记录 id
+ */
 async function download(id: string): Promise<void> {
   try {
     downloadBytes(await api.downloadReport(id), `report-${id}.docx`)
   } catch (caught) {
-    error.value = describeError(caught)
+    toast.error(describeError(caught))
   }
 }
 </script>
