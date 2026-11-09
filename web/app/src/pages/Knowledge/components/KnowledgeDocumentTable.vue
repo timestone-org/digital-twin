@@ -136,9 +136,15 @@ function isReparseDisabled(status: KnowledgeDocumentStatus): boolean {
         <span v-else class="block truncate" :title="row.title">
           {{ row.title }}
         </span>
+        <!-- 待处理行也可能带一句「稍后自动重试」的提示：那是在等，不是失败 -->
         <span
           v-if="row.failureReason !== ''"
-          class="block truncate text-xs text-state-danger"
+          class="block truncate text-xs"
+          :class="
+            row.status === 'failed'
+              ? 'text-state-danger'
+              : 'text-text-secondary'
+          "
           :title="row.failureReason"
         >
           {{ row.failureReason }}
