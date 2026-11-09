@@ -297,6 +297,29 @@ describe('如实报索引的毛病', () => {
   })
 })
 
+describe('没接嵌入模型', () => {
+  it('先说清楚并指去模型管理，传文档不可点', async () => {
+    api.readCapability.mockResolvedValue({
+      ...READY,
+      isEmbeddingEnabled: false,
+    })
+
+    const wrapper = await render()
+
+    expect(wrapper.text()).toContain('还没给「知识库嵌入」分配模型')
+    const picker = wrapper
+      .findAll('button')
+      .find((one) => one.text().includes('传文档'))
+    expect(picker?.attributes('disabled')).toBeDefined()
+  })
+
+  it('接好了就不摆这条', async () => {
+    const wrapper = await render()
+
+    expect(wrapper.text()).not.toContain('还没给「知识库嵌入」分配模型')
+  })
+})
+
 describe('文档表', () => {
   it('已选库落出第一页后上传，左栏仍显示真实计数', async () => {
     const firstPage = Array.from({ length: 100 }, (_, i) => ({

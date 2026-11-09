@@ -48,6 +48,10 @@ export function createState() {
     (capability.value?.acceptedSuffixes ?? []).join(','),
   )
   const indexHint = computed(() => capability.value?.index.reason ?? '')
+  // 没取到能力面时不下结论；取到了且没接嵌入，传上去的每一份都会摄取失败
+  const isEmbeddingMissing = computed(
+    () => capability.value?.isEmbeddingEnabled === false,
+  )
 
   return {
     bases,
@@ -67,6 +71,7 @@ export function createState() {
     selected,
     accept,
     indexHint,
+    isEmbeddingMissing,
   }
 }
 

@@ -9,6 +9,7 @@
  * 交互编排在 `scripts/useKnowledgePage.ts`，摄取轮询在 `scripts/useIngestPolling.ts`。
  */
 import { onMounted, ref } from 'vue'
+import { RouterLink } from 'vue-router'
 import { PERMISSION_CODES } from '@dt/contracts'
 import {
   DtButton,
@@ -133,7 +134,11 @@ async function removeDocument(doc: KnowledgeDocument): Promise<void> {
         <DtFilePicker
           :accept="page.accept.value"
           multiple
-          :disabled="page.selectedId.value === '' || page.upload.value !== null"
+          :disabled="
+            page.selectedId.value === '' ||
+            page.upload.value !== null ||
+            page.isEmbeddingMissing.value
+          "
           :label="page.upload.value === null ? '传文档' : '上传中…'"
           size="sm"
           @select="addFiles"
@@ -155,6 +160,20 @@ async function removeDocument(doc: KnowledgeDocument): Promise<void> {
       <KnowledgeGuide />
       <DtNotice v-if="page.error.value !== ''" intent="danger">
         {{ page.error.value }}
+      </DtNotice>
+
+      <!-- 向量是硬依赖（ADR-0045）：没接嵌入时先说清楚，而不是等每份文档都摄取失败 -->
+      <DtNotice
+        v-if="page.isEmbeddingMissing.value"
+        intent="warning"
+        icon="alert-triangle"
+      >
+        这套部署还没给「知识库嵌入」分配模型，传上来的文档都会摄取失败，
+        所以暂时不能传文档。请先到
+        <RouterLink to="/system/models" class="text-accent-primary underline">
+          模型管理
+        </RouterLink>
+        分配后再来。
       </DtNotice>
 
       <!-- ⚠ 索引有毛病时如实说出来：维数对不上会让每一份文档都摄取失败，
