@@ -29,13 +29,25 @@ class FakeEmbedder:
     dimensions: int = 3
     is_broken: bool = False
     id: str = "fake"
+    model: str | None = "m1"
+    # 每个分量都乘上它；换一个值就是换了一套向量空间
+    sign: float = 1.0
+    # 算过这么多次之后就算不出来了；不给即一直算得出
+    fail_after_calls: int | None = None
     calls: list[int] = field(default_factory=list[int])
 
     async def embed(self, texts: list[str]) -> list[list[float]]:
         self.calls.append(len(texts))
-        if self.is_broken:
+        over = self.fail_after_calls
+        if self.is_broken or (over is not None and len(self.calls) > over):
             raise RuntimeError("端点挂了")
-        return [[float(len(one)), 1.0, 0.0] for one in texts]
+        return [
+            [self.sign * one for one in [float(len(text)), 1.0, 0.0]][
+                : self.dimensions
+            ]
+            + [1.0] * max(0, self.dimensions - 3)
+            for text in texts
+        ]
 
 
 def _sessions(
@@ -146,3 +158,35 @@ async def test_searching_without_an_embedder_comes_back_empty(
 
     assert await blind.search("正文", "user", ALICE, 10) == []
     assert blind.can_rank is False
+
+
+async def test_a_switched_model_never_ranks_the_old_vectors(
+    db_stack: DbStack,
+) -> None:
+    """换了同维数的嵌入模型，旧向量与新查询不在同一个空间，不能当成命中。"""
+    await _store(db_stack, FakeEmbedder(model="m1")).remember(
+        Knowledge(scope="user", owner_id=ALICE, title="口径", body="正文")
+    )
+    switched = FakeEmbedder(model="m2", sign=-1.0)
+    store = _store(db_stack, switched)
+
+    found = await store.search("正文", "user", ALICE, 10)
+
+    # 补算之后按新模型排得上，且分数是新空间里的真余弦
+    assert [one.title for one in found] == ["口径"]
+    assert found[0].score > 0
+    assert switched.calls == [1, 1]
+
+
+async def test_a_row_that_cannot_be_reembedded_is_not_a_hit(
+    db_stack: DbStack,
+) -> None:
+    """补算失败时，换了模型与维数的旧向量不能凑成一条 0 分的命中。"""
+    await _store(db_stack, FakeEmbedder(model="m1")).remember(
+        Knowledge(scope="user", owner_id=ALICE, title="口径", body="正文")
+    )
+    other = FakeEmbedder(model="m2", dimensions=4, fail_after_calls=1)
+
+    found = await _store(db_stack, other).search("正文", "user", ALICE, 10)
+
+    assert found == []
