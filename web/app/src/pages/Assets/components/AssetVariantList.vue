@@ -35,6 +35,35 @@ const isCompressing = computed(() =>
   props.variants.some((item) => item.status === 'pending'),
 )
 
+/** 控制字符的上界（不含）与 DEL、替换符：上游把二进制当文本解析时会把它们带进错误原文。 */
+const CONTROL_LIMIT = 0x20
+const DEL = 0x7f
+const REPLACEMENT = 0xfffd
+
+/** 剥掉不可见字符。 */
+function printable(text: string): string {
+  return Array.from(text)
+    .filter((char) => {
+      const code = char.codePointAt(0) ?? 0
+      return code >= CONTROL_LIMIT && code !== DEL && code !== REPLACEMENT
+    })
+    .join('')
+}
+
+/** 失败原因按句子归并：几档同一个原因只说一次，并点名是哪几档。 */
+const failures = computed(() => {
+  const grouped = new Map<string, string[]>()
+  for (const item of props.variants) {
+    if (item.error === '') continue
+    const reason = printable(item.error).trim()
+    grouped.set(reason, [...(grouped.get(reason) ?? []), item.label])
+  }
+  return [...grouped.entries()].map(([reason, labels]) => ({
+    reason,
+    labels: labels.join('、'),
+  }))
+})
+
 /**
  * 一档相对原件的百分比；还没压好或原件体积不明时给空串。
  * @param item 一档
@@ -94,12 +123,8 @@ function stateOf(item: AssetVariant): string {
 
     <!-- ⚠ 失败原因必须给出来：不给的话用户只知道「有一档没成」，
          而重压一遍大概率还是同样的结果 -->
-    <DtNotice
-      v-for="item in variants.filter((one) => one.error !== '')"
-      :key="`${item.variant}-error`"
-      intent="danger"
-    >
-      {{ item.label }}：{{ item.error }}
+    <DtNotice v-for="one in failures" :key="one.reason" intent="danger">
+      {{ one.labels }}：{{ one.reason }}
     </DtNotice>
 
     <DtNotice v-if="isCompressing" intent="info">
