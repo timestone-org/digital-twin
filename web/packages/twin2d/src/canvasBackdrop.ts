@@ -8,18 +8,10 @@
  * ⚠ 两个宿主共用这一份求值：谁再算一份的表现是底图偏一点、图案疏一格，而两边单看都对。
  */
 import { sanitizeCssValue } from './cssValue'
-import type { Twin2dBackgroundFit } from './kinds'
+import { isTwin2dImageRef, twin2dImageLayer } from './imageLayer'
 import type { Twin2dIconResolver } from './paintText'
 import type { Twin2dCanvas } from './types'
 
-/** 素材引用前缀 */
-const ASSET_PREFIX = 'asset:'
-/** 素材解析槽未注入时的空地址 */
-const NO_ASSET_URL = ''
-/** 会把 `url()` 提前闭合的字符 */
-const URL_UNSAFE_RE = /["'()\\\s]/
-/** 底图地址允许的前缀 */
-const IMAGE_PREFIXES = ['https://', 'http://', 'data:', '/'] as const
 /** 图案色缺省：参考项目那三个变量全仓无定义、只活在 `var()` 的兜底位上（§7 #76） */
 const PATTERN_FALLBACK =
   'color-mix(in srgb, var(--accent-primary) 5%, transparent)'
@@ -27,18 +19,6 @@ const PATTERN_FALLBACK =
 const WEAVE_ANGLES = [45, -45] as const
 /** 平行线那一档的角度 */
 const LINES_ANGLE = 0
-
-/**
- * 底图四档铺法。
- * ⚠ 与 `paintBox` 里图元底图那一份是同一张表的两处落点（那边服务图元的 `fills`、
- * 这边服务画布底图），改了要两处一起改。
- */
-const IMAGE_FIT: Readonly<Record<Twin2dBackgroundFit, string>> = Object.freeze({
-  cover: 'center center / cover no-repeat',
-  contain: 'center center / contain no-repeat',
-  stretch: 'center center / 100% 100% no-repeat',
-  tile: 'left top / auto repeat',
-})
 
 /** 底两层各自的内联样式；空对象 = 这一层一条声明都不产。 */
 export interface Twin2dBackdropStyles {
@@ -61,11 +41,8 @@ function backgroundValue(
 ): string | null {
   const raw = canvas.background
   if (raw === '') return null
-  const asset = raw.startsWith(ASSET_PREFIX)
-  const ref = asset ? resolveImage(raw) : raw
-  if (asset || IMAGE_PREFIXES.some((prefix) => ref.startsWith(prefix))) {
-    if (ref === NO_ASSET_URL || URL_UNSAFE_RE.test(ref)) return null
-    return `url("${ref}") ${IMAGE_FIT[canvas.backgroundFit]}`
+  if (isTwin2dImageRef(raw)) {
+    return twin2dImageLayer(raw, canvas.backgroundFit, resolveImage)
   }
   const value = sanitizeCssValue(raw, '')
   return value === '' ? null : value

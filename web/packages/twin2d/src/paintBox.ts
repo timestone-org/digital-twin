@@ -4,7 +4,9 @@
  * 基类那几项一律取自 paintCommon 的 `paintBase`；口径见
  * docs/MODULE_TWIN_2D_DESIGN.md §4.2、§9.4。
  */
+import { twin2dImageUrl } from './assets'
 import { sanitizeCssValue } from './cssValue'
+import { isTwin2dImageRef, twin2dImageLayer } from './imageLayer'
 import { TWIN_2D_BOX_CONSTANTS, paintBase } from './paintCommon'
 import type {
   Twin2dAlign,
@@ -67,21 +69,8 @@ const JUSTIFY_CONTENT: Readonly<Record<Twin2dJustify, string>> = Object.freeze({
   around: 'space-around',
 })
 
-/** 底图铺法四档的「位置 / 尺寸 平铺」 */
-const IMAGE_FIT: Readonly<Record<Twin2dBackgroundFit, string>> = Object.freeze({
-  cover: 'center center / cover no-repeat',
-  contain: 'center center / contain no-repeat',
-  stretch: 'center center / 100% 100% no-repeat',
-  tile: 'left top / auto repeat',
-})
-
 /** 边框四边的文档序 */
 const BORDER_SIDES = ['top', 'right', 'bottom', 'left'] as const
-
-/** 会把 `url()` 提前闭合的字符 */
-const URL_UNSAFE_RE = /["'()\\\s]/
-/** 底图地址允许的前缀 */
-const IMAGE_PREFIXES = ['https://', 'http://', 'data:', '/'] as const
 
 // 归一值转百分数，量化掉浮点尾巴
 function pct(unit: number): string {
@@ -108,12 +97,10 @@ function stopsCss(
     .join(', ')
 }
 
-// ⚠ 地址按前缀白名单收：未解析的 `asset:<uuid>` 落不进 url()，整层丢弃而不是发一个必 404
-// 的请求；引号/括号/空白一律拒，它们能把 url() 提前闭合
+// ⚠ 素材引用经素材解析槽换成地址，与画布底图同一条路；不是图片的那一串整层丢弃
 function imageLayer(ref: string, fit: Twin2dBackgroundFit): string | null {
-  if (URL_UNSAFE_RE.test(ref)) return null
-  if (!IMAGE_PREFIXES.some((prefix) => ref.startsWith(prefix))) return null
-  return `url("${ref}") ${IMAGE_FIT[fit]}`
+  if (!isTwin2dImageRef(ref)) return null
+  return twin2dImageLayer(ref, fit, twin2dImageUrl)
 }
 
 // 一层填充的 CSS 值；表达不出来的层回 null 由调用方整层丢弃
