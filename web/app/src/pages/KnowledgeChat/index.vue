@@ -88,6 +88,7 @@ onMounted(() => void page.reload())
             <ChatSessionList
               :sessions="page.sessions.value"
               :selected-id="page.selectedId.value"
+              :loading="page.isLoading.value"
               @select="page.select"
               @rename="page.rename"
               @archive="page.archive"

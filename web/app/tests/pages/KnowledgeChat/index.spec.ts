@@ -285,6 +285,14 @@ describe('首屏', () => {
   })
 })
 
+describe('左栏加载态', () => {
+  it('清单还在取时不闪「还没有对话」', async () => {
+    api.listSessions.mockReturnValue(new Promise(() => undefined))
+    const wrapper = await render()
+    expect(wrapper.find('main aside').text()).not.toContain('还没有对话')
+  })
+})
+
 describe('切对话', () => {
   it('点一个就回放它的历史', async () => {
     const wrapper = await render()
