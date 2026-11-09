@@ -272,8 +272,10 @@ describe('报告编辑器', () => {
     })
     await flushPromises()
     umo.emit?.('changed:pageOrientation', { pageOrientation: 'landscape' })
-    const next = wrapper.emitted('update:page')?.at(-1)?.[0]
-    await wrapper.setProps({ page: next })
+    expect(wrapper.emitted('update:page')?.at(-1)?.[0]).toEqual({
+      orientation: 'landscape',
+    })
+    await wrapper.setProps({ page: { orientation: 'landscape' } })
     await flushPromises()
     expect(umo.setPage).not.toHaveBeenCalled()
     wrapper.unmount()

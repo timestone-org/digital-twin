@@ -185,7 +185,9 @@ describe('增删移之后焦点跟着那一档走', () => {
     box.element.focus()
     await box.trigger('focus')
     await clickLabelled(wrapper, '第 2 档上移')
-    await wrapper.setProps({ draft: lastDraft(wrapper) })
+    const moved = lastDraft(wrapper)
+    if (moved === undefined) throw new Error('上移没有抛出草稿')
+    await wrapper.setProps({ draft: moved })
     await flushPromises()
     const focused = document.activeElement
     expect(focused).toBeInstanceOf(HTMLTextAreaElement)
