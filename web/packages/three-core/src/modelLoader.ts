@@ -4,6 +4,7 @@
  */
 import { DRACOLoader } from 'three/examples/jsm/loaders/DRACOLoader.js'
 import { GLTFLoader } from 'three/examples/jsm/loaders/GLTFLoader.js'
+import { LoaderUtils } from 'three'
 import type * as THREE from 'three'
 
 import { disposeSceneGraph } from './sceneCore'
@@ -29,11 +30,12 @@ export function disposeGltfDecoders(): void {
   shared = null
 }
 
-/** `GLTFLoader` 的最小面，装载编排只依赖它，测试传替身。 */
+/** 装载编排只依赖的最小面，测试传替身。 */
 export interface GltfSource {
   loadAsync(
     url: string,
     onProgress?: (event: ProgressEvent) => void,
+    signal?: AbortSignal,
   ): Promise<{ scene: THREE.Object3D; animations?: THREE.AnimationClip[] }>
 }
 
@@ -61,7 +63,61 @@ export interface TwinModelLoadOptions {
  * `KHR_draco_mesh_compression` 时才会去调它，故存量模型照常加载。
  */
 export function createGltfSource(): GltfSource {
-  return new GLTFLoader().setDRACOLoader(dracoLoader())
+  const loader = new GLTFLoader().setDRACOLoader(dracoLoader())
+  return {
+    loadAsync: async (url, onProgress, signal) => {
+      const buffer = await downloadModel(url, onProgress, signal)
+      return loader.parseAsync(buffer, LoaderUtils.extractUrlBase(url))
+    },
+  }
+}
+
+/**
+ * 自己下载字节再交给解析器，好让取消真的掐掉请求。
+ * ⚠ 不走 `GLTFLoader.load`：它每次新建的 FileLoader 拿不到手，取消只能等下完再丢；
+ * 而它的同 URL 合并请求是全局共享的，掐掉一个会连带别的视口一起失败。
+ * @param url 模型地址
+ * @param onProgress 已下载字节的进度
+ * @param signal 取消信号
+ */
+async function downloadModel(
+  url: string,
+  onProgress: ((event: ProgressEvent) => void) | undefined,
+  signal: AbortSignal | undefined,
+): Promise<ArrayBuffer> {
+  const response = await fetch(url, { credentials: 'same-origin', signal })
+  if (!response.ok) {
+    throw new Error(`模型下载失败：HTTP ${String(response.status)}`)
+  }
+  const reader = response.body?.getReader()
+  if (reader === undefined) return response.arrayBuffer()
+  const total = Number(
+    response.headers.get('X-File-Size') ??
+      response.headers.get('Content-Length') ??
+      0,
+  )
+  const chunks: Uint8Array[] = []
+  let loaded = 0
+  for (;;) {
+    const { done, value } = await reader.read()
+    if (done) break
+    chunks.push(value)
+    loaded += value.byteLength
+    onProgress?.(
+      new ProgressEvent('progress', {
+        lengthComputable: total > 0,
+        loaded,
+        total,
+      }),
+    )
+  }
+  const bytes = new Uint8Array(loaded)
+  let offset = 0
+  for (const chunk of chunks) {
+    bytes.set(chunk, offset)
+    offset += chunk.byteLength
+  }
+  return bytes.buffer
 }
 
 function abortError(): DOMException {
@@ -86,9 +142,16 @@ export async function loadTwinModel(
   source: GltfSource = createGltfSource(),
 ): Promise<TwinModelAsset> {
   if (isAborted(options.signal)) throw abortError()
-  const gltf = await source.loadAsync(url, (event) => {
-    options.onProgress?.(event.loaded, event.lengthComputable ? event.total : 0)
-  })
+  const gltf = await source.loadAsync(
+    url,
+    (event) => {
+      options.onProgress?.(
+        event.loaded,
+        event.lengthComputable ? event.total : 0,
+      )
+    },
+    options.signal,
+  )
   if (isAborted(options.signal)) {
     disposeSceneGraph(gltf.scene)
     throw abortError()

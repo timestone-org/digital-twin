@@ -353,6 +353,7 @@ describe('模型装载', () => {
     expect(source.loadAsync).toHaveBeenCalledWith(
       `/assets/${ASSET}/medium.glb`,
       expect.any(Function),
+      expect.any(AbortSignal),
     )
   })
 
@@ -378,6 +379,7 @@ describe('模型装载', () => {
     expect(source.loadAsync).toHaveBeenLastCalledWith(
       `/assets/${ASSET}/low.glb`,
       expect.any(Function),
+      expect.any(AbortSignal),
     )
   })
 
