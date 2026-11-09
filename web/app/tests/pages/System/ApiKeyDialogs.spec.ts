@@ -181,6 +181,18 @@ describe('明文回执弹窗', () => {
     expect(document.body.textContent).toContain('永久密钥泄漏后只能吊销收回')
   })
 
+  it('点遮罩不关窗——密钥只此一次，误点就永远丢了', async () => {
+    const wrapper = mount(SecretRevealDialog, {
+      props: { issued: { name: 'XX系统写点位', secret: SECRET } },
+    })
+    await flushPromises()
+    document.querySelector<HTMLElement>('.dt-modal__backdrop')?.click()
+    await flushPromises()
+    expect(wrapper.emitted('close')).toBeUndefined()
+    await clickByText('我已抄走')
+    expect(wrapper.emitted('close')).toHaveLength(1)
+  })
+
   it('复制走 copyText——现场是纯 HTTP，navigator.clipboard 在那里不存在', async () => {
     const copy = vi.spyOn(clipboard, 'copyText').mockResolvedValue(true)
     mount(SecretRevealDialog, {
