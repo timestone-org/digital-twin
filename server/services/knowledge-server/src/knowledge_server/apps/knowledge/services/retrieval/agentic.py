@@ -22,6 +22,7 @@ from typing import cast
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from knowledge_server.apps.knowledge.services.llm import Answerer
+from knowledge_server.apps.knowledge.services.released import released
 from knowledge_server.apps.knowledge.services.reranking import (
     NullReranker,
     Reranker,
@@ -32,9 +33,6 @@ from knowledge_server.apps.knowledge.services.retrieval.ports import (
     RetrievalRequest,
     RetrievalResult,
     RetrievalUnavailable,
-)
-from knowledge_server.apps.knowledge.services.retrieval.released import (
-    released,
 )
 from knowledge_server.apps.knowledge.services.retrieval.reranked import (
     candidate_width,

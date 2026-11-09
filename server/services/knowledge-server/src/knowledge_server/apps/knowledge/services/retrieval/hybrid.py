@@ -24,6 +24,7 @@ from knowledge_server.apps.knowledge.services.indexing import (
     KeywordQuery,
     VectorQuery,
 )
+from knowledge_server.apps.knowledge.services.released import released
 from knowledge_server.apps.knowledge.services.reranking import (
     NullReranker,
     Reranker,
@@ -39,9 +40,6 @@ from knowledge_server.apps.knowledge.services.retrieval.ports import (
     RetrievalRequest,
     RetrievalResult,
     fused,
-)
-from knowledge_server.apps.knowledge.services.retrieval.released import (
-    released,
 )
 from knowledge_server.apps.knowledge.services.retrieval.reranked import (
     candidate_width,

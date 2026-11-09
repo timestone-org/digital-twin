@@ -46,6 +46,7 @@ from knowledge_server.apps.knowledge.services.parsing import (
     ExternalParserBackend,
     accepted_suffixes,
 )
+from knowledge_server.apps.knowledge.services.released import released
 from knowledge_server.apps.knowledge.services.sources import (
     UPLOAD_KIND,
     document_key,
@@ -243,12 +244,17 @@ async def _admit(
     ⚠ 判重在挪件**之前**：撞唯一键时事务已失败，无从核对正式键归不归自己，
     而同一文档 id 的并发登记里它就是胜出方的原件，不能在那时删。
 
+    ⚠ 读原件与挪件之前都先了结只读事务：两者都是跨网络的外部 IO，而走到这里
+    之前只查过库、一行都没写过。
+
     Args: session, store, base_id, staging, final。
     """
+    await released(session)
     digest, size = await _hashed(store, staging)
     if await crud.document.has_content_hash(session, base_id, digest):
         await _drop_staging(store, staging)
         raise DuplicateDocument(DUPLICATE_CONTENT)
+    await released(session)
     try:
         await store.copy(staging, final)
     except ObjectStoreError as error:

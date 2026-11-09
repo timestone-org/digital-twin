@@ -235,9 +235,42 @@ def _registration(
     monkeypatch.setattr(crud.document, "get_document", row)
 
 
-async def _register(store: _Store) -> str:
+class _Session:
+    """只记「此刻有没有开着事务」的假数据库会话。
+
+    ⚠ 开局就开着：路由在调登记之前已经查过库，请求那个事务早就开了。
+    """
+
+    def __init__(self) -> None:
+        self.is_open = True
+
+    def in_transaction(self) -> bool:
+        return self.is_open
+
+    async def commit(self) -> None:
+        self.is_open = False
+
+
+class _WatchingStore(_Store):
+    """每次碰对象存储时记下数据库事务是不是还开着。"""
+
+    def __init__(self, session: _Session) -> None:
+        super().__init__()
+        self.session = session
+        self.open_during_io: list[bool] = []
+
+    async def get_bytes(self, key: str) -> bytes:
+        self.open_during_io.append(self.session.in_transaction())
+        return await super().get_bytes(key)
+
+    async def copy(self, source_key: str, target_key: str) -> None:
+        self.open_during_io.append(self.session.in_transaction())
+        await super().copy(source_key, target_key)
+
+
+async def _register(store: _Store, session: _Session | None = None) -> str:
     made = await document_service.register_upload(
-        cast("AsyncSession", object()),
+        cast("AsyncSession", session or _Session()),
         cast("ObjectStore", store),
         BASE,
         RegisterDocumentIn(document_id=DOC, filename="手册.md"),
@@ -287,6 +320,21 @@ async def test_a_failed_staging_delete_does_not_fail_the_registration(
 
     assert await _register(store) == "手册.md"
     assert document_key(BASE, DOC, ".md") in store.objects
+
+
+async def test_no_transaction_stays_open_across_the_object_store(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """⚠ 读几十兆原件与挪件都是跨网络的外部 IO：事务开着跨过去，几次并发的
+    大文件登记就能把连接池占满（database-standard：事务里禁止外部 IO）。"""
+    _registration(monkeypatch, is_duplicate=False)
+    session = _Session()
+    store = _WatchingStore(session)
+    store.objects[staging_key(BASE, DOC, ".md")] = b"hello"
+
+    await _register(store, session)
+
+    assert store.open_during_io == [False, False]
 
 
 async def test_registering_before_the_bytes_landed_is_a_4xx(

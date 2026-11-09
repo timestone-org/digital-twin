@@ -13,6 +13,7 @@ from knowledge_server.apps.knowledge.services.indexing import (
     IndexPair,
     VectorQuery,
 )
+from knowledge_server.apps.knowledge.services.released import released
 from knowledge_server.apps.knowledge.services.retrieval.hydrate import (
     hydrated,
 )
@@ -21,9 +22,6 @@ from knowledge_server.apps.knowledge.services.retrieval.ports import (
     RetrievalRequest,
     RetrievalResult,
     RetrievalUnavailable,
-)
-from knowledge_server.apps.knowledge.services.retrieval.released import (
-    released,
 )
 
 NAIVE = "naive"
