@@ -178,8 +178,8 @@ async def recommend(
         raise ModelNotReady("模型还没有一次成功的训练，先训练再推荐")
     return RecommendResult(
         entries=[
-            replace(entry, is_recommended=(at == 0))
-            for at, entry in enumerate(scored)
+            replace(entry, is_recommended=(rank == 0))
+            for rank, entry in enumerate(scored)
         ],
         trained_at=model.trained_at,
         effective_at=at,

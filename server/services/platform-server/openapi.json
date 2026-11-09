@@ -27236,6 +27236,7 @@
     },
     "/api/v1/platform/ac-units/{ac_unit_id}/compliance-policies": {
       "get": {
+        "description": "读一台空调的两季达标配置，连同此刻生效的季节。\n\nArgs: ac_unit_id, session, timezone, _viewer。",
         "operationId": "get_compliance_policy_api_v1_platform_ac_units__ac_unit_id__compliance_policies_get",
         "parameters": [
           {
@@ -27277,6 +27278,7 @@
         ]
       },
       "put": {
+        "description": "一个事务里保存冬季日期与两套达标范围。\n\n⚠ 启用冬季之后，旧的 `PUT /metric-limits` 会被拒绝。\n\nArgs: ac_unit_id, payload, session, timezone, _manager。",
         "operationId": "put_compliance_policy_api_v1_platform_ac_units__ac_unit_id__compliance_policies_put",
         "parameters": [
           {
