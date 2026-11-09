@@ -280,10 +280,12 @@ async def test_the_same_receipt_twice_runs_only_one_turn(
     assert second.status_code == 409
 
 
-async def test_an_answered_pause_reads_back_as_settled(
+async def test_an_answered_pause_keeps_its_stored_batch(
     db_stack: DbStack,
 ) -> None:
-    """⚠ 不结算的话，回放时那一步永远是「没跑完」，而用户明明已经选过了。"""
+    """⚠ 答过的那一步仍按 `awaiting_client` 读回：前端回放只对这一态按后面的
+    工具回执逐个拆出每次调用（`replayClientSteps` / `liveReplay`），改成终态的话
+    实时卡片多出一行空步骤，一批几次调用也被并成一行。"""
     session_id = await _paused(db_stack)
     await _advance(
         db_stack.client,
@@ -291,13 +293,16 @@ async def test_an_answered_pause_reads_back_as_settled(
         tool_results=[{"call_id": "q1", "output": {"picked": ["k1"]}}],
     )
 
-    states = [
-        step["state"]
+    waiting = [
+        step
         for message in await _messages(db_stack, session_id)
         for step in message["steps"]
+        if step["kind"] == "client_tool"
     ]
-    assert "awaiting_client" not in states
-    assert "succeeded" in states
+    assert [one["state"] for one in waiting] == ["awaiting_client"]
+    assert [one["call_id"] for one in waiting[0]["input_json"]["calls"]] == [
+        "q1"
+    ]
 
 
 async def test_a_failed_turn_leaves_its_reason_and_a_good_one_clears_it(

@@ -433,21 +433,9 @@ async def _stored(
             steps=produced,
             citations=as_json(cited),
             ledger=as_json(ledger.issued) if outcome.is_waiting else [],
-            settled=_settled(payload),
         ),
     )
     return cited
-
-
-def _settled(payload: AdvanceInput) -> str | None:
-    """续跑时上一步待续该结算成什么；有一条回执报了错就算失败。
-
-    Args: payload。
-    """
-    if not payload.tool_results:
-        return None
-    failed = any(one.error is not None for one in payload.tool_results)
-    return "failed" if failed else "succeeded"
 
 
 async def _closing(
