@@ -162,6 +162,21 @@ function normKey(raw: unknown): string {
 }
 
 /**
+ * 按级别名查一档；只认自有键。
+ * ⚠ 查找表是普通对象：不先问自有键，`constructor` 会查出 Object 本身，rank 变成 undefined。
+ * @param table 级别查找表
+ * @param key 归一化后的级别名
+ */
+function levelOf(
+  table: Readonly<Record<string, FeedLevelStyle>>,
+  key: string,
+): FeedLevelStyle {
+  return (
+    (Object.hasOwn(table, key) ? table[key] : undefined) ?? FEED_UNKNOWN_LEVEL
+  )
+}
+
+/**
  * 色板里的一行 → 一档级别。
  * ⚠ 「配了一半」不该把颜色打回中性：只填了文字或权重的条目，其余项仍回落内置档。
  * @param raw 色板数组里的一行
@@ -170,7 +185,7 @@ function toLevelRow(raw: unknown): LevelRow | null {
   const row = readRecord(raw)
   const key = normKey(row.key)
   if (key === '') return null
-  const builtin = FEED_BUILTIN_LEVELS[key] ?? FEED_UNKNOWN_LEVEL
+  const builtin = levelOf(FEED_BUILTIN_LEVELS, key)
   return {
     key,
     style: {
@@ -192,7 +207,15 @@ export function readFeedLevels(
   const table: Record<string, FeedLevelStyle> = { ...FEED_BUILTIN_LEVELS }
   for (const raw of readArray(config.levels)) {
     const row = toLevelRow(raw)
-    if (row !== null) table[row.key] = row.style
+    // ⚠ 用 defineProperty 落键：`__proto__` 走赋值会改掉整张表的原型
+    if (row !== null) {
+      Object.defineProperty(table, row.key, {
+        value: row.style,
+        enumerable: true,
+        writable: true,
+        configurable: true,
+      })
+    }
   }
   return table
 }
@@ -217,7 +240,7 @@ function toRow(
   const text = readTrimmedText(trustedField(record, index, 'text', slots))
   const time = readTrimmedText(trustedField(record, index, 'time', slots))
   if (level === '' && text === '' && time === '' && issue === null) return null
-  const style = levels[level] ?? FEED_UNKNOWN_LEVEL
+  const style = levelOf(levels, level)
   return {
     key: `${String(index)}|${level}|${text}`,
     index,

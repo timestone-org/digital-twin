@@ -81,7 +81,11 @@ export function toDeviceStatus(
   // 不在词表里的档名（它不是现场词，是「没有数据」这个结论），少了这一跳，
   // 显式传 `unknown` 会被当成不认识的词而顶成 fallback
   if (typeof raw === 'string') {
-    const word = STATUS_WORDS[raw.trim().toLowerCase()]
+    const key = raw.trim().toLowerCase()
+    // ⚠ 词表是普通对象：不先问自有键，`constructor` 会查出 Object 本身
+    const word = Object.hasOwn(STATUS_WORDS, key)
+      ? STATUS_WORDS[key]
+      : undefined
     if (word !== undefined) return word
   }
   return readEnum(raw, DEVICE_STATUSES, fallback)
