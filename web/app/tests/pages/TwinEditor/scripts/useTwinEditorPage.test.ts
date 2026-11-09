@@ -9,6 +9,7 @@ import { removeMissingAnimations } from '@/pages/TwinEditor/scripts/missingAnima
 import { TWIN_CONFIG_KEY, normalizeTwinConfig } from '@dt/twin-config'
 import { flushPromises } from '@vue/test-utils'
 import { beforeEach, describe, expect, it, vi } from 'vitest'
+import { effectScope } from 'vue'
 
 vi.mock('@/api/dashboard', () => ({
   getDashboard: vi.fn(),
@@ -64,6 +65,29 @@ const saveMock = vi.mocked(replaceLayout)
 beforeEach(() => {
   getMock.mockReset()
   saveMock.mockReset()
+})
+
+describe('页面关闭', () => {
+  // ⚠ 关页时不收口的话，在途的取数照样跑完并写进一页已经没人看的状态
+  it('作用域结束时把在途的取数一并取消', async () => {
+    let seen: AbortSignal | undefined
+    getMock.mockImplementation((_id, signal) => {
+      seen = signal
+      return new Promise(() => undefined)
+    })
+    const scope = effectScope()
+    scope.run(() =>
+      useTwinEditorPage(
+        () => 'd1',
+        () => 'n1',
+      ),
+    )
+    await flushPromises()
+
+    scope.stop()
+
+    expect(seen?.aborted).toBe(true)
+  })
 })
 
 describe('取数', () => {

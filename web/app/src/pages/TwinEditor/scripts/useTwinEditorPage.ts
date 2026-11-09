@@ -9,7 +9,14 @@
  */
 import type { DashboardNodePayload, DashboardPayload } from '@dt/contracts'
 import { TWIN_CONFIG_KEY, normalizeTwinConfig } from '@dt/twin-config'
-import { computed, ref, shallowRef, watch } from 'vue'
+import {
+  computed,
+  getCurrentScope,
+  onScopeDispose,
+  ref,
+  shallowRef,
+  watch,
+} from 'vue'
 import type { ComputedRef, Ref } from 'vue'
 
 import { useDashboardDoc } from '@/composables/useDashboardDoc'
@@ -151,6 +158,8 @@ export function useTwinEditorPage(
   }
 
   watch([dashboardId, nodeId], ([id]) => void reload(id), { immediate: true })
+  // ⚠ 收口挂在这里而不是交给页面：页面忘了调，关页时在途的取数照样跑完写进死状态
+  if (getCurrentScope() !== undefined) onScopeDispose(file.dispose)
 
   const save = createReentrantSave(
     () => saveTwin(file, doc.value, nodeId(), beforeSave),
