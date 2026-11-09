@@ -295,7 +295,7 @@ def _apply(step: _Step, frame: Frame, estimator: object | None) -> Frame:
     operator, _ = registry.build(step.operator, step.config)
     # ⚠ 先注入再回灌：反过来的话，冻进步骤里的业务时区会被这里的 0 盖掉
     operator.bind_runtime(tz_offset_minutes=0, split_plan=None)
-    if step.fitted:
+    if step.fitted or operator.accepts_empty_fit(operator.config):
         operator.load_fitted(step.fitted)
     if isinstance(operator, PredictionPostprocess):
         return _rows(
