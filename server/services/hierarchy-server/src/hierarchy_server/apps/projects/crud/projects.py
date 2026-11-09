@@ -109,7 +109,19 @@ async def append_version(session: AsyncSession, project: Project) -> None:
 async def list_versions(
     session: AsyncSession, project_id: UUID, before: int | None, limit: int
 ) -> list[Version]:
-    statement = select(Version).where(Version.project_id == project_id)
+    """按版本号倒序取历史，多取一条判断是否还有下一页。
+
+    ⚠ 只加载版本号与时刻，不读整图快照；碰 `document` 会直接报错。
+
+    Args: session, project_id, before（游标版本号）, limit。
+    """
+    statement = (
+        select(Version)
+        .options(
+            load_only(Version.revision, Version.created_at, raiseload=True)
+        )
+        .where(Version.project_id == project_id)
+    )
     if before is not None:
         statement = statement.where(Version.revision < before)
     return list(
