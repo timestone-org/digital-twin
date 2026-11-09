@@ -137,7 +137,7 @@ function onRenameKeydown(event: KeyboardEvent): void {
         />
         <template v-else>
           <span
-            class="min-w-0 flex-1 truncate"
+            class="dt-layer__name truncate"
             title="单击选中（Shift 累积），双击重命名"
             @dblclick.stop="startRename(row)"
           >
@@ -264,9 +264,18 @@ function onRenameKeydown(event: KeyboardEvent): void {
   opacity: 1;
 }
 
+// ⚠ 名字按自身宽度起算（不是 flex-1 的 0 基准）：否则类型名先占满原宽，
+//   中文名被挤到一两个字
+.dt-layer__name {
+  flex: 1 1 auto;
+  min-width: 2em;
+}
+
 // 类型名让位给节点名：先被压缩，压到没有为止
 .dt-layer__type {
+  flex: 0 100 auto;
   min-width: 0;
+  max-width: 40%;
   overflow: hidden;
   color: var(--text-disabled);
   font-size: var(--font-size-caption);
