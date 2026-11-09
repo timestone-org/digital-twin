@@ -29,7 +29,9 @@ def user_codes() -> UserCodeSource:
     source = UserCodeSource(
         base_url="http://auth-test", service_key=SERVICE_KEY, timeout_s=1.0
     )
-    source._transport = ok_transport({"permissions": ["dashboard:view"]})
+    source._transport = ok_transport(
+        {"permissions": ["dashboard:view"], "is_active": True}
+    )
     return source
 
 

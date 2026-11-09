@@ -17,6 +17,7 @@ from realtime_hub.apps.channel.services.session import (
     CLOSE_ANONYMOUS_QUOTA,
     CLOSE_PUBLIC_GRANT_REVOKED,
 )
+from realtime_hub.apps.channel.services.user_codes import AccountUnusable
 from realtime_hub.settings import API_PREFIX, INTERNAL_PREFIX, Settings
 from starlette.testclient import TestClient
 from starlette.websockets import WebSocketDisconnect
@@ -40,6 +41,12 @@ class UserCodeGrant(Protocol):
     """测试夹具暴露的用户权限登记面。"""
 
     def grant(self, subject: str, codes: frozenset[str]) -> None: ...
+
+
+class FakeErrorSource(Protocol):
+    """测试夹具暴露的「回查失败」注入面。"""
+
+    error: Exception | None
 
 
 def _connect(client: TestClient, *protocols: str) -> None:
@@ -184,6 +191,19 @@ def test_the_alg_none_trick_is_refused(application: FastAPI) -> None:
         pytest.raises(WebSocketDisconnect) as refused,
     ):
         _connect(client, AUTH_SUBPROTOCOL, f"{header}.{payload}.")
+    assert refused.value.code == CLOSE_UNAUTHENTICATED
+
+
+def test_a_deactivated_account_is_refused_as_unauthenticated(
+    application: FastAPI, token: object, user_codes: FakeErrorSource
+) -> None:
+    # ⚠ HTTP 面立刻 401 的账号，WS 面不能靠一枚还没到期的令牌继续连上
+    user_codes.error = AccountUnusable("账号已停用")
+    with (
+        TestClient(application) as client,
+        pytest.raises(WebSocketDisconnect) as refused,
+    ):
+        _connect(client, AUTH_SUBPROTOCOL, token())  # type: ignore[operator]  # 工厂
     assert refused.value.code == CLOSE_UNAUTHENTICATED
 
 

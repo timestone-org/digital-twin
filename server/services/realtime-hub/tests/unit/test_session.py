@@ -34,6 +34,7 @@ from realtime_hub.apps.channel.services.session import (
     TYPE_ERROR,
     TYPE_SYSTEM,
 )
+from realtime_hub.apps.channel.services.user_codes import AccountUnusable
 
 from lib.auth import JwtCodec
 from lib.utils.timeutils import utcnow
@@ -347,6 +348,35 @@ async def test_auth_being_unreachable_fails_the_handshake_closed() -> None:
 
     with pytest.raises(UserCodesUnavailable):
         await service.authenticate(_token())
+
+
+async def test_a_deactivated_account_fails_the_handshake_as_rejected() -> None:
+    # ⚠ 停用不是「auth 不可达」：归成后者，客户端会按 1013 无休止地重连
+    codes = FakeUserCodes()
+    codes.error = AccountUnusable("账号已停用")
+    service, _connections = _service(codes=codes)
+
+    with pytest.raises(AuthenticationRejected):
+        await service.authenticate(_token())
+
+
+async def test_reauth_for_a_deactivated_account_drops_all_topics() -> None:
+    # ⚠ 换票被拒还留着老码的话，停用的人能在这条连接上一直收到令牌到期为止
+    codes = FakeUserCodes()
+    service, connections = _service(codes=codes)
+    connection, sent = await _open(service)
+    await service.dispatch(
+        connection, {"action": "subscribe", "topic": "opcua:1"}
+    )
+    codes.error = AccountUnusable("账号已停用")
+
+    await service.dispatch(connection, {"action": "reauth", "token": _token()})
+
+    assert (
+        sent[-1]["type"],
+        connection.codes,
+        await connections.subscribers("opcua:1"),
+    ) == (TYPE_ERROR, frozenset(), ())
 
 
 def test_expiry_and_reauth_windows() -> None:

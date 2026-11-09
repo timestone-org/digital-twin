@@ -36,7 +36,10 @@ from realtime_hub.apps.channel.services.grants import (
 )
 from realtime_hub.apps.channel.services.journal import SubscriptionJournal
 from realtime_hub.apps.channel.services.registry import TopicRegistry
-from realtime_hub.apps.channel.services.user_codes import UserCodeSource
+from realtime_hub.apps.channel.services.user_codes import (
+    AccountUnusable,
+    UserCodeSource,
+)
 
 _logger = get_logger("realtime.session")
 
@@ -156,10 +159,12 @@ class SessionService:
         except TokenError as error:
             raise AuthenticationRejected(str(error)) from error
         user_id = _as_uuid(claims.subject)
+        try:
+            codes = await self._codes.codes_of(user_id)
+        except AccountUnusable as error:
+            raise AccountRejected(str(error)) from error
         return Handshake(
-            user_id=user_id,
-            codes=await self._codes.codes_of(user_id),
-            expires_at=claims.expires_at,
+            user_id=user_id, codes=codes, expires_at=claims.expires_at
         )
 
     async def authenticate_public(self, ticket: str) -> Handshake:
@@ -359,7 +364,14 @@ class SessionService:
         if connection.grant is not None:
             await self._reauth_public(connection, token)
             return
-        handshake = await self.authenticate(token)
+        try:
+            handshake = await self.authenticate(token)
+        except AccountRejected:
+            # ⚠ 账号已停用：清空这条连接手上的码并退掉全部订阅，不能让它靠
+            # 老码一直收到令牌到期为止
+            connection.codes = frozenset()
+            await self.revoke_unauthorized(connection)
+            raise
         if handshake.user_id != connection.user_id:
             # ⚠ 不许换成别人的票：那等于在一条已建立的连接上换了主体，
             # 而订阅关系还挂在原来那个人身上
@@ -445,6 +457,10 @@ class AuthenticationRejected(AppError):
 
     code = 42006
     http_status = 401
+
+
+class AccountRejected(AuthenticationRejected):
+    """令牌本身合法，但它对应的账号已删除或已停用。"""
 
 
 class BadRequest(AppError):
