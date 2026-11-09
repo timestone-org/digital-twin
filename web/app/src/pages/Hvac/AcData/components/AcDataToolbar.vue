@@ -51,9 +51,6 @@ function onView(value: string): void {
     />
     <!-- ⚠ 整行统一 sm：不给 size 的话控件落回 md（40px），紧挨着的预设键是
        sm（32px），同一行差 8px 一眼就能看出来 -->
-    <!-- ⚠ 宽度套在外层 div 上，不写在组件的 class 上：DtDateTimeInput 与
-       DtInput 一样是 inheritAttrs:false + v-bind="$attrs"，class 会落到里面
-       那个 <input> 上，外框反而不受约束 -->
     <div class="w-52">
       <DtDateTimeInput
         size="sm"
