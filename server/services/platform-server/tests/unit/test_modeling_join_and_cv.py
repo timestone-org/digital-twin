@@ -194,3 +194,19 @@ def test_the_right_side_display_names_are_prefixed_too() -> None:
         LEFT_KEY,
         f"右_{LEFT_KEY}",
     ]
+
+
+def test_a_frame_with_other_features_than_the_model_is_refused() -> None:
+    """接进来的帧比模型多一列特征：拿它重训打出来的分说的是另一个模型。"""
+    frame = _training()
+    wider = Frame(
+        columns=(
+            *frame.columns,
+            FrameColumn(key="多余", name="多余", dtype="number"),
+        ),
+        rows=tuple((*row, 0.0) for row in frame.rows),
+    )
+    operator, _ = registry.build("cross_validate", {"folds": 4})
+    operator.bind_runtime(tz_offset_minutes=0, split_plan=None)
+    with pytest.raises(OperatorError, match="多余"):
+        operator.run({"model": _model_of(frame), "frame": wider})
