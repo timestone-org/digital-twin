@@ -87,9 +87,12 @@ export function createWrites(
     state.error.value = ''
     try {
       await deleteAsset(assetId)
+      const wasLoaded = state.assets.value.some((item) => item.id === assetId)
       state.assets.value = state.assets.value.filter(
         (item) => item.id !== assetId,
       )
+      // 服务端后面的行都前移一格，偏移不跟着减就会跳过一条
+      if (wasLoaded) state.loaded.value = Math.max(0, state.loaded.value - 1)
     } catch (caught) {
       state.error.value = messageOf(caught, '删除失败')
     }
