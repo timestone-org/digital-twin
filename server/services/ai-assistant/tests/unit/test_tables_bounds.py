@@ -5,10 +5,12 @@ sheet XML，整张读进内存再截断的话，同一副本上的其它请求�
 """
 
 import io
+import zipfile
 
 import pytest
 from openpyxl import Workbook
 
+from ai_assistant.apps.chat.schemas.attachment import MAX_CONTENT_CHARS
 from ai_assistant.apps.chat.services.perception import (
     UnsupportedInput,
     tables,
@@ -63,3 +65,16 @@ def test_an_oversized_archive_is_refused_before_it_is_opened(
     monkeypatch.setattr(tables, "load_workbook", refuse)
     with pytest.raises(UnsupportedInput, match="解压后"):
         parse_table("点表.xlsx", _xlsx(10))
+
+
+def test_a_dense_table_at_the_upload_cap_is_still_read() -> None:
+    # 点表一类文字重复多的表实测压缩比约 15 倍：上限卡得比这还紧的话，
+    # 一份没超上传上限的正常点表会被当成压缩炸弹拒掉
+    uploaded = MAX_CONTENT_CHARS * 3 // 4
+    buffer = io.BytesIO(_xlsx(10))
+    with zipfile.ZipFile(buffer, "a", zipfile.ZIP_DEFLATED) as archive:
+        archive.writestr("xl/media/pad.bin", bytes(16 * uploaded))
+    content = buffer.getvalue()
+    assert len(content) < uploaded
+    got = parse_table("点表.xlsx", content)
+    assert got.total_rows == 10

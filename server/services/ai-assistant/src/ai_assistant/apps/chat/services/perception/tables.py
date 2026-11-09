@@ -30,8 +30,9 @@ MAX_CELL = 120
 # 逐行计数的上限，过了就只报「超过」。⚠ 计数本身也是逐行解析，不设上限的话
 # 一张百万行的表照样把事件循环钉住，哪怕只留前 MAX_ROWS 行
 MAX_COUNTED_ROWS = 20_000
-# xlsx 解压后的总字节上限。⚠ xlsx 是 zip：2 MB 的附件能解出几百 MB 的 XML
-MAX_UNPACKED_BYTES = 30 * 1024 * 1024
+# xlsx 解压后的总字节上限。⚠ xlsx 是 zip：2 MB 的附件能解出几百 MB 的 XML；
+# 又不能卡太紧：文字重复多的点表正常就有 15 倍上下的压缩比
+MAX_UNPACKED_BYTES = 50 * 1024 * 1024
 # 纯文本的字符上限，量级与截断后的表持平：附件是参考资料，不是全文检索库
 MAX_TEXT_CHARS = 24_000
 
