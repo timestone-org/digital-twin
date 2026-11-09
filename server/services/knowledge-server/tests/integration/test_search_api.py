@@ -22,8 +22,12 @@ from knowledge_server.apps.knowledge.services.retrieval import (
     RetrievalDeps,
     build_strategies,
 )
+from knowledge_server.apps.knowledge.services.retrieval.hybrid import (
+    EMBEDDING_FAILED_NOTE,
+)
 from knowledge_server.apps.knowledge.services.sources import UPLOAD_KIND
 from knowledge_server.settings import API_PREFIX
+from llmcore.errors import ModelUnavailable
 from llmcore.rerank import RerankScore
 
 pytestmark = pytest.mark.requires_postgres
@@ -412,3 +416,40 @@ async def test_capabilities_lists_agentic_as_installed_but_not_ready(
     assert "agentic" in body["strategies"]
     assert "agentic" not in body["ready_strategies"]
     assert "hybrid" in body["ready_strategies"]
+
+
+@dataclass(frozen=True)
+class DownEmbedder:
+    """入库时好好的、检索时端点连不上的那一路。"""
+
+    dimensions: int
+    id: str = "fake"
+    max_input_tokens: int = 512
+    can_embed: bool = True
+
+    async def embed(self, texts: Sequence[str]) -> list[list[float]]:
+        del texts
+        raise ModelUnavailable("连不上嵌入端点")
+
+
+async def test_hybrid_falls_back_to_keywords_when_the_embedder_is_down(
+    db_sessions: object, db_dimensions: int
+) -> None:
+    """⚠ 嵌入端点一时连不上，关键词那一路照样查得到：为它把整次检索判成
+    500 是真损失。退化要写进 note，不悄悄退化。"""
+    base_id, document_id = await seeded(db_sessions)
+    await ingest(
+        db_sessions,  # pyright: ignore[reportArgumentType]
+        ingest_deps(FakeEmbedder(dimensions=db_dimensions)),
+        document_id,
+    )
+    made = await _searched(
+        db_sessions,
+        base_id,
+        DownEmbedder(
+            dimensions=db_dimensions
+        ),  # pyright: ignore[reportArgumentType]
+        NullReranker(),
+    )
+    assert made.strategy == "hybrid"
+    assert made.note == EMBEDDING_FAILED_NOTE

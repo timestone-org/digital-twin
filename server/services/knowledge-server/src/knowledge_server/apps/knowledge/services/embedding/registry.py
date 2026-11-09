@@ -10,6 +10,8 @@
 from collections.abc import Sequence
 from dataclasses import dataclass
 
+from openai import OpenAIError
+
 from knowledge_server.apps.knowledge.services.embedding.ports import (
     Embedder,
     NullEmbedder,
@@ -20,6 +22,7 @@ from llmcore import (
     build_openai_embedding,
 )
 from llmcore.endpoints import EmbeddingEndpoint
+from llmcore.errors import classified
 
 
 @dataclass(frozen=True)
@@ -58,9 +61,15 @@ class RemoteEmbedder:
     async def embed(self, texts: Sequence[str]) -> list[list[float]]:
         """把一批文本转成向量。
 
+        ⚠ 上游异常在这里收敛成 `ModelUnavailable` / `ModelRejected`：原样漏出去
+        的话，全局处理器只认得出「意料之外」，回的是 500 而不是「连不上端点」。
+
         Args: texts。
         """
-        return await self.adapter.embed(texts)
+        try:
+            return await self.adapter.embed(texts)
+        except OpenAIError as error:
+            raise classified(error) from error
 
 
 def build_embedder(

@@ -1,15 +1,22 @@
 """嵌入层：缺席要如实说出来，而不是悄悄回空。"""
 
+from collections.abc import Sequence
+from dataclasses import dataclass
+
+import httpx
 import pytest
+from openai import APIConnectionError
 from pydantic import SecretStr
 
 from knowledge_server.apps.knowledge.services.embedding import (
     Embedder,
     EmbeddingUnavailable,
     NullEmbedder,
+    RemoteEmbedder,
     build_embedder,
 )
 from llmcore.endpoints import EmbeddingEndpoint
+from llmcore.errors import ModelUnavailable
 
 # 这套部署那一档的嵌入窗口
 WINDOW = 512
@@ -52,3 +59,30 @@ def test_both_paths_satisfy_the_protocol() -> None:
     """⚠ 不钉这一条的话，注册表本身就成了新的静默失效点。"""
     assert isinstance(NullEmbedder(), Embedder)
     assert isinstance(build_embedder(None, WINDOW), Embedder)
+
+
+@dataclass(frozen=True)
+class _DownAdapter:
+    """端点连不上的那一路。"""
+
+    id: str = "openai-compat"
+    model: str = "text-embedding"
+    dimensions: int = 4
+    is_ready: bool = True
+
+    async def embed(self, texts: Sequence[str]) -> list[list[float]]:
+        del texts
+        raise APIConnectionError(
+            request=httpx.Request("POST", "http://endpoint/v1/embeddings")
+        )
+
+
+async def test_an_unreachable_endpoint_becomes_model_unavailable() -> None:
+    """⚠ 上游异常原样漏出去的话，全局处理器只认得出「意料之外」，回的是
+    一句 500 加一整段 ERROR 堆栈，而不是「连不上模型端点」。"""
+    made = RemoteEmbedder(
+        adapter=_DownAdapter(),  # pyright: ignore[reportArgumentType]
+        max_input_tokens=WINDOW,
+    )
+    with pytest.raises(ModelUnavailable):
+        await made.embed(["甲"])

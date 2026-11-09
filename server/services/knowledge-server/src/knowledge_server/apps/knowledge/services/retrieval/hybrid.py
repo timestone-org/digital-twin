@@ -6,7 +6,7 @@
 
 ⚠ 没接嵌入档时**退成只走关键词**，并把这件事写进 `note`。这不是「悄悄退化」：
 悄悄退化指的是**不告诉任何人**，而这里如实说了——关键词那一路本来就不需要
-嵌入，为了一句「不可用」把它也关掉才是真损失。
+嵌入，为了一句「不可用」把它也关掉才是真损失。嵌入端点这一次没连上时同理。
 
 ⚠ 接了重排就**多召一批再排**（ADR-0042）：只召 limit 条的话，重排能做的只有
 把这几条换个顺序，而它真正的价值是把融合名次里排在 limit 之外、其实最相关的
@@ -43,10 +43,16 @@ from knowledge_server.apps.knowledge.services.retrieval.reranked import (
     candidate_width,
     reranked,
 )
+from lib.logging import get_logger
+from llmcore.errors import ModelRejected, ModelUnavailable
+
+_logger = get_logger("knowledge.hybrid")
 
 HYBRID = "hybrid"
 
 NO_EMBEDDING_NOTE = "这套部署没接嵌入档，本次只走了关键词那一路"
+
+EMBEDDING_FAILED_NOTE = "嵌入端点这次没算成，本次只走了关键词那一路"
 
 
 @dataclass(frozen=True)
@@ -97,16 +103,13 @@ class Hybrid:
         """
         width = request.limit * LANE_WIDTH
         lanes: dict[str, list[tuple[object, str]]] = {}
-        note = ""
-        if self.embedder.can_embed:
-            probe = (await self.embedder.embed([request.query]))[0]
+        probe, note = await self._probe(request.query)
+        if probe is not None:
             found = await self.indexes.vector.search(
                 session,
                 VectorQuery(base_id=request.base_id, vector=probe, limit=width),
             )
             lanes["vector"] = [(one.chunk_id, one.why) for one in found]
-        else:
-            note = NO_EMBEDDING_NOTE
         words = await self.indexes.keyword.search(
             session,
             KeywordQuery(
@@ -115,3 +118,20 @@ class Hybrid:
         )
         lanes["keyword"] = [(one.chunk_id, one.why) for one in words]
         return (fused(lanes), note)  # pyright: ignore[reportArgumentType]
+
+    async def _probe(self, query: str) -> tuple[list[float] | None, str]:
+        """把问题嵌一次；嵌不成就回 `None` 与一句「这次少走了向量那一路」。
+
+        Args: query。
+        """
+        if not self.embedder.can_embed:
+            return (None, NO_EMBEDDING_NOTE)
+        try:
+            return ((await self.embedder.embed([query]))[0], "")
+        except (ModelUnavailable, ModelRejected) as error:
+            _logger.warning(
+                "knowledge_embedding_skipped",
+                "嵌入没算成，本次只走关键词那一路",
+                code=error.code,
+            )
+            return (None, EMBEDDING_FAILED_NOTE)
