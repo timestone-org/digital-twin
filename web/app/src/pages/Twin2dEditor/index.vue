@@ -21,14 +21,14 @@ import { useUnsavedGuard } from '@/composables/useUnsavedGuard'
 import { useSubEditorRouteGuard } from '@/features/dashboard/useSubEditorRouteGuard'
 
 import EditorStage from './components/EditorStage.vue'
-import NodePalette from './components/NodePalette.vue'
 import StyleLibraryDrawer from './components/StyleLibraryDrawer.vue'
 import Twin2dDiagnostics from './components/Twin2dDiagnostics.vue'
-import Twin2dOutline from './components/Twin2dOutline.vue'
+import Twin2dOutlinePane from './components/Twin2dOutlinePane.vue'
 import Twin2dRightPane from './components/Twin2dRightPane.vue'
 import Twin2dRuntimePreview from './components/Twin2dRuntimePreview.vue'
 import Twin2dToolbar from './components/Twin2dToolbar.vue'
 import { createTwin2dCommands } from './scripts/editorCommands'
+import { TWIN_2D_EDITOR_PANES, twin2dStagePanes } from './scripts/editorPanes'
 import { createTwin2dSelection } from './scripts/editorSelection'
 import type { Twin2dStyleKind } from './scripts/editorSelection'
 import { addNode } from './scripts/nodeOps'
@@ -87,13 +87,6 @@ const issues = computed(() =>
 
 // ⚠ 装配缺口只在启动时读取，并合入顶栏计数，避免素材缺失却没有诊断提示。
 const setupIssues = twin2dSetupIssues()
-
-const outlineSummary = computed(() => {
-  const current = config.value
-  if (current === null) return ''
-  const { nodes, edges, marks, styles } = current
-  return `节点 ${nodes.length} · 连线 ${edges.length} · 标注 ${marks.length} · 样式 ${styles.length}`
-})
 
 const canvasSummary = computed(() => {
   const canvas = config.value?.canvas
@@ -311,59 +304,23 @@ onBeforeUnmount(page.dispose)
           class="min-h-0 flex-1"
           storage-key="dt.twin2d-editor.layout"
           :stack-at="720"
-          :panes="[
-            { id: 'outline', label: '大纲', size: 20, minSize: 180 },
-            { id: 'stage', label: '画布', size: 55, minSize: 280 },
-            { id: 'inspector', label: '检查器', size: 25, minSize: 240 },
-          ]"
+          :panes="TWIN_2D_EDITOR_PANES"
         >
           <template #outline>
-            <aside
-              class="flex min-h-0 flex-1 flex-col gap-2 overflow-y-auto p-2 text-2xs text-text-secondary"
-              aria-label="大纲"
-              data-test="outline"
-            >
-              <div class="flex items-center gap-1">
-                <span class="min-w-0 flex-1 truncate">{{
-                  outlineSummary
-                }}</span>
-                <DtButton
-                  size="xs"
-                  variant="ghost"
-                  intent="primary"
-                  icon="palette"
-                  aria-label="样式库"
-                  title="样式库：新建、复制、恢复内置与整包导入导出"
-                  data-test="open-style-library"
-                  @click="libraryOpen = true"
-                />
-              </div>
-              <Twin2dOutline
-                :config="config"
-                :selection="selection"
-                @change="commit"
-              />
-              <NodePalette :styles="config.styles" @add="addFromPalette" />
-            </aside>
+            <Twin2dOutlinePane
+              :config="config"
+              :selection="selection"
+              @change="commit"
+              @add="addFromPalette"
+              @open-library="libraryOpen = true"
+            />
           </template>
           <template #stage>
             <DtResizableLayout
               class="min-h-0 flex-1"
               direction="vertical"
               storage-key="dt.twin2d-editor.diagnostics"
-              :panes="
-                showIssues
-                  ? [
-                      { id: 'canvas', label: '画布', size: 75, minSize: 180 },
-                      {
-                        id: 'issues',
-                        label: '配置问题',
-                        size: 25,
-                        minSize: 80,
-                      },
-                    ]
-                  : [{ id: 'canvas', label: '画布', size: 75, minSize: 180 }]
-              "
+              :panes="twin2dStagePanes(showIssues)"
             >
               <template #canvas>
                 <section
@@ -373,7 +330,6 @@ onBeforeUnmount(page.dispose)
                   :data-fit-request="fitRequest"
                 >
                   <EditorStage
-                    v-if="config !== null"
                     :config="config"
                     :selection="selection"
                     :fit-request="fitRequest"
@@ -395,7 +351,6 @@ onBeforeUnmount(page.dispose)
               </template>
               <template #issues>
                 <div
-                  v-if="showIssues"
                   class="min-h-0 flex-1 overflow-y-auto p-2 text-2xs text-text-secondary"
                   aria-label="配置问题"
                   data-test="diagnostics"
@@ -441,7 +396,6 @@ onBeforeUnmount(page.dispose)
                 />
               </div>
               <Twin2dRightPane
-                v-if="config !== null"
                 class="min-h-0 flex-1"
                 :config="config"
                 :selection="selection.inspect.value"
