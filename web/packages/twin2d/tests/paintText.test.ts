@@ -408,7 +408,7 @@ describe('paintText 与基类', () => {
     const out = paintText(txt({ z: 4, opacity: 0.5 }), CTX)
     expect(out.style['z-index']).toBe('4')
     expect(out.style['opacity']).toBe('0.5')
-    expect(out.style['pointer-events']).toBe('auto')
+    expect(out.style['pointer-events']).toBe('inherit')
     expect(out.attrs).toEqual({})
   })
 

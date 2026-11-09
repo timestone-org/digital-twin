@@ -151,6 +151,16 @@ function widthLimitCss(
 }
 
 /**
+ * `pointerEvents` 的 CSS 取值：`'auto'` 落成 `inherit`，让外层的 `none` 整枝生效。
+ * ⚠ 写死 `auto` 会把外层的 `none` 重新打开：透明的悬浮卡盖在下方节点上，
+ * 点下方节点落到上方节点身上（§9.3）。
+ * @param value 已归一化的指针事件档位
+ */
+function pointerEventsCss(value: Twin2dPrim['pointerEvents']): string {
+  return value === 'none' ? 'none' : 'inherit'
+}
+
+/**
  * 图元基类的内联样式：摆位、尺寸、宽度上下限、层级、透明度、旋转与等比缩放及其基点、
  * 过渡、指针事件、keyframes 类。
  * ⚠ `pointerEvents` / `transformOrigin` / `minWidth` / `maxWidth` 这四项漏一项的表现
@@ -178,7 +188,7 @@ export function paintBase(
       prim.transformOrigin,
       DEFAULT_TRANSFORM_ORIGIN,
     ),
-    'pointer-events': prim.pointerEvents,
+    'pointer-events': pointerEventsCss(prim.pointerEvents),
   }
   const transform = transformCss(placed['transform'], prim, ctx.node)
   if (transform !== null) style['transform'] = transform

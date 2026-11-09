@@ -246,6 +246,23 @@ describe('递归', () => {
   })
 })
 
+describe('pointerEvents 整枝生效', () => {
+  // ⚠ 子图元写死 `pointer-events: auto` 会把外层的 none 重新打开：透明的悬浮卡盖在
+  // 下方节点上，点下方节点落到的是上方节点
+  it('none 的 box 底下缺省的子孙都不吃指针', () => {
+    const leaf = txtOf({ id: 'leaf' })
+    const row = boxOf({ id: 'row', children: [leaf, vecOf({ id: 'mark' })] })
+    const tip = boxOf({ opacity: 0, pointerEvents: 'none', children: [row] })
+
+    const wrapper = render(tip)
+
+    const values = wrapper
+      .findAll('.t2-prim')
+      .map((el) => (el.element as HTMLElement).style.pointerEvents)
+    expect(values).toEqual(['none', 'inherit', 'inherit', 'inherit'])
+  })
+})
+
 describe('子树拿到的盒尺寸是这个 box 自己的', () => {
   // ⚠ 子孙拿盒尺寸算 perim 的周长落点与 unit 档 vec 的坐标换算：不换的表现是
   // 子盒里的图元贴到整个节点的边上去，而两处单看都说得通

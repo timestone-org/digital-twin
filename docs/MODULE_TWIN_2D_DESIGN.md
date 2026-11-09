@@ -443,7 +443,8 @@ interface Twin2dPrimBase {
    *  hover scale(1.08) 落在这里。⚠ 归一化按尺寸类正数收：0 与负数一律回 1。 */
   scale: number
   transformOrigin: string     // 缺省 '50% 50%'；悬浮卡的两档是 '50% 100%' / '50% 0'
-  /** 'none' 时整枝不吃指针事件。⚠ 悬浮卡不设它会 hover 自我抖动（§9.3）。 */
+  /** 'none' 时整枝不吃指针事件；'auto' 落成 CSS `inherit`，跟随外层。
+   *  ⚠ 悬浮卡不设它会 hover 自我抖动（§9.3）。 */
   pointerEvents: 'auto' | 'none'
   /** 节点整体旋转时本图元反向旋转保持正立（电路图的元件标号惯例）。 */
   keepUpright: boolean
@@ -1341,6 +1342,10 @@ Twin2dNodeBox.vue 的根元素上一对 @mouseenter / @mouseleave，
 
 ⚠ 悬浮卡必须 `pointerEvents:'none'`（#20）：卡片弹出来盖住指针会让节点失去 hover，
 于是卡片收起、指针回到节点、再弹出——**每秒抖十几次**，而每一帧的样式都是"对"的。
+
+⚠ `'auto'` 落成 `pointer-events: inherit` 而不是 `auto`：子图元写死 `auto` 会把外层的
+`none` 重新打开，透明的悬浮卡（含翻到节点下方的那张）盖在邻近节点上，点那个节点落到
+卡片主人身上。
 
 ⚠ hover 变体同时抬 `rootPatch.z`（#14），否则悬浮卡被右邻节点整块盖住。
 
