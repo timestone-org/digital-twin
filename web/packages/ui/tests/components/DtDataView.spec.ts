@@ -246,6 +246,21 @@ describe('DtDataView', () => {
     )
   })
 
+  it('操作列缺省贴右：窄屏横向滚动时行内操作不被挤出视口', () => {
+    const heads = render().findAll('th')
+    expect(heads.at(-1)?.classes()).toContain('is-sticky-end')
+  })
+
+  it('操作列显式 sticky: false 时不贴边', () => {
+    const heads = render({
+      columns: [
+        { key: 'name', label: '名称', card: 'title' },
+        { key: 'actions', label: '操作', card: 'actions', sticky: false },
+      ],
+    }).findAll('th')
+    expect(heads.at(-1)?.classes()).not.toContain('is-sticky-end')
+  })
+
   it('排序事件原样透传给调用方', async () => {
     const wrapper = render({
       columns: [{ key: 'name', label: '名称', sortable: true }],

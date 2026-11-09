@@ -63,6 +63,18 @@ function onSort(column: DtTableColumn): void {
 function isHeaderHidden(column: DtTableColumn): boolean {
   return props.hiddenHeaderKeys.includes(column.key)
 }
+
+/**
+ * 贴边列的类名：只认首列 start、末列 end，其余位置的声明不生效。
+ * @param column 列定义
+ * @param index 列序号
+ */
+function stickyClass(column: DtTableColumn, index: number): string | null {
+  if (column.sticky === 'start' && index === 0) return 'is-sticky-start'
+  const isLast = index === props.columns.length - 1
+  if (column.sticky === 'end' && isLast) return 'is-sticky-end'
+  return null
+}
 </script>
 
 <template>
@@ -87,10 +99,10 @@ function isHeaderHidden(column: DtTableColumn): boolean {
       <thead>
         <tr>
           <th
-            v-for="column in columns"
+            v-for="(column, col) in columns"
             :key="column.key"
             scope="col"
-            :class="`is-${column.align ?? 'left'}`"
+            :class="[`is-${column.align ?? 'left'}`, stickyClass(column, col)]"
             :aria-sort="ariaSort(column)"
             :aria-label="isHeaderHidden(column) ? column.label : undefined"
           >
@@ -120,9 +132,9 @@ function isHeaderHidden(column: DtTableColumn): boolean {
         <!-- ⚠ key 取 id 不取下标：下标做 key 会在删中间行时把状态串到相邻行 -->
         <tr v-for="(row, index) in rows" :key="row.id">
           <td
-            v-for="column in columns"
+            v-for="(column, col) in columns"
             :key="column.key"
-            :class="`is-${column.align ?? 'left'}`"
+            :class="[`is-${column.align ?? 'left'}`, stickyClass(column, col)]"
           >
             <!-- ⚠ 插槽名拼错不报错，只会渲染成这个占位符 -->
             <slot :name="`cell-${column.key}`" :row="row" :index="index">
@@ -137,6 +149,22 @@ function isHeaderHidden(column: DtTableColumn): boolean {
 
 <style scoped lang="scss">
 @use '../../styles/control' as ctl;
+
+// 贴边单元格的不透明底：面板色多半半透明，叠在页面底色上才盖得住滚过去的内容
+@mixin opaque-fill($tint: null) {
+  @if $tint {
+    background:
+      linear-gradient($tint, $tint),
+      linear-gradient(var(--surface-panel), var(--surface-panel)),
+      var(--surface-base);
+  } @else {
+    background:
+      linear-gradient(var(--surface-panel), var(--surface-panel)),
+      var(--surface-base);
+  }
+}
+
+$row-hover: rgba(var(--accent-primary-rgb), 0.04);
 
 .dt-table__scroll {
   overflow-x: auto;
@@ -172,9 +200,9 @@ function isHeaderHidden(column: DtTableColumn): boolean {
     // 必须给不透明底色，否则滚上来的行会从字缝里透出来。
     position: sticky;
     top: 0;
-    z-index: 1;
+    z-index: 2;
     padding: 12px;
-    background: var(--surface-panel);
+    @include opaque-fill;
     box-shadow: inset 0 -1px 0 var(--border-subtle);
     font-size: var(--font-size-compact);
     font-weight: 500;
@@ -192,11 +220,51 @@ function isHeaderHidden(column: DtTableColumn): boolean {
     vertical-align: middle;
   }
 
+  // 贴边列：横向滚动时操作列 / 首列不被挤出视口，分界线提示后面还有内容
+  td.is-sticky-start,
+  td.is-sticky-end {
+    position: sticky;
+    z-index: 1;
+    @include opaque-fill;
+  }
+
+  .is-sticky-start {
+    left: 0;
+    box-shadow: inset -1px 0 0 var(--border-subtle);
+  }
+
+  .is-sticky-end {
+    right: 0;
+    box-shadow: inset 1px 0 0 var(--border-subtle);
+  }
+
+  th.is-sticky-start,
+  th.is-sticky-end {
+    z-index: 3;
+  }
+
+  th.is-sticky-start {
+    box-shadow:
+      inset -1px 0 0 var(--border-subtle),
+      inset 0 -1px 0 var(--border-subtle);
+  }
+
+  th.is-sticky-end {
+    box-shadow:
+      inset 1px 0 0 var(--border-subtle),
+      inset 0 -1px 0 var(--border-subtle);
+  }
+
   tbody tr {
     transition: background 0.15s ease;
 
     &:hover td {
-      background: rgba(var(--accent-primary-rgb), 0.04);
+      background: $row-hover;
+    }
+
+    &:hover td.is-sticky-start,
+    &:hover td.is-sticky-end {
+      @include opaque-fill($row-hover);
     }
 
     &:last-child td {

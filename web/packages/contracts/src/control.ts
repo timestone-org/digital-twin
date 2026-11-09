@@ -43,6 +43,12 @@ export interface DtTableColumn {
   align?: 'left' | 'center' | 'right'
   /** 可排序。排序**不在组件内做**，只抛事件——数据通常在服务端分页。 */
   sortable?: boolean
+  /**
+   * 横向滚动时贴边不动。⚠ 只认首列 `start`、末列 `end`：中间列贴边要知道
+   * 前面各列的实际宽度，算不出来就会盖住相邻列。`false` 显式关掉
+   * DtDataView 给操作列的缺省贴右。
+   */
+  sticky?: 'start' | 'end' | false
 }
 
 /** 排序态。`null` 表示用调用方的默认序。 */
