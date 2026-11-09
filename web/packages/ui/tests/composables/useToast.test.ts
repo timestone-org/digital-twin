@@ -84,4 +84,38 @@ describe('useToast', () => {
     expect(toast.toasts.value).toHaveLength(0)
     expect(vi.getTimerCount()).toBe(0)
   })
+
+  it('最多同时挂 5 条，再来就挤掉最早那条并停掉它的定时器', () => {
+    const toast = useToast()
+    for (let index = 1; index <= 8; index += 1)
+      toast.error(`第 ${index} 批失败`)
+    expect(toast.toasts.value.map((item) => item.message)).toEqual([
+      '第 4 批失败',
+      '第 5 批失败',
+      '第 6 批失败',
+      '第 7 批失败',
+      '第 8 批失败',
+    ])
+    expect(vi.getTimerCount()).toBe(5)
+  })
+
+  it('与最新一条同文同类时不叠一条，只把它的停留时间重新计起', () => {
+    const toast = useToast()
+    const first = toast.error('网络断了')
+    vi.advanceTimersByTime(5000)
+    const second = toast.error('网络断了')
+    expect(second).toBe(first)
+    expect(toast.toasts.value).toHaveLength(1)
+    vi.advanceTimersByTime(5000)
+    expect(toast.toasts.value).toHaveLength(1)
+    vi.advanceTimersByTime(1000)
+    expect(toast.toasts.value).toHaveLength(0)
+  })
+
+  it('同文但类别不同照样各占一条', () => {
+    const toast = useToast()
+    toast.info('同步')
+    toast.error('同步')
+    expect(toast.toasts.value).toHaveLength(2)
+  })
 })
