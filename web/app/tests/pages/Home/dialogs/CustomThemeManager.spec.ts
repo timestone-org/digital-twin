@@ -154,3 +154,41 @@ describe('编辑', () => {
     })
   })
 })
+
+describe('提交后的收起时机', () => {
+  function receipt(wrapper: ReturnType<typeof mountManager>) {
+    const done =
+      wrapper.emitted<[unknown, (ok: boolean) => void]>('create')?.[0]?.[1]
+    if (done === undefined) throw new Error('create 没带回执')
+    return done
+  }
+
+  async function submitNew(wrapper: ReturnType<typeof mountManager>) {
+    await clickText(wrapper, '新建主题')
+    await wrapper.find('input[placeholder="主题名称"]').setValue('草稿主题')
+    await clickText(wrapper, '创建')
+  }
+
+  it('上层回报失败时表单留着，草稿名不丢', async () => {
+    const wrapper = mountManager()
+    await submitNew(wrapper)
+    const done = receipt(wrapper)
+    done(false)
+    await wrapper.vm.$nextTick()
+    const input = wrapper.find<HTMLInputElement>(
+      'input[placeholder="主题名称"]',
+    )
+    expect(input.exists()).toBe(true)
+    expect(input.element.value).toBe('草稿主题')
+  })
+
+  it('上层回报成功才收起', async () => {
+    const wrapper = mountManager()
+    await submitNew(wrapper)
+    expect(wrapper.find('input[placeholder="主题名称"]').exists()).toBe(true)
+    const done = receipt(wrapper)
+    done(true)
+    await wrapper.vm.$nextTick()
+    expect(wrapper.find('input[placeholder="主题名称"]').exists()).toBe(false)
+  })
+})

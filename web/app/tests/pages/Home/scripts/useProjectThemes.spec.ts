@@ -14,10 +14,12 @@ import { useProjectThemes } from '@/pages/Home/scripts/useProjectThemes'
 import type { ProjectThemes } from '@/pages/Home/scripts/useProjectThemes'
 
 const toastError = vi.fn()
+const confirmAsk = vi.fn()
 vi.mock('@dt/ui', async () => {
   const actual = await vi.importActual<Record<string, unknown>>('@dt/ui')
   return {
     ...actual,
+    useConfirm: () => ({ ask: confirmAsk }),
     useToast: () => ({
       success: vi.fn(),
       error: toastError,
@@ -48,6 +50,8 @@ function host(projectId: string | null = 'p-1') {
 
 beforeEach(() => {
   toastError.mockReset()
+  confirmAsk.mockReset()
+  confirmAsk.mockResolvedValue(true)
 })
 
 afterEach(() => {
@@ -110,6 +114,36 @@ describe('写回', () => {
 
     expect(toastError).toHaveBeenCalled()
     expect(api.items.value).toHaveLength(1)
+  })
+})
+
+describe('删除要先问', () => {
+  it('说清引用它的大屏会回退配色；不同意就不删', async () => {
+    confirmAsk.mockResolvedValue(false)
+    const remove = vi.spyOn(themesApi, 'deleteProjectTheme')
+    const { api } = host()
+    await api.drop(theme('t-1'))
+    expect(confirmAsk).toHaveBeenCalledWith(
+      expect.objectContaining({ danger: true }),
+    )
+    expect(confirmAsk).toHaveBeenCalledWith(
+      expect.objectContaining({ message: expect.stringContaining('回退') }),
+    )
+    expect(remove).not.toHaveBeenCalled()
+  })
+})
+
+describe('写回结果回执', () => {
+  it('成功回 true，失败回 false 供表单决定是否收起', async () => {
+    vi.spyOn(themesApi, 'listProjectThemes').mockResolvedValue([])
+    vi.spyOn(themesApi, 'createProjectTheme')
+      .mockResolvedValueOnce(theme('t-1'))
+      .mockRejectedValueOnce(new Error('422'))
+    const { api } = host()
+    const done = vi.fn()
+    await api.add({ name: 'a', mode: 'dark', tokens: {} }, done)
+    await api.add({ name: 'b', mode: 'dark', tokens: {} }, done)
+    expect(done.mock.calls).toEqual([[true], [false]])
   })
 })
 

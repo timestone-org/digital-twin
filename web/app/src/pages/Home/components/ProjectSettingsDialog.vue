@@ -28,6 +28,7 @@ import type {
   ProjectThemePatchInput,
 } from '@/api/projectThemes'
 import CustomThemeManager from './CustomThemeManager.vue'
+import type { ThemeWriteDone } from '../scripts/useProjectThemes'
 import { readText } from '../scripts/themeFields'
 import type { ProjectSettingsPayload } from '../scripts/payloads'
 
@@ -49,8 +50,12 @@ const emit = defineEmits<{
   'update:open': [open: boolean]
   save: [payload: ProjectSettingsPayload]
   'request-delete': []
-  'create-theme': [input: ProjectThemeCreateInput]
-  'update-theme': [themeId: string, patch: ProjectThemePatchInput]
+  'create-theme': [input: ProjectThemeCreateInput, done: ThemeWriteDone]
+  'update-theme': [
+    themeId: string,
+    patch: ProjectThemePatchInput,
+    done: ThemeWriteDone,
+  ]
   'delete-theme': [theme: ProjectThemePayload]
 }>()
 
@@ -106,9 +111,20 @@ watch(
   { immediate: true },
 )
 
-/** 改一套主题带两个参数，模板里的内联表达式只喂得进第一个，故走具名处理器。 */
-function onThemeUpdate(themeId: string, patch: ProjectThemePatchInput): void {
-  emit('update-theme', themeId, patch)
+/** 增改主题都带多个参数（含回执），模板里的 `$event` 只喂得进第一个，故走具名处理器。 */
+function onThemeCreate(
+  input: ProjectThemeCreateInput,
+  done: ThemeWriteDone,
+): void {
+  emit('create-theme', input, done)
+}
+
+function onThemeUpdate(
+  themeId: string,
+  patch: ProjectThemePatchInput,
+  done: ThemeWriteDone,
+): void {
+  emit('update-theme', themeId, patch, done)
 }
 
 function save(): void {
@@ -218,7 +234,7 @@ function save(): void {
           v-if="canManageTheme"
           :themes="customThemes"
           :busy="themeBusy ?? false"
-          @create="emit('create-theme', $event)"
+          @create="onThemeCreate"
           @update="onThemeUpdate"
           @delete="emit('delete-theme', $event)"
         />
