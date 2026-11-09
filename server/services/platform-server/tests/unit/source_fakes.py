@@ -7,6 +7,7 @@
 在一个六百行的文件里找位置。
 """
 
+import asyncio
 from collections.abc import Mapping, Sequence
 from dataclasses import dataclass, field
 
@@ -50,11 +51,15 @@ class FakeAcSource:
     buckets: list[dict[str, object]] = field(default_factory=list)
     queries: list[tuple[str, dict[str, object]]] = field(default_factory=list)
     failure: Exception | None = None
+    #: 每次查询先等这么久，模拟外库连不上时卡满登录超时
+    delay_s: float = 0.0
 
     async def fetch_all(
         self, sql: str, params: Mapping[str, object]
     ) -> list[dict[str, object]]:
         self.queries.append((sql, dict(params)))
+        if self.delay_s:
+            await asyncio.sleep(self.delay_s)
         if self.failure is not None:
             raise self.failure
         if "INFORMATION_SCHEMA.COLUMNS" in sql:

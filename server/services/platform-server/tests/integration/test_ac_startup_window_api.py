@@ -4,12 +4,14 @@
 补录更早的。区间的两端都由数据源当下的实际范围说了算。
 """
 
+import asyncio
 import uuid
 from collections.abc import Callable
 from datetime import UTC, datetime, timedelta
 from typing import Protocol
 
 import httpx
+import pytest
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from lib.errors import DependencyUnavailable
@@ -21,6 +23,7 @@ from platform_server.apps.hvac.models import (
     Room,
     Workshop,
 )
+from platform_server.apps.hvac.services import ac_startup_query
 from platform_server.apps.hvac.services.ac_room_configuration import (
     load_configuration,
 )
@@ -42,6 +45,7 @@ class FakeAcSource(Protocol):
 
     failure: Exception | None
     extent: list[dict[str, object]]
+    delay_s: float
 
 
 PREFIX = "/api/v1/platform"
@@ -294,6 +298,24 @@ async def test_an_unreachable_source_does_not_break_the_batches_page(
     room_id = await bound_room(db_session, "外库不可用")
     ac_source.failure = DependencyUnavailable("外部数据源暂时不可用")
     response = await app_client.get(f"{PREFIX}/rooms/{room_id}/startup-batches")
+    assert response.status_code == 200
+    assert response.json()["data"]["source_range"] is None
+
+
+async def test_a_slow_source_does_not_hold_the_batches_page(
+    app_client: httpx.AsyncClient,
+    db_session: AsyncSession,
+    ac_source: FakeAcSource,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """⚠ 外库连不上时卡满登录与查询超时，整页就跟着等到前端先超时。"""
+    room_id = await bound_room(db_session, "外库很慢")
+    ac_source.delay_s = 30.0
+    monkeypatch.setattr(ac_startup_query, "SOURCE_RANGE_BUDGET_S", 0.05)
+    async with asyncio.timeout(5):
+        response = await app_client.get(
+            f"{PREFIX}/rooms/{room_id}/startup-batches"
+        )
     assert response.status_code == 200
     assert response.json()["data"]["source_range"] is None
 
