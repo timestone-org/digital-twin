@@ -342,17 +342,25 @@ class FakeDriver:
         self.has_entered_subscribe = asyncio.Event()
         # 设了就把 subscribe 卡在这里，模拟大数据源首次订阅的几秒
         self.subscribe_gate: asyncio.Event | None = None
+        # 设了就把 connect 卡在这里，模拟现场握手的几秒
+        self.connect_gate: asyncio.Event | None = None
+        self.has_entered_connect = asyncio.Event()
+        self.disconnects = 0
 
     def load_points(self, points: list[PointSpec]) -> int:
         self.loaded = [point.point_code for point in points]
         return len(self.loaded)
 
     async def connect(self) -> None:
+        self.has_entered_connect.set()
+        if self.connect_gate is not None:
+            await self.connect_gate.wait()
         if self.connect_error is not None:
             raise self.connect_error
         self.is_connected = True
 
     async def disconnect(self) -> None:
+        self.disconnects += 1
         self.is_connected = False
 
     async def healthcheck(self) -> None:

@@ -43,3 +43,10 @@ class MissingPointCode(CollectError):
     """写值请求没带点位编码。"""
 
     reason: str = "missing_point_code"
+
+
+class NoReadablePoints(CollectError, ValueError):
+    """数据源没有一个可读取的有效点位，连了也不产值。
+
+    ⚠ 同时是 `ValueError`：各驱动按它把这类错误归为 config 档。
+    """

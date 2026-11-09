@@ -11,6 +11,7 @@ import pytest
 
 from collector_server.apps.collect.drivers.base import (
     DriverCapabilities,
+    DriverNotConnected,
     RejectedPoint,
 )
 from collector_server.apps.collect.runtime.session import (
@@ -462,3 +463,91 @@ async def test_a_dropped_heartbeat_tears_the_session_down(
     async with asyncio.timeout(3):
         await task
     assert driver.is_connected is False
+
+
+async def test_a_stop_landing_during_connect_subscribes_nothing(
+    driver: Any, reporter: Any, build_source: Any
+) -> None:
+    # 叫停落在握手途中：握手回来后不许再整批订阅、也不许补报 online
+    driver.connect_gate = asyncio.Event()
+    session = _session(build_source(), driver, reporter)
+    task = asyncio.create_task(session.run())
+    await asyncio.wait_for(driver.has_entered_connect.wait(), timeout=2)
+    await session.stop()
+    disconnects_before = driver.disconnects
+    driver.connect_gate.set()
+    async with asyncio.timeout(2):
+        await task
+    assert driver.subscribed == []
+    assert STATE_ONLINE not in reporter.states()
+    assert session.is_online is False
+    assert driver.disconnects > disconnects_before
+    assert driver.is_connected is False
+
+
+async def test_a_domain_failure_reports_its_own_message(
+    reporter: Any, build_driver: Any, build_source: Any
+) -> None:
+    # 领域异常的原文是我们自己写给人看的；只报类名，界面上没人看得懂
+    driver = build_driver(
+        connect_error=DriverNotConnected("HTTP 采集未在采集进程启用")
+    )
+    session = _session(build_source(), driver, reporter)
+    task = asyncio.create_task(session.run())
+    await _until(lambda: STATE_OFFLINE in reporter.states())
+    await session.stop()
+    async with asyncio.timeout(3):
+        await task
+    offline = [s for s in reporter.reported if s.state == STATE_OFFLINE]
+    assert offline[0].error_detail == "HTTP 采集未在采集进程启用"
+
+
+async def test_a_foreign_failure_reports_only_its_type(
+    reporter: Any, build_driver: Any, build_source: Any
+) -> None:
+    # 第三方异常的原文可能带地址等现场细节，只报类名
+    driver = build_driver(connect_error=ConnectionRefusedError("10.0.0.1"))
+    session = _session(build_source(), driver, reporter)
+    task = asyncio.create_task(session.run())
+    await _until(lambda: STATE_OFFLINE in reporter.states())
+    await session.stop()
+    async with asyncio.timeout(3):
+        await task
+    offline = [s for s in reporter.reported if s.state == STATE_OFFLINE]
+    assert offline[0].error_detail == "ConnectionRefusedError"
+
+
+async def test_a_source_without_points_reports_why(
+    reporter: Any, build_driver: Any, build_source: Any
+) -> None:
+    driver = build_driver(
+        capabilities=DriverCapabilities(
+            is_subscribe_supported=True,
+            is_browse_supported=True,
+            is_write_supported=True,
+            is_empty_source_connection_supported=False,
+        )
+    )
+    session = _session(build_source(points=()), driver, reporter)
+    task = asyncio.create_task(session.run())
+    await _until(lambda: STATE_OFFLINE in reporter.states())
+    await session.stop()
+    async with asyncio.timeout(3):
+        await task
+    offline = [s for s in reporter.reported if s.state == STATE_OFFLINE]
+    assert offline[0].error_detail == "这个数据源没有可读取的有效点位"
+
+
+async def test_a_stopped_session_reports_itself_offline(
+    driver: Any, reporter: Any, build_source: Any
+) -> None:
+    session = _session(build_source(), driver, reporter)
+    task = asyncio.create_task(session.run())
+    await _until(lambda: STATE_ONLINE in reporter.states())
+    await session.stop()
+    async with asyncio.timeout(2):
+        await task
+    await session.report_stopped()
+    last = reporter.reported[-1]
+    assert (last.state, last.point_count) == (STATE_OFFLINE, 0)
+    assert (last.error_category, last.error_detail) == (None, None)
