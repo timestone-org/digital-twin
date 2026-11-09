@@ -6,7 +6,7 @@
  */
 import { join } from 'node:path'
 import { compile } from 'sass-embedded'
-import { beforeAll, describe, expect, it } from 'vitest'
+import { describe, expect, it } from 'vitest'
 
 const SHEET = join(
   process.cwd(),
@@ -18,11 +18,7 @@ const SHEET = join(
   '_data-card.scss',
 )
 
-let css = ''
-
-beforeAll(async () => {
-  css = (await compile(SHEET)).css
-})
+const css = compile(SHEET).css
 
 /** 取一条选择器的声明块；没有这条规则时返回空串。 */
 function ruleBody(selector: string): string {

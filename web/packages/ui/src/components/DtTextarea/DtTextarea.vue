@@ -112,8 +112,10 @@ const remaining = computed<number | null>(() =>
     : Math.max(0, limit.value - props.modelValue.length),
 )
 
+const used = computed(() => props.modelValue.length)
+
 const isOverLimit = computed(
-  () => limit.value !== null && props.modelValue.length > limit.value,
+  () => limit.value !== null && used.value > limit.value,
 )
 
 const announcement = computed(() => {
@@ -173,7 +175,7 @@ defineExpose({ textareaEl })
         :class="{ 'dt-textarea__count--over': isOverLimit }"
         aria-hidden="true"
       >
-        {{ modelValue.length }} / {{ limit }}
+        {{ used }} / {{ limit }}
       </span>
     </template>
   </DtField>
