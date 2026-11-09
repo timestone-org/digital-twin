@@ -8,7 +8,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 
 from lib.auth import CallerContext
 from lib.objectstore import ObjectStore
-from lib.web import ApiResponse, CursorPage, Page, PageParams, ok, page_params
+from lib.web import ApiResponse, CursorPage, Page, ok
 from platform_server.apps.modeling.catalog import (
     DATASET_MANAGE,
     MODELING_PUBLISH,
@@ -57,7 +57,6 @@ bindings = APIRouter(
 )
 
 SessionDep = Annotated[AsyncSession, Depends(get_session)]
-PageDep = Annotated[PageParams, Depends(page_params)]
 ViewDep = Annotated[CallerContext, Depends(require(MODELING_VIEW))]
 PublishDep = Annotated[WriteGate, Depends(get_publish_context)]
 StoreDep = Annotated[ObjectStore, Depends(get_object_store)]
@@ -187,16 +186,17 @@ async def retire_version(
     session: SessionDep,
     write: PublishDep,
     response: Response,
+    store: StoreDep,
 ) -> None:
     """退役。还有绑定指着它时 409。
 
-    Args: version_id, session, write, response。
+    Args: version_id, session, write, response, store。
     """
     await write.run_once(
         endpoint=f"modeling.retire_version.{version_id}",
         model=CommandResourceOut,
         action=lambda: model_service.retire_version_command(
-            session, version_id
+            session, version_id, store
         ),
     )
     response.status_code = status.HTTP_204_NO_CONTENT
@@ -256,15 +256,15 @@ async def update_binding(
     binding_id: uuid.UUID,
     payload: ModelBindingUpdateIn,
     session: SessionDep,
-    _write: PublishDep,
+    write: PublishDep,
 ) -> ApiResponse[ModelBindingImpactOut]:
     """回执带影响面：哪些台账列会跟着变。重算由用户在台账页显式发起。
 
-    Args: binding_id, payload, session, _write。
+    Args: binding_id, payload, session, write。
     """
     return ok(
         await model_service.update_binding(
-            session, binding_id=binding_id, payload=payload
+            session, binding_id=binding_id, payload=payload, actor=_actor(write)
         )
     )
 
@@ -275,13 +275,13 @@ async def update_binding(
     summary="删除绑定",
 )
 async def remove_binding(
-    binding_id: uuid.UUID, session: SessionDep, _write: PublishDep
+    binding_id: uuid.UUID, session: SessionDep, write: PublishDep
 ) -> Response:
     """删绑定。之后那一列变空并给「模型未绑定」。
 
-    Args: binding_id, session, _write。
+    Args: binding_id, session, write。
     """
-    await delete_binding(session, binding_id)
+    await delete_binding(session, binding_id, _actor(write))
     return Response(status_code=status.HTTP_204_NO_CONTENT)
 
 

@@ -10,6 +10,9 @@ from platform_server.apps.modeling.operators.base import (
     OperatorError,
     PortSpec,
 )
+from platform_server.apps.modeling.operators.fitting import (
+    non_target_numeric_keys,
+)
 from platform_server.apps.modeling.operators.frame import (
     DTYPE_NUMBER,
     ROLE_TARGET,
@@ -68,17 +71,8 @@ class FrameOperator(OperatorBase):
         self, frame: Frame, configured: Sequence[str]
     ) -> tuple[str, ...]:
         """排除运行计划中的目标列。Args: frame, configured。"""
-        target = (
-            None
-            if self.split_plan is None
-            else self.split_plan.get("target_column")
-        )
-        keys = tuple(configured) or tuple(
-            column.key
-            for column in frame.columns
-            if column.dtype == DTYPE_NUMBER
-            and column.role != ROLE_TARGET
-            and column.key != target
+        keys = tuple(configured) or non_target_numeric_keys(
+            frame, self.split_plan
         )
         if not keys:
             raise OperatorError("没有可处理的非目标数值列")

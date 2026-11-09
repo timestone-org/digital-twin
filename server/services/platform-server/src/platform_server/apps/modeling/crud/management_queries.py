@@ -164,9 +164,9 @@ async def list_versions(
     statement = _time_bounds(statement, query, versions.c.created_at)
     total = await _total(session, statement, query)
     order = (
-        versions.c.created_at
-        if query.pagination == "cursor"
-        else versions.c.version
+        versions.c.version
+        if _orders_by_number(query)
+        else versions.c.created_at
     )
     selected = _bounded(
         statement, query, anchor, (order, versions.c.id)
@@ -305,15 +305,26 @@ def _time_bounds[RowT: tuple[object, ...]](
     return statement
 
 
+def _orders_by_number(query: VersionListQuery) -> bool:
+    """页码分页且限定了一个流程时按版本号排；其余按发布先后。
+
+    ⚠ 版本号是每个流程各自的计数：跨流程按它排，新流程的 v1 会沉到最后一页。
+    Args: query。
+    """
+    return query.pagination != "cursor" and (
+        query.instance_id is not None or query.pipeline_id is not None
+    )
+
+
 async def _version_rows(
     session: AsyncSession,
     selected: Subquery,
     query: VersionListQuery,
 ) -> list[ModelVersion]:
     order = (
-        selected.c.created_at
-        if query.pagination == "cursor"
-        else selected.c.version
+        selected.c.version
+        if _orders_by_number(query)
+        else selected.c.created_at
     )
     statement = (
         select(ModelingModelVersion, ModelingRuleVersion)

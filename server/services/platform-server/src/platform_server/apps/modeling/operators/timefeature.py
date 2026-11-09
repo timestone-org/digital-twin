@@ -51,6 +51,8 @@ TIME_PARTS: tuple[str, ...] = (
 COLUMN_PREFIX = "ts_"
 # 周六起算的星期序号（周一为 0）
 _SATURDAY = 5
+# 拟合参数里的时区偏移键
+_FITTED_TZ = "tz_offset_minutes"
 
 
 class TimeFeatureConfig(OperatorConfig):
@@ -132,6 +134,32 @@ class TimeFeature(OperatorBase):
         result = _appended(frame, parts, made)
         self._ran = self._recorded(result, parts, frame.index)
         return {"frame": result}
+
+    def dump_fitted(self) -> dict[str, Any] | None:
+        """把造列用的时区偏移冻进可服务表示，推理时按同一个时区造列。"""
+        return {_FITTED_TZ: self.tz_offset_minutes}
+
+    def load_fitted(self, params: dict[str, Any]) -> None:
+        """回灌冻结的时区偏移。
+
+        Args: params。
+        """
+        self.validate_fitted(params)
+        offset = params.get(_FITTED_TZ)
+        if isinstance(offset, int):
+            self.tz_offset_minutes = offset
+
+    @classmethod
+    def validate_fitted(cls, params: dict[str, Any]) -> None:
+        """时区偏移可以缺（旧版本），有就必须是整数分钟。
+
+        Args: params。
+        """
+        offset = params.get(_FITTED_TZ)
+        if offset is not None and (
+            isinstance(offset, bool) or not isinstance(offset, int)
+        ):
+            raise OperatorError("时间特征的时区偏移必须是整数分钟")
 
     def report(self) -> tuple[ReportBlock, ...]:
         """时间特征的三块：新增列、时区口径、各档取值分布。"""

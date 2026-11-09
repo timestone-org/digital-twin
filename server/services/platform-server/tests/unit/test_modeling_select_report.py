@@ -16,6 +16,7 @@ from platform_server.apps.modeling.operators import (
     registry,
 )
 from platform_server.apps.modeling.operators.featureblocks import (
+    CORRELATION_FALLBACK_ALERT,
     DEGRADED_REASON,
     VARIANCE_HINT,
 )
@@ -28,7 +29,7 @@ from platform_server.apps.modeling.operators.fitting import (
 from platform_server.apps.modeling.operators.reporting import ReportBlock
 from platform_server.apps.modeling.services import report_budget
 from platform_server.apps.modeling.services.preview import REPORT_MAX_BYTES
-from unit.modeling_fakes import hints_of
+from unit.modeling_fakes import alerts_of, hints_of
 
 OTHER = "负荷"
 # 最坏负载：60 列宽帧 × 366 天逐时
@@ -280,3 +281,12 @@ def test_the_worst_select_load_still_fits_the_report_budget() -> None:
     assert report["dropped"] == []
     assert report_budget.size_of(report) < REPORT_MAX_BYTES
     assert len(report["blocks"]) == 2
+
+
+def test_correlation_without_a_split_says_it_fell_back_to_variance() -> None:
+    """没有下游切分就拿不到目标列：排名实际按方差，讲解不能还写「相关性」。"""
+    frame = frame_of({"甲": [1.0, 2.0, 3.0, 4.0], "乙": [0.0, 0.0, 0.0, 1.0]})
+    blocks = blocks_of(frame, top_k=1, method="correlation")
+    assert blocks["breakdown"].payload["label"] == "方差"
+    assert "按方差" in blocks["columns"].payload["reason"]
+    assert CORRELATION_FALLBACK_ALERT in alerts_of(blocks["columns"])

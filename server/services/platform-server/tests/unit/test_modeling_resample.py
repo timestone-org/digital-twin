@@ -151,3 +151,24 @@ def test_data_without_a_timestamp_is_refused() -> None:
     """没有时间索引时说清楚，不按行号硬分桶。"""
     with pytest.raises(OperatorError, match="时间索引"):
         _resampled(_frame([(1.0, "甲")], None), bucket="1h", agg="avg")
+
+
+@pytest.mark.parametrize(
+    ("agg", "expected"),
+    [("delta", 20.0), ("first", 10.0), ("last", 30.0)],
+)
+def test_order_sensitive_aggs_follow_time_not_row_order(
+    agg: str, expected: float
+) -> None:
+    """行序被上游打乱（排序、拼接）时，首末值与差值仍按时刻取。
+
+    ⚠ 按行序取的话电表差值会算成负数，而且不报错。
+    """
+    minute = HOUR_MS // 60
+    frame = _frame(
+        [(30.0, "丙"), (10.0, "甲"), (20.0, "乙")],
+        [2 * minute, 0, minute],
+    )
+    got = _resampled(frame, bucket="1h", agg=agg)
+    assert got.values_of(KEY) == [expected]
+    assert got.values_of(LABEL) == ["丙"]

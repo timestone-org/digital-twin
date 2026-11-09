@@ -35,11 +35,15 @@ from platform_server.apps.modeling.services.configuration import (
     model_task_of,
     require_template_graph,
 )
+from platform_server.apps.modeling.services.constraints import violates
 from platform_server.apps.modeling.services.graph_walk import source_table_codes
 from platform_server.apps.modeling.services.management_guard import (
     require_active_instance,
 )
-from platform_server.apps.modeling.services.pipeline_service import Actor
+from platform_server.apps.modeling.services.pipeline_service import (
+    PIPELINE_CODE_CONSTRAINT,
+    Actor,
+)
 from platform_server.apps.modeling.services.presenters import to_run_summary
 from platform_server.apps.modeling.services.template_service import record_audit
 
@@ -73,6 +77,8 @@ async def create_instance(
     try:
         await session.flush()
     except IntegrityError as error:
+        if not violates(error, PIPELINE_CODE_CONSTRAINT):
+            raise
         raise PipelineCodeTaken("模型编码已经被占用") from error
     instances.add(
         session,

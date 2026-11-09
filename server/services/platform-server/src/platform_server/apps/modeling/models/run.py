@@ -169,6 +169,12 @@ class ModelingRun(UuidPrimaryKeyMixin, CreatedAtMixin, Base):
             "pipeline_id",
             text("created_at DESC"),
         ),
+        Index(
+            "ix_modeling_runs_pipeline_created_id",
+            "pipeline_id",
+            "created_at",
+            "id",
+        ),
     )
 
 

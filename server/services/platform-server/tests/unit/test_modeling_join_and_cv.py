@@ -183,3 +183,30 @@ def test_the_worst_fold_is_reported_too() -> None:
     assert worst is not None
     assert mean is not None
     assert worst <= mean
+
+
+def test_the_right_side_display_names_are_prefixed_too() -> None:
+    """显示名也加前缀：两张台账上同名的「温度」是两回事，界面上要分得清。"""
+    left = _sided(LEFT_KEY, [1.0], [0])
+    right = _sided(LEFT_KEY, [90.0], [0])
+    got = _joined(left, right, tolerance_ms=SECOND)
+    assert [column.name for column in got.columns] == [
+        LEFT_KEY,
+        f"右_{LEFT_KEY}",
+    ]
+
+
+def test_a_frame_with_other_features_than_the_model_is_refused() -> None:
+    """接进来的帧比模型多一列特征：拿它重训打出来的分说的是另一个模型。"""
+    frame = _training()
+    wider = Frame(
+        columns=(
+            *frame.columns,
+            FrameColumn(key="多余", name="多余", dtype="number"),
+        ),
+        rows=tuple((*row, 0.0) for row in frame.rows),
+    )
+    operator, _ = registry.build("cross_validate", {"folds": 4})
+    operator.bind_runtime(tz_offset_minutes=0, split_plan=None)
+    with pytest.raises(OperatorError, match="多余"):
+        operator.run({"model": _model_of(frame), "frame": wider})

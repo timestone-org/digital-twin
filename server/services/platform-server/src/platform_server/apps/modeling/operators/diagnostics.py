@@ -42,6 +42,7 @@ from platform_server.apps.modeling.operators.evaluate import (
     scored_columns_of,
 )
 from platform_server.apps.modeling.operators.frame import (
+    ROLE_FEATURE,
     Frame,
     frame_input,
     numbers_of,
@@ -173,6 +174,7 @@ class FeatureImportanceConfig(OperatorConfig):
     random_state: int = Field(
         default=42,
         ge=0,
+        le=2**32 - 1,
         title="随机种子",
         description="定住它，同一份数据每次算出来的重要性一样",
     )
@@ -481,6 +483,7 @@ class CrossValidate(OperatorBase):
         frame = with_roles(
             frame_input(inputs, "frame"), target_key=_supervised_target(payload)
         )
+        _refuse_other_features(frame, payload)
         spans = _folds(frame.row_count, self._config.folds, self._config.method)
         scores = [
             _fold_score(payload, frame, train, test) for train, test in spans
@@ -504,6 +507,22 @@ class CrossValidate(OperatorBase):
         return () if seen is None else fold_blocks(seen)
 
 
+def _refuse_other_features(frame: Frame, payload: ModelPayload) -> None:
+    """帧上的特征列必须就是模型的特征列（按集合比），否则重训的是另一个模型。
+
+    Args: frame, payload。
+    """
+    seen = set(frame.keys_by_role(ROLE_FEATURE))
+    wanted = set(payload.feature_keys)
+    if seen != wanted:
+        extra = "、".join(sorted(seen - wanted)) or "无"
+        missing = "、".join(sorted(wanted - seen)) or "无"
+        raise OperatorError(
+            f"交叉验证的数据列与模型特征不一致（多出：{extra}；缺少：{missing}），"
+            "请把它接在切分算子的输入那一路上"
+        )
+
+
 def _folds(
     row_count: int, folds: int, method: FoldMethod
 ) -> list[tuple[list[int], list[int]]]:
@@ -525,7 +544,7 @@ def _folds(
         train = (
             list(range(start))
             if method == "forward_chain"
-            else [item for item in range(row_count) if item not in set(test)]
+            else [*range(start), *range(stop, row_count)]
         )
         if train:
             made.append((train, test))

@@ -58,6 +58,8 @@ _COMPLAINTS: dict[str, str] = {
     "less_than": "太大了",
     "less_than_equal": "太大了",
     "too_long": "填得太多了",
+    "too_short": "至少要选一项",
+    "string_pattern_mismatch": "格式不对",
     "string_too_short": "不能留空",
 }
 
@@ -167,6 +169,12 @@ def _check_edges(
     for edge in graph.edges:
         if edge.from_node not in nodes or edge.to_node not in nodes:
             issues.append(GraphIssue("这条连线的一端已不存在", edge_id=edge.id))
+            continue
+        # 端点算子不认识的，节点那条问题已经说清楚了，这里查端口会直接抛
+        if not (
+            registry.has(nodes[edge.from_node].operator)
+            and registry.has(nodes[edge.to_node].operator)
+        ):
             continue
         issues += _check_edge_ports(edge, nodes)
         if (edge.to_node, edge.to_port) in taken:

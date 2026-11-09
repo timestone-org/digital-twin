@@ -2,7 +2,14 @@
 
 import uuid
 
-from sqlalchemy import Boolean, CheckConstraint, ForeignKey, Integer, Text
+from sqlalchemy import (
+    Boolean,
+    CheckConstraint,
+    ForeignKey,
+    Index,
+    Integer,
+    Text,
+)
 from sqlalchemy.orm import Mapped, mapped_column
 
 from lib.db import UuidPrimaryKeyMixin
@@ -74,6 +81,17 @@ class ModelingDeploymentSwitch(UuidPrimaryKeyMixin, CreatedAtMixin, Base):
             "(to_model_id IS NULL) <> (to_rule_id IS NULL)", name="one_target"
         ),
         CheckConstraint("revision > 1", name="revision_positive"),
+        *(
+            Index(f"ix_modeling_switches_{column}", column)
+            for column in (
+                "deployment_id",
+                "rollback_of_id",
+                "from_model_id",
+                "from_rule_id",
+                "to_model_id",
+                "to_rule_id",
+            )
+        ),
     )
 
     @property

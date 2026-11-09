@@ -34,7 +34,7 @@ ROUTERS: tuple[APIRouter, ...] = (
     modeling_models.versions,
     modeling_models.bindings,
     modeling_deployments.deployments,
-    # ⚠ 这一条是**匿名可达**的，见 `open_models.py` 的模块注释
+    # ⚠ 对外调用面：账号鉴权（用户 APIKey）+ 部署配额，见 ADR-0062
     open_models.open_models,
 )
 

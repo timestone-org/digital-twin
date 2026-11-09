@@ -38,10 +38,16 @@ from platform_server.apps.modeling.services.model_schema import (
     entry_keys_of,
 )
 from platform_server.apps.modeling.services.pipeline_service import Actor
+from platform_server.apps.modeling.services.template_service import (
+    record_audit,
+)
 
 # 只有列形参进得了特征矩阵：值形参是一个表达式的位置，不是一列数
 PARAM_COLUMN = "column"
 _CODE_CONSTRAINT = "uq_modeling_bindings_fx_code"
+# 审计前后快照里的键
+_VERSION = "model_version_id"
+_ENABLED = "is_enabled"
 
 
 @dataclass(frozen=True)
@@ -94,6 +100,13 @@ async def create_binding(
         if not violates(error, _CODE_CONSTRAINT):
             raise
         raise BindingCodeTaken("这条公式条目已经绑过一个模型版本了") from error
+    record_audit(
+        session,
+        actor,
+        "binding_created",
+        row.id,
+        (None, {"fx_code": row.fx_code, _VERSION: str(row.model_version_id)}),
+    )
     return row
 
 
@@ -102,6 +115,7 @@ async def rebind(
     *,
     binding_id: uuid.UUID,
     version_id: uuid.UUID,
+    actor: Actor,
     is_remap_confirmed: bool = False,
 ) -> ModelingBinding:
     """把一条绑定换到另一个版本上。
@@ -111,7 +125,7 @@ async def rebind(
     ⚠ 新版本的入口契约与旧版本不同时**拒掉**，要用户确认过再来一次：
     按名字自动重映射会在「两个版本恰好都有两个入口列、名字不同」时把甲的值
     喂给乙，而结果看着完全正常（D18）。
-    Args: session, binding_id, version_id, is_remap_confirmed。
+    Args: session, binding_id, version_id, actor, is_remap_confirmed。
     """
     row = await require_binding(session, binding_id)
     version = await require_active_version(session, version_id)
@@ -128,12 +142,20 @@ async def rebind(
     _require_same_arity(params, entry)
     if not is_remap_confirmed:
         _require_same_entry(row, entry)
+    before: dict[str, object] = {_VERSION: str(row.model_version_id)}
     row.model_version_id = version.id
     row.param_map_json = [
         {"param": name, "feature": feature}
         for name, feature in zip(params, entry, strict=True)
     ]
     await session.flush()
+    record_audit(
+        session,
+        actor,
+        "binding_rebound",
+        row.id,
+        (before, {_VERSION: str(version.id)}),
+    )
     return row
 
 
@@ -157,25 +179,44 @@ def _require_same_entry(row: ModelingBinding, entry: list[str]) -> None:
 
 
 async def set_enabled(
-    session: AsyncSession, *, binding_id: uuid.UUID, is_enabled: bool
+    session: AsyncSession,
+    *,
+    binding_id: uuid.UUID,
+    is_enabled: bool,
+    actor: Actor,
 ) -> ModelingBinding:
     """启停一条绑定。停用之后那一列变空，并给一句「模型绑定已停用」。
 
-    Args: session, binding_id, is_enabled。
+    Args: session, binding_id, is_enabled, actor。
     """
     row = await require_binding(session, binding_id)
+    before: dict[str, object] = {_ENABLED: row.is_enabled}
     row.is_enabled = is_enabled
     await session.flush()
+    record_audit(
+        session,
+        actor,
+        "binding_toggled",
+        row.id,
+        (before, {_ENABLED: is_enabled}),
+    )
     return row
 
 
-async def delete_binding(session: AsyncSession, binding_id: uuid.UUID) -> None:
+async def delete_binding(
+    session: AsyncSession, binding_id: uuid.UUID, actor: Actor
+) -> None:
     """删一条绑定。
 
-    Args: session, binding_id。
+    Args: session, binding_id, actor。
     """
     row = await require_binding(session, binding_id)
+    before: dict[str, object] = {
+        "fx_code": row.fx_code,
+        _VERSION: str(row.model_version_id),
+    }
     await binding_crud.delete(session, row)
+    record_audit(session, actor, "binding_deleted", row.id, (before, None))
 
 
 async def require_binding(

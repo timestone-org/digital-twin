@@ -51,7 +51,7 @@ class EntryColumn:
     unit: str
     #: 训练期均值。发布时拿它拼一行实跑——必然落在训练区间内
     mean: float
-    #: `{min, max, p50, null_ratio}`，供模型签名用
+    #: `{min, max, p50, null_ratio}` 里摘要真有的那几项，供模型签名用
     stats: dict[str, float]
 
 
@@ -124,8 +124,9 @@ def entry_meta(
 ) -> dict[str, dict[str, Any]]:
     """入口那些列的元信息，取自上游那一步的结果摘要里的列统计。
 
-    ⚠ 用列统计而不是摘要里的前几行：`head` 会被字节预算削掉，而统计不会。
+    ⚠ 用列统计而不是摘要里的前几行：`head` 会被单份字节预算削掉，而统计不会。
     均值还必然落在训练区间内，拿它做发布期那一次实跑不会触发外推告警。
+    ⚠ 统计也会缺：摘要只统计前若干列，运行级预算用光时整份摘要换成桩。
     Args: graph, records, first。
     """
     upstream = upstream_of(graph, first, _input_port_of(graph, first))
@@ -207,11 +208,22 @@ def _entry_column(key: str, meta: dict[str, dict[str, Any]]) -> EntryColumn:
         label=as_text(stat.get("name")) or key,
         unit=as_text(stat.get("unit")),
         mean=_number(stat.get("mean")),
-        stats={
-            name: _number(stat.get(name))
-            for name in ("min", "max", "p50", "null_ratio")
-        },
+        stats=_real_stats(stat),
     )
+
+
+def _real_stats(stat: dict[str, Any]) -> dict[str, float]:
+    """摘要里真有的那几项统计；缺的或为空的不写，不冒充成 0。
+
+    ⚠ 冒充成 `min=max=0` 会让每一次非零输入都报超出训练区间。
+    Args: stat。
+    """
+    found: dict[str, float] = {}
+    for name in ("min", "max", "p50", "null_ratio"):
+        value = stat.get(name)
+        if isinstance(value, (int | float)) and not isinstance(value, bool):
+            found[name] = float(value)
+    return found
 
 
 def _parsed_moment(text: str) -> datetime | None:

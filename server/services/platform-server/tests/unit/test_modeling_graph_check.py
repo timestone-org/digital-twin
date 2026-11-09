@@ -5,6 +5,7 @@ from platform_server.apps.modeling.schemas.graph import (
     PipelineGraph,
 )
 from platform_server.apps.modeling.services.graph_check import check_graph
+from platform_server.apps.modeling.services.pipeline_service import check_result
 from unit.modeling_fakes import linear_graph, node
 
 
@@ -203,3 +204,46 @@ def test_two_splits_downstream_of_a_fitting_operator_are_rejected() -> None:
         )
     )
     assert "这一步下游有多个切分，说不清按哪一个防泄漏" in messages(graph)
+
+
+def test_an_empty_identifier_list_is_reported_in_chinese() -> None:
+    """取数标识一个没选，报的是中文而不是 pydantic 的 too_short 英文。"""
+    graph = PipelineGraph(nodes=[node("b", "bdm_source", identifiers=[])])
+    found = [text for text in messages(graph) if "取数标识" in text]
+    assert found == ["参数「取数标识」至少要选一项"]
+
+
+def test_an_unknown_operator_wired_to_a_node_is_reported_not_raised() -> None:
+    """接了线的未知算子照样列成一条问题，而不是在查端口时抛出去变成 500。"""
+    graph = PipelineGraph(
+        nodes=[node("x", "nope"), node("t", "time_feature")],
+        edges=[
+            GraphEdge(
+                id="xt",
+                from_node="x",
+                from_port="frame",
+                to_node="t",
+                to_port="frame",
+            )
+        ],
+    )
+    assert messages(graph) == ["不认识的算子「nope」"]
+
+
+def test_the_check_result_survives_an_unknown_operator() -> None:
+    """对外的校验结果也不因未知算子抛错：它还要顺带推算逐节点的列。"""
+    graph = PipelineGraph(
+        nodes=[node("x", "nope"), node("t", "time_feature")],
+        edges=[
+            GraphEdge(
+                id="xt",
+                from_node="x",
+                from_port="frame",
+                to_node="t",
+                to_port="frame",
+            )
+        ],
+    )
+    result = check_result(graph)
+    assert not result.is_valid
+    assert [item.message for item in result.issues] == ["不认识的算子「nope」"]

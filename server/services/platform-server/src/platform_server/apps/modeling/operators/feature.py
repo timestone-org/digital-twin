@@ -85,6 +85,7 @@ class Standardize(OperatorBase):
 
     def __init__(self, config: OperatorConfig) -> None:
         super().__init__(config)
+        self._is_loaded = False
         self._scales: dict[str, dict[str, float]] = {}
         self._fit_rows: dict[str, int] = {}
         self._ran: ScaleRun | None = None
@@ -104,10 +105,12 @@ class Standardize(OperatorBase):
         frame = frame_input(inputs, "frame")
         keys = (
             tuple(self._scales)
-            if self._scales
+            if self._is_loaded
             else fit_columns(frame, self._config.columns, self.split_plan)
         )
-        train = None if self._scales else training_frame(frame, self.split_plan)
+        train = (
+            None if self._is_loaded else training_frame(frame, self.split_plan)
+        )
         if train is not None:
             self._fits(train, keys)
         scaled = frame
@@ -138,6 +141,14 @@ class Standardize(OperatorBase):
             method=self._config.method,
         )
 
+    @classmethod
+    def accepts_empty_fit(cls, config: OperatorConfig) -> bool:
+        """常量列选了跳过时，所选列全是常量就一列都不缩放。Args: config。"""
+        return (
+            isinstance(config, StandardizeConfig)
+            and config.on_constant_column == "skip"
+        )
+
     def dump_fitted(self) -> dict[str, Any] | None:
         """按列 key 建键的尺度参数。"""
         return {key: dict(value) for key, value in self._scales.items()}
@@ -151,6 +162,7 @@ class Standardize(OperatorBase):
         self._scales = {
             key: _scale_entry(key, value) for key, value in params.items()
         }
+        self._is_loaded = True
 
     @classmethod
     def validate_fitted(cls, params: dict[str, Any]) -> None:
@@ -295,6 +307,7 @@ class OneHot(OperatorBase):
 
     def __init__(self, config: OperatorConfig) -> None:
         super().__init__(config)
+        self._is_loaded = False
         self._categories: dict[str, list[str]] = {}
         self._ranked: dict[str, list[tuple[str, int]]] = {}
         self._ran: OneHotRun | None = None
@@ -326,7 +339,7 @@ class OneHot(OperatorBase):
         """
         frame = frame_input(inputs, "frame")
         train = (
-            None if self._categories else training_frame(frame, self.split_plan)
+            None if self._is_loaded else training_frame(frame, self.split_plan)
         )
         if train is not None:
             self._fits(train)
@@ -357,6 +370,11 @@ class OneHot(OperatorBase):
             train_rows=rows,
         )
 
+    @classmethod
+    def accepts_empty_fit(cls, config: OperatorConfig) -> bool:
+        """一列都没选时什么都不编。Args: config。"""
+        return isinstance(config, OneHotConfig) and not config.columns
+
     def dump_fitted(self) -> dict[str, Any] | None:
         """按列 key 建键的类目清单，顺序即编码顺序。"""
         return {key: list(value) for key, value in self._categories.items()}
@@ -371,6 +389,7 @@ class OneHot(OperatorBase):
             key: [str(item) for item in cast("list[object]", value)]
             for key, value in params.items()
         }
+        self._is_loaded = True
 
     @classmethod
     def validate_fitted(cls, params: dict[str, Any]) -> None:
