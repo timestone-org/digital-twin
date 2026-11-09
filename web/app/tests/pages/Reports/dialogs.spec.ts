@@ -1,7 +1,14 @@
 /** @fileoverview 指标、数据节点与页面设置的组件接线。 */
 import { flushPromises, mount, type VueWrapper } from '@vue/test-utils'
 import { afterEach, describe, expect, it, vi } from 'vitest'
-import { DtButton, DtInput, DtSelect, DtCheckbox, DtModal } from '@dt/ui'
+import {
+  DtButton,
+  DtCheckbox,
+  DtIconButton,
+  DtInput,
+  DtModal,
+  DtSelect,
+} from '@dt/ui'
 import * as dataset from '@/api/dataset'
 import MetricPanel from '@/pages/Reports/Editor/components/MetricPanel.vue'
 import PageDialog from '@/pages/Reports/Editor/components/PageDialog.vue'
@@ -363,4 +370,102 @@ it('工具栏设过自定义纸张时，纸张一栏照实显示「自定义」'
   expect(JSON.stringify(options)).toContain('custom')
   expect(paper?.props('modelValue')).toBe('custom')
   wrapper.unmount()
+})
+
+describe('指标面板的复位与说明', () => {
+  const apiSource = {
+    code: 'energy',
+    name: '能管接口',
+    connection: 'ems',
+    method: 'GET' as const,
+    path: '/monthly',
+    query: {},
+    columns: [{ key: 'value', name: '用电量', pointer: '/value' }],
+    offset: 0,
+  }
+  const apiMetric = {
+    name: '用电环比',
+    table: 'api:energy',
+    key: 'value',
+    mode: 'expr' as const,
+    expr: '{a}-{b}',
+  }
+
+  it('⚠ 编辑过一条再点「添加指标」，来源、字段、方式、偏移都回到初值', async () => {
+    vi.spyOn(dataset, 'listDatasetTables').mockResolvedValue({
+      items: [],
+      page: 1,
+      size: 200,
+      total: 0,
+    })
+    const wrapper = mount(MetricPanel, {
+      props: {
+        modelValue: [{ ...apiMetric, mode: 'latest' as const, offset: -1 }],
+        disabled: false,
+        apiSources: [apiSource],
+      },
+    })
+    await flushPromises()
+    await wrapper
+      .findAllComponents(DtIconButton)
+      .find((button) => button.props('label') === '编辑指标 用电环比')
+      ?.find('button')
+      .trigger('click')
+    await flushPromises()
+    expect(
+      wrapper
+        .findAllComponents(DtSelect)
+        .find((item) => item.props('label') === '数据来源')
+        ?.props('modelValue'),
+    ).toBe('api:energy')
+    await wrapper
+      .findAllComponents(DtButton)
+      .find((button) => button.text() === '取消编辑')
+      ?.trigger('click')
+    await openMetricForm(wrapper)
+    await flushPromises()
+    const select = (label: string) =>
+      wrapper
+        .findAllComponents(DtSelect)
+        .find((item) => item.props('label') === label)
+    expect(select('取数方式')?.props('modelValue')).toBe('window_agg')
+    expect(select('数据来源')?.props('modelValue')).toBe('')
+    expect(select('数据字段')?.props('modelValue')).toBe('')
+    expect(
+      wrapper
+        .findAllComponents(DtInput)
+        .find((item) => item.props('label') === '报告期偏移')
+        ?.props('modelValue'),
+    ).toBe('0')
+    wrapper.unmount()
+  })
+
+  it('列表里说出报告期偏移与单位，本期与上期不再读成同一条', async () => {
+    vi.spyOn(dataset, 'listDatasetTables').mockResolvedValue({
+      items: [],
+      page: 1,
+      size: 200,
+      total: 0,
+    })
+    const wrapper = mount(MetricPanel, {
+      props: {
+        modelValue: [
+          { name: '本期电', table: 'ledger', key: 'value', unit: 'kWh' },
+          {
+            name: '上期电',
+            table: 'ledger',
+            key: 'value',
+            offset: -1,
+            unit: 'kWh',
+          },
+        ],
+        disabled: false,
+        apiSources: [apiSource],
+      },
+    })
+    await flushPromises()
+    expect(wrapper.text()).toContain('本期 · kWh')
+    expect(wrapper.text()).toContain('上期 · kWh')
+    wrapper.unmount()
+  })
 })
