@@ -36,6 +36,9 @@ _DASHBOARDS = "/api/v1/platform/dashboards"
 _MODULES = "/api/v1/platform/module-types"
 _TABLES = "/api/v1/platform/dataset-tables"
 _ASSETS = "/api/v1/platform/assets"
+# 按编码精确找点位时最多翻几页。⚠ 有上限：短编码能模糊匹配上几千条，
+# 一次「看一个点位」不该变成几十次往返
+MAX_FIND_PAGES = 5
 
 
 class PlatformUnavailable(DependencyUnavailable):
@@ -309,18 +312,26 @@ class PlatformClient:
         """按 `(source_id, code)` 找那一个点位；没有就给 None。
 
         ⚠ 上游没有按编码精确取一条的端点，`q` 是名字/编码的模糊匹配；
-        这里先按 `q=code` 缩一页，再本地按编码逐字比对。
+        这里按 `q=code` 逐页取、本地按编码逐字比对。⚠ 要翻页：短编码能匹配上
+        多于一页的条目，精确那条排在后面时只看第一页会说成「库里没有」。
 
         Args: headers, source_id, code。
         """
-        query: dict[str, Any] = {
-            "page": 1,
-            "size": self._page_size,
-            "source_id": source_id,
-            "q": code,
-        }
-        rows = _items_of(await self._get(_POINTS, query, headers))
-        return next((row for row in rows if _code_of(row) == code), None)
+        for page in range(1, MAX_FIND_PAGES + 1):
+            query: dict[str, Any] = {
+                "page": page,
+                "size": self._page_size,
+                "source_id": source_id,
+                "q": code,
+            }
+            body = await self._get(_POINTS, query, headers)
+            rows = _items_of(body)
+            found = next((row for row in rows if _code_of(row) == code), None)
+            if found is not None:
+                return found
+            if not rows or page * self._page_size >= _total_of(body):
+                return None
+        return None
 
     async def validate_dashboard(
         self, headers: dict[str, str], dashboard_id: str
@@ -443,6 +454,14 @@ def _items_of(body: object) -> list[object]:
     if not isinstance(items, list):
         return []
     return cast("list[object]", items)
+
+
+def _total_of(body: object) -> int:
+    """分页体里的 total；没有就当 0（即「没有下一页」）。Args: body。"""
+    if not isinstance(body, dict):
+        return 0
+    total = cast("dict[str, object]", body).get("total")
+    return total if type(total) is int else 0
 
 
 def _rows_of(body: object) -> list[object]:
