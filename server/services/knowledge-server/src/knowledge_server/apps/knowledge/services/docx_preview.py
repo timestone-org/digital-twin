@@ -3,6 +3,7 @@
 import asyncio
 import os
 import shutil
+import signal
 import tempfile
 import uuid
 import xml.etree.ElementTree as ET
@@ -328,6 +329,9 @@ async def _run_libreoffice(
         stdout=asyncio.subprocess.DEVNULL,
         stderr=asyncio.subprocess.DEVNULL,
         env=_office_environment(output_dir),
+        # ⚠ 自成一个进程组：soffice 只是启动器，干活的 soffice.bin 是它 fork
+        # 出来的，杀的时候要整组一起杀
+        start_new_session=True,
     )
     try:
         async with asyncio.timeout(timeout_s):
@@ -343,12 +347,18 @@ async def _run_libreoffice(
 
 
 async def _kill(process: asyncio.subprocess.Process) -> None:
-    """杀掉并回收 Office 子进程。
+    """杀掉整个 Office 进程组并回收启动器。
+
+    ⚠ 只杀启动器那一个 pid 的话，它 fork 出来的转换进程成了孤儿，接着吃 CPU
+    与内存，而它的临时目录已经被删了。
 
     Args: process。
     """
-    if process.returncode is None:
-        process.kill()
+    try:
+        os.killpg(process.pid, signal.SIGKILL)
+    except (ProcessLookupError, PermissionError):
+        if process.returncode is None:
+            process.kill()
     try:
         await asyncio.wait_for(process.wait(), KILL_GRACE_S)
     except TimeoutError:
