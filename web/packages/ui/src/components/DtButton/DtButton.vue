@@ -231,6 +231,13 @@ function onClick(event: MouseEvent): void {
     filter: brightness(1.06);
     box-shadow: 0 0 16px -2px rgba(var(--_a-rgb), 0.9);
   }
+
+  // 只压透明度时禁用的实心键仍是一整块主题色；提交中（aria-busy）保留主题色
+  &:disabled:not([aria-busy=true]) {
+    background: rgba(var(--neutral-fg-rgb), 0.12);
+    color: var(--text-disabled);
+    box-shadow: none;
+  }
 }
 
 .dt-btn--soft {
