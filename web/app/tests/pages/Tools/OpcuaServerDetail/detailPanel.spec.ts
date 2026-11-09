@@ -293,6 +293,39 @@ describe('写值', () => {
     expect(write).toHaveBeenCalledWith('i1', 'n1', 0)
   })
 
+  it.each(['True', 'yes', '1'])(
+    '⚠ 布尔节点写「%s」不许悄悄变成 false 下发',
+    async (text) => {
+      const write = vi
+        .spyOn(opcuaApi, 'writeNodeValue')
+        .mockResolvedValue({ node_id: 'x', identifier: 'T1', value: null })
+      const wrapper = await panel({ data_type: 'boolean' })
+      await wrapper.find('input[aria-label="要写入的值"]').setValue(text)
+      expect(button(wrapper, '写入')?.attributes('disabled')).toBeDefined()
+      expect(wrapper.text()).toContain('true 或 false')
+      await button(wrapper, '写入')?.trigger('click')
+      await flushPromises()
+      expect(write).not.toHaveBeenCalled()
+    },
+  )
+
+  it('整数节点写小数在提交前拦下', async () => {
+    const wrapper = await panel({ data_type: 'int32' })
+    await wrapper.find('input[aria-label="要写入的值"]').setValue('1.5')
+    expect(button(wrapper, '写入')?.attributes('disabled')).toBeDefined()
+  })
+
+  it('布尔节点写 true 照常下发真值', async () => {
+    const write = vi
+      .spyOn(opcuaApi, 'writeNodeValue')
+      .mockResolvedValue({ node_id: 'x', identifier: 'T1', value: null })
+    const wrapper = await panel({ data_type: 'boolean' })
+    await wrapper.find('input[aria-label="要写入的值"]').setValue(' true ')
+    await button(wrapper, '写入')?.trigger('click')
+    await flushPromises()
+    expect(write).toHaveBeenCalledWith('i1', 'n1', true)
+  })
+
   it('写值失败时把后端的话原样报出来', async () => {
     vi.spyOn(opcuaApi, 'writeNodeValue').mockRejectedValue(
       new BizError(42111, '该节点不可写', 409, 'trace-2'),

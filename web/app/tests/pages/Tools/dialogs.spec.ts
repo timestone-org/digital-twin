@@ -511,19 +511,19 @@ describe('地址空间的写入路径', () => {
     expect(await writeDraft(wrapper, '12')).toBe('12')
   })
 
-  it('布尔类型认 true 与 1', async () => {
+  it('布尔类型认 true', async () => {
     const wrapper = await explorer([node({ data_type: 'boolean' })], 'boolean')
     expect(await writeDraft(wrapper, 'true')).toBe(true)
   })
 
-  it('布尔类型的其它输入一律为 false', async () => {
+  it('⚠ 布尔类型的其它输入不下发，不许悄悄当成 false 写进现场', async () => {
     const wrapper = await explorer([node({ data_type: 'boolean' })], 'boolean')
-    expect(await writeDraft(wrapper, 'nope')).toBe(false)
+    expect(await writeDraft(wrapper, 'nope')).toBeUndefined()
   })
 
-  it('数值类型收到非数字时按原样送出，不静默变成 NaN', async () => {
+  it('数值类型收到非数字时拦在提交前，不静默变成 NaN 或原样送出', async () => {
     const wrapper = await explorer([node()], 'double')
-    expect(await writeDraft(wrapper, 'abc')).toBe('abc')
+    expect(await writeDraft(wrapper, 'abc')).toBeUndefined()
   })
 
   it('写值失败时给出反馈', async () => {
