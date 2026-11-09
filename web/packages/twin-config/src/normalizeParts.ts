@@ -6,6 +6,7 @@
  * 把前者归一成后者会凭空多出一行绑定，而它绑上点位也永远不会有任何效果。
  * ⚠ 档位的**顺序**是配置的一部分（自上而下取第一个命中的），这里只清洗不重排。
  */
+import { isUsablePose } from './cameraSelect'
 import { normalizePanelField, MAX_PANEL_COLUMNS } from './normalizeElements'
 import { normalizeFocusView } from './normalizeScene'
 import { DEFAULT_PANEL_STYLE } from './panelStyle'
@@ -40,8 +41,6 @@ import {
 
 /** 常态染色浓度：染上去还看得出金属/纹理，不至于糊成一块纯色。 */
 const DEFAULT_BLEND = 0.85
-/** 可用取景的最小机位跨度。 */
-const MIN_DETAIL_VIEW_SPAN = 1e-6
 /** 自发光上限；再高只是把画面烧白。 */
 const MAX_GLOW = 3
 /** 渐变缺省区间，配成 0–100 让百分比类点位开箱即用。 */
@@ -205,12 +204,7 @@ function normalizeDetailView(raw: unknown): TwinFocusView | null {
   )
     return null
   const view = normalizeFocusView(raw)
-  if (view === null) return null
-  const [px, py, pz] = view.position
-  const [tx, ty, tz] = view.target
-  return Math.hypot(px - tx, py - ty, pz - tz) > MIN_DETAIL_VIEW_SPAN
-    ? view
-    : null
+  return view !== null && isUsablePose(view) ? view : null
 }
 
 /**
