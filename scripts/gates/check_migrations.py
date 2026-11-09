@@ -16,11 +16,55 @@ from _report import Violation, at, main, parse, read, service_dirs
 
 # 拿不到锁的 ALTER 会排队，排在它后面的普通查询也会一起排队
 LOCK_TIMEOUT = re.compile(r"SET\s+lock_timeout", re.IGNORECASE)
-# 回填走独立批处理任务：迁移只负责结构
+# 回填走独立批处理任务：迁移只负责结构。⚠ 表名要认 `schema.表` 与带引号的
+# 写法：本仓的迁移一律带 schema，只认裸表名等于这条规则从不触发
 BACKFILL = re.compile(
-    r"\b(UPDATE\s+\w|INSERT\s+INTO\s+\w+\s*(\([^)]*\))?\s*SELECT|DELETE\s+FROM)\b",
+    r"\bUPDATE\s+[\w\".]+\s+SET\b"
+    r"|\bINSERT\s+INTO\s+[\w\".]+\s*(?:\([^)]*\))?\s*SELECT\b"
+    r"|\bDELETE\s+FROM\b",
     re.IGNORECASE,
 )
+# 已上线迁移里登记过的回填例外：(文件名, 所在函数) → 理由。已应用的迁移不改写
+BACKFILL_ALLOWED: dict[tuple[str, str], str] = {
+    (
+        "2026_08_12_2130-c63d4f2a80e1_guard_incomplete_batches.py",
+        "downgrade",
+    ): "只在回退时跑：小分片表里的 skipped 归回 pending，旧 CHECK 才建得起来",
+}
+# f-string 里的插值在判定时换成这个占位，让 `UPDATE {表} SET` 仍长得像 SQL
+SQL_PLACEHOLDER = "x"
+# 存量表上一步到位加约束的那几个 op：建约束时全表扫描并持 ACCESS EXCLUSIVE
+ONE_STEP_CONSTRAINTS = (
+    "create_check_constraint",
+    "create_foreign_key",
+    "create_unique_constraint",
+)
+# 手写 SQL 里加约束的那一句；取出约束种类与其后的全部文字
+RAW_ADD_CONSTRAINT = re.compile(
+    r"\bADD\s+CONSTRAINT\s+[\w\"]+\s+(CHECK|FOREIGN\s+KEY|UNIQUE)\b(.*)",
+    re.IGNORECASE | re.DOTALL,
+)
+RAW_ALTER_TABLE = re.compile(
+    r"\bALTER\s+TABLE\s+(?:ONLY\s+)?([\w\".]+)", re.IGNORECASE
+)
+# 已上线迁移里一步加约束的那几处：文件名 → 理由。已应用的迁移不改写
+CONSTRAINT_ALLOWED: dict[str, str] = {
+    "2026_08_24_1400-b8c34e19d70f_widen_binding_source_kind.py": (
+        "已上线；绑定表当时很小"
+    ),
+    "2026_08_12_2130-c63d4f2a80e1_guard_incomplete_batches.py": (
+        "已上线；分片表是小表"
+    ),
+    "2026_08_12_1830-b52e7d0c41a9_add_ac_startup_shards.py": (
+        "已上线；约束列是同一次刚加的、批次表是小表"
+    ),
+    "2026_09_03_1000-a7e1c93b6d40_add_llm_provider_kind.py": (
+        "已上线；供应商配置表只有几行"
+    ),
+    "2026_09_03_1010-c8f2b41d7e35_add_credential_provider_ref.py": (
+        "已上线；凭据表只有几行，约束列是同一次刚加的全空列"
+    ),
+}
 # 加值要迁移、删值几乎不可能、改序静默改语义
 NATIVE_ENUM = re.compile(r"\bsa\.Enum\(|postgresql\.ENUM\(")
 # `op.create_index(名字, 表名, 列)` —— 取表名至少要有两个位置参数
@@ -67,6 +111,35 @@ def _op_calls(node: ast.AST, name: str) -> list[ast.Call]:
     return found
 
 
+def _sql_text(node: ast.expr | None) -> str | None:
+    """`op.execute` 的实参取成 SQL 文本；f-string 的插值换成占位。
+
+    ⚠ 只看字面量的话，一条 `f"UPDATE {表} SET …"` 整句漏判。
+    Args: node。
+    """
+    if isinstance(node, ast.Constant):
+        return node.value if isinstance(node.value, str) else None
+    if not isinstance(node, ast.JoinedStr):
+        return None
+    return "".join(
+        str(part.value) if isinstance(part, ast.Constant) else SQL_PLACEHOLDER
+        for part in node.values
+    )
+
+
+def _scopes(tree: ast.Module) -> dict[int, str]:
+    """每个调用节点所在的顶层函数名，按节点 id 查。
+
+    Args: tree。
+    """
+    found: dict[int, str] = {}
+    for node in tree.body:
+        if isinstance(node, ast.FunctionDef):
+            for child in ast.walk(node):
+                found[id(child)] = node.name
+    return found
+
+
 def check_upgrade_sets_lock_timeout() -> list[Violation]:
     """⚠ 单个迁移语句就能把一张热表的全部访问冻住。宁可迁移失败重试。"""
     return [
@@ -87,11 +160,12 @@ def check_no_backfill_in_migration() -> list[Violation]:
         tree = parse(path)
         if tree is None:
             continue
+        scopes = _scopes(tree)
         for call in _op_calls(tree, "execute"):
-            statement = call.args[0] if call.args else None
-            if not isinstance(statement, ast.Constant):
+            text = _sql_text(call.args[0] if call.args else None)
+            if text is None or not BACKFILL.search(text):
                 continue
-            if BACKFILL.search(str(statement.value)):
+            if (path.name, scopes.get(id(call), "")) not in BACKFILL_ALLOWED:
                 found.append(
                     Violation(
                         "迁移里禁止回填数据",
@@ -277,6 +351,130 @@ def check_index_on_existing_table_is_concurrent() -> list[Violation]:
     return found
 
 
+def _upgrade_scope(tree: ast.Module) -> list[ast.FunctionDef]:
+    """`upgrade` 连同它（层层）调到的本文件顶层函数。
+
+    ⚠ 约束常写在 `_swap` 这类辅助函数里；只看 `upgrade` 本体会整片漏判。
+    Args: tree。
+    """
+    functions = {
+        node.name: node
+        for node in tree.body
+        if isinstance(node, ast.FunctionDef)
+    }
+    pending = ["upgrade"]
+    reached: dict[str, ast.FunctionDef] = {}
+    while pending:
+        name = pending.pop()
+        function = functions.get(name)
+        if function is None or name in reached or name == "downgrade":
+            continue
+        reached[name] = function
+        pending.extend(
+            child.func.id
+            for child in ast.walk(function)
+            if isinstance(child, ast.Call) and isinstance(child.func, ast.Name)
+        )
+    return list(reached.values())
+
+
+def _table_of(path: Path, node: ast.expr | None) -> str | None:
+    """表名实参取成字符串；是模块级常量名就按常量取值。
+
+    Args: path, node。
+    """
+    if isinstance(node, ast.Constant):
+        return str(node.value)
+    if isinstance(node, ast.Name):
+        return _literal(path, node.id)
+    return None
+
+
+def _fresh_tables(path: Path, scope: list[ast.FunctionDef]) -> set[str]:
+    """这次升级里新建的表。
+
+    Args: path, scope。
+    """
+    names: set[str] = set()
+    for function in scope:
+        for call in _op_calls(function, "create_table"):
+            table = _table_of(path, call.args[0] if call.args else None)
+            if table is not None:
+                names.add(table)
+    return names
+
+
+def _one_step_op(path: Path, call: ast.Call, fresh: set[str]) -> bool:
+    """这一次 `op.create_*_constraint` 是不是在存量表上一步到位。
+
+    Args: path, call, fresh（本次新建的表）。
+    """
+    table = _table_of(path, call.args[1] if len(call.args) > 1 else None)
+    if table in fresh:
+        return False
+    return not any(
+        keyword.arg == "postgresql_not_valid" and _is_true(keyword.value)
+        for keyword in call.keywords
+    )
+
+
+def _one_step_sql(text: str, fresh: set[str]) -> bool:
+    """手写的 `ADD CONSTRAINT` 是不是在存量表上一步到位。
+
+    Args: text, fresh（本次新建的表）。
+    """
+    added = RAW_ADD_CONSTRAINT.search(text)
+    if added is None:
+        return False
+    table = RAW_ALTER_TABLE.search(text)
+    if table is not None and table.group(1).split(".")[-1].strip('"') in fresh:
+        return False
+    rest = added.group(2).upper()
+    if added.group(1).upper() == "UNIQUE":
+        return "USING INDEX" not in rest
+    return "NOT VALID" not in rest
+
+
+def check_constraint_on_existing_table() -> list[Violation]:
+    """存量表加 CHECK / 外键先 NOT VALID 再 VALIDATE，唯一约束走 USING INDEX。
+
+    ⚠ 一步到位的加约束持 ACCESS EXCLUSIVE 扫全表，期间这张表读写全停
+    （database-standard.md §5.2）。
+    """
+    found: list[Violation] = []
+    for path in _all_versions():
+        tree = parse(path)
+        if tree is None or path.name in CONSTRAINT_ALLOWED:
+            continue
+        scope = _upgrade_scope(tree)
+        fresh = _fresh_tables(path, scope)
+        for function in scope:
+            calls = [
+                call
+                for name in ONE_STEP_CONSTRAINTS
+                for call in _op_calls(function, name)
+                if _one_step_op(path, call, fresh)
+            ]
+            calls.extend(
+                call
+                for call in _op_calls(function, "execute")
+                if _one_step_sql(
+                    _sql_text(call.args[0] if call.args else None) or "",
+                    fresh,
+                )
+            )
+            found.extend(
+                Violation(
+                    "存量表加约束必须分两步",
+                    at(path, call.lineno),
+                    "ADD … NOT VALID 再 VALIDATE；唯一约束先建唯一索引再 "
+                    "USING INDEX",
+                )
+                for call in calls
+            )
+    return found
+
+
 def check_downgrade_is_honest() -> list[Violation]:
     """⚠ 假装能回滚的空 downgrade 比明确的不可逆更危险。"""
     found: list[Violation] = []
@@ -399,6 +597,7 @@ CHECKS = (
     check_no_native_enum,
     check_timestamps_carry_timezone,
     check_index_on_existing_table_is_concurrent,
+    check_constraint_on_existing_table,
     check_downgrade_is_honest,
     check_single_head_per_service,
     check_identifiers_fit_postgres,
