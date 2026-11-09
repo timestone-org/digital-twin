@@ -134,8 +134,10 @@ const hasDialects = computed(
   () => (kind.value?.rerank_dialects.length ?? 0) > 0,
 )
 
+/** 换类型清掉上一类专属的格子，名称与备注是各类共有的，留着。 */
 function pickKind(code: string): void {
-  form.value = emptyForm(code)
+  const { name, notes } = form.value
+  form.value = { ...emptyForm(code), name, notes }
 }
 
 function applyPreset(baseUrl: string): void {
@@ -261,7 +263,9 @@ async function onSubmit(): Promise<void> {
         @update:model-value="pickKind"
       />
       <!-- 编辑态只报类型不给改：换类型等于换一路接法，要删了重建 -->
-      <DtTag v-else size="sm">类型：{{ kind?.label ?? form.kind }}</DtTag>
+      <p v-else class="dt-form-grid__wide m-0">
+        <DtTag size="sm">类型：{{ kind?.label ?? form.kind }}</DtTag>
+      </p>
 
       <DtInput
         v-model="form.name"
