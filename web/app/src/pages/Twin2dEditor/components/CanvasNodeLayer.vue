@@ -30,7 +30,7 @@ import { computed, shallowRef } from 'vue'
 import type { CSSProperties } from 'vue'
 
 import {
-  moveNodes,
+  snapDragNodes,
   nodePortDots,
   rotationOf,
   withNodeRotation,
@@ -252,7 +252,7 @@ function dragTo(
   frame: Twin2dGestureFrame,
 ): void {
   if (!frame.moved) return
-  const move = moveNodes(
+  const move = snapDragNodes(
     props.nodes,
     styleMap.value,
     { ids, leadId, ...twin2dAxisLocked(frame) },

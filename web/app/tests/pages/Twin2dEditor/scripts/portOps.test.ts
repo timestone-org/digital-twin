@@ -20,7 +20,7 @@ import type {
 import { describe, expect, it } from 'vitest'
 
 import {
-  moveNodes,
+  snapDragNodes,
   nodePortDots,
   rotationOf,
   snapRotation,
@@ -283,7 +283,7 @@ describe('拖动落位', () => {
   it('关掉吸附时位移原样落地', () => {
     const nodes = [makeNode()]
 
-    const move = moveNodes(
+    const move = snapDragNodes(
       nodes,
       styleMap(makeStyle()),
       { ids: ['n1'], leadId: 'n1', dx: 7, dy: -3 },
@@ -295,7 +295,7 @@ describe('拖动落位', () => {
   })
 
   it('开着吸附时落到最近的一格网格线上', () => {
-    const move = moveNodes(
+    const move = snapDragNodes(
       [makeNode()],
       styleMap(makeStyle()),
       { ids: ['n1'], leadId: 'n1', dx: 7, dy: -3 },
@@ -308,7 +308,7 @@ describe('拖动落位', () => {
   it('同级节点的边线压过网格，并交出这一帧的参考线', () => {
     const nodes = [makeNode(), makeNode({ id: 'n2', x: 300, y: 47 })]
 
-    const move = moveNodes(
+    const move = snapDragNodes(
       nodes,
       styleMap(makeStyle()),
       { ids: ['n1'], leadId: 'n1', dx: 7, dy: -3 },
@@ -323,7 +323,7 @@ describe('拖动落位', () => {
   it('多选时其余节点原样加主选中那个差值', () => {
     const nodes = [makeNode(), makeNode({ id: 'n2', x: 220, y: 130 })]
 
-    const move = moveNodes(
+    const move = snapDragNodes(
       nodes,
       styleMap(makeStyle()),
       { ids: ['n1', 'n2'], leadId: 'n1', dx: 7, dy: -3 },
@@ -338,7 +338,7 @@ describe('拖动落位', () => {
   it('正在拖的节点不吸自己那条线', () => {
     const nodes = [makeNode(), makeNode({ id: 'n2' })]
 
-    const move = moveNodes(
+    const move = snapDragNodes(
       nodes,
       styleMap(makeStyle()),
       { ids: ['n1', 'n2'], leadId: 'n1', dx: 3, dy: 0 },
@@ -352,7 +352,7 @@ describe('拖动落位', () => {
   it('没被拖的节点原样带着，连引用都不换', () => {
     const nodes = [makeNode(), makeNode({ id: 'n2', x: 220, y: 130 })]
 
-    const move = moveNodes(
+    const move = snapDragNodes(
       nodes,
       styleMap(makeStyle()),
       { ids: ['n1'], leadId: 'n1', dx: 7, dy: -3 },
@@ -369,7 +369,7 @@ describe('拖动落位', () => {
       makeNode({ id: 'n2', x: 115, y: 400 }),
     ]
 
-    const move = moveNodes(
+    const move = snapDragNodes(
       nodes,
       styleMap(makeStyle()),
       { ids: ['n1'], leadId: 'n1', dx: 4, dy: 0 },
@@ -382,7 +382,7 @@ describe('拖动落位', () => {
   it('一步都没挪时原样返回入参那个引用', () => {
     const nodes = [makeNode()]
 
-    const move = moveNodes(
+    const move = snapDragNodes(
       nodes,
       styleMap(makeStyle()),
       { ids: ['n1'], leadId: 'n1', dx: 0, dy: 0 },
@@ -395,7 +395,7 @@ describe('拖动落位', () => {
   it('位移不是有限数时按没挪算', () => {
     const nodes = [makeNode()]
 
-    const move = moveNodes(
+    const move = snapDragNodes(
       nodes,
       styleMap(makeStyle()),
       { ids: ['n1'], leadId: 'n1', dx: Number.NaN, dy: 0 },
@@ -408,7 +408,7 @@ describe('拖动落位', () => {
   it('主选中的样式悬空时整批不动', () => {
     const nodes = [makeNode({ styleId: 'gone' })]
 
-    const move = moveNodes(
+    const move = snapDragNodes(
       nodes,
       styleMap(makeStyle()),
       { ids: ['n1'], leadId: 'n1', dx: 7, dy: -3 },
@@ -422,7 +422,7 @@ describe('拖动落位', () => {
   it('主选中不在表里时整批不动', () => {
     const nodes = [makeNode()]
 
-    const move = moveNodes(
+    const move = snapDragNodes(
       nodes,
       styleMap(makeStyle()),
       { ids: ['gone'], leadId: 'gone', dx: 7, dy: -3 },
@@ -435,7 +435,7 @@ describe('拖动落位', () => {
   it('样式悬空的同级节点不进可吸线', () => {
     const nodes = [makeNode(), makeNode({ id: 'n2', styleId: 'gone', x: 105 })]
 
-    const move = moveNodes(
+    const move = snapDragNodes(
       nodes,
       styleMap(makeStyle()),
       { ids: ['n1'], leadId: 'n1', dx: 3, dy: 0 },
