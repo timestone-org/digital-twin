@@ -56,19 +56,7 @@ async def preview(session: AsyncSession, context: PreviewContext) -> PreviewOut:
             warnings=[issue.message for issue in checked.issues],
         )
     metrics = await resolve_metrics(session, context)
-    # 没被任何指标引用的来源取数失败也要拦住：出稿那一路会因为它整份失败
-    warnings = list(dict.fromkeys(context.api_errors.values()))
-    warnings.extend(
-        f"{item.name}：{item.error}" for item in metrics if item.error
-    )
-    warnings.extend(
-        f"{item.name}：取数已截断" for item in metrics if item.is_truncated
-    )
-    warnings.extend(
-        f"{item.name}：使用较早的最新数据，非完整本期数据"
-        for item in metrics
-        if item.is_stale
-    )
+    warnings = _metric_warnings(context, metrics)
     nodes: dict[str, NodeValue] = {}
     for path, node in walk_nodes(context.template.doc_json):
         if node.type not in BUSINESS_NODES:
@@ -95,6 +83,29 @@ async def preview(session: AsyncSession, context: PreviewContext) -> PreviewOut:
         api_results=_api_results(context),
         checked_at=datetime.now(UTC),
     )
+
+
+def _metric_warnings(
+    context: PreviewContext, metrics: list[MetricValue]
+) -> list[str]:
+    """来源与指标两层的提示。
+
+    ⚠ 没被任何指标引用的来源取数失败也要算进去：出稿那一路会因为它整份失败。
+    Args: context, metrics。
+    """
+    warnings = list(dict.fromkeys(context.api_errors.values()))
+    warnings.extend(
+        f"{item.name}：{item.error}" for item in metrics if item.error
+    )
+    warnings.extend(
+        f"{item.name}：取数已截断" for item in metrics if item.is_truncated
+    )
+    warnings.extend(
+        f"{item.name}：使用较早的最新数据，非完整本期数据"
+        for item in metrics
+        if item.is_stale
+    )
+    return warnings
 
 
 def _api_results(context: PreviewContext) -> list[ReportApiResult]:
