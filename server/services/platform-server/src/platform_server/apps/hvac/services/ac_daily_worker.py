@@ -88,7 +88,7 @@ class DailyScheduler:
                 _logger.error(
                     "ac_daily_tick_failed",
                     "日增量调度这一拍出错，下一拍继续",
-                    error_type=type(error).__name__,
+                    error=error,
                 )
             finally:
                 self._idle.set()

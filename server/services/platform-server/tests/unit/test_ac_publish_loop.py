@@ -6,6 +6,7 @@
 
 import asyncio
 import contextlib
+import logging
 import uuid
 from collections.abc import AsyncIterator
 from dataclasses import dataclass, field
@@ -13,7 +14,10 @@ from datetime import UTC, datetime
 
 import pytest
 
-from platform_server.apps.hvac.publications import PUBLISH_STATUS_OK
+from platform_server.apps.hvac.publications import (
+    PUBLISH_STATUS_FAILED,
+    PUBLISH_STATUS_OK,
+)
 from platform_server.apps.hvac.services import (
     ac_publication_service,
     ac_publish_service,
@@ -59,6 +63,7 @@ class SpyPublisher:
     failures: dict[uuid.UUID, Exception] = field(
         default_factory=dict[uuid.UUID, Exception]
     )
+    statuses: dict[uuid.UUID, str] = field(default_factory=dict[uuid.UUID, str])
 
     async def due_models(
         self, _session: object
@@ -79,12 +84,13 @@ class SpyPublisher:
         failure = self.failures.get(model_id)
         if failure is not None:
             raise failure
+        status = self.statuses.get(model_id, PUBLISH_STATUS_OK)
         return PublishOutcome(
             model_id=model_id,
-            status=PUBLISH_STATUS_OK,
+            status=status,
             published_at=AT,
             items=(),
-            error=None,
+            error=None if status == PUBLISH_STATUS_OK else "下发面不可达",
         )
 
 
@@ -234,3 +240,37 @@ async def test_a_failing_tick_does_not_kill_the_loop(
     harness.loop.tick = exploding  # type: ignore[method-assign]  # 测试注入
     await asyncio.wait_for(harness.loop.run(), timeout=2)
     assert ticks >= 2
+
+
+async def test_a_failed_write_is_not_logged_as_a_sentinel_write(
+    monkeypatch: pytest.MonkeyPatch, caplog: pytest.LogCaptureFixture
+) -> None:
+    """⚠ 点位没写进去时日志不许说「已写哨兵值」：那正是没写进去的反面。"""
+    harness = build_harness(monkeypatch)
+    model_id = uuid.uuid4()
+    harness.publisher.ready = (model_id,)
+    harness.publisher.statuses[model_id] = PUBLISH_STATUS_FAILED
+    with caplog.at_level(logging.INFO):
+        await harness.loop.tick()
+    events = [record.getMessage() for record in caplog.records]
+    assert "ac_publish_write_failed" in events
+    assert "ac_publish_degraded" not in events
+
+
+async def test_an_unexpected_error_keeps_its_message_in_the_log(
+    monkeypatch: pytest.MonkeyPatch, caplog: pytest.LogCaptureFixture
+) -> None:
+    """只记异常类型的话，日志里永远查不出是哪里炸的。"""
+    harness = build_harness(monkeypatch)
+    doomed = uuid.uuid4()
+    harness.publisher.ready = (doomed,)
+    harness.publisher.failures[doomed] = RuntimeError("工件读不出来")
+    with caplog.at_level(logging.INFO):
+        await harness.loop.tick()
+    record = next(
+        item
+        for item in caplog.records
+        if item.getMessage() == "ac_publish_model_failed"
+    )
+    payload: object = record.__dict__["payload"]
+    assert "工件读不出来" in str(payload)

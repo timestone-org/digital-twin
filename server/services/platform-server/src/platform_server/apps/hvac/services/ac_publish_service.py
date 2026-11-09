@@ -442,7 +442,7 @@ async def _remember(database: Sessions, outcome: PublishOutcome) -> None:
             "ac_publish_heartbeat_unrecorded",
             "下发结果未能写回，页面上的心跳会停在上一拍",
             model_id=str(outcome.model_id),
-            error_type=type(error).__name__,
+            error=error,
         )
 
 
