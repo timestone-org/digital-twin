@@ -376,3 +376,4 @@ async def test_a_stuck_close_still_ends_that_connections_loop(
 
     async with asyncio.timeout(1):
         await loop
+    assert (loop.done(), await connections.get(stuck.id)) == (True, None)

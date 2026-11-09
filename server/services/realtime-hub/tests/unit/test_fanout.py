@@ -209,6 +209,7 @@ async def test_a_stalled_socket_is_dropped_instead_of_stalling_the_replica(
     # ⚠ 一条在 TCP 层不读的连接会让 send 一直挂着；不限时的话，本副本后续的
     # 每一条消息、每一个主题都要等它被保活判死
     monkeypatch.setattr(fanout, "SEND_TIMEOUT_S", 0.05)
+    script = [{"topic": "test:1", "seq": 1}, {"topic": "test:1", "seq": 2}]
     connections = ConnectionRegistry()
     alive: list[dict[str, object]] = []
     good = _connection(alive)
@@ -236,10 +237,7 @@ async def test_a_stalled_socket_is_dropped_instead_of_stalling_the_replica(
     for item in (good, stalled):
         await connections.add(item)
         await connections.bind(item.id, "test:1")
-    listener = _listener(
-        [{"topic": "test:1", "seq": 1}, {"topic": "test:1", "seq": 2}],
-        connections,
-    )
+    listener = _listener(script, connections)
 
     await listener.start()
     try:
@@ -250,7 +248,7 @@ async def test_a_stalled_socket_is_dropped_instead_of_stalling_the_replica(
         await listener.stop()
 
     assert (alive, await connections.subscribers("test:1"), closed) == (
-        [{"topic": "test:1", "seq": 1}, {"topic": "test:1", "seq": 2}],
+        script,
         (good,),
         [fanout.CLOSE_TRY_AGAIN],
     )
