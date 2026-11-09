@@ -49,6 +49,10 @@ class InstanceSupervisor:
         self._max_instances = max_instances
         self._on_value_change = on_value_change
         self._instances: dict[UUID, RunningInstance] = {}
+        # 同一实例的起停串行：双击「启动」时后到的那次要等前一次落定再看
+        self._locks: dict[UUID, asyncio.Lock] = {}
+        # 正在起、还没登记的实例也占上限的名额，否则并发起停能挤破上限
+        self._starting: set[UUID] = set()
 
     @property
     def ports(self) -> PortAllocator:
@@ -90,13 +94,67 @@ class InstanceSupervisor:
 
         Args: spec。
         """
-        existing = self._instances.get(spec.instance_id)
-        if existing is not None:
-            return existing
-        if len(self._instances) >= self._max_instances:
+        instance, _ = await self.launch(spec)
+        return instance
+
+    async def launch(self, spec: InstanceSpec) -> tuple[RunningInstance, bool]:
+        """起一台实例，并说明这次是否真的新建了服务器。
+
+        ⚠ 已在跑就原样返回且答「没新建」：调用方据此决定能不能清掉待重启
+        标记——没重建服务器，库里的新配置就还没生效。
+
+        Args: spec。
+        """
+        async with self._lock_of(spec.instance_id):
+            existing = self._instances.get(spec.instance_id)
+            if existing is not None:
+                return existing, False
+            return await self._start_locked(spec), True
+
+    async def restart(self, spec: InstanceSpec) -> RunningInstance:
+        """停掉再按新规格起，整段持有该实例的锁。
+
+        Args: spec。
+        """
+        async with self._lock_of(spec.instance_id):
+            await self._stop_locked(spec.instance_id)
+            return await self._start_locked(spec)
+
+    async def stop(self, instance_id: UUID) -> None:
+        """停一台实例并归还端口。未持有则无操作。
+
+        Args: instance_id。
+        """
+        async with self._lock_of(instance_id):
+            await self._stop_locked(instance_id)
+
+    def _lock_of(self, instance_id: UUID) -> asyncio.Lock:
+        """取该实例的起停锁。
+
+        Args: instance_id。
+        """
+        return self._locks.setdefault(instance_id, asyncio.Lock())
+
+    async def _start_locked(self, spec: InstanceSpec) -> RunningInstance:
+        """起一台实例。调用方持有该实例的锁且确认它没在跑。
+
+        Args: spec。
+        """
+        if len(self._instances) + len(self._starting) >= self._max_instances:
             raise InstanceLimitReached(
                 f"已达单进程实例数上限 {self._max_instances}"
             )
+        self._starting.add(spec.instance_id)
+        try:
+            return await self._build(spec)
+        finally:
+            self._starting.discard(spec.instance_id)
+
+    async def _build(self, spec: InstanceSpec) -> RunningInstance:
+        """记账端口、起服务器并登记。
+
+        Args: spec。
+        """
         self._ports.reserve(spec.instance_id, spec.port)
         instance = RunningInstance(
             spec, pki=self._pki, on_value_change=self._on_value_change
@@ -110,8 +168,8 @@ class InstanceSupervisor:
         self._instances[spec.instance_id] = instance
         return instance
 
-    async def stop(self, instance_id: UUID) -> None:
-        """停一台实例并归还端口。未持有则无操作。
+    async def _stop_locked(self, instance_id: UUID) -> None:
+        """停一台实例并归还端口。调用方持有该实例的锁。
 
         Args: instance_id。
         """
