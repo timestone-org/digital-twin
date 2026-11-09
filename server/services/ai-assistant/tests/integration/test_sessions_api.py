@@ -346,6 +346,26 @@ async def test_an_unknown_model_profile_is_rejected(
     assert rejected.json()["code"] == 42202
 
 
+async def test_a_null_model_profile_is_rejected_and_leaves_the_row(
+    db_client: httpx.AsyncClient,
+) -> None:
+    """显式 null 会把会话行改成 NULL，推进时退回按量那一路，只有账单看得出来。"""
+    created = await db_client.post(
+        SESSIONS_URL, json={"surface_kind": "dashboard-editor"}
+    )
+    session_id = created.json()["data"]["id"]
+    before = created.json()["data"]["model_profile"]
+    rejected = await db_client.patch(
+        f"{SESSIONS_URL}/{session_id}", json={"model_profile": None}
+    )
+    assert rejected.status_code == 400
+    listed = await db_client.patch(
+        f"{SESSIONS_URL}/{session_id}", json={"title": "改个名"}
+    )
+    assert listed.status_code == 200
+    assert listed.json()["data"]["model_profile"] == before
+
+
 def _default_route(capability: dict[str, object]) -> tuple[object, object]:
     """能力端点报的默认那一路，以及它该配的推理档。
 

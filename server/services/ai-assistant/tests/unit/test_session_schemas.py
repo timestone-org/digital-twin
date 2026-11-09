@@ -82,7 +82,7 @@ def test_a_blank_title_is_allowed() -> None:
     assert payload.title == ""
 
 
-@pytest.mark.parametrize("field", ["title", "is_archived"])
+@pytest.mark.parametrize("field", ["title", "is_archived", "model_profile"])
 def test_an_explicit_null_on_a_non_nullable_field_is_rejected(
     field: str,
 ) -> None:
