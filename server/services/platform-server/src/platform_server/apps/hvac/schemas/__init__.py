@@ -79,6 +79,7 @@ from platform_server.apps.hvac.schemas.common import (
     OutputModel,
     RoomRef,
     Utc,
+    UtcIn,
     WorkshopRef,
 )
 from platform_server.apps.hvac.schemas.room import (
@@ -164,6 +165,7 @@ __all__ = [
     "StartupRebuildOut",
     "TimeWindow",
     "Utc",
+    "UtcIn",
     "WorkshopCreateIn",
     "WorkshopOut",
     "WorkshopRef",

@@ -10,6 +10,7 @@ from decimal import Decimal
 from typing import Annotated
 
 from pydantic import (
+    AwareDatetime,
     BaseModel,
     ConfigDict,
     PlainSerializer,
@@ -24,6 +25,13 @@ from lib.utils.timeutils import format_rfc3339
 Utc = Annotated[
     datetime,
     PlainSerializer(format_rfc3339, return_type=str),
+    WithJsonSchema({"type": "string", "format": "date-time"}),
+]
+
+# 入参时刻：⚠ 必须带时区。裸时刻会被当成服务端本地时间，或与带时区的值比较时
+# 直接抛 TypeError 成 500
+UtcIn = Annotated[
+    AwareDatetime,
     WithJsonSchema({"type": "string", "format": "date-time"}),
 ]
 

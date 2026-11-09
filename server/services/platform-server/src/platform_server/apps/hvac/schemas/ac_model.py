@@ -14,6 +14,7 @@ from platform_server.apps.hvac.schemas.common import (
     OutputModel,
     RoomRef,
     Utc,
+    UtcIn,
     WorkshopRef,
 )
 
@@ -147,7 +148,7 @@ class PredictIn(InputModel):
 
     running_set: list[str] = Field(min_length=1)
     readings: dict[str, PredictReadingsIn] = Field(default_factory=dict)
-    at: Utc | None = None
+    at: UtcIn | None = None
     idle_minutes: int | None = Field(default=None, ge=0)
 
 
@@ -184,7 +185,7 @@ class RecommendIn(InputModel):
     """
 
     readings: dict[str, PredictReadingsIn] = Field(default_factory=dict)
-    at: Utc | None = None
+    at: UtcIn | None = None
     idle_minutes: int | None = Field(default=None, ge=0)
 
 

@@ -11,6 +11,7 @@ from platform_server.apps.hvac.schemas.common import (
     InputModel,
     OutputModel,
     Utc,
+    UtcIn,
 )
 
 MAX_EXCLUSION_REASON = 500
@@ -111,8 +112,8 @@ class StartupRebuildIn(InputModel):
     会继续产出数据，也可能补录更早的。
     """
 
-    window_start: Utc | None = None
-    window_end: Utc | None = None
+    window_start: UtcIn | None = None
+    window_end: UtcIn | None = None
 
 
 class StartupRebuildOut(OutputModel):

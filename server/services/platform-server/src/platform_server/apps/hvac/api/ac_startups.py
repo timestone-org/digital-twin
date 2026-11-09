@@ -5,10 +5,10 @@
 """
 
 import uuid
-from datetime import datetime
 from typing import Annotated
 
 from fastapi import APIRouter, Depends, Path, Query, Response, status
+from pydantic import AwareDatetime
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from lib.auth import CallerContext
@@ -63,7 +63,7 @@ ViewDep = Annotated[CallerContext, Depends(require(AC_VIEW))]
 ManageDep = Annotated[CallerContext, Depends(require(AC_MANAGE))]
 # ⚠ 路径里的时刻按 UTC 的 Z 后缀写（`2026-01-31T23:40:00Z`）：带 `+08:00`
 # 的写法里那个 `+` 在 URL 里必须转义成 %2B，不转义会被解成空格
-StartedAtDep = Annotated[datetime, Path()]
+StartedAtDep = Annotated[AwareDatetime, Path()]
 
 
 @router.get(
