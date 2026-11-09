@@ -40,6 +40,9 @@ from knowledge_server.apps.knowledge.services.retrieval.ports import (
     RetrievalResult,
     fused,
 )
+from knowledge_server.apps.knowledge.services.retrieval.released import (
+    released,
+)
 from knowledge_server.apps.knowledge.services.retrieval.reranked import (
     candidate_width,
     reranked,
@@ -86,6 +89,7 @@ class Hybrid:
             else request.limit
         )
         candidates = await hydrated(session, ranked, wanted)
+        await released(session)
         hits, rerank_note = await reranked(
             self.reranker, request.query, candidates, request.limit
         )
@@ -104,6 +108,7 @@ class Hybrid:
         """
         width = request.limit * LANE_WIDTH
         lanes: dict[str, list[tuple[uuid.UUID, str]]] = {}
+        await released(session)
         probe, note = await self._probe(request.query)
         if probe is not None:
             found = await self.indexes.vector.search(

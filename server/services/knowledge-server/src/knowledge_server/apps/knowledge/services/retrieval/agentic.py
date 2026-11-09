@@ -33,6 +33,9 @@ from knowledge_server.apps.knowledge.services.retrieval.ports import (
     RetrievalResult,
     RetrievalUnavailable,
 )
+from knowledge_server.apps.knowledge.services.retrieval.released import (
+    released,
+)
 from knowledge_server.apps.knowledge.services.retrieval.reranked import (
     candidate_width,
     reranked,
@@ -93,6 +96,7 @@ class Agentic:
             for one in await self._round(session, request):
                 seen[str(one.chunk_id)] = one
             found = list(seen.values())
+            await released(session)
             is_complete = await self._is_enough(request.query, found)
         hits, note = await self._ranked(request, list(seen.values()))
         return RetrievalResult(
@@ -137,6 +141,7 @@ class Agentic:
 
         Args: session, request。
         """
+        await released(session)
         made: list[Hit] = []
         for one in await self._rewritten(request.query):
             found = await self.hybrid.retrieve(

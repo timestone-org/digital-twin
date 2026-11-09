@@ -43,8 +43,23 @@ class _Answerer:
 
 
 @dataclass
+class _Session:
+    """只记「此刻有没有开着事务」的假数据库会话。"""
+
+    is_open: bool = False
+    commits: int = 0
+
+    def in_transaction(self) -> bool:
+        return self.is_open
+
+    async def commit(self) -> None:
+        self.is_open = False
+        self.commits += 1
+
+
+@dataclass
 class _Hybrid:
-    """按调用次数吐不同结果的假混合检索。"""
+    """按调用次数吐不同结果的假混合检索；跑一次就在会话上开一个事务。"""
 
     batches: list[tuple[Hit, ...]] = field(default_factory=list)
     calls: int = 0
@@ -52,7 +67,9 @@ class _Hybrid:
     async def retrieve(
         self, session: object, request: RetrievalRequest
     ) -> RetrievalResult:
-        del session, request
+        del request
+        if isinstance(session, _Session):
+            session.is_open = True
         made = (
             self.batches[self.calls] if self.calls < len(self.batches) else ()
         )
@@ -91,14 +108,14 @@ async def test_no_model_means_this_strategy_is_unavailable() -> None:
     absent = Agentic(hybrid=made.hybrid, answerer=NullAnswerer())
     with pytest.raises(RetrievalUnavailable):
         await absent.retrieve(
-            None, _request()
+            _Session(), _request()
         )  # pyright: ignore[reportArgumentType]
 
 
 async def test_it_stops_as_soon_as_the_grader_says_enough() -> None:
     hybrid = _Hybrid(batches=[(_hit("甲"),)])
     made = await _agentic(hybrid, _Answerer(grade="yes")).retrieve(
-        None,  # pyright: ignore[reportArgumentType]
+        _Session(),  # pyright: ignore[reportArgumentType]
         _request(),
     )
     assert made.rounds == 1
@@ -110,7 +127,7 @@ async def test_it_keeps_going_while_the_grader_says_not_enough() -> None:
     代价是一个看着很确定的错答案。"""
     hybrid = _Hybrid(batches=[(_hit("甲"),), (_hit("乙"),), (_hit("丙"),)])
     made = await _agentic(hybrid, _Answerer(grade="no")).retrieve(
-        None,  # pyright: ignore[reportArgumentType]
+        _Session(),  # pyright: ignore[reportArgumentType]
         _request(),
     )
     assert made.rounds == 3
@@ -121,7 +138,7 @@ async def test_hitting_the_ceiling_says_so() -> None:
     而不是装作查完了。"""
     hybrid = _Hybrid(batches=[(_hit("甲"),)])
     made = await _agentic(hybrid, _Answerer(grade="no")).retrieve(
-        None,  # pyright: ignore[reportArgumentType]
+        _Session(),  # pyright: ignore[reportArgumentType]
         _request(),
     )
     assert made.is_complete is False
@@ -131,7 +148,7 @@ async def test_hitting_the_ceiling_says_so() -> None:
 async def test_every_rewritten_query_really_runs() -> None:
     hybrid = _Hybrid(batches=[(_hit("甲"),), (_hit("乙"),)])
     await _agentic(hybrid, _Answerer(grade="yes")).retrieve(
-        None,  # pyright: ignore[reportArgumentType]
+        _Session(),  # pyright: ignore[reportArgumentType]
         _request(),
     )
     assert hybrid.calls == 2
@@ -143,7 +160,7 @@ async def test_a_broken_rewrite_falls_back_to_the_original_question() -> None:
     made = await _agentic(
         hybrid, _Answerer(queries="模型今天不想回 JSON", grade="yes")
     ).retrieve(
-        None,  # pyright: ignore[reportArgumentType]
+        _Session(),  # pyright: ignore[reportArgumentType]
         _request(),
     )
     assert hybrid.calls == 1
@@ -156,7 +173,7 @@ async def test_the_same_chunk_never_comes_back_twice() -> None:
     same = _hit("甲")
     hybrid = _Hybrid(batches=[(same,), (same,)])
     made = await _agentic(hybrid, _Answerer(grade="no")).retrieve(
-        None,  # pyright: ignore[reportArgumentType]
+        _Session(),  # pyright: ignore[reportArgumentType]
         _request(),
     )
     assert len(made.hits) == 1
@@ -166,7 +183,7 @@ async def test_no_hits_means_no_answer() -> None:
     """⚠ 一条都没召回时不去问模型：问了它只会凭常识编一段，
     而那段话没有任何一个角标指得到。"""
     made = await _agentic(_Hybrid(), _Answerer(grade="no")).retrieve(
-        None,  # pyright: ignore[reportArgumentType]
+        _Session(),  # pyright: ignore[reportArgumentType]
         _request(),
     )
     assert made.answer == ""
@@ -179,7 +196,7 @@ async def test_the_answer_prompt_numbers_the_snippets_from_one() -> None:
     answerer = _Answerer(grade="yes")
     hybrid = _Hybrid(batches=[(_hit("甲", 0.9), _hit("乙", 0.8))])
     await _agentic(hybrid, answerer).retrieve(
-        None,  # pyright: ignore[reportArgumentType]
+        _Session(),  # pyright: ignore[reportArgumentType]
         _request(),
     )
     prompt = answerer.seen[-1][1]
@@ -232,7 +249,7 @@ async def test_the_pool_is_reranked_once_against_the_original_question() -> (
         answerer=_Answerer(grade="yes"),  # pyright: ignore[reportArgumentType]
         reranker=lane,  # pyright: ignore[reportArgumentType]
     ).retrieve(
-        None,  # pyright: ignore[reportArgumentType]
+        _Session(),  # pyright: ignore[reportArgumentType]
         _request(),
     )
     assert lane.asked == ["出口温度多少"]
@@ -250,9 +267,35 @@ async def test_a_failed_rerank_still_answers_and_says_what_happened() -> None:
             raises=RerankFailed("端点未响应")
         ),
     ).retrieve(
-        None,  # pyright: ignore[reportArgumentType]
+        _Session(),  # pyright: ignore[reportArgumentType]
         _request(),
     )
     assert [one.text for one in made.hits] == ["甲", "乙"]
     assert made.answer
     assert RERANK_FAILED_NOTE in made.note
+
+
+@dataclass
+class _WatchingAnswerer(_Answerer):
+    """每次被调用时记下数据库会话是不是还开着事务。"""
+
+    session: _Session = field(default_factory=_Session)
+    open_during_calls: list[bool] = field(default_factory=list)
+
+    async def complete(self, system: str, user: str) -> str:
+        self.open_during_calls.append(self.session.in_transaction())
+        return await super().complete(system, user)
+
+
+async def test_no_transaction_stays_open_across_a_model_call() -> None:
+    """⚠ 一次提问要跑好几次模型调用，事务开着跨过去的话，连接在池里空占
+    几十秒；几个并发提问就能把整个池子占满，连带别的端点一起卡住。"""
+    session = _Session(is_open=True)
+    answerer = _WatchingAnswerer(grade="no", session=session)
+    hybrid = _Hybrid(batches=[(_hit("甲"),), (_hit("乙"),), (_hit("丙"),)])
+    await _agentic(hybrid, answerer).retrieve(
+        session,  # pyright: ignore[reportArgumentType]
+        _request(),
+    )
+    assert answerer.open_during_calls
+    assert not any(answerer.open_during_calls)
