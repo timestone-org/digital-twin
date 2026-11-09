@@ -151,7 +151,7 @@ async def _polled(
 
     Args: provider_id, body, credentials, login, actor。
     """
-    progress = await login.poll(body.ref, actor=actor)
+    progress = await login.poll(body.ref, provider_id=provider_id, actor=actor)
     if not progress.is_done:
         return LlmDeviceLoginPollOut(
             is_done=False, interval_s=progress.interval_s
