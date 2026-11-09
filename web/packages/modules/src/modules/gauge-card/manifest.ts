@@ -606,7 +606,15 @@ export default defineModule({
       span: 'half',
       help: '读数、刻度与目标标签共用此文字颜色。',
     },
-    { ...valueRulesField('rules', '取值规则'), group: '告警' },
+    {
+      ...valueRulesField(
+        'rules',
+        '取值规则',
+        undefined,
+        '留空跟随严重度语义色；量程分区、介质类别这类非严重度的配色填这里。',
+      ),
+      group: '告警',
+    },
   ],
   bindings: [
     {
