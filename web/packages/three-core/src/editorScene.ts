@@ -548,6 +548,7 @@ export class EditorScene {
       core,
       onChange: (change) => this.on.entityTransform(change),
       onDragEnd: () => this.on.entityTransformEnd(),
+      orbitAllowed: () => this.orbitAllowed(),
     })
     this.gameNavigation = new GameNavigationControls({
       core,
@@ -927,6 +928,14 @@ export class EditorScene {
     if (this.core !== null) this.core.controls.enabled = enabled
   }
 
+  /**
+   * 当前操作方式下轨道控制该不该开着。
+   * ⚠ 松手时回到它而不是无条件开：游戏档开回轨道控制，滚轮与拖拽就又能动镜头。
+   */
+  private orbitAllowed(): boolean {
+    return this.navigationMode === 'orbit'
+  }
+
   /** 框完了：算出框中哪些节点，交给宿主。 */
   private finishMarquee(rect: ScreenRect): void {
     const core = this.core
@@ -946,10 +955,10 @@ export class EditorScene {
     this.shiftSelectingPartNodes = false
     if (this.marquee?.up(event) === true) {
       this.downValid = false
-      this.setOrbitEnabled(true)
+      this.setOrbitEnabled(this.orbitAllowed())
       return
     }
-    this.setOrbitEnabled(true)
+    this.setOrbitEnabled(this.orbitAllowed())
     if (!this.downValid || event.button !== 0) return
     this.downValid = false
     const moved = Math.hypot(
@@ -964,7 +973,7 @@ export class EditorScene {
     this.downValid = false
     this.shiftSelectingPartNodes = false
     this.marquee?.cancel()
-    this.setOrbitEnabled(true)
+    this.setOrbitEnabled(this.orbitAllowed())
   }
 
   private canShiftSelectPartNodes(): boolean {

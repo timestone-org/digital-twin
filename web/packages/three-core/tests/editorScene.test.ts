@@ -772,6 +772,20 @@ describe('视口拾取', () => {
     expect(harness.events.select).not.toHaveBeenCalled()
   })
 
+  // ⚠ 松手无条件开回轨道控制的话，游戏档点一下之后滚轮又能推拉镜头
+  it('游戏操作下点一下之后轨道控制仍关着', async () => {
+    const harness = await ready()
+    harness.scene.setNavigationMode('game')
+    const before = harness.scene.snapshot()
+
+    click(harness, CENTER_X, CENTER_Y)
+    harness.canvas.dispatchEvent(
+      new WheelEvent('wheel', { deltaY: -500, cancelable: true }),
+    )
+
+    expect(harness.scene.snapshot()).toEqual(before)
+  })
+
   it('左侧选中部件后 Shift 单击把节点交给连续选择，不改当前选中', async () => {
     const harness = await ready()
     harness.scene.setSelection({ kind: 'parts', id: 'part-pump' })
