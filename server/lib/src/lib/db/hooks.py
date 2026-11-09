@@ -49,5 +49,6 @@ async def run_after_commit_hooks(session: AsyncSession) -> None:
             _logger.warning(
                 "after_commit_hook_failed",
                 "提交后副作用未执行完",
-                error_type=type(error).__name__,
+                hook=getattr(hook, "__qualname__", type(hook).__name__),
+                error=error,
             )
