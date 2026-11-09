@@ -29,6 +29,7 @@ from knowledge_server.apps.chat.schemas import (
     ChatStepOut,
 )
 from knowledge_server.apps.chat.services import scope as scope_service
+from knowledge_server.apps.chat.services.citations import CARRIED_KEY
 from knowledge_server.apps.chat.services.scope import BaseScope
 from lib.auth import CallerContext
 from lib.logging import get_logger
@@ -154,10 +155,16 @@ async def update_session(
     ⚠ `base_scope_ids` 给成 `null` 是「改回全部知识库」，与缺省不同——缺省
     才是「本次不涉及」。
 
+    ⚠ 先锁行再判版本：不锁的话，两次拿同一个版本号的并发修改都判得过，
+    后到的那次把先到的悄悄顶掉。
+
     Args: session, chat_session_id, caller, payload。
     """
     chat_session = await require_session(
-        session, chat_session_id=chat_session_id, caller=caller
+        session,
+        chat_session_id=chat_session_id,
+        caller=caller,
+        should_lock=True,
     )
     _require_version(chat_session, payload.expected_version)
     changes = payload.model_dump(exclude_unset=True)
@@ -230,14 +237,24 @@ async def require_session(
     *,
     chat_session_id: uuid.UUID,
     caller: CallerContext,
+    should_lock: bool = False,
 ) -> ChatSession:
     """取会话，看不见即 404。
 
     ⚠ 别人的会话回 404 而不是 403：403 等于逐个 id 回答「这条对话确实存在」。
 
-    Args: session, chat_session_id, caller。
+    Args: session, chat_session_id, caller, should_lock（要改它就先锁行）。
     """
-    chat_session = await session_crud.get(session, chat_session_id)
+    chat_session = (
+        await session.get(
+            ChatSession,
+            chat_session_id,
+            with_for_update=True,
+            populate_existing=True,
+        )
+        if should_lock
+        else await session_crud.get(session, chat_session_id)
+    )
     if chat_session is None or chat_session.user_id != visible_owner(caller):
         raise ChatSessionNotFound("对话不存在")
     return chat_session
@@ -261,12 +278,24 @@ def _to_message_out(
         content_json=message.content_json,
         usage_json=message.usage_json,
         created_at=message.created_at,
-        steps=[ChatStepOut.model_validate(step) for step in steps],
+        steps=[_step_out(step) for step in steps],
         citations=[
             ChatCitationOut.model_validate(one)
             for one in message.citations_json or []
         ],
     )
+
+
+def _step_out(step: ChatStep) -> ChatStepOut:
+    """一行步骤摊成出参，摘掉只给服务端续跑用的角标账本。
+
+    Args: step。
+    """
+    made = ChatStepOut.model_validate(step)
+    if made.input_json is None or CARRIED_KEY not in made.input_json:
+        return made
+    kept = {k: v for k, v in made.input_json.items() if k != CARRIED_KEY}
+    return made.model_copy(update={"input_json": kept})
 
 
 def _to_session_out(

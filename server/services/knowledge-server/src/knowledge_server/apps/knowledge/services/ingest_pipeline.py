@@ -53,6 +53,7 @@ from knowledge_server.apps.knowledge.services.indexing import (
     IndexPair,
     VectorRows,
 )
+from knowledge_server.apps.knowledge.services.parse_pool import RecyclingPool
 from knowledge_server.apps.knowledge.services.parsing import (
     ExternalParseFailed,
     ExternalParserBackend,
@@ -208,6 +209,9 @@ async def _parsed_locally(deps: IngestDeps, raw: RawItem) -> ParsedDocument:
         async with asyncio.timeout(deps.parse_timeout_s):
             return await loop.run_in_executor(deps.pool, parse_local, raw)
     except TimeoutError as error:
+        # ⚠ 不换池的话子进程仍在跑这一份，排在后面的每一份都会跟着超时
+        if isinstance(deps.pool, RecyclingPool):
+            deps.pool.recycle()
         raise IngestFailed("解析超时，这份文档可能过大") from error
     except UnsupportedRawItem as error:
         raise IngestFailed(str(error)) from error
@@ -341,6 +345,12 @@ def _chunked(
     Args: document, chunker, limits。
     """
     made = chunker_for(chunker).split(document, limits)
+    if not made:
+        # ⚠ 本地那几路解析器解不出字时不抛，而放它到 ready 的样子是「传上去了、
+        # 状态是绿的、检索却永远查不到」
+        raise IngestFailed(
+            "没有从这份原件里解出任何文字：可能是空白文件、纯图片或扫描件"
+        )
     over = oversized(made, limits)
     if over:
         raise IngestFailed(
@@ -501,11 +511,31 @@ async def ingest(
             document.base_id,
             list(zip(chunk_ids, [one.text for one in chunks], strict=True)),
         )
+    await _finished(sessions, deps, document, len(chunks))
+    return READY
+
+
+async def _finished(
+    sessions: Sessions, deps: IngestDeps, document: _Pending, chunk_count: int
+) -> None:
+    """置 ready，并给还没钉嵌入档的库补上这一档。
+
+    ⚠ 建库那一刻没接嵌入档的话库上那一格是空的，而它就是「建没建过索引」的
+    判据：不补上，这个库永远被当成只能靠关键词命中。
+
+    Args: sessions, deps, document, chunk_count。
+    """
     async with sessions() as session:
         await crud.document.mark_ready(
-            session, document.document_id, len(chunks), datetime.now(UTC)
+            session, document.document_id, chunk_count, datetime.now(UTC)
         )
-    return READY
+        if deps.embedder.model is not None:
+            await crud.knowledge_base.pin_embedding(
+                session,
+                document.base_id,
+                deps.embedder.model,
+                deps.embedder.dimensions,
+            )
 
 
 async def mark_failed(

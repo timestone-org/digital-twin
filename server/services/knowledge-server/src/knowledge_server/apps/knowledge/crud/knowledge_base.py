@@ -5,7 +5,7 @@ from collections.abc import Collection, Sequence
 from dataclasses import dataclass
 from typing import Any, cast
 
-from sqlalchemy import delete, func, select
+from sqlalchemy import delete, func, select, update
 from sqlalchemy.engine import CursorResult
 from sqlalchemy.ext.asyncio import AsyncSession
 
@@ -47,6 +47,23 @@ async def insert_base(session: AsyncSession, write: BaseWrite) -> KnowledgeBase:
     session.add(row)
     await session.flush()
     return row
+
+
+async def pin_embedding(
+    session: AsyncSession, base_id: uuid.UUID, model: str, dimensions: int
+) -> None:
+    """库上那一格嵌入档还空着时补上；已经钉过的不动。
+
+    Args: session, base_id, model, dimensions。
+    """
+    await session.execute(
+        update(KnowledgeBase)
+        .where(
+            KnowledgeBase.id == base_id,
+            KnowledgeBase.embedding_model.is_(None),
+        )
+        .values(embedding_model=model, dimensions=dimensions)
+    )
 
 
 async def get_base(

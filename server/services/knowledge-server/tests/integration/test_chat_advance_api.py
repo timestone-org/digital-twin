@@ -245,6 +245,24 @@ async def test_text_and_tool_results_together_are_refused_up_front(
     assert response.status_code == 400
 
 
+@pytest.mark.parametrize("text", ["", "   \n "])
+async def test_a_blank_question_is_refused_before_any_turn_runs(
+    db_stack: DbStack, text: str
+) -> None:
+    """⚠ 照收的话，一次空发送也要跑一整轮计费的模型，库里留一条空的提问，
+    会话还因为起不出标题而一直是「未命名」。"""
+    model = ScriptedChat(reply=AIMessage(content="好"))
+    _install(db_stack, model)
+    session_id = await _new_session(db_stack.client)
+
+    response = await db_stack.client.post(
+        f"{URL}/{session_id}:advance", json={"user_text": text}
+    )
+
+    assert response.status_code == 400
+    assert model.calls == 0
+
+
 async def test_the_thinking_is_streamed_but_never_stored(
     db_stack: DbStack,
 ) -> None:

@@ -30,6 +30,7 @@ from knowledge_server.apps.knowledge.services.embedding import NullEmbedder
 from knowledge_server.apps.knowledge.services.indexing import build_indexes
 from knowledge_server.apps.knowledge.services.ingest_pipeline import IngestDeps
 from knowledge_server.apps.knowledge.services.ingest_worker import (
+    DEFERRED_REASON,
     ConsumerOptions,
     IngestConsumer,
 )
@@ -232,8 +233,9 @@ async def test_a_permanent_source_failure_keeps_its_reason_and_is_acked(
 @pytest.mark.parametrize("mode", ["timeout", "503", "store"])
 async def test_a_temporary_source_failure_is_left_unacked(mode: str) -> None:
     database, stream = await _run(mode)
-    assert database.document.status == "parsing"
-    assert database.document.failure_reason == ""
+    # ⚠ 退回 pending 并写明在等什么：停在 parsing 的话「重新解析」一直被拒
+    assert database.document.status == "pending"
+    assert database.document.failure_reason == DEFERRED_REASON
     assert stream.acked == []
 
 
@@ -358,8 +360,8 @@ async def test_storage_faults_cross_the_real_adapter_source_pipeline_and_worker(
     )
     database, stream = await _run_source(UploadSource(storage), kind)
     if fault in ("503", "read-timeout", "stream-timeout", "stream-reset"):
-        assert database.document.status == "parsing"
-        assert database.document.failure_reason == ""
+        assert database.document.status == "pending"
+        assert database.document.failure_reason == DEFERRED_REASON
         assert stream.acked == []
     else:
         assert database.document.status == "failed"

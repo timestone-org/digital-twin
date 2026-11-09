@@ -142,7 +142,11 @@ async def _stored(
     Args: sessions, chat_session_id, title。
     """
     async with sessions() as session:
-        row = await session.get(ChatSession, chat_session_id)
+        # ⚠ 锁行再读：与手动改名并发时不锁的话，两边各自把版本号加一，
+        # 报出去的是同一个版本号、落下的却是两份不同的行
+        row = await session.get(
+            ChatSession, chat_session_id, with_for_update=True
+        )
         if row is None or row.title:
             return None
         row.title = title

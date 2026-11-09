@@ -164,3 +164,22 @@ class SourceSyncConflict(AppError):
 
     code = 42316
     http_status = 409
+
+
+class UploadNotFound(AppError):
+    """登记时找不到这次直传的原件：还没传完、凭证过期，或那一步上传失败了。
+
+    ⚠ 与 500 分开：这是「请重新上传」，不是服务坏了。混成 500 的话，前端分不清
+    该让用户重传还是该报障，而日志里多出一条不该有的 ERROR。
+    """
+
+    code = 42317
+    http_status = 409
+
+
+class ObjectStoreDown(AppError):
+    """对象存储此刻用不了。稍后重试有意义。"""
+
+    code = 52303
+    http_status = 503
+    is_retryable = True

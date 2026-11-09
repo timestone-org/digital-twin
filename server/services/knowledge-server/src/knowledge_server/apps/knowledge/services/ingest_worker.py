@@ -15,6 +15,7 @@ import asyncio
 import uuid
 from dataclasses import dataclass
 
+from knowledge_server.apps.knowledge import crud
 from knowledge_server.apps.knowledge.services import ingest_queue
 from knowledge_server.apps.knowledge.services.ingest_pipeline import (
     IngestDeps,
@@ -36,6 +37,8 @@ _logger = get_logger("knowledge.ingest_worker")
 
 RENEW_DIVISOR = 3
 MIN_RENEW_INTERVAL_S = 0.01
+# 上游一时拿不到原件时，留在文档行上给人看的那一句
+DEFERRED_REASON = "原件暂时取不到，稍后自动重试"
 
 
 class _OwnershipLost(RuntimeError):
@@ -250,6 +253,7 @@ class IngestConsumer:
                 entry_id=entry.entry_id,
                 error=error,
             )
+            await self._defer(document_id, generation)
             return False
         except IngestFailed as error:
             await self._fail(document_id, str(error))
@@ -309,6 +313,28 @@ class IngestConsumer:
 
     async def _fail(self, document_id: uuid.UUID, reason: str) -> None:
         await mark_failed(self._database.session, document_id, reason)
+
+    async def _defer(
+        self, document_id: uuid.UUID, generation: uuid.UUID | None
+    ) -> None:
+        """退回 pending 并写明在等什么；写不进去也不妨碍稍后重新认领。
+
+        ⚠ 不退的话这份文档停在 parsing：界面上看不出为什么卡住，而「重新解析」
+        一直被拒成「正在解析」。
+
+        Args: document_id, generation。
+        """
+        try:
+            async with self._database.session() as session:
+                await crud.document.mark_deferred(
+                    session, document_id, generation, DEFERRED_REASON
+                )
+        except Exception as error:
+            _logger.warning(
+                "knowledge_ingest_defer_failed",
+                "没能把这份文档退回待处理，稍后重新认领时再试",
+                error=error,
+            )
 
     async def _ack_owned(self, entry: StreamEntry) -> None:
         """仅仍归当前消费者的消息可确认。

@@ -8,6 +8,7 @@
 而原件其实好好的。
 """
 
+import asyncio
 import hashlib
 import uuid
 from collections.abc import Sequence
@@ -22,10 +23,12 @@ from knowledge_server.apps.knowledge.errors import (
     DocumentNotFound,
     DuplicateDocument,
     FigureBytesGone,
+    ObjectStoreDown,
     RawBytesGone,
     RawItemAbsent,
     SourceNotFound,
     UnsupportedRawItem,
+    UploadNotFound,
 )
 from knowledge_server.apps.knowledge.models import KnowledgeDocument
 from knowledge_server.apps.knowledge.schemas import (
@@ -43,6 +46,7 @@ from knowledge_server.apps.knowledge.services.parsing import (
     ExternalParserBackend,
     accepted_suffixes,
 )
+from knowledge_server.apps.knowledge.services.released import released
 from knowledge_server.apps.knowledge.services.sources import (
     UPLOAD_KIND,
     document_key,
@@ -177,7 +181,7 @@ async def _presign(
             ttl_s=UPLOAD_TTL_S,
         )
     except ObjectStoreError as error:
-        raise ObjectStoreError("对象存储暂时不可用") from error
+        raise ObjectStoreDown("对象存储暂时不可用，请稍后再试") from error
 
 
 async def _hashed(store: ObjectStore, staging: str) -> tuple[str, int]:
@@ -186,10 +190,27 @@ async def _hashed(store: ObjectStore, staging: str) -> tuple[str, int]:
     ⚠ 哈希在**服务端**算，不信客户端报的：客户端报什么我们就存什么的话，
     去重就成了一句空话——两份不同内容报同一个哈希，第二份会被当成重复丢掉。
 
+    ⚠ 哈希放进线程里算：几十兆的原件在事件循环上算一遍要上百毫秒，期间连探针
+    都答不了。
+
     Args: store, staging。
     """
-    content = await store.get_bytes(staging)
-    return (hashlib.sha256(content).hexdigest(), len(content))
+    try:
+        content = await store.get_bytes(staging)
+    except ObjectNotFound as error:
+        raise UploadNotFound("没有找到这次直传的原件，请重新上传") from error
+    except ObjectStoreError as error:
+        raise ObjectStoreDown("对象存储暂时不可用，请稍后再试") from error
+    digest = await asyncio.to_thread(_sha256_of, content)
+    return (digest, len(content))
+
+
+def _sha256_of(content: bytes) -> str:
+    """一段字节的 SHA-256 十六进制串。
+
+    Args: content。
+    """
+    return hashlib.sha256(content).hexdigest()
 
 
 async def _drop_staging(store: ObjectStore, staging: str) -> None:
@@ -223,15 +244,42 @@ async def _admit(
     ⚠ 判重在挪件**之前**：撞唯一键时事务已失败，无从核对正式键归不归自己，
     而同一文档 id 的并发登记里它就是胜出方的原件，不能在那时删。
 
+    ⚠ 读原件与挪件之前都先了结只读事务：两者都是跨网络的外部 IO，而走到这里
+    之前只查过库、一行都没写过。
+
     Args: session, store, base_id, staging, final。
     """
+    await released(session)
     digest, size = await _hashed(store, staging)
     if await crud.document.has_content_hash(session, base_id, digest):
         await _drop_staging(store, staging)
         raise DuplicateDocument(DUPLICATE_CONTENT)
-    await store.copy(staging, final)
+    await released(session)
+    try:
+        await store.copy(staging, final)
+    except ObjectStoreError as error:
+        raise ObjectStoreDown("对象存储暂时不可用，请稍后再试") from error
     await _drop_staging(store, staging)
     return (digest, size)
+
+
+async def _upload_source(
+    session: AsyncSession, base_id: uuid.UUID, document_id: uuid.UUID
+) -> uuid.UUID:
+    """这个库的上传通道；这个文档 id 已经登记过就当场拒。
+
+    ⚠ 第一次登记已把暂存件挪走，不先拒的话再登记一次只会撞「原件不在」。
+
+    Args: session, base_id, document_id。
+    """
+    source = await crud.source.find_source_by_kind(
+        session, base_id, UPLOAD_KIND
+    )
+    if source is None:
+        raise SourceNotFound("这个库没有上传通道")
+    if await crud.document.get_document(session, document_id) is not None:
+        raise DuplicateDocument("这份文档已经登记过了")
+    return source.id
 
 
 async def register_upload(
@@ -248,11 +296,7 @@ async def register_upload(
 
     Args: session, store, base_id, body, external。
     """
-    source = await crud.source.find_source_by_kind(
-        session, base_id, UPLOAD_KIND
-    )
-    if source is None:
-        raise SourceNotFound("这个库没有上传通道")
+    source_id = await _upload_source(session, base_id, body.document_id)
     suffix = _checked_suffix(body.filename, external)
     staging = staging_key(base_id, body.document_id, suffix)
     final = document_key(base_id, body.document_id, suffix)
@@ -263,7 +307,7 @@ async def register_upload(
             crud.document.DocumentWrite(
                 document_id=body.document_id,
                 base_id=base_id,
-                source_id=source.id,
+                source_id=source_id,
                 external_ref=final,
                 title=body.filename,
                 media_type="",

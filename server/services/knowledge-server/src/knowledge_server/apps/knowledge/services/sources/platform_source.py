@@ -30,6 +30,7 @@ from knowledge_server.apps.knowledge.errors import (
     SourceIdentityExpired,
     SourceReadFailed,
 )
+from knowledge_server.apps.knowledge.models.document import TITLE_MAX_LENGTH
 from knowledge_server.apps.knowledge.services.parsing import RawItem
 from knowledge_server.apps.knowledge.services.sources.ports import (
     DiscoveredItem,
@@ -44,6 +45,8 @@ PLATFORM_KIND = "platform"
 PAGE_SIZE = 50
 # 单条记录渲染成正文的字符上限。⚠ 有上限：一行里塞进一整篇说明书是现场常事
 MAX_ITEM_CHARS = 20_000
+# 条目标题的后缀，解析器按它分派
+_SUFFIX = ".md"
 TEMPORARY_HTTP_STATUSES = (
     HTTPStatus.REQUEST_TIMEOUT,
     HTTPStatus.TOO_MANY_REQUESTS,
@@ -225,11 +228,23 @@ def _item(config: Mapping[str, Any], row: Mapping[str, Any]) -> DiscoveredItem:
     return DiscoveredItem(
         external_ref=identity,
         # ⚠ 后缀必须带上：它是解析器分派的唯一判据，而这里的内容是纯文本
-        title=f"{title or identity}.md",
+        title=f"{_title_of(title, identity)}{_SUFFIX}",
         media_type="text/markdown",
         byte_size=len(content),
         content=content,
     )
+
+
+def _title_of(title: str, identity: str) -> str:
+    """标题字段那一格摊成一行、截到标题列放得下。
+
+    ⚠ 截而不是拒：标题字段指到一列长描述上时，超长的那一条会让整页同步回滚，
+    而每次重试都一样失败——一条记录堵住整个来源。
+
+    Args: title（标题字段的原值）, identity（行标识，标题为空时顶上）。
+    """
+    flat = " ".join(title.split()) or " ".join(identity.split())
+    return flat[: TITLE_MAX_LENGTH - len(_SUFFIX)]
 
 
 def _identity_of(value: object) -> str:

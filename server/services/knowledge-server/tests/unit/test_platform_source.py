@@ -6,6 +6,7 @@ from typing import Any
 import httpx
 import pytest
 
+from knowledge_server.apps.knowledge.models.document import TITLE_MAX_LENGTH
 from knowledge_server.apps.knowledge.services.sources import (
     PLATFORM_KIND,
     KnowledgeSource,
@@ -88,6 +89,29 @@ async def test_the_title_carries_a_suffix() -> None:
         {"path": "/x", "title_field": "name"}, None
     )
     assert page.items[0].title == "冷却水.md"
+
+
+@pytest.mark.parametrize(
+    "name",
+    ["说明" * 600, "  \n  ", "第一行\n第二行"],
+    ids=["long", "blank", "multiline"],
+)
+async def test_a_long_or_odd_title_still_fits_the_column(name: str) -> None:
+    """⚠ 标题字段指到一列长描述上时，超长的标题会让整页同步回滚，而且每次
+    重试都一样失败。"""
+
+    def handler(request: httpx.Request) -> httpx.Response:
+        del request
+        return _enveloped([{"row_id": "1", "name": name}])
+
+    page = await _source(handler).discover(
+        {"path": "/x", "title_field": "name"}, None
+    )
+    title = page.items[0].title
+    assert len(title) <= TITLE_MAX_LENGTH
+    assert title.endswith(".md")
+    assert "\n" not in title
+    assert title.strip() != ".md"
 
 
 async def test_a_full_url_is_refused() -> None:

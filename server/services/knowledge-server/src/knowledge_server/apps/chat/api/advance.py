@@ -16,9 +16,11 @@ from fastapi import APIRouter, Depends
 from fastapi.responses import StreamingResponse
 from sqlalchemy.ext.asyncio import AsyncSession
 
+from knowledge_server.apps.chat.crud import session_crud
 from knowledge_server.apps.chat.deps import get_advance_deps
+from knowledge_server.apps.chat.errors import ChatTurnFailed
 from knowledge_server.apps.chat.schemas import ChatAdvanceIn
-from knowledge_server.apps.chat.services import advance_service
+from knowledge_server.apps.chat.services import advance_service, client_receipts
 from knowledge_server.apps.chat.services.citations import (
     CitationsFound,
     as_json,
@@ -46,6 +48,8 @@ UseDep = Annotated[CallerContext, Depends(require(KNOWLEDGE_USE))]
 
 # ⚠ 关掉中间层缓冲。攒着一起吐的话，「一步步可见」退化成「最后一起出现」
 _STREAM_HEADERS = {"Cache-Control": "no-cache", "X-Accel-Buffering": "no"}
+# 意料之外的失败给人看的那一句。⚠ 不带异常原文：原文里可能有连接串与内网地址
+_CRASHED = "这一轮没跑完，请重试"
 
 
 @router.post("/{session_id}:advance", summary="推进一个回合（事件流）")
@@ -61,6 +65,9 @@ async def advance_turn(
     Args: session_id, payload, session, deps, caller。
     """
     await require_session(session, chat_session_id=session_id, caller=caller)
+    await client_receipts.require_pending(
+        session, session_id, [one.call_id for one in payload.tool_results]
+    )
     stream = _frames(deps, session_id, payload)
     return StreamingResponse(
         stream, media_type="text/event-stream", headers=_STREAM_HEADERS
@@ -84,7 +91,32 @@ async def _frames(
             yield _frame_of(item)
     except AppError as error:
         _logger.warning("kb_turn_failed", "回合失败", code=error.code)
+        await _remembered(deps, session_id, str(error))
         yield events.error_frame(error.code, str(error), trace_id)
+    # ⚠ 只接 `Exception`：客户端断开时的取消要照常往上传
+    except Exception as error:
+        _logger.error("kb_turn_crashed", "回合异常终止", error=error)
+        await _remembered(deps, session_id, _CRASHED)
+        yield events.error_frame(ChatTurnFailed.code, _CRASHED, trace_id)
+
+
+async def _remembered(
+    deps: advance_service.AdvanceDeps, session_id: uuid.UUID, reason: str
+) -> None:
+    """把这一轮为什么失败记到会话上；记不下也不妨碍那一帧 error 发出去。
+
+    ⚠ 自己一个短事务：回合里那几个事务早已各自了结，而这一轮的问题没落库——
+    不记的话，重开这条对话既看不到问题、也看不到为什么失败。
+
+    Args: deps, session_id, reason。
+    """
+    try:
+        async with deps.sessions() as session:
+            await session_crud.record_error(session, session_id, reason)
+    except Exception as error:
+        _logger.warning(
+            "kb_turn_error_unrecorded", "回合失败原因没记下", error=error
+        )
 
 
 def _frame_of(item: TurnEvent | SessionTitled | CitationsFound) -> str:

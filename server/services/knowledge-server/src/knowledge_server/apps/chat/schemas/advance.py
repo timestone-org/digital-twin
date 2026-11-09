@@ -6,7 +6,7 @@
 
 from typing import Annotated, Any, Self
 
-from pydantic import Field, model_validator
+from pydantic import Field, field_validator, model_validator
 
 from knowledge_server.apps.chat.schemas.common import InputModel
 
@@ -28,7 +28,9 @@ class ToolResultIn(InputModel):
 class ChatAdvanceIn(InputModel):
     """推进一个回合。"""
 
-    user_text: str | None = Field(default=None, max_length=MAX_USER_TEXT)
+    user_text: str | None = Field(
+        default=None, min_length=1, max_length=MAX_USER_TEXT
+    )
     tool_results: list[ToolResultIn] = Field(
         default_factory=list[ToolResultIn], max_length=MAX_TOOL_RESULTS
     )
@@ -37,6 +39,14 @@ class ChatAdvanceIn(InputModel):
     client_tools: list[Annotated[str, Field(min_length=1, max_length=64)]] = (
         Field(default_factory=list[str], max_length=8)
     )
+
+    @field_validator("user_text")
+    @classmethod
+    def check_not_blank(cls, value: str | None) -> str | None:
+        """空白的提问当场拒；原文照存，不替用户去掉首尾空白。"""
+        if value is not None and not value.strip():
+            raise ValueError("user_text 不能只有空白")
+        return value
 
     @model_validator(mode="after")
     def check_exactly_one_source(self) -> Self:
