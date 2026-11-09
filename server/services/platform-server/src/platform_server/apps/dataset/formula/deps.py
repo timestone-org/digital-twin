@@ -191,9 +191,42 @@ def topo_order(
                 dependents[dep].append(key)
     order = _drain(indegree, dependents)
     if len(order) != len(all_keys):
-        cycle = sorted(all_keys - set(order))
-        raise FormulaError(f"公式存在循环引用：{' → '.join(cycle)}")
+        cycle = _on_cycle(deps_by_key, all_keys - set(order))
+        raise FormulaError(f"公式存在循环引用：{'、'.join(cycle)}")
     return order
+
+
+def _on_cycle(
+    deps_by_key: Mapping[str, set[str]], stuck: set[str]
+) -> list[str]:
+    """排不出顺序的列里真正在环上的那些（能沿依赖回到自己）。
+
+    ⚠ 环下游的列同样排不出顺序，但不在环上：一并点名会把人带去改错的列。
+    Args: deps_by_key, stuck（排序后剩下的列）。
+    """
+    return sorted(
+        key for key in stuck if key in _reachable(deps_by_key, key, stuck)
+    )
+
+
+def _reachable(
+    deps_by_key: Mapping[str, set[str]], start: str, within: set[str]
+) -> set[str]:
+    """从 `start` 沿依赖能走到的列，只在 `within` 里走。
+
+    Args: deps_by_key, start, within。
+    """
+    seen: set[str] = set()
+    pending = [dep for dep in deps_by_key.get(start, set()) if dep in within]
+    while pending:
+        key = pending.pop()
+        if key in seen:
+            continue
+        seen.add(key)
+        pending.extend(
+            dep for dep in deps_by_key.get(key, set()) if dep in within
+        )
+    return seen
 
 
 def _drain(

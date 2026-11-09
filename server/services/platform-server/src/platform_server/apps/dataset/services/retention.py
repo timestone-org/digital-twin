@@ -32,10 +32,7 @@ from lib.logging import (
 )
 from lib.utils.ids import uuid7
 from lib.utils.timeutils import format_rfc3339, to_utc, utcnow
-from platform_server.apps.dataset.services.collector import (
-    Sessions,
-    number_or,
-)
+from platform_server.apps.dataset.services.collector import number_or
 from platform_server.apps.dataset.services.dirty import DatasetDirtyLog
 from platform_server.apps.dataset.services.retention_run import (
     Budget,
@@ -45,6 +42,7 @@ from platform_server.apps.dataset.services.retention_run import (
     reindex_span,
     sweep_table,
 )
+from platform_server.apps.dataset.services.sessions import Sessions
 from platform_server.apps.runtime_params.services import (
     SECTION_DATASET,
     param_service,

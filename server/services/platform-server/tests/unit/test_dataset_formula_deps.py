@@ -61,8 +61,14 @@ def test_a_self_reference_is_a_cycle() -> None:
 
 
 def test_two_columns_reading_each_other_are_a_cycle() -> None:
-    with pytest.raises(FormulaError, match="循环引用：乙 → 甲"):
+    with pytest.raises(FormulaError, match=r"循环引用：乙、甲$"):
         plan_of(("甲", "{乙} + 1"), ("乙", "{甲} + 1"))
+
+
+def test_a_column_downstream_of_a_cycle_is_not_named_as_part_of_it() -> None:
+    # ⚠ 环下游的列同样排不出顺序，但它不在环上：点它的名会把人带错地方
+    with pytest.raises(FormulaError, match=r"循环引用：乙、甲$"):
+        plan_of(("甲", "{乙} + 1"), ("乙", "{甲} + 1"), ("丙", "{甲} * 2"))
 
 
 def test_a_window_pointing_at_another_formula_column_is_an_edge() -> None:
@@ -159,9 +165,9 @@ def test_an_edge_pointing_outside_the_formula_columns_is_not_an_edge() -> None:
     assert topo_order({"甲": {"录入"}}, {"甲"}) == ["甲"]
 
 
-def test_the_cycle_message_names_every_column_it_could_not_order() -> None:
+def test_the_cycle_message_names_every_column_on_the_cycle() -> None:
     # 按码位排序，与运行环境的 locale 无关——报错文案在哪台机器上都一样
-    with pytest.raises(FormulaError, match="丙 → 乙 → 甲"):
+    with pytest.raises(FormulaError, match="丙、乙、甲"):
         topo_order(
             {"甲": {"乙"}, "乙": {"丙"}, "丙": {"甲"}}, {"甲", "乙", "丙"}
         )

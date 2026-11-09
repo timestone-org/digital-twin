@@ -13,6 +13,7 @@ from typing import Any
 
 from sqlalchemy.ext.asyncio import AsyncSession
 
+from lib.errors.base import FieldError
 from lib.logging import get_logger
 from lib.utils.ids import uuid7
 from lib.utils.timeutils import to_utc, utcnow
@@ -21,7 +22,10 @@ from platform_server.apps.dataset.crud import (
     column_crud,
     record_crud,
 )
-from platform_server.apps.dataset.errors import DatasetRecordNotFound
+from platform_server.apps.dataset.errors import (
+    DatasetRecordInvalid,
+    DatasetRecordNotFound,
+)
 from platform_server.apps.dataset.models import DatasetRecord
 from platform_server.apps.dataset.schemas import (
     RecomputeIn,
@@ -31,6 +35,7 @@ from platform_server.apps.dataset.schemas import (
     RecordUpdateIn,
     RecordWriteOut,
 )
+from platform_server.apps.dataset.services.buckets import COLLECT_SOURCE
 from platform_server.apps.dataset.services.dirty import (
     DatasetDirtyLog,
     mark_dirty,
@@ -148,6 +153,7 @@ async def update_record(
     merged = merge_values(record.values_json, values)
     overrides = merge_overrides(record.overrides_json, values)
     stamp = record.ts if payload.ts is None else to_utc(payload.ts)
+    _require_bucket_kept(record, stamp)
     saved = await _persist(
         session,
         scope,
@@ -162,6 +168,22 @@ async def update_record(
         row_id=str(saved.row_id),
     )
     return await write_out(session, scope, saved)
+
+
+def _require_bucket_kept(record: DatasetRecord, stamp: datetime) -> None:
+    """采集行不许改数据时间。
+
+    ⚠ 采集行的 row_id 由桶派生：挪走之后下一拍会在原桶再插一行同 row_id 的
+    行，按 row_id 取行从此不确定。
+    Args: record, stamp。
+    """
+    if record.source != COLLECT_SOURCE or stamp == record.ts:
+        return
+    message = "采集行的数据时间由桶决定，不能改"
+    raise DatasetRecordInvalid(
+        message,
+        details=(FieldError(field="ts", code="ts_immutable", message=message),),
+    )
 
 
 async def delete_record(

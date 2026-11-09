@@ -317,7 +317,7 @@ def _collector_first(
     watermark = table.last_collected_ts
     if watermark is None:
         return grid.last_closed(now)
-    return grid.shift(watermark, 1 - tail)
+    return grid.shift(grid.resume(watermark), 1 - tail)
 
 
 def _floor_note(floor: datetime, retention_days: int | None) -> str:

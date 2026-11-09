@@ -15,7 +15,7 @@ from typing import Protocol, runtime_checkable
 class AnalysisModel(Protocol):
     """一个能按实参算出一个数的模型。
 
-    ⚠  不能省：求值器要在运行期分辨「拿到的是模型还是一句
+    ⚠ `@runtime_checkable` 不能省：求值器要在运行期分辨「拿到的是模型还是一句
     用不了的原因」，而对普通 Protocol 做 isinstance 会直接抛 TypeError——
     表现是**绑好的模型反而算不出来**。
     """

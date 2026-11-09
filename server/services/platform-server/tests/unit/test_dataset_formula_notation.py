@@ -89,7 +89,7 @@ def test_arithmetic_uses_typographic_symbols() -> None:
     assert tree_of("{进水} - {出水}")["op"] == "−"
     assert tree_of("{进水} * {出水}")["op"] == "×"
     assert tree_of("{进水} % {出水}")["op"] == "mod"
-    assert tree_of("{进水} // {出水}")["op"] == "÷"
+    assert tree_of("{进水} // {出水}")["op"] == "整除"
 
 
 def test_comparisons_use_typographic_symbols() -> None:
@@ -272,3 +272,40 @@ def test_an_unreadable_node_degrades_to_a_placeholder(
 ) -> None:
     # ⚠ 一个能识别的节点少了个子字段就会让递归撞上缺键，把整个弹窗打黑
     assert "?" in to_plain_text(node)
+
+
+@pytest.mark.parametrize(
+    ("left", "right"),
+    [
+        ("{a} * ({b} % {c})", "({a} * {b}) % {c}"),
+        ("{a} // ({b} * {c})", "{a} // {b} * {c}"),
+        ("{a} // ({b} // {c})", "({a} // {b}) // {c}"),
+        ("{a} / ({b} * {c})", "{a} / {b} * {c}"),
+        ("({a} + {b}) / {c}", "{a} + {b} / {c}"),
+        ("{a} / ({b} / {c})", "({a} / {b}) / {c}"),
+        ("{a} % ({b} / {c})", "({a} % {b}) / {c}"),
+        ("({a} / {b}) ** 2", "{a} / {b} ** 2"),
+    ],
+)
+def test_formulas_that_compute_differently_read_differently(
+    left: str, right: str
+) -> None:
+    assert text_of(left) != text_of(right)
+
+
+def test_floor_division_does_not_read_as_true_division() -> None:
+    assert "÷" not in text_of("{a} // {b}")
+
+
+def test_a_compound_denominator_is_bracketed_in_linear_text() -> None:
+    assert text_of("{a} / ({b} * {c})") == "a ÷ (b × c)"
+
+
+def test_a_complete_day_sum_reads_as_an_aggregate_with_its_step() -> None:
+    tree = tree_of("SUM_COMPLETE_OVER({进水}, 'today', 300)")
+    assert tree["t"] == "agg"
+    assert tree["sym"] == "Σ完整"
+    assert "300" in tree["label"]
+    assert "SUM_COMPLETE_OVER" not in text_of(
+        "SUM_COMPLETE_OVER({进水}, 'today', 300)"
+    )

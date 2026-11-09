@@ -452,3 +452,14 @@ def test_large_calendar_batches_are_lazy_and_keep_exact_counts() -> None:
     assert first.count + sum(batch.count for batch in remaining) == 200_000
     assert first.first == plan.first
     assert remaining[-1].last == plan.last
+
+
+def test_a_watermark_left_off_grid_by_an_interval_change_still_plans() -> None:
+    # 改过周期的表，旧水位不在新网格上：右界按取整后的水位算，不报「超出范围」
+    off_grid = CLOSED - 2 * HOUR + timedelta(minutes=15)
+
+    guard = guard_bucket(
+        grid(), a_table(last_collected_ts=off_grid), now=NOW, tail=2
+    )
+
+    assert guard == CLOSED - 4 * HOUR

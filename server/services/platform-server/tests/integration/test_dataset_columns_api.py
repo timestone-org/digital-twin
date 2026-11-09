@@ -6,6 +6,7 @@
 """
 
 from typing import Any
+from unittest.mock import AsyncMock
 
 import httpx
 import pytest
@@ -26,6 +27,7 @@ from integration.dataset_helpers import (
     data_of,
 )
 from lib.utils.ids import uuid7
+from platform_server.apps.dataset.crud import column_crud
 
 pytestmark = pytest.mark.requires_postgres
 
@@ -368,3 +370,53 @@ def _detail_fields(response: httpx.Response) -> list[str]:
     """取错误体里的字段级说明指向了谁。"""
     details: list[dict[str, Any]] = response.json()["details"]
     return [item["field"] for item in details]
+
+
+@pytest.mark.parametrize(
+    "formula",
+    [
+        "{shift_output.产量} * 2",
+        "SUM_OVER({shift_output.产量}, '1d')",
+        "MAX_ALL({shift_output.产量})",
+    ],
+)
+async def test_a_column_referenced_from_another_table_refuses_to_be_deleted(
+    app_context: AppContext, formula: str
+) -> None:
+    # ⚠ 跨表引用不进 referenced_keys：只查本表会放行，另一张表的公式从此静默算空
+    source = await create_table(app_context.client)
+    referenced = await create_column(app_context.client, source["id"])
+    other = await create_table(app_context.client, code="plant", name="全厂")
+    await create_column(
+        app_context.client,
+        other["id"],
+        key="引用",
+        name="引用",
+        source="formula",
+        formula=formula,
+    )
+    url = f"{columns_url(source['id'])}/{referenced['id']}"
+
+    response = await app_context.client.delete(url)
+
+    assert response.status_code == HTTP_CONFLICT
+    assert code_of(response) == COLUMN_IN_USE
+    assert _detail_fields(response) == ["columns[plant.引用]"]
+    forced = await app_context.client.delete(url, params={"force": "true"})
+    assert forced.status_code == HTTP_NO_CONTENT
+
+
+async def test_a_key_taken_by_a_concurrent_create_is_still_a_conflict(
+    app_client: httpx.AsyncClient, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    # ⚠ 先查后插挡不住两个同时到的请求：后到的那个撞唯一约束，不该是 500
+    table = await create_table(app_client)
+    await create_column(app_client, table["id"])
+    monkeypatch.setattr(column_crud, "get_by_key", AsyncMock(return_value=None))
+
+    response = await app_client.post(
+        columns_url(table["id"]), json=column_body()
+    )
+
+    assert response.status_code == HTTP_CONFLICT
+    assert code_of(response) == COLUMN_KEY_TAKEN

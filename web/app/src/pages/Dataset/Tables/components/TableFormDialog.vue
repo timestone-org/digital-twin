@@ -37,6 +37,7 @@ import {
   INTERVAL_S_MAX,
   INTERVAL_S_MIN,
   NAME_MAX,
+  RETENTION_DAYS_MAX,
   suggestCode,
   toCreateInput,
   toPatchInput,
@@ -240,7 +241,7 @@ async function onSubmit(): Promise<void> {
         v-model="retentionDays"
         label="保留期"
         unit="天"
-        :range="{ min: 1 }"
+        :range="{ min: 1, max: RETENTION_DAYS_MAX }"
         hint="留空即永久保留"
       />
       <DtSwitch v-model="isEnabled" label="启用" />

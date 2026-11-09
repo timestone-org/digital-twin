@@ -1,6 +1,7 @@
 """有界 Word 导入，映射已支持的格式并列出内容与版式损失。"""
 
 import io
+import re
 import xml.etree.ElementTree as ET
 import zipfile
 
@@ -177,6 +178,28 @@ class _Converter:
         return content
 
 
+def _element(name: bytes) -> re.Pattern[bytes]:
+    # ⚠ 按完整元素名匹配：子串会把 w:insideH 认成 w:ins、w:delText 认成 w:del
+    return re.compile(rb"<" + name + rb"[\s/>]")
+
+
+_ELEMENT_WARNINGS: tuple[tuple[re.Pattern[bytes], str], ...] = (
+    (_element(b"w:numPr"), "列表自动编号转为普通段落"),
+    (_element(b"w:fldChar"), "动态域已转为当前显示文本，自动更新未保留"),
+    (
+        _element(b"w:fldSimple"),
+        "简单域的自动更新及复杂内容未导入，请核对显示文本",
+    ),
+    (_element(b"w:drawing"), "图片、图表及绘图对象未导入"),
+    (_element(b"w:pict"), "形状、文本框及旧式绘图未导入"),
+    (_element(b"m:oMath"), "Word 公式未导入"),
+    (_element(b"w:sdt"), "内容控件未导入，请核对控件内文字"),
+    (_element(b"w:bookmarkStart"), "书签与交叉引用关系未保留"),
+    (_element(b"w:ins"), "修订标记未导入，请核对修订内容"),
+    (_element(b"w:del"), "修订标记未导入，请核对修订内容"),
+)
+
+
 def _package_warnings(archive: zipfile.ZipFile) -> list[str]:
     warnings: list[str] = []
     names = archive.namelist()
@@ -188,21 +211,11 @@ def _package_warnings(archive: zipfile.ZipFile) -> list[str]:
     if any(name.startswith(("word/header", "word/footer")) for name in names):
         warnings.append("页眉页脚仅保留文字，原有格式、域和图形需重新设置")
     xml = archive.read("word/document.xml")
-    for marker, message in (
-        (b"w:numPr", "列表自动编号转为普通段落"),
-        (b"w:fldChar", "动态域已转为当前显示文本，自动更新未保留"),
-        (b"w:fldSimple", "简单域的自动更新及复杂内容未导入，请核对显示文本"),
-        (b"w:drawing", "图片、图表及绘图对象未导入"),
-        (b"w:pict", "形状、文本框及旧式绘图未导入"),
-        (b"m:oMath", "Word 公式未导入"),
-        (b"w:sdt", "内容控件未导入，请核对控件内文字"),
-        (b"w:bookmarkStart", "书签与交叉引用关系未保留"),
-        (b"w:ins", "修订标记未导入，请核对修订内容"),
-        (b"w:del", "修订标记未导入，请核对修订内容"),
-        (b'w:type="page"', "显式分页符未导入，请重新核对分页"),
-    ):
-        if marker in xml:
+    for marker, message in _ELEMENT_WARNINGS:
+        if marker.search(xml):
             warnings.append(message)
+    if b'w:type="page"' in xml:
+        warnings.append("显式分页符未导入，请重新核对分页")
     for name in names:
         if name.endswith(".rels"):
             warnings.extend(_relationship_warnings(archive.read(name)))

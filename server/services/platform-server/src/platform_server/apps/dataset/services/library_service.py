@@ -34,6 +34,7 @@ from platform_server.apps.dataset.schemas import (
     FormulaCreateIn,
     FormulaDefOut,
     FormulaDefWithUsagesOut,
+    FormulaParamIn,
     FormulaParamSpec,
     FormulaUpdateIn,
     FormulaUsageOut,
@@ -48,8 +49,12 @@ from platform_server.apps.dataset.services.formula_usage import (
     find_dependents,
     find_usages,
 )
+from platform_server.apps.dataset.services.integrity import flush_unique
 
 _logger = get_logger("platform.dataset.library")
+
+# 库公式标识的唯一约束名，命名规约生成
+FORMULA_CODE_CONSTRAINT = "uq_dataset_formulas_code"
 
 # 409 文案里最多点名几张台账，其余折成省略号
 MAX_NAMED_TABLES = 3
@@ -111,7 +116,11 @@ async def create_formula(
         is_enabled=payload.is_enabled,
     )
     formula_crud.add(session, row)
-    await session.flush()
+    await flush_unique(
+        session,
+        constraint=FORMULA_CODE_CONSTRAINT,
+        taken=DatasetFormulaCodeTaken(f"公式标识已被占用：{payload.code}"),
+    )
     _logger.info(
         "dataset_formula_created", "库公式已创建", formula_id=str(row.id)
     )
@@ -329,15 +338,15 @@ def _merged_entry(row: DatasetFormula, changes: dict[str, Any]) -> FxEntry:
     )
 
 
-def _param_of(item: FormulaParamSpec | dict[str, Any]) -> FxParam:
+def _param_of(item: FormulaParamIn | dict[str, Any]) -> FxParam:
     """一项形参入参 → 纯形参。
 
     Args: item。
     """
     spec = (
         item
-        if isinstance(item, FormulaParamSpec)
-        else FormulaParamSpec.model_validate(item)
+        if isinstance(item, FormulaParamIn)
+        else FormulaParamIn.model_validate(item)
     )
     return FxParam(
         name=spec.name,

@@ -16,13 +16,9 @@ import asyncio
 import contextlib
 import uuid
 from collections.abc import Sequence
-from contextlib import AbstractAsyncContextManager
 from contextvars import Token
 from dataclasses import dataclass
 from datetime import datetime
-from typing import Protocol
-
-from sqlalchemy.ext.asyncio import AsyncSession
 
 from lib.logging import (
     LogContext,
@@ -41,6 +37,7 @@ from platform_server.apps.dataset.services.collect_run import (
     collect_table,
 )
 from platform_server.apps.dataset.services.dirty import DatasetDirtyLog
+from platform_server.apps.dataset.services.sessions import Sessions
 from platform_server.apps.runtime_params.services import (
     SECTION_DATASET,
     param_service,
@@ -53,17 +50,6 @@ _logger = get_logger("platform.dataset.collector")
 # 跨度的一半：trace_id 与 span_id 各取一段十六进制
 _TRACE_ID_LENGTH = 32
 _SPAN_ID_LENGTH = 16
-
-
-class Sessions(Protocol):
-    """开一个短事务的最小面。
-
-    ⚠ 只认这一个方法而不认 `Database`：一拍里要开「读开关」「列表」与逐表各
-    一个互不相干的短事务，把它收成一个面，用例才能把那条回滚事务包进来，而不
-    必让被测代码知道自己跑在用例里。
-    """
-
-    def session(self) -> AbstractAsyncContextManager[AsyncSession]: ...
 
 
 @dataclass(frozen=True)

@@ -11381,7 +11381,7 @@
           },
           "params": {
             "items": {
-              "$ref": "#/components/schemas/FormulaParamSpec"
+              "$ref": "#/components/schemas/FormulaParamIn"
             },
             "maxItems": 8,
             "title": "Params",
@@ -11725,8 +11725,50 @@
         "title": "FormulaFunctionsOut",
         "type": "object"
       },
+      "FormulaParamIn": {
+        "additionalProperties": false,
+        "description": "一个形参（入参）。多带一个字段就拒绝：拼错的 `knd` 被忽略的话，\n存下去的是另一条公式。",
+        "properties": {
+          "default": {
+            "title": "Default"
+          },
+          "hint": {
+            "default": "",
+            "maxLength": 128,
+            "title": "Hint",
+            "type": "string"
+          },
+          "kind": {
+            "default": "column",
+            "enum": [
+              "column",
+              "value"
+            ],
+            "title": "Kind",
+            "type": "string"
+          },
+          "label": {
+            "default": "",
+            "maxLength": 64,
+            "title": "Label",
+            "type": "string"
+          },
+          "name": {
+            "maxLength": 64,
+            "minLength": 1,
+            "pattern": "^[^\\s@'\"(),.:{}\\[\\]]+$",
+            "title": "Name",
+            "type": "string"
+          }
+        },
+        "required": [
+          "name"
+        ],
+        "title": "FormulaParamIn",
+        "type": "object"
+      },
       "FormulaParamSpec": {
-        "description": "一个形参。出参与入参共用这一个形状——两边字段完全相同。",
+        "description": "一个形参（出参），字段与入参完全相同。\n\n⚠ 继承入参是为了服务内部能拿出参实例直接构造入参；出参口径不拒多余字段。",
         "properties": {
           "default": {
             "title": "Default"
@@ -11959,7 +12001,7 @@
             "anyOf": [
               {
                 "items": {
-                  "$ref": "#/components/schemas/FormulaParamSpec"
+                  "$ref": "#/components/schemas/FormulaParamIn"
                 },
                 "maxItems": 8,
                 "type": "array"
@@ -24844,7 +24886,7 @@
           "code": {
             "maxLength": 64,
             "minLength": 1,
-            "pattern": "^[A-Za-z0-9][A-Za-z0-9._-]*$",
+            "pattern": "^[A-Za-z0-9][A-Za-z0-9_-]*$",
             "title": "Code",
             "type": "string"
           },
@@ -24891,6 +24933,7 @@
           "retention_days": {
             "anyOf": [
               {
+                "maximum": 36500.0,
                 "minimum": 1.0,
                 "type": "integer"
               },
@@ -25184,6 +25227,7 @@
           "retention_days": {
             "anyOf": [
               {
+                "maximum": 36500.0,
                 "minimum": 1.0,
                 "type": "integer"
               },

@@ -23,6 +23,16 @@ DEFAULT_ORDER = (DatasetTable.code.asc(), DatasetTable.id.asc())
 # LIKE 的两个通配符与转义符自身。⚠ 不转义的话，搜「50%」会退化成「列全部」，
 # 而现象只是「搜索好像没生效」——没有任何一处会报错
 _LIKE_SPECIALS = str.maketrans({"\\": r"\\", "%": r"\%", "_": r"\_"})
+# 配 `contains_pattern` 用的转义符，写进 `ilike(..., escape=...)`
+LIKE_ESCAPE = "\\"
+
+
+def contains_pattern(keyword: str) -> str:
+    """「包含这个关键字」的 LIKE 模式，通配符按字面量转义。
+
+    Args: keyword。
+    """
+    return f"%{keyword.translate(_LIKE_SPECIALS)}%"
 
 
 class TableCrud(CrudBase[DatasetTable]):
@@ -140,10 +150,10 @@ class TableCrud(CrudBase[DatasetTable]):
         """
         statement = select(DatasetTable)
         if keyword:
-            pattern = f"%{keyword.translate(_LIKE_SPECIALS)}%"
+            pattern = contains_pattern(keyword)
             statement = statement.where(
-                DatasetTable.name.ilike(pattern, escape="\\")
-                | DatasetTable.code.ilike(pattern, escape="\\")
+                DatasetTable.name.ilike(pattern, escape=LIKE_ESCAPE)
+                | DatasetTable.code.ilike(pattern, escape=LIKE_ESCAPE)
             )
         return statement
 

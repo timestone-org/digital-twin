@@ -234,9 +234,11 @@ def test_the_complete_window_notation_preserves_all_three_arguments() -> None:
         parse_formula("SUM_COMPLETE_OVER({电量}, 'today', 300)"), {}
     )
 
-    assert tree["t"] == "fn"
-    assert tree["name"] == "SUM_COMPLETE_OVER"
-    assert len(tree["args"]) == 3
+    assert tree["t"] == "agg"
+    assert tree["func"] == "SUM_COMPLETE_OVER"
+    assert tree["x"]["key"] == "电量"
+    assert "当日" in tree["label"]
+    assert "300" in tree["label"]
 
 
 def test_today_is_resolved_in_the_business_timezone() -> None:

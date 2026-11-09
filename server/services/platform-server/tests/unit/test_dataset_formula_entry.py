@@ -213,3 +213,24 @@ def test_the_draft_replaces_the_stored_version_during_validation() -> None:
 def test_merging_an_unchanged_entry_hands_back_the_same_snapshot() -> None:
     snapshot = library(SHARE)
     assert merged_library(SHARE, snapshot) is snapshot
+
+
+def test_braces_inside_a_text_literal_are_not_parameter_references() -> None:
+    entry = FxEntry(
+        code="标记",
+        name="标记",
+        expression='IF({a} > 0, "{ok}", "")',
+        params=(FxParam(name="a"),),
+    )
+    assert validate_entry(entry) is None
+
+
+def test_a_parameter_used_only_inside_a_text_literal_counts_as_unused() -> None:
+    entry = FxEntry(
+        code="标记",
+        name="标记",
+        expression='IF({a} > 0, "{b}", "")',
+        params=(FxParam(name="a"), FxParam(name="b")),
+    )
+    with pytest.raises(FormulaError, match="没被用到"):
+        validate_entry(entry)

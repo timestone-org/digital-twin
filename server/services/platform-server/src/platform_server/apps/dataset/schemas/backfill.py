@@ -7,12 +7,12 @@
 
 import uuid
 
+from platform_server.apps.dataset.protocols import BackfillStatus
 from platform_server.apps.dataset.schemas.common import (
     InputModel,
     OutputModel,
     Utc,
 )
-from platform_server.apps.dataset.services.backfill_jobs import BackfillStatus
 
 
 class BackfillStartIn(InputModel):

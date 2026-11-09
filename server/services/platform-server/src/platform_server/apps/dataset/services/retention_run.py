@@ -21,7 +21,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 
 from lib.logging import get_logger
 from platform_server.apps.dataset.crud import retention_crud, table_crud
-from platform_server.apps.dataset.services.collector import Sessions
+from platform_server.apps.dataset.services.sessions import Sessions
 
 _logger = get_logger("platform.dataset.retention")
 
@@ -168,7 +168,11 @@ def keep_before(job: RetentionJob, now: datetime) -> datetime | None:
     """
     if job.retention_days is None or job.retention_days <= 0:
         return None
-    return now - timedelta(days=job.retention_days)
+    try:
+        return now - timedelta(days=job.retention_days)
+    except OverflowError:
+        # 早于公元元年的边界之前不可能有行，等同于永久保留
+        return None
 
 
 async def sweep_table(

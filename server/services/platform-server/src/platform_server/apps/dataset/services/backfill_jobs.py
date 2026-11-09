@@ -13,11 +13,12 @@ import json
 import uuid
 from dataclasses import asdict, dataclass, field
 from datetime import datetime
-from typing import Any, Literal, Protocol, cast
+from typing import Any, Protocol, cast
 
 from lib.logging import get_logger
 from lib.utils.timeutils import format_rfc3339
 from platform_server.apps.dataset.errors import DatasetBackfillUnreadable
+from platform_server.apps.dataset.protocols import BackfillStatus
 
 _logger = get_logger("platform.dataset.backfill")
 
@@ -29,8 +30,6 @@ STATE_TTL_S = 86_400
 # 锁与取消标志的存活期（秒），每批续一次。进程被 kill 之后最多这么久自动解锁
 LOCK_TTL_S = 300
 
-# 四个终局状态。⚠ 「取消」与「失败」分开：前者是人按的，后者要有人去看日志
-BackfillStatus = Literal["cancelled", "done", "failed", "running"]
 
 STATUS_RUNNING: BackfillStatus = "running"
 STATUS_DONE: BackfillStatus = "done"

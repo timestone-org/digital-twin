@@ -21,6 +21,7 @@ from platform_server.apps.dataset.crud import (
     record_crud,
     table_crud,
 )
+from platform_server.apps.dataset.errors import DatasetRecordInvalid
 from platform_server.apps.dataset.models import DatasetColumn, DatasetTable
 from platform_server.apps.dataset.services.aggregate import (
     BucketWindow,
@@ -34,6 +35,7 @@ from platform_server.apps.dataset.services.buckets import (
     bucket_sequence,
     collected_row_id,
     last_closed_bucket,
+    resume_bucket,
     shift_bucket,
 )
 from platform_server.apps.dataset.services.dirty import (
@@ -175,21 +177,31 @@ async def _recompute(
     """
     if not any(column.source == FORMULA_SOURCE for column in columns):
         return
-    plan = await build_scope(
-        session, columns=columns, timezone=ZoneInfo(context.timezone)
-    )
-    if plan.plan.is_empty:
-        return
-    await recompute_range(
-        session,
-        plan,
-        table_id=table.id,
-        window=RecordWindow(
+    try:
+        plan = await build_scope(
+            session, columns=columns, timezone=ZoneInfo(context.timezone)
+        )
+        if plan.plan.is_empty:
+            return
+        await recompute_range(
+            session,
+            plan,
             table_id=table.id,
-            since=window.starts[0],
-            until=window.starts[-1],
-        ),
-    )
+            window=RecordWindow(
+                table_id=table.id,
+                since=window.starts[0],
+                until=window.starts[-1],
+            ),
+        )
+    except DatasetRecordInvalid as error:
+        # ⚠ 公式历史触顶在写公式值之前就抛：吞掉它，原始行与水位照常提交，
+        # 否则整张表从此一行也采不进去；公式列留待手动重算
+        _logger.warning(
+            "dataset_collect_recompute_skipped",
+            "公式列本拍未重算，原始采集照常写入",
+            table_code=table.code,
+            error_type=type(error).__name__,
+        )
 
 
 def point_columns(
@@ -315,9 +327,11 @@ def _window_of(
         return None
     # ⚠ 先把右界压到上限之内再展开：停机一个月的 1 秒表展开出来是几百万个桶，
     # 而那一串在算出上限之前就已经把内存吃掉了
+    # ⚠ 上限至少要比尾部重算多一格，否则每拍只重写旧桶，水位停住甚至倒退
+    span = max(limits.max_buckets_per_tick, limits.recompute_tail_buckets + 1)
     reachable = shift_bucket(
         first,
-        steps=limits.max_buckets_per_tick - 1,
+        steps=span - 1,
         interval=interval,
         timezone=timezone,
     )
@@ -347,9 +361,9 @@ def _first_bucket(
     watermark = table.last_collected_ts
     if watermark is None:
         return last_closed
-    # 水位已经是持久化身份；春季缺口的身份不保证再次对齐后仍是自身。
+    # ⚠ 改过周期的表水位不在新网格上，直接移格会抛异常，这张表从此再也不采
     return shift_bucket(
-        watermark,
+        resume_bucket(watermark, interval=interval, timezone=timezone),
         steps=1 - limits.recompute_tail_buckets,
         interval=interval,
         timezone=timezone,

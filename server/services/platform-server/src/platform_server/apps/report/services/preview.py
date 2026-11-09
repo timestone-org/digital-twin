@@ -36,6 +36,11 @@ from platform_server.apps.report.services.metrics import (
 )
 from platform_server.apps.report.services.table import build_table
 
+# 取数失败的节点占位；出稿前凭它拒绝整份报告
+UNAVAILABLE_TEXT = "[数据不可用]"
+# 尚未填表达式的节点占位，与 Word 成品里缺值节点同一句
+UNCONFIGURED_TEXT = "[数据未配置]"
+
 
 async def preview(session: AsyncSession, context: PreviewContext) -> PreviewOut:
     """试算一份模板，所有降级显式返回。Args: session, context。"""
@@ -74,7 +79,7 @@ async def preview(session: AsyncSession, context: PreviewContext) -> PreviewOut:
                 error.message if isinstance(error, AppError) else str(error)
             )
             warnings.append(f"{path}：{message}")
-            nodes[path] = NodeValue(kind=node.type, text="[数据不可用]")
+            nodes[path] = NodeValue(kind=node.type, text=UNAVAILABLE_TEXT)
     return PreviewOut(
         is_valid=not warnings,
         period=context.period,
@@ -122,6 +127,9 @@ async def _node_value(
     metrics: list[MetricValue],
 ) -> NodeValue:
     if node.type in ("metricRef", "condText"):
+        # ⚠ 空表达式在校验里只是提示；交给公式引擎会抛错并让每次出稿失败
+        if not text_attr(node, "expr"):
+            return NodeValue(kind=node.type, text=UNCONFIGURED_TEXT)
         return _text_node(node, metrics)
     spec = DataNodeSpec.model_validate(node.attrs)
     if node.type == "dsChart":

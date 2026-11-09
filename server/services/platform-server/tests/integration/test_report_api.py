@@ -5,12 +5,15 @@ from datetime import UTC, datetime
 
 import httpx
 import pytest
+from sqlalchemy import inspect
 
 from integration.dataset_helpers import create_column, create_table, data_of
 from platform_server.apps.dataset.models import DatasetRecord
+from platform_server.apps.report.crud import renders
 from platform_server.apps.report.models import (
     ReportRender,
 )
+from platform_server.apps.report.services.render_service import output
 
 pytestmark = pytest.mark.requires_postgres
 PREFIX = "/api/v1/platform"
@@ -459,3 +462,36 @@ async def test_queue_backpressure_rejects_excess_work(app_context):
         json={"template_id": str(uuid.uuid4()), "period": "2026-08"},
     )
     assert response.status_code == 429
+
+
+async def test_the_render_history_page_leaves_the_snapshots_unloaded(
+    app_context,
+):
+    # ⚠ 列表只出状态字段：每行的模板快照与试算结果（含 API 快照）可达数 MB，
+    # 历史页轮询时整页搬一遍再扔掉
+    session = app_context.session
+    session.add(
+        ReportRender(
+            id=uuid.uuid4(),
+            period="2026-08",
+            granularity="month",
+            timezone="UTC",
+            kind="render",
+            status="succeeded",
+            snapshot_json={"name": "大快照"},
+            result_json={"api_data": {"rows": list(range(100))}},
+            warnings_json=[],
+            traceparent="00-0123456789abcdef0123456789abcdef-0123456789abcdef-01",
+            created_by="tester",
+        )
+    )
+    await session.flush()
+    session.expunge_all()
+
+    rows = await renders.page(session, None, None, 20)
+
+    assert rows
+    for row in rows:
+        unloaded = inspect(row).unloaded
+        assert {"snapshot_json", "result_json"} <= unloaded
+        output(row)
