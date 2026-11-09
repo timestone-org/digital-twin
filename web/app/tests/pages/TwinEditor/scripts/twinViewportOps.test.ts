@@ -1,5 +1,5 @@
 /**
- * @fileoverview 视口这一路的动作：两段式拾取、取当前机位、试飞漫游。
+ * @fileoverview 视口这一路的动作：两段式拾取、新实体放置、取当前机位与测距。
  *
  * ⚠ 拾取必须先记下「写回谁」：不记的话视口只知道用户点了哪个东西，
  * 不知道那一下是给谁点的，落下去就会改到别的实体上。
@@ -39,8 +39,6 @@ function fakeHandle(overrides: Partial<TwinViewportHandle> = {}) {
     focus: vi.fn(),
     snapshot: vi.fn(pose),
     measureDistance: vi.fn(() => MEASURED),
-    playRoamPreview: vi.fn(() => true),
-    stopRoamPreview: vi.fn(),
     stageEl: vi.fn(() => null),
     ...overrides,
   }
@@ -50,7 +48,6 @@ function setup(initial: TwinSelection = { kind: 'parts', id: 'part-1' }) {
   const selection = ref<TwinSelection>(initial)
   const patchConfig = vi.fn()
   const addAt = vi.fn()
-  const onRoamUnavailable = vi.fn()
   const config: { value: TwinConfig | null } = { value: CONFIG }
   const actions = { patchConfig, addAt } satisfies Pick<
     TwinEditorActions,
@@ -60,7 +57,6 @@ function setup(initial: TwinSelection = { kind: 'parts', id: 'part-1' }) {
     config: () => config.value,
     actions: () => actions,
     selection: () => selection.value,
-    onRoamUnavailable,
   })
   const handle = fakeHandle()
   ops.viewportRef.value = handle
@@ -68,7 +64,6 @@ function setup(initial: TwinSelection = { kind: 'parts', id: 'part-1' }) {
     ops,
     patchConfig,
     addAt,
-    onRoamUnavailable,
     handle,
     config,
     selection,
@@ -421,41 +416,5 @@ describe('测距', () => {
     ops.viewportRef.value = null
 
     expect(ops.measureDistance('orbit')).toBeNull()
-  })
-})
-
-describe('漫游预览', () => {
-  // 飞不起来就直说，不留一个按了没反应的按钮
-  it('站点不够时报出来', () => {
-    const { ops, onRoamUnavailable } = setup()
-    ops.viewportRef.value = fakeHandle({ playRoamPreview: () => false })
-
-    ops.previewRoam()
-
-    expect(onRoamUnavailable).toHaveBeenCalledTimes(1)
-  })
-
-  it('飞得起来就不报', () => {
-    const { ops, onRoamUnavailable } = setup()
-
-    ops.previewRoam()
-
-    expect(onRoamUnavailable).not.toHaveBeenCalled()
-  })
-
-  it('停预览转给视口', () => {
-    const { ops, handle } = setup()
-
-    ops.stopRoamPreview()
-
-    expect(handle.stopRoamPreview).toHaveBeenCalledTimes(1)
-  })
-
-  it('取景转给视口', () => {
-    const { ops, handle } = setup()
-
-    ops.focus(TWIN_SELECT_MODEL)
-
-    expect(handle.focus).toHaveBeenCalledWith(TWIN_SELECT_MODEL)
   })
 })

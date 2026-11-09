@@ -175,7 +175,6 @@ const viewport = createTwinViewportOps({
   config: () => config.value,
   actions: () => actions.value,
   selection: () => selection.value,
-  onRoamUnavailable: () => toast.error('有效视点不足两个，请先补充漫游站点'),
 })
 
 // ⚠ 模板里的 `ref="viewportRef"` 只认得顶层绑定，写成 `viewport.viewportRef`

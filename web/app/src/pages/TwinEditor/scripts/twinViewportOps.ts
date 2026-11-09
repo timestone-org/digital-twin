@@ -1,5 +1,5 @@
 /**
- * @fileoverview 页面与 3D 视口之间的两段式拾取、新实体放置、机位快照与漫游预览。
+ * @fileoverview 页面与 3D 视口之间的两段式拾取、新实体放置与机位快照。
  */
 import type {
   TwinConfig,
@@ -27,8 +27,6 @@ export interface TwinViewportHandle {
   focus: (selection: TwinSelection) => void
   snapshot: () => CameraPose
   measureDistance: (ref: TwinDistanceRef) => number | null
-  playRoamPreview: () => boolean
-  stopRoamPreview: () => void
   /** 视口的宿主元素；助手截图拿它当截图根。 */
   stageEl: () => HTMLElement | null
 }
@@ -42,7 +40,6 @@ export interface TwinViewportOps {
   isPicking: ComputedRef<boolean>
   /** 新建实体的放置提示；普通拾取沿用视口默认文案。 */
   placementHint: ComputedRef<string | undefined>
-  focus: (selection: TwinSelection) => void
   requestPick: (what: 'node' | 'position') => void
   /** 先拾取位置，再新建实体并归入请求时指定的文件夹。 */
   requestPlace: (kind: TwinPlaceableKind, folderId?: string) => void
@@ -59,16 +56,12 @@ export interface TwinViewportOps {
   }) => void
   /** 按参考系量当前相机离选中实体多远；量不出给 null。 */
   measureDistance: (ref: TwinDistanceRef) => number | null
-  previewRoam: () => void
-  stopRoamPreview: () => void
 }
 
 export interface TwinViewportDeps {
   config: () => TwinConfig | null
   actions: () => Pick<TwinEditorActions, 'patchConfig' | 'addAt'> | null
   selection: () => TwinSelection
-  /** 轨迹上可用站点不足两个，飞不起来。 */
-  onRoamUnavailable: () => void
 }
 
 /** 正在等的那一次拾取：写回已有实体的某个字段。 */
@@ -199,7 +192,7 @@ function createCapture(
 
 /**
  * 装上视口这一路的动作。
- * @param deps 配置、动作集、当前选中，以及漫游飞不起来时怎么报
+ * @param deps 配置、动作集与当前选中
  */
 export function createTwinViewportOps(deps: TwinViewportDeps): TwinViewportOps {
   const viewportRef = ref<TwinViewportHandle | null>(null)
@@ -229,7 +222,6 @@ export function createTwinViewportOps(deps: TwinViewportDeps): TwinViewportOps {
         ? `点击模型表面或地面，设置新${TWIN_ENTITY_LABELS[target.place]}的位置`
         : undefined
     }),
-    focus: (selection) => viewportRef.value?.focus(selection),
     measureDistance: (ref) => viewportRef.value?.measureDistance(ref) ?? null,
     onSelectNodes: (names) => {
       const current = deps.selection()
@@ -243,12 +235,5 @@ export function createTwinViewportOps(deps: TwinViewportDeps): TwinViewportOps {
       if (next.length === nodes.length) return
       patchEntity(deps, current.kind, current.id, { nodes: next })
     },
-    // 飞不起来（站点不够）就直说，不留一个没反应的按钮
-    previewRoam: () => {
-      if (viewportRef.value?.playRoamPreview() === false) {
-        deps.onRoamUnavailable()
-      }
-    },
-    stopRoamPreview: () => viewportRef.value?.stopRoamPreview(),
   }
 }

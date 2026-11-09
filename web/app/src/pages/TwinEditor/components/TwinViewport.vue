@@ -218,19 +218,6 @@ watch(
   },
 )
 
-/**
- * 按当前配置飞一遍漫游轨迹；可用站点不足两个时返回 false。
- * ⚠ 编辑视口只有这一个入口会自动移镜头，绝不跟着 `autoplay` 自己开播。
- */
-function playRoamPreview(): boolean {
-  return scene?.playRoamPreview() ?? false
-}
-
-/** 停下预览，镜头停在当前这一帧上。 */
-function stopRoamPreview(): void {
-  scene?.stopRoamPreview()
-}
-
 /** 视口的宿主元素；助手截图拿它当截图根。 */
 function stageEl(): HTMLElement | null {
   return containerRef.value
@@ -242,8 +229,6 @@ defineExpose({
   focus,
   snapshot,
   measureDistance,
-  playRoamPreview,
-  stopRoamPreview,
   stageEl,
 })
 </script>
