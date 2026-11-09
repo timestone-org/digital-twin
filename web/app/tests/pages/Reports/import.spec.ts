@@ -387,6 +387,9 @@ describe('Word 导入', () => {
       .findAllComponents(DtButton)
       .find((button) => button.text() === '使用导入内容创建模板')
     expect(create?.attributes('disabled')).toBeDefined()
+    const closes = wrapper.emitted('update:modelValue')?.length ?? 0
+    wrapper.findComponent(DtModal).vm.$emit('update:modelValue', false)
+    expect(wrapper.emitted('update:modelValue')).toHaveLength(closes + 1)
     wrapper.unmount()
   })
 })

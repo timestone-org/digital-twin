@@ -44,6 +44,7 @@ function stop(): void {
   if (timer) clearTimeout(timer)
   timer = undefined
   busy.value = false
+  creating.value = false
 }
 onBeforeUnmount(stop)
 watch(identity, restoreForAccount, { immediate: true, flush: 'sync' })
