@@ -14,15 +14,24 @@
 
 import csv
 import io
+import zipfile
+from collections.abc import Iterable
 from dataclasses import dataclass, field
 
 from openpyxl import load_workbook
+
+from ai_assistant.apps.chat.services.perception.ports import UnsupportedInput
 
 # 行列上限。列多是横表（一行一个设备），行多是竖表（一行一个点位），两种都有
 MAX_ROWS = 200
 MAX_COLUMNS = 30
 # 单元格文本上限：整段说明塞进一格是常事，而它对匹配没有帮助
 MAX_CELL = 120
+# 逐行计数的上限，过了就只报「超过」。⚠ 计数本身也是逐行解析，不设上限的话
+# 一张百万行的表照样把事件循环钉住，哪怕只留前 MAX_ROWS 行
+MAX_COUNTED_ROWS = 20_000
+# xlsx 解压后的总字节上限。⚠ xlsx 是 zip：2 MB 的附件能解出几百 MB 的 XML
+MAX_UNPACKED_BYTES = 30 * 1024 * 1024
 # 纯文本的字符上限，量级与截断后的表持平：附件是参考资料，不是全文检索库
 MAX_TEXT_CHARS = 24_000
 
@@ -46,8 +55,8 @@ TEXT_SUFFIXES = (
 )
 
 
-class UnsupportedTable(ValueError):
-    """认不出的文件类型。"""
+class UnsupportedTable(UnsupportedInput):
+    """认不出或读不动的文件。"""
 
 
 @dataclass(frozen=True)
@@ -59,6 +68,8 @@ class ParsedTable:
     is_truncated: bool = False
     # 原始行数（截断前）。⚠ 截断了必须让人看得见到底少了多少
     total_rows: int = 0
+    # 行数数到 MAX_COUNTED_ROWS 就停了，`total_rows` 只是下限
+    is_total_capped: bool = False
     # 纯文本文件的正文；表格文件恒为空串
     body: str = ""
 
@@ -70,7 +81,7 @@ def parse_table(filename: str, content: bytes) -> ParsedTable:
     """
     lowered = filename.lower()
     if lowered.endswith(_XLSX_SUFFIXES):
-        return _shape(_read_xlsx(content))
+        return _read_xlsx(content)
     if lowered.endswith(".csv"):
         return _shape(_read_csv(content))
     if lowered.endswith(TEXT_SUFFIXES):
@@ -80,12 +91,12 @@ def parse_table(filename: str, content: bytes) -> ParsedTable:
     )
 
 
-def _read_csv(content: bytes) -> list[list[str]]:
+def _read_csv(content: bytes) -> Iterable[list[str]]:
     """读 CSV。⚠ `utf-8-sig` 剥 BOM；解码不了就退回 GBK——组态软件导出的
     点表常是本地编码，而那时报「不是合法 UTF-8」对用户毫无帮助。
     """
     text = _decode(content)
-    return [list(row) for row in csv.reader(io.StringIO(text))]
+    return csv.reader(io.StringIO(text))
 
 
 def _decode(content: bytes) -> str:
@@ -97,23 +108,41 @@ def _decode(content: bytes) -> str:
     raise UnsupportedTable("这个文件的编码认不出来")
 
 
-def _read_xlsx(content: bytes) -> list[list[str]]:
-    """读 xlsx 的第一张工作表。
+def _read_xlsx(content: bytes) -> ParsedTable:
+    """读 xlsx 的第一张工作表，边读边截，不把整张表读进内存。
 
     ⚠ `data_only=True`：取公式**算出来的值**而不是公式本身。取到 `=A1*2`
     这种字符串的话，匹配永远对不上，而表格在 Excel 里看着一切正常。
     """
+    _check_unpacked(content)
     book = load_workbook(io.BytesIO(content), read_only=True, data_only=True)
     try:
         sheet = book.worksheets[0] if book.worksheets else None
         if sheet is None:
-            return []
-        return [
+            return ParsedTable()
+        return _shape(
             [_cell(value) for value in row]
             for row in sheet.iter_rows(values_only=True)
-        ]
+        )
     finally:
         book.close()
+
+
+def _check_unpacked(content: bytes) -> None:
+    """解压量超限就拒，在 openpyxl 打开之前判。
+
+    ⚠ 不是 zip 的不在这里拒：交给 openpyxl 报它自己的错。
+
+    Args: content。
+    """
+    try:
+        with zipfile.ZipFile(io.BytesIO(content)) as archive:
+            unpacked = sum(info.file_size for info in archive.infolist())
+    except zipfile.BadZipFile:
+        return
+    if unpacked > MAX_UNPACKED_BYTES:
+        limit = MAX_UNPACKED_BYTES // (1024 * 1024)
+        raise UnsupportedTable(f"这份表格解压后超过 {limit} MB，请拆小再传")
 
 
 def _cell(value: object) -> str:
@@ -122,26 +151,41 @@ def _cell(value: object) -> str:
     return str(value).strip()[:MAX_CELL]
 
 
-def _shape(grid: list[list[str]]) -> ParsedTable:
-    """把二维格摊成表头 + 数据行，顺带截断。
+def _shape(grid: Iterable[list[str]]) -> ParsedTable:
+    """把二维格摊成表头 + 数据行，顺带截断；逐行读，数到上限就停。
 
     ⚠ 整行都是空的直接丢：导出的表尾常挂着几十行空格，它们进了上下文就是纯噪音。
 
     Args: grid。
     """
-    live = [row for row in grid if any(cell.strip() for cell in row)]
-    if not live:
+    header: list[str] | None = None
+    kept: list[list[str]] = []
+    total = 0
+    for row in grid:
+        if not any(cell.strip() for cell in row):
+            continue
+        if header is None:
+            header = [cell.strip() for cell in row[:MAX_COLUMNS]]
+            continue
+        if total >= MAX_COUNTED_ROWS:
+            return _table(header, kept, total, is_capped=True)
+        total += 1
+        if len(kept) < MAX_ROWS:
+            kept.append([cell.strip() for cell in row[:MAX_COLUMNS]])
+    if header is None:
         return ParsedTable()
-    header = [cell.strip() for cell in live[0][:MAX_COLUMNS]]
-    body = live[1:]
-    kept = [
-        [cell.strip() for cell in row[:MAX_COLUMNS]] for row in body[:MAX_ROWS]
-    ]
+    return _table(header, kept, total, is_capped=False)
+
+
+def _table(
+    header: list[str], kept: list[list[str]], total: int, *, is_capped: bool
+) -> ParsedTable:
     return ParsedTable(
         columns=header,
         rows=kept,
-        is_truncated=len(body) > MAX_ROWS,
-        total_rows=len(body),
+        is_truncated=total > MAX_ROWS,
+        total_rows=total,
+        is_total_capped=is_capped,
     )
 
 
@@ -177,7 +221,11 @@ def to_text(table: ParsedTable) -> str:
         return "（这个文件里没有读到任何内容）"
     lines = [" | ".join(table.columns)]
     lines.extend(" | ".join(row) for row in table.rows)
-    if table.is_truncated:
+    if table.is_total_capped:
+        lines.append(
+            f"（只列了前 {MAX_ROWS} 行，整张表超过 {table.total_rows} 行）"
+        )
+    elif table.is_truncated:
         lines.append(
             f"（只列了前 {MAX_ROWS} 行，整张表共 {table.total_rows} 行）"
         )
@@ -195,7 +243,8 @@ def summary_of(table: ParsedTable) -> str:
     if table.body != "":
         shape = f"{table.total_rows} 行"
     elif table.columns:
-        shape = f"{len(table.columns)} 列 × {table.total_rows} 行"
+        over = "超过 " if table.is_total_capped else ""
+        shape = f"{len(table.columns)} 列 × {over}{table.total_rows} 行"
     else:
         return "空文件"
     return f"{shape}，已截断" if table.is_truncated else shape
