@@ -5,6 +5,7 @@ from datetime import datetime
 
 from sqlalchemy import DateTime, and_, cast, func, or_, select, update
 from sqlalchemy.ext.asyncio import AsyncSession
+from sqlalchemy.orm import defer
 from sqlalchemy.sql.elements import ColumnElement
 
 from platform_server.apps.report.models import ReportRender
@@ -36,7 +37,10 @@ async def page(
     anchor: tuple[datetime, uuid.UUID] | None,
     limit: int,
 ) -> list[ReportRender]:
-    query = select(ReportRender)
+    # ⚠ 列表只出状态字段：快照与试算结果（含 API 快照）可达数 MB，不取
+    query = select(ReportRender).options(
+        defer(ReportRender.snapshot_json), defer(ReportRender.result_json)
+    )
     if template_id is not None:
         query = query.where(ReportRender.template_id == template_id)
     if anchor is not None:
