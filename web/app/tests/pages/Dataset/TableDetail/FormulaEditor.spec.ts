@@ -20,6 +20,7 @@ import type {
 
 import * as dataset from '@/api/dataset'
 import FormulaEditor from '@/pages/Dataset/TableDetail/components/FormulaEditor.vue'
+import FormulaToolbox from '@/pages/Dataset/TableDetail/components/FormulaToolbox.vue'
 import { VALIDATE_DEBOUNCE_MS } from '@/pages/Dataset/TableDetail/scripts/useFormulaValidation'
 
 const CATALOG: DatasetFormulaCatalog = {
@@ -299,6 +300,25 @@ describe('时序规矩二：切回文本面重置选区', () => {
     const emitted = wrapper.emitted('update:formula')
     const last = emitted?.[emitted.length - 1]?.[0]
     expect(last).toBe('{进水量} - {出水量}{进水量}')
+  })
+})
+
+describe('文本面插入后的光标', () => {
+  it('⚠ 插入函数后光标落在括号里，而不是整条公式末尾', async () => {
+    const wrapper = await open('{进水量}')
+    const box = textarea(wrapper)
+    box.element.setSelectionRange(0, 0)
+    await box.trigger('select')
+
+    wrapper
+      .getComponent(FormulaToolbox)
+      .vm.$emit('insert', { snippet: 'ABS()', caret: 4 })
+    await flushPromises()
+
+    const node = box.element
+    expect(node.value).toBe('ABS(){进水量}')
+    expect(node.selectionStart).toBe(4)
+    expect(node.selectionEnd).toBe(4)
   })
 })
 
