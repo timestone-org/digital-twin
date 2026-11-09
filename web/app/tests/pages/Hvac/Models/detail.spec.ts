@@ -219,6 +219,12 @@ describe('评估呈现', () => {
 })
 
 describe('折外总览', () => {
+  it('⚠ 图例照着实际着色说：灰的是判零的零行，蓝的是命中，不只限热行', async () => {
+    const wrapper = await open()
+    expect(wrapper.text()).toContain('零行（判零）')
+    expect(wrapper.text()).not.toContain('热行命中')
+  })
+
   it('全量取数与分页表各走各的，脚注说清画了多少条', async () => {
     const wrapper = await open()
     expect(hvac.listModelPredictions).toHaveBeenCalledWith('m1', {
@@ -234,7 +240,7 @@ describe('折外总览', () => {
 
   it('图例、误差分布与按折稳定性都在', async () => {
     const wrapper = await open()
-    expect(wrapper.text()).toContain('热行漏盖')
+    expect(wrapper.text()).toContain('漏盖')
     expect(wrapper.text()).toContain('误差分布（热行，p50 − 实际）')
     expect(wrapper.text()).toContain('按折稳定性（热行 MAE）')
     expect(wrapper.text()).toContain('误差最大的 5 次')
