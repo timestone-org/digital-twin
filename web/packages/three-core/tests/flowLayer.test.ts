@@ -493,6 +493,20 @@ describe('随模型体量缩放', () => {
     expect(advanced).toBeGreaterThan(slow)
   })
 
+  // ⚠ 刷新配置时先换体量再整层重建：体量没变也重造一遍管线，等于每次都建两遍
+  it('体量没变时不重建管线几何', () => {
+    const layer = new FlowLayer(null)
+    layer.build([flow()], LINE)
+    layer.setWorldScale(10)
+    const geometry = firstTube(layer).geometry
+
+    layer.setWorldScale(10)
+    expect(firstTube(layer).geometry).toBe(geometry)
+
+    layer.setWorldScale(20)
+    expect(firstTube(layer).geometry).not.toBe(geometry)
+  })
+
   it('线宽因子大的流管线更粗', () => {
     const layer = new FlowLayer(null)
     layer.build([flow({ id: 'f1', width: 4 })], LINE)
