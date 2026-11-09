@@ -25,7 +25,10 @@ from platform_server.apps.dataset.formula.signatures import (
     WINDOW_FUNCS,
 )
 from platform_server.apps.dataset.formula.tokens import split_external
-from platform_server.apps.dataset.formula.windows import parse_window
+from platform_server.apps.dataset.formula.windows import (
+    parse_complete_window,
+    parse_window,
+)
 
 # 一个记号节点。⚠ 它是要发给前端的 JSON，故是边界类型
 NotationNode = dict[str, Any]
@@ -367,9 +370,7 @@ class _Builder:
                 else 1
             )
             return {"t": "prev", "x": self._column(key), "n": int(steps)}
-        if name != "SUM_COMPLETE_OVER" and (
-            name in WINDOW_FUNCS or name in ALL_FUNCS
-        ):
+        if name in WINDOW_FUNCS or name in ALL_FUNCS:
             return self._aggregate(name, node)
         if name == "SQRT":
             return {"t": "sqrt", "x": self.visit(node.args[0])}
@@ -392,6 +393,8 @@ class _Builder:
 
         Args: name, node。
         """
+        if name == "SUM_COMPLETE_OVER":
+            return self._complete_sum(node)
         key = self._parsed.placeholders[name_ref(node.args[0])]
         is_window = name in WINDOW_FUNCS
         spec = (
@@ -408,6 +411,23 @@ class _Builder:
             # func / window 只给回写公式文本用，展示不需要
             "func": name,
             "window": spec.literal if spec is not None else None,
+            "x": self._column(key),
+        }
+
+    def _complete_sum(self, node: ast.Call) -> NotationNode:
+        """当日完整网格合计：第三个实参是步长，`_aggregate` 不认它。
+
+        Args: node。
+        """
+        key = self._parsed.placeholders[name_ref(node.args[0])]
+        step = const_value(node.args[2])
+        spec = parse_complete_window(str(const_value(node.args[1])), step)
+        return {
+            "t": "agg",
+            "sym": _AGG_SYMBOLS["SUM_COMPLETE_OVER"],
+            "label": f"{spec.label}（每 {spec.step_s} 秒一格）",
+            "func": "SUM_COMPLETE_OVER",
+            "window": spec.literal,
             "x": self._column(key),
         }
 

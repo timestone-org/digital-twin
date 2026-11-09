@@ -299,3 +299,13 @@ def test_floor_division_does_not_read_as_true_division() -> None:
 
 def test_a_compound_denominator_is_bracketed_in_linear_text() -> None:
     assert text_of("{a} / ({b} * {c})") == "a ÷ (b × c)"
+
+
+def test_a_complete_day_sum_reads_as_an_aggregate_with_its_step() -> None:
+    tree = tree_of("SUM_COMPLETE_OVER({进水}, 'today', 300)")
+    assert tree["t"] == "agg"
+    assert tree["sym"] == "Σ完整"
+    assert "300" in tree["label"]
+    assert "SUM_COMPLETE_OVER" not in text_of(
+        "SUM_COMPLETE_OVER({进水}, 'today', 300)"
+    )
