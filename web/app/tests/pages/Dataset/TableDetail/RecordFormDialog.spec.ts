@@ -167,13 +167,26 @@ describe('提交', () => {
   })
 
   it('⚠ 改数据时间时，`?ts=` 仍是改之前那一刻——它是分区键', async () => {
-    await open(record())
+    await open(record({ source: 'manual' }))
     await pickMoment(MOVED_TS)
     await save()
     const [row, input] =
       vi.mocked(dataset.updateDatasetRecord).mock.calls[0] ?? []
     expect(row).toEqual({ tableId: 't1', rowId: 'r1', ts: ROW_TS })
     expect(input?.ts).toBe(MOVED_TS)
+  })
+
+  it('⚠ 采集行的数据时间锁住：它由桶决定，后端会拒绝改动', async () => {
+    await open(record({ source: 'collect' }))
+    const field = document.querySelector<HTMLInputElement>('.dt-datetime__el')
+    expect(field?.disabled).toBe(true)
+    expect(document.body.textContent).toContain('采集行的数据时间由桶决定')
+  })
+
+  it('人工录入的行仍可改数据时间', async () => {
+    await open(record({ source: 'manual' }))
+    const field = document.querySelector<HTMLInputElement>('.dt-datetime__el')
+    expect(field?.disabled).toBe(false)
   })
 
   it('新建走建行那条，回执里的脏信号原样上报', async () => {

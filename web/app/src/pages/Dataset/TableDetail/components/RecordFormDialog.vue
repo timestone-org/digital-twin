@@ -57,6 +57,8 @@ const { isDirty } = useFormDirty(
 )
 
 const isEdit = computed(() => props.record !== null)
+// ⚠ 采集行的 row_id 由桶派生，挪走数据时间后原桶会再长出一行，故后端拒改
+const isCollected = computed(() => props.record?.source === 'collect')
 const editable = computed(() => writableColumns(props.columns))
 const derived = computed(() => formulaColumns(props.columns))
 const hasPointColumn = computed(() =>
@@ -137,8 +139,13 @@ async function onSubmit(): Promise<void> {
         v-model="form.ts"
         label="数据时间"
         required
+        :disabled="isCollected"
         :error="tsError"
-        hint="补录历史行会让它之后那些行的跨行公式结果过期，保存后按提示重算"
+        :hint="
+          isCollected
+            ? '采集行的数据时间由桶决定，不能改'
+            : '补录历史行会让它之后那些行的跨行公式结果过期，保存后按提示重算'
+        "
       />
 
       <DtNotice v-if="hasPointColumn" intent="warning" icon="alert-triangle">
