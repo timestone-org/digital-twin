@@ -511,6 +511,15 @@ async def ingest(
         await crud.document.mark_ready(
             session, document.document_id, len(chunks), datetime.now(UTC)
         )
+        # ⚠ 建库那一刻没接嵌入档的话库上那一格是空的，而它就是「建没建过索引」
+        # 的判据：不补上，这个库永远被当成只能靠关键词命中
+        if deps.embedder.model is not None:
+            await crud.knowledge_base.pin_embedding(
+                session,
+                document.base_id,
+                deps.embedder.model,
+                deps.embedder.dimensions,
+            )
     return READY
 
 

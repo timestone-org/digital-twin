@@ -100,6 +100,7 @@ class _Embedder:
 
     dimensions: int
     id: str = "fake"
+    model: str | None = "fake-model"
     max_input_tokens: int = 512
     can_embed: bool = True
 
@@ -115,6 +116,7 @@ class _Embedder:
 class _NoEmbedder:
     dimensions: int = 0
     id: str = "none"
+    model: str | None = None
     max_input_tokens: int = 0
     can_embed: bool = False
 
@@ -127,6 +129,7 @@ class _LateEmbedder:
     """刷过目录之后才算得出向量的那一路，与生产的动态嵌入档同形。"""
 
     id = "late"
+    model = "late-model"
 
     def __init__(self, dimensions: int) -> None:
         self.dimensions = dimensions
@@ -433,3 +436,25 @@ async def test_a_document_with_no_text_fails_instead_of_going_ready(
             document_id,
         )
     assert await _chunks(db_sessions, base_id) == 0
+
+
+async def test_a_base_made_before_the_embedder_is_pinned_once_indexed(
+    db_sessions: object, db_dimensions: int
+) -> None:
+    """⚠ 建库那一刻还没接嵌入档时，库上那一格是空的；文档入了向量之后不补上
+    的话，它永远报「还没建过索引」，助手据此只肯拿关键词去查它。"""
+    base_id, document_id = await _seeded(db_sessions)
+    await ingest(
+        db_sessions,  # pyright: ignore[reportArgumentType]
+        _deps(
+            _Source(BODY.encode("utf-8")),
+            _Embedder(db_dimensions),
+            _pair(db_dimensions),
+        ),
+        document_id,
+    )
+    async with db_sessions() as session:  # pyright: ignore[reportCallIssue]
+        base = await crud.knowledge_base.get_base(session, base_id)
+    assert base is not None
+    assert base.embedding_model == "fake-model"
+    assert base.dimensions == db_dimensions

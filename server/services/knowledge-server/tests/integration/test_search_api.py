@@ -60,6 +60,7 @@ class FakeEmbedder:
 
     dimensions: int
     id: str = "fake"
+    model: str | None = "fake-model"
     max_input_tokens: int = 512
     can_embed: bool = True
 
@@ -424,6 +425,7 @@ class DownEmbedder:
 
     dimensions: int
     id: str = "fake"
+    model: str | None = "fake-model"
     max_input_tokens: int = 512
     can_embed: bool = True
 
