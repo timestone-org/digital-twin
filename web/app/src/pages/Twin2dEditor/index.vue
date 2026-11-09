@@ -32,7 +32,7 @@ import { createTwin2dCommands } from './scripts/editorCommands'
 import { TWIN_2D_EDITOR_PANES, twin2dStagePanes } from './scripts/editorPanes'
 import { createTwin2dSelection } from './scripts/editorSelection'
 import type { Twin2dStyleKind } from './scripts/editorSelection'
-import { addNode } from './scripts/nodeOps'
+import { addNodeAtCenter } from './scripts/paletteDrag'
 import { useTwin2dShortcuts } from './scripts/shortcuts'
 import { twin2dEntityExists } from './scripts/styleOps'
 import {
@@ -168,21 +168,16 @@ useTwin2dShortcuts({
 })
 
 /**
- * 从调色板加一个节点，落在画布正中。
- * ⚠ 走 `addNode` 而不是就地拼一个：缺省值抄一份出来，抄的那份一旦与归一化不一致，
- * 新节点会在「存一次再读回来」之后悄悄变样。
- * @param styleId 拖下来的那份样式
+ * 从调色板加一个节点，落在画布正中并吸网格。
+ * @param styleId 点的那份样式
  */
 function addFromPalette(styleId: string): void {
   const current = config.value
   if (current === null) return
-  const added = addNode(current, {
-    styleId,
-    x: current.canvas.width / 2,
-    y: current.canvas.height / 2,
-  })
+  const added = addNodeAtCenter(current, styleId)
+  if (added.id === null) return
   commit(added.config)
-  if (added.id !== null) selection.select('nodes', added.id)
+  selection.select('nodes', added.id)
 }
 
 /**

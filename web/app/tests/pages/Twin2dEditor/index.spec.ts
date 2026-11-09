@@ -22,6 +22,7 @@ import type {
 } from '@dt/contracts'
 import {
   TWIN_2D_BUILTIN_NODE_STYLES,
+  TWIN_2D_BUILTIN_NODE_STYLE_MAP,
   TWIN_2D_CONFIG_KEY,
   __resetTwin2dAssets,
   normalizeTwin2dConfig,
@@ -948,7 +949,18 @@ describe('左栏装配', () => {
 
     const nodes = controls.doc.value?.config.value.nodes ?? []
     expect(nodes).toHaveLength(2)
-    expect(nodes[1]?.x).toBe(CONFIG.canvas.width / 2)
+    // ⚠ x/y 是左上角：拿画布中心当 x/y 的话节点整个落在中心的右下方，还不在网格上
+    const added = nodes[1]
+    const size = TWIN_2D_BUILTIN_NODE_STYLE_MAP.get(added?.styleId ?? '')?.size
+    if (added === undefined || size === undefined) throw new Error('没加上')
+    const { width, height, grid } = CONFIG.canvas
+    expect(Math.abs(added.x + size.w / 2 - width / 2)).toBeLessThanOrEqual(
+      grid / 2,
+    )
+    expect(Math.abs(added.y + size.h / 2 - height / 2)).toBeLessThanOrEqual(
+      grid / 2,
+    )
+    expect([added.x % grid, added.y % grid]).toEqual([0, 0])
   })
 
   it('大纲改出来的整份配置落一步撤销', async () => {
