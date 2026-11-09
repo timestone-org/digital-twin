@@ -163,11 +163,7 @@ onMounted(() => {
 
           <DtNotice v-if="detail.columnsError.value" intent="warning">
             列已保存，但刷新列清单失败：{{ detail.columnsError.value }}
-            <DtButton
-              size="sm"
-              variant="ghost"
-              @click="detail.reloadColumns()"
-            >
+            <DtButton size="sm" variant="ghost" @click="detail.reloadColumns()">
               重试
             </DtButton>
           </DtNotice>

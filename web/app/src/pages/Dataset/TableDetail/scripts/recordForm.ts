@@ -93,7 +93,9 @@ export function recordFormOf(
   for (const column of writableColumns(columns)) {
     const seeded = seedOf(record, column)
     form.texts[column.key] =
-      column.data_type === 'bool' ? toBoolText(seeded) : seedText(seeded, column)
+      column.data_type === 'bool'
+        ? toBoolText(seeded)
+        : seedText(seeded, column)
   }
   return form
 }
