@@ -227,6 +227,24 @@ async def test_embed_access_is_rejected_by_both_auth_management_gates(
     assert edge.status_code == 401
 
 
+async def test_percent_encoding_does_not_open_the_auth_surface_to_embed(
+    app_client: httpx.AsyncClient,
+) -> None:
+    """闸 1 按解码后的路径挑规则，嵌入会话的拦截也必须按同一条路径判。"""
+    issued, _ = await issue_admin_api_key(app_client)
+    exchanged = await exchange_api_key(app_client, issued["secret"])
+    access_token = exchanged.json()["data"]["token"]["access_token"]
+    edge = await app_client.get(
+        VERIFY,
+        headers={
+            "Authorization": f"Bearer {access_token}",
+            "X-Original-URI": API_PREFIX.replace("/auth", "/%61uth") + "/users",
+            "X-Original-Method": "GET",
+        },
+    )
+    assert edge.status_code == 401
+
+
 async def test_wrong_password_is_401_without_revealing_which_part_failed(
     app_client: httpx.AsyncClient,
 ) -> None:

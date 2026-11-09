@@ -24,7 +24,11 @@ from auth_server.apps.auth.services.identity import (
     Identity,
     load_identity_by_id,
 )
-from auth_server.apps.auth.services.matching import Decision, decide
+from auth_server.apps.auth.services.matching import (
+    Decision,
+    decide,
+    normalize_path,
+)
 from auth_server.apps.auth.services.route_rule_service import (
     RouteRuleCache,
 )
@@ -190,4 +194,6 @@ def _subject(raw: str) -> uuid.UUID:
 
 
 def _is_auth_path(path: str) -> bool:
-    return path == API_PREFIX or path.startswith(f"{API_PREFIX}/")
+    # ⚠ 与闸 1 同一口径解码：按原串判，`/api/v1/%61uth/…` 就漏过这道拦截
+    target = normalize_path(path)
+    return target == API_PREFIX or target.startswith(f"{API_PREFIX}/")
