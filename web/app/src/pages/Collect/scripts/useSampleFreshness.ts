@@ -9,14 +9,19 @@ export function useSampleFreshness(isConnected: Ref<boolean>) {
   const timer = setInterval(() => {
     now.value = Date.now()
   }, 1000)
-  const staleKeys = computed(
-    () =>
-      new Set(
-        [...received.value]
-          .filter(([, at]) => now.value - at >= STREAM_TIMEOUT_MS)
-          .map(([key]) => key),
-      ),
-  )
+  // ⚠ 成员没变就交回上一个集合：每秒换一个新对象，点位表里读它的每一格都要重渲
+  let last = new Set<string>()
+  const staleKeys = computed(() => {
+    const next = new Set(
+      [...received.value]
+        .filter(([, at]) => now.value - at >= STREAM_TIMEOUT_MS)
+        .map(([key]) => key),
+    )
+    if (next.size === last.size && [...next].every((key) => last.has(key)))
+      return last
+    last = next
+    return next
+  })
   watch(isConnected, (connected) => {
     if (!connected)
       received.value = new Map(

@@ -57,12 +57,16 @@ const detailSample = computed(() =>
     ? undefined
     : live.samples.value.get(detail.value.node_key),
 )
+/** 这个点位的读数是否不可信：推送断了、它自己久没收到，或者数据源不在线。 */
+function isStale(nodeKey: string): boolean {
+  return (
+    !live.isConnected.value ||
+    live.staleKeys.value.has(nodeKey) ||
+    props.source.runtime.state !== 'online'
+  )
+}
 const detailStale = computed(
-  () =>
-    detail.value !== null &&
-    (!live.isConnected.value ||
-      live.staleKeys.value.has(detail.value.node_key) ||
-      props.source.runtime.state !== 'online'),
+  () => detail.value !== null && isStale(detail.value.node_key),
 )
 
 const auth = useAuthStore()
@@ -246,11 +250,7 @@ watch(list.items, (rows) => {
           <PointCard
             :point="row"
             :sample="live.samples.value.get(row.node_key)"
-            :stale="
-              !live.isConnected.value ||
-              live.staleKeys.value.has(row.node_key) ||
-              source.runtime.state !== 'online'
-            "
+            :stale="isStale(row.node_key)"
             :selected="archive.selected.value.has(row.id)"
             :archive-busy="archive.rowBusy.value.has(row.id)"
             :can-write="source.protocol === 'opcua'"
@@ -326,11 +326,7 @@ watch(list.items, (rows) => {
           <PointValueCell
             :sample="live.samples.value.get(row.node_key)"
             :unit="row.unit"
-            :stale="
-              !live.isConnected.value ||
-              live.staleKeys.value.has(row.node_key) ||
-              source.runtime.state !== 'online'
-            "
+            :stale="isStale(row.node_key)"
           />
         </template>
 
