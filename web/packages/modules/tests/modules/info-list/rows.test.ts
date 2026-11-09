@@ -902,8 +902,8 @@ describe('迟滞', () => {
   it('迟滞表摊成「行键到起始时刻」', () => {
     expect(
       sinceMap([
-        { key: 'a', since: 1, active: true },
-        { key: 'b', since: 2, active: false },
+        { key: 'a', since: 1, active: true, clearedAt: null },
+        { key: 'b', since: 2, active: false, clearedAt: 3 },
       ]),
     ).toEqual({ a: 1, b: 2 })
   })
