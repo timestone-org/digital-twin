@@ -212,3 +212,26 @@ it('清空采样周期提交时拦下，不靠后端默认值悄悄补上', asyn
   expect(wrapper.text()).toContain('请填写采样周期')
   wrapper.unmount()
 })
+
+it('死区只管归档：关掉归档时不显示，提交照旧带上原值', async () => {
+  const wrapper = await render()
+  expect(wrapper.text()).toContain('归档死区')
+  await wrapper.find('input[placeholder="如：outlet_temp"]').setValue('temp')
+  await wrapper.find('input[placeholder="如：出口温度"]').setValue('出口温度')
+  await wrapper
+    .find('input[placeholder="ns=2;s=Plant1.OutletTemp"]')
+    .setValue('ns=2;s=temp')
+  setNumberInputs(wrapper, [1000, 0.5])
+  wrapper.findComponent(DtSwitch).vm.$emit('update:modelValue', false)
+  await flushPromises()
+  expect(wrapper.text()).not.toContain('归档死区')
+  await wrapper
+    .findAll('button')
+    .find((one) => one.text() === '保存')
+    ?.trigger('click')
+  expect(wrapper.emitted('create')?.[0]?.[0]).toMatchObject({
+    archive_enabled: false,
+    deadband: 0.5,
+  })
+  wrapper.unmount()
+})

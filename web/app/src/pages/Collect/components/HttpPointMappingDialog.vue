@@ -246,7 +246,7 @@ async function submit(): Promise<void> {
           v-if="archiveEnabled"
           class="grid grid-cols-1 gap-3 sm:grid-cols-2"
         >
-          <DtField label="记录死区"
+          <DtField label="归档死区"
             ><DtNumberInput
               v-model="deadband"
               :range="{ min: 0, step: 0.1 }"

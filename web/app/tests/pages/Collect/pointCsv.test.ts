@@ -271,4 +271,9 @@ describe('模板与导出', () => {
     const csv = pointsToCsv([exported({ description: '一号机送风温度' })])
     expect(parsePointCsv(csv).rows[0]?.item?.description).toBe('一号机送风温度')
   })
+
+  it('老模板的「死区」表头照样认成归档死区', () => {
+    const parsed = parsePointCsv('点位编码,死区\r\nt1,0.5\r\n')
+    expect(parsed.rows[0]?.item?.deadband).toBe(0.5)
+  })
 })

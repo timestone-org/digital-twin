@@ -201,18 +201,34 @@ function validate(): string | null {
   return null
 }
 
-/** 数字框的取值；清空的框是 undefined，给出要补填的那一项。藏起来的框按默认值算。 */
+/** 显示着的框照实取；藏起来的框清空了也按默认值算，不拿看不见的框报错。 */
+function shownOr(
+  isShown: boolean,
+  value: number | undefined,
+  fallback: number,
+): number | undefined {
+  return isShown ? value : (value ?? fallback)
+}
+
+/** 数字框的取值；清空的框是 undefined，给出要补填的那一项。 */
 function numberFields() {
+  const archived = archiveEnabled.value
   const sampling = samplingIntervalMs.value
-  const band = isNumeric.value ? deadband.value : 0
-  const heartbeat = archiveEnabled.value
-    ? archiveMaxIntervalMs.value
-    : (archiveMaxIntervalMs.value ?? DEFAULTS.archiveMaxIntervalMs)
-  const retention = archiveEnabled.value
-    ? retentionDays.value
-    : (retentionDays.value ?? DEFAULTS.retentionDays)
+  const band = isNumeric.value
+    ? shownOr(archived, deadband.value, DEFAULTS.deadband)
+    : 0
+  const heartbeat = shownOr(
+    archived,
+    archiveMaxIntervalMs.value,
+    DEFAULTS.archiveMaxIntervalMs,
+  )
+  const retention = shownOr(
+    archived,
+    retentionDays.value,
+    DEFAULTS.retentionDays,
+  )
   if (sampling === undefined) return '请填写采样周期'
-  if (band === undefined) return '请填写死区'
+  if (band === undefined) return '请填写归档死区'
   if (heartbeat === undefined) return '请填写归档心跳'
   if (retention === undefined) return '请填写保留天数'
   return { sampling, band, heartbeat, retention }
@@ -326,13 +342,6 @@ function submit(): void {
         <DtField label="采样周期（毫秒）">
           <DtNumberInput v-model="samplingIntervalMs" :range="SAMPLING_RANGE" />
         </DtField>
-        <DtField
-          v-if="isNumeric"
-          label="死区"
-          hint="变化超过它才算一次新值。填 0 表示每次变化都记。"
-        >
-          <DtNumberInput v-model="deadband" :range="DEADBAND_RANGE" />
-        </DtField>
       </div>
 
       <DtField label="归档">
@@ -340,6 +349,14 @@ function submit(): void {
       </DtField>
 
       <div v-if="archiveEnabled" class="dt-form-grid dt-form-grid__wide">
+        <!-- 死区只在归档准入里用，不影响实时值的刷新 -->
+        <DtField
+          v-if="isNumeric"
+          label="归档死区"
+          hint="变化不超过它就不落库；0 表示每次变化都记。"
+        >
+          <DtNumberInput v-model="deadband" :range="DEADBAND_RANGE" />
+        </DtField>
         <DtField
           label="归档心跳（毫秒）"
           hint="值不变时也至少每隔这么久落一条，曲线才不会断成一段一段。"

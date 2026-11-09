@@ -34,7 +34,7 @@ export const CSV_COLUMNS = [
   { key: 'data_type', label: '数据类型', required: false },
   { key: 'unit', label: '单位', required: false },
   { key: 'sampling_interval_ms', label: '采样周期(ms)', required: false },
-  { key: 'deadband', label: '死区', required: false },
+  { key: 'deadband', label: '归档死区', required: false },
   { key: 'archive_enabled', label: '归档', required: false },
   { key: 'archive_max_interval_ms', label: '归档心跳(ms)', required: false },
   { key: 'archive_retention_days', label: '保留天数', required: false },
@@ -42,13 +42,19 @@ export const CSV_COLUMNS = [
 
 type ColumnKey = (typeof CSV_COLUMNS)[number]['key']
 
+/** 改过名的旧表头，老模板导回来照样认。 */
+const LEGACY_HEADERS: readonly (readonly [string, ColumnKey])[] = [
+  ['死区', 'deadband'],
+]
+
 /** 表头允许写中文标签，也允许写英文字段名——两种都认。 */
-const HEADER_ALIASES = new Map<string, ColumnKey>(
-  CSV_COLUMNS.flatMap((column) => [
+const HEADER_ALIASES = new Map<string, ColumnKey>([
+  ...CSV_COLUMNS.flatMap((column) => [
     [column.key, column.key] as const,
     [column.label, column.key] as const,
   ]),
-)
+  ...LEGACY_HEADERS,
+])
 
 /** 模板里的示例行。有一行样例，用户才知道寻址串长什么样。 */
 const SAMPLE_ROWS: readonly string[][] = [
@@ -245,7 +251,7 @@ function readSettings(values: Map<ColumnKey, string>): CollectPointUpdateInput {
       COLLECT_MIN_INTERVAL_MS,
       '采样周期',
     ),
-    deadband: nonNegative(values.get('deadband') ?? '', 0, '死区'),
+    deadband: nonNegative(values.get('deadband') ?? '', 0, '归档死区'),
     archive_enabled: bool(values.get('archive_enabled') ?? '', true),
     archive_max_interval_ms: positive(
       values.get('archive_max_interval_ms') ?? '',

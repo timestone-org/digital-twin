@@ -369,7 +369,7 @@ watch(list.items, (rows) => {
                 variant="ghost"
                 size="sm"
                 icon="settings-2"
-                aria-label="点位设置（记录历史 / 死区 / 心跳 / 保留期）"
+                aria-label="点位设置（记录历史 / 归档死区 / 心跳 / 保留期）"
                 @click="editing.openEdit(row)"
               />
               <DtButton

@@ -3,7 +3,7 @@
  * @fileoverview 把浏览树中勾选的节点批量导入为点位；逐行确认点位编码，并统一
  * 设置数据类型兜底、采样间隔与记录历史默认。
  *
- * ⚠ 「记录死区」写的是点位的 `deadband`：归档准入按它判定（变化幅度不超过它
+ * ⚠ 「归档死区」写的是点位的 `deadband`：归档准入按它判定（变化幅度不超过它
  * 就不落库），单点位可后续在「点位设置」里改。
  * ⚠ 编码由寻址串推、中文名按拼音推、撞名自动挂序号，但推出来的**只是建议**：
  * 有一行不合法就不许提交——后端一批是原子的，一条编码不合规是整批被拒。
@@ -193,7 +193,7 @@ function confirm(): void {
         />
       </label>
       <div v-if="archiveEnabled" class="grid grid-cols-1 gap-3 sm:grid-cols-2">
-        <DtField label="记录死区" hint="变化幅度不超过它就不落库；0 = 都记。">
+        <DtField label="归档死区" hint="变化幅度不超过它就不落库；0 = 都记。">
           <DtNumberInput v-model="deadband" :range="DEADBAND_RANGE" />
         </DtField>
         <DtField label="保留期（天）" hint="0 = 跟随全局保留策略。">
