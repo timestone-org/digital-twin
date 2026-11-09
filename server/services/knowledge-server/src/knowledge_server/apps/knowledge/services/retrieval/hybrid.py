@@ -13,6 +13,7 @@
 那一条捞上来。重排排不成时退回融合名次，并如实标注这次没排。
 """
 
+import uuid
 from dataclasses import dataclass, field
 
 from sqlalchemy.ext.asyncio import AsyncSession
@@ -102,7 +103,7 @@ class Hybrid:
         Args: session, request。
         """
         width = request.limit * LANE_WIDTH
-        lanes: dict[str, list[tuple[object, str]]] = {}
+        lanes: dict[str, list[tuple[uuid.UUID, str]]] = {}
         probe, note = await self._probe(request.query)
         if probe is not None:
             found = await self.indexes.vector.search(
@@ -117,7 +118,7 @@ class Hybrid:
             ),
         )
         lanes["keyword"] = [(one.chunk_id, one.why) for one in words]
-        return (fused(lanes), note)  # pyright: ignore[reportArgumentType]
+        return (fused(lanes), note)
 
     async def _probe(self, query: str) -> tuple[list[float] | None, str]:
         """把问题嵌一次；嵌不成就回 `None` 与一句「这次少走了向量那一路」。
