@@ -214,6 +214,7 @@ async function onProbe(): Promise<void> {
 }
 
 async function onSubmit(): Promise<void> {
+  if (busy.value) return
   const rejected = validateForm(form.value, kind.value, isEdit.value)
   if (rejected !== null) {
     error.value = rejected
@@ -432,6 +433,8 @@ async function onSubmit(): Promise<void> {
         改动会立刻影响指着这一路的 {{ provider?.assigned_purposes.length }}
         个用途
       </DtTag>
+      <!-- 保存键在页脚、表单之外；多输入框的表单没有提交键时浏览器不做回车提交 -->
+      <button type="submit" class="sr-only" tabindex="-1" aria-hidden="true" />
     </form>
 
     <template #footer>

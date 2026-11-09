@@ -73,6 +73,7 @@ watch(
 )
 
 async function onSubmit(): Promise<void> {
+  if (busy.value) return
   busy.value = true
   error.value = null
   try {
@@ -140,6 +141,8 @@ async function onSubmit(): Promise<void> {
       <DtInput v-model="form.full_name" label="姓名" />
       <DtInput v-model="form.phone" label="手机号" />
       <DtNotice v-if="error" intent="danger">{{ error }}</DtNotice>
+      <!-- 保存键在页脚、表单之外；多输入框的表单没有提交键时浏览器不做回车提交 -->
+      <button type="submit" class="sr-only" tabindex="-1" aria-hidden="true" />
     </form>
 
     <template #footer>
