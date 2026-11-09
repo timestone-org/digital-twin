@@ -81,8 +81,13 @@ function onRenamed(projectId: string, name: string): void {
               ? 'bg-accent-primary/10 text-accent-on-surface'
               : 'text-text-secondary hover:bg-accent-primary/10 hover:text-text-primary'
           "
+          role="button"
+          tabindex="0"
+          :aria-current="selectedProjectId === project.id ? 'true' : undefined"
           data-test="project-row"
           @click="emit('select', project.id)"
+          @keydown.enter.self.prevent="emit('select', project.id)"
+          @keydown.space.self.prevent="emit('select', project.id)"
         >
           <!-- 选中态的发光竖条。底色差别在暗色主题下很弱，只靠它一眼分得出选中的是哪个 -->
           <span
@@ -118,7 +123,7 @@ function onRenamed(projectId: string, name: string): void {
             <!-- ⚠ hidden 不能直接挂在 DtButton / DtTag 上：它们的 display 写在未分层的组件样式里，压得过 @layer utilities 里的 .hidden -->
             <span
               v-if="canManage"
-              class="hidden shrink-0 group-hover:inline-flex"
+              class="hidden shrink-0 group-focus-within:inline-flex group-hover:inline-flex"
             >
               <DtButton
                 size="sm"

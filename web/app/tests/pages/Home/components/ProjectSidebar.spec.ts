@@ -59,6 +59,18 @@ describe('项目列表', () => {
     expect(wrapper.emitted('select')).toEqual([['p-2']])
   })
 
+  it('键盘可达：行可聚焦，Enter 与空格都发 select，选中行标 aria-current', async () => {
+    const wrapper = render()
+    const [first, second] = rows(wrapper)
+    expect(second?.attributes('tabindex')).toBe('0')
+    expect(second?.attributes('role')).toBe('button')
+    expect(first?.attributes('aria-current')).toBe('true')
+    expect(second?.attributes('aria-current')).toBeUndefined()
+    await second?.trigger('keydown', { key: 'Enter' })
+    await second?.trigger('keydown', { key: ' ' })
+    expect(wrapper.emitted('select')).toEqual([['p-2'], ['p-2']])
+  })
+
   it('一个项目都没有时给一句空态，而不是空白', () => {
     const wrapper = mount(ProjectSidebar, {
       props: { projects: [], selectedProjectId: null },
