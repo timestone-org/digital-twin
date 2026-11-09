@@ -19,9 +19,13 @@ import { useAuthStore } from '@/stores/auth'
 
 const STAMP = '2026-01-01T00:00:00.000Z'
 
+/** 地址栏的查询串；带工作流筛选的那条用例会改它。 */
+const query: Record<string, string> = {}
+const replace = vi.fn()
+
 vi.mock('vue-router', () => ({
-  useRouter: () => ({ replace: vi.fn(), push: vi.fn() }),
-  useRoute: () => ({ path: '/modeling/models', query: {} }),
+  useRouter: () => ({ replace, push: vi.fn() }),
+  useRoute: () => ({ path: '/modeling/models', query }),
   RouterLink: { template: '<a><slot /></a>' },
 }))
 
@@ -101,6 +105,8 @@ function open() {
 
 beforeEach(() => {
   setActivePinia(createPinia())
+  for (const key of Object.keys(query)) delete query[key]
+  replace.mockReset()
 })
 
 afterEach(() => {
@@ -422,5 +428,120 @@ describe('换绑回执里的影响面', () => {
     const text = impactText({ ...binding(), usages: [] })
 
     expect(text).toContain('还没有台账列引用')
+  })
+})
+
+describe('绑公式弹窗', () => {
+  /** 带入口契约的版本详情：入口两列，独热之后的特征列有三列。 */
+  function detailed(): ModelingVersion {
+    return {
+      ...version({ feature_keys: ['temp', 'shift=day', 'shift=night'] }),
+      signature: {
+        format_version: '2.0',
+        inputs: [
+          {
+            key: 'temp',
+            label: '温度',
+            unit: '',
+            dtype: 'float',
+            is_required: true,
+            default_on_missing: null,
+            training_stats: {},
+          },
+          {
+            key: 'shift',
+            label: '班次',
+            unit: '',
+            dtype: 'str',
+            is_required: true,
+            default_on_missing: null,
+            training_stats: {},
+          },
+        ],
+        derived: [],
+        output: {
+          key: 'power',
+          label: '功率',
+          unit: '',
+          dtype: 'float',
+          task: 'regression',
+        },
+      },
+      metrics: {},
+      fingerprint: {},
+      description: null,
+    }
+  }
+
+  async function openBind() {
+    stub([version({ feature_keys: ['temp', 'shift=day', 'shift=night'] })], [])
+    vi.spyOn(modeling, 'getModelingVersion').mockResolvedValue(detailed())
+    signIn([PERMISSION_CODES.modelingView, PERMISSION_CODES.modelingPublish])
+    const wrapper = open()
+    await flushPromises()
+    await wrapper
+      .findAll('button')
+      .find((b) => b.text() === '绑公式')
+      ?.trigger('click')
+    await flushPromises()
+    return wrapper
+  }
+
+  it('形参按入口契约逐位列出，不是特征工程之后的列', async () => {
+    const wrapper = await openBind()
+
+    const items = wrapper
+      .findAll('.dt-ml-bind__params li')
+      .map((li) => li.text())
+    expect(items).toEqual([
+      '第 1 个参数 → 温度（temp）',
+      '第 2 个参数 → 班次（shift）',
+    ])
+  })
+
+  it('绑定失败时弹窗不关，填好的编码还在', async () => {
+    const wrapper = await openBind()
+    vi.spyOn(modeling, 'createModelingBinding').mockRejectedValue(
+      new Error('公式库里没有这条条目'),
+    )
+    await wrapper.get('.dt-modal input').setValue('predict_power')
+    await wrapper
+      .findAll('button')
+      .find((b) => b.text() === '绑定')
+      ?.trigger('click')
+    await flushPromises()
+
+    expect(wrapper.find('.dt-ml-bind__params').exists()).toBe(true)
+    expect(wrapper.get<HTMLInputElement>('.dt-modal input').element.value).toBe(
+      'predict_power',
+    )
+  })
+})
+
+describe('从画布带着工作流筛选进来', () => {
+  it('摆出筛选并能一键清掉', async () => {
+    query['pipeline_id'] = 'p1'
+    stub([version()], [])
+    signIn([PERMISSION_CODES.modelingView])
+    const wrapper = open()
+    await flushPromises()
+
+    const chip = wrapper
+      .findAll('button')
+      .find((b) => b.text() === '仅当前工作流')
+    expect(chip).toBeDefined()
+    await chip?.trigger('click')
+
+    expect(replace).toHaveBeenCalledWith({ query: {} })
+    expect(wrapper.text()).toContain('公式绑定不按工作流筛选')
+  })
+
+  it('没有筛选时不摆', async () => {
+    stub([version()], [])
+    signIn([PERMISSION_CODES.modelingView])
+    const wrapper = open()
+    await flushPromises()
+
+    expect(wrapper.text()).not.toContain('仅当前工作流')
   })
 })

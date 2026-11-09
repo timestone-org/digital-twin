@@ -299,6 +299,15 @@ describe('按项的一组数', () => {
       spread: null,
     })
   })
+  // ⚠ 监督模型概况与时间平移那几块按 `label` 发名字；只认 `name` 的话卡片标签成了「0:」「1:」
+  it('项名写在 label 上时也认得', () => {
+    const breakdown = breakdownOf({
+      label: '随机森林回归',
+      items: [{ key: 'training_rows', label: '训练行数', value: 127 }],
+    })
+
+    expect(breakdown.items[0]?.name).toBe('训练行数')
+  })
 })
 
 describe('模型内部', () => {

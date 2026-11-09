@@ -177,8 +177,10 @@ onMounted(() => void list.reload())
     subtitle="创建工作流 → 训练生成模型 → 发布调用；每个工作流保留一个发布入口"
   >
     <template #actions>
-      <RouterLink to="/modeling/instances">
-        <DtButton variant="ghost" size="sm">历史实例</DtButton>
+      <RouterLink v-slot="{ navigate }" to="/modeling/instances" custom>
+        <DtButton variant="ghost" size="sm" @click="navigate">
+          历史实例
+        </DtButton>
       </RouterLink>
       <PermGuard :codes="[PERMISSION_CODES.modelingManage]" explain>
         <DtIconButton
@@ -438,9 +440,11 @@ onMounted(() => void list.reload())
     max-width: 100%;
   }
 
+  // ⚠ 行高要撑开：DtTag 给的是 line-height:1，配上 overflow:hidden 会把下划线这类下伸笔画裁掉
   &__code-text {
     min-width: 0;
     overflow: hidden;
+    line-height: 1.4;
     text-overflow: ellipsis;
   }
 
@@ -450,12 +454,6 @@ onMounted(() => void list.reload())
     color: var(--text-secondary);
     text-overflow: ellipsis;
     white-space: nowrap;
-  }
-
-  &__icon {
-    display: inline-flex;
-    align-items: center;
-    color: var(--text-secondary);
   }
 }
 </style>

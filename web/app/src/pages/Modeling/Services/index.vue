@@ -90,6 +90,11 @@ async function openAccess(row: ModelDeployment): Promise<void> {
   inspectionRequest.cancel()
   inspecting.value = row
   stats.value = []
+  await loadStats(row)
+}
+
+/** 拉这个部署近一个月的调用量；试算之后也重拉一次。 */
+async function loadStats(row: ModelDeployment): Promise<void> {
   statsError.value = null
   isStatsLoading.value = true
   await statsRequest.run(
@@ -248,6 +253,7 @@ onBeforeUnmount(() => {
       :is-loading="isStatsLoading"
       :error="statsError"
       @close="closeAccess"
+      @called="inspecting && void loadStats(inspecting)"
     />
   </AppShell>
 </template>

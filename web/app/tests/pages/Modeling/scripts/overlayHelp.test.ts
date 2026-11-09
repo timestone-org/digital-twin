@@ -79,6 +79,7 @@ describe('快捷键说明与真实绑定对得上', () => {
       openConfig: vi.fn(),
       fit: vi.fn(),
       nudge: vi.fn(),
+      save: vi.fn(),
       canEdit: () => true,
     }
   }
@@ -121,12 +122,13 @@ describe('快捷键说明与真实绑定对得上', () => {
       hooks.copy,
       hooks.paste,
       hooks.duplicate,
+      hooks.save,
     ].filter((item) => vi.isMockFunction(item) && item.mock.calls.length > 0)
     expect(before).toBeGreaterThan(0)
-    expect(fired).toHaveLength(6)
+    expect(fired).toHaveLength(7)
   })
 
-  it('说明里列的组合恰好是这六个，加了绑定别忘了写说明', () => {
-    expect(listedKeys().sort()).toEqual(['A', 'C', 'D', 'V', 'Z', '⇧Z'])
+  it('说明里列的组合恰好是这七个，加了绑定别忘了写说明', () => {
+    expect(listedKeys().sort()).toEqual(['A', 'C', 'D', 'S', 'V', 'Z', '⇧Z'])
   })
 })

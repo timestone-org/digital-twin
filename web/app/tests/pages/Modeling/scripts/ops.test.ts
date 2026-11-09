@@ -213,9 +213,13 @@ describe('画布上的文档', () => {
     const doc = host(() => usePipelineDoc())
     await doc.load('p1')
 
-    const ok = await doc.validate({ format_version: '1', nodes: [], edges: [] })
+    const outcome = await doc.validate({
+      format_version: '1',
+      nodes: [],
+      edges: [],
+    })
 
-    expect(ok).toBe(false)
+    expect(outcome).toBe('invalid')
     expect(doc.issues.value[0]?.message).toContain('没接线')
   })
 
@@ -230,7 +234,7 @@ describe('画布上的文档', () => {
 
     expect(
       await doc.validate({ format_version: '1', nodes: [], edges: [] }),
-    ).toBe(false)
+    ).toBe('failed')
   })
 })
 
@@ -320,7 +324,18 @@ describe('模型库上的动作', () => {
     await ops.unbind('b1')
 
     expect(toast.error).toHaveBeenCalledOnce()
+    expect(toast.success).not.toHaveBeenCalled()
     expect(done).not.toHaveBeenCalled()
     expect(ops.isBusy.value).toBe(false)
+  })
+
+  it('解绑成功给一句「已解绑」', async () => {
+    const toast = toaster()
+    vi.spyOn(modeling, 'deleteModelingBinding').mockResolvedValue(undefined)
+    const ops = host(() => useBindingOps(vi.fn()))
+
+    await ops.unbind('b1')
+
+    expect(toast.success).toHaveBeenCalledWith('已解绑')
   })
 })

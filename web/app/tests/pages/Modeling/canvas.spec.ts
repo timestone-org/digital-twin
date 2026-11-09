@@ -9,6 +9,7 @@ import type {
   ModelingPipeline,
   ModelingRun,
 } from '@dt/contracts'
+import * as ui from '@dt/ui'
 import { DtSelect, useConfirm } from '@dt/ui'
 import { flushPromises, mount } from '@vue/test-utils'
 import { createPinia, setActivePinia } from 'pinia'
@@ -16,6 +17,7 @@ import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 
 import * as dataset from '@/api/dataset'
 import * as modeling from '@/api/modeling'
+import * as workflow from '@/api/modelingWorkflow'
 import CanvasPage from '@/pages/Modeling/Canvas/index.vue'
 import { useAuthStore } from '@/stores/auth'
 
@@ -258,7 +260,7 @@ describe('未保存画布回看历史', () => {
     await wrapper.find('.dt-ml-palette__item').trigger('click')
     await wrapper
       .findAll('button')
-      .find((button) => button.text() === '运行历史')
+      .find((button) => button.text() === '训练历史')
       ?.trigger('click')
     await wrapper.find('.dt-ml-runs__item').trigger('click')
     await flushPromises()
@@ -489,7 +491,7 @@ describe('画布页', () => {
     const wrapper = open()
     await flushPromises()
 
-    expect(wrapper.text()).not.toContain('运行历史 运行')
+    expect(wrapper.text()).not.toContain('训练历史 运行')
     expect(wrapper.find('[data-test="perm-readonly"]').exists()).toBe(true)
   })
 
@@ -539,7 +541,7 @@ describe('画布页', () => {
 
     await wrapper
       .findAll('button')
-      .find((b) => b.text() === '运行历史')
+      .find((b) => b.text() === '训练历史')
       ?.trigger('click')
     await flushPromises()
     await wrapper.find('.dt-ml-runs__item').trigger('click')
@@ -583,6 +585,26 @@ describe('画布页', () => {
     window.dispatchEvent(
       new KeyboardEvent('keydown', { key: 'z', ctrlKey: true }),
     )
+    await flushPromises()
+
+    expect(wrapper.find('.dt-ml-node').exists()).toBe(true)
+  })
+
+  it('撤销掉刚加的节点再按 Delete，不白压一步撤销、也不丢重做', async () => {
+    stubApi()
+    signIn(WRITER)
+    const wrapper = open()
+    await flushPromises()
+    await wrapper.findAll('.dt-ml-palette__item')[0]?.trigger('click')
+    await flushPromises()
+    const key = (init: KeyboardEventInit) =>
+      window.dispatchEvent(new KeyboardEvent('keydown', init))
+
+    key({ key: 'z', ctrlKey: true })
+    await flushPromises()
+    key({ key: 'Delete' })
+    await flushPromises()
+    key({ key: 'z', ctrlKey: true, shiftKey: true })
     await flushPromises()
 
     expect(wrapper.find('.dt-ml-node').exists()).toBe(true)
@@ -1060,6 +1082,21 @@ describe('保存前的整图校验', () => {
     edge_id: '',
   }
 
+  it('进页面只校验一次，不是一次直发再加一次防抖', async () => {
+    vi.useFakeTimers()
+    try {
+      stubApi()
+      signIn(WRITER)
+      open()
+      await vi.runOnlyPendingTimersAsync()
+      await vi.advanceTimersByTimeAsync(1000)
+
+      expect(modeling.validateModelingGraph).toHaveBeenCalledTimes(1)
+    } finally {
+      vi.useRealTimers()
+    }
+  })
+
   it('图一改就自动校验，问题逐条挂在画布上', async () => {
     vi.useFakeTimers()
     try {
@@ -1101,6 +1138,54 @@ describe('保存前的整图校验', () => {
     await flushPromises()
 
     expect(start).not.toHaveBeenCalled()
+  })
+})
+
+describe('运行前那次校验被边改边校验顶掉', () => {
+  it('不把被顶掉的校验说成「流水线还有问题」', async () => {
+    vi.useFakeTimers()
+    try {
+      stubApi()
+      const toast = {
+        info: vi.fn(),
+        success: vi.fn(),
+        warning: vi.fn(),
+        error: vi.fn(),
+        dismiss: vi.fn(),
+        clear: vi.fn(),
+        toasts: { value: [] },
+      }
+      vi.spyOn(ui, 'useToast').mockReturnValue(toast as never)
+      const valid = { is_valid: true, issues: [], known_columns: {} }
+      let finishRunCheck: ((value: typeof valid) => void) | undefined
+      let calls = 0
+      vi.spyOn(modeling, 'validateModelingGraph').mockImplementation(() => {
+        calls += 1
+        if (calls !== 2) return Promise.resolve(valid)
+        return new Promise((resolve) => {
+          finishRunCheck = resolve
+        })
+      })
+      signIn(WRITER)
+      const wrapper = open()
+      await vi.runOnlyPendingTimersAsync()
+
+      await wrapper
+        .findAll('button')
+        .find((b) => b.text() === '开始训练')
+        ?.trigger('click')
+      await vi.advanceTimersByTimeAsync(0)
+      await wrapper.find('.dt-ml-palette__item').trigger('click')
+      await vi.advanceTimersByTimeAsync(450)
+      finishRunCheck?.(valid)
+      await vi.advanceTimersByTimeAsync(0)
+
+      expect(toast.warning).not.toHaveBeenCalledWith(
+        '流水线还有问题，先改好再运行',
+      )
+    } finally {
+      vi.useRealTimers()
+    }
   })
 })
 
@@ -1310,7 +1395,7 @@ it('自动整理入口只调整位置，可撤销并随工作流保存', async (
   await flushPromises()
   const arrange = wrapper
     .findAll('button')
-    .find((button) => button.text().trim() === '自动整理')
+    .find((button) => button.text().trim() === '一键整理')
   if (!arrange) throw new Error('缺少自动整理入口')
   await arrange.trigger('click')
   await flushPromises()
@@ -1335,4 +1420,97 @@ it('自动整理入口只调整位置，可撤销并随工作流保存', async (
   const first = graph?.nodes.find((node) => node.id === 'source')
   const next = graph?.nodes.find((node) => node.id === 'target')
   expect(first?.position.left).toBeLessThan(next?.position.left ?? 0)
+})
+
+describe('运行结束之后', () => {
+  it('打开训练历史时现取列表，跑完的那条不再停在排队中', async () => {
+    stubApi()
+    signIn(WRITER)
+    const wrapper = open()
+    await flushPromises()
+    const list = vi.mocked(modeling.listModelingRuns)
+    const before = list.mock.calls.length
+
+    await wrapper
+      .findAll('button')
+      .find((b) => b.text() === '训练历史')
+      ?.trigger('click')
+    await flushPromises()
+
+    expect(list.mock.calls.length).toBe(before + 1)
+  })
+
+  it('训练并发布里发布没成时把原因说出来', async () => {
+    stubApi()
+    vi.spyOn(modeling, 'getModelingRun').mockResolvedValue({
+      ...runOf('succeeded'),
+      auto_publish: true,
+      publication_status: 'failed',
+      publication_error: '模型输入输出签名已改变，请核对并显式确认',
+    })
+    query['run_id'] = 'r1'
+    signIn(WRITER)
+    const wrapper = open()
+    await flushPromises()
+
+    expect(wrapper.text()).toContain('自动发布没有成功')
+    expect(wrapper.text()).toContain('模型输入输出签名已改变')
+  })
+
+  it('照提示点「发布本次模型」发成之后，发布失败的提示随之撤下', async () => {
+    stubApi()
+    const failed = {
+      ...runOf('succeeded'),
+      auto_publish: true,
+      publication_status: 'failed' as const,
+      publication_error: '模型输入输出签名已改变，请核对并显式确认',
+    }
+    vi.spyOn(modeling, 'getModelingRun')
+      .mockResolvedValueOnce(failed)
+      .mockResolvedValue({
+        ...failed,
+        publication_status: 'published',
+        publication_error: null,
+      })
+    vi.spyOn(workflow, 'deployModelingRun').mockResolvedValue({
+      code: 'p1',
+    } as never)
+    query['run_id'] = 'r1'
+    signIn([...WRITER, PERMISSION_CODES.modelingPublish])
+    const wrapper = open()
+    await flushPromises()
+
+    await wrapper
+      .findAll('button')
+      .find((b) => b.text() === '发布本次模型')
+      ?.trigger('click')
+    await flushPromises()
+    useConfirm().resolve(true)
+    await flushPromises()
+
+    expect(workflow.deployModelingRun).toHaveBeenCalledOnce()
+    expect(wrapper.text()).not.toContain('自动发布没有成功')
+  })
+
+  it('改名框里输入法回车上屏不会把弹窗提交掉', async () => {
+    stubApi()
+    signIn(WRITER)
+    const wrapper = open()
+    await flushPromises()
+    await wrapper.findAll('.dt-ml-palette__item')[0]?.trigger('click')
+    await flushPromises()
+    await wrapper.find('.dt-ml-canvas__node').trigger('pointerdown')
+    window.dispatchEvent(new KeyboardEvent('keydown', { key: 'F2' }))
+    await flushPromises()
+    const input = wrapper.find('input[placeholder="例如：剔除异常行"]')
+    await input.setValue('ab')
+
+    // 输入法上屏：compositionend 之后才到的那一下 keyup
+    await input.trigger('keyup', { key: 'Enter' })
+    await flushPromises()
+
+    expect(wrapper.find('input[placeholder="例如：剔除异常行"]').exists()).toBe(
+      true,
+    )
+  })
 })

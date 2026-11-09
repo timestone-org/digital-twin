@@ -6,9 +6,15 @@ import { createState, resetEditorContext } from './instanceState'
 import type { EditorState } from './instanceState'
 import * as api from '@/api/modelingTemplates'
 import { listModelingRuns, listModelingVersions } from '@/api/modeling'
-import { describeModelingError } from '../../scripts/instancePresentation'
+import {
+  describeModelingError,
+  isTraining,
+} from '../../scripts/instancePresentation'
 import { useRacedFetch } from '@/composables/useRacedFetch'
-import { isTraining } from '../../scripts/instancePresentation'
+import { changeDraft } from './instanceDraft'
+
+/** 训练中读状态失败后，隔多久再问一次。 */
+const RETRY_MS = 5000
 
 class InstanceReads {
   private readonly reader = useRacedFetch()
@@ -100,6 +106,12 @@ class InstanceReads {
         },
         fail: (caught) => {
           state.error.value = describeModelingError(caught)
+          // 读失败一次不能就此停表：还在训练就放慢一点接着问
+          if (
+            isTraining(state.instance.value?.latest_run?.status) &&
+            !this.isDisposed
+          )
+            this.poll = setTimeout(() => void this.refresh(), RETRY_MS)
         },
         settled: () => {},
       },
@@ -127,26 +139,6 @@ class InstanceReads {
     this.reader.cancel()
     this.statusReader.cancel()
   }
-}
-
-function change(
-  state: EditorState,
-  node: string,
-  key: string,
-  value: unknown,
-): void {
-  const configuration = state.parsed.value.value
-  if (configuration)
-    state.draft.value = JSON.stringify(
-      {
-        nodes: {
-          ...configuration.nodes,
-          [node]: { ...configuration.nodes[node], [key]: value },
-        },
-      },
-      null,
-      2,
-    )
 }
 
 function canSave(state: EditorState, id: string): boolean {
@@ -194,7 +186,7 @@ export function useInstanceEditor(id: Ref<string>) {
     refresh: () => reads.refresh(),
     restore: (runId: string) => reads.load(runId),
     change: (node: string, key: string, value: unknown) =>
-      change(state, node, key, value),
+      changeDraft(state, node, key, value),
     save: () => save(state, id.value, reads),
   }
 }

@@ -245,7 +245,13 @@ function onMenu(event: MouseEvent, on: MenuTarget): void {
 /** 从算子面板拖进来：只认自定义 MIME，免得把别处拖来的文本当成一次添加。 */
 function onDragOver(event: DragEvent): void {
   if (props.isReadonly || event.dataTransfer === null) return
+  // ⚠ 别的拖入物也要 preventDefault：不拦的话把文件丢上来，浏览器会直接打开它、离开编辑器
   event.preventDefault()
+  if (!event.dataTransfer.types.includes(OPERATOR_MIME)) {
+    event.dataTransfer.dropEffect = 'none'
+    dropAt.value = null
+    return
+  }
   event.dataTransfer.dropEffect = 'copy'
   dropAt.value = view.toCanvas(event.clientX, event.clientY)
 }

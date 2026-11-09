@@ -90,7 +90,8 @@ function openGroup(input: MenuInput): MenuGroup | null {
   return {
     key: 'open',
     items: [
-      entry('config', '参数', { keys: '双击', disabled: input.isReadonly }),
+      // 只读时也给：弹窗自己是只读的，回看历史时正要看当时的参数
+      entry('config', '参数', { keys: '双击' }),
       entry('result', '结果', { disabled: !input.hasResult }),
     ],
   }

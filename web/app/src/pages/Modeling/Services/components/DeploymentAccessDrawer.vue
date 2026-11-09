@@ -16,7 +16,7 @@ const props = defineProps<{
   error: string | null
 }>()
 
-const emit = defineEmits<{ close: [] }>()
+const emit = defineEmits<{ close: []; called: [] }>()
 
 /** 调用地址。⚠ 摆出来是为了让人直接复制，不必去翻文档。 */
 const endpoint = computed(() => {
@@ -68,7 +68,11 @@ const signatureUrl = computed(() => {
       />
       <p class="dt-ml-keys__endpoint">GET {{ signatureUrl }}</p>
 
-      <DeploymentTrial v-if="props.deployment" :deployment="props.deployment" />
+      <DeploymentTrial
+        v-if="props.deployment"
+        :deployment="props.deployment"
+        @called="emit('called')"
+      />
 
       <section>
         <h4 class="dt-ml-keys__title">近一个月的调用量</h4>

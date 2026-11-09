@@ -371,7 +371,8 @@ export function breakdownOf(payload: Item): Breakdown {
     scoreKind: asText(payload['score_kind']),
     baseline: asNumber(payload['baseline']),
     items: asItems(payload['items']).map((item) => ({
-      name: asText(item['name']),
+      // ⚠ 监督模型概况与时间平移那几块把项名写在 label 上，别的都写 name
+      name: asText(item['name']) || asText(item['label']),
       value: asNumber(item['value']),
       spread: asNumber(item['spread']),
     })),

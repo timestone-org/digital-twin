@@ -52,11 +52,6 @@ const emit = defineEmits<{ move: [key: string, direction: number] }>()
       opacity: 0.5;
       cursor: not-allowed;
     }
-
-    &--warn {
-      border-color: var(--state-warning);
-      color: var(--state-warning);
-    }
   }
 
   &__priority {

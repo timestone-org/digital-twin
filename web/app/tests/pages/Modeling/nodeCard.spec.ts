@@ -99,6 +99,15 @@ describe('节点卡片', () => {
     expect(wrapper.classes()).toContain('dt-ml-node--failed')
   })
 
+  // ⚠ 卡片上那行是单行省略号，长报错只剩十来个字；悬停要看得到全文
+  it('错误全文挂在悬停提示上', () => {
+    const wrapper = open({ state: 'failed', errorText: '列 x 不存在于上游' })
+
+    expect(wrapper.get('.dt-ml-node__error').attributes('title')).toBe(
+      '列 x 不存在于上游',
+    )
+  })
+
   it('没有结果时不给「结果」那颗键', () => {
     expect(open({ state: 'succeeded' }).text()).not.toContain('结果')
   })

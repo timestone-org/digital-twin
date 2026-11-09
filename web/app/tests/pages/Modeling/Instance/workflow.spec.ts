@@ -259,7 +259,9 @@ it('加载与写入失败给出可重试反馈', async () => {
   )
   const wrapper = await openPage()
   expect(wrapper.text()).toContain('请求失败')
-  await button(wrapper, '重新加载').trigger('click')
+  // 没加载出实例时只给页面态那一个重试，不再叠一条同样的红条
+  expect(wrapper.text().split('请求失败').length - 1).toBe(1)
+  await button(wrapper, '重试').trigger('click')
   await flushPromises()
   vi.mocked(api.trainInstance).mockRejectedValueOnce(new Error('offline'))
   await button(wrapper, '开始训练').trigger('click')
@@ -283,6 +285,18 @@ it('部署完成即可使用用户 APIKey，无需签发部署密钥', async () 
   expect(wrapper.text()).toContain('模型已部署')
   await button(wrapper, '完成').trigger('click')
   expect(wrapper.emitted('close')).toHaveLength(1)
+})
+
+it('服务编码写法不对时当场说明，不只是把按钮置灰', async () => {
+  const wrapper = mount(DeployDialog, {
+    props: { instanceId: versionSummary.pipeline_id, version: versionSummary },
+    global: { stubs: { teleport: true } },
+  })
+  wrappers.push(wrapper)
+  await wrapper.findAll('input')[1]?.setValue('Local_Service')
+
+  expect(wrapper.text()).toContain('只能用小写字母、数字或连字符')
+  expect(button(wrapper, '部署模型').attributes('disabled')).toBeDefined()
 })
 
 it('部署进行中 X 关闭不会丢掉部署结果', async () => {

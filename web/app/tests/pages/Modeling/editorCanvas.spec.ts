@@ -288,8 +288,9 @@ describe('画布组件', () => {
 })
 
 /** 一份能被 `getData` 读出算子码的假 dataTransfer。 */
-function transfer(code: string) {
+function transfer(code: string, types: string[] = [OPERATOR_MIME]) {
   return {
+    types,
     dropEffect: '',
     effectAllowed: '',
     getData: (type: string) => (type === OPERATOR_MIME ? code : ''),
@@ -347,6 +348,20 @@ describe('从算子面板拖进来', () => {
     })
 
     expect(wrapper.find('.dt-ml-canvas__ghost').exists()).toBe(true)
+  })
+
+  it('从别处拖来的文件或文字不画落点框，光标标成不可放', async () => {
+    const wrapper = open()
+    const foreign = transfer('', ['Files'])
+
+    await wrapper.find('.dt-ml-canvas').trigger('dragover', {
+      clientX: 300,
+      clientY: 200,
+      dataTransfer: foreign,
+    })
+
+    expect(wrapper.find('.dt-ml-canvas__ghost').exists()).toBe(false)
+    expect(foreign.dropEffect).toBe('none')
   })
 
   it('拖出画布之后那个落点框收掉', async () => {

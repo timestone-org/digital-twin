@@ -22,6 +22,7 @@ function actions(canEdit = true) {
     openConfig: vi.fn(),
     fit: vi.fn(),
     nudge: vi.fn(),
+    save: vi.fn(),
     canEdit: () => canEdit,
   }
 }
@@ -218,5 +219,45 @@ describe('画布快捷键', () => {
     press('Delete')
 
     expect(hooks.removeSelected).not.toHaveBeenCalled()
+  })
+})
+
+describe('和浏览器原生行为不抢', () => {
+  it('页面上划选了一段文字时 Ctrl+C 让给浏览器复制', () => {
+    const hooks = actions()
+    const wrapper = setup(hooks)
+    const text = document.createElement('p')
+    text.textContent = '列 xxx 不存在于上游'
+    document.body.append(text)
+    window.getSelection()?.selectAllChildren(text)
+
+    const event = press('c', { ctrlKey: true })
+
+    expect(hooks.copy).not.toHaveBeenCalled()
+    expect(event.defaultPrevented).toBe(false)
+    window.getSelection()?.removeAllRanges()
+    wrapper.unmount()
+  })
+
+  it('没有划选文字时 Ctrl+C 仍复制节点', () => {
+    const hooks = actions()
+    const wrapper = setup(hooks)
+    window.getSelection()?.removeAllRanges()
+
+    press('c', { ctrlKey: true })
+
+    expect(hooks.copy).toHaveBeenCalledOnce()
+    wrapper.unmount()
+  })
+
+  it('Ctrl+S 保存工作流，不弹浏览器的「存网页」', () => {
+    const hooks = actions()
+    const wrapper = setup(hooks)
+
+    const event = press('s', { metaKey: true })
+
+    expect(hooks.save).toHaveBeenCalledOnce()
+    expect(event.defaultPrevented).toBe(true)
+    wrapper.unmount()
   })
 })

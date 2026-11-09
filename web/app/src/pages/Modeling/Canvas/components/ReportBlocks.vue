@@ -59,6 +59,8 @@ const props = withDefaults(
     note?: string | undefined
     /** ④ 区的公式。骨架在前端、实参由调用方代好，这里只管摆。 */
     formulas?: readonly FormulaSpec[] | undefined
+    /** 不印区名：外面已经有一条同名的折叠条时用。 */
+    isUntitled?: boolean | undefined
   }>(),
   {
     blocks: () => [],
@@ -67,6 +69,7 @@ const props = withDefaults(
     dropped: () => [],
     note: '',
     formulas: () => [],
+    isUntitled: false,
   },
 )
 
@@ -166,7 +169,9 @@ function formulasIn(zone: ReportZone): readonly FormulaSpec[] {
       class="dt-ml-blocks__zone"
       :data-zone="group.zone"
     >
-      <h5 class="dt-ml-blocks__title">{{ ZONE_TITLES[group.zone] }}</h5>
+      <h5 v-if="!props.isUntitled" class="dt-ml-blocks__title">
+        {{ ZONE_TITLES[group.zone] }}
+      </h5>
       <div
         v-for="lane in lanesOf(group.zone, group.blocks)"
         :key="lane.key"

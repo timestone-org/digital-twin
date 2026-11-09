@@ -24,6 +24,8 @@ export interface ResultPanelDeps {
    * 份东西拆开走四条路。
    */
   nodeRunOf: (nodeId: string) => ModelingNodeRun | undefined
+  /** 这个节点的详情没拉回来的原因；没失败给 undefined。 */
+  previewErrorOf: (nodeId: string) => string | undefined
   /** 按需拉一个节点的详情。 */
   loadPreview: (nodeId: string) => Promise<void>
   /**
@@ -70,6 +72,10 @@ export function useResultPanel(deps: ResultPanelDeps) {
     /** 这个节点的详情；null = 还没拉回来。 */
     detail: computed(() =>
       nodeId.value === null ? null : (deps.nodeRunOf(nodeId.value) ?? null),
+    ),
+    /** 详情拉取失败的原因；'' = 没失败。 */
+    error: computed(() =>
+      nodeId.value === null ? '' : (deps.previewErrorOf(nodeId.value) ?? ''),
     ),
     open: async (id: string) => {
       nodeId.value = id

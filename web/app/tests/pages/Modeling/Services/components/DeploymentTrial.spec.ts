@@ -216,3 +216,23 @@ it('卸载时取消签名与试算，完成的请求不再更新页面', async (
   await flushPromises()
   expect(signal?.aborted).toBe(true)
 })
+
+it('试算跑完通知外面刷新调用量，告警按第 N 行（从 1 数）列出来', async () => {
+  vi.mocked(api.callOpenModel).mockResolvedValueOnce({
+    ...answer,
+    warnings: [
+      { row: 1, column: 'temperature', kind: 'missing', message: '缺值已补' },
+    ],
+  })
+  const wrapper = await open()
+  await wrapper
+    .get('textarea')
+    .setValue(JSON.stringify({ rows: [{ temperature: 1 }, {}] }))
+  await run(wrapper).trigger('click')
+  await flushPromises()
+
+  expect(wrapper.emitted('called')).toHaveLength(1)
+  expect(wrapper.get('[aria-label="试算告警"]').text()).toContain(
+    '第 2 行 · temperature：缺值已补',
+  )
+})

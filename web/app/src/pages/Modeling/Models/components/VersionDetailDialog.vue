@@ -79,7 +79,7 @@ watch(
         <p v-if="derived.length > 0" class="dt-ml-detail__derived">
           另有 {{ derived.length }} 列由流水线自己造：
           <code v-for="item in derived" :key="item.key">{{ item.label }}</code>
-          ——这些**不用**调用方提供。
+          ——这些<strong>不用</strong>调用方提供。
         </p>
       </section>
 

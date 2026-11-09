@@ -9,7 +9,7 @@
 /** 菜单宽度，与样式表里的 `min-width` 一致。 */
 const MENU_WIDTH = 208
 /** 一条菜单项与一条分隔线各占的高度，加上菜单自己的上下内边距。 */
-const ITEM_HEIGHT = 32
+const ITEM_HEIGHT = 34
 const SEPARATOR_HEIGHT = 9
 const MENU_PADDING = 8
 

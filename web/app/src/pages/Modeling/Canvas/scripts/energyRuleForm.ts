@@ -187,3 +187,14 @@ export function ruleConfigError(
     ? '良好比值上限不能大于预警比值上限'
     : ''
 }
+
+/** 改一项能源规则参数；换了规则类型就一并清掉不再适用的列映射，一次写入。 */
+export function changeEnergyConfig(
+  config: Record<string, unknown>,
+  key: string,
+  value: unknown,
+): Record<string, unknown> {
+  const next = { ...config, [key]: value }
+  if (key === 'kind' && config['kind'] !== value) next['fields'] = {}
+  return next
+}
