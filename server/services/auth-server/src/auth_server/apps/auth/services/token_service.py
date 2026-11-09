@@ -23,6 +23,7 @@ SESSION_KIND_CLAIM = "session_kind"
 EMBED_SESSION_KIND = "embed"
 EMBED_ACCESS_TTL_S = 300
 _REVOKED_PREFIX = "auth:refresh:revoked:"
+_REVOKED_MARK = "true"
 _BEARER_PREFIX = "bearer "
 
 
@@ -130,12 +131,17 @@ class TokenService:
             claims = self.codec.decode(token, expected_type=REFRESH_TYPE)
         except TokenError as error:
             raise TokenInvalid("刷新令牌无效或已过期") from error
-        if await self.cache.exists(_key(claims.token_id)):
+        remaining = _remaining_s(claims, now=now or utcnow())
+        if remaining <= 0:
+            raise TokenInvalid("刷新令牌无效或已过期")
+        # 查重与占位必须是同一条 SET NX：先查再写会让并发重放两边都过
+        if not await self.cache.set_if_absent(
+            _key(claims.token_id), _REVOKED_MARK, ttl_s=remaining
+        ):
             raise RefreshTokenRejected(
                 "刷新令牌已失效，请重新登录",
                 context={"token_id": claims.token_id},
             )
-        await self._revoke(claims, now=now or utcnow())
         return _subject_uuid(claims)
 
     async def revoke_refresh(
@@ -153,10 +159,14 @@ class TokenService:
         await self._revoke(claims, now=now or utcnow())
 
     async def _revoke(self, claims: TokenClaims, *, now: datetime) -> None:
-        remaining = int((claims.expires_at - now).total_seconds())
+        remaining = _remaining_s(claims, now=now)
         if remaining <= 0:
             return
         await self.cache.set_json(_key(claims.token_id), True, ttl_s=remaining)
+
+
+def _remaining_s(claims: TokenClaims, *, now: datetime) -> int:
+    return int((claims.expires_at - now).total_seconds())
 
 
 def _key(token_id: str) -> str:

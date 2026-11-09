@@ -1,5 +1,6 @@
 """锁住令牌轮换：刷新一次即失效，重放被拒，缓存不可达时 fail-closed。"""
 
+import asyncio
 import uuid
 
 import pytest
@@ -66,6 +67,32 @@ async def test_replaying_a_consumed_refresh_token_is_rejected() -> None:
     await service.consume_refresh(pair.refresh_token)
     with pytest.raises(RefreshTokenRejected):
         await service.consume_refresh(pair.refresh_token)
+
+
+class _YieldingCache(InMemoryCache):
+    """读完结果再让出事件循环，模拟两次往返之间另一请求插进来。"""
+
+    async def exists(self, key: str) -> bool:
+        found = await super().exists(key)
+        await asyncio.sleep(0)
+        return found
+
+    async def set_if_absent(self, key: str, value: str, *, ttl_s: int) -> bool:
+        written = await super().set_if_absent(key, value, ttl_s=ttl_s)
+        await asyncio.sleep(0)
+        return written
+
+
+async def test_concurrent_refreshes_of_one_token_let_only_one_through() -> None:
+    service = make_service(_YieldingCache())
+    pair = service.issue_pair(USER, now=utcnow())
+    outcomes = await asyncio.gather(
+        service.consume_refresh(pair.refresh_token),
+        service.consume_refresh(pair.refresh_token),
+        return_exceptions=True,
+    )
+    assert sum(outcome == USER for outcome in outcomes) == 1
+    assert sum(isinstance(o, RefreshTokenRejected) for o in outcomes) == 1
 
 
 async def test_revoked_refresh_token_is_rejected() -> None:
