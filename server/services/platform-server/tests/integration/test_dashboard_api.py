@@ -11,6 +11,7 @@ import pytest
 
 from integration.dashboard_helpers import (
     DASHBOARDS_URL,
+    HTTP_CONFLICT,
     HTTP_CREATED,
     HTTP_NO_CONTENT,
     HTTP_NOT_FOUND,
@@ -120,6 +121,46 @@ async def test_a_null_on_a_non_nullable_field_is_refused(
         f"{DASHBOARDS_URL}/{dashboard['id']}", json={"name": None}
     )
     assert response.status_code == 400
+
+
+async def test_a_metadata_patch_with_a_stale_version_is_refused(
+    app_client: httpx.AsyncClient,
+) -> None:
+    # ⚠ chrome_json 整包替换：不带版本断言，后存的一方静默抹掉先存的联动规则
+    project_id = await make_project(app_client)
+    dashboard = await make_dashboard(app_client, project_id=project_id)
+    url = f"{DASHBOARDS_URL}/{dashboard['id']}"
+    first = await app_client.patch(
+        url,
+        json={
+            "chrome_json": {"interactions": [1]},
+            "expected_version": dashboard["row_version"],
+        },
+    )
+    assert first.status_code == 200, first.text
+    stale = await app_client.patch(
+        url,
+        json={
+            "chrome_json": {"interactions": [2]},
+            "expected_version": dashboard["row_version"],
+        },
+    )
+    assert stale.status_code == HTTP_CONFLICT
+    kept = await app_client.get(url)
+    assert data_of(kept)["chrome_json"] == {"interactions": [1]}
+
+
+async def test_a_metadata_patch_without_a_version_still_applies(
+    app_client: httpx.AsyncClient,
+) -> None:
+    # 首页卡片改名不带版本：可选断言必须向后兼容
+    project_id = await make_project(app_client)
+    dashboard = await make_dashboard(app_client, project_id=project_id)
+    response = await app_client.patch(
+        f"{DASHBOARDS_URL}/{dashboard['id']}", json={"name": "改了名"}
+    )
+    assert response.status_code == 200
+    assert data_of(response)["name"] == "改了名"
 
 
 async def test_adding_a_node_advances_the_dashboard_version(

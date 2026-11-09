@@ -10591,6 +10591,19 @@
             ],
             "title": "Design Width"
           },
+          "expected_version": {
+            "anyOf": [
+              {
+                "minimum": 1.0,
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "description": "给了就做版本断言，与当前行版本不符即 409",
+            "title": "Expected Version"
+          },
           "name": {
             "anyOf": [
               {

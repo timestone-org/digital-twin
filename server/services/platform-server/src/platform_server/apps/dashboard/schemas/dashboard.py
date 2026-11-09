@@ -101,6 +101,13 @@ class DashboardUpdateIn(UpdateModel):
     theme_json: dict[str, Any] | None = None
     chrome_json: dict[str, Any] | None = None
     schema_version: int | None = Field(default=None, ge=1)
+    # ⚠ 可选的版本断言：`chrome_json` / `theme_json` 是整包替换，两人同时改时
+    # 后存的一方会静默抹掉先存的那份。给了就校验，不给保持原来的语义
+    expected_version: int | None = Field(
+        default=None,
+        ge=1,
+        description="给了就做版本断言，与当前行版本不符即 409",
+    )
 
 
 class ReplaceLayoutIn(InputModel):
