@@ -131,11 +131,17 @@ class ValueWatcher:
         context = contextvars.copy_context()
         context.run(bind_log_context, trace_id=new_trace_id())
         task = asyncio.get_running_loop().create_task(
-            self._on_change(self._instance_id, identifier, _unwrap(value)),
-            context=context,
+            self._deliver(identifier, _unwrap(value)), context=context
         )
         self._running.add(task)
         task.add_done_callback(self._running.discard)
+
+    async def _deliver(self, identifier: str, value: object) -> None:
+        """把一次值变化交给回调。
+
+        Args: identifier, value。
+        """
+        await self._on_change(self._instance_id, identifier, value)
 
 
 def _unwrap(value: object) -> object:
