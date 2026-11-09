@@ -52,6 +52,7 @@ export function useTwin2dAi(
         },
         bindings: () => binding.bindings.value,
         write: binding.write,
+        writeMany: binding.writeMany,
         drop: binding.drop,
         nodeId,
         nodeLabel: () => {

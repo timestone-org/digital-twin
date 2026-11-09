@@ -82,6 +82,7 @@ interface SetupOptions {
 function setup(options: SetupOptions = {}) {
   const bindings = [...(options.bindings ?? [])]
   const write = vi.fn<(binding: BindingPayload) => void>()
+  const writeMany = vi.fn<(list: readonly BindingPayload[]) => void>()
   const drop = vi.fn<(fieldKey: string) => void>()
   const save = vi.fn(() =>
     Promise.resolve({
@@ -98,6 +99,7 @@ function setup(options: SetupOptions = {}) {
     patchConfig: () => undefined,
     bindings: () => bindings,
     write,
+    writeMany,
     drop,
     nodeId: () => 'host',
     nodeLabel: () => '余热系统',
@@ -107,7 +109,14 @@ function setup(options: SetupOptions = {}) {
     save,
     savedVersion: () => 12,
   }
-  return { surface: createTwin2dSurface(deps), write, drop, save, selection }
+  return {
+    surface: createTwin2dSurface(deps),
+    write,
+    writeMany,
+    drop,
+    save,
+    selection,
+  }
 }
 
 async function run(
@@ -339,7 +348,7 @@ describe('解绑定', () => {
 
 describe('照抄绑定', () => {
   it('两个同款节点之间按槽位对，行号差多少都不影响', async () => {
-    const { surface, write } = setup({
+    const { surface, write, writeMany } = setup({
       bindings: [point(SOURCE.fieldKey, 'src-1:PT101')],
     })
 
@@ -358,15 +367,20 @@ describe('照抄绑定', () => {
         is_overwrite: false,
       },
     ])
-    expect(write.mock.calls[0]?.[0]).toMatchObject({
-      fieldKey: TARGET?.fieldKey,
-      nodeKey: 'src-1:PT101',
-    })
+    // ⚠ 整批一次写进去：助手的一步 = 用户的一次撤销
+    expect(writeMany).toHaveBeenCalledTimes(1)
+    expect(writeMany.mock.calls[0]?.[0]).toEqual([
+      expect.objectContaining({
+        fieldKey: TARGET?.fieldKey,
+        nodeKey: 'src-1:PT101',
+      }),
+    ])
+    expect(write).not.toHaveBeenCalled()
   })
 
   // ⚠ 这是这套数组绑定最容易「每条都有值、全接错对象」的地方
   it('对不上的行进 skipped，绝不退回按行号硬抄', async () => {
-    const { surface, write } = setup({
+    const { surface, write, writeMany } = setup({
       bindings: [point(SOURCE.fieldKey, 'src-1:PT101')],
     })
 
@@ -380,10 +394,11 @@ describe('照抄绑定', () => {
       { from_field_key: SOURCE.fieldKey, reason: '目标处没有同名的行' },
     ])
     expect(write).not.toHaveBeenCalled()
+    expect(writeMany).not.toHaveBeenCalled()
   })
 
   it('只看不动手时一条都不写', async () => {
-    const { surface, write } = setup({
+    const { surface, write, writeMany } = setup({
       bindings: [point(SOURCE.fieldKey, 'src-1:PT101')],
     })
 
@@ -396,6 +411,7 @@ describe('照抄绑定', () => {
     expect(plan.is_dry_run).toBe(true)
     expect((plan.copied as unknown[]).length).toBe(1)
     expect(write).not.toHaveBeenCalled()
+    expect(writeMany).not.toHaveBeenCalled()
   })
 
   it('认不出的实体一律抛，不交一份空计划', async () => {

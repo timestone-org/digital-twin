@@ -274,6 +274,36 @@ describe('落进撤销栈', () => {
   })
 })
 
+// ⚠ 助手照抄一批绑定是「一步」：逐条各落一帧的话，撤销要按 N 次，量大时还会把保存
+// 那一帧挤出撤销栈，脏标记从此消不掉
+describe('一批写入', () => {
+  it('整批只占一笔撤销，同 fieldKey 的沿用旧 id', () => {
+    const doc = docOf()
+    const api = bindingsOf(doc)
+    api.bind(FIRST)
+    const firstId = api.bindings.value[0]?.id
+
+    api.writeMany([
+      { ...archiveBinding(FIRST), nodeKey: 'a' },
+      { ...archiveBinding(SECOND), nodeKey: 'b' },
+    ])
+
+    expect(api.bindings.value.map((item) => item.nodeKey)).toEqual(['a', 'b'])
+    expect(api.bindings.value[0]?.id).toBe(firstId)
+    doc.undo()
+    expect(api.bindings.value.map((item) => item.fieldKey)).toEqual([FIRST])
+  })
+
+  it('空的一批不落帧', () => {
+    const doc = docOf()
+    const api = bindingsOf(doc)
+
+    api.writeMany([])
+
+    expect(doc.canUndo.value).toBe(false)
+  })
+})
+
 describe('文档还没读出来', () => {
   it('绑定表是空的，四个动作全是空操作而不是抛异常', () => {
     const api = bindingsOf(null)
