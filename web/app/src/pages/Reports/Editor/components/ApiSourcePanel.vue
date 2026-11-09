@@ -118,7 +118,7 @@ function open(source?: ApiSource, copy = false): void {
   form.value = next
   query.value = JSON.stringify(next.query ?? {}, null, 2)
   body.value = JSON.stringify(next.body ?? {}, null, 2)
-  offsetText.value = String(next.offset ?? 0)
+  offsetText.value = offsetTextOf(next)
   const mapped: ApiColumn[] = next.columns.length
     ? next.columns
     : [{ key: 'value', name: '数值', pointer: '/value', data_type: 'number' }]
@@ -130,6 +130,13 @@ function open(source?: ApiSource, copy = false): void {
   panelError.value = ''
   isOpen.value = true
   loadConnections()
+}
+/**
+ * 偏移输入框的初值。
+ * @param source 正在编辑的来源
+ */
+function offsetTextOf(source: ApiSource): string {
+  return String(source.offset ?? 0)
 }
 function copyIdentity(next: ApiSource): void {
   let suffix = 1
