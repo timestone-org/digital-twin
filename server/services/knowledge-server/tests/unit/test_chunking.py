@@ -355,3 +355,27 @@ def test_a_heading_that_is_not_the_path_tail_stays_in_the_body() -> None:
     assert len(made) == 1
     assert made[0].heading_path == "报告"
     assert "二" in made[0].text
+
+
+@pytest.mark.parametrize("width", [4, 8, 17])
+@pytest.mark.parametrize("path", [(), ("一章", "1.1 运行参数")])
+def test_many_short_lines_still_fit_the_window(
+    width: int, path: tuple[str, ...]
+) -> None:
+    """⚠ 块与块之间拼进去的换行也占预算：一行一块的纯文本日志攒上几百行，
+    没算进去的换行能把一块顶出窗口，整份文档随之判为失败。"""
+    lines = tuple(_paragraph("中" * width, *path) for _ in range(300))
+    made = StructuralChunker().split(_document(*lines), LIMITS)
+    assert oversized(made, LIMITS) == ()
+
+
+def test_a_block_cut_to_the_budget_still_fits_with_its_separators() -> None:
+    """⚠ 被句读断到刚好卡预算的那一块，顶着标题行与重叠尾巴各一个换行。"""
+    made = StructuralChunker().split(
+        _document(
+            _paragraph("中" * 2000, "一章"),
+            _paragraph("中" * 2000, "一章"),
+        ),
+        LIMITS,
+    )
+    assert oversized(made, LIMITS) == ()

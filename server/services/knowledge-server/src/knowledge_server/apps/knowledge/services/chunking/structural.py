@@ -32,6 +32,9 @@ from knowledge_server.apps.knowledge.services.parsing import (
     ParsedDocument,
 )
 
+# 标题行与重叠尾巴后面各拼一个换行，一个换行至多折一个 token
+_FRAME_SEPARATORS = 2
+
 
 def path_label(locator: Locator) -> str:
     """标题路径摊成一句。
@@ -48,13 +51,15 @@ def sized_blocks(blocks: tuple[Block, ...], max_tokens: int) -> list[Block]:
     段落无能为力——切出来仍是一块超窗的，而超出的那一截被嵌入端点悄悄丢掉。
 
     ⚠ 预算里先扣掉标题路径：它会拼进块的开头，一起进向量。不扣的话，
-    正文刚好卡在窗口上的那一块会因为顶着一行标题而超出去。
+    正文刚好卡在窗口上的那一块会因为顶着一行标题而超出去。标题与尾巴后面
+    那两个换行同理。
 
     Args: blocks, max_tokens。
     """
     made: list[Block] = []
     for block in blocks:
-        budget = max(1, max_tokens - estimated(path_label(block.locator)))
+        reserved = estimated(path_label(block.locator)) + _FRAME_SEPARATORS
+        budget = max(1, max_tokens - reserved)
         if estimated(block.text) <= budget:
             made.append(block)
             continue
@@ -86,7 +91,9 @@ class StructuralChunker:
         # 尾巴而超出去——而超出的那一截没有任何一处报错
         room = max(1, limits.max_tokens - limits.overlap_chars)
         for block in sized_blocks(document.blocks, room):
-            cost = estimated(block.text)
+            # ⚠ 连同拼在它前面的那个换行一起算：一行一块的日志攒上几百块，
+            # 漏算的换行足以把一块顶出窗口
+            cost = estimated(block.text) + 1
             if pending and _cuts_here(pending[-1], block, tokens, cost, limits):
                 made.append(_flushed(pending, carry, len(made)))
                 # ⚠ 只有「同一节里太长了」这一种断法才往下带尾巴。换节还带的
@@ -101,7 +108,9 @@ class StructuralChunker:
             if not pending:
                 # 标题路径会拼进这一块的开头，先把它的位子占上。⚠ 按首块的
                 # 路径预留：最后拼上去的是这几块的公共祖先，而祖先只会更短
-                tokens += estimated(path_label(block.locator))
+                tokens += (
+                    estimated(path_label(block.locator)) + _FRAME_SEPARATORS
+                )
             pending.append(block)
             tokens += cost
         if pending:
