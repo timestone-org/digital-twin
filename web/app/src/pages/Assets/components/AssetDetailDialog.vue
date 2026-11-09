@@ -14,15 +14,15 @@
 import { DtButton, DtInput, DtModal, DtTag, DtIconButton } from '@dt/ui'
 import { computed, ref, watch } from 'vue'
 
-import type { Asset } from '@/api/assets'
+import { ASSET_NAME_MAX_LEN, type Asset } from '@/api/assets'
 import { formatDateTime } from '@/utils/datetime'
 import { formatSize } from '@/utils/filesize'
 import AssetPreviewStage from './AssetPreviewStage.vue'
 import AssetVariantList from './AssetVariantList.vue'
 import AssetReplaceUpload from './AssetReplaceUpload.vue'
 
-/** 显示名的长度上限。⚠ 与服务端 `AssetName` 的 128 同值，两边分叉就是「存不进去却不说为什么」。 */
-const MAX_NAME_LEN = 128
+/** 显示名的长度上限，与上传那条路同一个常量。 */
+const MAX_NAME_LEN = ASSET_NAME_MAX_LEN
 
 const props = defineProps<{
   modelValue: boolean
