@@ -138,6 +138,21 @@ function isEnvelope(body: unknown): body is ApiEnvelope<unknown> {
   )
 }
 
+/** 网关自己回的非信封错误页（鉴权拒绝、限流）按状态码给出的说法。 */
+const GATEWAY_STATUS_TEXT: Readonly<Record<number, string>> = {
+  401: '登录状态已失效，请重新登录',
+  403: '没有权限执行该操作',
+  429: '请求过于频繁，请稍后再试',
+  503: '服务暂不可用或请求过于频繁，请稍后再试',
+}
+
+function malformedError(status: number): TransportError {
+  return new TransportError(
+    status,
+    GATEWAY_STATUS_TEXT[status] ?? '服务端响应格式异常',
+  )
+}
+
 async function readEnvelope<T>(
   response: Response,
 ): Promise<ApiEnvelope<T> | null> {
@@ -147,11 +162,9 @@ async function readEnvelope<T>(
     body = await response.json()
   } catch (error) {
     if (isTimeout(error)) throw timeoutError(response.status)
-    throw new TransportError(response.status, '服务端响应格式异常')
+    throw malformedError(response.status)
   }
-  if (!isEnvelope(body)) {
-    throw new TransportError(response.status, '服务端响应格式异常')
-  }
+  if (!isEnvelope(body)) throw malformedError(response.status)
   // 全仓唯一一处对后端数据的断言：形状由 openapi 契约测试锁，见
   // app/tests/contract/openapi-shapes.contract.spec.ts。调用侧一律不许再断言。
   return { ...body, data: body.data as T }
