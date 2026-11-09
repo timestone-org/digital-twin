@@ -13,7 +13,7 @@ import type { Page, PointMatchesOut } from '@dt/contracts'
 import * as collectApi from '@/api/collect'
 import * as searchApi from '@/api/collectSearch'
 import * as client from '@/api/client'
-import { DtSwitch } from '@dt/ui'
+import { DtModal, DtSwitch } from '@dt/ui'
 import type { CollectPoint, CollectSource } from '@dt/contracts'
 import PointPickerDialog from '@/components/binding/PointPickerDialog.vue'
 
@@ -434,6 +434,32 @@ describe('智能检索', () => {
       expect.any(AbortSignal),
     )
     expect(wrapper.text()).not.toContain('语义检索暂不可用')
+    wrapper.unmount()
+  })
+})
+
+describe('副标题', () => {
+  it('给了行名就用行名，不把内部字段键摆给用户看', async () => {
+    const wrapper = mount(PointPickerDialog, {
+      props: {
+        modelValue: true,
+        fieldKey: 'nodeValues[0].value',
+        label: '余热源A · 输入能量',
+      },
+      global: { stubs: { Teleport: true } },
+    })
+    await flushPromises()
+
+    expect(wrapper.getComponent(DtModal).props('description')).toBe(
+      '余热源A · 输入能量',
+    )
+    wrapper.unmount()
+  })
+
+  it('没给行名时退回字段键', async () => {
+    const wrapper = await opened()
+
+    expect(wrapper.getComponent(DtModal).props('description')).toBe('value')
     wrapper.unmount()
   })
 })

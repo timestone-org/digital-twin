@@ -25,6 +25,8 @@ const props = withDefaults(
   defineProps<{
     modelValue: boolean
     fieldKey: string | null
+    /** 给人看的行名（如「余热源A · 输入能量」）；不给才退回字段键作副标题。 */
+    label?: string | undefined
     /**
      * 叠放层级，原样交给 DtModal。
      * ⚠ 从另一个弹窗里打开这个面板时必须给 `confirm`：同层的两个弹窗 z-index
@@ -32,7 +34,7 @@ const props = withDefaults(
      */
     layer?: 'modal' | 'confirm'
   }>(),
-  { layer: 'modal' },
+  { layer: 'modal', label: undefined },
 )
 
 const emit = defineEmits<{
@@ -78,7 +80,7 @@ async function choose(point: CollectPoint | PointMatchOut): Promise<void> {
   <DtModal
     :model-value="modelValue"
     title="挑一个采集点位"
-    :description="fieldKey ?? undefined"
+    :description="label ?? fieldKey ?? undefined"
     :layer="props.layer"
     width="40rem"
     @update:model-value="emit('update:modelValue', $event)"
