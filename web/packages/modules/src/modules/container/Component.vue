@@ -8,7 +8,12 @@ import type { ModuleMeta } from '@dt/contracts'
 import { computed, type CSSProperties } from 'vue'
 
 import { coverBackground } from '../../shared/background'
-import { readBoolean, readNumber, readText } from '../../shared/config'
+import {
+  readBoolean,
+  readNumber,
+  readText,
+  readTrimmedText,
+} from '../../shared/config'
 import {
   CONTAINER_CONFIG_KEY,
   SHOW_TITLE_CONFIG_KEY,
@@ -47,8 +52,8 @@ const title = computed(() => readText(props.config.title))
 const isTitleShown = computed(() =>
   readBoolean(props.config[SHOW_TITLE_CONFIG_KEY]),
 )
-const accent = computed(() =>
-  readText(props.config.accent, 'var(--accent-primary)'),
+const accent = computed(
+  () => readTrimmedText(props.config.accent) || 'var(--accent-primary)',
 )
 const background = computed(() => readText(props.config.background))
 // 素材引用 / 图片地址 / CSS 值三条路各有各的铺法，见 shared/background.ts
