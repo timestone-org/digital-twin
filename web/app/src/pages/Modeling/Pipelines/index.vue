@@ -440,9 +440,11 @@ onMounted(() => void list.reload())
     max-width: 100%;
   }
 
+  // ⚠ 行高要撑开：DtTag 给的是 line-height:1，配上 overflow:hidden 会把下划线这类下伸笔画裁掉
   &__code-text {
     min-width: 0;
     overflow: hidden;
+    line-height: 1.4;
     text-overflow: ellipsis;
   }
 
@@ -452,12 +454,6 @@ onMounted(() => void list.reload())
     color: var(--text-secondary);
     text-overflow: ellipsis;
     white-space: nowrap;
-  }
-
-  &__icon {
-    display: inline-flex;
-    align-items: center;
-    color: var(--text-secondary);
   }
 }
 </style>

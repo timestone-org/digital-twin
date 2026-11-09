@@ -13,8 +13,9 @@
 import { DtCheckbox, DtField, DtInput } from '@dt/ui'
 import { computed, ref } from 'vue'
 
-type LedgerColumn = { key: string; name: string }
 import ColumnPriorities from './ColumnPriorities.vue'
+
+type LedgerColumn = { key: string; name: string }
 
 const props = defineProps<{
   modelValue: readonly string[]
