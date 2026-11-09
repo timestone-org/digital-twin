@@ -47,6 +47,10 @@ export interface Twin2dCommandDeps {
   selection: Twin2dEditorSelection
   /** 写配置的唯一入口（文档态的 `commit`）。 */
   commit: (next: Twin2dConfig) => void
+  /** 连续动作的一帧：同 `key` 的连着并成一帧撤销；不给就逐次各落一帧。 */
+  commitMerged?: (next: Twin2dConfig, key: string) => void
+  /** 一段连续动作到此为止。 */
+  endMerge?: () => void
   undo: () => void
   redo: () => void
   save: () => void
@@ -295,13 +299,23 @@ function selectAllCmd(ctx: Ctx): void {
 
 /**
  * 方向键微调。
+ * ⚠ 按住不放的自动重复并成一帧：各落一帧的话，三秒就把撤销栈冲光、保存那一帧也被
+ * 挤掉；每次新按下先断段，所以分开按的几下仍各占一步。
  * @param ctx 现场
  * @param at 位移（设计坐标）
+ * @param repeat 是不是按住不放的自动重复
  */
-function nudgeCmd(ctx: Ctx, at: Pt): void {
+function nudgeCmd(ctx: Ctx, at: Pt, repeat: boolean): void {
   const aim = aimOf(ctx)
   if (aim === null) return
-  ctx.deps.commit(moveOf(aim, at))
+  const next = moveOf(aim, at)
+  const { commitMerged, endMerge } = ctx.deps
+  if (commitMerged === undefined) {
+    ctx.deps.commit(next)
+    return
+  }
+  if (!repeat) endMerge?.()
+  commitMerged(next, `nudge:${aim.kind}:${aim.ids.join(',')}`)
 }
 
 /**
@@ -322,7 +336,7 @@ export function createTwin2dCommands(deps: Twin2dCommandDeps): Twin2dCommands {
       remove: () => removeCmd(ctx),
       selectAll: () => selectAllCmd(ctx),
       escape: () => deps.selection.clear(),
-      nudge: (at) => nudgeCmd(ctx, at),
+      nudge: (at, repeat) => nudgeCmd(ctx, at, repeat),
     },
   }
 }

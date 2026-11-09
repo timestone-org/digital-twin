@@ -131,8 +131,8 @@ export interface Twin2dShortcutHandlers {
   selectAll: () => void
   /** Esc：正在进行的手势按取消收场，没手势就清选中。 */
   escape: () => void
-  /** 方向键微调；位移已按栅格换算成设计像素。 */
-  nudge: (at: Pt) => void
+  /** 方向键微调；位移已按栅格换算成设计像素，`repeat` = 按住不放的自动重复。 */
+  nudge: (at: Pt, repeat: boolean) => void
 }
 
 export interface Twin2dShortcutOptions {
@@ -157,7 +157,7 @@ export function useTwin2dShortcuts(options: Twin2dShortcutOptions): void {
     const { handlers } = options
     if (action === 'nudge') {
       const at = twin2dNudgeOf(event, options.grid())
-      if (at !== null) handlers.nudge(at)
+      if (at !== null) handlers.nudge(at, event.repeat)
       return
     }
     handlers[action]()

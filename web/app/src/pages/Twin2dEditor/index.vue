@@ -150,6 +150,8 @@ const commands = createTwin2dCommands({
   config: () => config.value,
   selection,
   commit,
+  commitMerged,
+  endMerge,
   undo: () => page.doc.value?.undo(),
   redo: () => page.doc.value?.redo(),
   save: () => void save(),
