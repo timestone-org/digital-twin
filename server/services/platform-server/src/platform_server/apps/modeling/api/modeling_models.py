@@ -257,15 +257,15 @@ async def update_binding(
     binding_id: uuid.UUID,
     payload: ModelBindingUpdateIn,
     session: SessionDep,
-    _write: PublishDep,
+    write: PublishDep,
 ) -> ApiResponse[ModelBindingImpactOut]:
     """回执带影响面：哪些台账列会跟着变。重算由用户在台账页显式发起。
 
-    Args: binding_id, payload, session, _write。
+    Args: binding_id, payload, session, write。
     """
     return ok(
         await model_service.update_binding(
-            session, binding_id=binding_id, payload=payload
+            session, binding_id=binding_id, payload=payload, actor=_actor(write)
         )
     )
 
@@ -276,13 +276,13 @@ async def update_binding(
     summary="删除绑定",
 )
 async def remove_binding(
-    binding_id: uuid.UUID, session: SessionDep, _write: PublishDep
+    binding_id: uuid.UUID, session: SessionDep, write: PublishDep
 ) -> Response:
     """删绑定。之后那一列变空并给「模型未绑定」。
 
-    Args: binding_id, session, _write。
+    Args: binding_id, session, write。
     """
-    await delete_binding(session, binding_id)
+    await delete_binding(session, binding_id, _actor(write))
     return Response(status_code=status.HTTP_204_NO_CONTENT)
 
 

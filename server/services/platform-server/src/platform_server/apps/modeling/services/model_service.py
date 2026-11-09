@@ -449,10 +449,11 @@ async def update_binding(
     *,
     binding_id: uuid.UUID,
     payload: ModelBindingUpdateIn,
+    actor: Actor,
 ) -> ModelBindingImpactOut:
     """换版本 / 启停，回执带影响面。
 
-    Args: session, binding_id, payload。
+    Args: session, binding_id, payload, actor。
     """
     version_id = payload.model_version_id
     is_enabled = payload.is_enabled
@@ -463,11 +464,12 @@ async def update_binding(
             session,
             binding_id=binding_id,
             version_id=version_id,
+            actor=actor,
             is_remap_confirmed=is_remap_confirmed,
         )
     if is_enabled is not None:
         row = await binding_service.set_enabled(
-            session, binding_id=binding_id, is_enabled=is_enabled
+            session, binding_id=binding_id, is_enabled=is_enabled, actor=actor
         )
     usages = await formula_usage.find_usages(session, row.fx_code)
     return ModelBindingImpactOut(
