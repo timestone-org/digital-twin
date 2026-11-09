@@ -2,6 +2,11 @@
 # 配置来源为 no-ai.env.example；不依赖 compose.yml，不包含助手或知识库运行角色。
 name: digitaltwin-no-ai
 
+# 关停宽限：Docker 缺省 10s 就强杀，会抢在 drain（APP_DRAIN_TIMEOUT_S 缺省 20s，
+# knowledge-worker 写死 30s）前面，排在最后的归档 flush 与让租约都跑不到。
+# ⚠ 调大任何一个 *_APP_DRAIN_TIMEOUT_S 时这里要跟着调（runtime-resilience §8）
+x-stop-grace-period: &stop-grace-period 45s
+
 x-auth-environment: &auth-environment
   AUTH_REDIS_HOST: ${REDIS_HOST:?必填}
   AUTH_REDIS_PORT: ${REDIS_PORT:-6379}
@@ -497,6 +502,7 @@ services:
       interval: 10s
       timeout: 3s
       retries: 3
+    stop_grace_period: *stop-grace-period
     restart: unless-stopped
 
   platform-server:
@@ -515,6 +521,7 @@ services:
       interval: 10s
       timeout: 3s
       retries: 3
+    stop_grace_period: *stop-grace-period
     restart: unless-stopped
 
   platform-worker:
@@ -525,6 +532,7 @@ services:
     environment:
       <<: *platform-environment
       PLATFORM_APP_ROLE: worker
+    stop_grace_period: *stop-grace-period
     restart: unless-stopped
 
   platform-publisher:
@@ -536,6 +544,7 @@ services:
     environment:
       <<: *platform-environment
       PLATFORM_APP_ROLE: publisher
+    stop_grace_period: *stop-grace-period
     restart: unless-stopped
 
   collector-server:
@@ -554,6 +563,7 @@ services:
       interval: 10s
       timeout: 3s
       retries: 3
+    stop_grace_period: *stop-grace-period
     restart: unless-stopped
 
   opcua-server:
@@ -578,6 +588,7 @@ services:
       interval: 10s
       timeout: 3s
       retries: 3
+    stop_grace_period: *stop-grace-period
     restart: unless-stopped
 
   realtime-hub:
@@ -596,6 +607,7 @@ services:
       interval: 10s
       timeout: 3s
       retries: 3
+    stop_grace_period: *stop-grace-period
     restart: unless-stopped
 
   hierarchy-server:
@@ -614,6 +626,7 @@ services:
       interval: 10s
       timeout: 3s
       retries: 3
+    stop_grace_period: *stop-grace-period
     restart: unless-stopped
 
   edge-gateway:

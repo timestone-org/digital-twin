@@ -11,6 +11,7 @@ from __future__ import annotations
 import re
 from pathlib import Path
 
+import _report
 from _report import (
     STYLE,
     Violation,
@@ -25,6 +26,19 @@ from _report import (
 
 MAX_SFC_LINES = 500
 MAX_COMPOSABLE_LINES = 200
+# 组合式函数的另一种拆法：`useX.ts` 只是薄壳，状态与逻辑住在 `*State.ts`。
+# 不认它的话，上限恰好放过了最大的那几份有状态文件
+COMPOSABLE_STATE_SUFFIX = "State.ts"
+VUE_IMPORT = re.compile(r"""from\s+['"]vue['"]""")
+# 已超限的存量 `*State.ts`：并回组合式函数（按关注点拆分）后逐条删掉，不许新增
+OVERSIZED_STATE_DEBT: frozenset[str] = frozenset(
+    {
+        "web/app/src/pages/Knowledge/scripts/knowledgeState.ts",
+        "web/app/src/pages/Tools/Hierarchy/scripts/canvasPointerState.ts",
+        "web/app/src/pages/Tools/Hierarchy/scripts/hierarchyPageState.ts",
+        "web/app/src/pages/Tools/Hierarchy/scripts/hierarchyProjectsState.ts",
+    }
+)
 MAX_PROPS = 10
 # ⚠ 不是 4：§4.2 强制的 `AppShell > 页面根 > DtCard > DtDataView` 已占满 4 层，
 # 取 4 会让这两条规范互相排斥。6 层给页面自己的标记留两层。
@@ -87,12 +101,23 @@ def _components() -> list[Path]:
     return [path for path in web_sources() if path.suffix == ".vue"]
 
 
+def _is_composable_state(path: Path) -> bool:
+    return path.name.endswith(COMPOSABLE_STATE_SUFFIX) and bool(
+        VUE_IMPORT.search(read(path))
+    )
+
+
 def _composables() -> list[Path]:
     return [
         path
         for path in web_sources()
-        if path.suffix == ".ts" and path.name.startswith("use")
+        if path.suffix == ".ts"
+        and (path.name.startswith("use") or _is_composable_state(path))
     ]
+
+
+def _lines(path: Path) -> int:
+    return len(read(path).splitlines())
 
 
 def check_component_size() -> list[Violation]:
@@ -108,7 +133,9 @@ def check_component_size() -> list[Violation]:
     )
     for paths, limit in limits:
         for path in paths:
-            lines = len(read(path).splitlines())
+            if at(path) in OVERSIZED_STATE_DEBT:
+                continue
+            lines = _lines(path)
             if lines > limit:
                 found.append(
                     Violation(
@@ -117,6 +144,23 @@ def check_component_size() -> list[Violation]:
                         f"{lines} 行；逻辑抽进组合式函数或拆子组件",
                     )
                 )
+    return found
+
+
+def check_state_debt_is_current() -> list[Violation]:
+    """欠账表里的文件必须仍然存在且仍然超限——还清了就删掉那一条。"""
+    found: list[Violation] = []
+    for entry in sorted(OVERSIZED_STATE_DEBT):
+        path = _report.ROOT / entry
+        if path.is_file() and _lines(path) > MAX_COMPOSABLE_LINES:
+            continue
+        found.append(
+            Violation(
+                "超限欠账表里的条目已经还清或不存在",
+                entry,
+                "删掉它，别让欠账表变成许愿池",
+            )
+        )
     return found
 
 
@@ -315,6 +359,7 @@ def _styled_files() -> list[Path]:
 
 CHECKS = (
     check_component_size,
+    check_state_debt_is_current,
     check_props_count,
     check_template_nesting,
     check_v_for_key_is_stable,
