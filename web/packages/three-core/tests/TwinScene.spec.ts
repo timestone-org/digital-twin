@@ -539,7 +539,9 @@ describe('模型清空与装载失败', () => {
     seam.loadTwinModel.mockResolvedValue(assetOf(model))
     const wrapper = mountScene({ showStructureTree: true })
     await flushPromises()
-    await wrapper.get('[data-test="twin-structure-tree"] button').trigger('click')
+    await wrapper
+      .get('[data-test="twin-structure-tree"] button')
+      .trigger('click')
     await wrapper.get('input[aria-label="显示 pump"]').setValue(false)
     const pump = model.getObjectByName('pump')
     expect(pump?.visible).toBe(false)
@@ -908,9 +910,7 @@ describe('部件点击', () => {
     clickOn(button, 50, 50)
 
     expect(wrapper.emitted('partClick')).toBeUndefined()
-    expect(
-      document.querySelector('[data-test="part-modal-data"]'),
-    ).toBeNull()
+    expect(document.querySelector('[data-test="part-modal-data"]')).toBeNull()
     wrapper.unmount()
   })
 
@@ -952,7 +952,7 @@ describe('初始取景', () => {
     expect(
       camera.getWorldDirection(new THREE.Vector3()).angleTo(toCenter),
     ).toBeLessThan(1e-6)
-    expect(toCenter.length()).toBeGreaterThan(3 * Math.sqrt(12) / 2)
+    expect(toCenter.length()).toBeGreaterThan((3 * Math.sqrt(12)) / 2)
     wrapper.unmount()
   })
 })
