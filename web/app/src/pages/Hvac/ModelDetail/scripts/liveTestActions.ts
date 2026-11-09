@@ -48,7 +48,18 @@ export function createLiveActions(
     void loadReadings()
   }
 
-  return { loadReadings, recommend, setTuning, start }
+  /**
+   * 作废在飞的两条请求。⚠ 关弹窗必须调：上一次打开时还在算的推荐回来后会写进
+   * 下一次打开的结果区，而它是按旧读数算的。
+   */
+  function cancel(): void {
+    readingsFetch.cancel()
+    recommendFetch.cancel()
+    state.loadingReadings.value = false
+    state.recommending.value = false
+  }
+
+  return { loadReadings, recommend, setTuning, start, cancel }
 }
 
 /** 取当下工况；至少有一台读到了就顺手推荐。 */

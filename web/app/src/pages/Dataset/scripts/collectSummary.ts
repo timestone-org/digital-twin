@@ -3,9 +3,8 @@
  * `scripts/` 而不是任一页自己的目录里——两页各写一份会漂，一页引另一页的
  * 私有脚本又会让被引的那页不敢重构。
  *
- * ⚠ 这里**不写「未生效」一类的运行状态**：聚合采集器的总开关随第 5 期落地，
- * 眼下前端读不到它的真实取值。写死一句「未生效」与写死一句「已生效」是同一种
- * 谎（docs/DATASET_DESIGN.md §7.9），故一句都不写。
+ * 这里只描述台账自己配的取数方式；采集器总开关等运行状态由
+ * `Tables/scripts/useDatasetSwitches.ts` 读真实取值另行展示。
  */
 
 import type { DatasetTableSummary } from '@dt/contracts'
@@ -55,7 +54,7 @@ export function collectSummary(table: DatasetTableSummary): CollectSummary {
     const every = formatInterval(table.collect_interval_ms)
     return {
       label: `自动采集 · 每 ${every}`,
-      hint: `每 ${every} 从点位历史汇总出一行。`,
+      hint: `每 ${every}从点位历史汇总出一行。`,
     }
   }
   return {

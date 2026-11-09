@@ -13,9 +13,12 @@ import PermGuard from '@/components/PermGuard.vue'
 const props = defineProps<{
   workshops: readonly Workshop[]
   activeId: string
+  /** 车间列表取不到时的那一句；有它就不说「还没有车间」。 */
+  error?: string | null
 }>()
 
 const emit = defineEmits<{
+  retry: []
   select: [workshopId: string]
   create: []
   rename: [workshop: Workshop]
@@ -96,6 +99,17 @@ const emit = defineEmits<{
     </ul>
 
     <DtEmpty
+      v-else-if="props.error"
+      class="flex-1"
+      icon="alert-triangle"
+      title="车间列表取不到"
+      :hint="props.error"
+    >
+      <DtButton size="sm" variant="outline" @click="emit('retry')">
+        重试
+      </DtButton>
+    </DtEmpty>
+    <DtEmpty
       v-else
       class="flex-1"
       icon="building"
@@ -107,10 +121,9 @@ const emit = defineEmits<{
 
 <style scoped lang="scss">
 .workshop-rail {
-  // 随页宽伸缩而不是钉死一个数：钉死的话宽屏上它是一条越来越细的边条，
-  // 窄屏上又占掉近三成。上下限对齐达标预测页（18rem）与采集页（20rem）
-  width: clamp(16rem, 20vw, 20rem);
-  flex: none;
+  // 宽度归外层可拖动的分栏管，这里只把那一格填满
+  width: 100%;
+  flex: 1;
 
   &__list {
     display: flex;

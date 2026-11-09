@@ -13,8 +13,8 @@ import type { DtDataViewLayout } from '@dt/ui'
 import FormulaRowActions from './FormulaRowActions.vue'
 
 const COLUMNS: readonly DtDataColumn[] = [
-  { key: 'name', label: '名称', width: '16rem', card: 'title' },
-  { key: 'signature', label: '调用写法', width: '16rem', card: 'meta' },
+  { key: 'name', label: '名称', width: '15rem', card: 'title' },
+  { key: 'signature', label: '调用写法', width: '14rem', card: 'meta' },
   { key: 'expression', label: '公式体' },
   { key: 'status', label: '状态', width: '8rem' },
   {
@@ -30,7 +30,8 @@ const LAYOUT: DtDataViewLayout = {
   toggle: false,
   fill: false,
   fixedLayout: true,
-  minWidth: '64rem',
+  // ⚠ 要装得进 1280 宽屏的分组卡（约 62rem），装不下时操作列被裁掉且看不到滚动条
+  minWidth: '58rem',
   // 与台账列表等同类页面同档：够宽铺三列，窄了自己降列
   cardColumns: 3,
   cardMinWidth: '20rem',

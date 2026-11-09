@@ -184,7 +184,7 @@ describe('空间配置页', () => {
   it('只读账号看不到任何写入口，空调也点不动', async () => {
     const wrapper = await render(['ac:view'])
     expect(wrapper.text()).not.toContain('新建房间')
-    expect(wrapper.find('[aria-label="删除房间"]').exists()).toBe(false)
+    expect(wrapper.find('[aria-label^="删除房间"]').exists()).toBe(false)
     expect(wrapper.find('.ac-chip').attributes('disabled')).toBeDefined()
   })
 
@@ -249,7 +249,7 @@ describe('空间配置页', () => {
 
   it('删有空调的房间会先说清它会被后端拒绝', async () => {
     const wrapper = await renderWithHosts(['ac:view', 'ac:manage'])
-    await wrapper.find('[aria-label="删除房间"]').trigger('click')
+    await wrapper.find('[aria-label^="删除房间"]').trigger('click')
     await flushPromises()
     expect(document.body.textContent).toContain('2 台空调')
   })
@@ -294,7 +294,7 @@ describe('空间配置页', () => {
       .spyOn(hvac, 'updateRoom')
       .mockResolvedValue(room('r1', '注塑一房'))
     const wrapper = await render(['ac:view', 'ac:manage'])
-    await wrapper.find('[aria-label="重命名房间"]').trigger('click')
+    await wrapper.find('[aria-label^="重命名房间"]').trigger('click')
     await flushPromises()
     expect(nameInput()?.value).toBe('注塑房')
     await typeName('注塑一房')
@@ -306,7 +306,7 @@ describe('空间配置页', () => {
     const remove = vi.spyOn(hvac, 'deleteRoom').mockResolvedValue()
     const wrapper = await renderWithHosts(['ac:view', 'ac:manage'])
     // 空房间才走得到确认这一步：里面还有空调的房间根本不该问（见下面那一组）
-    await wrapper.findAll('[aria-label="删除房间"]')[2]?.trigger('click')
+    await wrapper.findAll('[aria-label^="删除房间"]')[2]?.trigger('click')
     await flushPromises()
     await clickInBody('删除')
     expect(remove).toHaveBeenCalledWith('r3')
@@ -328,7 +328,7 @@ describe('空间配置页', () => {
     // 前端拦不住的那类拒绝（并发改动、后端另有约束）仍要如实吐出来
     vi.spyOn(hvac, 'deleteRoom').mockRejectedValue(new Error('boom'))
     const wrapper = await renderWithHosts(['ac:view', 'ac:manage'])
-    await wrapper.findAll('[aria-label="删除房间"]')[2]?.trigger('click')
+    await wrapper.findAll('[aria-label^="删除房间"]')[2]?.trigger('click')
     await flushPromises()
     await clickInBody('删除')
     expect(document.body.textContent).toContain('请求失败')
@@ -348,7 +348,8 @@ describe('空间配置页', () => {
   it('车间列表取回失败时说出来，且不去取房间', async () => {
     vi.mocked(hvac.listWorkshops).mockRejectedValue(new Error('boom'))
     const wrapper = await render(['ac:view'])
-    expect(wrapper.text()).toContain('先选一个车间')
+    expect(wrapper.text()).toContain('车间列表取不到')
+    expect(wrapper.text()).not.toContain('先选一个车间')
     expect(hvac.listRooms).not.toHaveBeenCalled()
   })
 
@@ -475,7 +476,7 @@ describe('删不成的时候不问，直接说清下一步', () => {
     const remove = vi.spyOn(hvac, 'deleteRoom').mockResolvedValue()
     const wrapper = await renderWithHosts(['ac:view', 'ac:manage'])
 
-    await wrapper.findAll('[aria-label="删除房间"]')[0]?.trigger('click')
+    await wrapper.findAll('[aria-label^="删除房间"]')[0]?.trigger('click')
     await flushPromises()
 
     expect(remove).not.toHaveBeenCalled()
@@ -492,5 +493,29 @@ describe('删不成的时候不问，直接说清下一步', () => {
 
     expect(remove).not.toHaveBeenCalled()
     expect(document.body.textContent).toContain('先把房间移走或删掉')
+  })
+})
+
+describe('房间按钮的读屏名', () => {
+  it('带上房间名，几个房间的按钮读出来不再一模一样', async () => {
+    const wrapper = await render(['ac:view', 'ac:manage'])
+    expect(wrapper.find('[aria-label="删除房间 注塑房"]').exists()).toBe(true)
+    expect(wrapper.find('[aria-label="重命名房间 装配房"]').exists()).toBe(true)
+  })
+})
+
+describe('车间列表取不到', () => {
+  it('⚠ 照实报错并给重试，不冒充「还没有车间」', async () => {
+    vi.mocked(hvac.listWorkshops).mockRejectedValueOnce(new Error('boom'))
+    const wrapper = await render(['ac:view', 'ac:manage'])
+    expect(wrapper.text()).toContain('请求失败')
+    expect(wrapper.text()).not.toContain('还没有车间')
+    expect(wrapper.text()).not.toContain('左侧还没有车间时')
+    const retry = wrapper
+      .findAll('button')
+      .find((node) => node.text() === '重试')
+    await retry?.trigger('click')
+    await flushPromises()
+    expect(hvac.listWorkshops).toHaveBeenCalledTimes(2)
   })
 })

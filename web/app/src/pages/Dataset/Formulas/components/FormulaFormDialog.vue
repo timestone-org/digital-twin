@@ -47,6 +47,9 @@ import {
 } from '../scripts/formulaForm'
 import { categoryOptions, savedMessage } from '../scripts/formulaView'
 
+const EDIT_WARNING =
+  '改动即刻对所有引用它的台账列生效，历史行要等各自的台账重算之后才跟上。改之前先看一眼「引用」。'
+
 const NO_ERRORS: FormulaFormErrors = {
   code: '',
   name: '',
@@ -190,8 +193,7 @@ async function onSubmit(): Promise<void> {
   >
     <form class="flex flex-col gap-4" @submit.prevent="onSubmit">
       <DtNotice v-if="isEdit" intent="warning" icon="alert-triangle">
-        改动即刻对所有引用它的台账列生效，历史行要等各自的台账重算之后才跟上。
-        改之前先看一眼「引用」。
+        {{ EDIT_WARNING }}
       </DtNotice>
 
       <div class="grid grid-cols-2 gap-3">

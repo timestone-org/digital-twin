@@ -23,7 +23,10 @@ import PermGuard from '@/components/PermGuard.vue'
 import { AppShell } from '@/components/layout'
 import { describeError, useAsyncList } from '@/composables/useAsyncList'
 import { useViewMode } from '@/composables/useViewMode'
-import { useLocationPicker } from '@/features/hvac/useLocationPicker'
+import {
+  PARTIAL_WORKSHOPS_HINT,
+  useLocationPicker,
+} from '@/features/hvac/useLocationPicker'
 import { formatDateTime } from '@/utils/datetime'
 import { listEmptyState } from '@/utils/listEmpty'
 import AcDataDialog from './components/AcDataDialog.vue'
@@ -59,9 +62,11 @@ const view = useViewMode('hvac-units', 'table')
 const {
   workshopId,
   roomId,
+  rooms,
   workshopOptions,
   roomOptions,
   loadWorkshops,
+  isWorkshopListPartial,
   error: pickerError,
 } = useLocationPicker('全部')
 
@@ -93,7 +98,11 @@ onUnmounted(() => {
   clearTimeout(searchTimer)
 })
 
+// ⚠ 换车间那一刻房间还是上一个车间的：先拿它去筛新车间必然是空，紧接着选择器
+// 把房间作废又会再取一次。等房间被作废时那一次取数就够了
 watch([workshopId, roomId], () => {
+  const room = rooms.value.find((item) => item.id === roomId.value)
+  if (roomId.value !== '' && room?.workshop.id !== workshopId.value) return
   void list.reloadFromFirstPage()
 })
 
@@ -171,6 +180,9 @@ onMounted(() => {
     <!-- h-full + min-h-0 见 AppShell 的契约：main 不滚，高度由页面自己吃满 -->
     <div class="flex h-full min-h-0 flex-col gap-4">
       <DtNotice v-if="pickerError" intent="danger">{{ pickerError }}</DtNotice>
+      <DtNotice v-else-if="isWorkshopListPartial" intent="warning">
+        {{ PARTIAL_WORKSHOPS_HINT }}
+      </DtNotice>
 
       <DtDataView
         v-model:view="view"

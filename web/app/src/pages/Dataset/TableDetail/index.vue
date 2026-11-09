@@ -12,7 +12,7 @@
 import { computed, onMounted } from 'vue'
 import { RouterView, useRoute } from 'vue-router'
 import { PERMISSION_CODES } from '@dt/contracts'
-import { DtPageState, DtTag, DtIconButton } from '@dt/ui'
+import { DtButton, DtIconButton, DtNotice, DtPageState, DtTag } from '@dt/ui'
 
 import AiDock from '@/components/ai/AiDock.vue'
 import PermGuard from '@/components/PermGuard.vue'
@@ -160,6 +160,13 @@ onMounted(() => {
           </div>
 
           <DatasetBackfill :table="detail.table.value" />
+
+          <DtNotice v-if="detail.columnsError.value" intent="warning">
+            列已保存，但刷新列清单失败：{{ detail.columnsError.value }}
+            <DtButton size="sm" variant="ghost" @click="detail.reloadColumns()">
+              重试
+            </DtButton>
+          </DtNotice>
 
           <AppTabNav :items="tabs" label="台账详情分区" />
 

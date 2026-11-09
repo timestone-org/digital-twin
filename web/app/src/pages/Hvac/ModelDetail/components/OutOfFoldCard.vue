@@ -103,13 +103,13 @@ function onScale(value: string): void {
       class="m-0 mb-2 flex list-none flex-wrap gap-x-4 gap-y-1 p-0 text-2xs text-text-secondary"
     >
       <li class="flex items-center gap-1">
-        <span class="size-2 rounded-full bg-accent-primary/70" />热行命中
+        <span class="size-2 rounded-full bg-accent-primary/70" />命中
       </li>
       <li class="flex items-center gap-1">
-        <span class="size-2 rounded-full bg-state-warning" />热行漏盖
+        <span class="size-2 rounded-full bg-state-warning" />漏盖
       </li>
       <li class="flex items-center gap-1">
-        <span class="size-2 rounded-full bg-text-disabled/40" />零行
+        <span class="size-2 rounded-full bg-text-disabled/40" />零行（判零）
       </li>
       <li class="flex items-center gap-1">
         <span class="h-2 w-4 rounded-sm bg-accent-primary/20" />±MAE 带

@@ -9,15 +9,25 @@
 import { computed, onMounted, ref, watch } from 'vue'
 import type { AcDataset, AcUnit, DtSegmentedOption } from '@dt/contracts'
 import { PERMISSION_CODES } from '@dt/contracts'
-import { DtNotice, DtResizableLayout, useConfirm, useToast } from '@dt/ui'
+import {
+  DtButton,
+  DtNotice,
+  DtResizableLayout,
+  useConfirm,
+  useToast,
+} from '@dt/ui'
 
 import * as hvac from '@/api/hvac'
 import PermGuard from '@/components/PermGuard.vue'
 import { AppShell } from '@/components/layout'
 import { describeError } from '@/composables/useAsyncList'
+import { useBusyPolling } from '@/composables/useBusyPolling'
 import { useCursorPages } from '@/composables/useCursorPages'
 import { useRacedFetch } from '@/composables/useRacedFetch'
-import { useLocationPicker } from '@/features/hvac/useLocationPicker'
+import {
+  PARTIAL_WORKSHOPS_HINT,
+  useLocationPicker,
+} from '@/features/hvac/useLocationPicker'
 import BatchStatusStrip from './components/BatchStatusStrip.vue'
 import CoverageSidebar from './components/CoverageSidebar.vue'
 import EpisodeCurveDialog from './components/EpisodeCurveDialog.vue'
@@ -53,6 +63,9 @@ const rebuildFrom = ref('')
 const rebuildTo = ref('')
 
 const batches = useStartupBatches(() => picker.roomId.value)
+/** 抽取进行中多久回读一次进度。 */
+const BATCH_POLL_MS = 5000
+const batchPolling = useBusyPolling(() => batches.load(), BATCH_POLL_MS)
 // ⚠ 翻页是替换不是追加，所以 reload() 同时就是「回到第一页」——游标栈跟着清空
 const episodes = useCursorPages(
   (after) =>
@@ -111,8 +124,10 @@ function onInspect(row: EpisodeRow): void {
   inspecting.value = row
   curve.reset()
   const known = new Set(roomUnits.value.map((item) => item.serial))
-  serial.value = row.episode.running_set.find((item) => known.has(item)) ?? ''
-  loadCurve()
+  const next = row.episode.running_set.find((item) => known.has(item)) ?? ''
+  // 台数变了交给 serial 的侦听去取，自己再取一次就是同一请求发两遍
+  if (serial.value === next) loadCurve()
+  else serial.value = next
 }
 
 async function submitExclusion(reason: string): Promise<void> {
@@ -179,13 +194,43 @@ async function onRebuild(): Promise<void> {
   )
 }
 
-watch(() => picker.roomId.value, reload)
-watch([outcome, combination], () => void episodes.reload())
+// ⚠ 换房间先清掉运行组合：上一个房间的台号在新房间里不存在，筛出来恒为空
+watch(
+  () => picker.roomId.value,
+  () => {
+    const hadFilter = combination.value !== ''
+    combination.value = ''
+    if (!hadFilter) {
+      reload()
+      return
+    }
+    // 事件那条交给 [outcome, combination] 的侦听，免得同一请求发两遍
+    if (picker.roomId.value === '') return
+    void batches.load()
+    void loadUnits()
+  },
+)
+// 换车间作废房间时组合也跟着清空，这时没有房间可取
+watch([outcome, combination], () => {
+  if (picker.roomId.value !== '') void episodes.reload()
+})
 watch(serial, loadCurve)
+// 抽取在跑就回读进度；跑完那一刻事件列表也换成新的一批
+watch(
+  () => batches.isRunning.value,
+  (running, was) => {
+    batchPolling.sync(running)
+    if (was && !running) void episodes.refresh()
+  },
+)
 
 onMounted(() => {
   void picker.loadWorkshops()
-  void hvac.listAcDatasets().then((found) => (datasets.value = found))
+  // 指标目录只拿来给曲线取名字，取不到就退回用键名
+  void hvac
+    .listAcDatasets()
+    .then((found) => (datasets.value = found))
+    .catch(() => undefined)
 })
 </script>
 
@@ -209,6 +254,9 @@ onMounted(() => {
       <DtNotice v-if="picker.error.value" intent="danger">
         {{ picker.error.value }}
       </DtNotice>
+      <DtNotice v-else-if="picker.isWorkshopListPartial.value" intent="warning">
+        {{ PARTIAL_WORKSHOPS_HINT }}
+      </DtNotice>
       <DtNotice v-else-if="picker.roomId.value === ''" intent="info">
         先选一个房间——开机事件是房间级的，不是某一台空调的。
       </DtNotice>
@@ -216,6 +264,7 @@ onMounted(() => {
       <template v-else>
         <BatchStatusStrip
           :batch="batches.current.value"
+          :loading="batches.loading.value"
           :is-stale="batches.isStale.value"
           :rebuilding="batches.rebuilding.value"
           :from="rebuildFrom"
@@ -227,6 +276,9 @@ onMounted(() => {
         />
         <DtNotice v-if="batches.error.value" intent="danger">
           {{ batches.error.value }}
+          <DtButton size="sm" variant="ghost" @click="batches.load()">
+            重试
+          </DtButton>
         </DtNotice>
 
         <DtResizableLayout

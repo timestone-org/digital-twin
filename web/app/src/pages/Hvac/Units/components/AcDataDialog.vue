@@ -112,11 +112,24 @@ async function onSaveLimits(): Promise<void> {
           :disabled="config.loadingObjects.value"
           :options="config.objectOptions.value"
           :display="{
-            placeholder: '选择外部库里的一个对象',
+            placeholder: config.loadingObjects.value
+              ? '正在读取外部库里的对象…'
+              : '选择外部库里的一个对象',
             emptyText: '外部库里没有列结构匹配的对象',
           }"
+          :error="config.objectsError.value ?? undefined"
           hint="只列出列结构与该数据集相符的对象，因此不能手填"
         />
+        <div v-if="config.objectsError.value">
+          <DtButton
+            size="sm"
+            variant="ghost"
+            :loading="config.loadingObjects.value"
+            @click="config.reloadObjects()"
+          >
+            重试
+          </DtButton>
+        </div>
         <div class="flex items-center gap-2">
           <DtButton
             size="sm"
@@ -153,13 +166,13 @@ async function onSaveLimits(): Promise<void> {
           <DtInput
             v-model="config.winter.value.start"
             label="冬季开始（月-日）"
-            placeholder="11-15"
+            placeholder="如 11-15"
             class="w-40"
           />
           <DtInput
             v-model="config.winter.value.end"
             label="冬季结束（月-日）"
-            placeholder="03-15"
+            placeholder="如 03-15"
             class="w-40"
           />
         </div>

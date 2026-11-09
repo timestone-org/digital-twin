@@ -25,8 +25,13 @@ export interface AcDataConfig {
   effectiveSeason: Ref<string>
   loading: Ref<boolean>
   busy: Ref<boolean>
-  error: ComputedRef<string | null>
+  /** 写操作与校验的那一句，摆在弹窗底部。 */
+  error: Ref<string | null>
+  /** 对象清单取不回来的那一句，摆在数据源对象那一格下，不混进写操作的结果。 */
+  objectsError: Ref<string | null>
   load: () => Promise<void>
+  /** 重取当前数据集的可绑定对象。 */
+  reloadObjects: () => Promise<void>
   selectDataset: (key: string) => Promise<void>
   saveBinding: () => Promise<boolean>
   removeBinding: () => Promise<boolean>
@@ -64,7 +69,8 @@ export function useAcDataConfig(acUnitId: () => string): AcDataConfig {
     objectOptions: state.objects.options,
     loadingObjects: state.objects.loading,
     boundObject: computed(() => ops.boundObjectOf(state)),
-    error: computed(() => state.failure.value ?? state.objects.error.value),
+    error: state.failure,
+    objectsError: state.objects.error,
     dataset: computed(() =>
       state.datasets.value.find((item) => item.key === state.datasetKey.value),
     ),
@@ -75,6 +81,7 @@ export function useAcDataConfig(acUnitId: () => string): AcDataConfig {
       })),
     ),
     load: () => ops.load(state),
+    reloadObjects: () => state.objects.load(state.datasetKey.value),
     selectDataset: (key) => ops.selectDataset(state, key),
     saveBinding: () => ops.saveBinding(state),
     removeBinding: () => ops.removeBinding(state),

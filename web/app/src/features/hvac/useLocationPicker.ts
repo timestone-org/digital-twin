@@ -16,6 +16,9 @@ import { useRacedFetch, type RacedFetch } from '@/composables/useRacedFetch'
 /** 一次取满的上限，与后端分页上限同值。 */
 const PAGE_SIZE = 200
 
+/** 车间列表被截断时的提示语；各页照这一句说，不各写一份。 */
+export const PARTIAL_WORKSHOPS_HINT = `车间超过 ${PAGE_SIZE} 个，下拉里只列出前 ${PAGE_SIZE} 个`
+
 /** 「全部」在选择器里的取值。空串而不是 undefined：DtSelect 的 v-model 是 string。 */
 export const ANY_LOCATION = ''
 

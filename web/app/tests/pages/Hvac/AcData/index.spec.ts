@@ -408,3 +408,54 @@ describe('呈现方式', () => {
     expect(wrapper.text()).toContain('数据集')
   })
 })
+
+describe('折线视图的取数', () => {
+  it('⚠ 折线视图下换区间不去拉表格那条，切回表格才补一次', async () => {
+    await open()
+    await click('折线')
+    vi.mocked(hvac.listRawSamples).mockClear()
+    await click('近 1 小时')
+    expect(hvac.listRawSamples).not.toHaveBeenCalled()
+    await click('表格')
+    expect(hvac.listRawSamples).toHaveBeenCalledTimes(1)
+  })
+
+  it('⚠ 序列取数的一般失败说出原因并给重试，不冒充「暂无数据」', async () => {
+    vi.mocked(hvac.getRawSeries).mockRejectedValue(new Error('boom'))
+    const wrapper = await open()
+    await click('折线')
+    expect(wrapper.text()).toContain('请求失败')
+    expect(wrapper.find('[data-test="chart"]').exists()).toBe(false)
+    vi.mocked(hvac.getRawSeries).mockResolvedValue(series([1]))
+    await click('重试')
+    expect(wrapper.find('[data-test="chart"]').exists()).toBe(true)
+  })
+
+  it('换数据集时勾选改成新数据集的默认指标', async () => {
+    const hourly = catalog('hourly', '小时数据')
+    const metric = hourly.metrics[2]
+    if (metric === undefined) throw new Error('fixture')
+    vi.mocked(hvac.listAcDatasets).mockResolvedValue([
+      catalog(),
+      {
+        ...hourly,
+        metrics: [{ ...metric, is_charted_by_default: true }],
+      },
+    ])
+    await open()
+    await click('折线')
+    const trigger = [...document.querySelectorAll('label')]
+      .find((node) => node.textContent?.trim().startsWith('数据集'))
+      ?.getAttribute('for')
+    document
+      .getElementById(trigger ?? '')
+      ?.dispatchEvent(new MouseEvent('click', { bubbles: true }))
+    await flushPromises()
+    ;[...document.querySelectorAll('[role="option"]')]
+      .find((node) => node.textContent?.trim() === '小时数据')
+      ?.dispatchEvent(new MouseEvent('click', { bubbles: true }))
+    await flushPromises()
+    const query = vi.mocked(hvac.getRawSeries).mock.calls.at(-1)?.[1]
+    expect(query?.metrics).toEqual(['fan_frequency'])
+  })
+})

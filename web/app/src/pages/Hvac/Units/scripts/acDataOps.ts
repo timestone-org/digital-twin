@@ -109,14 +109,21 @@ async function write(
   }
 }
 
+/**
+ * 保存当前数据集的绑定。⚠ 回执回来时弹窗可能已换成另一台空调，只在仍是同一台
+ * 时写状态，否则会把 A 的绑定挂到 B 头上。
+ * @param state 弹窗状态
+ */
 export async function saveBinding(state: ConfigState): Promise<boolean> {
   if (state.sourceObject.value === '') return false
+  const id = state.acUnitId()
   return await write(state, async () => {
     const saved = await hvac.putAcDataBinding(
-      state.acUnitId(),
+      id,
       state.datasetKey.value,
       state.sourceObject.value,
     )
+    if (state.acUnitId() !== id) return
     state.bindings.value = [
       ...state.bindings.value.filter((item) => item.dataset !== saved.dataset),
       saved,
@@ -124,10 +131,16 @@ export async function saveBinding(state: ConfigState): Promise<boolean> {
   })
 }
 
+/**
+ * 解除当前数据集的绑定；跨空调的守卫同 `saveBinding`。
+ * @param state 弹窗状态
+ */
 export async function removeBinding(state: ConfigState): Promise<boolean> {
   const key = state.datasetKey.value
+  const id = state.acUnitId()
   return await write(state, async () => {
-    await hvac.deleteAcDataBinding(state.acUnitId(), key)
+    await hvac.deleteAcDataBinding(id, key)
+    if (state.acUnitId() !== id) return
     state.bindings.value = state.bindings.value.filter(
       (item) => item.dataset !== key,
     )

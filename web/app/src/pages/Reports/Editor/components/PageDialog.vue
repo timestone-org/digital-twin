@@ -1,9 +1,15 @@
 <script setup lang="ts">
 /** @fileoverview Word 纸张、页边距与页眉页脚配置。 */
 import { useFormDirty } from '@/composables/useFormDirty'
-import { ref, watch } from 'vue'
+import { computed, ref, watch } from 'vue'
 import { DtButton, DtInput, DtModal, DtSelect, DtCheckbox } from '@dt/ui'
 import type { ReportPage } from '@dt/contracts'
+import {
+  FONT_SIZE_RANGE,
+  MARGIN_RANGE,
+  boundedError,
+  boundedNumber,
+} from '../scripts/pageForm'
 const props = defineProps<{ modelValue: boolean; page: ReportPage }>()
 const emit = defineEmits<{
   'update:modelValue': [value: boolean]
@@ -26,6 +32,30 @@ const dirty = useFormDirty(
   [size, orientation, header, footer, watermark, fontSize, toc, margins],
   () => props.modelValue,
 )
+/** 是否点过「应用」：点之前不提前亮红。 */
+const isSubmitted = ref(false)
+const PAPER_OPTIONS = [
+  { value: 'A4', label: 'A4' },
+  { value: 'A3', label: 'A3' },
+  { value: 'Letter', label: 'Letter' },
+  { value: 'Legal', label: 'Legal' },
+]
+// 工具栏改纸张会写成 custom；不列这一项的话下拉是空白的
+const paperOptions = computed(() =>
+  size.value === 'custom'
+    ? [...PAPER_OPTIONS, { value: 'custom', label: '自定义（工具栏设置）' }]
+    : PAPER_OPTIONS,
+)
+const fontSizeError = computed(() =>
+  isSubmitted.value ? boundedError(fontSize.value, FONT_SIZE_RANGE) : '',
+)
+/**
+ * 某一侧边距的报错。
+ * @param key 哪一侧
+ */
+function marginError(key: (typeof sides)[number]['key']): string {
+  return isSubmitted.value ? boundedError(margins.value[key], MARGIN_RANGE) : ''
+}
 const sides = [
   { key: 'top', label: '上' },
   { key: 'bottom', label: '下' },
@@ -36,6 +66,7 @@ watch(
   () => props.modelValue,
   (open) => {
     if (!open) return
+    isSubmitted.value = false
     size.value = props.page.size ?? 'A4'
     orientation.value = props.page.orientation ?? 'portrait'
     header.value = props.page.header ?? ''
@@ -53,7 +84,28 @@ function resetMargins(): void {
         (side.key === 'left' || side.key === 'right' ? 3.18 : 2.54),
     )
 }
+/** 四边距都合法时给出数值，任一不合法给 null。 */
+function parsedMargins(): {
+  top: number
+  bottom: number
+  left: number
+  right: number
+} | null {
+  const margin = (key: (typeof sides)[number]['key']) =>
+    boundedNumber(margins.value[key], MARGIN_RANGE)
+  const top = margin('top')
+  const bottom = margin('bottom')
+  const left = margin('left')
+  const right = margin('right')
+  if (top === null || bottom === null || left === null || right === null)
+    return null
+  return { top, bottom, left, right }
+}
 function save(): void {
+  isSubmitted.value = true
+  const font = boundedNumber(fontSize.value, FONT_SIZE_RANGE)
+  const parsed = parsedMargins()
+  if (font === null || parsed === null) return
   const paper =
     size.value === 'A3' ||
     size.value === 'Letter' ||
@@ -67,15 +119,10 @@ function save(): void {
     orientation: orientation.value === 'landscape' ? 'landscape' : 'portrait',
     header: header.value,
     footer: footer.value,
-    font_size_pt: Number(fontSize.value),
+    font_size_pt: font,
     is_toc_enabled: toc.value,
     watermark: { ...props.page.watermark, text: watermark.value },
-    margins_cm: {
-      top: Number(margins.value.top),
-      bottom: Number(margins.value.bottom),
-      left: Number(margins.value.left),
-      right: Number(margins.value.right),
-    },
+    margins_cm: parsed,
   })
   emit('update:modelValue', false)
 }
@@ -89,17 +136,7 @@ function save(): void {
     @update:model-value="emit('update:modelValue', $event)"
   >
     <div class="dt-form-grid">
-      <DtSelect
-        v-model="size"
-        label="纸张"
-        size="sm"
-        :options="[
-          { value: 'A4', label: 'A4' },
-          { value: 'A3', label: 'A3' },
-          { value: 'Letter', label: 'Letter' },
-          { value: 'Legal', label: 'Legal' },
-        ]"
-      />
+      <DtSelect v-model="size" label="纸张" size="sm" :options="paperOptions" />
       <DtSelect
         v-model="orientation"
         label="方向"
@@ -115,10 +152,16 @@ function save(): void {
           :key="side.key"
           v-model="margins[side.key]"
           :label="`${side.label}边距（厘米）`"
+          :error="marginError(side.key)"
           size="sm"
         />
       </div>
-      <DtInput v-model="fontSize" label="正文字号（磅）" size="sm" />
+      <DtInput
+        v-model="fontSize"
+        label="正文字号（磅）"
+        :error="fontSizeError"
+        size="sm"
+      />
       <DtInput v-model="header" label="页眉" size="sm" />
       <DtInput v-model="footer" label="页脚" size="sm" />
       <DtInput v-model="watermark" label="水印文字" size="sm" />

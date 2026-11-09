@@ -18,8 +18,12 @@ export interface TextInsertion {
   moveToEnd: (length: number) => void
   /** 当前选中的那一段；工具箱据此决定套住还是插入。 */
   selected: (text: string) => string
-  /** 插一段进去，返回新文本；焦点与光标一并还给输入框。 */
-  insert: (text: string, payload: InsertPayload) => Promise<string>
+  /** 插一段进去：先经 `commit` 写回新文本，再把焦点与光标还给输入框。 */
+  insert: (
+    text: string,
+    payload: InsertPayload,
+    commit: (next: string) => void,
+  ) => Promise<void>
 }
 
 /**
@@ -45,18 +49,28 @@ export function useTextInsertion(
     return text.slice(selection.value.start, selection.value.end)
   }
 
-  async function insert(text: string, payload: InsertPayload): Promise<string> {
+  /**
+   * 插一段进去。
+   * ⚠ 新文本必须在等 DOM 之前写回：先设光标再换内容，浏览器会把光标甩到末尾。
+   * @param text 插入前的全文
+   * @param payload 要插的片段与片段内的光标
+   * @param commit 把新全文写回模型
+   */
+  async function insert(
+    text: string,
+    payload: InsertPayload,
+    commit: (next: string) => void,
+  ): Promise<void> {
     const { start, end } = selection.value
     const next = spliceText(text, start, end, payload.snippet, payload.caret)
     selection.value = { start: next.start, end: next.end }
-    // 位置要等 v-model 回流、DOM 更新完之后再设，否则设在旧内容上
+    commit(next.text)
     await nextTick()
     const node = element()
     if (node !== null) {
       node.focus()
       node.setSelectionRange(next.start, next.end)
     }
-    return next.text
   }
 
   return { selection, sync, moveToEnd, selected, insert }

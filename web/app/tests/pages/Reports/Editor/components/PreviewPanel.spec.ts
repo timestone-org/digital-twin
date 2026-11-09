@@ -124,3 +124,27 @@ it('API 来源即使未插入正文也展示映射样例与核对时间', () => 
   expect(wrapper.text()).toContain('核对时间')
   expect(wrapper.text()).toContain('本期暂无匹配数据')
 })
+
+it('⚠ 指标值按两位小数给人看，全精度留在悬停里', () => {
+  const wrapper = mount(PreviewPanel, {
+    props: {
+      preview: {
+        ...preview,
+        nodes: {},
+        metrics: [
+          {
+            name: '本期平均温度',
+            value: '25.58516091132809519230769231',
+            value_kind: 'number',
+          },
+          { name: '班组', value: '甲班', value_kind: 'text' },
+        ],
+      },
+    },
+  })
+  expect(wrapper.text()).toContain('本期平均温度：25.59')
+  expect(wrapper.text()).not.toContain('25.585160911')
+  expect(wrapper.text()).toContain('班组：甲班')
+  expect(wrapper.html()).toContain('25.58516091132809519230769231')
+  wrapper.unmount()
+})

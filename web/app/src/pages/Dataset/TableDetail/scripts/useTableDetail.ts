@@ -21,6 +21,8 @@ export interface TableDetail {
   columns: Ref<DatasetColumn[]>
   loading: Ref<boolean>
   error: Ref<string | null>
+  /** 写完列之后重取列失败的那一句；只在列那一侧提示，不替换整页。 */
+  columnsError: Ref<string | null>
   /** 取台账详情。回参已带列定义，故进页面只要这一次。 */
   load: () => Promise<void>
   /** 写完列之后只重取列，不重取整张表。 */
@@ -38,6 +40,7 @@ export function useTableDetail(tableId: () => string): TableDetail {
   const columns = ref<DatasetColumn[]>([])
   const loading = ref(false)
   const error = ref<string | null>(null)
+  const columnsError = ref<string | null>(null)
   // ⚠ 两条链路各自防竞态：重取列比取详情快得多，共用一个序号的话，
   // 一次「保存列」会把还在飞的那次详情取数判成过期，页面停在空壳上
   const detailRaced = useRacedFetch()
@@ -50,6 +53,7 @@ export function useTableDetail(tableId: () => string): TableDetail {
       ok: (result) => {
         table.value = result
         columns.value = sortByOrder(result.columns)
+        columnsError.value = null
       },
       fail: (caught) => {
         error.value = describeError(caught)
@@ -64,11 +68,12 @@ export function useTableDetail(tableId: () => string): TableDetail {
     await columnsRaced.run(() => dataset.listDatasetColumns(tableId()), {
       ok: (result) => {
         columns.value = sortByOrder(result)
+        columnsError.value = null
       },
-      // ⚠ 重取列失败不清空手上这份：这一步是写成功之后的刷新，清空会让
-      // 一次网络抖动看起来像「刚才那一列把整张表删没了」
+      // ⚠ 重取列失败不清空手上这份，也不写整页的 error：这一步是写成功之后的
+      // 刷新，整页换成「加载失败」会让一次网络抖动看起来像那一列把整张表删没了
       fail: (caught) => {
-        error.value = describeError(caught)
+        columnsError.value = describeError(caught)
       },
       settled: () => undefined,
     })
@@ -79,6 +84,7 @@ export function useTableDetail(tableId: () => string): TableDetail {
     columns,
     loading,
     error,
+    columnsError,
     load,
     reloadColumns,
     setColumns: (next) => {

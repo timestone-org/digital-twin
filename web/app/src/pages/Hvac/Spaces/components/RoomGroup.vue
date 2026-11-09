@@ -57,7 +57,7 @@ const emit = defineEmits<{
           intent="neutral"
           size="sm"
           icon="pencil"
-          aria-label="重命名房间"
+          :aria-label="`重命名房间 ${props.room.name}`"
           title="重命名房间"
           @click="emit('rename', props.room)"
         />
@@ -66,7 +66,7 @@ const emit = defineEmits<{
           intent="danger"
           size="sm"
           icon="trash"
-          aria-label="删除房间"
+          :aria-label="`删除房间 ${props.room.name}`"
           title="删除房间"
           @click="emit('remove', props.room)"
         />

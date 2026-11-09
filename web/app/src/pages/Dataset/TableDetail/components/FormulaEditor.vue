@@ -98,7 +98,9 @@ async function onInsert(payload: InsertPayload): Promise<void> {
     await branchFace.value?.insert(payload.snippet, payload.caret)
     return
   }
-  formula.value = await text.insert(formula.value, payload)
+  await text.insert(formula.value, payload, (next) => {
+    formula.value = next
+  })
 }
 
 /**

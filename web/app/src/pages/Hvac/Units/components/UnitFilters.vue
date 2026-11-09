@@ -24,8 +24,6 @@ const emit = defineEmits<{
 
 <template>
   <div class="flex flex-wrap items-end gap-3">
-    <!-- ⚠ 宽度落在外层 div 上：DtInput / DtSelect 都是 inheritAttrs: false，
-       class 会被透传到内层原生控件上，量出来的宽度不是这一格的宽度 -->
     <div class="w-56">
       <DtInput
         :model-value="props.keyword"

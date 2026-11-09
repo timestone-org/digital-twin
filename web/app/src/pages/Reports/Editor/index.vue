@@ -104,7 +104,11 @@ const ai = useAiPanel({
       templateId: () => id.value,
       draft: () => draft.value,
       setDraft: (value) => {
+        // ⚠ 换周期要走界面那条路：报告期按新周期重算，否则留着「2026-11」去试算年报
+        const next = value.granularity
+        const isRegrained = next !== draft.value.granularity
         draft.value = value
+        if (isRegrained && next !== undefined) changeGranularity(next)
       },
       canEdit: () => canEdit.value,
       insert: insertForAssistant,
