@@ -468,6 +468,21 @@ async def test_a_configuration_change_is_not_logged_as_a_shard_failure(
     assert "ac_startup_batch_failed" not in events
 
 
+async def test_a_fetch_that_hits_the_row_limit_fails_the_shard(
+    db_session: AsyncSession,
+) -> None:
+    """⚠ 取数撞上行数上限说明尾部被截掉了，不能悄悄把这一片记成跑完。"""
+    room_id = await make_room(db_session, "截断")
+    plan = await request_rebuild(
+        db_session, room_id=room_id, window=WINDOW, rules=RULES
+    )
+    context = ExtractionContext(
+        reader=StubReader(crossing_rows()), rules=RULES, max_rows=5
+    )
+    with pytest.raises(ValueError, match="上限"):
+        await run_shard(db_session, context, plan.messages[0])
+
+
 async def test_an_empty_failure_reason_still_records_the_failure(
     db_session: AsyncSession,
 ) -> None:
