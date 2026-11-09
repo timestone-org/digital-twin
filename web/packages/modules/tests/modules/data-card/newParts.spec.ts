@@ -590,6 +590,17 @@ describe('分段格子条', () => {
 })
 
 describe('名称的前导圆点', () => {
+  // ⚠ 弹性盒里裸文字是匿名项，省略号不生效、长名会被硬切；文字必须自成一项
+  it('带圆点时名称包成独立的一段，长名才有省略号', async () => {
+    const on = await card(
+      [{ kind: 'label', 'label-dot': true }],
+      [{}],
+      [{ label: '1#机组冷却水回水温度' }],
+    )
+
+    expect(on.find('.dc-label__text').text()).toBe('1#机组冷却水回水温度')
+  })
+
   it('开了才画，圆点跟格基色', async () => {
     const on = await card(
       [{ kind: 'label', 'label-dot': true }],
