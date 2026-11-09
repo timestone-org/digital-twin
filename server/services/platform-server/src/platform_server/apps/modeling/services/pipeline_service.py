@@ -46,7 +46,8 @@ from platform_server.apps.modeling.services.graph_walk import (
     source_table_codes,
 )
 
-_CODE_CONSTRAINT = "uq_modeling_pipelines_code"
+# 流水线编码的唯一约束名
+PIPELINE_CODE_CONSTRAINT = "uq_modeling_pipelines_code"
 
 
 @dataclass(frozen=True)
@@ -120,7 +121,7 @@ async def create_pipeline(
     try:
         await session.flush()
     except IntegrityError as error:
-        if not violates(error, _CODE_CONSTRAINT):
+        if not violates(error, PIPELINE_CODE_CONSTRAINT):
             raise
         raise PipelineCodeTaken("这个流水线编码已经被占用了") from error
     return presenters.to_pipeline_out(row)
