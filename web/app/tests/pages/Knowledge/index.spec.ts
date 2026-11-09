@@ -208,7 +208,7 @@ describe('首屏', () => {
       { id: 'documents' },
       { id: 'search' },
     ])
-    expect(layouts[1]?.attributes('style')).toContain('min-height: 24rem')
+    expect(layouts[1]?.attributes('style')).toContain('min-height: 32rem')
     expect(wrapper.get('main aside').text()).toContain('运维手册')
     expect(layouts[1]?.text()).toContain('一号机组.docx')
     expect(wrapper.find('input[type="search"]').exists()).toBe(true)
