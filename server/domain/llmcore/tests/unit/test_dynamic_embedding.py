@@ -18,13 +18,15 @@ from llmcore import (
 from llmcore.dynamic_embedding import OpenAiCompatEmbeddingAdapter
 
 
-def _endpoint(model: str = "embed-1", key: str = "k1") -> EmbeddingEndpoint:
+def _endpoint(
+    model: str = "embed-1", key: str = "k1", dimensions: int = 3
+) -> EmbeddingEndpoint:
     return EmbeddingEndpoint(
         base_url="https://endpoint/v1",
         api_key=SecretStr(key),
         model=model,
         timeout_s=5.0,
-        dimensions=3,
+        dimensions=dimensions,
     )
 
 
@@ -119,3 +121,16 @@ def test_the_built_client_carries_the_endpoint_shape() -> None:
     assert str(client.base_url).startswith("https://endpoint/v1")
     assert built.dimensions == 3
     assert built.id == made.id
+
+
+def test_a_corrected_dimension_count_rebuilds_the_client() -> None:
+    """⚠ 只改了登记维数时还复用旧的那个，`embed` 会一直按旧维数校验而报错。"""
+    made = DynamicEmbeddingAdapter(resolve=_Switch(_endpoint()).resolve)
+    first = made._adapter_for(  # pyright: ignore[reportPrivateUsage]
+        _endpoint()
+    )
+    widened = made._adapter_for(  # pyright: ignore[reportPrivateUsage]
+        _endpoint(dimensions=4)
+    )
+    assert widened is not first
+    assert widened.dimensions == 4

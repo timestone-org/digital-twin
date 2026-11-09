@@ -40,7 +40,7 @@ class DynamicEmbeddingAdapter:
         self._refresh = refresh
         self._id = id
         self._built: OpenAiCompatEmbeddingAdapter | None = None
-        self._built_for: tuple[str, str, str, float] | None = None
+        self._built_for: tuple[str, str, str, float, int] | None = None
 
     @property
     def id(self) -> str:
@@ -79,7 +79,7 @@ class DynamicEmbeddingAdapter:
     def _adapter_for(
         self, endpoint: EmbeddingEndpoint
     ) -> OpenAiCompatEmbeddingAdapter:
-        """端点没变就复用上一次造的客户端；变了就换一个。
+        """端点没变就复用上一次造的客户端；变了（含登记维数）就换一个。
 
         ⚠ 复用是必须的：每次调用现造一个客户端，连接不会自己回收，
         跑久了之后端口耗尽，而现象与嵌入这件事毫无关系。
@@ -91,6 +91,7 @@ class DynamicEmbeddingAdapter:
             endpoint.api_key.get_secret_value(),
             endpoint.model,
             endpoint.timeout_s,
+            endpoint.dimensions,
         )
         if self._built is None or self._built_for != signature:
             self._built = OpenAiCompatEmbeddingAdapter(
