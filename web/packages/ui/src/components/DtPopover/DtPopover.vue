@@ -152,8 +152,10 @@ defineExpose({ open: requestOpen, close: requestClose, toggle })
 .dt-popover {
   display: inline-flex;
 
+  // 按内容取宽：fixed 面板按剩余空间收缩的话，贴右对齐时会被压成一百来像素
   &__panel {
-    max-width: 22rem;
+    width: max-content;
+    max-width: min(22rem, 100vw - 16px);
     padding: 10px 12px;
     font-size: var(--ctl-fs-sm);
     line-height: 1.5;

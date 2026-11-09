@@ -59,3 +59,14 @@ describe('DtButton 高度尺寸契约', () => {
     expect(body).toMatch(/(^|\s)min-height:\s*20px;/)
   })
 })
+
+describe('DtButton 实心档的禁用态', () => {
+  // ⚠ 只压透明度的话，禁用的实心主按钮仍是一整块主题色，一排里分不出哪颗能按
+  it('换成中性底、去掉辉光', () => {
+    const body = ruleBody('.dt-btn--solid:disabled:not([aria-busy=true])')
+
+    expect(body).toMatch(/background:\s*rgba\(var\(--neutral-fg-rgb\)/)
+    expect(body).toMatch(/color:\s*var\(--text-disabled\);/)
+    expect(body).toMatch(/box-shadow:\s*none;/)
+  })
+})

@@ -102,6 +102,7 @@ const isFirstLoad = computed(() => props.loading && props.rows.length === 0)
 const empty = computed(() => ({
   title: props.empty?.title ?? '暂无数据',
   hint: props.empty?.hint,
+  icon: props.empty?.icon,
 }))
 
 /**
@@ -140,9 +141,16 @@ const SELECTION_COLUMN: DtDataColumn = {
   label: '选择',
   width: '3rem',
 }
-const tableColumns = computed(() =>
-  props.selection ? [SELECTION_COLUMN, ...props.columns] : props.columns,
-)
+/** 操作列没说贴不贴时缺省贴右：窄屏横向滚动时行内操作不许被挤出视口。 */
+function withActionsSticky(column: DtDataColumn): DtDataColumn {
+  if (column.card !== 'actions' || column.sticky !== undefined) return column
+  return { ...column, sticky: 'end' }
+}
+
+const tableColumns = computed(() => {
+  const columns = props.columns.map(withActionsSticky)
+  return props.selection ? [SELECTION_COLUMN, ...columns] : columns
+})
 const selectedIds = computed(() => new Set(props.selection?.selectedIds ?? []))
 const pageIds = computed(() => props.rows.map((row) => row.id))
 const selectionLocked = computed(
@@ -264,6 +272,7 @@ const fieldColumns = computed(() =>
         :empty="rows.length === 0"
         :empty-title="empty.title"
         :empty-hint="empty.hint"
+        :empty-icon="empty.icon"
         @retry="emit('retry')"
       >
         <DtTable
@@ -302,6 +311,7 @@ const fieldColumns = computed(() =>
       :empty="rows.length === 0"
       :empty-title="empty.title"
       :empty-hint="empty.hint"
+      :empty-icon="empty.icon"
       @retry="emit('retry')"
     >
       <div

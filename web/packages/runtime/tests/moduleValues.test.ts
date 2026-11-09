@@ -931,3 +931,18 @@ describe('时序槽的逐槽结论', () => {
     expect(result.slots[SERIES_KEY]).toEqual({ state: 'ok' })
   })
 })
+
+describe('applyEnumMap 公开出口', () => {
+  // 助手读数要与画布同一个口径：画布显示「运行」，报告里不许还是 1
+  it('从包出口可取，数值按声明映射成语义值', async () => {
+    const runtime = await import('../src/index')
+    expect(runtime.applyEnumMap(1, MODE_SPEC)).toBe('运行')
+  })
+
+  it('映射里没有的数值、非数值与没有声明的槽原样保留', async () => {
+    const { applyEnumMap } = await import('../src/index')
+    expect(applyEnumMap(7, MODE_SPEC)).toBe(7)
+    expect(applyEnumMap('1', MODE_SPEC)).toBe('1')
+    expect(applyEnumMap(1, undefined)).toBe(1)
+  })
+})

@@ -154,6 +154,36 @@ describe('DtTable', () => {
     expect(scroll.find('thead th').exists()).toBe(true)
   })
 
+  it('首列标 sticky start、末列标 sticky end：表头与每行同一列都贴边', () => {
+    const wrapper = render({
+      columns: [
+        { key: 'name', label: '名称', sticky: 'start' },
+        { key: 'extra', label: '附加' },
+        { key: 'ops', label: '操作', sticky: 'end' },
+      ],
+    })
+    const heads = wrapper.findAll('th')
+    expect(heads[0]?.classes()).toContain('is-sticky-start')
+    expect(heads[2]?.classes()).toContain('is-sticky-end')
+    expect(heads[1]?.classes()).not.toContain('is-sticky-start')
+    const firstRow = wrapper.findAll('tbody tr')[0]?.findAll('td') ?? []
+    expect(firstRow[0]?.classes()).toContain('is-sticky-start')
+    expect(firstRow[2]?.classes()).toContain('is-sticky-end')
+  })
+
+  it('sticky 只认首列 start 与末列 end：中间列贴边会盖住相邻列', () => {
+    const wrapper = render({
+      columns: [
+        { key: 'name', label: '名称', sticky: 'end' },
+        { key: 'extra', label: '附加', sticky: 'start' },
+      ],
+    })
+    for (const th of wrapper.findAll('th')) {
+      expect(th.classes()).not.toContain('is-sticky-start')
+      expect(th.classes()).not.toContain('is-sticky-end')
+    }
+  })
+
   it('删掉中间行后，剩下的行不换位——key 取 id 而不是下标', async () => {
     const wrapper = render({ rows: [ROW_A, ROW_B, ROW_C] })
     expect(wrapper.findAll('.probe').map((n) => n.text())).toEqual([

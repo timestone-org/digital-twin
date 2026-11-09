@@ -43,7 +43,8 @@ const accent = computed(() => {
   background: rgba(var(--_t-rgb), 0.12);
   border-radius: var(--radius-pill);
   color: rgb(var(--_t-rgb));
-  line-height: 1;
+  // 高度由 height 定死；行高等于字号的话，里面再包一层 truncate 会裁掉下划线
+  line-height: 1.4;
   white-space: nowrap;
 
   &--sm {
