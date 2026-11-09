@@ -188,11 +188,11 @@ function setCustom(axis: 'w' | 'h', value: number | undefined): void {
           :read-slot="shot.readSlot"
         />
       </span>
-      <span class="t2sp-size" data-test="style-preview-size">
-        {{ shots[0]?.size.w ?? nodeStyle.size.w }} ×
-        {{ shots[0]?.size.h ?? nodeStyle.size.h }}
-      </span>
     </div>
+    <span class="t2sp-size" data-test="style-preview-size">
+      {{ shots[0]?.size.w ?? nodeStyle.size.w }} ×
+      {{ shots[0]?.size.h ?? nodeStyle.size.h }}
+    </span>
 
     <div v-if="!compact" class="flex flex-col gap-2">
       <div class="flex flex-wrap gap-1" data-test="style-preview-states">
@@ -284,10 +284,10 @@ function setCustom(axis: 'w' | 'h', value: number | undefined): void {
   left: 50%;
 }
 
+// ⚠ 尺寸读数单占框下一行：压在框里的话，铺满的节点右下角（状态点）正好被它盖住
 .t2sp-size {
-  position: absolute;
-  right: 4px;
-  bottom: 2px;
+  align-self: flex-end;
+  margin-top: -4px;
   color: var(--text-disabled);
   font-size: var(--font-size-caption);
   pointer-events: none;
