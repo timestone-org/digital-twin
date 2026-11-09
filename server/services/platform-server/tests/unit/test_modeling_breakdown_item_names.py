@@ -1,7 +1,6 @@
 """按项的一组数：项名一律写在 `name` 上，开关不印成 0/1 的数卡。
 
-⚠ 别的发射点都把项名写在 `name`，监督概况与时间平移写在 `label`：前端只认
-`name` 时这几项整片没有标题，且没有任何报错。
+⚠ 前端按 `name` 取项名：写在别的键上的项整片没有标题，且没有任何报错。
 """
 
 from platform_server.apps.modeling.operators import (
