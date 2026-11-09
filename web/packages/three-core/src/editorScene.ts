@@ -235,9 +235,9 @@ export class EditorScene {
   private readonly selectionBoxTarget = new THREE.Box3()
 
   private config: TwinConfig
-  /** 宿主最近一次喂进来的五路实时值；重建覆盖层时按它重放。 */
   private readonly isolation = new PreviewIsolation()
   private isolatedPartId: string | null = null
+  /** 宿主最近一次喂进来的五路实时值；重建覆盖层时按它重放。 */
   private liveValues: SceneLayerValues = EMPTY_LAYER_VALUES
   private core: SceneCore | null = null
   private layers: SceneLayers | null = null
@@ -309,10 +309,8 @@ export class EditorScene {
   }
 
   /**
-   * 换一份实时值，只换值不重建覆盖层。
-   * ⚠ 必须记在实例上：`refresh()` 会把覆盖层整片重建，重建时不重放这一份的话，
-   * 改一下配置就会把读数全刷回占位符，而下一帧数据到来之前它一直是那样。
-   * @param values 缝合好的五路实时值
+   * 配置预览：只显示这一个部件。
+   * @param id 部件 id；null = 恢复全部
    */
   isolatePart(id: string | null): void {
     if (this.isolatedPartId === id) return
@@ -325,6 +323,12 @@ export class EditorScene {
     this.flight.flyTo(this.core, pose, this.modelSpan)
   }
 
+  /**
+   * 换一份实时值，只换值不重建覆盖层。
+   * ⚠ 必须记在实例上：`refresh()` 会把覆盖层整片重建，重建时不重放这一份的话，
+   * 改一下配置就会把读数全刷回占位符，而下一帧数据到来之前它一直是那样。
+   * @param values 缝合好的五路实时值
+   */
   setValues(values: SceneLayerValues): void {
     this.liveValues = values
     this.layers?.setValues(values)
