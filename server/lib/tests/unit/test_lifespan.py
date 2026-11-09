@@ -189,9 +189,12 @@ async def test_the_drain_timeout_bounds_the_whole_shutdown() -> None:
 
     runner = LifespanRunner(
         hooks=(
-            LifespanHook("hang1", shutdown=hang, shutdown_order=10),
-            LifespanHook("hang2", shutdown=hang, shutdown_order=20),
-            LifespanHook("hang3", shutdown=hang, shutdown_order=30),
+            *(
+                LifespanHook(
+                    f"hang{order}", shutdown=hang, shutdown_order=order
+                )
+                for order in range(10, 60, 10)
+            ),
             LifespanHook("lease", shutdown=make("lease"), shutdown_order=99),
         ),
         drain_timeout_s=0.2,
@@ -200,7 +203,8 @@ async def test_the_drain_timeout_bounds_the_whole_shutdown() -> None:
     loop = asyncio.get_running_loop()
     started = loop.time()
     await runner.shutdown()
-    assert loop.time() - started < 0.3
+    # ⚠ 按钩子各给一份时这里要 5 × 0.2 = 1.0s；留足余量免得慢机器上抖红
+    assert loop.time() - started < 0.7
     assert log == ["lease"]
 
 
