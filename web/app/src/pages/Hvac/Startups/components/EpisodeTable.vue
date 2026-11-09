@@ -15,12 +15,14 @@ import { DtButton, DtCursorPager, DtDataView, DtTag } from '@dt/ui'
 import PermGuard from '@/components/PermGuard.vue'
 import type { EpisodeRow } from '../scripts/startupView'
 
+// ⚠ 列宽按固定排布写死、最小表宽要装得进 1280 宽屏下事件那一栏（约 48rem）：
+// 不固定的话一条长排除原因就把表撑宽，操作列被挤出视口且看不到滚动条
 const COLUMNS: readonly DtDataColumn[] = [
-  { key: 'started', label: '起始时刻', width: '12rem', card: 'title' },
-  { key: 'combination', label: '运行组合', width: '14rem', card: 'meta' },
-  { key: 'duration', label: '达标时长', width: '8rem', align: 'right' },
-  { key: 'outcome', label: '结果', width: '9rem' },
-  { key: 'state', label: '人工排除' },
+  { key: 'started', label: '起始时刻', width: '11rem', card: 'title' },
+  { key: 'combination', label: '运行组合', width: '11rem', card: 'meta' },
+  { key: 'duration', label: '达标时长', width: '6.5rem', align: 'right' },
+  { key: 'outcome', label: '结果', width: '7rem' },
+  { key: 'state', label: '排除' },
   {
     key: 'actions',
     label: '操作',
@@ -59,7 +61,7 @@ const emit = defineEmits<{
       :rows="props.rows"
       :loading="props.loading"
       :error="props.error"
-      :layout="{ toggle: false, minWidth: '64rem' }"
+      :layout="{ toggle: false, minWidth: '48rem', fixedLayout: true }"
       :empty="{
         title: '这个房间还没有开机事件',
         hint: '换一个房间，或先跑一次抽取。',
@@ -75,7 +77,11 @@ const emit = defineEmits<{
         </span>
       </template>
       <template #cell-combination="{ row }">
-        <span class="truncate" :class="{ 'opacity-50': row.isExcluded }">
+        <span
+          class="block truncate"
+          :class="{ 'opacity-50': row.isExcluded }"
+          :title="row.combination"
+        >
           {{ row.combination }}
         </span>
       </template>
@@ -91,7 +97,11 @@ const emit = defineEmits<{
         <DtTag size="sm" :intent="row.intent">{{ row.outcome }}</DtTag>
       </template>
       <template #cell-state="{ row }">
-        <span v-if="row.isExcluded" class="truncate text-xs text-state-warning">
+        <span
+          v-if="row.isExcluded"
+          class="block truncate text-xs text-state-warning"
+          :title="row.reason"
+        >
           已排除 · {{ row.reason }}
         </span>
         <span v-else class="text-xs text-text-disabled">—</span>
