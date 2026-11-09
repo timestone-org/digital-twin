@@ -145,6 +145,22 @@ describe('新建节点', () => {
     expect(created.clientKey).toBeNull()
   })
 
+  // ⚠ 封顶之后一律落在同一点：第 13 个起的新模块全压在一起，新加的那个被盖在下面
+  it('连着加到二十个，落点两两不同', () => {
+    const spots = Array.from({ length: 20 }, (_, count) => {
+      const created = createNode({
+        dashboardId: 'd1',
+        manifest: MANIFEST,
+        parentId: null,
+        siblingCount: count,
+        zIndex: count,
+      })
+      return `${String(created.x)},${String(created.y)}`
+    })
+
+    expect(new Set(spots).size).toBe(20)
+  })
+
   it('同层已有节点时错开落点，不与已有节点完全重叠', () => {
     const first = createNode({
       dashboardId: 'd1',
