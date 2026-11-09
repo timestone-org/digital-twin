@@ -12,6 +12,8 @@ import ast
 import re
 from pathlib import Path
 
+from _migration_sql import one_step_sql, sql_text
+
 from _report import Violation, at, main, parse, read, service_dirs
 
 # 拿不到锁的 ALTER 会排队，排在它后面的普通查询也会一起排队
@@ -31,21 +33,11 @@ BACKFILL_ALLOWED: dict[tuple[str, str], str] = {
         "downgrade",
     ): "只在回退时跑：小分片表里的 skipped 归回 pending，旧 CHECK 才建得起来",
 }
-# f-string 里的插值在判定时换成这个占位，让 `UPDATE {表} SET` 仍长得像 SQL
-SQL_PLACEHOLDER = "x"
 # 存量表上一步到位加约束的那几个 op：建约束时全表扫描并持 ACCESS EXCLUSIVE
 ONE_STEP_CONSTRAINTS = (
     "create_check_constraint",
     "create_foreign_key",
     "create_unique_constraint",
-)
-# 手写 SQL 里加约束的那一句；取出约束种类与其后的全部文字
-RAW_ADD_CONSTRAINT = re.compile(
-    r"\bADD\s+CONSTRAINT\s+[\w\"]+\s+(CHECK|FOREIGN\s+KEY|UNIQUE)\b(.*)",
-    re.IGNORECASE | re.DOTALL,
-)
-RAW_ALTER_TABLE = re.compile(
-    r"\bALTER\s+TABLE\s+(?:ONLY\s+)?([\w\".]+)", re.IGNORECASE
 )
 # 已上线迁移里一步加约束的那几处：文件名 → 理由。已应用的迁移不改写
 CONSTRAINT_ALLOWED: dict[str, str] = {
@@ -111,22 +103,6 @@ def _op_calls(node: ast.AST, name: str) -> list[ast.Call]:
     return found
 
 
-def _sql_text(node: ast.expr | None) -> str | None:
-    """`op.execute` 的实参取成 SQL 文本；f-string 的插值换成占位。
-
-    ⚠ 只看字面量的话，一条 `f"UPDATE {表} SET …"` 整句漏判。
-    Args: node。
-    """
-    if isinstance(node, ast.Constant):
-        return node.value if isinstance(node.value, str) else None
-    if not isinstance(node, ast.JoinedStr):
-        return None
-    return "".join(
-        str(part.value) if isinstance(part, ast.Constant) else SQL_PLACEHOLDER
-        for part in node.values
-    )
-
-
 def _scopes(tree: ast.Module) -> dict[int, str]:
     """每个调用节点所在的顶层函数名，按节点 id 查。
 
@@ -162,7 +138,7 @@ def check_no_backfill_in_migration() -> list[Violation]:
             continue
         scopes = _scopes(tree)
         for call in _op_calls(tree, "execute"):
-            text = _sql_text(call.args[0] if call.args else None)
+            text = sql_text(call.args[0] if call.args else None)
             if text is None or not BACKFILL.search(text):
                 continue
             if (path.name, scopes.get(id(call), "")) not in BACKFILL_ALLOWED:
@@ -418,23 +394,6 @@ def _one_step_op(path: Path, call: ast.Call, fresh: set[str]) -> bool:
     )
 
 
-def _one_step_sql(text: str, fresh: set[str]) -> bool:
-    """手写的 `ADD CONSTRAINT` 是不是在存量表上一步到位。
-
-    Args: text, fresh（本次新建的表）。
-    """
-    added = RAW_ADD_CONSTRAINT.search(text)
-    if added is None:
-        return False
-    table = RAW_ALTER_TABLE.search(text)
-    if table is not None and table.group(1).split(".")[-1].strip('"') in fresh:
-        return False
-    rest = added.group(2).upper()
-    if added.group(1).upper() == "UNIQUE":
-        return "USING INDEX" not in rest
-    return "NOT VALID" not in rest
-
-
 def check_constraint_on_existing_table() -> list[Violation]:
     """存量表加 CHECK / 外键先 NOT VALID 再 VALIDATE，唯一约束走 USING INDEX。
 
@@ -458,8 +417,8 @@ def check_constraint_on_existing_table() -> list[Violation]:
             calls.extend(
                 call
                 for call in _op_calls(function, "execute")
-                if _one_step_sql(
-                    _sql_text(call.args[0] if call.args else None) or "",
+                if one_step_sql(
+                    sql_text(call.args[0] if call.args else None) or "",
                     fresh,
                 )
             )
