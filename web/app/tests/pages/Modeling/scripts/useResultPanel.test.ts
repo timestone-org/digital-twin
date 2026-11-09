@@ -77,6 +77,7 @@ const DETAIL: ModelingNodeRun = {
 function panelOf(
   detail: ModelingNodeRun | undefined,
   runGraph: ModelingGraph | null = FROZEN,
+  errors: ReadonlyMap<string, string> = new Map(),
 ) {
   const loaded: string[] = []
   const panel = useResultPanel({
@@ -84,6 +85,7 @@ function panelOf(
     runGraph: () => runGraph,
     operators: computed(() => new Map([['split_dataset', SPLIT]])),
     nodeRunOf: () => detail,
+    previewErrorOf: (id) => errors.get(id),
     loadPreview: (id: string) => {
       loaded.push(id)
       return Promise.resolve()
@@ -136,6 +138,14 @@ describe('结果弹窗那一摊', () => {
     await panel.open('n1')
 
     expect(panel.labels.value).toEqual({ train: '训练集' })
+  })
+
+  it('没拉回来的原因交给弹窗，不让骨架一直转', async () => {
+    const { panel } = panelOf(undefined, FROZEN, new Map([['n1', '没权限']]))
+
+    await panel.open('n1')
+
+    expect(panel.error.value).toBe('没权限')
   })
 
   it('关掉之后不再指着任何节点', async () => {

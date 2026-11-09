@@ -522,12 +522,33 @@ describe('结果弹窗', () => {
     fitted: null,
   }
 
-  function open(detail: ModelingNodeRun | null) {
+  function open(detail: ModelingNodeRun | null, error = '') {
     return mount(ResultDialog, {
-      props: { detail, labels: {}, runId: 'r1', nodeId: 'n1', config: {} },
+      props: {
+        detail,
+        labels: {},
+        runId: 'r1',
+        nodeId: 'n1',
+        config: {},
+        error,
+      },
       attachTo: document.body,
     })
   }
+
+  it('详情拉取失败时说出原因并给重试，不让骨架一直转', async () => {
+    const wrapper = open(null, '没有查看权限')
+
+    expect(document.body.textContent).toContain('没有查看权限')
+    expect(document.body.querySelector('.dt-ml-blocks__hold')).toBeNull()
+    const retry = [...document.body.querySelectorAll('button')].find(
+      (button) => button.textContent?.trim() === '重试',
+    )
+    retry?.click()
+    await wrapper.vm.$nextTick()
+    expect(wrapper.emitted('retry')).toHaveLength(1)
+    wrapper.unmount()
+  })
 
   // ⚠ 占位高度按区固定：详情回来之后各区落在原处，不跳版
   it('详情还没拉回来时摆骨架，不是一片空白', () => {

@@ -9,7 +9,7 @@
  * 它们今天就在横向滚。
  */
 import type { ModelingNodeRun, ModelingOperator } from '@dt/contracts'
-import { DtModal } from '@dt/ui'
+import { DtModal, DtPageState } from '@dt/ui'
 
 import ReportBlocks from './ReportBlocks.vue'
 import ResultView from './ResultView.vue'
@@ -28,9 +28,11 @@ const props = defineProps<{
    * ⚠ 要运行时冻结的那份快照：画布上现在那份在历史回看时早改过了。
    */
   config: Readonly<Record<string, unknown>>
+  /** 详情没拉回来的原因；'' = 没失败。 */
+  error: string
 }>()
 
-const emit = defineEmits<{ close: [] }>()
+const emit = defineEmits<{ close: []; retry: [] }>()
 </script>
 
 <template>
@@ -52,6 +54,12 @@ const emit = defineEmits<{ close: [] }>()
       :code="props.detail.operator"
       :config="props.config"
       :operator="props.operator"
+    />
+    <DtPageState
+      v-else-if="props.error"
+      :error="props.error"
+      :empty="false"
+      @retry="emit('retry')"
     />
     <!-- ⚠ 占位高度按区固定：拉回来之后各区落在原处，不跳版 -->
     <ReportBlocks v-else pending />

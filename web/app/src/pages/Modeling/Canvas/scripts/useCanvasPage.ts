@@ -74,7 +74,8 @@ function prefetchPreviews(state: PageState): void {
     if (node.status !== 'succeeded' || !node.has_preview) continue
     if (state.runner.previews.value.has(node.node_id)) continue
     budget -= 1
-    void state.runner.loadPreview(node.node_id)
+    // 后台预取：失败不弹提示（一轮最多 24 份），失败过的也不跟着每拍重拉
+    void state.runner.loadPreview(node.node_id, true)
   }
 }
 

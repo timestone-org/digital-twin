@@ -1336,3 +1336,61 @@ it('自动整理入口只调整位置，可撤销并随工作流保存', async (
   const next = graph?.nodes.find((node) => node.id === 'target')
   expect(first?.position.left).toBeLessThan(next?.position.left ?? 0)
 })
+
+describe('运行结束之后', () => {
+  it('打开训练历史时现取列表，跑完的那条不再停在排队中', async () => {
+    stubApi()
+    signIn(WRITER)
+    const wrapper = open()
+    await flushPromises()
+    const list = vi.mocked(modeling.listModelingRuns)
+    const before = list.mock.calls.length
+
+    await wrapper
+      .findAll('button')
+      .find((b) => b.text() === '运行历史')
+      ?.trigger('click')
+    await flushPromises()
+
+    expect(list.mock.calls.length).toBe(before + 1)
+  })
+
+  it('训练并发布里发布没成时把原因说出来', async () => {
+    stubApi()
+    vi.spyOn(modeling, 'getModelingRun').mockResolvedValue({
+      ...runOf('succeeded'),
+      auto_publish: true,
+      publication_status: 'failed',
+      publication_error: '模型输入输出签名已改变，请核对并显式确认',
+    })
+    query['run_id'] = 'r1'
+    signIn(WRITER)
+    const wrapper = open()
+    await flushPromises()
+
+    expect(wrapper.text()).toContain('自动发布没有成功')
+    expect(wrapper.text()).toContain('模型输入输出签名已改变')
+  })
+
+  it('改名框里输入法回车上屏不会把弹窗提交掉', async () => {
+    stubApi()
+    signIn(WRITER)
+    const wrapper = open()
+    await flushPromises()
+    await wrapper.findAll('.dt-ml-palette__item')[0]?.trigger('click')
+    await flushPromises()
+    await wrapper.find('.dt-ml-canvas__node').trigger('pointerdown')
+    window.dispatchEvent(new KeyboardEvent('keydown', { key: 'F2' }))
+    await flushPromises()
+    const input = wrapper.find('input[placeholder="例如：剔除异常行"]')
+    await input.setValue('ab')
+
+    // 输入法上屏：compositionend 之后才到的那一下 keyup
+    await input.trigger('keyup', { key: 'Enter' })
+    await flushPromises()
+
+    expect(wrapper.find('input[placeholder="例如：剔除异常行"]').exists()).toBe(
+      true,
+    )
+  })
+})
