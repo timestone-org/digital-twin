@@ -214,6 +214,29 @@ describe('在线会话', () => {
     expect(wrapper.text()).toContain('匿名')
   })
 
+  it('⚠ 一次轮询失败不清空会话表：留着上一份并标明是哪一刻的数据', async () => {
+    vi.useFakeTimers()
+    vi.spyOn(opcuaApi, 'listSessions')
+      .mockResolvedValueOnce([
+        {
+          session_id: 's1',
+          peer: '10.0.0.9:51234',
+          username: 'scada',
+          connected_at: new Date().toISOString(),
+        },
+      ])
+      .mockRejectedValueOnce(new Error('网关超时'))
+    const wrapper = mount(SessionsPanel, {
+      props: { instance: instance({ is_running: true }) },
+    })
+    await vi.advanceTimersByTimeAsync(0)
+    await vi.advanceTimersByTimeAsync(5000)
+    expect(wrapper.text()).toContain('10.0.0.9:51234')
+    expect(wrapper.text()).toContain('刷新失败')
+    wrapper.unmount()
+    vi.useRealTimers()
+  })
+
   it('⚠ 卸载后不再轮询——运维屏一开几天', async () => {
     vi.useFakeTimers()
     const list = vi.spyOn(opcuaApi, 'listSessions').mockResolvedValue([])

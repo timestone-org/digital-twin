@@ -45,9 +45,9 @@ async function load(): Promise<void> {
       error.value = null
       now.value = Date.now()
     },
+    // ⚠ 已有数据时一次失败不清表：留着上一份、标明是哪一刻的，空表比陈旧数据更误导
     fail: (caught) => {
       error.value = describeError(caught)
-      sessions.value = []
     },
     settled: () => (loading.value = false),
   })
@@ -63,6 +63,11 @@ function since(connectedAt: string): string {
   if (minutes < 60) return `${minutes} 分钟`
   return `${Math.floor(minutes / 60)} 小时 ${minutes % 60} 分钟`
 }
+
+/** 上一份成功数据的时刻，失败时告诉人表里是哪一刻的。 */
+const fetchedAt = computed(() =>
+  new Date(now.value).toLocaleTimeString('zh-CN', { hour12: false }),
+)
 
 const rows = computed(() =>
   sessions.value.map((session) => ({ id: session.session_id, ...session })),
@@ -90,13 +95,21 @@ onBeforeUnmount(() => {
       实例未运行，不会有任何上位机会话。
     </DtNotice>
 
+    <DtNotice
+      v-if="error !== null && rows.length > 0"
+      intent="warning"
+      icon="alert-triangle"
+    >
+      刷新失败，下面是 {{ fetchedAt }} 的数据：{{ error }}
+    </DtNotice>
+
     <DtDataView
       v-model:view="view"
       class="min-h-0 flex-1"
       :columns="COLUMNS"
       :rows="rows"
       :loading="loading && rows.length === 0"
-      :error="error"
+      :error="rows.length === 0 ? error : null"
       :layout="{ minWidth: '40rem', cardColumns: 3, cardMinWidth: '18rem' }"
       :empty="{
         title: '当前没有上位机连接',
