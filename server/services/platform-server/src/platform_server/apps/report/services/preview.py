@@ -23,6 +23,7 @@ from platform_server.apps.report.services.aggregation import (
 from platform_server.apps.report.services.chart_data import chart_node
 from platform_server.apps.report.services.document import (
     BUSINESS_NODES,
+    node_label,
     number_attr,
     text_attr,
     validate_template,
@@ -75,14 +76,14 @@ async def preview(session: AsyncSession, context: PreviewContext) -> PreviewOut:
         try:
             nodes[path] = await _node_value(session, context, node, metrics)
             if nodes[path].is_stale:
-                warnings.append(f"{path}：使用较早的最新数据")
+                warnings.append(f"{node_label(path, node)}：使用较早的最新数据")
             if nodes[path].is_truncated:
-                warnings.append(f"{path}：表格或图表数据已截断")
+                warnings.append(f"{node_label(path, node)}：数据已截断")
         except (ValueError, AppError, report_formula.FormulaError) as error:
             message = (
                 error.message if isinstance(error, AppError) else str(error)
             )
-            warnings.append(f"{path}：{message}")
+            warnings.append(f"{node_label(path, node)}：{message}")
             nodes[path] = NodeValue(kind=node.type, text=UNAVAILABLE_TEXT)
     return PreviewOut(
         is_valid=not warnings,

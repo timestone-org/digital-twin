@@ -272,6 +272,17 @@ async def test_a_metric_ref_unit_of_its_own_wins_over_the_metric_unit():
     assert result.nodes["content.0.content.1"].text == "25.500 kWh"
 
 
+async def test_a_node_warning_names_the_node_instead_of_its_path():
+    # ⚠ content.0.content.1 这种内部路径用户对不上正文里的任何一处
+    context = precise_inline_context("25.5")
+    context.api_errors["api:energy"] = "数据来源「能源接口」：API 取数超时"
+    async with AsyncSession() as session:
+        result = await preview(session, context)
+    node_warnings = [item for item in result.warnings if "节点" in item]
+    assert node_warnings == ["第 1 段的数字 {总量}：节点引用的指标不可用"]
+    assert not any("content." in item for item in result.warnings)
+
+
 async def test_word_inline_paragraph_uses_exact_metric_value():
     context = precise_inline_context("9007199254740993.125")
     async with AsyncSession() as session:
