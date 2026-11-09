@@ -194,6 +194,7 @@ const archiveParamsOpen = ref(false)
 
               <DtButton
                 v-if="activeSource.protocol === 'opcua'"
+                class="self-start"
                 variant="outline"
                 size="sm"
                 :aria-expanded="browseOpen"
