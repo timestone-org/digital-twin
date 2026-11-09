@@ -46,6 +46,8 @@ from platform_server.apps.assets.schemas import (
 
 # 凭证有效期：给大文件的表单填写与一次重试留足余量，又不至于长期可重放
 UPLOAD_TTL_S = 900
+_SIZE_STEP = 1024
+_SIZE_UNITS = ("B", "KB", "MB", "GB")
 
 
 @dataclass(frozen=True)
@@ -78,10 +80,40 @@ def checked_upload_spec(
     if not spec.accepts(content_type):
         raise AssetTypeRejected(f"{spec.label}不接受 {content_type} 这种文件")
     if size_bytes > spec.max_bytes:
-        raise AssetTooLarge(
-            f"{spec.label}最大 {spec.max_bytes // (1024 * 1024)} MB"
-        )
+        raise _too_large(spec, size_bytes)
     return spec
+
+
+def _too_large(spec: KindSpec, size_bytes: int) -> AssetTooLarge:
+    """超限的那句话：上限与这个文件的实际大小都按人读的单位写。
+
+    Args: spec, size_bytes。
+    """
+    return AssetTooLarge(
+        f"{spec.label}最大 {_size_text(spec.max_bytes)}"
+        f"（这个文件 {_size_text(size_bytes)}）"
+    )
+
+
+def _size_text(size_bytes: int) -> str:
+    """把字节数写成 B / KB / MB / GB；整数就不带小数。
+
+    ⚠ 不能一律按 MB 整除：512 KB 的图标上限会被写成「0 MB」。
+    Args: size_bytes。
+    """
+    value = float(size_bytes)
+    for unit in _SIZE_UNITS[:-1]:
+        if value < _SIZE_STEP:
+            return _number_text(value, unit)
+        value /= _SIZE_STEP
+    return _number_text(value, _SIZE_UNITS[-1])
+
+
+def _number_text(value: float, unit: str) -> str:
+    """一个数加单位。Args: value, unit。"""
+    if value.is_integer():
+        return f"{int(value)} {unit}"
+    return f"{value:.1f} {unit}"
 
 
 def kind_catalog() -> list[AssetKindOut]:
@@ -162,7 +194,9 @@ async def finalize_upload(
     if existing is not None:
         rows = await crud.asset_variant.list_for_asset(session, asset_id)
         return _present(existing, rows)
-
+    # ⚠ 搬字节之前放掉只读事务：GB 级模型的服务端拷贝要几十秒，事务不放就是
+    # 一条连接 idle in transaction 那么久（database-standard：禁事务内外部 IO）
+    await session.rollback()
     kind, stat = await _arrived(store, asset_id)
     await crud.insert_if_absent(
         session,
@@ -200,9 +234,7 @@ async def _arrived(
     if spec is None:  # pragma: no cover - 键由本服务铸造，类型必在目录里
         raise AssetKindUnknown(f"没有「{kind}」这类素材")
     if stat.size_bytes > spec.max_bytes:
-        raise AssetTooLarge(
-            f"{spec.label}最大 {spec.max_bytes // (1024 * 1024)} MB"
-        )
+        raise _too_large(spec, stat.size_bytes)
     await _promote(store, key, keys.object_key(kind, asset_id))
     return kind, stat
 
@@ -391,8 +423,12 @@ async def delete_asset(
     found = await crud.get(session, asset_id)
     if found is None:
         return
+    # ⚠ 先取出 kind 再放事务：rollback 会让读过的行过期，之后再碰属性就是一次
+    # 异步会话里不许发生的隐式刷新
+    prefix = keys.owned_prefix(found.kind, asset_id)
+    await session.rollback()
     try:
-        await store.delete_prefix(keys.owned_prefix(found.kind, asset_id))
+        await store.delete_prefix(prefix)
     except ObjectStoreError as error:
         raise AssetStoreUnavailable("素材服务暂时不可用") from error
     # 字节走的是整前缀，档行也要跟着删——留着的话下次同 id 复现时会读到一批
