@@ -21,6 +21,7 @@ from unit.opcua_driver_fakes import (
     MAX_NODES,
     NOW_MS,
     FakeClient,
+    FakeNode,
     grant_server_session,
     make_child,
     make_driver,
@@ -276,6 +277,24 @@ async def test_unsubscribe_returns_how_many_were_really_dropped() -> None:
     dropped = await made.unsubscribe(["a", "never-subscribed"])
     assert dropped == 1
     assert built[0].subscription.dropped == [1]
+
+
+async def test_a_failed_unsubscribe_still_stops_routing_the_points() -> None:
+    # 退订回包丢了也不许让删掉的点位继续进快照与归档
+    made, built = make_driver()
+    await made.connect()
+    seen: list[tuple[object, ...]] = []
+    await made.subscribe([make_spec("a")], lambda *sample: seen.append(sample))
+    seen.clear()
+    subscription = built[0].subscription
+    subscription.error = TimeoutError()
+    with pytest.raises(TimeoutError):
+        await made.unsubscribe(["a"])
+    subscription.notify(
+        FakeNode(ua.NodeId.from_string("ns=2;s=a")),
+        ua.DataValue(Value=ua.Variant(9.5)),
+    )
+    assert seen == []
 
 
 async def test_read_many_returns_one_entry_per_requested_point() -> None:

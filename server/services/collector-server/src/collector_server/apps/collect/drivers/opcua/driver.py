@@ -389,11 +389,15 @@ class OpcuaDriver:
         ]
         if subscription is None or not taken:
             return 0
-        async with asyncio.timeout(self._connection.timeouts.request_s):
-            await subscription.unsubscribe([handle for _, handle in taken])
-        for code, _ in taken:
+        try:
+            async with asyncio.timeout(self._connection.timeouts.request_s):
+                await subscription.unsubscribe([handle for _, handle in taken])
+        finally:
+            # ⚠ 不论服务端怎么答都先断本地路由：句柄已经摘掉，重试只会退 0
+            # 条，而删掉的点位会一直往快照与归档里写
             if self._notifier is not None:
-                self._notifier.forget(code)
+                for code, _ in taken:
+                    self._notifier.forget(code)
         return len(taken)
 
     async def read_many(self, point_codes: Sequence[str]) -> list[Sample]:
