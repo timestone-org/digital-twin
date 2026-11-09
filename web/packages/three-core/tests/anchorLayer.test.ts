@@ -154,9 +154,10 @@ describe('读数', () => {
       (child): child is THREE.Object3D & { element: HTMLElement } =>
         'element' in child,
     )?.element
-    const parts = [...(element?.children ?? [])].map(
-      (child) => child.textContent,
-    )
+    // ⚠ CSS2D 渲染器逐帧改根元素的 display：排版必须挂在里层，否则 gap 被冲掉
+    const row = element?.firstElementChild
+    expect(row instanceof HTMLElement && row.style.display).toBe('flex')
+    const parts = [...(row?.children ?? [])].map((child) => child.textContent)
     expect(parts).toEqual(['罐顶', '罐温', '26.5 ℃'])
   })
 

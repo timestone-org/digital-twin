@@ -161,20 +161,24 @@ export class AnchorLayer {
     const dot = new THREE.Mesh(geometry, material)
     dot.position.set(...anchor.position)
     dot.renderOrder = ANCHOR_RENDER_ORDER
+    // ⚠ 排版挂在里层：CSS2D 渲染器逐帧改根元素的 display 来显隐，根上的 flex 与 gap
+    //   会被冲掉，几段文字于是首尾相接连成一串
     const element = document.createElement('div')
+    const inner = document.createElement('div')
+    element.append(inner)
     const nameEl = document.createElement('span')
     nameEl.textContent = anchor.name
-    element.append(nameEl)
+    inner.append(nameEl)
     const prefix = anchor.label.trim()
     if (prefix !== '') {
       const prefixEl = document.createElement('span')
       prefixEl.textContent = prefix
-      element.append(prefixEl)
+      inner.append(prefixEl)
     }
     const valueEl = document.createElement('span')
     valueEl.textContent = NO_VALUE_TEXT
-    element.append(valueEl)
-    styleLabel(element, valueEl)
+    inner.append(valueEl)
+    styleLabel(inner, valueEl)
     const label = new CSS2DObject(element)
     this.group.add(dot, label)
     return { anchor, dot, material, label, valueEl }
