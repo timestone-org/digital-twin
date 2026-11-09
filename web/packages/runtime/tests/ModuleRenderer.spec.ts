@@ -90,7 +90,31 @@ const ownsStrict = fakeManifest({
   component: () => asAsyncModule(fakeModuleComponent({ mark: 'owns' })),
 })
 
+/** 只在 `config.bad === true` 时抛：验改对配置之后能不能自己恢复。 */
+const picky = fakeManifest({
+  type: 'picky',
+  component: () =>
+    asAsyncModule(
+      defineComponent({
+        name: 'PickyModule',
+        props: {
+          config: {
+            type: Object as PropType<Record<string, unknown>>,
+            required: true,
+          },
+        },
+        setup(props) {
+          return () => {
+            if (props.config.bad === true) throw new Error('配置不合法')
+            return h('div', { class: 'picky' })
+          }
+        },
+      }),
+    ),
+})
+
 const catalog = fakeCatalog([
+  picky,
   simple,
   strict,
   boom,
@@ -455,6 +479,33 @@ describe('三条失败边界', () => {
 
     expect(wrapper.get('.dt-module-fallback').text()).toBe('模块渲染失败')
     expect(wrapper.find('.dt-module-fallback__detail').exists()).toBe(false)
+  })
+
+  it('配置改对之后渲染失败自己解除，不必等重挂', async () => {
+    const wrapper = mountCells([{ moduleType: 'picky', config: { bad: true } }])
+    await flushPromises()
+    expect(wrapper.get('.dt-module-fallback').text()).toContain('模块渲染失败')
+
+    await wrapper.setProps({
+      cells: [{ moduleType: 'picky', config: { bad: false } }],
+    })
+    await flushPromises()
+
+    expect(wrapper.find('.picky').exists()).toBe(true)
+    expect(wrapper.find('.dt-module-fallback').exists()).toBe(false)
+  })
+
+  it('换成仍然会抛的配置时照旧占位，不会来回重试', async () => {
+    const wrapper = mountCells([{ moduleType: 'picky', config: { bad: true } }])
+    await flushPromises()
+
+    await wrapper.setProps({
+      cells: [{ moduleType: 'picky', config: { bad: true, note: '改了别的' } }],
+    })
+    await flushPromises()
+
+    expect(wrapper.get('.dt-module-fallback').text()).toContain('模块渲染失败')
+    expect(wrapper.find('.picky').exists()).toBe(false)
   })
 
   it('异步 chunk 加载失败先重试一次，仍失败才换成占位', async () => {
