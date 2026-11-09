@@ -9,8 +9,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy.orm import load_only
 
 from hierarchy_server.apps.projects.models.projects import Project, Version
-
-HISTORY_LIMIT: int = 50
+from hierarchy_server.apps.projects.schemas.projects import HISTORY_LIMIT
 
 
 async def find_project(

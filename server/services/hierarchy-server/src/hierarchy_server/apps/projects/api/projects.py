@@ -6,7 +6,9 @@ from uuid import UUID
 from fastapi import APIRouter, Depends, Query, Response
 
 from hierarchy_server.apps.projects.permissions import MANAGE, VIEW
+from hierarchy_server.apps.projects.schemas.graph import MAX_EDGES, MAX_NODES
 from hierarchy_server.apps.projects.schemas.projects import (
+    HISTORY_LIMIT,
     HierarchyCapabilities,
     HierarchyCreate,
     HierarchyHistory,
@@ -40,7 +42,10 @@ Service = Annotated[ProjectService, Depends(get_service)]
 async def capabilities(_caller: Reader) -> ApiResponse[HierarchyCapabilities]:
     return ok(
         HierarchyCapabilities(
-            is_enabled=True, max_nodes=300, max_edges=2000, history_limit=50
+            is_enabled=True,
+            max_nodes=MAX_NODES,
+            max_edges=MAX_EDGES,
+            history_limit=HISTORY_LIMIT,
         )
     )
 
@@ -106,7 +111,7 @@ async def history(
     service: Service,
     caller: Reader,
     after: Annotated[str | None, Query(max_length=100)] = None,
-    limit: Annotated[int, Query(ge=1, le=50)] = 50,
+    limit: Annotated[int, Query(ge=1, le=HISTORY_LIMIT)] = HISTORY_LIMIT,
 ) -> ApiResponse[HierarchyHistory]:
     return ok(await service.history(caller.user_id, project_id, after, limit))
 
