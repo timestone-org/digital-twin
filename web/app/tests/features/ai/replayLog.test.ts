@@ -203,17 +203,40 @@ describe('步骤标题', () => {
     ])
   })
 
+  it('模型那一步与直播同口径：后面跟了几个工具就说决定调用几个，没有就是给出答复', () => {
+    const log = replayedLog(
+      detailOf([
+        messageOf({
+          role: 'assistant',
+          content_json: {},
+          steps: [
+            stepOf({ id: 'm1', kind: 'model', name: 'model' }),
+            stepOf({ id: 't1', seq: 2 }),
+            stepOf({ id: 't2', seq: 3 }),
+            stepOf({ id: 'm2', seq: 4, kind: 'model', name: 'model' }),
+          ],
+        }),
+      ]),
+    )
+    expect(log.entries.map((one) => one.text)).toEqual([
+      '决定调用 2 个工具',
+      'points.search 跑完了',
+      'points.search 跑完了',
+      '给出答复',
+    ])
+  })
+
   it('名字缺失时退回种类，不出现空标题', () => {
     const log = replayedLog(
       detailOf([
         messageOf({
           role: 'assistant',
           content_json: {},
-          steps: [stepOf({ name: '', kind: 'model' })],
+          steps: [stepOf({ name: '', kind: 'server_tool' })],
         }),
       ]),
     )
-    expect(log.entries[0]?.text).toBe('model 跑完了')
+    expect(log.entries[0]?.text).toBe('server_tool 跑完了')
   })
 })
 
