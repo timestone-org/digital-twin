@@ -4,11 +4,17 @@ import math
 from dataclasses import dataclass
 
 from platform_server.apps.modeling.operators.reporting import (
+    NOTE_ALERT,
+    NOTE_HINT,
     BlockAt,
     ReportBlock,
     Scale,
+    annotated,
     breakdown_block,
 )
+
+# 拟合概况上那句口径说明
+FROZEN_HINT = "模型冻结后可发布；测试数据不参与训练或标准化拟合"
 
 
 @dataclass(frozen=True)
@@ -47,13 +53,9 @@ def supervised_blocks(seen: SupervisedRun) -> tuple[ReportBlock, ...]:
             },
         ],
     )
-    gist.payload["notes"] = [
-        {
-            "level": "hint",
-            "text": "模型冻结后可发布；测试数据不参与训练或标准化拟合",
-        },
-        *({"level": "alert", "text": text} for text in seen.notices),
-    ]
+    gist = annotated(
+        annotated(gist, NOTE_HINT, (FROZEN_HINT,)), NOTE_ALERT, seen.notices
+    )
     score = _test_score(seen)
     metric = "测试准确率" if seen.is_classification else "测试均方根误差"
     evaluation = breakdown_block(
