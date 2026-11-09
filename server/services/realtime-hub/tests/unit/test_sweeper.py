@@ -9,6 +9,7 @@ import asyncio
 import uuid
 from datetime import timedelta
 
+import pytest
 from realtime_hub.apps.channel.services import (
     Connection,
     ConnectionRegistry,
@@ -17,6 +18,7 @@ from realtime_hub.apps.channel.services import (
     public_alias,
     ticket_fingerprint,
 )
+from realtime_hub.apps.channel.services import sweeper as sweeper_module
 from realtime_hub.apps.channel.services.session import (
     CLOSE_PUBLIC_GRANT_REVOKED,
     CLOSE_TOKEN_EXPIRED,
@@ -301,3 +303,31 @@ async def test_a_connection_without_a_close_port_is_skipped() -> None:
     sweeper = _sweeper(connections, {})
 
     assert await sweeper.sweep_once() == 0
+
+
+async def test_a_stuck_close_neither_stalls_the_sweep_nor_keeps_the_feed(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    # ⚠ 对端在 TCP 层不读时 close 会一直挂着：不限时，一轮复核能拖到几分钟，
+    # 本副本其它票据的撤回一起延后；关不掉也要先摘索引，撤回才算数
+    monkeypatch.setattr(sweeper_module, "CLOSE_TIMEOUT_S", 0.05)
+    connections = ConnectionRegistry()
+    stuck, _stuck_closed = _anonymous()
+    other, other_closed = _anonymous()
+
+    async def never_closes(_code: int) -> None:
+        await asyncio.Event().wait()
+
+    stuck.close = never_closes
+    for item in (stuck, other):
+        await connections.add(item)
+    sweeper = _sweeper(connections, {})
+
+    async with asyncio.timeout(1):
+        closed = await sweeper.sweep_once()
+
+    assert (closed, other_closed, await connections.get(stuck.id)) == (
+        1,
+        [CLOSE_PUBLIC_GRANT_REVOKED],
+        None,
+    )
