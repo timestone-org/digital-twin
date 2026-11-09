@@ -64,7 +64,7 @@ class SessionCrud(CrudBase[ChatSession]):
     async def touch_session(
         self, session: AsyncSession, chat_session_id: uuid.UUID
     ) -> None:
-        """有了新的一轮：把会话顶到列表最前，版本号不动。
+        """有了新的一轮：把会话顶到列表最前、清掉上一次的失败原因，版本号不动。
 
         ⚠ 不动 `row_version`：它守的是范围与标题的并发改写，跟着每一轮涨的话，
         前端手里那份版本号下一次改范围必然撞 409。
@@ -74,7 +74,20 @@ class SessionCrud(CrudBase[ChatSession]):
         await session.execute(
             update(ChatSession)
             .where(ChatSession.id == chat_session_id)
-            .values(updated_at=func.now())
+            .values(updated_at=func.now(), last_error=None)
+        )
+
+    async def record_error(
+        self, session: AsyncSession, chat_session_id: uuid.UUID, reason: str
+    ) -> None:
+        """记下这次对话最近一次回合失败的原因；下一轮成功落库时清掉。
+
+        Args: session, chat_session_id, reason（给人看的一句，不带上游细节）。
+        """
+        await session.execute(
+            update(ChatSession)
+            .where(ChatSession.id == chat_session_id)
+            .values(last_error=reason)
         )
 
     async def max_seq(
