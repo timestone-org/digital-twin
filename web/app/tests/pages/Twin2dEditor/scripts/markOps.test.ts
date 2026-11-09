@@ -64,6 +64,16 @@ describe('新增', () => {
     expect(text.id).toBe('mark-3')
   })
 
+  it('画布边长是奇数时落点取整，不落在半像素上', () => {
+    const base = normalizeTwin2dConfig({ canvas: { width: 1229, height: 691 } })
+
+    const added = addMark(base, 'rect', idSeries('mark-'))
+
+    const mark = added.config.marks[0]
+    expect(Number.isInteger(mark?.x)).toBe(true)
+    expect(Number.isInteger(mark?.y)).toBe(true)
+  })
+
   it('id 撞了就再发一个', () => {
     const base = normalizeTwin2dConfig({
       marks: [{ id: 'mark-1', kind: 'rect' }],

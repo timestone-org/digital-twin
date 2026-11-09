@@ -47,10 +47,12 @@ const NEW_MARK_TEXT = '文字'
  */
 function markSeed(config: Twin2dConfig, kind: Twin2dMarkKind): object {
   const { width, height } = config.canvas
-  const x = width / 2 - NEW_MARK_SIZE.w / 2
-  const y = height / 2 - NEW_MARK_SIZE.h / 2
+  // 取整：画布边长是奇数时正中落在半像素上，检查器里读出来是 554.5
+  const x = Math.round(width / 2 - NEW_MARK_SIZE.w / 2)
+  const y = Math.round(height / 2 - NEW_MARK_SIZE.h / 2)
+  const mid = Math.round(height / 2)
   if (kind === 'line') {
-    return { kind, x, y: height / 2, x2: x + NEW_MARK_SIZE.w, y2: height / 2 }
+    return { kind, x, y: mid, x2: x + NEW_MARK_SIZE.w, y2: mid }
   }
   const text = kind === 'text' ? NEW_MARK_TEXT : ''
   return { kind, x, y, ...NEW_MARK_SIZE, text }
