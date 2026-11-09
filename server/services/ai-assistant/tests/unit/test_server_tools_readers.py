@@ -142,12 +142,14 @@ async def test_listing_tables_narrows_to_the_card_fields() -> None:
 
 async def test_reading_saved_columns_keeps_the_formula() -> None:
     def handler(request: httpx.Request) -> httpx.Response:
-        assert request.url.path.endswith("/dataset-tables/t1/columns")
+        assert request.url.path.endswith(
+            "/dataset-tables/0190a000-0000-7000-8000-000000000001/columns"
+        )
         return _listing(
             [
                 {
                     "id": "c1",
-                    "table_id": "t1",
+                    "table_id": "0190a000-0000-7000-8000-000000000001",
                     "key": "本期",
                     "name": "本期值",
                     "unit": "kWh",
@@ -159,7 +161,7 @@ async def test_reading_saved_columns_keeps_the_formula() -> None:
                 },
                 {
                     "id": "c2",
-                    "table_id": "t1",
+                    "table_id": "0190a000-0000-7000-8000-000000000001",
                     "key": "增量",
                     "name": "增量",
                     "unit": None,
@@ -171,7 +173,10 @@ async def test_reading_saved_columns_keeps_the_formula() -> None:
             ]
         )(request)
 
-    got = await _tools(handler)("datasets.read_columns", {"table_id": "t1"})
+    got = await _tools(handler)(
+        "datasets.read_columns",
+        {"table_id": "0190a000-0000-7000-8000-000000000001"},
+    )
     assert isinstance(got, dict)
     columns = got["columns"]
     assert isinstance(columns, list)
@@ -315,7 +320,10 @@ async def test_without_an_upstream_the_cross_module_reads_say_so() -> None:
     calls: list[tuple[str, dict[str, object]]] = [
         ("dashboards.list", {}),
         ("datasets.list_tables", {}),
-        ("datasets.read_columns", {"table_id": "t1"}),
+        (
+            "datasets.read_columns",
+            {"table_id": "0190a000-0000-7000-8000-000000000001"},
+        ),
         ("assets.search", {}),
         ("points.detail", {"node_key": f"{SOURCE_ID}:K1"}),
     ]

@@ -78,14 +78,22 @@ async def test_the_identity_headers_go_upstream() -> None:
 async def test_search_passes_the_query_through() -> None:
     tools = _tools({"hits": [], "strategy": "hybrid", "note": ""})
     await tools.run(
-        "knowledge.search", {"base_id": "1", "query": "出口温度", "limit": 3}
+        "knowledge.search",
+        {
+            "base_id": "0190a000-0000-7000-8000-000000000b01",
+            "query": "出口温度",
+            "limit": 3,
+        },
     )
     client = tools.client
     assert client is not None
     _kind, _headers, sent = client.seen[
         0
     ]  # pyright: ignore[reportAttributeAccessIssue]
-    assert sent == ("1", {"query": "出口温度", "limit": 3})
+    assert sent == (
+        "0190a000-0000-7000-8000-000000000b01",
+        {"query": "出口温度", "limit": 3},
+    )
 
 
 async def test_a_missing_argument_raises_instead_of_guessing() -> None:
@@ -98,7 +106,10 @@ async def test_the_note_reaches_the_model() -> None:
     否则它会把一次退化的召回当成全部事实。"""
     made = await _tools(
         {"hits": [], "strategy": "hybrid", "note": "只走了关键词那一路"}
-    ).run("knowledge.search", {"base_id": "1", "query": "甲"})
+    ).run(
+        "knowledge.search",
+        {"base_id": "0190a000-0000-7000-8000-000000000b01", "query": "甲"},
+    )
     assert made["note"] == "只走了关键词那一路"
 
 
@@ -116,7 +127,10 @@ async def test_a_long_snippet_is_trimmed() -> None:
                 }
             ]
         }
-    ).run("knowledge.search", {"base_id": "1", "query": "甲"})
+    ).run(
+        "knowledge.search",
+        {"base_id": "0190a000-0000-7000-8000-000000000b01", "query": "甲"},
+    )
     assert len(made["hits"][0]["text"]) == MAX_SNIPPET_CHARS
     assert made["hits"][0]["locator"] == "第 12 页"
 
@@ -124,7 +138,8 @@ async def test_a_long_snippet_is_trimmed() -> None:
 async def test_an_unreadable_answer_never_looks_like_no_results() -> None:
     """⚠ 把「读不懂的回包」读成「没有结果」，助手会当着用户的面说库里没有。"""
     made = await _tools("这不是一个对象").run(
-        "knowledge.search", {"base_id": "1", "query": "甲"}
+        "knowledge.search",
+        {"base_id": "0190a000-0000-7000-8000-000000000b01", "query": "甲"},
     )
     assert made["hits"] == []
     assert made["note"]

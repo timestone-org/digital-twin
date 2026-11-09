@@ -23,14 +23,14 @@ from ai_assistant.apps.chat.schemas.advance import AdvanceIn
 from ai_assistant.apps.chat.services import advance_service
 from ai_assistant.apps.chat.services.perception import UnsupportedInput
 from ai_assistant.apps.chat.services.perception.decoders.image import (
-    check_data_uri,
+    normalised_data_uri,
 )
 from ai_assistant.apps.chat.services.planning.plan import PlanUpdate
 from ai_assistant.apps.chat.services.session_service import require_session
 from ai_assistant.deps import get_session, require
 from ai_assistant.settings import API_PREFIX
 from lib.auth import CallerContext
-from lib.errors import AppError, ValidationFailed
+from lib.errors import AppError, InfraError, ValidationFailed
 from lib.logging import current_log_context, get_logger
 from llmcore.output import events
 from llmcore.output.payloads import ContextPayload
@@ -65,39 +65,41 @@ async def advance_turn(
     Args: session_id, payload, session, deps, caller。
     """
     await require_session(session, chat_session_id=session_id, caller=caller)
-    _check_images(payload)
-    stream = _frames(deps, session_id, payload)
+    images = _checked_images(payload)
+    stream = _frames(deps, session_id, _to_input(payload, images))
     return StreamingResponse(
         stream, media_type="text/event-stream", headers=_STREAM_HEADERS
     )
 
 
-def _check_images(payload: AdvanceIn) -> None:
-    """贴进来的图必须过白名单，且**在开流之前**判。
+def _checked_images(payload: AdvanceIn) -> list[str]:
+    """贴进来的图必须过白名单，且**在开流之前**判；交回重标过格式的那一份。
 
     ⚠ 开流之后就改不了状态码了，那时只能回一个 `error` 事件——而「这张图不收」
     是调用方能当场改的事，该拿到一个 422 而不是一条流里的错。
 
     ⚠ 判的是解出来的字节而不是 URI 里声明的 media type，判定与解码器同一份
-    （`perception/decoders/image`）。
+    （`perception/decoders/image`）；转发出去的 media type 也按字节重标。
 
     Args: payload。
     """
+    checked: list[str] = []
     for at, uri in enumerate(payload.user_images, start=1):
         try:
-            check_data_uri(uri, f"第 {at} 张图")
+            checked.append(normalised_data_uri(uri, f"第 {at} 张图"))
         except UnsupportedInput as error:
             raise ValidationFailed(str(error)) from error
+    return checked
 
 
 async def _frames(
     deps: advance_service.AdvanceDeps,
     session_id: uuid.UUID,
-    payload: AdvanceIn,
+    turn_input: advance_service.AdvanceInput,
 ) -> AsyncIterator[str]:
     """逐帧吐。回合内的失败落成 `error` 事件而不是断流。
 
-    Args: deps, session_id, payload。
+    Args: deps, session_id, turn_input。
     """
     # 与统一信封里的那一个同源：用户报「刚才出错了」时，它是唯一能把
     # 界面上那一条与后端日志接起来的东西
@@ -106,12 +108,17 @@ async def _frames(
         async for item in advance_service.advance(
             deps,
             chat_session_id=session_id,
-            payload=_to_input(payload),
+            payload=turn_input,
         ):
             yield _frame_of(item)
     except AppError as error:
         _logger.warning("turn_failed", "回合失败", code=error.code)
         yield events.error_frame(error.code, str(error), trace_id)
+    except Exception as error:  # 理由：开流后改不了状态码，只能落成 error 帧
+        _logger.error("turn_crashed", "回合异常中断", error=error)
+        yield events.error_frame(
+            InfraError.code, "助手内部错误，请稍后重试", trace_id
+        )
 
 
 def _frame_of(item: advance_service.AdvanceEvent) -> str:
@@ -133,14 +140,16 @@ def _frame_of(item: advance_service.AdvanceEvent) -> str:
     return events.outcome_frame(item)
 
 
-def _to_input(payload: AdvanceIn) -> advance_service.AdvanceInput:
+def _to_input(
+    payload: AdvanceIn, images: list[str]
+) -> advance_service.AdvanceInput:
     return advance_service.AdvanceInput(
         surface_kind=payload.surface_kind,
         surface_label=payload.surface_label,
         surface_context=payload.surface_context,
         client_tools=payload.client_tools,
         user_text=payload.user_text,
-        user_images=list(payload.user_images),
+        user_images=images,
         tool_results=[
             advance_service.ClientToolResult(
                 call_id=result.call_id,

@@ -154,6 +154,7 @@ def deps_of(
             sessions=container.database.session,
             embedder=container.embedder,
             knowledge=container.knowledge,
+            skills=container.skills,
         )
     )
     return AdvanceDeps(

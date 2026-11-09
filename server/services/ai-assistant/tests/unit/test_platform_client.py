@@ -39,11 +39,11 @@ def _page(items: list[object]) -> httpx.Response:
     )
 
 
-async def test_points_come_back_as_a_list() -> None:
+async def test_sources_come_back_as_a_list() -> None:
     def handler(_request: httpx.Request) -> httpx.Response:
-        return _page([{"node_key": "s:a", "code": "a", "name": "温度"}])
+        return _page([{"id": "s1", "code": "a", "name": "一号机"}])
 
-    got = await _client(handler).search_points(HEADERS, keyword="温度")
+    got = await _client(handler).list_sources(HEADERS)
     assert len(got) == 1
 
 
@@ -54,7 +54,7 @@ async def test_the_identity_headers_go_through_verbatim() -> None:
         seen.update(request.headers)
         return _page([])
 
-    await _client(handler).search_points(HEADERS, keyword="温度")
+    await _client(handler).list_sources(HEADERS)
     # 签名覆盖的是原始字符串；归一化一次就验不过，而报出来的是「签名不符」
     for name, value in HEADERS.items():
         assert seen[name.lower()] == value
@@ -80,23 +80,9 @@ async def test_the_keyword_and_source_reach_the_query() -> None:
         seen.update(dict(request.url.params))
         return _page([])
 
-    await _client(handler).search_points(
-        HEADERS, keyword="温度", source_id="s1"
-    )
+    await _client(handler).find_point(HEADERS, source_id="s1", code="温度")
     assert seen["q"] == "温度"
     assert seen["source_id"] == "s1"
-
-
-async def test_a_call_without_a_keyword_omits_it() -> None:
-    seen: dict[str, str] = {}
-
-    def handler(request: httpx.Request) -> httpx.Response:
-        seen.update(dict(request.url.params))
-        return _page([])
-
-    await _client(handler).search_points(HEADERS, page=2)
-    assert "q" not in seen
-    assert seen["page"] == "2"
 
 
 async def test_an_upstream_error_is_reported_not_swallowed() -> None:

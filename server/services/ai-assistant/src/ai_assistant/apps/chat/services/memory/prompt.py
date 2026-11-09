@@ -67,6 +67,17 @@ _TWIN_TARGETS = """三维孪生界面仅支持单选，不要求用户多选。
 先加载 twin-configure，按其目标解析流程执行。"""
 
 _NO_SKILLS = "这一页上没有可用的技能，你只能解读与回答问题。"
+# 工作面 → 给模型看的页面名。⚠ 与 `reflection/hitl.py` 的 SURFACE_UNDO 同一份
+# 工作面集合，由契约测试守着：加一个工作面漏了这里，提示词只会说「当前业务页面」
+SURFACE_LABELS: dict[str, str] = {
+    "dashboard-editor": "大屏编辑器",
+    "twin-editor": "孪生编辑器",
+    "twin2d-editor": "二维孪生编辑器",
+    "dataset-table": "台账详情",
+    "report-editor": "报告模板编辑器",
+    "dashboard-view": "大屏运行页",
+    "collect-source": "采集配置页",
+}
 
 
 def build_system_prompt(
@@ -80,15 +91,7 @@ def build_system_prompt(
     Args: surface_kind, surface_label（给人看的页面名，缺省用工作面标识）。
     """
     del surface_label
-    where = {
-        "dashboard-editor": "大屏编辑器",
-        "twin-editor": "孪生编辑器",
-        "twin2d-editor": "二维孪生编辑器",
-        "dataset-table": "台账详情",
-        "report-editor": "报告模板编辑器",
-        "dashboard-view": "大屏运行页",
-        "collect-source": "采集配置页",
-    }.get(surface_kind, "当前业务页面")
+    where = SURFACE_LABELS.get(surface_kind, "当前业务页面")
     parts = [
         _BASE.strip(),
         f"## 当前位置\n\n用户正在**{where}**。",

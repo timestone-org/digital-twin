@@ -11,13 +11,19 @@
 
 from dataclasses import dataclass
 
-from ai_assistant.apps.chat.skills import find_skill
+from ai_assistant.apps.chat.skills import SkillManifest, find_skill
 from llmcore.intent.ports import Allowed, TurnContext
 
 
 @dataclass(frozen=True)
 class PermissionGate:
-    """留下调用者持得全码的那几个技能。"""
+    """留下调用者持得全码的那几个技能。
+
+    `skills` 是这一轮选中的技能清单；名字在里面查不到时才退回内建目录。
+    ⚠ 只查内建目录的话，外置技能声明的 `required_codes` 在这一道永远不生效。
+    """
+
+    skills: tuple[SkillManifest, ...] = ()
 
     @property
     def name(self) -> str:
@@ -37,19 +43,27 @@ class PermissionGate:
         if held is None:
             return allowed
         return allowed.keep_skills(
-            frozenset(name for name in allowed.skills if _is_held(name, held))
+            frozenset(
+                name
+                for name in allowed.skills
+                if _is_held(self._find(name), held)
+            )
         )
 
+    def _find(self, name: str) -> SkillManifest | None:
+        """先查这一轮的清单，再查内建目录。Args: name。"""
+        found = next((one for one in self.skills if one.name == name), None)
+        return found if found is not None else find_skill(name)
 
-def _is_held(skill_name: str, held: frozenset[str]) -> bool:
+
+def _is_held(skill: SkillManifest | None, held: frozenset[str]) -> bool:
     """这个技能要的码是不是都在手上。
 
-    ⚠ 认不出的技能名**放行**：名字对不上多半是这一层与注册表漂开了，
+    ⚠ 认不出的技能**放行**：名字对不上多半是这一层与注册表漂开了，
     而那时把它藏掉只会让「助手忽然少了个技能」更难查。
 
-    Args: skill_name, held。
+    Args: skill（查不到为 None）, held。
     """
-    skill = find_skill(skill_name)
     if skill is None:
         return True
     return frozenset(skill.required_codes) <= held

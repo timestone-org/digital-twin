@@ -5,6 +5,8 @@
 都撞 platform 的 401，界面上显示成「points.search 没跑成」，而 platform 是好的。
 """
 
+import asyncio
+
 import httpx
 import pytest
 
@@ -168,3 +170,30 @@ async def test_the_service_key_goes_with_every_reissue() -> None:
 
     # 少了它，签发面对这一跳一律 401，而现象与「身份过期」是同一句话
     assert seen["x-service-key"] == "k" * 32
+
+
+async def test_one_slow_renewal_does_not_hold_up_another_user() -> None:
+    """⚠ 锁内禁长 IO：一把全局锁会让一个人卡住的续签挡住所有人的调用。"""
+    release = asyncio.Event()
+
+    async def handler(request: httpx.Request) -> httpx.Response:
+        if USER in request.url.path:
+            await release.wait()
+        return httpx.Response(200, headers=_headers(OTHER, 300, "new"))
+
+    auth = AuthClient(
+        base_url="http://auth.test", service_key="k" * 32, timeout_s=3
+    )
+    auth.use_transport(httpx.MockTransport(handler))
+    identity = DelegatedIdentity(auth)
+    stuck = asyncio.create_task(identity.fresh(_headers(USER, 1)))
+    await asyncio.sleep(0)
+    try:
+        other = await asyncio.wait_for(
+            identity.fresh(_headers(OTHER, 1)), timeout=1
+        )
+        assert other["X-Auth-Sig"] == "new"
+        assert not stuck.done()
+    finally:
+        release.set()
+        await stuck

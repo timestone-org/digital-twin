@@ -128,7 +128,7 @@ async def test_columns_filter_before_paging() -> None:
         result = await ServerTools(platform=client).run(
             "datasets.read_columns",
             {
-                "table_id": "t1",
+                "table_id": "0190a000-0000-7000-8000-000000000001",
                 "keyword": "温度",
                 "limit": 1,
                 "page": 2,

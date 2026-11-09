@@ -12,6 +12,7 @@
 不到的库。
 """
 
+import uuid
 from collections.abc import Awaitable, Callable
 from dataclasses import dataclass, field
 from typing import Any, cast
@@ -143,7 +144,7 @@ class KnowledgeTools:
         }
 
     async def _search(self, arguments: dict[str, Any]) -> Any:
-        base_id = _text(arguments, "base_id")
+        base_id = _base_id(arguments)
         made = await self._upstream().search(
             self.headers,
             base_id,
@@ -209,6 +210,18 @@ def _text(arguments: dict[str, Any], name: str) -> str:
     if not isinstance(given, str) or not given.strip():
         raise UnknownTool(f"少了参数 {name}")
     return given.strip()
+
+
+def _base_id(arguments: dict[str, Any]) -> str:
+    """取库 id；不是 UUID 就抛。⚠ 它要拼进 URL 路径，不能让一段变成多段。
+
+    Args: arguments。
+    """
+    given = _text(arguments, "base_id")
+    try:
+        return str(uuid.UUID(given))
+    except ValueError as error:
+        raise UnknownTool(f"参数 base_id 不是合法 id：{given}") from error
 
 
 def _limit(given: object) -> int:

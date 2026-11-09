@@ -14,6 +14,7 @@
 `McpToolInfo`，翻成工具规格是 `services/tools/providers/mcp.py` 的事。
 """
 
+import asyncio
 import json
 from dataclasses import dataclass, field
 from typing import Any, cast
@@ -194,13 +195,18 @@ class McpCatalog:
     )
 
     async def refresh(self) -> None:
-        """逐路重问一遍。
+        """各路同时重问一遍。
 
         ⚠ **一路问不到只丢它自己**：其余照常，整个助手照常起
         （ADR-0031 决策五）。断路器打开期间连问都不问，直接当它这一轮缺席。
+        ⚠ 同时问而不是逐路问：逐路问时一路慢的会让每一步推进多等 k 倍超时。
+        `_ask` 自己收住失败，`gather` 不会因一路出错丢掉别的。
         """
-        for server in self.servers:
-            self._found[server.name] = await self._ask(server)
+        answers = await asyncio.gather(
+            *(self._ask(server) for server in self.servers)
+        )
+        for server, found in zip(self.servers, answers, strict=True):
+            self._found[server.name] = found
 
     async def refresh_server(self, name: str) -> None:
         """仅复核当前调用的服务器，不等待其他独立依赖。

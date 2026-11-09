@@ -5,6 +5,7 @@ server 分）、写操作默认**不出现在清单里**而不是「调了再拒
 账号那一路的线名往返、以及外部报来的坏形状不许把整路带塌。
 """
 
+import asyncio
 from collections.abc import Callable
 
 import httpx
@@ -340,3 +341,23 @@ async def test_the_selector_appends_the_round_only_specs() -> None:
     picked = specs_for("dashboard-editor", [], extra=extra)
     assert picked[-1].name == "mcp.weather.forecast"
     assert specs_for("dashboard-editor", [])[-1].name != "mcp.weather.forecast"
+
+
+async def test_the_servers_are_asked_side_by_side() -> None:
+    """逐路串行问的话，一路慢的会把每一步推进都拖上 k 倍超时。"""
+    notes_asked = asyncio.Event()
+
+    async def handler(request: httpx.Request) -> httpx.Response:
+        if "weather" in str(request.url):
+            # 只有两路同时在问时，这一路才等得到 notes 那一路开问
+            await notes_asked.wait()
+            return _reply([_tool("now")])
+        notes_asked.set()
+        return _reply([_tool("list")])
+
+    catalog = _catalog(
+        handler, servers=(WEATHER, NOTES)
+    )  # pyright: ignore[reportArgumentType]
+    await asyncio.wait_for(catalog.refresh(), timeout=2)
+    names = [one.name for one in McpTools(catalog=catalog).specs()]
+    assert names == ["mcp.weather.now", "mcp.notes.list"]
