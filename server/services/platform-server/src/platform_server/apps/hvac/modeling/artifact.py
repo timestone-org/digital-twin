@@ -6,6 +6,7 @@
 
 import hashlib
 import pickle
+from collections.abc import Sequence
 from dataclasses import dataclass
 
 from platform_server.apps.hvac.modeling.estimators import (
@@ -142,30 +143,94 @@ def predict_mixture(
 ) -> MixturePrediction:
     """一行特征 → 瞬时达标概率与混合分布的三分位。
 
+    Args: pair, row, known_compliance。
+    """
+    return predict_mixture_many(
+        pair, [row], known_compliance=[known_compliance]
+    )[0]
+
+
+def predict_mixture_many(
+    pair: StagePair,
+    rows: Sequence[list[float]],
+    *,
+    known_compliance: Sequence[float | None],
+) -> list[MixturePrediction]:
+    """成批预测：每棵树对整批只调一次，结果与逐行调用逐位相同。
+
     时长分布是「概率 p₀ 的 0 + 概率 (1−p₀) 的连续时长」的混合
     （实测近半开机一开机就已达标，直接回归会把非零场景全稀释成 0）。
     混合分布在水平 q 上的分位：q ≤ p₀ 时是 0，否则是条件分布在
     (q − p₀)/(1 − p₀) 水平上的分位。
-    Args: pair, row, known_compliance。
+    Args: pair, rows, known_compliance（与 rows 一一对应）。
     """
+    unknown = [
+        row
+        for row, fact in zip(rows, known_compliance, strict=True)
+        if fact is None
+    ]
+    guessed = iter(pair.zero_classifier.proba_zero_many(unknown))
     # ⚠ 起始达标是已知事实；只有缺测未定时才使用分类器概率。
-    p_zero = (
-        pair.zero_classifier.proba_zero(row)
-        if known_compliance is None
-        else known_compliance
+    p_zeros = [
+        fact if fact is not None else next(guessed) for fact in known_compliance
+    ]
+    positives = [_positive_levels(p_zero) for p_zero in p_zeros]
+    minutes = _conditional_minutes(pair, rows, positives)
+    return [
+        _mixture(p_zero, positive, found)
+        for p_zero, positive, found in zip(
+            p_zeros, positives, minutes, strict=True
+        )
+    ]
+
+
+def _conditional_minutes(
+    pair: StagePair,
+    rows: Sequence[list[float]],
+    positives: Sequence[list[tuple[float, float]]],
+) -> list[list[float]]:
+    """每行在非零段各分位上的条件时长；没有时长森林时恒 0。
+
+    ⚠ 只把真有非零分位的那些行送进森林：全落在零段的行不必算。
+    Args: pair, rows, positives（与 rows 一一对应）。
+    """
+    found = [[0.0] * len(positive) for positive in positives]
+    if pair.duration_forest is None:
+        return found
+    asked = [at for at, positive in enumerate(positives) if positive]
+    raw = pair.duration_forest.quantiles_many(
+        [rows[at] for at in asked],
+        [[adjusted for _, adjusted in positives[at]] for at in asked],
     )
-    positive = [
+    for at, values in zip(asked, raw, strict=True):
+        found[at] = values
+    return found
+
+
+def _positive_levels(p_zero: float) -> list[tuple[float, float]]:
+    """落在非零段的分位水平，连同它在条件分布上的水平。
+
+    Args: p_zero。
+    """
+    return [
         (level, (level - p_zero) / (1.0 - p_zero))
         for level in QUANTILE_LEVELS
         if level > p_zero and p_zero < 1.0
     ]
+
+
+def _mixture(
+    p_zero: float,
+    positive: list[tuple[float, float]],
+    minutes: list[float],
+) -> MixturePrediction:
+    """拼出一行的混合分布三分位。
+
+    Args: p_zero, positive, minutes（与 positive 一一对应）。
+    """
     found = dict.fromkeys(QUANTILE_LEVELS, 0.0)
-    if positive and pair.duration_forest is not None:
-        raw = pair.duration_forest.quantiles_at(
-            row, [adjusted for _, adjusted in positive]
-        )
-        for (level, _), minutes in zip(positive, raw, strict=True):
-            found[level] = max(0.0, minutes)
+    for (level, _), value in zip(positive, minutes, strict=True):
+        found[level] = max(0.0, value)
     ordered = sorted(found[level] for level in QUANTILE_LEVELS)
     return MixturePrediction(
         instant_probability=p_zero,

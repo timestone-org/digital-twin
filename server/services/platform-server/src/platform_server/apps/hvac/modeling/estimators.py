@@ -57,8 +57,17 @@ class ZeroClassifier:
 
         Args: row。
         """
+        return self.proba_zero_many([row])[0]
+
+    def proba_zero_many(self, rows: Sequence[Sequence[float]]) -> list[float]:
+        """成批的「瞬时达标」概率，与逐行调用逐位相同。
+
+        Args: rows。
+        """
+        if not rows:
+            return []
         if self._only_class is not None:
-            return 1.0 if self._only_class else 0.0
+            return [1.0 if self._only_class else 0.0] * len(rows)
         # pyright: ignore 的理由 —— classes_/predict_proba 在类型面上部分未知
         classes = cast(
             list[bool],
@@ -68,10 +77,10 @@ class ZeroClassifier:
         proba = cast(
             "np.ndarray[tuple[int, int], np.dtype[np.float64]]",
             self._forest.predict_proba(  # pyright: ignore[reportUnknownMemberType]
-                np.asarray([row], dtype=float)
+                np.asarray(rows, dtype=float)
             ),
         )
-        return float(proba[0][at])
+        return [float(value) for value in proba[:, at]]
 
 
 class DurationForest:
@@ -118,36 +127,52 @@ class DurationForest:
 
         Args: row, levels（0~1，升序）。
         """
-        batch = np.asarray([row], dtype=float)
+        return self.quantiles_many([row], [levels])[0]
+
+    def quantiles_many(
+        self,
+        rows: Sequence[Sequence[float]],
+        levels: Sequence[Sequence[float]],
+    ) -> list[list[float]]:
+        """成批的条件时长分位，每行各有自己的分位水平。
+
+        ⚠ 每棵树对整批只调一次 predict：逐行调用时 300 棵树 × 行数次 Python
+        调用是折外评估的大头，而数值与逐行完全相同。
+        Args: rows, levels（与 rows 一一对应，0~1，升序）。
+        """
+        if not rows:
+            return []
+        batch = np.asarray(rows, dtype=float)
         estimators = cast(
             list[RandomForestRegressor],
             self._forest.estimators_,  # pyright: ignore[reportUnknownMemberType]
         )
-        spread = np.asarray(
-            [_first_prediction(tree, batch) for tree in estimators],
-            dtype=float,
+        spread = np.stack(
+            [_tree_predictions(tree, batch) for tree in estimators]
         )
         return [
-            float(np.expm1(np.percentile(spread, level * 100)))
-            for level in levels
+            [
+                float(np.expm1(np.percentile(spread[:, index], level * 100)))
+                for level in row_levels
+            ]
+            for index, row_levels in enumerate(levels)
         ]
 
 
-def _first_prediction(
+def _tree_predictions(
     tree: RandomForestRegressor,
     batch: "np.ndarray[tuple[int, int], np.dtype[np.float64]]",
-) -> float:
-    """一棵树对单行的预测值。
+) -> "np.ndarray[tuple[int], np.dtype[np.float64]]":
+    """一棵树对整批行的预测值。
 
-    Args: tree, batch（单行）。
+    Args: tree, batch。
     """
     # pyright: ignore 的理由 —— 树的 predict 在 sklearn 类型面上部分未知；
-    # Unknown 立即在 float() 处收敛，不外溢
-    predicted = cast(
+    # Unknown 立即在 cast 处收敛，不外溢
+    return cast(
         "np.ndarray[tuple[int], np.dtype[np.float64]]",
         tree.predict(batch),  # pyright: ignore[reportUnknownMemberType]
     )
-    return float(predicted[0])
 
 
 def sklearn_version() -> str:
