@@ -19,7 +19,6 @@
 import {
   TWIN_2D_BUILTIN_NODE_STYLES,
   TWIN_2D_EDGE_PRESETS,
-  normalizeEdge,
   uniqueBy,
 } from '@dt/twin2d'
 import type {
@@ -34,8 +33,7 @@ import type {
 } from '@dt/twin2d'
 import { computed, shallowRef } from 'vue'
 
-import { newClientUuid } from '@/api/idempotency'
-
+import { addEdge } from '../scripts/edgeOps'
 import { markSnapBox, nodeSnapBox, pointsBox } from '../scripts/entityBoxes'
 import type { Twin2dEntityBox } from '../scripts/entityBoxes'
 import type {
@@ -280,22 +278,20 @@ function insertWaypoints(
 }
 
 /**
- * 拉线松手落到一个节点上：造一条新连线接上去。
- * ⚠ 造出来的那一条也过一遍 `normalizeEdge`：文档里只该有归一化过的形状，就地拼一个
- * 出来的话，某个缺省字段的取值会与读盘那一份不同，而差别只在下次读盘时显形。
+ * 拉线松手落到一个节点上：造一条新连线接上去，并选中它。
+ * ⚠ 走 `addEdge` 而不是就地拼一条：id 口径、缺省值与归一化只有那一支，与「加节点」
+ * 走 `addNode` 同一个理由。
  * @param from 起手那一端
  * @param to 落点那一端
  */
 function connect(from: Twin2dEndpoint, to: Twin2dEndpoint): void {
   // 预置库恒非空，`??` 那一支走不到；留着只为收住下标可空
   const styleId = edgeStyles.value[0]?.id ?? ''
-  const edge = normalizeEdge(
-    { id: newClientUuid(), styleId, from, to },
-    new Set(props.config.nodes.map((node) => node.id)),
-  )
+  const added = addEdge(props.config, { styleId, from, to })
   // ⚠ 走不到：两端都是画布上真实节点，归一化没有丢弃它的理由
-  if (edge === null) return
-  commitEdges([...props.config.edges, edge])
+  if (added.id === null) return
+  emit('change', added.config)
+  props.selection.select('edges', added.id)
 }
 
 /**
