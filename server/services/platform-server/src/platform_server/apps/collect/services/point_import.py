@@ -1,7 +1,5 @@
 """按数据源与编码原地导入点位；事务外校验地址，事务内批量写入。"""
 
-from collections.abc import Sequence
-
 from pydantic import ValidationError
 from sqlalchemy.exc import IntegrityError
 from sqlalchemy.ext.asyncio import AsyncSession
@@ -17,7 +15,10 @@ from platform_server.apps.collect.schemas.point_import import (
     PointImportItemIn,
     PointImportOut,
 )
-from platform_server.apps.collect.services import source_service
+from platform_server.apps.collect.services import (
+    point_service,
+    source_service,
+)
 from platform_server.apps.collect.services.address_check import (
     check_addresses,
     raise_if_rejected,
@@ -29,6 +30,7 @@ from platform_server.apps.collect.services.http_profile import (
 from platform_server.apps.collect.services.presenters import to_point_out
 from platform_server.apps.collect.services.transactions import (
     release_read_transaction,
+    violated_constraint,
 )
 
 _logger = get_logger("platform.collect.point_import")
@@ -38,7 +40,9 @@ async def import_points(
     session: AsyncSession, *, bus: CommandBus, payload: PointImportIn
 ) -> PointImportOut:
     """导入一批点位并提交。Args: session, bus, payload。"""
-    _check_duplicate_codes(payload.items)
+    point_service.raise_if_duplicated_codes(
+        [item.code for item in payload.items]
+    )
     source = await source_service.require_source(session, payload.source_id)
     existing = await point_crud.taken_codes(
         session, payload.source_id, [item.code for item in payload.items]
@@ -114,11 +118,7 @@ async def _flush_import(session: AsyncSession) -> None:
     try:
         await session.flush()
     except IntegrityError as error:
-        cause = getattr(error.orig, "__cause__", None)
-        if (
-            getattr(cause, "constraint_name", None)
-            != "uq_collect_points_source_id_code"
-        ):
+        if violated_constraint(error) != point_service.POINT_CODE_CONSTRAINT:
             raise
         raise PointCodeTaken(
             "导入期间有点位编码被其他请求创建，本批未保存，请刷新后重试"
@@ -157,22 +157,3 @@ def _new_item(item: PointImportItemIn, position: int) -> PointItemIn:
                 for detail in error.errors()
             ),
         ) from error
-
-
-def _check_duplicate_codes(items: Sequence[PointImportItemIn]) -> None:
-    """拒绝同批重复编码。Args: items。"""
-    seen: dict[str, int] = {}
-    for position, item in enumerate(items):
-        first = seen.get(item.code)
-        if first is not None:
-            raise PointInvalid(
-                "同一批里有重复的点位编码",
-                details=(
-                    FieldError(
-                        field=f"items[{position}].code",
-                        code="duplicate_code",
-                        message=f"与 items[{first}] 的编码相同",
-                    ),
-                ),
-            )
-        seen[item.code] = position
