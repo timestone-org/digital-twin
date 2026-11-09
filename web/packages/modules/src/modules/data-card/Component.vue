@@ -230,6 +230,11 @@ const sections = computed(() => {
   }))
 })
 
+/** 摆出来的格数；页签档只数选中那一组，滚一圈的时长按它算。 */
+const shownCount = computed(() =>
+  sections.value.reduce((n, part) => n + part.cells.length, 0),
+)
+
 // ⚠ 两个滚动键要在这里字面读一遍：`shared/scroll.ts` 写的是 `config?.autoScroll`，
 //   可选链绕过了「死字段」闸的正则，那道闸会把这两个键判成声明了没人读
 const scroll = computed(() =>
@@ -262,7 +267,7 @@ const scroll = computed(() =>
         </button>
       </div>
       <ScrollList
-        :item-count="rendered.length"
+        :item-count="shownCount"
         :auto-scroll="scroll.autoScroll"
         :seconds-per-item="scroll.scrollSpeed"
       >

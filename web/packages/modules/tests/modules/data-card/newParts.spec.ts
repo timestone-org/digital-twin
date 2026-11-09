@@ -13,6 +13,7 @@ import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 import { __resetCardParts } from '../../../src/cardParts/registry'
 import Component from '../../../src/modules/data-card/Component.vue'
 import { registerBuiltinCardParts } from '../../../src/modules/data-card/parts'
+import ScrollList from '../../../src/shared/ScrollList.vue'
 
 /**
  * 摆一张卡片。
@@ -351,6 +352,23 @@ describe('分组', () => {
 
     expect(wrapper.findAll('.dc-tabs__one')).toHaveLength(2)
     expect(wrapper.findAll('.dc-cell')).toHaveLength(2)
+  })
+
+  // ⚠ 滚一圈的时长按「秒/项 × 项数」算，项数要数摆出来的那几格，不是全量
+  it('页签档滚动按选中那一组的格数计时', async () => {
+    const wrapper = mount(Component, {
+      props: {
+        config: { cells: CELLS, parts: [{ kind: 'label' }], grouping: 'tabs' },
+        values: { cellValues: [{}, {}, {}] },
+      },
+    })
+    await vi.dynamicImportSettled()
+    await flushPromises()
+    const list = wrapper.findComponent(ScrollList)
+
+    expect(list.props('itemCount')).toBe(2)
+    await wrapper.findAll('.dc-tabs__one')[1]?.trigger('click')
+    expect(list.props('itemCount')).toBe(1)
   })
 
   it('点页签换组', async () => {
