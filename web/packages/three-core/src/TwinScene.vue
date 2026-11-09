@@ -137,6 +137,8 @@ const model = useTwinModelLoad({
     // 动画属于模型，换模型整层重建；只换配置走 refreshLayers 里的 apply
     animations = new ModelAnimations(asset.root, asset.clips)
     animations.apply(props.config.model.animations, props.values?.animations)
+    // ⚠ 先摆后量：框住的必须是缩放、位移、旋转之后的模型，与编辑器同序
+    placeModel()
     sceneCamera.applyInitial(asset.root)
     structure.rebuild()
     refreshLayers()

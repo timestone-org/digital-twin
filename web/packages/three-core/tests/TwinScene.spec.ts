@@ -897,6 +897,38 @@ describe('部件点击', () => {
   })
 })
 
+describe('初始取景', () => {
+  // ⚠ 先量后摆的话框住的是没缩放、没位移的原件，发布后模型偏到画外或缩成一个点
+  it('没配视点时框住的是摆放之后的模型', async () => {
+    let nextFrame: FrameRequestCallback = () => undefined
+    vi.spyOn(globalThis, 'requestAnimationFrame').mockImplementation(
+      (callback) => {
+        nextFrame = callback
+        return 1
+      },
+    )
+    vi.spyOn(globalThis, 'cancelAnimationFrame').mockImplementation(
+      () => undefined,
+    )
+    const wrapper = mountScene({
+      config: config({
+        model: { asset: ASSET, position: [50, 0, 0], scale: 3 },
+      }),
+    })
+    await flushPromises()
+    nextFrame(16)
+
+    const camera = renderer.renders[renderer.renders.length - 1]?.camera
+    if (!(camera instanceof THREE.PerspectiveCamera)) throw new Error('没出帧')
+    const toCenter = new THREE.Vector3(50, 0, 0).sub(camera.position)
+    expect(
+      camera.getWorldDirection(new THREE.Vector3()).angleTo(toCenter),
+    ).toBeLessThan(1e-6)
+    expect(toCenter.length()).toBeGreaterThan(3 * Math.sqrt(12) / 2)
+    wrapper.unmount()
+  })
+})
+
 describe('外部取景', () => {
   /** 相机是渲染器记账里的那一台；场景核心本身不外露。 */
   function cameraOf(): THREE.PerspectiveCamera {
