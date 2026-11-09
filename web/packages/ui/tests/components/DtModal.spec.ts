@@ -79,6 +79,23 @@ describe('干净的弹窗', () => {
     wrapper.unmount()
   })
 
+  it.each([
+    ['isComposing', { isComposing: true }],
+    ['keyCode 229', { keyCode: 229 }],
+  ] as const)('输入法组词时（%s）的 Esc 归输入法，弹窗不关', (_name, init) => {
+    const wrapper = mountModal()
+
+    document.body
+      .querySelector('.dt-modal')
+      ?.dispatchEvent(
+        new KeyboardEvent('keydown', { key: 'Escape', bubbles: true, ...init }),
+      )
+    const emitted = wrapper.emitted('update:modelValue')
+    wrapper.unmount()
+
+    expect(emitted).toBeUndefined()
+  })
+
   it('按 Esc 就关', () => {
     const wrapper = mountModal()
 

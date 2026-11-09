@@ -14,6 +14,7 @@ import DtSelectMenu from './DtSelectMenu.vue'
 import { useSelectMenu } from './useSelectMenu'
 import { resolveKey } from './keyboard'
 import type { SelectAction } from './keyboard'
+import { isImeKeydown } from '../../shared/ime'
 import {
   SEARCHABLE_THRESHOLD,
   filterOptions,
@@ -201,7 +202,7 @@ function stopsAtSelect(action: SelectAction): boolean {
 }
 
 function onKeydown(event: KeyboardEvent): void {
-  if (props.disabled === true) return
+  if (props.disabled === true || isImeKeydown(event)) return
   const action = resolveKey(event.key, {
     isOpen: open.value,
     hasSearch: showSearch.value,

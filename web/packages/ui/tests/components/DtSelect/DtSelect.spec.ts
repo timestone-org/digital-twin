@@ -316,6 +316,30 @@ describe('DtSelect 搜索', () => {
     expect(wrapper.emitted('update:modelValue')).toEqual([['v7']])
   })
 
+  it.each([
+    ['isComposing', { isComposing: true }],
+    ['keyCode 229', { keyCode: 229 }],
+  ] as const)(
+    '输入法组词时（%s）的回车与 Esc 归输入法，不选项也不收起',
+    async (_name, init) => {
+      const { wrapper, input } = await openWithQuery('选项 7')
+      for (const key of ['Enter', 'Escape']) {
+        input?.dispatchEvent(
+          new KeyboardEvent('keydown', {
+            key,
+            bubbles: true,
+            cancelable: true,
+            ...init,
+          }),
+        )
+        await flushPromises()
+      }
+      expect(wrapper.emitted('update:modelValue')).toBeUndefined()
+      expect(input?.value).toBe('选项 7')
+      expect(document.querySelector('.dt-select-menu')).not.toBeNull()
+    },
+  )
+
   it('弹窗里按 Esc 依次清词、收下拉、关弹窗，一下只退一层', async () => {
     const modal = mount(DtModal, {
       props: { modelValue: true, title: '表单' },
