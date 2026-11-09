@@ -30,9 +30,12 @@ const MIN_FIT_ZOOM = 0.4
 const FIT_MARGIN = 40
 /** 右下角缩放工具条占的高度，取景时让开它。 */
 const ZOOM_BAR_HEIGHT = 48
+/** 左上角操作提示条占的高度，顶端对齐时让开它。 */
+const HINT_HEIGHT = 32
 
 /**
- * 让节点落进画布的视口；内容大到要缩到 40% 以下时停在 40%，从内容左上角开始看。
+ * 让节点落进画布的视口；内容大到要缩到 40% 以下时停在 40%，顶端对齐、水平居中
+ * （层级图的根在上方正中）。
  * @param nodes 要取景的节点
  * @param width 画布宽
  * @param height 画布高
@@ -59,8 +62,8 @@ export function fitViewport(
   )
   if (fitted < MIN_FIT_ZOOM)
     return {
-      x: FIT_MARGIN - left * MIN_FIT_ZOOM,
-      y: FIT_MARGIN - top * MIN_FIT_ZOOM,
+      x: (width - (right + left) * MIN_FIT_ZOOM) / 2,
+      y: FIT_MARGIN + HINT_HEIGHT - top * MIN_FIT_ZOOM,
       zoom: MIN_FIT_ZOOM,
     }
   return {

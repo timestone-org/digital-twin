@@ -222,9 +222,10 @@ function onRestore(revision: number) {
             :disabled="busy"
             @select="onImport"
           />
+          <!-- 编辑会自动保存：只有还没存下的改动时才用主色催一下 -->
           <DtButton
             size="sm"
-            variant="solid"
+            :variant="saving.dirty.value ? 'solid' : 'outline'"
             :disabled="!document || busy || saving.saving.value"
             @click="page.safe(saving.flush)"
           >

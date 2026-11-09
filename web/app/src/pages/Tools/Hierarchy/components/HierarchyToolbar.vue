@@ -191,13 +191,14 @@ function drag(event: DragEvent, kind: NodeKind) {
           </DtButton>
           <DtButton
             size="sm"
-            variant="ghost"
+            variant="outline"
             draggable="true"
             :disabled="busy"
             title="组织公共连接，不占逻辑层级"
             @dragstart="drag($event, 'junction')"
             @click="emit('add', 'junction')"
           >
+            <template #leading><DtIcon name="plus" :size="14" /></template>
             汇流点
           </DtButton>
         </div>
