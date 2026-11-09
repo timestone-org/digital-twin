@@ -55,7 +55,6 @@ from platform_server.apps.dataset.services.collect_run import (
     manual_keys,
     point_columns,
 )
-from platform_server.apps.dataset.services.collector import Sessions
 from platform_server.apps.dataset.services.dirty import DatasetDirtyLog
 from platform_server.apps.dataset.services.record_compute import (
     RecomputeOutcome,
@@ -63,6 +62,7 @@ from platform_server.apps.dataset.services.record_compute import (
     recompute_range,
 )
 from platform_server.apps.dataset.services.record_history import ComputeScope
+from platform_server.apps.dataset.services.sessions import Sessions
 
 _logger = get_logger("platform.dataset.backfill")
 

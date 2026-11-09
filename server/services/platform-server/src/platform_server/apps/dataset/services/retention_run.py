@@ -21,7 +21,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 
 from lib.logging import get_logger
 from platform_server.apps.dataset.crud import retention_crud, table_crud
-from platform_server.apps.dataset.services.collector import Sessions
+from platform_server.apps.dataset.services.sessions import Sessions
 
 _logger = get_logger("platform.dataset.retention")
 
