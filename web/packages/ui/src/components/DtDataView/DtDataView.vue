@@ -7,7 +7,8 @@
  * 改」这份漂移风险就落在页面上——两种视图不同屏，评审也看不出来。凡两种视图
  * 都要出现、且不止一个元素的片段，页面必须抽成子组件供两处共用。
  */
-import { computed } from 'vue'
+import { computed, h } from 'vue'
+import type { FunctionalComponent } from 'vue'
 import type {
   DtDataColumn,
   DtDataViewEmpty,
@@ -24,6 +25,20 @@ import type { DtPaginationState } from '../DtPagination/pages'
 import DtSegmented from '../DtSegmented/DtSegmented.vue'
 import DtTable from '../DtTable/DtTable.vue'
 import type { DtDataViewSelection } from './selection'
+
+/**
+ * 卡片外壳：可选时包一层留出复选框位，否则卡片直接铺进网格，卡片本体因此只写一份。
+ * ⚠ 包装层的留位样式是 scoped 的，靠函数组件根节点继承父级 scoped id 才落得上。
+ * @param selectable 是否带复选框位
+ */
+const CardShell: FunctionalComponent<{ selectable: boolean }> = (
+  shellProps,
+  { slots },
+) =>
+  shellProps.selectable
+    ? h('div', { class: 'dt-data-view__selectable-card' }, slots.default?.())
+    : slots.default?.()
+CardShell.props = ['selectable']
 
 export interface DtDataViewLayout {
   minWidth?: string | undefined
@@ -296,8 +311,13 @@ const fieldColumns = computed(() =>
       >
         <!-- 走插槽的后备内容而不是双分支：两条路径不会同时存在 -->
         <template v-for="(row, index) in rows" :key="row.id">
-          <div v-if="selection" class="dt-data-view__selectable-card">
-            <div class="dt-data-view__card-select" @click.stop @keydown.stop>
+          <CardShell :selectable="selection !== undefined">
+            <div
+              v-if="selection"
+              class="dt-data-view__card-select"
+              @click.stop
+              @keydown.stop
+            >
               <DtCheckbox
                 :model-value="selectedIds.has(row.id)"
                 :aria-label="selectionLabel(row)"
@@ -323,25 +343,7 @@ const fieldColumns = computed(() =>
                 </template>
               </DtDataCard>
             </slot>
-          </div>
-          <slot v-else name="card" :row="row" :index="index">
-            <DtDataCard
-              :title-column="titleColumn"
-              :meta-columns="metaColumns"
-              :actions-column="actionsColumn"
-              :field-columns="fieldColumns"
-            >
-              <template
-                v-for="column in columns"
-                :key="column.key"
-                #[cellSlot(column.key)]
-              >
-                <slot :name="`cell-${column.key}`" :row="row" :index="index"
-                  >—</slot
-                >
-              </template>
-            </DtDataCard>
-          </slot>
+          </CardShell>
         </template>
       </div>
     </DtPageState>
