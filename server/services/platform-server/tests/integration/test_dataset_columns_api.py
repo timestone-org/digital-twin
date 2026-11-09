@@ -368,3 +368,37 @@ def _detail_fields(response: httpx.Response) -> list[str]:
     """取错误体里的字段级说明指向了谁。"""
     details: list[dict[str, Any]] = response.json()["details"]
     return [item["field"] for item in details]
+
+
+@pytest.mark.parametrize(
+    "formula",
+    [
+        "{shift_output.产量} * 2",
+        "SUM_OVER({shift_output.产量}, '1d')",
+        "MAX_ALL({shift_output.产量})",
+    ],
+)
+async def test_a_column_referenced_from_another_table_refuses_to_be_deleted(
+    app_context: AppContext, formula: str
+) -> None:
+    # ⚠ 跨表引用不进 referenced_keys：只查本表会放行，另一张表的公式从此静默算空
+    source = await create_table(app_context.client)
+    referenced = await create_column(app_context.client, source["id"])
+    other = await create_table(app_context.client, code="plant", name="全厂")
+    await create_column(
+        app_context.client,
+        other["id"],
+        key="引用",
+        name="引用",
+        source="formula",
+        formula=formula,
+    )
+    url = f"{columns_url(source['id'])}/{referenced['id']}"
+
+    response = await app_context.client.delete(url)
+
+    assert response.status_code == HTTP_CONFLICT
+    assert code_of(response) == COLUMN_IN_USE
+    assert _detail_fields(response) == ["columns[plant.引用]"]
+    forced = await app_context.client.delete(url, params={"force": "true"})
+    assert forced.status_code == HTTP_NO_CONTENT
