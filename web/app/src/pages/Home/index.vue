@@ -63,10 +63,11 @@ const {
 /**
  * 大屏增删之后重拉。⚠ 项目列表也要重拉：侧栏每一行带着大屏计数，只刷网格的话
  * 删掉或复制一张屏之后那个数停在改动前。项目在前，大屏的结果才是最后一句话。
+ * ⚠ 项目没拉到就别拉大屏：大屏成功会清掉错误，侧栏空着却没有错误态。
  */
 async function reloadAfterDashboardsChanged(): Promise<void> {
   await reloadProjects()
-  await reloadDashboards()
+  if (error.value === null) await reloadDashboards()
 }
 
 const cards = useCardActions(reloadAfterDashboardsChanged)

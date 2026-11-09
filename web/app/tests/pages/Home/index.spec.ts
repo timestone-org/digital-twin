@@ -455,6 +455,18 @@ describe('弹窗回来的三条信号', () => {
     expect(dashboardApi.listProjects).toHaveBeenCalledTimes(2)
   })
 
+  it('改了大屏后项目重拉失败要停在错误态，不能被大屏的成功盖掉', async () => {
+    stubList()
+    const wrapper = await render()
+    vi.mocked(dashboardApi.listProjects).mockRejectedValue(
+      new Error('后端挂了'),
+    )
+    wrapper.getComponent(WorkbenchDialogs).vm.$emit('changed', 'dashboards')
+    await flushPromises()
+    expect(wrapper.text()).toContain('加载失败')
+    expect(dashboardApi.listDashboards).toHaveBeenCalledTimes(1)
+  })
+
   it('改了项目连大屏一起重拉——删掉当前项目后网格不能还留着它的屏', async () => {
     stubList()
     const wrapper = await render()
