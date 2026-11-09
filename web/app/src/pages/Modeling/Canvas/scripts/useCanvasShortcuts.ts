@@ -38,6 +38,8 @@ export interface ShortcutActions {
   openConfig: () => void
   /** 让整张图回到视野里。 */
   fit: () => void
+  /** 保存工作流。 */
+  save: () => void
   /** 方向键微调选中的节点。 */
   nudge: (deltaLeft: number, deltaTop: number) => void
   /** 现在能不能改图（只读时改图类按键一律不响应）。 */
@@ -65,7 +67,14 @@ function withModifier(event: KeyboardEvent): SimpleAction | null {
   if (key === 'c') return 'copy'
   if (key === 'v') return 'paste'
   if (key === 'd') return 'duplicate'
+  if (key === 's') return 'save'
   return null
+}
+
+/** 页面上划选着一段文字：这时 Ctrl+C 该让给浏览器复制它。 */
+function hasTextSelection(): boolean {
+  const selection = window.getSelection()
+  return selection !== null && !selection.isCollapsed
 }
 
 /** 方向键要挪多远；不是方向键给 null。 */
@@ -104,6 +113,7 @@ export function useCanvasShortcuts(actions: ShortcutActions): void {
     }
     const action = actionOf(event)
     if (action === null) return
+    if (action === 'copy' && hasTextSelection()) return
     if (!READONLY_SAFE.has(action) && !actions.canEdit()) return
     event.preventDefault()
     actions[action]()

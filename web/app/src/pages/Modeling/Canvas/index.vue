@@ -218,6 +218,9 @@ useCanvasShortcuts({
   duplicate: actions.duplicate,
   nudge: actions.nudge,
   fit: actions.fit,
+  save: () => {
+    if (page.graph.isDirty.value) void saving.save()
+  },
   rename: () => {
     const id = firstSelected()
     if (id !== null) openRename(id)

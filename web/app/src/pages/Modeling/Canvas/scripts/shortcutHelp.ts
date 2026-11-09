@@ -54,6 +54,7 @@ export function shortcutSections(mod: string): ShortcutSection[] {
           desc: '复制 / 粘贴（可粘到别的流水线里）',
         },
         { keys: `${mod}D`, desc: '就地再制一份' },
+        { keys: `${mod}S`, desc: '保存工作流' },
         { keys: 'Delete', desc: '删掉选中的卡片与线' },
         { keys: 'F2', desc: '给这一步改名' },
         { keys: 'Enter / 双击', desc: '打开参数' },
