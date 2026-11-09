@@ -27,7 +27,7 @@ vi.mock('pdfjs-dist/build/pdf.worker.min.mjs?url', () => ({
 interface FakeObserver {
   observe: ReturnType<typeof vi.fn>
   disconnect: ReturnType<typeof vi.fn>
-  fire: (targets: readonly Element[]) => void
+  fire: (targets: readonly Element[], isIntersecting?: boolean) => void
 }
 
 const observers: FakeObserver[] = []
@@ -59,11 +59,11 @@ function installObserver(): void {
       observers.push({
         observe: this.observe,
         disconnect: this.disconnect,
-        fire: (targets) => {
+        fire: (targets, isIntersecting = true) => {
           this.callback(
             targets.map(
               (target) =>
-                ({ isIntersecting: true, target }) as IntersectionObserverEntry,
+                ({ isIntersecting, target }) as IntersectionObserverEntry,
             ),
             this as unknown as IntersectionObserver,
           )
@@ -155,6 +155,24 @@ describe('PDF 原件的画法', () => {
     await flushPromises()
 
     expect(renderCalls).toHaveLength(1)
+  })
+
+  it('⚠ 滚出保留区的页放掉位图，滚回来再画一遍', async () => {
+    const wrapper = await render()
+    const box = wrapper.find('[data-page]').element
+    const evictor = observers.at(-2)
+    if (evictor === undefined) throw new Error('没有回收用的 observer')
+
+    latest().fire([box])
+    await flushPromises()
+    evictor.fire([box], false)
+    await flushPromises()
+    expect(canvasSizes(wrapper)[0]).toBe('0x0')
+
+    latest().fire([box])
+    await flushPromises()
+    expect(renderCalls).toHaveLength(2)
+    expect(canvasSizes(wrapper)[0]).toBe('900x1275')
   })
 
   it('⚠ 卸载时把加载任务 destroy 掉，别让后台那个 worker 一直挂着', async () => {
