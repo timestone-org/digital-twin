@@ -9,6 +9,7 @@ import { BizError, requestData, TransportError } from './client'
 
 const TABLE_PAGE_SIZE = 200
 const REFRESH_TOLERANCE_MS = 60_000
+const HTTP_TOO_MANY_REQUESTS = 429
 
 export interface DatasetLatestValue {
   slot: BindingSlot
@@ -21,9 +22,10 @@ export type DatasetLatestReader = (
   signal: AbortSignal,
 ) => Promise<ReadonlyMap<string, DatasetLatestValue>>
 
-/** 只有网络中断或服务端暂态错误才允许保留陈旧值。 */
+/** 只有网络中断、限流或服务端暂态错误才允许保留陈旧值。 */
 export function canRetainDatasetLatest(caught: unknown): boolean {
-  if (caught instanceof BizError) return caught.status >= 500
+  if (caught instanceof BizError)
+    return caught.status >= 500 || caught.status === HTTP_TOO_MANY_REQUESTS
   return (
     caught instanceof TransportError &&
     (caught.status === 0 || caught.status >= 500)
