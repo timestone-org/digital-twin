@@ -62,11 +62,20 @@ def format_table(
         f'<w:tblBorders xmlns:w="{_W_NS}">{borders}</w:tblBorders>',
         "_tbl",
     )
+    # ⚠ `row.cells` 对合并格按跨列、跨行各回一次同一个 tc：只排第一次，
+    # 否则叠出几份 shd / tcMar，纵向合并格还会拿到两种斑马底色
+    # ⚠ 按元素本身去重而不是 id()：代理对象随取随建，回收后的 id 会被复用
+    seen: set[object] = set()
     for index, row in enumerate(table.rows):
         append_property(row, "trPr", f'<w:cantSplit xmlns:w="{_W_NS}"/>', "_tr")
         for cell in row.cells:
-            cell.vertical_alignment = WD_CELL_VERTICAL_ALIGNMENT.CENTER
+            element = cast(object, vars(cell)["_tc"])
+            if element in seen:
+                continue
+            seen.add(element)
             _format_cell(cell, index, has_header)
+            # 追加式写入的 shd / tcMar 要排在 vAlign 前面（CT_TcPr 的元素序）
+            cell.vertical_alignment = WD_CELL_VERTICAL_ALIGNMENT.CENTER
 
 
 def _format_cell(cell: Cell, index: int, has_header: bool) -> None:
