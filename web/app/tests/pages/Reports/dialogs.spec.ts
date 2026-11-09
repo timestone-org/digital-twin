@@ -324,3 +324,43 @@ it('API 数值指标保存聚合口径，支持取消编辑和删除', async () 
   expect(wrapper.emitted('update:modelValue')?.[1]?.[0]).toEqual([])
   wrapper.unmount()
 })
+
+it('⚠ 页面设置的数字不合法时拦在弹窗里，不发出去', async () => {
+  const wrapper = mount(PageDialog, {
+    props: { modelValue: false, page: {} },
+    global: { stubs: { teleport: true } },
+  })
+  await wrapper.setProps({ modelValue: true })
+  const field = (label: string) =>
+    wrapper
+      .findAllComponents(DtInput)
+      .find((input) => input.props('label') === label)
+  field('上边距（厘米）')?.vm.$emit('update:modelValue', 'abc')
+  field('正文字号（磅）')?.vm.$emit('update:modelValue', '')
+  await flushPromises()
+  await wrapper
+    .findAllComponents(DtButton)
+    .find((button) => button.text() === '应用')
+    ?.trigger('click')
+  expect(wrapper.emitted('save')).toBeUndefined()
+  expect(wrapper.emitted('update:modelValue')).toBeUndefined()
+  expect(field('上边距（厘米）')?.props('error')).toBeTruthy()
+  expect(field('正文字号（磅）')?.props('error')).toBeTruthy()
+  wrapper.unmount()
+})
+
+it('工具栏设过自定义纸张时，纸张一栏照实显示「自定义」', async () => {
+  const wrapper = mount(PageDialog, {
+    props: { modelValue: false, page: { size: 'custom' } },
+    global: { stubs: { teleport: true } },
+  })
+  await wrapper.setProps({ modelValue: true })
+  await flushPromises()
+  const paper = wrapper
+    .findAllComponents(DtSelect)
+    .find((select) => select.props('label') === '纸张')
+  const options: unknown = paper?.props('options')
+  expect(JSON.stringify(options)).toContain('custom')
+  expect(paper?.props('modelValue')).toBe('custom')
+  wrapper.unmount()
+})
