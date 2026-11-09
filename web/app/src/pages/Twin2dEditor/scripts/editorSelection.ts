@@ -170,11 +170,9 @@ function prunePick(
 ): void {
   const current = state.pick.value
   if (current !== null) {
-    setPick(
-      state,
-      current.kind,
-      current.ids.filter((id) => exists(current.kind, id)),
-    )
+    const kept = current.ids.filter((id) => exists(current.kind, id))
+    // 一个都没摘就不换引用：配置每改一笔都会走到这里，换了右栏整片跟着白重算
+    if (kept.length !== current.ids.length) setPick(state, current.kind, kept)
   }
   const style = state.focus.value
   if (style !== null && !exists(style.kind, style.id)) state.focus.value = null

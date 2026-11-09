@@ -238,3 +238,23 @@ describe('只看选中的那一个', () => {
     )
   })
 })
+
+// ⚠ 换热器、末端这类样式默认一个读数槽都不引：选中它只看得到一行状态，不说一声的话
+// 像是「这个节点绑不了读数」，其实要先在属性页勾上传感器
+describe('选中的节点没有读数行', () => {
+  it('说清怎么让读数行出来', () => {
+    const wrapper = mountPane({ kind: 'nodes', id: 'n2' })
+
+    expect(wrapper.get('[data-test="binding-no-readings"]').text()).toContain(
+      '传感器',
+    )
+  })
+
+  it('有读数行的节点不出这句', () => {
+    const wrapper = mountPane({ kind: 'nodes', id: 'n1' })
+
+    expect(wrapper.find('[data-test="binding-no-readings"]').exists()).toBe(
+      false,
+    )
+  })
+})

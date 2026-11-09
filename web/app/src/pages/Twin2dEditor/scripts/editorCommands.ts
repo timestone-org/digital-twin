@@ -1,6 +1,6 @@
 /**
- * @fileoverview 键盘手势的十二个落点：撤销重做、复制剪切粘贴再制、删除、全选、
- * Esc、方向键微调与数字键切工具，各自落到文档态与选中态上。
+ * @fileoverview 键盘手势的落点：撤销重做、复制剪切粘贴再制、删除、全选、
+ * Esc 与方向键微调，各自落到文档态与选中态上。
  * 判定归 `shortcuts.ts`，这里只回答「按下去做什么」。
  *
  * ⚠ 一切改动都走调用方给的 `commit`（= 文档态那个唯一入口）：绕开它写的那一笔不会
@@ -16,8 +16,6 @@
  * 进图元树，认错了只会往文档里塞一堆归一化随后丢掉的东西，而界面上一声不吭。
  */
 import type { Pt, Twin2dConfig, Twin2dNodeStyle } from '@dt/twin2d'
-import { ref } from 'vue'
-import type { Ref } from 'vue'
 
 import {
   createTwin2dClipboard,
@@ -25,6 +23,7 @@ import {
   pasteTwin2dPrims,
   twin2dCut,
   twin2dEntityClip,
+  twin2dPasteNotice,
   twin2dPrimClip,
 } from './clipboard'
 import type {
@@ -38,7 +37,7 @@ import { duplicateMarks, moveMarks, removeMarks } from './markOps'
 import { duplicateNodes, moveNodes, removeNodes } from './nodeOps'
 import type { Twin2dCopied } from './nodeOps'
 import { findTwin2dPrim, removePrim, twin2dPrimIds } from './primOps'
-import type { Twin2dShortcutHandlers, Twin2dTool } from './shortcuts'
+import type { Twin2dShortcutHandlers } from './shortcuts'
 import { twin2dNodeStyleOf, writeNodeStyle } from './styleOps'
 
 /** 手势落点要的那几样。 */
@@ -49,6 +48,12 @@ export interface Twin2dCommandDeps {
   selection: Twin2dEditorSelection
   /** 写配置的唯一入口（文档态的 `commit`）。 */
   commit: (next: Twin2dConfig) => void
+  /** 连续动作的一帧：同 `key` 的连着并成一帧撤销；不给就逐次各落一帧。 */
+  commitMerged?: (next: Twin2dConfig, key: string) => void
+  /** 一段连续动作到此为止。 */
+  endMerge?: () => void
+  /** 给用户交代一句话（粘贴时换了样式、丢了连线）。 */
+  notify?: (text: string) => void
   undo: () => void
   redo: () => void
   save: () => void
@@ -58,11 +63,9 @@ export interface Twin2dCommandDeps {
   pickPrim: (primId: string) => void
 }
 
-/** 装好的手势落点，加当前工具。 */
+/** 装好的手势落点。 */
 export interface Twin2dCommands {
   handlers: Twin2dShortcutHandlers
-  /** 数字键切出来的当前工具。 */
-  tool: Ref<Twin2dTool>
 }
 
 /** 一次动作的现场：配置、当下这一类与它选中的那一批。 */
@@ -242,6 +245,8 @@ function pasteEntitiesCmd(ctx: Ctx, clip: Twin2dEntityClip): void {
     offset: ctx.clipboard.nextOffset(config.canvas.grid),
   })
   ctx.deps.commit(done.config)
+  const notice = twin2dPasteNotice(done, clip, config)
+  if (notice !== null) ctx.deps.notify?.(notice)
   const kind = PICK_KINDS.find((item) => done.ids[item].length > 0)
   if (kind !== undefined) {
     ctx.deps.selection.selectMany(kind, done.ids[kind], false)
@@ -299,24 +304,32 @@ function selectAllCmd(ctx: Ctx): void {
 
 /**
  * 方向键微调。
+ * ⚠ 按住不放的自动重复并成一帧：各落一帧的话，三秒就把撤销栈冲光、保存那一帧也被
+ * 挤掉；每次新按下先断段，所以分开按的几下仍各占一步。
  * @param ctx 现场
  * @param at 位移（设计坐标）
+ * @param repeat 是不是按住不放的自动重复
  */
-function nudgeCmd(ctx: Ctx, at: Pt): void {
+function nudgeCmd(ctx: Ctx, at: Pt, repeat: boolean): void {
   const aim = aimOf(ctx)
   if (aim === null) return
-  ctx.deps.commit(moveOf(aim, at))
+  const next = moveOf(aim, at)
+  const { commitMerged, endMerge } = ctx.deps
+  if (commitMerged === undefined) {
+    ctx.deps.commit(next)
+    return
+  }
+  if (!repeat) endMerge?.()
+  commitMerged(next, `nudge:${aim.kind}:${aim.ids.join(',')}`)
 }
 
 /**
- * 装上十二个手势落点。
+ * 装上全部手势落点。
  * @param deps 文档态、选中轴与页面动作
  */
 export function createTwin2dCommands(deps: Twin2dCommandDeps): Twin2dCommands {
-  const tool = ref<Twin2dTool>('select')
   const ctx: Ctx = { deps, clipboard: createTwin2dClipboard() }
   return {
-    tool,
     handlers: {
       save: deps.save,
       undo: deps.undo,
@@ -328,10 +341,7 @@ export function createTwin2dCommands(deps: Twin2dCommandDeps): Twin2dCommands {
       remove: () => removeCmd(ctx),
       selectAll: () => selectAllCmd(ctx),
       escape: () => deps.selection.clear(),
-      nudge: (at) => nudgeCmd(ctx, at),
-      selectTool: (next) => {
-        tool.value = next
-      },
+      nudge: (at, repeat) => nudgeCmd(ctx, at, repeat),
     },
   }
 }

@@ -223,6 +223,14 @@ describe('formatSlotValue', () => {
     expect(formatSlotValue(63.4, slot)).toBe('63.4 kW')
   })
 
+  // ⚠ 零点附近抖动的传感器（-0.03、精度 1）是最常见的那一档：显出「-0.0」像个坏值
+  it('缺省档给了精度时，舍入成零的负数不带负号', () => {
+    expect(formatSlotValue(-0.03, slotOf({ precision: 1, unit: 'kW' }))).toBe(
+      '0.0 kW',
+    )
+    expect(formatSlotValue(-0.4, slotOf({ precision: 0 }))).toBe('0')
+  })
+
   it('给了 precision 就定点补零', () => {
     expect(formatSlotValue(63.4, slotOf({ precision: 2, unit: '%' }))).toBe(
       '63.40%',

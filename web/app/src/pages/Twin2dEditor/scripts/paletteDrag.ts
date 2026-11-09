@@ -5,10 +5,20 @@
  * 话，改一处就悄悄拖不出东西来——拖到画布上什么都不发生，且零报错。
  */
 import { clamp } from '@dt/twin2d'
-import type { Pt, Twin2dCanvas, Twin2dNodeSize } from '@dt/twin2d'
+import type {
+  Pt,
+  Twin2dCanvas,
+  Twin2dConfig,
+  Twin2dNode,
+  Twin2dNodeSize,
+  Twin2dNodeStyle,
+} from '@dt/twin2d'
 
-import { snapPoint } from './snapping'
+import { addNode } from './nodeOps'
+import type { Twin2dAdded } from './nodeOps'
+import { TWIN_2D_DEFAULT_SNAP, snapPoint } from './snapping'
 import type { Twin2dSnapOptions } from './snapping'
+import { twin2dNodeStyleOf } from './styleOps'
 
 /**
  * 载荷是节点样式 id。
@@ -43,4 +53,43 @@ export function twin2dDropPoint(
     x: clamp(snapped.x, 0, Math.max(0, canvas.width - size.w)),
     y: clamp(snapped.y, 0, Math.max(0, canvas.height - size.h)),
   }
+}
+
+/**
+ * 调色板上点一下：在画布正中加一个节点，与拖下来那一手过同样三道算术。
+ * ⚠ 不能拿画布中心直接当 `x/y`：那是左上角，节点会整个落在中心右下方，也不在网格上。
+ * ⚠ 样式解析不到就一个都不加，理由同 `addNode` 交回的 `id: null`。
+ * @param config 当前配置
+ * @param styleId 点的那份样式
+ */
+export function addNodeAtCenter(
+  config: Twin2dConfig,
+  styleId: string,
+): Twin2dAdded {
+  const style = twin2dNodeStyleOf(config, styleId)
+  if (style === null) return { config, id: null }
+  const { canvas } = config
+  const center = { x: canvas.width / 2, y: canvas.height / 2 }
+  const snap = { ...TWIN_2D_DEFAULT_SNAP, grid: canvas.grid }
+  const where = twin2dDropPoint(center, style.size, canvas, snap)
+  return addNode(config, twin2dNodeSeed(style, where))
+}
+
+/** 只画显示名的那一类样式（文字标注）的分栏。 */
+const TEXT_ONLY_CATEGORY = 'label'
+
+/**
+ * 从调色板落一个新节点的种子：样式、位置，文字标注那一类再带上起手文字。
+ * ⚠ 文字标注只画显示名：空着落下去就只剩一根 3px 的竖条，看不出加了什么。
+ * @param style 落下去的那份样式
+ * @param at 左上角（设计坐标）
+ */
+export function twin2dNodeSeed(
+  style: Twin2dNodeStyle,
+  at: Pt,
+): Partial<Omit<Twin2dNode, 'id'>> {
+  const seed = { styleId: style.id, x: at.x, y: at.y }
+  return style.category === TEXT_ONLY_CATEGORY
+    ? { ...seed, label: style.name }
+    : seed
 }

@@ -18,6 +18,7 @@ import { afterEach, describe, expect, it } from 'vitest'
 
 import {
   TWIN_2D_ASSETS_UNWIRED,
+  twin2dLoadDrops,
   twin2dScan,
   twin2dSetupIssues,
 } from '@/pages/Twin2dEditor/scripts/twin2dIssues'
@@ -80,5 +81,25 @@ describe('装配那一层的缺口', () => {
   // 就再也分不开，而两者的查法完全不同
   it('不混进配置问题里', () => {
     expect(codesOf(RAW)).not.toContain(TWIN_2D_ASSETS_UNWIRED)
+  })
+})
+
+describe('载入时丢掉的那一族', () => {
+  it('原始配置里被整条丢掉的条目逐条报出来', () => {
+    expect(twin2dLoadDrops(RAW).map((issue) => issue.code)).toContain(
+      'dropped-node',
+    )
+  })
+
+  it('只报丢弃那一族，引用完整性那一族不重复报', () => {
+    const codes = twin2dLoadDrops({
+      nodes: [{ id: 'n1', styleId: 'no-such-style' }],
+    }).map((issue) => issue.code)
+
+    expect(codes).toEqual([])
+  })
+
+  it('节点还没读出来时什么都不报', () => {
+    expect(twin2dLoadDrops(undefined)).toEqual([])
   })
 })

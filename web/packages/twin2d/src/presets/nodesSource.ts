@@ -514,6 +514,16 @@ function caption(
 }
 
 /**
+ * 读数行里跟着大字的那两个说明字（「输出」「kWh」）。
+ * ⚠ 必须不换行：读数一长这一行就挤，可折行的中文会按字折成竖排「输 / 出」。
+ * @param id 图元 id
+ * @param text 说明字
+ */
+function inlineCaption(id: string, text: string): Twin2dTxtPrim {
+  return { ...caption(id, text, CAPTION_FONT), nowrap: true }
+}
+
+/**
  * 悬浮卡一行的行高：参考项目 `.tnv-energy-tip__row` 的 1.55。
  * ⚠ 行距由行高撑而不是 `gap`：`tip-rows` 的 gap 是 0，改用 gap 会让三行之间等距、
  * 而每一行自己的上下留白消失，整张卡看着挤在一起（§7.3）。
@@ -780,9 +790,9 @@ function energyMain(): Twin2dBoxPrim {
       pad: [0, 0, 0, 0],
     },
     children: [
-      caption('energy-label', '输出', CAPTION_FONT),
+      inlineCaption('energy-label', '输出'),
       value,
-      caption('energy-unit', 'kWh', CAPTION_FONT),
+      inlineCaption('energy-unit', 'kWh'),
     ],
   }
 }

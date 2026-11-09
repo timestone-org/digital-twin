@@ -124,7 +124,18 @@ export function effectiveSlotsOf(
 ): Twin2dSlot[] {
   const node = config.nodes.find((item) => item.id === nodeId)
   if (node === undefined) return []
-  const style = twin2dStyleResolver(config)(node.styleId)
+  return effectiveSlotsFor(node, twin2dStyleResolver(config)(node.styleId))
+}
+
+/**
+ * 同 `effectiveSlotsOf`，节点与样式已经在手。
+ * @param node 节点实例
+ * @param style 节点引的样式；悬空时为 null
+ */
+function effectiveSlotsFor(
+  node: Twin2dNode,
+  style: Twin2dNodeStyle | null,
+): Twin2dSlot[] {
   if (style === null) return []
   const available = uniqueBy([...style.slots, ...node.slots], (s) => s.key)
   const used = referencedSlots(style, node, available)
@@ -136,8 +147,10 @@ export function effectiveSlotsOf(
 /** 节点读数行：节点文档序 × 该节点有效槽位文档序，扁平。 */
 function nodeValueRows(config: Twin2dConfig): Twin2dBindingRow[] {
   const rows: Twin2dBindingRow[] = []
+  // ⚠ 查表只建一次：逐节点按 id 回查再各建一份的话，每次读数刷新都是平方级
+  const styleOf = twin2dStyleResolver(config)
   for (const node of config.nodes) {
-    for (const slot of effectiveSlotsOf(config, node.id)) {
+    for (const slot of effectiveSlotsFor(node, styleOf(node.styleId))) {
       const index = rows.length
       rows.push({
         slotKey: TWIN_2D_NODE_BINDING_KEY,
@@ -171,15 +184,20 @@ function nodeStatusRows(config: Twin2dConfig): Twin2dBindingRow[] {
 }
 
 /** 一端显示成哪个名字：节点名，空着退回节点 id。 */
-function endpointName(config: Twin2dConfig, nodeId: string): string {
-  const node = config.nodes.find((item) => item.id === nodeId)
-  return nameOr(node?.label ?? '', nodeId)
+function endpointName(
+  nodes: ReadonlyMap<string, Twin2dNode>,
+  nodeId: string,
+): string {
+  return nameOr(nodes.get(nodeId)?.label ?? '', nodeId)
 }
 
 /** 一条连线的行名：两端的节点名。 */
-function edgeLabel(config: Twin2dConfig, edge: Twin2dEdge): string {
-  const from = endpointName(config, edge.from.nodeId)
-  const to = endpointName(config, edge.to.nodeId)
+function edgeLabel(
+  nodes: ReadonlyMap<string, Twin2dNode>,
+  edge: Twin2dEdge,
+): string {
+  const from = endpointName(nodes, edge.from.nodeId)
+  const to = endpointName(nodes, edge.to.nodeId)
   return `${from} → ${to}`
 }
 
@@ -189,6 +207,7 @@ function edgeLabel(config: Twin2dConfig, edge: Twin2dEdge): string {
  * 再筛一次只会与 §14.2 的「行数 = edges.length」错开一格。
  */
 function edgeValueRows(config: Twin2dConfig): Twin2dBindingRow[] {
+  const nodes = new Map(config.nodes.map((node) => [node.id, node]))
   return config.edges.map((edge, index) => ({
     slotKey: TWIN_2D_EDGE_BINDING_KEY,
     index,
@@ -196,7 +215,7 @@ function edgeValueRows(config: Twin2dConfig): Twin2dBindingRow[] {
     entityId: edge.id,
     entitySlot: '',
     sub: EDGE_ROW_SUB,
-    label: edgeLabel(config, edge),
+    label: edgeLabel(nodes, edge),
   }))
 }
 

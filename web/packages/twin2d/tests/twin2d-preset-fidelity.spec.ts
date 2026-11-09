@@ -1403,7 +1403,7 @@ describe('§7.6 shape=square / text（5 件）', () => {
     ])
   })
 
-  it('§7-45 shape 兜底：样式 id 找不到 → 落 __fallback **并进诊断**（参考项目那边是纯静默）', () => {
+  it('§7-45 shape 兜底：样式 id 找不到 → 整个不画，**并进诊断**说清后果（参考项目那边是纯静默）', () => {
     const issues = collectTwin2dIssues({
       canvas: {},
       styles: [],
@@ -1415,7 +1415,9 @@ describe('§7.6 shape=square / text（5 件）', () => {
 
     expect(dangling.length).toBe(1)
     expect(dangling[0]?.level).toBe('error')
-    expect(dangling[0]?.message.includes('__fallback')).toBe(true)
+    // ⚠ 并没有一份兜底样式：说「落到兜底样式」会让人照着去找一个不存在的东西
+    expect(dangling[0]?.message.includes('__fallback')).toBe(false)
+    expect(dangling[0]?.message.includes('不会显示')).toBe(true)
   })
 })
 

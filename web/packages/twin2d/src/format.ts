@@ -186,7 +186,8 @@ function enumText(
  * @param precision 槽位精度，null = 整数直出
  */
 function autoText(value: number, precision: number | null): string {
-  if (precision !== null) return fmtFixed(value, precision)
+  // ⚠ `fmtFixed` 本身与 modules 那份副本逐项对齐、不归一负零，所以在这一层归一
+  if (precision !== null) return unsignZero(fmtFixed(value, precision))
   return Number.isInteger(value) ? String(value) : fmtTrim(value, 1)
 }
 

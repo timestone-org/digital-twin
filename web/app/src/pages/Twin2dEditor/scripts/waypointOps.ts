@@ -19,6 +19,7 @@ import {
   portWorldSide,
   projectToPerimT,
   sideNormal,
+  twin2dOutlinePoint,
   uniqueBy,
 } from '@dt/twin2d'
 import type {
@@ -48,6 +49,9 @@ export const TWIN_2D_DROP_SNAP_PX = 10
  * 服务把手），改了要两处一起改，否则把手按正交摆而线按别的档画。
  */
 const FALLBACK_ROUTE: Twin2dRouteKind = 'orthogonal'
+
+/** 钉周长参数时保留的精度：千分之一圈。 */
+const PERIM_T_SCALE = 1000
 
 /** 编辑器恒按正向画：反向只是运行态的数据，文档里的形状不跟着变。 */
 const NOT_REVERSED = false
@@ -116,6 +120,8 @@ function portEnd(pair: NodePair, portId: string): Twin2dEdgeEnd | null {
  * 一端解析成落点与出线方向，优先级 `t` > `portId` > 朝向对方中心。
  * ⚠ 周长参数是**节点自己那只未变换的盒**上的：先取点再过位姿，直接在世界盒上取点
  * 会让转过 90° 的节点上的端点跑到相邻那条边去。
+ * ⚠ 两档周长落点都要投到样式声明的外缘上，与渲染件同一口径：不投的话椭圆、胶囊外缘上
+ * 的把手停在外接矩形的角上。
  * @param end 端点
  * @param node 节点实例
  * @param style 该节点用的样式
@@ -130,7 +136,12 @@ export function resolveEdgeEnd(
   const pair: NodePair = { node, style }
   const box = worldBoxOf(pair)
   if (end.t !== null) {
-    const local = perimeterPoint(centerBoxOf(node, style.size), end.t)
+    const own = centerBoxOf(node, style.size)
+    const local = twin2dOutlinePoint(
+      own,
+      style.outline,
+      perimeterPoint(own, end.t),
+    )
     const point = applyNodeTransform(local.point, node, style.size)
     return { point, side: perimTToSide(projectToPerimT(box, point)) }
   }
@@ -140,7 +151,8 @@ export function resolveEdgeEnd(
   }
   const facing = projectToPerimT(box, toward)
   return {
-    point: perimeterPoint(box, facing).point,
+    point: twin2dOutlinePoint(box, style.outline, perimeterPoint(box, facing))
+      .point,
     side: perimTToSide(facing),
   }
 }
@@ -409,7 +421,9 @@ function endpointOn(pair: NodePair, at: Pt, threshold: number): Twin2dEndpoint {
   // 转过 90° 的节点上端点会落到相邻的那条边
   const local = invertNodeTransform(at, pair.node, pair.style.size)
   const t = projectToPerimT(centerBoxOf(pair.node, pair.style.size), local)
-  return { nodeId: pair.node.id, portId: '', t }
+  // 留三位小数：一圈千分之一远小于一个像素，原样落浮点尾巴只会让检查器读出一长串
+  const rounded = Math.round(t * PERIM_T_SCALE) / PERIM_T_SCALE
+  return { nodeId: pair.node.id, portId: '', t: rounded }
 }
 
 /**

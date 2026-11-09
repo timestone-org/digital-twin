@@ -190,6 +190,17 @@ export function svgGradientDomId(idPrefix: string, id: string): string {
 }
 
 /**
+ * 一枚图元自己的 id 前缀：实例前缀再接图元 id。
+ * ⚠ 渐变 id 只在**一枚图元**里唯一：复制图元会把渐变原样带过去，只拿实例前缀的话
+ * 同一节点里两枚图元写出同 id 的定义，`url(#…)` 只认头一个。
+ * @param idPrefix 本次挂载的实例前缀
+ * @param primId 图元 id
+ */
+export function svgPrimIdPrefix(idPrefix: string, primId: string): string {
+  return `${idPrefix}${ID_SEP}${primId}`
+}
+
+/**
  * 一个局部渐变 → `<linearGradient>` / `<radialGradient>` 的属性。
  * ⚠ 坐标是**对象包围盒**的 0..1 归一值（SVG 的 `gradientUnits` 缺省档），不随 `coord`
  * 走：跟着乘一遍盒尺寸会让渐变整个跑到形状外面去，画面上只剩纯色。

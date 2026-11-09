@@ -451,6 +451,39 @@ describe('落库', () => {
     expect(doc?.isDirty.value).toBe(true)
   })
 
+  // ⚠ 存失败写进加载那一路的错误的话，整个编辑器换成错误页，唯一的「重试」整份重取，
+  // 改了半天的东西一声不吭全丢
+  it('存失败不算加载失败：文档原样留着，错误另放一处', async () => {
+    getMock.mockResolvedValue(payload([node('n1')]))
+    saveMock.mockRejectedValue(new Error('boom'))
+    const editor = page()
+    await flushPromises()
+    const doc = editor.doc.value
+    doc?.commit({ ...(doc?.config.value ?? {}), marks: [] })
+
+    expect(await editor.save()).toBe(false)
+
+    expect(editor.error.value).toBeNull()
+    expect(editor.doc.value).toBe(doc)
+    expect(doc?.isDirty.value).toBe(true)
+    expect(editor.saveError.value).toBe('请求失败，请重试')
+  })
+
+  it('下一次存成功就清掉上一次的保存错误', async () => {
+    getMock.mockResolvedValue(payload([node('n1')]))
+    saveMock.mockRejectedValueOnce(new Error('boom'))
+    saveMock.mockResolvedValue(payload([node('n1')]))
+    const editor = page()
+    await flushPromises()
+    const doc = editor.doc.value
+    doc?.commit({ ...(doc?.config.value ?? {}), marks: [] })
+    await editor.save()
+
+    expect(await editor.save()).toBe(true)
+
+    expect(editor.saveError.value).toBeNull()
+  })
+
   it('还没读出来就按保存，什么都不发', async () => {
     getMock.mockResolvedValue(payload([node('other')]))
     const editor = page()

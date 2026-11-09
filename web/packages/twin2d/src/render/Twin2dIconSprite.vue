@@ -18,7 +18,9 @@ import iconSprite from './icons.svg?raw'
 </template>
 
 <style scoped lang="scss">
-/* 只当 symbol 的容器，零尺寸且脱离文档流，绝不参与布局 */
+/* 只当 symbol 的容器，零尺寸且脱离文档流，绝不参与布局。
+   ⚠ 不能用 display:none 或 visibility:hidden 藏它：那样 use 元素解析不到符号，
+   图标全部静默消失。 */
 .twin2d-icon-sprite {
   position: absolute;
   width: 0;

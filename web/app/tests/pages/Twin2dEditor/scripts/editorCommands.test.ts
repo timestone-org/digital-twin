@@ -18,6 +18,7 @@ import { ref } from 'vue'
 
 import { createTwin2dCommands } from '@/pages/Twin2dEditor/scripts/editorCommands'
 import { createTwin2dSelection } from '@/pages/Twin2dEditor/scripts/editorSelection'
+import { createTwin2dDoc } from '@/pages/Twin2dEditor/scripts/twin2dDoc'
 import type { Twin2dEditorSelection } from '@/pages/Twin2dEditor/scripts/editorSelection'
 
 const CONFIG: Twin2dConfig = normalizeTwin2dConfig({
@@ -51,6 +52,8 @@ interface Rig {
   selectedPrim: ReturnType<typeof ref<string>>
   /** 最后一次写出去的配置；一次都没写就是初始那份。 */
   now: () => Twin2dConfig
+  /** 粘贴之后那句交代。 */
+  notify: ReturnType<typeof vi.fn<(text: string) => void>>
 }
 
 /**
@@ -63,6 +66,7 @@ function rigOf(initial: Twin2dConfig = CONFIG): Rig {
   const save = vi.fn()
   const undo = vi.fn()
   const redo = vi.fn()
+  const notify = vi.fn<(text: string) => void>()
   const now = (): Twin2dConfig => commits.at(-1) ?? initial
   const selectedPrim = ref('')
   const commands = createTwin2dCommands({
@@ -76,8 +80,19 @@ function rigOf(initial: Twin2dConfig = CONFIG): Rig {
     pickPrim: (primId) => {
       selectedPrim.value = primId
     },
+    notify,
   })
-  return { selection, commands, commits, save, undo, redo, selectedPrim, now }
+  return {
+    selection,
+    commands,
+    commits,
+    save,
+    undo,
+    redo,
+    selectedPrim,
+    now,
+    notify,
+  }
 }
 
 /** 当下那份样式的图元树。 */
@@ -174,7 +189,7 @@ describe('方向键微调', () => {
     const rig = rigOf()
     rig.selection.selectMany('nodes', ['n1', 'n2'], false)
 
-    rig.commands.handlers.nudge({ x: 10, y: -10 })
+    rig.commands.handlers.nudge({ x: 10, y: -10 }, false)
 
     expect(rig.now().nodes.map((node) => node.x)).toEqual([110, 310])
     expect(rig.now().nodes[0]?.y).toBe(90)
@@ -184,10 +199,42 @@ describe('方向键微调', () => {
     const rig = rigOf()
     rig.selection.select('marks', 'm1')
 
-    rig.commands.handlers.nudge({ x: 5, y: 5 })
+    rig.commands.handlers.nudge({ x: 5, y: 5 }, false)
 
     expect(rig.now().marks[0]?.x).toBe(15)
     expect(rig.now().marks[0]?.y).toBe(25)
+  })
+
+  // ⚠ 按住方向键的自动重复每一下都各落一帧的话，三秒就把 100 帧的撤销栈冲光，
+  // 想退回去要按几十次撤销，保存那一帧也被挤掉
+  it('按住不放的那一串并成一帧，松开再按另起一帧', () => {
+    const doc = createTwin2dDoc({ config: CONFIG, bindings: [] })
+    const selection = createTwin2dSelection()
+    const commands = createTwin2dCommands({
+      config: () => doc.config.value,
+      selection,
+      commit: doc.commit,
+      commitMerged: doc.commitMerged,
+      endMerge: doc.endMerge,
+      undo: doc.undo,
+      redo: doc.redo,
+      save: () => undefined,
+      selectedPrim: () => '',
+      pickPrim: () => undefined,
+    })
+    selection.select('nodes', 'n1')
+
+    commands.handlers.nudge({ x: 10, y: 0 }, false)
+    commands.handlers.nudge({ x: 10, y: 0 }, false)
+    for (let step = 0; step < 20; step += 1) {
+      commands.handlers.nudge({ x: 10, y: 0 }, true)
+    }
+    expect(doc.config.value.nodes[0]?.x).toBe(320)
+
+    doc.undo()
+    expect(doc.config.value.nodes[0]?.x).toBe(110)
+    doc.undo()
+    expect(doc.config.value.nodes[0]?.x).toBe(100)
   })
 
   // ⚠ 连线的位置由两端定住，自己挪不了
@@ -195,7 +242,7 @@ describe('方向键微调', () => {
     const rig = rigOf()
     rig.selection.select('edges', 'e1')
 
-    rig.commands.handlers.nudge({ x: 10, y: 0 })
+    rig.commands.handlers.nudge({ x: 10, y: 0 }, false)
 
     expect(rig.commits).toEqual([CONFIG])
   })
@@ -260,7 +307,7 @@ describe('复制、剪切与粘贴', () => {
   })
 })
 
-describe('Esc 与工具', () => {
+describe('Esc', () => {
   it('Esc 清掉画布那条选中', () => {
     const rig = rigOf()
     rig.selection.select('nodes', 'n1')
@@ -269,14 +316,33 @@ describe('Esc 与工具', () => {
 
     expect(rig.selection.pick.value).toBeNull()
   })
+})
 
-  it('数字键切工具', () => {
+// ⚠ 粘进来的节点换用了本图同 id 的另一份样式、或连线因为两端不在而整条没粘上：
+// 不说一声的话整批节点粘完就变了样，画面上无从追查
+describe('粘贴之后的交代', () => {
+  it('沿用了本图同 id 的样式时说一声', () => {
     const rig = rigOf()
-    expect(rig.commands.tool.value).toBe('select')
+    rig.selection.select('nodes', 'n1')
+    rig.commands.handlers.copy()
+    rig.commits.push({
+      ...CONFIG,
+      styles: CONFIG.styles.map((style) => ({ ...style, name: '本图那份' })),
+    })
 
-    rig.commands.handlers.selectTool('link')
+    rig.commands.handlers.paste()
 
-    expect(rig.commands.tool.value).toBe('link')
+    expect(rig.notify).toHaveBeenCalledWith(expect.stringContaining('st'))
+  })
+
+  it('原样粘回同一张图时一声不吭', () => {
+    const rig = rigOf()
+    rig.selection.select('nodes', 'n1')
+    rig.commands.handlers.copy()
+
+    rig.commands.handlers.paste()
+
+    expect(rig.notify).not.toHaveBeenCalled()
   })
 })
 
@@ -301,7 +367,7 @@ describe('配置还没读出来', () => {
     commands.handlers.duplicate()
     commands.handlers.remove()
     commands.handlers.selectAll()
-    commands.handlers.nudge({ x: 1, y: 1 })
+    commands.handlers.nudge({ x: 1, y: 1 }, false)
 
     expect(commits).toHaveLength(0)
     expect(selection.pick.value).toBeNull()

@@ -19,6 +19,8 @@ export interface Twin2dSurfaceDeps {
   bindings: () => readonly BindingPayload[]
   /** 写一条绑定。⚠ 走页面那一支：它按 fieldKey 原地替换并沿用旧的绑定 id。 */
   write: (binding: BindingPayload) => void
+  /** 一次写一批，整批只占一笔撤销。⚠ 助手的一步必须是用户的一次撤销（ADR-0023）。 */
+  writeMany: (list: readonly BindingPayload[]) => void
   /** 解一条绑定。⚠ 换点位别用它——直接重写那一条，绑定 id 要沿用。 */
   drop: (fieldKey: string) => void
   /** 这段孪生所在的大屏节点 id；新建的绑定挂在它上面。 */

@@ -22,6 +22,7 @@ import {
   createTwin2dClipboard,
   parseTwin2dClip,
   pasteTwin2dEntities,
+  twin2dPasteNotice,
   pasteTwin2dPrims,
   twin2dCut,
   twin2dEntityClip,
@@ -595,5 +596,49 @@ describe('载荷的脏数据防御', () => {
     const back = parseTwin2dClip(JSON.parse(JSON.stringify(clip)))
 
     expect(back).toEqual(clip)
+  })
+})
+
+describe('粘贴之后的交代', () => {
+  const EMPTY_CARRY = { added: [], adopted: [], missing: [] }
+
+  it('找不到的样式与丢掉的连线一起说清楚', () => {
+    const config = normalizeTwin2dConfig({ marks: [{ id: 'm', kind: 'rect' }] })
+    const clip = twin2dEntityClip(config, 'marks', ['m'])
+    if (clip === null) throw new Error('载荷没打出来')
+    const notice = twin2dPasteNotice(
+      {
+        config,
+        ids: { nodes: [], edges: [], marks: [] },
+        styles: { ...EMPTY_CARRY, missing: ['ghost'] },
+        edgeStyles: EMPTY_CARRY,
+        droppedEdges: 2,
+      },
+      clip,
+      config,
+    )
+
+    expect(notice).toContain('ghost')
+    expect(notice).toContain('2 条连线')
+  })
+
+  it('没什么要交代时给 null', () => {
+    const config = normalizeTwin2dConfig({ marks: [{ id: 'm', kind: 'rect' }] })
+    const clip = twin2dEntityClip(config, 'marks', ['m'])
+    if (clip === null) throw new Error('载荷没打出来')
+
+    expect(
+      twin2dPasteNotice(
+        {
+          config,
+          ids: { nodes: [], edges: [], marks: [] },
+          styles: EMPTY_CARRY,
+          edgeStyles: EMPTY_CARRY,
+          droppedEdges: 0,
+        },
+        clip,
+        config,
+      ),
+    ).toBeNull()
   })
 })

@@ -45,6 +45,7 @@ import { computed } from 'vue'
 
 import { TWIN_2D_PX_RANGE } from '../../scripts/inspectorFields'
 import { updateNode } from '../../scripts/nodeOps'
+import { twin2dCategoryLabel } from '../../scripts/styleCategories'
 import ColorField from '../fields/ColorField.vue'
 import NodeBadgeFields from './NodeBadgeFields.vue'
 import NodeLayerList from './NodeLayerList.vue'
@@ -82,16 +83,6 @@ const SIZE_RANGE = { min: 0, step: 1 }
 const NO_PORTS: readonly Twin2dPort[] = Object.freeze([])
 const NO_PRIMS: readonly Twin2dPrim[] = Object.freeze([])
 
-/** 预置库的分栏名。⚠ 只用于分组显示，一处渲染判断都不参与。 */
-const CATEGORY_LABELS: Readonly<Record<string, string>> = {
-  source: '热源',
-  vessel: '容器',
-  terminal: '末端',
-  exchanger: '换热',
-  label: '标注',
-  circuit: '电路符号',
-}
-
 const LABEL_POS_LABELS: Readonly<Record<Twin2dLabelPos, string>> = {
   bottom: '下方',
   top: '上方',
@@ -119,15 +110,6 @@ const STATUS_OPTIONS = [
   ...TWIN_2D_STATUSES.map((value) => ({ value, label: STATUS_LABELS[value] })),
 ]
 
-/**
- * 分栏的显示名；没登记的分栏原样显示，空分栏归「其他」。
- * @param category 样式上的分栏名
- */
-function categoryLabel(category: string): string {
-  if (category === '') return '其他'
-  return CATEGORY_LABELS[category] ?? category
-}
-
 /** 可选样式：文档里的压住同 id 的预置样式（§13.4）。 */
 const allStyles = computed<readonly Twin2dNodeStyle[]>(() =>
   uniqueBy(
@@ -148,7 +130,7 @@ const styleOptions = computed<readonly DtSelectOption[]>(() => {
   for (const [category, items] of groups) {
     options.push({
       value: `${GROUP_PREFIX}${category}`,
-      label: categoryLabel(category),
+      label: twin2dCategoryLabel(category),
       disabled: true,
     })
     for (const item of items) {

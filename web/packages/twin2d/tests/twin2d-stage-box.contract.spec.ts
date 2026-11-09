@@ -18,6 +18,7 @@ import { describe, expect, it } from 'vitest'
 const RENDER = join(process.cwd(), 'packages', 'twin2d', 'src', 'render')
 const SCSS = join(RENDER, 'twin2d.scss')
 const STAGE = join(RENDER, 'Twin2dStage.vue')
+const SPRITE = join(RENDER, 'Twin2dIconSprite.vue')
 
 /** 舞台宿主那条规则的选择器。 */
 const HOST_SELECTOR = '.t2-stage'
@@ -46,14 +47,21 @@ describe('舞台宿主盒', () => {
   it('孩子全是绝对定位，所以撑不起这只盒', () => {
     const css = readFileSync(SCSS, 'utf8')
 
-    // 这三条是舞台的直接孩子；只要它们还是绝对定位，上面那条就一条都省不得
-    for (const selector of [
-      '.t2-stage__viewport',
-      '.t2-stage__empty',
-      '.t2-sprite',
-    ]) {
+    // 这两条是舞台的直接孩子；只要它们还是绝对定位，上面那条就一条都省不得
+    for (const selector of ['.t2-stage__viewport', '.t2-stage__empty']) {
       expect(ruleBody(css, selector)).toContain('position: absolute')
     }
+  })
+
+  // ⚠ 第三个孩子是 sprite 宿主，它的样式在组件自己身上：守全局那份的话守的是一条
+  // 谁也不用的死规则，组件那份改坏了照样绿
+  it('sprite 宿主按它真正渲染的那个类守绝对定位，全局样式里不留死规则', () => {
+    const source = readFileSync(SPRITE, 'utf8')
+    const [, rendered = ''] = /<div class="([\w-]+)"/.exec(source) ?? []
+
+    expect(rendered).not.toBe('')
+    expect(ruleBody(source, `.${rendered}`)).toContain('position: absolute')
+    expect(readFileSync(SCSS, 'utf8')).not.toContain('.t2-sprite')
   })
 })
 

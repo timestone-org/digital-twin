@@ -190,7 +190,7 @@ function peerBoxes(
  * @param drag 这一帧的位移与被拖的那一批
  * @param snap 吸附配置（`threshold` 已换算成设计像素）
  */
-export function moveNodes(
+export function snapDragNodes(
   nodes: readonly Twin2dNode[],
   styles: ReadonlyMap<string, Twin2dNodeStyle>,
   drag: Twin2dNodeDrag,

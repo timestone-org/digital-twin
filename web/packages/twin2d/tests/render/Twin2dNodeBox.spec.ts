@@ -634,6 +634,30 @@ describe('图元树的上下文', () => {
     expect(wrapper.get('linearGradient').attributes('id')).toContain('stage7')
   })
 
+  // ⚠ 渐变 id 只在一枚图元里唯一：复制一枚 vec 图元会把渐变原样带过去，两枚各出一份
+  // 同 id 的定义的话 `url(#…)` 只认头一个，改副本的色标画面上纹丝不动
+  it('同一节点里两枚 vec 图元用同名渐变时 DOM id 各不相同', () => {
+    const base = gradientStyle()
+    const first = base.prims[0]
+    if (first?.kind !== 'vec') throw new Error('夹具应是 vec 图元')
+    const vec: Twin2dVecPrim = {
+      ...first,
+      fill: { kind: 'gradient', id: 'g1' },
+    }
+    const nodeStyle = styleOf({ prims: [vec, { ...vec, id: 'v2' }] })
+    const wrapper = render({ nodeStyle, idPrefix: 'stage7' })
+
+    const ids = wrapper
+      .findAll('linearGradient')
+      .map((el) => el.attributes('id'))
+    expect(ids).toHaveLength(2)
+    expect(ids[0]).not.toBe(ids[1])
+    const fills = wrapper
+      .findAll('svg.t2-vec')
+      .map((el) => el.find('[fill^="url("]').attributes('fill'))
+    expect(fills).toEqual(ids.map((id) => `url(#${id ?? ''})`))
+  })
+
   // ⚠ 缺省不能是空串：同一份样式在同一张图上出现两次时局部渐变 id 会相撞，浏览器
   // 只认头一个，表现是「另一个节点的颜色跑到这个节点上」
   it('不给实例前缀时同一应用里的两个节点各拿一个', () => {

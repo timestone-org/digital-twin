@@ -144,10 +144,17 @@ describe('外观', () => {
     expect(changedEdge(wrapper).styleId).toBe('steam')
   })
 
-  it('走线四档加上跟随样式一档不少', () => {
-    expect(valuesOf(mountInspector(E1), 'edge-route')).toEqual([
-      ...TWIN_2D_EDGE_ROUTES,
-    ])
+  // ⚠ 阶梯与正交是同一条路由：两档并排摆着，选哪个画出来都一样，像是「阶梯坏了」
+  it('走线除了与正交同路的阶梯一档，其余一档不少', () => {
+    expect(valuesOf(mountInspector(E1), 'edge-route')).toEqual(
+      TWIN_2D_EDGE_ROUTES.filter((route) => route !== 'step'),
+    )
+  })
+
+  it('存量的阶梯档照样显示出来，不被下拉抹成空白', () => {
+    expect(
+      valuesOf(mountInspector({ ...E1, route: 'step' }), 'edge-route'),
+    ).toContain('step')
   })
 
   it('换走线档落成一步一帧', () => {

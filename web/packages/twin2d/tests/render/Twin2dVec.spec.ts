@@ -239,14 +239,16 @@ describe('局部渐变', () => {
     expect(stops[1]?.attributes('stop-color')).toBe('var(--surface-raised)')
   })
 
-  it('id 带实例前缀，填充引的就是这个 id', () => {
+  it('id 带实例与图元前缀，填充引的就是这个 id', () => {
     const wrapper = render({
       gradients: [LINEAR],
       fill: { kind: 'gradient', id: 'g1' },
     })
 
-    expect(gradientIds(wrapper)).toEqual(['t2g-a1-g1'])
-    expect(drawn(wrapper)[0]?.attributes('fill')).toBe('url(#t2g-a1-g1)')
+    expect(gradientIds(wrapper)).toEqual(['t2g-a1-outline-g1'])
+    expect(drawn(wrapper)[0]?.attributes('fill')).toBe(
+      'url(#t2g-a1-outline-g1)',
+    )
   })
 
   // ⚠ 同页两个节点用同名渐变时浏览器只认头一个：不带实例前缀的表现是
@@ -260,9 +262,9 @@ describe('局部渐变', () => {
     const first = render(props, { ...CTX, idPrefix: 'a1' })
     const second = render(props, { ...CTX, idPrefix: 'b2' })
 
-    expect(gradientIds(first)).toEqual(['t2g-a1-g1'])
-    expect(gradientIds(second)).toEqual(['t2g-b2-g1'])
-    expect(drawn(second)[0]?.attributes('fill')).toBe('url(#t2g-b2-g1)')
+    expect(gradientIds(first)).toEqual(['t2g-a1-outline-g1'])
+    expect(gradientIds(second)).toEqual(['t2g-b2-outline-g1'])
+    expect(drawn(second)[0]?.attributes('fill')).toBe('url(#t2g-b2-outline-g1)')
   })
 
   // ⚠ url(#不存在) 在浏览器里是整个形状不画，而配置面上那一档看着是选中的

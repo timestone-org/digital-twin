@@ -61,16 +61,6 @@
   font-size: 0.9rem;
 }
 
-// sprite 宿主：每个 DOM 文档挂一次，本身不占位也不可见。
-// ⚠ 不能用 `display:none` 或 `visibility:hidden` 藏它——那样 `<use href="#ico-…">`
-//   解析不到符号，图标全部静默消失而 `<use>` 元素在 devtools 里还好端端地在。
-.t2-sprite {
-  position: absolute;
-  width: 0;
-  height: 0;
-  overflow: hidden;
-}
-
 // ── 节点与图元 ────────────────────────────────────────────────────────
 // 六个 --t2-* 由 paintCommon.ts 的 injectVars 注入在这个根上。
 // ⚠ `will-change: transform` 是给 hover 变体那一下缩放用的（§7 #16）：参考项目挂在

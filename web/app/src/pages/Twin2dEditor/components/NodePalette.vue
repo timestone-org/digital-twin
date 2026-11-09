@@ -25,6 +25,7 @@ import { computed, ref } from 'vue'
 import type { CSSProperties } from 'vue'
 
 import { TWIN_2D_STYLE_DRAG_MIME } from '../scripts/paletteDrag'
+import { twin2dCategoryLabel } from '../scripts/styleCategories'
 import { twin2dPreviewFit } from '../scripts/stylePreview'
 import { twin2dMergedNodeStyles } from '../scripts/styleOps'
 
@@ -70,20 +71,6 @@ const THUMB: Twin2dNodeSize = { w: THUMB_W, h: THUMB_H }
 /** 缩略图最多放大几倍：接线点只有 6×6，按框铺满会糊成一大块。 */
 const MAX_ZOOM = 2
 
-/**
- * 预置库那几个 `category` 的显示名。
- * ⚠ `category` 只用于这里分栏，不参与任何渲染判断（§7 #55）；认不出的原样显示，
- * 用户自建的分类照样成栏。
- */
-const CATEGORY_LABELS: Readonly<Record<string, string>> = {
-  source: '热源',
-  vessel: '容器',
-  terminal: '末端',
-  exchanger: '换热',
-  label: '标注',
-  circuit: '电路符号',
-}
-
 const keyword = ref('')
 
 /** 几何尺寸下发给样式表：列宽换挡的刻度与缩略图的高都只有这一处取值。 */
@@ -91,14 +78,6 @@ const metrics: CSSProperties = {
   '--t2p-card': `${CARD_MIN}px`,
   '--t2p-thumb-w': `${THUMB_W}px`,
   '--t2p-thumb-h': `${THUMB_H}px`,
-}
-
-/**
- * 一个分类的显示名。
- * @param category 分类字符串
- */
-function categoryLabel(category: string): string {
-  return CATEGORY_LABELS[category] ?? (category === '' ? '未分类' : category)
 }
 
 /** 合并后的整份样式库；口径与样式库抽屉同一支（`twin2dMergedNodeStyles`）。 */
@@ -136,7 +115,7 @@ const visible = computed<readonly Twin2dNodeStyle[]>(() => {
   const needle = keyword.value.trim().toLowerCase()
   if (needle === '') return merged.value
   return merged.value.filter((style) =>
-    `${style.name} ${style.id} ${categoryLabel(style.category)}`
+    `${style.name} ${style.id} ${twin2dCategoryLabel(style.category)}`
       .toLowerCase()
       .includes(needle),
   )
@@ -165,7 +144,7 @@ const groups = computed<readonly PaletteGroup[]>(() => {
   }
   return [...buckets].map(([key, list]) => ({
     key,
-    label: categoryLabel(key),
+    label: twin2dCategoryLabel(key),
     items: list,
   }))
 })

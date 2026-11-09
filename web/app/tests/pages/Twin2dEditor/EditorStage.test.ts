@@ -19,6 +19,7 @@ import { describe, expect, it } from 'vitest'
 import { defineComponent, h, nextTick } from 'vue'
 
 import EditorStage from '@/pages/Twin2dEditor/components/EditorStage.vue'
+import { TWIN_2D_EDGE_ID_PREFIX } from '@/pages/Twin2dEditor/scripts/edgeOps'
 import { createTwin2dSelection } from '@/pages/Twin2dEditor/scripts/editorSelection'
 import type { Twin2dEditorSelection } from '@/pages/Twin2dEditor/scripts/editorSelection'
 import { TWIN_2D_STYLE_DRAG_MIME } from '@/pages/Twin2dEditor/scripts/paletteDrag'
@@ -491,6 +492,24 @@ describe('拉一条新连线', () => {
     )
 
     expect(doc.config.value.edges).toHaveLength(3)
+  })
+
+  // ⚠ 新连线与新节点走同一套 id 口径（带类别前缀），拉完就选中它，好接着改
+  it('新连线的 id 带连线前缀，拉完选中它', async () => {
+    const { wrapper, doc, selection } = mountStage()
+    selection.select('nodes', 'n1')
+    await nextTick()
+
+    await dragBy(
+      portAt(wrapper, 'n1', 'b'),
+      { x: 140, y: 110 },
+      { x: 320, y: 110 },
+      3,
+    )
+
+    const added = doc.config.value.edges.at(-1)
+    expect(added?.id.startsWith(`${TWIN_2D_EDGE_ID_PREFIX}-`)).toBe(true)
+    expect(selection.idsOf('edges')).toEqual([added?.id])
   })
 
   it('拉到空白处什么都不落', async () => {

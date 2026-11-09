@@ -5,6 +5,7 @@
  * ⚠ 倍率读数必须写在按钮上：不写的话「上屏会缩一截」这件事只有点开才知道。
  * ⚠ 图标名没登记时 DtIcon 静默不画，typecheck 与 lint 双双放行，只能在这里兜。
  */
+import { DtIconButton } from '@dt/ui'
 import { mount } from '@vue/test-utils'
 import { describe, expect, it } from 'vitest'
 
@@ -241,5 +242,19 @@ describe('对齐会裁到内容时', () => {
     await button.trigger('click')
 
     expect(wrapper.emitted('alignCell')).toBeUndefined()
+  })
+})
+
+// ⚠ 无字的图标键只能靠图标认：放大镜读作「搜索」、磁铁读作「吸附」，与这两个动作都不沾边
+describe('图标', () => {
+  it('适应与裁到内容不借搜索、吸附的图标', () => {
+    const wrapper = mountToolbar()
+    const icons: unknown[] = wrapper
+      .findAllComponents(DtIconButton)
+      .map((button) => button.props('icon'))
+
+    expect(icons).toContain('maximize')
+    expect(icons).not.toContain('search')
+    expect(icons).not.toContain('magnet')
   })
 })

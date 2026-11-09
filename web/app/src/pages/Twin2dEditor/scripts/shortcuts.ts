@@ -1,6 +1,6 @@
 /**
  * @fileoverview 2D 孪生编辑器的键盘手势：删除、复制剪切粘贴再制、撤销重做、方向键
- * 微调（步长跟着这张图的栅格走）、Esc 收手势、数字键切工具。判定是纯函数，装载那一支
+ * 微调（步长跟着这张图的栅格走）、Esc 收手势。判定是纯函数，装载那一支
  * 把 window 监听挂上并在卸载时摘干净。
  *
  * ⚠ 表单获焦时编辑类手势全部让位，而 `isTwin2dFormFocused` 按**最近可交互祖先**判，
@@ -16,20 +16,6 @@ import type { Pt } from '@dt/twin2d'
 import { onMounted, onUnmounted } from 'vue'
 import { useWorkspacePage } from '@/features/workspace/context'
 import { ownsKeyboard } from '@/utils/keyboardOwner'
-
-/**
- * 数字键 1..6 对应的工具。
- * ⚠ 次序就是键位，插一档进中间会把用户练熟的键位整体挪一位；新工具往后加。
- */
-export const TWIN_2D_TOOLS = [
-  'select',
-  'pan',
-  'link',
-  'rect',
-  'line',
-  'text',
-] as const
-export type Twin2dTool = (typeof TWIN_2D_TOOLS)[number]
 
 /** 四个方向键各自的单位位移；`y` 向下为正，与设计坐标同向。 */
 export const TWIN_2D_ARROWS: Readonly<Record<string, Pt>> = Object.freeze({
@@ -63,7 +49,6 @@ export type Twin2dShortcutAction =
   | 'selectAll'
   | 'escape'
   | 'nudge'
-  | 'selectTool'
 
 /** ⌘/Ctrl + 键 的编辑类手势；`z` 另按 Shift 分叉成重做。 */
 const EDIT_COMMAND: Readonly<Record<string, Twin2dShortcutAction>> =
@@ -76,16 +61,6 @@ const EDIT_COMMAND: Readonly<Record<string, Twin2dShortcutAction>> =
     d: 'duplicate',
     a: 'selectAll',
   })
-
-/**
- * 这个键切到哪个工具；不是工具键给 null。
- * @param key 按键名
- */
-export function twin2dToolOf(key: string): Twin2dTool | null {
-  const index = Number.parseInt(key, 10) - 1
-  if (!Number.isInteger(index)) return null
-  return TWIN_2D_TOOLS[index] ?? null
-}
 
 /**
  * 方向键一步走多远（设计像素）：Alt 精调 1 px、Shift 粗调十格、其余一格。
@@ -123,8 +98,7 @@ function commandActionOf(event: KeyboardEvent): Twin2dShortcutAction | null {
 function plainActionOf(event: KeyboardEvent): Twin2dShortcutAction | null {
   const key = event.key
   if (key === 'Delete' || key === 'Backspace') return 'remove'
-  if (key in TWIN_2D_ARROWS) return 'nudge'
-  return twin2dToolOf(key) === null ? null : 'selectTool'
+  return key in TWIN_2D_ARROWS ? 'nudge' : null
 }
 
 /**
@@ -144,7 +118,7 @@ export function twin2dShortcutOf(
   return withCommand ? commandActionOf(event) : plainActionOf(event)
 }
 
-/** 十二个动作各自的落点；一个都不许缺，缺了那个键就是按了没反应。 */
+/** 每个动作各自的落点；一个都不许缺，缺了那个键就是按了没反应。 */
 export interface Twin2dShortcutHandlers {
   save: () => void
   undo: () => void
@@ -157,9 +131,8 @@ export interface Twin2dShortcutHandlers {
   selectAll: () => void
   /** Esc：正在进行的手势按取消收场，没手势就清选中。 */
   escape: () => void
-  /** 方向键微调；位移已按栅格换算成设计像素。 */
-  nudge: (at: Pt) => void
-  selectTool: (tool: Twin2dTool) => void
+  /** 方向键微调；位移已按栅格换算成设计像素，`repeat` = 按住不放的自动重复。 */
+  nudge: (at: Pt, repeat: boolean) => void
 }
 
 export interface Twin2dShortcutOptions {
@@ -184,12 +157,7 @@ export function useTwin2dShortcuts(options: Twin2dShortcutOptions): void {
     const { handlers } = options
     if (action === 'nudge') {
       const at = twin2dNudgeOf(event, options.grid())
-      if (at !== null) handlers.nudge(at)
-      return
-    }
-    if (action === 'selectTool') {
-      const tool = twin2dToolOf(event.key)
-      if (tool !== null) handlers.selectTool(tool)
+      if (at !== null) handlers.nudge(at, event.repeat)
       return
     }
     handlers[action]()

@@ -30,7 +30,7 @@ import { computed, shallowRef } from 'vue'
 import type { CSSProperties } from 'vue'
 
 import {
-  moveNodes,
+  snapDragNodes,
   nodePortDots,
   rotationOf,
   withNodeRotation,
@@ -57,6 +57,11 @@ const HANDLE_GAP_PX = 22
 
 /** 一条参考线都没有；不每次现造一个空表，免得下游白重画。 */
 const NO_GUIDES: readonly Twin2dGuideLine[] = Object.freeze([])
+
+// ⚠ 画中画在同一页挂着运行态舞台，那边拿节点 id 作渐变前缀：这边不另加一段的话两边写出
+// 同 id 的定义，画中画的 `url(#…)` 认到编辑画布这一份，状态变体改的渐变在预览里不生效
+/** 编辑画布的 DOM id 前缀 */
+const EDIT_ID_PREFIX = 'edit-'
 
 /** 一个节点渲染要的那一份。 */
 interface NodeView {
@@ -247,7 +252,7 @@ function dragTo(
   frame: Twin2dGestureFrame,
 ): void {
   if (!frame.moved) return
-  const move = moveNodes(
+  const move = snapDragNodes(
     props.nodes,
     styleMap.value,
     { ids, leadId, ...twin2dAxisLocked(frame) },
@@ -360,17 +365,19 @@ function onNodeDown(view: NodeView, event: PointerEvent): void {
 
 <template>
   <div class="t2e-nodes" data-test="node-layer" :style="chromeVars">
-    <Twin2dNodeBox
-      v-for="view in views"
-      :key="view.node.id"
-      class="t2e-node"
-      :class="{ 't2e-node--picked': view.picked }"
-      :node="view.node"
-      :node-style="view.style"
-      :id-prefix="view.node.id"
-      :resolve-icon="iconResolver"
-      @pointerdown="onNodeDown(view, $event)"
-    />
+    <div class="t2e-node-boxes" data-test="node-boxes">
+      <Twin2dNodeBox
+        v-for="view in views"
+        :key="view.node.id"
+        class="t2e-node"
+        :class="{ 't2e-node--picked': view.picked }"
+        :node="view.node"
+        :node-style="view.style"
+        :id-prefix="`${EDIT_ID_PREFIX}${view.node.id}`"
+        :resolve-icon="iconResolver"
+        @pointerdown="onNodeDown(view, $event)"
+      />
+    </div>
     <span
       v-for="guide in guideLines"
       :key="guide.key"
@@ -408,6 +415,15 @@ function onNodeDown(view: NodeView, event: PointerEvent): void {
 .t2e-nodes {
   position: absolute;
   inset: 0;
+  pointer-events: none;
+}
+
+// ⚠ 节点盒自己的 z-index（悬停变体常带 `z: 30`）必须关在这一格里：放出去的话悬停的
+// 节点盖住自己的引脚点与旋转柄，按下去拖走的是节点，连线一根也拉不出来
+.t2e-node-boxes {
+  position: absolute;
+  inset: 0;
+  isolation: isolate;
   pointer-events: none;
 }
 

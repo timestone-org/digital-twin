@@ -9,6 +9,8 @@
  * 同一份文档里若两族都有，先按丢弃那一族把脏条目清掉，下标才会重合。
  * 口径见 docs/MODULE_TWIN_2D_DESIGN.md §4.2、§7 #45、§9.5。
  */
+import { isIconName } from '@dt/ui'
+
 import { collectTwin2dDroppedIssues } from './issuesDropped'
 import { normalizeTwin2dConfig } from './normalize'
 import {
@@ -51,8 +53,8 @@ function styleResolver(
 
 /**
  * 节点引的样式既不在文档里也不在预置库里。
- * ⚠ 渲染层对这种节点是「落 `__fallback` 兜底样式」——不报出来的话，用户看到的是
- * 一条 3px 竖条加显示名，而配置里明明选着某个具体样式。
+ * ⚠ 渲染层对这种节点是整个不画、绑定行也不出——不报出来的话，用户看到的是节点
+ * 凭空消失，而配置里明明选着某个具体样式。
  */
 function danglingStyles(
   config: Twin2dConfig,
@@ -64,7 +66,7 @@ function danglingStyles(
     .map((ref) => ({
       level: 'error' as const,
       code: 'dangling-style' as const,
-      message: `找不到节点样式 ${ref.node.styleId}，这个节点会落到 __fallback 兜底样式`,
+      message: `找不到节点样式 ${ref.node.styleId}，这个节点不会显示，读数也不会绑定`,
       at: `nodes[${ref.index}].styleId`,
     }))
 }
@@ -263,6 +265,28 @@ function danglingGradients(sites: readonly Twin2dPrimSite[]): Twin2dIssue[] {
   })
 }
 
+/**
+ * `ico` 图元按名字引了一枚图标库里没登记的图标。
+ * ⚠ 未登记的名字 DtIcon 一个像素都不画、也不出声；检查器的下拉挡得住手选，挡不住
+ * 助手与导入直接写进来的名字。
+ * @param sites 文档里的全部图元落点
+ */
+function danglingIconNames(sites: readonly Twin2dPrimSite[]): Twin2dIssue[] {
+  return sites.flatMap((site) => {
+    const prim = site.prim
+    if (prim.kind !== 'ico' || prim.src.kind !== 'name') return []
+    if (isIconName(prim.src.name)) return []
+    return [
+      {
+        level: 'error' as const,
+        code: 'dangling-icon-name' as const,
+        message: `图标库里没有 ${prim.src.name}，这个图标会整个消失`,
+        at: `${site.at}.src.name`,
+      },
+    ]
+  })
+}
+
 function isOutsideCanvas(
   point: Twin2dWaypoint,
   width: number,
@@ -355,6 +379,7 @@ export function collectTwin2dIssues(
     ...danglingPatchKeys(config, styleFor),
     ...danglingVariantKeys(config),
     ...danglingGradients(sites),
+    ...danglingIconNames(sites),
     ...outOfCanvasNodes(config, styleFor),
     ...outOfCanvasWaypoints(config),
     ...collectTwin2dDroppedIssues(raw, config),
