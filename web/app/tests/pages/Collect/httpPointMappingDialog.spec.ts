@@ -4,6 +4,7 @@ import { enableAutoUnmount, flushPromises, mount } from '@vue/test-utils'
 import type { VueWrapper } from '@vue/test-utils'
 import type { CollectPoint } from '@dt/contracts'
 import * as collect from '@/api/collect'
+import { useToast } from '@dt/ui'
 import HttpPointMappingDialog from '@/pages/Collect/components/HttpPointMappingDialog.vue'
 
 enableAutoUnmount(afterEach)
@@ -105,7 +106,13 @@ describe('HTTP JSON 点位映射', () => {
       expect.any(String),
     )
     expect(wrapper.emitted('imported')).toHaveLength(1)
-    expect(wrapper.text()).toContain('已创建 2 个点位')
+    // 全部成功就关弹窗并 toast：结果写在弹窗正文底部，滚动区外根本看不见
+    expect(wrapper.emitted('update:modelValue')?.at(-1)).toEqual([false])
+    expect(
+      useToast().toasts.value.some((one) =>
+        one.message.includes('已创建 2 个点位'),
+      ),
+    ).toBe(true)
   })
   it('JSON 格式错误、空字段及 null 均在 DOM 中说明', async () => {
     const wrapper = await render()

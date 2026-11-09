@@ -11,6 +11,7 @@ import {
   DtNumberInput,
   DtSwitch,
   DtTextarea,
+  useToast,
 } from '@dt/ui'
 import HttpPointMappingTable from './HttpPointMappingTable.vue'
 import { useFormDirty } from '@/composables/useFormDirty'
@@ -78,6 +79,7 @@ const problemMessage = computed(
   () =>
     `有 ${problems.value.size} 个已选字段的编码无效、重复或已存在，请修改编码或取消选择。`,
 )
+const toast = useToast()
 const outcomeMessage = computed(() => {
   const result = state.outcome.value
   if (result === null) return ''
@@ -161,6 +163,16 @@ async function submit(): Promise<void> {
     retentionDays: retentionDays.value,
   })
   await state.submit(items, () => emit('imported'))
+  const outcome = state.outcome.value
+  // 全部进去了就关弹窗报喜；结果写在正文底部，用户多半已滚到别处看不见
+  if (
+    outcome !== null &&
+    outcome.created > 0 &&
+    outcome.failures.length === 0
+  ) {
+    toast.success(outcomeMessage.value)
+    emit('update:modelValue', false)
+  }
 }
 </script>
 
@@ -174,6 +186,20 @@ async function submit(): Promise<void> {
     @update:model-value="emit('update:modelValue', $event)"
   >
     <div class="flex flex-col gap-3">
+      <!-- 部分批次失败时弹窗留着：结果放最上面，不压在滚动区底部 -->
+      <DtNotice
+        v-if="state.outcome.value"
+        :intent="state.outcome.value.failures.length ? 'danger' : 'success'"
+        icon="check"
+        >{{ outcomeMessage }}</DtNotice
+      >
+      <DtNotice
+        v-for="failure in failureNotices"
+        :key="failure.id"
+        intent="danger"
+        icon="alert-circle"
+        >{{ failure.message }}</DtNotice
+      >
       <p class="m-0 text-sm text-text-secondary">
         粘贴接口 JSON
         响应样例，选择需要采集的字段。一个响应可解析多个点位；每个点位均可用于实时展示、历史归档与业务绑定。
@@ -260,19 +286,6 @@ async function submit(): Promise<void> {
           /></DtField>
         </div>
       </template>
-      <DtNotice
-        v-if="state.outcome.value"
-        :intent="state.outcome.value.failures.length ? 'danger' : 'success'"
-        icon="check"
-        >{{ outcomeMessage }}</DtNotice
-      >
-      <DtNotice
-        v-for="failure in failureNotices"
-        :key="failure.id"
-        intent="danger"
-        icon="alert-circle"
-        >{{ failure.message }}</DtNotice
-      >
     </div>
     <template #footer>
       <DtButton
