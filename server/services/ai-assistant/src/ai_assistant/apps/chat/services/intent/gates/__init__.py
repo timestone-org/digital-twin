@@ -10,8 +10,15 @@
 from ai_assistant.apps.chat.services.intent.gates.permission import (
     PermissionGate,
 )
+from ai_assistant.apps.chat.skills import SkillManifest
 from llmcore.intent.ports import Gate
 
-GATES: tuple[Gate, ...] = (PermissionGate(),)
 
-__all__ = ["GATES", "PermissionGate"]
+def gates_for(skills: tuple[SkillManifest, ...]) -> tuple[Gate, ...]:
+    """这一轮的收窄，认得这一轮选中的技能（外置的也在内）。Args: skills。"""
+    return (PermissionGate(skills=skills),)
+
+
+GATES: tuple[Gate, ...] = gates_for(())
+
+__all__ = ["GATES", "PermissionGate", "gates_for"]

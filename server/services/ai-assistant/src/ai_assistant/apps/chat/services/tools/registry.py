@@ -23,6 +23,7 @@ from ai_assistant.apps.chat.services.tools.providers.knowledge import (
 from ai_assistant.apps.chat.services.tools.providers.mcp import McpTools
 from ai_assistant.apps.chat.services.tools.providers.memory import MemoryTools
 from ai_assistant.apps.chat.services.tools.providers.server import ServerTools
+from ai_assistant.apps.chat.skills import SkillCatalog
 from ai_assistant.llm import EmbeddingAdapter
 from ai_assistant.upstream import KnowledgeClient, McpCatalog, PlatformClient
 from llmcore.tools.ports import ToolProvider
@@ -54,6 +55,8 @@ class ProviderDeps:
     embedder: EmbeddingAdapter | None = None
     # 知识库的读侧；不给即这一路缺席（这套部署没起 knowledge-server）
     knowledge: KnowledgeClient | None = None
+    # 技能目录；不给即只有内建那一份
+    skills: SkillCatalog | None = None
 
 
 def build_registry(deps: ProviderDeps | None = None) -> ToolRegistry:
@@ -79,7 +82,9 @@ def build_registry(deps: ProviderDeps | None = None) -> ToolRegistry:
     given = deps if deps is not None else ProviderDeps()
     headers = dict(given.headers or {})
     providers: list[ToolProvider] = [
-        ServerTools(platform=given.platform, headers=headers),
+        ServerTools(
+            platform=given.platform, headers=headers, skills=given.skills
+        ),
         MemoryTools(
             store=(
                 None

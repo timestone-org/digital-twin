@@ -18,6 +18,7 @@
 
 from collections.abc import Sequence
 
+from ai_assistant.apps.chat.services.intent.gates import gates_for
 from ai_assistant.apps.chat.services.intent.registry import narrow_all
 from ai_assistant.apps.chat.services.tools.guides import with_guides
 from ai_assistant.apps.chat.services.tools.mcp_policy import (
@@ -101,6 +102,7 @@ def allowed_for(
             tools=frozenset(spec.name for spec in TOOL_SPECS),
             skills=frozenset(skill.name for skill in on_surface),
         ),
+        gates_for(on_surface),
     )
     kept = tuple(one for one in on_surface if one.name in gated.skills)
     server_allowed = {

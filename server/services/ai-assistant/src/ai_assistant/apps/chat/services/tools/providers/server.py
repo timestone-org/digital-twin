@@ -47,7 +47,7 @@ from ai_assistant.apps.chat.services.tools.skill_access import (
     load_skill,
     resource_answer,
 )
-from ai_assistant.apps.chat.skills import find_skill, list_skills
+from ai_assistant.apps.chat.skills import SkillCatalog, default_catalog
 from ai_assistant.upstream import PlatformClient
 from llmcore.tools.ports import UnknownTool
 from llmcore.tools.shapes import ToolSpec
@@ -72,6 +72,8 @@ class ServerTools:
 
     platform: PlatformClient | None = None
     headers: dict[str, str] = field(default_factory=dict[str, str])
+    # 这套部署的技能目录；不给即只有内建那一份
+    skills: SkillCatalog | None = None
 
     # 这一路在注册表里的名字。⚠ 不加类型标注：加了它就成了 dataclass 字段，
     # 出现在构造签名里，而调用点没有任何理由去改它
@@ -115,8 +117,8 @@ class ServerTools:
         看得见那个工具、调用它却每次都失败。
         """
         return {
-            "skills.load": _skill_answer,
-            "skills.read_resource": _resource_answer,
+            "skills.load": self._skill_answer,
+            "skills.read_resource": self._resource_answer,
             "tools.describe": _tool_answer,
             "modules.catalog": self._modules,
             "points.list_sources": self._list_sources,
@@ -132,6 +134,29 @@ class ServerTools:
             "datasets.read_columns": self._read_saved_columns,
             "assets.search": self._search_assets,
         }
+
+    async def _skill_answer(self, arguments: dict[str, Any]) -> Any:
+        """取一个技能的完整指令；技能是本地的，包成协程只为与别的工具同形。
+
+        ⚠ 技能不存在时回一句「没有这个技能」而不是抛：模型多半是把名字记岔了，
+        告诉它有哪些比让这一步失败有用。
+
+        Args: arguments。
+        """
+        name = str(arguments.get("name") or "")
+        skill = self._catalog().find(name)
+        if skill is None:
+            return {"ok": False, "reason": f"没有名为 {name} 的技能"}
+        return load_skill(skill)
+
+    async def _resource_answer(
+        self, arguments: dict[str, Any]
+    ) -> dict[str, object]:
+        return await resource_answer(self._catalog().skills, arguments)
+
+    def _catalog(self) -> SkillCatalog:
+        """⚠ 与名册取自同一份目录：只查内建那份的话，外置技能列得出却拉不到。"""
+        return self.skills or default_catalog()
 
     def _upstream(self) -> PlatformClient:
         if self.platform is None:
@@ -391,32 +416,6 @@ def _required_id(arguments: dict[str, Any], name: str) -> str:
         return str(uuid.UUID(given))
     except ValueError as error:
         raise UnknownServerTool(f"参数 {name} 不是合法 id：{given}") from error
-
-
-async def _skill_answer(arguments: dict[str, Any]) -> Any:
-    """技能是本地的，没有 IO；包成协程只为与别的工具同形。
-
-    Args: arguments。
-    """
-    return _load_skill(str(arguments.get("name") or ""))
-
-
-def _load_skill(name: str) -> dict[str, Any]:
-    """取一个技能的完整指令。
-
-    ⚠ 技能不存在时回一句「没有这个技能」而不是抛：模型多半是把名字记岔了，
-    告诉它有哪些比让这一步失败有用。
-
-    Args: name。
-    """
-    skill = find_skill(name)
-    if skill is None:
-        return {"ok": False, "reason": f"没有名为 {name} 的技能"}
-    return load_skill(skill)
-
-
-async def _resource_answer(arguments: dict[str, Any]) -> dict[str, object]:
-    return await resource_answer(list_skills(), arguments)
 
 
 async def _tool_answer(arguments: dict[str, Any]) -> dict[str, object]:
