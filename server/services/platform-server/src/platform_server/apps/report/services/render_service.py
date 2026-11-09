@@ -56,6 +56,10 @@ CONTENT_TYPE = (
 GROUP = REPORT_GROUP
 MAX_KEY_LENGTH = 200
 MAX_PENDING_RENDERS = 100
+# 文件名里放不进的字符：路径分隔、Windows 保留字符与控制字符
+_UNSAFE_FILENAME = str.maketrans(
+    dict.fromkeys('\\/:*?"<>|' + "".join(map(chr, range(32))), "_")
+)
 
 
 @dataclass(frozen=True)
@@ -277,17 +281,42 @@ def _anchor(after: str | None) -> tuple[datetime, uuid.UUID] | None:
         raise ReportInvalid("生成记录游标不可解析") from error
 
 
+@dataclass(frozen=True)
+class RenderFile:
+    """一份可下载的成品：正文字节 + 给人看的文件名。"""
+
+    payload: bytes
+    filename: str
+
+
 async def download(
     session: AsyncSession, render_id: uuid.UUID, store: ObjectStore, actor: str
-) -> bytes:
+) -> RenderFile:
     """事务外下载。Args: session, render_id, store, actor。"""
     row = await require_render(session, render_id)
     if row.status != "succeeded" or row.kind != "render" or not row.object_key:
         raise ReportUnavailable("报告尚未生成成功")
     object_key = row.object_key
+    filename = _filename_of(row)
     record_audit(session, actor, "render_downloaded", row.id, (None, None))
     await session.commit()
-    return await store.get_bytes(object_key)
+    return RenderFile(
+        payload=await store.get_bytes(object_key), filename=filename
+    )
+
+
+def _filename_of(row: ReportRender) -> str:
+    """「模板名-报告期.docx」；快照里取不到模板名时用记录 id。
+
+    Args: row。
+    """
+    name = row.snapshot_json.get("name")
+    stem = (
+        f"{name}-{row.period}"
+        if isinstance(name, str) and name.strip()
+        else f"report-{row.id}"
+    )
+    return f"{stem.strip().translate(_UNSAFE_FILENAME)}.docx"
 
 
 async def start_import(

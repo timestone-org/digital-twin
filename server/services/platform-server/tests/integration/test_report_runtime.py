@@ -5,6 +5,7 @@ import io
 import uuid
 from collections.abc import Callable
 from datetime import UTC, datetime
+from urllib.parse import quote
 
 import pytest
 from docx import Document
@@ -83,6 +84,10 @@ async def test_worker_generates_downloadable_word(app_context, stream, sign):
     downloaded = await client.get(f"{PREFIX}/report-renders/{render_id}/files")
     assert downloaded.status_code == 200
     assert downloaded.content.startswith(b"PK")
+    # ⚠ 只有 UUID 的文件名下载下来认不出是哪份报告；中文名走 RFC 5987
+    disposition = downloaded.headers["Content-Disposition"]
+    assert f'filename="report-{render_id}.docx"' in disposition
+    assert "filename*=UTF-8''" + quote("可下载报告-2026-08.docx") in disposition
     viewer = await client.get(
         f"{PREFIX}/report-renders/{render_id}",
         headers=sign(codes=("report:view",)),
