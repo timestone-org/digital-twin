@@ -70,6 +70,9 @@ const CORNER_OFFSETS: Record<(typeof CORNERS)[number], CSSProperties> = {
   'bottom-right': { bottom: '12px', right: '16px' },
 }
 
+/** 上沿有控件条时标题让到它下方：条高约 32px，加上沿 12px 与 8px 间隔。 */
+const TITLE_BELOW_BAR = '52px'
+
 function clamp(value: number, low: number, high: number): number {
   return Math.min(high, Math.max(low, value))
 }
@@ -235,10 +238,23 @@ const statusReadout = computed<TwinStatusReadout | null>(() => {
   return bindingReadout(slots) ?? overallReadout()
 })
 
-const titleStyle = computed<CSSProperties>(() => ({
-  ...CORNER_OFFSETS[readEnum(props.config.titlePosition, CORNERS, 'top-left')],
-  fontSize: `${clamp(readNumber(props.config.titleFontSize, 16), 8, 72)}px`,
-}))
+/** 3D 宿主自己钉在上沿的那两条控件：场景工具条在左、视点条在右。 */
+const hasViewpointBar = computed(
+  () => scene.value.viewpoints.enabled && scene.value.cameras.length > 0,
+)
+
+const titleStyle = computed<CSSProperties>(() => {
+  const corner = readEnum(props.config.titlePosition, CORNERS, 'top-left')
+  // ⚠ 标题与工具条、视点条同在上沿 12px：不让开就叠在它们上面
+  const blocked =
+    (corner === 'top-left' && showSceneTools.value) ||
+    (corner === 'top-right' && hasViewpointBar.value)
+  return {
+    ...CORNER_OFFSETS[corner],
+    ...(blocked ? { top: TITLE_BELOW_BAR } : {}),
+    fontSize: `${clamp(readNumber(props.config.titleFontSize, 16), 8, 72)}px`,
+  }
+})
 </script>
 
 <template>
@@ -293,10 +309,16 @@ const titleStyle = computed<CSSProperties>(() => ({
   text-shadow: var(--fx-glow-title);
 }
 
+// ⚠ 只占右下一角、不拦指针：横贯底边的话会盖住结构树的底几行，还吃掉那一条上的拖拽
 .dt-twin__readout {
   position: absolute;
   right: 16px;
   bottom: 12px;
-  left: 16px;
+  max-width: min(60%, 28rem);
+  pointer-events: none;
+}
+
+.dt-twin__readout :deep(.dt-help-tip) {
+  pointer-events: auto;
 }
 </style>
