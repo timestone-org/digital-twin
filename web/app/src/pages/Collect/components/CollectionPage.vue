@@ -205,7 +205,7 @@ const archiveParamsOpen = ref(false)
                 class="min-h-0 flex-1"
                 style="min-height: 20rem"
                 :panes="pointPanes"
-                :stack-at="900"
+                :stack-at="720"
                 :storage-key="`dt.collect.${protocol}.points-layout`"
               >
                 <template #browse>
