@@ -80,6 +80,7 @@ class TreeRegressorConfig(OperatorConfig):
     random_state: int = Field(
         default=42,
         ge=0,
+        le=2**32 - 1,
         title="随机种子",
         description="定住它，同一份数据每次训出同一个模型",
     )
