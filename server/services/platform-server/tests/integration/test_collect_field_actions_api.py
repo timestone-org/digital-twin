@@ -259,6 +259,24 @@ async def test_a_truncated_subtree_says_so_instead_of_looking_complete(
     assert payload(response)["is_truncated"] is True
 
 
+@pytest.mark.parametrize(
+    "extra", [{"limit": 5}, {"continuation_token": "next-page"}]
+)
+async def test_a_subtree_refuses_paging_fields_it_would_ignore(
+    app_client: httpx.AsyncClient,
+    collect_fakes: CollectFakes,
+    extra: dict[str, object],
+) -> None:
+    # ⚠ 收下又不用，客户端拿着续页令牌翻页会一直拿到同一批
+    source = await create_source(app_client)
+    response = await app_client.post(
+        f"{SOURCES}/{source['id']}:browse-subtree",
+        json={"parent": None, **extra},
+    )
+    assert response.status_code == 400
+    assert collect_fakes.bus.envelopes_of(ACTION_BROWSE_SUBTREE) == []
+
+
 async def test_modbus_write_is_rejected_before_command_enqueue(
     app_client: httpx.AsyncClient, collect_fakes: CollectFakes
 ) -> None:

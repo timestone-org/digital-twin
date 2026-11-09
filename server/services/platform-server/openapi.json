@@ -24735,6 +24735,27 @@
         "title": "StartupRebuildOut",
         "type": "object"
       },
+      "SubtreeIn": {
+        "additionalProperties": false,
+        "description": "收一棵子树：只认从哪个节点往下收。\n\n⚠ 不复用 `BrowseIn`：子树没有分页，收下 `limit` 与续页令牌又不用，客户端\n拿着令牌翻页会一直拿到同一批。",
+        "properties": {
+          "parent": {
+            "anyOf": [
+              {
+                "maxLength": 256,
+                "minLength": 1,
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Parent"
+          }
+        },
+        "title": "SubtreeIn",
+        "type": "object"
+      },
       "SubtreeItemOut": {
         "description": "子树里的一项，外加它挂在谁下面。\n\n⚠ `parent` 不能省：整棵子树是平铺回来的，客户端要靠它拼回层级。",
         "properties": {
@@ -29470,7 +29491,7 @@
           "content": {
             "application/json": {
               "schema": {
-                "$ref": "#/components/schemas/BrowseIn"
+                "$ref": "#/components/schemas/SubtreeIn"
               }
             }
           },

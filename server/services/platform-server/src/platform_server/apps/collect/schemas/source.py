@@ -156,6 +156,16 @@ class BrowseIn(InputModel):
     )
 
 
+class SubtreeIn(InputModel):
+    """收一棵子树：只认从哪个节点往下收。
+
+    ⚠ 不复用 `BrowseIn`：子树没有分页，收下 `limit` 与续页令牌又不用，客户端
+    拿着令牌翻页会一直拿到同一批。
+    """
+
+    parent: Address | None = None
+
+
 class BrowseOut(OutputModel):
     """一页浏览结果；存在续页时由用户显式继续加载。"""
 

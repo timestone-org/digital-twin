@@ -25,6 +25,7 @@ from platform_server.apps.collect.schemas import (
     SourceCreateIn,
     SourceOut,
     SourceUpdateIn,
+    SubtreeIn,
     SubtreeOut,
 )
 from platform_server.apps.collect.services import (
@@ -253,7 +254,7 @@ async def browse_source(
 )
 async def browse_subtree(
     source_id: uuid.UUID,
-    payload: BrowseIn,
+    payload: SubtreeIn,
     session: SessionDep,
     write: OperateDep,
 ) -> ApiResponse[SubtreeOut]:
