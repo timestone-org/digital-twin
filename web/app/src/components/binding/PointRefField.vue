@@ -52,8 +52,8 @@ const parts = computed(() => {
       class="dt-point-ref__value dt-point-ref__value--named"
       :title="nodeKey"
     >
-      <span class="dt-point-ref__code">{{ label.name }}</span>
-      <span v-if="label.source !== ''" class="dt-point-ref__source">
+      <span class="dt-point-ref__name">{{ label.name }}</span>
+      <span v-if="label.source !== ''" class="dt-point-ref__origin">
         · {{ label.source }}
       </span>
     </span>
@@ -132,6 +132,26 @@ const parts = computed(() => {
   &__code {
     flex: 0 1 auto;
     color: var(--text-primary);
+  }
+
+  // 点位名是认人的那一截：先保住它，数据源名只用剩下的地方
+  &__name,
+  &__origin {
+    overflow: hidden;
+    white-space: nowrap;
+    text-overflow: ellipsis;
+  }
+
+  &__name {
+    flex: 0 0 auto;
+    max-width: 100%;
+    color: var(--text-primary);
+  }
+
+  &__origin {
+    min-width: 0;
+    flex: 0 1 auto;
+    color: var(--text-disabled);
   }
 
   &__pick {
