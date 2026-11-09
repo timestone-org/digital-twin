@@ -8,6 +8,7 @@
 from typing import Any
 
 from platform_server.apps.modeling.operators.frame import (
+    ROLE_TARGET,
     Frame,
     numeric_keys,
     select_rows,
@@ -50,5 +51,21 @@ def fit_columns(
         for key in configured:
             frame.position_of(key)
         return tuple(configured)
+    return non_target_numeric_keys(frame, split_plan)
+
+
+def non_target_numeric_keys(
+    frame: Frame, split_plan: dict[str, Any] | None
+) -> tuple[str, ...]:
+    """除目标列外的全部数值列。目标列按切分计划与列角色两头认。
+
+    ⚠ 只按切分计划认的话，接在切分下游（没有计划、但帧上已带目标角色）的步骤
+    会把目标列当成特征一起处理。
+    Args: frame, split_plan。
+    """
     target = None if split_plan is None else split_plan.get(PLAN_TARGET)
-    return tuple(key for key in numeric_keys(frame) if key != target)
+    return tuple(
+        key
+        for key in numeric_keys(frame)
+        if key != target and frame.column_of(key).role != ROLE_TARGET
+    )
