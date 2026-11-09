@@ -183,7 +183,7 @@ watch(list.items, (rows) => {
 
       <DtDataView
         v-model:view="view"
-        class="min-h-0 flex-1"
+        class="node-table min-h-0 flex-1"
         :columns="COLUMNS"
         :rows="list.items.value"
         :loading="list.loading.value"
@@ -444,3 +444,39 @@ watch(list.items, (rows) => {
     />
   </DtCard>
 </template>
+
+<style scoped lang="scss">
+// 操作列贴右：寻址串吃满剩余宽度后表格比窄屏容器宽，不贴右就得横滚到底才找得到写值与删除。
+// ⚠ --surface-panel 是半透明的，贴住的格子必须垫一层 --surface-base，否则底下滚过的列会透出来
+.node-table :deep(.dt-table th:last-child),
+.node-table :deep(.dt-table td:last-child) {
+  position: sticky;
+  right: 0;
+  z-index: 1;
+  background:
+    linear-gradient(var(--surface-panel), var(--surface-panel)),
+    var(--surface-base);
+  box-shadow: inset 1px 0 0 var(--border-subtle);
+}
+
+.node-table :deep(.dt-table th) {
+  z-index: 2;
+}
+
+.node-table :deep(.dt-table th:last-child) {
+  z-index: 3;
+  box-shadow:
+    inset 1px 0 0 var(--border-subtle),
+    inset 0 -1px 0 var(--border-subtle);
+}
+
+.node-table :deep(.dt-table tbody tr:hover td:last-child) {
+  background:
+    linear-gradient(
+      rgba(var(--accent-primary-rgb), 0.04),
+      rgba(var(--accent-primary-rgb), 0.04)
+    ),
+    linear-gradient(var(--surface-panel), var(--surface-panel)),
+    var(--surface-base);
+}
+</style>
