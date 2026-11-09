@@ -166,7 +166,7 @@ const viewpoints = useViewpointSwitch({
   config: () => props.config,
   onSwitch: (camera) => {
     // 手动切视点即打断漫游：否则下一帧轨迹又把镜头拽走，看着像点了没反应
-    roam.pause()
+    roam.interrupt()
     sceneCamera.applyCamera(camera)
   },
 })
@@ -197,7 +197,7 @@ function partObjectsOf(partId: string): readonly THREE.Object3D[] {
 /** 切换部件取景，缺少目标时退回自动框住。 */
 function focusPart(part: TwinPart, box: THREE.Box3 | null): void {
   if (core === null) return
-  roam.pause()
+  roam.interrupt()
   const view = partFocusView(part, props.config.cameras)
   if (view !== null) return sceneCamera.applyView(view)
   if (box !== null) flight.flyToBox(core, box)

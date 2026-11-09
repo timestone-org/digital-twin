@@ -40,8 +40,13 @@ export interface RoamTourController {
   toggle: () => void
   next: () => void
   prev: () => void
-  /** 停在当前位姿上。⚠ 手动切视点时必须先叫它，否则下一帧轨迹又把镜头拽走。 */
+  /** 停在当前位姿上；播放键的「暂停」走这里。 */
   pause: () => void
+  /**
+   * 用户手动动了镜头（切视点、定位部件）：停播并重新计闲置。
+   * ⚠ 手动切视点时必须叫它，否则下一帧轨迹又把镜头拽走，或闲置计时照旧到点开播。
+   */
+  interrupt: () => void
 }
 
 /**
@@ -163,7 +168,7 @@ class RoamRunner {
 
   // ⚠ 立刻停播、不等这一段飞完：用户已经在手动看别处了，镜头还自己往前飞
   // 会变成两个人抢方向盘
-  private readonly onUserInput = (): void => {
+  readonly onUserInput = (): void => {
     this.pause()
     this.armIdleTimer()
   }
@@ -196,5 +201,6 @@ export function useRoamTour(deps: RoamTourDeps): RoamTourController {
     next: () => runner.step(1),
     prev: () => runner.step(-1),
     pause: () => runner.pause(),
+    interrupt: runner.onUserInput,
   }
 }
