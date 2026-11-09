@@ -14,6 +14,7 @@ import type { CollectProtocol } from '@dt/contracts'
 
 async function render(
   protocol: CollectProtocol = 'opcua',
+  busy = false,
 ): Promise<VueWrapper> {
   const wrapper = mount(PointFormDialog, {
     props: {
@@ -21,6 +22,7 @@ async function render(
       point: null,
       presetAddress: undefined,
       protocol,
+      busy,
     },
     attachTo: document.body,
     global: { stubs: { Teleport: true } },
@@ -177,3 +179,18 @@ it.each(['', 'pump:freq', 'pump freq', 'a'.repeat(65)])(
     wrapper.unmount()
   },
 )
+
+describe('提交在途', () => {
+  it('保存在途时按钮转圈、点外面与取消都关不掉', async () => {
+    const wrapper = await render('opcua', true)
+    const buttons = wrapper.findAll('button')
+    const save = buttons.find((one) => one.text() === '保存')
+    const cancel = buttons.find((one) => one.text() === '取消')
+    expect(save?.attributes('aria-busy')).toBe('true')
+    expect(cancel?.attributes('disabled')).toBeDefined()
+    await wrapper.find('.dt-modal__backdrop').trigger('click')
+    await save?.trigger('click')
+    expect(wrapper.emitted('update:modelValue')).toBeUndefined()
+    expect(wrapper.emitted('create')).toBeUndefined()
+  })
+})

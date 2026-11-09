@@ -37,6 +37,8 @@ const props = defineProps<{
   modelValue: boolean
   point: CollectPoint | null
   protocol?: CollectProtocol | undefined
+  /** 新建在途时为真：保存按钮转圈，弹窗不许关。 */
+  busy?: boolean
   /** 新建时预填的寻址串，从地址空间挑来的那条。 */
   presetAddress?: string | undefined
 }>()
@@ -199,7 +201,13 @@ function validate(): string | null {
   return null
 }
 
+function close(open: boolean): void {
+  if (!open && props.busy === true) return
+  emit('update:modelValue', open)
+}
+
 function submit(): void {
+  if (props.busy === true) return
   error.value = validate()
   if (error.value !== null) return
   const shared = {
@@ -227,7 +235,7 @@ function submit(): void {
     :dirty="isDirty"
     :title="isEdit ? '编辑点位' : '新建点位'"
     width="48rem"
-    @update:model-value="emit('update:modelValue', $event)"
+    @update:model-value="close"
   >
     <div class="dt-form-grid">
       <DtNotice v-if="error" intent="danger" icon="alert-circle">
@@ -331,10 +339,10 @@ function submit(): void {
     </div>
 
     <template #footer>
-      <DtButton variant="ghost" @click="emit('update:modelValue', false)">
+      <DtButton variant="ghost" :disabled="busy" @click="close(false)">
         取消
       </DtButton>
-      <DtButton @click="submit">保存</DtButton>
+      <DtButton :loading="busy" @click="submit">保存</DtButton>
     </template>
   </DtModal>
 </template>

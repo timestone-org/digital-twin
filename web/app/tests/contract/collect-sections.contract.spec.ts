@@ -137,6 +137,7 @@ describe('弹窗的对外面', () => {
 
   it('点位表单收 point 与预填的寻址串，抛建与改两种意图', () => {
     expect(propNames(PointFormDialog).sort()).toEqual([
+      'busy',
       'modelValue',
       'point',
       'presetAddress',

@@ -399,6 +399,7 @@ watch(list.items, (rows) => {
       v-model="editing.formOpen.value"
       :point="editing.editing.value"
       :protocol="source.protocol"
+      :busy="editing.formBusy.value"
       @create="editing.create"
       @update="editing.update"
     />
