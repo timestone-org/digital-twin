@@ -18,6 +18,7 @@ import {
   useToast,
 } from '@dt/ui'
 import type { DtNumberRange, RuntimeParamItem } from '@dt/contracts'
+import { PERMISSION_CODES } from '@dt/contracts'
 
 import {
   listRuntimeParams,
@@ -25,6 +26,7 @@ import {
   saveRuntimeParams,
 } from '@/api/runtimeParams'
 import { useRacedFetch } from '@/composables/useRacedFetch'
+import { useAuthStore } from '@/stores/auth'
 
 interface ParamField {
   key: string
@@ -77,6 +79,10 @@ const emit = defineEmits<{ 'update:open': [open: boolean] }>()
 
 const confirm = useConfirm()
 const toast = useToast()
+// 读放行给 dashboard:view，写要 dashboard:edit：没有就只读，不画写按钮
+const canEdit = computed(() =>
+  useAuthStore().can([PERMISSION_CODES.dashboardEdit]),
+)
 
 const items = ref<RuntimeParamItem[]>([])
 const draft = ref<Record<string, number>>({})
@@ -191,6 +197,9 @@ async function reset(): Promise<void> {
       @retry="load"
     >
       <div class="flex flex-col gap-4">
+        <DtNotice v-if="!canEdit" intent="warning" icon="alert-triangle">
+          只读：修改运行参数需要「大屏编辑」权限。
+        </DtNotice>
         <DtNotice icon="circle-question">
           环境变量是永久默认值，库里只存被改过的项。「恢复默认」删掉覆盖值，
           此后这几项重新跟随 .env，不是写死一份默认值。
@@ -203,7 +212,7 @@ async function reset(): Promise<void> {
             :hint="field.hint"
             :unit="field.unit"
             :range="field.range"
-            :disabled="busy"
+            :disabled="busy || !canEdit"
             @update:model-value="onParam(field.key, $event)"
           />
           <p class="dt-param__env">
@@ -218,7 +227,12 @@ async function reset(): Promise<void> {
     </DtPageState>
 
     <template #footer>
-      <DtButton variant="ghost" :disabled="busy || loading" @click="reset">
+      <DtButton
+        v-if="canEdit"
+        variant="ghost"
+        :disabled="busy || loading"
+        @click="reset"
+      >
         恢复默认
       </DtButton>
       <DtButton
@@ -229,6 +243,7 @@ async function reset(): Promise<void> {
         关闭
       </DtButton>
       <DtButton
+        v-if="canEdit"
         icon="save"
         :loading="busy"
         :disabled="loading || fields.length === 0"
