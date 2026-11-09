@@ -4,6 +4,7 @@
  * ⚠ 字段名保持后端的 snake_case（与助手、采集那两组同源）：这一层是线形，
  * 换成驼峰就要多一份映射，而映射写错时 typecheck 与 lint 双双放行。
  */
+import { ERROR_CODES } from './envelope'
 
 /** 检索策略。与后端注册表的名字逐字一致，未登记的值后端一律 400。 */
 export const KNOWLEDGE_STRATEGIES = ['naive', 'hybrid', 'agentic'] as const
@@ -375,8 +376,8 @@ export interface KnowledgeChatAdvanceIn {
   client_tools?: string[]
 }
 
-/** 这个对话在别处改过了，手上这份是旧的（领域 23）。 */
-export const KNOWLEDGE_CHAT_CONFLICT_CODE = 42323
+/** 这个对话在别处改过了，手上这份是旧的；码值以 ERROR_CODES 为准。 */
+export const KNOWLEDGE_CHAT_CONFLICT_CODE = ERROR_CODES.knowledgeChatConflict
 
 /** 引用里带的一张图。⚠ 只有 id 与图注，字节走取图端点——每一次都过权限。 */
 export interface KnowledgeCitedFigure {

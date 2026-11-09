@@ -28,6 +28,7 @@ import {
   watch,
 } from 'vue'
 import DtButton from '../DtButton/DtButton.vue'
+import { isImeKeydown } from '../../shared/ime'
 
 const props = withDefaults(
   defineProps<{
@@ -91,6 +92,7 @@ function focusables(): HTMLElement[] {
 
 /** 焦点陷阱：Tab 到末尾回到首项，Shift+Tab 到首项回到末项。 */
 function onKeydown(event: KeyboardEvent): void {
+  if (isImeKeydown(event)) return
   if (event.key === 'Escape') {
     event.stopPropagation()
     onEscape()

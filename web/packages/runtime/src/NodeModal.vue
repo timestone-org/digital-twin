@@ -46,11 +46,13 @@ const subtree = computed(() =>
 const root = computed(() => subtree.value[0] ?? null)
 const hasTitle = computed(() => (props.title ?? '') !== '')
 
-// 内容区 = 内容节点自身宽高钳到舞台可用区；钳小时裁掉超出部分——
-// 把面板顶出舞台看不见，比裁掉底部更糟
+// 内容区 = 内容节点自身宽高钳到舞台可用区；钳小时超出部分在内容区里滚动，
+// 绝不把面板顶出舞台
 const contentStyle = computed(() => {
   const box = root.value?.box
-  if (box === undefined) return { width: '0px', height: '0px' }
+  if (box === undefined) {
+    return { width: '0px', height: '0px', overflow: 'hidden' }
+  }
   const maxW = Math.max(120, props.design.width - STAGE_MARGIN * 2)
   const maxH = Math.max(
     120,
@@ -59,6 +61,7 @@ const contentStyle = computed(() => {
   return {
     width: `${Math.min(box.w, maxW)}px`,
     height: `${Math.min(box.h, maxH)}px`,
+    overflow: box.w > maxW || box.h > maxH ? 'auto' : 'hidden',
   }
 })
 
@@ -224,10 +227,9 @@ function onKeydown(event: KeyboardEvent): void {
   outline-offset: 1px;
 }
 
-/* 内容区是 NodeTree 的绝对定位基准；超出裁断，绝不顶出舞台 */
+/* 内容区是 NodeTree 的定位基准；溢出方式随钳制走内联样式，绝不顶出舞台 */
 .dt-node-modal__body {
   position: relative;
-  overflow: hidden;
   border-radius: 0 0 var(--radius-md) var(--radius-md);
 }
 

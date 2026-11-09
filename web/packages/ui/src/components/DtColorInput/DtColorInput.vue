@@ -105,6 +105,7 @@ function onPick(event: Event): void {
             :placeholder="placeholder"
             :size="size"
             :disabled="disabled"
+            :aria-label="`${label ?? '颜色'}取值`"
             spellcheck="false"
             @update:model-value="set"
           />

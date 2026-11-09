@@ -36,19 +36,13 @@ function dismiss(id: number): void {
   items.value = items.value.filter((item) => item.id !== id)
 }
 
-function push(
-  intent: DtIntent,
-  message: string,
-  options: DtToastOptions = {},
-): number {
-  const id = ++sequence
-  const duration =
-    options.duration ??
-    (intent === 'danger' ? DURATION_MS.error : DURATION_MS.default)
-  items.value = [
-    ...items.value,
-    { id, intent, message, title: options.title, duration },
-  ]
+/** 同时挂着的上限：再多就会顶出视口，读屏也会被一串 alert 连着打断。 */
+const MAX_VISIBLE = 5
+
+function arm(id: number, duration: number): void {
+  const previous = timers.get(id)
+  if (previous !== undefined) clearTimeout(previous)
+  timers.delete(id)
   if (duration > 0) {
     // ⚠ 句柄要存下来：手动关掉之后定时器还在跑，会去删一个已经不存在的 id，
     // 更要紧的是它让组件卸载后仍有待触发的回调。
@@ -57,6 +51,49 @@ function push(
       setTimeout(() => dismiss(id), duration),
     )
   }
+}
+
+/** 与最新一条完全同文的，返回它；连着报同一个错时只续时不叠条。 */
+function repeatOfLatest(
+  intent: DtIntent,
+  message: string,
+  title: string | undefined,
+  duration: number,
+): DtToast | undefined {
+  const latest = items.value[items.value.length - 1]
+  if (latest === undefined) return undefined
+  const same =
+    latest.intent === intent &&
+    latest.message === message &&
+    latest.title === title &&
+    latest.duration === duration
+  return same ? latest : undefined
+}
+
+function push(
+  intent: DtIntent,
+  message: string,
+  options: DtToastOptions = {},
+): number {
+  const duration =
+    options.duration ??
+    (intent === 'danger' ? DURATION_MS.error : DURATION_MS.default)
+  const repeat = repeatOfLatest(intent, message, options.title, duration)
+  if (repeat !== undefined) {
+    arm(repeat.id, duration)
+    return repeat.id
+  }
+  while (items.value.length >= MAX_VISIBLE) {
+    const oldest = items.value[0]
+    if (oldest === undefined) break
+    dismiss(oldest.id)
+  }
+  const id = ++sequence
+  items.value = [
+    ...items.value,
+    { id, intent, message, title: options.title, duration },
+  ]
+  arm(id, duration)
   return id
 }
 

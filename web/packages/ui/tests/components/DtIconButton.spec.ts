@@ -50,11 +50,24 @@ describe('DtIconButton', () => {
         '撤销',
       )
     })
+    // 提示与名称同文时不再挂描述，否则读屏会把「撤销」念两遍
+    expect(wrapper.get('button').attributes('aria-describedby')).toBeUndefined()
+    await wrapper.get('button').trigger('keydown', { key: 'Escape' })
+    expect(document.querySelector('[role="tooltip"]')).toBeNull()
+  })
+
+  it('提示比名称多说了东西时才经 aria-describedby 关联', async () => {
+    const wrapper = mountIconButton({ tooltip: '撤销上一步' })
+    wrappers.push(wrapper)
+    wrapper.get('button').element.focus()
+    await vi.waitFor(() => {
+      expect(document.querySelector('[role="tooltip"]')?.textContent).toBe(
+        '撤销上一步',
+      )
+    })
     expect(wrapper.get('button').attributes('aria-describedby')).toBe(
       document.querySelector('[role="tooltip"]')?.id,
     )
-    await wrapper.get('button').trigger('keydown', { key: 'Escape' })
-    expect(document.querySelector('[role="tooltip"]')).toBeNull()
   })
 
   it.each([{ disabled: true }, { loading: true }])(

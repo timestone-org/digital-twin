@@ -11,6 +11,7 @@ import type {
 } from '@dt/contracts'
 
 import { refuseSubscribe } from '../capability'
+import { assertRange } from '../range'
 import { DataSourceError, describeError, isDataSourceError } from '../errors'
 
 const KIND = 'archive'
@@ -55,22 +56,5 @@ function assertQuery(query: HistoryQuery): void {
   if (query.nodeKey.trim() === '') {
     throw new DataSourceError('invalid-query', '历史取数缺少点位身份')
   }
-  assertRange(query)
-}
-
-function assertRange(query: HistoryQuery): void {
-  const { fromMs, toMs, limit } = query.range
-  // ⚠ 左右颠倒的时间窗后端只会回一段空序列，那与「这段时间没数据」长得一样
-  if (fromMs !== undefined && toMs !== undefined && fromMs > toMs) {
-    throw new DataSourceError(
-      'invalid-query',
-      `历史取数的时间窗左右颠倒：${fromMs} > ${toMs}`,
-    )
-  }
-  if (limit !== undefined && (!Number.isInteger(limit) || limit <= 0)) {
-    throw new DataSourceError(
-      'invalid-query',
-      `历史取数的 limit 必须是正整数，收到 ${limit}`,
-    )
-  }
+  assertRange(query, '历史取数')
 }

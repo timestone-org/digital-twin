@@ -45,6 +45,20 @@ describe('当前页选择', () => {
     expect(card.get('.dt-data-view__grid').element.children).toHaveLength(2)
   })
 
+  it('开启时卡片包装与网格同带 scoped 标记，留位样式才落得上', () => {
+    const card = render({ selectedIds: [] }, 'card')
+    const grid = card.get('.dt-data-view__grid').element
+    const shell = card.get('.dt-data-view__selectable-card').element
+    const scope = grid
+      .getAttributeNames()
+      .find((name) => name.startsWith('data-v-'))
+    expect(scope).toBeDefined()
+    expect(shell.hasAttribute(scope ?? '')).toBe(true)
+    expect(grid.children).toHaveLength(2)
+    expect(shell.querySelector('.dt-data-view__card-select')).not.toBeNull()
+    expect(shell.querySelector('.dt-card')).not.toBeNull()
+  })
+
   it('行选择只发送新ID，不修改调用方数组', async () => {
     const selectedIds = ['off-page']
     const wrapper = render({ selectedIds })
