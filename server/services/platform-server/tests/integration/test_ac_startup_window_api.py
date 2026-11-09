@@ -354,3 +354,30 @@ async def test_an_exclusion_moment_without_a_timezone_is_400(
     )
     assert response.status_code == 400, response.text
     assert response.json()["details"][0]["code"] == "timezone_aware"
+
+
+async def test_the_episode_duration_is_the_stored_one(
+    app_client: httpx.AsyncClient, db_session: AsyncSession
+) -> None:
+    """⚠ 页面与训练读同一份时长：训练用的是存下来的那列，页面不许另算一份。"""
+    room_id = await make_room(db_session, "存的时长")
+    batch = await make_batch(db_session, room_id)
+    db_session.add(
+        AcStartupEpisode(
+            batch_id=batch.id,
+            room_id=room_id,
+            started_at=at(10),
+            running_set=["K11"],
+            complied_at=at(30),
+            duration_minutes=19,
+            outcome=OUTCOME_USABLE,
+            readings=READINGS,
+        )
+    )
+    await db_session.flush()
+    response = await app_client.get(
+        f"{PREFIX}/rooms/{room_id}/startup-episodes"
+    )
+    assert response.status_code == 200, response.text
+    items = response.json()["data"]["items"]
+    assert [item["duration_minutes"] for item in items] == [19]

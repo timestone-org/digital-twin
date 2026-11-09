@@ -192,6 +192,7 @@ def _to_episode(
         started_at=row.started_at,
         running_set=list(row.running_set),
         complied_at=row.complied_at,
+        duration_minutes=row.duration_minutes,
         outcome=row.outcome,
         readings=dict(row.readings),
         idle_minutes=row.idle_minutes,

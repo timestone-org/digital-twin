@@ -24524,8 +24524,6 @@
                 "type": "null"
               }
             ],
-            "description": "达标时长；没达标就没有时长。\n\n⚠ 派生而不是单独存一份：与 `complied_at` 分开存的话两者会各自漂移，\n而页面读到的是哪一个全看它先看哪一列。",
-            "readOnly": true,
             "title": "Duration Minutes"
           },
           "exclusion_reason": {
@@ -24592,12 +24590,12 @@
           "started_at",
           "running_set",
           "complied_at",
+          "duration_minutes",
           "outcome",
           "readings",
           "idle_minutes",
           "is_excluded",
-          "exclusion_reason",
-          "duration_minutes"
+          "exclusion_reason"
         ],
         "title": "StartupEpisodeOut",
         "type": "object"
