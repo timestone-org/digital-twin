@@ -15,6 +15,7 @@ import NodeDialog from '@/pages/Reports/Editor/components/NodeDialog.vue'
 import TemplateSettingsCard from '@/pages/Reports/Editor/components/TemplateSettingsCard.vue'
 import { BizError } from '@/api/client'
 import { useAuthStore } from '@/stores/auth'
+import { activeSurface } from '@/features/ai/surfaces'
 
 vi.mock('@/pages/Reports/Editor/components/ReportEditor.vue', async () => {
   const { defineComponent, h } = await import('vue')
@@ -157,6 +158,29 @@ it('加载模板时按业务时区初始化当前报告期', async () => {
   wrapper
     .findComponent(TemplateSettingsCard)
     .vm.$emit('update:granularity', 'year')
+  await flushPromises()
+  expect(
+    wrapper.get<HTMLInputElement>('input[aria-label="报告期"]').element.value,
+  ).toBe('2025')
+  wrapper.unmount()
+})
+
+it('⚠ 助手改周期时报告期跟着按新周期重算，与界面上改一致', async () => {
+  vi.useFakeTimers()
+  vi.setSystemTime(new Date('2026-01-01T00:30:00Z'))
+  setupEditor()
+  vi.mocked(api.reportRuntime).mockResolvedValue({
+    is_schedule_enabled: false,
+    timezone: 'America/Los_Angeles',
+  })
+  vi.spyOn(api, 'getReport').mockResolvedValue(template('r1'))
+  const wrapper = mount(EditorPage, { global: { stubs: { teleport: true } } })
+  await flushPromises()
+  await activeSurface()?.run({
+    call_id: 'call-1',
+    name: 'report.set_template',
+    arguments: { granularity: 'year' },
+  })
   await flushPromises()
   expect(
     wrapper.get<HTMLInputElement>('input[aria-label="报告期"]').element.value,
