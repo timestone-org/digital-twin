@@ -668,6 +668,9 @@ describe('建库', () => {
     const modal = document.body.querySelector('.dt-modal')
     expect(modal).not.toBeNull()
     expect(modal?.textContent).toContain('同名的库已经有了')
+    // 只在弹窗里说一遍：页面顶上那条错误不该同时冒出来、关窗后还挂着
+    const outside = wrapper.text().replace(modal?.textContent ?? '', '')
+    expect(outside).not.toContain('同名的库已经有了')
   })
 
   it('左栏空态里也有新建入口', async () => {

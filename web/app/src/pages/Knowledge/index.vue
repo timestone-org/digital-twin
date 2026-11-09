@@ -64,7 +64,9 @@ async function createBase(name: string, description: string): Promise<void> {
     if (await page.create(name, description)) {
       isCreating.value = false
     } else {
+      // 这句只在弹窗里说：留在页面错误上会说两遍，关窗后还挂着
       createError.value = page.error.value
+      page.error.value = ''
     }
   } finally {
     isSubmitting.value = false
