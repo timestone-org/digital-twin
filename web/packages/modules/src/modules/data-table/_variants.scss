@@ -88,14 +88,16 @@
     color-mix(in srgb, var(--border-strong) 55%, transparent);
 }
 
+/* ⚠ 行名列首尾都不画竖线：表头的行名格与数据行的行名格要对齐在同一条边上 */
 .dtb--lines-both .dtb-cell,
-.dtb--lines-both .dtb-headcell {
+.dtb--lines-both .dtb-headcell:not(.dtb-headcell--name) {
   border-left: 1px solid
     color-mix(in srgb, var(--border-strong) 35%, transparent);
   padding-left: 6px;
 }
 
-.dtb--striped .dtb-row:nth-child(even) {
+/* ⚠ 不用 nth-child：表头与数据行同在一个容器里，按它数会把表头算进去 */
+.dtb--striped .dtb-row--alt {
   background: color-mix(in srgb, var(--text-primary) 4%, transparent);
 }
 
