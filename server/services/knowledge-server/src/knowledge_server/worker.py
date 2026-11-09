@@ -9,7 +9,6 @@
 
 import asyncio
 from collections.abc import Awaitable, Callable
-from concurrent.futures import ProcessPoolExecutor
 from dataclasses import dataclass
 from typing import Protocol
 
@@ -21,6 +20,7 @@ from knowledge_server.apps.knowledge.services.ingest_worker import (
     ConsumerOptions,
     IngestConsumer,
 )
+from knowledge_server.apps.knowledge.services.parse_pool import RecyclingPool
 from knowledge_server.container import Container, build_container
 from knowledge_server.schema import read_schema_facts
 from knowledge_server.settings import Settings
@@ -55,7 +55,7 @@ class WorkerRuntime:
     wait: Wait
     # 解析用的进程池。⚠ 只有 worker 角色有它：api 角色一行解析都不跑，
     # 给它开一个池子等于白占一份内存
-    pool: ProcessPoolExecutor | None = None
+    pool: RecyclingPool | None = None
 
 
 def build_runtime(container: Container, wait: Wait) -> WorkerRuntime:
@@ -76,7 +76,7 @@ def build_runtime(container: Container, wait: Wait) -> WorkerRuntime:
 
     Args: container, wait（等停止信号，测试换一个立刻返回的）。
     """
-    pool = ProcessPoolExecutor(max_workers=1)
+    pool = RecyclingPool()
     return WorkerRuntime(
         consumers=(_ingest_consumer(container, pool),),
         container=container,
@@ -86,7 +86,7 @@ def build_runtime(container: Container, wait: Wait) -> WorkerRuntime:
 
 
 def _ingest_consumer(
-    container: Container, pool: ProcessPoolExecutor
+    container: Container, pool: RecyclingPool
 ) -> IngestConsumer:
     """装出摄取消费者。
 
@@ -159,8 +159,8 @@ async def _shutdown(
         task.cancel()
     await asyncio.gather(*tasks, return_exceptions=True)
     if runtime.pool is not None:
-        # ⚠ 不等在跑的那一个：`ProcessPoolExecutor` 没有公开的「杀掉在跑任务」
-        # 的口，而 drain 已经等过一轮了。再等下去只会让编排器的强杀先到
+        # ⚠ 不等在跑的那一个：drain 已经等过一轮了，再等下去只会让编排器的
+        # 强杀先到
         runtime.pool.shutdown(wait=False, cancel_futures=True)
     await runtime.container.cache.close()
     await runtime.container.database.dispose()

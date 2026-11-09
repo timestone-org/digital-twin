@@ -53,6 +53,7 @@ from knowledge_server.apps.knowledge.services.indexing import (
     IndexPair,
     VectorRows,
 )
+from knowledge_server.apps.knowledge.services.parse_pool import RecyclingPool
 from knowledge_server.apps.knowledge.services.parsing import (
     ExternalParseFailed,
     ExternalParserBackend,
@@ -208,6 +209,9 @@ async def _parsed_locally(deps: IngestDeps, raw: RawItem) -> ParsedDocument:
         async with asyncio.timeout(deps.parse_timeout_s):
             return await loop.run_in_executor(deps.pool, parse_local, raw)
     except TimeoutError as error:
+        # ⚠ 不换池的话子进程仍在跑这一份，排在后面的每一份都会跟着超时
+        if isinstance(deps.pool, RecyclingPool):
+            deps.pool.recycle()
         raise IngestFailed("解析超时，这份文档可能过大") from error
     except UnsupportedRawItem as error:
         raise IngestFailed(str(error)) from error
