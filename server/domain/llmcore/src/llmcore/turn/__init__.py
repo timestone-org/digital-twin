@@ -1,5 +1,6 @@
 """一个回合：模型 ↔ 工具，直到给出答复或停下来等浏览器。"""
 
+from llmcore.errors import TurnStepLimitReached
 from llmcore.turn.loop import (
     DEFAULT_MAX_STEPS,
     DEFAULT_MAX_TOOL_RESULT_CHARS,
@@ -34,6 +35,7 @@ __all__ = [
     "TurnEvent",
     "TurnOutcome",
     "TurnStep",
+    "TurnStepLimitReached",
     "run_turn",
     "stream_turn",
 ]

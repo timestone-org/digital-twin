@@ -33,6 +33,7 @@ from uuid import uuid4
 
 from langchain_core.messages import AIMessage, BaseMessage, ToolMessage
 from langchain_core.messages.tool import ToolCall
+from langgraph.errors import GraphRecursionError
 from langgraph.graph import END, START, StateGraph
 from langgraph.graph.message import add_messages
 
@@ -43,6 +44,7 @@ from llmcore import (
     ModelChoice,
 )
 from llmcore.deltas import text_of
+from llmcore.errors import TurnStepLimitReached
 from llmcore.memory.history import sized
 from llmcore.output.tool_text import format_tool_output
 from llmcore.textcalls import salvage
@@ -61,9 +63,12 @@ from llmcore.turn.types import (
     TurnStep,
 )
 
-# 一个回合最多走几步。⚠ 24 是助手上跑出来的经验值：够一次「查—改—核对」的
+# 一个回合最多走几步。⚠ 数的是图的超步，想一次与跑一批工具各算一步，所以
+# 24 约等于 12 次模型调用；这是助手上跑出来的经验值：够一次「查—改—核对」的
 # 完整来回，又不至于让模型与工具互相喂到把上下文填满
 DEFAULT_MAX_STEPS = 24
+# 撞到步数上限时给人看的那句话
+_STEP_LIMIT_MESSAGE = "这一轮的步骤太多，已停下，请把问题拆小一点再试"
 # 单个工具产出的字数上限。⚠ 不设上限的话，一次超大结果能把整个上下文挤掉
 DEFAULT_MAX_TOOL_RESULT_CHARS = 20_000
 # 再挤也要给工具产出留这么多字。⚠ 回一个空壳会被模型读成「查过了，没有」，
@@ -142,7 +147,10 @@ async def run_turn(deps: TurnDeps, messages: list[BaseMessage]) -> TurnOutcome:
     """
     graph = _build_graph(deps)
     seed: TurnState = {"messages": messages, "steps": [], "pending": ()}
-    final = await graph.ainvoke(seed, {"recursion_limit": deps.max_steps})
+    try:
+        final = await graph.ainvoke(seed, {"recursion_limit": deps.max_steps})
+    except GraphRecursionError as error:
+        raise TurnStepLimitReached(_STEP_LIMIT_MESSAGE) from error
     return _outcome(final, len(messages))
 
 
@@ -227,14 +235,17 @@ async def _walk(
     seed: TurnState = {"messages": messages, "steps": [], "pending": ()}
     seen = 0
     latest: dict[str, Any] = {}
-    async for state in graph.astream(  # type: ignore[reportUnknownMemberType]  # 理由：见文件头
-        seed, {"recursion_limit": deps.max_steps}, stream_mode="values"
-    ):
-        latest = dict(state)
-        steps = list(latest.get("steps") or [])
-        for step in steps[seen:]:
-            yield step
-        seen = len(steps)
+    try:
+        async for state in graph.astream(  # type: ignore[reportUnknownMemberType]  # 理由：见文件头
+            seed, {"recursion_limit": deps.max_steps}, stream_mode="values"
+        ):
+            latest = dict(state)
+            steps = list(latest.get("steps") or [])
+            for step in steps[seen:]:
+                yield step
+            seen = len(steps)
+    except GraphRecursionError as error:
+        raise TurnStepLimitReached(_STEP_LIMIT_MESSAGE) from error
     yield _outcome(latest, len(messages))
 
 

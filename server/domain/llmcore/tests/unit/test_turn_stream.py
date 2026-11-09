@@ -12,7 +12,7 @@ from langchain_core.messages import AIMessage
 from unit.fakes import ScriptedResponder, tool_call
 
 from llmcore.tools.shapes import ToolSpec, object_schema
-from llmcore.turn import TurnDeps, stream_turn
+from llmcore.turn import TurnDeps, TurnStepLimitReached, stream_turn
 from llmcore.turn.types import TurnDelta, TurnOutcome, TurnStep
 
 SERVER_TOOL = ToolSpec(
@@ -103,3 +103,21 @@ async def test_letting_go_half_way_cancels_the_work() -> None:
         break
 
     assert seen == 1
+
+
+async def test_hitting_the_step_ceiling_arrives_as_an_app_error() -> None:
+    """⚠ 消费方只把 AppError 落成 error 帧，别的异常让流无声断掉。"""
+    responder = ScriptedResponder(
+        [
+            AIMessage(
+                content="", tool_calls=[tool_call("kb.search", {}, f"c{i}")]
+            )
+            for i in range(10)
+        ]
+    )
+    deps = TurnDeps(
+        model=responder, specs=(SERVER_TOOL,), run_tool=_ok, max_steps=2
+    )
+
+    with pytest.raises(TurnStepLimitReached):
+        await _drain(deps)
