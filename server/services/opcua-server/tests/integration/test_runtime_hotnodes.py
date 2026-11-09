@@ -13,7 +13,7 @@ from pathlib import Path
 from uuid import uuid4
 
 import pytest
-from asyncua import Client
+from asyncua import Client, Server
 
 from opcua_server.apps.instance.errors import (
     InstanceNotRunning,
@@ -25,6 +25,7 @@ from opcua_server.apps.instance.errors import (
 )
 from opcua_server.apps.instance.runtime.addressspace import (
     CUSTOM_NAMESPACE_INDEX,
+    BuiltNode,
     NodeDefinition,
     delete_node,
 )
@@ -410,3 +411,38 @@ async def test_set_writable_on_a_stopped_instance_is_rejected(
         await running.set_node_writable(
             TEMPERATURE.identifier, is_writable=False
         )
+
+
+async def test_a_parent_delete_failure_keeps_already_deleted_children_out(
+    instance: RunningInstance, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """⚠ 子节点已从地址空间删掉，回滚时不许再放回映射。
+
+    放回去之后重试会再删一次已删的子节点、必然失败，节点就永远删不掉。
+    """
+    folder = NodeDefinition(
+        identifier="plant.folder", browse_name="Folder", node_class="object"
+    )
+    child = NodeDefinition(
+        identifier="plant.folder.child",
+        browse_name="Child",
+        data_type="double",
+        initial_value=1.0,
+        parent_identifier=folder.identifier,
+    )
+    await instance.add_node(folder)
+    await instance.add_node(child)
+
+    async def _refuse_parent(server: Server, node: BuiltNode) -> None:
+        if node.definition.identifier == folder.identifier:
+            raise NodeDeleteFailed("模拟父节点删除失败")
+        await delete_node(server, node)
+
+    monkeypatch.setattr(
+        "opcua_server.apps.instance.runtime.instance.delete_node",
+        _refuse_parent,
+    )
+    with pytest.raises(NodeDeleteFailed):
+        await instance.remove_node(folder.identifier)
+    assert child.identifier not in instance.node_identifiers()
+    assert folder.identifier in instance.node_identifiers()

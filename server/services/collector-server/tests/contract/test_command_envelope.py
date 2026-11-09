@@ -57,6 +57,8 @@ class OfflineLocator:
 
     def __init__(self) -> None:
         self.asked: list[UUID] = []
+        # 是 leader 却没有会话：答「离线」才是如实的
+        self.is_leader = True
 
     def session_of(self, source_id: UUID) -> None:
         self.asked.append(source_id)

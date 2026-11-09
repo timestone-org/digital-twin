@@ -264,6 +264,37 @@ async def test_write_is_idempotent_with_a_key(
 
 
 @pytest.mark.usefixtures("clean_tables")
+async def test_one_key_reused_on_another_node_still_writes_that_node(
+    client: httpx.AsyncClient, sign_headers: Headers
+) -> None:
+    """⚠ 幂等键按目标节点分开：同一把键写另一个节点不许拿回前一个节点的结果。
+
+    Args: client, sign_headers。
+    """
+    instance_id = await _instance(client, sign_headers)
+    first_node = await _node(client, sign_headers, instance_id)
+    second_node = await _node(
+        client, sign_headers, instance_id, identifier="Temp02"
+    )
+    await client.post(
+        f"{INSTANCES}/{instance_id}:start", headers=sign_headers(PERM_OPERATE)
+    )
+    headers = sign_headers(PERM_OPERATE)
+    headers["Idempotency-Key"] = "shared-key"
+    for node, value in ((first_node, 11.0), (second_node, 22.0)):
+        await client.post(
+            f"{INSTANCES}/{instance_id}/nodes/{node['id']}:write",
+            json={"value": value},
+            headers=headers,
+        )
+    read = await client.get(
+        f"{INSTANCES}/{instance_id}/nodes/{second_node['id']}/value",
+        headers=sign_headers(PERM_VIEW),
+    )
+    assert read.json()["data"]["value"] == 22.0
+
+
+@pytest.mark.usefixtures("clean_tables")
 async def test_node_of_another_instance_is_not_found(
     client: httpx.AsyncClient, sign_headers: Headers
 ) -> None:

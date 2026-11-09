@@ -10,6 +10,7 @@
 
 import asyncio
 import hashlib
+import os
 from dataclasses import dataclass
 from datetime import datetime, timedelta
 from pathlib import Path
@@ -28,6 +29,10 @@ PUBLIC_EXPONENT = 65537
 # 私钥文件只有属主可读写；目录同理
 KEY_FILE_MODE = 0o600
 PKI_DIR_MODE = 0o700
+# 证书是公开的，属主可写、其余只读
+CERT_FILE_MODE = 0o644
+# 原子落盘的临时文件后缀
+TEMP_SUFFIX = ".tmp"
 
 
 @dataclass(frozen=True)
@@ -190,23 +195,45 @@ class PkiStore:
         key: rsa.RSAPrivateKey,
         certificate: x509.Certificate,
     ) -> None:
-        """落盘。私钥文件权限收到 0600。
+        """落盘：先私钥后证书，各自写临时文件再原子换名。
+
+        ⚠ 证书排在最后：`_read` 只认「两个文件都在」，证书在就说明私钥早已
+        写完整；中途崩掉留下的只是临时文件，下次照常重新生成。
 
         Args: instance_id, key, certificate。
         """
-        certificate_path = self.certificate_path(instance_id)
-        private_key_path = self.private_key_path(instance_id)
-        certificate_path.write_bytes(
-            certificate.public_bytes(serialization.Encoding.DER)
-        )
-        private_key_path.write_bytes(
+        _write_atomic(
+            self.private_key_path(instance_id),
             key.private_bytes(
                 encoding=serialization.Encoding.PEM,
                 format=serialization.PrivateFormat.PKCS8,
                 encryption_algorithm=serialization.NoEncryption(),
-            )
+            ),
+            mode=KEY_FILE_MODE,
         )
-        private_key_path.chmod(KEY_FILE_MODE)
+        _write_atomic(
+            self.certificate_path(instance_id),
+            certificate.public_bytes(serialization.Encoding.DER),
+            mode=CERT_FILE_MODE,
+        )
+
+
+def _write_atomic(path: Path, data: bytes, *, mode: int) -> None:
+    """按权限新建临时文件、写满刷盘，再换名到目标路径。
+
+    ⚠ 权限在建文件那一刻给定：先按 umask 建再 chmod，中间有一段私钥谁都能
+    读的窗口。
+
+    Args: path, data, mode。
+    """
+    temporary = path.with_name(f"{path.name}{TEMP_SUFFIX}")
+    temporary.unlink(missing_ok=True)
+    descriptor = os.open(temporary, os.O_WRONLY | os.O_CREAT | os.O_EXCL, mode)
+    with os.fdopen(descriptor, "wb") as handle:
+        handle.write(data)
+        handle.flush()
+        os.fsync(handle.fileno())
+    os.replace(temporary, path)
 
 
 def _key_usage() -> x509.KeyUsage:

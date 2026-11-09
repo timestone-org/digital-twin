@@ -176,6 +176,41 @@ def test_non_numeric_values_compare_by_equality(
     assert is_beyond_deadband(previous, value, 10.0) is is_expected
 
 
+NAN = float("nan")
+INF = float("inf")
+
+
+@pytest.mark.parametrize(
+    ("previous", "value", "is_expected"),
+    [
+        (NAN, 1.0, True),
+        (1.0, NAN, True),
+        (NAN, NAN, False),
+        (INF, INF, False),
+        (INF, 1.0, True),
+    ],
+    ids=[
+        "nan-to-number",
+        "number-to-nan",
+        "nan-held",
+        "inf-held",
+        "inf-to-number",
+    ],
+)
+def test_non_finite_readings_count_as_changes(
+    previous: float, value: float, is_expected: bool
+) -> None:
+    # NaN 与任何数相减都是 NaN，`> 死区` 恒假：NaN 基线会挡掉之后的每一次变化
+    assert is_beyond_deadband(previous, value, 0.5) is is_expected
+
+
+def test_a_real_reading_after_a_nan_baseline_is_archived() -> None:
+    gate = _gate()
+    policy = ArchivePolicy(deadband=0.5)
+    gate.admit(KEY, policy, (NAN, TS_MS, "good"))
+    assert gate.admit(KEY, policy, (5.0, TS_MS + 1000, "good")) is True
+
+
 def test_the_plan_becomes_a_flat_table_keyed_by_point(
     build_plan: Any, build_source: Any, build_point: Any
 ) -> None:

@@ -45,6 +45,7 @@ from opcua_server.apps.instance.schemas import (
     NodeValueOut,
     NodeWriteOut,
 )
+from opcua_server.apps.instance.services.integrity import flush_or_conflict
 from opcua_server.apps.instance.services.presenter import (
     ACCESS_LEVEL_WRITE,
     definition_of,
@@ -55,6 +56,13 @@ from opcua_server.apps.instance.services.presenter import (
 )
 
 _logger = get_logger("opcua.nodes")
+
+# 并发建节点时「先查再插」漏掉的那一条，由唯一约束兜成 409
+_NODE_CONFLICTS = {
+    "uq_opcua_nodes_instance_id_identifier": lambda: NodeIdentifierTaken(
+        "该标识在本实例已被占用"
+    ),
+}
 
 # 改了要重启才生效的节点字段。description 不参与地址空间构建。
 RESTART_FIELDS = frozenset({"browse_name", "data_type", "initial_value"})
@@ -156,7 +164,7 @@ class NodeService:
                 description=payload.description,
             )
             node_crud.add(session, row)
-            await session.flush()
+            await flush_or_conflict(session, _NODE_CONFLICTS)
             await session.refresh(row)
             created, node_id = to_node_out(row), row.id
             definition = definition_of(row, parent)

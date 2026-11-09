@@ -23,8 +23,11 @@ from opcua_server.apps.instance.crud import (
 )
 from opcua_server.apps.instance.errors import (
     CredentialNotFound,
+    CredentialUsernameTaken,
     InstanceNotFound,
+    TrustedCertificateDuplicate,
     TrustedCertificateInvalid,
+    TrustedCertificateNotFound,
 )
 from opcua_server.apps.instance.models import Credential, TrustedCertificate
 from opcua_server.apps.instance.runtime.supervisor import InstanceSupervisor
@@ -36,10 +39,21 @@ from opcua_server.apps.instance.schemas import (
     TrustedCertificateCreateIn,
     TrustedCertificateOut,
 )
+from opcua_server.apps.instance.services.integrity import flush_or_conflict
 
 # 自动生成的口令长度（URL-safe 字符），足以顶住离线爆破
 GENERATED_PASSWORD_BYTES = 24
 _PRIVATE_KEY_MARKER = "PRIVATE KEY"
+_CREDENTIAL_CONFLICTS = {
+    "uq_opcua_instance_credentials_instance_id_username": lambda: (
+        CredentialUsernameTaken("该实例下已有同名凭据")
+    ),
+}
+_CERTIFICATE_CONFLICTS = {
+    "uq_opcua_instance_trusted_certs_instance_id_fingerprint": lambda: (
+        TrustedCertificateDuplicate("这张证书已在该实例登记过")
+    ),
+}
 
 
 class SecurityService:
@@ -113,7 +127,7 @@ class SecurityService:
                 hashed_password=self._hasher.hash(password),
             )
             credential_crud.add(session, row)
-            await session.flush()
+            await flush_or_conflict(session, _CREDENTIAL_CONFLICTS)
             await session.refresh(row)
             return CredentialCreatedOut(
                 credential=CredentialOut.model_validate(row),
@@ -168,7 +182,7 @@ class SecurityService:
                 public_key_pem=parsed.public_key_pem,
             )
             trusted_certificate_crud.add(session, row)
-            await session.flush()
+            await flush_or_conflict(session, _CERTIFICATE_CONFLICTS)
             await session.refresh(row)
             return TrustedCertificateOut.model_validate(row)
 
@@ -182,7 +196,7 @@ class SecurityService:
         async with self._database.session() as session:
             row = await trusted_certificate_crud.get(session, certificate_id)
             if row is None or row.instance_id != instance_id:
-                raise TrustedCertificateInvalid("证书不存在于该实例")
+                raise TrustedCertificateNotFound("证书不存在于该实例")
             await trusted_certificate_crud.delete(session, row)
 
     @staticmethod

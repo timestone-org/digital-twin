@@ -92,6 +92,8 @@ class FakeSubscription:
         )
 
     async def unsubscribe(self, handle: list[int]) -> None:
+        if self.error is not None:
+            raise self.error
         self.dropped.extend(handle)
 
 
