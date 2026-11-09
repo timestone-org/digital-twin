@@ -231,3 +231,24 @@ it('多条训练记录的菜单只转发实际点击的目标row', async () => {
   expect(wrapper.emitted('remove')).toEqual([[rows[1]]])
   wrapper.unmount()
 })
+
+describe('失败原因那一列', () => {
+  it('训练成功但发布失败时写出发布失败的原因', async () => {
+    const wrapper = open(new Map())
+    await wrapper.setProps({
+      rows: [
+        {
+          ...RUN,
+          status: 'succeeded',
+          error_text: null,
+          publication_status: 'failed',
+          publication_error: '模型输入输出签名已改变',
+        },
+      ],
+    })
+
+    expect(wrapper.find('.dt-ml-runs__why').text()).toBe(
+      '发布：模型输入输出签名已改变',
+    )
+  })
+})

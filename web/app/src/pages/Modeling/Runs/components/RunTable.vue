@@ -75,6 +75,14 @@ function duration(ms: number | null): string {
   if (ms < 1000) return `${ms} 毫秒`
   return `${(ms / 1000).toFixed(1)} 秒`
 }
+
+/** 失败原因：训练本身的报错优先；训练成了但发布没成时写发布的原因。 */
+function whyOf(row: ModelingRunSummary): string {
+  if (row.error_text) return row.error_text
+  if (row.publication_status === 'failed' && row.publication_error)
+    return `发布：${row.publication_error}`
+  return ''
+}
 </script>
 
 <template>
@@ -140,8 +148,8 @@ function duration(ms: number | null): string {
       {{ formatDateTime(row.created_at) }}
     </template>
     <template #cell-why="{ row }">
-      <span class="dt-ml-runs__why" :title="row.error_text ?? ''">
-        {{ row.error_text ?? '' }}
+      <span class="dt-ml-runs__why" :title="whyOf(row)">
+        {{ whyOf(row) }}
       </span>
     </template>
     <template #cell-actions="{ row }">
