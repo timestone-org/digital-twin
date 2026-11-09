@@ -24,8 +24,8 @@ from redis.asyncio.client import PubSub as RedisPubSub
 from redis.exceptions import RedisError
 
 from lib.errors.base import DependencyUnavailable
-from lib.logging.context import current_log_context
 from lib.logging.logger import get_logger
+from lib.logging.trace import current_traceparent
 
 _logger = get_logger("lib.pubsub")
 
@@ -33,11 +33,6 @@ _logger = get_logger("lib.pubsub")
 # 它卡在 C 层的读上，关停会挂到超时才结束
 _POLL_TIMEOUT_S = 1.0
 
-# W3C traceparent 的版本与采样标志位。⚠ 采样恒为 01：这条通道上的消息量由
-# 推送方的合并窗口控制，而链路断在异步处是最难查的一类问题，不值得为省一点
-# 日志量换它
-_TRACE_VERSION = "00"
-_TRACE_FLAGS = "01"
 # 信封里承载 trace 的键名，与 api-contract §10 的消息契约同名
 TRACEPARENT_KEY = "traceparent"
 
@@ -66,7 +61,7 @@ class PubSub:
 
         Args: channel, payload。
         """
-        envelope = {TRACEPARENT_KEY: _traceparent(), **payload}
+        envelope = {TRACEPARENT_KEY: current_traceparent(), **payload}
         try:
             sent = await self._client.publish(channel, json.dumps(envelope))
             return int(sent)
@@ -153,15 +148,3 @@ def _decode(message: object) -> tuple[str, dict[str, Any]] | None:
         )
         return None
     return channel, cast("dict[str, Any]", decoded)
-
-
-def _traceparent() -> str:
-    """把当前日志上下文压成一条 W3C traceparent。
-
-    ⚠ 没有 trace_id 时给全零：格式上仍然合法，订阅方照常解析，而「全零」
-    本身就说明发送侧没有链路——比不带这个键更好查。
-    """
-    context = current_log_context()
-    trace_id = (context.trace_id or "").replace("-", "").rjust(32, "0")[:32]
-    span_id = (context.span_id or "").replace("-", "").rjust(16, "0")[:16]
-    return f"{_TRACE_VERSION}-{trace_id}-{span_id}-{_TRACE_FLAGS}"
