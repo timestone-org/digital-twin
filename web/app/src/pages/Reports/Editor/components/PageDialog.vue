@@ -84,23 +84,28 @@ function resetMargins(): void {
         (side.key === 'left' || side.key === 'right' ? 3.18 : 2.54),
     )
 }
-function save(): void {
-  isSubmitted.value = true
-  const font = boundedNumber(fontSize.value, FONT_SIZE_RANGE)
+/** 四边距都合法时给出数值，任一不合法给 null。 */
+function parsedMargins(): {
+  top: number
+  bottom: number
+  left: number
+  right: number
+} | null {
   const margin = (key: (typeof sides)[number]['key']) =>
     boundedNumber(margins.value[key], MARGIN_RANGE)
   const top = margin('top')
   const bottom = margin('bottom')
   const left = margin('left')
   const right = margin('right')
-  if (
-    font === null ||
-    top === null ||
-    bottom === null ||
-    left === null ||
-    right === null
-  )
-    return
+  if (top === null || bottom === null || left === null || right === null)
+    return null
+  return { top, bottom, left, right }
+}
+function save(): void {
+  isSubmitted.value = true
+  const font = boundedNumber(fontSize.value, FONT_SIZE_RANGE)
+  const parsed = parsedMargins()
+  if (font === null || parsed === null) return
   const paper =
     size.value === 'A3' ||
     size.value === 'Letter' ||
@@ -117,7 +122,7 @@ function save(): void {
     font_size_pt: font,
     is_toc_enabled: toc.value,
     watermark: { ...props.page.watermark, text: watermark.value },
-    margins_cm: { top, bottom, left, right },
+    margins_cm: parsed,
   })
   emit('update:modelValue', false)
 }
