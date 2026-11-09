@@ -42,6 +42,21 @@ async def purposes_of(
     return list(rows.scalars().all())
 
 
+async def for_provider(
+    session: AsyncSession, provider_id: uuid.UUID
+) -> list[LlmAssignment]:
+    """此刻指着这一路的分配行。
+
+    Args: session, provider_id。
+    """
+    rows = await session.execute(
+        select(LlmAssignment)
+        .where(LlmAssignment.provider_id == provider_id)
+        .order_by(LlmAssignment.purpose.asc())
+    )
+    return list(rows.scalars().all())
+
+
 async def count_for(session: AsyncSession, provider_id: uuid.UUID) -> int:
     """指着这一路的用途有几个。
 

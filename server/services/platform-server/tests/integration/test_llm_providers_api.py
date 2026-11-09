@@ -160,6 +160,63 @@ async def test_assigning_a_purpose_then_the_provider_cannot_be_deleted(
     assert gone.status_code == HTTP_NO_CONTENT
 
 
+async def test_dropping_an_assigned_model_is_refused(
+    llm_context: AppContext,
+) -> None:
+    # ⚠ 放过去的话界面上仍显示「已分配」，消费方却悄悄回落到环境变量那一档
+    created = await _create(llm_context.client)
+    url = f"{PROVIDERS}/{created['id']}"
+    await llm_context.client.put(
+        f"{PURPOSES}/assistant.chat",
+        json={"provider_id": created["id"], "model_name": "qwen-plus"},
+    )
+    response = await llm_context.client.patch(
+        url,
+        json={"models": [{"name": "qwen-max", "kind": "chat"}]},
+    )
+    assert response.status_code == HTTP_CONFLICT, response.text
+    assert "qwen-plus" in response.json()["message"]
+    kept = data_of(await llm_context.client.get(url))
+    assert [one["name"] for one in kept["models"]] == [
+        "qwen-plus",
+        "text-embedding-v3",
+    ]
+
+
+async def test_an_assigned_vision_model_cannot_lose_vision(
+    llm_context: AppContext,
+) -> None:
+    created = await _create(llm_context.client)
+    await llm_context.client.put(
+        f"{PURPOSES}/assistant.vision",
+        json={"provider_id": created["id"], "model_name": "qwen-plus"},
+    )
+    response = await llm_context.client.patch(
+        f"{PROVIDERS}/{created['id']}",
+        json={
+            "models": [
+                {"name": "qwen-plus", "kind": "chat", "has_vision": False}
+            ]
+        },
+    )
+    assert response.status_code == HTTP_CONFLICT
+
+
+async def test_editing_models_that_keeps_assignments_valid_is_fine(
+    llm_context: AppContext,
+) -> None:
+    created = await _create(llm_context.client)
+    await llm_context.client.put(
+        f"{PURPOSES}/assistant.chat",
+        json={"provider_id": created["id"], "model_name": "qwen-plus"},
+    )
+    response = await llm_context.client.patch(
+        f"{PROVIDERS}/{created['id']}",
+        json={"models": [{"name": "qwen-plus", "kind": "chat"}]},
+    )
+    assert response.status_code == httpx.codes.OK, response.text
+
+
 @pytest.mark.parametrize(
     ("purpose", "model", "expected"),
     [
