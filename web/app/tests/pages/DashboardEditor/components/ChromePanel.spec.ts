@@ -4,7 +4,7 @@
  */
 import { mount } from '@vue/test-utils'
 import { describe, expect, it } from 'vitest'
-import { DtSelect } from '@dt/ui'
+import { DtNumberInput, DtSelect } from '@dt/ui'
 import { listThemes } from '@dt/tokens'
 
 import CardStyleFields from '@/components/chrome/CardStyleFields.vue'
@@ -30,6 +30,22 @@ function mountPanel(themeJson: Record<string, unknown> = {}) {
 }
 
 describe('大屏级外观面板', () => {
+  // ⚠ 服务端只收 320–20000：面板放得过去的值会在保存时变成一句笼统的 422
+  it('设计宽高的取值域与服务端一致', () => {
+    const wrapper = mountPanel()
+    const inputs = wrapper
+      .findAllComponents(DtNumberInput)
+      .filter((one) =>
+        ['设计宽度', '设计高度'].includes(String(one.props('label'))),
+      )
+
+    expect(inputs).toHaveLength(2)
+    for (const input of inputs) {
+      expect(input.props('range')).toEqual({ min: 320, max: 20000 })
+    }
+    wrapper.unmount()
+  })
+
   it('主题缺省显示跟随系统，选项包含七套系统预设', () => {
     const wrapper = mountPanel()
     const select = wrapper.getComponent(DtSelect)

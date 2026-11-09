@@ -6,15 +6,25 @@ import { designSize } from '@dt/runtime'
 import { computed, ref, type Ref } from 'vue'
 
 import type { CanvasZoom } from '@/features/dashboard/canvasZoom'
+import { clampDesignExtent } from '@/features/dashboard/designExtent'
 import type EditorCanvas from '../components/EditorCanvas.vue'
+import type { EditorMetaDraft } from './useEditorMeta'
 
+/**
+ * 画布的设计尺寸先读页面设置的草稿：右栏一改，画布、吸附与钉位几何当场跟着变。
+ * @param dashboard 已保存的大屏载荷
+ * @param draft 页面设置的元数据草稿
+ */
 export function useEditorCanvasState(
   dashboard: Readonly<Ref<DashboardPayload | null>>,
+  draft: Readonly<Ref<EditorMetaDraft | null>>,
 ) {
+  const extentOf = (value: number | undefined): number =>
+    value === undefined ? 0 : clampDesignExtent(value)
   const design = computed(() =>
     designSize(
-      dashboard.value?.designWidth ?? 0,
-      dashboard.value?.designHeight ?? 0,
+      extentOf(draft.value?.designWidth ?? dashboard.value?.designWidth),
+      extentOf(draft.value?.designHeight ?? dashboard.value?.designHeight),
     ),
   )
   const zoom = ref<CanvasZoom>(null)

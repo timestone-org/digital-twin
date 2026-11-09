@@ -64,8 +64,10 @@ const pickingFieldKey = ref<string | null>(null)
 const values = useEditorDataSources(file.dashboard, () => editor.nodes.value)
 
 const dashboardId = computed(() => String(route.params.dashboardId ?? ''))
+const meta = useEditorMeta(file.dashboard)
 const { design, zoom, canvasRef, fitScale, centerOn } = useEditorCanvasState(
   file.dashboard,
+  meta.draft,
 )
 
 const actions = createEditorActions({
@@ -75,7 +77,6 @@ const actions = createEditorActions({
   design: () => design.value,
 })
 
-const meta = useEditorMeta(file.dashboard)
 provide(DASHBOARD_THEME_KEY, () => meta.draft.value?.themeJson)
 const chrome = useEditorChrome(file.dashboard, meta)
 const { snap, grid } = chrome
