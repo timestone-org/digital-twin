@@ -14,6 +14,7 @@
 """
 
 from typing import Any
+from urllib.parse import quote
 
 import httpx
 from pydantic import BaseModel, ValidationError
@@ -91,7 +92,10 @@ class KnowledgeClient:
         Args: headers, base_id, body。
         """
         return await self._call(
-            "POST", f"{_BASES}/{base_id}:search", headers, json=body
+            "POST",
+            f"{_BASES}/{quote(base_id, safe='').replace('.', '%2E')}:search",
+            headers,
+            json=body,
         )
 
     def _client(self) -> httpx.AsyncClient:

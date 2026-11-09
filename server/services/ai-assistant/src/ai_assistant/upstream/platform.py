@@ -17,6 +17,7 @@
 
 import uuid
 from typing import Any, cast
+from urllib.parse import quote
 
 import httpx
 from pydantic import BaseModel, ValidationError
@@ -168,7 +169,9 @@ class PlatformClient:
 
         Args: headers, module_type。
         """
-        return await self._get(f"{_MODULES}/{module_type}", {}, headers)
+        return await self._get(
+            f"{_MODULES}/{_segment(module_type)}", {}, headers
+        )
 
     async def formula_functions(
         self, headers: dict[str, str], table_id: str
@@ -178,7 +181,7 @@ class PlatformClient:
         Args: headers, table_id。
         """
         return await self._get(
-            f"{_TABLES}/{table_id}/formula-functions", {}, headers
+            f"{_TABLES}/{_segment(table_id)}/formula-functions", {}, headers
         )
 
     async def check_formula(
@@ -192,7 +195,7 @@ class PlatformClient:
         Args: headers, table_id, body。
         """
         return await self._post(
-            f"{_TABLES}/{table_id}/formula:validate", headers, body
+            f"{_TABLES}/{_segment(table_id)}/formula:validate", headers, body
         )
 
     async def try_formula(
@@ -203,7 +206,7 @@ class PlatformClient:
         Args: headers, table_id, body。
         """
         return await self._post(
-            f"{_TABLES}/{table_id}/formula:preview", headers, body
+            f"{_TABLES}/{_segment(table_id)}/formula:preview", headers, body
         )
 
     async def list_dashboards(
@@ -266,7 +269,9 @@ class PlatformClient:
 
         Args: headers, table_id。
         """
-        body = await self._get(f"{_TABLES}/{table_id}/columns", {}, headers)
+        body = await self._get(
+            f"{_TABLES}/{_segment(table_id)}/columns", {}, headers
+        )
         return _rows_of(body)
 
     async def list_assets(
@@ -316,7 +321,7 @@ class PlatformClient:
         Args: headers, dashboard_id。
         """
         return await self._post(
-            f"{_DASHBOARDS}/{dashboard_id}:validate", headers
+            f"{_DASHBOARDS}/{_segment(dashboard_id)}:validate", headers
         )
 
     def _client(self) -> httpx.AsyncClient:
@@ -385,6 +390,18 @@ class PlatformClient:
         if self._identity is None:
             return headers
         return await self._identity.fresh(headers)
+
+
+def _segment(value: str) -> str:
+    """把一段 id 转义成单个路径段。
+
+    ⚠ 不转义的话 `?`、`#`、`/` 与 `..` 能让一段 id 改写整条路径，把只读调用
+    拐到写端点上。
+
+    Args: value。
+    """
+    # 点号也转：`quote` 留着它，而单独一段 `..` 会被当成上一级目录
+    return quote(value, safe="").replace(".", "%2E")
 
 
 def _with_trace(headers: dict[str, str]) -> dict[str, str]:

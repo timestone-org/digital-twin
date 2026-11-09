@@ -16,6 +16,8 @@
 某一个用户。做成进程级单例的话，两个用户的请求会互相借用对方的身份。
 """
 
+import re
+import uuid
 from collections.abc import Awaitable, Callable
 from dataclasses import dataclass, field
 from typing import Any, cast
@@ -51,6 +53,8 @@ from llmcore.tools.ports import UnknownTool
 from llmcore.tools.shapes import ToolSpec
 
 MAX_POINT_QUERY_CHARS = 300
+# 与 platform 的 ModuleType 同一条规则
+_MODULE_TYPE = re.compile(r"[a-z][a-z0-9-]{0,63}")
 # 一个工具的实现：收一袋参数，给一份结果
 ToolHandler = Callable[[dict[str, Any]], Awaitable[Any]]
 
@@ -146,6 +150,10 @@ class ServerTools:
         wanted = _text_or_none(arguments.get("module_type"))
         client = self._upstream()
         if wanted is not None:
+            if _MODULE_TYPE.fullmatch(wanted) is None:
+                raise UnknownServerTool(
+                    f"参数 module_type 不是合法的模块类型：{wanted}"
+                )
             body = await client.read_module_type(self.headers, wanted)
             return detail_of(body, _text_or_none(arguments.get("preset")))
         body = await client.list_module_types(self.headers)
@@ -194,7 +202,7 @@ class ServerTools:
         Args: arguments。
         """
         body = await self._upstream().formula_functions(
-            self.headers, _required(arguments, "table_id")
+            self.headers, _required_id(arguments, "table_id")
         )
         return formula_catalog_of(
             body, _text_or_none(arguments.get("keyword")), arguments
@@ -210,7 +218,7 @@ class ServerTools:
         """
         return await self._upstream().check_formula(
             self.headers,
-            _required(arguments, "table_id"),
+            _required_id(arguments, "table_id"),
             _formula_body(arguments),
         )
 
@@ -223,12 +231,12 @@ class ServerTools:
         given = arguments.get("values")
         body["values"] = given if isinstance(given, dict) else {}
         return await self._upstream().try_formula(
-            self.headers, _required(arguments, "table_id"), body
+            self.headers, _required_id(arguments, "table_id"), body
         )
 
     async def _validate(self, arguments: dict[str, Any]) -> Any:
         return await self._upstream().validate_dashboard(
-            self.headers, _required(arguments, "dashboard_id")
+            self.headers, _required_id(arguments, "dashboard_id")
         )
 
     async def _list_dashboards(self, arguments: dict[str, Any]) -> Any:
@@ -280,7 +288,7 @@ class ServerTools:
         Args: arguments。
         """
         rows = await self._upstream().list_dataset_columns(
-            self.headers, _required(arguments, "table_id")
+            self.headers, _required_id(arguments, "table_id")
         )
         page = ToolPage.parse(arguments)
         columns = [_column_of(row) for row in rows]
@@ -368,6 +376,21 @@ def _required(arguments: dict[str, Any], name: str) -> str:
     if given is None:
         raise UnknownServerTool(f"少了参数 {name}")
     return given
+
+
+def _required_id(arguments: dict[str, Any], name: str) -> str:
+    """取一个必须是 UUID 的 id 参数；不是就抛。
+
+    ⚠ 它要拼进 URL 路径：不先认成 id 的话，`<id>:publish?` 这样一段会把只读
+    工具拐去打写端点，而这串字可以来自知识库片段或点位名里注入的文字。
+
+    Args: arguments, name。
+    """
+    given = _required(arguments, name)
+    try:
+        return str(uuid.UUID(given))
+    except ValueError as error:
+        raise UnknownServerTool(f"参数 {name} 不是合法 id：{given}") from error
 
 
 async def _skill_answer(arguments: dict[str, Any]) -> Any:
