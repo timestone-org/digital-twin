@@ -28,6 +28,7 @@ from ai_assistant.apps.chat.services.tools.registry import (
 )
 from ai_assistant.upstream import McpCatalog, McpClient, McpServer
 from lib.resilience import CircuitBreaker
+from lib.testing.clock import FrozenClock
 from llmcore.codex import wire_names
 from llmcore.tools.registry import DuplicateTool, registry_of
 
@@ -361,3 +362,37 @@ async def test_the_servers_are_asked_side_by_side() -> None:
     await asyncio.wait_for(catalog.refresh(), timeout=2)
     names = [one.name for one in McpTools(catalog=catalog).specs()]
     assert names == ["mcp.weather.now", "mcp.notes.list"]
+
+
+def _crashing(request: httpx.Request) -> httpx.Response:
+    del request
+    raise RuntimeError("传输层自己崩了")
+
+
+def _half_open(catalog: McpCatalog) -> CircuitBreaker:
+    clock = FrozenClock()
+    breaker = CircuitBreaker(
+        name="mcp:weather", failure_threshold=1, reset_after_s=60, clock=clock
+    )
+    breaker.record_failure("t")
+    clock.advance(61)
+    catalog.breakers["weather"] = breaker
+    return breaker
+
+
+async def test_a_call_probe_that_crashes_is_handed_back() -> None:
+    """⚠ 探测没记成败就退出（被取消、意料外的异常）时必须交还：不交还的话，
+    下一个调用要白等一整个冷却期才被放过去。"""
+    catalog = _catalog(_crashing)
+    breaker = _half_open(catalog)
+    with pytest.raises(RuntimeError):
+        await catalog.call("weather", "temp", {})
+    assert breaker.allow() is True
+
+
+async def test_a_listing_probe_that_crashes_is_handed_back() -> None:
+    catalog = _catalog(_crashing)
+    breaker = _half_open(catalog)
+    with pytest.raises(RuntimeError):
+        await catalog.refresh_server("weather")
+    assert breaker.allow() is True

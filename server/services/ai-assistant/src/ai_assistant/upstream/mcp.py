@@ -245,6 +245,7 @@ class McpCatalog:
         if found is None:
             raise McpUnavailable(f"没有 {server} 这一路 MCP")
         breaker = self.breakers[server]
+        is_probe = breaker.state == "half_open"
         breaker.guard()
         try:
             reply = await self.client.call_tool(
@@ -252,6 +253,9 @@ class McpCatalog:
             )
         except McpUnavailable:
             breaker.record_failure("call")
+            raise
+        except BaseException:
+            _hand_back(breaker, is_probe=is_probe)
             raise
         breaker.record_success()
         return reply
@@ -262,6 +266,7 @@ class McpCatalog:
         Args: server。
         """
         breaker = self.breakers[server.name]
+        is_probe = breaker.state == "half_open"
         if not breaker.allow():
             return ()
         try:
@@ -276,8 +281,23 @@ class McpCatalog:
                 "mcp_list_failed", "MCP 工具目录拉取失败", server=server.name
             )
             return ()
+        except BaseException:
+            _hand_back(breaker, is_probe=is_probe)
+            raise
         breaker.record_success()
         return tuple(listed)
+
+
+def _hand_back(breaker: CircuitBreaker, *, is_probe: bool) -> None:
+    """没记成败就退出（被取消、意料外的异常）时交还探测。
+
+    ⚠ 只交还半开时放行的那一个：合上时发出去的调用交还的话，会把别人手上的
+    探测一起放掉。
+
+    Args: breaker, is_probe。
+    """
+    if is_probe:
+        breaker.release_probe()
 
 
 def _tool_of(server: str, row: object) -> McpToolInfo | None:
