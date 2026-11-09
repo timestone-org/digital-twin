@@ -1,12 +1,12 @@
 /**
- * @fileoverview 页面设置弹窗里数字字段的校验；取值范围与助手改页面设置时的口径一致
- * （见 aiSurface.ts 的 pageOf）。
+ * @fileoverview 页面设置弹窗里数字字段的校验；取值范围照服务端的 PageSettings
+ * （platform-server apps/report/schemas/document.py），超出的值存模板时会被拒。
  */
 
 /** 正文字号的取值范围，磅。 */
-export const FONT_SIZE_RANGE = { min: 1, max: 200 } as const
+export const FONT_SIZE_RANGE = { min: 6, max: 72 } as const
 /** 页边距的取值范围，厘米。 */
-export const MARGIN_RANGE = { min: 0, max: 20 } as const
+export const MARGIN_RANGE = { min: 0, max: 10 } as const
 
 /**
  * 把一格文本读成范围内的数。

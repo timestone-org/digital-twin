@@ -356,6 +356,29 @@ it('⚠ 页面设置的数字不合法时拦在弹窗里，不发出去', async 
   wrapper.unmount()
 })
 
+it('⚠ 字号与边距按服务端的范围拦：超出的值存模板时只会换来一句参数校验失败', async () => {
+  const wrapper = mount(PageDialog, {
+    props: { modelValue: false, page: {} },
+    global: { stubs: { teleport: true } },
+  })
+  await wrapper.setProps({ modelValue: true })
+  const field = (label: string) =>
+    wrapper
+      .findAllComponents(DtInput)
+      .find((input) => input.props('label') === label)
+  field('上边距（厘米）')?.vm.$emit('update:modelValue', '15')
+  field('正文字号（磅）')?.vm.$emit('update:modelValue', '100')
+  await flushPromises()
+  await wrapper
+    .findAllComponents(DtButton)
+    .find((button) => button.text() === '应用')
+    ?.trigger('click')
+  expect(wrapper.emitted('save')).toBeUndefined()
+  expect(field('上边距（厘米）')?.props('error')).toContain('0～10')
+  expect(field('正文字号（磅）')?.props('error')).toContain('6～72')
+  wrapper.unmount()
+})
+
 it('工具栏设过自定义纸张时，纸张一栏照实显示「自定义」', async () => {
   const wrapper = mount(PageDialog, {
     props: { modelValue: false, page: { size: 'custom' } },
