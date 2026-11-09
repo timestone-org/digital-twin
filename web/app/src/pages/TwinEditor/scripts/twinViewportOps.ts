@@ -80,6 +80,19 @@ interface PendingPlacePick {
 
 type PendingPick = PendingPatchPick | PendingPlacePick
 
+/** 拾取位置保留的小数位数：毫单位，够摆放又不把射线的满精度浮点写进库。 */
+const PICK_SCALE = 1000
+
+/**
+ * 拾取点按毫单位取整；`-0` 归成 0。
+ * @param position 射线命中的世界坐标
+ */
+function roundedPick(position: Vec3): Vec3 {
+  const round = (value: number): number =>
+    Math.round(value * PICK_SCALE) / PICK_SCALE || 0
+  return [round(position[0]), round(position[1]), round(position[2])]
+}
+
 /** 换掉某一类实体里指定 id 的那一项，其余原样。 */
 function patchEntity(
   deps: TwinViewportDeps,
@@ -146,7 +159,8 @@ function createPicking(
         nodes: nodes.includes(name) ? [...nodes] : [...nodes, name],
       })
     },
-    onPickPosition: (position) => {
+    onPickPosition: (picked) => {
+      const position = roundedPick(picked)
       const target = pending.value
       pending.value = null
       if (target === null) return

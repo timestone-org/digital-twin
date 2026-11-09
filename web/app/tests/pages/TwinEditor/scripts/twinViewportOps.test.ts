@@ -122,6 +122,29 @@ describe('两段式拾取', () => {
     expect(ops.isPicking.value).toBe(false)
   })
 
+  // ⚠ 射线命中点带满精度浮点：落库是一长串小数，窄输入框只显示被截断的一半
+  it('拾取到的位置按毫单位取整再写回', () => {
+    const config = normalizeTwinConfig({ anchors: [{ id: 'a1' }] })
+    const { ops, patchConfig, ...rest } = setup({ kind: 'anchors', id: 'a1' })
+    rest.config.value = config
+
+    ops.requestPick('position')
+    ops.onPickPosition([4.779980630236411, 2, 0.9141729618581067])
+
+    expect(patchConfig).toHaveBeenCalledWith({
+      anchors: [expect.objectContaining({ position: [4.78, 2, 0.914] })],
+    })
+  })
+
+  it('放置新实体用的位置同样取整', () => {
+    const { ops, addAt } = setup()
+
+    ops.requestPlace('anchors')
+    ops.onPickPosition([1.23456, -0.00049, 7])
+
+    expect(addAt).toHaveBeenCalledWith('anchors', [1.235, 0, 7], undefined)
+  })
+
   it('取消之后视口回来的那一下不落', () => {
     const { ops, patchConfig } = setup()
 
