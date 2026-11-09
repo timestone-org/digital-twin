@@ -70,12 +70,12 @@ const description = ref('')
 const address = ref('')
 const dataType = ref<CollectDataType>('float')
 const unit = ref('')
-const samplingIntervalMs = ref(1000)
-const deadband = ref(0)
+const samplingIntervalMs = ref<number | undefined>(1000)
+const deadband = ref<number | undefined>(0)
 const archiveEnabled = ref(true)
-const archiveMaxIntervalMs = ref(60_000)
+const archiveMaxIntervalMs = ref<number | undefined>(60_000)
 /** 0 表示跟随全局保留策略。后端用 null 表达同一件事。 */
-const retentionDays = ref(0)
+const retentionDays = ref<number | undefined>(0)
 
 const error = ref<string | null>(null)
 
@@ -194,9 +194,28 @@ function validate(): string | null {
     const problem = validateHttpPointer(address.value.trim())
     if (problem !== null) return problem
   }
-  if (samplingIntervalMs.value < COLLECT_MIN_INTERVAL_MS)
+  const numbers = numberFields()
+  if (typeof numbers === 'string') return numbers
+  if (numbers.sampling < COLLECT_MIN_INTERVAL_MS)
     return `采样周期不能小于 ${COLLECT_MIN_INTERVAL_MS} 毫秒`
   return null
+}
+
+/** 数字框的取值；清空的框是 undefined，给出要补填的那一项。藏起来的框按默认值算。 */
+function numberFields() {
+  const sampling = samplingIntervalMs.value
+  const band = isNumeric.value ? deadband.value : 0
+  const heartbeat = archiveEnabled.value
+    ? archiveMaxIntervalMs.value
+    : (archiveMaxIntervalMs.value ?? DEFAULTS.archiveMaxIntervalMs)
+  const retention = archiveEnabled.value
+    ? retentionDays.value
+    : (retentionDays.value ?? DEFAULTS.retentionDays)
+  if (sampling === undefined) return '请填写采样周期'
+  if (band === undefined) return '请填写死区'
+  if (heartbeat === undefined) return '请填写归档心跳'
+  if (retention === undefined) return '请填写保留天数'
+  return { sampling, band, heartbeat, retention }
 }
 
 function close(open: boolean): void {
@@ -207,19 +226,19 @@ function close(open: boolean): void {
 function submit(): void {
   if (props.busy === true) return
   error.value = validate()
-  if (error.value !== null) return
+  const numbers = numberFields()
+  if (error.value !== null || typeof numbers === 'string') return
   const shared = {
     name: name.value.trim(),
     description: description.value.trim() || null,
     address: address.value.trim(),
     data_type: dataType.value,
     unit: unit.value.trim() === '' ? null : unit.value.trim(),
-    sampling_interval_ms: samplingIntervalMs.value,
-    deadband: isNumeric.value ? deadband.value : 0,
+    sampling_interval_ms: numbers.sampling,
+    deadband: numbers.band,
     archive_enabled: archiveEnabled.value,
-    archive_max_interval_ms: archiveMaxIntervalMs.value,
-    archive_retention_days:
-      retentionDays.value > 0 ? retentionDays.value : null,
+    archive_max_interval_ms: numbers.heartbeat,
+    archive_retention_days: numbers.retention > 0 ? numbers.retention : null,
   }
   if (props.point === null)
     emit('create', { code: code.value.trim(), ...shared })

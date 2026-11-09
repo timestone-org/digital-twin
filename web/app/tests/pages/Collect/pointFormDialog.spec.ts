@@ -193,3 +193,22 @@ describe('提交在途', () => {
     expect(wrapper.emitted('create')).toBeUndefined()
   })
 })
+
+it('清空采样周期提交时拦下，不靠后端默认值悄悄补上', async () => {
+  const wrapper = await render()
+  await wrapper.find('input[placeholder="如：outlet_temp"]').setValue('temp')
+  await wrapper.find('input[placeholder="如：出口温度"]').setValue('出口温度')
+  await wrapper
+    .find('input[placeholder="ns=2;s=Plant1.OutletTemp"]')
+    .setValue('ns=2;s=temp')
+  wrapper
+    .findAllComponents(DtNumberInput)[0]
+    ?.vm.$emit('update:modelValue', undefined)
+  await wrapper
+    .findAll('button')
+    .find((one) => one.text() === '保存')
+    ?.trigger('click')
+  expect(wrapper.emitted('create')).toBeUndefined()
+  expect(wrapper.text()).toContain('请填写采样周期')
+  wrapper.unmount()
+})

@@ -55,14 +55,14 @@ const tokenEndpoint = field('token_endpoint')
 const scope = field('scope')
 const timeoutNumber = computed({
   get: () => Number(timeout.value),
-  set: (value: number) => {
-    timeout.value = String(value)
+  set: (value: number | undefined) => {
+    timeout.value = value === undefined ? '' : String(value)
   },
 })
 const responseLimitNumber = computed({
   get: () => Number(responseLimit.value),
-  set: (value: number) => {
-    responseLimit.value = String(value)
+  set: (value: number | undefined) => {
+    responseLimit.value = value === undefined ? '' : String(value)
   },
 })
 const hasUsername = computed(() =>

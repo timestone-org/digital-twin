@@ -267,6 +267,17 @@ describe('HTTP 认证', () => {
       },
     })
   })
+  it('清空超时输入框按默认值走，不把 undefined 当字符串存进去', async () => {
+    const wrapper = await httpForm()
+    const timeout = wrapper.find('input[aria-label="HTTP 请求超时（秒）"]')
+    await timeout.setValue('')
+    await timeout.trigger('change')
+    await press(wrapper, '创建')
+    const created = wrapper.emitted('create')?.[0]?.[0]
+    expect(created).toBeDefined()
+    expect(JSON.stringify(created)).not.toContain('undefined')
+    expect(created).toMatchObject({ options_json: { method: 'GET' } })
+  })
   it('OAuth scope 与清空凭据开关生效，缺失凭据明确拒绝', async () => {
     const wrapper = await render({
       ...httpSource(),

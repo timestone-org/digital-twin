@@ -14,7 +14,7 @@ import type {
   CollectSourceCreateInput,
   CollectSourceUpdateInput,
 } from '@dt/contracts'
-import { DtSelect } from '@dt/ui'
+import { DtNumberInput, DtSelect } from '@dt/ui'
 
 import SourceFormDialog from '@/pages/Collect/components/SourceFormDialog.vue'
 
@@ -199,6 +199,18 @@ describe('编辑', () => {
 
     expect(updatedPayload(wrapper).credential).toBe('new-secret')
   })
+})
+
+it('清空轮询周期提交时拦下，不发一个缺字段的请求', async () => {
+  const wrapper = await render({ ...source(), read_mode: 'poll' })
+  const poll = wrapper
+    .findAllComponents(DtNumberInput)
+    .find((one) => one.props('modelValue') === 1000)
+  if (poll === undefined) throw new Error('没有轮询周期输入框')
+  poll.vm.$emit('update:modelValue', undefined)
+  await submit(wrapper, '保存')
+  expect(wrapper.emitted('update')).toBeUndefined()
+  expect(wrapper.text()).toContain('请填写轮询周期')
 })
 
 describe('误关保护', () => {

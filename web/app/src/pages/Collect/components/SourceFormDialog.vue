@@ -77,7 +77,7 @@ const endpoint = ref('')
 const securityMode = ref('None')
 const securityPolicy = ref('None')
 const readMode = ref<CollectReadMode>('subscribe')
-const pollIntervalMs = ref(1000)
+const pollIntervalMs = ref<number | undefined>(1000)
 const username = ref('')
 /** 空串 = 这次不改口令。 */
 const credential = ref('')
@@ -204,7 +204,7 @@ function values(): SourceFormValues {
     securityMode: securityMode.value,
     securityPolicy: securityPolicy.value,
     readMode: readMode.value,
-    pollIntervalMs: pollIntervalMs.value,
+    pollIntervalMs: pollIntervalMs.value ?? Number.NaN,
     username: username.value,
     credential: credential.value,
     isCredentialCleared: isCredentialCleared.value,
