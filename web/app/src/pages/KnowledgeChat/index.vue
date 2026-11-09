@@ -108,6 +108,7 @@ onMounted(() => void page.reload())
               :bases="page.bases.value"
               :scope="page.scope.value"
               @send="(text: string) => void page.send(text)"
+              @restart="page.create"
               @scope="(ids: string[] | null) => void page.setScope(ids)"
             />
           </section>

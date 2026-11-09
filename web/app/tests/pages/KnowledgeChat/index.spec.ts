@@ -639,12 +639,12 @@ describe('面板标题栏', () => {
     expect(wrapper.find('.chat-panel__working').exists()).toBe(false)
   })
 
-  it('清空键没内容时禁着，答完一轮点它就清掉这一屏', async () => {
+  it('开新对话键没内容时禁着，答完一轮点它就回到空白草稿、不再接着旧会话', async () => {
     api.listSessions.mockResolvedValue([])
     api.createSession.mockResolvedValue(sessionOf('s9'))
     api.readSession.mockResolvedValue({ ...sessionOf('s9'), messages: [] })
     const wrapper = await render()
-    const clear = () => wrapper.find('button[aria-label="清空这一屏的对话"]')
+    const clear = () => wrapper.find('button[aria-label="开新对话"]')
     expect(clear().attributes('disabled')).toBeDefined()
 
     await wrapper.find('textarea').setValue('上限多少')
@@ -653,9 +653,16 @@ describe('面板标题栏', () => {
     expect(wrapper.text()).toContain('上限 65 ℃')
 
     await clear().trigger('click')
+    await flushPromises()
 
     expect(wrapper.text()).not.toContain('上限 65 ℃')
     expect(wrapper.text()).toContain('查资料，也能查看实时数据')
+    // 下一句开一个新会话，而不是带着 s9 的上下文接着问
+    api.createSession.mockResolvedValue(sessionOf('s10'))
+    await wrapper.find('textarea').setValue('再问一句')
+    await wrapper.find('button[aria-label="发送"]').trigger('click')
+    await flushPromises()
+    expect(api.createSession).toHaveBeenCalledTimes(2)
   })
 })
 
