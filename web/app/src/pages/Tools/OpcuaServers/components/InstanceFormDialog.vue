@@ -31,6 +31,10 @@ import {
 } from '@dt/ui'
 import { useFormDirty } from '@/composables/useFormDirty'
 
+import {
+  INSTANCE_RESTART_FIELDS,
+  pendingFieldLabels,
+} from '../../scripts/pendingFields'
 import { usePortPool } from '../scripts/usePortPool'
 
 const props = defineProps<{
@@ -43,6 +47,7 @@ const emit = defineEmits<{
   update: [input: OpcuaInstanceUpdateInput]
 }>()
 
+const restartLabels = pendingFieldLabels(INSTANCE_RESTART_FIELDS).join('、')
 const isEdit = computed(() => props.instance !== null)
 
 const name = ref('')
@@ -190,8 +195,8 @@ function submit(): void {
   >
     <div class="dt-form-grid">
       <DtNotice v-if="isEdit" intent="warning" icon="alert-triangle">
-        端点路径、命名空间 URI
-        与安全策略改完要重启实例才生效，重启会断开该实例上全部上位机会话。
+        {{ restartLabels }}
+        改完要重启实例才生效，重启会断开该实例上全部上位机会话。
       </DtNotice>
 
       <DtField v-if="!isEdit" label="名称" required>

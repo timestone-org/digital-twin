@@ -196,6 +196,8 @@ describe('实例表单', () => {
     expect(text).toContain('编辑实例')
     // 名称只在新建时可填
     expect(text).not.toContain('字母开头')
+    // 匿名访问与端点、命名空间、安全策略一样要重启才生效
+    expect(text).toContain('匿名访问')
   })
 
   it('编辑提交的载荷不含名称——名称不可改', async () => {
