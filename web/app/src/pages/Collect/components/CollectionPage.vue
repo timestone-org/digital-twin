@@ -196,16 +196,18 @@ const archiveParamsOpen = ref(false)
                 @remove="removal.ask(activeSource)"
               />
 
-              <DtButton
-                v-if="activeSource.protocol === 'opcua'"
-                class="self-start"
-                variant="outline"
-                size="sm"
-                :aria-expanded="browseOpen"
-                @click="browseOpen = !browseOpen"
-              >
-                {{ browseOpen ? '收起地址浏览' : '浏览并导入点位' }}
-              </DtButton>
+              <PermGuard :codes="[PERMISSION_CODES.collectOperate]">
+                <DtButton
+                  v-if="activeSource.protocol === 'opcua'"
+                  class="self-start"
+                  variant="outline"
+                  size="sm"
+                  :aria-expanded="browseOpen"
+                  @click="browseOpen = !browseOpen"
+                >
+                  {{ browseOpen ? '收起地址浏览' : '浏览并导入点位' }}
+                </DtButton>
+              </PermGuard>
               <DtResizableLayout
                 class="min-h-0 flex-1"
                 style="min-height: 20rem"

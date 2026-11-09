@@ -414,6 +414,7 @@ describe('权限', () => {
     const labels = wrapper.findAll('button').map((one) => one.text())
     expect(labels).toContain('断开')
     expect(labels).not.toContain('连通性测试')
+    expect(labels).not.toContain('浏览并导入点位')
   })
 })
 
