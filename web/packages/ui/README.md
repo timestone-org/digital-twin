@@ -50,6 +50,8 @@ interface DtDataViewSelection<TRow extends { id: string }> {
 
 选择列的表头不显示文字，保留可访问名称；工具栏中的全选控件与行内复选框同列，并与紧凑表单控件垂直居中。
 `DtTable` 可通过 `hiddenHeaderKeys` 隐去指定列的表头文字，列语义和排序按钮的可访问名称保留。
+列定义的 `sticky` 让首列（`'start'`）或末列（`'end'`）在横向滚动时贴边，其余位置的声明不生效；
+`DtDataView` 的操作列（`card: 'actions'`）缺省贴右，写 `sticky: false` 关掉。
 
 ## 可调整布局与卡片
 
