@@ -10,6 +10,7 @@ import {
   type Vec3,
 } from '@dt/twin-config'
 import { describe, expect, it, vi } from 'vitest'
+import { nextTick, ref } from 'vue'
 
 import {
   createTwinViewportOps,
@@ -45,7 +46,8 @@ function fakeHandle(overrides: Partial<TwinViewportHandle> = {}) {
   }
 }
 
-function setup(selection: TwinSelection = { kind: 'parts', id: 'part-1' }) {
+function setup(initial: TwinSelection = { kind: 'parts', id: 'part-1' }) {
+  const selection = ref<TwinSelection>(initial)
   const patchConfig = vi.fn()
   const addAt = vi.fn()
   const onRoamUnavailable = vi.fn()
@@ -57,12 +59,20 @@ function setup(selection: TwinSelection = { kind: 'parts', id: 'part-1' }) {
   const ops = createTwinViewportOps({
     config: () => config.value,
     actions: () => actions,
-    selection: () => selection,
+    selection: () => selection.value,
     onRoamUnavailable,
   })
   const handle = fakeHandle()
   ops.viewportRef.value = handle
-  return { ops, patchConfig, addAt, onRoamUnavailable, handle, config }
+  return {
+    ops,
+    patchConfig,
+    addAt,
+    onRoamUnavailable,
+    handle,
+    config,
+    selection,
+  }
 }
 
 describe('两段式拾取', () => {
@@ -125,6 +135,42 @@ describe('两段式拾取', () => {
     ops.onPickPosition([1, 1, 1])
 
     expect(patchConfig).not.toHaveBeenCalled()
+  })
+
+  // ⚠ 拾取记着发起时的那个实体：换了选中还留着的话，下一次点视口会改到看不见的那个
+  it('拾取途中换了选中就作废，不写回原来那个实体', async () => {
+    const config = normalizeTwinConfig({
+      anchors: [{ id: 'a1' }, { id: 'a2' }],
+    })
+    const { ops, patchConfig, selection, ...rest } = setup({
+      kind: 'anchors',
+      id: 'a1',
+    })
+    rest.config.value = config
+
+    ops.requestPick('position')
+    selection.value = { kind: 'anchors', id: 'a2' }
+    await nextTick()
+    ops.onPickPosition([1, 2, 3])
+
+    expect(patchConfig).not.toHaveBeenCalled()
+    expect(ops.isPicking.value).toBe(false)
+    expect(ops.pickMode.value).toBeNull()
+
+    selection.value = { kind: 'anchors', id: 'a1' }
+    await nextTick()
+    expect(ops.isPicking.value).toBe(false)
+  })
+
+  it('放置途中换了选中不作废：新建的实体本就还不存在', async () => {
+    const { ops, addAt, selection } = setup()
+
+    ops.requestPlace('anchors')
+    selection.value = TWIN_SELECT_MODEL
+    await nextTick()
+    ops.onPickPosition([1, 2, 3])
+
+    expect(addAt).toHaveBeenCalledWith('anchors', [1, 2, 3], undefined)
   })
 
   it('实体在拾取途中被删掉时什么都不改', () => {

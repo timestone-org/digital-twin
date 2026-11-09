@@ -7,7 +7,7 @@ import type {
   TwinFocusView,
   Vec3,
 } from '@dt/twin-config'
-import { computed, ref, type ComputedRef, type Ref } from 'vue'
+import { computed, ref, watch, type ComputedRef, type Ref } from 'vue'
 
 import type { TwinEditorActions } from './twinEditorActions'
 import { TWIN_ENTITY_LABELS } from './types'
@@ -204,6 +204,18 @@ function createCapture(
 export function createTwinViewportOps(deps: TwinViewportDeps): TwinViewportOps {
   const viewportRef = ref<TwinViewportHandle | null>(null)
   const pending = ref<PendingPick | null>(null)
+  // ⚠ 写回已有实体的拾取跟着选中走：换了选中还留着的话，检查器里看到的是另一个实体
+  //   在拾取，点下去却改了原来那个。放置不受影响——新实体本来就还不在选中里
+  watch(
+    () => {
+      const current = deps.selection()
+      return 'id' in current ? `${current.kind}:${current.id}` : current.kind
+    },
+    () => {
+      const target = pending.value
+      if (target !== null && !('place' in target)) pending.value = null
+    },
+  )
 
   return {
     ...createPicking(deps, pending),
