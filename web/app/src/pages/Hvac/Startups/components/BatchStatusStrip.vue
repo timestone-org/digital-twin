@@ -34,6 +34,8 @@ import {
 
 const props = defineProps<{
   batch: StartupBatch | null
+  /** 批次还在取；取回来之前不下「没抽取过」「没数据源」的结论。 */
+  loading?: boolean
   isStale: boolean
   rebuilding: boolean
   /** 要抽哪一段，UTC RFC3339；两端都是空串表示全部可用历史。 */
@@ -65,7 +67,10 @@ const unmatched = computed(() => props.batch?.unmatched_exclusion_count ?? 0)
 <template>
   <div class="flex flex-col gap-2">
     <div class="flex flex-wrap items-center gap-3 text-xs">
-      <template v-if="batch === null">
+      <template v-if="batch === null && loading">
+        <span class="text-text-disabled">正在读取抽取批次…</span>
+      </template>
+      <template v-else-if="batch === null">
         <span class="text-text-secondary">还没有抽取过开机事件</span>
       </template>
       <template v-else>
@@ -106,7 +111,8 @@ const unmatched = computed(() => props.batch?.unmatched_exclusion_count ?? 0)
     <PermGuard :codes="[PERMISSION_CODES.acManage]">
       <!-- ⚠ 取不到数据源范围时不给空picker：没有上下界的区间填出来只会在提交时
          报一个看不懂的错，不如直接说清该去哪儿绑数据源 -->
-      <DtNotice v-if="sourceRange === null" intent="warning">
+      <template v-if="sourceRange === null && batch === null && loading" />
+      <DtNotice v-else-if="sourceRange === null" intent="warning">
         这个房间还没有可用的数据源，抽不出开机事件。
         先在台账页的「数据与达标」里给房间内的空调绑上数据源。
       </DtNotice>

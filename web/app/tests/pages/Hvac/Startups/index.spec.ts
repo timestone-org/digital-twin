@@ -920,3 +920,120 @@ describe('竞态', () => {
     expect(wrapper.text()).not.toContain('111 条事件')
   })
 })
+
+describe('换房间与轮询', () => {
+  function twoRooms(): void {
+    vi.mocked(hvac.listRooms).mockResolvedValue(
+      page([room('r1', '注塑房', 2), room('r3', '装配房', 4)]),
+    )
+  }
+
+  it('⚠ 换房间清掉上一个房间的运行组合筛选', async () => {
+    twoRooms()
+    vi.mocked(hvac.getStartupBatches).mockResolvedValue(twoCombinations())
+    await open()
+    await selectRoom()
+    await pickCombination('K02')
+    await pick('房间', '装配房')
+    const last = vi.mocked(hvac.listStartupEpisodes).mock.calls.at(-1)
+    expect(last?.[0]).toBe('r3')
+    expect(last?.[1]?.running_set).toBeUndefined()
+  })
+
+  it('⚠ 换房间后批次取数失败，不再摆着上一个房间的批次与覆盖度', async () => {
+    twoRooms()
+    vi.mocked(hvac.getStartupBatches)
+      .mockResolvedValueOnce(
+        batches({ current: batch({ episode_count: 555 }) }),
+      )
+      .mockRejectedValueOnce(new Error('boom'))
+    const wrapper = await open()
+    await selectRoom()
+    expect(wrapper.text()).toContain('555 条事件')
+    await pick('房间', '装配房')
+    expect(wrapper.text()).not.toContain('555 条事件')
+    expect(wrapper.text()).not.toContain('42')
+  })
+
+  it('⚠ 抽取进行中定时回读进度，跑完后刷新事件且不再轮询', async () => {
+    vi.useFakeTimers()
+    try {
+      vi.mocked(hvac.getStartupBatches)
+        .mockResolvedValueOnce(
+          batches({ current: batch({ status: 'running', shard_done: 2 }) }),
+        )
+        .mockResolvedValue(batches())
+      await open()
+      await selectRoom()
+      const before = vi.mocked(hvac.getStartupBatches).mock.calls.length
+      const episodesBefore = vi.mocked(hvac.listStartupEpisodes).mock.calls
+        .length
+      await vi.advanceTimersByTimeAsync(5000)
+      await flushPromises()
+      expect(vi.mocked(hvac.getStartupBatches).mock.calls.length).toBe(
+        before + 1,
+      )
+      expect(
+        vi.mocked(hvac.listStartupEpisodes).mock.calls.length,
+      ).toBeGreaterThan(episodesBefore)
+      await vi.advanceTimersByTimeAsync(10000)
+      expect(vi.mocked(hvac.getStartupBatches).mock.calls.length).toBe(
+        before + 1,
+      )
+    } finally {
+      vi.useRealTimers()
+    }
+  })
+
+  it('批次还在取时不抢先说「还没有抽取过」', async () => {
+    const slow = deferred<StartupBatches>()
+    vi.mocked(hvac.getStartupBatches).mockReturnValue(slow.promise)
+    const wrapper = await open()
+    await selectRoom()
+    expect(wrapper.text()).not.toContain('还没有抽取过')
+    expect(wrapper.text()).not.toContain('还没有可用的数据源')
+    slow.resolve(batches())
+    await flushPromises()
+  })
+
+  it('批次取数失败给一个重试', async () => {
+    vi.mocked(hvac.getStartupBatches)
+      .mockRejectedValueOnce(new Error('boom'))
+      .mockResolvedValue(batches())
+    await open()
+    await selectRoom()
+    await click('重试')
+    expect(hvac.getStartupBatches).toHaveBeenCalledTimes(2)
+  })
+})
+
+describe('下钻曲线只取一次', () => {
+  it('⚠ 点「曲线」只发一次采样请求', async () => {
+    vi.mocked(hvac.listAcUnits).mockResolvedValue(
+      page([
+        {
+          id: 'a1',
+          serial: 'K01',
+          name: '东侧机',
+          room: { id: 'r1', name: '注塑房' },
+          workshop: { id: 'w1', name: '东车间' },
+          created_at: STAMP,
+          updated_at: STAMP,
+        },
+      ]),
+    )
+    const samples = vi
+      .spyOn(hvac, 'listRawSamples')
+      .mockResolvedValue({ items: [], next: null, has_more: false })
+    await open()
+    await selectRoom()
+    await click('曲线')
+    expect(samples).toHaveBeenCalledTimes(1)
+  })
+
+  it('指标目录取不到不抛未处理的拒绝', async () => {
+    vi.mocked(hvac.listAcDatasets).mockRejectedValue(new Error('boom'))
+    const wrapper = await open()
+    expect(wrapper.exists()).toBe(true)
+  })
+})
