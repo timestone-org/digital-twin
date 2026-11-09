@@ -19,6 +19,7 @@ import {
   validateHttpEndpoint,
   validateHttpOptions,
 } from './httpSourceOptions'
+import { validateModbusOptions } from './modbusOptions'
 
 /** 编码只能用字母数字与 . _ -，且以字母或数字开头。它是数据源的身份。 */
 const CODE_PATTERN = /^[A-Za-z0-9][A-Za-z0-9._-]*$/
@@ -62,6 +63,9 @@ export function validateSourceForm(
     validateSecurity(values) ??
     validateEndpoint(values.endpoint, values.protocol) ??
     validateHttpForm(values, isEdit) ??
+    (values.protocol === 'modbus_tcp'
+      ? validateModbusOptions(values.extraOptions)
+      : null) ??
     validatePollInterval(values)
   )
 }

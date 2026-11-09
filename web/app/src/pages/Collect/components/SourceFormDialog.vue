@@ -45,6 +45,7 @@ import {
   type SourceFormValues,
 } from '../scripts/sourceFormPayload'
 import { defaultHttpOptions } from '../scripts/httpSourceOptions'
+import { MODBUS_OPTION_KEYS } from '../scripts/modbusOptions'
 import HttpSourceFields from './HttpSourceFields.vue'
 import OptionsEditor from './OptionsEditor.vue'
 import SourceCredentialFields from './SourceCredentialFields.vue'
@@ -336,7 +337,7 @@ function submit(): void {
         :hint="
           protocol === 'opcua'
             ? '驱动特有的旁路配置，如证书路径。不清楚就留空。'
-            : '可配置 device_id、byte_order、word_order、max_registers_per_request、max_bits_per_request；不清楚就留空。'
+            : `可配置 ${MODBUS_OPTION_KEYS.join('、')}；不清楚就留空。`
         "
       >
         <OptionsEditor v-model="extraOptions" />

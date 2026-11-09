@@ -157,6 +157,22 @@ describe('新建', () => {
   })
 })
 
+it('Modbus 连接参数写错键名时提交前拦下，不等采集侧离线才发现', async () => {
+  const wrapper = await render({
+    ...source(),
+    protocol: 'modbus_tcp',
+    endpoint: 'modbus.tcp://10.0.0.9:502',
+    username: null,
+    has_credential: false,
+    read_mode: 'poll',
+    options_json: { byte_oder: 'big' },
+  })
+  await submit(wrapper, '保存')
+  expect(wrapper.emitted('update')).toBeUndefined()
+  expect(wrapper.text()).toContain('不支持的连接参数 byte_oder')
+  expect(wrapper.text()).toContain('max_requests_per_cycle')
+})
+
 describe('编辑', () => {
   it('回填安全两键与其余连接参数各归各位，编码只读', async () => {
     const wrapper = await render(source())
