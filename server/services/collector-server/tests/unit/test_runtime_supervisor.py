@@ -8,8 +8,13 @@ import asyncio
 from typing import Any
 from uuid import uuid4
 
+import pytest
+
 from collector_server.apps.collect.errors import PlanUnavailable
 from collector_server.apps.collect.plan.store import PlanStore
+from collector_server.apps.collect.runtime import (
+    supervisor as supervisor_module,
+)
 from collector_server.apps.collect.runtime.supervisor import (
     LEASE_KEY,
     LEASE_RENEW_INTERVAL_S,
@@ -71,6 +76,7 @@ class FakeSession:
         self.is_online = True
         self.is_subscribing = True
         self.is_stopped = False
+        self.reported_stopped = 0
         self.driver = object()
         self._forever = asyncio.Event()
 
@@ -84,6 +90,9 @@ class FakeSession:
     def revoke(self) -> None:
         self.is_online = False
         self.is_stopped = True
+
+    async def report_stopped(self) -> None:
+        self.reported_stopped += 1
 
     async def apply(self, source: Any) -> None:
         self.applied.append(source)
@@ -116,7 +125,10 @@ async def _until(is_done: Any, *, timeout_s: float = 3.0) -> None:
 
 
 def _supervisor(
-    lease: FakeLease, fetcher: FakeFetcher
+    lease: FakeLease,
+    fetcher: FakeFetcher,
+    *,
+    renew_interval_s: float = LEASE_RENEW_INTERVAL_S,
 ) -> tuple[CollectSupervisor, list[FakeSession]]:
     built: list[FakeSession] = []
 
@@ -129,7 +141,9 @@ def _supervisor(
         lease=lease,
         plan=PlanStore(fetcher=fetcher),
         builder=builder,
-        options=SupervisorOptions(plan_refresh_interval_s=0.0),
+        options=SupervisorOptions(
+            plan_refresh_interval_s=0.0, lease_renew_interval_s=renew_interval_s
+        ),
         clock=lambda: 0,
     )
     return supervisor, built
@@ -363,3 +377,142 @@ async def test_a_replica_that_never_led_does_not_release_a_lease() -> None:
     await supervisor.tick()
     await supervisor.stop()
     assert lease.released == 0
+
+
+def _hang_stop(session: FakeSession, release: asyncio.Event) -> asyncio.Event:
+    """让一条会话拆得很慢：stop 一直卡到 release 被置位。
+
+    Args: session, release。
+    """
+    entered = asyncio.Event()
+
+    async def slow_stop() -> None:
+        entered.set()
+        await release.wait()
+        session.is_stopped = True
+        session._forever.set()
+
+    session.stop = slow_stop
+    return entered
+
+
+async def test_a_slow_converge_keeps_renewing_the_lease(
+    build_plan: Any, build_source: Any
+) -> None:
+    # 一条拆得很慢的会话不许把续约饿死：饿过 TTL，热备就会在我们还握着
+    # 现场会话时接手
+    lease = FakeLease()
+    plans = [
+        build_plan(),
+        build_plan(version="v2", sources=(build_source(uuid4()),)),
+    ]
+    supervisor, built = _supervisor(
+        lease, FakeFetcher(plans), renew_interval_s=0.01
+    )
+    await supervisor.tick()
+    release = asyncio.Event()
+    entered = _hang_stop(built[0], release)
+    ticking = asyncio.create_task(supervisor.tick())
+    await asyncio.wait_for(entered.wait(), timeout=1)
+    renewed_before = lease.renewed
+    await _until(lambda: lease.renewed >= renewed_before + 3)
+    release.set()
+    await asyncio.wait_for(ticking, timeout=1)
+    assert supervisor.is_leader is True
+    assert len(built) == 2
+    await supervisor.stop()
+
+
+async def test_losing_the_lease_mid_converge_stops_and_builds_nothing_more(
+    build_plan: Any, build_source: Any
+) -> None:
+    lease = FakeLease()
+    first = build_source(uuid4())
+    second = build_source(uuid4())
+    plans = [
+        build_plan(sources=(first,)),
+        build_plan(version="v2", sources=(second,)),
+    ]
+    supervisor, built = _supervisor(
+        lease, FakeFetcher(plans), renew_interval_s=0.01
+    )
+    await supervisor.tick()
+    release = asyncio.Event()
+    entered = _hang_stop(built[0], release)
+    ticking = asyncio.create_task(supervisor.tick())
+    await asyncio.wait_for(entered.wait(), timeout=1)
+    lease.answers = [False]
+    await _until(lambda: supervisor.is_leader is False)
+    release.set()
+    await asyncio.wait_for(ticking, timeout=1)
+    assert len(built) == 1
+    assert supervisor.is_online(second.source_id) is False
+    assert built[0].reported_stopped == 0
+
+
+async def test_a_removed_source_is_reported_offline(
+    build_plan: Any, build_source: Any
+) -> None:
+    supervisor, built = _supervisor(
+        FakeLease(),
+        FakeFetcher(
+            [
+                build_plan(),
+                build_plan(version="v2", sources=(build_source(uuid4()),)),
+            ]
+        ),
+    )
+    await supervisor.tick()
+    await supervisor.tick()
+    assert built[0].reported_stopped == 1
+    await supervisor.stop()
+
+
+async def test_shutdown_reports_every_session_offline(build_plan: Any) -> None:
+    supervisor, built = _supervisor(FakeLease(), FakeFetcher([build_plan()]))
+    await supervisor.tick()
+    await supervisor.stop()
+    assert built[0].reported_stopped == 1
+
+
+async def test_losing_the_lease_leaves_the_state_row_to_the_new_leader(
+    build_plan: Any,
+) -> None:
+    lease = FakeLease(answers=[True, False])
+    supervisor, built = _supervisor(lease, FakeFetcher([build_plan()]))
+    await supervisor.tick()
+    await supervisor.tick()
+    assert built[0].is_stopped is True
+    assert built[0].reported_stopped == 0
+
+
+async def test_a_session_that_will_not_stop_is_cancelled_after_the_grace(
+    build_plan: Any, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    # 拆不掉的会话不许把关停挂死：等满宽限就取消，照样让出租约
+    monkeypatch.setattr(supervisor_module, "DROP_GRACE_S", 0.05)
+    lease = FakeLease()
+    supervisor, built = _supervisor(lease, FakeFetcher([build_plan()]))
+    await supervisor.tick()
+    _hang_stop(built[0], asyncio.Event())
+    async with asyncio.timeout(1):
+        await supervisor.stop()
+    assert lease.released == 1
+
+
+async def test_the_plan_can_shorten_its_own_refresh_interval(
+    build_plan: Any,
+) -> None:
+    now = {"ms": 1_000_000}
+    plan = build_plan(params={"collect": {"plan_refresh_interval_s": 5}})
+    supervisor = CollectSupervisor(
+        lease=FakeLease(),
+        plan=PlanStore(fetcher=FakeFetcher([plan])),
+        builder=FakeSession,
+        options=SupervisorOptions(plan_refresh_interval_s=30.0),
+        clock=lambda: now["ms"],
+    )
+    await supervisor.tick()
+    now["ms"] += 6_000
+    assert supervisor._is_plan_due() is True
+    await supervisor.stop()

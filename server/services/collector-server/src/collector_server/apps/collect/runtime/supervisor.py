@@ -9,6 +9,7 @@ from collections.abc import Callable
 from dataclasses import dataclass
 from uuid import UUID
 
+from collector_server.apps.collect import tuning
 from collector_server.apps.collect.plan.adapt import without_points
 from collector_server.apps.collect.plan.store import PlanStore
 from collector_server.apps.collect.runtime.session import SourceSession
@@ -26,6 +27,11 @@ LEASE_KEY = "collect:leader"
 # 而丢主意味着现场设备上要重建一整轮会话
 LEASE_TTL_S = 15
 LEASE_RENEW_INTERVAL_S = 5.0
+# 拆一条会话最多等多久，过了就取消它的任务。⚠ 一条卡在握手或心跳上的会话
+# 不许把收敛与关停一起挂住
+DROP_GRACE_S = 10.0
+# 计划里覆盖刷新周期时的下限，与 platform 参数目录的最小值同值
+MIN_PLAN_REFRESH_S = 5.0
 
 MS_PER_S = 1000
 
@@ -37,6 +43,7 @@ class SupervisorOptions:
     """主循环的节奏。"""
 
     plan_refresh_interval_s: float
+    lease_renew_interval_s: float = LEASE_RENEW_INTERVAL_S
 
 
 class CollectSupervisor:
@@ -119,7 +126,8 @@ class CollectSupervisor:
         """
         self._stopped.set()
         await self._stop_loop()
-        await self._stand_down()
+        # 此刻还持有租约，运行态那一行仍归我们写
+        await self._stand_down(is_reported=self._is_leader)
         if self._is_leader:
             await self._lease.release()
             self._is_leader = False
@@ -140,20 +148,42 @@ class CollectSupervisor:
                     "主循环这一拍出错，下一拍继续",
                     error_type=type(error).__name__,
                 )
-            await self._pause(LEASE_RENEW_INTERVAL_S)
+            await self._pause(self._options.lease_renew_interval_s)
 
     async def tick(self) -> None:
         """跑一拍。"""
         was_leader = self._is_leader
         if not await self._hold_lease():
             if was_leader:
-                await self._stand_down()
+                await self._stand_down(is_reported=False)
             return
         is_changed = not was_leader
         if self._is_plan_due():
             is_changed = await self._plan.refresh() or is_changed
         if is_changed:
-            await self.converge()
+            await self._converge_under_lease()
+
+    async def _converge_under_lease(self) -> None:
+        """收敛，期间照常续约。
+
+        ⚠ 收敛可能很久（逐条拆会话、等首次订阅），只在两拍之间续约的话，
+        租约会在我们还握着现场会话时过期，热备随即接手。续不上就撤销全部
+        会话、等收敛在下一个检查点停手，再整体拆掉。
+        """
+        task = asyncio.create_task(self.converge())
+        try:
+            while not task.done():
+                await asyncio.wait(
+                    {task}, timeout=self._options.lease_renew_interval_s
+                )
+                if not task.done() and not await self._hold_lease():
+                    for session in self._sessions.values():
+                        session.revoke()
+                    break
+            await task
+        finally:
+            if not self._is_leader:
+                await self._stand_down(is_reported=False)
 
     async def converge(self) -> None:
         """让活着的会话与计划一致。"""
@@ -166,9 +196,13 @@ class CollectSupervisor:
             return
         wanted = {source.source_id: source for source in plan.sources}
         for source_id in list(self._sessions):
+            if not self._is_leader:
+                return
             if source_id not in wanted:
-                await self._drop(source_id)
+                await self._drop(source_id, is_reported=True)
         for source in wanted.values():
+            if not self._is_leader:
+                return
             try:
                 await self._ensure(source)
             except Exception as error:
@@ -194,7 +228,7 @@ class CollectSupervisor:
         ) != without_points(source)
         if is_rebuilt:
             # 连接参数变了：整条重建，光换点位救不回来
-            await self._drop(source.source_id)
+            await self._drop(source.source_id, is_reported=True)
             await self._launch(source)
             return
         self._applied[source.source_id] = source
@@ -217,31 +251,47 @@ class CollectSupervisor:
             point_count=len(source.points),
         )
 
-    async def _drop(self, source_id: UUID) -> None:
-        """拆一条会话。
+    async def _drop(self, source_id: UUID, *, is_reported: bool) -> None:
+        """拆一条会话，等满宽限还没拆完就取消它的任务。
 
-        Args: source_id。
+        Args: source_id, is_reported（拆完是否补报离线；丢主时那一行归新
+            leader，不许再写）。
         """
         session = self._sessions.pop(source_id, None)
         task = self._tasks.pop(source_id, None)
         self._applied.pop(source_id, None)
-        if session is not None:
-            await session.stop()
-        if task is not None:
-            with contextlib.suppress(asyncio.CancelledError):
-                await task
+        try:
+            async with asyncio.timeout(DROP_GRACE_S):
+                if session is not None:
+                    await session.stop()
+                if task is not None:
+                    with contextlib.suppress(asyncio.CancelledError):
+                        await task
+        except TimeoutError:
+            _logger.warning(
+                "source_session_stop_timed_out",
+                "数据源会话没在宽限内拆完，已强行取消",
+                source_id=str(source_id),
+            )
+            await _cancel(task)
+        # ⚠ 拆的途中丢了主，这一行就归新 leader 了
+        if session is not None and is_reported and self._is_leader:
+            await _report_stopped(session)
         _logger.info(
             "source_session_stopped",
             "数据源会话已拆除",
             source_id=str(source_id),
         )
 
-    async def _stand_down(self) -> None:
-        """拆掉全部会话。丢主与关停都走这里。"""
+    async def _stand_down(self, *, is_reported: bool) -> None:
+        """拆掉全部会话。丢主与关停都走这里。
+
+        Args: is_reported（拆完是否补报离线）。
+        """
         for session in self._sessions.values():
             session.revoke()
         for source_id in list(self._sessions):
-            await self._drop(source_id)
+            await self._drop(source_id, is_reported=is_reported)
 
     async def _hold_lease(self) -> bool:
         """续或抢租约，返回此刻是不是 leader。
@@ -264,11 +314,22 @@ class CollectSupervisor:
     def _is_plan_due(self) -> bool:
         """到该重拉计划的时候了吗。"""
         now_ms = self._clock()
-        due_ms = int(self._options.plan_refresh_interval_s * MS_PER_S)
+        due_ms = int(self._refresh_interval_s() * MS_PER_S)
         if now_ms - self._planned_at_ms < due_ms:
             return False
         self._planned_at_ms = now_ms
         return True
+
+    def _refresh_interval_s(self) -> float:
+        """计划刷新周期：计划里的覆盖值优先，环境变量兜底。"""
+        override = tuning.float_param(
+            self._plan.current,
+            tuning.SECTION_COLLECT,
+            tuning.KEY_PLAN_REFRESH_S,
+        )
+        if override is None:
+            return self._options.plan_refresh_interval_s
+        return max(override, MIN_PLAN_REFRESH_S)
 
     async def _stop_loop(self) -> None:
         """停主循环并等它退出。"""
@@ -284,3 +345,31 @@ class CollectSupervisor:
         """
         with contextlib.suppress(TimeoutError):
             await asyncio.wait_for(self._stopped.wait(), timeout=delay_s)
+
+
+async def _cancel(task: asyncio.Task[None] | None) -> None:
+    """取消一条会话任务并等它退出。
+
+    Args: task。
+    """
+    if task is None:
+        return
+    task.cancel()
+    with contextlib.suppress(asyncio.CancelledError):
+        await task
+
+
+async def _report_stopped(session: SourceSession) -> None:
+    """补报一条会话已拆。报不上只记日志：拆会话不能因为写运行态失败而中断。
+
+    Args: session。
+    """
+    try:
+        await session.report_stopped()
+    except Exception as error:
+        _logger.warning(
+            "source_state_report_failed",
+            "会话已拆，但离线运行态没报上",
+            source_id=str(session.source_id),
+            error_type=type(error).__name__,
+        )
