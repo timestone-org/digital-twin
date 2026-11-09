@@ -90,6 +90,32 @@ describe('页面关闭', () => {
   })
 })
 
+describe('重新加载', () => {
+  // ⚠ 版本冲突之后能做的只有按最新那一版重读：本地草稿整份丢掉，不与新版本混着
+  it('丢掉本地草稿，按服务端最新那一版重读', async () => {
+    getMock.mockResolvedValue(
+      payload([node('n1', { anchors: [{ id: 'a1' }] })]),
+    )
+    const page = useTwinEditorPage(
+      () => 'd1',
+      () => 'n1',
+    )
+    await flushPromises()
+    page.doc.value?.commit({
+      ...normalizeTwinConfig({}),
+    })
+    getMock.mockResolvedValue(
+      payload([node('n1', { anchors: [{ id: 'a1' }, { id: 'a2' }] })]),
+    )
+
+    await page.reload()
+    await flushPromises()
+
+    expect(page.doc.value?.config.value.anchors).toHaveLength(2)
+    expect(page.doc.value?.isDirty.value).toBe(false)
+  })
+})
+
 describe('取数', () => {
   it('取出节点上那段孪生配置并归一化', async () => {
     getMock.mockResolvedValue(

@@ -41,6 +41,8 @@ export interface TwinEditorPage {
   error: ComputedRef<string | null>
   conflict: Ref<string | null>
   save: () => Promise<boolean>
+  /** 丢掉本地草稿，按服务端最新的那一版重读；版本冲突后走这里。 */
+  reload: () => Promise<void>
   dispose: () => void
 }
 
@@ -185,6 +187,7 @@ export function useTwinEditorPage(
         : file.error.value,
     ),
     conflict: file.conflict,
+    reload: () => reload(dashboardId()),
     dispose: file.dispose,
   }
 }

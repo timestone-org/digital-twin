@@ -214,7 +214,19 @@ function onBatchBindings(next: readonly BindingPayload[]): void {
 async function save(): Promise<void> {
   const ok = await page.save()
   if (ok) toast.success('孪生场景已保存')
-  else toast.error(page.conflict.value ?? '保存失败，请重试')
+  else if (page.conflict.value !== null) await offerReload(page.conflict.value)
+  else toast.error('保存失败，请重试')
+}
+
+/** 版本冲突后给一条出路：按最新那一版重读，代价是这里没保存的改动。 */
+async function offerReload(conflict: string): Promise<void> {
+  const ok = await confirm.ask({
+    title: '大屏在别处被改过',
+    message: `${conflict}重新加载会丢弃这里还没保存的改动。`,
+    confirmText: '重新加载',
+    danger: true,
+  })
+  if (ok) await page.reload()
 }
 
 /** Delete 键删当前选中；有连带影响时先确认，与大纲的删除同一口径。 */

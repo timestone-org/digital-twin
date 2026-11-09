@@ -95,6 +95,7 @@ function pageOf(harness: Harness): TwinEditorPage {
     error: computed(() => null),
     conflict: harness.conflict,
     save: harness.save,
+    reload: vi.fn(() => Promise.resolve()),
     dispose: vi.fn(),
   }
 }
