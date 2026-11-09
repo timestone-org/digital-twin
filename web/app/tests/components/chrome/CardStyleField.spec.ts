@@ -89,7 +89,7 @@ describe('数值字段的单位', () => {
 })
 
 describe('颜色字段', () => {
-  it('占位符短到半栏放得下，不被截成「#00cefc 或」', () => {
+  it('占位符短到半栏放得下，不会被截断', () => {
     const wrapper = mountField({ key: 'bg', label: '卡片背景', kind: 'color' })
 
     expect(wrapper.findComponent(DtColorInput).props('placeholder')).toBe(
