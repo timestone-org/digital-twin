@@ -289,3 +289,30 @@ async def test_a_cancelled_probe_does_not_wedge_the_breaker() -> None:
         await guarded.respond(choice=ModelChoice(), messages=[], tools=())
 
     assert breaker.allow() is True
+
+
+async def test_cancelling_a_call_that_is_not_the_probe_keeps_it() -> None:
+    """⚠ 合上时就发出去的调用被取消，不能把别人手上的探测一起交还。"""
+    clock = FrozenClock()
+    breaker = CircuitBreaker(
+        name="t", failure_threshold=1, reset_after_s=60, clock=clock
+    )
+    gate = asyncio.Event()
+
+    async def source(_choice: ModelChoice) -> BaseChatModel:
+        await gate.wait()
+        return ScriptedChat(reply=AIMessage(content="好"))
+
+    guarded = GuardedModel(source=source, breaker=breaker)
+    early = asyncio.create_task(
+        guarded.respond(choice=ModelChoice(), messages=[], tools=())
+    )
+    await asyncio.sleep(0)
+    breaker.record_failure()
+    clock.advance(61)
+    assert breaker.allow() is True
+    early.cancel()
+    with pytest.raises(asyncio.CancelledError):
+        await early
+
+    assert breaker.allow() is False

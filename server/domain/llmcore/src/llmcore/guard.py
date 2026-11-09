@@ -103,13 +103,17 @@ class GuardedModel:
         Args: choice, messages, tools, on_delta。
         """
         breaker = self._breaker_of(choice)
+        # ⚠ 只有半开时放行的这一个才是探测；合上时发出去的调用交还的话，
+        # 会把别人手上的探测一起放掉
+        is_probe = breaker.state == "half_open"
         self._guard(breaker)
         try:
             return await self._call(breaker, choice, messages, tools, on_delta)
         except BaseException:
             # ⚠ 没记成败就退出（被取消、端点判我们发错、来源自己抛）时必须
             # 交还探测，否则半开的断路器会一直挡到进程重启
-            breaker.release_probe()
+            if is_probe:
+                breaker.release_probe()
             raise
 
     async def _call(
