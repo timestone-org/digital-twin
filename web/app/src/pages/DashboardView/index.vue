@@ -16,7 +16,7 @@ import {
   createInteractionRuntime,
   type GetModuleManifest,
 } from '@dt/runtime'
-import { DtButton, DtPageState, DtSpinner } from '@dt/ui'
+import { DtButton, DtEmpty, DtPageState, DtSpinner } from '@dt/ui'
 import {
   computed,
   onBeforeUnmount,
@@ -236,6 +236,19 @@ onBeforeUnmount(() => {
         :get-manifest="getManifest"
         :card-chrome="cardChrome"
         @close="interaction.closeModal"
+      />
+    </div>
+
+    <!-- ⚠ 一个节点都没有的屏整片是底色：跳过来的人分不清是没内容还是没加载出来 -->
+    <div
+      v-if="file.dashboard.value !== null && nodes.length === 0"
+      data-test="dashboard-empty"
+      class="absolute inset-0 flex items-center justify-center"
+    >
+      <DtEmpty
+        icon="layout-grid"
+        title="这张大屏还没有内容"
+        hint="在编辑器里加上模块并保存后，这里就会显示。"
       />
     </div>
 
