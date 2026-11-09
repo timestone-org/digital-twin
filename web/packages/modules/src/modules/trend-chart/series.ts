@@ -29,6 +29,7 @@ import { cellState, type CellState } from '../../shared/slotState'
 import {
   TREND_AXIS_VALUES,
   TREND_LINE_TYPE_VALUES,
+  TREND_STYLE_VALUES,
   type TrendAxis,
   type TrendLineType,
 } from './options'
@@ -334,14 +335,21 @@ function rowStateOf(
     row[SERIES_POINTS_FIELD],
     input.slots !== undefined,
   )
+  // ⚠ 堆叠面积档不接末值：各条末值的采样时刻几乎不会逐毫秒相同，接上去的尾点
+  //   会让整块永远判成「时间轴未对齐」而退回不堆叠
+  const stacked =
+    readEnum(input.config.chartStyle, TREND_STYLE_VALUES, 'line') ===
+    'stackedArea'
+  const drawn = state === 'ok' || state === 'unbound'
+  const history = drawn ? pointsOf(row) : []
   const points =
-    state === 'ok' || state === 'unbound'
-      ? withLatest(
-          pointsOf(row),
+    !drawn || stacked
+      ? history
+      : withLatest(
+          history,
           row[SERIES_LATEST_FIELD],
           input.slots?.[latestFieldKey(index)],
         )
-      : []
   return { state, points, message: slot?.message ?? '' }
 }
 
