@@ -298,10 +298,13 @@ def _cursor_of(after: str | None) -> HistoryCursor | None:
     if after is None:
         return None
     payload = decode_cursor(after)
+    point_code = payload.get(_CURSOR_CODE, "")
+    if not point_code:
+        raise _invalid_cursor()
     return HistoryCursor(
         ts=_cursor_moment(payload.get(_CURSOR_TS, "")),
-        source_id=payload.get(_CURSOR_SOURCE, ""),
-        point_code=payload.get(_CURSOR_CODE, ""),
+        source_id=_cursor_source(payload.get(_CURSOR_SOURCE, "")),
+        point_code=point_code,
     )
 
 
@@ -313,17 +316,35 @@ def _cursor_moment(raw: str) -> datetime:
     try:
         moment = datetime.fromisoformat(raw.replace("Z", "+00:00"))
     except ValueError as error:
-        raise HistoryQueryInvalid(
-            "游标不可解析",
-            details=(
-                FieldError(
-                    field=CURSOR_FIELD,
-                    code="invalid_cursor",
-                    message="游标不可解析，请从上一页响应里原样带回",
-                ),
-            ),
-        ) from error
+        raise _invalid_cursor() from error
     return to_utc(moment)
+
+
+def _cursor_source(raw: str) -> str:
+    """把游标里的数据源 id 校成 UUID 的规范写法。
+
+    ⚠ 不校就绑进 `CAST(... AS uuid)`：库里报错被包成 503「请稍后重试」并记一条
+    ERROR，而这只是一个被改坏的入参。
+    Args: raw。
+    """
+    try:
+        return str(uuid.UUID(raw))
+    except ValueError as error:
+        raise _invalid_cursor() from error
+
+
+def _invalid_cursor() -> HistoryQueryInvalid:
+    """游标解不动时的那一个 400。"""
+    return HistoryQueryInvalid(
+        "游标不可解析",
+        details=(
+            FieldError(
+                field=CURSOR_FIELD,
+                code="invalid_cursor",
+                message="游标不可解析，请从上一页响应里原样带回",
+            ),
+        ),
+    )
 
 
 def _next_cursor(rows: Sequence[HistoryPointOut]) -> str:
