@@ -1,57 +1,20 @@
 /** @fileoverview 训练轮询、取消与节点结果读取；发布完成后停止轮询。 */
 import type { ModelingNodeRun, ModelingRun } from '@dt/contracts'
 import { useToast } from '@dt/ui'
-import type { Ref, ShallowRef } from 'vue'
-import { onBeforeUnmount, ref, shallowRef } from 'vue'
+import type { Ref } from 'vue'
+import { onBeforeUnmount, ref } from 'vue'
 
 import * as modeling from '@/api/modeling'
 import { describeError } from '@/composables/useAsyncList'
-import { useRacedFetch } from '@/composables/useRacedFetch'
-import type { RacedFetch } from '@/composables/useRacedFetch'
 
-const POLL_MS = 1000
-
-const SETTLED = new Set(['succeeded', 'failed', 'cancelled'])
-function isSettled(run: ModelingRun): boolean {
-  return SETTLED.has(run.status) && run.publication_status !== 'pending'
-}
-
-interface PollState {
-  generation: number
-  run: ShallowRef<ModelingRun | null>
-  timer: ShallowRef<ReturnType<typeof setTimeout> | null>
-  polling: RacedFetch
-  previewLoads: Map<string, RacedFetch>
-  isDisposed: boolean
-}
-
-function stopPolling(state: PollState): void {
-  state.generation += 1
-  if (state.timer.value !== null) clearTimeout(state.timer.value)
-  state.timer.value = null
-  state.polling.cancel()
-  for (const request of state.previewLoads.values()) request.cancel()
-  state.previewLoads.clear()
-}
-
-function schedule(runId: string, state: PollState): void {
-  state.timer.value = setTimeout(() => void tick(runId, state), POLL_MS)
-}
-
-async function tick(runId: string, state: PollState): Promise<void> {
-  await state.polling.run((signal) => modeling.getModelingRun(runId, signal), {
-    ok: (next) => {
-      state.run.value = next
-      if (isSettled(next)) stopPolling(state)
-    },
-    fail: () => undefined,
-    // cancel作废回调后不会再排一拍，包括忽略signal而迟到的成功回包。
-    settled: () => {
-      if (state.run.value?.id === runId && !isSettled(state.run.value))
-        schedule(runId, state)
-    },
-  })
-}
+import type { PollState } from './runPollState'
+import {
+  createPollState,
+  isSettled,
+  schedule,
+  stopPolling,
+} from './runPollState'
+import { loadPreview } from './runPreviews'
 
 type Toast = ReturnType<typeof useToast>
 
@@ -68,38 +31,6 @@ async function attempt<T>(
   }
 }
 
-/** 拉一个节点的结果摘要。**拉过就缓存**，不随轮询重复拉。 */
-async function loadPreview(
-  nodeId: string,
-  state: PollState,
-  previews: Ref<Map<string, ModelingNodeRun>>,
-  toast: Toast,
-): Promise<void> {
-  const current = state.run.value
-  if (
-    state.isDisposed ||
-    current === null ||
-    previews.value.has(nodeId) ||
-    state.previewLoads.has(nodeId)
-  )
-    return
-  // 不同节点可并发；每个节点各用一份守卫，换运行统一取消。
-  const request = useRacedFetch()
-  state.previewLoads.set(nodeId, request)
-  await request.run(
-    (signal) => modeling.getModelingNodeRun(current.id, nodeId, signal),
-    {
-      ok: (detail) => {
-        previews.value = new Map(previews.value).set(nodeId, detail)
-      },
-      fail: (caught) => toast.error(describeError(caught)),
-      settled: () => {
-        state.previewLoads.delete(nodeId)
-      },
-    },
-  )
-}
-
 /** 请求取消。回执只是「已受理」，故轮询继续，等它真停。 */
 async function cancel(state: PollState, toast: Toast): Promise<void> {
   const current = state.run.value
@@ -112,18 +43,6 @@ async function cancel(state: PollState, toast: Toast): Promise<void> {
   if (next !== null && generation === state.generation) {
     state.run.value = next
     toast.info('已请求取消，当前这一步跑完就会停')
-  }
-}
-
-/** 各节点预览独立读取，停表统一释放。 */
-function createPollState(): PollState {
-  return {
-    generation: 0,
-    run: shallowRef<ModelingRun | null>(null),
-    timer: shallowRef<ReturnType<typeof setTimeout> | null>(null),
-    polling: useRacedFetch(),
-    previewLoads: new Map(),
-    isDisposed: false,
   }
 }
 
@@ -162,6 +81,7 @@ function createStarter(
 export function useRunPolling() {
   const state = createPollState()
   const previews = ref(new Map<string, ModelingNodeRun>())
+  const previewErrors = ref(new Map<string, string>())
   const isStarting = ref(false)
   const toast = useToast()
 
@@ -172,6 +92,7 @@ export function useRunPolling() {
     isStarting.value = false
     state.run.value = next
     previews.value = new Map()
+    previewErrors.value = new Map()
     if (!isSettled(next)) schedule(next.id, state)
   }
 
@@ -188,11 +109,21 @@ export function useRunPolling() {
   return {
     run: state.run,
     previews,
+    /** 节点 id → 结果摘要没拉回来的原因。 */
+    previewErrors,
+    /** 运行状态读不到、界面停在最后一次读数时的原因；null = 读数是新的。 */
+    staleReason: state.staleReason,
     isStarting,
     watchRun,
     stop,
-    loadPreview: (nodeId: string) =>
-      loadPreview(nodeId, state, previews, toast),
+    loadPreview: (nodeId: string, isQuiet = false) =>
+      loadPreview(
+        nodeId,
+        isQuiet,
+        state,
+        { previews, errors: previewErrors },
+        toast,
+      ),
     start: createStarter(state, isStarting, toast, watchRun),
     cancel: () => cancel(state, toast),
   }

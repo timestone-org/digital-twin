@@ -3,10 +3,12 @@
  * 新的、节点结果拉过就缓存。
  */
 import type { ModelingNodeRun, ModelingRun } from '@dt/contracts'
+import * as ui from '@dt/ui'
 import { mount } from '@vue/test-utils'
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 import { defineComponent, h } from 'vue'
 
+import { BizError } from '@/api/client'
 import * as modeling from '@/api/modeling'
 import { useRunPolling } from '@/pages/Modeling/Canvas/scripts/useRunPolling'
 
@@ -31,6 +33,20 @@ function run(over: Partial<ModelingRun> = {}): ModelingRun {
     nodes: [],
     ...over,
   }
+}
+
+function toaster() {
+  const toast = {
+    info: vi.fn(),
+    success: vi.fn(),
+    warning: vi.fn(),
+    error: vi.fn(),
+    dismiss: vi.fn(),
+    clear: vi.fn(),
+    toasts: { value: [] },
+  }
+  vi.spyOn(ui, 'useToast').mockReturnValue(toast as never)
+  return toast
 }
 
 function setup() {
@@ -320,3 +336,134 @@ describe('节点结果', () => {
     expect(runner.previews.value.size).toBe(0)
   })
 })
+
+describe('运行轮询的边角', () => {
+  it('发布收尾那一拍不吞掉在飞的新一次训练', async () => {
+    let finishStart: ((value: ModelingRun) => void) | undefined
+    vi.spyOn(modeling, 'startModelingRun').mockImplementation(
+      () =>
+        new Promise((resolve) => {
+          finishStart = resolve
+        }),
+    )
+    vi.spyOn(modeling, 'getModelingRun').mockResolvedValue(
+      run({ status: 'succeeded', publication_status: 'published' }),
+    )
+    const { runner, wrapper } = setup()
+    runner.watchRun(run({ status: 'succeeded', publication_status: 'pending' }))
+    const starting = runner.start('p1')
+    await vi.advanceTimersByTimeAsync(1000)
+    finishStart?.(run({ id: 'r2', status: 'running' }))
+    await starting
+
+    expect(runner.isStarting.value).toBe(false)
+    expect(runner.run.value?.id).toBe('r2')
+    wrapper.unmount()
+  })
+
+  it('运行刚跑完时在飞的节点结果照样落进缓存', async () => {
+    let finish: ((value: ModelingNodeRun) => void) | undefined
+    vi.spyOn(modeling, 'getModelingRun').mockResolvedValue(
+      run({ status: 'succeeded' }),
+    )
+    vi.spyOn(modeling, 'getModelingNodeRun').mockImplementation(
+      () =>
+        new Promise((resolve) => {
+          finish = resolve
+        }),
+    )
+    const { runner, wrapper } = setup()
+    runner.watchRun(run({ status: 'running' }))
+    const loading = runner.loadPreview('n1')
+    await vi.advanceTimersByTimeAsync(1000)
+    finish?.(nodeRunOf('n1'))
+    await loading
+
+    expect(runner.previews.value.has('n1')).toBe(true)
+    wrapper.unmount()
+  })
+
+  it('运行没了（4xx）就停表并标出界面停在旧状态', async () => {
+    const get = vi
+      .spyOn(modeling, 'getModelingRun')
+      .mockRejectedValue(new BizError(40401, '运行不存在', 404, 't'))
+    const { runner, wrapper } = setup()
+    runner.watchRun(run({ status: 'running' }))
+    await vi.advanceTimersByTimeAsync(1000)
+    await vi.advanceTimersByTimeAsync(20_000)
+
+    expect(get).toHaveBeenCalledTimes(1)
+    expect(runner.staleReason.value).toContain('运行不存在')
+    wrapper.unmount()
+  })
+
+  it('连着失败就逐次放慢，不是一秒一次打到天亮', async () => {
+    const get = vi
+      .spyOn(modeling, 'getModelingRun')
+      .mockRejectedValue(new Error('网关超时'))
+    const { runner, wrapper } = setup()
+    runner.watchRun(run({ status: 'running' }))
+    await vi.advanceTimersByTimeAsync(1000)
+    await vi.advanceTimersByTimeAsync(1000)
+    await vi.advanceTimersByTimeAsync(1000)
+
+    expect(get).toHaveBeenCalledTimes(2)
+    wrapper.unmount()
+  })
+})
+
+describe('节点结果的后台预取', () => {
+  it('预取失败不弹红条，记下原因，也不跟着每拍重拉', async () => {
+    const toast = toaster()
+    const get = vi
+      .spyOn(modeling, 'getModelingNodeRun')
+      .mockRejectedValue(new BizError(50300, '对象存储抖了', 503, 't'))
+    const { runner, wrapper } = setup()
+    runner.watchRun(run({ status: 'succeeded' }))
+
+    await runner.loadPreview('n1', true)
+    await runner.loadPreview('n1', true)
+
+    expect(get).toHaveBeenCalledTimes(1)
+    expect(toast.error).not.toHaveBeenCalled()
+    expect(runner.previewErrors.value.get('n1')).toContain('对象存储抖了')
+    wrapper.unmount()
+  })
+
+  it('用户亲手点开时不受预取失败影响，照样重拉', async () => {
+    const toast = toaster()
+    const get = vi
+      .spyOn(modeling, 'getModelingNodeRun')
+      .mockRejectedValueOnce(new Error('对象存储抖了'))
+      .mockResolvedValue(nodeRunOf('n1'))
+    const { runner, wrapper } = setup()
+    runner.watchRun(run({ status: 'succeeded' }))
+
+    await runner.loadPreview('n1', true)
+    await runner.loadPreview('n1')
+
+    expect(get).toHaveBeenCalledTimes(2)
+    expect(runner.previews.value.has('n1')).toBe(true)
+    expect(runner.previewErrors.value.has('n1')).toBe(false)
+    expect(toast.error).not.toHaveBeenCalled()
+    wrapper.unmount()
+  })
+})
+
+function nodeRunOf(nodeId: string): ModelingNodeRun {
+  return {
+    node_id: nodeId,
+    operator: 'src',
+    alias: '',
+    ordinal: 0,
+    status: 'succeeded',
+    duration_ms: 12,
+    has_preview: true,
+    error_text: null,
+    preview: { kind: 'frame' },
+    is_preview_truncated: false,
+    exported_ports: [],
+    report: null,
+    fitted: null,
+  }
+}
