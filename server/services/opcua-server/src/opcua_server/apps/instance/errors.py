@@ -110,6 +110,27 @@ class TrustedCertificateInvalid(AppError):
     http_status = 400
 
 
+class TrustedCertificateNotFound(AppError):
+    """信任证书不存在于该实例。"""
+
+    code = 42114
+    http_status = 404
+
+
+class CredentialUsernameTaken(AppError):
+    """同一实例下已有同名凭据。"""
+
+    code = 42115
+    http_status = 409
+
+
+class TrustedCertificateDuplicate(AppError):
+    """同一张证书已在该实例登记过。"""
+
+    code = 42116
+    http_status = 409
+
+
 class InstanceStartFailed(AppError):
     """实例启动失败（端口被占、证书不可读、地址空间构建失败）。"""
 

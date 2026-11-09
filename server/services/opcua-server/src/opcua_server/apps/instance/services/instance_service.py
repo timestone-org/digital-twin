@@ -35,6 +35,7 @@ from opcua_server.apps.instance.schemas import (
     InstanceUpdateIn,
     PortPoolOut,
 )
+from opcua_server.apps.instance.services.integrity import flush_or_conflict
 from opcua_server.apps.instance.services.presenter import (
     definitions_of,
     endpoint_url_of,
@@ -148,7 +149,17 @@ class InstanceService:
                 desired_state="stopped",
             )
             instance_crud.add(session, row)
-            await session.flush()
+            await flush_or_conflict(
+                session,
+                {
+                    "uq_opcua_instances_name": lambda: InstanceNameTaken(
+                        f"实例名 {payload.name} 已被占用"
+                    ),
+                    "uq_opcua_instances_port": lambda: PortUnavailable(
+                        f"端口 {row.port} 已被别的实例占用"
+                    ),
+                },
+            )
             await session.refresh(row)
             created = await self._present(session, row)
         # ⚠ 登记在事务**之外**：它是一次跨服务调用，放事务里会让一次 hub
