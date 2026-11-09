@@ -14,9 +14,19 @@ const emit = defineEmits<{
 }>()
 const draft = ref('')
 const error = ref('')
+/** 草稿已经写的就是这份值（用户刚敲出来的）；解析不了给 false。 */
+function draftHolds(value: unknown): boolean {
+  try {
+    return JSON.stringify(JSON.parse(draft.value)) === JSON.stringify(value)
+  } catch {
+    return false
+  }
+}
+// ⚠ 只在值从外面换了时才重排：每敲一个合法字符值都会绕一圈回来，照着重排光标会跳到末尾
 watch(
   () => JSON.stringify(props.value),
   () => {
+    if (draft.value !== '' && draftHolds(props.value ?? null)) return
     draft.value = JSON.stringify(props.value ?? null, null, 2)
     error.value = ''
     emit('error', '')
