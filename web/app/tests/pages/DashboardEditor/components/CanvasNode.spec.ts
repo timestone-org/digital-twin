@@ -25,10 +25,15 @@ const IMAGE: ModuleManifest = {
 }
 
 const BARE: ModuleManifest = {
-  ...IMAGE,
   type: 'demo-bare',
-  contentKeys: undefined,
+  displayName: '演示',
+  category: '演示',
+  chrome: 'bare',
+  defaultSize: { width: 100, height: 100 },
+  configSchema: [],
+  bindings: [],
   preview: { config: { title: '演示标题' } },
+  component: () => Promise.resolve({ default: { template: '<i />' } }),
 }
 
 function node(
