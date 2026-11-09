@@ -131,6 +131,15 @@ export class SceneLayers {
   }
 
   /**
+   * 换一份结构树手动藏起来的对象；下一帧按它重算部件显隐。
+   * @param objects 结构树勾掉的模型节点
+   */
+  setForcedHidden(objects: ReadonlySet<THREE.Object3D>): void {
+    this.distanceDirty = true
+    this.parts.setForcedHidden(objects)
+  }
+
+  /**
    * 按这一帧的取景状态更新各处的距离显隐与淡出。
    *
    * ⚠ 每帧都调，故这里只算距离、不重建任何对象。配置变了走 `build`。

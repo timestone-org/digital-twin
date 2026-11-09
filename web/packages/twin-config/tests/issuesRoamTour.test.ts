@@ -10,7 +10,10 @@ import { describe, expect, it } from 'vitest'
 import { collectTwinConfigIssues } from '../src/issues'
 import { normalizeTwinConfig } from '../src/normalize'
 
-const TWO_CAMERAS = [{ id: 'c1' }, { id: 'c2' }]
+const TWO_CAMERAS = [
+  { id: 'c1', position: [10, 0, 0], target: [0, 0, 0] },
+  { id: 'c2', position: [0, 0, 10], target: [0, 0, 0] },
+]
 
 describe('轨迹上的悬空视点', () => {
   it('指到不存在的视点时带上具体槽位报出来', () => {
@@ -90,5 +93,17 @@ describe('凑不够两站的轨迹', () => {
       roamTour: { enabled: true, items: ['c1', 'c2'] },
     })
     expect(collectTwinConfigIssues(config)).toEqual([])
+  })
+})
+
+describe('轨迹上解不出姿态的视点', () => {
+  it('只剩一站可用时报凑不够两站', () => {
+    const config = normalizeTwinConfig({
+      cameras: [...TWO_CAMERAS, { id: 'blank' }],
+      roamTour: { enabled: true, items: ['c1', 'blank'] },
+    })
+    expect(collectTwinConfigIssues(config).map((issue) => issue.kind)).toEqual([
+      'roam-too-short',
+    ])
   })
 })

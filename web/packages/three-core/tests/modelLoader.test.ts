@@ -154,3 +154,41 @@ describe('模型装载', () => {
     expect(typeof createGltfSource().loadAsync).toBe('function')
   })
 })
+
+describe('缺省装载器的下载', () => {
+  // ⚠ 只在下载完之后才看取消的话，快速切模型时每个被换掉的几十兆 GLB 都照样下完、解完
+  it('取消时把在途的下载一起掐掉', async () => {
+    let seen: AbortSignal | undefined
+    vi.stubGlobal(
+      'fetch',
+      vi.fn((_url: string, init?: RequestInit) => {
+        const signal = init?.signal ?? undefined
+        seen = signal
+        // 与真 fetch 一样：信号一断就以 AbortError 落地
+        return new Promise<Response>((_resolve, reject) => {
+          signal?.addEventListener('abort', () => {
+            reject(new DOMException('aborted', 'AbortError'))
+          })
+        })
+      }),
+    )
+    const controller = new AbortController()
+
+    const pending = loadTwinModel('/m.glb', { signal: controller.signal })
+    controller.abort()
+
+    await expect(pending).rejects.toThrow()
+    expect(seen?.aborted).toBe(true)
+    vi.unstubAllGlobals()
+  })
+
+  it('HTTP 失败时报出状态码，不交给解析器', async () => {
+    vi.stubGlobal(
+      'fetch',
+      vi.fn().mockResolvedValue(new Response(null, { status: 404 })),
+    )
+
+    await expect(loadTwinModel('/m.glb')).rejects.toThrow('404')
+    vi.unstubAllGlobals()
+  })
+})

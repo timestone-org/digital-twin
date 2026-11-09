@@ -155,13 +155,6 @@ describe('曲线退化边界', () => {
       ],
     },
     {
-      name: '重合的机位和注视点',
-      positions: [
-        [0, 0, 0],
-        [0, 0, 10],
-      ],
-    },
-    {
       name: '两极机位',
       positions: [
         [0, 10, 0],
@@ -176,6 +169,33 @@ describe('曲线退化边界', () => {
       expect(pose?.position.every(Number.isFinite)).toBe(true)
     }
     expect(player.pose()?.position).toEqual(positions[positions.length - 1])
+  })
+
+  // ⚠ 配置里这种视点在摊轨迹时已被滤掉；这里直接喂段，守的是插值本身不出 NaN
+  it('重合的机位和注视点 全程有限且准确到站', () => {
+    const pose = (position: Vec3) => ({
+      position,
+      target: [0, 0, 0] as Vec3,
+      fov: 40,
+    })
+    const player = new RoamTimeline(
+      [
+        {
+          fromId: 'c0',
+          toId: 'c1',
+          from: pose([0, 0, 0]),
+          to: pose([0, 0, 10]),
+          flyMs: 1000,
+          holdMs: 0,
+        },
+      ],
+      false,
+    )
+    player.play()
+    for (let time = 0; time < 1000; time += 10) {
+      expect(player.advance(10)?.position.every(Number.isFinite)).toBe(true)
+    }
+    expect(player.pose()?.position).toEqual([0, 0, 10])
   })
 
   it('正对面机位的中途半径保持不变', () => {

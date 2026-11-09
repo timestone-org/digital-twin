@@ -5,14 +5,15 @@
  */
 import type { BindingSpec } from '@dt/contracts'
 
-/** 节点 `configJson` 里孪生配置所在的键。 */
+/** 模型动画触发值的绑定槽键。 */
 export const TWIN_ANIMATION_BINDING_KEY = 'animationValues'
 
+/** 节点 `configJson` 里孪生配置所在的键。 */
 export const TWIN_CONFIG_KEY = 'twin'
 
 /**
  * 孪生配置的文档格式版本。
- * ⚠ 版本只认这个显式整数，不许靠「坐标是不是整数」这类结构启发式判断（ADR-0012 六）。
+ * ⚠ 版本只认这个显式整数，不许靠「坐标是不是整数」这类结构启发式判断（docs/DASHBOARD_DESIGN.md §2.2 第 6 条）。
  */
 export const TWIN_CONFIG_VERSION = 1
 

@@ -134,6 +134,24 @@ describe('按档取色', () => {
     ).toEqual({ kind: 'solid', spec: '#00ff00' })
   })
 
+  // ⚠ 运行信号多是布尔点位：true 对不上档位里填的 "1"，部件就一直是回落色
+  it('布尔读数按 1 / 0 比，也认档位里填的 true / false', () => {
+    expect(partTintColor(RULE, true)).toEqual({
+      kind: 'solid',
+      spec: '#00ff00',
+    })
+    expect(partTintColor(RULE, false)).toEqual({
+      kind: 'solid',
+      spec: '#ff0000',
+    })
+    expect(
+      partTintColor(tint({ stops: [{ ...RUN_STOP, equals: 'TRUE' }] }), true),
+    ).toEqual({ kind: 'solid', spec: '#00ff00' })
+    expect(
+      partTintColor(tint({ stops: [RUN_STOP], fallback: '#0000ff' }), false),
+    ).toEqual({ kind: 'solid', spec: '#0000ff' })
+  })
+
   it('一档都没命中时走回落色', () => {
     expect(partTintColor(RULE, 7)).toEqual({ kind: 'solid', spec: '#0000ff' })
   })
@@ -195,6 +213,13 @@ describe('区间档', () => {
     expect(partTintColor(any, -999)).toEqual({ kind: 'solid', spec: '#111111' })
   })
 
+  it('布尔读数在区间档里按 1 / 0 算', () => {
+    expect(partTintColor(RULE, true)).toEqual({
+      kind: 'solid',
+      spec: '#00ff00',
+    })
+  })
+
   it('值不是数时区间档一律不命中', () => {
     expect(partTintColor(RULE, '停机')).toEqual({ kind: 'none' })
   })
@@ -226,6 +251,13 @@ describe('区间渐变', () => {
     const flat = tint({ mode: 'gradient', gradient: { min: 5, max: 5 } })
 
     expect(partTintColor(flat, 5)).toMatchObject({ t: 0 })
+  })
+
+  it('布尔读数按 1 / 0 落在渐变上', () => {
+    const unit = tint({ mode: 'gradient', gradient: { min: 0, max: 1 } })
+
+    expect(partTintColor(unit, true)).toMatchObject({ t: 1 })
+    expect(partTintColor(unit, false)).toMatchObject({ t: 0 })
   })
 
   it('值不是数时走回落色', () => {

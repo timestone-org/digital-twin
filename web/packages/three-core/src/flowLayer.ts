@@ -223,12 +223,16 @@ export class FlowLayer {
   setWorldScale(modelDiagonal: number): void {
     const usable =
       Number.isFinite(modelDiagonal) && modelDiagonal > 0 ? modelDiagonal : 1
-    this.tubeRadius = clamp(
+    const radius = clamp(
       usable * TUBE_RADIUS_RATIO,
       MIN_TUBE_RADIUS,
       MAX_TUBE_RADIUS,
     )
-    this.speedUnits = usable * SPEED_RATIO
+    const speed = usable * SPEED_RATIO
+    // ⚠ 刷新配置时先换体量、紧接着整层重建：体量没变还重造管线就是白建一遍再扔掉
+    if (radius === this.tubeRadius && speed === this.speedUnits) return
+    this.tubeRadius = radius
+    this.speedUnits = speed
     for (const entry of this.entries) this.applyEntryScale(entry)
   }
 

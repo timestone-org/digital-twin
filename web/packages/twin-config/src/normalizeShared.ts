@@ -68,6 +68,22 @@ export function clampedOr(
   return clamp(finiteOr(value, fallback), low, high)
 }
 
+/**
+ * 取整后夹进区间；取不到数用 fallback。
+ * @param value 原始值
+ * @param fallback 取不到数时的缺省
+ * @param low 下限
+ * @param high 上限
+ */
+export function clampedIntOr(
+  value: unknown,
+  fallback: number,
+  low: number,
+  high: number,
+): number {
+  return clamp(Math.round(finiteOr(value, fallback)), low, high)
+}
+
 /** 布尔；缺省由调用方给——`enabled` 缺省关，`visible` 缺省开，两者不能共用一个口径。 */
 export function boolOr(value: unknown, fallback: boolean): boolean {
   return typeof value === 'boolean' ? value : fallback

@@ -2,7 +2,14 @@
 import * as THREE from 'three'
 import { CSS3DObject } from 'three/examples/jsm/renderers/CSS3DRenderer.js'
 import { measurePanelBounds, type PanelBounds } from './panelBounds'
-import { projectPanel } from './panelProjection'
+import { expandPolygon, projectPanel } from './panelProjection'
+
+/**
+ * 背板裁剪比挖洞多铺出去的像素。
+ * ⚠ 两者共用一条边时各自抗锯齿，边上像素两层都半透明、透出底下的背景色，
+ * 亮处就是一圈细灰框。背板多铺一点，洞边下面就是实的。
+ */
+const CLIP_OVERDRAW_PX = 2
 
 export class PanelSurface extends CSS3DObject {
   readonly proxy = new THREE.Mesh(
@@ -84,7 +91,10 @@ export class PanelSurface extends CSS3DObject {
     this.projection.multiplyMatrices(viewProjection, this.proxy.matrix)
     const points = projectPanel(this.projection, width, height)
     if (points !== this.previousPoints) {
-      this.clipPolygon.setAttribute('points', points)
+      this.clipPolygon.setAttribute(
+        'points',
+        expandPolygon(points, CLIP_OVERDRAW_PX),
+      )
       this.previousPoints = points
     }
     this.element.style.visibility = points === '' ? 'hidden' : ''

@@ -60,7 +60,9 @@ export type { TwinGizmoKind, TwinGizmoTarget } from './gizmoTarget'
 export {
   FLOW_COLOR_FALLBACK,
   FLOW_KIND_COLORS,
+  FLOW_KIND_OPTIONS,
   flowKindColor,
+  flowKindLabel,
   flowKindToken,
 } from './flowColors'
 export {

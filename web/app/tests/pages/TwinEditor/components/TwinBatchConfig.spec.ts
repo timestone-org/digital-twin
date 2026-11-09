@@ -137,7 +137,7 @@ it('全选只作用于当前结果，筛选后取消不丢失隐藏的已选目�
   })
   await button(wrapper, '全选当前结果').trigger('click')
   expect(wrapper.text()).toContain('已选 3 / 3')
-  field(wrapper, '目标对象').vm.$emit('update:modelValue', '泵')
+  field(wrapper, '筛选目标').vm.$emit('update:modelValue', '泵')
   await flushPromises()
   await button(wrapper, '取消当前结果').trigger('click')
   expect(wrapper.text()).toContain('已选 1 / 3')

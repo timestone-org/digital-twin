@@ -54,7 +54,12 @@ export interface PanelFieldView {
   deltaEl: HTMLElement | null
   /** 上一次的有限读数，`delta` 拿它比；没收到过是 null。 */
   last: number | null
+  /** 上一次刷进序列与升降的原始读数；还没刷过是 `UNPAINTED`。 */
+  lastRaw: unknown
 }
+
+/** 还没刷过任何一轮读数的哨兵；与任何真实读数都不 `Object.is` 相等。 */
+const UNPAINTED: unique symbol = Symbol('unpainted')
 
 /** 建好的一张牌。 */
 export interface PanelCard {
@@ -295,7 +300,14 @@ function buildFieldView(
   field: TwinPanelField,
 ): PanelFieldView {
   const valueKey = `${panelId}::${field.key}`
-  const shared = { field, valueKey, chart: null, deltaEl: null, last: null }
+  const shared = {
+    field,
+    valueKey,
+    chart: null,
+    deltaEl: null,
+    last: null,
+    lastRaw: UNPAINTED,
+  }
   if (panelKindUsesState(field.kind)) {
     return { ...shared, ...buildState(field), unitEl: null }
   }
@@ -451,6 +463,10 @@ export function paintPanelField(
   const ratio = reading.live ? panelFieldRatio(view.field, reading.raw) : null
   if (ratio === null) view.row.style.removeProperty('--tp-fill')
   else view.row.style.setProperty('--tp-fill', ratio.toFixed(3))
+  // ⚠ 牌上任何一路刷新都会重推整份值，读数没变就不算新的一拍：否则走势按全局刷新
+  //   次数攒重复点，升降角标下一拍就被冲成「持平」。值不带时刻，同值重发同样被吞掉
+  if (Object.is(view.lastRaw, reading.raw)) return
+  view.lastRaw = reading.raw
   // ⚠ 只有攒序列的那两档才推，否则每次刷新都会给别的画法白攒一份数组
   if (panelKindUsesSeries(view.field.kind)) view.chart?.push(ratio)
   paintDelta(view, reading)

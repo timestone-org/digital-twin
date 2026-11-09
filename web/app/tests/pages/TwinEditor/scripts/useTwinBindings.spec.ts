@@ -105,6 +105,18 @@ describe('挑点弹窗', () => {
     expect(api.pickingFieldKey.value).toBeNull()
   })
 
+  // ⚠ 副标题直接给 `anchorValues[0].value` 的话，用户对不上自己点的是哪一行
+  it('弹窗副标题是给人看的那一行名字，不是内部键', () => {
+    const doc = createTwinDoc({ config: CONFIG, bindings: [] })
+    const { api } = mountBindings(doc)
+
+    expect(api.pickingLabel.value).toBeNull()
+    api.pickingFieldKey.value = 'anchorValues[0].value'
+
+    expect(api.pickingLabel.value).toContain('锚点读数')
+    expect(api.pickingLabel.value).not.toContain('anchorValues')
+  })
+
   it('弹窗没开时挑到的点位不写给任何人', () => {
     const doc = createTwinDoc({ config: CONFIG, bindings: [] })
     const { api } = mountBindings(doc)

@@ -6,6 +6,7 @@
  */
 import {
   boolOr,
+  clampedIntOr,
   clampedOr,
   entityId,
   normalizeList,
@@ -20,8 +21,8 @@ import {
   finiteOr,
   isRecord,
   normalizeColorSpec,
-  stringList,
   toFiniteNumber,
+  trimmedList,
   trimmedString,
 } from './sanitize'
 import {
@@ -45,7 +46,7 @@ const MAX_DECIMALS = 10
 const MAX_PANEL_WIDTH = 1200
 /** 卡片最小高度 0 = 自适应；上限同宽度 */
 const MAX_PANEL_HEIGHT = 1200
-/** 字段分列上限：三列以上每格窄到放不下一个带单位的读数 */
+/** 字段分列上限：四列以上每格窄到放不下一个带单位的读数 */
 export const MAX_PANEL_COLUMNS = 4
 /** 阈值档上限：再多用户自己也读不出牌上现在是哪一档 */
 const MAX_LEVELS = 6
@@ -83,7 +84,13 @@ function normalizePanelStyle(raw: unknown): TwinPanelStyle {
     background: normalizeColorSpec(source.background) ?? defaults.background,
     width: clampedOr(source.width, defaults.width, 0, MAX_PANEL_WIDTH),
     height: clampedOr(source.height, defaults.height, 0, MAX_PANEL_HEIGHT),
-    columns: clampedOr(source.columns, defaults.columns, 1, MAX_PANEL_COLUMNS),
+    // ⚠ 取整：样式表只认整数档的 data-columns，2.5 会静默退成单列
+    columns: clampedIntOr(
+      source.columns,
+      defaults.columns,
+      1,
+      MAX_PANEL_COLUMNS,
+    ),
     density: oneOf(source.density, TWIN_PANEL_DENSITIES, defaults.density),
     scan: boolOr(source.scan, defaults.scan),
     corners: boolOr(source.corners, defaults.corners),
@@ -215,7 +222,8 @@ export function normalizeFlow(
     id: entityId(raw.id, 'flow', index),
     name: trimmedString(raw.name),
     kind: trimmedString(raw.kind),
-    pathAnchors: stringList(raw.pathAnchors),
+    // ⚠ 不去重：往返、回环都靠同一个锚点重复出现
+    pathAnchors: trimmedList(raw.pathAnchors),
     width: clampedOr(raw.width, 1, MIN_GEOMETRY, MAX_GEOMETRY),
     reversible: raw.reversible === true,
     visibility: normalizeVisibility(raw.visibility, raw.visible),

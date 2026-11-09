@@ -6,6 +6,7 @@ import { normalizeTwinConfig, type TwinConfig } from '@dt/twin-config'
 import * as THREE from 'three'
 import { afterEach, describe, expect, it, vi } from 'vitest'
 
+import { flowMidpointOf } from '../src/distanceBasis'
 import {
   PickTargets,
   entityPickPoints,
@@ -92,11 +93,38 @@ describe('实体落点', () => {
       }),
     )
 
-    expect(points.at(-1)).toEqual({
-      kind: 'flows',
-      id: 'f1',
-      position: [2, 0, 1],
+    const last = points.at(-1)
+    expect(last?.kind).toBe('flows')
+    expect(last?.id).toBe('f1')
+    const [x, y, z] = last?.position ?? [NaN, NaN, NaN]
+    expect(x).toBeCloseTo(2)
+    expect(y).toBeCloseTo(0)
+    expect(z).toBeCloseTo(1)
+  })
+
+  // ⚠ 算术平均落在折线围出来的空地上：拐弯的流，标记会浮在管子外面
+  it('拐弯的能量流落在画出来的那条曲线的中点上', () => {
+    const anchors = [
+      { id: 'a', position: [0, 0, 0] },
+      { id: 'b', position: [10, 0, 0] },
+      { id: 'c', position: [10, 0, 10] },
+    ]
+    const twin = config({
+      anchors,
+      flows: [{ id: 'f1', pathAnchors: ['a', 'b', 'c'] }],
     })
+    const flow = twin.flows[0]
+    if (flow === undefined) throw new Error('没有能量流')
+
+    const position = entityPickPoints(twin).at(-1)?.position
+    const expected = flowMidpointOf(flow, twin.anchors)
+
+    expect(expected).not.toBeNull()
+    expect(
+      new THREE.Vector3(...(position ?? [NaN, NaN, NaN])).distanceTo(
+        expected ?? new THREE.Vector3(),
+      ),
+    ).toBeLessThan(1e-9)
   })
 
   it('能量流路径解析不出两个点时不给标记', () => {

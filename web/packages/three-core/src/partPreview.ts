@@ -108,10 +108,20 @@ function isMesh(object: THREE.Object3D): object is THREE.Mesh {
   return object instanceof THREE.Mesh
 }
 
-function createStage(objects: readonly THREE.Object3D[]): THREE.Group {
-  const stage = new THREE.Group()
-  for (const object of dropNestedObjects(objects)) stage.add(bakedClone(object))
-  return stage
+/**
+ * 舞台分两层：外层 `pivot` 只管自转，内层 `content` 装克隆件并负责居中。
+ * ⚠ 同一层既居中又自转的话，转轴是模型原点而不是部件中心，部件会画着圈甩出画面。
+ */
+function createStage(objects: readonly THREE.Object3D[]): {
+  pivot: THREE.Group
+  content: THREE.Group
+} {
+  const pivot = new THREE.Group()
+  const content = new THREE.Group()
+  for (const object of dropNestedObjects(objects))
+    content.add(bakedClone(object))
+  pivot.add(content)
+  return { pivot, content }
 }
 
 function sortPreviewGeometry(root: THREE.Object3D): TransparentGeometry[] {
@@ -298,8 +308,8 @@ export function createPartPreview(
     renderer instanceof THREE.WebGLRenderer
       ? attachStudioEnvironment(scene, lighting, loadStudioEnvironment)
       : () => {}
-  const stage = createStage(options.objects)
-  const { box, center } = centerAt(stage)
+  const { pivot: stage, content } = createStage(options.objects)
+  const { box, center } = centerAt(content)
   const sorting = sortPreviewGeometry(stage)
   scene.add(lighting, stage)
 

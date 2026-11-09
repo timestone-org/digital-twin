@@ -294,6 +294,24 @@ describe('走势序列', () => {
     expect(drawn?.split(' ')).toHaveLength(SERIES_LENGTH)
   })
 
+  // ⚠ 别的字段一刷新就重推整份值：同一读数再攒一个点，走势的横轴就成了「全局刷新次数」
+  it('同一读数重推时不重复攒点', () => {
+    const built = buildPanelCard(
+      panel({ fields: [field({ kind: 'sparkline' })] }),
+    )
+    const view = built.fields[0]
+    if (view === undefined) throw new Error('本该建出一行')
+
+    paintPanelField(view, { 'p1::f1': { value: 5 } })
+    paintPanelField(view, { 'p1::f1': { value: 7 } })
+    paintPanelField(view, { 'p1::f1': { value: 7 } })
+
+    const drawn = built.card
+      .querySelector('.twin-panel__spark-line')
+      ?.getAttribute('points')
+    expect(drawn?.split(' ')).toHaveLength(2)
+  })
+
   // ⚠ 一个点画不出线，留半截线头看着像数据错了
   it('只有一个点时不画线', () => {
     const built = render(
@@ -342,6 +360,19 @@ describe('升降角标', () => {
 
     paintPanelField(view, { 'p1::f1': { value: 5 } })
     expect(view.deltaEl?.dataset.dir).toBe('down')
+  })
+
+  // ⚠ 牌上任何一路刷新都会把整份值重推一遍：同一个读数再来一次不是「持平」
+  it('同一读数重推时保留上一次的升降', () => {
+    const built = buildPanelCard(panel({ fields: [field({ kind: 'delta' })] }))
+    const view = built.fields[0]
+    if (view === undefined) throw new Error('本该建出一行')
+
+    paintPanelField(view, { 'p1::f1': { value: 5 } })
+    paintPanelField(view, { 'p1::f1': { value: 7 } })
+    paintPanelField(view, { 'p1::f1': { value: 7 } })
+
+    expect(view.deltaEl?.dataset.dir).toBe('up')
   })
 
   // ⚠ 第一个读数没有可比的上一次，画成升或降都是编出来的

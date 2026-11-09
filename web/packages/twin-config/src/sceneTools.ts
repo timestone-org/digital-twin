@@ -2,7 +2,7 @@
  * @fileoverview 运行态场景工具里能提纯的那一半：颜色图例、截图文件名、剖切平面、
  * 场景内搜索、两点测距。不碰 three、不碰 DOM、不读时钟——时间戳由调用方喂进来。
  */
-import { flowKindColor, flowKindToken } from './flowColors'
+import { flowKindColor, flowKindLabel, flowKindToken } from './flowColors'
 import { tintStopText } from './partTint'
 import type { TwinFlowLink, TwinPart, TwinPartTint } from './types'
 
@@ -26,8 +26,9 @@ export interface TwinLegendEntry {
  *
  * ⚠ 同一个含义只列一次：十条能流共用一套种类、几十个部件共用一套染色档位都是
  * 常态，逐条列出来的图例没法看。
- * ⚠ 没写种类的流、没写说明的档位照样进图例——档位那一侧有 `tintStopText` 按
- * 条件拼一句兜底，而「一个没有任何说明的色块」等于没有图例。
+ * ⚠ 没写说明的档位照样进图例——`tintStopText` 按条件拼一句兜底，而「一个没有
+ * 任何说明的色块」等于没有图例。没写种类的流不进：缺省色本身没有含义，列出来只会让人去猜。
+ * ⚠ 种类给中文名，不认识的才原样显示：中文大屏上冒出「water」是在露内部代码。
  *
  * @param flows 归一化后的能量流
  * @param parts 归一化后的部件，取它们的状态染色档位
@@ -45,12 +46,12 @@ export function collectSceneLegend(
     out.push(entry)
   }
   for (const flow of flows) {
-    const label = flow.kind.trim()
+    const kind = flow.kind.trim()
     push({
       group: '能量流',
-      label,
-      token: flowKindToken(label),
-      color: flowKindColor(label),
+      label: flowKindLabel(kind),
+      token: flowKindToken(kind),
+      color: flowKindColor(kind),
     })
   }
   for (const part of parts) {
@@ -189,7 +190,7 @@ function rankOf(text: string, query: string): number {
  * 搜部件名 / 模型节点名。
  *
  * 排序：前缀命中优先于子串命中，同档按「名字更短的更相关」（搜 `pump` 时 `Pump`
- * 该排在 `Pump_Assembly_Housing_01` 前面），最后按字典序保证结果稳定。
+ * 该排在 `Pump_Assembly_Housing_01` 前面），最后按码点序保证结果稳定。
  *
  * ⚠ 截断时 `total` 仍是命中总数：调用方要如实告知「还有多少条没显示」，
  * 静默砍掉会让用户以为搜到的就这些。
@@ -218,11 +219,12 @@ export function searchSceneEntities(
       hits.push({ kind: 'node', id: name, label: name, nodes: [name], rank })
   }
 
+  // ⚠ 末位按码点比，不用 localeCompare：CI 是中文 locale、开发机是英文，次序会不同
   hits.sort(
     (a, b) =>
       a.rank - b.rank ||
       a.label.length - b.label.length ||
-      a.label.localeCompare(b.label),
+      (a.label < b.label ? -1 : a.label > b.label ? 1 : 0),
   )
   return { hits: hits.slice(0, limit), total: hits.length }
 }

@@ -75,6 +75,22 @@ describe('buildRoamSegments', () => {
     ])
   })
 
+  // ⚠ 新建还没「取当前机位」的视点，机位与注视点都在原点：飞到这一站画面全黑或乱转
+  it('机位与注视点重合的视点不进轨迹', () => {
+    const config = normalizeTwinConfig({
+      cameras: [
+        { id: 'c1', position: [10, 0, 0], target: [0, 0, 0] },
+        { id: 'c2', position: [0, 0, 10], target: [0, 0, 0] },
+        { id: 'blank' },
+      ],
+      roamTour: { items: ['c1', 'blank', 'c2'], loop: false },
+    })
+
+    expect(
+      segmentsOf(config).map((item) => `${item.fromId}-${item.toId}`),
+    ).toEqual(['c1-c2'])
+  })
+
   it('不循环时只有站点之间那几段', () => {
     const segments = segmentsOf(
       twin({ items: ['c1', 'c2', 'c3'], loop: false }),

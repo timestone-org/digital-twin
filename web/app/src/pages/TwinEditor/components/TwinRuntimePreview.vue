@@ -1,14 +1,14 @@
 <script setup lang="ts">
 /**
- * @fileoverview 视口右下角的画中画：按这块孪生在大屏上的宽高比，用运行态那一条
- * 渲染链画当前草稿——看到的就是它最终在大屏上的样子。
+ * @fileoverview 配置预览里的「运行态」那一页：按这块孪生在大屏上的宽高比，用运行态
+ * 那一条渲染链画当前草稿——看到的就是它最终在大屏上的样子。
  *
  * ⚠ 走 `ModuleRenderer` 而不是在这里照着运行态再拼一遍：标题、场景工具条、
  * 结构树、部件详情、按距离的显隐与自动旋转全都长在模块里，拼第二遍必然漂，
  * 漂了以后预览里看到的就不是大屏上的那一份。
  * ⚠ 内容按**设计像素**铺开再整体缩放：直接渲染进一个小框的话，16px 的标题
  * 在小框里占的比例远大于大屏上，字号、边距这类配置全看不准。
- * ⚠ 只在打开时挂载：3D 预览自带一个 WebGL 上下文并把模型再解析一遍，
+ * ⚠ 外层只在切到这一页时挂它：3D 预览自带一个 WebGL 上下文并把模型再解析一遍，
  * 常挂着等于整页把模型显存吃两份。
  */
 import type { BindingView, DashboardNodePayload } from '@dt/contracts'
@@ -19,11 +19,10 @@ import {
   type BindingValueReader,
 } from '@dt/runtime'
 import type { TwinConfig } from '@dt/twin-config'
-import { DtButton, DtNotice, DtIconButton } from '@dt/ui'
+import { DtNotice } from '@dt/ui'
 import {
   computed,
   ref,
-  watch,
   onMounted,
   onBeforeUnmount,
   type CSSProperties,
@@ -38,7 +37,6 @@ import {
 
 const props = defineProps<{
   /** 被编辑的大屏节点；null = 还没读出来。 */
-  embedded?: boolean
   node: DashboardNodePayload | null
   /**
    * 编辑器内存里的这份配置。
@@ -55,34 +53,23 @@ const props = defineProps<{
 // 预览与编辑视口共用同一条取数：同一份绑定、同一个读取器、同一个订阅
 provideRuntimeData({ readBinding: () => props.readBinding() })
 
+/** 宿主还没量出宽度时先按这么宽画，像素。 */
+const INITIAL_WIDTH = 320
+/** 预览框的高度上限，像素；竖长的格子到这儿就不再长高。 */
+const MAX_HEIGHT = 520
+
 const hostRef = ref<HTMLDivElement | null>(null)
-const embeddedWidth = ref(320)
+const hostWidth = ref(INITIAL_WIDTH)
 let observer: ResizeObserver | null = null
 onMounted(() => {
   const host = hostRef.value
-  if (!props.embedded || host === null) return
+  if (host === null) return
   observer = new ResizeObserver(() => {
-    if (host.clientWidth > 0) embeddedWidth.value = host.clientWidth
+    if (host.clientWidth > 0) hostWidth.value = host.clientWidth
   })
   observer.observe(host)
 })
 onBeforeUnmount(() => observer?.disconnect())
-
-const open = ref(false)
-watch(
-  () => props.embedded,
-  (embedded) => {
-    if (embedded === true) open.value = true
-  },
-  { immediate: true },
-)
-const wide = ref(false)
-
-/** 画中画与放大档各自的上限框（像素）。 */
-const LIMITS = {
-  pip: { width: 320, height: 220 },
-  wide: { width: 760, height: 520 },
-} as const
 
 const target = computed<TwinTargetSize | undefined>(() =>
   props.node === null
@@ -93,14 +80,7 @@ const target = computed<TwinTargetSize | undefined>(() =>
 const box = computed(() => {
   const size = target.value
   if (!isUsableTargetSize(size)) return null
-  return previewBoxOf(
-    size,
-    props.embedded
-      ? { width: embeddedWidth.value, height: LIMITS.wide.height }
-      : wide.value
-        ? LIMITS.wide
-        : LIMITS.pip,
-  )
+  return previewBoxOf(size, { width: hostWidth.value, height: MAX_HEIGHT })
 })
 
 const preview = computed(() =>
@@ -113,7 +93,7 @@ const boxStyle = computed<CSSProperties | undefined>(() =>
     : { width: `${box.value.width}px`, height: `${box.value.height}px` },
 )
 
-/** 内容按设计像素铺开，再整体缩到画中画那么大。 */
+/** 内容按设计像素铺开，再整体缩到预览框那么大。 */
 const stageStyle = computed<CSSProperties | undefined>(() => {
   const size = target.value
   const current = box.value
@@ -133,48 +113,11 @@ const sizeLabel = computed(() => {
 </script>
 
 <template>
-  <div
-    ref="hostRef"
-    class="twin-preview"
-    :class="{ 'twin-preview--embedded': embedded }"
-  >
-    <DtIconButton
-      v-if="!open"
-      size="sm"
-      variant="soft"
-      intent="neutral"
-      data-test="open-preview"
-      icon="eye"
-      label="运行态预览"
-      @click="open = true"
-    />
-
-    <div v-else class="twin-preview__panel">
+  <div ref="hostRef" class="twin-preview">
+    <div class="twin-preview__panel">
       <header class="twin-preview__bar">
         <span class="twin-preview__name">运行态预览</span>
         <span class="twin-preview__size">{{ sizeLabel }}</span>
-        <DtButton
-          v-if="!embedded"
-          size="xs"
-          variant="ghost"
-          intent="neutral"
-          :icon="wide ? 'minus' : 'plus'"
-          :aria-label="wide ? '缩小预览窗口' : '放大预览窗口'"
-          :title="wide ? '缩小预览窗口' : '放大预览窗口'"
-          data-test="toggle-wide"
-          @click="wide = !wide"
-        />
-        <DtButton
-          v-if="!embedded"
-          size="xs"
-          variant="ghost"
-          intent="neutral"
-          icon="close"
-          aria-label="关闭预览"
-          title="关闭预览"
-          data-test="close-preview"
-          @click="open = false"
-        />
       </header>
 
       <div
@@ -202,15 +145,7 @@ const sizeLabel = computed(() => {
 
 <style scoped lang="scss">
 .twin-preview {
-  position: absolute;
-  right: 12px;
-  bottom: 12px;
-  z-index: var(--z-sticky);
-
-  &--embedded {
-    position: relative;
-    inset: auto;
-  }
+  position: relative;
 
   &__panel {
     display: flex;
@@ -227,7 +162,7 @@ const sizeLabel = computed(() => {
     display: flex;
     gap: 8px;
     align-items: center;
-    padding: 4px 4px 4px 10px;
+    padding: 6px 10px;
     border-bottom: 1px solid var(--border-subtle);
   }
 
@@ -236,7 +171,7 @@ const sizeLabel = computed(() => {
     color: var(--text-primary);
   }
 
-  // 尺寸推开两个按钮，读数与标题不会挤在一起
+  // 尺寸靠右，读数与标题不会挤在一起
   &__size {
     flex: 1;
     font-size: var(--font-size-caption);

@@ -59,3 +59,45 @@ export function projectPanel(
     )
     .join(' ')
 }
+
+/** 尖角处外扩的上限倍数；再尖的角也不把背板拉出一根长刺。 */
+const MAX_MITER = 4
+
+/**
+ * 把屏幕多边形的每条边往外平移 `px`，顶点取相邻两条平移边的交点（斜接）。
+ * @param points `projectPanel` 给的 "x,y x,y …"；空串原样返回
+ * @param px 外扩的像素
+ */
+export function expandPolygon(points: string, px: number): string {
+  if (points === '') return ''
+  const vertices = points.split(' ').map((pair) => {
+    const [x = 0, y = 0] = pair.split(',').map(Number)
+    return new THREE.Vector2(x, y)
+  })
+  let area = 0
+  vertices.forEach((point, index) => {
+    const next = vertices[(index + 1) % vertices.length] ?? point
+    area += point.x * next.y - next.x * point.y
+  })
+  // 按环绕方向定外法向：顶点顺逆两种次序都往外扩
+  const outward = area >= 0 ? 1 : -1
+  const normalOf = (from: THREE.Vector2, to: THREE.Vector2): THREE.Vector2 =>
+    new THREE.Vector2(to.y - from.y, from.x - to.x)
+      .normalize()
+      .multiplyScalar(outward)
+  return vertices
+    .map((point, index) => {
+      const prev = vertices[(index + vertices.length - 1) % vertices.length]
+      const next = vertices[(index + 1) % vertices.length]
+      if (prev === undefined || next === undefined) return point
+      const n1 = normalOf(prev, point)
+      const n2 = normalOf(point, next)
+      const miter = Math.min(1 / Math.max(1 + n1.dot(n2), 1e-6), MAX_MITER)
+      return n1
+        .add(n2)
+        .multiplyScalar(px * miter)
+        .add(point)
+    })
+    .map((point) => `${point.x.toFixed(3)},${point.y.toFixed(3)}`)
+    .join(' ')
+}

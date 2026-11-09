@@ -131,6 +131,16 @@ describe('信息牌', () => {
     expect(style.grid).toBe(false)
   })
 
+  // ⚠ 样式表只认 data-columns 为整数的那几档：2.5 一个选择器都匹配不上，静默退成单列
+  it('列数取整，信息牌与部件详情同一口径', () => {
+    expect(panel({ style: { columns: 2.5 } }).style.columns).toBe(3)
+    expect(panel({ style: { columns: 2.4 } }).style.columns).toBe(2)
+    const detail = normalizeTwinConfig({
+      parts: [{ id: 'p', detail: { columns: 2.5 } }],
+    }).parts[0]?.detail
+    expect(detail?.columns).toBe(3)
+  })
+
   it('列数与高度夹进上下限，不认识的密度回落', () => {
     expect(panel({ style: { columns: 99 } }).style.columns).toBe(4)
     expect(panel({ style: { columns: 0 } }).style.columns).toBe(1)
@@ -283,11 +293,21 @@ describe('立体箭头', () => {
 })
 
 describe('能量流', () => {
-  it('路径锚点去重去空白', () => {
-    expect(flow({ pathAnchors: [' a ', 'a', '', 'b'] }).pathAnchors).toEqual([
+  it('路径锚点去空白、丢空串', () => {
+    expect(flow({ pathAnchors: [' a ', '', 'b'] }).pathAnchors).toEqual([
       'a',
       'b',
     ])
+  })
+
+  // ⚠ 往返、回环都靠同一个锚点重复出现：去重的话 A→B→C→A 存下来只剩 A→B→C，环永远合不上
+  it('路径锚点保留重复与次序，归一化两遍结果不变', () => {
+    const once = flow({ pathAnchors: ['a', 'b', 'c', 'a'] })
+
+    expect(once.pathAnchors).toEqual(['a', 'b', 'c', 'a'])
+    expect(flow({ pathAnchors: once.pathAnchors }).pathAnchors).toEqual(
+      once.pathAnchors,
+    )
   })
 
   // 只绑了强度没绑激活是常见配法，要求两个都有会让那条流永远静止

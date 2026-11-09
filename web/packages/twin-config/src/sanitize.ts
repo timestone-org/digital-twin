@@ -64,6 +64,13 @@ export function trimmedString(value: unknown): string {
   return typeof value === 'string' ? value.trim() : ''
 }
 
+/** 字符串数组：去空白、丢空串，保留次序与重复。 */
+export function trimmedList(value: unknown): string[] {
+  return toArray(value)
+    .map(trimmedString)
+    .filter((text) => text !== '')
+}
+
 /** 字符串数组：去空白、丢空串、按首次出现去重。 */
 export function stringList(value: unknown): string[] {
   const seen = new Set<string>()

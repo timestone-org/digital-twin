@@ -2,12 +2,18 @@
 import { readFile } from 'node:fs/promises'
 import * as THREE from 'three'
 import { afterEach, expect, it, vi } from 'vitest'
+import { EXRLoader } from 'three/examples/jsm/loaders/EXRLoader.js'
 import {
+  __resetStudioEnvironment,
   attachStudioEnvironment,
   loadStudioEnvironment,
 } from '../src/studioEnvironment'
 
-afterEach(() => vi.unstubAllGlobals())
+afterEach(() => {
+  vi.unstubAllGlobals()
+  vi.restoreAllMocks()
+  __resetStudioEnvironment()
+})
 
 it('加载失败保留补光并标记降级', async () => {
   const scene = new THREE.Scene()
@@ -61,4 +67,70 @@ it('环境图 HTTP 失败不交给解码器', async () => {
   await expect(
     loadStudioEnvironment(new AbortController().signal),
   ).rejects.toThrow('环境光资源加载失败')
+})
+
+/** 不真解码：真 EXR 解一遍要上百毫秒，用例只关心解了几次。 */
+function stubDecoder() {
+  return vi.spyOn(EXRLoader.prototype, 'parse').mockReturnValue({
+    header: {},
+    width: 1,
+    height: 1,
+    data: new Uint16Array(4),
+    format: THREE.RGBAFormat,
+    colorSpace: THREE.LinearSRGBColorSpace,
+    type: THREE.HalfFloatType,
+  })
+}
+
+function okResponse(): Promise<Response> {
+  return Promise.resolve(new Response(new ArrayBuffer(8)))
+}
+
+// ⚠ 每个场景、每开一次详情弹窗都在主线程上解一遍 DWAB 压缩的 EXR，卡顿按场景数叠加
+it('多个场景共用一次下载与解码，各自拿到自己的纹理', async () => {
+  const fetcher = vi.fn(okResponse)
+  vi.stubGlobal('fetch', fetcher)
+  const parse = stubDecoder()
+
+  const first = await loadStudioEnvironment(new AbortController().signal)
+  const second = await loadStudioEnvironment(new AbortController().signal)
+
+  expect(fetcher).toHaveBeenCalledOnce()
+  expect(parse).toHaveBeenCalledOnce()
+  expect(second).not.toBe(first)
+  first.dispose()
+  second.dispose()
+})
+
+it('上一次失败后下一次重新加载', async () => {
+  const fetcher = vi
+    .fn()
+    .mockResolvedValueOnce(new Response(null, { status: 503 }))
+    .mockImplementationOnce(okResponse)
+  vi.stubGlobal('fetch', fetcher)
+  stubDecoder()
+
+  await expect(
+    loadStudioEnvironment(new AbortController().signal),
+  ).rejects.toThrow('环境光资源加载失败')
+  const texture = await loadStudioEnvironment(new AbortController().signal)
+
+  expect(texture).toBeInstanceOf(THREE.DataTexture)
+  texture.dispose()
+})
+
+// ⚠ 一个场景卸载取消了加载，不能连带把别的场景要等的那一份也作废
+it('一个调用方取消不影响共用的那份', async () => {
+  vi.stubGlobal('fetch', vi.fn(okResponse))
+  stubDecoder()
+  const controller = new AbortController()
+
+  const cancelled = loadStudioEnvironment(controller.signal)
+  const kept = loadStudioEnvironment(new AbortController().signal)
+  controller.abort()
+
+  await expect(cancelled).rejects.toBeDefined()
+  const texture = await kept
+  expect(texture).toBeInstanceOf(THREE.DataTexture)
+  texture.dispose()
 })

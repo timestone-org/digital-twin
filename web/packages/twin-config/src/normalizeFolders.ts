@@ -7,7 +7,7 @@ import { isRecord, stringList, toArray, trimmedString } from './sanitize'
 import { TWIN_FOLDER_KINDS } from './types'
 import type { TwinFolderKind, TwinOutlineFolder } from './types'
 
-/** 悬空判定用的实体表：七类实体各给一份已归一化的 id 载体。 */
+/** 悬空判定用的实体表：六类实体各给一份已归一化的 id 载体。 */
 export type TwinFolderHosts = Readonly<
   Record<TwinFolderKind, readonly { id: string }[]>
 >
@@ -54,7 +54,7 @@ function mintFolderIds(parsed: readonly ParsedFolder[]): TwinOutlineFolder[] {
 /**
  * 归一化文件夹表；幂等，空夹合法。
  * @param raw 落库的 folders 块
- * @param hosts 已归一化的七类实体表，悬空成员按它剔除
+ * @param hosts 已归一化的六类实体表，悬空成员按它剔除
  */
 export function normalizeFolders(
   raw: unknown,

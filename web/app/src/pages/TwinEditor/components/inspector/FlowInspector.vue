@@ -5,7 +5,11 @@
  * ⚠ 种类只决定配色 token（渲染层认 `--flow-<kind>`，认不出就用内置色），
  * 它不是枚举——落库里的自定义种类要原样留着，不能被下拉「归一」成缺省色。
  */
-import type { TwinAnchor, TwinFlowLink } from '@dt/twin-config'
+import {
+  FLOW_KIND_OPTIONS,
+  type TwinAnchor,
+  type TwinFlowLink,
+} from '@dt/twin-config'
 import { DtField, DtInput, DtSelect, DtSlider, DtSwitch } from '@dt/ui'
 import { computed } from 'vue'
 
@@ -20,18 +24,14 @@ const props = defineProps<{
 
 const emit = defineEmits<{ 'update:modelValue': [TwinFlowLink] }>()
 
-/** 渲染层内置了配色的种类；主题里配了 `--flow-<kind>` 时以主题为准。 */
+/** 渲染层内置了配色的种类；中文名与图例同一份。 */
 const KIND_OPTIONS = [
   { value: '', label: '（不指定，用缺省色）' },
-  { value: 'water', label: '水' },
-  { value: 'steam', label: '蒸汽' },
-  { value: 'electricity', label: '电' },
-  { value: 'gas', label: '燃气' },
-  { value: 'oil', label: '油' },
-  { value: 'heat', label: '热' },
-  { value: 'cold', label: '冷' },
-  { value: 'air', label: '空气' },
-] as const
+  ...FLOW_KIND_OPTIONS.map((option) => ({
+    value: option.kind,
+    label: option.label,
+  })),
+]
 
 // 归一化把线宽夹在 [0.01, 100]；面板给到 20 就够粗，再宽只是遮挡模型
 const WIDTH_RANGE = { min: 0.1, max: 20, step: 0.1 }
