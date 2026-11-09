@@ -9,9 +9,6 @@ import check_ts_style as gate
 
 import _report
 
-HIERARCHY_PAGE_STATE = (
-    "web/app/src/pages/Tools/Hierarchy/scripts/hierarchyPageState.ts"
-)
 VUE_IMPORT = "import { ref, watch } from 'vue'\n"
 
 
@@ -55,12 +52,10 @@ class ComposableStateSizeTests(unittest.TestCase):
 class RepositoryStateDebtTests(unittest.TestCase):
     """真仓上的存量超限文件只能靠登记过的欠账表放行。"""
 
-    def test_hierarchy_page_state_is_caught_without_its_debt_entry(
-        self,
-    ) -> None:
+    def test_every_debt_entry_is_caught_without_the_debt_table(self) -> None:
         with patch.object(gate, "OVERSIZED_STATE_DEBT", frozenset[str]()):
-            found = gate.check_component_size()
-        assert HIERARCHY_PAGE_STATE in [item.where for item in found]
+            found = {item.where for item in gate.check_component_size()}
+        assert gate.OVERSIZED_STATE_DEBT - found == set()
 
     def test_debt_entries_still_exceed_the_limit(self) -> None:
         assert gate.check_state_debt_is_current() == []
