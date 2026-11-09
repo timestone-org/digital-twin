@@ -55,3 +55,33 @@ describe('提交口径', () => {
     expect(wrapper.emitted('update:modelValue')?.at(-1)).toEqual([{}])
   })
 })
+
+describe('删中间一行', () => {
+  it('⚠ 删掉中间那行后，其余行的输入框仍各归各位（键不按下标）', async () => {
+    const wrapper = render({ a: '1', b: '2', c: '3' })
+    const before = wrapper.findAll('input')[5]?.element
+    await wrapper
+      .findAll('button[aria-label="删除这一行"]')[1]
+      ?.trigger('click')
+    const inputs = wrapper.findAll('input')
+    expect(
+      inputs.map((one) => (one.element as HTMLInputElement).value),
+    ).toEqual(['a', '1', 'c', '3'])
+    // c 那一行的取值框还是原来那个 DOM 节点，没有被挪给别的行复用
+    expect(inputs[3]?.element).toBe(before)
+  })
+})
+
+describe('同名参数', () => {
+  it('两行写了同一个参数名时就地提示，不静默只留最后一行', async () => {
+    const wrapper = render({ a: '1' })
+    const add = wrapper
+      .findAll('button')
+      .find((item) => item.text().includes('添加参数'))
+    await add?.trigger('click')
+    const key = wrapper.findAll('input')[2]
+    await key?.setValue('a')
+    await key?.trigger('blur')
+    expect(wrapper.text()).toContain('参数名「a」重复')
+  })
+})
