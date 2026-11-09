@@ -7,7 +7,13 @@ from sqlalchemy.ext.asyncio import AsyncSession
 
 from lib.logging import get_logger
 from lib.web import Page, PageParams
-from platform_server.apps.hvac.crud import RoomLocation, ac_unit_crud, room_crud
+from platform_server.apps.hvac.crud import (
+    RoomLocation,
+    ac_data_binding_crud,
+    ac_metric_limit_crud,
+    ac_unit_crud,
+    room_crud,
+)
 from platform_server.apps.hvac.crud.ac_unit import DEFAULT_ORDER, SORTABLE
 from platform_server.apps.hvac.errors import (
     AcUnitNotFound,
@@ -125,13 +131,17 @@ async def update_ac_unit(
 async def delete_ac_unit(
     session: AsyncSession, *, ac_unit_id: uuid.UUID
 ) -> None:
-    """删空调。
+    """删空调，连同它自己的数据源绑定与达标范围。
 
     Args: session, ac_unit_id。
     """
     ac_unit = await lock_unit(session, ac_unit_id)
-    _logger.info("ac_unit_deleted", "空调已删除", ac_unit_id=str(ac_unit.id))
+    await ac_data_binding_crud.delete_by_ac_unit(session, ac_unit.id)
+    await ac_metric_limit_crud.delete_by_ac_unit(session, ac_unit.id)
     await ac_unit_crud.delete(session, ac_unit)
+    # ⚠ 删除要在这里落到库：拖到提交才撞外键，响应早已按成功发出去了
+    await session.flush()
+    _logger.info("ac_unit_deleted", "空调已删除", ac_unit_id=str(ac_unit.id))
 
 
 async def relocate_ac_units(

@@ -116,15 +116,21 @@ async def update_room(
 
 
 async def delete_room(session: AsyncSession, *, room_id: uuid.UUID) -> None:
-    """删房间。里面还有空调时拒绝——先把它们改派到别的房间。
+    """删房间。里面还有空调、模型或开机事件记录时拒绝。
 
     Args: session, room_id。
     """
     room = await require_room(session, room_id)
     if await ac_unit_crud.count_by_room(session, room.id) > 0:
         raise RoomNotEmpty("该房间里还有空调，请先把它们改派到别的房间")
-    _logger.info("room_deleted", "房间已删除", room_id=str(room.id))
+    if await room_crud.has_history(session, room.id):
+        raise RoomNotEmpty("该房间还有模型或开机事件记录，不能删除")
     await room_crud.delete(session, room)
+    try:
+        await session.flush()
+    except IntegrityError as error:
+        raise RoomNotEmpty("该房间还有关联数据，不能删除") from error
+    _logger.info("room_deleted", "房间已删除", room_id=str(room.id))
 
 
 async def require_room(session: AsyncSession, room_id: uuid.UUID) -> Room:

@@ -9,7 +9,10 @@
 from collections.abc import Sequence
 from dataclasses import dataclass
 
-from platform_server.apps.hvac.modeling.features import EpisodeSample
+from platform_server.apps.hvac.modeling.features import (
+    EpisodeSample,
+    instant_compliance,
+)
 from platform_server.apps.hvac.rooms import RoomUnit
 
 MAX_NORMAL_DURATION_MINUTES = 60
@@ -30,32 +33,27 @@ class Curated:
 def is_instantly_compliant(
     sample: EpisodeSample,
     units: Sequence[RoomUnit],
-    timezone: str = "Asia/Shanghai",
+    *,
+    timezone: str,
 ) -> bool:
     """开机那一刻整个房间是不是已经达标（每台各自落在它自己的范围内）。
 
-    ⚠ 机组清单为空时一律给假：`all()` 在空序列上恒真，照搬就是把每条事件
-    都判成开机即达标，然后把非零时长的样本全剔光。
-    ⚠ 起始帧上少一台读数就不算达标，与抽取引擎的 `is_valid` 同向：机组绑定
-    在抽取之后变过时，这里只会少判达标，不会多判。
-    Args: sample, units。
+    ⚠ 与混合模型的 `known_compliance` 共用 `instant_compliance` 这一份判定：
+    两边各写一份的话，甄别剔掉的与模型以为已知达标的会悄悄对不上。机组清单
+    为空、起始帧上少一台读数都给 None，这里一律当作不达标——只少判，不多判。
+    Args: sample, units, timezone。
     """
-    if not units:
-        return False
-    readings = sample.conditions.readings
-    return all(
-        unit.at(sample.conditions.started_at, timezone).is_in_band(
-            readings.get(unit.serial, {})
-        )
-        for unit in units
+    found = instant_compliance(
+        sample.conditions, units=units, timezone=timezone
     )
+    return found == 1.0
 
 
 def curate(
     samples: Sequence[EpisodeSample],
     *,
     units: Sequence[RoomUnit],
-    timezone: str = "Asia/Shanghai",
+    timezone: str,
 ) -> Curated:
     """筛选正常工况时长，再甄别达标标签。
 
@@ -73,7 +71,7 @@ def curate(
         if sample.duration_minutes > MAX_NORMAL_DURATION_MINUTES:
             overlong_episode_count += 1
             continue
-        is_compliant = is_instantly_compliant(sample, units, timezone)
+        is_compliant = is_instantly_compliant(sample, units, timezone=timezone)
         if is_compliant and sample.duration_minutes != 0:
             contradictory += 1
             continue

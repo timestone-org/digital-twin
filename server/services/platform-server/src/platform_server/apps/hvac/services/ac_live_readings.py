@@ -27,13 +27,13 @@ from platform_server.apps.hvac.schemas import (
     LiveUnitReadingOut,
     TimeWindow,
 )
+from platform_server.apps.hvac.services.ac_room_configuration import (
+    BoundUnit,
+    load_bound_units,
+)
 from platform_server.apps.hvac.services.ac_source_reader import (
     AcSourceReader,
     SourceRow,
-)
-from platform_server.apps.hvac.services.ac_startup_extract import (
-    BoundUnit,
-    load_bound_units,
 )
 from platform_server.apps.hvac.services.ac_startup_frames import (
     is_plausible_celsius,
@@ -79,13 +79,33 @@ async def read_live(
 
     Args: session, reader, room_id。
     """
+    units = await load_live_units(session, room_id)
+    return await fetch_live(reader, units)
+
+
+async def load_live_units(
+    session: AsyncSession, room_id: uuid.UUID
+) -> list[BoundUnit]:
+    """要读实时读数的机组：房间不存在即 404。
+
+    Args: session, room_id。
+    """
     await require_room(session, room_id)
+    return await load_bound_units(session, room_id)
+
+
+async def fetch_live(
+    reader: AcSourceReader, units: Sequence[BoundUnit]
+) -> LiveReadingsOut:
+    """逐台向外库取回看窗内的最后一行。⚠ 打的是外库，调用方不要开着事务。
+
+    Args: reader, units。
+    """
     as_of = utcnow()
     window = TimeWindow(
         start=as_of - timedelta(minutes=LOOKBACK_MINUTES),
         end=as_of + _LOOKAHEAD,
     )
-    units = await load_bound_units(session, room_id)
     return LiveReadingsOut(
         as_of=as_of,
         lookback_minutes=LOOKBACK_MINUTES,

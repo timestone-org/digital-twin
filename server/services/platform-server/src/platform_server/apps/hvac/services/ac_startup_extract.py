@@ -26,7 +26,6 @@ from platform_server.apps.hvac.models import (
 )
 from platform_server.apps.hvac.schemas import TimeWindow
 from platform_server.apps.hvac.services.ac_room_configuration import (
-    BoundUnit,
     RoomConfiguration,
     load_bound_units,
     restore_configuration,
@@ -34,13 +33,12 @@ from platform_server.apps.hvac.services.ac_room_configuration import (
 from platform_server.apps.hvac.services.ac_source_reader import (
     AcSourceReader,
     SourceExtent,
+    SourceRow,
 )
 from platform_server.apps.hvac.services.ac_startup_frames import (
     build_frames,
     compliant_at,
 )
-
-__all__ = ["BoundUnit", "load_bound_units"]
 from platform_server.apps.hvac.services.ac_startup_queue import ShardMessage
 from platform_server.apps.hvac.services.ac_startup_rules import (
     Episode,
@@ -172,11 +170,15 @@ async def extract_window(
     if not units:
         return []
     rows = {
-        bound.unit.serial: await context.reader.fetch_samples(
-            source_object=bound.source_object,
-            columns=_RAW_COLUMNS,
-            window=TimeWindow(start=window.read_start, end=window.read_end),
-            row_limit=context.max_rows,
+        bound.unit.serial: _require_untruncated(
+            bound.unit.serial,
+            await context.reader.fetch_samples(
+                source_object=bound.source_object,
+                columns=_RAW_COLUMNS,
+                window=TimeWindow(start=window.read_start, end=window.read_end),
+                row_limit=context.max_rows,
+            ),
+            max_rows=context.max_rows,
         )
         for bound in units
     }
@@ -191,6 +193,20 @@ async def extract_window(
     # ⚠ 只写归属区间内的：取数越了界，事件也会多出来，不过滤就会与相邻分片
     # 各写一份同一次开机
     return [item for item in found if window.owns(item.started_at)]
+
+
+def _require_untruncated(
+    serial: str, rows: list[SourceRow], *, max_rows: int
+) -> list[SourceRow]:
+    """取回的行数撞上上限就判失败。
+
+    ⚠ 取数是升序 TOP，撞上上限意味着区间尾部被截掉了：照常抽取的话，月末
+    那几天的开机会静默消失，而分片照样报「跑完了」。
+    Args: serial, rows, max_rows。
+    """
+    if len(rows) >= max_rows:
+        raise ValueError(f"{serial} 取数达到上限 {max_rows} 行，结果会被截断")
+    return rows
 
 
 def to_episode_row(batch: AcStartupBatch, episode: Episode) -> AcStartupEpisode:

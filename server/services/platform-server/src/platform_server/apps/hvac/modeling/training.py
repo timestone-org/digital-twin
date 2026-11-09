@@ -9,10 +9,11 @@ from collections.abc import Sequence
 from dataclasses import dataclass
 
 from platform_server.apps.hvac.modeling.artifact import (
+    MixturePrediction,
     ModelBundle,
     SealedArtifact,
     StagePair,
-    predict_quantiles,
+    predict_mixture_many,
     seal,
 )
 from platform_server.apps.hvac.modeling.curation import (
@@ -289,24 +290,37 @@ def _fold_predictions(
     Args: prepared, held, models, fold。
     """
     pooled, pairs = models
-    found: list[OofPrediction] = []
+    groups: dict[str | None, list[int]] = {}
     for row in held:
-        conditions = prepared.ordered[row].conditions
-        pair = pairs.get(set_key(conditions.running_set), pooled)
-        p10, p50, p90 = predict_quantiles(
+        key = set_key(prepared.ordered[row].conditions.running_set)
+        groups.setdefault(key if key in pairs else None, []).append(row)
+    predicted: dict[int, MixturePrediction] = {}
+    # ⚠ 同一套模型的行成批预测：逐行调用时每行都是 300 次逐棵树的调用
+    for key, rows in groups.items():
+        pair = pooled if key is None else pairs[key]
+        batch = predict_mixture_many(
             pair,
-            prepared.matrix[row],
-            known_compliance=prepared.compliance[row],
+            [prepared.matrix[row] for row in rows],
+            known_compliance=[prepared.compliance[row] for row in rows],
         )
-        found.append(
-            OofPrediction(
-                started_at=conditions.started_at,
-                running_set=conditions.running_set,
-                actual_minutes=int(prepared.targets[row]),
-                p10=p10,
-                p50=p50,
-                p90=p90,
-                fold=fold,
-            )
-        )
-    return found
+        predicted.update(zip(rows, batch, strict=True))
+    return [_oof_row(prepared, row, predicted[row], fold) for row in held]
+
+
+def _oof_row(
+    prepared: "_Prepared", row: int, found: MixturePrediction, fold: int
+) -> OofPrediction:
+    """一条折外预测。
+
+    Args: prepared, row, found, fold。
+    """
+    conditions = prepared.ordered[row].conditions
+    return OofPrediction(
+        started_at=conditions.started_at,
+        running_set=conditions.running_set,
+        actual_minutes=int(prepared.targets[row]),
+        p10=found.p10,
+        p50=found.p50,
+        p90=found.p90,
+        fold=fold,
+    )

@@ -2,7 +2,7 @@
 
 import uuid
 
-from pydantic import Field, computed_field
+from pydantic import Field
 
 from platform_server.apps.hvac.schemas.ac_compliance import (
     EffectiveComplianceOut,
@@ -11,6 +11,7 @@ from platform_server.apps.hvac.schemas.common import (
     InputModel,
     OutputModel,
     Utc,
+    UtcIn,
 )
 
 MAX_EXCLUSION_REASON = 500
@@ -30,6 +31,8 @@ class StartupEpisodeOut(OutputModel):
     started_at: Utc
     running_set: list[str]
     complied_at: Utc | None
+    # 达标时长；没达标就没有时长。⚠ 读存下来的那列：训练用的就是它
+    duration_minutes: int | None
     outcome: str
     readings: Readings
     # ⚠ null = 这行是 LOGIC_VERSION < 2 抽的，不是「全停时长为零」
@@ -39,19 +42,6 @@ class StartupEpisodeOut(OutputModel):
     compliance: list[EffectiveComplianceOut] = Field(
         default_factory=list[EffectiveComplianceOut]
     )
-
-    @computed_field
-    @property
-    def duration_minutes(self) -> int | None:
-        """达标时长；没达标就没有时长。
-
-        ⚠ 派生而不是单独存一份：与 `complied_at` 分开存的话两者会各自漂移，
-        而页面读到的是哪一个全看它先看哪一列。
-        """
-        if self.complied_at is None:
-            return None
-        delta = self.complied_at - self.started_at
-        return int(delta.total_seconds() // 60)
 
 
 class StartupBatchOut(OutputModel):
@@ -111,8 +101,8 @@ class StartupRebuildIn(InputModel):
     会继续产出数据，也可能补录更早的。
     """
 
-    window_start: Utc | None = None
-    window_end: Utc | None = None
+    window_start: UtcIn | None = None
+    window_end: UtcIn | None = None
 
 
 class StartupRebuildOut(OutputModel):

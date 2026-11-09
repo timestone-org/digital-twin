@@ -173,7 +173,11 @@ async def test_a_rebuild_only_enqueues_and_never_extracts(
     """⚠ API 角色永不跑重任务：入队这一步不许产生任何事件行。"""
     room_id = await make_room(db_session, "入队")
     plan = await request_rebuild(
-        db_session, room_id=room_id, window=WINDOW, rules=RULES
+        db_session,
+        room_id=room_id,
+        window=WINDOW,
+        rules=RULES,
+        timezone="Asia/Shanghai",
     )
     assert [message.month for message in plan.messages] == [
         "2026-01",
@@ -200,7 +204,11 @@ async def test_an_episode_crossing_a_month_is_extracted_exactly_once(
     """⚠ 跨月的那次开机必须恰好抽出一次，起始与达标时刻都对得上。"""
     room_id = await make_room(db_session, "跨月")
     plan = await request_rebuild(
-        db_session, room_id=room_id, window=WINDOW, rules=RULES
+        db_session,
+        room_id=room_id,
+        window=WINDOW,
+        rules=RULES,
+        timezone="Asia/Shanghai",
     )
     context = context_for(crossing_rows())
     for message in plan.messages:
@@ -221,7 +229,11 @@ async def test_the_january_shard_reads_past_its_own_month(
     """1 月那片要向后多读到 2 月，才判得出跨月这次到底有没有达标。"""
     room_id = await make_room(db_session, "越界")
     plan = await request_rebuild(
-        db_session, room_id=room_id, window=WINDOW, rules=RULES
+        db_session,
+        room_id=room_id,
+        window=WINDOW,
+        rules=RULES,
+        timezone="Asia/Shanghai",
     )
     context = context_for(crossing_rows())
     await run_shard(db_session, context, plan.messages[0])
@@ -255,7 +267,11 @@ async def test_the_batch_is_on_disk_before_the_plan_is_handed_back(
 
     monkeypatch.setattr(db_session, "commit", counted_commit)
     await request_rebuild(
-        db_session, room_id=room_id, window=WINDOW, rules=RULES
+        db_session,
+        room_id=room_id,
+        window=WINDOW,
+        rules=RULES,
+        timezone="Asia/Shanghai",
     )
     assert commits == ["commit"]
 
@@ -266,7 +282,11 @@ async def test_the_february_shard_sees_the_start_but_does_not_write_it(
     """2 月那片看得见 1 月的起机，但不归它写——否则同一次开机会有两份。"""
     room_id = await make_room(db_session, "归属")
     plan = await request_rebuild(
-        db_session, room_id=room_id, window=WINDOW, rules=RULES
+        db_session,
+        room_id=room_id,
+        window=WINDOW,
+        rules=RULES,
+        timezone="Asia/Shanghai",
     )
     context = context_for(crossing_rows())
     run = await run_shard(db_session, context, plan.messages[1])
@@ -279,7 +299,11 @@ async def test_replaying_a_message_writes_no_duplicate(
     """队列是 at-least-once：同一条消息重放，事件与进度都不该翻倍。"""
     room_id = await make_room(db_session, "重放")
     plan = await request_rebuild(
-        db_session, room_id=room_id, window=WINDOW, rules=RULES
+        db_session,
+        room_id=room_id,
+        window=WINDOW,
+        rules=RULES,
+        timezone="Asia/Shanghai",
     )
     context = context_for(crossing_rows())
     for _ in range(3):
@@ -305,7 +329,11 @@ async def test_a_shard_persists_the_idle_minutes_it_counted(
     """
     room_id = await make_room(db_session, "蓄热")
     plan = await request_rebuild(
-        db_session, room_id=room_id, window=WINDOW, rules=RULES
+        db_session,
+        room_id=room_id,
+        window=WINDOW,
+        rules=RULES,
+        timezone="Asia/Shanghai",
     )
     for message in plan.messages:
         await run_shard(db_session, context_for(crossing_rows()), message)

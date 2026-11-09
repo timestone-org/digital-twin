@@ -2,7 +2,7 @@
 
 import uuid
 
-from sqlalchemy import select
+from sqlalchemy import delete, select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from lib.db import CrudBase
@@ -44,6 +44,17 @@ class AcDataBindingCrud(CrudBase[AcDataBinding]):
         )
         return result.scalar_one_or_none()
 
+    async def delete_by_ac_unit(
+        self, session: AsyncSession, ac_unit_id: uuid.UUID
+    ) -> None:
+        """删掉一台空调的全部绑定。
+
+        Args: session, ac_unit_id。
+        """
+        await session.execute(
+            delete(AcDataBinding).where(AcDataBinding.ac_unit_id == ac_unit_id)
+        )
+
 
 class AcMetricLimitCrud(CrudBase[AcMetricLimit]):
     """`hvac_ac_metric_limits` 的数据访问。"""
@@ -64,6 +75,17 @@ class AcMetricLimitCrud(CrudBase[AcMetricLimit]):
             .order_by(AcMetricLimit.metric.asc())
         )
         return list(result.scalars().all())
+
+    async def delete_by_ac_unit(
+        self, session: AsyncSession, ac_unit_id: uuid.UUID
+    ) -> None:
+        """删掉一台空调的全部达标范围。
+
+        Args: session, ac_unit_id。
+        """
+        await session.execute(
+            delete(AcMetricLimit).where(AcMetricLimit.ac_unit_id == ac_unit_id)
+        )
 
 
 ac_data_binding_crud = AcDataBindingCrud()

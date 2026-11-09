@@ -73,6 +73,7 @@
           "description": {
             "anyOf": [
               {
+                "maxLength": 500,
                 "type": "string"
               },
               {
@@ -300,6 +301,7 @@
           "description": {
             "anyOf": [
               {
+                "maxLength": 500,
                 "type": "string"
               },
               {
@@ -24577,8 +24579,6 @@
                 "type": "null"
               }
             ],
-            "description": "达标时长；没达标就没有时长。\n\n⚠ 派生而不是单独存一份：与 `complied_at` 分开存的话两者会各自漂移，\n而页面读到的是哪一个全看它先看哪一列。",
-            "readOnly": true,
             "title": "Duration Minutes"
           },
           "exclusion_reason": {
@@ -24645,12 +24645,12 @@
           "started_at",
           "running_set",
           "complied_at",
+          "duration_minutes",
           "outcome",
           "readings",
           "idle_minutes",
           "is_excluded",
-          "exclusion_reason",
-          "duration_minutes"
+          "exclusion_reason"
         ],
         "title": "StartupEpisodeOut",
         "type": "object"
@@ -26435,8 +26435,26 @@
         ]
       },
       "post": {
-        "description": "建一个模型并排进训练队列，立刻返回。\n\nArgs: payload, session, dispatcher, caller, _manager。",
+        "description": "建一个模型并排进训练队列，立刻返回。带幂等键的重试拿回首次结果。\n\nArgs: payload, session, timezone, dispatcher, gate。",
         "operationId": "create_ac_model_api_v1_platform_ac_models_post",
+        "parameters": [
+          {
+            "in": "header",
+            "name": "idempotency-key",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Idempotency-Key"
+            }
+          }
+        ],
         "requestBody": {
           "content": {
             "application/json": {
@@ -26822,7 +26840,7 @@
     },
     "/api/v1/platform/ac-models/{model_id}/publication:publish": {
       "post": {
-        "description": "按当前实时工况算一次并写进点位。\n\n⚠ 走的是与每分钟那条循环**完全相同**的代码路径，只是不经租约。两条路\n分开写的话，页面上试通了、循环里还是不通。\n\nArgs: model_id, sessions, reader, nodes, _manager。",
+        "description": "按当前实时工况算一次并写进点位。带幂等键的重试拿回首次那一拍的结论。\n\n⚠ 走的是与每分钟那条循环**完全相同**的代码路径，只是不经租约。两条路\n分开写的话，页面上试通了、循环里还是不通。\n\nArgs: model_id, sessions, reader, nodes, gate。",
         "operationId": "publish_now_api_v1_platform_ac_models__model_id__publication_publish_post",
         "parameters": [
           {
@@ -26833,6 +26851,22 @@
               "format": "uuid",
               "title": "Model Id",
               "type": "string"
+            }
+          },
+          {
+            "in": "header",
+            "name": "idempotency-key",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Idempotency-Key"
             }
           }
         ],
@@ -26974,7 +27008,7 @@
     },
     "/api/v1/platform/ac-models/{model_id}:retrain": {
       "post": {
-        "description": "按当前配置与当前批次重训，立刻返回。\n\nArgs: model_id, session, dispatcher, _manager。",
+        "description": "按当前配置与当前批次重训，立刻返回。带幂等键的重试拿回首次结果。\n\nArgs: model_id, session, timezone, dispatcher, gate。",
         "operationId": "retrain_ac_model_api_v1_platform_ac_models__model_id__retrain_post",
         "parameters": [
           {
@@ -26985,6 +27019,22 @@
               "format": "uuid",
               "title": "Model Id",
               "type": "string"
+            }
+          },
+          {
+            "in": "header",
+            "name": "idempotency-key",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Idempotency-Key"
             }
           }
         ],
@@ -27312,6 +27362,7 @@
     },
     "/api/v1/platform/ac-units/{ac_unit_id}/compliance-policies": {
       "get": {
+        "description": "读一台空调的两季达标配置，连同此刻生效的季节。\n\nArgs: ac_unit_id, session, timezone, _viewer。",
         "operationId": "get_compliance_policy_api_v1_platform_ac_units__ac_unit_id__compliance_policies_get",
         "parameters": [
           {
@@ -27353,6 +27404,7 @@
         ]
       },
       "put": {
+        "description": "一个事务里保存冬季日期与两套达标范围。\n\n⚠ 启用冬季之后，旧的 `PUT /metric-limits` 会被拒绝。\n\nArgs: ac_unit_id, payload, session, timezone, _manager。",
         "operationId": "put_compliance_policy_api_v1_platform_ac_units__ac_unit_id__compliance_policies_put",
         "parameters": [
           {
@@ -41553,7 +41605,7 @@
     },
     "/api/v1/platform/rooms/{room_id}/startup-batches:rebuild": {
       "post": {
-        "description": "建一个新批次并把分片排进队列，立刻返回批次 id。\n\nArgs: room_id, payload, session, reader, dispatcher, _manager。",
+        "description": "建一个新批次并把分片排进队列，立刻返回批次 id；同键重试拿回首次结果。\n\nArgs: room_id, payload, session, reader, dispatcher, gate。",
         "operationId": "rebuild_startup_batches_api_v1_platform_rooms__room_id__startup_batches_rebuild_post",
         "parameters": [
           {
@@ -41564,6 +41616,22 @@
               "format": "uuid",
               "title": "Room Id",
               "type": "string"
+            }
+          },
+          {
+            "in": "header",
+            "name": "idempotency-key",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Idempotency-Key"
             }
           }
         ],

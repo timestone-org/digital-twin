@@ -5,10 +5,10 @@
 """
 
 import uuid
-from datetime import datetime
 from typing import Annotated
 
 from fastapi import APIRouter, Depends, Path, Query, Response, status
+from pydantic import AwareDatetime
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from lib.auth import CallerContext
@@ -17,9 +17,11 @@ from platform_server.apps.hvac.catalog import AC_MANAGE, AC_VIEW
 from platform_server.apps.hvac.crud import EpisodePage
 from platform_server.apps.hvac.deps import (
     Dispatcher,
+    WriteGate,
     get_ac_source_reader,
     get_caller,
     get_dispatcher,
+    get_manage_gate,
     get_session,
     require,
 )
@@ -58,12 +60,13 @@ ReaderDep = Annotated[AcSourceReader, Depends(get_ac_source_reader)]
 CursorDep = Annotated[CursorParams, Depends(cursor_params)]
 FiltersDep = Annotated[EpisodePage, Depends(episode_filters)]
 DispatchDep = Annotated[Dispatcher, Depends(get_dispatcher)]
+GateDep = Annotated[WriteGate, Depends(get_manage_gate)]
 CallerDep = Annotated[CallerContext, Depends(get_caller)]
 ViewDep = Annotated[CallerContext, Depends(require(AC_VIEW))]
 ManageDep = Annotated[CallerContext, Depends(require(AC_MANAGE))]
 # ⚠ 路径里的时刻按 UTC 的 Z 后缀写（`2026-01-31T23:40:00Z`）：带 `+08:00`
 # 的写法里那个 `+` 在 URL 里必须转义成 %2B，不转义会被解成空格
-StartedAtDep = Annotated[datetime, Path()]
+StartedAtDep = Annotated[AwareDatetime, Path()]
 
 
 @router.get(
@@ -119,13 +122,34 @@ async def rebuild_startup_batches(
     room_id: uuid.UUID,
     payload: StartupRebuildIn,
     session: SessionDep,
+    *,
     reader: ReaderDep,
     dispatcher: DispatchDep,
-    _manager: ManageDep,
+    gate: GateDep,
 ) -> ApiResponse[StartupRebuildOut]:
-    """建一个新批次并把分片排进队列，立刻返回批次 id。
+    """建一个新批次并把分片排进队列，立刻返回批次 id；同键重试拿回首次结果。
 
-    Args: room_id, payload, session, reader, dispatcher, _manager。
+    Args: room_id, payload, session, reader, dispatcher, gate。
+    """
+    out = await gate.run_once(
+        # ⚠ 端点名带上路径 id：同一个键换个对象重用时，不能回放别人的结果
+        endpoint=f"hvac_startup_rebuild.{room_id}",
+        model=StartupRebuildOut,
+        action=lambda: _rebuild(session, reader, dispatcher, room_id, payload),
+    )
+    return ok(out, message="重算已排队")
+
+
+async def _rebuild(
+    session: AsyncSession,
+    reader: AcSourceReader,
+    dispatcher: Dispatcher,
+    room_id: uuid.UUID,
+    payload: StartupRebuildIn,
+) -> StartupRebuildOut:
+    """定区间、建批次、排一次提交后的分片投递。
+
+    Args: session, reader, dispatcher, room_id, payload。
     """
     resolved = await ac_startup_service.resolve_window(
         session, reader, room_id=room_id, asked=payload
@@ -134,7 +158,7 @@ async def rebuild_startup_batches(
         session, room_id=room_id, resolved=resolved, timezone=reader.timezone
     )
     dispatcher.after_commit(plan.dispatch())
-    return ok(_to_rebuild_out(plan, resolved), message="重算已排队")
+    return _to_rebuild_out(plan, resolved)
 
 
 async def _queue(

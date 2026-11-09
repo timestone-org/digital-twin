@@ -169,7 +169,7 @@ async def request_rebuild(
     room_id: uuid.UUID,
     window: TimeWindow,
     rules: ExtractionRules,
-    timezone: str = "Asia/Shanghai",
+    timezone: str,
 ) -> RebuildPlan:
     """建一个新批次并登记它的分片。只入队，不在这里抽取。
 
@@ -178,6 +178,8 @@ async def request_rebuild(
     Args: session, room_id, window, rules。
     """
     await _require_room(session, room_id)
+    # ⚠ 先锁房间再查「有没有在跑的」：不锁的话连点两下会双双通过检查
+    await room_crud.lock_configuration(session, frozenset({room_id}))
     await _require_no_running_batch(session, room_id)
     months = plan_months(window.start, window.end)
     if not months:
@@ -274,7 +276,7 @@ async def finalize_if_complete(
     if not _is_complete(batch, counts):
         return None
     if not await _configuration_current(session, batch):
-        return await _fail(session, batch)
+        return await _fail_stale(session, batch)
     return await _publish(session, batch)
 
 
@@ -303,6 +305,24 @@ async def _fail(session: AsyncSession, batch: AcStartupBatch) -> AcStartupBatch:
     _logger.error(
         "ac_startup_batch_failed",
         "抽取批次有分片失败，当前批次保持不变",
+        room_id=str(batch.room_id),
+        batch_id=str(batch.id),
+    )
+    return batch
+
+
+async def _fail_stale(
+    session: AsyncSession, batch: AcStartupBatch
+) -> AcStartupBatch:
+    """抽取期间房间配置变了：批次作废。是人的操作，只报 WARNING。
+
+    Args: session, batch。
+    """
+    batch.status = BATCH_STATUS_FAILED
+    await session.flush()
+    _logger.warning(
+        "ac_startup_batch_config_changed",
+        "抽取期间房间配置已变化，批次作废，当前批次保持不变",
         room_id=str(batch.room_id),
         batch_id=str(batch.id),
     )
@@ -349,18 +369,20 @@ async def fail_shard(
     见——批次判失败、上一批次照常服务，人看到了再重新触发。
     Args: session, message, reason。
     """
+    # ⚠ 空原因会撞上分片表的 CHECK，失败本身就落不了库
+    text = reason.strip()[:_MAX_REASON] or "未说明原因"
     await ac_startup_shard_crud.mark(
         session,
         AcStartupShard(batch_id=message.batch_id, month=message.month),
         status=SHARD_STATUS_FAILED,
-        error=reason[:_MAX_REASON],
+        error=text,
     )
     _logger.error(
         "ac_startup_shard_failed",
         "分片抽取失败",
         batch_id=str(message.batch_id),
         month=message.month,
-        reason=reason[:_MAX_REASON],
+        reason=text,
     )
 
 

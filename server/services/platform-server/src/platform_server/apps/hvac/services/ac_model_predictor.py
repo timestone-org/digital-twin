@@ -11,6 +11,10 @@ from sqlalchemy.ext.asyncio import AsyncSession
 
 from lib.utils.timeutils import utcnow
 from platform_server.apps.hvac.crud import ac_model_artifact_crud
+from platform_server.apps.hvac.datasets import (
+    GROUP_TEMPERATURE,
+    RAW_MINUTE_METRICS,
+)
 from platform_server.apps.hvac.errors import (
     ModelArtifactUnusable,
     ModelConfigInvalid,
@@ -29,7 +33,11 @@ from platform_server.apps.hvac.modeling.features import (
     instant_compliance,
 )
 from platform_server.apps.hvac.models import AcModel
-from platform_server.apps.hvac.schemas import PredictIn, RecommendIn
+from platform_server.apps.hvac.schemas import (
+    PredictIn,
+    PredictReadingsIn,
+    RecommendIn,
+)
 from platform_server.apps.hvac.schemas.ac_compliance import (
     EffectiveComplianceOut,
 )
@@ -40,7 +48,17 @@ from platform_server.apps.hvac.services.ac_compliance_service import (
 from platform_server.apps.hvac.services.ac_room_configuration import (
     load_configuration,
 )
+from platform_server.apps.hvac.services.ac_startup_frames import (
+    is_plausible_celsius,
+)
 from platform_server.apps.hvac.services.ac_startup_rules import ExtractionRules
+
+# 摄氏读数的指标：越出可信区间按缺测处理，与训练、实时读数同一口径
+_CELSIUS_METRICS = frozenset(
+    metric.key
+    for metric in RAW_MINUTE_METRICS
+    if metric.group == GROUP_TEMPERATURE
+)
 
 
 @dataclass(frozen=True)
@@ -55,9 +73,9 @@ class PredictResult:
     # 答话的是这个组合的专属子模型，还是房间共用模型在兜底
     is_dedicated: bool
     trained_at: datetime
+    timezone: str
     effective_at: datetime | None = None
     compliance: tuple[EffectiveComplianceOut, ...] = ()
-    timezone: str = "Asia/Shanghai"
 
 
 @dataclass(frozen=True)
@@ -80,9 +98,9 @@ class RecommendResult:
 
     entries: list[RecommendEntry]
     trained_at: datetime
+    timezone: str
     effective_at: datetime | None = None
     compliance: tuple[EffectiveComplianceOut, ...] = ()
-    timezone: str = "Asia/Shanghai"
 
 
 async def predict(
@@ -90,11 +108,11 @@ async def predict(
     model_id: uuid.UUID,
     payload: PredictIn,
     *,
-    timezone: str = "Asia/Shanghai",
+    timezone: str,
 ) -> PredictResult:
     """试算：读工件、算特征、出三分位。
 
-    Args: session, model_id, payload。
+    Args: session, model_id, payload, timezone（业务时区，取自配置）。
     """
     model, bundle = await _load_bundle(session, model_id, timezone=timezone)
     at = payload.at or utcnow()
@@ -128,13 +146,13 @@ async def recommend(
     model_id: uuid.UUID,
     payload: RecommendIn,
     *,
-    timezone: str = "Asia/Shanghai",
+    timezone: str,
 ) -> RecommendResult:
     """同一个起始条件下让全部服务组合同台比，排好序、第一名带推荐标。
 
     排序口径（AC_MODEL_DESIGN §5.4）：p50 快者优先，再比 p90，
     最后少开机组优先——同样快就选省电的。
-    Args: session, model_id, payload。
+    Args: session, model_id, payload, timezone（业务时区，取自配置）。
     """
     model, bundle = await _load_bundle(session, model_id, timezone=timezone)
     at = payload.at or utcnow()
@@ -160,8 +178,8 @@ async def recommend(
         raise ModelNotReady("模型还没有一次成功的训练，先训练再推荐")
     return RecommendResult(
         entries=[
-            replace(entry, is_recommended=(at == 0))
-            for at, entry in enumerate(scored)
+            replace(entry, is_recommended=(rank == 0))
+            for rank, entry in enumerate(scored)
         ],
         trained_at=model.trained_at,
         effective_at=at,
@@ -256,7 +274,21 @@ def _conditions_of(
         running_set=tuple(running),
         idle_minutes=payload.idle_minutes,
         readings={
-            serial: reading.model_dump(exclude_none=True)
+            serial: _plausible(reading)
             for serial, reading in payload.readings.items()
         },
     )
+
+
+def _plausible(reading: PredictReadingsIn) -> dict[str, float]:
+    """一台机组的假想读数，越出可信区间的温度按缺测去掉。
+
+    ⚠ 不去掉的话训练里从没见过的值会被照常打分；靠近 -265.5 还会让焓值公式
+    除零或溢出成 500。
+    Args: reading。
+    """
+    return {
+        metric: value
+        for metric, value in reading.model_dump(exclude_none=True).items()
+        if metric not in _CELSIUS_METRICS or is_plausible_celsius(value)
+    }

@@ -67,11 +67,11 @@ class AcUnitCrud(CrudBase[AcUnit]):
         if filters.room_id is not None:
             statement = statement.where(AcUnit.room_id == filters.room_id)
         if filters.keyword:
-            pattern = f"%{filters.keyword.lower()}%"
+            keyword = filters.keyword
             statement = statement.where(
                 or_(
-                    func.lower(AcUnit.serial).like(pattern),
-                    func.lower(AcUnit.name).like(pattern),
+                    AcUnit.serial.icontains(keyword, autoescape=True),
+                    AcUnit.name.icontains(keyword, autoescape=True),
                 )
             )
         return statement
