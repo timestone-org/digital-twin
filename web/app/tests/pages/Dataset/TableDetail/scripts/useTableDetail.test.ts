@@ -46,4 +46,15 @@ describe('重取列失败', () => {
     expect(detail.columnsError.value).toBeNull()
     expect(list).toHaveBeenCalledTimes(2)
   })
+
+  it('整页重取成功后列清单已是新的，那条列错误一并清掉', async () => {
+    vi.spyOn(dataset, 'getDatasetTable').mockResolvedValue(table())
+    vi.spyOn(dataset, 'listDatasetColumns').mockRejectedValue(new Error('boom'))
+    const detail = useTableDetail(() => 't1')
+    await detail.load()
+    await detail.reloadColumns()
+    expect(detail.columnsError.value).not.toBeNull()
+    await detail.load()
+    expect(detail.columnsError.value).toBeNull()
+  })
 })

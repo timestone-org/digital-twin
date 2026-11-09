@@ -53,6 +53,7 @@ export function useTableDetail(tableId: () => string): TableDetail {
       ok: (result) => {
         table.value = result
         columns.value = sortByOrder(result.columns)
+        columnsError.value = null
       },
       fail: (caught) => {
         error.value = describeError(caught)
