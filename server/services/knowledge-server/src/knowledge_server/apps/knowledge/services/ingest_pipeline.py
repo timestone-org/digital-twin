@@ -341,6 +341,12 @@ def _chunked(
     Args: document, chunker, limits。
     """
     made = chunker_for(chunker).split(document, limits)
+    if not made:
+        # ⚠ 本地那几路解析器解不出字时不抛，而放它到 ready 的样子是「传上去了、
+        # 状态是绿的、检索却永远查不到」
+        raise IngestFailed(
+            "没有从这份原件里解出任何文字：可能是空白文件、纯图片或扫描件"
+        )
     over = oversized(made, limits)
     if over:
         raise IngestFailed(

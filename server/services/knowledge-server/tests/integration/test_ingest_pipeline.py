@@ -414,3 +414,22 @@ async def test_a_reingest_replaces_the_old_vectors(
             session, VectorQuery(base_id=base_id, vector=probe, limit=10)
         )
     assert len(found) == await _chunks(db_sessions, base_id)
+
+
+async def test_a_document_with_no_text_fails_instead_of_going_ready(
+    db_sessions: object, db_dimensions: int
+) -> None:
+    """⚠ 解不出一个字时判 failed：放到 ready 的话，界面上是一份绿色的文档，
+    检索却永远查不到它，而没有任何一处说为什么。"""
+    base_id, document_id = await _seeded(db_sessions)
+    with pytest.raises(IngestFailed, match="没有从这份原件里解出任何文字"):
+        await ingest(
+            db_sessions,  # pyright: ignore[reportArgumentType]
+            _deps(
+                _Source(b"   \n\n  \n"),
+                _Embedder(db_dimensions),
+                _pair(db_dimensions),
+            ),
+            document_id,
+        )
+    assert await _chunks(db_sessions, base_id) == 0
