@@ -199,7 +199,7 @@ onBeforeUnmount(() => {
         >
           <header class="dt-modal__head">
             <div>
-              <h2 class="dt-modal__title">{{ title }}</h2>
+              <h2 class="dt-modal__title" :title="title">{{ title }}</h2>
               <p v-if="description" class="dt-modal__desc">{{ description }}</p>
             </div>
             <DtButton
@@ -283,7 +283,13 @@ onBeforeUnmount(() => {
     }
   }
 
+  // 长名称最多两行，全名在悬浮提示里：再多就把正文整段往下顶
   &__title {
+    display: -webkit-box;
+    -webkit-box-orient: vertical;
+    -webkit-line-clamp: 2;
+    line-clamp: 2;
+    overflow: hidden;
     margin: 0;
     font-family: var(--font-display);
     font-size: var(--font-size-dialog);
