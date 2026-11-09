@@ -18,6 +18,9 @@ HttpMethod = Literal[
     "GET", "POST", "PUT", "PATCH", "DELETE", "HEAD", "OPTIONS", "*"
 ]
 
+# 优先级上限 = priority 列（int4）能存的最大值；越界交给库会变成 500
+PRIORITY_MAX = 2_147_483_647
+
 PathPattern = Annotated[
     str,
     StringConstraints(
@@ -51,7 +54,7 @@ class RouteRuleCreateIn(InputModel):
         default_factory=list[str], max_length=50
     )
     match_mode: MatchMode = "all"
-    priority: int = Field(default=0, ge=0, le=999)
+    priority: int = Field(default=0, ge=0, le=PRIORITY_MAX)
     is_enabled: bool = True
     description: Trimmed | None = Field(default=None, max_length=255)
 
@@ -65,6 +68,8 @@ class RouteRuleUpdateIn(InputModel):
         default=None, max_length=50
     )
     match_mode: Annotated[MatchMode | None, NotNull] = None
-    priority: Annotated[int | None, NotNull] = Field(default=None, ge=0, le=999)
+    priority: Annotated[int | None, NotNull] = Field(
+        default=None, ge=0, le=PRIORITY_MAX
+    )
     is_enabled: Annotated[bool | None, NotNull] = None
     description: Trimmed | None = Field(default=None, max_length=255)

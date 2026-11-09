@@ -95,7 +95,7 @@ def test_route_rule_method_is_a_string_literal_not_a_number() -> None:
 def test_route_rule_priority_is_bounded() -> None:
     with pytest.raises(ValidationError):
         RouteRuleCreateIn(
-            path_pattern="/api/v1/x", http_method="GET", priority=1000
+            path_pattern="/api/v1/x", http_method="GET", priority=2**31
         )
 
 

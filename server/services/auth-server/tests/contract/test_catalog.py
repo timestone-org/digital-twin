@@ -6,6 +6,7 @@
 
 from auth_server.apps.auth import catalog
 from auth_server.apps.auth.models import PERMISSION_KINDS
+from auth_server.apps.auth.schemas import RouteRuleCreateIn, RouteRuleUpdateIn
 from auth_server.apps.auth.services.matching import decide, is_redundant
 from contract.rule_views import catalog_rule_views
 
@@ -180,6 +181,25 @@ def test_route_rule_keys_are_unique() -> None:
         (rule.path_pattern, rule.http_method) for rule in catalog.ROUTE_RULES
     ]
     assert len(keys) == len(set(keys))
+
+
+def test_every_route_rule_passes_the_rule_input_schema() -> None:
+    """内置规则在管理页里原样「编辑→保存」必须过得了入参校验。
+
+    ⚠ 目录不走 schema 落库，取值越界只在有人改这条规则时才 422。
+    """
+    for rule in catalog.ROUTE_RULES:
+        RouteRuleCreateIn.model_validate(
+            {
+                "path_pattern": rule.path_pattern,
+                "http_method": rule.http_method,
+                "permission_codes": list(rule.codes),
+                "match_mode": rule.match_mode,
+                "priority": rule.priority,
+                "description": rule.description or None,
+            }
+        )
+        RouteRuleUpdateIn(priority=rule.priority)
 
 
 def test_no_route_rule_is_redundant() -> None:
