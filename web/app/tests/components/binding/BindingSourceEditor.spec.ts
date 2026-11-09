@@ -23,6 +23,13 @@ vi.mock('@/api/dataset', () => ({
   listDatasetTables: () => Promise.resolve({ items: [] }),
 }))
 
+// 点位行会去查点位名；这里只验填写面，查不到即退回身份串
+vi.mock('@/api/collect', () => ({
+  listPoints: () =>
+    Promise.resolve({ items: [], page: 1, size: 200, total: 0 }),
+  getSource: () => Promise.reject(new Error('未接')),
+}))
+
 function binding(over: Partial<BindingPayload> = {}): BindingPayload {
   return {
     id: 'b1',

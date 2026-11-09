@@ -10,6 +10,8 @@
 import { DtButton } from '@dt/ui'
 import { computed } from 'vue'
 
+import { usePointLabel } from '@/composables/usePointLabel'
+
 const props = defineProps<{
   /** 当前指向的点位身份；空串 = 还没挑。 */
   nodeKey: string
@@ -23,6 +25,8 @@ const props = defineProps<{
 }>()
 
 const emit = defineEmits<{ pick: [] }>()
+
+const label = usePointLabel(() => props.nodeKey)
 
 const SEPARATOR = ':'
 
@@ -42,8 +46,23 @@ const parts = computed(() => {
 
 <template>
   <div class="dt-point-ref">
-    <!-- 全串挂 title：省略号吃掉的是 source_id，要核对时靠悬停 -->
-    <span v-if="nodeKey !== ''" class="dt-point-ref__value" :title="nodeKey">
+    <!-- 全串挂 title：认人看点位名，要核对身份时靠悬停 -->
+    <span
+      v-if="nodeKey !== '' && label !== null"
+      class="dt-point-ref__value dt-point-ref__value--named"
+      :title="nodeKey"
+    >
+      <span class="dt-point-ref__code">{{ label.name }}</span>
+      <span v-if="label.source !== ''" class="dt-point-ref__source">
+        · {{ label.source }}
+      </span>
+    </span>
+    <!-- 名字没查到时退回身份串：省略号吃掉的是 source_id -->
+    <span
+      v-else-if="nodeKey !== ''"
+      class="dt-point-ref__value"
+      :title="nodeKey"
+    >
       <span class="dt-point-ref__source">{{ parts.source }}</span>
       <span class="dt-point-ref__code">{{ parts.code }}</span>
     </span>
@@ -87,6 +106,11 @@ const parts = computed(() => {
 
     &--empty {
       color: var(--text-disabled);
+      font-family: inherit;
+    }
+
+    &--named {
+      gap: 4px;
       font-family: inherit;
     }
   }
