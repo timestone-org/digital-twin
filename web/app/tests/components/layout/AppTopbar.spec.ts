@@ -91,9 +91,10 @@ describe('AppTopbar · 标题与插槽', () => {
     expect(wrapper.get('p').attributes('title')).toBe('拖动模块调整布局')
   })
 
-  it('标题区收缩有下限，宽工具条压不成一个字', () => {
+  it('标题区能让到底，宽工具条的保存钮不被挤进滚动区', () => {
     const wrapper = mount(AppTopbar, { props: { title: '审计大屏' } })
-    expect(wrapper.get('h1').element.closest('.min-w-32')).not.toBeNull()
+    const block = wrapper.get('h1').element.closest('.shrink-\\[1000\\]')
+    expect(block?.classList.contains('min-w-0')).toBe(true)
   })
 
   it('actions 槽落在右侧', () => {
