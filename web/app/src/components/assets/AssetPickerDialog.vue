@@ -224,7 +224,12 @@ watch(
                 loading="lazy"
                 @error="markBroken(asset.id)"
               />
-              <DtIcon v-else name="layers" :size="14" />
+              <!-- 模型没有缩略图与图片读不出来是两回事，不共用一个图标 -->
+              <DtIcon
+                v-else
+                :name="asset.kind === 'model' ? 'layers' : 'alert-circle'"
+                :size="14"
+              />
             </span>
             <span class="dt-assets__name" :title="asset.name">{{
               asset.name
