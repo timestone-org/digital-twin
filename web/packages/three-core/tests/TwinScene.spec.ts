@@ -523,6 +523,34 @@ describe('模型清空与装载失败', () => {
     wrapper.unmount()
   })
 
+  // ⚠ 部件层每帧按距离规则写显隐：不认树上的勾选，一转镜头被藏的部件就回来了
+  it('结构树勾掉的部件节点在距离规则重算后仍保持隐藏', async () => {
+    let nextFrame: FrameRequestCallback = () => undefined
+    vi.spyOn(globalThis, 'requestAnimationFrame').mockImplementation(
+      (callback) => {
+        nextFrame = callback
+        return 1
+      },
+    )
+    vi.spyOn(globalThis, 'cancelAnimationFrame').mockImplementation(
+      () => undefined,
+    )
+    const model = fakeModel()
+    seam.loadTwinModel.mockResolvedValue(assetOf(model))
+    const wrapper = mountScene({ showStructureTree: true })
+    await flushPromises()
+    await wrapper.get('[data-test="twin-structure-tree"] button').trigger('click')
+    await wrapper.get('input[aria-label="显示 pump"]').setValue(false)
+    const pump = model.getObjectByName('pump')
+    expect(pump?.visible).toBe(false)
+
+    await wrapper.setProps({ values: { parts: {} } })
+    nextFrame(16)
+
+    expect(pump?.visible).toBe(false)
+    wrapper.unmount()
+  })
+
   it('换到装载失败的素材后结构树不再列旧模型', async () => {
     const wrapper = mountScene({ showStructureTree: true })
     await flushPromises()

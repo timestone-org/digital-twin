@@ -232,6 +232,7 @@ const structure = useStructureTree({
   core: () => core,
   enabled: () => props.showStructureTree === true,
   flight,
+  onHiddenChange: (objects) => layers?.setForcedHidden(objects),
 })
 
 const backgroundStyle = computed(() => {

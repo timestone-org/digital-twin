@@ -68,6 +68,8 @@ export class PartsLayer {
   private entries: PartEntry[] = []
   private values: TwinPartValues = {}
   private effectValues: TwinPartEffectValues = {}
+  /** 结构树里被手动勾掉的对象；距离规则说可见也压成不可见。 */
+  private forcedHidden: ReadonlySet<THREE.Object3D> = new Set()
   private readonly colors: ColorSpecCache
 
   /**
@@ -113,6 +115,14 @@ export class PartsLayer {
     this.values = values
   }
 
+  /**
+   * 换一份会话里手动藏起来的对象，下一次 `apply` 生效。
+   * @param objects 结构树勾掉的模型节点
+   */
+  setForcedHidden(objects: ReadonlySet<THREE.Object3D>): void {
+    this.forcedHidden = objects
+  }
+
   setEffectValues(values: TwinPartEffectValues): void {
     this.effectValues = values
   }
@@ -138,7 +148,8 @@ export class PartsLayer {
         entry.part.visibility,
         distanceResolver(context, entry.center, entry.center),
       )
-      for (const object of entry.objects) object.visible = state.visible
+      for (const object of entry.objects)
+        object.visible = state.visible && !this.forcedHidden.has(object)
       entry.fade = state.opacity
       this.dress(entry)
     }
