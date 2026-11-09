@@ -11,6 +11,7 @@ import {
 } from './constants'
 import { resolveAccent, sanitizeCssValue } from './cssValue'
 import { edgePath } from './edgePath'
+import type { EdgePathResult } from './edgePath'
 import {
   perimTToSide,
   perimeterPoint,
@@ -410,28 +411,25 @@ function arrowAttrs(
 
 /**
  * 两处端点标记。
- * ⚠ 起点的箭头朝**外**（由第二个点指向起点）：两处都按行进方向画的话，一条双箭头
+ * ⚠ 起点的箭头朝**外**（由来处指向起点）：两处都按行进方向画的话，一条双箭头
  * 的线上两个箭头会一起指向同一端。
  * @param style 连线样式
- * @param points `edgePath` 给出的完整折线点序列
+ * @param geom `edgePath` 的产物：两端落点与各自箭头的来处
  */
 function markerViewsOf(
   style: Twin2dEdgeStyle,
-  points: readonly Pt[],
+  geom: EdgePathResult,
 ): Twin2dEdgePart[] {
-  const last = points.length - 1
   const outline = outlineWidthOf(style.strokes)
+  const first = geom.points[0]
+  const last = geom.points[geom.points.length - 1]
   const slots = [
-    [TWIN_2D_START_MARKER, style.startMarker, 1, 0],
-    [TWIN_2D_END_MARKER, style.endMarker, last - 1, last],
+    [TWIN_2D_START_MARKER, style.startMarker, geom.startFrom, first],
+    [TWIN_2D_END_MARKER, style.endMarker, geom.endFrom, last],
   ] as const
   const views: Twin2dEdgePart[] = []
-  for (const [id, marker, fromAt, tipAt] of slots) {
-    const from = points[fromAt]
-    const tip = points[tipAt]
-    if (marker.kind !== 'arrow' || from === undefined || tip === undefined) {
-      continue
-    }
+  for (const [id, marker, from, tip] of slots) {
+    if (marker.kind !== 'arrow' || tip === undefined) continue
     views.push({ id, attrs: arrowAttrs(marker, tip, from, outline) })
   }
   return views
@@ -578,7 +576,7 @@ function edgeViewOf(
     flow: timing,
     path: geom.path,
     strokes: strokeViewsOf(style, state.active, dash),
-    markers: markerViewsOf(style, geom.points),
+    markers: markerViewsOf(style, geom),
     label: labelViewOf(style, geom.label, state.label || edge.label),
   }
 }

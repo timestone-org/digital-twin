@@ -166,8 +166,28 @@ export interface EdgePathResult {
   path: string
   /** 标签锚点。 */
   label: Pt
-  /** 完整折线点序列；箭头朝向取末两点。 */
+  /** 完整折线点序列。 */
   points: Pt[]
+  /** 始端箭头朝向的来处：箭头从它指向起点。 */
+  startFrom: Pt
+  /** 末端箭头朝向的来处：箭头从它指向终点。 */
+  endFrom: Pt
+}
+
+/**
+ * 折线两端箭头的来处：紧挨端点的那一个点。
+ * @param points 完整折线点序列（至少两点）
+ */
+function polylineTangents(points: readonly Pt[]): {
+  startFrom: Pt
+  endFrom: Pt
+} {
+  const first = points[0] ?? { x: 0, y: 0 }
+  const last = points[points.length - 1] ?? first
+  return {
+    startFrom: points[1] ?? last,
+    endFrom: points[points.length - 2] ?? first,
+  }
 }
 
 /** 摆正后的两端。 */
@@ -217,6 +237,7 @@ function polylineResult(
     path: roundCorners(points, radius),
     label: pointAlong(points, labelAt),
     points,
+    ...polylineTangents(points),
   }
 }
 
@@ -238,10 +259,12 @@ function bezierPath(ends: OrientedEnds, labelAt: number): EdgePathResult {
     path: `M${fmt(s.x)},${fmt(s.y)} ${curve} ${fmt(e.x)},${fmt(e.y)}`,
     // 标签走弦而不是 points：c2 不在曲线上，拿它插值会把标签甩到曲线外
     label: pointAlong([s, e], labelAt),
-    // ⚠ points 里多出来的 c2 是末控制点，不是路径上的点：三次贝塞尔 B'(1) ∝ e−c2，
-    // 而箭头朝向取末两点——带上它箭头才与曲线端点相切，去掉它箭头按弦向 e−s 画，
-    // 非轴对齐时肉眼可见地歪
+    // ⚠ points 里多出来的 c2 是末控制点，不是路径上的点；编辑器按这串点做命中，不动它
     points: [s, c2, e],
+    // ⚠ 三次贝塞尔两端的切向分别是 c1−s 与 e−c2：始端拿 c2 定朝向的话，非轴对齐时
+    // 箭头顺着弦歪出去
+    startFrom: c1,
+    endFrom: c2,
   }
 }
 
@@ -264,6 +287,7 @@ export function edgePath(input: EdgePathInput): EdgePathResult {
       path: `M${fmt(ends.start.x)},${fmt(ends.start.y)} ${tail}`,
       label: pointAlong(points, labelAt),
       points,
+      ...polylineTangents(points),
     }
   }
   if (input.route === 'bezier') return bezierPath(ends, labelAt)
