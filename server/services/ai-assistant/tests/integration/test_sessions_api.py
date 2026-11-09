@@ -349,7 +349,7 @@ async def test_an_unknown_model_profile_is_rejected(
 async def test_a_null_model_profile_is_rejected_and_leaves_the_row(
     db_client: httpx.AsyncClient,
 ) -> None:
-    """显式 null 会把会话行改成 NULL，推进时退回按量那一路，只有账单看得出来。"""
+    """显式 null 会把档位改成 NULL，推进时退回按量那一路，只有账单看得出来。"""
     created = await db_client.post(
         SESSIONS_URL, json={"surface_kind": "dashboard-editor"}
     )
