@@ -391,10 +391,18 @@ describe('节点与大屏', () => {
   })
 
   it('列表项只带规模，不带节点树', () => {
-    expect(toDashboardSummary(dashboardWire())).toMatchObject({
+    expect(
+      toDashboardSummary({ ...dashboardWire(), has_thumbnail: false }),
+    ).toMatchObject({
       nodeCount: 1,
       designWidth: 1920,
     })
+  })
+
+  it('列表项带上有没有缩略图，整张大屏不谈这一列', () => {
+    const wire = { ...dashboardWire(), has_thumbnail: true }
+    expect(toDashboardSummary(wire).hasThumbnail).toBe(true)
+    expect('hasThumbnail' in toDashboard(dashboardWire())).toBe(false)
   })
 
   it('项目带上它下面有几张大屏', () => {

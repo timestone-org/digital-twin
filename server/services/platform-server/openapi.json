@@ -10486,6 +10486,10 @@
             "title": "Design Width",
             "type": "integer"
           },
+          "has_thumbnail": {
+            "title": "Has Thumbnail",
+            "type": "boolean"
+          },
           "id": {
             "format": "uuid",
             "title": "Id",
@@ -10534,7 +10538,8 @@
           "is_public",
           "node_count",
           "created_at",
-          "updated_at"
+          "updated_at",
+          "has_thumbnail"
         ],
         "title": "DashboardSummaryOut",
         "type": "object"

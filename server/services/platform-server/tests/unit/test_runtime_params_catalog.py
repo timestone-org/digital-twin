@@ -269,3 +269,10 @@ def test_the_frame_size_ceiling_matches_the_catalog_bound() -> None:
     spec = catalog.spec_of(catalog.SECTION_DASHBOARD, "publish_max_items")
     assert spec is not None
     assert spec.maximum == PUBLISH_MAX_ITEMS_CEILING
+
+
+def test_the_plan_refresh_knob_takes_effect_without_a_restart() -> None:
+    # 采集器每次判定要不要重拉计划都读覆盖值，标成「需重启」会让运维白白重启
+    spec = catalog.spec_of(catalog.SECTION_COLLECT, "plan_refresh_interval_s")
+    assert spec is not None
+    assert spec.tier == catalog.TIER_INSTANT

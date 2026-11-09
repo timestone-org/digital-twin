@@ -117,6 +117,37 @@ describe('懒加载', () => {
   })
 })
 
+describe('列表已知没有图', () => {
+  it('不挂 observer、不取图，直接画占位——没有图的屏不发必然 404 的请求', async () => {
+    const fetch = vi
+      .spyOn(thumbnailApi, 'getDashboardThumbnail')
+      .mockResolvedValue(null)
+    const wrapper = mount(DashboardThumbnail, {
+      props: { dashboardId: 'd-9', hasThumbnail: false },
+    })
+    await flushPromises()
+
+    expect(observers).toHaveLength(0)
+    expect(fetch).not.toHaveBeenCalled()
+    expect(wrapper.find('[data-test="thumb-placeholder"]').exists()).toBe(true)
+    wrapper.unmount()
+  })
+
+  it('列表说有图时照常懒加载', async () => {
+    const fetch = vi
+      .spyOn(thumbnailApi, 'getDashboardThumbnail')
+      .mockResolvedValue(null)
+    const wrapper = mount(DashboardThumbnail, {
+      props: { dashboardId: 'd-1', hasThumbnail: true },
+    })
+    latest().fire()
+    await flushPromises()
+
+    expect(fetch).toHaveBeenCalledWith('d-1')
+    wrapper.unmount()
+  })
+})
+
 describe('占位图', () => {
   it('没存过缩略图时画确定性占位，而不是空白', async () => {
     vi.spyOn(thumbnailApi, 'getDashboardThumbnail').mockResolvedValue(null)

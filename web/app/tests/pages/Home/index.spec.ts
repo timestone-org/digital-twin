@@ -446,13 +446,25 @@ describe('项目重命名', () => {
 })
 
 describe('弹窗回来的三条信号', () => {
-  it('改了大屏只重拉大屏', async () => {
+  it('改了大屏连项目一起重拉——侧栏的大屏计数要跟着变', async () => {
     stubList()
     const wrapper = await render()
     wrapper.getComponent(WorkbenchDialogs).vm.$emit('changed', 'dashboards')
     await flushPromises()
     expect(dashboardApi.listDashboards).toHaveBeenCalledTimes(2)
-    expect(dashboardApi.listProjects).toHaveBeenCalledTimes(1)
+    expect(dashboardApi.listProjects).toHaveBeenCalledTimes(2)
+  })
+
+  it('改了大屏后项目重拉失败要停在错误态，不能被大屏的成功盖掉', async () => {
+    stubList()
+    const wrapper = await render()
+    vi.mocked(dashboardApi.listProjects).mockRejectedValue(
+      new Error('后端挂了'),
+    )
+    wrapper.getComponent(WorkbenchDialogs).vm.$emit('changed', 'dashboards')
+    await flushPromises()
+    expect(wrapper.text()).toContain('加载失败')
+    expect(dashboardApi.listDashboards).toHaveBeenCalledTimes(1)
   })
 
   it('改了项目连大屏一起重拉——删掉当前项目后网格不能还留着它的屏', async () => {
@@ -539,6 +551,8 @@ describe('卡片动作接线', () => {
       includePointBindings: true,
     })
     expect(dashboardApi.listDashboards).toHaveBeenCalledTimes(2)
+    // 多出一张屏，侧栏那一行的计数也要重拉
+    expect(dashboardApi.listProjects).toHaveBeenCalledTimes(2)
   })
 
   it.each(['创建副本', '导出 JSON'])('取消%s不发送请求', async (label) => {
@@ -567,6 +581,8 @@ describe('卡片动作接线', () => {
     await pickMenu(wrapper, '删除')
     expect(confirmSpy).toHaveBeenCalled()
     expect(remove).toHaveBeenCalledWith('d-1')
+    await flushPromises()
+    expect(dashboardApi.listProjects).toHaveBeenCalledTimes(2)
   })
 
   it('确认框点了取消就不删', async () => {

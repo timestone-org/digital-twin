@@ -71,11 +71,11 @@ def to_project_out(
 
 
 def to_dashboard_summary_out(
-    dashboard: Dashboard, *, node_count: int
+    dashboard: Dashboard, *, node_count: int, has_thumbnail: bool
 ) -> DashboardSummaryOut:
     """列表页的大屏条目。
 
-    Args: dashboard, node_count。
+    Args: dashboard, node_count, has_thumbnail。
     """
     return DashboardSummaryOut(
         id=dashboard.id,
@@ -88,6 +88,7 @@ def to_dashboard_summary_out(
         schema_version=dashboard.schema_version,
         is_public=dashboard.is_public,
         node_count=node_count,
+        has_thumbnail=has_thumbnail,
         created_at=dashboard.created_at,
         updated_at=dashboard.updated_at,
     )

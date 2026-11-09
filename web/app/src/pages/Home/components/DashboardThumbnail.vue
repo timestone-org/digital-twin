@@ -11,7 +11,16 @@ import { DtIcon } from '@dt/ui'
 import { getDashboardThumbnail } from '@/api/dashboardThumbnail'
 import { placeholderBlocks } from '../scripts/thumbnailPlaceholder'
 
-const props = defineProps<{ dashboardId: string }>()
+// ⚠ 缺省必须显式给 true：可选的布尔 prop 不传时会被强转成 false，于是所有
+// 没传这一项的地方都不再取图
+const props = withDefaults(
+  defineProps<{
+    dashboardId: string
+    /** 列表报的有没有存过图；false 时直接画占位不去取。缺省 = 不知道，照常取。 */
+    hasThumbnail?: boolean
+  }>(),
+  { hasThumbnail: true },
+)
 
 /** 提前一屏开始取图，滚动到位时图已经在了。 */
 const PRELOAD_MARGIN = '160px'
@@ -46,6 +55,10 @@ function stopObserving(): void {
 }
 
 onMounted(() => {
+  if (!props.hasThumbnail) {
+    isLoading.value = false
+    return
+  }
   if (typeof IntersectionObserver === 'undefined') {
     void load()
     return

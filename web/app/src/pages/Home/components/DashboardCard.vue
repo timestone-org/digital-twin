@@ -123,7 +123,10 @@ function onCardClick(event: MouseEvent): void {
     @click="onCardClick"
   >
     <div class="relative">
-      <DashboardThumbnail :dashboard-id="dashboard.id" />
+      <DashboardThumbnail
+        :dashboard-id="dashboard.id"
+        :has-thumbnail="dashboard.hasThumbnail ?? true"
+      />
 
       <!-- ⚠ 一并响应 focus-within：只挂 hover 会让键盘焦点落在完全看不见的按钮上 -->
       <div

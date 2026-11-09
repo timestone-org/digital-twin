@@ -84,6 +84,7 @@ const SHAPES = {
     description: true,
     design_height: true,
     design_width: true,
+    has_thumbnail: true,
     id: true,
     is_public: true,
     name: true,
