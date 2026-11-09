@@ -119,6 +119,30 @@ async def test_missing_necessary_values_fail_before_word_generation(
     assert "数据检查未通过" in changes["error"]
 
 
+async def test_a_data_check_failure_names_the_metric_and_is_not_an_error(
+    monkeypatch, caplog
+):
+    # ⚠ 只存一句笼统的「检查未通过」，用户不知道该去修哪个指标；而缺数是
+    # 业务结果不是系统故障，记 ERROR 会把真正的故障埋掉
+    consumer, row, _sessions, _pool, completed = assemble_worker(monkeypatch)
+    monkeypatch.setattr(
+        worker, "fetch_api_sources", AsyncMock(return_value=api_snapshot(0))
+    )
+    with caplog.at_level(logging.INFO):
+        await consumer._handle(
+            {
+                "envelope_version": "1",
+                "traceparent": TRACE,
+                "render_id": str(row.id),
+            }
+        )
+    changes = completed.await_args.args[2]
+    assert any(item.startswith("总量：") for item in changes["warnings_json"])
+    levels = {record.getMessage(): record.levelno for record in caplog.records}
+    assert levels["report_generation_rejected"] == logging.WARNING
+    assert "report_generation_failed" not in levels
+
+
 async def test_api_read_failure_is_visible_and_does_not_generate_word(
     monkeypatch,
 ):
