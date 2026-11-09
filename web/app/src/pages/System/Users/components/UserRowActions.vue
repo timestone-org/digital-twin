@@ -34,7 +34,8 @@ const emit = defineEmits<{
 defineOptions({ inheritAttrs: false })
 
 const auth = useAuthStore()
-// 服务端拒绝对自己停用、删除与改派角色（40109）：自己那一行不摆这三颗，免得点了必败
+// 自己那一行不摆停用、删除与改派角色：前两样服务端必拒（40109），改派角色一旦
+// 拿掉自己赖以管理的码同样被拒，改成功了也只是把自己降级
 const isSelf = computed(() => auth.user?.id === props.user.id)
 </script>
 
