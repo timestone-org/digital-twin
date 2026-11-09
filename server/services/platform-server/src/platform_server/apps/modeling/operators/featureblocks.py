@@ -132,7 +132,7 @@ class SelectRun:
     #: 下游切分不是恰好一个——排名与上游拟合都退化到整帧上
     is_degraded: bool
     #: 选的是相关性却拿不到目标列，实际按方差排名
-    fell_back: bool = False
+    is_fallback: bool = False
 
 
 def scale_blocks(run: ScaleRun) -> tuple[ReportBlock, ...]:
@@ -412,7 +412,7 @@ def _select_columns(run: SelectRun) -> ReportBlock:
             ),
         ),
     )
-    if run.fell_back:
+    if run.is_fallback:
         block = annotated(block, NOTE_ALERT, (CORRELATION_FALLBACK_ALERT,))
     return _hinted(_flagged(block, run.is_degraded), _select_hints(run.method))
 
