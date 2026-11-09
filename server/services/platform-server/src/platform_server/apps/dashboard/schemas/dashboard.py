@@ -27,8 +27,8 @@ MAX_DESIGN_EXTENT_PX = 20_000
 MAX_NODES_PER_DASHBOARD = 2000
 
 
-class DashboardSummaryOut(OutputModel):
-    """列表页的大屏条目：不带节点树。"""
+class DashboardFieldsOut(OutputModel):
+    """列表条目与整张大屏共有的那几列。"""
 
     id: uuid.UUID
     project_id: uuid.UUID
@@ -44,7 +44,14 @@ class DashboardSummaryOut(OutputModel):
     updated_at: Utc
 
 
-class DashboardOut(DashboardSummaryOut):
+class DashboardSummaryOut(DashboardFieldsOut):
+    """列表页的大屏条目：不带节点树。"""
+
+    #: 有没有存过缩略图。工作台据此决定取不取图，没有图的屏不再换来一条 404
+    has_thumbnail: bool
+
+
+class DashboardOut(DashboardFieldsOut):
     """加载一张大屏。运行时与编辑器共用同一份。
 
     `nodes` 是**扁平**一维数组，树由 `parent_id` 重建；顺序钉死在
