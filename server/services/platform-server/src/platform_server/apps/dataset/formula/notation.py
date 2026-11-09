@@ -26,6 +26,7 @@ from platform_server.apps.dataset.formula.signatures import (
 )
 from platform_server.apps.dataset.formula.tokens import split_external
 from platform_server.apps.dataset.formula.windows import (
+    WindowSpec,
     parse_complete_window,
     parse_window,
 )
@@ -389,47 +390,40 @@ class _Builder:
         }
 
     def _aggregate(self, name: str, node: ast.Call) -> NotationNode:
-        """时间窗与整列聚合。
+        """时间窗与整列聚合；完整日合计多一个步长实参。
 
         Args: name, node。
         """
-        if name == "SUM_COMPLETE_OVER":
-            return self._complete_sum(node)
         key = self._parsed.placeholders[name_ref(node.args[0])]
-        is_window = name in WINDOW_FUNCS
-        spec = (
-            parse_window(str(const_value(node.args[1]))) if is_window else None
-        )
+        spec = _window_of(name, node)
         return {
             "t": "agg",
             "sym": _AGG_SYMBOLS[name],
-            "label": (
-                (spec.label if spec.is_today else f"近 {spec.label}")
-                if spec is not None
-                else "全表"
-            ),
+            "label": _agg_label(spec),
             # func / window 只给回写公式文本用，展示不需要
             "func": name,
             "window": spec.literal if spec is not None else None,
             "x": self._column(key),
         }
 
-    def _complete_sum(self, node: ast.Call) -> NotationNode:
-        """当日完整网格合计：第三个实参是步长，`_aggregate` 不认它。
 
-        Args: node。
-        """
-        key = self._parsed.placeholders[name_ref(node.args[0])]
-        step = const_value(node.args[2])
-        spec = parse_complete_window(str(const_value(node.args[1])), step)
-        return {
-            "t": "agg",
-            "sym": _AGG_SYMBOLS["SUM_COMPLETE_OVER"],
-            "label": f"{spec.label}（每 {spec.step_s} 秒一格）",
-            "func": "SUM_COMPLETE_OVER",
-            "window": spec.literal,
-            "x": self._column(key),
-        }
+def _window_of(name: str, node: ast.Call) -> WindowSpec | None:
+    """聚合调用的时间窗；整列聚合给 None。Args: name, node。"""
+    if name not in WINDOW_FUNCS:
+        return None
+    literal = str(const_value(node.args[1]))
+    if name == "SUM_COMPLETE_OVER":
+        return parse_complete_window(literal, const_value(node.args[2]))
+    return parse_window(literal)
+
+
+def _agg_label(spec: WindowSpec | None) -> str:
+    """聚合符号下标那句话。Args: spec。"""
+    if spec is None:
+        return "全表"
+    if spec.step_s is not None:
+        return f"{spec.label}（每 {spec.step_s} 秒一格）"
+    return spec.label if spec.is_today else f"近 {spec.label}"
 
 
 def _constant(value: object) -> NotationNode:
@@ -461,18 +455,16 @@ def _power(base: NotationNode, exponent: NotationNode) -> NotationNode:
 
 
 def _right_tightening(symbol: str, right: NotationNode) -> int:
-    """右操作数要不要比本档更紧（1 = 要）。
+    """右操作数要比本档紧几级：`a − (b − c)`、`a × (b mod c)` 都不能去括号。
 
-    ⚠ 减法与乘法档里的取余、整除不满足结合律：`a − (b − c)` ≠ `a − b − c`；
-    乘号右边是取余或整除时同理。
     Args: symbol, right。
     """
     if symbol == "−" or symbol in _NON_ASSOCIATIVE_MUL:
         return 1
-    is_loose_mul = right.get("t") == "bin" and right.get("op") in (
-        _NON_ASSOCIATIVE_MUL
+    is_loose = (
+        right.get("t") == "bin" and right.get("op") in _NON_ASSOCIATIVE_MUL
     )
-    return 1 if symbol == "×" and is_loose_mul else 0
+    return 1 if symbol == "×" and is_loose else 0
 
 
 _NODE_PREC = {
@@ -533,12 +525,8 @@ def _operand(node: NotationNode) -> str:
 
 
 def _side(node: NotationNode, min_prec: int) -> str:
-    """线性文本里的一个操作数，优先级不够就补括号。
-
-    ⚠ 分式在二维里是原子，摊成一行的 `a ÷ b` 却是乘法档：不补括号
-    `a ÷ (b × c)` 会念成 `a ÷ b × c`。
-    Args: node, min_prec。
-    """
+    """线性文本里的一个操作数，优先级不够就补括号。Args: node, min_prec。"""
+    # ⚠ 分式在二维里是原子，摊成一行却是乘法档：`a ÷ (b × c)` 不能去括号
     text = _operand(node)
     if node.get("t") in ("paren", "cases"):
         return text
@@ -547,10 +535,7 @@ def _side(node: NotationNode, min_prec: int) -> str:
 
 
 def _plain_bin(node: NotationNode) -> str:
-    """二元运算摊成一行；取余、整除右边的分式要括起来。
-
-    Args: node。
-    """
+    """二元运算摊成一行；取余、整除右边的分式要括起来。Args: node。"""
     right: NotationNode = node["r"]
     tighter = node["op"] in _NON_ASSOCIATIVE_MUL
     rendered = _side(right, _PREC_MUL + 1) if tighter else _operand(right)
