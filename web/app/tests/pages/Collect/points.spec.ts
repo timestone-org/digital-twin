@@ -13,6 +13,7 @@ import { enableAutoUnmount, flushPromises, mount } from '@vue/test-utils'
 import type { VueWrapper } from '@vue/test-utils'
 import { ref } from 'vue'
 import type { CollectPoint, CollectSource } from '@dt/contracts'
+import { DtTooltip } from '@dt/ui'
 
 import * as collectApi from '@/api/collect'
 import * as histories from '@/api/pointHistories'
@@ -617,7 +618,15 @@ describe('全数据源状态查询', () => {
     await clickByText(wrapper, '刷新列表')
     await flushPromises()
     expect(wrapper.text()).toContain('刷新后的异常点')
-    expect(wrapper.text()).toContain('状态筛选覆盖当前数据源的全部点位')
+    expect(
+      wrapper
+        .findAllComponents(DtTooltip)
+        .some((tip) =>
+          String(tip.props('content')).includes(
+            '状态筛选覆盖当前数据源的全部点位',
+          ),
+        ),
+    ).toBe(true)
   })
 
   it('切状态清多选，换源同时重置关键词与状态并切换实时主题', async () => {

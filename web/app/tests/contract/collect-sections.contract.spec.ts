@@ -50,7 +50,7 @@ function emitNames(component: unknown): string[] {
 }
 
 const PANELS = [
-  ['已导入节点', NodeTable],
+  ['点位', NodeTable],
   ['在线浏览', BrowsePanel],
 ] as const
 

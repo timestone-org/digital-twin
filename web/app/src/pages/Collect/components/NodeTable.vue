@@ -14,6 +14,7 @@ import {
   DtSwitch,
   DtSelect,
   DtTag,
+  DtTooltip,
 } from '@dt/ui'
 
 import * as collect from '@/api/collect'
@@ -41,6 +42,10 @@ import PointDetailDialog from './PointDetailDialog.vue'
 import PointFormDialog from './PointFormDialog.vue'
 import PointValueCell from './PointValueCell.vue'
 import WriteValueDialog from './WriteValueDialog.vue'
+
+/** 状态筛选的口径，挂在筛选框的提示里，不常驻占一行。 */
+const STATUS_FILTER_HINT =
+  '状态筛选覆盖当前数据源的全部点位。“全部异常”包含等待数据、数据陈旧和质量异常；状态变化后点击“刷新列表”重新查询。'
 
 const props = defineProps<{ source: CollectSource }>()
 
@@ -155,7 +160,7 @@ watch(list.items, (rows) => {
 </script>
 
 <template>
-  <DtCard icon="table" title="已导入节点" class="flex min-h-0 flex-col">
+  <DtCard icon="table" title="点位" class="flex min-h-0 flex-col">
     <template #actions>
       <DtTag v-if="hasPoints" size="sm">
         {{ list.total.value }}
@@ -167,9 +172,6 @@ watch(list.items, (rows) => {
         :source="source"
         :is-connected="live.isConnected.value"
       />
-      <p class="text-xs text-text-secondary">
-        状态筛选覆盖当前数据源的全部点位。“全部异常”包含等待数据、数据陈旧和质量异常；状态变化后点击“刷新列表”重新查询。
-      </p>
 
       <BatchActionBar
         v-if="hasSelection"
@@ -201,13 +203,15 @@ watch(list.items, (rows) => {
         @retry="list.reload()"
       >
         <template #toolbar>
-          <DtSelect
-            :model-value="status"
-            :options="POINT_STATUS_OPTIONS"
-            aria-label="点位状态"
-            size="sm"
-            @update:model-value="setStatus"
-          />
+          <DtTooltip :content="STATUS_FILTER_HINT">
+            <DtSelect
+              :model-value="status"
+              :options="POINT_STATUS_OPTIONS"
+              aria-label="点位状态"
+              size="sm"
+              @update:model-value="setStatus"
+            />
+          </DtTooltip>
           <DtButton
             variant="outline"
             size="sm"
