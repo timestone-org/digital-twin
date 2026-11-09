@@ -36,13 +36,21 @@ function solid(spec: string): TwinPartColor {
 }
 
 /**
+ * 读数当数用；布尔按 1 / 0，与信息牌状态、动画、部件效果同一口径。
+ * ⚠ 布尔点位（运行信号）最常见：不按 1 / 0 算的话，档位里填的 "1" 永远命中不了。
+ */
+function numericReading(value: unknown): number | null {
+  return typeof value === 'boolean' ? Number(value) : toFiniteNumber(value)
+}
+
+/**
  * 两个值相等吗。
  * ⚠ 两边都能当数时按数比：点位下发的 `1` 与档位里填的 `"1"` 不按数比就永远对不上，
  * 而界面上两者看起来一模一样。比不了数时按不分大小写的字符串比。
  */
 function sameValue(expected: string, value: unknown): boolean {
   const left = toFiniteNumber(expected)
-  const right = toFiniteNumber(value)
+  const right = numericReading(value)
   if (left !== null && right !== null) return left === right
   const text = typeof value === 'string' ? value.trim() : String(value)
   return text.toLowerCase() === expected.toLowerCase()
@@ -50,7 +58,7 @@ function sameValue(expected: string, value: unknown): boolean {
 
 /** 落在 [from, to) 里吗；两端为 null 即那一侧不设限。 */
 function inRange(stop: TwinTintStop, value: unknown): boolean {
-  const parsed = toFiniteNumber(value)
+  const parsed = numericReading(value)
   if (parsed === null) return false
   if (stop.from !== null && parsed < stop.from) return false
   return stop.to === null || parsed < stop.to
@@ -79,7 +87,7 @@ export function partTintColor(
   const reading = finiteValue(value)
   if (reading === undefined || reading === null) return solid(tint.fallback)
   if (tint.mode === 'gradient') {
-    const parsed = toFiniteNumber(reading)
+    const parsed = numericReading(reading)
     if (parsed === null) return solid(tint.fallback)
     const { min, max, from, to } = tint.gradient
     return { kind: 'mix', from, to, t: gradientPosition(min, max, parsed) }
