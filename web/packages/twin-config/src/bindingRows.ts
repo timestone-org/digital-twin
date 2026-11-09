@@ -285,6 +285,27 @@ export function remapTwinBindings<T extends { fieldKey: string }>(
   return moved
 }
 
+/** id → 它占的各行行号，按文档序。 */
+function rowsById(ids: readonly string[]): ReadonlyMap<string, number[]> {
+  const rows = new Map<string, number[]>()
+  ids.forEach((id, index) => {
+    const list = rows.get(id)
+    if (list === undefined) rows.set(id, [index])
+    else list.push(index)
+  })
+  return rows
+}
+
+/** 每一行是它那个 id 的第几次出现（从 0 数）。 */
+function occurrences(ids: readonly string[]): number[] {
+  const seen = new Map<string, number>()
+  return ids.map((id) => {
+    const nth = seen.get(id) ?? 0
+    seen.set(id, nth + 1)
+    return nth
+  })
+}
+
 /** `slotKey[index].sub` 拆成三段；形状不符给 null。 */
 function parseFieldKey(
   fieldKey: string,
@@ -301,6 +322,7 @@ function parseFieldKey(
  * ⚠ 这一步漏掉，删一个实体就会让它后面的每一条绑定改喂前一个实体——**没有任何
  * 报错**，读数照常刷新，只是全都接错了对象。
  * ⚠ 实体没了的那些行整条丢弃，不留着：留着的话它会占住一个行号，把后面的又推错一格。
+ * ⚠ id 重复时按「第几次出现」对应：按 id 单值建表的话两条绑定会叠到同一行，保存时撞唯一键。
  *
  * ⚠ 只按 `fieldKey` 认人、其余字段整份带走：这里既要能搬已落库的绑定，也要能搬
  * 编辑器里还没落库的草稿，两者字段集不同。收窄成某一种就得在另一种上补一堆
@@ -317,7 +339,8 @@ export function remapBindingRows<T extends { fieldKey: string }>(
   afterIds: readonly string[],
   bindings: readonly T[],
 ): T[] {
-  const target = new Map(afterIds.map((id, index) => [id, index]))
+  const target = rowsById(afterIds)
+  const before = occurrences(beforeIds)
   const kept: T[] = []
   for (const binding of bindings) {
     const parsed = parseFieldKey(binding.fieldKey)
@@ -326,7 +349,9 @@ export function remapBindingRows<T extends { fieldKey: string }>(
       continue
     }
     const entityId = beforeIds[parsed.index]
-    const moved = entityId === undefined ? undefined : target.get(entityId)
+    const nth = before[parsed.index] ?? 0
+    const moved =
+      entityId === undefined ? undefined : target.get(entityId)?.[nth]
     if (moved === undefined) continue
     kept.push({
       ...binding,

@@ -37,6 +37,27 @@ describe('collectTwinConfigIssues', () => {
     ])
   })
 
+  // ⚠ 实时值按「牌 id::字段 key」缝：key 重复的两个字段显示同一个读数，重映射还会把绑定叠到一起
+  it('同一张牌或同一份部件详情里字段 key 重复时报出来', () => {
+    const config = normalizeTwinConfig({
+      panels: [{ id: 'm1', fields: [{ key: 'f1' }, { key: 'f1' }] }],
+      parts: [
+        {
+          id: 'p1',
+          click: { near: 'detail' },
+          detail: { fields: [{ key: 't' }, { key: 'u' }, { key: 't' }] },
+        },
+      ],
+    })
+    const issues = collectTwinConfigIssues(config).filter(
+      (issue) => issue.kind === 'duplicate-field-key',
+    )
+    expect(issues.map((issue) => [issue.entityId, issue.path])).toEqual([
+      ['m1', 'panels[0].fields[1].key'],
+      ['p1', 'parts[0].detail.fields[2].key'],
+    ])
+  })
+
   it('视点切换条列到一个不存在的视点时报出来', () => {
     const config = normalizeTwinConfig({
       cameras: [{ id: 'c1' }],

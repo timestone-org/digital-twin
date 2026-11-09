@@ -21,6 +21,7 @@ const ROAM_TOUR_ENTITY_ID = 'roamTour'
 /** 问题种类。 */
 export const TWIN_CONFIG_ISSUE_KINDS = [
   'duplicate-id',
+  'duplicate-field-key',
   'dangling-camera',
   'dangling-anchor',
   'flow-too-short',
@@ -65,6 +66,51 @@ function duplicateIds(
     seen.add(item.id)
   })
   return out
+}
+
+/**
+ * 一组字段里重复的 key；只报后出现的那个。
+ * @param fields 一张牌或一份部件详情的字段
+ * @param entityId 牌或部件的 id
+ * @param path 这组字段在配置里的路径
+ */
+function duplicateKeysIn(
+  fields: readonly { key: string }[],
+  entityId: string,
+  path: string,
+): TwinConfigIssue[] {
+  const seen = new Set<string>()
+  const out: TwinConfigIssue[] = []
+  fields.forEach((field, index) => {
+    if (seen.has(field.key))
+      out.push({
+        kind: 'duplicate-field-key',
+        entityId,
+        path: `${path}[${index}].key`,
+        detail: `字段 key「${field.key}」重复，两个字段会显示同一个读数`,
+      })
+    seen.add(field.key)
+  })
+  return out
+}
+
+/**
+ * 同一张牌、同一份部件详情里字段 key 重复。
+ * ⚠ 实时值按「实体 id::字段 key」缝：重复时后一个盖掉前一个，界面上两行同一个数。
+ */
+function duplicateFieldKeys(config: TwinConfig): TwinConfigIssue[] {
+  return [
+    ...config.panels.flatMap((panel, index) =>
+      duplicateKeysIn(panel.fields, panel.id, `panels[${index}].fields`),
+    ),
+    ...config.parts.flatMap((part, index) =>
+      duplicateKeysIn(
+        part.detail.fields,
+        part.id,
+        `parts[${index}].detail.fields`,
+      ),
+    ),
+  ]
 }
 
 /**
@@ -446,6 +492,7 @@ export function collectTwinConfigIssues(config: TwinConfig): TwinConfigIssue[] {
     ...duplicateIds('panels', config.panels),
     ...duplicateIds('arrows', config.arrows),
     ...duplicateIds('flows', config.flows),
+    ...duplicateFieldKeys(config),
     ...danglingCameras(config),
     ...danglingRoamCameras(config, cameraIds),
     ...danglingPanelAnchors(config, anchorIds),
