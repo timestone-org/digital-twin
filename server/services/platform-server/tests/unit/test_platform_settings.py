@@ -47,3 +47,29 @@ def test_a_publish_budget_as_long_as_the_tick_refuses_to_start() -> None:
 def test_a_model_timeout_beyond_the_budget_refuses_to_start() -> None:
     with pytest.raises(ValidationError, match="ACPUBLISH"):
         _with(acpublish_model_timeout_s=50.0, acpublish_budget_s=45.0)
+
+
+@pytest.mark.parametrize(
+    ("claim_idle", "prefetch", "timeout"),
+    [
+        (
+            "acstartup_claim_idle_ms",
+            "acstartup_prefetch",
+            "acstartup_shard_timeout_s",
+        ),
+        (
+            "acmodel_claim_idle_ms",
+            "acmodel_prefetch",
+            "acmodel_train_timeout_s",
+        ),
+        ("acdaily_claim_idle_ms", "acdaily_prefetch", "acdaily_timeout_s"),
+    ],
+)
+def test_the_default_claim_threshold_outlasts_the_longest_hold(
+    claim_idle: str, prefetch: str, timeout: str
+) -> None:
+    # ⚠ 一批取 n 条逐条处理，最后一条最多在 PEL 里滞留 n × 超时；门槛更短
+    # 的话别的副本会把还在跑的消息认领走重做一遍
+    fields = build_settings().model_dump()
+    hold_ms = fields[prefetch] * fields[timeout] * 1000
+    assert fields[claim_idle] > hold_ms
