@@ -5,6 +5,8 @@
  */
 import { describe, expect, it } from 'vitest'
 import { mount } from '@vue/test-utils'
+import BindingPanel from '@/components/binding/BindingPanel.vue'
+import { installConfigControls } from '@/features/dashboard/configControls'
 import type {
   BindingRowLabel,
   DashboardNodePayload,
@@ -162,6 +164,84 @@ describe('行数转发', () => {
         .findAll('button')
         .some((item) => item.text().includes('新增一行')),
     ).toBe(true)
+    wrapper.unmount()
+  })
+})
+
+/**
+ * ⚠ 刚拖上来的节点只存了外壳样式、实体数组还在清单缺省里：拿落库配置去问行数，
+ * 画布上看得见的那一个缺省实体在绑点页上就成了「暂无可绑定字段」。
+ */
+describe('行数按铺过缺省的配置算', () => {
+  const DEFAULTED: ModuleManifest = {
+    ...NAMED,
+    type: 'defaulted',
+    configSchema: [
+      { key: 'names', label: '实体', type: 'json', default: ['点位 1'] },
+    ],
+  }
+
+  it('落库配置里没有实体数组时，按清单缺省的那一个实体出行', async () => {
+    const selected = { ...node('defaulted'), configJson: {}, bindings: [] }
+    const wrapper = mount(InspectorPane, {
+      props: {
+        selected,
+        nodes: [selected],
+        getManifest: () => DEFAULTED,
+        rules: [],
+      },
+    })
+
+    await openBindingTab(wrapper)
+    const panel = wrapper.getComponent(BindingPanel)
+
+    expect(panel.props('rowCounts')).toEqual({ rows: 1 })
+    expect(wrapper.text()).toContain('点位 1')
+    wrapper.unmount()
+  })
+})
+
+/**
+ * ⚠ 同类模块的两个节点之间切换时，面板实例若被复用，控件里的本地草稿
+ * （JSON 文本、解析错误、数组展开行）会带到下一个节点上。
+ */
+describe('换节点时面板重建', () => {
+  const JSONY: ModuleManifest = {
+    ...PLAIN,
+    type: 'jsony',
+    configSchema: [{ key: 'raw', label: '原始配置', type: 'json' }],
+  }
+
+  it('上一个节点留下的坏 JSON 不带到下一个节点', async () => {
+    installConfigControls()
+    const first = {
+      ...node('jsony'),
+      id: 'a',
+      configJson: { raw: { a: 1 } },
+    }
+    const second = {
+      ...node('jsony'),
+      id: 'b',
+      configJson: { raw: { b: 2 } },
+    }
+    const wrapper = mount(InspectorPane, {
+      props: {
+        selected: first,
+        nodes: [first, second],
+        getManifest: () => JSONY,
+        rules: [],
+      },
+    })
+    const tab = wrapper
+      .findAll('button')
+      .find((item) => item.text().trim() === '专属')
+    await tab?.trigger('click')
+    await wrapper.get('textarea').setValue('{ 坏掉的')
+
+    await wrapper.setProps({ selected: second })
+
+    expect(wrapper.get('textarea').element.value).toContain('"b"')
+    expect(wrapper.text()).not.toContain('不是合法的 JSON')
     wrapper.unmount()
   })
 })
