@@ -126,7 +126,7 @@ describe('paintBase 的恒定几项', () => {
     expect(out.style['z-index']).toBe('30')
     expect(out.style['opacity']).toBe('0.4')
     expect(out.style['transform-origin']).toBe('50% 100%')
-    expect(out.style['pointer-events']).toBe('auto')
+    expect(out.style['pointer-events']).toBe('inherit')
   })
 
   it('悬浮卡的 pointerEvents:none 原样落进样式：不落它就 hover 自我抖动', () => {
