@@ -35,8 +35,10 @@ from realtime_hub.apps.channel.services.session import (
     TYPE_SYSTEM,
 )
 from realtime_hub.apps.channel.services.user_codes import AccountUnusable
+from sqlalchemy.exc import OperationalError
 
 from lib.auth import JwtCodec
+from lib.errors import DependencyUnavailable
 from lib.utils.timeutils import utcnow
 
 SECRET = "unit-test-secret-0123456789abcdef"
@@ -209,6 +211,52 @@ async def test_a_denied_subscribe_only_returns_an_error_frame() -> None:
     )
     assert sent[-1]["type"] == TYPE_ERROR
     assert await connections.subscribers("opcua:404") == ()
+
+
+class BrokenRegistry(FakeRegistry):
+    """判权那一步撞上库抖动的假主题表。"""
+
+    async def authorize(self, **_kwargs: object) -> str:
+        raise OperationalError("SELECT 1", {}, ConnectionError("pg gone"))
+
+
+async def test_a_db_blip_on_subscribe_is_an_error_frame_not_a_disconnect() -> (
+    None
+):
+    # ⚠ 一次订阅撞上库抖动不该把这条连接上的其它主题一起断掉（CONTEXT §6）
+    service, connections = _service(registry=BrokenRegistry())
+    connection, sent = await _open(service)
+
+    await service.dispatch(
+        connection, {"action": "subscribe", "topic": "opcua:1", "req_id": "c"}
+    )
+
+    assert (
+        sent[-1]["type"],
+        sent[-1]["code"],
+        sent[-1]["req_id"],
+        await connections.subscribers("opcua:1"),
+    ) == (TYPE_ERROR, DependencyUnavailable.code, "c", ())
+
+
+async def test_a_failed_journal_write_leaves_no_live_subscription() -> None:
+    # ⚠ 回了 error 帧却照样收数据，客户端与服务端对「订没订上」各说各话
+    service, connections = _service()
+    connection, sent = await _open(service)
+
+    async def broken_record(**_kwargs: object) -> None:
+        raise OperationalError("INSERT", {}, ConnectionError("pg gone"))
+
+    service._journal.record = broken_record  # type: ignore[method-assign]  # 测试注入
+
+    await service.dispatch(
+        connection, {"action": "subscribe", "topic": "opcua:1"}
+    )
+
+    assert (sent[-1]["type"], await connections.subscribers("opcua:1")) == (
+        TYPE_ERROR,
+        (),
+    )
 
 
 async def test_an_unknown_action_is_a_client_error_not_a_disconnect() -> None:

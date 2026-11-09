@@ -18,7 +18,7 @@ from typing import Any
 from anyio import CancelScope
 
 from lib.auth import JwtCodec, TokenError
-from lib.errors import AppError
+from lib.errors import AppError, DependencyUnavailable
 from lib.logging import get_logger
 from lib.utils.timeutils import utcnow
 from realtime_hub.apps.channel.errors import SubscriptionDenied
@@ -272,13 +272,22 @@ class SessionService:
         try:
             await self._apply(connection, action, topic, message)
         except AppError as error:
-            await connection.send(
-                {
-                    "type": TYPE_ERROR,
-                    "req_id": req_id,
-                    "code": error.code,
-                    "message": str(error),
-                }
+            await _send_error(connection, req_id, error.code, str(error))
+            return
+        except Exception as error:
+            # ⚠ 库抖动、外键竞态这类非领域异常也只回 error 帧：放它冒出去，
+            # 整条连接会以 1011 断掉，用户正在看的全部主题一起黑屏
+            _logger.warning(
+                "ws_action_failed",
+                "处理客户端动作时依赖失败，已回错误帧",
+                action=str(action),
+                error_type=type(error).__name__,
+            )
+            await _send_error(
+                connection,
+                req_id,
+                DependencyUnavailable.code,
+                "服务暂时不可用，请稍后重试",
             )
             return
         await connection.send(
@@ -332,12 +341,14 @@ class SessionService:
 
         Args: connection, topic, alias。
         """
-        await self._connections.bind(connection.id, topic, alias=alias)
+        # ⚠ 先记账后挂上：记账失败时调用方回的是 error 帧，挂在前面就会
+        # 一边说没订上、一边照样收数据
         await self._journal.record(
             connection_id=connection.id,
             user_id=connection.user_id,
             topic=topic,
         )
+        await self._connections.bind(connection.id, topic, alias=alias)
 
     async def _unsubscribe(self, connection: Connection, topic: str) -> None:
         """退订一个主题。匿名连接说的是别名，落到真主题上。
@@ -434,6 +445,18 @@ class SessionService:
                 revoked=revoked,
             )
         return revoked
+
+
+async def _send_error(
+    connection: Connection, req_id: object, code: int, message: str
+) -> None:
+    """回一帧 error。
+
+    Args: connection, req_id, code, message。
+    """
+    await connection.send(
+        {"type": TYPE_ERROR, "req_id": req_id, "code": code, "message": message}
+    )
 
 
 def needs_reauth(connection: Connection, *, now: datetime) -> bool:
