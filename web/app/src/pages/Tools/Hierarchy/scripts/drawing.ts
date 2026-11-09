@@ -8,6 +8,7 @@ import {
 } from './diagramLayout'
 import { metricsFor, preflight } from './drawingText'
 import { DomainError, ranks, validate } from './graph'
+import { required } from './required'
 import type { Drawing, GraphDocument, GraphNode } from './types'
 export { labelLines, units } from './drawingText'
 export const TEMPLATE = Object.freeze({
@@ -158,8 +159,6 @@ export function generate(original: unknown): Drawing {
     warnings,
   }
 }
-
-import { required } from './required'
 
 function checkCollisions(
   document: GraphDocument,

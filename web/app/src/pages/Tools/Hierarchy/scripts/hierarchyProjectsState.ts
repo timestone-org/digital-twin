@@ -20,7 +20,6 @@ export function createState(saving: ReturnType<typeof useHierarchySaving>) {
     projectRequest = useRacedFetch(),
     historyRequest = useRacedFetch()
   const confirm = useConfirm()
-  const alive = true
   const fail = (caught: unknown) => {
     error.value = caught instanceof Error ? caught.message : '读取失败'
   }
@@ -37,7 +36,8 @@ export function createState(saving: ReturnType<typeof useHierarchySaving>) {
     projectRequest,
     historyRequest,
     confirm,
-    alive,
+    /** 组件还挂着；卸载时由 Controller 改成 false。 */
+    alive: true,
     fail,
     saving,
   }

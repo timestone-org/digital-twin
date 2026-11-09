@@ -20,9 +20,7 @@ export function createState(editor: HierarchyEditor, canEdit: () => boolean) {
         (signature(editor.document.value) !== savedSignature.value &&
           editor.document.value !== null)),
   )
-  let timer: ReturnType<typeof setTimeout> | undefined
   const holder: { running: Promise<void> | null } = { running: null }
-  const disposed = false
   return {
     savedProject,
     projectId,
@@ -31,9 +29,11 @@ export function createState(editor: HierarchyEditor, canEdit: () => boolean) {
     saving,
     error,
     dirty,
-    timer,
+    /** 自动保存的延时句柄；由 Controller 改写。 */
+    timer: undefined as ReturnType<typeof setTimeout> | undefined,
     holder,
-    disposed,
+    /** 组件已卸载；由 Controller 改写。 */
+    disposed: false,
     editor,
     canEdit,
   }
