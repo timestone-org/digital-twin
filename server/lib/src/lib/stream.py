@@ -41,13 +41,27 @@ local touched = redis.call(
 return #touched
 """
 
-# XACK 不看 owner；同一 Lua 原子段先核对，避免旧消费者确认新 owner 的活
+# XACK 不看 owner；同一 Lua 原子段先核对，避免旧消费者确认新 owner 的活。
+# 给了 ARGV[4]='1' 时确认成功后顺手删掉条目
 _ACK_IF_OWNED_SCRIPT = """
 local pending = redis.call('XPENDING', KEYS[1], ARGV[1], ARGV[3], ARGV[3], 1)
 if #pending == 0 or pending[1][2] ~= ARGV[2] then
   return 0
 end
-return redis.call('XACK', KEYS[1], ARGV[1], ARGV[3])
+local acked = redis.call('XACK', KEYS[1], ARGV[1], ARGV[3])
+if acked == 1 and ARGV[4] == '1' then
+  redis.call('XDEL', KEYS[1], ARGV[3])
+end
+return acked
+"""
+
+# 确认并删除，同一 Lua 原子段：只确认不删的话条目永远留在流里
+_ACK_AND_DELETE_SCRIPT = """
+local acked = redis.call('XACK', KEYS[1], ARGV[1], ARGV[2])
+if acked == 1 then
+  redis.call('XDEL', KEYS[1], ARGV[2])
+end
+return acked
 """
 
 
@@ -95,9 +109,15 @@ class StreamLike(Protocol):
 
 
 class RedisStream:
-    """Redis Stream 客户端。驱动异常一律收敛成 `DependencyUnavailable`。"""
+    """Redis Stream 客户端。驱动异常一律收敛成 `DependencyUnavailable`。
 
-    def __init__(self, *, url: str, timeout_s: float = 1.0) -> None:
+    ⚠ `delete_on_ack` 只给**单消费组**的作业流开：确认即删，流才不会单调涨；
+    多个消费组共读一条流时，先确认的那组会把别组还没读的条目删掉。
+    """
+
+    def __init__(
+        self, *, url: str, timeout_s: float = 1.0, delete_on_ack: bool = False
+    ) -> None:
         # pyright: ignore 的理由 —— redis-py 的 from_url 形参标成 Unknown
         self._client: Redis = (
             Redis.from_url(  # pyright: ignore[reportUnknownMemberType]
@@ -109,6 +129,7 @@ class RedisStream:
         )
         # 每个消费身份各自续扫 XAUTOCLAIM；扫到 0-0 才从头开始。
         self._claim_cursors: dict[StreamGroup, str] = {}
+        self._delete_on_ack = delete_on_ack
 
     async def ping(self) -> bool:
         """连通性自检。不抛，供启动自检复用。"""
@@ -198,8 +219,19 @@ class RedisStream:
 
         Args: target, entry_id。
         """
+        if not self._delete_on_ack:
+            await self._run(
+                self._client.xack(target.stream, target.group, entry_id)
+            )
+            return
         await self._run(
-            self._client.xack(target.stream, target.group, entry_id)
+            self._client.eval(
+                _ACK_AND_DELETE_SCRIPT,
+                1,
+                target.stream,
+                target.group,
+                entry_id,
+            )
         )
 
     async def touch(self, target: StreamGroup, entry_id: str) -> bool:
@@ -224,6 +256,7 @@ class RedisStream:
 
         Args: target, entry_id。
         """
+        delete = ("1",) if self._delete_on_ack else ()
         acked = await self._run(
             self._client.eval(
                 _ACK_IF_OWNED_SCRIPT,
@@ -232,6 +265,7 @@ class RedisStream:
                 target.group,
                 target.consumer,
                 entry_id,
+                *delete,
             )
         )
         return bool(acked)
