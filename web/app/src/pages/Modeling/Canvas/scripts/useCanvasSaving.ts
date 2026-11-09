@@ -22,9 +22,13 @@ async function runSnapshot(deps: RunDeps): Promise<void> {
   if (!isCurrent()) return
   page.graph.markSaved(snapshot)
   page.stopChecking()
-  const isValid = await page.doc.validate(snapshot)
-  if (!isCurrent()) return
-  if (!isValid) {
+  const outcome = await page.doc.validate(snapshot)
+  if (!isCurrent() || outcome === 'failed') return
+  if (outcome === 'aborted') {
+    toast.info('校验期间图又改过了，请再点一次')
+    return
+  }
+  if (outcome === 'invalid') {
     toast.warning(
       page.issueViews.value[0]?.message ?? '流水线还有问题，先改好再运行',
     )

@@ -9,6 +9,7 @@ import type {
   ModelingPipeline,
   ModelingRun,
 } from '@dt/contracts'
+import * as ui from '@dt/ui'
 import { DtSelect, useConfirm } from '@dt/ui'
 import { flushPromises, mount } from '@vue/test-utils'
 import { createPinia, setActivePinia } from 'pinia'
@@ -1136,6 +1137,54 @@ describe('保存前的整图校验', () => {
     await flushPromises()
 
     expect(start).not.toHaveBeenCalled()
+  })
+})
+
+describe('运行前那次校验被边改边校验顶掉', () => {
+  it('不把被顶掉的校验说成「流水线还有问题」', async () => {
+    vi.useFakeTimers()
+    try {
+      stubApi()
+      const toast = {
+        info: vi.fn(),
+        success: vi.fn(),
+        warning: vi.fn(),
+        error: vi.fn(),
+        dismiss: vi.fn(),
+        clear: vi.fn(),
+        toasts: { value: [] },
+      }
+      vi.spyOn(ui, 'useToast').mockReturnValue(toast as never)
+      const valid = { is_valid: true, issues: [], known_columns: {} }
+      let finishRunCheck: ((value: typeof valid) => void) | undefined
+      let calls = 0
+      vi.spyOn(modeling, 'validateModelingGraph').mockImplementation(() => {
+        calls += 1
+        if (calls !== 2) return Promise.resolve(valid)
+        return new Promise((resolve) => {
+          finishRunCheck = resolve
+        })
+      })
+      signIn(WRITER)
+      const wrapper = open()
+      await vi.runOnlyPendingTimersAsync()
+
+      await wrapper
+        .findAll('button')
+        .find((b) => b.text() === '开始训练')
+        ?.trigger('click')
+      await vi.advanceTimersByTimeAsync(0)
+      await wrapper.find('.dt-ml-palette__item').trigger('click')
+      await vi.advanceTimersByTimeAsync(450)
+      finishRunCheck?.(valid)
+      await vi.advanceTimersByTimeAsync(0)
+
+      expect(toast.warning).not.toHaveBeenCalledWith(
+        '流水线还有问题，先改好再运行',
+      )
+    } finally {
+      vi.useRealTimers()
+    }
   })
 })
 

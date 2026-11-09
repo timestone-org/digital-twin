@@ -23,6 +23,12 @@ import { useRacedFetch } from '@/composables/useRacedFetch'
 
 import { createPipelineLoader } from './pipelineReads'
 
+/**
+ * 一次校验的结局。`failed` 已经弹过错；`aborted` = 被后一次校验顶掉，结论
+ * 属于那一次，这一次什么也说明不了。
+ */
+export type CheckOutcome = 'valid' | 'invalid' | 'failed' | 'aborted'
+
 /** 跑一次校验要碰的那几摊状态。 */
 interface CheckDeps {
   pipeline: ShallowRef<ModelingPipeline | null>
@@ -45,25 +51,26 @@ async function runCheck(
   deps: CheckDeps,
   graph: ModelingGraph,
   isQuiet: boolean,
-): Promise<boolean> {
+): Promise<CheckOutcome> {
   const current = deps.pipeline.value
-  if (current === null) return false
-  let isValid = false
+  if (current === null) return 'failed'
+  let outcome: CheckOutcome = 'aborted'
   await deps.raced.run(
     (signal) => modeling.validateModelingGraph(current.id, graph, signal),
     {
       ok: (check: ModelingGraphCheck) => {
         deps.issues.value = check.issues
         deps.knownColumns.value = check.known_columns
-        isValid = check.is_valid
+        outcome = check.is_valid ? 'valid' : 'invalid'
       },
       fail: (caught) => {
+        outcome = 'failed'
         if (!isQuiet) deps.toast.error(describeError(caught))
       },
       settled: () => undefined,
     },
   )
-  return isValid
+  return outcome
 }
 
 /** 存图。出错时弹一次并给 null。 */
@@ -155,6 +162,7 @@ export function usePipelineDoc() {
       toast,
       generation: () => generation,
     }),
+    /** 校验一张图；按「运行」那一路要看结局，边改边校验那一路只要副作用。 */
     validate: (graph: ModelingGraph, isQuiet = false) =>
       runCheck(
         { pipeline, issues, knownColumns, toast, raced: checking },

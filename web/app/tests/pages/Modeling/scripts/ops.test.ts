@@ -213,9 +213,13 @@ describe('画布上的文档', () => {
     const doc = host(() => usePipelineDoc())
     await doc.load('p1')
 
-    const ok = await doc.validate({ format_version: '1', nodes: [], edges: [] })
+    const outcome = await doc.validate({
+      format_version: '1',
+      nodes: [],
+      edges: [],
+    })
 
-    expect(ok).toBe(false)
+    expect(outcome).toBe('invalid')
     expect(doc.issues.value[0]?.message).toContain('没接线')
   })
 
@@ -230,7 +234,7 @@ describe('画布上的文档', () => {
 
     expect(
       await doc.validate({ format_version: '1', nodes: [], edges: [] }),
-    ).toBe(false)
+    ).toBe('failed')
   })
 })
 
