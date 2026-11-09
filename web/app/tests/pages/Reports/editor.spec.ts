@@ -265,6 +265,32 @@ describe('报告编辑器', () => {
     wrapper.unmount()
   })
 
+  it('⚠ 超过 Umo 上限的水印不推给 Umo，也不被它的半截回流清掉', async () => {
+    // 照 Umo 11.1.1 的 setWatermark：先把水印清成只剩透明度并触发回流，超 30 字再抛
+    umo.setWatermark.mockReset()
+    umo.setWatermark.mockImplementation((options: { text?: string }) => {
+      umo.emit?.('changed:pageWatermark', { pageWatermark: { alpha: 0.2 } })
+      if ((options.text ?? '').length > 30) throw new Error('too long')
+    })
+    const longText =
+      '本报告仅供内部审阅使用，未经许可不得外传或转载，违者追究相关责任'
+    const wrapper = mount(ReportEditor, {
+      props: { modelValue: blank, page: { orientation: 'portrait' } },
+    })
+    await flushPromises()
+    await wrapper.setProps({
+      page: { orientation: 'landscape', watermark: { text: longText } },
+    })
+    await flushPromises()
+    const pages = wrapper.emitted('update:page') ?? []
+    expect(pages.some(([page]) => record(page)['watermark'] === null)).toBe(
+      false,
+    )
+    expect(umo.setPage).toHaveBeenCalled()
+    umo.setWatermark.mockReset()
+    wrapper.unmount()
+  })
+
   it('Umo 自己工具栏改的页面设置回流时不再反推一遍', async () => {
     umo.setPage.mockClear()
     const wrapper = mount(ReportEditor, {

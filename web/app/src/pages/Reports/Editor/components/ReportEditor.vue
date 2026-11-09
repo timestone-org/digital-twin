@@ -83,6 +83,9 @@ const DEFAULT_WATERMARK = {
   type: 'compact',
 }
 const PAPER_INK_VARIABLE = '--fx-const-ink'
+// ⚠ Umo 的 setWatermark 先把水印清空再校验，超过这个字数就抛；清空那一下会回流成
+// 「删掉水印」。服务端放得更长，长水印只进 Word、不推给纸面
+const UMO_WATERMARK_MAX_LENGTH = 30
 
 function isRecord(value: unknown): value is Record<string, unknown> {
   return value !== null && typeof value === 'object' && !Array.isArray(value)
@@ -137,6 +140,7 @@ watch(
       orientation: page.orientation ?? 'portrait',
       margin: { ...DEFAULT_MARGIN_CM, ...page.margins_cm },
     })
+    if ((page.watermark?.text ?? '').length > UMO_WATERMARK_MAX_LENGTH) return
     editor.setWatermark(umoWatermark())
   },
 )
