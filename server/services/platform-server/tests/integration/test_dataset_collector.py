@@ -23,15 +23,21 @@ from integration.collector_helpers import (
     watermark_of,
 )
 from integration.dataset_helpers import (
+    HTTP_BAD_REQUEST,
+    HTTP_OK,
     ArchiveWriter,
     Sample,
+    code_of,
     create_column,
+    record_url,
     records_url,
 )
 from platform_server.apps.dataset.services import record_history
 from platform_server.apps.dataset.services.dirty import DatasetDirtyLog
 
 pytestmark = pytest.mark.requires_postgres
+
+RECORD_INVALID = 41213
 
 
 async def test_a_closed_bucket_becomes_one_row_with_its_sample_count(
@@ -388,3 +394,38 @@ async def test_a_formula_history_over_the_cap_still_commits_the_raw_rows(
     rows = await rows_of(app_context.client, table["id"])
     assert sorted(row["values"]["均温"] for row in rows) == [20.0, 21.0]
     assert await watermark_of(app_context, table["id"]) == CLOSED
+
+
+async def test_a_collected_row_refuses_to_move_away_from_its_bucket(
+    app_context: AppContext, archive: ArchiveWriter, dirty: DatasetDirtyLog
+) -> None:
+    # ⚠ 采集行的 row_id 由桶派生：挪走后下一拍会在原桶再插一行同 row_id 的行
+    table = await aggregate_table(app_context.client)
+    await create_column(
+        app_context.client,
+        table["id"],
+        key="均温",
+        name="均温",
+        source="point",
+        node_key=archive.node_key(POINT),
+        agg="avg",
+    )
+    await archive.write(
+        POINT, [Sample(ts=CLOSED + timedelta(minutes=5), value_num=21.0)]
+    )
+    await run_pass(app_context, (dirty, archive), table_id=table["id"])
+    row = (await rows_of(app_context.client, table["id"]))[0]
+    url = record_url(table["id"], row["row_id"], row["ts"])
+    moved = (CLOSED + timedelta(minutes=10)).isoformat()
+
+    response = await app_context.client.patch(
+        url, json={"ts": moved, "values": {}}
+    )
+
+    assert response.status_code == HTTP_BAD_REQUEST
+    assert code_of(response) == RECORD_INVALID
+    assert [item["field"] for item in response.json()["details"]] == ["ts"]
+    kept = await app_context.client.patch(
+        url, json={"ts": row["ts"], "values": {}}
+    )
+    assert kept.status_code == HTTP_OK
