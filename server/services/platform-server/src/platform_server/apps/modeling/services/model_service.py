@@ -55,6 +55,9 @@ from platform_server.apps.modeling.services.artifact_store import (
     ArtifactRejected,
 )
 from platform_server.apps.modeling.services.entry_contract import NodeRecord
+from platform_server.apps.modeling.services.graph_walk import (
+    source_table_codes,
+)
 from platform_server.apps.modeling.services.jsonshape import (
     as_dict,
     as_text,
@@ -527,14 +530,8 @@ def _metrics_of(
 
 
 def _table_codes_of(run: Any) -> list[str]:
-    graph = graph_of_run(run)
-    return sorted(
-        {
-            str(node.config.get("table_code"))
-            for node in graph.nodes
-            if node.config.get("table_code")
-        }
-    )
+    """这次运行用到的台账，与流水线的来源台账同一份口径。Args: run。"""
+    return list(source_table_codes(graph_of_run(run)))
 
 
 def to_version_summary(row: ModelVersion) -> ModelVersionSummaryOut:
