@@ -260,7 +260,7 @@ describe('复制、剪切与粘贴', () => {
   })
 })
 
-describe('Esc 与工具', () => {
+describe('Esc', () => {
   it('Esc 清掉画布那条选中', () => {
     const rig = rigOf()
     rig.selection.select('nodes', 'n1')
@@ -268,15 +268,6 @@ describe('Esc 与工具', () => {
     rig.commands.handlers.escape()
 
     expect(rig.selection.pick.value).toBeNull()
-  })
-
-  it('数字键切工具', () => {
-    const rig = rigOf()
-    expect(rig.commands.tool.value).toBe('select')
-
-    rig.commands.handlers.selectTool('link')
-
-    expect(rig.commands.tool.value).toBe('link')
   })
 })
 

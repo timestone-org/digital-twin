@@ -16,18 +16,13 @@ import type { ShallowRef } from 'vue'
 
 import { updateNode } from '@/pages/Twin2dEditor/scripts/nodeOps'
 import {
-  TWIN_2D_TOOLS,
   isTwin2dFormFocused,
   twin2dNudgeOf,
   twin2dNudgeStep,
   twin2dShortcutOf,
-  twin2dToolOf,
   useTwin2dShortcuts,
 } from '@/pages/Twin2dEditor/scripts/shortcuts'
-import type {
-  Twin2dShortcutHandlers,
-  Twin2dTool,
-} from '@/pages/Twin2dEditor/scripts/shortcuts'
+import type { Twin2dShortcutHandlers } from '@/pages/Twin2dEditor/scripts/shortcuts'
 
 /** 一个 20 格栅格、一个节点的最小文档。 */
 function makeConfig(): Twin2dConfig {
@@ -68,7 +63,6 @@ function focusInside(role: string): HTMLElement {
 /** 装上快捷键的那个壳记下了什么。 */
 interface Recorder {
   actions: string[]
-  tools: Twin2dTool[]
   config: ShallowRef<Twin2dConfig>
 }
 
@@ -96,9 +90,6 @@ function handlersOf(rec: Recorder): Twin2dShortcutHandlers {
         y: node.y + at.y,
       })
     },
-    selectTool: (tool) => {
-      rec.tools.push(tool)
-    },
   }
 }
 
@@ -112,7 +103,6 @@ const mounted: { unmount: () => void }[] = []
 function mountShortcuts(suspended?: () => boolean) {
   const rec: Recorder = {
     actions: [],
-    tools: [],
     config: shallowRef(makeConfig()),
   }
   const wrapper = mount(
@@ -251,19 +241,11 @@ describe('按键判定', () => {
     expect(twin2dShortcutOf(keyEvent('Escape'), true)).toBeNull()
   })
 
-  it('数字键切工具，超出工具数的那些不切', () => {
-    expect(twin2dShortcutOf(keyEvent('1'), false)).toBe('selectTool')
-    expect(twin2dToolOf('1')).toBe(TWIN_2D_TOOLS[0])
-    expect(twin2dToolOf(String(TWIN_2D_TOOLS.length))).toBe(
-      TWIN_2D_TOOLS[TWIN_2D_TOOLS.length - 1],
-    )
-    expect(twin2dToolOf(String(TWIN_2D_TOOLS.length + 1))).toBeNull()
-    expect(twin2dToolOf('0')).toBeNull()
-    expect(twin2dToolOf('ArrowUp')).toBeNull()
-  })
-
-  it('带修饰键的数字键不切工具', () => {
-    expect(twin2dShortcutOf(keyEvent('1', { metaKey: true }), false)).toBeNull()
+  // ⚠ 没有消费者的键位不许占着：判成动作就会被 `preventDefault`，按了没反应还吞掉按键
+  it('数字键不触发任何动作', () => {
+    for (const key of ['1', '3', '6']) {
+      expect(twin2dShortcutOf(keyEvent(key), false)).toBeNull()
+    }
   })
 
   it('认不出的键不触发任何动作', () => {
@@ -348,12 +330,14 @@ describe('装上之后的实际行为', () => {
     expect(nodeAt(rec)).toEqual({ x: 100, y: 101 })
   })
 
-  it('数字键把工具切过去', () => {
+  it('数字键不被吞掉', () => {
     const { rec } = mountShortcuts()
+    const event = keyEvent('3')
 
-    window.dispatchEvent(keyEvent('3'))
+    window.dispatchEvent(event)
 
-    expect(rec.tools).toEqual([TWIN_2D_TOOLS[2]])
+    expect(event.defaultPrevented).toBe(false)
+    expect(rec.actions).toEqual([])
   })
 
   it('复制粘贴各触发一次', () => {

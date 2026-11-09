@@ -1,6 +1,6 @@
 /**
- * @fileoverview 键盘手势的十二个落点：撤销重做、复制剪切粘贴再制、删除、全选、
- * Esc、方向键微调与数字键切工具，各自落到文档态与选中态上。
+ * @fileoverview 键盘手势的落点：撤销重做、复制剪切粘贴再制、删除、全选、
+ * Esc 与方向键微调，各自落到文档态与选中态上。
  * 判定归 `shortcuts.ts`，这里只回答「按下去做什么」。
  *
  * ⚠ 一切改动都走调用方给的 `commit`（= 文档态那个唯一入口）：绕开它写的那一笔不会
@@ -16,8 +16,6 @@
  * 进图元树，认错了只会往文档里塞一堆归一化随后丢掉的东西，而界面上一声不吭。
  */
 import type { Pt, Twin2dConfig, Twin2dNodeStyle } from '@dt/twin2d'
-import { ref } from 'vue'
-import type { Ref } from 'vue'
 
 import {
   createTwin2dClipboard,
@@ -38,7 +36,7 @@ import { duplicateMarks, moveMarks, removeMarks } from './markOps'
 import { duplicateNodes, moveNodes, removeNodes } from './nodeOps'
 import type { Twin2dCopied } from './nodeOps'
 import { findTwin2dPrim, removePrim, twin2dPrimIds } from './primOps'
-import type { Twin2dShortcutHandlers, Twin2dTool } from './shortcuts'
+import type { Twin2dShortcutHandlers } from './shortcuts'
 import { twin2dNodeStyleOf, writeNodeStyle } from './styleOps'
 
 /** 手势落点要的那几样。 */
@@ -58,11 +56,9 @@ export interface Twin2dCommandDeps {
   pickPrim: (primId: string) => void
 }
 
-/** 装好的手势落点，加当前工具。 */
+/** 装好的手势落点。 */
 export interface Twin2dCommands {
   handlers: Twin2dShortcutHandlers
-  /** 数字键切出来的当前工具。 */
-  tool: Ref<Twin2dTool>
 }
 
 /** 一次动作的现场：配置、当下这一类与它选中的那一批。 */
@@ -309,14 +305,12 @@ function nudgeCmd(ctx: Ctx, at: Pt): void {
 }
 
 /**
- * 装上十二个手势落点。
+ * 装上全部手势落点。
  * @param deps 文档态、选中轴与页面动作
  */
 export function createTwin2dCommands(deps: Twin2dCommandDeps): Twin2dCommands {
-  const tool = ref<Twin2dTool>('select')
   const ctx: Ctx = { deps, clipboard: createTwin2dClipboard() }
   return {
-    tool,
     handlers: {
       save: deps.save,
       undo: deps.undo,
@@ -329,9 +323,6 @@ export function createTwin2dCommands(deps: Twin2dCommandDeps): Twin2dCommands {
       selectAll: () => selectAllCmd(ctx),
       escape: () => deps.selection.clear(),
       nudge: (at) => nudgeCmd(ctx, at),
-      selectTool: (next) => {
-        tool.value = next
-      },
     },
   }
 }
