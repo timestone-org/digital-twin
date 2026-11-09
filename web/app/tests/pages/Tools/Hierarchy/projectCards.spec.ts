@@ -1,7 +1,6 @@
 /** @fileoverview 项目卡片整卡激活、选中反馈与加载期间禁用。 */
 import { mount } from '@vue/test-utils'
 import { afterEach, expect, it, vi } from 'vitest'
-import { DtDataView } from '@dt/ui'
 import * as api from '@/api/hierarchy'
 import Projects from '../../../../src/pages/Tools/Hierarchy/components/HierarchyProjects.vue'
 import { useHierarchyDocument } from '../../../../src/pages/Tools/Hierarchy/scripts/useHierarchyDocument'
@@ -77,7 +76,8 @@ it('查询项目在途时列表显示加载态，卡片不被禁用', async () =
   vi.spyOn(api, 'listProjects').mockReturnValue(new Promise(() => undefined))
   void parent.state.search()
   await wrapper.vm.$nextTick()
-  expect(wrapper.findComponent(DtDataView).props('loading')).toBe(true)
+  const view = wrapper.findAllComponents({ name: 'DtDataView' })[0]
+  expect(view?.props('loading')).toBe(true)
   expect(
     wrapper.get('.dt-data-view__grid > button').attributes('disabled'),
   ).toBeUndefined()
