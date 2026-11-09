@@ -190,7 +190,8 @@ async def retrain_ac_model(
     Args: model_id, session, timezone, dispatcher, gate。
     """
     out = await gate.run_once(
-        endpoint="hvac_ac_model_retrain",
+        # ⚠ 端点名带上路径 id：同一个键换个对象重用时，不能回放别人的结果
+        endpoint=f"hvac_ac_model_retrain.{model_id}",
         model=AcModelOut,
         action=lambda: _retrain(
             session, model_id, timezone=timezone, dispatcher=dispatcher

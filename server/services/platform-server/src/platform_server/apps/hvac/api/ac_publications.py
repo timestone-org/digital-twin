@@ -136,7 +136,7 @@ async def publish_now(
     Args: model_id, sessions, reader, nodes, gate。
     """
     out = await gate.run_once(
-        endpoint="hvac_ac_model_publish",
+        endpoint=f"hvac_ac_model_publish.{model_id}",
         model=PublishOut,
         action=lambda: _publish(sessions, reader, nodes, model_id=model_id),
     )

@@ -132,7 +132,8 @@ async def rebuild_startup_batches(
     Args: room_id, payload, session, reader, dispatcher, gate。
     """
     out = await gate.run_once(
-        endpoint="hvac_startup_rebuild",
+        # ⚠ 端点名带上路径 id：同一个键换个对象重用时，不能回放别人的结果
+        endpoint=f"hvac_startup_rebuild.{room_id}",
         model=StartupRebuildOut,
         action=lambda: _rebuild(session, reader, dispatcher, room_id, payload),
     )

@@ -74,3 +74,29 @@ async def test_a_retried_rebuild_returns_the_first_batch(
     assert first.status_code == ACCEPTED, first.text
     assert second.status_code == ACCEPTED, second.text
     assert second.json()["data"]["batch_id"] == first.json()["data"]["batch_id"]
+
+
+async def test_a_key_reused_on_another_model_is_not_replayed(
+    app_client: httpx.AsyncClient, db_session: AsyncSession, sign: SignHeaders
+) -> None:
+    """⚠ 幂等键按路径上的模型分开：同一个键换一个模型，回放的是别人的结果。"""
+    seeded = await seed_room(db_session)
+    manage = sign([AC_MANAGE])
+    first_id = (await create_model(app_client, manage, seeded))["id"]
+    second_id = (await create_model(app_client, manage, seeded, name="晚班"))[
+        "id"
+    ]
+    for model_id in (first_id, second_id):
+        await _mark_trained(
+            db_session, uuid.UUID(model_id), running_set=[seeded.serials[0]]
+        )
+    headers = {**manage, "Idempotency-Key": "retrain-shared"}
+    first = await app_client.post(
+        f"{PREFIX}/ac-models/{first_id}:retrain", headers=headers
+    )
+    second = await app_client.post(
+        f"{PREFIX}/ac-models/{second_id}:retrain", headers=headers
+    )
+    assert first.status_code == ACCEPTED, first.text
+    assert second.status_code == ACCEPTED, second.text
+    assert second.json()["data"]["id"] == second_id
