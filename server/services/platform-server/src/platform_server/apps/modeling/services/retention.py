@@ -85,9 +85,8 @@ async def sweep_expired(
     """
     before = datetime.now(UTC) - timedelta(days=options.retention_days)
     async with sessions.session() as session:
-        published = await model_version_crud.published_run_ids(session, None)
         expired = await run_crud.expired_ids(
-            session, before=before, exclude=published, limit=SWEEP_MAX_RUNS
+            session, before=before, limit=SWEEP_MAX_RUNS
         )
         removed = await run_crud.delete_by_ids(session, expired)
     await _drop_artifacts(store, expired)

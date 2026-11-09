@@ -31,6 +31,7 @@ from platform_server.apps.modeling.services.retention import (
     RetentionOptions,
     converge_pipeline,
     reap_stale,
+    sweep_expired,
 )
 from platform_server.apps.modeling.services.run_dispatch import (
     INTERRUPTED_REASON,
@@ -272,3 +273,42 @@ def _options(*, keep: int, days: int) -> RetentionOptions:
         stale_minutes=STALE_MINUTES,
         interval_s=1.0,
     )
+
+
+async def test_the_sweep_keeps_an_old_run_that_is_still_active(
+    app_client: httpx.AsyncClient, worker_sessions: MakerSessions
+) -> None:
+    """过了保留期却还在途（等着派发）的运行不删：删了它，那条消息就悬空了。"""
+    created = await create_pipeline(
+        app_client, "sweepactive", linear_graph("any")
+    )
+    run = await _start(app_client, created["id"])
+    async with worker_sessions.session() as session:
+        row = await run_crud.get(session, uuid.UUID(run["id"]))
+        assert row is not None
+        row.created_at = row.created_at.replace(year=2000)
+    removed = await sweep_expired(
+        worker_sessions, options=_options(keep=20, days=90), store=None
+    )
+    assert removed == 0
+    async with worker_sessions.session() as session:
+        assert await run_crud.get(session, uuid.UUID(run["id"])) is not None
+
+
+async def test_the_sweep_drops_an_old_finished_unpublished_run(
+    app_client: httpx.AsyncClient, worker_sessions: MakerSessions
+) -> None:
+    """过了保留期、没发布过的终态运行照删。"""
+    created = await create_pipeline(
+        app_client, "sweepdone", linear_graph("any")
+    )
+    run = await _start(app_client, created["id"])
+    async with worker_sessions.session() as session:
+        row = await run_crud.get(session, uuid.UUID(run["id"]))
+        assert row is not None
+        row.status = "failed"
+        row.created_at = row.created_at.replace(year=2000)
+    removed = await sweep_expired(
+        worker_sessions, options=_options(keep=20, days=90), store=None
+    )
+    assert removed == 1

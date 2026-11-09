@@ -9,7 +9,12 @@ from sqlalchemy.ext.asyncio import AsyncSession
 
 from lib.db import CrudBase
 from platform_server.apps.modeling.errors import RunAlreadyActive
-from platform_server.apps.modeling.models import ModelingNodeRun, ModelingRun
+from platform_server.apps.modeling.models import (
+    ModelingModelVersion,
+    ModelingNodeRun,
+    ModelingRuleVersion,
+    ModelingRun,
+)
 from platform_server.apps.modeling.protocols import ACTIVE_RUN_STATUSES
 
 # 运行列表按发起时间倒序，同刻按 id 定序
@@ -189,18 +194,20 @@ class RunCrud(CrudBase[ModelingRun]):
         session: AsyncSession,
         *,
         before: datetime,
-        exclude: frozenset[uuid.UUID],
         limit: int,
     ) -> list[uuid.UUID]:
-        """过了保留期的运行 id。已发布过的一律跳过。
+        """过了保留期的运行 id。已发布过的与仍在途的一律跳过。
 
-        Args: session, before, exclude, limit。
+        ⚠ 已发布与否在库里判（反连接），不把全部已发布 id 拉回进程再绑成
+        `NOT IN`：那份清单随版本数无界增长，绑定参数个数也跟着涨。
+        Args: session, before, limit。
         """
         statement = select(ModelingRun.id).where(
-            ModelingRun.created_at < before
+            ModelingRun.created_at < before,
+            ModelingRun.status.not_in(ACTIVE_RUN_STATUSES),
+            ~exists().where(ModelingModelVersion.run_id == ModelingRun.id),
+            ~exists().where(ModelingRuleVersion.run_id == ModelingRun.id),
         )
-        if exclude:
-            statement = statement.where(ModelingRun.id.not_in(exclude))
         rows = await session.execute(
             statement.order_by(ModelingRun.created_at.asc()).limit(limit)
         )
