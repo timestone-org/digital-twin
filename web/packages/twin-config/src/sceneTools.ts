@@ -190,7 +190,7 @@ function rankOf(text: string, query: string): number {
  * 搜部件名 / 模型节点名。
  *
  * 排序：前缀命中优先于子串命中，同档按「名字更短的更相关」（搜 `pump` 时 `Pump`
- * 该排在 `Pump_Assembly_Housing_01` 前面），最后按字典序保证结果稳定。
+ * 该排在 `Pump_Assembly_Housing_01` 前面），最后按码点序保证结果稳定。
  *
  * ⚠ 截断时 `total` 仍是命中总数：调用方要如实告知「还有多少条没显示」，
  * 静默砍掉会让用户以为搜到的就这些。
@@ -219,11 +219,12 @@ export function searchSceneEntities(
       hits.push({ kind: 'node', id: name, label: name, nodes: [name], rank })
   }
 
+  // ⚠ 末位按码点比，不用 localeCompare：CI 是中文 locale、开发机是英文，次序会不同
   hits.sort(
     (a, b) =>
       a.rank - b.rank ||
       a.label.length - b.label.length ||
-      a.label.localeCompare(b.label),
+      (a.label < b.label ? -1 : a.label > b.label ? 1 : 0),
   )
   return { hits: hits.slice(0, limit), total: hits.length }
 }

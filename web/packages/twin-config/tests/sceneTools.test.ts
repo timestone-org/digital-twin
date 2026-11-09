@@ -241,6 +241,16 @@ describe('场景内搜索', () => {
     expect(hits[0]?.label).toBe('Pump')
   })
 
+  // ⚠ 不钉 locale 的 localeCompare 在中文 locale 的 CI 与英文 locale 的开发机上次序不同
+  it('同档同长时按码点排，与机器的 locale 无关', () => {
+    const { hits } = searchSceneEntities('x', {
+      parts: [],
+      namedNodes: ['ax', 'Bx', '甲x'],
+    })
+
+    expect(hits.map((hit) => hit.label)).toEqual(['Bx', 'ax', '甲x'])
+  })
+
   // 搜 pump 时 Pump 该排在 Pump_Assembly_Housing 前面
   it('同档里名字更短的更相关', () => {
     const { hits } = searchSceneEntities('pump', source)
