@@ -12,7 +12,7 @@
  * 界面一直停在「等首帧」，而首帧永远不会来。
  */
 
-import { onUnmounted, shallowRef, watch, type Ref } from 'vue'
+import { onUnmounted, shallowRef, triggerRef, watch, type Ref } from 'vue'
 import type { PointSample, Unsubscribe } from '@dt/contracts'
 import { getProvider, hasProvider } from '@dt/datasources'
 
@@ -43,19 +43,19 @@ export function usePointSamples(
   keys: () => readonly string[],
   scope: () => string,
 ): PointSamples {
-  const samples = shallowRef(new Map<string, PointSample>())
+  const store = new Map<string, PointSample>()
+  const samples = shallowRef(store)
   const sampleCount = shallowRef(0)
   let stop: Unsubscribe | null = null
   // ⚠ 初值取不到的哨兵用 null 而不是空串：空串是「还没打开任何一张屏」这个真值
   let subscribedScope: string | null = null
 
   function record(nodeKey: string, sample: PointSample): void {
-    // ⚠ 换一份 Map 而不是就地 set：shallowRef 只认引用变化，
-    // 就地改的话画面上的值永远停在第一帧
-    const next = new Map(samples.value)
-    next.set(nodeKey, sample)
-    samples.value = next
-    sampleCount.value = next.size
+    // ⚠ 就地 set 之后必须 triggerRef：shallowRef 只认引用变化，不触发的话画面上的值
+    // 永远停在第一帧；也不能每点复制一份表，一帧几百个点就是几百次整表拷贝
+    store.set(nodeKey, sample)
+    sampleCount.value = store.size
+    triggerRef(samples)
   }
 
   /**
@@ -63,8 +63,9 @@ export function usePointSamples(
    * 跟着清会让整屏的值闪一下。换屏时不清则相反——上一屏的读数会冒充新屏的首帧。
    */
   function forgetSamples(): void {
-    samples.value = new Map()
+    store.clear()
     sampleCount.value = 0
+    triggerRef(samples)
   }
 
   function resubscribe(nextScope: string, wanted: readonly string[]): void {

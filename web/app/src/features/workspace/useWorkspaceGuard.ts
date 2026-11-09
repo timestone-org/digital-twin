@@ -27,6 +27,7 @@ export function useWorkspaceGuard(
     onBeforeUnmount(workspace.registerGuard(page.key, guard))
   }
   function leave(to: RouteLocationNormalized): boolean | Promise<boolean> {
+    if (page !== null && workspace?.isClosing(page.key) === true) return true
     if (page?.cached === true && workspace?.canRetain(to) === true) return true
     return guard()
   }

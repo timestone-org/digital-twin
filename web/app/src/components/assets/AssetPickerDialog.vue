@@ -1,22 +1,27 @@
 <script setup lang="ts">
 /**
- * @fileoverview 素材挑选弹窗：按类型浏览、上传、删除，选中回一个 `asset:` 引用。
+ * @fileoverview 素材挑选弹窗：按类型浏览、搜索、翻页，持 asset:manage 时可上传与删除；
+ * 选中回一个 `asset:` 引用。
  * ⚠ 回的是引用不是 URL：URL 在下一次部署就可能 404，而存进大屏配置之后没有
  * 任何一处会报错——表现只是那张屏上的模型不见了。
  */
 import type { AssetKind } from '@dt/contracts'
+import { PERMISSION_CODES } from '@dt/contracts'
 import {
   DtButton,
   DtEmpty,
   DtFilePicker,
+  DtInput,
   DtModal,
   DtNotice,
   DtSpinner,
   useConfirm,
 } from '@dt/ui'
-import { computed, ref, watch } from 'vue'
+import { getActivePinia } from 'pinia'
+import { computed, onUnmounted, ref, watch } from 'vue'
 
 import type { Asset } from '@/api/assets'
+import { useAuthStore } from '@/stores/auth'
 import { useAssetLibrary } from '@/features/assets/useAssetLibrary'
 import { formatSize } from '@/utils/filesize'
 
@@ -32,9 +37,37 @@ const emit = defineEmits<{
   pick: [ref: string, asset: Asset]
 }>()
 
+/** 敲字停下多久才搜。 */
+const SEARCH_DEBOUNCE_MS = 300
+
 const confirm = useConfirm()
 const library = useAssetLibrary()
 const selectedId = ref('')
+const draftKeyword = ref('')
+// 没有 pinia（嵌在只测挑选的宿主里）时按无权处理：只藏写入口，不影响挑选
+const canManage = computed(
+  () =>
+    getActivePinia() !== undefined &&
+    useAuthStore().can([PERMISSION_CODES.assetManage]),
+)
+let debounce: ReturnType<typeof setTimeout> | null = null
+
+function stopDebounce(): void {
+  if (debounce !== null) clearTimeout(debounce)
+  debounce = null
+}
+
+// ⚠ 只列第一页的话，超过 50 条时最旧的那几条在这里永远挑不到
+function typeKeyword(text: string): void {
+  draftKeyword.value = text
+  stopDebounce()
+  debounce = setTimeout(() => {
+    debounce = null
+    void library.search(text)
+  }, SEARCH_DEBOUNCE_MS)
+}
+
+onUnmounted(stopDebounce)
 const dialogTitle = computed(() => props.title ?? '选择素材')
 
 const accept = computed(() => library.spec.value?.contentTypes.join(',') ?? '')
@@ -93,6 +126,10 @@ watch(
   ([open, kind]) => {
     if (!open) return
     selectedId.value = ''
+    draftKeyword.value = ''
+    stopDebounce()
+    // ⚠ 关键词跟着搜索框一起清：只清框的话，上一次的词还在库里筛着列表
+    library.keyword.value = ''
     void library.reload(kind)
   },
   { immediate: true },
@@ -109,7 +146,17 @@ watch(
   >
     <div class="dt-assets">
       <div class="dt-assets__bar">
+        <DtInput
+          :model-value="draftKeyword"
+          type="search"
+          size="sm"
+          class="flex-1"
+          placeholder="按名字搜索"
+          aria-label="按名字搜索素材"
+          @update:model-value="typeKeyword"
+        />
         <DtFilePicker
+          v-if="canManage"
           :accept="accept"
           :disabled="library.isUploading.value"
           label="上传素材"
@@ -130,6 +177,14 @@ watch(
         <DtSpinner />
       </div>
       <DtEmpty
+        v-else-if="
+          library.assets.value.length === 0 && library.keyword.value !== ''
+        "
+        icon="search"
+        title="没搜着"
+        hint="换个关键词试试"
+      />
+      <DtEmpty
         v-else-if="library.assets.value.length === 0"
         icon="image"
         title="还没有素材"
@@ -144,12 +199,15 @@ watch(
             :aria-current="asset.id === selectedId ? 'true' : undefined"
             @click="selectedId = asset.id"
           >
-            <span class="dt-assets__name">{{ asset.name }}</span>
+            <span class="dt-assets__name" :title="asset.name">{{
+              asset.name
+            }}</span>
             <span class="dt-assets__meta">{{
               formatSize(asset.sizeBytes)
             }}</span>
           </button>
           <DtButton
+            v-if="canManage"
             size="sm"
             variant="ghost"
             intent="danger"
@@ -159,6 +217,16 @@ watch(
           />
         </li>
       </ul>
+      <div v-if="library.hasMore.value" class="dt-assets__more">
+        <DtButton
+          size="sm"
+          variant="ghost"
+          :disabled="library.isLoading.value"
+          @click="library.loadMore()"
+        >
+          加载更多
+        </DtButton>
+      </div>
     </div>
 
     <template #footer>
@@ -186,6 +254,11 @@ watch(
   &__hint {
     color: var(--text-secondary);
     font-size: var(--ctl-hint-fs-md);
+  }
+
+  &__more {
+    display: flex;
+    justify-content: center;
   }
 
   &__center {

@@ -259,13 +259,12 @@ async function copyLink(): Promise<void> {
       <template v-else>
         <DtButton
           variant="ghost"
-          size="sm"
           :disabled="busy"
           @click="emit('update:open', false)"
         >
           取消
         </DtButton>
-        <DtButton size="sm" icon="share" :loading="busy" @click="publish">
+        <DtButton icon="share" :loading="busy" @click="publish">
           发布并生成链接
         </DtButton>
       </template>

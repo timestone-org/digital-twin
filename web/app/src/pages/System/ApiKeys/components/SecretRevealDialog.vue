@@ -41,6 +41,7 @@ async function copy(text: string, what: string): Promise<void> {
   <DtModal
     :model-value="issued !== null"
     title="密钥只显示这一次"
+    :close-on-backdrop="false"
     @update:model-value="emit('close')"
   >
     <DtNotice intent="warning" icon="alert-triangle">

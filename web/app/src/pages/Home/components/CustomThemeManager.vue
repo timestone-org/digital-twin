@@ -4,7 +4,8 @@
  * 一组主题整体存在项目行的 JSONB 数组里，读改写必须由持有事务的那一层做。
  *
  * ⚠ 删掉一套主题不联动改屏：引用它的大屏 resolve 时回退到项目默认或内置主题，
- * 所以删除前要说清「这几张屏会换回默认配色」，而不是问「确定删除吗」。
+ * 所以删除前要说清「这几张屏会换回默认配色」，而不是问「确定删除吗」——
+ * 由落库的上层去问。增改随事件带回执，**落库成功才收起表单**，失败保留草稿。
  */
 import { computed, ref } from 'vue'
 import { DtButton, DtColorInput, DtInput, DtSelect, DtIconButton } from '@dt/ui'
@@ -14,6 +15,7 @@ import type {
   ProjectThemeCreateInput,
   ProjectThemePatchInput,
 } from '@/api/projectThemes'
+import type { ThemeWriteDone } from '../scripts/useProjectThemes'
 import {
   MODE_OPTIONS,
   THEME_COLOR_FIELDS,
@@ -31,8 +33,8 @@ const props = withDefaults(
 )
 
 const emit = defineEmits<{
-  create: [input: ProjectThemeCreateInput]
-  update: [themeId: string, patch: ProjectThemePatchInput]
+  create: [input: ProjectThemeCreateInput, done: ThemeWriteDone]
+  update: [themeId: string, patch: ProjectThemePatchInput, done: ThemeWriteDone]
   delete: [theme: ProjectThemePayload]
 }>()
 
@@ -68,9 +70,11 @@ function submit(): void {
   if (name === '' || editing === null) return
   const mode = draftMode.value === 'light' ? 'light' : 'dark'
   const tokens = buildTokens(draftColors.value)
-  if (editing === '') emit('create', { name, mode, tokens })
-  else emit('update', editing, { name, mode, tokens })
-  editingId.value = null
+  const done: ThemeWriteDone = (ok) => {
+    if (ok && editingId.value === editing) editingId.value = null
+  }
+  if (editing === '') emit('create', { name, mode, tokens }, done)
+  else emit('update', editing, { name, mode, tokens }, done)
 }
 </script>
 

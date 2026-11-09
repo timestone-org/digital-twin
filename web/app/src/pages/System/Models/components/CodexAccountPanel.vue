@@ -6,7 +6,7 @@
  * 第二路点登录时改的是第一路。
  *
  * ⚠ 这一份凭据是**整套部署共用的**：换掉它等于替所有人换了说话的账号，
- * 所以它要 `assistant:manage`，与目录那边的 `llm:manage` 是两个码。
+ * 写操作要 `llm:manage`（ADR-0041）。
  * ⚠ 面板上不出现任何令牌。后端也不回——账号只以掩码露面。
  */
 import { onMounted } from 'vue'
@@ -24,7 +24,10 @@ const props = defineProps<{
 const emit = defineEmits<{ changed: [] }>()
 
 const confirm = useConfirm()
-const login = useCodexLogin(() => props.providerRef)
+const login = useCodexLogin(
+  () => props.providerRef,
+  () => emit('changed'),
+)
 
 async function signOut(): Promise<void> {
   const ok = await confirm.ask({
@@ -73,7 +76,6 @@ onMounted(() => void login.refresh())
       v-if="login.pending.value"
       :pending="login.pending.value"
       @cancel="login.cancel"
-      @done="emit('changed')"
     />
 
     <div class="flex gap-2">

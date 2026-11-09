@@ -211,8 +211,7 @@ async function onSubmit(): Promise<void> {
     gap: 20px;
   }
 
-  // 入场交错：延时挂在类上，模板里不写内联样式
-  // 入场依次错开：只差延时的四个类合成一个，序号由 --i 给
+  // 入场依次错开：各字段在模板里给序号 --i，延时按它算
   &__field {
     animation-delay: calc(var(--i) * 60ms);
   }

@@ -108,9 +108,15 @@ export async function listAssetKinds(): Promise<AssetKindSpec[]> {
 }
 
 /** 取一个素材。 */
-export async function getAsset(assetId: string): Promise<Asset> {
+export async function getAsset(
+  assetId: string,
+  signal?: AbortSignal,
+): Promise<Asset> {
   return toAsset(
-    await requestData<unknown>(`${ASSETS_PATH}/${assetId}`, onPlatform()),
+    await requestData<unknown>(
+      `${ASSETS_PATH}/${assetId}`,
+      onPlatform(signal === undefined ? {} : { signal }),
+    ),
   )
 }
 
@@ -173,6 +179,24 @@ export function putAssetBytes(
   return postUploadForm(ticket.url, ticket.fields, file, options)
 }
 
+/** 素材显示名的上限（字符数），与服务端 `AssetName` 一致。 */
+export const ASSET_NAME_MAX_LEN = 128
+
+/**
+ * 把显示名截到上限，保住扩展名。
+ * ⚠ 必须在传字节之前做：服务端在 finalize 才校验长度，超长的话字节传完了才被拒，
+ * 这一份就丢了，还在暂存区留下一个孤儿对象。
+ * @param name 原始显示名
+ */
+export function clampAssetName(name: string): string {
+  const chars = Array.from(name)
+  if (chars.length <= ASSET_NAME_MAX_LEN) return name
+  const dot = name.lastIndexOf('.')
+  const ext = dot > 0 ? Array.from(name.slice(dot)) : []
+  const keep = ext.length < ASSET_NAME_MAX_LEN ? ext : []
+  return [...chars.slice(0, ASSET_NAME_MAX_LEN - keep.length), ...keep].join('')
+}
+
 /**
  * 走完整三步，回落库后的素材。
  * @param kind 素材类型
@@ -184,9 +208,10 @@ export async function uploadAsset(
   file: File,
   options: UploadOptions = {},
 ): Promise<Asset> {
+  const name = clampAssetName(options.name?.trim() || file.name)
   const ticket = await presignUpload(kind, file)
   await putAssetBytes(ticket, file, options)
-  return finalizeUpload(ticket.assetId, options.name?.trim() || file.name)
+  return finalizeUpload(ticket.assetId, name)
 }
 
 /**

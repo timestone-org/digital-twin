@@ -56,6 +56,8 @@ const activeCards = computed(
 defineEmits<{
   send: [text: string]
   scope: [ids: string[] | null]
+  /** 开一段新对话：只清屏的话下一句仍带着这一段的服务端上下文，与「清空」字面不符。 */
+  restart: []
 }>()
 </script>
 
@@ -78,11 +80,11 @@ defineEmits<{
       <DtButton
         variant="ghost"
         size="xs"
-        icon="trash"
-        aria-label="清空这一屏的对话"
-        title="清空对话"
+        icon="plus"
+        aria-label="开新对话"
+        title="开新对话（这一段仍留在左栏，可以回来接着问）"
         :disabled="chat.entries.value.length === 0"
-        @click="chat.clear"
+        @click="$emit('restart')"
       />
     </div>
 

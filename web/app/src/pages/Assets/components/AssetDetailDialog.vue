@@ -11,7 +11,14 @@
  * 11px 的等宽值，看着像标题压脚注（同 `WriteValueDialog` 的写法）。
  * ⚠ 删除的二次确认走全局宿主（`layer="confirm"`，z 比本弹窗高），故可以从这里问。
  */
-import { DtButton, DtInput, DtModal, DtTag, DtIconButton } from '@dt/ui'
+import {
+  DtButton,
+  DtInput,
+  DtModal,
+  DtTag,
+  DtIconButton,
+  useConfirm,
+} from '@dt/ui'
 import { computed, ref, watch } from 'vue'
 
 import type { Asset } from '@/api/assets'
@@ -61,8 +68,24 @@ const nameError = computed(() => {
 /** 改过、且改得合法，才有得存。 */
 const canSave = computed(() => isDirty.value && nameError.value === '')
 
+const confirm = useConfirm()
+
 function close(): void {
   emit('update:modelValue', false)
+}
+
+/** 页脚「关闭」：遮罩与 Esc 由 DtModal 的 dirty 拦，这颗按钮得自己问。 */
+async function closeFromFooter(): Promise<void> {
+  if (isDirty.value) {
+    const discard = await confirm.ask({
+      title: '放弃改名',
+      message: `新名字「${trimmed.value}」还没保存，关掉就没了。`,
+      confirmText: '放弃并关闭',
+      danger: true,
+    })
+    if (!discard) return
+  }
+  close()
 }
 
 function submit(): void {
@@ -72,8 +95,10 @@ function submit(): void {
 
 // 每次换素材或重新打开都把草稿拉回真值：留着上一个的名字，用户一按保存就会
 // 把这个素材改成上一个的名字，而两边都不会报错
+// ⚠ 多源写法逐项比较：压缩档轮询会换上同 id 的新对象，getter 返回新数组
+// 会误触发、抹掉没存的新名字
 watch(
-  () => [props.modelValue, props.asset?.id] as const,
+  [() => props.modelValue, () => props.asset?.id],
   () => (draft.value = props.asset?.name ?? ''),
   { immediate: true },
 )
@@ -173,7 +198,10 @@ watch(
         label="删除"
         @click="emit('remove')"
       />
-      <DtButton variant="outline" intent="neutral" @click="close">
+      <DtButton v-if="isDirty" :disabled="!canSave" @click="submit">
+        保存名字
+      </DtButton>
+      <DtButton variant="outline" intent="neutral" @click="closeFromFooter">
         关闭
       </DtButton>
     </template>

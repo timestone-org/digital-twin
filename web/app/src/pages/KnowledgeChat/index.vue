@@ -88,6 +88,7 @@ onMounted(() => void page.reload())
             <ChatSessionList
               :sessions="page.sessions.value"
               :selected-id="page.selectedId.value"
+              :loading="page.isLoading.value"
               @select="page.select"
               @rename="page.rename"
               @archive="page.archive"
@@ -107,6 +108,7 @@ onMounted(() => void page.reload())
               :bases="page.bases.value"
               :scope="page.scope.value"
               @send="(text: string) => void page.send(text)"
+              @restart="page.create"
               @scope="(ids: string[] | null) => void page.setScope(ids)"
             />
           </section>

@@ -74,7 +74,8 @@ export function useWorkbench(): Workbench {
   async function load(): Promise<void> {
     state.isLoading.value = true
     await reloadProjects()
-    await reloadDashboards()
+    // 项目都没拉到就别拉大屏：它成功时会清掉错误，把失败伪装成「还没有任何项目」
+    if (state.error.value === null) await reloadDashboards()
     state.isLoading.value = false
   }
 

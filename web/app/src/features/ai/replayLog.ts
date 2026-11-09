@@ -23,12 +23,17 @@ import {
   withStep,
   type ConversationLog,
 } from './conversationLog'
-import { inputPreview, outputDisplay, outputPreview } from './stepPreview'
+import {
+  clientStepTitle,
+  inputPreview,
+  outputDisplay,
+  outputPreview,
+} from './stepPreview'
 import { followingReceipts, replayClientSteps } from './replayClientSteps'
 import type { RunnerStep } from './turnRunner'
+import { AUTO_CONTINUE_PREFIX, PLAN_CONTINUE_NOTE } from './autoContinue'
 
-/** 循环代发的催促消息的开头（turnRunner 的 PLAN_CONTINUE_TEXT 以它起头）。 */
-export const AUTO_CONTINUE_PREFIX = '（自动继续）'
+export { AUTO_CONTINUE_PREFIX, PLAN_CONTINUE_NOTE } from './autoContinue'
 
 /**
  * 回放只读消息的这几格；助手与知识库对话的会话详情都长这个样子。
@@ -85,8 +90,10 @@ function withUserSaid(
 ): ConversationLog {
   const text = readText(message.content_json.text)
   if (text === '') return log
-  const role = text.startsWith(AUTO_CONTINUE_PREFIX) ? 'note' : 'user'
-  return withSaid(log, role, text)
+  if (text.startsWith(AUTO_CONTINUE_PREFIX)) {
+    return withSaid(log, 'note', PLAN_CONTINUE_NOTE)
+  }
+  return withSaid(log, 'user', text)
 }
 
 /**
@@ -98,8 +105,10 @@ function withAssistantSaid(
   log: ConversationLog,
   message: ReplayableMessage,
 ): ConversationLog {
-  const stepped = message.steps.reduce(
-    (grown, step) => withStep(grown, runnerStepOf(step)),
+  const steps = message.steps
+  const stepped = steps.reduce(
+    (grown, step, at) =>
+      withStep(grown, runnerStepOf(step, toolsAfter(steps, at))),
     log,
   )
   const text = readText(message.content_json.text)
@@ -108,11 +117,25 @@ function withAssistantSaid(
 }
 
 /**
+ * 模型那一步之后、下一步模型之前跟了几个工具——库里不存模型步的标题，靠它还原。
+ * @param steps 这一条消息的全部步骤
+ * @param at 模型那一步的下标
+ */
+function toolsAfter(steps: readonly AssistantStep[], at: number): number {
+  let count = 0
+  for (const one of steps.slice(at + 1)) {
+    if (one.kind === 'model') break
+    count += 1
+  }
+  return count
+}
+
+/**
  * 库里的一步摊成界面上的一步。
  * ⚠ 图不在里面：截图**从来不落库**（存的是一句「[截图]」），所以回放出来的
  * 那几步永远没有缩略图。卡片上就此说一句人话，不留一个点不开的空框。
  */
-function runnerStepOf(step: AssistantStep): RunnerStep {
+function runnerStepOf(step: AssistantStep, toolCount: number): RunnerStep {
   const input = inputPreview(
     step.kind === 'client_tool' && typeof step.input_json?.call_id === 'string'
       ? step.input_json.arguments
@@ -127,7 +150,7 @@ function runnerStepOf(step: AssistantStep): RunnerStep {
     kind: step.kind,
     name: step.name,
     state: step.state,
-    title: titleOf(step),
+    title: titleOf(step, toolCount),
     error: step.error,
     ...(input === null ? {} : { input }),
     ...(output === null ? {} : { output }),
@@ -135,14 +158,34 @@ function runnerStepOf(step: AssistantStep): RunnerStep {
   }
 }
 
+/** 服务端一步的三种结局在回放里的说法；其余（running / awaiting_client）不会再动了。 */
+const SERVER_STEP_ENDINGS: Readonly<Record<string, string>> = {
+  failed: '没跑成',
+  succeeded: '跑完了',
+  aborted: '停下了',
+}
+
+/** 已结束的状态收窄成客户端标题认的三档；没结束给 null。 */
+function settledState(
+  state: AssistantStep['state'],
+): 'succeeded' | 'failed' | 'aborted' | null {
+  return state === 'succeeded' || state === 'failed' || state === 'aborted'
+    ? state
+    : null
+}
+
 /** 库里的步骤不存标题，用名字与状态凑一句，措辞与直播时同一口径。 */
-function titleOf(step: AssistantStep): string {
+function titleOf(step: AssistantStep, toolCount: number): string {
+  // 与服务端 llmcore `_model_step` 同一句
+  if (step.kind === 'model' && step.state === 'succeeded') {
+    return toolCount > 0 ? `决定调用 ${toolCount} 个工具` : '给出答复'
+  }
   const name = step.name === '' ? step.kind : step.name
-  if (step.state === 'failed') return `${name} 没跑成`
-  if (step.state === 'succeeded') return `${name} 跑完了`
-  if (step.state === 'aborted') return `${name} 停下了`
-  // running / awaiting_client：回放出来的步骤不会再动了，如实说没跑完
-  return `${name} 没跑完`
+  const settled = settledState(step.state)
+  if (step.kind === 'client_tool' && settled !== null) {
+    return clientStepTitle(name, settled)
+  }
+  return `${name} ${SERVER_STEP_ENDINGS[step.state] ?? '没跑完'}`
 }
 
 function readText(given: unknown): string {

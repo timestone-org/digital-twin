@@ -285,6 +285,14 @@ describe('首屏', () => {
   })
 })
 
+describe('左栏加载态', () => {
+  it('清单还在取时不闪「还没有对话」', async () => {
+    api.listSessions.mockReturnValue(new Promise(() => undefined))
+    const wrapper = await render()
+    expect(wrapper.find('main aside').text()).not.toContain('还没有对话')
+  })
+})
+
 describe('切对话', () => {
   it('点一个就回放它的历史', async () => {
     const wrapper = await render()
@@ -294,6 +302,17 @@ describe('切对话', () => {
 
     expect(api.readSession.mock.calls[0]?.[0]).toBe('s1')
     expect(wrapper.text()).toContain('早先问过')
+  })
+
+  it('再点一下已选中的那条不重放、不打断正在跑的回合', async () => {
+    const wrapper = await render()
+
+    await wrapper.find('button[title="锅炉那几台"]').trigger('click')
+    await flushPromises()
+    await wrapper.find('button[title="锅炉那几台"]').trigger('click')
+    await flushPromises()
+
+    expect(api.readSession).toHaveBeenCalledTimes(1)
   })
 
   it('慢回来的那一次不许盖后选的', async () => {
@@ -620,12 +639,12 @@ describe('面板标题栏', () => {
     expect(wrapper.find('.chat-panel__working').exists()).toBe(false)
   })
 
-  it('清空键没内容时禁着，答完一轮点它就清掉这一屏', async () => {
+  it('开新对话键没内容时禁着，答完一轮点它就回到空白草稿、不再接着旧会话', async () => {
     api.listSessions.mockResolvedValue([])
     api.createSession.mockResolvedValue(sessionOf('s9'))
     api.readSession.mockResolvedValue({ ...sessionOf('s9'), messages: [] })
     const wrapper = await render()
-    const clear = () => wrapper.find('button[aria-label="清空这一屏的对话"]')
+    const clear = () => wrapper.find('button[aria-label="开新对话"]')
     expect(clear().attributes('disabled')).toBeDefined()
 
     await wrapper.find('textarea').setValue('上限多少')
@@ -634,9 +653,16 @@ describe('面板标题栏', () => {
     expect(wrapper.text()).toContain('上限 65 ℃')
 
     await clear().trigger('click')
+    await flushPromises()
 
     expect(wrapper.text()).not.toContain('上限 65 ℃')
     expect(wrapper.text()).toContain('查资料，也能查看实时数据')
+    // 下一句开一个新会话，而不是带着 s9 的上下文接着问
+    api.createSession.mockResolvedValue(sessionOf('s10'))
+    await wrapper.find('textarea').setValue('再问一句')
+    await wrapper.find('button[aria-label="发送"]').trigger('click')
+    await flushPromises()
+    expect(api.createSession).toHaveBeenCalledTimes(2)
   })
 })
 

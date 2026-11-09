@@ -7,7 +7,7 @@
 
 import type { ClientMessage, ServerSystemFrame } from '@dt/contracts'
 
-import { parseServerFrame } from '@/runtime/realtimeFrames'
+import { isRecord, parseServerFrame } from '@/runtime/realtimeFrames'
 import type { TopicRegistry } from '@/runtime/topicRegistry'
 
 export interface DispatchPorts {
@@ -44,8 +44,8 @@ export function dispatchFrame(raw: string, ports: DispatchPorts): void {
   // 失败的表现就是收不到数据，与 error 帧携带的信息重合
   if (frame.type !== 'data' && frame.type !== 'event') return
   const payload = frame.payload
-  if (typeof payload !== 'object' || payload === null) return
+  if (!isRecord(payload)) return
   for (const handler of ports.topics.listeners(frame.topic)) {
-    handler(payload as Record<string, unknown>)
+    handler(payload)
   }
 }

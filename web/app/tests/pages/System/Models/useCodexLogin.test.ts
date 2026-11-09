@@ -96,6 +96,25 @@ describe('设备码登录', () => {
     scope.stop()
   })
 
+  it('登好了回调 onConnected，让页面刷新「当前生效」', async () => {
+    vi.mocked(api.startDeviceLogin).mockResolvedValue(started())
+    vi.mocked(api.pollDeviceLogin).mockResolvedValue({
+      is_done: true,
+      interval_s: 5,
+      credential: connected(),
+    })
+    const onConnected = vi.fn()
+    const scope = effectScope()
+    const login = scope.run(() =>
+      useCodexLogin(() => PROVIDER_REF, onConnected),
+    )
+    await login?.begin()
+
+    await vi.advanceTimersByTimeAsync(6_000)
+    expect(onConnected).toHaveBeenCalledOnce()
+    scope.stop()
+  })
+
   it('登好了就收摊，不再接着问', async () => {
     vi.mocked(api.startDeviceLogin).mockResolvedValue(started())
     vi.mocked(api.pollDeviceLogin).mockResolvedValue({
@@ -226,6 +245,17 @@ describe('设备码登录', () => {
     await vi.advanceTimersByTimeAsync(6_000)
     expect(login?.error.value).toBe('上游拒了')
     expect(login?.pending.value).toBeNull()
+    scope.stop()
+  })
+})
+
+describe('读登录态', () => {
+  it('读失败把原因摆出来，不留一个没人接的拒绝', async () => {
+    vi.mocked(api.readCredential).mockRejectedValue(new Error('读不到登录态'))
+    const scope = effectScope()
+    const login = scope.run(() => useCodexLogin(() => PROVIDER_REF))
+    await expect(login?.refresh()).resolves.toBeUndefined()
+    expect(login?.error.value).toBe('读不到登录态')
     scope.stop()
   })
 })

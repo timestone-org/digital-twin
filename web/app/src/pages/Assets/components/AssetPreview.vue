@@ -42,7 +42,8 @@ watch(
       loading="lazy"
       @error="failed = true"
     />
-    <DtIcon v-else name="layers" :size="16" />
+    <!-- 图片读不出来与「模型没有缩略图」是两回事，不共用一个图标 -->
+    <DtIcon v-else :name="failed ? 'alert-circle' : 'layers'" :size="16" />
   </span>
 </template>
 

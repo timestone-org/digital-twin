@@ -251,6 +251,23 @@ describe('删除', () => {
     expect(library.assets.value.map((item) => item.id)).toEqual(['b'])
   })
 
+  it('删掉一条后接着往下取，偏移少一格，不跳过服务端前移上来的那条', async () => {
+    api.listAssets.mockResolvedValue(
+      Array.from({ length: 50 }, (_unused, index) => asset(`a${index}`)),
+    )
+    api.deleteAsset.mockResolvedValue(undefined)
+    const { library } = mountLibrary()
+    await library.reload('model')
+
+    await library.remove('a3')
+    await library.loadMore()
+
+    expect(api.listAssets).toHaveBeenLastCalledWith(
+      'model',
+      expect.objectContaining({ offset: 49 }),
+    )
+  })
+
   it('删失败时列表原样留着，只报错', async () => {
     api.listAssets.mockResolvedValue([asset('a')])
     api.deleteAsset.mockRejectedValue(new Error('删不掉'))

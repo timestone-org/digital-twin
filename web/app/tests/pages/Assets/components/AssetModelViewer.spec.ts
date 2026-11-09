@@ -97,6 +97,20 @@ describe('三维模型预览', () => {
     expect(seam.loadTwinModel).toHaveBeenCalledTimes(2)
   })
 
+  it('文件解析不了时说人话且不给重试——再下一遍还是同一份坏字节', async () => {
+    seam.loadTwinModel.mockRejectedValue(
+      new RangeError('Offset is outside the bounds of the DataView'),
+    )
+
+    const wrapper = await render()
+
+    expect(wrapper.text()).toContain('模型文件无法解析')
+    expect(wrapper.text()).not.toContain('DataView')
+    expect(wrapper.findAll('button').some((n) => n.text() === '重试')).toBe(
+      false,
+    )
+  })
+
   it('卸载时把渲染器还回去，不留一个占着上下文的空壳', async () => {
     seam.loadTwinModel.mockResolvedValue(await modelStub())
     const wrapper = await render()

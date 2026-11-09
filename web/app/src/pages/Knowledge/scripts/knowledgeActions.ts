@@ -11,6 +11,7 @@ import {
   searchBase,
   uploadDocument,
 } from '@/api/knowledge'
+import { BizError } from '@/api/client'
 import {
   cancelSearch,
   guarded,
@@ -116,10 +117,71 @@ export async function drop(
   })
 }
 
+/** 「这份内容已经在这个库里了」；见 knowledge-server `apps/knowledge/errors.py`。 */
+const DUPLICATE_DOCUMENT_CODE = 42308
+
+interface UploadTally {
+  uploaded: number
+  duplicates: string[]
+  failures: string[]
+  /** 只传一份时原样抛出那句原因，不套汇总。 */
+  single: boolean
+}
+
+/** 一批里有重复或失败时的那句汇总；全成功给空串。 */
+function tallyText(tally: UploadTally): string {
+  if (tally.duplicates.length === 0 && tally.failures.length === 0) return ''
+  const parts = [`已传 ${tally.uploaded} 份`]
+  if (tally.duplicates.length > 0) {
+    parts.push(
+      `跳过 ${tally.duplicates.length} 份重复：${tally.duplicates.join('、')}`,
+    )
+  }
+  if (tally.failures.length > 0) {
+    parts.push(`失败 ${tally.failures.length} 份：${tally.failures.join('；')}`)
+  }
+  return parts.join('；')
+}
+
+/**
+ * 传一份并把结局记进账里。
+ * @param state 页面状态
+ * @param baseId 传进哪个库
+ * @param file 这一份
+ * @param tally 这一批的账
+ */
+async function uploadOne(
+  state: KnowledgeState,
+  baseId: string,
+  file: File,
+  tally: UploadTally,
+): Promise<void> {
+  state.upload.value = { name: file.name, ratio: 0 }
+  try {
+    await uploadDocument(baseId, file, {
+      onProgress: (progress) => {
+        state.upload.value = {
+          name: file.name,
+          ratio: progress.total > 0 ? progress.loaded / progress.total : 0,
+        }
+      },
+    })
+    tally.uploaded += 1
+  } catch (cause) {
+    if (cause instanceof BizError && cause.code === DUPLICATE_DOCUMENT_CODE) {
+      tally.duplicates.push(file.name)
+    } else {
+      tally.failures.push(`${file.name}（${messageOf(cause)}）`)
+    }
+    if (tally.single) throw cause
+  }
+}
+
 /**
  * 逐个传文件，回传成了几份。
  * ⚠ 一个一个传而不是并发：并发几份大文件时，进度条只能显示其中一个，
  * 而用户看到的是「卡住了」。
+ * ⚠ 一份失败不拦后面的：重复的那份记作跳过，最后一句话说清哪几份没进库。
  * @param state 页面状态
  * @param files 用户选的文件
  */
@@ -129,27 +191,23 @@ export async function addFiles(
 ): Promise<number> {
   const baseId = state.selectedId.value
   if (baseId === '') return 0
-  let uploaded = 0
+  const tally: UploadTally = {
+    uploaded: 0,
+    duplicates: [],
+    failures: [],
+    single: files.length === 1,
+  }
   await guarded(state, async () => {
     try {
-      for (const file of files) {
-        state.upload.value = { name: file.name, ratio: 0 }
-        await uploadDocument(baseId, file, {
-          onProgress: (progress) => {
-            state.upload.value = {
-              name: file.name,
-              ratio: progress.total > 0 ? progress.loaded / progress.total : 0,
-            }
-          },
-        })
-        uploaded += 1
-      }
+      for (const file of files) await uploadOne(state, baseId, file, tally)
     } finally {
-      if (uploaded > 0) await refreshLibrary(state, [baseId])
+      if (tally.uploaded > 0) await refreshLibrary(state, [baseId])
     }
+    const summary = tallyText(tally)
+    if (summary !== '') throw new Error(summary)
   })
   state.upload.value = null
-  return uploaded
+  return tally.uploaded
 }
 
 /**

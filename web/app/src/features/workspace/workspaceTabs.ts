@@ -16,6 +16,7 @@ export class WorkspaceTabs implements Workspace {
   readonly activeKey: ComputedRef<string>
   private readonly guards = new Map<string, () => boolean | Promise<boolean>>()
   private readonly dashboardVersions = new Map<string, number>()
+  private readonly approvedClose = new Set<string>()
   private nextGeneration = 0
 
   constructor(
@@ -27,6 +28,10 @@ export class WorkspaceTabs implements Workspace {
         ? router.currentRoute.value.path
         : '',
     )
+  }
+
+  isClosing(key: string): boolean {
+    return this.approvedClose.has(key)
   }
 
   canRetain(to: RouteLocationNormalized): boolean {
@@ -154,8 +159,13 @@ export class WorkspaceTabs implements Workspace {
     const tab = this.tabs.value.find((entry) => entry.key === key)
     if (tab === undefined || key === '/') return true
     if (!(await this.approveClose(tab))) return false
-    if (this.activeKey.value === key && !(await this.leaveCurrent(key)))
-      return false
+    this.approvedClose.add(key)
+    try {
+      if (this.activeKey.value === key && !(await this.leaveCurrent(key)))
+        return false
+    } finally {
+      this.approvedClose.delete(key)
+    }
     this.tabs.value = this.tabs.value.filter((entry) => entry.key !== key)
     this.guards.delete(key)
     return true

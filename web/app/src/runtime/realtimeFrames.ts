@@ -1,8 +1,9 @@
 /**
  * @fileoverview 把 hub 发来的一行 JSON 收窄成 `ServerFrame`，形状不对就丢。
  *
- * ⚠ 这里不许写 `as`：帧是外部数据，断言只是把校验挪到运行时的第一次解引用，
- * 而那时报的错与真实原因（hub 改了帧形状）隔得很远。
+ * ⚠ 字段收窄不许写 `as`：帧是外部数据，断言只是把校验挪到运行时的第一次解引用，
+ * 而那时报的错与真实原因（hub 改了帧形状）隔得很远。唯一一处断言在出口，
+ * 它前面已逐档核过该类型的全部必备字段。
  */
 
 import {
@@ -13,22 +14,17 @@ import {
   type ServerSystemEvent,
 } from '@dt/contracts'
 
-function isRecord(value: unknown): value is Record<string, unknown> {
+/** 是普通对象（不是数组、不是 null）。 */
+export function isRecord(value: unknown): value is Record<string, unknown> {
   return typeof value === 'object' && value !== null && !Array.isArray(value)
 }
 
 function frameTypeOf(value: unknown): ServerFrameType | null {
-  const types: readonly string[] = SERVER_FRAME_TYPES
-  return typeof value === 'string' && types.includes(value)
-    ? (value as ServerFrameType)
-    : null
+  return SERVER_FRAME_TYPES.find((one) => one === value) ?? null
 }
 
 function systemEventOf(value: unknown): ServerSystemEvent | null {
-  const events: readonly string[] = SERVER_SYSTEM_EVENTS
-  return typeof value === 'string' && events.includes(value)
-    ? (value as ServerSystemEvent)
-    : null
+  return SERVER_SYSTEM_EVENTS.find((one) => one === value) ?? null
 }
 
 /** 载荷帧的必备字段都在且类型对。 */
@@ -86,5 +82,6 @@ export function parseServerFrame(raw: string): ServerFrame | null {
   const kind = frameTypeOf(decoded['type'])
   if (kind === null) return null
   if (!matchesType(decoded, kind)) return null
+  // 判别联合靠上面逐档核过的字段成立，TS 推不出这一步
   return decoded as unknown as ServerFrame
 }

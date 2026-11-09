@@ -398,7 +398,9 @@ describe('上传', () => {
     expect(uploaded).toBe(1)
     expect(page.selected.value?.documentCount).toBe(1)
     expect(page.documents.value.map((one) => one.id)).toEqual(['d1'])
-    expect(page.error.value).toBe('第二份上传失败')
+    expect(page.error.value).toBe(
+      '已传 1 份；失败 1 份：b.md（第二份上传失败）',
+    )
   })
 
   it('上传期间切库，刷新原库计数但不切回或覆盖当前库文档', async () => {

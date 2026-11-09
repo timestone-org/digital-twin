@@ -26,6 +26,7 @@ import { ASSISTANT_ASK_TOOL } from '@dt/contracts'
 
 import { createFrameReader, type FrameReader } from './sseFrames'
 import {
+  clientStepTitle,
   inputPreview,
   isImageOutput,
   outputDisplay,
@@ -267,6 +268,8 @@ function flushPump<Body extends LoopBody>(
     if (frame.name === 'error') return { kind: 'error' }
   }
   if (isCancelled(input.signal)) return { kind: 'error' }
+  // 空批只来自认不出的工具调用，handle 已经报过错；拿它续推只会撞服务端 422
+  if (calls !== null && calls.length === 0) return { kind: 'error' }
   if (calls !== null) return { kind: 'pending', calls }
   sink.onError(
     '助手事件流中断，未收到回合完成结果。已执行的操作不会自动重试；请检查连接后说一句「继续」。',
@@ -288,7 +291,12 @@ function handle<Body extends LoopBody>(
     sink.onStep(readStep(data))
     return null
   }
-  if (name === 'client_tool.request') return readCalls(data)
+  if (name === 'client_tool.request') {
+    const calls = readCalls(data)
+    if (calls !== null) return calls
+    sink.onError(MALFORMED_CALLS_TEXT)
+    return []
+  }
   if (name === 'turn.done') {
     sink.onDone(readText(data.reply))
     return null
@@ -379,12 +387,11 @@ function stepOf(
   const input = inputPreview(call.arguments)
   const text = outputPreview(output)
   const state = error !== null ? 'failed' : isAborted ? 'aborted' : 'succeeded'
-  const title = error !== null ? '没做成' : isAborted ? '停下了' : '做完了'
   return {
     kind: 'client_tool',
     name: call.name,
     state,
-    title: `${call.name} ${title}`,
+    title: clientStepTitle(call.name, state),
     error,
     ...(input === null ? {} : { input }),
     ...(text === null ? {} : { output: text }),
@@ -412,13 +419,18 @@ function readChannel(given: unknown): AssistantDeltaChannel {
   return given === 'reasoning' ? 'reasoning' : 'text'
 }
 
-function readCalls(data: Record<string, unknown>): AssistantToolCall[] {
+/** 认不出工具调用时的说法。 */
+const MALFORMED_CALLS_TEXT =
+  '助手下发的工具调用无法识别，已停下；请刷新页面后说一句「继续」。'
+
+/** 读一批工具调用；不是数组、为空或有任何一项认不出时给 null——残缺的批会让服务端永远等不齐回执。 */
+function readCalls(data: Record<string, unknown>): AssistantToolCall[] | null {
   const given: unknown = data.calls
-  if (!Array.isArray(given)) return []
+  if (!Array.isArray(given) || given.length === 0) return null
   // ⚠ 收成 `unknown[]` 再逐项判：`Array.isArray` 把 `unknown` narrow 成
   // `any[]`，直接展开每一项就把 any 放进了业务层
   const items: unknown[] = given
-  return items.flatMap((item) => {
+  const calls = items.flatMap((item) => {
     if (typeof item !== 'object' || item === null) return []
     const shape: Record<string, unknown> = { ...item }
     const callId = readText(shape.call_id)
@@ -426,6 +438,7 @@ function readCalls(data: Record<string, unknown>): AssistantToolCall[] {
     if (callId === '' || name === '') return []
     return [{ call_id: callId, name, arguments: readObject(shape.arguments) }]
   })
+  return calls.length === items.length ? calls : null
 }
 
 /** 把一个不确定的东西读成对象；不是对象给空表。 */

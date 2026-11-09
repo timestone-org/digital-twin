@@ -13,6 +13,14 @@ const props = defineProps<{
   isLoading: boolean
 }>()
 defineEmits<{ sync: [source: KnowledgeSource] }>()
+/** 来源种类的中文说法；认不出的种类原样显示，免得新种类在界面上整行消失。 */
+const KIND_LABELS: Readonly<Record<string, string>> = {
+  upload: '文件上传 · 传文档时自动摄取',
+  platform: '平台接口 · 按路径分页拉取',
+}
+const kindLabel = computed(
+  () => KIND_LABELS[props.source.kind] ?? props.source.kind,
+)
 const path = computed(() =>
   typeof props.source.config.path === 'string' ? props.source.config.path : '',
 )
@@ -22,11 +30,7 @@ const path = computed(() =>
     <p class="truncate text-sm text-text-title" :title="source.name">
       {{ source.name }}
     </p>
-    <p class="text-xs text-text-secondary">
-      {{
-        source.kind === 'upload' ? '文件上传 · 传文档时自动摄取' : source.kind
-      }}
-    </p>
+    <p class="text-xs text-text-secondary">{{ kindLabel }}</p>
     <p
       v-if="source.kind === 'platform'"
       class="mt-1 break-all text-xs text-text-secondary"

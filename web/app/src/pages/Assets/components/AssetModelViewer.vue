@@ -39,6 +39,8 @@ const core = shallowRef<SceneCore | null>(null)
 const model = shallowRef<ModelRoot | null>(null)
 
 const error = ref('')
+/** 失败是字节本身解析不了：再下一遍还是同一份，不给重试。 */
+const isCorrupt = ref(false)
 const isLoading = ref(true)
 /** 已下载比例，0～1；服务端没给长度时停在 0，界面改用不定态。 */
 const ratio = ref(0)
@@ -68,6 +70,7 @@ async function load(): Promise<void> {
   loading = controller
   isLoading.value = true
   error.value = ''
+  isCorrupt.value = false
   try {
     const asset = await loadTwinModel(props.url, {
       signal: controller.signal,
@@ -83,7 +86,15 @@ async function load(): Promise<void> {
   } catch (caught) {
     // 中止是组件被卸载了，那时没有任何界面还能显示这条错
     if (!controller.signal.aborted) {
-      error.value = caught instanceof Error ? caught.message : '模型加载失败'
+      // 解析器抛的是英文内部消息（越界、JSON 不合法），给人看的只该是「文件坏了」
+      // ⚠ 不收 TypeError：断网时 fetch 抛的就是它，那种该留重试
+      isCorrupt.value =
+        caught instanceof RangeError || caught instanceof SyntaxError
+      error.value = isCorrupt.value
+        ? '模型文件无法解析（可能已损坏），请重新上传原件'
+        : caught instanceof Error
+          ? caught.message
+          : '模型加载失败'
     }
   } finally {
     if (loading === controller) {
@@ -137,7 +148,9 @@ onBeforeUnmount(() => {
 
     <div v-else-if="error !== ''" class="dt-model-viewer__veil">
       <DtNotice intent="danger">{{ error }}</DtNotice>
-      <DtButton size="sm" variant="outline" @click="load()">重试</DtButton>
+      <DtButton v-if="!isCorrupt" size="sm" variant="outline" @click="load()">
+        重试
+      </DtButton>
     </div>
 
     <DtTag v-else class="dt-model-viewer__tip" size="sm">

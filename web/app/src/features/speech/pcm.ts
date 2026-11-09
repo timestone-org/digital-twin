@@ -80,3 +80,54 @@ export function downsampleToInt16(
   }
   return out
 }
+
+/** 一个渲染块降采样之后的产出与留给下一块的状态。 */
+export interface DownsampleStep {
+  samples: Int16Array<ArrayBuffer>
+  /** 还没凑成整数个输出样本的输入尾巴。 */
+  carry: Float32Array
+  /** 下一个输出样本在 `carry` 里的小数起点，取值 [0, 1)。 */
+  phase: number
+}
+
+/**
+ * 把上一块的尾巴接上这一块再降采样，相位跨块连续。
+ * ⚠ 小数相位必须带到下一块：只按整数样本切尾巴的话，每块都从 0 相位重算，
+ * 44.1 kHz 下要么每块少出一个样本、要么每个输出覆盖得偏短，攒一秒就漂出百分之几。
+ * @param previous 上一块留下的尾巴与相位
+ * @param block 这一块的单声道 float32 样本
+ * @param fromRate 输入采样率
+ * @param toRate 目标采样率
+ */
+export function downsampleBlock(
+  previous: Pick<DownsampleStep, 'carry' | 'phase'>,
+  block: Float32Array,
+  fromRate: number,
+  toRate: number,
+): DownsampleStep {
+  const joined = new Float32Array(previous.carry.length + block.length)
+  joined.set(previous.carry)
+  joined.set(block, previous.carry.length)
+  if (fromRate <= toRate) {
+    const carry = new Float32Array(0)
+    return {
+      samples: downsampleToInt16(joined, fromRate, toRate),
+      carry,
+      phase: 0,
+    }
+  }
+  const ratio = fromRate / toRate
+  const phase = previous.phase
+  const produced = Math.max(0, Math.floor((joined.length - phase) / ratio))
+  const samples = new Int16Array(produced)
+  for (let index = 0; index < produced; index += 1) {
+    const start = Math.floor(phase + index * ratio)
+    const end = Math.max(start + 1, Math.floor(phase + (index + 1) * ratio))
+    let sum = 0
+    for (let at = start; at < end; at += 1) sum += joined[at] ?? 0
+    samples[index] = toInt16(sum / (end - start))
+  }
+  const next = phase + produced * ratio
+  const consumed = Math.floor(next)
+  return { samples, carry: joined.slice(consumed), phase: next - consumed }
+}

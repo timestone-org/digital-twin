@@ -204,6 +204,8 @@ describe('换算', () => {
 
   it('端点自报的名字按名猜种类', () => {
     expect(suggestedRow('text-embedding-v3').kind).toBe('embedding')
+    expect(suggestedRow('bge-reranker-v2').kind).toBe('rerank')
+    expect(suggestedRow('fake-rerank').hasVision).toBe(false)
     expect(suggestedRow('qwen-vl-max').hasVision).toBe(true)
     expect(suggestedRow('qwen-plus')).toEqual({
       key: expect.any(String),
