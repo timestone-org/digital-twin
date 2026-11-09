@@ -201,7 +201,12 @@ export class Controller {
       this.state.toast.warning('整理期间配置已变化，请重新整理')
       return
     }
-    if (result?.kind === 'document') this.state.editor.commit(result.document)
+    const current = this.state.editor.document.value
+    if (result?.kind === 'document' && current)
+      this.state.editor.commit({
+        ...result.document,
+        viewport: current.viewport,
+      })
   }
   draw = async () => {
     this.state.editor.applyDrafts()

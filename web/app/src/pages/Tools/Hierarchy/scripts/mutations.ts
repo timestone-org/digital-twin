@@ -97,6 +97,7 @@ export function moveNodes(
   })
 }
 
+/** 判断内容是否变化的签名；视口只随下一次内容修改一并保存，单独平移缩放不算修改。 */
 export function signature(document: GraphDocument | null): string {
   if (!document) return ''
   return JSON.stringify([
@@ -104,7 +105,6 @@ export function signature(document: GraphDocument | null): string {
     document.templateId,
     document.title,
     document.paper.width,
-    [document.viewport.x, document.viewport.y, document.viewport.zoom],
     document.nodes.map((node) => [
       node.id,
       node.kind,

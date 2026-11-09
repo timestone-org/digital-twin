@@ -96,3 +96,33 @@ it('只读视口变化不产生保存或未保存保护，卸载取消自动保�
   await vi.advanceTimersByTimeAsync(1000)
   expect(api.saveProject).not.toHaveBeenCalled()
 })
+it('可编辑时只平移缩放视口不触发自动保存，视口随下一次真实修改一起保存', async () => {
+  const {
+    state: { editor, saving },
+    wrapper,
+  } = setup()
+  vi.mocked(api.saveProject).mockResolvedValue(project('project-1', 2))
+  editor.commit(
+    {
+      ...required(editor.document.value),
+      viewport: { x: 300, y: 120, zoom: 1.5 },
+    },
+    false,
+  )
+  await flushPromises()
+  await vi.advanceTimersByTimeAsync(2000)
+  expect(api.saveProject).not.toHaveBeenCalled()
+  expect(saving.dirty.value).toBe(false)
+  editor.commit({ ...required(editor.document.value), title: '真实修改' })
+  await flushPromises()
+  await vi.advanceTimersByTimeAsync(1000)
+  expect(api.saveProject).toHaveBeenCalledWith(
+    'project-1',
+    1,
+    expect.objectContaining({
+      title: '真实修改',
+      viewport: { x: 300, y: 120, zoom: 1.5 },
+    }),
+  )
+  wrapper.unmount()
+})

@@ -344,3 +344,18 @@ it('窄屏从配置面板添加节点后可立即编辑并生成预览', async (
   expect(wrapper.get('[data-pane]').attributes('data-pane')).toBe('canvas')
   wrapper.unmount()
 })
+it('整理期间平移缩放视口不作废整理结果，也不触发保存', async () => {
+  const wrapper = await setup()
+  await flushPromises()
+  vi.mocked(api.saveProject).mockClear()
+  wrapper.getComponent(HierarchyToolbar).vm.$emit('arrange')
+  await button(wrapper, '放大画布').trigger('click')
+  await vi.waitFor(() =>
+    expect(button(wrapper, '整理画布').attributes('disabled')).toBeUndefined(),
+  )
+  await flushPromises()
+  expect(useToast().toasts.value.map((item) => item.message)).not.toContain(
+    '整理期间配置已变化，请重新整理',
+  )
+  wrapper.unmount()
+})
