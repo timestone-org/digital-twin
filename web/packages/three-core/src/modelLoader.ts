@@ -99,6 +99,20 @@ async function downloadModel(
       response.headers.get('Content-Length') ??
       0,
   )
+  return readAll(reader, total, onProgress)
+}
+
+/**
+ * 边读边报进度，读完拼成一整块字节。
+ * @param reader 响应体的读取器
+ * @param total 服务端给的总字节；没给是 0
+ * @param onProgress 已下载字节的进度
+ */
+async function readAll(
+  reader: ReadableStreamDefaultReader<Uint8Array>,
+  total: number,
+  onProgress: ((event: ProgressEvent) => void) | undefined,
+): Promise<ArrayBuffer> {
   const chunks: Uint8Array[] = []
   let loaded = 0
   for (;;) {

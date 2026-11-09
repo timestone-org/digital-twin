@@ -33,6 +33,10 @@ function decodedEnvironment(): Promise<DecodedEnvironment> {
   return decoded
 }
 
+function abortError(): DOMException {
+  return new DOMException('环境光加载已取消', 'AbortError')
+}
+
 /**
  * 等共用的那份，但调用方一取消就先撤。
  * @param promise 共用的解码结果
@@ -42,9 +46,9 @@ function unlessAborted<T>(
   promise: Promise<T>,
   signal: AbortSignal,
 ): Promise<T> {
-  if (signal.aborted) return Promise.reject(signal.reason)
+  if (signal.aborted) return Promise.reject(abortError())
   return new Promise<T>((resolve, reject) => {
-    const onAbort = (): void => reject(signal.reason)
+    const onAbort = (): void => reject(abortError())
     signal.addEventListener('abort', onAbort, { once: true })
     promise.then(
       (value) => {
@@ -53,7 +57,7 @@ function unlessAborted<T>(
       },
       (error: unknown) => {
         signal.removeEventListener('abort', onAbort)
-        reject(error)
+        reject(error instanceof Error ? error : new Error(String(error)))
       },
     )
   })
