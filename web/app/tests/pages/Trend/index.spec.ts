@@ -359,6 +359,37 @@ describe('台账那一面的选表', () => {
   })
 })
 
+describe('台账那一面的失败', () => {
+  it('⚠ 一张表取列失败后选表框还在，换一张就画得出来', async () => {
+    signIn([PERMISSION_CODES.datasetView])
+    vi.mocked(dataset.getDatasetTable)
+      .mockRejectedValueOnce(new Error('取不到'))
+      .mockResolvedValue(detail('t2'))
+    const wrapper = await open()
+    const trigger = triggerOf(wrapper, '数据台账')
+    if (trigger === undefined) throw new Error('取列失败后选表框不见了')
+    await trigger.trigger('click')
+    await flushPromises()
+    const items = document.querySelectorAll('.dt-select-menu__item')
+    items[items.length - 1]?.dispatchEvent(
+      new MouseEvent('click', { bubbles: true }),
+    )
+    await flushPromises()
+    expect(vi.mocked(dataset.getDatasetTable)).toHaveBeenLastCalledWith('t2')
+    expect(wrapper.text()).not.toContain('取不到')
+  })
+
+  it('⚠ 台账清单取不到时不把深链说成「已被删除」', async () => {
+    signIn([PERMISSION_CODES.datasetView])
+    query.value = { source: 'dataset', tableId: 't2' }
+    vi.mocked(dataset.listDatasetTables).mockRejectedValue(
+      new Error('网关超时'),
+    )
+    const wrapper = await open()
+    expect(wrapper.text()).not.toContain('不存在或已被删除')
+  })
+})
+
 describe('取点间隔', () => {
   it('默认走自动档，标签里写明它这次落在哪一格', async () => {
     signIn([PERMISSION_CODES.collectView])

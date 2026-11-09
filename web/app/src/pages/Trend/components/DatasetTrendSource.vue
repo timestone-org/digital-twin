@@ -40,17 +40,20 @@ onUnmounted(picker.dispose)
       {{ picker.missingLink.value }}
     </DtNotice>
 
+    <!-- 报错单独一格、不进下面的分支链：取列失败时选表框得留着，好换一张 -->
     <DtNotice v-if="picker.error.value" intent="danger" icon="alert-circle">
       {{ picker.error.value }}
     </DtNotice>
-    <DtEmpty
-      v-else-if="picker.options.value.length === 0"
-      icon="table"
-      title="还没有台账"
-      hint="先去「数据台账」建一张，配好列之后这里才画得出曲线。"
-    />
+    <template v-if="picker.options.value.length === 0">
+      <DtEmpty
+        v-if="!picker.error.value"
+        icon="table"
+        title="还没有台账"
+        hint="先去「数据台账」建一张，配好列之后这里才画得出曲线。"
+      />
+    </template>
     <DatasetTrendChart
-      v-else-if="picker.tableId.value !== ''"
+      v-else-if="picker.tableId.value !== '' && !picker.error.value"
       :key="picker.tableId.value"
       :table-id="picker.tableId.value"
       :columns="picker.columns.value"
@@ -76,6 +79,7 @@ onUnmounted(picker.dispose)
         />
       </div>
       <DtEmpty
+        v-if="picker.tableId.value === ''"
         icon="chart-line"
         title="还没有选台账"
         hint="在上面挑一张台账就能看它的曲线。"
