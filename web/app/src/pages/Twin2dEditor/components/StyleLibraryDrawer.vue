@@ -34,7 +34,6 @@ import {
   DtModal,
   DtSelect,
   useToast,
-  DtIconButton,
 } from '@dt/ui'
 import { computed, ref } from 'vue'
 
@@ -274,11 +273,28 @@ function reportText(what: string, report: Twin2dImportReport): string {
 }
 
 /**
+ * 读出文件全文；读不出（选完之后被删、权限被收回）给 null。
+ * @param file 用户选中的那一份
+ */
+async function textOf(file: File): Promise<string | null> {
+  try {
+    return await file.text()
+  } catch {
+    return null
+  }
+}
+
+/**
  * 读一份样式包并并进当前配置。
  * @param file 用户选中的那一份 JSON
  */
 async function importFrom(file: File): Promise<void> {
-  const read = readTwin2dStylePackage(await file.text())
+  const text = await textOf(file)
+  if (text === null) {
+    toast.error('读不出这个文件')
+    return
+  }
+  const read = readTwin2dStylePackage(text)
   if (!read.ok) {
     toast.error(read.reason)
     return
@@ -348,6 +364,16 @@ function close(): void {
         >
           新建连线样式
         </DtButton>
+        <DtButton
+          size="sm"
+          variant="outline"
+          intent="neutral"
+          icon="download"
+          data-test="style-lib-export"
+          @click="onExport"
+        >
+          导出样式包
+        </DtButton>
       </div>
 
       <DtSelect
@@ -365,15 +391,7 @@ function close(): void {
             label="导入样式包"
             size="sm"
             data-test="style-lib-import"
-            @select="onPickFile" />
-          <DtIconButton
-            size="sm"
-            variant="outline"
-            intent="neutral"
-            data-test="style-lib-export"
-            icon="download"
-            label="导出样式包"
-            @click="onExport"
+            @select="onPickFile"
         /></template>
       </DtSelect>
 
