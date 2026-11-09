@@ -36,9 +36,9 @@ from platform_server.apps.dataset.services.aggregate import (
     aggregate_cells,
 )
 from platform_server.apps.dataset.services.backfill_jobs import (
+    LOCK_TTL_S,
     STATUS_CANCELLED,
     STATUS_DONE,
-    LOCK_TTL_S,
     STATUS_FAILED,
     BackfillJobs,
     BackfillJobState,
