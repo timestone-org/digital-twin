@@ -31,12 +31,9 @@ import {
 } from './stepPreview'
 import { followingReceipts, replayClientSteps } from './replayClientSteps'
 import type { RunnerStep } from './turnRunner'
+import { AUTO_CONTINUE_PREFIX, PLAN_CONTINUE_NOTE } from './autoContinue'
 
-/** 循环代发的催促消息的开头（turnRunner 的 PLAN_CONTINUE_TEXT 以它起头）。 */
-export const AUTO_CONTINUE_PREFIX = '（自动继续）'
-
-/** 代发催促时时间线上那条 note；回放把催促消息还原成同一句。 */
-export const PLAN_CONTINUE_NOTE = '计划还没走完，自动继续。'
+export { AUTO_CONTINUE_PREFIX, PLAN_CONTINUE_NOTE } from './autoContinue'
 
 /**
  * 回放只读消息的这几格；助手与知识库对话的会话详情都长这个样子。

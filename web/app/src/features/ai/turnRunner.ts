@@ -37,10 +37,10 @@ import { readObject, readText, runLoop, type LoopSink } from './turnLoop'
 import { runMcpWrite } from './mcpWriteBridge'
 import { currentPagePath } from './pageContext'
 import { readContextUsage } from './contextUsage'
-import { PLAN_CONTINUE_NOTE } from './replayLog'
+import { PLAN_CONTINUE_NOTE } from './autoContinue'
 
 export { ASK_MUST_BE_ALONE, type RunnerStep } from './turnLoop'
-export { PLAN_CONTINUE_NOTE } from './replayLog'
+export { PLAN_CONTINUE_NOTE } from './autoContinue'
 
 /**
  * 一次往返的上限。到顶就停下并如实告诉用户，而不是继续烧钱。
