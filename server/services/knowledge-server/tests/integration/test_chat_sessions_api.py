@@ -5,6 +5,7 @@ import uuid
 import httpx
 import pytest
 from integration.conftest import DbStack, HeaderFactory
+from sqlalchemy import event
 
 from knowledge_server.apps.chat.models import ChatMessage
 from knowledge_server.settings import API_PREFIX
@@ -157,3 +158,30 @@ async def test_use_is_enough_and_nothing_less_gets_in(
 
     assert allowed.status_code == 201
     assert denied.status_code == 403
+
+
+async def test_an_update_locks_the_row_before_checking_the_version(
+    db_stack: DbStack,
+) -> None:
+    """⚠ 不锁就判版本，两个标签页拿同一个版本号同时改：两边都判过、都提交，
+    后到的那次把先到的范围悄悄顶掉，而两边拿到的是同一个新版本号。"""
+    made = await _create(db_stack.client)
+    seen: list[str] = []
+
+    def record(*args: object) -> None:
+        seen.append(str(args[2]))
+
+    engine = db_stack.app.state.container.database.engine.sync_engine
+    event.listen(engine, "before_cursor_execute", record)
+    try:
+        response = await db_stack.client.patch(
+            f"{URL}/{made['id']}",
+            json={"title": "改名了", "expected_version": 1},
+        )
+    finally:
+        event.remove(engine, "before_cursor_execute", record)
+
+    assert response.status_code == 200
+    assert any(
+        "kb_chat_sessions" in one and "FOR UPDATE" in one for one in seen
+    )
