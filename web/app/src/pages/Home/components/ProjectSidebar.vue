@@ -135,7 +135,12 @@ function onRenamed(projectId: string, name: string): void {
                 @click.stop="startRename(project.id)"
               />
             </span>
-            <span class="shrink-0" :class="{ 'group-hover:hidden': canManage }">
+            <span
+              class="shrink-0"
+              :class="{
+                'group-focus-within:hidden group-hover:hidden': canManage,
+              }"
+            >
               <DtTag data-test="project-count">
                 {{ project.dashboardCount }}
               </DtTag>
