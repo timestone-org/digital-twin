@@ -10,6 +10,7 @@
 import type { Pt, Twin2dMark } from '@dt/twin2d'
 import { computed } from 'vue'
 
+import { twin2dClaimPointer } from '../scripts/gestureFrame'
 import { screenToDesignPx } from '../scripts/viewportOps'
 
 /** 手柄在屏幕上的边长。 */
@@ -114,7 +115,7 @@ const endpoints = computed<readonly EndpointHandle[]>(() => {
  * @param event 起手事件
  */
 function grabResize(dir: Pt, event: PointerEvent): void {
-  event.stopPropagation()
+  if (!twin2dClaimPointer(event)) return
   event.preventDefault()
   emit('resize', dir, event)
 }
@@ -125,7 +126,7 @@ function grabResize(dir: Pt, event: PointerEvent): void {
  * @param event 起手事件
  */
 function grabEndpoint(index: number, event: PointerEvent): void {
-  event.stopPropagation()
+  if (!twin2dClaimPointer(event)) return
   event.preventDefault()
   emit('endpoint', index, event)
 }
