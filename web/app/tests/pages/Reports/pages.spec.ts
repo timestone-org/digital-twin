@@ -94,6 +94,8 @@ beforeEach(() => {
   signIn(['report:view'])
 })
 afterEach(() => {
+  // 吐司队列是模块级单例，不清的话上一条用例的提示会漏进下一条的断言
+  useToast().clear()
   vi.restoreAllMocks()
   vi.useRealTimers()
 })
