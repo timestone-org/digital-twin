@@ -182,7 +182,11 @@ const archiveParamsOpen = ref(false)
             <template v-if="activeSource">
               <SourceDetailHeader
                 :source="activeSource"
-                :busy="ops.busyId.value === activeSource.id"
+                :busy="
+                  ops.busyId.value === activeSource.id
+                    ? ops.busyAction.value
+                    : null
+                "
                 :refreshing="sourcesLoading"
                 @connect="ops.setEnabled(activeSource, true)"
                 @disconnect="ops.setEnabled(activeSource, false)"
