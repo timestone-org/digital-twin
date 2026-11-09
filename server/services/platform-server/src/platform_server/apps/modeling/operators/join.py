@@ -23,6 +23,7 @@ from platform_server.apps.modeling.operators.base import (
 from platform_server.apps.modeling.operators.frame import (
     CellValue,
     Frame,
+    FrameColumn,
     Provenance,
     frame_input,
 )
@@ -252,6 +253,16 @@ def _closest(
     return _Match(position, gap)
 
 
+def _prefixed(right: Frame, prefix: str) -> tuple[FrameColumn, ...]:
+    """右侧每一列的 key 与显示名都加上前缀。Args: right, prefix。"""
+    return tuple(
+        replace(
+            column, key=f"{prefix}{column.key}", name=f"{prefix}{column.name}"
+        )
+        for column in right.columns
+    )
+
+
 def _joined(
     left: Frame,
     right: Frame,
@@ -283,17 +294,7 @@ def _joined(
         )
         for position in kept
     )
-    columns = (
-        *left.columns,
-        *(
-            replace(
-                column,
-                key=f"{config.right_prefix}{column.key}",
-                name=f"{config.right_prefix}{column.name}",
-            )
-            for column in right.columns
-        ),
-    )
+    columns = (*left.columns, *_prefixed(right, config.right_prefix))
     return replace(
         left,
         columns=columns,

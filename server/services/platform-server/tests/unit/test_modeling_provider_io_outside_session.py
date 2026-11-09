@@ -36,10 +36,11 @@ class TrackedSessions:
             self.is_open = False
 
 
-async def test_binary_models_are_fetched_after_the_session_closes(
-    monkeypatch: pytest.MonkeyPatch,
-) -> None:
-    sessions = TrackedSessions()
+def _stub_rows(monkeypatch: pytest.MonkeyPatch) -> None:
+    """一条启用的绑定指向一个通道 B 的版本，产物行也在。
+
+    Args: monkeypatch。
+    """
     binding = SimpleNamespace(
         fx_code="模型", is_enabled=True, model_version_id=VERSION_ID
     )
@@ -66,6 +67,23 @@ async def test_binary_models_are_fetched_after_the_session_closes(
         del args
         return artifact
 
+    def compiled(serving: object, *, estimator: object) -> str:
+        del serving, estimator
+        return "compiled"
+
+    monkeypatch.setattr(model_provider.binding_crud, "list_by_codes", bindings)
+    monkeypatch.setattr(model_provider.model_version_crud, "get", got)
+    monkeypatch.setattr(
+        model_provider.model_artifact_crud, "get_by_version", artifact_of
+    )
+    monkeypatch.setattr(model_provider, "compile_model", compiled)
+
+
+async def test_binary_models_are_fetched_after_the_session_closes(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    sessions = TrackedSessions()
+    _stub_rows(monkeypatch)
     opened_during_fetch: list[bool] = []
 
     async def fetch(*args: Any) -> object:
@@ -73,18 +91,7 @@ async def test_binary_models_are_fetched_after_the_session_closes(
         opened_during_fetch.append(sessions.is_open)
         return object()
 
-    monkeypatch.setattr(model_provider.binding_crud, "list_by_codes", bindings)
-    monkeypatch.setattr(model_provider.model_version_crud, "get", got)
-    monkeypatch.setattr(
-        model_provider.model_artifact_crud, "get_by_version", artifact_of
-    )
     monkeypatch.setattr(model_provider.artifact_io, "fetch", fetch)
-
-    def compiled(serving: object, *, estimator: object) -> str:
-        del serving, estimator
-        return "compiled"
-
-    monkeypatch.setattr(model_provider, "compile_model", compiled)
     provider = model_provider.ModelingAnalysisProvider(
         store=cast("ObjectStore", object())
     )
