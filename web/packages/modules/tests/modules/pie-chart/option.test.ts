@@ -143,6 +143,13 @@ describe('扇区', () => {
     ).toBe(false)
   })
 
+  // ⚠ 不配的话 echarts 画一圈自带的浅灰空环，深色主题下是全屏最亮的那一块
+  it('没有读数时的空环跟主题的弱分隔色，不用 echarts 自带的浅灰', () => {
+    const series = seriesOf(optionOf(BASE, viewsOf(BASE, [null, null, null])))
+
+    expect(asRecord(series.emptyCircleStyle).color).toBe('tone-split')
+  })
+
   it('逐片固定色压过色板，没填的按文档序取色板', () => {
     const config = {
       [SLICE_ITEMS_KEY]: [
