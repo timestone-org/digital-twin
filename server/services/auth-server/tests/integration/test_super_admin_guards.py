@@ -150,6 +150,11 @@ async def test_stripping_the_last_super_admins_custom_role_is_refused(
     assert moved.status_code == 200, moved.text
     assert response.status_code == 400, response.text[:300]
     assert response.json()["code"] == SELF_LOCKOUT
+    # ⚠ 拒绝发生在 flush 之后：整笔必须回滚，角色上的码一条都不能少
+    stored = await app_client.get(
+        f"{API_PREFIX}/roles/{everything}", headers=headers
+    )
+    assert "dashboard:view" in stored.json()["data"]["permissions"]
 
 
 async def test_editing_a_role_nobody_privileged_holds_still_works(
