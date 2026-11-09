@@ -49,6 +49,12 @@ describe('HTTP JSON 映射', () => {
       'point_3',
     ])
   })
+  it('中文键名与 OPC UA 导入一样转写成拼音，不再退成 point_N', () => {
+    const words: Record<string, string> = { 炉: 'lu', 温度: 'wen_du' }
+    const romanize = (text: string) => words[text] ?? ''
+    const result = parseHttpSample('{"炉":{"温度":3},"温度":4}', romanize)
+    expect(result.rows.map((row) => row.code)).toEqual(['lu_wen_du', 'wen_du'])
+  })
   it('无效 JSON、过深响应及过多叶子明确报错', () => {
     expect(parseHttpSample('{').error).toContain('JSON')
     expect(parseHttpSample('{"value":1e999}').error).toContain('有限数值')

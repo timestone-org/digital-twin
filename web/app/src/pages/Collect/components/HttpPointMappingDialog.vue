@@ -19,6 +19,7 @@ import {
   parseHttpSample,
   type HttpPointDraft,
 } from '../scripts/httpPointMapping'
+import { loadRomanize } from '../scripts/romanize'
 import { codeProblems, toPointItems } from '../scripts/importDrafts'
 import { useHttpPointImport } from '../scripts/useHttpPointImport'
 
@@ -119,8 +120,9 @@ watch(
 )
 onUnmounted(state.cancel)
 
-function parse(): void {
-  const result = parseHttpSample(sample.value)
+/** 中文键名按拼音推编码；字典按需加载，加载不动就退回不转写。 */
+async function parse(): Promise<void> {
+  const result = parseHttpSample(sample.value, await loadRomanize())
   rows.value = result.rows
   selected.value = new Set(result.rows.map((row) => row.address))
   parseError.value = result.error
@@ -216,7 +218,7 @@ async function submit(): Promise<void> {
         <DtButton
           variant="outline"
           :disabled="isBusy || sample.trim() === ''"
-          @click="parse"
+          @click="void parse()"
         >
           <span>解析并预览</span>
         </DtButton>

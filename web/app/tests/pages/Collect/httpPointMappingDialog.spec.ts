@@ -1,5 +1,13 @@
 /** @fileoverview JSON 多点位导入在真实 DOM 中的字段选择、预览、归档和错误契约。 */
-import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
+import {
+  afterEach,
+  beforeAll,
+  beforeEach,
+  describe,
+  expect,
+  it,
+  vi,
+} from 'vitest'
 import { enableAutoUnmount, flushPromises, mount } from '@vue/test-utils'
 import type { VueWrapper } from '@vue/test-utils'
 import type { CollectPoint } from '@dt/contracts'
@@ -8,6 +16,10 @@ import { useToast } from '@dt/ui'
 import HttpPointMappingDialog from '@/pages/Collect/components/HttpPointMappingDialog.vue'
 
 enableAutoUnmount(afterEach)
+// ⚠ 先把拼音字典加载好：解析时那次 `import()` 是动态的，预热后从模块缓存同步命中
+beforeAll(async () => {
+  await import('pinyin-pro')
+})
 beforeEach(() => {
   document.body.innerHTML = ''
   vi.spyOn(collect, 'listPoints').mockResolvedValue({
