@@ -19,6 +19,7 @@ import {
   DtSpinner,
   DtSwitch,
   DtTag,
+  useConfirm,
 } from '@dt/ui'
 
 import {
@@ -107,7 +108,16 @@ async function save(): Promise<void> {
   if (await state.value.save()) emit('saved')
 }
 
+const confirm = useConfirm()
+
 async function unbind(): Promise<void> {
+  const agreed = await confirm.ask({
+    title: '解绑点位',
+    message: '解绑后不再自动下发，点位上此刻的值不会被清除。',
+    confirmText: '解绑',
+    danger: true,
+  })
+  if (!agreed) return
   if (await state.value.unbind()) emit('unbound')
 }
 
@@ -268,7 +278,7 @@ async function publishNow(): Promise<void> {
         class="ml-auto"
         size="sm"
         variant="ghost"
-        danger
+        intent="danger"
         :disabled="state.saved.value === null || state.isSaving.value"
         @click="unbind"
       >

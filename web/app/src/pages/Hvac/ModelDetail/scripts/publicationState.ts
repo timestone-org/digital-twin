@@ -33,6 +33,8 @@ export function createPublicationState() {
     isPublishing: ref(false),
     error: ref<string | null>(null),
     publishResult: shallowRef<ModelPublishResult | null>(null),
+    /** 上一次读成功的是哪个模型；同一模型下有未保存改动时不再重读。 */
+    loadedFor: ref<string | null>(null),
   }
 }
 

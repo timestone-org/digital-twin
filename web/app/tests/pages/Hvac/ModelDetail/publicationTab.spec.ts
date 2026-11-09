@@ -9,8 +9,9 @@ import { createPinia, setActivePinia } from 'pinia'
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 import { enableAutoUnmount, flushPromises, mount } from '@vue/test-utils'
 import type { AcModelPublication, ModelPublishResult } from '@dt/contracts'
-import { useToast } from '@dt/ui'
+import { DtButton, useConfirm, useToast } from '@dt/ui'
 
+import { BizError } from '@/api/client'
 import * as hvac from '@/api/hvac'
 import * as opcua from '@/api/opcua'
 import DetailPage from '@/pages/Hvac/ModelDetail/index.vue'
@@ -274,11 +275,19 @@ describe('点位绑定页签', () => {
 
   it('还没配过时不报错，只是一份空表单', async () => {
     vi.spyOn(hvac, 'getModelPublication').mockRejectedValue(
-      new Error('not found'),
+      new BizError(40401, 'not found', 404, 'trace'),
     )
     const wrapper = await openTab()
     expect(wrapper.text()).toContain('还没下发过')
     expect(wrapper.text()).not.toContain('not found')
+  })
+
+  it('⚠ 读配置的其他失败照实报错，不许冒充「没配过」', async () => {
+    vi.spyOn(hvac, 'getModelPublication').mockRejectedValue(
+      new BizError(50001, '平台暂时不可用', 500, 'trace'),
+    )
+    const wrapper = await openTab()
+    expect(wrapper.text()).toContain('平台暂时不可用')
   })
 
   it('上一拍失败时把原因摆出来', async () => {
@@ -361,5 +370,66 @@ describe('点位绑定页签', () => {
       .findAll('button')
       .find((node) => node.text() === '立刻下发一次')
     expect(button?.attributes('disabled')).toBeDefined()
+  })
+
+  it('⚠ 下发成功后重读配置失败，保留手上那份而不是清成「没配过」', async () => {
+    vi.spyOn(hvac, 'getModelPublication')
+      .mockResolvedValueOnce(publication())
+      .mockRejectedValueOnce(new BizError(50301, '暂时不可用', 503, 'trace'))
+    vi.spyOn(hvac, 'publishModelNow').mockResolvedValue(publishResult())
+    const wrapper = await openTab()
+    const button = wrapper
+      .findAll('button')
+      .find((node) => node.text() === '立刻下发一次')
+    await button?.trigger('click')
+    await flushPromises()
+    expect(wrapper.text()).not.toContain('还没下发过')
+    const unbind = wrapper
+      .findAll('button')
+      .find((node) => node.text() === '解绑')
+    expect(unbind?.attributes('disabled')).toBeUndefined()
+  })
+
+  it('⚠ 切走再切回来不丢未保存的改动，也不重读配置', async () => {
+    const read = vi
+      .spyOn(hvac, 'getModelPublication')
+      .mockResolvedValue(publication())
+    const wrapper = await openTab()
+    const toggle = wrapper.find('[role="switch"]')
+    await toggle.trigger('click')
+    await flushPromises()
+    const before = toggle.attributes('aria-checked')
+    const tabButton = (label: string) =>
+      wrapper.findAll('button').find((node) => node.text() === label)
+    await tabButton('评估')?.trigger('click')
+    await flushPromises()
+    await tabButton('点位绑定')?.trigger('click')
+    await flushPromises()
+    expect(wrapper.find('[role="switch"]').attributes('aria-checked')).toBe(
+      before,
+    )
+    expect(read).toHaveBeenCalledTimes(1)
+  })
+
+  it('⚠ 解绑先确认，取消就不删；按钮是危险色', async () => {
+    vi.spyOn(hvac, 'getModelPublication').mockResolvedValue(publication())
+    const remove = vi
+      .spyOn(hvac, 'deleteModelPublication')
+      .mockResolvedValue(undefined)
+    const wrapper = await openTab()
+    const unbind = wrapper
+      .findAllComponents(DtButton)
+      .find((node) => node.text() === '解绑')
+    expect(unbind?.props('intent')).toBe('danger')
+    await unbind?.trigger('click')
+    await flushPromises()
+    useConfirm().resolve(false)
+    await flushPromises()
+    expect(remove).not.toHaveBeenCalled()
+    await unbind?.trigger('click')
+    await flushPromises()
+    useConfirm().resolve(true)
+    await flushPromises()
+    expect(remove).toHaveBeenCalledTimes(1)
   })
 })
