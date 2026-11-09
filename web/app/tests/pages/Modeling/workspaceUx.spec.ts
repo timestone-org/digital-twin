@@ -43,8 +43,8 @@ it('工作栏提供配置与历史入口，并准确展示只读和草稿状态'
   expect(wrapper.text()).toContain('有未保存修改')
   for (const [label, event] of [
     ['配置选中节点', 'configure'],
-    ['自动整理', 'autoLayout'],
-    ['运行历史', 'history'],
+    ['一键整理', 'autoLayout'],
+    ['训练历史', 'history'],
     ['撤销', 'undo'],
     ['重做', 'redo'],
     ['快捷键', 'shortcuts'],
@@ -81,7 +81,7 @@ it('工作栏提供配置与历史入口，并准确展示只读和草稿状态'
   expect(
     wrapper
       .findAll('button')
-      .find((item) => item.text().trim() === '自动整理')
+      .find((item) => item.text().trim() === '一键整理')
       ?.attributes('disabled'),
   ).toBeDefined()
   wrapper.unmount()
@@ -105,7 +105,7 @@ it('空图不能触发自动整理', async () => {
   })
   const button = wrapper
     .findAll('button')
-    .find((item) => item.text().trim() === '自动整理')
+    .find((item) => item.text().trim() === '一键整理')
   if (!button) throw new Error('缺少自动整理入口')
   expect(button.attributes('disabled')).toBeDefined()
   await button.trigger('click')

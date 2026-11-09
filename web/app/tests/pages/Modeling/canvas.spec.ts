@@ -259,7 +259,7 @@ describe('未保存画布回看历史', () => {
     await wrapper.find('.dt-ml-palette__item').trigger('click')
     await wrapper
       .findAll('button')
-      .find((button) => button.text() === '运行历史')
+      .find((button) => button.text() === '训练历史')
       ?.trigger('click')
     await wrapper.find('.dt-ml-runs__item').trigger('click')
     await flushPromises()
@@ -490,7 +490,7 @@ describe('画布页', () => {
     const wrapper = open()
     await flushPromises()
 
-    expect(wrapper.text()).not.toContain('运行历史 运行')
+    expect(wrapper.text()).not.toContain('训练历史 运行')
     expect(wrapper.find('[data-test="perm-readonly"]').exists()).toBe(true)
   })
 
@@ -540,7 +540,7 @@ describe('画布页', () => {
 
     await wrapper
       .findAll('button')
-      .find((b) => b.text() === '运行历史')
+      .find((b) => b.text() === '训练历史')
       ?.trigger('click')
     await flushPromises()
     await wrapper.find('.dt-ml-runs__item').trigger('click')
@@ -1394,7 +1394,7 @@ it('自动整理入口只调整位置，可撤销并随工作流保存', async (
   await flushPromises()
   const arrange = wrapper
     .findAll('button')
-    .find((button) => button.text().trim() === '自动整理')
+    .find((button) => button.text().trim() === '一键整理')
   if (!arrange) throw new Error('缺少自动整理入口')
   await arrange.trigger('click')
   await flushPromises()
@@ -1432,7 +1432,7 @@ describe('运行结束之后', () => {
 
     await wrapper
       .findAll('button')
-      .find((b) => b.text() === '运行历史')
+      .find((b) => b.text() === '训练历史')
       ?.trigger('click')
     await flushPromises()
 

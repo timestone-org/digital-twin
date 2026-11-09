@@ -61,7 +61,7 @@ defineEmits<{
           title="按数据流整理节点，支持撤销"
           :disabled="state.isReadonly || state.nodeCount === 0"
           @click="$emit('autoLayout')"
-          >自动整理</DtButton
+          >一键整理</DtButton
         >
         <DtIconButton
           variant="ghost"
@@ -86,8 +86,8 @@ defineEmits<{
         variant="ghost"
         size="sm"
         icon="list-checks"
-        label="运行历史"
-        tooltip="查看运行历史"
+        label="训练历史"
+        tooltip="在画布上回看本工作流的训练历史"
         @click="$emit('history')"
       />
       <DtIconButton
