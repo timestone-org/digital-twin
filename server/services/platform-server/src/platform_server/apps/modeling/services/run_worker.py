@@ -7,7 +7,10 @@ at-least-once（docs/agents/runtime-resilience.md §5）。
 
 import asyncio
 import uuid
+from collections.abc import Callable
 from dataclasses import dataclass
+from datetime import UTC, datetime
+from zoneinfo import ZoneInfo
 
 from lib.errors import DependencyUnavailable
 from lib.logging import (
@@ -42,6 +45,22 @@ from platform_server.apps.modeling.services.workflow_publication import (
 
 _logger = get_logger("platform.modeling.worker")
 
+_MINUTE_S = 60
+
+
+def _utc_now() -> datetime:
+    return datetime.now(UTC)
+
+
+def business_offset_minutes(zone: ZoneInfo, moment: datetime) -> int:
+    """业务时区在某一时刻相对 UTC 的分钟偏移。
+
+    ⚠ 时间特征按 UTC 算会整体偏 8 小时，且不报任何错。
+    Args: zone, moment。
+    """
+    offset = moment.astimezone(zone).utcoffset()
+    return 0 if offset is None else int(offset.total_seconds() // _MINUTE_S)
+
 
 @dataclass(frozen=True)
 class RunConsumerOptions:
@@ -52,13 +71,16 @@ class RunConsumerOptions:
     block_ms: int
     claim_idle_ms: int
     node_timeout_s: float
-    tz_offset_minutes: int
+    #: 业务时区。⚠ 偏移每次运行现算：worker 一跑几个月，启动时冻住的偏移
+    #: 在夏令时切换后让时间特征整体偏一小时
+    business_zone: ZoneInfo
     #: 每条流水线留几次运行的节点级明细
     keep_per_pipeline: int
     #: 二进制产物的落脚处。缺省「没有」——纯 JSON 那些算子一个字节都不产
     store: ObjectStore | None = None
     bdm_connection: BdmConnection | None = None
     stale_after_s: float = 3600
+    clock: Callable[[], datetime] = _utc_now
 
 
 class RunConsumer:
@@ -195,7 +217,9 @@ class RunConsumer:
                     runner=PooledRunner(
                         self._pool, timeout_s=options.node_timeout_s
                     ),
-                    tz_offset_minutes=options.tz_offset_minutes,
+                    tz_offset_minutes=business_offset_minutes(
+                        options.business_zone, options.clock()
+                    ),
                     store=options.store,
                     bdm_connection=options.bdm_connection,
                     pool=self._pool,

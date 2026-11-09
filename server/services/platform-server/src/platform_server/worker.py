@@ -3,7 +3,6 @@
 import asyncio
 from collections.abc import Awaitable, Callable
 from dataclasses import dataclass
-from datetime import UTC, datetime
 from typing import Protocol
 from zoneinfo import ZoneInfo
 
@@ -88,7 +87,6 @@ _logger = get_logger("platform.worker")
 
 # 一天与一分钟的秒数，清理周期与时区偏移换算用
 _DAY_S = 86400.0
-_MINUTE_S = 60
 
 Wait = Callable[[], Awaitable[None]]
 
@@ -227,7 +225,7 @@ def build_modeling_runner(
             claim_idle_ms=settings.modeling_claim_idle_ms,
             stale_after_s=settings.modeling_stale_minutes * 60,
             node_timeout_s=settings.modeling_node_timeout_s,
-            tz_offset_minutes=_business_tz_offset_minutes(container),
+            business_zone=ZoneInfo(settings.dataset_bucket_timezone),
             keep_per_pipeline=settings.modeling_run_keep_per_pipeline,
             bdm_connection=configured_connection(settings),
         ),
@@ -247,17 +245,6 @@ def build_modeling_retention(container: Container) -> ModelingRetention:
             interval_s=_DAY_S,
         ),
     )
-
-
-def _business_tz_offset_minutes(container: Container) -> int:
-    """业务时区相对 UTC 的分钟偏移。
-
-    ⚠ 时间特征按 UTC 算会整体偏 8 小时，且不报任何错。
-    Args: container。
-    """
-    zone = ZoneInfo(container.settings.dataset_bucket_timezone)
-    offset = datetime.now(UTC).astimezone(zone).utcoffset()
-    return 0 if offset is None else int(offset.total_seconds() // _MINUTE_S)
 
 
 def build_publish_loop(container: Container) -> PublishLoop:
