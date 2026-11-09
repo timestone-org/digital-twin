@@ -283,11 +283,21 @@ describe('立体箭头', () => {
 })
 
 describe('能量流', () => {
-  it('路径锚点去重去空白', () => {
-    expect(flow({ pathAnchors: [' a ', 'a', '', 'b'] }).pathAnchors).toEqual([
+  it('路径锚点去空白、丢空串', () => {
+    expect(flow({ pathAnchors: [' a ', '', 'b'] }).pathAnchors).toEqual([
       'a',
       'b',
     ])
+  })
+
+  // ⚠ 往返、回环都靠同一个锚点重复出现：去重的话 A→B→C→A 存下来只剩 A→B→C，环永远合不上
+  it('路径锚点保留重复与次序，归一化两遍结果不变', () => {
+    const once = flow({ pathAnchors: ['a', 'b', 'c', 'a'] })
+
+    expect(once.pathAnchors).toEqual(['a', 'b', 'c', 'a'])
+    expect(flow({ pathAnchors: once.pathAnchors }).pathAnchors).toEqual(
+      once.pathAnchors,
+    )
   })
 
   // 只绑了强度没绑激活是常见配法，要求两个都有会让那条流永远静止

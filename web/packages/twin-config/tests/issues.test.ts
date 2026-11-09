@@ -101,6 +101,25 @@ describe('collectTwinConfigIssues', () => {
     ])
   })
 
+  // ⚠ 路径允许重复锚点（往返、回环），但紧挨着的同一站只算一个点，画出来仍是一个点
+  it('紧挨着重复的同一个锚点只算一个点', () => {
+    const config = normalizeTwinConfig({
+      anchors: [{ id: 'a1' }],
+      flows: [{ id: 'f1', pathAnchors: ['a1', 'a1'] }],
+    })
+    expect(collectTwinConfigIssues(config).map((issue) => issue.kind)).toEqual([
+      'flow-too-short',
+    ])
+  })
+
+  it('往返的流不报太短', () => {
+    const config = normalizeTwinConfig({
+      anchors: [{ id: 'a1' }, { id: 'a2' }],
+      flows: [{ id: 'f1', pathAnchors: ['a1', 'a2', 'a1'] }],
+    })
+    expect(collectTwinConfigIssues(config)).toEqual([])
+  })
+
   it('两个点都在时不报太短', () => {
     const config = normalizeTwinConfig({
       anchors: [{ id: 'a1' }, { id: 'a2' }],

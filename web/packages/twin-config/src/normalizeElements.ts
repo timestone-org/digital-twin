@@ -20,8 +20,8 @@ import {
   finiteOr,
   isRecord,
   normalizeColorSpec,
-  stringList,
   toFiniteNumber,
+  trimmedList,
   trimmedString,
 } from './sanitize'
 import {
@@ -215,7 +215,8 @@ export function normalizeFlow(
     id: entityId(raw.id, 'flow', index),
     name: trimmedString(raw.name),
     kind: trimmedString(raw.kind),
-    pathAnchors: stringList(raw.pathAnchors),
+    // ⚠ 不去重：往返、回环都靠同一个锚点重复出现
+    pathAnchors: trimmedList(raw.pathAnchors),
     width: clampedOr(raw.width, 1, MIN_GEOMETRY, MAX_GEOMETRY),
     reversible: raw.reversible === true,
     visibility: normalizeVisibility(raw.visibility, raw.visible),

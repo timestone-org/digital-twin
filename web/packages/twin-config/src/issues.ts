@@ -124,6 +124,25 @@ function danglingFlowAnchors(
 }
 
 /**
+ * 能画出来的路径点数：只数解析得出的锚点，紧挨着的同一站只算一个。
+ * @param path 路径上的锚点 id
+ * @param known 存在的锚点 id
+ */
+function drawableStops(
+  path: readonly string[],
+  known: ReadonlySet<string>,
+): number {
+  let count = 0
+  let previous: string | null = null
+  for (const id of path) {
+    if (!known.has(id) || id === previous) continue
+    count += 1
+    previous = id
+  }
+  return count
+}
+
+/**
  * 能量流可解析的点不足两个。
  * ⚠ 一条线至少要两点，渲染层对这种流是整条不画——不报出来的话，用户看到的是
  * 「配了一条流但画面上什么都没有」。
@@ -134,9 +153,7 @@ function shortFlows(
 ): TwinConfigIssue[] {
   return config.flows
     .map((flow, index) => ({ flow, index }))
-    .filter(
-      (ref) => ref.flow.pathAnchors.filter((id) => known.has(id)).length < 2,
-    )
+    .filter((ref) => drawableStops(ref.flow.pathAnchors, known) < 2)
     .map((ref) => ({
       kind: 'flow-too-short' as const,
       entityId: ref.flow.id,

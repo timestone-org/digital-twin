@@ -468,6 +468,21 @@ describe('帧间隔', () => {
   })
 })
 
+describe('往返与回环', () => {
+  // ⚠ A→B→A 在 B 处切线接近零：管线的法向框架一旦算出 NaN，整条管子不画也不报错
+  it('往返的流建得出管线，顶点里没有 NaN', () => {
+    const layer = new FlowLayer(null)
+    layer.build([flow({ pathAnchors: ['a1', 'a2', 'a1'] })], LINE)
+    layer.setWorldScale(10)
+
+    const positions = firstTube(layer).geometry.getAttribute('position')
+    expect(positions.count).toBeGreaterThan(0)
+    for (let index = 0; index < positions.array.length; index += 1) {
+      expect(Number.isFinite(positions.array[index])).toBe(true)
+    }
+  })
+})
+
 describe('随模型体量缩放', () => {
   it('大模型上管线与粒子都更粗', () => {
     const layer = new FlowLayer(null)
