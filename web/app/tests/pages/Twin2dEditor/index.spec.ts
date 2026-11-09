@@ -65,6 +65,7 @@ vi.mock('@dt/ui', async () => {
       success: toastSuccess,
       error: toastError,
       info: vi.fn(),
+      warning: vi.fn(),
     }),
     useConfirm: () => ({ ask: confirmAsk }),
   }

@@ -52,6 +52,8 @@ interface Rig {
   selectedPrim: ReturnType<typeof ref<string>>
   /** 最后一次写出去的配置；一次都没写就是初始那份。 */
   now: () => Twin2dConfig
+  /** 粘贴之后那句交代。 */
+  notify: ReturnType<typeof vi.fn<(text: string) => void>>
 }
 
 /**
@@ -64,6 +66,7 @@ function rigOf(initial: Twin2dConfig = CONFIG): Rig {
   const save = vi.fn()
   const undo = vi.fn()
   const redo = vi.fn()
+  const notify = vi.fn<(text: string) => void>()
   const now = (): Twin2dConfig => commits.at(-1) ?? initial
   const selectedPrim = ref('')
   const commands = createTwin2dCommands({
@@ -77,8 +80,19 @@ function rigOf(initial: Twin2dConfig = CONFIG): Rig {
     pickPrim: (primId) => {
       selectedPrim.value = primId
     },
+    notify,
   })
-  return { selection, commands, commits, save, undo, redo, selectedPrim, now }
+  return {
+    selection,
+    commands,
+    commits,
+    save,
+    undo,
+    redo,
+    selectedPrim,
+    now,
+    notify,
+  }
 }
 
 /** 当下那份样式的图元树。 */
@@ -301,6 +315,34 @@ describe('Esc', () => {
     rig.commands.handlers.escape()
 
     expect(rig.selection.pick.value).toBeNull()
+  })
+})
+
+// ⚠ 粘进来的节点换用了本图同 id 的另一份样式、或连线因为两端不在而整条没粘上：
+// 不说一声的话整批节点粘完就变了样，画面上无从追查
+describe('粘贴之后的交代', () => {
+  it('沿用了本图同 id 的样式时说一声', () => {
+    const rig = rigOf()
+    rig.selection.select('nodes', 'n1')
+    rig.commands.handlers.copy()
+    rig.commits.push({
+      ...CONFIG,
+      styles: CONFIG.styles.map((style) => ({ ...style, name: '本图那份' })),
+    })
+
+    rig.commands.handlers.paste()
+
+    expect(rig.notify).toHaveBeenCalledWith(expect.stringContaining('st'))
+  })
+
+  it('原样粘回同一张图时一声不吭', () => {
+    const rig = rigOf()
+    rig.selection.select('nodes', 'n1')
+    rig.commands.handlers.copy()
+
+    rig.commands.handlers.paste()
+
+    expect(rig.notify).not.toHaveBeenCalled()
   })
 })
 

@@ -23,6 +23,7 @@ import {
   pasteTwin2dPrims,
   twin2dCut,
   twin2dEntityClip,
+  twin2dPasteNotice,
   twin2dPrimClip,
 } from './clipboard'
 import type {
@@ -51,6 +52,8 @@ export interface Twin2dCommandDeps {
   commitMerged?: (next: Twin2dConfig, key: string) => void
   /** 一段连续动作到此为止。 */
   endMerge?: () => void
+  /** 给用户交代一句话（粘贴时换了样式、丢了连线）。 */
+  notify?: (text: string) => void
   undo: () => void
   redo: () => void
   save: () => void
@@ -242,6 +245,8 @@ function pasteEntitiesCmd(ctx: Ctx, clip: Twin2dEntityClip): void {
     offset: ctx.clipboard.nextOffset(config.canvas.grid),
   })
   ctx.deps.commit(done.config)
+  const notice = twin2dPasteNotice(done, clip, config)
+  if (notice !== null) ctx.deps.notify?.(notice)
   const kind = PICK_KINDS.find((item) => done.ids[item].length > 0)
   if (kind !== undefined) {
     ctx.deps.selection.selectMany(kind, done.ids[kind], false)

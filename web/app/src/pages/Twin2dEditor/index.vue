@@ -159,6 +159,7 @@ const commands = createTwin2dCommands({
   pickPrim: (primId) => {
     selectedPrim.value = primId
   },
+  notify: (text) => toast.warning(text),
 })
 
 useTwin2dShortcuts({
