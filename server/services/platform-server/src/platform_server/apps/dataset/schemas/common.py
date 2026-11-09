@@ -8,6 +8,7 @@ from datetime import datetime
 from typing import Annotated, ClassVar, Self
 
 from pydantic import (
+    AfterValidator,
     BaseModel,
     ConfigDict,
     PlainSerializer,
@@ -16,13 +17,15 @@ from pydantic import (
     model_validator,
 )
 
-from lib.utils.timeutils import format_rfc3339
+from lib.utils.timeutils import format_rfc3339, to_utc
 from platform_server.apps.dataset.models import KEY_PATTERN
 
 # ⚠ `WithJsonSchema` 不能省：PlainSerializer 会把 openapi 里的类型压成裸
 # `string`，前端由它生成的类型于是丢掉时间语义，而两侧都不会报错。
+# ⚠ `AfterValidator(to_utc)` 不能省：naive 时刻到 asyncpg 会按进程本地时区读
 Utc = Annotated[
     datetime,
+    AfterValidator(to_utc),
     PlainSerializer(format_rfc3339, return_type=str),
     WithJsonSchema({"type": "string", "format": "date-time"}),
 ]
