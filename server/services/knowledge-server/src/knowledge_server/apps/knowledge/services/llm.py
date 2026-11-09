@@ -124,10 +124,27 @@ class ChatAnswerer:
             await self.refresh()
         if not self.can_answer:
             raise AnswerUnavailable("这套部署没有接对话档")
+        # ⚠ 只有半开时放行的这一个才是探测；合上时发出去的调用交还的话，
+        # 会把别人手上的探测一起放掉
+        is_probe = self.breaker.state == "half_open"
         try:
             self.breaker.guard()
         except BreakerOpen as error:
             raise ModelUnavailable("模型暂时不可用") from error
+        try:
+            return await self._ask(system, user)
+        except BaseException:
+            # ⚠ 没记成败就退出（被取消、判我们发错、装不出模型）时必须交还探测，
+            # 否则下一个调用要白等一整个冷却期
+            if is_probe:
+                self.breaker.release_probe()
+            raise
+
+    async def _ask(self, system: str, user: str) -> str:
+        """真正发出这一次调用并按失败分档记进断路器。
+
+        Args: system, user。
+        """
         model = await self.adapter.build(ModelChoice())
         try:
             reply = await model.ainvoke(

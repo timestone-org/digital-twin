@@ -17,6 +17,7 @@ from knowledge_server.apps.knowledge.services.reranking import (
     build_reranker,
 )
 from lib.resilience import BreakerOpen, CircuitBreaker
+from lib.testing.clock import FrozenClock
 from llmcore import ModelRejected, ModelUnavailable, RerankUnavailable
 from llmcore.rerank import RerankScore, UnknownRerankDialect
 
@@ -149,3 +150,34 @@ async def test_a_success_clears_the_failures_it_had_counted() -> None:
     with pytest.raises(RerankFailed):
         await made.rerank("问", ["甲"], top_n=1)
     breaker.guard()
+
+
+def _half_open_breaker() -> CircuitBreaker:
+    clock = FrozenClock()
+    breaker = CircuitBreaker(
+        name="test:rerank", failure_threshold=1, reset_after_s=60.0, clock=clock
+    )
+    breaker.record_failure("t")
+    clock.advance(61)
+    return breaker
+
+
+async def test_a_probe_rejected_as_our_fault_is_handed_back() -> None:
+    """⚠ 探测撞上「我们配错了」说明不了下游好坏：不交还的话，下一个调用在
+    一整个冷却期里都被当成「暂时不可用」挡掉。"""
+    adapter = _Adapter(raises=ModelRejected("密钥不对"))
+    breaker = _half_open_breaker()
+    assert breaker.state == "half_open"
+    made = _made(adapter, breaker)
+    for _ in range(2):
+        with pytest.raises(RerankFailed):
+            await made.rerank("问", ["甲"], top_n=1)
+    assert len(adapter.asked) == 2
+
+
+async def test_a_probe_that_crashes_is_handed_back() -> None:
+    breaker = _half_open_breaker()
+    made = _made(_Adapter(raises=RuntimeError("坏了")), breaker)
+    with pytest.raises(RuntimeError):
+        await made.rerank("问", ["甲"], top_n=1)
+    assert breaker.allow() is True

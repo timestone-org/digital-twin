@@ -70,10 +70,29 @@ class RemoteReranker:
 
         Args: query, documents, top_n。
         """
+        # ⚠ 只有半开时放行的这一个才是探测；合上时发出去的调用交还的话，
+        # 会把别人手上的探测一起放掉
+        is_probe = self.breaker.state == "half_open"
         try:
             self.breaker.guard()
         except BreakerOpen as error:
             raise RerankFailed("重排端点暂时不可用") from error
+        try:
+            return await self._ask(query, documents, top_n=top_n)
+        except BaseException:
+            # ⚠ 没记成败就退出（被取消、判我们配错、方言没装）时必须交还探测，
+            # 否则下一个调用要白等一整个冷却期
+            if is_probe:
+                self.breaker.release_probe()
+            raise
+
+    async def _ask(
+        self, query: str, documents: Sequence[str], *, top_n: int
+    ) -> list[RerankScore]:
+        """真正发出这一次调用并按失败分档记进断路器。
+
+        Args: query, documents, top_n。
+        """
         try:
             made = await self.adapter.rerank(query, documents, top_n=top_n)
         except UnknownRerankDialect as error:

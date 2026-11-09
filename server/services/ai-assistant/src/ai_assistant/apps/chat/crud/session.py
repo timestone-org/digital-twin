@@ -7,7 +7,7 @@
 import uuid
 from collections.abc import Sequence
 
-from sqlalchemy import Select, select
+from sqlalchemy import Select, func, select, update
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from ai_assistant.apps.chat.models import ChatMessage, ChatSession, ChatStep
@@ -59,6 +59,22 @@ class SessionCrud(CrudBase[ChatSession]):
             select(ChatSession.id)
             .where(ChatSession.id == chat_session_id)
             .with_for_update()
+        )
+
+    async def touch_session(
+        self, session: AsyncSession, chat_session_id: uuid.UUID
+    ) -> None:
+        """有了新的一轮：把会话顶到列表最前，版本号不动。
+
+        ⚠ 不动 `row_version`：它守的是标题、归档与模型的并发改写，跟着每一轮涨的
+        话，前端手里那份版本号下一次改会话必然撞 409。
+
+        Args: session, chat_session_id。
+        """
+        await session.execute(
+            update(ChatSession)
+            .where(ChatSession.id == chat_session_id)
+            .values(updated_at=func.now())
         )
 
     async def messages_of(
