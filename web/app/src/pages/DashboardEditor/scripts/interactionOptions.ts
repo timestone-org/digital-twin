@@ -128,10 +128,18 @@ export function nodeOptionsOf(
   nodes: readonly DashboardNodePayload[],
   getManifest: GetModuleManifest,
 ): DtSelectOption[] {
-  return nodes.map((node) => ({
-    value: node.id,
-    label: nodeLabelOf(node, getManifest),
-  }))
+  const labels = nodes.map((node) => nodeLabelOf(node, getManifest))
+  // ⚠ 同类节点都没起名时下拉里是几行一模一样的字：重名的带上位置区分开
+  return nodes.map((node, at) => {
+    const label = labels[at] ?? ''
+    const isShared = labels.filter((one) => one === label).length > 1
+    return {
+      value: node.id,
+      label: isShared
+        ? `${label} · (${String(node.x)}, ${String(node.y)})`
+        : label,
+    }
+  })
 }
 
 function actionSummary(
