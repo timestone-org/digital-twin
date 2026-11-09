@@ -88,7 +88,8 @@ const arrange = createArrangeActions({
   steps: () => snapStep(design.value, grid.value, snap.value),
   dashboardId: () => file.dashboard.value?.id ?? null,
   chrome,
-  notify: (message) => toast.success(message),
+  notify: (message, tone) =>
+    tone === 'warning' ? toast.warning(message) : toast.success(message),
 })
 
 const surface = createEditorSurface({

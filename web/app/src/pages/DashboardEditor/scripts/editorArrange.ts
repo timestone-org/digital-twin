@@ -58,8 +58,8 @@ export interface ArrangeDeps {
   dashboardId: () => string | null
   /** 大屏级外观轴：复制粘贴要连联动规则一起搬。 */
   chrome: ArrangeChrome
-  /** 复制/粘贴结果的提示出口，页面接 toast。 */
-  notify: (message: string) => void
+  /** 复制/粘贴结果的提示出口，页面接 toast；`warning` 是没做成的那一类。 */
+  notify: (message: string, tone?: 'success' | 'warning') => void
 }
 
 export interface ArrangeActions {
@@ -507,7 +507,7 @@ function clipboardActions(
           at === undefined ? clipboard.nextPasteOffset() : 0,
           at,
         )
-      if (!pasted) deps.notify('剪贴板里没有可粘贴的模块')
+      if (!pasted) deps.notify('剪贴板里没有可粘贴的模块', 'warning')
       return pasted
     },
     duplicateSelected: () => {
