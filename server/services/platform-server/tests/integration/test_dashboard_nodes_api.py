@@ -24,6 +24,7 @@ from integration.dashboard_helpers import (
     make_project,
     node_body,
 )
+from platform_server.apps.dashboard.services import node_service
 
 pytestmark = pytest.mark.requires_postgres
 
@@ -55,6 +56,21 @@ async def test_a_created_node_answers_with_a_location_header(
     )
     node_id = data_of(response)["id"]
     assert response.headers["Location"] == f"{NODES_URL}/{node_id}"
+
+
+async def test_a_node_beyond_the_dashboard_cap_is_refused(
+    app_client: httpx.AsyncClient, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    # ⚠ 逐个建能越过整树替换钉的上限，越过之后整树保存、复制、导出全都失败
+    monkeypatch.setattr(node_service, "MAX_NODES_PER_DASHBOARD", 2)
+    dashboard_id = await make_screen(app_client)
+    await make_node(app_client, dashboard_id=dashboard_id)
+    await make_node(app_client, dashboard_id=dashboard_id)
+    response = await app_client.post(
+        f"{DASHBOARDS_URL}/{dashboard_id}/nodes", json=node_body()
+    )
+    assert response.status_code == HTTP_BAD_REQUEST
+    assert issue_fields(response) == [("nodes", "node_limit_reached")]
 
 
 async def test_an_unregistered_module_type_is_refused(

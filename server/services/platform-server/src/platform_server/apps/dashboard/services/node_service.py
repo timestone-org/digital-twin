@@ -5,11 +5,13 @@ import uuid
 from sqlalchemy.exc import IntegrityError
 from sqlalchemy.ext.asyncio import AsyncSession
 
+from lib.errors import FieldError
 from lib.logging import get_logger
 from lib.utils.ids import uuid7
 from platform_server.apps.dashboard.crud import node_crud
 from platform_server.apps.dashboard.errors import (
     ClientKeyTaken,
+    LayoutInvalid,
     NodeNotFound,
 )
 from platform_server.apps.dashboard.models import Dashboard, DashboardNode
@@ -17,6 +19,9 @@ from platform_server.apps.dashboard.schemas import (
     NodeCreateIn,
     NodeOut,
     NodeUpdateIn,
+)
+from platform_server.apps.dashboard.schemas.dashboard import (
+    MAX_NODES_PER_DASHBOARD,
 )
 from platform_server.apps.dashboard.services.changes import given_changes
 from platform_server.apps.dashboard.services.dashboard_service import (
@@ -79,6 +84,7 @@ async def create_node(
     """
     dashboard = await locked_dashboard(session, dashboard_id)
     state = await load_state(session, dashboard.id)
+    _raise_if_full(state)
     node = DashboardNode(
         id=uuid7(),
         dashboard_id=dashboard.id,
@@ -99,6 +105,26 @@ async def create_node(
     await _flush(session)
     _logger.info("dashboard_node_created", "节点已创建", node_id=str(node.id))
     return to_node_out(node, bindings=[])
+
+
+def _raise_if_full(state: DashboardState) -> None:
+    """满了就拒：逐个建不许越过整树替换与导出钉的同一个上限。
+
+    ⚠ 越过之后整树保存必 422，复制、导出与另存模板则在组装出参时 500。
+    Args: state。
+    """
+    if len(state.nodes) < MAX_NODES_PER_DASHBOARD:
+        return
+    raise LayoutInvalid(
+        "节点树不合法",
+        details=(
+            FieldError(
+                field="nodes",
+                code="node_limit_reached",
+                message=f"一张大屏最多 {MAX_NODES_PER_DASHBOARD} 个节点",
+            ),
+        ),
+    )
 
 
 async def update_node(
