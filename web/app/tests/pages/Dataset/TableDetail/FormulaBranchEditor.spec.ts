@@ -173,3 +173,25 @@ describe('插入落点', () => {
     expect(lastDraft(wrapper)?.otherwise).toBe(' + {b}{a}')
   })
 })
+
+describe('增删移之后焦点跟着那一档走', () => {
+  it('⚠ 上移聚焦的那一档，焦点跟到它的新位置，而不是留在原处那一格', async () => {
+    const wrapper = mount(FormulaBranchEditor, {
+      props: { draft: DRAFT },
+      attachTo: document.body,
+    })
+    const box = wrapper.findAll('textarea')[2]
+    if (box === undefined) throw new Error('第 2 档的条件格不存在')
+    box.element.focus()
+    await box.trigger('focus')
+    await clickLabelled(wrapper, '第 2 档上移')
+    await wrapper.setProps({ draft: lastDraft(wrapper) })
+    await flushPromises()
+    const focused = document.activeElement
+    expect(focused).toBeInstanceOf(HTMLTextAreaElement)
+    expect(focused instanceof HTMLTextAreaElement ? focused.value : '').toBe(
+      '{a} > 6',
+    )
+    expect(focused?.getAttribute('aria-label')).toBe('第 1 档的条件')
+  })
+})
