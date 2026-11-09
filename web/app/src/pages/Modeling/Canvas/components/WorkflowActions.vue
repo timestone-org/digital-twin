@@ -56,6 +56,7 @@ const ops = useRunOps(() => emit('published'))
     >
       <DtButton
         size="sm"
+        variant="outline"
         :disabled="run.publication_status === 'pending'"
         :loading="ops.busyId.value !== ''"
         @click="props.run && void ops.publish(props.run.id)"
