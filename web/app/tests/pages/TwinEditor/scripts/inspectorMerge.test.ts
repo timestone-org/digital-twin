@@ -6,6 +6,7 @@ import { inspectorMergeKey } from '@/pages/TwinEditor/scripts/inspectorMerge'
 
 const CONFIG = normalizeTwinConfig({
   anchors: [{ id: 'a1' }, { id: 'a2' }],
+  panels: [{ id: 'p1', fields: [{ key: 'temp', label: '温度' }] }],
 })
 
 describe('inspectorMergeKey', () => {
@@ -45,6 +46,33 @@ describe('inspectorMergeKey', () => {
     expect(
       inspectorMergeKey(CONFIG, { anchors: [...CONFIG.anchors].reverse() }),
     ).toBeNull()
+  })
+
+  // ⚠ 牌里的字段、漫游的站点这类子列表同理：加一个字段并进前面的改名，撤一次两样都没了
+  it('实体里的子列表增删不合并，同一子列表里改字段照样合并', () => {
+    const panel = CONFIG.panels[0]
+    if (panel === undefined) throw new Error('fixture')
+    const field = panel.fields[0]
+    if (field === undefined) throw new Error('fixture')
+    const withFields = (fields: typeof panel.fields) => ({
+      panels: [{ ...panel, fields }],
+    })
+
+    expect(
+      inspectorMergeKey(
+        CONFIG,
+        withFields([...panel.fields, { ...field, key: 'flow' }]),
+      ),
+    ).toBeNull()
+    expect(inspectorMergeKey(CONFIG, withFields([]))).toBeNull()
+    expect(
+      inspectorMergeKey(CONFIG, {
+        roamTour: { ...CONFIG.roamTour, items: ['c1'] },
+      }),
+    ).toBeNull()
+    expect(
+      inspectorMergeKey(CONFIG, withFields([{ ...field, label: '罐温' }])),
+    ).toBe('inspect|panels:p1:fields')
   })
 
   it('什么都没变时给 null', () => {

@@ -7,19 +7,42 @@ function isRecord(value: unknown): value is Record<string, unknown> {
   return typeof value === 'object' && value !== null && !Array.isArray(value)
 }
 
-/** 两份对象里取值不同的那些键，排好序。 */
+/**
+ * 两份值之间有没有列表增删或带 id 的项换了位置，逐层往里找。
+ * ⚠ 牌里的字段、档位、漫游站点都是嵌在实体里的子列表：只在顶层判增删的话，
+ * 「加一个字段」会并进前面的改名，撤一次两样都没了。
+ */
+function reshaped(before: unknown, after: unknown): boolean {
+  if (Array.isArray(before) && Array.isArray(after)) {
+    if (before.length !== after.length) return true
+    return after.some((item, index) => {
+      const prev: unknown = before[index]
+      if (isRecord(prev) && isRecord(item) && prev['id'] !== item['id'])
+        return true
+      return reshaped(prev, item)
+    })
+  }
+  if (isRecord(before) && isRecord(after))
+    return Object.keys(after).some((key) => reshaped(before[key], after[key]))
+  return false
+}
+
+/** 两份对象里取值不同的那些键，排好序；子列表有增删或重排时给 null。 */
 function changedKeys(
   before: Record<string, unknown>,
   after: Record<string, unknown>,
-): string[] {
+): string[] | null {
   const keys = new Set([...Object.keys(before), ...Object.keys(after)])
-  return [...keys]
+  const changed = [...keys]
     .filter((key) => JSON.stringify(before[key]) !== JSON.stringify(after[key]))
     .sort()
+  return changed.some((key) => reshaped(before[key], after[key]))
+    ? null
+    : changed
 }
 
 /**
- * 一个实体集合里改了哪些实体的哪些字段；增删或重排给 null（结构性改动不合并）。
+ * 一个实体集合里改了哪些实体的哪些字段；增删或重排（含实体里的子列表）给 null。
  * @param section 集合名
  * @param before 改之前
  * @param after 改之后
@@ -37,7 +60,9 @@ function listChanges(
     if (!isRecord(prev) || !isRecord(item) || prev['id'] !== item['id'])
       return null
     const id = typeof item['id'] === 'string' ? item['id'] : String(index)
-    parts.push(`${section}:${id}:${changedKeys(prev, item).join(',')}`)
+    const keys = changedKeys(prev, item)
+    if (keys === null) return null
+    parts.push(`${section}:${id}:${keys.join(',')}`)
   }
   return parts
 }
@@ -62,7 +87,9 @@ export function inspectorMergeKey(
       if (changes === null) return null
       parts.push(...changes)
     } else if (isRecord(prev) && isRecord(next)) {
-      parts.push(`${section}:${changedKeys(prev, next).join(',')}`)
+      const keys = changedKeys(prev, next)
+      if (keys === null) return null
+      parts.push(`${section}:${keys.join(',')}`)
     } else {
       parts.push(section)
     }
