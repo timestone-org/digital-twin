@@ -4,6 +4,9 @@
 十有八九是替身比真的宽容。已知刻意的差异只有一条——直传凭证不做真签名。
 """
 
+import asyncio
+from pathlib import Path
+
 from lib.objectstore.base import (
     ObjectNotFound,
     ObjectStat,
@@ -33,6 +36,18 @@ class FakeObjectStore:
         if found is None:
             raise ObjectNotFound(f"对象不存在：{key}")
         return found[0]
+
+    async def download_to(self, key: str, path: Path) -> None:
+        found = self.objects.get(key)
+        if found is None:
+            raise ObjectNotFound(f"对象不存在：{key}")
+        await asyncio.to_thread(path.write_bytes, found[0])
+
+    async def upload_from(
+        self, key: str, path: Path, *, content_type: str
+    ) -> None:
+        data = await asyncio.to_thread(path.read_bytes)
+        self.objects[key] = (data, content_type)
 
     async def stat(self, key: str) -> ObjectStat | None:
         found = self.objects.get(key)

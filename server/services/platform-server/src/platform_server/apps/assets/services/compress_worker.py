@@ -111,16 +111,6 @@ async def _reap(process: asyncio.subprocess.Process) -> None:
     await asyncio.wait_for(process.wait(), KILL_GRACE_S)
 
 
-# ⚠ 文件读写挪进线程：一个 200MB 的模型在事件循环里读一次，这条 worker 上
-# 其它所有活都得等着，而现象只是「偶尔所有任务一起变慢」，归因极难
-async def _read_file(path: Path) -> bytes:
-    return await asyncio.to_thread(path.read_bytes)
-
-
-async def _write_file(path: Path, data: bytes) -> None:
-    await asyncio.to_thread(path.write_bytes, data)
-
-
 @dataclass(frozen=True)
 class ContentVersion:
     """压缩任务读取的素材版本快照。"""
@@ -151,17 +141,14 @@ class ModelCompressor:
         version, pending = await self._pending_variants(asset_id)
         if not pending:
             return
-        # ⚠ 压缩在临时目录里跑，但下载与上传仍整份过内存（字节面还没有流式
-        # 读写口）：一个 2GB 的模型会让 worker 短时多占 2GB 以上
+        # ⚠ 下载与上传都走文件流：整份过内存的话，一个 2GB 的模型会让 worker
+        # 短时多占 2GB 以上
         with tempfile.TemporaryDirectory(prefix="dt-compress-") as workdir:
             root = Path(workdir)
             source = root / "original.glb"
             try:
-                await _write_file(
-                    source,
-                    await self._store.get_bytes(
-                        keys.revision_key(asset_id, version.revision)
-                    ),
+                await self._store.download_to(
+                    keys.revision_key(asset_id, version.revision), source
                 )
             except ObjectStoreError as error:
                 await self._fail_all(version, pending, f"取不到原件：{error}")
@@ -219,8 +206,8 @@ class ModelCompressor:
     ) -> VariantResult:
         """把压好的字节传上去，并以**存储端读到的**为准回报大小与校验和。"""
         key = keys.revision_key(version.asset_id, version.revision, name)
-        await self._store.put_bytes(
-            key, await _read_file(output), content_type="model/gltf-binary"
+        await self._store.upload_from(
+            key, output, content_type="model/gltf-binary"
         )
         stat = await self._store.stat(key)
         if stat is None:  # pragma: no cover - 刚写完就读不到即存储端错

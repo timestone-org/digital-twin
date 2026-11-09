@@ -4,6 +4,8 @@
 在这里钉住（两者都必须能赋给 `ObjectStore`），语义由下面这批逐条比对。
 """
 
+from pathlib import Path
+
 import pytest
 
 from lib.objectstore import (
@@ -81,3 +83,23 @@ async def test_the_ticket_carries_the_key_and_ttl() -> None:
 
     assert (ticket.key, ticket.expires_seconds) == ("staging/model/1", 300)
     assert store.presigned == [ticket]
+
+
+async def test_a_file_round_trips_through_the_store(tmp_path: Path) -> None:
+    store = FakeObjectStore()
+    source = tmp_path / "in.glb"
+    source.write_bytes(b"payload")
+    await store.upload_from("k", source, content_type="model/gltf-binary")
+
+    target = tmp_path / "out.glb"
+    await store.download_to("k", target)
+
+    assert target.read_bytes() == b"payload"
+    stat = await store.stat("k")
+    assert stat is not None
+    assert stat.content_type == "model/gltf-binary"
+
+
+async def test_downloading_a_missing_key_raises(tmp_path: Path) -> None:
+    with pytest.raises(ObjectNotFound):
+        await FakeObjectStore().download_to("nope", tmp_path / "out")

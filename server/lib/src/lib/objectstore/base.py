@@ -8,6 +8,7 @@
 """
 
 from dataclasses import dataclass
+from pathlib import Path
 from typing import Protocol
 
 
@@ -71,6 +72,16 @@ class ObjectStore(Protocol):
 
     async def get_bytes(self, key: str) -> bytes:
         """读一个对象；不存在抛 `ObjectNotFound`。"""
+        ...
+
+    async def download_to(self, key: str, path: Path) -> None:
+        """把对象流式写进本地文件，不整份过内存；不存在抛 `ObjectNotFound`。"""
+        ...
+
+    async def upload_from(
+        self, key: str, path: Path, *, content_type: str
+    ) -> None:
+        """把本地文件流式写成一个对象，已存在即覆盖。"""
         ...
 
     async def stat(self, key: str) -> ObjectStat | None:

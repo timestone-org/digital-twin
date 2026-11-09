@@ -7,9 +7,11 @@
 from __future__ import annotations
 
 import asyncio
+from pathlib import Path
 from typing import TYPE_CHECKING, Any, cast
 
 import boto3
+from boto3.exceptions import Boto3Error, RetriesExceededError
 from botocore.client import Config as BotoConfig
 from botocore.exceptions import (
     BotoCoreError,
@@ -112,6 +114,29 @@ class S3ObjectStore:
         )
         body = cast(dict[str, Any], response)["Body"]
         return cast(bytes, await self._call(body.read, is_read=True))
+
+    async def download_to(self, key: str, path: Path) -> None:
+        """把对象流式写进本地文件，不整份过内存；不存在抛 `ObjectNotFound`。"""
+        await self._call(
+            self._client.download_file,
+            Bucket=self._bucket,
+            Key=key,
+            Filename=str(path),
+            key=key,
+            is_read=True,
+        )
+
+    async def upload_from(
+        self, key: str, path: Path, *, content_type: str
+    ) -> None:
+        """把本地文件流式写成一个对象；大文件由托管传输分片上传。"""
+        await self._call(
+            self._client.upload_file,
+            Filename=str(path),
+            Bucket=self._bucket,
+            Key=key,
+            ExtraArgs={"ContentType": content_type},
+        )
 
     async def stat(self, key: str) -> ObjectStat | None:
         """取元信息；不存在给 None。"""
@@ -236,6 +261,11 @@ class S3ObjectStore:
             raise ObjectStoreError("对象存储拒绝了一次操作") from error
         except BotoCoreError as error:
             if is_read and isinstance(error, _TEMPORARY_ERRORS):
+                raise ObjectStoreUnavailable("对象存储暂时不可用") from error
+            raise ObjectStoreError("对象存储操作失败") from error
+        # 托管传输（download_file / upload_file）把底层故障包成自己的异常
+        except Boto3Error as error:
+            if is_read and isinstance(error, RetriesExceededError):
                 raise ObjectStoreUnavailable("对象存储暂时不可用") from error
             raise ObjectStoreError("对象存储操作失败") from error
 

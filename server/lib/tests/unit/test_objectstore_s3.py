@@ -6,9 +6,11 @@
 """
 
 from io import BytesIO
+from pathlib import Path
 from typing import Any
 
 import pytest
+from boto3.exceptions import RetriesExceededError, S3UploadFailedError
 from botocore.exceptions import (
     BotoCoreError,
     ClientError,
@@ -92,6 +94,13 @@ class FakeClient:
     def list_objects_v2(self, **kwargs: Any) -> dict[str, Any]:
         self._record("list_objects_v2", kwargs)
         return self.pages.pop(0)
+
+    def download_file(self, **kwargs: Any) -> None:
+        self._record("download_file", kwargs)
+        Path(str(kwargs["Filename"])).write_bytes(b"streamed")
+
+    def upload_file(self, **kwargs: Any) -> None:
+        self._record("upload_file", kwargs)
 
     def generate_presigned_post(self, **kwargs: Any) -> dict[str, Any]:
         self._record("generate_presigned_post", kwargs)
@@ -378,3 +387,73 @@ async def test_get_bytes_preserves_the_body_bytes() -> None:
 def test_unknown_objectstore_errors_default_to_not_retryable() -> None:
     assert getattr(ObjectStoreError("unknown"), "is_retryable", None) is False
     assert getattr(ObjectNotFound("missing"), "is_retryable", None) is False
+
+
+async def test_download_streams_straight_into_the_file(tmp_path: Path) -> None:
+    client = FakeClient()
+    target = tmp_path / "original.glb"
+    await store(client).download_to("models/x/original", target)
+    assert client.calls == [
+        (
+            "download_file",
+            {
+                "Bucket": BUCKET,
+                "Key": "models/x/original",
+                "Filename": str(target),
+            },
+        )
+    ]
+    assert target.read_bytes() == b"streamed"
+
+
+async def test_a_download_of_a_missing_key_is_its_own_error(
+    tmp_path: Path,
+) -> None:
+    client = FakeClient()
+    # 托管传输先 HEAD 一次，缺失回的是 404 而不是 NoSuchKey
+    client.raises = _upstream_error("404", 404)
+    with pytest.raises(ObjectNotFound):
+        await store(client).download_to("k", tmp_path / "out")
+
+
+async def test_a_download_that_ran_out_of_retries_is_retryable(
+    tmp_path: Path,
+) -> None:
+    client = FakeClient()
+    client.raises = RetriesExceededError(ReadTimeoutError(endpoint_url="e"))
+    with pytest.raises(ObjectStoreError) as caught:
+        await store(client).download_to("k", tmp_path / "out")
+    assert getattr(caught.value, "is_retryable", None) is True
+
+
+async def test_upload_streams_from_the_file_with_its_type(
+    tmp_path: Path,
+) -> None:
+    client = FakeClient()
+    source = tmp_path / "low.glb"
+    source.write_bytes(b"x")
+    await store(client).upload_from(
+        "models/x/low", source, content_type="model/gltf-binary"
+    )
+    assert client.calls == [
+        (
+            "upload_file",
+            {
+                "Filename": str(source),
+                "Bucket": BUCKET,
+                "Key": "models/x/low",
+                "ExtraArgs": {"ContentType": "model/gltf-binary"},
+            },
+        )
+    ]
+
+
+async def test_a_failed_upload_is_never_retryable(tmp_path: Path) -> None:
+    client = FakeClient()
+    client.raises = S3UploadFailedError("private-reason")
+    source = tmp_path / "low.glb"
+    source.write_bytes(b"x")
+    with pytest.raises(ObjectStoreError) as caught:
+        await store(client).upload_from("k", source, content_type="x/y")
+    assert getattr(caught.value, "is_retryable", None) is False
+    assert "private-" not in str(caught.value)
