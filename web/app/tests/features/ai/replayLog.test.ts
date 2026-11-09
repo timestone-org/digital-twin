@@ -17,7 +17,10 @@ import { ASSISTANT_ASK_TOOL } from '@dt/contracts'
 
 import { __resetEntryIds } from '@/features/ai/conversationLog'
 import { AUTO_CONTINUE_PREFIX, replayedLog } from '@/features/ai/replayLog'
-import { PLAN_CONTINUE_TEXT } from '@/features/ai/turnRunner'
+import {
+  PLAN_CONTINUE_NOTE,
+  PLAN_CONTINUE_TEXT,
+} from '@/features/ai/turnRunner'
 import AiToolCard from '@/components/ai/AiToolCard.vue'
 import { outputPreview } from '@/features/ai/stepPreview'
 
@@ -139,6 +142,13 @@ describe('自动继续的催促', () => {
     expect(log.entries.map((one) => one.role)).toEqual(['note'])
   })
 
+  it('回放出来的 note 与直播时那条同一句话', () => {
+    const log = replayedLog(
+      detailOf([messageOf({ content_json: { text: PLAN_CONTINUE_TEXT } })]),
+    )
+    expect(log.entries[0]?.text).toBe(PLAN_CONTINUE_NOTE)
+  })
+
   it('识别的前缀确实是 turnRunner 催促用语的开头（漂开这条映射就失灵）', () => {
     expect(PLAN_CONTINUE_TEXT.startsWith(AUTO_CONTINUE_PREFIX)).toBe(true)
   })
@@ -165,6 +175,32 @@ describe('步骤标题', () => {
       'points.search 没跑完',
     ])
     expect(log.entries[1]?.step?.error).toBe('点位不存在')
+  })
+
+  it('客户端工具的步骤与直播时同一套措辞', () => {
+    const log = replayedLog(
+      detailOf([
+        messageOf({
+          role: 'assistant',
+          content_json: {},
+          steps: [
+            stepOf({ kind: 'client_tool', name: 'dashboard.save' }),
+            stepOf({
+              id: 'st2',
+              seq: 2,
+              kind: 'client_tool',
+              name: 'dashboard.save',
+              state: 'failed',
+              error: 'x',
+            }),
+          ],
+        }),
+      ]),
+    )
+    expect(log.entries.map((one) => one.text)).toEqual([
+      'dashboard.save 做完了',
+      'dashboard.save 没做成',
+    ])
   })
 
   it('名字缺失时退回种类，不出现空标题', () => {

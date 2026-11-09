@@ -273,3 +273,17 @@ function clamped(text: string, limit: number): string {
   if (text.length <= limit) return text
   return `${text.slice(0, limit)}${ELLIPSIS}（共 ${text.length} 字，已截断）`
 }
+
+/**
+ * 客户端工具一步的标题；直播与回放共用这一套措辞。
+ * @param name 工具名
+ * @param state 这一步的结局
+ */
+export function clientStepTitle(
+  name: string,
+  state: 'succeeded' | 'failed' | 'aborted',
+): string {
+  if (state === 'failed') return `${name} 没做成`
+  if (state === 'aborted') return `${name} 停下了`
+  return `${name} 做完了`
+}

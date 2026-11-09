@@ -26,6 +26,7 @@ import { ASSISTANT_ASK_TOOL } from '@dt/contracts'
 
 import { createFrameReader, type FrameReader } from './sseFrames'
 import {
+  clientStepTitle,
   inputPreview,
   isImageOutput,
   outputDisplay,
@@ -386,12 +387,11 @@ function stepOf(
   const input = inputPreview(call.arguments)
   const text = outputPreview(output)
   const state = error !== null ? 'failed' : isAborted ? 'aborted' : 'succeeded'
-  const title = error !== null ? '没做成' : isAborted ? '停下了' : '做完了'
   return {
     kind: 'client_tool',
     name: call.name,
     state,
-    title: `${call.name} ${title}`,
+    title: clientStepTitle(call.name, state),
     error,
     ...(input === null ? {} : { input }),
     ...(text === null ? {} : { output: text }),

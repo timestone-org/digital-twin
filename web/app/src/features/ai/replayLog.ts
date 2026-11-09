@@ -23,12 +23,20 @@ import {
   withStep,
   type ConversationLog,
 } from './conversationLog'
-import { inputPreview, outputDisplay, outputPreview } from './stepPreview'
+import {
+  clientStepTitle,
+  inputPreview,
+  outputDisplay,
+  outputPreview,
+} from './stepPreview'
 import { followingReceipts, replayClientSteps } from './replayClientSteps'
 import type { RunnerStep } from './turnRunner'
 
 /** 循环代发的催促消息的开头（turnRunner 的 PLAN_CONTINUE_TEXT 以它起头）。 */
 export const AUTO_CONTINUE_PREFIX = '（自动继续）'
+
+/** 代发催促时时间线上那条 note；回放把催促消息还原成同一句。 */
+export const PLAN_CONTINUE_NOTE = '计划还没走完，自动继续。'
 
 /**
  * 回放只读消息的这几格；助手与知识库对话的会话详情都长这个样子。
@@ -85,8 +93,10 @@ function withUserSaid(
 ): ConversationLog {
   const text = readText(message.content_json.text)
   if (text === '') return log
-  const role = text.startsWith(AUTO_CONTINUE_PREFIX) ? 'note' : 'user'
-  return withSaid(log, role, text)
+  if (text.startsWith(AUTO_CONTINUE_PREFIX)) {
+    return withSaid(log, 'note', PLAN_CONTINUE_NOTE)
+  }
+  return withSaid(log, 'user', text)
 }
 
 /**
@@ -138,6 +148,14 @@ function runnerStepOf(step: AssistantStep): RunnerStep {
 /** 库里的步骤不存标题，用名字与状态凑一句，措辞与直播时同一口径。 */
 function titleOf(step: AssistantStep): string {
   const name = step.name === '' ? step.kind : step.name
+  if (
+    step.kind === 'client_tool' &&
+    (step.state === 'succeeded' ||
+      step.state === 'failed' ||
+      step.state === 'aborted')
+  ) {
+    return clientStepTitle(name, step.state)
+  }
   if (step.state === 'failed') return `${name} 没跑成`
   if (step.state === 'succeeded') return `${name} 跑完了`
   if (step.state === 'aborted') return `${name} 停下了`
