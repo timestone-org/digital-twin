@@ -18,7 +18,7 @@ vi.mock('@dt/datasources', () => ({
   getProvider: () => ({
     subscribe: (
       _keys: readonly string[],
-      onValue: (key: string, sample: never) => void,
+      onValue: (key: string, sample: PointSample) => void,
     ) => {
       provider.onValue = onValue
       return () => undefined
