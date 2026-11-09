@@ -35221,7 +35221,7 @@
     },
     "/api/v1/platform/modeling-bindings/{binding_id}": {
       "delete": {
-        "description": "删绑定。之后那一列变空并给「模型未绑定」。\n\nArgs: binding_id, session, _write。",
+        "description": "删绑定。之后那一列变空并给「模型未绑定」。\n\nArgs: binding_id, session, write。",
         "operationId": "remove_binding_api_v1_platform_modeling_bindings__binding_id__delete",
         "parameters": [
           {
@@ -35272,7 +35272,7 @@
         ]
       },
       "patch": {
-        "description": "回执带影响面：哪些台账列会跟着变。重算由用户在台账页显式发起。\n\nArgs: binding_id, payload, session, _write。",
+        "description": "回执带影响面：哪些台账列会跟着变。重算由用户在台账页显式发起。\n\nArgs: binding_id, payload, session, write。",
         "operationId": "update_binding_api_v1_platform_modeling_bindings__binding_id__patch",
         "parameters": [
           {
@@ -37441,7 +37441,7 @@
     },
     "/api/v1/platform/modeling-model-versions/{version_id}": {
       "delete": {
-        "description": "退役。还有绑定指着它时 409。\n\nArgs: version_id, session, write, response。",
+        "description": "退役。还有绑定指着它时 409。\n\nArgs: version_id, session, write, response, store。",
         "operationId": "retire_version_api_v1_platform_modeling_model_versions__version_id__delete",
         "parameters": [
           {
