@@ -6,7 +6,7 @@
  * ⚠ 首屏与追加共用一个竞态序号，这是刻意的：两者写的是同一份列表，换了筛选之后
  * 上一段的「下一页」再回来就该被丢掉——它接的是另一份结果的尾巴。
  */
-import { ref, shallowRef, type Ref } from 'vue'
+import { getCurrentScope, onScopeDispose, ref, shallowRef, type Ref } from 'vue'
 import type { CursorPage } from '@dt/contracts'
 
 import { useRacedFetch, type RacedFetch } from '@/composables/useRacedFetch'
@@ -54,6 +54,9 @@ export function useCursorList<TItem, TProblem>(
     problem: ref<TProblem | null>(null) as Ref<TProblem | null>,
     raced: useRacedFetch(),
   }
+  // 卸载即作废在途那一页，免得它写进一棵已经没人看的树；同 useAsyncList
+  if (getCurrentScope() !== undefined)
+    onScopeDispose(() => state.raced.cancel())
   return {
     items: state.items,
     loading: state.loading,
@@ -88,6 +91,14 @@ function fail<TItem, TProblem>(
   state.cursor.value = null
 }
 
+/** 追加失败只报错：已经摊开的行与游标都留着，用户能原地再点一次。 */
+function failAppend<TItem, TProblem>(
+  state: ListState<TItem, TProblem>,
+  caught: unknown,
+): void {
+  state.problem.value = state.describe(caught)
+}
+
 async function reload<TItem, TProblem>(
   state: ListState<TItem, TProblem>,
 ): Promise<void> {
@@ -111,7 +122,7 @@ async function loadMore<TItem, TProblem>(
   state.loadingMore.value = true
   await state.raced.run(() => state.fetcher(after), {
     ok: (page) => accept(state, page, true),
-    fail: (caught) => fail(state, caught),
+    fail: (caught) => failAppend(state, caught),
     settled: () => (state.loadingMore.value = false),
   })
 }
