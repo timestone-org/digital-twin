@@ -203,7 +203,7 @@ const CALLS: [string, () => Promise<unknown>][] = [
     'updateModelingVersion',
     () => modeling.updateModelingVersion('v1', { name: '设备能效评估模型' }),
   ],
-  ['retireModelingVersion', () => modeling.retireModelingVersion('v1')],
+  ['archiveModelingVersion', () => modeling.archiveModelingVersion('v1')],
   ['listModelingBindings', () => modeling.listModelingBindings()],
   [
     'createModelingBinding',
@@ -371,6 +371,12 @@ describe('URL 与方法', () => {
     expect(call()[0]).toBe('/modeling-runs/r1:cancel')
   })
 
+  it('下线打在服务端真有的归档动作端点上', async () => {
+    await modeling.archiveModelingVersion('v1')
+
+    expect(call()[0]).toBe('/modeling-model-versions/v1:archive')
+  })
+
   it('节点结果是运行下面的一条子路径', async () => {
     await modeling.getModelingNodeRun('r1', 'n1')
 
@@ -436,7 +442,7 @@ describe('幂等键', () => {
       'publishModelingVersion',
       () => modeling.publishModelingVersion({ run_id: 'r1', name: 'v' }),
     ],
-    ['retireModelingVersion', () => modeling.retireModelingVersion('v1')],
+    ['archiveModelingVersion', () => modeling.archiveModelingVersion('v1')],
     [
       'createModelingBinding',
       () =>

@@ -451,12 +451,12 @@ export async function updateModelingVersion(
   )
 }
 
-/** 下线一个版本。绑在它上面的公式会开始报「模型不可用」。 */
-export async function retireModelingVersion(
+/** 下线（归档）一个版本。仍有部署或公式绑定时服务端回 409；可恢复。 */
+export async function archiveModelingVersion(
   versionId: string,
 ): Promise<ModelingVersion> {
   return await requestData<ModelingVersion>(
-    `/modeling-model-versions/${versionId}:retire`,
+    `/modeling-model-versions/${versionId}:archive`,
     onPlatform({ method: 'POST', headers: idempotent(newIdempotencyKey()) }),
   )
 }

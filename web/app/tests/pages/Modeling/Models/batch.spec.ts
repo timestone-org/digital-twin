@@ -96,7 +96,7 @@ beforeEach(() => {
   })
   vi.spyOn(workflow, 'deleteModelingVersion').mockResolvedValue()
   vi.spyOn(modeling, 'deleteModelingBinding').mockResolvedValue()
-  vi.spyOn(modeling, 'retireModelingVersion').mockImplementation((id) =>
+  vi.spyOn(modeling, 'archiveModelingVersion').mockImplementation((id) =>
     Promise.resolve({
       ...version(id, { is_servable: false }),
       signature: {},
@@ -163,9 +163,12 @@ it('批量删除版本保留冲突选择并只刷新一次，不提供批量发�
       .checked,
   ).toBe(false)
 })
-it('批量下线使用retire而不删除，已不可服务版本跳过并说明影响', async () => {
+it('批量下线走归档而不删除，已下线版本跳过并说明影响', async () => {
   vi.mocked(modeling.listModelingVersions).mockResolvedValue({
-    items: [version('v1'), version('v2', { is_servable: false })],
+    items: [
+      version('v1', { is_servable: false }),
+      version('v2', { archived_at: '2026-01-01T00:00:00Z' }),
+    ],
     page: 1,
     size: 200,
     total: 2,
@@ -178,13 +181,13 @@ it('批量下线使用retire而不删除，已不可服务版本跳过并说明�
   expect(ask).toHaveBeenCalledWith(
     expect.objectContaining({
       danger: true,
-      message: expect.stringContaining('台账列将取不到数'),
+      message: expect.stringContaining('服务端拒绝下线'),
     }),
   )
-  expect(modeling.retireModelingVersion).toHaveBeenCalledOnce()
-  expect(modeling.retireModelingVersion).toHaveBeenCalledWith('v1')
+  expect(modeling.archiveModelingVersion).toHaveBeenCalledOnce()
+  expect(modeling.archiveModelingVersion).toHaveBeenCalledWith('v1')
   expect(workflow.deleteModelingVersion).not.toHaveBeenCalled()
-  expect(wrapper.text()).toContain('模型已下线或不可服务')
+  expect(wrapper.text()).toContain('模型已下线')
 })
 
 it('未知结果后详情仍可读取，详情注册被阻止且清除后恢复', async () => {
@@ -249,7 +252,7 @@ it.each(['version', 'binding'] as const)(
     await button(wrapper, '批量下线模型').trigger('click')
     await button(wrapper, '批量停用绑定').trigger('click')
     await flushPromises()
-    expect(modeling.retireModelingVersion).not.toHaveBeenCalled()
+    expect(modeling.archiveModelingVersion).not.toHaveBeenCalled()
     expect(modeling.updateModelingBinding).not.toHaveBeenCalled()
   },
 )
