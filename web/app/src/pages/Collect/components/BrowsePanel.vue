@@ -53,6 +53,10 @@ const tree = useBrowseTree(() => props.source.id, takenAddresses)
 
 const isOffline = computed(() => props.source.runtime.state !== 'online')
 const hasSelection = computed(() => tree.selectedCount.value > 0)
+const takenErrorMessage = computed(
+  () =>
+    `已建点位清单没取到（${takenError.value ?? ''}），「已建」标记与编码查重这会儿都不可靠，先不让导入。`,
+)
 
 /**
  * 勾一个节点。上层节点勾的是它下面的全部变量。
@@ -209,9 +213,7 @@ onMounted(() => {
       </DtNotice>
 
       <DtNotice v-if="takenError" intent="danger" icon="alert-triangle">
-        已建点位清单没取到（{{
-          takenError
-        }}），「已建」标记与编码查重这会儿都不可靠， 先不让导入。
+        {{ takenErrorMessage }}
         <DtButton variant="ghost" size="sm" @click="loadTaken">重试</DtButton>
       </DtNotice>
 

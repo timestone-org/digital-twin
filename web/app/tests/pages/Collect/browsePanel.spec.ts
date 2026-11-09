@@ -683,6 +683,7 @@ describe('导入选中', () => {
     await flushPromises()
     await check(box(wrapper, 'Temp'))
     expect(wrapper.text()).toContain('已建点位清单没取到')
+    expect(wrapper.text()).toContain('都不可靠，先不让导入')
     const open = wrapper
       .findAll('button')
       .find((one) => one.text().startsWith('导入选中'))
