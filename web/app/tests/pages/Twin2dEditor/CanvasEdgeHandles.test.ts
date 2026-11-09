@@ -80,6 +80,8 @@ interface Stand {
   previews: (Twin2dEdge | null)[]
   changes: Twin2dEdge[]
   hide: () => Promise<void>
+  /** 换掉传进去的那一条连线（模拟手势中途文档换了一份）。 */
+  setEdge: (next: Twin2dEdge) => Promise<void>
 }
 
 interface Options {
@@ -90,6 +92,7 @@ interface Options {
 
 function mountHandles(options: Options = {}): Stand {
   const shown = shallowRef(true)
+  const edge = shallowRef(options.edge ?? edgeOf(DOC))
   const previews: (Twin2dEdge | null)[] = []
   const changes: Twin2dEdge[] = []
   const host = defineComponent({
@@ -99,7 +102,7 @@ function mountHandles(options: Options = {}): Stand {
         shown.value
           ? h(CanvasEdgeHandles, {
               canvas: DOC.canvas,
-              edge: options.edge ?? edgeOf(DOC),
+              edge: edge.value,
               nodes: DOC.nodes,
               nodeStyles: DOC.styles,
               edgeStyles: DOC.edgeStyles,
@@ -120,6 +123,10 @@ function mountHandles(options: Options = {}): Stand {
     changes,
     hide: async () => {
       shown.value = false
+      await nextTick()
+    },
+    setEdge: async (next) => {
+      edge.value = next
       await nextTick()
     },
   }
@@ -334,6 +341,21 @@ describe('拖一端', () => {
     fire('pointerup', { x: 600, y: 300 })
 
     expect(stand.changes).toEqual([])
+  })
+})
+
+describe('手势中途文档换了一份', () => {
+  // ⚠ 按着把手时 ⌘Z 照样生效：草稿里的拐点是按撤销之前那份起算的，松手照交的话
+  // 那一步撤销被悄悄撤回
+  it('松手时不再交按旧文档算出来的草稿，草稿也撤掉', async () => {
+    const stand = mountHandles()
+    down(stand, 'edge-bend-handle', { x: 200, y: 100 })
+    fire('pointermove', { x: 240, y: 120 })
+    await stand.setEdge({ ...edgeOf(DOC), waypoints: [{ x: 300, y: 200 }] })
+    fire('pointerup', { x: 260, y: 140 })
+
+    expect(stand.changes).toEqual([])
+    expect(stand.previews.at(-1)).toBeNull()
   })
 })
 

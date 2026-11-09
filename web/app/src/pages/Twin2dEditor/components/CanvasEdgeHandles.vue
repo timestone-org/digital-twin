@@ -174,15 +174,22 @@ function runGesture(
   // ⚠ 接下的这一按不许再冒到画布壳上：那边把落到自己身上的按下当成「点了空白」，
   // 不拦的表现是抓把手的同时选中被清掉；非主键放过去，与节点同一口径
   if (!twin2dClaimPointer(event)) return
+  // ⚠ 手势中途文档换了一份（多半是按着时 ⌘Z）：按旧那份算的草稿交上去，等于把那一步
+  // 撤销悄悄撤回，所以收场时按撤掉处理
+  let base: Twin2dEdge | null = null
+  const stale = (): boolean => base !== null && base !== props.edge
+  const step = (frame: Twin2dGestureFrame): void => {
+    if (!frame.moved || stale()) return
+    base = props.edge
+    drawDraft(of(frame))
+  }
   live = props.startGesture({
     kind,
     event,
-    onMove: (frame) => {
-      if (frame.moved) drawDraft(of(frame))
-    },
+    onMove: step,
     onEnd: (frame, end) => {
-      if (end !== 'cancelled' && frame.moved) drawDraft(of(frame))
-      finish(end)
+      if (end !== 'cancelled') step(frame)
+      finish(stale() ? 'cancelled' : end)
     },
   })
 }
