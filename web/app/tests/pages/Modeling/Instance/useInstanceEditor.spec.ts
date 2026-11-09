@@ -228,3 +228,67 @@ it('新模型加载失败后不展示旧模型配置，也不能向新模型保�
   expect(save).not.toHaveBeenCalled()
   wrapper.unmount()
 })
+
+it('训练中读状态失败一次，过一会儿照样接着问', async () => {
+  vi.useFakeTimers()
+  try {
+    const training = {
+      ...model,
+      latest_run: {
+        id: 'r1',
+        pipeline_id: 'i1',
+        status: 'running' as const,
+        trigger: 'manual' as const,
+        started_at: null,
+        finished_at: null,
+        duration_ms: null,
+        row_count: null,
+        is_source_truncated: false,
+        is_keeping_frames: false,
+        error_text: null,
+        created_by_name: null,
+        created_at: '2026-10-27T00:00:00.000Z',
+      },
+    }
+    vi.spyOn(api, 'getInstanceConfiguration').mockResolvedValue({
+      ...configuration,
+      instance: training,
+    })
+    const read = vi
+      .spyOn(api, 'getInstance')
+      .mockResolvedValueOnce(training)
+      .mockRejectedValueOnce(new Error('网关超时'))
+      .mockResolvedValue(training)
+    vi.spyOn(modeling, 'listModelingRuns').mockResolvedValue({
+      items: [],
+      page: 1,
+      size: 20,
+      total: 0,
+    })
+    vi.spyOn(modeling, 'listModelingVersions').mockResolvedValue({
+      items: [],
+      page: 1,
+      size: 20,
+      total: 0,
+    })
+    let editor: ReturnType<typeof useInstanceEditor> | undefined
+    const wrapper = mount(
+      defineComponent({
+        setup() {
+          editor = useInstanceEditor(ref('i1'))
+          return () => h('div')
+        },
+      }),
+    )
+    if (!editor) throw new Error('组件未装配')
+    await editor.load()
+    await vi.advanceTimersByTimeAsync(2000)
+    const afterFailure = read.mock.calls.length
+    await vi.advanceTimersByTimeAsync(10_000)
+
+    expect(read.mock.calls.length).toBeGreaterThan(afterFailure)
+    wrapper.unmount()
+  } finally {
+    vi.useRealTimers()
+  }
+})
