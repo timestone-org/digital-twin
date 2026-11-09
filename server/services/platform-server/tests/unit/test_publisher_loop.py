@@ -9,6 +9,7 @@
 import asyncio
 from dataclasses import dataclass, field
 
+from platform_server.publish_knobs import PublishKnobs, knobs_of
 from platform_server.publisher import Lane, LoopOptions, PublisherRuntime
 from unit.publish_fakes import FakeLease
 
@@ -29,6 +30,7 @@ class SpyLane:
     failure: Exception | None = None
     target_ticks: int = 1
     rounds: list[tuple[int, int]] = field(default_factory=list[tuple[int, int]])
+    sizes: list[int] = field(default_factory=list[int])
     reached: asyncio.Event = field(default_factory=asyncio.Event)
 
     async def publish(self) -> None:
@@ -46,13 +48,32 @@ class SpyLane:
     def forget_all(self) -> None:
         self.forgotten += 1
 
+    def resize(self, max_items: int) -> None:
+        self.sizes.append(max_items)
+
     def as_lane(self) -> Lane:
         return Lane(
             name=self.name,
             reconcile=self.reconcile,
             tick=self.publish,
             forget_all=self.forget_all,
+            resize=self.resize,
         )
+
+
+@dataclass
+class FakeKnobs:
+    """按序回一份旋钮；给了 `failure` 就抛。"""
+
+    knobs: PublishKnobs
+    failure: Exception | None = None
+    reads: int = 0
+
+    async def read(self) -> PublishKnobs:
+        self.reads += 1
+        if self.failure is not None:
+            raise self.failure
+        return self.knobs
 
 
 @dataclass
@@ -71,10 +92,11 @@ def build_harness(
     is_grantable: bool = True,
     is_renewable: bool = True,
     reconcile_interval_s: float = RECONCILE_INTERVAL_S,
+    knobs: FakeKnobs | None = None,
 ) -> Harness:
     """装一套循环，两条链路各一件假件。
 
-    Args: is_grantable, is_renewable, reconcile_interval_s。
+    Args: is_grantable, is_renewable, reconcile_interval_s, knobs。
     """
     lease = FakeLease(is_grantable=is_grantable, is_renewable=is_renewable)
     dashboards = SpyLane(name="dashboard")
@@ -85,6 +107,7 @@ def build_harness(
         options=LoopOptions(
             window_s=WINDOW_S, reconcile_interval_s=reconcile_interval_s
         ),
+        read_knobs=None if knobs is None else knobs.read,
     )
     return Harness(
         runtime=runtime,
@@ -214,3 +237,83 @@ async def test_draining_returns_when_the_loop_is_already_idle() -> None:
     harness = build_harness()
     await harness.runtime.drain(timeout_s=0.05)
     assert harness.publisher.ticks == 0
+
+
+TUNED = PublishKnobs(window_s=0.5, reconcile_interval_s=7.0, max_items=10)
+
+
+async def test_saved_runtime_params_reach_the_loop_and_every_lane() -> None:
+    # ⚠ 运行参数页标着「即时生效」：读不进循环就是「配了不生效」
+    knobs = FakeKnobs(knobs=TUNED)
+    harness = build_harness(knobs=knobs)
+    await harness.runtime.tick()
+    options = harness.runtime._options  # 理由 —— 断言循环拿到的节奏
+    assert (options.window_s, options.reconcile_interval_s) == (0.5, 7.0)
+    assert harness.publisher.sizes == [10]
+    assert harness.collect.sizes == [10]
+
+
+async def test_runtime_params_are_reread_only_when_reconciling() -> None:
+    knobs = FakeKnobs(knobs=TUNED)
+    harness = build_harness(knobs=knobs)
+    await harness.runtime.tick()
+    await harness.runtime.tick()
+    assert knobs.reads == 1
+
+
+async def test_a_failed_param_read_keeps_the_pace_and_still_publishes() -> None:
+    knobs = FakeKnobs(knobs=TUNED, failure=RuntimeError("库抖了"))
+    harness = build_harness(knobs=knobs)
+    await harness.runtime.tick()
+    options = harness.runtime._options  # 理由 —— 断言循环拿到的节奏
+    assert options.window_s == WINDOW_S
+    assert harness.publisher.ticks == 1
+    assert harness.publisher.sizes == []
+
+
+def test_knobs_fall_back_to_settings_for_missing_values() -> None:
+    knobs = knobs_of(
+        {}, window_ms=2000, reconcile_s=5.0, max_items=200, lease_ttl_s=15
+    )
+    assert knobs == PublishKnobs(
+        window_s=2.0, reconcile_interval_s=5.0, max_items=200
+    )
+
+
+def test_knobs_take_the_saved_values() -> None:
+    knobs = knobs_of(
+        {
+            "publish_window_ms": 500,
+            "publish_max_items": 10,
+            "publish_reconcile_interval_s": 7.0,
+        },
+        window_ms=2000,
+        reconcile_s=5.0,
+        max_items=200,
+        lease_ttl_s=15,
+    )
+    assert knobs == TUNED
+
+
+def test_a_window_longer_than_half_the_lease_is_capped() -> None:
+    # ⚠ 一拍续一次租约：窗口拖过 TTL，每一拍醒来租约都已过期，主就来回换
+    knobs = knobs_of(
+        {"publish_window_ms": 60_000},
+        window_ms=2000,
+        reconcile_s=5.0,
+        max_items=200,
+        lease_ttl_s=15,
+    )
+    assert knobs.window_s == 7.5
+
+
+def test_a_mistyped_value_falls_back_instead_of_zero() -> None:
+    knobs = knobs_of(
+        {"publish_max_items": True, "publish_window_ms": 0},
+        window_ms=2000,
+        reconcile_s=5.0,
+        max_items=200,
+        lease_ttl_s=15,
+    )
+    assert knobs.max_items == 200
+    assert knobs.window_s == 0.1

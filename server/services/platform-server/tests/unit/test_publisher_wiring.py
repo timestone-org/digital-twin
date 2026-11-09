@@ -179,6 +179,17 @@ def test_both_lanes_are_wired_and_named_apart() -> None:
     assert [lane.name for lane in lanes] == ["dashboard", "collect"]
 
 
+def test_resizing_a_lane_reaches_its_publisher() -> None:
+    # 运行参数页改的单帧上限要落到两条链路各自的发布器上
+    runtime = build_runtime(build_container([], settings=publisher_settings()))
+    for lane in runtime._lanes:  # 理由 —— 断言装配出的链路
+        lane.resize(10)
+        owner = (
+            lane.forget_all.__self__
+        )  # pyright: ignore[reportFunctionMemberAccess]
+        assert owner.options.max_items == 10
+
+
 def test_the_publisher_takes_its_pace_from_config() -> None:
     container = build_container([], settings=publisher_settings())
     runtime = build_runtime(container)
