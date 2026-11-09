@@ -39,7 +39,7 @@ import { useTwinEditorPage } from './scripts/useTwinEditorPage'
 import { useTwinAnimationSelection } from './scripts/useTwinAnimationSelection'
 import { applyBatchBindings, applyBatchConfig } from './scripts/batchApply'
 import { removeMissingAnimations } from './scripts/missingAnimations'
-import { twinRemoveImpactText } from './scripts/outlineNodes'
+import { removeSelectedEntity } from './scripts/removeSelected'
 import { useTwinShortcuts } from './scripts/useTwinShortcuts'
 import { useUnsavedGuard } from '@/composables/useUnsavedGuard'
 
@@ -229,23 +229,6 @@ async function offerReload(conflict: string): Promise<void> {
   if (ok) await page.reload()
 }
 
-/** Delete 键删当前选中；有连带影响时先确认，与大纲的删除同一口径。 */
-async function removeSelected(): Promise<void> {
-  const current = selection.value
-  if (!('id' in current) || config.value === null) return
-  const impact = twinRemoveImpactText(config.value, current.kind, current.id)
-  if (impact !== '') {
-    const ok = await confirm.ask({
-      title: '删除选中对象',
-      message: impact,
-      confirmText: '删除',
-      danger: true,
-    })
-    if (!ok) return
-  }
-  actions.value?.remove(current.kind, current.id)
-}
-
 useTwinShortcuts({
   handlers: {
     save: () => {
@@ -253,7 +236,13 @@ useTwinShortcuts({
     },
     undo: () => page.doc.value?.undo(),
     redo: () => page.doc.value?.redo(),
-    remove: () => void removeSelected(),
+    remove: () =>
+      void removeSelectedEntity({
+        config: config.value,
+        selection: selection.value,
+        ask: confirm.ask,
+        remove: (kind, id) => actions.value?.remove(kind, id),
+      }),
   },
   suspended: () =>
     viewport.isPicking.value || batchOpen.value || bulk.open.value,

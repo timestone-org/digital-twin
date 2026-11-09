@@ -27,7 +27,7 @@ export interface RoamTourDeps {
   span: () => number
 }
 
-/** 宿主要用到的四个动作与两个状态。 */
+/** 宿主要用到的动作与两个状态。 */
 export interface RoamTourController {
   /** 运行态该不该画播放控件。 */
   showControls: ComputedRef<boolean>
@@ -42,10 +42,7 @@ export interface RoamTourController {
   prev: () => void
   /** 停在当前位姿上；播放键的「暂停」走这里。 */
   pause: () => void
-  /**
-   * 用户手动动了镜头（切视点、定位部件）：停播并重新计闲置。
-   * ⚠ 手动切视点时必须叫它，否则下一帧轨迹又把镜头拽走，或闲置计时照旧到点开播。
-   */
+  /** 用户手动动了镜头：停播并重新计闲置。⚠ 切视点不叫它，闲置计时会照旧到点开播。 */
   interrupt: () => void
 }
 
@@ -56,21 +53,15 @@ class RoamRunner {
   readonly playing = ref(false)
   readonly progress = ref({ segmentIndex: 0, percent: 0 })
 
-  private readonly deps: RoamTourDeps
-  private readonly tour: ComputedRef<TwinRoamTour>
-  private readonly segments: ComputedRef<readonly TwinRoamSegment[]>
   private timeline: RoamTimeline
   private idleTimer = 0
   private attached: SceneCore | null = null
 
   constructor(
-    deps: RoamTourDeps,
-    tour: ComputedRef<TwinRoamTour>,
-    segments: ComputedRef<readonly TwinRoamSegment[]>,
+    private readonly deps: RoamTourDeps,
+    private readonly tour: ComputedRef<TwinRoamTour>,
+    private readonly segments: ComputedRef<readonly TwinRoamSegment[]>,
   ) {
-    this.deps = deps
-    this.tour = tour
-    this.segments = segments
     this.timeline = new RoamTimeline(segments.value, tour.value.loop)
   }
 
