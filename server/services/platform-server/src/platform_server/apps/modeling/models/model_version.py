@@ -13,6 +13,7 @@ from sqlalchemy import (
     CheckConstraint,
     DateTime,
     ForeignKeyConstraint,
+    Index,
     Integer,
     Text,
     UniqueConstraint,
@@ -149,5 +150,11 @@ class ModelingModelVersion(ModelVersionFields, Base):
         CheckConstraint(
             "jsonb_typeof(fingerprint_json) = 'object'",
             name="fingerprint_is_an_object",
+        ),
+        Index(
+            "ix_modeling_model_versions_archive_created",
+            "archived_at",
+            "created_at",
+            "id",
         ),
     )

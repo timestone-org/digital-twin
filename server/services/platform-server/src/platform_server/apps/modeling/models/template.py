@@ -9,6 +9,7 @@ from sqlalchemy import (
     CheckConstraint,
     DateTime,
     ForeignKey,
+    Index,
     Integer,
     Text,
     UniqueConstraint,
@@ -66,6 +67,12 @@ class ModelingInstance(TimestampMixin, Base):
     )
     __table_args__ = (
         CheckConstraint("revision > 0", name="revision_positive"),
+        Index(
+            "ix_modeling_instances_archive_created",
+            "archived_at",
+            "created_at",
+            "id",
+        ),
     )
 
 
