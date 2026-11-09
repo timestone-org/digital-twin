@@ -276,7 +276,7 @@ async def finalize_if_complete(
     if not _is_complete(batch, counts):
         return None
     if not await _configuration_current(session, batch):
-        return await _fail(session, batch)
+        return await _fail_stale(session, batch)
     return await _publish(session, batch)
 
 
@@ -305,6 +305,24 @@ async def _fail(session: AsyncSession, batch: AcStartupBatch) -> AcStartupBatch:
     _logger.error(
         "ac_startup_batch_failed",
         "抽取批次有分片失败，当前批次保持不变",
+        room_id=str(batch.room_id),
+        batch_id=str(batch.id),
+    )
+    return batch
+
+
+async def _fail_stale(
+    session: AsyncSession, batch: AcStartupBatch
+) -> AcStartupBatch:
+    """抽取期间房间配置变了：批次作废。是人的操作，只报 WARNING。
+
+    Args: session, batch。
+    """
+    batch.status = BATCH_STATUS_FAILED
+    await session.flush()
+    _logger.warning(
+        "ac_startup_batch_config_changed",
+        "抽取期间房间配置已变化，批次作废，当前批次保持不变",
         room_id=str(batch.room_id),
         batch_id=str(batch.id),
     )

@@ -4,12 +4,14 @@
 的旧数据而不是半份新数据。
 """
 
+import logging
 import uuid
 from collections.abc import Sequence
 from datetime import UTC, datetime, timedelta
 from typing import Protocol, cast
 
 import pytest
+from sqlalchemy import update
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from lib.stream import StreamEntry, StreamGroup, StreamLike
@@ -439,6 +441,31 @@ async def test_a_very_long_failure_reason_is_trimmed(
     failed = next(item for item in shards if item.month == "2026-01")
     assert failed.error is not None
     assert len(failed.error) == 500
+
+
+async def test_a_configuration_change_is_not_logged_as_a_shard_failure(
+    db_session: AsyncSession, caplog: pytest.LogCaptureFixture
+) -> None:
+    """⚠ 抽取期间改了配置是人的操作，不能在日志里记成「有分片失败」的 ERROR。"""
+    room_id = await make_room(db_session, "改配置")
+    plan = await request_rebuild(
+        db_session, room_id=room_id, window=WINDOW, rules=RULES
+    )
+    context = context_for(crossing_rows())
+    for message in plan.messages:
+        await run_shard(db_session, context, message)
+    await db_session.execute(
+        update(AcMetricLimit)
+        .where(AcMetricLimit.metric == "workshop_temp_avg")
+        .values(upper_limit=27)
+    )
+    with caplog.at_level(logging.INFO):
+        failed = await finalize_if_complete(db_session, plan.batch.id)
+    assert failed is not None
+    assert failed.status == BATCH_STATUS_FAILED
+    events = [record.getMessage() for record in caplog.records]
+    assert "ac_startup_batch_config_changed" in events
+    assert "ac_startup_batch_failed" not in events
 
 
 async def test_an_empty_failure_reason_still_records_the_failure(
