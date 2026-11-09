@@ -5,22 +5,68 @@
  * ⚠ 结果是**预演**：真正的判定在 auth-server。它存在的理由是排序错了就是
  * 直接 403，而排序错误只看表是看不出来的——必须能试。
  *
+ * ⚠ 判定要对着**全量启用规则**做：页面表格只有一页且带搜索筛选，
+ * 拿它预演会把别页的赢家漏掉。故每次打开都自己翻页拉全。
+ *
  * 根节点就是那颗按钮、不带任何布局容器：它挂在页面顶栏的操作区里，
  * 由那一行决定间距与对齐。
  */
-import { computed, ref } from 'vue'
+import { computed, onBeforeUnmount, ref } from 'vue'
 import type { DtSelectOption, RouteRule } from '@dt/contracts'
 import { HTTP_METHODS } from '@dt/contracts'
 import { DtButton, DtInput, DtModal, DtNotice, DtSelect, DtTag } from '@dt/ui'
 
+import * as admin from '@/api/admin'
+import { describeError } from '@/composables/useAsyncList'
+import { useRacedFetch } from '@/composables/useRacedFetch'
 import { useAuthStore } from '@/stores/auth'
 import { decide } from '../scripts/matcher'
 
-const props = defineProps<{ rules: readonly RouteRule[] }>()
+/** 后端分页上限。 */
+const PAGE_SIZE = 200
 
 const auth = useAuthStore()
 
 const open = ref(false)
+const rules = ref<readonly RouteRule[]>([])
+const loading = ref(false)
+const loadError = ref<string | null>(null)
+const raced = useRacedFetch()
+
+/** 翻页拉全所有启用规则。 */
+async function fetchAllEnabled(): Promise<RouteRule[]> {
+  const collected: RouteRule[] = []
+  for (let page = 1; ; page += 1) {
+    const batch = await admin.listRouteRules({
+      is_enabled: true,
+      page,
+      size: PAGE_SIZE,
+    })
+    collected.push(...batch.items)
+    if (batch.items.length === 0 || collected.length >= batch.total) {
+      return collected
+    }
+  }
+}
+
+function openDialog(): void {
+  open.value = true
+  loading.value = true
+  loadError.value = null
+  void raced.run(fetchAllEnabled, {
+    ok: (all) => {
+      rules.value = all
+    },
+    fail: (caught) => {
+      loadError.value = describeError(caught)
+    },
+    settled: () => {
+      loading.value = false
+    },
+  })
+}
+
+onBeforeUnmount(raced.cancel)
 
 /**
  * 关窗不重置：用法是「试一条 → 回表里改规则 → 再试同一条」，
@@ -41,7 +87,7 @@ const OUTCOME_TEXT = {
 } as const
 
 const result = computed(() =>
-  decide(props.rules, path.value, method.value, auth.permissions),
+  decide(rules.value, path.value, method.value, auth.permissions),
 )
 const outcome = computed(() => OUTCOME_TEXT[result.value.outcome])
 </script>
@@ -52,7 +98,7 @@ const outcome = computed(() => OUTCOME_TEXT[result.value.outcome])
     intent="neutral"
     size="sm"
     icon="route"
-    @click="open = true"
+    @click="openDialog"
   >
     试一条路径
   </DtButton>
@@ -82,7 +128,13 @@ const outcome = computed(() => OUTCOME_TEXT[result.value.outcome])
         />
       </div>
 
-      <div class="flex flex-wrap items-center gap-2 text-xs">
+      <DtNotice v-if="loadError" intent="danger" icon="alert-circle">
+        规则加载失败：{{ loadError }}
+      </DtNotice>
+      <div v-else-if="loading" class="text-xs text-text-secondary">
+        正在加载全部启用规则…
+      </div>
+      <div v-else class="flex flex-wrap items-center gap-2 text-xs">
         <DtTag :intent="outcome.intent" size="md">{{ outcome.label }}</DtTag>
         <template v-if="result.rule">
           <span class="text-text-secondary">命中</span>

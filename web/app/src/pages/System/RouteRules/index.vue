@@ -138,7 +138,7 @@ onMounted(() => {
            看不出它们是一组 -->
       <div class="flex items-center gap-2">
         <!-- 试算不改数据，故不套 PermGuard：能看这张表的人就该能试 -->
-        <RuleMatcher :rules="list.items.value" />
+        <RuleMatcher />
         <PermGuard :codes="[PERMISSION_CODES.routeRuleManage]" explain>
           <DtIconButton
             size="sm"
