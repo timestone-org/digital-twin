@@ -176,12 +176,12 @@ describe('身份与样式', () => {
     expect(labels).toContain('工艺')
   })
 
-  it('没分栏的自建样式归「其他」', () => {
+  it('没分栏的自建样式归「未分类」，与调色板同名', () => {
     const labels = optionsOf(mountInspector(N1), 'node-style')
       .filter((option) => option.disabled === true)
       .map((header) => header.label)
 
-    expect(labels).toContain('其他')
+    expect(labels).toContain('未分类')
   })
 
   it('换样式落成一步一帧', () => {
