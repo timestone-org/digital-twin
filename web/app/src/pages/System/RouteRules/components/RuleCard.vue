@@ -50,12 +50,12 @@ const cardVars = computed<Readonly<Record<string, string>>>(() =>
               不参与判定
             </span>
           </span>
-          <h2 class="m-0 flex min-w-0 items-center gap-2 text-sm font-semibold">
-            <MethodTag :method="rule.http_method" class="shrink-0" />
-            <RulePattern :rule="rule" />
-          </h2>
+          <MethodTag :method="rule.http_method" class="shrink-0" />
           <RuleBadges :rule="rule" emphasis class="ml-auto" />
         </div>
+        <h2 class="m-0 mt-1 min-w-0 text-sm font-semibold">
+          <RulePattern :rule="rule" wrap />
+        </h2>
         <!-- 副标识缺席也占一行：与用户卡、角色卡同一句式，链节间距才均匀 -->
         <p class="m-0 mt-1 truncate text-2xs text-text-disabled">
           {{ rule.description || '未填写描述' }}
