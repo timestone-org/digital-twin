@@ -10,13 +10,11 @@ import pytest
 from asyncua import ua
 
 from collector_server.apps.collect.drivers.base import (
-    DriverConnection,
     DriverNotConnected,
     PointNotLoaded,
     PointSpec,
 )
 from collector_server.apps.collect.drivers.opcua import driver as opcua_driver
-from collector_server.apps.collect.drivers.opcua.driver import OpcuaDriver
 from unit.opcua_driver_fakes import (
     MAX_NODES,
     NOW_MS,
@@ -120,29 +118,6 @@ def test_variable_nodes_are_leaves_in_the_browse_tree() -> None:
 def test_capabilities_declare_all_three_abilities() -> None:
     made, _ = make_driver()
     assert made.capabilities == opcua_driver.CAPABILITIES
-
-
-def test_fingerprint_carries_a_digest_instead_of_the_password() -> None:
-    made = OpcuaDriver(
-        connection=DriverConnection(
-            endpoint="opc.tcp://plc:4840",
-            username="operator",
-            password="s3cret-value",
-            options={"policy": "None"},
-        )
-    )
-    fingerprint = made.fingerprint()
-    assert fingerprint[0] == "opc.tcp://plc:4840"
-    assert "s3cret-value" not in fingerprint
-    assert fingerprint[-1] == "policy=None"
-
-
-def test_fingerprint_changes_when_the_endpoint_changes() -> None:
-    one = OpcuaDriver(connection=DriverConnection(endpoint="opc.tcp://a:4840"))
-    other = OpcuaDriver(
-        connection=DriverConnection(endpoint="opc.tcp://b:4840")
-    )
-    assert one.fingerprint() != other.fingerprint()
 
 
 async def test_reading_before_connecting_is_refused() -> None:

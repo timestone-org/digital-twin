@@ -285,15 +285,6 @@ class ModbusTcpDriver:
     async def release_browse(self, continuation_token: str) -> None:
         del continuation_token
 
-    def fingerprint(self) -> tuple[str, ...]:
-        return (
-            self._connection.endpoint,
-            *(
-                f"{key}={value}"
-                for key, value in sorted(self._connection.options.items())
-            ),
-        )
-
     def classify_error(self, error: BaseException) -> ErrorCategory:
         if isinstance(error, (AddressInvalid, ValueError)):
             return "config"

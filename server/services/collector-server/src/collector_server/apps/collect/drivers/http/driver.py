@@ -1,7 +1,6 @@
 """HTTP JSON 轮询驱动，每轮请求一次并解析多个点位（ADR-0057）。"""
 
 import asyncio
-import hashlib
 import time
 from collections.abc import Callable, Sequence
 from http.cookiejar import CookieJar, DefaultCookiePolicy
@@ -281,18 +280,6 @@ class HttpDriver:
 
     async def release_browse(self, continuation_token: str) -> None:
         del continuation_token
-
-    def fingerprint(self) -> tuple[str, ...]:
-        fields = [
-            self._connection.endpoint,
-            self._connection.username or "",
-            self._connection.password or "",
-        ]
-        fields.extend(
-            f"{key}={value}"
-            for key, value in sorted(self._connection.options.items())
-        )
-        return (hashlib.sha256("\0".join(fields).encode()).hexdigest(),)
 
     def classify_error(self, error: BaseException) -> ErrorCategory:
         if isinstance(error, HttpAuthenticationRejected):

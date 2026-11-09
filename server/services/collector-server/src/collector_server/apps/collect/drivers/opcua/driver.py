@@ -1,7 +1,6 @@
 """OPC UA 会话、点位表与读写装配；协议边界见 CONTEXT.md §3。"""
 
 import asyncio
-import hashlib
 from collections.abc import Callable, Sequence
 from dataclasses import dataclass, replace
 from typing import cast
@@ -50,8 +49,6 @@ CAPABILITIES = DriverCapabilities(
 MIN_PUBLISH_INTERVAL_MS = 100
 # 单个监视项的服务端队列长度。1 = 只留最新值——快照是采样，不是事件流
 QUEUE_SIZE = 1
-# 指纹里口令那一段的长度。留指纹不留口令：指纹进得了日志，口令进不了
-DIGEST_LENGTH = 16
 # 一次 Read 最多问多少个节点。⚠ 服务端普遍有 MaxNodesPerRead 上限，超了是
 # 整批回 BadTooManyOperations 而不是截断——切批是唯一的解
 MAX_NODES_PER_READ = 100
@@ -303,19 +300,6 @@ class OpcuaDriver:
     def _remember(self, points: Sequence[PointSpec]) -> None:
         """登记增量点位，保留尚未变更的既有点位。Args: points。"""
         self._points.update({point.point_code: point for point in points})
-
-    def fingerprint(self) -> tuple[str, ...]:
-        """连接参数指纹。任一项变了都必须重连，否则还连着旧端点。"""
-        options = tuple(
-            f"{name}={value}"
-            for name, value in sorted(self._connection.options.items())
-        )
-        return (
-            self._connection.endpoint,
-            self._connection.username or "",
-            _digest_of(self._connection.password),
-            *options,
-        )
 
     def classify_error(self, error: BaseException) -> ErrorCategory:
         """判成 transient / config / auth 三档。
@@ -578,13 +562,3 @@ def _as_sequence(raw: object) -> Sequence[object]:
         # 未知元素类型止步于此：调用方只按 int / StatusCode 判
         return cast("list[object]", raw)
     return [raw]
-
-
-def _digest_of(secret: str | None) -> str:
-    """口令的短摘要。留指纹不留口令——指纹进得了日志，口令进不了。
-
-    Args: secret。
-    """
-    if secret is None:
-        return ""
-    return hashlib.sha256(secret.encode("utf-8")).hexdigest()[:DIGEST_LENGTH]

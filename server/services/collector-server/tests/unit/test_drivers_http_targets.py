@@ -3,7 +3,6 @@
 import asyncio
 import ipaddress
 import socket
-from dataclasses import replace
 
 import pytest
 
@@ -267,15 +266,6 @@ async def test_post_query_body_and_public_headers_are_sent() -> None:
         assert request.url.params["format"] == "json"
     finally:
         await driver.disconnect()
-
-
-async def test_fingerprint_is_independent_of_option_insertion_order() -> None:
-    setup = HttpSetup(options={"method": "GET", "timeout_s": "3"})
-    other = replace(setup, options={"timeout_s": "3", "method": "GET"})
-    assert (
-        driver_for(RecordingHandler(), setup).fingerprint()
-        == driver_for(RecordingHandler(), other).fingerprint()
-    )
 
 
 async def test_revoke_during_dns_cancels_before_sending_http(

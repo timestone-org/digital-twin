@@ -46,6 +46,7 @@
 |---|---|---|
 | `capabilities.supports_subscribe` | `capabilities.is_subscribe_supported` | 命名闸要求布尔带 `is_/has_/should_` 前缀（`browse` / `write` 同理） |
 | （未列） | `load_points(points)` | 轮询模式不订阅，而 `read_many` / `write` 只认已登记的 `point_code`。这不是给未来协议预留的字段，是 OPC UA 今天就需要的能力 |
+| `fingerprint()` | （不实现） | 重连判据在计划层：supervisor 比较 `without_points(旧) != without_points(新)`，驱动不参与。留一个没人调用的指纹方法只会让人以为重连靠它 |
 
 计划到驱动那一步的换手在 `apps/collect/plan/adapt.py`：`to_connection` / `specs_of` / `without_points`。**共享的计划形状上不许挂驱动方法**——那会让协议知识出现在协议无关的那一侧。
 

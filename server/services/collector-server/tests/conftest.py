@@ -418,9 +418,6 @@ class FakeDriver:
     async def release_browse(self, continuation_token: str) -> None:
         del continuation_token
 
-    def fingerprint(self) -> tuple[str, ...]:
-        return ("fake",)
-
     def classify_error(self, error: BaseException) -> str:
         self.classified.append(error)
         return "transient"
