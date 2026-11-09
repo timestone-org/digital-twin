@@ -1,9 +1,12 @@
 """第三方设备检测，复用账号鉴权、部署配额、推理与调用记录。"""
 
 import math
+import time
+from dataclasses import replace
 
 from sqlalchemy.ext.asyncio import AsyncSession
 
+from lib.errors import AppError
 from platform_server.apps.modeling.errors import (
     DeploymentUnservable,
     PredictRequestInvalid,
@@ -22,6 +25,7 @@ from platform_server.apps.modeling.schemas.detection import (
 from platform_server.apps.modeling.services import open_model_service
 from platform_server.apps.modeling.services.jsonshape import as_dict, as_list
 from platform_server.apps.modeling.services.open_model_service import (
+    HTTP_OK,
     TIMESTAMP_KEY,
     OpenModelDeps,
     ResolvedCall,
@@ -35,13 +39,38 @@ async def detect(
     resolved: ResolvedCall,
     payload: OpenModelDetectIn,
 ) -> OpenModelDetectOut:
-    """校验后推理并返回判定。Args: session, deps, resolved, payload。"""
+    """校验后推理并返回判定，整段只记一条调用记录。
+
+    ⚠ 校验与判定都包在记录里：校验失败不记会少算 4xx，先记成功再判不出分数
+    会把 503 记成成功。
+    Args: session, deps, resolved, payload。
+    """
+    started = time.monotonic()
+    counted = replace(resolved, row_count=len(payload.rows))
+    try:
+        answer = await _detected(session, deps, counted, payload)
+    except AppError as error:
+        await open_model_service.record_call(
+            deps, counted, started, error.http_status, error.code
+        )
+        raise
+    await open_model_service.record_call(deps, counted, started, HTTP_OK, None)
+    return answer
+
+
+async def _detected(
+    session: AsyncSession,
+    deps: OpenModelDeps,
+    resolved: ResolvedCall,
+    payload: OpenModelDetectIn,
+) -> OpenModelDetectOut:
+    """校验、推理、判定。Args: session, deps, resolved, payload。"""
     if resolved.version.task != TASK_ANOMALY:
         raise PredictRequestInvalid(
             "这个模型不是异常检测模型，请选择异常检测版本"
         )
     _validate_rows(payload, resolved)
-    answer = await open_model_service.predict_and_record(
+    answer = await open_model_service.predict(
         session,
         deps=deps,
         resolved=resolved,
