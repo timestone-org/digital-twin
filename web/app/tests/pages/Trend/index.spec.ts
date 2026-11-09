@@ -420,6 +420,28 @@ describe('取点间隔', () => {
   })
 })
 
+describe('图已过期的提示', () => {
+  it('⚠ 只换了取点间隔时，提示说的是查询条件变了而不是勾选变了', async () => {
+    signIn([PERMISSION_CODES.collectView])
+    const wrapper = await open()
+    await wrapper.get('input[type="checkbox"]').setValue(true)
+    await wrapper
+      .findAll('button')
+      .find((one) => one.text().includes('查询'))
+      ?.trigger('click')
+    await flushPromises()
+    await triggerOf(wrapper, '取点间隔')?.trigger('click')
+    await flushPromises()
+    const wanted = [...document.querySelectorAll('.dt-select-menu__item')].find(
+      (one) => one.textContent?.includes('1 小时'),
+    )
+    wanted?.dispatchEvent(new MouseEvent('click', { bubbles: true }))
+    await flushPromises()
+    expect(wrapper.text()).toContain('查询条件已经变了')
+    expect(wrapper.text()).not.toContain('勾选已经变了')
+  })
+})
+
 describe('工具条对齐', () => {
   it('⚠ 范围不合法时那句话不许挤进工具条：一格长高整条就错位', async () => {
     signIn([PERMISSION_CODES.collectView])
