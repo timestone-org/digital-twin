@@ -95,8 +95,10 @@ function submit(): void {
 
 // 每次换素材或重新打开都把草稿拉回真值：留着上一个的名字，用户一按保存就会
 // 把这个素材改成上一个的名字，而两边都不会报错
+// ⚠ 多源写法逐项比较：压缩档轮询会换上同 id 的新对象，getter 返回新数组
+// 会误触发、抹掉没存的新名字
 watch(
-  () => [props.modelValue, props.asset?.id] as const,
+  [() => props.modelValue, () => props.asset?.id],
   () => (draft.value = props.asset?.name ?? ''),
   { immediate: true },
 )

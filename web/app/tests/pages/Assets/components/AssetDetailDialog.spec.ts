@@ -73,4 +73,15 @@ describe('AssetDetailDialog 的未存改名', () => {
     expect(wrapper.emitted('rename')).toEqual([['新泵.svg']])
     wrapper.unmount()
   })
+
+  it('轮询换上同 id 的新对象时，没存的新名字留着', async () => {
+    const wrapper = await renderDirty()
+    await wrapper.setProps({ asset: { ...ASSET, variants: [] } })
+    await flushPromises()
+    const input = document.body.querySelector('input[type="text"]')
+    expect(input instanceof HTMLInputElement ? input.value : '').toBe(
+      '新泵.svg',
+    )
+    wrapper.unmount()
+  })
 })
