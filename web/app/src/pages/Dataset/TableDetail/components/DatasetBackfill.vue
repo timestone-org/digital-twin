@@ -13,9 +13,10 @@ import {
   DtIconButton,
 } from '@dt/ui'
 import PermGuard from '@/components/PermGuard.vue'
+import { formatInterval } from '../../scripts/collectSummary'
 import {
-  BACKFILL_STATUS_LABELS,
   backfillRangeProblem,
+  backfillStatusLabel,
   backfillTime,
 } from '../scripts/backfillView'
 import { useDatasetBackfill } from '../scripts/useDatasetBackfill'
@@ -34,18 +35,19 @@ const canStart = computed(
     rangeProblem.value === null,
 )
 const status = computed(() =>
-  task.job.value === null ? '' : BACKFILL_STATUS_LABELS[task.job.value.status],
+  task.job.value === null ? '' : backfillStatusLabel(task.job.value.status),
+)
+// 弹窗关着时不轮询：运行中的那句状态可能已经过时，必须标出来
+const isStale = computed(
+  () => !task.isOpen.value && task.job.value?.status === 'running',
 )
 </script>
 
 <template>
-  <p
-    v-if="props.table.collect_mode === 'manual'"
-    class="text-xs text-text-secondary"
+  <div
+    v-if="props.table.collect_mode !== 'manual'"
+    class="flex shrink-0 flex-wrap items-center gap-2 text-xs"
   >
-    手动录入台账不支持历史桶回填。
-  </p>
-  <div v-else class="flex shrink-0 flex-wrap items-center gap-2 text-xs">
     <PermGuard :codes="[PERMISSION_CODES.datasetBackfill]">
       <DtButton
         size="sm"
@@ -67,6 +69,9 @@ const status = computed(() =>
     <DtTag v-if="task.job.value" size="sm">
       {{ status }}
     </DtTag>
+    <span v-if="isStale" class="text-text-disabled">
+      未自动刷新，打开进度查看最新
+    </span>
     <span v-if="task.uncertain.value" class="text-text-secondary">
       状态待核查，请打开进度手动刷新
     </span>
@@ -141,7 +146,7 @@ const status = computed(() =>
         <p>
           实际范围：{{ backfillTime(task.job.value.since) }} 至
           {{ backfillTime(task.job.value.until) }}；周期
-          {{ task.job.value.interval_ms / 1000 }} 秒
+          {{ formatInterval(task.job.value.interval_ms) }}
         </p>
         <p>
           开始 {{ backfillTime(task.job.value.started_at) }}；更新

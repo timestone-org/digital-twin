@@ -159,12 +159,12 @@ describe('闸 3：写入口', () => {
     )
   })
 
-  it('手动录入台账明确不支持历史桶回填', async () => {
+  it('手动录入台账不摆回填入口，也不在每个分区挂一句用不上的说明', async () => {
     vi.mocked(dataset.getDatasetTable).mockResolvedValue(
       table({ collect_mode: 'manual' }),
     )
     const wrapper = await render(['dataset:view', 'dataset:backfill'])
-    expect(wrapper.text()).toContain('手动录入台账不支持历史桶回填')
+    expect(wrapper.text()).not.toContain('回填')
     expect(wrapper.find('button[data-test="backfill-open"]').exists()).toBe(
       false,
     )
