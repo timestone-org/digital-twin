@@ -1153,6 +1153,18 @@ describe('绑定装配', () => {
     )
   })
 
+  it('挑点弹窗的副标题是正在绑的那一行的名字', async () => {
+    const wrapper = mountPage()
+    await switchPane(wrapper, '绑定')
+
+    wrapper
+      .findComponent(Twin2dBindingPane)
+      .vm.$emit('pick', 'nodeStatus[0].status')
+    await nextTick()
+
+    expect(wrapper.findComponent(PointPickerDialog).props('label')).toBe('a')
+  })
+
   // ⚠ 绑定与配置压在同一帧撤销里：只把配置进退的话，撤销一次会让行号回到旧配置、
   // 绑定却停在新行号上
   it('绑定页写出去的那一条落进文档态', async () => {

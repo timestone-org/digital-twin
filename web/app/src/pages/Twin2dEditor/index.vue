@@ -2,7 +2,7 @@
 /**
  * @fileoverview 2D 孪生子编辑器：大纲、画布、诊断与检查器；交互由 scripts/ 编排。
  */
-import { TWIN_2D_CONFIG_KEY } from '@dt/twin2d'
+import { TWIN_2D_CONFIG_KEY, twin2dRowLabels } from '@dt/twin2d'
 import type { Twin2dConfig } from '@dt/twin2d'
 import {
   DtButton,
@@ -82,6 +82,13 @@ const binding = useTwin2dBindings(
   () => dashboardId.value,
   () => nodeId.value,
 )
+
+/** 挑点弹窗的副标题：正在绑的那一行叫什么。 */
+const pickerLabel = computed(() => {
+  const key = binding.pickingFieldKey.value
+  if (key === null || config.value === null) return undefined
+  return twin2dRowLabels(config.value)[key]?.title
+})
 
 // ⚠ SVG/DOM 舞台未接截图能力，见 scripts/aiSurface.ts。
 const ai = useTwin2dAi(page, binding, selection)
@@ -453,6 +460,7 @@ onBeforeUnmount(page.dispose)
         <PointPickerDialog
           :model-value="binding.pickingFieldKey.value !== null"
           :field-key="binding.pickingFieldKey.value"
+          :label="pickerLabel"
           @update:model-value="binding.closePicker"
           @pick="binding.pickPoint"
         />
