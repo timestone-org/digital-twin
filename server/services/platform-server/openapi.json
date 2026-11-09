@@ -73,6 +73,7 @@
           "description": {
             "anyOf": [
               {
+                "maxLength": 500,
                 "type": "string"
               },
               {
@@ -300,6 +301,7 @@
           "description": {
             "anyOf": [
               {
+                "maxLength": 500,
                 "type": "string"
               },
               {

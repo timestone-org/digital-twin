@@ -136,7 +136,7 @@ async def create_model(
     model = AcModel(
         room_id=payload.room_id,
         name=payload.name,
-        description=payload.description,
+        description=_description(payload.description),
         serving_sets=serving_sets,
         half_life_days=payload.half_life_days,
         status=MODEL_STATUS_QUEUED,
@@ -173,13 +173,21 @@ async def patch_model(
             raise ModelNameTaken("这个房间里已经有同名模型")
         model.name = payload.name
     if payload.description is not None:
-        model.description = payload.description
+        model.description = _description(payload.description)
     if payload.serving_sets is not None:
         serials = await _room_serials(session, model.room_id)
         model.serving_sets = _normalized_sets(payload.serving_sets, serials)
         await _resummarize(session, model)
     await _flush_named(session)
     return model
+
+
+def _description(text: str | None) -> str | None:
+    """纯空白的描述存成 NULL，空态只留一种。
+
+    Args: text。
+    """
+    return text if text is not None and text.strip() else None
 
 
 async def _flush_named(session: AsyncSession) -> None:

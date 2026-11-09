@@ -145,6 +145,35 @@ async def test_a_racing_duplicate_rename_is_409_not_500(
     assert response.json()["code"] == 41619
 
 
+async def test_an_overlong_description_is_rejected(
+    app_client: httpx.AsyncClient, db_session: AsyncSession, sign: SignHeaders
+) -> None:
+    """描述限长：每个列表响应都带着它，不限长就能塞进任意大的文本。"""
+    seeded = await seed_room(db_session)
+    response = await app_client.post(
+        f"{PREFIX}/ac-models",
+        json=create_body(seeded, description="长" * 501),
+        headers=sign([AC_MANAGE]),
+    )
+    assert response.status_code == 400, response.text
+
+
+async def test_patching_an_empty_description_clears_it(
+    app_client: httpx.AsyncClient, db_session: AsyncSession, sign: SignHeaders
+) -> None:
+    """空串即清空，存成 NULL 而不是空串——空态只有一种。"""
+    seeded = await seed_room(db_session)
+    manager = sign([AC_MANAGE])
+    data = await create_model(app_client, manager, seeded, description="试用")
+    response = await app_client.patch(
+        f"{PREFIX}/ac-models/{data['id']}",
+        json={"description": "  "},
+        headers=manager,
+    )
+    assert response.status_code == 200, response.text
+    assert response.json()["data"]["description"] is None
+
+
 async def test_the_list_filters_by_room(
     app_client: httpx.AsyncClient, db_session: AsyncSession, sign: SignHeaders
 ) -> None:

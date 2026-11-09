@@ -23,6 +23,8 @@ from platform_server.apps.hvac.schemas.common import (
     WorkshopRef,
 )
 
+# 模型描述的长度上限：页面只给 200 字，留出余量给接口调用方
+MAX_DESCRIPTION = 500
 # 半衰期上限（天）：十年等于不衰减，再大就是在骗自己配了衰减
 _MAX_HALF_LIFE_DAYS = 3650.0
 
@@ -108,7 +110,7 @@ class AcModelCreateIn(InputModel):
 
     room_id: uuid.UUID
     name: Label
-    description: str | None = None
+    description: str | None = Field(default=None, max_length=MAX_DESCRIPTION)
     serving_sets: list[list[str]] = Field(min_length=1)
     half_life_days: float = Field(
         default=180.0, ge=MIN_HALF_LIFE_DAYS, le=_MAX_HALF_LIFE_DAYS
@@ -119,7 +121,8 @@ class AcModelPatchIn(InputModel):
     """改名、改描述或改服务组合。⚠ 改组合就地重汇总评估，不触发重训。"""
 
     name: Label | None = None
-    description: str | None = None
+    # 空串（含纯空白）即清空成 NULL；省略或 null 不改
+    description: str | None = Field(default=None, max_length=MAX_DESCRIPTION)
     serving_sets: list[list[str]] | None = Field(default=None, min_length=1)
 
 
