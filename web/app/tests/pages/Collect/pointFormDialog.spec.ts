@@ -20,7 +20,6 @@ async function render(
     props: {
       modelValue: true,
       point: null,
-      presetAddress: undefined,
       protocol,
       busy,
     },

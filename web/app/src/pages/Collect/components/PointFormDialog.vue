@@ -39,8 +39,6 @@ const props = defineProps<{
   protocol?: CollectProtocol | undefined
   /** 新建在途时为真：保存按钮转圈，弹窗不许关。 */
   busy?: boolean
-  /** 新建时预填的寻址串，从地址空间挑来的那条。 */
-  presetAddress?: string | undefined
 }>()
 const emit = defineEmits<{
   'update:modelValue': [value: boolean]
@@ -127,9 +125,9 @@ const DEFAULTS: FormValues = {
   retentionDays: 0,
 }
 
-/** 表单的初始取值：编辑时来自点位，新建时用默认值 + 挑来的寻址串。 */
-function valuesOf(target: CollectPoint | null, preset: string): FormValues {
-  if (target === null) return { ...DEFAULTS, address: preset }
+/** 表单的初始取值：编辑时来自点位，新建时用默认值。 */
+function valuesOf(target: CollectPoint | null): FormValues {
+  if (target === null) return { ...DEFAULTS }
   return {
     code: target.code,
     name: target.name,
@@ -146,7 +144,7 @@ function valuesOf(target: CollectPoint | null, preset: string): FormValues {
 }
 
 function reset(): void {
-  const values = valuesOf(props.point, props.presetAddress ?? '')
+  const values = valuesOf(props.point)
   error.value = null
   code.value = values.code
   name.value = values.name
@@ -162,7 +160,7 @@ function reset(): void {
 }
 
 watch(
-  () => [props.modelValue, props.point, props.presetAddress] as const,
+  () => [props.modelValue, props.point] as const,
   ([open]) => {
     if (open) reset()
   },
