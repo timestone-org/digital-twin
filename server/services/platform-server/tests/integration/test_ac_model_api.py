@@ -20,6 +20,7 @@ from integration.ac_model_helpers import (
     seed_room,
 )
 from platform_server.apps.hvac.catalog import AC_MANAGE, AC_VIEW
+from platform_server.apps.hvac.crud import ac_model_crud
 from platform_server.apps.hvac.model_statuses import MODEL_STATUS_READY
 from platform_server.apps.hvac.models import Room, Workshop
 
@@ -94,6 +95,53 @@ async def test_create_rejects_a_duplicate_name_in_the_room(
         f"{PREFIX}/ac-models", json=create_body(seeded), headers=manager
     )
     assert response.status_code == 409
+    assert response.json()["code"] == 41619
+
+
+async def _never_taken(
+    _session: AsyncSession, *, room_id: uuid.UUID, name: str
+) -> None:
+    """让「先查」恒查不到，模拟并发下两边都通过了预检。"""
+    assert room_id
+    assert name
+
+
+async def test_a_racing_duplicate_create_is_409_not_500(
+    app_client: httpx.AsyncClient,
+    db_session: AsyncSession,
+    sign: SignHeaders,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """⚠ 预检被并发越过时由唯一约束兜底，也得是 409 而不是 500。"""
+    seeded = await seed_room(db_session)
+    manager = sign([AC_MANAGE])
+    await create_model(app_client, manager, seeded)
+    monkeypatch.setattr(ac_model_crud, "get_by_name", _never_taken)
+    response = await app_client.post(
+        f"{PREFIX}/ac-models", json=create_body(seeded), headers=manager
+    )
+    assert response.status_code == 409, response.text
+    assert response.json()["code"] == 41619
+
+
+async def test_a_racing_duplicate_rename_is_409_not_500(
+    app_client: httpx.AsyncClient,
+    db_session: AsyncSession,
+    sign: SignHeaders,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """改名同理：预检被越过时唯一约束兜底成 409。"""
+    seeded = await seed_room(db_session)
+    manager = sign([AC_MANAGE])
+    await create_model(app_client, manager, seeded)
+    other = await create_model(app_client, manager, seeded, name="另一个")
+    monkeypatch.setattr(ac_model_crud, "get_by_name", _never_taken)
+    response = await app_client.patch(
+        f"{PREFIX}/ac-models/{other['id']}",
+        json={"name": "早班模型"},
+        headers=manager,
+    )
+    assert response.status_code == 409, response.text
     assert response.json()["code"] == 41619
 
 
