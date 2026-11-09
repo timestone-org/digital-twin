@@ -564,15 +564,36 @@ describe('两处相反的转义口径', () => {
     ).toBe('&lt;i&gt;09:00<br/>&lt;b&gt;甲 12 &amp; 备用')
   })
 
-  it('提示框把没读数的那一格写成「—」，不留一行空白', () => {
-    const view = liveView(BASE_CONFIG, [30, 10])
+  it('历史档提示框把没采到的那一格写成「—」，不留一行空白', () => {
+    const view = historyView(BASE_CONFIG, [
+      [
+        { t: BASE, v: 30 },
+        { t: BASE + HOUR, v: 40 },
+      ],
+      [{ t: BASE + HOUR, v: 10 }],
+    ])
+    const option = optionOf(BASE_CONFIG, view)
+
+    expect(
+      call(asRecord(option.tooltip).formatter, [
+        { seriesIndex: 0, dataIndex: 0, axisValueLabel: '09:00' },
+        { seriesIndex: 1, dataIndex: 0, axisValueLabel: '09:00' },
+      ]),
+    ).toBe('09:00<br/>1# 线 30t<br/>2# 线 —')
+  })
+
+  // ⚠ 实时档一个类目就是一行，别的行在这一格上本来就没有值，列出来全是「—」
+  it('实时档提示框只列悬停那一行', () => {
+    const view = liveView(BASE_CONFIG, [30, 10, 20])
     const option = optionOf(BASE_CONFIG, view)
 
     expect(
       call(asRecord(option.tooltip).formatter, [
         { seriesIndex: 0, dataIndex: 1, axisValueLabel: '2# 线' },
+        { seriesIndex: 1, dataIndex: 1, axisValueLabel: '2# 线' },
+        { seriesIndex: 2, dataIndex: 1, axisValueLabel: '2# 线' },
       ]),
-    ).toBe('2# 线<br/>1# 线 —')
+    ).toBe('2# 线<br/>2# 线 10t')
   })
 
   it('百分比档的提示框同时给原值与占比', () => {

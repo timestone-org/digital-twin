@@ -448,10 +448,14 @@ function tooltipFormatter(
     let head = ''
     for (const row of Array.isArray(params) ? params : [params]) {
       const entry = readRecord(row)
-      const series = view.series[readNumber(entry.seriesIndex, -1)]
+      const at = readNumber(entry.seriesIndex, -1)
+      const cell = readNumber(entry.dataIndex, -1)
+      const series = view.series[at]
       if (series === undefined) continue
       head = escapeHtml(readText(entry.axisValueLabel))
-      lines.push(tooltipLine(series, readNumber(entry.dataIndex, -1), layout))
+      // ⚠ 实时档一个类目就是一行：别的行在这一格上本来就没有值，列出来全是「—」
+      if (view.source === 'live' && at !== cell) continue
+      lines.push(tooltipLine(series, cell, layout))
     }
     if (lines.length === 0) return ''
     return head === '' ? lines.join('<br/>') : [head, ...lines].join('<br/>')
