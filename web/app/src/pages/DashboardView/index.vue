@@ -5,8 +5,7 @@
  * ⚠ 这一页刻意不套 AppShell：大屏是拿去投到墙上的，左边挂一条导航就废掉了
  * 设计尺寸的等比关系。返回入口做成悬浮的，鼠标不动时淡出。
  */
-import type { ModuleManifest } from '@dt/contracts'
-import { getModule, listModules } from '@dt/modules'
+import { getModule } from '@dt/modules'
 import {
   INTERACTION_KEY,
   NodeModal,
@@ -59,9 +58,7 @@ const embed = useEmbedContext()
 installDashboardModules()
 
 const getManifest: GetModuleManifest = (moduleType: string) =>
-  listModules().some((item: ModuleManifest) => item.type === moduleType)
-    ? getModule(moduleType)
-    : undefined
+  getModule(moduleType)
 
 const file = useDashboardDoc()
 

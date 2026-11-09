@@ -12,8 +12,7 @@
  * 说「静态快照 + 数据截止」。一个看起来在跑、实际停在某一刻的大屏，比一个明说
  * 自己是快照的大屏危险得多（runtime-resilience「返回陈旧数据必须标注为陈旧」）。
  */
-import { getModule, listModules } from '@dt/modules'
-import type { ModuleManifest } from '@dt/contracts'
+import { getModule } from '@dt/modules'
 import {
   INTERACTION_KEY,
   NodeModal,
@@ -83,9 +82,7 @@ installDashboardDataSources({
 })
 
 const getManifest: GetModuleManifest = (moduleType: string) =>
-  listModules().some((item: ModuleManifest) => item.type === moduleType)
-    ? getModule(moduleType)
-    : undefined
+  getModule(moduleType)
 
 const doc = usePublicDashboardDoc()
 const nodes = computed(() => doc.dashboard.value?.nodes ?? [])
