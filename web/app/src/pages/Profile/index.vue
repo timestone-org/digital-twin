@@ -28,15 +28,38 @@ const permissionStats = computed(() => [
   { key: 'direct', label: '单独授予', value: directCodes.value.length },
 ])
 
-// 权限可能在别处被改过，进页面时对齐一次；失败静默，不阻断渲染
-onMounted(() => {
-  void auth.syncMe()
-})
+interface ProfileDraft {
+  full_name: string
+  email: string
+  phone: string
+}
 
-const profile = ref({
-  full_name: auth.user?.full_name ?? '',
-  email: auth.user?.email ?? '',
-  phone: auth.user?.phone ?? '',
+function seedProfile(): ProfileDraft {
+  return {
+    full_name: auth.user?.full_name ?? '',
+    email: auth.user?.email ?? '',
+    phone: auth.user?.phone ?? '',
+  }
+}
+
+let lastSeed = seedProfile()
+const profile = ref<ProfileDraft>({ ...lastSeed })
+
+/** 表单没被动过才用最新的用户资料回填，免得把缓存里的旧值整份写回服务端。 */
+function reseedIfPristine(): void {
+  const current = profile.value
+  const pristine =
+    current.full_name === lastSeed.full_name &&
+    current.email === lastSeed.email &&
+    current.phone === lastSeed.phone
+  lastSeed = seedProfile()
+  if (pristine) profile.value = { ...lastSeed }
+}
+
+// 资料与权限可能在别处被改过，进页面时对齐一次；失败静默，不阻断渲染
+onMounted(async () => {
+  await auth.syncMe()
+  reseedIfPristine()
 })
 const passwords = ref({ current: '', next: '' })
 
@@ -73,7 +96,9 @@ async function onSaveProfile(): Promise<void> {
       email: profile.value.email,
       phone: profile.value.phone,
     })
+    lastSeed = { ...profile.value }
     await auth.syncMe()
+    reseedIfPristine()
     profileState.value = { busy: false, note: '资料已保存', ok: true }
   } catch (caught) {
     profileState.value = {
