@@ -171,6 +171,19 @@ def _is_inside(position: int, spans: list[tuple[int, int]]) -> bool:
     return any(start <= position < end for start, end in spans)
 
 
+def refs_outside_quotes(source: str) -> list[str]:
+    """`{…}` 引用到的名字，按出现顺序、不去重；字符串字面量里的不算。
+
+    Args: source。
+    """
+    spans = _quoted_spans(source)
+    return [
+        found.group(1).strip()
+        for found in COLUMN_REF_RE.finditer(source)
+        if not _is_inside(found.start(), spans)
+    ]
+
+
 def _replace_outside_quotes(
     source: str,
     pattern: re.Pattern[str],
