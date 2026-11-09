@@ -8,11 +8,17 @@
  * 它永远是一对空的 teleport 注释，而「找不到」看着像组件没渲染。
  */
 import { enableAutoUnmount, flushPromises, mount } from '@vue/test-utils'
+import { createPinia, setActivePinia } from 'pinia'
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 
 import { DtConfirmHost, useConfirm } from '@dt/ui'
 
 import AssetPickerDialog from '@/components/assets/AssetPickerDialog.vue'
+import { useAuthStore } from '@/stores/auth'
+
+function grant(codes: string[]): void {
+  useAuthStore().user = { permissions: codes } as never
+}
 
 const api = vi.hoisted(() => ({
   listAssets: vi.fn(),
@@ -80,6 +86,8 @@ async function click(element: HTMLElement): Promise<void> {
 
 beforeEach(() => {
   vi.resetAllMocks()
+  setActivePinia(createPinia())
+  grant(['asset:view', 'asset:manage'])
   api.listAssetKinds.mockResolvedValue([
     {
       kind: 'model',
@@ -194,5 +202,60 @@ describe('删除', () => {
 
     expect(api.deleteAsset).toHaveBeenCalledWith(ID)
     expect(document.body.textContent).toContain('还没有素材')
+  })
+})
+
+describe('翻页与搜索', () => {
+  function page(count: number, prefix = 'a') {
+    return Array.from({ length: count }, (_unused, at) => ({
+      ...ASSET,
+      id: `${prefix}${at}`,
+      ref: `asset:${prefix}${at}`,
+      name: `${prefix}${at}.glb`,
+    }))
+  }
+
+  it('取满一页给「加载更多」，点了接着取，最旧的那几条也挑得到', async () => {
+    api.listAssets
+      .mockResolvedValueOnce(page(50))
+      .mockResolvedValueOnce(page(3, 'old'))
+    await render()
+
+    await click(buttonByText('加载更多'))
+
+    expect(api.listAssets).toHaveBeenLastCalledWith('model', {
+      limit: 50,
+      offset: 50,
+      q: '',
+    })
+    expect(document.body.textContent).toContain('old2.glb')
+  })
+
+  it('按名字搜，防抖到点才发', async () => {
+    vi.useFakeTimers()
+    await render()
+    const box = query('input[type="search"]')
+    if (!(box instanceof HTMLInputElement)) throw new Error('搜索框不是 input')
+    box.value = '泵'
+    box.dispatchEvent(new Event('input'))
+    await vi.advanceTimersByTimeAsync(400)
+    vi.useRealTimers()
+    await flushPromises()
+
+    expect(api.listAssets).toHaveBeenLastCalledWith('model', {
+      limit: 50,
+      offset: 0,
+      q: '泵',
+    })
+  })
+
+  it('只读账号没有上传与删除入口', async () => {
+    grant(['asset:view'])
+    await render()
+
+    expect(document.body.textContent).not.toContain('上传素材')
+    expect(
+      document.body.querySelector(`[aria-label="删除 ${ASSET.name}"]`),
+    ).toBeNull()
   })
 })
