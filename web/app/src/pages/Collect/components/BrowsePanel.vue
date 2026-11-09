@@ -45,6 +45,7 @@ const pending = ref<ImportDraft[]>([])
 const {
   addresses: takenAddresses,
   codes: takenCodes,
+  error: takenError,
   load: loadTaken,
 } = useBrowseTaken(() => props.source.id)
 
@@ -88,7 +89,8 @@ async function toggle(address: string): Promise<void> {
  * 那些行在弹窗里留空等人填，而**不是**把节点丢掉。
  */
 async function openImport(): Promise<void> {
-  if (tree.selectedCount.value === 0 || busy.value) return
+  if (tree.selectedCount.value === 0 || busy.value || takenError.value !== null)
+    return
   busy.value = true
   try {
     const romanize = await loadRomanize()
@@ -191,7 +193,7 @@ onMounted(() => {
         <DtButton
           size="sm"
           icon="download"
-          :disabled="tree.selectedCount.value === 0"
+          :disabled="tree.selectedCount.value === 0 || takenError !== null"
           :loading="busy"
           @click="openImport"
         >
@@ -204,6 +206,13 @@ onMounted(() => {
       <DtNotice v-if="isOffline" intent="warning" icon="alert-triangle">
         这个数据源当前不在采集，地址空间由持有会话的采集进程读取——现在多半浏览
         不出东西。空树的意思是「读不到」，不是「设备没有点位」。
+      </DtNotice>
+
+      <DtNotice v-if="takenError" intent="danger" icon="alert-triangle">
+        已建点位清单没取到（{{
+          takenError
+        }}），「已建」标记与编码查重这会儿都不可靠， 先不让导入。
+        <DtButton variant="ghost" size="sm" @click="loadTaken">重试</DtButton>
       </DtNotice>
 
       <DtNotice

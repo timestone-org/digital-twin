@@ -676,6 +676,19 @@ async function openImport(wrapper: VueWrapper): Promise<void> {
 }
 
 describe('导入选中', () => {
+  it('已建点位清单没取到时如实说出来，并且先不让导入', async () => {
+    browseTree({ [ROOT]: [leaf('Temp')] }, 500)
+    vi.spyOn(collectApi, 'listPoints').mockRejectedValue(new Error('超时'))
+    const wrapper = mount(BrowsePanel, { props: { source: source() } })
+    await flushPromises()
+    await check(box(wrapper, 'Temp'))
+    expect(wrapper.text()).toContain('已建点位清单没取到')
+    const open = wrapper
+      .findAll('button')
+      .find((one) => one.text().startsWith('导入选中'))
+    expect(open?.attributes('disabled')).toBeDefined()
+  })
+
   it('切换数据源会关闭旧源的导入草稿，防止提交到新源', async () => {
     const wrapper = await render({ [ROOT]: [leaf('Temp')] })
     await check(box(wrapper, 'Temp'))

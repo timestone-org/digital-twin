@@ -2,6 +2,7 @@
 import { onBeforeUnmount, ref } from 'vue'
 
 import * as collect from '@/api/collect'
+import { describeError } from '@/composables/useAsyncList'
 import { useRacedFetch } from '@/composables/useRacedFetch'
 
 const SCAN_PAGE_SIZE = 100
@@ -15,27 +16,31 @@ interface TakenPoints {
 export function useBrowseTaken(sourceId: () => string) {
   const addresses = ref(new Set<string>())
   const codes = ref(new Set<string>())
+  /** 已建清单没取到的原因；此时「已建」锁与撞码检查都失效，界面要说出来。 */
+  const error = ref<string | null>(null)
   const request = useRacedFetch()
 
   async function load(): Promise<void> {
     const currentSource = sourceId()
     addresses.value = new Set()
     codes.value = new Set()
+    error.value = null
     await request.run((signal) => scanExisting(currentSource, signal), {
       ok: (points) => {
         addresses.value = points.addresses
         codes.value = points.codes
       },
-      fail: () => {
+      fail: (caught) => {
         addresses.value = new Set()
         codes.value = new Set()
+        error.value = describeError(caught)
       },
       settled: () => {},
     })
   }
 
   onBeforeUnmount(() => request.cancel())
-  return { addresses, codes, load }
+  return { addresses, codes, error, load }
 }
 
 async function scanExisting(
