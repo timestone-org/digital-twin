@@ -119,7 +119,7 @@ function dependsOnConnection(slot: ModuleSlotMeta | undefined): boolean {
 }
 
 /**
- * 本模块消费的六个槽。
+ * 本模块消费的八个槽。
  * ⚠ 键在这里显式列一遍、不把整袋直接递下去：清单声明的槽键与渲染侧真正消费的
  * 槽键由契约测试逐一对上，而它只看得见本文件里的 `values[...]` 取法。
  * 少列一个键的表现是「那一路读数永远不来」，两边都不报错。

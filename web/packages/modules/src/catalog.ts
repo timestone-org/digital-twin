@@ -199,12 +199,6 @@ export function buildModuleCatalog(
 }
 
 /**
- * 把「档位 → 一句话」的说明表摊成有序数组。
- * ⚠ 用数组不用对象：JSON 对象的键序在跨语言往返里没有保证，而这份产物是
- * 逐字比对的快照——键序一漂，每次生成都是一份假 diff。
- * @param docs 契约里逐档铺满的说明表
- */
-/**
  * 卡片外壳的一个键。这批键**不在任何模块的 `configSchema` 里**——它们住在
  * `config_json.__cardStyle` 与大屏级 `chrome_json.card` 两处，对所有模块通用。
  * ⚠ 不导出就没人校得动一条卡片样式的外壳段：服务端没有别的地方能知道
@@ -217,6 +211,12 @@ function chromeKey(spec: (typeof CHROME_KEYS)[number]): CatalogJson {
   return out
 }
 
+/**
+ * 把「档位 → 一句话」的说明表摊成有序数组。
+ * ⚠ 用数组不用对象：JSON 对象的键序在跨语言往返里没有保证，而这份产物是
+ * 逐字比对的快照——键序一漂，每次生成都是一份假 diff。
+ * @param docs 契约里逐档铺满的说明表
+ */
 function docTable(docs: Readonly<Record<string, string>>): CatalogValue[] {
   return Object.entries(docs)
     .sort(([a], [b]) => (a < b ? -1 : 1))
