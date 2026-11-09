@@ -58,6 +58,11 @@ const HANDLE_GAP_PX = 22
 /** 一条参考线都没有；不每次现造一个空表，免得下游白重画。 */
 const NO_GUIDES: readonly Twin2dGuideLine[] = Object.freeze([])
 
+// ⚠ 画中画在同一页挂着运行态舞台，那边拿节点 id 作渐变前缀：这边不另加一段的话两边写出
+// 同 id 的定义，画中画的 `url(#…)` 认到编辑画布这一份，状态变体改的渐变在预览里不生效
+/** 编辑画布的 DOM id 前缀 */
+const EDIT_ID_PREFIX = 'edit-'
+
 /** 一个节点渲染要的那一份。 */
 interface NodeView {
   node: Twin2dNode
@@ -368,7 +373,7 @@ function onNodeDown(view: NodeView, event: PointerEvent): void {
         :class="{ 't2e-node--picked': view.picked }"
         :node="view.node"
         :node-style="view.style"
-        :id-prefix="view.node.id"
+        :id-prefix="`${EDIT_ID_PREFIX}${view.node.id}`"
         :resolve-icon="iconResolver"
         @pointerdown="onNodeDown(view, $event)"
       />

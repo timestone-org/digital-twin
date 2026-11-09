@@ -7,7 +7,12 @@
  * ⚠ 卸载不补收场同样不报错：拖到一半切走的改动既没进撤销栈也没落库。
  * ⚠ sprite 宿主由画布壳挂一次：这一层再挂一份，同一份 symbol 在文档里就重号了。
  */
-import { Twin2dNodeBox } from '@dt/twin2d'
+import {
+  Twin2dNodeBox,
+  normalizeNodeStyle,
+  svgGradientDomId,
+  svgPrimIdPrefix,
+} from '@dt/twin2d'
 import type {
   Twin2dIconResolver,
   Twin2dNode,
@@ -250,6 +255,39 @@ describe('画节点', () => {
     const port = wrapper.get('[data-test="node-port"]').element
     expect(boxes.contains(port)).toBe(false)
     expect(port.parentElement).toBe(boxes.parentElement)
+  })
+
+  // ⚠ 画中画在同一页上挂着运行态舞台，它的渐变 id 用节点 id 作前缀：编辑画布也用同一个
+  // 的话两边写出同 id 的定义，画中画的 `url(#…)` 认到的是编辑画布那一份
+  it('局部渐变的 DOM id 与运行态舞台的那一份不撞', () => {
+    const gradientStyle = normalizeNodeStyle({
+      id: 's1',
+      size: SIZE,
+      prims: [
+        {
+          id: 'v1',
+          kind: 'vec',
+          shape: { kind: 'rect', x: 0, y: 0, w: 1, h: 1 },
+          fill: { kind: 'gradient', id: 'g1' },
+          gradients: [
+            {
+              id: 'g1',
+              kind: 'linear',
+              stops: [
+                { id: 'a', at: 0, color: '#000' },
+                { id: 'b', at: 1, color: '#fff' },
+              ],
+            },
+          ],
+        },
+      ],
+    })
+    if (gradientStyle === null) throw new Error('夹具样式归一化失败')
+    const { wrapper } = mountLayer({ nodeStyles: [gradientStyle] })
+
+    const id = wrapper.get('linearGradient').attributes('id')
+    expect(id).toBeDefined()
+    expect(id).not.toBe(svgGradientDomId(svgPrimIdPrefix('n1', 'v1'), 'g1'))
   })
 
   it('选中的节点带选中类，没选中的不带', () => {
