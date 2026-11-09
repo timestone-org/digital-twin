@@ -6,7 +6,7 @@
  * 因此按端口建键；多路时用页签一次只摆一路，两路各摆一遍等于把同一份账印两遍。
  * ⚠ 没有讲解的运行（老运行）退回升级前的样子：不摆空区、不折叠、不多说一个字。
  */
-import { DtCard, DtEmpty, DtSegmented } from '@dt/ui'
+import { DtCard, DtEmpty, DtIcon, DtSegmented } from '@dt/ui'
 import type { DtSegmentedOption, ModelingOperator } from '@dt/contracts'
 import { computed, ref } from 'vue'
 
@@ -335,6 +335,11 @@ function jump(target: string): void {
           :aria-expanded="isOpen(item.port)"
           @click="toggle(item.port)"
         >
+          <DtIcon
+            class="dt-ml-result__chevron"
+            :name="isOpen(item.port) ? 'chevron-down' : 'chevron-right'"
+            :size="14"
+          />
           {{ dataTitleOf(item) }}
         </button>
         <div
@@ -345,6 +350,7 @@ function jump(target: string): void {
             v-if="hasFace"
             :blocks="portBlocks(item.port)"
             :zones="TABLE_ZONES"
+            is-untitled
           />
           <FrameView
             v-if="item.preview.kind === 'frame'"
@@ -457,6 +463,9 @@ function jump(target: string): void {
   }
 
   &__toggle {
+    display: inline-flex;
+    gap: 0.25rem;
+    align-items: center;
     align-self: flex-start;
     padding: 0;
     border: none;
