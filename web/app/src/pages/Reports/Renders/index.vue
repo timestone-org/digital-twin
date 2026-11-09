@@ -105,13 +105,22 @@ async function prevPage(): Promise<void> {
 }
 const toast = useToast()
 /**
+ * 下载文件名：模板名-报告期，几份下下来分得清；模板名取不到时退回记录 id。
+ * @param row 生成记录
+ */
+function fileNameOf(row: ReportRender): string {
+  const template = row.template_id ? templateNames.value[row.template_id] : ''
+  const stem = template ? `${template}-${row.period}` : `report-${row.id}`
+  return `${stem.replace(/[\\/:*?"<>|]/g, '_')}.docx`
+}
+/**
  * 下载一份产物。⚠ 失败走吐司不走 error：error 是列表取数那一格，写进去整张列表
  * 会被换成「加载失败」，下一次轮询又把那句话冲掉。
- * @param id 生成记录 id
+ * @param row 生成记录
  */
-async function download(id: string): Promise<void> {
+async function download(row: ReportRender): Promise<void> {
   try {
-    downloadBytes(await api.downloadReport(id), `report-${id}.docx`)
+    downloadBytes(await api.downloadReport(row.id), fileNameOf(row))
   } catch (caught) {
     toast.error(describeError(caught))
   }
@@ -178,7 +187,13 @@ async function download(id: string): Promise<void> {
           </DtTag>
         </template>
         <template #cell-warnings="{ row }">
+          <span
+            v-if="!row.error && row.warnings.length === 0"
+            class="text-xs text-text-disabled"
+            >无提示</span
+          >
           <DtButton
+            v-else
             variant="ghost"
             size="sm"
             icon="activity"
@@ -195,7 +210,7 @@ async function download(id: string): Promise<void> {
               intent="primary"
               icon="download"
               label="下载 Word"
-              @click="download(row.id)"
+              @click="download(row)"
             />
           </PermGuard>
         </template>

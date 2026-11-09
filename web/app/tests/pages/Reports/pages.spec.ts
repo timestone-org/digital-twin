@@ -495,7 +495,11 @@ it('生成记录显示警告并把真实文件交给下载器', async () => {
     .find((button) => button.text() === '下载 Word')
     ?.trigger('click')
   await flushPromises()
-  expect(downloads.downloadBytes).toHaveBeenCalledWith(blob, 'report-j1.docx')
+  // 文件名用模板名与报告期，几份下下来分得清
+  expect(downloads.downloadBytes).toHaveBeenCalledWith(
+    blob,
+    '能耗月报-2026-08.docx',
+  )
   await wrapper
     .findAllComponents(DtButton)
     .find((button) => button.text() === '1 条提示')
@@ -656,5 +660,23 @@ it('⚠ 模板编码不合规时就地说在那一格，不发请求', async () 
   await flushPromises()
   expect(createReport).not.toHaveBeenCalled()
   expect(input('模板编码')?.props('error')).toBeTruthy()
+  wrapper.unmount()
+})
+
+it('没有提示也没有错误的记录不摆一颗「0 条提示」按钮', async () => {
+  signIn(['report:view', 'report:render'])
+  vi.spyOn(api, 'listReportRenders').mockResolvedValue({
+    items: [job('succeeded')],
+    next: null,
+    has_more: false,
+  })
+  const wrapper = mount(Renders, { global: { stubs: { teleport: true } } })
+  await flushPromises()
+  expect(wrapper.text()).toContain('无提示')
+  expect(
+    wrapper
+      .findAllComponents(DtButton)
+      .some((button) => button.text() === '0 条提示'),
+  ).toBe(false)
   wrapper.unmount()
 })
