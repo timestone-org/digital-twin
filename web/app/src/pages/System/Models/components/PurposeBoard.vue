@@ -233,8 +233,10 @@ function save(purpose: LlmPurpose): void {
           >
             保存
           </DtButton>
+          <!-- 没分配时也占着这一格（只是看不见）：否则有无分配的两行下拉错开一截 -->
           <DtIconButton
-            v-if="purpose.provider_id !== null"
+            :class="{ invisible: purpose.provider_id === null }"
+            :disabled="purpose.provider_id === null"
             variant="ghost"
             intent="neutral"
             size="sm"

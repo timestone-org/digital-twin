@@ -90,7 +90,8 @@ const view = useViewMode('system-models')
     <template #cell-name="{ row }">
       <p class="m-0 text-text-primary">{{ row.name }}</p>
       <p v-if="row.base_url" class="m-0 font-mono text-2xs text-text-disabled">
-        {{ row.base_url }} · 密钥 {{ row.api_key_hint }}
+        {{ row.base_url }}
+        <span class="whitespace-nowrap">· 密钥 {{ row.api_key_hint }}</span>
       </p>
       <p v-else class="m-0 text-2xs text-text-disabled">
         登录一次即可，不按 token 计费
