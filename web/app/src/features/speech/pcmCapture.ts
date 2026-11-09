@@ -11,7 +11,7 @@ import { FRAME_BYTES, PCM_CAPTURE_PROCESSOR, TARGET_SAMPLE_RATE } from './pcm'
 // TypeScript**，addModule 一执行就是语法错误；`?worker&url` 才会把它打成独立的 JS
 import workletUrl from './pcmCapture.worklet.ts?worker&url'
 
-export { downsampleSpan, downsampleToInt16 } from './pcm'
+export { downsampleBlock, downsampleSpan, downsampleToInt16 } from './pcm'
 
 /** 一路开着的采集。 */
 export interface PcmCapture {
