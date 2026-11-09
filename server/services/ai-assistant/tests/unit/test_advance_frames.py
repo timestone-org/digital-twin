@@ -46,7 +46,9 @@ async def test_an_unexpected_error_ends_with_an_error_frame(
         advance_api._frames(  # pyright: ignore[reportPrivateUsage]
             object(),  # pyright: ignore[reportArgumentType]
             uuid.uuid4(),
-            AdvanceIn(surface_kind="dashboard-editor", user_text="你好"),
+            advance_api._to_input(  # pyright: ignore[reportPrivateUsage]
+                AdvanceIn(surface_kind="dashboard-editor", user_text="你好"), []
+            ),
         )
     )
     event, data = _last_event(frames)
@@ -68,7 +70,9 @@ async def test_an_app_error_keeps_its_own_code(
         advance_api._frames(  # pyright: ignore[reportPrivateUsage]
             object(),  # pyright: ignore[reportArgumentType]
             uuid.uuid4(),
-            AdvanceIn(surface_kind="dashboard-editor", user_text="你好"),
+            advance_api._to_input(  # pyright: ignore[reportPrivateUsage]
+                AdvanceIn(surface_kind="dashboard-editor", user_text="你好"), []
+            ),
         )
     )
     event, data = _last_event(frames)

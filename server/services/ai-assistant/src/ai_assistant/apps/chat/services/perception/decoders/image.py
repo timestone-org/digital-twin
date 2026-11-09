@@ -96,6 +96,18 @@ def check_data_uri(uri: str, at: str) -> str:
     return _sniff(raw, at)
 
 
+def normalised_data_uri(uri: str, at: str) -> str:
+    """校验一个 data URI，并按认出的格式重标 media type。
+
+    ⚠ 转发出去的要是重标过的这一份：声明与内容不符的 URI 过得了白名单，
+    原样发给视觉端点时严格的供应商按 400 拒。
+
+    Args: uri, at（出错时指得出是第几张图）。
+    """
+    media_type = check_data_uri(uri, at)
+    return f"data:{media_type};base64,{uri.partition(',')[2]}"
+
+
 def _sniff(raw: bytes, filename: str) -> str:
     """按字节开头认格式；认不出就抛。
 
