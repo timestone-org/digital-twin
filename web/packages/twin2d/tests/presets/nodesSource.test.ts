@@ -390,6 +390,8 @@ describe('四个能源源预置样式', () => {
       text: 'kWh',
     })
     for (const id of ['energy-label', 'energy-unit']) {
+      // ⚠ 读数一长这一行就挤：两个说明字会按字折成竖排「输 / 出」
+      expect(txtOf(style, id).nowrap).toBe(true)
       expect(txtOf(style, id).font).toEqual({
         size: 12,
         letterSpacing: 0,
