@@ -469,7 +469,7 @@ async def test_listening_probes_run_outside_any_transaction(
     await client.post(
         f"{INSTANCES}/{data['id']}:start", headers=sign_headers(PERM_OPERATE)
     )
-    service = app.app.state.container.instances  # type: ignore[attr-defined]
+    service = app.app.state.container.instances
     tracking = _TrackingDatabase(service._database)
     monkeypatch.setattr(service, "_database", tracking)
     seen: list[int] = []
