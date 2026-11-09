@@ -299,20 +299,26 @@ async def test_a_briefly_stalled_socket_still_gets_its_close_frame(
     assert closed == [fanout.CLOSE_TRY_AGAIN]
 
 
-async def test_stop_does_not_wait_for_pending_slow_closes(
+async def test_stop_cancels_pending_slow_closes(
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
+    # ⚠ 后台关闭最长等 60s：关停时不取消，它们会活过扇出、拖到事件循环收尾
     monkeypatch.setattr(fanout, "SEND_TIMEOUT_S", 0.05)
     connections = ConnectionRegistry()
     stalled = _connection([])
     is_closing = asyncio.Event()
+    cancelled: list[bool] = []
 
     async def never_drains(_frame: str) -> None:
         await asyncio.Event().wait()
 
     async def never_closes(_code: int) -> None:
         is_closing.set()
-        await asyncio.Event().wait()
+        try:
+            await asyncio.Event().wait()
+        except asyncio.CancelledError:
+            cancelled.append(True)
+            raise
 
     stalled.send_frame = never_drains
     stalled.close = never_closes
@@ -326,4 +332,4 @@ async def test_stop_does_not_wait_for_pending_slow_closes(
     async with asyncio.timeout(1):
         await listener.stop()
 
-    assert listener._closing == set()
+    assert cancelled == [True]
