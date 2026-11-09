@@ -22367,7 +22367,7 @@
             "items": {
               "$ref": "#/components/schemas/ReportApiColumn"
             },
-            "maxItems": 50,
+            "maxItems": 300,
             "minItems": 1,
             "title": "Columns",
             "type": "array"

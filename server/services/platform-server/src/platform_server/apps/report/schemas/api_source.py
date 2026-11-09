@@ -24,7 +24,8 @@ from platform_server.apps.report.schemas.api_variable import (
 )
 from platform_server.apps.report.schemas.common import Code, InputModel, Label
 
-MAX_COLUMNS = 50
+MAX_COLUMNS = 300
+MAX_HEADERS = 50
 MAX_CONFIG_BYTES = 65_536
 MIN_HEADER_CHARACTER = 32
 MAX_HEADER_CHARACTER = 126
@@ -92,7 +93,7 @@ class ReportApiConnection(InputModel):
     def validate_headers(
         cls, headers: dict[str, SecretStr]
     ) -> dict[str, SecretStr]:
-        if len(headers) > MAX_COLUMNS:
+        if len(headers) > MAX_HEADERS:
             raise ValueError("API 请求头超过数量上限")
         if len({name.casefold() for name in headers}) != len(headers):
             raise ValueError("API 请求头不能重复")

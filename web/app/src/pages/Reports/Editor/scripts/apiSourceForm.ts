@@ -48,6 +48,8 @@ export function sourceIsUsed(
   return uses(document)
 }
 const CODE = /^[A-Za-z][A-Za-z0-9_]*$/u
+/** 单个来源可映射的字段数，与后端 `api_source.MAX_COLUMNS` 一致。 */
+export const MAX_API_COLUMNS = 300
 export function validateSource(source: ApiSource): void {
   if (!CODE.test(source.code) || source.code.length > 60)
     throw new Error(
@@ -83,8 +85,8 @@ function validateMapping(source: ApiSource): void {
     throw new Error('JSON Pointer 须为空或以 / 开头；~ 仅使用 ~0 和 ~1 转义')
 }
 function validateColumns(columns: readonly ApiColumn[]): void {
-  if (!columns.length || columns.length > 50)
-    throw new Error('请配置 1～50 个映射字段')
+  if (!columns.length || columns.length > MAX_API_COLUMNS)
+    throw new Error(`请配置 1～${MAX_API_COLUMNS} 个映射字段`)
   const keys = new Set<string>()
   for (const column of columns) {
     if (!CODE.test(column.key) || !column.name.trim() || keys.has(column.key))
@@ -124,8 +126,8 @@ export function columnsFromSample(
   } catch {
     throw new Error('响应样例须为 JSON 列表')
   }
-  if (!Array.isArray(value) || !value.length || value.length > 50)
-    throw new Error('响应样例须为 1～50 项的 JSON 列表')
+  if (!Array.isArray(value) || !value.length || value.length > MAX_API_COLUMNS)
+    throw new Error(`响应样例须为 1～${MAX_API_COLUMNS} 项的 JSON 列表`)
   const items: unknown[] = value
   return items.map((item, index) => {
     const pointer = `/${index}`

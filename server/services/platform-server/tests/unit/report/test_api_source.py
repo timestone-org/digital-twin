@@ -468,6 +468,36 @@ async def test_flat_list_shorter_than_mapping_fails_visibly():
         await read(LIST_RESPONSE[:3], wanted=list_source())
 
 
+def _flat_columns(count):
+    return [
+        {
+            "key": f"item_{index + 1}",
+            "name": f"第{index + 1}项",
+            "pointer": f"/{index}",
+        }
+        for index in range(count)
+    ]
+
+
+async def test_flat_list_maps_up_to_300_items_and_rejects_more():
+    values = list(range(300))
+    wanted = source(
+        rows_pointer="", row_shape="single", columns=_flat_columns(300)
+    )
+
+    found = await read(values, wanted=wanted)
+
+    assert found["api:usage"].rows[0].values["item_300"] == Decimal("299")
+    with pytest.raises(ValidationError, match="300"):
+        source(columns=_flat_columns(301))
+
+
+def test_connection_headers_keep_their_own_limit_of_50():
+    headers = {f"X-H{index}": "v" for index in range(51)}
+    with pytest.raises(ValidationError, match="请求头超过数量上限"):
+        connection(headers=headers)
+
+
 async def test_list_stays_multi_row_without_single_shape():
     wanted = source(
         rows_pointer="",

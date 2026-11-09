@@ -19,6 +19,7 @@ import { useFormDirty } from '@/composables/useFormDirty'
 import ApiDateParam from './ApiDateParam.vue'
 import ApiListMapping from './ApiListMapping.vue'
 import {
+  MAX_API_COLUMNS,
   jsonObject,
   metricsForSource,
   queryObject,
@@ -452,7 +453,7 @@ onBeforeUnmount(() => raced.cancel())
             size="sm"
             variant="outline"
             icon="plus"
-            :disabled="columns.length >= 50"
+            :disabled="columns.length >= MAX_API_COLUMNS"
             @click="addColumn"
           >
             添加映射字段

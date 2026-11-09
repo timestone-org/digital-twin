@@ -1,6 +1,7 @@
 /** @fileoverview API 来源的参数校验与引用保护。 */
 import { describe, expect, it } from 'vitest'
 import {
+  MAX_API_COLUMNS,
   columnsFromSample,
   dateToken,
   jsonObject,
@@ -131,6 +132,13 @@ describe('能管列表接口配置', () => {
       { key: 'power', name: '用电量', pointer: '/0' },
     ])
     expect(first).toMatchObject({ key: 'power', name: '用电量' })
+  })
+  it('样例最多 300 项，超出给出上限', () => {
+    const sample = (count: number): string =>
+      JSON.stringify(Array.from({ length: count }, (_, index) => index))
+    expect(MAX_API_COLUMNS).toBe(300)
+    expect(columnsFromSample(sample(300), [])).toHaveLength(300)
+    expect(() => columnsFromSample(sample(301), [])).toThrow('1～300 项')
   })
   it.each(['{', '{"a":1}', '[]', '[{"a":1}]'])('拒绝样例 %s', (text) => {
     expect(() => columnsFromSample(text, [])).toThrow()
