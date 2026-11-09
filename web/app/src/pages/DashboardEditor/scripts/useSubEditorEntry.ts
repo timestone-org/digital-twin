@@ -53,7 +53,7 @@ export function useSubEditorEntry(
       const go = await deps.confirm.ask({
         title: '先保存当前改动',
         message:
-          '孪生编辑器会直接保存到服务器。为免这里未保存的改动丢失，先保存一次再打开。',
+          '要打开的那一页会直接保存到服务器。为免这里未保存的改动丢失，先保存一次再打开。',
         confirmText: '保存并打开',
         danger: false,
       })
