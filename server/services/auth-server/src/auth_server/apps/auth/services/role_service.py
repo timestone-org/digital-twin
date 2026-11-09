@@ -7,6 +7,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 
 from auth_server.apps.auth.crud import role_crud, user_crud
 from auth_server.apps.auth.crud.role import DEFAULT_ORDER, SORTABLE
+from auth_server.apps.auth.errors import SelfLockout
 from auth_server.apps.auth.models import Role
 from auth_server.apps.auth.schemas import (
     RoleCreateIn,
@@ -16,9 +17,13 @@ from auth_server.apps.auth.schemas import (
 )
 from auth_server.apps.auth.services import audit, guards
 from auth_server.apps.auth.services.grant_service import (
+    SELF_LOCK_GUARD_CODES,
     resolve_permission_ids,
 )
-from auth_server.apps.auth.services.identity import Operation
+from auth_server.apps.auth.services.identity import (
+    Operation,
+    count_super_admins,
+)
 from auth_server.apps.auth.services.presenters import to_role_out
 from lib.errors import Conflict, NotFound
 from lib.web import Page, PageParams
@@ -169,11 +174,18 @@ async def set_role_permissions(
         granted_codes=requested,
         is_super=operation.operator.is_super,
     )
+    _assert_keeps_own_admin_capability(operation, role, requested)
+    supers_before = await count_super_admins(session)
     before = {"permissions": sorted(await role_crud.codes_of(session, role.id))}
     await role_crud.replace_permissions(
         session, role_id=role.id, permission_ids=frozenset(ids.values())
     )
     await session.flush()
+    # 持有者是谁、各带多少直权都会影响结果，故写完在同一事务里重数一次
+    if supers_before >= 1 and await count_super_admins(session) == 0:
+        raise SelfLockout(
+            "这会让系统失去最后一个全权账号，不能这样改该角色的权限"
+        )
     _audit(
         session,
         operation,
@@ -182,6 +194,20 @@ async def set_role_permissions(
         audit.Change(before=before, after={"permissions": sorted(requested)}),
     )
     return await _present(session, role)
+
+
+def _assert_keeps_own_admin_capability(
+    operation: Operation, role: Role, requested: frozenset[str]
+) -> None:
+    operator = operation.operator
+    if operator.user.role_id != role.id:
+        return
+    guards.assert_keeps_admin_capability(
+        operator_id=operator.user.id,
+        target_id=operator.user.id,
+        remaining_codes=requested | operator.direct_codes,
+        required_codes=SELF_LOCK_GUARD_CODES & operator.codes,
+    )
 
 
 async def delete_role(

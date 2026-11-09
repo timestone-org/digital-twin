@@ -209,7 +209,7 @@ async def _assert_keeps_a_super_admin(
     next_codes: frozenset[str],
     action: str,
 ) -> None:
-    if not target.is_super:
+    if not target.is_active_super:
         return
     if guards.is_super_admin(next_codes, target.builtin_codes):
         return
