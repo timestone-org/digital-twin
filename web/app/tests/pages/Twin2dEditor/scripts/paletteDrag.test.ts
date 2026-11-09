@@ -13,6 +13,7 @@ import { describe, expect, it } from 'vitest'
 
 import {
   addNodeAtCenter,
+  twin2dNodeSeed,
   twin2dDropPoint,
 } from '@/pages/Twin2dEditor/scripts/paletteDrag'
 import { TWIN_2D_DEFAULT_SNAP } from '@/pages/Twin2dEditor/scripts/snapping'
@@ -109,5 +110,22 @@ describe('点一下加在正中', () => {
     const added = addNodeAtCenter(config, 'no-such-style')
 
     expect(added).toEqual({ config, id: null })
+  })
+})
+
+describe('新节点的种子', () => {
+  // ⚠ 文字标注只画显示名：空着落下去只剩一根竖条
+  it('文字标注那一类带上起手文字，别的样式不带', () => {
+    const config = normalizeTwin2dConfig({
+      styles: [
+        { id: 'note', name: '文字标注', category: 'label' },
+        { id: 'box', name: '方块', category: 'misc' },
+      ],
+    })
+    const [note, box] = config.styles
+    if (note === undefined || box === undefined) throw new Error('夹具不全')
+
+    expect(twin2dNodeSeed(note, { x: 0, y: 0 }).label).toBe('文字标注')
+    expect(twin2dNodeSeed(box, { x: 0, y: 0 }).label).toBeUndefined()
   })
 })

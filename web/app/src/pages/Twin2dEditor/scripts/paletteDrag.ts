@@ -5,7 +5,14 @@
  * 话，改一处就悄悄拖不出东西来——拖到画布上什么都不发生，且零报错。
  */
 import { clamp } from '@dt/twin2d'
-import type { Pt, Twin2dCanvas, Twin2dConfig, Twin2dNodeSize } from '@dt/twin2d'
+import type {
+  Pt,
+  Twin2dCanvas,
+  Twin2dConfig,
+  Twin2dNode,
+  Twin2dNodeSize,
+  Twin2dNodeStyle,
+} from '@dt/twin2d'
 
 import { addNode } from './nodeOps'
 import type { Twin2dAdded } from './nodeOps'
@@ -65,5 +72,24 @@ export function addNodeAtCenter(
   const center = { x: canvas.width / 2, y: canvas.height / 2 }
   const snap = { ...TWIN_2D_DEFAULT_SNAP, grid: canvas.grid }
   const where = twin2dDropPoint(center, style.size, canvas, snap)
-  return addNode(config, { styleId, x: where.x, y: where.y })
+  return addNode(config, twin2dNodeSeed(style, where))
+}
+
+/** 只画显示名的那一类样式（文字标注）的分栏。 */
+const TEXT_ONLY_CATEGORY = 'label'
+
+/**
+ * 从调色板落一个新节点的种子：样式、位置，文字标注那一类再带上起手文字。
+ * ⚠ 文字标注只画显示名：空着落下去就只剩一根 3px 的竖条，看不出加了什么。
+ * @param style 落下去的那份样式
+ * @param at 左上角（设计坐标）
+ */
+export function twin2dNodeSeed(
+  style: Twin2dNodeStyle,
+  at: Pt,
+): Partial<Omit<Twin2dNode, 'id'>> {
+  const seed = { styleId: style.id, x: at.x, y: at.y }
+  return style.category === TEXT_ONLY_CATEGORY
+    ? { ...seed, label: style.name }
+    : seed
 }

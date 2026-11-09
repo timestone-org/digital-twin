@@ -41,7 +41,7 @@ import type {
   Twin2dPickKind,
 } from '../scripts/editorSelection'
 import { addNode } from '../scripts/nodeOps'
-import { twin2dDropPoint } from '../scripts/paletteDrag'
+import { twin2dDropPoint, twin2dNodeSeed } from '../scripts/paletteDrag'
 import { TWIN_2D_DEFAULT_SNAP } from '../scripts/snapping'
 import type { Twin2dGuideLine, Twin2dSnapBox } from '../scripts/snapping'
 import { edgePolyline } from '../scripts/waypointOps'
@@ -311,11 +311,7 @@ function dropStyle(styleId: string, at: Pt): void {
   const style = nodeStyles.value.find((item) => item.id === styleId)
   if (style === undefined) return
   const where = twin2dDropPoint(at, style.size, props.config.canvas, snap.value)
-  const added = addNode(props.config, {
-    styleId,
-    x: where.x,
-    y: where.y,
-  })
+  const added = addNode(props.config, twin2dNodeSeed(style, where))
   // 归一化没收下这一条时（`addNode` 交回原样的配置）就当没拖过，不塞一格空步进撤销栈
   if (added.id === null) return
   emit('change', added.config)
