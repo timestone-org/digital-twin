@@ -318,7 +318,6 @@ watch(
       />
       <TwinRuntimePreview
         v-if="mode === 'runtime'"
-        embedded
         :node="node"
         :config="props.config"
         :bindings="bindings"
