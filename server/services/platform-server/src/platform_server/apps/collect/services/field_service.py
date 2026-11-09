@@ -181,8 +181,8 @@ async def write_point(
     await release_read_transaction(session)
     node_key = compose_node_key(source_id, code)
     await bus.write(source_id, code, value)
-    # ⚠ 审计只记「谁写了哪个点位」，不记值：写值的载荷可能是配方参数一类的
-    # 敏感数据，而请求体全文禁入日志（observability §3）
+    # ⚠ 只记「谁写了哪个点位」（谁 = 写上下文绑进日志的 user_id），不记值：
+    # 写值载荷可能是配方参数一类的敏感数据，请求体禁入日志（observability §3）
     _logger.info("collect_point_written", "写值已下发", point_id=str(point_id))
     return WriteOut(point_id=point_id, node_key=node_key, is_written=True)
 

@@ -4,6 +4,8 @@
 自动重试」。
 """
 
+import logging
+
 import httpx
 import pytest
 from conftest import CollectFakes
@@ -332,6 +334,51 @@ async def test_a_write_reaches_the_field_with_the_point_code(
     sent = collect_fakes.bus.envelopes_of(ACTION_WRITE)[0]
     assert sent["point_code"] == "outlet_temp"
     assert sent["value"] == 21.5
+
+
+def _logged(caplog: pytest.LogCaptureFixture, event: str) -> dict[str, object]:
+    """取最后一条给定事件的日志载荷。Args: caplog, event。"""
+    found = [
+        record.payload  # pyright: ignore[reportAttributeAccessIssue]
+        for record in caplog.records
+        if record.getMessage() == event
+    ]
+    assert found, f"没有 {event} 日志"
+    return found[-1]
+
+
+async def test_a_write_log_names_who_wrote_it(
+    app_client: httpx.AsyncClient,
+    collect_fakes: CollectFakes,
+    caplog: pytest.LogCaptureFixture,
+) -> None:
+    # ⚠ 下发写值是唯一有物理后果的操作，日志里认不出人就无从追责
+    source = await create_source(app_client)
+    batch = await create_points(app_client, source["id"])
+    collect_fakes.bus.replies[ACTION_WRITE] = {"status": "ok", "data": {}}
+    with caplog.at_level(logging.INFO, logger="platform.collect.field"):
+        response = await app_client.post(
+            f"{POINTS}/{batch['items'][0]['id']}:write",
+            json={"value": 21.5},
+            headers=WRITE_KEY,
+        )
+    assert response.status_code == 200
+    logged = _logged(caplog, "collect_point_written")
+    assert logged["user_id"] == app_client.headers["X-Auth-User-Id"]
+
+
+async def test_a_config_change_log_names_who_made_it(
+    app_client: httpx.AsyncClient, caplog: pytest.LogCaptureFixture
+) -> None:
+    source = await create_source(app_client)
+    batch = await create_points(app_client, source["id"])
+    with caplog.at_level(logging.INFO, logger="platform.collect.point"):
+        response = await app_client.delete(
+            f"{POINTS}/{batch['items'][0]['id']}"
+        )
+    assert response.status_code == 204
+    logged = _logged(caplog, "collect_point_deleted")
+    assert logged["user_id"] == app_client.headers["X-Auth-User-Id"]
 
 
 async def test_the_same_write_key_reaches_the_field_only_once(
