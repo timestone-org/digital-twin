@@ -83,6 +83,16 @@ async def test_a_project_listing_counts_its_dashboards(
     assert [item["dashboard_count"] for item in items] == [1]
 
 
+async def test_a_project_search_takes_wildcards_literally(
+    app_client: httpx.AsyncClient,
+) -> None:
+    await make_project(app_client, "1_号项目")
+    await make_project(app_client, "1x号项目")
+    response = await app_client.get(PROJECTS_URL, params={"q": "1_号"})
+    names = [item["name"] for item in response.json()["data"]["items"]]
+    assert names == ["1_号项目"]
+
+
 async def test_a_project_with_dashboards_refuses_to_be_deleted(
     app_client: httpx.AsyncClient,
 ) -> None:

@@ -182,6 +182,23 @@ async def test_a_dashboard_search_matches_on_the_name(
     ]
 
 
+@pytest.mark.parametrize(
+    ("keyword", "expected"),
+    [("%", ["负荷率%"]), ("1_号", ["1_号线"])],
+    ids=["percent", "underscore"],
+)
+async def test_a_dashboard_search_takes_wildcards_literally(
+    app_client: httpx.AsyncClient, keyword: str, expected: list[str]
+) -> None:
+    # ⚠ 不转义的话 % 匹配全部、_ 匹配任意一个字
+    project_id = await make_project(app_client)
+    for name in ("负荷率%", "1_号线", "1x号线"):
+        await make_dashboard(app_client, project_id=project_id, name=name)
+    response = await app_client.get(DASHBOARDS_URL, params={"q": keyword})
+    names = [item["name"] for item in response.json()["data"]["items"]]
+    assert names == expected
+
+
 async def test_a_listing_that_matches_nothing_returns_an_empty_page(
     app_client: httpx.AsyncClient,
 ) -> None:

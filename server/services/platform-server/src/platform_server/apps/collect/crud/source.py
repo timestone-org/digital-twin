@@ -73,10 +73,9 @@ class SourceCrud(CrudBase[CollectSource]):
         """
         statement = select(CollectSource)
         if keyword:
-            pattern = f"%{keyword.lower()}%"
             statement = statement.where(
-                func.lower(CollectSource.name).like(pattern)
-                | func.lower(CollectSource.code).like(pattern)
+                CollectSource.name.icontains(keyword, autoescape=True)
+                | CollectSource.code.icontains(keyword, autoescape=True)
             )
         if protocol is not None:
             statement = statement.where(CollectSource.protocol == protocol)
