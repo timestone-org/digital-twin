@@ -2,6 +2,7 @@
 import type { DtNumberRange } from '@dt/contracts'
 
 import type { FormField } from './schemaForm'
+import { isRelative } from './moment'
 import { missingHint } from './schemaForm'
 
 export interface ConfigStatus {
@@ -96,7 +97,18 @@ export function configError(field: FormField, value: unknown): string {
   if (missing) return missing
   if (typeof value === 'number') return numericError(field, value)
   if (typeof value !== 'string') return ''
+  if (field.widget === 'moment')
+    return momentError(value) || stringError(field, value)
   return stringError(field, value)
+}
+
+/** 时刻：留空、相对写法（`-90d`）或能解析的绝对时刻，别的挡住保存。 */
+function momentError(value: string): string {
+  const text = value.trim()
+  if (text === '' || isRelative(text)) return ''
+  if (text.startsWith('-') || Number.isNaN(Date.parse(text)))
+    return '时刻写法不对：相对写法形如 -90d / -12h，绝对时刻写 UTC 时间'
+  return ''
 }
 
 function stringError(field: FormField, value: string): string {

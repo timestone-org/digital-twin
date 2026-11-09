@@ -170,3 +170,19 @@ it('整数参数拒绝分数UI步长，支持正整数步长', () => {
     numberRange(field({ type: 'integer', default: 10, 'x-dt-step': 2 })).step,
   ).toBe(2)
 })
+
+describe('时刻字段', () => {
+  const moment = () => field({ type: 'string', 'x-dt-widget': 'moment' })
+
+  // ⚠ 输入框当场标红，表单状态却是干净的话，保存键照样亮着
+  it('写错的相对写法挡住保存', () => {
+    expect(configError(moment(), '-90x')).not.toBe('')
+    expect(configError(moment(), '最近三天')).not.toBe('')
+  })
+
+  it('合法的相对、绝对写法与留空都放行', () => {
+    expect(configError(moment(), '-90d')).toBe('')
+    expect(configError(moment(), '2026-01-01T00:00:00Z')).toBe('')
+    expect(configError(moment(), '')).toBe('')
+  })
+})
