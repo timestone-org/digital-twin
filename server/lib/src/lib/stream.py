@@ -111,12 +111,16 @@ class StreamLike(Protocol):
 class RedisStream:
     """Redis Stream 客户端。驱动异常一律收敛成 `DependencyUnavailable`。
 
-    ⚠ `delete_on_ack` 只给**单消费组**的作业流开：确认即删，流才不会单调涨；
-    多个消费组共读一条流时，先确认的那组会把别组还没读的条目删掉。
+    ⚠ `should_delete_on_ack` 只给**单消费组**的作业流开：确认即删，流才不会
+    单调涨；多个消费组共读一条流时，先确认的那组会把别组还没读的条目删掉。
     """
 
     def __init__(
-        self, *, url: str, timeout_s: float = 1.0, delete_on_ack: bool = False
+        self,
+        *,
+        url: str,
+        timeout_s: float = 1.0,
+        should_delete_on_ack: bool = False,
     ) -> None:
         # pyright: ignore 的理由 —— redis-py 的 from_url 形参标成 Unknown
         self._client: Redis = (
@@ -129,7 +133,7 @@ class RedisStream:
         )
         # 每个消费身份各自续扫 XAUTOCLAIM；扫到 0-0 才从头开始。
         self._claim_cursors: dict[StreamGroup, str] = {}
-        self._delete_on_ack = delete_on_ack
+        self._is_deleting_on_ack = should_delete_on_ack
 
     async def ping(self) -> bool:
         """连通性自检。不抛，供启动自检复用。"""
@@ -219,7 +223,7 @@ class RedisStream:
 
         Args: target, entry_id。
         """
-        if not self._delete_on_ack:
+        if not self._is_deleting_on_ack:
             await self._run(
                 self._client.xack(target.stream, target.group, entry_id)
             )
@@ -256,7 +260,7 @@ class RedisStream:
 
         Args: target, entry_id。
         """
-        delete = ("1",) if self._delete_on_ack else ()
+        delete = ("1",) if self._is_deleting_on_ack else ()
         acked = await self._run(
             self._client.eval(
                 _ACK_IF_OWNED_SCRIPT,
