@@ -12,6 +12,7 @@ from auth_server.apps.auth.errors import (
     InvalidCredentials,
     SignupDisabled,
     TokenInvalid,
+    TooManyLoginAttempts,
 )
 from auth_server.apps.auth.models import User
 from auth_server.apps.auth.schemas import (
@@ -36,7 +37,7 @@ from auth_server.apps.auth.services.token_service import (
     TokenPair,
     TokenService,
 )
-from lib.errors import Conflict, InfraError
+from lib.errors import Conflict, InfraError, RateLimited
 from lib.logging import get_logger
 from lib.ratelimit import FixedWindowLimiter
 from lib.utils.timeutils import Clock
@@ -71,7 +72,13 @@ class AuthService:
         Args: session, login（用户名或邮箱）, password。
         """
         login_key = login.strip().lower()
-        await self.login_limiter.hit(login_key)
+        try:
+            await self.login_limiter.hit(login_key)
+        except RateLimited as error:
+            # 登录场景有自己的错误码，前端按它给文案；通用限流码对不上
+            raise TooManyLoginAttempts(
+                error.message, context=error.context
+            ) from error
         user = await user_crud.get_by_login(session, login)
         if user is None:
             await self.hasher.verify(password, _TIMING_DECOY)

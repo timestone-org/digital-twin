@@ -327,10 +327,10 @@ async def test_self_registration_is_refused_while_disabled(
 async def test_repeated_failures_eventually_hit_the_rate_limit(
     app_client: httpx.AsyncClient,
 ) -> None:
-    codes = set()
+    codes: set[tuple[int, int]] = set()
     for _ in range(12):
         response = await login(
             app_client, username="brute-target", password="Wrongpass123"
         )
-        codes.add(response.status_code)
-    assert 429 in codes
+        codes.add((response.status_code, response.json()["code"]))
+    assert (429, 40111) in codes
