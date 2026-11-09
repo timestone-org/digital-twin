@@ -8,12 +8,13 @@ import uuid
 from typing import cast
 
 import pytest
+from sqlalchemy.exc import IntegrityError
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from auth_server.apps.auth.crud import user_crud
 from auth_server.apps.auth.errors import InvalidCredentials
 from auth_server.apps.auth.models import User
-from auth_server.apps.auth.schemas import SessionOut
+from auth_server.apps.auth.schemas import MeUpdateIn, SessionOut
 from auth_server.apps.auth.services import auth_service as auth_module
 from auth_server.apps.auth.services.api_key_service import ApiKeyService
 from auth_server.apps.auth.services.auth_service import AuthService
@@ -22,7 +23,7 @@ from auth_server.apps.auth.services.identity import Identity
 from auth_server.apps.auth.services.token_service import TokenService
 from lib.auth import PasswordHasher
 from lib.cache import Cache
-from lib.errors import RateLimited
+from lib.errors import Conflict, RateLimited
 from lib.ratelimit import FixedWindowLimiter
 from lib.testing import InMemoryCache
 from lib.utils.timeutils import utcnow
@@ -46,6 +47,13 @@ class FakeSession:
 
     async def flush(self) -> None:
         return None
+
+
+class RacingSession:
+    """预检之后另一请求抢先占了同一邮箱：唯一约束在 flush 时才报出来。"""
+
+    async def flush(self) -> None:
+        raise IntegrityError("UPDATE auth_users", None, Exception("dup"))
 
 
 def build_limiter(cache: InMemoryCache) -> FixedWindowLimiter:
@@ -134,3 +142,20 @@ async def test_failed_logins_still_hit_the_limit() -> None:
             )
     with pytest.raises(RateLimited):
         await login(service, "alice@example.com")
+
+
+async def test_email_taken_by_a_concurrent_update_is_a_conflict() -> None:
+    me = User(
+        id=USER.id,
+        username="alice",
+        email="alice@example.com",
+        hashed_password=USER.hashed_password,
+        is_active=True,
+    )
+    service = build_service(build_limiter(InMemoryCache()))
+    with pytest.raises(Conflict):
+        await service.update_me(
+            cast("AsyncSession", RacingSession()),
+            user=me,
+            payload=MeUpdateIn(email="bob@example.com"),
+        )

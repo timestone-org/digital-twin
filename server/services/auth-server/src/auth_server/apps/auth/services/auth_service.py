@@ -180,7 +180,11 @@ class AuthService:
         ):
             raise Conflict("该邮箱已被占用")
         user_crud.apply_changes(user, changes)
-        await session.flush()
+        try:
+            await session.flush()
+        except IntegrityError as error:
+            # 预检之后仍可能被并发请求抢先，唯一约束才是最后一道
+            raise Conflict("该邮箱已被占用") from error
         return to_user_detail(await load_identity(session, user))
 
     async def change_password(

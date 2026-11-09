@@ -7,6 +7,7 @@ from pydantic import Field, StringConstraints
 
 from auth_server.apps.auth.schemas.common import (
     InputModel,
+    NotNull,
     OutputModel,
     Trimmed,
     Utc,
@@ -58,10 +59,12 @@ class RouteRuleCreateIn(InputModel):
 class RouteRuleUpdateIn(InputModel):
     """改规则。缺省的字段表示本次不涉及。"""
 
-    path_pattern: PathPattern | None = None
-    http_method: HttpMethod | None = None
-    permission_codes: list[Trimmed] | None = Field(default=None, max_length=50)
-    match_mode: MatchMode | None = None
-    priority: int | None = Field(default=None, ge=0, le=999)
-    is_enabled: bool | None = None
+    path_pattern: Annotated[PathPattern | None, NotNull] = None
+    http_method: Annotated[HttpMethod | None, NotNull] = None
+    permission_codes: Annotated[list[Trimmed] | None, NotNull] = Field(
+        default=None, max_length=50
+    )
+    match_mode: Annotated[MatchMode | None, NotNull] = None
+    priority: Annotated[int | None, NotNull] = Field(default=None, ge=0, le=999)
+    is_enabled: Annotated[bool | None, NotNull] = None
     description: Trimmed | None = Field(default=None, max_length=255)
