@@ -82,9 +82,9 @@ describe('DtColorInput 取值', () => {
     [{}, '颜色取值'],
   ] as const)('文本框有自己的可读名称 %j', (props, name) => {
     const wrapper = mountColor({ ...props, allowText: true })
-    expect(
-      wrapper.get('.dt-color__text input').attributes('aria-label'),
-    ).toBe(name)
+    expect(wrapper.get('.dt-color__text input').attributes('aria-label')).toBe(
+      name,
+    )
     wrapper.unmount()
   })
 

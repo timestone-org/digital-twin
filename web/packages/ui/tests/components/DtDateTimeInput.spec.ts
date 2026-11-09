@@ -336,9 +336,8 @@ describe('DtDateTimeInput 面板里的时分', () => {
     await flushPromises()
     await pickTime('小时', '14')
     expect(document.querySelector('.dt-calendar')).not.toBeNull()
-    await wrapper.setProps({
-      modelValue: wrapper.emitted('update:modelValue')?.[0]?.[0],
-    })
+    // 父组件回写 v-model 之后再改分钟，验的是同一次展开里能连着改
+    await wrapper.setProps({ modelValue: '2026-08-12T06:55:00.000Z' })
     await pickTime('分钟', '35')
     expect(wrapper.emitted('update:modelValue')?.[1]).toEqual([
       '2026-08-12T06:35:00.000Z',

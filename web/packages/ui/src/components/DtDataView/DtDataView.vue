@@ -26,20 +26,6 @@ import DtSegmented from '../DtSegmented/DtSegmented.vue'
 import DtTable from '../DtTable/DtTable.vue'
 import type { DtDataViewSelection } from './selection'
 
-/**
- * 卡片外壳：可选时包一层留出复选框位，否则卡片直接铺进网格，卡片本体因此只写一份。
- * ⚠ 包装层的留位样式是 scoped 的，靠函数组件根节点继承父级 scoped id 才落得上。
- * @param selectable 是否带复选框位
- */
-const CardShell: FunctionalComponent<{ selectable: boolean }> = (
-  shellProps,
-  { slots },
-) =>
-  shellProps.selectable
-    ? h('div', { class: 'dt-data-view__selectable-card' }, slots.default?.())
-    : slots.default?.()
-CardShell.props = ['selectable']
-
 export interface DtDataViewLayout {
   minWidth?: string | undefined
   /**
@@ -62,6 +48,20 @@ export interface DtDataViewLayout {
    */
   fill?: boolean | undefined
 }
+
+/**
+ * 卡片外壳：可选时包一层留出复选框位，否则卡片直接铺进网格，卡片本体因此只写一份。
+ * ⚠ 包装层的留位样式是 scoped 的，靠函数组件根节点继承父级 scoped id 才落得上。
+ * @param selectable 是否带复选框位
+ */
+const CardShell: FunctionalComponent<{ selectable: boolean }> = (
+  shellProps,
+  { slots },
+) =>
+  shellProps.selectable
+    ? h('div', { class: 'dt-data-view__selectable-card' }, slots.default?.())
+    : slots.default?.()
+CardShell.props = ['selectable']
 
 const props = withDefaults(
   defineProps<{
