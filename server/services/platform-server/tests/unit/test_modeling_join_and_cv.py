@@ -183,3 +183,14 @@ def test_the_worst_fold_is_reported_too() -> None:
     assert worst is not None
     assert mean is not None
     assert worst <= mean
+
+
+def test_the_right_side_display_names_are_prefixed_too() -> None:
+    """显示名也加前缀：两张台账上同名的「温度」是两回事，界面上要分得清。"""
+    left = _sided(LEFT_KEY, [1.0], [0])
+    right = _sided(LEFT_KEY, [90.0], [0])
+    got = _joined(left, right, tolerance_ms=SECOND)
+    assert [column.name for column in got.columns] == [
+        LEFT_KEY,
+        f"右_{LEFT_KEY}",
+    ]

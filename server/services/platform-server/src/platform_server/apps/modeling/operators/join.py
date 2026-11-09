@@ -286,7 +286,11 @@ def _joined(
     columns = (
         *left.columns,
         *(
-            replace(column, key=f"{config.right_prefix}{column.key}")
+            replace(
+                column,
+                key=f"{config.right_prefix}{column.key}",
+                name=f"{config.right_prefix}{column.name}",
+            )
             for column in right.columns
         ),
     )
