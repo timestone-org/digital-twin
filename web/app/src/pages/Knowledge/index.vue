@@ -156,8 +156,12 @@ async function removeDocument(doc: KnowledgeDocument): Promise<void> {
       </PermGuard>
     </template>
 
-    <div class="flex h-full min-h-0 flex-col gap-4">
-      <KnowledgeGuide />
+    <!-- 高度不够时整列滚，而不是把文档表与检索结果挤成零高 -->
+    <div class="flex h-full min-h-0 flex-col gap-4 overflow-y-auto">
+      <!-- 引导只在还没东西可看时出现：库里有文档之后它只是占掉文档表的高度 -->
+      <KnowledgeGuide
+        v-if="page.selected.value === null || page.documents.value.length === 0"
+      />
       <DtNotice v-if="page.error.value !== ''" intent="danger">
         {{ page.error.value }}
       </DtNotice>
@@ -187,7 +191,8 @@ async function removeDocument(doc: KnowledgeDocument): Promise<void> {
       </DtNotice>
 
       <DtResizableLayout
-        class="min-h-0 flex-1"
+        class="min-h-0 flex-1 shrink-0"
+        style="min-height: 36rem"
         :panes="[
           { id: 'bases', label: '知识库列表', size: 1, minSize: 220 },
           { id: 'detail', label: '知识库详情', size: 3, minSize: 320 },
@@ -236,7 +241,7 @@ async function removeDocument(doc: KnowledgeDocument): Promise<void> {
 
               <DtResizableLayout
                 class="min-h-0 flex-1"
-                style="min-height: 24rem"
+                style="min-height: 32rem"
                 :panes="[
                   { id: 'documents', label: '文档列表', size: 3, minSize: 300 },
                   { id: 'search', label: '检索试验台', size: 2, minSize: 240 },

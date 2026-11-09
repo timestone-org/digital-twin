@@ -92,7 +92,8 @@ const emit = defineEmits<{
         {{ props.result.note }}
       </DtNotice>
 
-      <div class="relative min-h-0 flex-1">
+      <!-- 下限一截：叠放时它会被压到零高，结果明明回来了却一条都看不见 -->
+      <div class="relative min-h-40 flex-1">
         <div class="absolute inset-0 overflow-y-auto">
           <div
             v-if="props.isSearching"
