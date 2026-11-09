@@ -61,6 +61,8 @@ _CONNECT_TIMEOUT_S = 5.0
 _REQUEST_TIMEOUT_S = 120.0
 # 一份原件最多解出多少块，与本地那几路同一条口径
 _MAX_BLOCKS = 20_000
+# 一格最多认它跨几列。⚠ 有上限：一句 colspan="100000" 就能把一行铺成十万格
+_MAX_COLSPAN = 50
 # 版面框那个数组有几个数
 _BBOX_LENGTH = 4
 # 任务的终态
@@ -95,21 +97,24 @@ class _TableWalk(HTMLParser):
         self._cells: list[str] = []
         self._buffer: list[str] = []
         self._in_cell = False
+        self._span = 1
 
     def handle_starttag(
         self, tag: str, attrs: list[tuple[str, str | None]]
     ) -> None:
-        del attrs
         if tag == "tr":
             self._cells = []
         elif tag in ("td", "th"):
             self._in_cell = True
             self._buffer = []
+            self._span = _colspan(attrs)
 
     def handle_endtag(self, tag: str) -> None:
         if tag in ("td", "th") and self._in_cell:
             self._in_cell = False
-            self._cells.append(cell_text("".join(self._buffer)))
+            # ⚠ 合并单元格按它跨的列数铺开：不铺的话，后面每一列都配错列名
+            text = cell_text("".join(self._buffer))
+            self._cells.extend([text] * self._span)
         elif tag == "tr" and self._cells:
             self.rows.append(self._cells)
             self._cells = []
@@ -117,6 +122,17 @@ class _TableWalk(HTMLParser):
     def handle_data(self, data: str) -> None:
         if self._in_cell:
             self._buffer.append(data)
+
+
+def _colspan(attrs: list[tuple[str, str | None]]) -> int:
+    """一格跨几列；认不出就当一列，且有上限。
+
+    Args: attrs。
+    """
+    raw = dict(attrs).get("colspan") or ""
+    if not raw.strip().isdigit():
+        return 1
+    return max(1, min(int(raw), _MAX_COLSPAN))
 
 
 @dataclass
@@ -222,11 +238,12 @@ def _table_item(walk: _Walk, item: dict[str, Any], page: int) -> None:
     # 截图负责让人看清合并单元格那类版面——两者缺一个都不够
     walk.emit("figure", caption or _NO_TABLE_CAPTION, page, ref=_ref_of(item))
     rows = _table_rows(str(item.get("table_body") or ""))
-    if not rows:
-        return
-    header = rows[0]
+    if len(rows) == 1:
+        # ⚠ 只有一行的表（键值条）没有「表头之下的行」，不单收它的话整张表在
+        # 检索里一个字都不存在
+        walk.emit("table_row", " | ".join(one for one in rows[0] if one), page)
     for cells in rows[1:]:
-        walk.emit("table_row", paired(header, cells), page)
+        walk.emit("table_row", paired(rows[0], cells), page)
     walk.emit("caption", _joined(item, "table_footnote"), page)
 
 
