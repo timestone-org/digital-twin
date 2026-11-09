@@ -1,6 +1,8 @@
 /**
- * @fileoverview provider 注册表：加一种取数方式 = 加一个 provider + 一行注册，
- * 渲染层一行不用碰（docs/DASHBOARD_DESIGN.md §5.5）。
+ * @fileoverview provider 注册表：加一种取数方式 = 加一个 provider + 一行注册
+ * （docs/DASHBOARD_DESIGN.md §5.5）。
+ * ⚠ 生产上只有实时订阅从这里取 provider；时序槽走 RuntimeDataSource.readSeries、
+ * 静态与计算值直接调纯函数，都不经注册表——新登记的历史 provider 不会被调用。
  * ⚠ 这里不许 import 任何具体 provider——注册表一旦认识实现，那条缝就焊死了。
  */
 import type { BindingSourceKind, DataSourceProvider } from '@dt/contracts'
