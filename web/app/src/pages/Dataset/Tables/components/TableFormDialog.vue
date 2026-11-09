@@ -162,7 +162,7 @@ async function save(): Promise<void> {
     emit('saved', `台账「${created.name}」已创建`, created.id)
     return
   }
-  await dataset.updateDatasetTable(target.id, toPatchInput(state.value))
+  await dataset.updateDatasetTable(target.id, toPatchInput(state.value, target))
   emit('saved', '台账已更新', null)
 }
 
@@ -233,14 +233,14 @@ async function onSubmit(): Promise<void> {
         v-model="intervalSeconds"
         label="台账周期"
         unit="秒"
-        :range="{ min: INTERVAL_S_MIN, max: INTERVAL_S_MAX }"
-        hint="一行覆盖多长的时间桶。上限 1 天：更长的桶宽两侧对齐口径尚未在真库验过"
+        :range="{ min: INTERVAL_S_MIN, max: INTERVAL_S_MAX, precision: 0 }"
+        hint="一行覆盖多长的时间桶，1 秒到 1 天"
       />
       <DtNumberInput
         v-model="retentionDays"
         label="保留期"
         unit="天"
-        :range="{ min: 1 }"
+        :range="{ min: 1, precision: 0 }"
         hint="留空即永久保留"
       />
       <DtSwitch v-model="isEnabled" label="启用" />

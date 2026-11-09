@@ -137,8 +137,21 @@ export function toCreateInput(state: TableFormState): DatasetTableCreateInput {
  * 改表补丁。
  * ⚠ 不含 `code`：它是大屏绑定键 `ds:{code}:{列key}` 的前半段，改一次等于让
  * 每一处引用它的绑定悄悄失效，故后端的 `TableUpdateIn` 里根本没有这一项。
+ * ⚠ 周期没动过就不提交：表单按整秒显示，1500ms 这类合法存量铺进来是 2 秒，
+ * 原样写回会悄悄改掉采集节奏与桶网格。
  * @param state 表单取值
+ * @param original 正在编辑的那张台账
  */
-export function toPatchInput(state: TableFormState): DatasetTablePatchInput {
-  return sharedFields(state)
+export function toPatchInput(
+  state: TableFormState,
+  original: DatasetTableSummary | null = null,
+): DatasetTablePatchInput {
+  const patch: DatasetTablePatchInput = sharedFields(state)
+  if (
+    original !== null &&
+    state.intervalSeconds === formStateOf(original).intervalSeconds
+  ) {
+    delete patch.collect_interval_ms
+  }
+  return patch
 }

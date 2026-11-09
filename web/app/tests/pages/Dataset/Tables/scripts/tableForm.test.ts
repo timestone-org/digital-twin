@@ -104,6 +104,20 @@ describe('出参组装', () => {
   it('⚠ 改表的补丁里没有 code：改一次等于让每一处大屏绑定悄悄失效', () => {
     expect(toPatchInput(filled())).not.toHaveProperty('code')
   })
+
+  it('⚠ 周期没动过就不进补丁：1500ms 铺成 2 秒再写回会悄悄改掉采集节奏', () => {
+    const original = table({ collect_interval_ms: 1500 })
+    const state = { ...formStateOf(original), name: '改个名' }
+    expect(toPatchInput(state, original)).not.toHaveProperty(
+      'collect_interval_ms',
+    )
+  })
+
+  it('周期改过照常提交', () => {
+    const original = table({ collect_interval_ms: 1500 })
+    const state = { ...formStateOf(original), intervalSeconds: 5 }
+    expect(toPatchInput(state, original).collect_interval_ms).toBe(5000)
+  })
 })
 
 describe('把已有台账铺进表单', () => {
