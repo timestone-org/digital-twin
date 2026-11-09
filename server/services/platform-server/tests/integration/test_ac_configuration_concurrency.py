@@ -20,7 +20,7 @@ from unit.source_fakes import FakeAcSource, full_shape
 
 from lib.db import Database, PoolProfile
 from lib.errors import Conflict
-from platform_server.apps.hvac.crud import room_crud
+from platform_server.apps.hvac.crud import ac_startup_batch_crud, room_crud
 from platform_server.apps.hvac.models import (
     AcDataBinding,
     AcMetricLimit,
@@ -479,3 +479,8 @@ async def test_a_rebuild_waits_for_the_room_lock(
             finally:
                 await holder.commit()
                 await rebuild
+    async with case.database.session() as session:
+        running = await ac_startup_batch_crud.find_running(
+            session, case.room_id
+        )
+    assert running is not None

@@ -41527,7 +41527,7 @@
     },
     "/api/v1/platform/rooms/{room_id}/startup-batches:rebuild": {
       "post": {
-        "description": "建一个新批次并把分片排进队列，立刻返回批次 id。\n\n带幂等键的重试拿回首次结果，而不是撞上「已有批次在跑」。\nArgs: room_id, payload, session, reader, dispatcher, gate。",
+        "description": "建一个新批次并把分片排进队列，立刻返回批次 id；同键重试拿回首次结果。\n\nArgs: room_id, payload, session, reader, dispatcher, gate。",
         "operationId": "rebuild_startup_batches_api_v1_platform_rooms__room_id__startup_batches_rebuild_post",
         "parameters": [
           {

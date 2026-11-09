@@ -127,17 +127,14 @@ async def rebuild_startup_batches(
     dispatcher: DispatchDep,
     gate: GateDep,
 ) -> ApiResponse[StartupRebuildOut]:
-    """建一个新批次并把分片排进队列，立刻返回批次 id。
+    """建一个新批次并把分片排进队列，立刻返回批次 id；同键重试拿回首次结果。
 
-    带幂等键的重试拿回首次结果，而不是撞上「已有批次在跑」。
     Args: room_id, payload, session, reader, dispatcher, gate。
     """
     out = await gate.run_once(
         endpoint="hvac_startup_rebuild",
         model=StartupRebuildOut,
-        action=lambda: _rebuild(
-            session, reader, dispatcher, room_id=room_id, payload=payload
-        ),
+        action=lambda: _rebuild(session, reader, dispatcher, room_id, payload),
     )
     return ok(out, message="重算已排队")
 
@@ -146,7 +143,6 @@ async def _rebuild(
     session: AsyncSession,
     reader: AcSourceReader,
     dispatcher: Dispatcher,
-    *,
     room_id: uuid.UUID,
     payload: StartupRebuildIn,
 ) -> StartupRebuildOut:

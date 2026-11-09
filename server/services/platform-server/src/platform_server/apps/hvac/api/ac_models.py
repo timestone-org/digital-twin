@@ -91,13 +91,7 @@ async def create_ac_model(
     out = await gate.run_once(
         endpoint="hvac_ac_model_create",
         model=AcModelOut,
-        action=lambda: _create(
-            session,
-            payload,
-            created_by=gate.caller.username,
-            timezone=timezone,
-            dispatcher=dispatcher,
-        ),
+        action=lambda: _create(session, payload, timezone, dispatcher, gate),
     )
     return ok(out, message="训练已排队")
 
@@ -105,17 +99,16 @@ async def create_ac_model(
 async def _create(
     session: AsyncSession,
     payload: AcModelCreateIn,
-    *,
-    created_by: str,
     timezone: str,
     dispatcher: Dispatcher,
+    gate: WriteGate,
 ) -> AcModelOut:
     """建模、排一次提交后的训练投递，给出对外形态。
 
-    Args: session, payload, created_by, timezone, dispatcher。
+    Args: session, payload, timezone, dispatcher, gate（建模人取自它的身份）。
     """
     model, message = await ac_model_service.create_model(
-        session, payload, created_by=created_by
+        session, payload, created_by=gate.caller.username
     )
     dispatcher.after_commit_training(message)
     return await _present(session, model.id, timezone=timezone)
