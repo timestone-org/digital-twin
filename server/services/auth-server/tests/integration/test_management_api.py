@@ -194,7 +194,9 @@ async def test_changing_own_password_requires_the_current_one(
             "new_password": "Another12345",
         },
     )
-    assert wrong.status_code == 401
+    # ⚠ 旧密码不对不是会话失效：回 401 会让客户端刷新重试，刷不过就踢下线
+    assert wrong.status_code == 400
+    assert wrong.json()["code"] == 40113
     assert right.status_code == 204
 
 
