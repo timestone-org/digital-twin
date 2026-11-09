@@ -112,7 +112,7 @@ const props = withDefaults(
     view?: Twin2dStageView
     /** 运行态注入的状态、读数与素材解析。 */
     live?: Twin2dStageLive
-    /** 容器尺寸；给了就用它，不给才装 `ResizeObserver` 自己量。 */
+    /** 容器尺寸；给了就以它为准，`ResizeObserver` 量出来的那份随之不用。 */
     containerSize?: Twin2dStageBox | null
   }>(),
   {
