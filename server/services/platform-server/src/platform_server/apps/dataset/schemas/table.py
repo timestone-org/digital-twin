@@ -24,6 +24,11 @@ from platform_server.apps.dataset.schemas.common import (
 DEFAULT_INTERVAL_MS = 60_000
 
 
+# 保留天数上限（一百年）。⚠ 想表达「永久」请留空：极大的天数在算清理边界时
+# 溢出，或超出库里的 int4
+MAX_RETENTION_DAYS = 36_500
+
+
 class TableSummaryOut(OutputModel):
     """列表页的台账条目：带列数，不带整份列定义。"""
 
@@ -60,7 +65,10 @@ class TableCreateIn(InputModel):
     collect_interval_ms: int = Field(
         default=DEFAULT_INTERVAL_MS, ge=MIN_INTERVAL_MS, le=MAX_INTERVAL_MS
     )
-    retention_days: int | None = Field(default=None, ge=1)
+    # 留空是永久保留
+    retention_days: int | None = Field(
+        default=None, ge=1, le=MAX_RETENTION_DAYS
+    )
     is_enabled: bool = True
 
 
@@ -82,5 +90,7 @@ class TableUpdateIn(UpdateModel):
         default=None, ge=MIN_INTERVAL_MS, le=MAX_INTERVAL_MS
     )
     # 给 null 是改回永久保留，不给是不动
-    retention_days: int | None = Field(default=None, ge=1)
+    retention_days: int | None = Field(
+        default=None, ge=1, le=MAX_RETENTION_DAYS
+    )
     is_enabled: bool | None = None

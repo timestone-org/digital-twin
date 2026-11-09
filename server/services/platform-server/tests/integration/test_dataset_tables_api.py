@@ -257,3 +257,31 @@ def _detail_messages(response: httpx.Response) -> list[str]:
 async def _record_count(session: AsyncSession, table_id: str) -> int:
     """数一数这张台账名下还剩几行。"""
     return await record_crud.count_by_table(session, uuid.UUID(table_id))
+
+
+async def test_a_dotted_code_is_refused_because_no_formula_could_reach_it(
+    app_client: httpx.AsyncClient,
+) -> None:
+    # ⚠ 跨表引用 `{表code.列key}` 按第一个点号切：带点的编码建得出来却引用不到，
+    # 而编码建后不可改，只能删表重建
+    response = await app_client.post(
+        TABLES, json=table_body(code="plant.energy")
+    )
+
+    assert response.status_code == HTTP_BAD_REQUEST
+
+
+async def test_a_retention_beyond_a_century_is_refused(
+    app_client: httpx.AsyncClient,
+) -> None:
+    # ⚠ 想表达「永久」请留空：极大的天数让保留期清理每一轮都在这张表上溢出
+    created = await app_client.post(
+        TABLES, json=table_body(retention_days=1_000_000)
+    )
+    table = await create_table(app_client, code="kept")
+    updated = await app_client.patch(
+        f"{TABLES}/{table['id']}", json={"retention_days": 1_000_000}
+    )
+
+    assert created.status_code == HTTP_BAD_REQUEST
+    assert updated.status_code == HTTP_BAD_REQUEST

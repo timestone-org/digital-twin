@@ -36,13 +36,14 @@ Label = Annotated[
 ]
 # 台账编码：它是**身份**，也是大屏绑定键 `ds:{code}:{列key}` 的前半段。
 # ⚠ 不许含冒号：绑定键按冒号切分，混进去就切不回这张台账
+# ⚠ 不许含点号：跨表引用 `{表code.列key}` 按第一个点号切，带点的表引用不到
 TableCode = Annotated[
     str,
     StringConstraints(
         strip_whitespace=True,
         min_length=1,
         max_length=64,
-        pattern=r"^[A-Za-z0-9][A-Za-z0-9._-]*$",
+        pattern=r"^[A-Za-z0-9][A-Za-z0-9_-]*$",
     ),
 ]
 # 列 key：公式里写作 `{key}`，也是 JSONB 的字段名。放行中文，禁公式记号

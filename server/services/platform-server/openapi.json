@@ -24852,7 +24852,7 @@
           "code": {
             "maxLength": 64,
             "minLength": 1,
-            "pattern": "^[A-Za-z0-9][A-Za-z0-9._-]*$",
+            "pattern": "^[A-Za-z0-9][A-Za-z0-9_-]*$",
             "title": "Code",
             "type": "string"
           },
@@ -24899,6 +24899,7 @@
           "retention_days": {
             "anyOf": [
               {
+                "maximum": 36500.0,
                 "minimum": 1.0,
                 "type": "integer"
               },
@@ -25192,6 +25193,7 @@
           "retention_days": {
             "anyOf": [
               {
+                "maximum": 36500.0,
                 "minimum": 1.0,
                 "type": "integer"
               },
