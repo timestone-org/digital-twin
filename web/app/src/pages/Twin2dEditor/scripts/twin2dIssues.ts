@@ -11,6 +11,7 @@
  */
 import {
   TWIN_2D_BUILTIN_NODE_STYLE_MAP,
+  collectTwin2dDroppedIssues,
   collectTwin2dIssues,
   normalizeTwin2dConfig,
   twin2dAssetsConfigured,
@@ -43,6 +44,18 @@ export function twin2dScan(config: unknown): Twin2dScan {
       styleOf: twin2dStyleResolver(live),
     }),
   }
+}
+
+/**
+ * 库里那份原始配置在载入时被归一化整条丢掉的东西（`dropped-*` / `prim-too-deep` /
+ * `dangling-sprite`）。
+ * ⚠ 编辑器改的是归一化之后那一份，拿它跑 `twin2dScan` 这一族恒为空；而保存写回的也是
+ * 那一份，所以这里列出来的东西第一次保存之后就永久没了。
+ * @param raw 节点上落库的 `configJson.twin2d`；节点还没读出来时是 undefined
+ */
+export function twin2dLoadDrops(raw: unknown): readonly Twin2dIssue[] {
+  if (raw === undefined) return []
+  return collectTwin2dDroppedIssues(raw, normalizeTwin2dConfig(raw))
 }
 
 /**

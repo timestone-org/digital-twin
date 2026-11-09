@@ -2,6 +2,7 @@
 /**
  * @fileoverview 2D 孪生子编辑器：大纲、画布、诊断与检查器；交互由 scripts/ 编排。
  */
+import { TWIN_2D_CONFIG_KEY } from '@dt/twin2d'
 import type { Twin2dConfig } from '@dt/twin2d'
 import {
   DtButton,
@@ -34,7 +35,11 @@ import type { Twin2dStyleKind } from './scripts/editorSelection'
 import { addNode } from './scripts/nodeOps'
 import { useTwin2dShortcuts } from './scripts/shortcuts'
 import { twin2dEntityExists } from './scripts/styleOps'
-import { twin2dScan, twin2dSetupIssues } from './scripts/twin2dIssues'
+import {
+  twin2dLoadDrops,
+  twin2dScan,
+  twin2dSetupIssues,
+} from './scripts/twin2dIssues'
 import type { Twin2dEntityKind } from './scripts/types'
 import { TWIN_2D_AI_STARTERS, useTwin2dAi } from './scripts/useTwin2dAi'
 import { useTwin2dBindings } from './scripts/useTwin2dBindings'
@@ -84,6 +89,11 @@ const ai = useTwin2dAi(page, binding, selection)
 // ⚠ 顶栏计数与诊断清单共用 twin2dIssues，避免显示不一致。
 const issues = computed(() =>
   config.value === null ? [] : twin2dScan(config.value).issues,
+)
+
+// ⚠ 读的是库里那份原始配置：保存成功后它换成新落库的那一份，这一族随之清空
+const loadDrops = computed(() =>
+  twin2dLoadDrops(page.node.value?.configJson[TWIN_2D_CONFIG_KEY]),
 )
 
 // ⚠ 装配缺口只在启动时读取，并合入顶栏计数，避免素材缺失却没有诊断提示。
@@ -259,7 +269,7 @@ onBeforeUnmount(page.dispose)
         :is-saving="page.saving.value"
         :can-undo="page.doc.value?.canUndo.value ?? false"
         :can-redo="page.doc.value?.canRedo.value ?? false"
-        :issue-count="issues.length + setupIssues.length"
+        :issue-count="issues.length + loadDrops.length + setupIssues.length"
         :parity-text="parity?.summary ?? ''"
         :parity-exact="parity?.exact ?? false"
         :crop-exact="sizing.contentFit.value?.exact ?? true"
@@ -368,7 +378,11 @@ onBeforeUnmount(page.dispose)
                   >
                     {{ text }}
                   </DtNotice>
-                  <Twin2dDiagnostics :config="config" @select="focusIssue" />
+                  <Twin2dDiagnostics
+                    :config="config"
+                    :load-drops="loadDrops"
+                    @select="focusIssue"
+                  />
                 </div>
               </template>
             </DtResizableLayout>

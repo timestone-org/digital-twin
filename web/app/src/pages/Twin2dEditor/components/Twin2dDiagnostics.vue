@@ -26,6 +26,11 @@ const props = defineProps<{
    * ⚠ 递归一化后的结果进来不会报错，只是「被整条丢掉了什么」那一族恒为空。
    */
   config: unknown
+  /**
+   * 库里那份配置载入时就被丢掉的条目（原始下标，不可跳）；保存一次就永久没了。
+   * ⚠ `config` 是编辑中的那一份时这一族只能从这里进来，见 `twin2dLoadDrops`。
+   */
+  loadDrops?: readonly Twin2dIssue[]
 }>()
 
 const emit = defineEmits<{
@@ -72,7 +77,7 @@ const TARGET_KINDS: readonly Twin2dIssueKind[] = [
 const AT_HEAD = /^([a-zA-Z]+)\[(\d+)\]/
 
 /**
- * 十六种问题各自的短标签。
+ * 每种问题各自的短标签。
  * ⚠ 铺满 `Twin2dIssueCode` 而不是按前缀拼：新增一种 code 时这里编译期就红，
  * 拼出来的那份只会给新 code 显示一个空标签。
  */
@@ -124,6 +129,14 @@ const scan = computed(() => twin2dScan(props.config))
 
 const issues = computed<readonly Twin2dIssue[]>(() => scan.value.issues)
 
+/** 载入时丢掉的那一族，话里补上「保存后就没了」。 */
+const loadDropIssues = computed<readonly Twin2dIssue[]>(() =>
+  (props.loadDrops ?? []).map((issue) => ({
+    ...issue,
+    message: `${issue.message}（载入时已丢弃，保存后将永久消失）`,
+  })),
+)
+
 /**
  * `at` 头一段里的实体集合名；不是那四类之一给 null。
  * @param text 头一段的原文
@@ -169,13 +182,18 @@ function targetOf(at: string): Twin2dIssueTarget | null {
 }
 
 // ⚠ 同一条路径上可能同时报出两条不同的问题，所以键里带上文档序
-const rows = computed<readonly Twin2dIssueRow[]>(() =>
-  issues.value.map((issue, order) => ({
+const rows = computed<readonly Twin2dIssueRow[]>(() => [
+  ...issues.value.map((issue, order) => ({
     key: `${order}:${issue.code}:${issue.at}`,
     issue,
     target: targetOf(issue.at),
   })),
-)
+  ...loadDropIssues.value.map((issue, order) => ({
+    key: `load:${order}:${issue.code}:${issue.at}`,
+    issue,
+    target: null,
+  })),
+])
 
 /** 按档计数，只列有的那几档；两档都没有时整块落空态。 */
 const counts = computed(() =>
@@ -183,7 +201,7 @@ const counts = computed(() =>
     .map(([level, look]) => ({
       key: level,
       look,
-      total: issues.value.filter((issue) => issue.level === level).length,
+      total: rows.value.filter((row) => row.issue.level === level).length,
     }))
     .filter((entry) => entry.total > 0),
 )

@@ -22,6 +22,7 @@ import type {
 } from '@dt/contracts'
 import {
   TWIN_2D_BUILTIN_NODE_STYLES,
+  TWIN_2D_CONFIG_KEY,
   __resetTwin2dAssets,
   normalizeTwin2dConfig,
 } from '@dt/twin2d'
@@ -613,6 +614,30 @@ describe('诊断', () => {
         '[data-test="diagnostics"] [data-test="diagnostics-row"]',
       ),
     ).toHaveLength(1)
+  })
+
+  // ⚠ 编辑的是归一化之后那一份：拿它跑诊断，「载入时被整条丢掉了什么」那一族恒为空，
+  // 而第一次保存就把丢掉的东西永久写没，全程没有一句提示
+  it('库里那份配置载入时丢掉的条目也列出来，并说清保存后就没了', async () => {
+    stub.page = {
+      ...controls.page,
+      node: computed(() => ({
+        ...node(),
+        configJson: {
+          [TWIN_2D_CONFIG_KEY]: {
+            nodes: [{ id: 'a', styleId: 'nope' }, { styleId: 'nope' }],
+          },
+        },
+      })),
+    }
+    const wrapper = mountPage()
+
+    expect(wrapper.find('[data-test="issues"]').text()).toContain('2')
+    await wrapper.find('[data-test="issues"]').trigger('click')
+
+    const dropped = wrapper.findAll('[data-code="dropped-node"]')
+    expect(dropped).toHaveLength(1)
+    expect(dropped[0]?.text()).toContain('保存后')
   })
 
   // ⚠ 跳过去才是这张清单的用处：只列不跳的话，「nodes[0].styleId」这种路径要人自己

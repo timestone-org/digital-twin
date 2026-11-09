@@ -230,3 +230,26 @@ describe('点一条跳过去', () => {
     expect(wrapper.emitted('select')).toBeUndefined()
   })
 })
+
+describe('载入时丢掉的那一族', () => {
+  it('另行列出、不可点，话里说清保存后就没了', () => {
+    const wrapper = mount(Twin2dDiagnostics, {
+      props: {
+        config: normalizeTwin2dConfig({}),
+        loadDrops: [
+          {
+            level: 'warn',
+            code: 'dropped-node',
+            message: '这个节点没写 id，整条会被丢掉',
+            at: 'nodes[0]',
+          },
+        ],
+      },
+    })
+
+    const row = rowOf(wrapper, 'dropped-node')
+    expect(row.attributes('disabled')).toBeDefined()
+    expect(row.text()).toContain('保存后将永久消失')
+    expect(wrapper.get('[data-test="diagnostics-total"]').text()).toContain('1')
+  })
+})
