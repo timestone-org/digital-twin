@@ -17,8 +17,6 @@ from platform_server.apps.hvac.rooms import RoomUnit
 
 # 工件的序列化格式版本。改 ModelBundle 的形状**或成员的预测语义**就 +1，
 # 老工件拒载并提示重训。
-# v3：时长森林改 log1p 尺度——老工件在原始尺度上拟合，用新代码反解会把
-# 分钟数当对数再指数化，错得悄无声息，必须拒载
 FORMAT_VERSION = 5
 
 # 对外报的三个分位水平，顺序固定

@@ -19,7 +19,6 @@ from platform_server.apps.hvac.startups import (
 
 # ⚠ 改抽取逻辑的人手动 +1，不对代码求哈希：否则一次格式化就触发全量重算提醒，
 # 很快没人理它（docs/AC_STARTUP_DESIGN.md §5）。
-# v2：事件记录全停时长 idle_minutes（蓄热特征，docs/AC_MODEL_DESIGN.md §2.5）
 LOGIC_VERSION = 3
 
 _ONE_MINUTE = timedelta(minutes=1)
