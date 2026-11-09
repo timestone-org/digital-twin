@@ -92,7 +92,7 @@ function submit(): void {
       label="平台路径"
       required
       placeholder="/api/v1/platform/dataset-tables"
-      hint="示例读取台账目录；行标识字段填 id，标题字段填 name。"
+      hint="照示例读台账目录时，把下面的行标识改成 id、标题填 name；读台账行用默认的 row_id。"
       :error="pathError"
       :disabled="isBusy"
     />
