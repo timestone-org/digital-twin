@@ -29,6 +29,7 @@ import { describeError } from '@/composables/useAsyncList'
 import { copyText } from '@/utils/clipboard'
 import {
   accessLabels,
+  classLabel,
   displayValue,
   isWritable,
   valueRankLabel,
@@ -135,7 +136,7 @@ async function write(): Promise<void> {
     <header class="flex flex-col gap-1.5">
       <div class="flex flex-wrap items-center gap-2">
         <h3 class="m-0 text-base font-medium">{{ node.browse_name }}</h3>
-        <DtTag size="sm">{{ node.node_class }}</DtTag>
+        <DtTag size="sm">{{ classLabel(node.node_class) }}</DtTag>
         <DtTag v-if="node.data_type" mono size="sm">
           {{ node.data_type }}
         </DtTag>

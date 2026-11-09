@@ -443,7 +443,7 @@ describe('地址空间的成功路径', () => {
     })
     const wrapper = mount(NodeExplorer, { props: { instance: instance() } })
     await flushPromises()
-    expect(wrapper.text()).toContain('object')
+    expect(wrapper.text()).toContain('对象')
   })
 })
 

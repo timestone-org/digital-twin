@@ -271,9 +271,9 @@ describe('节点表单', () => {
     await flushPromises()
     // DtSelect 是自绘组合框，选项在 props 上而不是 <option> 元素里
     const labels = selectLabels(wrapper, 0)
-    expect(labels).toContain('variable')
-    expect(labels).toContain('object')
-    expect(labels).not.toContain('method')
+    expect(labels).toContain('变量')
+    expect(labels).toContain('对象')
+    expect(labels).not.toContain('方法')
   })
 
   it('标识为空时提交按钮不可用', async () => {
@@ -324,7 +324,7 @@ describe('节点表单', () => {
       attachTo: document.body,
     })
     await flushPromises()
-    await pickInSelect(0, 'object')
+    await pickInSelect(0, '对象')
     expect(document.body.textContent).not.toContain('访问权限')
     fillModal({ 0: 'Plant', 1: 'Plant' })
     await flushPromises()
