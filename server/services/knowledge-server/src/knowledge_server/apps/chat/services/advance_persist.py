@@ -61,8 +61,8 @@ async def persist(
     """
     async with sessions() as session:
         await session_crud.lock_session(session, chat_session_id)
-        rows = await session_crud.messages_of(session, chat_session_id)
-        seq = max((row.seq for row in rows), default=0)
+        await session_crud.touch_session(session, chat_session_id)
+        seq = await session_crud.max_seq(session, chat_session_id)
         written: list[ChatMessage] = []
         for message in [*record.incoming, *record.outcome.messages]:
             seq += 1

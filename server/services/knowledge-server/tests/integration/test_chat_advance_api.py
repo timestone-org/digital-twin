@@ -9,6 +9,7 @@ import uuid
 from collections.abc import AsyncIterator, Callable
 from contextlib import asynccontextmanager
 from dataclasses import dataclass
+from datetime import UTC, datetime
 from typing import Any
 
 import httpx
@@ -16,9 +17,12 @@ import pytest
 from integration.conftest import DbStack
 from langchain_core.language_models import BaseChatModel
 from langchain_core.messages import AIMessage
+from sqlalchemy import update
 from sqlalchemy.ext.asyncio import AsyncSession
 
+from knowledge_server.apps.chat.crud import session_crud
 from knowledge_server.apps.chat.deps import get_advance_deps
+from knowledge_server.apps.chat.models import ChatSession
 from knowledge_server.apps.chat.services.advance_service import AdvanceDeps
 from knowledge_server.apps.chat.services.citations import Ledger
 from knowledge_server.apps.chat.services.scope import BaseScope
@@ -618,3 +622,40 @@ async def test_an_unexpected_failure_still_ends_with_an_error_frame(
     assert events[-1][0] == "error"
     assert events[-1][1]["code"] == 52325
     assert "内部细节" not in events[-1][1]["message"]
+
+
+async def test_a_new_turn_moves_the_session_to_the_top(
+    db_stack: DbStack,
+) -> None:
+    """⚠ 列表按 `updated_at` 排：续聊不顶它的话，上周开的会话今天接着聊，
+    仍沉在列表下面、挂着上周的时间。版本号不跟着动——它守的是范围与标题。"""
+    _install(db_stack, ScriptedChat(reply=AIMessage(content="好")))
+    session_id = await _new_session(db_stack.client)
+    long_ago = datetime(2020, 1, 1, tzinfo=UTC)
+    async with db_stack.sessions() as session:
+        await session.execute(
+            update(ChatSession)
+            .where(ChatSession.id == uuid.UUID(session_id))
+            .values(updated_at=long_ago, title="已命名")
+        )
+        await session.commit()
+    before = await db_stack.client.get(f"{URL}/{session_id}")
+
+    await _advance(db_stack.client, session_id, user_text="在吗")
+
+    after = (await db_stack.client.get(f"{URL}/{session_id}")).json()["data"]
+    assert datetime.fromisoformat(after["updated_at"]) > long_ago
+    assert after["row_version"] == before.json()["data"]["row_version"]
+
+
+async def test_the_next_sequence_number_comes_from_the_largest_one(
+    db_stack: DbStack,
+) -> None:
+    _install(db_stack, ScriptedChat(reply=AIMessage(content="好")))
+    session_id = uuid.UUID(await _new_session(db_stack.client))
+    async with db_stack.sessions() as session:
+        assert await session_crud.max_seq(session, session_id) == 0
+    await _advance(db_stack.client, str(session_id), user_text="在吗")
+    await _advance(db_stack.client, str(session_id), user_text="还在吗")
+    async with db_stack.sessions() as session:
+        assert await session_crud.max_seq(session, session_id) == 4

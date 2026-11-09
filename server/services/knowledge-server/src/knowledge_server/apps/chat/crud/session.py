@@ -7,7 +7,7 @@
 import uuid
 from collections.abc import Sequence
 
-from sqlalchemy import Select, select
+from sqlalchemy import Select, func, select, update
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from knowledge_server.apps.chat.models import (
@@ -60,6 +60,36 @@ class SessionCrud(CrudBase[ChatSession]):
             .where(ChatSession.id == chat_session_id)
             .with_for_update()
         )
+
+    async def touch_session(
+        self, session: AsyncSession, chat_session_id: uuid.UUID
+    ) -> None:
+        """有了新的一轮：把会话顶到列表最前，版本号不动。
+
+        ⚠ 不动 `row_version`：它守的是范围与标题的并发改写，跟着每一轮涨的话，
+        前端手里那份版本号下一次改范围必然撞 409。
+
+        Args: session, chat_session_id。
+        """
+        await session.execute(
+            update(ChatSession)
+            .where(ChatSession.id == chat_session_id)
+            .values(updated_at=func.now())
+        )
+
+    async def max_seq(
+        self, session: AsyncSession, chat_session_id: uuid.UUID
+    ) -> int:
+        """这次对话里最大的消息序号；还没有消息时是 0。
+
+        Args: session, chat_session_id。
+        """
+        found = await session.execute(
+            select(func.coalesce(func.max(ChatMessage.seq), 0)).where(
+                ChatMessage.session_id == chat_session_id
+            )
+        )
+        return int(found.scalar_one())
 
     async def messages_of(
         self, session: AsyncSession, chat_session_id: uuid.UUID
