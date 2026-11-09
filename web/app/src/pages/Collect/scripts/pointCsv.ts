@@ -29,6 +29,7 @@ const BOM = '\uFEFF'
 export const CSV_COLUMNS = [
   { key: 'code', label: '点位编码', required: true },
   { key: 'name', label: '名称', required: false },
+  { key: 'description', label: '描述', required: false },
   { key: 'address', label: '寻址串', required: false },
   { key: 'data_type', label: '数据类型', required: false },
   { key: 'unit', label: '单位', required: false },
@@ -54,6 +55,7 @@ const SAMPLE_ROWS: readonly string[][] = [
   [
     'outlet_temp',
     '出口温度',
+    '一号机出风口温度，也称送风温度',
     'ns=2;s=Plant1.Line1.OutletTemp',
     'float',
     '℃',
@@ -66,6 +68,7 @@ const SAMPLE_ROWS: readonly string[][] = [
   [
     'run_state',
     '运行状态',
+    '',
     'ns=2;s=Plant1.Line1.Running',
     'bool',
     '',
@@ -126,6 +129,24 @@ export function splitCsvLine(line: string): string[] {
   }
   cells.push(cell)
   return cells
+}
+
+/**
+ * ⚠ 名称这类自由文本可能直接来自设备的 BrowseName；以这些字符开头的格子，
+ * Excel 打开时会当公式执行（CSV 注入）。导出时垫一个单引号，导入时剥掉。
+ */
+const FORMULA_LEAD = /^[=+\-@\t\r]/
+
+/** 自由文本格子导出前的防公式处理。 */
+function guardText(cell: string): string {
+  return FORMULA_LEAD.test(cell) ? `'${cell}` : cell
+}
+
+/** 剥掉导出时垫的那个单引号。 */
+function unguardText(cell: string): string {
+  return cell.startsWith("'") && FORMULA_LEAD.test(cell.slice(1))
+    ? cell.slice(1)
+    : cell
 }
 
 /** 把一格写成 CSV 安全的形式。 */
@@ -189,16 +210,22 @@ function parseRow(
   }
 }
 
+/** 自由文本列的取值，剥掉导出时垫的防公式单引号。 */
+function text(values: Map<ColumnKey, string>, key: ColumnKey): string {
+  return unguardText(values.get(key) ?? '')
+}
+
 function buildItem(
   values: Map<ColumnKey, string>,
 ): CollectPointImportItemInput {
   const code = required(values, 'code', '点位编码')
   const problem = pointCodeProblem(code)
   if (problem !== null) throw new Error(`点位编码「${code}」：${problem}`)
-  const unit = values.get('unit') ?? ''
+  const unit = text(values, 'unit')
   const item: CollectPointImportItemInput = {
     code,
-    name: values.get('name') ?? '',
+    name: text(values, 'name'),
+    description: text(values, 'description'),
     address: values.get('address') ?? '',
     data_type: dataType(values.get('data_type') ?? ''),
     unit: unit === '' ? null : unit,
@@ -324,10 +351,11 @@ export function templateCsv(): string {
 export function pointsToCsv(points: readonly CollectPoint[]): string {
   const rows = points.map((point) => [
     point.code,
-    point.name,
+    guardText(point.name),
+    guardText(point.description ?? ''),
     point.address,
     point.data_type,
-    point.unit ?? '',
+    guardText(point.unit ?? ''),
     String(point.sampling_interval_ms),
     String(point.deadband),
     point.archive_enabled ? '是' : '否',

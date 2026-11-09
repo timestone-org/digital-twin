@@ -229,4 +229,46 @@ describe('模板与导出', () => {
       archive_retention_days: 90,
     })
   })
+
+  function exported(over: Partial<CollectPoint>): CollectPoint {
+    return {
+      id: 'p1',
+      source_id: 's1',
+      node_key: 's1:t1',
+      code: 't1',
+      name: '出口温度',
+      address: 'ns=2;s=A',
+      data_type: 'float',
+      unit: null,
+      sampling_interval_ms: 1000,
+      deadband: 0,
+      archive_enabled: true,
+      archive_max_interval_ms: 60_000,
+      archive_retention_days: null,
+      created_at: '2026-08-16T00:00:00.000Z',
+      updated_at: '2026-08-16T00:00:00.000Z',
+      ...over,
+    }
+  }
+
+  it('⚠ 公式开头的名称导出时垫一个单引号，Excel 打开不当公式执行；导回来原样', () => {
+    const csv = pointsToCsv([
+      exported({ name: '=HYPERLINK("http://x","click")', unit: '+1' }),
+    ])
+    const row = splitCsvLine(csv.split('\r\n')[1] ?? '')
+    expect(row[1]?.startsWith("'=")).toBe(true)
+    const item = parsePointCsv(csv).rows[0]?.item
+    expect(item?.name).toBe('=HYPERLINK("http://x","click")')
+    expect(item?.unit).toBe('+1')
+  })
+
+  it('寻址串与编码不加单引号', () => {
+    const csv = pointsToCsv([exported({ address: '-1' })])
+    expect(splitCsvLine(csv.split('\r\n')[1] ?? '')[3]).toBe('-1')
+  })
+
+  it('描述随导出导入一起往返，批量也能改描述', () => {
+    const csv = pointsToCsv([exported({ description: '一号机送风温度' })])
+    expect(parsePointCsv(csv).rows[0]?.item?.description).toBe('一号机送风温度')
+  })
 })
