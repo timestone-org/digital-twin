@@ -258,6 +258,7 @@ function removePort(id: string): void {
     <DtEmpty
       v-if="modelValue.length === 0"
       size="inline"
+      class="flex-wrap"
       title="没有节点级引脚"
       hint="连线挂的是样式里那几个；要挪位置就把它覆盖进来。"
       data-test="port-empty"
