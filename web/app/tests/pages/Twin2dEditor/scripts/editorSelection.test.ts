@@ -211,4 +211,14 @@ describe('实体被删之后', () => {
 
     expect(selection.styleFocus.value).toEqual({ kind: 'styles', id: 's1' })
   })
+
+  it('一个都没摘就不换引用', () => {
+    const selection = createTwin2dSelection()
+    selection.selectMany('nodes', ['n1', 'n2'], false)
+    const before = selection.pick.value
+
+    selection.prune(() => true)
+
+    expect(selection.pick.value).toBe(before)
+  })
 })

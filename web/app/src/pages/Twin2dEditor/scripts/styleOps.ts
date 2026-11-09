@@ -37,6 +37,7 @@ import type {
 
 import { freshTwin2dId, newTwin2dId, orderList } from './nodeOps'
 import type { Twin2dAdded, Twin2dIdFactory, Twin2dOrderMove } from './nodeOps'
+import type { Twin2dEntityKind } from './types'
 
 /** 新建节点样式的 id 前缀。 */
 export const TWIN_2D_STYLE_ID_PREFIX = 'style'
@@ -150,6 +151,25 @@ export function twin2dEdgeStyleOf(
 ): Twin2dEdgeStyle | null {
   const inDoc = config.edgeStyles.find((style) => style.id === id)
   return inDoc ?? EDGE_PRESET_MAP.get(id) ?? null
+}
+
+/**
+ * 这个 id 在当前配置里还解析不解析得到；悬空选中按它摘。
+ * ⚠ 两条样式轴连预置库一起认：没覆盖过的内置样式不在文档的 `styles` 里，只查文档的话
+ * 改任何别处都会把右栏正编着的那份内置样式当成「已删」关掉。
+ * @param config 当前配置
+ * @param kind 实体类别
+ * @param id 实体 id
+ */
+export function twin2dEntityExists(
+  config: Twin2dConfig,
+  kind: Twin2dEntityKind,
+  id: string,
+): boolean {
+  if (kind === 'styles') return twin2dNodeStyleOf(config, id) !== null
+  if (kind === 'edgeStyles') return twin2dEdgeStyleOf(config, id) !== null
+  const rows: readonly { id: string }[] = config[kind]
+  return rows.some((row) => row.id === id)
 }
 
 /**

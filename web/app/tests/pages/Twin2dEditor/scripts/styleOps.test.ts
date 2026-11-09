@@ -8,7 +8,9 @@
  * ⚠ 什么都没改时必须原样返回入参那个引用：文档态按引用判要不要压一帧撤销。
  */
 import {
+  TWIN_2D_BUILTIN_NODE_STYLES,
   TWIN_2D_BUILTIN_NODE_STYLE_MAP,
+  TWIN_2D_EDGE_PRESETS,
   normalizeTwin2dConfig,
   twin2dStyleResolver,
 } from '@dt/twin2d'
@@ -34,6 +36,7 @@ import {
   restoreBuiltinNodeStyle,
   twin2dEdgeStyleOf,
   twin2dEdgeStyleOrigin,
+  twin2dEntityExists,
   twin2dEdgeStyleUsage,
   twin2dNodeStyleOf,
   twin2dNodeStyleOrigin,
@@ -676,5 +679,30 @@ describe('只动点名的那一条', () => {
     expect(styleOf(withVariant, 's2').variants.at(1)?.rootPatch).toEqual({
       lift: 2,
     })
+  })
+})
+
+describe('悬空判定', () => {
+  it('两条样式轴连预置库一起认，文档里没有也算在', () => {
+    const config = normalizeTwin2dConfig({})
+    const builtin = TWIN_2D_BUILTIN_NODE_STYLES[0]?.id ?? ''
+    const edge = TWIN_2D_EDGE_PRESETS[0]?.id ?? ''
+
+    expect(twin2dEntityExists(config, 'styles', builtin)).toBe(true)
+    expect(twin2dEntityExists(config, 'edgeStyles', edge)).toBe(true)
+    expect(twin2dEntityExists(config, 'styles', 'no-such-style')).toBe(false)
+    expect(twin2dEntityExists(config, 'edgeStyles', 'no-such-style')).toBe(
+      false,
+    )
+  })
+
+  it('画布三类只认文档里那些', () => {
+    const config = normalizeTwin2dConfig({
+      nodes: [{ id: 'n1', styleId: 'x' }],
+    })
+
+    expect(twin2dEntityExists(config, 'nodes', 'n1')).toBe(true)
+    expect(twin2dEntityExists(config, 'nodes', 'n2')).toBe(false)
+    expect(twin2dEntityExists(config, 'marks', 'n1')).toBe(false)
   })
 })

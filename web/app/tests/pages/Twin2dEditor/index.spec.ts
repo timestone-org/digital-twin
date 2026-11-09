@@ -20,7 +20,11 @@ import type {
   DashboardPayload,
   Page,
 } from '@dt/contracts'
-import { __resetTwin2dAssets, normalizeTwin2dConfig } from '@dt/twin2d'
+import {
+  TWIN_2D_BUILTIN_NODE_STYLES,
+  __resetTwin2dAssets,
+  normalizeTwin2dConfig,
+} from '@dt/twin2d'
 import type { Twin2dConfig } from '@dt/twin2d'
 import { DtResizableLayout } from '@dt/ui'
 import { flushPromises, mount } from '@vue/test-utils'
@@ -962,6 +966,20 @@ describe('样式库抽屉', () => {
     await wrapper.find('[data-test="close-style-focus"]').trigger('click')
 
     expect(inspectorKind(wrapper)).toBe('canvas')
+  })
+
+  // ⚠ 没覆盖过的内置样式不在文档的 `styles` 里：按「文档里有没有」摘悬空选中的话，
+  // 挪一下节点、改一格字段，右栏正编着的那份内置样式就自己关掉了
+  it('编着一份没覆盖过的内置样式时，改别处不把它关掉', async () => {
+    const wrapper = mountPage()
+    const selection = selectionOf(wrapper)
+    const builtin = TWIN_2D_BUILTIN_NODE_STYLES[0]?.id ?? ''
+    selection.focusStyle('styles', builtin)
+    await nextTick()
+
+    await dirty(wrapper)
+
+    expect(selection.styleFocus.value).toEqual({ kind: 'styles', id: builtin })
   })
 
   // ⚠ 图元 id 只在它自己那份样式里唯一：留着上一份的 id 会让右栏画出另一份样式里

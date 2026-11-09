@@ -33,6 +33,7 @@ import { createTwin2dSelection } from './scripts/editorSelection'
 import type { Twin2dStyleKind } from './scripts/editorSelection'
 import { addNode } from './scripts/nodeOps'
 import { useTwin2dShortcuts } from './scripts/shortcuts'
+import { twin2dEntityExists } from './scripts/styleOps'
 import { twin2dScan, twin2dSetupIssues } from './scripts/twin2dIssues'
 import type { Twin2dEntityKind } from './scripts/types'
 import { TWIN_2D_AI_STARTERS, useTwin2dAi } from './scripts/useTwin2dAi'
@@ -202,10 +203,7 @@ function focusIssue(target: { kind: Twin2dEntityKind; id: string }): void {
 // 已经不存在的东西，改哪一项都写不回去且不报错
 watch(config, (next) => {
   if (next === null) return
-  selection.prune((kind: Twin2dEntityKind, id: string) => {
-    const rows: readonly { id: string }[] = next[kind]
-    return rows.some((row) => row.id === id)
-  })
+  selection.prune((kind, id) => twin2dEntityExists(next, kind, id))
 })
 
 // ⚠ 换一份样式必须把图元选中清掉：图元 id 只在**它自己那份样式**里唯一，留着上一份
