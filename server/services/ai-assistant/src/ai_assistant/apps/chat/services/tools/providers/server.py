@@ -557,10 +557,7 @@ def _split_node_key(node_key: str) -> tuple[str, str]:
 
 
 def _as_body(row: object) -> dict[str, object]:
-    """把上游那一行收成一张确定形状的表。
-
-    ⚠ 逐键重建而不是 `dict(row)`：后者从 `object` narrow 出来的是未知键值类型，
-    一路带进打分层之后，pyright 会在几个文件之外才报出来。
+    """把上游那一行收成键为字符串的表；不是表就当空。
 
     Args: row。
     """
