@@ -320,7 +320,18 @@ describe('模型库上的动作', () => {
     await ops.unbind('b1')
 
     expect(toast.error).toHaveBeenCalledOnce()
+    expect(toast.success).not.toHaveBeenCalled()
     expect(done).not.toHaveBeenCalled()
     expect(ops.isBusy.value).toBe(false)
+  })
+
+  it('解绑成功给一句「已解绑」', async () => {
+    const toast = toaster()
+    vi.spyOn(modeling, 'deleteModelingBinding').mockResolvedValue(undefined)
+    const ops = host(() => useBindingOps(vi.fn()))
+
+    await ops.unbind('b1')
+
+    expect(toast.success).toHaveBeenCalledWith('已解绑')
   })
 })
