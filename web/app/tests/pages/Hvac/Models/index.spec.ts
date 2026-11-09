@@ -221,6 +221,31 @@ describe('视图切换', () => {
   })
 })
 
+describe('房间列表取不到或取不全', () => {
+  it('⚠ 取不到时照实报错并给重试，不劝人「先配置房间」', async () => {
+    vi.mocked(hvac.listRooms).mockRejectedValueOnce(new Error('boom'))
+    const wrapper = await open()
+    expect(wrapper.text()).not.toContain('先配置房间')
+    expect(wrapper.text()).toContain('请求失败')
+    const retry = wrapper
+      .findAll('button')
+      .find((node) => node.text() === '重试')
+    await retry?.trigger('click')
+    await flushPromises()
+    expect(hvac.listRooms).toHaveBeenCalledTimes(2)
+    expect(wrapper.text()).toContain('注塑房')
+  })
+
+  it('房间超过一次取回的上限时说出来', async () => {
+    vi.mocked(hvac.listRooms).mockResolvedValue({
+      ...page([room('r1', '注塑房', 2)]),
+      total: 201,
+    })
+    const wrapper = await open()
+    expect(wrapper.text()).toContain('只列出前 200 个')
+  })
+})
+
 describe('左栏', () => {
   it('按车间分组列房间与模型数，训练中的房间带圆点', async () => {
     vi.mocked(hvac.listRooms).mockResolvedValue(

@@ -8,7 +8,14 @@
 import { computed, onBeforeUnmount, onMounted, ref } from 'vue'
 import { useRoute, useRouter } from 'vue-router'
 import type { AcModel, DtTableSort, Room } from '@dt/contracts'
-import { DtEmpty, DtResizableLayout, useConfirm, useToast } from '@dt/ui'
+import {
+  DtButton,
+  DtEmpty,
+  DtNotice,
+  DtResizableLayout,
+  useConfirm,
+  useToast,
+} from '@dt/ui'
 
 import * as hvac from '@/api/hvac'
 import { AppShell } from '@/components/layout'
@@ -30,6 +37,8 @@ import {
 
 // 训练中列表的刷新间隔
 const POLL_INTERVAL_MS = 5000
+/** 房间一次取回的上限，与后端分页上限同值。 */
+const ROOM_LIMIT = 200
 
 const route = useRoute()
 const router = useRouter()
@@ -41,6 +50,9 @@ const view = useViewMode('hvac-models')
 
 const models = ref<AcModel[]>([])
 const rooms = ref<Room[]>([])
+const roomsError = ref<string | null>(null)
+/** 房间数超出一次取回的上限：左栏少列了几个，要说出来。 */
+const isRoomListPartial = ref(false)
 const loading = ref(false)
 const error = ref<string | null>(null)
 const isCreating = ref(false)
@@ -98,13 +110,23 @@ async function load(): Promise<void> {
 
 async function loadRooms(): Promise<void> {
   try {
-    rooms.value = (await hvac.listRooms({ size: 200 })).items
-  } catch {
-    // 房间列表拿不到时左栏是空态，右区跟着空——不比半份房间更糟
+    const page = await hvac.listRooms({ size: ROOM_LIMIT })
+    rooms.value = page.items
+    isRoomListPartial.value = page.total > page.items.length
+    roomsError.value = null
+  } catch (caught) {
+    // ⚠ 照实报错：空态会劝人「先配置房间」，而房间早就建好了
     rooms.value = []
+    roomsError.value = describeError(caught)
   }
   roomsSettled = true
   resolveSelection()
+}
+
+/** 重取房间列表，并按地址栏重新落定选中项。 */
+function retryRooms(): void {
+  selectionPending = true
+  void loadRooms()
 }
 
 /** 首次落定选中项：地址栏给的那个存在就用它，否则按兜底次序挑一个。 */
@@ -196,6 +218,9 @@ function onCreated(modelId: string): void {
       </template>
       <template #models>
         <div class="flex min-h-0 min-w-0 flex-1 flex-col gap-3">
+          <DtNotice v-if="isRoomListPartial" intent="warning">
+            房间超过 {{ ROOM_LIMIT }} 个，左栏只列出前 {{ ROOM_LIMIT }} 个
+          </DtNotice>
           <template v-if="current">
             <RoomHeader :room="current" @create="isCreating = true" />
 
@@ -214,6 +239,16 @@ function onCreated(modelId: string): void {
             />
           </template>
 
+          <DtEmpty
+            v-else-if="roomsError"
+            icon="alert-circle"
+            title="房间列表取不到"
+            :hint="roomsError"
+          >
+            <DtButton variant="outline" size="sm" @click="retryRooms">
+              重试
+            </DtButton>
+          </DtEmpty>
           <DtEmpty
             v-else
             icon="building"
