@@ -41,6 +41,9 @@ class LibProjectNounTests(unittest.TestCase):
     def test_neutral_line_passes(self) -> None:
         assert self._check("把向量压成字节存进 bytea、取回来算余弦") == []
 
+    def test_acknowledge_is_not_a_project_noun(self) -> None:
+        assert self._check("entries are acknowledged with XACK") == []
+
 
 if __name__ == "__main__":
     unittest.main()
