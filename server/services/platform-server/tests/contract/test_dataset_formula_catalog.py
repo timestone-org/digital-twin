@@ -136,6 +136,11 @@ def test_the_panel_ships_the_operator_and_rule_reference() -> None:
     assert len(RULES) >= 1
 
 
+def test_the_rules_carry_no_markdown_markers() -> None:
+    # 面板按纯文本渲染规则，`**` 会原样露在界面上
+    assert not [rule for rule in RULES if "**" in rule or "`" in rule]
+
+
 def test_the_library_list_is_empty_until_the_library_lands() -> None:
     # 公式库随第 4 期落地；空表是正常状态，不是错误
     assert CATALOG.library == ()
