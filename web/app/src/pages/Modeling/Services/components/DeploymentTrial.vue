@@ -1,6 +1,6 @@
 <script setup lang="ts">
 /** @fileoverview 在部署服务中按真实签名试算预测、检测与规则模型。 */
-import type { ModelDeployment } from '@dt/contracts'
+import type { ModelDeployment, OpenModelWarning } from '@dt/contracts'
 import { DtButton, DtNotice, DtSpinner, DtTextarea } from '@dt/ui'
 import { computed, onBeforeUnmount, ref, watch } from 'vue'
 import { callOpenModel, getOpenModelSignature } from '@/api/modelingServing'
@@ -14,9 +14,13 @@ import {
 import type { TrialModel } from '../scripts/trialInput'
 
 const props = defineProps<{ deployment: ModelDeployment }>()
+/** 每调一次（成败都算）通知外面，调用量统计要跟着刷新。 */
+const emit = defineEmits<{ called: [] }>()
 const signature = ref<TrialModel | null>(null)
 const input = ref('')
 const result = ref('')
+// ⚠ 接口里告警的 row 从 0 数，而 400 的报错说「第 N 行」从 1 数；摆给人看统一从 1 数
+const warnings = ref<readonly OpenModelWarning[]>([])
 const error = ref('')
 const loading = ref(false)
 const running = ref(false)
@@ -74,18 +78,21 @@ async function run(): Promise<void> {
   running.value = true
   error.value = ''
   result.value = ''
+  warnings.value = []
   await inference.run(
     (signal) =>
       callOpenModel(props.deployment.code, model.action, rows, signal),
     {
       ok: (value) => {
         result.value = JSON.stringify(value, null, 2)
+        warnings.value = 'warnings' in value ? value.warnings : []
       },
       fail: (caught) => {
         error.value = describeError(caught)
       },
       settled: () => {
         running.value = false
+        emit('called')
       },
     },
   )
@@ -165,6 +172,18 @@ onBeforeUnmount(() => {
         >重新读取签名</DtButton
       >
     </div>
+    <ul
+      v-if="warnings.length > 0"
+      class="flex flex-col gap-1 text-text-secondary"
+      aria-label="试算告警"
+    >
+      <li
+        v-for="item in warnings"
+        :key="`${item.row}:${item.column}:${item.kind}`"
+      >
+        第 {{ item.row + 1 }} 行 · {{ item.column }}：{{ item.message }}
+      </li>
+    </ul>
     <pre
       v-if="result"
       class="max-h-72 overflow-auto rounded-md bg-surface-sunken p-3 text-compact"
