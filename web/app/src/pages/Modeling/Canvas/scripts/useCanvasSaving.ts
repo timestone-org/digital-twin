@@ -4,6 +4,7 @@ import type { Ref } from 'vue'
 import { onBeforeUnmount, ref } from 'vue'
 
 import type { useCanvasPage } from './useCanvasPage'
+import type { CheckOutcome } from './usePipelineDoc'
 
 interface RunDeps {
   page: ReturnType<typeof useCanvasPage>
@@ -12,6 +13,20 @@ interface RunDeps {
   isKeepingFrames: () => boolean
   autoPublish: boolean
   toast: ReturnType<typeof useToast>
+}
+
+/** 校验结局能不能接着起运行；不能时按结局说一句（失败那一路已经弹过错）。 */
+function isRunnable(
+  outcome: CheckOutcome,
+  page: ReturnType<typeof useCanvasPage>,
+  toast: ReturnType<typeof useToast>,
+): boolean {
+  if (outcome === 'aborted') toast.info('校验期间图又改过了，请再点一次')
+  if (outcome === 'invalid')
+    toast.warning(
+      page.issueViews.value[0]?.message ?? '流水线还有问题，先改好再运行',
+    )
+  return outcome === 'valid'
 }
 
 /** 保存、校验和运行都使用捕获的资源及图，不接受已离开的回执。 */
@@ -23,17 +38,7 @@ async function runSnapshot(deps: RunDeps): Promise<void> {
   page.graph.markSaved(snapshot)
   page.stopChecking()
   const outcome = await page.doc.validate(snapshot)
-  if (!isCurrent() || outcome === 'failed') return
-  if (outcome === 'aborted') {
-    toast.info('校验期间图又改过了，请再点一次')
-    return
-  }
-  if (outcome === 'invalid') {
-    toast.warning(
-      page.issueViews.value[0]?.message ?? '流水线还有问题，先改好再运行',
-    )
-    return
-  }
+  if (!isCurrent() || !isRunnable(outcome, page, toast)) return
   await page.runner.start(id, isKeepingFrames(), deps.autoPublish)
   if (isCurrent()) await page.loadRuns(id)
 }

@@ -99,6 +99,12 @@ function actionOf(event: KeyboardEvent): SimpleAction | null {
   return null
 }
 
+/** 这个动作此刻该不该接：划选着文字时复制让给浏览器，只读时只放不改图的。 */
+function isAllowed(action: SimpleAction, actions: ShortcutActions): boolean {
+  if (action === 'copy' && hasTextSelection()) return false
+  return READONLY_SAFE.has(action) || actions.canEdit()
+}
+
 export function useCanvasShortcuts(actions: ShortcutActions): void {
   const page = useWorkspacePage()
   const active = page?.active ?? ref(true)
@@ -112,9 +118,7 @@ export function useCanvasShortcuts(actions: ShortcutActions): void {
       return actions.nudge(nudge[0], nudge[1])
     }
     const action = actionOf(event)
-    if (action === null) return
-    if (action === 'copy' && hasTextSelection()) return
-    if (!READONLY_SAFE.has(action) && !actions.canEdit()) return
+    if (action === null || !isAllowed(action, actions)) return
     event.preventDefault()
     actions[action]()
   }
