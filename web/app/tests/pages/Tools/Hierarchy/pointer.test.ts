@@ -160,3 +160,18 @@ it('只读不能移动和连接，坐标换算与适应全部有明确边界', (
   frame.remove()
   wrapper.unmount()
 })
+it('⚠ 适应全部不缩到看不清：内容太大时停在 40%，从内容左上角开始看', () => {
+  const nodes = Array.from({ length: 40 }, (_, index) => ({
+    id: `n${index}`,
+    kind: 'meter' as const,
+    code: `N-${index}`,
+    name: '节点',
+    parameter: '',
+    order: index,
+    position: { x: 100 + index * 300, y: 60 },
+  }))
+  const view = fitViewport(nodes, 1000, 600)
+  expect(view.zoom).toBe(0.4)
+  expect(view.x).toBeCloseTo(40 - 100 * 0.4)
+  expect(view.y).toBeCloseTo(40 - 60 * 0.4)
+})
