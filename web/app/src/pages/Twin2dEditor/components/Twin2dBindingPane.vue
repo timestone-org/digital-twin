@@ -18,6 +18,7 @@
  */
 import type { BindingPayload } from '@dt/contracts'
 import {
+  TWIN_2D_NODE_BINDING_KEY,
   TWIN_2D_VIEW_BINDINGS,
   twin2dRowCounts,
   twin2dRowLabels,
@@ -101,6 +102,17 @@ const scope = computed<Twin2dBindingScope | null>(() => {
   return kind === undefined ? null : scopeOf(props.config, kind, target.id)
 })
 
+/**
+ * 收窄在一个节点上、而它一行读数都没有（只剩状态那一行）。
+ * ⚠ 换热器、末端这类样式默认一个读数槽都不引：不说一声的话像是「这个节点绑不了读数」。
+ */
+const hasNoReadings = computed(() => {
+  const target = props.selection
+  if (scope.value === null || target.kind !== 'nodes') return false
+  const readings = scope.value.rows[TWIN_2D_NODE_BINDING_KEY] ?? []
+  return readings.length === 0
+})
+
 const rowLabels = computed(() => twin2dRowLabels(props.config))
 const rowCounts = computed(() => twin2dRowCounts(props.config))
 </script>
@@ -122,6 +134,15 @@ const rowCounts = computed(() => twin2dRowCounts(props.config))
         显示全部
       </DtButton>
     </div>
+
+    <DtNotice
+      v-if="hasNoReadings"
+      intent="info"
+      icon="alert-circle"
+      data-test="binding-no-readings"
+    >
+      这个节点还没有读数行：在「属性」页勾上传感器，或在样式里引用读数槽位之后，读数行会出现在这里。
+    </DtNotice>
 
     <DtNotice v-if="isDirty" intent="info" icon="alert-circle">
       新绑的点位要保存之后才会开始推送：推送方读的是已落库的那一份绑定。
