@@ -173,6 +173,24 @@ describe('多选', () => {
     expect(editor.selectedIds.value).toEqual(['a'])
   })
 
+  it('撤销与重做之后选中集都按当前节点表收敛', () => {
+    const editor = editorWith([node('a')])
+
+    editor.apply((nodes) => [...nodes, node('b')])
+    editor.setSelection(['a', 'b'])
+    editor.undo()
+
+    expect(editor.selectedIds.value).toEqual(['a'])
+
+    editor.setSelection(['a'])
+    editor.apply((nodes) => nodes.filter((item) => item.id !== 'a'))
+    editor.undo()
+    editor.setSelection(['a'])
+    editor.redo()
+
+    expect(editor.selectedIds.value).toEqual([])
+  })
+
   it('换基线时不存在的选中被清掉', () => {
     const editor = editorWith([node('a'), node('b')])
 

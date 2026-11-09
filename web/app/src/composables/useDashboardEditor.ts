@@ -20,6 +20,7 @@ import {
   editorMutations,
   type EditorMutations,
 } from '@/features/dashboard/editorMutations'
+import { prunedSelection } from '@/features/dashboard/editorSelection'
 
 export type { NodeChange } from '@/features/dashboard/editorMutations'
 
@@ -80,6 +81,11 @@ export function useDashboardEditor(
 
   const isDirty = computed(() => nodes.value !== baseline.value)
   const mutations = editorMutations({ history, baseline, selection })
+  // 撤销/重做只换 present，选中集要跟着收敛，否则面板会指向已不存在的节点
+  const travel = (step: () => void) => (): void => {
+    step()
+    selection.value = prunedSelection(selection.value, history.present.value)
+  }
 
   return {
     nodes,
@@ -92,8 +98,8 @@ export function useDashboardEditor(
     canUndo: history.canUndo,
     canRedo: history.canRedo,
     flush: history.flush,
-    undo: history.undo,
-    redo: history.redo,
+    undo: travel(history.undo),
+    redo: travel(history.redo),
     markSaved: (sent, received) => {
       if (nodes.value === sent) mutations.reset(received)
       else baseline.value = sent
