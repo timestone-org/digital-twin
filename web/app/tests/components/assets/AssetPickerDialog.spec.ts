@@ -2,7 +2,7 @@
  * @fileoverview 契约：挑选器交出的是 `asset:` 引用，不是 URL。
  * ⚠ 交 URL 的话，存进大屏配置之后部署地址一换就 404，而没有任何一处会报错。
  * 另守三条：没选中不许确认（否则写进去一个空引用），取不到时要说出原因，
- * 删除必须二次确认（它删的是所有大屏共用的那份字节）。
+ * 挑选器里不摆删除（它删的是所有大屏共用的那份字节，删素材去素材库）。
  *
  * ⚠ 弹窗 teleport 到 body，断言一律查 `document.body`——查 wrapper 的话
  * 它永远是一对空的 teleport 注释，而「找不到」看着像组件没渲染。
@@ -11,7 +11,7 @@ import { enableAutoUnmount, flushPromises, mount } from '@vue/test-utils'
 import { createPinia, setActivePinia } from 'pinia'
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 
-import { DtConfirmHost, useConfirm } from '@dt/ui'
+import { useConfirm } from '@dt/ui'
 
 import AssetPickerDialog from '@/components/assets/AssetPickerDialog.vue'
 import { useAuthStore } from '@/stores/auth'
@@ -53,9 +53,12 @@ afterEach(() => {
   useConfirm().resolve(false)
 })
 
-async function render(open = true) {
+async function render(
+  open = true,
+  extra: { kind?: 'model' | 'image'; current?: string } = {},
+) {
   const wrapper = mount(AssetPickerDialog, {
-    props: { modelValue: open, kind: 'model' as const },
+    props: { modelValue: open, kind: 'model' as const, ...extra },
     attachTo: document.body,
   })
   await flushPromises()
@@ -177,31 +180,59 @@ describe('打开与关闭', () => {
 })
 
 describe('删除', () => {
-  it('要二次确认，取消则一个字节都不动', async () => {
-    api.deleteAsset.mockResolvedValue(undefined)
+  it('持管理权限也不在挑选器里摆删除：手一滑删掉的是所有大屏共用的那份字节', async () => {
     await render()
-    mount(DtConfirmHost)
-    await flushPromises()
 
-    await click(query(`[aria-label="删除 ${ASSET.name}"]`))
-    await click(buttonByText('取消'))
-
-    // ⚠ 这个弹窗是「挑素材」用的，旁边就是垃圾桶；手一滑删掉的是所有大屏
-    // 共用的那份字节，故这一条不是洁癖
+    expect(
+      document.body.querySelector(`[aria-label="删除 ${ASSET.name}"]`),
+    ).toBeNull()
     expect(api.deleteAsset).not.toHaveBeenCalled()
   })
+})
 
-  it('确认之后从列表里消失', async () => {
-    api.deleteAsset.mockResolvedValue(undefined)
-    await render()
-    mount(DtConfirmHost)
+describe('预选与快捷选用', () => {
+  it('打开时预选当前引用，直接点「选用」就是原样', async () => {
+    const wrapper = await render(true, { current: ASSET.ref })
+
+    expect(query('.dt-assets__item').getAttribute('aria-current')).toBe('true')
+    await click(buttonByText('选用'))
+    expect(wrapper.emitted('pick')?.[0]?.[0]).toBe(ASSET.ref)
+  })
+
+  it('当前引用不在列表里时什么也不选', async () => {
+    await render(true, { current: 'asset:gone' })
+
+    expect(buttonByText('选用').hasAttribute('disabled')).toBe(true)
+  })
+
+  it('双击一条直接选用并关窗', async () => {
+    const wrapper = await render()
+
+    query('.dt-assets__item').dispatchEvent(
+      new MouseEvent('dblclick', { bubbles: true }),
+    )
     await flushPromises()
 
-    await click(query(`[aria-label="删除 ${ASSET.name}"]`))
-    await click(buttonByText('删除'))
+    expect(wrapper.emitted('pick')?.[0]?.[0]).toBe(ASSET.ref)
+    expect(wrapper.emitted('update:modelValue')?.at(-1)).toEqual([false])
+  })
+})
 
-    expect(api.deleteAsset).toHaveBeenCalledWith(ID)
-    expect(document.body.textContent).toContain('还没有素材')
+describe('缩略图', () => {
+  it('图片给缩略图，模型不开 WebGL 只给占位', async () => {
+    api.listAssets.mockResolvedValue([
+      { ...ASSET, kind: 'image', name: '底图.png', contentType: 'image/png' },
+    ])
+    await render(true, { kind: 'image' })
+
+    const thumb = query('.dt-assets__thumb img')
+    expect(thumb.getAttribute('src')).toContain(ID)
+  })
+
+  it('模型行没有图片缩略图', async () => {
+    await render()
+
+    expect(document.body.querySelector('.dt-assets__thumb img')).toBeNull()
   })
 })
 
