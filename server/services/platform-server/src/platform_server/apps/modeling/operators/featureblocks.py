@@ -15,6 +15,7 @@ from platform_server.apps.modeling.operators.frame import Frame, numbers_of
 from platform_server.apps.modeling.operators.reporting import (
     MAX_BIN_COLUMNS,
     MAX_CELL_COLUMNS,
+    NOTE_ALERT,
     NOTE_HINT,
     TIER_LARGE,
     TIER_SCALAR,
@@ -65,6 +66,11 @@ DEGRADED_REASON = (
     "上游带拟合的算子也跟着在整帧上拟合"
 )
 # 方差档的量纲陷阱。⚠ 写成提示不写成断言：上游有没有标准化，这一步看不见
+# 选了相关性筛选、下游却没有切分可给目标列时的告警
+CORRELATION_FALLBACK_ALERT = (
+    "下游没有切分、拿不到目标列，相关性筛选退化成了方差筛选——"
+    "要按相关性筛，请在下游接一个切分算子"
+)
 VARIANCE_HINT = (
     "方差对量纲敏感，单位大的列方差天然大。"
     "如果上游没有标准化，这份排名看起来更像是「单位大的那几列」"
@@ -125,6 +131,8 @@ class SelectRun:
     train_rows: int
     #: 下游切分不是恰好一个——排名与上游拟合都退化到整帧上
     is_degraded: bool
+    #: 选的是相关性却拿不到目标列，实际按方差排名
+    fell_back: bool = False
 
 
 def scale_blocks(run: ScaleRun) -> tuple[ReportBlock, ...]:
@@ -404,6 +412,8 @@ def _select_columns(run: SelectRun) -> ReportBlock:
             ),
         ),
     )
+    if run.fell_back:
+        block = annotated(block, NOTE_ALERT, (CORRELATION_FALLBACK_ALERT,))
     return _hinted(_flagged(block, run.is_degraded), _select_hints(run.method))
 
 
