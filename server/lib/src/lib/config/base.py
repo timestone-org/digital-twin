@@ -4,12 +4,13 @@
 密钥类字段一律无默认值——弱默认的密钥等于没有密钥。
 """
 
+import logging
 import socket
 import sys
 from typing import Literal
 from urllib.parse import quote
 
-from pydantic import Field, SecretStr, ValidationError
+from pydantic import Field, SecretStr, ValidationError, field_validator
 from pydantic_settings import BaseSettings, SettingsConfigDict
 
 LogFormat = Literal["json", "text"]
@@ -49,6 +50,20 @@ class AppSettings(EnvSettings):
     # 优雅关停时等待在途工作的上限，必须小于编排器的宽限期
     app_drain_timeout_s: float = 20.0
     app_trace_sample_ratio: float = Field(default=0.1, ge=0.0, le=1.0)
+
+    @field_validator("app_log_level", mode="before")
+    @classmethod
+    def _known_log_level(cls, value: object) -> object:
+        """日志级别名转大写，且必须是 logging 认得的名字。
+
+        Args: value。
+        """
+        if not isinstance(value, str):
+            return value
+        level = value.upper()
+        if level not in logging.getLevelNamesMapping():
+            raise ValueError(f"不认识的日志级别：{value}")
+        return level
 
 
 class PostgresSettings(EnvSettings):
