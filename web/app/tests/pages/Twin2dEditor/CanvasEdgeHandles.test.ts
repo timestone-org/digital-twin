@@ -205,6 +205,22 @@ describe('拖一个拐点', () => {
     expect(bendOf(stand.changes[0] ?? edgeOf(DOC))).toEqual({ x: 240, y: 120 })
   })
 
+  it('右键按在拐点把手上不起拖动', () => {
+    const stand = mountHandles()
+    stand.wrapper.get('[data-test="edge-bend-handle"]').element.dispatchEvent(
+      new PointerEvent('pointerdown', {
+        bubbles: true,
+        clientX: 200,
+        clientY: 100,
+        button: 2,
+      }),
+    )
+    fire('pointermove', { x: 260, y: 160 })
+    fire('pointerup', { x: 260, y: 160 })
+
+    expect(stand.changes).toHaveLength(0)
+  })
+
   it('落库的是松手那一帧的位置，不是倒数第二帧', () => {
     const stand = mountHandles()
     down(stand, 'edge-bend-handle', { x: 200, y: 100 })

@@ -181,6 +181,18 @@ describe('命中带上的两下', () => {
     expect(seen).not.toHaveBeenCalled()
   })
 
+  // ⚠ 右键留给上下文菜单：按下就换选中的话，右键一下选中就变了，节点那边不这样
+  it('右键按下不上抛选中', () => {
+    const wrapper = mountLayer()
+    wrapper
+      .get('[data-test="edge-hit"]')
+      .element.dispatchEvent(
+        new PointerEvent('pointerdown', { bubbles: true, button: 2 }),
+      )
+
+    expect(wrapper.emitted('pick')).toBeUndefined()
+  })
+
   it('双击线上一点，按弧长插一个拐点', () => {
     const wrapper = mountLayer()
     fire(wrapper, 'dblclick', { x: 244, y: 36 })

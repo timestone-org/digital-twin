@@ -20,6 +20,7 @@ import type {
 } from '@dt/twin2d'
 import { computed, onBeforeUnmount, shallowRef } from 'vue'
 
+import { twin2dClaimPointer } from '../scripts/gestureFrame'
 import { snapAtScale, snapThresholdOf } from '../scripts/snapping'
 import {
   TWIN_2D_DROP_SNAP_PX,
@@ -170,9 +171,9 @@ function runGesture(
   event: PointerEvent,
   of: (frame: Twin2dGestureFrame) => Twin2dEdge | null,
 ): void {
-  // ⚠ 这一按不许再冒到画布壳上：那边把落到自己身上的按下当成「点了空白」，
-  // 不拦的表现是抓把手的同时选中被清掉
-  event.stopPropagation()
+  // ⚠ 接下的这一按不许再冒到画布壳上：那边把落到自己身上的按下当成「点了空白」，
+  // 不拦的表现是抓把手的同时选中被清掉；非主键放过去，与节点同一口径
+  if (!twin2dClaimPointer(event)) return
   live = props.startGesture({
     kind,
     event,

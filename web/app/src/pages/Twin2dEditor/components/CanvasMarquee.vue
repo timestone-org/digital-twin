@@ -115,7 +115,8 @@ function hitsOf(rect: Twin2dSnapBox): Twin2dMarqueeHit | null {
  * @param end 怎么收的场
  */
 function settle(frame: Twin2dGestureFrame, end: Twin2dGestureEnd): void {
-  const drawn = box.value
+  // ⚠ 按收场那一帧算框：浏览器不保证松手前一定还有一次 pointermove
+  const drawn = frame.moved ? rectOf(frame) : null
   box.value = null
   emit('done')
   if (end === 'cancelled') return
