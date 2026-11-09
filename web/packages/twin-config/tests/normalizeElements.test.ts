@@ -131,6 +131,16 @@ describe('信息牌', () => {
     expect(style.grid).toBe(false)
   })
 
+  // ⚠ 样式表只认 data-columns 为整数的那几档：2.5 一个选择器都匹配不上，静默退成单列
+  it('列数取整，信息牌与部件详情同一口径', () => {
+    expect(panel({ style: { columns: 2.5 } }).style.columns).toBe(3)
+    expect(panel({ style: { columns: 2.4 } }).style.columns).toBe(2)
+    const detail = normalizeTwinConfig({
+      parts: [{ id: 'p', detail: { columns: 2.5 } }],
+    }).parts[0]?.detail
+    expect(detail?.columns).toBe(3)
+  })
+
   it('列数与高度夹进上下限，不认识的密度回落', () => {
     expect(panel({ style: { columns: 99 } }).style.columns).toBe(4)
     expect(panel({ style: { columns: 0 } }).style.columns).toBe(1)

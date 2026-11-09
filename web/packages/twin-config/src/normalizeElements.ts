@@ -6,6 +6,7 @@
  */
 import {
   boolOr,
+  clampedIntOr,
   clampedOr,
   entityId,
   normalizeList,
@@ -83,7 +84,13 @@ function normalizePanelStyle(raw: unknown): TwinPanelStyle {
     background: normalizeColorSpec(source.background) ?? defaults.background,
     width: clampedOr(source.width, defaults.width, 0, MAX_PANEL_WIDTH),
     height: clampedOr(source.height, defaults.height, 0, MAX_PANEL_HEIGHT),
-    columns: clampedOr(source.columns, defaults.columns, 1, MAX_PANEL_COLUMNS),
+    // ⚠ 取整：样式表只认整数档的 data-columns，2.5 会静默退成单列
+    columns: clampedIntOr(
+      source.columns,
+      defaults.columns,
+      1,
+      MAX_PANEL_COLUMNS,
+    ),
     density: oneOf(source.density, TWIN_PANEL_DENSITIES, defaults.density),
     scan: boolOr(source.scan, defaults.scan),
     corners: boolOr(source.corners, defaults.corners),

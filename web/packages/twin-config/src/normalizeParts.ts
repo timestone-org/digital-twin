@@ -11,6 +11,7 @@ import { normalizeFocusView } from './normalizeScene'
 import { DEFAULT_PANEL_STYLE } from './panelStyle'
 import {
   boolOr,
+  clampedIntOr,
   clampedOr,
   entityId,
   normalizeList,
@@ -245,6 +246,11 @@ export function normalizePartDetail(raw: unknown): TwinPartDetail {
       DEFAULT_PART_DETAIL.variant,
     ),
     accent: colorSpec(source.accent),
-    columns: clampedOr(source.columns, 1, 1, MAX_PANEL_COLUMNS),
+    columns: clampedIntOr(
+      source.columns,
+      DEFAULT_PART_DETAIL.columns,
+      1,
+      MAX_PANEL_COLUMNS,
+    ),
   }
 }
