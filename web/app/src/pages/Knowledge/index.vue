@@ -42,7 +42,7 @@ const page = useKnowledgePage()
 const toast = useToast()
 const confirm = useConfirm()
 
-useIngestPolling(page.documents, page.refreshDocuments)
+useIngestPolling(page.documents, page.pollDocuments)
 
 const isCreating = ref(false)
 const isSubmitting = ref(false)

@@ -137,8 +137,12 @@ export function messageOf(cause: unknown): string {
 /**
  * 重取当前库的文档。
  * @param state 页面状态
+ * @param isQuiet 后台轮询用：不转顶栏的刷新圈
  */
-export async function refreshDocuments(state: KnowledgeState): Promise<void> {
+export async function refreshDocuments(
+  state: KnowledgeState,
+  isQuiet = false,
+): Promise<void> {
   const baseId = state.selectedId.value
   if (baseId === '') {
     state.documentsRace.cancel()
@@ -146,7 +150,7 @@ export async function refreshDocuments(state: KnowledgeState): Promise<void> {
     state.isRefreshing.value = false
     return
   }
-  state.isRefreshing.value = true
+  if (!isQuiet) state.isRefreshing.value = true
   // ⚠ 慢回来的那一次由 `useRacedFetch` 丢掉：不丢的话，右边显示的是上一个库
   // 的文档，而两边看着都正常
   await state.documentsRace.run((signal) => listDocuments(baseId, signal), {
