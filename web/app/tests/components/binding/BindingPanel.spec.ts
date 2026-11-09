@@ -5,12 +5,19 @@
  *
  * 面板不认识「大屏节点」，入参只有槽声明与绑定：孪生子编辑器与大屏右栏共用它。
  */
-import { describe, expect, it } from 'vitest'
+import { describe, expect, it, vi } from 'vitest'
 import { mount } from '@vue/test-utils'
 import type { BindingPayload, BindingSpec } from '@dt/contracts'
 import { DtHelpTip, DtSelect } from '@dt/ui'
 
 import BindingPanel from '@/components/binding/BindingPanel.vue'
+
+// 点位行会去查点位名；这里只验摆槽，查不到即退回身份串
+vi.mock('@/api/collect', () => ({
+  listPoints: () =>
+    Promise.resolve({ items: [], page: 1, size: 200, total: 0 }),
+  getSource: () => Promise.reject(new Error('未接')),
+}))
 
 const SPECS: readonly BindingSpec[] = [
   { key: 'title', label: '标题', dataType: 'string', isRequired: true },

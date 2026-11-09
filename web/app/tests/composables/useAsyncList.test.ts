@@ -7,8 +7,14 @@ import { describe, expect, it, vi } from 'vitest'
 import { effectScope } from 'vue'
 import type { Page } from '@dt/contracts'
 
-import { TransportError } from '@/api/client'
-import { useAsyncList, type AsyncListPage } from '@/composables/useAsyncList'
+import { ERROR_CODES } from '@dt/contracts'
+
+import { BizError, TransportError } from '@/api/client'
+import {
+  describeError,
+  useAsyncList,
+  type AsyncListPage,
+} from '@/composables/useAsyncList'
 
 function page<T>(items: T[], total = items.length): Page<T> {
   return { items, page: 1, size: 20, total }
@@ -49,6 +55,46 @@ describe('useAsyncList 取数三态', () => {
     const list = useAsyncList(() => Promise.reject(new Error('boom')))
     await list.reload()
     expect(list.error.value).toBe('请求失败，请重试')
+  })
+})
+
+describe('describeError 字段级说明', () => {
+  it('参数校验失败时把 details 里逐字段的原因带出来', () => {
+    const caught = new BizError(
+      ERROR_CODES.validationFailed,
+      '参数校验失败',
+      400,
+      't',
+      [{ field: 'code', code: 'pattern', message: '只能是字母数字下划线' }],
+    )
+    expect(describeError(caught)).toBe(
+      '参数校验失败：code：只能是字母数字下划线',
+    )
+  })
+
+  it('字段太多时只列前三条并报剩余条数', () => {
+    const details = ['a', 'b', 'c', 'd', 'e'].map((field) => ({
+      field,
+      code: 'x',
+      message: '不合法',
+    }))
+    const caught = new BizError(
+      ERROR_CODES.validationFailed,
+      '参数校验失败',
+      400,
+      't',
+      details,
+    )
+    expect(describeError(caught)).toBe(
+      '参数校验失败：a：不合法；b：不合法；c：不合法；另有 2 项',
+    )
+  })
+
+  it('其他业务码的 details 有各自的用途，不往文案里拼', () => {
+    const caught = new BizError(41206, '还被 2 列引用', 409, 't', [
+      { field: 'columns[x]', code: 'in_use', message: 'x' },
+    ])
+    expect(describeError(caught)).toBe('还被 2 列引用')
   })
 })
 
@@ -191,6 +237,21 @@ describe('useAsyncList 分页', () => {
       { page: 1, size: 100 },
       expect.any(AbortSignal),
     )
+  })
+
+  it('翻页失败时保留总数，分页器不会把页码夹回第一页', async () => {
+    let fail = false
+    const list = useAsyncList(() =>
+      fail
+        ? Promise.reject(new TransportError(0, '无法连接服务器'))
+        : Promise.resolve(page(['a'], 50)),
+    )
+    await list.reload()
+    fail = true
+    await list.goToPage(3)
+    expect(list.error.value).toBe('无法连接服务器')
+    expect(list.total.value).toBe(50)
+    expect(list.pager.value.page).toBe(3)
   })
 
   it('改筛选条件也回第一页', async () => {

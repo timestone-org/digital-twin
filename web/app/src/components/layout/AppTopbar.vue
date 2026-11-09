@@ -56,6 +56,8 @@ onBeforeUnmount(() => {
       是要点的控件。两边同为 shrink-1 时按内容宽度按比例分摊，宽工具条的页面
       （大屏编辑器）在 1440 下就是「标题还剩一半、保存钮已经滚出屏外」。标题让
       到底（min-w-0）之后才轮到 actions 收缩，那时工具条自己的横向滚动才接手。
+      ⚠ 不设下限：留 8rem 时大屏编辑器在 1280 下保存钮就被挤进工具条滚动区；
+      标题压窄了全名靠 title 悬停看。
     -->
     <div
       class="relative z-10 flex min-w-0 items-center gap-3"
@@ -80,10 +82,15 @@ onBeforeUnmount(() => {
         <h1
           v-if="title"
           class="dt-glow-text truncate text-xl font-semibold tracking-wide"
+          :title="title"
         >
           {{ title }}
         </h1>
-        <p v-if="subtitle" class="truncate text-xs text-text-disabled">
+        <p
+          v-if="subtitle"
+          class="truncate text-xs text-text-disabled"
+          :title="subtitle"
+        >
           {{ subtitle }}
         </p>
       </div>

@@ -8,6 +8,7 @@ import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 import { flushPromises, mount } from '@vue/test-utils'
 import type { ConfigField } from '@dt/contracts'
 
+import { BizError } from '@/api/client'
 import ImageControl from '@/features/dashboard/controls/ImageControl.vue'
 import AssetPickerDialog from '@/components/assets/AssetPickerDialog.vue'
 import {
@@ -160,6 +161,25 @@ describe('素材引用', () => {
     expect(bare.text()).toContain(REF)
   })
 
+  it('素材已被删掉时说出来，而不是只摆一串引用', async () => {
+    api.getAsset.mockRejectedValueOnce(
+      new BizError(41504, '素材不存在', 404, 't'),
+    )
+    const wrapper = mountImage(REF)
+    await flushPromises()
+
+    expect(wrapper.text()).toContain('素材已被删除')
+    expect(wrapper.get('[title]').attributes('title')).toBe(REF)
+  })
+
+  it('网络抖动不算被删：只退回引用串', async () => {
+    api.getAsset.mockRejectedValueOnce(new Error('网络错误'))
+    const wrapper = mountImage(REF)
+    await flushPromises()
+
+    expect(wrapper.text()).not.toContain('素材已被删除')
+  })
+
   it('不是引用就不去问名字，省掉一次没人要的请求', () => {
     mountImage('https://example.com/a.png')
 
@@ -177,6 +197,17 @@ describe('从素材库挑图', () => {
     await flushPromises()
 
     expect(lastUpdate(wrapper)).toStrictEqual([REF, true])
+  })
+
+  it('打开挑选器时把当前引用交过去预选', () => {
+    expect(
+      mountImage(REF).getComponent(AssetPickerDialog).props('current'),
+    ).toBe(REF)
+    expect(
+      mountImage('https://example.com/a.png')
+        .getComponent(AssetPickerDialog)
+        .props('current'),
+    ).toBeUndefined()
   })
 
   it('挑选器只挑图片：挑到模型是配错而不是自由', () => {

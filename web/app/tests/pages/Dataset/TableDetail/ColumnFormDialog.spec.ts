@@ -11,6 +11,7 @@ import type { DatasetColumn, DatasetFormulaValidation } from '@dt/contracts'
 import { ERROR_CODES } from '@dt/contracts'
 
 import { BizError } from '@/api/client'
+import * as collect from '@/api/collect'
 import * as dataset from '@/api/dataset'
 import ColumnFormDialog from '@/pages/Dataset/TableDetail/components/ColumnFormDialog.vue'
 import { VALIDATE_DEBOUNCE_MS } from '@/pages/Dataset/TableDetail/scripts/useFormulaValidation'
@@ -75,6 +76,14 @@ beforeEach(() => {
   vi.spyOn(dataset, 'updateDatasetColumn').mockResolvedValue(column())
   vi.spyOn(dataset, 'getDatasetFormulaCatalog').mockResolvedValue(CATALOG)
   vi.spyOn(dataset, 'validateDatasetFormula').mockResolvedValue(validation())
+  // 点位列会去查点位名；这里只验表单，查不到即退回身份串，且不发真实请求
+  vi.spyOn(collect, 'listPoints').mockResolvedValue({
+    items: [],
+    page: 1,
+    size: 200,
+    total: 0,
+  })
+  vi.spyOn(collect, 'getSource').mockRejectedValue(new Error('未接'))
 })
 
 enableAutoUnmount(afterEach)

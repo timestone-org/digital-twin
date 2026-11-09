@@ -35,7 +35,9 @@ const parsed = computed(() => parseDatasetBindingKey(props.datasetKey))
 
 const tables = ref<readonly DatasetTableSummary[]>([])
 const columns = ref<readonly DatasetColumn[]>([])
-const failure = ref('')
+// 两处取数各报各的：列没取到时台账下拉是满的，说成「清单没取到」会指错地方
+const tablesFailure = ref('')
+const columnsFailure = ref('')
 
 const columnsFetch = useRacedFetch()
 
@@ -72,7 +74,7 @@ async function loadTables(): Promise<void> {
     const page = await dataset.listDatasetTables({ size: TABLE_PAGE_SIZE })
     tables.value = page.items
   } catch (caught) {
-    failure.value = describeError(caught)
+    tablesFailure.value = describeError(caught)
   }
 }
 
@@ -80,14 +82,14 @@ async function loadTables(): Promise<void> {
 function loadColumns(id: string): void {
   columnsFetch.cancel()
   columns.value = []
-  failure.value = ''
+  columnsFailure.value = ''
   if (id === '') return
   void columnsFetch.run(() => dataset.listDatasetColumns(id), {
     ok: (list) => {
       columns.value = list
     },
     fail: (caught: unknown) => {
-      failure.value = describeError(caught)
+      columnsFailure.value = describeError(caught)
     },
     settled: () => undefined,
   })
@@ -133,7 +135,10 @@ onMounted(() => {
       @update:model-value="pickColumn"
     />
   </DtField>
-  <DtNotice v-if="failure" intent="warning" icon="alert-triangle">
-    台账清单没取到：{{ failure }}。已配好的绑定不受影响。
+  <DtNotice v-if="tablesFailure" intent="warning" icon="alert-triangle">
+    台账清单没取到：{{ tablesFailure }}。已配好的绑定不受影响。
+  </DtNotice>
+  <DtNotice v-else-if="columnsFailure" intent="warning" icon="alert-triangle">
+    这张台账的列没取到：{{ columnsFailure }}。已配好的绑定不受影响。
   </DtNotice>
 </template>

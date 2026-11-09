@@ -52,10 +52,12 @@ async function openAll(wrapper: Wrapper): Promise<void> {
   }
 }
 
+/** 按字段名找数字控件；单位并进了标签（「圆角 (px)」），故按名字前缀认。 */
 function numField(wrapper: Wrapper, label: string) {
-  const found = wrapper
-    .findAllComponents(DtNumberInput)
-    .find((item) => item.props('label') === label)
+  const found = wrapper.findAllComponents(DtNumberInput).find((item) => {
+    const shown = String(item.props('label'))
+    return shown === label || shown.startsWith(`${label} (`)
+  })
   if (!found) throw new Error(`未找到数字控件：${label}`)
   return found
 }

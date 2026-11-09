@@ -52,6 +52,22 @@ export interface CardField {
   help?: string
 }
 
+// 提示行开头的单位：px 或 秒，后面可再跟一句「，说明」
+const UNIT_HINT = /^(px|秒)(?:，(.+))?$/
+
+/**
+ * 数值控件的标签与提示行：单位并进标签（「圆角 (px)」），提示行只留单位之后的说明。
+ * @param field 一条可配字段
+ */
+export function unitLabelled(field: CardField): {
+  label: string
+  hint: string | undefined
+} {
+  const matched = UNIT_HINT.exec(field.hint ?? '')
+  if (matched === null) return { label: field.label, hint: field.hint }
+  return { label: `${field.label} (${matched[1] ?? ''})`, hint: matched[2] }
+}
+
 /**
  * 边框样式的选项**从渲染侧的目录推导**，面板不另抄一份：抄一份就一定会漂成
  * 「面板能选、渲染静默回落」（DASHBOARD_DESIGN §5.3 ⑤）。
