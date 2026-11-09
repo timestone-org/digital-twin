@@ -15,7 +15,7 @@ import type { OpcuaInstance } from '@dt/contracts'
 import * as opcua from '@/api/opcua'
 import { describeError } from '@/composables/useAsyncList'
 
-import { pendingSummary } from './pendingFields'
+import { pendingSummary } from '../../scripts/pendingFields'
 
 export type InstanceVerb = 'start' | 'stop' | 'restart'
 

@@ -8,7 +8,7 @@ import {
   pendingFieldLabel,
   pendingFieldLabels,
   pendingSummary,
-} from '@/pages/Tools/OpcuaServers/scripts/pendingFields'
+} from '@/pages/Tools/scripts/pendingFields'
 
 describe('字段文案', () => {
   it('认识的字段翻成中文', () => {

@@ -26,7 +26,7 @@ import { AppShell } from '@/components/layout'
 import { useAsyncList } from '@/composables/useAsyncList'
 import { useViewMode } from '@/composables/useViewMode'
 import InstanceFormDialog from './components/InstanceFormDialog.vue'
-import InstanceStatusTag from './components/InstanceStatusTag.vue'
+import InstanceStatusTag from '../components/InstanceStatusTag.vue'
 import { useInstanceOps } from './scripts/useInstanceOps'
 
 const COLUMNS: readonly DtDataColumn[] = [
