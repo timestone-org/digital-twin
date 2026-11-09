@@ -26,6 +26,8 @@ const NEW_NODE_CASCADE_PX = 24
 const NEW_NODE_CASCADE_LIMIT = 12
 /** 一串错开排满之后，下一串整体右移这么多再从头错开，免得全压在同一点。 */
 const NEW_NODE_WRAP_PX = 160
+/** 串数封顶后回到第一串：落点不随节点数无限右移出设计稿。 */
+const NEW_NODE_WRAP_LIMIT = 5
 
 /** 节点几何的可改部分。 */
 export interface NodeGeometry {
@@ -104,7 +106,9 @@ export function createNode(input: {
   const step =
     (input.siblingCount % NEW_NODE_CASCADE_LIMIT) * NEW_NODE_CASCADE_PX
   const wrap =
-    Math.floor(input.siblingCount / NEW_NODE_CASCADE_LIMIT) * NEW_NODE_WRAP_PX
+    (Math.floor(input.siblingCount / NEW_NODE_CASCADE_LIMIT) %
+      NEW_NODE_WRAP_LIMIT) *
+    NEW_NODE_WRAP_PX
   const moment = draftMoment()
   return {
     id: newClientUuid(),

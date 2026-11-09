@@ -161,6 +161,23 @@ describe('新建节点', () => {
     expect(new Set(spots).size).toBe(20)
   })
 
+  // ⚠ 换串不封顶的话落点随节点数一路右移：上百个节点的屏，新模块落到设计稿外面去
+  it('节点再多，新落点也不越过设计稿左半边', () => {
+    const xs = Array.from(
+      { length: 200 },
+      (_, count) =>
+        createNode({
+          dashboardId: 'd1',
+          manifest: MANIFEST,
+          parentId: null,
+          siblingCount: count,
+          zIndex: count,
+        }).x,
+    )
+
+    expect(Math.max(...xs)).toBeLessThan(1000)
+  })
+
   it('同层已有节点时错开落点，不与已有节点完全重叠', () => {
     const first = createNode({
       dashboardId: 'd1',
