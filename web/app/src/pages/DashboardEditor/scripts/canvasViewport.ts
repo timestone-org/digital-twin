@@ -184,6 +184,8 @@ export function panWithPointer(
 /**
  * 空格键态挂在 window 上：指针可能停在画布外才按下空格再移回来。
  * ⚠ 失焦一律复位——切到别的窗口时收不到 keyup，回来会卡在平移态。
+ * ⚠ 平移用的空格要吞掉默认动作：刚点过的工具条按钮还握着焦点，松开空格会再「点」
+ * 它一次（撤销、重新加载），焦点在页面上时还会滚动视口。
  * @param onChange 空格按下为真、松开或失焦为假
  */
 export function listenSpaceKey(
@@ -191,10 +193,18 @@ export function listenSpaceKey(
   onChange: (isHeld: boolean) => void,
 ): void {
   const { signal } = controller
+  let isHeld = false
+  const release = (): void => {
+    isHeld = false
+    onChange(false)
+  }
   window.addEventListener(
     'keydown',
     (event: KeyboardEvent) => {
-      if (event.code !== 'Space' || event.repeat || isFormFocused()) return
+      if (event.code !== 'Space' || isFormFocused()) return
+      event.preventDefault()
+      if (event.repeat) return
+      isHeld = true
       onChange(true)
     },
     { signal },
@@ -202,11 +212,13 @@ export function listenSpaceKey(
   window.addEventListener(
     'keyup',
     (event: KeyboardEvent) => {
-      if (event.code === 'Space') onChange(false)
+      if (event.code !== 'Space') return
+      if (isHeld) event.preventDefault()
+      release()
     },
     { signal },
   )
-  window.addEventListener('blur', () => onChange(false), { signal })
+  window.addEventListener('blur', release, { signal })
 }
 
 /** 视口的运行态：组合式函数只持有它，动作都是下面这几个函数。 */
