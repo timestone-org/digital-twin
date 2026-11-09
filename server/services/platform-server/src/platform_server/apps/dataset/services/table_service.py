@@ -29,12 +29,16 @@ from platform_server.apps.dataset.schemas import (
     TableUpdateIn,
 )
 from platform_server.apps.dataset.services.changes import given_changes
+from platform_server.apps.dataset.services.integrity import flush_unique
 from platform_server.apps.dataset.services.presenters import (
     to_table_out,
     to_table_summary_out,
 )
 
 _logger = get_logger("platform.dataset.table")
+
+# 台账编码的唯一约束名，命名规约生成
+TABLE_CODE_CONSTRAINT = "uq_dataset_tables_code"
 
 
 async def list_tables(
@@ -101,7 +105,11 @@ async def create_table(
         is_enabled=payload.is_enabled,
     )
     table_crud.add(session, table)
-    await session.flush()
+    await flush_unique(
+        session,
+        constraint=TABLE_CODE_CONSTRAINT,
+        taken=DatasetTableCodeTaken(f"台账编码已被占用：{payload.code}"),
+    )
     _logger.info("dataset_table_created", "台账已创建", table_id=str(table.id))
     return to_table_out(table, columns=[])
 

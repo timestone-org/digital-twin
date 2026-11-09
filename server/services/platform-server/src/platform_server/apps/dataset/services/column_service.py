@@ -34,10 +34,14 @@ from platform_server.apps.dataset.services.formula_compile import (
     ColumnDraft,
     compile_for_save,
 )
+from platform_server.apps.dataset.services.integrity import flush_unique
 from platform_server.apps.dataset.services.presenters import to_column_out
 from platform_server.apps.dataset.services.table_service import require_table
 
 _logger = get_logger("platform.dataset.column")
+
+# 同表列 key 的唯一约束名，命名规约生成
+COLUMN_KEY_CONSTRAINT = "uq_dataset_columns_table_id_key"
 
 
 @dataclass(frozen=True)
@@ -109,7 +113,11 @@ async def create_column(
         table.id, payload, await _order_of(session, payload, table.id), deps
     )
     column_crud.add(session, column)
-    await session.flush()
+    await flush_unique(
+        session,
+        constraint=COLUMN_KEY_CONSTRAINT,
+        taken=DatasetColumnKeyTaken(f"这张台账下已有同名列：{payload.key}"),
+    )
     _logger.info(
         "dataset_column_created", "台账列已创建", column_id=str(column.id)
     )

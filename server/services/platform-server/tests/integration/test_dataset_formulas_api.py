@@ -7,6 +7,7 @@
 """
 
 from typing import Any
+from unittest.mock import AsyncMock
 
 import httpx
 import pytest
@@ -544,3 +545,17 @@ async def test_a_misspelt_parameter_field_is_refused_not_ignored(
     )
 
     assert response.status_code == HTTP_BAD_REQUEST
+
+
+async def test_a_code_taken_by_a_concurrent_create_is_still_a_conflict(
+    app_client: httpx.AsyncClient, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    # ⚠ 先查后插挡不住两个同时到的请求：后到的那个撞唯一约束，不该是 500
+    await create_formula(app_client)
+    monkeypatch.setattr(
+        formula_crud, "get_by_code", AsyncMock(return_value=None)
+    )
+
+    response = await app_client.post(FORMULAS, json=formula_body())
+
+    assert response.status_code == HTTP_CONFLICT

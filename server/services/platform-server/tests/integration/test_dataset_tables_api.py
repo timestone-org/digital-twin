@@ -7,6 +7,7 @@
 
 import uuid
 from typing import Any
+from unittest.mock import AsyncMock
 
 import httpx
 import pytest
@@ -27,7 +28,7 @@ from integration.dataset_helpers import (
 )
 from lib.utils.ids import uuid7
 from lib.utils.timeutils import utcnow
-from platform_server.apps.dataset.crud import record_crud
+from platform_server.apps.dataset.crud import record_crud, table_crud
 from platform_server.apps.dataset.models import DatasetRecord
 
 pytestmark = pytest.mark.requires_postgres
@@ -285,3 +286,16 @@ async def test_a_retention_beyond_a_century_is_refused(
 
     assert created.status_code == HTTP_BAD_REQUEST
     assert updated.status_code == HTTP_BAD_REQUEST
+
+
+async def test_a_code_taken_by_a_concurrent_create_is_still_a_conflict(
+    app_client: httpx.AsyncClient, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    # ⚠ 先查后插挡不住两个同时到的请求：后到的那个撞唯一约束，不该是 500
+    await create_table(app_client)
+    monkeypatch.setattr(table_crud, "get_by_code", AsyncMock(return_value=None))
+
+    response = await app_client.post(TABLES, json=table_body())
+
+    assert response.status_code == HTTP_CONFLICT
+    assert code_of(response) == TABLE_CODE_TAKEN

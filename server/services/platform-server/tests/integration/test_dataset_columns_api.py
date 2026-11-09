@@ -6,6 +6,7 @@
 """
 
 from typing import Any
+from unittest.mock import AsyncMock
 
 import httpx
 import pytest
@@ -26,6 +27,7 @@ from integration.dataset_helpers import (
     data_of,
 )
 from lib.utils.ids import uuid7
+from platform_server.apps.dataset.crud import column_crud
 
 pytestmark = pytest.mark.requires_postgres
 
@@ -402,3 +404,19 @@ async def test_a_column_referenced_from_another_table_refuses_to_be_deleted(
     assert _detail_fields(response) == ["columns[plant.引用]"]
     forced = await app_context.client.delete(url, params={"force": "true"})
     assert forced.status_code == HTTP_NO_CONTENT
+
+
+async def test_a_key_taken_by_a_concurrent_create_is_still_a_conflict(
+    app_client: httpx.AsyncClient, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    # ⚠ 先查后插挡不住两个同时到的请求：后到的那个撞唯一约束，不该是 500
+    table = await create_table(app_client)
+    await create_column(app_client, table["id"])
+    monkeypatch.setattr(column_crud, "get_by_key", AsyncMock(return_value=None))
+
+    response = await app_client.post(
+        columns_url(table["id"]), json=column_body()
+    )
+
+    assert response.status_code == HTTP_CONFLICT
+    assert code_of(response) == COLUMN_KEY_TAKEN
