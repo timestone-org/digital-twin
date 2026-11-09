@@ -82,16 +82,20 @@ async function probe(provider: LlmProvider): Promise<void> {
 
 async function remove(provider: LlmProvider): Promise<void> {
   const inUse = provider.assigned_purposes.length
+  // 删不掉时只说原因，与角色页「下面还有账号」同一个说法；不弹一个两颗键同义的框
+  if (inUse > 0) {
+    toast.warning(
+      `「${provider.name}」还被 ${inUse} 个用途指着，删不掉：先把那些用途改指别处。`,
+    )
+    return
+  }
   const ok = await confirm.ask({
     title: '删除供应商',
-    message:
-      inUse > 0
-        ? `「${provider.name}」还被 ${inUse} 个用途指着，删不掉：先把那些用途改指别处。`
-        : `将删除「${provider.name}」及它的密钥，且不可恢复。`,
-    confirmText: inUse > 0 ? '知道了' : '删除',
-    danger: inUse === 0,
+    message: `将删除「${provider.name}」及它的密钥，且不可恢复。`,
+    confirmText: '删除',
+    danger: true,
   })
-  if (!ok || inUse > 0) return
+  if (!ok) return
   try {
     await catalog.remove(provider)
     await afterWrite('供应商已删除')

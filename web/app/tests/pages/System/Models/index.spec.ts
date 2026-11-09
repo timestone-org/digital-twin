@@ -238,7 +238,9 @@ describe('模型管理页', () => {
     const wrapper = await renderWithHosts()
     await click(wrapper, '删除')
     expect(document.body.textContent).toContain('先把那些用途改指别处')
-    await clickInConfirm('知道了')
+    // 与角色页同一个说法：只提示原因，不弹一个「取消 / 知道了」同义的确认框
+    expect(document.body.querySelector('[role="alertdialog"]')).toBeNull()
+    expect(document.body.textContent).not.toContain('知道了')
     expect(remove).not.toHaveBeenCalled()
   })
 
