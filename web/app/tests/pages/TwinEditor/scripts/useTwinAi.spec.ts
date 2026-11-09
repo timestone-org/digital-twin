@@ -111,6 +111,7 @@ function bindingsOf(
     drop: vi.fn(),
     removeRow: vi.fn(),
     pickingFieldKey: ref<string | null>(null),
+    pickingLabel: computed(() => null),
     pickPoint: vi.fn(),
     closePicker: vi.fn(),
     liveValues: computed(() => undefined),

@@ -85,7 +85,10 @@ async function downloadModel(
   onProgress: ((event: ProgressEvent) => void) | undefined,
   signal: AbortSignal | undefined,
 ): Promise<ArrayBuffer> {
-  const response = await fetch(url, { credentials: 'same-origin', signal })
+  const response = await fetch(url, {
+    credentials: 'same-origin',
+    signal: signal ?? null,
+  })
   if (!response.ok) {
     throw new Error(`模型下载失败：HTTP ${String(response.status)}`)
   }

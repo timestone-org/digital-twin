@@ -42,11 +42,11 @@ it('收起后换选中不再弹回来，下次打开编辑器也还收着', asyn
   const props = {
     node: null,
     config,
-    selection: { kind: 'parts', id: 'pump' },
+    selection: { kind: 'parts' as const, id: 'pump' },
     animation: null,
-    testMode: 'live',
+    testMode: 'live' as const,
     bindings: [],
-    readBinding: () => () => ({ state: 'pending' }),
+    readBinding: () => () => ({ state: 'pending' as const }),
   }
   const wrapper = mount(TwinConfigPreview, {
     props,

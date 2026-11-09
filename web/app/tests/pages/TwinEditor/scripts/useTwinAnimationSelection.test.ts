@@ -9,7 +9,7 @@ import {
   type TwinSelection,
 } from '@/pages/TwinEditor/scripts/types'
 
-const CLIP = { name: 'spin', duration: 1 }
+const CLIP = { name: 'spin', duration: 1, nodes: [], ambiguous: false }
 
 function configWith(asset: string, clips: string[] = []): TwinConfig {
   return normalizeTwinConfig({

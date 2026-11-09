@@ -51,7 +51,7 @@ vi.mock('@dt/three-core', async (importOriginal) => {
   return { ...actual, EditorScene: FakeEditorScene }
 })
 
-function payload(config: Partial<TwinConfig>): DashboardPayload {
+function payload(config: Record<string, unknown>): DashboardPayload {
   return {
     id: 'd1',
     projectId: 'p1',
@@ -89,7 +89,7 @@ function payload(config: Partial<TwinConfig>): DashboardPayload {
 }
 
 async function setup(
-  config: Partial<TwinConfig> = {},
+  config: Record<string, unknown> = {},
   bindings: BindingPayload[] = [],
 ) {
   const data = payload(config)
