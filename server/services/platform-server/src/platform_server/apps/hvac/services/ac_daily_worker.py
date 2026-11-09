@@ -105,8 +105,9 @@ class DailyScheduler:
         # 前后重启时，「从下一次算起」会**静默丢掉整整一天**，而重复跑一天
         # 只是白读一遍外库（整窗替换，结果一样）。宁可多跑不可少跑
         yesterday = today - timedelta(days=1)
-        self._last_day = today
+        # ⚠ 入队成功之后才记成已投：先记的话入队一失败，这一天就永久丢了
         await self._enqueue(yesterday)
+        self._last_day = today
 
     def stop(self) -> None:
         """停收新活。⚠ 只置位，不等待——等在 `drain` 里做。"""
@@ -311,7 +312,7 @@ class DailyConsumer:
             self._idle.set()
 
     async def _process(self, message: ac_daily_queue.DailyMessage) -> None:
-        """抽一天。失败只记日志——不重试，下一晚会带着更完整的数据再来一次。
+        """抽一天。失败只记日志——不重试，这一天要靠全量重算才补得回来。
 
         Args: message。
         """
