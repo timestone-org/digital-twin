@@ -404,7 +404,7 @@ def _check_unreferenced(
     if not parts:
         return
     raise DatasetFormulaInUse(
-        f"删不了：{'；'.join(parts)}。请先把它们改成别的算法，或停用本公式"
+        f"删不了：{'；'.join(parts)}。请先把它们改成别的算法"
     )
 
 
