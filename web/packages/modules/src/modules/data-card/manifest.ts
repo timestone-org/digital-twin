@@ -38,11 +38,6 @@ const KIND_FIELD: ConfigField = {
 }
 
 /**
- * 部件表的行字段：档位下拉 + 全部内置部件的字段并集。
- * ⚠ 并集靠 `when: { key: 'kind' }` 各露各的，属性面板与助手因此白拿——
- * 这条路完全落在现有机制内，一行适配代码都不用写（§3.1）。
- */
-/**
  * 这一件在格里怎么占位。与 `kind` 一样是内建字段，不属于任何一档，故不前缀化。
  * ⚠ 成行规则在 `cardParts/lines.ts`：整行独占；连续的左件聚成左簇、右件聚成右簇；
  * 右件之后再来左件就起新的一行。
@@ -61,6 +56,11 @@ const PLACE_FIELD: ConfigField = {
   ],
 }
 
+/**
+ * 部件表的行字段：档位下拉 + 全部内置部件的字段并集。
+ * ⚠ 并集靠 `when: { key: 'kind' }` 各露各的，属性面板与助手因此白拿——
+ * 这条路完全落在现有机制内，一行适配代码都不用写（§3.1）。
+ */
 const PART_ITEM_SCHEMA: ConfigField[] = [
   KIND_FIELD,
   PLACE_FIELD,
@@ -431,7 +431,7 @@ export default defineModule({
   ownsStatusDisplay: true,
   // 点某一格上抛这一格的联动值（配了联动值的格才抛）
   emitsInteractions: true,
-  // 整块可点由宿主接管；格内点击在模板里 `.stop`，否则同一次点击会被兜底再抛一次
+  // 整块可点由宿主接管；格内点击仅在配了联动值时阻止冒泡，否则同一次点击会被兜底再抛一次
   hostClickable: true,
   bindingRowLabels: (config) =>
     rowLabels(readCells(config[DATA_CARD_CELLS_KEY])),

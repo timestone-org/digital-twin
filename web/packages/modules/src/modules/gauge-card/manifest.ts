@@ -638,7 +638,7 @@ export default defineModule({
   ownsStatusDisplay: true,
   // 点某一个仪表上抛它的联动值（配了联动值的才抛）
   emitsInteractions: true,
-  // 整块可点由宿主接管；仪表内点击在模板里 `.stop`，否则同一次点击会被兜底再抛一次
+  // 整块可点由宿主接管；仪表内点击仅在配了联动值时阻止冒泡，否则同一次点击会被兜底再抛一次
   hostClickable: true,
   bindingRowLabels: (config) =>
     rowLabels(readGaugeItems(config[GAUGE_ITEMS_KEY])),
