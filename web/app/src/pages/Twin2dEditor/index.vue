@@ -221,9 +221,14 @@ watch(
 const backTo = computed(() => `/dashboards/${dashboardId.value}/edit`)
 
 async function save(): Promise<void> {
+  // ⚠ 上一次还在路上时再按一次是「忙」，不是「失败」：报红会让人以为没存上
+  if (page.saving.value) return
   const ok = await page.save()
   if (ok) toast.success('2D 孪生已保存')
-  else toast.error(page.conflict.value ?? '保存失败，请重试')
+  else
+    toast.error(
+      page.conflict.value ?? page.saveError.value ?? '保存失败，请重试',
+    )
 }
 
 /** 冲突或加载失败之后的出口：整份重取，本地未保存的改动就此丢弃。 */

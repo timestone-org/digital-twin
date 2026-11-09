@@ -26,6 +26,9 @@ export const TWIN_2D_AI_STARTERS: readonly string[] = [
   '把1号水箱的标题改成冷水箱，并检查配置',
 ]
 
+/** 上一次保存还在路上时告诉模型的话：是忙，不是失败。 */
+export const TWIN_2D_SAVE_BUSY_MESSAGE = '上一次保存还没结束，稍后再存一次'
+
 /**
  * 装上助手面板。须在 setup 内调用。
  * @param page 这一页的取数、节点与落库
@@ -72,6 +75,12 @@ export function useTwin2dAi(
  * @param page 这一页的落库
  */
 async function saveOnce(page: Twin2dEditorPage): Promise<SaveOutcome> {
+  if (page.saving.value) {
+    return { isSaved: false, message: TWIN_2D_SAVE_BUSY_MESSAGE }
+  }
   const isSaved = await page.save()
-  return { isSaved, message: page.conflict.value }
+  return {
+    isSaved,
+    message: isSaved ? null : (page.conflict.value ?? page.saveError.value),
+  }
 }

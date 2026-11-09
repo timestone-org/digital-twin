@@ -143,6 +143,8 @@ interface Controls {
   loading: Ref<boolean>
   error: Ref<string | null>
   conflict: Ref<string | null>
+  saving: Ref<boolean>
+  saveError: Ref<string | null>
   save: ReturnType<typeof vi.fn<() => Promise<boolean>>>
   reload: ReturnType<typeof vi.fn<() => Promise<void>>>
   dispose: ReturnType<typeof vi.fn<() => void>>
@@ -156,6 +158,8 @@ function makeControls(): Controls {
   const loading = ref(false)
   const error = ref<string | null>(null)
   const conflict = ref<string | null>(null)
+  const saving = ref(false)
+  const saveError = ref<string | null>(null)
   const save = vi.fn<() => Promise<boolean>>(() => Promise.resolve(true))
   const reload = vi.fn<() => Promise<void>>(() => Promise.resolve())
   const dispose = vi.fn<() => void>()
@@ -165,14 +169,26 @@ function makeControls(): Controls {
     node: computed(() => node()),
     targetSize: computed(() => ({ width: 640, height: 360 })),
     loading,
-    saving: ref(false),
+    saving,
     error: computed(() => error.value),
     conflict,
     save,
     reload,
+    saveError,
     dispose,
   }
-  return { doc, loading, error, conflict, save, reload, dispose, page }
+  return {
+    doc,
+    loading,
+    error,
+    conflict,
+    saving,
+    saveError,
+    save,
+    reload,
+    dispose,
+    page,
+  }
 }
 
 let controls = makeControls()
@@ -346,6 +362,36 @@ describe('顶栏动作', () => {
     await flushPromises()
 
     expect(toastError).toHaveBeenCalledWith('保存失败，请重试')
+  })
+
+  it('保存失败时把失败原因原样弹出来，编辑器留在原地', async () => {
+    controls.save.mockImplementation(() => {
+      controls.saveError.value = '服务暂时不可用'
+      return Promise.resolve(false)
+    })
+    const wrapper = mountPage()
+    await dirty(wrapper)
+
+    await wrapper.find('[data-test="save"]').trigger('click')
+    await flushPromises()
+
+    expect(toastError).toHaveBeenCalledWith('服务暂时不可用')
+    expect(wrapper.find('[data-test="canvas"]').exists()).toBe(true)
+  })
+
+  // ⚠ 上一次还在路上时再按一次 ⌘S 是「忙」：报红的话人会以为没存上，而第一次随后就成了
+  it('保存还没结束时再按 ⌘S 不报失败，也不再发一次', async () => {
+    controls.saving.value = true
+    const wrapper = mountPage()
+    await dirty(wrapper)
+
+    window.dispatchEvent(
+      new KeyboardEvent('keydown', { key: 's', ctrlKey: true }),
+    )
+    await flushPromises()
+
+    expect(controls.save).not.toHaveBeenCalled()
+    expect(toastError).not.toHaveBeenCalled()
   })
 
   it('版本撞了就把冲突那句话原样弹出来', async () => {
