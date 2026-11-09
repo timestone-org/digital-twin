@@ -122,6 +122,11 @@ export function useCanvasPage() {
     stopChecking: state.doc.stopChecking,
   })
 
+  // 撤销 / 重做整份换图不经过选中，删掉的 id 要从选中集里收掉
+  watch([state.graph.nodeIds, state.graph.edgeIds], ([nodes, edges]) =>
+    state.selection.prune(nodes, edges),
+  )
+
   // 节点一跑成，就把它的摘要拉回来——卡片上那行数字要靠它
   watch(
     () => state.runner.run.value?.nodes.map((node) => node.status).join(','),

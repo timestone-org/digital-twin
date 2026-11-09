@@ -588,6 +588,26 @@ describe('画布页', () => {
     expect(wrapper.find('.dt-ml-node').exists()).toBe(true)
   })
 
+  it('撤销掉刚加的节点再按 Delete，不白压一步撤销、也不丢重做', async () => {
+    stubApi()
+    signIn(WRITER)
+    const wrapper = open()
+    await flushPromises()
+    await wrapper.findAll('.dt-ml-palette__item')[0]?.trigger('click')
+    await flushPromises()
+    const key = (init: KeyboardEventInit) =>
+      window.dispatchEvent(new KeyboardEvent('keydown', init))
+
+    key({ key: 'z', ctrlKey: true })
+    await flushPromises()
+    key({ key: 'Delete' })
+    await flushPromises()
+    key({ key: 'z', ctrlKey: true, shiftKey: true })
+    await flushPromises()
+
+    expect(wrapper.find('.dt-ml-node').exists()).toBe(true)
+  })
+
   it('跑起来之后顶栏给进度，不然卡死与慢跑长得一样', async () => {
     stubApi()
     const running = {
