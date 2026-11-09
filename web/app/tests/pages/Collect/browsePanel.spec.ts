@@ -757,6 +757,33 @@ describe('导入选中', () => {
     expect(toastWarning).not.toHaveBeenCalled()
   })
 
+  it('⚠ 部分批次没进去时弹窗留着失败的那些，勾选也只剩它们', async () => {
+    const leaves = Array.from({ length: 205 }, (_, index) => leaf(`P${index}`))
+    const wrapper = await render({
+      [ROOT]: [branch('Line1')],
+      'ns=2;s=Line1': leaves,
+    })
+    vi.spyOn(collectApi, 'createPoints')
+      .mockImplementationOnce((input) =>
+        Promise.resolve({
+          items: input.items.map((item) => point(item.address, item.code)),
+          address_checks: [],
+        }),
+      )
+      .mockRejectedValueOnce(new Error('编码冲突'))
+    await check(box(wrapper, 'Line1'))
+    await openImport(wrapper)
+    dialogButton(/^导入 \d+ 个节点$/)?.click()
+    await flushPromises()
+    await flushPromises()
+
+    expect(dialogButton(/^导入 5 个节点$/)).toBeDefined()
+    expect(wrapper.text()).toContain('已选 5')
+    expect(toastError).toHaveBeenCalledWith(
+      expect.stringContaining('第 2 批没进去'),
+    )
+  })
+
   it('⚠ 编码改成不合法的就不许提交：后端一批原子，一条不合规是整批被拒', async () => {
     const wrapper = await render({ [ROOT]: [leaf('Temp')] })
     const create = vi.spyOn(collectApi, 'createPoints').mockResolvedValue({

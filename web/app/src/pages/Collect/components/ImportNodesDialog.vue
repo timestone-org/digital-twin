@@ -99,6 +99,16 @@ watch(
   { immediate: true },
 )
 
+// 开着时草稿被换掉（部分批次失败后只留没进去的那些）：换行，统一默认照旧
+watch(
+  () => props.drafts,
+  (drafts) => {
+    if (!props.modelValue) return
+    rows.value = drafts.map((draft) => ({ ...draft }))
+    page.value = 1
+  },
+)
+
 const count = computed(() => rows.value.length)
 const problems = computed(() => codeProblems(rows.value, props.takenCodes))
 const typeless = computed(

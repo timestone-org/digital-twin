@@ -104,15 +104,38 @@ async function openImport(): Promise<void> {
   importOpen.value = true
 }
 
-/** 提交批量导入；成功后清空选择并关闭弹窗，失败逐批提示、不清空方便重试。 */
+/**
+ * 只留下没进去的那几批：弹窗里换成它们的草稿（保留改过的编码），树上也只勾它们。
+ * @param items 这次提交的全部点位
+ * @param failedCodes 失败批次里的编码
+ */
+function keepFailed(
+  items: readonly CollectPointItemInput[],
+  failedCodes: ReadonlySet<string>,
+): void {
+  const byAddress = new Map(pending.value.map((one) => [one.address, one]))
+  const failed = items.filter((item) => failedCodes.has(item.code))
+  pending.value = failed.map((item) => ({
+    address: item.address,
+    name: item.name,
+    fieldType: byAddress.get(item.address)?.fieldType ?? null,
+    code: item.code,
+  }))
+  tree.selected.value = new Set(failed.map((item) => item.address))
+}
+
+/** 提交批量导入；全部成功才清空选择并关弹窗，失败的批次留在弹窗里方便重试。 */
 async function doImport(items: CollectPointItemInput[]): Promise<void> {
   if (busy.value) return
   busy.value = true
   try {
     const outcome = await importPoints(props.source.id, items)
     if (outcome.created > 0) {
-      importOpen.value = false
-      tree.clear()
+      if (outcome.failures.length === 0) {
+        importOpen.value = false
+        tree.clear()
+      } else
+        keepFailed(items, new Set(outcome.failures.flatMap((f) => f.codes)))
       await loadTaken()
       emit('imported', outcome.created)
     }
