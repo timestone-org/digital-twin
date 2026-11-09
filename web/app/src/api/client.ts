@@ -165,7 +165,7 @@ async function readEnvelope<T>(
     throw malformedError(response.status)
   }
   if (!isEnvelope(body)) throw malformedError(response.status)
-  // 全仓唯一一处对后端数据的断言：形状由 openapi 契约测试锁，见
+  // HTTP 信封唯一一处对后端数据的断言：形状由 openapi 契约测试锁，见
   // app/tests/contract/openapi-shapes.contract.spec.ts。调用侧一律不许再断言。
   return { ...body, data: body.data as T }
 }
