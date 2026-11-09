@@ -39,6 +39,8 @@ import { useTwinEditorPage } from './scripts/useTwinEditorPage'
 import { useTwinAnimationSelection } from './scripts/useTwinAnimationSelection'
 import { applyBatchBindings, applyBatchConfig } from './scripts/batchApply'
 import { removeMissingAnimations } from './scripts/missingAnimations'
+import { twinRemoveImpactText } from './scripts/outlineNodes'
+import { useTwinShortcuts } from './scripts/useTwinShortcuts'
 import { useUnsavedGuard } from '@/composables/useUnsavedGuard'
 
 // ⚠ 子编辑器直接刷新时也必须安装模块，否则模型地址无法解析。
@@ -214,6 +216,36 @@ async function save(): Promise<void> {
   if (ok) toast.success('孪生场景已保存')
   else toast.error(page.conflict.value ?? '保存失败，请重试')
 }
+
+/** Delete 键删当前选中；有连带影响时先确认，与大纲的删除同一口径。 */
+async function removeSelected(): Promise<void> {
+  const current = selection.value
+  if (!('id' in current) || config.value === null) return
+  const impact = twinRemoveImpactText(config.value, current.kind, current.id)
+  if (impact !== '') {
+    const ok = await confirm.ask({
+      title: '删除选中对象',
+      message: impact,
+      confirmText: '删除',
+      danger: true,
+    })
+    if (!ok) return
+  }
+  actions.value?.remove(current.kind, current.id)
+}
+
+useTwinShortcuts({
+  handlers: {
+    save: () => {
+      if (isDirty.value && !page.saving.value) void save()
+    },
+    undo: () => page.doc.value?.undo(),
+    redo: () => page.doc.value?.redo(),
+    remove: () => void removeSelected(),
+  },
+  suspended: () =>
+    viewport.isPicking.value || batchOpen.value || bulk.open.value,
+})
 
 /** 返回大屏编辑器；外壳的返回入口按站内路径走。 */
 const backTo = computed(() => `/dashboards/${dashboardId.value}/edit`)
