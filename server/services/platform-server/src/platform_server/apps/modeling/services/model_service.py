@@ -45,6 +45,7 @@ from platform_server.apps.modeling.schemas import (
 from platform_server.apps.modeling.schemas.command import CommandResourceOut
 from platform_server.apps.modeling.schemas.graph import PipelineGraph
 from platform_server.apps.modeling.services import (
+    artifact_cleanup,
     artifact_io,
     artifact_store,
     binding_service,
@@ -99,7 +100,8 @@ async def publish_version(
     ⚠ 不可服务的运行**照样发**，只是 `servable=false` 且带原因：能看指标、能
     做对比，只是绑不上去。全拒的话，用户连「为什么不能上线」都看不到。
     ⚠ 通道 B 的次序是**先搬字节、再落两行**：反过来的话库里会指着一个还不存在
-    的键。搬完落库失败只留一份没人引用的字节，那由保留期收拾。
+    的键。搬完却没落成产物行（撞上已有版本、或判为不可服务）的那份字节在提交后
+    删掉；落库本身失败回滚时那份字节没人清理。
     Args: session, payload, actor, store。
     """
     existing = await model_version_crud.get_by_run(session, payload.run_id)
@@ -114,7 +116,7 @@ async def publish_version(
     source = await load_version_source(session, payload.run_id)
     prepared = await prepare_version(source, payload, actor, store)
     return await save_prepared_version(
-        session, prepared, is_reusing_existing=True
+        session, prepared, is_reusing_existing=True, store=store
     )
 
 
@@ -181,8 +183,14 @@ async def save_prepared_version(
     prepared: PreparedVersion,
     *,
     is_reusing_existing: bool = False,
+    store: ObjectStore | None = None,
 ) -> ModelVersionOut:
+    """落版本行与产物行；搬好却没用上的字节在提交后删掉。
+
+    Args: session, prepared, is_reusing_existing, store。
+    """
     draft = prepared.draft
+    unused = as_text(prepared.artifact.get("object_key"))
     version = await model_version_crud.next_version(
         session, draft.run.pipeline_id
     )
@@ -190,6 +198,7 @@ async def save_prepared_version(
     if is_reusing_existing:
         existing = await model_version_crud.get_by_run(session, draft.run.id)
         if existing is not None:
+            artifact_cleanup.discard_after_commit(session, store, unused)
             return await get_version(session, existing.id)
     await require_publishable_run(session, draft.run.id)
     draft = replace(draft, version=version)
@@ -199,6 +208,8 @@ async def save_prepared_version(
         model_artifact_crud.add(
             session, _artifact_row(draft.version_id, prepared.artifact)
         )
+    else:
+        artifact_cleanup.discard_after_commit(session, store, unused)
     await session.flush()
     return await get_version(session, row.id)
 
@@ -405,9 +416,18 @@ async def retire_version(session: AsyncSession, version_id: uuid.UUID) -> None:
 
 
 async def retire_version_command(
-    session: AsyncSession, version_id: uuid.UUID
+    session: AsyncSession,
+    version_id: uuid.UUID,
+    store: ObjectStore | None = None,
 ) -> CommandResourceOut:
+    """退役一个版本，提交后连它在对象存储里的字节一起删。
+
+    Args: session, version_id, store。
+    """
     await retire_version(session, version_id)
+    artifact_cleanup.discard_after_commit(
+        session, store, artifact_store.model_key(str(version_id))
+    )
     return CommandResourceOut(id=version_id)
 
 

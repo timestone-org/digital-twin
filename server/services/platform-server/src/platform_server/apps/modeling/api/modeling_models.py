@@ -187,16 +187,17 @@ async def retire_version(
     session: SessionDep,
     write: PublishDep,
     response: Response,
+    store: StoreDep,
 ) -> None:
     """退役。还有绑定指着它时 409。
 
-    Args: version_id, session, write, response。
+    Args: version_id, session, write, response, store。
     """
     await write.run_once(
         endpoint=f"modeling.retire_version.{version_id}",
         model=CommandResourceOut,
         action=lambda: model_service.retire_version_command(
-            session, version_id
+            session, version_id, store
         ),
     )
     response.status_code = status.HTTP_204_NO_CONTENT
