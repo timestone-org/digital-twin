@@ -130,13 +130,15 @@ export interface DatasetTablePatchInput {
  * ⚠ 列表项是**摘要**：带列数、不带整份列定义。当详情用会在渲染里崩在
  * `columns` 上，那时离真正的原因已经很远了。
  * @param query 页码与每页条数
+ * @param signal 取消当前读取的信号
  */
 export async function listDatasetTables(
   query: DatasetTableQuery = {},
+  signal?: AbortSignal,
 ): Promise<Page<DatasetTableSummary>> {
   return await requestData<Page<DatasetTableSummary>>(
     '/dataset-tables',
-    onPlatform({ query }),
+    onPlatform({ query, signal }),
   )
 }
 
@@ -255,13 +257,15 @@ export interface DatasetColumnPatchInput {
 /**
  * 一张台账的全部列。集合有界（后端不分页），故一次取完。
  * @param tableId 台账 id
+ * @param signal 取消当前读取的信号
  */
 export async function listDatasetColumns(
   tableId: string,
+  signal?: AbortSignal,
 ): Promise<DatasetColumn[]> {
   return await requestData<DatasetColumn[]>(
     `/dataset-tables/${tableId}/columns`,
-    onPlatform(),
+    onPlatform({ signal }),
   )
 }
 

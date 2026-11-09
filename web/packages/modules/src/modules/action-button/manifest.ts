@@ -408,7 +408,7 @@ export default defineModule({
     },
   ],
   preview: {
-    config: { text: '进入详情', icon: 'arrow-right', iconPosition: 'right' },
+    config: { text: '进入详情', icon: 'arrow-right' },
   },
   component: () => import('./Component.vue'),
 })

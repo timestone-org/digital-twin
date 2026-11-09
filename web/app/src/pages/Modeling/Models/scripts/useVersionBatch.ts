@@ -48,10 +48,10 @@ export function useVersionBatch(
     const report = await batch.run({
       label: '批量下线模型',
       message:
-        '选中模型将立即不可用于计算，指向它们的部署无法调用，绑定公式及引用这些公式的台账列将取不到数。请先确认业务影响。',
+        '选中模型将归档，之后可以恢复。仍有部署指向或公式绑定的版本由服务端拒绝下线，每项结果分别保留；请先切换部署、解除绑定。',
       danger: true,
-      skip: (row) => (row.is_servable ? null : '模型已下线或不可服务'),
-      action: (row) => modeling.retireModelingVersion(row.id),
+      skip: (row) => ((row.archived_at ?? null) === null ? null : '模型已下线'),
+      action: (row) => modeling.archiveModelingVersion(row.id),
     })
     if (report !== null) await onDone()
   }

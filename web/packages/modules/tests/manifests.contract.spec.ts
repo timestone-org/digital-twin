@@ -386,6 +386,19 @@ describe('清单自身的不变量', () => {
     expect(offenders).toEqual([])
   })
 
+  /** 画布只铺内容键的演示值，演示配置里写了观感键就是一份永远不生效的死配置。 */
+  it('声明了内容键的模块，预览只提内容键', () => {
+    const offenders = listModules().flatMap((manifest) => {
+      const content = manifest.contentKeys
+      if (content === undefined) return []
+      return Object.keys(manifest.preview?.config ?? {})
+        .filter((key) => !content.includes(key))
+        .map((key) => `${manifest.type}.${key}`)
+    })
+
+    expect(offenders).toEqual([])
+  })
+
   it('子编辑器接管的配置一定声明为内容', () => {
     const offenders = listModules()
       .filter((manifest) => manifest.subEditor !== undefined)

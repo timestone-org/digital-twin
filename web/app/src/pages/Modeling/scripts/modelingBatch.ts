@@ -1,4 +1,6 @@
 /** @fileoverview 建模批量操作的逐项结果与串行执行，不重试未知写入。 */
+import { ERROR_CODES } from '@dt/contracts'
+
 import { BizError } from '@/api/client'
 import { describeError } from '@/composables/useAsyncList'
 
@@ -64,8 +66,8 @@ function failureStatus(caught: unknown): 'failed' | 'unknown' | 'skipped' {
   if (
     caught.status >= 500 ||
     caught.status === 408 ||
-    caught.code === 41443 ||
-    caught.code === 41444
+    caught.code === ERROR_CODES.modelingCommandPending ||
+    caught.code === ERROR_CODES.modelingLegacyCommandConflict
   )
     return 'unknown'
   return 'failed'

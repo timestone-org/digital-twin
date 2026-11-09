@@ -103,7 +103,7 @@ function update(value: string): void {
       <DtSelect
         :model-value="presetValue"
         :options="props.presets ?? RELATIVE_PRESETS"
-        placeholder="常用档"
+        :display="{ placeholder: '常用档' }"
         size="sm"
         :disabled="props.isReadonly"
         @update:model-value="update"

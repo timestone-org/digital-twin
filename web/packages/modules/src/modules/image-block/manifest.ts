@@ -257,7 +257,6 @@ export default defineModule({
   preview: {
     config: {
       src: 'linear-gradient(135deg, var(--accent-primary), transparent)',
-      fit: 'cover',
     },
   },
   component: () => import('./Component.vue'),

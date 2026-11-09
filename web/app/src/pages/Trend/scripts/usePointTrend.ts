@@ -31,6 +31,7 @@ import {
   pointSeries,
   pointTruncation,
   runPointQuery,
+  type PointQueryChoice,
 } from './pointTrendState'
 
 /** 进来先看哪一档折算。平均是唯一一档对温度、压力这类瞬时量说得通的。 */
@@ -68,6 +69,11 @@ export function usePointTrend(): PointTrend {
   const interval = ref(TREND_BUCKET_AUTO)
   const drawableOnly = ref(true)
   const raced = useRacedFetch()
+  const choice = (): PointQueryChoice => ({
+    range: range.value,
+    aggregate: aggregate.value,
+    interval: interval.value,
+  })
 
   const selected = computed(() => state.chosen.value.map((item) => item.key))
   const items = computed<TrendItem[]>(() =>
@@ -90,18 +96,13 @@ export function usePointTrend(): PointTrend {
     series: computed(() => pointSeries(state, items.value, selected.value)),
     loading: state.loading,
     failure: state.failure,
-    dirty: computed(() => pointDirty(state, selected.value)),
+    dirty: computed(() => pointDirty(state, selected.value, choice())),
     truncation: computed(() => pointTruncation(state)),
     toggle: (key) => {
       state.chosen.value = nextChosen(items.value, selected.value, key)
     },
     clear: () => (state.chosen.value = []),
-    query: () =>
-      runPointQuery(state, raced, {
-        range: range.value,
-        aggregate: aggregate.value,
-        interval: interval.value,
-      }),
+    query: () => runPointQuery(state, raced, choice()),
     dispose: () => {
       picker.dispose()
       raced.cancel()

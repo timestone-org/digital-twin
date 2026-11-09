@@ -273,10 +273,10 @@ describe('模型库上的动作', () => {
     }
   }
 
-  it('下线前问一句，并说清绑在它上面的公式会立刻取不到数', async () => {
+  it('下线前问一句，并说清仍被引用会被拒绝、之后可以恢复', async () => {
     toaster()
     const ask = asker(true)
-    vi.spyOn(modeling, 'retireModelingVersion').mockResolvedValue({
+    vi.spyOn(modeling, 'archiveModelingVersion').mockResolvedValue({
       ...version(),
       signature: {},
       metrics: {},
@@ -288,7 +288,9 @@ describe('模型库上的动作', () => {
 
     await ops.retire(version())
 
-    expect(String(ask.mock.calls[0]?.[0]?.['message'])).toContain('模型不可用')
+    const message = String(ask.mock.calls[0]?.[0]?.['message'])
+    expect(message).toContain('拒绝下线')
+    expect(message).toContain('可以恢复')
   })
 
   it('绑定成功后把「哪些台账列跟着变」报出来', async () => {

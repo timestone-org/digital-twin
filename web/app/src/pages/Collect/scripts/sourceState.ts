@@ -40,8 +40,9 @@ const CATEGORY_LABELS: Record<string, string> = {
 /**
  * 把运行态里的报错写成一句能给人看的话；没有错就返回 null。
  *
- * ⚠ `error_detail` 是异常类型名不是原文，直接摆出来没人看得懂，所以前面必须
- * 带上归类——归类才决定去查什么（网络 / 配置 / 凭据）。
+ * ⚠ `error_detail` 对采集器自己的错误是一句领域说明，对外来异常只是类型名，
+ * 后者直接摆出来没人看得懂，所以前面必须带上归类——归类才决定去查什么
+ * （网络 / 配置 / 凭据）。
  * @param runtime 采集运行态
  */
 export function errorSummary(runtime: CollectSourceRuntime): string | null {

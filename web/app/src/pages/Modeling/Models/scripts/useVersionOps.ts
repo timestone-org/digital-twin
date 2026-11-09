@@ -1,8 +1,8 @@
 /**
  * @fileoverview 版本上的两个动作：下线、一键注册为公式。
  *
- * 与绑定那一组分开：这两个动作的对象是**版本**，爆炸半径也不同——下线会让绑在
- * 它上面的公式当场报「模型不可用」，注册则是往公式库里写一条新东西
+ * 与绑定那一组分开：这两个动作的对象是**版本**，爆炸半径也不同——下线是归档，
+ * 仍被部署或公式引用的版本由服务端拒绝；注册则是往公式库里写一条新东西
  * （docs/MODELING_PLATFORM_DESIGN.md D17）。
  */
 import type {
@@ -17,7 +17,7 @@ import { deleteModelingVersion } from '@/api/modelingWorkflow'
 
 import { attempt } from './useBindingOps'
 
-/** 下线前的问话。⚠ 要说清绑在它上面的公式会怎样。 */
+/** 下线前的问话。⚠ 要说清仍被引用时会被拒绝、下线后可恢复。 */
 function retireAsk(
   name: string,
   version: number,
@@ -30,7 +30,7 @@ function retireAsk(
   return {
     title: `下线「${name}」v${version}？`,
     message:
-      '绑在这个版本上的公式会立刻开始报「模型不可用」，引用那条公式的台账列取不到数。换一个版本再下线它更稳。',
+      '下线即归档：版本从可用列表中移除，之后可以恢复。仍有部署指向它或公式绑定它时，服务端会拒绝下线，请先切换部署、解除绑定。',
     confirmText: '下线',
     danger: true,
   }
@@ -86,10 +86,10 @@ export function useVersionOps(onDone: () => void) {
     },
     remove: (row: ModelingVersionSummary) =>
       removeVersion(row, { confirm, run, toast }),
-    /** 下线一个版本。 */
+    /** 下线（归档）一个版本。 */
     retire: async (row: ModelingVersionSummary) => {
       if (!(await confirm.ask(retireAsk(row.name, row.version)))) return
-      const done = await run(() => modeling.retireModelingVersion(row.id))
+      const done = await run(() => modeling.archiveModelingVersion(row.id))
       if (done !== null) toast.success('已下线')
     },
     /**
