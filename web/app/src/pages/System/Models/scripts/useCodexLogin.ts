@@ -81,6 +81,38 @@ function createPolling(
   return { startAt, stop }
 }
 
+interface PollTarget {
+  providerRef: () => string
+  status: Ref<LlmCredential | null>
+  pending: Ref<LlmDeviceLoginStart | null>
+  error: Ref<string>
+  onConnected: (() => void) | undefined
+}
+
+/**
+ * 轮询的一步：没好就回下一次的间隔，好了或出错就收摊（回 null）。
+ * @param target 要写的几格状态与成功回调
+ */
+function pollStep(
+  target: PollTarget,
+): (ref_: string, signal: AbortSignal) => Promise<number | null> {
+  return async (ref_, signal) => {
+    try {
+      const polled = await pollDeviceLogin(target.providerRef(), ref_, signal)
+      if (!polled.is_done) {
+        // ⚠ 用回来的那个间隔，不是我们自己记的
+        return polled.interval_s || FALLBACK_INTERVAL_S
+      }
+      target.status.value = polled.credential
+      target.onConnected?.()
+    } catch (caught) {
+      target.error.value = describe(caught)
+    }
+    target.pending.value = null
+    return null
+  }
+}
+
 /**
  * 造一段设备码登录的状态。
  * ⚠ 收一个**那一路供应商的 id** 而不是写死一个名字：目录里能配出好几路订阅
@@ -88,27 +120,20 @@ function createPolling(
  * ⚠ 收的是个**取值口子**而不是取值：调用方多半是从 props 里拿它的，
  * 在根作用域读一次会把响应性丢掉（`vue/no-setup-props-reactivity-loss`）。
  * @param providerRef 取那一路供应商的 id
+ * @param onConnected 设备码登录成功那一刻的回调
  */
-export function useCodexLogin(providerRef: () => string): CodexLogin {
+export function useCodexLogin(
+  providerRef: () => string,
+  onConnected?: () => void,
+): CodexLogin {
   const status = ref<LlmCredential | null>(null)
   const pending = ref<LlmDeviceLoginStart | null>(null)
   const isBusy = ref(false)
   const error = ref('')
 
-  const polling = createPolling(async (ref_, signal) => {
-    try {
-      const polled = await pollDeviceLogin(providerRef(), ref_, signal)
-      if (!polled.is_done) {
-        // ⚠ 用回来的那个间隔，不是我们自己记的
-        return polled.interval_s || FALLBACK_INTERVAL_S
-      }
-      status.value = polled.credential
-    } catch (caught) {
-      error.value = describe(caught)
-    }
-    pending.value = null
-    return null
-  })
+  const polling = createPolling(
+    pollStep({ providerRef, status, pending, error, onConnected }),
+  )
 
   onScopeDispose(polling.stop)
 

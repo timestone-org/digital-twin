@@ -24,7 +24,10 @@ const props = defineProps<{
 const emit = defineEmits<{ changed: [] }>()
 
 const confirm = useConfirm()
-const login = useCodexLogin(() => props.providerRef)
+const login = useCodexLogin(
+  () => props.providerRef,
+  () => emit('changed'),
+)
 
 async function signOut(): Promise<void> {
   const ok = await confirm.ask({
@@ -73,7 +76,6 @@ onMounted(() => void login.refresh())
       v-if="login.pending.value"
       :pending="login.pending.value"
       @cancel="login.cancel"
-      @done="emit('changed')"
     />
 
     <div class="flex gap-2">

@@ -96,6 +96,25 @@ describe('设备码登录', () => {
     scope.stop()
   })
 
+  it('登好了回调 onConnected，让页面刷新「当前生效」', async () => {
+    vi.mocked(api.startDeviceLogin).mockResolvedValue(started())
+    vi.mocked(api.pollDeviceLogin).mockResolvedValue({
+      is_done: true,
+      interval_s: 5,
+      credential: connected(),
+    })
+    const onConnected = vi.fn()
+    const scope = effectScope()
+    const login = scope.run(() =>
+      useCodexLogin(() => PROVIDER_REF, onConnected),
+    )
+    await login?.begin()
+
+    await vi.advanceTimersByTimeAsync(6_000)
+    expect(onConnected).toHaveBeenCalledOnce()
+    scope.stop()
+  })
+
   it('登好了就收摊，不再接着问', async () => {
     vi.mocked(api.startDeviceLogin).mockResolvedValue(started())
     vi.mocked(api.pollDeviceLogin).mockResolvedValue({
