@@ -11,10 +11,12 @@ from collections.abc import AsyncIterator, Sequence
 from datetime import timedelta
 from typing import Any
 
+import pytest
 from realtime_hub.apps.channel.services import (
     Connection,
     ConnectionRegistry,
     FanoutListener,
+    fanout,
 )
 from realtime_hub.apps.channel.services.fanout import encode_per_name
 
@@ -199,3 +201,56 @@ def test_an_encoded_frame_is_byte_identical_to_what_send_json_would_write() -> (
     frames = encode_per_name(envelope, "dashboard:d1", [_target(None)])
 
     assert frames["dashboard:d1"] == json.dumps(envelope, separators=(",", ":"))
+
+
+async def test_a_stalled_socket_is_dropped_instead_of_stalling_the_replica(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    # ⚠ 一条在 TCP 层不读的连接会让 send 一直挂着；不限时的话，本副本后续的
+    # 每一条消息、每一个主题都要等它被保活判死
+    monkeypatch.setattr(fanout, "SEND_TIMEOUT_S", 0.05)
+    connections = ConnectionRegistry()
+    alive: list[dict[str, object]] = []
+    good = _connection(alive)
+    stalled = _connection([])
+    closed: list[int] = []
+    is_closed = asyncio.Event()
+    is_second_delivered = asyncio.Event()
+    deliver_good = good.send_frame
+
+    async def never_drains(_frame: str) -> None:
+        await asyncio.Event().wait()
+
+    async def close(code: int) -> None:
+        closed.append(code)
+        is_closed.set()
+
+    async def deliver_and_count(frame: str) -> None:
+        await deliver_good(frame)
+        if len(alive) == 2:
+            is_second_delivered.set()
+
+    good.send_frame = deliver_and_count
+    stalled.send_frame = never_drains
+    stalled.close = close
+    for item in (good, stalled):
+        await connections.add(item)
+        await connections.bind(item.id, "test:1")
+    listener = _listener(
+        [{"topic": "test:1", "seq": 1}, {"topic": "test:1", "seq": 2}],
+        connections,
+    )
+
+    await listener.start()
+    try:
+        async with asyncio.timeout(1):
+            await is_second_delivered.wait()
+            await is_closed.wait()
+    finally:
+        await listener.stop()
+
+    assert (alive, await connections.subscribers("test:1"), closed) == (
+        [{"topic": "test:1", "seq": 1}, {"topic": "test:1", "seq": 2}],
+        (good,),
+        [fanout.CLOSE_TRY_AGAIN],
+    )

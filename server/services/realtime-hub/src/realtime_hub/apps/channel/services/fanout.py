@@ -26,6 +26,9 @@ RECONNECT_BASE_S = 1.0
 RECONNECT_MAX_S = 30.0
 CLOSE_TIMEOUT_S = 1.0
 CLOSE_TRY_AGAIN = 1013
+# 单条连接发一帧的上限。⚠ 对端在 TCP 层不读时 send 会一直挂到保活判死
+# （约 40s），不限时的话整个副本的扇出都排在它后面
+SEND_TIMEOUT_S = 2.0
 
 
 class FanoutListener:
@@ -40,6 +43,8 @@ class FanoutListener:
         self._task: asyncio.Task[None] | None = None
         self._retry_delay_s = RECONNECT_BASE_S
         self._needs_resync = False
+        # 后台关闭慢连接的任务。⚠ 存强引用，见模块头
+        self._closing: set[asyncio.Task[None]] = set()
 
     async def start(self) -> None:
         """起后台任务。重复调用是幂等的。"""
@@ -122,12 +127,12 @@ class FanoutListener:
         targets = await self._connections.subscribers(topic)
         if not targets:
             return
-        # ⚠ 并发发送并**逐条兜住异常**：一条慢或已死的连接不该拖住同主题的
+        # ⚠ 并发、逐条限时发送并**逐条兜住异常**：一条慢或已死的连接不该拖住
         # 其它订阅者，更不该让这一轮扇出整个失败
         frames = encode_per_name(envelope, topic, targets)
         results = await asyncio.gather(
             *(
-                item.send_frame(frames[item.outgoing_topic(topic)])
+                self._send_bounded(item, frames[item.outgoing_topic(topic)])
                 for item in targets
             ),
             return_exceptions=True,
@@ -141,6 +146,29 @@ class FanoutListener:
                 targets=len(targets),
                 failed=failed,
             )
+
+    async def _send_bounded(self, connection: Connection, frame: str) -> None:
+        """限时发一帧；超时就把这条连接摘掉并在后台关闭，再把超时抛给调用方。
+
+        ⚠ 不在这里 await 关闭：close 也走同一个 send，会卡在同一处背压上。
+        先摘索引，后续扇出就不再等它；取消是安全的，背压时一个字节都还没写出。
+
+        Args: connection, frame。
+        """
+        try:
+            async with asyncio.timeout(SEND_TIMEOUT_S):
+                await connection.send_frame(frame)
+        except TimeoutError:
+            await self._connections.remove(connection.id)
+            _logger.warning(
+                "fanout_slow_consumer_dropped",
+                "连接发送超时，已摘除并关闭",
+                connection_id=str(connection.id),
+            )
+            task = asyncio.create_task(_close_for_resync(connection))
+            self._closing.add(task)
+            task.add_done_callback(self._closing.discard)
+            raise
 
 
 async def _close_for_resync(connection: Connection) -> None:
