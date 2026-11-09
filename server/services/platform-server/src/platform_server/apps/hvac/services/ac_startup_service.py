@@ -178,6 +178,8 @@ async def request_rebuild(
     Args: session, room_id, window, rules。
     """
     await _require_room(session, room_id)
+    # ⚠ 先锁房间再查「有没有在跑的」：不锁的话连点两下会双双通过检查
+    await room_crud.lock_configuration(session, frozenset({room_id}))
     await _require_no_running_batch(session, room_id)
     months = plan_months(window.start, window.end)
     if not months:

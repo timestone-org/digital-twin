@@ -10,6 +10,7 @@ from contextlib import (
 )
 from contextvars import ContextVar
 from dataclasses import dataclass, field
+from datetime import UTC, datetime
 from decimal import Decimal
 
 import pytest
@@ -23,6 +24,7 @@ from platform_server.apps.hvac.crud import room_crud
 from platform_server.apps.hvac.models import (
     AcDataBinding,
     AcMetricLimit,
+    AcStartupBatch,
     AcUnit,
     Room,
     Workshop,
@@ -34,6 +36,7 @@ from platform_server.apps.hvac.schemas import (
     AcUnitUpdateIn,
     MetricLimitIn,
     MetricLimitsPutIn,
+    TimeWindow,
 )
 from platform_server.apps.hvac.schemas.ac_compliance import (
     CompliancePolicyIn,
@@ -49,6 +52,9 @@ from platform_server.apps.hvac.services.ac_room_configuration import (
 )
 from platform_server.apps.hvac.services.ac_source_reader import AcSourceReader
 from platform_server.apps.hvac.services.ac_startup_rules import ExtractionRules
+from platform_server.apps.hvac.services.ac_startup_service import (
+    request_rebuild,
+)
 
 # ⚠ 这里手工建库，CI 放宽语句超时的环境变量管不到；互斥用例不判耗时，默认 2 秒
 # 预算会被覆盖率全套下的 runner 抖动打穿。
@@ -118,6 +124,9 @@ async def _clear_case(case: ConfigurationCase) -> None:
         )
         await session.execute(
             delete(AcMetricLimit).where(AcMetricLimit.ac_unit_id.in_(units))
+        )
+        await session.execute(
+            delete(AcStartupBatch).where(AcStartupBatch.room_id.in_(room_ids))
         )
         await session.execute(
             delete(AcUnit).where(AcUnit.room_id.in_(room_ids))
@@ -431,3 +440,41 @@ async def test_snapshot_and_writer_finish_before_observer_teardown(
         finally:
             delayed.release.set()
             await protocol
+
+
+async def _rebuild(case: ConfigurationCase, ready: asyncio.Future[int]) -> None:
+    async with case.database.session() as session:
+        process_id = await session.scalar(text("SELECT pg_backend_pid()"))
+        assert isinstance(process_id, int)
+        ready.set_result(process_id)
+        await request_rebuild(
+            session,
+            room_id=case.room_id,
+            window=TimeWindow(
+                start=datetime(2026, 1, 1, tzinfo=UTC),
+                end=datetime(2026, 2, 1, tzinfo=UTC),
+            ),
+            rules=ExtractionRules(),
+        )
+
+
+async def test_a_rebuild_waits_for_the_room_lock(
+    configuration_case: ConfigurationCase,
+) -> None:
+    """⚠ 「一个房间同时只有一次抽取」靠房间锁串行，先查再插挡不住连点两下。"""
+    case = configuration_case
+    ready: asyncio.Future[int] = asyncio.get_running_loop().create_future()
+    async with case.database.session() as observer:
+        await observer.connection()
+        async with case.database.session() as holder:
+            # ⚠ 用共享锁占着：建批次的外键检查只拿 KEY SHARE，与它相容，
+            # 排他锁的话不加房间锁也会被挡住，测不出缺陷
+            await room_crud.lock_configuration(
+                holder, frozenset({case.room_id}), should_share=True
+            )
+            rebuild = asyncio.create_task(_rebuild(case, ready))
+            try:
+                await _require_waiting(observer, rebuild, await ready)
+            finally:
+                await holder.commit()
+                await rebuild
