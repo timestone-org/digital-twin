@@ -29,7 +29,10 @@ from platform_server.apps.report.schemas.template import TemplateBody
 from platform_server.apps.report.services.aggregation import wire_value
 from platform_server.apps.report.services.api_source import fetch_api_sources
 from platform_server.apps.report.services.metrics import PreviewContext
-from platform_server.apps.report.services.preview import preview
+from platform_server.apps.report.services.preview import (
+    UNAVAILABLE_TEXT,
+    preview,
+)
 from platform_server.apps.report.services.render_service import (
     CONTENT_TYPE,
     GROUP,
@@ -375,7 +378,7 @@ def result_payload(
 
 def _require_complete(result: PreviewOut) -> None:
     if any(metric.error for metric in result.metrics) or any(
-        node.text == "[数据不可用]" for node in result.nodes.values()
+        node.text == UNAVAILABLE_TEXT for node in result.nodes.values()
     ):
         raise ReportInvalid(
             "报告数据检查未通过，请先试算并修复缺失或错误的数据"
