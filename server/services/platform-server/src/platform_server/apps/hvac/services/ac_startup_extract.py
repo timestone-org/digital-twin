@@ -26,7 +26,6 @@ from platform_server.apps.hvac.models import (
 )
 from platform_server.apps.hvac.schemas import TimeWindow
 from platform_server.apps.hvac.services.ac_room_configuration import (
-    BoundUnit,
     RoomConfiguration,
     load_bound_units,
     restore_configuration,
@@ -39,8 +38,6 @@ from platform_server.apps.hvac.services.ac_startup_frames import (
     build_frames,
     compliant_at,
 )
-
-__all__ = ["BoundUnit", "load_bound_units"]
 from platform_server.apps.hvac.services.ac_startup_queue import ShardMessage
 from platform_server.apps.hvac.services.ac_startup_rules import (
     Episode,

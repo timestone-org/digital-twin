@@ -27,6 +27,9 @@ from platform_server.apps.hvac.models import (
     Workshop,
 )
 from platform_server.apps.hvac.schemas import TimeWindow
+from platform_server.apps.hvac.services.ac_room_configuration import (
+    load_bound_units,
+)
 from platform_server.apps.hvac.services.ac_source_reader import (
     AcSourceReader,
     SourceRow,
@@ -36,7 +39,6 @@ from platform_server.apps.hvac.services.ac_startup_extract import (
     SHARD_RUN_ORPHANED,
     SHARD_RUN_SKIPPED,
     ExtractionContext,
-    load_bound_units,
     run_shard,
 )
 from platform_server.apps.hvac.services.ac_startup_queue import (
