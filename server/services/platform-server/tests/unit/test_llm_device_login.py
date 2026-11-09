@@ -90,7 +90,7 @@ async def test_the_browser_gets_a_handle_not_the_device_auth_id() -> None:
 async def test_an_unknown_handle_reads_as_expired() -> None:
     login, _ = _login()
     with pytest.raises(LlmLoginSessionExpired):
-        await login.poll("没这个句柄", actor=ACTOR)
+        await login.poll("没这个句柄", provider_id=PROVIDER, actor=ACTOR)
 
 
 async def test_a_pending_poll_keeps_waiting() -> None:
@@ -101,9 +101,9 @@ async def test_a_pending_poll_keeps_waiting() -> None:
         (403, {}),
     )
     started = await login.start(PROVIDER)
-    first = await login.poll(started.ref, actor=ACTOR)
+    first = await login.poll(started.ref, provider_id=PROVIDER, actor=ACTOR)
     assert first.is_done is False
-    second = await login.poll(started.ref, actor=ACTOR)
+    second = await login.poll(started.ref, provider_id=PROVIDER, actor=ACTOR)
     assert second.is_done is False
     assert saved.bundles == []
 
@@ -115,7 +115,7 @@ async def test_a_finished_poll_saves_the_bundle_and_burns_the_handle() -> None:
         (200, TOKEN_BODY),
     )
     started = await login.start(PROVIDER)
-    done = await login.poll(started.ref, actor=ACTOR)
+    done = await login.poll(started.ref, provider_id=PROVIDER, actor=ACTOR)
     assert done.is_done is True
     assert saved.bundles[0].access_token == "at-1"
     assert saved.actors == [ACTOR]
@@ -124,7 +124,7 @@ async def test_a_finished_poll_saves_the_bundle_and_burns_the_handle() -> None:
     assert saved.providers == [PROVIDER]
     # 句柄留着的话，同一个码能被再换一次
     with pytest.raises(LlmLoginSessionExpired):
-        await login.poll(started.ref, actor=ACTOR)
+        await login.poll(started.ref, provider_id=PROVIDER, actor=ACTOR)
 
 
 async def test_a_handle_that_lost_its_provider_reads_as_expired() -> None:
@@ -140,4 +140,13 @@ async def test_a_handle_that_lost_its_provider_reads_as_expired() -> None:
         oauth=OAuthClient(httpx.AsyncClient()), cache=cache, store=_Saved()
     )
     with pytest.raises(LlmLoginSessionExpired):
-        await made.poll("ref-1", actor=ACTOR)
+        await made.poll("ref-1", provider_id=PROVIDER, actor=ACTOR)
+
+
+async def test_a_handle_polled_under_another_provider_is_refused() -> None:
+    # ⚠ 放过去的话令牌存进开头那一路，接口却回报 URL 里那一路的状态
+    login, saved = _login((200, START_BODY))
+    started = await login.start(PROVIDER)
+    with pytest.raises(LlmLoginSessionExpired):
+        await login.poll(started.ref, provider_id=uuid.uuid4(), actor=ACTOR)
+    assert saved.bundles == []

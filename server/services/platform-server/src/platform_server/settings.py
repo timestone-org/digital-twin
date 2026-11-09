@@ -30,6 +30,7 @@ DB_SCHEMA = "platform"
 ROLE_API = "api"
 ROLE_WORKER = "worker"
 ROLE_PUBLISHER = "publisher"
+ROLES = (ROLE_API, ROLE_WORKER, ROLE_PUBLISHER)
 
 # 合并窗口的下限。配成 0 会让发布循环空转打满一个核
 PUBLISH_WINDOW_FLOOR_MS = 100
@@ -73,6 +74,19 @@ class Settings(
     report_api_connections: list[ReportApiConnection] = Field(
         default_factory=list[ReportApiConnection], max_length=50
     )
+
+    @field_validator("app_role")
+    @classmethod
+    def _known_role(cls, role: str) -> str:
+        """只认三个角色。
+
+        ⚠ 写错时不拦，入口的分叉会把它当成 api：起来一个看着健康的 API 副本，
+        实时推送与 worker 循环一个都没跑。
+        Args: role。
+        """
+        if role not in ROLES:
+            raise ValueError(f"PLATFORM_APP_ROLE 只能是 {'/'.join(ROLES)}")
+        return role
 
     @field_validator("report_api_connections")
     @classmethod
@@ -319,6 +333,30 @@ class Settings(
         ):
             raise ValueError(
                 "BDM 单次超时须小于取数总超时，且总超时须小于建模节点超时"
+            )
+        return self
+
+    @model_validator(mode="after")
+    def validate_runtime_budgets(self) -> Self:
+        """时区名与下发预算在启动时校验，不留到运行期第一次用到才炸。"""
+        for env_name, zone in (
+            ("PLATFORM_ACSOURCE_TIMEZONE", self.acsource_timezone),
+            ("PLATFORM_COLLECT_BUCKET_TIMEZONE", self.collect_bucket_timezone),
+            ("PLATFORM_DATASET_BUCKET_TIMEZONE", self.dataset_bucket_timezone),
+        ):
+            try:
+                ZoneInfo(zone)
+            except (ZoneInfoNotFoundError, ValueError):
+                raise ValueError(f"{env_name} 不是有效时区") from None
+        if not (
+            self.acpublish_model_timeout_s
+            <= self.acpublish_budget_s
+            < self.acpublish_interval_s
+        ):
+            raise ValueError(
+                "PLATFORM_ACPUBLISH_MODEL_TIMEOUT_S 须不大于 "
+                "PLATFORM_ACPUBLISH_BUDGET_S，且后者须小于 "
+                "PLATFORM_ACPUBLISH_INTERVAL_S"
             )
         return self
 

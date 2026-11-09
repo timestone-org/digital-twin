@@ -84,9 +84,8 @@ class DashboardCrud(CrudBase[Dashboard]):
         if project_id is not None:
             statement = statement.where(Dashboard.project_id == project_id)
         if keyword:
-            pattern = f"%{keyword.lower()}%"
             statement = statement.where(
-                func.lower(Dashboard.name).like(pattern)
+                Dashboard.name.icontains(keyword, autoescape=True)
             )
         return statement
 

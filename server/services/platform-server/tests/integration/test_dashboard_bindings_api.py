@@ -215,6 +215,29 @@ async def test_an_update_keeps_the_binding_id(
     assert data_of(response)["node_key"] == OTHER_KEY
 
 
+async def test_a_null_source_kind_is_refused_as_a_null(
+    app_client: httpx.AsyncClient,
+) -> None:
+    # ⚠ 不在入参层拦，它会走到来源校验，报一句「绑定来源未注册：None」
+    node_id = await make_twin_node(app_client)
+    created = await bind(
+        app_client,
+        node_id,
+        {
+            "field_key": "anchorValues[0].value",
+            "source_kind": "opcua",
+            "node_key": KNOWN_KEY,
+        },
+    )
+    response = await app_client.patch(
+        f"{BINDINGS_URL}/{data_of(created)['id']}", json={"source_kind": None}
+    )
+    assert response.status_code == HTTP_BAD_REQUEST
+    body = response.json()
+    assert "null" in str(body)
+    assert "source_kind_unknown" not in str(body)
+
+
 async def test_an_update_onto_a_point_nobody_collects_is_refused(
     app_client: httpx.AsyncClient,
 ) -> None:

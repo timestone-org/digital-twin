@@ -4,9 +4,10 @@
 （api-contract §5.1）。
 """
 
+from datetime import datetime
 from typing import Annotated, Any
 
-from pydantic import Field, StringConstraints
+from pydantic import Field, StringConstraints, field_validator
 
 from platform_server.apps.collect.schemas.common import (
     InputModel,
@@ -76,6 +77,19 @@ class AggregateIn(InputModel):
     interval: AggregateInterval
     aggregate: str = Field(default="avg")
     timezone: str | None = None
+
+    @field_validator("range_start", "range_end")
+    @classmethod
+    def _aware(cls, moment: datetime) -> datetime:
+        """不接受没有时区的时刻，与列表那条同一口径。
+
+        ⚠ 没有时区的时刻一旦落进查询，就再也说不清它是哪个时区的了
+        （api-contract §6）。
+        Args: moment。
+        """
+        if moment.tzinfo is None or moment.utcoffset() is None:
+            raise ValueError("时刻必须带时区，例如 2026-08-01T00:00:00Z")
+        return moment
 
 
 class AggregateOut(OutputModel):

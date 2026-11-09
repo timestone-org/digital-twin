@@ -9,7 +9,7 @@ import uuid
 from collections.abc import Sequence
 from dataclasses import dataclass
 
-from sqlalchemy import select
+from sqlalchemy import case, func, select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from platform_server.apps.dashboard.models import (
@@ -39,11 +39,22 @@ async def dashboards_binding(
     """
     if not node_keys:
         return {}
+    # ⚠ `archive` 的点位写在取数说明里、`node_key` 列留空，只看列会漏掉历史绑定
+    point_key = case(
+        (
+            DashboardBinding.source_kind == "archive",
+            func.coalesce(
+                DashboardBinding.detail_json["node_key"].astext,
+                DashboardBinding.node_key,
+            ),
+        ),
+        else_=DashboardBinding.node_key,
+    )
     rows = await session.execute(
-        select(DashboardBinding.node_key, Dashboard.id, Dashboard.name)
+        select(point_key, Dashboard.id, Dashboard.name)
         .join(DashboardNode, DashboardBinding.node_id == DashboardNode.id)
         .join(Dashboard, DashboardNode.dashboard_id == Dashboard.id)
-        .where(DashboardBinding.node_key.in_(list(node_keys)))
+        .where(point_key.in_(list(node_keys)))
         .order_by(Dashboard.name.asc(), Dashboard.id.asc())
     )
     counted: dict[str, dict[uuid.UUID, BoundDashboard]] = {}

@@ -16,21 +16,21 @@ BATCH_SIZE = 32
 CANDIDATE_LIMIT = 40
 MAX_NATIVE_VECTOR_DIMENSIONS = 16000
 
+# ⚠ 协议的人话标签逐个列：除 Modbus 外一律写成 OPC UA 会让 HTTP 点位被
+# 「OPC UA」搜出来。content_hash 取 md5(content)，两处拼法不会各走各的
 _CATALOG = """
-WITH catalog AS (
+WITH labelled AS (
  SELECT p.id, p.source_id, p.code, p.name, p.description, p.unit,
         s.name AS source_name, s.protocol AS source_protocol, s.is_enabled,
         p.source_id::text || ':' || p.code AS node_key,
         concat_ws(E'\\n', p.code, p.name, p.description, s.name,
  s.description, p.unit, s.protocol,
- CASE WHEN s.protocol = 'modbus_tcp' THEN 'PLC Modbus TCP'
- ELSE 'OPC UA' END) AS content,
-        md5(concat_ws(E'\\n', p.code, p.name, p.description, s.name,
- s.description, p.unit, s.protocol,
- CASE WHEN s.protocol = 'modbus_tcp' THEN 'PLC Modbus TCP'
- ELSE 'OPC UA' END)) AS content_hash
+ CASE s.protocol WHEN 'modbus_tcp' THEN 'PLC Modbus TCP'
+ WHEN 'opcua' THEN 'OPC UA' WHEN 'http' THEN 'HTTP API' END) AS content
  FROM platform.collect_points p
  JOIN platform.collect_sources s ON s.id = p.source_id
+), catalog AS (
+ SELECT labelled.*, md5(labelled.content) AS content_hash FROM labelled
 )
 """
 

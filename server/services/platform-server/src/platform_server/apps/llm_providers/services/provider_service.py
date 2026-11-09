@@ -5,7 +5,8 @@
 """
 
 import uuid
-from typing import Any, cast
+from collections.abc import Sequence
+from typing import Any, Protocol, cast
 
 from sqlalchemy.exc import IntegrityError
 from sqlalchemy.ext.asyncio import AsyncSession
@@ -13,7 +14,11 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from lib.crypto import SecretCipher
 from lib.logging import get_logger
 from platform_server.apps.llm_providers import crud
-from platform_server.apps.llm_providers.enums import provider_kind_of
+from platform_server.apps.llm_providers.enums import (
+    PurposeSpec,
+    provider_kind_of,
+    purpose_of,
+)
 from platform_server.apps.llm_providers.errors import (
     LlmProviderInUse,
     LlmProviderNameTaken,
@@ -36,6 +41,41 @@ from platform_server.apps.llm_providers.schemas import (
 _logger = get_logger("platform.llm_providers")
 
 NAME_CONSTRAINT = "uq_llm_providers_name"
+
+
+class ModelLike(Protocol):
+    """判一个模型配不配得上某个用途要看的三格。"""
+
+    @property
+    def name(self) -> str: ...
+
+    @property
+    def kind(self) -> str: ...
+
+    @property
+    def has_vision(self) -> bool: ...
+
+
+def assignment_mismatch(
+    spec: PurposeSpec,
+    provider_name: str,
+    models: Sequence[ModelLike],
+    name: str,
+) -> str | None:
+    """这一路的模型清单里有没有这个模型、它配不配得上这个用途。
+
+    ⚠ 分配与改模型清单共用这一份：只在分配时判，改清单时就能把一个已分配的
+    模型改没、改种类或去掉看图能力，界面仍显示已分配而消费方悄悄回落。
+    Args: spec, provider_name, models, name。
+    """
+    model = next((one for one in models if one.name == name), None)
+    if model is None:
+        return f"「{provider_name}」上没有登记模型「{name}」"
+    if model.kind != spec.kind:
+        return f"「{name}」是{model.kind}模型，配不上这个用途"
+    if spec.is_vision_required and not model.has_vision:
+        return f"「{name}」不接图，配不上看图这个用途"
+    return None
 
 
 def key_hint(api_key: str) -> str:
@@ -202,6 +242,8 @@ async def update_provider(
         if await crud.provider.by_name(session, body.name) is not None:
             raise LlmProviderNameTaken(f"已经有一路叫「{body.name}」的供应商")
         row.name = body.name
+    if body.models is not None:
+        await _raise_if_orphaning(session, row, body.models)
     _apply_plain_fields(row, body)
     if body.api_key is not None:
         secret = body.api_key.get_secret_value()
@@ -213,6 +255,34 @@ async def update_provider(
     return provider_out(
         row, await crud.assignment.purposes_of(session, provider_id)
     )
+
+
+async def _raise_if_orphaning(
+    session: AsyncSession, row: LlmProvider, models: Sequence[ModelLike]
+) -> None:
+    """新的模型清单会不会让指着这一路的用途落空；会就 409。
+
+    ⚠ 只拦这次改出来的落空：表单每次都整份带上模型清单，存量里本就指空的
+    分配也拦的话，这一路连换密钥、改名都存不进去。
+    Args: session, row, models（新清单）。
+    """
+    current = models_of(row)
+    for assigned in await crud.assignment.for_provider(session, row.id):
+        spec = purpose_of(assigned.purpose)
+        if spec is None:
+            continue
+        rejected = assignment_mismatch(
+            spec, row.name, models, assigned.model_name
+        )
+        was_valid = (
+            assignment_mismatch(spec, row.name, current, assigned.model_name)
+            is None
+        )
+        if rejected is not None and was_valid:
+            raise LlmProviderInUse(
+                f"用途「{spec.label}」指着「{assigned.model_name}」，"
+                f"改完后{rejected}——先把这个用途改指别处"
+            )
 
 
 async def delete_provider(

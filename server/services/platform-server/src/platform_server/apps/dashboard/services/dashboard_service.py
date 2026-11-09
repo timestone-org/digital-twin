@@ -132,7 +132,11 @@ async def update_dashboard(
     Args: session, dashboard_id, payload。
     """
     dashboard = await locked_dashboard(session, dashboard_id)
-    dashboard_crud.apply_changes(dashboard, given_changes(payload))
+    if payload.expected_version is not None:
+        require_version(dashboard, payload.expected_version)
+    changes = given_changes(payload)
+    changes.pop("expected_version", None)
+    dashboard_crud.apply_changes(dashboard, changes)
     bump_version(dashboard)
     await session.flush()
     _logger.info(

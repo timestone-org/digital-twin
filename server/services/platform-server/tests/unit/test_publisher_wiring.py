@@ -179,6 +179,17 @@ def test_both_lanes_are_wired_and_named_apart() -> None:
     assert [lane.name for lane in lanes] == ["dashboard", "collect"]
 
 
+def test_resizing_a_lane_reaches_its_publisher() -> None:
+    # 运行参数页改的单帧上限要落到两条链路各自的发布器上
+    runtime = build_runtime(build_container([], settings=publisher_settings()))
+    for lane in runtime._lanes:  # 理由 —— 断言装配出的链路
+        lane.resize(10)
+        owner = (
+            lane.forget_all.__self__
+        )  # pyright: ignore[reportFunctionMemberAccess]
+        assert owner.options.max_items == 10
+
+
 def test_the_publisher_takes_its_pace_from_config() -> None:
     container = build_container([], settings=publisher_settings())
     runtime = build_runtime(container)
@@ -186,6 +197,8 @@ def test_the_publisher_takes_its_pace_from_config() -> None:
     # 出厂节拍 2s：它是全平台实时数据的时间分辨率上限，各数据源只会比它慢
     assert options.window_s == 2.0
     assert options.reconcile_interval_s == 5.0
+    # 一拍的预算：续租后跑完再等一个窗口，下一次续租仍在 TTL 之内
+    assert options.tick_budget_s() == pytest.approx(15 * 0.8 - 2.0)
 
 
 def test_the_shard_ceiling_stays_within_what_the_hub_accepts() -> None:

@@ -123,13 +123,17 @@ class DeviceLogin:
             expires_in_s=started.expires_in_s,
         )
 
-    async def poll(self, ref: str, *, actor: str | None) -> LoginProgress:
+    async def poll(
+        self, ref: str, *, provider_id: uuid.UUID, actor: str | None
+    ) -> LoginProgress:
         """问一次「用户点完了没」；点完了就把令牌存下来。
 
-        Args: ref, actor（谁在登，落进登录态那一行）。
+        ⚠ 句柄必须属于 URL 里那一路：令牌存在开头那一路上，接口却回报另一路的
+        状态，界面就显示错的登录态。
+        Args: ref, provider_id（URL 里那一路）, actor（谁在登）。
         """
         pending = _read_pending(await self._cache.get_json(_key(ref)))
-        if pending is None:
+        if pending is None or pending.provider_id != provider_id:
             raise LlmLoginSessionExpired("这次登录已经过期，请重新开始")
         polled = await self._oauth.poll_device_code(
             device_auth_id=pending.device_auth_id,

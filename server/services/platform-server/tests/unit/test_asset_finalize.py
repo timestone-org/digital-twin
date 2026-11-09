@@ -23,6 +23,9 @@ class FakeSession:
     async def flush(self) -> None:
         return None
 
+    async def rollback(self) -> None:
+        return None
+
 
 def model_row(*, size_bytes: int = 1) -> Asset:
     return Asset(
@@ -127,3 +130,79 @@ async def test_finalizing_with_no_bytes_anywhere_is_refused(
 
     with pytest.raises(AssetUploadMissing):
         await finalize(FakeObjectStore())
+
+
+@dataclass
+class LedgerSession(FakeSession):
+    """记下 rollback 在什么时候发生。"""
+
+    ledger: list[str] = field(default_factory=list[str])
+
+    async def rollback(self) -> None:
+        self.ledger.append("rollback")
+
+
+class LedgerStore(FakeObjectStore):
+    """每次碰存储都记一笔，用来断言「事务放掉之后才做外部 IO」。"""
+
+    def __init__(self, ledger: list[str]) -> None:
+        super().__init__()
+        self.ledger = ledger
+
+    async def stat(self, key: str) -> Any:
+        self.ledger.append("io")
+        return await super().stat(key)
+
+    async def copy(self, source_key: str, target_key: str) -> None:
+        self.ledger.append("io")
+        await super().copy(source_key, target_key)
+
+    async def delete_prefix(self, prefix: str) -> int:
+        self.ledger.append("io")
+        return await super().delete_prefix(prefix)
+
+
+async def test_finalizing_lets_go_of_the_transaction_before_moving_bytes(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    # ⚠ 搬一个 GB 级模型要几十秒：事务不放，连接就一直 idle in transaction
+    FakeTables().install(monkeypatch)
+    ledger: list[str] = []
+    store = LedgerStore(ledger=ledger)
+    await store.put_bytes(
+        keys.staging_key("model", ASSET_ID),
+        GLB,
+        content_type="model/gltf-binary",
+    )
+    ledger.clear()
+
+    await asset_service.finalize_upload(
+        cast(Any, LedgerSession(ledger=ledger)), store, ASSET_ID, REQUEST
+    )
+
+    assert ledger[0] == "rollback"
+    assert "io" in ledger
+
+
+async def test_deleting_lets_go_of_the_transaction_before_deleting_bytes(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    tables = FakeTables(asset=model_row())
+    tables.install(monkeypatch)
+    removed: list[uuid.UUID] = []
+
+    async def remove(_session: object, asset_id: uuid.UUID) -> None:
+        removed.append(asset_id)
+
+    monkeypatch.setattr(crud, "remove", remove)
+    monkeypatch.setattr(crud.asset_variant, "remove_for_asset", remove)
+    ledger: list[str] = []
+
+    await asset_service.delete_asset(
+        cast(Any, LedgerSession(ledger=ledger)),
+        LedgerStore(ledger=ledger),
+        ASSET_ID,
+    )
+
+    assert ledger == ["rollback", "io"]
+    assert removed == [ASSET_ID, ASSET_ID]

@@ -151,8 +151,8 @@ class ModelCompressor:
         version, pending = await self._pending_variants(asset_id)
         if not pending:
             return
-        # ⚠ 原件与派生件都可能是几百 MB，全部落临时目录而不是内存：
-        # 一个 200MB 的模型读进内存再压，worker 的常驻内存就再也降不下来
+        # ⚠ 压缩在临时目录里跑，但下载与上传仍整份过内存（字节面还没有流式
+        # 读写口）：一个 2GB 的模型会让 worker 短时多占 2GB 以上
         with tempfile.TemporaryDirectory(prefix="dt-compress-") as workdir:
             root = Path(workdir)
             source = root / "original.glb"

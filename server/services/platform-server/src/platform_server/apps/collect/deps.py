@@ -10,6 +10,7 @@ from typing import Annotated
 from fastapi import Depends
 
 from lib.auth import CallerContext
+from lib.logging import bind_log_context
 from platform_server.apps.collect.catalog import (
     COLLECT_MANAGE,
     COLLECT_OPERATE,
@@ -99,6 +100,10 @@ def _write_context(
     caller: CallerContext,
     idempotency_key: str | None,
 ) -> WriteContext:
+    # ⚠ 把调用者绑进日志上下文：写值与配置变更的每条日志都要认得出是谁干的
+    # （observability §7）。只在 async 依赖里调才生效——同步依赖跑在线程池，
+    # 那边设的上下文传不回请求协程
+    bind_log_context(user_id=str(caller.user_id))
     return WriteContext(
         idempotency=container.idempotency,
         idempotency_key=idempotency_key,
@@ -108,7 +113,7 @@ def _write_context(
     )
 
 
-def get_manage_context(
+async def get_manage_context(
     container: Annotated[Container, Depends(get_container)],
     caller: Annotated[CallerContext, Depends(require(COLLECT_MANAGE))],
     idempotency_key: Annotated[str | None, Depends(get_idempotency_key)],
@@ -120,7 +125,7 @@ def get_manage_context(
     return _write_context(container, caller, idempotency_key)
 
 
-def get_operate_context(
+async def get_operate_context(
     container: Annotated[Container, Depends(get_container)],
     caller: Annotated[CallerContext, Depends(require(COLLECT_OPERATE))],
     idempotency_key: Annotated[str | None, Depends(get_idempotency_key)],
@@ -132,7 +137,7 @@ def get_operate_context(
     return _write_context(container, caller, idempotency_key)
 
 
-def get_write_value_context(
+async def get_write_value_context(
     container: Annotated[Container, Depends(get_container)],
     caller: Annotated[CallerContext, Depends(require(COLLECT_OPERATE))],
     idempotency_key: Annotated[str, Depends(require_idempotency_key)],

@@ -55,11 +55,16 @@ def point_catalog() -> AnyPointCatalog:
 
 
 async def bind_point(
-    client: httpx.AsyncClient, *, node_key: str, name: str
+    client: httpx.AsyncClient,
+    *,
+    node_key: str,
+    name: str,
+    source_kind: str = "opcua",
 ) -> tuple[str, str]:
     """建一张绑着该点位的大屏，返回 `(大屏 id, 节点 id)`。
 
-    Args: client, node_key, name。
+    ⚠ `archive` 的点位只写在取数说明里、`node_key` 列留空——与前端写法一致。
+    Args: client, node_key, name, source_kind。
     """
     project_id = await make_project(client, name=f"{name} 项目")
     dashboard = await make_dashboard(client, project_id=project_id, name=name)
@@ -68,13 +73,19 @@ async def bind_point(
         dashboard_id=dashboard["id"],
         body=node_body(module_type="twin-view"),
     )
-    response = await client.post(
-        f"{NODES_URL}/{node['id']}/bindings",
-        json={
-            "field_key": BINDING_SLOT,
-            "source_kind": "opcua",
+    body: dict[str, object] = {
+        "field_key": BINDING_SLOT,
+        "source_kind": source_kind,
+        "node_key": node_key,
+    }
+    if source_kind == "archive":
+        body["node_key"] = None
+        body["detail_json"] = {
             "node_key": node_key,
-        },
+            "range": {"last_window": "1h"},
+        }
+    response = await client.post(
+        f"{NODES_URL}/{node['id']}/bindings", json=body
     )
     assert response.status_code == HTTP_CREATED, response.text
     return str(dashboard["id"]), str(node["id"])
@@ -95,6 +106,46 @@ async def test_a_bound_point_cannot_be_deleted(
     assert body["code"] == 41105
     assert body["details"][0]["field"] == f"dashboards[{dashboard_id}]"
     assert "一号大屏" in body["details"][0]["message"]
+
+
+async def test_a_point_bound_only_by_history_cannot_be_deleted(
+    app_client: httpx.AsyncClient,
+) -> None:
+    source = await create_source(app_client)
+    batch = await create_points(app_client, source["id"])
+    point = batch["items"][0]
+    dashboard_id, _ = await bind_point(
+        app_client,
+        node_key=point["node_key"],
+        name="历史大屏",
+        source_kind="archive",
+    )
+    response = await app_client.delete(f"{POINTS}/{point['id']}")
+    assert response.status_code == 409
+    body = envelope(response)
+    assert body["details"][0]["field"] == f"dashboards[{dashboard_id}]"
+    assert "历史大屏" in body["details"][0]["message"]
+
+
+async def test_a_history_binding_blocks_the_batch_delete(
+    app_client: httpx.AsyncClient,
+) -> None:
+    source = await create_source(app_client)
+    batch = await create_points(app_client, source["id"])
+    point = batch["items"][0]
+    await bind_point(
+        app_client,
+        node_key=point["node_key"],
+        name="历史大屏",
+        source_kind="archive",
+    )
+    response = await app_client.post(
+        BATCH_DELETE, json={"point_ids": [point["id"]]}
+    )
+    assert response.status_code == 409
+    assert envelope(response)["details"][0]["field"] == (
+        f"points[{point['id']}]"
+    )
 
 
 async def test_import_preserves_existing_dashboard_bindings(

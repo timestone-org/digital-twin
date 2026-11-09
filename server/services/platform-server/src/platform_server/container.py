@@ -12,6 +12,7 @@ from lib.db import Database, PoolProfile, ReadOnlySqlSource, SourceProfile
 from lib.idempotency import IdempotencyStore
 from lib.objectstore import ObjectStore, create_object_store
 from lib.stream import RedisStream
+from lib.utils.ids import uuid7
 from platform_server.apps.collect.crud import HistorySource
 from platform_server.apps.collect.services import (
     CommandBus,
@@ -343,8 +344,9 @@ def _build_lease(settings: Settings, key: str) -> Lease:
     return RedisLease(
         url=settings.url(),
         key=key,
-        # ⚠ 令牌必须每个进程唯一：两个副本同名就会互相续到对方的租约上
-        token=settings.app_instance,
+        # ⚠ 令牌必须每个进程唯一：两个副本同名就会互相续到对方的租约上。
+        # 主机名不够——同一台机器上的两个进程主机名相同
+        token=f"{settings.app_instance}:{uuid7()}",
         ttl_s=_ttl_of(settings, key),
         timeout_s=settings.redis_timeout_s,
     )

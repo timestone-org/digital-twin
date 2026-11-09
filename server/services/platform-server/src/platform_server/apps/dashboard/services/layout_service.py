@@ -146,6 +146,32 @@ async def _park_moved_bindings(
         await _flush(session)
 
 
+async def _park_rekeyed_nodes(
+    session: AsyncSession,
+    *,
+    known: dict[uuid.UUID, DashboardNode],
+    plan: LayoutPlan,
+) -> None:
+    """要换 `client_key` 的旧节点先让出键，最终写入才各就各位。
+
+    ⚠ 与绑定换槽同一个坑：唯一键非延迟，两个节点互换键或链式换键时，先 UPDATE
+    的那行会撞上还没让位的另一行。`client_key` 可空，置空即让位。
+    Args: session, known, plan。
+    """
+    parked = False
+    for planned in plan.nodes:
+        existing = known.get(planned.node_id)
+        if (
+            existing is not None
+            and existing.client_key is not None
+            and existing.client_key != planned.entry.client_key
+        ):
+            existing.client_key = None
+            parked = True
+    if parked:
+        await _flush(session)
+
+
 async def _write_nodes(
     session: AsyncSession,
     *,
@@ -163,6 +189,7 @@ async def _write_nodes(
     Args: session, dashboard, state, plan。
     """
     known = {node.id: node for node in state.nodes}
+    await _park_rekeyed_nodes(session, known=known, plan=plan)
     for planned in plan.nodes:
         existing = known.get(planned.node_id)
         if existing is not None:

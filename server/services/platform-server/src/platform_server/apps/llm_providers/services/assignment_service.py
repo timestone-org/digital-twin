@@ -30,10 +30,10 @@ from platform_server.apps.llm_providers.models import (
 from platform_server.apps.llm_providers.rules import purpose_mismatch
 from platform_server.apps.llm_providers.schemas import (
     LlmAssignmentIn,
-    LlmModelOut,
     LlmPurposeOut,
 )
 from platform_server.apps.llm_providers.services.provider_service import (
+    assignment_mismatch,
     models_of,
 )
 
@@ -158,17 +158,11 @@ def _check_model(spec: PurposeSpec, provider: LlmProvider, name: str) -> None:
 
     Args: spec, provider, name。
     """
-    model = _model_named(models_of(provider), name)
-    if model is None:
-        raise LlmModelUnknown(f"「{provider.name}」上没有登记模型「{name}」")
-    if model.kind != spec.kind:
-        raise LlmModelUnknown(f"「{name}」是{model.kind}模型，配不上这个用途")
-    if spec.is_vision_required and not model.has_vision:
-        raise LlmModelUnknown(f"「{name}」不接图，配不上看图这个用途")
-
-
-def _model_named(models: list[LlmModelOut], name: str) -> LlmModelOut | None:
-    return next((one for one in models if one.name == name), None)
+    rejected = assignment_mismatch(
+        spec, provider.name, models_of(provider), name
+    )
+    if rejected is not None:
+        raise LlmModelUnknown(rejected)
 
 
 def _provider_of(

@@ -49,8 +49,22 @@ async def test_a_healthy_endpoint_reports_its_models() -> None:
 
 @pytest.mark.parametrize(
     ("status", "expected"),
-    [(401, "密钥"), (403, "密钥"), (404, "/models"), (500, "500")],
-    ids=["unauthorized", "forbidden", "not-found", "server-error"],
+    [
+        (400, "HTTP 400"),
+        (302, "重定向"),
+        (401, "密钥"),
+        (403, "密钥"),
+        (404, "/models"),
+        (500, "500"),
+    ],
+    ids=[
+        "bad-request",
+        "redirect",
+        "unauthorized",
+        "forbidden",
+        "not-found",
+        "server-error",
+    ],
 )
 async def test_each_failure_status_gets_its_own_words(
     status: int, expected: str

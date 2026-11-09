@@ -199,6 +199,21 @@ async def test_the_list_filters_by_keyword(
     assert codes == ["line-2"]
 
 
+@pytest.mark.parametrize(
+    ("keyword", "expected"),
+    [("plc_1", ["plc_1"]), ("%", [])],
+    ids=["underscore", "percent"],
+)
+async def test_the_keyword_takes_wildcards_literally(
+    app_client: httpx.AsyncClient, keyword: str, expected: list[str]
+) -> None:
+    await create_source(app_client, code="plc_1", name="一号")
+    await create_source(app_client, code="plcx1", name="二号")
+    response = await app_client.get(SOURCES, params={"q": keyword})
+    codes = [item["code"] for item in payload(response)["items"]]
+    assert codes == expected
+
+
 async def test_the_list_filters_by_protocol(
     app_client: httpx.AsyncClient,
 ) -> None:
