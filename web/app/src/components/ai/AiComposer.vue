@@ -9,7 +9,7 @@
  *
  * ⚠ 键位判定在 features/ai/composeKeys.ts，这里只接线。
  */
-import { computed, ref } from 'vue'
+import { computed, ref, watch } from 'vue'
 import type { AssistantModelProfile } from '@dt/contracts'
 import { DtButton, DtFilePicker, DtNotice, DtTextarea } from '@dt/ui'
 
@@ -106,6 +106,15 @@ const attaching = ref(false)
 const attachError = ref('')
 /** 点开在看全文的那一条附件；null = 都收着。 */
 const previewAt = ref<number | null>(null)
+// 附件被发走或被外部清掉时复位，否则下一条落在同一下标上会一进来就是展开的
+watch(
+  () => props.compose.attachments.value.length,
+  (length) => {
+    if (previewAt.value !== null && previewAt.value >= length) {
+      previewAt.value = null
+    }
+  },
+)
 
 async function attach(files: File[]): Promise<void> {
   const file = files[0]
