@@ -271,9 +271,10 @@ function onRenameKeydown(event: KeyboardEvent): void {
   min-width: 2em;
 }
 
-// 类型名让位给节点名：先被压缩，压到没有为止
+// 类型名让位给节点名：先被压缩，压到没有为止。
+// ⚠ 收缩比要拉得极大：按比例分摊时名字哪怕只分到零点几像素，也会被省略号截掉一个字
 .dt-layer__type {
-  flex: 0 100 auto;
+  flex: 0 10000 auto;
   min-width: 0;
   max-width: 40%;
   overflow: hidden;
