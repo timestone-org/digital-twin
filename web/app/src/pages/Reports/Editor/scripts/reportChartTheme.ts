@@ -19,6 +19,8 @@ export const REPORT_SERIES_COLORS = [
 ] as const
 /** Word 里图表固定高 2 800 000 EMU。 */
 export const REPORT_CHART_HEIGHT_CM = 7.78
+/** ECharts 图例标记形状（不是 DtIcon 图标名），对应 Word 图例的方块。 */
+const LEGEND_MARK = 'rect'
 export const REPORT_PRINT_COLORS = { text: '#595959', grid: '#D9D9D9' }
 /** Word 表格的边框、表头底与隔行底。 */
 export const REPORT_TABLE_COLORS = {
@@ -181,7 +183,7 @@ export function reportChartOption(
     legend: {
       show: legend,
       type: 'scroll',
-      icon: 'rect',
+      icon: LEGEND_MARK,
       itemWidth: node.kind === 'line' ? 18 : 8,
       itemHeight: node.kind === 'line' ? 2 : 8,
       bottom: 0,
