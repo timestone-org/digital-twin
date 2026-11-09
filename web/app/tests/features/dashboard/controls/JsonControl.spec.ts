@@ -45,12 +45,23 @@ describe('显示现值', () => {
 })
 
 describe('编辑上抛', () => {
-  it('合法 JSON 抛解析后的值，且不算连续输入', async () => {
+  // ⚠ 打字是连续输入：不并成一笔的话，每个能解析的中间态都是一条撤销记录
+  it('合法 JSON 抛解析后的值，按连续输入并进撤销栈', async () => {
     const wrapper = mountJson({})
 
     await wrapper.find('textarea').setValue('{ "n": 3 }')
 
-    expect(lastUpdate(wrapper)).toStrictEqual([{ n: 3 }, false])
+    expect(lastUpdate(wrapper)).toStrictEqual([{ n: 3 }, true])
+  })
+
+  // ⚠ 值回流时若按缩进重排文本，光标会跳走、后面敲的字落到别处
+  it('自己敲出来的合法文本在值回流后原样保留，不被重排', async () => {
+    const wrapper = mountJson({})
+
+    await wrapper.find('textarea').setValue('{"a":1}')
+    await wrapper.setProps({ field: FIELD, value: { a: 1 } })
+
+    expect(wrapper.find('textarea').element.value).toBe('{"a":1}')
   })
 
   it('清空即取消这一项的配置', async () => {
@@ -58,7 +69,7 @@ describe('编辑上抛', () => {
 
     await wrapper.find('textarea').setValue('   ')
 
-    expect(lastUpdate(wrapper)).toStrictEqual([undefined, false])
+    expect(lastUpdate(wrapper)).toStrictEqual([undefined, true])
   })
 })
 
@@ -86,7 +97,7 @@ describe('解析失败', () => {
     await wrapper.find('textarea').setValue('[')
     await wrapper.find('textarea').setValue('[1]')
 
-    expect(lastUpdate(wrapper)).toStrictEqual([[1], false])
+    expect(lastUpdate(wrapper)).toStrictEqual([[1], true])
     expect(wrapper.findComponent(DtNotice).exists()).toBe(false)
   })
 })

@@ -20,11 +20,22 @@ const serialized = computed(() =>
   props.value === undefined ? '' : JSON.stringify(props.value, null, 2),
 )
 
-// 外部改了值（撤销、换选中节点）就把草稿换回来；正在编辑时不打断
+/** 草稿解出来是不是就等于这一份值；解不出来算不等。 */
+function draftMatches(next: string): boolean {
+  if (draft.value.trim() === '') return next === ''
+  try {
+    return JSON.stringify(JSON.parse(draft.value), null, 2) === next
+  } catch {
+    return false
+  }
+}
+
+// 外部改了值（撤销、换选中节点）就把草稿换回来；正在编辑时不打断。
+// ⚠ 自己敲出来的值回流时不重排：按缩进重写文本会让光标跳走、后面敲的字落错地方
 watch(
   serialized,
   (next) => {
-    if (parseError.value === null) draft.value = next
+    if (parseError.value === null && !draftMatches(next)) draft.value = next
   },
   { immediate: true },
 )
@@ -33,13 +44,14 @@ function commit(text: string): void {
   draft.value = text
   if (text.trim() === '') {
     parseError.value = null
-    emit('update', undefined, false)
+    emit('update', undefined, true)
     return
   }
   try {
     const parsed: unknown = JSON.parse(text)
     parseError.value = null
-    emit('update', parsed, false)
+    // 打字是连续输入：撤销栈按 (节点,字段) 并成一笔
+    emit('update', parsed, true)
   } catch {
     parseError.value = '不是合法的 JSON，这一次没有写回去'
   }
