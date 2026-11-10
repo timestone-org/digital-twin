@@ -22,7 +22,6 @@ from platform_server.apps.dataset.formula.catalog import (
 )
 from platform_server.apps.dataset.formula.context import (
     HistoryCache,
-    RowSnapshot,
     WholeStats,
     build_externals,
     empty_cache,
@@ -81,6 +80,8 @@ from platform_server.apps.dataset.formula.signatures import (
     SCALAR_FUNCS,
     WINDOW_FUNCS,
 )
+from platform_server.apps.dataset.formula.snapshot import RowSnapshot
+from platform_server.apps.dataset.formula.window_index import WindowIndex
 from platform_server.apps.dataset.formula.windows import (
     MAX_WINDOW_YEARS,
     WindowSpec,
@@ -131,6 +132,7 @@ __all__ = [
     "TableLabels",
     "WholeRef",
     "WholeStats",
+    "WindowIndex",
     "WindowRef",
     "WindowSpec",
     "build_catalog",

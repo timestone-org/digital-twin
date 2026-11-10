@@ -32,6 +32,7 @@ from platform_server.apps.dataset.formula import (
     PredictKey,
     RowSnapshot,
     WholeStats,
+    WindowIndex,
     build_externals,
     build_plan,
     evaluate,
@@ -60,8 +61,9 @@ _logger = get_logger("platform.dataset.compute")
 # 一次重算最多改写多少行。触顶时如实上报，不静默截断
 MAX_RECOMPUTE_ROWS = 200_000
 # 每处理这么多行让出一次事件循环。⚠ 不用 `asyncio.to_thread`——线程里改
-# ORM 实例会碰 SQLAlchemy 的线程安全边界
-YIELD_EVERY = 500
+# ORM 实例会碰 SQLAlchemy 的线程安全边界。⚠ 宽表一行要毫秒级，攒太多行才让
+# 一次，同进程别的请求读不到库的回包，会被库按语句超时掐掉
+YIELD_EVERY = 50
 # `*_ALL` 指向公式列时要多跑几趟才收敛，上限就这么多
 _MAX_PASSES = 3
 
@@ -316,12 +318,14 @@ async def _one_pass(
         RowTarget(table_id=targets[0].table_id, ts=targets[0].ts),
     )
     series = list(batch.seeds)
+    # 一趟一份：这一趟的历史串只追加，窗口索引因此能逐行追平而不必重建
+    index = WindowIndex()
     is_collecting = batch.memo is not None and batch.memo.is_collecting
     failed = 0
     has_changed = False
     for position, record in enumerate(targets):
         values = batch.values[position]
-        cache = _cache_of(scope, series, whole, batch)
+        cache = _cache_of(scope, series, whole, batch, index)
         computed, errors = evaluate_row(scope, record.ts, values, cache)
         if not is_collecting:
             has_changed = has_changed or computed != (
@@ -342,12 +346,13 @@ def _cache_of(
     series: list[RowSnapshot],
     whole: dict[str, WholeStats],
     batch: "_Batch",
+    index: WindowIndex,
 ) -> HistoryCache:
     """从内存里那串已算过的行切出下一行要用的历史。
 
     ⚠ 窗口不在这里精确切：求值层会按各自的下界再切一次，多给几行不会算错，
     而少给一行会静默少算（`formula.context._window_value`）。
-    Args: scope, series, whole, batch。
+    Args: scope, series, whole, batch, index（整趟共用的窗口索引）。
     """
     externals = batch.externals
     models = batch.models
@@ -359,6 +364,7 @@ def _cache_of(
     cache.external_rows = externals
     cache.models = models
     cache.model_memo = batch.memo
+    cache.window_index = index
     return cache
 
 

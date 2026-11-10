@@ -6,8 +6,7 @@
 （docs/DATASET_DESIGN.md §5.6）。
 """
 
-from bisect import bisect_left, bisect_right
-from collections.abc import Callable, Iterable, Sequence
+from collections.abc import Callable, Sequence
 from dataclasses import dataclass, field
 from datetime import UTC, datetime, tzinfo
 
@@ -22,26 +21,14 @@ from platform_server.apps.dataset.formula.complete_windows import (
 from platform_server.apps.dataset.formula.errors import FormulaError
 from platform_server.apps.dataset.formula.evaluator import ExternalKey
 from platform_server.apps.dataset.formula.refs import FormulaDeps, WindowRef
+from platform_server.apps.dataset.formula.snapshot import RowSnapshot
 from platform_server.apps.dataset.formula.values import finite, to_number
-from platform_server.apps.dataset.formula.windows import (
-    WindowSpec,
-    window_lower_bound,
+from platform_server.apps.dataset.formula.window_index import (
+    WindowIndex,
+    WindowSlice,
+    ts_bounds,
 )
-
-
-@dataclass(frozen=True)
-class RowSnapshot:
-    """一条行在求值视角下的样子：时刻 + 全部列值（原始值 ∪ 计算值）。"""
-
-    ts: datetime
-    values: dict[str, object]
-
-    def get(self, key: str) -> object:
-        """取一列的值。
-
-        Args: key。
-        """
-        return self.values.get(key)
+from platform_server.apps.dataset.formula.windows import window_lower_bound
 
 
 @dataclass(frozen=True)
@@ -113,6 +100,9 @@ class HistoryCache:
     external_rows: dict[str, list[RowSnapshot]] = field(
         default_factory=dict[str, list[RowSnapshot]]
     )
+    #: 窗口聚合的增量索引。⚠ 整表重算要让一趟里的每一行共用同一份：每行新造
+    #: 一份就退回「每行把整个窗口重转一遍数」，1 分钟台账的今日窗是平方级
+    window_index: WindowIndex = field(default_factory=WindowIndex)
 
 
 def empty_cache() -> HistoryCache:
@@ -171,61 +161,46 @@ def _window_value(
     if ref.table_code is not None:
         # ⚠ 跨表窗口**不含当前行**：当前行属于本表，并进去是凭空多一个值，
         # 而两张表有同名列时尤其难发现（docs/DATASET_DESIGN.md §5.6）
-        rows = _slice_window(
-            cache.external_rows.get(ref.table_code) or [],
-            current.ts,
-            ref.spec,
-            cache.tz,
-        )
-        return _window_aggregate(ref, rows, current.ts, cache.tz)
-    # ⚠ 这里**再切一次**窗口，不假定取数层切得刚好：取多了不会报错，只会让
-    # 「近 1 小时」悄悄算成近一天，而两边的代码单看都对
-    rows = _slice_window(
-        cache.window_rows.get(ref.spec.literal, ()),
-        current.ts,
-        ref.spec,
-        cache.tz,
-    )
+        rows = cache.external_rows.get(ref.table_code) or []
+        return _window_aggregate(ref, cache, rows, current.ts, None)
     # 当前行参与本表窗口：仅当它确实持有该列的值——公式列引用自身窗口时不成立，
     # 这正是 `SUM_OVER({自己}, '1y')` 不构成环的原因
-    if current.values.get(ref.key) is not None or ref.spec.step_s is not None:
-        rows = [*rows, current]
-    return _window_aggregate(ref, rows, current.ts, cache.tz)
+    joins = (
+        current.values.get(ref.key) is not None or ref.spec.step_s is not None
+    )
+    rows = cache.window_rows.get(ref.spec.literal, ())
+    return _window_aggregate(
+        ref, cache, rows, current.ts, current if joins else None
+    )
 
 
 def _window_aggregate(
-    ref: WindowRef, rows: list[RowSnapshot], ts: datetime, tz: tzinfo
+    ref: WindowRef,
+    cache: HistoryCache,
+    rows: Sequence[RowSnapshot],
+    ts: datetime,
+    extra: RowSnapshot | None,
 ) -> object:
-    """按窗口口径求和或执行普通聚合。Args: ref, rows, ts, tz。"""
+    """在升序行串里切出 `(下界, ts]`（今日窗下界闭），按窗口口径聚合。
+
+    ⚠ 这里**再切一次**窗口，不假定取数层切得刚好：取多了不会报错，只会让
+    「近 1 小时」悄悄算成近一天，而两边的代码单看都对。
+    Args: ref, cache, rows（⚠ 必须按 ts 升序）, ts, extra（并进窗口的当前行）。
+    """
+    lower = window_lower_bound(ts, ref.spec, cache.tz)
+    start, end = ts_bounds(rows, lower, ts, is_closed=ref.spec.is_today)
     if ref.spec.step_s is not None:
+        picked = [*rows[start:end], *([] if extra is None else [extra])]
         return sum_complete_window(
-            ((row.ts, row.get(ref.column_key)) for row in rows),
-            window_lower_bound(ts, ref.spec, tz),
+            ((row.ts, row.get(ref.column_key)) for row in picked),
+            lower,
             ts,
             ref.spec.step_s,
         )
-    return _aggregate(ref.func, rows, ref.column_key)
-
-
-def _slice_window(
-    rows: Sequence[RowSnapshot], ts: datetime, spec: WindowSpec, tz: tzinfo
-) -> list[RowSnapshot]:
-    """从一串升序的行里二分切出 `(下界, ts]`，今日窗下界闭。
-
-    Args: rows（⚠ 必须按 ts 升序）, ts, spec, tz。
-    """
-    lower = window_lower_bound(ts, spec, tz)
-    locate = bisect_left if spec.is_today else bisect_right
-    start = locate(rows, lower, key=_row_ts)
-    return list(rows[start : bisect_right(rows, ts, key=_row_ts)])
-
-
-def _row_ts(row: RowSnapshot) -> datetime:
-    """二分用的键。
-
-    Args: row。
-    """
-    return row.ts
+    column = cache.window_index.column(rows, ref.column_key)
+    return _aggregate(
+        ref.func, WindowSlice(column, start, end, ref.column_key, extra)
+    )
 
 
 def _as_of(
@@ -247,27 +222,6 @@ def _as_of(
     return rows[low - 1] if low > 0 else None
 
 
-def _numeric_series(rows: Iterable[RowSnapshot], key: str) -> list[float]:
-    """窗口内某列的数值序列。
-
-    ⚠ 空值与转不成数的脏值一并**跳过**，不报错——一个窗口横跨很多行，一格脏
-    数据不该毙掉整条公式（与单值算术的「类型不匹配才报错」刻意不同）。
-    Args: rows, key。
-    """
-    series: list[float] = []
-    for row in rows:
-        raw = row.get(key)
-        if raw is None:
-            continue
-        try:
-            number = to_number(raw, where="窗口聚合")
-        except FormulaError:
-            continue
-        if number is not None:
-            series.append(number)
-    return series
-
-
 _SERIES_REDUCERS: dict[str, Callable[[list[float]], float]] = {
     "SUM_OVER": sum,
     "AVG_OVER": lambda series: sum(series) / len(series),
@@ -284,19 +238,19 @@ _WHOLE_DERIVERS: dict[str, Callable[[WholeStats], float | None]] = {
 }
 
 
-def _aggregate(func: str, rows: list[RowSnapshot], key: str) -> object:
-    """按窗口函数名折算一个标量。rows 已按 ts 升序。
+def _aggregate(func: str, window: WindowSlice) -> object:
+    """按窗口函数名折算一个标量。
 
-    Args: func, rows, key。
+    Args: func, window。
     """
     if func == "COUNT_OVER":
         # ⚠ 数的是**有没有值**，不是能不能转成数，空白串也算一条
-        return float(sum(1 for row in rows if row.get(key) is not None))
+        return float(window.count())
     if func == "FIRST_OVER":
-        return _first_present(rows, key)
+        return window.first()
     if func == "LAST_OVER":
-        return _first_present(list(reversed(rows)), key)
-    series = _numeric_series(rows, key)
+        return window.last()
+    series = window.numbers()
     if func == "ALL_ZERO_OVER":
         # ⚠ 窗口里一个值都没有时给**空**而不是真：「都是 0」与「什么都没有」
         # 是两回事，混成一档会让一张刚建好的空表直接走进归零那一支
@@ -305,18 +259,6 @@ def _aggregate(func: str, rows: list[RowSnapshot], key: str) -> object:
     if reducer is None:  # pragma: no cover - 名单由契约测试锁死
         raise FormulaError(f"未实现的窗口函数 {func}")
     return finite(reducer(series)) if series else None
-
-
-def _first_present(rows: list[RowSnapshot], key: str) -> object:
-    """第一条持有该列值的行的**原值**（不转数）。
-
-    Args: rows, key。
-    """
-    for row in rows:
-        value = row.get(key)
-        if value is not None:
-            return value
-    return None
 
 
 def _whole_value(func: str, stats: WholeStats | None) -> object:
