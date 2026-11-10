@@ -2,6 +2,7 @@
 
 import tempfile
 import unittest
+from collections.abc import Callable
 from pathlib import Path
 from unittest.mock import patch
 
@@ -39,12 +40,11 @@ class _GateCase(unittest.TestCase):
         path.write_text(HEADER + body + DOWNGRADE, encoding="utf-8")
         return path
 
-    def _run(self, check: object, *paths: Path) -> list[_report.Violation]:
+    def _run(
+        self, check: Callable[[], list[_report.Violation]], *paths: Path
+    ) -> list[_report.Violation]:
         with patch.object(gate, "_all_versions", return_value=list(paths)):
-            assert callable(check)
-            found = check()
-            assert isinstance(found, list)
-            return found
+            return check()
 
 
 class BackfillPatternTests(unittest.TestCase):
