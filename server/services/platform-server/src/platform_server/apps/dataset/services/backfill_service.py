@@ -160,8 +160,8 @@ async def start_backfill(
     token = f"{settings.app_instance}:{uuid7().hex}"
     if not await runner.jobs.claim(table_id, token):
         raise DatasetBackfillBusy(
-            f"台账「{table.code}」已经有一个回填在跑，"
-            "等它结束、或者先取消（DELETE 同一路径）"
+            f"台账「{table.code}」已经有一个回填或重算在跑，"
+            "等它结束、或者先取消回填（DELETE 同一路径）"
         )
     state = initial_state(table, plan, (payload.since, payload.until), now)
     await _record(runner, state, token=token, at=now)

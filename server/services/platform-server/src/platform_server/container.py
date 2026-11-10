@@ -37,9 +37,11 @@ from platform_server.apps.dashboard.services import (
     load_module_catalog,
 )
 from platform_server.apps.dataset.services import (
+    RECOMPUTE_STATE_PREFIX,
     BackfillJobs,
     BackfillRunner,
     DatasetDirtyLog,
+    RecomputeRunner,
 )
 from platform_server.apps.llm_providers.services import (
     HTTP_TIMEOUT_S,
@@ -98,6 +100,8 @@ class DatasetParts:
     dirty: DatasetDirtyLog
     #: 历史回填的起跑口，兼在跑的那几个后台任务的强引用（§14）
     backfill: BackfillRunner
+    #: 重算任务的起跑口（§14.10）。⚠ 锁与回填共用一把
+    recompute: RecomputeRunner
     #: 聚合采集器的单活租约（§13.4）
     lease: Lease
     #: 保留期清理的单活租约（§15.4）。⚠ 与上面那把分开，理由见键名旁的告诫
@@ -243,6 +247,15 @@ def _dataset(
             dirty=DatasetDirtyLog(sink=cache),
             jobs=BackfillJobs(store=cache),
             settings=settings,
+        ),
+        recompute=RecomputeRunner(
+            sessions=database,
+            dirty=DatasetDirtyLog(sink=cache),
+            jobs=BackfillJobs(
+                store=cache, state_prefix=RECOMPUTE_STATE_PREFIX, label="重算"
+            ),
+            timezone=ZoneInfo(settings.dataset_bucket_timezone),
+            instance=settings.app_instance,
         ),
         lease=_build_lease(settings, DATASET_LEASE_KEY),
         retention_lease=_build_lease(settings, DATASET_RETENTION_LEASE_KEY),

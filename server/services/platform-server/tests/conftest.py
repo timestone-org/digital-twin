@@ -4,7 +4,7 @@ import os
 import socket
 import uuid
 from collections.abc import AsyncIterator, Callable, Iterable
-from dataclasses import dataclass, replace
+from dataclasses import dataclass
 from datetime import datetime
 
 import httpx
@@ -21,8 +21,17 @@ from unit.collect_fakes import (
     FakeCommandTransport,
     FakeHistorySource,
 )
+from unit.container_fakes import (
+    CollectFakes,
+    ExternalFakes,
+    faked_container,
+    recording_recompute,
+)
 from unit.database_fakes import MakerSessions, rollback_sessions
-from unit.dataset_fakes import FakeSetSink, RecordingRunner
+from unit.dataset_fakes import (
+    FakeSetSink,
+    RecordingRecomputeRunner,
+)
 from unit.opcua_fakes import FakeNodeWriter
 from unit.source_fakes import (
     FakeAcSource,
@@ -41,7 +50,7 @@ from lib.config import load_settings
 from lib.db import Database, run_after_commit_hooks
 from lib.idempotency import IdempotencyStore
 from lib.logging import configure_logging
-from lib.testing import FakeObjectStore, InMemoryCache
+from lib.testing import FakeObjectStore
 from lib.utils.timeutils import utcnow
 from platform_server.app import build_app
 from platform_server.apps.assets.catalog import ASSET_MANAGE, ASSET_VIEW
@@ -55,8 +64,6 @@ from platform_server.apps.collect.catalog import (
     COLLECT_VIEW,
 )
 from platform_server.apps.collect.services import (
-    CommandBus,
-    PlanNotifier,
     ReadOnlyHistorySource,
 )
 from platform_server.apps.dashboard.catalog import (
@@ -75,9 +82,7 @@ from platform_server.apps.dashboard.services import (
 )
 from platform_server.apps.dataset import catalog as dataset_catalog
 from platform_server.apps.dataset.services import (
-    BackfillJobs,
     BackfillRunner,
-    DatasetDirtyLog,
 )
 from platform_server.apps.hvac.catalog import AC_MANAGE, AC_VIEW
 from platform_server.apps.hvac.deps import (
@@ -91,8 +96,6 @@ from platform_server.apps.modeling import catalog as modeling_catalog
 from platform_server.apps.modeling.deps import get_modeling_sessions
 from platform_server.apps.report.catalog import REPORT_CODES
 from platform_server.container import (
-    IDEMPOTENCY_NAMESPACE,
-    Container,
     _build_history_database,
 )
 from platform_server.deps import get_session, get_stream
@@ -132,12 +135,6 @@ FULL_CODES = (
     LLM_VIEW,
     LLM_MANAGE,
 )
-# 命令总线的两档预算，固定住，断言里的信封才是可手写的常量
-BROWSE_TIMEOUT_S = 10.0
-COMMAND_TIMEOUT_S = 5.0
-SUBTREE_TIMEOUT_S = 15.0
-PLAN_CHANNEL = "collect:plan:changed"
-
 # 大屏绑定用例引用的点位。⚠ 采集配置面未落地，故点位台账在用例里是一份名单假件
 SEEDED_SOURCE_ID = "0192f0c0-0000-7000-8000-00000000abcd"
 SEEDED_NODE_KEYS = frozenset(
@@ -300,19 +297,12 @@ class AppContext:
     """回填的起跑口。⚠ 与应用同一个实例：端点用例据它看「起过没有」，
     而 `sessions` 就是用例那条回滚事务的会话工厂。"""
     backfill: BackfillRunner
+    """重算的起跑口替身。用例 POST 之后调 `run_launched()` 才真跑。"""
+    recompute: RecordingRecomputeRunner
     """用例那条回滚事务上的会话工厂。⚠ worker 侧的编排自己开短事务，用例要
     扮演一次 worker 就得把这个工厂交给它——另开一条连接的话，它看不见用例经
     HTTP 种下的数据，而现象是「运行说台账不存在」。"""
     sessions: MakerSessions
-
-
-@dataclass(frozen=True)
-class CollectFakes:
-    """采集面那三跳跨进程调用的假件，一次性交给用例。"""
-
-    bus: FakeCommandTransport
-    plans: FakeChannelPublisher
-    history: FakeHistorySource
 
 
 @pytest.fixture
@@ -380,21 +370,6 @@ def collect_fakes() -> CollectFakes:
     )
 
 
-@dataclass(frozen=True)
-class ExternalFakes:
-    """整装应用要替掉的全部跨进程依赖，打成一包。
-
-    ⚠ 打成一包不是为了好看：fixture 的形参上限与函数一样是 5，而
-    `app_context` 还要 settings / 可达性 / 签名器三件。
-    """
-
-    ac_source: FakeAcSource
-    points: StaticPointCatalog
-    collect: CollectFakes
-    nodes: FakeNodeWriter
-    dirty: FakeSetSink
-
-
 @pytest.fixture
 def dirty_sink() -> FakeSetSink:
     """台账报脏用的进程内集合。"""
@@ -457,49 +432,6 @@ def _wire_fakes(
     )
 
 
-def _faked_container(
-    built: Container, fakes: ExternalFakes, sessions: MakerSessions
-) -> Container:
-    """把会打网络的长生命周期对象换成进程内假件。
-
-    ⚠ 用例不许打网络，而 Redis 与归档库在 CI 里也不存在。
-    ⚠ 回填的起跑口换成**只记不跑**的替身：用例那条会话是一条回滚事务上的
-    单连接，后台任务会在同一条连接上另开短事务，一交错就是
-    `PendingRollbackError`。真跑一遍回填由 `integration` 那一批用例自建起跑口
-    验（`backfill_helpers.Backfiller`）。
-    Args: built, fakes, sessions。
-    """
-    dirty = DatasetDirtyLog(sink=fakes.dirty)
-    return replace(
-        built,
-        dataset=replace(
-            built.dataset,
-            dirty=dirty,
-            backfill=RecordingRunner(
-                sessions=sessions,
-                history=fakes.collect.history,
-                dirty=dirty,
-                jobs=BackfillJobs(store=InMemoryCache()),
-                settings=built.settings,
-            ),
-        ),
-        nodes=fakes.nodes,
-        idempotency=IdempotencyStore(
-            cache=InMemoryCache(), namespace=IDEMPOTENCY_NAMESPACE
-        ),
-        command_bus=CommandBus(
-            transport=fakes.collect.bus,
-            browse_timeout_s=BROWSE_TIMEOUT_S,
-            command_timeout_s=COMMAND_TIMEOUT_S,
-            subtree_timeout_s=SUBTREE_TIMEOUT_S,
-        ),
-        plan_notifier=PlanNotifier(
-            publisher=fakes.collect.plans, channel=PLAN_CHANNEL
-        ),
-        history=fakes.collect.history,
-    )
-
-
 @pytest.fixture
 async def app_context(
     settings: Settings,
@@ -509,7 +441,7 @@ async def app_context(
 ) -> AsyncIterator[AppContext]:
     """整装应用 + 同连接的会话，每条用例一个回滚事务。
 
-    ⚠ 外库与 Redis 一律换成假件：用例不许打网络，而它们在 CI 里也不存在。
+    ⚠ 外库与 Redis 一律换成假件：用例不许打网络，CI 里也没有它们。
     """
     if not postgres_available:
         pytest.skip("本机连不到 Postgres")
@@ -517,11 +449,10 @@ async def app_context(
     connection = await application.state.container.database.engine.connect()
     transaction = await connection.begin()
     maker = rollback_sessions(connection)
-    container = _faked_container(
+    container = faked_container(
         application.state.container, external_fakes, MakerSessions(maker)
     )
     application.state.container = container
-    object_store = FakeObjectStore()
     _wire_fakes(
         application,
         maker=maker,
@@ -529,7 +460,7 @@ async def app_context(
         validation=ValidationContext(
             catalog=container.module_catalog, points=external_fakes.points
         ),
-        object_store=object_store,
+        object_store=(object_store := FakeObjectStore()),
     )
     transport = httpx.ASGITransport(app=application)
     async with (
@@ -546,6 +477,7 @@ async def app_context(
             idempotency=container.idempotency,
             dirty=external_fakes.dirty,
             backfill=container.dataset.backfill,
+            recompute=recording_recompute(container),
             sessions=MakerSessions(maker),
         )
     await transaction.rollback()

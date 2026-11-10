@@ -40,7 +40,9 @@ const hasFormulaColumn = computed(() =>
 )
 // 行内动作在「详情页正忙」或「本分区正忙」时一起禁掉：删一列与删一行同时在飞，
 // 后回来的那个会拿着一份已经不成立的行去发请求
-const isBusy = computed(() => props.busy || ops.busy.value)
+const isBusy = computed(
+  () => props.busy || ops.busy.value || ops.recomputing.value,
+)
 
 useRecordRefresh({
   table: () => props.table,
@@ -86,10 +88,10 @@ function onRevoke(column: DatasetColumn, row: RecordRow): void {
           <DtButton
             size="sm"
             icon="refresh-cw"
-            :loading="ops.busy.value"
+            :loading="ops.busy.value || ops.recomputing.value"
             @click="ops.recompute()"
           >
-            立即重算
+            {{ ops.recomputing.value ? '重算中' : '立即重算' }}
           </DtButton>
         </PermGuard>
       </span>
@@ -138,9 +140,10 @@ function onRevoke(column: DatasetColumn, row: RecordRow): void {
             size="sm"
             icon="refresh-cw"
             :disabled="isBusy"
+            :loading="ops.recomputing.value"
             @click="ops.recompute()"
           >
-            重算公式列
+            {{ ops.recomputing.value ? '重算中' : '重算公式列' }}
           </DtButton>
         </PermGuard>
         <PermGuard :codes="[PERMISSION_CODES.datasetRecordWrite]">

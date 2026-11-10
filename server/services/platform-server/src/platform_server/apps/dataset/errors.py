@@ -167,6 +167,28 @@ class DatasetBackfillBusy(AppError):
     http_status = 409
 
 
+class DatasetRecomputeBusy(AppError):
+    """这张台账正在回填或重算。
+
+    ⚠ 与回填共用一把锁、却单列一个码：回填那条的处置是「等它或先取消」，
+    而重算没有取消，处置只有等（docs/DATASET_DESIGN.md §14.10）。
+    """
+
+    code = 41233
+    http_status = 409
+
+
+class DatasetRecomputeLockLost(AppError):
+    """重算途中续不上单飞锁：锁已不在本次任务手上，整趟回滚。
+
+    只落进任务态，不经 HTTP 返回。
+    """
+
+    # ⚠ 首位跟 HTTP 状态走：这一条按 503 归类，故是 5 开头
+    code = 51231
+    http_status = 503
+
+
 class DatasetBackfillNotRunning(AppError):
     """这张台账当前没有正在跑的回填，取消无从谈起。"""
 

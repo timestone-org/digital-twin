@@ -689,7 +689,8 @@ P/dataset-tables/{tid}/series                 GET  序列（?keys=a,b）
 P/dataset-tables/{tid}/template               GET  下载录入模板（CSV 正文，无信封）
 P/dataset-tables/{tid}/export                 GET  导出 CSV（同上）
 P/dataset-tables/{tid}/backfill               POST 起回填  GET 查进度  DELETE 取消
-P/dataset-tables/{tid}:recompute              POST 重算公式列
+P/dataset-tables/{tid}:recompute              POST 起重算任务（202，§14.10）
+P/dataset-tables/{tid}/recompute              GET  查重算进度
 P/dataset-tables/{tid}/formula-functions      GET  函数目录 + 库公式 + 可引用的列
 P/dataset-tables/{tid}/formula:validate       POST 校验（语法 / 未知列 / 环）
 P/dataset-tables/{tid}/formula:preview        POST 试算
@@ -930,6 +931,7 @@ Dataset/TableDetail/
 |---|---|---|---|
 | 自动采集台账的数据首页 | 60s | 数据分区可见且工作页签活跃；从隐藏或失活恢复时立即刷新 | 历史页、编辑或写入期间、停用、隐藏、工作页签失活、卸载 |
 | 回填进度 | 3s | 提交后；**外加挂载时立刻拉一次**，好接上刷新页面之前起的任务 | 终态；取数失败（**静默，不弹吐司**——每 3 秒一个会糊满屏幕）；卸载 |
+| 重算任务 | 1.5s | 起任务后；**外加挂载时立刻拉一次**，好接上刷新页面之前起的任务 | 终态；取数失败（静默，按钮保持「重算中」直到读到终态）；换表；卸载 |
 | 批量重算 | 1.5s | 起任务后且状态是 running | 非 running；取数失败（作业态只留一天，**保留最后一次进度不要清空**）；关弹窗；卸载 |
 
 ⚠ 定时器、监听、`ResizeObserver`、echarts 实例**必须在卸载时清掉**，这是闸门检查项。
@@ -1474,6 +1476,36 @@ DELETE P/dataset-tables/{tid}/backfill   取消           dataset:backfill  没�
 | `dataset_backfill_state_write_failed` | 进度没写进 Redis（数据已落库） | WARNING |
 | `dataset_backfill_cancel_flag_unreadable` | 取消标志读不到，本批按未取消继续 | WARNING |
 | `dataset_backfill_release_failed` | 锁没放掉，等它自己过期 | WARNING |
+
+### 14.10 重算任务：与回填同构的后台任务
+
+重算原先是同步请求，一张 213 列、1 分钟一行的台账整表重算要十几秒，且**随行数
+线性增长**（每天约 +1440 行），迟早越过前端 20s 与网关 25s 的超时。故改成与回填
+同构的后台任务（ADR-0002：重任务由同一代码单元的运行角色承载）：
+
+```
+POST P/dataset-tables/{tid}:recompute  起任务（202）  dataset:backfill  必须支持 Idempotency-Key
+GET  P/dataset-tables/{tid}/recompute  查进度         dataset:view      没有任务时 data=null
+```
+
+1. **与回填共用同一把按表的单飞锁**（`platform:dataset:backfill:{tid}:lock`）。
+   两者都改写 `computed_json`：并发时后跑完的一方拿的是对方写入之前的上文，结果
+   静默错位。撞锁回 409（`DatasetRecomputeBusy`），文案说「正在回填或重算」。
+2. **任务态单独一个键**（`platform:dataset:recompute:{tid}`，TTL 一天），出参
+   `RecomputeJobOut` 起与查共用；`limit` / `is_truncated` / `failed` 照实给。
+3. **一个事务算完再提交**，不拆批：`PREV`、今日窗与 `*_ALL` 依赖整段内存上文，
+   拆批提交会改结果。整趟限时 30 分钟；期间另起一个心跳每 100 秒 CAS 续锁，续不上
+   立刻中止、整趟回滚。
+4. **没有取消**：单事务的任务只有「全写」与「全不写」，协作式取消没有可停的批边界。
+5. **进程关停**：先等 drain 超时，再取消在跑的任务——事务回滚、任务态记成
+   `failed` +「服务正在关停」，再放锁。排在 Redis 与连接池之前（同回填）。
+6. 报脏走提交后钩子（§16）：在事务落地之前告诉发布器，它读到的是旧值。
+
+| event | 何时 | 级别 |
+|---|---|---|
+| `dataset_recompute_started` | 起了一个任务 | INFO |
+| `dataset_records_recomputed` | 算完并已提交 | INFO |
+| `dataset_recompute_failed` | 任务本体出错（已回滚） | ERROR |
 
 ## 15. 保留期夜间清理
 

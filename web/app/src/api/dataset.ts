@@ -20,7 +20,7 @@ import type {
   DatasetFormulaValidation,
   DatasetOverrideBulkClear,
   DatasetOverrideWrite,
-  DatasetRecompute,
+  DatasetRecomputeJob,
   DatasetRecord,
   DatasetRecordDelete,
   DatasetRecordWrite,
@@ -597,22 +597,35 @@ export interface DatasetRangeInput {
 }
 
 /**
- * 重算公式列。只写计算值，不碰任何原始录入值。
- * ⚠ 回执的 `is_truncated` 必须照实说出来：触顶的一次与算完的一次长得一模一样，
- * 不说的话用户以为已经算完了（docs/DATASET_DESIGN.md §6.2）。
+ * 起一个重算公式列的任务（202）。只写计算值，不碰任何原始录入值。
+ * ⚠ 回执永远是 `running` 且一行都还没算：数要轮询 `getDatasetRecompute` 读到
+ * 终态才有（docs/DATASET_DESIGN.md §14.10）。
  * @param tableId 台账 id
  * @param range 时间范围，缺省整表
  * @param key 幂等键，缺省现生成一个
  */
-export async function recomputeDatasetTable(
+export async function startDatasetRecompute(
   tableId: string,
   range: DatasetRangeInput = {},
   key: string = newIdempotencyKey(),
-): Promise<DatasetRecompute> {
-  return await requestData<DatasetRecompute>(
+): Promise<DatasetRecomputeJob> {
+  return await requestData<DatasetRecomputeJob>(
     `/dataset-tables/${tableId}:recompute`,
     onPlatform({ method: 'POST', body: range, headers: idempotent(key) }),
   )
+}
+
+/**
+ * 查重算进度。没有保留的任务时 GET 正常返回 null；不能使用 requestData。
+ * ⚠ 「读不到」会抛，与「没有任务」（null）是两个答案。
+ * @param tableId 台账 id
+ * @param signal 中止信号
+ */
+export function getDatasetRecompute(
+  tableId: string,
+  signal?: AbortSignal,
+): Promise<DatasetRecomputeJob | null> {
+  return request(`/dataset-tables/${tableId}/recompute`, onPlatform({ signal }))
 }
 
 /**

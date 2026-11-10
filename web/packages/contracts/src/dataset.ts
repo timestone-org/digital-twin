@@ -333,13 +333,35 @@ export interface DatasetSeries {
   limit: number
 }
 
-/** 一次重算的回执。对应后端 `RecomputeOut`。 */
-export interface DatasetRecompute {
+/**
+ * 重算任务的状态。没有「取消」：后端一个事务算完才提交，没有可停的批边界
+ * （docs/DATASET_DESIGN.md §14.10）。
+ */
+export const DATASET_RECOMPUTE_STATUSES = ['running', 'done', 'failed'] as const
+export type DatasetRecomputeStatus = (typeof DATASET_RECOMPUTE_STATUSES)[number]
+
+/**
+ * 一次重算任务。起任务与查进度**共用这一个形状**。对应后端 `RecomputeJobOut`。
+ * ⚠ 受理回执永远是 `running` 且一行都还没算：数要等轮询读到终态才有。
+ */
+export interface DatasetRecomputeJob {
+  table_id: string
+  table_code: string
+  status: DatasetRecomputeStatus
+  /** 用户提交的时间范围；两端都为空即整表。 */
+  since: string | null
+  until: string | null
   recomputed: number
   failed: number
   /** 待重算的行数触顶，本次只算了最早的 `limit` 行。 */
   is_truncated: boolean
   limit: number
+  started_at: string
+  updated_at: string
+  finished_at: string | null
+  /** 只在 `status === 'failed'` 时有值。 */
+  error: string | null
+  message: string
 }
 
 /**

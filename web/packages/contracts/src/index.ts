@@ -496,7 +496,8 @@ export type {
   DatasetOverrideBulkClear,
   DatasetOverrideWrite,
   DatasetPrevDep,
-  DatasetRecompute,
+  DatasetRecomputeJob,
+  DatasetRecomputeStatus,
   DatasetRecord,
   DatasetRecordDelete,
   DatasetRecordSource,
@@ -515,6 +516,7 @@ export {
   DATASET_COLUMN_SOURCES,
   DATASET_COLUMN_TYPES,
   DATASET_FORMULA_PARAM_KINDS,
+  DATASET_RECOMPUTE_STATUSES,
   DATASET_RECORD_SOURCES,
 } from './dataset'
 export type {

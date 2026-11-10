@@ -14,8 +14,9 @@ import { useConfirm, useToast } from '@dt/ui'
 import * as dataset from '@/api/dataset'
 import { describeError } from '@/composables/useAsyncList'
 import type { RecordRow, RevokeTarget } from './recordView'
-import { recomputeReceipt, revokeCellMessage } from './recordView'
+import { revokeCellMessage } from './recordView'
 import type { RecordsView } from './useRecords'
+import { reportRecompute, useRecompute } from './useRecompute'
 
 export interface RecordOps {
   /** 正在改的那一行；`null` 即录入新行。 */
@@ -24,6 +25,11 @@ export interface RecordOps {
   isBulkOpen: Ref<boolean>
   /** 有一次写在飞：行内动作跟着禁用，免得连点发出第二次。 */
   busy: Ref<boolean>
+  /**
+   * 有一个重算任务在后台跑。⚠ 期间写动作一并禁用：重算按开跑那一刻的数据算，
+   * 中途改的行会被它算完的结果盖回旧口径。
+   */
+  recomputing: Ref<boolean>
   openCreate: () => void
   openEdit: (row: RecordRow) => void
   openBulk: () => void
@@ -114,31 +120,6 @@ async function revokeCell(deps: OpsDeps, target: RevokeTarget): Promise<void> {
 }
 
 /**
- * 重算整表的公式列。
- * ⚠ 只有**整表算完且一行没错**才放下「下游过期」的横幅：触顶的那一次没算完，
- * 收起横幅等于告诉用户已经算好了。
- * @param deps 依赖
- */
-async function recompute(deps: OpsDeps): Promise<void> {
-  deps.busy.value = true
-  try {
-    const receipt = recomputeReceipt(
-      await dataset.recomputeDatasetTable(deps.tableId()),
-    )
-    if (receipt.isPartial) deps.toast.warning(receipt.text)
-    else {
-      deps.toast.success(receipt.text)
-      deps.records.isStale.value = false
-    }
-    await deps.records.refresh()
-  } catch (caught) {
-    deps.toast.error(describeError(caught))
-  } finally {
-    deps.busy.value = false
-  }
-}
-
-/**
  * 接住一次写回执里的脏信号。
  * ⚠ 只置真不置假：另一次写留下的过期不会因为这一次写干净了就消失。
  * @param deps 依赖
@@ -168,12 +149,17 @@ export function useRecordOps(
   const editing = ref<DatasetRecord | null>(null)
   const isFormOpen = ref(false)
   const isBulkOpen = ref(false)
+  const recompute = useRecompute(tableId, {
+    onStartFailed: (message) => deps.toast.error(message),
+    onFinished: (job) => reportRecompute(job, deps),
+  })
 
   return {
     editing,
     isFormOpen,
     isBulkOpen,
     busy,
+    recomputing: recompute.running,
     openCreate: () => {
       editing.value = null
       isFormOpen.value = true
@@ -185,7 +171,7 @@ export function useRecordOps(
     openBulk: () => (isBulkOpen.value = true),
     removeRecord: (row) => removeRecord(deps, row),
     revokeCell: (target) => revokeCell(deps, target),
-    recompute: () => recompute(deps),
+    recompute: recompute.start,
     afterSaved: async (message, hasStale) => {
       deps.toast.success(message)
       noteStale(deps, hasStale)

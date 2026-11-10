@@ -175,8 +175,8 @@ def test_readiness_never_waits_on_the_external_source() -> None:
 
 def test_the_external_source_is_closed_before_the_connection_pool() -> None:
     # 连接池最后关：在途请求还要用它。
-    # ⚠ 在跑的历史回填排在**最前**：它收摊时还要写一次终态、放一次锁（要
-    # Redis），最后一批的提交还要连接池——排在它们后面就是关完了才想起来收摊
+    # ⚠ 在跑的历史回填与重算排在**最前**：收摊时还要写一次终态、放一次锁（要
+    # Redis），提交或回滚还要连接池——排在它们后面就是关完了才想起来收摊
     container, _database, _source = build_container()
     closing = [
         hook.name
@@ -187,6 +187,7 @@ def test_the_external_source_is_closed_before_the_connection_pool() -> None:
     ]
     assert closing == [
         "dataset_backfill",
+        "dataset_recompute",
         "stream",
         "cache",
         "command_bus",

@@ -4,6 +4,7 @@ from typing import Any
 
 import httpx
 import pytest
+from conftest import AppContext
 
 from integration.dataset_helpers import (
     HTTP_BAD_REQUEST,
@@ -14,6 +15,7 @@ from integration.dataset_helpers import (
     create_table,
     data_of,
     record_url,
+    run_recompute,
 )
 from platform_server.apps.dataset.services import record_history
 
@@ -79,8 +81,9 @@ async def test_missing_cells_do_not_become_a_complete_day_total(
 
 
 async def test_recomputing_a_tail_keeps_all_of_todays_earlier_buckets(
-    app_client: httpx.AsyncClient,
+    app_context: AppContext,
 ) -> None:
+    app_client = app_context.client
     table_id = await daily_table(app_client)
     first = await record(app_client, table_id, MIDNIGHT, 电量=2)
     await record(app_client, table_id, FIVE_MINUTES, 电量=3)
@@ -91,13 +94,10 @@ async def test_recomputing_a_tail_keeps_all_of_todays_earlier_buckets(
     )
     assert changed.status_code == HTTP_OK
 
-    response = await app_client.post(
-        f"{TABLES}/{table_id}:recompute", json={"since": TEN_MINUTES}
-    )
+    _, outcome = await run_recompute(app_context, table_id, since=TEN_MINUTES)
     latest = data_of(await app_client.get(f"{TABLES}/{table_id}/latest"))
 
-    assert response.status_code == HTTP_OK
-    assert data_of(response)["recomputed"] == 1
+    assert (outcome["status"], outcome["recomputed"]) == ("done", 1)
     assert latest["computed"] == {"普通日和": 14.0, "完整日和": 14.0}
 
 
@@ -162,8 +162,9 @@ async def test_a_counter_reset_keeps_the_daily_total_unknown(
 
 
 async def test_recomputing_from_midnight_keeps_the_previous_meter_reading(
-    app_client: httpx.AsyncClient,
+    app_context: AppContext,
 ) -> None:
+    app_client = app_context.client
     table = await create_table(app_client)
     await create_column(
         app_client, table["id"], key="累计电量", name="累计电量"
@@ -191,12 +192,12 @@ async def test_recomputing_from_midnight_keeps_the_previous_meter_reading(
     ):
         await record(app_client, table["id"], moment, 累计电量=value)
 
-    response = await app_client.post(
-        f"{TABLES}/{table['id']}:recompute", json={"since": MIDNIGHT}
+    _, outcome = await run_recompute(
+        app_context, str(table["id"]), since=MIDNIGHT
     )
     latest = data_of(await app_client.get(f"{TABLES}/{table['id']}/latest"))
 
-    assert response.status_code == HTTP_OK
+    assert outcome["status"] == "done"
     assert latest["computed"] == {"增量": 3.0, "当日电量": 5.0}
 
 
@@ -230,19 +231,20 @@ async def test_a_history_window_at_exactly_the_limit_still_computes(
 
 
 async def test_recompute_seeds_refuse_a_truncated_history_window(
-    app_client: httpx.AsyncClient, monkeypatch: pytest.MonkeyPatch
+    app_context: AppContext,
+    monkeypatch: pytest.MonkeyPatch,
 ) -> None:
+    app_client = app_context.client
     table_id = await daily_table(app_client)
     for moment, value in ((MIDNIGHT, 2), (FIVE_MINUTES, 3), (TEN_MINUTES, 4)):
         await record(app_client, table_id, moment, 电量=value)
     monkeypatch.setattr(record_history, "MAX_FORMULA_HISTORY_ROWS", 1)
 
-    response = await app_client.post(
-        f"{TABLES}/{table_id}:recompute", json={"since": TEN_MINUTES}
-    )
+    _, outcome = await run_recompute(app_context, table_id, since=TEN_MINUTES)
 
-    assert response.status_code == HTTP_BAD_REQUEST
-    assert "历史预取超过" in response.json()["message"]
+    # 后台任务里的拒绝落进任务态：整趟回滚，原因原文给用户看
+    assert outcome["status"] == "failed"
+    assert "历史预取超过" in outcome["message"]
 
 
 async def test_cross_table_windows_refuse_a_truncated_history_window(

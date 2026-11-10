@@ -69,6 +69,16 @@ class JobStore(Protocol):
     async def exists(self, key: str) -> bool: ...
 
 
+class JobPayload(Protocol):
+    """能落进任务态的那一份：回填与重算各有各的形状，读写口只认这几样。"""
+
+    table_id: str
+    table_code: str
+    updated_at: datetime
+
+    def to_payload(self) -> dict[str, Any]: ...
+
+
 @dataclass
 class BackfillJobState:
     """一次回填对外可见的全部状态。
@@ -125,11 +135,20 @@ class BackfillJobState:
 
 @dataclass(frozen=True)
 class BackfillJobs:
-    """任务态、单飞锁与取消标志的读写口。"""
+    """任务态、单飞锁与取消标志的读写口。
+
+    ⚠ 重算任务用同一个类、换一个 `state_prefix`：任务态各存各的，**锁与取消
+    标志的键不随前缀变**——回填与重算都改写 `computed_json`，必须抢同一把按表的
+    锁（docs/DATASET_DESIGN.md §14.10）。
+    """
 
     store: JobStore
     state_ttl_s: int = STATE_TTL_S
     lock_ttl_s: int = LOCK_TTL_S
+    #: 任务态键的前缀
+    state_prefix: str = KEY_PREFIX
+    #: 读不出来时那句话里的任务名
+    label: str = "回填"
 
     async def read(self, table_id: uuid.UUID) -> dict[str, Any] | None:
         """读任务态；没有任务（或已过期）给 None。
@@ -139,23 +158,22 @@ class BackfillJobs:
         而那一次撞上的是仍然握着锁的上一次。Redis 不可达同理，由缓存层抛。
         Args: table_id。
         """
-        raw = await self.store.get(_state_key(table_id))
+        raw = await self.store.get(f"{self.state_prefix}{table_id}")
+        unreadable = f"{self.label}进度暂时读不出来，请稍后再看"
         if raw is None:
             return None
         try:
             found: object = json.loads(raw)
         except json.JSONDecodeError as error:
-            raise DatasetBackfillUnreadable(
-                "回填进度暂时读不出来，请稍后再看"
-            ) from error
+            raise DatasetBackfillUnreadable(unreadable) from error
         if not isinstance(found, dict):
-            raise DatasetBackfillUnreadable("回填进度暂时读不出来，请稍后再看")
+            raise DatasetBackfillUnreadable(unreadable)
         # 边界收窄：JSON 对象的键在 Python 里一定是 `str`，而 `json.loads`
         # 的返回类型宽到 `Any`，narrow 之后仍是部分未知
         return cast("dict[str, Any]", found)
 
     async def write(
-        self, state: BackfillJobState, *, at: datetime, is_quiet: bool = False
+        self, state: JobPayload, *, at: datetime, is_quiet: bool = False
     ) -> None:
         """把任务态写回去。
 
@@ -167,7 +185,7 @@ class BackfillJobs:
         state.updated_at = at
         try:
             await self.store.set_json(
-                _state_key(uuid.UUID(state.table_id)),
+                f"{self.state_prefix}{state.table_id}",
                 state.to_payload(),
                 ttl_s=self.state_ttl_s,
             )
@@ -253,14 +271,6 @@ class BackfillJobs:
                 error_type=type(error).__name__,
             )
             return False
-
-
-def _state_key(table_id: uuid.UUID) -> str:
-    """任务态的键。
-
-    Args: table_id。
-    """
-    return f"{KEY_PREFIX}{table_id}"
 
 
 def _lock_key(table_id: uuid.UUID) -> str:

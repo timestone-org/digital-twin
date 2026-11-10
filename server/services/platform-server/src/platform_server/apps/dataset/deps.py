@@ -22,6 +22,7 @@ from platform_server.apps.dataset.catalog import (
 from platform_server.apps.dataset.services import (
     Actor,
     BackfillRunner,
+    RecomputeRunner,
     RecordLocator,
     RecordWriter,
 )
@@ -38,12 +39,12 @@ __all__ = [
     "WriteGate",
     "get_backfill_gate",
     "get_backfill_runner",
-    "get_backfill_writer",
     "get_container",
     "get_formula_context",
     "get_idempotency_key",
     "get_manage_context",
     "get_override_writer",
+    "get_recompute_runner",
     "get_record_locator",
     "get_record_writer",
     "get_session",
@@ -110,26 +111,15 @@ def get_override_writer(
     return _writer(container, caller)
 
 
-def get_backfill_writer(
-    container: Annotated[Container, Depends(get_container)],
-    caller: Annotated[CallerContext, Depends(require(DATASET_BACKFILL))],
-) -> RecordWriter:
-    """全表重算用的写上下文。大批量改写历史行且吃满数据库，故自成一个码。
-
-    Args: container, caller。
-    """
-    return _writer(container, caller)
-
-
 def get_backfill_gate(
     container: Annotated[Container, Depends(get_container)],
     caller: Annotated[CallerContext, Depends(require(DATASET_BACKFILL))],
     idempotency_key: Annotated[str | None, Depends(get_idempotency_key)],
 ) -> WriteGate:
-    """起 / 取消历史回填用的写上下文。
+    """起 / 取消历史回填与起重算任务用的写上下文。
 
-    ⚠ 与 `get_backfill_writer` 分成两件：那一件带的是报脏口与操作人（重算要
-    署名），这一件带的是幂等键——回填是长任务，重试不该变成第二个任务（§6.3）。
+    ⚠ 带的是幂等键：回填与重算都是长任务，重试不该变成第二个任务（§6.3）。
+    大批量改写历史行且吃满数据库，故自成一个码。
     Args: container, caller, idempotency_key。
     """
     return WriteGate(
@@ -176,3 +166,13 @@ def _writer(container: Container, caller: CallerContext) -> RecordWriter:
         timezone=container.dataset.timezone,
         actor=Actor(user_id=str(caller.user_id), name=caller.username),
     )
+
+
+def get_recompute_runner(
+    container: Annotated[Container, Depends(get_container)],
+) -> RecomputeRunner:
+    """重算任务的起跑口。一个进程一份，随容器装配。
+
+    Args: container。
+    """
+    return container.dataset.recompute

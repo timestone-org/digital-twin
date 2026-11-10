@@ -8,6 +8,7 @@ from platform_server.apps.dataset.api import (
     dataset_formula,
     dataset_formulas,
     dataset_overrides,
+    dataset_recompute,
     dataset_records,
     dataset_runtime_params,
     dataset_series,
@@ -27,6 +28,7 @@ ROUTERS: tuple[APIRouter, ...] = (
     dataset_records.router,
     dataset_overrides.router,
     dataset_series.router,
+    dataset_recompute.router,
     dataset_backfill.router,
 )
 
