@@ -14,12 +14,13 @@ import { DtButton, DtCard, DtIcon, DtTag } from '@dt/ui'
 import PermGuard from '@/components/PermGuard.vue'
 import { formatDateTime } from '@/utils/datetime'
 import { errorSummary, missingPoints } from '../scripts/sourceState'
+import type { SourceBusyAction } from '../scripts/useSourceOps'
 import SourceStateTag from './SourceStateTag.vue'
 
 const props = defineProps<{
   source: CollectSource
-  /** 启停 / 连通性测试进行中（按钮 loading）。 */
-  busy: boolean
+  /** 在跑的那个动作：它的按钮转圈，另一个暂不可点；空闲为 null。 */
+  busy: SourceBusyAction | null
   /** 列表刷新进行中。 */
   refreshing: boolean
 }>()
@@ -91,7 +92,8 @@ const stateUpdatedAt = computed(() =>
             v-if="!source.is_enabled"
             size="sm"
             icon="power"
-            :loading="busy"
+            :loading="busy === 'toggle'"
+            :disabled="busy !== null"
             data-test="connect-source"
             @click="$emit('connect')"
           >
@@ -102,7 +104,8 @@ const stateUpdatedAt = computed(() =>
             variant="outline"
             size="sm"
             icon="power-off"
-            :loading="busy"
+            :loading="busy === 'toggle'"
+            :disabled="busy !== null"
             data-test="disconnect-source"
             @click="$emit('disconnect')"
           >
@@ -115,7 +118,8 @@ const stateUpdatedAt = computed(() =>
             variant="ghost"
             size="sm"
             icon="activity"
-            :loading="busy"
+            :loading="busy === 'test'"
+            :disabled="busy !== null"
             @click="$emit('test')"
           >
             连通性测试
@@ -141,6 +145,7 @@ const stateUpdatedAt = computed(() =>
           <DtButton
             variant="ghost"
             size="sm"
+            intent="danger"
             icon="trash"
             aria-label="删除"
             @click="$emit('remove')"

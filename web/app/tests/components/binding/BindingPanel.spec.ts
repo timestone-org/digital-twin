@@ -5,12 +5,19 @@
  *
  * 面板不认识「大屏节点」，入参只有槽声明与绑定：孪生子编辑器与大屏右栏共用它。
  */
-import { describe, expect, it } from 'vitest'
+import { describe, expect, it, vi } from 'vitest'
 import { mount } from '@vue/test-utils'
 import type { BindingPayload, BindingSpec } from '@dt/contracts'
 import { DtHelpTip, DtSelect } from '@dt/ui'
 
 import BindingPanel from '@/components/binding/BindingPanel.vue'
+
+// 点位行会去查点位名；这里只验摆槽，查不到即退回身份串
+vi.mock('@/api/collect', () => ({
+  listPoints: () =>
+    Promise.resolve({ items: [], page: 1, size: 200, total: 0 }),
+  getSource: () => Promise.reject(new Error('未接')),
+}))
 
 const SPECS: readonly BindingSpec[] = [
   { key: 'title', label: '标题', dataType: 'string', isRequired: true },
@@ -64,6 +71,34 @@ describe('空态', () => {
     const wrapper = mount(BindingPanel, { props: { specs: [], bindings: [] } })
 
     expect(wrapper.text()).toContain('无需数据绑定')
+  })
+
+  // ⚠ 「暂无可绑定字段」只属于按对象筛行那一路：没筛的话一行都没有的数组槽
+  //   也要露出段头与「新增一行」，否则第一条绑定永远加不上
+  it('没有筛行时，零行的数组槽照样摆出段头与新增一行', () => {
+    const wrapper = mount(BindingPanel, {
+      props: { specs: SPECS.slice(1), bindings: [] },
+    })
+
+    expect(wrapper.text()).not.toContain('暂无可绑定字段')
+    expect(wrapper.text()).toContain('多行')
+    expect(
+      wrapper
+        .findAll('button')
+        .some((item) => item.attributes('aria-label') === '新增一行'),
+    ).toBe(true)
+  })
+
+  it('筛行之后一行都不剩时才说暂无可绑定字段', () => {
+    const wrapper = mount(BindingPanel, {
+      props: {
+        specs: SPECS.slice(1),
+        bindings: [row(0)],
+        visibleRows: { rows: [] },
+      },
+    })
+
+    expect(wrapper.text()).toContain('暂无可绑定字段')
   })
 })
 

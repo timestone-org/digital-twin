@@ -7,11 +7,15 @@
  * ⚠ 不夹进画布也不报错：节点落在画布外，大屏上整个看不见——用户看到的是
  * 「拖下去什么都没出现」，与「拖放坏了」分不开。
  */
-import { normalizeCanvas } from '@dt/twin2d'
+import { normalizeCanvas, normalizeTwin2dConfig } from '@dt/twin2d'
 import type { Twin2dNodeSize } from '@dt/twin2d'
 import { describe, expect, it } from 'vitest'
 
-import { twin2dDropPoint } from '@/pages/Twin2dEditor/scripts/paletteDrag'
+import {
+  addNodeAtCenter,
+  twin2dNodeSeed,
+  twin2dDropPoint,
+} from '@/pages/Twin2dEditor/scripts/paletteDrag'
 import { TWIN_2D_DEFAULT_SNAP } from '@/pages/Twin2dEditor/scripts/snapping'
 
 /** 画布 400×200：非方形，两轴写反了才看得出来。 */
@@ -84,5 +88,44 @@ describe('落点', () => {
       x: 0,
       y: 0,
     })
+  })
+})
+
+describe('点一下加在正中', () => {
+  it('节点的中心落在画布中心附近，左上角吸在网格上', () => {
+    const config = normalizeTwin2dConfig({
+      canvas: { width: 800, height: 600, grid: 20 },
+      styles: [{ id: 'box', size: { w: 120, h: 80 } }],
+    })
+
+    const added = addNodeAtCenter(config, 'box')
+
+    const node = added.config.nodes.find((item) => item.id === added.id)
+    expect(node).toMatchObject({ x: 340, y: 260 })
+  })
+
+  it('样式解析不到就一个都不加', () => {
+    const config = normalizeTwin2dConfig({})
+
+    const added = addNodeAtCenter(config, 'no-such-style')
+
+    expect(added).toEqual({ config, id: null })
+  })
+})
+
+describe('新节点的种子', () => {
+  // ⚠ 文字标注只画显示名：空着落下去只剩一根竖条
+  it('文字标注那一类带上起手文字，别的样式不带', () => {
+    const config = normalizeTwin2dConfig({
+      styles: [
+        { id: 'note', name: '文字标注', category: 'label' },
+        { id: 'box', name: '方块', category: 'misc' },
+      ],
+    })
+    const [note, box] = config.styles
+    if (note === undefined || box === undefined) throw new Error('夹具不全')
+
+    expect(twin2dNodeSeed(note, { x: 0, y: 0 }).label).toBe('文字标注')
+    expect(twin2dNodeSeed(box, { x: 0, y: 0 }).label).toBeUndefined()
   })
 })

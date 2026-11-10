@@ -330,3 +330,17 @@ describe('框本身', () => {
     wrapper.unmount()
   })
 })
+
+// ⚠ 浏览器不保证松手前一定还有一次 pointermove：按最后一次移动帧的框去选，快速一拖
+// 选中的是倒数第二帧框住的那一批
+it('选中按松手那一帧的框算，不是倒数第二帧', async () => {
+  const wrapper = mountMarquee()
+
+  await begin(wrapper, [700, 500])
+  fire('pointermove', 760, 560)
+  fire('pointerup', 500, 410)
+
+  expect(rec.picks).toEqual([{ kind: 'marks', ids: ['m1'], additive: false }])
+  expect(rec.clears).toBe(0)
+  wrapper.unmount()
+})

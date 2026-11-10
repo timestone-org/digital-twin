@@ -359,6 +359,37 @@ describe('台账那一面的选表', () => {
   })
 })
 
+describe('台账那一面的失败', () => {
+  it('⚠ 一张表取列失败后选表框还在，换一张就画得出来', async () => {
+    signIn([PERMISSION_CODES.datasetView])
+    vi.mocked(dataset.getDatasetTable)
+      .mockRejectedValueOnce(new Error('取不到'))
+      .mockResolvedValue(detail('t2'))
+    const wrapper = await open()
+    const trigger = triggerOf(wrapper, '数据台账')
+    if (trigger === undefined) throw new Error('取列失败后选表框不见了')
+    await trigger.trigger('click')
+    await flushPromises()
+    const items = document.querySelectorAll('.dt-select-menu__item')
+    items[items.length - 1]?.dispatchEvent(
+      new MouseEvent('click', { bubbles: true }),
+    )
+    await flushPromises()
+    expect(vi.mocked(dataset.getDatasetTable)).toHaveBeenLastCalledWith('t2')
+    expect(wrapper.text()).not.toContain('取不到')
+  })
+
+  it('⚠ 台账清单取不到时不把深链说成「已被删除」', async () => {
+    signIn([PERMISSION_CODES.datasetView])
+    query.value = { source: 'dataset', tableId: 't2' }
+    vi.mocked(dataset.listDatasetTables).mockRejectedValue(
+      new Error('网关超时'),
+    )
+    const wrapper = await open()
+    expect(wrapper.text()).not.toContain('不存在或已被删除')
+  })
+})
+
 describe('取点间隔', () => {
   it('默认走自动档，标签里写明它这次落在哪一格', async () => {
     signIn([PERMISSION_CODES.collectView])
@@ -386,6 +417,28 @@ describe('取点间隔', () => {
     expect(
       vi.mocked(histories.fetchPointAggregate).mock.calls.at(-1)?.[0].interval,
     ).toBe('1h')
+  })
+})
+
+describe('图已过期的提示', () => {
+  it('⚠ 只换了取点间隔时，提示说的是查询条件变了而不是勾选变了', async () => {
+    signIn([PERMISSION_CODES.collectView])
+    const wrapper = await open()
+    await wrapper.get('input[type="checkbox"]').setValue(true)
+    await wrapper
+      .findAll('button')
+      .find((one) => one.text().includes('查询'))
+      ?.trigger('click')
+    await flushPromises()
+    await triggerOf(wrapper, '取点间隔')?.trigger('click')
+    await flushPromises()
+    const wanted = [...document.querySelectorAll('.dt-select-menu__item')].find(
+      (one) => one.textContent?.includes('1 小时'),
+    )
+    wanted?.dispatchEvent(new MouseEvent('click', { bubbles: true }))
+    await flushPromises()
+    expect(wrapper.text()).toContain('查询条件已经变了')
+    expect(wrapper.text()).not.toContain('勾选已经变了')
   })
 })
 

@@ -226,7 +226,7 @@ describe('图例', () => {
   it('按配置里的能量流种类出图例', () => {
     const { tools } = setup()
 
-    expect(tools.legend.value.map((item) => item.label)).toEqual(['water'])
+    expect(tools.legend.value.map((item) => item.label)).toEqual(['水'])
   })
 
   it('默认收着，点开才显示', () => {

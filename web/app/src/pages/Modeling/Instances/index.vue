@@ -92,8 +92,10 @@ onMounted(() => void list.reload())
   >
     <template #actions>
       <PermGuard :codes="[PERMISSION_CODES.modelingRun]">
-        <RouterLink to="/modeling/templates">
-          <DtButton icon="plus"> 通过工作流创建模型 </DtButton>
+        <RouterLink v-slot="{ navigate }" to="/modeling/pipelines" custom>
+          <DtButton icon="plus" @click="navigate">
+            通过工作流创建模型
+          </DtButton>
         </RouterLink>
       </PermGuard>
     </template>
@@ -217,8 +219,14 @@ onMounted(() => void list.reload())
         </template>
 
         <template #cell-actions="{ row }">
-          <RouterLink :to="`/modeling/instances/${row.id}`">
-            <DtButton variant="ghost" size="sm"> 打开模型 </DtButton>
+          <RouterLink
+            v-slot="{ navigate }"
+            :to="`/modeling/instances/${row.id}`"
+            custom
+          >
+            <DtButton variant="ghost" size="sm" @click="navigate">
+              打开模型
+            </DtButton>
           </RouterLink>
         </template>
       </DtDataView>

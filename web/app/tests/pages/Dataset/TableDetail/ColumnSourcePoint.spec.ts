@@ -84,6 +84,8 @@ async function openPicker(wrapper: ReturnType<typeof render>): Promise<void> {
 beforeEach(() => {
   vi.spyOn(collectApi, 'listPoints').mockResolvedValue(page([point()]))
   vi.spyOn(collectApi, 'listSources').mockResolvedValue(page([source()]))
+  // 已绑的点位行会去查数据源名，不桩就是一条真实网络请求
+  vi.spyOn(collectApi, 'getSource').mockResolvedValue(source())
 })
 
 enableAutoUnmount(afterEach)

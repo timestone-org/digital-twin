@@ -795,6 +795,7 @@
             "anyOf": [
               {
                 "maxLength": 4000,
+                "minLength": 1,
                 "type": "string"
               },
               {

@@ -152,6 +152,16 @@ describe('模型素材', () => {
     expect(lastModel(wrapper).asset).toBe(`asset:${ID}`)
   })
 
+  it('重新挑模型时弹窗先选中当前那一个', async () => {
+    const wrapper = mountModel(makeModel({ asset: `asset:${ID}` }))
+
+    await buttonByText(wrapper, '选择模型').trigger('click')
+    await flushPromises()
+    const item = document.body.querySelector('.dt-assets__item')
+
+    expect(item?.getAttribute('aria-current')).toBe('true')
+  })
+
   it('清除把引用清成空串，而不是留一个指不到东西的旧引用', async () => {
     const wrapper = mountModel(makeModel({ asset: `asset:${ID}` }))
 

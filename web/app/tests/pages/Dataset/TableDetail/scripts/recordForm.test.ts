@@ -8,6 +8,7 @@ import type { DatasetColumn, DatasetRecord } from '@dt/contracts'
 
 import {
   formulaColumns,
+  isBlankInput,
   recordFormOf,
   toRecordInput,
   writableColumns,
@@ -92,7 +93,7 @@ describe('打开表单时的初值', () => {
     const form = recordFormOf(record(), COLUMNS)
     expect(form.ts).toBe('2026-02-02T03:04:00.000Z')
     expect(form.texts.inflow).toBe('12')
-    expect(form.flags.on).toBe(true)
+    expect(form.texts.on).toBe('true')
   })
 
   it('新建时数据时间默认此刻，人工录入列吃默认值', () => {
@@ -113,6 +114,30 @@ describe('打开表单时的初值', () => {
       new Date(STAMP),
     )
     expect(form.texts.kwh).toBe('')
+  })
+})
+
+describe('点位汇总列的初值按列的小数位', () => {
+  it('采集值的浮点噪声按 decimals 收齐，没动过照样不提交', () => {
+    const columns = [{ ...POINT_COLUMN, decimals: 3 }]
+    const row = record({ values: { kwh: 1.2869999408721924 } })
+    const form = recordFormOf(row, columns)
+    expect(form.texts.kwh).toBe('1.287')
+    expect(toRecordInput(form, form, columns).values).not.toHaveProperty('kwh')
+  })
+
+  it('⚠ 人工录入列不按小数位收：它整份提交，收了就改了库里的值', () => {
+    const columns = [column({ decimals: 1 })]
+    const form = recordFormOf(record({ values: { inflow: 1.26 } }), columns)
+    expect(form.texts.inflow).toBe('1.26')
+  })
+})
+
+describe('一格都没填', () => {
+  it('全是空值才算空行', () => {
+    expect(isBlankInput({ ts: STAMP, values: { a: null } })).toBe(true)
+    expect(isBlankInput({ ts: STAMP, values: {} })).toBe(true)
+    expect(isBlankInput({ ts: STAMP, values: { a: null, b: 0 } })).toBe(false)
   })
 })
 
@@ -159,8 +184,20 @@ describe('提交载荷', () => {
   it('布尔列被拨动才算动过', () => {
     const opened = recordFormOf(record(), COLUMNS)
     const form = recordFormOf(record(), COLUMNS)
-    form.flags.on = false
+    form.texts.on = 'false'
     expect(toRecordInput(form, opened, COLUMNS).values.on).toBe(false)
+  })
+
+  it('⚠ 没填过的布尔列原样提交空值，不许变成「否」', () => {
+    const row = record({ values: { inflow: 12, kwh: 34, on: null } })
+    const opened = recordFormOf(row, COLUMNS)
+    const form = recordFormOf(row, COLUMNS)
+    expect(toRecordInput(form, opened, COLUMNS).values.on).toBeNull()
+  })
+
+  it('新建时没有默认值的布尔列也提交空值', () => {
+    const opened = recordFormOf(null, COLUMNS, new Date(STAMP))
+    expect(toRecordInput(opened, opened, COLUMNS).values.on).toBeNull()
   })
 })
 

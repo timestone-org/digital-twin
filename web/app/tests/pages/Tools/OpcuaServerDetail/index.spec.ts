@@ -164,6 +164,32 @@ describe('详情页', () => {
 })
 
 describe('起停', () => {
+  it('起停之后分区内容原地刷新，不整块卸载重挂', async () => {
+    vi.spyOn(opcuaApi, 'actOnInstance').mockResolvedValue({} as never)
+    const wrapper = await render({ is_running: true, desired_state: 'running' })
+    const before = wrapper.find('[data-test="router-view"]').element
+    await wrapper
+      .findAll('button')
+      .find((b) => b.text() === '重启')
+      ?.trigger('click')
+    await flushPromises()
+    expect(opcuaApi.getInstance).toHaveBeenCalledTimes(2)
+    expect(wrapper.find('[data-test="router-view"]').element).toBe(before)
+  })
+
+  it('确认文案点名实例；请求在途时再点不重复下发', async () => {
+    const act = vi
+      .spyOn(opcuaApi, 'actOnInstance')
+      .mockResolvedValue({} as never)
+    const wrapper = await render({ is_running: true, desired_state: 'running' })
+    const restart = wrapper.findAll('button').find((b) => b.text() === '重启')
+    await restart?.trigger('click')
+    await restart?.trigger('click')
+    await flushPromises()
+    expect(confirmSpy.mock.calls[0]?.[0]?.message).toContain('「plant」')
+    expect(act).toHaveBeenCalledTimes(1)
+  })
+
   it('停止先确认并报出会话数', async () => {
     const act = vi
       .spyOn(opcuaApi, 'actOnInstance')

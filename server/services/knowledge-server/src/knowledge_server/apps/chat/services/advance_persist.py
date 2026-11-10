@@ -19,6 +19,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 
 from knowledge_server.apps.chat.crud import session_crud
 from knowledge_server.apps.chat.models import ChatMessage, ChatStep
+from knowledge_server.apps.chat.services.citations import CARRIED_KEY
 from lib.logging import get_logger
 from llmcore.memory import history
 from llmcore.turn import TurnOutcome, TurnStep
@@ -43,6 +44,9 @@ class TurnRecord:
     citations: list[dict[str, Any]] = field(
         default_factory=list[dict[str, Any]]
     )
+    # 停下来等浏览器时这一回合已发的角标（`citations.as_json` 的形状）。
+    # 续跑那次请求靠它接着编号；回合结束时是空表
+    ledger: list[dict[str, Any]] = field(default_factory=list[dict[str, Any]])
 
 
 async def persist(
@@ -57,8 +61,8 @@ async def persist(
     """
     async with sessions() as session:
         await session_crud.lock_session(session, chat_session_id)
-        rows = await session_crud.messages_of(session, chat_session_id)
-        seq = max((row.seq for row in rows), default=0)
+        await session_crud.touch_session(session, chat_session_id)
+        seq = await session_crud.max_seq(session, chat_session_id)
         written: list[ChatMessage] = []
         for message in [*record.incoming, *record.outcome.messages]:
             seq += 1
@@ -74,7 +78,7 @@ async def persist(
         # ⚠ 先 flush 拿到主键再挂步骤，且**必须自己攥着这些行**：flush 之后
         # 它们就从 `session.new` 里出去了
         await session.flush()
-        _attach_steps(session, written, record.steps, record.outcome)
+        _attach_steps(session, written, record)
         _attach_citations(written, record.citations)
 
 
@@ -94,18 +98,16 @@ def _attach_citations(
 
 
 def _attach_steps(
-    session: AsyncSession,
-    written: list[ChatMessage],
-    steps: list[TurnStep],
-    outcome: TurnOutcome,
+    session: AsyncSession, written: list[ChatMessage], record: TurnRecord
 ) -> None:
     """把步骤挂到本回合最后一条消息上。
 
     ⚠ 等浏览器时补一条 `awaiting_client` 的步骤：界面上它是转着圈的那一行，
-    而浏览器回来时要能按它认出自己接的是哪一步。
+    而浏览器回来时要能按它认出自己接的是哪一步。角标账本也落在这一步上。
 
-    Args: session, written, steps, outcome。
+    Args: session, written, record。
     """
+    steps, outcome = record.steps, record.outcome
     if not written:
         _logger.warning("turn_message_missing", "本回合没有落下任何消息")
         return
@@ -131,7 +133,8 @@ def _attach_steps(
                             "arguments": call.arguments,
                         }
                         for call in outcome.pending
-                    ]
+                    ],
+                    **({CARRIED_KEY: record.ledger} if record.ledger else {}),
                 },
             )
         )

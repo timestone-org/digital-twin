@@ -177,3 +177,66 @@ async def test_termination_wait_returns_once_the_signal_arrives() -> None:
         handle(int(signal.SIGTERM), None)
         async with asyncio.timeout(1):
             await waiting
+
+
+async def test_the_drain_timeout_bounds_the_whole_shutdown() -> None:
+    """⚠ 预算按钩子各给一份的话，N 个慢钩子要 N 倍时长，排在最后的 flush 与
+    让租约会被编排器的 SIGKILL 截掉。"""
+    log, make = recorder()
+
+    async def hang() -> None:
+        await asyncio.sleep(5)
+
+    runner = LifespanRunner(
+        hooks=(
+            *(
+                LifespanHook(
+                    f"hang{order}", shutdown=hang, shutdown_order=order
+                )
+                for order in range(10, 60, 10)
+            ),
+            LifespanHook("lease", shutdown=make("lease"), shutdown_order=99),
+        ),
+        drain_timeout_s=0.2,
+        drain_floor_s=0.01,
+    )
+    loop = asyncio.get_running_loop()
+    started = loop.time()
+    await runner.shutdown()
+    # ⚠ 按钩子各给一份时这里要 5 × 0.2 = 1.0s；留足余量免得慢机器上抖红
+    assert loop.time() - started < 0.7
+    assert log == ["lease"]
+
+
+async def test_a_failed_startup_stops_the_components_already_started() -> None:
+    log, make = recorder()
+
+    async def explode() -> None:
+        raise RuntimeError("cannot start")
+
+    runner = LifespanRunner(
+        hooks=(
+            LifespanHook(
+                "lease",
+                startup=make("start:lease"),
+                shutdown=make("stop:lease"),
+                startup_order=10,
+            ),
+            LifespanHook(
+                "check",
+                startup=explode,
+                shutdown=make("stop:check"),
+                startup_order=20,
+            ),
+            LifespanHook(
+                "late",
+                startup=make("start:late"),
+                shutdown=make("stop:late"),
+                startup_order=30,
+            ),
+        )
+    )
+    with pytest.raises(RuntimeError):
+        await runner.startup()
+    assert log == ["start:lease", "stop:lease"]
+    assert runner.gate.reason == "startup_failed"

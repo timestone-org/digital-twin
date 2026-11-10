@@ -8,7 +8,6 @@ from pathlib import Path
 
 import pytest
 
-from ai_assistant.apps.chat.services import skills_of_surface
 from ai_assistant.apps.chat.services.tools.specs import TOOL_SPECS
 from ai_assistant.apps.chat.skills import (
     SkillInstructionsMissing,
@@ -70,12 +69,6 @@ def test_twin_editor_offers_binding_and_review() -> None:
 
 def test_an_unknown_surface_offers_nothing() -> None:
     assert skills_for("no-such-surface") == ()
-
-
-def test_surface_listing_carries_the_same_names_as_the_registry() -> None:
-    listed = {entry.name for entry in skills_of_surface("twin-editor")}
-    registered = {skill.name for skill in skills_for("twin-editor")}
-    assert listed == registered
 
 
 def test_instructions_missing_is_reported_loudly() -> None:

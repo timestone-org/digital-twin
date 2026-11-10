@@ -14,12 +14,12 @@ export function createState(saving: ReturnType<typeof useHierarchySaving>) {
     total = ref(0),
     query = ref(''),
     loading = ref(false),
+    listLoading = ref(false),
     error = ref('')
   const listRequest = useRacedFetch(),
     projectRequest = useRacedFetch(),
     historyRequest = useRacedFetch()
   const confirm = useConfirm()
-  const alive = true
   const fail = (caught: unknown) => {
     error.value = caught instanceof Error ? caught.message : '读取失败'
   }
@@ -30,12 +30,14 @@ export function createState(saving: ReturnType<typeof useHierarchySaving>) {
     total,
     query,
     loading,
+    listLoading,
     error,
     listRequest,
     projectRequest,
     historyRequest,
     confirm,
-    alive,
+    /** 组件还挂着；卸载时由 Controller 改成 false。 */
+    alive: true,
     fail,
     saving,
   }
@@ -69,6 +71,7 @@ export class Controller {
   }
   refresh = async () => {
     if (!this.state.alive) return
+    this.state.listLoading.value = true
     await this.state.listRequest.run(
       (signal) =>
         api.listProjects(
@@ -82,7 +85,9 @@ export class Controller {
           this.state.error.value = ''
         },
         fail: this.state.fail,
-        settled: () => undefined,
+        settled: () => {
+          if (this.state.alive) this.state.listLoading.value = false
+        },
       },
     )
   }

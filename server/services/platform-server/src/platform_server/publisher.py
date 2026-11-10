@@ -22,7 +22,7 @@ import asyncio
 import contextlib
 from collections.abc import Awaitable, Callable
 from contextvars import Token
-from dataclasses import dataclass
+from dataclasses import dataclass, replace
 
 from lib.lifespan import wait_for_termination
 from lib.logging import (
@@ -62,6 +62,7 @@ from platform_server.apps.dashboard.services.publish_service import (
 )
 from platform_server.container import Container, build_container
 from platform_server.lease import Lease
+from platform_server.publish_knobs import PublishKnobs, read_knobs
 from platform_server.settings import Settings
 
 _logger = get_logger("platform.publisher")
@@ -74,12 +75,34 @@ _SPAN_ID_LENGTH = 16
 Wait = Callable[[], Awaitable[None]]
 
 
+# 一拍的预算占租约 TTL 的比例：留出余量给续租那次往返
+_TICK_BUDGET_SHARE = 0.8
+
+
 @dataclass(frozen=True)
 class LoopOptions:
-    """循环的节奏。"""
+    """循环的节奏。`lease_ttl_s` 给了才给一拍设预算。"""
 
     window_s: float
     reconcile_interval_s: float
+    lease_ttl_s: float | None = None
+
+    def tick_budget_s(self) -> float | None:
+        """一拍最多跑多久：跑完再等一个窗口，下一次续租仍要落在 TTL 之内。"""
+        if self.lease_ttl_s is None:
+            return None
+        return max(
+            self.lease_ttl_s * _TICK_BUDGET_SHARE - self.window_s,
+            self.lease_ttl_s * (1 - _TICK_BUDGET_SHARE),
+        )
+
+
+ReadKnobs = Callable[[], Awaitable[PublishKnobs]]
+
+
+def _no_resize(max_items: int) -> None:
+    """不分片的链路用的空实现。Args: max_items。"""
+    del max_items
 
 
 @dataclass(frozen=True)
@@ -96,6 +119,8 @@ class Lane:
     # 于是这一层会被要求带 traceparent，而真正投递发生在发布器内部
     tick: Callable[[], Awaitable[None]]
     forget_all: Callable[[], None]
+    # 改单帧条目上限；运行参数页改了它要在下一次对账时生效
+    resize: Callable[[int], None] = _no_resize
 
 
 class PublisherRuntime:
@@ -107,14 +132,16 @@ class PublisherRuntime:
         lease: Lease,
         lanes: tuple[Lane, ...],
         options: LoopOptions,
+        read_knobs: ReadKnobs | None = None,
     ) -> None:
         """按租约与各条链路初始化，构造时不做 IO。
 
-        Args: lease, lanes, options。
+        Args: lease, lanes, options（出厂节奏）, read_knobs（运行参数读口）。
         """
         self._lease = lease
         self._lanes = lanes
         self._options = options
+        self._read_knobs = read_knobs
         self._stopped = asyncio.Event()
         self._idle = asyncio.Event()
         self._idle.set()
@@ -156,11 +183,56 @@ class PublisherRuntime:
         try:
             if not await self._hold_lease():
                 return
-            is_due = self._is_reconcile_due()
-            for lane in self._lanes:
-                await self._run_lane(lane, is_reconcile_due=is_due)
+            await self._run_lanes(is_reconcile_due=self._is_reconcile_due())
         finally:
             reset_log_context(token)
+
+    async def _run_lanes(self, *, is_reconcile_due: bool) -> None:
+        """在一拍的预算内跑完每条链路。
+
+        ⚠ 一拍只续一次租约：hub 卡住时逐个 2s 超时能把一拍拖过 TTL，热备接手
+        而我们还在推，就是同一个主题两份值。超了预算就截断并丢掉缓存。重读
+        运行参数也是一次库 IO，一并算在预算里。
+        Args: is_reconcile_due。
+        """
+        try:
+            async with asyncio.timeout(self._options.tick_budget_s()):
+                if is_reconcile_due:
+                    await self._refresh_knobs()
+                for lane in self._lanes:
+                    await self._run_lane(
+                        lane, is_reconcile_due=is_reconcile_due
+                    )
+        except TimeoutError:
+            self._forget_all()
+            _logger.warning(
+                "publisher_tick_overran",
+                "这一拍超出租约预算，已截断，下一拍从全量帧重来",
+            )
+
+    async def _refresh_knobs(self) -> None:
+        """跟对账同节奏重读运行参数，推给循环与每条链路。
+
+        ⚠ 读失败沿用上一份、不往外抛：一次读库抖动不该让这一拍不推。
+        """
+        if self._read_knobs is None:
+            return
+        try:
+            knobs = await self._read_knobs()
+        except Exception as error:
+            _logger.warning(
+                "publisher_knobs_read_failed",
+                "运行参数读取失败，沿用当前节奏",
+                error_type=type(error).__name__,
+            )
+            return
+        self._options = replace(
+            self._options,
+            window_s=knobs.window_s,
+            reconcile_interval_s=knobs.reconcile_interval_s,
+        )
+        for lane in self._lanes:
+            lane.resize(knobs.max_items)
 
     async def _run_lane(self, lane: Lane, *, is_reconcile_due: bool) -> None:
         """跑一条链路。
@@ -257,7 +329,9 @@ def build_runtime(container: Container) -> PublisherRuntime:
         options=LoopOptions(
             window_s=settings.publish_window_ms / MS_PER_S,
             reconcile_interval_s=settings.publish_reconcile_interval_s,
+            lease_ttl_s=settings.publish_lease_ttl_s,
         ),
+        read_knobs=lambda: read_knobs(container.database, settings),
     )
 
 
@@ -282,11 +356,16 @@ def _dashboard_lane(container: Container) -> Lane:
         dashboards=DatabasePublishedIndex(database=container.database),
         realtime=container.realtime,
     )
+
+    def resize(max_items: int) -> None:
+        publisher.options = PublishOptions(max_items=max_items)
+
     return Lane(
         name="dashboard",
         reconcile=lambda: _reconcile_dashboards(reconciler, grants),
         tick=lambda: _publish_dashboards(publisher),
         forget_all=publisher.forget_all,
+        resize=resize,
     )
 
 
@@ -311,11 +390,16 @@ def _collect_lane(container: Container) -> Lane:
         sources=DatabaseSourceIndex(database=container.database),
         realtime=container.realtime,
     )
+
+    def resize(max_items: int) -> None:
+        publisher.options = replace(publisher.options, max_items=max_items)
+
     return Lane(
         name="collect",
         reconcile=reconciler.reconcile,
         tick=lambda: _publish_collect(publisher),
         forget_all=publisher.forget_all,
+        resize=resize,
     )
 
 

@@ -11,6 +11,7 @@ import {
   DtNumberInput,
   DtSwitch,
   DtTextarea,
+  useToast,
 } from '@dt/ui'
 import HttpPointMappingTable from './HttpPointMappingTable.vue'
 import { useFormDirty } from '@/composables/useFormDirty'
@@ -18,6 +19,7 @@ import {
   parseHttpSample,
   type HttpPointDraft,
 } from '../scripts/httpPointMapping'
+import { loadRomanize } from '../scripts/romanize'
 import { codeProblems, toPointItems } from '../scripts/importDrafts'
 import { useHttpPointImport } from '../scripts/useHttpPointImport'
 
@@ -78,6 +80,7 @@ const problemMessage = computed(
   () =>
     `有 ${problems.value.size} 个已选字段的编码无效、重复或已存在，请修改编码或取消选择。`,
 )
+const toast = useToast()
 const outcomeMessage = computed(() => {
   const result = state.outcome.value
   if (result === null) return ''
@@ -117,8 +120,9 @@ watch(
 )
 onUnmounted(state.cancel)
 
-function parse(): void {
-  const result = parseHttpSample(sample.value)
+/** 中文键名按拼音推编码；字典按需加载，加载不动就退回不转写。 */
+async function parse(): Promise<void> {
+  const result = parseHttpSample(sample.value, await loadRomanize())
   rows.value = result.rows
   selected.value = new Set(result.rows.map((row) => row.address))
   parseError.value = result.error
@@ -161,6 +165,16 @@ async function submit(): Promise<void> {
     retentionDays: retentionDays.value,
   })
   await state.submit(items, () => emit('imported'))
+  const outcome = state.outcome.value
+  // 全部进去了就关弹窗报喜；结果写在正文底部，用户多半已滚到别处看不见
+  if (
+    outcome !== null &&
+    outcome.created > 0 &&
+    outcome.failures.length === 0
+  ) {
+    toast.success(outcomeMessage.value)
+    emit('update:modelValue', false)
+  }
 }
 </script>
 
@@ -174,6 +188,22 @@ async function submit(): Promise<void> {
     @update:model-value="emit('update:modelValue', $event)"
   >
     <div class="flex flex-col gap-3">
+      <!-- 部分批次失败时弹窗留着：结果放最上面，不压在滚动区底部 -->
+      <DtNotice
+        v-if="state.outcome.value"
+        :intent="state.outcome.value.failures.length ? 'danger' : 'success'"
+        icon="check"
+      >
+        {{ outcomeMessage }}
+      </DtNotice>
+      <DtNotice
+        v-for="failure in failureNotices"
+        :key="failure.id"
+        intent="danger"
+        icon="alert-circle"
+      >
+        {{ failure.message }}
+      </DtNotice>
       <p class="m-0 text-sm text-text-secondary">
         粘贴接口 JSON
         响应样例，选择需要采集的字段。一个响应可解析多个点位；每个点位均可用于实时展示、历史归档与业务绑定。
@@ -190,7 +220,7 @@ async function submit(): Promise<void> {
         <DtButton
           variant="outline"
           :disabled="isBusy || sample.trim() === ''"
-          @click="parse"
+          @click="void parse()"
         >
           <span>解析并预览</span>
         </DtButton>
@@ -246,7 +276,7 @@ async function submit(): Promise<void> {
           v-if="archiveEnabled"
           class="grid grid-cols-1 gap-3 sm:grid-cols-2"
         >
-          <DtField label="记录死区"
+          <DtField label="归档死区"
             ><DtNumberInput
               v-model="deadband"
               :range="{ min: 0, step: 0.1 }"
@@ -260,19 +290,6 @@ async function submit(): Promise<void> {
           /></DtField>
         </div>
       </template>
-      <DtNotice
-        v-if="state.outcome.value"
-        :intent="state.outcome.value.failures.length ? 'danger' : 'success'"
-        icon="check"
-        >{{ outcomeMessage }}</DtNotice
-      >
-      <DtNotice
-        v-for="failure in failureNotices"
-        :key="failure.id"
-        intent="danger"
-        icon="alert-circle"
-        >{{ failure.message }}</DtNotice
-      >
     </div>
     <template #footer>
       <DtButton

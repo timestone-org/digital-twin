@@ -14,9 +14,9 @@ import RoamTourInspector from '@/pages/TwinEditor/components/inspector/RoamTourI
 
 const CONFIG = normalizeTwinConfig({
   cameras: [
-    { id: 'c1', name: '全景' },
-    { id: 'c2', name: '俯视' },
-    { id: 'c3', name: '' },
+    { id: 'c1', name: '全景', position: [10, 0, 0] },
+    { id: 'c2', name: '俯视', position: [0, 10, 0] },
+    { id: 'c3', name: '', position: [0, 0, 10] },
   ],
 })
 

@@ -197,6 +197,30 @@ describe('有讲解时铺成六区', () => {
     expect(wrapper.text()).toContain('中位')
   })
 
+  // ⚠ 折叠条自己就叫「完整数据」，点开后里面那一区再印一遍区名就成了两个同样的标题
+  it('点开之后「完整数据」只出现一个标题，折叠条带着展开指示', async () => {
+    const wrapper = mount(ResultView, {
+      props: {
+        payload: FRAME,
+        report: reportOf([
+          blockOf(),
+          blockOf({ kind: 'bins', zone: 'table', title: '残差分布' }),
+        ]),
+      },
+    })
+    const toggle = wrapper.find('.dt-ml-result__toggle')
+    expect(toggle.find('.dt-ml-result__chevron').exists()).toBe(true)
+
+    await toggle.trigger('click')
+
+    expect(toggle.attributes('aria-expanded')).toBe('true')
+    expect(
+      wrapper
+        .findAll('.dt-ml-blocks__title')
+        .filter((title) => title.text() === '完整数据'),
+    ).toHaveLength(0)
+  })
+
   // ⚠ ⑥ 区那行比表自己那句更全（请求区间与实际取到的区间分两段），两处一起印
   // 就是同一句灰字在同一个折叠区里说两遍。收起来的那一档看不见这个重复
   it('点开之后出处只印一行，不是同一句话说两遍', async () => {
@@ -522,12 +546,33 @@ describe('结果弹窗', () => {
     fitted: null,
   }
 
-  function open(detail: ModelingNodeRun | null) {
+  function open(detail: ModelingNodeRun | null, error = '') {
     return mount(ResultDialog, {
-      props: { detail, labels: {}, runId: 'r1', nodeId: 'n1', config: {} },
+      props: {
+        detail,
+        labels: {},
+        runId: 'r1',
+        nodeId: 'n1',
+        config: {},
+        error,
+      },
       attachTo: document.body,
     })
   }
+
+  it('详情拉取失败时说出原因并给重试，不让骨架一直转', async () => {
+    const wrapper = open(null, '没有查看权限')
+
+    expect(document.body.textContent).toContain('没有查看权限')
+    expect(document.body.querySelector('.dt-ml-blocks__hold')).toBeNull()
+    const retry = [...document.body.querySelectorAll('button')].find(
+      (button) => button.textContent?.trim() === '重试',
+    )
+    retry?.click()
+    await wrapper.vm.$nextTick()
+    expect(wrapper.emitted('retry')).toHaveLength(1)
+    wrapper.unmount()
+  })
 
   // ⚠ 占位高度按区固定：详情回来之后各区落在原处，不跳版
   it('详情还没拉回来时摆骨架，不是一片空白', () => {

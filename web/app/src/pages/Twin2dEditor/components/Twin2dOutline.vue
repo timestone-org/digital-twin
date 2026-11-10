@@ -12,7 +12,7 @@
  * ⚠ 层序即文档序，也是数组绑定的行号：动一次等于把它与相邻那条的取值来源对调，
  * 所以一律走 `change` 交给文档态重派绑定，不在这里就地改数组。
  */
-import type { Pt, Twin2dConfig } from '@dt/twin2d'
+import type { Pt, Twin2dConfig, Twin2dMarkKind } from '@dt/twin2d'
 import { DtButton, DtEmpty, DtIcon } from '@dt/ui'
 import { computed, ref } from 'vue'
 
@@ -22,7 +22,12 @@ import type {
   Twin2dPickKind,
   Twin2dStyleKind,
 } from '../scripts/editorSelection'
-import { duplicateMarks, orderMarks, removeMarks } from '../scripts/markOps'
+import {
+  addMark,
+  duplicateMarks,
+  orderMarks,
+  removeMarks,
+} from '../scripts/markOps'
 import { duplicateNodes, orderNodes, removeNodes } from '../scripts/nodeOps'
 import type {
   Twin2dAdded,
@@ -74,6 +79,8 @@ interface OutlineSection {
   /** 动作条左边那句话，说清这几枚键对谁生效。 */
   scope: string
   actions: readonly RowAction[]
+  /** 这一段的「新加」键；不随选中变，展开就在。 */
+  adds: readonly RowAction[]
 }
 
 const props = defineProps<{
@@ -106,6 +113,17 @@ const ORDER_MOVES: readonly {
   { move: 'forward', icon: 'chevron-up', label: '上移一层' },
   { move: 'backward', icon: 'chevron-down', label: '下移一层' },
   { move: 'back', icon: 'align-bottom', label: '置底' },
+]
+
+/** 标注那一段的三枚「新加」键。 */
+const MARK_ADDS: readonly {
+  kind: Twin2dMarkKind
+  label: string
+  icon: string
+}[] = [
+  { kind: 'rect', label: '辅助框', icon: 'square' },
+  { kind: 'line', label: '辅助线', icon: 'minus' },
+  { kind: 'text', label: '文字', icon: 'type' },
 ]
 
 /** 收起来的那几段。 */
@@ -149,6 +167,16 @@ function onDuplicate(kind: Twin2dPickKind): void {
   const copied = copyOf(kind, props.selection.idsOf(kind))
   emit('change', copied.config)
   props.selection.selectMany(kind, copied.ids, false)
+}
+
+/**
+ * 加一条标注，落定后选中它。
+ * @param kind 标注哪一档
+ */
+function onAddMark(kind: Twin2dMarkKind): void {
+  const added = addMark(props.config, kind)
+  emit('change', added.config)
+  if (added.id !== null) props.selection.select('marks', added.id)
 }
 
 /**
@@ -336,10 +364,18 @@ function pickSection(kind: Twin2dPickKind): OutlineSection {
     label,
     icon: TWIN_2D_OUTLINE_ICONS[kind],
     empty: `还没有${label}`,
-    hint: '',
+    hint: kind === 'marks' ? '用上面三枚键加一条辅助框、辅助线或文字。' : '',
     rows: twin2dOutlineRows(props.config, props.selection, kind),
     scope: `选中 ${picked}`,
     actions: picked === 0 ? [] : pickActions(kind, label),
+    adds:
+      kind === 'marks'
+        ? MARK_ADDS.map((entry) =>
+            action(`add-${entry.kind}`, entry.label, entry.icon, () =>
+              onAddMark(entry.kind),
+            ),
+          )
+        : [],
   }
 }
 
@@ -358,6 +394,7 @@ const sections = computed<readonly OutlineSection[]>(() => {
       rows: styleEntries.value.map((entry) => entry.row),
       scope: '正在编辑',
       actions: focused?.actions ?? [],
+      adds: [],
     },
   ]
 })
@@ -383,6 +420,26 @@ const sections = computed<readonly OutlineSection[]>(() => {
           section.rows.length
         }}</span>
       </button>
+
+      <div
+        v-if="isOpen(section.key) && section.adds.length > 0"
+        class="flex flex-wrap items-center gap-0.5 px-1 pb-1"
+        :data-test="`outline-adds-${section.key}`"
+      >
+        <DtButton
+          v-for="entry in section.adds"
+          :key="entry.key"
+          size="xs"
+          variant="ghost"
+          intent="primary"
+          icon="plus"
+          :title="`加一条${entry.label}`"
+          :data-test="`outline-${entry.key}`"
+          @click="entry.run()"
+        >
+          {{ entry.label }}
+        </DtButton>
+      </div>
 
       <div
         v-if="isOpen(section.key) && section.actions.length > 0"

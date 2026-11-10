@@ -4,12 +4,14 @@
 补录更早的。区间的两端都由数据源当下的实际范围说了算。
 """
 
+import asyncio
 import uuid
 from collections.abc import Callable
 from datetime import UTC, datetime, timedelta
 from typing import Protocol
 
 import httpx
+import pytest
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from lib.errors import DependencyUnavailable
@@ -21,6 +23,7 @@ from platform_server.apps.hvac.models import (
     Room,
     Workshop,
 )
+from platform_server.apps.hvac.services import ac_startup_query
 from platform_server.apps.hvac.services.ac_room_configuration import (
     load_configuration,
 )
@@ -42,6 +45,7 @@ class FakeAcSource(Protocol):
 
     failure: Exception | None
     extent: list[dict[str, object]]
+    delay_s: float
 
 
 PREFIX = "/api/v1/platform"
@@ -298,6 +302,24 @@ async def test_an_unreachable_source_does_not_break_the_batches_page(
     assert response.json()["data"]["source_range"] is None
 
 
+async def test_a_slow_source_does_not_hold_the_batches_page(
+    app_client: httpx.AsyncClient,
+    db_session: AsyncSession,
+    ac_source: FakeAcSource,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """⚠ 外库连不上时卡满登录与查询超时，整页就跟着等到前端先超时。"""
+    room_id = await bound_room(db_session, "外库很慢")
+    ac_source.delay_s = 30.0
+    monkeypatch.setattr(ac_startup_query, "SOURCE_RANGE_BUDGET_S", 0.05)
+    async with asyncio.timeout(5):
+        response = await app_client.get(
+            f"{PREFIX}/rooms/{room_id}/startup-batches"
+        )
+    assert response.status_code == 200
+    assert response.json()["data"]["source_range"] is None
+
+
 async def test_an_unreachable_source_fails_a_rebuild(
     app_client: httpx.AsyncClient,
     db_session: AsyncSession,
@@ -328,3 +350,56 @@ async def test_a_bound_room_whose_source_is_empty_has_no_range(
     )
     assert rebuilt.status_code == 409
     assert rebuilt.json()["code"] == 41617
+
+
+async def test_a_rebuild_window_without_a_timezone_is_400(
+    app_client: httpx.AsyncClient, db_session: AsyncSession
+) -> None:
+    """⚠ 不带时区的时刻没法判是哪一刻，必须是校验失败，而不是比较时炸成 500。"""
+    room_id = await bound_room(db_session, "无时区")
+    response = await app_client.post(
+        f"{PREFIX}/rooms/{room_id}/startup-batches:rebuild",
+        json={"window_start": "2025-01-01T00:00:00"},
+    )
+    assert response.status_code == 400, response.text
+    assert response.json()["details"][0]["code"] == "timezone_aware"
+
+
+async def test_an_exclusion_moment_without_a_timezone_is_400(
+    app_client: httpx.AsyncClient, db_session: AsyncSession
+) -> None:
+    """路径里的开机时刻同样要带时区，否则会按服务端本地时间落库。"""
+    room_id = await bound_room(db_session, "路径无时区")
+    response = await app_client.put(
+        f"{PREFIX}/rooms/{room_id}/startup-exclusions/2026-03-01T00:10:00",
+        json={"reason": "现场在调试"},
+    )
+    assert response.status_code == 400, response.text
+    assert response.json()["details"][0]["code"] == "timezone_aware"
+
+
+async def test_the_episode_duration_is_the_stored_one(
+    app_client: httpx.AsyncClient, db_session: AsyncSession
+) -> None:
+    """⚠ 页面与训练读同一份时长：训练用的是存下来的那列，页面不许另算一份。"""
+    room_id = await make_room(db_session, "存的时长")
+    batch = await make_batch(db_session, room_id)
+    db_session.add(
+        AcStartupEpisode(
+            batch_id=batch.id,
+            room_id=room_id,
+            started_at=at(10),
+            running_set=["K11"],
+            complied_at=at(30),
+            duration_minutes=19,
+            outcome=OUTCOME_USABLE,
+            readings=READINGS,
+        )
+    )
+    await db_session.flush()
+    response = await app_client.get(
+        f"{PREFIX}/rooms/{room_id}/startup-episodes"
+    )
+    assert response.status_code == 200, response.text
+    items = response.json()["data"]["items"]
+    assert [item["duration_minutes"] for item in items] == [19]

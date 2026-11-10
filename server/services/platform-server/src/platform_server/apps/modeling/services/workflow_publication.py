@@ -74,7 +74,10 @@ class RunDeploymentCommand:
     async def execute(self) -> ModelDeploymentOut:
         if self._prepared is not None:
             await model_service.save_prepared_version(
-                self.session, self._prepared, is_reusing_existing=True
+                self.session,
+                self._prepared,
+                is_reusing_existing=True,
+                store=self.context.store,
             )
         return await deploy_run(
             self.session,
@@ -239,7 +242,7 @@ async def _save_training_version(
         return
     async with sessions.session() as session:
         version = await model_service.save_prepared_version(
-            session, prepared, is_reusing_existing=True
+            session, prepared, is_reusing_existing=True, store=store
         )
         record_audit(
             session,

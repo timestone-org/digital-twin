@@ -22,6 +22,7 @@ import { sourceTablesFor } from './upstream'
 import { useLedgerOptions } from './useLedgerOptions'
 import { useConfigDraft } from './useConfigDraft'
 import { changeBdmConfig } from './bdmConfig'
+import { changeEnergyConfig } from './energyRuleForm'
 
 type Operators = ReadonlyMap<string, ModelingOperator>
 type Ledger = ReturnType<typeof useLedgerOptions>
@@ -139,7 +140,9 @@ export function useConfigPanel(deps: ConfigPanelDeps) {
       const config =
         current.operator === 'bdm_source'
           ? changeBdmConfig(current.config, key, value)
-          : { ...current.config, [key]: value }
+          : current.operator === 'energy_rules'
+            ? changeEnergyConfig(current.config, key, value)
+            : { ...current.config, [key]: value }
       deps.setConfig(current.id, config)
     },
   }

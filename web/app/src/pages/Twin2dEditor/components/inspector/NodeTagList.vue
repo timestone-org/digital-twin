@@ -95,6 +95,7 @@ function addTag(): void {
     <DtEmpty
       v-if="rows.length === 0"
       size="inline"
+      class="flex-wrap"
       title="还没有标签"
       hint="子类等「不改结构只改外观」的维度靠它，键值都自定。"
       data-test="tag-empty"
@@ -150,8 +151,8 @@ function addTag(): void {
         data-test="tag-new-value"
       />
       <DtButton
-        size="xs"
-        variant="ghost"
+        size="sm"
+        variant="outline"
         intent="neutral"
         icon="plus"
         :disabled="!canAdd"

@@ -7,7 +7,12 @@
  * ⚠ 卸载不补收场同样不报错：拖到一半切走的改动既没进撤销栈也没落库。
  * ⚠ sprite 宿主由画布壳挂一次：这一层再挂一份，同一份 symbol 在文档里就重号了。
  */
-import { Twin2dNodeBox } from '@dt/twin2d'
+import {
+  Twin2dNodeBox,
+  normalizeNodeStyle,
+  svgGradientDomId,
+  svgPrimIdPrefix,
+} from '@dt/twin2d'
 import type {
   Twin2dIconResolver,
   Twin2dNode,
@@ -237,6 +242,52 @@ describe('画节点', () => {
     })
 
     expect(wrapper.findAll('[data-test="node"]')).toHaveLength(1)
+  })
+
+  // ⚠ 悬停变体会给节点盒写 `z-index: 30`：节点盒与引脚点同处一格叠放的话，悬停的
+  // 节点盖住自己的引脚，按下去拖走的是节点而不是拉出一根线（happy-dom 量不出叠放，
+  // 这里钉结构：节点盒关在自己那一格里，引脚与旋转柄在格子外面）
+  it('节点盒关在自己的叠放格里，引脚点不与它们同格', () => {
+    const { wrapper } = mountLayer({ nodes: [makeNode()], selectedIds: ['n1'] })
+
+    const boxes = wrapper.get('[data-test="node-boxes"]').element
+    expect(boxes.contains(nodeEl(wrapper, 'n1'))).toBe(true)
+    const port = wrapper.get('[data-test="node-port"]').element
+    expect(boxes.contains(port)).toBe(false)
+    expect(port.parentElement).toBe(boxes.parentElement)
+  })
+
+  // ⚠ 画中画在同一页上挂着运行态舞台，它的渐变 id 用节点 id 作前缀：编辑画布也用同一个
+  // 的话两边写出同 id 的定义，画中画的 `url(#…)` 认到的是编辑画布那一份
+  it('局部渐变的 DOM id 与运行态舞台的那一份不撞', () => {
+    const gradientStyle = normalizeNodeStyle({
+      id: 's1',
+      size: SIZE,
+      prims: [
+        {
+          id: 'v1',
+          kind: 'vec',
+          shape: { kind: 'rect', x: 0, y: 0, w: 1, h: 1 },
+          fill: { kind: 'gradient', id: 'g1' },
+          gradients: [
+            {
+              id: 'g1',
+              kind: 'linear',
+              stops: [
+                { id: 'a', at: 0, color: '#000' },
+                { id: 'b', at: 1, color: '#fff' },
+              ],
+            },
+          ],
+        },
+      ],
+    })
+    if (gradientStyle === null) throw new Error('夹具样式归一化失败')
+    const { wrapper } = mountLayer({ nodeStyles: [gradientStyle] })
+
+    const id = wrapper.get('linearGradient').attributes('id')
+    expect(id).toBeDefined()
+    expect(id).not.toBe(svgGradientDomId(svgPrimIdPrefix('n1', 'v1'), 'g1'))
   })
 
   it('选中的节点带选中类，没选中的不带', () => {

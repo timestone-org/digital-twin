@@ -37,6 +37,9 @@ import { groupFormulas } from './scripts/formulaView'
 import { useFormulaOps } from './scripts/useFormulaOps'
 import { useFormulaUsages } from './scripts/useFormulaUsages'
 
+const PAGE_HINT =
+  '公式在这里定义一次，台账列里写 @标识(实参) 就能调用。改一条公式，所有引用它的台账列即刻按新口径算，历史行要等各自的台账重算之后才跟上——动手之前先点「引用」看一眼波及面。'
+
 const VIEW_OPTIONS: readonly DtSegmentedOption[] = [
   { value: 'table', label: '表格视图', icon: 'table', iconOnly: true },
   { value: 'card', label: '卡片视图', icon: 'layout-grid', iconOnly: true },
@@ -95,10 +98,9 @@ onMounted(() => {
 
     <!-- h-full + min-h-0 见 AppShell 的契约：main 不滚，高度由页面自己吃满 -->
     <div class="flex h-full min-h-0 flex-col gap-4">
+      <!-- 中文句子不在模板里折行：折行处的空白会渲染成一个可见空格 -->
       <p class="text-xs leading-relaxed text-text-secondary">
-        公式在这里定义一次，台账列里写 @标识(实参) 就能调用。改一条公式，
-        所有引用它的台账列即刻按新口径算，历史行要等各自的台账重算之后才跟上
-        ——动手之前先点「引用」看一眼波及面。
+        {{ PAGE_HINT }}
       </p>
 
       <!-- 被后端拦下的那次操作：它点名了受影响的台账，留在页面上直到下一次动作 -->

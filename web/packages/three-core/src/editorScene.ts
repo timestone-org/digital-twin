@@ -235,9 +235,9 @@ export class EditorScene {
   private readonly selectionBoxTarget = new THREE.Box3()
 
   private config: TwinConfig
-  /** 宿主最近一次喂进来的五路实时值；重建覆盖层时按它重放。 */
   private readonly isolation = new PreviewIsolation()
   private isolatedPartId: string | null = null
+  /** 宿主最近一次喂进来的五路实时值；重建覆盖层时按它重放。 */
   private liveValues: SceneLayerValues = EMPTY_LAYER_VALUES
   private core: SceneCore | null = null
   private layers: SceneLayers | null = null
@@ -309,10 +309,8 @@ export class EditorScene {
   }
 
   /**
-   * 换一份实时值，只换值不重建覆盖层。
-   * ⚠ 必须记在实例上：`refresh()` 会把覆盖层整片重建，重建时不重放这一份的话，
-   * 改一下配置就会把读数全刷回占位符，而下一帧数据到来之前它一直是那样。
-   * @param values 缝合好的五路实时值
+   * 配置预览：只显示这一个部件。
+   * @param id 部件 id；null = 恢复全部
    */
   isolatePart(id: string | null): void {
     if (this.isolatedPartId === id) return
@@ -325,6 +323,12 @@ export class EditorScene {
     this.flight.flyTo(this.core, pose, this.modelSpan)
   }
 
+  /**
+   * 换一份实时值，只换值不重建覆盖层。
+   * ⚠ 必须记在实例上：`refresh()` 会把覆盖层整片重建，重建时不重放这一份的话，
+   * 改一下配置就会把读数全刷回占位符，而下一帧数据到来之前它一直是那样。
+   * @param values 缝合好的五路实时值
+   */
   setValues(values: SceneLayerValues): void {
     this.liveValues = values
     this.layers?.setValues(values)
@@ -548,6 +552,7 @@ export class EditorScene {
       core,
       onChange: (change) => this.on.entityTransform(change),
       onDragEnd: () => this.on.entityTransformEnd(),
+      orbitAllowed: () => this.orbitAllowed(),
     })
     this.gameNavigation = new GameNavigationControls({
       core,
@@ -927,6 +932,14 @@ export class EditorScene {
     if (this.core !== null) this.core.controls.enabled = enabled
   }
 
+  /**
+   * 当前操作方式下轨道控制该不该开着。
+   * ⚠ 松手时回到它而不是无条件开：游戏档开回轨道控制，滚轮与拖拽就又能动镜头。
+   */
+  private orbitAllowed(): boolean {
+    return this.navigationMode === 'orbit'
+  }
+
   /** 框完了：算出框中哪些节点，交给宿主。 */
   private finishMarquee(rect: ScreenRect): void {
     const core = this.core
@@ -946,10 +959,10 @@ export class EditorScene {
     this.shiftSelectingPartNodes = false
     if (this.marquee?.up(event) === true) {
       this.downValid = false
-      this.setOrbitEnabled(true)
+      this.setOrbitEnabled(this.orbitAllowed())
       return
     }
-    this.setOrbitEnabled(true)
+    this.setOrbitEnabled(this.orbitAllowed())
     if (!this.downValid || event.button !== 0) return
     this.downValid = false
     const moved = Math.hypot(
@@ -964,7 +977,7 @@ export class EditorScene {
     this.downValid = false
     this.shiftSelectingPartNodes = false
     this.marquee?.cancel()
-    this.setOrbitEnabled(true)
+    this.setOrbitEnabled(this.orbitAllowed())
   }
 
   private canShiftSelectPartNodes(): boolean {

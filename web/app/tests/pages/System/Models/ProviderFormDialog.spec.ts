@@ -279,6 +279,15 @@ describe('按类型摆格子', () => {
     ).toBe('')
   })
 
+  it('换类型保留已填的名称与备注', async () => {
+    const wrapper = render()
+    await inputOf(wrapper, '名称').setValue('我的端点')
+    await pickKind(wrapper, 'codex_oauth')
+    expect((inputOf(wrapper, '名称').element as HTMLInputElement).value).toBe(
+      '我的端点',
+    )
+  })
+
   it('编辑态只报类型，不给改', () => {
     const wrapper = render(provider({ kind: 'codex_oauth' }))
     expect(wrapper.text()).toContain('类型：Codex 订阅')

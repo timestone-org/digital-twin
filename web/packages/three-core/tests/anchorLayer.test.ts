@@ -143,6 +143,24 @@ describe('读数', () => {
     expect(labelTexts(layer)).toEqual(['出口温度36.5 ℃'])
   })
 
+  // ⚠ 前缀拼进强调色的读数里，会和锚点名连成一串「罐顶罐温 26.5 ℃」
+  it('读数前缀单独成一节，不混进强调色的读数里', () => {
+    const layer = layerOn(host())
+    layer.build([anchor({ name: '罐顶', label: '罐温' })])
+
+    layer.setValues({ a1: { value: 26.48 } })
+
+    const element = layer.group.children.find(
+      (child): child is THREE.Object3D & { element: HTMLElement } =>
+        'element' in child,
+    )?.element
+    // ⚠ CSS2D 渲染器逐帧改根元素的 display：排版必须挂在里层，否则 gap 被冲掉
+    const row = element?.firstElementChild
+    expect(row instanceof HTMLElement && row.style.display).toBe('flex')
+    const parts = [...(row?.children ?? [])].map((child) => child.textContent)
+    expect(parts).toEqual(['罐顶', '罐温', '26.5 ℃'])
+  })
+
   it('有值但拼不出任何文本时也给占位符，不留空白', () => {
     const layer = layerOn(host())
     layer.build([anchor({ name: '', label: '', unit: '', decimals: null })])

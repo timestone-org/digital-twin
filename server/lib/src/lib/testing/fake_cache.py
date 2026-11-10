@@ -66,12 +66,13 @@ class InMemoryCache:
     async def delete(self, key: str) -> None:
         self.store.pop(key, None)
         self.ttl_s.pop(key, None)
+        self.sets.pop(key, None)
 
     async def add_to_set(self, key: str, *members: str) -> None:
         self.sets.setdefault(key, set()).update(members)
 
     async def exists(self, key: str) -> bool:
-        return key in self.store
+        return key in self.store or key in self.sets
 
     async def incr_in_window(self, key: str, *, window_s: int) -> int:
         count = int(self.store.get(key, "0")) + 1

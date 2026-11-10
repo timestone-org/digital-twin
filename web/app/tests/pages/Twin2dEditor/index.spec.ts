@@ -20,7 +20,13 @@ import type {
   DashboardPayload,
   Page,
 } from '@dt/contracts'
-import { __resetTwin2dAssets, normalizeTwin2dConfig } from '@dt/twin2d'
+import {
+  TWIN_2D_BUILTIN_NODE_STYLES,
+  TWIN_2D_BUILTIN_NODE_STYLE_MAP,
+  TWIN_2D_CONFIG_KEY,
+  __resetTwin2dAssets,
+  normalizeTwin2dConfig,
+} from '@dt/twin2d'
 import type { Twin2dConfig } from '@dt/twin2d'
 import { DtResizableLayout } from '@dt/ui'
 import { flushPromises, mount } from '@vue/test-utils'
@@ -59,6 +65,7 @@ vi.mock('@dt/ui', async () => {
       success: toastSuccess,
       error: toastError,
       info: vi.fn(),
+      warning: vi.fn(),
     }),
     useConfirm: () => ({ ask: confirmAsk }),
   }
@@ -143,6 +150,8 @@ interface Controls {
   loading: Ref<boolean>
   error: Ref<string | null>
   conflict: Ref<string | null>
+  saving: Ref<boolean>
+  saveError: Ref<string | null>
   save: ReturnType<typeof vi.fn<() => Promise<boolean>>>
   reload: ReturnType<typeof vi.fn<() => Promise<void>>>
   dispose: ReturnType<typeof vi.fn<() => void>>
@@ -156,6 +165,8 @@ function makeControls(): Controls {
   const loading = ref(false)
   const error = ref<string | null>(null)
   const conflict = ref<string | null>(null)
+  const saving = ref(false)
+  const saveError = ref<string | null>(null)
   const save = vi.fn<() => Promise<boolean>>(() => Promise.resolve(true))
   const reload = vi.fn<() => Promise<void>>(() => Promise.resolve())
   const dispose = vi.fn<() => void>()
@@ -165,14 +176,26 @@ function makeControls(): Controls {
     node: computed(() => node()),
     targetSize: computed(() => ({ width: 640, height: 360 })),
     loading,
-    saving: ref(false),
+    saving,
     error: computed(() => error.value),
     conflict,
     save,
     reload,
+    saveError,
     dispose,
   }
-  return { doc, loading, error, conflict, save, reload, dispose, page }
+  return {
+    doc,
+    loading,
+    error,
+    conflict,
+    saving,
+    saveError,
+    save,
+    reload,
+    dispose,
+    page,
+  }
 }
 
 let controls = makeControls()
@@ -346,6 +369,36 @@ describe('顶栏动作', () => {
     await flushPromises()
 
     expect(toastError).toHaveBeenCalledWith('保存失败，请重试')
+  })
+
+  it('保存失败时把失败原因原样弹出来，编辑器留在原地', async () => {
+    controls.save.mockImplementation(() => {
+      controls.saveError.value = '服务暂时不可用'
+      return Promise.resolve(false)
+    })
+    const wrapper = mountPage()
+    await dirty(wrapper)
+
+    await wrapper.find('[data-test="save"]').trigger('click')
+    await flushPromises()
+
+    expect(toastError).toHaveBeenCalledWith('服务暂时不可用')
+    expect(wrapper.find('[data-test="canvas"]').exists()).toBe(true)
+  })
+
+  // ⚠ 上一次还在路上时再按一次 ⌘S 是「忙」：报红的话人会以为没存上，而第一次随后就成了
+  it('保存还没结束时再按 ⌘S 不报失败，也不再发一次', async () => {
+    controls.saving.value = true
+    const wrapper = mountPage()
+    await dirty(wrapper)
+
+    window.dispatchEvent(
+      new KeyboardEvent('keydown', { key: 's', ctrlKey: true }),
+    )
+    await flushPromises()
+
+    expect(controls.save).not.toHaveBeenCalled()
+    expect(toastError).not.toHaveBeenCalled()
   })
 
   it('版本撞了就把冲突那句话原样弹出来', async () => {
@@ -563,6 +616,30 @@ describe('诊断', () => {
         '[data-test="diagnostics"] [data-test="diagnostics-row"]',
       ),
     ).toHaveLength(1)
+  })
+
+  // ⚠ 编辑的是归一化之后那一份：拿它跑诊断，「载入时被整条丢掉了什么」那一族恒为空，
+  // 而第一次保存就把丢掉的东西永久写没，全程没有一句提示
+  it('库里那份配置载入时丢掉的条目也列出来，并说清保存后就没了', async () => {
+    stub.page = {
+      ...controls.page,
+      node: computed(() => ({
+        ...node(),
+        configJson: {
+          [TWIN_2D_CONFIG_KEY]: {
+            nodes: [{ id: 'a', styleId: 'nope' }, { styleId: 'nope' }],
+          },
+        },
+      })),
+    }
+    const wrapper = mountPage()
+
+    expect(wrapper.find('[data-test="issues"]').text()).toContain('2')
+    await wrapper.find('[data-test="issues"]').trigger('click')
+
+    const dropped = wrapper.findAll('[data-code="dropped-node"]')
+    expect(dropped).toHaveLength(1)
+    expect(dropped[0]?.text()).toContain('保存后')
   })
 
   // ⚠ 跳过去才是这张清单的用处：只列不跳的话，「nodes[0].styleId」这种路径要人自己
@@ -873,7 +950,18 @@ describe('左栏装配', () => {
 
     const nodes = controls.doc.value?.config.value.nodes ?? []
     expect(nodes).toHaveLength(2)
-    expect(nodes[1]?.x).toBe(CONFIG.canvas.width / 2)
+    // ⚠ x/y 是左上角：拿画布中心当 x/y 的话节点整个落在中心的右下方，还不在网格上
+    const added = nodes[1]
+    const size = TWIN_2D_BUILTIN_NODE_STYLE_MAP.get(added?.styleId ?? '')?.size
+    if (added === undefined || size === undefined) throw new Error('没加上')
+    const { width, height, grid } = CONFIG.canvas
+    expect(Math.abs(added.x + size.w / 2 - width / 2)).toBeLessThanOrEqual(
+      grid / 2,
+    )
+    expect(Math.abs(added.y + size.h / 2 - height / 2)).toBeLessThanOrEqual(
+      grid / 2,
+    )
+    expect([added.x % grid, added.y % grid]).toEqual([0, 0])
   })
 
   it('大纲改出来的整份配置落一步撤销', async () => {
@@ -916,6 +1004,20 @@ describe('样式库抽屉', () => {
     await wrapper.find('[data-test="close-style-focus"]').trigger('click')
 
     expect(inspectorKind(wrapper)).toBe('canvas')
+  })
+
+  // ⚠ 没覆盖过的内置样式不在文档的 `styles` 里：按「文档里有没有」摘悬空选中的话，
+  // 挪一下节点、改一格字段，右栏正编着的那份内置样式就自己关掉了
+  it('编着一份没覆盖过的内置样式时，改别处不把它关掉', async () => {
+    const wrapper = mountPage()
+    const selection = selectionOf(wrapper)
+    const builtin = TWIN_2D_BUILTIN_NODE_STYLES[0]?.id ?? ''
+    selection.focusStyle('styles', builtin)
+    await nextTick()
+
+    await dirty(wrapper)
+
+    expect(selection.styleFocus.value).toEqual({ kind: 'styles', id: builtin })
   })
 
   // ⚠ 图元 id 只在它自己那份样式里唯一：留着上一份的 id 会让右栏画出另一份样式里
@@ -1049,6 +1151,18 @@ describe('绑定装配', () => {
     expect(wrapper.findComponent(PointPickerDialog).props('fieldKey')).toBe(
       'nodeValues[0].value',
     )
+  })
+
+  it('挑点弹窗的副标题是正在绑的那一行的名字', async () => {
+    const wrapper = mountPage()
+    await switchPane(wrapper, '绑定')
+
+    wrapper
+      .findComponent(Twin2dBindingPane)
+      .vm.$emit('pick', 'nodeStatus[0].status')
+    await nextTick()
+
+    expect(wrapper.findComponent(PointPickerDialog).props('label')).toBe('a')
   })
 
   // ⚠ 绑定与配置压在同一帧撤销里：只把配置进退的话，撤销一次会让行号回到旧配置、

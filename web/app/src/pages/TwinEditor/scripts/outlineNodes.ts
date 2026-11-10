@@ -122,6 +122,7 @@ export const TWIN_ISSUE_LABELS: Readonly<
   Record<TwinConfigIssue['kind'], string>
 > = {
   'duplicate-id': 'id 重复',
+  'duplicate-field-key': '字段 key 重复',
   'dangling-camera': '视点丢失',
   'dangling-anchor': '锚点丢失',
   'flow-too-short': '流画不出',

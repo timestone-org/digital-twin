@@ -45,7 +45,7 @@ const props = defineProps<{
   selected: readonly string[]
   series: readonly DtChartSeries[]
   loading: boolean
-  /** 勾选已经超出上一次查询的结果。 */
+  /** 勾选或查询条件已经与上一次查询对不上。 */
   dirty: boolean
   /** 截断的那一句，没截断给 null。 */
   truncation: string | null
@@ -181,7 +181,7 @@ function patchRange(patch: Partial<TrendRangeValue>): void {
 
       <section class="flex min-h-0 flex-1 flex-col gap-2">
         <DtNotice v-if="dirty" intent="warning" icon="alert-triangle">
-          勾选已经变了，图上画的还是上一次查询的那几条。点「查询」刷新曲线。
+          查询条件已经变了，图上画的还是上一次查询的结果。点「查询」刷新曲线。
         </DtNotice>
 
         <DtNotice v-if="truncation" intent="warning" icon="alert-triangle">

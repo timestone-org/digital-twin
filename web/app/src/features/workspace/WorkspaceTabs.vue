@@ -145,6 +145,9 @@ watch(() => workspace?.activeKey.value, revealActive, { flush: 'post' })
 
 <style scoped lang="scss">
 .workspace-tabs {
+  /* 两侧给标题块与操作区留的宽度 */
+  --workspace-tabs-side-reserve: 17rem;
+
   position: absolute;
   z-index: 35;
   top: 0;
@@ -152,7 +155,12 @@ watch(() => workspace?.activeKey.value, revealActive, { flush: 'post' })
   display: flex;
   align-items: center;
   width: max-content;
-  max-width: min(var(--workspace-tabs-max-width), calc(100% - 2rem));
+  // ⚠ 居中骑在顶栏下沿上：两侧各让出标题块与操作区的宽度，满了就在条内横滚，
+  // 不让 48rem 的上限在窄屏上盖住副标题与右侧按钮
+  max-width: min(
+    var(--workspace-tabs-max-width),
+    max(16rem, calc(100% - 2 * var(--workspace-tabs-side-reserve)))
+  );
   padding: 3px 4px;
   border: 1px solid color-mix(in srgb, var(--text-primary) 10%, transparent);
   border-radius: var(--radius-pill);

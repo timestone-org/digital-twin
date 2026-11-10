@@ -14,6 +14,7 @@ import {
   DtSwitch,
   DtSelect,
   DtTag,
+  DtTooltip,
 } from '@dt/ui'
 
 import * as collect from '@/api/collect'
@@ -42,6 +43,10 @@ import PointFormDialog from './PointFormDialog.vue'
 import PointValueCell from './PointValueCell.vue'
 import WriteValueDialog from './WriteValueDialog.vue'
 
+/** 状态筛选的口径，挂在筛选框的提示里，不常驻占一行。 */
+const STATUS_FILTER_HINT =
+  '状态筛选覆盖当前数据源的全部点位。“全部异常”包含等待数据、数据陈旧和质量异常；状态变化后点击“刷新列表”重新查询。'
+
 const props = defineProps<{ source: CollectSource }>()
 
 const batchEditing = ref<CollectPoint[] | null>(null)
@@ -52,12 +57,16 @@ const detailSample = computed(() =>
     ? undefined
     : live.samples.value.get(detail.value.node_key),
 )
+/** 这个点位的读数是否不可信：推送断了、它自己久没收到，或者数据源不在线。 */
+function isStale(nodeKey: string): boolean {
+  return (
+    !live.isConnected.value ||
+    live.staleKeys.value.has(nodeKey) ||
+    props.source.runtime.state !== 'online'
+  )
+}
 const detailStale = computed(
-  () =>
-    detail.value !== null &&
-    (!live.isConnected.value ||
-      live.staleKeys.value.has(detail.value.node_key) ||
-      props.source.runtime.state !== 'online'),
+  () => detail.value !== null && isStale(detail.value.node_key),
 )
 
 const auth = useAuthStore()
@@ -155,7 +164,7 @@ watch(list.items, (rows) => {
 </script>
 
 <template>
-  <DtCard icon="table" title="已导入节点" class="flex min-h-0 flex-col">
+  <DtCard icon="table" title="点位" class="flex min-h-0 flex-col">
     <template #actions>
       <DtTag v-if="hasPoints" size="sm">
         {{ list.total.value }}
@@ -167,9 +176,6 @@ watch(list.items, (rows) => {
         :source="source"
         :is-connected="live.isConnected.value"
       />
-      <p class="text-xs text-text-secondary">
-        状态筛选覆盖当前数据源的全部点位。“全部异常”包含等待数据、数据陈旧和质量异常；状态变化后点击“刷新列表”重新查询。
-      </p>
 
       <BatchActionBar
         v-if="hasSelection"
@@ -183,7 +189,7 @@ watch(list.items, (rows) => {
 
       <DtDataView
         v-model:view="view"
-        class="min-h-0 flex-1"
+        class="node-table min-h-0 flex-1"
         :columns="COLUMNS"
         :rows="list.items.value"
         :loading="list.loading.value"
@@ -201,13 +207,15 @@ watch(list.items, (rows) => {
         @retry="list.reload()"
       >
         <template #toolbar>
-          <DtSelect
-            :model-value="status"
-            :options="POINT_STATUS_OPTIONS"
-            aria-label="点位状态"
-            size="sm"
-            @update:model-value="setStatus"
-          />
+          <DtTooltip :content="STATUS_FILTER_HINT">
+            <DtSelect
+              :model-value="status"
+              :options="POINT_STATUS_OPTIONS"
+              aria-label="点位状态"
+              size="sm"
+              @update:model-value="setStatus"
+            />
+          </DtTooltip>
           <DtButton
             variant="outline"
             size="sm"
@@ -242,11 +250,7 @@ watch(list.items, (rows) => {
           <PointCard
             :point="row"
             :sample="live.samples.value.get(row.node_key)"
-            :stale="
-              !live.isConnected.value ||
-              live.staleKeys.value.has(row.node_key) ||
-              source.runtime.state !== 'online'
-            "
+            :stale="isStale(row.node_key)"
             :selected="archive.selected.value.has(row.id)"
             :archive-busy="archive.rowBusy.value.has(row.id)"
             :can-write="source.protocol === 'opcua'"
@@ -322,11 +326,7 @@ watch(list.items, (rows) => {
           <PointValueCell
             :sample="live.samples.value.get(row.node_key)"
             :unit="row.unit"
-            :stale="
-              !live.isConnected.value ||
-              live.staleKeys.value.has(row.node_key) ||
-              source.runtime.state !== 'online'
-            "
+            :stale="isStale(row.node_key)"
           />
         </template>
 
@@ -365,7 +365,7 @@ watch(list.items, (rows) => {
                 variant="ghost"
                 size="sm"
                 icon="settings-2"
-                aria-label="点位设置（记录历史 / 死区 / 心跳 / 保留期）"
+                aria-label="点位设置（记录历史 / 归档死区 / 心跳 / 保留期）"
                 @click="editing.openEdit(row)"
               />
               <DtButton
@@ -399,6 +399,7 @@ watch(list.items, (rows) => {
       v-model="editing.formOpen.value"
       :point="editing.editing.value"
       :protocol="source.protocol"
+      :busy="editing.formBusy.value"
       @create="editing.create"
       @update="editing.update"
     />
@@ -444,3 +445,39 @@ watch(list.items, (rows) => {
     />
   </DtCard>
 </template>
+
+<style scoped lang="scss">
+// 操作列贴右：寻址串吃满剩余宽度后表格比窄屏容器宽，不贴右就得横滚到底才找得到写值与删除。
+// ⚠ --surface-panel 是半透明的，贴住的格子必须垫一层 --surface-base，否则底下滚过的列会透出来
+.node-table :deep(.dt-table th:last-child),
+.node-table :deep(.dt-table td:last-child) {
+  position: sticky;
+  right: 0;
+  z-index: 1;
+  background:
+    linear-gradient(var(--surface-panel), var(--surface-panel)),
+    var(--surface-base);
+  box-shadow: inset 1px 0 0 var(--border-subtle);
+}
+
+.node-table :deep(.dt-table th) {
+  z-index: 2;
+}
+
+.node-table :deep(.dt-table th:last-child) {
+  z-index: 3;
+  box-shadow:
+    inset 1px 0 0 var(--border-subtle),
+    inset 0 -1px 0 var(--border-subtle);
+}
+
+.node-table :deep(.dt-table tbody tr:hover td:last-child) {
+  background:
+    linear-gradient(
+      rgba(var(--accent-primary-rgb), 0.04),
+      rgba(var(--accent-primary-rgb), 0.04)
+    ),
+    linear-gradient(var(--surface-panel), var(--surface-panel)),
+    var(--surface-base);
+}
+</style>

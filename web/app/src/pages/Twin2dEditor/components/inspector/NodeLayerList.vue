@@ -227,6 +227,7 @@ function setPatchOpacity(
     <DtEmpty
       v-if="rows.length === 0"
       size="inline"
+      class="flex-wrap"
       title="没有节点级追加图元"
       hint="传感器药丸算在传感器那一段里。"
       data-test="layer-empty"

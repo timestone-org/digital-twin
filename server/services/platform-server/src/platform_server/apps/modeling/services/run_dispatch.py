@@ -118,8 +118,13 @@ async def _run_claimed(
     Args: sessions, run_id, claimed, options。
     """
     try:
-        sources = await _load_sources(
-            sessions, claimed, options.bdm_connection, pool=options.pool
+        # 认领前已取消的不取数：引擎在第一个节点边界就会把它收成 cancelled
+        sources = (
+            Sources(frames={})
+            if claimed.is_cancel_requested
+            else await _load_sources(
+                sessions, claimed, options.bdm_connection, pool=options.pool
+            )
         )
         return await execute_graph(
             claimed.graph,
@@ -168,6 +173,8 @@ class _Claimed:
     pipeline_id: uuid.UUID
     #: 这次运行要不要把每个端口的全量帧写成 CSV 存下来（D12）
     is_keeping_frames: bool
+    #: 认领之前用户已经点过取消
+    is_cancel_requested: bool = False
 
 
 async def _claim(
@@ -188,7 +195,8 @@ async def _claim(
         redelivery = run.attempt > 0
         run.attempt += 1
         if not redelivery:
-            run.status = "running"
+            if not run.cancel_requested:
+                run.status = "running"
             run.started_at = moment
             run.heartbeat_at = moment
         return _Claimed(
@@ -196,6 +204,7 @@ async def _claim(
             is_redelivery=redelivery,
             pipeline_id=run.pipeline_id,
             is_keeping_frames=run.is_keeping_frames,
+            is_cancel_requested=run.cancel_requested,
         )
 
 

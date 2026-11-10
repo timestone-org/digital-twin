@@ -13,7 +13,9 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from knowledge_server.apps.knowledge import crud
 from knowledge_server.apps.knowledge.errors import (
     DuplicateDocument,
+    ObjectStoreDown,
     UnsupportedRawItem,
+    UploadNotFound,
 )
 from knowledge_server.apps.knowledge.schemas import (
     RegisterDocumentIn,
@@ -187,12 +189,16 @@ class _StuckDeleteStore(_Store):
 
 
 def _registration(
-    monkeypatch: pytest.MonkeyPatch, *, is_duplicate: bool
+    monkeypatch: pytest.MonkeyPatch,
+    *,
+    is_duplicate: bool,
+    is_registered: bool = False,
 ) -> None:
     """替换登记走到的库操作；重复时唯一键与判重查询口径一致。
 
-    Args: monkeypatch, is_duplicate。
+    Args: monkeypatch, is_duplicate, is_registered（这个 id 已经登记过了）。
     """
+    inserted: list[bool] = [is_registered]
 
     async def source(*_args: object) -> SimpleNamespace:
         return SimpleNamespace(id=uuid.uuid4())
@@ -203,8 +209,11 @@ def _registration(
     async def insert(*_args: object) -> None:
         if is_duplicate:
             raise IntegrityError("insert", {}, Exception("唯一键冲突"))
+        inserted[0] = True
 
-    async def row(*_args: object) -> SimpleNamespace:
+    async def row(*_args: object) -> SimpleNamespace | None:
+        if not inserted[0]:
+            return None
         return SimpleNamespace(
             id=DOC,
             base_id=BASE,
@@ -226,9 +235,42 @@ def _registration(
     monkeypatch.setattr(crud.document, "get_document", row)
 
 
-async def _register(store: _Store) -> str:
+class _Session:
+    """只记「此刻有没有开着事务」的假数据库会话。
+
+    ⚠ 开局就开着：路由在调登记之前已经查过库，请求那个事务早就开了。
+    """
+
+    def __init__(self) -> None:
+        self.is_open = True
+
+    def in_transaction(self) -> bool:
+        return self.is_open
+
+    async def commit(self) -> None:
+        self.is_open = False
+
+
+class _WatchingStore(_Store):
+    """每次碰对象存储时记下数据库事务是不是还开着。"""
+
+    def __init__(self, session: _Session) -> None:
+        super().__init__()
+        self.session = session
+        self.open_during_io: list[bool] = []
+
+    async def get_bytes(self, key: str) -> bytes:
+        self.open_during_io.append(self.session.in_transaction())
+        return await super().get_bytes(key)
+
+    async def copy(self, source_key: str, target_key: str) -> None:
+        self.open_during_io.append(self.session.in_transaction())
+        await super().copy(source_key, target_key)
+
+
+async def _register(store: _Store, session: _Session | None = None) -> str:
     made = await document_service.register_upload(
-        cast("AsyncSession", object()),
+        cast("AsyncSession", session or _Session()),
         cast("ObjectStore", store),
         BASE,
         RegisterDocumentIn(document_id=DOC, filename="手册.md"),
@@ -278,6 +320,70 @@ async def test_a_failed_staging_delete_does_not_fail_the_registration(
 
     assert await _register(store) == "手册.md"
     assert document_key(BASE, DOC, ".md") in store.objects
+
+
+async def test_no_transaction_stays_open_across_the_object_store(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """⚠ 读几十兆原件与挪件都是跨网络的外部 IO：事务开着跨过去，几次并发的
+    大文件登记就能把连接池占满（database-standard：事务里禁止外部 IO）。"""
+    _registration(monkeypatch, is_duplicate=False)
+    session = _Session()
+    store = _WatchingStore(session)
+    store.objects[staging_key(BASE, DOC, ".md")] = b"hello"
+
+    await _register(store, session)
+
+    assert store.open_during_io == [False, False]
+
+
+async def test_registering_before_the_bytes_landed_is_a_4xx(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """⚠ 直传没落地、凭证过期或那一步 POST 失败时，回的得是「请重新上传」，
+    而不是一条 500 加一段 ERROR 堆栈。"""
+    _registration(monkeypatch, is_duplicate=False)
+
+    with pytest.raises(UploadNotFound) as caught:
+        await _register(_Store())
+
+    assert caught.value.http_status == 409
+
+
+async def test_registering_the_same_id_twice_is_a_conflict(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """⚠ 连点一次「确认上传」：第一次已把暂存件挪走，第二次不该是 500。"""
+    _registration(monkeypatch, is_duplicate=False, is_registered=True)
+
+    with pytest.raises(DuplicateDocument, match="登记过"):
+        await _register(_Store())
+
+
+class _DownStore(_Store):
+    """签不出凭证的对象存储。"""
+
+    async def presign_post(
+        self,
+        key: str,
+        *,
+        content_type: str,
+        limits: UploadLimits,
+        ttl_s: int,
+    ) -> PresignedPost:
+        del content_type, limits, ttl_s
+        raise ObjectStoreUnavailable(key)
+
+
+async def test_a_store_outage_while_signing_is_a_503() -> None:
+    with pytest.raises(ObjectStoreDown) as caught:
+        await document_service.presign_upload(
+            _DownStore(),  # pyright: ignore[reportArgumentType]
+            BASE,
+            _ticket("手册.md"),
+            (),
+        )
+    assert caught.value.http_status == 503
 
 
 @dataclass(frozen=True)

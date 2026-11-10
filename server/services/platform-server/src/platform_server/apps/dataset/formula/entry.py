@@ -22,7 +22,7 @@ from platform_server.apps.dataset.formula.library import (
 from platform_server.apps.dataset.formula.parser import parse_formula
 from platform_server.apps.dataset.formula.tokens import (
     COLUMN_KEY_RE,
-    COLUMN_REF_RE,
+    refs_outside_quotes,
 )
 
 # 形参没给默认值时，样例调用里替它填的数。取 1 不取 0：它还要去当除数
@@ -140,12 +140,10 @@ def _referenced_names(expression: str) -> list[str]:
     """体里 `{…}` 引用到的全部名字，按出现顺序、不去重。
 
     ⚠ 扫的是**原文**而不是解析结果：形参在展开之后就不存在了，从 AST 上
-    反推不回来。
+    反推不回来。字符串字面量里的 `{…}` 不是引用，与展开时同一口径。
     Args: expression。
     """
-    return [
-        found.group(1).strip() for found in COLUMN_REF_RE.finditer(expression)
-    ]
+    return refs_outside_quotes(expression)
 
 
 def _check_no_stray(entry: FxEntry, referenced: list[str]) -> None:

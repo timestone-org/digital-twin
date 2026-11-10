@@ -13,6 +13,7 @@ from sqlalchemy import (
     CheckConstraint,
     DateTime,
     ForeignKeyConstraint,
+    Index,
     Integer,
     Text,
     UniqueConstraint,
@@ -31,7 +32,7 @@ from platform_server.apps.modeling.protocols import (
 
 # 二进制产物列（artifact / artifact_digest / sklearn_version）不在这张表上：
 # ⚠ 版本表要被列表页全量读，加一列几十 MB 的 bytea 会让每次列表都拖着产物走。
-# 要开二进制通道时照 `ac_model_artifacts` 的形状另起一张子表（§4.4）
+# 产物键 / 摘要 / 库版本在子表 `ModelingModelArtifact`（models/artifact.py）
 
 
 class ModelVersionFields(UuidPrimaryKeyMixin, CreatedAtMixin):
@@ -149,5 +150,11 @@ class ModelingModelVersion(ModelVersionFields, Base):
         CheckConstraint(
             "jsonb_typeof(fingerprint_json) = 'object'",
             name="fingerprint_is_an_object",
+        ),
+        Index(
+            "ix_modeling_model_versions_archive_created",
+            "archived_at",
+            "created_at",
+            "id",
         ),
     )

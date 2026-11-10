@@ -182,6 +182,15 @@ describe('大屏', () => {
     expect(options.body).toEqual({ name: '改过' })
   })
 
+  it('给了版本断言就发 expected_version', async () => {
+    await dashboards.updateDashboard('db1', {
+      name: '改过',
+      expectedVersion: 7,
+    })
+
+    expect(call()[1].body).toEqual({ name: '改过', expected_version: 7 })
+  })
+
   it('描述显式给 null 时也发出去——那是「清空描述」这个明确意思', async () => {
     await dashboards.updateDashboard('db1', { description: null })
 

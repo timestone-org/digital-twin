@@ -52,6 +52,7 @@ from llmcore.tools.shapes import (
     ToolSpec,
     openai_schema,
 )
+from llmcore.turn.ceiling import step_ceiling
 from llmcore.turn.exclusive import isolate_exclusive_call
 from llmcore.turn.ports import Responder
 from llmcore.turn.types import (
@@ -61,8 +62,8 @@ from llmcore.turn.types import (
     TurnStep,
 )
 
-# 一个回合最多走几步。⚠ 24 是助手上跑出来的经验值：够一次「查—改—核对」的
-# 完整来回，又不至于让模型与工具互相喂到把上下文填满
+# 一个回合最多走几个图超步（想一次、跑一批工具各算一步，24 约是 12 次模型
+# 调用）。⚠ 助手上跑出来的经验值：够一次「查—改—核对」，又不至于把上下文填满
 DEFAULT_MAX_STEPS = 24
 # 单个工具产出的字数上限。⚠ 不设上限的话，一次超大结果能把整个上下文挤掉
 DEFAULT_MAX_TOOL_RESULT_CHARS = 20_000
@@ -142,7 +143,8 @@ async def run_turn(deps: TurnDeps, messages: list[BaseMessage]) -> TurnOutcome:
     """
     graph = _build_graph(deps)
     seed: TurnState = {"messages": messages, "steps": [], "pending": ()}
-    final = await graph.ainvoke(seed, {"recursion_limit": deps.max_steps})
+    with step_ceiling():
+        final = await graph.ainvoke(seed, {"recursion_limit": deps.max_steps})
     return _outcome(final, len(messages))
 
 
@@ -227,14 +229,15 @@ async def _walk(
     seed: TurnState = {"messages": messages, "steps": [], "pending": ()}
     seen = 0
     latest: dict[str, Any] = {}
-    async for state in graph.astream(  # type: ignore[reportUnknownMemberType]  # 理由：见文件头
-        seed, {"recursion_limit": deps.max_steps}, stream_mode="values"
-    ):
-        latest = dict(state)
-        steps = list(latest.get("steps") or [])
-        for step in steps[seen:]:
-            yield step
-        seen = len(steps)
+    with step_ceiling():
+        async for state in graph.astream(  # type: ignore[reportUnknownMemberType]  # 理由：见文件头
+            seed, {"recursion_limit": deps.max_steps}, stream_mode="values"
+        ):
+            latest = dict(state)
+            steps = list(latest.get("steps") or [])
+            for step in steps[seen:]:
+                yield step
+            seen = len(steps)
     yield _outcome(latest, len(messages))
 
 

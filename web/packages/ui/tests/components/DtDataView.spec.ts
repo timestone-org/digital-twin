@@ -11,6 +11,7 @@ import { afterEach, describe, expect, it } from 'vitest'
 import type { DtDataColumn } from '@dt/contracts'
 
 import DtDataView from '../../src/components/DtDataView/DtDataView.vue'
+import DtPageState from '../../src/components/DtPageState/DtPageState.vue'
 
 interface Row {
   id: string
@@ -211,6 +212,16 @@ describe('DtDataView', () => {
     expect(wrapper.text()).toContain('还没有账号')
   })
 
+  it.each(['table', 'card'])(
+    '空态图标可以按场景改，%s 视图同样生效',
+    (view) => {
+      const wrapper = render({ rows: [], view, empty: { icon: 'folder-open' } })
+      expect(wrapper.findComponent(DtPageState).props('emptyIcon')).toBe(
+        'folder-open',
+      )
+    },
+  )
+
   it('最小宽度透传给表格', () => {
     const wrapper = render({ layout: { minWidth: '70rem' } })
     expect(wrapper.find('table').attributes('style')).toContain('70rem')
@@ -244,6 +255,21 @@ describe('DtDataView', () => {
     expect(wrapper.find('.dt-data-view__grid').attributes('style')).toContain(
       '--dt-card-min: 18rem',
     )
+  })
+
+  it('操作列缺省贴右：窄屏横向滚动时行内操作不被挤出视口', () => {
+    const heads = render().findAll('th')
+    expect(heads.at(-1)?.classes()).toContain('is-sticky-end')
+  })
+
+  it('操作列显式 sticky: false 时不贴边', () => {
+    const heads = render({
+      columns: [
+        { key: 'name', label: '名称', card: 'title' },
+        { key: 'actions', label: '操作', card: 'actions', sticky: false },
+      ],
+    }).findAll('th')
+    expect(heads.at(-1)?.classes()).not.toContain('is-sticky-end')
   })
 
   it('排序事件原样透传给调用方', async () => {

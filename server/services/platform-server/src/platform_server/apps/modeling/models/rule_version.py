@@ -1,6 +1,11 @@
 """规则版本独立存储，旧模型读取端继续读取原有任务集合。"""
 
-from sqlalchemy import CheckConstraint, ForeignKeyConstraint, UniqueConstraint
+from sqlalchemy import (
+    CheckConstraint,
+    ForeignKeyConstraint,
+    Index,
+    UniqueConstraint,
+)
 
 from platform_server.apps.modeling.models.base import Base
 from platform_server.apps.modeling.models.model_version import (
@@ -58,5 +63,11 @@ class ModelingRuleVersion(ModelVersionFields, Base):
         CheckConstraint(
             "jsonb_typeof(fingerprint_json) = 'object'",
             name="fingerprint_is_an_object",
+        ),
+        Index(
+            "ix_modeling_rule_versions_archive_created",
+            "archived_at",
+            "created_at",
+            "id",
         ),
     )

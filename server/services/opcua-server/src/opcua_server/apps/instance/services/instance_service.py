@@ -7,6 +7,7 @@
 因此每个动作的形状都是：短事务读 → 事务外做 IO → 短事务写回状态。
 """
 
+import asyncio
 import uuid
 
 from sqlalchemy.ext.asyncio import AsyncSession
@@ -25,6 +26,7 @@ from opcua_server.apps.instance.errors import (
 from opcua_server.apps.instance.models import Instance
 from opcua_server.apps.instance.runtime.instance import (
     InstanceSpec,
+    RunningInstance,
     SecurityProfile,
 )
 from opcua_server.apps.instance.runtime.supervisor import InstanceSupervisor
@@ -35,6 +37,7 @@ from opcua_server.apps.instance.schemas import (
     InstanceUpdateIn,
     PortPoolOut,
 )
+from opcua_server.apps.instance.services.integrity import flush_or_conflict
 from opcua_server.apps.instance.services.presenter import (
     definitions_of,
     endpoint_url_of,
@@ -112,7 +115,15 @@ class InstanceService:
                 offset=page.offset,
                 limit=page.size,
             )
-            items = [await self._present(session, row) for row in rows]
+            counts = await node_crud.count_by_instances(
+                session, [row.id for row in rows]
+            )
+        # ⚠ 端口探活在事务之外：探活是 IO，放进事务会让连接陪着它等
+        items = list(
+            await asyncio.gather(
+                *(self._present(row, counts.get(row.id, 0)) for row in rows)
+            )
+        )
         return Page[InstanceOut](
             items=items, page=page.page, size=page.size, total=total
         )
@@ -124,7 +135,8 @@ class InstanceService:
         """
         async with self._database.session() as session:
             row = await self._require(session, instance_id)
-            return await self._present(session, row)
+            node_count = await node_crud.count_of_instance(session, row.id)
+        return await self._present(row, node_count)
 
     async def create_instance(self, payload: InstanceCreateIn) -> InstanceOut:
         """建实例并从池里分配端口。
@@ -148,9 +160,19 @@ class InstanceService:
                 desired_state="stopped",
             )
             instance_crud.add(session, row)
-            await session.flush()
+            await flush_or_conflict(
+                session,
+                {
+                    "uq_opcua_instances_name": lambda: InstanceNameTaken(
+                        f"实例名 {payload.name} 已被占用"
+                    ),
+                    "uq_opcua_instances_port": lambda: PortUnavailable(
+                        f"端口 {row.port} 已被别的实例占用"
+                    ),
+                },
+            )
             await session.refresh(row)
-            created = await self._present(session, row)
+        created = await self._present(row, 0)
         # ⚠ 登记在事务**之外**：它是一次跨服务调用，放事务里会让一次 hub
         # 抖动把数据库连接一起占住（database-standard.md 禁事务内做外部 IO）。
         # 失败不抛——降级方向是「少一个实时通道」，不是「建不了实例」。
@@ -170,11 +192,14 @@ class InstanceService:
         async with self._database.session() as session:
             row = await self._require(session, instance_id)
             changed = _apply_update(row, payload)
-            if changed & RESTART_FIELDS:
+            # ⚠ 只有在跑的实例才谈得上「待重启」：没在跑的下次起来读的就是新值
+            is_running = self._supervisor.find(instance_id) is not None
+            if changed & RESTART_FIELDS and is_running:
                 row.has_pending_restart = True
             await session.flush()
             await session.refresh(row)
-            return await self._present(session, row)
+            node_count = await node_crud.count_of_instance(session, row.id)
+        return await self._present(row, node_count)
 
     async def delete_instance(self, instance_id: uuid.UUID) -> None:
         """删实例。在跑就先停——事务外停，再进事务删。
@@ -198,8 +223,11 @@ class InstanceService:
         Args: instance_id。
         """
         spec = await self._load_spec(instance_id)
-        await self._supervisor.start(spec)
-        return await self._settle(instance_id, desired="running")
+        _, is_created = await self._supervisor.launch(spec)
+        # ⚠ 已在跑就没重建服务器，库里的新配置并未生效，待重启标记不能清
+        return await self._settle(
+            instance_id, desired="running", is_rebuilt=is_created
+        )
 
     async def stop_instance(self, instance_id: uuid.UUID) -> InstanceActionOut:
         """停实例。
@@ -209,7 +237,9 @@ class InstanceService:
         async with self._database.session() as session:
             await self._require(session, instance_id)
         await self._supervisor.stop(instance_id)
-        return await self._settle(instance_id, desired="stopped")
+        return await self._settle(
+            instance_id, desired="stopped", is_rebuilt=False
+        )
 
     async def restart_instance(
         self, instance_id: uuid.UUID
@@ -219,9 +249,10 @@ class InstanceService:
         Args: instance_id。
         """
         spec = await self._load_spec(instance_id)
-        await self._supervisor.stop(instance_id)
-        await self._supervisor.start(spec)
-        return await self._settle(instance_id, desired="running")
+        await self._supervisor.restart(spec)
+        return await self._settle(
+            instance_id, desired="running", is_rebuilt=True
+        )
 
     async def port_pool(self) -> PortPoolOut:
         """端口池占用情况。"""
@@ -252,7 +283,8 @@ class InstanceService:
             specs = [await self._spec_of(session, row) for row in rows]
         for spec in specs:
             try:
-                await self._supervisor.start(spec)
+                running = await self._supervisor.start(spec)
+                await self._record_certificate(spec.instance_id, running)
             except Exception as error:
                 _logger.error(
                     "opcua_autostart_failed",
@@ -262,20 +294,23 @@ class InstanceService:
                 )
 
     async def _settle(
-        self, instance_id: uuid.UUID, *, desired: str
+        self, instance_id: uuid.UUID, *, desired: str, is_rebuilt: bool
     ) -> InstanceActionOut:
         """把期望状态写回，并以端口实况回答「到底在不在跑」。
 
-        Args: instance_id, desired。
+        Args: instance_id, desired, is_rebuilt（这次是否按库里的配置新建了
+            服务器；只有新建了才能清待重启标记）。
         """
         running = self._supervisor.find(instance_id)
         is_running = running is not None and await running.is_listening()
         async with self._database.session() as session:
             row = await self._require(session, instance_id)
             row.desired_state = desired
-            if is_running:
-                # 起来了就说明库里的配置已经生效，待重启标记随之清掉
+            if is_running and is_rebuilt:
+                # 按库里的配置新起的，待重启标记随之清掉
                 row.has_pending_restart = False
+            if running is not None:
+                _copy_certificate(row, running)
             await session.flush()
             return InstanceActionOut(
                 id=row.id,
@@ -283,6 +318,17 @@ class InstanceService:
                 desired_state=row.desired_state,
                 endpoint_url=endpoint_url_of(row, self._host),
             )
+
+    async def _record_certificate(
+        self, instance_id: uuid.UUID, running: RunningInstance
+    ) -> None:
+        """把运行中实例装上的服务器证书元信息写回库。
+
+        Args: instance_id, running。
+        """
+        async with self._database.session() as session:
+            row = await self._require(session, instance_id)
+            _copy_certificate(row, running)
 
     async def _load_spec(self, instance_id: uuid.UUID) -> InstanceSpec:
         async with self._database.session() as session:
@@ -306,16 +352,18 @@ class InstanceService:
             ),
         )
 
-    async def _present(
-        self, session: AsyncSession, row: Instance
-    ) -> InstanceOut:
+    async def _present(self, row: Instance, node_count: int) -> InstanceOut:
+        """行 + 端口实况 → 出参。在事务之外调：探活是 IO。
+
+        Args: row, node_count。
+        """
         running = self._supervisor.find(row.id)
         is_running = running is not None and await running.is_listening()
         return to_instance_out(
             row,
             running=running,
             is_running=is_running,
-            node_count=await node_crud.count_of_instance(session, row.id),
+            node_count=node_count,
             host=self._host,
         )
 
@@ -356,6 +404,19 @@ class InstanceService:
         if row is None:
             raise InstanceNotFound("实例不存在")
         return row
+
+
+def _copy_certificate(row: Instance, running: RunningInstance) -> None:
+    """把服务器证书的指纹、主体与有效期末抄进行；私钥不进库（不变式 7）。
+
+    Args: row, running。
+    """
+    material = running.certificate
+    if material is None:
+        return
+    row.certificate_fingerprint = material.fingerprint_sha256
+    row.certificate_subject = material.subject
+    row.certificate_expires_at = material.not_valid_after
 
 
 def _apply_update(row: Instance, payload: InstanceUpdateIn) -> frozenset[str]:

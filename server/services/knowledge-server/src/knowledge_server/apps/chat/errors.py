@@ -51,3 +51,24 @@ class ChatContextTooLarge(AppError):
 
     code = 42324
     http_status = 413
+
+
+class ChatTurnFailed(AppError):
+    """回合中途撞上了意料之外的错，这一轮没跑完。
+
+    ⚠ 只经 `error` 事件出去，不带异常原文：原文里可能有连接串与内网地址。
+    """
+
+    code = 52325
+    http_status = 500
+
+
+class ChatToolResultMismatch(AppError):
+    """回执对不上此刻停着等浏览器的那一批调用：id 不认识、或已经答过了。
+
+    ⚠ 在开流之前拒：照收的话，一个过期标签页或一次重试会再跑一整轮模型，
+    而那条对不上的工具消息在拼上下文时被悄悄丢掉。
+    """
+
+    code = 42326
+    http_status = 409

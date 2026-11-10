@@ -18,6 +18,7 @@ import { computed, ref, watch } from 'vue'
 
 import AssetPickerDialog from '@/components/assets/AssetPickerDialog.vue'
 import { getAsset } from '@/api/assets'
+import { BizError } from '@/api/client'
 
 import type { ConfigControlEmits, ConfigControlProps } from './controlProps'
 
@@ -36,18 +37,21 @@ const placeholder = computed(
 const pickerOpen = ref(false)
 /** 素材显示名，纯展示；落库的只有引用。取不到名字就退回引用串本身。 */
 const assetName = ref('')
+/** 后端明说这个素材没了（404）；网络抖动不算，那只是暂时问不到名字。 */
+const assetMissing = ref(false)
 const assetLabel = computed(() =>
   assetName.value === '' ? current.value : assetName.value,
 )
 
 /**
  * 引用换了就去问一次名字。
- * ⚠ 失败只是没有名字，不是配置坏了：这里吞掉错误，界面退回显示引用串本身。
+ * ⚠ 失败多半只是没有名字，界面退回显示引用串本身；只有 404 才说「已被删除」。
  */
 watch(
   current,
   (value) => {
     assetName.value = ''
+    assetMissing.value = false
     const id = parseAssetRef(value)
     if (id === null) return
     const wanted = value
@@ -56,7 +60,10 @@ watch(
         // 迟到的响应不许盖新值：连点两次素材时，先发的那条可能后到
         if (current.value === wanted) assetName.value = asset.name
       })
-      .catch(() => undefined)
+      .catch((caught: unknown) => {
+        if (current.value !== wanted) return
+        assetMissing.value = caught instanceof BizError && caught.status === 404
+      })
   },
   { immediate: true },
 )
@@ -95,7 +102,14 @@ function clearAsset(): void {
       v-if="isRef"
       class="flex min-w-0 flex-1 items-center gap-1 rounded-sm border border-border-subtle px-2 py-1"
     >
-      <span class="min-w-0 flex-1 truncate text-xs" :title="assetLabel">
+      <span
+        v-if="assetMissing"
+        class="min-w-0 flex-1 truncate text-xs text-state-danger"
+        :title="current"
+      >
+        素材已被删除，请重新选择
+      </span>
+      <span v-else class="min-w-0 flex-1 truncate text-xs" :title="assetLabel">
         {{ assetLabel }}
       </span>
       <DtButton
@@ -131,6 +145,7 @@ function clearAsset(): void {
       v-model="pickerOpen"
       kind="image"
       title="选择图片"
+      :current="isRef ? current : undefined"
       @pick="onPick"
     />
   </div>

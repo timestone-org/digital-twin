@@ -187,9 +187,8 @@ function rowsOrThrow(
 
 /**
  * 把算好的那批照抄真写进目标实体。
- * ⚠ 逐条走页面现有的 `write`：它按 (节点, 槽) 并帧，所以同一个槽里的整批照抄
- * 仍然只占一次撤销——「助手的一步 = 用户的一次撤销」是这套东西的基本承诺
- * （ADR-0023）。
+ * ⚠ 整批一次走 `writeMany`：照抄出来的每一行 fieldKey 都不同，逐条走 `write` 会各落
+ * 一帧——「助手的一步 = 用户的一次撤销」是这套东西的基本承诺（ADR-0023）。
  * @param deps 工作面句柄
  * @param bindings 动手之前的那一份绑定
  * @param copied 算好的那批
@@ -200,11 +199,13 @@ function applyCopy(
   copied: readonly CopiedBinding[],
 ): void {
   const source = new Map(bindings.map((one) => [one.fieldKey, one]))
+  const written: BindingPayload[] = []
   for (const one of copied) {
     const found = source.get(one.from_field_key)
     if (found === undefined) continue
-    deps.write(writtenFrom(deps.nodeId(), one.to_field_key, found))
+    written.push(writtenFrom(deps.nodeId(), one.to_field_key, found))
   }
+  if (written.length > 0) deps.writeMany(written)
 }
 
 /**

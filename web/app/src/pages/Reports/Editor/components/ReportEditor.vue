@@ -25,7 +25,7 @@ import {
 } from '../scripts/documentPreview'
 import NodeDialog from './NodeDialog.vue'
 import ReportPaperTheme from './ReportPaperTheme.vue'
-import { documentFrom } from '../../scripts/reportDocument'
+import { canonicalDocument, documentFrom } from '../../scripts/reportDocument'
 
 const props = withDefaults(
   defineProps<{
@@ -83,6 +83,9 @@ const DEFAULT_WATERMARK = {
   type: 'compact',
 }
 const PAPER_INK_VARIABLE = '--fx-const-ink'
+// ⚠ Umo 的 setWatermark 先把水印清空再校验，超过这个字数就抛；清空那一下会回流成
+// 「删掉水印」。服务端放得更长，长水印只进 Word、不推给纸面
+const UMO_WATERMARK_MAX_LENGTH = 30
 
 function isRecord(value: unknown): value is Record<string, unknown> {
   return value !== null && typeof value === 'object' && !Array.isArray(value)
@@ -108,10 +111,37 @@ function patchPage(patch: Partial<ReportPage>): void {
   emit('update:page', next)
 }
 
+/** Umo 实例上推页面设置的那两个方法；本地类型声明里没写，按运行时形状认。 */
+interface UmoPageApi {
+  setPage: (options: Record<string, unknown>) => void
+  setWatermark: (options: Record<string, unknown>) => void
+}
+
+function hasPageApi(value: unknown): value is UmoPageApi {
+  return (
+    isRecord(value) &&
+    typeof value['setPage'] === 'function' &&
+    typeof value['setWatermark'] === 'function'
+  )
+}
+
+// ⚠ 页面设置弹窗与助手改的是 props.page，Umo 只在挂载时读一次：不推过去，纸面
+// 一直是旧的方向与边距，直到重新加载。自己工具栏回流的那一份不再反推
 watch(
   () => props.page,
-  () => {
+  (page) => {
+    const isEcho =
+      pendingPage !== null &&
+      JSON.stringify(page) === JSON.stringify(pendingPage)
     pendingPage = null
+    const editor: unknown = editorRef.value
+    if (isEcho || !hasPageApi(editor)) return
+    editor.setPage({
+      orientation: page.orientation ?? 'portrait',
+      margin: { ...DEFAULT_MARGIN_CM, ...page.margins_cm },
+    })
+    if ((page.watermark?.text ?? '').length > UMO_WATERMARK_MAX_LENGTH) return
+    editor.setWatermark(umoWatermark())
   },
 )
 
@@ -160,11 +190,13 @@ function onPageWatermark(payload: unknown): void {
     return
   }
   const fontSize = watermark['fontSize']
+  // 推给 Umo 的那一份回流回来：字号经过 pt↔px 往返会差几位小数，别当成改动
+  const current = (pendingPage ?? props.page).watermark
+  if (text === current?.text && fontSize === umoWatermark()['fontSize']) return
   // ⚠ Umo 不接旋转角；该字段只供服务端 Word 生成，回写时必须保留。
-  const previous = (pendingPage ?? props.page).watermark
   patchPage({
     watermark: {
-      ...(previous ?? {}),
+      ...(current ?? {}),
       text,
       ...(typeof fontSize === 'number'
         ? { font_size_pt: fontSize * 0.75 }
@@ -229,6 +261,10 @@ function onChanged(): void {
   const json = editorRef.value?.getJSON()
   if (!json) return
   const document = documentFrom(json)
+  // ⚠ 切只读等动作也会触发 changed：正文语义没变就不回写，否则草稿换成 Umo 的
+  // 键序后整页被判成「有未保存修改」，刚发起的试算也被判成过期
+  if (canonicalDocument(document) === canonicalDocument(props.modelValue))
+    return
   emitted = JSON.stringify(document)
   emit('update:modelValue', document)
   previewStore.refresh()

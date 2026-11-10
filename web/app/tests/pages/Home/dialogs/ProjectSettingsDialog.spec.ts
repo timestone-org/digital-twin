@@ -162,14 +162,16 @@ describe('自定义主题', () => {
   })
 
   // 主题管理器自身的编辑态由 CustomThemeManager.spec.ts 守；这里只钉转发这一层
-  it('把管理器的 create 原样转成 create-theme', async () => {
+  it('把管理器的 create 连同回执原样转成 create-theme', async () => {
     const wrapper = mountDialog()
     await wrapper.setProps({ open: true })
     const input = { name: '新配色', mode: 'dark', tokens: {} }
 
-    wrapper.getComponent(CustomThemeManager).vm.$emit('create', input)
+    const done = (): void => undefined
 
-    expect(wrapper.emitted('create-theme')).toEqual([[input]])
+    wrapper.getComponent(CustomThemeManager).vm.$emit('create', input, done)
+
+    expect(wrapper.emitted('create-theme')).toEqual([[input, done]])
   })
 
   it('把管理器的 update 连着主题 id 一起转成 update-theme', async () => {
@@ -177,8 +179,12 @@ describe('自定义主题', () => {
     await wrapper.setProps({ open: true })
     const patch = { name: '改过的' }
 
-    wrapper.getComponent(CustomThemeManager).vm.$emit('update', 'c1', patch)
+    const done = (): void => undefined
 
-    expect(wrapper.emitted('update-theme')).toEqual([['c1', patch]])
+    wrapper
+      .getComponent(CustomThemeManager)
+      .vm.$emit('update', 'c1', patch, done)
+
+    expect(wrapper.emitted('update-theme')).toEqual([['c1', patch, done]])
   })
 })

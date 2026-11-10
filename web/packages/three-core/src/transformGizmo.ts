@@ -57,6 +57,8 @@ export interface TransformGizmoOptions {
    * 各记一条的话撤销一次只退回一帧，用户要按几十下才回得到原位。
    */
   onDragEnd: () => void
+  /** 松手后轨道控制该不该开回来；缺省总是开。⚠ 游戏档必须保持关着。 */
+  orbitAllowed?: () => boolean
 }
 
 /**
@@ -66,6 +68,7 @@ export class TransformGizmo {
   private readonly core: SceneCore
   private readonly onChange: (change: GizmoChange) => void
   private readonly onDragEnd: () => void
+  private readonly orbitAllowed: () => boolean
   private readonly controls: TransformControls
   private readonly helper: THREE.Object3D
   /** 手柄真正附着的隐形替身。 */
@@ -79,6 +82,7 @@ export class TransformGizmo {
     this.core = options.core
     this.onChange = options.onChange
     this.onDragEnd = options.onDragEnd
+    this.orbitAllowed = options.orbitAllowed ?? (() => true)
     this.proxy.name = 'twin-gizmo-proxy'
     this.proxy.visible = false
     this.core.scene.add(this.proxy)
@@ -151,7 +155,7 @@ export class TransformGizmo {
     const wasDragging = this.dragging
     this.dragging = event.value === true
     // ⚠ 拖手柄时关掉轨道控制：两套控制抢同一个指针，表现是「越拖越跑偏」
-    this.core.controls.enabled = !this.dragging
+    this.core.controls.enabled = !this.dragging && this.orbitAllowed()
     if (wasDragging && !this.dragging) this.onDragEnd()
   }
 

@@ -10,13 +10,19 @@
 """
 
 import asyncio
+import contextvars
 import uuid
 from collections.abc import Awaitable, Callable
 from typing import Any, cast
 
 from asyncua import ua
 
-from lib.logging import get_logger
+from lib.logging import (
+    bind_log_context,
+    get_logger,
+    new_span_id,
+    new_trace_id,
+)
 
 _logger = get_logger("opcua.valuewatch")
 
@@ -119,17 +125,30 @@ class ValueWatcher:
         `record`，而 record 需要 await——所以这里派一个任务出去。
         ⚠ 任务句柄存进集合再在完成时移除：不存的话它可能在运行中被 GC 掉，
         表现是「有些值变化没推出去」且没有任何报错。
+        ⚠ 每次通知另开一条链路：回调跑在内部订阅的循环里，那个循环抄的是
+        起实例那次请求的上下文；写值那一刻的链路从这里根本够不着。
 
         Args: node, value, _data。
         """
         identifier = self._identifiers.get(str(node.nodeid.to_string()))
         if identifier is None:
             return
-        task = asyncio.ensure_future(
-            self._on_change(self._instance_id, identifier, _unwrap(value))
+        context = contextvars.copy_context()
+        context.run(
+            bind_log_context, trace_id=new_trace_id(), span_id=new_span_id()
+        )
+        task = asyncio.get_running_loop().create_task(
+            self._deliver(identifier, _unwrap(value)), context=context
         )
         self._running.add(task)
         task.add_done_callback(self._running.discard)
+
+    async def _deliver(self, identifier: str, value: object) -> None:
+        """把一次值变化交给回调。
+
+        Args: identifier, value。
+        """
+        await self._on_change(self._instance_id, identifier, value)
 
 
 def _unwrap(value: object) -> object:

@@ -7,8 +7,8 @@
  * ⚠ 口令三态：不填=不动、填了=改成新的、勾「清空」=删掉。合成两态的话，
  * 每次改端点都会顺手把口令抹掉。
  * ⚠ 安全模式/安全策略存进 `options_json`（`security_mode` / `security_policy`
- * 两个键）：驱动按自身能力消费，暂不支持的取值只存不生效——表单如实说明，
- * 不装作已经生效。
+ * 两个键）：当前驱动不支持的取值在提交前就拦下，不存一个看着生效其实没用的配置。
+ * 协议由所在页面定死（每个协议一页），表单里只读展示。
  */
 import { computed, ref, watch } from 'vue'
 import type {
@@ -19,7 +19,7 @@ import type {
   CollectSourceUpdateInput,
   DtNumberRange,
 } from '@dt/contracts'
-import { COLLECT_MIN_INTERVAL_MS, COLLECT_PROTOCOLS } from '@dt/contracts'
+import { COLLECT_MIN_INTERVAL_MS } from '@dt/contracts'
 import {
   DtButton,
   DtField,
@@ -32,6 +32,7 @@ import {
 } from '@dt/ui'
 
 import { useFormDirty } from '@/composables/useFormDirty'
+import { protocolLabel } from '@/features/collect/protocols'
 import {
   READ_MODES,
   SECURITY_MODES,
@@ -45,6 +46,7 @@ import {
   type SourceFormValues,
 } from '../scripts/sourceFormPayload'
 import { defaultHttpOptions } from '../scripts/httpSourceOptions'
+import { MODBUS_OPTION_KEYS } from '../scripts/modbusOptions'
 import HttpSourceFields from './HttpSourceFields.vue'
 import OptionsEditor from './OptionsEditor.vue'
 import SourceCredentialFields from './SourceCredentialFields.vue'
@@ -52,7 +54,8 @@ import SourceCredentialFields from './SourceCredentialFields.vue'
 const props = defineProps<{
   modelValue: boolean
   source: CollectSource | null
-  fixedProtocol?: CollectProtocol
+  /** 所在页面的协议；新建按它建，编辑时以数据源自己的协议为准。 */
+  fixedProtocol: CollectProtocol
   loading?: boolean
 }>()
 const emit = defineEmits<{
@@ -67,6 +70,13 @@ const INTERVAL_RANGE: DtNumberRange = {
   step: 100,
 }
 
+/** 名称示例按协议给：HTTP 接口不是 PLC。 */
+const NAME_PLACEHOLDERS: Record<CollectProtocol, string> = {
+  opcua: '如：1号生产线 PLC',
+  modbus_tcp: '如：2号线 Modbus 网关',
+  http: '如：能源平台接口',
+}
+
 const isEdit = computed(() => props.source !== null)
 
 const protocol = ref<CollectProtocol>('opcua')
@@ -77,7 +87,7 @@ const endpoint = ref('')
 const securityMode = ref('None')
 const securityPolicy = ref('None')
 const readMode = ref<CollectReadMode>('subscribe')
-const pollIntervalMs = ref(1000)
+const pollIntervalMs = ref<number | undefined>(1000)
 const username = ref('')
 /** 空串 = 这次不改口令。 */
 const credential = ref('')
@@ -115,7 +125,7 @@ function reset(target: CollectSource | null): void {
   credential.value = ''
   isCredentialCleared.value = false
   if (target === null) {
-    protocol.value = props.fixedProtocol ?? 'opcua'
+    protocol.value = props.fixedProtocol
     name.value = ''
     code.value = ''
     description.value = ''
@@ -163,36 +173,6 @@ const readModeValue = computed<string>({
   },
 })
 
-const protocolValue = computed<string>({
-  get: () => protocol.value,
-  set: (next) => {
-    if (isEdit.value || props.fixedProtocol !== undefined) return
-    const selected =
-      COLLECT_PROTOCOLS.find((candidate) => candidate === next) ?? 'opcua'
-    if (selected === protocol.value) return
-    protocol.value = selected
-    extraOptions.value = {}
-    username.value = ''
-    credential.value = ''
-    isCredentialCleared.value = false
-    readMode.value = selected === 'opcua' ? 'subscribe' : 'poll'
-    if (protocol.value === 'modbus_tcp') {
-      readMode.value = 'poll'
-      isEnabled.value = false
-    }
-    if (protocol.value === 'http') {
-      readMode.value = 'poll'
-      extraOptions.value = defaultHttpOptions()
-    }
-  },
-})
-
-const PROTOCOL_OPTIONS = [
-  { value: 'opcua', label: 'OPC UA' },
-  { value: 'modbus_tcp', label: 'Modbus TCP（只读）' },
-  { value: 'http', label: 'HTTP / HTTPS' },
-]
-
 /** 表单此刻的取值，交给纯函数去校验与组装请求体。 */
 function values(): SourceFormValues {
   return {
@@ -204,7 +184,7 @@ function values(): SourceFormValues {
     securityMode: securityMode.value,
     securityPolicy: securityPolicy.value,
     readMode: readMode.value,
-    pollIntervalMs: pollIntervalMs.value,
+    pollIntervalMs: pollIntervalMs.value ?? Number.NaN,
     username: username.value,
     credential: credential.value,
     isCredentialCleared: isCredentialCleared.value,
@@ -228,6 +208,7 @@ function submit(): void {
   <DtModal
     :model-value="modelValue"
     :title="isEdit ? '编辑数据源' : '新增数据源'"
+    :description="`协议：${protocolLabel(protocol)}`"
     width="52rem"
     :dirty="isDirty"
     @update:model-value="!loading && emit('update:modelValue', $event)"
@@ -237,18 +218,9 @@ function submit(): void {
         {{ error }}
       </DtNotice>
 
-      <div class="grid grid-cols-1 gap-3 sm:grid-cols-2">
-        <DtSelect
-          v-model="protocolValue"
-          label="协议"
-          required
-          :options="PROTOCOL_OPTIONS"
-          :disabled="isEdit || fixedProtocol !== undefined"
-        />
-        <DtField label="名称" required>
-          <DtInput v-model="name" placeholder="如：1号生产线 PLC" />
-        </DtField>
-      </div>
+      <DtField label="名称" required>
+        <DtInput v-model="name" :placeholder="NAME_PLACEHOLDERS[protocol]" />
+      </DtField>
       <div class="grid grid-cols-1 gap-3 sm:grid-cols-2">
         <DtField label="Endpoint" required>
           <DtInput
@@ -336,7 +308,7 @@ function submit(): void {
         :hint="
           protocol === 'opcua'
             ? '驱动特有的旁路配置，如证书路径。不清楚就留空。'
-            : '可配置 device_id、byte_order、word_order、max_registers_per_request、max_bits_per_request；不清楚就留空。'
+            : `可配置 ${MODBUS_OPTION_KEYS.join('、')}；不清楚就留空。`
         "
       >
         <OptionsEditor v-model="extraOptions" />
@@ -347,7 +319,6 @@ function submit(): void {
         v-model="extraOptions"
         v-model:username="username"
         v-model:credential="credential"
-        v-model:is-cleared="isCredentialCleared"
         :is-edit="isEdit"
         :has-credential="source?.has_credential ?? false"
       />

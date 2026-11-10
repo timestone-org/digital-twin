@@ -115,6 +115,50 @@ describe('DtLineChart 实例生命周期', () => {
     expect(seam.resize).toHaveBeenCalledTimes(1)
   })
 
+  it('换肤后按新 token 重建 option，一批变更只重画一次', async () => {
+    const frames: FrameRequestCallback[] = []
+    vi.stubGlobal('requestAnimationFrame', (callback: FrameRequestCallback) => {
+      frames.push(callback)
+      return frames.length
+    })
+    const wrapper = mount(DtLineChart, {
+      props: { series: [series('t', 'a')] },
+      attachTo: document.body,
+    })
+    await flushPromises()
+    seam.setOption.mockClear()
+
+    document.documentElement.classList.add('theme-light')
+    document.documentElement.style.setProperty('--text-secondary', '#000')
+    await flushPromises()
+    for (const frame of frames.splice(0)) frame(0)
+
+    expect(seam.setOption).toHaveBeenCalledTimes(1)
+    wrapper.unmount()
+    document.documentElement.classList.remove('theme-light')
+    document.documentElement.style.removeProperty('--text-secondary')
+  })
+
+  it('卸载后换肤不再碰已释放的实例', async () => {
+    const cancel = vi.fn()
+    vi.stubGlobal('requestAnimationFrame', () => 7)
+    vi.stubGlobal('cancelAnimationFrame', cancel)
+    const wrapper = mount(DtLineChart, {
+      props: { series: [series('t', 'a')] },
+      attachTo: document.body,
+    })
+    await flushPromises()
+    document.documentElement.classList.add('theme-light')
+    await flushPromises()
+    wrapper.unmount()
+    seam.setOption.mockClear()
+    document.documentElement.classList.remove('theme-light')
+    await flushPromises()
+
+    expect(cancel).toHaveBeenCalledWith(7)
+    expect(seam.setOption).not.toHaveBeenCalled()
+  })
+
   it('实例还没到手就卸载时，到手即释放——否则它永远没人回收', async () => {
     const wrapper = mount(DtLineChart, { props: { series: [] } })
     wrapper.unmount()

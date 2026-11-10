@@ -81,11 +81,17 @@ export function rectStyleOf(rect: ModuleRect | null): CSSProperties {
 /** 栅格导引线的最小周期（设计像素）：再密就是一片噪点，不如不画。 */
 const GRID_MIN_PERIOD_PX = 4
 
-/** 吸附导引背景：两道 repeating-gradient 画出栅格线，色值走 token。 */
+/**
+ * 吸附导引背景：两道 repeating-gradient 画出栅格线，色值走 token。
+ * ⚠ 线宽按屏幕像素折算：舞台整体缩放，1 设计像素的线在 1/3 倍率下只剩 0.33
+ * 屏幕像素，有的列整条消失、有的叠成两条。
+ * @param scale 舞台此刻的生效倍率
+ */
 export function gridBackgroundStyle(
   design: DesignSize,
   grid: EditorGridConfig,
   snap: SnapConfig,
+  scale = 1,
 ): CSSProperties {
   const guide = gridGuide(design, grid, snap)
   if (
@@ -95,11 +101,13 @@ export function gridBackgroundStyle(
   ) {
     return {}
   }
-  const line = 'var(--border-subtle) 0 1px'
+  const width = scale > 0 ? 1 / scale : 1
+  const px = `${String(Math.round(width * 100) / 100)}px`
+  const line = `var(--border-subtle) 0 ${px}`
   return {
     backgroundImage:
-      `repeating-linear-gradient(to right, ${line}, transparent 1px ${guide.colPeriod}px), ` +
-      `repeating-linear-gradient(to bottom, ${line}, transparent 1px ${guide.rowPeriod}px)`,
+      `repeating-linear-gradient(to right, ${line}, transparent ${px} ${guide.colPeriod}px), ` +
+      `repeating-linear-gradient(to bottom, ${line}, transparent ${px} ${guide.rowPeriod}px)`,
     backgroundPosition: `${guide.offsetX}px ${guide.offsetY}px`,
   }
 }
@@ -184,6 +192,8 @@ export function panWithPointer(
 /**
  * 空格键态挂在 window 上：指针可能停在画布外才按下空格再移回来。
  * ⚠ 失焦一律复位——切到别的窗口时收不到 keyup，回来会卡在平移态。
+ * ⚠ 平移用的空格要吞掉默认动作：刚点过的工具条按钮还握着焦点，松开空格会再「点」
+ * 它一次（撤销、重新加载），焦点在页面上时还会滚动视口。
  * @param onChange 空格按下为真、松开或失焦为假
  */
 export function listenSpaceKey(
@@ -191,10 +201,18 @@ export function listenSpaceKey(
   onChange: (isHeld: boolean) => void,
 ): void {
   const { signal } = controller
+  let isHeld = false
+  const release = (): void => {
+    isHeld = false
+    onChange(false)
+  }
   window.addEventListener(
     'keydown',
     (event: KeyboardEvent) => {
-      if (event.code !== 'Space' || event.repeat || isFormFocused()) return
+      if (event.code !== 'Space' || isFormFocused()) return
+      event.preventDefault()
+      if (event.repeat) return
+      isHeld = true
       onChange(true)
     },
     { signal },
@@ -202,11 +220,13 @@ export function listenSpaceKey(
   window.addEventListener(
     'keyup',
     (event: KeyboardEvent) => {
-      if (event.code === 'Space') onChange(false)
+      if (event.code !== 'Space') return
+      if (isHeld) event.preventDefault()
+      release()
     },
     { signal },
   )
-  window.addEventListener('blur', () => onChange(false), { signal })
+  window.addEventListener('blur', release, { signal })
 }
 
 /** 视口的运行态：组合式函数只持有它，动作都是下面这几个函数。 */

@@ -653,6 +653,33 @@ describe('随模型体量缩放', () => {
     )
   })
 
+  // ⚠ 倍率乘在封顶之后：毫米级模型的基础高度早已顶到上限，滑块再拉也压成同一个值
+  it('毫米级大模型上 height 倍数照样生效', () => {
+    const heightAt = (height: number): number => {
+      const layer = new SceneEffectsLayer()
+      layer.build(
+        effects({ lightColumn: lightColumn({ enabled: true, height }) }),
+      )
+      layer.setWorldScale(4000)
+      return partOf(layer, 'twin-light-beam').scale.y
+    }
+
+    expect(heightAt(2)).toBeGreaterThan(heightAt(1))
+  })
+
+  // ⚠ 半径不封顶而高度封顶：半球罩被压成扁椭球，远远铺出底座之外
+  it('毫米级大模型上半球罩的占地与底座同一个封顶', () => {
+    const layer = new SceneEffectsLayer()
+    layer.build(
+      effects({ lightColumn: lightColumn({ enabled: true, mode: 'dome' }) }),
+    )
+    layer.setWorldScale(4000)
+
+    expect(partOf(layer, 'twin-light-dome').scale.x).toBeLessThanOrEqual(
+      400 * 1.05,
+    )
+  })
+
   for (const diagonal of [Number.NaN, 0, -12, Number.POSITIVE_INFINITY]) {
     it(`对角线是 ${String(diagonal)} 时按 1 算，不产出 NaN 尺寸`, () => {
       const layer = new SceneEffectsLayer()

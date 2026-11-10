@@ -122,7 +122,7 @@ def _is_beyond_the_gist(block: ReportBlock) -> bool:
     return not (block.zone == "step" and block.tier == TIER_SCALAR)
 
 
-# 五档降级，逐档累加。⚠ 顺序即语义，别按「先丢大的」重排
+# 四档降级，逐档累加。⚠ 顺序即语义，别按「先丢大的」重排
 LADDER: tuple[Callable[[ReportBlock], bool], ...] = (
     _is_bulky_table,
     _is_aux_chart,

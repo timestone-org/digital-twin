@@ -251,10 +251,6 @@ class Driver(Protocol):
         """释放不再使用的浏览游标。"""
         ...
 
-    def fingerprint(self) -> tuple[str, ...]:
-        """连接参数的指纹，变了就必须重连。"""
-        ...
-
     def classify_error(self, error: BaseException) -> ErrorCategory:
         """把协议异常判成三档之一。
 

@@ -9,6 +9,7 @@
  * 交互编排在 `scripts/useKnowledgePage.ts`，摄取轮询在 `scripts/useIngestPolling.ts`。
  */
 import { onMounted, ref } from 'vue'
+import { RouterLink } from 'vue-router'
 import { PERMISSION_CODES } from '@dt/contracts'
 import {
   DtButton,
@@ -42,7 +43,7 @@ const page = useKnowledgePage()
 const toast = useToast()
 const confirm = useConfirm()
 
-useIngestPolling(page.documents, page.refreshDocuments)
+useIngestPolling(page.documents, page.pollDocuments)
 
 const isCreating = ref(false)
 const isSubmitting = ref(false)
@@ -64,7 +65,9 @@ async function createBase(name: string, description: string): Promise<void> {
     if (await page.create(name, description)) {
       isCreating.value = false
     } else {
+      // 这句只在弹窗里说：留在页面错误上会说两遍，关窗后还挂着
       createError.value = page.error.value
+      page.error.value = ''
     }
   } finally {
     isSubmitting.value = false
@@ -131,7 +134,11 @@ async function removeDocument(doc: KnowledgeDocument): Promise<void> {
         <DtFilePicker
           :accept="page.accept.value"
           multiple
-          :disabled="page.selectedId.value === '' || page.upload.value !== null"
+          :disabled="
+            page.selectedId.value === '' ||
+            page.upload.value !== null ||
+            page.isEmbeddingMissing.value
+          "
           :label="page.upload.value === null ? '传文档' : '上传中…'"
           size="sm"
           @select="addFiles"
@@ -149,10 +156,28 @@ async function removeDocument(doc: KnowledgeDocument): Promise<void> {
       </PermGuard>
     </template>
 
-    <div class="flex h-full min-h-0 flex-col gap-4">
-      <KnowledgeGuide />
+    <!-- 高度不够时整列滚，而不是把文档表与检索结果挤成零高 -->
+    <div class="flex h-full min-h-0 flex-col gap-4 overflow-y-auto">
+      <!-- 引导只在还没东西可看时出现：库里有文档之后它只是占掉文档表的高度 -->
+      <KnowledgeGuide
+        v-if="page.selected.value === null || page.documents.value.length === 0"
+      />
       <DtNotice v-if="page.error.value !== ''" intent="danger">
         {{ page.error.value }}
+      </DtNotice>
+
+      <!-- 向量是硬依赖（ADR-0045）：没接嵌入时先说清楚，而不是等每份文档都摄取失败 -->
+      <DtNotice
+        v-if="page.isEmbeddingMissing.value"
+        intent="warning"
+        icon="alert-triangle"
+      >
+        这套部署还没给「知识库嵌入」分配模型，传上来的文档都会摄取失败，
+        所以暂时不能传文档。请先到
+        <RouterLink to="/system/models" class="text-accent-primary underline">
+          模型管理
+        </RouterLink>
+        分配后再来。
       </DtNotice>
 
       <!-- ⚠ 索引有毛病时如实说出来：维数对不上会让每一份文档都摄取失败，
@@ -166,7 +191,8 @@ async function removeDocument(doc: KnowledgeDocument): Promise<void> {
       </DtNotice>
 
       <DtResizableLayout
-        class="min-h-0 flex-1"
+        class="min-h-0 flex-1 shrink-0"
+        style="min-height: 36rem"
         :panes="[
           { id: 'bases', label: '知识库列表', size: 1, minSize: 220 },
           { id: 'detail', label: '知识库详情', size: 3, minSize: 320 },
@@ -215,7 +241,7 @@ async function removeDocument(doc: KnowledgeDocument): Promise<void> {
 
               <DtResizableLayout
                 class="min-h-0 flex-1"
-                style="min-height: 24rem"
+                style="min-height: 32rem"
                 :panes="[
                   { id: 'documents', label: '文档列表', size: 3, minSize: 300 },
                   { id: 'search', label: '检索试验台', size: 2, minSize: 240 },

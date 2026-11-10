@@ -25,8 +25,9 @@ const page = useKnowledgeSources(
 )
 const formKey = ref(0)
 const isDirty = ref(false)
+// ⚠ 多源写法逐项比较：轮询刷新计数会换掉 base 的对象身份，getter 返回新数组会误触发重置
 watch(
-  () => [props.modelValue, props.base?.id],
+  [() => props.modelValue, () => props.base?.id],
   () => {
     page.cancel()
     isDirty.value = false

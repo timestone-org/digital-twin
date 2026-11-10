@@ -93,7 +93,14 @@ describe('选一张表', () => {
   it('选了就按 code 换出 id，再取那张表的列', async () => {
     const wrapper = open()
     await pick(wrapper, 'water')
-    expect(dataset.listDatasetColumns).toHaveBeenCalledWith('w1')
+    expect(dataset.listDatasetTables).toHaveBeenCalledWith(
+      expect.anything(),
+      expect.any(AbortSignal),
+    )
+    expect(dataset.listDatasetColumns).toHaveBeenCalledWith(
+      'w1',
+      expect.any(AbortSignal),
+    )
     expect(wrapper.text()).toContain('inflow 列')
   })
 
@@ -119,6 +126,39 @@ describe('选一张表', () => {
     const wrapper = open()
     await pick(wrapper, 'water')
     expect(wrapper.text()).toContain('这张台账还没有列')
+  })
+})
+
+describe('code → id 只换一次', () => {
+  it('来回切表不再每次都拉整份台账清单', async () => {
+    const wrapper = open()
+    await pick(wrapper, 'water')
+    await pick(wrapper, 'power')
+    await pick(wrapper, 'water')
+    expect(dataset.listDatasetTables).toHaveBeenCalledTimes(1)
+    expect(dataset.listDatasetColumns).toHaveBeenLastCalledWith(
+      'w1',
+      expect.any(AbortSignal),
+    )
+  })
+
+  it('清单里没有这张表时重取一次，新建的表照样认得出', async () => {
+    vi.mocked(dataset.listDatasetTables)
+      .mockResolvedValueOnce({ items: [], total: 0, page: 1, size: 200 })
+      .mockResolvedValueOnce({
+        items: [summary('water', 'w1')],
+        total: 1,
+        page: 1,
+        size: 200,
+      })
+    const wrapper = open()
+    await pick(wrapper, 'water')
+    expect(wrapper.text()).toContain('这张台账已经不在了')
+    await pick(wrapper, 'water')
+    expect(dataset.listDatasetColumns).toHaveBeenCalledWith(
+      'w1',
+      expect.any(AbortSignal),
+    )
   })
 })
 

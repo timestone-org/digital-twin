@@ -17,6 +17,11 @@ export interface StructureTreeOptions {
   enabled: () => boolean
   /** 相机飞行；定位与切视点共用宿主的这一段。 */
   flight: CameraFlight
+  /**
+   * 手动隐藏的对象变了；宿主转给部件层。
+   * ⚠ 部件层每帧按距离规则写显隐，不告诉它的话一转镜头被藏的部件就回来了。
+   */
+  onHiddenChange?: (objects: ReadonlySet<THREE.Object3D>) => void
 }
 
 export interface StructureTree {
@@ -62,6 +67,18 @@ export function useStructureTree(options: StructureTreeOptions): StructureTree {
   const expanded = ref<ReadonlySet<string>>(new Set())
   const hidden = ref<ReadonlySet<string>>(new Set())
 
+  /** 记下新的勾选并把对应对象报给宿主。 */
+  function setHidden(next: ReadonlySet<string>): void {
+    hidden.value = next
+    const root = options.core()?.modelRoot
+    const objects = new Set<THREE.Object3D>()
+    for (const uid of next) {
+      const object = root === undefined ? null : objectAtUid(root, uid)
+      if (object !== null) objects.add(object)
+    }
+    options.onHiddenChange?.(objects)
+  }
+
   const nodes = computed<readonly SceneTreeNode[]>(() => {
     void version.value
     const core = options.core()
@@ -84,7 +101,7 @@ export function useStructureTree(options: StructureTreeOptions): StructureTree {
       if (object === null) return
       const next = toggled(hidden.value, uid)
       object.visible = !next.has(uid)
-      hidden.value = next
+      setHidden(next)
     },
 
     locate: (uid) => {
@@ -97,7 +114,7 @@ export function useStructureTree(options: StructureTreeOptions): StructureTree {
       // ⚠ 先把手动隐藏的恢复再清记录：换模型时不恢复的话，那些对象带着
       // `visible = false` 被留在旧场景里，而记录已经没了，谁也开不回来
       restoreHidden(options.core(), hidden.value)
-      hidden.value = new Set()
+      setHidden(new Set())
       expanded.value = new Set()
       version.value += 1
     },

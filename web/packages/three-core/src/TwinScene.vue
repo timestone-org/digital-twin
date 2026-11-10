@@ -104,10 +104,15 @@ const isolation = new PreviewIsolation()
 let previewKey = ''
 let targetKey = ''
 
-/** 模型包围盒对角线；相机、图层与剪裁面都按它定尺度。 */
+/** 摆放之后量下的模型包围盒对角线；`placeModel` 里更新。 */
+let spanCache = 0
+
+/**
+ * 模型包围盒对角线；相机、图层与剪裁面都按它定尺度。
+ * ⚠ 读缓存不现量：漫游与游戏档每帧都要它，现量等于每帧遍历整棵模型树。
+ */
 function modelSpan(): number {
-  const root = model.root()
-  return root === null ? 0 : boundingDiagonal(root)
+  return model.root() === null ? 0 : spanCache
 }
 const sceneCamera = useSceneCamera({
   core: () => core,
@@ -123,6 +128,7 @@ const model = useTwinModelLoad({
   variant: () => props.config.model.variant,
   parts: () => props.config.parts,
   onBeforeClear: () => {
+    spanCache = 0
     isolation.restore()
     targetKey = ''
     previewKey = ''
@@ -137,6 +143,8 @@ const model = useTwinModelLoad({
     // 动画属于模型，换模型整层重建；只换配置走 refreshLayers 里的 apply
     animations = new ModelAnimations(asset.root, asset.clips)
     animations.apply(props.config.model.animations, props.values?.animations)
+    // ⚠ 先摆后量：框住的必须是缩放、位移、旋转之后的模型，与编辑器同序
+    placeModel()
     sceneCamera.applyInitial(asset.root)
     structure.rebuild()
     refreshLayers()
@@ -158,7 +166,7 @@ const viewpoints = useViewpointSwitch({
   config: () => props.config,
   onSwitch: (camera) => {
     // 手动切视点即打断漫游：否则下一帧轨迹又把镜头拽走，看着像点了没反应
-    roam.pause()
+    roam.interrupt()
     sceneCamera.applyCamera(camera)
   },
 })
@@ -189,7 +197,7 @@ function partObjectsOf(partId: string): readonly THREE.Object3D[] {
 /** 切换部件取景，缺少目标时退回自动框住。 */
 function focusPart(part: TwinPart, box: THREE.Box3 | null): void {
   if (core === null) return
-  roam.pause()
+  roam.interrupt()
   const view = partFocusView(part, props.config.cameras)
   if (view !== null) return sceneCamera.applyView(view)
   if (box !== null) flight.flyToBox(core, box)
@@ -224,6 +232,7 @@ const structure = useStructureTree({
   core: () => core,
   enabled: () => props.showStructureTree === true,
   flight,
+  onHiddenChange: (objects) => layers?.setForcedHidden(objects),
 })
 
 const backgroundStyle = computed(() => {
@@ -341,7 +350,8 @@ function placeModel(): void {
   const root = model.root()
   if (root !== null) {
     applyModelPlacement(root, props.config.model)
-    layers?.setWorldScale(modelSpan())
+    spanCache = boundingDiagonal(root)
+    layers?.setWorldScale(spanCache)
   }
   const origin = modelFrameOrigin(props.config.model, root)
   layers?.setFrameOrigin(origin)

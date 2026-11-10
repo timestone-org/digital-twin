@@ -28,6 +28,7 @@ import {
   watch,
 } from 'vue'
 import DtButton from '../DtButton/DtButton.vue'
+import { isImeKeydown } from '../../shared/ime'
 
 const props = withDefaults(
   defineProps<{
@@ -46,6 +47,7 @@ const props = withDefaults(
 
 const emit = defineEmits<{ 'update:modelValue': [value: boolean] }>()
 
+const root = ref<HTMLElement | null>(null)
 const panel = ref<HTMLElement | null>(null)
 /** 已经拦下过一次误关，提示条正挂着；再按一次 Esc 就放行。 */
 const isGuardShown = ref(false)
@@ -89,8 +91,44 @@ function focusables(): HTMLElement[] {
   return Array.from(panel.value?.querySelectorAll<HTMLElement>(FOCUSABLE) ?? [])
 }
 
+/**
+ * 叠着的弹窗里此刻在最上面的那个：确认层压过普通层，同层后挂的在上；
+ * 正在离场的不算。
+ */
+function topmostModal(): Element | undefined {
+  const open = Array.from(document.querySelectorAll('.dt-modal')).filter(
+    (node) =>
+      node instanceof HTMLElement &&
+      node.style.display !== 'none' &&
+      !node.classList.contains('dt-modal-leave-active'),
+  )
+  const confirms = open.filter((node) =>
+    node.classList.contains('dt-modal--confirm'),
+  )
+  return (confirms.length > 0 ? confirms : open).at(-1)
+}
+
+/**
+ * 焦点掉到 body 上时（手里那颗按钮在保存中变成 disabled）键盘事件不再经过
+ * 弹窗根节点：由最上面那层接住 Esc，并把 Tab 拉回弹窗里。
+ */
+function onStrayKeydown(event: KeyboardEvent): void {
+  const active = document.activeElement
+  if (active !== null && active !== document.body) return
+  if (isImeKeydown(event) || topmostModal() !== root.value) return
+  if (event.key === 'Escape') {
+    onEscape()
+    return
+  }
+  if (event.key !== 'Tab') return
+  event.preventDefault()
+  const items = focusables()
+  ;((event.shiftKey ? items.at(-1) : items[0]) ?? panel.value)?.focus()
+}
+
 /** 焦点陷阱：Tab 到末尾回到首项，Shift+Tab 到首项回到末项。 */
 function onKeydown(event: KeyboardEvent): void {
+  if (isImeKeydown(event)) return
   if (event.key === 'Escape') {
     event.stopPropagation()
     onEscape()
@@ -117,11 +155,13 @@ watch(
     // 重开一次就重新拦一次：上一次的「再按一次就丢」不该跨着一次打开继续有效
     isGuardShown.value = false
     if (open) {
+      document.addEventListener('keydown', onStrayKeydown)
       previouslyFocused = document.activeElement as HTMLElement | null
       await nextTick()
       ;(focusables()[0] ?? panel.value)?.focus()
       return
     }
+    document.removeEventListener('keydown', onStrayKeydown)
     previouslyFocused?.focus()
     previouslyFocused = null
   },
@@ -131,6 +171,7 @@ watch(
 
 // 组件在弹窗开着时被卸载（路由切走）也要把焦点还回去
 onBeforeUnmount(() => {
+  document.removeEventListener('keydown', onStrayKeydown)
   previouslyFocused?.focus()
 })
 </script>
@@ -141,6 +182,7 @@ onBeforeUnmount(() => {
       <div
         v-if="modelValue"
         v-show="isActive"
+        ref="root"
         class="dt-modal"
         :class="`dt-modal--${layer}`"
         @keydown="onKeydown"
@@ -157,7 +199,7 @@ onBeforeUnmount(() => {
         >
           <header class="dt-modal__head">
             <div>
-              <h2 class="dt-modal__title">{{ title }}</h2>
+              <h2 class="dt-modal__title" :title="title">{{ title }}</h2>
               <p v-if="description" class="dt-modal__desc">{{ description }}</p>
             </div>
             <DtButton
@@ -241,7 +283,13 @@ onBeforeUnmount(() => {
     }
   }
 
+  // 长名称最多两行，全名在悬浮提示里：再多就把正文整段往下顶
   &__title {
+    display: -webkit-box;
+    -webkit-box-orient: vertical;
+    -webkit-line-clamp: 2;
+    line-clamp: 2;
+    overflow: hidden;
     margin: 0;
     font-family: var(--font-display);
     font-size: var(--font-size-dialog);

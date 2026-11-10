@@ -255,6 +255,35 @@ async def test_a_node_left_out_of_the_payload_is_deleted(
     assert [item["id"] for item in data_of(response)["nodes"]] == [kept["id"]]
 
 
+async def test_two_nodes_can_swap_their_client_keys_in_one_replace(
+    app_client: httpx.AsyncClient,
+) -> None:
+    # ⚠ 唯一键非延迟，逐行 UPDATE 时先改的那行会撞上还没让位的另一行
+    dashboard = await make_screen(app_client)
+    first = await make_node(
+        app_client, dashboard_id=dashboard["id"], body=node_body(client_key="a")
+    )
+    second = await make_node(
+        app_client, dashboard_id=dashboard["id"], body=node_body(client_key="b")
+    )
+    current = await app_client.get(f"{DASHBOARDS_URL}/{dashboard['id']}")
+    swapped_first = layout_node(node_id=str(first["id"]))
+    swapped_first["client_key"] = "b"
+    swapped_second = layout_node(node_id=str(second["id"]))
+    swapped_second["client_key"] = "a"
+    response = await replace(
+        app_client,
+        dashboard["id"],
+        version=data_of(current)["row_version"],
+        nodes=[swapped_first, swapped_second],
+    )
+    assert response.status_code == 200, response.text
+    keys = {
+        item["id"]: item["client_key"] for item in data_of(response)["nodes"]
+    }
+    assert keys == {first["id"]: "b", second["id"]: "a"}
+
+
 async def test_a_child_of_a_deleted_node_survives_when_reparented(
     app_client: httpx.AsyncClient,
 ) -> None:

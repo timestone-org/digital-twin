@@ -216,6 +216,8 @@ def build_container(settings: Settings) -> Container:
         service_key=settings.edge_service_key.get_secret_value(),
         timeout_s=settings.auth_timeout_s,
     )
+    # ⚠ platform 与知识库共用一份：各造一份的话同一个人要各签一趟
+    identity = DelegatedIdentity(auth)
     return Container(
         settings=settings,
         skills=(
@@ -233,14 +235,14 @@ def build_container(settings: Settings) -> Container:
         platform=PlatformClient(
             base_url=settings.platform_base_url,
             timeout_s=settings.platform_timeout_s,
-            identity=DelegatedIdentity(auth),
+            identity=identity,
         ),
         auth=auth,
         models=registry,
         mcp=_build_mcp(settings),
         logins=PlatformLogins(tokens=tokens),
         embedder=build_openai_embedding(adapter_deps),
-        knowledge=_build_knowledge(settings, auth),
+        knowledge=_build_knowledge(settings, identity),
         catalog=catalog,
     )
 
@@ -265,7 +267,7 @@ def _build_catalog(settings: Settings) -> CatalogCache:
 
 
 def _build_knowledge(
-    settings: Settings, auth: AuthClient
+    settings: Settings, identity: DelegatedIdentity
 ) -> KnowledgeClient | None:
     """按配置装知识库读侧；没配地址就是这套部署没接它。
 
@@ -273,12 +275,12 @@ def _build_knowledge(
     那组头只有几十秒——不续的话回合后半段每一次检索都是 401，而现象是
     「knowledge.search 没跑成」，原因却在身份头上。
 
-    Args: settings, auth。
+    Args: settings, identity（与 platform 共用的那一份）。
     """
     if not settings.knowledge_base_url.strip():
         return None
     return KnowledgeClient(
         base_url=settings.knowledge_base_url,
         timeout_s=settings.knowledge_timeout_s,
-        identity=DelegatedIdentity(auth),
+        identity=identity,
     )

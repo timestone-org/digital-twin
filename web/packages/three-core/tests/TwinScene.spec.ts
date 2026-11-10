@@ -523,6 +523,36 @@ describe('模型清空与装载失败', () => {
     wrapper.unmount()
   })
 
+  // ⚠ 部件层每帧按距离规则写显隐：不认树上的勾选，一转镜头被藏的部件就回来了
+  it('结构树勾掉的部件节点在距离规则重算后仍保持隐藏', async () => {
+    let nextFrame: FrameRequestCallback = () => undefined
+    vi.spyOn(globalThis, 'requestAnimationFrame').mockImplementation(
+      (callback) => {
+        nextFrame = callback
+        return 1
+      },
+    )
+    vi.spyOn(globalThis, 'cancelAnimationFrame').mockImplementation(
+      () => undefined,
+    )
+    const model = fakeModel()
+    seam.loadTwinModel.mockResolvedValue(assetOf(model))
+    const wrapper = mountScene({ showStructureTree: true })
+    await flushPromises()
+    await wrapper
+      .get('[data-test="twin-structure-tree"] button')
+      .trigger('click')
+    await wrapper.get('input[aria-label="显示 pump"]').setValue(false)
+    const pump = model.getObjectByName('pump')
+    expect(pump?.visible).toBe(false)
+
+    await wrapper.setProps({ values: { parts: {} } })
+    nextFrame(16)
+
+    expect(pump?.visible).toBe(false)
+    wrapper.unmount()
+  })
+
   it('换到装载失败的素材后结构树不再列旧模型', async () => {
     const wrapper = mountScene({ showStructureTree: true })
     await flushPromises()
@@ -757,16 +787,32 @@ function viewportOf(): HTMLElement {
   return element
 }
 
+/**
+ * 按在视口画布上；`element` 只用来认这是哪一次挂载。
+ * ⚠ 真浏览器里点模型时事件目标是画布：覆盖层都不接指针事件。
+ */
 function press(element: HTMLElement, x: number, y: number): void {
-  element.dispatchEvent(
+  surfaceOf(element).dispatchEvent(
     new MouseEvent('pointerdown', { clientX: x, clientY: y, bubbles: true }),
   )
 }
 
 function release(element: HTMLElement, x: number, y: number): void {
-  element.dispatchEvent(
+  surfaceOf(element).dispatchEvent(
     new MouseEvent('pointerup', { clientX: x, clientY: y, bubbles: true }),
   )
+}
+
+function surfaceOf(element: HTMLElement): HTMLElement {
+  return element.contains(renderer.domElement) ? renderer.domElement : element
+}
+
+function clickOn(target: Element, x: number, y: number): void {
+  for (const type of ['pointerdown', 'pointerup']) {
+    target.dispatchEvent(
+      new MouseEvent(type, { clientX: x, clientY: y, bubbles: true }),
+    )
+  }
 }
 
 describe('部件点击', () => {
@@ -838,6 +884,36 @@ describe('部件点击', () => {
     wrapper.unmount()
   })
 
+  // ⚠ 覆盖层按钮在模型前面：冒泡到视口根的那一下若也判部件，点视点会顺手触发联动
+  it('点在覆盖层按钮上不判部件点击', async () => {
+    const wrapper = mountScene({
+      config: config({
+        parts: [
+          {
+            id: 'part-pump',
+            name: '泵',
+            nodes: ['pump'],
+            click: { near: 'detail' },
+          },
+        ],
+        cameras: [
+          { id: 'cam-a', name: 'A', position: [6, 6, 6], target: [0, 0, 0] },
+        ],
+        viewpoints: { enabled: true },
+      }),
+    })
+    await flushPromises()
+    viewportOf()
+    const button = document.querySelector('.twin-viewpoints button')
+    if (button === null) throw new Error('视点条没显示')
+
+    clickOn(button, 50, 50)
+
+    expect(wrapper.emitted('partClick')).toBeUndefined()
+    expect(document.querySelector('[data-test="part-modal-data"]')).toBeNull()
+    wrapper.unmount()
+  })
+
   it('没被任何部件覆盖的模型部位点不出事件', async () => {
     const { wrapper, element } = await scene({ nodes: ['别的名字'] })
 
@@ -845,6 +921,38 @@ describe('部件点击', () => {
     release(element, 50, 50)
 
     expect(wrapper.emitted('partClick')).toBeUndefined()
+    wrapper.unmount()
+  })
+})
+
+describe('初始取景', () => {
+  // ⚠ 先量后摆的话框住的是没缩放、没位移的原件，发布后模型偏到画外或缩成一个点
+  it('没配视点时框住的是摆放之后的模型', async () => {
+    let nextFrame: FrameRequestCallback = () => undefined
+    vi.spyOn(globalThis, 'requestAnimationFrame').mockImplementation(
+      (callback) => {
+        nextFrame = callback
+        return 1
+      },
+    )
+    vi.spyOn(globalThis, 'cancelAnimationFrame').mockImplementation(
+      () => undefined,
+    )
+    const wrapper = mountScene({
+      config: config({
+        model: { asset: ASSET, position: [50, 0, 0], scale: 3 },
+      }),
+    })
+    await flushPromises()
+    nextFrame(16)
+
+    const camera = renderer.renders[renderer.renders.length - 1]?.camera
+    if (!(camera instanceof THREE.PerspectiveCamera)) throw new Error('没出帧')
+    const toCenter = new THREE.Vector3(50, 0, 0).sub(camera.position)
+    expect(
+      camera.getWorldDirection(new THREE.Vector3()).angleTo(toCenter),
+    ).toBeLessThan(1e-6)
+    expect(toCenter.length()).toBeGreaterThan((3 * Math.sqrt(12)) / 2)
     wrapper.unmount()
   })
 })

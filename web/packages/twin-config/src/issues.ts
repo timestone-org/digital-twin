@@ -1,10 +1,11 @@
 /**
- * @fileoverview 归一化吞不掉的那两类错：重复 id 与悬空引用。
- * 归一化只管形状，这两样必须响亮报出去——静默降级对人尚可忍受，对 Agent 是致命的（ADR-0012 四）。
+ * @fileoverview 归一化吞不掉的那几类错：重复 id、悬空引用与画不出来的配置。
+ * 归一化只管形状，这些必须响亮报出去——静默降级对人尚可忍受，对 Agent 是致命的（ADR-0012）。
  */
 import { MIN_ROAM_TOUR_STOPS } from './normalizeScene'
 import { partFocusView } from './cameraSelect'
 import { panelFieldSpan, panelKindUsesRange } from './panelGraph'
+import { roamTourStops } from './roamTimeline'
 import {
   MAX_ASSEMBLY_DEPTH,
   hasFieldedDescendant,
@@ -20,6 +21,7 @@ const ROAM_TOUR_ENTITY_ID = 'roamTour'
 /** 问题种类。 */
 export const TWIN_CONFIG_ISSUE_KINDS = [
   'duplicate-id',
+  'duplicate-field-key',
   'dangling-camera',
   'dangling-anchor',
   'flow-too-short',
@@ -64,6 +66,51 @@ function duplicateIds(
     seen.add(item.id)
   })
   return out
+}
+
+/**
+ * 一组字段里重复的 key；只报后出现的那个。
+ * @param fields 一张牌或一份部件详情的字段
+ * @param entityId 牌或部件的 id
+ * @param path 这组字段在配置里的路径
+ */
+function duplicateKeysIn(
+  fields: readonly { key: string }[],
+  entityId: string,
+  path: string,
+): TwinConfigIssue[] {
+  const seen = new Set<string>()
+  const out: TwinConfigIssue[] = []
+  fields.forEach((field, index) => {
+    if (seen.has(field.key))
+      out.push({
+        kind: 'duplicate-field-key',
+        entityId,
+        path: `${path}[${index}].key`,
+        detail: `字段 key「${field.key}」重复，两个字段会显示同一个读数`,
+      })
+    seen.add(field.key)
+  })
+  return out
+}
+
+/**
+ * 同一张牌、同一份部件详情里字段 key 重复。
+ * ⚠ 实时值按「实体 id::字段 key」缝：重复时后一个盖掉前一个，界面上两行同一个数。
+ */
+function duplicateFieldKeys(config: TwinConfig): TwinConfigIssue[] {
+  return [
+    ...config.panels.flatMap((panel, index) =>
+      duplicateKeysIn(panel.fields, panel.id, `panels[${index}].fields`),
+    ),
+    ...config.parts.flatMap((part, index) =>
+      duplicateKeysIn(
+        part.detail.fields,
+        part.id,
+        `parts[${index}].detail.fields`,
+      ),
+    ),
+  ]
 }
 
 /**
@@ -124,6 +171,25 @@ function danglingFlowAnchors(
 }
 
 /**
+ * 能画出来的路径点数：只数解析得出的锚点，紧挨着的同一站只算一个。
+ * @param path 路径上的锚点 id
+ * @param known 存在的锚点 id
+ */
+function drawableStops(
+  path: readonly string[],
+  known: ReadonlySet<string>,
+): number {
+  let count = 0
+  let previous: string | null = null
+  for (const id of path) {
+    if (!known.has(id) || id === previous) continue
+    count += 1
+    previous = id
+  }
+  return count
+}
+
+/**
  * 能量流可解析的点不足两个。
  * ⚠ 一条线至少要两点，渲染层对这种流是整条不画——不报出来的话，用户看到的是
  * 「配了一条流但画面上什么都没有」。
@@ -134,9 +200,7 @@ function shortFlows(
 ): TwinConfigIssue[] {
   return config.flows
     .map((flow, index) => ({ flow, index }))
-    .filter(
-      (ref) => ref.flow.pathAnchors.filter((id) => known.has(id)).length < 2,
-    )
+    .filter((ref) => drawableStops(ref.flow.pathAnchors, known) < 2)
     .map((ref) => ({
       kind: 'flow-too-short' as const,
       entityId: ref.flow.id,
@@ -378,12 +442,10 @@ function danglingRoamCameras(
  * ⚠ 一段都摊不出来时运行态整条不播——不报出来的话，用户看到的是「开关明明
  * 开着，镜头却一动不动」。
  */
-function shortRoamTour(
-  config: TwinConfig,
-  known: ReadonlySet<string>,
-): TwinConfigIssue[] {
+function shortRoamTour(config: TwinConfig): TwinConfigIssue[] {
   const tour = config.roamTour
-  const usable = tour.items.filter((id) => known.has(id))
+  // ⚠ 与真正起播的轨迹同一份过滤：悬空的与解不出姿态的都不算一站
+  const usable = roamTourStops(config.cameras, tour)
   if (!tour.enabled || usable.length >= MIN_ROAM_TOUR_STOPS) return []
   return [
     {
@@ -430,12 +492,13 @@ export function collectTwinConfigIssues(config: TwinConfig): TwinConfigIssue[] {
     ...duplicateIds('panels', config.panels),
     ...duplicateIds('arrows', config.arrows),
     ...duplicateIds('flows', config.flows),
+    ...duplicateFieldKeys(config),
     ...danglingCameras(config),
     ...danglingRoamCameras(config, cameraIds),
     ...danglingPanelAnchors(config, anchorIds),
     ...danglingFlowAnchors(config, anchorIds),
     ...shortFlows(config, anchorIds),
-    ...shortRoamTour(config, cameraIds),
+    ...shortRoamTour(config),
     ...danglingPartCameras(config, cameraIds),
     ...danglingPartParents(config),
     ...partFocusWithoutTarget(config, cameraIds),

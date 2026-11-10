@@ -93,6 +93,7 @@ async def extract_seasons(session: AsyncSession, room_id: uuid.UUID) -> None:
             datetime(2026, 1, 1, tzinfo=UTC), datetime(2026, 8, 1, tzinfo=UTC)
         ),
         rules=rules,
+        timezone="Asia/Shanghai",
     )
     context = ExtractionContext(StubReader(historical_rows()), rules, 100000)
     for message in plan.messages:

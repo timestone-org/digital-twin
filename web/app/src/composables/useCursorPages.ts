@@ -11,7 +11,15 @@
  * ⚠ 换房间 / 换筛选必须走 `reload()`：栈里还留着上一串游标的话，翻回去落到的是
  * 另一份结果的中间，而它看着完全正常。
  */
-import { computed, ref, shallowRef, type ComputedRef, type Ref } from 'vue'
+import {
+  computed,
+  getCurrentScope,
+  onScopeDispose,
+  ref,
+  shallowRef,
+  type ComputedRef,
+  type Ref,
+} from 'vue'
 import type { CursorPage } from '@dt/contracts'
 
 import { useRacedFetch, type RacedFetch } from '@/composables/useRacedFetch'
@@ -79,6 +87,13 @@ export function useCursorPages<TItem, TProblem>(
     problem: ref<TProblem | null>(null) as Ref<TProblem | null>,
     raced: useRacedFetch(),
   }
+  const cancel = (): void => {
+    state.raced.cancel()
+    state.loading.value = false
+    state.isFetching.value = false
+  }
+  // 卸载即中止在途请求；同 useAsyncList
+  if (getCurrentScope() !== undefined) onScopeDispose(cancel)
   return {
     items: state.items,
     loading: state.loading,
@@ -89,11 +104,7 @@ export function useCursorPages<TItem, TProblem>(
     problem: state.problem,
     reload: () => go(state, [null]),
     refresh: (options) => go(state, state.trail.value, options?.background),
-    cancel: () => {
-      state.raced.cancel()
-      state.loading.value = false
-      state.isFetching.value = false
-    },
+    cancel,
     next: () => next(state),
     prev: () => prev(state),
   }

@@ -174,6 +174,14 @@ describe('DtDateTimeInput 日历浮层', () => {
     wrapper.unmount()
   })
 
+  it('日格是 role=group：没有 row/gridcell 的 grid 是无效 ARIA', async () => {
+    mountInShanghai({ modelValue: '2026-08-12T02:55:00.000Z' })
+    openCalendar()
+    await flushPromises()
+    const grid = document.querySelector('.dt-calendar__grid')
+    expect(grid?.getAttribute('role')).toBe('group')
+  })
+
   it('面板停在取值所在的那个月', async () => {
     mountInShanghai({ modelValue: '2026-08-12T02:55:00.000Z' })
     openCalendar()
@@ -298,7 +306,7 @@ describe('DtDateTimeInput 面板里的时分', () => {
     ])
   })
 
-  it('⚠ 指针选时分：按下选项不算点外面，抬起才选中并收起日历', async () => {
+  it('⚠ 指针选时分：按下选项不算点外面，抬起才选中，日历留着接着选', async () => {
     const wrapper = mountInShanghai({ modelValue: '2026-08-12T02:55:00.000Z' })
     openCalendar()
     await flushPromises()
@@ -319,7 +327,21 @@ describe('DtDateTimeInput 面板里的时分', () => {
     expect(wrapper.emitted('update:modelValue')).toEqual([
       ['2026-08-12T05:55:00.000Z'],
     ])
-    expect(document.querySelector('.dt-calendar')).toBeNull()
+    expect(document.querySelector('.dt-calendar')).not.toBeNull()
+  })
+
+  it('改完小时面板不收起，紧接着能改分钟', async () => {
+    const wrapper = mountInShanghai({ modelValue: '2026-08-12T02:55:00.000Z' })
+    openCalendar()
+    await flushPromises()
+    await pickTime('小时', '14')
+    expect(document.querySelector('.dt-calendar')).not.toBeNull()
+    // 父组件回写 v-model 之后再改分钟，验的是同一次展开里能连着改
+    await wrapper.setProps({ modelValue: '2026-08-12T06:55:00.000Z' })
+    await pickTime('分钟', '35')
+    expect(wrapper.emitted('update:modelValue')?.[1]).toEqual([
+      '2026-08-12T06:35:00.000Z',
+    ])
   })
 
   it('还没选过日子时改时分落在当月 1 号，而不是抛一个没有日期的值', async () => {

@@ -45,9 +45,11 @@ def build_app(settings: Settings) -> FastAPI:
 def _hooks(container: Container) -> tuple[LifespanHook, ...]:
     """启停钩子。
 
-    ⚠ 关停顺序不是启动的逆序：**连接最先摘**（10），它们持有客户端的
-    socket，晚摘会让对端在我们已经关掉数据库之后还在发订阅；缓存与数据库
-    最后关，在途请求还要用它们。
+    ⚠ 关停顺序不是启动的逆序：
+    - uvicorn 在跑这些钩子**之前**就已经以 1012 关掉了全部 WS 连接；
+    - 扇出（5）与匿名复核（6）先停，此后没有后台任务再碰内存索引与库；
+    - `connections`（10）只丢内存索引，不关任何 socket；
+    - 打 auth-server 的 HTTP 客户端（20）与存储（80+）最后关。
 
     Args: container。
     """
@@ -74,8 +76,7 @@ def _channel_hooks(container: Container) -> tuple[LifespanHook, ...]:
             startup=container.fanout.start,
             # 扇出在清残留之后起：先把上次的脏行清掉，再开始收消息
             startup_order=20,
-            # ⚠ 停在连接之前：还在收消息却已经没有连接可发，只会刷一堆
-            # 「没人订」的日志
+            # ⚠ 停在丢索引之前：此后不再有扇出读它
             shutdown=container.fanout.stop,
             shutdown_order=5,
         ),
@@ -84,7 +85,7 @@ def _channel_hooks(container: Container) -> tuple[LifespanHook, ...]:
             startup=container.sweeper.start,
             # 复核在扇出之后起，先后无所谓：它只读库与内存索引
             startup_order=30,
-            # ⚠ 停在连接之前：连接都摘光之后再复核只是空转一轮
+            # ⚠ 停在丢索引之前：此后不再有复核读它
             shutdown=container.sweeper.stop,
             shutdown_order=6,
         ),
@@ -100,7 +101,7 @@ def _client_hooks(container: Container) -> tuple[LifespanHook, ...]:
     """两份打 auth-server 的 HTTP 客户端。
 
     ⚠ 它们各持一个连接池、一个进程一份且长活，不关就是退出时留下两组还开着
-    的 socket。停在连接摘完之后：还在握手的那几条要用它取权限码。
+    的 socket。停在丢索引之后、存储之前。
 
     Args: container。
     """

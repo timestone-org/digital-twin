@@ -414,6 +414,7 @@ describe('权限', () => {
     const labels = wrapper.findAll('button').map((one) => one.text())
     expect(labels).toContain('断开')
     expect(labels).not.toContain('连通性测试')
+    expect(labels).not.toContain('浏览并导入点位')
   })
 })
 
@@ -531,7 +532,7 @@ describe('HTTP 数据源提交', () => {
     await clickByText(wrapper, '新增数据源')
     await flushPromises()
     for (const [placeholder, value] of [
-      ['如：1号生产线 PLC', 'HTTP 测试接口'],
+      ['如：能源平台接口', 'HTTP 测试接口'],
       ['如：plant1_plc', 'http_test'],
       ['https://api.example.com/metrics', 'https://api.example.com/metrics'],
     ]) {
@@ -596,7 +597,7 @@ describe('HTTP 数据源提交', () => {
     expect(submit.disabled).toBe(false)
     expect(
       document.body.querySelector<HTMLInputElement>(
-        'input[placeholder="如：1号生产线 PLC"]',
+        'input[placeholder="如：能源平台接口"]',
       )?.value,
     ).toBe('HTTP 测试接口')
     submit.click()

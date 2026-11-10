@@ -14,7 +14,7 @@ from platform_server.apps.dataset.errors import (
     DatasetColumnKeyTaken,
     DatasetColumnNotFound,
 )
-from platform_server.apps.dataset.models import DatasetColumn
+from platform_server.apps.dataset.models import DatasetColumn, DatasetTable
 from platform_server.apps.dataset.protocols import (
     ColumnSource,
     as_column_source,
@@ -34,10 +34,14 @@ from platform_server.apps.dataset.services.formula_compile import (
     ColumnDraft,
     compile_for_save,
 )
+from platform_server.apps.dataset.services.integrity import flush_unique
 from platform_server.apps.dataset.services.presenters import to_column_out
 from platform_server.apps.dataset.services.table_service import require_table
 
 _logger = get_logger("platform.dataset.column")
+
+# 同表列 key 的唯一约束名，命名规约生成
+COLUMN_KEY_CONSTRAINT = "uq_dataset_columns_table_id_key"
 
 
 @dataclass(frozen=True)
@@ -109,7 +113,11 @@ async def create_column(
         table.id, payload, await _order_of(session, payload, table.id), deps
     )
     column_crud.add(session, column)
-    await session.flush()
+    await flush_unique(
+        session,
+        constraint=COLUMN_KEY_CONSTRAINT,
+        taken=DatasetColumnKeyTaken(f"这张台账下已有同名列：{payload.key}"),
+    )
     _logger.info(
         "dataset_column_created", "台账列已创建", column_id=str(column.id)
     )
@@ -167,16 +175,23 @@ async def delete_column(
     dependents = await column_crud.dependents_of(
         session, table_id=table_id, key=column.key
     )
-    if dependents and not is_forced:
+    external = await column_crud.external_dependents_of(
+        session, table=await require_table(session, table_id), key=column.key
+    )
+    details = (
+        *(_dependent_detail(item) for item in dependents),
+        *(_external_detail(item, owner) for item, owner in external),
+    )
+    if details and not is_forced:
         raise DatasetColumnInUse(
-            f"还有 {len(dependents)} 列的公式引用着这一列，请先改公式",
-            details=tuple(_dependent_detail(item) for item in dependents),
+            f"还有 {len(details)} 列的公式引用着这一列，请先改公式",
+            details=details,
         )
     _logger.info(
         "dataset_column_deleted",
         "台账列已删除",
         column_id=str(column.id),
-        dependent_count=len(dependents),
+        dependent_count=len(details),
         is_forced=is_forced,
     )
     await column_crud.delete(session, column)
@@ -307,4 +322,16 @@ def _dependent_detail(column: DatasetColumn) -> FieldError:
         field=f"columns[{column.key}]",
         code="column_referenced",
         message=f"{column.name} 的公式引用了这一列",
+    )
+
+
+def _external_detail(column: DatasetColumn, owner: DatasetTable) -> FieldError:
+    """把别的台账里的引用者摊成字段级说明，路径带上台账编码。
+
+    Args: column, owner。
+    """
+    return FieldError(
+        field=f"columns[{owner.code}.{column.key}]",
+        code="column_referenced",
+        message=f"{owner.name} 的 {column.name} 的公式引用了这一列",
     )

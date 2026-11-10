@@ -70,18 +70,31 @@ function textOf(value: unknown, unit: string | null | undefined): string {
     : `${body} ${unit}`
 }
 
-function timeOf(timestampMs: number): string {
-  return new Date(timestampMs).toLocaleTimeString('zh-CN', { hour12: false })
+/**
+ * 采样时刻。⚠ 不是今天的要带上月日：订阅模式下稳定点位的时刻可能是几天前，
+ * 只给时分秒会让它看着像刚刚采到的。
+ * @param timestampMs 采样时刻
+ * @param nowMs 现在
+ */
+function timeOf(timestampMs: number, nowMs: number): string {
+  const at = new Date(timestampMs)
+  const time = at.toLocaleTimeString('zh-CN', { hour12: false })
+  if (at.toDateString() === new Date(nowMs).toDateString()) return time
+  const month = String(at.getMonth() + 1).padStart(2, '0')
+  const day = String(at.getDate()).padStart(2, '0')
+  return `${month}-${day} ${time}`
 }
 
 /**
  * 一条读数的长相。
  * @param sample 收到的读数；没收到过就是 undefined
  * @param unit 点位单位
+ * @param nowMs 现在，判断采样是不是今天的
  */
 export function formatSample(
   sample: PointSample | undefined,
   unit: string | null | undefined,
+  nowMs: number = Date.now(),
 ): SampleLook {
   if (sample === undefined) return MISSING
   if (sample.state === 'error') {
@@ -98,7 +111,7 @@ export function formatSample(
     text: textOf(sample.value, unit),
     badge: quality === '' ? null : quality,
     intent: quality === '' ? 'success' : 'warning',
-    at: timeOf(sample.timestampMs),
+    at: timeOf(sample.timestampMs, nowMs),
     reason: null,
   }
 }

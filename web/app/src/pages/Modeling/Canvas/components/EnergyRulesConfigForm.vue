@@ -60,8 +60,8 @@ function setStatus(key: string, value: ConfigStatus): void {
   statuses.value = { ...statuses.value, [key]: value }
 }
 function changeKind(_key: string, value: unknown): void {
+  // 换类型时清列映射由上层合在同一次写入里做，撤销一步就整个回去
   if (props.isReadonly || status.value.hasDraft) return
-  emit('change', 'fields', {})
   emit('change', 'kind', value)
 }
 function changeNested(group: string, key: string, value: unknown): void {

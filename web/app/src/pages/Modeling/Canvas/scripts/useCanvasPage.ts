@@ -74,7 +74,8 @@ function prefetchPreviews(state: PageState): void {
     if (node.status !== 'succeeded' || !node.has_preview) continue
     if (state.runner.previews.value.has(node.node_id)) continue
     budget -= 1
-    void state.runner.loadPreview(node.node_id)
+    // 后台预取：失败不弹提示（一轮最多 24 份），失败过的也不跟着每拍重拉
+    void state.runner.loadPreview(node.node_id, true)
   }
 }
 
@@ -121,6 +122,11 @@ export function useCanvasPage() {
     stopChecking: state.doc.stopChecking,
   })
 
+  // 撤销 / 重做整份换图不经过选中，删掉的 id 要从选中集里收掉
+  watch([state.graph.nodeIds, state.graph.edgeIds], ([nodes, edges]) =>
+    state.selection.prune(nodes, edges),
+  )
+
   // 节点一跑成，就把它的摘要拉回来——卡片上那行数字要靠它
   watch(
     () => state.runner.run.value?.nodes.map((node) => node.status).join(','),
@@ -132,7 +138,12 @@ export function useCanvasPage() {
     operatorMap,
     runtime,
     loadRuns: (pipelineId: string) => loadCanvasRuns(state, pipelineId),
-    open: (pipelineId: string) => openCanvasPage(state, pipelineId),
+    /** 进页面：读回来时已直接校验过一次，换图排下的那次防抖校验作废。 */
+    open: async (pipelineId: string) => {
+      const isLoaded = await openCanvasPage(state, pipelineId)
+      check.cancel()
+      return isLoaded
+    },
     replay: (runId: string) => replayCanvasRun(state, runId),
     backToEditing: (current: ModelingGraph | null) =>
       backToEditing(state, current),

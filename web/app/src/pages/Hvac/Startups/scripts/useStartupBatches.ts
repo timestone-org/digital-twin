@@ -53,6 +53,8 @@ interface BatchesState {
   rebuilding: Ref<boolean>
   error: Ref<string | null>
   raced: RacedFetch
+  /** 手上这份数据属于哪个房间；换了房间就不再拿它充数。 */
+  loadedRoom: string | null
 }
 
 /**
@@ -69,6 +71,7 @@ export function useStartupBatches(roomId: () => string): StartupBatchesView {
     rebuilding: ref(false),
     error: ref<string | null>(null),
     raced: useRacedFetch(),
+    loadedRoom: null,
   }
   return {
     current: state.current,
@@ -85,14 +88,33 @@ export function useStartupBatches(roomId: () => string): StartupBatchesView {
   }
 }
 
+/**
+ * 清掉手上的批次数据。
+ * @param state 批次状态
+ */
+function clear(state: BatchesState): void {
+  state.current.value = null
+  state.coverage.value = []
+  state.isStale.value = false
+  state.sourceRange.value = null
+  state.loadedRoom = null
+}
+
+/**
+ * 取当前房间的批次与覆盖度。
+ * ⚠ 同一房间重取（重算后、轮询）不清空，换了房间才清：取数失败时留着上一个
+ * 房间的批次，会让人拿它的组合去筛新房间。
+ * @param state 批次状态
+ */
 async function load(state: BatchesState): Promise<void> {
   const room = state.roomId()
   if (room === '') {
-    state.current.value = null
-    state.coverage.value = []
-    state.isStale.value = false
-    state.sourceRange.value = null
+    clear(state)
     return
+  }
+  if (state.loadedRoom !== room) {
+    clear(state)
+    state.error.value = null
   }
   state.loading.value = true
   await state.raced.run(() => hvac.getStartupBatches(room), {
@@ -102,6 +124,7 @@ async function load(state: BatchesState): Promise<void> {
       state.isStale.value = found.is_stale
       state.sourceRange.value = found.source_range
       state.error.value = null
+      state.loadedRoom = room
     },
     fail: (caught) => (state.error.value = describeError(caught)),
     settled: () => (state.loading.value = false),

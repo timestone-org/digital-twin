@@ -15,6 +15,7 @@ import {
   readFeedLevels,
   type FeedRowView,
 } from '../../../src/modules/info-feed/feed'
+import { FEED_UNKNOWN_LEVEL } from '../../../src/modules/info-feed/options'
 import { NO_DATA } from '../../../src/shared/format'
 
 /** 中国气象预警五色，作为**配置数据**填进 `levels`——代码里一个色值都没有。 */
@@ -367,5 +368,32 @@ describe('空态文案', () => {
 
   it('配了就用配的那一句', () => {
     expect(readFeedEmptyText({ emptyText: ' 暂无预警 ' })).toBe('暂无预警')
+  })
+})
+
+describe('级别查表只认自有键', () => {
+  // ⚠ 色板是普通对象：不拦的话 `constructor` 会查出 Object 本身，rank 变成 undefined
+  it('级别名撞上原型链上的键时按未知级别处理，排序不出 NaN', () => {
+    const rows = rowsOf(
+      [
+        { level: 'constructor', text: '甲' },
+        { level: '__proto__', text: '乙' },
+        { level: 'danger', text: '丙' },
+      ],
+      { sortBy: 'level' },
+    )
+    const odd = rows.filter((row) => row.text !== '丙')
+
+    expect(odd.map((row) => row.label)).toEqual([
+      FEED_UNKNOWN_LEVEL.label,
+      FEED_UNKNOWN_LEVEL.label,
+    ])
+    expect(rows.every((row) => typeof row.label === 'string')).toBe(true)
+  })
+
+  it('色板里配了原型链上的键名也不污染查找表', () => {
+    const table = readFeedLevels({ levels: [{ key: '__proto__', rank: 9 }] })
+
+    expect(Object.getPrototypeOf(table)).toBe(Object.prototype)
   })
 })

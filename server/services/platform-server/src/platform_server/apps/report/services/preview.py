@@ -23,6 +23,7 @@ from platform_server.apps.report.services.aggregation import (
 from platform_server.apps.report.services.chart_data import chart_node
 from platform_server.apps.report.services.document import (
     BUSINESS_NODES,
+    node_label,
     number_attr,
     text_attr,
     validate_template,
@@ -35,6 +36,11 @@ from platform_server.apps.report.services.metrics import (
     resolve_metrics,
 )
 from platform_server.apps.report.services.table import build_table
+
+# 取数失败的节点占位；出稿前凭它拒绝整份报告
+UNAVAILABLE_TEXT = "[数据不可用]"
+# 尚未填表达式的节点占位，与 Word 成品里缺值节点同一句
+UNCONFIGURED_TEXT = "[数据未配置]"
 
 
 async def preview(session: AsyncSession, context: PreviewContext) -> PreviewOut:
@@ -50,7 +56,48 @@ async def preview(session: AsyncSession, context: PreviewContext) -> PreviewOut:
             warnings=[issue.message for issue in checked.issues],
         )
     metrics = await resolve_metrics(session, context)
-    warnings = [f"{item.name}：{item.error}" for item in metrics if item.error]
+    warnings = _metric_warnings(context, metrics)
+    nodes: dict[str, NodeValue] = {}
+    for path, node in walk_nodes(context.template.doc_json):
+        if node.type not in BUSINESS_NODES:
+            continue
+        try:
+            nodes[path] = await _node_value(session, context, node, metrics)
+            if nodes[path].is_stale:
+                warnings.append(f"{node_label(path, node)}：使用较早的最新数据")
+            if nodes[path].is_truncated:
+                warnings.append(f"{node_label(path, node)}：数据已截断")
+        except (ValueError, AppError, report_formula.FormulaError) as error:
+            message = (
+                error.message if isinstance(error, AppError) else str(error)
+            )
+            warnings.append(f"{node_label(path, node)}：{message}")
+            nodes[path] = NodeValue(kind=node.type, text=UNAVAILABLE_TEXT)
+    return PreviewOut(
+        is_valid=not warnings,
+        period=context.period,
+        timezone=context.timezone,
+        metrics=metrics,
+        nodes=nodes,
+        # ⚠ 去重：同一段里两处一样的节点报同一句，而前端按原文做列表键
+        warnings=list(dict.fromkeys(warnings)),
+        api_results=_api_results(context),
+        checked_at=datetime.now(UTC),
+    )
+
+
+def _metric_warnings(
+    context: PreviewContext, metrics: list[MetricValue]
+) -> list[str]:
+    """来源与指标两层的提示。
+
+    ⚠ 没被任何指标引用的来源取数失败也要算进去：出稿那一路会因为它整份失败。
+    Args: context, metrics。
+    """
+    warnings = list(dict.fromkeys(context.api_errors.values()))
+    warnings.extend(
+        f"{item.name}：{item.error}" for item in metrics if item.error
+    )
     warnings.extend(
         f"{item.name}：取数已截断" for item in metrics if item.is_truncated
     )
@@ -59,38 +106,26 @@ async def preview(session: AsyncSession, context: PreviewContext) -> PreviewOut:
         for item in metrics
         if item.is_stale
     )
-    nodes: dict[str, NodeValue] = {}
-    for path, node in walk_nodes(context.template.doc_json):
-        if node.type not in BUSINESS_NODES:
-            continue
-        try:
-            nodes[path] = await _node_value(session, context, node, metrics)
-            if nodes[path].is_stale:
-                warnings.append(f"{path}：使用较早的最新数据")
-            if nodes[path].is_truncated:
-                warnings.append(f"{path}：表格或图表数据已截断")
-        except (ValueError, AppError, report_formula.FormulaError) as error:
-            message = (
-                error.message if isinstance(error, AppError) else str(error)
-            )
-            warnings.append(f"{path}：{message}")
-            nodes[path] = NodeValue(kind=node.type, text="[数据不可用]")
-    return PreviewOut(
-        is_valid=not warnings,
-        period=context.period,
-        timezone=context.timezone,
-        metrics=metrics,
-        nodes=nodes,
-        warnings=warnings,
-        api_results=_api_results(context),
-        checked_at=datetime.now(UTC),
-    )
+    return warnings
 
 
 def _api_results(context: PreviewContext) -> list[ReportApiResult]:
     results: list[ReportApiResult] = []
     for source in context.template.api_sources:
-        found = context.api_data.get(f"api:{source.code}")
+        key = f"api:{source.code}"
+        if key in context.api_errors:
+            results.append(
+                ReportApiResult(
+                    source_code=source.code,
+                    name=source.name,
+                    row_count=0,
+                    columns=[],
+                    rows=[],
+                    error=context.api_errors[key],
+                )
+            )
+            continue
+        found = context.api_data.get(key)
         if found is None:
             continue
         results.append(
@@ -122,7 +157,10 @@ async def _node_value(
     metrics: list[MetricValue],
 ) -> NodeValue:
     if node.type in ("metricRef", "condText"):
-        return _text_node(node, metrics)
+        # ⚠ 空表达式在校验里只是提示；交给公式引擎会抛错并让每次出稿失败
+        if not text_attr(node, "expr"):
+            return NodeValue(kind=node.type, text=UNCONFIGURED_TEXT)
+        return _text_node(node, metrics, context.template.metrics)
     spec = DataNodeSpec.model_validate(node.attrs)
     if node.type == "dsChart":
         return await chart_node(session, context, spec)
@@ -156,7 +194,11 @@ def _precision(node: DocumentNode) -> int | None:
     return int(number_attr(node, "precision", 2))
 
 
-def _text_node(node: DocumentNode, metrics: list[MetricValue]) -> NodeValue:
+def _text_node(
+    node: DocumentNode,
+    metrics: list[MetricValue],
+    definitions: list[MetricDef],
+) -> NodeValue:
     expression = text_attr(node, "expr")
     references = report_formula.metric_references(expression)
     by_name = {metric.name: metric for metric in metrics}
@@ -167,9 +209,31 @@ def _text_node(node: DocumentNode, metrics: list[MetricValue]) -> NodeValue:
         value,
         value_kind(value),
         _precision(node),
-        text_attr(node, "unit") if node.type == "metricRef" else "",
+        _unit(node, expression, definitions),
     )
     return NodeValue(kind=node.type, text=text)
+
+
+def _unit(
+    node: DocumentNode, expression: str, definitions: list[MetricDef]
+) -> str:
+    """正文数字的单位：节点自己的优先，没填时回落到直接引用的那个指标。
+
+    Args: node, expression, definitions。
+    """
+    if node.type != "metricRef":
+        return ""
+    own = text_attr(node, "unit")
+    if own:
+        return own
+    return next(
+        (
+            definition.unit or ""
+            for definition in definitions
+            if expression.strip() == f"{{{definition.name}}}"
+        ),
+        "",
+    )
 
 
 def _expression_value(expression: str, metrics: list[MetricValue]) -> object:

@@ -48,17 +48,31 @@ interface Draft {
 
 /** 每个用途各自的草稿，键是用途码。 */
 const drafts = ref<Record<string, Draft>>({})
-const busy = ref<Record<string, boolean>>({})
 
+/** 草稿是否偏离了那一行上一次的已存值，即用户动过还没存。 */
+function isEdited(draft: Draft | undefined, saved: LlmPurpose | undefined) {
+  if (draft === undefined || saved === undefined) return false
+  return (
+    draft.providerId !== (saved.provider_id ?? '') ||
+    draft.modelName !== (saved.model_name ?? '')
+  )
+}
+
+// ⚠ 父层存完一行会换掉整组：只重填没动过的行，别的行没存的草稿要留着
 watch(
   () => props.purposes,
-  (listed) => {
+  (listed, previous) => {
     const next: Record<string, Draft> = {}
     for (const one of listed) {
-      next[one.purpose] = {
-        providerId: one.provider_id ?? '',
-        modelName: one.model_name ?? '',
-      }
+      const draft = drafts.value[one.purpose]
+      const saved = previous?.find((row) => row.purpose === one.purpose)
+      next[one.purpose] =
+        draft !== undefined && isEdited(draft, saved)
+          ? draft
+          : {
+              providerId: one.provider_id ?? '',
+              modelName: one.model_name ?? '',
+            }
     }
     drafts.value = next
   },
@@ -214,13 +228,15 @@ function save(purpose: LlmPurpose): void {
           />
           <DtButton
             size="sm"
-            :disabled="!canSave(purpose) || busy[purpose.purpose]"
+            :disabled="!canSave(purpose)"
             @click="save(purpose)"
           >
             保存
           </DtButton>
+          <!-- 没分配时也占着这一格（只是看不见）：否则有无分配的两行下拉错开一截 -->
           <DtIconButton
-            v-if="purpose.provider_id !== null"
+            :class="{ invisible: purpose.provider_id === null }"
+            :disabled="purpose.provider_id === null"
             variant="ghost"
             intent="neutral"
             size="sm"

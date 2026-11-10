@@ -17,7 +17,8 @@ from uuid import UUID
 from pydantic import BaseModel
 
 from lib.cache.protocol import CacheLike
-from lib.errors import Conflict
+from lib.errors import Conflict, DependencyUnavailable
+from lib.logging import get_logger
 
 # 重试窗口可能跨越一次发布，故结果至少留 24h
 RESULT_TTL_S = 86_400
@@ -25,6 +26,8 @@ RESULT_TTL_S = 86_400
 # 否则同一个幂等键会被永久拒绝，而调用方无从得知该等多久。
 CLAIM_TTL_S = 300
 _CLAIM_MARKER = "pending"
+
+_logger = get_logger("lib.idempotency")
 
 
 @dataclass(frozen=True)
@@ -82,13 +85,22 @@ class IdempotencyStore:
             # 失败要放开占位，否则调用方拿同一个键永远重试不了
             await self.cache.delete(self._claim_key(endpoint, key, caller))
             raise
-        await self.cache.set_json(
-            self._result_key(endpoint, key, caller),
-            # ⚠ 必须 by_alias：出参带别名时，不按别名存回放出来的就是另一套
-            # 字段名，而调用方只在重试那一次看到它
-            result.model_dump(mode="json", by_alias=True),
-            ttl_s=RESULT_TTL_S,
-        )
+        try:
+            await self.cache.set_json(
+                self._result_key(endpoint, key, caller),
+                # ⚠ 必须 by_alias：出参带别名时，不按别名存回放出来的就是
+                # 另一套字段名，而调用方只在重试那一次看到它
+                result.model_dump(mode="json", by_alias=True),
+                ttl_s=RESULT_TTL_S,
+            )
+        # ⚠ 动作已经做了：此时回 503 会让调用方重试，占位一过期就做第二遍
+        except DependencyUnavailable as error:
+            _logger.warning(
+                "idempotency_result_store_failed",
+                "幂等结果没存上，本次仍按成功返回",
+                endpoint=endpoint,
+                error=error,
+            )
         return result
 
     async def _claim(self, *, endpoint: str, key: str, caller: UUID) -> None:

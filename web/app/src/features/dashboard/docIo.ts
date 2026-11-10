@@ -152,6 +152,11 @@ export function createMetaSaver(
   return async (patch) => {
     const current = state.dashboard.value
     if (current === null) return null
-    return guarded(state, () => updateDashboard(current.id, patch))
+    return guarded(state, () =>
+      updateDashboard(current.id, {
+        ...patch,
+        expectedVersion: current.rowVersion,
+      }),
+    )
   }
 }

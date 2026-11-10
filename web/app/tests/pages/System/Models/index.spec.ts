@@ -238,7 +238,9 @@ describe('模型管理页', () => {
     const wrapper = await renderWithHosts()
     await click(wrapper, '删除')
     expect(document.body.textContent).toContain('先把那些用途改指别处')
-    await clickInConfirm('知道了')
+    // 与角色页同一个说法：只提示原因，不弹一个「取消 / 知道了」同义的确认框
+    expect(document.body.querySelector('[role="alertdialog"]')).toBeNull()
+    expect(document.body.textContent).not.toContain('知道了')
     expect(remove).not.toHaveBeenCalled()
   })
 
@@ -279,6 +281,20 @@ describe('模型管理页', () => {
     // 首次加载一次 + 分配之后一次
     expect(assistant.probeCapability).toHaveBeenCalledTimes(2)
     expect(wrapper.text()).toContain('当前：百炼 / qwen-plus')
+  })
+
+  it('同一用途连点两下保存只发一次', async () => {
+    const assign = vi
+      .spyOn(llm, 'assignPurpose')
+      .mockResolvedValue(
+        purpose({ provider_id: 'p1', provider_name: '百炼', model_name: 'm' }),
+      )
+    const wrapper = await renderWithHosts()
+    const board = wrapper.findComponent(PurposeBoard)
+    board.vm.$emit('assign', 'assistant.chat', 'p1', 'm')
+    board.vm.$emit('assign', 'assistant.chat', 'p1', 'm')
+    await flushPromises()
+    expect(assign).toHaveBeenCalledTimes(1)
   })
 
   it('订阅账号那一节只在目录里真配了那一路且持 llm:manage 时出现', async () => {

@@ -17,9 +17,10 @@ export function isTraining(status: string | undefined): boolean {
 }
 
 export function describeModelingError(caught: unknown): string {
-  const summary = describeError(caught)
   if (!(caught instanceof BizError) || caught.details.length === 0)
-    return summary
+    return describeError(caught)
+  // ⚠ 不走 describeError：它对参数校验失败已拼过 details，再拼一遍就出现两次
+  const summary = caught.message || '请求失败'
   const details = caught.details
     .slice(0, 8)
     .map(

@@ -39,8 +39,8 @@ from platform_server.apps.dataset.services.buckets import (
     bucket_interval,
     bucket_start,
 )
-from platform_server.apps.dataset.services.collector import Sessions
 from platform_server.apps.dataset.services.dirty import DatasetDirtyLog
+from platform_server.apps.dataset.services.sessions import Sessions
 
 SHANGHAI = "Asia/Shanghai"
 HOUR = timedelta(hours=1)

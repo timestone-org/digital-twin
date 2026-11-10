@@ -63,10 +63,20 @@ const stops = computed<PathStop[]>(() =>
   }),
 )
 
-/** 能解析出坐标的站数；画不画得出线只看它。 */
-const resolved = computed(
-  () => stops.value.filter((stop) => !stop.missing).length,
-)
+/**
+ * 能解析出坐标的站数，紧挨着的同一站只算一个；画不画得出线只看它。
+ * ⚠ 与诊断的 `flow-too-short` 同一口径：渲染层把连着的重合点并成一个，[甲, 甲] 画不出线。
+ */
+const resolved = computed(() => {
+  let count = 0
+  let previous: string | null = null
+  for (const [index, id] of props.modelValue.entries()) {
+    if (stops.value[index]?.missing !== false || id === previous) continue
+    count += 1
+    previous = id
+  }
+  return count
+})
 
 function write(next: string[]): void {
   emit('update:modelValue', next)

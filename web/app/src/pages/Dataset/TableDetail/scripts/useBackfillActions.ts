@@ -1,24 +1,14 @@
 /** @fileoverview 回填写操作逐次确认与未知结果处理；业务权限仍由后台强制检查。 */
-import type { Ref } from 'vue'
 import type { DatasetBackfillJob, DatasetTable } from '@dt/contracts'
-import { ERROR_CODES, PERMISSION_CODES } from '@dt/contracts'
+import { PERMISSION_CODES } from '@dt/contracts'
 import { useConfirm, type DtConfirmRequest } from '@dt/ui'
 import * as dataset from '@/api/dataset'
-import { BizError, TransportError } from '@/api/client'
-import { describeError } from '@/composables/useAsyncList'
 import { useAuthStore } from '@/stores/auth'
+import { applyWriteError, type BackfillState } from './backfillState'
 import { backfillRangeProblem, backfillTime } from './backfillView'
 
-interface BackfillActionState {
-  isOpen: Ref<boolean>
-  job: Ref<DatasetBackfillJob | null>
-  since: Ref<string>
-  until: Ref<string>
-  loading: Ref<boolean>
-  busy: Ref<boolean>
-  uncertain: Ref<boolean>
-  error: Ref<string | null>
-  notice: Ref<string | null>
+/** 写这一半还要读那一半给的几个回调。 */
+interface BackfillActionState extends BackfillState {
   refresh: () => Promise<void>
   schedule: () => void
   stopPolling: () => void
@@ -32,6 +22,12 @@ interface ActionContext {
   auth: ReturnType<typeof useAuthStore>
   confirm: ReturnType<typeof useConfirm>
 }
+
+/**
+ * 此刻还能不能写这张表：没卸载、没换表、是汇总台账且有回填权限。
+ * @param ctx 写操作上下文
+ * @param id 发起写时的那张台账
+ */
 function writeAllowed(ctx: ActionContext, id: string): boolean {
   return (
     ctx.state.isAlive() &&
@@ -40,6 +36,12 @@ function writeAllowed(ctx: ActionContext, id: string): boolean {
     ctx.auth.can([PERMISSION_CODES.datasetBackfill])
   )
 }
+
+/**
+ * 能不能发起新的写：在 `writeAllowed` 之上还要求没有读在飞、没有写在飞、结果不是未知。
+ * @param ctx 写操作上下文
+ * @param id 发起写时的那张台账
+ */
 function canAct(ctx: ActionContext, id: string): boolean {
   const { loading, busy, uncertain } = ctx.state
   return (
@@ -47,6 +49,11 @@ function canAct(ctx: ActionContext, id: string): boolean {
   )
 }
 
+/**
+ * 确认过了却没派发写（拒绝、关窗、换表）时把锁还回去；换了表就读新表的实际任务。
+ * @param ctx 写操作上下文
+ * @param id 发起写时的那张台账
+ */
 function releaseUndispatched(ctx: ActionContext, id: string): void {
   const state = ctx.state
   if (!state.isAlive()) return
@@ -55,33 +62,26 @@ function releaseUndispatched(ctx: ActionContext, id: string): void {
   else state.schedule()
 }
 
+/**
+ * 确认回来之后还能不能继续派发；不能就顺手还锁。
+ * @param ctx 写操作上下文
+ * @param id 发起写时的那张台账
+ * @param agreed 用户是否点了确认
+ */
 function canResume(ctx: ActionContext, id: string, agreed: boolean): boolean {
   if (!agreed) return false
   if (writeAllowed(ctx, id) && ctx.state.isOpen.value) return true
   releaseUndispatched(ctx, id)
   return false
 }
-function applyWriteError(state: BackfillActionState, caught: unknown): boolean {
-  if (
-    caught instanceof BizError &&
-    (caught.code === ERROR_CODES.datasetBackfillBusy ||
-      caught.code === ERROR_CODES.datasetBackfillNotRunning)
-  ) {
-    state.notice.value =
-      caught.code === ERROR_CODES.datasetBackfillBusy
-        ? '已有任务正在执行，尝试重新读取实际进度。'
-        : '任务已不在运行，尝试重新读取实际状态。'
-    return true
-  }
-  state.uncertain.value =
-    caught instanceof TransportError ||
-    !(caught instanceof BizError) ||
-    caught.status >= 500
-  state.error.value = state.uncertain.value
-    ? `操作状态未确认：${describeError(caught)}。请手动刷新进度核查，不要重复启动。`
-    : describeError(caught)
-  return false
-}
+
+/**
+ * 派发一次写并落回执；换表或冲突后读实际任务，否则按状态续轮询。
+ * @param ctx 写操作上下文
+ * @param id 发起写时的那张台账
+ * @param action 真正的写请求
+ * @param successNotice 回执仍在运行时给的提示
+ */
 async function execute(
   ctx: ActionContext,
   id: string,
@@ -108,6 +108,13 @@ async function execute(
     }
   }
 }
+
+/**
+ * 逐次确认；等确认期间锁写、停轮询、作废在飞的读。
+ * @param ctx 写操作上下文
+ * @param id 发起写时的那张台账
+ * @param request 确认框内容
+ */
 async function ask(
   ctx: ActionContext,
   id: string,
@@ -123,6 +130,11 @@ async function ask(
   releaseUndispatched(ctx, id)
   return false
 }
+
+/**
+ * 开始回填：校验范围、确认、派发。
+ * @param ctx 写操作上下文
+ */
 async function start(ctx: ActionContext): Promise<void> {
   const { table, state } = ctx
   const id = table().id
@@ -139,6 +151,11 @@ async function start(ctx: ActionContext): Promise<void> {
   state.notice.value = null
   await execute(ctx, id, () => dataset.startDatasetBackfill(id, input))
 }
+
+/**
+ * 取消运行中的回填：确认、派发；已写入的桶不回滚。
+ * @param ctx 写操作上下文
+ */
 async function cancel(ctx: ActionContext): Promise<void> {
   const id = ctx.table().id
   if (!canAct(ctx, id) || ctx.state.job.value?.status !== 'running') return
@@ -156,6 +173,12 @@ async function cancel(ctx: ActionContext): Promise<void> {
     '已请求取消，等待后台实际终态；已写入的数据不会回滚。',
   )
 }
+
+/**
+ * 装上回填的写操作。
+ * @param table 取当前台账
+ * @param state 读那一半给的状态与回调
+ */
 export function useBackfillActions(
   table: () => DatasetTable,
   state: BackfillActionState,

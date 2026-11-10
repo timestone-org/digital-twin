@@ -4,13 +4,15 @@
  * 本组件不发请求。
  */
 import type { KnowledgeChatSession } from '@dt/contracts'
-import { DtCard, DtEmpty, DtTag } from '@dt/ui'
+import { DtCard, DtEmpty, DtSkeleton, DtTag } from '@dt/ui'
 
 import ChatSessionItem from './ChatSessionItem.vue'
 
 defineProps<{
   sessions: readonly KnowledgeChatSession[]
   selectedId: string | null
+  /** 清单还在取：没有行时给骨架，不说「还没有对话」。 */
+  loading?: boolean
 }>()
 
 defineEmits<{
@@ -31,8 +33,14 @@ defineEmits<{
 
     <div class="relative min-h-0 flex-1">
       <div class="absolute inset-0 overflow-y-auto">
+        <div
+          v-if="loading && sessions.length === 0"
+          class="flex flex-col gap-2"
+        >
+          <DtSkeleton v-for="row in 4" :key="row" class="h-14 w-full" />
+        </div>
         <DtEmpty
-          v-if="sessions.length === 0"
+          v-else-if="sessions.length === 0"
           icon="sparkles"
           title="还没有对话"
           hint="直接在右边发第一句，会自动建一个。"

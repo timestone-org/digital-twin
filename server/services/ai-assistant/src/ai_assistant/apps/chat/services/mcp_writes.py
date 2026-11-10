@@ -9,6 +9,7 @@ import uuid
 from collections.abc import Callable
 from dataclasses import dataclass
 from datetime import datetime, timedelta
+from http import HTTPStatus
 from typing import Any, cast
 
 import httpx
@@ -43,10 +44,10 @@ from ai_assistant.apps.chat.services.tools.mcp_policy import (
 from ai_assistant.settings import Settings
 from ai_assistant.upstream.auth import AuthClient
 from ai_assistant.upstream.mcp import McpCatalog, McpToolInfo
-from ai_assistant.upstream.platform import PlatformClient
+from ai_assistant.upstream.platform import PlatformClient, PlatformUnavailable
 from lib.auth import CallerContext
 from lib.auth.edge_headers import decode_caller
-from lib.errors import Conflict, PermissionDenied, Unauthenticated
+from lib.errors import Conflict, NotFound, PermissionDenied, Unauthenticated
 from lib.utils.timeutils import utcnow
 
 TICKET_TTL_S = 120
@@ -169,12 +170,34 @@ class McpWriteService:
         tool = self._deps.catalog.find(pieces[1], pieces[2])
         if tool is None:
             raise Conflict("该 MCP 工具已不可用")
-        await self._deps.platform.read_mcp_target(
-            headers, policy.resource_kind, str(target_of(pending, policy))
-        )
+        await self._check_target(headers, pending, policy)
         # 目录/资源查询期间可能撤权；最后一次续签紧挨短事务领取。
         await self._fresh_headers(pending, policy)
         return VerifiedWrite(policy, tool, binding(pending, policy, tool))
+
+    async def _check_target(
+        self,
+        headers: dict[str, str],
+        pending: PendingWrite,
+        policy: McpWritePolicy,
+    ) -> None:
+        """用调用者身份读一次写目标。
+
+        ⚠ 目标不存在或无权访问要按 404/403 答：一律报成「依赖不可用」的话，
+        界面与模型都会当成一时故障去重试，运维还会看到假的 platform 告警。
+
+        Args: headers, pending, policy。
+        """
+        try:
+            await self._deps.platform.read_mcp_target(
+                headers, policy.resource_kind, str(target_of(pending, policy))
+            )
+        except PlatformUnavailable as error:
+            if error.upstream_status == HTTPStatus.FORBIDDEN:
+                raise PermissionDenied("没有访问写操作目标的权限") from error
+            if error.upstream_status == HTTPStatus.NOT_FOUND:
+                raise NotFound("写操作目标不存在") from error
+            raise
 
     async def _fresh_headers(
         self, pending: PendingWrite, policy: McpWritePolicy

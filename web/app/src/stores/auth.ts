@@ -23,7 +23,7 @@ import {
 import { isAllowed, isTokenExpired, readTokenExpiry } from '@dt/security'
 
 import * as authApi from '@/api/auth'
-import { configureApiClient } from '@/api/client'
+import { TransportError, configureApiClient } from '@/api/client'
 import { MAX_TIMEOUT_MS, REFRESH_SKEW_S } from '@/config/app'
 import {
   activateEmbed,
@@ -31,6 +31,9 @@ import {
   showEmbedError,
   useEmbedContext,
 } from '@/features/embed/context'
+
+/** 刷新遇到网络抖动后的重试间隔（毫秒）。 */
+const REFRESH_RETRY_MS = 5_000
 
 /** 未授权时的跳转动作，由 router 注入一次。 */
 let redirectToLogin: (() => void) | null = null
@@ -97,6 +100,15 @@ export const useAuthStore = defineStore('auth', () => {
       },
       Math.min(Math.max(delay, 0), MAX_TIMEOUT_MS),
     )
+  }
+
+  /** 刷新撞上网络抖动后的短间隔重试。 */
+  function scheduleRetry(): void {
+    cancelScheduledRefresh()
+    if (refreshToken.value === null) return
+    refreshTimer = setTimeout(() => {
+      void refresh()
+    }, REFRESH_RETRY_MS)
   }
 
   function setSession(result: authApi.SessionResult): void {
@@ -213,8 +225,13 @@ export const useAuthStore = defineStore('auth', () => {
       if (browserSessionWasReplaced(generation)) return false
       setSession(result)
       return true
-    } catch {
+    } catch (caught) {
       if (browserSessionWasReplaced(generation)) return false
+      // 断网/超时/网关页不代表令牌失效：保留登录态，稍后再换
+      if (caught instanceof TransportError) {
+        scheduleRetry()
+        return false
+      }
       // 没有 Web Locks 的浏览器仍可能撞车：对方已写回新令牌就跟着用，别把人踢下线
       if (readItem(STORAGE_KEYS.refreshToken) !== token) {
         adoptStoredSession()

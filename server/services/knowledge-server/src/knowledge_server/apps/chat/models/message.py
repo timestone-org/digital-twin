@@ -35,7 +35,8 @@ class ChatMessage(UuidPrimaryKeyMixin, TimestampMixin, Base):
     role: Mapped[str] = mapped_column(String(ROLE_MAX_LENGTH), nullable=False)
     # 消息体。形状随 role 变，本层不解析——解析归 `llmcore.memory.history`
     content_json: Mapped[dict[str, Any]] = mapped_column(JSONB, nullable=False)
-    # 这一条花了多少 token。取不到时留空，不填 0——0 与「没拿到」是两件事
+    # 这一条花了多少 token。取不到时留空，不填 0——0 与「没拿到」是两件事。
+    # ⚠ 回合产出此刻不带用量，所以这一列恒空：列与出参先留着，别读成「没花钱」
     usage_json: Mapped[dict[str, Any] | None] = mapped_column(
         JSONB, nullable=True
     )

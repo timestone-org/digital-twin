@@ -14,7 +14,7 @@ async function render(
   source: CollectSource | null = null,
 ): Promise<VueWrapper> {
   const wrapper = mount(SourceFormDialog, {
-    props: { modelValue: true, source },
+    props: { modelValue: true, source, fixedProtocol: 'http' },
     attachTo: document.body,
     global: { stubs: { Teleport: true } },
   })
@@ -43,9 +43,8 @@ async function press(wrapper: VueWrapper, label: string): Promise<void> {
 }
 async function httpForm(): Promise<VueWrapper> {
   const wrapper = await render()
-  await choose(wrapper, '[role="combobox"]', 'HTTP / HTTPS')
   await wrapper
-    .find('input[placeholder="如：1号生产线 PLC"]')
+    .find('input[placeholder="如：能源平台接口"]')
     .setValue('HTTP 能源接口')
   await wrapper
     .find('input[placeholder="如：plant1_plc"]')
@@ -115,7 +114,7 @@ describe('HTTP 请求配置', () => {
     await press(wrapper, '取消')
     expect(wrapper.emitted('update:modelValue')?.[0]).toEqual([false])
   })
-  it.each(['协议', '采集模式', '轮询间隔（毫秒）'])(
+  it.each(['采集模式', '轮询间隔（毫秒）'])(
     '%s 的可见标签关联真实控件',
     async (label) => {
       const wrapper = await httpForm()
@@ -131,8 +130,9 @@ describe('HTTP 请求配置', () => {
       )
     },
   )
-  it('协议可从真实下拉选中，固定轮询并提交 GET 默认配置', async () => {
+  it('协议由页面定死并只读展示，固定轮询并提交 GET 默认配置', async () => {
     const wrapper = await httpForm()
+    expect(wrapper.text()).toContain('协议：HTTP / HTTPS')
     expect(wrapper.text()).toContain('认证方式')
     expect(wrapper.text()).toContain('轮询')
     expect(
@@ -267,7 +267,18 @@ describe('HTTP 认证', () => {
       },
     })
   })
-  it('OAuth scope 与清空凭据开关生效，缺失凭据明确拒绝', async () => {
+  it('清空超时输入框按默认值走，不把 undefined 当字符串存进去', async () => {
+    const wrapper = await httpForm()
+    const timeout = wrapper.find('input[aria-label="HTTP 请求超时（秒）"]')
+    await timeout.setValue('')
+    await timeout.trigger('change')
+    await press(wrapper, '创建')
+    const created = wrapper.emitted('create')?.[0]?.[0]
+    expect(created).toBeDefined()
+    expect(JSON.stringify(created)).not.toContain('undefined')
+    expect(created).toMatchObject({ options_json: { method: 'GET' } })
+  })
+  it('OAuth scope 生效；HTTP 不再给一个只会卡住保存的「清空凭据」开关', async () => {
     const wrapper = await render({
       ...httpSource(),
       username: 'client',
@@ -283,18 +294,14 @@ describe('HTTP 认证', () => {
     expect(wrapper.emitted('update')?.[0]?.[0]).toMatchObject({
       options_json: { scope: 'read:metrics' },
     })
-    const clear = wrapper
-      .findAll('[role="switch"]')
-      .find((node) => node.text().includes('删掉已保存'))
-    if (clear === undefined) throw new Error('没有清空凭据开关')
-    await clear.trigger('click')
-    await press(wrapper, '保存')
-    expect(wrapper.text()).toContain('请填写认证凭据')
+    // ⚠ 选了认证方式就必须有凭据，开关一开只会落到「请填写认证凭据」且输入框被禁用；
+    // 要清凭据就把认证方式改成「无认证」，那会显式发 credential: null
+    expect(wrapper.text()).not.toContain('删掉已保存')
     expect(
       wrapper.find('input[type="password"]').attributes('disabled'),
-    ).toBeDefined()
+    ).toBeUndefined()
   })
-  it('POST 改 GET 时移除旧请求体；切协议不携带另一种协议的连接选项', async () => {
+  it('POST 改 GET 时移除旧请求体', async () => {
     const wrapper = await httpForm()
     await choose(wrapper, '[aria-label="HTTP 请求方法"]', 'POST（查询接口）')
     await wrapper
@@ -306,14 +313,5 @@ describe('HTTP 认证', () => {
     if (typeof payload !== 'object' || payload === null)
       throw new Error('没有创建请求')
     expect(Reflect.get(payload, 'options_json')).not.toHaveProperty('body_json')
-    await choose(wrapper, '[role="combobox"]', 'Modbus TCP（只读）')
-    await wrapper
-      .find('input[placeholder="modbus.tcp://host:502"]')
-      .setValue('modbus.tcp://10.0.0.2:502')
-    await press(wrapper, '创建')
-    expect(wrapper.emitted('create')?.[1]?.[0]).toMatchObject({
-      protocol: 'modbus_tcp',
-      options_json: {},
-    })
   })
 })

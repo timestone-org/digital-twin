@@ -284,6 +284,8 @@ function pieSeries(
     avoidLabelOverlap: true,
     // 读数全是 0 时不等分圆：那是凭空造出来的「各占 1/N」
     stillShowZeroSum: false,
+    // ⚠ 一片读数都没有时 echarts 画自带的浅灰空环，深色主题下是全屏最亮的一块
+    emptyCircleStyle: { ...withColor(theme.splitLine) },
     label: showLabel
       ? {
           show: true,

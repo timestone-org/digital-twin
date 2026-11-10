@@ -120,7 +120,7 @@ class TimeShift(OperatorBase):
                 [
                     {
                         "key": "offset",
-                        "label": "历史观测向后平移",
+                        "name": "历史观测向后平移",
                         "value": self._shift.offset_minutes,
                     }
                 ],

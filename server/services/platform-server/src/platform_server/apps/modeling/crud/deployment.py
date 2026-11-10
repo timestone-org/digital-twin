@@ -74,16 +74,6 @@ class DeploymentCrud(CrudBase[ModelingDeployment]):
         )
         return rows.scalars().first()
 
-    async def list_all(self, session: AsyncSession) -> list[ModelingDeployment]:
-        """全部部署，最新的在前。
-
-        Args: session。
-        """
-        rows = await session.execute(
-            select(ModelingDeployment).order_by(*DEPLOYMENT_ORDER)
-        )
-        return list(rows.scalars().all())
-
 
 class ApiKeyCrud(CrudBase[ModelingApiKey]):
     """`modeling_api_keys` 的数据访问。"""
@@ -121,9 +111,10 @@ class CallLogCrud(CrudBase[ModelingCallLog]):
         """按天聚合的调用量与出错量。
 
         ⚠ 聚合在库里做：几万行拉回进程再分组，一次翻页就把内存吃满。
+        ⚠ 显式按 UTC 截断：两参数的 `date_trunc` 按会话时区切日。
         Args: session, deployment_id, since。
         """
-        day = func.date_trunc("day", ModelingCallLog.created_at)
+        day = func.date_trunc("day", ModelingCallLog.created_at, "UTC")
         rows = await session.execute(
             select(
                 day.label("day"),

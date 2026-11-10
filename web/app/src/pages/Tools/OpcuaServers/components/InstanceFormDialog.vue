@@ -31,6 +31,14 @@ import {
 } from '@dt/ui'
 import { useFormDirty } from '@/composables/useFormDirty'
 
+import {
+  INSTANCE_RESTART_FIELDS,
+  pendingFieldLabels,
+} from '../../scripts/pendingFields'
+import {
+  defaultNamespaceUri,
+  instanceFieldErrors,
+} from '../scripts/instanceFormRules'
 import { usePortPool } from '../scripts/usePortPool'
 
 const props = defineProps<{
@@ -43,6 +51,7 @@ const emit = defineEmits<{
   update: [input: OpcuaInstanceUpdateInput]
 }>()
 
+const restartLabels = pendingFieldLabels(INSTANCE_RESTART_FIELDS).join('、')
 const isEdit = computed(() => props.instance !== null)
 
 const name = ref('')
@@ -62,6 +71,11 @@ const PORT_MODES: readonly DtRadioOption[] = [
   { value: 'auto', label: '自动分配' },
   { value: 'manual', label: '指定端口' },
 ]
+
+/** 点过一次提交之后，空着的必填项也要标出来。 */
+const attempted = ref(false)
+/** 用户自己改过命名空间，就不再跟着名称预填。 */
+const namespaceTouched = ref(false)
 
 const portMode = ref('auto')
 const port = ref('')
@@ -136,6 +150,8 @@ watch(
   ([open, target]) => {
     if (!open) return
     reset(target)
+    attempted.value = false
+    namespaceTouched.value = false
     portMode.value = 'auto'
     port.value = ''
     // 编辑时改不了端口，没必要去问池子
@@ -151,15 +167,47 @@ function togglePolicy(policy: OpcuaSecurityPolicy, checked: boolean): void {
   policies.value = [...next]
 }
 
+watch(name, (next) => {
+  if (!isEdit.value && !namespaceTouched.value)
+    namespaceUri.value = defaultNamespaceUri(next)
+})
+
+function setNamespace(value: string): void {
+  namespaceTouched.value = true
+  namespaceUri.value = value
+}
+
+const errors = computed(() =>
+  instanceFieldErrors(
+    {
+      name: name.value,
+      endpointPath: endpointPath.value,
+      namespaceUri: namespaceUri.value,
+      policies: policies.value,
+    },
+    isEdit.value,
+  ),
+)
+
+/** 字段错误何时摆出来：点过提交，或者已经填了却不合规。 */
+function shown(message: string | undefined, value: string): string | undefined {
+  return attempted.value || value.trim() !== '' ? message : undefined
+}
+
+/** 池子确实拿回来了且一个空位都没有：此时建不了。没拿到池子照常可以自动分配。 */
+const isPoolExhausted = computed(
+  () => !isEdit.value && poolInfo.value !== null && !pool.canPick.value,
+)
+
 const canSubmit = computed(
   () =>
-    policies.value.length > 0 &&
-    namespaceUri.value.trim() !== '' &&
-    (isEdit.value || name.value.trim() !== '') &&
+    Object.keys(errors.value).length === 0 &&
+    !isPoolExhausted.value &&
     (isEdit.value || portMode.value === 'auto' || port.value !== ''),
 )
 
 function submit(): void {
+  attempted.value = true
   if (!canSubmit.value) return
   const shared = {
     description: description.value.trim() || null,
@@ -190,11 +238,16 @@ function submit(): void {
   >
     <div class="dt-form-grid">
       <DtNotice v-if="isEdit" intent="warning" icon="alert-triangle">
-        端点路径、命名空间 URI
-        与安全策略改完要重启实例才生效，重启会断开该实例上全部上位机会话。
+        {{ restartLabels }}
+        改完要重启实例才生效，重启会断开该实例上全部上位机会话。
       </DtNotice>
 
-      <DtField v-if="!isEdit" label="名称" required>
+      <DtField
+        v-if="!isEdit"
+        label="名称"
+        required
+        :error="shown(errors.name, name)"
+      >
         <DtInput
           v-model="name"
           placeholder="字母开头，可含数字、下划线与短横"
@@ -206,7 +259,7 @@ function submit(): void {
           取不到端口池：{{ pool.error.value }}
         </DtNotice>
         <DtNotice
-          v-else-if="pool.error.value === null && !pool.canPick.value"
+          v-else-if="isPoolExhausted"
           intent="warning"
           icon="alert-triangle"
         >
@@ -241,15 +294,32 @@ function submit(): void {
         <DtInput v-model="description" placeholder="选填" />
       </DtField>
 
-      <DtField label="端点路径" required>
+      <DtField
+        label="端点路径"
+        required
+        :error="attempted ? errors.endpointPath : undefined"
+      >
         <DtInput v-model="endpointPath" placeholder="/digitaltwin" />
       </DtField>
 
-      <DtField label="命名空间 URI" required>
-        <DtInput v-model="namespaceUri" placeholder="urn:digitaltwin:plant" />
+      <DtField
+        label="命名空间 URI"
+        required
+        :error="attempted ? errors.namespaceUri : undefined"
+      >
+        <DtInput
+          :model-value="namespaceUri"
+          placeholder="urn:digitaltwin:plant"
+          @update:model-value="setNamespace"
+        />
       </DtField>
 
-      <DtField label="安全策略" required class="dt-form-grid__wide">
+      <DtField
+        label="安全策略"
+        required
+        class="dt-form-grid__wide"
+        :error="attempted ? errors.policies : undefined"
+      >
         <div class="flex flex-col gap-1">
           <DtCheckbox
             v-for="policy in OPCUA_SECURITY_POLICIES"
@@ -275,7 +345,7 @@ function submit(): void {
       <DtButton variant="ghost" @click="emit('update:modelValue', false)">
         取消
       </DtButton>
-      <DtButton :disabled="!canSubmit" @click="submit">
+      <DtButton :disabled="isPoolExhausted" @click="submit">
         {{ isEdit ? '保存' : '创建' }}
       </DtButton>
     </template>

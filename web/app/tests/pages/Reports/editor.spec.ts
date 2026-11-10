@@ -8,6 +8,8 @@ vi.mock('@umoteam/editor/style', () => ({ default: '' }))
 
 const umo = vi.hoisted(() => ({
   emit: null as ((event: string, payload?: unknown) => void) | null,
+  setPage: vi.fn(),
+  setWatermark: vi.fn(),
 }))
 
 vi.mock('@umoteam/editor', async () => {
@@ -69,6 +71,8 @@ vi.mock('@umoteam/editor', async () => {
           document.value = next
         },
         setReadOnly: () => undefined,
+        setPage: umo.setPage,
+        setWatermark: umo.setWatermark,
       })
       umo.emit = emit as (event: string, payload?: unknown) => void
       onMounted(() => emit('created', { editor: { chain: () => chain } }))
@@ -234,5 +238,91 @@ describe('报告编辑器', () => {
     expect(watermark['fontColor']).toBe('rgb(31 35 40)')
     wrapper.unmount()
     document.documentElement.style.removeProperty('--fx-const-ink')
+  })
+
+  it('⚠ 页面设置从外面改（页面设置弹窗、助手）要推给 Umo 的纸面', async () => {
+    umo.setPage.mockClear()
+    umo.setWatermark.mockClear()
+    const wrapper = mount(ReportEditor, {
+      props: { modelValue: blank, page: { orientation: 'portrait' } },
+    })
+    await flushPromises()
+    await wrapper.setProps({
+      page: {
+        orientation: 'landscape',
+        margins_cm: { top: 2, bottom: 2, left: 2, right: 2 },
+        watermark: { text: '审计' },
+      },
+    })
+    await flushPromises()
+    expect(umo.setPage).toHaveBeenCalledWith({
+      orientation: 'landscape',
+      margin: { top: 2, bottom: 2, left: 2, right: 2 },
+    })
+    expect(umo.setWatermark).toHaveBeenCalledWith(
+      expect.objectContaining({ text: '审计' }),
+    )
+    wrapper.unmount()
+  })
+
+  it('⚠ 超过 Umo 上限的水印不推给 Umo，也不被它的半截回流清掉', async () => {
+    // 照 Umo 11.1.1 的 setWatermark：先把水印清成只剩透明度并触发回流，超 30 字再抛
+    umo.setWatermark.mockReset()
+    umo.setWatermark.mockImplementation((options: { text?: string }) => {
+      umo.emit?.('changed:pageWatermark', { pageWatermark: { alpha: 0.2 } })
+      if ((options.text ?? '').length > 30) throw new Error('too long')
+    })
+    const longText =
+      '本报告仅供内部审阅使用，未经许可不得外传或转载，违者追究相关责任'
+    const wrapper = mount(ReportEditor, {
+      props: { modelValue: blank, page: { orientation: 'portrait' } },
+    })
+    await flushPromises()
+    await wrapper.setProps({
+      page: { orientation: 'landscape', watermark: { text: longText } },
+    })
+    await flushPromises()
+    const pages = wrapper.emitted('update:page') ?? []
+    expect(pages.some(([page]) => record(page)['watermark'] === null)).toBe(
+      false,
+    )
+    expect(umo.setPage).toHaveBeenCalled()
+    umo.setWatermark.mockReset()
+    wrapper.unmount()
+  })
+
+  it('Umo 自己工具栏改的页面设置回流时不再反推一遍', async () => {
+    umo.setPage.mockClear()
+    const wrapper = mount(ReportEditor, {
+      props: { modelValue: blank, page: { orientation: 'portrait' } },
+    })
+    await flushPromises()
+    umo.emit?.('changed:pageOrientation', { pageOrientation: 'landscape' })
+    expect(wrapper.emitted('update:page')?.at(-1)?.[0]).toEqual({
+      orientation: 'landscape',
+    })
+    await wrapper.setProps({ page: { orientation: 'landscape' } })
+    await flushPromises()
+    expect(umo.setPage).not.toHaveBeenCalled()
+    wrapper.unmount()
+  })
+
+  it('⚠ 只读切换等引起的 changed 不改正文时不回写，不平白变成「有未保存修改」', async () => {
+    const saved: ReportDocument = {
+      type: 'doc',
+      content: [
+        {
+          type: 'paragraph',
+          attrs: { textAlign: null },
+          content: [{ type: 'text', text: '本月', marks: [] }],
+        },
+      ],
+    }
+    const wrapper = mount(ReportEditor, { props: { modelValue: saved } })
+    await flushPromises()
+    umo.emit?.('changed')
+    await flushPromises()
+    expect(wrapper.emitted('update:modelValue')).toBeUndefined()
+    wrapper.unmount()
   })
 })

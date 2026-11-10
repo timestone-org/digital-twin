@@ -56,6 +56,17 @@ class ModelRejected(AppError):
     http_status = 502
 
 
+class TurnStepLimitReached(AppError):
+    """一个回合走到了步数上限还没给出答复。
+
+    ⚠ 必须是 AppError：两个服务的 `:advance` 只把 AppError 落成 error 帧，
+    裸的图递归错误会让流无声断掉。
+    """
+
+    code = 52208
+    http_status = 422
+
+
 def is_our_fault(error: OpenAIError) -> bool:
     """这一档是「我们发错了」还是「下游此刻不行」。
 

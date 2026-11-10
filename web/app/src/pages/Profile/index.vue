@@ -6,7 +6,7 @@
  * 权限一览放在这里而不是工作台：工作台是项目与大屏的操作面，
  * 「这个账号能做什么」属于账号自己的页，两者同框只会互相稀释。
  */
-import { computed, onMounted, ref } from 'vue'
+import { computed, onMounted, ref, watch, type Ref } from 'vue'
 import { ERROR_CODES } from '@dt/contracts'
 import { DtButton, DtCard, DtInput, DtNotice } from '@dt/ui'
 
@@ -28,17 +28,40 @@ const permissionStats = computed(() => [
   { key: 'direct', label: '单独授予', value: directCodes.value.length },
 ])
 
-// 权限可能在别处被改过，进页面时对齐一次；失败静默，不阻断渲染
-onMounted(() => {
-  void auth.syncMe()
-})
+interface ProfileDraft {
+  full_name: string
+  email: string
+  phone: string
+}
 
-const profile = ref({
-  full_name: auth.user?.full_name ?? '',
-  email: auth.user?.email ?? '',
-  phone: auth.user?.phone ?? '',
+function seedProfile(): ProfileDraft {
+  return {
+    full_name: auth.user?.full_name ?? '',
+    email: auth.user?.email ?? '',
+    phone: auth.user?.phone ?? '',
+  }
+}
+
+let lastSeed = seedProfile()
+const profile = ref<ProfileDraft>({ ...lastSeed })
+
+/** 表单没被动过才用最新的用户资料回填，免得把缓存里的旧值整份写回服务端。 */
+function reseedIfPristine(): void {
+  const current = profile.value
+  const pristine =
+    current.full_name === lastSeed.full_name &&
+    current.email === lastSeed.email &&
+    current.phone === lastSeed.phone
+  lastSeed = seedProfile()
+  if (pristine) profile.value = { ...lastSeed }
+}
+
+// 资料与权限可能在别处被改过，进页面时对齐一次；失败静默，不阻断渲染
+onMounted(async () => {
+  await auth.syncMe()
+  reseedIfPristine()
 })
-const passwords = ref({ current: '', next: '' })
+const passwords = ref({ current: '', next: '', confirm: '' })
 
 /**
  * ⚠ `ok` 不能省：成功与失败共用同一行文字时，两者只有措辞不同、颜色一样，
@@ -52,6 +75,31 @@ interface FormState {
 
 const profileState = ref<FormState>({ busy: false, note: null, ok: true })
 const passwordState = ref<FormState>({ busy: false, note: null, ok: true })
+
+/**
+ * 一动表单就收掉上一次的成功提示：「已保存」一直挂着会让人以为改了一半的也存上了。
+ * ⚠ 比的是「出结果那一刻」的表单快照：成功后程序自己清空/回填表单也会触发侦听，
+ * 不比快照的话结果一出来就被自己抹掉。
+ */
+function clearNoteOnEdit<T>(form: Ref<T>, state: Ref<FormState>): void {
+  let shown = ''
+  watch(
+    () => [JSON.stringify(form.value), state.value.note] as const,
+    ([now, note], before) => {
+      if (note !== before?.[1]) {
+        shown = now
+        return
+      }
+      // 只收成功提示；失败原因留到下一次提交，免得一回填就把错因抹了
+      if (note !== null && state.value.ok && now !== shown) {
+        state.value.note = null
+      }
+    },
+  )
+}
+
+clearNoteOnEdit(profile, profileState)
+clearNoteOnEdit(passwords, passwordState)
 
 function describe(caught: unknown, fallback: string): string {
   if (caught instanceof BizError) {
@@ -73,7 +121,9 @@ async function onSaveProfile(): Promise<void> {
       email: profile.value.email,
       phone: profile.value.phone,
     })
+    lastSeed = { ...profile.value }
     await auth.syncMe()
+    reseedIfPristine()
     profileState.value = { busy: false, note: '资料已保存', ok: true }
   } catch (caught) {
     profileState.value = {
@@ -84,14 +134,27 @@ async function onSaveProfile(): Promise<void> {
   }
 }
 
+/** 提交前在本地就能判的两条：两次新密码一致、新旧不同。 */
+function passwordProblem(): string | null {
+  const { current, next, confirm } = passwords.value
+  if (next !== confirm) return '两次输入的新密码不一致'
+  if (next !== '' && next === current) return '新密码不能与当前密码相同'
+  return null
+}
+
 async function onChangePassword(): Promise<void> {
+  const problem = passwordProblem()
+  if (problem !== null) {
+    passwordState.value = { busy: false, note: problem, ok: false }
+    return
+  }
   passwordState.value = { busy: true, note: null, ok: true }
   try {
     await authApi.changeMyPassword(
       passwords.value.current,
       passwords.value.next,
     )
-    passwords.value = { current: '', next: '' }
+    passwords.value = { current: '', next: '', confirm: '' }
     passwordState.value = { busy: false, note: '密码已修改', ok: true }
   } catch (caught) {
     passwordState.value = {
@@ -118,8 +181,10 @@ async function onChangePassword(): Promise<void> {
 
       <div class="grid gap-5 lg:grid-cols-2">
         <DtCard title="个人资料" icon="user" corners>
+          <!-- novalidate：邮箱格式交给服务端判，回中文原因；浏览器自带的英文气泡不一致 -->
           <form
             class="flex flex-col items-stretch gap-4"
+            novalidate
             @submit.prevent="onSaveProfile"
           >
             <DtInput v-model="profile.full_name" label="姓名" size="sm" />
@@ -165,6 +230,13 @@ async function onChangePassword(): Promise<void> {
               type="password"
               size="sm"
               hint="至少 10 位，且同时包含字母与数字"
+              autocomplete="new-password"
+            />
+            <DtInput
+              v-model="passwords.confirm"
+              label="确认新密码"
+              type="password"
+              size="sm"
               autocomplete="new-password"
             />
             <DtButton

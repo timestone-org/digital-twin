@@ -113,6 +113,17 @@ async function reload(state: State): Promise<void> {
   ])
 }
 
+/** 按当前用途分配重算每一路身上的 `assigned_purposes`，删除的拦截与「用途」列都读它。 */
+function syncAssigned(state: State): void {
+  const purposes = state.purposes.value
+  state.providers.value = state.providers.value.map((one) => ({
+    ...one,
+    assigned_purposes: purposes
+      .filter((row) => row.provider_id === one.id)
+      .map((row) => row.purpose),
+  }))
+}
+
 async function assign(
   state: State,
   purpose: string,
@@ -126,6 +137,7 @@ async function assign(
   state.purposes.value = state.purposes.value.map((one) =>
     one.purpose === purpose ? updated : one,
   )
+  syncAssigned(state)
 }
 
 async function clear(state: State, purpose: string): Promise<void> {
@@ -141,6 +153,7 @@ async function clear(state: State, purpose: string): Promise<void> {
         }
       : one,
   )
+  syncAssigned(state)
 }
 
 async function remove(state: State, provider: LlmProvider): Promise<void> {

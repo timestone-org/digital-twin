@@ -2,7 +2,7 @@
 
 import uuid
 
-from sqlalchemy import func
+from sqlalchemy import func, select
 from sqlalchemy.dialects.postgresql import insert
 from sqlalchemy.ext.asyncio import AsyncSession
 
@@ -45,6 +45,22 @@ class ThumbnailCrud(CrudBase[DashboardThumbnail]):
         if stored is None:  # pragma: no cover
             raise RuntimeError("缩略图写入后回读为空")
         return stored
+
+    async def pictured(
+        self, session: AsyncSession, dashboard_ids: frozenset[uuid.UUID]
+    ) -> frozenset[uuid.UUID]:
+        """这批大屏里存过缩略图的那几张。只读主键，不拖 data 列。
+
+        Args: session, dashboard_ids。
+        """
+        if not dashboard_ids:
+            return frozenset()
+        rows = await session.execute(
+            select(DashboardThumbnail.dashboard_id).where(
+                DashboardThumbnail.dashboard_id.in_(dashboard_ids)
+            )
+        )
+        return frozenset(rows.scalars().all())
 
 
 thumbnail_crud = ThumbnailCrud()

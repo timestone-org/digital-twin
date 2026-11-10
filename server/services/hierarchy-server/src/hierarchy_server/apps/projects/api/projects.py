@@ -6,7 +6,9 @@ from uuid import UUID
 from fastapi import APIRouter, Depends, Query, Response
 
 from hierarchy_server.apps.projects.permissions import MANAGE, VIEW
+from hierarchy_server.apps.projects.schemas.graph import MAX_EDGES, MAX_NODES
 from hierarchy_server.apps.projects.schemas.projects import (
+    HISTORY_LIMIT,
     HierarchyCapabilities,
     HierarchyCreate,
     HierarchyHistory,
@@ -30,6 +32,7 @@ Writer = Annotated[CallerContext, Depends(require(MANAGE))]
 def get_service(
     container: Annotated[Container, Depends(get_container)],
 ) -> ProjectService:
+    """按请求装配项目服务。Args: container。"""
     return ProjectService(container.database, container.idempotency)
 
 
@@ -38,9 +41,13 @@ Service = Annotated[ProjectService, Depends(get_service)]
 
 @router.get("/capabilities", response_model=ApiResponse[HierarchyCapabilities])
 async def capabilities(_caller: Reader) -> ApiResponse[HierarchyCapabilities]:
+    """报出编辑器要遵守的上限。Args: _caller。"""
     return ok(
         HierarchyCapabilities(
-            is_enabled=True, max_nodes=300, max_edges=2000, history_limit=50
+            is_enabled=True,
+            max_nodes=MAX_NODES,
+            max_edges=MAX_EDGES,
+            history_limit=HISTORY_LIMIT,
         )
     )
 
@@ -53,6 +60,7 @@ async def list_projects(
     size: Annotated[int, Query(ge=1, le=200)] = 20,
     q: Annotated[str, Query(max_length=80)] = "",
 ) -> ApiResponse[HierarchyPage]:
+    """分页列出当前账号的项目。Args: service, caller, page, size, q。"""
     return ok(await service.list(caller.user_id, q, (page, size)))
 
 
@@ -62,6 +70,7 @@ async def list_projects(
 async def get_project(
     project_id: UUID, service: Service, caller: Reader
 ) -> ApiResponse[HierarchyProject]:
+    """读一个项目。Args: project_id, service, caller。"""
     return ok(await service.get(caller.user_id, project_id))
 
 
@@ -75,6 +84,7 @@ async def create_project(
     caller: Writer,
     key: Annotated[str | None, Depends(get_idempotency_key)],
 ) -> ApiResponse[HierarchyProject]:
+    """新建项目。Args: body, response, service, caller, key。"""
     project = await service.create(caller.user_id, body.document, key)
     response.headers["Location"] = f"{API_PREFIX}/projects/{project.id}"
     return ok(project)
@@ -86,6 +96,7 @@ async def create_project(
 async def save_project(
     project_id: UUID, body: HierarchySave, service: Service, caller: Writer
 ) -> ApiResponse[HierarchyProject]:
+    """按乐观版本号保存。Args: project_id, body, service, caller。"""
     return ok(await service.save(caller.user_id, project_id, body))
 
 
@@ -93,6 +104,7 @@ async def save_project(
 async def delete_project(
     project_id: UUID, service: Service, caller: Writer
 ) -> Response:
+    """删除项目。Args: project_id, service, caller。"""
     await service.delete(caller.user_id, project_id)
     return Response(status_code=204)
 
@@ -106,8 +118,9 @@ async def history(
     service: Service,
     caller: Reader,
     after: Annotated[str | None, Query(max_length=100)] = None,
-    limit: Annotated[int, Query(ge=1, le=50)] = 50,
+    limit: Annotated[int, Query(ge=1, le=HISTORY_LIMIT)] = HISTORY_LIMIT,
 ) -> ApiResponse[HierarchyHistory]:
+    """列出历史版本。Args: project_id, service, caller, after, limit。"""
     return ok(await service.history(caller.user_id, project_id, after, limit))
 
 
@@ -118,4 +131,5 @@ async def history(
 async def restore(
     project_id: UUID, body: HierarchyRestore, service: Service, caller: Writer
 ) -> ApiResponse[HierarchyProject]:
+    """恢复到某个历史版本。Args: project_id, body, service, caller。"""
     return ok(await service.restore(caller.user_id, project_id, body))

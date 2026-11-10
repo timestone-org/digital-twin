@@ -125,17 +125,23 @@ export function formOf(provider: LlmProvider): ProviderForm {
   }
 }
 
+/** 按名字猜种类：带 rerank 的是重排，带 embed 的是嵌入，其余当对话。 */
+function guessKind(name: string): LlmModelKind {
+  if (/rerank/i.test(name)) return 'rerank'
+  return /embed/i.test(name) ? 'embedding' : 'chat'
+}
+
 /**
- * 端点自报的模型名猜一行：名字里带 embed 的按嵌入模型起，维数留给人填。
+ * 端点自报的模型名猜一行；嵌入的维数留给人填。
  * @param name 端点自报的模型代号
  */
 export function suggestedRow(name: string): ModelRow {
-  const isEmbedding = /embed/i.test(name)
+  const kind = guessKind(name)
   return {
     key: nextRowKey(),
     name,
-    kind: isEmbedding ? 'embedding' : 'chat',
-    hasVision: !isEmbedding && /vision|vl|omni|4o/i.test(name),
+    kind,
+    hasVision: kind === 'chat' && /vision|vl|omni|4o/i.test(name),
     dimensions: '',
   }
 }

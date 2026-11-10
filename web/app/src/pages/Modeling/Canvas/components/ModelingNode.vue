@@ -96,7 +96,11 @@ function portMood(side: 'in' | 'out', name: string): string {
         {{ STATE_LABELS[props.state] }}
       </DtTag>
     </header>
-    <p v-if="props.errorText" class="dt-ml-node__error">
+    <p
+      v-if="props.errorText"
+      class="dt-ml-node__error"
+      :title="props.errorText"
+    >
       {{ props.errorText }}
     </p>
     <p v-else-if="props.headline" class="dt-ml-node__headline">

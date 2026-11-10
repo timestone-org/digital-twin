@@ -2,6 +2,11 @@
 # 配置来源为 no-ai.env.example；不依赖 compose.yml，不包含助手或知识库运行角色。
 name: digitaltwin-no-ai
 
+# 关停宽限：Docker 缺省 10s 就强杀，会抢在 drain（APP_DRAIN_TIMEOUT_S 缺省 20s，
+# knowledge-worker 写死 30s）前面，排在最后的归档 flush 与让租约都跑不到。
+# ⚠ 调大任何一个 *_APP_DRAIN_TIMEOUT_S 时这里要跟着调（runtime-resilience §8）
+x-stop-grace-period: &stop-grace-period 45s
+
 x-auth-environment: &auth-environment
   AUTH_REDIS_HOST: ${REDIS_HOST:?必填}
   AUTH_REDIS_PORT: ${REDIS_PORT:-6379}
@@ -132,8 +137,8 @@ x-platform-environment: &platform-environment
   PLATFORM_ACSTARTUP_STREAM: ${PLATFORM_ACSTARTUP_STREAM:-${ACSTARTUP_STREAM:-platform:ac-startup:shards}}
   PLATFORM_ACSTARTUP_GROUP: ${PLATFORM_ACSTARTUP_GROUP:-${ACSTARTUP_GROUP:-ac-startup-workers}}
   PLATFORM_ACSTARTUP_BLOCK_MS: ${PLATFORM_ACSTARTUP_BLOCK_MS:-5000}
-  PLATFORM_ACSTARTUP_CLAIM_IDLE_MS: ${PLATFORM_ACSTARTUP_CLAIM_IDLE_MS:-60000}
-  PLATFORM_ACSTARTUP_PREFETCH: ${PLATFORM_ACSTARTUP_PREFETCH:-8}
+  PLATFORM_ACSTARTUP_CLAIM_IDLE_MS: ${PLATFORM_ACSTARTUP_CLAIM_IDLE_MS:-360000}
+  PLATFORM_ACSTARTUP_PREFETCH: ${PLATFORM_ACSTARTUP_PREFETCH:-1}
   PLATFORM_ACSTARTUP_SHARD_TIMEOUT_S: ${PLATFORM_ACSTARTUP_SHARD_TIMEOUT_S:-300.0}
   PLATFORM_ACSTARTUP_MAX_ROWS: ${PLATFORM_ACSTARTUP_MAX_ROWS:-60000}
   PLATFORM_ASSETCOMPRESS_STREAM: ${PLATFORM_ASSETCOMPRESS_STREAM:-platform:asset:compress}
@@ -143,7 +148,7 @@ x-platform-environment: &platform-environment
   PLATFORM_ACMODEL_STREAM: ${PLATFORM_ACMODEL_STREAM:-platform:ac-model:train}
   PLATFORM_ACMODEL_GROUP: ${PLATFORM_ACMODEL_GROUP:-ac-model-trainers}
   PLATFORM_ACMODEL_BLOCK_MS: ${PLATFORM_ACMODEL_BLOCK_MS:-5000}
-  PLATFORM_ACMODEL_CLAIM_IDLE_MS: ${PLATFORM_ACMODEL_CLAIM_IDLE_MS:-300000}
+  PLATFORM_ACMODEL_CLAIM_IDLE_MS: ${PLATFORM_ACMODEL_CLAIM_IDLE_MS:-1200000}
   PLATFORM_ACMODEL_PREFETCH: ${PLATFORM_ACMODEL_PREFETCH:-1}
   PLATFORM_ACMODEL_TRAIN_TIMEOUT_S: ${PLATFORM_ACMODEL_TRAIN_TIMEOUT_S:-900.0}
   PLATFORM_MODELING_STREAM: ${PLATFORM_MODELING_STREAM:-platform:modeling:run}
@@ -171,7 +176,7 @@ x-platform-environment: &platform-environment
   PLATFORM_ACDAILY_STREAM: ${PLATFORM_ACDAILY_STREAM:-platform:ac-startup:daily}
   PLATFORM_ACDAILY_GROUP: ${PLATFORM_ACDAILY_GROUP:-ac-startup-daily-workers}
   PLATFORM_ACDAILY_BLOCK_MS: ${PLATFORM_ACDAILY_BLOCK_MS:-5000}
-  PLATFORM_ACDAILY_CLAIM_IDLE_MS: ${PLATFORM_ACDAILY_CLAIM_IDLE_MS:-300000}
+  PLATFORM_ACDAILY_CLAIM_IDLE_MS: ${PLATFORM_ACDAILY_CLAIM_IDLE_MS:-360000}
   PLATFORM_ACDAILY_PREFETCH: ${PLATFORM_ACDAILY_PREFETCH:-1}
   PLATFORM_ACDAILY_TIMEOUT_S: ${PLATFORM_ACDAILY_TIMEOUT_S:-300.0}
   PLATFORM_ACDAILY_SCHEDULER_INTERVAL_S: ${PLATFORM_ACDAILY_SCHEDULER_INTERVAL_S:-60.0}
@@ -497,6 +502,7 @@ services:
       interval: 10s
       timeout: 3s
       retries: 3
+    stop_grace_period: *stop-grace-period
     restart: unless-stopped
 
   platform-server:
@@ -515,6 +521,7 @@ services:
       interval: 10s
       timeout: 3s
       retries: 3
+    stop_grace_period: *stop-grace-period
     restart: unless-stopped
 
   platform-worker:
@@ -525,6 +532,7 @@ services:
     environment:
       <<: *platform-environment
       PLATFORM_APP_ROLE: worker
+    stop_grace_period: *stop-grace-period
     restart: unless-stopped
 
   platform-publisher:
@@ -536,6 +544,7 @@ services:
     environment:
       <<: *platform-environment
       PLATFORM_APP_ROLE: publisher
+    stop_grace_period: *stop-grace-period
     restart: unless-stopped
 
   collector-server:
@@ -554,6 +563,7 @@ services:
       interval: 10s
       timeout: 3s
       retries: 3
+    stop_grace_period: *stop-grace-period
     restart: unless-stopped
 
   opcua-server:
@@ -578,6 +588,7 @@ services:
       interval: 10s
       timeout: 3s
       retries: 3
+    stop_grace_period: *stop-grace-period
     restart: unless-stopped
 
   realtime-hub:
@@ -596,6 +607,7 @@ services:
       interval: 10s
       timeout: 3s
       retries: 3
+    stop_grace_period: *stop-grace-period
     restart: unless-stopped
 
   hierarchy-server:
@@ -614,6 +626,7 @@ services:
       interval: 10s
       timeout: 3s
       retries: 3
+    stop_grace_period: *stop-grace-period
     restart: unless-stopped
 
   edge-gateway:

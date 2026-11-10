@@ -7,6 +7,7 @@
 """
 
 from typing import Any
+from unittest.mock import AsyncMock
 
 import httpx
 import pytest
@@ -378,6 +379,8 @@ async def test_deleting_a_formula_a_column_uses_is_refused(
 
     assert response.status_code == HTTP_CONFLICT
     assert "班次台账" in response.json()["message"]
+    # ⚠ 停用同样被「还有列在用」挡着，指给用户一条走不通的路等于没指
+    assert "停用" not in response.json()["message"]
 
 
 async def test_deleting_a_formula_only_another_formula_calls_is_refused(
@@ -514,3 +517,47 @@ async def test_seeding_never_overwrites_a_preset_someone_edited(
     assert added == len(missing)
     assert row.code in present
     assert (row.expression, row.is_enabled) == ("1 + 1", False)
+
+
+async def test_an_underscore_in_the_search_is_a_literal_not_a_wildcard(
+    app_client: httpx.AsyncClient,
+) -> None:
+    # ⚠ 不转义的话 `_` 匹配任意一个字符，搜「z_q」会把 zzxq 一并带出来
+    wanted = await create_formula(app_client, code="zz_q", name="下划线")
+    await create_formula(app_client, code="zzxq", name="无下划线")
+
+    listed = data_of(await app_client.get(FORMULAS, params={"q": "z_q"}))
+
+    assert [item["id"] for item in listed] == [wanted["id"]]
+
+
+async def test_a_misspelt_parameter_field_is_refused_not_ignored(
+    app_client: httpx.AsyncClient,
+) -> None:
+    # ⚠ 忽略的话 kind 退回 column、default 退回空，存下去的是另一条公式
+    response = await app_client.post(
+        FORMULAS,
+        json=formula_body(
+            expression="{被减数} - {减数}",
+            params=[
+                {"name": "被减数"},
+                {"name": "减数", "knd": "value", "defualt": 1},
+            ],
+        ),
+    )
+
+    assert response.status_code == HTTP_BAD_REQUEST
+
+
+async def test_a_code_taken_by_a_concurrent_create_is_still_a_conflict(
+    app_client: httpx.AsyncClient, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    # ⚠ 先查后插挡不住两个同时到的请求：后到的那个撞唯一约束，不该是 500
+    await create_formula(app_client)
+    monkeypatch.setattr(
+        formula_crud, "get_by_code", AsyncMock(return_value=None)
+    )
+
+    response = await app_client.post(FORMULAS, json=formula_body())
+
+    assert response.status_code == HTTP_CONFLICT

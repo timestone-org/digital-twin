@@ -7,7 +7,7 @@
  */
 import { computed } from 'vue'
 import type { AcMetric } from '@dt/contracts'
-import { DtCheckbox, DtLineChart, DtNotice } from '@dt/ui'
+import { DtCheckbox, DtLineChart, DtNotice, DtPageState } from '@dt/ui'
 import type { DtChartSeries } from '@dt/ui'
 
 import { MAX_CHARTED_METRICS } from '../scripts/acDataQuery'
@@ -18,9 +18,11 @@ const props = defineProps<{
   series: readonly DtChartSeries[]
   intervalMinutes: number
   loading: boolean
+  /** 取序列失败的那一句；有它就不画空图，免得看着像「这段没数据」。 */
+  error?: string | null
 }>()
 
-const emit = defineEmits<{ toggle: [metric: string] }>()
+const emit = defineEmits<{ toggle: [metric: string]; retry: [] }>()
 
 const isFull = computed(() => props.selected.length >= MAX_CHARTED_METRICS)
 </script>
@@ -49,6 +51,13 @@ const isFull = computed(() => props.selected.length >= MAX_CHARTED_METRICS)
     <DtNotice v-if="selected.length === 0" intent="info">
       勾选上面的指标就能看到曲线。
     </DtNotice>
+    <DtPageState
+      v-else-if="props.error"
+      class="min-h-0 flex-1"
+      :error="props.error"
+      :empty="false"
+      @retry="emit('retry')"
+    />
     <DtLineChart
       v-else
       class="min-h-0 flex-1"

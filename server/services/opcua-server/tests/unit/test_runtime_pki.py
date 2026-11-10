@@ -1,10 +1,12 @@
 """服务器证书：自签、复用、指纹、私钥不外泄。"""
 
+import os
 import stat
 from datetime import UTC, datetime
 from pathlib import Path
 from uuid import uuid4
 
+import pytest
 from cryptography import x509
 from cryptography.hazmat.primitives import serialization
 
@@ -169,3 +171,37 @@ async def test_missing_key_file_makes_material_report_nothing(
     )
     material.private_key_path.unlink()
     assert await store.material(instance_id) is None
+
+
+async def test_the_key_is_created_owner_only_rather_than_narrowed_later(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """⚠ 先按 umask 建文件再 chmod，中间有一段谁都能读私钥的窗口。
+
+    把事后 chmod 拿掉、umask 放到最宽，私钥仍必须是 0600。
+    """
+    monkeypatch.setattr(Path, "chmod", lambda *_args, **_kwargs: None)
+    previous = os.umask(0)
+    try:
+        material = await _store(tmp_path).ensure(
+            uuid4(), application_uri=APPLICATION_URI, hostname="plant"
+        )
+    finally:
+        os.umask(previous)
+    mode = stat.S_IMODE(material.private_key_path.stat().st_mode)
+    assert mode == KEY_FILE_MODE
+
+
+async def test_a_stale_temporary_file_does_not_block_generation(
+    tmp_path: Path,
+) -> None:
+    """上一次写到一半崩掉留下的临时文件，不许挡住这一次生成。"""
+    store = _store(tmp_path)
+    instance_id = uuid4()
+    stale = store.private_key_path(instance_id)
+    stale.with_name(f"{stale.name}.tmp").write_bytes(b"half")
+    material = await store.ensure(
+        instance_id, application_uri=APPLICATION_URI, hostname="plant"
+    )
+    assert material.private_key_path.is_file()
+    assert not stale.with_name(f"{stale.name}.tmp").exists()

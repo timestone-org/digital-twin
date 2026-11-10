@@ -79,6 +79,23 @@ describe('干净的弹窗', () => {
     wrapper.unmount()
   })
 
+  it.each([
+    ['isComposing', { isComposing: true }],
+    ['keyCode 229', { keyCode: 229 }],
+  ] as const)('输入法组词时（%s）的 Esc 归输入法，弹窗不关', (_name, init) => {
+    const wrapper = mountModal()
+
+    document.body
+      .querySelector('.dt-modal')
+      ?.dispatchEvent(
+        new KeyboardEvent('keydown', { key: 'Escape', bubbles: true, ...init }),
+      )
+    const emitted = wrapper.emitted('update:modelValue')
+    wrapper.unmount()
+
+    expect(emitted).toBeUndefined()
+  })
+
   it('按 Esc 就关', () => {
     const wrapper = mountModal()
 
@@ -251,6 +268,84 @@ describe('出现与离开的动效', () => {
     await nextTick()
     expect(root().classList).not.toContain('dt-modal-leave-active')
     expect(root().style.display).toBe('none')
+    wrapper.unmount()
+  })
+})
+
+describe('焦点掉到 body 上的弹窗', () => {
+  function mountWithField() {
+    return mount(DtModal, {
+      props: { modelValue: true, title: '新建空调' },
+      slots: { default: '<input class="field" />' },
+      attachTo: document.body,
+    })
+  }
+
+  /** 保存键变成 disabled 时焦点会落回 body：模拟那一刻。 */
+  async function dropFocus(): Promise<void> {
+    await nextTick()
+    const active = document.activeElement
+    if (active instanceof HTMLElement) active.blur()
+    expect(document.activeElement).toBe(document.body)
+  }
+
+  function pressOnBody(key: string, shiftKey = false): KeyboardEvent {
+    const event = new KeyboardEvent('keydown', {
+      key,
+      shiftKey,
+      bubbles: true,
+      cancelable: true,
+    })
+    document.body.dispatchEvent(event)
+    return event
+  }
+
+  it('Esc 照样关', async () => {
+    const wrapper = mountWithField()
+    await dropFocus()
+
+    pressOnBody('Escape')
+
+    expect(wrapper.emitted('update:modelValue')?.[0]).toEqual([false])
+    wrapper.unmount()
+  })
+
+  it('Tab 把焦点拉回弹窗，而不是跑到背后的页面上', async () => {
+    const wrapper = mountWithField()
+    await dropFocus()
+
+    const event = pressOnBody('Tab')
+
+    expect(event.defaultPrevented).toBe(true)
+    const panel = document.body.querySelector('.dt-modal__panel')
+    expect(panel?.contains(document.activeElement)).toBe(true)
+    wrapper.unmount()
+  })
+
+  it('叠着两层时只有最上面那层接 Esc', async () => {
+    const lower = mountWithField()
+    const upper = mount(DtModal, {
+      props: { modelValue: true, title: '二次确认', layer: 'confirm' },
+      attachTo: document.body,
+    })
+    await dropFocus()
+
+    pressOnBody('Escape')
+
+    expect(upper.emitted('update:modelValue')?.[0]).toEqual([false])
+    expect(lower.emitted('update:modelValue')).toBeUndefined()
+    upper.unmount()
+    lower.unmount()
+  })
+
+  it('关掉以后不再接 body 上的按键', async () => {
+    const wrapper = mountWithField()
+    await wrapper.setProps({ modelValue: false })
+    await dropFocus()
+
+    pressOnBody('Escape')
+
+    expect(wrapper.emitted('update:modelValue')).toBeUndefined()
     wrapper.unmount()
   })
 })

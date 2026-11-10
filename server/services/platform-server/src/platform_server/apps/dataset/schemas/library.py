@@ -3,7 +3,7 @@
 import uuid
 from typing import Any, Literal
 
-from pydantic import Field
+from pydantic import ConfigDict, Field
 
 from platform_server.apps.dataset.models import (
     DEFAULT_CATEGORY,
@@ -29,8 +29,9 @@ MAX_PARAM_LABEL = 64
 MAX_PARAM_HINT = 128
 
 
-class FormulaParamSpec(OutputModel):
-    """一个形参。出参与入参共用这一个形状——两边字段完全相同。"""
+class FormulaParamIn(InputModel):
+    """一个形参（入参）。多带一个字段就拒绝：拼错的 `knd` 被忽略的话，
+    存下去的是另一条公式。"""
 
     name: ColumnKey
     kind: FormulaParamKind = "column"
@@ -40,6 +41,17 @@ class FormulaParamSpec(OutputModel):
     # ⚠ `value` 形参的默认值不是界面预填：它是「这个位置该放什么」的唯一声明。
     # 落在只收字面量的位置（时间窗、PREV 的期数）而没有默认值，校验必然失败
     default: Any = None
+
+
+class FormulaParamSpec(FormulaParamIn):
+    """一个形参（出参），字段与入参完全相同。
+
+    ⚠ 继承入参是为了服务内部能拿出参实例直接构造入参；出参口径不拒多余字段。
+    """
+
+    model_config = ConfigDict(
+        extra="ignore", from_attributes=True, populate_by_name=True
+    )
 
 
 class FormulaDefOut(OutputModel):
@@ -98,8 +110,8 @@ class FormulaCreateIn(InputModel):
         default=DEFAULT_CATEGORY, min_length=1, max_length=MAX_CATEGORY_LENGTH
     )
     expression: str = Field(min_length=1, max_length=MAX_FORMULA_LENGTH)
-    params: list[FormulaParamSpec] = Field(
-        default_factory=list[FormulaParamSpec], max_length=MAX_FX_PARAMS
+    params: list[FormulaParamIn] = Field(
+        default_factory=list[FormulaParamIn], max_length=MAX_FX_PARAMS
     )
     description: Note | None = None
     is_enabled: bool = True
@@ -119,7 +131,7 @@ class FormulaUpdateIn(UpdateModel):
     expression: str | None = Field(
         default=None, min_length=1, max_length=MAX_FORMULA_LENGTH
     )
-    params: list[FormulaParamSpec] | None = Field(
+    params: list[FormulaParamIn] | None = Field(
         default=None, max_length=MAX_FX_PARAMS
     )
     description: Note | None = None

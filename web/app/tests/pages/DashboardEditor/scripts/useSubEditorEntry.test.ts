@@ -110,6 +110,19 @@ describe('子编辑器入口', () => {
     expect(push).not.toHaveBeenCalled()
   })
 
+  // ⚠ 同一个入口还接自定义卡片：文案写死「孪生编辑器」就是告诉用户进错了页
+  it('先存的提示不点名某一种编辑器', async () => {
+    const probe = mountPair({ dirty: true, askAnswer: false })
+
+    await probe.open()
+
+    expect(probe.ask).toHaveBeenCalledWith(
+      expect.objectContaining({
+        message: expect.not.stringContaining('孪生') as unknown,
+      }),
+    )
+  })
+
   it('脏着同意后先存再跳', async () => {
     const pair = mountPair({ dirty: true, askAnswer: true })
 

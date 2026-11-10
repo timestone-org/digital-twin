@@ -26,7 +26,7 @@ import { AppShell } from '@/components/layout'
 import { useAsyncList } from '@/composables/useAsyncList'
 import { useViewMode } from '@/composables/useViewMode'
 import InstanceFormDialog from './components/InstanceFormDialog.vue'
-import InstanceStatusTag from './components/InstanceStatusTag.vue'
+import InstanceStatusTag from '../components/InstanceStatusTag.vue'
 import { useInstanceOps } from './scripts/useInstanceOps'
 
 const COLUMNS: readonly DtDataColumn[] = [
@@ -200,6 +200,7 @@ onMounted(() => {
                 v-if="!row.is_running"
                 size="sm"
                 variant="ghost"
+                :disabled="ops.acting.value"
                 @click="ops.act(row, 'start')"
               >
                 启动
@@ -208,6 +209,7 @@ onMounted(() => {
                 v-else
                 size="sm"
                 variant="ghost"
+                :disabled="ops.acting.value"
                 @click="ops.act(row, 'stop')"
               >
                 停止

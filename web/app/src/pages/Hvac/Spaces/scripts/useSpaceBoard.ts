@@ -25,6 +25,7 @@ interface BoardState {
   workshopId: Ref<string>
   loading: Ref<boolean>
   error: Ref<string | null>
+  workshopsError: Ref<string | null>
   partialHint: Ref<string | null>
   raced: RacedFetch
 }
@@ -36,6 +37,8 @@ export interface SpaceBoard {
   workshopId: Ref<string>
   loading: Ref<boolean>
   error: Ref<string | null>
+  /** 车间列表取不到的那一句；只由车间取数写，取房间不会把它冲掉。 */
+  workshopsError: Ref<string | null>
   /** 有一类没取全时的说明，`null` 表示都取全了。 */
   partialHint: Ref<string | null>
   unitsByRoom: ComputedRef<Map<string, AcUnit[]>>
@@ -52,6 +55,7 @@ export function useSpaceBoard(): SpaceBoard {
     workshopId: ref(''),
     loading: ref(false),
     error: ref<string | null>(null),
+    workshopsError: ref<string | null>(null),
     partialHint: ref<string | null>(null),
     raced: useRacedFetch(),
   }
@@ -63,6 +67,7 @@ export function useSpaceBoard(): SpaceBoard {
     workshopId: state.workshopId,
     loading: state.loading,
     error: state.error,
+    workshopsError: state.workshopsError,
     partialHint: state.partialHint,
     unitsByRoom: computed(() => groupByRoom(state.units.value)),
     loadWorkshops: () => loadWorkshops(state),
@@ -75,13 +80,14 @@ async function loadWorkshops(state: BoardState): Promise<void> {
   try {
     const page = await hvac.listWorkshops({ size: PAGE_SIZE })
     state.workshops.value = page.items
-    state.error.value = null
+    state.workshopsError.value = null
     // 选中的车间被别人删掉后落回第一个，而不是留着一个空白右栏
     if (!page.items.some((item) => item.id === state.workshopId.value)) {
       state.workshopId.value = page.items[0]?.id ?? ''
     }
   } catch (caught) {
-    state.error.value = describeError(caught)
+    // ⚠ 不写 error：那一格由右栏的房间取数持有，下一次取房间就会把它清掉
+    state.workshopsError.value = describeError(caught)
     state.workshops.value = []
   }
 }
@@ -105,6 +111,7 @@ async function loadBoard(state: BoardState): Promise<void> {
       state.error.value = describeError(caught)
       state.rooms.value = []
       state.units.value = []
+      state.partialHint.value = null
     },
     settled: () => {
       state.loading.value = false
@@ -118,6 +125,7 @@ async function select(state: BoardState, next: string): Promise<void> {
   // 先清空再取：慢网络下留着旧数据，人会以为新车间里就是这些机器
   state.rooms.value = []
   state.units.value = []
+  state.partialHint.value = null
   await loadBoard(state)
 }
 

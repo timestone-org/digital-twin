@@ -3,6 +3,7 @@
  * 再按喂进来的时长推进出「这一刻镜头该在哪」。纯逻辑，不碰 Vue / three / DOM，
  * 单测直接喂 dt 就能驱动完整一圈。
  */
+import { isUsablePose } from './cameraSelect'
 import { clampedOr } from './normalizeShared'
 import type { TwinPose } from './roamPose'
 import { RoamSpline, type RoamSplineSegment } from './roamSpline'
@@ -31,6 +32,8 @@ export type TwinRoamPhase = 'flying' | 'holding' | 'idle'
  * 轨迹上能解析出的视点，按 `items` 的顺序。
  * ⚠ 指向已删视点的 id 直接跳过、不占位：留着会让镜头飞向一个不存在的位姿。
  * 悬空 id 本身不在这里清理，由 `collectTwinConfigIssues` 报出来。
+ * ⚠ 机位与注视点重合的视点（新建还没取机位）同样跳过：落到这一站画面全黑或乱转，
+ * 与默认视点、部件取景同一口径。
  * @param cameras 归一化后的视点
  * @param tour 归一化后的漫游配置
  */
@@ -41,7 +44,10 @@ export function roamTourStops(
   const byId = new Map(cameras.map((camera) => [camera.id, camera]))
   return tour.items
     .map((id) => byId.get(id))
-    .filter((camera): camera is TwinCamera => camera !== undefined)
+    .filter(
+      (camera): camera is TwinCamera =>
+        camera !== undefined && isUsablePose(camera),
+    )
 }
 
 function poseOf(camera: TwinCamera): TwinPose {

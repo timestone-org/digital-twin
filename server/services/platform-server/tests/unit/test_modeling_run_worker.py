@@ -5,7 +5,10 @@
 
 import asyncio
 import uuid
+from collections.abc import Callable
 from dataclasses import dataclass, field
+from datetime import UTC, datetime
+from zoneinfo import ZoneInfo
 
 import pytest
 
@@ -48,6 +51,7 @@ class RecordingDispatch:
     """把 `execute_run` 换成一个只记账的假件。"""
 
     seen: list[uuid.UUID] = field(default_factory=list[uuid.UUID])
+    offsets: list[int] = field(default_factory=list[int])
     error: Exception | None = None
     outcome: str = "done"
 
@@ -58,15 +62,21 @@ class RecordingDispatch:
         assert isinstance(options, DispatchOptions)
         assert isinstance(options.pool, NodePool)
         self.seen.append(run_id)
+        self.offsets.append(options.tz_offset_minutes)
         if self.error is not None:
             raise self.error
         return DispatchReport(outcome=self.outcome, status="succeeded")
 
 
-def consumer_of(stream: InMemoryStream) -> RunConsumer:
+def consumer_of(
+    stream: InMemoryStream,
+    *,
+    zone: str = "Asia/Shanghai",
+    clock: Callable[[], datetime] = lambda: datetime.now(UTC),
+) -> RunConsumer:
     """造一个消费者。
 
-    Args: stream。
+    Args: stream, zone, clock。
     """
     return RunConsumer(
         sessions=RecordingSessions(),  # pyright: ignore[reportArgumentType]
@@ -78,8 +88,9 @@ def consumer_of(stream: InMemoryStream) -> RunConsumer:
             block_ms=BLOCK_MS,
             claim_idle_ms=1000,
             node_timeout_s=NODE_TIMEOUT_S,
-            tz_offset_minutes=480,
+            business_zone=ZoneInfo(zone),
             keep_per_pipeline=KEEP_PER_PIPELINE,
+            clock=clock,
         ),
     )
 
@@ -124,6 +135,39 @@ async def test_a_message_is_processed_then_acked(
     assert dispatch.seen == [run_id]
     assert completed == [run_id]
     assert len(stream.acked) == 1
+
+
+async def test_the_business_offset_follows_daylight_saving_per_run(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """偏移在启动时冻住的话，夏令时一切换时间特征就整体偏一小时。"""
+    moments = iter(
+        (datetime(2026, 1, 15, tzinfo=UTC), datetime(2026, 7, 15, tzinfo=UTC))
+    )
+    stream = InMemoryStream()
+    for _ in range(2):
+        await stream.publish(
+            TARGET.stream, run_queue.new_message(uuid.uuid4()).to_fields()
+        )
+    dispatch = RecordingDispatch()
+    monkeypatch.setattr(
+        "platform_server.apps.modeling.services.run_worker.execute_run",
+        dispatch,
+    )
+
+    async def finish(*_args: object) -> None:
+        return None
+
+    monkeypatch.setattr(
+        "platform_server.apps.modeling.services.run_worker.complete_training",
+        finish,
+    )
+    consumer = consumer_of(
+        stream, zone="Europe/Berlin", clock=lambda: next(moments)
+    )
+    await consumer._tick()
+    await consumer._tick()
+    assert dispatch.offsets == [60, 120]
 
 
 async def test_an_unreadable_message_is_dropped_not_retried(

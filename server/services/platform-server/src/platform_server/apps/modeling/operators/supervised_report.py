@@ -4,11 +4,20 @@ import math
 from dataclasses import dataclass
 
 from platform_server.apps.modeling.operators.reporting import (
+    NOTE_ALERT,
+    NOTE_HINT,
     BlockAt,
     ReportBlock,
     Scale,
+    annotated,
     breakdown_block,
 )
+
+# 拟合概况上那句口径说明
+FROZEN_HINT = "模型冻结后可发布；测试数据不参与训练或标准化拟合"
+# 是否标准化是一个开关，印成 0/1 的数卡读不出意思
+SCALED_HINT = "特征已在训练集内标准化"
+UNSCALED_HINT = "特征未做标准化"
 
 
 @dataclass(frozen=True)
@@ -34,32 +43,26 @@ def supervised_blocks(seen: SupervisedRun) -> tuple[ReportBlock, ...]:
         [
             {
                 "key": "training_rows",
-                "label": "训练行数",
+                "name": "训练行数",
                 "value": seen.training_rows,
             },
-            {"key": "test_rows", "label": "测试行数", "value": len(seen.truth)},
-            {"key": "features", "label": "特征数", "value": seen.feature_count},
-            {"key": "classes", "label": "类别数", "value": seen.class_count},
-            {
-                "key": "scaling",
-                "label": "训练集内标准化",
-                "value": 1 if seen.should_standardize else 0,
-            },
+            {"key": "test_rows", "name": "测试行数", "value": len(seen.truth)},
+            {"key": "features", "name": "特征数", "value": seen.feature_count},
+            {"key": "classes", "name": "类别数", "value": seen.class_count},
         ],
     )
-    gist.payload["notes"] = [
-        {
-            "level": "hint",
-            "text": "模型冻结后可发布；测试数据不参与训练或标准化拟合",
-        },
-        *({"level": "alert", "text": text} for text in seen.notices),
-    ]
+    scaling = SCALED_HINT if seen.should_standardize else UNSCALED_HINT
+    gist = annotated(
+        annotated(gist, NOTE_HINT, (scaling, FROZEN_HINT)),
+        NOTE_ALERT,
+        seen.notices,
+    )
     score = _test_score(seen)
     metric = "测试准确率" if seen.is_classification else "测试均方根误差"
     evaluation = breakdown_block(
         BlockAt(zone="stats", title="留出测试集表现"),
         Scale(label=metric),
-        [{"key": "score", "label": metric, "value": score}],
+        [{"key": "score", "name": metric, "value": score}],
     )
     return (gist, evaluation)
 

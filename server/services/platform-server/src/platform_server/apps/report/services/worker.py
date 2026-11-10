@@ -5,12 +5,14 @@ import time
 import uuid
 from collections.abc import Mapping
 from concurrent.futures import ProcessPoolExecutor
+from concurrent.futures.process import BrokenProcessPool
 from dataclasses import dataclass
 from datetime import UTC, datetime
 from multiprocessing.process import BaseProcess
 from typing import Protocol, cast
 
 from lib.errors import AppError, DependencyUnavailable
+from lib.errors.base import FieldError
 from lib.logging import (
     bind_log_context,
     get_logger,
@@ -28,7 +30,10 @@ from platform_server.apps.report.schemas.template import TemplateBody
 from platform_server.apps.report.services.aggregation import wire_value
 from platform_server.apps.report.services.api_source import fetch_api_sources
 from platform_server.apps.report.services.metrics import PreviewContext
-from platform_server.apps.report.services.preview import preview
+from platform_server.apps.report.services.preview import (
+    UNAVAILABLE_TEXT,
+    preview,
+)
 from platform_server.apps.report.services.render_service import (
     CONTENT_TYPE,
     GROUP,
@@ -46,6 +51,8 @@ from platform_server.apps.report.services.word_task import (
 )
 
 _logger = get_logger("platform.report.worker")
+# HTTP 5xx 的起点；低于它的业务错误不按故障记
+_SERVER_ERROR = 500
 
 
 class WordRunner(Protocol):
@@ -68,10 +75,18 @@ class WordPool:
                 return await asyncio.get_running_loop().run_in_executor(
                     self._pool, run_task, task
                 )
-        except BaseException:
-            self.close()
-            self._pool = ProcessPoolExecutor(max_workers=1)
+        except Exception as error:
+            # 子进程抛回的业务异常（导入被拒等）不动进程池，免得下一单冷启动
+            if isinstance(error, (TimeoutError, BrokenProcessPool)):
+                self._reset()
             raise
+        except BaseException:
+            self._reset()
+            raise
+
+    def _reset(self) -> None:
+        self.close()
+        self._pool = ProcessPoolExecutor(max_workers=1)
 
     def close(self) -> None:
         # Python 3.12 没有公开的 kill_workers；仅在此处收敛 CPython 边界。
@@ -185,12 +200,19 @@ class ReportWorker:
                     duration_ms=int((time.monotonic() - started) * 1000),
                 )
         except Exception as error:
-            _logger.error(
-                "report_generation_failed",
-                "报告生成失败",
-                render_id=str(render_id),
-                error_type=type(error).__name__,
-            )
+            _log_failure(render_id, error)
+            await self._record_failure(render_id, error)
+
+    async def _record_failure(
+        self, render_id: uuid.UUID, error: Exception
+    ) -> None:
+        """把失败写回任务行，写不进去只记日志。
+
+        ⚠ 不能让异常漏出去：消费者退出会拖垮整个 worker 角色；没写上的行
+        由派发补投或 `fail_stale` 收尾。
+        Args: render_id, error。
+        """
+        try:
             async with self._options.database.session() as session:
                 await renders.finish(
                     session,
@@ -203,9 +225,21 @@ class ReportWorker:
                             if isinstance(error, AppError)
                             else "生成失败，请检查报告配置或联系管理员"
                         ),
+                        "warnings_json": (
+                            [detail.message for detail in error.details]
+                            if isinstance(error, AppError)
+                            else []
+                        ),
                         "finished_at": datetime.now(UTC),
                     },
                 )
+        except Exception as record_error:
+            _logger.error(
+                "report_failure_record_failed",
+                "报告失败状态写入失败",
+                render_id=str(render_id),
+                error_type=type(record_error).__name__,
+            )
 
     async def execute(self, render_id: uuid.UUID) -> bool:
         """原子认领、取数、出事务、生成、入库。Args: render_id。"""
@@ -345,10 +379,41 @@ def result_payload(
     return payload
 
 
+def _log_failure(render_id: uuid.UUID, error: Exception) -> None:
+    """记一次出稿失败。数据或配置没过检查是业务结果，按 WARNING 记。
+
+    Args: render_id, error。
+    """
+    if isinstance(error, AppError) and error.http_status < _SERVER_ERROR:
+        _logger.warning(
+            "report_generation_rejected",
+            "报告数据或配置未通过检查，未生成",
+            render_id=str(render_id),
+            error_type=type(error).__name__,
+        )
+        return
+    _logger.error(
+        "report_generation_failed",
+        "报告生成失败",
+        render_id=str(render_id),
+        error_type=type(error).__name__,
+    )
+
+
 def _require_complete(result: PreviewOut) -> None:
+    """出稿前的数据检查；不过时把逐条原因带在错误明细里，写进生成记录的提示。
+
+    Args: result。
+    """
     if any(metric.error for metric in result.metrics) or any(
-        node.text == "[数据不可用]" for node in result.nodes.values()
+        node.text == UNAVAILABLE_TEXT for node in result.nodes.values()
     ):
         raise ReportInvalid(
-            "报告数据检查未通过，请先试算并修复缺失或错误的数据"
+            "报告数据检查未通过，请先试算并修复缺失或错误的数据",
+            details=tuple(
+                FieldError(
+                    field="preview", code="data_unavailable", message=warning
+                )
+                for warning in result.warnings
+            ),
         )

@@ -43,13 +43,15 @@ export function cellState(
  * 没有值的那一句话；`error` 档带上取数侧给的原因。
  * @param state 这一格所在的档
  * @param slot 这一槽的取数结论
+ * @param reasons 各档的那句话；模块要换主语（「这个仪表」）时传自己的一份
  */
 export function reasonOf(
   state: CellState,
   slot: ModuleSlotMeta | undefined,
+  reasons: Readonly<Record<Exclude<CellState, 'ok'>, string>> = REASONS,
 ): string {
   if (state === 'ok') return ''
-  const base = REASONS[state]
+  const base = reasons[state]
   const detail = slot?.message ?? ''
   return detail === '' ? base : `${base}：${detail}`
 }

@@ -1,5 +1,6 @@
 """多实例 supervisor：数量上限、端口记账、故障隔离。"""
 
+import asyncio
 import contextlib
 import socket
 from collections.abc import AsyncIterator, Iterator
@@ -210,3 +211,47 @@ async def test_one_instance_does_not_block_the_other(
     with _occupied(doomed.port), pytest.raises(InstanceStartFailed):
         await supervisor.start(doomed)
     assert await supervisor.get(good.instance_id).is_listening()
+
+
+async def test_concurrent_starts_of_one_instance_share_one_server(
+    supervisor: InstanceSupervisor,
+) -> None:
+    """⚠ 双击「启动」：后到的那次不许 bind 失败，更不许把端口记账一起还掉。"""
+    spec = _spec(supervisor_port(supervisor, 0))
+    first, second = await asyncio.gather(
+        supervisor.start(spec), supervisor.start(spec)
+    )
+    assert first is second
+    assert supervisor.ports.assigned(spec.instance_id) == spec.port
+
+
+async def test_concurrent_starts_cannot_overrun_the_limit(
+    supervisor: InstanceSupervisor,
+) -> None:
+    await supervisor.start(_spec(supervisor_port(supervisor, 0), "a"))
+    results = await asyncio.gather(
+        supervisor.start(_spec(supervisor_port(supervisor, 1), "b")),
+        supervisor.start(_spec(supervisor_port(supervisor, 2), "c")),
+        return_exceptions=True,
+    )
+    assert sum(isinstance(item, InstanceLimitReached) for item in results) == 1
+    assert supervisor.count() == 2
+
+
+async def test_launch_says_whether_it_built_a_new_server(
+    supervisor: InstanceSupervisor,
+) -> None:
+    spec = _spec(supervisor_port(supervisor, 0))
+    _, is_created = await supervisor.launch(spec)
+    _, is_created_again = await supervisor.launch(spec)
+    assert (is_created, is_created_again) == (True, False)
+
+
+async def test_restart_rebuilds_the_server_with_the_new_spec(
+    supervisor: InstanceSupervisor,
+) -> None:
+    spec = _spec(supervisor_port(supervisor, 0))
+    first = await supervisor.start(spec)
+    second = await supervisor.restart(spec)
+    assert second is not first
+    assert supervisor.find(spec.instance_id) is second

@@ -18,8 +18,6 @@ from platform_server.apps.hvac.rooms import (
 
 # ⚠ 改特征算法的人手动 +1，纪律同 LOGIC_VERSION：模型上存着训练时的取值，
 # 页面据此提示「特征口径已更新，建议重训」。
-# v2：加设定值距离、回风/送风、温湿度极差、焓值与空气路径温差（热力学口径
-# 取自参考实现 ../Baoding/api 的特征工程，只取按物理讲得通的那部分）
 FEATURE_VERSION = 4
 
 # 外部条件与供冷能力的代理测点（datasets.py 里的列名）

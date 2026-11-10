@@ -182,7 +182,11 @@ const archiveParamsOpen = ref(false)
             <template v-if="activeSource">
               <SourceDetailHeader
                 :source="activeSource"
-                :busy="ops.busyId.value === activeSource.id"
+                :busy="
+                  ops.busyId.value === activeSource.id
+                    ? ops.busyAction.value
+                    : null
+                "
                 :refreshing="sourcesLoading"
                 @connect="ops.setEnabled(activeSource, true)"
                 @disconnect="ops.setEnabled(activeSource, false)"
@@ -192,20 +196,23 @@ const archiveParamsOpen = ref(false)
                 @remove="removal.ask(activeSource)"
               />
 
-              <DtButton
-                v-if="activeSource.protocol === 'opcua'"
-                variant="outline"
-                size="sm"
-                :aria-expanded="browseOpen"
-                @click="browseOpen = !browseOpen"
-              >
-                {{ browseOpen ? '收起地址浏览' : '浏览并导入点位' }}
-              </DtButton>
+              <PermGuard :codes="[PERMISSION_CODES.collectOperate]">
+                <DtButton
+                  v-if="activeSource.protocol === 'opcua'"
+                  class="self-start"
+                  variant="outline"
+                  size="sm"
+                  :aria-expanded="browseOpen"
+                  @click="browseOpen = !browseOpen"
+                >
+                  {{ browseOpen ? '收起地址浏览' : '浏览并导入点位' }}
+                </DtButton>
+              </PermGuard>
               <DtResizableLayout
                 class="min-h-0 flex-1"
                 style="min-height: 20rem"
                 :panes="pointPanes"
-                :stack-at="900"
+                :stack-at="720"
                 :storage-key="`dt.collect.${protocol}.points-layout`"
               >
                 <template #browse>

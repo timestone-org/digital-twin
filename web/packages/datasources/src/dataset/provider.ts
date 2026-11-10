@@ -18,6 +18,7 @@ import type {
 import { parseDatasetBindingKey } from '@dt/contracts'
 
 import { refuseSubscribe } from '../capability'
+import { assertRange } from '../range'
 import { DataSourceError, describeError, isDataSourceError } from '../errors'
 
 const KIND = 'dataset'
@@ -67,22 +68,5 @@ function assertQuery(query: HistoryQuery): void {
       `不是台账列身份（应形如 ds:台账编码:列标识）：${query.nodeKey}`,
     )
   }
-  assertRange(query)
-}
-
-function assertRange(query: HistoryQuery): void {
-  const { fromMs, toMs, limit } = query.range
-  // ⚠ 左右颠倒的时间窗后端只会回一段空序列，那与「这段时间没数据」长得一样
-  if (fromMs !== undefined && toMs !== undefined && fromMs > toMs) {
-    throw new DataSourceError(
-      'invalid-query',
-      `台账取数的时间窗左右颠倒：${fromMs} > ${toMs}`,
-    )
-  }
-  if (limit !== undefined && (!Number.isInteger(limit) || limit <= 0)) {
-    throw new DataSourceError(
-      'invalid-query',
-      `台账取数的 limit 必须是正整数，收到 ${limit}`,
-    )
-  }
+  assertRange(query, '台账取数')
 }

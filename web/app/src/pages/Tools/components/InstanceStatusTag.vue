@@ -3,8 +3,8 @@
  * @fileoverview 实例运行状态。
  *
  * ⚠ 显示的是 `is_running`（本地监听端口的实况）而不是 `desired_state`（用户意图）。
- * 两者不一致时——按了启动但端口没起来——必须让人看出来，所以不一致会另出一档
- * 「启动中/停止中」而不是安静地按意图显示成「运行中」。
+ * 两者不一致时必须让人看出来，不安静地按意图显示：还在监听但已要求停止显示
+ * 「停止中」，要求运行却没在监听（没起来或起失败了）显示「未就绪」。
  */
 import { computed } from 'vue'
 import type { OpcuaDesiredState } from '@dt/contracts'

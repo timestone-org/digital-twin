@@ -14,6 +14,7 @@
 `McpToolInfo`，翻成工具规格是 `services/tools/providers/mcp.py` 的事。
 """
 
+import asyncio
 import json
 from dataclasses import dataclass, field
 from typing import Any, cast
@@ -194,13 +195,18 @@ class McpCatalog:
     )
 
     async def refresh(self) -> None:
-        """逐路重问一遍。
+        """各路同时重问一遍。
 
         ⚠ **一路问不到只丢它自己**：其余照常，整个助手照常起
         （ADR-0031 决策五）。断路器打开期间连问都不问，直接当它这一轮缺席。
+        ⚠ 同时问而不是逐路问：逐路问时一路慢的会让每一步推进多等 k 倍超时。
+        `_ask` 自己收住失败，`gather` 不会因一路出错丢掉别的。
         """
-        for server in self.servers:
-            self._found[server.name] = await self._ask(server)
+        answers = await asyncio.gather(
+            *(self._ask(server) for server in self.servers)
+        )
+        for server, found in zip(self.servers, answers, strict=True):
+            self._found[server.name] = found
 
     async def refresh_server(self, name: str) -> None:
         """仅复核当前调用的服务器，不等待其他独立依赖。
@@ -239,6 +245,7 @@ class McpCatalog:
         if found is None:
             raise McpUnavailable(f"没有 {server} 这一路 MCP")
         breaker = self.breakers[server]
+        is_probe = breaker.state == "half_open"
         breaker.guard()
         try:
             reply = await self.client.call_tool(
@@ -246,6 +253,9 @@ class McpCatalog:
             )
         except McpUnavailable:
             breaker.record_failure("call")
+            raise
+        except BaseException:
+            _hand_back(breaker, is_probe=is_probe)
             raise
         breaker.record_success()
         return reply
@@ -256,6 +266,7 @@ class McpCatalog:
         Args: server。
         """
         breaker = self.breakers[server.name]
+        is_probe = breaker.state == "half_open"
         if not breaker.allow():
             return ()
         try:
@@ -270,8 +281,23 @@ class McpCatalog:
                 "mcp_list_failed", "MCP 工具目录拉取失败", server=server.name
             )
             return ()
+        except BaseException:
+            _hand_back(breaker, is_probe=is_probe)
+            raise
         breaker.record_success()
         return tuple(listed)
+
+
+def _hand_back(breaker: CircuitBreaker, *, is_probe: bool) -> None:
+    """没记成败就退出（被取消、意料外的异常）时交还探测。
+
+    ⚠ 只交还半开时放行的那一个：合上时发出去的调用交还的话，会把别人手上的
+    探测一起放掉。
+
+    Args: breaker, is_probe。
+    """
+    if is_probe:
+        breaker.release_probe()
 
 
 def _tool_of(server: str, row: object) -> McpToolInfo | None:

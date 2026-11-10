@@ -55,6 +55,23 @@ describe('captureThumbnail', () => {
     expect(options().style).toEqual({ transform: 'none' })
   })
 
+  // ⚠ 舞台里还摆着网格、落点高亮、参考线与缩放手柄：截进去的话列表缩略图上全是编辑器的东西
+  it('截图时滤掉编辑器自己的网格、参考线与手柄，模块照常截', async () => {
+    await captureThumbnail('d1', stageEl())
+    const filter = options().filter as (node: HTMLElement) => boolean
+    const of = (className: string): HTMLElement => {
+      const el = document.createElement('div')
+      el.className = className
+      return el
+    }
+
+    expect(filter(of('dt-canvas__grid absolute inset-0'))).toBe(false)
+    expect(filter(of('dt-canvas__drop'))).toBe(false)
+    expect(filter(of('dt-guides'))).toBe(false)
+    expect(filter(of('dt-node__handle absolute'))).toBe(false)
+    expect(filter(of('dt-node absolute'))).toBe(true)
+  })
+
   it('输出宽度按设计宽度折算，缩放不参与', async () => {
     await captureThumbnail('d1', stageEl(1920))
 

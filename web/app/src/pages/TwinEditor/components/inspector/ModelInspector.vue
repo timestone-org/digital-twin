@@ -271,6 +271,7 @@ function toggleBackground(opaque: boolean): void {
       v-model="pickerOpen"
       kind="model"
       title="选择三维模型"
+      :current="modelValue.asset === '' ? undefined : modelValue.asset"
       @pick="onPick"
     />
   </div>

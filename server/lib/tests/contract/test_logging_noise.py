@@ -68,3 +68,32 @@ async def test_access_logs_keep_failures_and_debug_successes(
         assert access[0]["level"] == expected
         assert access[0]["status"] == status
         assert access[0]["trace_id"]
+
+
+async def test_an_unhandled_crash_still_leaves_an_access_line(
+    capsys: pytest.CaptureFixture[str],
+) -> None:
+    """⚠ 真崩溃是最要紧的那种 5xx，访问日志里没有它，按 status 计数的告警
+    就数不到。"""
+    configure_logging(service="svc", role="api", instance="one", level="INFO")
+    app = create_app(title="test", prefix="/api/v1/test")
+
+    @app.get("/boom")
+    async def boom() -> Response:
+        raise RuntimeError("崩了")
+
+    async with httpx.AsyncClient(
+        transport=httpx.ASGITransport(app=app, raise_app_exceptions=False),
+        base_url="http://test",
+    ) as client:
+        response = await client.get("/boom")
+    records = [
+        json.loads(line) for line in capsys.readouterr().out.splitlines()
+    ]
+    access = [record for record in records if record["event"] == "http_request"]
+    assert response.status_code == 500
+    assert len(access) == 1
+    assert access[0]["status"] == 500
+    assert access[0]["level"] == "ERROR"
+    assert access[0]["route"] == "/boom"
+    assert access[0]["trace_id"] == response.json()["trace_id"]

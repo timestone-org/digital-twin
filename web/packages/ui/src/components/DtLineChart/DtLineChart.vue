@@ -4,6 +4,7 @@
  * Y 轴，`null` 画成断档；echarts 走动态 import，取到的实例只更新不重建。
  */
 import { onMounted, onUnmounted, shallowRef, watch } from 'vue'
+import { observeThemeChange } from '@dt/tokens'
 import { createChart } from '../../shared/chart/echarts'
 import type { DtChartHandle } from '../../shared/chart/echarts'
 import { buildLineOption } from '../../shared/chart/lineOption'
@@ -25,7 +26,18 @@ const props = withDefaults(
 const host = shallowRef<HTMLDivElement | null>(null)
 const chart = shallowRef<DtChartHandle | null>(null)
 let sizeWatcher: ResizeObserver | null = null
+let stopTheme: (() => void) | null = null
+let themeFrame: number | null = null
 let isGone = false
+
+// 一次换肤会连着改好几个属性，攒到下一帧只重画一次
+function scheduleRepaint(): void {
+  if (themeFrame !== null) return
+  themeFrame = requestAnimationFrame(() => {
+    themeFrame = null
+    chart.value?.setOption(buildLineOption(props.series))
+  })
+}
 
 async function attach(): Promise<void> {
   const el = host.value
@@ -42,6 +54,8 @@ async function attach(): Promise<void> {
     handle.resize()
   })
   sizeWatcher.observe(el)
+  // 颜色在 buildLineOption 里读成定值，换肤不重建 option 就一直是旧配色
+  stopTheme = observeThemeChange(el, scheduleRepaint)
 }
 
 onMounted(() => {
@@ -60,6 +74,10 @@ onUnmounted(() => {
   isGone = true
   sizeWatcher?.disconnect()
   sizeWatcher = null
+  stopTheme?.()
+  stopTheme = null
+  if (themeFrame !== null) cancelAnimationFrame(themeFrame)
+  themeFrame = null
   chart.value?.dispose()
   chart.value = null
 })

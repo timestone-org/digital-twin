@@ -142,3 +142,54 @@ async def test_any_chat_adapter_answers_not_just_the_endpoint_one() -> None:
     )
     assert made.can_answer is True
     assert await made.complete("s", "u") == "经订阅账号答的"
+
+
+def _half_open(breaker: CircuitBreaker, clock: FrozenClock) -> None:
+    breaker.record_failure("t")
+    breaker.record_failure("t")
+    clock.advance(31)
+    assert breaker.state == "half_open"
+
+
+async def test_a_probe_answered_with_our_fault_is_handed_back() -> None:
+    """⚠ 探测撞上「我们发错了」时既不算成功也不算失败：不交还的话，下一个
+    调用在一整个冷却期里都被当成「暂时不可用」挡掉，盖住真正的原因。"""
+    clock = FrozenClock()
+    breaker = CircuitBreaker(
+        name="t", failure_threshold=2, reset_after_s=30, clock=clock
+    )
+    error = AuthenticationError(
+        "", response=httpx.Response(401, request=_REQUEST), body=None
+    )
+    made = ChatAnswerer(
+        adapter=_Adapter(
+            _Model(error=error)
+        ),  # pyright: ignore[reportArgumentType]
+        breaker=breaker,
+    )
+    _half_open(breaker, clock)
+    with pytest.raises(ModelRejected):
+        await made.complete("s", "u")
+    with pytest.raises(ModelRejected):
+        await made.complete("s", "u")
+
+
+class _BrokenAdapter(_Adapter):
+    async def build(self, choice: object) -> _Model:
+        del choice
+        raise RuntimeError("装不出来")
+
+
+async def test_a_probe_that_fails_to_build_is_handed_back() -> None:
+    clock = FrozenClock()
+    breaker = CircuitBreaker(
+        name="t", failure_threshold=2, reset_after_s=30, clock=clock
+    )
+    made = ChatAnswerer(
+        adapter=_BrokenAdapter(_Model()),  # pyright: ignore[reportArgumentType]
+        breaker=breaker,
+    )
+    _half_open(breaker, clock)
+    with pytest.raises(RuntimeError):
+        await made.complete("s", "u")
+    assert breaker.allow() is True

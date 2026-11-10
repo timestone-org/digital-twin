@@ -230,6 +230,23 @@ describe('edgePath 的四档走线', () => {
     expect(at('bottom')).toContain('C0,40')
   })
 
+  // ⚠ 三次贝塞尔起点处的切向是 c1−s：始端箭头拿 c2 去定朝向，非轴对齐时箭头顺着弦歪
+  it('bezier 两端箭头各取各自那一侧的控制点定朝向', () => {
+    const got = edgePath({ ...BASE, route: 'bezier', end: { x: 200, y: 100 } })
+
+    expect(got.startFrom.y).toBe(0)
+    expect(got.startFrom.x).toBeGreaterThan(0)
+    expect(got.endFrom.y).toBe(100)
+    expect(got.endFrom.x).toBeLessThan(200)
+  })
+
+  it('折线两端箭头取紧挨端点的那一个点定朝向', () => {
+    const got = edgePath(BASE)
+
+    expect(got.startFrom).toEqual(got.points[1])
+    expect(got.endFrom).toEqual(got.points[got.points.length - 2])
+  })
+
   it('bezier 的 points 多带一个末控制点让箭头与曲线相切', () => {
     const got = edgePath({ ...BASE, route: 'bezier', end: { x: 100, y: 0 } })
     expect(got.points).toEqual([

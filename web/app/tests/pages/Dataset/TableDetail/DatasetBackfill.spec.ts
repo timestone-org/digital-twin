@@ -144,7 +144,7 @@ describe('入口、确认与实际回执', () => {
   })
   it('手动台账不可启动且不发 GET；停用的汇总台账仍可回填', async () => {
     const manual = await render({ collect_mode: 'manual' })
-    expect(manual.text()).toContain('不支持历史桶回填')
+    expect(manual.text()).not.toContain('回填')
     expect(dataset.getDatasetBackfill).not.toHaveBeenCalled()
     manual.unmount()
     const aggregate = await render({ is_enabled: false })
@@ -413,6 +413,24 @@ describe('恢复、排他与竞态', () => {
     await flushPromises()
     await open(wrapper)
     expect(wrapper.text()).not.toContain('桶进度 3 / 25')
+  })
+  it('⚠ 关着弹窗时运行中的状态标成可能陈旧，周期用人话', async () => {
+    vi.mocked(dataset.getDatasetBackfill).mockResolvedValue(
+      job({ interval_ms: 86_400_000 }),
+    )
+    const wrapper = await render()
+    expect(wrapper.text()).toContain('正在回填')
+    expect(wrapper.text()).toContain('打开进度查看最新')
+    await open(wrapper)
+    expect(wrapper.text()).toContain('周期 1 天')
+  })
+  it('认不出的状态显示原始代码，不渲染成空标签', async () => {
+    vi.mocked(dataset.getDatasetBackfill).mockResolvedValue({
+      ...job(),
+      status: 'paused' as never,
+    })
+    const wrapper = await render()
+    expect(wrapper.text()).toContain('paused')
   })
   it('只在打开且 running 时轮询，终态、关闭及卸载停止定时器', async () => {
     vi.useFakeTimers()

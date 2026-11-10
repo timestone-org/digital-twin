@@ -17,6 +17,7 @@ import { useAuthStore } from '@/stores/auth'
 import { createAssetsActions } from './assetsActions'
 import type { AssetsActions } from './assetsActions'
 import { createAssetsView } from './assetsView'
+import { useVariantPolling } from './useVariantPolling'
 import type { AssetsView } from './assetsView'
 
 /** 搜索防抖。⚠ 太短会让每敲一个字都发一次请求，太长会像卡住。 */
@@ -46,6 +47,7 @@ export function useAssetsPage(): AssetsPage {
   const draftKeyword = ref('')
   const detail = ref<Asset | null>(null)
   const actions = createAssetsActions(library, detail)
+  useVariantPolling(detail, library.assets)
   let debounce: ReturnType<typeof setTimeout> | null = null
 
   function selectKind(next: string): void {

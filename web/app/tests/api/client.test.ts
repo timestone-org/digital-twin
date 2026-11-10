@@ -277,6 +277,18 @@ describe('信封校验', () => {
     await expect(request('/x')).rejects.toThrow('服务端响应格式异常')
   })
 
+  it.each([
+    [403, '没有权限执行该操作'],
+    [429, '请求过于频繁，请稍后再试'],
+    [503, '服务暂不可用或请求过于频繁，请稍后再试'],
+  ])('网关 %i 的 HTML 页按状态码说人话', async (status, message) => {
+    fetchMock.mockResolvedValue(new Response('<html>nginx</html>', { status }))
+    const caught: unknown = await request('/x').catch((error: unknown) => error)
+    expect(caught).toBeInstanceOf(TransportError)
+    expect((caught as TransportError).message).toBe(message)
+    expect((caught as TransportError).status).toBe(status)
+  })
+
   it('缺 trace_id 的响应不算信封——链路 id 是必填项', async () => {
     fetchMock.mockResolvedValue(envelope({ code: 0, message: 'ok', data: {} }))
     await expect(request('/x')).rejects.toBeInstanceOf(TransportError)

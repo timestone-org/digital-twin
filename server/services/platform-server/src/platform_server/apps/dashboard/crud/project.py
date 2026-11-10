@@ -48,9 +48,8 @@ class ProjectCrud(CrudBase[DashboardProject]):
         """
         statement = select(DashboardProject)
         if keyword:
-            pattern = f"%{keyword.lower()}%"
             statement = statement.where(
-                func.lower(DashboardProject.name).like(pattern)
+                DashboardProject.name.icontains(keyword, autoescape=True)
             )
         return statement
 

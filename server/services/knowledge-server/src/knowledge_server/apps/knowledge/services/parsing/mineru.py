@@ -27,11 +27,13 @@ import json
 import time
 from collections.abc import Callable
 from dataclasses import dataclass, field
-from html.parser import HTMLParser
 from typing import Any, Literal, cast
 
 import httpx
 
+from knowledge_server.apps.knowledge.services.parsing.mineru_table import (
+    table_rows,
+)
 from knowledge_server.apps.knowledge.services.parsing.ports import (
     Block,
     BlockKind,
@@ -42,7 +44,6 @@ from knowledge_server.apps.knowledge.services.parsing.ports import (
     RawItem,
 )
 from knowledge_server.apps.knowledge.services.parsing.structure import (
-    cell_text,
     paired,
     path_of,
     pushed,
@@ -70,53 +71,6 @@ _DONE = "completed"
 # 而一张没有图注的图仍然值得在引用面上摆出来
 _NO_CAPTION = "（图，无图注）"
 _NO_TABLE_CAPTION = "（表格截图）"
-
-
-def _table_rows(html: str) -> list[list[str]]:
-    """把 `table_body` 那段 HTML 拆成一行行单元格。
-
-    Args: html。
-    """
-    walk = _TableWalk()
-    walk.feed(html)
-    walk.close()
-    return walk.rows
-
-
-class _TableWalk(HTMLParser):
-    """只收 `tr` / `td` / `th` 的文本，别的一律丢掉。
-
-    ⚠ 不执行任何脚本、不跟外链：这段 HTML 是外部服务产出的。
-    """
-
-    def __init__(self) -> None:
-        super().__init__(convert_charrefs=True)
-        self.rows: list[list[str]] = []
-        self._cells: list[str] = []
-        self._buffer: list[str] = []
-        self._in_cell = False
-
-    def handle_starttag(
-        self, tag: str, attrs: list[tuple[str, str | None]]
-    ) -> None:
-        del attrs
-        if tag == "tr":
-            self._cells = []
-        elif tag in ("td", "th"):
-            self._in_cell = True
-            self._buffer = []
-
-    def handle_endtag(self, tag: str) -> None:
-        if tag in ("td", "th") and self._in_cell:
-            self._in_cell = False
-            self._cells.append(cell_text("".join(self._buffer)))
-        elif tag == "tr" and self._cells:
-            self.rows.append(self._cells)
-            self._cells = []
-
-    def handle_data(self, data: str) -> None:
-        if self._in_cell:
-            self._buffer.append(data)
 
 
 @dataclass
@@ -221,12 +175,12 @@ def _table_item(walk: _Walk, item: dict[str, Any], page: int) -> None:
     # ⚠ 表格截图与下面那些 `table_row` 文本块**并存**：文本块负责被检索到，
     # 截图负责让人看清合并单元格那类版面——两者缺一个都不够
     walk.emit("figure", caption or _NO_TABLE_CAPTION, page, ref=_ref_of(item))
-    rows = _table_rows(str(item.get("table_body") or ""))
-    if not rows:
-        return
-    header = rows[0]
+    rows = table_rows(str(item.get("table_body") or ""))
+    if len(rows) == 1:
+        # ⚠ 单行表（键值条）不单收的话，整张表在检索里一个字都不存在
+        walk.emit("table_row", " | ".join(one for one in rows[0] if one), page)
     for cells in rows[1:]:
-        walk.emit("table_row", paired(header, cells), page)
+        walk.emit("table_row", paired(rows[0], cells), page)
     walk.emit("caption", _joined(item, "table_footnote"), page)
 
 

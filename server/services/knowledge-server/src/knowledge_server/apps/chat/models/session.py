@@ -55,7 +55,8 @@ class ChatSession(UuidPrimaryKeyMixin, TimestampMixin, Base):
     row_version: Mapped[int] = mapped_column(
         Integer, nullable=False, server_default=text("1")
     )
-    # 最近一次失败的原因，给人看。⚠ 不带上游 URL 与密钥
+    # 最近一次回合失败的原因，给人看；下一轮成功落库时清空。⚠ 不带上游 URL
+    # 与密钥
     last_error: Mapped[str | None] = mapped_column(Text, nullable=True)
     # 窗口外那一截折成的摘要（`llmcore.memory.summarize`）。⚠ 落库不重算：
     # 同一个台阶内必须逐字复用，否则它就是历史区前面一个每轮都变的前缀断点

@@ -75,6 +75,16 @@ async function fetched(
   signal: AbortSignal,
   requestedKind: PreviewKind,
 ): Promise<Loaded> {
+  // 画不出的格式不先拉整份原件：只摆下载键，点了再按需取
+  if (requestedKind === 'none') {
+    return {
+      raw: null,
+      preview: new Blob(),
+      previewKind: 'none',
+      text: '',
+      isCompatibilityDocx: false,
+    }
+  }
   if (requestedKind !== 'docx') {
     const raw = await readDocumentRaw(documentId, signal)
     const text = TEXTUAL.includes(requestedKind) ? await raw.text() : ''

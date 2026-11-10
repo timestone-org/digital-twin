@@ -8,27 +8,19 @@
  * （从属性面板反复进出不同节点的子编辑器），慢的那次后返回会盖掉新文档，
  * 且没有任何报错（docs/MODULE_TWIN_2D_DESIGN.md §13.5）。取数在这一页自己做而不是
  * 借大屏文档壳那一份，是要让「哪张屏」与「哪个节点」在同一回合里一起定住。
- * ⚠ 409 的口径只有 `docIo` 一份，保存借它的 `createSaver`，不在这里另写一套。
  */
 import type { DashboardNodePayload, DashboardPayload } from '@dt/contracts'
 import { computed, ref, shallowRef, watch } from 'vue'
-import type { ComputedRef, Ref, ShallowRef } from 'vue'
+import type { ComputedRef, Ref } from 'vue'
 
-import { getDashboard } from '@/api/dashboard'
 import { useWorkspaceDashboard } from '@/features/workspace/useWorkspaceDashboard'
-import { describeError } from '@/composables/useAsyncList'
 import { useRacedFetch } from '@/composables/useRacedFetch'
-import type { RacedFetch } from '@/composables/useRacedFetch'
-import { createSaver, disposeDoc } from '@/features/dashboard/docIo'
-import type { DocState } from '@/features/dashboard/docIo'
-import { toLayoutInput } from '@/features/dashboard/editorDoc'
+import { disposeDoc } from '@/features/dashboard/docIo'
 
-import {
-  TWIN_2D_MISSING_NODE_MESSAGE,
-  nodesWithTwin2d,
-  twin2dDocOf,
-} from './twin2dNodeDoc'
 import type { Twin2dDoc } from './twin2dDoc'
+import { TWIN_2D_MISSING_NODE_MESSAGE } from './twin2dNodeDoc'
+import { createTwin2dReload, createTwin2dSave } from './twin2dPageIo'
+import type { Twin2dPageState } from './twin2dPageIo'
 
 export interface Twin2dEditorPage {
   doc: ComputedRef<Twin2dDoc | null>
@@ -49,102 +41,10 @@ export interface Twin2dEditorPage {
   save: () => Promise<boolean>
   /** 冲突或加载失败之后的出口：整份重取，本地未保存的改动就此丢弃。 */
   reload: () => Promise<void>
+  /** 上一次保存失败（版本冲突除外）的那句话；不挡编辑，只给提示用。 */
+  saveError: Ref<string | null>
   /** 卸载时掐掉在途请求。 */
   dispose: () => void
-}
-
-/** 一页的可变状态；取数与落库两支动作都写它。 */
-interface Twin2dPageState {
-  /**
-   * ⚠ 文档态与「哪个节点」绑死：切了节点必须整份重建，沿用旧的会把 A 的撤销栈
-   * 接到 B 头上，一次撤销就把 B 改成 A 的内容。
-   * ⚠ `shallowRef` 不是随手写的：`ref` 会把里面的 ComputedRef 逐个解包，
-   * `doc.value.config` 从 ref 变成裸值，类型对不上且失去响应。
-   */
-  doc: ShallowRef<Twin2dDoc | null>
-  /** 这张屏读出来了，但里面没有这个节点。 */
-  missing: Ref<boolean>
-  file: DocState
-}
-
-/**
- * 造「整份重取」的动作。
- * ⚠ `forNode` 在发起那一刻捕获：这一回合能落地就说明它仍是最后一次，用当下的
- * `nodeId()` 只会在两者相同时碰巧对。
- * @param page 一页的可变状态
- * @param raced 竞态闸
- * @param dashboardId 取当前大屏 id
- * @param nodeId 取当前要编辑的节点 id
- */
-function createReload(
-  page: Twin2dPageState,
-  raced: RacedFetch,
-  dashboardId: () => string,
-  nodeId: () => string,
-): () => Promise<void> {
-  const file = page.file
-  function apply(loaded: DashboardPayload, forNode: string): void {
-    file.dashboard.value = loaded
-    const next = twin2dDocOf(loaded.nodes, forNode)
-    page.missing.value = next === null
-    page.doc.value = next
-  }
-  return async () => {
-    const forNode = nodeId()
-    file.loadGeneration = (file.loadGeneration ?? 0) + 1
-    file.isDisposed = false
-    file.saving.value = false
-    page.doc.value = null
-    page.missing.value = false
-    file.loading.value = true
-    file.error.value = null
-    file.conflict.value = null
-    await raced.run((signal) => getDashboard(dashboardId(), signal), {
-      ok: (loaded) => apply(loaded, forNode),
-      fail: (caught) => {
-        file.error.value = describeError(caught)
-        file.dashboard.value = null
-      },
-      settled: () => {
-        file.loading.value = false
-      },
-    })
-  }
-}
-
-/**
- * 造「整树替换落库」的动作；成功返回 true。
- * @param page 一页的可变状态
- * @param nodeId 取当前要编辑的节点 id
- */
-function createSave(
-  page: Twin2dPageState,
-  nodeId: () => string,
-): () => Promise<boolean> {
-  const replace = createSaver(page.file)
-  return async () => {
-    if (page.file.saving.value) return false
-    const current = page.file.dashboard.value
-    const editing = page.doc.value
-    if (current === null || editing === null) return false
-    editing.endMerge()
-    const generation = page.file.loadGeneration ?? 0
-    const snapshot = {
-      config: editing.config.value,
-      bindings: editing.bindings.value,
-    }
-    const saved = await replace({
-      expectedVersion: current.rowVersion,
-      nodes: toLayoutInput(nodesWithTwin2d(current, nodeId(), editing)),
-    })
-    if (saved === null) return false
-    if (
-      generation === (page.file.loadGeneration ?? 0) &&
-      page.doc.value === editing
-    )
-      editing.markSaved(snapshot)
-    return true
-  }
 }
 
 /**
@@ -159,6 +59,8 @@ export function useTwin2dEditorPage(
   const page: Twin2dPageState = {
     doc: shallowRef<Twin2dDoc | null>(null),
     missing: ref(false),
+    loadError: ref<string | null>(null),
+    saveError: ref<string | null>(null),
     file: {
       dashboard: ref<DashboardPayload | null>(null),
       loading: ref(false),
@@ -169,7 +71,7 @@ export function useTwin2dEditorPage(
   }
   const raced = useRacedFetch()
   useWorkspaceDashboard(() => page.file.dashboard.value)
-  const reload = createReload(page, raced, dashboardId, nodeId)
+  const reload = createTwin2dReload(page, raced, dashboardId, nodeId)
   const node = computed<DashboardNodePayload | null>(
     () =>
       page.file.dashboard.value?.nodes.find((item) => item.id === nodeId()) ??
@@ -189,11 +91,12 @@ export function useTwin2dEditorPage(
     loading: page.file.loading,
     saving: page.file.saving,
     error: computed(() =>
-      page.missing.value ? TWIN_2D_MISSING_NODE_MESSAGE : page.file.error.value,
+      page.missing.value ? TWIN_2D_MISSING_NODE_MESSAGE : page.loadError.value,
     ),
     conflict: page.file.conflict,
-    save: createSave(page, nodeId),
+    save: createTwin2dSave(page, nodeId),
     reload,
+    saveError: page.saveError,
     dispose: () => disposeDoc(page.file, raced.cancel),
   }
 }

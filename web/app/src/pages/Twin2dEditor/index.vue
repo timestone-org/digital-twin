@@ -2,6 +2,7 @@
 /**
  * @fileoverview 2D 孪生子编辑器：大纲、画布、诊断与检查器；交互由 scripts/ 编排。
  */
+import { TWIN_2D_CONFIG_KEY, twin2dRowLabels } from '@dt/twin2d'
 import type { Twin2dConfig } from '@dt/twin2d'
 import {
   DtButton,
@@ -21,19 +22,24 @@ import { useUnsavedGuard } from '@/composables/useUnsavedGuard'
 import { useSubEditorRouteGuard } from '@/features/dashboard/useSubEditorRouteGuard'
 
 import EditorStage from './components/EditorStage.vue'
-import NodePalette from './components/NodePalette.vue'
 import StyleLibraryDrawer from './components/StyleLibraryDrawer.vue'
 import Twin2dDiagnostics from './components/Twin2dDiagnostics.vue'
-import Twin2dOutline from './components/Twin2dOutline.vue'
+import Twin2dOutlinePane from './components/Twin2dOutlinePane.vue'
 import Twin2dRightPane from './components/Twin2dRightPane.vue'
 import Twin2dRuntimePreview from './components/Twin2dRuntimePreview.vue'
 import Twin2dToolbar from './components/Twin2dToolbar.vue'
 import { createTwin2dCommands } from './scripts/editorCommands'
+import { TWIN_2D_EDITOR_PANES, twin2dStagePanes } from './scripts/editorPanes'
 import { createTwin2dSelection } from './scripts/editorSelection'
 import type { Twin2dStyleKind } from './scripts/editorSelection'
-import { addNode } from './scripts/nodeOps'
+import { addNodeAtCenter } from './scripts/paletteDrag'
 import { useTwin2dShortcuts } from './scripts/shortcuts'
-import { twin2dScan, twin2dSetupIssues } from './scripts/twin2dIssues'
+import { twin2dEntityExists } from './scripts/styleOps'
+import {
+  twin2dLoadDrops,
+  twin2dScan,
+  twin2dSetupIssues,
+} from './scripts/twin2dIssues'
 import type { Twin2dEntityKind } from './scripts/types'
 import { TWIN_2D_AI_STARTERS, useTwin2dAi } from './scripts/useTwin2dAi'
 import { useTwin2dBindings } from './scripts/useTwin2dBindings'
@@ -77,6 +83,13 @@ const binding = useTwin2dBindings(
   () => nodeId.value,
 )
 
+/** 挑点弹窗的副标题：正在绑的那一行叫什么。 */
+const pickerLabel = computed(() => {
+  const key = binding.pickingFieldKey.value
+  if (key === null || config.value === null) return undefined
+  return twin2dRowLabels(config.value)[key]?.title
+})
+
 // ⚠ SVG/DOM 舞台未接截图能力，见 scripts/aiSurface.ts。
 const ai = useTwin2dAi(page, binding, selection)
 
@@ -85,15 +98,13 @@ const issues = computed(() =>
   config.value === null ? [] : twin2dScan(config.value).issues,
 )
 
+// ⚠ 读的是库里那份原始配置：保存成功后它换成新落库的那一份，这一族随之清空
+const loadDrops = computed(() =>
+  twin2dLoadDrops(page.node.value?.configJson[TWIN_2D_CONFIG_KEY]),
+)
+
 // ⚠ 装配缺口只在启动时读取，并合入顶栏计数，避免素材缺失却没有诊断提示。
 const setupIssues = twin2dSetupIssues()
-
-const outlineSummary = computed(() => {
-  const current = config.value
-  if (current === null) return ''
-  const { nodes, edges, marks, styles } = current
-  return `节点 ${nodes.length} · 连线 ${edges.length} · 标注 ${marks.length} · 样式 ${styles.length}`
-})
 
 const canvasSummary = computed(() => {
   const canvas = config.value?.canvas
@@ -146,6 +157,8 @@ const commands = createTwin2dCommands({
   config: () => config.value,
   selection,
   commit,
+  commitMerged,
+  endMerge,
   undo: () => page.doc.value?.undo(),
   redo: () => page.doc.value?.redo(),
   save: () => void save(),
@@ -153,6 +166,7 @@ const commands = createTwin2dCommands({
   pickPrim: (primId) => {
     selectedPrim.value = primId
   },
+  notify: (text) => toast.warning(text),
 })
 
 useTwin2dShortcuts({
@@ -164,21 +178,16 @@ useTwin2dShortcuts({
 })
 
 /**
- * 从调色板加一个节点，落在画布正中。
- * ⚠ 走 `addNode` 而不是就地拼一个：缺省值抄一份出来，抄的那份一旦与归一化不一致，
- * 新节点会在「存一次再读回来」之后悄悄变样。
- * @param styleId 拖下来的那份样式
+ * 从调色板加一个节点，落在画布正中并吸网格。
+ * @param styleId 点的那份样式
  */
 function addFromPalette(styleId: string): void {
   const current = config.value
   if (current === null) return
-  const added = addNode(current, {
-    styleId,
-    x: current.canvas.width / 2,
-    y: current.canvas.height / 2,
-  })
+  const added = addNodeAtCenter(current, styleId)
+  if (added.id === null) return
   commit(added.config)
-  if (added.id !== null) selection.select('nodes', added.id)
+  selection.select('nodes', added.id)
 }
 
 /**
@@ -209,10 +218,7 @@ function focusIssue(target: { kind: Twin2dEntityKind; id: string }): void {
 // 已经不存在的东西，改哪一项都写不回去且不报错
 watch(config, (next) => {
   if (next === null) return
-  selection.prune((kind: Twin2dEntityKind, id: string) => {
-    const rows: readonly { id: string }[] = next[kind]
-    return rows.some((row) => row.id === id)
-  })
+  selection.prune((kind, id) => twin2dEntityExists(next, kind, id))
 })
 
 // ⚠ 换一份样式必须把图元选中清掉：图元 id 只在**它自己那份样式**里唯一，留着上一份
@@ -228,9 +234,14 @@ watch(
 const backTo = computed(() => `/dashboards/${dashboardId.value}/edit`)
 
 async function save(): Promise<void> {
+  // ⚠ 上一次还在路上时再按一次是「忙」，不是「失败」：报红会让人以为没存上
+  if (page.saving.value) return
   const ok = await page.save()
   if (ok) toast.success('2D 孪生已保存')
-  else toast.error(page.conflict.value ?? '保存失败，请重试')
+  else
+    toast.error(
+      page.conflict.value ?? page.saveError.value ?? '保存失败，请重试',
+    )
 }
 
 /** 冲突或加载失败之后的出口：整份重取，本地未保存的改动就此丢弃。 */
@@ -263,7 +274,7 @@ onBeforeUnmount(page.dispose)
         :is-saving="page.saving.value"
         :can-undo="page.doc.value?.canUndo.value ?? false"
         :can-redo="page.doc.value?.canRedo.value ?? false"
-        :issue-count="issues.length + setupIssues.length"
+        :issue-count="issues.length + loadDrops.length + setupIssues.length"
         :parity-text="parity?.summary ?? ''"
         :parity-exact="parity?.exact ?? false"
         :crop-exact="sizing.contentFit.value?.exact ?? true"
@@ -311,59 +322,23 @@ onBeforeUnmount(page.dispose)
           class="min-h-0 flex-1"
           storage-key="dt.twin2d-editor.layout"
           :stack-at="720"
-          :panes="[
-            { id: 'outline', label: '大纲', size: 20, minSize: 180 },
-            { id: 'stage', label: '画布', size: 55, minSize: 280 },
-            { id: 'inspector', label: '检查器', size: 25, minSize: 240 },
-          ]"
+          :panes="TWIN_2D_EDITOR_PANES"
         >
           <template #outline>
-            <aside
-              class="flex min-h-0 flex-1 flex-col gap-2 overflow-y-auto p-2 text-2xs text-text-secondary"
-              aria-label="大纲"
-              data-test="outline"
-            >
-              <div class="flex items-center gap-1">
-                <span class="min-w-0 flex-1 truncate">{{
-                  outlineSummary
-                }}</span>
-                <DtButton
-                  size="xs"
-                  variant="ghost"
-                  intent="primary"
-                  icon="palette"
-                  aria-label="样式库"
-                  title="样式库：新建、复制、恢复内置与整包导入导出"
-                  data-test="open-style-library"
-                  @click="libraryOpen = true"
-                />
-              </div>
-              <Twin2dOutline
-                :config="config"
-                :selection="selection"
-                @change="commit"
-              />
-              <NodePalette :styles="config.styles" @add="addFromPalette" />
-            </aside>
+            <Twin2dOutlinePane
+              :config="config"
+              :selection="selection"
+              @change="commit"
+              @add="addFromPalette"
+              @open-library="libraryOpen = true"
+            />
           </template>
           <template #stage>
             <DtResizableLayout
               class="min-h-0 flex-1"
               direction="vertical"
               storage-key="dt.twin2d-editor.diagnostics"
-              :panes="
-                showIssues
-                  ? [
-                      { id: 'canvas', label: '画布', size: 75, minSize: 180 },
-                      {
-                        id: 'issues',
-                        label: '配置问题',
-                        size: 25,
-                        minSize: 80,
-                      },
-                    ]
-                  : [{ id: 'canvas', label: '画布', size: 75, minSize: 180 }]
-              "
+              :panes="twin2dStagePanes(showIssues)"
             >
               <template #canvas>
                 <section
@@ -373,7 +348,6 @@ onBeforeUnmount(page.dispose)
                   :data-fit-request="fitRequest"
                 >
                   <EditorStage
-                    v-if="config !== null"
                     :config="config"
                     :selection="selection"
                     :fit-request="fitRequest"
@@ -395,7 +369,6 @@ onBeforeUnmount(page.dispose)
               </template>
               <template #issues>
                 <div
-                  v-if="showIssues"
                   class="min-h-0 flex-1 overflow-y-auto p-2 text-2xs text-text-secondary"
                   aria-label="配置问题"
                   data-test="diagnostics"
@@ -410,7 +383,11 @@ onBeforeUnmount(page.dispose)
                   >
                     {{ text }}
                   </DtNotice>
-                  <Twin2dDiagnostics :config="config" @select="focusIssue" />
+                  <Twin2dDiagnostics
+                    :config="config"
+                    :load-drops="loadDrops"
+                    @select="focusIssue"
+                  />
                 </div>
               </template>
             </DtResizableLayout>
@@ -441,7 +418,6 @@ onBeforeUnmount(page.dispose)
                 />
               </div>
               <Twin2dRightPane
-                v-if="config !== null"
                 class="min-h-0 flex-1"
                 :config="config"
                 :selection="selection.inspect.value"
@@ -484,6 +460,7 @@ onBeforeUnmount(page.dispose)
         <PointPickerDialog
           :model-value="binding.pickingFieldKey.value !== null"
           :field-key="binding.pickingFieldKey.value"
+          :label="pickerLabel"
           @update:model-value="binding.closePicker"
           @pick="binding.pickPoint"
         />

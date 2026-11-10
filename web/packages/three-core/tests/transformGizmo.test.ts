@@ -119,6 +119,30 @@ describe('拖动', () => {
     expect(core.controls.enabled).toBe(true)
   })
 
+  // ⚠ 游戏档的轨道控制本该一直关着：松手无条件开回来，滚轮又能推拉镜头
+  it('宿主说不许开时，松手也不开回轨道控制', () => {
+    const container = document.createElement('div')
+    document.body.append(container)
+    const core = createSceneCore({
+      container,
+      renderer: createHeadlessRenderer(),
+    })
+    core.controls.enabled = false
+    const gizmo = new TransformGizmo({
+      core,
+      onChange: () => undefined,
+      onDragEnd: () => undefined,
+      orbitAllowed: () => false,
+    })
+    living.push(gizmo)
+    gizmo.attach(ANCHOR)
+
+    emitDragging(gizmo, true)
+    emitDragging(gizmo, false)
+
+    expect(core.controls.enabled).toBe(false)
+  })
+
   it('松手时发一次结束信号，供宿主合并撤销', () => {
     const { gizmo, ends } = setup()
     gizmo.attach(ANCHOR)

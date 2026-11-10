@@ -20,7 +20,7 @@
 import { TWIN_2D_BUILTIN_NODE_STYLES, normalizeTwin2dConfig } from '@dt/twin2d'
 import type { Twin2dConfig, Twin2dNodeStyle } from '@dt/twin2d'
 import { DtFilePicker, DtSelect } from '@dt/ui'
-import { mount } from '@vue/test-utils'
+import { flushPromises, mount } from '@vue/test-utils'
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 import { nextTick } from 'vue'
 
@@ -423,6 +423,31 @@ describe('导入', () => {
 
     expect(wrapper.emitted('change')).toBeUndefined()
     expect(toastError).toHaveBeenCalled()
+  })
+
+  // ⚠ 选完之后文件被删、权限被收回时 `file.text()` 会抛：吞掉的话用户什么提示都看不到
+  it('文件读不出来时说一声，一步不改文档', async () => {
+    const wrapper = mountDrawer()
+    const broken = new File(['{}'], 'broken.json')
+    broken.text = () => Promise.reject(new Error('NotReadableError'))
+
+    pickFiles(wrapper, [broken])
+    await flushPromises()
+
+    expect(wrapper.emitted('change')).toBeUndefined()
+    expect(toastError).toHaveBeenCalledWith('读不出这个文件')
+  })
+
+  // ⚠ 导出键挂在「导入时 id 撞了怎么办」那一格上的话，看着像只对导入生效的设置
+  it('导出键不挂在导入撞名那一格里', () => {
+    const wrapper = mountDrawer()
+
+    expect(
+      wrapper
+        .find('[data-test="style-lib-mode"] [data-test="style-lib-export"]')
+        .exists(),
+    ).toBe(false)
+    expect(wrapper.find('[data-test="style-lib-export"]').exists()).toBe(true)
   })
 
   it('版本比本版新的一律拒绝', async () => {

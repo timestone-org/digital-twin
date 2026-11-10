@@ -89,9 +89,11 @@ const rangeError = computed(() =>
     ? problem.value.message
     : localRangeError.value,
 )
-const tableError = computed(() =>
+const otherError = computed(() =>
   problem.value?.kind === 'other' ? problem.value.message : null,
 )
+// 折线视图下表格那条没跟着区间走；切回表格时要补一次
+const isSamplesStale = ref(false)
 const isBlocked = computed(
   () =>
     problem.value?.kind === 'unbound' || problem.value?.kind === 'unavailable',
@@ -99,11 +101,14 @@ const isBlocked = computed(
 
 function reloadAll(): void {
   if (localRangeError.value !== null || datasetKey.value === '') return
-  void samples.reload()
-  // 表格视图下不去拉序列：那是另一条端点，看不见的时候拉纯属浪费外库的查询
-  if (view.value === 'chart' && selected.value.length > 0) {
-    void series.load(metrics.value)
+  // 只拉正在看的那条：另一条是另一个端点，看不见的时候拉纯属浪费外库的查询
+  if (view.value === 'table') {
+    isSamplesStale.value = false
+    void samples.reload()
+    return
   }
+  isSamplesStale.value = true
+  if (selected.value.length > 0) void series.load(metrics.value)
 }
 
 async function loadCatalog(): Promise<void> {
@@ -134,11 +139,18 @@ function onMore(): void {
   void samples.loadMore()
 }
 
+// ⚠ 必须排在下面那条取数侦听之前：换数据集后要先换成新数据集的默认指标再取，
+// 否则拿旧数据集的指标键去问新数据集。取数端点眼下固定在逐分钟数据集上，按数据集
+// 取数要后端先支持
+watch(datasetKey, () => {
+  selected.value = defaultMetrics(metrics.value)
+})
 watch([from, to, datasetKey], () => reloadAll())
 watch(view, (next) => {
   if (next === 'chart' && selected.value.length > 0) {
     void series.load(metrics.value)
   }
+  if (next === 'table' && isSamplesStale.value) reloadAll()
 })
 
 // ⚠ 不在这里再调一次 reloadAll：目录回来时 datasetKey 从空串变成第一个 key，
@@ -191,7 +203,7 @@ onMounted(() => {
         :loading="samples.loading.value"
         :loading-more="samples.loadingMore.value"
         :has-more="samples.hasMore.value"
-        :error="tableError"
+        :error="otherError"
         @more="onMore"
         @retry="reloadAll"
       />
@@ -203,7 +215,9 @@ onMounted(() => {
         :series="series.series.value"
         :interval-minutes="series.intervalMinutes.value"
         :loading="series.loading.value"
+        :error="otherError"
         @toggle="onToggle"
+        @retry="reloadAll"
       />
     </div>
   </AppShell>

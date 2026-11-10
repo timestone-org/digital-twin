@@ -29,7 +29,7 @@ class RerankUnavailable(ModelDisabled):
     把一句「本部署没接」变成一条 500。
     """
 
-    code = 52205
+    code = 52207
 
 
 @dataclass(frozen=True)

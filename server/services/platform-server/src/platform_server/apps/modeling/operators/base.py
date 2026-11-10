@@ -335,6 +335,17 @@ class OperatorBase:
         raise NotImplementedError
 
     @classmethod
+    def accepts_empty_fit(cls, config: OperatorConfig) -> bool:
+        """按这份参数，拟合出一份空参数是不是合法的（这一步什么都不做）。
+
+        ⚠ 答「是」的算子必须按「回灌过没有」而不是「参数空不空」分支，否则回灌
+        一份空参数后推理时会重新拟合。
+        Args: config。
+        """
+        del config
+        return False
+
+    @classmethod
     def validate_fitted(cls, params: dict[str, Any]) -> None:
         """校验一份拟合参数；不合法抛 `OperatorError`。
 

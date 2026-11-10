@@ -6,7 +6,11 @@
 import { computed } from 'vue'
 import type { RouteRule } from '@dt/contracts'
 
-const props = defineProps<{ rule: RouteRule }>()
+const props = defineProps<{
+  rule: RouteRule
+  /** 折行铺满而不是省略：卡片上路径就是规则的身份，省略成同一个前缀就分不出谁是谁。 */
+  wrap?: boolean
+}>()
 
 const tone = computed(() =>
   props.rule.is_enabled ? 'text-text-title' : 'text-text-disabled',
@@ -15,8 +19,8 @@ const tone = computed(() =>
 
 <template>
   <code
-    class="min-w-0 truncate font-mono"
-    :class="tone"
+    class="min-w-0 font-mono"
+    :class="[tone, wrap ? 'break-all' : 'truncate']"
     :title="rule.path_pattern"
     >{{ rule.path_pattern }}</code
   >

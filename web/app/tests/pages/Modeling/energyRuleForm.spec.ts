@@ -4,6 +4,7 @@ import { mount } from '@vue/test-utils'
 import { expect, it } from 'vitest'
 
 import ConfigEditorDialog from '@/pages/Modeling/Canvas/components/ConfigEditorDialog.vue'
+import { changeEnergyConfig } from '@/pages/Modeling/Canvas/scripts/energyRuleForm'
 import { fieldsOf } from '@/pages/Modeling/Canvas/scripts/schemaForm'
 
 const schema = {
@@ -132,11 +133,17 @@ it('切换规则清除不适用的业务列映射', async () => {
     .find((item) => item.props('label') === '规则类型')
   select?.vm.$emit('update:modelValue', 'unit_consumption')
   await wrapper.vm.$nextTick()
-  expect(wrapper.emitted('change')).toEqual([
-    ['fields', {}],
-    ['kind', 'unit_consumption'],
-  ])
+  // ⚠ 一次写入：拆成两次 commit 的话，撤销一下会落到「旧类型 + 列映射已清空」
+  expect(wrapper.emitted('change')).toEqual([['kind', 'unit_consumption']])
   wrapper.unmount()
+})
+it('换规则类型时一并清掉列映射，同类型不动', () => {
+  const config = { kind: 'hvac_compliance', fields: { temp: 't1' } }
+  expect(changeEnergyConfig(config, 'kind', 'energy_aggregation')).toEqual({
+    kind: 'energy_aggregation',
+    fields: {},
+  })
+  expect(changeEnergyConfig(config, 'kind', 'hvac_compliance')).toEqual(config)
 })
 it('分类计量提供可编辑行，折标系数保持十进制文本，未完成行不覆盖配置', async () => {
   const wrapper = dialog('energy_aggregation')

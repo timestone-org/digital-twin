@@ -122,3 +122,22 @@ describe('不该发的请求一律不发', () => {
     expect(vi.mocked(dataset.getDatasetSeries)).not.toHaveBeenCalled()
   })
 })
+
+describe('图已过期的提示', () => {
+  it('⚠ 换了时间范围就提示，再查一次就消掉', async () => {
+    vi.mocked(dataset.getDatasetSeries).mockResolvedValue(answer(1))
+    const one = trend()
+    await one.query()
+    expect(one.dirty.value).toBe(false)
+
+    one.range.value = { preset: 'custom', from: '2026-08-01T00:00', to: '' }
+    expect(one.dirty.value).toBe(true)
+    one.range.value = {
+      preset: 'custom',
+      from: '2026-08-01T00:00',
+      to: '2026-08-02T00:00',
+    }
+    await one.query()
+    expect(one.dirty.value).toBe(false)
+  })
+})

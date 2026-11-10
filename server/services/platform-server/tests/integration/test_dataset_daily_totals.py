@@ -69,8 +69,9 @@ async def test_missing_cells_do_not_become_a_complete_day_total(
     app_client: httpx.AsyncClient,
 ) -> None:
     table_id = await daily_table(app_client)
+    await create_column(app_client, table_id, key="备注", name="备注")
     await record(app_client, table_id, MIDNIGHT, 电量=2)
-    await record(app_client, table_id, FIVE_MINUTES)
+    await record(app_client, table_id, FIVE_MINUTES, 备注=1)
 
     current = await record(app_client, table_id, TEN_MINUTES, 电量=4)
 

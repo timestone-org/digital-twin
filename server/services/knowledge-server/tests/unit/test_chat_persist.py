@@ -57,8 +57,9 @@ class _Transaction:
             self.holds_lock = True
         await asyncio.sleep(0)
         rows = list(self.database.committed)
+        top = max((row.seq for row in rows), default=0)
         found = SimpleNamespace(all=lambda: rows)
-        return SimpleNamespace(scalars=lambda: found)
+        return SimpleNamespace(scalars=lambda: found, scalar_one=lambda: top)
 
     def add(self, row: ChatMessage) -> None:
         self.pending.append(row)

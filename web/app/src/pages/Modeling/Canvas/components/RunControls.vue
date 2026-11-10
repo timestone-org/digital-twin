@@ -27,6 +27,7 @@ const isKeepingFrames = defineModel<boolean>('isKeepingFrames', {
 <template>
   <DtCheckbox
     v-model="isKeepingFrames"
+    class="shrink-0 whitespace-nowrap"
     label="留全量结果"
     title="跑完把每一步的完整数据存下来，之后可以在结果面上下载"
   />
@@ -52,8 +53,10 @@ const isKeepingFrames = defineModel<boolean>('isKeepingFrames', {
     v-if="!props.isRunning"
     :codes="[PERMISSION_CODES.modelingPublish]"
   >
+    <!-- 顶栏只留「开始训练」一个实心主按钮，并排几个实心的分不出先点哪个 -->
     <DtButton
       size="sm"
+      variant="outline"
       icon="share"
       :disabled="props.isReadonly"
       :loading="props.isStarting"

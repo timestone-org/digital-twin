@@ -7,6 +7,7 @@ import { computed, ref, watch } from 'vue'
 import * as api from '@/api/reports'
 import { describeError } from '@/composables/useAsyncList'
 import { useFormDirty } from '@/composables/useFormDirty'
+import { granularityLabel } from '../../scripts/reportDocument'
 import {
   emptyScheduleErrors,
   validateScheduleFields,
@@ -98,7 +99,7 @@ async function save(): Promise<void> {
         hint="报告模板和周期沿用原规则，启停可在列表操作"
       />
       <div class="dt-form-grid__wide flex flex-wrap gap-2">
-        <DtTag>周期：{{ record?.granularity }}</DtTag>
+        <DtTag>周期：{{ granularityLabel(record?.granularity ?? '') }}</DtTag>
         <DtTag>{{ record?.is_enabled ? '已启用' : '已停用' }}</DtTag>
       </div>
       <DtInput

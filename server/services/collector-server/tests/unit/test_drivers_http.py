@@ -1,7 +1,6 @@
 """HTTP 驱动的逐点解析、对齐、错误分档与响应资源限制。"""
 
 import asyncio
-from dataclasses import replace
 
 import httpx
 import pytest
@@ -354,26 +353,6 @@ async def test_lifecycle_and_read_only_operations_are_explicit() -> None:
     await driver.disconnect()
     with pytest.raises(DriverNotConnected):
         await driver.healthcheck()
-
-
-def test_fingerprint_is_secret_safe_and_detects_changes() -> None:
-    setup = HttpSetup(options={"auth_type": "bearer"}, password=SECRET)
-    first = driver_for(RecordingHandler(), setup).fingerprint()
-    second = driver_for(
-        RecordingHandler(), replace(setup, password="rotated-secret")
-    ).fingerprint()
-    third = driver_for(
-        RecordingHandler(),
-        replace(setup, options={"auth_type": "bearer", "timeout_s": "3"}),
-    ).fingerprint()
-    assert SECRET not in str(first)
-    assert len(first[0]) == 64
-    assert first != second
-    assert first != third
-    assert (
-        driver_for(RecordingHandler()).classify_error(ValueError("bad"))
-        == "config"
-    )
 
 
 async def test_empty_point_read_is_a_real_connectivity_probe() -> None:

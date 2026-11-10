@@ -168,6 +168,11 @@ class ShardConsumer:
         try:
             async with asyncio.timeout(self._options.shard_timeout_s):
                 await self._run_one(message)
+        except TimeoutError as error:
+            # ⚠ 预算到点的 TimeoutError 文本是空串，原样落库会撞上 CHECK
+            timeout_s = self._options.shard_timeout_s
+            reason = str(error) or f"分片抽取超过 {timeout_s:.0f} 秒被掐断"
+            await self._record_failure(message, reason=reason)
         # 一片失败不该让循环停下，也不该让上一批次受影响
         except Exception as error:
             _logger.error(
@@ -177,7 +182,8 @@ class ShardConsumer:
                 month=message.month,
                 error=error,
             )
-            await self._record_failure(message, reason=str(error))
+            reason = str(error) or type(error).__name__
+            await self._record_failure(message, reason=reason)
         await self._finalize(message)
 
     async def _run_one(self, message: ac_startup_queue.ShardMessage) -> None:
@@ -237,7 +243,7 @@ class ShardConsumer:
         try:
             async with self._database.session() as session:
                 await finalize_if_complete(session, message.batch_id)
-        # 收尾失败不该让这条消息重放：分片状态已经落库，下一片会再试一次
+        # 收尾失败不该让这条消息重放：分片状态已经落库，后面还有片时会再试一次
         except Exception as error:  # pragma: no cover - 依赖库同时不可用
             _logger.error(
                 "ac_startup_batch_finalize_failed",

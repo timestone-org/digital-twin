@@ -59,11 +59,21 @@ describe('DtTextarea 取值', () => {
 })
 
 describe('DtTextarea 字数', () => {
-  it('给了 maxlength 才显示剩余字数', () => {
+  it('给了 maxlength 才显示「已用 / 上限」', () => {
     const wrapper = mount(DtTextarea, {
       props: { modelValue: 'abc', maxlength: 10 },
     })
-    expect(wrapper.find('.dt-textarea__count').text()).toBe('7')
+    expect(wrapper.find('.dt-textarea__count').text()).toBe('3 / 10')
+  })
+
+  it('计数排在输入框外面，不压在原生拖拽把手上', () => {
+    const wrapper = mount(DtTextarea, {
+      props: { modelValue: 'abc', maxlength: 10 },
+    })
+    expect(wrapper.find('.dt-textarea .dt-textarea__count').exists()).toBe(
+      false,
+    )
+    expect(wrapper.find('.dt-textarea__count').exists()).toBe(true)
   })
 
   it('没给 maxlength 时不显示计数', () => {
@@ -71,11 +81,13 @@ describe('DtTextarea 字数', () => {
     expect(wrapper.find('.dt-textarea__count').exists()).toBe(false)
   })
 
-  it('内容超过上限时截到 0，不露负数', () => {
+  it('内容超过上限时照实显示已用数并标成超限', () => {
     const wrapper = mount(DtTextarea, {
       props: { modelValue: 'abcdef', maxlength: 3 },
     })
-    expect(wrapper.find('.dt-textarea__count').text()).toBe('0')
+    const count = wrapper.find('.dt-textarea__count')
+    expect(count.text()).toBe('6 / 3')
+    expect(count.classes()).toContain('dt-textarea__count--over')
   })
 
   it('非有限的 maxlength 不显示计数', () => {

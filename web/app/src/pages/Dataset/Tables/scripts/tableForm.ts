@@ -11,8 +11,11 @@ import type {
   DatasetTablePatchInput,
 } from '@/api/dataset'
 
-/** 与后端 `TableCreateIn.code` 的 pattern 逐字一致。 */
-export const CODE_PATTERN = /^[A-Za-z0-9][A-Za-z0-9._-]*$/
+/**
+ * 与后端 `TableCreateIn.code` 的 pattern 逐字一致。
+ * ⚠ 不许含点号：跨表引用 `{表code.列key}` 按第一个点号切，带点的表引用不到。
+ */
+export const CODE_PATTERN = /^[A-Za-z0-9][A-Za-z0-9_-]*$/
 export const CODE_MAX = 64
 export const NAME_MAX = 64
 export const DESCRIPTION_MAX = 256
@@ -20,6 +23,8 @@ export const DESCRIPTION_MAX = 256
 export const INTERVAL_S_MIN = 1
 export const INTERVAL_S_MAX = 86_400
 export const DEFAULT_INTERVAL_S = 60
+/** 与后端 `retention_days` 的上限同界（一百年）；永久保留是留空，不是填大数。 */
+export const RETENTION_DAYS_MAX = 36_500
 
 /** 表单此刻的取值。周期以**秒**记：让人对着 60000 数零是没必要的。 */
 export interface TableFormState {
@@ -108,7 +113,7 @@ function codeError(code: string): string {
   if (code.trim() === '') return '请填台账编码'
   if (code.length > CODE_MAX) return `不超过 ${CODE_MAX} 个字符`
   if (!CODE_PATTERN.test(code)) {
-    return '只能用字母、数字与 . _ -，且以字母或数字开头'
+    return '只能用字母、数字与 _ -，且以字母或数字开头'
   }
   return ''
 }
@@ -137,8 +142,21 @@ export function toCreateInput(state: TableFormState): DatasetTableCreateInput {
  * 改表补丁。
  * ⚠ 不含 `code`：它是大屏绑定键 `ds:{code}:{列key}` 的前半段，改一次等于让
  * 每一处引用它的绑定悄悄失效，故后端的 `TableUpdateIn` 里根本没有这一项。
+ * ⚠ 周期没动过就不提交：表单按整秒显示，1500ms 这类合法存量铺进来是 2 秒，
+ * 原样写回会悄悄改掉采集节奏与桶网格。
  * @param state 表单取值
+ * @param original 正在编辑的那张台账
  */
-export function toPatchInput(state: TableFormState): DatasetTablePatchInput {
-  return sharedFields(state)
+export function toPatchInput(
+  state: TableFormState,
+  original: DatasetTableSummary | null = null,
+): DatasetTablePatchInput {
+  const patch: DatasetTablePatchInput = sharedFields(state)
+  if (
+    original !== null &&
+    state.intervalSeconds === formStateOf(original).intervalSeconds
+  ) {
+    delete patch.collect_interval_ms
+  }
+  return patch
 }

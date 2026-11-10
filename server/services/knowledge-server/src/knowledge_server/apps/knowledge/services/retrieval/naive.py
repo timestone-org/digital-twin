@@ -13,6 +13,7 @@ from knowledge_server.apps.knowledge.services.indexing import (
     IndexPair,
     VectorQuery,
 )
+from knowledge_server.apps.knowledge.services.released import released
 from knowledge_server.apps.knowledge.services.retrieval.hydrate import (
     hydrated,
 )
@@ -53,6 +54,7 @@ class NaiveVector:
         """
         if not self.embedder.can_embed:
             raise RetrievalUnavailable("这个库还没建索引：这套部署没接嵌入档")
+        await released(session)
         probe = (await self.embedder.embed([request.query]))[0]
         scored = await self.indexes.vector.search(
             session,

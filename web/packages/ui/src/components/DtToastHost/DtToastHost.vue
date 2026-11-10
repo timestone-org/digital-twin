@@ -85,6 +85,13 @@ const ACCENT: Record<DtIntent, string> = {
   pointer-events: none;
 }
 
+// 消息层压在弹窗之上，挂在右下角就正好盖住弹窗底栏里的提交键。
+// ⚠ 收起的页签里弹窗只是 v-show 藏起，节点仍在 body 里，不排除就一直挂右上角
+body:has(.dt-modal:not([style*='display: none'])) .dt-toasts {
+  top: 20px;
+  bottom: auto;
+}
+
 .dt-toast {
   display: flex;
   align-items: flex-start;

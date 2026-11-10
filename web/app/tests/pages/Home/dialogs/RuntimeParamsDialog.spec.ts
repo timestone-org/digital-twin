@@ -2,6 +2,7 @@
  * @fileoverview 契约：运行参数弹窗自己取数、三项旋钮与后端目录逐字对齐、
  * 每项显示 env 名，且「恢复默认」的文案说的是删覆盖值重新跟随环境变量。
  */
+import { createPinia, setActivePinia } from 'pinia'
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 import { flushPromises, mount } from '@vue/test-utils'
 import { useConfirm } from '@dt/ui'
@@ -9,6 +10,11 @@ import type { RuntimeParamItem } from '@dt/contracts'
 
 import * as runtimeApi from '@/api/runtimeParams'
 import RuntimeParamsDialog from '@/pages/Home/components/RuntimeParamsDialog.vue'
+import { useAuthStore } from '@/stores/auth'
+
+function grant(codes: string[]): void {
+  useAuthStore().user = { permissions: codes } as never
+}
 
 function item(
   key: string,
@@ -63,6 +69,8 @@ async function clickText(
 }
 
 beforeEach(() => {
+  setActivePinia(createPinia())
+  grant(['dashboard:view', 'dashboard:edit'])
   vi.spyOn(runtimeApi, 'listRuntimeParams').mockResolvedValue(ROWS)
   vi.spyOn(runtimeApi, 'saveRuntimeParams').mockResolvedValue(ROWS)
   vi.spyOn(runtimeApi, 'resetRuntimeParams').mockResolvedValue(ROWS)
@@ -198,5 +206,22 @@ describe('弹窗自带的关闭路径', () => {
     await wrapper.find('[aria-label="关闭"]').trigger('click')
 
     expect(wrapper.emitted('update:open')).toEqual([[false]])
+  })
+})
+
+describe('只读账号', () => {
+  it('只有 dashboard:view 时不给保存与恢复默认，输入框禁用', async () => {
+    grant(['dashboard:view'])
+    const wrapper = mountDialog(true)
+    await flushPromises()
+    const labels = wrapper.findAll('button').map((button) => button.text())
+    expect(labels.some((text) => text.includes('保存'))).toBe(false)
+    expect(labels.some((text) => text.includes('恢复默认'))).toBe(false)
+    const inputs = wrapper.findAll('input')
+    expect(inputs.length).toBeGreaterThan(0)
+    for (const input of inputs) {
+      expect(input.attributes('disabled')).toBeDefined()
+    }
+    expect(wrapper.text()).toContain('只读')
   })
 })

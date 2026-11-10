@@ -8,6 +8,7 @@
 
 from collections.abc import Mapping, Sequence
 from dataclasses import dataclass, replace
+from itertools import pairwise
 
 from platform_server.apps.modeling.operators.reporting import (
     MAX_BIN_COLUMNS,
@@ -55,6 +56,11 @@ ORDER_NOTE = (
     "按帧的行序往前数，不按时刻：中间插了会改行序的算子（排序、随机切分）"
     "之后这几列整片是错的，图校验也拦不住这一条"
 )
+# 帧的时刻索引有倒退时，按行序数出来的就不是「前几期」
+OUT_OF_ORDER_ALERT = (
+    "这份数据的行序不是时间顺序（上游排过序或拼接过），"
+    "按行序往前数出来的这几列整片是错的——请先按时刻排序再接这一步"
+)
 # 开头那几行的空值不许当 0 读
 ZERO_FILL_NOTE = (
     "开头那几行是空值不是 0：填 0 会把「还没有历史」说成「历史上是 0」，"
@@ -85,6 +91,8 @@ class LagRun:
     configured: int
     kept: int
     rows: int
+    #: 时刻索引有没有倒退
+    is_out_of_order: bool = False
 
 
 @dataclass(frozen=True)
@@ -100,6 +108,8 @@ class RollingRun:
     rows: int
     #: 每个原列逐行的有效样本数，只数窗口已满的那些行
     counts: Mapping[str, Sequence[int]]
+    #: 时刻索引有没有倒退
+    is_out_of_order: bool = False
 
 
 def valid_counts(values: Sequence[float | None], window: int) -> list[int]:
@@ -127,7 +137,11 @@ def lag_blocks(run: LagRun) -> tuple[ReportBlock, ...]:
 
     Args: run。
     """
-    return (_lag_columns(run), _lag_rows(run), _lag_axis(run))
+    return (
+        _order_alerted(_lag_columns(run), run.is_out_of_order),
+        _lag_rows(run),
+        _lag_axis(run),
+    )
 
 
 def rolling_blocks(run: RollingRun) -> tuple[ReportBlock, ...]:
@@ -136,7 +150,7 @@ def rolling_blocks(run: RollingRun) -> tuple[ReportBlock, ...]:
     Args: run。
     """
     return (
-        _rolling_columns(run),
+        _order_alerted(_rolling_columns(run), run.is_out_of_order),
         _rolling_rows(run),
         _rolling_bins(run),
         _rolling_axis(run),
@@ -408,6 +422,21 @@ def _hinted(block: ReportBlock, notes: Sequence[str]) -> ReportBlock:
     Args: block, notes。
     """
     return annotated(block, NOTE_HINT, notes)
+
+
+def is_out_of_order(index: Sequence[int] | None) -> bool:
+    """时刻索引有没有往回走的地方。同一时刻的重复行不算。
+
+    Args: index。
+    """
+    return index is not None and any(
+        right < left for left, right in pairwise(index)
+    )
+
+
+def _order_alerted(block: ReportBlock, is_disordered: bool) -> ReportBlock:
+    """行序不是时序时挂上那条告警。Args: block, is_disordered。"""
+    return _alerted(block, (OUT_OF_ORDER_ALERT,)) if is_disordered else block
 
 
 def _alerted(block: ReportBlock, alerts: Sequence[str]) -> ReportBlock:

@@ -280,3 +280,70 @@ describe('⚠ 42113 被拒绝时', () => {
     expect(create).toHaveBeenCalledTimes(1)
   })
 })
+
+describe('端口池还在读', () => {
+  it('⚠ 池子没拿回来时不闪「端口池已用尽」；真用尽才说，并且不让建', async () => {
+    let resolve: (value: OpcuaPortPool) => void = () => undefined
+    vi.spyOn(opcuaApi, 'getPortPool').mockReturnValue(
+      new Promise<OpcuaPortPool>((done) => {
+        resolve = done
+      }),
+    )
+    mount(InstanceFormDialog, {
+      props: { modelValue: true, instance: null },
+      attachTo: document.body,
+    })
+    await flushPromises()
+    expect(bodyText()).not.toContain('端口池已用尽')
+    resolve(pool({ free_ports: [], available: 0, used: 10 }))
+    await flushPromises()
+    expect(bodyText()).toContain('端口池已用尽')
+    expect(bodyButton('创建')?.disabled).toBe(true)
+  })
+})
+
+describe('字段就地校验', () => {
+  function textInputs(): HTMLInputElement[] {
+    return [...document.body.querySelectorAll('input')].filter(
+      (item) => item.type !== 'radio' && item.type !== 'checkbox',
+    )
+  }
+  function type(index: number, value: string): void {
+    const field = textInputs()[index]
+    if (field === undefined) throw new Error(`没有第 ${index} 个输入框`)
+    field.value = value
+    field.dispatchEvent(new Event('input', { bubbles: true }))
+  }
+
+  it('命名空间按名称预填，用户自己改过就不再跟着名称走', async () => {
+    await dialog()
+    type(0, 'plant2')
+    await flushPromises()
+    expect(textInputs()[3]?.value).toBe('urn:digitaltwin:plant2')
+    type(3, 'urn:custom')
+    type(0, 'plant3')
+    await flushPromises()
+    expect(textInputs()[3]?.value).toBe('urn:custom')
+  })
+
+  it('名称不合规时就地说明，不发一个注定 400 的请求', async () => {
+    const wrapper = await dialog()
+    type(0, '中文名')
+    await flushPromises()
+    expect(bodyText()).toContain('名称须以字母开头')
+    bodyButton('创建')?.click()
+    await flushPromises()
+    expect(wrapper.emitted('create')).toBeUndefined()
+  })
+
+  it('点创建时把空着的必填项逐个标出来，端点路径也算', async () => {
+    const wrapper = await dialog()
+    type(2, '')
+    await flushPromises()
+    bodyButton('创建')?.click()
+    await flushPromises()
+    expect(wrapper.emitted('create')).toBeUndefined()
+    expect(bodyText()).toContain('请填写名称')
+    expect(bodyText()).toContain('端点路径须以 / 开头')
+  })
+})

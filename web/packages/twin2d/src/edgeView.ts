@@ -11,6 +11,7 @@ import {
 } from './constants'
 import { resolveAccent, sanitizeCssValue } from './cssValue'
 import { edgePath } from './edgePath'
+import type { EdgePathResult } from './edgePath'
 import {
   perimTToSide,
   perimeterPoint,
@@ -73,8 +74,12 @@ export const TWIN_2D_END_MARKER = 'end'
 const FALLBACK_OUTLINE_WIDTH = 1
 /** 标签字号缺省 */
 const LABEL_FONT_SIZE = 12
-/** 标签底板的字宽估算系数 */
+/** 标签底板的字宽估算系数（西文） */
 const LABEL_EM_RATIO = 0.62
+/** 中日韩与全角字的字宽系数：一个字约一个字号宽 */
+const LABEL_WIDE_EM_RATIO = 1
+/** 中日韩部首起点；它往上的码位按全宽估 */
+const WIDE_CODE_POINT = 0x2e80
 /** 标签底板的行高系数 */
 const LABEL_LINE_RATIO = 1.2
 
@@ -406,28 +411,25 @@ function arrowAttrs(
 
 /**
  * 两处端点标记。
- * ⚠ 起点的箭头朝**外**（由第二个点指向起点）：两处都按行进方向画的话，一条双箭头
+ * ⚠ 起点的箭头朝**外**（由来处指向起点）：两处都按行进方向画的话，一条双箭头
  * 的线上两个箭头会一起指向同一端。
  * @param style 连线样式
- * @param points `edgePath` 给出的完整折线点序列
+ * @param geom `edgePath` 的产物：两端落点与各自箭头的来处
  */
 function markerViewsOf(
   style: Twin2dEdgeStyle,
-  points: readonly Pt[],
+  geom: EdgePathResult,
 ): Twin2dEdgePart[] {
-  const last = points.length - 1
   const outline = outlineWidthOf(style.strokes)
+  const first = geom.points[0]
+  const last = geom.points[geom.points.length - 1]
   const slots = [
-    [TWIN_2D_START_MARKER, style.startMarker, 1, 0],
-    [TWIN_2D_END_MARKER, style.endMarker, last - 1, last],
+    [TWIN_2D_START_MARKER, style.startMarker, geom.startFrom, first],
+    [TWIN_2D_END_MARKER, style.endMarker, geom.endFrom, last],
   ] as const
   const views: Twin2dEdgePart[] = []
-  for (const [id, marker, fromAt, tipAt] of slots) {
-    const from = points[fromAt]
-    const tip = points[tipAt]
-    if (marker.kind !== 'arrow' || from === undefined || tip === undefined) {
-      continue
-    }
+  for (const [id, marker, from, tip] of slots) {
+    if (marker.kind !== 'arrow' || tip === undefined) continue
     views.push({ id, attrs: arrowAttrs(marker, tip, from, outline) })
   }
   return views
@@ -441,7 +443,8 @@ function labelFontCss(font: FontValue): Record<string, string> {
   }
   const family = sanitizeCssValue(font.family, '')
   if (family !== '') style['font-family'] = family
-  if (font.size !== undefined) style['font-size'] = `${font.size}px`
+  // ⚠ 字号恒写：不写就跟随页面字号，而底板按缺省 12 估宽，字比底板宽出一截
+  style['font-size'] = `${font.size ?? LABEL_FONT_SIZE}px`
   if (font.weight !== undefined) style['font-weight'] = String(font.weight)
   if (font.letterSpacing !== undefined) {
     style['letter-spacing'] = `${font.letterSpacing}px`
@@ -465,23 +468,36 @@ function labelBorderAttrs(border: Twin2dBorder): Record<string, string> {
 }
 
 /**
+ * 一串字按字号算的估计宽度（单位：字号）。
+ * @param text 标签文字
+ */
+function labelEms(text: string): number {
+  let ems = 0
+  for (const char of text) {
+    const wide = (char.codePointAt(0) ?? 0) >= WIDE_CODE_POINT
+    ems += wide ? LABEL_WIDE_EM_RATIO : LABEL_EM_RATIO
+  }
+  return ems
+}
+
+/**
  * 标签底板。
  * ⚠ 宽度按**字数估算**：量真实文字要 `getComputedTextLength` 与真布局，happy-dom 下
  * 测不了——为了几像素的精度换掉整块可测性不值（同 §8 `labelAt` 的取舍）。
  * @param box 底板配置，null = 不画底板
  * @param at 标签锚点
  * @param size 字号
- * @param chars 文字长度
+ * @param text 标签文字
  */
 function labelBoxAttrs(
   box: Twin2dEdgeLabelBox | null,
   at: Pt,
   size: number,
-  chars: number,
+  text: string,
 ): Record<string, string> | null {
   if (box === null) return null
   const [top, right, bottom, left] = box.pad
-  const width = chars * size * LABEL_EM_RATIO + left + right
+  const width = labelEms(text) * size + left + right
   const height = size * LABEL_LINE_RATIO + top + bottom
   return {
     x: num(at.x - width / 2),
@@ -516,7 +532,7 @@ function labelViewOf(
       'dominant-baseline': 'central',
     },
     style: labelFontCss(style.label.font),
-    box: labelBoxAttrs(style.label.box, at, size, text.length),
+    box: labelBoxAttrs(style.label.box, at, size, text),
   }
 }
 
@@ -560,7 +576,7 @@ function edgeViewOf(
     flow: timing,
     path: geom.path,
     strokes: strokeViewsOf(style, state.active, dash),
-    markers: markerViewsOf(style, geom.points),
+    markers: markerViewsOf(style, geom),
     label: labelViewOf(style, geom.label, state.label || edge.label),
   }
 }

@@ -1018,7 +1018,7 @@ export const TWIN_2D_PALETTE = {
 | 42 | `.tnv-square__label` | abs left 50% bottom -2 translate(-50%,100%) / **17px**（= 18−1）/ 600 / shadow 4px 50% | `txt{at:{kind:'abs',left:'50%',bottom:-2,tx:'-50%',ty:'100%'},font:{size:17}}` | ✅ |
 | 43 | `.tnv-text__bar` | 3px 宽 × 1em 高 / bg accent / `0 0 6px accent` / **无圆角** | `box{size:{w:3,h:'1em'},radius:0,fills:[…],shadows:[…]}`。⚠ `Len` 要支持 `'1em'`，归一化白名单里加这一档 | ✅ |
 | 44 | `.tnv-text__label` | 18/600 nowrap shadow 5px 45% | `txt` | ✅ |
-| 45 | shape 兜底 | 模板里 `text` 分支是 `v-else`：任何未识别 shape 落这里 | 归一化里 `styleId` 找不到 → 落 `__fallback` 预置样式（一条 3px 竖条 + 显示名），**并进诊断**。静默兜底但说得出来；参考项目那边是纯静默 | 🔁 |
+| 45 | shape 兜底 | 模板里 `text` 分支是 `v-else`：任何未识别 shape 落这里 | `styleId` 找不到 → 节点整个不画、绑定行也不出，由诊断 `dangling-style` 报错。不造空壳（会在图上留一块吃指针的透明区），但说得出来；参考项目那边是纯静默 | 🔁 |
 
 ### 7.7 根容器、角标、状态点、显示名（11 件）
 

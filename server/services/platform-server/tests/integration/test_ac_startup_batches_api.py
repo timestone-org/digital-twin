@@ -448,6 +448,7 @@ async def test_a_batch_that_could_not_be_enqueued_is_marked_failed(
         room_id=room_id,
         window=TimeWindow(start=at(0), end=at(1440)),
         rules=ExtractionRules(),
+        timezone="Asia/Shanghai",
     )
     failed = await fail_batch(db_session, plan.batch.id)
     assert failed is not None

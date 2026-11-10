@@ -2,7 +2,7 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 
 import * as client from '@/api/client'
-import { readDatasetLatest } from '@/api/datasetLatest'
+import { canRetainDatasetLatest, readDatasetLatest } from '@/api/datasetLatest'
 
 const TABLE = {
   id: 't1',
@@ -147,5 +147,19 @@ describe('最新值的业务口径', () => {
     })
     expect(result.get('broken')?.slot.state).toBe('error')
     expect(requestMock).toHaveBeenCalledTimes(1)
+  })
+})
+
+describe('失败时能否保留陈旧值', () => {
+  it('限流与暂态故障保留，确定的业务拒绝不保留', () => {
+    const rateLimited = new client.BizError(40002, '请求过于频繁', 429, 't')
+    const outage = new client.BizError(50001, '下游不可用', 503, 't')
+    const denied = new client.BizError(40301, '无权访问', 403, 't')
+    expect(canRetainDatasetLatest(rateLimited)).toBe(true)
+    expect(canRetainDatasetLatest(outage)).toBe(true)
+    expect(canRetainDatasetLatest(denied)).toBe(false)
+    expect(canRetainDatasetLatest(new client.TransportError(0, '断网'))).toBe(
+      true,
+    )
   })
 })

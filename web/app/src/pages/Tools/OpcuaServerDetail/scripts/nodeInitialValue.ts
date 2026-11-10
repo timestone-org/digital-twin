@@ -1,4 +1,4 @@
-/** @fileoverview 按本部署的 OPC UA 运行时类型解析节点初值。 */
+/** @fileoverview 按本部署的 OPC UA 运行时类型解析节点初值与写入值。 */
 import type { OpcuaDataType } from '@dt/contracts'
 
 export const CREATABLE_DATA_TYPES: readonly OpcuaDataType[] = [
@@ -38,7 +38,7 @@ export function parseInitialValue(
 function parseBoolean(text: string): ParsedInitialValue {
   if (text === 'true' || text === 'false')
     return { value: text === 'true', error: null }
-  return { value: undefined, error: '布尔初值请输入 true 或 false' }
+  return { value: undefined, error: '布尔值请输入 true 或 false' }
 }
 
 /** 检查有限数值和 OPC UA float 的编码范围。@param text @param dataType */
@@ -48,9 +48,9 @@ function parseReal(text: string, dataType: OpcuaDataType): ParsedInitialValue {
     !/^[+-]?(?:\d+\.?\d*|\.\d+)(?:e[+-]?\d+)?$/i.test(text) ||
     !Number.isFinite(value)
   )
-    return { value: undefined, error: '数值初值请输入有限数字' }
+    return { value: undefined, error: '数值请输入有限数字' }
   if (dataType === 'float' && !Number.isFinite(Math.fround(value)))
-    return { value: undefined, error: 'float 初值超出有限32位浮点范围' }
+    return { value: undefined, error: 'float 值超出有限32位浮点范围' }
   return { value, error: null }
 }
 
@@ -63,12 +63,12 @@ function parseInteger(
   if (!/^[+-]?\d+$/.test(text) || !Number.isSafeInteger(value))
     return {
       value: undefined,
-      error: '整数初值须为安全整数（绝对值不超过 9007199254740991）',
+      error: '整数值须为安全整数（绝对值不超过 9007199254740991）',
     }
   if (dataType === 'int32' && (value < -2147483648 || value > 2147483647))
     return {
       value: undefined,
-      error: 'int32 初值范围为 -2147483648 至 2147483647',
+      error: 'int32 取值范围为 -2147483648 至 2147483647',
     }
   return { value, error: null }
 }

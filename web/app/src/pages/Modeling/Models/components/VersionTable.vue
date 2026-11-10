@@ -18,25 +18,26 @@ import PermGuard from '@/components/PermGuard.vue'
 import { formatDateTime } from '@/utils/datetime'
 import { taskLabel } from '../../scripts/taskPresentation'
 
+// ⚠ 定宽排布下每一列都要给宽度：留一列不给，列宽之和超出时它会被挤成 0，名称整列消失
 const COLUMNS: readonly DtDataColumn[] = [
-  { key: 'name', label: '名称', card: 'title' },
+  { key: 'name', label: '名称', width: '10rem', card: 'title' },
   {
     key: 'version',
     label: '版本',
-    width: '5rem',
+    width: '4rem',
     align: 'right',
     card: 'meta',
   },
-  { key: 'algo', label: '算法', width: '10rem' },
-  { key: 'task', label: '模型类型', width: '8rem' },
-  { key: 'target_key', label: '目标列', width: '11rem' },
-  { key: 'servable', label: '可用于取数', width: '13rem' },
-  { key: 'created_at', label: '生成时间', width: '10rem' },
+  { key: 'algo', label: '算法', width: '8rem' },
+  { key: 'task', label: '模型类型', width: '6rem' },
+  { key: 'target_key', label: '目标列', width: '8rem' },
+  { key: 'servable', label: '可用于取数', width: '9rem' },
+  { key: 'created_at', label: '生成时间', width: '9.5rem' },
   {
     key: 'actions',
     label: '操作',
     align: 'right',
-    width: '21rem',
+    width: '20rem',
     card: 'actions',
   },
 ]
@@ -82,7 +83,7 @@ defineEmits<{
     :selection="props.selection"
     :layout="{
       fixedLayout: true,
-      minWidth: '77rem',
+      minWidth: '78rem',
       cardColumns: 3,
       cardMinWidth: '20rem',
     }"
@@ -114,7 +115,7 @@ defineEmits<{
       <span v-else class="dt-ml-versions__why max-w-full">
         <DtTag class="shrink-0" intent="danger" size="sm">不可用</DtTag>
         <span
-          class="min-w-0 [overflow-wrap:anywhere]"
+          class="line-clamp-2 min-w-0 [overflow-wrap:anywhere]"
           :title="row.unservable_reason ?? ''"
         >
           {{ row.unservable_reason }}

@@ -716,3 +716,51 @@ export function createTwin2dClipboard(
     },
   }
 }
+
+/**
+ * 沿用了本图同 id、但内容与载荷里那份不同的样式 id。
+ * @param adopted 沿用了本图那份的 id
+ * @param carried 载荷里带着的样式
+ * @param own 粘之前本图里的样式
+ */
+function divergedIds<T extends { id: string }>(
+  adopted: readonly string[],
+  carried: readonly T[],
+  own: readonly T[],
+): string[] {
+  return adopted.filter((id) => {
+    const theirs = carried.find((style) => style.id === id)
+    const ours = own.find((style) => style.id === id)
+    return JSON.stringify(theirs) !== JSON.stringify(ours)
+  })
+}
+
+/**
+ * 一次实体粘贴要交代给用户的话；没有要交代的给 null。
+ * ⚠ 原样粘回同一张图时什么都不说：那时「沿用同 id 的样式」就是同一份，说了只是噪音。
+ * @param done 粘贴的结果
+ * @param clip 粘进来的那份载荷
+ * @param before 粘之前的配置
+ */
+export function twin2dPasteNotice(
+  done: Twin2dPasted,
+  clip: Twin2dEntityClip,
+  before: Twin2dConfig,
+): string | null {
+  const diverged = [
+    ...divergedIds(done.styles.adopted, clip.styles, before.styles),
+    ...divergedIds(done.edgeStyles.adopted, clip.edgeStyles, before.edgeStyles),
+  ]
+  const missing = [...done.styles.missing, ...done.edgeStyles.missing]
+  const parts: string[] = []
+  if (diverged.length > 0) {
+    parts.push(
+      `沿用了本图同 id 的样式 ${diverged.join('、')}，外观可能与复制时不同`,
+    )
+  }
+  if (missing.length > 0) parts.push(`本图里找不到样式 ${missing.join('、')}`)
+  if (done.droppedEdges > 0) {
+    parts.push(`${done.droppedEdges} 条连线的两端不在本图里，没有粘上`)
+  }
+  return parts.length === 0 ? null : parts.join('；')
+}

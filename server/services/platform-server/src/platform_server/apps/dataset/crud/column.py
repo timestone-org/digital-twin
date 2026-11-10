@@ -2,11 +2,11 @@
 
 import uuid
 
-from sqlalchemy import func, select
+from sqlalchemy import func, or_, select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from lib.db import CrudBase
-from platform_server.apps.dataset.models import DatasetColumn
+from platform_server.apps.dataset.models import DatasetColumn, DatasetTable
 
 # ⚠ 第二、第三排序键不能省：`order_index` 允许并列，只按它排时两次读取的列序
 # 可以不同，表头于是会在两次刷新之间自己换位置
@@ -89,6 +89,35 @@ class ColumnCrud(CrudBase[DatasetColumn]):
             .order_by(*DEFAULT_ORDER)
         )
         return list(rows.scalars().all())
+
+    async def external_dependents_of(
+        self, session: AsyncSession, *, table: DatasetTable, key: str
+    ) -> list[tuple[DatasetColumn, DatasetTable]]:
+        """别的台账里公式引用了这一列的列，连同它们所在的台账。
+
+        ⚠ 跨表引用不进 `referenced_keys`：直接引用记在 `external`，窗口与整列
+        聚合记在 `window`/`whole`、键是 `表code.列key`，三处都要查，漏一处那几列
+        会在删列后静默算空。
+        Args: session, table, key。
+        """
+        qualified = f"{table.code}.{key}"
+        deps = DatasetColumn.formula_deps
+        rows = await session.execute(
+            select(DatasetColumn, DatasetTable)
+            .join(DatasetTable, DatasetTable.id == DatasetColumn.table_id)
+            .where(
+                DatasetColumn.table_id != table.id,
+                or_(
+                    deps.contains(
+                        {"external": [{"table": table.code, "key": key}]}
+                    ),
+                    deps.contains({"window": [{"key": qualified}]}),
+                    deps.contains({"whole": [{"key": qualified}]}),
+                ),
+            )
+            .order_by(DatasetTable.code.asc(), *DEFAULT_ORDER)
+        )
+        return [(column, owner) for column, owner in rows.tuples().all()]
 
 
 column_crud = ColumnCrud()

@@ -84,7 +84,8 @@ async def create_node(
     Args: instance_id, payload, container, key, manager。
     """
     created = await container.idempotency.run_once(
-        endpoint="create_node",
+        # ⚠ 端点名带上目标：同一把键用在另一个实例上不许拿回前一次的结果
+        endpoint=f"create_node:{instance_id}",
         key=key,
         caller=manager.user_id,
         model=NodeMutationOut,
@@ -180,7 +181,7 @@ async def _write_once(
     instance_id, node_id = target
     write = partial(container.nodes.write_value, instance_id, node_id, value)
     return await container.idempotency.run_once(
-        endpoint="write_node_value",
+        endpoint=f"write_node_value:{instance_id}:{node_id}",
         key=key,
         caller=operator.user_id,
         model=NodeWriteOut,

@@ -4,11 +4,12 @@
 """
 
 import uuid
+from typing import Any
 
 import pytest
 from pydantic import BaseModel
 
-from lib.errors import Conflict
+from lib.errors import Conflict, DependencyUnavailable
 from lib.idempotency import IdempotencyStore
 from lib.testing import InMemoryCache
 
@@ -169,3 +170,29 @@ async def test_two_namespaces_do_not_replay_each_other() -> None:
         endpoint="e", key="k", caller=CALLER, model=Result, action=action
     )
     assert (started.value, other.value) == (1, 2)
+
+
+class _ResultStoreDown(InMemoryCache):
+    """占位能写进去，存结果那一下 Redis 抖了。"""
+
+    async def set_json(self, key: str, value: Any, *, ttl_s: int) -> None:
+        del key, value, ttl_s
+        raise DependencyUnavailable("缓存暂时不可用")
+
+
+async def test_a_failed_result_store_still_reports_the_action_succeeded() -> (
+    None
+):
+    """⚠ 动作已经做了却回 503，调用方按可重试去重试，占位一过期就做第二遍。"""
+    store = IdempotencyStore(cache=_ResultStoreDown(), namespace=NAMESPACE)
+    calls: list[int] = []
+
+    async def action() -> Result:
+        calls.append(1)
+        return Result(value=7)
+
+    got = await store.run_once(
+        endpoint="write", key="k1", caller=CALLER, model=Result, action=action
+    )
+    assert got == Result(value=7)
+    assert calls == [1]

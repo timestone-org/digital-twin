@@ -252,7 +252,7 @@ def _refusal(
         and len(steps) != 1
     ):
         return "规则计算不允许会改变计量值的前置推理步骤，请直接连接业务原值"
-    starved = _starved_step(publishing.graph, steps)
+    starved = _starved_step(publishing.graph, steps, publishing.records)
     if starved:
         return starved
     features = as_texts(publishing.payload.get("feature_keys"))
@@ -458,21 +458,35 @@ def _fitted_of(
     return as_dict(payload.get("fitted")) if is_model else {}
 
 
-def _starved_step(graph: PipelineGraph, steps: list[dict[str, Any]]) -> str:
+def _starved_step(
+    graph: PipelineGraph,
+    steps: list[dict[str, Any]],
+    records: dict[str, NodeRecord],
+) -> str:
     """有没有哪一步该带参数却是空的；有就给一句人话，没有就给空串。
 
     ⚠ 这是**必须拦下**的一条：空参数不会报错，它会让那一步在推理时拿请求里的
     单行重新拟合，算出一个与线上模型毫无关系的数（缺陷 A）。
-    Args: graph, steps。
+    ⚠ 空参数只在按这份参数确实合法、且节点记录上**确实记过**一份（哪怕是空
+    的）时放行：没有记录的老运行仍然拦下。
+    Args: graph, steps, records。
     """
     nodes = graph.node_by_id()
     for step in steps:
-        operator = registry.get(nodes[as_text(step["node_id"])].operator)
-        if operator.REQUIRES_FIT and not step["fitted"]:
+        node_id = as_text(step["node_id"])
+        operator, config = registry.build(
+            nodes[node_id].operator, nodes[node_id].config
+        )
+        is_empty_fit = (
+            operator.accepts_empty_fit(config)
+            and record_of(records, node_id).fitted is not None
+        )
+        if operator.REQUIRES_FIT and not step["fitted"] and not is_empty_fit:
             return (
                 f"步骤「{operator.NAME}」没有可用的拟合参数。"
                 "推理时它会拿单行重新拟合，算出来的数与训练结果无关，"
-                "故不可上线——请重跑一遍这条流水线再发布"
+                "故不可上线——请重跑一遍这条流水线再发布；"
+                "重跑后仍是空的，说明这一步的列全被跳过了，请去掉它或改配置"
             )
     return ""
 

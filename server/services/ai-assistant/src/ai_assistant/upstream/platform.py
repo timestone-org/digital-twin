@@ -17,6 +17,7 @@
 
 import uuid
 from typing import Any, cast
+from urllib.parse import quote
 
 import httpx
 from pydantic import BaseModel, ValidationError
@@ -35,12 +36,24 @@ _DASHBOARDS = "/api/v1/platform/dashboards"
 _MODULES = "/api/v1/platform/module-types"
 _TABLES = "/api/v1/platform/dataset-tables"
 _ASSETS = "/api/v1/platform/assets"
+# 按编码精确找点位时最多翻几页。⚠ 有上限：短编码能模糊匹配上几千条，
+# 一次「看一个点位」不该变成几十次往返
+MAX_FIND_PAGES = 5
 
 
 class PlatformUnavailable(DependencyUnavailable):
-    """platform 没答上来。"""
+    """platform 没答上来。
+
+    `upstream_status` 是 platform 回的 HTTP 状态；超时与不可达时为 None。
+    ⚠ 4xx 也走这一类，调用方要按真实状态答（如 403/404）时读它。
+    """
 
     code = 52210
+
+    def __init__(self, message: str, *, upstream_status: int | None = None):
+        """Args: message, upstream_status。"""
+        super().__init__(message)
+        self.upstream_status = upstream_status
 
 
 class _Envelope(BaseModel):
@@ -103,25 +116,6 @@ class PlatformClient:
         """按页读取数据源；Args: headers, query。"""
         return await self._get(_SOURCES, query, headers)
 
-    async def search_points(
-        self,
-        headers: dict[str, str],
-        *,
-        keyword: str | None = None,
-        source_id: str | None = None,
-        page: int = 1,
-    ) -> list[object]:
-        """按关键词与数据源翻一页点位。
-
-        Args: headers, keyword, source_id, page。
-        """
-        query: dict[str, Any] = {"page": page, "size": self._page_size}
-        if keyword:
-            query["q"] = keyword
-        if source_id:
-            query["source_id"] = source_id
-        return _items_of(await self._get(_POINTS, query, headers))
-
     async def match_points(
         self,
         headers: dict[str, str],
@@ -168,7 +162,9 @@ class PlatformClient:
 
         Args: headers, module_type。
         """
-        return await self._get(f"{_MODULES}/{module_type}", {}, headers)
+        return await self._get(
+            f"{_MODULES}/{_segment(module_type)}", {}, headers
+        )
 
     async def formula_functions(
         self, headers: dict[str, str], table_id: str
@@ -178,7 +174,7 @@ class PlatformClient:
         Args: headers, table_id。
         """
         return await self._get(
-            f"{_TABLES}/{table_id}/formula-functions", {}, headers
+            f"{_TABLES}/{_segment(table_id)}/formula-functions", {}, headers
         )
 
     async def check_formula(
@@ -192,7 +188,7 @@ class PlatformClient:
         Args: headers, table_id, body。
         """
         return await self._post(
-            f"{_TABLES}/{table_id}/formula:validate", headers, body
+            f"{_TABLES}/{_segment(table_id)}/formula:validate", headers, body
         )
 
     async def try_formula(
@@ -203,7 +199,7 @@ class PlatformClient:
         Args: headers, table_id, body。
         """
         return await self._post(
-            f"{_TABLES}/{table_id}/formula:preview", headers, body
+            f"{_TABLES}/{_segment(table_id)}/formula:preview", headers, body
         )
 
     async def list_dashboards(
@@ -266,7 +262,9 @@ class PlatformClient:
 
         Args: headers, table_id。
         """
-        body = await self._get(f"{_TABLES}/{table_id}/columns", {}, headers)
+        body = await self._get(
+            f"{_TABLES}/{_segment(table_id)}/columns", {}, headers
+        )
         return _rows_of(body)
 
     async def list_assets(
@@ -295,18 +293,26 @@ class PlatformClient:
         """按 `(source_id, code)` 找那一个点位；没有就给 None。
 
         ⚠ 上游没有按编码精确取一条的端点，`q` 是名字/编码的模糊匹配；
-        这里先按 `q=code` 缩一页，再本地按编码逐字比对。
+        这里按 `q=code` 逐页取、本地按编码逐字比对。⚠ 要翻页：短编码能匹配上
+        多于一页的条目，精确那条排在后面时只看第一页会说成「库里没有」。
 
         Args: headers, source_id, code。
         """
-        query: dict[str, Any] = {
-            "page": 1,
-            "size": self._page_size,
-            "source_id": source_id,
-            "q": code,
-        }
-        rows = _items_of(await self._get(_POINTS, query, headers))
-        return next((row for row in rows if _code_of(row) == code), None)
+        for page in range(1, MAX_FIND_PAGES + 1):
+            query: dict[str, Any] = {
+                "page": page,
+                "size": self._page_size,
+                "source_id": source_id,
+                "q": code,
+            }
+            body = await self._get(_POINTS, query, headers)
+            rows = _items_of(body)
+            found = next((row for row in rows if _code_of(row) == code), None)
+            if found is not None:
+                return found
+            if not rows or page * self._page_size >= _total_of(body):
+                return None
+        return None
 
     async def validate_dashboard(
         self, headers: dict[str, str], dashboard_id: str
@@ -316,7 +322,7 @@ class PlatformClient:
         Args: headers, dashboard_id。
         """
         return await self._post(
-            f"{_DASHBOARDS}/{dashboard_id}:validate", headers
+            f"{_DASHBOARDS}/{_segment(dashboard_id)}:validate", headers
         )
 
     def _client(self) -> httpx.AsyncClient:
@@ -375,7 +381,9 @@ class PlatformClient:
                 path=path,
                 error_type=type(error).__name__,
             )
-            raise PlatformUnavailable(_reason(error)) from error
+            raise PlatformUnavailable(
+                _reason(error), upstream_status=_status_of(error)
+            ) from error
 
     async def _fresh(self, headers: dict[str, str]) -> dict[str, str]:
         """把快到期的身份头换成新的。没接续签件时原样交回。
@@ -385,6 +393,18 @@ class PlatformClient:
         if self._identity is None:
             return headers
         return await self._identity.fresh(headers)
+
+
+def _segment(value: str) -> str:
+    """把一段 id 转义成单个路径段。
+
+    ⚠ 不转义的话 `?`、`#`、`/` 与 `..` 能让一段 id 改写整条路径，把只读调用
+    拐到写端点上。
+
+    Args: value。
+    """
+    # 点号也转：`quote` 留着它，而单独一段 `..` 会被当成上一级目录
+    return quote(value, safe="").replace(".", "%2E")
 
 
 def _with_trace(headers: dict[str, str]) -> dict[str, str]:
@@ -417,6 +437,14 @@ def _items_of(body: object) -> list[object]:
     return cast("list[object]", items)
 
 
+def _total_of(body: object) -> int:
+    """分页体里的 total；没有就当 0（即「没有下一页」）。Args: body。"""
+    if not isinstance(body, dict):
+        return 0
+    total = cast("dict[str, object]", body).get("total")
+    return total if type(total) is int else 0
+
+
 def _rows_of(body: object) -> list[object]:
     """收下「data 直接就是数组」的响应体；不是数组就当空。
 
@@ -436,6 +464,13 @@ def _code_of(row: object) -> str | None:
         return None
     code = cast("dict[str, object]", row).get("code")
     return code if isinstance(code, str) else None
+
+
+def _status_of(error: Exception) -> int | None:
+    """上游回的 HTTP 状态；没回到响应时给 None。Args: error。"""
+    if isinstance(error, httpx.HTTPStatusError):
+        return error.response.status_code
+    return None
 
 
 def _reason(error: Exception) -> str:

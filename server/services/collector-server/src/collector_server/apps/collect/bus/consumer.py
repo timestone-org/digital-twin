@@ -41,10 +41,17 @@ from collectwire import (
     REASON_BROWSE_CONTINUATION_INVALID,
     REASON_BROWSE_PAGE_TOO_LARGE,
     REASON_DRIVER_FAILED,
+    REASON_UNKNOWN_ACTION,
     STATUS_ERROR,
     STATUS_OK,
 )
-from lib.logging import get_logger
+from lib.logging import (
+    bind_log_context,
+    get_logger,
+    new_span_id,
+    parse_traceparent,
+    reset_log_context,
+)
 
 _logger = get_logger("collect.bus")
 
@@ -61,9 +68,19 @@ SUPPORTED_ACTIONS = (
 # Redis 抖动后等一拍再取，避免空转打满 CPU
 RETRY_PAUSE_S = 1.0
 
+# 约定内的失败：发起方据此给出明确结论，不是采集侧故障，记 WARNING
+_EXPECTED_REASONS = (
+    REASON_BROWSE_CONTINUATION_INVALID,
+    REASON_BROWSE_PAGE_TOO_LARGE,
+    REASON_UNKNOWN_ACTION,
+)
+
 
 class SessionLocator(Protocol):
     """按数据源找活着的会话。真实现是 supervisor。"""
+
+    @property
+    def is_leader(self) -> bool: ...
 
     def session_of(self, source_id: UUID) -> SourceSession | None: ...
 
@@ -92,6 +109,8 @@ class CommandRequest(BaseModel):
     # 写用。⚠ 幂等键在 platform 侧兜（api-contract §7），本层只负责执行一次
     point_code: str | None = None
     value: Any = None
+    # 发起方的链路；格式不合法就当没带
+    traceparent: str | None = None
 
 
 class CommandConsumer:
@@ -154,7 +173,14 @@ class CommandConsumer:
                 await self._pause(RETRY_PAUSE_S)
 
     async def handle_once(self) -> bool:
-        """取一条并处理，返回这一拍有没有活干。"""
+        """取一条并处理，返回这一拍有没有活干。
+
+        ⚠ 不是 leader 就不取：热备没有现场会话，取走的请求只能答「离线」，
+        而 leader 明明连着。留在列表里让 leader 取。
+        """
+        if not self._locator.is_leader:
+            await self._pause(self._block_s)
+            return False
         envelope = await self._transport.take(block_s=self._block_s)
         if envelope is None:
             return False
@@ -167,7 +193,14 @@ class CommandConsumer:
                 error_type=type(error).__name__,
             )
             return False
-        await self._execute(request)
+        token = bind_log_context(
+            trace_id=parse_traceparent(request.traceparent),
+            span_id=new_span_id(),
+        )
+        try:
+            await self._execute(request)
+        finally:
+            reset_log_context(token)
         return True
 
     async def _execute(self, request: CommandRequest) -> None:
@@ -258,15 +291,7 @@ class CommandConsumer:
 
         Args: request, reason, detail。
         """
-        emit = (
-            _logger.warning
-            if reason
-            in (
-                REASON_BROWSE_CONTINUATION_INVALID,
-                REASON_BROWSE_PAGE_TOO_LARGE,
-            )
-            else _logger.error
-        )
+        emit = _logger.warning if reason in _EXPECTED_REASONS else _logger.error
         emit(
             "command_failed",
             "命令执行失败",

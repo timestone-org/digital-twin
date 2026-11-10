@@ -2,6 +2,7 @@
 
 import datetime as dt
 from collections.abc import Callable
+from uuid import uuid4
 
 import httpx
 import pytest
@@ -26,6 +27,10 @@ NO_CONTENT = 204
 BAD_REQUEST = 400
 FORBIDDEN = 403
 NOT_FOUND = 404
+CONFLICT = 409
+CODE_CREDENTIAL_TAKEN = 42115
+CODE_CERTIFICATE_DUPLICATE = 42116
+CODE_CERTIFICATE_NOT_FOUND = 42114
 
 Headers = Callable[..., dict[str, str]]
 RSA_BITS = 2048
@@ -311,3 +316,59 @@ async def test_security_endpoints_reject_unknown_instance(
             f"{INSTANCES}/{unknown}/{suffix}", headers=headers
         )
         assert response.status_code == NOT_FOUND, suffix
+
+
+@pytest.mark.usefixtures("clean_tables")
+async def test_a_duplicate_username_is_a_conflict(
+    client: httpx.AsyncClient, sign_headers: Headers
+) -> None:
+    """同一实例下重名的凭据是 409，不是撞唯一约束冒出来的 500。
+
+    Args: client, sign_headers。
+    """
+    instance_id = await _instance(client, sign_headers)
+    for _ in range(2):
+        response = await client.post(
+            f"{INSTANCES}/{instance_id}/credentials",
+            json={"username": "twice"},
+            headers=sign_headers(PERM_MANAGE),
+        )
+    assert response.status_code == CONFLICT
+    assert response.json()["code"] == CODE_CREDENTIAL_TAKEN
+
+
+@pytest.mark.usefixtures("clean_tables")
+async def test_registering_the_same_certificate_twice_is_a_conflict(
+    client: httpx.AsyncClient, sign_headers: Headers
+) -> None:
+    """同一张证书登记两次是 409。
+
+    Args: client, sign_headers。
+    """
+    instance_id = await _instance(client, sign_headers)
+    cert_pem, _ = _self_signed_pem()
+    for _ in range(2):
+        response = await client.post(
+            f"{INSTANCES}/{instance_id}/trusted-certificates",
+            json={"certificate_pem": cert_pem},
+            headers=sign_headers(PERM_MANAGE),
+        )
+    assert response.status_code == CONFLICT
+    assert response.json()["code"] == CODE_CERTIFICATE_DUPLICATE
+
+
+@pytest.mark.usefixtures("clean_tables")
+async def test_revoking_an_unknown_certificate_is_404(
+    client: httpx.AsyncClient, sign_headers: Headers
+) -> None:
+    """撤销不存在的证书是 404，不是「证书无法解析」的 400。
+
+    Args: client, sign_headers。
+    """
+    instance_id = await _instance(client, sign_headers)
+    response = await client.delete(
+        f"{INSTANCES}/{instance_id}/trusted-certificates/{uuid4()}",
+        headers=sign_headers(PERM_MANAGE),
+    )
+    assert response.status_code == NOT_FOUND
+    assert response.json()["code"] == CODE_CERTIFICATE_NOT_FOUND

@@ -13,6 +13,7 @@ from platform_server.apps.report.services.document import validate_template
 from platform_server.apps.report.services.metrics import PreviewContext
 from platform_server.apps.report.services.preview import preview
 from platform_server.apps.report.services.source import SourceData
+from platform_server.apps.report.services.worker import _require_complete
 
 
 def chart_template(**attrs):
@@ -93,3 +94,26 @@ async def test_chart_buckets_aggregate_before_sorting(monkeypatch):
     points = result.nodes["content.0"].series[0].points
     assert [point.value for point in points] == ["25", "3"]
     assert points[0].ts > points[1].ts
+
+
+@pytest.mark.parametrize("node_type", ["metricRef", "condText"])
+async def test_an_unconfigured_text_node_renders_a_placeholder_not_a_failure(
+    node_type,
+):
+    body = TemplateBody(
+        name="周报",
+        doc_json=DocumentNode(
+            type="doc",
+            content=[
+                DocumentNode(
+                    type="paragraph",
+                    content=[DocumentNode(type=node_type, attrs={"expr": ""})],
+                )
+            ],
+        ),
+    )
+    async with AsyncSession() as session:
+        result = await preview(session, PreviewContext(body, "2026-09", "UTC"))
+    assert [node.text for node in result.nodes.values()] == ["[数据未配置]"]
+    assert result.is_valid
+    _require_complete(result)

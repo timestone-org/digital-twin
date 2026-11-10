@@ -74,9 +74,10 @@ export function twinBindingRows(config: TwinConfig): TwinBindingRow[] {
     label: nameOr(item.name, item.id),
   }))
   // 信息牌按**扁平化后**的字段序，不是按牌
+  const panelNames = namesById(config.panels)
   const panels = flattenPanelFields(config.panels).map((entry) => ({
     id: entry.valueKey,
-    label: `${nameOr(panelNameOf(config, entry.panelId), entry.panelId)} · ${nameOr(entry.field.label, entry.field.key)}`,
+    label: `${nameOr(panelNames.get(entry.panelId) ?? '', entry.panelId)} · ${nameOr(entry.field.label, entry.field.key)}`,
   }))
   const arrows = config.arrows.map((item) => ({
     id: item.id,
@@ -112,8 +113,17 @@ export function twinBindingRows(config: TwinConfig): TwinBindingRow[] {
   ]
 }
 
-function panelNameOf(config: TwinConfig, panelId: string): string {
-  return config.panels.find((item) => item.id === panelId)?.name ?? ''
+/**
+ * id → 名字的一次性查表；同 id 重复时取先出现的那个，与逐个 `find` 的结果一致。
+ * ⚠ 不逐字段 `find`：字段数 × 实体数，而编辑器每次写配置都要把绑定行重算几遍。
+ */
+function namesById(
+  items: readonly { id: string; name: string }[],
+): ReadonlyMap<string, string> {
+  const names = new Map<string, string>()
+  for (const item of items)
+    if (!names.has(item.id)) names.set(item.id, item.name)
+  return names
 }
 
 /**
@@ -124,14 +134,11 @@ function panelNameOf(config: TwinConfig, panelId: string): string {
 function partFieldEntities(
   config: TwinConfig,
 ): { id: string; label: string }[] {
+  const partNames = namesById(config.parts)
   return flattenPartFields(config.parts).map((entry) => ({
     id: entry.valueKey,
-    label: `${nameOr(partNameOf(config, entry.partId), entry.partId)} · ${nameOr(entry.field.label, entry.field.key)}`,
+    label: `${nameOr(partNames.get(entry.partId) ?? '', entry.partId)} · ${nameOr(entry.field.label, entry.field.key)}`,
   }))
-}
-
-function partNameOf(config: TwinConfig, partId: string): string {
-  return config.parts.find((item) => item.id === partId)?.name ?? ''
 }
 
 /**
@@ -237,9 +244,12 @@ export function twinRowCounts(config: TwinConfig): Record<string, number> {
   return counts
 }
 
-/** 一份配置里某个槽的实体 id，按文档序。 */
-function entityIdsOf(config: TwinConfig, slotKey: string): string[] {
-  return twinBindingRows(config)
+/** 一份绑定行里某个槽的实体 id，按文档序。 */
+function entityIdsOf(
+  rows: readonly TwinBindingRow[],
+  slotKey: string,
+): string[] {
+  return rows
     .filter((row) => row.slotKey === slotKey)
     .map((row) => row.entityId)
 }
@@ -260,16 +270,40 @@ export function remapTwinBindings<T extends { fieldKey: string }>(
   after: TwinConfig,
   bindings: readonly T[],
 ): T[] {
+  // 前后两份各摊一次：逐槽重摊的话每次写配置要把整份绑定行重算十几遍
+  const beforeRows = twinBindingRows(before)
+  const afterRows = twinBindingRows(after)
   let moved = [...bindings]
   for (const slotKey of ARRAY_SLOTS) {
     moved = remapBindingRows(
       slotKey,
-      entityIdsOf(before, slotKey),
-      entityIdsOf(after, slotKey),
+      entityIdsOf(beforeRows, slotKey),
+      entityIdsOf(afterRows, slotKey),
       moved,
     )
   }
   return moved
+}
+
+/** id → 它占的各行行号，按文档序。 */
+function rowsById(ids: readonly string[]): ReadonlyMap<string, number[]> {
+  const rows = new Map<string, number[]>()
+  ids.forEach((id, index) => {
+    const list = rows.get(id)
+    if (list === undefined) rows.set(id, [index])
+    else list.push(index)
+  })
+  return rows
+}
+
+/** 每一行是它那个 id 的第几次出现（从 0 数）。 */
+function occurrences(ids: readonly string[]): number[] {
+  const seen = new Map<string, number>()
+  return ids.map((id) => {
+    const nth = seen.get(id) ?? 0
+    seen.set(id, nth + 1)
+    return nth
+  })
 }
 
 /** `slotKey[index].sub` 拆成三段；形状不符给 null。 */
@@ -288,6 +322,7 @@ function parseFieldKey(
  * ⚠ 这一步漏掉，删一个实体就会让它后面的每一条绑定改喂前一个实体——**没有任何
  * 报错**，读数照常刷新，只是全都接错了对象。
  * ⚠ 实体没了的那些行整条丢弃，不留着：留着的话它会占住一个行号，把后面的又推错一格。
+ * ⚠ id 重复时按「第几次出现」对应：按 id 单值建表的话两条绑定会叠到同一行，保存时撞唯一键。
  *
  * ⚠ 只按 `fieldKey` 认人、其余字段整份带走：这里既要能搬已落库的绑定，也要能搬
  * 编辑器里还没落库的草稿，两者字段集不同。收窄成某一种就得在另一种上补一堆
@@ -304,7 +339,8 @@ export function remapBindingRows<T extends { fieldKey: string }>(
   afterIds: readonly string[],
   bindings: readonly T[],
 ): T[] {
-  const target = new Map(afterIds.map((id, index) => [id, index]))
+  const target = rowsById(afterIds)
+  const before = occurrences(beforeIds)
   const kept: T[] = []
   for (const binding of bindings) {
     const parsed = parseFieldKey(binding.fieldKey)
@@ -313,7 +349,9 @@ export function remapBindingRows<T extends { fieldKey: string }>(
       continue
     }
     const entityId = beforeIds[parsed.index]
-    const moved = entityId === undefined ? undefined : target.get(entityId)
+    const nth = before[parsed.index] ?? 0
+    const moved =
+      entityId === undefined ? undefined : target.get(entityId)?.[nth]
     if (moved === undefined) continue
     kept.push({
       ...binding,

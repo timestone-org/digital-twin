@@ -27,6 +27,13 @@ import {
   isPresent,
   NO_DATA,
 } from '../../shared/format'
+import {
+  CELL_STATES,
+  cellState,
+  type CellState,
+  reasonOf,
+  REASONS,
+} from '../../shared/slotState'
 import type { ThresholdLevel } from '../../shared/thresholds'
 
 import {
@@ -58,19 +65,7 @@ export const CARD_ITEMS_KEY = 'items'
 export const CARD_SLOT_FIELDS = ['value', 'aux'] as const
 export type CardSlotField = (typeof CARD_SLOT_FIELDS)[number]
 
-/**
- * 一格此刻处在哪一档。
- * ⚠ `unbound` 与 `pending` 必须分开：前者要去配绑定，后者只要再等一会儿。
- */
-export const CELL_STATES = ['ok', 'pending', 'error', 'unbound'] as const
-export type CellState = (typeof CELL_STATES)[number]
-
-/** 各档没有值时给看的人的一句话，鼠标停上去才看得全。 */
-export const REASONS: Record<Exclude<CellState, 'ok'>, string> = {
-  unbound: '这一格还没绑定数据来源',
-  pending: '已绑定，还没收到第一帧',
-  error: '取不到',
-}
+export { CELL_STATES, cellState, reasonOf, REASONS, type CellState }
 
 // 涨跌箭头：三档各一个字，与参考仓 kpi-card 逐字相同
 const ARROW_UP = '▲'
@@ -255,39 +250,6 @@ function toItem(raw: unknown): CardItem {
  */
 export function readCardItems(raw: unknown): CardItem[] {
   return readArray(raw).map(toItem)
-}
-
-/**
- * 这一格落在哪一档。
- * @param slot 这一槽的取数结论
- * @param raw 注入袋里这一格的原值
- * @param hasSlots 运行时下发了逐槽结论没有
- */
-export function cellState(
-  slot: ModuleSlotMeta | undefined,
-  raw: unknown,
-  hasSlots: boolean,
-): CellState {
-  if (slot !== undefined) return slot.state
-  // ⚠ 没下发结论时只能退回「有没有值」这一条判据：设计态画布与独立挂载走这里。
-  //   此时把没有值一律说成 unbound 是诚实的——那两处本来就没有取数
-  if (!hasSlots) return raw === undefined ? 'unbound' : 'ok'
-  return 'unbound'
-}
-
-/**
- * 没有值的那一句话；`error` 档带上取数侧给的原因。
- * @param state 这一格所在的档
- * @param slot 这一槽的取数结论
- */
-export function reasonOf(
-  state: CellState,
-  slot: ModuleSlotMeta | undefined,
-): string {
-  if (state === 'ok') return ''
-  const base = REASONS[state]
-  const detail = slot?.message ?? ''
-  return detail === '' ? base : `${base}：${detail}`
 }
 
 /**

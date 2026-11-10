@@ -1,5 +1,5 @@
 /**
- * @fileoverview 视口这一路的动作：两段式拾取、取当前机位、试飞漫游。
+ * @fileoverview 视口这一路的动作：两段式拾取、新实体放置、取当前机位与测距。
  *
  * ⚠ 拾取必须先记下「写回谁」：不记的话视口只知道用户点了哪个东西，
  * 不知道那一下是给谁点的，落下去就会改到别的实体上。
@@ -10,6 +10,7 @@ import {
   type Vec3,
 } from '@dt/twin-config'
 import { describe, expect, it, vi } from 'vitest'
+import { nextTick, ref } from 'vue'
 
 import {
   createTwinViewportOps,
@@ -38,17 +39,15 @@ function fakeHandle(overrides: Partial<TwinViewportHandle> = {}) {
     focus: vi.fn(),
     snapshot: vi.fn(pose),
     measureDistance: vi.fn(() => MEASURED),
-    playRoamPreview: vi.fn(() => true),
-    stopRoamPreview: vi.fn(),
     stageEl: vi.fn(() => null),
     ...overrides,
   }
 }
 
-function setup(selection: TwinSelection = { kind: 'parts', id: 'part-1' }) {
+function setup(initial: TwinSelection = { kind: 'parts', id: 'part-1' }) {
+  const selection = ref<TwinSelection>(initial)
   const patchConfig = vi.fn()
   const addAt = vi.fn()
-  const onRoamUnavailable = vi.fn()
   const config: { value: TwinConfig | null } = { value: CONFIG }
   const actions = { patchConfig, addAt } satisfies Pick<
     TwinEditorActions,
@@ -57,12 +56,18 @@ function setup(selection: TwinSelection = { kind: 'parts', id: 'part-1' }) {
   const ops = createTwinViewportOps({
     config: () => config.value,
     actions: () => actions,
-    selection: () => selection,
-    onRoamUnavailable,
+    selection: () => selection.value,
   })
   const handle = fakeHandle()
   ops.viewportRef.value = handle
-  return { ops, patchConfig, addAt, onRoamUnavailable, handle, config }
+  return {
+    ops,
+    patchConfig,
+    addAt,
+    handle,
+    config,
+    selection,
+  }
 }
 
 describe('两段式拾取', () => {
@@ -117,6 +122,29 @@ describe('两段式拾取', () => {
     expect(ops.isPicking.value).toBe(false)
   })
 
+  // ⚠ 射线命中点带满精度浮点：落库是一长串小数，窄输入框只显示被截断的一半
+  it('拾取到的位置按毫单位取整再写回', () => {
+    const config = normalizeTwinConfig({ anchors: [{ id: 'a1' }] })
+    const { ops, patchConfig, ...rest } = setup({ kind: 'anchors', id: 'a1' })
+    rest.config.value = config
+
+    ops.requestPick('position')
+    ops.onPickPosition([4.779980630236411, 2, 0.9141729618581067])
+
+    expect(patchConfig).toHaveBeenCalledWith({
+      anchors: [expect.objectContaining({ position: [4.78, 2, 0.914] })],
+    })
+  })
+
+  it('放置新实体用的位置同样取整', () => {
+    const { ops, addAt } = setup()
+
+    ops.requestPlace('anchors')
+    ops.onPickPosition([1.23456, -0.00049, 7])
+
+    expect(addAt).toHaveBeenCalledWith('anchors', [1.235, 0, 7], undefined)
+  })
+
   it('取消之后视口回来的那一下不落', () => {
     const { ops, patchConfig } = setup()
 
@@ -125,6 +153,42 @@ describe('两段式拾取', () => {
     ops.onPickPosition([1, 1, 1])
 
     expect(patchConfig).not.toHaveBeenCalled()
+  })
+
+  // ⚠ 拾取记着发起时的那个实体：换了选中还留着的话，下一次点视口会改到看不见的那个
+  it('拾取途中换了选中就作废，不写回原来那个实体', async () => {
+    const config = normalizeTwinConfig({
+      anchors: [{ id: 'a1' }, { id: 'a2' }],
+    })
+    const { ops, patchConfig, selection, ...rest } = setup({
+      kind: 'anchors',
+      id: 'a1',
+    })
+    rest.config.value = config
+
+    ops.requestPick('position')
+    selection.value = { kind: 'anchors', id: 'a2' }
+    await nextTick()
+    ops.onPickPosition([1, 2, 3])
+
+    expect(patchConfig).not.toHaveBeenCalled()
+    expect(ops.isPicking.value).toBe(false)
+    expect(ops.pickMode.value).toBeNull()
+
+    selection.value = { kind: 'anchors', id: 'a1' }
+    await nextTick()
+    expect(ops.isPicking.value).toBe(false)
+  })
+
+  it('放置途中换了选中不作废：新建的实体本就还不存在', async () => {
+    const { ops, addAt, selection } = setup()
+
+    ops.requestPlace('anchors')
+    selection.value = TWIN_SELECT_MODEL
+    await nextTick()
+    ops.onPickPosition([1, 2, 3])
+
+    expect(addAt).toHaveBeenCalledWith('anchors', [1, 2, 3], undefined)
   })
 
   it('实体在拾取途中被删掉时什么都不改', () => {
@@ -375,41 +439,5 @@ describe('测距', () => {
     ops.viewportRef.value = null
 
     expect(ops.measureDistance('orbit')).toBeNull()
-  })
-})
-
-describe('漫游预览', () => {
-  // 飞不起来就直说，不留一个按了没反应的按钮
-  it('站点不够时报出来', () => {
-    const { ops, onRoamUnavailable } = setup()
-    ops.viewportRef.value = fakeHandle({ playRoamPreview: () => false })
-
-    ops.previewRoam()
-
-    expect(onRoamUnavailable).toHaveBeenCalledTimes(1)
-  })
-
-  it('飞得起来就不报', () => {
-    const { ops, onRoamUnavailable } = setup()
-
-    ops.previewRoam()
-
-    expect(onRoamUnavailable).not.toHaveBeenCalled()
-  })
-
-  it('停预览转给视口', () => {
-    const { ops, handle } = setup()
-
-    ops.stopRoamPreview()
-
-    expect(handle.stopRoamPreview).toHaveBeenCalledTimes(1)
-  })
-
-  it('取景转给视口', () => {
-    const { ops, handle } = setup()
-
-    ops.focus(TWIN_SELECT_MODEL)
-
-    expect(handle.focus).toHaveBeenCalledWith(TWIN_SELECT_MODEL)
   })
 })

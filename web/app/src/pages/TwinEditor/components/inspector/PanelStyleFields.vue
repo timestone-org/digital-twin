@@ -112,6 +112,7 @@ function toggleAutoHeight(auto: boolean): void {
 <template>
   <InspectorSection title="外观">
     <!-- 一整套观感是十几个开关的组合，逐个试很难自己看出漏了哪条 -->
+    <p class="panel-presets__caption">整套预设（边框、装饰与密度一起换）</p>
     <div class="panel-presets">
       <DtTooltip
         v-for="preset in TWIN_PANEL_PRESETS"
@@ -130,11 +131,11 @@ function toggleAutoHeight(auto: boolean): void {
         </DtButton>
       </DtTooltip>
     </div>
-    <DtField label="风格" size="sm">
+    <DtField label="边框变体" hint="只换卡片边框，不动装饰与密度" size="sm">
       <DtSelect
         :model-value="modelValue.variant"
         :options="variantOptions"
-        aria-label="风格"
+        aria-label="边框变体"
         size="sm"
         @update:model-value="writeVariant"
       />
@@ -287,6 +288,12 @@ function toggleAutoHeight(auto: boolean): void {
 </template>
 
 <style scoped lang="scss">
+.panel-presets__caption {
+  margin: 0;
+  font-size: var(--font-size-caption);
+  color: var(--text-secondary);
+}
+
 .panel-presets {
   display: flex;
   flex-wrap: wrap;

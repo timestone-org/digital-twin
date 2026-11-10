@@ -19,6 +19,7 @@ from llmcore.turn import (
     MIN_TOOL_RESULT_CHARS,
     ServerToolRunner,
     TurnDeps,
+    TurnStepLimitReached,
     run_turn,
 )
 from llmcore.turn.exclusive import isolate_exclusive_call
@@ -290,7 +291,9 @@ async def test_the_step_ceiling_is_configurable() -> None:
         ]
     )
 
-    with pytest.raises(Exception):  # noqa: B017,PT011
+    # ⚠ 必须是 AppError：裸的 GraphRecursionError 两边的 `:advance` 都接不住，
+    # 表现是流突然断掉、界面上没有任何错
+    with pytest.raises(TurnStepLimitReached):
         await run_turn(_deps(responder, max_steps=2), [])
 
 

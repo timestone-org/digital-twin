@@ -19,6 +19,8 @@ export interface Workspace {
   activeKey: Readonly<Ref<string>>
   closing: Readonly<Ref<boolean>>
   canRetain: (to: RouteLocationNormalized) => boolean
+  /** 这一页的关闭已经过了守卫，随后那次切走的路由守卫不该再问一遍。 */
+  isClosing: (key: string) => boolean
   close: (key: string) => Promise<void>
   closeAll: () => Promise<void>
   update: (

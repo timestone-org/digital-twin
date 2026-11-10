@@ -283,6 +283,30 @@ describe('百分比档', () => {
     expect(asRecord(asArray(option.yAxis)[0]).max).toBe(100)
   })
 
+  // ⚠ 折线不进堆、没有占比：画读数，挂在右轴上时右轴也不钉 0–100
+  it('折线行照画读数，只挂折线的右轴不钉占比量程', () => {
+    const config = {
+      [BAR_ITEMS_KEY]: [
+        { name: 'A' },
+        { name: 'B' },
+        { name: '达标率', plot: 'line', axis: 'right' },
+      ],
+      precision: 0,
+      chartStyle: 'percent',
+    }
+    const view = historyView(config, [
+      [{ t: BASE, v: 300 }],
+      [{ t: BASE, v: 100 }],
+      [{ t: BASE, v: 120 }],
+    ])
+    const option = optionOf(config, view)
+    const right = asRecord(asArray(option.yAxis)[1])
+
+    expect(seriesAt(option, 0).data).toEqual([75])
+    expect(seriesAt(option, 2).data).toEqual([120])
+    expect(right.max).toBeUndefined()
+  })
+
   it('一整列全缺时那一列留空，而不是一排 0%', () => {
     const config = { ...BASE_CONFIG, chartStyle: 'percent' }
     const view = historyView(config, [
@@ -411,6 +435,28 @@ describe('参考线', () => {
     expect(Object.keys(seriesAt(option, 1))).toContain('markLine')
   })
 
+  // ⚠ echarts 只按系列数据算轴范围，阈值高过最高的柱时线落到绘图区外面
+  it('参考值并进值轴的范围；横向档并进的是横轴', () => {
+    const config = { ...BASE_CONFIG, refLines: [{ value: 500 }] }
+    const option = optionOf(config, liveView(config, [300, 100]))
+    const flat = { ...config, chartStyle: 'horizontal' }
+    const sideways = optionOf(flat, liveView(flat, [300, 100]))
+
+    expect(asRecord(asArray(option.yAxis)[0]).dataMax).toBe(500)
+    expect(asRecord(asArray(sideways.xAxis)[0]).dataMax).toBe(500)
+  })
+
+  it('百分比档不画参考线，也不把它并进量程', () => {
+    const config = {
+      ...BASE_CONFIG,
+      chartStyle: 'percent',
+      refLines: [{ value: 500 }],
+    }
+    const option = optionOf(config, liveView(config, [300, 100]))
+
+    expect(asRecord(asArray(option.yAxis)[0]).dataMax).toBeUndefined()
+  })
+
   it('一条都画不出来时谁也不挂，不给一条空系列硬塞参考线', () => {
     const config = { ...BASE_CONFIG, refLines: [{ value: 50 }] }
     const view = liveView(config, [1], ['error'])
@@ -518,15 +564,36 @@ describe('两处相反的转义口径', () => {
     ).toBe('&lt;i&gt;09:00<br/>&lt;b&gt;甲 12 &amp; 备用')
   })
 
-  it('提示框把没读数的那一格写成「—」，不留一行空白', () => {
-    const view = liveView(BASE_CONFIG, [30, 10])
+  it('历史档提示框把没采到的那一格写成「—」，不留一行空白', () => {
+    const view = historyView(BASE_CONFIG, [
+      [
+        { t: BASE, v: 30 },
+        { t: BASE + HOUR, v: 40 },
+      ],
+      [{ t: BASE + HOUR, v: 10 }],
+    ])
+    const option = optionOf(BASE_CONFIG, view)
+
+    expect(
+      call(asRecord(option.tooltip).formatter, [
+        { seriesIndex: 0, dataIndex: 0, axisValueLabel: '09:00' },
+        { seriesIndex: 1, dataIndex: 0, axisValueLabel: '09:00' },
+      ]),
+    ).toBe('09:00<br/>1# 线 30t<br/>2# 线 —')
+  })
+
+  // ⚠ 实时档一个类目就是一行，别的行在这一格上本来就没有值，列出来全是「—」
+  it('实时档提示框只列悬停那一行', () => {
+    const view = liveView(BASE_CONFIG, [30, 10, 20])
     const option = optionOf(BASE_CONFIG, view)
 
     expect(
       call(asRecord(option.tooltip).formatter, [
         { seriesIndex: 0, dataIndex: 1, axisValueLabel: '2# 线' },
+        { seriesIndex: 1, dataIndex: 1, axisValueLabel: '2# 线' },
+        { seriesIndex: 2, dataIndex: 1, axisValueLabel: '2# 线' },
       ]),
-    ).toBe('2# 线<br/>1# 线 —')
+    ).toBe('2# 线<br/>2# 线 10t')
   })
 
   it('百分比档的提示框同时给原值与占比', () => {

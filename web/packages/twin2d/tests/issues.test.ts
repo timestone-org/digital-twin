@@ -286,7 +286,7 @@ describe('collectTwin2dIssues', () => {
       {
         level: 'error',
         code: 'dangling-style',
-        message: '找不到节点样式 st-gone，这个节点会落到 __fallback 兜底样式',
+        message: '找不到节点样式 st-gone，这个节点不会显示，读数也不会绑定',
         at: 'nodes[0].styleId',
       },
     ])
@@ -724,6 +724,50 @@ describe('collectTwin2dIssues', () => {
       ],
     })
     expect(collectTwin2dIssues(config)).toEqual([])
+  })
+
+  // ⚠ 图标库里没登记的名字 DtIcon 一个像素都不画、控制台也不出声：助手或导入写进来的
+  // 名字绕开了检查器的下拉，只有这里能报
+  it('ico 图元按名字引了一枚图标库里没有的图标时报出来', () => {
+    const config = configOf({
+      styles: [
+        styleWith({
+          prims: [icoPrim('i0', { kind: 'name', name: 'no-such-icon' })],
+        }),
+      ],
+      nodes: [
+        nodeWith({
+          layers: [icoPrim('i1', { kind: 'name', name: 'also-missing' })],
+        }),
+      ],
+    })
+
+    expect(collectTwin2dIssues(config)).toEqual([
+      {
+        level: 'error',
+        code: 'dangling-icon-name',
+        message: '图标库里没有 no-such-icon，这个图标会整个消失',
+        at: 'styles[0].prims[0].src.name',
+      },
+      {
+        level: 'error',
+        code: 'dangling-icon-name',
+        message: '图标库里没有 also-missing，这个图标会整个消失',
+        at: 'nodes[0].layers[0].src.name',
+      },
+    ])
+  })
+
+  it('登记过的图标名不报', () => {
+    const config = configOf({
+      styles: [
+        styleWith({ prims: [icoPrim('i0', { kind: 'name', name: 'plus' })] }),
+      ],
+    })
+
+    expect(codesOf(collectTwin2dIssues(config))).not.toContain(
+      'dangling-icon-name',
+    )
   })
 
   it('四个方向出界的拐点各报一条，落在边线上不算出界', () => {

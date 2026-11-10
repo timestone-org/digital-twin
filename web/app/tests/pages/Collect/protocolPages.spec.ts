@@ -13,6 +13,7 @@ import { useAuthStore } from '@/stores/auth'
 import OpcuaPage from '@/pages/Collect/Opcua/index.vue'
 import ModbusPage from '@/pages/Collect/ModbusTcp/index.vue'
 import HttpPage from '@/pages/Collect/Http/index.vue'
+import { protocolLabel } from '@/features/collect/protocols'
 
 const subscribe = vi.fn(() => vi.fn())
 vi.mock('@/composables/useRealtimeChannel', () => ({
@@ -263,12 +264,9 @@ describe('协议页面隔离', () => {
       const { wrapper } = await render(path)
       await click(wrapper, '新增数据源')
       const dialog = () => wrapper.get('[role="dialog"]')
-      expect(
-        dialog().get('[role="combobox"]').attributes('disabled'),
-      ).toBeDefined()
-      await dialog()
-        .get('input[placeholder="如：1号生产线 PLC"]')
-        .setValue('新数据源')
+      // 协议由页面定死，表单里只读展示、没有可切换的下拉
+      expect(dialog().text()).toContain(`协议：${protocolLabel(protocol)}`)
+      await dialog().get('input[placeholder^="如："]').setValue('新数据源')
       await dialog()
         .get('input[placeholder="如：plant1_plc"]')
         .setValue('new_source')

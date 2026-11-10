@@ -2,7 +2,7 @@
 import { flushPromises, mount } from '@vue/test-utils'
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 import { createPinia, setActivePinia } from 'pinia'
-import { DtButton, DtFilePicker, DtInput } from '@dt/ui'
+import { DtButton, DtFilePicker, DtInput, DtModal } from '@dt/ui'
 import type { ReportRenderDetail, ReportTemplate } from '@dt/contracts'
 import * as api from '@/api/reports'
 import ImportDialog from '@/pages/Reports/Templates/components/ImportDialog.vue'
@@ -345,6 +345,51 @@ describe('Word 导入', () => {
     await wrapper.setProps({ modelValue: false })
     await vi.advanceTimersByTimeAsync(2000)
     expect(api.getReportRender).toHaveBeenCalledTimes(2)
+    wrapper.unmount()
+  })
+
+  it('⚠ 创建在飞时关不掉弹窗，创建完再打开不会把同一份导入再给一遍', async () => {
+    vi.spyOn(api, 'importReport').mockResolvedValue(job('pending'))
+    vi.spyOn(api, 'getReportRender').mockResolvedValue(job('succeeded'))
+    let release: (value: ReportTemplate) => void = () => undefined
+    vi.spyOn(api, 'createReport').mockReturnValue(
+      new Promise((done) => {
+        release = done
+      }),
+    )
+    const wrapper = mount(ImportDialog, {
+      props: { modelValue: true },
+      global: { stubs: { teleport: true } },
+    })
+    wrapper
+      .findComponent(DtFilePicker)
+      .vm.$emit('select', [new File(['Word'], '月报.docx')])
+    await flushPromises()
+    wrapper
+      .findAllComponents(DtInput)
+      .find((input) => input.props('label') === '模板编码')
+      ?.vm.$emit('update:modelValue', 'imported')
+    await flushPromises()
+    await wrapper
+      .findAllComponents(DtButton)
+      .find((button) => button.text() === '使用导入内容创建模板')
+      ?.trigger('click')
+    wrapper.findComponent(DtModal).vm.$emit('update:modelValue', false)
+    expect(wrapper.emitted('update:modelValue')).toBeUndefined()
+    release(report())
+    await flushPromises()
+    expect(wrapper.emitted('created')).toHaveLength(1)
+    await wrapper.setProps({ modelValue: false })
+    await wrapper.setProps({ modelValue: true })
+    await flushPromises()
+    expect(wrapper.text()).not.toContain('批注未导入')
+    const create = wrapper
+      .findAllComponents(DtButton)
+      .find((button) => button.text() === '使用导入内容创建模板')
+    expect(create?.attributes('disabled')).toBeDefined()
+    const closes = wrapper.emitted('update:modelValue')?.length ?? 0
+    wrapper.findComponent(DtModal).vm.$emit('update:modelValue', false)
+    expect(wrapper.emitted('update:modelValue')).toHaveLength(closes + 1)
     wrapper.unmount()
   })
 })

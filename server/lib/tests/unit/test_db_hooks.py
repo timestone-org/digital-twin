@@ -91,3 +91,21 @@ async def test_every_registered_hook_runs(count: int) -> None:
     await run_after_commit_hooks(as_session(session))
 
     assert len(seen) == count
+
+
+async def test_a_failing_hook_is_logged_with_its_name_and_error(
+    caplog: pytest.LogCaptureFixture,
+) -> None:
+    """⚠ 只记异常类型的话，看不出是哪一个副作用没执行、错在哪。"""
+    session = FakeSession()
+    after_commit(as_session(session), _boom)
+
+    with caplog.at_level("WARNING"):
+        await run_after_commit_hooks(as_session(session))
+
+    payloads = [getattr(one, "payload", {}) for one in caplog.records]
+    event = "after_commit_hook_failed"
+    failed = next(one for one in payloads if one.get("event") == event)
+    assert failed["hook"] == "_boom"
+    assert failed["error"]["type"] == "RuntimeError"
+    assert "stack" in failed["error"]

@@ -1,12 +1,25 @@
 /** @fileoverview JSON 多点位导入在真实 DOM 中的字段选择、预览、归档和错误契约。 */
-import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
+import {
+  afterEach,
+  beforeAll,
+  beforeEach,
+  describe,
+  expect,
+  it,
+  vi,
+} from 'vitest'
 import { enableAutoUnmount, flushPromises, mount } from '@vue/test-utils'
 import type { VueWrapper } from '@vue/test-utils'
 import type { CollectPoint } from '@dt/contracts'
 import * as collect from '@/api/collect'
+import { useToast } from '@dt/ui'
 import HttpPointMappingDialog from '@/pages/Collect/components/HttpPointMappingDialog.vue'
 
 enableAutoUnmount(afterEach)
+// ⚠ 先把拼音字典加载好：解析时那次 `import()` 是动态的，预热后从模块缓存同步命中
+beforeAll(async () => {
+  await import('pinyin-pro')
+})
 beforeEach(() => {
   document.body.innerHTML = ''
   vi.spyOn(collect, 'listPoints').mockResolvedValue({
@@ -105,7 +118,13 @@ describe('HTTP JSON 点位映射', () => {
       expect.any(String),
     )
     expect(wrapper.emitted('imported')).toHaveLength(1)
-    expect(wrapper.text()).toContain('已创建 2 个点位')
+    // 全部成功就关弹窗并 toast：结果写在弹窗正文底部，滚动区外根本看不见
+    expect(wrapper.emitted('update:modelValue')?.at(-1)).toEqual([false])
+    expect(
+      useToast().toasts.value.some((one) =>
+        one.message.includes('已创建 2 个点位'),
+      ),
+    ).toBe(true)
   })
   it('JSON 格式错误、空字段及 null 均在 DOM 中说明', async () => {
     const wrapper = await render()

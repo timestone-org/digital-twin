@@ -46,7 +46,10 @@ const isImportOpen = ref(false)
 const name = ref('')
 const code = ref('')
 const error = ref('')
+const codeError = ref('')
 const isSaving = ref(false)
+/** 模板编码的口径，与后端校验同一条正则。 */
+const CODE_PATTERN = /^[A-Za-z_][A-Za-z0-9_]*$/
 watch(keyword, () => void list.reloadFromFirstPage())
 const emptyState = computed(() =>
   listEmptyState({
@@ -61,6 +64,11 @@ const emptyState = computed(() =>
 )
 onMounted(() => void list.reload())
 async function create(): Promise<void> {
+  // 先在这一格说清：交给后端只会得到一句不指向字段的「参数校验失败」
+  codeError.value = CODE_PATTERN.test(code.value)
+    ? ''
+    : '只能用英文字母、数字和下划线，且不能以数字开头'
+  if (codeError.value !== '') return
   isSaving.value = true
   error.value = ''
   try {
@@ -96,11 +104,15 @@ async function remove(id: string): Promise<void> {
 <template>
   <AppShell title="自动报告" subtitle="模板与报告期生成 Word 文档">
     <template #actions>
-      <RouterLink to="/reports/renders">
-        <DtButton variant="ghost" size="sm" icon="activity">生成记录</DtButton>
+      <RouterLink v-slot="{ navigate }" to="/reports/renders" custom>
+        <DtButton variant="ghost" size="sm" icon="activity" @click="navigate">
+          生成记录
+        </DtButton>
       </RouterLink>
-      <RouterLink to="/reports/schedules">
-        <DtButton variant="ghost" size="sm" icon="calendar">定时规则</DtButton>
+      <RouterLink v-slot="{ navigate }" to="/reports/schedules" custom>
+        <DtButton variant="ghost" size="sm" icon="calendar" @click="navigate">
+          定时规则
+        </DtButton>
       </RouterLink>
       <PermGuard :codes="[PERMISSION_CODES.reportManage]">
         <DtButton
@@ -183,6 +195,7 @@ async function remove(id: string): Promise<void> {
           label="模板编码"
           size="sm"
           hint="字母开头，使用英文字母、数字、下划线"
+          :error="codeError"
         />
         <DtNotice v-if="error" intent="danger">
           {{ error }}

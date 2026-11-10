@@ -10,6 +10,7 @@ import {
   DtNotice,
   DtTag,
   DtIconButton,
+  useToast,
 } from '@dt/ui'
 import { PERMISSION_CODES } from '@dt/contracts'
 import type { DtDataColumn, ReportRender } from '@dt/contracts'
@@ -102,11 +103,26 @@ async function prevPage(): Promise<void> {
   trail.value = trail.value.slice(0, -1)
   await reload()
 }
-async function download(id: string): Promise<void> {
+const toast = useToast()
+/**
+ * 下载文件名：模板名-报告期，几份下下来分得清；模板名取不到时退回记录 id。
+ * @param row 生成记录
+ */
+function fileNameOf(row: ReportRender): string {
+  const template = row.template_id ? templateNames.value[row.template_id] : ''
+  const stem = template ? `${template}-${row.period}` : `report-${row.id}`
+  return `${stem.replace(/[\\/:*?"<>|]/g, '_')}.docx`
+}
+/**
+ * 下载一份产物。⚠ 失败走吐司不走 error：error 是列表取数那一格，写进去整张列表
+ * 会被换成「加载失败」，下一次轮询又把那句话冲掉。
+ * @param row 生成记录
+ */
+async function download(row: ReportRender): Promise<void> {
   try {
-    downloadBytes(await api.downloadReport(id), `report-${id}.docx`)
+    downloadBytes(await api.downloadReport(row.id), fileNameOf(row))
   } catch (caught) {
-    error.value = describeError(caught)
+    toast.error(describeError(caught))
   }
 }
 </script>
@@ -117,8 +133,10 @@ async function download(id: string): Promise<void> {
     subtitle="任务状态与 Word 产物"
   >
     <template #actions>
-      <RouterLink to="/reports">
-        <DtButton variant="ghost" size="sm" icon="table">报告模板</DtButton>
+      <RouterLink v-slot="{ navigate }" to="/reports" custom>
+        <DtButton variant="ghost" size="sm" icon="table" @click="navigate">
+          报告模板
+        </DtButton>
       </RouterLink>
       <DtIconButton
         size="sm"
@@ -171,7 +189,14 @@ async function download(id: string): Promise<void> {
           </DtTag>
         </template>
         <template #cell-warnings="{ row }">
+          <p
+            v-if="!row.error && row.warnings.length === 0"
+            class="m-0 text-xs text-text-disabled"
+          >
+            无提示
+          </p>
           <DtButton
+            v-else
             variant="ghost"
             size="sm"
             icon="activity"
@@ -188,7 +213,7 @@ async function download(id: string): Promise<void> {
               intent="primary"
               icon="download"
               label="下载 Word"
-              @click="download(row.id)"
+              @click="download(row)"
             />
           </PermGuard>
         </template>

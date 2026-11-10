@@ -17,9 +17,17 @@ function geometry(indexed = true): THREE.BufferGeometry {
   return result
 }
 
+/** 只认渲染目标的假渲染器；`target` 非 null 表示这一趟画进离屏目标（如镜面反射）。 */
+function rendererDrawingInto(
+  target: THREE.WebGLRenderTarget | null,
+): THREE.WebGLRenderer {
+  return { getRenderTarget: () => target } as unknown as THREE.WebGLRenderer
+}
+
 function render(
   mesh: THREE.Mesh,
   camera = new THREE.PerspectiveCamera(),
+  renderer = rendererDrawingInto(null),
 ): void {
   mesh.updateMatrixWorld()
   camera.updateMatrixWorld()
@@ -28,7 +36,7 @@ function render(
     : mesh.material
   if (material === undefined) throw new Error('测试网格没有材质')
   mesh.onBeforeRender(
-    THREE.WebGLRenderer.prototype,
+    renderer,
     new THREE.Scene(),
     camera,
     mesh.geometry,
@@ -101,6 +109,24 @@ describe('透明三角形排序', () => {
     const version = mesh.geometry.index?.version
     render(mesh, camera)
     camera.position.set(12, 5, 10)
+    render(mesh, camera)
+
+    expect(mesh.geometry.index?.version).toBe(version)
+    sorter.dispose()
+  })
+
+  // ⚠ 底座镜面每帧从镜像机位再画一遍场景：两个视向交替，缓存永远不中，静止也每帧排两趟
+  it('画进离屏目标的那一趟沿用主视图的顺序，不重排', () => {
+    const mesh = new THREE.Mesh(geometry())
+    const sorter = new TransparentGeometry(mesh)
+    const camera = new THREE.PerspectiveCamera()
+    const mirrored = new THREE.PerspectiveCamera()
+    mirrored.rotation.y = Math.PI
+    const reflection = rendererDrawingInto(new THREE.WebGLRenderTarget(1, 1))
+    render(mesh, camera)
+    const version = mesh.geometry.index?.version
+
+    render(mesh, mirrored, reflection)
     render(mesh, camera)
 
     expect(mesh.geometry.index?.version).toBe(version)
@@ -231,8 +257,9 @@ describe('透明三角形排序', () => {
     const scene = new THREE.Scene()
     const camera = new THREE.PerspectiveCamera()
     const group = new THREE.Group()
+    const renderer = rendererDrawingInto(null)
     mesh.onBeforeRender(
-      THREE.WebGLRenderer.prototype,
+      renderer,
       scene,
       camera,
       mesh.geometry,
@@ -241,7 +268,7 @@ describe('透明三角形排序', () => {
     )
 
     expect(previous).toHaveBeenCalledExactlyOnceWith(
-      THREE.WebGLRenderer.prototype,
+      renderer,
       scene,
       camera,
       mesh.geometry,

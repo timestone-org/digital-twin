@@ -19,9 +19,8 @@ COLUMN_REF_RE = re.compile(r"\{([^{}]*)\}")
 # `tests/contract/test_dataset_formula_catalog.py` 逐字符钉住
 COLUMN_KEY_RE = re.compile(r"^[^\s@{}:,.'\"()\[\]]{1,64}$")
 # 跨表引用 `{表code.列key}`：点号后面那截仍按列标识校验。
-# ⚠ 按**第一个**点号切：列标识本身禁点号，所以切法无歧义。台账编码允许含点号
-# （`TableCode` 放行 `.`），那样的表跨表引用不到——报的是「列标识不合法」，
-# 不是静默算空
+# ⚠ 按**第一个**点号切：列标识本身禁点号，所以切法无歧义。新建台账的编码已禁
+# 点号；存量里带点的表跨表引用不到——报的是「列标识不合法」，不是静默算空
 EXTERNAL_RE = re.compile(r"^([A-Za-z0-9][A-Za-z0-9_-]*)\.(.+)$")
 # 库公式调用 `@标识(`；只改写函数名那一段，实参原样留着按普通表达式解析
 FX_CALL_RE = re.compile(r"@([^\s@{}()\[\],:.'\"]+)\s*\(")
@@ -29,6 +28,16 @@ FX_CALL_RE = re.compile(r"@([^\s@{}()\[\],:.'\"]+)\s*\(")
 _STRING_RE = re.compile(r"'(?:[^'\\]|\\.)*'|\"(?:[^\"\\]|\\.)*\"")
 
 _REF_PLACEHOLDER_FMT = "_c{}_"
+# CPython 语法错误原话的片段 → 中文说法。⚠ 不带列号：占位替换改过原文长度，
+# 报出来的位置对不上用户写的那一串
+_SYNTAX_HINTS = (
+    ("was never closed", "括号没有闭合，缺少配对的右括号"),
+    ("unmatched", "多了一个右括号，找不到与它配对的左括号"),
+    ("does not match opening", "括号不配对，左右括号的种类不一致"),
+    ("unterminated string", "引号没有闭合"),
+    ("unexpected EOF", "公式没写完"),
+)
+_SYNTAX_FALLBACK = "写法有误，请检查括号、逗号与运算符是否完整"
 _FX_PLACEHOLDER_FMT = "_fx{}_"
 _MISSING_PARENS = (
     "调用库公式要带括号，写作 @公式标识(实参)；零参公式也要写成 @公式标识()"
@@ -96,10 +105,22 @@ def to_expression(
     try:
         tree = ast.parse(substituted, mode="eval")
     except SyntaxError as error:
-        raise FormulaError(f"公式语法错误：{error.msg}") from error
+        raise FormulaError(f"公式语法错误：{_syntax_hint(error)}") from error
     except RecursionError as error:
         raise FormulaError("公式嵌套过深，请拆成多列分步计算") from error
     return tree, placeholders, codes
+
+
+def _syntax_hint(error: SyntaxError) -> str:
+    """把 CPython 的英文语法错误换成中文说法。
+
+    Args: error。
+    """
+    message = error.msg or ""
+    for fragment, hint in _SYNTAX_HINTS:
+        if fragment in message:
+            return hint
+    return _SYNTAX_FALLBACK
 
 
 def intern_ref(key: str, placeholders: dict[str, str]) -> str:
@@ -169,6 +190,19 @@ def _is_inside(position: int, spans: list[tuple[int, int]]) -> bool:
     Args: position, spans。
     """
     return any(start <= position < end for start, end in spans)
+
+
+def refs_outside_quotes(source: str) -> list[str]:
+    """`{…}` 引用到的名字，按出现顺序、不去重；字符串字面量里的不算。
+
+    Args: source。
+    """
+    spans = _quoted_spans(source)
+    return [
+        found.group(1).strip()
+        for found in COLUMN_REF_RE.finditer(source)
+        if not _is_inside(found.start(), spans)
+    ]
 
 
 def _replace_outside_quotes(

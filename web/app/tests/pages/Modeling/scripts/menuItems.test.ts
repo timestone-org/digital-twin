@@ -78,6 +78,13 @@ describe('该摆哪些条目', () => {
 })
 
 describe('置灰', () => {
+  // ⚠ 双击与回车在只读时照样打开（弹窗自己只读），菜单不能说它打不开
+  it('只读时「参数」仍点得开，弹窗只读', () => {
+    expect(
+      entryOf('config', { nodeId: 'n1', isReadonly: true })?.disabled,
+    ).toBe(false)
+  })
+
   it('剪贴板空着时「粘贴」点不动', () => {
     expect(entryOf('paste')?.disabled).toBe(true)
     expect(entryOf('paste', { canPaste: true })?.disabled).toBe(false)

@@ -155,6 +155,23 @@ describe('平移', () => {
     wrapper.unmount()
   })
 
+  // ⚠ 刚点过的工具条按钮还握着焦点：空格的默认动作会再「点」它一次（撤销、重新加载）
+  it('平移用的空格吞掉默认动作，不再触发焦点上的按钮也不滚视口', () => {
+    const { wrapper } = mountViewport(1)
+    const down = new KeyboardEvent('keydown', {
+      code: 'Space',
+      cancelable: true,
+    })
+    const up = new KeyboardEvent('keyup', { code: 'Space', cancelable: true })
+
+    window.dispatchEvent(down)
+    window.dispatchEvent(up)
+
+    expect(down.defaultPrevented).toBe(true)
+    expect(up.defaultPrevented).toBe(true)
+    wrapper.unmount()
+  })
+
   it('卸载之后再按空格不再进平移态', () => {
     const { view, wrapper } = mountViewport(1)
 

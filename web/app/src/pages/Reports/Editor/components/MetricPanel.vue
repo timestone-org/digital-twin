@@ -296,8 +296,18 @@ function reset(): void {
   unit.value = ''
   error.value = ''
 }
+/**
+ * 打开一张空白的添加表单。⚠ 来源、字段、方式与偏移要在这里复位而不是放进
+ * reset()：reset() 在保存与取消后也跑，那时还在编辑态的取值不能被它冲掉；而不复位
+ * 的话，刚编辑过的那条的来源会原样带进新指标，保存时毫无察觉。
+ */
 function openForm(): void {
   reset()
+  pendingKey = ''
+  tableId.value = ''
+  key.value = ''
+  mode.value = 'window_agg'
+  offset.value = '0'
   formOpen.value = true
 }
 function sourceName(metric: ReportMetric): string {
@@ -307,12 +317,35 @@ function sourceName(metric: ReportMetric): string {
   const table = tables.value.find((item) => item.code === metric.table)
   return api?.name ?? table?.name ?? metric.table ?? '未配置来源'
 }
+/**
+ * 报告期偏移的说法。API 来源的偏移配在来源上，指标自己的恒为 0。
+ * @param metric 指标定义
+ */
+function periodLabel(metric: ReportMetric): string {
+  const api = props.apiSources.find(
+    (source) => `api:${source.code}` === metric.table,
+  )
+  const offset = api ? (api.offset ?? 0) : (metric.offset ?? 0)
+  if (offset === 0) return '本期'
+  if (offset === -1) return '上期'
+  return `偏移 ${offset} 期`
+}
+/**
+ * 列表里一条指标的说明；本期与上期、单位都要说出来，否则两条读起来一模一样。
+ * @param metric 指标定义
+ */
 function describe(metric: ReportMetric): string {
   if (metric.mode === 'expr') return metric.expr ?? '指标表达式'
   const label =
     AGGREGATIONS.find((item) => item.value === existingMode(metric))?.label ??
     '期内均值'
-  return `${sourceName(metric)} · ${metric.key ?? ''} · ${label}`
+  return [
+    sourceName(metric),
+    metric.key ?? '',
+    label,
+    periodLabel(metric),
+    ...(metric.unit ? [metric.unit] : []),
+  ].join(' · ')
 }
 </script>
 <template>

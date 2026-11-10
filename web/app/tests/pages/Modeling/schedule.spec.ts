@@ -135,3 +135,20 @@ it('初始已打开的规则也会加载', async () => {
     expect.any(AbortSignal),
   )
 })
+it('间隔填得比 5 分钟短时当场说明并挡住保存，不悄悄改成 5', async () => {
+  const wrapper = open()
+  await wrapper.setProps({ pipeline: { id: 'p1', name: '能耗' } })
+  await flushPromises()
+  const input = wrapper.getComponent(ui.DtNumberInput)
+  await input.find('input').setValue('3')
+  await input.find('input').trigger('blur')
+  await flushPromises()
+
+  expect(input.props('error')).toContain('最短 5 分钟')
+  expect(
+    wrapper
+      .findAll('button')
+      .find((item) => item.text() === '保存')
+      ?.attributes('disabled'),
+  ).toBeDefined()
+})

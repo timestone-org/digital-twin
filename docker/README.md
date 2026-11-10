@@ -13,8 +13,11 @@
 
 ### 三处不能改的配置
 
-1. **server 级把 6 个 `X-Auth-*` 头置空**。客户端伪造这些头就等于伪造身份；
-   只在 `auth_request` 成功后由 `auth_request_set` 重新注入。
+1. **server 级把 7 个 `X-Auth-*` 头置空**。客户端伪造这些头就等于伪造身份；
+   只在 `auth_request` 成功后由 `auth_request_set` 重新注入。⚠ 自己写了任何一条
+   `proxy_set_header`（含 include `proxy-common.conf`）的 location 不再继承 server 级
+   那几行，不挂 `auth-inject.conf` 的就必须在块内再置空一遍；
+   `server/services/auth-server/tests/contract/test_edge_gateway.py` 逐个 location 数这一条。
 2. **免认证 location 只有那几条**。规则表里的空 `permission_codes` 语义是
    「任意已登录用户放行」而**不是**匿名放行——匿名可达性只由这些 location 保证。
    删掉 `/sessions` 那条就会全站无法登录，且管理员自己也进不去。

@@ -7,6 +7,8 @@ import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 import { enableAutoUnmount, flushPromises, mount } from '@vue/test-utils'
 import type { Room, StartupBatches } from '@dt/contracts'
 
+import { DtModal } from '@dt/ui'
+
 import * as hvac from '@/api/hvac'
 import CreateModelDialog from '@/pages/Hvac/Models/components/CreateModelDialog.vue'
 import { STAMP, model } from '@/testing/modelFixtures'
@@ -261,5 +263,67 @@ describe('对话框状态', () => {
     await flushPromises()
     expect(bodyText()).toContain('请求失败')
     expect(wrapper.emitted('created')).toBeUndefined()
+  })
+})
+
+describe('覆盖度的几种落点', () => {
+  function running(): StartupBatches {
+    const base = batches()
+    return batches({
+      coverage: [],
+      current:
+        base.current === null ? null : { ...base.current, status: 'running' },
+    })
+  }
+
+  it('⚠ 首次抽取还在跑、覆盖度为空时说清要等，不停在「正在取」', async () => {
+    vi.mocked(hvac.getStartupBatches).mockResolvedValue(running())
+    await open()
+    await pickRoom('注塑房')
+    expect(bodyText()).not.toContain('正在取组合覆盖度')
+    expect(bodyText()).toContain('抽取还在进行')
+  })
+
+  it('⚠ 抽完了却一个可用组合都没有时说清去哪看', async () => {
+    vi.mocked(hvac.getStartupBatches).mockResolvedValue(
+      batches({ coverage: [] }),
+    )
+    await open()
+    await pickRoom('注塑房')
+    expect(bodyText()).not.toContain('正在取组合覆盖度')
+    expect(bodyText()).toContain('还没有可用组合')
+  })
+
+  it('真在取的时候才说「正在取」', async () => {
+    let release: (value: StartupBatches) => void = () => undefined
+    vi.mocked(hvac.getStartupBatches).mockReturnValue(
+      new Promise((done) => {
+        release = done
+      }),
+    )
+    await open()
+    await pickRoom('注塑房')
+    expect(bodyText()).toContain('正在取组合覆盖度')
+    release(batches())
+    await flushPromises()
+    expect(bodyText()).not.toContain('正在取组合覆盖度')
+  })
+})
+
+describe('误关保护', () => {
+  it('⚠ 只勾了组合也算填过，误点遮罩要拦下', async () => {
+    const wrapper = mount(CreateModelDialog, {
+      attachTo: document.body,
+      props: { open: false, rooms: [room('r1', '注塑房')], roomId: 'r1' },
+    })
+    await wrapper.setProps({ open: true })
+    await flushPromises()
+    expect(wrapper.getComponent(DtModal).props('dirty')).toBe(false)
+    const box = document.body.querySelector<HTMLInputElement>(
+      'input[type="checkbox"]',
+    )
+    box?.click()
+    await flushPromises()
+    expect(wrapper.getComponent(DtModal).props('dirty')).toBe(true)
   })
 })

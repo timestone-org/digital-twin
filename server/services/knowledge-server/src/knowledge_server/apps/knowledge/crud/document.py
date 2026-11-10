@@ -178,6 +178,36 @@ async def claim_ingest(
     return found.scalar_one_or_none()
 
 
+async def mark_deferred(
+    session: AsyncSession,
+    document_id: uuid.UUID,
+    generation: uuid.UUID | None,
+    reason: str,
+) -> int:
+    """这一期次此刻跑不了：从 parsing 退回 pending，并写明在等什么。
+
+    ⚠ 只退本期次、且只退 parsing：用户在这期间点过「重新解析」的话，行上已是
+    新期次，旧消息不该把它拨回去。
+
+    Args: session, document_id, generation, reason（给人看的一句）。
+    """
+    statement = (
+        update(KnowledgeDocument)
+        .where(
+            KnowledgeDocument.id == document_id,
+            KnowledgeDocument.status == "parsing",
+        )
+        .values(status="pending", failure_reason=reason)
+    )
+    statement = statement.where(
+        KnowledgeDocument.ingest_generation.is_(None)
+        if generation is None
+        else KnowledgeDocument.ingest_generation == generation
+    )
+    done = await session.execute(statement)
+    return max(0, cast("CursorResult[Any]", done).rowcount)
+
+
 async def mark_requeued(
     session: AsyncSession,
     document_id: uuid.UUID,

@@ -161,7 +161,7 @@ async def delete_user(
     )
     _assert_can_touch(operation, target, action="删除")
     guards.assert_not_last_super_admin(
-        is_target_super=target.is_super,
+        is_target_super=target.is_active_super,
         super_admin_count=await count_super_admins(session),
         action="删除",
     )
@@ -200,7 +200,7 @@ async def set_active(
             action="执行停用",
         )
         guards.assert_not_last_super_admin(
-            is_target_super=target.is_super,
+            is_target_super=target.is_active_super,
             super_admin_count=await count_super_admins(session),
             action="停用",
         )

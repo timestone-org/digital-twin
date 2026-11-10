@@ -38,6 +38,11 @@ class Identity:
     def is_super(self) -> bool:
         return is_super_admin(self.codes, self.builtin_codes)
 
+    @property
+    def is_active_super(self) -> bool:
+        """计入「最后一个全权账号」保护的口径：停用的全权账号不算。"""
+        return self.user.is_active and self.is_super
+
     def has_all(self, required: frozenset[str]) -> bool:
         """是否持有全部给定权限码。空集合视为满足。
 
@@ -108,9 +113,10 @@ async def load_identity_by_id(
 
 
 async def count_super_admins(session: AsyncSession) -> int:
-    """全权账号数量。删除/停用最后一个全权账号的保护要用它。
+    """启用中的全权账号数量。删除/停用最后一个全权账号的保护要用它。
 
     ⚠ 必须是单条查询：逐个用户算权限会让保护逻辑的开销随用户数线性增长。
+    ⚠ 停用的不算：它登录不了，降级后也没人还有权限把它启用回来。
 
     Args: session。
     """
@@ -121,15 +127,16 @@ async def count_super_admins(session: AsyncSession) -> int:
     from_role = (
         from_role.join(RolePermission, RolePermission.role_id == User.role_id)
         .join(Permission, Permission.id == RolePermission.permission_id)
-        .where(Permission.is_builtin.is_(True))
+        .where(Permission.is_builtin.is_(True), User.is_active.is_(True))
     )
     from_direct = (
         select(
             UserPermission.user_id.label("user_id"),
             Permission.id.label("pid"),
         )
+        .join(User, User.id == UserPermission.user_id)
         .join(Permission, Permission.id == UserPermission.permission_id)
-        .where(Permission.is_builtin.is_(True))
+        .where(Permission.is_builtin.is_(True), User.is_active.is_(True))
     )
     held = union(from_role, from_direct).subquery("held")
     full = (

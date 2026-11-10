@@ -288,3 +288,24 @@ describe('正常回合回执先于续推', () => {
     expect(sink.onError).toHaveBeenCalledWith('执行状态未确认')
   })
 })
+
+describe('认不出的工具调用', () => {
+  it.each([
+    [{ calls: [{ foo: 1 }] }],
+    [{ calls: 'x' }],
+    [{ calls: [{ call_id: 'w1', name: 'a' }, { call_id: 'w2' }] }],
+  ])('%j 停下并说清楚，不拿空/残缺回执去续推', async (body) => {
+    const controller = new AbortController()
+    const advance = vi.fn(async function* () {
+      await Promise.resolve()
+      yield frame('client_tool.request', body)
+    })
+    const input = inputOf(controller)
+    const sink = sinkOf()
+    await runLoop({ ...input, advance }, sink)
+    expect(advance).toHaveBeenCalledOnce()
+    expect(input.dispatch).not.toHaveBeenCalled()
+    expect(sink.onError).toHaveBeenCalledOnce()
+    expect(sink.onError.mock.calls[0]?.[0]).toContain('无法识别')
+  })
+})

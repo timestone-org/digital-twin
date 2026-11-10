@@ -3,6 +3,7 @@
 写侧与生命周期在 `ac_startup_service.py`。口径见 docs/AC_STARTUP_DESIGN.md §7。
 """
 
+import asyncio
 import uuid
 from datetime import datetime
 
@@ -39,12 +40,13 @@ from platform_server.apps.hvac.services.ac_compliance_service import (
 )
 from platform_server.apps.hvac.services.ac_room_configuration import (
     RoomConfiguration,
+    load_bound_units,
     load_configuration,
     restore_configuration,
 )
 from platform_server.apps.hvac.services.ac_source_reader import AcSourceReader
 from platform_server.apps.hvac.services.ac_startup_extract import (
-    resolve_source_extent,
+    merge_extents,
 )
 from platform_server.apps.hvac.services.ac_startup_rules import ExtractionRules
 from platform_server.apps.hvac.startups import (
@@ -57,6 +59,9 @@ _logger = get_logger("platform.hvac.ac_startup_query")
 
 # 游标里锚点字段的名字，客户端不许解析
 CURSOR_TIME_FIELD = "before"
+# 批次页问外库数据跨度的预算。⚠ 远小于前端 20 s 的请求预算：外库连不上时
+# 登录与查询超时加起来正好 20 s，不另设上限整页就跟着等到前端先放弃
+SOURCE_RANGE_BUDGET_S = 3.0
 
 
 async def list_episodes(
@@ -192,6 +197,7 @@ def _to_episode(
         started_at=row.started_at,
         running_set=list(row.running_set),
         complied_at=row.complied_at,
+        duration_minutes=row.duration_minutes,
         outcome=row.outcome,
         readings=dict(row.readings),
         idle_minutes=row.idle_minutes,
@@ -249,10 +255,21 @@ async def _source_range(
 
     ⚠ 外库抖一下不该让整页 503：这一页的主体是我们自己的批次数据，只有这一个
     字段依赖厂商库（CONTEXT §5）。取不到就说不知道，不返回陈旧值。
+    ⚠ 限时只罩外库那一段：罩住会话上的查询的话，超时取消会把这个请求的连接
+    留在半截状态。
     Args: session, reader, room_id。
     """
+    units = await load_bound_units(session, room_id)
     try:
-        extent = await resolve_source_extent(session, reader, room_id=room_id)
+        async with asyncio.timeout(SOURCE_RANGE_BUDGET_S):
+            extent = await merge_extents(reader, units)
+    except TimeoutError:
+        _logger.warning(
+            "ac_startup_source_range_timeout",
+            "外库响应超时，批次页不预设抽取范围",
+            room_id=str(room_id),
+        )
+        return None
     except SourceUnavailable as error:
         _logger.warning(
             "ac_startup_source_range_unavailable",

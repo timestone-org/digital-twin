@@ -57,7 +57,7 @@ function user(over: Record<string, unknown> = {}) {
 
 function signIn(codes: string[]): void {
   const auth = useAuthStore()
-  auth.user = user({ permissions: codes, role_permissions: codes })
+  auth.user = user({ id: 'me', permissions: codes, role_permissions: codes })
   auth.accessToken = 'token'
 }
 
@@ -186,6 +186,9 @@ describe('用户管理页', () => {
       .mockResolvedValue(user({ is_active: false }))
     const wrapper = await render(['user:view', 'user:manage'])
     await wrapper.find('[aria-label="停用"]').trigger('click')
+    // 停用会先确认；这里只验确认之后的写入
+    await flushPromises()
+    useConfirm().resolve(true)
     await flushPromises()
     expect(setActive).toHaveBeenCalledWith('u1', false)
     expect(admin.listUsers).toHaveBeenCalledTimes(2)
@@ -224,6 +227,9 @@ describe('用户管理页', () => {
     )
     const wrapper = await renderWithHosts(['user:view', 'user:manage'])
     await wrapper.find('[aria-label="停用"]').trigger('click')
+    // 停用会先确认；这里只验确认之后的写入
+    await flushPromises()
+    useConfirm().resolve(true)
     await flushPromises()
     expect(document.body.textContent).toContain('账号已停用')
   })
@@ -235,6 +241,9 @@ describe('用户管理页', () => {
     )
     const wrapper = await renderWithHosts(['user:view', 'user:manage'])
     await wrapper.find('[aria-label="停用"]').trigger('click')
+    // 停用会先确认；这里只验确认之后的写入
+    await flushPromises()
+    useConfirm().resolve(true)
     await flushPromises()
     expect(document.body.textContent).toContain('目标账号的权限高于你')
   })
@@ -579,6 +588,9 @@ describe('用户管理页 · 卡片视图', () => {
     await toCardView(wrapper)
 
     await wrapper.get('.user-card [aria-label="停用"]').trigger('click')
+    // 停用会先确认；这里只验确认之后的写入
+    await flushPromises()
+    useConfirm().resolve(true)
     await flushPromises()
     expect(setActive).toHaveBeenCalledWith('u1', false)
 
@@ -607,5 +619,31 @@ describe('用户管理页 · 卡片视图', () => {
     expect(remove).not.toHaveBeenCalled()
     await clickInConfirm('删除')
     expect(remove).toHaveBeenCalledWith('u1')
+  })
+})
+
+describe('用户管理页 · 停用与自己那一行', () => {
+  it('停用先确认；取消就不发请求', async () => {
+    const setActive = vi.spyOn(admin, 'setUserActive')
+    const wrapper = await renderWithHosts(['user:view', 'user:manage'])
+    await wrapper.find('[aria-label="停用"]').trigger('click')
+    await flushPromises()
+    expect(document.body.textContent).toContain('立刻不能登录')
+    useConfirm().resolve(false)
+    await flushPromises()
+    expect(setActive).not.toHaveBeenCalled()
+  })
+
+  it('自己那一行不摆停用、改派角色与删除', async () => {
+    signIn(['user:view', 'user:manage', 'user:grant', 'user:delete'])
+    useAuthStore().user = user({
+      permissions: ['user:view', 'user:manage', 'user:grant', 'user:delete'],
+    })
+    const wrapper = mount(UsersPage)
+    await flushPromises()
+    expect(wrapper.find('[aria-label="停用"]').exists()).toBe(false)
+    expect(wrapper.find('[aria-label="改派角色"]').exists()).toBe(false)
+    expect(wrapper.find('[aria-label="删除"]').exists()).toBe(false)
+    expect(wrapper.find('[aria-label="编辑资料"]').exists()).toBe(true)
   })
 })

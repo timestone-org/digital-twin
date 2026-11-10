@@ -242,8 +242,15 @@ function transformPoints(
   }))
 }
 
-/** enum 槽的数值 → 清单声明的语义值；映射里没有的数值原样保留。 */
-function applyEnumMap(value: unknown, spec: BindingSpec | undefined): unknown {
+/**
+ * enum 槽的数值 → 清单声明的语义值；映射里没有的数值原样保留。
+ * @param value 定值变换之后的取值
+ * @param spec 这条绑定的槽声明；没有则原样返回
+ */
+export function applyEnumMap(
+  value: unknown,
+  spec: BindingSpec | undefined,
+): unknown {
   const enumMap = spec?.enumMap
   if (enumMap === undefined || typeof value !== 'number') return value
   // ⚠ 显式转字符串：映射的键来自 JSON，永远是字符串

@@ -64,8 +64,10 @@ const pickingFieldKey = ref<string | null>(null)
 const values = useEditorDataSources(file.dashboard, () => editor.nodes.value)
 
 const dashboardId = computed(() => String(route.params.dashboardId ?? ''))
+const meta = useEditorMeta(file.dashboard)
 const { design, zoom, canvasRef, fitScale, centerOn } = useEditorCanvasState(
   file.dashboard,
+  meta.draft,
 )
 
 const actions = createEditorActions({
@@ -75,7 +77,6 @@ const actions = createEditorActions({
   design: () => design.value,
 })
 
-const meta = useEditorMeta(file.dashboard)
 provide(DASHBOARD_THEME_KEY, () => meta.draft.value?.themeJson)
 const chrome = useEditorChrome(file.dashboard, meta)
 const { snap, grid } = chrome
@@ -87,7 +88,8 @@ const arrange = createArrangeActions({
   steps: () => snapStep(design.value, grid.value, snap.value),
   dashboardId: () => file.dashboard.value?.id ?? null,
   chrome,
-  notify: (message) => toast.success(message),
+  notify: (message, tone) =>
+    tone === 'warning' ? toast.warning(message) : toast.success(message),
 })
 
 const surface = createEditorSurface({
@@ -152,6 +154,11 @@ const editing = useEditorVisibility(
   ops.reload,
 )
 
+/** 工具条上的手动重新加载；换屏那一路由 `useEditorVisibility` 直接加载、不问。 */
+async function reloadFromToolbar(): Promise<void> {
+  if (await ops.confirmReload()) editing.reload()
+}
+
 onUnmounted(file.dispose)
 </script>
 
@@ -174,10 +181,10 @@ onUnmounted(file.dispose)
         :snap="snap"
         @undo="editor.undo"
         @redo="editor.redo"
-        @reload="editing.reload"
+        @reload="reloadFromToolbar"
         @save="extras.saveWithThumbnail"
         @update:zoom="zoom = $event"
-        @set-snap="snap = { ...snap, ...$event }"
+        @set-snap="chrome.setSnap"
         @tidy="arrange.tidyTopLevel"
         @help="extras.helpOpen.value = true"
         @preview="extras.previewOpen.value = true"

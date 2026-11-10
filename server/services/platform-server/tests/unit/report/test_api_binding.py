@@ -167,23 +167,47 @@ async def test_trial_fetches_api_after_ending_database_transaction(monkeypatch):
     reader.assert_awaited_once()
 
 
-async def test_trial_propagates_safe_api_failure(monkeypatch):
-    body = api_template()
+async def test_trial_degrades_per_api_source(monkeypatch):
+    # ⚠ 一个来源连不上就整份试算 503 的话，台账指标、图表与表格一样都核对不了
+    broken = ReportApiSource(
+        code="broken",
+        name="能管月度能耗",
+        connection="ems",
+        path="/broken",
+        columns=[{"key": "value", "name": "用量", "pointer": "/amount"}],
+    )
+    body = api_template(
+        metrics=[
+            MetricDef(name="总量", table="api:energy", key="value", agg="sum"),
+            MetricDef(name="断开", table="api:broken", key="value", agg="sum"),
+        ]
+    )
+    body.api_sources.append(broken)
     monkeypatch.setattr(
         template_preview,
         "require_template",
         AsyncMock(return_value=SimpleNamespace(body_json=body.model_dump())),
     )
+
+    async def fetch(sources, *_arguments):
+        if sources[0].code == "broken":
+            raise ReportInvalid("数据来源「能管月度能耗」：API 取数超时")
+        return api_snapshot()
+
     monkeypatch.setattr(
-        template_preview,
-        "fetch_api_sources",
-        AsyncMock(side_effect=ReportInvalid("API 字段映射缺失")),
+        template_preview, "fetch_api_sources", AsyncMock(side_effect=fetch)
     )
     async with AsyncSession() as session:
-        with pytest.raises(ReportInvalid, match="字段映射缺失"):
-            await template_preview.preview_template(
-                session, uuid.uuid4(), PreviewIn(period="2026-09"), "UTC"
-            )
+        result = await template_preview.preview_template(
+            session, uuid.uuid4(), PreviewIn(period="2026-09"), "UTC"
+        )
+    by_name = {metric.name: metric for metric in result.metrics}
+    assert by_name["总量"].error is None
+    assert "API 取数超时" in (by_name["断开"].error or "")
+    results = {item.source_code: item for item in result.api_results}
+    assert results["energy"].error is None
+    assert "API 取数超时" in (results["broken"].error or "")
+    assert not result.is_valid
 
 
 def precise_inline_context(value):
@@ -227,6 +251,48 @@ async def test_direct_metric_reference_preserves_decimal_precision(value):
         result = await preview(session, context)
     assert result.metrics[0].value == value
     assert result.nodes["content.0.content.1"].text == f"{value} kWh"
+
+
+async def test_a_metric_ref_without_its_own_unit_uses_the_metric_unit():
+    # ⚠ 单位写在指标定义上、插入的节点自己没带单位：不回落的话正文只有裸数
+    context = precise_inline_context("25.5")
+    context.template.metrics[0].unit = "℃"
+    node = context.template.doc_json.content[0].content[1]
+    node.attrs["unit"] = ""
+    async with AsyncSession() as session:
+        result = await preview(session, context)
+    assert result.nodes["content.0.content.1"].text == "25.500℃"
+
+
+async def test_a_metric_ref_unit_of_its_own_wins_over_the_metric_unit():
+    context = precise_inline_context("25.5")
+    context.template.metrics[0].unit = "℃"
+    async with AsyncSession() as session:
+        result = await preview(session, context)
+    assert result.nodes["content.0.content.1"].text == "25.500 kWh"
+
+
+async def test_a_node_warning_names_the_node_instead_of_its_path():
+    # ⚠ content.0.content.1 这种内部路径用户对不上正文里的任何一处
+    context = precise_inline_context("25.5")
+    context.api_errors["api:energy"] = "数据来源「能源接口」：API 取数超时"
+    async with AsyncSession() as session:
+        result = await preview(session, context)
+    node_warnings = [item for item in result.warnings if "节点" in item]
+    assert node_warnings == ["第 1 段的数字 {总量}：节点引用的指标不可用"]
+    assert not any("content." in item for item in result.warnings)
+
+
+async def test_two_nodes_with_the_same_label_warn_once():
+    # ⚠ 前端按提示原文做列表键：同一段里两处一样的数字报同一句，键就撞了
+    context = precise_inline_context("25.5")
+    paragraph = context.template.doc_json.content[0]
+    paragraph.content.append(paragraph.content[1].model_copy(deep=True))
+    context.api_errors["api:energy"] = "数据来源「能源接口」：API 取数超时"
+    async with AsyncSession() as session:
+        result = await preview(session, context)
+    assert len(result.nodes) == 2
+    assert len(result.warnings) == len(set(result.warnings))
 
 
 async def test_word_inline_paragraph_uses_exact_metric_value():

@@ -24,6 +24,7 @@ import type {
 } from '@dt/twin2d'
 import { computed } from 'vue'
 
+import { twin2dClaimPointer } from '../scripts/gestureFrame'
 import { edgePolyline, insertWaypointOnPath } from '../scripts/waypointOps'
 import type { Twin2dSnapOptions } from '../scripts/snapping'
 import { canvasViewBox, screenToDesignPx } from '../scripts/viewportOps'
@@ -89,9 +90,9 @@ const haloWidth = computed(() => screenToDesignPx(HALO_PX, props.scale))
  * @param event 那一下 pointerdown
  */
 function onPick(edgeId: string, event: PointerEvent): void {
-  // ⚠ 这一按不许再冒到画布壳上：那边把落到自己身上的按下当成「点了空白」，
-  // 不拦的表现是刚选中的连线在同一次按下里又被清掉
-  event.stopPropagation()
+  // ⚠ 接下的这一按不许再冒到画布壳上：那边把落到自己身上的按下当成「点了空白」，
+  // 不拦的表现是刚选中的连线在同一次按下里又被清掉；非主键放过去，与节点同一口径
+  if (!twin2dClaimPointer(event)) return
   emit('pick', edgeId, event)
 }
 

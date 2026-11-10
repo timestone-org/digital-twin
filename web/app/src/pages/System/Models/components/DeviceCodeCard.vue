@@ -10,7 +10,7 @@ import type { LlmDeviceLoginStart } from '@dt/contracts'
 import { DtButton, DtSpinner } from '@dt/ui'
 
 const props = defineProps<{ pending: LlmDeviceLoginStart }>()
-defineEmits<{ cancel: []; done: [] }>()
+defineEmits<{ cancel: [] }>()
 
 /**
  * 还剩多少秒。

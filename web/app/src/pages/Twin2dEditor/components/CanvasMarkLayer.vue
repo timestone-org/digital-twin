@@ -19,6 +19,7 @@ import type { Pt, Twin2dCanvas, Twin2dMark, Twin2dMarkZOrder } from '@dt/twin2d'
 import { computed, shallowRef } from 'vue'
 
 import { markSnapBox } from '../scripts/entityBoxes'
+import { twin2dClaimPointer } from '../scripts/gestureFrame'
 import {
   snapAtScale,
   snapNodeBox,
@@ -247,15 +248,52 @@ function movedEndpoint(
 
 /**
  * 收场：整段手势只在这里上抛一次。
- * @param _frame 收场那一帧
+ * @param base 草稿是按哪一份标注表算的
  * @param end 怎么收的场
  */
-function settle(_frame: Twin2dGestureFrame, end: Twin2dGestureEnd): void {
+function settle(
+  base: readonly Twin2dMark[] | null,
+  end: Twin2dGestureEnd,
+): void {
   const next = draft.value
   draft.value = null
   emit('guides', [])
-  if (end === 'cancelled' || next === null) return
+  // ⚠ 手势中途文档换了一份（多半是按着键时 ⌘Z）：按旧那份算的草稿交上去，等于把那一步
+  // 撤销悄悄撤回
+  const stale = base !== props.marks
+  if (end === 'cancelled' || next === null || stale) return
   emit('change', next)
+}
+
+/**
+ * 起一次标注手势；三种手势共用这一套收放。
+ * ⚠ 没越过起手阈值的帧一律不算：一次点击几乎总带一两帧亚像素移动，算进去的话点一下
+ * 就压一格撤销、亮起脏标记，离网格的还被吸走一截。
+ * ⚠ 收场那一帧要再算一次：浏览器不保证松手前一定还有一次 pointermove。
+ * @param kind 手势类别
+ * @param event 起手事件
+ * @param compute 按一帧算出整份标注表
+ */
+function runGesture(
+  kind: Twin2dGestureSpec['kind'],
+  event: PointerEvent,
+  compute: (frame: Twin2dGestureFrame) => readonly Twin2dMark[],
+): void {
+  let base: readonly Twin2dMark[] | null = null
+  const step = (frame: Twin2dGestureFrame): void => {
+    if (!frame.moved || (base !== null && base !== props.marks)) return
+    base = props.marks
+    draft.value = compute(frame)
+  }
+  props.startGesture({
+    kind,
+    event,
+    onMove: step,
+    onEnd: (frame, end) => {
+      if (end !== 'cancelled') step(frame)
+      settle(base, end)
+    },
+  })
 }
 
 /**
@@ -274,7 +312,7 @@ function dragSet(id: string): ReadonlySet<string> {
  * @param event 起手事件
  */
 function grab(mark: Twin2dMark, event: PointerEvent): void {
-  event.stopPropagation()
+  if (!twin2dClaimPointer(event)) return
   event.preventDefault()
   const additive = event.ctrlKey || event.metaKey
   if (additive || !props.selectedIds.includes(mark.id)) {
@@ -283,14 +321,7 @@ function grab(mark: Twin2dMark, event: PointerEvent): void {
   // 加选那一下只切换去留：这时候拖走的是谁没有定义
   if (additive) return
   const ids = dragSet(mark.id)
-  props.startGesture({
-    kind: 'move',
-    event,
-    onMove: (frame) => {
-      draft.value = movedMarks(mark, ids, frame)
-    },
-    onEnd: settle,
-  })
+  runGesture('move', event, (frame) => movedMarks(mark, ids, frame))
 }
 
 /**
@@ -302,14 +333,7 @@ function startResize(dir: Pt, event: PointerEvent): void {
   const mark = focused.value
   // ⚠ 走不到：把手只在 focused 非空时才画得出来，这一条是给类型系统看的
   if (mark === null) return
-  props.startGesture({
-    kind: 'resize',
-    event,
-    onMove: (frame) => {
-      draft.value = resizedMarks(mark, dir, frame)
-    },
-    onEnd: settle,
-  })
+  runGesture('resize', event, (frame) => resizedMarks(mark, dir, frame))
 }
 
 /**
@@ -321,14 +345,7 @@ function startEndpoint(index: number, event: PointerEvent): void {
   const mark = focused.value
   // ⚠ 同上：端点手柄同样只在 focused 非空时才画得出来
   if (mark === null) return
-  props.startGesture({
-    kind: 'endpoint',
-    event,
-    onMove: (frame) => {
-      draft.value = movedEndpoint(mark, index, frame)
-    },
-    onEnd: settle,
-  })
+  runGesture('endpoint', event, (frame) => movedEndpoint(mark, index, frame))
 }
 
 /**

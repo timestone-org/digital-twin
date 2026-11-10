@@ -56,6 +56,10 @@ CONTENT_TYPE = (
 GROUP = REPORT_GROUP
 MAX_KEY_LENGTH = 200
 MAX_PENDING_RENDERS = 100
+# 文件名里放不进的字符：路径分隔、Windows 保留字符与控制字符
+_UNSAFE_FILENAME = str.maketrans(
+    dict.fromkeys('\\/:*?"<>|' + "".join(map(chr, range(32))), "_")
+)
 
 
 @dataclass(frozen=True)
@@ -124,17 +128,9 @@ async def _save_request(
     payload: dict[str, object],
     context: RenderContext,
 ) -> RenderOut:
-    digest = hashlib.sha256(
-        json.dumps(payload, sort_keys=True).encode()
-    ).hexdigest()
-    key = context.idempotency_key
-    if key is not None:
-        if not 1 <= len(key) <= MAX_KEY_LENGTH:
-            raise ReportInvalid("幂等键长度必须为 1 至 200")
-        row.request_key = hashlib.sha256(
-            f"{context.actor}:{row.kind}:{key}".encode()
-        ).hexdigest()
-        row.request_hash = digest
+    identity = request_identity(payload, context, row.kind)
+    if identity is not None:
+        row.request_key, row.request_hash = identity
     try:
         async with session.begin_nested():
             await renders.add(session, row)
@@ -144,7 +140,7 @@ async def _save_request(
             if row.request_key
             else None
         )
-        if existing is None or existing.request_hash != digest:
+        if existing is None or existing.request_hash != row.request_hash:
             raise ReportConflict("幂等键已用于其他生成参数") from error
         return accepted_output(existing)
     record_audit(
@@ -176,6 +172,27 @@ async def cached_request(
     context: RenderContext,
     kind: str,
 ) -> RenderOut | None:
+    identity = request_identity(payload, context, kind)
+    if identity is None:
+        return None
+    request_key, digest = identity
+    existing = await renders.by_request(session, request_key)
+    if existing is None:
+        return None
+    if existing.request_hash != digest:
+        raise ReportConflict("幂等键已用于其他生成参数")
+    return accepted_output(existing)
+
+
+def request_identity(
+    payload: dict[str, object], context: RenderContext, kind: str
+) -> tuple[str, str] | None:
+    """幂等键派生出的 (request_key, 参数摘要)；没带键给 None。
+
+    ⚠ 只此一份：查缓存与落库各算一遍的话，两边漂开时重试拿到的是 409 或第二个
+    任务。存量行的 request_key 按这条式子落的库，改式子等于废掉全部旧键。
+    Args: payload, context, kind。
+    """
     key = context.idempotency_key
     if key is None:
         return None
@@ -184,15 +201,10 @@ async def cached_request(
     request_key = hashlib.sha256(
         f"{context.actor}:{kind}:{key}".encode()
     ).hexdigest()
-    existing = await renders.by_request(session, request_key)
-    if existing is None:
-        return None
     digest = hashlib.sha256(
         json.dumps(payload, sort_keys=True).encode()
     ).hexdigest()
-    if existing.request_hash != digest:
-        raise ReportConflict("幂等键已用于其他生成参数")
-    return accepted_output(existing)
+    return request_key, digest
 
 
 def enqueue(
@@ -269,17 +281,42 @@ def _anchor(after: str | None) -> tuple[datetime, uuid.UUID] | None:
         raise ReportInvalid("生成记录游标不可解析") from error
 
 
+@dataclass(frozen=True)
+class RenderFile:
+    """一份可下载的成品：正文字节 + 给人看的文件名。"""
+
+    payload: bytes
+    filename: str
+
+
 async def download(
     session: AsyncSession, render_id: uuid.UUID, store: ObjectStore, actor: str
-) -> bytes:
+) -> RenderFile:
     """事务外下载。Args: session, render_id, store, actor。"""
     row = await require_render(session, render_id)
     if row.status != "succeeded" or row.kind != "render" or not row.object_key:
         raise ReportUnavailable("报告尚未生成成功")
     object_key = row.object_key
+    filename = _filename_of(row)
     record_audit(session, actor, "render_downloaded", row.id, (None, None))
     await session.commit()
-    return await store.get_bytes(object_key)
+    return RenderFile(
+        payload=await store.get_bytes(object_key), filename=filename
+    )
+
+
+def _filename_of(row: ReportRender) -> str:
+    """「模板名-报告期.docx」；快照里取不到模板名时用记录 id。
+
+    Args: row。
+    """
+    name = row.snapshot_json.get("name")
+    stem = (
+        f"{name}-{row.period}"
+        if isinstance(name, str) and name.strip()
+        else f"report-{row.id}"
+    )
+    return f"{stem.strip().translate(_UNSAFE_FILENAME)}.docx"
 
 
 async def start_import(

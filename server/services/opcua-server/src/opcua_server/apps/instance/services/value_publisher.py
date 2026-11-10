@@ -36,8 +36,9 @@ class ValuePublisher:
         self._max_items = max_items
         # 实例 → {节点标识: 最后一次的值}
         self._pending: dict[uuid.UUID, dict[str, object]] = {}
-        # 实例 → 本窗口内第一次写值时的 traceparent。⚠ 必须在记录时捕获：
-        # 冲刷跑在后台任务里，请求上下文早已不在，取到的只会是全零。
+        # 实例 → 本窗口内第一次值变化的 traceparent。⚠ 写值请求的链路经内部
+        # 订阅够不着，这里是值监听为每次通知另开的那条；必须在记录时捕获——
+        # 冲刷跑在后台任务里，那时已不在通知的上下文中。
         self._trace: dict[uuid.UUID, str] = {}
         self._lock = asyncio.Lock()
         self._task: asyncio.Task[None] | None = None
@@ -126,7 +127,7 @@ class ValuePublisher:
         values: dict[str, object],
         traceparent: str | None,
     ) -> None:
-        """把一个实例的一批值分片推出去，带上写值那一刻的 traceparent。
+        """把一个实例的一批值分片推出去，带上记录时捕获的 traceparent。
 
         Args: instance_id, values, traceparent。
         """

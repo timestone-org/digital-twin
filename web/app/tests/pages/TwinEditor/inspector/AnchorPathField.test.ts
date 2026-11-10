@@ -67,6 +67,12 @@ describe('不足两点', () => {
     expect(wrapper.text()).toContain('画不出来')
   })
 
+  // ⚠ 紧挨着的同一站渲染层并成一个点：[甲, 甲] 画不出线，往返 [甲, 乙, 甲] 画得出
+  it('紧挨着重复的同一站只算一个点', () => {
+    expect(mountField(['a1', 'a1']).text()).toContain('画不出来')
+    expect(mountField(['a1', 'a2', 'a1']).text()).not.toContain('画不出来')
+  })
+
   it('两个点就不再提示', () => {
     const wrapper = mountField(['a1', 'a2'])
 

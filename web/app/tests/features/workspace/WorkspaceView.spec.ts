@@ -64,6 +64,16 @@ const Editor = defineComponent({
   },
 })
 
+const guardedLeave = vi.fn<() => boolean>()
+
+/** 不进缓存的页：离开时同样跑守卫。 */
+const Guarded = defineComponent({
+  setup() {
+    useWorkspaceGuard(() => guardedLeave())
+    return () => h(AppShell, { title: '受保护页' }, { default: () => 'x' })
+  },
+})
+
 async function setup() {
   localStorage.clear()
   resetEmbedContext()
@@ -127,6 +137,12 @@ async function setup() {
         name: 'report-editor',
         component: Editor,
         meta: { permissions: ['report:view'] },
+      },
+      {
+        path: '/guarded',
+        name: 'guarded-page',
+        component: Guarded,
+        meta: { title: '受保护页' },
       },
       {
         path: '/forbidden',
@@ -241,6 +257,32 @@ it('关闭时相邻页被路由守卫拒绝则保留当前页与草稿', async (
   await flushPromises()
   expect(wrapper.get('input').element.value).toBe('保留 A')
   expect(wrapper.findAll('nav[aria-label="已打开页面"] a')).toHaveLength(1)
+  wrapper.unmount()
+})
+
+it('关闭当前的非缓存页只跑一次离开守卫', async () => {
+  const { wrapper, router } = await setup()
+  guardedLeave.mockReset().mockReturnValue(true)
+  await router.push('/guarded')
+  await flushPromises()
+  await wrapper.get('[aria-label="关闭 受保护页"]').trigger('click')
+  await flushPromises()
+  expect(guardedLeave).toHaveBeenCalledTimes(1)
+  expect(router.currentRoute.value.path).toBe('/dashboards/a/edit')
+  wrapper.unmount()
+})
+
+it('非缓存页的守卫拒绝关闭时页签与路由都不动', async () => {
+  const { wrapper, router } = await setup()
+  guardedLeave.mockReset().mockReturnValue(false)
+  await router.push('/guarded')
+  await flushPromises()
+  await wrapper.get('[aria-label="关闭 受保护页"]').trigger('click')
+  await flushPromises()
+  expect(router.currentRoute.value.path).toBe('/guarded')
+  expect(wrapper.get('nav[aria-label="已打开页面"]').text()).toContain(
+    '受保护页',
+  )
   wrapper.unmount()
 })
 

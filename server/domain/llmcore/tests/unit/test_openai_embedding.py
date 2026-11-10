@@ -3,10 +3,13 @@
 from dataclasses import dataclass
 from typing import Any
 
+import httpx
 import pytest
+from openai import APIConnectionError, AuthenticationError
 from pydantic import SecretStr
 
 from llmcore.endpoints import EmbeddingEndpoint
+from llmcore.errors import ModelRejected, ModelUnavailable
 from llmcore.openai_embedding import (
     EMBEDDING_SOURCE,
     EmbeddingShapeChanged,
@@ -99,3 +102,44 @@ def test_the_source_name_is_a_wire_contract() -> None:
     """⚠ 落库的 `embedding_model` 旁边存的就是它，换名字会让存量条目看着
     像另一路算的。"""
     assert EMBEDDING_SOURCE == "openai-compat"
+
+
+_REQUEST = httpx.Request("POST", "http://endpoint/v1/embeddings")
+
+
+class _FailingEmbeddings:
+    def __init__(self, error: Exception) -> None:
+        self._error = error
+
+    async def create(self, *, model: str, input: list[str]) -> _Answer:
+        del model, input
+        raise self._error
+
+
+class _FailingClient:
+    def __init__(self, error: Exception) -> None:
+        self.embeddings = _FailingEmbeddings(error)
+
+
+def _failing(error: Exception) -> OpenAiCompatEmbeddingAdapter:
+    return OpenAiCompatEmbeddingAdapter(
+        client=_FailingClient(error),  # pyright: ignore[reportArgumentType]
+        model="text-embedding",
+        dimensions=3,
+    )
+
+
+async def test_an_unreachable_endpoint_reads_as_unavailable() -> None:
+    """⚠ 上游异常原样漏出去的话，每个消费方的全局处理器都只认得出「意料之外」，
+    回的是 500 而不是「连不上端点」。"""
+    adapter = _failing(APIConnectionError(request=_REQUEST))
+    with pytest.raises(ModelUnavailable):
+        await adapter.embed(["甲"])
+
+
+async def test_bad_credentials_read_as_rejected() -> None:
+    error = AuthenticationError(
+        "", response=httpx.Response(401, request=_REQUEST), body=None
+    )
+    with pytest.raises(ModelRejected):
+        await _failing(error).embed(["甲"])

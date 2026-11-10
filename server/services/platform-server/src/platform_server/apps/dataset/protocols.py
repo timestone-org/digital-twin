@@ -1,4 +1,4 @@
-"""台账里五组闭合取值：采集模式、列来源、列类型、聚合口径、行来源。
+"""台账里的闭合取值：采集模式、列来源、列类型、聚合口径、行来源、回填状态。
 
 ⚠ 放开成任意字符串的话，`aggregate` 写成 `aggregat` 会照常入库、永远不出行、
 也不告警——它要到下一个周期到点才暴露（docs/DATASET_DESIGN.md §4.2）。
@@ -34,6 +34,9 @@ AGG_FUNCS: tuple[str, ...] = tuple(sorted(get_args(AggFunc)))
 RecordSource = Literal["collect", "import", "manual"]
 
 RECORD_SOURCES: tuple[str, ...] = tuple(sorted(get_args(RecordSource)))
+
+# 回填任务的四个状态。⚠ 「取消」与「失败」分开：前者是人按的，后者要有人去看日志
+BackfillStatus = Literal["cancelled", "done", "failed", "running"]
 
 
 def sql_values(values: tuple[str, ...]) -> str:

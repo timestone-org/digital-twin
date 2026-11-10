@@ -11,6 +11,7 @@ from integration.modeling_helpers import data_of
 from integration.modeling_management_helpers import (
     seed_rule_versions,
     seed_versions,
+    signature,
 )
 from integration.test_modeling_deployment_switches import (
     DEPLOYMENTS,
@@ -25,6 +26,7 @@ from platform_server.apps.modeling.models import (
     ModelingDeployment,
     ModelingInstance,
     ModelingModelVersion,
+    ModelingRun,
 )
 from platform_server.apps.modeling.schemas.deployment import (
     ModelDeploymentUpdateIn,
@@ -496,3 +498,48 @@ async def test_public_version_links_resolve_when_present(
         if version["deployments_url"] is not None:
             linked = await app_client.get(version["deployments_url"])
             assert linked.status_code == 200
+
+
+async def test_page_mode_without_a_workflow_lists_newest_versions_first(
+    app_client: httpx.AsyncClient, db_session: AsyncSession
+) -> None:
+    """不按流程筛时按发布先后排：新流程的 v1 不该沉到所有老流程的 v2 后面。"""
+    older, _ = await seed_versions(app_client, db_session)
+    instance = data_of(await app_client.get(f"{INSTANCES}/{older}"))
+    created = await app_client.post(
+        INSTANCES,
+        json={
+            "template_id": instance["template_id"],
+            "code": "energy-k2",
+            "name": "二号机能耗模型",
+        },
+    )
+    assert created.status_code == 201, created.text
+    newer = uuid.UUID(data_of(created)["id"])
+    run = ModelingRun(
+        pipeline_id=newer, status="succeeded", graph_snapshot={}, trigger="api"
+    )
+    db_session.add(run)
+    await db_session.flush()
+    fresh = ModelingModelVersion(
+        pipeline_id=newer,
+        run_id=run.id,
+        version=1,
+        name="新流程 v1",
+        algo="linear_regression",
+        task="regression",
+        servable=True,
+        serving_channel="json",
+        serving_json={},
+        feature_keys=["temperature"],
+        target_key="energy",
+        metrics_json={},
+        fingerprint_json={},
+        signature_json=signature(),
+    )
+    db_session.add(fresh)
+    await db_session.commit()
+    listed = await management_queries.list_versions(
+        db_session, VersionListQuery()
+    )
+    assert listed.items[0].id == fresh.id

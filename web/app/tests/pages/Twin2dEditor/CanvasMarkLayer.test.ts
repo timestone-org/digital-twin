@@ -524,3 +524,101 @@ describe('端点', () => {
     wrapper.unmount()
   })
 })
+
+// ⚠ 一次正常的点击几乎总带一两帧亚像素的 pointermove：没越过起手阈值也照样落库的话，
+// 点一下标注就压一格撤销、脏标记亮起，离网格的还被吸走一截
+describe('没越过起手阈值', () => {
+  it('点一下标注、手抖了一像素，不上抛改动', () => {
+    const wrapper = mountLayer({
+      marks: [markOf({ id: 'a', kind: 'rect', x: 103, y: 107, w: 50, h: 50 })],
+    })
+
+    grab(wrapper, 'a', down(120, 120))
+    fire('pointermove', 121, 121)
+    fire('pointerup', 121, 121)
+
+    expect(rec.changes).toHaveLength(0)
+    wrapper.unmount()
+  })
+
+  it('点一下缩放把手不改尺寸', () => {
+    const wrapper = mountLayer({ selectedIds: ['a'] })
+
+    wrapper.find('[data-dir="1,1"]').element.dispatchEvent(down(300, 200))
+    fire('pointermove', 302, 201)
+    fire('pointerup', 302, 201)
+
+    expect(rec.changes).toHaveLength(0)
+    wrapper.unmount()
+  })
+
+  it('点一下端点把手不挪端点', () => {
+    const wrapper = mountLayer({ layer: 'above', selectedIds: ['c'] })
+    const second = wrapper.findAll('[data-test="mark-endpoint"]')[1]
+
+    second?.element.dispatchEvent(down(301, 401))
+    fire('pointermove', 303, 402)
+    fire('pointerup', 303, 402)
+
+    expect(rec.changes).toHaveLength(0)
+    wrapper.unmount()
+  })
+})
+
+// ⚠ 按着标注时 ⌘Z 照样生效：草稿是按撤销之前那份算的，松手照交的话那一步撤销被
+// 悄悄撤回，重做栈也一起没了
+describe('手势中途文档换了一份', () => {
+  it('松手时不再交按旧文档算出来的草稿', async () => {
+    const wrapper = mountLayer()
+
+    grab(wrapper, 'a', down(150, 150))
+    fire('pointermove', 180, 170)
+    await wrapper.setProps({ marks: [...fixtureMarks()] })
+    fire('pointerup', 180, 170)
+
+    expect(rec.changes).toHaveLength(0)
+    wrapper.unmount()
+  })
+})
+
+describe('只认主键', () => {
+  it('右键按在标注上既不选中也不起拖动', () => {
+    const wrapper = mountLayer()
+
+    grab(wrapper, 'a', down(150, 150, { button: 2 }))
+    fire('pointermove', 190, 190, { button: 2 })
+    fire('pointerup', 190, 190, { button: 2 })
+
+    expect(rec.picks).toEqual([])
+    expect(rec.changes).toHaveLength(0)
+    wrapper.unmount()
+  })
+
+  it('右键按在缩放把手上不改尺寸', () => {
+    const wrapper = mountLayer({ selectedIds: ['a'] })
+
+    wrapper
+      .find('[data-dir="1,1"]')
+      .element.dispatchEvent(down(300, 200, { button: 2 }))
+    fire('pointermove', 340, 240)
+    fire('pointerup', 340, 240)
+
+    expect(rec.changes).toHaveLength(0)
+    wrapper.unmount()
+  })
+})
+
+// ⚠ 浏览器不保证松手前一定还有一次 pointermove：按倒数第二帧落库的话，标注停在离松手
+// 处差一帧的地方
+it('落库的是松手那一帧的位置，不是倒数第二帧', () => {
+  const wrapper = mountLayer({
+    snap: { ...TWIN_2D_DEFAULT_SNAP, enabled: false },
+  })
+
+  grab(wrapper, 'a', down(150, 150))
+  fire('pointermove', 180, 170)
+  fire('pointerup', 220, 200)
+
+  expect(lastMark('a')).toMatchObject({ x: 170, y: 150 })
+  wrapper.unmount()
+})

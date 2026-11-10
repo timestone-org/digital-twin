@@ -3,10 +3,12 @@
 ⚠ 依赖方向：本模块编译期认识 `apps/dataset`，反过来永远不认识。装配点在
 `app.py` 与 `worker.py` **两处**——注册表是进程内的，而重算可能落到任意 API
 副本、也可能跑在 worker 上（docs/MODELING_DESIGN.md §3.2）。
-⚠ 每批只查一次库：单行写触发的重算批量恒为 1，每批的固定开销必须小。
+⚠ 查库与下载分两段：库在一个会话里查完就关，对象存储的下载与反序列化在会话
+之外做——在会话里下载会把池连接一直占到下载完（事务内禁外部 IO）。
 """
 
 from dataclasses import dataclass, field
+from typing import Any
 
 from sqlalchemy.ext.asyncio import AsyncSession
 
@@ -42,6 +44,15 @@ PROVIDER_CODE = "modeling"
 
 
 @dataclass(frozen=True)
+class _Plan:
+    """会话里查好的一个版本：可服务表示，外加通道 B 要下载的产物元信息。"""
+
+    serving: dict[str, Any]
+    #: 通道 A 为 None
+    artifact: dict[str, Any] | None
+
+
+@dataclass(frozen=True)
 class ModelingAnalysisProvider(AnalysisProvider):
     """把公式库条目标识翻成一个能算数的模型。
 
@@ -64,7 +75,7 @@ class ModelingAnalysisProvider(AnalysisProvider):
     async def load(
         self, sessions: Sessions, codes: frozenset[str]
     ) -> LoadedModels:
-        """一次装一批。查一次绑定、查一次版本，其余全是纯计算。
+        """一次装一批。先在一个会话里查完库，关掉会话再下载与编译。
 
         Args: sessions, codes。
         """
@@ -79,26 +90,31 @@ class ModelingAnalysisProvider(AnalysisProvider):
     async def _load(
         self, sessions: Sessions, codes: frozenset[str], *, is_preview: bool
     ) -> LoadedModels:
-        loaded: dict[str, AnalysisModel | AnalysisUnavailable] = {}
+        planned: dict[str, _Plan | AnalysisUnavailable] = {}
         async with sessions.session() as session:
             bindings = await binding_crud.list_by_codes(
                 session, tuple(sorted(codes))
             )
             found = {binding.fx_code: binding for binding in bindings}
             for code in codes:
-                loaded[code] = await self._one(
+                planned[code] = await self._plan(
                     session, found.get(code), is_preview=is_preview
                 )
+        loaded: dict[str, AnalysisModel | AnalysisUnavailable] = {}
+        for code, plan in planned.items():
+            loaded[code] = (
+                await self._compiled(plan) if isinstance(plan, _Plan) else plan
+            )
         return loaded
 
-    async def _one(
+    async def _plan(
         self,
         session: AsyncSession,
         binding: ModelingBinding | None,
         *,
         is_preview: bool,
-    ) -> AnalysisModel | AnalysisUnavailable:
-        """一条绑定编译出来的模型，或一句用不了的原因。
+    ) -> _Plan | AnalysisUnavailable:
+        """一条绑定在库里查得到的全部东西，或一句用不了的原因。
 
         Args: session, binding, is_preview。
         """
@@ -111,45 +127,44 @@ class ModelingAnalysisProvider(AnalysisProvider):
         )
         if version is None:
             return AnalysisUnavailable(reason="绑定指向的模型版本已不存在")
-        if not version.servable:
-            return AnalysisUnavailable(
-                reason=version.unservable_reason or "这个模型版本不可上线"
+        refusal = _refusal_of(version, is_preview=is_preview)
+        if refusal is not None:
+            return refusal
+        try:
+            artifact = (
+                None if is_preview else await self._artifact(session, version)
             )
-        return await self._compiled(session, version, is_preview=is_preview)
+        except ArtifactRejected as error:
+            return AnalysisUnavailable(reason=str(error))
+        return _Plan(serving=dict(version.serving_json), artifact=artifact)
 
     async def _compiled(
-        self,
-        session: AsyncSession,
-        version: ModelVersion,
-        *,
-        is_preview: bool,
+        self, plan: _Plan
     ) -> AnalysisModel | AnalysisUnavailable:
         """编译一个版本。通道 B 先把模型本体从对象存储装回来。
 
         ⚠ 加载放在**取数相位**：编译出来的东西在求值期只做算术，那里一次 I/O
         都不许有（docs/MODELING_DESIGN.md D20）。
-        Args: session, version, is_preview。
+        Args: plan。
         """
-        if is_preview and version.serving_channel != CHANNEL_JSON:
-            return AnalysisUnavailable(
-                reason="二进制模型请通过台账重算查看结果，公式预览暂不支持"
-            )
         try:
             estimator = (
-                None if is_preview else await self._estimator(session, version)
+                None
+                if plan.artifact is None or self.store is None
+                else await artifact_io.fetch(
+                    self.store, plan.artifact, self.cache
+                )
             )
-            return compile_model(
-                dict(version.serving_json), estimator=estimator
-            )
+            return compile_model(plan.serving, estimator=estimator)
         except ArtifactRejected as error:
             return AnalysisUnavailable(reason=str(error))
         except OperatorError as error:
             return AnalysisUnavailable(reason=str(error))
 
-    async def _estimator(
+    async def _artifact(
         self, session: AsyncSession, version: ModelVersion
-    ) -> object | None:
-        """通道 B 的模型本体；通道 A 给 `None`。
+    ) -> dict[str, Any] | None:
+        """通道 B 要下载的产物元信息；通道 A 给 `None`。
 
         Args: session, version。
         """
@@ -160,13 +175,27 @@ class ModelingAnalysisProvider(AnalysisProvider):
         row = await model_artifact_crud.get_by_version(session, version.id)
         if row is None:
             raise ArtifactRejected("这个模型版本没有留下模型产物，请重新发布")
-        return await artifact_io.fetch(
-            self.store,
-            {
-                "object_key": row.object_key,
-                "digest": row.digest,
-                "format_version": row.format_version,
-                "runtime": dict(row.runtime_json),
-            },
-            self.cache,
+        return {
+            "object_key": row.object_key,
+            "digest": row.digest,
+            "format_version": row.format_version,
+            "runtime": dict(row.runtime_json),
+        }
+
+
+def _refusal_of(
+    version: ModelVersion, *, is_preview: bool
+) -> AnalysisUnavailable | None:
+    """这个版本用不了的原因；用得了给 None。
+
+    Args: version, is_preview。
+    """
+    if not version.servable:
+        return AnalysisUnavailable(
+            reason=version.unservable_reason or "这个模型版本不可上线"
         )
+    if is_preview and version.serving_channel != CHANNEL_JSON:
+        return AnalysisUnavailable(
+            reason="二进制模型请通过台账重算查看结果，公式预览暂不支持"
+        )
+    return None

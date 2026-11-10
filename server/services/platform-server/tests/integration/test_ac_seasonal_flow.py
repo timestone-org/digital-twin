@@ -208,6 +208,7 @@ async def test_changed_policy_blocks_batch_promotion(
         window=TimeWindow(
             datetime(2026, 1, 1, tzinfo=UTC), datetime(2026, 2, 1, tzinfo=UTC)
         ),
+        timezone="Asia/Shanghai",
     )
     context = ExtractionContext(StubReader(historical_rows()), rules, 100000)
     await run_shard(db_session, context, plan.messages[0])

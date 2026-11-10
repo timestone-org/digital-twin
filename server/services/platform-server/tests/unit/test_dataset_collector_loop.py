@@ -173,9 +173,43 @@ async def test_losing_the_lease_stops_the_very_next_tick(
     await collector.tick()
     assert collector.is_leader is True
     lease.is_renewable = False
+    lease.is_grantable = False
     await collector.tick()
     assert collector.is_leader is False
     assert runs.seen == [FIRST_TABLE, SECOND_TABLE]
+
+
+async def test_an_expired_lease_is_taken_back_in_the_same_tick(
+    wired: tuple[DatasetCollector, SpySessions, SpyRuns, FakeLease],
+) -> None:
+    # ⚠ 间隔长过 TTL 时续约必然失败；不当场重抢就是每隔一拍白白空过一拍
+    collector, _sessions, runs, lease = wired
+    await collector.tick()
+    lease.is_renewable = False
+    await collector.tick()
+    assert collector.is_leader is True
+    assert runs.seen == [FIRST_TABLE, SECOND_TABLE] * 2
+
+
+async def test_losing_the_lease_mid_tick_skips_the_remaining_tables(
+    wired: tuple[DatasetCollector, SpySessions, SpyRuns, FakeLease],
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    # 一拍长过 TTL 时，别的副本已经接手；手上这一拍不许再往下写
+    collector, _sessions, runs, lease = wired
+    original = runs.collect_table
+
+    async def lose_after_first(*args: object, **kwargs: object) -> RunOutcome:
+        lease.is_renewable = False
+        lease.is_grantable = False
+        return await original(
+            *args, **kwargs
+        )  # pyright: ignore[reportArgumentType, reportCallIssue]
+
+    monkeypatch.setattr(loop_module, "collect_table", lose_after_first)
+    await collector.tick()
+    assert runs.seen == [FIRST_TABLE]
+    assert collector.is_leader is False
 
 
 async def test_the_switch_is_read_inside_the_tick(

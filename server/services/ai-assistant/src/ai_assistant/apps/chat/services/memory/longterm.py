@@ -36,6 +36,22 @@ MAX_SCANNED = 2000
 
 
 @dataclass(frozen=True)
+class _Space:
+    """一次查询所在的向量空间：哪个模型、几维。"""
+
+    model: str | None
+    dimensions: int
+
+    def holds(self, row: KnowledgeChunk) -> bool:
+        """这一行的向量是不是在这个空间里算的。Args: row。"""
+        return (
+            row.embedding is not None
+            and row.embedding_model == self.model
+            and row.dimensions == self.dimensions
+        )
+
+
+@dataclass(frozen=True)
 class PgLongTermStore:
     """落在 `assistant.knowledge_chunks` 上的那一路。
 
@@ -89,8 +105,9 @@ class PgLongTermStore:
         if asked is None:
             return []
         rows = await self._rows_of(scope, owner_id)
-        await self._backfill(rows)
-        found = _ranked(rows, asked, limit)
+        space = _Space(model=self._model_id(), dimensions=len(asked))
+        await self._backfill(rows, space)
+        found = _ranked(rows, asked, limit, self._comparable(space))
         # 耗时指标。⚠ 标签只有 scope——低基数（observability）；owner_id 进去
         # 就是每个用户一条时间序列，那会把指标后端撑爆
         _logger.info(
@@ -116,12 +133,14 @@ class PgLongTermStore:
             )
             return list(found.scalars().all())
 
-    async def _backfill(self, rows: Sequence[KnowledgeChunk]) -> None:
-        """给当时没算出向量的那几条补上，就地写回。
+    async def _backfill(
+        self, rows: Sequence[KnowledgeChunk], space: _Space
+    ) -> None:
+        """给没算出向量、或向量不在当前空间里的那几条重算，就地写回。
 
-        Args: rows。
+        Args: rows, space（这一次查询的模型与维数）。
         """
-        pending = [one for one in rows if one.embedding is None][:MAX_BACKFILL]
+        pending = [one for one in rows if not space.holds(one)][:MAX_BACKFILL]
         if not pending or self.embedder is None:
             return
         made = await self._embed_many(
@@ -140,10 +159,35 @@ class PgLongTermStore:
                 stored.dimensions = len(vector)
                 # 就地也更新手上这一份，本次检索就能把它排进去
                 row.embedding = stored.embedding
+                row.embedding_model = stored.embedding_model
                 row.dimensions = stored.dimensions
 
     def _model_id(self) -> str | None:
-        return None if self.embedder is None else self.embedder.id
+        """落库的模型名：此刻端点上的模型，解不出时退回来源名。
+
+        ⚠ 记来源名（`openai-compat`）的话，目录里换了同维数的模型也看不出来，
+        旧向量会与新查询算余弦。
+        """
+        if self.embedder is None:
+            return None
+        return self.embedder.model or self.embedder.id
+
+    def _comparable(self, space: _Space) -> Callable[[KnowledgeChunk], bool]:
+        """哪些行的向量能与这一次查询比。
+
+        ⚠ 只记了来源名的存量行照常参与排序、同时惰性重算：不参与的话，升级后
+        这些记忆要等补完才查得到，而一次只补 MAX_BACKFILL 条。
+
+        Args: space。
+        """
+        legacy = None if self.embedder is None else self.embedder.id
+
+        def comparable(row: KnowledgeChunk) -> bool:
+            return row.dimensions == space.dimensions and (
+                row.embedding_model in (space.model, legacy)
+            )
+
+        return comparable
 
     async def _embed(self, text: str) -> list[float] | None:
         made = await self._embed_many([text])
@@ -174,16 +218,25 @@ class PgLongTermStore:
 
 
 def _ranked(
-    rows: Sequence[KnowledgeChunk], asked: Sequence[float], limit: int
+    rows: Sequence[KnowledgeChunk],
+    asked: Sequence[float],
+    limit: int,
+    comparable: Callable[[KnowledgeChunk], bool],
 ) -> list[Hit]:
-    """按余弦排序取前几条。没有向量的条目排不上——它们等下一次补算。"""
+    """按余弦排序取前几条。
+
+    ⚠ 没有向量、或向量与查询不在同一空间的条目排不上——它们等下一次补算；
+    不大于 0 的分数也不算命中，否则凑不满 limit 时会拿无关条目充数。
+
+    Args: rows, asked, limit, comparable。
+    """
     scored: list[tuple[float, KnowledgeChunk]] = []
     for row in rows:
-        if row.embedding is None:
+        if row.embedding is None or not comparable(row):
             continue
-        scored.append(
-            (vectors.cosine(asked, vectors.decode(row.embedding)), row)
-        )
+        score = vectors.cosine(asked, vectors.decode(row.embedding))
+        if score > 0:
+            scored.append((score, row))
     scored.sort(key=lambda pair: pair[0], reverse=True)
     return [
         Hit(

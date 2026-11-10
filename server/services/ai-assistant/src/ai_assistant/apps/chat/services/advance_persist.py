@@ -45,6 +45,7 @@ async def persist(
     """
     async with sessions() as session:
         await session_crud.lock_session(session, chat_session_id)
+        await session_crud.touch_session(session, chat_session_id)
         rows = await session_crud.messages_of(session, chat_session_id)
         seq = max((row.seq for row in rows), default=0)
         written: list[ChatMessage] = []

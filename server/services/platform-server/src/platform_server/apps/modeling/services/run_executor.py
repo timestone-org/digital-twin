@@ -198,12 +198,18 @@ def _setting_of(
     )
 
 
+# 运行级预算用光也不换桩的摘要种类
+_UNBUDGETED_KINDS = (preview_service.KIND_MODEL, preview_service.KIND_METRICS)
+
+
 class _Budget:
     """一次运行里全部摘要合计的字节预算。用光之后的节点只留统计。
 
     ⚠ 按**实际字节**记账，不是每个端口一律记满单份摘要的上限：那样记的话
     第 33 路端口起一律只剩桩，而绝大多数图的每份摘要都远不到那个上限。装不下
     的那一路才换成桩，于是合计**不会**超出预算。
+    ⚠ 模型与评估摘要不换桩（只记账）：发布读的就是它们，各自已被单份上限封顶，
+    换成桩的话训练好的运行发布不了，拒绝理由还指向算法。
     """
 
     def __init__(self) -> None:
@@ -221,7 +227,10 @@ class _Budget:
         for port, raw in previews.items():
             fitted, was_cut = preview_service.fit_budget(raw)
             size = preview_service.size_of(fitted)
-            if self._used + size > preview_service.RUN_PREVIEW_MAX_BYTES:
+            if (
+                self._used + size > preview_service.RUN_PREVIEW_MAX_BYTES
+                and raw.get("kind") not in _UNBUDGETED_KINDS
+            ):
                 kept[port] = {
                     "kind": raw.get("kind", "unknown"),
                     "note": "本次运行的结果摘要已用满预算",

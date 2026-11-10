@@ -2000,7 +2000,7 @@
     },
     "/api/v1/opcua/instances/{instance_id}": {
       "delete": {
-        "description": "删实例。在跑就先停。删已删的同样返回 204。\n\nArgs: instance_id, container, _manager。",
+        "description": "删实例。在跑就先停。实例不存在返回 404。\n\nArgs: instance_id, container, _manager。",
         "operationId": "delete_instance_api_v1_opcua_instances__instance_id__delete",
         "parameters": [
           {

@@ -116,7 +116,6 @@ class Driver(Protocol):
     async def browse(self, parent: str | None) -> list[BrowseItem]  # 完整小目录，超限明确失败
     async def browse_page(self, parent, *, limit=200, continuation_token=None) -> BrowsePage
     async def release_browse(self, continuation_token: str) -> None
-    def fingerprint(self) -> tuple[str, ...]                # 变了就必须重连
     def classify_error(self, error: BaseException) -> ErrorCategory
 ```
 

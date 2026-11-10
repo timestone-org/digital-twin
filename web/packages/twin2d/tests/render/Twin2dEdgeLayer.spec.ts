@@ -518,6 +518,25 @@ describe('样式里那些各有分支的档位', () => {
     expect(box.attributes('height')).toBe('18.4')
   })
 
+  // ⚠ 中文一个字约一个字号宽：按西文字宽估的话，「母线」两个字露出底板两头
+  it('中文标签的底板按一个字一个字号宽估', () => {
+    const box = labelBoxOf({ font: { size: 12 }, pad: [0, 0, 0, 0] })
+
+    expect(Number(box.attributes('width'))).toBeGreaterThanOrEqual(24)
+  })
+
+  // ⚠ 文字不写字号就跟随页面字号（常见 14–16px），而底板按 12 算：字比底板宽一截
+  it('样式没给字号时文字也按缺省 12px 写，与底板同一个字号', () => {
+    const wrapper = render({
+      edges: [{ ...EDGE, label: '母线' }],
+      edgeStyles: [{ ...EDGE_STYLE, label: { font: {} } }],
+    })
+
+    expect(
+      wrapper.get('[data-test="edge-label"]').attributes('style'),
+    ).toContain('font-size: 12px')
+  })
+
   it('连线上写死的走线档盖过样式，两边都跟随时收底到正交', () => {
     const own = render(withEdge({ route: 'bezier' }))
     const auto = render({

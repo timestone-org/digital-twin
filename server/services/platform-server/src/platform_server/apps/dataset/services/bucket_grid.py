@@ -260,6 +260,20 @@ class BucketGrid:
         return self.selection(key, key + _MARGIN + self.interval).first
 
     @_datetime_boundary
+    def resume(self, watermark: datetime) -> datetime:
+        """持久化水位在本网格上的身份：可达身份原样返回，否则向下取整。
+
+        ⚠ 不能无条件 floor：春季缺口的身份再次取整后不保证仍是自身。
+        水位离网只发生在改过台账周期之后。
+        Args: watermark。
+        """
+        watermark = to_utc(watermark)
+        nearby = self.selection(watermark - _MARGIN, watermark + _MARGIN)
+        if nearby.between(watermark, watermark).count:
+            return watermark
+        return self.floor(watermark)
+
+    @_datetime_boundary
     def shift(self, identity: datetime, steps: int) -> datetime:
         """在严格有序的可达身份中移 steps 格，拒绝非网格身份。
 

@@ -9,6 +9,7 @@ import uuid
 from collections.abc import Sequence
 
 from sqlalchemy import select
+from sqlalchemy.exc import IntegrityError
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from lib.db import Database
@@ -53,6 +54,9 @@ from platform_server.apps.hvac.services.ac_model_queue import TrainMessage
 from platform_server.apps.hvac.services.ac_model_trainer import (
     metrics_to_json,
 )
+
+# 同房间模型名的唯一约束，见 models/ac_model.py
+_NAME_CONSTRAINT = "uq_hvac_ac_models_room_id_name"
 
 _logger = get_logger("platform.hvac.ac_model_service")
 
@@ -132,14 +136,14 @@ async def create_model(
     model = AcModel(
         room_id=payload.room_id,
         name=payload.name,
-        description=payload.description,
+        description=_description(payload.description),
         serving_sets=serving_sets,
         half_life_days=payload.half_life_days,
         status=MODEL_STATUS_QUEUED,
         created_by=created_by,
     )
     session.add(model)
-    await session.flush()
+    await _flush_named(session)
     # ⚠ 就地提交（同 request_rebuild 的教训）：投递跑在响应发出的那一刻，
     # 而那早于 yield 依赖的提交——不提交，消费者会看见「模型不存在」
     await session.commit()
@@ -169,13 +173,34 @@ async def patch_model(
             raise ModelNameTaken("这个房间里已经有同名模型")
         model.name = payload.name
     if payload.description is not None:
-        model.description = payload.description
+        model.description = _description(payload.description)
     if payload.serving_sets is not None:
         serials = await _room_serials(session, model.room_id)
         model.serving_sets = _normalized_sets(payload.serving_sets, serials)
         await _resummarize(session, model)
-    await session.flush()
+    await _flush_named(session)
     return model
+
+
+def _description(text: str | None) -> str | None:
+    """纯空白的描述存成 NULL，空态只留一种。
+
+    Args: text。
+    """
+    return text if text is not None and text.strip() else None
+
+
+async def _flush_named(session: AsyncSession) -> None:
+    """落库；同房间重名由唯一约束兜底成 409——先查只挡得住不并发的那次。
+
+    Args: session。
+    """
+    try:
+        await session.flush()
+    except IntegrityError as error:
+        if _NAME_CONSTRAINT not in str(error.orig):
+            raise
+        raise ModelNameTaken("这个房间里已经有同名模型") from error
 
 
 async def _resummarize(session: AsyncSession, model: AcModel) -> None:

@@ -12,6 +12,10 @@ from lib.db import Database, PoolProfile, ReadOnlySqlSource, SourceProfile
 from lib.idempotency import IdempotencyStore
 from lib.objectstore import ObjectStore, create_object_store
 from lib.stream import RedisStream
+from lib.utils.ids import uuid7
+from platform_server.apps.assets.services.compress_worker import (
+    COMPRESS_BLOCK_MS,
+)
 from platform_server.apps.collect.crud import HistorySource
 from platform_server.apps.collect.services import (
     CommandBus,
@@ -343,8 +347,9 @@ def _build_lease(settings: Settings, key: str) -> Lease:
     return RedisLease(
         url=settings.url(),
         key=key,
-        # ⚠ 令牌必须每个进程唯一：两个副本同名就会互相续到对方的租约上
-        token=settings.app_instance,
+        # ⚠ 令牌必须每个进程唯一：两个副本同名就会互相续到对方的租约上。
+        # 主机名不够——同一台机器上的两个进程主机名相同
+        token=f"{settings.app_instance}:{uuid7()}",
         ttl_s=_ttl_of(settings, key),
         timeout_s=settings.redis_timeout_s,
     )
@@ -462,10 +467,18 @@ def _build_stream(settings: Settings) -> RedisStream:
 
     ⚠ 套接字超时必须**大于**阻塞读的时长，否则队列一空就必然超时：服务端正
     按约定挂起 `block_ms`，客户端却在 `redis_timeout_s` 就先放弃，于是空队列
-    被报成故障。`redis_timeout_s` 是给一问一答的调用用的，不管阻塞读。
+    被报成故障。`redis_timeout_s` 是给一问一答的调用用的，不管阻塞读。各条消费
+    循环共用这一个客户端，故取其中最长的阻塞时长。
     Args: settings。
     """
-    block_s = settings.acstartup_block_ms / 1000
+    longest_block_ms = max(
+        settings.acstartup_block_ms,
+        settings.acmodel_block_ms,
+        settings.modeling_block_ms,
+        settings.acdaily_block_ms,
+        COMPRESS_BLOCK_MS,
+    )
+    block_s = longest_block_ms / 1000
     return RedisStream(
         url=settings.url(),
         timeout_s=max(settings.redis_timeout_s, block_s + STREAM_READ_MARGIN_S),

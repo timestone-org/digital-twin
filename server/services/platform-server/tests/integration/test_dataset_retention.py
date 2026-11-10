@@ -22,7 +22,6 @@ from platform_server.apps.dataset.crud import (
     retention_crud,
     table_crud,
 )
-from platform_server.apps.dataset.services.collector import Sessions
 from platform_server.apps.dataset.services.retention_run import (
     Budget,
     RetentionJob,
@@ -31,6 +30,7 @@ from platform_server.apps.dataset.services.retention_run import (
     reindex_span,
     sweep_table,
 )
+from platform_server.apps.dataset.services.sessions import Sessions
 
 pytestmark = pytest.mark.requires_postgres
 

@@ -23,6 +23,20 @@ _logger = get_logger("realtime.usercodes")
 # auth-server 的内部端点。⚠ 服务级密钥走 X-Service-Key，与权限码目录用的是
 # 同一枚——集群内的服务级密钥全系统一份。
 USER_CODES_PATH = "/internal/v1/users/{user_id}/permissions"
+# 「用户确实不存在」的标记头与取值，与 auth-server 的 HEADER_USER_LOOKUP 逐字
+# 一致。⚠ 服务之间不许互相 import，故抄一份；裸 404 不算这件事
+HEADER_USER_LOOKUP = "X-Auth-User-Lookup"
+USER_LOOKUP_MISS = "miss"
+# 用户不存在
+HTTP_NOT_FOUND = 404
+
+
+class AccountUnusable(Exception):
+    """auth-server 明确答复：令牌对应的账号已删除或已停用。
+
+    ⚠ 与 `UserCodesUnavailable` 分开：那是「查不到、过会儿再来」，这是「查到了、
+    不许连」。合成一个的话，停用的账号会被当成依赖抖动，客户端永远退避重连。
+    """
 
 
 class _UserData(BaseModel):
@@ -30,9 +44,11 @@ class _UserData(BaseModel):
 
     ⚠ `permissions` 是**合并后**的有效码（角色 + 直授），不是 role_permissions：
     只看角色那一份会漏掉直接授给某个人的码。
+    ⚠ `is_active` 必填：缺了要响亮失败（fail-closed），不许默认成「在用」。
     """
 
     permissions: list[str]
+    is_active: bool
 
 
 class _UserEnvelope(BaseModel):
@@ -71,6 +87,31 @@ class UserCodeSource:
         ⚠ 超时必须有且必须短：它挂在握手的同步路径上，拖住它等于让页面一直
         转圈（runtime-resilience.md 的下游之和 < 上游）。
         ⚠ 重试**这一层不做**：一条链路只有一层负责重试，重试归客户端重连。
+        账号已删除或已停用时抛 `AccountUnusable`。
+
+        Args: user_id。
+        """
+        user = await self._fetch(user_id)
+        if user is None:
+            _logger.warning(
+                "user_codes_account_missing",
+                "令牌对应的账号已不存在，握手将被拒绝",
+                user_id=str(user_id),
+            )
+            raise AccountUnusable("令牌对应的账号不存在")
+        if not user.is_active:
+            _logger.warning(
+                "user_codes_account_disabled",
+                "令牌对应的账号已停用，握手将被拒绝",
+                user_id=str(user_id),
+            )
+            raise AccountUnusable("账号已停用")
+        return frozenset(user.permissions)
+
+    async def _fetch(self, user_id: uuid.UUID) -> _UserData | None:
+        """回查一个用户；auth-server 明确说「没有这个人」时返回 None。
+
+        ⚠ 其余任何坏答案（含不带标记头的 404）都按不可达处理，fail-closed。
 
         Args: user_id。
         """
@@ -80,9 +121,13 @@ class UserCodeSource:
                 USER_CODES_PATH.format(user_id=user_id),
                 headers={"X-Service-Key": self._service_key},
             )
+            if (
+                response.status_code == HTTP_NOT_FOUND
+                and response.headers.get(HEADER_USER_LOOKUP) == USER_LOOKUP_MISS
+            ):
+                return None
             response.raise_for_status()
-            envelope = _UserEnvelope.model_validate(response.json())
-            return frozenset(envelope.data.permissions)
+            return _UserEnvelope.model_validate(response.json()).data
         except (httpx.HTTPError, ValidationError, ValueError) as error:
             # ⚠ 不记异常里的响应体：它可能带着别的服务的内部信息
             _logger.error(

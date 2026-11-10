@@ -1,5 +1,6 @@
 <script setup lang="ts">
 /** @fileoverview 带中文名称和悬浮提示的图标按钮，规范见 web/docs/ICON_BUTTON_GUIDELINES.md。 */
+import { computed } from 'vue'
 import type { DtButtonVariant, DtIntent, DtSize } from '@dt/contracts'
 import { DT_CONTROL_ICON_PX } from '@dt/contracts'
 import type { IconName } from '../DtIcon/registry'
@@ -32,6 +33,14 @@ const props = withDefaults(
 )
 
 defineEmits<{ click: [event: MouseEvent] }>()
+
+// 提示与名称同文时不挂描述：名称已经念过一遍，再关联只会让读屏重复
+const hasDescription = computed(
+  () =>
+    props.tooltip !== undefined &&
+    props.tooltip !== '' &&
+    props.tooltip !== props.label,
+)
 </script>
 
 <template>
@@ -46,7 +55,7 @@ defineEmits<{ click: [event: MouseEvent] }>()
       :loading="props.loading"
       :pressed="props.pressed"
       :aria-label="props.label"
-      :aria-describedby="describedby"
+      :aria-describedby="hasDescription ? describedby : undefined"
       @click="$emit('click', $event)"
     >
       <template #leading>

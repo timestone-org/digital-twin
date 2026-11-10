@@ -306,3 +306,47 @@ it('列表来源一键生成指标，没有新指标时给出提示', async () =
 it('普通来源不提供生成指标入口', () => {
   expect(button(setup(), '生成指标')).toBeUndefined()
 })
+it('⚠ 报告期偏移能逐字敲出负数，应用后存成整数', async () => {
+  const wrapper = setup()
+  await wrapper
+    .findAllComponents(DtButton)
+    .find((button) => button.text() === '配置')
+    ?.trigger('click')
+  await flushPromises()
+  const offset = () =>
+    wrapper
+      .findAllComponents(DtInput)
+      .find((input) => input.props('label') === '报告期偏移')
+  offset()?.vm.$emit('update:modelValue', '-')
+  await flushPromises()
+  expect(offset()?.props('modelValue')).toBe('-')
+  offset()?.vm.$emit('update:modelValue', '-1')
+  await flushPromises()
+  await wrapper
+    .findAllComponents(DtButton)
+    .find((button) => button.text() === '应用数据源')
+    ?.trigger('click')
+  expect(wrapper.emitted('update:modelValue')?.[0]?.[0]).toEqual([
+    expect.objectContaining({ code: 'energy', offset: -1 }),
+  ])
+  wrapper.unmount()
+})
+it('报告期偏移不是整数时拦下并说清范围', async () => {
+  const wrapper = setup()
+  await wrapper
+    .findAllComponents(DtButton)
+    .find((button) => button.text() === '配置')
+    ?.trigger('click')
+  await flushPromises()
+  wrapper
+    .findAllComponents(DtInput)
+    .find((input) => input.props('label') === '报告期偏移')
+    ?.vm.$emit('update:modelValue', '-')
+  await wrapper
+    .findAllComponents(DtButton)
+    .find((button) => button.text() === '应用数据源')
+    ?.trigger('click')
+  expect(wrapper.emitted('update:modelValue')).toBeUndefined()
+  expect(wrapper.text()).toContain('-120 到 120 的整数')
+  wrapper.unmount()
+})

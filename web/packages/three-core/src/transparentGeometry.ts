@@ -228,6 +228,9 @@ export class TransparentGeometry {
     ...parameters
   ) => {
     this.previous.call(this.mesh, ...parameters)
+    // ⚠ 画进离屏目标（底座镜面反射）的那一趟有意沿用主视图的顺序：两个视向交替的话
+    //   缓存永远不中，静止的画面也每帧排序、上传两趟索引
+    if (parameters[0].getRenderTarget() !== null) return
     this.sort(parameters[2])
   }
 

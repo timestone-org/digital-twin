@@ -233,6 +233,7 @@ export function categoryAxis(
 /**
  * 数值轴。`splitLine:false` 关分隔线，`scale:true` 不强制含 0
  * （高基线上的窄幅波动只有这样才看得出来）。
+ * `dataMin`/`dataMax` 把数据之外的值（如参考线）并进量程，仍保留取整与 `scale`。
  * @param theme 当前主题色
  * @param opts 量程、分隔线与轴文本
  */
@@ -241,6 +242,8 @@ export function valueAxis(
   opts: AxisTextOptions & {
     min?: number | string
     max?: number | string
+    dataMin?: number
+    dataMax?: number
     splitLine?: boolean
     scale?: boolean
     axisLabelFormatter?: (value: number) => string
@@ -251,6 +254,8 @@ export function valueAxis(
     name: opts.name,
     min: opts.min,
     max: opts.max,
+    ...(opts.dataMin === undefined ? {} : { dataMin: opts.dataMin }),
+    ...(opts.dataMax === undefined ? {} : { dataMax: opts.dataMax }),
     scale: opts.scale,
     axisLabel: {
       fontSize: opts.labelFontSize ?? 11,

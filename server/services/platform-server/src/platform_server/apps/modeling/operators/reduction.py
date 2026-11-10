@@ -166,16 +166,20 @@ class SelectFeature(OperatorBase):
         恰好一个，沿上游判会在没退化时乱报（规格 §11 的 R-12）。
         Args: selected, candidates, dropped。
         """
+        is_fallback = self._config.method == "correlation" and not _target_key(
+            self.split_plan
+        )
         return SelectRun(
             result=selected,
             candidates=candidates,
             scores=dict(self._scores),
             kept=list(self._kept),
             removed=dropped,
-            method=self._config.method,
+            method="variance" if is_fallback else self._config.method,
             top_k=self._config.top_k,
             train_rows=self._train_rows,
             is_degraded=self.split_plan is None,
+            is_fallback=is_fallback,
         )
 
     def dump_fitted(self) -> dict[str, Any] | None:

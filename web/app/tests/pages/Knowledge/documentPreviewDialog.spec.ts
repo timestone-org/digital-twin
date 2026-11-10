@@ -202,6 +202,23 @@ describe('原件预览弹窗', () => {
     expect(api.readDocumentRaw).toHaveBeenCalledTimes(1)
   })
 
+  it('画不出的格式打开时不取原件，点下载才取', async () => {
+    const wrapper = await render({
+      modelValue: true,
+      document: documentOf({ title: '汇报.pptx' }),
+    })
+    expect(api.readDocumentRaw).not.toHaveBeenCalled()
+
+    const download = wrapper
+      .findAll('button')
+      .find((one) => one.text().includes('下载原件'))
+    await download?.trigger('click')
+    await flushPromises()
+
+    expect(api.readDocumentRaw).toHaveBeenCalledTimes(1)
+    expect(clicked[0]?.download).toBe('汇报.pptx')
+  })
+
   it('PDF 预览下载原件失败时保留预览并给出原因', async () => {
     api.readDocumentRaw.mockRejectedValue(new Error('原件下载失败'))
     const wrapper = await render(

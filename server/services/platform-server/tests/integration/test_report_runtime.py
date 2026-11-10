@@ -5,6 +5,7 @@ import io
 import uuid
 from collections.abc import Callable
 from datetime import UTC, datetime
+from urllib.parse import quote
 
 import pytest
 from docx import Document
@@ -37,6 +38,13 @@ from platform_server.apps.report.services.worker import (
 
 pytestmark = pytest.mark.requires_postgres
 PREFIX = "/api/v1/platform"
+
+
+def assert_named_after_the_template(headers, render_id):
+    """⚠ 只有 UUID 的文件名下载下来认不出是哪份报告；中文名走 RFC 5987。"""
+    disposition = headers["Content-Disposition"]
+    assert f'filename="report-{render_id}.docx"' in disposition
+    assert "filename*=UTF-8''" + quote("可下载报告-2026-08.docx") in disposition
 
 
 async def test_worker_generates_downloadable_word(app_context, stream, sign):
@@ -83,6 +91,7 @@ async def test_worker_generates_downloadable_word(app_context, stream, sign):
     downloaded = await client.get(f"{PREFIX}/report-renders/{render_id}/files")
     assert downloaded.status_code == 200
     assert downloaded.content.startswith(b"PK")
+    assert_named_after_the_template(downloaded.headers, render_id)
     viewer = await client.get(
         f"{PREFIX}/report-renders/{render_id}",
         headers=sign(codes=("report:view",)),

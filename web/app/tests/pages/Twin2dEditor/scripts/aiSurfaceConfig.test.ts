@@ -30,6 +30,7 @@ function setup(input?: unknown) {
     bindings: () => doc.bindings.value,
     patchConfig: doc.commit,
     write: () => undefined,
+    writeMany: () => undefined,
     drop: () => undefined,
     nodeId: () => 'host',
     nodeLabel: () => '测试二维孪生',

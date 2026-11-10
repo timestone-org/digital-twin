@@ -15,7 +15,7 @@ import {
   DtInput,
   DtModal,
   DtNotice,
-  DtSwitch,
+  DtSelect,
 } from '@dt/ui'
 
 import * as dataset from '@/api/dataset'
@@ -23,7 +23,9 @@ import { describeError } from '@/composables/useAsyncList'
 import { useFormDirty } from '@/composables/useFormDirty'
 import { formatCell } from '../scripts/recordView'
 import {
+  BOOL_OPTIONS,
   formulaColumns,
+  isBlankInput,
   recordFormOf,
   toRecordInput,
   writableColumns,
@@ -57,6 +59,8 @@ const { isDirty } = useFormDirty(
 )
 
 const isEdit = computed(() => props.record !== null)
+// ⚠ 采集行的 row_id 由桶派生，挪走数据时间后原桶会再长出一行，故后端拒改
+const isCollected = computed(() => props.record?.source === 'collect')
 const editable = computed(() => writableColumns(props.columns))
 const derived = computed(() => formulaColumns(props.columns))
 const hasPointColumn = computed(() =>
@@ -103,9 +107,32 @@ async function save(): Promise<void> {
   emit('saved', '数据行已更新', saved.has_stale_downstream)
 }
 
+/**
+ * 输入框的标签：单位跟在列名后面，不放占位符里——一填值就看不见了。
+ * @param column 列定义
+ */
+function labelOf(column: DatasetColumn): string {
+  return column.unit ? `${column.name}（${column.unit}）` : column.name
+}
+
+/**
+ * 这一列要不要打必填星号；点位汇总列的必填由采集兜着，不拦手填。
+ * @param column 列定义
+ */
+function isRequired(column: DatasetColumn): boolean {
+  return column.source === 'manual' && column.is_required
+}
+
 async function onSubmit(): Promise<void> {
   if (form.value.ts === '') {
     tsError.value = '请选一个数据时间'
+    return
+  }
+  if (
+    props.record === null &&
+    isBlankInput(toRecordInput(form.value, opened.value, props.columns))
+  ) {
+    error.value = '至少填一格再保存'
     return
   }
   busy.value = true
@@ -137,8 +164,13 @@ async function onSubmit(): Promise<void> {
         v-model="form.ts"
         label="数据时间"
         required
+        :disabled="isCollected"
         :error="tsError"
-        hint="补录历史行会让它之后那些行的跨行公式结果过期，保存后按提示重算"
+        :hint="
+          isCollected
+            ? '采集行的数据时间由桶决定，不能改'
+            : '补录历史行会让它之后那些行的跨行公式结果过期，保存后按提示重算'
+        "
       />
 
       <DtNotice v-if="hasPointColumn" intent="warning" icon="alert-triangle">
@@ -147,18 +179,20 @@ async function onSubmit(): Promise<void> {
 
       <div class="grid grid-cols-1 gap-4 sm:grid-cols-2">
         <template v-for="column in editable" :key="column.id">
-          <DtSwitch
+          <DtSelect
             v-if="column.data_type === 'bool'"
-            class="self-end"
-            :model-value="form.flags[column.key] ?? false"
-            :label="column.name"
-            @update:model-value="form.flags[column.key] = $event"
+            :model-value="form.texts[column.key] ?? ''"
+            :options="BOOL_OPTIONS"
+            :label="labelOf(column)"
+            :required="isRequired(column)"
+            :hint="writeHint(column, props.record)"
+            @update:model-value="form.texts[column.key] = $event"
           />
           <DtInput
             v-else
             :model-value="form.texts[column.key] ?? ''"
-            :label="column.name"
-            :placeholder="column.unit ?? ''"
+            :label="labelOf(column)"
+            :required="isRequired(column)"
             :hint="writeHint(column, props.record)"
             @update:model-value="form.texts[column.key] = $event"
           />

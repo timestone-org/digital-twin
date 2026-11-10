@@ -193,7 +193,11 @@ onBeforeRouteUpdate(
     </template>
 
     <div class="flex h-full min-h-0 flex-col gap-4">
-      <DtNotice v-if="editor.error.value" intent="danger">
+      <!-- 还没加载出实例时错误由下面的页面态报，这里不再重复一遍 -->
+      <DtNotice
+        v-if="editor.error.value && editor.instance.value"
+        intent="danger"
+      >
         {{ editor.error.value }}
         <DtButton size="xs" variant="ghost" @click="void discard()">
           重新加载

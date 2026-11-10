@@ -80,9 +80,9 @@ class DelegatedIdentity:
         self._auth = auth
         self._renew_when_left_s = renew_when_left_s
         self._minted: dict[str, dict[str, str]] = {}
-        # ⚠ 一把锁就够，而且必须有：一批点位是并发解析的，没有锁的话同一个
-        # 用户会在同一瞬间去签好几份
-        self._lock = asyncio.Lock()
+        # ⚠ 按用户各一把：一批点位是并发解析的，没有锁的话同一个用户会在同一
+        # 瞬间去签好几份；而全局一把会让一个人卡住的续签挡住所有人的调用
+        self._locks: dict[str, asyncio.Lock] = {}
 
     async def fresh(self, headers: dict[str, str]) -> dict[str, str]:
         """交出一组还没到期的身份头。
@@ -95,7 +95,7 @@ class DelegatedIdentity:
         user_id = headers.get(HEADER_USER_ID)
         if not user_id or self._is_alive(headers):
             return headers
-        async with self._lock:
+        async with self._locks.setdefault(user_id, asyncio.Lock()):
             cached = self._minted.get(user_id)
             if cached is not None and self._is_alive(cached):
                 return cached
@@ -117,6 +117,11 @@ class DelegatedIdentity:
             user_id: headers
             for user_id, headers in self._minted.items()
             if (_expires_at(headers) or 0) > now
+        }
+        self._locks = {
+            user_id: lock
+            for user_id, lock in self._locks.items()
+            if lock.locked() or user_id in self._minted
         }
 
 

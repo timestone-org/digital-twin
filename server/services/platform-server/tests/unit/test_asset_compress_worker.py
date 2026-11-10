@@ -168,6 +168,34 @@ async def test_every_pending_variant_is_compressed_and_recorded(
     assert await store.stat(keys.model_variant_key(ASSET_ID, "low")) is not None
 
 
+class StreamingOnlyStore(FakeObjectStore):
+    """整份过内存的读写口一碰就炸：模型走文件流，不许整份进内存。"""
+
+    async def get_bytes(self, key: str) -> bytes:
+        raise AssertionError(f"原件整份读进了内存：{key}")
+
+    async def put_bytes(
+        self, key: str, data: bytes, *, content_type: str
+    ) -> None:
+        del data, content_type
+        raise AssertionError(f"产物整份读进了内存：{key}")
+
+
+async def test_models_stream_through_files_instead_of_memory(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    rows = [FakeRow(name, "pending") for name in ("high", "medium", "low")]
+    recorder = install_fakes(monkeypatch, asset=FakeAsset(), rows=rows)
+    fake_compressor(monkeypatch)
+    store = StreamingOnlyStore()
+    store.objects[keys.model_key(ASSET_ID)] = (GLB, "model/gltf-binary")
+
+    await build(store).compress(ASSET_ID)
+
+    assert recorder.failed == []
+    assert len(recorder.ready) == 3
+
+
 async def test_variants_already_ready_are_not_recompressed(
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:

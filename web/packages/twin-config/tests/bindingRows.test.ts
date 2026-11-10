@@ -324,6 +324,20 @@ describe('实体删掉之后的重映射', () => {
     expect(byKey.get('anchorValues[1].value')).toBe('anchorValues[0].value')
   })
 
+  // ⚠ 同 id 重复时按「后者覆盖前者」建表，两条绑定会被搬到同一个 fieldKey 上，保存时撞唯一键
+  it('实体 id 重复时按第几次出现对应，不把两条绑定叠到同一行', () => {
+    const moved = remapBindingRows(
+      'panelValues',
+      ['p::f1', 'p::f1'],
+      ['x::f0', 'p::f1', 'p::f1'],
+      [binding('panelValues[0].value'), binding('panelValues[1].value')],
+    )
+    expect(moved.map((item) => item.fieldKey)).toEqual([
+      'panelValues[1].value',
+      'panelValues[2].value',
+    ])
+  })
+
   it('别的槽的绑定原样不动', () => {
     const moved = remapBindingRows(
       'anchorValues',

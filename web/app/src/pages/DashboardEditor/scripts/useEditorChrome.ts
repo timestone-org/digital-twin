@@ -21,6 +21,7 @@ import {
   EDITOR_CANVAS_CARD_KEY,
   EDITOR_PROJECT_ID_KEY,
 } from '@/features/dashboard/editorContext'
+import { clampDesignExtent } from '@/features/dashboard/designExtent'
 import { parseInteractionRules } from '@/features/dashboard/interactionRules'
 import type { EditorMeta } from './useEditorMeta'
 
@@ -71,7 +72,7 @@ function writeField(
     if (typeof value === 'string') meta.setField('name', value)
     return
   }
-  if (typeof value === 'number') meta.setField(key, value)
+  if (typeof value === 'number') meta.setField(key, clampDesignExtent(value))
 }
 
 /** 直接落进元数据草稿的三个写入口，与内存态的吸附/栅格无关。 */

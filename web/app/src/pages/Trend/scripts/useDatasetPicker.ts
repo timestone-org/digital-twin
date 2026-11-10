@@ -70,6 +70,7 @@ async function selectTable(
 ): Promise<void> {
   state.tableId.value = id
   state.columns.value = []
+  state.error.value = null
   if (id === '') return
   state.loading.value = true
   await raced.run(() => getDatasetTable(id), {
@@ -96,12 +97,14 @@ async function loadTables(
   wantedId: string | null,
 ): Promise<void> {
   state.loading.value = true
+  let isListed = false
   await listing.run(
     () => listDatasetTables({ page: 1, size: TABLE_PAGE_SIZE }),
     {
       ok: (page) => {
         state.tables.value = page.items
         state.error.value = null
+        isListed = true
       },
       fail: (caught) => {
         state.error.value = describeError(caught)
@@ -110,6 +113,8 @@ async function loadTables(
       settled: () => (state.loading.value = false),
     },
   )
+  // 清单都没取到时说不出深链那张在不在，只留取清单的那句错
+  if (!isListed) return
   const found = state.tables.value.some((table) => table.id === wantedId)
   if (wantedId !== null && !found) {
     state.missingLink.value = '链接里的台账不存在或已被删除，请自己选一张。'

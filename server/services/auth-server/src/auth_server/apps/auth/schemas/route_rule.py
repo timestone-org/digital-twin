@@ -7,6 +7,7 @@ from pydantic import Field, StringConstraints
 
 from auth_server.apps.auth.schemas.common import (
     InputModel,
+    NotNull,
     OutputModel,
     Trimmed,
     Utc,
@@ -16,6 +17,9 @@ MatchMode = Literal["all", "any"]
 HttpMethod = Literal[
     "GET", "POST", "PUT", "PATCH", "DELETE", "HEAD", "OPTIONS", "*"
 ]
+
+# 优先级上限 = priority 列（int4）能存的最大值；越界交给库会变成 500
+PRIORITY_MAX = 2_147_483_647
 
 PathPattern = Annotated[
     str,
@@ -50,7 +54,7 @@ class RouteRuleCreateIn(InputModel):
         default_factory=list[str], max_length=50
     )
     match_mode: MatchMode = "all"
-    priority: int = Field(default=0, ge=0, le=999)
+    priority: int = Field(default=0, ge=0, le=PRIORITY_MAX)
     is_enabled: bool = True
     description: Trimmed | None = Field(default=None, max_length=255)
 
@@ -58,10 +62,14 @@ class RouteRuleCreateIn(InputModel):
 class RouteRuleUpdateIn(InputModel):
     """改规则。缺省的字段表示本次不涉及。"""
 
-    path_pattern: PathPattern | None = None
-    http_method: HttpMethod | None = None
-    permission_codes: list[Trimmed] | None = Field(default=None, max_length=50)
-    match_mode: MatchMode | None = None
-    priority: int | None = Field(default=None, ge=0, le=999)
-    is_enabled: bool | None = None
+    path_pattern: Annotated[PathPattern | None, NotNull] = None
+    http_method: Annotated[HttpMethod | None, NotNull] = None
+    permission_codes: Annotated[list[Trimmed] | None, NotNull] = Field(
+        default=None, max_length=50
+    )
+    match_mode: Annotated[MatchMode | None, NotNull] = None
+    priority: Annotated[int | None, NotNull] = Field(
+        default=None, ge=0, le=PRIORITY_MAX
+    )
+    is_enabled: Annotated[bool | None, NotNull] = None
     description: Trimmed | None = Field(default=None, max_length=255)

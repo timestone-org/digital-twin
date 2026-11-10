@@ -4,6 +4,7 @@ import asyncio
 from dataclasses import replace
 from typing import Any, Self
 
+from knowledge_server.app import _hooks
 from knowledge_server.apps.knowledge.services.embedding import NullEmbedder
 from knowledge_server.apps.knowledge.services.llm import NullAnswerer
 from knowledge_server.apps.knowledge.services.reranking import NullReranker
@@ -66,7 +67,7 @@ def _runtime(loops: tuple[_Loop, ...], closed: list[str]) -> WorkerRuntime:
         cache=_Closable(closed, "cache"),
         idempotency=None,
         objectstore=None,
-        stream=None,
+        stream=_Closable(closed, "stream"),
         sources=(),
         external_parsers=(),
         embedder=NullEmbedder(),
@@ -110,14 +111,14 @@ async def test_resources_close_after_loops_wind_down() -> None:
     closed: list[str] = []
     loop = _Loop()
     await run_until_stopped(_runtime((loop,), closed))
-    assert closed == ["cache", "database"]
+    assert closed == ["stream", "cache", "database"]
     assert loop.steps[-1] == "drain"
 
 
 async def test_resources_close_even_with_no_consumers() -> None:
     closed: list[str] = []
     await run_until_stopped(_runtime((), closed))
-    assert closed == ["cache", "database"]
+    assert closed == ["stream", "cache", "database"]
 
 
 def test_consumers_are_an_explicit_tuple(settings: Settings) -> None:
@@ -135,7 +136,7 @@ def test_consumers_are_an_explicit_tuple(settings: Settings) -> None:
     assert isinstance(runtime.consumers, tuple)
     assert len(runtime.consumers) == 1
     assert runtime.pool is not None
-    runtime.pool.shutdown(wait=False)
+    runtime.pool.close()
 
 
 def test_ingest_consumers_are_unique_even_when_instance_is_blank(
@@ -150,3 +151,18 @@ def test_ingest_consumers_are_unique_even_when_instance_is_blank(
     second_name = second.ingest_group().consumer
     assert first_name.startswith("knowledge-server:")
     assert first_name != second_name
+
+
+def test_the_api_closes_the_stream_client_on_shutdown(
+    settings: Settings,
+) -> None:
+    """⚠ 不关的话，每次滚动发布都把队列连接留给进程退出去拆，日志与用例里
+    冒出一串没关的连接告警。"""
+    container = build_container(settings)
+    hooks = {one.name: one for one in _hooks(container)}
+    assert hooks["stream"].shutdown == container.stream.close
+    assert (
+        hooks["platform"].shutdown_order
+        < hooks["stream"].shutdown_order
+        < hooks["cache"].shutdown_order
+    )

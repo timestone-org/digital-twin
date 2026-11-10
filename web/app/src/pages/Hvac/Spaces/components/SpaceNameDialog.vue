@@ -33,6 +33,7 @@ watch(
 )
 
 function onSubmit(): void {
+  if (props.isBusy) return
   const trimmed = name.value.trim()
   if (trimmed !== '') emit('submit', trimmed)
 }
@@ -45,8 +46,9 @@ function onSubmit(): void {
     :description="props.description"
     @update:model-value="emit('update:modelValue', $event)"
   >
+    <!-- 回车交给表单的隐式提交：再接一个 @enter，同一个请求就发两遍 -->
     <form class="flex flex-col gap-4" @submit.prevent="onSubmit">
-      <DtInput v-model="name" label="名称" required @enter="onSubmit" />
+      <DtInput v-model="name" label="名称" required />
       <DtNotice v-if="props.error" intent="danger">{{ props.error }}</DtNotice>
     </form>
 

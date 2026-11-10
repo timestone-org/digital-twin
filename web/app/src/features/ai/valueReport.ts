@@ -142,12 +142,24 @@ function pointReading(nodeKey: string, read: ReadPointSample): Reading {
   }
 }
 
+/** 一条绑定此刻是什么读数，值已过定值变换。 */
+function readingOf(binding: BindingView, read: ReadPointSample): Reading {
+  const found = rawReadingOf(binding, read)
+  // ⚠ 与画布同一道定值变换：不过的话助手读到 12000、卡片上是 12，模型会去「修」一条好绑定
+  return found.status === 'has_value'
+    ? {
+        ...found,
+        value: applyBindingTransform(found.value, binding.transformJson),
+      }
+    : found
+}
+
 /**
- * 一条绑定此刻是什么读数。
+ * 一条绑定此刻的原始读数。
  * ⚠ `0` / `false` / `''` 都是合法常量，不许按真假判——按真假判会让一屏
  * 「常量 0」全部报成没配过。
  */
-function readingOf(binding: BindingView, read: ReadPointSample): Reading {
+function rawReadingOf(binding: BindingView, read: ReadPointSample): Reading {
   const kind = binding.sourceKind
   if (kind === 'opcua') {
     if (binding.nodeKey === null) {

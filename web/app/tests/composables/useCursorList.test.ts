@@ -4,6 +4,7 @@
  * ⚠ 「追加」写成「替换」时界面看着还在翻页，只是永远只有最后一页。
  */
 import { describe, expect, it, vi } from 'vitest'
+import { effectScope } from 'vue'
 import type { CursorPage } from '@dt/contracts'
 
 import { BizError } from '@/api/client'
@@ -82,5 +83,44 @@ describe('useCursorList', () => {
     expect(list.items.value).toEqual([])
     expect(list.hasMore.value).toBe(false)
     expect(list.problem.value?.kind).toBe('unavailable')
+  })
+})
+
+describe('useCursorList 的失败与卸载', () => {
+  it('加载更多失败只报错，已经摊开的行与游标都留着，能接着重试', async () => {
+    const fetcher = vi
+      .fn<(after: string | null) => Promise<CursorPage<string>>>()
+      .mockResolvedValueOnce(page(['a'], 'C1'))
+      .mockRejectedValueOnce(new BizError(50000, '炸了', 500, 't'))
+      .mockResolvedValueOnce(page(['b']))
+    const list = useCursorList(fetcher, describeAcDataError)
+    await list.reload()
+    await list.loadMore()
+    expect(list.items.value).toEqual(['a'])
+    expect(list.hasMore.value).toBe(true)
+    expect(list.problem.value).not.toBeNull()
+    await list.loadMore()
+    expect(fetcher.mock.calls[2]?.[0]).toBe('C1')
+    expect(list.items.value).toEqual(['a', 'b'])
+  })
+
+  it('作用域销毁后迟到的那一页不再写状态', async () => {
+    let settle: (value: CursorPage<string>) => void = () => undefined
+    const scope = effectScope()
+    const list = scope.run(() =>
+      useCursorList(
+        () =>
+          new Promise<CursorPage<string>>((resolve) => {
+            settle = resolve
+          }),
+        describeAcDataError,
+      ),
+    )
+    if (list === undefined) throw new Error('没挂上')
+    const pending = list.reload()
+    scope.stop()
+    settle(page(['late']))
+    await pending
+    expect(list.items.value).toEqual([])
   })
 })

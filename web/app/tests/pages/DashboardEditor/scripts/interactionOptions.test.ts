@@ -3,11 +3,16 @@
  * 跳转的目标是大屏不是节点、摘要要让人一眼看出这条会走人。
  */
 import { describe, expect, it } from 'vitest'
-import type { InteractionRule, ModuleManifest } from '@dt/contracts'
+import type {
+  DashboardNodePayload,
+  InteractionRule,
+  ModuleManifest,
+} from '@dt/contracts'
 
 import {
   actionForType,
   eventOptionsFor,
+  nodeOptionsOf,
   ruleSummary,
   ruleTouchesNode,
 } from '@/pages/DashboardEditor/scripts/interactionOptions'
@@ -162,4 +167,48 @@ describe('摘要', () => {
       action: { type: 'navigate', target },
     }
   }
+})
+
+describe('节点下拉', () => {
+  function card(id: string, x: number, y: number): DashboardNodePayload {
+    return {
+      id,
+      dashboardId: 'd1',
+      parentId: null,
+      clientKey: null,
+      moduleType: 'data-card',
+      x,
+      y,
+      w: 10,
+      h: 10,
+      zIndex: 0,
+      isVisible: true,
+      configJson: {},
+      createdAt: '',
+      updatedAt: '',
+      bindings: [],
+    }
+  }
+  const getManifest = (): ModuleManifest => ({
+    type: 'data-card',
+    displayName: '可组合卡片',
+    category: '演示',
+    defaultSize: { width: 10, height: 10 },
+    configSchema: [],
+    bindings: [],
+    component: () => Promise.resolve({ default: {} }),
+  })
+
+  // ⚠ 两个同类节点都没起名时下拉里是两行一模一样的字，选哪个全凭运气
+  it('重名的节点带上位置区分开，不重名的照旧', () => {
+    const options = nodeOptionsOf(
+      [card('a', 0, 0), card('b', 100, 40)],
+      getManifest,
+    )
+    const single = nodeOptionsOf([card('a', 0, 0)], getManifest)
+
+    expect(new Set(options.map((one) => one.label)).size).toBe(2)
+    expect(options[1]?.label).toContain('(100, 40)')
+    expect(single[0]?.label).toBe('可组合卡片')
+  })
 })

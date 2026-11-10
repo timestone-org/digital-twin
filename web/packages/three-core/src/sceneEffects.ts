@@ -598,12 +598,19 @@ class LightColumnEffect implements Effect {
   }
 
   setWorldScale(diagonal: number): void {
-    const height = clamp(
-      diagonal * MODEL_HEIGHT_RATIO * this.heightFactor,
-      MIN_COLUMN_HEIGHT,
-      MAX_COLUMN_HEIGHT,
+    // ⚠ 与底座同一套口径：倍率乘在封顶之后，占地按底座的上限封顶。否则毫米级模型上
+    //   高度滑块失效，半球罩被压成远超底座的扁椭球
+    const height =
+      clamp(
+        diagonal * MODEL_HEIGHT_RATIO,
+        MIN_COLUMN_HEIGHT,
+        MAX_COLUMN_HEIGHT,
+      ) * this.heightFactor
+    const footprint = clamp(
+      diagonal * FOOTPRINT_RATIO,
+      MIN_STAGE_RADIUS,
+      MAX_STAGE_FOOTPRINT_RADIUS,
     )
-    const footprint = diagonal * FOOTPRINT_RATIO
     const radius = Math.max(
       MIN_STAGE_RADIUS * BEAM_RADIUS_RATIO,
       footprint * (this.isDome ? DOME_RADIUS_RATIO : BEAM_RADIUS_RATIO),

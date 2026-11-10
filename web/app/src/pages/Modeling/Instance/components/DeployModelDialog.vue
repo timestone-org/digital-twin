@@ -24,9 +24,16 @@ onBeforeUnmount(() => {
 })
 onBeforeRouteLeave(() => !busy.value)
 onBeforeRouteUpdate(() => !busy.value)
+/** 服务编码的写法；进稳定调用地址，故比别处的编码更窄（不收下划线与大写）。 */
+const CODE_PATTERN = /^[a-z0-9][a-z0-9-]{1,62}$/
+const codeError = computed(() =>
+  code.value !== '' && !CODE_PATTERN.test(code.value)
+    ? '只能用小写字母、数字或连字符，2–63 位，且不以连字符开头'
+    : '',
+)
 const valid = computed(
   () =>
-    /^[a-z0-9][a-z0-9-]{1,62}$/.test(code.value) &&
+    CODE_PATTERN.test(code.value) &&
     name.value.trim() !== '' &&
     maxRows.value !== undefined &&
     rate.value !== undefined,
@@ -44,7 +51,7 @@ watch(
 function deploymentInput(versionId: string) {
   return {
     code: code.value,
-    name: name.value,
+    name: name.value.trim(),
     model_version_id: versionId,
     max_rows_per_call: maxRows.value ?? 200,
     rate_limit_per_minute: rate.value ?? 60,
@@ -102,6 +109,7 @@ async function deploy(): Promise<void> {
           label="服务编码"
           placeholder="例如：chiller-01-energy"
           hint="2–63 位小写字母、数字或连字符；用于稳定调用地址。"
+          :error="codeError"
           :disabled="deployment !== null || busy"
           required
         />

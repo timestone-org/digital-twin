@@ -62,10 +62,8 @@ export async function saveDashboard(deps: SaveDeps): Promise<boolean> {
     if (!isCurrent()) return !isLayoutDirty
     meta.acceptSaved(savedMeta, patch)
   }
-  if (isLayoutDirty || patch === null) {
-    return saveLayout(deps, snapshot, isCurrent)
-  }
-  return true
+  // ⚠ 两轴都干净时不发整树替换：它一律推进行版本，别处开着的编辑器会平白 409
+  return isLayoutDirty ? saveLayout(deps, snapshot, isCurrent) : true
 }
 
 interface SaveWithFeedbackDeps {

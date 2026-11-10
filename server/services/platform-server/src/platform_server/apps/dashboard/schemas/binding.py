@@ -1,7 +1,7 @@
 """绑定面的入参与出参。"""
 
 import uuid
-from typing import Any
+from typing import Any, ClassVar
 
 from pydantic import Field
 
@@ -10,6 +10,7 @@ from platform_server.apps.dashboard.schemas.common import (
     InputModel,
     NodeKey,
     OutputModel,
+    UpdateModel,
     Utc,
 )
 from platform_server.apps.dashboard.source_kinds import SourceKind
@@ -44,12 +45,15 @@ class BindingCreateIn(InputModel):
     transform_json: dict[str, Any] | None = None
 
 
-class BindingUpdateIn(InputModel):
+class BindingUpdateIn(UpdateModel):
     """改绑定。缺省的字段表示本次不涉及。
 
     ⚠ `field_key` 不在这里：改槽等于换一条绑定，而 id 是实时推送的关联键。
     要换槽就删了重建。
     """
+
+    # 其余几格的 null 是「清空」，只有来源种类是非空列
+    NON_NULLABLE: ClassVar[frozenset[str]] = frozenset({"source_kind"})
 
     source_kind: SourceKind | None = None
     node_key: NodeKey | None = None

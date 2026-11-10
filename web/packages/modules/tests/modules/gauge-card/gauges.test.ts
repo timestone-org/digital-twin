@@ -313,6 +313,26 @@ describe('「万」格式与它的门槛', () => {
 describe('刻度', () => {
   const slots = { [gaugeFieldKey(0, 'value')]: { state: 'ok' as const } }
 
+  it('刻度跟读数共用千分位开关，关了刻度也不写分隔符', () => {
+    const view = only(
+      {
+        [GAUGE_ITEMS_KEY]: [item({ max: 20000 })],
+        scale: { ticks: true, tickCount: 4 },
+        thousands: false,
+      },
+      [{ value: 15000 }],
+      slots,
+    )
+
+    expect(view.text).toBe('15000')
+    expect(view.ticks.map((tick) => tick.label)).toEqual([
+      '0',
+      '6667',
+      '13333',
+      '20000',
+    ])
+  })
+
   it('关着的时候一根都不给', () => {
     expect(one().ticks).toEqual([])
   })

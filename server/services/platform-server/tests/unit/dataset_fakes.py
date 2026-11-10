@@ -12,8 +12,8 @@ from platform_server.apps.dataset.services.backfill_jobs import (
     BackfillJobState,
 )
 from platform_server.apps.dataset.services.backfill_plan import BackfillPlan
-from platform_server.apps.dataset.services.collector import Sessions
 from platform_server.apps.dataset.services.dirty import DatasetDirtyLog
+from platform_server.apps.dataset.services.sessions import Sessions
 from platform_server.container import DatasetParts
 from platform_server.lease import Lease
 from platform_server.settings import Settings

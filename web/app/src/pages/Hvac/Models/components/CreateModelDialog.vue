@@ -9,7 +9,7 @@
  * 房间的组合。
  */
 import { computed, ref, watch } from 'vue'
-import type { CombinationCoverage, Room } from '@dt/contracts'
+import type { CombinationCoverage, Room, StartupBatches } from '@dt/contracts'
 import { MODEL_HALF_LIFE_DEFAULT_DAYS } from '@dt/contracts'
 import {
   DtButton,
@@ -50,13 +50,21 @@ const halfLife = ref(MODEL_HALF_LIFE_DEFAULT_DAYS)
 const isAdvancedOpen = ref(false)
 const coverage = ref<CombinationCoverage[]>([])
 const coverageError = ref<string | null>(null)
+const coverageLoading = ref(false)
 const picked = ref<Set<string>>(new Set())
 const busy = ref(false)
 const problem = ref<string | null>(null)
 
-// ⚠ 填了一半误点遮罩就全没了；脏着时由 DtModal 拦下误关
+// ⚠ 填了一半误点遮罩就全没了；脏着时由 DtModal 拦下误关。
+// ⚠ 勾选是 Set，JSON 序列化成 {}，必须摊成排好序的数组才认得出变化
 const { isDirty } = useFormDirty(
-  [pickedRoom, name, description, halfLife, picked],
+  () => [
+    pickedRoom.value,
+    name.value,
+    description.value,
+    halfLife.value,
+    [...picked.value].sort(),
+  ],
   () => props.open,
 )
 
@@ -106,22 +114,37 @@ watch([() => props.open, pickedRoom], ([open, room]) => {
   coverage.value = []
   picked.value = new Set()
   coverageError.value = null
+  coverageLoading.value = false
   if (!open || room === '') return
   void loadCoverage(room)
 })
 
+/**
+ * 覆盖度为空时的那一句；有组合就是 null。
+ * @param batches 这个房间的批次
+ */
+function emptyCoverageReason(batches: StartupBatches): string | null {
+  if (batches.current === null) {
+    return '这个房间还没抽取过开机事件，先去开机事件页重算'
+  }
+  if (batches.coverage.length > 0) return null
+  if (batches.current.status === 'running') {
+    return '首次抽取还在进行，完成后再来勾选组合'
+  }
+  return '这个房间的开机事件里还没有可用组合，先去开机事件页查看'
+}
+
 async function loadCoverage(room: string): Promise<void> {
+  coverageLoading.value = true
   await coverageFetch.run(() => hvac.getStartupBatches(room), {
     ok: (batches) => {
       coverage.value = batches.coverage
-      if (batches.current === null) {
-        coverageError.value = '这个房间还没抽取过开机事件，先去开机事件页重算'
-      }
+      coverageError.value = emptyCoverageReason(batches)
     },
     fail: (caught) => {
       coverageError.value = describeError(caught)
     },
-    settled: () => undefined,
+    settled: () => (coverageLoading.value = false),
   })
 }
 
@@ -187,10 +210,7 @@ async function submit(): Promise<void> {
         <p v-else-if="pickedRoom === ''" class="text-xs text-text-secondary">
           先选房间，再从它抽出的组合里勾选。
         </p>
-        <p
-          v-else-if="setOptions.length === 0"
-          class="text-xs text-text-secondary"
-        >
+        <p v-else-if="coverageLoading" class="text-xs text-text-secondary">
           正在取组合覆盖度…
         </p>
         <div v-else class="flex max-h-48 flex-col gap-1 overflow-y-auto">

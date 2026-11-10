@@ -208,7 +208,7 @@ describe('首屏', () => {
       { id: 'documents' },
       { id: 'search' },
     ])
-    expect(layouts[1]?.attributes('style')).toContain('min-height: 24rem')
+    expect(layouts[1]?.attributes('style')).toContain('min-height: 32rem')
     expect(wrapper.get('main aside').text()).toContain('运维手册')
     expect(layouts[1]?.text()).toContain('一号机组.docx')
     expect(wrapper.find('input[type="search"]').exists()).toBe(true)
@@ -294,6 +294,29 @@ describe('如实报索引的毛病', () => {
     const wrapper = await render()
 
     expect(wrapper.text()).not.toContain('1024 维')
+  })
+})
+
+describe('没接嵌入模型', () => {
+  it('先说清楚并指去模型管理，传文档不可点', async () => {
+    api.readCapability.mockResolvedValue({
+      ...READY,
+      isEmbeddingEnabled: false,
+    })
+
+    const wrapper = await render()
+
+    expect(wrapper.text()).toContain('还没给「知识库嵌入」分配模型')
+    const picker = wrapper
+      .findAll('button')
+      .find((one) => one.text().includes('传文档'))
+    expect(picker?.attributes('disabled')).toBeDefined()
+  })
+
+  it('接好了就不摆这条', async () => {
+    const wrapper = await render()
+
+    expect(wrapper.text()).not.toContain('还没给「知识库嵌入」分配模型')
   })
 })
 
@@ -668,6 +691,9 @@ describe('建库', () => {
     const modal = document.body.querySelector('.dt-modal')
     expect(modal).not.toBeNull()
     expect(modal?.textContent).toContain('同名的库已经有了')
+    // 只在弹窗里说一遍：页面顶上那条错误不该同时冒出来、关窗后还挂着
+    const outside = wrapper.text().replace(modal?.textContent ?? '', '')
+    expect(outside).not.toContain('同名的库已经有了')
   })
 
   it('左栏空态里也有新建入口', async () => {

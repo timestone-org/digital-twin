@@ -3,8 +3,8 @@
  * @fileoverview 模型管理：供应商目录、各用途走哪个模型、订阅账号，以及两个消费方
  * 此刻真在用什么（ADR-0039）。
  *
- * ⚠ 三个码各管各的：`llm:view` 看目录、`llm:manage` 改目录与测试端点、
- * `assistant:manage` 管订阅账号——订阅账号是助手一家的事，不随目录走。
+ * ⚠ 两个码：`llm:view` 看目录，`llm:manage` 改目录、测试端点与订阅账号
+ * 登录（ADR-0041：登录态挂在那一路供应商上）。
  * ⚠ 目录没开（后端没配加密密钥）时供应商与用途两栏如实说「没开」并指向配置项，
  * 不摆一个永远空着的列表。
  */
@@ -82,16 +82,20 @@ async function probe(provider: LlmProvider): Promise<void> {
 
 async function remove(provider: LlmProvider): Promise<void> {
   const inUse = provider.assigned_purposes.length
+  // 删不掉时只说原因，与角色页「下面还有账号」同一个说法；不弹一个两颗键同义的框
+  if (inUse > 0) {
+    toast.warning(
+      `「${provider.name}」还被 ${inUse} 个用途指着，删不掉：先把那些用途改指别处。`,
+    )
+    return
+  }
   const ok = await confirm.ask({
     title: '删除供应商',
-    message:
-      inUse > 0
-        ? `「${provider.name}」还被 ${inUse} 个用途指着，删不掉：先把那些用途改指别处。`
-        : `将删除「${provider.name}」及它的密钥，且不可恢复。`,
-    confirmText: inUse > 0 ? '知道了' : '删除',
-    danger: inUse === 0,
+    message: `将删除「${provider.name}」及它的密钥，且不可恢复。`,
+    confirmText: '删除',
+    danger: true,
   })
-  if (!ok || inUse > 0) return
+  if (!ok) return
   try {
     await catalog.remove(provider)
     await afterWrite('供应商已删除')
@@ -100,17 +104,24 @@ async function remove(provider: LlmProvider): Promise<void> {
   }
 }
 
+/** 在途的用途写入；连点保存时第二下直接丢掉，不发两个 PUT。 */
+const assigning = new Set<string>()
+
 async function assign(
   purpose: string,
   providerId: string,
   modelName: string,
 ): Promise<void> {
+  if (assigning.has(purpose)) return
+  assigning.add(purpose)
   try {
     await catalog.assign(purpose, providerId, modelName)
     toast.success('用途已更新，两侧十秒内生效')
     await catalog.reloadEffective()
   } catch (caught) {
     toast.error(describeError(caught))
+  } finally {
+    assigning.delete(purpose)
   }
 }
 

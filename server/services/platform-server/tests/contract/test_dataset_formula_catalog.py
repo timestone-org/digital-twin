@@ -136,6 +136,11 @@ def test_the_panel_ships_the_operator_and_rule_reference() -> None:
     assert len(RULES) >= 1
 
 
+def test_the_rules_carry_no_markdown_markers() -> None:
+    # 面板按纯文本渲染规则，`**` 会原样露在界面上
+    assert not [rule for rule in RULES if "**" in rule or "`" in rule]
+
+
 def test_the_library_list_is_empty_until_the_library_lands() -> None:
     # 公式库随第 4 期落地；空表是正常状态，不是错误
     assert CATALOG.library == ()
@@ -191,3 +196,11 @@ def test_the_library_call_prefix_is_banned_from_both_identifier_rules() -> None:
     # 「调用库公式要带括号」——指向一个用户根本没写过的东西
     assert FX_CODE_RE.match("a@b") is None
     assert COLUMN_KEY_RE.match("a@b") is None
+
+
+def test_the_panel_texts_carry_no_markdown_markers() -> None:
+    # ⚠ 前端按纯文本渲染：`**` 会原样出现在面板里
+    texts = [*RULES]
+    for function in build_catalog(EMPTY_LIBRARY).functions:
+        texts.extend((function.doc.description, function.doc.example))
+    assert [text for text in texts if "**" in text] == []

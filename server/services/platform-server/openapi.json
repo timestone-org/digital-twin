@@ -73,6 +73,7 @@
           "description": {
             "anyOf": [
               {
+                "maxLength": 500,
                 "type": "string"
               },
               {
@@ -300,6 +301,7 @@
           "description": {
             "anyOf": [
               {
+                "maxLength": 500,
                 "type": "string"
               },
               {
@@ -10484,6 +10486,10 @@
             "title": "Design Width",
             "type": "integer"
           },
+          "has_thumbnail": {
+            "title": "Has Thumbnail",
+            "type": "boolean"
+          },
           "id": {
             "format": "uuid",
             "title": "Id",
@@ -10532,7 +10538,8 @@
           "is_public",
           "node_count",
           "created_at",
-          "updated_at"
+          "updated_at",
+          "has_thumbnail"
         ],
         "title": "DashboardSummaryOut",
         "type": "object"
@@ -10590,6 +10597,19 @@
               }
             ],
             "title": "Design Width"
+          },
+          "expected_version": {
+            "anyOf": [
+              {
+                "minimum": 1.0,
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "description": "给了就做版本断言，与当前行版本不符即 409",
+            "title": "Expected Version"
           },
           "name": {
             "anyOf": [
@@ -11368,7 +11388,7 @@
           },
           "params": {
             "items": {
-              "$ref": "#/components/schemas/FormulaParamSpec"
+              "$ref": "#/components/schemas/FormulaParamIn"
             },
             "maxItems": 8,
             "title": "Params",
@@ -11712,8 +11732,50 @@
         "title": "FormulaFunctionsOut",
         "type": "object"
       },
+      "FormulaParamIn": {
+        "additionalProperties": false,
+        "description": "一个形参（入参）。多带一个字段就拒绝：拼错的 `knd` 被忽略的话，\n存下去的是另一条公式。",
+        "properties": {
+          "default": {
+            "title": "Default"
+          },
+          "hint": {
+            "default": "",
+            "maxLength": 128,
+            "title": "Hint",
+            "type": "string"
+          },
+          "kind": {
+            "default": "column",
+            "enum": [
+              "column",
+              "value"
+            ],
+            "title": "Kind",
+            "type": "string"
+          },
+          "label": {
+            "default": "",
+            "maxLength": 64,
+            "title": "Label",
+            "type": "string"
+          },
+          "name": {
+            "maxLength": 64,
+            "minLength": 1,
+            "pattern": "^[^\\s@'\"(),.:{}\\[\\]]+$",
+            "title": "Name",
+            "type": "string"
+          }
+        },
+        "required": [
+          "name"
+        ],
+        "title": "FormulaParamIn",
+        "type": "object"
+      },
       "FormulaParamSpec": {
-        "description": "一个形参。出参与入参共用这一个形状——两边字段完全相同。",
+        "description": "一个形参（出参），字段与入参完全相同。\n\n⚠ 继承入参是为了服务内部能拿出参实例直接构造入参；出参口径不拒多余字段。",
         "properties": {
           "default": {
             "title": "Default"
@@ -11946,7 +12008,7 @@
             "anyOf": [
               {
                 "items": {
-                  "$ref": "#/components/schemas/FormulaParamSpec"
+                  "$ref": "#/components/schemas/FormulaParamIn"
                 },
                 "maxItems": 8,
                 "type": "array"
@@ -22306,6 +22368,17 @@
             "title": "Columns",
             "type": "array"
           },
+          "error": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Error"
+          },
           "name": {
             "title": "Name",
             "type": "string"
@@ -24522,8 +24595,6 @@
                 "type": "null"
               }
             ],
-            "description": "达标时长；没达标就没有时长。\n\n⚠ 派生而不是单独存一份：与 `complied_at` 分开存的话两者会各自漂移，\n而页面读到的是哪一个全看它先看哪一列。",
-            "readOnly": true,
             "title": "Duration Minutes"
           },
           "exclusion_reason": {
@@ -24590,12 +24661,12 @@
           "started_at",
           "running_set",
           "complied_at",
+          "duration_minutes",
           "outcome",
           "readings",
           "idle_minutes",
           "is_excluded",
-          "exclusion_reason",
-          "duration_minutes"
+          "exclusion_reason"
         ],
         "title": "StartupEpisodeOut",
         "type": "object"
@@ -24722,6 +24793,27 @@
         "title": "StartupRebuildOut",
         "type": "object"
       },
+      "SubtreeIn": {
+        "additionalProperties": false,
+        "description": "收一棵子树：只认从哪个节点往下收。\n\n⚠ 不复用 `BrowseIn`：子树没有分页，收下 `limit` 与续页令牌又不用，客户端\n拿着令牌翻页会一直拿到同一批。",
+        "properties": {
+          "parent": {
+            "anyOf": [
+              {
+                "maxLength": 256,
+                "minLength": 1,
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Parent"
+          }
+        },
+        "title": "SubtreeIn",
+        "type": "object"
+      },
       "SubtreeItemOut": {
         "description": "子树里的一项，外加它挂在谁下面。\n\n⚠ `parent` 不能省：整棵子树是平铺回来的，客户端要靠它拼回层级。",
         "properties": {
@@ -24810,7 +24902,7 @@
           "code": {
             "maxLength": 64,
             "minLength": 1,
-            "pattern": "^[A-Za-z0-9][A-Za-z0-9._-]*$",
+            "pattern": "^[A-Za-z0-9][A-Za-z0-9_-]*$",
             "title": "Code",
             "type": "string"
           },
@@ -24857,6 +24949,7 @@
           "retention_days": {
             "anyOf": [
               {
+                "maximum": 36500.0,
                 "minimum": 1.0,
                 "type": "integer"
               },
@@ -25150,6 +25243,7 @@
           "retention_days": {
             "anyOf": [
               {
+                "maximum": 36500.0,
                 "minimum": 1.0,
                 "type": "integer"
               },
@@ -26357,8 +26451,26 @@
         ]
       },
       "post": {
-        "description": "建一个模型并排进训练队列，立刻返回。\n\nArgs: payload, session, dispatcher, caller, _manager。",
+        "description": "建一个模型并排进训练队列，立刻返回。带幂等键的重试拿回首次结果。\n\nArgs: payload, session, timezone, dispatcher, gate。",
         "operationId": "create_ac_model_api_v1_platform_ac_models_post",
+        "parameters": [
+          {
+            "in": "header",
+            "name": "idempotency-key",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Idempotency-Key"
+            }
+          }
+        ],
         "requestBody": {
           "content": {
             "application/json": {
@@ -26744,7 +26856,7 @@
     },
     "/api/v1/platform/ac-models/{model_id}/publication:publish": {
       "post": {
-        "description": "按当前实时工况算一次并写进点位。\n\n⚠ 走的是与每分钟那条循环**完全相同**的代码路径，只是不经租约。两条路\n分开写的话，页面上试通了、循环里还是不通。\n\nArgs: model_id, sessions, reader, nodes, _manager。",
+        "description": "按当前实时工况算一次并写进点位。带幂等键的重试拿回首次那一拍的结论。\n\n⚠ 走的是与每分钟那条循环**完全相同**的代码路径，只是不经租约。两条路\n分开写的话，页面上试通了、循环里还是不通。\n\nArgs: model_id, sessions, reader, nodes, gate。",
         "operationId": "publish_now_api_v1_platform_ac_models__model_id__publication_publish_post",
         "parameters": [
           {
@@ -26755,6 +26867,22 @@
               "format": "uuid",
               "title": "Model Id",
               "type": "string"
+            }
+          },
+          {
+            "in": "header",
+            "name": "idempotency-key",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Idempotency-Key"
             }
           }
         ],
@@ -26896,7 +27024,7 @@
     },
     "/api/v1/platform/ac-models/{model_id}:retrain": {
       "post": {
-        "description": "按当前配置与当前批次重训，立刻返回。\n\nArgs: model_id, session, dispatcher, _manager。",
+        "description": "按当前配置与当前批次重训，立刻返回。带幂等键的重试拿回首次结果。\n\nArgs: model_id, session, timezone, dispatcher, gate。",
         "operationId": "retrain_ac_model_api_v1_platform_ac_models__model_id__retrain_post",
         "parameters": [
           {
@@ -26907,6 +27035,22 @@
               "format": "uuid",
               "title": "Model Id",
               "type": "string"
+            }
+          },
+          {
+            "in": "header",
+            "name": "idempotency-key",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Idempotency-Key"
             }
           }
         ],
@@ -27234,6 +27378,7 @@
     },
     "/api/v1/platform/ac-units/{ac_unit_id}/compliance-policies": {
       "get": {
+        "description": "读一台空调的两季达标配置，连同此刻生效的季节。\n\nArgs: ac_unit_id, session, timezone, _viewer。",
         "operationId": "get_compliance_policy_api_v1_platform_ac_units__ac_unit_id__compliance_policies_get",
         "parameters": [
           {
@@ -27275,6 +27420,7 @@
         ]
       },
       "put": {
+        "description": "一个事务里保存冬季日期与两套达标范围。\n\n⚠ 启用冬季之后，旧的 `PUT /metric-limits` 会被拒绝。\n\nArgs: ac_unit_id, payload, session, timezone, _manager。",
         "operationId": "put_compliance_policy_api_v1_platform_ac_units__ac_unit_id__compliance_policies_put",
         "parameters": [
           {
@@ -29457,7 +29603,7 @@
           "content": {
             "application/json": {
               "schema": {
-                "$ref": "#/components/schemas/BrowseIn"
+                "$ref": "#/components/schemas/SubtreeIn"
               }
             }
           },
@@ -35221,7 +35367,7 @@
     },
     "/api/v1/platform/modeling-bindings/{binding_id}": {
       "delete": {
-        "description": "删绑定。之后那一列变空并给「模型未绑定」。\n\nArgs: binding_id, session, _write。",
+        "description": "删绑定。之后那一列变空并给「模型未绑定」。\n\nArgs: binding_id, session, write。",
         "operationId": "remove_binding_api_v1_platform_modeling_bindings__binding_id__delete",
         "parameters": [
           {
@@ -35272,7 +35418,7 @@
         ]
       },
       "patch": {
-        "description": "回执带影响面：哪些台账列会跟着变。重算由用户在台账页显式发起。\n\nArgs: binding_id, payload, session, _write。",
+        "description": "回执带影响面：哪些台账列会跟着变。重算由用户在台账页显式发起。\n\nArgs: binding_id, payload, session, write。",
         "operationId": "update_binding_api_v1_platform_modeling_bindings__binding_id__patch",
         "parameters": [
           {
@@ -37441,7 +37587,7 @@
     },
     "/api/v1/platform/modeling-model-versions/{version_id}": {
       "delete": {
-        "description": "退役。还有绑定指着它时 409。\n\nArgs: version_id, session, write, response。",
+        "description": "退役。还有绑定指着它时 409。\n\nArgs: version_id, session, write, response, store。",
         "operationId": "retire_version_api_v1_platform_modeling_model_versions__version_id__delete",
         "parameters": [
           {
@@ -41475,7 +41621,7 @@
     },
     "/api/v1/platform/rooms/{room_id}/startup-batches:rebuild": {
       "post": {
-        "description": "建一个新批次并把分片排进队列，立刻返回批次 id。\n\nArgs: room_id, payload, session, reader, dispatcher, _manager。",
+        "description": "建一个新批次并把分片排进队列，立刻返回批次 id；同键重试拿回首次结果。\n\nArgs: room_id, payload, session, reader, dispatcher, gate。",
         "operationId": "rebuild_startup_batches_api_v1_platform_rooms__room_id__startup_batches_rebuild_post",
         "parameters": [
           {
@@ -41486,6 +41632,22 @@
               "format": "uuid",
               "title": "Room Id",
               "type": "string"
+            }
+          },
+          {
+            "in": "header",
+            "name": "idempotency-key",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Idempotency-Key"
             }
           }
         ],

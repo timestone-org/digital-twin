@@ -28,8 +28,11 @@ const emit = defineEmits<{
   publish: [run: ModelingRunSummary]
   deploy: [version: ModelingVersionSummary]
 }>()
-function isPublished(id: string): boolean {
-  return props.versions.some((version) => version.run_id === id)
+/** 运行记录自己带着发布结果；版本列表只有最近 20 条，只在字段缺席时兜底。 */
+function isPublished(row: ModelingRunSummary): boolean {
+  if (row.published_version_id !== undefined)
+    return row.published_version_id !== null
+  return props.versions.some((version) => version.run_id === row.id)
 }
 const runColumns: readonly DtDataColumn[] = [
   { key: 'created_at', label: '训练时间' },
@@ -84,8 +87,14 @@ const versionColumns: readonly DtDataColumn[] = [
 
       <template #cell-actions="{ row }">
         <div class="flex gap-2">
-          <RouterLink :to="`/modeling/pipelines/${id}?run_id=${row.id}`">
-            <DtButton size="sm" variant="ghost"> 查看结果 </DtButton>
+          <RouterLink
+            v-slot="{ navigate }"
+            :to="`/modeling/pipelines/${id}?run_id=${row.id}`"
+            custom
+          >
+            <DtButton size="sm" variant="ghost" @click="navigate">
+              查看结果
+            </DtButton>
           </RouterLink>
 
           <PermGuard :codes="[PERMISSION_CODES.modelingRun]">
@@ -101,7 +110,7 @@ const versionColumns: readonly DtDataColumn[] = [
 
           <PermGuard :codes="[PERMISSION_CODES.modelingPublish]">
             <DtButton
-              v-if="row.status === 'succeeded' && !isPublished(row.id)"
+              v-if="row.status === 'succeeded' && !isPublished(row)"
               size="sm"
               :disabled="busy"
               @click="emit('publish', row)"

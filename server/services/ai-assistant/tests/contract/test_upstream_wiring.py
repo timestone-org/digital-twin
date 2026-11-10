@@ -55,3 +55,16 @@ def test_the_reissue_hop_is_budgeted_under_the_platform_call() -> None:
     # 续签是 platform 调用**之前**的一跳；下游之和必须小于上游，
     # 否则边缘先掐断，而现象是「助手转了半天什么都没发生」
     assert settings.auth_timeout_s < settings.platform_timeout_s
+
+
+def test_platform_and_knowledge_share_one_renewing_identity() -> None:
+    """各造一份的话同一个人要各签一趟，两份缓存还各自过期。"""
+    container = build_container(
+        _settings(knowledge_base_url="http://knowledge.test")
+    )
+
+    # 私有字段：这条口径没有别的观察点
+    platform = getattr(container.platform, "_identity", None)
+    knowledge = getattr(container.knowledge, "_identity", None)
+    assert isinstance(platform, DelegatedIdentity)
+    assert platform is knowledge

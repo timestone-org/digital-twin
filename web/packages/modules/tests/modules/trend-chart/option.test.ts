@@ -396,6 +396,22 @@ describe('双轴与参考线', () => {
     })
   })
 
+  // ⚠ echarts 只按系列数据算轴范围，参考线在数据范围外就落到绘图区外面去了
+  it('参考线的值并进挂线那根轴的范围，数据够不着阈值时线也看得见', () => {
+    const option = optionOf(config, viewsOf(config, ROWS))
+    const axes = asArray(option.yAxis).map(asRecord)
+
+    expect(axes[0]?.dataMax).toBe(80)
+    expect(axes[0]?.dataMin).toBe(80)
+    expect(axes[1]?.dataMax).toBeUndefined()
+  })
+
+  it('没配参考线时不写数据范围', () => {
+    const option = optionOf(BASE, viewsOf(BASE, ROWS))
+
+    expect(asRecord(asArray(option.yAxis)[0]).dataMax).toBeUndefined()
+  })
+
   it('参考线只挂一条 series，且挂在左轴那一条上', () => {
     const option = optionOf(config, viewsOf(config, ROWS))
 

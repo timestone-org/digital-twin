@@ -182,6 +182,32 @@ export function isSelectionDirty(
 }
 
 /**
+ * 一次查询条件的指纹：条件相同，指纹相同。
+ * @param choice 时间范围、折算档位等界面上的取值
+ */
+export function trendChoiceKey(choice: object): string {
+  return JSON.stringify(choice)
+}
+
+/**
+ * 图上画的是否已经不是眼下这组勾选与查询条件。
+ * ⚠ 只看勾选的话，换了时间范围或折算档位之后图上还是上一次的曲线，且没有提示。
+ * @param fetched 上一次查询取回来的那几个 key
+ * @param selected 当前勾选
+ * @param keys 上一次成功查询的条件指纹（没查过是 null）与眼下的条件指纹
+ */
+export function isQueryDirty(
+  fetched: Readonly<Record<string, unknown>>,
+  selected: readonly string[],
+  keys: { queried: string | null; current: string },
+): boolean {
+  if (keys.queried === null) return false
+  return (
+    isSelectionDirty(true, selected, fetched) || keys.queried !== keys.current
+  )
+}
+
+/**
  * 截断的那一句。
  * ⚠ 必须说清砍掉的是哪一头：曲线开头凭空少一截会被读成「采集那阵子坏了」，
  * 而它其实只是没画（docs/DATASET_DESIGN.md §6.2）。

@@ -55,7 +55,8 @@ class ChatStep(UuidPrimaryKeyMixin, TimestampMixin, Base):
     # 失败原因，给人看。不带 URL 与密钥
     error: Mapped[str | None] = mapped_column(Text, nullable=True)
     # ⚠ 这两个时刻由应用写，不给 server_default：它们量的是这一步真正开始与
-    # 结束的时刻，而 `created_at` 量的是行什么时候插进来的
+    # 结束的时刻，而 `created_at` 量的是行什么时候插进来的。回合的步骤此刻
+    # 不带时刻，所以两列恒空——别拿它们算耗时
     started_at: Mapped[datetime | None] = mapped_column(
         DateTime(timezone=True), nullable=True
     )

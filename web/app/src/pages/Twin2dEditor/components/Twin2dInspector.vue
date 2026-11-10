@@ -167,6 +167,7 @@ function onPickPrim(primId: string): void {
     />
     <NodeInspector
       v-else-if="node !== null"
+      :key="node.id"
       :node="node"
       :config="config"
       @change="onChange"
@@ -175,6 +176,7 @@ function onPickPrim(primId: string): void {
     />
     <EdgeInspector
       v-else-if="edge !== null"
+      :key="edge.id"
       :edge="edge"
       :config="config"
       @change="onChange"
@@ -183,6 +185,7 @@ function onPickPrim(primId: string): void {
     />
     <MarkInspector
       v-else-if="mark !== null"
+      :key="mark.id"
       :mark="mark"
       :config="config"
       @change="onChange"

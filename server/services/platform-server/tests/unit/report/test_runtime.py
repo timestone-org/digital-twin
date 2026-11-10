@@ -7,6 +7,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from unit.source_fakes import InMemoryStream
 
 from lib.db import run_after_commit_hooks
+from platform_server.apps.report.errors import ReportInvalid
 from platform_server.apps.report.models import ReportRender
 from platform_server.apps.report.schemas.preview import PreviewOut
 from platform_server.apps.report.schemas.template import TemplateBody
@@ -62,3 +63,14 @@ def test_synchronous_task_produces_real_document():
     result = run_task(valid_task())
     assert result.payload is not None
     assert result.payload.startswith(b"PK")
+
+
+async def test_a_rejected_import_keeps_the_warm_process_pool():
+    pool = WordPool()
+    try:
+        before = pool._pool
+        with pytest.raises(ReportInvalid):
+            await pool.run(WordTask(source=b"not a zip"), 15)
+        assert pool._pool is before
+    finally:
+        pool.close()

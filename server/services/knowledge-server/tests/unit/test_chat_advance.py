@@ -299,3 +299,15 @@ def test_point_search_receipts_leave_room_for_the_followup_tools() -> None:
     for name, code in zip(names, codes, strict=True):
         assert name in content
         assert f"{source}:{code}" in content
+
+
+def test_a_client_receipt_is_capped_by_the_window_budget() -> None:
+    """⚠ 写死 8000 字的话，窗口小的部署（n_ctx=6656 折出来约 4387 字）上一条
+    大回执就把上下文顶穿，回合直接报「上下文太大」而不是把回执截短。"""
+    made = svc.incoming_messages(
+        svc.AdvanceInput(
+            tool_results=[svc.ClientToolResult(call_id="c1", output="x" * 6000)]
+        ),
+        max_chars=4387,
+    )
+    assert len(str(made[0].content)) <= 4387

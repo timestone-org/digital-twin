@@ -10,6 +10,9 @@
  * 显存，而表现是「点开预览浏览器卡住」。所以先按第一页的比例占好位，
  * 滚到跟前才画那一页。
  *
+ * ⚠ 滚远了还要**放掉**：只懒画不回收的话，一路滚完整本，每页的位图照样全攒着。
+ * 离开保留区的页把画布清成 0×0，滚回来再画一遍；占位盒的比例保证版面不跳。
+ *
  * ⚠ 占位比例取**第一页**：逐页问一次尺寸要多花 N 个跨 worker 往返，而绝大多数
  * 文档整本同一个开本。比例猜偏的代价只是那一页画出来之后位置跳一下。
  */
@@ -33,6 +36,8 @@ const props = defineProps<{ blob: Blob }>()
 const MAX_PIXEL_RATIO = 2
 /** 提前多远开始画。留一屏，滚动时才不会看见空白格 */
 const PRERENDER_MARGIN = '400px'
+/** 离开多远才回收画布。比开画的边远得多，免得在边上来回滚时反复重画 */
+const RETAIN_MARGIN = '300%'
 /** 画布的目标宽度取不到时的兜底（容器还没量出来那一帧）。 */
 const FALLBACK_WIDTH = 900
 
@@ -47,16 +52,21 @@ const opened = shallowRef<PDFDocumentProxy | null>(null)
 // ⚠ 放手上的是**加载任务**而不是文档：只有它身上有 `destroy()`，而那一下同时
 // 停掉后台那个 worker。光丢掉文档引用的话 worker 还在，翻几份 PDF 就攒下几个
 let task: PDFDocumentLoadingTask | null = null
-const drawn = new Set<number>()
-const running: RenderTask[] = []
+/** 已画或在画的页 → 那一次的记号；回收后再画会换新记号，旧的那次据此作废。 */
+const drawn = new Map<number, object>()
+const running = new Map<number, RenderTask>()
 let watcher: IntersectionObserver | null = null
+let evictor: IntersectionObserver | null = null
 let isAlive = true
 
 /** 放掉文档、观察器与在画的那几笔。⚠ 少一样都会在关掉弹窗之后接着画。 */
 function release(): void {
   watcher?.disconnect()
   watcher = null
-  for (const one of running.splice(0)) one.cancel()
+  evictor?.disconnect()
+  evictor = null
+  for (const one of running.values()) one.cancel()
+  running.clear()
   void task?.destroy()
   task = null
   opened.value = null
@@ -108,13 +118,20 @@ async function measure(made: PDFDocumentProxy): Promise<void> {
 async function observePages(): Promise<void> {
   await nextTick()
   if (!isAlive || host.value === null) return
+  const root = host.value
+  const away = new IntersectionObserver(onAway, {
+    root,
+    rootMargin: RETAIN_MARGIN,
+  })
   const made = new IntersectionObserver(onVisible, {
-    root: host.value,
+    root,
     rootMargin: PRERENDER_MARGIN,
   })
-  for (const box of Array.from(host.value.querySelectorAll('[data-page]'))) {
+  for (const box of Array.from(root.querySelectorAll('[data-page]'))) {
+    away.observe(box)
     made.observe(box)
   }
+  evictor = away
   watcher = made
 }
 
@@ -123,6 +140,28 @@ function onVisible(entries: readonly IntersectionObserverEntry[]): void {
     if (!entry.isIntersecting) continue
     void draw(entry.target)
   }
+}
+
+function onAway(entries: readonly IntersectionObserverEntry[]): void {
+  for (const entry of entries) {
+    if (!entry.isIntersecting) evict(entry.target)
+  }
+}
+
+/**
+ * 回收一页的画布：停掉在画的那一笔，位图清成 0×0，下次滚回来重画。
+ * @param box 这一页的占位盒
+ */
+function evict(box: Element): void {
+  const at = Number(box.getAttribute('data-page'))
+  if (!drawn.has(at)) return
+  running.get(at)?.cancel()
+  running.delete(at)
+  drawn.delete(at)
+  const canvas = box.querySelector('canvas')
+  if (canvas === null) return
+  canvas.width = 0
+  canvas.height = 0
 }
 
 /**
@@ -137,9 +176,10 @@ async function draw(box: Element): Promise<void> {
   // ⚠ 先记账再 await：同一页可以在一帧里被观察器报两次（滚动 + 尺寸变化），
   // 记账放在 await 之后的话两笔会一起开画，画出来的是叠影
   if (drawn.has(at)) return
-  drawn.add(at)
+  const mark = {}
+  drawn.set(at, mark)
   const page = await made.getPage(at)
-  if (!isAlive) return
+  if (!isAlive || drawn.get(at) !== mark) return
   const scale = scaleFor(page.getViewport({ scale: 1 }).width)
   const viewport = page.getViewport({ scale })
   canvas.width = Math.floor(viewport.width)
@@ -147,8 +187,9 @@ async function draw(box: Element): Promise<void> {
   // ⚠ 交 `canvas` 而不是它的 2D 上下文：v6 起上下文那一路只是向后兼容的入口，
   // 而它要求 `canvas` 显式为 null，两个都给会当场拒
   const drawing = page.render({ canvas, viewport })
-  running.push(drawing)
+  running.set(at, drawing)
   await drawing.promise.catch(() => undefined)
+  if (running.get(at) === drawing) running.delete(at)
 }
 
 /**

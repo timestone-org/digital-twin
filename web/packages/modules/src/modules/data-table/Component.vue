@@ -81,10 +81,13 @@ function onPick(row: TableRowView, event: MouseEvent): void {
           </span>
         </div>
         <div
-          v-for="row in view.rows"
+          v-for="(row, at) in view.rows"
           :key="row.key"
           class="dtb-row"
-          :class="{ 'dtb-row--pick': row.emitValue !== '' }"
+          :class="{
+            'dtb-row--pick': row.emitValue !== '',
+            'dtb-row--alt': at % 2 === 1,
+          }"
           role="row"
           @click="onPick(row, $event)"
         >

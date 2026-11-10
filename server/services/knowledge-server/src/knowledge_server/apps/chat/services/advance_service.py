@@ -22,6 +22,7 @@ from knowledge_server.apps.chat.models import ChatMessage, ChatSession
 from knowledge_server.apps.chat.services import (
     advance_persist,
     budget,
+    client_receipts,
     title_service,
 )
 from knowledge_server.apps.chat.services import scope as scope_service
@@ -189,13 +190,29 @@ class AdvanceInput:
     client_tools: tuple[str, ...] = ()
 
 
-def incoming_messages(payload: AdvanceInput) -> list[BaseMessage]:
+# 一条客户端回执最多占多少字；窗口折出来的预算更窄时取更窄的那个
+MAX_CLIENT_RESULT_CHARS = 8000
+
+
+def client_result_chars(deps: AdvanceDeps) -> int:
+    """这一轮一条客户端回执最多占多少字。
+
+    ⚠ 落库那一份与喂给模型那一份必须用同一个数，否则回放与直播看到的不一样。
+
+    Args: deps。
+    """
+    return min(MAX_CLIENT_RESULT_CHARS, deps.tool_result_chars)
+
+
+def incoming_messages(
+    payload: AdvanceInput, max_chars: int = MAX_CLIENT_RESULT_CHARS
+) -> list[BaseMessage]:
     """把这一次的输入摊成模型认的消息。
 
     ⚠ 工具回填必须逐条带回 `call_id`：对不上的话，模型看到的是「我问了 A，
     回来的是 B 的答案」。
 
-    Args: payload。
+    Args: payload, max_chars（一条回执最多多少字）。
     """
     if payload.user_text is not None:
         return [HumanMessage(content=payload.user_text)]
@@ -204,7 +221,8 @@ def incoming_messages(payload: AdvanceInput) -> list[BaseMessage]:
     )
     return [
         ToolMessage(
-            content=format_tool_output(body, 8000), tool_call_id=result.call_id
+            content=format_tool_output(body, max_chars),
+            tool_call_id=result.call_id,
         )
         for result, body in zip(payload.tool_results, texts, strict=True)
     ]
@@ -218,6 +236,8 @@ class LoadedContext:
     summary: Summary | None
     # 这个会话此刻的检索范围。⚠ 每一轮现读：用户可能在两轮之间刚改过它
     scope: BaseScope
+    # 上一次停在等浏览器时已发的角标；没停过就是空的
+    carried: tuple[Cited, ...] = ()
 
 
 async def load_context(
@@ -240,6 +260,7 @@ async def load_context(
         scope=await scope_service.resolve(
             session, row.base_scope_ids if row is not None else None
         ),
+        carried=await client_receipts.carried_ledger(session, rows),
     )
 
 
@@ -261,6 +282,7 @@ class ContextOptions:
     history_chars: int = 0
     skills: tuple[SkillManifest, ...] | None = None
     restore_chars: int = MAX_SKILL_RESTORE_CHARS
+    client_result_chars: int = MAX_CLIENT_RESULT_CHARS
 
 
 def assemble(
@@ -282,7 +304,7 @@ def assemble(
     replayed = history.with_user_requests(
         rows, history.fitted(history.replay(recent), options.history_chars)
     )
-    fresh = incoming_messages(payload)
+    fresh = incoming_messages(payload, options.client_result_chars)
     answered = {
         one.tool_call_id for one in fresh if isinstance(one, ToolMessage)
     }
@@ -323,6 +345,8 @@ async def advance(
     loaded, messages = await _opened(deps, chat_session_id, payload, selected)
     # ⚠ 注册表按这一轮读到的范围现造：范围改了下一轮就跟着改，不留隔夜的那份
     ledger = Ledger()
+    if payload.tool_results:
+        ledger.seed(loaded.carried)
     registry = deps.tools(loaded.scope, ledger)
     specs = _turn_specs(registry.specs, payload.client_tools)
     turn = _turn_deps(deps, loaded, selected, registry, specs)
@@ -404,10 +428,11 @@ async def _stored(
         deps.sessions,
         chat_session_id=chat_session_id,
         record=advance_persist.TurnRecord(
-            incoming=incoming_messages(payload),
+            incoming=incoming_messages(payload, client_result_chars(deps)),
             outcome=outcome,
             steps=produced,
             citations=as_json(cited),
+            ledger=as_json(ledger.issued) if outcome.is_waiting else [],
         ),
     )
     return cited
@@ -501,6 +526,7 @@ async def _opened(
             0 if deps.context_chars > 0 else deps.history_chars,
             selected,
             _restore_budget(deps),
+            client_result_chars(deps),
         ),
     )
 

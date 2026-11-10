@@ -298,3 +298,31 @@ def test_theme_font_projection_reports_static_font_conversion():
     document.add_paragraph("主题字体的中西文字形需核对", style="Title")
     imported = import_docx(payload(document))
     assert any("主题字体" in warning for warning in imported.dropped)
+
+
+def test_table_inside_borders_are_not_mistaken_for_tracked_changes():
+    document = Document()
+    table = document.add_table(rows=2, cols=2)
+    table.style = "Table Grid"
+    borders = OxmlElement("w:tblBorders")
+    for edge in ("insideH", "insideV"):
+        borders.append(OxmlElement(f"w:{edge}"))
+    table._tbl.tblPr.append(borders)
+    imported = import_docx(payload(document))
+    assert "修订标记未导入，请核对修订内容" not in imported.dropped
+
+
+def test_a_real_tracked_insertion_is_still_reported():
+    document = Document()
+    paragraph = document.add_paragraph()
+    insertion = OxmlElement("w:ins")
+    insertion.set(qn("w:id"), "1")
+    insertion.set(qn("w:author"), "审阅人")
+    run = OxmlElement("w:r")
+    text = OxmlElement("w:t")
+    text.text = "新增"
+    run.append(text)
+    insertion.append(run)
+    paragraph._p.append(insertion)
+    imported = import_docx(payload(document))
+    assert "修订标记未导入，请核对修订内容" in imported.dropped

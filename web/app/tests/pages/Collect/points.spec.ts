@@ -13,6 +13,7 @@ import { enableAutoUnmount, flushPromises, mount } from '@vue/test-utils'
 import type { VueWrapper } from '@vue/test-utils'
 import { ref } from 'vue'
 import type { CollectPoint, CollectSource } from '@dt/contracts'
+import { DtTooltip } from '@dt/ui'
 
 import * as collectApi from '@/api/collect'
 import * as histories from '@/api/pointHistories'
@@ -309,15 +310,11 @@ describe('当前值的四种情形', () => {
 })
 
 describe('实时值的覆盖范围', () => {
-  it('⚠ 点位比上限多时如实说明，否则那些行看起来像坏了', async () => {
+  it('实时值覆盖全部点位，不再出「只覆盖前 N 个」的提示', async () => {
     const text = (
-      await render([point()], { point_count: 1500, live_point_limit: 1000 })
+      await render([point()], { point_count: 1500, live_point_limit: 1500 })
     ).text()
-    expect(text).toContain('实时值只覆盖')
-  })
-
-  it('没超上限时不出这条', async () => {
-    expect((await render()).text()).not.toContain('实时值只覆盖')
+    expect(text).not.toContain('实时值只覆盖')
   })
 })
 
@@ -617,7 +614,15 @@ describe('全数据源状态查询', () => {
     await clickByText(wrapper, '刷新列表')
     await flushPromises()
     expect(wrapper.text()).toContain('刷新后的异常点')
-    expect(wrapper.text()).toContain('状态筛选覆盖当前数据源的全部点位')
+    expect(
+      wrapper
+        .findAllComponents(DtTooltip)
+        .some((tip) =>
+          String(tip.props('content')).includes(
+            '状态筛选覆盖当前数据源的全部点位',
+          ),
+        ),
+    ).toBe(true)
   })
 
   it('切状态清多选，换源同时重置关键词与状态并切换实时主题', async () => {
@@ -735,6 +740,30 @@ describe('批量开关记录历史', () => {
     expect(update).toHaveBeenCalledWith('p1', { archive_enabled: true })
     expect(update).toHaveBeenCalledWith('p2', { archive_enabled: true })
     expect(toastSuccess).toHaveBeenCalledWith('已开启记录历史：2 个点位')
+  })
+
+  it('⚠ 一次最多 4 个请求在途：每个改动都会触发重新下发采集计划', async () => {
+    const pending: (() => void)[] = []
+    vi.spyOn(collectApi, 'updatePoint').mockImplementation(
+      () =>
+        new Promise((done) => {
+          pending.push(() => done(SAVED))
+        }),
+    )
+    const rows = Array.from({ length: 10 }, (_, index) =>
+      point({ id: `p${index}`, name: `点${index}`, code: `c${index}` }),
+    )
+    const wrapper = await render(rows)
+    await clickByText(wrapper, '全选本页')
+    await clickByText(wrapper, '批量开启记录历史')
+    let peak = 0
+    while (pending.length > 0) {
+      peak = Math.max(peak, pending.length)
+      pending.shift()?.()
+      await flushPromises()
+    }
+    expect(peak).toBe(4)
+    expect(toastSuccess).toHaveBeenCalledWith('已开启记录历史：10 个点位')
   })
 
   it('⚠ 部分失败要报出失败个数，静默吞掉会让人以为整批都改成了', async () => {

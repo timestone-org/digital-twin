@@ -47,8 +47,8 @@ watch(
     <DtEmpty
       v-else-if="failed"
       icon="image"
-      title="取不到这个素材的字节"
-      hint="它可能已被从对象存储里删掉；这一行的元信息还在，但文件没了"
+      title="无法显示这个文件"
+      hint="它可能已损坏，或已被从对象存储里删掉；这一行的元信息还在"
     />
     <img
       v-else

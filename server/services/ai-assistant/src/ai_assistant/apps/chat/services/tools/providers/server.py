@@ -16,6 +16,8 @@
 某一个用户。做成进程级单例的话，两个用户的请求会互相借用对方的身份。
 """
 
+import re
+import uuid
 from collections.abc import Awaitable, Callable
 from dataclasses import dataclass, field
 from typing import Any, cast
@@ -45,12 +47,14 @@ from ai_assistant.apps.chat.services.tools.skill_access import (
     load_skill,
     resource_answer,
 )
-from ai_assistant.apps.chat.skills import find_skill, list_skills
+from ai_assistant.apps.chat.skills import SkillCatalog, default_catalog
 from ai_assistant.upstream import PlatformClient
 from llmcore.tools.ports import UnknownTool
 from llmcore.tools.shapes import ToolSpec
 
 MAX_POINT_QUERY_CHARS = 300
+# 与 platform 的 ModuleType 同一条规则
+_MODULE_TYPE = re.compile(r"[a-z][a-z0-9-]{0,63}")
 # 一个工具的实现：收一袋参数，给一份结果
 ToolHandler = Callable[[dict[str, Any]], Awaitable[Any]]
 
@@ -68,6 +72,8 @@ class ServerTools:
 
     platform: PlatformClient | None = None
     headers: dict[str, str] = field(default_factory=dict[str, str])
+    # 这套部署的技能目录；不给即只有内建那一份
+    skills: SkillCatalog | None = None
 
     # 这一路在注册表里的名字。⚠ 不加类型标注：加了它就成了 dataclass 字段，
     # 出现在构造签名里，而调用点没有任何理由去改它
@@ -111,8 +117,8 @@ class ServerTools:
         看得见那个工具、调用它却每次都失败。
         """
         return {
-            "skills.load": _skill_answer,
-            "skills.read_resource": _resource_answer,
+            "skills.load": self._skill_answer,
+            "skills.read_resource": self._resource_answer,
             "tools.describe": _tool_answer,
             "modules.catalog": self._modules,
             "points.list_sources": self._list_sources,
@@ -128,6 +134,29 @@ class ServerTools:
             "datasets.read_columns": self._read_saved_columns,
             "assets.search": self._search_assets,
         }
+
+    async def _skill_answer(self, arguments: dict[str, Any]) -> Any:
+        """取一个技能的完整指令；技能是本地的，包成协程只为与别的工具同形。
+
+        ⚠ 技能不存在时回一句「没有这个技能」而不是抛：模型多半是把名字记岔了，
+        告诉它有哪些比让这一步失败有用。
+
+        Args: arguments。
+        """
+        name = str(arguments.get("name") or "")
+        skill = self._catalog().find(name)
+        if skill is None:
+            return {"ok": False, "reason": f"没有名为 {name} 的技能"}
+        return load_skill(skill)
+
+    async def _resource_answer(
+        self, arguments: dict[str, Any]
+    ) -> dict[str, object]:
+        return await resource_answer(self._catalog().skills, arguments)
+
+    def _catalog(self) -> SkillCatalog:
+        """⚠ 与名册取自同一份目录：只查内建那份的话，外置技能列得出却拉不到。"""
+        return self.skills or default_catalog()
 
     def _upstream(self) -> PlatformClient:
         if self.platform is None:
@@ -146,6 +175,10 @@ class ServerTools:
         wanted = _text_or_none(arguments.get("module_type"))
         client = self._upstream()
         if wanted is not None:
+            if _MODULE_TYPE.fullmatch(wanted) is None:
+                raise UnknownServerTool(
+                    f"参数 module_type 不是合法的模块类型：{wanted}"
+                )
             body = await client.read_module_type(self.headers, wanted)
             return detail_of(body, _text_or_none(arguments.get("preset")))
         body = await client.list_module_types(self.headers)
@@ -194,7 +227,7 @@ class ServerTools:
         Args: arguments。
         """
         body = await self._upstream().formula_functions(
-            self.headers, _required(arguments, "table_id")
+            self.headers, _required_id(arguments, "table_id")
         )
         return formula_catalog_of(
             body, _text_or_none(arguments.get("keyword")), arguments
@@ -210,7 +243,7 @@ class ServerTools:
         """
         return await self._upstream().check_formula(
             self.headers,
-            _required(arguments, "table_id"),
+            _required_id(arguments, "table_id"),
             _formula_body(arguments),
         )
 
@@ -223,12 +256,12 @@ class ServerTools:
         given = arguments.get("values")
         body["values"] = given if isinstance(given, dict) else {}
         return await self._upstream().try_formula(
-            self.headers, _required(arguments, "table_id"), body
+            self.headers, _required_id(arguments, "table_id"), body
         )
 
     async def _validate(self, arguments: dict[str, Any]) -> Any:
         return await self._upstream().validate_dashboard(
-            self.headers, _required(arguments, "dashboard_id")
+            self.headers, _required_id(arguments, "dashboard_id")
         )
 
     async def _list_dashboards(self, arguments: dict[str, Any]) -> Any:
@@ -280,7 +313,7 @@ class ServerTools:
         Args: arguments。
         """
         rows = await self._upstream().list_dataset_columns(
-            self.headers, _required(arguments, "table_id")
+            self.headers, _required_id(arguments, "table_id")
         )
         page = ToolPage.parse(arguments)
         columns = [_column_of(row) for row in rows]
@@ -370,30 +403,19 @@ def _required(arguments: dict[str, Any], name: str) -> str:
     return given
 
 
-async def _skill_answer(arguments: dict[str, Any]) -> Any:
-    """技能是本地的，没有 IO；包成协程只为与别的工具同形。
+def _required_id(arguments: dict[str, Any], name: str) -> str:
+    """取一个必须是 UUID 的 id 参数；不是就抛。
 
-    Args: arguments。
+    ⚠ 它要拼进 URL 路径：不先认成 id 的话，`<id>:publish?` 这样一段会把只读
+    工具拐去打写端点，而这串字可以来自知识库片段或点位名里注入的文字。
+
+    Args: arguments, name。
     """
-    return _load_skill(str(arguments.get("name") or ""))
-
-
-def _load_skill(name: str) -> dict[str, Any]:
-    """取一个技能的完整指令。
-
-    ⚠ 技能不存在时回一句「没有这个技能」而不是抛：模型多半是把名字记岔了，
-    告诉它有哪些比让这一步失败有用。
-
-    Args: name。
-    """
-    skill = find_skill(name)
-    if skill is None:
-        return {"ok": False, "reason": f"没有名为 {name} 的技能"}
-    return load_skill(skill)
-
-
-async def _resource_answer(arguments: dict[str, Any]) -> dict[str, object]:
-    return await resource_answer(list_skills(), arguments)
+    given = _required(arguments, name)
+    try:
+        return str(uuid.UUID(given))
+    except ValueError as error:
+        raise UnknownServerTool(f"参数 {name} 不是合法 id：{given}") from error
 
 
 async def _tool_answer(arguments: dict[str, Any]) -> dict[str, object]:
@@ -535,10 +557,7 @@ def _split_node_key(node_key: str) -> tuple[str, str]:
 
 
 def _as_body(row: object) -> dict[str, object]:
-    """把上游那一行收成一张确定形状的表。
-
-    ⚠ 逐键重建而不是 `dict(row)`：后者从 `object` narrow 出来的是未知键值类型，
-    一路带进打分层之后，pyright 会在几个文件之外才报出来。
+    """把上游那一行收成键为字符串的表；不是表就当空。
 
     Args: row。
     """

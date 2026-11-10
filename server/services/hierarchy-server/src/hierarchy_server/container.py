@@ -10,6 +10,8 @@ from lib.idempotency import IdempotencyStore
 
 @dataclass(frozen=True)
 class Container:
+    """一个进程一份的协作件：配置、连接池、缓存与幂等存储。"""
+
     settings: Settings
     database: Database
     cache: Cache
@@ -31,5 +33,8 @@ def build_container(settings: Settings) -> Container:
     )
     cache = Cache(url=settings.url(), timeout_s=settings.redis_timeout_s)
     return Container(
-        settings, database, cache, IdempotencyStore(cache, "hierarchy")
+        settings=settings,
+        database=database,
+        cache=cache,
+        idempotency=IdempotencyStore(cache, "hierarchy"),
     )

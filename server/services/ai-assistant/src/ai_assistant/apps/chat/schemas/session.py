@@ -156,7 +156,11 @@ class SessionCreateIn(InputModel):
 class SessionUpdateIn(UpdateModel):
     """改会话。缺省的字段表示本次不涉及。"""
 
-    NON_NULLABLE: ClassVar[frozenset[str]] = frozenset({"title", "is_archived"})
+    # ⚠ `model_profile` 也不许清空：清成 NULL 的话推进时退回按量那一路，
+    # 而界面上显示的仍是默认档，只有账单看得出来（与建会话同一条理由）
+    NON_NULLABLE: ClassVar[frozenset[str]] = frozenset(
+        {"title", "is_archived", "model_profile"}
+    )
 
     title: Title | None = None
     # 归档只是不再默认列出，历史一条都不删

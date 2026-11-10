@@ -5,7 +5,8 @@
  * ⚠ 这里没有 window，也进不了 vitest（happy-dom 没有 AudioWorklet）：算法全在
  * `pcm.ts` 那几个纯函数里，这个文件只负责搬运。
  */
-import { downsampleSpan, downsampleToInt16, PCM_CAPTURE_PROCESSOR } from './pcm'
+import { downsampleBlock, PCM_CAPTURE_PROCESSOR } from './pcm'
+import type { DownsampleStep } from './pcm'
 
 interface ProcessorOptions {
   targetRate?: number
@@ -34,8 +35,11 @@ const BYTES_PER_SAMPLE = 2
 class PcmCaptureProcessor extends AudioWorkletProcessor {
   private readonly targetRate: number
   private readonly frameSamples: number
-  /** 还没凑成整数个输出样本的输入尾巴。 */
-  private carry: Float32Array = new Float32Array(0)
+  /** 还没凑成整数个输出样本的输入尾巴与它的小数相位。 */
+  private rest: Pick<DownsampleStep, 'carry' | 'phase'> = {
+    carry: new Float32Array(0),
+    phase: 0,
+  }
   private frame: Int16Array<ArrayBuffer>
   private filled = 0
 
@@ -52,22 +56,14 @@ class PcmCaptureProcessor extends AudioWorkletProcessor {
   process(inputs: Float32Array[][]): boolean {
     const channel = inputs[0]?.[0]
     if (channel === undefined || channel.length === 0) return true
-    const joined = new Float32Array(this.carry.length + channel.length)
-    joined.set(this.carry)
-    joined.set(channel, this.carry.length)
-    const { consumed } = downsampleSpan(
-      joined.length,
+    const step = downsampleBlock(
+      this.rest,
+      channel,
       sampleRate,
       this.targetRate,
     )
-    this.push(
-      downsampleToInt16(
-        joined.subarray(0, consumed),
-        sampleRate,
-        this.targetRate,
-      ),
-    )
-    this.carry = joined.slice(consumed)
+    this.push(step.samples)
+    this.rest = step
     return true
   }
 

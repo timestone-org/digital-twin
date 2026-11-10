@@ -23,7 +23,10 @@ from lib.logging import (
     reset_log_context,
 )
 from lib.utils.ids import uuid7
-from platform_server.apps.hvac.publications import PUBLISH_STATUS_OK
+from platform_server.apps.hvac.publications import (
+    PUBLISH_STATUS_FAILED,
+    PUBLISH_STATUS_OK,
+)
 from platform_server.apps.hvac.services import (
     ac_publication_service,
     ac_publish_service,
@@ -94,7 +97,7 @@ class PublishLoop:
                 _logger.error(
                     "ac_publish_tick_failed",
                     "下发循环这一拍出错，下一拍继续",
-                    error_type=type(error).__name__,
+                    error=error,
                 )
             finally:
                 self._idle.set()
@@ -190,7 +193,7 @@ class PublishLoop:
                 "ac_publish_model_failed",
                 "这个模型这一拍没发出去，下一拍继续",
                 model_id=str(model_id),
-                error_type=type(error).__name__,
+                error=error,
             )
             return
         _log_outcome(outcome)
@@ -228,7 +231,7 @@ class PublishLoop:
 def _log_outcome(outcome: ac_publish_service.PublishOutcome) -> None:
     """一次下发的结论落进日志。
 
-    ⚠ 成功与降级/失败是**两个** event：混成一条的话，一个每分钟都在写哨兵值
+    ⚠ 成功、降级与写失败是三个 event：混成一条的话，一个每分钟都在写哨兵值
     的模型在日志里与正常下发的一模一样。
 
     Args: outcome。
@@ -239,6 +242,16 @@ def _log_outcome(outcome: ac_publish_service.PublishOutcome) -> None:
             "预测已下发",
             model_id=str(outcome.model_id),
             written=outcome.written_count,
+        )
+        return
+    if outcome.status == PUBLISH_STATUS_FAILED:
+        _logger.warning(
+            "ac_publish_write_failed",
+            "这一拍点位没写进去，点位停在上一拍的值",
+            model_id=str(outcome.model_id),
+            status=outcome.status,
+            written=outcome.written_count,
+            reason=outcome.error,
         )
         return
     _logger.warning(

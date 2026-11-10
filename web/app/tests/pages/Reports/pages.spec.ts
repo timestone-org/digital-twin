@@ -9,6 +9,7 @@ import {
   DtSelect,
   DtModal,
   useConfirm,
+  useToast,
 } from '@dt/ui'
 import type {
   AuthUser,
@@ -93,6 +94,8 @@ beforeEach(() => {
   signIn(['report:view'])
 })
 afterEach(() => {
+  // 吐司队列是模块级单例，不清的话上一条用例的提示会漏进下一条的断言
+  useToast().clear()
   vi.restoreAllMocks()
   vi.useRealTimers()
 })
@@ -492,7 +495,11 @@ it('生成记录显示警告并把真实文件交给下载器', async () => {
     .find((button) => button.text() === '下载 Word')
     ?.trigger('click')
   await flushPromises()
-  expect(downloads.downloadBytes).toHaveBeenCalledWith(blob, 'report-j1.docx')
+  // 文件名用模板名与报告期，几份下下来分得清
+  expect(downloads.downloadBytes).toHaveBeenCalledWith(
+    blob,
+    '能耗月报-2026-08.docx',
+  )
   await wrapper
     .findAllComponents(DtButton)
     .find((button) => button.text() === '1 条提示')
@@ -508,11 +515,168 @@ it('生成记录显示警告并把真实文件交给下载器', async () => {
     .find((button) => button.text() === '下载 Word')
     ?.trigger('click')
   await flushPromises()
-  expect(wrapper.text()).toContain('产物不可用')
+  // ⚠ 一个产物下不下来只是一条提示：整张列表不许被换成「加载失败」
+  expect(
+    useToast().toasts.value.some((item) => item.message.includes('产物不可用')),
+  ).toBe(true)
+  expect(wrapper.text()).not.toContain('加载失败')
+  expect(
+    wrapper
+      .findAllComponents(DtButton)
+      .some((button) => button.text() === '下载 Word'),
+  ).toBe(true)
   await wrapper
     .findAllComponents(DtButton)
     .find((button) => button.text() === '刷新')
     ?.trigger('click')
   await flushPromises()
+  wrapper.unmount()
+})
+
+describe('定时规则列表的呈现', () => {
+  const rule: ReportSchedule = {
+    id: 's1',
+    template_id: 'r1',
+    name: '审计月报定时',
+    granularity: 'month',
+    delay_hours: 24,
+    is_enabled: true,
+    row_version: 1,
+    last_run_period: null,
+    created_at: stamp,
+    updated_at: stamp,
+  }
+
+  function mockList(items: ReportSchedule[] = [rule]): void {
+    signIn(['report:view', 'report:schedule'])
+    vi.spyOn(api, 'listReportSchedules').mockResolvedValue({
+      items,
+      page: 1,
+      size: 20,
+      total: items.length,
+    })
+  }
+
+  it('⚠ 每条规则说出生成哪个模板，周期写中文不露英文代码', async () => {
+    mockList()
+    vi.spyOn(api, 'reportRuntime').mockResolvedValue({
+      is_schedule_enabled: true,
+      timezone: 'UTC',
+    })
+    const wrapper = mount(Schedules, { global: { stubs: { teleport: true } } })
+    await flushPromises()
+    expect(wrapper.text()).toContain('能耗月报')
+    expect(wrapper.text()).toContain('月报')
+    expect(wrapper.text()).not.toContain('month')
+    wrapper.unmount()
+  })
+
+  it('⚠ 运行开关取不到时模板目录照样可用', async () => {
+    mockList([])
+    vi.spyOn(api, 'reportRuntime').mockRejectedValue(new Error('boom'))
+    const wrapper = mount(Schedules, { global: { stubs: { teleport: true } } })
+    await flushPromises()
+    expect(wrapper.text()).toContain('请求失败')
+    await wrapper
+      .findAllComponents(DtButton)
+      .find((button) => button.text() === '新建规则')
+      ?.trigger('click')
+    await flushPromises()
+    const select = wrapper
+      .findAllComponents(DtSelect)
+      .find((item) => item.props('label') === '报告模板')
+    expect(JSON.stringify(select?.props('options'))).toContain('能耗月报')
+    wrapper.unmount()
+  })
+
+  it('建完一条再点「新建规则」是一张空白表单', async () => {
+    mockList()
+    vi.spyOn(api, 'reportRuntime').mockResolvedValue({
+      is_schedule_enabled: true,
+      timezone: 'UTC',
+    })
+    vi.spyOn(api, 'createReportSchedule').mockResolvedValue(rule)
+    const wrapper = mount(Schedules, { global: { stubs: { teleport: true } } })
+    await flushPromises()
+    const click = async (label: string) => {
+      await wrapper
+        .findAllComponents(DtButton)
+        .find((button) => button.text() === label)
+        ?.trigger('click')
+      await flushPromises()
+    }
+    const input = (label: string) =>
+      wrapper
+        .findAllComponents(DtInput)
+        .find((item) => item.props('label') === label)
+    await click('新建规则')
+    input('规则名称')?.vm.$emit('update:modelValue', '审计月报定时')
+    wrapper
+      .findAllComponents(DtSelect)
+      .find((select) => select.props('label') === '报告模板')
+      ?.vm.$emit('update:modelValue', 'r1')
+    await flushPromises()
+    await click('创建规则')
+    expect(api.createReportSchedule).toHaveBeenCalledTimes(1)
+    await click('新建规则')
+    expect(input('规则名称')?.props('modelValue')).toBe('')
+    expect(
+      wrapper
+        .findAllComponents(DtSelect)
+        .find((select) => select.props('label') === '报告模板')
+        ?.props('modelValue'),
+    ).toBe('')
+    wrapper.unmount()
+  })
+})
+
+it('⚠ 模板编码不合规时就地说在那一格，不发请求', async () => {
+  signIn(['report:view', 'report:manage'])
+  vi.spyOn(api, 'listReports').mockResolvedValue({
+    items: [],
+    page: 1,
+    size: 20,
+    total: 0,
+  })
+  const createReport = vi.spyOn(api, 'createReport')
+  const wrapper = mount(Templates, { global: { stubs: { teleport: true } } })
+  await flushPromises()
+  await wrapper
+    .findAllComponents(DtButton)
+    .find((button) => button.text() === '新建模板')
+    ?.trigger('click')
+  await flushPromises()
+  const input = (label: string) =>
+    wrapper
+      .findAllComponents(DtInput)
+      .find((item) => item.props('label') === label)
+  input('报告名称')?.vm.$emit('update:modelValue', '月报')
+  input('模板编码')?.vm.$emit('update:modelValue', '1bad code')
+  await flushPromises()
+  await wrapper
+    .findAllComponents(DtButton)
+    .find((button) => button.text() === '创建并编辑')
+    ?.trigger('click')
+  await flushPromises()
+  expect(createReport).not.toHaveBeenCalled()
+  expect(input('模板编码')?.props('error')).toBeTruthy()
+  wrapper.unmount()
+})
+
+it('没有提示也没有错误的记录不摆一颗「0 条提示」按钮', async () => {
+  signIn(['report:view', 'report:render'])
+  vi.spyOn(api, 'listReportRenders').mockResolvedValue({
+    items: [job('succeeded')],
+    next: null,
+    has_more: false,
+  })
+  const wrapper = mount(Renders, { global: { stubs: { teleport: true } } })
+  await flushPromises()
+  expect(wrapper.text()).toContain('无提示')
+  expect(
+    wrapper
+      .findAllComponents(DtButton)
+      .some((button) => button.text() === '0 条提示'),
+  ).toBe(false)
   wrapper.unmount()
 })

@@ -166,6 +166,27 @@ describe('闲置自动开播', () => {
     wrapper.unmount()
   })
 
+  // ⚠ 只靠视点条、数字键看场景的人也是在操作：装上时的那个计时器不能照旧到点开播
+  it('手动切视点算一次交互，闲置计时从这一下重新算', () => {
+    vi.useFakeTimers()
+    const wrapper = mountHost(
+      twinConfig({
+        enabled: true,
+        autoplay: false,
+        idleAutoplay: true,
+        idleAutoplayDelayMs: IDLE_MS,
+      }),
+    )
+    roam().attach()
+    vi.advanceTimersByTime(IDLE_MS - 100)
+    roam().interrupt()
+    vi.advanceTimersByTime(200)
+    expect(roam().playing.value).toBe(false)
+    vi.advanceTimersByTime(IDLE_MS)
+    expect(roam().playing.value).toBe(true)
+    wrapper.unmount()
+  })
+
   // ⚠ 没开这一档就一个计时器都不该留
   it('没开闲置自动播时不留计时器', () => {
     vi.useFakeTimers()

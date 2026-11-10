@@ -40,11 +40,13 @@ function startRename(): void {
   void nextTick(() => box.value?.inputEl?.focus())
 }
 
-/** Enter 与失焦都提交；Esc 取消之后紧跟的那次失焦不再提交。 */
+/** Enter 与失焦都提交；Esc 取消之后紧跟的那次失焦不再提交。没改或改成空白不提交。 */
 function commitRename(): void {
   if (!editing.value) return
   editing.value = false
-  emit('rename', draft.value)
+  const next = draft.value.trim()
+  if (next === '' || next === props.session.title) return
+  emit('rename', next)
 }
 
 function cancelRename(): void {

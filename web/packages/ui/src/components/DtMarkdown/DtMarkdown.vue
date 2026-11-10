@@ -119,6 +119,15 @@ function headingTag(level: number): string {
   gap: 0.125rem;
 }
 
+// Tailwind preflight 把列表标记清成 none，这里不恢复，步骤序号就整列消失
+ol.md__list {
+  list-style-type: decimal;
+}
+
+ul.md__list {
+  list-style-type: disc;
+}
+
 .md__quote {
   margin: 0;
   padding: 0.125rem 0 0.125rem 0.625rem;

@@ -5,6 +5,7 @@
 助手那边另有一份把订阅账号的改写也串进来的用例；这里只验通用的那几条。
 """
 
+import asyncio
 from collections.abc import Sequence
 from dataclasses import dataclass, field
 from typing import Any
@@ -16,6 +17,7 @@ from langchain_core.messages import AIMessage, BaseMessage, HumanMessage
 from openai import APIConnectionError, AuthenticationError, BadRequestError
 
 from lib.resilience import CircuitBreaker
+from lib.testing.clock import FrozenClock
 from llmcore import ModelChoice, ModelRejected, ModelUnavailable
 from llmcore.guard import GuardedModel, ToolDecl, usage_of
 from llmcore.testing import ScriptedChat, StreamingChat
@@ -224,3 +226,93 @@ def test_usage_reads_the_cache_hit_count_by_its_langchain_key() -> None:
 
 def test_no_usage_is_none_not_zero() -> None:
     assert usage_of(AIMessage(content="")) is None
+
+
+def _bad_request() -> BadRequestError:
+    return BadRequestError(
+        "",
+        response=httpx.Response(400, request=httpx.Request("POST", "http://x")),
+        body=None,
+    )
+
+
+def _half_open(source: Any) -> tuple[GuardedModel, CircuitBreaker]:
+    """断路器已打开、冷却已过：下一次调用就是那唯一的探测。"""
+    clock = FrozenClock()
+    breaker = CircuitBreaker(
+        name="t", failure_threshold=1, reset_after_s=60, clock=clock
+    )
+    breaker.record_failure()
+    clock.advance(61)
+    return GuardedModel(source=source, breaker=breaker), breaker
+
+
+def _source_of(model: BaseChatModel) -> Any:
+    async def source(_choice: ModelChoice) -> BaseChatModel:
+        return model
+
+    return source
+
+
+async def test_a_rejected_probe_does_not_wedge_the_breaker() -> None:
+    """⚠ 探测撞上 400 时什么都不记的话，断路器会一直半开着、谁都放不过去。"""
+    rejecting = ScriptedChat(error=_bad_request())
+    guarded, breaker = _half_open(_source_of(rejecting))
+
+    with pytest.raises(ModelRejected):
+        await guarded.respond(choice=ModelChoice(), messages=[], tools=())
+
+    assert breaker.allow() is True
+
+
+async def test_a_probe_whose_source_fails_does_not_wedge_the_breaker() -> None:
+    async def source(_choice: ModelChoice) -> BaseChatModel:
+        raise ModelUnavailable("凭据不可用")
+
+    guarded, breaker = _half_open(source)
+
+    with pytest.raises(ModelUnavailable):
+        await guarded.respond(choice=ModelChoice(), messages=[], tools=())
+
+    assert breaker.allow() is True
+
+
+async def test_a_cancelled_probe_does_not_wedge_the_breaker() -> None:
+    """用户按了停止：探测被取消，下一次调用得接着探。"""
+
+    async def source(_choice: ModelChoice) -> BaseChatModel:
+        raise asyncio.CancelledError
+
+    guarded, breaker = _half_open(source)
+
+    with pytest.raises(asyncio.CancelledError):
+        await guarded.respond(choice=ModelChoice(), messages=[], tools=())
+
+    assert breaker.allow() is True
+
+
+async def test_cancelling_a_call_that_is_not_the_probe_keeps_it() -> None:
+    """⚠ 合上时就发出去的调用被取消，不能把别人手上的探测一起交还。"""
+    clock = FrozenClock()
+    breaker = CircuitBreaker(
+        name="t", failure_threshold=1, reset_after_s=60, clock=clock
+    )
+    gate = asyncio.Event()
+
+    async def source(_choice: ModelChoice) -> BaseChatModel:
+        await gate.wait()
+        return ScriptedChat(reply=AIMessage(content="好"))
+
+    guarded = GuardedModel(source=source, breaker=breaker)
+    early = asyncio.create_task(
+        guarded.respond(choice=ModelChoice(), messages=[], tools=())
+    )
+    await asyncio.sleep(0)
+    breaker.record_failure()
+    clock.advance(61)
+    assert breaker.allow() is True
+    early.cancel()
+    with pytest.raises(asyncio.CancelledError):
+        await early
+
+    assert breaker.allow() is False

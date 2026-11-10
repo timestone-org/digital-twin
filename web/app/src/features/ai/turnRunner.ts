@@ -37,8 +37,10 @@ import { readObject, readText, runLoop, type LoopSink } from './turnLoop'
 import { runMcpWrite } from './mcpWriteBridge'
 import { currentPagePath } from './pageContext'
 import { readContextUsage } from './contextUsage'
+import { PLAN_CONTINUE_NOTE } from './autoContinue'
 
 export { ASK_MUST_BE_ALONE, type RunnerStep } from './turnLoop'
+export { PLAN_CONTINUE_NOTE } from './autoContinue'
 
 /**
  * 一次往返的上限。到顶就停下并如实告诉用户，而不是继续烧钱。
@@ -119,7 +121,7 @@ export async function runTurn(
           return null
         }
         nudges += 1
-        return { note: '计划还没走完，自动继续。', text: PLAN_CONTINUE_TEXT }
+        return { note: PLAN_CONTINUE_NOTE, text: PLAN_CONTINUE_TEXT }
       },
       maxRounds: MAX_ROUNDS,
     },

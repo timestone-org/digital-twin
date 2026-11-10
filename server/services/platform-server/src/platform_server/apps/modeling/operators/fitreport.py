@@ -13,6 +13,7 @@ from platform_server.apps.modeling.operators.frame import Frame, numbers_of
 from platform_server.apps.modeling.operators.reporting import (
     MAX_BIN_COLUMNS,
     MAX_CELL_COLUMNS,
+    NOTE_ALERT,
     TIER_LARGE,
     TIER_SCALAR,
     TIER_SMALL,
@@ -21,6 +22,7 @@ from platform_server.apps.modeling.operators.reporting import (
     ColumnBins,
     Item,
     ReportBlock,
+    annotated,
     bins_block,
     cells_block,
     fits_block,
@@ -37,6 +39,11 @@ PORT = "frame"
 # 学不出参数的那几列照列进表，只是那几栏空着
 NO_FILL_REASON = "训练行上这一列全是空值，按配置没有填"
 NO_BOUND_REASON = "训练行上这一列的取值太少，定不出上下界"
+# 所选列全被跳过、一个参数都没学到时的告警
+NOTHING_FITTED = (
+    "所有列都被跳过，这一步没有任何作用，也因此发布不了——"
+    "请去掉这一步，或改选列与跳过策略"
+)
 
 
 @dataclass(frozen=True)
@@ -95,7 +102,10 @@ def fill_blocks(run: FillRun) -> tuple[ReportBlock, ...]:
 
     Args: run。
     """
-    return (_fill_cells(run), _fill_fits(run), _fill_bins(run))
+    cells = _fill_cells(run)
+    if not run.fills:
+        cells = annotated(cells, NOTE_ALERT, (NOTHING_FITTED,))
+    return (cells, _fill_fits(run), _fill_bins(run))
 
 
 def clip_blocks(run: ClipRun) -> tuple[ReportBlock, ...]:
@@ -104,8 +114,11 @@ def clip_blocks(run: ClipRun) -> tuple[ReportBlock, ...]:
     Args: run。
     """
     touched = {key: _touch_of(run, key) for key in run.keys}
+    cells = _clip_cells(run, touched)
+    if not run.bounds:
+        cells = annotated(cells, NOTE_ALERT, (NOTHING_FITTED,))
     return (
-        _clip_cells(run, touched),
+        cells,
         _clip_fits(run, touched),
         _clip_bins(run, touched),
     )

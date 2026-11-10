@@ -21,6 +21,10 @@ from llmcore.tools.ports import ServerToolRunner, UnknownTool
 from llmcore.tools.shapes import ToolSpec
 
 MAX_ARGUMENT_ISSUES = 5
+# 由执行器自己答、不转给服务端工具的元数据工具
+_METADATA_TOOLS = frozenset(
+    {"skills.load", "skills.read_resource", "tools.describe"}
+)
 
 
 class ToolExecutionError(RuntimeError):
@@ -28,12 +32,18 @@ class ToolExecutionError(RuntimeError):
 
 
 class SchemaValidator(Protocol):
+    """jsonschema 校验器里本模块用到的那一面。"""
+
     def iter_errors(self, instance: object) -> Iterator[ValidationError]: ...
 
 
 def failure(
     code: str, message: str, next_action: str, *, execution: str = "not_started"
 ) -> ToolExecutionError:
+    """造一条模型读得懂、带恢复建议的失败。
+
+    Args: code, message, next_action, execution（是否已动手）。
+    """
     return ToolExecutionError(
         json.dumps(
             {
@@ -53,6 +63,10 @@ ToolDescriber = Callable[[tuple[ToolSpec, ...], str], dict[str, object]]
 
 
 def describe_tool(specs: tuple[ToolSpec, ...], name: str) -> dict[str, object]:
+    """本轮某个工具的完整说明。
+
+    Args: specs, name。
+    """
     spec = next((one for one in specs if one.name == name), None)
     if spec is None:
         raise ValueError("本轮没有这个工具，请从当前清单选择")
@@ -67,6 +81,8 @@ def describe_tool(specs: tuple[ToolSpec, ...], name: str) -> dict[str, object]:
 
 @dataclass(frozen=True)
 class ToolExecutor:
+    """本回合的工具执行面：校验参数、答元数据工具、把失败收成可恢复提示。"""
+
     specs: tuple[ToolSpec, ...]
     skills: tuple[SkillManifest, ...]
     run_tool: ServerToolRunner
@@ -78,11 +94,7 @@ class ToolExecutor:
         self, name: str, arguments: dict[str, Any], max_chars: int
     ) -> Any:
         """元数据按完整 JSON 预算返回，避免正文和分页字段二次截断。"""
-        if name not in {
-            "skills.load",
-            "skills.read_resource",
-            "tools.describe",
-        }:
+        if name not in _METADATA_TOOLS:
             result = await self(name, arguments)
             if self.result_reserve_chars <= 0:
                 return result
@@ -102,6 +114,10 @@ class ToolExecutor:
         return text
 
     async def __call__(self, name: str, arguments: dict[str, Any]) -> Any:
+        """执行一次工具调用。
+
+        Args: name, arguments。
+        """
         spec = next((one for one in self.specs if one.name == name), None)
         if spec is None:
             raise failure(
@@ -110,7 +126,7 @@ class ToolExecutor:
                 "从本轮工具清单选择可用工具。",
             )
         validate_arguments(spec, arguments)
-        if name in {"skills.load", "skills.read_resource", "tools.describe"}:
+        if name in _METADATA_TOOLS:
             return await self._metadata(name, arguments)
         try:
             return await self.run_tool(name, arguments)
@@ -139,6 +155,10 @@ class ToolExecutor:
             ) from error
 
     async def _metadata(self, name: str, arguments: dict[str, Any]) -> object:
+        """答一次元数据工具。
+
+        Args: name, arguments。
+        """
         try:
             if name == "skills.load":
                 result = load_skill(

@@ -3,7 +3,7 @@ import { TwinScene } from '@dt/three-core'
 import { normalizeTwinConfig } from '@dt/twin-config'
 import type { TwinFocusView } from '@dt/twin-config'
 import { mount, flushPromises } from '@vue/test-utils'
-import { expect, it, vi } from 'vitest'
+import { beforeEach, expect, it, vi } from 'vitest'
 import { DtSegmented } from '@dt/ui'
 import TwinPreviewControls from '@/pages/TwinEditor/components/TwinPreviewControls.vue'
 import TwinPreviewData from '@/pages/TwinEditor/components/TwinPreviewData.vue'
@@ -34,6 +34,39 @@ const config = normalizeTwinConfig({
   parts: [{ id: 'pump', nodes: ['pump-mesh'] }],
   cameras: [{ id: 'view', position: [1, 2, 3], target: [0, 0, 0] }],
 })
+
+beforeEach(() => localStorage.removeItem('dt.twin-editor.preview'))
+
+// ⚠ 预览钉在视口右下角：一点大纲就弹回来的话，盖住的正是刚选中的那个东西
+it('收起后换选中不再弹回来，下次打开编辑器也还收着', async () => {
+  const props = {
+    node: null,
+    config,
+    selection: { kind: 'parts' as const, id: 'pump' },
+    animation: null,
+    testMode: 'live' as const,
+    bindings: [],
+    readBinding: () => () => ({ state: 'pending' as const }),
+  }
+  const wrapper = mount(TwinConfigPreview, {
+    props,
+    global: { stubs: { TwinRuntimePreview: true } },
+  })
+  await wrapper.get('[aria-label="关闭配置预览"]').trigger('click')
+  await wrapper.setProps({ selection: { kind: 'cameras', id: 'view' } })
+  await flushPromises()
+
+  expect(wrapper.classes()).toContain('config-preview--closed')
+  wrapper.unmount()
+
+  const again = mount(TwinConfigPreview, {
+    props,
+    global: { stubs: { TwinRuntimePreview: true } },
+  })
+  expect(again.classes()).toContain('config-preview--closed')
+  again.unmount()
+})
+
 it.each(['关闭', '整屏运行'])(
   '%s 后不保留上一次点击验证的结果',
   async (action) => {

@@ -160,6 +160,17 @@ describe('双轴顺序', () => {
     expect(save).not.toHaveBeenCalled()
   })
 
+  // ⚠ 整树替换一律推进行版本：干净时按 ⌘S 也发一次，别处开着的编辑器下次保存平白 409
+  it('两轴都干净：一次请求都不发，照样报成功', async () => {
+    const { editor, meta, file, saveMeta, save, onFail } = setup(3)
+
+    const done = await saveDashboard({ editor, meta, file, onFail })
+
+    expect(done).toBe(true)
+    expect(saveMeta).not.toHaveBeenCalled()
+    expect(save).not.toHaveBeenCalled()
+  })
+
   it('元数据轴失败：整体报败，布局轴不跑', async () => {
     const { editor, meta, file, saveMeta, save, onFail } = setup(3)
     meta.setField('name', '改名')

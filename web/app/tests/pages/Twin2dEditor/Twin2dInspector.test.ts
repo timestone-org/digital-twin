@@ -117,3 +117,17 @@ describe('三个事件原样上抛', () => {
     expect(wrapper.emitted('endMerge')).toHaveLength(1)
   })
 })
+
+// ⚠ 不按实体换实例的话，半截输入的草稿跟着换到下一个节点上：在 A 上敲了一半的标签，
+// 点到 B 再按「+」就加到了 B 身上
+describe('换一个实体', () => {
+  it('检查器整个换一份，上一个实体的半截草稿不带过去', async () => {
+    const wrapper = mountInspector({ kind: 'nodes', id: 'n1' })
+    await wrapper.find('input[data-test="tag-new-key"]').setValue('subtype')
+
+    await wrapper.setProps({ selection: { kind: 'nodes', id: 'n2' } })
+
+    const draft = wrapper.find('input[data-test="tag-new-key"]')
+    expect((draft.element as HTMLInputElement).value).toBe('')
+  })
+})

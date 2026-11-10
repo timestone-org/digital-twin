@@ -17,9 +17,10 @@ import {
   type TrendBucket,
 } from '@/features/trend/trendBucket'
 import {
-  isSelectionDirty,
+  isQueryDirty,
   pointChartSeries,
   toggleTrendKey,
+  trendChoiceKey,
   type TrendItem,
 } from '@/features/trend/trendSeries'
 import {
@@ -33,6 +34,8 @@ export interface PointState {
   chosen: Ref<TrendItem[]>
   fetched: Ref<Record<string, HistoryPoint[]>>
   hasQueried: Ref<boolean>
+  /** 上一次成功查询的条件指纹；没查过是 null。 */
+  queriedChoice: Ref<string | null>
   bucket: Ref<TrendBucket | null>
   isTruncated: Ref<boolean>
   loading: Ref<boolean>
@@ -44,6 +47,7 @@ export function createPointState(): PointState {
     chosen: ref<TrendItem[]>([]),
     fetched: ref<Record<string, HistoryPoint[]>>({}),
     hasQueried: ref(false),
+    queriedChoice: ref<string | null>(null),
     bucket: ref<TrendBucket | null>(null),
     isTruncated: ref(false),
     loading: ref(false),
@@ -71,6 +75,7 @@ export async function runPointQuery(
   choice: PointQueryChoice,
 ): Promise<void> {
   const wanted = [...state.chosen.value]
+  const asked = trendChoiceKey(choice)
   const window = resolveTrendRange(choice.range).window
   if (wanted.length === 0 || window === null) return
   state.loading.value = true
@@ -95,11 +100,13 @@ export async function runPointQuery(
         state.bucket.value = result.bucket
         state.isTruncated.value = result.isTruncated
         state.hasQueried.value = true
+        state.queriedChoice.value = asked
       },
       fail: (caught) => {
         state.failure.value = describeError(caught)
         state.fetched.value = {}
         state.hasQueried.value = false
+        state.queriedChoice.value = null
         state.isTruncated.value = false
       },
       settled: () => (state.loading.value = false),
@@ -134,15 +141,20 @@ export function pointSeries(
 }
 
 /**
- * 勾选是否已经超出上一次查询的结果。
+ * 勾选或查询条件是否已经与上一次查询对不上。
  * @param state 一次查询留下的那几格
  * @param selected 当前勾选
+ * @param choice 界面上眼下的时间范围、折算档位与取点间隔
  */
 export function pointDirty(
   state: PointState,
   selected: readonly string[],
+  choice: PointQueryChoice,
 ): boolean {
-  return isSelectionDirty(state.hasQueried.value, selected, state.fetched.value)
+  return isQueryDirty(state.fetched.value, selected, {
+    queried: state.queriedChoice.value,
+    current: trendChoiceKey(choice),
+  })
 }
 
 /**

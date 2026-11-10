@@ -124,3 +124,54 @@ it('API 来源即使未插入正文也展示映射样例与核对时间', () => 
   expect(wrapper.text()).toContain('核对时间')
   expect(wrapper.text()).toContain('本期暂无匹配数据')
 })
+
+it('⚠ 指标值按两位小数给人看，全精度留在悬停里', () => {
+  const wrapper = mount(PreviewPanel, {
+    props: {
+      preview: {
+        ...preview,
+        nodes: {},
+        metrics: [
+          {
+            name: '本期平均温度',
+            value: '25.58516091132809519230769231',
+            value_kind: 'number',
+          },
+          { name: '班组', value: '甲班', value_kind: 'text' },
+        ],
+      },
+    },
+  })
+  expect(wrapper.text()).toContain('本期平均温度：25.59')
+  expect(wrapper.text()).not.toContain('25.585160911')
+  expect(wrapper.text()).toContain('班组：甲班')
+  expect(wrapper.html()).toContain('25.58516091132809519230769231')
+  wrapper.unmount()
+})
+
+it('⚠ 取数失败的 API 来源报出原因，不说成「已返回、暂无匹配数据」', () => {
+  const wrapper = mount(PreviewPanel, {
+    props: {
+      preview: {
+        ...preview,
+        is_valid: false,
+        api_results: [
+          {
+            source_code: 'broken',
+            name: '能管月度能耗',
+            row_count: 0,
+            columns: [],
+            rows: [],
+            error: '数据来源「能管月度能耗」：API 取数超时，请稍后重试',
+          },
+        ],
+      },
+    },
+  })
+  const card = wrapper.text()
+  expect(card).toContain('API · 能管月度能耗')
+  expect(card).toContain('API 取数超时')
+  expect(card).not.toContain('本次获取')
+  expect(card).not.toContain('API 已返回')
+  wrapper.unmount()
+})

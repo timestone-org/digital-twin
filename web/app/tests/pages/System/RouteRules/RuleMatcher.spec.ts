@@ -3,10 +3,11 @@
  * 三种判定结果各有明确文案，且界面必须说清它是预演不是判定。
  */
 import { createPinia, setActivePinia } from 'pinia'
-import { afterEach, beforeEach, describe, expect, it } from 'vitest'
+import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 import { enableAutoUnmount, flushPromises, mount } from '@vue/test-utils'
 import type { AuthUser, RouteRule } from '@dt/contracts'
 
+import * as admin from '@/api/admin'
 import RuleMatcher from '@/pages/System/RouteRules/components/RuleMatcher.vue'
 import { useAuthStore } from '@/stores/auth'
 
@@ -50,8 +51,13 @@ function signIn(codes: string[]): void {
 
 // ⚠ DtModal 与 DtSelect 的浮层都 teleport 到 body；stub 掉才能用 wrapper 断言
 function render(rules: RouteRule[]) {
+  vi.spyOn(admin, 'listRouteRules').mockResolvedValue({
+    items: rules,
+    page: 1,
+    size: 200,
+    total: rules.length,
+  })
   return mount(RuleMatcher, {
-    props: { rules },
     attachTo: document.body,
     global: { stubs: { teleport: true } },
   })
@@ -79,6 +85,10 @@ beforeEach(() => {
 })
 
 enableAutoUnmount(afterEach)
+
+afterEach(() => {
+  vi.restoreAllMocks()
+})
 
 describe('RuleMatcher 的入口', () => {
   it('页面上只留一个触发按钮，试算表单不常驻', () => {
@@ -209,5 +219,52 @@ describe('RuleMatcher 的弹窗输入', () => {
     await wrapper.find('.dt-select__trigger').trigger('click')
     await flushPromises()
     expect(wrapper.find('.dt-select-menu__search').exists()).toBe(false)
+  })
+})
+
+describe('RuleMatcher 对着全量规则判定', () => {
+  it('翻页拉全启用规则：赢家在第二页也判得出来', async () => {
+    signIn(['user:view'])
+    const high = Array.from({ length: 200 }, (_, index) =>
+      rule({
+        id: `h${index}`,
+        path_pattern: `/api/v1/other${index}`,
+        priority: 990,
+      }),
+    )
+    const winner = rule({ id: 'w', path_pattern: '/api/v1/x/y', priority: 10 })
+    const spy = vi
+      .spyOn(admin, 'listRouteRules')
+      .mockResolvedValueOnce({ items: high, page: 1, size: 200, total: 201 })
+      .mockResolvedValueOnce({
+        items: [winner],
+        page: 2,
+        size: 200,
+        total: 201,
+      })
+    const wrapper = mount(RuleMatcher, {
+      attachTo: document.body,
+      global: { stubs: { teleport: true } },
+    })
+    await launcher(wrapper).trigger('click')
+    await flushPromises()
+    await wrapper.find('input').setValue('/api/v1/x/y')
+    expect(spy).toHaveBeenCalledWith({ is_enabled: true, page: 1, size: 200 })
+    expect(spy).toHaveBeenCalledWith({ is_enabled: true, page: 2, size: 200 })
+    expect(wrapper.text()).toContain('放行')
+    expect(wrapper.text()).toContain('priority 10')
+  })
+
+  it('加载失败时说清楚，不给出假判定', async () => {
+    signIn(['user:view'])
+    vi.spyOn(admin, 'listRouteRules').mockRejectedValue(new Error('down'))
+    const wrapper = mount(RuleMatcher, {
+      attachTo: document.body,
+      global: { stubs: { teleport: true } },
+    })
+    await launcher(wrapper).trigger('click')
+    await flushPromises()
+    expect(wrapper.text()).toContain('规则加载失败')
+    expect(wrapper.text()).not.toContain('无规则命中')
   })
 })

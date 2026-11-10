@@ -118,6 +118,16 @@ function orderOf(index: number): number {
 }
 
 async function toggleEnabled(rule: RouteRule): Promise<void> {
+  // 启停一条规则就是改全系统的鉴权矩阵：两个方向都先问
+  const ok = await confirm.ask({
+    title: rule.is_enabled ? '停用规则' : '启用规则',
+    message: `${rule.http_method} ${rule.path_pattern} 将${
+      rule.is_enabled ? '不再参与' : '重新参与'
+    }闸 1 判定，立即对所有请求生效。`,
+    confirmText: rule.is_enabled ? '停用' : '启用',
+    danger: rule.is_enabled,
+  })
+  if (!ok) return
   try {
     await admin.updateRouteRule(rule.id, { is_enabled: !rule.is_enabled })
     await afterWrite(rule.is_enabled ? '规则已停用' : '规则已启用')
@@ -138,7 +148,7 @@ onMounted(() => {
            看不出它们是一组 -->
       <div class="flex items-center gap-2">
         <!-- 试算不改数据，故不套 PermGuard：能看这张表的人就该能试 -->
-        <RuleMatcher :rules="list.items.value" />
+        <RuleMatcher />
         <PermGuard :codes="[PERMISSION_CODES.routeRuleManage]" explain>
           <DtIconButton
             size="sm"

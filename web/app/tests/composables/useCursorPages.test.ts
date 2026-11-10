@@ -6,6 +6,7 @@
  */
 import { describe, expect, it, vi, type Mock } from 'vitest'
 import type { CursorPage } from '@dt/contracts'
+import { effectScope } from 'vue'
 
 import { describeError } from '@/composables/useAsyncList'
 import { useCursorPages } from '@/composables/useCursorPages'
@@ -212,5 +213,31 @@ describe('useCursorPages', () => {
     expect(pages.pageNumber.value).toBe(2)
     // 退得回去：否则用户卡在一张空表上，只剩刷新一条路
     expect(pages.hasPrev.value).toBe(true)
+  })
+})
+
+describe('useCursorPages 的卸载', () => {
+  it('作用域销毁即中止在途请求，迟到的那一页不再写状态', async () => {
+    let settle: (value: CursorPage<string>) => void = () => undefined
+    let seen: AbortSignal | null = null
+    const scope = effectScope()
+    const pages = scope.run(() =>
+      useCursorPages(
+        (_after, signal) =>
+          new Promise<CursorPage<string>>((resolve) => {
+            seen = signal
+            settle = resolve
+          }),
+        describeError,
+      ),
+    )
+    if (pages === undefined) throw new Error('没挂上')
+    const pending = pages.reload()
+    scope.stop()
+    settle(page(['late']))
+    await pending
+    expect(pages.items.value).toEqual([])
+    expect(pages.loading.value).toBe(false)
+    expect((seen as AbortSignal | null)?.aborted).toBe(true)
   })
 })

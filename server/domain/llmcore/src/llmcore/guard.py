@@ -103,7 +103,31 @@ class GuardedModel:
         Args: choice, messages, tools, on_delta。
         """
         breaker = self._breaker_of(choice)
+        # ⚠ 只有半开时放行的这一个才是探测；合上时发出去的调用交还的话，
+        # 会把别人手上的探测一起放掉
+        is_probe = breaker.state == "half_open"
         self._guard(breaker)
+        try:
+            return await self._call(breaker, choice, messages, tools, on_delta)
+        except BaseException:
+            # ⚠ 没记成败就退出（被取消、端点判我们发错、来源自己抛）时必须
+            # 交还探测，否则半开的断路器会一直挡到进程重启
+            if is_probe:
+                breaker.release_probe()
+            raise
+
+    async def _call(
+        self,
+        breaker: CircuitBreaker,
+        choice: ModelChoice,
+        messages: list[BaseMessage],
+        tools: Sequence[ToolDecl],
+        on_delta: DeltaSink | None,
+    ) -> AIMessage:
+        """真正发出这一次调用并按失败分档记进断路器。
+
+        Args: breaker, choice, messages, tools, on_delta。
+        """
         model = await self.source(choice)
         # ⚠ 有的端点要改线形（如不认工具名里的点号）：出去的路上改掉，
         # 回来的路上改回来，两头都改才对得上

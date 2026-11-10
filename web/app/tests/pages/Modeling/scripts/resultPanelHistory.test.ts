@@ -60,6 +60,7 @@ describe('历史结果端口标签', () => {
           ]),
       ),
       nodeRunOf: () => undefined,
+      previewErrorOf: () => undefined,
       loadPreview: () => Promise.resolve(),
     })
     await panel.open('node')

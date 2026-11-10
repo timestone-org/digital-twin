@@ -105,6 +105,12 @@ watch(
   { immediate: true },
 )
 
+// 配置或绑定换了就再给一次机会：同样的输入还会再抛，所以不会来回重试；
+// chunk 失败与输入无关，不在此列
+watch([() => props.config, () => props.bindings], () => {
+  renderFailure.value = null
+})
+
 const fallback = computed<{ title: string; detail: string } | null>(() => {
   if (manifest.value === undefined) {
     return { title: '未知模块类型', detail: props.moduleType }

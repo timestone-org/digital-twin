@@ -2,14 +2,21 @@
 // 拿的是它的 scope id，写在父组件的样式表里选择器永远匹配不上。
 
 .dt-data-view {
+  // 吃满操作以外的宽度：按内容定宽时，一条长名称会把整组操作顶到下一行
   &__card-head {
+    flex: 1 1 0;
     min-width: 0;
   }
 
+  // 抬头宽度跟着操作走，不换行的名称（等宽编号标签）不裁就压到操作按钮上；
+  // 四周 4px 留给焦点环（outline 2px + offset 2px）
   &__card-title {
     display: flex;
     align-items: center;
     gap: 8px;
+    overflow: hidden;
+    margin: -4px;
+    padding: 4px;
     font-family: var(--font-display);
     font-size: var(--font-size-section);
     font-weight: 600;
@@ -18,8 +25,11 @@
 
   &__card-meta {
     margin-top: 4px;
+    overflow: hidden;
     font-size: var(--font-size-caption);
     color: var(--text-disabled);
+    text-overflow: ellipsis;
+    white-space: nowrap;
   }
 
   &__fields {

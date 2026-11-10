@@ -375,6 +375,8 @@ const SHAPES: Record<string, Record<string, true>> = {
   DatasetSeriesPointOut: { ...SERIES_POINT_KEYS },
   SeriesOut: { ...SERIES_KEYS },
   FormulaParamSpec: { ...FORMULA_PARAM_KEYS },
+  // 入参与出参是两个组件（入参拒收多余字段），键集必须相同
+  FormulaParamIn: { ...FORMULA_PARAM_KEYS },
   FormulaDefOut: { ...FORMULA_DEF_KEYS },
   FormulaUsageOut: { ...FORMULA_USAGE_KEYS },
   FormulaDefWithUsagesOut: { ...FORMULA_DEF_WITH_USAGES_KEYS },

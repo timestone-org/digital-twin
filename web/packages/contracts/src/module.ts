@@ -454,7 +454,8 @@ export function styleKeysOf(manifest: {
 /**
  * 模块的运行状态。六档各自对应一种「现在看到的东西为什么长这样」：
  * `loading` 尚无首帧、`connected` 正常、`stale` 通道断了屏上挂的是最后已知值、
- * `empty` 已绑但还没收到值、`unbound` 必绑槽没配来源、`error` 取数或渲染失败。
+ * `empty` 已绑且取到了、但值全是空（null/undefined）、`unbound` 必绑槽没配来源、
+ * `error` 取数或渲染失败。
  * ⚠ `stale` 判的是**连接态**，不是时间戳，两件事别混：通道一断，屏上一切都是
  * 最后已知值，与点位变化快慢无关；值有多旧仍由 `valueTimeMs` 照实说、由模块自己
  * 决定要不要显示——一个一天变一次的点位不该因为时刻旧就被降档

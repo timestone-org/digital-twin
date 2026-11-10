@@ -18,14 +18,15 @@ import PermGuard from '@/components/PermGuard.vue'
 import { formatDateTime } from '@/utils/datetime'
 import { taskLabel } from '../../scripts/taskPresentation'
 
+// ⚠ 定宽排布下每一列都要给宽度：留一列不给，列宽之和超出时它会被挤成 0，名称整列消失
 const COLUMNS: readonly DtDataColumn[] = [
-  { key: 'name', label: '名称', card: 'title' },
-  { key: 'code', label: '对外标识', width: '12rem' },
-  { key: 'model', label: '钉住的版本', width: '13rem' },
-  { key: 'task', label: '模型类型', width: '8rem' },
-  { key: 'state', label: '状态', width: '13rem' },
-  { key: 'quota', label: '配额', width: '11rem', align: 'right' },
-  { key: 'created_at', label: '开通时间', width: '10rem' },
+  { key: 'name', label: '名称', width: '11rem', card: 'title' },
+  { key: 'code', label: '对外标识', width: '10rem' },
+  { key: 'model', label: '钉住的版本', width: '11rem' },
+  { key: 'task', label: '模型类型', width: '6rem' },
+  { key: 'state', label: '状态', width: '9rem' },
+  { key: 'quota', label: '配额', width: '10rem', align: 'right' },
+  { key: 'created_at', label: '开通时间', width: '9.5rem' },
   {
     key: 'actions',
     label: '操作',
@@ -75,7 +76,7 @@ defineEmits<{
     :pagination="props.pagination"
     :layout="{
       fixedLayout: true,
-      minWidth: '81rem',
+      minWidth: '83rem',
       cardColumns: 2,
       cardMinWidth: '24rem',
     }"

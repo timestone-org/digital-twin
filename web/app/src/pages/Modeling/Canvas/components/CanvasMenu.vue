@@ -76,7 +76,7 @@ function onPointerDown(event: Event): void {
   if (!inside) emit('close')
 }
 
-/** 画布一滚，落点就不再对着原来的节点，直接收起。 */
+/** 画布一滚或一缩放（滚轮），落点就不再对着原来的节点，直接收起。 */
 function onViewChange(): void {
   emit('close')
 }
@@ -95,6 +95,7 @@ function startListening(): void {
   window.addEventListener('keydown', onKeydown, on)
   window.addEventListener('pointerdown', onPointerDown, on)
   window.addEventListener('scroll', onViewChange, on)
+  window.addEventListener('wheel', onViewChange, { ...on, passive: true })
   window.addEventListener('resize', onViewChange, on)
   listeners = controller
 }
@@ -152,8 +153,9 @@ onUnmounted(stopListening)
   padding: 4px;
   border: 1px solid var(--border-default);
   border-radius: var(--radius-md);
-  background: var(--surface-panel);
+  background: var(--surface-overlay);
   box-shadow: var(--fx-shadow-menu);
+  backdrop-filter: blur(6px);
   animation: dt-overlay-enter var(--motion-fast) var(--motion-ease-enter);
 
   &__item {

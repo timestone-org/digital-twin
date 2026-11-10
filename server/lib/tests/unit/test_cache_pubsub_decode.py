@@ -6,8 +6,9 @@
 
 import json
 
-from lib.cache.pubsub import TRACEPARENT_KEY, PubSub, _decode, _traceparent
+from lib.cache.pubsub import TRACEPARENT_KEY, PubSub, _decode
 from lib.logging.context import bind_log_context, reset_log_context
+from lib.logging.trace import parse_traceparent
 
 VALID = {"channel": "t.demo", "data": '{"seq": 3}'}
 EXPLICIT_TRACEPARENT = f"00-{'c' * 32}-{'d' * 16}-01"
@@ -52,21 +53,15 @@ def test_skips_a_payload_that_is_json_but_not_an_object() -> None:
     assert _decode({"channel": "t", "data": "[1, 2]"}) is None
 
 
-def test_traceparent_is_all_zero_when_there_is_no_trace() -> None:
-    # 全零仍是合法格式：订阅方照常解析，而「全零」说明发送侧没有链路
-    parts = _traceparent().split("-")
-    assert parts[0] == "00"
-    assert set(parts[1]) == {"0"}
-    assert len(parts[1]) == 32
-    assert len(parts[2]) == 16
-
-
-def test_traceparent_carries_the_current_trace() -> None:
-    token = bind_log_context(trace_id="a" * 32, span_id="b" * 16)
-    try:
-        assert _traceparent() == f"00-{'a' * 32}-{'b' * 16}-01"
-    finally:
-        reset_log_context(token)
+async def test_publish_without_a_trace_starts_a_valid_one() -> None:
+    """⚠ 全零 trace id 按 W3C 无效；订阅方照单全收的话，所有没带链路的推送
+    会并进同一条巨型链路。"""
+    client = _RecordingRedis()
+    await _pubsub(client).publish("t.demo", {"seq": 1})
+    sent = json.loads(client.published[0])[TRACEPARENT_KEY]
+    trace_id = parse_traceparent(sent)
+    assert trace_id is not None
+    assert set(trace_id) != {"0"}
 
 
 def test_the_envelope_key_is_the_contract_name() -> None:

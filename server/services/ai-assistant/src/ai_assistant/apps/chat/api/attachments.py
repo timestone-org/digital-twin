@@ -10,6 +10,7 @@
 那份字节。图随 `:advance` 的 `user_images` 走，白名单在那条路上判。
 """
 
+import asyncio
 import base64
 import binascii
 from typing import Annotated
@@ -49,7 +50,8 @@ async def parse_attachment(
 
     Args: payload, _caller。
     """
-    parsed = _parse(payload)
+    # ⚠ 解析是同步的逐行 CPU 活，放在事件循环里会让同一副本上的流式回合一起卡住
+    parsed = await asyncio.to_thread(_parse, payload)
     return ok(
         AttachmentParseOut(
             is_truncated=parsed.is_truncated,

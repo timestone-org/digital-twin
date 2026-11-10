@@ -417,3 +417,26 @@ describe('相对时间的定时器', () => {
     expect(vi.getTimerCount()).toBe(0)
   })
 })
+
+describe('关掉再打开', () => {
+  it('⚠ 上一次打开时还在算的推荐，回来了也不许写进这一次', async () => {
+    let releaseOld: (value: ModelRecommendResult) => void = () => undefined
+    vi.mocked(hvac.recommendWithAcModel).mockReturnValueOnce(
+      new Promise((done) => {
+        releaseOld = done
+      }),
+    )
+    const wrapper = await open()
+    await wrapper.setProps({ open: false })
+    vi.mocked(hvac.getRoomLiveReadings).mockResolvedValue(
+      liveReadings([
+        liveUnit({ sampled_at: null, is_running: null, readings: BLANK }),
+      ]),
+    )
+    await wrapper.setProps({ open: true })
+    await flushPromises()
+    releaseOld(recommendResult())
+    await flushPromises()
+    expect(bodyText()).not.toContain('12.4')
+  })
+})

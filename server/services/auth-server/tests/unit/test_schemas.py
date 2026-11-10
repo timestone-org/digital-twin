@@ -12,7 +12,9 @@ from auth_server.apps.auth.schemas import (
     MeUpdateIn,
     RegistrationIn,
     RouteRuleCreateIn,
+    RouteRuleUpdateIn,
     UserCreateIn,
+    UserUpdateIn,
 )
 
 
@@ -93,5 +95,47 @@ def test_route_rule_method_is_a_string_literal_not_a_number() -> None:
 def test_route_rule_priority_is_bounded() -> None:
     with pytest.raises(ValidationError):
         RouteRuleCreateIn(
-            path_pattern="/api/v1/x", http_method="GET", priority=1000
+            path_pattern="/api/v1/x", http_method="GET", priority=2**31
         )
+
+
+@pytest.mark.parametrize("model", [MeUpdateIn, UserUpdateIn])
+def test_profile_update_rejects_an_explicit_null_email(
+    model: type[MeUpdateIn] | type[UserUpdateIn],
+) -> None:
+    """邮箱列非空：显式 null 必须当场 422，不能落到库里变成 500 或假 409。"""
+    with pytest.raises(ValidationError, match="email"):
+        model.model_validate({"email": None})
+
+
+@pytest.mark.parametrize("model", [MeUpdateIn, UserUpdateIn])
+def test_profile_update_still_treats_a_missing_email_as_unchanged(
+    model: type[MeUpdateIn] | type[UserUpdateIn],
+) -> None:
+    assert "email" not in model.model_validate({}).model_dump(
+        exclude_unset=True
+    )
+
+
+@pytest.mark.parametrize(
+    "field",
+    [
+        "path_pattern",
+        "http_method",
+        "permission_codes",
+        "match_mode",
+        "priority",
+        "is_enabled",
+    ],
+)
+def test_route_rule_update_rejects_null_on_non_nullable_fields(
+    field: str,
+) -> None:
+    """这几列非空：显式 null 必须 422 并点名字段，不能被报成「规则已存在」。"""
+    with pytest.raises(ValidationError, match=field):
+        RouteRuleUpdateIn.model_validate({field: None})
+
+
+def test_route_rule_update_may_clear_the_description() -> None:
+    payload = RouteRuleUpdateIn.model_validate({"description": None})
+    assert payload.model_dump(exclude_unset=True) == {"description": None}

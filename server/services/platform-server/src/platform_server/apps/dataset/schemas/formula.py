@@ -117,7 +117,7 @@ class FormulaFunctionsOut(OutputModel):
     rules: list[str]
     columns: list[FormulaColumnOut]
     tables: list[FormulaTableOut]
-    # 库公式标识。⚠ 公式库随第 4 期落地，在那之前恒为空
+    # 启用中的库公式标识
     library: list[str]
 
 

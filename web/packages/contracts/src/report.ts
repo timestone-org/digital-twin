@@ -138,6 +138,7 @@ export interface ReportSchemas {
   ReportApiConnectionOut: { code: string; name: string }
   ReportApiResult: {
     columns: string[]
+    error?: string | null
     name: string
     row_count: number
     rows: string[][]

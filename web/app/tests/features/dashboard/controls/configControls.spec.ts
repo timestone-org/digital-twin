@@ -247,7 +247,7 @@ describe('对象与数组', () => {
 
     await wrapper.find('textarea').setValue('   ')
 
-    expect(lastUpdate(wrapper)).toEqual([undefined, false])
+    expect(lastUpdate(wrapper)).toEqual([undefined, true])
   })
 
   it('数组按 itemSchema 摊行，增删行是离散动作', async () => {

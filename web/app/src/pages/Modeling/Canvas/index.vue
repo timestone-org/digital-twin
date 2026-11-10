@@ -3,7 +3,6 @@
 import { PERMISSION_CODES } from '@dt/contracts'
 import {
   DtButton,
-  DtInput,
   DtIconButton,
   DtModal,
   DtNotice,
@@ -30,6 +29,8 @@ import OperatorPalette from './components/OperatorPalette.vue'
 import ResultDialog from './components/ResultDialog.vue'
 import RunControls from './components/RunControls.vue'
 import RunHistory from './components/RunHistory.vue'
+import RunNotices from './components/RunNotices.vue'
+import RenameNodeDialog from './components/RenameNodeDialog.vue'
 import ShortcutsHelp from './components/ShortcutsHelp.vue'
 import { cascadeFrom } from './scripts/nodeLayout'
 import { confirmReplay } from './scripts/confirmReplay'
@@ -71,7 +72,7 @@ watch(
   { flush: 'post' },
 )
 const renameNodeId = ref<string | null>(null)
-const renameDraft = ref('')
+const renameAlias = ref('')
 const isHistoryOpen = ref(false)
 const isKeysOpen = ref(false)
 /** 吸附对齐默认开着：图一多，手摆的卡片很难对齐，而歪一点点就看着乱。 */
@@ -130,6 +131,7 @@ const result = useResultPanel({
   graph: page.graph.graph,
   operators: page.operatorMap,
   nodeRunOf: (id) => page.runner.previews.value.get(id),
+  previewErrorOf: (id) => page.runner.previewErrors.value.get(id),
   loadPreview: page.runner.loadPreview,
   runGraph: () => page.runner.run.value?.graph ?? null,
 })
@@ -162,14 +164,26 @@ const progress = computed(() => progressOf(page.runner.run.value, tick.value))
 
 function openRename(nodeId: string): void {
   const node = page.graph.graph.value.nodes.find((item) => item.id === nodeId)
-  renameDraft.value = node?.alias ?? ''
+  renameAlias.value = node?.alias ?? ''
   renameNodeId.value = nodeId
 }
 
-function applyRename(): void {
+function applyRename(alias: string): void {
   const id = renameNodeId.value
-  if (id !== null) page.graph.setAlias(id, renameDraft.value.trim())
+  if (id !== null) page.graph.setAlias(id, alias)
   renameNodeId.value = null
+}
+
+/** 手动发布成了：历史列表与正看着的这次运行都现取，发布失败的提示才会撤下。 */
+function onPublished(): void {
+  void page.loadRuns(pipelineId.value)
+  void page.runner.refresh()
+}
+
+/** 打开训练历史：列表在发起运行那一刻拉过，之后跑完的状态要现取。 */
+function openHistory(): void {
+  isHistoryOpen.value = true
+  void page.loadRuns(pipelineId.value)
 }
 
 /** 回看运行并把运行 id 写入地址栏，供刷新与分享恢复。 */
@@ -210,6 +224,9 @@ useCanvasShortcuts({
   duplicate: actions.duplicate,
   nudge: actions.nudge,
   fit: actions.fit,
+  save: () => {
+    if (page.graph.isDirty.value) void saving.save()
+  },
   rename: () => {
     const id = firstSelected()
     if (id !== null) openRename(id)
@@ -253,7 +270,7 @@ watch(
         :pipeline="page.doc.pipeline.value"
         :run="page.runner.run.value"
         :is-readonly="isReadonly"
-        @published="void page.loadRuns(pipelineId)"
+        @published="onPublished"
       />
       <DtButton
         v-if="page.isReplaying.value"
@@ -321,7 +338,7 @@ watch(
       @configure="
         firstSelected() !== null && config.open(firstSelected() ?? '')
       "
-      @history="isHistoryOpen = true"
+      @history="openHistory"
       @shortcuts="isKeysOpen = true"
     >
       <PublishTemplateButton
@@ -357,6 +374,10 @@ watch(
       </template>
       <template #canvas>
         <div class="dt-ml-page__main">
+          <RunNotices
+            :run="page.runner.run.value"
+            :stale-reason="page.runner.staleReason.value"
+          />
           <DtNotice v-if="config.blockReason.value" intent="warning">
             {{ config.blockReason.value }}；请先改正或应用参数，再保存或运行。
           </DtNotice>
@@ -427,24 +448,11 @@ watch(
       @close="config.close"
     />
 
-    <DtModal
-      :model-value="renameNodeId !== null"
-      title="给这一步改个名"
-      description="留空就用算子本来的名字。"
-      width="22rem"
-      @update:model-value="renameNodeId = null"
-    >
-      <DtInput
-        v-model="renameDraft"
-        label="显示名"
-        placeholder="例如：剔除异常行"
-        @keyup.enter="applyRename"
-      />
-      <template #footer>
-        <DtButton variant="ghost" @click="renameNodeId = null">取消</DtButton>
-        <DtButton @click="applyRename">改名</DtButton>
-      </template>
-    </DtModal>
+    <RenameNodeDialog
+      :alias="renameNodeId === null ? null : renameAlias"
+      @apply="applyRename"
+      @close="renameNodeId = null"
+    />
 
     <ResultDialog
       :detail="result.detail.value"
@@ -453,7 +461,9 @@ watch(
       :node-id="result.nodeId.value"
       :config="result.config.value"
       :operator="result.operator.value"
+      :error="result.error.value"
       @close="result.close"
+      @retry="void result.open(result.nodeId.value ?? '')"
     />
 
     <DtModal v-model="isKeysOpen" title="快捷键与手势" width="34rem">

@@ -19,6 +19,14 @@ const LABELS: Record<string, string> = {
   description: '描述',
 }
 
+/** 实例上改完要重启才生效的字段，与后端 instance_service.RESTART_FIELDS 同口径。 */
+export const INSTANCE_RESTART_FIELDS: readonly string[] = [
+  'endpoint_path',
+  'namespace_uri',
+  'security_policies',
+  'is_anonymous_allowed',
+]
+
 /** 单个字段名的展示文案；认不出就原样给回去。 */
 export function pendingFieldLabel(field: string): string {
   return LABELS[field] ?? field

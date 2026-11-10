@@ -211,3 +211,21 @@ it('直传失败时不确认替换', async () => {
   ).rejects.toThrow('网络中断')
   expect(requestData).toHaveBeenCalledTimes(1)
 })
+
+describe('clampAssetName', () => {
+  it('不超过上限原样返回', () => {
+    expect(assets.clampAssetName('泵.png')).toBe('泵.png')
+  })
+
+  it('超长时截到上限并保住扩展名', () => {
+    const long = `audit-${'L'.repeat(130)}.png`
+    const clamped = assets.clampAssetName(long)
+    expect(Array.from(clamped)).toHaveLength(assets.ASSET_NAME_MAX_LEN)
+    expect(clamped.endsWith('.png')).toBe(true)
+  })
+
+  it('按字符而不是 UTF-16 单元数', () => {
+    const clamped = assets.clampAssetName(`${'😀'.repeat(200)}.svg`)
+    expect(Array.from(clamped)).toHaveLength(assets.ASSET_NAME_MAX_LEN)
+  })
+})

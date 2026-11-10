@@ -1,6 +1,7 @@
 """达标时长模型面的对外模型。口径见 docs/AC_MODEL_DESIGN.md §5。"""
 
 import uuid
+from typing import Annotated
 
 from pydantic import Field
 
@@ -14,9 +15,12 @@ from platform_server.apps.hvac.schemas.common import (
     OutputModel,
     RoomRef,
     Utc,
+    UtcIn,
     WorkshopRef,
 )
 
+# 模型描述的长度上限：页面只给 200 字，留出余量给接口调用方
+MAX_DESCRIPTION = 500
 # 半衰期上限（天）：十年等于不衰减，再大就是在骗自己配了衰减
 _MAX_HALF_LIFE_DAYS = 3650.0
 
@@ -102,7 +106,7 @@ class AcModelCreateIn(InputModel):
 
     room_id: uuid.UUID
     name: Label
-    description: str | None = None
+    description: str | None = Field(default=None, max_length=MAX_DESCRIPTION)
     serving_sets: list[list[str]] = Field(min_length=1)
     half_life_days: float = Field(
         default=180.0, ge=MIN_HALF_LIFE_DAYS, le=_MAX_HALF_LIFE_DAYS
@@ -113,7 +117,8 @@ class AcModelPatchIn(InputModel):
     """改名、改描述或改服务组合。⚠ 改组合就地重汇总评估，不触发重训。"""
 
     name: Label | None = None
-    description: str | None = None
+    # 空串（含纯空白）即清空成 NULL；省略或 null 不改
+    description: str | None = Field(default=None, max_length=MAX_DESCRIPTION)
     serving_sets: list[list[str]] | None = Field(default=None, min_length=1)
 
 
@@ -129,14 +134,19 @@ class ModelPredictionOut(OutputModel):
     fold: int
 
 
+# ⚠ JSON 里的 Infinity/NaN 一律拒绝：非有限值进了特征，模型推理当场抛异常。
+# 越出可信区间的温度不在这里拒，由推理侧按缺测处理，与实时读数同一口径
+FiniteFloat = Annotated[float, Field(allow_inf_nan=False)]
+
+
 class PredictReadingsIn(InputModel):
     """试算时一台机组的读数。⚠ 缺测就省略字段，不要填 0——0 是真实读数。"""
 
-    workshop_temp_avg: float | None = None
-    workshop_humidity_avg: float | None = None
-    fresh_air_temp: float | None = None
-    fresh_air_humidity: float | None = None
-    chilled_water_supply_temp: float | None = None
+    workshop_temp_avg: FiniteFloat | None = None
+    workshop_humidity_avg: FiniteFloat | None = None
+    fresh_air_temp: FiniteFloat | None = None
+    fresh_air_humidity: FiniteFloat | None = None
+    chilled_water_supply_temp: FiniteFloat | None = None
 
 
 class PredictIn(InputModel):
@@ -147,7 +157,7 @@ class PredictIn(InputModel):
 
     running_set: list[str] = Field(min_length=1)
     readings: dict[str, PredictReadingsIn] = Field(default_factory=dict)
-    at: Utc | None = None
+    at: UtcIn | None = None
     idle_minutes: int | None = Field(default=None, ge=0)
 
 
@@ -184,7 +194,7 @@ class RecommendIn(InputModel):
     """
 
     readings: dict[str, PredictReadingsIn] = Field(default_factory=dict)
-    at: Utc | None = None
+    at: UtcIn | None = None
     idle_minutes: int | None = Field(default=None, ge=0)
 
 

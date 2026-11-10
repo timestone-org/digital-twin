@@ -128,3 +128,26 @@ async def test_deleting_the_screen_takes_the_picture_with_it(
     assert removed.status_code == HTTP_NO_CONTENT
     response = await app_client.get(thumbnail_url(dashboard_id))
     assert response.status_code == HTTP_NOT_FOUND
+
+
+async def test_the_list_says_which_screens_have_a_picture(
+    app_client: httpx.AsyncClient,
+) -> None:
+    # 列表不说的话，工作台只能逐张去取图，没有图的每一张都换来一条 404
+    project_id = await make_project(app_client)
+    pictured = await make_dashboard(
+        app_client, project_id=project_id, name="有图"
+    )
+    bare = await make_dashboard(app_client, project_id=project_id, name="无图")
+    await app_client.put(
+        thumbnail_url(str(pictured["id"])), json={"data": SHOT}
+    )
+
+    response = await app_client.get(
+        DASHBOARDS_URL, params={"project_id": project_id}
+    )
+
+    flags = {
+        item["id"]: item["has_thumbnail"] for item in data_of(response)["items"]
+    }
+    assert flags == {str(pictured["id"]): True, str(bare["id"]): False}

@@ -50,8 +50,9 @@ from platform_server.apps.dataset.services.backfill_run import (
     run_backfill,
 )
 from platform_server.apps.dataset.services.collect_run import point_columns
-from platform_server.apps.dataset.services.collector import Sessions, knobs_of
+from platform_server.apps.dataset.services.collector import knobs_of
 from platform_server.apps.dataset.services.dirty import DatasetDirtyLog
+from platform_server.apps.dataset.services.sessions import Sessions
 from platform_server.apps.dataset.services.table_service import require_table
 from platform_server.apps.runtime_params.services import (
     SECTION_DATASET,

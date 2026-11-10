@@ -26,6 +26,8 @@ export interface Twin2dBindings {
   bindings: ComputedRef<readonly BindingPayload[]>
   /** 写一条绑定；同 `fieldKey` 原地替换，**id 沿用旧的**。 */
   write: (binding: BindingPayload) => void
+  /** 一次写一批，整批只占一笔撤销；逐条的口径同 `write`。 */
+  writeMany: (list: readonly BindingPayload[]) => void
   /** 给一个还没绑的槽建一条空绑定。 */
   bind: (fieldKey: string) => void
   /** 解除一条绑定。 */
@@ -129,6 +131,9 @@ export function useTwin2dBindings(
     bindings,
     write: (binding) =>
       commit(upsert(bindings.value, binding), binding.fieldKey),
+    writeMany: (list) => {
+      if (list.length > 0) commit(list.reduce(upsert, [...bindings.value]))
+    },
     bind: (fieldKey) =>
       commit(upsert(bindings.value, createBinding(nodeId(), fieldKey))),
     drop: (fieldKey) =>

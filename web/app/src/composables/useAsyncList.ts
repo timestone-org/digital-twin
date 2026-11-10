@@ -14,15 +14,34 @@ import {
   type ComputedRef,
   type Ref,
 } from 'vue'
-import type { Page } from '@dt/contracts'
+import { ERROR_CODES, type Page } from '@dt/contracts'
 import type { DtPaginationState } from '@dt/ui'
 
 import { BizError, TransportError } from '@/api/client'
 import { useRacedFetch } from '@/composables/useRacedFetch'
 
+// 参数校验失败时文案里最多列几条字段原因
+const SHOWN_FIELD_ERRORS = 3
+
+/**
+ * 参数校验失败时把逐字段原因拼在后面。
+ * ⚠ 只认通用校验码：别的业务码的 details 各有用途（如删列的引用者），拼进文案会重复。
+ * @param caught 业务错误
+ */
+function withFieldErrors(caught: BizError): string {
+  const summary = caught.message || '请求失败'
+  if (caught.code !== ERROR_CODES.validationFailed) return summary
+  const shown = caught.details
+    .slice(0, SHOWN_FIELD_ERRORS)
+    .map((item) => `${item.field}：${item.message}`)
+  if (shown.length === 0) return summary
+  const rest = caught.details.length - shown.length
+  return `${summary}：${shown.join('；')}${rest > 0 ? `；另有 ${rest} 项` : ''}`
+}
+
 /** 把后端与网络错误归一成一句能给用户看的话。 */
 export function describeError(caught: unknown): string {
-  if (caught instanceof BizError) return caught.message || '请求失败'
+  if (caught instanceof BizError) return withFieldErrors(caught)
   if (caught instanceof TransportError) return caught.message
   return '请求失败，请重试'
 }
@@ -75,10 +94,10 @@ export function useAsyncList<TItem>(
         items.value = rows
         total.value = count
       },
+      // ⚠ 失败时保留总数：清零会让分页器把页码夹回第一页并自己再取一次数
       fail: (caught) => {
         error.value = describeError(caught)
         items.value = []
-        total.value = 0
       },
       settled: () => (loading.value = false),
     })

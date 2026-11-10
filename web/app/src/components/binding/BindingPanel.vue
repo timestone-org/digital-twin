@@ -143,9 +143,14 @@ const sections = computed<SlotSection[]>(() =>
     }),
 )
 
-/** 限定之后一行都不剩：要说出来，否则看着像面板没加载出来。 */
+/**
+ * 限定之后一行都不剩：要说出来，否则看着像面板没加载出来。
+ * ⚠ 只认按对象筛过行的那一路：没筛时零行的数组槽要照常露出段头与「新增一行」，
+ * 被这块空态盖掉的话第一条绑定永远加不上。
+ */
 const isFilteredEmpty = computed(
   () =>
+    props.visibleRows !== undefined &&
     props.specs.length > 0 &&
     sections.value.every((section) => section.groups.length === 0),
 )

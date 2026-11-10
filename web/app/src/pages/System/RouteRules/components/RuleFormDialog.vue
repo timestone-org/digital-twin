@@ -91,14 +91,22 @@ watch(
   { immediate: true },
 )
 
+/** 优先级只收非负整数串；上限由服务端校验。 */
+const PRIORITY_PATTERN = /^\d+$/
+
 async function onSubmit(): Promise<void> {
+  // ⚠ 输入框是文本：不拦的话空串经 Number 变成 0（最后才判），乱写变成 NaN 发成 null
+  if (!PRIORITY_PATTERN.test(String(form.value.priority).trim())) {
+    error.value = '优先级要填非负整数'
+    return
+  }
   busy.value = true
   error.value = null
   const payload = {
     path_pattern: form.value.path_pattern,
     http_method: form.value.http_method,
     match_mode: form.value.match_mode,
-    priority: Number(form.value.priority),
+    priority: Number(String(form.value.priority).trim()),
     is_enabled: form.value.is_enabled,
     permission_codes: [...selected.value],
   }
@@ -170,7 +178,7 @@ async function onSubmit(): Promise<void> {
         <p class="m-0 mb-2 text-xs font-semibold text-text-secondary">
           需要的权限码
           <span class="font-normal text-text-disabled">
-            （一个都不选 = 任意已登录用户放行，**不是**匿名放行）
+            （一个都不选 = 任意已登录用户放行，并非匿名放行）
           </span>
         </p>
         <PermissionCodePicker

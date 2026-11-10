@@ -150,6 +150,14 @@ def test_the_retention_boundary_is_that_many_days_before_now() -> None:
     assert keep_before(job(30), NOW) == NOW - timedelta(days=30)
 
 
+@pytest.mark.parametrize("days", [1_000_000, 2_000_000_000])
+def test_a_retention_older_than_the_calendar_keeps_everything(
+    days: int,
+) -> None:
+    # ⚠ 存量里可能已有这样的值：算边界溢出的话这张表每一轮都清理失败
+    assert keep_before(job(days), NOW) is None
+
+
 async def test_a_table_kept_forever_never_even_opens_a_session(
     crud: FakeCrud,
 ) -> None:

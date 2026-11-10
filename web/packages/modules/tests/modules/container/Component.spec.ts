@@ -73,6 +73,17 @@ describe('容器外观', () => {
     )
   })
 
+  // ⚠ 空串注入成自定义属性等于删掉它，花纹、分隔线与辉光会一起失色
+  it('强调色清空或只剩空白时回落主色', () => {
+    for (const accent of ['', '  ']) {
+      const wrapper = render({ accent })
+
+      expect(wrapper.get('.dt-container').attributes('style')).toContain(
+        '--dt-container-accent: var(--accent-primary)',
+      )
+    }
+  })
+
   it('强调色写进外壳的自定义属性', () => {
     const wrapper = render({ accent: 'var(--state-success)' })
 

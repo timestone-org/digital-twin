@@ -9,6 +9,7 @@ import { removeMissingAnimations } from '@/pages/TwinEditor/scripts/missingAnima
 import { TWIN_CONFIG_KEY, normalizeTwinConfig } from '@dt/twin-config'
 import { flushPromises } from '@vue/test-utils'
 import { beforeEach, describe, expect, it, vi } from 'vitest'
+import { effectScope } from 'vue'
 
 vi.mock('@/api/dashboard', () => ({
   getDashboard: vi.fn(),
@@ -64,6 +65,55 @@ const saveMock = vi.mocked(replaceLayout)
 beforeEach(() => {
   getMock.mockReset()
   saveMock.mockReset()
+})
+
+describe('页面关闭', () => {
+  // ⚠ 关页时不收口的话，在途的取数照样跑完并写进一页已经没人看的状态
+  it('作用域结束时把在途的取数一并取消', async () => {
+    let seen: AbortSignal | undefined
+    getMock.mockImplementation((_id, signal) => {
+      seen = signal
+      return new Promise(() => undefined)
+    })
+    const scope = effectScope()
+    scope.run(() =>
+      useTwinEditorPage(
+        () => 'd1',
+        () => 'n1',
+      ),
+    )
+    await flushPromises()
+
+    scope.stop()
+
+    expect(seen?.aborted).toBe(true)
+  })
+})
+
+describe('重新加载', () => {
+  // ⚠ 版本冲突之后能做的只有按最新那一版重读：本地草稿整份丢掉，不与新版本混着
+  it('丢掉本地草稿，按服务端最新那一版重读', async () => {
+    getMock.mockResolvedValue(
+      payload([node('n1', { anchors: [{ id: 'a1' }] })]),
+    )
+    const page = useTwinEditorPage(
+      () => 'd1',
+      () => 'n1',
+    )
+    await flushPromises()
+    page.doc.value?.commit({
+      ...normalizeTwinConfig({}),
+    })
+    getMock.mockResolvedValue(
+      payload([node('n1', { anchors: [{ id: 'a1' }, { id: 'a2' }] })]),
+    )
+
+    await page.reload()
+    await flushPromises()
+
+    expect(page.doc.value?.config.value.anchors).toHaveLength(2)
+    expect(page.doc.value?.isDirty.value).toBe(false)
+  })
 })
 
 describe('取数', () => {

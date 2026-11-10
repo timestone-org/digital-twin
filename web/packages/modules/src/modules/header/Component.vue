@@ -9,7 +9,12 @@ import type { ModuleMeta } from '@dt/contracts'
 import { computed, type CSSProperties } from 'vue'
 
 import { bannerBackground } from '../../shared/background'
-import { readBoolean, readNumber, readText } from '../../shared/config'
+import {
+  readBoolean,
+  readNumber,
+  readText,
+  readTrimmedText,
+} from '../../shared/config'
 import {
   CONTAINER_CONFIG_KEY,
   readContainerLayout,
@@ -37,8 +42,8 @@ const deco = computed(() => normalizeDeco(readText(props.config.deco, 'bars')))
 const isDecorated = computed(() => variant.value !== PLAIN_VARIANT)
 
 /** 空串要回落默认色：空的强调色会让花纹、装饰与辉光线一起失色。 */
-const accent = computed(() =>
-  readText(props.config.accent, 'var(--accent-primary)'),
+const accent = computed(
+  () => readTrimmedText(props.config.accent) || 'var(--accent-primary)',
 )
 const background = computed(() => readText(props.config.background))
 const isScanlineShown = computed(

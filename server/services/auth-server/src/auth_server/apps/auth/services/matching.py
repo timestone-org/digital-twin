@@ -10,6 +10,7 @@
 from dataclasses import dataclass
 from enum import StrEnum
 from fnmatch import fnmatchcase
+from urllib.parse import unquote
 
 ANY_METHOD = "*"
 
@@ -60,11 +61,14 @@ def sort_key(rule: RuleView) -> tuple[int, int, str, str]:
 
 
 def normalize_path(raw: str) -> str:
-    """去掉 query 与末尾斜杠。根路径保留 `/`。
+    """去掉 query、解码一次百分号编码、去掉末尾斜杠。根路径保留 `/`。
+
+    ⚠ 解码口径与 uvicorn 一致；不解码就和上游路由的路径对不上，
+    `%63ollect-points` 会绕开窄规则落到前缀兜底。
 
     Args: raw。
     """
-    path = raw.split("?", 1)[0].split("#", 1)[0]
+    path = unquote(raw.split("?", 1)[0].split("#", 1)[0])
     if len(path) > 1 and path.endswith("/"):
         path = path.rstrip("/") or "/"
     return path or "/"

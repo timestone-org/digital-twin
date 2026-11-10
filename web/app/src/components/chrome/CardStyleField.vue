@@ -15,6 +15,7 @@ import { computed } from 'vue'
 import {
   TITLE_PAD_DEFAULT,
   TITLE_PAD_LABELS,
+  unitLabelled,
   type CardField,
 } from '@/features/dashboard/cardStyleFields'
 
@@ -47,6 +48,8 @@ function numOf(value: unknown): number | undefined {
 }
 
 const num = computed(() => numOf(props.value))
+
+const numText = computed(() => unitLabelled(props.field))
 
 /**
  * 枚举 / 取色回填：数字（如字重 400）转成串才对得上选项；
@@ -140,6 +143,7 @@ function onPad(index: number, next: number | undefined): void {
         :model-value="text"
         :label="field.label"
         :hint="field.hint"
+        placeholder="#RRGGBB / 变量"
         :disabled="disabled"
         size="sm"
         @update:model-value="emit('update', $event)"
@@ -172,8 +176,8 @@ function onPad(index: number, next: number | undefined): void {
       <DtNumberInput
         class="min-w-0 flex-1"
         :model-value="num"
-        :label="field.label"
-        :hint="field.hint"
+        :label="numText.label"
+        :hint="numText.hint"
         :placeholder="field.placeholder"
         :range="field.range"
         :disabled="disabled"

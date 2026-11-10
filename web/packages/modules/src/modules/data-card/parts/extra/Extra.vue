@@ -57,12 +57,16 @@ const label = computed(() => readText(props.part.label))
 
 const unit = computed(() => readText(props.part.unit))
 
-const style = computed<CSSProperties>(() => {
+const style = computed<CSSProperties>(() => ({
+  fontSize: `${String(readNumber(props.part.size, 12))}px`,
+}))
+
+/** 读数色写在读数本身上：它的类自带 `color`，写在外层会被压住。 */
+const numStyle = computed<CSSProperties>(() => {
   const color = readText(props.part.color)
-  const base = { fontSize: `${String(readNumber(props.part.size, 12))}px` }
   // ⚠ 没有值的三档不写配色：写了就把内联样式压在类上面，占位符会被画成读数色
-  if (!hasValue.value) return base
-  return { ...base, ...(color === '' ? {} : { color }) }
+  if (!hasValue.value || color === '') return {}
+  return { color }
 })
 </script>
 
@@ -72,6 +76,7 @@ const style = computed<CSSProperties>(() => {
     <b
       class="dc-extra__num"
       :class="`dc-extra__num--${state}`"
+      :style="numStyle"
       :title="reason === '' ? text : reason"
       >{{ text }}</b
     >

@@ -128,7 +128,10 @@ export function useCanvasMenu(deps: MenuDeps) {
 
   return {
     menu,
+    /** 右键一张不在选中里的卡片时改选它，菜单里的动作才对着它。 */
     open: (at: { x: number; y: number }, on: MenuTarget) => {
+      if (on.nodeId !== null && !deps.selection.isNodeSelected(on.nodeId))
+        deps.selection.select({ kind: 'node', id: on.nodeId })
       menu.value = stateAt(deps, at, on)
     },
     close: () => {

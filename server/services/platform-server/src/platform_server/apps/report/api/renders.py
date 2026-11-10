@@ -2,6 +2,7 @@
 
 import uuid
 from typing import Annotated
+from urllib.parse import quote
 
 from fastapi import APIRouter, Depends, Response
 from sqlalchemy.ext.asyncio import AsyncSession
@@ -72,14 +73,27 @@ async def download(
     store: StoreDep,
     caller: DownloadDep,
 ) -> Response:
-    payload = await render_service.download(
+    found = await render_service.download(
         session, render_id, store, str(caller.user_id)
     )
-    filename = f"report-{render_id}.docx"
     return Response(
-        content=payload,
+        content=found.payload,
         media_type=render_service.CONTENT_TYPE,
-        headers={"Content-Disposition": f'attachment; filename="{filename}"'},
+        headers={
+            "Content-Disposition": _disposition(render_id, found.filename)
+        },
+    )
+
+
+def _disposition(render_id: uuid.UUID, filename: str) -> str:
+    """ASCII 回落名在前、RFC 5987 的 UTF-8 名在后：老客户端仍拿得到文件。
+
+    Args: render_id, filename。
+    """
+    fallback = f"report-{render_id}.docx"
+    return (
+        f'attachment; filename="{fallback}"; '
+        f"filename*=UTF-8''{quote(filename, safe='')}"
     )
 
 

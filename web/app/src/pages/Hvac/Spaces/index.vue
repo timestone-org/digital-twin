@@ -200,13 +200,14 @@ onMounted(() => {
     >
       <template #workshops>
         <WorkshopRail
-          style="width: 100%; flex: 1"
           :workshops="board.workshops.value"
+          :error="board.workshopsError.value"
           :active-id="board.workshopId.value"
           @select="selectWorkshop($event)"
           @create="openTask({ kind: 'workshop-create' })"
           @rename="openTask({ kind: 'workshop-rename', workshop: $event })"
           @remove="removeWorkshop($event)"
+          @retry="refresh()"
         />
       </template>
       <template #rooms>
@@ -240,7 +241,11 @@ onMounted(() => {
           />
 
           <DtEmpty
-            v-if="board.workshopId.value === '' && !board.loading.value"
+            v-if="
+              board.workshopId.value === '' &&
+              !board.loading.value &&
+              !board.workshopsError.value
+            "
             class="flex-1"
             icon="building"
             title="先选一个车间"

@@ -19,10 +19,11 @@ import {
   columnTrendItems,
   countTrendPoints,
   datasetChartSeries,
-  isSelectionDirty,
+  isQueryDirty,
   numericTrendColumns,
   seedTrendSelection,
   toggleTrendKey,
+  trendChoiceKey,
   truncationHint,
   type TrendItem,
 } from './trendSeries'
@@ -58,6 +59,8 @@ export interface DatasetTrend {
 interface TrendState {
   fetched: Ref<Record<string, DatasetSeriesPoint[]>>
   hasQueried: Ref<boolean>
+  /** 上一次成功查询的范围指纹；没查过是 null。 */
+  queriedRange: Ref<string | null>
   isTruncated: Ref<boolean>
   limit: Ref<number>
   loading: Ref<boolean>
@@ -68,6 +71,7 @@ function createState(): TrendState {
   return {
     fetched: ref<Record<string, DatasetSeriesPoint[]>>({}),
     hasQueried: ref(false),
+    queriedRange: ref<string | null>(null),
     isTruncated: ref(false),
     limit: ref(0),
     loading: ref(false),
@@ -91,6 +95,7 @@ async function runQuery(
   keys: readonly string[],
   range: TrendRangeValue,
 ): Promise<void> {
+  const asked = trendChoiceKey(range)
   const resolved = resolveTrendRange(range)
   const window = resolved.window
   if (keys.length === 0 || window === null) return
@@ -104,11 +109,13 @@ async function runQuery(
         state.isTruncated.value = result.is_truncated
         state.limit.value = result.limit
         state.hasQueried.value = true
+        state.queriedRange.value = asked
       },
       fail: (caught) => {
         state.failure.value = describeError(caught)
         state.fetched.value = {}
         state.hasQueried.value = false
+        state.queriedRange.value = null
         state.isTruncated.value = false
       },
       settled: () => (state.loading.value = false),
@@ -157,11 +164,10 @@ export function useDatasetTrend(
     loading: state.loading,
     failure: state.failure,
     dirty: computed(() =>
-      isSelectionDirty(
-        state.hasQueried.value,
-        selected.value,
-        state.fetched.value,
-      ),
+      isQueryDirty(state.fetched.value, selected.value, {
+        queried: state.queriedRange.value,
+        current: trendChoiceKey(range.value),
+      }),
     ),
     truncation: computed(() =>
       state.isTruncated.value

@@ -80,6 +80,7 @@ const SNAP: Twin2dSnapOptions = {
 }
 
 interface Overrides {
+  styles?: readonly unknown[]
   nodes?: readonly unknown[]
   edges?: readonly unknown[]
   edgeStyles?: readonly unknown[]
@@ -142,6 +143,30 @@ describe('两端解析', () => {
       `M${start.x},${start.y} L${end.x},${end.y}`,
     )
     expect(start).toEqual({ x: 100, y: 30 })
+  })
+
+  // ⚠ 椭圆、胶囊、圆角外缘上渲染件把线头投到画出来的边上：编辑器这边不投的话，两端把手
+  // 停在外接矩形的角上，离线头差出去一截
+  it.each([
+    ['钉了周长参数', { nodeId: 'a', t: 0.2 }],
+    ['朝向对方中心', { nodeId: 'a' }],
+  ])('非矩形外缘上%s的那一端与渲染件同一处落点', (_name, from) => {
+    const config = doc({
+      styles: [{ ...NODE_STYLE, outline: { kind: 'ellipse' } }],
+      nodes: [NODES[0], { ...NODES[1], y: 300 }],
+      edges: [{ ...EDGE, from }],
+    })
+    const points = edgePolyline(
+      firstEdge(config),
+      config.nodes,
+      config.styles,
+      config.edgeStyles,
+    )
+    const [, x = '', y = ''] =
+      /^M([-\d.]+),([-\d.]+)/.exec(renderedPath(config)) ?? []
+
+    expect(pointAt(points, 0).x).toBeCloseTo(Number(x), 1)
+    expect(pointAt(points, 0).y).toBeCloseTo(Number(y), 1)
   })
 
   it('转过 90° 的节点上，端点跟着位姿走而不是留在原地', () => {
@@ -407,6 +432,20 @@ describe('端点落到哪', () => {
     expect(
       dropEndpoint(config.nodes, config.styles, { x: 50, y: 5 }, 10),
     ).toEqual({ nodeId: 'a', portId: '', t: 0.125 })
+  })
+
+  // ⚠ 原样落浮点尾巴的话，检查器上读出来是 0.6250002698887671，库里也存这一串
+  it('钉下的周长参数只留三位小数', () => {
+    const config = doc()
+
+    const end = dropEndpoint(
+      config.nodes,
+      config.styles,
+      { x: 33.3333, y: 5 },
+      10,
+    )
+
+    expect(end?.t).toBe(0.083)
   })
 
   it('落在空白处时一端都不给：文档里没有不挂节点的端点', () => {

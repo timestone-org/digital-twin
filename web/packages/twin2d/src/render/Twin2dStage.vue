@@ -112,7 +112,7 @@ const props = withDefaults(
     view?: Twin2dStageView
     /** 运行态注入的状态、读数与素材解析。 */
     live?: Twin2dStageLive
-    /** 容器尺寸；给了就用它，不给才装 `ResizeObserver` 自己量。 */
+    /** 容器尺寸；给了就以它为准，`ResizeObserver` 量出来的那份随之不用。 */
     containerSize?: Twin2dStageBox | null
   }>(),
   {
@@ -242,8 +242,8 @@ const edgeStates = computed<Readonly<Record<string, Twin2dEdgeState>>>(
 
 /**
  * 逐节点的渲染输入。
- * ⚠ 样式悬空的节点整个不画：造一个空壳出来会在图上留一块吃指针的透明区，而落回
- * `__fallback` 预置样式那一步归调用方（它才知道预置库，§7 #45）。
+ * ⚠ 样式悬空的节点整个不画：造一个空壳出来会在图上留一块吃指针的透明区；这件事
+ * 由诊断 `dangling-style` 报出来（§7 #45）。
  * ⚠ 运行态按节点 id 取而不按下标：`nodes` 与运行态两个 props 各自变化时下标会错位，
  * 表现是「状态点串到隔壁节点上」，零报错。
  */

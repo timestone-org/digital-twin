@@ -29,18 +29,36 @@ const loading = ref(false)
 /** 取不到列时的一句实话，不是错误弹窗。 */
 const failure = ref('')
 const raced = useRacedFetch()
+/** code → id 的换算表；整份台账清单只在头一次或认不出时取。 */
+let idsByCode: Map<string, string> | null = null
 
 const options = computed(() =>
   props.tables.map((one) => ({ value: one.code, label: one.name })),
 )
 
 /**
- * code → id。目录只给 code，取列定义要 id。
- * @param code 台账编码
+ * 取一份 code → id 换算表。
+ * @param signal 被顶掉或关窗时中止
  */
-async function idOf(code: string): Promise<string | null> {
-  const page = await dataset.listDatasetTables({ size: TABLE_PAGE_SIZE })
-  return page.items.find((one) => one.code === code)?.id ?? null
+async function loadIds(signal: AbortSignal): Promise<Map<string, string>> {
+  const page = await dataset.listDatasetTables(
+    { size: TABLE_PAGE_SIZE },
+    signal,
+  )
+  idsByCode = new Map(page.items.map((one) => [one.code, one.id]))
+  return idsByCode
+}
+
+/**
+ * code → id。目录只给 code，取列定义要 id。缓存里认不出就重取一次清单：
+ * 那张表可能是打开编辑器之后才建的。
+ * @param code 台账编码
+ * @param signal 被顶掉或关窗时中止
+ */
+async function idOf(code: string, signal: AbortSignal): Promise<string | null> {
+  const cached = idsByCode?.get(code)
+  if (cached !== undefined) return cached
+  return (await loadIds(signal)).get(code) ?? null
 }
 
 function onPick(code: string): void {
@@ -53,9 +71,9 @@ function onPick(code: string): void {
   }
   loading.value = true
   void raced.run(
-    async () => {
-      const id = await idOf(code)
-      return id === null ? null : await dataset.listDatasetColumns(id)
+    async (signal) => {
+      const id = await idOf(code, signal)
+      return id === null ? null : await dataset.listDatasetColumns(id, signal)
     },
     {
       ok: (result) => {

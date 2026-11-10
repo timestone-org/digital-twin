@@ -337,10 +337,12 @@ def _sizes_block(folding: _Folding) -> ReportBlock:
 def _buckets_of(
     index: tuple[int, ...], bucket: BucketWidth, tz_offset_minutes: int
 ) -> list[tuple[int, list[int]]]:
-    """`[(桶起点, 落在这个桶里的行下标)]`，按桶起点升序。
+    """`[(桶起点, 落在这个桶里的行下标)]`，按桶起点升序，桶内按时刻升序。
 
     ⚠ 先加时区偏移再取整、再减回去：直接对 UTC 毫秒取整，「一天」的边界会落在
     当地时间早上八点上。
+    ⚠ 桶内按时刻排而不按行序：上游排序或拼接后行序不是时序，首末值与差值会
+    取错且不报错。同一时刻按行序，结果稳定。
     Args: index, bucket, tz_offset_minutes。
     """
     width = _BUCKET_MS[bucket]
@@ -349,7 +351,10 @@ def _buckets_of(
     for position, moment in enumerate(index):
         start = ((moment + offset) // width) * width - offset
         grouped.setdefault(start, []).append(position)
-    return sorted(grouped.items())
+    return [
+        (start, sorted(positions, key=lambda position: index[position]))
+        for start, positions in sorted(grouped.items())
+    ]
 
 
 def _merged(

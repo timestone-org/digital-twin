@@ -10,9 +10,10 @@
 from collections.abc import Sequence
 from dataclasses import dataclass
 
-from openai import AsyncOpenAI
+from openai import AsyncOpenAI, OpenAIError
 
 from llmcore.endpoints import EmbeddingEndpoint
+from llmcore.errors import classified
 
 # 这一路在能力面上的名字。⚠ 是线上契约的一部分：落库的 `embedding_model`
 # 旁边存的就是它，换名字会让存量条目看着像另一路算的
@@ -41,11 +42,17 @@ class OpenAiCompatEmbeddingAdapter:
     async def embed(self, texts: Sequence[str]) -> list[list[float]]:
         """把一批文本转成向量，顺序与入参一一对应。
 
+        ⚠ 上游异常在这里收敛成 `ModelUnavailable` / `ModelRejected`：原样漏出去
+        的话，每个消费方的全局处理器都只认得出「意料之外」，回的是 500。
+
         Args: texts。
         """
-        answer = await self.client.embeddings.create(
-            model=self.model, input=list(texts)
-        )
+        try:
+            answer = await self.client.embeddings.create(
+                model=self.model, input=list(texts)
+            )
+        except OpenAIError as error:
+            raise classified(error) from error
         made = [list(one.embedding) for one in answer.data]
         wrong = next(
             (len(one) for one in made if len(one) != self.dimensions), None

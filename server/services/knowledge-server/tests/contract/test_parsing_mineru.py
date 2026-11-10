@@ -16,6 +16,7 @@ from knowledge_server.apps.knowledge.services.parsing import (
 )
 from knowledge_server.apps.knowledge.services.parsing.mineru import (
     MineruBackend,
+    blocks_of,
     document_of,
 )
 
@@ -209,3 +210,44 @@ def test_office_is_left_to_the_local_parsers() -> None:
     made = MineruBackend(base_url="http://mineru:8000")
     assert ".pdf" in made.suffixes
     assert not {".docx", ".xlsx", ".pptx"} & set(made.suffixes)
+
+
+def _table(body: str, footnote: list[str] | None = None) -> list[object]:
+    return [
+        {
+            "type": "table",
+            "page_idx": 0,
+            "table_body": body,
+            "table_caption": ["表 1"],
+            "table_footnote": footnote or [],
+        }
+    ]
+
+
+def test_a_one_row_table_still_lands_as_text() -> None:
+    """⚠ 键值条那类只有一行的表，不收的话整张表在检索里一个字都不存在。"""
+    made = blocks_of(
+        _table("<table><tr><td>额定功率</td><td>15 kW</td></tr></table>")
+    )
+    rows = [one.text for one in made if one.kind == "table_row"]
+    assert rows == ["额定功率 | 15 kW"]
+
+
+def test_a_merged_header_cell_spans_the_columns_under_it() -> None:
+    """⚠ 不认 colspan 的话，合并表头后面的每一列都配错列名，而那一行看着完全
+    正常。"""
+    made = blocks_of(
+        _table(
+            '<table><tr><th colspan="2">温度</th><th>单位</th></tr>'
+            "<tr><td>60</td><td>65</td><td>℃</td></tr></table>"
+        )
+    )
+    rows = [one.text for one in made if one.kind == "table_row"]
+    assert any("单位=℃" in one for one in rows)
+
+
+def test_the_footnote_survives_an_empty_table_body() -> None:
+    made = blocks_of(_table("", ["注：数据取自 2024 年标定"]))
+    assert any(
+        "2024 年标定" in one.text for one in made if one.kind == "caption"
+    )

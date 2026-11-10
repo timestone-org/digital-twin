@@ -61,7 +61,7 @@ function onNavigationMode(value: string): void {
       intent="neutral"
       icon="undo"
       label="撤销"
-      tooltip="撤销"
+      tooltip="撤销（Ctrl/⌘ Z）"
       data-test="undo"
       :disabled="!canUndo"
       @click="emit('undo')"
@@ -72,7 +72,7 @@ function onNavigationMode(value: string): void {
       intent="neutral"
       icon="redo"
       label="重做"
-      tooltip="重做"
+      tooltip="重做（Ctrl/⌘ Shift Z）"
       data-test="redo"
       :disabled="!canRedo"
       @click="emit('redo')"
@@ -114,6 +114,7 @@ function onNavigationMode(value: string): void {
       intent="primary"
       icon="save"
       label="保存"
+      tooltip="保存（Ctrl/⌘ S）"
       @click="emit('save')"
     />
   </div>

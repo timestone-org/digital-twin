@@ -12,6 +12,7 @@ from platform_server.apps.dashboard.crud.dashboard import (
     DEFAULT_ORDER,
     SORTABLE,
 )
+from platform_server.apps.dashboard.crud.thumbnail import thumbnail_crud
 from platform_server.apps.dashboard.errors import (
     DashboardNotFound,
     VersionConflict,
@@ -71,12 +72,16 @@ async def list_dashboards(
     rows, total = await dashboard_crud.list_page(
         session, statement=statement, offset=page.offset, limit=page.size
     )
-    counts = await dashboard_crud.node_counts(
-        session, frozenset(row.id for row in rows)
-    )
+    ids = frozenset(row.id for row in rows)
+    counts = await dashboard_crud.node_counts(session, ids)
+    pictured = await thumbnail_crud.pictured(session, ids)
     return Page[DashboardSummaryOut](
         items=[
-            to_dashboard_summary_out(row, node_count=counts.get(row.id, 0))
+            to_dashboard_summary_out(
+                row,
+                node_count=counts.get(row.id, 0),
+                has_thumbnail=row.id in pictured,
+            )
             for row in rows
         ],
         page=page.page,
@@ -132,7 +137,11 @@ async def update_dashboard(
     Args: session, dashboard_id, payload。
     """
     dashboard = await locked_dashboard(session, dashboard_id)
-    dashboard_crud.apply_changes(dashboard, given_changes(payload))
+    if payload.expected_version is not None:
+        require_version(dashboard, payload.expected_version)
+    changes = given_changes(payload)
+    changes.pop("expected_version", None)
+    dashboard_crud.apply_changes(dashboard, changes)
     bump_version(dashboard)
     await session.flush()
     _logger.info(

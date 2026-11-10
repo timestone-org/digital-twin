@@ -3,7 +3,9 @@
  * CSS 先写的在上面）、五种填充各自的 CSS 形状、四边可分关的边框、三形圆角、
  * inset 与外阴影混排、以及 §9.4 那三样恒定输出与 `minWidth` 的覆盖关系。
  */
-import { describe, expect, it } from 'vitest'
+import { afterEach, describe, expect, it } from 'vitest'
+
+import { __resetTwin2dAssets, configureTwin2dAssets } from '../src/assets'
 
 import { paintBox } from '../src/paintBox'
 import { TWIN_2D_BOX_CONSTANTS } from '../src/paintCommon'
@@ -298,7 +300,7 @@ describe('paintBox 的多层填充', () => {
     }
   })
 
-  it('未解析的 asset: 与带引号括号的地址都整层丢弃，不发必 404 的请求', () => {
+  it('素材解析没装配时 asset: 与带引号括号的地址都整层丢弃，不发必 404 的请求', () => {
     const unresolved = styleOf({
       fills: [
         { kind: 'image', id: 'i', ref: 'asset:abc', fit: 'cover', opacity: 1 },
@@ -317,6 +319,46 @@ describe('paintBox 的多层填充', () => {
       ],
     })
     expect('background' in injected).toBe(false)
+  })
+})
+
+// ⚠ 编辑器那一格写着「素材引用」：asset: 不解析的话，按提示选了素材的那一层在编辑器
+// 与大屏上都整层消失，诊断也一声不吭
+describe('paintBox 的素材底图', () => {
+  afterEach(() => {
+    __resetTwin2dAssets()
+  })
+
+  it('asset: 经素材解析槽换成地址再铺', () => {
+    configureTwin2dAssets({
+      resolveIcon: () => '',
+      resolveImage: (ref) => `/oss/images/${ref.slice('asset:'.length)}`,
+    })
+
+    const style = styleOf({
+      fills: [
+        { kind: 'image', id: 'i', ref: 'asset:abc', fit: 'cover', opacity: 1 },
+      ],
+    })
+
+    expect(style['background']).toBe(
+      'url("/oss/images/abc") center center / cover no-repeat',
+    )
+  })
+
+  it('解析出来的地址带引号括号时同样整层丢弃', () => {
+    configureTwin2dAssets({
+      resolveIcon: () => '',
+      resolveImage: () => '/oss/a").png',
+    })
+
+    const style = styleOf({
+      fills: [
+        { kind: 'image', id: 'i', ref: 'asset:abc', fit: 'cover', opacity: 1 },
+      ],
+    })
+
+    expect('background' in style).toBe(false)
   })
 })
 

@@ -18,6 +18,7 @@ from collector_server.apps.collect.drivers.base import (
     PointSpec,
     ValueSink,
 )
+from collector_server.apps.collect.errors import CollectError, NoReadablePoints
 from collector_server.apps.collect.plan.adapt import specs_of
 from collector_server.apps.collect.runtime.poller import PollLoop, PollOptions
 from collectwire import (
@@ -166,6 +167,13 @@ class SourceSession:
         self.revoke()
         await self._close()
 
+    async def report_stopped(self) -> None:
+        """会话拆完后补报一次离线，免得运行态一直停在拆之前的 online。
+
+        ⚠ 只能由仍持有租约的一方调：丢主之后那一行归新 leader 写。
+        """
+        await self._reporter.report(self._status(STATE_OFFLINE))
+
     def revoke(self) -> None:
         """租约失效时同步撤销读数出口与驱动发请求的权利。"""
         self._stopped.set()
@@ -215,8 +223,11 @@ class SourceSession:
             self._driver.capabilities.is_empty_source_connection_supported
         )
         if self._loaded_count == 0 and not is_empty_allowed:
-            raise ValueError("这个数据源没有可读取的有效点位")
+            raise NoReadablePoints("这个数据源没有可读取的有效点位")
         await self._driver.connect()
+        if self._stopped.is_set():
+            # ⚠ 叫停落在握手途中：此刻 `_close` 已经跑过，回到 run 再拆一次
+            return
         self._is_online = True
         async with self._attach_lock:
             await self._attach()
@@ -229,7 +240,7 @@ class SourceSession:
         几次，也不要静默变成一个不产值的会话（COLLECT_DESIGN.md §4.1）。
         ⚠ 在线状态要在拿到锁之后再判：排队期间会话可能已被撤销。
         """
-        if not self._is_online:
+        if not self._is_online or self._stopped.is_set():
             return
         specs = specs_of(self._source)
         self._loaded_count = self._driver.load_points(specs)
@@ -335,15 +346,15 @@ class SourceSession:
         Args: error, attempt。
         """
         category = self._driver.classify_error(error)
-        detail = type(error).__name__
         _logger.error(
             "source_session_failed",
             "数据源会话断开",
             source_id=str(self.source_id),
             error_category=category,
-            error_type=detail,
+            error_type=type(error).__name__,
             attempt=attempt,
         )
+        detail = _detail_of(error)
         await self._reporter.report(
             self._status(
                 STATE_OFFLINE, error_category=category, error_detail=detail
@@ -414,3 +425,17 @@ class SourceSession:
         if self._wants_subscribe():
             return len(self._subscribed)
         return self._loaded_count
+
+
+def _detail_of(error: BaseException) -> str:
+    """运行态里给人看的那句原因。
+
+    ⚠ 只有本服务自己的领域异常报原文——原文是写给人看的；第三方异常的原文
+    可能带现场地址等细节，只报类名。
+
+    Args: error。
+    """
+    message = str(error)
+    if isinstance(error, CollectError) and message:
+        return message
+    return type(error).__name__

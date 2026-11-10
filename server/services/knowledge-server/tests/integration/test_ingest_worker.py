@@ -70,6 +70,7 @@ class _Embedder:
 
     dimensions: int
     id: str = "fake"
+    model: str | None = "fake-model"
     max_input_tokens: int = 512
     can_embed: bool = True
 
@@ -251,7 +252,14 @@ async def test_a_flaky_upstream_is_left_unacked(
         )
     )
     assert stream.acked == []
-    assert await _status(db_sessions, document_id) == "parsing"
+    # ⚠ 退回 pending 并写明原因：停在 parsing 的话界面上看不出为什么卡住，
+    # 「重新解析」也一直被拒成「正在解析」
+    async with db_sessions() as session:  # pyright: ignore[reportCallIssue]
+        row = await crud.document.get_document(session, document_id)
+        assert row is not None
+        assert row.status == "pending"
+        assert "稍后自动重试" in row.failure_reason
+        assert await crud.document.mark_requeued(session, document_id, None)
 
 
 async def test_a_running_ingest_renews_its_pending_delivery(

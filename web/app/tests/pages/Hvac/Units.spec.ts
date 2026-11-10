@@ -269,6 +269,41 @@ describe('空调台账页', () => {
     )
   })
 
+  it('⚠ 选着房间时换车间只重取一次，不先拿旧房间去筛新车间', async () => {
+    vi.mocked(hvac.listWorkshops).mockResolvedValue({
+      items: [workshop(), { ...workshop(), id: 'w2', name: '西车间' }],
+      page: 1,
+      size: 200,
+      total: 2,
+    })
+    const wrapper = await render(['ac:view'])
+    await pickInSelect(wrapper, 0, '东车间')
+    await pickInSelect(wrapper, 1, '注塑房')
+    vi.mocked(hvac.listRooms).mockResolvedValue({
+      items: [],
+      page: 1,
+      size: 200,
+      total: 0,
+    })
+    vi.mocked(hvac.listAcUnits).mockClear()
+    await pickInSelect(wrapper, 0, '西车间')
+    expect(hvac.listAcUnits).toHaveBeenCalledTimes(1)
+    expect(hvac.listAcUnits).toHaveBeenLastCalledWith(
+      expect.objectContaining({ workshop_id: 'w2', room_id: undefined }),
+    )
+  })
+
+  it('车间超过一次取回的上限时说出来', async () => {
+    vi.mocked(hvac.listWorkshops).mockResolvedValue({
+      items: [workshop()],
+      page: 1,
+      size: 200,
+      total: 201,
+    })
+    const wrapper = await render(['ac:view'])
+    expect(wrapper.text()).toContain('只列出前 200 个')
+  })
+
   it('搜索要等打字停下来才发请求', async () => {
     // 边打字边发会把一次输入变成七八次查询，而只有最后一次的结果有用
     // ⚠ 不用 runAllTimers：UI 组件自己也在排定时器，跑到底会被判成死循环

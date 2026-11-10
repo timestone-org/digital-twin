@@ -14,6 +14,19 @@ const apiViews = computed(() =>
     node: { kind: 'dsTable', columns: result.columns, rows: result.rows },
   })),
 )
+/** 核对面板里数字的小数位；与正文插入指标的默认位数一致。 */
+const METRIC_DECIMALS = 2
+/**
+ * 指标值给人看的样子：数字收到两位小数，其余原样；全精度放在悬停里。
+ * @param metric 一条指标结果
+ */
+function metricText(metric: ReportPreview['metrics'][number]): string {
+  if (metric.value === null) return '—'
+  if (metric.value_kind !== 'number' || typeof metric.value !== 'string')
+    return String(metric.value)
+  const value = Number(metric.value)
+  return Number.isFinite(value) ? value.toFixed(METRIC_DECIMALS) : metric.value
+}
 const DATA_NODE_KINDS = new Set(['line', 'bar', 'pie', 'dsChart', 'dsTable'])
 const nodeViews = computed(() =>
   Object.entries(props.preview.nodes).map(([path, node]) => {
@@ -56,7 +69,10 @@ const nodeViews = computed(() =>
         {{ warning }}
       </DtNotice>
       <div v-for="metric in preview.metrics" :key="metric.name">
-        <strong> {{ metric.name }} </strong>：{{ metric.value ?? '—' }}
+        <strong> {{ metric.name }} </strong>：<span
+          :title="metric.value === null ? undefined : String(metric.value)"
+          >{{ metricText(metric) }}</span
+        >
         <span v-if="metric.is_truncated"> （数据已截断） </span>
         <DtNotice v-if="metric.error" intent="danger">
           {{ metric.error }}。请检查该指标的数据来源与字段映射。
@@ -71,12 +87,15 @@ const nodeViews = computed(() =>
         :title="`API · ${source.name}`"
         padding="sm"
       >
-        <p class="mb-2 text-sm text-secondary">
+        <DtNotice v-if="source.error" intent="danger">
+          {{ source.error }}
+        </DtNotice>
+        <p v-else class="mb-2 text-sm text-secondary">
           本次获取 {{ source.row_count }} 行，以下展示前
           {{ source.rows.length }} 行映射结果。
         </p>
         <ReportTable v-if="source.rows.length" :node="source.node" />
-        <DtNotice v-else intent="info">
+        <DtNotice v-else-if="!source.error" intent="info">
           API 已返回，本期暂无匹配数据。请核对参数、数据位置与报告期。
         </DtNotice>
       </DtCard>

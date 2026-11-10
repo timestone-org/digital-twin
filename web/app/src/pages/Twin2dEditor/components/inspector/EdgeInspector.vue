@@ -40,6 +40,7 @@ import { updateEdge } from '../../scripts/edgeOps'
 import {
   TWIN_2D_PX_RANGE,
   TWIN_2D_UNIT_RANGE,
+  twin2dRouteOptions,
 } from '../../scripts/inspectorFields'
 import { TWIN_2D_DEFAULT_SNAP } from '../../scripts/snapping'
 import { insertWaypoint, removeWaypoint } from '../../scripts/waypointOps'
@@ -80,10 +81,6 @@ const ROUTE_LABELS: Readonly<Record<Twin2dEdgeRoute, string>> = {
   bezier: '贝塞尔曲线',
   straight: '直连',
 }
-
-const ROUTE_OPTIONS: readonly DtSelectOption[] = TWIN_2D_EDGE_ROUTES.map(
-  (value) => ({ value, label: ROUTE_LABELS[value] }),
-)
 
 /** 端口那一档的「不钉」：由几何层朝对方中心自动选边。 */
 const AUTO_PORT: DtSelectOption = { value: '', label: '自动（朝向对方中心）' }
@@ -318,7 +315,7 @@ function writeWaypoint(
       />
       <DtSelect
         :model-value="edge.route"
-        :options="ROUTE_OPTIONS"
+        :options="twin2dRouteOptions(edge.route, ROUTE_LABELS)"
         :hint="routeHint"
         label="走线"
         size="sm"

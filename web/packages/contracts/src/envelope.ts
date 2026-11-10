@@ -45,7 +45,7 @@ export const SUCCESS_CODE = 0
 /**
  * 已发布的错误码。**按码分支，不要按 message 分支**——文案会改、会翻译。
  * 分段十进制 `<4|5><领域两位><序号两位>`，领域 00 通用、01 认证与授权、
- * 12 数据台账、14 建模、16 空调与空间。
+ * 12 数据台账、14 建模、16 空调与空间、23 知识库。
  *
  * ⚠ 只登记**前端真的按它分支**的码：登记一个没人消费的码，等于摆出一条
  * 看起来处理过、实际走的是通用兜底的分支。
@@ -100,6 +100,10 @@ export const ERROR_CODES = {
   datasetFormulaPresetRule: 41223,
   /** 同一次成功运行已经发布过模型版本；刷新运行的发布状态，不再重复提交。 */
   modelingRunAlreadyPublished: 41411,
+  /** 命令已受理但结果未确认：结局未知，查原命令，不许当失败也不许新建命令重发。 */
+  modelingCommandPending: 41443,
+  /** 同一幂等键撞上旧式命令：结局同样未知，处置与上一条相同。 */
+  modelingLegacyCommandConflict: 41444,
   workshopNotFound: 41601,
   roomNotFound: 41602,
   acUnitNotFound: 41603,
@@ -118,6 +122,8 @@ export const ERROR_CODES = {
   startupRebuildInProgress: 41616,
   /** 服务组合与工件对不上（多半是训练之后新加的机组），要重训。 */
   modelConfigInvalid: 41620,
+  /** 对话在别处改过了，手上这份是旧的：重新拉取再改，不做无条件覆盖。 */
+  knowledgeChatConflict: 42323,
   internal: 50000,
   dependencyUnavailable: 50001,
   /** 外部数据源不可用。⚠ 后端刻意不给陈旧数据兜底，前端也不许显示旧值。 */

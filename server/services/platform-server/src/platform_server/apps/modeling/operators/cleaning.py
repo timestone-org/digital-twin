@@ -336,9 +336,11 @@ class FilterRows(OperatorBase):
         """
         config = self._config
         frame = frame_input(inputs, "frame")
+        # 布尔列直接读值，交给 `_keeps` 当 0/1 比；文本列仍由 `numbers_of` 拒
         values = (
             frame.values_of(config.column)
             if config.op in _BLANK_OPS
+            or frame.column_of(config.column).dtype == DTYPE_BOOLEAN
             else numbers_of(frame, config.column)
         )
         kept = [

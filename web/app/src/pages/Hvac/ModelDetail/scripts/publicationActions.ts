@@ -11,6 +11,7 @@ import type {
   OpcuaNode,
 } from '@dt/contracts'
 
+import { BizError } from '@/api/client'
 import * as hvac from '@/api/hvac'
 import * as opcua from '@/api/opcua'
 import { describeError } from '@/composables/useAsyncList'
@@ -91,6 +92,8 @@ async function load(
   derived: PublicationDerived,
   modelId: string,
 ): Promise<void> {
+  // ⚠ 切走再切回来会再进这里：草稿有未保存的改动时重读会静默把它冲掉
+  if (state.loadedFor.value === modelId && derived.isDirty.value) return
   state.isLoading.value = true
   state.error.value = null
   try {
@@ -100,6 +103,7 @@ async function load(
       state.saved.value === null
         ? emptyDraft()
         : draftOf(state.saved.value, derived.servingKeys.value)
+    state.loadedFor.value = modelId
   } catch (caught) {
     state.error.value = describeError(caught)
   } finally {
@@ -157,14 +161,31 @@ async function publishNow(
   state.error.value = null
   try {
     state.publishResult.value = await hvac.publishModelNow(modelId)
-    // 心跳落在配置行上，下发完要连它一起刷新
-    state.saved.value = await readPublication(modelId)
+    await refreshSaved(state, modelId)
     return true
   } catch (caught) {
     state.error.value = describeError(caught)
     return false
   } finally {
     state.isPublishing.value = false
+  }
+}
+
+/**
+ * 下发完重读配置：心跳落在配置行上。
+ * ⚠ 重读失败保留手上那份——下发本身已经成功，清成 null 会让一个配好的模型
+ * 看起来像没配过，下一次保存就整份盖掉线上的绑定。
+ * @param state 页签状态
+ * @param modelId 模型 id
+ */
+async function refreshSaved(
+  state: PublicationState,
+  modelId: string,
+): Promise<void> {
+  try {
+    state.saved.value = await readPublication(modelId)
+  } catch {
+    // 心跳暂时是旧的，配置本身没变
   }
 }
 
@@ -175,7 +196,8 @@ async function listInstances(): Promise<readonly OpcuaInstance[]> {
 
 /**
  * 读已保存的配置。⚠ 没配过是 404，**那是正常状态不是错误**——按错误处理会让
- * 一个还没配过的模型顶着一条红色横幅。
+ * 一个还没配过的模型顶着一条红色横幅。其余失败照样抛：当成「没配过」的话，
+ * 下一次保存会整份盖掉线上那份绑定。
  * @param modelId 模型 id
  */
 async function readPublication(
@@ -183,7 +205,8 @@ async function readPublication(
 ): Promise<AcModelPublication | null> {
   try {
     return await hvac.getModelPublication(modelId)
-  } catch {
-    return null
+  } catch (caught) {
+    if (caught instanceof BizError && caught.status === 404) return null
+    throw caught
   }
 }

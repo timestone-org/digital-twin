@@ -26,6 +26,7 @@ from platform_server.apps.collect.schemas import (
     AggregateOut,
     HistoryPointOut,
 )
+from platform_server.apps.collect.schemas.history import MAX_NODE_KEYS
 from platform_server.apps.collect.services import history_service
 from platform_server.container import Container
 from platform_server.settings import API_PREFIX
@@ -37,8 +38,6 @@ router = APIRouter(
 ContainerDep = Annotated[Container, Depends(get_container)]
 CursorDep = Annotated[CursorParams, Depends(cursor_params)]
 ViewDep = Annotated[CallerContext, Depends(require(COLLECT_VIEW))]
-# 一次查询能问的点位上限，与 schemas.history 的 MAX_NODE_KEYS 同值
-MAX_NODE_KEYS = 50
 
 
 def get_history_source(container: ContainerDep) -> HistorySource:

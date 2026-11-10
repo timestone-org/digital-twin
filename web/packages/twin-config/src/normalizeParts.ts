@@ -6,11 +6,13 @@
  * 把前者归一成后者会凭空多出一行绑定，而它绑上点位也永远不会有任何效果。
  * ⚠ 档位的**顺序**是配置的一部分（自上而下取第一个命中的），这里只清洗不重排。
  */
+import { isUsablePose } from './cameraSelect'
 import { normalizePanelField, MAX_PANEL_COLUMNS } from './normalizeElements'
 import { normalizeFocusView } from './normalizeScene'
 import { DEFAULT_PANEL_STYLE } from './panelStyle'
 import {
   boolOr,
+  clampedIntOr,
   clampedOr,
   entityId,
   normalizeList,
@@ -39,8 +41,6 @@ import {
 
 /** 常态染色浓度：染上去还看得出金属/纹理，不至于糊成一块纯色。 */
 const DEFAULT_BLEND = 0.85
-/** 可用取景的最小机位跨度。 */
-const MIN_DETAIL_VIEW_SPAN = 1e-6
 /** 自发光上限；再高只是把画面烧白。 */
 const MAX_GLOW = 3
 /** 渐变缺省区间，配成 0–100 让百分比类点位开箱即用。 */
@@ -165,10 +165,7 @@ export const DEFAULT_PART_DETAIL: TwinPartDetail = Object.freeze({
 })
 
 /**
- * 部件的点击动作。
- * ⚠ 远距缺省是 `approach`（先把部件框进画面），与两段式点击本来的行为一致；
- * 近距缺省是 `none`：缺省就弹窗的话，一份还没配过详情字段的配置会在每次点击
- * 部件时弹出一张空卡片。
+ * 部件的点击动作；缺省值及其理由见 `DEFAULT_PART_CLICK`。
  * @param raw 落库的点击动作
  */
 export function normalizePartClick(raw: unknown): TwinPartClick {
@@ -204,12 +201,7 @@ function normalizeDetailView(raw: unknown): TwinFocusView | null {
   )
     return null
   const view = normalizeFocusView(raw)
-  if (view === null) return null
-  const [px, py, pz] = view.position
-  const [tx, ty, tz] = view.target
-  return Math.hypot(px - tx, py - ty, pz - tz) > MIN_DETAIL_VIEW_SPAN
-    ? view
-    : null
+  return view !== null && isUsablePose(view) ? view : null
 }
 
 /**
@@ -245,6 +237,11 @@ export function normalizePartDetail(raw: unknown): TwinPartDetail {
       DEFAULT_PART_DETAIL.variant,
     ),
     accent: colorSpec(source.accent),
-    columns: clampedOr(source.columns, 1, 1, MAX_PANEL_COLUMNS),
+    columns: clampedIntOr(
+      source.columns,
+      DEFAULT_PART_DETAIL.columns,
+      1,
+      MAX_PANEL_COLUMNS,
+    ),
   }
 }

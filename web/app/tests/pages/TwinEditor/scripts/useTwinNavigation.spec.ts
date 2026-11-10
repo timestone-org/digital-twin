@@ -17,8 +17,6 @@ it('返回上一视角，切换对象同步隔离，显示全部恢复显隐', a
     restoreView: vi.fn(),
     isolatePart: vi.fn(),
     measureDistance: () => null,
-    playRoamPreview: () => false,
-    stopRoamPreview: () => undefined,
     stageEl: () => null,
   }
   const viewport = shallowRef<TwinViewportHandle | null>(handle),

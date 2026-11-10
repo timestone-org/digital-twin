@@ -4,16 +4,68 @@ import { EXRLoader } from 'three/examples/jsm/loaders/EXRLoader.js'
 
 export type EnvironmentLoader = (signal: AbortSignal) => Promise<THREE.Texture>
 
-/** 加载随应用发布的 CC0 环境图。 */
-export const loadStudioEnvironment: EnvironmentLoader = async (signal) => {
+/** 环境图下载的总时限，毫秒。 */
+const ENVIRONMENT_TIMEOUT_MS = 15_000
+
+type DecodedEnvironment = ReturnType<EXRLoader['parse']>
+
+/**
+ * 解好的环境图像素，全应用共用一份；失败时清空，下一次重新加载。
+ * ⚠ 不缓存的话每个场景、每开一次详情弹窗都在主线程上解一遍 DWAB，卡顿按场景数叠加。
+ */
+let decoded: Promise<DecodedEnvironment> | null = null
+
+/** 下载并解码一次；⚠ 不接调用方的取消信号，一个场景卸载不能作废别人在等的那份。 */
+async function fetchAndDecode(): Promise<DecodedEnvironment> {
   const response = await fetch(
     new URL('./assets/forest.exr', import.meta.url),
-    {
-      signal: AbortSignal.any([signal, AbortSignal.timeout(15_000)]),
-    },
+    { signal: AbortSignal.timeout(ENVIRONMENT_TIMEOUT_MS) },
   )
   if (!response.ok) throw new Error('环境光资源加载失败')
-  const parsed = new EXRLoader().parse(await response.arrayBuffer())
+  return new EXRLoader().parse(await response.arrayBuffer())
+}
+
+function decodedEnvironment(): Promise<DecodedEnvironment> {
+  decoded ??= fetchAndDecode().catch((error: unknown) => {
+    decoded = null
+    throw error
+  })
+  return decoded
+}
+
+function abortError(): DOMException {
+  return new DOMException('环境光加载已取消', 'AbortError')
+}
+
+/**
+ * 等共用的那份，但调用方一取消就先撤。
+ * @param promise 共用的解码结果
+ * @param signal 调用方自己的取消信号
+ */
+function unlessAborted<T>(
+  promise: Promise<T>,
+  signal: AbortSignal,
+): Promise<T> {
+  if (signal.aborted) return Promise.reject(abortError())
+  return new Promise<T>((resolve, reject) => {
+    const onAbort = (): void => reject(abortError())
+    signal.addEventListener('abort', onAbort, { once: true })
+    promise.then(
+      (value) => {
+        signal.removeEventListener('abort', onAbort)
+        resolve(value)
+      },
+      (error: unknown) => {
+        signal.removeEventListener('abort', onAbort)
+        reject(error instanceof Error ? error : new Error(String(error)))
+      },
+    )
+  })
+}
+
+/** 加载随应用发布的 CC0 环境图；每次给一张新纹理，调用方各自释放。 */
+export const loadStudioEnvironment: EnvironmentLoader = async (signal) => {
+  const parsed = await unlessAborted(decodedEnvironment(), signal)
   const texture = new THREE.DataTexture(
     parsed.data,
     parsed.width,
@@ -27,6 +79,11 @@ export const loadStudioEnvironment: EnvironmentLoader = async (signal) => {
   texture.flipY = false
   texture.needsUpdate = true
   return texture
+}
+
+/** 只给测试用：丢掉共用的解码结果。 */
+export function __resetStudioEnvironment(): void {
+  decoded = null
 }
 
 /** 装配与 Blender AgX / exposure 0 对应的输出变换。 */

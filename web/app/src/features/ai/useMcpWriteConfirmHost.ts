@@ -19,7 +19,9 @@ export function useMcpWriteConfirmHost() {
   const pending = shallowRef<PendingWrite | null>(null)
   let attached = true
   const present: McpWriteConfirmHandler = (request, signal) => {
-    if (pending.value !== null) {
+    // 只挡还没决定或在提交的那一笔；只剩上一笔失败提示时由新请求顶替，不替人拒绝
+    const current = pending.value
+    if (current !== null && (current.error === null || current.isSubmitting)) {
       return { decision: Promise.resolve(false), complete: () => undefined }
     }
     let chosen = false

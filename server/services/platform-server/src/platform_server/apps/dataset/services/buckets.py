@@ -60,6 +60,16 @@ def shift_bucket(
     return BucketGrid(interval, timezone).shift(bucket, steps)
 
 
+def resume_bucket(
+    watermark: datetime, *, interval: timedelta, timezone: str
+) -> datetime:
+    """持久化水位在当前网格上的身份，离网（改过周期）时向下取整。
+
+    Args: watermark, interval, timezone。
+    """
+    return BucketGrid(interval, timezone).resume(watermark)
+
+
 def bucket_sequence(
     first: datetime, last: datetime, *, interval: timedelta, timezone: str
 ) -> tuple[datetime, ...]:

@@ -224,7 +224,7 @@ _COLLECT_SPECS: tuple[ParamSpec, ...] = (
             "的上界——包括这一页里其它旋钮的即时档。"
         ),
         read=lambda _settings: 30.0,
-        tier=TIER_RESTART,
+        tier=TIER_INSTANT,
         env_override="COLLECT_PLAN_REFRESH_INTERVAL_S",
     ),
 )

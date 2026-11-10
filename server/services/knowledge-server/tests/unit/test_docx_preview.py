@@ -1,6 +1,7 @@
 """DOCX 的 PDF 派生：隔离 Office 子进程、校验产物并尽力落私有对象。"""
 
 import asyncio
+import os
 import uuid
 import zipfile
 from dataclasses import dataclass
@@ -39,6 +40,8 @@ class _Process:
         self.is_hanging = is_hanging
         self.was_killed = False
         self.started = asyncio.Event()
+        # 不对应任何真进程：杀进程组那一步在用例里换成 `_killpg_of`
+        self.pid = 0
 
     async def communicate(self) -> tuple[bytes, bytes]:
         self.started.set()
@@ -52,6 +55,19 @@ class _Process:
 
     async def wait(self) -> int:
         return self.returncode or 0
+
+
+def _killpg_of(process: _Process) -> object:
+    """杀进程组的替身：落到这个假进程自己身上。
+
+    Args: process。
+    """
+
+    def killpg(pgid: int, sig: int) -> None:
+        del pgid, sig
+        process.kill()
+
+    return killpg
 
 
 def _docx(*, has_macro: bool = False) -> bytes:
@@ -268,6 +284,7 @@ async def test_a_hung_converter_is_killed(
     monkeypatch.setattr(
         docx_preview.shutil, "which", lambda _one: "/bin/soffice"
     )
+    monkeypatch.setattr(docx_preview.os, "killpg", _killpg_of(process))
     monkeypatch.setattr(docx_preview.asyncio, "create_subprocess_exec", launch)
     with pytest.raises(PreviewRenderFailed, match="超时"):
         await LibreOfficeDocxPreviewer(
@@ -287,6 +304,7 @@ async def test_cancelling_conversion_kills_the_child_process(
     monkeypatch.setattr(
         docx_preview.shutil, "which", lambda _one: "/bin/soffice"
     )
+    monkeypatch.setattr(docx_preview.os, "killpg", _killpg_of(process))
     monkeypatch.setattr(docx_preview.asyncio, "create_subprocess_exec", launch)
     task = asyncio.create_task(
         LibreOfficeDocxPreviewer(executable="soffice", timeout_s=30).render(
@@ -360,3 +378,40 @@ def test_the_feature_switch_controls_previewer_assembly() -> None:
     assert isinstance(
         build_previewer(True, "soffice", 30), LibreOfficeDocxPreviewer
     )
+
+
+async def _gone(pid: int) -> bool:
+    """这个进程在两秒内没了吗（僵尸也等它被回收）。
+
+    Args: pid。
+    """
+    for _ in range(40):
+        try:
+            os.kill(pid, 0)
+        except ProcessLookupError:
+            return True
+        await asyncio.sleep(0.05)
+    return False
+
+
+async def test_a_timeout_kills_the_converter_that_the_launcher_forked(
+    tmp_path: Path,
+) -> None:
+    """⚠ soffice 是个启动器，真正干活的 soffice.bin 是它 fork 出来的：只杀
+    启动器那一个 pid 的话，转换进程成了孤儿接着吃 CPU 与内存，超时几次就把
+    worker 容器顶到 OOM。"""
+    launcher = tmp_path / "soffice"
+    launcher.write_text(
+        '#!/bin/sh\nsleep 30 &\necho $! > "$HOME/child.pid"\nwait\n'
+    )
+    launcher.chmod(0o755)
+    output = tmp_path / "out"
+    output.mkdir()
+
+    with pytest.raises(PreviewRenderFailed, match="超时"):
+        await docx_preview._run_libreoffice(
+            str(launcher), tmp_path / "a.docx", output, 0.5
+        )
+
+    child = int((output / "child.pid").read_text().strip())
+    assert await _gone(child)

@@ -8,7 +8,7 @@
  * 本地副本就会出现「界面上是这样、落库的是那样」。
  * ⚠ 分支有序：第一个成立的那一档说了算，所以上下移是语义操作不是排版操作。
  */
-import { computed, nextTick, ref } from 'vue'
+import { computed, nextTick, ref, watch } from 'vue'
 import { DtButton, DtTextarea } from '@dt/ui'
 
 import { toCards, type FieldId } from '../scripts/branchCards'
@@ -142,6 +142,24 @@ function remap(moved: (at: number) => number | null): void {
   active.value = to === null ? null : { ...current, id: `${to}.${which}` }
 }
 
+// 删或移之后等新草稿画完再把焦点送回 `active` 那一格。卡片按档位序号复用 DOM，
+// 不送的话焦点留在原处那一格，而那一格此刻装的是别的档
+let refocusPending = false
+
+watch(
+  () => props.draft,
+  () => {
+    if (!refocusPending) return
+    refocusPending = false
+    const current = active.value
+    const element = current === null ? null : elementOf(current.id)
+    if (current === null || element === null) return
+    element.focus()
+    element.setSelectionRange(current.start, current.end)
+  },
+  { flush: 'post' },
+)
+
 function addArm(): void {
   // 追加在末尾，已有档位序号不变，active 无需重映射
   emitDraft(
@@ -152,6 +170,7 @@ function addArm(): void {
 
 function removeArm(at: number): void {
   remap((one) => (one === at ? null : one > at ? one - 1 : one))
+  refocusPending = true
   emitDraft(
     props.draft.arms.filter((_, one) => one !== at),
     props.draft.otherwise,
@@ -163,6 +182,7 @@ function moveArm(at: number, delta: -1 | 1): void {
   const moving = props.draft.arms[at]
   if (moving === undefined || to < 0 || to >= props.draft.arms.length) return
   remap((one) => (one === at ? to : one === to ? at : one))
+  refocusPending = true
   const next = [...props.draft.arms]
   next.splice(at, 1)
   next.splice(to, 0, moving)

@@ -177,6 +177,24 @@ def test_configuring_points_does_not_grant_writing_to_the_field() -> None:
     assert not rule.permission_codes <= configurer
 
 
+@pytest.mark.parametrize(
+    "encoded",
+    [
+        f"{PLATFORM_PREFIX}/%63ollect-points/{SAMPLE_ID}:write",
+        f"{POINT}%3Awrite",
+        f"{POINT}:%77rite",
+    ],
+    ids=["encoded-resource", "encoded-colon", "encoded-verb"],
+)
+def test_percent_encoding_does_not_steer_the_write_to_the_fallback(
+    encoded: str,
+) -> None:
+    """上游按解码后的路径路由，闸 1 也必须按解码后的路径挑规则。"""
+    views = catalog_rule_views()
+    plain = find_rule(views, path=f"{POINT}:write", method="POST")
+    assert find_rule(views, path=encoded, method="POST") == plain
+
+
 def test_the_internal_collect_plan_has_no_seeded_rule() -> None:
     """内部面走服务级密钥，边缘对 `/internal/` 一律 deny。
 

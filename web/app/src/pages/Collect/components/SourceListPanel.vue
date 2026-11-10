@@ -45,6 +45,8 @@ defineEmits<{
   reload: []
   create: []
 }>()
+/** 头上的计数跟分页器一样给总数；没给总数时退回本页条数。 */
+const count = computed(() => props.total ?? props.sources.length)
 const hasPages = computed(() => (props.total ?? 0) > (props.size ?? 100))
 const previousDisabled = computed(() => props.loading || (props.page ?? 1) <= 1)
 const nextDisabled = computed(
@@ -57,8 +59,8 @@ const nextDisabled = computed(
 <template>
   <DtCard icon="server" title="数据源" class="flex min-h-0 flex-1 flex-col">
     <template #actions>
-      <DtTag v-if="sources.length !== 0" size="sm">
-        {{ sources.length }}
+      <DtTag v-if="count !== 0" size="sm">
+        {{ count }}
       </DtTag>
       <DtButton
         variant="ghost"
@@ -73,6 +75,7 @@ const nextDisabled = computed(
     <div class="mb-3 flex gap-2">
       <DtInput
         :model-value="keyword ?? ''"
+        class="min-w-0 flex-1"
         size="sm"
         placeholder="搜索数据源名称或编码"
         @update:model-value="$emit('update:keyword', $event)"

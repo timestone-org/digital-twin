@@ -10,6 +10,7 @@ from typing import Annotated
 
 from pydantic import (
     BaseModel,
+    BeforeValidator,
     ConfigDict,
     PlainSerializer,
     StringConstraints,
@@ -27,6 +28,16 @@ Utc = Annotated[
 ]
 
 Trimmed = Annotated[str, StringConstraints(strip_whitespace=True)]
+
+
+def _reject_null(value: object) -> object:
+    if value is None:
+        raise ValueError("不能为 null；不改这个字段就别传它")
+    return value
+
+
+# 局部更新里「缺省 = 不改」，而显式 null 对非空列没有含义，挂上它就当场 422
+NotNull = BeforeValidator(_reject_null)
 
 
 class InputModel(BaseModel):

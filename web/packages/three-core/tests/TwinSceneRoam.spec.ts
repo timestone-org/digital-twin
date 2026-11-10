@@ -167,3 +167,76 @@ it('退出漫游配置后停止播放，镜头交还配置预览', async () => {
   ])
   wrapper.unmount()
 })
+
+describe('逐帧开销', () => {
+  // ⚠ 漫游每帧都要模型体量：每帧重量包围盒等于每帧遍历整棵模型树
+  it('漫游播放中不逐帧重量模型包围盒', async () => {
+    let nextFrame: FrameRequestCallback = () => undefined
+    vi.spyOn(globalThis, 'requestAnimationFrame').mockImplementation(
+      (callback) => {
+        nextFrame = callback
+        return 1
+      },
+    )
+    vi.spyOn(globalThis, 'cancelAnimationFrame').mockImplementation(
+      () => undefined,
+    )
+    const wrapper = mountScene({ enabled: true, showControls: true })
+    await flushPromises()
+    const toggle = wrapper
+      .findAll('button')
+      .find((item) => item.text() === '播放漫游')
+    await toggle?.trigger('click')
+    nextFrame(16)
+    const measure = vi.spyOn(THREE.Box3.prototype, 'setFromObject')
+
+    for (let timeMs = 32; timeMs <= 200; timeMs += 16) nextFrame(timeMs)
+
+    expect(wrapper.find(CONTROLS).text()).toContain('暂停漫游')
+    expect(measure).not.toHaveBeenCalled()
+    wrapper.unmount()
+  })
+})
+
+describe('闲置自动开播', () => {
+  // ⚠ 视点条是用户在操作：只停播不重新计闲置的话，装上时的那个计时器照旧到点开播
+  it('点视点条之后闲置计时从这一下重新算', async () => {
+    const IDLE_MS = 5000
+    vi.useFakeTimers({ toFake: ['setTimeout', 'clearTimeout'] })
+    try {
+      const wrapper = mount(TwinScene, {
+        props: {
+          config: normalizeTwinConfig({
+            model: { asset: ASSET },
+            cameras: [
+              { id: 'c1', name: '一号', position: [10, 0, 0] },
+              { id: 'c2', name: '二号', position: [0, 0, 10] },
+            ],
+            viewpoints: { enabled: true },
+            roamTour: {
+              items: ['c1', 'c2'],
+              enabled: true,
+              showControls: true,
+              idleAutoplay: true,
+              idleAutoplayDelayMs: IDLE_MS,
+            },
+          }),
+        },
+        attachTo: document.body,
+      })
+      await flushPromises()
+      vi.advanceTimersByTime(IDLE_MS - 100)
+      await wrapper.find('.twin-viewpoints button').trigger('click')
+      vi.advanceTimersByTime(200)
+      await flushPromises()
+
+      expect(wrapper.find(CONTROLS).text()).toContain('播放漫游')
+      vi.advanceTimersByTime(IDLE_MS)
+      await flushPromises()
+      expect(wrapper.find(CONTROLS).text()).toContain('暂停漫游')
+      wrapper.unmount()
+    } finally {
+      vi.useRealTimers()
+    }
+  })
+})

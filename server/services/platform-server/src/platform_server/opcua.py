@@ -111,7 +111,8 @@ class OpcuaClient:
             "ids": [str(node_id) for node_id in node_ids],
         }
         data = await self._post(RESOLVE_PATH, payload, action="resolve")
-        return [_resolved(item) for item in _ResolveData.of(data).items]
+        receipt = _receipt(_ResolveData, data, action="resolve")
+        return [_resolved(item) for item in receipt.items]
 
     async def write(
         self,
@@ -135,7 +136,8 @@ class OpcuaClient:
         data = await self._post(
             WRITE_PATH, payload, action="write", key=idempotency_key
         )
-        return [_written(item) for item in _WriteData.of(data).items]
+        receipt = _receipt(_WriteData, data, action="write")
+        return [_written(item) for item in receipt.items]
 
     async def _post(
         self,
@@ -208,6 +210,27 @@ class OpcuaClient:
         return headers
 
 
+def _receipt[ModelT: BaseModel](
+    model: type[ModelT], data: dict[str, Any], *, action: str
+) -> ModelT:
+    """把 data 段收口成回执；形状不对按调用失败报。
+
+    ⚠ 调用方只接 `OpcuaCallFailed`：漏出裸的校验错，下发循环就跳过记错与心跳
+    那一步，表现是「静默没发」。
+    Args: model, data, action。
+    """
+    try:
+        return model.model_validate(data)
+    except ValidationError as error:
+        _logger.error(
+            "opcua_call_failed",
+            "opcua-server 回执格式不对",
+            action=action,
+            error_type=type(error).__name__,
+        )
+        raise OpcuaCallFailed("opcua-server 回执格式不对") from error
+
+
 def _reason(error: Exception) -> str:
     """给人看的失败原因，落在 `last_error` 与接口上。
 
@@ -255,14 +278,6 @@ class _ResolveData(BaseModel):
 
     items: list[_ResolvedItem]
 
-    @classmethod
-    def of(cls, data: dict[str, Any]) -> "_ResolveData":
-        """按回执结构收口。
-
-        Args: data。
-        """
-        return cls.model_validate(data)
-
 
 class _WriteItem(BaseModel):
     """写值回执里的一项。"""
@@ -278,14 +293,6 @@ class _WriteData(BaseModel):
     """写值回执的 data 段。"""
 
     items: list[_WriteItem]
-
-    @classmethod
-    def of(cls, data: dict[str, Any]) -> "_WriteData":
-        """按回执结构收口。
-
-        Args: data。
-        """
-        return cls.model_validate(data)
 
 
 def _resolved(item: _ResolvedItem) -> ResolvedNode:

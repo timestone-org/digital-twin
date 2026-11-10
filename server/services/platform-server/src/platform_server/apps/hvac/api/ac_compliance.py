@@ -39,6 +39,10 @@ async def get_compliance_policy(
     timezone: TimezoneDep,
     _viewer: ViewDep,
 ) -> ApiResponse[CompliancePolicyOut]:
+    """读一台空调的两季达标配置，连同此刻生效的季节。
+
+    Args: ac_unit_id, session, timezone, _viewer。
+    """
     return ok(
         await ac_compliance_service.read_policy(
             session, ac_unit_id, timezone=timezone
@@ -58,6 +62,12 @@ async def put_compliance_policy(
     timezone: TimezoneDep,
     _manager: ManageDep,
 ) -> ApiResponse[CompliancePolicyOut]:
+    """一个事务里保存冬季日期与两套达标范围。
+
+    ⚠ 启用冬季之后，旧的 `PUT /metric-limits` 会被拒绝。
+
+    Args: ac_unit_id, payload, session, timezone, _manager。
+    """
     return ok(
         await ac_compliance_service.put_policy(
             session, ac_unit_id, payload, timezone=timezone

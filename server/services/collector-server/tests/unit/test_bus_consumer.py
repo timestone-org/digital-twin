@@ -25,6 +25,7 @@ from collectwire import (
     STATUS_ERROR,
     STATUS_OK,
 )
+from lib.logging import current_log_context
 
 NOW_MS = 1_767_323_045_000
 LATER_MS = NOW_MS + 10_000
@@ -57,8 +58,11 @@ class FakeTransport:
 class FakeLocator:
     """按 id 给会话的假定位器。"""
 
-    def __init__(self, sessions: dict[UUID, Any]) -> None:
+    def __init__(
+        self, sessions: dict[UUID, Any], *, is_leader: bool = True
+    ) -> None:
         self.sessions = sessions
+        self.is_leader = is_leader
 
     def session_of(self, source_id: UUID) -> Any:
         return self.sessions.get(source_id)
@@ -70,10 +74,15 @@ class FakeSession:
         self.is_online = is_online
 
 
-def _consumer(transport: FakeTransport, sessions: dict[UUID, Any]) -> Any:
+def _consumer(
+    transport: FakeTransport,
+    sessions: dict[UUID, Any],
+    *,
+    locator: FakeLocator | None = None,
+) -> Any:
     return CommandConsumer(
         transport=transport,
-        locator=FakeLocator(sessions),
+        locator=locator or FakeLocator(sessions),
         block_s=0.01,
         reply_ttl_s=60,
         clock=lambda: NOW_MS,
@@ -343,6 +352,60 @@ async def test_expected_browse_rejections_are_logged_as_warnings(
     consumer = _consumer(transport, {SOURCE_ID: FakeSession(driver)})
     with caplog.at_level(logging.WARNING):
         await consumer.handle_once()
+    assert [
+        record.levelno
+        for record in caplog.records
+        if record.getMessage() == "command_failed"
+    ] == [logging.WARNING]
+
+
+async def test_a_standby_leaves_requests_for_the_leader(driver: Any) -> None:
+    # 热备没有现场会话：它取走的每一条都只能答「离线」，而 leader 明明连着
+    transport = FakeTransport([_request(ACTION_READ, point_codes=[])])
+    locator = FakeLocator({SOURCE_ID: FakeSession(driver)}, is_leader=False)
+    consumer = _consumer(transport, {}, locator=locator)
+    assert await consumer.handle_once() is False
+    assert transport.blocked_s == []
+    assert transport.replies == []
+    locator.is_leader = True
+    assert await consumer.handle_once() is True
+    assert transport.replies[0][1]["status"] == STATUS_OK
+
+
+async def test_the_request_trace_is_carried_into_the_execution(
+    driver: Any,
+) -> None:
+    trace_id = "4bf92f3577b34da6a3ce929d0e0e4736"
+    seen: list[str | None] = []
+
+    async def browse(_parent: str | None) -> list[BrowseItem]:
+        seen.append(current_log_context().trace_id)
+        return []
+
+    driver.browse = browse
+    transport = FakeTransport(
+        [
+            _request(
+                ACTION_BROWSE,
+                traceparent=f"00-{trace_id}-00f067aa0ba902b7-01",
+            )
+        ]
+    )
+    consumer = _consumer(transport, {SOURCE_ID: FakeSession(driver)})
+    await consumer.handle_once()
+    assert seen == [trace_id]
+    assert current_log_context().trace_id is None
+
+
+async def test_an_unimplemented_action_is_logged_as_a_warning(
+    driver: Any, caplog: pytest.LogCaptureFixture
+) -> None:
+    # 未实现的动作是约定内的结论（发起方记成「未校验」），不是采集侧故障
+    transport = FakeTransport([_request("validate", addresses=["ns=2;s=A"])])
+    consumer = _consumer(transport, {SOURCE_ID: FakeSession(driver)})
+    with caplog.at_level(logging.WARNING):
+        await consumer.handle_once()
+    assert transport.replies[0][1]["reason"] == "unknown_action"
     assert [
         record.levelno
         for record in caplog.records

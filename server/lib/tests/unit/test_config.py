@@ -142,6 +142,17 @@ def test_trace_sample_ratio_is_bounded() -> None:
         make(app_trace_sample_ratio=1.5)
 
 
+def test_an_unknown_log_level_is_rejected_at_load_time() -> None:
+    """⚠ 放过去的话要到装配日志器才崩，且是一条裸栈而不是逐项的配置错误。"""
+    with pytest.raises(ValidationError):
+        make(app_log_level="verbose")
+
+
+def test_log_level_accepts_every_name_logging_knows() -> None:
+    assert make(app_log_level="warn").app_log_level == "WARN"
+    assert make(app_log_level="Critical").app_log_level == "CRITICAL"
+
+
 def test_load_settings_or_exit_prints_and_exits_non_zero(
     capsys: pytest.CaptureFixture[str],
 ) -> None:

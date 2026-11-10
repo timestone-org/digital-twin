@@ -29,7 +29,15 @@ describe('颜色图例', () => {
   it('每个种类只列一次——十条能流共用一套种类是常态', () => {
     const legend = collectSceneLegend(flowsOf('water', 'water', 'steam'), [])
 
-    expect(legend.map((item) => item.label)).toEqual(['water', 'steam'])
+    expect(legend.map((item) => item.label)).toEqual(['水', '蒸汽'])
+  })
+
+  // ⚠ 中文大屏的图例上出现 water / electricity 是在露内部代码
+  it('认得的种类显示中文名，旧别名也认得，不认识的原样显示', () => {
+    const legend = collectSceneLegend(flowsOf('electricity', '冷却水'), [])
+
+    expect(legend.map((item) => item.label)).toEqual(['电', '冷却水'])
+    expect(collectSceneLegend(flowsOf('Power'), [])[0]?.label).toBe('电')
   })
 
   // 缺省色代表什么本身没有含义，列出来只会让人去猜
@@ -231,6 +239,16 @@ describe('场景内搜索', () => {
     const { hits } = searchSceneEntities('pump', source)
 
     expect(hits[0]?.label).toBe('Pump')
+  })
+
+  // ⚠ 不钉 locale 的 localeCompare 在中文 locale 的 CI 与英文 locale 的开发机上次序不同
+  it('同档同长时按码点排，与机器的 locale 无关', () => {
+    const { hits } = searchSceneEntities('x', {
+      parts: [],
+      namedNodes: ['ax', 'Bx', '甲x'],
+    })
+
+    expect(hits.map((hit) => hit.label)).toEqual(['Bx', 'ax', '甲x'])
   })
 
   // 搜 pump 时 Pump 该排在 Pump_Assembly_Housing 前面

@@ -278,6 +278,41 @@ describe('数据源绑定', () => {
   })
 })
 
+describe('对象清单取不回来的落点', () => {
+  function bindingSection(): Element | null | undefined {
+    return [...document.querySelectorAll('h3')]
+      .find((node) => node.textContent?.trim() === '数据源绑定')
+      ?.closest('section')
+  }
+
+  it('⚠ 说在数据源对象那一格下并给重试，不挂到达标范围的保存键底下', async () => {
+    vi.mocked(hvac.listAcSourceObjects)
+      .mockRejectedValueOnce(new Error('外库连不上'))
+      .mockResolvedValue([])
+    await open()
+    expect(bindingSection()?.textContent).toContain('请求失败')
+    const retry = [
+      ...(bindingSection()?.querySelectorAll('button') ?? []),
+    ].find((node) => node.textContent?.trim() === '重试')
+    retry?.dispatchEvent(new MouseEvent('click', { bubbles: true }))
+    await flushPromises()
+    expect(hvac.listAcSourceObjects).toHaveBeenCalledTimes(2)
+    expect(bindingSection()?.textContent).not.toContain('请求失败')
+  })
+
+  it('保存达标范围成功后，底部不再挂着对象清单那句失败', async () => {
+    vi.mocked(hvac.listAcSourceObjects).mockRejectedValue(
+      new Error('外库连不上'),
+    )
+    vi.spyOn(hvac, 'putAcCompliancePolicy').mockResolvedValue(policy())
+    await open()
+    await click('保存达标范围')
+    const sections = [...document.querySelectorAll('section')]
+    const tail = sections.at(-1)?.parentElement?.lastElementChild
+    expect(tail?.textContent ?? '').not.toContain('请求失败')
+  })
+})
+
 describe('达标范围', () => {
   it('只给 is_limitable 的指标出输入框，量纲写在标签上', async () => {
     await open()

@@ -89,3 +89,10 @@ class SignupDisabled(AppError):
 
     code = 40112
     http_status = 403
+
+
+class CurrentPasswordIncorrect(AppError):
+    """改密码时旧密码不对。⚠ 不能是 401：客户端会当成会话失效去刷新重试。"""
+
+    code = 40113
+    http_status = 400

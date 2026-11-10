@@ -38,7 +38,10 @@ from platform_server.apps.hvac.schemas import (
     RecommendIn,
 )
 from platform_server.apps.hvac.services import ac_publication_service
-from platform_server.apps.hvac.services.ac_live_readings import read_live
+from platform_server.apps.hvac.services.ac_live_readings import (
+    fetch_live,
+    load_live_units,
+)
 from platform_server.apps.hvac.services.ac_model_predictor import (
     RecommendResult,
     recommend,
@@ -154,13 +157,15 @@ async def _plan(
 ) -> tuple[PlanItem, ...]:
     """算出这一拍要写的每个点位的值。
 
-    ⚠ 取数与推理都在事务之外：前者打的是厂商的外库，后者是纯计算但要读工件。
+    ⚠ 取数在事务之外：它打的是厂商的外库。读配置与推理各开一个短事务。
 
     Args: database, reader, view。
     """
     try:
         async with database.session() as session:
-            live = await read_live(session, reader, room_id=view.room_id)
+            units = await load_live_units(session, view.room_id)
+        live = await fetch_live(reader, units)
+        async with database.session() as session:
             result = await recommend(
                 session,
                 view.publication.model_id,
@@ -437,7 +442,7 @@ async def _remember(database: Sessions, outcome: PublishOutcome) -> None:
             "ac_publish_heartbeat_unrecorded",
             "下发结果未能写回，页面上的心跳会停在上一拍",
             model_id=str(outcome.model_id),
-            error_type=type(error).__name__,
+            error=error,
         )
 
 

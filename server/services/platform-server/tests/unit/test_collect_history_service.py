@@ -172,6 +172,41 @@ async def test_a_cursor_with_an_unreadable_moment_is_refused() -> None:
     assert raised.value.http_status == 400
 
 
+@pytest.mark.parametrize(
+    ("source_id", "point_code"),
+    [("not-a-uuid", "outlet_temp"), ("", "outlet_temp"), (None, "x")],
+    ids=["not-a-uuid", "empty", "missing"],
+)
+async def test_a_cursor_with_a_bad_anchor_is_refused_before_querying(
+    source_id: str | None, point_code: str
+) -> None:
+    # ⚠ 放过去就绑进 CAST(... AS uuid)，被包成 503「请稍后重试」并记一条 ERROR
+    anchor = {"ts": "2026-08-01T00:00:00Z", "point_code": point_code}
+    if source_id is not None:
+        anchor["source_id"] = source_id
+    source = FakeHistorySource()
+    with pytest.raises(HistoryQueryInvalid) as raised:
+        await history_service.read_history(
+            source,
+            query=build_query(),
+            page=CursorParams(limit=2, after=encode_cursor(anchor)),
+        )
+    assert raised.value.http_status == 400
+    assert source.queries == []
+
+
+async def test_a_cursor_without_a_point_code_is_refused() -> None:
+    forged = encode_cursor(
+        {"ts": "2026-08-01T00:00:00Z", "source_id": str(SOURCE_ID)}
+    )
+    with pytest.raises(HistoryQueryInvalid):
+        await history_service.read_history(
+            FakeHistorySource(),
+            query=build_query(),
+            page=CursorParams(limit=2, after=forged),
+        )
+
+
 async def test_a_text_value_round_trips_through_the_archive_columns() -> None:
     row = build_row(0, None)
     row["value_text"] = '{"mode": "auto"}'

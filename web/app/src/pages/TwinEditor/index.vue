@@ -4,8 +4,7 @@ import type { BindingPayload } from '@dt/contracts'
 import { collectTwinConfigIssues } from '@dt/twin-config'
 import type { TwinConfig, TwinNavigationMode, Vec3 } from '@dt/twin-config'
 import { DtPageState, DtResizableLayout, useConfirm, useToast } from '@dt/ui'
-import type { ModelAnimationEntry } from '@dt/three-core'
-import { computed, ref, watch, provide } from 'vue'
+import { computed, ref, provide, watch } from 'vue'
 import { useRoute } from 'vue-router'
 import { useWorkspaceGuard } from '@/features/workspace/useWorkspaceGuard'
 import { migrateLegacyEditorLayout } from '@/features/workspace/legacyEditorLayout'
@@ -37,6 +36,11 @@ import { useBulkParts } from './scripts/useBulkParts'
 import { useGizmoMode } from './scripts/useGizmoMode'
 import { useTwinAi } from './scripts/useTwinAi'
 import { useTwinEditorPage } from './scripts/useTwinEditorPage'
+import { useTwinAnimationSelection } from './scripts/useTwinAnimationSelection'
+import { applyBatchBindings, applyBatchConfig } from './scripts/batchApply'
+import { removeMissingAnimations } from './scripts/missingAnimations'
+import { removeSelectedEntity } from './scripts/removeSelected'
+import { useTwinShortcuts } from './scripts/useTwinShortcuts'
 import { useUnsavedGuard } from '@/composables/useUnsavedGuard'
 
 // ⚠ 子编辑器直接刷新时也必须安装模块，否则模型地址无法解析。
@@ -54,11 +58,6 @@ const confirm = useConfirm()
 const dashboardId = computed(() => String(route.params.dashboardId ?? ''))
 const nodeId = computed(() => String(route.params.nodeId ?? ''))
 
-import {
-  missingAnimationNames,
-  removeMissingAnimations,
-} from './scripts/missingAnimations'
-
 const page = useTwinEditorPage(
   () => dashboardId.value,
   () => nodeId.value,
@@ -75,24 +74,6 @@ const configPreviewRef = ref<InstanceType<typeof TwinConfigPreview> | null>(
 provide(TWIN_PREVIEW_INTENT, (mode) => {
   configPreviewRef.value?.showPartMode(mode)
 })
-const modelStatus = ref('empty')
-const animationClips = ref<readonly ModelAnimationEntry[]>([])
-const selectedAnimation = ref<string | null>(null)
-const animationTest = ref<'live' | 'play' | 'pause' | 'reset'>('live')
-const currentAnimation = computed(
-  () =>
-    animationClips.value.find(
-      (item) => item.name === selectedAnimation.value,
-    ) ?? null,
-)
-watch(selection, () => {
-  selectedAnimation.value = null
-  animationTest.value = 'live'
-})
-function selectAnimation(name: string): void {
-  selectedAnimation.value = name
-  animationTest.value = 'live'
-}
 const showIssues = ref(false)
 const focusMode = ref(false)
 const batchOpen = ref(false)
@@ -107,27 +88,19 @@ const roamPreviewing = ref(false)
 /** 视口回传的世界坐标基准原点。 */
 const frameOrigin = ref<Vec3>([0, 0, 0])
 const config = computed(() => page.doc.value?.config.value ?? null)
-const missingAnimations = computed(() =>
-  config.value === null
-    ? new Set<string>()
-    : missingAnimationNames(
-        config.value.model.animations,
-        animationClips.value,
-        modelStatus.value,
-      ),
+const {
+  modelStatus,
+  animationClips,
+  selectedAnimation,
+  animationTest,
+  currentAnimation,
+  missingAnimations,
+  selectAnimation,
+  resetAnimation,
+} = useTwinAnimationSelection(
+  () => config.value,
+  () => selection.value,
 )
-watch(
-  [() => config.value?.model.asset, () => config.value?.model.variant],
-  () => {
-    modelStatus.value = 'loading'
-    animationClips.value = []
-  },
-  { flush: 'sync' },
-)
-watch(missingAnimations, (missing) => {
-  if (selectedAnimation.value !== null && missing.has(selectedAnimation.value))
-    selectedAnimation.value = null
-})
 
 const isDirty = computed(
   () =>
@@ -175,7 +148,6 @@ const viewport = createTwinViewportOps({
   config: () => config.value,
   actions: () => actions.value,
   selection: () => selection.value,
-  onRoamUnavailable: () => toast.error('有效视点不足两个，请先补充漫游站点'),
 })
 
 // ⚠ 模板里的 `ref="viewportRef"` 只认得顶层绑定，写成 `viewport.viewportRef`
@@ -201,9 +173,11 @@ const ai = useTwinAi(
   () => viewportRef.value?.stageEl() ?? null,
 )
 
+// 换了选中就断开检查器的合并段：回到同一个字段再改，是另一次编辑
+watch(selection, () => page.doc.value?.endMerge())
+
 function select(next: TwinSelection): void {
-  selectedAnimation.value = null
-  animationTest.value = 'live'
+  resetAnimation()
   selection.value = next
 }
 
@@ -226,36 +200,53 @@ function createFolderWith(payload: { kind: TwinEntityKind; id: string }): void {
     actions.value?.addFolderWithItem(payload.kind, payload.id) ?? null
 }
 
-function applyBatchConfig(next: TwinConfig): void {
+function onBatchConfig(next: TwinConfig): void {
   const doc = page.doc.value
-  if (doc === null) return
-  const count = doc.config.value.parts.filter(
-    (part) =>
-      JSON.stringify(part) !==
-      JSON.stringify(next.parts.find((item) => item.id === part.id)),
-  ).length
-  if (count === 0) return
-  doc.commit(next)
-  toast.success(`已更新 ${count} 个部件，可整体撤销`)
+  const count = doc === null ? 0 : applyBatchConfig(doc, next)
+  if (count > 0) toast.success(`已更新 ${count} 个部件，可整体撤销`)
 }
-function applyBatchBindings(next: readonly BindingPayload[]): void {
+function onBatchBindings(next: readonly BindingPayload[]): void {
   const doc = page.doc.value
-  if (doc === null) return
-  const count = next.filter(
-    (item) =>
-      doc.bindings.value.find((old) => old.id === item.id)?.nodeKey !==
-      item.nodeKey,
-  ).length
-  if (count === 0) return
-  doc.commitBindings(next)
-  toast.success(`已替换 ${count} 条草稿绑定，可整体撤销`)
+  const count = doc === null ? 0 : applyBatchBindings(doc, next)
+  if (count > 0) toast.success(`已替换 ${count} 条草稿绑定，可整体撤销`)
 }
 
 async function save(): Promise<void> {
   const ok = await page.save()
   if (ok) toast.success('孪生场景已保存')
-  else toast.error(page.conflict.value ?? '保存失败，请重试')
+  else if (page.conflict.value !== null) await offerReload(page.conflict.value)
+  else toast.error('保存失败，请重试')
 }
+
+/** 版本冲突后给一条出路：按最新那一版重读，代价是这里没保存的改动。 */
+async function offerReload(conflict: string): Promise<void> {
+  const ok = await confirm.ask({
+    title: '大屏在别处被改过',
+    message: `${conflict}重新加载会丢弃这里还没保存的改动。`,
+    confirmText: '重新加载',
+    danger: true,
+  })
+  if (ok) await page.reload()
+}
+
+useTwinShortcuts({
+  handlers: {
+    save: () => {
+      if (isDirty.value && !page.saving.value) void save()
+    },
+    undo: () => page.doc.value?.undo(),
+    redo: () => page.doc.value?.redo(),
+    remove: () =>
+      void removeSelectedEntity({
+        config: config.value,
+        selection: selection.value,
+        ask: confirm.ask,
+        remove: (kind, id) => actions.value?.remove(kind, id),
+      }),
+  },
+  suspended: () =>
+    viewport.isPicking.value || batchOpen.value || bulk.open.value,
+})
 
 /** 返回大屏编辑器；外壳的返回入口按站内路径走。 */
 const backTo = computed(() => `/dashboards/${dashboardId.value}/edit`)
@@ -439,7 +430,7 @@ useUnsavedGuard(() => page.doc.value?.isDirty.value === true)
               :available="currentAnimation !== null"
               :is-dirty="isDirty"
               :test-mode="animationTest"
-              @patch="actions?.patchConfig($event)"
+              @patch="actions?.patchInspector($event)"
               @pick="binding.pickingFieldKey.value = $event"
               @drop="binding.drop"
               @test="animationTest = $event"
@@ -456,7 +447,7 @@ useUnsavedGuard(() => page.doc.value?.isDirty.value === true)
               :frame-origin="frameOrigin"
               :bindings="binding.bindings.value"
               :is-dirty="isDirty"
-              @patch="actions?.patchConfig($event)"
+              @patch="actions?.patchInspector($event)"
               @request-pick="viewport.requestPick"
               @cancel-pick="viewport.cancelPick"
               @capture-camera="viewport.captureCamera"
@@ -486,8 +477,8 @@ useUnsavedGuard(() => page.doc.value?.isDirty.value === true)
       :selection="selection"
       :animation="selectedAnimation"
       @update:open="batchOpen = $event"
-      @copy="applyBatchConfig"
-      @replace="applyBatchBindings"
+      @copy="onBatchConfig"
+      @replace="onBatchBindings"
     />
     <TwinOverlays
       :bulk="bulk"

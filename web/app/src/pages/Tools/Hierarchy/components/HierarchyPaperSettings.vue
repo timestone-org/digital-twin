@@ -1,6 +1,6 @@
 <script setup lang="ts">
 /** @fileoverview 项目名称、图纸幅宽预设与自定义幅宽。 */
-import { computed } from 'vue'
+import { computed, ref, watch } from 'vue'
 import { DtIcon, DtInput, DtNumberInput, DtSelect } from '@dt/ui'
 import type { HierarchyEditor } from '../scripts/useHierarchyDocument'
 
@@ -25,18 +25,30 @@ function paper(width: number | undefined) {
       paper: { width: Math.max(360, Math.min(12000, Math.round(width))) },
     })
 }
+/** 输入框自己的草稿：文档里只存去掉首尾空格后的非空名称，自动保存才不会删掉输入中的空格。 */
+const titleDraft = ref(document.value?.title ?? '')
+watch(
+  () => document.value?.title,
+  (next) => {
+    if (next !== undefined && titleDraft.value.trim() !== next)
+      titleDraft.value = next
+  },
+)
 function title(value: string) {
-  const current = document.value
-  if (current) props.editor.commit({ ...current, title: value })
+  titleDraft.value = value
+  const current = document.value,
+    next = value.trim()
+  if (current && next && next !== current.title)
+    props.editor.commit({ ...current, title: next })
 }
 </script>
 
 <template>
   <div v-if="document" class="flex flex-col gap-5">
     <DtInput
-      :model-value="document.title"
+      :model-value="titleDraft"
       label="项目名称"
-      :error="document.title.trim() ? '' : '请填写项目名称后保存'"
+      :error="titleDraft.trim() ? '' : '请填写项目名称后保存'"
       :disabled="readonly"
       :maxlength="80"
       @update:model-value="title"

@@ -173,3 +173,14 @@ def test_dense_chart_uses_readable_image_with_native_fallback(
     assert ("<pic:pic" in xml) == raster_available
     assert ("<c:chart" in xml) != raster_available
     assert len(document.inline_shapes) == 1
+
+
+@pytest.mark.parametrize("name", ["Normal", "Title", "Heading 1", "Caption"])
+def test_line_spacing_is_a_floor_so_large_inline_text_is_not_clipped(name):
+    # ⚠ exact 行距会把行内放大的字裁掉一截；编辑器的 1.65 倍行距随内容长高
+    document = render([])
+    spacing = document.styles[name].element.pPr.find(qn("w:spacing"))
+    assert spacing.get(qn("w:lineRule")) == "atLeast"
+    assert document.styles["Normal"].element.pPr.find(qn("w:spacing")).get(
+        qn("w:line")
+    ) == str(round(12 * 1.65 * 20))

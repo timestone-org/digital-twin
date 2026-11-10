@@ -403,6 +403,22 @@ describe('每帧', () => {
     expect(stageOf(renderer.renders[1]?.scene).rotation.y).not.toBe(before)
   })
 
+  // ⚠ 绕舞台原点转而不是绕部件中心转：离模型原点远的部件会画着大圈甩出画面
+  it('自转绕部件中心转，部件始终留在画面中央', () => {
+    const { preview, renderer } = setup(true)
+    preview.measure(300, 200)
+    preview.frame(0)
+
+    for (let step = 1; step <= 6; step += 1) {
+      preview.frame(3)
+      const stage = stageOf(renderer.renders[step]?.scene)
+      const center = new THREE.Box3()
+        .setFromObject(stage)
+        .getCenter(new THREE.Vector3())
+      expect(center.length()).toBeLessThan(1e-6)
+    }
+  })
+
   it('自转关着时一动不动', () => {
     const { preview, renderer } = setup(false)
     preview.measure(300, 200)

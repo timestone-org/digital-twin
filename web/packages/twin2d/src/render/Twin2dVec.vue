@@ -10,6 +10,7 @@ import {
   paintVec,
   svgGradientAttrs,
   svgPaintLayers,
+  svgPrimIdPrefix,
   svgShapeAttrs,
   svgShapeTag,
   svgStopAttrs,
@@ -43,16 +44,21 @@ const paint = computed(() => paintVec(props.prim, props.ctx))
 
 const shapeTag = computed(() => svgShapeTag(props.prim.shape))
 
+/** 这一枚图元的 id 前缀；渐变定义与引用两头必须同一份。 */
+const idPrefix = computed(() =>
+  svgPrimIdPrefix(props.ctx.idPrefix, props.prim.id),
+)
+
 /**
  * 局部渐变的 `<defs>` 条目。
- * ⚠ id 必须经 `svgGradientAttrs` 拿实例前缀：同页两个节点用同名渐变时浏览器只认
- * 头一个，表现是「另一张图的颜色跑到这张图上」，两边都不报错（§5）。
+ * ⚠ id 必须经 `svgGradientAttrs` 拿实例加图元前缀：同页两个节点、或同一节点里两枚
+ * 图元用同名渐变时浏览器只认头一个，表现是「另一处的颜色跑到这里」，两边都不报错（§5）。
  */
 const gradientDefs = computed<Twin2dGradientDef[]>(() =>
   props.prim.gradients.map((gradient) => ({
     id: gradient.id,
     tag: GRADIENT_TAGS[gradient.kind],
-    attrs: svgGradientAttrs(gradient, props.ctx.idPrefix),
+    attrs: svgGradientAttrs(gradient, idPrefix.value),
     stops: gradient.stops.map((stop: Twin2dGradientStop) => ({
       id: stop.id,
       attrs: svgStopAttrs(stop),
@@ -76,7 +82,7 @@ const layers = computed<Twin2dSvgLayer[]>(() => {
     props.prim.fill,
     props.prim.strokes,
     props.prim.gradients,
-    props.ctx.idPrefix,
+    idPrefix.value,
   )
   return painted.map((layer) => ({
     key: layer.key,

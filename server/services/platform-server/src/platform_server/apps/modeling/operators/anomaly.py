@@ -62,6 +62,7 @@ class SplitSamplesConfig(OperatorConfig):
     random_state: int = Field(
         default=42,
         ge=0,
+        le=2**32 - 1,
         title="保留的随机种子",
         description="仅用于统一切分计划，时序切分不使用随机数",
     )

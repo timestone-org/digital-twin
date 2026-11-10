@@ -135,7 +135,7 @@ async def update_instance(
 async def delete_instance(
     instance_id: uuid.UUID, container: ContainerDep, _manager: ManageDep
 ) -> Response:
-    """删实例。在跑就先停。删已删的同样返回 204。
+    """删实例。在跑就先停。实例不存在返回 404。
 
     Args: instance_id, container, _manager。
     """

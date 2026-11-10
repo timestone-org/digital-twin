@@ -59,7 +59,7 @@ function setup(selected: string[] = []) {
     onOpenConfig,
     onOpenResult,
   })
-  return { menu, actions, onRename, onOpenConfig, onOpenResult }
+  return { menu, actions, selection, onRename, onOpenConfig, onOpenResult }
 }
 
 function pick(action: MenuAction, selected: string[] = []) {
@@ -77,6 +77,23 @@ describe('开合', () => {
 
     expect(bench.menu.menu.value?.at).toEqual({ x: 10, y: 20 })
     expect(bench.menu.menu.value?.groups.length).toBeGreaterThan(0)
+  })
+
+  // ⚠ 不改选中的话，右键 B 点「删除」删掉的是之前选中的 A
+  it('右键一张没选中的卡片，选中改成它', () => {
+    const bench = setup(['n2'])
+
+    bench.menu.open({ x: 0, y: 0 }, { nodeId: 'n1', edgeId: null })
+
+    expect(bench.selection.selectedNodeIds.value).toEqual(['n1'])
+  })
+
+  it('右键落在选中的那几张之一上，整份选中不变', () => {
+    const bench = setup(['n1', 'n2'])
+
+    bench.menu.open({ x: 0, y: 0 }, { nodeId: 'n1', edgeId: null })
+
+    expect(bench.selection.selectedNodeIds.value).toEqual(['n1', 'n2'])
   })
 
   it('收起之后不再渲染', () => {

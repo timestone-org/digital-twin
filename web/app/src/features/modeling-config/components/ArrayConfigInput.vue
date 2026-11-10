@@ -105,7 +105,7 @@ function toggle(key: string, isOn: boolean): void {
     v-else
     :model-value="draft"
     :label="props.field.label"
-    :hint="`${props.field.hint}；多项用逗号分隔`"
+    :hint="[props.field.hint, '多项用逗号分隔'].filter(Boolean).join('；')"
     :error="parsed.error"
     :disabled="props.isReadonly"
     @update:model-value="input"

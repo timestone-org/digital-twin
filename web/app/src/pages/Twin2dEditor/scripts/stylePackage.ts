@@ -301,3 +301,15 @@ export function importTwin2dStyles(
     edgeStyles: edges.report,
   }
 }
+
+/**
+ * 读出用户选中那份文件的全文；读不出（选完之后被删、权限被收回）给 null。
+ * @param file 用户选中的那一份
+ */
+export async function twin2dFileText(file: File): Promise<string | null> {
+  try {
+    return await file.text()
+  } catch {
+    return null
+  }
+}

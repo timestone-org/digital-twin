@@ -148,3 +148,41 @@ def test_the_open_error_names_the_downstream_but_carries_no_detail() -> None:
     # 消息面向最终用户：认得出是哪个下游，但不带任何内部细节
     assert "upstream" in str(error.value)
     assert "连接被拒" not in str(error.value)
+
+
+def _half_open_with_probe_out(clock: FrozenClock) -> CircuitBreaker:
+    breaker = _breaker(clock)
+    for _ in range(THRESHOLD):
+        breaker.record_failure()
+    clock.advance(RESET_AFTER_S)
+    assert breaker.allow() is True
+    return breaker
+
+
+def test_a_probe_that_never_reports_back_expires_after_a_cooldown() -> None:
+    clock = FrozenClock()
+    breaker = _half_open_with_probe_out(clock)
+    clock.advance(RESET_AFTER_S - 1)
+    assert breaker.allow() is False
+    # 探测丢了（被取消、调用方没回报）：再等一个冷却期就该放下一个探测
+    clock.advance(1)
+    assert breaker.allow() is True
+    assert breaker.allow() is False
+
+
+def test_a_released_probe_lets_the_next_call_probe() -> None:
+    clock = FrozenClock()
+    breaker = _half_open_with_probe_out(clock)
+    breaker.release_probe()
+    assert breaker.state == "half_open"
+    assert breaker.allow() is True
+    assert breaker.allow() is False
+
+
+def test_release_probe_leaves_the_closed_failure_run_alone() -> None:
+    breaker = _breaker(FrozenClock())
+    for _ in range(THRESHOLD - 1):
+        breaker.record_failure()
+    breaker.release_probe()
+    breaker.record_failure()
+    assert breaker.state == "open"

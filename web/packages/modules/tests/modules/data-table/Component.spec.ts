@@ -87,6 +87,18 @@ describe('骨架', () => {
     expect(render({ showHeader: false }).find('.dtb-head').exists()).toBe(false)
   })
 
+  // ⚠ 表头与数据行同在一个容器里：按 nth-child 数会把表头算进去，开关表头斑马纹整体错一行
+  it('斑马纹按数据行自己的序号排，开关表头不错位', () => {
+    const three = { [TABLE_ROWS_KEY]: [{}, {}, {}] }
+    const alt = (header: boolean) =>
+      render({ ...three, showHeader: header })
+        .findAll('.dtb-row')
+        .map((row) => row.classes().includes('dtb-row--alt'))
+
+    expect(alt(true)).toEqual([false, true, false])
+    expect(alt(false)).toEqual([false, true, false])
+  })
+
   it('行名列画的是配置里的行名，没起名的按「第 N 行」', () => {
     const names = render({ [TABLE_ROWS_KEY]: [{ name: '甲' }, {}] })
       .findAll('.dtb-name')

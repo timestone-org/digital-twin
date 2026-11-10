@@ -17,6 +17,7 @@ _logger = get_logger("platform.llm_providers.probe")
 MODELS_PATH = "/models"
 # 端点自报的清单最多带回多少条；界面拿它做一键登记，几百条也没人挑得过来
 MAX_LISTED_MODELS = 200
+HTTP_BAD_REQUEST = 400
 HTTP_UNAUTHORIZED = 401
 HTTP_FORBIDDEN = 403
 HTTP_NOT_FOUND = 404
@@ -68,13 +69,19 @@ def _read(response: httpx.Response) -> ProbeResult:
     Args: response。
     """
     status = response.status_code
+    # ⚠ httpx 默认不跟重定向：多半是登录页或少了版本段，别报成「口径不对」
+    if response.is_redirect:
+        return ProbeResult(
+            is_ok=False,
+            message="端点重定向了（多半是登录页或少了 /v1），检查地址",
+        )
     if status in (HTTP_UNAUTHORIZED, HTTP_FORBIDDEN):
         return ProbeResult(is_ok=False, message="端点拒绝了这把密钥")
     if status == HTTP_NOT_FOUND:
         return ProbeResult(
             is_ok=False, message="端点上没有 /models，地址多半少了版本段"
         )
-    if status >= HTTP_UNAUTHORIZED:
+    if status >= HTTP_BAD_REQUEST:
         return ProbeResult(is_ok=False, message=f"端点回了 HTTP {status}")
     names = _model_names(response)
     if names is None:

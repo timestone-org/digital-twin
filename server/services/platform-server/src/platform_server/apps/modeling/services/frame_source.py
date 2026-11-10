@@ -5,6 +5,7 @@
 自洽，排查时几乎不会怀疑到取值口径上（docs/MODELING_DESIGN.md §3.3）。
 """
 
+import math
 import re
 from dataclasses import dataclass
 from datetime import UTC, datetime, timedelta
@@ -220,14 +221,20 @@ def _coerce(value: object, column: ColumnSpec) -> tuple[CellValue, bool]:
 
 
 def _as_number(value: object) -> tuple[CellValue, bool]:
-    if isinstance(value, bool):
-        return float(value), False
-    if isinstance(value, (int, float)):
-        return float(value), False
+    """转成有限浮点数；转不动或不是有限值都记成转不动。
+
+    ⚠ 'NaN' / 'inf' 文本放过去会让摘要统计变成 NaN，落不进 JSONB。
+    Args: value。
+    """
     try:
-        return float(str(value)), False
-    except ValueError:
+        number = (
+            float(value)
+            if isinstance(value, (int, float))
+            else float(str(value))
+        )
+    except (ValueError, OverflowError):
         return None, True
+    return (number, False) if math.isfinite(number) else (None, True)
 
 
 def resolve_moment(raw: str, now: datetime, field: str) -> datetime | None:

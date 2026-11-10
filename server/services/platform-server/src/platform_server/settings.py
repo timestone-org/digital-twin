@@ -30,6 +30,7 @@ DB_SCHEMA = "platform"
 ROLE_API = "api"
 ROLE_WORKER = "worker"
 ROLE_PUBLISHER = "publisher"
+ROLES = (ROLE_API, ROLE_WORKER, ROLE_PUBLISHER)
 
 # 合并窗口的下限。配成 0 会让发布循环空转打满一个核
 PUBLISH_WINDOW_FLOOR_MS = 100
@@ -73,6 +74,19 @@ class Settings(
     report_api_connections: list[ReportApiConnection] = Field(
         default_factory=list[ReportApiConnection], max_length=50
     )
+
+    @field_validator("app_role")
+    @classmethod
+    def _known_role(cls, role: str) -> str:
+        """只认三个角色。
+
+        ⚠ 写错时不拦，入口的分叉会把它当成 api：起来一个看着健康的 API 副本，
+        实时推送与 worker 循环一个都没跑。
+        Args: role。
+        """
+        if role not in ROLES:
+            raise ValueError(f"PLATFORM_APP_ROLE 只能是 {'/'.join(ROLES)}")
+        return role
 
     @field_validator("report_api_connections")
     @classmethod
@@ -234,9 +248,10 @@ class Settings(
     acstartup_stream: str = "platform:ac-startup:shards"
     acstartup_group: str = "ac-startup-workers"
     acstartup_block_ms: int = 5000
-    # 多久没确认就算滞留，可以被别的消费者认领回来
-    acstartup_claim_idle_ms: int = 60000
-    acstartup_prefetch: int = 8
+    # 多久没确认就算滞留，可以被别的消费者认领回来。⚠ 要长过 prefetch × 一片的
+    # 预算：逐条处理时最后一条在 PEL 里滞留得最久，门槛更短就会被别的副本重跑
+    acstartup_claim_idle_ms: int = 360000
+    acstartup_prefetch: int = 1
     # ⚠ 一片的总预算必须大于它内部全部外库查询之和：6 台 × 15 s 查询超时 = 90 s
     acstartup_shard_timeout_s: float = 300.0
     # 一台空调一片最多取多少行；一个月按分钟采样约 4.5 万行
@@ -254,8 +269,8 @@ class Settings(
     acmodel_stream: str = "platform:ac-model:train"
     acmodel_group: str = "ac-model-trainers"
     acmodel_block_ms: int = 5000
-    # 训练要跑几十秒，认领门槛要比它长得多，否则跑到一半就被别人抢走重训
-    acmodel_claim_idle_ms: int = 300000
+    # ⚠ 认领门槛要长过训练总预算，否则跑到一半就被别人抢走重训
+    acmodel_claim_idle_ms: int = 1200000
     acmodel_prefetch: int = 1
     # 一次训练的总预算。⚠ 真实房间全史上万条可用事件，18 次拟合在竞争负载下
     # 是分钟级；这条线是硬故障线，穿了按不可重试标失败
@@ -322,6 +337,30 @@ class Settings(
             )
         return self
 
+    @model_validator(mode="after")
+    def validate_runtime_budgets(self) -> Self:
+        """时区名与下发预算在启动时校验，不留到运行期第一次用到才炸。"""
+        for env_name, zone in (
+            ("PLATFORM_ACSOURCE_TIMEZONE", self.acsource_timezone),
+            ("PLATFORM_COLLECT_BUCKET_TIMEZONE", self.collect_bucket_timezone),
+            ("PLATFORM_DATASET_BUCKET_TIMEZONE", self.dataset_bucket_timezone),
+        ):
+            try:
+                ZoneInfo(zone)
+            except (ZoneInfoNotFoundError, ValueError):
+                raise ValueError(f"{env_name} 不是有效时区") from None
+        if not (
+            self.acpublish_model_timeout_s
+            <= self.acpublish_budget_s
+            < self.acpublish_interval_s
+        ):
+            raise ValueError(
+                "PLATFORM_ACPUBLISH_MODEL_TIMEOUT_S 须不大于 "
+                "PLATFORM_ACPUBLISH_BUDGET_S，且后者须小于 "
+                "PLATFORM_ACPUBLISH_INTERVAL_S"
+            )
+        return self
+
     # 预测下发，见 docs/AC_PUBLISH_DESIGN.md §5
     # opcua-server 的地址。⚠ 直连不经边缘：边缘对 `/internal/` 一律 deny。
     # ⚠ 端口是 **8008** 不是 8000——8000 是 realtime-hub 的，两个抄串了的表现是
@@ -343,7 +382,8 @@ class Settings(
     acdaily_stream: str = "platform:ac-startup:daily"
     acdaily_group: str = "ac-startup-daily-workers"
     acdaily_block_ms: int = 5000
-    acdaily_claim_idle_ms: int = 300000
+    # ⚠ 认领门槛要长过一天窗口的预算，理由同 acstartup_claim_idle_ms
+    acdaily_claim_idle_ms: int = 360000
     acdaily_prefetch: int = 1
     # 一天的窗口比一个月的分片小得多，但仍要大于它内部全部外库查询之和
     acdaily_timeout_s: float = 300.0

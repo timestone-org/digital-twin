@@ -48,8 +48,13 @@ const panelError = ref('')
 const form = ref<ApiSource>(emptySource())
 const query = ref('{}')
 const body = ref('{}')
+// ⚠ 偏移按文本存着，保存时才转数：边敲边转的话，敲下的第一个「-」就成了 NaN
+const offsetText = ref('0')
 const columns = ref<(ApiColumn & { id: string })[]>([])
-const dirty = useFormDirty([form, query, body, columns], () => isOpen.value)
+const dirty = useFormDirty(
+  [form, query, body, offsetText, columns],
+  () => isOpen.value,
+)
 const raced = useRacedFetch()
 let columnSequence = 0
 const connectionOptions = computed(() =>
@@ -113,6 +118,7 @@ function open(source?: ApiSource, copy = false): void {
   form.value = next
   query.value = JSON.stringify(next.query ?? {}, null, 2)
   body.value = JSON.stringify(next.body ?? {}, null, 2)
+  offsetText.value = offsetTextOf(next)
   const mapped: ApiColumn[] = next.columns.length
     ? next.columns
     : [{ key: 'value', name: '数值', pointer: '/value', data_type: 'number' }]
@@ -124,6 +130,13 @@ function open(source?: ApiSource, copy = false): void {
   panelError.value = ''
   isOpen.value = true
   loadConnections()
+}
+/**
+ * 偏移输入框的初值。
+ * @param source 正在编辑的来源
+ */
+function offsetTextOf(source: ApiSource): string {
+  return String(source.offset ?? 0)
 }
 function copyIdentity(next: ApiSource): void {
   let suffix = 1
@@ -201,6 +214,7 @@ function save(): void {
         data_type: data_type ?? 'number',
       })),
       time_pointer: form.value.time_pointer || null,
+      offset: Number(offsetText.value.trim() || '0'),
     }
     validateSource(next)
     if (
@@ -347,10 +361,9 @@ onBeforeUnmount(() => raced.cancel())
             hint="相对于所选连接，可写日期变量，如 /report/{{year}}/{{month}}；查询参数在下方填写"
           />
           <DtInput
-            :model-value="String(form.offset ?? 0)"
+            v-model="offsetText"
             label="报告期偏移"
             hint="0 本期，-1 上期；范围 -120～120"
-            @update:model-value="form.offset = Number($event)"
           />
         </div>
         <DtNotice v-if="!isLoading && !connections.length" intent="warning">

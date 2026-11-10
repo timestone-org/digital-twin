@@ -88,6 +88,7 @@ class ReportApiResult(OutputModel):
     row_count: int
     columns: list[str]
     rows: list[list[str]]
+    error: str | None = None
 
 
 class PreviewOut(OutputModel):

@@ -4,6 +4,7 @@
 ⚠ 本模块只认四元组 `(point_code, value, ts_ms, quality)`，不认识任何驱动。
 """
 
+import math
 from dataclasses import dataclass, replace
 from uuid import UUID
 
@@ -60,7 +61,13 @@ def is_beyond_deadband(
     if isinstance(previous, bool) or isinstance(value, bool):
         return previous != value
     if isinstance(previous, int | float) and isinstance(value, int | float):
-        return abs(float(value) - float(previous)) > deadband
+        before, after = float(previous), float(value)
+        if not (math.isfinite(before) and math.isfinite(after)):
+            # ⚠ NaN 参与相减恒为 NaN、`>` 恒假：NaN 基线会挡掉之后每一次变化
+            return not (math.isnan(before) and math.isnan(after)) and (
+                before != after
+            )
+        return abs(after - before) > deadband
     return previous != value
 
 

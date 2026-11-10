@@ -32,7 +32,13 @@ from lib.utils.ids import uuid7
 CREATE_NAMESPACE: UUID = UUID("9bb998de-9c15-5e9e-85c5-0082658bfcca")
 
 
+def meter_count(document: HierarchyDocument) -> int:
+    """项目的 `node_count`：只数计量节点，汇流点不算。Args: document。"""
+    return sum(node.kind == "meter" for node in document.nodes)
+
+
 def present(project: Project) -> HierarchyProject:
+    """把项目行转成含整图的对外形状。Args: project。"""
     return HierarchyProject(
         id=project.id,
         title=project.title,
@@ -44,6 +50,7 @@ def present(project: Project) -> HierarchyProject:
 
 
 def summary(project: Project) -> HierarchySummary:
+    """把项目行转成列表摘要。Args: project。"""
     return HierarchySummary(
         id=project.id,
         title=project.title,
@@ -71,6 +78,10 @@ def decode_cursor(cursor: str | None) -> int | None:
 async def require_project(
     session: AsyncSession, owner: UUID, project_id: UUID
 ) -> Project:
+    """取属于该账号的项目，取不到抛 `ProjectMissing`。
+
+    Args: session, owner, project_id。
+    """
     project = await crud.find_project(session, owner, project_id)
     if project is None:
         raise ProjectMissing("项目不存在或不可访问")
@@ -79,12 +90,15 @@ async def require_project(
 
 @dataclass(frozen=True)
 class ProjectService:
+    """项目的增删改查、历史与恢复；事务在这一层持有。"""
+
     database: Database
     idempotency: IdempotencyStore
 
     async def list(
         self, owner: UUID, query: str, window: tuple[int, int]
     ) -> HierarchyPage:
+        """分页列出该账号的项目。Args: owner, query, window（页码, 页大小）。"""
         async with self.database.session() as session:
             projects, total = await crud.list_projects(
                 session, owner, query, window
@@ -97,13 +111,14 @@ class ProjectService:
             )
 
     async def get(self, owner: UUID, project_id: UUID) -> HierarchyProject:
+        """读一个项目。Args: owner, project_id。"""
         async with self.database.session() as session:
             return present(await require_project(session, owner, project_id))
 
     async def create(
         self, owner: UUID, document: HierarchyDocument, key: str | None
     ) -> HierarchyProject:
-        """提交成功后才缓存创建回执。Args: owner, document, key。"""
+        """新建项目，提交成功后才缓存创建回执。Args: owner, document, key。"""
 
         async def action() -> HierarchyProject:
             return await self._create(owner, document, key)
@@ -119,6 +134,10 @@ class ProjectService:
     async def _create(
         self, owner: UUID, document: HierarchyDocument, key: str | None
     ) -> HierarchyProject:
+        """落库并回首次内容；同键重放回的是创建那一刻的快照。
+
+        Args: owner, document, key。
+        """
         project_id = (
             uuid7()
             if key is None
@@ -135,9 +154,7 @@ class ProjectService:
                     "owner_id": owner,
                     "title": document.title,
                     "revision": 1,
-                    "node_count": sum(
-                        node.kind == "meter" for node in document.nodes
-                    ),
+                    "node_count": meter_count(document),
                     "document": document.model_dump(mode="json", by_alias=True),
                     "creation_hash": digest,
                 },
@@ -152,7 +169,7 @@ class ProjectService:
                 id=project.id,
                 title=document.title,
                 revision=1,
-                node_count=sum(node.kind == "meter" for node in document.nodes),
+                node_count=meter_count(document),
                 updated_at=project.created_at,
                 document=document,
             )
@@ -160,6 +177,7 @@ class ProjectService:
     async def save(
         self, owner: UUID, project_id: UUID, change: HierarchySave
     ) -> HierarchyProject:
+        """按乐观版本号整图保存。Args: owner, project_id, change。"""
         async with self.database.session() as session:
             project = await require_project(session, owner, project_id)
             return await self._replace(session, project, change)
@@ -167,6 +185,10 @@ class ProjectService:
     async def _replace(
         self, session: AsyncSession, project: Project, change: HierarchySave
     ) -> HierarchyProject:
+        """条件替换并追加一个历史版本；版本号对不上抛冲突。
+
+        Args: session, project, change。
+        """
         document = change.document
         updated = await crud.replace_project(
             session,
@@ -176,9 +198,7 @@ class ProjectService:
                 "title": document.title,
                 "document": document.model_dump(mode="json", by_alias=True),
                 "revision": change.revision + 1,
-                "node_count": sum(
-                    node.kind == "meter" for node in document.nodes
-                ),
+                "node_count": meter_count(document),
             },
         )
         if not updated:
@@ -190,12 +210,14 @@ class ProjectService:
         return present(project)
 
     async def delete(self, owner: UUID, project_id: UUID) -> None:
+        """删除项目，重复删除不报错。Args: owner, project_id。"""
         async with self.database.session() as session:
             await crud.remove_project(session, owner, project_id)
 
     async def history(
         self, owner: UUID, project_id: UUID, cursor: str | None, limit: int
     ) -> HierarchyHistory:
+        """按版本号倒序分页列出历史。Args: owner, project_id, cursor, limit。"""
         before = decode_cursor(cursor)
         async with self.database.session() as session:
             await require_project(session, owner, project_id)
@@ -221,6 +243,7 @@ class ProjectService:
     async def restore(
         self, owner: UUID, project_id: UUID, change: HierarchyRestore
     ) -> HierarchyProject:
+        """把某个历史版本存成新的当前版本。Args: owner, project_id, change。"""
         async with self.database.session() as session:
             project = await require_project(session, owner, project_id)
             version = await crud.find_version(

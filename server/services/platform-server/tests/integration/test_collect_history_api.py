@@ -194,6 +194,34 @@ async def test_an_aggregate_maps_the_buckets(
     assert bucket["sample_count"] == 60
 
 
+@pytest.mark.parametrize("field", ["range_start", "range_end"])
+async def test_an_aggregate_with_a_naive_moment_is_refused(
+    app_client: httpx.AsyncClient, field: str
+) -> None:
+    # ⚠ 与列表那条同一口径：没有时区的时刻一旦落进查询，就说不清是哪个时区的
+    body: dict[str, object] = {
+        "node_keys": [NODE_KEY],
+        "range_start": RANGE_START,
+        "range_end": RANGE_END,
+        "interval": "1h",
+    }
+    body[field] = "2026-08-01T12:00:00"
+    response = await app_client.post(f"{HISTORIES}:aggregate", json=body)
+    assert response.status_code == 400
+    assert envelope(response)["details"][0]["field"] == field
+
+
+async def test_a_listing_accepts_several_node_keys(
+    app_client: httpx.AsyncClient, collect_fakes: CollectFakes
+) -> None:
+    collect_fakes.history.rows = []
+    response = await app_client.get(
+        HISTORIES,
+        params=range_params(node_keys=[NODE_KEY, f"{SOURCE_ID}:running"]),
+    )
+    assert response.status_code == 200, response.text
+
+
 async def test_an_unknown_aggregate_is_refused(
     app_client: httpx.AsyncClient,
 ) -> None:

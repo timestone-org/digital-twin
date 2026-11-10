@@ -106,7 +106,10 @@ async def test_validating_a_dashboard_passes_the_report_through() -> None:
         )
 
     tools = _tools(handler)
-    got = await tools("dashboard.validate", {"dashboard_id": "d1"})
+    got = await tools(
+        "dashboard.validate",
+        {"dashboard_id": "0190a000-0000-7000-8000-0000000000d1"},
+    )
     assert got == {"is_valid": False, "issues": [{"code": "x"}]}
 
 
@@ -169,7 +172,9 @@ def _function(name: str, description: str) -> dict[str, object]:
 
 async def test_the_function_list_starts_without_examples() -> None:
     tools = _tools(_functions([_function("PREV", "取前若干行的值")]))
-    got = await tools("formula.catalog", {"table_id": "t1"})
+    got = await tools(
+        "formula.catalog", {"table_id": "0190a000-0000-7000-8000-000000000001"}
+    )
     assert isinstance(got, dict)
     functions = got["functions"]
     assert isinstance(functions, list)
@@ -180,12 +185,18 @@ async def test_the_function_list_starts_without_examples() -> None:
 async def test_the_nine_evaluation_rules_are_never_dropped() -> None:
     # 它们全是「错了不报错、只是算出来的数不对」那一类
     tools = _tools(_functions([_function("PREV", "取前若干行的值")]))
-    got = await tools("formula.catalog", {"table_id": "t1"})
+    got = await tools(
+        "formula.catalog", {"table_id": "0190a000-0000-7000-8000-000000000001"}
+    )
     assert isinstance(got, dict)
     assert got["rules"] == ["四则运算里任一值为空，整条为空"]
     assert "columns" not in got
     columns = await tools(
-        "formula.catalog", {"table_id": "t1", "section": "columns"}
+        "formula.catalog",
+        {
+            "table_id": "0190a000-0000-7000-8000-000000000001",
+            "section": "columns",
+        },
     )
     assert columns["columns"] == [{"key": "本期", "name": "本期值"}]
 
@@ -196,7 +207,10 @@ async def test_a_keyword_narrows_to_matches_and_adds_the_examples() -> None:
             [_function("PREV", "取前若干行的值"), _function("SUM", "求和")]
         )
     )
-    got = await tools("formula.catalog", {"table_id": "t1", "keyword": "求和"})
+    got = await tools(
+        "formula.catalog",
+        {"table_id": "0190a000-0000-7000-8000-000000000001", "keyword": "求和"},
+    )
     assert isinstance(got, dict)
     functions = got["functions"]
     assert isinstance(functions, list)
@@ -206,7 +220,10 @@ async def test_a_keyword_narrows_to_matches_and_adds_the_examples() -> None:
 
 async def test_a_keyword_that_matches_nothing_says_do_not_invent_one() -> None:
     tools = _tools(_functions([_function("PREV", "取前若干行的值")]))
-    got = await tools("formula.catalog", {"table_id": "t1", "keyword": "涨跌"})
+    got = await tools(
+        "formula.catalog",
+        {"table_id": "0190a000-0000-7000-8000-000000000001", "keyword": "涨跌"},
+    )
     assert isinstance(got, dict)
     assert got["functions"] == []
     assert "不要自己编" in str(got["note"])
@@ -226,7 +243,11 @@ async def test_a_broken_formula_comes_back_as_an_answer_not_a_failure() -> None:
         )
 
     got = await _tools(handler)(
-        "formula.validate", {"table_id": "t1", "formula": "FOO(1)"}
+        "formula.validate",
+        {
+            "table_id": "0190a000-0000-7000-8000-000000000001",
+            "formula": "FOO(1)",
+        },
     )
     # 当成调用失败的话，助手会以为是自己这一侧坏了
     assert got == {"is_ok": False, "error": "未知函数 FOO"}
@@ -250,7 +271,7 @@ async def test_a_trial_run_carries_the_sample_values_over() -> None:
     got = await _tools(handler)(
         "formula.preview",
         {
-            "table_id": "t1",
+            "table_id": "0190a000-0000-7000-8000-000000000001",
             "formula": "{本期} - PREV({本期}, 1)",
             "column_key": "增量",
             "values": {"本期": 120},
@@ -274,7 +295,11 @@ async def test_a_trial_run_without_sample_values_still_sends_the_grid() -> None:
         )
 
     got = await _tools(handler)(
-        "formula.preview", {"table_id": "t1", "formula": "{本期}"}
+        "formula.preview",
+        {
+            "table_id": "0190a000-0000-7000-8000-000000000001",
+            "formula": "{本期}",
+        },
     )
     assert isinstance(got, dict)
     assert got["is_ok"] is True

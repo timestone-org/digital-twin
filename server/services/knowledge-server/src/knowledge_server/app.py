@@ -77,6 +77,12 @@ def _hooks(container: Container) -> tuple[LifespanHook, ...]:
             shutdown=container.platform.aclose,
             shutdown_order=50,
         ),
+        # ⚠ 停在平台之后、缓存之前：在途的登记还要在提交之后往队列里投摄取任务
+        LifespanHook(
+            name="stream",
+            shutdown=container.stream.close,
+            shutdown_order=85,
+        ),
         LifespanHook(
             name="cache",
             shutdown=container.cache.close,

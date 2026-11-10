@@ -13,7 +13,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 
 from lib.auth import CallerContext
 from lib.objectstore import ObjectStore
-from lib.web import ApiResponse, CursorPage, Page, PageParams, ok, page_params
+from lib.web import ApiResponse, CursorPage, Page, ok
 from platform_server.apps.modeling.catalog import (
     DATASET_RECORD_EXPORT,
     MODELING_VIEW,
@@ -54,7 +54,6 @@ from platform_server.settings import API_PREFIX
 router = APIRouter(prefix=f"{API_PREFIX}/modeling-runs", tags=["modeling-run"])
 
 SessionDep = Annotated[AsyncSession, Depends(get_session)]
-PageDep = Annotated[PageParams, Depends(page_params)]
 ViewDep = Annotated[CallerContext, Depends(require(MODELING_VIEW))]
 WriteDep = Annotated[WriteGate, Depends(get_instance_write_context)]
 PublishDep = Annotated[DurableModelingGate, Depends(get_publish_context)]

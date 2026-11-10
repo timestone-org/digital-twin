@@ -14,7 +14,7 @@ import type {
 } from '@dt/twin-config'
 import * as THREE from 'three'
 
-import { panelPositionOf } from './distanceBasis'
+import { flowMidpointOf, panelPositionOf } from './distanceBasis'
 import { ACCENT_COLOR_TOKEN, resolveColorSpec } from './themeColor'
 
 /**
@@ -90,52 +90,26 @@ export function isSameSceneSelection(
   return leftId === rightId
 }
 
-/** 锚点 id → 世界坐标。 */
-function anchorPositions(
-  anchors: readonly TwinAnchor[],
-): ReadonlyMap<string, Vec3> {
-  return new Map(anchors.map((anchor) => [anchor.id, anchor.position]))
-}
-
-/**
- * 能量流落点：路径上解析得出的锚点的中点。
- * ⚠ 不足两点返回 null：那条流本来就画不出线，给个标记等于让人点中一条看不见的东西。
- * @param flow 归一化后的能量流
- * @param byId 锚点 id → 世界坐标
- */
-function flowPosition(
-  flow: TwinFlowLink,
-  byId: ReadonlyMap<string, Vec3>,
-): Vec3 | null {
-  const points: Vec3[] = []
-  for (const anchorId of flow.pathAnchors) {
-    const position = byId.get(anchorId)
-    if (position !== undefined) points.push(position)
-  }
-  if (points.length < 2) return null
-  const sum: Vec3 = [0, 0, 0]
-  for (const point of points) {
-    sum[0] += point[0]
-    sum[1] += point[1]
-    sum[2] += point[2]
-  }
-  return [
-    sum[0] / points.length,
-    sum[1] / points.length,
-    sum[2] / points.length,
-  ]
-}
-
 /** 能量流的落点集合，路径解析不出的整条跳过。 */
+/**
+ * ⚠ 落点取画出来的那条曲线的中点，与管子、距离基准同一份算法：
+ * 自己求平均的话，拐弯的流标记会浮在管子外面。
+ * 途经点不足两个时那条流画不出线，不给标记。
+ */
 function flowPickPoints(
   flows: readonly TwinFlowLink[],
-  byId: ReadonlyMap<string, Vec3>,
+  anchors: readonly TwinAnchor[],
 ): TwinPickPoint[] {
   const found: TwinPickPoint[] = []
   for (const flow of flows) {
     if (!flow.visibility.visible) continue
-    const position = flowPosition(flow, byId)
-    if (position !== null) found.push({ kind: 'flows', id: flow.id, position })
+    const mid = flowMidpointOf(flow, anchors)
+    if (mid !== null)
+      found.push({
+        kind: 'flows',
+        id: flow.id,
+        position: [mid.x, mid.y, mid.z],
+      })
   }
   return found
 }
@@ -146,7 +120,6 @@ function flowPickPoints(
  * @param config 归一化后的孪生配置
  */
 export function entityPickPoints(config: TwinConfig): TwinPickPoint[] {
-  const byId = anchorPositions(config.anchors)
   return [
     ...config.anchors
       .filter((anchor) => anchor.visibility.visible)
@@ -169,7 +142,7 @@ export function entityPickPoints(config: TwinConfig): TwinPickPoint[] {
         id: arrow.id,
         position: arrow.position,
       })),
-    ...flowPickPoints(config.flows, byId),
+    ...flowPickPoints(config.flows, config.anchors),
   ]
 }
 

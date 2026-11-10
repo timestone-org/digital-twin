@@ -10,11 +10,12 @@ import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 import { enableAutoUnmount, flushPromises, mount } from '@vue/test-utils'
 import type { VueWrapper } from '@vue/test-utils'
 import type {
+  CollectProtocol,
   CollectSource,
   CollectSourceCreateInput,
   CollectSourceUpdateInput,
 } from '@dt/contracts'
-import { DtSelect } from '@dt/ui'
+import { DtNumberInput } from '@dt/ui'
 
 import SourceFormDialog from '@/pages/Collect/components/SourceFormDialog.vue'
 
@@ -51,9 +52,12 @@ function source(): CollectSource {
   }
 }
 
-async function render(target: CollectSource | null): Promise<VueWrapper> {
+async function render(
+  target: CollectSource | null,
+  fixedProtocol: CollectProtocol = target?.protocol ?? 'opcua',
+): Promise<VueWrapper> {
   const wrapper = mount(SourceFormDialog, {
-    props: { modelValue: true, source: target },
+    props: { modelValue: true, source: target, fixedProtocol },
     attachTo: document.body,
     global: { stubs: { Teleport: true } },
   })
@@ -135,12 +139,8 @@ describe('新建', () => {
   })
 
   it('Modbus TCP 默认只读轮询且先以停用状态保存', async () => {
-    const wrapper = await render(null)
-    wrapper
-      .findAllComponents(DtSelect)[0]
-      ?.vm.$emit('update:modelValue', 'modbus_tcp')
-    await flushPromises()
-    await fill(wrapper, '1号生产线', '二号线 PLC')
+    const wrapper = await render(null, 'modbus_tcp')
+    await fill(wrapper, 'Modbus 网关', '二号线 PLC')
     await fill(wrapper, 'modbus.tcp://host:502', 'modbus.tcp://10.0.0.9:502')
     await fill(wrapper, 'plant1_plc', 'line2_modbus')
     await submit(wrapper, '创建')
@@ -155,6 +155,22 @@ describe('新建', () => {
     expect(payload.username).toBeUndefined()
     expect(payload.credential).toBeUndefined()
   })
+})
+
+it('Modbus 连接参数写错键名时提交前拦下，不等采集侧离线才发现', async () => {
+  const wrapper = await render({
+    ...source(),
+    protocol: 'modbus_tcp',
+    endpoint: 'modbus.tcp://10.0.0.9:502',
+    username: null,
+    has_credential: false,
+    read_mode: 'poll',
+    options_json: { byte_oder: 'big' },
+  })
+  await submit(wrapper, '保存')
+  expect(wrapper.emitted('update')).toBeUndefined()
+  expect(wrapper.text()).toContain('不支持的连接参数 byte_oder')
+  expect(wrapper.text()).toContain('max_requests_per_cycle')
 })
 
 describe('编辑', () => {
@@ -199,6 +215,18 @@ describe('编辑', () => {
 
     expect(updatedPayload(wrapper).credential).toBe('new-secret')
   })
+})
+
+it('清空轮询周期提交时拦下，不发一个缺字段的请求', async () => {
+  const wrapper = await render({ ...source(), read_mode: 'poll' })
+  const poll = wrapper
+    .findAllComponents(DtNumberInput)
+    .find((one) => one.props('modelValue') === 1000)
+  if (poll === undefined) throw new Error('没有轮询周期输入框')
+  poll.vm.$emit('update:modelValue', undefined)
+  await submit(wrapper, '保存')
+  expect(wrapper.emitted('update')).toBeUndefined()
+  expect(wrapper.text()).toContain('请填写轮询周期')
 })
 
 describe('误关保护', () => {

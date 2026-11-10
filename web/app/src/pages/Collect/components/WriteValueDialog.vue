@@ -44,7 +44,7 @@ const BOOL_OPTIONS = [
 
 const draft = ref('')
 const error = ref<string | null>(null)
-/** 这一次下发意图的幂等键。换点位或重开弹窗就换一个。 */
+/** 这一次下发意图的幂等键。换点位、重开弹窗或改了要下发的值就换一个。 */
 const key = ref(newIdempotencyKey())
 
 watch(
@@ -57,6 +57,11 @@ watch(
   },
   { immediate: true },
 )
+
+// ⚠ 服务端按键回放结果、不比对请求体：沿用旧键改值重发，回来的是上一次的成功，新值根本没写
+watch(draft, () => {
+  key.value = newIdempotencyKey()
+})
 
 const current = computed(() => formatSample(props.sample, props.point?.unit))
 

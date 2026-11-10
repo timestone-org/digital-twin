@@ -271,7 +271,7 @@ async def _insert_points(
 
     Args: session, source_id, payload。
     """
-    _raise_if_duplicated_in_batch(payload)
+    raise_if_duplicated_codes([item.code for item in payload.items])
     codes = [item.code for item in payload.items]
     taken = await point_crud.taken_codes(session, source_id, codes)
     if taken:
@@ -306,16 +306,16 @@ async def _flush_new_points(session: AsyncSession) -> None:
         ) from error
 
 
-def _raise_if_duplicated_in_batch(payload: PointCreateIn) -> None:
-    """同一批里撞编码就 400 并指到第二次出现的那一项。
+def raise_if_duplicated_codes(codes: Sequence[str]) -> None:
+    """同一批里撞编码就 400 并指到第二次出现的那一项。新建与导入共用。
 
     ⚠ 不靠库上的唯一约束兜：一次 flush 里两条同编码会报成一句和字段无关的
     完整性错误，调用方看不出是哪一项写重了。
-    Args: payload。
+    Args: codes（按入参顺序）。
     """
     seen: dict[str, int] = {}
-    for position, item in enumerate(payload.items):
-        first = seen.get(item.code)
+    for position, code in enumerate(codes):
+        first = seen.get(code)
         if first is not None:
             raise PointInvalid(
                 "同一批里有重复的点位编码",
@@ -327,7 +327,7 @@ def _raise_if_duplicated_in_batch(payload: PointCreateIn) -> None:
                     ),
                 ),
             )
-        seen[item.code] = position
+        seen[code] = position
 
 
 def _address_fields(payload: PointCreateIn) -> dict[str, str]:

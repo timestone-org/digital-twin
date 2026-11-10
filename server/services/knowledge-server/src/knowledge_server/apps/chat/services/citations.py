@@ -4,18 +4,24 @@
 `deps.tools(loaded.scope)`），所以这份账本天然是回合作用域的。做成模块级的
 话，两个用户的两个回合在同一个进程里并发跑，后来的那个会把前一个的账本盖掉。
 
+⚠ 回合停下来等浏览器时，账本随那一步待续落库（`CARRIED_KEY`），续跑那次请求
+再接回来：续跑是另一次请求，而在用户眼里它仍是同一回合——重开一本的话，暂停前
+发的 ① 解析不出来，续跑里新查到的那条又从 ① 编起。
+
 ⚠ 扫不出角标 = **不出引用块**，而不是退回「把查到的都列出来」。后者正是这一
 轮要改掉的样子：检索回执里那十来条，模型多半只用了两三条。
 """
 
 import uuid
-from collections.abc import Callable, Sequence
+from collections.abc import Callable, Mapping, Sequence
 from contextlib import AbstractAsyncContextManager
 from dataclasses import dataclass, field, replace
-from typing import Any
+from typing import Any, cast
 
+from pydantic import ValidationError
 from sqlalchemy.ext.asyncio import AsyncSession
 
+from knowledge_server.apps.chat.schemas import ChatCitationOut
 from knowledge_server.apps.chat.services.markers import marker_of
 from knowledge_server.apps.knowledge import crud
 from knowledge_server.apps.knowledge.services import HitOut
@@ -23,6 +29,9 @@ from knowledge_server.apps.knowledge.services import HitOut
 # 开一个新事务的口子。⚠ 就地定义而不是从摄取那一侧借：对话这一层不该为了
 # 一个类型别名去依赖摄取管线
 Sessions = Callable[[], AbstractAsyncContextManager[AsyncSession]]
+
+# 待续那一步的入参里，账本落在这一格。⚠ 只给服务端续跑用，详情出参里摘掉
+CARRIED_KEY = "ledger"
 
 
 @dataclass(frozen=True)
@@ -90,6 +99,19 @@ class Ledger:
         )
         return marker
 
+    def seed(self, carried: Sequence[Cited]) -> None:
+        """续跑时把暂停前发过的角标接回来，新角标接着往下编。
+
+        ⚠ 只认从 ① 起连续的那一段：中间断了的话，后面那几条的序号与它们自己
+        的角标对不上，解析出来就是另一段话。
+
+        Args: carried（暂停那一步记下的账本，按发出序）。
+        """
+        for one in carried:
+            if one.marker != marker_of(len(self.issued) + 1):
+                return
+            self.issued.append(one)
+
     def resolve(self, numbers: list[int]) -> list[Cited]:
         """把答案里扫到的那几个序号解析成召回。
 
@@ -103,6 +125,40 @@ class Ledger:
             for one in numbers
             if 1 <= one <= len(self.issued)
         ]
+
+
+def carried_of(stored: Mapping[str, Any] | None) -> list[Cited]:
+    """待续那一步记下的账本还原回来；形状不对就当没有。
+
+    ⚠ 形状不对时整份丢掉而不是逐条挑：挑剩的几条序号会断，而断了的那一截
+    `Ledger.seed` 本来也接不上。
+
+    Args: stored（待续那一步的入参）。
+    """
+    rows = stored.get(CARRIED_KEY) if stored is not None else None
+    if not isinstance(rows, list):
+        return []
+    try:
+        parsed = [
+            ChatCitationOut.model_validate(one) for one in cast(list[Any], rows)
+        ]
+    except ValidationError:
+        return []
+    return [
+        Cited(
+            marker=one.marker,
+            chunk_id=one.chunk_id,
+            document_id=one.document_id,
+            document_title=one.document_title,
+            base_name=one.base_name,
+            heading_path=one.heading_path,
+            where=one.where,
+            page=one.page,
+            page_end=one.page_end,
+            text=one.text,
+        )
+        for one in parsed
+    ]
 
 
 @dataclass(frozen=True)

@@ -65,8 +65,9 @@ class WorkshopCrud(CrudBase[Workshop]):
         """
         statement = select(Workshop)
         if keyword:
-            pattern = f"%{keyword.lower()}%"
-            statement = statement.where(func.lower(Workshop.name).like(pattern))
+            statement = statement.where(
+                Workshop.name.icontains(keyword, autoescape=True)
+            )
         return statement
 
 

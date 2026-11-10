@@ -32,7 +32,25 @@ const BLANK_FORM = {
   role_id: '',
 }
 
-/** 打开时把目标账号铺进表单；新建时留空，角色落在第一个可选项上。 */
+/**
+ * 新建时预选权限码最少的那个角色。
+ * ⚠ 不取第一个：列表按名字排，第一个往往是 admin——不动角色就存，等于建了个超管。
+ * @param roles 可选角色
+ */
+function leastPrivilegedRoleId(roles: readonly RoleSummary[]): string {
+  let picked: RoleSummary | undefined
+  for (const role of roles) {
+    if (
+      picked === undefined ||
+      role.permissions.length < picked.permissions.length
+    ) {
+      picked = role
+    }
+  }
+  return picked?.id ?? ''
+}
+
+/** 打开时把目标账号铺进表单；新建时留空，角色落在权限最少的那个上。 */
 function toForm(user: UserBase | null, fallbackRoleId: string) {
   if (user === null) return { ...BLANK_FORM, role_id: fallbackRoleId }
   return {
@@ -65,7 +83,7 @@ watch(
   (open) => {
     if (!open) return
     error.value = null
-    form.value = toForm(props.user, props.roles[0]?.id ?? '')
+    form.value = toForm(props.user, leastPrivilegedRoleId(props.roles))
   },
   // ⚠ immediate：组件在「已经是打开态」时被挂载（深链、或标记与挂载同一 tick）
   // 时，只监听变化的 watch 一次都不会跑，表单会是空的。
@@ -73,6 +91,7 @@ watch(
 )
 
 async function onSubmit(): Promise<void> {
+  if (busy.value) return
   busy.value = true
   error.value = null
   try {
@@ -140,6 +159,8 @@ async function onSubmit(): Promise<void> {
       <DtInput v-model="form.full_name" label="姓名" />
       <DtInput v-model="form.phone" label="手机号" />
       <DtNotice v-if="error" intent="danger">{{ error }}</DtNotice>
+      <!-- 保存键在页脚、表单之外；多输入框的表单没有提交键时浏览器不做回车提交 -->
+      <button type="submit" class="sr-only" tabindex="-1" aria-hidden="true" />
     </form>
 
     <template #footer>

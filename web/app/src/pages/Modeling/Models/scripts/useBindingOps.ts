@@ -53,15 +53,17 @@ export function useBindingOps(onDone: () => void) {
 
   return {
     isBusy,
-    /** 把一个版本绑到一条已有的公式条目上。 */
-    bind: async (fxCode: string, versionId: string) => {
+    /** 把一个版本绑到一条已有的公式条目上；返回是否绑成。 */
+    bind: async (fxCode: string, versionId: string): Promise<boolean> => {
       const impact = await run(() =>
         modeling.createModelingBinding({
           fx_code: fxCode,
           model_version_id: versionId,
         }),
       )
-      if (impact !== null) toast.success(impactText(impact))
+      if (impact === null) return false
+      toast.success(impactText(impact))
+      return true
     },
     /** 换版本或启停。 */
     update: async (
@@ -76,7 +78,7 @@ export function useBindingOps(onDone: () => void) {
     /** 解绑。公式条目本身不动。 */
     unbind: async (bindingId: string) => {
       const done = await run(() => modeling.deleteModelingBinding(bindingId))
-      if (done !== undefined) toast.success('已解绑')
+      if (done !== null) toast.success('已解绑')
     },
   }
 }

@@ -58,6 +58,24 @@ async def test_an_oversized_declaration_is_refused_before_uploading() -> None:
     assert store.presigned == []
 
 
+async def test_a_sub_megabyte_limit_is_named_in_kilobytes() -> None:
+    # ⚠ 按 MB 整除时 512 KB 的图标上限会报成「最大 0 MB」
+    store = FakeObjectStore()
+    with pytest.raises(AssetTooLarge) as raised:
+        await presign_upload(
+            store,
+            request(kind="icon", content_type="image/png", size_bytes=655_360),
+        )
+    assert "图标最大 512 KB" in str(raised.value)
+
+
+async def test_a_gigabyte_limit_is_named_in_gigabytes() -> None:
+    store = FakeObjectStore()
+    with pytest.raises(AssetTooLarge) as raised:
+        await presign_upload(store, request(size_bytes=2_147_483_649))
+    assert "最大 2 GB" in str(raised.value)
+
+
 @pytest.mark.parametrize(
     "size_bytes",
     [268_435_457, 1_073_741_824, 2_147_483_648],

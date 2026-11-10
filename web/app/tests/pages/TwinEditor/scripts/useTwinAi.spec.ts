@@ -95,6 +95,7 @@ function pageOf(harness: Harness): TwinEditorPage {
     error: computed(() => null),
     conflict: harness.conflict,
     save: harness.save,
+    reload: vi.fn(() => Promise.resolve()),
     dispose: vi.fn(),
   }
 }
@@ -110,6 +111,7 @@ function bindingsOf(
     drop: vi.fn(),
     removeRow: vi.fn(),
     pickingFieldKey: ref<string | null>(null),
+    pickingLabel: computed(() => null),
     pickPoint: vi.fn(),
     closePicker: vi.fn(),
     liveValues: computed(() => undefined),
