@@ -11,6 +11,7 @@ from platform_server.apps.dataset.crud.formula import (
 )
 from platform_server.apps.dataset.crud.record import (
     CollectedRow,
+    PickedRow,
     RecordCrud,
     RecordWindow,
     WholeStatsRow,
@@ -25,6 +26,7 @@ __all__ = [
     "CollectedRow",
     "ColumnCrud",
     "FormulaCrud",
+    "PickedRow",
     "RecordCrud",
     "RecordWindow",
     "TableCrud",

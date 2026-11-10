@@ -6,23 +6,28 @@
 
 import uuid
 from collections.abc import Sequence
-from dataclasses import dataclass
+from dataclasses import dataclass, replace
 from datetime import datetime
 from typing import Any
 
 from sqlalchemy import (
     ARRAY,
+    ColumnElement,
     Select,
     Text,
+    any_,
+    case,
     delete,
     func,
     literal,
+    null,
     select,
     text,
     tuple_,
 )
-from sqlalchemy.dialects.postgresql import insert
+from sqlalchemy.dialects.postgresql import JSONB, insert
 from sqlalchemy.ext.asyncio import AsyncSession
+from sqlalchemy.orm import InstrumentedAttribute
 
 from lib.db import CrudBase
 from platform_server.apps.dataset.models import DatasetRecord
@@ -32,6 +37,10 @@ from platform_server.settings import DB_SCHEMA
 # 采集各一行），只按 ts 排时两次翻页会重复或漏掉其中一行
 NEWEST_FIRST = (DatasetRecord.ts.desc(), DatasetRecord.row_id.desc())
 OLDEST_FIRST = (DatasetRecord.ts.asc(), DatasetRecord.row_id.asc())
+# 整行扫描一条语句最多搬多少行。⚠ `statement_timeout` 把结果传回客户端的时间
+# 也算在内：一行带着三列 JSON 能有十几 KB，一条语句整搬一天的行跨网就是好几秒，
+# 而库里执行只要几毫秒——现象是重算与趋势一律「服务暂时不可用」
+SCAN_PAGE_ROWS = 250
 
 # 整列聚合的底数：`*_ALL` 五个函数共用这一次扫描。
 # ⚠ 三层取值（computed → overrides.v → values）就是 SQL 版的 effective 口径，
@@ -99,6 +108,16 @@ class WholeStatsRow:
 
 
 @dataclass(frozen=True)
+class PickedRow:
+    """一行里只留下点名那几列的三层原料（缺列即不在场）。"""
+
+    ts: datetime
+    values: dict[str, Any] | None
+    overrides: dict[str, Any] | None
+    computed: dict[str, Any] | None
+
+
+@dataclass(frozen=True)
 class RecordWindow:
     """一次行扫描的边界。
 
@@ -118,14 +137,14 @@ class RecordWindow:
     #: 倒序键集翻页的锚点：`(ts, row_id) < 锚点`。⚠ 两个键都要——同一个 ts 上
     #: 可以有多行，只锚 ts 会在翻页时重复或漏掉其中一行
     after_key: tuple[datetime, uuid.UUID] | None = None
+    #: 正序键集翻页的锚点：`(ts, row_id) > 锚点`
+    past_key: tuple[datetime, uuid.UUID] | None = None
     #: 只要这几种来源的行。⚠ 空元组是「全都要」而不是「一个都不要」：同一个
     #: `ts` 上采集行至多一条，而人工与导入行合法地有多条，混在一起取到的时间
     #: 索引不再唯一（docs/DATASET_DESIGN.md §4.4b）
     sources: tuple[str, ...] = ()
 
-    def narrow(
-        self, statement: Select[tuple[DatasetRecord]]
-    ) -> Select[tuple[DatasetRecord]]:
+    def narrow[S: Select[Any]](self, statement: S) -> S:
         """把边界叠到一条查询上。
 
         ⚠ 每条谓词都在判空之后才构造：SQLAlchemy 的比较运算符碰上 `None`
@@ -152,6 +171,10 @@ class RecordWindow:
         if self.after_key is not None:
             statement = statement.where(
                 tuple_(DatasetRecord.ts, DatasetRecord.row_id) < self.after_key
+            )
+        if self.past_key is not None:
+            statement = statement.where(
+                tuple_(DatasetRecord.ts, DatasetRecord.row_id) > self.past_key
             )
         if self.sources:
             statement = statement.where(DatasetRecord.source.in_(self.sources))
@@ -236,12 +259,42 @@ class RecordCrud(CrudBase[DatasetRecord]):
         判断有没有触顶。调用方拿到的是 **ts 倒序**，要正序自己反转。
         Args: session, window, limit。
         """
-        rows = await session.execute(
-            window.narrow(select(DatasetRecord))
-            .order_by(*NEWEST_FIRST)
-            .limit(limit + 1)
+        return await _scan_paged(
+            session, window=window, wanted=limit + 1, is_newest_first=True
         )
-        return list(rows.scalars().all())
+
+    async def scan_newest_picked(
+        self,
+        session: AsyncSession,
+        *,
+        window: RecordWindow,
+        keys: Sequence[str],
+        limit: int,
+    ) -> list[PickedRow]:
+        """与 `scan_newest` 同口径反扫，但三列 JSON 只搬点名的那几个键。
+
+        ★ 序列只要几列，整行搬回来是把一整天的全部列跨网送一遍——几千行就够
+        撞上语句超时。键的在场与否原样保留：公式列「算出空也算数」靠的就是它。
+        Args: session, window, keys, limit。
+        """
+        wanted = literal(sorted(set(keys)), ARRAY(Text()))
+        statement = window.narrow(
+            select(
+                DatasetRecord.ts,
+                _picked(DatasetRecord.values_json, wanted),
+                _picked(DatasetRecord.overrides_json, wanted),
+                _picked(DatasetRecord.computed_json, wanted),
+            )
+        )
+        rows = await session.execute(
+            statement.order_by(*NEWEST_FIRST).limit(limit + 1)
+        )
+        return [
+            PickedRow(
+                ts=ts, values=values, overrides=overrides, computed=computed
+            )
+            for ts, values, overrides, computed in rows.tuples().all()
+        ]
 
     async def scan_oldest(
         self, session: AsyncSession, *, window: RecordWindow, limit: int
@@ -251,12 +304,9 @@ class RecordCrud(CrudBase[DatasetRecord]):
         重算与批量撤销要从最早的一行往后推，故与 `scan_newest` 反向。
         Args: session, window, limit。
         """
-        rows = await session.execute(
-            window.narrow(select(DatasetRecord))
-            .order_by(*OLDEST_FIRST)
-            .limit(limit + 1)
+        return await _scan_paged(
+            session, window=window, wanted=limit + 1, is_newest_first=False
         )
-        return list(rows.scalars().all())
 
     async def has_rows_after(
         self, session: AsyncSession, *, table_id: uuid.UUID, ts: datetime
@@ -410,6 +460,63 @@ class RecordCrud(CrudBase[DatasetRecord]):
                 DatasetRecord.row_id == record.row_id,
             )
         )
+
+
+def _picked(
+    column: InstrumentedAttribute[Any], keys: ColumnElement[Any]
+) -> ColumnElement[dict[str, Any] | None]:
+    """一列 JSONB 里只留下 `keys` 点名的键；一个都不在时为 NULL。
+
+    ⚠ 可空的 JSONB 列里存着 JSON 的 `null`（不是 SQL NULL），`jsonb_each` 碰上
+    非对象当场报错，故只展开对象。
+    Args: column, keys（`text[]`）。
+    """
+    cells = func.jsonb_each(column).table_valued("key", "value")
+    picked = (
+        select(func.jsonb_object_agg(cells.c.key, cells.c.value))
+        .where(cells.c.key == any_(keys))
+        .scalar_subquery()
+    )
+    return case(
+        (func.jsonb_typeof(column) == "object", picked),
+        else_=null(),
+    ).cast(JSONB)
+
+
+async def _scan_paged(
+    session: AsyncSession,
+    *,
+    window: RecordWindow,
+    wanted: int,
+    is_newest_first: bool,
+) -> list[DatasetRecord]:
+    """按键集分页取够 `wanted` 行，每条语句至多 `SCAN_PAGE_ROWS` 行。
+
+    ⚠ 翻页锚点要 `(ts, row_id)` 两个键：同一个 ts 上可以有多行，只锚 ts 会在
+    页缝上重复或漏掉其中一行。
+    Args: session, window, wanted, is_newest_first（倒序还是正序）。
+    """
+    order = NEWEST_FIRST if is_newest_first else OLDEST_FIRST
+    rows: list[DatasetRecord] = []
+    page_window = window
+    while len(rows) < wanted:
+        size = min(SCAN_PAGE_ROWS, wanted - len(rows))
+        result = await session.execute(
+            page_window.narrow(select(DatasetRecord))
+            .order_by(*order)
+            .limit(size)
+        )
+        page = list(result.scalars().all())
+        rows.extend(page)
+        if len(page) < size:
+            break
+        anchor = (page[-1].ts, page[-1].row_id)
+        page_window = (
+            replace(page_window, after_key=anchor)
+            if is_newest_first
+            else replace(page_window, past_key=anchor)
+        )
+    return rows
 
 
 def _collected_values(table_id: uuid.UUID, row: CollectedRow) -> dict[str, Any]:
