@@ -12,7 +12,7 @@
 import type {
   DatasetColumn,
   DatasetOverride,
-  DatasetRecompute,
+  DatasetRecomputeJob,
   DatasetRecord,
 } from '@dt/contracts'
 
@@ -376,9 +376,14 @@ export interface Receipt {
  * 重算回执的说法。
  * ⚠ 触顶与求值出错必须**逐条说出来**：只说「已重算 N 行」的话，一次只算了
  * 一半的重算与一次算完的重算长得一模一样（docs/DATASET_DESIGN.md §6.2）。
- * @param outcome 后端回执
+ * @param outcome 终态的重算任务
  */
-export function recomputeReceipt(outcome: DatasetRecompute): Receipt {
+export function recomputeReceipt(
+  outcome: Pick<
+    DatasetRecomputeJob,
+    'recomputed' | 'failed' | 'is_truncated' | 'limit'
+  >,
+): Receipt {
   const head = `已重算 ${String(outcome.recomputed)} 行`
   if (outcome.is_truncated) {
     return {

@@ -39,7 +39,7 @@ import type {
   DatasetOverrideBulkClear,
   DatasetOverrideWrite,
   DatasetPrevDep,
-  DatasetRecompute,
+  DatasetRecomputeJob,
   DatasetRecord,
   DatasetRecordDelete,
   DatasetRecordSource,
@@ -314,12 +314,22 @@ const FORMULA_DEF_WITH_USAGES_KEYS = {
   usages: true,
 } satisfies Keys<DatasetFormulaDefWithUsages>
 
-const RECOMPUTE_KEYS = {
+const RECOMPUTE_JOB_KEYS = {
+  table_id: true,
+  table_code: true,
+  status: true,
+  since: true,
+  until: true,
   recomputed: true,
   failed: true,
   is_truncated: true,
   limit: true,
-} satisfies Keys<DatasetRecompute>
+  started_at: true,
+  updated_at: true,
+  finished_at: true,
+  error: true,
+  message: true,
+} satisfies Keys<DatasetRecomputeJob>
 
 const BACKFILL_JOB_KEYS = {
   table_id: true,
@@ -380,7 +390,7 @@ const SHAPES: Record<string, Record<string, true>> = {
   FormulaDefOut: { ...FORMULA_DEF_KEYS },
   FormulaUsageOut: { ...FORMULA_USAGE_KEYS },
   FormulaDefWithUsagesOut: { ...FORMULA_DEF_WITH_USAGES_KEYS },
-  RecomputeOut: { ...RECOMPUTE_KEYS },
+  RecomputeJobOut: { ...RECOMPUTE_JOB_KEYS },
   BackfillJobOut: { ...BACKFILL_JOB_KEYS },
   BackfillStartIn: {
     ...({ since: true, until: true } satisfies Keys<DatasetBackfillInput>),

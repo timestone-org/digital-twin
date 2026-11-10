@@ -65,7 +65,8 @@ describe('每一条都打 platform 前缀', () => {
       () =>
         dataset.clearDatasetOverridesInRange('t1', { column_keys: ['kwh'] }),
     ],
-    ['recomputeDatasetTable', () => dataset.recomputeDatasetTable('t1')],
+    ['startDatasetRecompute', () => dataset.startDatasetRecompute('t1')],
+    ['getDatasetRecompute', () => dataset.getDatasetRecompute('t1')],
     ['getDatasetSeries', () => dataset.getDatasetSeries('t1', ['kwh'])],
   ])('%s', async (_name, run) => {
     await run()
@@ -226,12 +227,22 @@ describe('人工修正', () => {
     })
   })
 
-  it('重算同样是动作端点，缺省即整表', async () => {
-    await dataset.recomputeDatasetTable('t1')
+  it('起重算是动作端点，缺省即整表，且带幂等键', async () => {
+    await dataset.startDatasetRecompute('t1')
     const [path, options] = call()
     expect(path).toBe('/dataset-tables/t1:recompute')
     expect(options.method).toBe('POST')
     expect(options.body).toEqual({})
+    expect(options.headers).toHaveProperty('Idempotency-Key')
+  })
+
+  it('查重算进度是子资源 GET，不是动作端点', async () => {
+    const controller = new AbortController()
+    await dataset.getDatasetRecompute('t1', controller.signal)
+    const [path, options] = call()
+    expect(path).toBe('/dataset-tables/t1/recompute')
+    expect(options.method).toBeUndefined()
+    expect(options.signal).toBe(controller.signal)
   })
 })
 

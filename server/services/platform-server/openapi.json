@@ -5161,7 +5161,7 @@
         "title": "ApiResponse[RecommendOut]",
         "type": "object"
       },
-      "ApiResponse_RecomputeOut_": {
+      "ApiResponse_RecomputeJobOut_": {
         "properties": {
           "code": {
             "default": 0,
@@ -5171,7 +5171,7 @@
           "data": {
             "anyOf": [
               {
-                "$ref": "#/components/schemas/RecomputeOut"
+                "$ref": "#/components/schemas/RecomputeJobOut"
               },
               {
                 "type": "null"
@@ -5203,7 +5203,7 @@
             "type": "string"
           }
         },
-        "title": "ApiResponse[RecomputeOut]",
+        "title": "ApiResponse[RecomputeJobOut]",
         "type": "object"
       },
       "ApiResponse_RecordDeleteOut_": {
@@ -21680,12 +21680,35 @@
         "title": "RecomputeIn",
         "type": "object"
       },
-      "RecomputeOut": {
-        "description": "一次重算的回执。",
+      "RecomputeJobOut": {
+        "description": "一次重算任务的全部对外状态，起任务与查进度共用这一个形状。",
         "properties": {
+          "error": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Error"
+          },
           "failed": {
             "title": "Failed",
             "type": "integer"
+          },
+          "finished_at": {
+            "anyOf": [
+              {
+                "format": "date-time",
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Finished At"
           },
           "is_truncated": {
             "title": "Is Truncated",
@@ -21695,18 +21718,84 @@
             "title": "Limit",
             "type": "integer"
           },
+          "message": {
+            "title": "Message",
+            "type": "string"
+          },
           "recomputed": {
             "title": "Recomputed",
             "type": "integer"
+          },
+          "since": {
+            "anyOf": [
+              {
+                "format": "date-time",
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Since"
+          },
+          "started_at": {
+            "format": "date-time",
+            "title": "Started At",
+            "type": "string"
+          },
+          "status": {
+            "enum": [
+              "done",
+              "failed",
+              "running"
+            ],
+            "title": "Status",
+            "type": "string"
+          },
+          "table_code": {
+            "title": "Table Code",
+            "type": "string"
+          },
+          "table_id": {
+            "format": "uuid",
+            "title": "Table Id",
+            "type": "string"
+          },
+          "until": {
+            "anyOf": [
+              {
+                "format": "date-time",
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Until"
+          },
+          "updated_at": {
+            "format": "date-time",
+            "title": "Updated At",
+            "type": "string"
           }
         },
         "required": [
+          "table_id",
+          "table_code",
+          "status",
+          "since",
+          "until",
           "recomputed",
           "failed",
           "is_truncated",
-          "limit"
+          "limit",
+          "started_at",
+          "updated_at",
+          "finished_at",
+          "error",
+          "message"
         ],
-        "title": "RecomputeOut",
+        "title": "RecomputeJobOut",
         "type": "object"
       },
       "RecordCreateIn": {
@@ -33179,6 +33268,50 @@
         ]
       }
     },
+    "/api/v1/platform/dataset-tables/{table_id}/recompute": {
+      "get": {
+        "description": "`data = null` 表示这张表当前没有重算任务，与「任务失败」是两件事。\n\nArgs: table_id, session, runner, _viewer。",
+        "operationId": "read_recompute_api_v1_platform_dataset_tables__table_id__recompute_get",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "table_id",
+            "required": true,
+            "schema": {
+              "format": "uuid",
+              "title": "Table Id",
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiResponse_RecomputeJobOut_"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "查重算进度",
+        "tags": [
+          "dataset-recompute"
+        ]
+      }
+    },
     "/api/v1/platform/dataset-tables/{table_id}/records": {
       "get": {
         "description": "按数据时间倒序翻页。**游标分页**，`after` 从上一页原样带回。\n\nArgs: table_id, session, page, filters, _viewer。",
@@ -33743,8 +33876,8 @@
     },
     "/api/v1/platform/dataset-tables/{table_id}:recompute": {
       "post": {
-        "description": "改完公式之后重算。只写计算值，不碰任何原始录入值。\n\nArgs: table_id, payload, session, writer。",
-        "operationId": "recompute_api_v1_platform_dataset_tables__table_id__recompute_post",
+        "description": "后台重算这一段的公式列，立刻返回；进度轮询 GET `…/recompute`。\n\nArgs: table_id, payload, session, runner, gate。",
+        "operationId": "start_recompute_api_v1_platform_dataset_tables__table_id__recompute_post",
         "parameters": [
           {
             "in": "path",
@@ -33754,6 +33887,22 @@
               "format": "uuid",
               "title": "Table Id",
               "type": "string"
+            }
+          },
+          {
+            "in": "header",
+            "name": "idempotency-key",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Idempotency-Key"
             }
           }
         ],
@@ -33768,11 +33917,11 @@
           "required": true
         },
         "responses": {
-          "200": {
+          "202": {
             "content": {
               "application/json": {
                 "schema": {
-                  "$ref": "#/components/schemas/ApiResponse_RecomputeOut_"
+                  "$ref": "#/components/schemas/ApiResponse_RecomputeJobOut_"
                 }
               }
             },
@@ -33789,9 +33938,9 @@
             "description": "Validation Error"
           }
         },
-        "summary": "重算公式列",
+        "summary": "起一个重算公式列的任务",
         "tags": [
-          "dataset-series"
+          "dataset-recompute"
         ]
       }
     },

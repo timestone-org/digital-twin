@@ -90,6 +90,7 @@ def _hooks(container: Container) -> tuple[LifespanHook, ...]:
             startup_order=10,
         ),
         _backfill_hook(container),
+        _recompute_hook(container),
         *_client_hooks(container),
         *_http_hooks(container),
         *_pool_hooks(container),
@@ -112,6 +113,23 @@ def _backfill_hook(container: Container) -> LifespanHook:
 
     return LifespanHook(
         name="dataset_backfill", shutdown=shutdown, shutdown_order=96
+    )
+
+
+def _recompute_hook(container: Container) -> LifespanHook:
+    """在跑的重算先收摊，再关 Redis 与连接池。
+
+    ⚠ 与回填同一个位次的理由：收摊时要写终态、放锁（Redis），而事务回滚要
+    连接池。重算没有批边界，drain 超时之后就取消——整趟回滚，一行不写。
+    Args: container。
+    """
+    runner = container.dataset.recompute
+
+    async def shutdown() -> None:
+        await runner.drain(container.settings.app_drain_timeout_s)
+
+    return LifespanHook(
+        name="dataset_recompute", shutdown=shutdown, shutdown_order=96
     )
 
 

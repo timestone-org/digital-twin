@@ -7,6 +7,7 @@
 
 import httpx
 import pytest
+from conftest import AppContext
 from unit.dataset_fakes import FakeSetSink
 
 from integration.dataset_helpers import (
@@ -16,6 +17,7 @@ from integration.dataset_helpers import (
     create_record,
     create_table,
     data_of,
+    run_recompute,
 )
 
 pytestmark = pytest.mark.requires_postgres
@@ -292,8 +294,9 @@ async def test_a_table_without_history_formulas_never_goes_stale(
 
 
 async def test_recompute_repairs_the_stale_downstream_rows(
-    app_client: httpx.AsyncClient,
+    app_context: AppContext,
 ) -> None:
+    app_client = app_context.client
     table = await create_table(app_client)
     await create_column(app_client, table["id"], key="读数")
     await create_column(
@@ -315,9 +318,7 @@ async def test_recompute_repairs_the_stale_downstream_rows(
         json={"values": {"读数": 12}},
     )
 
-    outcome = data_of(
-        await app_client.post(f"{TABLES}/{table['id']}:recompute", json={})
-    )
+    _, outcome = await run_recompute(app_context, str(table["id"]))
     series = data_of(await app_client.get(series_url(str(table["id"]), "增量")))
 
     assert (outcome["recomputed"], outcome["failed"]) == (2, 0)
@@ -325,25 +326,26 @@ async def test_recompute_repairs_the_stale_downstream_rows(
 
 
 async def test_recompute_on_a_table_without_formulas_does_nothing(
-    app_client: httpx.AsyncClient,
+    app_context: AppContext,
 ) -> None:
+    app_client = app_context.client
     table_id = await seed_hourly(app_client, [1.0])
 
-    outcome = data_of(
-        await app_client.post(f"{TABLES}/{table_id}:recompute", json={})
-    )
+    _, outcome = await run_recompute(app_context, table_id)
 
-    assert outcome == {
-        "recomputed": 0,
-        "failed": 0,
-        "is_truncated": False,
-        "limit": 200000,
-    }
+    assert (outcome["status"], outcome["recomputed"], outcome["failed"]) == (
+        "done",
+        0,
+        0,
+    )
+    assert (outcome["is_truncated"], outcome["limit"]) == (False, 200000)
 
 
 async def test_recompute_marks_the_table_dirty(
-    app_client: httpx.AsyncClient, dirty_marks: FakeSetSink
+    app_context: AppContext,
+    dirty_marks: FakeSetSink,
 ) -> None:
+    app_client = app_context.client
     table = await create_table(app_client)
     await create_column(app_client, table["id"], key="产量")
     await create_column(
@@ -358,7 +360,7 @@ async def test_recompute_marks_the_table_dirty(
     )
     dirty_marks.sets.clear()
 
-    await app_client.post(f"{TABLES}/{table['id']}:recompute", json={})
+    await run_recompute(app_context, str(table["id"]))
 
     assert dirty_marks.members(DIRTY_KEY) == {table["code"]}
 
@@ -429,8 +431,9 @@ async def test_a_whole_table_aggregate_over_a_formula_column_converges(
 
 
 async def test_recompute_over_an_empty_range_touches_nothing(
-    app_client: httpx.AsyncClient,
+    app_context: AppContext,
 ) -> None:
+    app_client = app_context.client
     table = await create_table(app_client)
     await create_column(app_client, table["id"], key="产量")
     await create_column(
@@ -444,18 +447,17 @@ async def test_recompute_over_an_empty_range_touches_nothing(
         app_client, str(table["id"]), ts=HOURS[0], values={"产量": 1}
     )
 
-    outcome = data_of(
-        await app_client.post(
-            f"{TABLES}/{table['id']}:recompute", json={"since": HOURS[3]}
-        )
+    _, outcome = await run_recompute(
+        app_context, str(table["id"]), since=HOURS[3]
     )
 
     assert (outcome["recomputed"], outcome["is_truncated"]) == (0, False)
 
 
 async def test_recomputing_a_tail_range_still_sees_the_rows_before_it(
-    app_client: httpx.AsyncClient,
+    app_context: AppContext,
 ) -> None:
+    app_client = app_context.client
     # ⚠ 种子行不能省：少了它，区间里最早那几行的时间窗会算成空——而它们在库里
     # 明明有上文，只是这一趟没取进来
     table = await create_table(app_client)
@@ -472,9 +474,7 @@ async def test_recomputing_a_tail_range_still_sees_the_rows_before_it(
             app_client, str(table["id"]), ts=moment, values={"产量": value}
         )
 
-    await app_client.post(
-        f"{TABLES}/{table['id']}:recompute", json={"since": HOURS[2]}
-    )
+    await run_recompute(app_context, str(table["id"]), since=HOURS[2])
     series = data_of(
         await app_client.get(series_url(str(table["id"]), "近三小时"))
     )
@@ -487,8 +487,9 @@ async def test_recomputing_a_tail_range_still_sees_the_rows_before_it(
 
 
 async def test_the_recompute_receipt_names_the_rows_that_failed(
-    app_client: httpx.AsyncClient,
+    app_context: AppContext,
 ) -> None:
+    app_client = app_context.client
     # ⚠ 求值出错要说出来：只回「已重算 N 行」的话，一批算不出数的行看起来
     # 与算对了的一模一样
     table = await create_table(app_client)
@@ -504,9 +505,7 @@ async def test_the_recompute_receipt_names_the_rows_that_failed(
         app_client, str(table["id"]), ts=HOURS[0], values={"班次": "早班"}
     )
 
-    response = await app_client.post(
-        f"{TABLES}/{table['id']}:recompute", json={}
-    )
+    _, outcome = await run_recompute(app_context, str(table["id"]))
 
-    assert data_of(response)["failed"] == 1
-    assert "求值错误" in response.json()["message"]
+    assert outcome["failed"] == 1
+    assert "求值错误" in outcome["message"]

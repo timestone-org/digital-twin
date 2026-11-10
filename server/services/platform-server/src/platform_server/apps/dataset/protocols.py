@@ -38,6 +38,9 @@ RECORD_SOURCES: tuple[str, ...] = tuple(sorted(get_args(RecordSource)))
 # 回填任务的四个状态。⚠ 「取消」与「失败」分开：前者是人按的，后者要有人去看日志
 BackfillStatus = Literal["cancelled", "done", "failed", "running"]
 
+# 重算任务的三个状态。没有「取消」：一个事务算完才提交，没有可停的批边界
+RecomputeStatus = Literal["done", "failed", "running"]
+
 
 def sql_values(values: tuple[str, ...]) -> str:
     """把取值集合渲染成 CHECK 约束里的字面量列表。

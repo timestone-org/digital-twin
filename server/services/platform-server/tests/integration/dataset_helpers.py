@@ -7,6 +7,7 @@ from datetime import datetime
 from typing import Any
 
 import httpx
+from conftest import AppContext
 from sqlalchemy import text
 
 from lib.db import Database
@@ -18,6 +19,7 @@ DIRTY_KEY = "platform:dataset:dirty"
 
 HTTP_OK = 200
 HTTP_CREATED = 201
+HTTP_ACCEPTED = 202
 HTTP_NO_CONTENT = 204
 HTTP_BAD_REQUEST = 400
 HTTP_NOT_FOUND = 404
@@ -162,3 +164,22 @@ class ArchiveWriter:
                 ),
                 {"source_id": self.source_id},
             )
+
+
+async def run_recompute(
+    context: AppContext, table_id: str, **body: object
+) -> tuple[httpx.Response, dict[str, Any]]:
+    """起一次重算并真跑完，回（受理回执, 终态）。
+
+    ⚠ 容器上的起跑口只记不跑，必须在响应返回之后再执行：后台任务与请求在
+    同一条回滚连接上交错就是 `PendingRollbackError`。
+    Args: context, table_id, body（`since` / `until`）。
+    """
+    started = await context.client.post(
+        f"{TABLES}/{table_id}:recompute", json=body
+    )
+    assert started.status_code == HTTP_ACCEPTED, started.text
+    await context.recompute.run_launched()
+    final = await context.client.get(f"{TABLES}/{table_id}/recompute")
+    assert final.status_code == HTTP_OK, final.text
+    return started, data_of(final)

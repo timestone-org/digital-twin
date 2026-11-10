@@ -546,9 +546,9 @@ def test_the_dataset_face_was_actually_covered() -> None:
         for path, method in ROUTE_CASES
         if dataset_expectation(path, method) is not None
     ]
-    # 5 台账 + 5 列 + 3 公式 + 4 记录 + 3 修正 + 3 取数 + 3 回填
+    # 5 台账 + 5 列 + 3 公式 + 4 记录 + 3 修正 + 2 取数 + 2 重算 + 3 回填
     # + 3 采集运行参数 + 7 公式库
-    assert len(covered) == 36
+    assert len(covered) == 37
 
 
 def test_every_route_takes_its_session_from_the_one_place() -> None:

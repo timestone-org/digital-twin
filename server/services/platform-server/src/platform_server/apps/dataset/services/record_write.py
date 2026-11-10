@@ -23,7 +23,6 @@ from lib.logging import get_logger
 from lib.utils.ids import uuid7
 from lib.utils.timeutils import to_utc, utcnow
 from platform_server.apps.dataset.crud import (
-    RecordWindow,
     column_crud,
     record_crud,
 )
@@ -39,8 +38,6 @@ from platform_server.apps.dataset.models import (
     DatasetTable,
 )
 from platform_server.apps.dataset.schemas import (
-    RecomputeIn,
-    RecomputeOut,
     RecordCreateIn,
     RecordDeleteOut,
     RecordUpdateIn,
@@ -64,8 +61,6 @@ from platform_server.apps.dataset.services.presenters import to_record_out
 from platform_server.apps.dataset.services.record_compute import (
     build_scope,
     compute_row,
-    log_recompute,
-    recompute_range,
 )
 from platform_server.apps.dataset.services.record_history import (
     ComputeScope,
@@ -356,44 +351,6 @@ async def delete_record(
     )
 
 
-async def recompute_table(
-    session: AsyncSession,
-    writer: RecordWriter,
-    *,
-    table_id: uuid.UUID,
-    payload: RecomputeIn,
-) -> RecomputeOut:
-    """按时间范围重算公式列。只写计算值，不碰任何原始录入值。
-
-    Args: session, writer, table_id, payload。
-    """
-    table = await require_table(session, table_id)
-    columns = await column_crud.list_by_table(session, table.id)
-    scope = await build_scope(
-        session, columns=columns, timezone=writer.timezone
-    )
-    outcome = await recompute_range(
-        session,
-        scope,
-        table_id=table.id,
-        window=RecordWindow(
-            table_id=table.id,
-            since=_moment(payload.since),
-            until=_moment(payload.until),
-        ),
-    )
-    if outcome.recomputed:
-        await session.flush()
-        mark_dirty(session, writer.dirty, table.code)
-    log_recompute(table.id, outcome)
-    return RecomputeOut(
-        recomputed=outcome.recomputed,
-        failed=outcome.failed,
-        is_truncated=outcome.is_truncated,
-        limit=outcome.limit,
-    )
-
-
 async def recompute_row(
     session: AsyncSession, scope: ComputeScope, record: DatasetRecord
 ) -> None:
@@ -556,14 +513,6 @@ async def require_record(
     if record is None:
         raise DatasetRecordNotFound("这张台账下没有这一行")
     return record
-
-
-def _moment(given: datetime | None) -> datetime | None:
-    """把一个可选的时刻归一到 UTC aware。
-
-    Args: given。
-    """
-    return None if given is None else to_utc(given)
 
 
 def _zone_name(zone: tzinfo) -> str:

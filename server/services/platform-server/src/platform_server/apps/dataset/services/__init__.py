@@ -19,6 +19,7 @@ from platform_server.apps.dataset.services import (
     formula_service,
     formula_usage,
     library_service,
+    recompute_service,
     record_overrides,
     record_read,
     record_write,
@@ -44,6 +45,10 @@ from platform_server.apps.dataset.services.dirty import (
     DIRTY_TABLES_KEY,
     DatasetDirtyLog,
 )
+from platform_server.apps.dataset.services.recompute_run import (
+    RECOMPUTE_STATE_PREFIX,
+    RecomputeRunner,
+)
 from platform_server.apps.dataset.services.record_read import (
     EffectiveRow,
     EffectiveScan,
@@ -60,6 +65,7 @@ from platform_server.apps.dataset.services.sessions import Sessions
 __all__ = [
     "DIRTY_TABLES_KEY",
     "KEY_PATTERN",
+    "RECOMPUTE_STATE_PREFIX",
     "Actor",
     "AnalysisModel",
     "AnalysisProvider",
@@ -76,6 +82,7 @@ __all__ = [
     "FormulaDefOut",
     "FormulaParamSpec",
     "LoadedModels",
+    "RecomputeRunner",
     "RecordFilters",
     "RecordLocator",
     "RecordWriter",
@@ -86,6 +93,7 @@ __all__ = [
     "formula_service",
     "formula_usage",
     "library_service",
+    "recompute_service",
     "record_overrides",
     "record_read",
     "record_write",

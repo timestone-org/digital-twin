@@ -13,6 +13,7 @@ import { enableAutoUnmount, flushPromises, mount } from '@vue/test-utils'
 import type {
   CursorPage,
   DatasetColumn,
+  DatasetRecomputeJob,
   DatasetRecord,
   DatasetTable,
 } from '@dt/contracts'
@@ -21,6 +22,7 @@ import * as dataset from '@/api/dataset'
 import { TransportError } from '@/api/client'
 import { WORKSPACE_PAGE_KEY } from '@/features/workspace/context'
 import RecordsPanel from '@/pages/Dataset/TableDetail/components/RecordsPanel.vue'
+import { RECOMPUTE_POLL_MS } from '@/pages/Dataset/TableDetail/scripts/useRecompute'
 import { useAuthStore } from '@/stores/auth'
 
 interface ConfirmAsk {
@@ -167,12 +169,11 @@ beforeEach(() => {
     has_stale_downstream: false,
     cleared: ['kwh'],
   })
-  vi.spyOn(dataset, 'recomputeDatasetTable').mockResolvedValue({
-    recomputed: 12,
-    failed: 0,
-    is_truncated: false,
-    limit: 5000,
-  })
+  vi.spyOn(dataset, 'startDatasetRecompute').mockResolvedValue(
+    recomputeJob({ status: 'running', recomputed: 0 }),
+  )
+  // 挂载时读一次以接上刷新前起的任务；默认没有
+  vi.spyOn(dataset, 'getDatasetRecompute').mockResolvedValue(null)
 })
 
 enableAutoUnmount(afterEach)
@@ -195,6 +196,46 @@ async function render(codes: string[], columns = COLUMNS, active = ref(true)) {
   })
   await flushPromises()
   return wrapper
+}
+
+function recomputeJob(
+  overrides: Partial<DatasetRecomputeJob> = {},
+): DatasetRecomputeJob {
+  return {
+    table_id: 't1',
+    table_code: 'demo',
+    status: 'done',
+    since: null,
+    until: null,
+    recomputed: 12,
+    failed: 0,
+    is_truncated: false,
+    limit: 5000,
+    started_at: STAMP,
+    updated_at: STAMP,
+    finished_at: STAMP,
+    error: null,
+    message: '已重算 12 行',
+    ...overrides,
+  }
+}
+
+/**
+ * 点下重算、让后台算完：受理回执是 running，要推进一次轮询才读到终态。
+ * @param wrapper 挂好的面板
+ * @param label 按钮文字
+ * @param done 轮询读到的终态
+ */
+async function recomputeUntil(
+  wrapper: ReturnType<typeof mount>,
+  label: string,
+  done: DatasetRecomputeJob,
+) {
+  await button(wrapper, label)?.trigger('click')
+  await flushPromises()
+  vi.mocked(dataset.getDatasetRecompute).mockResolvedValue(done)
+  await vi.advanceTimersByTimeAsync(RECOMPUTE_POLL_MS)
+  await flushPromises()
 }
 
 function button(wrapper: ReturnType<typeof mount>, text: string) {
@@ -443,6 +484,7 @@ describe('下游过期', () => {
   })
 
   it('算干净了才放下横幅', async () => {
+    vi.useFakeTimers()
     vi.mocked(dataset.deleteDatasetRecord).mockResolvedValue({
       deleted_row_id: 'r1',
       has_stale_downstream: true,
@@ -454,22 +496,16 @@ describe('下游过期', () => {
     ])
     await wrapper.find('[aria-label="删除数据行"]').trigger('click')
     await flushPromises()
-    await button(wrapper, '立即重算')?.trigger('click')
-    await flushPromises()
+    await recomputeUntil(wrapper, '立即重算', recomputeJob())
     expect(toastSuccess).toHaveBeenCalledWith('已重算 12 行')
     expect(wrapper.text()).not.toContain('仍是按旧数据算的')
   })
 
   it('⚠ 触顶那一次不放下横幅：没算完却收起提示等于说已经算好了', async () => {
+    vi.useFakeTimers()
     vi.mocked(dataset.deleteDatasetRecord).mockResolvedValue({
       deleted_row_id: 'r1',
       has_stale_downstream: true,
-    })
-    vi.mocked(dataset.recomputeDatasetTable).mockResolvedValue({
-      recomputed: 5000,
-      failed: 0,
-      is_truncated: true,
-      limit: 5000,
     })
     const wrapper = await render([
       'dataset:view',
@@ -478,8 +514,11 @@ describe('下游过期', () => {
     ])
     await wrapper.find('[aria-label="删除数据行"]').trigger('click')
     await flushPromises()
-    await button(wrapper, '立即重算')?.trigger('click')
-    await flushPromises()
+    await recomputeUntil(
+      wrapper,
+      '立即重算',
+      recomputeJob({ recomputed: 5000, is_truncated: true }),
+    )
     expect(toastWarning).toHaveBeenCalled()
     expect(wrapper.text()).toContain('仍是按旧数据算的')
   })
@@ -540,5 +579,117 @@ describe('撤销单格修正', () => {
     await flushPromises()
     expect(toastInfo).toHaveBeenCalledWith('这一格已经没有人工修正了')
     expect(toastError).not.toHaveBeenCalled()
+  })
+})
+
+describe('重算是后台任务', () => {
+  const ALL = ['dataset:view', 'dataset:record:write', 'dataset:backfill']
+
+  beforeEach(() => vi.useFakeTimers())
+
+  it('跑的时候按钮写「重算中」、写动作一并禁用；读到终态才放开', async () => {
+    const wrapper = await render(ALL)
+    await button(wrapper, '重算公式列')?.trigger('click')
+    await flushPromises()
+
+    // ⚠ 重算按开跑那一刻的数据算，中途改的行会被它盖回旧口径
+    expect(button(wrapper, '重算中')?.attributes('disabled')).toBeDefined()
+    expect(button(wrapper, '录入数据')?.attributes('disabled')).toBeDefined()
+    expect(toastSuccess).not.toHaveBeenCalled()
+
+    vi.mocked(dataset.getDatasetRecompute).mockResolvedValue(recomputeJob())
+    await vi.advanceTimersByTimeAsync(RECOMPUTE_POLL_MS)
+    await flushPromises()
+
+    expect(toastSuccess).toHaveBeenCalledWith('已重算 12 行')
+    expect(button(wrapper, '重算公式列')).toBeDefined()
+    expect(button(wrapper, '录入数据')?.attributes('disabled')).toBeUndefined()
+  })
+
+  it('还在跑就接着轮询，不提前报回执', async () => {
+    const wrapper = await render(ALL)
+    await recomputeUntil(
+      wrapper,
+      '重算公式列',
+      recomputeJob({ status: 'running', recomputed: 0 }),
+    )
+
+    expect(toastSuccess).not.toHaveBeenCalled()
+    expect(button(wrapper, '重算中')).toBeDefined()
+  })
+
+  it('任务失败报原因，且不放下「下游过期」的横幅', async () => {
+    vi.mocked(dataset.deleteDatasetRecord).mockResolvedValue({
+      deleted_row_id: 'r1',
+      has_stale_downstream: true,
+    })
+    const wrapper = await render(ALL)
+    await wrapper.find('[aria-label="删除数据行"]').trigger('click')
+    await flushPromises()
+
+    await recomputeUntil(
+      wrapper,
+      '立即重算',
+      recomputeJob({
+        status: 'failed',
+        recomputed: 0,
+        error: '这张台账已被删除，重算中止',
+        message: '重算失败：这张台账已被删除，重算中止',
+      }),
+    )
+
+    expect(toastError).toHaveBeenCalledWith(
+      '重算失败：这张台账已被删除，重算中止',
+    )
+    expect(wrapper.text()).toContain('仍是按旧数据算的')
+  })
+
+  it('读进度失败不弹吐司，按钮保持「重算中」直到读到终态', async () => {
+    const wrapper = await render(ALL)
+    await button(wrapper, '重算公式列')?.trigger('click')
+    await flushPromises()
+    vi.mocked(dataset.getDatasetRecompute).mockRejectedValue(
+      new TransportError(503, '缓存暂不可用'),
+    )
+    await vi.advanceTimersByTimeAsync(RECOMPUTE_POLL_MS)
+    await flushPromises()
+
+    expect(toastError).not.toHaveBeenCalled()
+    expect(button(wrapper, '重算中')).toBeDefined()
+  })
+
+  it('刷新页面之前起的重算，挂载时接上', async () => {
+    vi.mocked(dataset.getDatasetRecompute).mockResolvedValue(
+      recomputeJob({ status: 'running', recomputed: 0 }),
+    )
+    const wrapper = await render(ALL)
+
+    expect(button(wrapper, '重算中')).toBeDefined()
+  })
+
+  it('起不来就报错并放开按钮', async () => {
+    vi.mocked(dataset.startDatasetRecompute).mockRejectedValue(
+      new TransportError(409, '正在回填或重算'),
+    )
+    const wrapper = await render(ALL)
+    await button(wrapper, '重算公式列')?.trigger('click')
+    await flushPromises()
+
+    expect(toastError).toHaveBeenCalled()
+    expect(button(wrapper, '重算公式列')).toBeDefined()
+  })
+
+  it('卸载之后不再轮询', async () => {
+    const wrapper = await render(ALL)
+    await button(wrapper, '重算公式列')?.trigger('click')
+    await flushPromises()
+    const before = vi.mocked(dataset.getDatasetRecompute).mock.calls.length
+
+    wrapper.unmount()
+    await vi.advanceTimersByTimeAsync(RECOMPUTE_POLL_MS * 3)
+
+    expect(vi.mocked(dataset.getDatasetRecompute).mock.calls.length).toBe(
+      before,
+    )
   })
 })

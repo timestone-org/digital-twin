@@ -9,7 +9,10 @@ from typing import Annotated, Any
 
 from pydantic import Field
 
-from platform_server.apps.dataset.protocols import RecordSource
+from platform_server.apps.dataset.protocols import (
+    RecomputeStatus,
+    RecordSource,
+)
 from platform_server.apps.dataset.schemas.common import (
     ColumnKey,
     InputModel,
@@ -205,11 +208,23 @@ class RecomputeIn(InputModel):
     until: Utc | None = None
 
 
-class RecomputeOut(OutputModel):
-    """一次重算的回执。"""
+class RecomputeJobOut(OutputModel):
+    """一次重算任务的全部对外状态，起任务与查进度共用这一个形状。"""
 
+    table_id: uuid.UUID
+    table_code: str
+    status: RecomputeStatus
+    #: 用户提交的时间范围；两端都为空即整表
+    since: Utc | None
+    until: Utc | None
     recomputed: int
     failed: int
     #: 待重算的行数触顶，本次只算了最早的 `limit` 行
     is_truncated: bool
     limit: int
+    started_at: Utc
+    updated_at: Utc
+    finished_at: Utc | None
+    #: 只在 `status = failed` 时有值
+    error: str | None
+    message: str

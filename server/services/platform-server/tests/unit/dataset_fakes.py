@@ -7,12 +7,21 @@ from typing import Any
 
 from lib.errors import DependencyUnavailable
 from lib.testing import InMemoryCache
-from platform_server.apps.dataset.services import BackfillJobs, BackfillRunner
+from platform_server.apps.dataset.services import (
+    RECOMPUTE_STATE_PREFIX,
+    BackfillJobs,
+    BackfillRunner,
+    RecomputeRunner,
+)
 from platform_server.apps.dataset.services.backfill_jobs import (
     BackfillJobState,
 )
 from platform_server.apps.dataset.services.backfill_plan import BackfillPlan
 from platform_server.apps.dataset.services.dirty import DatasetDirtyLog
+from platform_server.apps.dataset.services.recompute_run import (
+    RecomputeJobState,
+    run_recompute,
+)
 from platform_server.apps.dataset.services.sessions import Sessions
 from platform_server.container import DatasetParts
 from platform_server.lease import Lease
@@ -177,6 +186,43 @@ def recording_runner(sessions: Sessions, settings: Settings) -> RecordingRunner:
 
 
 @dataclass
+class RecordingRecomputeRunner(RecomputeRunner):
+    """重算起跑口的替身：只记下起过什么，由用例在响应返回之后再顺序执行。
+
+    ⚠ 理由同 `RecordingRunner`：用例那条会话是回滚事务上的单连接，后台任务与
+    请求交错就是 `PendingRollbackError`。执行走的是真实现那一个协程
+    （`run_recompute`），只是不在后台调度。
+    """
+
+    launched: list[tuple[RecomputeJobState, str]] = field(
+        default_factory=list[tuple[RecomputeJobState, str]]
+    )
+
+    def launch(self, state: RecomputeJobState, *, token: str) -> None:
+        """记一笔就算起过了。
+
+        Args: state, token。
+        """
+        self.launched.append((state, token))
+
+    async def run_launched(self) -> None:
+        """把记下的任务按顺序真跑一遍。"""
+        while self.launched:
+            state, token = self.launched.pop(0)
+            await run_recompute(self.context(token), state)
+
+
+def recompute_jobs(store: InMemoryCache) -> BackfillJobs:
+    """重算那一份任务态读写口。⚠ 与回填共用 `store`，锁因此是同一把。
+
+    Args: store。
+    """
+    return BackfillJobs(
+        store=store, state_prefix=RECOMPUTE_STATE_PREFIX, label="重算"
+    )
+
+
+@dataclass
 class HalfBrokenStore:
     """能抢锁、写不了任务态的 Redis 替身。
 
@@ -219,16 +265,27 @@ def dataset_parts(
     lease: Lease,
     retention_lease: Lease | None = None,
 ) -> DatasetParts:
-    """台账那一面的五件，全是进程内假件。
+    """台账那一面的六件，全是进程内假件。
 
     ⚠ 收成一个工厂而不是在每处装配点各拼一遍：那几件每加一期就多一件，
     而拼错一件的表现是那一面的用例整片红在一句「缺少参数」上。
     Args: sessions, settings, lease, retention_lease（不给就与采集共用一把，
         只有关停顺序的用例才在乎它们是两把）。
     """
+    backfill = recording_runner(sessions, settings)
+    store = backfill.jobs.store
+    assert isinstance(store, InMemoryCache)
     return DatasetParts(
         dirty=DatasetDirtyLog(sink=FakeSetSink()),
-        backfill=recording_runner(sessions, settings),
+        backfill=backfill,
+        # ⚠ 与回填共用一个存储：两者抢的是同一把锁
+        recompute=RecordingRecomputeRunner(
+            sessions=sessions,
+            dirty=DatasetDirtyLog(sink=FakeSetSink()),
+            jobs=recompute_jobs(store),
+            timezone=UTC,
+            instance=settings.app_instance,
+        ),
         lease=lease,
         retention_lease=lease if retention_lease is None else retention_lease,
         timezone=UTC,
