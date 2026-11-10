@@ -61,7 +61,21 @@ def effective_merged(record: DatasetRecord) -> dict[str, Any]:
     让它借尸还魂。
     Args: record。
     """
-    return {**effective_values(record), **(record.computed_json or {})}
+    return merge_effective(
+        record.values_json, record.overrides_json, record.computed_json
+    )
+
+
+def merge_effective(
+    values: dict[str, Any] | None,
+    overrides: dict[str, Any] | None,
+    computed: dict[str, Any] | None,
+) -> dict[str, Any]:
+    """三层原料拼出完整可读值；`effective_merged` 的无 ORM 版本。
+
+    Args: values, overrides, computed。
+    """
+    return {**apply_overrides(values, overrides), **(computed or {})}
 
 
 def to_snapshot(record: DatasetRecord) -> RowSnapshot:

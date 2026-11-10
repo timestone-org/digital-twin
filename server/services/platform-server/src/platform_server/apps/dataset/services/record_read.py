@@ -32,6 +32,7 @@ from platform_server.apps.dataset.schemas.record import MAX_SERIES_ROWS
 from platform_server.apps.dataset.services.effective import (
     effective_merged,
     effective_values,
+    merge_effective,
 )
 from platform_server.apps.dataset.services.presenters import to_record_out
 from platform_server.apps.dataset.services.table_service import require_table
@@ -258,25 +259,28 @@ async def read_series(
     """
     table = await require_table(session, table_id)
     wanted = _require_keys(keys)
-    scan = await scan_window(
+    fetched = await record_crud.scan_newest_picked(
         session,
         window=RecordWindow(
             table_id=table.id, since=filters.since, until=filters.until
         ),
+        keys=wanted,
         limit=MAX_SERIES_ROWS,
     )
     series: dict[str, list[DatasetSeriesPointOut]] = {key: [] for key in wanted}
-    # 反扫取的是最新 N 行，对外契约按时刻升序
-    for record in reversed(scan.rows):
-        merged = effective_merged(record)
+    # 反扫取的是最新 N 行（多一行判触顶），对外契约按时刻升序
+    for row in reversed(fetched[:MAX_SERIES_ROWS]):
+        merged = merge_effective(row.values, row.overrides, row.computed)
         for key in wanted:
             value = merged.get(key)
             if value is not None:
                 series[key].append(
-                    DatasetSeriesPointOut(ts=record.ts, value=value)
+                    DatasetSeriesPointOut(ts=row.ts, value=value)
                 )
     return SeriesOut(
-        series=series, is_truncated=scan.is_truncated, limit=scan.limit
+        series=series,
+        is_truncated=len(fetched) > MAX_SERIES_ROWS,
+        limit=MAX_SERIES_ROWS,
     )
 
 
