@@ -48,7 +48,6 @@ export function useDatasetLatestValues(
   const fetch = useRacedFetch()
 
   function refresh(): void {
-    nowMs.value = Date.now()
     const wanted = keys.value
     void fetch.run((signal) => readLatest(wanted, signal), {
       ok: (result) => {
@@ -60,7 +59,10 @@ export function useDatasetLatestValues(
           values.value,
         )
       },
-      settled: () => undefined,
+      // ⚠ 时钟随结果一起推进：发请求时就推进，慢响应期间旧值会被新时钟判成过期
+      settled: () => {
+        nowMs.value = Date.now()
+      },
     })
   }
 

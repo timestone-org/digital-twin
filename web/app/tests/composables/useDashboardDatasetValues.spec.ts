@@ -253,6 +253,42 @@ describe('台账标量的屏级装配', () => {
     expect(requestMock).toHaveBeenCalledTimes(4)
   })
 
+  it('刷新在途时不拿新时钟判旧值过期，慢响应期间不闪陈旧角标', async () => {
+    latestTimestamp = new Date(Date.now() - 601000).toISOString()
+    const { read } = mountDashboard()
+    await flushPromises()
+    expect(read()).not.toHaveProperty('isStale')
+    let release: (() => void) | undefined
+    requestMock.mockImplementationOnce(
+      (path: string) =>
+        new Promise((resolve) => {
+          release = () => {
+            resolve({
+              items: [
+                {
+                  id: 't1',
+                  code: 'nyyh',
+                  collect_mode: 'aggregate',
+                  collect_interval_ms: 300000,
+                },
+              ],
+              page: 1,
+              size: 200,
+              total: 1,
+            })
+          }
+          expect(path).toBe('/dataset-tables')
+        }),
+    )
+    await vi.advanceTimersByTimeAsync(60000)
+    expect(read()).not.toHaveProperty('isStale')
+    latestTimestamp = new Date().toISOString()
+    release?.()
+    await flushPromises()
+    expect(read()).toMatchObject({ state: 'ok', value: formulaValue })
+    expect(read()).not.toHaveProperty('isStale')
+  })
+
   it('刷新失败保留最后值并标陈旧，恢复成功才撤掉标记', async () => {
     const { read } = mountDashboard()
     await flushPromises()
