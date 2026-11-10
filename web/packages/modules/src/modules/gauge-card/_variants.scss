@@ -259,11 +259,11 @@
   pointer-events: none;
 }
 
-// ⚠ 指针档的轴心就落在图形正中：读数不让开的话，指针会从数字中间穿过去。
-//   往下挪到弧口里——那正是这一档留出缺口的用处。
-.gc--ind-needle .gc-center {
-  align-items: flex-end;
-  padding-bottom: 12%;
+// 弧度盘的读数层钉在表盘盒上，落点（圆心，或指针档的轴心下方）由内联 top 给：
+// 取景裁过之后，图形正中已不是圆心
+.gc-dial .gc-center {
+  inset: auto 0 auto 0;
+  align-items: flex-start;
 }
 
 .gc-range {
@@ -294,9 +294,18 @@
   width: 100%;
 }
 
-.gc-arc {
+// ⚠ 表盘盒的宽高比来自裁剪后的取景（内联 aspect-ratio）：宽给满、高按比例，
+// 卡片太矮时由 max-height 截住，svg 再以 meet 在横向留白——纵向比例因此始终与取景一致
+.gc-dial {
+  position: relative;
+  display: block;
   width: 100%;
   max-height: 100%;
+}
+
+.gc-arc {
+  display: block;
+  width: 100%;
   height: 100%;
 }
 

@@ -12,7 +12,7 @@
 import { DtTooltip } from '@dt/ui'
 import { computed, useId, type CSSProperties } from 'vue'
 
-import { needlePath } from './geometry'
+import { GAUGE_NEEDLE_HUB_RADIUS, arcFrame, needlePath } from './geometry'
 
 import type { GaugeView } from './gauges'
 import type { GaugeLook } from './look'
@@ -119,6 +119,38 @@ const needleD = computed(() =>
   ),
 )
 
+/** 弧按实际占到的纵向范围取景，读数落点跟着换算 */
+const frame = computed(() =>
+  arcFrame(
+    props.look.geometry.thickness,
+    props.look.geometry.arcSpan,
+    hasNeedle.value,
+  ),
+)
+
+const viewBox = computed(
+  () => `0 ${String(frame.value.minY)} 100 ${String(frame.value.height)}`,
+)
+
+/**
+ * 表盘盒按取景的宽高比撑开，读数层绝对定位在这只盒上。
+ * ⚠ 读数落点用百分比是因为盒与取景同比：宽受限时高随宽走，高受限时只在横向留白，
+ * 纵向比例始终对得上。
+ */
+const dialStyle = computed<CSSProperties>(() => ({
+  aspectRatio: `100 / ${String(frame.value.height)}`,
+}))
+
+/** 读数层的落点：摆圆心那一档以圆心居中，指针档摆在轴心下方。 */
+const readStyle = computed<CSSProperties>(() => {
+  const f = frame.value
+  const top = hasNeedle.value ? f.needleReadRatio : f.centerRatio
+  return {
+    top: `${compact(top * 100)}%`,
+    transform: hasNeedle.value ? undefined : 'translateY(-50%)',
+  }
+})
+
 /** 刻度、目标标记与 pill 只有粗轨道那一档摆。 */
 const isTrack = computed(() => props.look.shape === 'track')
 </script>
@@ -138,72 +170,84 @@ const isTrack = computed(() => props.look.shape === 'track')
           >!</span
         >
       </DtTooltip>
-      <svg
-        v-if="look.shape === 'arc'"
-        class="gc-arc"
-        viewBox="0 0 100 100"
-        preserveAspectRatio="xMidYMid meet"
-        aria-hidden="true"
-      >
-        <defs v-if="arcStroke !== ''">
-          <!-- ⚠ 自定义色标走横向（左→右），与图上「左红右青」的读法一致；
+      <span v-if="look.shape === 'arc'" class="gc-dial" :style="dialStyle">
+        <svg
+          class="gc-arc"
+          :viewBox="viewBox"
+          preserveAspectRatio="xMidYMid meet"
+          aria-hidden="true"
+        >
+          <defs v-if="arcStroke !== ''">
+            <!-- ⚠ 自定义色标走横向（左→右），与图上「左红右青」的读法一致；
                两档缺省色标仍走竖向，改了会让存量大屏的弧整体换个方向 -->
-          <linearGradient
-            :id="gradientId"
-            :x1="stops.length > 0 ? 0 : 0"
-            :y1="stops.length > 0 ? 0 : 1"
-            :x2="stops.length > 0 ? 1 : 0"
-            :y2="0"
-          >
-            <template v-if="stops.length > 0">
-              <stop
-                v-for="(stop, at) in stops"
-                :key="`stop-${String(at)}`"
-                :offset="`${String(stop.at)}%`"
-                :stop-color="stop.color"
-              />
-            </template>
-            <template v-else>
-              <stop class="gc-arc__stop-a" offset="0%" />
-              <stop class="gc-arc__stop-b" offset="100%" />
-            </template>
-          </linearGradient>
-        </defs>
-        <path
-          class="gc-arc__track"
-          :d="look.geometry.arcPath"
-          fill="none"
-          :stroke-width="look.geometry.thickness"
-          stroke-linecap="round"
-        />
-        <!-- 满弧档：整条弧上色，不按读数裁；读数交给指针 -->
-        <path
-          v-if="hasNeedle"
-          class="gc-arc__fill gc-arc__fill--full"
-          :d="look.geometry.arcPath"
-          fill="none"
-          :stroke-width="look.geometry.thickness"
-          stroke-linecap="round"
-          :style="{ stroke: arcStroke }"
-        />
-        <path
-          v-else-if="view.fill !== ''"
-          class="gc-arc__fill"
-          :d="look.geometry.arcPath"
-          fill="none"
-          :stroke-width="look.geometry.thickness"
-          stroke-linecap="round"
-          pathLength="100"
-          stroke-dasharray="100"
-          :stroke-dashoffset="view.dashOffset"
-          :style="{ stroke: arcStroke }"
-        />
-        <!-- ⚠ 读数取不到时不画指针：指在起点会被读成「现在是最小值」 -->
-        <g v-if="hasNeedle && view.percent !== null" class="gc-needle">
-          <path class="gc-needle__blade" :d="needleD" />
-          <circle class="gc-needle__hub" cx="50" cy="50" r="4" />
-        </g>
-      </svg>
+            <linearGradient
+              :id="gradientId"
+              :x1="stops.length > 0 ? 0 : 0"
+              :y1="stops.length > 0 ? 0 : 1"
+              :x2="stops.length > 0 ? 1 : 0"
+              :y2="0"
+            >
+              <template v-if="stops.length > 0">
+                <stop
+                  v-for="(stop, at) in stops"
+                  :key="`stop-${String(at)}`"
+                  :offset="`${String(stop.at)}%`"
+                  :stop-color="stop.color"
+                />
+              </template>
+              <template v-else>
+                <stop class="gc-arc__stop-a" offset="0%" />
+                <stop class="gc-arc__stop-b" offset="100%" />
+              </template>
+            </linearGradient>
+          </defs>
+          <path
+            class="gc-arc__track"
+            :d="look.geometry.arcPath"
+            fill="none"
+            :stroke-width="look.geometry.thickness"
+            stroke-linecap="round"
+          />
+          <!-- 满弧档：整条弧上色，不按读数裁；读数交给指针 -->
+          <path
+            v-if="hasNeedle"
+            class="gc-arc__fill gc-arc__fill--full"
+            :d="look.geometry.arcPath"
+            fill="none"
+            :stroke-width="look.geometry.thickness"
+            stroke-linecap="round"
+            :style="{ stroke: arcStroke }"
+          />
+          <path
+            v-else-if="view.fill !== ''"
+            class="gc-arc__fill"
+            :d="look.geometry.arcPath"
+            fill="none"
+            :stroke-width="look.geometry.thickness"
+            stroke-linecap="round"
+            pathLength="100"
+            stroke-dasharray="100"
+            :stroke-dashoffset="view.dashOffset"
+            :style="{ stroke: arcStroke }"
+          />
+          <!-- ⚠ 读数取不到时不画指针：指在起点会被读成「现在是最小值」 -->
+          <g v-if="hasNeedle && view.percent !== null" class="gc-needle">
+            <path class="gc-needle__blade" :d="needleD" />
+            <circle
+              class="gc-needle__hub"
+              cx="50"
+              cy="50"
+              :r="GAUGE_NEEDLE_HUB_RADIUS"
+            />
+          </g>
+        </svg>
+        <span
+          v-if="$slots.center !== undefined"
+          class="gc-center"
+          :style="readStyle"
+          ><slot name="center"
+        /></span>
+      </span>
       <span
         v-else-if="look.shape === 'linear' || look.shape === 'track'"
         class="gc-bar"
@@ -263,7 +307,9 @@ const isTrack = computed(() => props.look.shape === 'track')
           >{{ tick.label }}</i
         >
       </span>
-      <span v-if="$slots.center !== undefined" class="gc-center"
+      <span
+        v-if="$slots.center !== undefined && look.shape !== 'arc'"
+        class="gc-center"
         ><slot name="center"
       /></span>
     </span>

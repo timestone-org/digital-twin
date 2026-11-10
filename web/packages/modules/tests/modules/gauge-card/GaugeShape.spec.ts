@@ -237,6 +237,38 @@ describe('量程端点与居中读数', () => {
     expect(render({ shape: 'arc' }).find('.gc-center').exists()).toBe(false)
     expect(withSlot.get('.gc-center .probe').text()).toBe('42')
   })
+
+  it('弧的居中层钉在表盘盒里，取景按弧的实际范围裁剪', () => {
+    const wrapper = mount(GaugeShape, {
+      props: {
+        view: viewOf(),
+        look: lookOf({ shape: 'arc', geometry: { arcSpan: 200 } }),
+      },
+      slots: { center: '<b class="probe">42</b>' },
+    })
+
+    expect(wrapper.find('.gc-dial .gc-center .probe').exists()).toBe(true)
+    const box = wrapper.get('svg.gc-arc').attributes('viewBox') ?? ''
+    expect(Number(box.split(' ')[3])).toBeLessThan(100)
+  })
+
+  it('指针档的读数摆在轴心下方，不再按圆心居中', () => {
+    const wrapper = mount(GaugeShape, {
+      props: {
+        view: viewOf(),
+        look: lookOf({
+          shape: 'arc',
+          indicator: 'needle',
+          geometry: { arcSpan: 200 },
+        }),
+      },
+      slots: { center: '<b class="probe">42</b>' },
+    })
+    const style = wrapper.get('.gc-center').attributes('style') ?? ''
+
+    expect(style).toContain('top:')
+    expect(style).not.toContain('translateY')
+  })
 })
 
 describe('满弧 + 指针', () => {

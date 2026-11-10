@@ -7,6 +7,8 @@
 import { describe, expect, it } from 'vitest'
 
 import {
+  arcFrame,
+  GAUGE_NEEDLE_HUB_RADIUS,
   arcAngleAt,
   arcAngles,
   arcDashOffset,
@@ -257,5 +259,37 @@ describe('刻度与贴边标签', () => {
       '-50%',
       '-100%',
     ])
+  })
+})
+
+describe('弧的取景裁剪', () => {
+  it('张角不到 270° 时裁掉下方空白，取景比正方形矮', () => {
+    const frame = arcFrame(14, 200, false)
+    expect(frame.minY).toBeGreaterThanOrEqual(0)
+    expect(frame.height).toBeLessThan(80)
+  })
+
+  it('圆心比例换算回取景坐标正好落在画布正中', () => {
+    const frame = arcFrame(14, 200, false)
+    expect(frame.minY + frame.centerRatio * frame.height).toBeCloseTo(50, 5)
+  })
+
+  it('指针档的读数上沿落在轴心下缘之下，且仍在取景之内', () => {
+    const frame = arcFrame(14, 200, true)
+    const readY = frame.minY + frame.needleReadRatio * frame.height
+    expect(readY).toBeGreaterThan(50 + GAUGE_NEEDLE_HUB_RADIUS)
+    expect(frame.needleReadRatio).toBeLessThan(1)
+  })
+
+  it('指针档给读数留的空间比摆圆心那一档多', () => {
+    expect(arcFrame(14, 200, true).height).toBeGreaterThan(
+      arcFrame(14, 200, false).height,
+    )
+  })
+
+  it('张角越大弧口越低，取景跟着加高，但不超出画布', () => {
+    const wide = arcFrame(14, 300, false)
+    expect(wide.height).toBeGreaterThan(arcFrame(14, 200, false).height)
+    expect(wide.minY + wide.height).toBeLessThanOrEqual(100)
   })
 })

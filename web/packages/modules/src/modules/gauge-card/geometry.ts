@@ -245,6 +245,63 @@ export function arcAngleAt(percent: number | null, spanDeg: number): number {
   return start + ((end - start) * fillPercent(percent)) / 100
 }
 
+/** 指针轴心的半径，模板里那个 `<circle r>` 与读数让位都按它算。 */
+export const GAUGE_NEEDLE_HUB_RADIUS = 4
+
+/** 读数离指针轴心下缘的距离 */
+const NEEDLE_READOUT_GAP = 3
+
+/** 指针档在圆心下方给读数留的高度，按半径的比例 */
+const NEEDLE_READOUT_ROOM = 0.8
+
+/** 读数摆圆心那一档在圆心下方至少留的高度，按半径的比例 */
+const CENTER_READOUT_ROOM = 0.3
+
+/** 弧画布裁剪后的取景：纵向范围与读数落点（落点是相对取景高度的比例）。 */
+export interface GaugeArcFrame {
+  /** 取景上沿（viewBox 的 minY） */
+  minY: number
+  /** 取景高度（viewBox 的 height，宽固定 100） */
+  height: number
+  /** 圆心在取景里的纵向比例，读数摆圆心那一档以它居中 */
+  centerRatio: number
+  /** 指针档读数上沿的纵向比例：轴心下缘再让一点 */
+  needleReadRatio: number
+}
+
+/**
+ * 弧实际占到的纵向范围。
+ * ⚠ 画布是 100×100 的正方形，而张角不到 270° 时弧只占上半截，下面整片是空白；
+ * 不裁掉的话弧被卡片高度压小，空白还把读数挤到指针轴心上。
+ * @param thickness 描边宽度，`0` = 随形状取缺省
+ * @param spanDeg 张角
+ * @param needle 是否满弧 + 指针（要在轴心下方给读数留位置）
+ */
+export function arcFrame(
+  thickness: number,
+  spanDeg: number,
+  needle: boolean,
+): GaugeArcFrame {
+  const stroke = resolveThickness('arc', thickness)
+  const radius = arcRadius(thickness)
+  const c = GAUGE_ARC_CENTER
+  const { start } = arcAngles(spanDeg)
+  const endY = polarToCartesian(c, c, radius, start).y
+  const arcBottom = Math.max(endY, c) + stroke / 2 + ARC_EDGE_PAD
+  const room = c + radius * (needle ? NEEDLE_READOUT_ROOM : CENTER_READOUT_ROOM)
+  // ⚠ 比例按取整后的取景算：viewBox 用的是取整值，两边各取各的会让读数偏一点
+  const minY = round(Math.max(0, c - radius - stroke / 2 - ARC_EDGE_PAD))
+  const maxY = Math.min(GAUGE_ARC_BOX, Math.max(arcBottom, room))
+  const height = round(maxY - minY)
+  return {
+    minY,
+    height,
+    centerRatio: (c - minY) / height,
+    needleReadRatio:
+      (c + GAUGE_NEEDLE_HUB_RADIUS + NEEDLE_READOUT_GAP - minY) / height,
+  }
+}
+
 /** 指针尖离弧内缘留这么远，太贴会看着像戳在弧上。 */
 const NEEDLE_TIP_GAP = 6
 /** 指针根部半宽；再宽就成了扇形，再窄在缩放后会消失。 */
