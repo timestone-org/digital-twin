@@ -19,6 +19,9 @@ from platform_server.apps.report.schemas.document import (
     PageSettings,
 )
 
+# 一份模板最多几个指标变量；总体积另有 1 MB 上限兜底。
+MAX_METRICS = 2000
+
 
 class TemplateBody(InputModel):
     """一份完整模板定义。"""
@@ -29,7 +32,7 @@ class TemplateBody(InputModel):
     is_enabled: bool = True
     doc_json: DocumentNode = DocumentNode(type="doc")
     metrics: list[MetricDef] = Field(
-        default_factory=list[MetricDef], max_length=200
+        default_factory=list[MetricDef], max_length=MAX_METRICS
     )
     page_json: PageSettings = PageSettings()
     api_sources: list[ReportApiSource] = Field(

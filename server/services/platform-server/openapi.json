@@ -22698,7 +22698,7 @@
             "items": {
               "$ref": "#/components/schemas/MetricDef"
             },
-            "maxItems": 200,
+            "maxItems": 2000,
             "title": "Metrics",
             "type": "array"
           },
@@ -25399,7 +25399,7 @@
             "items": {
               "$ref": "#/components/schemas/MetricDef"
             },
-            "maxItems": 200,
+            "maxItems": 2000,
             "title": "Metrics",
             "type": "array"
           },
@@ -25766,7 +25766,7 @@
             "items": {
               "$ref": "#/components/schemas/MetricDef"
             },
-            "maxItems": 200,
+            "maxItems": 2000,
             "title": "Metrics",
             "type": "array"
           },

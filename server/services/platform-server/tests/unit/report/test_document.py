@@ -2,6 +2,9 @@
 
 from decimal import Decimal
 
+import pytest
+from pydantic import ValidationError
+
 from platform_server.apps.report.schemas.document import DocumentNode, MetricDef
 from platform_server.apps.report.schemas.template import TemplateBody
 from platform_server.apps.report.services.aggregation import (
@@ -90,3 +93,20 @@ def test_a_number_rounded_to_zero_loses_its_sign():
     assert format_number("-0.4", 0, "kW") == "0kW"
     assert format_number("-0.06", 1) == "-0.1"
     assert format_number("-1.26", 1) == "-1.3"
+
+
+def test_template_accepts_two_thousand_metrics():
+    metrics = [
+        MetricDef(name=f"变量{index}", mode="expr", expr="1")
+        for index in range(2000)
+    ]
+    assert len(TemplateBody(name="月报", metrics=metrics).metrics) == 2000
+
+
+def test_template_rejects_metrics_over_limit():
+    metrics = [
+        MetricDef(name=f"变量{index}", mode="expr", expr="1")
+        for index in range(2001)
+    ]
+    with pytest.raises(ValidationError):
+        TemplateBody(name="月报", metrics=metrics)
