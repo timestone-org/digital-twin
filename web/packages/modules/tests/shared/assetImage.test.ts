@@ -12,6 +12,7 @@ import {
   resolveImageValue,
 } from '../../src/shared/assetImage'
 import { bannerBackground } from '../../src/shared/background'
+import { readCardItems } from '../../src/modules/info-card/cells'
 
 const ID = '018f3a2b-4c5d-7e8f-9a0b-1c2d3e4f5a6b'
 const REF = `asset:${ID}`
@@ -31,6 +32,15 @@ describe('引用判别', () => {
 })
 
 describe('摊平', () => {
+  it('卡片图标使用图标前缀，背景仍使用图片前缀', () => {
+    configureAssetImages(
+      (ref, kind = 'image') => `/oss/${kind}s/${ref.slice('asset:'.length)}`,
+    )
+    expect(readCardItems([{ icon: REF }])[0]?.icon).toBe(`/oss/icons/${ID}`)
+    expect(bannerBackground(REF)).toBe(
+      `url("/oss/images/${ID}") center bottom / 100% 100% no-repeat`,
+    )
+  })
   it('装了解析器就换成地址', () => {
     configureAssetImages((ref) => `/oss/images/${ref.slice('asset:'.length)}`)
 

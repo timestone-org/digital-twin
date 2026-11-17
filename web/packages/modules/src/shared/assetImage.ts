@@ -9,7 +9,10 @@
 import { ASSET_REF_PREFIX } from '@dt/contracts'
 
 /** 素材引用 → 可取回的地址；解析不出给空串。 */
-export type ResolveAssetImage = (assetRef: string) => string
+export type ResolveAssetImage = (
+  assetRef: string,
+  kind: 'image' | 'icon',
+) => string
 
 const NOT_CONFIGURED: ResolveAssetImage = () => ''
 
@@ -42,8 +45,11 @@ export function isAssetRef(value: string): boolean {
  * `<img src>`，得到的是一个碎图图标，看着像素材坏了。
  * @param value 配置里存的原始字符串
  */
-export function resolveImageValue(value: string): string {
+export function resolveImageValue(
+  value: string,
+  kind: 'image' | 'icon' = 'image',
+): string {
   const text = value.trim()
   if (!isAssetRef(text)) return value
-  return resolver(text).trim()
+  return resolver(text, kind).trim()
 }
