@@ -1,7 +1,8 @@
 """多台账按时间对齐。
 
-⚠ 两边的列名会撞——同一个「温度」在两张台账上是两回事。右侧一律加前缀，前缀
-定死不给配空串：配空了就成了静默覆盖，而下游拿到的是哪一张表的数看不出来。
+⚠ 两边的列名会撞——同一个「温度」在两张台账上是两回事。右侧前缀可以留空，但
+加完前缀之后只要还撞名就当场拒绝：放过去就成了静默覆盖，下游拿到的是哪一张表的
+数看不出来。
 ⚠ 对齐按**时刻就近**，不是按行号：两张台账的采集周期常常不同，按行号并起来的
 每一行都是错的，而每个数看着都正常。
 """
@@ -78,11 +79,10 @@ class LedgerJoinConfig(OperatorConfig):
         description="两边时刻相差不超过它才算同一时刻；0 表示必须完全相等",
     )
     right_prefix: str = Field(
-        default="右_",
-        min_length=1,
+        default="",
         max_length=16,
         title="右侧列名前缀",
-        description="右边每一列都加上它，避免与左边同名",
+        description="右边每一列都加上它；留空则不加，此时两边有同名列会报错",
     )
 
 
@@ -92,7 +92,7 @@ class LedgerJoin(OperatorBase):
 
     CODE = "ledger_join"
     NAME = "多台账对齐"
-    DESCRIPTION = "把两份数据按时刻就近并成一份，右侧列名加前缀"
+    DESCRIPTION = "把两份数据按时刻就近并成一份，右侧列名可加前缀"
     CATEGORY = "source"
     ICON = "link"
     CONFIG_MODEL = LedgerJoinConfig
@@ -116,7 +116,7 @@ class LedgerJoin(OperatorBase):
     def describe_columns(
         cls, config: OperatorConfig, inputs: ColumnsByPort
     ) -> ColumnsByPort:
-        """左边原样，右边每一列加前缀。
+        """左边原样，右边每一列加前缀；加完仍撞名就推不出来。
 
         Args: config, inputs。
         """
@@ -127,7 +127,10 @@ class LedgerJoin(OperatorBase):
         if not isinstance(config, LedgerJoinConfig):
             return {"frame": None}
         prefix = config.right_prefix
-        return {"frame": (*left, *(f"{prefix}{key}" for key in right))}
+        added = tuple(f"{prefix}{key}" for key in right)
+        if set(left) & set(added):
+            return {"frame": None}
+        return {"frame": (*left, *added)}
 
     def __init__(self, config: OperatorConfig) -> None:
         super().__init__(config)
@@ -190,10 +193,12 @@ def _refuse_prefix_clashes(left: Frame, right: Frame, prefix: str) -> None:
     Args: left, right, prefix。
     """
     taken = set(left.keys) & {f"{prefix}{key}" for key in right.keys}
-    if taken:
-        raise OperatorError(
-            f"加上前缀之后仍与左边撞名：{'、'.join(sorted(taken))}，请换个前缀"
-        )
+    if not taken:
+        return
+    names = "、".join(sorted(taken))
+    if prefix == "":
+        raise OperatorError(f"两边有同名列：{names}，请填写右侧列名前缀")
+    raise OperatorError(f"加上前缀之后仍与左边撞名：{names}，请换个前缀")
 
 
 def _matches(
@@ -370,7 +375,11 @@ def _columns_block(aligned: _Aligned, config: LedgerJoinConfig) -> ReportBlock:
                 f"{prefix}{column.key}" for column in aligned.right.columns
             ),
             kept=len(aligned.left.columns) + len(aligned.right.columns),
-            reason=f"右边每一列都加前缀「{prefix}」，同名列不会互相盖掉",
+            reason=(
+                f"右边每一列都加前缀「{prefix}」，同名列不会互相盖掉"
+                if prefix
+                else "右边的列原样并入；两边没有同名列"
+            ),
         ),
     )
 

@@ -297,7 +297,7 @@ def _source_loads() -> dict[str, tuple[Case, ...]]:
         "ledger_join": (
             (
                 {"left": pool["wide"], "right": pool["narrow"]},
-                {"how": "left", "tolerance_ms": HOUR_MS},
+                {"how": "left", "tolerance_ms": HOUR_MS, "right_prefix": "右_"},
             ),
         ),
         "ledger_source": (

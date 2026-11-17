@@ -63,7 +63,7 @@ def test_exact_join_preserves_gap_instead_of_using_previous_row() -> None:
         source(), index=(DAY, DAY + 60 * MINUTE, DAY + 90 * MINUTE)
     )
     operator, _ = registry.build(
-        "ledger_join", {"how": "left", "tolerance_ms": 0}
+        "ledger_join", {"how": "left", "tolerance_ms": 0, "right_prefix": "右_"}
     )
     result = operator.run({"left": targets, "right": shifted})["frame"]
     assert isinstance(result, Frame)

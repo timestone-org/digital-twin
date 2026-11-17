@@ -20,7 +20,9 @@ def joined(left: Provenance, right: Provenance) -> Frame:
     second = Frame(
         columns=columns, rows=((2.0,),), index=(moment,), provenance=right
     )
-    operator, _ = registry.build("ledger_join", {"tolerance_ms": 0})
+    operator, _ = registry.build(
+        "ledger_join", {"tolerance_ms": 0, "right_prefix": "右_"}
+    )
     result = operator.run({"left": first, "right": second})["frame"]
     assert isinstance(result, Frame)
     assert result.rows == ((1.0, 2.0),)

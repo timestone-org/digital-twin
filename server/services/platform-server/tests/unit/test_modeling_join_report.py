@@ -67,7 +67,9 @@ def report_of(
 
     Args: left, right, config。
     """
-    operator, _ = registry.build("ledger_join", {**config})
+    operator, _ = registry.build(
+        "ledger_join", {"right_prefix": "右_", **config}
+    )
     operator.bind_runtime(tz_offset_minutes=480, split_plan=None)
     operator.run({"left": left, "right": right})
     return {block.kind: block for block in operator.report()}
@@ -176,6 +178,18 @@ def test_the_prefixed_columns_are_named_one_by_one() -> None:
     assert "右_" in block.payload["reason"]
 
 
+def test_without_a_prefix_the_columns_are_named_as_they_are() -> None:
+    """不加前缀时右边的列原样点名，理由也不再说「加前缀」。"""
+    block = report_of(
+        sided("温度", [0]),
+        sided("湿度", [0]),
+        tolerance_ms=SECOND,
+        right_prefix="",
+    )["columns"]
+    assert block.payload["added"] == ["湿度"]
+    assert "前缀" not in block.payload["reason"]
+
+
 def test_one_right_row_hit_by_sixty_left_rows_is_stated_outright() -> None:
     """⚠ 一条右行被 60 条左行命中——这一步事实上做了一次前向填充。"""
     left = sided("温度", list(range(60)))
@@ -259,7 +273,9 @@ def test_the_worst_load_still_fits_the_report_budget() -> None:
     """右边 60 列、两边各五千行：讲解装得下，一块都不用降档丢掉。"""
     left = wide_side("左", [index * SECOND for index in range(WIDE_ROWS)])
     right = wide_side("右", [index * SECOND + 7 for index in range(WIDE_ROWS)])
-    operator, _ = registry.build("ledger_join", {"tolerance_ms": SECOND})
+    operator, _ = registry.build(
+        "ledger_join", {"tolerance_ms": SECOND, "right_prefix": "右_"}
+    )
     operator.bind_runtime(tz_offset_minutes=480, split_plan=None)
     operator.run({"left": left, "right": right})
     report = report_budget.fit_report(operator.report())
