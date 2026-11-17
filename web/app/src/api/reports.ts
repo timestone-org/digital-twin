@@ -68,15 +68,19 @@ export const generateReport = (id: string, period: string) =>
     '/report-renders',
     write({ template_id: id, period }),
   )
-export const listReportRenders = (after?: string) =>
+export const listReportRenders = (
+  after?: string,
+  templateId?: string,
+  signal?: AbortSignal,
+) =>
   requestData<CursorPage<ReportRender>>(
     '/report-renders',
-    options({ query: { after, limit: 20 } }),
+    options({ query: { after, limit: 20, template_id: templateId }, signal }),
   )
 export const getReportRender = (id: string, signal?: AbortSignal) =>
   requestData<ReportRenderDetail>(`/report-renders/${id}`, options({ signal }))
-export const downloadReport = (id: string) =>
-  requestBytes(`/report-renders/${id}/files`, options())
+export const downloadReport = (id: string, signal?: AbortSignal) =>
+  requestBytes(`/report-renders/${id}/files`, options({ signal }))
 export const listReportSchedules = (page = 1) =>
   requestData<Page<ReportSchedule>>(
     '/report-schedules',

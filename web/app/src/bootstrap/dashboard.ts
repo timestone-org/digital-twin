@@ -25,11 +25,15 @@ import {
   createStaticProvider,
   registerProvider,
 } from '@dt/datasources'
-import { configureAssetImages, registerBuiltinModules } from '@dt/modules'
+import {
+  configureAssetImages,
+  configureReportHost,
+  registerBuiltinModules,
+} from '@dt/modules'
 import { provideRuntimeData } from '@dt/runtime'
 import { configureTwin2dAssets } from '@dt/twin2d'
 import { assetUrl } from '@dt/contracts'
-import { onScopeDispose, ref } from 'vue'
+import { defineAsyncComponent, onScopeDispose, ref } from 'vue'
 
 import { ASSET_BASE_URL } from '@/config/app'
 import { installTwinModelHost } from './twinModelHost'
@@ -77,6 +81,11 @@ export function installDashboardModules(): void {
   installConfigControls()
   installTwinModelHost()
   installAssetImages()
+  configureReportHost(
+    defineAsyncComponent(
+      () => import('@/features/reports/DashboardReportHost.vue'),
+    ),
+  )
   installTwin2dAssets()
 }
 
@@ -86,7 +95,7 @@ export function installDashboardModules(): void {
  * 全空、而配置与另外两页一字不差。
  */
 function installAssetImages(): void {
-  configureAssetImages((ref) => assetUrl(ASSET_BASE_URL, 'image', ref))
+  configureAssetImages((ref, kind) => assetUrl(ASSET_BASE_URL, kind, ref))
 }
 
 /**
