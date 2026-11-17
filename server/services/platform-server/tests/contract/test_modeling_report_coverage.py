@@ -192,7 +192,10 @@ def other_cases(source: Frame) -> dict[str, Case]:
         "classification_metrics": ({"scored": scored(is_binary=True)}, {}),
         "cross_validate": ({"model": trained, "frame": roled}, {"folds": 4}),
         "feature_importance": ({"model": trained, "test": roled}, {}),
-        "ledger_join": ({"left": source, "right": source}, {}),
+        "ledger_join": (
+            {"left": source, "right": source},
+            {"right_prefix": "右_"},
+        ),
         "ledger_source": (
             {PREFETCHED_KEY: source},
             {"table_code": "energy_h"},

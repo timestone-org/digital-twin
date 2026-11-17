@@ -49,7 +49,7 @@ def test_wide_join_column_totals_survive_report_and_preview_budgets() -> None:
         rows=(tuple(float(seat) for seat in range(65)),),
         index=(0,),
     )
-    operator, _ = registry.build("ledger_join", {})
+    operator, _ = registry.build("ledger_join", {"right_prefix": "右_"})
     result = operator.run({"left": source, "right": source})["frame"]
     assert isinstance(result, Frame)
     summary, truncated = preview.fit_budget(preview.summarize(result))

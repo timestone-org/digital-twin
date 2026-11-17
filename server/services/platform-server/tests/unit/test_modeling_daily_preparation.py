@@ -284,7 +284,9 @@ def test_join_keeps_the_earliest_observation_cutoff(earlier_side: str) -> None:
         ),
     )
     inputs = {"left": later, "right": later, earlier_side: early}
-    join, _ = registry.build("ledger_join", {"tolerance_ms": 0})
+    join, _ = registry.build(
+        "ledger_join", {"tolerance_ms": 0, "right_prefix": "右_"}
+    )
     joined = join.run(inputs)["frame"]
     assert isinstance(joined, Frame)
     result = run_frame(

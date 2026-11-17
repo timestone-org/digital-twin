@@ -616,7 +616,7 @@ POST /api/v1/platform/modeling-model-versions/{id}:register-formula
 
 | code | 名称 | 关键参数 | 列变? | 备注 |
 | --- | --- | --- | --- | --- |
-| `ledger_join` ✅ | 多台账按时间对齐 | `how`(inner/left) / `tolerance_ms` / `right_prefix` | **是** | 按**时刻就近**对齐不按行号；前缀不许空串——空了就是静默覆盖 |
+| `ledger_join` ✅ | 多台账按时间对齐 | `how`(inner/left) / `tolerance_ms` / `right_prefix` | **是** | 按**时刻就近**对齐不按行号；前缀默认留空，但加完前缀仍撞名一律报错——放过去就是静默覆盖 |
 
 ### 8.2 预处理 `preprocess`
 

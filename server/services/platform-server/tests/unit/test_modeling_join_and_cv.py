@@ -40,7 +40,9 @@ def _sided(key: str, values: list[float], moments: list[int]) -> Frame:
 
 
 def _joined(left: Frame, right: Frame, **config: Any) -> Frame:
-    operator, _ = registry.build("ledger_join", config)
+    operator, _ = registry.build(
+        "ledger_join", {"right_prefix": "右_", **config}
+    )
     operator.bind_runtime(tz_offset_minutes=0, split_plan=None)
     produced = operator.run({"left": left, "right": right})["frame"]
     assert isinstance(produced, Frame)
@@ -83,7 +85,7 @@ def test_the_right_side_columns_are_prefixed() -> None:
 
     operator = registry.get("ledger_join")
     declared = operator.describe_columns(
-        operator.CONFIG_MODEL(),
+        operator.CONFIG_MODEL(right_prefix="右_"),
         {"left": (LEFT_KEY,), "right": (RIGHT_KEY,)},
     )
     assert declared["frame"] == got.keys
@@ -95,6 +97,45 @@ def test_a_prefix_that_still_clashes_is_refused() -> None:
     right = _sided(RIGHT_KEY, [90.0], [0])
     with pytest.raises(OperatorError, match="撞名"):
         _joined(left, right)
+
+
+def test_the_prefix_defaults_to_blank() -> None:
+    """默认不加前缀：两边列名本就不同时，右边的列原样并入。"""
+    operator = registry.get("ledger_join")
+    config = operator.CONFIG_MODEL()
+    assert config.model_dump()["right_prefix"] == ""
+    declared = operator.describe_columns(
+        config, {"left": (LEFT_KEY,), "right": (RIGHT_KEY,)}
+    )
+    assert declared["frame"] == (LEFT_KEY, RIGHT_KEY)
+
+
+def test_a_blank_prefix_keeps_the_right_side_names() -> None:
+    """前缀留空时 key 与显示名都原样，声明与实跑一致。"""
+    left = _sided(LEFT_KEY, [1.0], [0])
+    right = _sided(RIGHT_KEY, [90.0], [0])
+    got = _joined(left, right, right_prefix="")
+    assert got.keys == (LEFT_KEY, RIGHT_KEY)
+    assert [column.name for column in got.columns] == [LEFT_KEY, RIGHT_KEY]
+    assert got.values_of(RIGHT_KEY) == [90.0]
+
+
+def test_a_blank_prefix_with_a_shared_name_is_refused() -> None:
+    """前缀留空而两边同名：当场要求填前缀，不让右边静默盖掉左边。"""
+    left = _sided(LEFT_KEY, [1.0], [0])
+    right = _sided(LEFT_KEY, [90.0], [0])
+    with pytest.raises(OperatorError, match="请填写右侧列名前缀"):
+        _joined(left, right, right_prefix="")
+
+
+def test_a_shared_name_cannot_be_declared() -> None:
+    """撞名的组合在画布上推不出列，不先摆出两个同名列。"""
+    operator = registry.get("ledger_join")
+    declared = operator.describe_columns(
+        operator.CONFIG_MODEL(),
+        {"left": (LEFT_KEY,), "right": (LEFT_KEY,)},
+    )
+    assert declared == {"frame": None}
 
 
 def test_nothing_matching_is_an_error_not_an_empty_frame() -> None:
