@@ -238,7 +238,7 @@ function toItem(raw: unknown): CardItem {
     trueText: readTrimmedText(row.trueText, '运行'),
     falseText: readTrimmedText(row.falseText, '停止'),
     emoji: readTrimmedText(row.emoji),
-    icon: resolveImageValue(readTrimmedText(row.icon)),
+    icon: resolveImageValue(readTrimmedText(row.icon), 'icon'),
     color: readTrimmedText(row.color),
     emitValue: readTrimmedText(row.emitValue),
   }

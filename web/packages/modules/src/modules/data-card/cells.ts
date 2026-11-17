@@ -56,7 +56,7 @@ export function readCells(raw: unknown): CardCell[] {
     const row = readRecord(one)
     return {
       label: readText(row.label),
-      icon: resolveImageValue(readText(row.icon).trim()),
+      icon: resolveImageValue(readText(row.icon).trim(), 'icon'),
       group: readText(row.group),
       color: readText(row.color),
       unit: readText(row.unit),

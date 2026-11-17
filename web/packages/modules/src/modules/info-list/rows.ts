@@ -333,7 +333,7 @@ function toItem(raw: unknown): ListItem {
     tag: readTrimmedText(row.tag),
     group: readTrimmedText(row.group),
     color: readTrimmedText(row.color),
-    icon: resolveImageValue(readTrimmedText(row.icon)),
+    icon: resolveImageValue(readTrimmedText(row.icon), 'icon'),
     min: readLooseNumber(range.min),
     max: readLooseNumber(range.max),
     target: readLooseNumber(range.target),
