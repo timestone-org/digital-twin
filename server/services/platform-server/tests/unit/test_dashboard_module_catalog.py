@@ -19,11 +19,13 @@ def test_the_committed_catalog_registers_the_known_modules() -> None:
             "action-button",
             "bar-chart",
             "calendar-heat",
+            "clock",
             "container",
             "data-card",
             "data-table",
             "footer",
             "gauge-card",
+            "geo-map",
             "header",
             "image-block",
             "info-card",
@@ -32,10 +34,12 @@ def test_the_committed_catalog_registers_the_known_modules() -> None:
             "nav-tabs",
             "pie-chart",
             "radar-chart",
+            "report-view",
             "text-block",
             "trend-chart",
             "twin-2d-view",
             "twin-view",
+            "wind-compass",
         }
     )
 
