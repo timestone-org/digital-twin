@@ -42,11 +42,13 @@ EXPECTED_TYPES = frozenset(
         "action-button",
         "bar-chart",
         "calendar-heat",
+        "clock",
         "container",
         "data-card",
         "data-table",
         "footer",
         "gauge-card",
+        "geo-map",
         "header",
         "info-card",
         "info-feed",
@@ -55,10 +57,12 @@ EXPECTED_TYPES = frozenset(
         "nav-tabs",
         "pie-chart",
         "radar-chart",
+        "report-view",
         "text-block",
         "trend-chart",
         "twin-2d-view",
         "twin-view",
+        "wind-compass",
     }
 )
 

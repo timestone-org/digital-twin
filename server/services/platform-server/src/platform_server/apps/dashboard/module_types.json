@@ -2158,6 +2158,101 @@
       ]
     },
     {
+      "type": "clock",
+      "display_name": "数字时钟",
+      "category": "装饰",
+      "description": "数字时钟按所选时区显示当前日期与时间，适合大屏页头和运行监视画面。历史采样时刻应由数据节点呈现，不能用当前时钟代替。节点不接数据绑定，浏览器每秒更新一次，支持上海时间和协调世界时，以及秒数、日期与字号设置。卸载时清理更新定时器，多个时钟可以分别配置时区。",
+      "icon": "gauge",
+      "keywords": [
+        "时间",
+        "日期",
+        "时钟",
+        "clock"
+      ],
+      "default_size": {
+        "width": 320,
+        "height": 40,
+        "min_width": 120,
+        "min_height": 24
+      },
+      "chrome": "bare",
+      "version": 1,
+      "config_schema": [
+        {
+          "key": "timezone",
+          "label": "时区",
+          "type": "enum",
+          "default": "Asia/Shanghai",
+          "options": [
+            {
+              "value": "Asia/Shanghai",
+              "label": "北京时间"
+            },
+            {
+              "value": "UTC",
+              "label": "UTC"
+            }
+          ],
+          "span": "half"
+        },
+        {
+          "key": "showDate",
+          "label": "显示日期",
+          "type": "boolean",
+          "default": true,
+          "span": "half"
+        },
+        {
+          "key": "showSeconds",
+          "label": "显示秒",
+          "type": "boolean",
+          "default": true,
+          "span": "half"
+        },
+        {
+          "key": "fontSize",
+          "label": "字号",
+          "type": "number",
+          "default": 20,
+          "span": "half",
+          "min": 12,
+          "max": 80
+        },
+        {
+          "key": "align",
+          "label": "对齐",
+          "type": "enum",
+          "default": "right",
+          "options": [
+            {
+              "value": "left",
+              "label": "左"
+            },
+            {
+              "value": "center",
+              "label": "中"
+            },
+            {
+              "value": "right",
+              "label": "右"
+            }
+          ],
+          "span": "half"
+        },
+        {
+          "key": "opacity",
+          "label": "不透明度",
+          "type": "number",
+          "default": 0.75,
+          "span": "half",
+          "min": 0,
+          "max": 1,
+          "step": 0.05
+        }
+      ],
+      "bindings": []
+    },
+    {
       "type": "container",
       "display_name": "容器",
       "category": "布局",
@@ -5848,6 +5943,115 @@
         "items",
         "emptyText",
         "rules"
+      ]
+    },
+    {
+      "type": "geo-map",
+      "display_name": "地理地图",
+      "category": "图表",
+      "description": "地理地图呈现中国省级边界、区域高亮和经纬度站点，适合说明工厂所处位置。跨时间的指标比较应使用趋势曲线，地图不替代指标图表。节点采用随包离线边界，无需外部地图服务或密钥；站点通过 markers 配置，点击时发送名称。省级轮廓、缩放与中心点均在设计坐标系内计算，标记不依赖实时数据绑定。",
+      "icon": "network",
+      "default_size": {
+        "width": 900,
+        "height": 600,
+        "min_width": 240,
+        "min_height": 180
+      },
+      "chrome": "card",
+      "version": 1,
+      "config_schema": [
+        {
+          "key": "title",
+          "label": "标题",
+          "type": "string",
+          "default": "",
+          "span": "full"
+        },
+        {
+          "key": "highlightRegion",
+          "label": "高亮省份",
+          "type": "string",
+          "default": "安徽省",
+          "span": "half"
+        },
+        {
+          "key": "zoom",
+          "label": "缩放",
+          "type": "number",
+          "default": 1.5,
+          "span": "half",
+          "min": 0.5,
+          "max": 3,
+          "step": 0.1
+        },
+        {
+          "key": "centerLng",
+          "label": "中心经度",
+          "type": "number",
+          "default": 104,
+          "span": "half",
+          "min": -180,
+          "max": 180
+        },
+        {
+          "key": "centerLat",
+          "label": "中心纬度",
+          "type": "number",
+          "default": 35.5,
+          "span": "half",
+          "min": -80,
+          "max": 80
+        },
+        {
+          "key": "showCapitals",
+          "label": "显示省会位置",
+          "type": "boolean",
+          "default": true,
+          "span": "half"
+        },
+        {
+          "key": "showCapitalLabel",
+          "label": "显示省级名称",
+          "type": "boolean",
+          "default": true,
+          "span": "half"
+        },
+        {
+          "key": "markers",
+          "label": "站点",
+          "type": "array",
+          "default": [],
+          "item_schema": [
+            {
+              "key": "label",
+              "label": "名称",
+              "type": "string",
+              "default": "站点",
+              "span": "full"
+            },
+            {
+              "key": "lng",
+              "label": "经度",
+              "type": "number",
+              "default": 115.81,
+              "span": "half"
+            },
+            {
+              "key": "lat",
+              "label": "纬度",
+              "type": "number",
+              "default": 32.89,
+              "span": "half"
+            }
+          ],
+          "item_label_key": "label"
+        }
+      ],
+      "bindings": [],
+      "content_keys": [
+        "title",
+        "markers",
+        "highlightRegion"
       ]
     },
     {
@@ -12190,6 +12394,53 @@
       ]
     },
     {
+      "type": "report-view",
+      "display_name": "报告展示",
+      "category": "数据",
+      "description": "报告展示节点按模板编码呈现最新一份成功生成的报告，适合报告弹窗或持续展示区域。实时监测指标应使用信息卡片，节点不会把尚未完成的任务当成报告。正文与图表来自生成时的文件和快照，支持刷新与 Word 下载；未选编码时查询全部模板。报告读取遵守登录和报告权限，匿名公开屏不开放私有报告。",
+      "icon": "table",
+      "default_size": {
+        "width": 900,
+        "height": 640,
+        "min_width": 320,
+        "min_height": 200
+      },
+      "chrome": "card",
+      "version": 1,
+      "config_schema": [
+        {
+          "key": "title",
+          "label": "标题",
+          "type": "string",
+          "default": "",
+          "span": "full"
+        },
+        {
+          "key": "templateCode",
+          "label": "报告模板编码",
+          "type": "string",
+          "default": "",
+          "help": "使用报告模板管理中的编码；留空显示全部模板中最新的成功报告。",
+          "span": "full"
+        },
+        {
+          "key": "refreshSeconds",
+          "label": "刷新间隔（秒）",
+          "type": "number",
+          "default": 30,
+          "help": "0 表示只在打开和手动刷新时获取；自动刷新最短 10 秒。",
+          "span": "half",
+          "min": 0,
+          "max": 3600
+        }
+      ],
+      "bindings": [],
+      "content_keys": [
+        "title",
+        "templateCode"
+      ]
+    },
+    {
       "type": "text-block",
       "display_name": "文本块",
       "category": "装饰",
@@ -13455,6 +13706,74 @@
         "label": "打开孪生编辑器",
         "hint": "在孪生编辑器中维护模型、部件、锚点、信息牌与能量流。"
       }
+    },
+    {
+      "type": "wind-compass",
+      "display_name": "风向罗盘",
+      "category": "数据",
+      "description": "风向罗盘将气象风向角映射为正北起顺时针的八方位指针，并同时呈现风速和气温。只比较风速变化时应选择趋势曲线。三个独立标量槽 direction、speed、temperature 分别接收角度、米每秒和摄氏度，负角及超过一周的角度自动归一。缺失或取数失败时隐藏指针并保留对应状态，避免被误读成北风。",
+      "icon": "wind",
+      "keywords": [
+        "风向",
+        "风速",
+        "气象",
+        "罗盘",
+        "wind",
+        "compass"
+      ],
+      "default_size": {
+        "width": 456,
+        "height": 246,
+        "min_width": 220,
+        "min_height": 180
+      },
+      "chrome": "card",
+      "version": 1,
+      "config_schema": [
+        {
+          "key": "title",
+          "label": "标题",
+          "type": "string",
+          "default": "风向 · 风速",
+          "span": "half"
+        },
+        {
+          "key": "accent",
+          "label": "指针颜色",
+          "type": "color",
+          "default": "var(--accent-primary)",
+          "span": "half"
+        },
+        {
+          "key": "valueSize",
+          "label": "读数字号",
+          "type": "number",
+          "default": 22,
+          "span": "half",
+          "min": 12,
+          "max": 48
+        }
+      ],
+      "bindings": [
+        {
+          "key": "direction",
+          "label": "风向 (°)",
+          "data_type": "number"
+        },
+        {
+          "key": "speed",
+          "label": "风速 (m/s)",
+          "data_type": "number"
+        },
+        {
+          "key": "temperature",
+          "label": "气温 (°C)",
+          "data_type": "number"
+        }
+      ],
+      "content_keys": [
+        "title"
+      ]
     }
   ]
 }

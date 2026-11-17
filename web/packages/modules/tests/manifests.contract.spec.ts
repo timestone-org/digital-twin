@@ -253,11 +253,13 @@ describe('一个模块 = 一个目录', () => {
       'action-button',
       'bar-chart',
       'calendar-heat',
+      'clock',
       'container',
       'data-card',
       'data-table',
       'footer',
       'gauge-card',
+      'geo-map',
       'header',
       'image-block',
       'info-card',
@@ -266,10 +268,12 @@ describe('一个模块 = 一个目录', () => {
       'nav-tabs',
       'pie-chart',
       'radar-chart',
+      'report-view',
       'text-block',
       'trend-chart',
       'twin-2d-view',
       'twin-view',
+      'wind-compass',
     ])
   })
 

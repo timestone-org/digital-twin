@@ -1,0 +1,98 @@
+/** @fileoverview 离线中国省级地图及静态站点标记。 */
+import { defineModule } from '../../registry'
+
+export default defineModule({
+  type: 'geo-map',
+  displayName: '地理地图',
+  category: '图表',
+  icon: 'network',
+  description:
+    '地理地图呈现中国省级边界、区域高亮和经纬度站点，适合说明工厂所处位置。跨时间的指标比较应使用趋势曲线，地图不替代指标图表。节点采用随包离线边界，无需外部地图服务或密钥；站点通过 markers 配置，点击时发送名称。省级轮廓、缩放与中心点均在设计坐标系内计算，标记不依赖实时数据绑定。',
+  defaultSize: { width: 900, height: 600, minWidth: 240, minHeight: 180 },
+  contentKeys: ['title', 'markers', 'highlightRegion'],
+  configSchema: [
+    { key: 'title', label: '标题', type: 'string', default: '', span: 'full' },
+    {
+      key: 'highlightRegion',
+      label: '高亮省份',
+      type: 'string',
+      default: '安徽省',
+      span: 'half',
+    },
+    {
+      key: 'zoom',
+      label: '缩放',
+      type: 'number',
+      default: 1.5,
+      min: 0.5,
+      max: 3,
+      step: 0.1,
+      span: 'half',
+    },
+    {
+      key: 'centerLng',
+      label: '中心经度',
+      type: 'number',
+      default: 104,
+      min: -180,
+      max: 180,
+      span: 'half',
+    },
+    {
+      key: 'centerLat',
+      label: '中心纬度',
+      type: 'number',
+      default: 35.5,
+      min: -80,
+      max: 80,
+      span: 'half',
+    },
+    {
+      key: 'showCapitals',
+      label: '显示省会位置',
+      type: 'boolean',
+      default: true,
+      span: 'half',
+    },
+    {
+      key: 'showCapitalLabel',
+      label: '显示省级名称',
+      type: 'boolean',
+      default: true,
+      span: 'half',
+    },
+    {
+      key: 'markers',
+      label: '站点',
+      type: 'array',
+      default: [],
+      itemLabelKey: 'label',
+      itemSchema: [
+        {
+          key: 'label',
+          label: '名称',
+          type: 'string',
+          default: '站点',
+          span: 'full',
+        },
+        {
+          key: 'lng',
+          label: '经度',
+          type: 'number',
+          default: 115.81,
+          span: 'half',
+        },
+        {
+          key: 'lat',
+          label: '纬度',
+          type: 'number',
+          default: 32.89,
+          span: 'half',
+        },
+      ],
+    },
+  ],
+  bindings: [],
+  emitsInteractions: true,
+  component: () => import('./Component.vue'),
+})
