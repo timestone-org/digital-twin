@@ -23,11 +23,13 @@ async def test_the_listing_names_every_registered_module(
         "action-button",
         "bar-chart",
         "calendar-heat",
+        "clock",
         "container",
         "data-card",
         "data-table",
         "footer",
         "gauge-card",
+        "geo-map",
         "header",
         "image-block",
         "info-card",
@@ -36,10 +38,12 @@ async def test_the_listing_names_every_registered_module(
         "nav-tabs",
         "pie-chart",
         "radar-chart",
+        "report-view",
         "text-block",
         "trend-chart",
         "twin-2d-view",
         "twin-view",
+        "wind-compass",
     }
 
 
