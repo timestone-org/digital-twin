@@ -30,11 +30,13 @@ const BUILTIN_TYPES = [
   'action-button',
   'bar-chart',
   'calendar-heat',
+  'clock',
   'container',
   'data-card',
   'data-table',
   'footer',
   'gauge-card',
+  'geo-map',
   'header',
   'image-block',
   'info-card',
@@ -43,10 +45,12 @@ const BUILTIN_TYPES = [
   'nav-tabs',
   'pie-chart',
   'radar-chart',
+  'report-view',
   'text-block',
   'trend-chart',
   'twin-2d-view',
   'twin-view',
+  'wind-compass',
 ]
 
 describe('内置模块的自动发现', () => {
