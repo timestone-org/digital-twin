@@ -85,30 +85,41 @@ class PreviewContext:
         return self.windows[window]
 
 
+def _metric_offset(context: PreviewContext, metric: MetricDef) -> int:
+    """API 来源的偏移只应用一次。Args: context, metric。"""
+    table = metric.table or ""
+    if not table.startswith("api:"):
+        return metric.offset
+    source = next(
+        (
+            item
+            for item in context.template.api_sources
+            if table == f"api:{item.code}"
+        ),
+        None,
+    )
+    if source is None:
+        raise ValueError("引用了未定义的第三方 API 数据来源")
+    return source.offset
+
+
 async def metric_window(
     session: AsyncSession, context: PreviewContext, metric: MetricDef
 ) -> SourceWindow:
     """确定取数边界，latest 也不越过报告期。Args: session, context, metric。"""
     zone = ZoneInfo(context.timezone)
     table = metric.table or ""
-    offset = metric.offset
-    if table.startswith("api:"):
-        source = next(
-            (
-                item
-                for item in context.template.api_sources
-                if table == f"api:{item.code}"
-            ),
-            None,
-        )
-        if source is None:
-            raise ValueError("引用了未定义的第三方 API 数据来源")
-        offset = source.offset
+    offset = _metric_offset(context, metric)
     options = WindowOptions(offset=offset, window=metric.window)
     since, until = resolve_window(
         context.period, context.template.granularity, zone, options
     )
-    nominal_until = until
+    period_since, _ = resolve_window(
+        context.period,
+        context.template.granularity,
+        zone,
+        WindowOptions(offset=offset),
+    )
     if metric.anchor == "latest":
         cache_key = (table, until)
         if cache_key not in context.latest:
@@ -129,7 +140,8 @@ async def metric_window(
         table=table,
         since=since,
         until=until,
-        is_stale=until < nominal_until,
+        # ⚠ 月初记账仍属于本期，不能用期末判断是否退回了上期。
+        is_stale=until <= period_since,
     )
 
 
