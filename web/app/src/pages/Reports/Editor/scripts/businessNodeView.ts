@@ -6,14 +6,14 @@ import { h, render } from 'vue'
 import type { NodeViewRenderer, NodeViewRendererProps } from '@tiptap/core'
 import type { ReportSchemas } from '@dt/contracts'
 import { documentFrom } from '../../scripts/reportDocument'
-import ReportChart from '../components/ReportChart.vue'
+import ReportChart from '@/features/reports/components/ReportChart.vue'
 import {
   nodePath,
   nodeSignature,
   previewValue,
   type PreviewStore,
 } from './documentPreview'
-import { hasChartData } from './reportChartTheme'
+import { hasChartData } from '@/features/reports/scripts/reportChartTheme'
 
 type NodeValue = ReportSchemas['NodeValue']
 

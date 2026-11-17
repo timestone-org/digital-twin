@@ -1,6 +1,6 @@
 """报告图表与表格的印刷配色与尺寸，编辑器正文按同一份数值绘制。
 
-前端副本在 web/app/src/pages/Reports/Editor/scripts/reportChartTheme.ts，
+前端副本在 web/app/src/features/reports/scripts/reportChartTheme.ts，
 两侧由 tests/contract/test_report_chart_theme.py 逐字比对。
 """
 

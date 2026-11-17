@@ -2,7 +2,7 @@
 import { flushPromises, mount } from '@vue/test-utils'
 import { afterEach, expect, it, vi } from 'vitest'
 import * as tokens from '@dt/tokens'
-import ReportChart from '@/pages/Reports/Editor/components/ReportChart.vue'
+import ReportChart from '@/features/reports/components/ReportChart.vue'
 
 const chart = vi.hoisted(() => ({
   setOption: vi.fn(),

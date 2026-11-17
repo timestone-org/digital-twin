@@ -7,7 +7,7 @@ import {
   hasLegend,
   labelStep,
   reportChartOption,
-} from '@/pages/Reports/Editor/scripts/reportChartTheme'
+} from '@/features/reports/scripts/reportChartTheme'
 import { paperFontStack } from '@/pages/Reports/Editor/scripts/paperFont'
 
 const LINE = {

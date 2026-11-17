@@ -12,7 +12,7 @@
 import { flushPromises, mount } from '@vue/test-utils'
 import { beforeEach, describe, expect, it, vi } from 'vitest'
 
-import DocumentPreviewDocx from '@/pages/Knowledge/components/DocumentPreviewDocx.vue'
+import DocumentPreviewDocx from '@/components/documents/DocumentPreviewDocx.vue'
 
 const docx = vi.hoisted(() => ({ renderAsync: vi.fn() }))
 vi.mock('docx-preview', () => docx)
@@ -40,6 +40,7 @@ describe('Word 原件的画法', () => {
 
     expect(docx.renderAsync).toHaveBeenCalledTimes(1)
     expect(wrapper.find('.dt-spinner').exists()).toBe(false)
+    wrapper.unmount()
   })
 
   it('⚠ 第一次侦听时容器还没挂上，仍要等到它挂上再画', async () => {
@@ -49,8 +50,10 @@ describe('Word 原件的画法', () => {
     const box: unknown = docx.renderAsync.mock.calls[0]?.[1]
     expect(box).toBeInstanceOf(HTMLElement)
     if (!(box instanceof HTMLElement)) throw new Error('缺少渲染容器')
-    expect(box.isConnected).toBe(true)
-    expect(wrapper.find('.doc-docx__paper').element).toBe(box)
+    const paper = wrapper.find('.doc-docx__paper').element
+    expect(paper.isConnected).toBe(true)
+    expect(paper.querySelector('section')).not.toBeNull()
+    wrapper.unmount()
   })
 
   it('⚠ 换一份文档先清空容器，否则第二份直接接在第一份后面', async () => {
@@ -61,16 +64,15 @@ describe('Word 原件的画法', () => {
 
     expect(docx.renderAsync).toHaveBeenCalledTimes(2)
     expect(wrapper.find('.doc-docx__paper').element.children).toHaveLength(1)
+    wrapper.unmount()
   })
 
   it('⚠ altChunk 一律不画：那是 .docx 往本站源里塞 HTML 的口子', async () => {
-    await render()
-
-    const options = docx.renderAsync.mock.calls[0]?.[3] as Record<
-      string,
-      unknown
-    >
-    expect(options.renderAltChunks).toBe(false)
+    const wrapper = await render()
+    expect(docx.renderAsync.mock.calls[0]?.[3]).toMatchObject({
+      renderAltChunks: false,
+    })
+    wrapper.unmount()
   })
 
   it('画不出来时说一句人话，而不是停在加载态', async () => {
@@ -80,5 +82,6 @@ describe('Word 原件的画法', () => {
 
     expect(wrapper.text()).toContain('这份 Word 文档画不出来')
     expect(wrapper.find('.dt-spinner').exists()).toBe(false)
+    wrapper.unmount()
   })
 })
