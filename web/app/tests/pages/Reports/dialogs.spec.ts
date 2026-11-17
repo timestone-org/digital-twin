@@ -63,7 +63,10 @@ describe('报告配置交互', () => {
       .findAllComponents(DtInput)
       .find((input) => input.props('label') === '指标表达式')
       ?.vm.$emit('update:modelValue', '100-80')
-    await wrapper.findComponent(DtButton).trigger('click')
+    await wrapper
+      .findAllComponents(DtButton)
+      .find((button) => button.text() === '确认添加')
+      ?.trigger('click')
     expect(wrapper.emitted('update:modelValue')?.[0]?.[0]).toEqual([
       expect.objectContaining({ name: '变化', mode: 'expr', expr: '100-80' }),
     ])
@@ -287,7 +290,7 @@ it('API 数值指标保存聚合口径，支持取消编辑和删除', async () 
   setMetricInput(wrapper, '单位（可选）', 'kWh')
   await wrapper
     .findAllComponents(DtButton)
-    .find((button) => button.text() === '添加指标')
+    .find((button) => button.text() === '确认添加')
     ?.trigger('click')
   const metrics = [
     {
