@@ -1,31 +1,18 @@
 <script setup lang="ts">
-/**
- * @fileoverview 原件预览的 Word 画法：docx-preview 把 .docx 摊成真实版式。
- *
- * ⚠ 这个件**只许异步加载**（调用方用 `defineAsyncComponent`）：它第一行就静态
- * 依赖 docx-preview 与 jszip，同步引进来就是每次打开知识库页都白下一份。
- *
- * ⚠ **`renderAltChunks` 必须显式关掉**，而它默认是开的。altChunk 是 .docx 里
- * 可以夹一整段 HTML 的口子，docx-preview 把它画成一个 `<iframe srcdoc>` 且
- * **不带 sandbox**——那个 iframe 继承本页的源，于是一份精心构造的 .docx
- * 传上来就是一次存储型 XSS。这一行是安全边界，不是排版偏好。
- *
- * ⚠ 图片走 `useBase64URL`：默认那条路给每张插图铸一个 object URL，而
- * docx-preview 不负责 revoke——翻几份带图的手册就攒下几十份没人放的字节。
- *
- * ⚠ 换文档时先把容器清空：这个库是往容器里 append，不清的话第二份文档
- * 直接接在第一份后面，看着像「一份特别长的文档」。
- */
+/** @fileoverview 共享 Word 原件预览，完成后通知宿主装配内容扩展。 */
 import { nextTick, onUnmounted, ref, watch } from 'vue'
 import { renderAsync } from 'docx-preview'
 import { DtSpinner } from '@dt/ui'
+import { useRacedFetch } from '@/composables/useRacedFetch'
 
 const props = defineProps<{ blob: Blob }>()
+const emit = defineEmits<{ rendered: [host: HTMLElement] }>()
 
 const host = ref<HTMLElement | null>(null)
 const isLoading = ref(true)
 const failure = ref('')
 let isAlive = true
+const raced = useRacedFetch()
 
 async function render(blob: Blob): Promise<void> {
   isLoading.value = true
@@ -39,36 +26,47 @@ async function render(blob: Blob): Promise<void> {
     isLoading.value = false
     return
   }
-  box.replaceChildren()
-  try {
-    await renderAsync(blob, box, undefined, {
-      className: 'docx',
-      inWrapper: true,
-      breakPages: true,
-      ignoreLastRenderedPageBreak: true,
-      renderHeaders: true,
-      renderFooters: true,
-      renderFootnotes: true,
-      // ⚠ 见文件头：这一条是安全边界，默认值是 true
-      renderAltChunks: false,
-      // ⚠ 修订痕迹与批注不画：它们在版式里是彩色删除线与批注框，而预览要
-      // 回答的问题是「这份资料里写了什么」，不是「谁改过哪一句」
-      renderChanges: false,
-      renderComments: false,
-      useBase64URL: true,
-    })
-  } catch {
-    // ⚠ 不摆库里那句英文原文：用户能做的只有一件事——下载下来用 Word 打开
-    failure.value = '这份 Word 文档画不出来，可以下载原件后用 Word 打开。'
-  } finally {
-    if (isAlive) isLoading.value = false
-  }
+  await raced.run(
+    async () => {
+      const detached = document.createElement('div')
+      await renderAsync(blob, detached, undefined, {
+        className: 'docx',
+        inWrapper: true,
+        breakPages: true,
+        ignoreLastRenderedPageBreak: true,
+        renderHeaders: true,
+        renderFooters: true,
+        renderFootnotes: true,
+        // ⚠ 见文件头：这一条是安全边界，默认值是 true
+        renderAltChunks: false,
+        // ⚠ 修订痕迹与批注不画：它们在版式里是彩色删除线与批注框，而预览要
+        // 回答的问题是「这份资料里写了什么」，不是「谁改过哪一句」
+        renderChanges: false,
+        renderComments: false,
+        useBase64URL: true,
+      })
+      return detached
+    },
+    {
+      ok: (rendered) => {
+        box.replaceChildren(...Array.from(rendered.childNodes))
+        emit('rendered', box)
+      },
+      fail: () => {
+        failure.value = '这份 Word 文档画不出来，可以下载原件后用 Word 打开。'
+      },
+      settled: () => {
+        if (isAlive) isLoading.value = false
+      },
+    },
+  )
 }
 
 watch(() => props.blob, render, { immediate: true })
 
 onUnmounted(() => {
   isAlive = false
+  raced.cancel()
 })
 </script>
 

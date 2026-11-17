@@ -6,7 +6,7 @@
 import { computed } from 'vue'
 import type { ReportPage } from '@dt/contracts'
 import { paperFontStack, REPORT_DEFAULT_PAGE } from '../scripts/paperFont'
-import { REPORT_TABLE_COLORS } from '../scripts/reportChartTheme'
+import { REPORT_TABLE_COLORS } from '@/features/reports/scripts/reportChartTheme'
 const props = defineProps<{ page: ReportPage }>()
 const paperStyle = computed(() => ({
   '--report-body-font': paperFontStack(

@@ -19,7 +19,7 @@ from platform_server.apps.report.services.chart_theme import (
 
 ROOT = Path(__file__).resolve().parents[5]
 THEME = (
-    ROOT / "web/app/src/pages/Reports/Editor/scripts/reportChartTheme.ts"
+    ROOT / "web/app/src/features/reports/scripts/reportChartTheme.ts"
 ).read_text(encoding="utf-8")
 EMU_PER_CM = 360_000
 

@@ -22,7 +22,7 @@ const DocumentPreviewPdf = defineAsyncComponent({
   loadingComponent: DtSpinner,
 })
 const DocumentPreviewDocx = defineAsyncComponent({
-  loader: () => import('./DocumentPreviewDocx.vue'),
+  loader: () => import('@/components/documents/DocumentPreviewDocx.vue'),
   loadingComponent: DtSpinner,
 })
 const DocumentPreviewSheet = defineAsyncComponent({

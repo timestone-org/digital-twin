@@ -8,7 +8,7 @@ import {
   REPORT_CHART_HEIGHT_CM,
   REPORT_PRINT_COLORS,
   reportChartOption,
-} from '../scripts/reportChartTheme'
+} from '@/features/reports/scripts/reportChartTheme'
 const props = withDefaults(
   defineProps<{ node: ReportSchemas['NodeValue']; paper?: boolean }>(),
   { paper: false },

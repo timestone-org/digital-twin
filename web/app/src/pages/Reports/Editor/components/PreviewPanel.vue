@@ -4,9 +4,9 @@ import { computed } from 'vue'
 import { DtCard, DtNotice } from '@dt/ui'
 import type { ReportPreview } from '@dt/contracts'
 import { formatDateTime } from '@/utils/datetime'
-import ReportChart from './ReportChart.vue'
+import ReportChart from '@/features/reports/components/ReportChart.vue'
 import ReportTable from './ReportTable.vue'
-import { hasChartData } from '../scripts/reportChartTheme'
+import { hasChartData } from '@/features/reports/scripts/reportChartTheme'
 const props = defineProps<{ preview: ReportPreview }>()
 const apiViews = computed(() =>
   (props.preview.api_results ?? []).map((result) => ({
