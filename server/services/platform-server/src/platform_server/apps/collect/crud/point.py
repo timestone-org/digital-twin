@@ -1,14 +1,31 @@
 """点位数据访问。"""
 
+from __future__ import annotations
+
 import uuid
 from collections.abc import Sequence
 from dataclasses import dataclass
+from typing import TYPE_CHECKING, Final
 
-from sqlalchemy import Select, delete, func, select, tuple_
+from sqlalchemy import (
+    ARRAY,
+    Select,
+    Uuid,
+    any_,
+    delete,
+    func,
+    literal,
+    select,
+    tuple_,
+)
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from lib.db import CrudBase
 from platform_server.apps.collect.models import CollectPoint
+
+if TYPE_CHECKING:
+    from collections.abc import AsyncGenerator, Collection
+
 
 SORTABLE = {
     "code": CollectPoint.code,
@@ -25,7 +42,7 @@ DEFAULT_ORDER = (
 
 PointCursor = tuple[uuid.UUID, str, uuid.UUID]
 # 全量计划点位游标的提取批大小
-PLAN_PAGE_ROWS = 2000
+PLAN_PAGE_ROWS: Final[int] = 2000
 
 
 @dataclass(frozen=True)
@@ -61,8 +78,16 @@ class PointCrud(CrudBase[CollectPoint]):
     def __init__(self) -> None:
         super().__init__(CollectPoint)
 
-    async def list_for_plan(self, session: AsyncSession) -> list[PlanPointRow]:
-        """在同一游标快照中分批读取计划字段。Args: session。"""
+    async def iter_for_plan(
+        self, session: AsyncSession, *, source_ids: Collection[uuid.UUID]
+    ) -> AsyncGenerator[PlanPointRow, None]:
+        """按游标快照逐批读取所选源的计划字段。
+
+        Args: session, source_ids。
+        """
+        if not source_ids:
+            return
+        selected = literal(list(source_ids), ARRAY(Uuid()))
         statement = (
             select(
                 CollectPoint.source_id,
@@ -74,17 +99,17 @@ class PointCrud(CrudBase[CollectPoint]):
                 CollectPoint.archive_enabled,
                 CollectPoint.archive_max_interval_ms,
             )
+            .where(CollectPoint.source_id == any_(selected))
             .order_by(*DEFAULT_ORDER)
             .execution_options(yield_per=PLAN_PAGE_ROWS)
         )
         rows = (await session.stream(statement)).tuples()
-        points: list[PlanPointRow] = []
         try:
             while page := await rows.fetchmany(PLAN_PAGE_ROWS):
-                points.extend(PlanPointRow(*row) for row in page)
+                for row in page:
+                    yield PlanPointRow(*row)
         finally:
             await rows.close()
-        return points
 
     async def list_candidates(
         self,

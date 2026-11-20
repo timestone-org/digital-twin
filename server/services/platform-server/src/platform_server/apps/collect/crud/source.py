@@ -34,14 +34,17 @@ class SourceCrud(CrudBase[CollectSource]):
         )
         return rows.scalars().first()
 
-    async def list_all(self, session: AsyncSession) -> list[CollectSource]:
-        """取全部数据源，顺序与列表页一致。计划下发用它。
+    async def list_all(
+        self, session: AsyncSession, *, is_enabled: bool | None = None
+    ) -> list[CollectSource]:
+        """按列表顺序读取数据源，可按启用状态过滤。
 
-        Args: session。
+        Args: session, is_enabled。
         """
-        rows = await session.execute(
-            select(CollectSource).order_by(*DEFAULT_ORDER)
+        query = self.build_query(
+            keyword=None, protocol=None, is_enabled=is_enabled
         )
+        rows = await session.execute(query.order_by(*DEFAULT_ORDER))
         return list(rows.scalars().all())
 
     async def point_counts(
