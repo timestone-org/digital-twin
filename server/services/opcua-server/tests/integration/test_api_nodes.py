@@ -158,6 +158,77 @@ async def test_value_read_is_not_live_when_stopped(
 
 
 @pytest.mark.usefixtures("clean_tables")
+async def test_node_configuration_preserves_the_live_type_until_restart(
+    client: httpx.AsyncClient, sign_headers: Headers
+) -> None:
+    instance_id = await _instance(client, sign_headers)
+    node = await _node(client, sign_headers, instance_id)
+    instance = f"{INSTANCES}/{instance_id}"
+    path = f"{instance}/nodes/{node['id']}"
+    operator = sign_headers(PERM_OPERATE)
+    viewer = sign_headers(PERM_VIEW)
+    started = await client.post(f"{instance}:start", headers=operator)
+    assert started.status_code == OK, started.text
+
+    updated = await client.put(
+        path,
+        json={
+            "browse_name": "Alarm",
+            "data_type": "boolean",
+            "initial_value": False,
+        },
+        headers=sign_headers(PERM_MANAGE),
+    )
+    assert updated.status_code == OK, updated.text
+    saved = updated.json()["data"]
+    assert saved["pending_fields"] == [
+        "browse_name",
+        "data_type",
+        "initial_value",
+    ]
+    assert saved["node"]["node_id"] == node["node_id"]
+    live = (await client.get(f"{path}/value", headers=viewer)).json()["data"]
+    assert (live["data_type"], live["value"]) == ("double", 20.5)
+
+    restarted = await client.post(f"{instance}:restart", headers=operator)
+    assert restarted.status_code == OK, restarted.text
+    live = (await client.get(f"{path}/value", headers=viewer)).json()["data"]
+    assert live["data_type"] == "boolean"
+    assert live["value"] is False
+
+
+@pytest.mark.usefixtures("clean_tables")
+@pytest.mark.parametrize(
+    ("before", "after"),
+    [(("double", 1.0), ("int32", 1)), (("int32", 0), ("boolean", False))],
+    ids=["float-to-integer", "integer-to-boolean"],
+)
+async def test_changing_data_type_saves_the_initial_value_with_its_new_type(
+    client: httpx.AsyncClient,
+    sign_headers: Headers,
+    before: tuple[str, object],
+    after: tuple[str, object],
+) -> None:
+    instance = await _instance(client, sign_headers)
+    node = await _node(
+        client,
+        sign_headers,
+        instance,
+        data_type=before[0],
+        initial_value=before[1],
+    )
+    response = await client.put(
+        f"{INSTANCES}/{instance}/nodes/{node['id']}",
+        json={"data_type": after[0], "initial_value": after[1]},
+        headers=sign_headers(PERM_MANAGE),
+    )
+    assert response.status_code == OK, response.text
+    saved = response.json()["data"]["node"]["initial_value"]
+    assert type(saved) is type(after[1])
+    assert saved == after[1]
+
+
+@pytest.mark.usefixtures("clean_tables")
 async def test_write_requires_operate_not_view(
     client: httpx.AsyncClient, sign_headers: Headers
 ) -> None:
@@ -319,3 +390,58 @@ async def test_node_of_another_instance_is_not_found(
         headers=sign_headers(PERM_VIEW),
     )
     assert response.status_code == NOT_FOUND
+
+
+@pytest.mark.usefixtures("clean_tables")
+async def test_live_variable_reports_its_default_string_type(
+    client: httpx.AsyncClient, sign_headers: Headers
+) -> None:
+    instance_id = await _instance(client, sign_headers)
+    node = await _node(
+        client, sign_headers, instance_id, data_type=None, initial_value="idle"
+    )
+    instance = f"{INSTANCES}/{instance_id}"
+    started = await client.post(
+        f"{instance}:start", headers=sign_headers(PERM_OPERATE)
+    )
+    assert started.status_code == OK
+    current = await client.get(
+        f"{instance}/nodes/{node['id']}/value", headers=sign_headers(PERM_VIEW)
+    )
+    assert current.status_code == OK
+    result = current.json()["data"]
+    assert (result["is_live"], result["value"], result["data_type"]) == (
+        True,
+        "idle",
+        "string",
+    )
+
+
+@pytest.mark.usefixtures("clean_tables")
+async def test_instance_revision_tracks_node_catalog_mutations(
+    client: httpx.AsyncClient, sign_headers: Headers
+) -> None:
+    instance_id = await _instance(client, sign_headers)
+    url = f"{INSTANCES}/{instance_id}"
+
+    async def revision() -> str:
+        response = await client.get(
+            f"{url}/nodes", headers=sign_headers(PERM_VIEW)
+        )
+        assert response.status_code == OK
+        return str(response.json()["data"]["revision"])
+
+    before = await revision()
+    node = await _node(client, sign_headers, instance_id)
+    after_create = await revision()
+    assert after_create > before
+    path = f"{url}/nodes/{node['id']}"
+    updated = await client.put(
+        path, json={"browse_name": "Updated"}, headers=sign_headers(PERM_MANAGE)
+    )
+    assert updated.status_code == OK
+    after_update = await revision()
+    assert after_update > after_create
+    deleted = await client.delete(path, headers=sign_headers(PERM_MANAGE))
+    assert deleted.status_code in (200, 204)
+    assert await revision() > after_update

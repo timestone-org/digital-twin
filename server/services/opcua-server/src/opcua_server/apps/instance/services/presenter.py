@@ -46,11 +46,16 @@ def unwrap_value(stored: dict[str, object] | None) -> object | None:
     return None if stored is None else stored.get(_VALUE_KEY)
 
 
-def endpoint_url_of(row: Instance, host: str) -> str:
+def endpoint_url_of(
+    row: Instance, host: str, running: RunningInstance | None = None
+) -> str:
     """对外展示的 endpoint。host 由部署决定，不是实例配置的一部分。
 
-    Args: row, host。
+    Args: row, host, running。
     """
+    if running is not None:
+        spec = running.spec
+        return f"opc.tcp://{host}:{spec.port}/{spec.endpoint_path}"
     return f"opc.tcp://{host}:{row.port}{row.endpoint_path}"
 
 
@@ -65,18 +70,15 @@ def pending_fields_of(
         return []
     spec = running.spec
     differences = {
+        "name": row.name != spec.name,
         "namespace_uri": row.namespace_uri != spec.namespace_uri,
         "endpoint_path": row.endpoint_path != f"/{spec.endpoint_path}",
         "port": row.port != spec.port,
         "is_anonymous_allowed": (
             row.is_anonymous_allowed != spec.security.allow_anonymous
         ),
-        # ⚠ 运行时只认「是否放行无安全传输」这一位，比到这一位为止：比整张
-        # 策略表会报一个重启了也不会变的差异
-        "security_policies": (
-            ("NoSecurity" in row.security_policies)
-            != spec.security.allow_insecure_transport
-        ),
+        "security_policies": set(row.security_policies)
+        != set(spec.security.policy_names()),
     }
     return sorted(name for name, differs in differences.items() if differs)
 
@@ -132,6 +134,7 @@ def to_instance_out(
 
     Args: row, running, is_running, node_count, host。
     """
+    pending_fields = pending_fields_of(row, running)
     return InstanceOut(
         id=row.id,
         name=row.name,
@@ -144,9 +147,10 @@ def to_instance_out(
         is_autostart=row.is_autostart,
         desired_state=row.desired_state,
         is_running=is_running,
-        has_pending_restart=row.has_pending_restart,
-        pending_fields=pending_fields_of(row, running),
-        endpoint_url=endpoint_url_of(row, host),
+        has_pending_restart=running is not None
+        and (row.has_pending_restart or bool(pending_fields)),
+        pending_fields=pending_fields,
+        endpoint_url=endpoint_url_of(row, host, running),
         node_count=node_count,
         session_count=len(running.sessions()) if running is not None else 0,
         certificate=CertificateOut(

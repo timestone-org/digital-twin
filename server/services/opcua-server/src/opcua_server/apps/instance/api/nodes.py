@@ -16,7 +16,7 @@ from typing import Annotated
 from fastapi import APIRouter, Depends, Response, status
 
 from lib.auth import CallerContext
-from lib.web import ApiResponse, Page, PageParams, ok, page_params
+from lib.web import ApiResponse, PageParams, ok, page_params
 from opcua_server.apps.instance.deps import (
     PERM_MANAGE,
     PERM_OPERATE,
@@ -29,6 +29,7 @@ from opcua_server.apps.instance.schemas import (
     NodeCreateIn,
     NodeMutationOut,
     NodeOut,
+    NodePageOut,
     NodeUpdateIn,
     NodeValueOut,
     NodeWriteIn,
@@ -49,14 +50,14 @@ OperateDep = Annotated[CallerContext, Depends(require(PERM_OPERATE))]
 ManageDep = Annotated[CallerContext, Depends(require(PERM_MANAGE))]
 
 
-@router.get("", response_model=ApiResponse[Page[NodeOut]], summary="节点列表")
+@router.get("", response_model=ApiResponse[NodePageOut], summary="节点列表")
 async def list_nodes(
     instance_id: uuid.UUID,
     container: ContainerDep,
     page: PageDep,
     _viewer: ViewDep,
     q: str | None = None,
-) -> ApiResponse[Page[NodeOut]]:
+) -> ApiResponse[NodePageOut]:
     """分页列出某实例的节点。
 
     Args: instance_id, container, page, _viewer, q。

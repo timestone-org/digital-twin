@@ -1,8 +1,9 @@
 """实例数据访问。"""
 
+from datetime import timedelta
 from uuid import UUID
 
-from sqlalchemy import Select, func, select
+from sqlalchemy import Select, func, select, update
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from lib.db import CrudBase
@@ -21,6 +22,38 @@ class InstanceCrud(CrudBase[Instance]):
 
     def __init__(self) -> None:
         super().__init__(Instance)
+
+    async def get(
+        self,
+        session: AsyncSession,
+        entity_id: UUID,
+        *,
+        should_lock: bool = False,
+    ) -> Instance | None:
+        """读取实例，可在配置事务内锁定父行。
+
+        Args: session, entity_id, should_lock。
+        """
+        return await session.get(
+            Instance, entity_id, with_for_update=should_lock
+        )
+
+    async def touch_address_space(
+        self, session: AsyncSession, instance_id: UUID
+    ) -> None:
+        """在节点配置事务内推进分页版本。Args: session, instance_id。"""
+        await session.flush()
+        await session.execute(
+            update(Instance)
+            .where(Instance.id == instance_id)
+            .values(
+                updated_at=func.greatest(
+                    func.clock_timestamp(),
+                    Instance.updated_at + timedelta(microseconds=1),
+                )
+            )
+            .execution_options(synchronize_session=False)
+        )
 
     async def get_by_name(
         self, session: AsyncSession, name: str

@@ -38,6 +38,9 @@ from opcua_server.apps.instance.schemas import (
     PortPoolOut,
 )
 from opcua_server.apps.instance.services.integrity import flush_or_conflict
+from opcua_server.apps.instance.services.node_service import (
+    reconcile_node_state,
+)
 from opcua_server.apps.instance.services.presenter import (
     definitions_of,
     endpoint_url_of,
@@ -46,17 +49,6 @@ from opcua_server.apps.instance.services.presenter import (
 from opcua_server.apps.instance.services.realtime import RealtimeClient
 
 _logger = get_logger("opcua.instance_service")
-
-# 改了要重启才生效的字段。description 与 is_autostart 不在其中——
-# 前者不参与运行、后者只在下次开机时被读到。
-RESTART_FIELDS = frozenset(
-    {
-        "namespace_uri",
-        "endpoint_path",
-        "security_policies",
-        "is_anonymous_allowed",
-    }
-)
 
 
 def _validated_port(
@@ -191,12 +183,15 @@ class InstanceService:
         """
         async with self._database.session() as session:
             row = await self._require(session, instance_id)
-            changed = _apply_update(row, payload)
-            # ⚠ 只有在跑的实例才谈得上「待重启」：没在跑的下次起来读的就是新值
-            is_running = self._supervisor.find(instance_id) is not None
-            if changed & RESTART_FIELDS and is_running:
-                row.has_pending_restart = True
-            await session.flush()
+            _apply_update(row, payload)
+            await flush_or_conflict(
+                session,
+                {
+                    "uq_opcua_instances_name": lambda: InstanceNameTaken(
+                        f"实例名 {payload.name} 已被占用"
+                    )
+                },
+            )
             await session.refresh(row)
             node_count = await node_crud.count_of_instance(session, row.id)
         return await self._present(row, node_count)
@@ -283,8 +278,9 @@ class InstanceService:
             specs = [await self._spec_of(session, row) for row in rows]
         for spec in specs:
             try:
-                running = await self._supervisor.start(spec)
-                await self._record_certificate(spec.instance_id, running)
+                running, is_rebuilt = await self._supervisor.launch(spec)
+                if is_rebuilt:
+                    await self._record_autostart(spec.instance_id, running)
             except Exception as error:
                 _logger.error(
                     "opcua_autostart_failed",
@@ -304,11 +300,10 @@ class InstanceService:
         running = self._supervisor.find(instance_id)
         is_running = running is not None and await running.is_listening()
         async with self._database.session() as session:
-            row = await self._require(session, instance_id)
+            row = await self._require(session, instance_id, should_lock=True)
             row.desired_state = desired
             if is_running and is_rebuilt:
-                # 按库里的配置新起的，待重启标记随之清掉
-                row.has_pending_restart = False
+                await reconcile_node_state(session, row, running)
             if running is not None:
                 _copy_certificate(row, running)
             await session.flush()
@@ -316,18 +311,19 @@ class InstanceService:
                 id=row.id,
                 is_running=is_running,
                 desired_state=row.desired_state,
-                endpoint_url=endpoint_url_of(row, self._host),
+                endpoint_url=endpoint_url_of(row, self._host, running),
             )
 
-    async def _record_certificate(
+    async def _record_autostart(
         self, instance_id: uuid.UUID, running: RunningInstance
     ) -> None:
-        """把运行中实例装上的服务器证书元信息写回库。
+        """确认自启实例已加载配置，并保存证书信息。
 
         Args: instance_id, running。
         """
         async with self._database.session() as session:
-            row = await self._require(session, instance_id)
+            row = await self._require(session, instance_id, should_lock=True)
+            await reconcile_node_state(session, row, running)
             _copy_certificate(row, running)
 
     async def _load_spec(self, instance_id: uuid.UUID) -> InstanceSpec:
@@ -344,11 +340,16 @@ class InstanceService:
             name=row.name,
             port=row.port,
             namespace_uri=row.namespace_uri,
-            endpoint_path=row.endpoint_path.lstrip("/"),
+            endpoint_path=row.endpoint_path.removeprefix("/"),
             nodes=definitions_of(list(nodes)),
             security=SecurityProfile(
                 allow_anonymous=row.is_anonymous_allowed,
                 allow_insecure_transport="NoSecurity" in row.security_policies,
+                secure_policies=tuple(
+                    name
+                    for name in row.security_policies
+                    if name != "NoSecurity"
+                ),
             ),
         )
 
@@ -398,9 +399,14 @@ class InstanceService:
 
     @staticmethod
     async def _require(
-        session: AsyncSession, instance_id: uuid.UUID
+        session: AsyncSession,
+        instance_id: uuid.UUID,
+        *,
+        should_lock: bool = False,
     ) -> Instance:
-        row = await instance_crud.get(session, instance_id)
+        row = await instance_crud.get(
+            session, instance_id, should_lock=should_lock
+        )
         if row is None:
             raise InstanceNotFound("实例不存在")
         return row
@@ -419,19 +425,10 @@ def _copy_certificate(row: Instance, running: RunningInstance) -> None:
     row.certificate_expires_at = material.not_valid_after
 
 
-def _apply_update(row: Instance, payload: InstanceUpdateIn) -> frozenset[str]:
-    """把非空字段写进行，返回真正发生变化的字段名。
-
-    ⚠ 只看「传了没有」不够——传了个和现值一样的取值不该被算成改动，
-    否则实例会因为一次无意义的保存被标成待重启。
-
-    Args: row, payload。
-    """
-    changed: set[str] = set()
-    for name, value in payload.model_dump(exclude_unset=True).items():
-        if value is None:
-            continue
+def _apply_update(row: Instance, payload: InstanceUpdateIn) -> None:
+    """应用已提交的配置字段。Args: row, payload。"""
+    for name, value in payload.model_dump(
+        exclude_unset=True, exclude_none=True
+    ).items():
         if getattr(row, name) != value:
             setattr(row, name, value)
-            changed.add(name)
-    return frozenset(changed)

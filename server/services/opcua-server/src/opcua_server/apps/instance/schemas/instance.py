@@ -113,6 +113,7 @@ class InstanceUpdateIn(InputModel):
     响应里的 `pending_fields` 会逐项列出，接口不会假装已经生效。
     """
 
+    name: InstanceName | None = None
     description: Description | None = None
     namespace_uri: NamespaceUri | None = None
     endpoint_path: EndpointPath | None = None

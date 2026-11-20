@@ -212,6 +212,7 @@ export type {
   OpcuaInstanceCreateInput,
   OpcuaInstanceUpdateInput,
   OpcuaNode,
+  OpcuaNodePage,
   OpcuaNodeClass,
   OpcuaNodeCreateInput,
   OpcuaNodeMutation,

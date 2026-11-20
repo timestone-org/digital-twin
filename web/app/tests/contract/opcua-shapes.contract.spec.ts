@@ -18,7 +18,9 @@ import type {
   OpcuaCredentialCreated,
   OpcuaInstance,
   OpcuaInstanceAction,
+  OpcuaInstanceUpdateInput,
   OpcuaNode,
+  OpcuaNodePage,
   OpcuaNodeMutation,
   OpcuaNodeValue,
   OpcuaNodeWrite,
@@ -79,6 +81,16 @@ const SHAPES: Record<string, Record<string, true>> = {
     created_at: true,
     updated_at: true,
   } satisfies Keys<OpcuaInstance>,
+
+  InstanceUpdateIn: {
+    name: true,
+    description: true,
+    endpoint_path: true,
+    namespace_uri: true,
+    security_policies: true,
+    is_anonymous_allowed: true,
+    is_autostart: true,
+  } satisfies Keys<OpcuaInstanceUpdateInput>,
 
   CertificateOut: {
     fingerprint: true,
@@ -168,6 +180,13 @@ const SHAPES: Record<string, Record<string, true>> = {
     created_at: true,
   } satisfies Keys<OpcuaTrustedCertificate>,
 
+  NodePageOut: {
+    items: true,
+    page: true,
+    size: true,
+    total: true,
+    revision: true,
+  } satisfies Keys<OpcuaNodePage>,
   Page_InstanceOut_: {
     items: true,
     page: true,
