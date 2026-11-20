@@ -1,8 +1,5 @@
 /**
- * @fileoverview 数据台账列表页的行为契约：一行说清这张表是什么、**进得去详情**、
- * 闸 3 门禁、客户端搜索、两种空态，以及**两段式删除**——先不带 force 试一次，
- * 后端回 409 才升级成「仍然删除」，以及**两个总开关的实话**——关着就说关着，
- * 读不到就退回全关且不把整页判成加载失败。
+ * @fileoverview 台账列表的导航、权限、筛选、删除和运行开关展示契约。
  */
 import { createPinia, setActivePinia } from 'pinia'
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
@@ -301,14 +298,145 @@ describe('两个总开关的实话', () => {
     expect(wrapper.text()).not.toContain('台账采集总开关当前是关的')
   })
 
-  it('⚠ 运行参数取不到时退回全关，且整页照常渲染——不判成加载失败', async () => {
+  it('运行参数取不到显示未知和原因，不能声称关闭或未清理', async () => {
     vi.mocked(runtimeApi.listRuntimeParams).mockRejectedValue(
       new Error('平台服务开小差'),
     )
+    vi.mocked(dataset.listDatasetTables).mockResolvedValue(
+      pageOf([table({ retention_days: 90 })]),
+    )
     const wrapper = await render(['dataset:view'])
     expect(wrapper.text()).toContain('一号机组能耗台账')
-    expect(wrapper.text()).toContain('未生效')
-    expect(wrapper.text()).not.toContain('平台服务开小差')
+    expect(wrapper.text()).toContain('采集状态未知')
+    expect(wrapper.text()).toContain('清理状态未知')
+    expect(wrapper.text()).toContain('平台服务开小差')
+    expect(wrapper.text()).not.toContain('未生效')
+    expect(wrapper.text()).not.toContain('未清理')
+    expect(wrapper.text()).not.toContain('台账采集总开关当前是关的')
+  })
+
+  it.each([new Error(''), null])(
+    '读取错误没有说明时提供重试提示',
+    async (cause) => {
+      vi.mocked(runtimeApi.listRuntimeParams).mockRejectedValue(cause)
+      const wrapper = await render(['dataset:view'])
+      expect(wrapper.text()).toContain('读取失败，请重试')
+      expect(wrapper.get('[data-test="retry-dataset-switches"]').text()).toBe(
+        '重试读取',
+      )
+    },
+  )
+
+  it('读取期间显示正在读取，不能把未返回的开关显示成关闭', async () => {
+    let resolve: (rows: RuntimeParamItem[]) => void = () => undefined
+    const pending = new Promise<RuntimeParamItem[]>((done) => {
+      resolve = done
+    })
+    vi.mocked(runtimeApi.listRuntimeParams).mockReturnValue(pending)
+    const wrapper = await render(['dataset:view'])
+    expect(wrapper.text()).toContain('正在读取运行开关状态')
+    expect(wrapper.text()).not.toContain('未生效')
+    expect(wrapper.text()).not.toContain('台账采集总开关当前是关的')
+    resolve(switches(false))
+    await flushPromises()
+    expect(wrapper.text()).toContain('台账采集总开关当前是关的')
+  })
+
+  it('缺失或错误类型的开关保持未知，已读到的另一项保持真实值', async () => {
+    const rows = switches(true, false).filter(
+      (row) => row.key !== 'dataset_retention_enabled',
+    )
+    vi.mocked(runtimeApi.listRuntimeParams).mockResolvedValue(rows)
+    vi.mocked(dataset.listDatasetTables).mockResolvedValue(
+      pageOf([table({ retention_days: 90 })]),
+    )
+    const wrapper = await render(['dataset:view'])
+    expect(wrapper.text()).toContain('清理状态未知')
+    expect(wrapper.text()).not.toContain('采集状态未知')
+    expect(wrapper.text()).not.toContain('未清理')
+
+    vi.mocked(runtimeApi.listRuntimeParams).mockResolvedValue(
+      switches(true, true).map((row) => ({ ...row, value: 0 })),
+    )
+    await wrapper.find('[data-test="retry-dataset-switches"]').trigger('click')
+    await flushPromises()
+    expect(wrapper.text()).toContain('采集状态未知')
+    expect(wrapper.text()).not.toContain('未生效')
+  })
+
+  it('失败后重试恢复服务端真实关闭状态，移除未知和错误提示', async () => {
+    vi.mocked(runtimeApi.listRuntimeParams)
+      .mockRejectedValueOnce(new Error('网络错误'))
+      .mockResolvedValue(switches(false, false))
+    const wrapper = await render(['dataset:view'])
+
+    await wrapper.find('[data-test="retry-dataset-switches"]').trigger('click')
+    await flushPromises()
+
+    expect(wrapper.text()).toContain('台账采集总开关当前是关的')
+    expect(wrapper.text()).not.toContain('网络错误')
+    expect(wrapper.text()).not.toContain('采集状态未知')
+  })
+
+  it('曾读取成功但重新读取失败后不能继续显示旧关闭状态', async () => {
+    const wrapper = await render(['dataset:view'])
+    vi.mocked(runtimeApi.listRuntimeParams).mockRejectedValue(
+      new Error('重新读取失败'),
+    )
+    wrapper
+      .findComponent(RuntimeParamsDialog)
+      .vm.$emit('update:modelValue', false)
+    await flushPromises()
+
+    expect(wrapper.text()).toContain('采集状态未知')
+    expect(wrapper.text()).not.toContain('台账采集总开关当前是关的')
+  })
+
+  it('旧请求的迟到结果不能覆盖重试恢复的最新开关', async () => {
+    let resolve: (rows: RuntimeParamItem[]) => void = () => undefined
+    const pending = new Promise<RuntimeParamItem[]>((done) => {
+      resolve = done
+    })
+    vi.mocked(runtimeApi.listRuntimeParams)
+      .mockReturnValueOnce(pending)
+      .mockResolvedValue(switches(true, true))
+    const wrapper = await render(['dataset:view'])
+    wrapper
+      .findComponent(RuntimeParamsDialog)
+      .vm.$emit('update:modelValue', false)
+    await flushPromises()
+    resolve(switches(false, false))
+    await flushPromises()
+
+    expect(wrapper.text()).not.toContain('未生效')
+    expect(wrapper.text()).not.toContain('正在读取运行开关状态')
+  })
+
+  it('卸载页面中止在途开关读取', async () => {
+    vi.mocked(runtimeApi.listRuntimeParams).mockReturnValue(
+      new Promise<RuntimeParamItem[]>(() => undefined),
+    )
+    const wrapper = await render(['dataset:view'])
+    const signal = vi.mocked(runtimeApi.listRuntimeParams).mock.calls[0]?.[1]
+
+    expect(signal?.aborted).toBe(false)
+    wrapper.unmount()
+    expect(signal?.aborted).toBe(true)
+  })
+
+  it('重新读取开关时中止前一次请求', async () => {
+    vi.mocked(runtimeApi.listRuntimeParams)
+      .mockReturnValueOnce(new Promise<RuntimeParamItem[]>(() => undefined))
+      .mockResolvedValue(switches(true, true))
+    const wrapper = await render(['dataset:view'])
+    const signal = vi.mocked(runtimeApi.listRuntimeParams).mock.calls[0]?.[1]
+    wrapper
+      .findComponent(RuntimeParamsDialog)
+      .vm.$emit('update:modelValue', false)
+    await flushPromises()
+
+    expect(signal?.aborted).toBe(true)
+    expect(wrapper.text()).not.toContain('采集状态未知')
   })
 
   it('保留期那一格在清理开关关着时补一句，开着就不补', async () => {

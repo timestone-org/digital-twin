@@ -30,13 +30,18 @@ function baseOf(section: RuntimeParamSection): string {
   return '/collect-runtime-params'
 }
 
-/** 读一组运行参数的当前有效值。 */
+/**
+ * 读取一组运行参数的当前有效值。
+ * @param section 参数分组
+ * @param signal 中止本次读取的信号
+ */
 export async function listRuntimeParams(
   section: RuntimeParamSection,
+  signal?: AbortSignal,
 ): Promise<RuntimeParamItem[]> {
   const rows = await requestData<RuntimeParamItemWire[]>(
     baseOf(section),
-    onPlatform({ query: { section } }),
+    onPlatform({ query: { section }, signal }),
   )
   return rows.map(toRuntimeParamItem)
 }

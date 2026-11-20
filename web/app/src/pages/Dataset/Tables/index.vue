@@ -103,7 +103,7 @@ const emptyState = computed(() =>
 // 采集总开关关着，而这一屏里有按周期汇总的台账——那些表一行都不会新增
 const stalled = computed(
   () =>
-    !switches.collectEnabled.value &&
+    switches.collectEnabled.value === false &&
     visible.value.some((table) => table.collect_mode === 'aggregate'),
 )
 
@@ -147,6 +147,26 @@ onMounted(() => {
 
     <!-- h-full + min-h-0 见 AppShell 的契约：main 不滚，高度由页面自己吃满 -->
     <div class="flex h-full min-h-0 flex-col gap-4">
+      <DtNotice
+        v-if="switches.error.value !== ''"
+        intent="warning"
+        icon="alert-triangle"
+      >
+        运行开关状态未知。{{ switches.error.value }}
+        <DtButton
+          size="sm"
+          variant="ghost"
+          :disabled="switches.isLoading.value"
+          data-test="retry-dataset-switches"
+          @click="switches.load()"
+        >
+          重试读取
+        </DtButton>
+      </DtNotice>
+      <DtNotice v-else-if="switches.isLoading.value" intent="info">
+        正在读取运行开关状态…
+      </DtNotice>
+
       <DtNotice v-if="missing > 0" intent="warning" icon="alert-triangle">
         还有 {{ missing }} 张台账没取回来，搜索只筛得到已经列出的这
         {{ list.items.value.length }} 张。
@@ -218,9 +238,9 @@ onMounted(() => {
         </template>
 
         <template #cell-collect="{ row }">
-          <div class="flex min-w-0 items-center gap-1.5">
+          <div class="flex min-w-0 flex-wrap items-center gap-x-1.5 gap-y-1">
             <span
-              class="truncate text-text-secondary"
+              class="max-w-full truncate text-text-secondary"
               :title="collectSummary(row).hint"
             >
               {{ collectSummary(row).label }}
@@ -228,13 +248,23 @@ onMounted(() => {
             <DtTag
               v-if="
                 row.collect_mode === 'aggregate' &&
-                !switches.collectEnabled.value
+                switches.collectEnabled.value !== true
               "
               size="sm"
-              intent="warning"
-              title="台账采集总开关是关的，这张表不会出新行"
+              :intent="
+                switches.collectEnabled.value === false ? 'warning' : 'neutral'
+              "
+              :title="
+                switches.collectEnabled.value === false
+                  ? '台账采集总开关是关的，这张表不会出新行'
+                  : '尚未取得采集总开关的有效值'
+              "
             >
-              未生效
+              {{
+                switches.collectEnabled.value === false
+                  ? '未生效'
+                  : '采集状态未知'
+              }}
             </DtTag>
           </div>
         </template>
@@ -259,12 +289,22 @@ onMounted(() => {
           {{ retentionLabel(row.retention_days) }}
           <span
             v-if="
-              row.retention_days !== null && !switches.retentionEnabled.value
+              row.retention_days !== null &&
+              switches.retentionEnabled.value !== true
             "
             class="text-xs text-text-disabled"
-            title="保留期清理总开关是关的，过期的行不会被删"
+            :class="{ block: switches.retentionEnabled.value === null }"
+            :title="
+              switches.retentionEnabled.value === false
+                ? '保留期清理总开关是关的，过期的行不会被删'
+                : '尚未取得保留期清理总开关的有效值'
+            "
           >
-            未清理
+            {{
+              switches.retentionEnabled.value === false
+                ? '未清理'
+                : '清理状态未知'
+            }}
           </span>
         </template>
 

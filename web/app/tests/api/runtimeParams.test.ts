@@ -99,6 +99,17 @@ describe('线形映射', () => {
 })
 
 describe('读写与恢复默认', () => {
+  it('读取使用调用方的取消信号，保留分组与平台前缀', async () => {
+    const controller = new AbortController()
+    await runtimeParams.listRuntimeParams('dataset', controller.signal)
+    const [path, options] = call()
+
+    expect(path).toBe('/dataset-tables/runtime-params')
+    expect(options.baseUrl).toBe(PLATFORM_PREFIX)
+    expect(options.query).toEqual({ section: 'dataset' })
+    expect(options.signal).toBe(controller.signal)
+  })
+
   it('读按 section 过滤，打在 platform 前缀上', async () => {
     const items = await runtimeParams.listRuntimeParams('dashboard')
     const [path, options] = call()
