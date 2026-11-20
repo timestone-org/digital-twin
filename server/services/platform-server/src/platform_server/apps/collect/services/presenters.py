@@ -1,9 +1,10 @@
 """ORM 模型 → 对外模型。转换只在这一处发生，HTTP 层拿不到 ORM 对象。"""
 
-from collections.abc import Sequence
+from __future__ import annotations
+
+from typing import TYPE_CHECKING
 
 from collectwire import PlanPoint, PlanSource
-from platform_server.apps.collect.crud import PlanPointRow
 from platform_server.apps.collect.models import CollectPoint, CollectSource
 from platform_server.apps.collect.protocols import (
     as_data_type,
@@ -26,6 +27,11 @@ from platform_server.apps.collect.services.state_source import (
     SourceRuntime,
 )
 from timeseries import compose_node_key
+
+if TYPE_CHECKING:
+    from collections.abc import Sequence
+
+    from platform_server.apps.collect.crud import PlanPointRow
 
 
 def to_source_out(source: CollectSource, *, point_count: int) -> SourceOut:
@@ -130,7 +136,7 @@ def to_subtree_item_out(item: SubtreeEntry) -> SubtreeItemOut:
 def to_plan_source(
     source: CollectSource,
     *,
-    points: Sequence[PlanPointRow],
+    points: Sequence[PlanPoint],
     password: str | None = None,
 ) -> PlanSource:
     """一个数据源在采集计划里的形态。
@@ -147,18 +153,20 @@ def to_plan_source(
         options=_text_options(source),
         username=source.username,
         password=password,
-        points=tuple(
-            PlanPoint(
-                point_code=point.code,
-                address=point.address,
-                data_type=as_data_type(point.data_type),
-                sampling_interval_ms=point.sampling_interval_ms,
-                archive_enabled=point.archive_enabled,
-                deadband=point.deadband,
-                archive_max_interval_ms=point.archive_max_interval_ms,
-            )
-            for point in points
-        ),
+        points=tuple(points),
+    )
+
+
+def to_plan_point(row: PlanPointRow) -> PlanPoint:
+    """把当前游标中的点位投影为采集计划条目。Args: row。"""
+    return PlanPoint(
+        point_code=row.code,
+        address=row.address,
+        data_type=as_data_type(row.data_type),
+        sampling_interval_ms=row.sampling_interval_ms,
+        archive_enabled=row.archive_enabled,
+        deadband=row.deadband,
+        archive_max_interval_ms=row.archive_max_interval_ms,
     )
 
 

@@ -6,19 +6,25 @@ collector 只按 `version` 判断要不要重新收敛，**不做增量**——�
 
 import hashlib
 import json
+from contextlib import aclosing
+from typing import TYPE_CHECKING
 
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from collectwire import CollectPlan, PlanSource
-from platform_server.apps.collect.crud import (
-    PlanPointRow,
-    point_crud,
-    source_crud,
-)
+from platform_server.apps.collect.crud import point_crud, source_crud
 from platform_server.apps.collect.models import CollectSource
 from platform_server.apps.collect.services.credentials import CredentialCipher
-from platform_server.apps.collect.services.presenters import to_plan_source
+from platform_server.apps.collect.services.presenters import (
+    to_plan_point,
+    to_plan_source,
+)
 from platform_server.apps.runtime_params.services import param_service
+
+if TYPE_CHECKING:
+    from uuid import UUID
+
+    from collectwire import PlanPoint
 
 PlanParams = dict[str, dict[str, bool | int | float]]
 
@@ -34,19 +40,20 @@ async def build_plan(
     解不开按未配置下发（credentials.py 里已响亮记日志）。
     Args: session, cipher。
     """
-    sources = await source_crud.list_all(session)
-    points = await point_crud.list_for_plan(session)
-    grouped: dict[str, list[PlanPointRow]] = {}
-    for point in points:
-        grouped.setdefault(str(point.source_id), []).append(point)
+    sources = await source_crud.list_all(session, is_enabled=True)
+    grouped: dict[UUID, list[PlanPoint]] = {source.id: [] for source in sources}
+    async with aclosing(
+        point_crud.iter_for_plan(session, source_ids=grouped.keys())
+    ) as rows:
+        async for row in rows:
+            grouped[row.source_id].append(to_plan_point(row))
     rendered = [
         to_plan_source(
             source,
-            points=grouped.get(str(source.id), []),
+            points=grouped.pop(source.id),
             password=_password_of(cipher, source),
         )
         for source in sources
-        if source.is_enabled
     ]
     params = await param_service.overrides_for_plan(session)
     return CollectPlan(
