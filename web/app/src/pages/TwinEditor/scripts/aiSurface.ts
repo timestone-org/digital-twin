@@ -17,7 +17,11 @@ import { twinBindingRows, type TwinConfig } from '@dt/twin-config'
 import { createBinding } from '@/features/dashboard/editorDoc'
 import { withSource } from '@/features/ai/bindingSource'
 import { captureCanvas } from '@/features/ai/captureWithGl'
-import type { AiSurface, SurfaceSnapshot } from '@/features/ai/surfaces'
+import {
+  PAGED_POINT_VALUES,
+  type AiSurface,
+  type SurfaceSnapshot,
+} from '@/features/ai/surfaces'
 
 import {
   runTwinBindingTool,
@@ -76,6 +80,7 @@ export function createTwinSurface(deps: TwinSurfaceDeps): AiSurface {
   return {
     kind: 'twin-editor',
     label: '孪生编辑器',
+    capabilities: [PAGED_POINT_VALUES],
     tools: TWIN_TOOLS,
     snapshot: () => snapshotOf(deps),
     run: (call) => settle(deps, call),
