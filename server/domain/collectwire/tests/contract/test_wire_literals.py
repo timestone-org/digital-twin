@@ -15,6 +15,7 @@ from collectwire import (
     ACTION_VALIDATE,
     ACTION_WRITE,
     ACTIONS,
+    COLLECT_LEASE_KEY,
     DATA_TYPES,
     ERROR_CATEGORIES,
     REPLY_PREFIX,
@@ -31,6 +32,8 @@ from collectwire import (
     DataType,
     reply_key,
     snapshot_key,
+    snapshot_owner_stamp,
+    snapshot_owners_key,
 )
 from collectwire.commands import (
     REASON_HTTP_AUTH_REJECTED,
@@ -66,6 +69,10 @@ def test_the_command_keys_are_the_ones_in_redis() -> None:
 def test_the_snapshot_key_is_the_one_in_redis() -> None:
     assert SNAPSHOT_KEY_PREFIX == "collect:snapshot"
     assert snapshot_key(SOURCE_ID) == f"collect:snapshot:{SOURCE_ID}"
+    assert COLLECT_LEASE_KEY == "collect:leader"
+    assert (
+        snapshot_owners_key(SOURCE_ID) == f"collect:snapshot-owners:{SOURCE_ID}"
+    )
 
 
 def test_the_snapshot_payload_carries_exactly_three_fields() -> None:
@@ -145,3 +152,11 @@ def test_the_data_types_are_the_ones_in_the_check_constraint() -> None:
 def test_the_data_type_literal_and_the_tuple_cannot_drift() -> None:
     """⚠ 一份给类型检查、一份给 CHECK 约束，漏改一边不会报错。"""
     assert set(get_args(DataType)) == set(DATA_TYPES)
+
+
+def test_snapshot_owner_stamp_binds_the_exact_payload_bytes() -> None:
+    expected = (
+        "ba7816bf8f01cfea414140de5dae2223" "b00361a396177a9cb410ff61f20015ad"
+    )
+    assert snapshot_owner_stamp("epoch", "abc") == f"epoch:{expected}"
+    assert snapshot_owner_stamp("epoch", "abc ") != f"epoch:{expected}"
