@@ -7,6 +7,7 @@ import { useDashboardEditor } from '@/composables/useDashboardEditor'
 import { createEditorActions } from '@/pages/DashboardEditor/scripts/editorActions'
 import { createArrangeActions } from '@/pages/DashboardEditor/scripts/editorArrange'
 import { createEditorSurface } from '@/pages/DashboardEditor/scripts/aiSurface'
+import configPathFixture from '../../../../../../server/services/ai-assistant/tests/fixtures/config_path.json'
 
 function setup(type: string) {
   registerBuiltinModules()
@@ -68,7 +69,13 @@ describe('新模块实际清单', () => {
     expect(await run('read_bindings')).toMatchObject({
       slots: [{ row_count: 3 }],
     })
-    await run('set_config', { path: ['indicators', 0, 'name'], value: '能效' })
+    await run('set_config', {
+      path: configPathFixture.arguments.path,
+      value: configPathFixture.arguments.value,
+    })
+    expect(editor.nodes.value[0]?.configJson.indicators).toEqual(
+      expect.arrayContaining([expect.objectContaining({ name: '能效' })]),
+    )
     expect(editor.nodes.value[0]?.configJson.indicators).toHaveLength(3)
     await run('add_config_item', {
       field: 'indicators',
@@ -78,6 +85,21 @@ describe('新模块实际清单', () => {
     editor.undo()
     expect(editor.nodes.value[0]?.configJson.indicators).toHaveLength(3)
   })
+
+  it.each([-1, 0.5, true, Number.MAX_SAFE_INTEGER + 1])(
+    '拒绝非负安全整数之外的数组下标 %s',
+    async (index) => {
+      const { editor, run } = setup('radar-chart')
+      const before = JSON.stringify(editor.nodes.value)
+      await expect(
+        run('set_config', {
+          path: ['indicators', index, 'name'],
+          value: '未写入',
+        }),
+      ).rejects.toThrow(/非负安全整数/)
+      expect(JSON.stringify(editor.nodes.value)).toBe(before)
+    },
+  )
 
   it.each(['remove_config_item', 'set_config'])(
     '已有中间轴绑定时 %s 不允许静默移位',

@@ -338,8 +338,11 @@ function pathArg(call: AssistantToolCall): ConfigPath {
   const parts: unknown[] = given
   if (parts.length === 0) throw new Error('set_config 必须指向一个声明过的字段')
   return parts.map((one) => {
-    if (typeof one !== 'string' && typeof one !== 'number')
-      throw new Error('配置路径只接受字段名和下标')
+    if (typeof one !== 'string') {
+      if (typeof one !== 'number' || !Number.isSafeInteger(one) || one < 0)
+        throw new Error('配置路径的下标必须是非负安全整数')
+      return one
+    }
     if (['__proto__', 'constructor', 'prototype'].includes(String(one)))
       throw new Error('不允许此配置路径')
     return one
