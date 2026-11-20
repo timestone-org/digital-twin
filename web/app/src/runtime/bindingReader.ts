@@ -31,6 +31,18 @@ export type ReadDatasetValue = (
   detail?: DatasetBindingDetail,
 ) => BindingSlot | undefined
 
+export function connectedPointReader(
+  read: ReadPointSample,
+  currentConnection: () => string | undefined,
+): ReadPointSample {
+  return (nodeKey) => {
+    const state = currentConnection()
+    return state === undefined || state === 'open'
+      ? read(nodeKey)
+      : { state: 'error', errorMessage: '实时连接已断开，数据可能过期' }
+  }
+}
+
 /** 一个点位的快照 → 一条槽的结果。 */
 function slotOfSample(sample: PointSample): BindingSlot {
   if (sample.state === 'error') {

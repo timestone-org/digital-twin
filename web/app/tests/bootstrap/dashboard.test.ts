@@ -331,14 +331,14 @@ describe('两次注入的键集', () => {
       useDashboardValues(
         () => nodes.value,
         () => 'd-1',
-        () => 'open',
+        { connectionState: () => 'open' },
       )
     })
     const series = keysOfInstalled(() => {
       const values = useDashboardValues(
         () => nodes.value,
         () => 'd-1',
-        () => 'open',
+        { connectionState: () => 'open' },
       )
       installDashboardSeries({
         readPoint: values.read,
