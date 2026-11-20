@@ -3,6 +3,7 @@
 from collections.abc import Sequence
 
 from collectwire import PlanPoint, PlanSource
+from platform_server.apps.collect.crud import PlanPointRow
 from platform_server.apps.collect.models import CollectPoint, CollectSource
 from platform_server.apps.collect.protocols import (
     as_data_type,
@@ -129,7 +130,7 @@ def to_subtree_item_out(item: SubtreeEntry) -> SubtreeItemOut:
 def to_plan_source(
     source: CollectSource,
     *,
-    points: Sequence[CollectPoint],
+    points: Sequence[PlanPointRow],
     password: str | None = None,
 ) -> PlanSource:
     """一个数据源在采集计划里的形态。

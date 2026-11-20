@@ -10,8 +10,12 @@ import json
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from collectwire import CollectPlan, PlanSource
-from platform_server.apps.collect.crud import point_crud, source_crud
-from platform_server.apps.collect.models import CollectPoint, CollectSource
+from platform_server.apps.collect.crud import (
+    PlanPointRow,
+    point_crud,
+    source_crud,
+)
+from platform_server.apps.collect.models import CollectSource
 from platform_server.apps.collect.services.credentials import CredentialCipher
 from platform_server.apps.collect.services.presenters import to_plan_source
 from platform_server.apps.runtime_params.services import param_service
@@ -31,8 +35,8 @@ async def build_plan(
     Args: session, cipher。
     """
     sources = await source_crud.list_all(session)
-    points = await point_crud.list_all(session)
-    grouped: dict[str, list[CollectPoint]] = {}
+    points = await point_crud.list_for_plan(session)
+    grouped: dict[str, list[PlanPointRow]] = {}
     for point in points:
         grouped.setdefault(str(point.source_id), []).append(point)
     rendered = [

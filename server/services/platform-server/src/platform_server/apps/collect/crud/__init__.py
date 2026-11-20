@@ -8,13 +8,18 @@ from platform_server.apps.collect.crud.history import (
     build_aggregate_query,
     build_range_query,
 )
-from platform_server.apps.collect.crud.point import PointCrud, point_crud
+from platform_server.apps.collect.crud.point import (
+    PlanPointRow,
+    PointCrud,
+    point_crud,
+)
 from platform_server.apps.collect.crud.source import SourceCrud, source_crud
 
 __all__ = [
     "HistoryCursor",
     "HistorySource",
     "HistoryWindow",
+    "PlanPointRow",
     "PointCrud",
     "PointRef",
     "SourceCrud",

@@ -24,6 +24,22 @@ DEFAULT_ORDER = (
 )
 
 PointCursor = tuple[uuid.UUID, str, uuid.UUID]
+# 全量计划点位游标的提取批大小
+PLAN_PAGE_ROWS = 2000
+
+
+@dataclass(frozen=True)
+class PlanPointRow:
+    """构建采集计划所需的点位字段。"""
+
+    source_id: uuid.UUID
+    code: str
+    address: str
+    data_type: str
+    sampling_interval_ms: int
+    deadband: float
+    archive_enabled: bool
+    archive_max_interval_ms: int
 
 
 @dataclass(frozen=True)
@@ -45,15 +61,30 @@ class PointCrud(CrudBase[CollectPoint]):
     def __init__(self) -> None:
         super().__init__(CollectPoint)
 
-    async def list_all(self, session: AsyncSession) -> list[CollectPoint]:
-        """取全部点位，顺序写死。
-
-        Args: session。
-        """
-        rows = await session.execute(
-            select(CollectPoint).order_by(*DEFAULT_ORDER)
+    async def list_for_plan(self, session: AsyncSession) -> list[PlanPointRow]:
+        """在同一游标快照中分批读取计划字段。Args: session。"""
+        statement = (
+            select(
+                CollectPoint.source_id,
+                CollectPoint.code,
+                CollectPoint.address,
+                CollectPoint.data_type,
+                CollectPoint.sampling_interval_ms,
+                CollectPoint.deadband,
+                CollectPoint.archive_enabled,
+                CollectPoint.archive_max_interval_ms,
+            )
+            .order_by(*DEFAULT_ORDER)
+            .execution_options(yield_per=PLAN_PAGE_ROWS)
         )
-        return list(rows.scalars().all())
+        rows = (await session.stream(statement)).tuples()
+        points: list[PlanPointRow] = []
+        try:
+            while page := await rows.fetchmany(PLAN_PAGE_ROWS):
+                points.extend(PlanPointRow(*row) for row in page)
+        finally:
+            await rows.close()
+        return points
 
     async def list_candidates(
         self,
