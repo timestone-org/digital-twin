@@ -7,7 +7,10 @@
 本类只负责第 4 步「释放角色资源」，不自行决定摘流量的时机。
 """
 
+from __future__ import annotations
+
 import asyncio
+from typing import TYPE_CHECKING
 from uuid import UUID
 
 from lib.logging import get_logger
@@ -23,6 +26,9 @@ from opcua_server.apps.instance.runtime.pki import PkiStore
 from opcua_server.apps.instance.runtime.ports import PortAllocator
 from opcua_server.apps.instance.runtime.valuewatch import OnValueChange
 
+if TYPE_CHECKING:
+    from opcua_server.apps.instance.runtime.identity import IdentityDirectory
+
 _logger = get_logger("opcua.supervisor")
 
 
@@ -36,15 +42,17 @@ class InstanceSupervisor:
         pki: PkiStore,
         max_instances: int,
         on_value_change: OnValueChange | None = None,
+        identity_directory: IdentityDirectory | None = None,
     ) -> None:
         """按端口池、证书库与上限初始化。
 
         ⚠ `on_value_change` 可缺省：不给就不建值监听。用例里起实例不必都带上
         实时推送那条链路。
 
-        Args: ports, pki, max_instances, on_value_change。
+        Args: ports, pki, max_instances, on_value_change, identity_directory。
         """
         self._ports = ports
+        self._identity_directory = identity_directory
         self._pki = pki
         self._max_instances = max_instances
         self._on_value_change = on_value_change
@@ -157,7 +165,10 @@ class InstanceSupervisor:
         """
         self._ports.reserve(spec.instance_id, spec.port)
         instance = RunningInstance(
-            spec, pki=self._pki, on_value_change=self._on_value_change
+            spec,
+            pki=self._pki,
+            on_value_change=self._on_value_change,
+            identity_directory=self._identity_directory,
         )
         try:
             await instance.start()

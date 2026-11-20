@@ -20,6 +20,9 @@ from opcua_server.apps.instance.services import (
     TopicReconciler,
     ValuePublisher,
 )
+from opcua_server.apps.instance.services.identity_directory import (
+    InstanceIdentityDirectory,
+)
 from opcua_server.settings import Settings
 
 # 幂等记录的键前缀。⚠ **不许随手改**：它是已经在 Redis 里的键，改了等于把一批
@@ -61,14 +64,17 @@ def _build_database(settings: Settings) -> Database:
 
 
 def _build_supervisor(
-    settings: Settings, on_value_change: OnValueChange | None = None
+    settings: Settings,
+    identities: InstanceIdentityDirectory,
+    on_value_change: OnValueChange | None = None,
 ) -> InstanceSupervisor:
     """端口池与证书库都来自部署期配置，运行期不可扩。
 
-    Args: settings。
+    Args: settings, identities, on_value_change。
     """
     return InstanceSupervisor(
         on_value_change=on_value_change,
+        identity_directory=identities,
         ports=PortAllocator(settings.ports()),
         pki=PkiStore(
             settings.pki_dir,
@@ -108,7 +114,8 @@ def build_container(settings: Settings) -> Container:
     )
     # ⚠ 监听在这里注进去而不是让实例自己找：实例是运行时对象，让它认识
     # ValuePublisher 就等于把「有没有实时通道」搬进了 opc.tcp 那一侧
-    supervisor = _build_supervisor(settings, values.record)
+    identities = InstanceIdentityDirectory(database, PasswordHasher())
+    supervisor = _build_supervisor(settings, identities, values.record)
     return Container(
         settings=settings,
         database=database,
@@ -125,7 +132,7 @@ def build_container(settings: Settings) -> Container:
         security=SecurityService(
             database=database,
             supervisor=supervisor,
-            hasher=PasswordHasher(),
+            identities=identities,
         ),
         idempotency=IdempotencyStore(
             cache=cache, namespace=IDEMPOTENCY_NAMESPACE

@@ -1,26 +1,24 @@
 """上位机身份面：会话、凭据、信任证书。"""
 
-import datetime as dt
-from collections.abc import Callable
 from uuid import uuid4
 
 import httpx
 import pytest
-from cryptography import x509
-from cryptography.hazmat.primitives import hashes, serialization
-from cryptography.hazmat.primitives.asymmetric import rsa
-from cryptography.x509.oid import NameOID
 
+from integration.security_helpers import (
+    INSTANCES,
+    Headers,
+    certificate_pair,
+    create_security_instance,
+)
 from opcua_server.apps.instance.deps import (
     PERM_MANAGE,
     PERM_OPERATE,
     PERM_VIEW,
 )
-from opcua_server.settings import API_PREFIX
 
 pytestmark = pytest.mark.requires_postgres
 
-INSTANCES = f"{API_PREFIX}/instances"
 OK = 200
 CREATED = 201
 NO_CONTENT = 204
@@ -32,47 +30,7 @@ CODE_CREDENTIAL_TAKEN = 42115
 CODE_CERTIFICATE_DUPLICATE = 42116
 CODE_CERTIFICATE_NOT_FOUND = 42114
 
-Headers = Callable[..., dict[str, str]]
-RSA_BITS = 2048
 MIN_PASSWORD_LENGTH = 12
-
-
-def _self_signed_pem() -> tuple[str, str]:
-    """造一张自签客户端证书，返回 (证书 PEM, 私钥 PEM)。"""
-    key = rsa.generate_private_key(public_exponent=65537, key_size=RSA_BITS)
-    subject = x509.Name([x509.NameAttribute(NameOID.COMMON_NAME, "test-scada")])
-    now = dt.datetime.now(dt.UTC)
-    certificate = (
-        x509.CertificateBuilder()
-        .subject_name(subject)
-        .issuer_name(subject)
-        .public_key(key.public_key())
-        .serial_number(x509.random_serial_number())
-        .not_valid_before(now - dt.timedelta(days=1))
-        .not_valid_after(now + dt.timedelta(days=365))
-        .sign(key, hashes.SHA256())
-    )
-    cert_pem = certificate.public_bytes(serialization.Encoding.PEM).decode()
-    key_pem = key.private_bytes(
-        encoding=serialization.Encoding.PEM,
-        format=serialization.PrivateFormat.PKCS8,
-        encryption_algorithm=serialization.NoEncryption(),
-    ).decode()
-    return cert_pem, key_pem
-
-
-async def _instance(client: httpx.AsyncClient, headers: Headers) -> str:
-    response = await client.post(
-        INSTANCES,
-        json={
-            "name": "sec-host",
-            "namespace_uri": "urn:test:sec",
-            "security_policies": ["Basic256Sha256_SignAndEncrypt"],
-        },
-        headers=headers(PERM_MANAGE),
-    )
-    assert response.status_code == CREATED
-    return str(response.json()["data"]["id"])
 
 
 @pytest.mark.usefixtures("clean_tables")
@@ -85,7 +43,7 @@ async def test_sessions_are_empty_when_stopped(
 
     Args: client, sign_headers。
     """
-    instance_id = await _instance(client, sign_headers)
+    instance_id = await create_security_instance(client, sign_headers)
     response = await client.get(
         f"{INSTANCES}/{instance_id}/sessions", headers=sign_headers(PERM_VIEW)
     )
@@ -101,7 +59,7 @@ async def test_credential_password_is_returned_exactly_once(
 
     Args: client, sign_headers。
     """
-    instance_id = await _instance(client, sign_headers)
+    instance_id = await create_security_instance(client, sign_headers)
     created = await client.post(
         f"{INSTANCES}/{instance_id}/credentials",
         json={"username": "scada01"},
@@ -129,7 +87,7 @@ async def test_credential_accepts_an_explicit_password(
 
     Args: client, sign_headers。
     """
-    instance_id = await _instance(client, sign_headers)
+    instance_id = await create_security_instance(client, sign_headers)
     created = await client.post(
         f"{INSTANCES}/{instance_id}/credentials",
         json={"username": "scada02", "password": "correct-horse-battery"},
@@ -146,7 +104,7 @@ async def test_short_password_is_rejected(
 
     Args: client, sign_headers。
     """
-    instance_id = await _instance(client, sign_headers)
+    instance_id = await create_security_instance(client, sign_headers)
     response = await client.post(
         f"{INSTANCES}/{instance_id}/credentials",
         json={"username": "scada03", "password": "short"},
@@ -163,7 +121,7 @@ async def test_credentials_require_manage(
 
     Args: client, sign_headers。
     """
-    instance_id = await _instance(client, sign_headers)
+    instance_id = await create_security_instance(client, sign_headers)
     response = await client.get(
         f"{INSTANCES}/{instance_id}/credentials",
         headers=sign_headers(PERM_VIEW, PERM_OPERATE),
@@ -179,7 +137,7 @@ async def test_credential_can_be_deleted(
 
     Args: client, sign_headers。
     """
-    instance_id = await _instance(client, sign_headers)
+    instance_id = await create_security_instance(client, sign_headers)
     created = await client.post(
         f"{INSTANCES}/{instance_id}/credentials",
         json={"username": "gone"},
@@ -201,7 +159,7 @@ async def test_deleting_unknown_credential_is_404(
 
     Args: client, sign_headers。
     """
-    instance_id = await _instance(client, sign_headers)
+    instance_id = await create_security_instance(client, sign_headers)
     unknown = "3fa85f64-5717-4562-b3fc-2c963f66afa6"
     response = await client.delete(
         f"{INSTANCES}/{instance_id}/credentials/{unknown}",
@@ -219,8 +177,8 @@ async def test_certificate_is_registered_by_fingerprint(
 
     Args: client, sign_headers。
     """
-    instance_id = await _instance(client, sign_headers)
-    cert_pem, _ = _self_signed_pem()
+    instance_id = await create_security_instance(client, sign_headers)
+    cert_pem, _ = certificate_pair()
     created = await client.post(
         f"{INSTANCES}/{instance_id}/trusted-certificates",
         json={"certificate_pem": cert_pem},
@@ -242,8 +200,8 @@ async def test_certificate_with_a_private_key_is_rejected(
 
     Args: client, sign_headers。
     """
-    instance_id = await _instance(client, sign_headers)
-    cert_pem, key_pem = _self_signed_pem()
+    instance_id = await create_security_instance(client, sign_headers)
+    cert_pem, key_pem = certificate_pair()
     response = await client.post(
         f"{INSTANCES}/{instance_id}/trusted-certificates",
         json={"certificate_pem": cert_pem + key_pem},
@@ -261,7 +219,7 @@ async def test_unparseable_certificate_is_rejected(
 
     Args: client, sign_headers。
     """
-    instance_id = await _instance(client, sign_headers)
+    instance_id = await create_security_instance(client, sign_headers)
     response = await client.post(
         f"{INSTANCES}/{instance_id}/trusted-certificates",
         json={"certificate_pem": "-----BEGIN CERTIFICATE-----\nnope\n"},
@@ -278,8 +236,8 @@ async def test_certificate_can_be_revoked(
 
     Args: client, sign_headers。
     """
-    instance_id = await _instance(client, sign_headers)
-    cert_pem, _ = _self_signed_pem()
+    instance_id = await create_security_instance(client, sign_headers)
+    cert_pem, _ = certificate_pair()
     created = await client.post(
         f"{INSTANCES}/{instance_id}/trusted-certificates",
         json={"certificate_pem": cert_pem},
@@ -326,7 +284,7 @@ async def test_a_duplicate_username_is_a_conflict(
 
     Args: client, sign_headers。
     """
-    instance_id = await _instance(client, sign_headers)
+    instance_id = await create_security_instance(client, sign_headers)
     for _ in range(2):
         response = await client.post(
             f"{INSTANCES}/{instance_id}/credentials",
@@ -345,8 +303,8 @@ async def test_registering_the_same_certificate_twice_is_a_conflict(
 
     Args: client, sign_headers。
     """
-    instance_id = await _instance(client, sign_headers)
-    cert_pem, _ = _self_signed_pem()
+    instance_id = await create_security_instance(client, sign_headers)
+    cert_pem, _ = certificate_pair()
     for _ in range(2):
         response = await client.post(
             f"{INSTANCES}/{instance_id}/trusted-certificates",
@@ -365,7 +323,7 @@ async def test_revoking_an_unknown_certificate_is_404(
 
     Args: client, sign_headers。
     """
-    instance_id = await _instance(client, sign_headers)
+    instance_id = await create_security_instance(client, sign_headers)
     response = await client.delete(
         f"{INSTANCES}/{instance_id}/trusted-certificates/{uuid4()}",
         headers=sign_headers(PERM_MANAGE),

@@ -6,7 +6,7 @@
 """
 
 import uuid
-from typing import Annotated
+from typing import Annotated, Final
 
 from pydantic import StringConstraints
 
@@ -17,17 +17,22 @@ from opcua_server.apps.instance.schemas.common import (
     Utc,
 )
 
+MAX_USERNAME_LENGTH: Final[int] = 64
+MAX_PASSWORD_LENGTH: Final[int] = 128
+
 Username = Annotated[
     str,
     StringConstraints(
         strip_whitespace=True,
         min_length=1,
-        max_length=64,
+        max_length=MAX_USERNAME_LENGTH,
         pattern=r"^[A-Za-z0-9._-]+$",
     ),
 ]
 # ⚠ 不开 strip_whitespace：口令被静默去空白等于悄悄改了凭据
-Password = Annotated[str, StringConstraints(min_length=12, max_length=128)]
+Password = Annotated[
+    str, StringConstraints(min_length=12, max_length=MAX_PASSWORD_LENGTH)
+]
 
 
 class SessionOut(OutputModel):

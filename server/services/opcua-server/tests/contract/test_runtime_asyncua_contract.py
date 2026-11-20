@@ -1,11 +1,4 @@
-"""钉死 asyncua 的两个子类扩展点。
-
-⚠ 这一层守的是**升级时静默失效**：`asyncua` 不承诺这两处的稳定性，一旦上游
-改了签名或把同步方法改成协程，会话追踪会安静地不再登记任何东西——页面上
-「在线客户端 0」，而实际连着一片。CONTEXT.md §5 承诺的「响亮失败」就靠这里。
-
-版本钉死在 pyproject（`asyncua==1.1.8`）；升级时本文件必须一起过。
-"""
+"""固定版本 asyncua 的会话跟踪、身份激活及地址空间扩展契约。"""
 
 import inspect
 from importlib.metadata import version
@@ -13,6 +6,7 @@ from importlib.metadata import version
 from asyncua import Server, ua
 from asyncua.common import manage_nodes
 from asyncua.common.node import Node
+from asyncua.common.utils import Buffer
 from asyncua.server.address_space import AttributeService
 from asyncua.server.internal_server import InternalServer
 from asyncua.server.internal_session import InternalSession
@@ -157,3 +151,22 @@ def test_write_extension_preserves_signature_and_permissions() -> None:
     assert permission < mutation
     assert "ua.AttributeIds.AccessLevel" in source
     assert "ua.AttributeIds.UserAccessLevel" in source
+
+
+def test_activation_dispatch_preserves_the_decoded_request_hook() -> None:
+    dispatch = UaProcessor._process_message
+    assert inspect.iscoroutinefunction(dispatch)
+    assert list(inspect.signature(dispatch).parameters) == [
+        "self",
+        "typeid",
+        "requesthdr",
+        "seqhdr",
+        "body",
+    ]
+
+
+def test_activation_reads_a_copy_of_the_request_for_identity_lookup() -> None:
+    from_copy = Buffer(b"session")
+    duplicate = from_copy.copy()
+    assert duplicate.read(2) == b"se"
+    assert from_copy.read(2) == b"se"

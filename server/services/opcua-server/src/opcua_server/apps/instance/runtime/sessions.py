@@ -21,12 +21,14 @@ from datetime import datetime
 from typing import Any, cast
 
 from asyncua import ua
+from asyncua.common.utils import ServiceError
 from asyncua.crypto.permission_rules import User, UserRole
 from asyncua.server.internal_server import InternalServer
-from asyncua.server.internal_session import InternalSession
+from asyncua.server.internal_session import InternalSession, SessionState
 from asyncua.server.user_managers import UserManager
 
 from lib.utils.timeutils import Clock, utcnow
+from opcua_server.apps.instance.runtime.identity import InstanceUserManager
 from opcua_server.apps.instance.runtime.native_values import NativeValuePolicy
 
 
@@ -113,13 +115,28 @@ class TrackedSession(InternalSession):
 
         Args: params, peer_certificate。
         """
+        own = cast(Any, self)
+        manager = own.iserver.user_manager
+        identity = (
+            manager.identity_for(self)
+            if isinstance(manager, InstanceUserManager)
+            else None
+        )
+        if (
+            isinstance(manager, InstanceUserManager)
+            and own.state == SessionState.Created
+            and identity is None
+        ):
+            raise ServiceError(ua.StatusCodes.BadUserAccessDenied)
         parent = cast(Any, super())
         result = parent.activate_session(params, peer_certificate)
-        own = cast(Any, self)
         session_id = str(cast(object, own.session_id))
         peer: object = own.name
-        user = cast(User, own.user)
-        self.registry.activated(session_id, peer, user.name)
+        # 上游会记录 User 的 repr。显示身份仅进入管理面的会话登记。
+        username = (
+            identity.name if identity is not None else cast(User, own.user).name
+        )
+        self.registry.activated(session_id, peer, username)
         return result
 
     async def close_session(self, delete_subs: bool = True) -> None:
@@ -188,15 +205,12 @@ class TrackingInternalServer(InternalServer):
     ) -> None:
         """按注册表与用户管理器初始化。
 
-        ⚠ 上游把 `user_manager` 标成必填却给了 `None` 默认值；这里不传，
-        让它自己走「未指定即用宽松管理器」那条路，省掉为标注错误加的 cast。
-
         Args: registry, user_manager。
         """
-        if user_manager is None:
-            super().__init__()
-        else:
-            super().__init__(user_manager=user_manager)
+        manager = (
+            user_manager if user_manager is not None else InstanceUserManager()
+        )
+        super().__init__(user_manager=manager)
         self.registry = registry
 
     def create_session(
