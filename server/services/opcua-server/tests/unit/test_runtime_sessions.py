@@ -2,7 +2,7 @@
 
 from datetime import UTC, datetime
 
-from asyncua.server.user_managers import UserManager
+from asyncua.server.user_managers import PermissiveUserManager, UserManager
 
 from lib.testing import FrozenClock
 from opcua_server.apps.instance.runtime.sessions import (
@@ -100,3 +100,8 @@ def test_an_explicit_user_manager_is_passed_through() -> None:
     registry = SessionRegistry(clock=FrozenClock())
     server = TrackingInternalServer(registry, user_manager=UserManager())
     assert server.registry is registry
+
+
+def test_unconfigured_server_has_no_permissive_identity_provider() -> None:
+    server = TrackingInternalServer(SessionRegistry())
+    assert not isinstance(server.user_manager, PermissiveUserManager)

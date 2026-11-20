@@ -11,13 +11,15 @@
   重启回初值——这是明确语义，不是缺陷。
 """
 
+from __future__ import annotations
+
 import asyncio
 import contextlib
 import socket
 from collections.abc import Generator
 from dataclasses import dataclass, field
 from datetime import timedelta
-from typing import Any, cast
+from typing import TYPE_CHECKING, Any, cast
 from uuid import UUID
 
 from asyncua import Server, ua
@@ -44,6 +46,8 @@ from opcua_server.apps.instance.runtime.addressspace import (
     subtree_of,
     write_node_value,
 )
+from opcua_server.apps.instance.runtime.identity import InstanceUserManager
+from opcua_server.apps.instance.runtime.identity_server import InstanceServer
 from opcua_server.apps.instance.runtime.pki import CertificateMaterial, PkiStore
 from opcua_server.apps.instance.runtime.sessions import (
     SessionRecord,
@@ -54,6 +58,9 @@ from opcua_server.apps.instance.runtime.valuewatch import (
     OnValueChange,
     ValueWatcher,
 )
+
+if TYPE_CHECKING:
+    from opcua_server.apps.instance.runtime.identity import IdentityDirectory
 
 _logger = get_logger("opcua.instance")
 
@@ -182,16 +189,20 @@ class RunningInstance:
         pki: PkiStore,
         clock: Clock = utcnow,
         on_value_change: OnValueChange | None = None,
+        identity_directory: IdentityDirectory | None = None,
     ) -> None:
         """按规格与证书库装配。
 
         ⚠ `on_value_change` 可缺省：不给就不建值监听，实例照常对上位机服务。
         实时推送是可选链路，不该由它决定实例能不能起。
 
-        Args: spec, pki, clock, on_value_change。
+        Args: spec, pki, clock, on_value_change, identity_directory。
         """
         self.spec = spec
         self._pki = pki
+        self._user_manager = InstanceUserManager(
+            spec.instance_id, identity_directory
+        )
         self._clock = clock
         self._certificate: CertificateMaterial | None = None
         self._watcher = _make_watcher(spec.instance_id, on_value_change)
@@ -255,7 +266,9 @@ class RunningInstance:
         NamespaceArray）、在自定义命名空间注册之前（它占的是索引 1），
         也必须在 `start()` 之前——`start()` 会拿它去核对证书 SAN。
         """
-        server = Server(iserver=TrackingInternalServer(self._registry))
+        server = InstanceServer(
+            iserver=TrackingInternalServer(self._registry, self._user_manager)
+        )
         await server.init()
         # asyncua 的这几个 setter 形参无标注，在边界上一次性收敛
         configure = cast(Any, server)
