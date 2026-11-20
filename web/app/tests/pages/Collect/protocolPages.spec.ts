@@ -10,6 +10,8 @@ import type { CollectProtocol, CollectSource, Page } from '@dt/contracts'
 import { BizError } from '@/api/client'
 import * as collect from '@/api/collect'
 import { useAuthStore } from '@/stores/auth'
+import { activeSurface } from '@/features/ai/surfaces'
+import { setAiPorts, __resetAiPorts } from '@/features/ai/ports'
 import OpcuaPage from '@/pages/Collect/Opcua/index.vue'
 import ModbusPage from '@/pages/Collect/ModbusTcp/index.vue'
 import HttpPage from '@/pages/Collect/Http/index.vue'
@@ -189,12 +191,48 @@ beforeEach(() => {
   })
 })
 afterEach(() => {
+  __resetAiPorts()
   vi.restoreAllMocks()
   vi.useRealTimers()
   localStorage.clear()
 })
 
 describe('协议页面隔离', () => {
+  it.each(CASES)(
+    '$title 从当前协议进入只读助手',
+    async ({ path, protocol }) => {
+      signIn(['collect:view', 'assistant:use'])
+      setAiPorts({
+        probe: () =>
+          Promise.resolve({
+            is_model_enabled: true,
+            skills: [],
+            models: [],
+            default_model_id: '',
+            default_effort: '',
+            attachment_suffixes: [],
+          }),
+      })
+      const { wrapper } = await render(path)
+      expect(wrapper.find('button[aria-label="打开 AI 助手"]').exists()).toBe(
+        true,
+      )
+      expect(activeSurface()?.tools).toEqual([])
+      expect(activeSurface()?.snapshot()).toMatchObject({
+        selected_source: { protocol },
+      })
+    },
+  )
+
+  it('无助手权限的采集账号不会挂载助手工作面', async () => {
+    signIn(['collect:view'])
+    const { wrapper } = await render('/collect/opcua')
+    expect(wrapper.find('button[aria-label="打开 AI 助手"]').exists()).toBe(
+      false,
+    )
+    expect(activeSurface()?.kind).not.toBe('collect-source')
+  })
+
   it.each(
     CASES.flatMap((one) => [
       { ...one, path: `${one.path}/` },
