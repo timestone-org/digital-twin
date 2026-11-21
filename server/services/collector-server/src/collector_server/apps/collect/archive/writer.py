@@ -171,9 +171,9 @@ class ArchiveWriter:
             return 0
         total = 0
         for _ in range(MAX_ROUNDS_PER_FLUSH):
-            written = await self._drain_once(key, source_id)
+            written, should_continue = await self._drain_once(key, source_id)
             total += written
-            if written == 0:
+            if not should_continue:
                 return total
         _logger.warning(
             "archive_drain_budget_spent",
@@ -183,22 +183,24 @@ class ArchiveWriter:
         )
         return total
 
-    async def _drain_once(self, key: str, source_id: UUID) -> int:
-        """读一批、写库、删条目。返回这一批落库的行数。
+    async def _drain_once(self, key: str, source_id: UUID) -> tuple[int, bool]:
+        """读一批、写库、删条目，返回实际写入行数与是否继续排流。
 
         Args: key, source_id。
         """
+        written = 0
         try:
             entries = await self._stream.read(key, count=ENTRIES_PER_READ)
             if not entries:
-                return 0
+                return written, False
             rows = self._decode(source_id, entries)
-            await self._store.store(rows)
+            if rows:
+                written = await self._store.store(rows)
+                self._written += written
             # ⚠ 只有走到这里才删：写库失败时条目留在流里，下一轮重来
             await self._stream.delete(
                 key, [entry.entry_id for entry in entries]
             )
-            self._written += len(rows)
         except Exception as error:
             _logger.error(
                 "archive_write_failed",
@@ -206,8 +208,8 @@ class ArchiveWriter:
                 source_id=str(source_id),
                 error_type=type(error).__name__,
             )
-            return 0
-        return len(rows)
+            return written, False
+        return written, True
 
     def _decode(
         self, source_id: UUID, entries: Sequence[StreamEntry]

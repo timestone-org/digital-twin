@@ -29,28 +29,36 @@ def _gate() -> AdmissionGate:
 
 def test_the_first_reading_of_a_point_is_always_archived() -> None:
     gate = _gate()
-    assert gate.admit(KEY, ArchivePolicy(), (21.5, TS_MS, "good")) is True
+    assert gate.admit(KEY, ArchivePolicy(), (21.5, TS_MS, "good")) == (
+        21.5,
+        TS_MS,
+        "good",
+    )
 
 
 def test_an_unchanged_reading_is_not_archived_again() -> None:
     gate = _gate()
     gate.admit(KEY, ArchivePolicy(), (21.5, TS_MS, "good"))
     later = gate.admit(KEY, ArchivePolicy(), (21.5, TS_MS + 1000, "good"))
-    assert later is False
+    assert later is None
 
 
 def test_a_change_within_the_deadband_is_not_archived() -> None:
     gate = _gate()
     policy = ArchivePolicy(deadband=0.5)
     gate.admit(KEY, policy, (21.5, TS_MS, "good"))
-    assert gate.admit(KEY, policy, (21.9, TS_MS + 1000, "good")) is False
+    assert gate.admit(KEY, policy, (21.9, TS_MS + 1000, "good")) is None
 
 
 def test_a_change_beyond_the_deadband_is_archived() -> None:
     gate = _gate()
     policy = ArchivePolicy(deadband=0.5)
     gate.admit(KEY, policy, (21.5, TS_MS, "good"))
-    assert gate.admit(KEY, policy, (22.1, TS_MS + 1000, "good")) is True
+    assert gate.admit(KEY, policy, (22.1, TS_MS + 1000, "good")) == (
+        22.1,
+        TS_MS + 1000,
+        "good",
+    )
 
 
 def test_the_deadband_is_measured_against_the_last_archived_value() -> None:
@@ -60,33 +68,45 @@ def test_the_deadband_is_measured_against_the_last_archived_value() -> None:
     # 三次爬升每次只走 0.4：拿「上一条见过的」当基线就永远越不过死区
     for step in range(1, 4):
         gate.admit(KEY, policy, (20.0 + 0.4 * step, TS_MS + step, "good"))
-    assert gate.admit(KEY, policy, (22.1, TS_MS + 9, "good")) is True
+    assert gate.admit(KEY, policy, (22.1, TS_MS + 9, "good")) == (
+        22.1,
+        TS_MS + 9,
+        "good",
+    )
 
 
 def test_the_heartbeat_archives_a_value_that_never_changes() -> None:
     gate = _gate()
     policy = ArchivePolicy(max_interval_ms=60_000)
     gate.admit(KEY, policy, (21.5, TS_MS, "good"))
-    assert gate.admit(KEY, policy, (21.5, TS_MS + 60_000, "good")) is True
+    assert gate.admit(KEY, policy, (21.5, TS_MS + 60_000, "good")) == (
+        21.5,
+        TS_MS + 60_000,
+        "good",
+    )
 
 
 def test_without_a_heartbeat_a_held_value_is_archived_once() -> None:
     gate = _gate()
     policy = ArchivePolicy(max_interval_ms=0)
     gate.admit(KEY, policy, (21.5, TS_MS, "good"))
-    assert gate.admit(KEY, policy, (21.5, TS_MS + 86_400_000, "good")) is False
+    assert gate.admit(KEY, policy, (21.5, TS_MS + 86_400_000, "good")) is None
 
 
 def test_a_quality_flip_is_archived_even_when_the_value_holds() -> None:
     gate = _gate()
     gate.admit(KEY, ArchivePolicy(), (21.5, TS_MS, "good"))
-    assert gate.admit(KEY, ArchivePolicy(), (21.5, TS_MS + 1, "bad")) is True
+    assert gate.admit(KEY, ArchivePolicy(), (21.5, TS_MS + 1, "bad")) == (
+        21.5,
+        TS_MS + 1,
+        "bad",
+    )
 
 
 def test_a_point_with_archiving_off_never_gets_in() -> None:
     gate = _gate()
     policy = ArchivePolicy(archive_enabled=False)
-    assert gate.admit(KEY, policy, (21.5, TS_MS, "good")) is False
+    assert gate.admit(KEY, policy, (21.5, TS_MS, "good")) is None
 
 
 def test_dropping_a_point_from_the_plan_drops_its_baseline() -> None:
@@ -100,7 +120,11 @@ def test_a_point_that_comes_back_starts_from_a_first_value_again() -> None:
     gate = _gate()
     gate.admit(KEY, ArchivePolicy(), (21.5, TS_MS, "good"))
     gate.retain(frozenset())
-    assert gate.admit(KEY, ArchivePolicy(), (21.5, TS_MS + 1, "good")) is True
+    assert gate.admit(KEY, ArchivePolicy(), (21.5, TS_MS + 1, "good")) == (
+        21.5,
+        TS_MS + 1,
+        "good",
+    )
 
 
 def test_a_baseline_still_in_the_plan_survives_a_refresh() -> None:
@@ -146,7 +170,7 @@ def test_a_forgotten_sighting_blocks_the_heartbeat_but_keeps_the_baseline() -> (
     assert gate.heartbeat(KEY, policy, TS_MS + HEARTBEAT_MS) is None
     assert gate.size() == 1
     # 重连后推回来的同一个值不算首值，不多写一行
-    assert gate.admit(KEY, policy, (21.5, TS_MS + 10, "good")) is False
+    assert gate.admit(KEY, policy, (21.5, TS_MS + 10, "good")) is None
 
 
 @pytest.mark.parametrize(
@@ -208,7 +232,11 @@ def test_a_real_reading_after_a_nan_baseline_is_archived() -> None:
     gate = _gate()
     policy = ArchivePolicy(deadband=0.5)
     gate.admit(KEY, policy, (NAN, TS_MS, "good"))
-    assert gate.admit(KEY, policy, (5.0, TS_MS + 1000, "good")) is True
+    assert gate.admit(KEY, policy, (5.0, TS_MS + 1000, "good")) == (
+        5.0,
+        TS_MS + 1000,
+        "good",
+    )
 
 
 def test_the_plan_becomes_a_flat_table_keyed_by_point(

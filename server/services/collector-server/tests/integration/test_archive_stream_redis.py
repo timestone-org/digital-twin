@@ -12,6 +12,11 @@ from uuid import uuid4
 import pytest
 from redis.asyncio import Redis
 
+from collector_server.apps.collect.archive.writer import (
+    ENTRIES_PER_READ,
+    ArchiveWriter,
+    WriterOptions,
+)
 from collector_server.stream import (
     ROWS_FIELD,
     RedisArchiveStream,
@@ -179,13 +184,22 @@ async def test_deleting_nothing_is_not_a_round_trip(
     assert await stream.delete(stream_key(uuid4()), []) == 0
 
 
-async def test_an_entry_without_the_rows_field_is_ignored(
-    stream: RedisArchiveStream, client: Any
+async def test_a_batch_of_malformed_entries_cannot_block_a_source_stream(
+    stream: RedisArchiveStream, client: Any, history_store: Any
 ) -> None:
     source_id = uuid4()
     key = stream_key(source_id)
     try:
-        await client.xadd(key, {"invented_later": json.dumps([])})
-        assert await stream.read(key, count=10) == []
+        for _ in range(ENTRIES_PER_READ):
+            await client.xadd(key, {"invented_later": json.dumps([])})
+        await stream.append(source_id, rows(1), maxlen=MAXLEN)
+        writer = ArchiveWriter(
+            stream=stream,
+            store=history_store,
+            options=WriterOptions(flush_interval_ms=5000),
+        )
+        assert await writer.flush_once() == 1
+        assert [row["point_code"] for row in history_store.rows] == ["point_0"]
+        assert await client.xlen(key) == 0
     finally:
         await client.delete(key)
