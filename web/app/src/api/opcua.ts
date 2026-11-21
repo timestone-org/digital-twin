@@ -13,6 +13,7 @@ import type {
   OpcuaInstanceCreateInput,
   OpcuaInstanceUpdateInput,
   OpcuaNode,
+  OpcuaNodePage,
   OpcuaNodeCreateInput,
   OpcuaNodeMutation,
   OpcuaNodeUpdateInput,
@@ -106,9 +107,11 @@ export async function actOnInstance(
 export async function listNodes(
   instanceId: string,
   query: OpcuaPageQuery = {},
-): Promise<Page<OpcuaNode>> {
-  return await opcua<Page<OpcuaNode>>(`/instances/${instanceId}/nodes`, {
+  signal?: AbortSignal,
+): Promise<OpcuaNodePage> {
+  return await opcua<OpcuaNodePage>(`/instances/${instanceId}/nodes`, {
     query,
+    signal,
   })
 }
 

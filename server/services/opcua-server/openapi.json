@@ -226,6 +226,51 @@
         "title": "ApiResponse[NodeOut]",
         "type": "object"
       },
+      "ApiResponse_NodePageOut_": {
+        "properties": {
+          "code": {
+            "default": 0,
+            "title": "Code",
+            "type": "integer"
+          },
+          "data": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/NodePageOut"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "details": {
+            "anyOf": [
+              {
+                "items": {
+                  "$ref": "#/components/schemas/FieldErrorOut"
+                },
+                "type": "array"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Details"
+          },
+          "message": {
+            "default": "ok",
+            "title": "Message",
+            "type": "string"
+          },
+          "trace_id": {
+            "default": "",
+            "title": "Trace Id",
+            "type": "string"
+          }
+        },
+        "title": "ApiResponse[NodePageOut]",
+        "type": "object"
+      },
       "ApiResponse_NodeValueOut_": {
         "properties": {
           "code": {
@@ -359,51 +404,6 @@
           }
         },
         "title": "ApiResponse[Page[InstanceOut]]",
-        "type": "object"
-      },
-      "ApiResponse_Page_NodeOut__": {
-        "properties": {
-          "code": {
-            "default": 0,
-            "title": "Code",
-            "type": "integer"
-          },
-          "data": {
-            "anyOf": [
-              {
-                "$ref": "#/components/schemas/Page_NodeOut_"
-              },
-              {
-                "type": "null"
-              }
-            ]
-          },
-          "details": {
-            "anyOf": [
-              {
-                "items": {
-                  "$ref": "#/components/schemas/FieldErrorOut"
-                },
-                "type": "array"
-              },
-              {
-                "type": "null"
-              }
-            ],
-            "title": "Details"
-          },
-          "message": {
-            "default": "ok",
-            "title": "Message",
-            "type": "string"
-          },
-          "trace_id": {
-            "default": "",
-            "title": "Trace Id",
-            "type": "string"
-          }
-        },
-        "title": "ApiResponse[Page[NodeOut]]",
         "type": "object"
       },
       "ApiResponse_PortPoolOut_": {
@@ -1087,6 +1087,20 @@
             ],
             "title": "Is Autostart"
           },
+          "name": {
+            "anyOf": [
+              {
+                "maxLength": 64,
+                "minLength": 1,
+                "pattern": "^[A-Za-z][A-Za-z0-9_-]*$",
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Name"
+          },
           "namespace_uri": {
             "anyOf": [
               {
@@ -1405,6 +1419,43 @@
         "title": "NodeOut",
         "type": "object"
       },
+      "NodePageOut": {
+        "description": "同一数据库快照中的节点页与地址空间版本。",
+        "properties": {
+          "items": {
+            "items": {
+              "$ref": "#/components/schemas/NodeOut"
+            },
+            "title": "Items",
+            "type": "array"
+          },
+          "page": {
+            "title": "Page",
+            "type": "integer"
+          },
+          "revision": {
+            "title": "Revision",
+            "type": "string"
+          },
+          "size": {
+            "title": "Size",
+            "type": "integer"
+          },
+          "total": {
+            "title": "Total",
+            "type": "integer"
+          }
+        },
+        "required": [
+          "items",
+          "page",
+          "size",
+          "total",
+          "revision"
+        ],
+        "title": "NodePageOut",
+        "type": "object"
+      },
       "NodeUpdateIn": {
         "additionalProperties": false,
         "description": "改节点定义。\n\n⚠ 这里没有 `identifier`——它不可改（不变式 3）。要换标识只能删了重建，\n而那是一个现场必须同步改组态的动作，不该伪装成一次改名。\n⚠ `browse_name` 与 `data_type` 属于待重启档：保存成功但要重启才生效。\n⚠ `access_level` 是热生效档：实例在跑就当场改运行中地址空间的可写位；\n热改失败时转待重启，并计入出参的 `pending_fields`。",
@@ -1489,7 +1540,7 @@
         "type": "object"
       },
       "NodeValueOut": {
-        "description": "节点的当前值。\n\n⚠ `is_live` 为假表示实例没在跑，此时读到的是**初值**而不是运行时的值。\n不标注这一点，调用方会把配置当成现场读数。",
+        "description": "节点的当前值。\n\n⚠ `is_live` 为假表示实例没在跑，此时读到的是**初值**而不是运行时的值。\n`data_type` 与 `value` 使用同一份配置，已保存的类型在重启后随当前值生效。",
         "properties": {
           "data_type": {
             "anyOf": [
@@ -1603,37 +1654,6 @@
           "total"
         ],
         "title": "Page[InstanceOut]",
-        "type": "object"
-      },
-      "Page_NodeOut_": {
-        "properties": {
-          "items": {
-            "items": {
-              "$ref": "#/components/schemas/NodeOut"
-            },
-            "title": "Items",
-            "type": "array"
-          },
-          "page": {
-            "title": "Page",
-            "type": "integer"
-          },
-          "size": {
-            "title": "Size",
-            "type": "integer"
-          },
-          "total": {
-            "title": "Total",
-            "type": "integer"
-          }
-        },
-        "required": [
-          "items",
-          "page",
-          "size",
-          "total"
-        ],
-        "title": "Page[NodeOut]",
         "type": "object"
       },
       "PortPoolOut": {
@@ -2332,7 +2352,7 @@
             "content": {
               "application/json": {
                 "schema": {
-                  "$ref": "#/components/schemas/ApiResponse_Page_NodeOut__"
+                  "$ref": "#/components/schemas/ApiResponse_NodePageOut_"
                 }
               }
             },

@@ -79,6 +79,31 @@ class NodeDefinition:
         """
         return f"{CUSTOM_NAMESPACE_INDEX}:{self.browse_name}"
 
+    @property
+    def effective_data_type(self) -> str | None:
+        """已建节点实际使用的值类型。"""
+        return _data_type_of(self) if self.has_value() else None
+
+    def pending_fields(self, active: "NodeDefinition") -> set[str]:
+        """与当前地址空间相比，需要重启才能生效的字段。Args: active。"""
+        differences = {
+            "browse_name": self.browse_name != active.browse_name,
+            "data_type": self.effective_data_type != active.effective_data_type,
+            "initial_value": (
+                self.initial_value != active.initial_value
+                or type(self.initial_value) is not type(active.initial_value)
+            ),
+        }
+        return {name for name, differs in differences.items() if differs}
+
+    def matches(self, active: "NodeDefinition | None") -> bool:
+        """比对定义及初值的具体类型。Args: active。"""
+        return (
+            active is not None
+            and self == active
+            and type(self.initial_value) is type(active.initial_value)
+        )
+
     def has_value(self) -> bool:
         """这个类别的节点带不带值。"""
         return self.node_class in VALUED_CLASSES

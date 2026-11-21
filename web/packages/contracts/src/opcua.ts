@@ -7,6 +7,8 @@
  * openapi 上，改后端字段名会在那里红，不会等到线上。
  */
 
+import type { Page } from './envelope'
+
 /** 安全策略。与后端 `SecurityPolicy` 的字面量集合一致。 */
 export const OPCUA_SECURITY_POLICIES = [
   'NoSecurity',
@@ -150,6 +152,11 @@ export interface OpcuaNode {
   updated_at: string
 }
 
+/** 地址空间的同版本分页；旧服务没有 revision。 */
+export interface OpcuaNodePage extends Page<OpcuaNode> {
+  revision?: string
+}
+
 /** 节点增删改的回执，带上本次未生效的字段。 */
 export interface OpcuaNodeMutation {
   node: OpcuaNode
@@ -234,6 +241,7 @@ export interface OpcuaInstanceCreateInput {
 }
 
 export interface OpcuaInstanceUpdateInput {
+  name?: string | null
   description?: string | null
   endpoint_path?: string | null
   namespace_uri?: string | null

@@ -77,6 +77,37 @@ async def test_autostart_only_starts_flagged_instances(
 
 
 @pytest.mark.usefixtures("clean_tables")
+async def test_autostart_applies_pending_configuration(
+    client: httpx.AsyncClient,
+    app: httpx.ASGITransport,
+    sign_headers: Headers,
+) -> None:
+    instance_id = await _create(client, sign_headers, "auto", is_autostart=True)
+    path = f"{INSTANCES}/{instance_id}"
+    container = _container(app)
+    await container.instances.autostart()
+    updated = await client.put(
+        path,
+        json={"namespace_uri": "urn:test:updated"},
+        headers=sign_headers(PERM_MANAGE),
+    )
+    assert updated.json()["data"]["has_pending_restart"] is True
+
+    await container.instances.autostart()
+    detail = await client.get(path, headers=sign_headers(PERM_VIEW))
+    assert detail.json()["data"]["has_pending_restart"] is True
+
+    await container.supervisor.stop_all()
+    stopped = await client.get(path, headers=sign_headers(PERM_VIEW))
+    assert stopped.json()["data"]["has_pending_restart"] is False
+
+    await container.instances.autostart()
+    detail = await client.get(path, headers=sign_headers(PERM_VIEW))
+    assert detail.json()["data"]["is_running"] is True
+    assert detail.json()["data"]["has_pending_restart"] is False
+
+
+@pytest.mark.usefixtures("clean_tables")
 async def test_autostart_survives_a_port_conflict(
     client: httpx.AsyncClient,
     app: httpx.ASGITransport,

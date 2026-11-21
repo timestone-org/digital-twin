@@ -86,6 +86,17 @@ class SecurityProfile:
     allow_username: bool = True
     allow_certificate: bool = True
     allow_insecure_transport: bool = False
+    secure_policies: tuple[str, ...] = (
+        "Basic256Sha256_SignAndEncrypt",
+        "Basic256Sha256_Sign",
+        "Aes128Sha256RsaOaep_SignAndEncrypt",
+        "Aes128Sha256RsaOaep_Sign",
+    )
+
+    def policy_names(self) -> tuple[str, ...]:
+        """实例启用的端点策略。"""
+        insecure = ("NoSecurity",) if self.allow_insecure_transport else ()
+        return tuple(dict.fromkeys((*insecure, *self.secure_policies)))
 
 
 @dataclass(frozen=True)
@@ -156,15 +167,7 @@ def _security_policies(security: SecurityProfile) -> list[Any]:
 
     Args: security。
     """
-    policies: list[Any] = [
-        ua.SecurityPolicyType.Basic256Sha256_SignAndEncrypt,
-        ua.SecurityPolicyType.Basic256Sha256_Sign,
-        ua.SecurityPolicyType.Aes128Sha256RsaOaep_SignAndEncrypt,
-        ua.SecurityPolicyType.Aes128Sha256RsaOaep_Sign,
-    ]
-    if security.allow_insecure_transport:
-        policies.insert(0, ua.SecurityPolicyType.NoSecurity)
-    return policies
+    return [ua.SecurityPolicyType[name] for name in security.policy_names()]
 
 
 def _make_watcher(
@@ -229,6 +232,18 @@ class RunningInstance:
     def node_identifiers(self) -> list[str]:
         """已建成的节点标识。"""
         return sorted(self._nodes)
+
+    def node_definition(self, identifier: str) -> NodeDefinition | None:
+        """读取已经建成的节点定义。Args: identifier。"""
+        built = self._nodes.get(identifier)
+        return None if built is None else built.definition
+
+    def matches_nodes(self, configured: tuple[NodeDefinition, ...]) -> bool:
+        """校对当前地址空间与保存的定义。Args: configured。"""
+        return len(configured) == len(self._nodes) and all(
+            node.matches(self.node_definition(node.identifier))
+            for node in configured
+        )
 
     async def start(self) -> None:
         """建地址空间并起监听。已在跑则抛。"""
@@ -508,9 +523,19 @@ class RunningInstance:
 
         Args: identifier。
         """
+        value, _ = await self.read_value_with_type(identifier)
+        return value
+
+    async def read_value_with_type(
+        self, identifier: str
+    ) -> tuple[object, str | None]:
+        """从同一运行时节点读取当前值与数据类型。Args: identifier。"""
         node = self._require_node(identifier)
         with _vanished(identifier):
-            return await read_node_value(node)
+            return (
+                await read_node_value(node),
+                node.definition.effective_data_type,
+            )
 
     def _require_node(self, identifier: str) -> BuiltNode:
         """取节点，取不到就抛。

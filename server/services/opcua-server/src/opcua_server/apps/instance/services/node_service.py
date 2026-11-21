@@ -17,11 +17,12 @@
 import uuid
 
 from sqlalchemy.ext.asyncio import AsyncSession
+from sqlalchemy.orm.attributes import flag_modified
 
 from lib.db import Database
 from lib.errors import ValidationFailed
 from lib.logging import get_logger
-from lib.web import Page, PageParams
+from lib.web import PageParams
 from opcua_server.apps.instance.crud import instance_crud, node_crud
 from opcua_server.apps.instance.errors import (
     InstanceNotFound,
@@ -36,11 +37,13 @@ from opcua_server.apps.instance.runtime.addressspace import (
     validate_initial_value,
 )
 from opcua_server.apps.instance.runtime.datatypes import require_finite_json
+from opcua_server.apps.instance.runtime.instance import RunningInstance
 from opcua_server.apps.instance.runtime.supervisor import InstanceSupervisor
 from opcua_server.apps.instance.schemas import (
     NodeCreateIn,
     NodeMutationOut,
     NodeOut,
+    NodePageOut,
     NodeUpdateIn,
     NodeValueOut,
     NodeWriteOut,
@@ -49,6 +52,7 @@ from opcua_server.apps.instance.services.integrity import flush_or_conflict
 from opcua_server.apps.instance.services.presenter import (
     ACCESS_LEVEL_WRITE,
     definition_of,
+    definitions_of,
     node_id_of,
     to_node_out,
     unwrap_value,
@@ -95,24 +99,32 @@ class NodeService:
         *,
         keyword: str | None,
         page: PageParams,
-    ) -> Page[NodeOut]:
+    ) -> NodePageOut:
         """分页列出某实例的节点。
 
         Args: instance_id, keyword, page。
         """
         async with self._database.session() as session:
-            await self._require_instance(session, instance_id)
+            await session.connection(
+                execution_options={"isolation_level": "REPEATABLE READ"}
+            )
+            instance = await self._require_instance(session, instance_id)
+            revision = instance.updated_at.isoformat(timespec="microseconds")
             rows, total = await node_crud.list_page(
                 session,
                 statement=node_crud.build_query(
                     instance_id=instance_id, keyword=keyword
-                ).order_by(Node.browse_name.asc()),
+                ).order_by(Node.browse_name.asc(), Node.id.asc()),
                 offset=page.offset,
                 limit=page.size,
             )
             items = [to_node_out(row) for row in rows]
-        return Page[NodeOut](
-            items=items, page=page.page, size=page.size, total=total
+        return NodePageOut(
+            revision=revision,
+            items=items,
+            page=page.page,
+            size=page.size,
+            total=total,
         )
 
     async def get_node(
@@ -139,7 +151,7 @@ class NodeService:
         """
         _validate_node_create(payload)
         async with self._database.session() as session:
-            await self._require_instance(session, instance_id)
+            await self._require_instance(session, instance_id, should_lock=True)
             await self._guard_identifier(
                 session,
                 instance_id,
@@ -165,6 +177,7 @@ class NodeService:
             )
             node_crud.add(session, row)
             await flush_or_conflict(session, _NODE_CONFLICTS)
+            await instance_crud.touch_address_space(session, instance_id)
             await session.refresh(row)
             created, node_id = to_node_out(row), row.id
             definition = definition_of(row, parent)
@@ -185,14 +198,16 @@ class NodeService:
         Args: instance_id, node_id, payload。
         """
         async with self._database.session() as session:
-            instance = await self._require_instance(session, instance_id)
+            instance = await self._require_instance(
+                session, instance_id, should_lock=True
+            )
             row = await self._require_node(session, instance_id, node_id)
             changed = _apply_node_update(row, payload)
-            pending: list[str] = []
-            if changed & RESTART_FIELDS:
-                pending = self._mark_pending(
-                    instance, *sorted(changed & RESTART_FIELDS)
-                )
+            pending = await self._restart_fields(
+                session, instance, row, changed
+            )
+            if changed:
+                await instance_crud.touch_address_space(session, instance_id)
             await session.flush()
             await session.refresh(row)
             updated = to_node_out(row)
@@ -224,8 +239,16 @@ class NodeService:
             identifier = row.identifier
         await self._sync.deactivate(instance_id, identifier)
         async with self._database.session() as session:
+            instance = await self._require_instance(
+                session, instance_id, should_lock=True
+            )
             row = await self._require_node(session, instance_id, node_id)
             await node_crud.delete(session, row)
+            if instance.has_pending_restart:
+                await reconcile_node_state(
+                    session, instance, self._supervisor.find(instance_id)
+                )
+            await instance_crud.touch_address_space(session, instance_id)
         return []
 
     async def read_value(
@@ -252,13 +275,13 @@ class NodeService:
                 data_type=data_type,
                 is_live=False,
             )
-        live_value = await running.read_value(identifier)
+        live_value, live_type = await running.read_value_with_type(identifier)
         require_finite_json(live_value)
         return NodeValueOut(
             identifier=identifier,
             node_id=node_id_text,
             value=live_value,
-            data_type=data_type,
+            data_type=live_type,
             is_live=True,
         )
 
@@ -283,15 +306,31 @@ class NodeService:
             identifier=identifier, node_id=node_id_text, value=written
         )
 
-    def _mark_pending(self, instance: Instance, *fields: str) -> list[str]:
-        """实例在跑才谈得上「未生效」；没在跑的下次起来读的就是新配置。
+    async def _restart_fields(
+        self,
+        session: AsyncSession,
+        instance: Instance,
+        row: Node,
+        changed: frozenset[str],
+    ) -> list[str]:
+        """本次改动中尚未生效的字段。
 
-        Args: instance, fields。
+        Args: session, instance, row, changed。
         """
-        if self._supervisor.find(instance.id) is None:
+        fields = changed & RESTART_FIELDS
+        running = self._supervisor.find(instance.id)
+        if not fields or running is None:
             return []
-        instance.has_pending_restart = True
-        return sorted(fields)
+        saved = definition_of(row, None)
+        active = running.node_definition(row.identifier)
+        pending = sorted(
+            fields if active is None else fields & saved.pending_fields(active)
+        )
+        if pending:
+            instance.has_pending_restart = True
+        elif instance.has_pending_restart:
+            await reconcile_node_state(session, instance, running)
+        return pending
 
     @staticmethod
     async def _parent_identifier(
@@ -333,9 +372,14 @@ class NodeService:
 
     @staticmethod
     async def _require_instance(
-        session: AsyncSession, instance_id: uuid.UUID
+        session: AsyncSession,
+        instance_id: uuid.UUID,
+        *,
+        should_lock: bool = False,
     ) -> Instance:
-        row = await instance_crud.get(session, instance_id)
+        row = await instance_crud.get(
+            session, instance_id, should_lock=should_lock
+        )
         if row is None:
             raise InstanceNotFound("实例不存在")
         return row
@@ -350,37 +394,48 @@ class NodeService:
         return row
 
 
+async def reconcile_node_state(
+    session: AsyncSession, instance: Instance, running: RunningInstance | None
+) -> None:
+    """在父行被锁定时核对数据库与内存定义。
+
+    Args: session, instance, running。
+    """
+    if running is None:
+        return
+    await session.flush()
+    nodes = await node_crud.list_of_instance(session, instance.id)
+    instance.has_pending_restart = not running.matches_nodes(
+        definitions_of(list(nodes))
+    )
+
+
 def _apply_node_update(row: Node, payload: NodeUpdateIn) -> frozenset[str]:
     """把非空字段写进行，返回真正发生变化的字段名。
 
     Args: row, payload。
     """
-    initial = (
-        unwrap_value(row.initial_value)
-        if payload.initial_value is None
-        else payload.initial_value
-    )
+    previous_initial = unwrap_value(row.initial_value)
+    initial = payload.initial_value
     validate_initial_value(
-        initial, payload.data_type or row.data_type, row.node_class
+        previous_initial if initial is None else initial,
+        payload.data_type or row.data_type,
+        row.node_class,
     )
     changed: set[str] = set()
-    fields = payload.model_dump(exclude_unset=True)
+    if initial is not None and (
+        initial != previous_initial
+        or type(initial) is not type(previous_initial)
+    ):
+        row.initial_value = wrap_value(initial)
+        # ⚠ JSONB 脏检查会把 1.0 与 1、0 与 false 视为相等。
+        flag_modified(row, "initial_value")
+        changed.add("initial_value")
+    fields = payload.model_dump(exclude_unset=True, exclude={"initial_value"})
     for name, value in fields.items():
-        if value is None:
-            continue
-        current = (
-            unwrap_value(row.initial_value)
-            if name == "initial_value"
-            else getattr(row, name)
-        )
-        if current == value:
-            continue
-        setattr(
-            row,
-            name,
-            wrap_value(value) if name == "initial_value" else value,
-        )
-        changed.add(name)
+        if value is not None and getattr(row, name) != value:
+            setattr(row, name, value)
+            changed.add(name)
     return frozenset(changed)
 
 
@@ -446,6 +501,9 @@ class NodeRuntimeSync:
                 row = await node_crud.get(session, node_id)
                 if row is not None:
                     await node_crud.delete(session, row)
+                    await instance_crud.touch_address_space(
+                        session, row.instance_id
+                    )
         except Exception as error:
             _logger.error(
                 "opcua_node_compensation_failed",

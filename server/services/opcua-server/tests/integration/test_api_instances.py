@@ -22,6 +22,7 @@ INSTANCES = f"{API_PREFIX}/instances"
 OK = 200
 CREATED = 201
 NO_CONTENT = 204
+BAD_REQUEST = 400
 NOT_FOUND = 404
 CONFLICT = 409
 
@@ -81,6 +82,61 @@ async def test_duplicate_name_is_rejected(
         INSTANCES, json=_payload("dup"), headers=sign_headers(PERM_MANAGE)
     )
     assert response.status_code == CONFLICT
+
+
+@pytest.mark.usefixtures("clean_tables")
+async def test_a_stopped_instance_can_be_renamed(
+    client: httpx.AsyncClient, sign_headers: Headers
+) -> None:
+    data = await _create(client, sign_headers, "station")
+    path = f"{INSTANCES}/{data['id']}"
+    response = await client.put(
+        path, json={"name": " new-station "}, headers=sign_headers(PERM_MANAGE)
+    )
+    assert response.status_code == OK, response.text
+    assert response.json()["data"]["has_pending_restart"] is False
+    detail = await client.get(path, headers=sign_headers(PERM_VIEW))
+    assert detail.json()["data"]["name"] == "new-station"
+    assert detail.json()["data"]["endpoint_url"] == data["endpoint_url"]
+
+
+@pytest.mark.usefixtures("clean_tables")
+async def test_renaming_to_an_existing_instance_name_is_rejected(
+    client: httpx.AsyncClient, sign_headers: Headers
+) -> None:
+    await _create(client, sign_headers, "occupied")
+    data = await _create(client, sign_headers, "station")
+    path = f"{INSTANCES}/{data['id']}"
+    response = await client.put(
+        path, json={"name": "occupied"}, headers=sign_headers(PERM_MANAGE)
+    )
+    assert response.status_code == CONFLICT, response.text
+    assert response.json()["code"] == 42102
+    detail = await client.get(path, headers=sign_headers(PERM_VIEW))
+    assert detail.json()["data"]["name"] == "station"
+
+
+@pytest.mark.usefixtures("clean_tables")
+@pytest.mark.parametrize(
+    ("name", "error_code"),
+    [
+        (" ", "string_too_short"),
+        ("x" * 65, "string_too_long"),
+        ("station one", "string_pattern_mismatch"),
+    ],
+    ids=("blank", "too-long", "invalid-characters"),
+)
+async def test_renaming_validates_the_instance_name(
+    client: httpx.AsyncClient, sign_headers: Headers, name: str, error_code: str
+) -> None:
+    data = await _create(client, sign_headers, "station")
+    response = await client.put(
+        f"{INSTANCES}/{data['id']}",
+        json={"name": name},
+        headers=sign_headers(PERM_MANAGE),
+    )
+    assert response.status_code == BAD_REQUEST, response.text
+    assert response.json()["details"][0]["code"] == error_code
 
 
 @pytest.mark.usefixtures("clean_tables")
@@ -178,6 +234,15 @@ async def test_namespace_change_marks_pending_restart(
     )
     assert response.json()["data"]["has_pending_restart"] is True
     assert response.json()["data"]["pending_fields"] == ["namespace_uri"]
+
+    restored = await client.put(
+        f"{INSTANCES}/{data['id']}",
+        json={"namespace_uri": data["namespace_uri"]},
+        headers=sign_headers(PERM_MANAGE),
+    )
+    assert restored.status_code == OK
+    assert restored.json()["data"]["pending_fields"] == []
+    assert not restored.json()["data"]["has_pending_restart"]
 
 
 @pytest.mark.usefixtures("clean_tables")

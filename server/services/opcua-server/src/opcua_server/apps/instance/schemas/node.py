@@ -10,6 +10,7 @@ from typing import Annotated, Literal
 
 from pydantic import Field, StringConstraints
 
+from lib.web import Page
 from opcua_server.apps.instance.schemas.common import (
     InputModel,
     OutputModel,
@@ -76,11 +77,17 @@ class NodeOut(OutputModel):
     updated_at: Utc
 
 
+class NodePageOut(Page[NodeOut]):
+    """同一数据库快照中的节点页与地址空间版本。"""
+
+    revision: str
+
+
 class NodeValueOut(OutputModel):
     """节点的当前值。
 
     ⚠ `is_live` 为假表示实例没在跑，此时读到的是**初值**而不是运行时的值。
-    不标注这一点，调用方会把配置当成现场读数。
+    `data_type` 与 `value` 使用同一份配置，已保存的类型在重启后随当前值生效。
     """
 
     identifier: str
