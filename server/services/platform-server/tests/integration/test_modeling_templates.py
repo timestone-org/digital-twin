@@ -1,13 +1,20 @@
 """模板快照、实例参数原子性与第三方权限的真实数据库契约。"""
 
 import copy
+import uuid
 
 import httpx
 import pytest
 from conftest import SignHeaders
 from pydantic import JsonValue, TypeAdapter
+from sqlalchemy import select
+from sqlalchemy.ext.asyncio import AsyncSession
 
 from integration.modeling_helpers import PIPELINES, data_of, linear_graph
+from platform_server.apps.modeling.models.template import (
+    ModelingConfigurationAudit,
+    ModelingTemplate,
+)
 
 TEMPLATES = "/api/v1/platform/modeling-templates"
 INSTANCES = "/api/v1/platform/modeling-instances"
@@ -44,6 +51,26 @@ async def make_instance(client: httpx.AsyncClient) -> dict[str, JsonValue]:
     )
     assert response.status_code == 201
     return _OBJECT.validate_python(data_of(response))
+
+
+async def test_publishing_records_the_authenticated_account(
+    app_client: httpx.AsyncClient, db_session: AsyncSession
+) -> None:
+    assert "X-Auth-Sig-V2" in app_client.headers
+    actor = app_client.headers["X-Auth-User-Id"]
+    published = await make_template(app_client)
+    identity = uuid.UUID(str(published["id"]))
+    row = await db_session.get(ModelingTemplate, identity)
+    audit = await db_session.scalar(
+        select(ModelingConfigurationAudit).where(
+            ModelingConfigurationAudit.target_id == identity,
+            ModelingConfigurationAudit.action == "template_published",
+        )
+    )
+    assert row is not None
+    assert audit is not None
+    assert row.created_by == audit.actor_id == actor
+    assert row.created_by_name == "测试员"
 
 
 async def test_template_snapshot_survives_design_edits(app_client):

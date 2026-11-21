@@ -45,6 +45,7 @@ from lib.auth import (
     encode_identity,
     encode_permissions,
     sign_context,
+    sign_named_context,
 )
 from lib.config import load_settings
 from lib.db import Database, run_after_commit_hooks
@@ -205,8 +206,9 @@ def sign(settings: Settings) -> SignHeaders:
         *,
         lifetime_s: int = HEADER_TTL_S,
         role: str = "admin",
+        account_id: uuid.UUID | None = None,
     ) -> dict[str, str]:
-        user_id = str(uuid.uuid4())
+        user_id = str(account_id or uuid.uuid4())
         encoded_role = encode_identity(role)
         permissions = encode_permissions(codes)
         expires_at = int(utcnow().timestamp()) + lifetime_s
@@ -216,13 +218,15 @@ def sign(settings: Settings) -> SignHeaders:
             permissions_b64=permissions,
             expires_at=expires_at,
         )
+        username = encode_identity("测试员")
         return {
             "X-Auth-User-Id": user_id,
-            "X-Auth-Username": encode_identity("测试员"),
+            "X-Auth-Username": username,
             "X-Auth-Role": encoded_role,
             "X-Auth-Permissions": permissions,
             "X-Auth-Exp": str(expires_at),
             "X-Auth-Sig": sign_context(secret, context),
+            "X-Auth-Sig-V2": sign_named_context(secret, context, username),
         }
 
     return make
