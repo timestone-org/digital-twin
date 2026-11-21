@@ -10,7 +10,7 @@ from pathlib import Path
 from pydantic import Field, SecretStr, field_validator, model_validator
 from pydantic_settings import SettingsConfigDict
 
-from lib.config import AppSettings, PostgresSettings, RedisSettings
+from lib.config import HttpAppSettings, PostgresSettings, RedisSettings
 from opcua_server.apps.instance.endpoint import advertised_hostname
 
 SERVICE_NAME = "opcua-server"
@@ -47,7 +47,7 @@ class MigrationSettings(PostgresSettings):
     postgres_schema: str = DB_SCHEMA
 
 
-class Settings(AppSettings, PostgresSettings, RedisSettings):
+class Settings(HttpAppSettings, PostgresSettings, RedisSettings):
     """进程启动时构造一次并冻结。"""
 
     model_config = SettingsConfigDict(
