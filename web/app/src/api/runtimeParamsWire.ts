@@ -40,6 +40,7 @@ export interface RuntimeParamItemWire {
   previous_value: number | boolean | null
   is_overridden: boolean
   updated_by: string | null
+  updated_by_name?: string | null
   updated_at: string | null
 }
 
@@ -107,6 +108,7 @@ export function toRuntimeParamItem(
     defaultValue: wire.default_value,
     overridden: wire.is_overridden,
     updatedBy: wire.updated_by,
+    updatedByName: wire.updated_by_name ?? null,
     updatedAt: wire.updated_at,
     previousValue: wire.previous_value,
   }
