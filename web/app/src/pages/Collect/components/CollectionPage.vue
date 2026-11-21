@@ -25,6 +25,7 @@ import { SOURCE_LIST_SIZE, useSourceList } from '../scripts/useSourceList'
 import { useForceDelete } from '../scripts/useForceDelete'
 import { useSourceOps } from '../scripts/useSourceOps'
 import BrowsePanel from './BrowsePanel.vue'
+import CollectAssistant from './CollectAssistant.vue'
 import ForceDeleteDialog from './ForceDeleteDialog.vue'
 import NodeTable from './NodeTable.vue'
 import RuntimeParamsDialog from '@/components/runtime/RuntimeParamsDialog.vue'
@@ -245,6 +246,12 @@ const archiveParamsOpen = ref(false)
         </template>
       </DtResizableLayout>
     </div>
+
+    <PermGuard
+      :codes="[PERMISSION_CODES.collectView, PERMISSION_CODES.assistantUse]"
+    >
+      <CollectAssistant :source="activeSource" />
+    </PermGuard>
 
     <!-- 弹窗 -->
     <SourceFormDialog
