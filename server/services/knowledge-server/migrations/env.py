@@ -58,6 +58,8 @@ def _configure(connection: Connection) -> None:
 
 def _run(connection: Connection) -> None:
     connection.execute(text(f'CREATE SCHEMA IF NOT EXISTS "{DB_SCHEMA}"'))
+    # 独立结束引导事务，Alembic 才能在线单独提交并发索引。
+    connection.commit()
     _configure(connection)
     with context.begin_transaction():
         context.run_migrations()
