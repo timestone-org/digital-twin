@@ -162,3 +162,17 @@ async def test_the_secret_never_leaks_into_the_version() -> None:
     cache = CatalogCache(_client(upstream), ttl_s=10.0, clock=_Clock())
     got = await cache.refresh()
     assert "sk-secret" not in json.dumps(got.version)
+
+
+async def test_confirmation_requires_a_successful_fetch() -> None:
+    upstream = _Upstream(
+        httpx.Response(200, json=_body()),
+        httpx.Response(503),
+        httpx.Response(200, json=_body("v2")),
+    )
+    cache = CatalogCache(_client(upstream), ttl_s=30.0)
+    assert (await cache.confirm_current()).version == "v1"
+    with pytest.raises(CatalogUnavailable):
+        await cache.confirm_current()
+    assert cache.snapshot().version == "v1"
+    assert (await cache.confirm_current()).version == "v2"
