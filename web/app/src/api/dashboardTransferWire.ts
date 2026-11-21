@@ -7,6 +7,7 @@
  * 放行一个错形状会让它一路流进渲染层，最后崩在某个深层组件里。
  */
 import type {
+  ComputedBindingWarning,
   DashboardExportPayload,
   DashboardImportResult,
   ExportBindingPayload,
@@ -31,6 +32,7 @@ import {
 /** 导入结果的线形：大屏整包再挂一份告警清单。 */
 export interface DashboardImportWire extends DashboardWire {
   unresolved_bindings: unknown
+  computed_binding_warnings?: unknown
 }
 
 function invalid(what: string): TransportError {
@@ -216,6 +218,30 @@ function toUnresolved(raw: unknown): UnresolvedBinding | null {
   }
 }
 
+/** 逐项窄化导入后的派生警告。 */
+function toComputedWarning(raw: unknown): ComputedBindingWarning | null {
+  if (!isRecord(raw)) return null
+  const { node_client_key, module_type, field_key, field, reason, message } =
+    raw
+  if (
+    typeof node_client_key !== 'string' ||
+    typeof module_type !== 'string' ||
+    typeof field_key !== 'string' ||
+    typeof field !== 'string' ||
+    typeof reason !== 'string' ||
+    typeof message !== 'string'
+  )
+    return null
+  return {
+    nodeClientKey: node_client_key,
+    moduleType: module_type,
+    fieldKey: field_key,
+    field,
+    reason,
+    message,
+  }
+}
+
 /**
  * 导入结果：新屏整包加一份告警清单。
  * @param wire 线上的导入结果
@@ -226,8 +252,14 @@ export function toImportResult(
   const rows = Array.isArray(wire.unresolved_bindings)
     ? wire.unresolved_bindings
     : []
+  const computed = Array.isArray(wire.computed_binding_warnings)
+    ? wire.computed_binding_warnings
+    : []
   return {
     ...toDashboard(wire),
+    computedBindingWarnings: computed
+      .map(toComputedWarning)
+      .filter((item): item is ComputedBindingWarning => item !== null),
     unresolvedBindings: rows
       .map(toUnresolved)
       .filter((item): item is UnresolvedBinding => item !== null),

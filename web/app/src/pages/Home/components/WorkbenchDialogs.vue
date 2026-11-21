@@ -288,7 +288,11 @@ function onPreviewCreated(): void {
   />
 
   <UnresolvedBindingsDialog
-    :open="dashboard.unresolved.value.length > 0"
+    :open="
+      dashboard.unresolved.value.length > 0 ||
+      (dashboard.created.value?.computedBindingWarnings?.length ?? 0) > 0
+    "
+    :computed-warnings="dashboard.created.value?.computedBindingWarnings"
     :count="dashboard.unresolved.value.length"
     :list="dashboard.unresolved.value"
     :dashboard-name="dashboard.created.value?.name ?? ''"

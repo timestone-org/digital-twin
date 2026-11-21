@@ -1,17 +1,17 @@
 <script setup lang="ts">
 /**
- * @fileoverview 导入 / 模板实例化之后的告警：屏建出来了，但有几条绑定指向本
- * 部署不存在的点位。
+ * @fileoverview 导入或模板实例化后仍需处理的点位和派生绑定。
  *
  * ⚠ 这些绑定**已经入库**，不是被丢掉了：不逐条列出来，用户会以为导进来的是一张
  * 能用的屏，直到上线那天才发现这几个位置永远不产数据。
  */
 import { DtButton, DtModal, DtNotice, DtTag } from '@dt/ui'
-import type { UnresolvedBinding } from '@dt/contracts'
+import type { ComputedBindingWarning, UnresolvedBinding } from '@dt/contracts'
 
 defineProps<{
   open: boolean
   count: number
+  computedWarnings?: readonly ComputedBindingWarning[] | undefined
   list: readonly UnresolvedBinding[]
   dashboardName?: string | undefined
 }>()
@@ -26,13 +26,17 @@ const emit = defineEmits<{
 <template>
   <DtModal
     :model-value="open"
-    title="已创建，但有绑定没接上"
+    :title="
+      computedWarnings?.length
+        ? '已创建，部分绑定需要检查'
+        : '已创建，但有绑定没接上'
+    "
     :description="dashboardName"
     width="40rem"
     @update:model-value="emit('update:open', $event)"
   >
     <div class="flex flex-col gap-3">
-      <DtNotice intent="warning" icon="alert-triangle">
+      <DtNotice v-if="count > 0" intent="warning" icon="alert-triangle">
         有 {{ count }} 条绑定指向本部署不存在的点位。绑定按原样保留了，
         但这些位置在屏上不会有数据，要到编辑器里重新挑点位。
       </DtNotice>
@@ -51,6 +55,28 @@ const emit = defineEmits<{
           <span class="dt-unresolved__why">{{ item.reason }}</span>
         </div>
       </div>
+      <DtNotice
+        v-if="computedWarnings?.length"
+        intent="warning"
+        icon="alert-triangle"
+      >
+        派生绑定已按原样保留。可在大屏编辑器中修正下列运算规格。
+      </DtNotice>
+      <ul v-if="computedWarnings?.length" class="dt-unresolved">
+        <li
+          v-for="item in computedWarnings"
+          :key="`${item.nodeClientKey}|${item.fieldKey}|${item.field}|${item.reason}`"
+          class="dt-unresolved__computed"
+        >
+          <span
+            >{{ item.moduleType }} · {{ item.nodeClientKey }} ·
+            {{ item.fieldKey }}</span
+          >
+          <span class="dt-unresolved__why"
+            >{{ item.field }} · {{ item.message }}</span
+          >
+        </li>
+      </ul>
     </div>
 
     <template #footer>
@@ -87,6 +113,15 @@ const emit = defineEmits<{
     color: var(--text-disabled);
     text-overflow: ellipsis;
     white-space: nowrap;
+  }
+
+  &__computed {
+    display: flex;
+    flex-direction: column;
+    gap: 2px;
+    padding: 6px 10px;
+    font-size: 12px;
+    overflow-wrap: anywhere;
   }
 
   &__why {

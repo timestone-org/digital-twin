@@ -289,6 +289,32 @@ describe('整包写回线形', () => {
 })
 
 describe('导入结果', () => {
+  it('旧文件的派生规格保留未知字段和原始精度值', () => {
+    const computeJson = {
+      op: 'sum',
+      inputs: ['ghost'],
+      precision: null,
+      importedMetadata: { original: true },
+    }
+    const node = nodeWire({
+      bindings: [
+        bindingWire({
+          field_key: 'value',
+          source_kind: 'computed',
+          compute_json: computeJson,
+        }),
+      ],
+    })
+    expect(
+      fromExportPackage(parseExportPackage(packageWire({ nodes: [node] })))
+        .nodes,
+    ).toEqual([
+      expect.objectContaining({
+        bindings: [expect.objectContaining({ compute_json: computeJson })],
+      }),
+    ])
+  })
+
   function importWire(unresolved: unknown): DashboardImportWire {
     return {
       id: 'db1',
@@ -309,6 +335,35 @@ describe('导入结果', () => {
       unresolved_bindings: unresolved,
     }
   }
+
+  it('导入成功后保留派生警告，同时兼容没有该字段的旧响应', () => {
+    const old = importWire([])
+    expect(toImportResult(old)).toHaveProperty('computedBindingWarnings', [])
+    const response = {
+      ...old,
+      computed_binding_warnings: [
+        null,
+        {
+          node_client_key: 'card',
+          module_type: 'data-card',
+          field_key: 'cellValues[0].value',
+          field: 'compute_json.inputs[1]',
+          reason: 'compute_input_not_string',
+          message: '输入槽必须为字符串',
+        },
+      ],
+    }
+    expect(toImportResult(response)).toHaveProperty('computedBindingWarnings', [
+      {
+        nodeClientKey: 'card',
+        moduleType: 'data-card',
+        fieldKey: 'cellValues[0].value',
+        field: 'compute_json.inputs[1]',
+        reason: 'compute_input_not_string',
+        message: '输入槽必须为字符串',
+      },
+    ])
+  })
 
   it('大屏整包照常转，告警清单逐条转', () => {
     const result = toImportResult(

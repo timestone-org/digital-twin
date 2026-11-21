@@ -171,9 +171,17 @@ export function toComputeSpec(raw: unknown): ComputeSpec | null {
     op: raw.op,
     inputs: inputs.filter((item): item is string => typeof item === 'string'),
   }
-  if (spec.inputs.length !== inputs.length) spec.invalidWire = raw
   const precision = finite(raw.precision)
   if (precision !== null) spec.precision = precision
+  if (spec.inputs.length !== inputs.length) {
+    spec.invalidWire = raw
+  } else if (
+    !Array.isArray(raw.inputs) ||
+    (raw.precision !== undefined && precision === null) ||
+    Object.keys(raw).some((key) => !['op', 'inputs', 'precision'].includes(key))
+  ) {
+    spec.preservedWire = raw
+  }
   return spec
 }
 
@@ -185,7 +193,8 @@ export function fromComputeSpec(
   spec: ComputeSpec | null,
 ): Record<string, unknown> | null {
   if (spec === null) return null
-  if (spec.invalidWire !== undefined) return spec.invalidWire
+  const preserved = spec.invalidWire ?? spec.preservedWire
+  if (preserved !== undefined) return preserved
   const out: Record<string, unknown> = { op: spec.op, inputs: [...spec.inputs] }
   if (spec.precision !== undefined) out.precision = spec.precision
   return out

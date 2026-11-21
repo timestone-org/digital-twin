@@ -69,7 +69,18 @@ export interface UnresolvedBinding {
   reason: string
 }
 
+/** 导入时保留的一条派生规格问题。 */
+export interface ComputedBindingWarning {
+  nodeClientKey: string
+  moduleType: string
+  fieldKey: string
+  field: string
+  reason: string
+  message: string
+}
+
 /** 导入 / 模板实例化的结果：新屏整包，外加一份说得出原因的告警清单。 */
 export interface DashboardImportResult extends DashboardPayload {
   unresolvedBindings: UnresolvedBinding[]
+  computedBindingWarnings?: ComputedBindingWarning[]
 }

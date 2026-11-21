@@ -346,6 +346,7 @@ export type {
   ProjectPayload,
 } from './dashboard'
 export type {
+  ComputedBindingWarning,
   DashboardExportPayload,
   DashboardImportResult,
   ExportBindingPayload,

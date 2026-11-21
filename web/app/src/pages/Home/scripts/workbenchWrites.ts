@@ -6,7 +6,11 @@
  * 结果，空白与复制回的是干净的大屏。这里收敛成同一个形状，调用方才不用为
  * 「这次要不要弹未解析绑定」各写一遍分支。
  */
-import type { DashboardExportPayload, UnresolvedBinding } from '@dt/contracts'
+import type {
+  ComputedBindingWarning,
+  DashboardExportPayload,
+  UnresolvedBinding,
+} from '@dt/contracts'
 
 import { TransportError } from '@/api/client'
 import { createDashboard } from '@/api/dashboard'
@@ -21,6 +25,7 @@ export interface CreatedDashboard {
   name: string
   /** 指向本部署不存在的点位的绑定；空数组表示全接上了。 */
   unresolvedBindings: UnresolvedBinding[]
+  computedBindingWarnings?: ComputedBindingWarning[] | undefined
 }
 
 /** 复制现有屏。缺 `sourceDashboardId` 的载荷不该走到这里，故直接拒。 */
@@ -54,6 +59,7 @@ async function fromTemplate(
     id: made.id,
     name: made.name,
     unresolvedBindings: made.unresolvedBindings,
+    computedBindingWarnings: made.computedBindingWarnings,
   }
 }
 
@@ -102,6 +108,7 @@ export async function importInto(
     id: made.id,
     name: made.name,
     unresolvedBindings: made.unresolvedBindings,
+    computedBindingWarnings: made.computedBindingWarnings,
   }
 }
 
