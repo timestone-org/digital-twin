@@ -9,7 +9,11 @@
  * ⚠ 端点的周长参数落在**未变换**的盒上：不先反变换的话，转过 90° 的节点上端点会跑到
  * 相邻那条边去，而两处单看都说得通。
  */
-import { Twin2dEdgeLayer, normalizeTwin2dConfig } from '@dt/twin2d'
+import {
+  Twin2dEdgeLayer,
+  applyNodeTransform,
+  normalizeTwin2dConfig,
+} from '@dt/twin2d'
 import type { Pt, Twin2dConfig, Twin2dEdge } from '@dt/twin2d'
 import { mount } from '@vue/test-utils'
 import { describe, expect, it } from 'vitest'
@@ -20,6 +24,7 @@ import {
   dropEndpoint,
   edgeEnds,
   edgePolyline,
+  grabOutline,
   insertWaypoint,
   insertWaypointOnPath,
   moveWaypoint,
@@ -126,6 +131,44 @@ function renderedPath(config: Twin2dConfig): string {
   wrapper.unmount()
   return path
 }
+
+describe('从设备轮廓起线', () => {
+  it('旋转和镜像后的椭圆沿同一射线保存与恢复落点', () => {
+    const config = doc({
+      styles: [{ ...NODE_STYLE, ports: [], outline: { kind: 'ellipse' } }],
+      nodes: [{ ...NODES[0], rotate: 90, flipX: true }],
+    })
+    const [node] = config.nodes
+    const [style] = config.styles
+    if (node === undefined || style === undefined)
+      throw new Error('缺少验收设备')
+    const local = { x: 50 + 25 / Math.sqrt(1.25), y: 30 - 30 / Math.sqrt(1.25) }
+    const point = applyNodeTransform(local, node, style.size)
+    const start = grabOutline(node, style, point, 2)
+    expect(start).toMatchObject({ nodeId: 'a', portId: '', t: 0.188 })
+    if (start === null) throw new Error('未命中轮廓')
+    const restored = resolveEdgeEnd(start, node, style, point).point
+    expect(Math.hypot(restored.x - point.x, restored.y - point.y)).toBeLessThan(
+      0.2,
+    )
+    expect(dropEndpoint(config.nodes, config.styles, point, 2)).toEqual(start)
+    const emptyCorner = applyNodeTransform({ x: 100, y: 0 }, node, style.size)
+    expect(grabOutline(node, style, emptyCorner, 2)).toBeNull()
+  })
+
+  it('命名端口覆盖同位置的轮廓起点，设备内部保留拖动', () => {
+    const [node] = doc().nodes
+    const [style] = doc().styles
+    if (node === undefined || style === undefined)
+      throw new Error('缺少验收设备')
+    expect(grabOutline(node, style, { x: 100, y: 30 }, 5)).toEqual({
+      nodeId: 'a',
+      portId: 'r',
+      t: null,
+    })
+    expect(grabOutline(node, style, { x: 50, y: 30 }, 5)).toBeNull()
+  })
+})
 
 describe('两端解析', () => {
   it('折线两端与渲染件画出来的是同一处落点', () => {

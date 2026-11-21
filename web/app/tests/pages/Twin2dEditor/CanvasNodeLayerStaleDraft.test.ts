@@ -67,6 +67,7 @@ function mountLayer(): Harness {
             selectedIds: ['a'],
             snap: FREE,
             scale: 1,
+            outlineAt: () => null,
             startGesture: pointer.start,
             onChange: (next: readonly Twin2dNode[]) => {
               changes.push(next)

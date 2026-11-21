@@ -409,6 +409,56 @@ function nearestPortId(pair: NodePair, at: Pt, threshold: number): string {
 }
 
 /**
+ * 用盒心到落点的射线反推曲线轮廓上的周长参数。
+ * @param box 未变换的节点盒
+ * @param style 节点样式
+ * @param local 未变换的落点
+ */
+function outlineT(box: Box, style: Twin2dNodeStyle, local: Pt): number {
+  const d = { x: local.x - box.x, y: local.y - box.y }
+  const radial = Math.max(
+    Math.abs(d.x) / (box.w / 2),
+    Math.abs(d.y) / (box.h / 2),
+  )
+  const outer =
+    style.outline.kind === 'rect' || radial === 0
+      ? local
+      : { x: box.x + d.x / radial, y: box.y + d.y / radial }
+  return projectToPerimT(box, outer)
+}
+
+/**
+ * 从真实的设备轮廓起线，已有的命名端口优先。
+ * @param node 节点实例
+ * @param style 节点样式
+ * @param at 指针的设计坐标
+ * @param threshold 可命中的轮廓距离
+ */
+export function grabOutline(
+  node: Twin2dNode,
+  style: Twin2dNodeStyle,
+  at: Pt,
+  threshold: number,
+): Twin2dEndpoint | null {
+  const box = centerBoxOf(node, style.size)
+  const local = invertNodeTransform(at, node, style.size)
+  const t = outlineT(box, style, local)
+  const { point } = twin2dOutlinePoint(
+    box,
+    style.outline,
+    perimeterPoint(box, t),
+  )
+  const band = Math.min(threshold, box.w / 4, box.h / 4)
+  if (Math.hypot(local.x - point.x, local.y - point.y) > band) return null
+  const portId = nearestPortId({ node, style }, at, threshold)
+  return {
+    nodeId: node.id,
+    portId,
+    t: portId === '' ? Math.round(t * PERIM_T_SCALE) / PERIM_T_SCALE : null,
+  }
+}
+
+/**
  * 落在这个节点上的那个端点：够得着端口就钉端口，否则钉周长参数。
  * @param pair 节点与它的样式
  * @param at 落点（设计坐标）
@@ -420,7 +470,7 @@ function endpointOn(pair: NodePair, at: Pt, threshold: number): Twin2dEndpoint {
   // ⚠ `t` 是未变换盒上的周长参数（与 `resolveEdgeEnd` 互逆）：不先反变换的话，
   // 转过 90° 的节点上端点会落到相邻的那条边
   const local = invertNodeTransform(at, pair.node, pair.style.size)
-  const t = projectToPerimT(centerBoxOf(pair.node, pair.style.size), local)
+  const t = outlineT(centerBoxOf(pair.node, pair.style.size), pair.style, local)
   // 留三位小数：一圈千分之一远小于一个像素，原样落浮点尾巴只会让检查器读出一长串
   const rounded = Math.round(t * PERIM_T_SCALE) / PERIM_T_SCALE
   return { nodeId: pair.node.id, portId: '', t: rounded }
