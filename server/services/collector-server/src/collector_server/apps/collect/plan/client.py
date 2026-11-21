@@ -3,8 +3,10 @@
 内部面 + 服务级密钥，预算 5s（runtime-resilience §3.1）。
 """
 
+import asyncio
+
 import httpx
-from pydantic import BaseModel, ConfigDict, ValidationError
+from pydantic import BaseModel, ConfigDict, Field, StrictInt, ValidationError
 
 from collector_server.apps.collect.errors import PlanUnavailable
 from collectwire import CollectPlan
@@ -20,6 +22,7 @@ class _PlanEnvelope(BaseModel):
 
     model_config = ConfigDict(extra="ignore")
 
+    code: StrictInt = Field(ge=0, le=0)
     data: CollectPlan
 
 
@@ -46,13 +49,21 @@ class PlanClient:
         重试，逐层重试会相乘成雪崩（runtime-resilience §4.2）。
         """
         try:
-            async with self._client() as client:
+            async with (
+                asyncio.timeout(self._timeout_s),
+                self._client() as client,
+            ):
                 response = await client.get(
                     PLAN_PATH, headers={"X-Service-Key": self._service_key}
                 )
                 response.raise_for_status()
                 envelope = _PlanEnvelope.model_validate(response.json())
-        except (httpx.HTTPError, ValidationError, ValueError) as error:
+        except (
+            TimeoutError,
+            httpx.HTTPError,
+            ValidationError,
+            ValueError,
+        ) as error:
             _logger.error(
                 "plan_fetch_failed",
                 "拉采集计划失败",

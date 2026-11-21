@@ -3,6 +3,8 @@
 ⚠ 不在这一层重试：重试归主循环，逐层重试会相乘成雪崩。
 """
 
+import asyncio
+
 import httpx
 import pytest
 
@@ -35,11 +37,11 @@ PLAN_BODY = {
 }
 
 
-def _client(handler: object) -> PlanClient:
+def _client(handler: object, *, timeout_s: float = 5.0) -> PlanClient:
     made = PlanClient(
         base_url="http://platform-server:8005",
         service_key=SERVICE_KEY,
-        timeout_s=5.0,
+        timeout_s=timeout_s,
     )
     made._transport = httpx.MockTransport(handler)
     return made
@@ -73,6 +75,25 @@ async def test_error_status_becomes_plan_unavailable(status: int) -> None:
         await made.fetch()
 
 
+@pytest.mark.parametrize("code", [1, 50321, False, "0"])
+async def test_a_non_success_envelope_cannot_return_an_old_plan(
+    code: object,
+) -> None:
+    made = _client(
+        lambda _request: httpx.Response(200, json={**PLAN_BODY, "code": code})
+    )
+    with pytest.raises(PlanUnavailable):
+        await made.fetch()
+
+
+async def test_a_plan_without_a_status_code_is_rejected() -> None:
+    made = _client(
+        lambda _request: httpx.Response(200, json={"data": PLAN_BODY["data"]})
+    )
+    with pytest.raises(PlanUnavailable):
+        await made.fetch()
+
+
 async def test_malformed_body_becomes_plan_unavailable() -> None:
     made = _client(
         lambda _request: httpx.Response(200, json={"data": {"version": ""}})
@@ -87,3 +108,14 @@ async def test_transport_failure_becomes_plan_unavailable() -> None:
 
     with pytest.raises(PlanUnavailable):
         await _client(handler).fetch()
+
+
+async def test_the_full_plan_request_stays_within_its_time_budget() -> None:
+    async def handler(_request: httpx.Request) -> httpx.Response:
+        await asyncio.Event().wait()
+        return httpx.Response(200, json=PLAN_BODY)
+
+    made = _client(handler, timeout_s=0.01)
+    with pytest.raises(PlanUnavailable):
+        async with asyncio.timeout(1):
+            await made.fetch()
