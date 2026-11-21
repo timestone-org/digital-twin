@@ -8,15 +8,22 @@
 丢掉比记不全更坏，而「记住了但永远查不到」是最坏的一种。
 """
 
+import uuid
 from collections.abc import AsyncIterator
 from contextlib import asynccontextmanager
 from dataclasses import dataclass, field
 
+import pytest
 from sqlalchemy.ext.asyncio import AsyncSession, async_sessionmaker
 
+from ai_assistant.apps.chat.models import KnowledgeChunk
 from ai_assistant.apps.chat.services.memory.longterm import PgLongTermStore
 from ai_assistant.apps.chat.services.memory.ports import Knowledge
+from ai_assistant.apps.chat.services.tools.providers.memory import MemoryTools
 from integration.conftest import DbStack
+from lib import vectors
+from lib.auth.edge_headers import HEADER_USER_ID
+from llmcore.embedding_snapshot import EmbeddingBatch
 
 ALICE = "11111111-1111-4111-8111-111111111111"
 BOB = "22222222-2222-4222-8222-222222222222"
@@ -26,6 +33,7 @@ BOB = "22222222-2222-4222-8222-222222222222"
 class FakeEmbedder:
     """按文本长度造一条可预测的向量；`is_broken` 为真时这一次算不出来。"""
 
+    is_ready: bool = True
     dimensions: int = 3
     is_broken: bool = False
     id: str = "fake"
@@ -35,6 +43,14 @@ class FakeEmbedder:
     # 算过这么多次之后就算不出来了；不给即一直算得出
     fail_after_calls: int | None = None
     calls: list[int] = field(default_factory=list[int])
+
+    @property
+    def identity(self) -> str:
+        return f"space-{self.model}-{self.dimensions}"
+
+    async def embed_batch(self, texts: list[str]) -> EmbeddingBatch:
+        identity, model = self.identity, self.model or self.id
+        return EmbeddingBatch(identity, model, await self.embed(texts))
 
     async def embed(self, texts: list[str]) -> list[list[float]]:
         self.calls.append(len(texts))
@@ -190,3 +206,71 @@ async def test_a_row_that_cannot_be_reembedded_is_not_a_hit(
     found = await _store(db_stack, other).search("正文", "user", ALICE, 10)
 
     assert found == []
+
+
+async def test_saved_text_without_a_vector_is_reported_as_unsearchable(
+    db_stack: DbStack,
+) -> None:
+    tools = MemoryTools(
+        store=_store(db_stack, FakeEmbedder(is_broken=True)),
+        headers={HEADER_USER_ID: ALICE},
+    )
+    result = await tools.run(
+        "memory.remember", {"title": "口径", "body": "保留文本"}
+    )
+    assert result["id"]
+    assert result["is_searchable"] is False
+
+
+async def test_saved_batch_keeps_its_space_after_live_catalog_was_switched(
+    db_stack: DbStack,
+) -> None:
+    class Switching(FakeEmbedder):
+        async def embed(self, texts: list[str]) -> list[list[float]]:
+            self.model = "new-model"
+            return await super().embed(texts)
+
+    embedder = Switching(model="old-model")
+    original = embedder.identity
+    stored = await _store(db_stack, embedder).remember(
+        Knowledge(
+            scope="user", owner_id=ALICE, title="切换", body="原模型的正文"
+        )
+    )
+    assert not stored.is_searchable
+    async with db_stack.sessions() as session:
+        row = await session.get(KnowledgeChunk, uuid.UUID(stored.id))
+        assert row is not None
+        assert row.embedding_model == "old-model"
+        assert row.embedding_space_id == original
+
+
+@pytest.mark.parametrize(
+    "is_old_writer", [False, True], ids=["legacy", "updated-by-old-writer"]
+)
+async def test_uncertified_vectors_are_excluded_until_backfill_finishes(
+    db_stack: DbStack, is_old_writer: bool
+) -> None:
+    good = FakeEmbedder()
+    stored = await _store(db_stack, good).remember(
+        Knowledge(scope="user", owner_id=ALICE, title="旧模型", body="正文")
+    )
+    async with _sessions(db_stack.sessions)() as session:
+        row = await session.get(KnowledgeChunk, uuid.UUID(stored.id))
+        assert row is not None
+        if is_old_writer:
+            row.embedding = vectors.encode([0.0, 1.0, 0.0])
+        else:
+            row.embedding_space_id = None
+            row.embedding_checksum = None
+    partial = await _store(
+        db_stack, FakeEmbedder(fail_after_calls=1)
+    ).search_report("正文", "user", ALICE, 10)
+    assert not partial.is_complete
+    assert partial.hits == []
+    assert partial.note
+    rebuilt = await _store(db_stack, good).search_report(
+        "正文", "user", ALICE, 10
+    )
+    assert rebuilt.is_complete
+    assert [item.id for item in rebuilt.hits] == [stored.id]

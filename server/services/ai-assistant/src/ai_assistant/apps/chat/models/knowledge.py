@@ -53,6 +53,9 @@ class KnowledgeChunk(UuidPrimaryKeyMixin, TimestampMixin, Base):
         String(EMBEDDING_MODEL_MAX_LENGTH), nullable=True
     )
     dimensions: Mapped[int | None] = mapped_column(Integer, nullable=True)
+    embedding_space_id: Mapped[str | None] = mapped_column(Text, nullable=True)
+    # 旧版本补算只更新向量与模型名，需识别被它更新过的证据。
+    embedding_checksum: Mapped[str | None] = mapped_column(Text, nullable=True)
 
     __table_args__ = (
         CheckConstraint(

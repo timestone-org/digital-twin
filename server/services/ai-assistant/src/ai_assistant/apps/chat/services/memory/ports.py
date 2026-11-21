@@ -26,6 +26,14 @@ class Knowledge:
 
 
 @dataclass(frozen=True)
+class Remembered:
+    """一次记忆保存的真实结果。"""
+
+    id: str
+    is_searchable: bool
+
+
+@dataclass(frozen=True)
 class Hit:
     """一条召回。"""
 
@@ -35,6 +43,15 @@ class Hit:
     score: float
     # ⚠ 没有向量的条目（嵌入当时失败）如实标出来，别让它看着像正常召回
     has_vector: bool
+
+
+@dataclass(frozen=True)
+class SearchReport:
+    """当前可核验的记忆命中与检索完整性。"""
+
+    hits: list[Hit]
+    is_complete: bool
+    note: str
 
 
 @runtime_checkable
@@ -50,7 +67,7 @@ class LongTermStore(Protocol):
         """
         ...
 
-    async def remember(self, item: Knowledge) -> str:
+    async def remember(self, item: Knowledge) -> Remembered:
         """记一条，回它的 id。
 
         ⚠ 嵌入算不出来时**仍然写入**（存文本、标记没有向量），由调用方如实
@@ -71,3 +88,7 @@ class LongTermStore(Protocol):
         Args: query, scope, owner_id, limit。
         """
         ...
+
+    async def search_report(
+        self, query: str, scope: Scope, owner_id: str, limit: int
+    ) -> SearchReport: ...

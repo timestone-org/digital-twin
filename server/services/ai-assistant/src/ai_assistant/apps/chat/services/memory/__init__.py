@@ -14,7 +14,9 @@ from ai_assistant.apps.chat.services.memory.ports import (
     Hit,
     Knowledge,
     LongTermStore,
+    Remembered,
     Scope,
+    SearchReport,
 )
 from llmcore.memory import ShortTermStore, Summarizer, Summary
 from llmcore.memory.summarize import ModelSummarizer, NullSummarizer
@@ -26,7 +28,9 @@ __all__ = [
     "ModelSummarizer",
     "NullSummarizer",
     "PgLongTermStore",
+    "Remembered",
     "Scope",
+    "SearchReport",
     "SessionFactory",
     "ShortTermStore",
     "Summarizer",

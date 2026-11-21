@@ -12,7 +12,9 @@ import pytest
 from ai_assistant.apps.chat.services.memory.ports import (
     Hit,
     Knowledge,
+    Remembered,
     Scope,
+    SearchReport,
 )
 from ai_assistant.apps.chat.services.tools.providers.memory import (
     MAX_LIMIT,
@@ -34,9 +36,9 @@ class FakeStore:
         default_factory=list[tuple[str, str, str, int]]
     )
 
-    async def remember(self, item: Knowledge) -> str:
+    async def remember(self, item: Knowledge) -> Remembered:
         self.written.append(item)
-        return f"id-{len(self.written)}"
+        return Remembered(f"id-{len(self.written)}", self.can_rank)
 
     async def search(
         self, query: str, scope: Scope, owner_id: str, limit: int
@@ -53,6 +55,13 @@ class FakeStore:
                 has_vector=True,
             )
         ]
+
+    async def search_report(
+        self, query: str, scope: Scope, owner_id: str, limit: int
+    ) -> SearchReport:
+        return SearchReport(
+            await self.search(query, scope, owner_id, limit), self.can_rank, ""
+        )
 
 
 def _tools(
