@@ -8,13 +8,14 @@ from datetime import timedelta
 import pytest
 from conftest import AppContext
 from redis.asyncio import Redis
+from unit.collect_fakes import FakeHistorySource
 from unit.publish_fakes import (
     FakeRealtime,
     FakeViewerSource,
     subscription_row,
 )
 
-from collectwire import snapshot_key
+from collectwire import snapshot_key, snapshot_owner_stamp, snapshot_owners_key
 from integration.collector_helpers import (
     CLOSED,
     NOW,
@@ -42,10 +43,12 @@ from platform_server.apps.collect.services import (
     DatabasePointCatalog,
     ReadOnlyHistorySource,
     history_service,
+    snapshot_source,
 )
 from platform_server.apps.collect.services.snapshot_source import (
     RedisSnapshotSource,
 )
+from platform_server.apps.collect.services.state_source import SourceStateSource
 from platform_server.apps.dashboard.schemas import BindingCreateIn
 from platform_server.apps.dashboard.services import ValidationContext
 from platform_server.apps.dashboard.services.binding_service import (
@@ -116,6 +119,7 @@ def _publisher(
     dashboard_id: uuid.UUID,
     snapshots: RedisSnapshotSource,
     realtime: FakeRealtime,
+    source_id: uuid.UUID,
 ) -> DashboardPublisher:
     return DashboardPublisher(
         plans=DatabasePlanSource(database=SessionDatabase(context.session)),
@@ -127,11 +131,36 @@ def _publisher(
         snapshots=snapshots,
         realtime=realtime,
         options=PublishOptions(max_items=100),
+        states=SourceStateSource(
+            FakeHistorySource(
+                rows=[{"source_id": source_id, "state": "online"}]
+            )
+        ),
     )
 
 
+async def _seed_current_snapshot(
+    raw: Redis, source_id: uuid.UUID, ts_ms: int, lease_key: str
+) -> None:
+    """写入当前采集进程收到的快照。Args: raw, source_id, ts_ms, lease_key。"""
+    owner = f"collector-test:{source_id}"
+    encoded = json.dumps({"value": 21.5, "ts_ms": ts_ms, "quality": "good"})
+    async with raw.pipeline() as write:
+        write.set(lease_key, owner, ex=60)
+        write.hset(snapshot_key(source_id), "temperature", encoded)
+        write.hset(
+            snapshot_owners_key(source_id),
+            "temperature",
+            snapshot_owner_stamp(owner, encoded),
+        )
+        await write.execute()
+
+
 async def test_http_point_uses_the_existing_dashboard_snapshot_publisher(
-    app_context: AppContext, http_points: HttpPoints, redis_url: str
+    app_context: AppContext,
+    http_points: HttpPoints,
+    redis_url: str,
+    monkeypatch: pytest.MonkeyPatch,
 ) -> None:
     dashboard_id = await _bind_http_points(app_context, http_points)
     plans = DatabasePlanSource(database=SessionDatabase(app_context.session))
@@ -141,18 +170,19 @@ async def test_http_point_uses_the_existing_dashboard_snapshot_publisher(
     snapshots = RedisSnapshotSource(url=redis_url, timeout_s=2)
     raw = Redis.from_url(redis_url, decode_responses=True)
     ts_ms = int(CLOSED.timestamp() * 1000)
-    await raw.hset(
-        snapshot_key(http_points.source_id),
-        mapping={
-            "temperature": json.dumps(
-                {"value": 21.5, "ts_ms": ts_ms, "quality": "good"}
-            )
-        },
-    )
+    lease_key = f"collect:test:leader:{http_points.source_id}"
+    monkeypatch.setattr(snapshot_source, "COLLECT_LEASE_KEY", lease_key)
     realtime = FakeRealtime()
     try:
+        await _seed_current_snapshot(
+            raw, http_points.source_id, ts_ms, lease_key
+        )
         report = await _publisher(
-            app_context, dashboard_id, snapshots, realtime
+            app_context,
+            dashboard_id,
+            snapshots,
+            realtime,
+            http_points.source_id,
         ).publish_once()
         assert report.items == 1
         assert realtime.published[0][0] == topic_of(dashboard_id)
@@ -164,7 +194,11 @@ async def test_http_point_uses_the_existing_dashboard_snapshot_publisher(
             "quality": "good",
         }
     finally:
-        await raw.delete(snapshot_key(http_points.source_id))
+        await raw.delete(
+            lease_key,
+            snapshot_key(http_points.source_id),
+            snapshot_owners_key(http_points.source_id),
+        )
         await raw.aclose()
         await snapshots.close()
 

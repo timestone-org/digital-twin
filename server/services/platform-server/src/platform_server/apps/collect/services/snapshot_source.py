@@ -7,7 +7,7 @@
 
 import json
 from collections.abc import Iterable, Mapping, Sequence
-from dataclasses import dataclass
+from dataclasses import dataclass, replace
 from typing import Any, Protocol, cast
 from uuid import UUID
 
@@ -15,10 +15,13 @@ from redis.asyncio import Redis
 from redis.exceptions import RedisError
 
 from collectwire import (
+    COLLECT_LEASE_KEY,
     FIELD_QUALITY,
     FIELD_TIMESTAMP_MS,
     FIELD_VALUE,
     snapshot_key,
+    snapshot_owner_stamp,
+    snapshot_owners_key,
 )
 from lib.errors import DependencyUnavailable
 from lib.logging import get_logger
@@ -40,6 +43,7 @@ class PointReading:
     value: object
     timestamp_ms: int
     quality: Quality
+    is_current: bool = True
 
 
 class SnapshotSource(Protocol):
@@ -83,12 +87,19 @@ class RedisSnapshotSource:
         grouped = group_by_source(node_keys)
         if not grouped:
             return {}
-        pipeline = self._client.pipeline()
+        # 读数、属主与当前租约必须同一事务读取，避免换主时混成两任。
+        pipeline = self._client.pipeline(transaction=True)
+        pipeline.get(COLLECT_LEASE_KEY)
         for source_id, codes in grouped.items():
-            # ⚠ 只取本屏用得上的字段，不 HGETALL
             pipeline.hmget(snapshot_key(source_id), list(codes))
-        rows: Any = await self._run(pipeline.execute())
-        return decode_rows(grouped, rows)
+            pipeline.hmget(snapshot_owners_key(source_id), list(codes))
+        rows: list[Any] = await self._run(pipeline.execute())
+        payloads = rows[1::2]
+        owned = _owned_keys(grouped, payloads, rows[2::2], rows[0])
+        return {
+            key: replace(reading, is_current=key in owned)
+            for key, reading in decode_rows(grouped, payloads).items()
+        }
 
     async def ping(self) -> bool:
         """连通性自检。不抛，供启动自检复用。"""
@@ -132,6 +143,26 @@ def group_by_source(node_keys: Iterable[str]) -> dict[UUID, tuple[str, ...]]:
         grouped.setdefault(source_id, set()).add(point_code)
     return {
         source_id: tuple(sorted(codes)) for source_id, codes in grouped.items()
+    }
+
+
+def _owned_keys(
+    grouped: Mapping[UUID, tuple[str, ...]],
+    payloads: Sequence[Sequence[object]],
+    owners: Sequence[Sequence[object]],
+    lease_token: object,
+) -> set[str]:
+    """核对点位属主与读数。Args: grouped, payloads, owners, lease_token。"""
+    if not isinstance(lease_token, str) or not lease_token:
+        return set()
+    return {
+        compose_node_key(source_id, code)
+        for (source_id, codes), raws, stamps in zip(
+            grouped.items(), payloads, owners, strict=True
+        )
+        for code, raw, stamp in zip(codes, raws, stamps, strict=True)
+        if isinstance(raw, str)
+        and stamp == snapshot_owner_stamp(lease_token, raw)
     }
 
 

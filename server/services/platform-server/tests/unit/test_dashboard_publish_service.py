@@ -19,8 +19,10 @@ from platform_server.apps.collect.services.point_frames import (
     KEY_VALUE,
     POINT_STATE_ERROR,
     POINT_STATE_OK,
+    POINT_STATE_STALE,
     UNAVAILABLE_REASON,
 )
+from platform_server.apps.collect.services.state_source import SourceStateSource
 from platform_server.apps.dashboard.services.publish_plan import (
     DashboardPlan,
     PlanLookup,
@@ -33,6 +35,7 @@ from platform_server.apps.dashboard.services.topics import topic_of
 from platform_server.apps.dashboard.services.viewers import (
     SubscriptionViewers,
 )
+from unit.collect_fakes import FakeHistorySource
 from unit.publish_fakes import (
     FakeRealtime,
     FakeSnapshotSource,
@@ -143,10 +146,11 @@ def build_harness(
     *,
     readings: dict[str, PointReading] | None = None,
     max_items: int = 100,
+    state_history: FakeHistorySource | None = None,
 ) -> Harness:
     """装一套发布器。
 
-    Args: readings, max_items。
+    Args: readings, max_items, state_history。
     """
     plans = FakePlanSource(plans={DASHBOARD: plan_of(OUTLET, INLET)})
     snapshots = FakeSnapshotSource(readings=dict(readings or {}))
@@ -158,6 +162,12 @@ def build_harness(
         snapshots=snapshots,
         realtime=realtime,
         options=PublishOptions(max_items=max_items),
+        states=SourceStateSource(
+            state_history
+            or FakeHistorySource(
+                rows=[{"source_id": SOURCE, "state": "online"}]
+            )
+        ),
     )
     return Harness(
         publisher=publisher,
@@ -190,6 +200,34 @@ async def test_the_next_tick_pushes_only_what_changed() -> None:
     harness.snapshots.readings[OUTLET] = reading(22.0)
     await harness.publisher.publish_once()
     assert harness.node_keys()[1] == [OUTLET]
+
+
+async def test_an_offline_source_pushes_stale_dashboard_values() -> None:
+    history = FakeHistorySource(rows=[{"source_id": SOURCE, "state": "online"}])
+    harness = build_harness(
+        readings={OUTLET: reading(21.5)}, state_history=history
+    )
+    harness.watch((DASHBOARD, VIEWER), (OTHER_DASHBOARD, SECOND_VIEWER))
+    harness.plans.plans[OTHER_DASHBOARD] = plan_of(OUTLET)
+    await harness.publisher.publish_once()
+    assert harness.frames()[0][0][KEY_STATE] == POINT_STATE_OK
+
+    history.rows[0]["state"] = "offline"
+    await harness.publisher.publish_once()
+    assert len(harness.frames()) == 4
+    for frame in harness.frames()[2:]:
+        assert len(frame) == 1
+        assert frame[0][KEY_STATE] == POINT_STATE_STALE
+        assert frame[0][KEY_VALUE] == 21.5
+    assert [query[1]["source_ids"] for query in history.queries] == [
+        [SOURCE],
+        [SOURCE],
+    ]
+
+    history.rows[0]["state"] = "online"
+    await harness.publisher.publish_once()
+    assert len(harness.frames()) == 6
+    assert harness.frames()[-1][0][KEY_STATE] == POINT_STATE_OK
 
 
 async def test_a_tick_with_nothing_new_pushes_nothing() -> None:

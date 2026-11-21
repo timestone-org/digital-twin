@@ -171,7 +171,7 @@ def point_status(
     """按快照存在性、源运行态及质量分类。Args: reading, source。"""
     if reading is None:
         return "waiting"
-    if source.state != "online":
+    if source.state != "online" or not reading.is_current:
         return "stale"
     if reading.quality != "good":
         return "abnormal"

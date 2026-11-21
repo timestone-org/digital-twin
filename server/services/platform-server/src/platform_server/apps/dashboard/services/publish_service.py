@@ -29,6 +29,7 @@ from platform_server.apps.collect.services.point_frames import (
     shards,
     warn_non_finite,
 )
+from platform_server.apps.collect.services.state_source import SourceStateSource
 from platform_server.apps.dashboard.services.publish_plan import (
     DashboardPlan,
     PlanLookup,
@@ -65,6 +66,7 @@ class DashboardPublisher:
     snapshots: SnapshotSource
     realtime: FramePublisher
     options: PublishOptions
+    states: SourceStateSource
     _watchers: dict[uuid.UUID, frozenset[uuid.UUID]] = field(
         default_factory=dict[uuid.UUID, frozenset[uuid.UUID]], init=False
     )
@@ -87,11 +89,21 @@ class DashboardPublisher:
         # ⚠ 整批问一次计划：按屏逐个问的话，在看的屏有多少张，每一拍就有多少
         # 个只读会话与多少次 BEGIN/COMMIT
         lookups = await self.plans.load_many(tuple(watchers), self._plans)
+        source_ids = {
+            source_id
+            for lookup in lookups.values()
+            if lookup.plan is not None
+            for source_id in lookup.plan.source_ids
+        }
+        online_sources = await self.states.online_ids(sorted(source_ids))
         total = 0
         for dashboard_id, subscriptions in watchers.items():
             is_full = self._is_new_audience(dashboard_id, subscriptions)
             total += await self._publish_one(
-                dashboard_id, lookups.get(dashboard_id), is_full=is_full
+                dashboard_id,
+                lookups.get(dashboard_id),
+                online_sources,
+                is_full=is_full,
             )
             self._watchers[dashboard_id] = subscriptions
         return PublishReport(dashboards=len(watchers), items=total)
@@ -106,18 +118,21 @@ class DashboardPublisher:
         self,
         dashboard_id: uuid.UUID,
         lookup: PlanLookup | None,
+        online_sources: frozenset[uuid.UUID],
         *,
         is_full: bool,
     ) -> int:
         """推一张大屏，返回真正推出去的条目数。
 
-        Args: dashboard_id, lookup（整批查询里属于它的那一条）, is_full。
+        Args: dashboard_id, lookup, online_sources, is_full。
         """
         plan, is_reloaded = self._plan_of(dashboard_id, lookup)
         if plan is None or not plan.node_keys:
             return 0
         is_full_frame = is_full or is_reloaded
-        items = await self._items_of(plan, dashboard_id)
+        items = await self._items_of(
+            plan, dashboard_id, plan.source_ids & online_sources
+        )
         fresh = changed_items(items, self._sent.get(dashboard_id, {}))
         warn_non_finite(fresh, topic=topic_of(dashboard_id))
         outgoing = items if is_full_frame else fresh
@@ -129,11 +144,14 @@ class DashboardPublisher:
         return await self._send(dashboard_id, outgoing)
 
     async def _items_of(
-        self, plan: DashboardPlan, dashboard_id: uuid.UUID
+        self,
+        plan: DashboardPlan,
+        dashboard_id: uuid.UUID,
+        online_sources: frozenset[uuid.UUID],
     ) -> list[Item]:
         """取一屏的值并装成条目。快照读不到就整批标成取不到。
 
-        Args: plan, dashboard_id。
+        Args: plan, dashboard_id, online_sources。
         """
         try:
             readings = await self.snapshots.read(plan.node_keys)
@@ -145,7 +163,7 @@ class DashboardPublisher:
                 points=len(plan.node_keys),
             )
             return error_items(plan.node_keys, reason=UNAVAILABLE_REASON)
-        return build_items(plan.node_keys, readings)
+        return build_items(plan.node_keys, readings, online_sources)
 
     async def _send(self, dashboard_id: uuid.UUID, outgoing: list[Item]) -> int:
         """分片推给 hub，返回推成功的条目数。

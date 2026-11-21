@@ -40,6 +40,7 @@ from platform_server.apps.collect.services.live_publisher import (
     LiveOptions,
     SourceLivePublisher,
 )
+from platform_server.apps.collect.services.state_source import SourceStateSource
 from platform_server.apps.collect.services.topic_reconcile import (
     CollectTopicReconciler,
     DatabaseSourceIndex,
@@ -347,6 +348,7 @@ def _dashboard_lane(container: Container) -> Lane:
         snapshots=container.snapshots,
         realtime=container.realtime,
         options=PublishOptions(max_items=settings.publish_max_items),
+        states=SourceStateSource(container.history),
     )
     reconciler = TopicReconciler(
         dashboards=DatabaseDashboardIndex(database=container.database),
@@ -385,6 +387,7 @@ def _collect_lane(container: Container) -> Lane:
             batch_points=settings.collect_live_max_points,
             plan_ttl_s=settings.collect_live_plan_ttl_s,
         ),
+        states=SourceStateSource(container.history),
     )
     reconciler = CollectTopicReconciler(
         sources=DatabaseSourceIndex(database=container.database),
