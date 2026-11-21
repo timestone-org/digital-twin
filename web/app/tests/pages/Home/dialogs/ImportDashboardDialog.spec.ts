@@ -4,6 +4,7 @@
  */
 import { describe, expect, it } from 'vitest'
 import { mount } from '@vue/test-utils'
+import { DtSelect } from '@dt/ui'
 import type { DashboardExportPayload } from '@dt/contracts'
 
 import ImportDashboardDialog from '@/pages/Home/components/ImportDashboardDialog.vue'
@@ -161,6 +162,80 @@ describe('关闭', () => {
 
     await clickText(wrapper, '取消')
 
+    expect(wrapper.emitted('update:open')).toEqual([[false]])
+  })
+})
+
+describe('旧包联动', () => {
+  const legacy = '0195d258-1d43-7a6c-806c-092dddc12e1e'
+  const linked: DashboardExportPayload = {
+    ...PACKAGE,
+    chromeJson: {
+      interactions: [
+        {
+          id: '开关',
+          source: { nodeId: legacy },
+          action: { type: 'show', targets: [legacy] },
+        },
+        {
+          id: '详情',
+          source: { nodeId: 'label' },
+          action: { type: 'openModal', target: legacy },
+        },
+      ],
+    },
+    nodes: [
+      {
+        clientKey: 'label',
+        parentClientKey: null,
+        moduleType: 'text',
+        configJson: { __label: '运行状态' },
+        bindings: [],
+        x: 0,
+        y: 0,
+        w: 20,
+        h: 20,
+        zIndex: 0,
+        isVisible: true,
+      },
+    ],
+  }
+  it('先列受影响规则，同一旧节点只选一次，确认前新建与覆盖都不能提交', async () => {
+    const wrapper = mountDialog()
+    await wrapper.setProps({ open: true, payload: linked })
+    await clickText(wrapper, '导入')
+    expect(wrapper.emitted('submit')).toBeUndefined()
+    expect(wrapper.text()).toContain('开关')
+    expect(wrapper.get('[role=combobox]').text()).toContain('选择包内节点')
+    expect(wrapper.text()).toContain('详情')
+    await clickText(wrapper, '覆盖已有大屏')
+    await clickText(wrapper, '覆盖导入')
+    expect(wrapper.emitted('submit')).toBeUndefined()
+    const select = wrapper
+      .findAllComponents(DtSelect)
+      .find((item) => item.props('label') === '对应的包内节点')
+    expect(select).toBeDefined()
+    select?.vm.$emit('update:modelValue', 'label')
+    await wrapper.vm.$nextTick()
+    await clickText(wrapper, '覆盖导入')
+    expect(wrapper.emitted('submit')?.[0]?.[0]).toMatchObject({
+      interactionNodeMap: { [legacy]: 'label' },
+      targetDashboardId: 'd1',
+    })
+  })
+  it('更换文件与关闭会清掉同一旧引用的先前选择，取消不会提交', async () => {
+    const wrapper = mountDialog()
+    await wrapper.setProps({ open: true, payload: linked })
+    const select = wrapper
+      .findAllComponents(DtSelect)
+      .find((item) => item.props('label') === '对应的包内节点')
+    select?.vm.$emit('update:modelValue', 'label')
+    await clickText(wrapper, '更换文件')
+    expect(wrapper.emitted('choose-file')).toHaveLength(1)
+    await wrapper.setProps({ payload: { ...linked, name: '另一份' } })
+    await clickText(wrapper, '导入')
+    expect(wrapper.emitted('submit')).toBeUndefined()
+    await clickText(wrapper, '取消')
     expect(wrapper.emitted('update:open')).toEqual([[false]])
   })
 })

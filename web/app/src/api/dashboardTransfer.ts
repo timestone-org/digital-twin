@@ -83,6 +83,7 @@ export async function exportDashboard(
 }
 
 export interface DashboardImportInput {
+  interactionNodeMap?: Record<string, string> | undefined
   includePointBindings?: boolean | undefined
   projectId: string
   payload: DashboardExportPayload
@@ -106,6 +107,10 @@ export async function importDashboard(
   const body: Record<string, unknown> = {
     project_id: input.projectId,
     payload: fromExportPackage(input.payload),
+    ...(input.interactionNodeMap &&
+    Object.keys(input.interactionNodeMap).length > 0
+      ? { interaction_node_map: input.interactionNodeMap }
+      : {}),
   }
   if (input.includePointBindings !== undefined) {
     body.include_point_bindings = input.includePointBindings

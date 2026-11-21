@@ -22,6 +22,10 @@ import type {
   DtSelectOption,
 } from '@dt/contracts'
 
+import InteractionNodeMapping from './InteractionNodeMapping.vue'
+import { useInteractionMapping } from '../scripts/useInteractionMapping'
+import type { ImportChoice } from '../scripts/workbenchWrites'
+
 const props = withDefaults(
   defineProps<{
     open: boolean
@@ -38,13 +42,8 @@ const props = withDefaults(
 
 const emit = defineEmits<{
   'update:open': [open: boolean]
-  submit: [
-    payload: {
-      newName: string
-      targetDashboardId: string | null
-      includePointBindings: boolean
-    },
-  ]
+  'choose-file': []
+  submit: [payload: ImportChoice]
 }>()
 
 const MODES: readonly DtSegmentedOption[] = [
@@ -68,16 +67,17 @@ const targetName = computed(
 
 const nodeCount = computed(() => props.payload?.nodes.length ?? 0)
 
+const mapping = useInteractionMapping(() => (props.open ? props.payload : null))
+
 const canSubmit = computed(() => {
-  if (props.loading || props.payload === null) return false
+  if (props.loading || !mapping.ready.value) return false
   if (mode.value === 'overwrite') return targetId.value !== ''
   return newName.value.trim() !== ''
 })
 
 watch(
-  () => props.open,
-  (open) => {
-    const incoming = props.payload
+  [() => props.open, () => props.payload],
+  ([open, incoming]) => {
     if (!open || incoming === null) return
     mode.value = 'new'
     newName.value = props.conflict ? `${incoming.name} 副本` : incoming.name
@@ -94,17 +94,12 @@ function onMode(value: string): void {
 
 function submit(): void {
   if (!canSubmit.value) return
-  if (mode.value === 'overwrite') {
-    emit('submit', {
-      newName: '',
-      targetDashboardId: targetId.value,
-      includePointBindings: includePointBindings.value,
-    })
-    return
-  }
   emit('submit', {
-    newName: newName.value.trim(),
-    targetDashboardId: null,
+    newName: mode.value === 'overwrite' ? '' : newName.value.trim(),
+    targetDashboardId: mode.value === 'overwrite' ? targetId.value : null,
+    ...(mapping.map.value === undefined
+      ? {}
+      : { interactionNodeMap: mapping.map.value }),
     includePointBindings: includePointBindings.value,
   })
 }
@@ -127,6 +122,21 @@ function submit(): void {
           {{ projectName === '' ? '当前项目' : projectName }}
         </p>
       </div>
+
+      <DtButton
+        size="sm"
+        variant="ghost"
+        class="self-start"
+        :disabled="loading"
+        @click="emit('choose-file')"
+        >更换文件</DtButton
+      >
+      <InteractionNodeMapping
+        :review="mapping.review.value"
+        :choices="mapping.choices.value"
+        :disabled="loading ?? false"
+        @choose="mapping.choose"
+      />
 
       <DtSegmented
         :model-value="mode"

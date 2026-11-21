@@ -188,3 +188,23 @@ describe('错误码', () => {
     expect(transfer.IMPORT_TARGET_MISMATCH_CODE).toBe(41014)
   })
 })
+
+describe('确认联动节点', () => {
+  it('有补选时发送对照，空表沿用旧请求形状', async () => {
+    await transfer.importDashboard({
+      projectId: 'p1',
+      payload: PACKAGE,
+      interactionNodeMap: { 'old-node': 'display' },
+    })
+    expect(call()[1].body).toHaveProperty('interaction_node_map', {
+      'old-node': 'display',
+    })
+    vi.clearAllMocks()
+    await transfer.importDashboard({
+      projectId: 'p1',
+      payload: PACKAGE,
+      interactionNodeMap: {},
+    })
+    expect(call()[1].body).not.toHaveProperty('interaction_node_map')
+  })
+})

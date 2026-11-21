@@ -70,6 +70,7 @@ export async function createDashboardFrom(
 }
 
 export interface ImportChoice {
+  interactionNodeMap?: Record<string, string> | undefined
   includePointBindings?: boolean | undefined
   /** 新建时的名字；覆盖既有屏时用不上。 */
   newName: string
@@ -87,6 +88,9 @@ export async function importInto(
     projectId,
     payload,
     includePointBindings: choice.includePointBindings ?? false,
+    ...(choice.interactionNodeMap === undefined
+      ? {}
+      : { interactionNodeMap: choice.interactionNodeMap }),
     ...(choice.targetDashboardId === null
       ? { newName: choice.newName }
       : { targetDashboardId: choice.targetDashboardId }),

@@ -5,11 +5,12 @@
  * ⚠ 建屏与导入都可能回一串接不上的绑定，所以结果留在 `created` 里等着被摆出来，
  * 而不是跑完就丢——静默咽掉会让人以为拿到的是一张能用的屏。
  */
-import { computed, ref, type ComputedRef, type Ref } from 'vue'
+import { computed, onScopeDispose, ref, type ComputedRef, type Ref } from 'vue'
 import { useToast } from '@dt/ui'
 import type { DashboardExportPayload, UnresolvedBinding } from '@dt/contracts'
 
 import { validateDashboard, type ValidationReport } from '@/api/dashboard'
+import { useRacedFetch } from '@/composables/useRacedFetch'
 import { describeError } from '@/composables/useAsyncList'
 import type { NewDashboardPayload } from './payloads'
 import {
@@ -63,15 +64,6 @@ async function build(
   }
 }
 
-/** 读文件失败不清掉已选的包：用户可以再选一次，不必从头开。 */
-async function pick(context: Context, file: File): Promise<void> {
-  try {
-    context.payload.value = await readExportFile(file)
-  } catch (caught) {
-    context.toast.error(describeError(caught))
-  }
-}
-
 async function runImport(
   context: Context,
   projectId: string,
@@ -91,6 +83,8 @@ export function useDashboardDialogFlow(): DashboardDialogFlow {
     created: ref<CreatedDashboard | null>(null),
     payload: ref<DashboardExportPayload | null>(null),
   }
+  const files = useRacedFetch()
+  onScopeDispose(files.cancel)
   const validating = ref(false)
   const validation = ref<ValidationReport | null>(null)
 
@@ -114,8 +108,16 @@ export function useDashboardDialogFlow(): DashboardDialogFlow {
     payload: context.payload,
     created: context.created,
     unresolved: computed(() => context.created.value?.unresolvedBindings ?? []),
-    pick: (file) => pick(context, file),
+    pick: (file) =>
+      files.run(() => readExportFile(file), {
+        ok: (payload) => {
+          context.payload.value = payload
+        },
+        fail: (caught) => context.toast.error(describeError(caught)),
+        settled: () => undefined,
+      }),
     clearPayload: () => {
+      files.cancel()
       context.payload.value = null
     },
     dismiss: () => {

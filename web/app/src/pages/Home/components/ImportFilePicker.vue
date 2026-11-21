@@ -30,7 +30,7 @@ function onSelect(files: File[]): void {
   >
     <div class="flex flex-col gap-3">
       <DtNotice icon="upload">
-        只认本系统导出的包。包里没有任何 id，导进来是一张新屏，不会改到源屏。
+        只认本系统导出的包。下一步可以核对联动节点并选择导入方式。
       </DtNotice>
       <DtFilePicker
         accept="application/json,.json"

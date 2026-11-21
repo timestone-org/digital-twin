@@ -272,3 +272,19 @@ describe('读导入文件', () => {
     await expect(readExportFile(file)).rejects.toThrow()
   })
 })
+
+it('把新建和覆盖的包内联动选择交给同一导入入口', async () => {
+  const spy = vi
+    .spyOn(transferApi, 'importDashboard')
+    .mockResolvedValue(imported('包内对照'))
+  for (const targetDashboardId of [null, 'd7']) {
+    await importInto('p1', PACKAGE, {
+      newName: '屏',
+      targetDashboardId,
+      interactionNodeMap: { old: 'key' },
+    })
+    expect(spy).toHaveBeenLastCalledWith(
+      expect.objectContaining({ interactionNodeMap: { old: 'key' } }),
+    )
+  }
+})

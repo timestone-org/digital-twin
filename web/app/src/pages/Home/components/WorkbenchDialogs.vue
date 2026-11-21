@@ -263,6 +263,7 @@ function onPreviewCreated(): void {
     :loading="dashboard.busy.value"
     :targets="importTargets"
     @update:open="onToggle"
+    @choose-file="dashboard.clearPayload"
     @submit="onImport"
   />
 
