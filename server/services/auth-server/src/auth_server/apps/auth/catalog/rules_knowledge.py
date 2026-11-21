@@ -68,6 +68,20 @@ KNOWLEDGE_RULES: tuple[RouteRuleSpec, ...] = (
     ),
     RouteRuleSpec(
         f"{_K}/sources/*",
+        "PATCH",
+        codes=(KNOWLEDGE_MANAGE,),
+        priority=890,
+        description="编辑平台来源配置",
+    ),
+    RouteRuleSpec(
+        f"{_K}/sources/*",
+        "DELETE",
+        codes=(KNOWLEDGE_MANAGE,),
+        priority=890,
+        description="解绑平台来源并保留本地资料",
+    ),
+    RouteRuleSpec(
+        f"{_K}/sources/*",
         "*",
         codes=(KNOWLEDGE_WRITE,),
         priority=880,

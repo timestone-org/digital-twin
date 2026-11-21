@@ -78,3 +78,14 @@ def test_reembedding_is_always_a_management_operation(
     rule = find_rule(catalog_rule_views(), path=path, method=method)
     assert rule is not None
     assert rule.permission_codes == frozenset({KNOWLEDGE_MANAGE})
+
+
+@pytest.mark.parametrize("method", ["PATCH", "DELETE"])
+def test_source_management_requires_management_permission(method: str) -> None:
+    rule = find_rule(
+        catalog_rule_views(),
+        path=f"{KNOWLEDGE_PREFIX}/sources/source",
+        method=method,
+    )
+    assert rule is not None
+    assert rule.permission_codes == frozenset({KNOWLEDGE_MANAGE})
