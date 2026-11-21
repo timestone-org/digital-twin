@@ -29,6 +29,7 @@ from collector_server.apps.collect.drivers.base import (
     ValueSink,
 )
 from collector_server.apps.collect.runtime.session import SourceStatus
+from collector_server.lease import RedisLease
 from collector_server.settings import Settings
 from collector_server.stream import StreamEntry, stream_key
 from collectwire import (
@@ -125,6 +126,23 @@ async def redis_url(live_settings: Settings) -> str:
     finally:
         await client.aclose()
     return url
+
+
+@pytest.fixture
+async def snapshot_lease(redis_url: str) -> AsyncIterator[RedisLease]:
+    """每个快照用例持有一把独立 Redis 租约。"""
+    lease = RedisLease(
+        url=redis_url,
+        key=f"collect:test:leader:{uuid4()}",
+        token="snapshot-test",
+        ttl_s=120,
+    )
+    try:
+        assert await lease.acquire()
+        yield lease
+    finally:
+        await lease.release()
+        await lease.close()
 
 
 @pytest.fixture

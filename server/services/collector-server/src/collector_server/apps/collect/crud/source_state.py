@@ -2,7 +2,7 @@
 
 from typing import Any
 
-from sqlalchemy import func
+from sqlalchemy import func, or_, text
 from sqlalchemy.dialects.postgresql import insert
 from sqlalchemy.ext.asyncio import AsyncSession
 
@@ -13,15 +13,29 @@ from collector_server.apps.collect.runtime.session import SourceStatus
 class SourceStateCrud:
     """`collect_source_states` 的数据访问。"""
 
+    async def reserve_report_order(self, session: AsyncSession) -> int:
+        """取 PostgreSQL 全局递增的完整事务号。Args: session。"""
+        order = await session.scalar(
+            text("SELECT pg_current_xact_id()::text::bigint")
+        )
+        if not isinstance(order, int):
+            raise RuntimeError("无法取得采集运行态上报顺序")
+        return order
+
     async def upsert(
-        self, session: AsyncSession, status: SourceStatus, *, instance: str
+        self,
+        session: AsyncSession,
+        status: SourceStatus,
+        *,
+        instance: str,
+        order: int,
     ) -> None:
         """按数据源覆盖写一行运行态。
 
         ⚠ 走 `ON CONFLICT` 而不是「先查再插」：后者在并发下必然重复，而这里
         的并发来源是租约切换时新旧 leader 的重叠窗口。
 
-        Args: session, status, instance。
+        Args: session, status, instance, order。
         """
         values = {
             "source_id": status.source_id,
@@ -30,6 +44,7 @@ class SourceStateCrud:
             "error_category": status.error_category,
             "error_detail": status.error_detail,
             "leader_instance": instance,
+            "report_order": order,
         }
         statement = insert(SourceState).values(**values)
         # SQLAlchemy 的 `set_` 收的是列表达式，形状由它自己定义，止步于本行
@@ -43,6 +58,11 @@ class SourceStateCrud:
         updated["updated_at"] = func.now()
         await session.execute(
             statement.on_conflict_do_update(
-                index_elements=[SourceState.source_id], set_=updated
+                index_elements=[SourceState.source_id],
+                set_=updated,
+                where=or_(
+                    SourceState.report_order.is_(None),
+                    SourceState.report_order < order,
+                ),
             )
         )

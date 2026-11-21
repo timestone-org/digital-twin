@@ -39,12 +39,12 @@ def test_every_shared_column_exists_on_the_model() -> None:
     assert set(STATE_COLUMNS) <= set(_columns())
 
 
-def test_the_model_declares_no_column_the_reader_cannot_see() -> None:
-    """写侧多一列而读侧不认识，那一列就是没人读的死数据。
-
-    `created_at` 是例外：它由 TimestampMixin 带进来，读侧只关心最后一次更新。
-    """
-    assert set(_columns()) - set(STATE_COLUMNS) == {"created_at"}
+def test_the_model_names_the_internal_columns() -> None:
+    """更新时间和公开运行态仍由原有共享列提供。"""
+    assert set(_columns()) - set(STATE_COLUMNS) == {
+        "created_at",
+        "report_order",
+    }
 
 
 def test_the_state_check_constraint_lists_the_shared_states() -> None:

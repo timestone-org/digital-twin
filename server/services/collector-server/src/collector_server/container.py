@@ -1,6 +1,7 @@
 """组合根：把配置拧成各个协作对象。装配只在这里发生，模块顶层不做副作用。"""
 
 import asyncio
+from collections.abc import Callable
 from dataclasses import dataclass
 
 from collector_server.apps.collect import tuning
@@ -45,7 +46,6 @@ from collector_server.snapshot import RedisSnapshotStore
 from collector_server.stream import RedisArchiveStream
 from collectwire import PlanSource
 from lib.db import Database, PoolProfile
-from lib.utils.ids import uuid7
 
 # 预算表见 runtime-resilience §3.1：连 5s、读写 3s、浏览 10s
 DRIVER_TIMEOUTS = DriverTimeouts()
@@ -90,15 +90,17 @@ def _build_database(settings: Settings) -> Database:
     )
 
 
-def _lease_token(settings: Settings) -> str:
-    """本进程这一次运行的租约令牌。
+def _state_reporters(
+    database: Database, lease: RedisLease, instance: str
+) -> Callable[[], SourceStateService]:
+    """每个会话绑定建立时的租约。Args: database, lease, instance。"""
 
-    ⚠ 每次启动都换一个：沿用上次的令牌，会让一个刚重启的进程「续」上自己上
-    一世的租约——那正是脑裂窗口里最不该发生的事。
+    def bind() -> SourceStateService:
+        return SourceStateService(
+            database=database, instance=instance, lease=lease
+        )
 
-    Args: settings。
-    """
-    return f"{settings.app_instance}:{uuid7()}"
+    return bind
 
 
 def _build_session_builder(
@@ -106,7 +108,7 @@ def _build_session_builder(
     plan: PlanStore,
     sink: SnapshotSink,
     archive: ArchiveBuffer,
-    state: SourceStateService,
+    state: Callable[[], SourceStateService],
 ) -> SessionBuilder:
     """造一个「按计划里的数据源产出会话」的工厂。
 
@@ -133,7 +135,7 @@ def _build_session_builder(
             # 会话预算在**建会话时**现取：运行参数改了，已建立的会话继续用
             # 旧值，下次重连才换——这正是「下次重连生效」档的语义
             options=_session_options(settings, plan),
-            reporter=state,
+            reporter=state(),
         )
 
     return build
@@ -249,7 +251,7 @@ def _build_redis(settings: Settings) -> RedisFaces:
         lease=RedisLease(
             url=redis_url,
             key=LEASE_KEY,
-            token=_lease_token(settings),
+            token=settings.app_instance,
             ttl_s=LEASE_TTL_S,
             timeout_s=settings.redis_timeout_s,
         ),
@@ -300,9 +302,7 @@ def build_container(settings: Settings) -> Container:
         plan=plan,
     )
     archive = _build_archive(settings, redis.stream, plan)
-    state = SourceStateService(
-        database=database, instance=settings.app_instance
-    )
+    state = _state_reporters(database, redis.lease, settings.app_instance)
     supervisor = _build_supervisor(
         settings,
         redis.lease,
