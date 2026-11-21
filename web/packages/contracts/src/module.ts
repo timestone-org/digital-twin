@@ -365,6 +365,11 @@ export interface ModuleManifest {
    * 编辑器按它过滤「触发事件」选项——列出模块发不出的事件，配出来的规则永远不触发。
    */
   interactionEvents?: readonly InteractionEventName[]
+  /** 选择类模块在进场时实际高亮的联动值，空值不触发互斥显隐。 */
+  initialSelection?: (
+    config: Record<string, unknown>,
+    activeValue: string,
+  ) => string | undefined
   /**
    * 模块自己 `emit('interaction', InteractionEvent)` 上抛事件（控件类，或按
    * 子项带 value 上抛的展示类：图表点图元、列表点行）。

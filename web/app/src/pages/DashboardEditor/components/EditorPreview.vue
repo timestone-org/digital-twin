@@ -45,6 +45,7 @@ const cardChrome = computed(() => mergeCardChrome(props.chromeJson.card, null))
 // 预览按运行态跑联动：显隐、互斥切换与弹窗都当真，只有跨屏跳转换成一句提示
 const interaction = usePreviewInteraction({
   nodes: () => props.nodes,
+  getManifest: (moduleType) => props.getManifest(moduleType),
   chromeJson: () => props.chromeJson,
   dashboardId: () => props.dashboardId,
 })

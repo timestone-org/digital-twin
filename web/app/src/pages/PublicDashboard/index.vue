@@ -47,7 +47,7 @@ import {
   usePublicRealtimeChannel,
 } from '@/composables/useRealtimeChannel'
 import { boundPointKeys } from '@/features/dashboard/editorDoc'
-import { parseInteractionRules } from '@/features/dashboard/interactionRules'
+import { loadInteractions } from '@/features/dashboard/loadInteractions'
 import { useDashboardTheme } from '@/features/dashboard/useDashboardTheme'
 import { publicTopic } from '@/runtime/pointFrames'
 import { createPointSubscribe } from '@/runtime/pointStream'
@@ -153,12 +153,11 @@ provide(INTERACTION_KEY, interaction)
 watch(
   () => doc.dashboard.value,
   (current) => {
-    interaction.init(
-      current === null ? [] : parseInteractionRules(current.chromeJson),
-      nodes.value.map((node) => ({
-        nodeId: node.id,
-        isVisible: node.isVisible,
-      })),
+    loadInteractions(
+      interaction,
+      current?.chromeJson ?? {},
+      nodes.value,
+      getManifest,
     )
   },
   { immediate: true },

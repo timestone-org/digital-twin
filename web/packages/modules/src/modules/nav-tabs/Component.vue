@@ -9,7 +9,7 @@ import type { InteractionEvent, ModuleMeta } from '@dt/contracts'
 import { DtIcon } from '@dt/ui'
 import { computed, ref, watch } from 'vue'
 
-import { readTabsSpec } from './look'
+import { boundTabIndex, readTabsSpec } from './look'
 
 const props = defineProps<{
   config: Record<string, unknown>
@@ -30,11 +30,9 @@ const picked = ref<number | null>(null)
  * ⚠ 它必须赢过配置里的「默认选中」：同一条页签栏摆在几张屏上时那个静态下标
  * 只对其中一张是对的，在别的屏上就成了「高亮停在别处、点自己那一格没反应」。
  */
-const boundAt = computed(() => {
-  const value = props.meta?.activeValue ?? ''
-  if (value === '') return -1
-  return spec.value.items.findIndex((tab) => tab.emitValue === value)
-})
+const boundAt = computed(() =>
+  boundTabIndex(spec.value.items, props.meta?.activeValue ?? ''),
+)
 
 // 改了「默认选中」、或宿主说这一屏换了，都回到推出来的那一档：编辑器里改一个数
 // 要当场看得见，而不是还停在上一次点过的那一格上

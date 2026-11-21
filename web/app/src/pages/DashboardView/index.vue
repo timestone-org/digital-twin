@@ -36,7 +36,7 @@ import {
   useSeriesEpoch,
 } from '@/bootstrap/dashboard'
 import { useDashboardDoc } from '@/composables/useDashboardDoc'
-import { parseInteractionRules } from '@/features/dashboard/interactionRules'
+import { loadInteractions } from '@/features/dashboard/loadInteractions'
 import { useDashboardTheme } from '@/features/dashboard/useDashboardTheme'
 import RealtimeOfflineNotice from '@/components/RealtimeOfflineNotice.vue'
 import { useDashboardValues } from '@/composables/useDashboardValues'
@@ -123,12 +123,11 @@ provide(INTERACTION_KEY, interaction)
 watch(
   () => file.dashboard.value,
   (current) => {
-    interaction.init(
-      current === null ? [] : parseInteractionRules(current.chromeJson),
-      nodes.value.map((node) => ({
-        nodeId: node.id,
-        isVisible: node.isVisible,
-      })),
+    loadInteractions(
+      interaction,
+      current?.chromeJson ?? {},
+      nodes.value,
+      getManifest,
     )
   },
   { immediate: true },

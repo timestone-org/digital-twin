@@ -201,6 +201,28 @@ function activeAtOf(config: Record<string, unknown>, count: number): number {
   return clamp(Math.round(configured) - FIRST_INDEX, 0, Math.max(0, count - 1))
 }
 
+/** 由当前大屏句柄推导出的页签位置。 */
+export function boundTabIndex(
+  items: readonly TabView[],
+  activeValue: string,
+): number {
+  return activeValue === ''
+    ? -1
+    : items.findIndex((tab) => tab.emitValue === activeValue)
+}
+
+/** 返回实际高亮页签的初始联动值，位置优先级与页签渲染一致。 */
+export function initialTabSelection(
+  config: Record<string, unknown>,
+  activeValue: string,
+): string | undefined {
+  const items = readItems(config)
+  const bound = boundTabIndex(items, activeValue)
+  const value =
+    items[bound >= 0 ? bound : activeAtOf(config, items.length)]?.emitValue
+  return value === '' ? undefined : value
+}
+
 function cssVars(config: Record<string, unknown>): TabsVars {
   const colors = toneColors(config)
   const corner = cornerOf(config)

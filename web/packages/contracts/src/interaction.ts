@@ -26,7 +26,7 @@ export interface InteractionShowAction {
   targets: string[]
 }
 
-/** setActive：互斥切换组——选中值命中的组显示、其余组隐藏。 */
+/** setActive：互斥切换组——图元属于任意一个命中组即显示，只属于未命中组的图元隐藏。 */
 export interface InteractionSetActiveAction {
   type: 'setActive'
   groups: { value: string; targets: string[] }[]
