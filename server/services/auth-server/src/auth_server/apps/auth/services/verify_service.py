@@ -40,6 +40,7 @@ from auth_server.apps.auth.services.token_service import (
 from auth_server.settings import API_PREFIX
 from lib.auth import (
     HEADER_EXPIRES,
+    HEADER_NAMED_SIGNATURE,
     HEADER_PERMISSIONS,
     HEADER_ROLE,
     HEADER_SIGNATURE,
@@ -51,6 +52,7 @@ from lib.auth import (
     encode_identity,
     encode_permissions,
     sign_context,
+    sign_named_context,
 )
 from lib.logging import get_logger
 from lib.utils.timeutils import Clock
@@ -113,21 +115,17 @@ class VerifyService:
         role = encode_identity(identity.user.role.name)
         permissions = encode_permissions(identity.codes)
         expires_at = int(self.clock().timestamp()) + self.header_ttl_s
-        signature = sign_context(
-            self.signing_secret,
-            SignedContext(
-                user_id=user_id,
-                role=role,
-                permissions_b64=permissions,
-                expires_at=expires_at,
-            ),
-        )
+        signed = SignedContext(user_id, role, permissions, expires_at)
+        username = encode_identity(identity.user.username)
         headers = {
             HEADER_USER_ID: user_id,
-            HEADER_USERNAME: encode_identity(identity.user.username),
+            HEADER_USERNAME: username,
             HEADER_ROLE: role,
             HEADER_EXPIRES: str(expires_at),
-            HEADER_SIGNATURE: signature,
+            HEADER_SIGNATURE: sign_context(self.signing_secret, signed),
+            HEADER_NAMED_SIGNATURE: sign_named_context(
+                self.signing_secret, signed, username
+            ),
         }
         headers.update(_permission_header(permissions, user_id))
         return headers
