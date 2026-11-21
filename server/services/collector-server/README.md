@@ -60,8 +60,9 @@ tests/{unit,integration,contract,e2e}
 | `COLLECT_EDGE_SERVICE_KEY` | 拉计划时打 platform `/internal/` 的服务级密钥，与 auth-server 同值。**无默认值** |
 | `COLLECT_PLATFORM_BASE_URL` | 计划来源，默认 `http://platform-server:8005` |
 | `COLLECT_PLAN_REFRESH_INTERVAL_S` | 全量重拉并按版本号比对的周期 |
+| `COLLECT_PLAN_CHANNEL` | 计划变更广播频道，须与 `PLATFORM_COLLECT_PLAN_CHANNEL` 同值 |
 | `COLLECT_FLUSH_INTERVAL_MS` | 快照落 Redis 的窗口，默认 300 |
-| `COLLECT_SNAPSHOT_TTL_S` | 快照哈希的存活期，每次 flush 续 |
+| `COLLECT_SNAPSHOT_TTL_S` | 快照哈希的存活期，在线数据源由采集主副本续期 |
 | `COLLECT_ARCHIVE_FLUSH_MS` | Stream 落 TimescaleDB 的周期，默认 5000 |
 | `COLLECT_ARCHIVE_BUFFER_MAX` | 归档缓冲的行数上限，默认 200000。超限丢最旧并计数上报 |
 | `COLLECT_ARCHIVE_BATCH_ROWS` | 一条 Stream 条目与一条 INSERT 的行数，默认 1000（上限由 asyncpg 的 32767 个绑定参数收敛） |

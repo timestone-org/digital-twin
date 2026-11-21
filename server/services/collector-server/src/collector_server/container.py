@@ -22,6 +22,7 @@ from collector_server.apps.collect.drivers.base import (
 from collector_server.apps.collect.drivers.registry import create_driver
 from collector_server.apps.collect.plan.adapt import to_connection
 from collector_server.apps.collect.plan.client import PlanClient
+from collector_server.apps.collect.plan.notifications import PlanNotifications
 from collector_server.apps.collect.plan.store import PlanStore
 from collector_server.apps.collect.runtime.session import (
     SessionOptions,
@@ -46,6 +47,7 @@ from collector_server.settings import Settings
 from collector_server.snapshot import RedisSnapshotStore
 from collector_server.stream import RedisArchiveStream
 from collectwire import PlanSource
+from lib.cache import PubSub
 from lib.db import Database, PoolProfile
 
 # 预算表见 runtime-resilience §3.1：连 5s、读写 3s、浏览 10s
@@ -74,6 +76,7 @@ class Container:
     archive: ArchiveBuffer
     writer: ArchiveWriter
     supervisor: CollectSupervisor
+    plan_notifications: PlanNotifications
     consumer: CommandConsumer
 
 
@@ -332,6 +335,13 @@ def build_container(settings: Settings) -> Container:
         archive=archive,
         writer=_build_writer(settings, redis.stream, database, plan),
         supervisor=supervisor,
+        plan_notifications=PlanNotifications(
+            pubsub=PubSub(
+                url=settings.url(), timeout_s=settings.redis_timeout_s
+            ),
+            channel=settings.plan_channel,
+            refresh=supervisor.request_plan_refresh,
+        ),
         consumer=CommandConsumer(
             transport=redis.transport,
             locator=supervisor,

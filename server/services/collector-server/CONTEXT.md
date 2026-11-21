@@ -57,7 +57,7 @@
 **不是启动的逆序**（[runtime-resilience §8](../../../docs/agents/runtime-resilience.md)），顺序由 `app.py` 的常量显式声明、`tests/contract/test_shutdown_order.py` 锁死：
 
 ```
-命令总线（停收新活） → supervisor（拆会话 → 快照冲尾窗 → 让租约） → sink（停循环）
+命令总线（停收新活） → 计划通知 → supervisor（拆会话 → 快照冲尾窗 → 让租约） → sink（停循环）
   → 归档缓冲（冲尾帧进 Stream） → 归档 writer（把 Stream 排干进库） → 数据库 → Redis
 ```
 
@@ -74,6 +74,7 @@
 | 快照属主 | `collect:snapshot-owners:{source_id}` 哈希，字段 = `point_code` | `platform-publisher` 核对当前租约及原始读数的 SHA-256 |
 | 归档流 | `collect:archive:{source_id}` Stream，一条条目 = 一批行 | 只有本服务（writer 读完即 `XDEL`） |
 | 命令总线 | 请求 `collect:cmd:req`，应答 `collect:cmd:reply:{request_id}` | platform 发、本服务应 |
+| 计划变更通知 | `COLLECT_PLAN_CHANNEL`（与 platform 同值） | platform 发、本服务订阅 |
 
 快照字段的载荷是 `{"value":…, "ts_ms":…, "quality":…}`。**键名与字段名取自 `collectwire`，读侧用的是同一份**，故不再有两侧比对的用例，编码这一步由 `tests/contract/test_snapshot_payload.py` 守；归档条目的信封（`rows` + `traceparent`）与流键只有本服务读写，由 `tests/contract/test_archive_envelope.py` 锁死。
 
