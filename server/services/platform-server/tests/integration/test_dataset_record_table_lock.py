@@ -91,21 +91,24 @@ async def ledger(
 
 
 async def perform(
-    session: AsyncSession, table_id: uuid.UUID, action: Action
+    session: AsyncSession, ledger: Ledger, action: Action
 ) -> None:
     if action == "insert":
         writer = record_write.RecordWriter(
-            DatasetDirtyLog(FakeSetSink()), UTC, Actor(name="QA")
+            DatasetDirtyLog(FakeSetSink()),
+            UTC,
+            Actor(name="QA"),
+            ledger.database,
         )
         await record_write.create_record(
             session,
             writer,
-            table_id=table_id,
+            table_id=ledger.table_id,
             payload=RecordCreateIn(values={"v": 7}),
         )
     else:
         await table_service.delete_table(
-            session, table_id=table_id, is_forced=action == "force"
+            session, table_id=ledger.table_id, is_forced=action == "force"
         )
 
 
@@ -114,7 +117,7 @@ async def follow(case: Ledger, action: Action, pid: asyncio.Future[int]) -> str:
         async with case.database.session() as session:
             result = await session.execute(text("SELECT pg_backend_pid()"))
             pid.set_result(int(result.scalar_one()))
-            await perform(session, case.table_id, action)
+            await perform(session, case, action)
     except DatasetTableNotEmpty:
         return "history"
     except DatasetTableNotFound:
@@ -142,7 +145,7 @@ async def test_writing_a_row_serializes_with_deleting_its_table(
         asyncio.TaskGroup() as group,
         ledger.database.session() as holder,
     ):
-        await perform(holder, ledger.table_id, first)
+        await perform(holder, ledger, first)
         pending = group.create_task(follow(ledger, next_action, pid))
         was_blocked = await blocks(holder, pending, await pid)
     assert was_blocked

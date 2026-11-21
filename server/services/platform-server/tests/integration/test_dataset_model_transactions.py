@@ -7,12 +7,15 @@ import pytest
 from conftest import AppContext
 
 from integration.dataset_helpers import (
+    TABLES,
     create_column,
     create_record,
+    overrides_url,
     records_url,
     run_recompute,
 )
 from integration.modeling_helpers import HTTP_OK, LOAD, TEMPERATURE, data_of
+from integration.test_dataset_overrides_api import NODE_KEY
 from integration.test_modeling_artifact_transactions import active_transactions
 from integration.test_modeling_formula_preview import (
     binary_version,
@@ -93,3 +96,59 @@ async def test_an_empty_recompute_window_does_not_download_a_model(
     assert outcome["status"] == "done", outcome
     assert outcome["recomputed"] == 0
     assert reads == []
+
+
+async def test_row_creation_downloads_the_model_outside_its_transaction(
+    app_context: AppContext, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    table_id = await a_model_table(app_context)
+    with observe_download(app_context, monkeypatch) as reads:
+        answer = await create_record(
+            app_context.client,
+            table_id,
+            ts="2026-10-02T00:00:00Z",
+            values={TEMPERATURE: 26, LOAD: 431},
+        )
+    assert isinstance(
+        answer["record"]["computed"]["预测"], (int, float)
+    ), answer
+    assert reads == [0]
+
+
+@pytest.mark.parametrize(
+    "operation", ["edit", "correct", "clear", "clear_range"]
+)
+async def test_edits_and_corrections_download_models_outside_the_transaction(
+    app_context: AppContext, monkeypatch: pytest.MonkeyPatch, operation: str
+) -> None:
+    client = app_context.client
+    table_id = await a_model_table(app_context)
+    await create_column(
+        client, table_id, key="表计", source="point", node_key=NODE_KEY
+    )
+    record = data_of(await client.get(records_url(table_id)))["items"][0]
+    route = overrides_url(table_id, record["row_id"], record["ts"])
+    correction = {"values": {"表计": 9}, "reason": "合成核对"}
+    if operation in {"clear", "clear_range"}:
+        prepared = await client.put(route, json=correction)
+        assert prepared.status_code == HTTP_OK, prepared.text
+    with observe_download(app_context, monkeypatch) as reads:
+        if operation == "edit":
+            response = await client.patch(
+                records_url(table_id) + "/" + record["row_id"],
+                params={"ts": record["ts"]},
+                json={"values": {LOAD: 450}},
+            )
+        elif operation == "correct":
+            response = await client.put(route, json=correction)
+        elif operation == "clear":
+            response = await client.delete(route)
+        else:
+            response = await client.post(
+                f"{TABLES}/{table_id}/overrides:clear",
+                json={"column_keys": ["表计"]},
+            )
+    assert response.status_code == HTTP_OK, response.text
+    stored = data_of(await client.get(records_url(table_id)))["items"][0]
+    assert isinstance(stored["computed"]["预测"], (int, float))
+    assert reads == [0]

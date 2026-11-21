@@ -65,6 +65,7 @@ from platform_server.apps.dataset.services.record_compute import (
 from platform_server.apps.dataset.services.record_history import (
     ComputeScope,
     RowTarget,
+    prepare_models,
 )
 from platform_server.apps.dataset.services.record_values import (
     Actor,
@@ -73,6 +74,7 @@ from platform_server.apps.dataset.services.record_values import (
     merge_values,
     sanitize,
 )
+from platform_server.apps.dataset.services.sessions import Sessions
 from platform_server.apps.dataset.services.table_service import (
     require_table,
 )
@@ -84,7 +86,7 @@ _logger = get_logger("platform.dataset.record")
 
 @dataclass(frozen=True)
 class RecordWriter:
-    """一次记录写入要带的三件协作者：报脏口、业务时区、操作人。
+    """记录写入所需的会话、报脏口、时区和操作人。
 
     ⚠ 打成一个对象而不是逐个透传：函数的形参上限是 5，而写路径天然还要带上
     会话、路径参数与请求体。
@@ -93,6 +95,19 @@ class RecordWriter:
     dirty: DatasetDirtyLog
     timezone: tzinfo
     actor: Actor
+    sessions: Sessions
+
+    async def prepare(
+        self, table_id: uuid.UUID
+    ) -> tuple[DatasetTable, list[DatasetColumn], ComputeScope]:
+        """准备列、公式和固定模型，再开始写入记录。Args: table_id。"""
+        async with self.sessions.session() as read:
+            table = await require_table(read, table_id)
+            columns = await column_crud.list_by_table(read, table_id)
+            scope = await build_scope(
+                read, columns=columns, timezone=self.timezone
+            )
+        return table, columns, await prepare_models(self.sessions, scope)
 
 
 @dataclass(frozen=True)
@@ -118,11 +133,7 @@ async def create_record(
 
     Args: session, writer, table_id, payload。
     """
-    table = await require_table(session, table_id)
-    columns = await column_crud.list_by_table(session, table.id)
-    scope = await build_scope(
-        session, columns=columns, timezone=writer.timezone
-    )
+    table, columns, scope = await writer.prepare(table_id)
     values = sanitize(payload.values, columns, actor=writer.actor)
     _require_some_value(values, columns)
     slot = await _slot_of(session, writer, table, _stamp(payload.ts))
@@ -277,12 +288,8 @@ async def update_record(
 
     Args: session, writer, locator, payload。
     """
-    table = await require_table(session, locator.table_id)
+    table, columns, scope = await writer.prepare(locator.table_id)
     record = await require_record(session, locator)
-    columns = await column_crud.list_by_table(session, table.id)
-    scope = await build_scope(
-        session, columns=columns, timezone=writer.timezone
-    )
     values = sanitize(payload.values, columns, actor=writer.actor)
     merged = merge_values(record.values_json, values)
     overrides = merge_overrides(record.overrides_json, values)

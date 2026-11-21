@@ -27,6 +27,7 @@ from platform_server.apps.dataset.services import (
     RecordLocator,
     RecordWriter,
 )
+from platform_server.apps.dataset.services.sessions import Sessions
 from platform_server.container import Container
 from platform_server.deps import (
     WriteGate,
@@ -47,6 +48,7 @@ __all__ = [
     "get_override_writer",
     "get_recompute_runner",
     "get_record_locator",
+    "get_record_sessions",
     "get_record_writer",
     "get_session",
     "require",
@@ -93,27 +95,36 @@ def get_formula_context(
     )
 
 
+def get_record_sessions(
+    container: Annotated[Container, Depends(get_container)],
+) -> Sessions:
+    """取台账记录读模型所用的短事务工厂。Args: container。"""
+    return container.database
+
+
 def get_record_writer(
     container: Annotated[Container, Depends(get_container)],
     caller: Annotated[CallerContext, Depends(require(DATASET_RECORD_WRITE))],
+    sessions: Annotated[Sessions, Depends(get_record_sessions)],
 ) -> RecordWriter:
     """录入 / 编辑 / 删除单行用的写上下文。
 
-    Args: container, caller。
+    Args: container, caller, sessions。
     """
-    return _writer(container, caller)
+    return _writer(container, caller, sessions)
 
 
 def get_override_writer(
     container: Annotated[Container, Depends(get_container)],
     caller: Annotated[CallerContext, Depends(require(DATASET_OVERRIDE))],
+    sessions: Annotated[Sessions, Depends(get_record_sessions)],
 ) -> RecordWriter:
     """人工修正用的写上下文。
 
     ⚠ 与录入分成两个码：修正值优先于点位聚合值，等同于篡改台账（§9）。
-    Args: container, caller。
+    Args: container, caller, sessions。
     """
-    return _writer(container, caller)
+    return _writer(container, caller, sessions)
 
 
 def get_backfill_gate(
@@ -161,12 +172,15 @@ def get_record_locator(
     )
 
 
-def _writer(container: Container, caller: CallerContext) -> RecordWriter:
+def _writer(
+    container: Container, caller: CallerContext, sessions: Sessions
+) -> RecordWriter:
     """把组合根里的报脏口与时区、加上调用者，拧成一个写上下文。
 
-    Args: container, caller。
+    Args: container, caller, sessions。
     """
     return RecordWriter(
+        sessions=sessions,
         dirty=container.dataset.dirty,
         timezone=container.dataset.timezone,
         actor=Actor(user_id=str(caller.user_id), name=caller.username),

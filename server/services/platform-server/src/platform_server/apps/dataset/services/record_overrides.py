@@ -19,7 +19,6 @@ from lib.logging import get_logger
 from lib.utils.timeutils import utcnow
 from platform_server.apps.dataset.crud import (
     RecordWindow,
-    column_crud,
     record_crud,
 )
 from platform_server.apps.dataset.models import DatasetColumn, DatasetRecord
@@ -35,7 +34,6 @@ from platform_server.apps.dataset.services.record_compute import (
     MAX_RECOMPUTE_ROWS,
     YIELD_EVERY,
     RecomputeOutcome,
-    build_scope,
     recompute_range,
 )
 from platform_server.apps.dataset.services.record_history import ComputeScope
@@ -52,7 +50,6 @@ from platform_server.apps.dataset.services.record_write import (
     require_record,
     write_out,
 )
-from platform_server.apps.dataset.services.table_service import require_table
 
 _logger = get_logger("platform.dataset.override")
 
@@ -71,17 +68,13 @@ async def write_overrides(
     时也知道该绕开哪些格。
     Args: session, writer, locator, payload。
     """
-    table = await require_table(session, locator.table_id)
+    table, columns, scope = await writer.prepare(locator.table_id)
     record = await require_record(session, locator)
-    columns = await column_crud.list_by_table(session, table.id)
     before = set(record.overrides_json or {})
     entries, dropped = _entries_of(
         payload.values, columns, actor=writer.actor, reason=payload.reason
     )
     record.overrides_json = _merged(record, entries, dropped) or None
-    scope = await build_scope(
-        session, columns=columns, timezone=writer.timezone
-    )
     await recompute_row(session, scope, record)
     await session.flush()
     mark_dirty(session, writer.dirty, table.code)
@@ -102,9 +95,8 @@ async def clear_overrides(
     撤掉之后这些格回落到 `values_json` 里的原值，公式随之重算。
     Args: session, writer, locator, payload。
     """
-    table = await require_table(session, locator.table_id)
+    table, _columns, scope = await writer.prepare(locator.table_id)
     record = await require_record(session, locator)
-    columns = await column_crud.list_by_table(session, table.id)
     existing = dict(record.overrides_json or {})
     keys = None if payload is None else payload.keys
     remaining = (
@@ -115,9 +107,6 @@ async def clear_overrides(
             for key, entry in existing.items()
             if key not in set(keys)
         }
-    )
-    scope = await build_scope(
-        session, columns=columns, timezone=writer.timezone
     )
     cleared = sorted(set(existing) - set(remaining))
     if cleared:
@@ -140,12 +129,8 @@ async def clear_overrides_in_range(
     ⚠ 用到整表聚合时必须整表重算：`*_ALL` 一变，比被清区间更早的行也过期了。
     Args: session, writer, table_id, payload。
     """
-    table = await require_table(session, table_id)
-    columns = await column_crud.list_by_table(session, table.id)
+    table, columns, scope = await writer.prepare(table_id)
     _require_known(payload.column_keys, columns)
-    scope = await build_scope(
-        session, columns=columns, timezone=writer.timezone
-    )
     swept = await _sweep(session, table.id, payload)
     if not swept.rows:
         return _bulk_out(swept, RecomputeOutcome(0, 0, False, 0))
