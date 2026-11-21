@@ -23,11 +23,20 @@ from platform_server.apps.modeling.models import (
 from platform_server.apps.modeling.models.deployment_switch import (
     ModelingDeploymentSwitch,
 )
+from platform_server.apps.modeling.operators import OperatorRegistryError
 from platform_server.apps.modeling.schemas.management import DeploymentSwitchIn
+from platform_server.apps.modeling.services.input_defaults import (
+    FrozenInputDefault,
+    leading_frozen_defaults,
+)
+from platform_server.apps.modeling.services.jsonshape import as_dict, as_list
 from platform_server.apps.modeling.services.management_guard import (
     require_active_version,
 )
 from platform_server.apps.modeling.services.pipeline_service import Actor
+from platform_server.apps.modeling.services.serving import (
+    SERVING_FORMAT_VERSION,
+)
 from platform_server.apps.modeling.services.template_service import record_audit
 
 
@@ -147,22 +156,66 @@ def _signature_contract(version: ModelVersion) -> dict[str, JsonValue]:
             "output": {"key": version.target_key, "task": version.task},
             "rule_result": _rule_result_contract(version),
         }
+    defaults = _confirmed_frozen_defaults(version)
     return {
         "format_version": signature.get("format_version"),
         "requires_timestamp": signature.get("requires_timestamp"),
         "data_period": signature.get("data_period"),
         "inputs": [
-            {
-                key: value
-                for key, value in item.items()
-                if key not in {"label", "training_stats", "description"}
-            }
+            _input_contract(item, defaults)
             for item in inputs
             if isinstance(item, dict)
         ],
         "output": signature.get("output"),
         "rule_result": _rule_result_contract(version),
     }
+
+
+def _confirmed_frozen_defaults(
+    version: ModelVersion,
+) -> dict[str, FrozenInputDefault]:
+    """只从执行入口填充的冻结格式核实来源；Args: version。"""
+    serving = version.serving_json
+    if (
+        version.task not in {"regression", "classification"}
+        or serving.get("format_version") != SERVING_FORMAT_VERSION
+        or serving.get("task") != version.task
+    ):
+        return {}
+    try:
+        return leading_frozen_defaults(
+            [as_dict(step) for step in as_list(serving.get("steps"))]
+        )
+    except (OperatorRegistryError, OverflowError):
+        return {}
+
+
+def _input_contract(
+    item: dict[str, JsonValue], defaults: dict[str, FrozenInputDefault]
+) -> dict[str, JsonValue]:
+    """保留已核实的缺失策略；均值更新不改变输入契约。Args: item, defaults。"""
+    result = {
+        key: value
+        for key, value in item.items()
+        if key not in {"label", "training_stats", "description"}
+    }
+    key = item.get("key")
+    default = defaults.get(key) if isinstance(key, str) else None
+    value = item.get("default_on_missing")
+    if (
+        default is None
+        or default.strategy is None
+        or isinstance(value, bool)
+        or value != default.value
+        or item.get("is_required") is not False
+        or item.get("missing_policy")
+        != {"on_missing": "fitted_default", "on_null": "fitted_default"}
+    ):
+        return result
+    result["default_source"] = default.strategy
+    if default.strategy == "mean":
+        result.pop("default_on_missing")
+    return result
 
 
 def _rule_result_contract(version: ModelVersion) -> JsonValue:
