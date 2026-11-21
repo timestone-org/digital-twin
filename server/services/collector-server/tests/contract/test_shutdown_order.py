@@ -25,6 +25,7 @@ def _names_by_startup(settings: Settings) -> list[str]:
 def test_shutdown_runs_in_the_declared_order(settings: Settings) -> None:
     assert _names_by_shutdown(settings) == [
         "command_bus",
+        "plan_notifications",
         "supervisor",
         "snapshot_sink",
         "archive_buffer",

@@ -67,6 +67,7 @@ class Settings(AppSettings, PostgresSettings, RedisSettings):
     plan_timeout_s: float = Field(default=5.0, gt=0)
     # 定期全量重拉并按版本号比对。不用增量消息——丢一条就永久错位
     plan_refresh_interval_s: float = Field(default=30.0, gt=0)
+    plan_channel: str = Field(default="collect:plan:changed", min_length=1)
 
     # 快照落 Redis 的窗口。窗口内同一点位后值覆盖前值（快照是采样不是事件流）
     flush_interval_ms: int = Field(default=300, ge=50)

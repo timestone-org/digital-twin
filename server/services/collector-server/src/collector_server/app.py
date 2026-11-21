@@ -26,6 +26,7 @@ _logger = get_logger("collect.app")
 # 尾帧），writer 又比缓冲晚停（它要把那一帧排进库），而连接池最后关（前面
 # 几件收尾时还要用它）。见 runtime-resilience §8。
 SHUTDOWN_COMMAND_BUS = 10
+SHUTDOWN_PLAN_NOTIFICATIONS = 15
 SHUTDOWN_SUPERVISOR = 20
 SHUTDOWN_SINK = 30
 SHUTDOWN_ARCHIVE_BUFFER = 40
@@ -39,6 +40,7 @@ STARTUP_ARCHIVE_WRITER = 15
 STARTUP_SINK = 20
 STARTUP_ARCHIVE_BUFFER = 25
 STARTUP_SUPERVISOR = 30
+STARTUP_PLAN_NOTIFICATIONS = 35
 STARTUP_COMMAND_BUS = 40
 
 
@@ -86,6 +88,13 @@ def hooks_of(container: Container) -> tuple[LifespanHook, ...]:
             startup_order=STARTUP_SUPERVISOR,
             shutdown=container.supervisor.stop,
             shutdown_order=SHUTDOWN_SUPERVISOR,
+        ),
+        LifespanHook(
+            name="plan_notifications",
+            startup=container.plan_notifications.start,
+            startup_order=STARTUP_PLAN_NOTIFICATIONS,
+            shutdown=container.plan_notifications.stop,
+            shutdown_order=SHUTDOWN_PLAN_NOTIFICATIONS,
         ),
         LifespanHook(
             name="command_bus",
