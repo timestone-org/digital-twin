@@ -51,6 +51,7 @@ export function computeValue(
   spec: ComputeSpec,
   values: Readonly<Record<string, unknown>>,
 ): number | null {
+  if (spec.invalidWire !== undefined) return null
   const numbers = toFiniteNumbers(spec.inputs, values)
   if (numbers === null || numbers.length === 0) return null
   const result = REDUCERS[spec.op](numbers)

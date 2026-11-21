@@ -161,8 +161,7 @@ export function toSourceKind(raw: unknown): BindingSourceKind {
 }
 
 /**
- * 派生规格。op 不在闭合集合里或 inputs 不是字符串数组时给 null——
- * 求值层会把它渲染成一条说得出原因的错误槽。
+ * 派生规格。混有非字符串输入的旧规格原样往返，且不参与求值。
  * @param raw 线上的 `compute_json`
  */
 export function toComputeSpec(raw: unknown): ComputeSpec | null {
@@ -172,6 +171,7 @@ export function toComputeSpec(raw: unknown): ComputeSpec | null {
     op: raw.op,
     inputs: inputs.filter((item): item is string => typeof item === 'string'),
   }
+  if (spec.inputs.length !== inputs.length) spec.invalidWire = raw
   const precision = finite(raw.precision)
   if (precision !== null) spec.precision = precision
   return spec
@@ -185,6 +185,7 @@ export function fromComputeSpec(
   spec: ComputeSpec | null,
 ): Record<string, unknown> | null {
   if (spec === null) return null
+  if (spec.invalidWire !== undefined) return spec.invalidWire
   const out: Record<string, unknown> = { op: spec.op, inputs: [...spec.inputs] }
   if (spec.precision !== undefined) out.precision = spec.precision
   return out
