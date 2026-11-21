@@ -51,6 +51,11 @@ def _hooks(container: Container) -> tuple[LifespanHook, ...]:
     return (
         _catalog_hook(container),
         LifespanHook(
+            name="attachments",
+            shutdown=container.attachments.close,
+            shutdown_order=40,
+        ),
+        LifespanHook(
             name="mcp",
             # ⚠ 与 platform 同一档：在途的回合还可能正等某一路 MCP 答复
             shutdown=container.mcp.client.close,

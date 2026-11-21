@@ -133,7 +133,9 @@ async def db_stack(
     if not _reachable(db_settings.postgres_host, db_settings.postgres_port):
         pytest.skip("本机连不到 Postgres")
     application = build_app(db_settings)
-    database = application.state.container.database
+    container = application.state.container
+    assert isinstance(container, Container)
+    database = container.database
     connection = await database.engine.connect()
     transaction = await connection.begin()
     maker = _wire(application, connection)
@@ -145,6 +147,7 @@ async def db_stack(
     ) as client:
         client.headers.update(sign())
         yield DbStack(client=client, app=application, sessions=maker)
+    await container.attachments.close()
     await transaction.rollback()
     await connection.close()
     await database.dispose()

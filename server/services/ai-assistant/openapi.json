@@ -1411,7 +1411,7 @@
   "paths": {
     "/api/v1/assistant/attachments:parse": {
       "post": {
-        "description": "读一份 xlsx / csv / 纯文本：表格摊成竖线表，文本原样截取。\n\nArgs: payload, _caller。",
+        "description": "读一份 xlsx / csv / 纯文本：表格摊成竖线表，文本原样截取。\n\nArgs: payload, _caller, container。",
         "operationId": "parse_attachment_api_v1_assistant_attachments_parse_post",
         "requestBody": {
           "content": {
