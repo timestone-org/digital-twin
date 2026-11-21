@@ -13,6 +13,7 @@ from redis.asyncio import Redis
 
 from collector_server.apps.collect.drivers.base import (
     DriverConnection,
+    DriverError,
     PointSpec,
 )
 from collector_server.apps.collect.drivers.opcua.driver import OpcuaDriver
@@ -91,6 +92,24 @@ async def opcua_endpoint(unused_tcp_port: int) -> AsyncIterator[str]:
         if process.returncode is None:
             process.terminate()
             await asyncio.wait_for(process.wait(), 10)
+
+
+async def test_stock_read_only_node_refuses_write_without_changing_value(
+    opcua_endpoint: str,
+) -> None:
+    driver = OpcuaDriver(connection=DriverConnection(endpoint=opcua_endpoint))
+    driver.load_points([PointSpec("read_only", "ns=2;s=p12", 1000)])
+    try:
+        await driver.connect()
+        before = await driver.read_many(["read_only"])
+        assert before[0][0] == 12.0
+        with pytest.raises(DriverError, match="设备明确拒绝") as error:
+            await driver.write("read_only", 31.25)
+        assert error.value.reason == "write_rejected"
+        after = await driver.read_many(["read_only"])
+        assert after[0][0] == 12.0
+    finally:
+        await driver.disconnect()
 
 
 async def test_static_points_land_in_snapshot_without_a_value_change(

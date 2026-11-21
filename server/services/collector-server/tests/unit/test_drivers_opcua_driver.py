@@ -8,8 +8,17 @@ import asyncio
 
 import pytest
 from asyncua import ua
+from asyncua.ua.uaerrors import (
+    BadIdentityTokenRejected,
+    BadNotWritable,
+    BadTimeout,
+    BadTypeMismatch,
+    BadUnexpectedError,
+    BadUserAccessDenied,
+)
 
 from collector_server.apps.collect.drivers.base import (
+    DriverError,
     DriverNotConnected,
     PointNotLoaded,
     PointSpec,
@@ -131,6 +140,65 @@ async def test_writing_an_unregistered_point_is_refused() -> None:
     await made.connect()
     with pytest.raises(PointNotLoaded):
         await made.write("nobody", 1)
+
+
+@pytest.mark.parametrize(
+    "refusal", [BadTypeMismatch, BadNotWritable, BadUserAccessDenied]
+)
+async def test_protocol_write_refusal_reports_a_confirmed_rejection(
+    refusal: type[Exception], monkeypatch: pytest.MonkeyPatch
+) -> None:
+    async def rejected(_node: FakeNode, _value: object) -> None:
+        raise refusal()
+
+    monkeypatch.setattr(FakeNode, "write_value", rejected)
+    made, built = make_driver()
+    try:
+        await made.connect()
+        made.load_points([make_spec("outlet_temp")])
+        with pytest.raises(DriverError, match="设备明确拒绝") as error:
+            await made.write("outlet_temp", 21.5)
+        assert error.value.reason == "write_rejected"
+        assert built[0].built["ns=2;s=outlet_temp"].written == []
+    finally:
+        await made.disconnect()
+
+
+@pytest.mark.parametrize(
+    "failure",
+    [
+        BadUnexpectedError,
+        BadIdentityTokenRejected,
+        BadTimeout,
+        ConnectionResetError,
+        TimeoutError,
+    ],
+)
+async def test_unconfirmed_native_write_errors_remain_unconfirmed(
+    failure: type[Exception], monkeypatch: pytest.MonkeyPatch
+) -> None:
+    async def lost_reply(node: FakeNode, value: object) -> None:
+        node.written.append(value)
+        raise failure()
+
+    monkeypatch.setattr(FakeNode, "write_value", lost_reply)
+    made, built = make_driver()
+    try:
+        await made.connect()
+        made.load_points([make_spec("outlet_temp")])
+        with pytest.raises(failure):
+            await made.write("outlet_temp", 21.5)
+        assert built[0].built["ns=2;s=outlet_temp"].written == [21.5]
+    finally:
+        await made.disconnect()
+
+
+async def test_write_with_no_connection_has_no_native_client() -> None:
+    made, built = make_driver()
+    made.load_points([make_spec("outlet_temp")])
+    with pytest.raises(DriverNotConnected):
+        await made.write("outlet_temp", 21.5)
+    assert built == []
 
 
 async def test_write_reaches_the_node_of_the_registered_address() -> None:
