@@ -6,7 +6,7 @@
 
 import uuid
 from dataclasses import dataclass, field
-from typing import Any
+from typing import Any, cast
 
 from platform_server.apps.dashboard.models import (
     DashboardBinding,
@@ -38,6 +38,7 @@ class BindingDraft:
     detail_json: dict[str, Any] | None = None
     static_value_json: Any = None
     has_static_value: bool = field(default=False)
+    should_check_compute_details: bool = False
 
 
 def node_draft_of(node: DashboardNode, *, field_path: str) -> NodeDraft:
@@ -55,7 +56,10 @@ def node_draft_of(node: DashboardNode, *, field_path: str) -> NodeDraft:
 
 
 def binding_draft_of(
-    binding: DashboardBinding, *, field_path: str
+    binding: DashboardBinding,
+    *,
+    field_path: str,
+    should_check_compute_details: bool = False,
 ) -> BindingDraft:
     """把已落库的绑定转成校验形态。
 
@@ -71,7 +75,29 @@ def binding_draft_of(
         detail_json=binding.detail_json,
         static_value_json=binding.static_value_json,
         has_static_value=binding.static_value_json is not None,
+        should_check_compute_details=should_check_compute_details,
     )
+
+
+def same_compute_payload(before: object, after: object) -> bool:
+    """比较 JSON 值，保留布尔值和数字的类型区别。"""
+    if isinstance(before, bool) or isinstance(after, bool):
+        return before is after
+    if isinstance(before, dict) and isinstance(after, dict):
+        old_members = cast("dict[str, object]", before)
+        new_members = cast("dict[str, object]", after)
+        return old_members.keys() == new_members.keys() and all(
+            same_compute_payload(old_members[key], new_members[key])
+            for key in old_members
+        )
+    if isinstance(before, list) and isinstance(after, list):
+        old_items = cast("list[object]", before)
+        new_items = cast("list[object]", after)
+        return len(old_items) == len(new_items) and all(
+            same_compute_payload(left, right)
+            for left, right in zip(old_items, new_items, strict=True)
+        )
+    return before == after
 
 
 def at_field(field_path: str, name: str) -> str:

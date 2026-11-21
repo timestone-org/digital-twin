@@ -18,6 +18,7 @@ from platform_server.apps.dashboard.services.layout_plan import (
     build_plan,
     in_parent_first_order,
 )
+from platform_server.apps.dashboard.services.state import DashboardState
 
 
 def entry(
@@ -120,9 +121,10 @@ def test_binding_drafts_carry_the_nested_path() -> None:
             ]
         )
     )
-    assert [draft.field_path for draft in plan.binding_drafts()] == [
-        "nodes[0].bindings[0]"
-    ]
+    assert [
+        draft.field_path
+        for draft in plan.binding_drafts(DashboardState([], []))
+    ] == ["nodes[0].bindings[0]"]
 
 
 def test_children_are_ordered_after_their_parents() -> None:

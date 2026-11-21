@@ -27,6 +27,7 @@ from platform_server.apps.dashboard.models import (
 from platform_server.apps.dashboard.schemas import DashboardOut
 from platform_server.apps.dashboard.schemas.transfer import (
     COPY_NAME_SUFFIX,
+    ComputedBindingWarningOut,
     DashboardExportIn,
     DashboardExportOut,
     DashboardImportIn,
@@ -35,6 +36,9 @@ from platform_server.apps.dashboard.schemas.transfer import (
     ExportBindingIn,
     ExportNodeIn,
     UnresolvedBindingOut,
+)
+from platform_server.apps.dashboard.services.binding_rules import (
+    COMPUTE_WARNING_CODES,
 )
 from platform_server.apps.dashboard.services.dashboard_service import (
     bump_version,
@@ -169,7 +173,7 @@ async def import_dashboard(
         payload.interaction_node_map,
     )
     document = document.model_copy(update={"chrome_json": chrome})
-    unresolved = await _unresolved_bindings(planned, context=context)
+    unresolved, computed = await _import_warnings(planned, context=context)
     dashboard = await _prepare_dashboard(
         session,
         project_id=project.id,
@@ -186,7 +190,7 @@ async def import_dashboard(
         unresolved_count=len(unresolved),
     )
     return _with_unresolved(
-        await present_dashboard(session, dashboard), unresolved
+        await present_dashboard(session, dashboard), unresolved, computed
     )
 
 
@@ -299,6 +303,7 @@ def binding_drafts(planned: Sequence[PlannedNode]) -> list[BindingDraft]:
             detail_json=binding.entry.detail_json,
             static_value_json=binding.entry.static_value_json,
             has_static_value=binding.entry.static_value_json is not None,
+            should_check_compute_details=True,
         )
         for item in planned
         for binding in item.bindings
@@ -508,31 +513,43 @@ def _binding_values(entry: ExportBindingIn) -> dict[str, Any]:
     }
 
 
-async def _unresolved_bindings(
+async def _import_warnings(
     planned: Sequence[PlannedNode], *, context: ValidationContext
-) -> list[UnresolvedBindingOut]:
-    """把包过一遍写入面同一套校验，返回指不到点位的那些绑定。
-
-    Args: planned, context。
-    """
+) -> tuple[list[UnresolvedBindingOut], list[ComputedBindingWarningOut]]:
+    """导入报告缺点位或派生输入问题，并拒绝其余校验问题。"""
     issues = await collect_issues(
         nodes=node_drafts(planned),
         bindings=binding_drafts(planned),
         context=context,
     )
-    raise_if_invalid(
-        [issue for issue in issues if issue.code != TOLERATED_ISSUE_CODE]
-    )
+    tolerated = COMPUTE_WARNING_CODES | {TOLERATED_ISSUE_CODE}
+    raise_if_invalid([issue for issue in issues if issue.code not in tolerated])
     by_path = {
-        binding.field_path: binding
+        binding.field_path: (item, binding)
         for item in planned
         for binding in item.bindings
     }
-    return [
-        _to_unresolved(by_path[_owner_path(issue.field)], issue.code)
-        for issue in issues
-        if issue.code == TOLERATED_ISSUE_CODE
-    ]
+    unresolved: list[UnresolvedBindingOut] = []
+    computed: list[ComputedBindingWarningOut] = []
+    for issue in issues:
+        if issue.code == TOLERATED_ISSUE_CODE:
+            unresolved.append(
+                _to_unresolved(by_path[_owner_path(issue.field)][1], issue.code)
+            )
+        else:
+            path, _, suffix = issue.field.partition(".compute_json")
+            item, binding = by_path[path]
+            computed.append(
+                ComputedBindingWarningOut(
+                    node_client_key=item.entry.client_key,
+                    module_type=item.entry.module_type,
+                    field_key=binding.entry.field_key,
+                    field=f"compute_json{suffix}",
+                    reason=issue.code,
+                    message=issue.message,
+                )
+            )
+    return unresolved, computed
 
 
 def _owner_path(field: str) -> str:
@@ -552,8 +569,12 @@ def _to_unresolved(
 
 
 def _with_unresolved(
-    presented: DashboardOut, unresolved: Sequence[UnresolvedBindingOut]
+    presented: DashboardOut,
+    unresolved: Sequence[UnresolvedBindingOut],
+    computed: Sequence[ComputedBindingWarningOut],
 ) -> DashboardImportOut:
     return DashboardImportOut(
-        **presented.model_dump(), unresolved_bindings=list(unresolved)
+        **presented.model_dump(),
+        unresolved_bindings=list(unresolved),
+        computed_binding_warnings=list(computed),
     )

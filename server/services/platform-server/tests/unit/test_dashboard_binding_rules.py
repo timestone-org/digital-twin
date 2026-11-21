@@ -429,14 +429,14 @@ def test_a_derived_binding_needs_a_registered_operator() -> None:
     assert codes(list(issues)) == ["compute_spec_invalid"]
 
 
-def test_a_derived_binding_needs_non_empty_inputs() -> None:
+def test_a_derived_binding_needs_an_inputs_array() -> None:
     issues = check_sources(
         [
             binding(
                 uuid7(),
                 "sceneStatus",
                 source_kind="computed",
-                payload={"compute_json": {"op": "sum", "inputs": []}},
+                payload={"compute_json": {"op": "sum", "inputs": "value"}},
             )
         ],
         known_node_keys=KNOWN,

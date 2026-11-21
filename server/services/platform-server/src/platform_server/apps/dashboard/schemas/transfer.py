@@ -166,6 +166,17 @@ class UnresolvedBindingOut(OutputModel):
     reason: str
 
 
+class ComputedBindingWarningOut(OutputModel):
+    """导入时保留的一条派生规格问题。"""
+
+    node_client_key: str
+    module_type: str
+    field_key: str
+    field: str
+    reason: str
+    message: str
+
+
 class DashboardImportOut(DashboardOut):
     """导入结果。
 
@@ -175,4 +186,7 @@ class DashboardImportOut(DashboardOut):
 
     unresolved_bindings: list[UnresolvedBindingOut] = Field(
         default_factory=list[UnresolvedBindingOut]
+    )
+    computed_binding_warnings: list[ComputedBindingWarningOut] = Field(
+        default_factory=list[ComputedBindingWarningOut]
     )

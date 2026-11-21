@@ -9360,6 +9360,45 @@
         "title": "CompliancePolicyOut",
         "type": "object"
       },
+      "ComputedBindingWarningOut": {
+        "description": "导入时保留的一条派生规格问题。",
+        "properties": {
+          "field": {
+            "title": "Field",
+            "type": "string"
+          },
+          "field_key": {
+            "title": "Field Key",
+            "type": "string"
+          },
+          "message": {
+            "title": "Message",
+            "type": "string"
+          },
+          "module_type": {
+            "title": "Module Type",
+            "type": "string"
+          },
+          "node_client_key": {
+            "title": "Node Client Key",
+            "type": "string"
+          },
+          "reason": {
+            "title": "Reason",
+            "type": "string"
+          }
+        },
+        "required": [
+          "node_client_key",
+          "module_type",
+          "field_key",
+          "field",
+          "reason",
+          "message"
+        ],
+        "title": "ComputedBindingWarningOut",
+        "type": "object"
+      },
       "ConfigFieldConditionOut": {
         "description": "条件显示：同级字段的当前值落在 `in_values` 里才渲染本字段。",
         "properties": {
@@ -10290,6 +10329,13 @@
             "additionalProperties": true,
             "title": "Chrome Json",
             "type": "object"
+          },
+          "computed_binding_warnings": {
+            "items": {
+              "$ref": "#/components/schemas/ComputedBindingWarningOut"
+            },
+            "title": "Computed Binding Warnings",
+            "type": "array"
           },
           "created_at": {
             "format": "date-time",

@@ -32,6 +32,7 @@ from platform_server.apps.dashboard.source_kinds import (
 from timeseries import InvalidNodeKey, split_node_key
 
 # 每种来源必须带的那一件东西
+_RATIO_INPUT_COUNT = 2
 _REQUIRED_PAYLOAD = {
     "opcua": ("node_key", "实时绑定必须指向一个点位"),
     "static": ("static_value_json", "常量绑定必须给出值"),
@@ -72,6 +73,89 @@ def check_sources(
         found.extend(_check_kind(binding))
         found.extend(_check_point(binding, known_node_keys=known_node_keys))
     return found
+
+
+COMPUTE_WARNING_CODES = frozenset(
+    {
+        "compute_input_not_string",
+        "compute_input_slot_unknown",
+        "compute_arity_invalid",
+    }
+)
+
+
+def check_compute_details(
+    bindings: Sequence[BindingDraft],
+    *,
+    module_types: dict[uuid.UUID, str],
+    catalog: ModuleCatalog,
+) -> list[FieldError]:
+    """校验新增或实际改动的派生输入。"""
+    return [
+        issue
+        for binding in bindings
+        if binding.should_check_compute_details
+        and binding.source_kind == "computed"
+        if (module_type := module_types.get(binding.node_id)) is not None
+        for issue in _compute_details(binding, catalog.slots(module_type))
+    ]
+
+
+def _compute_details(
+    binding: BindingDraft, slots: ModuleSlots
+) -> list[FieldError]:
+    spec = binding.compute_json or {}
+    raw = spec.get("inputs")
+    operator = spec.get("op")
+    if not isinstance(operator, str) or operator not in COMPUTE_OPS:
+        return []
+    if not isinstance(raw, list):
+        return []
+    inputs = cast("list[object]", raw)
+    issues = [
+        issue
+        for index, item in enumerate(inputs)
+        if (issue := _compute_input(binding, slots, index, item)) is not None
+    ]
+    message = _arity_issue(operator, len(inputs))
+    if message is not None:
+        issues.append(
+            FieldError(
+                field=at_field(binding.field_path, "compute_json.inputs"),
+                code="compute_arity_invalid",
+                message=message,
+            )
+        )
+    return issues
+
+
+def _arity_issue(operator: str, count: int) -> str | None:
+    if operator == "ratio":
+        return (
+            None
+            if count == _RATIO_INPUT_COUNT
+            else "比值运算需要恰好两个输入槽"
+        )
+    return None if count > 0 else "运算至少需要一个输入槽"
+
+
+def _compute_input(
+    binding: BindingDraft, slots: ModuleSlots, index: int, item: object
+) -> FieldError | None:
+    path = at_field(binding.field_path, f"compute_json.inputs[{index}]")
+    if not isinstance(item, str):
+        return FieldError(
+            field=path,
+            code="compute_input_not_string",
+            message="输入槽必须为字符串",
+        )
+    if item == binding.field_key or not _slot_exists(item, slots):
+        return FieldError(
+            field=path,
+            code="compute_input_slot_unknown",
+            message=f"不是本模块可引用的其它槽：{item}",
+        )
+    return None
 
 
 def referenced_node_keys(bindings: Sequence[BindingDraft]) -> frozenset[str]:
@@ -250,7 +334,6 @@ def _check_compute(binding: BindingDraft) -> list[FieldError]:
         isinstance(operator, str)
         and operator in COMPUTE_OPS
         and isinstance(inputs, list)
-        and len(cast("list[object]", inputs)) > 0
     )
     if is_well_formed:
         return []
@@ -258,7 +341,7 @@ def _check_compute(binding: BindingDraft) -> list[FieldError]:
         FieldError(
             field=at_field(binding.field_path, "compute_json"),
             code="compute_spec_invalid",
-            message="派生规格要有已注册的 op 与非空的 inputs",
+            message="派生规格要有已注册的 op 与 inputs 数组",
         )
     ]
 

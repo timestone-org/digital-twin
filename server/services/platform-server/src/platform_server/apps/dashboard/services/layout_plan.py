@@ -12,6 +12,7 @@ from typing import Any
 from lib.errors import FieldError
 from lib.utils.ids import uuid7
 from platform_server.apps.dashboard.errors import LayoutInvalid
+from platform_server.apps.dashboard.models import DashboardBinding
 from platform_server.apps.dashboard.schemas import (
     BindingCreateIn,
     LayoutNodeIn,
@@ -20,7 +21,9 @@ from platform_server.apps.dashboard.schemas import (
 from platform_server.apps.dashboard.services.drafts import (
     BindingDraft,
     NodeDraft,
+    same_compute_payload,
 )
+from platform_server.apps.dashboard.services.state import DashboardState
 
 
 @dataclass(frozen=True)
@@ -74,8 +77,10 @@ class LayoutPlan:
             for node in self.nodes
         ]
 
-    def binding_drafts(self) -> list[BindingDraft]:
+    def binding_drafts(self, state: DashboardState) -> list[BindingDraft]:
         """绑定的校验形态。"""
+        previous = {binding.id: binding for binding in state.bindings}
+        modules = {node.id: node.module_type for node in state.nodes}
         return [
             BindingDraft(
                 node_id=binding.node_id,
@@ -87,10 +92,31 @@ class LayoutPlan:
                 detail_json=binding.entry.detail_json,
                 static_value_json=binding.entry.static_value_json,
                 has_static_value=binding.entry.static_value_json is not None,
+                should_check_compute_details=(
+                    modules.get(node.node_id) != node.entry.module_type
+                    or binding_changed(
+                        binding, previous.get(binding.binding_id)
+                    )
+                ),
             )
             for node in self.nodes
             for binding in node.bindings
         ]
+
+
+def binding_changed(
+    planned: PlannedBinding, previous: DashboardBinding | None
+) -> bool:
+    """旧计算规格须在相同节点、槽及来源保留。"""
+    return (
+        previous is None
+        or previous.node_id != planned.node_id
+        or previous.field_key != planned.entry.field_key
+        or previous.source_kind != planned.entry.source_kind
+        or not same_compute_payload(
+            previous.compute_json, planned.entry.compute_json
+        )
+    )
 
 
 def build_plan(payload: ReplaceLayoutIn) -> LayoutPlan:
