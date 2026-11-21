@@ -1,6 +1,7 @@
 """基础数学：取整、开方、幂、符号、取余、夹取。"""
 
 import math
+from decimal import ROUND_HALF_UP, Context, Decimal
 
 from platform_server.apps.dataset.formula.functions.wrappers import (
     ScalarImpl,
@@ -8,7 +9,7 @@ from platform_server.apps.dataset.formula.functions.wrappers import (
     ternary,
     unary,
 )
-from platform_server.apps.dataset.formula.values import to_number
+from platform_server.apps.dataset.formula.values import finite, to_number
 
 
 def _round(args: list[object]) -> object:
@@ -20,10 +21,23 @@ def _round(args: list[object]) -> object:
     if value is None:
         return None
     digits = to_number(args[1] if len(args) > 1 else 0, where="ROUND 的小数位")
-    try:
-        return round(value, int(digits or 0))
-    except OverflowError:
-        return None
+    return _round_decimal(value, int(digits or 0))
+
+
+def _round_decimal(value: float, places: int) -> float | None:
+    """按十进制中点向远离零的方向舍入。Args: value, places。"""
+    decimal = Decimal(str(value))
+    precision = len(decimal.as_tuple().digits)
+    target = -places
+    if value == 0 or target <= decimal.adjusted() + 1 - precision:
+        return value
+    if target > decimal.adjusted() + 1:
+        return math.copysign(0.0, value)
+    quantum = Decimal((0, (1,), target))
+    rounded = decimal.quantize(
+        quantum, rounding=ROUND_HALF_UP, context=Context(prec=precision + 1)
+    )
+    return finite(float(rounded))
 
 
 def _sign(value: float) -> float:
