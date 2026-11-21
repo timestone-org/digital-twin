@@ -737,6 +737,8 @@ services:
   knowledge-worker:
     image: digitaltwin/knowledge-server:${IMAGE_TAG:-dev}
     build: *knowledge-build
+    # 回收随 Office 进程组终止的孤儿子进程。
+    init: true
     depends_on:
       database-migrate: {condition: service_completed_successfully}
     environment:

@@ -2,8 +2,10 @@
 
 import asyncio
 import os
+import sys
 import uuid
 import zipfile
+from contextlib import suppress
 from dataclasses import dataclass
 from io import BytesIO
 from pathlib import Path
@@ -380,38 +382,89 @@ def test_the_feature_switch_controls_previewer_assembly() -> None:
     )
 
 
-async def _gone(pid: int) -> bool:
-    """这个进程在两秒内没了吗（僵尸也等它被回收）。
+async def _converter_pid(marker: Path) -> int:
+    """等转换子进程的 PID 文件就绪。
+
+    Args: marker。
+    """
+    while True:
+        try:
+            return int(await asyncio.to_thread(marker.read_text))
+        except FileNotFoundError:
+            await asyncio.sleep(0.01)
+
+
+def _converter_exited(pid: int) -> bool:
+    """区分仍在执行的进程和待回收的僵尸进程。
 
     Args: pid。
     """
-    for _ in range(40):
-        try:
-            os.kill(pid, 0)
-        except ProcessLookupError:
-            return True
-        await asyncio.sleep(0.05)
+    try:
+        if sys.platform == "linux":
+            state = Path(f"/proc/{pid}/stat").read_text().rpartition(") ")[2]
+            return state.startswith("Z ")
+        os.kill(pid, 0)
+    except (FileNotFoundError, ProcessLookupError):
+        return True
     return False
 
 
-async def test_a_timeout_kills_the_converter_that_the_launcher_forked(
-    tmp_path: Path,
+async def _wait_for_converter_exit(pid: int) -> None:
+    """等转换子进程停止执行。
+
+    Args: pid。
+    """
+    while True:
+        if await asyncio.to_thread(_converter_exited, pid):
+            return
+        await asyncio.sleep(0.01)
+
+
+@pytest.mark.parametrize(
+    "should_cancel", [False, True], ids=["timeout", "cancel"]
+)
+async def test_interrupted_conversion_stops_the_converter_process_group(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch, *, should_cancel: bool
 ) -> None:
-    """⚠ soffice 是个启动器，真正干活的 soffice.bin 是它 fork 出来的：只杀
-    启动器那一个 pid 的话，转换进程成了孤儿接着吃 CPU 与内存，超时几次就把
-    worker 容器顶到 OOM。"""
     launcher = tmp_path / "soffice"
     launcher.write_text(
-        '#!/bin/sh\nsleep 30 &\necho $! > "$HOME/child.pid"\nwait\n'
+        '#!/bin/sh\nsleep 30 &\necho $! > "$HOME/child.tmp"\n'
+        'mv "$HOME/child.tmp" "$HOME/child.pid"\nwait\n'
     )
     launcher.chmod(0o755)
     output = tmp_path / "out"
     output.mkdir()
+    deadline = asyncio.timeout(None)
+    waiting = asyncio.Event()
 
-    with pytest.raises(PreviewRenderFailed, match="超时"):
-        await docx_preview._run_libreoffice(
-            str(launcher), tmp_path / "a.docx", output, 0.5
+    def start_deadline(_delay_s: float) -> asyncio.Timeout:
+        waiting.set()
+        return deadline
+
+    monkeypatch.setattr(docx_preview.asyncio, "timeout", start_deadline)
+    task = asyncio.create_task(
+        docx_preview._run_libreoffice(
+            str(launcher), tmp_path / "a.docx", output, 30
         )
+    )
 
-    child = int((output / "child.pid").read_text().strip())
-    assert await _gone(child)
+    try:
+        child = await asyncio.wait_for(
+            _converter_pid(output / "child.pid"), timeout=10
+        )
+        await asyncio.wait_for(waiting.wait(), timeout=2)
+        assert not await asyncio.to_thread(_converter_exited, child)
+        if should_cancel:
+            task.cancel()
+            with pytest.raises(asyncio.CancelledError):
+                await task
+        else:
+            deadline.reschedule(asyncio.get_running_loop().time())
+            with pytest.raises(PreviewRenderFailed, match="超时"):
+                await task
+        await asyncio.wait_for(_wait_for_converter_exit(child), timeout=2)
+    finally:
+        if not task.done():
+            task.cancel()
+            with suppress(asyncio.CancelledError):
+                await task
