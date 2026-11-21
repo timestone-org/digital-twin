@@ -21,6 +21,7 @@ from sqlalchemy import (
     String,
     Text,
     UniqueConstraint,
+    text,
 )
 from sqlalchemy.dialects.postgresql import UUID
 from sqlalchemy.orm import Mapped, mapped_column
@@ -97,6 +98,7 @@ class KnowledgeDocument(UuidPrimaryKeyMixin, TimestampMixin, Base):
     chunk_count: Mapped[int] = mapped_column(
         Integer, nullable=False, server_default="0"
     )
+    source_revision_state: Mapped[str | None] = mapped_column(String(16))
     embedding_deferred: Mapped[bool | None] = mapped_column(Boolean)
     ready_at: Mapped[datetime | None] = mapped_column(
         DateTime(timezone=True), nullable=True
@@ -107,6 +109,10 @@ class KnowledgeDocument(UuidPrimaryKeyMixin, TimestampMixin, Base):
             "status IN ('pending', 'parsing', 'chunking', 'embedding', "
             "'indexing', 'ready', 'failed')",
             name="status_known",
+        ),
+        CheckConstraint(
+            "source_revision_state IN ('current','pending','historical')",
+            name="source_revision_state",
         ),
         CheckConstraint("length(title) > 0", name="title_present"),
         CheckConstraint("length(content_hash) = 64", name="hash_sized"),
@@ -119,4 +125,13 @@ class KnowledgeDocument(UuidPrimaryKeyMixin, TimestampMixin, Base):
         ),
         Index("ix_kb_documents_base_status", "base_id", "status"),
         Index("ix_kb_documents_source", "source_id"),
+        Index(
+            "ix_kb_documents_source_recovery",
+            "updated_at",
+            "id",
+            postgresql_where=text(
+                "status='pending' "
+                "AND source_revision_state IN ('pending','current')"
+            ),
+        ),
     )
