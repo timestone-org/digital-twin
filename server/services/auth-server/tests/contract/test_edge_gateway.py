@@ -12,17 +12,10 @@ from pathlib import Path
 
 import pytest
 
+from lib.auth import IDENTITY_HEADERS
+
 ROOT = Path(__file__).resolve().parents[5]
 CONFIGS = ("nginx.conf.template", "dt-edge.windows.conf")
-AUTH_HEADERS = (
-    "X-Auth-User-Id",
-    "X-Auth-Username",
-    "X-Auth-Role",
-    "X-Auth-Permissions",
-    "X-Auth-Permissions-Truncated",
-    "X-Auth-Exp",
-    "X-Auth-Sig",
-)
 # 引号串整体跳过：串里的 `#` 与花括号不是注释也不是块边界
 _LEXEME = re.compile(r"'[^']*'|\"(?:\\.|[^\"\\])*\"|#[^\n]*|[{}]")
 
@@ -145,8 +138,35 @@ def test_client_sent_identity_headers_never_reach_an_upstream(
         )
         if not writes_headers or _includes(block.body, "auth-inject.conf"):
             continue
-        missing = [h for h in AUTH_HEADERS if not _sets_header(block.body, h)]
+        missing = [
+            h for h in IDENTITY_HEADERS if not _sets_header(block.body, h)
+        ]
         assert not missing, (block.match, missing)
+
+
+@pytest.mark.parametrize("filename", CONFIGS)
+def test_protected_routes_forward_the_signed_account_name(
+    filename: str,
+) -> None:
+    _, blocks = load(filename)
+    shared = (ROOT / "docker/nginx/auth-inject.conf").read_text()
+    protected = [
+        shared,
+        *(
+            block.body
+            for block in blocks
+            if re.search(r"\bauth_request\s+/_auth(?:_ws)?;", block.body)
+        ),
+    ]
+    for body in protected:
+        source = re.search(
+            r"auth_request_set\s+(\$\w+)\s+\$upstream_http_x_auth_sig_v2;", body
+        )
+        assert source is not None
+        assert re.search(
+            rf"proxy_set_header\s+X-Auth-Sig-V2\s+{re.escape(source.group(1))};",
+            body,
+        )
 
 
 @pytest.mark.parametrize("filename", CONFIGS)

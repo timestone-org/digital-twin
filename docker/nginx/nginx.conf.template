@@ -163,6 +163,7 @@ map $host $hierarchy_upstream { default 'hierarchy-server:8010'; }
     proxy_set_header X-Auth-Permissions-Truncated "";
     proxy_set_header X-Auth-Exp       "";
     proxy_set_header X-Auth-Sig       "";
+    proxy_set_header X-Auth-Sig-V2    "";
 
     # 限流拒绝回 429 与统一信封。⚠ 默认是 503 加一页 HTML：前端会把「点太快了」
     # 当成服务端故障，运维也会被一次并不存在的宕机叫起来。
@@ -189,6 +190,7 @@ map $host $hierarchy_upstream { default 'hierarchy-server:8010'; }
       proxy_set_header X-Auth-Permissions-Truncated "";
       proxy_set_header X-Auth-Exp       "";
       proxy_set_header X-Auth-Sig       "";
+      proxy_set_header X-Auth-Sig-V2    "";
       limit_req zone=login burst=5 nodelay;
       proxy_pass http://$auth_upstream$request_uri;
       include /etc/nginx/conf.d/proxy-common.conf;
@@ -201,6 +203,7 @@ map $host $hierarchy_upstream { default 'hierarchy-server:8010'; }
       proxy_set_header X-Auth-Permissions-Truncated "";
       proxy_set_header X-Auth-Exp       "";
       proxy_set_header X-Auth-Sig       "";
+      proxy_set_header X-Auth-Sig-V2    "";
       proxy_pass http://$auth_upstream$request_uri;
       include /etc/nginx/conf.d/proxy-common.conf;
     }
@@ -212,6 +215,7 @@ map $host $hierarchy_upstream { default 'hierarchy-server:8010'; }
       proxy_set_header X-Auth-Permissions-Truncated "";
       proxy_set_header X-Auth-Exp       "";
       proxy_set_header X-Auth-Sig       "";
+      proxy_set_header X-Auth-Sig-V2    "";
       proxy_pass http://$auth_upstream$request_uri;
       include /etc/nginx/conf.d/proxy-common.conf;
     }
@@ -223,6 +227,7 @@ map $host $hierarchy_upstream { default 'hierarchy-server:8010'; }
       proxy_set_header X-Auth-Permissions-Truncated "";
       proxy_set_header X-Auth-Exp       "";
       proxy_set_header X-Auth-Sig       "";
+      proxy_set_header X-Auth-Sig-V2    "";
       limit_req zone=login burst=3 nodelay;
       proxy_pass http://$auth_upstream$request_uri;
       include /etc/nginx/conf.d/proxy-common.conf;
@@ -254,6 +259,7 @@ map $host $hierarchy_upstream { default 'hierarchy-server:8010'; }
       proxy_set_header X-Auth-Permissions-Truncated "";
       proxy_set_header X-Auth-Exp       "";
       proxy_set_header X-Auth-Sig       "";
+      proxy_set_header X-Auth-Sig-V2    "";
       limit_req zone=public_dashboard burst=20 nodelay;
       proxy_pass http://$platform_upstream$request_uri;
       include /etc/nginx/conf.d/proxy-common.conf;
@@ -282,6 +288,7 @@ map $host $hierarchy_upstream { default 'hierarchy-server:8010'; }
       proxy_set_header X-Auth-Permissions-Truncated "";
       proxy_set_header X-Auth-Exp       "";
       proxy_set_header X-Auth-Sig       "";
+      proxy_set_header X-Auth-Sig-V2    "";
       limit_req zone=asset_resolve burst=100 nodelay;
       limit_req_status 429;
       rewrite ^/oss/resolve/models/([^/]+)/([^/]+)$ /api/v1/platform/public-assets/$1/$2 break;
@@ -300,6 +307,7 @@ map $host $hierarchy_upstream { default 'hierarchy-server:8010'; }
       proxy_set_header X-Auth-Permissions-Truncated "";
       proxy_set_header X-Auth-Exp       "";
       proxy_set_header X-Auth-Sig       "";
+      proxy_set_header X-Auth-Sig-V2    "";
       # 桶名不出现在对外地址里：换桶只改一个环境变量，存量 asset: 引用不受影响
       rewrite ^/oss/(.*)$ /${OSS_BUCKET}/$1 break;
       # ⚠ 这里是 $uri 不是 $request_uri：上一行 rewrite 刚把路径改写成带桶名的，
@@ -383,6 +391,7 @@ map $host $hierarchy_upstream { default 'hierarchy-server:8010'; }
       auth_request_set $opcua_trunc $upstream_http_x_auth_permissions_truncated;
       auth_request_set $opcua_exp   $upstream_http_x_auth_exp;
       auth_request_set $opcua_sig   $upstream_http_x_auth_sig;
+      auth_request_set $opcua_sig_v2   $upstream_http_x_auth_sig_v2;
 
       proxy_set_header X-Auth-User-Id   $opcua_user;
       proxy_set_header X-Auth-Username  $opcua_name;
@@ -391,6 +400,7 @@ map $host $hierarchy_upstream { default 'hierarchy-server:8010'; }
       proxy_set_header X-Auth-Permissions-Truncated $opcua_trunc;
       proxy_set_header X-Auth-Exp       $opcua_exp;
       proxy_set_header X-Auth-Sig       $opcua_sig;
+      proxy_set_header X-Auth-Sig-V2    $opcua_sig_v2;
 
       proxy_pass http://$opcua_upstream$request_uri;
       include /etc/nginx/conf.d/proxy-common.conf;
@@ -415,6 +425,7 @@ map $host $hierarchy_upstream { default 'hierarchy-server:8010'; }
       proxy_set_header X-Auth-Permissions-Truncated "";
       proxy_set_header X-Auth-Exp       "";
       proxy_set_header X-Auth-Sig       "";
+      proxy_set_header X-Auth-Sig-V2    "";
       proxy_pass http://$realtime_upstream$request_uri;
       # ⚠ 刻意**不** include proxy-common.conf：那份是给请求-响应用的，
       # 里面的 proxy_read_timeout 25s 会切断长连接，而 nginx 不允许在同一个
@@ -536,6 +547,7 @@ map $host $hierarchy_upstream { default 'hierarchy-server:8010'; }
       auth_request_set $speech_trunc $upstream_http_x_auth_permissions_truncated;
       auth_request_set $speech_exp   $upstream_http_x_auth_exp;
       auth_request_set $speech_sig   $upstream_http_x_auth_sig;
+      auth_request_set $speech_sig_v2   $upstream_http_x_auth_sig_v2;
 
       proxy_set_header X-Auth-User-Id   $speech_user;
       proxy_set_header X-Auth-Username  $speech_name;
@@ -544,6 +556,7 @@ map $host $hierarchy_upstream { default 'hierarchy-server:8010'; }
       proxy_set_header X-Auth-Permissions-Truncated $speech_trunc;
       proxy_set_header X-Auth-Exp       $speech_exp;
       proxy_set_header X-Auth-Sig       $speech_sig;
+      proxy_set_header X-Auth-Sig-V2    $speech_sig_v2;
 
       proxy_pass http://$knowledge_upstream$request_uri;
       # ⚠ 刻意**不** include proxy-common.conf：那份的 25s 读超时会切断长连接，
@@ -627,6 +640,7 @@ map $host $hierarchy_upstream { default 'hierarchy-server:8010'; }
       proxy_set_header X-Auth-Permissions-Truncated "";
       proxy_set_header X-Auth-Exp       "";
       proxy_set_header X-Auth-Sig       "";
+      proxy_set_header X-Auth-Sig-V2    "";
       internal;
       proxy_pass http://$auth_upstream/internal/v1/verify;
       proxy_pass_request_body off;
@@ -650,6 +664,7 @@ map $host $hierarchy_upstream { default 'hierarchy-server:8010'; }
       proxy_set_header X-Auth-Permissions-Truncated "";
       proxy_set_header X-Auth-Exp       "";
       proxy_set_header X-Auth-Sig       "";
+      proxy_set_header X-Auth-Sig-V2    "";
       internal;
       proxy_pass http://$auth_upstream/internal/v1/verify;
       proxy_pass_request_body off;

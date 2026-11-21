@@ -13,7 +13,7 @@
 
 ### 三处不能改的配置
 
-1. **server 级把 7 个 `X-Auth-*` 头置空**。客户端伪造这些头就等于伪造身份；
+1. **server 级把身份与权限的 `X-Auth-*` 头置空**。客户端伪造这些头就等于伪造身份；
    只在 `auth_request` 成功后由 `auth_request_set` 重新注入。⚠ 自己写了任何一条
    `proxy_set_header`（含 include `proxy-common.conf`）的 location 不再继承 server 级
    那几行，不挂 `auth-inject.conf` 的就必须在块内再置空一遍；
