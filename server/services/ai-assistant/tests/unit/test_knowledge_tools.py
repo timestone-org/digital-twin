@@ -151,4 +151,29 @@ def test_every_spec_is_read_only_and_runs_on_the_server() -> None:
     assert {spec.name for spec in KNOWLEDGE_SPECS} == {
         "knowledge.list_bases",
         "knowledge.search",
+        "knowledge.read_chunk",
     }
+
+
+async def test_search_keeps_incomplete_status_and_a_chunk_continuation() -> (
+    None
+):
+    made = await _tools(
+        {
+            "hits": [
+                {"chunk_id": "c", "document_id": "d", "text": "字" * 1300}
+            ],
+            "strategy": "agentic",
+            "rounds": 3,
+            "is_complete": False,
+            "note": "尚未查全",
+        }
+    ).run(
+        "knowledge.search",
+        {"base_id": "0190a000-0000-7000-8000-000000000b01", "query": "检查"},
+    )
+    assert made["is_complete"] is False
+    assert made["rounds"] == 3
+    assert made["hits"][0]["document_id"] == "d"
+    assert made["hits"][0]["is_truncated"] is True
+    assert made["hits"][0]["next_offset"] == 1200

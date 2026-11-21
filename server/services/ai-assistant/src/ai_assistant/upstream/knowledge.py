@@ -13,18 +13,20 @@
 越少，它被当成越权通道的可能就越小。
 """
 
-from typing import Any, cast
+from http import HTTPStatus
+from typing import Any, Final, cast
 from urllib.parse import quote
 
 import httpx
 from pydantic import BaseModel, ValidationError
 
 from ai_assistant.upstream.identity import DelegatedIdentity
-from lib.errors import DependencyUnavailable
+from lib.errors import AppError, DependencyUnavailable
 from lib.logging import current_traceparent, get_logger
 
 _logger = get_logger("assistant.upstream.knowledge")
 
+MISSING_CHUNK_CODE: Final[int] = 42318
 _BASES = "/api/v1/knowledge/knowledge-bases"
 
 
@@ -40,6 +42,13 @@ class KnowledgeUnavailable(DependencyUnavailable):
         """Args: message, upstream_status。"""
         super().__init__(message)
         self.upstream_status = upstream_status
+
+
+class KnowledgeObjectNotFound(AppError):
+    """指定知识块已不属于本次读取的知识库。"""
+
+    code = 42204
+    http_status = 404
 
 
 class _Envelope(BaseModel):
@@ -105,6 +114,36 @@ class KnowledgeClient:
             headers,
             json=body,
         )
+
+    async def read_chunk(
+        self,
+        headers: dict[str, str],
+        base_id: str,
+        chunk_id: str,
+        window: tuple[int, int] = (0, 4000),
+    ) -> object:
+        """按原用户身份读取正文窗口。
+
+        Args: headers, base_id, chunk_id, window。
+        """
+        base = quote(base_id, safe="").replace(".", "%2E")
+        chunk = quote(chunk_id, safe="").replace(".", "%2E")
+        try:
+            return await self._call(
+                "GET",
+                f"{_BASES}/{base}/chunks/{chunk}",
+                headers,
+                params={"offset": window[0], "limit": window[1]},
+            )
+        except KnowledgeUnavailable as error:
+            if (
+                error.upstream_status == HTTPStatus.NOT_FOUND
+                and _missing_chunk(error.__cause__)
+            ):
+                raise KnowledgeObjectNotFound(
+                    "知识块不存在，请重新检索取得当前块身份"
+                ) from error
+            raise
 
     def _client(self) -> httpx.AsyncClient:
         if self._http is None:
@@ -198,3 +237,16 @@ def _said(response: httpx.Response) -> str:
     if not isinstance(message, str) or not message.strip():
         return ""
     return f"：{message.strip()}"
+
+
+def _missing_chunk(cause: BaseException | None) -> bool:
+    if not isinstance(cause, httpx.HTTPStatusError):
+        return False
+    try:
+        payload: object = cause.response.json()
+    except ValueError:
+        return False
+    if not isinstance(payload, dict):
+        return False
+    code = cast("dict[str, object]", payload).get("code")
+    return type(code) is int and code == MISSING_CHUNK_CODE

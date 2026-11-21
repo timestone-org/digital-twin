@@ -5,8 +5,9 @@
 """
 
 import httpx
+import pytest
 
-from ai_assistant.upstream import PlatformClient
+from ai_assistant.upstream import PlatformClient, PlatformUnavailable
 from ai_assistant.upstream.platform import MAX_FIND_PAGES
 
 SIZE = 3
@@ -57,7 +58,45 @@ async def test_paging_stops_at_the_last_page() -> None:
 
 
 async def test_paging_stops_at_the_cap() -> None:
-    pages = {page: ["15", "25", "35"] for page in range(1, 50)}
+    pages = {
+        page: [f"{page}-{n}" for n in ("15", "25", "35")]
+        for page in range(1, 50)
+    }
     client, asked = _client(pages, total=1_000)
-    assert await client.find_point({}, source_id="s", code="5") is None
+    with pytest.raises(PlatformUnavailable, match="未完成"):
+        await client.find_point({}, source_id="s", code="5")
     assert asked == list(range(1, MAX_FIND_PAGES + 1))
+
+
+@pytest.mark.parametrize(
+    "defect", ["repeated_code", "wrong_page", "wrong_size"]
+)
+async def test_inconsistent_page_cannot_complete_an_exact_search(
+    defect: str,
+) -> None:
+    def respond(request: httpx.Request) -> httpx.Response:
+        page = int(request.url.params["page"])
+        items = ["first", "second", "third"] if page == 1 else ["last"]
+        if defect == "repeated_code" and page > 1:
+            items = ["first"]
+        return httpx.Response(
+            200,
+            json={
+                "data": {
+                    "items": [{"code": code} for code in items],
+                    "total": 4,
+                    "page": 1 if defect == "wrong_page" else page,
+                    "size": 2 if defect == "wrong_size" else SIZE,
+                }
+            },
+        )
+
+    client = PlatformClient(
+        base_url="http://platform.test", timeout_s=1, page_size=SIZE
+    )
+    client.use_transport(httpx.MockTransport(respond))
+    try:
+        with pytest.raises(PlatformUnavailable, match="未完成"):
+            await client.find_point({}, source_id="s", code="missing")
+    finally:
+        await client.close()

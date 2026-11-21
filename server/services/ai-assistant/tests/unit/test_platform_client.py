@@ -34,7 +34,12 @@ def _page(items: list[object]) -> httpx.Response:
             "code": 0,
             "message": "ok",
             "trace_id": "t",
-            "data": {"items": items, "page": 1, "size": 200, "total": 1},
+            "data": {
+                "items": items,
+                "page": 1,
+                "size": 200,
+                "total": len(items),
+            },
         },
     )
 
@@ -183,3 +188,19 @@ async def test_a_page_without_items_reads_as_empty() -> None:
         )
 
     assert await _client(handler).list_sources(HEADERS) == []
+
+
+async def test_partial_exact_search_cannot_claim_the_point_is_missing() -> None:
+    def handler(_request: httpx.Request) -> httpx.Response:
+        return httpx.Response(
+            200, json={"data": {"items": [{"code": "similar"}], "total": 9000}}
+        )
+
+    client = _client(handler)
+    try:
+        with pytest.raises(PlatformUnavailable, match="未完成"):
+            await client.find_point(
+                HEADERS, source_id="test-source", code="needle"
+            )
+    finally:
+        await client.close()

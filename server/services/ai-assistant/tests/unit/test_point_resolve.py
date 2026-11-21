@@ -66,7 +66,9 @@ class _Platform:
         asked_source = request.url.params.get("source_id", "")
         name = self.known.get(code)
         rows = [_point(code, name, asked_source)] if name else []
-        return _envelope({"items": rows, "page": 1, "size": 200, "total": 1})
+        return _envelope(
+            {"items": rows, "page": 1, "size": 200, "total": len(rows)}
+        )
 
 
 def _client(platform: _Platform) -> PlatformClient:

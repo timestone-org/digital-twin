@@ -71,6 +71,7 @@ OUTPUT_GUIDES = (
         "memory.search",
         "当前用户的记忆候选与检索可用状态；不能替代业务数据读取。",
     ),
+    ("knowledge.read_chunk", "原块正文窗口、出处、has_more 和 next_offset。"),
     ("knowledge.list_bases", "当前用户可见的知识库及分页信息。"),
     (
         "knowledge.search",
@@ -176,6 +177,7 @@ READ_TOOLS = frozenset(
         "datasets.list_tables",
         "datasets.read_columns",
         "memory.search",
+        "knowledge.read_chunk",
         "knowledge.list_bases",
         "knowledge.search",
         "dataset.read_columns",
