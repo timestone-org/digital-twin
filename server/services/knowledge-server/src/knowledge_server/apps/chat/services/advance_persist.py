@@ -113,6 +113,27 @@ def _same_failed_question(
     )
 
 
+async def retain_failed_question(
+    sessions: Sessions, chat_session_id: uuid.UUID, question: str
+) -> None:
+    """保留模型失败前已受理的原问，供用户重开会话。"""
+    async with sessions() as session:
+        await session_crud.lock_session(session, chat_session_id)
+        last = await session_crud.last_message(session, chat_session_id)
+        if last is not None and _same_failed_question(
+            last, "user", {"text": question}
+        ):
+            return
+        session.add(
+            ChatMessage(
+                session_id=chat_session_id,
+                seq=last.seq + 1 if last is not None else 1,
+                role="user",
+                content_json={"text": question, FAILED_QUESTION_KEY: True},
+            )
+        )
+
+
 def _attach_citations(
     written: list[ChatMessage], citations: list[dict[str, Any]]
 ) -> None:

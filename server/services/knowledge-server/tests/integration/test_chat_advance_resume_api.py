@@ -305,23 +305,35 @@ async def test_an_answered_pause_keeps_its_stored_batch(
     ]
 
 
-async def test_a_failed_turn_leaves_its_reason_and_a_good_one_clears_it(
+async def test_a_failed_first_question_stays_visible_and_a_retry_reuses_it(
     db_stack: DbStack,
 ) -> None:
-    """⚠ `last_error` 写在出参里却从没人写：回合失败时问题没落库，重开这条
-    对话既看不到问题、也看不到为什么失败。"""
+    question = "上限多少"
     _install(db_stack, ScriptedChat(error=RuntimeError("内部细节不许外泄")))
     session_id = await _new_session(db_stack.client)
-    await _advance(db_stack.client, session_id, user_text="上限多少")
+    for _ in range(2):
+        events = await _advance(db_stack.client, session_id, user_text=question)
+        assert events[-1][0] == "error"
 
     failed = (await db_stack.client.get(f"{URL}/{session_id}")).json()["data"]
     assert failed["last_error"] == "这一轮没跑完，请重试"
+    (saved,) = failed["messages"]
+    assert saved["role"] == "user"
+    assert saved["content_json"]["text"] == question
+    listed = (await db_stack.client.get(URL)).json()["data"]["items"]
+    assert session_id in [row["id"] for row in listed]
 
-    _install(db_stack, ScriptedChat(reply=AIMessage(content="好")))
-    await _advance(db_stack.client, session_id, user_text="再试一次")
+    model = ScriptedChat(reply=AIMessage(content="好"))
+    _install(db_stack, model)
+    await _advance(db_stack.client, session_id, user_text=question)
 
     cleared = (await db_stack.client.get(f"{URL}/{session_id}")).json()["data"]
     assert cleared["last_error"] is None
+    asked, answered = cleared["messages"]
+    assert asked["id"] == saved["id"]
+    assert asked["content_json"] == {"text": question}
+    assert answered["role"] == "assistant"
+    assert [one.content for one in model.seen[0]].count(question) == 1
 
 
 async def test_retained_failed_question_is_visible_but_not_used_on_resume(

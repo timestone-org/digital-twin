@@ -4,7 +4,7 @@ import json
 import uuid
 from collections.abc import AsyncIterator, Callable
 from contextlib import AbstractAsyncContextManager
-from dataclasses import dataclass, field
+from dataclasses import dataclass, field, replace
 from typing import Any
 
 from langchain_core.messages import (
@@ -23,6 +23,7 @@ from knowledge_server.apps.chat.services import (
     advance_persist,
     budget,
     client_receipts,
+    failed_question,
     title_service,
 )
 from knowledge_server.apps.chat.services import scope as scope_service
@@ -352,6 +353,13 @@ async def advance(
     registry = deps.tools(loaded.scope, ledger)
     specs = _turn_specs(registry.specs, payload.client_tools)
     turn = _turn_deps(deps, loaded, selected, registry, specs)
+    if payload.user_text is not None:
+        turn = replace(
+            turn,
+            model=failed_question.RetainingResponder(
+                deps.model, deps.sessions, chat_session_id, payload.user_text
+            ),
+        )
     produced: list[TurnStep] = []
     outcome: TurnOutcome | None = None
     async for item in stream_turn(turn, messages):
