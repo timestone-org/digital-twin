@@ -2,10 +2,12 @@
 import { createPinia, setActivePinia } from 'pinia'
 import { afterEach, expect, it, vi } from 'vitest'
 import { flushPromises, mount } from '@vue/test-utils'
+import { useConfirm, useToast } from '@dt/ui'
 import { computed, defineComponent, h, onUnmounted, ref, watch } from 'vue'
 import { createMemoryHistory, createRouter, useRoute } from 'vue-router'
 
 import App from '@/App.vue'
+import * as authApi from '@/api/auth'
 import { AppShell } from '@/components/layout'
 import { useAuthStore } from '@/stores/auth'
 import { resetEmbedContext } from '@/features/embed/context'
@@ -15,6 +17,16 @@ import { useWorkspace } from '@/features/workspace/context'
 
 const confirmLeave = vi.fn<() => Promise<boolean>>()
 const unmounted = vi.fn<(key: string) => void>()
+
+function delayedGuard() {
+  let finish: (approved: boolean) => void = () => undefined
+  let fail: (error: Error) => void = () => undefined
+  const result = new Promise<boolean>((resolve, reject) => {
+    finish = resolve
+    fail = reject
+  })
+  return { result, finish, fail }
+}
 
 const Editor = defineComponent({
   setup() {
@@ -74,7 +86,7 @@ const Guarded = defineComponent({
   },
 })
 
-async function setup() {
+async function setup(withNavigation = false) {
   localStorage.clear()
   resetEmbedContext()
   confirmLeave.mockReset().mockResolvedValue(true)
@@ -158,7 +170,7 @@ async function setup() {
     global: {
       plugins: [pinia, router],
       stubs: {
-        AppNavRail: true,
+        AppNavRail: !withNavigation,
         AppCompactNav: true,
         AppTopbar: true,
         DtToastHost: true,
@@ -172,6 +184,7 @@ async function setup() {
 }
 
 afterEach(resetEmbedContext)
+afterEach(() => vi.restoreAllMocks())
 
 it('切到其他页面再回来保留尚未保存的编辑内容', async () => {
   const { wrapper, router } = await setup()
@@ -192,6 +205,160 @@ it('同一种编辑器的不同画面各自保留草稿', async () => {
   await router.push('/dashboards/a/edit')
   await flushPromises()
   expect(wrapper.get('input').element.value).toBe('草稿 A')
+  wrapper.unmount()
+})
+
+it('主动退出时任一页签取消会保留会话和所有草稿', async () => {
+  const revoke = vi.spyOn(authApi, 'revokeSession').mockResolvedValue()
+  const { wrapper, router, auth } = await setup(true)
+  auth.refreshToken = 'fixture-refresh'
+  await wrapper.get('input').setValue('后台草稿 A')
+  await router.push('/dashboards/b/edit')
+  await flushPromises()
+  await wrapper.get('input').setValue('当前草稿 B')
+  confirmLeave.mockResolvedValueOnce(true).mockResolvedValueOnce(false)
+  await wrapper.get('[aria-label="退出登录"]').trigger('click')
+  await flushPromises()
+  expect(auth.isAuthenticated).toBe(true)
+  expect(revoke).not.toHaveBeenCalled()
+  expect(confirmLeave).toHaveBeenCalledTimes(2)
+  expect(router.currentRoute.value.path).toBe('/dashboards/b/edit')
+  expect(wrapper.get('input').element.value).toBe('当前草稿 B')
+  await router.push('/dashboards/a/edit')
+  await flushPromises()
+  expect(wrapper.get('input').element.value).toBe('后台草稿 A')
+  wrapper.unmount()
+})
+
+it('确认期间会话失效时清理提示并直接离开工作区', async () => {
+  const { wrapper, router, auth } = await setup(true)
+  await wrapper.get('input').setValue('会话到期前的草稿')
+  confirmLeave.mockImplementationOnce(() =>
+    useConfirm().ask({ title: '放弃此草稿？', message: '仍要退出吗？' }),
+  )
+  await wrapper.get('[aria-label="退出登录"]').trigger('click')
+  await flushPromises()
+  expect(document.querySelector('[role="dialog"]')?.textContent).toContain(
+    '放弃此草稿？',
+  )
+  auth.clear()
+  await router.replace('/login')
+  await flushPromises()
+  expect(document.querySelector('[role="dialog"]')).toBeNull()
+  expect(wrapper.text()).toContain('登录')
+  wrapper.unmount()
+})
+
+it('所有页签同意后只退出一次，等候确认时不重复提交', async () => {
+  const revoke = vi.spyOn(authApi, 'revokeSession').mockResolvedValue()
+  const { wrapper, router, auth } = await setup(true)
+  auth.refreshToken = 'fixture-refresh'
+  await wrapper.get('input').setValue('已确认的草稿 A')
+  await router.push('/dashboards/b/edit')
+  await flushPromises()
+  await wrapper.get('input').setValue('已确认的草稿 B')
+  confirmLeave.mockImplementationOnce(() =>
+    useConfirm().ask({ message: '是否离开？' }),
+  )
+  const logout = wrapper.get('[aria-label="退出登录"]')
+  await logout.trigger('click')
+  await logout.trigger('click')
+  expect(logout.attributes('disabled')).toBeDefined()
+  expect(wrapper.get('input').element.closest('[inert]')).not.toBeNull()
+  expect(
+    document.querySelector('[role="dialog"]')?.closest('[inert]'),
+  ).toBeNull()
+  expect(revoke).not.toHaveBeenCalled()
+  useConfirm().resolve(true)
+  await flushPromises()
+  expect(confirmLeave).toHaveBeenCalledTimes(2)
+  expect(revoke).toHaveBeenCalledExactlyOnceWith('fixture-refresh')
+  expect(auth.isAuthenticated).toBe(false)
+  expect(router.currentRoute.value.path).toBe('/login')
+  wrapper.unmount()
+})
+
+it('确认期间新增了页签时保留新页签与会话', async () => {
+  const { wrapper, router, auth } = await setup(true)
+  await wrapper.get('input').setValue('先打开的草稿')
+  confirmLeave.mockImplementationOnce(() =>
+    useConfirm().ask({ message: '是否离开？' }),
+  )
+  await wrapper.get('[aria-label="退出登录"]').trigger('click')
+  await router.push('/dashboards/b/edit')
+  await flushPromises()
+  await wrapper.get('input').setValue('后来打开的草稿')
+  useConfirm().resolve(true)
+  await flushPromises()
+  expect(auth.isAuthenticated).toBe(true)
+  expect(wrapper.get('input').element.value).toBe('后来打开的草稿')
+  wrapper.unmount()
+})
+
+it('后续守卫等待保存时，已通过的干净页签出现草稿会取消退出', async () => {
+  const { wrapper, router, auth } = await setup(true)
+  await router.push('/dashboards/b/edit')
+  await flushPromises()
+  await wrapper.get('input').setValue('等待保存的后台草稿')
+  await router.push('/dashboards/a/edit')
+  await flushPromises()
+  const pending = delayedGuard()
+  confirmLeave.mockImplementationOnce(() => pending.result)
+  await wrapper.get('[aria-label="退出登录"]').trigger('click')
+  await flushPromises()
+  expect(confirmLeave).toHaveBeenCalledOnce()
+  await wrapper.get('input').setValue('确认期间制成的新草稿')
+  pending.finish(true)
+  await flushPromises()
+  expect(auth.isAuthenticated).toBe(true)
+  expect(wrapper.get('input').element.value).toBe('确认期间制成的新草稿')
+  wrapper.unmount()
+})
+
+it('旧会话迟到的关闭结果不会解除新会话的退出确认', async () => {
+  const { wrapper, router, auth } = await setup(true)
+  await wrapper.get('input').setValue('旧账号草稿')
+  const oldUser = auth.user
+  if (oldUser === null) throw new Error('缺少账号夹具')
+  const oldCheck = delayedGuard()
+  confirmLeave.mockImplementationOnce(() => oldCheck.result)
+  await wrapper.get('[aria-label="退出登录"]').trigger('click')
+  await flushPromises()
+  auth.clear()
+  auth.user = { ...oldUser, id: 'replacement-user' }
+  auth.accessToken = 'another-token'
+  await router.push('/dashboards/b/edit')
+  await flushPromises()
+  expect(wrapper.get('input').element.closest('[inert]')).toBeNull()
+  await wrapper.get('input').setValue('新账号草稿')
+  const newCheck = delayedGuard()
+  confirmLeave.mockImplementationOnce(() => newCheck.result)
+  await wrapper.get('[aria-label="退出登录"]').trigger('click')
+  oldCheck.fail(new Error('旧会话的迟到错误'))
+  await flushPromises()
+  expect(wrapper.get('input').element.closest('[inert]')).not.toBeNull()
+  expect(
+    useToast().toasts.value.some((item) => item.message === '旧会话的迟到错误'),
+  ).toBe(false)
+  newCheck.finish(false)
+  await flushPromises()
+  expect(auth.isAuthenticated).toBe(true)
+  expect(wrapper.get('input').element.value).toBe('新账号草稿')
+  wrapper.unmount()
+})
+
+it('关闭守卫失败时可保留草稿并重新发起退出', async () => {
+  const { wrapper, router, auth } = await setup(true)
+  await wrapper.get('input').setValue('未保存')
+  confirmLeave.mockRejectedValueOnce(new Error('暂时无法确认'))
+  const logout = wrapper.get('[aria-label="退出登录"]')
+  await logout.trigger('click')
+  await flushPromises()
+  expect(auth.isAuthenticated).toBe(true)
+  expect(wrapper.get('input').element.value).toBe('未保存')
+  await logout.trigger('click')
+  await flushPromises()
+  expect(router.currentRoute.value.path).toBe('/login')
   wrapper.unmount()
 })
 
@@ -304,6 +471,7 @@ it('账号退出会销毁缓存，再次登录不能恢复上一会话草稿', a
   auth.clear()
   await router.push('/login')
   await flushPromises()
+  expect(confirmLeave).not.toHaveBeenCalled()
   expect(wrapper.find('[aria-label="已打开页面"]').exists()).toBe(false)
   auth.accessToken = 'another-token'
   await router.push('/dashboards/a/edit')

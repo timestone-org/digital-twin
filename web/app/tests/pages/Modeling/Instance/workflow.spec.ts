@@ -2,6 +2,7 @@
 import { flushPromises, mount } from '@vue/test-utils'
 import type { VueWrapper } from '@vue/test-utils'
 import { createPinia, setActivePinia } from 'pinia'
+import { ref } from 'vue'
 import { afterEach, beforeEach, expect, it, vi } from 'vitest'
 import * as ui from '@dt/ui'
 import * as api from '@/api/modelingTemplates'
@@ -9,6 +10,9 @@ import { BizError } from '@/api/client'
 import * as modeling from '@/api/modeling'
 import * as hierarchy from '@/api/hierarchy'
 import { onBeforeRouteLeave, onBeforeRouteUpdate } from 'vue-router'
+import type * as VueRouter from 'vue-router'
+import { WORKSPACE_KEY, WORKSPACE_PAGE_KEY } from '@/features/workspace/context'
+import { WorkspaceTabs } from '@/features/workspace/workspaceTabs'
 import SharedConfigForm from '@/features/modeling-config/components/ConfigForm.vue'
 import InstancePage from '@/pages/Modeling/Instance/index.vue'
 import DeployDialog from '@/pages/Modeling/Instance/components/DeployModelDialog.vue'
@@ -121,8 +125,22 @@ afterEach(() => {
   vi.restoreAllMocks()
 })
 
-async function openPage(): Promise<VueWrapper> {
-  const wrapper = mount(InstancePage, { global: { stubs: { teleport: true } } })
+async function openPage(workspace?: WorkspaceTabs): Promise<VueWrapper> {
+  const wrapper = mount(InstancePage, {
+    global: {
+      stubs: { teleport: true },
+      provide: workspace
+        ? {
+            [WORKSPACE_KEY]: workspace,
+            [WORKSPACE_PAGE_KEY]: {
+              key: workspace.activeKey.value,
+              active: ref(true),
+              cached: false,
+            },
+          }
+        : {},
+    },
+  })
   wrappers.push(wrapper)
   await flushPromises()
   return wrapper
@@ -555,6 +573,34 @@ it('切换模型参数与离开页面都保护未保存的配置', async () => {
     if ((await guard(route, current, next)) === false) canLeave = false
   }
   expect(canLeave).toBe(false)
+})
+
+it('模型参数未保存时取消主动退出会保留表单', async () => {
+  const { createRouter, createMemoryHistory } =
+    await vi.importActual<typeof VueRouter>('vue-router')
+  const router = createRouter({
+    history: createMemoryHistory(),
+    routes: [
+      { path: '/modeling/instances/:instanceId', component: InstancePage },
+    ],
+  })
+  await router.push('/modeling/instances/i1')
+  const workspace = new WorkspaceTabs(router, {
+    enabled: ref(true),
+    canAccess: () => true,
+    reportError: (message) => {
+      throw new Error(message)
+    },
+  })
+  workspace.visit()
+  const wrapper = await openPage(workspace)
+  await button(wrapper, '完整 JSON').trigger('click')
+  await wrapper.get('textarea[rows="18"]').setValue('{"nodes":{}}')
+  vi.mocked(ui.useConfirm().ask).mockResolvedValue(false)
+  expect(await workspace.confirmLogout()).toBe(false)
+  expect(
+    wrapper.get<HTMLTextAreaElement>('textarea[rows="18"]').element.value,
+  ).toBe('{"nodes":{}}')
 })
 
 function navigationTarget(instanceId: string) {

@@ -60,7 +60,10 @@ watch(
 </script>
 
 <template>
-  <div class="dt-grid-bg flex h-dvh w-full overflow-hidden bg-surface-base">
+  <div
+    class="dt-grid-bg flex h-dvh w-full overflow-hidden bg-surface-base"
+    :inert="workspace?.confirmingLogout.value ?? false"
+  >
     <AppNavRail v-if="!embed.isEmbedded.value && !focusMode && !isCompact" />
 
     <component

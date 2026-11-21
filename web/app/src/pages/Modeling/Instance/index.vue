@@ -11,12 +11,16 @@ import {
   useToast,
 } from '@dt/ui'
 import { computed, onBeforeUnmount, ref, watch } from 'vue'
-import { onBeforeRouteLeave, onBeforeRouteUpdate, useRoute } from 'vue-router'
+import { useRoute } from 'vue-router'
 import { trainInstance } from '@/api/modelingTemplates'
 import { cancelModelingRun, publishModelingVersion } from '@/api/modeling'
 import PermGuard from '@/components/PermGuard.vue'
 import { AppShell } from '@/components/layout'
 import { describeError } from '@/composables/useAsyncList'
+import {
+  useWorkspaceDirty,
+  useWorkspaceGuard,
+} from '@/features/workspace/useWorkspaceGuard'
 import { useAuthStore } from '@/stores/auth'
 import { runLabel } from '../scripts/instancePresentation'
 import DeployModelDialog from './components/DeployModelDialog.vue'
@@ -140,10 +144,10 @@ async function confirmLeaving(): Promise<boolean> {
     }))
   )
 }
-onBeforeRouteLeave(confirmLeaving)
-onBeforeRouteUpdate(
-  (to, from) =>
-    to.params['instanceId'] === from.params['instanceId'] || confirmLeaving(),
+useWorkspaceDirty(() => hasChanges.value)
+useWorkspaceGuard(
+  confirmLeaving,
+  (to, from) => to.params['instanceId'] !== from.params['instanceId'],
 )
 </script>
 

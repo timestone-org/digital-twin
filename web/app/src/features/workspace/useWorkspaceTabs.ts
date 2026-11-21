@@ -1,7 +1,7 @@
 /** @fileoverview 页签会话与当前账号、路由及权限生命周期的装配。 */
 import { computed, onBeforeUnmount, watch } from 'vue'
 import { isAllowed } from '@dt/security'
-import { useToast } from '@dt/ui'
+import { useConfirm, useToast } from '@dt/ui'
 import type { Router } from 'vue-router'
 import { useAuthStore } from '@/stores/auth'
 import { useEmbedContext } from '@/features/embed/context'
@@ -12,6 +12,7 @@ export function useWorkspaceTabs(router: Router): Workspace {
   const auth = useAuthStore()
   const embed = useEmbedContext()
   const toast = useToast()
+  const confirm = useConfirm()
   const enabled = computed(
     () => auth.isAuthenticated && !embed.isEmbedded.value,
   )
@@ -25,9 +26,14 @@ export function useWorkspaceTabs(router: Router): Workspace {
       ),
     reportError: (message) => toast.error(message),
   })
-  watch([enabled, () => auth.user?.id], () => workspace.reset(), {
-    flush: 'sync',
-  })
+  watch(
+    [enabled, () => auth.user?.id],
+    () => {
+      if (workspace.closing.value) confirm.resolve(false)
+      workspace.reset()
+    },
+    { flush: 'sync' },
+  )
   watch(
     () => auth.permissions,
     () => workspace.prune(),

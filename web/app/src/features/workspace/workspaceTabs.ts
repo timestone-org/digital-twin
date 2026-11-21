@@ -1,5 +1,5 @@
 /** @fileoverview 工作页签实例的增删、关闭确认与大屏版本失效。 */
-import { computed, ref, shallowRef, type ComputedRef, type Ref } from 'vue'
+import { computed, shallowRef, type ComputedRef, type Ref } from 'vue'
 import type { RouteLocationNormalized, Router } from 'vue-router'
 import type { Workspace, WorkspaceTab } from './context'
 import { isWorkspaceRoute, shouldCacheRoute } from './routePolicy'
@@ -11,12 +11,18 @@ export interface WorkspaceAccess {
 }
 
 export class WorkspaceTabs implements Workspace {
+  private readonly operation = shallowRef<{ kind: 'close' | 'logout' } | null>(
+    null,
+  )
   readonly tabs = shallowRef<readonly WorkspaceTab[]>([])
-  readonly closing = ref(false)
+  readonly closing = computed(() => this.operation.value !== null)
+  readonly confirmingLogout = computed(
+    () => this.operation.value?.kind === 'logout',
+  )
   readonly activeKey: ComputedRef<string>
   private readonly guards = new Map<string, () => boolean | Promise<boolean>>()
   private readonly dashboardVersions = new Map<string, number>()
-  private readonly approvedClose = new Set<string>()
+  private readonly approvedClose = new Set<number>()
   private nextGeneration = 0
 
   constructor(
@@ -31,7 +37,8 @@ export class WorkspaceTabs implements Workspace {
   }
 
   isClosing(key: string): boolean {
-    return this.approvedClose.has(key)
+    const tab = this.tabs.value.find((entry) => entry.key === key)
+    return tab === undefined || this.approvedClose.has(tab.generation)
   }
 
   canRetain(to: RouteLocationNormalized): boolean {
@@ -89,6 +96,31 @@ export class WorkspaceTabs implements Workspace {
     return this.closeKeys([...otherKeys, this.activeKey.value])
   }
 
+  confirmLogout(): Promise<boolean> {
+    return this.runClosing('logout', async () => {
+      const tabs = this.tabs.value
+      const approved: WorkspaceTab[] = []
+      for (const opened of tabs) {
+        const tab = this.tabs.value.find(
+          (entry) => entry.generation === opened.generation,
+        )
+        if (!tab || !(await this.approveClose(tab))) return false
+        approved.push(tab)
+      }
+      // 后续守卫可能等待保存，期间产生的新草稿还没有确认退出。
+      return (
+        approved.length === this.tabs.value.length &&
+        this.tabs.value.every((tab, index) => {
+          const previous = approved[index]
+          return (
+            previous?.generation === tab.generation &&
+            (!tab.dirty || previous.dirty)
+          )
+        })
+      )
+    })
+  }
+
   registerGuard(
     key: string,
     guard: () => boolean | Promise<boolean>,
@@ -118,8 +150,10 @@ export class WorkspaceTabs implements Workspace {
   }
 
   reset(): void {
+    this.operation.value = null
     this.tabs.value = []
     this.guards.clear()
+    this.approvedClose.clear()
     this.dashboardVersions.clear()
   }
 
@@ -159,31 +193,49 @@ export class WorkspaceTabs implements Workspace {
     const tab = this.tabs.value.find((entry) => entry.key === key)
     if (tab === undefined || key === '/') return true
     if (!(await this.approveClose(tab))) return false
-    this.approvedClose.add(key)
+    this.approvedClose.add(tab.generation)
     try {
       if (this.activeKey.value === key && !(await this.leaveCurrent(key)))
         return false
     } finally {
-      this.approvedClose.delete(key)
+      this.approvedClose.delete(tab.generation)
     }
-    this.tabs.value = this.tabs.value.filter((entry) => entry.key !== key)
+    if (!this.tabs.value.some((entry) => entry.generation === tab.generation))
+      return false
+    this.tabs.value = this.tabs.value.filter(
+      (entry) => entry.generation !== tab.generation,
+    )
     this.guards.delete(key)
     return true
   }
 
   private async closeKeys(keys: readonly string[]): Promise<void> {
-    if (this.closing.value) return
-    this.closing.value = true
-    try {
+    await this.runClosing('close', async () => {
       for (const key of keys) {
-        if (!(await this.remove(key))) break
+        if (!(await this.remove(key))) return false
       }
+      return true
+    })
+  }
+
+  private async runClosing(
+    kind: 'close' | 'logout',
+    action: () => Promise<boolean>,
+  ): Promise<boolean> {
+    if (this.closing.value) return false
+    const operation = { kind }
+    this.operation.value = operation
+    try {
+      const accepted = await action()
+      return this.operation.value === operation && accepted
     } catch (error) {
-      this.access.reportError(
-        error instanceof Error ? error.message : '关闭页面失败',
-      )
+      if (this.operation.value === operation)
+        this.access.reportError(
+          error instanceof Error ? error.message : '关闭页面失败',
+        )
+      return false
     } finally {
-      this.closing.value = false
+      if (this.operation.value === operation) this.operation.value = null
     }
   }
 }

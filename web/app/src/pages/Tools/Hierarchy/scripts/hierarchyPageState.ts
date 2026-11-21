@@ -92,6 +92,7 @@ export class Controller {
         await this.state.saving.flush()
         return true
       } catch {
+        if (!this.state.availability.alive) return false
         return this.state.confirm.ask({
           title: '仍有未保存的层级图',
           message:

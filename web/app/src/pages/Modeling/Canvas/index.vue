@@ -101,13 +101,7 @@ const saving = useCanvasSaving(
   () => isKeepingFrames.value,
   () => config.blockReason.value,
 )
-useCanvasLeaveGuard(
-  () => page.graph.isDirty.value || config.hasDraft.value,
-  () => {
-    saving.cancel()
-    config.discard()
-  },
-)
+useCanvasLeaveGuard(() => page.graph.isDirty.value || config.hasDraft.value)
 
 const actions = useCanvasActions({
   graph: page.graph,
@@ -249,7 +243,11 @@ onMounted(() => {
 
 watch(
   pipelineId,
-  async (id) => {
+  async (id, previous) => {
+    if (previous !== undefined) {
+      saving.cancel()
+      config.discard()
+    }
     const wanted = route.query['run_id']
     if (!(await page.open(id)) || pipelineId.value !== id) return
     // 带着 ?run_id= 进来的（同事发过来的链接、或刷新）直接落到只读回看
