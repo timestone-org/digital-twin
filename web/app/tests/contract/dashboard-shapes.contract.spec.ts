@@ -20,11 +20,14 @@ import type {
 } from '@/api/dashboardWire'
 import type { DashboardImportWire } from '@/api/dashboardTransferWire'
 import type {
+  DashboardPublicationStateWire,
   DashboardPublicationWire,
   PublicBindingWire,
   PublicDashboardWire,
   PublicNodeWire,
+  UnpublishedJumpTargetWire,
 } from '@/api/dashboardShareWire'
+import { toPublicationState } from '@/api/dashboardShareWire'
 import type {
   DashboardTemplateDetailWire,
   DashboardTemplateSummaryWire,
@@ -175,6 +178,18 @@ const SHAPES = {
     public_token: true,
     updated_at: true,
   } satisfies Keys<DashboardPublicationWire>,
+  DashboardPublicationStateOut: {
+    dashboard_id: true,
+    is_public: true,
+    public_token: true,
+    unpublished_targets: true,
+    updated_at: true,
+  } satisfies Keys<DashboardPublicationStateWire>,
+  UnpublishedJumpTargetOut: {
+    dashboard_id: true,
+    name: true,
+    project_name: true,
+  } satisfies Keys<UnpublishedJumpTargetWire>,
   PublicBindingOut: {
     compute_json: true,
     detail_json: true,
@@ -299,5 +314,21 @@ describe('大屏与素材线形与 openapi 一致', () => {
     expect(declared.length).toBeGreaterThan(0)
     const mapped = SHAPES[name as keyof typeof SHAPES]
     expect(Object.keys(mapped).sort()).toEqual(declared)
+  })
+
+  it('继续读取旧服务的发布令牌', () => {
+    expect(
+      toPublicationState({
+        dashboard_id: 'd1',
+        is_public: true,
+        public_token: 'tok-existing',
+        updated_at: '2026-08-01T00:00:00Z',
+      }),
+    ).toEqual({
+      dashboardId: 'd1',
+      isPublic: true,
+      publicToken: 'tok-existing',
+      unpublishedTargets: [],
+    })
   })
 })

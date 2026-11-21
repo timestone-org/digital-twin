@@ -12,14 +12,20 @@ from sqlalchemy.ext.asyncio import AsyncSession
 
 from lib.auth import CallerContext
 from lib.web import ApiResponse, ok
-from platform_server.apps.dashboard.catalog import DASHBOARD_MANAGE
+from platform_server.apps.dashboard.catalog import (
+    DASHBOARD_MANAGE,
+    DASHBOARD_VIEW,
+)
 from platform_server.apps.dashboard.deps import (
     WriteContext,
     get_manage_context,
     get_session,
     require,
 )
-from platform_server.apps.dashboard.schemas.share import DashboardShareOut
+from platform_server.apps.dashboard.schemas.share import (
+    DashboardPublicationStateOut,
+    DashboardShareOut,
+)
 from platform_server.apps.dashboard.services import share_service
 from platform_server.settings import API_PREFIX
 
@@ -32,18 +38,22 @@ ManagerDep = Annotated[CallerContext, Depends(require(DASHBOARD_MANAGE))]
 
 @router.get(
     "/{dashboard_id}/publication",
-    response_model=ApiResponse[DashboardShareOut],
+    response_model=ApiResponse[DashboardPublicationStateOut],
     summary="读大屏发布态",
 )
 async def read_dashboard_publication(
-    dashboard_id: uuid.UUID, session: SessionDep, _manager: ManagerDep
-) -> ApiResponse[DashboardShareOut]:
-    """读这张屏此刻的发布态与公开链接。
+    dashboard_id: uuid.UUID, session: SessionDep, manager: ManagerDep
+) -> ApiResponse[DashboardPublicationStateOut]:
+    """读发布态与公开链接，有查看权限时附未公开的跳转目标。
 
-    Args: dashboard_id, session, _manager。
+    Args: dashboard_id, session, manager。
     """
     return ok(
-        await share_service.get_publication(session, dashboard_id=dashboard_id)
+        await share_service.get_publication(
+            session,
+            dashboard_id=dashboard_id,
+            can_view_targets=DASHBOARD_VIEW in manager.permissions,
+        )
     )
 
 

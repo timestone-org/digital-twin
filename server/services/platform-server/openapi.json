@@ -1921,6 +1921,51 @@
         "title": "ApiResponse[DashboardOut]",
         "type": "object"
       },
+      "ApiResponse_DashboardPublicationStateOut_": {
+        "properties": {
+          "code": {
+            "default": 0,
+            "title": "Code",
+            "type": "integer"
+          },
+          "data": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/DashboardPublicationStateOut"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "details": {
+            "anyOf": [
+              {
+                "items": {
+                  "$ref": "#/components/schemas/FieldErrorOut"
+                },
+                "type": "array"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Details"
+          },
+          "message": {
+            "default": "ok",
+            "title": "Message",
+            "type": "string"
+          },
+          "trace_id": {
+            "default": "",
+            "title": "Trace Id",
+            "type": "string"
+          }
+        },
+        "title": "ApiResponse[DashboardPublicationStateOut]",
+        "type": "object"
+      },
       "ApiResponse_DashboardShareOut_": {
         "properties": {
           "code": {
@@ -10419,6 +10464,51 @@
           "chrome_json"
         ],
         "title": "DashboardOut",
+        "type": "object"
+      },
+      "DashboardPublicationStateOut": {
+        "description": "已授权的发布态读取及跳转提示。",
+        "properties": {
+          "dashboard_id": {
+            "format": "uuid",
+            "title": "Dashboard Id",
+            "type": "string"
+          },
+          "is_public": {
+            "title": "Is Public",
+            "type": "boolean"
+          },
+          "public_token": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Public Token"
+          },
+          "unpublished_targets": {
+            "items": {
+              "$ref": "#/components/schemas/UnpublishedJumpTargetOut"
+            },
+            "title": "Unpublished Targets",
+            "type": "array"
+          },
+          "updated_at": {
+            "format": "date-time",
+            "title": "Updated At",
+            "type": "string"
+          }
+        },
+        "required": [
+          "dashboard_id",
+          "is_public",
+          "public_token",
+          "updated_at"
+        ],
+        "title": "DashboardPublicationStateOut",
         "type": "object"
       },
       "DashboardShareOut": {
@@ -26070,6 +26160,31 @@
         "title": "TransferPipeline",
         "type": "object"
       },
+      "UnpublishedJumpTargetOut": {
+        "description": "发布者可查看的未公开目标。",
+        "properties": {
+          "dashboard_id": {
+            "format": "uuid",
+            "title": "Dashboard Id",
+            "type": "string"
+          },
+          "name": {
+            "title": "Name",
+            "type": "string"
+          },
+          "project_name": {
+            "title": "Project Name",
+            "type": "string"
+          }
+        },
+        "required": [
+          "dashboard_id",
+          "name",
+          "project_name"
+        ],
+        "title": "UnpublishedJumpTargetOut",
+        "type": "object"
+      },
       "UnresolvedBindingOut": {
         "description": "一条指向本部署不存在的点位的绑定。它照常入库，只是取不到数。",
         "properties": {
@@ -31496,7 +31611,7 @@
     },
     "/api/v1/platform/dashboards/{dashboard_id}/publication": {
       "get": {
-        "description": "读这张屏此刻的发布态与公开链接。\n\nArgs: dashboard_id, session, _manager。",
+        "description": "读发布态与公开链接，有查看权限时附未公开的跳转目标。\n\nArgs: dashboard_id, session, manager。",
         "operationId": "read_dashboard_publication_api_v1_platform_dashboards__dashboard_id__publication_get",
         "parameters": [
           {
@@ -31515,7 +31630,7 @@
             "content": {
               "application/json": {
                 "schema": {
-                  "$ref": "#/components/schemas/ApiResponse_DashboardShareOut_"
+                  "$ref": "#/components/schemas/ApiResponse_DashboardPublicationStateOut_"
                 }
               }
             },

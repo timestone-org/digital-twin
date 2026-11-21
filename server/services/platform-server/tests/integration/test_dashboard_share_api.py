@@ -21,6 +21,7 @@ from integration.dashboard_helpers import (
 )
 from platform_server.apps.dashboard.catalog import (
     DASHBOARD_EDIT,
+    DASHBOARD_MANAGE,
     DASHBOARD_VIEW,
 )
 from platform_server.settings import API_PREFIX
@@ -336,6 +337,52 @@ async def test_reading_the_publication_of_a_missing_dashboard_is_a_404(
     assert response.json()["code"] == CODE_DASHBOARD_NOT_FOUND
 
 
+async def test_publication_lists_distinct_draft_targets_without_issuing_tokens(
+    app_client: httpx.AsyncClient, sign: SignHeaders
+) -> None:
+    source = await make_blank(app_client)
+    project_id = await make_project(app_client, name="跨屏验收")
+    draft = await make_dashboard(
+        app_client, project_id=project_id, name="未发布总览"
+    )
+    public_id, public_token = await make_published(app_client)
+    missing = await make_blank(app_client)
+    removed = await app_client.delete(f"{DASHBOARDS_URL}/{missing}")
+    assert removed.status_code == 204
+    await set_mixed_navigate_rules(
+        app_client,
+        source_id=source,
+        draft_id=draft["id"],
+        public_id=public_id,
+        missing_id=missing,
+    )
+
+    state = data_of(await read_publication(app_client, source))
+    assert state["is_public"] is False
+    assert state["public_token"] is None
+    assert state["unpublished_targets"] == [
+        {
+            "dashboard_id": draft["id"],
+            "name": draft["name"],
+            "project_name": "跨屏验收",
+        }
+    ]
+    assert missing not in str(state)
+    assert public_token not in str(state)
+
+    no_view = sign([DASHBOARD_MANAGE])
+    limited = data_of(await read_publication(app_client, source, no_view))
+    assert limited["unpublished_targets"] == []
+    assert draft["id"] not in str(limited)
+
+    await published_token(app_client, draft["id"])
+    published = data_of(await read_publication(app_client, source))
+    assert published["unpublished_targets"] == []
+    assert (await unpublish(app_client, draft["id"])).status_code == HTTP_OK
+    withdrawn = data_of(await read_publication(app_client, source))
+    assert withdrawn["unpublished_targets"] == state["unpublished_targets"]
+
+
 async def test_the_public_payload_carries_no_internal_fields(
     app_client: httpx.AsyncClient,
 ) -> None:
@@ -392,6 +439,49 @@ async def set_navigate_rule(
                         "action": {"type": "navigate", "target": target_id},
                     }
                 ],
+            }
+        },
+    )
+    assert response.status_code == HTTP_OK
+
+
+async def set_mixed_navigate_rules(
+    client: httpx.AsyncClient,
+    *,
+    source_id: str,
+    draft_id: str,
+    public_id: str,
+    missing_id: str,
+) -> None:
+    """保存直跳与按值跳转。
+
+    Args: client, source_id, draft_id, public_id, missing_id。
+    """
+    node = await make_node(client, dashboard_id=source_id, body=node_body())
+    source = {"nodeId": node["id"], "event": "click"}
+    response = await client.patch(
+        f"{DASHBOARDS_URL}/{source_id}",
+        json={
+            "chrome_json": {
+                "interactions": [
+                    {
+                        "id": "direct",
+                        "source": source,
+                        "action": {"type": "navigate", "target": draft_id},
+                    },
+                    {
+                        "id": "by-value",
+                        "source": source,
+                        "action": {
+                            "type": "navigateByValue",
+                            "routes": [
+                                {"value": "draft", "target": draft_id},
+                                {"value": "public", "target": public_id},
+                                {"value": "missing", "target": missing_id},
+                            ],
+                        },
+                    },
+                ]
             }
         },
     )
