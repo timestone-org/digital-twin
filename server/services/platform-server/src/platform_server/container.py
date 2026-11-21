@@ -472,7 +472,7 @@ def _build_ac_source(settings: Settings) -> ReadOnlySqlSource:
 
 
 def _build_stream(settings: Settings) -> RedisStream:
-    """抽取分片的队列。⚠ 构造不连网，API 角色不用它时也不会多一个连接。
+    """装配平台作业流。各流由独占消费组处理，结果另行持久化。
 
     ⚠ 套接字超时必须**大于**阻塞读的时长，否则队列一空就必然超时：服务端正
     按约定挂起 `block_ms`，客户端却在 `redis_timeout_s` 就先放弃，于是空队列
@@ -491,6 +491,7 @@ def _build_stream(settings: Settings) -> RedisStream:
     return RedisStream(
         url=settings.url(),
         timeout_s=max(settings.redis_timeout_s, block_s + STREAM_READ_MARGIN_S),
+        should_delete_on_ack=True,
     )
 
 
