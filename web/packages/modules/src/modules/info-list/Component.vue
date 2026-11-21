@@ -255,6 +255,7 @@ const emptyNote = computed(() =>
       <p v-if="emptyNote !== ''" class="il-empty">{{ emptyNote }}</p>
       <ScrollList
         v-else
+        v-slot="{ isDuplicate }"
         class="il-scroll"
         :item-count="shown.length"
         :auto-scroll="scroll.autoScroll"
@@ -270,6 +271,7 @@ const emptyNote = computed(() =>
             :key="row.key"
             :row="row"
             :look="look"
+            :is-duplicate="isDuplicate"
             @pick="onPick"
           />
         </template>

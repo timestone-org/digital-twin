@@ -189,7 +189,11 @@ import CellBadge from './CellBadge.vue'
 import MeterBar from '../../shared/MeterBar.vue'
 import type { ListLook } from './look'
 
-const props = defineProps<{ row: ListRow; look: ListLook }>()
+const props = defineProps<{
+  row: ListRow
+  look: ListLook
+  isDuplicate?: boolean
+}>()
 
 const emit = defineEmits<{ pick: [value: string] }>()
 
@@ -429,7 +433,7 @@ function onPick(event: MouseEvent): void {
       <span
         class="il-status"
         :class="`il-status--${row.issue.state}`"
-        tabindex="0"
+        :tabindex="isDuplicate ? undefined : 0"
         :aria-label="row.issue.reason"
         >{{ row.issue.mark }}</span
       >

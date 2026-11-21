@@ -62,6 +62,7 @@ const scroll = computed(() =>
       <p v-if="rows.length === 0" class="if-empty">{{ emptyText }}</p>
       <ScrollList
         v-else
+        v-slot="{ isDuplicate }"
         class="if-scroll"
         :item-count="rows.length"
         :auto-scroll="scroll.autoScroll"
@@ -72,6 +73,7 @@ const scroll = computed(() =>
           :key="row.key"
           :row="row"
           :look="look"
+          :is-duplicate="isDuplicate"
           @pick="onPick"
         />
       </ScrollList>

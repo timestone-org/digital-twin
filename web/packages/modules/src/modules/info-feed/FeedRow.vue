@@ -11,7 +11,11 @@ import { computed } from 'vue'
 import type { FeedRowView } from './feed'
 import type { FeedLook } from './look'
 
-const props = defineProps<{ row: FeedRowView; look: FeedLook }>()
+const props = defineProps<{
+  row: FeedRowView
+  look: FeedLook
+  isDuplicate?: boolean
+}>()
 
 const emit = defineEmits<{ pick: [value: string] }>()
 
@@ -50,7 +54,7 @@ function onPick(event: MouseEvent): void {
       <span
         class="if-status"
         :class="`if-status--${row.issue.state}`"
-        tabindex="0"
+        :tabindex="isDuplicate ? undefined : 0"
         :aria-label="row.issue.reason"
         >{{ row.issue.mark }}</span
       >
