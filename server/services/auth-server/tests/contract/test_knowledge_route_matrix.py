@@ -11,7 +11,7 @@ knowledge-server 的端点定义在另一个代码单元里，auth-server 看不
 
 import pytest
 
-from auth_server.apps.auth.catalog import KNOWLEDGE_USE
+from auth_server.apps.auth.catalog import KNOWLEDGE_MANAGE, KNOWLEDGE_USE
 from auth_server.apps.auth.services.matching import find_rule
 from contract.rule_views import catalog_rule_views
 
@@ -59,3 +59,22 @@ def test_speech_websocket_is_not_swallowed_by_a_broader_rule() -> None:
     )
     assert rule is not None
     assert rule.path_pattern == f"{KNOWLEDGE_PREFIX}/speech/ws"
+
+
+@pytest.mark.parametrize(
+    ("suffix", "method"),
+    [
+        ("", "GET"),
+        ("", "POST"),
+        (":preview", "POST"),
+        ("/job", "GET"),
+        ("/job:cancel", "POST"),
+    ],
+)
+def test_reembedding_is_always_a_management_operation(
+    suffix: str, method: str
+) -> None:
+    path = f"{KNOWLEDGE_PREFIX}/knowledge-bases/library/reembeddings{suffix}"
+    rule = find_rule(catalog_rule_views(), path=path, method=method)
+    assert rule is not None
+    assert rule.permission_codes == frozenset({KNOWLEDGE_MANAGE})

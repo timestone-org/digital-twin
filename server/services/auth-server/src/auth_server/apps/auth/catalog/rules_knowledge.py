@@ -36,6 +36,13 @@ KNOWLEDGE_RULES: tuple[RouteRuleSpec, ...] = (
         ),
     ),
     RouteRuleSpec(
+        f"{_K}/knowledge-bases/*/reembeddings*",
+        "*",
+        codes=(KNOWLEDGE_MANAGE,),
+        priority=895,
+        description="预览、启动、查看或取消整库重嵌",
+    ),
+    RouteRuleSpec(
         f"{_K}/knowledge-bases",
         "GET",
         codes=(KNOWLEDGE_USE,),
