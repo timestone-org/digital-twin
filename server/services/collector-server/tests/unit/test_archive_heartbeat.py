@@ -15,6 +15,7 @@ from collector_server.apps.collect.archive.buffer import (
     ArchiveBuffer,
     ArchiveOptions,
 )
+from collectwire import CollectPlan, PlanPoint, PlanSource
 
 SOURCE_ID = UUID("0192f000-0000-7000-8000-000000000001")
 TS_MS = 1_767_323_045_000
@@ -256,6 +257,190 @@ async def test_a_polling_source_is_neither_heartbeated_nor_forgotten(
     assert _payloads(archive_stream)[-1] == _row(21.5, TS_MS + 2 * HEARTBEAT_MS)
 
 
+async def test_a_held_device_timestamp_does_not_stop_polling_history(
+    build_heartbeat_buffer: Any, archive_stream: Any
+) -> None:
+    clock = FakeClock(TS_MS)
+    buffer = await build_heartbeat_buffer(
+        clock, FakeLiveness(polling=(SOURCE_ID,))
+    )
+    sink = buffer.sink_for(SOURCE_ID)
+    sink("outlet_temp", 10, TS_MS, "good")
+    clock.advance(HEARTBEAT_MS - 100)
+    sink("outlet_temp", 10, TS_MS, "good")
+    clock.advance(100)
+    sink("outlet_temp", 10, TS_MS, "good")
+    clock.advance(HEARTBEAT_MS)
+    sink("outlet_temp", 10, TS_MS, "good")
+    sink("outlet_temp", 25, TS_MS + 1_000, "good")
+    await buffer.flush_once()
+    assert _payloads(archive_stream) == [
+        _row(10, TS_MS),
+        _row(10, TS_MS + HEARTBEAT_MS),
+        _row(10, TS_MS + 2 * HEARTBEAT_MS),
+        _row(25, TS_MS + 1_000),
+    ]
+
+
+async def test_a_failed_poll_does_not_use_the_observation_clock(
+    build_heartbeat_buffer: Any, archive_stream: Any
+) -> None:
+    clock = FakeClock(TS_MS)
+    buffer = await build_heartbeat_buffer(
+        clock, FakeLiveness(polling=(SOURCE_ID,))
+    )
+    sink = buffer.sink_for(SOURCE_ID)
+    sink("outlet_temp", None, TS_MS, "bad")
+    clock.advance(HEARTBEAT_MS)
+    sink("outlet_temp", None, TS_MS, "bad")
+    await buffer.flush_once()
+    assert _payloads(archive_stream) == [_row(None, TS_MS, "bad")]
+
+
+def _archive_plan(version: str, *, is_enabled: bool) -> CollectPlan:
+    return CollectPlan(
+        version=version,
+        sources=(
+            PlanSource(
+                source_id=SOURCE_ID,
+                code="line-1",
+                protocol="opcua",
+                endpoint="opc.tcp://local:4840",
+                points=(
+                    PlanPoint(
+                        point_code="outlet_temp",
+                        address="ns=2;s=outlet_temp",
+                        sampling_interval_ms=1_000,
+                        archive_enabled=is_enabled,
+                        archive_max_interval_ms=HEARTBEAT_MS,
+                    ),
+                ),
+            ),
+        ),
+    )
+
+
+@pytest.mark.parametrize("was_enabled", [False, True], ids=["enable", "resume"])
+async def test_enabling_archiving_uses_the_latest_live_subscription_value(
+    archive_stream: Any, build_plan_view: Any, was_enabled: bool
+) -> None:
+    clock = FakeClock(TS_MS)
+    plan = build_plan_view(_archive_plan("initial", is_enabled=was_enabled))
+    buffer = ArchiveBuffer(
+        stream=archive_stream, plan=plan, options=OPTIONS, clock=clock
+    )
+    buffer.bind_liveness(_subscribing(SOURCE_ID))
+    sink = buffer.sink_for(SOURCE_ID)
+    sink("outlet_temp", 10, TS_MS, "good")
+    await buffer.flush_once()
+    plan.replace(_archive_plan("off", is_enabled=False))
+    clock.advance(HEARTBEAT_MS)
+    sink("outlet_temp", 99, clock.now_ms, "good")
+    await buffer.flush_once()
+    plan.replace(_archive_plan("on", is_enabled=True))
+    clock.advance(HEARTBEAT_MS)
+    await buffer.flush_once()
+    initial = [_row(10, TS_MS)] if was_enabled else []
+    assert _payloads(archive_stream) == [
+        *initial,
+        _row(99, TS_MS + 2 * HEARTBEAT_MS),
+    ]
+
+
+async def test_enabling_archiving_waits_for_the_next_valid_observation(
+    archive_stream: Any, build_plan_view: Any
+) -> None:
+    clock = FakeClock(TS_MS)
+    plan = build_plan_view(_archive_plan("initial", is_enabled=False))
+    buffer = ArchiveBuffer(
+        stream=archive_stream, plan=plan, options=OPTIONS, clock=clock
+    )
+    buffer.bind_liveness(_subscribing(SOURCE_ID))
+    sink = buffer.sink_for(SOURCE_ID)
+    sink("outlet_temp", 10, TS_MS, "good")
+    clock.advance(HEARTBEAT_MS)
+    sink("outlet_temp", None, clock.now_ms, "bad")
+    await buffer.flush_once()
+    plan.replace(_archive_plan("on", is_enabled=True))
+    clock.advance(HEARTBEAT_MS)
+    await buffer.flush_once()
+    assert _payloads(archive_stream) == []
+
+
+async def test_resuming_a_held_poll_records_the_first_new_observation(
+    archive_stream: Any, build_plan_view: Any
+) -> None:
+    clock = FakeClock(TS_MS)
+    plan = build_plan_view(_archive_plan("initial", is_enabled=True))
+    buffer = ArchiveBuffer(
+        stream=archive_stream, plan=plan, options=OPTIONS, clock=clock
+    )
+    buffer.bind_liveness(FakeLiveness(polling=(SOURCE_ID,)))
+    sink = buffer.sink_for(SOURCE_ID)
+    sink("outlet_temp", 10, TS_MS, "good")
+    await buffer.flush_once()
+    plan.replace(_archive_plan("off", is_enabled=False))
+    clock.advance(HEARTBEAT_MS)
+    await buffer.flush_once()
+    plan.replace(_archive_plan("on", is_enabled=True))
+    clock.advance(HEARTBEAT_MS)
+    sink("outlet_temp", 10, TS_MS, "good")
+    await buffer.flush_once()
+    assert _payloads(archive_stream) == [
+        _row(10, TS_MS),
+        _row(10, TS_MS + 2 * HEARTBEAT_MS),
+    ]
+
+
+async def test_disabling_globally_resets_the_baseline_without_a_new_reading(
+    archive_stream: Any, build_plan_view: Any
+) -> None:
+    clock = FakeClock(TS_MS + 800)
+    active = _archive_plan("initial", is_enabled=True)
+    plan = build_plan_view(active)
+    buffer = ArchiveBuffer(
+        stream=archive_stream, plan=plan, options=OPTIONS, clock=clock
+    )
+    buffer.bind_liveness(_subscribing(SOURCE_ID))
+    buffer.sink_for(SOURCE_ID)("outlet_temp", 10, TS_MS, "good")
+    await buffer.flush_once()
+    plan.replace(
+        active.model_copy(
+            update={
+                "version": "off",
+                "params": {"archive": {"enabled": False}},
+            }
+        )
+    )
+    clock.advance(1_000)
+    await buffer.flush_once()
+    plan.replace(active.model_copy(update={"version": "on"}))
+    clock.advance(1_000)
+    await buffer.flush_once()
+    assert _payloads(archive_stream) == [
+        _row(10, TS_MS),
+        _row(10, TS_MS + 2_800),
+    ]
+
+
+async def test_invalidating_a_point_discards_its_archive_observation(
+    build_heartbeat_buffer: Any, archive_stream: Any
+) -> None:
+    clock = FakeClock(TS_MS)
+    buffer = await build_heartbeat_buffer(clock, _subscribing(SOURCE_ID))
+    sink = buffer.sink_for(SOURCE_ID)
+    sink("outlet_temp", 10, TS_MS, "good")
+    buffer.invalidate_point(SOURCE_ID, "outlet_temp")
+    clock.advance(HEARTBEAT_MS)
+    await buffer.flush_once()
+    sink("outlet_temp", 10, TS_MS + 1, "good")
+    await buffer.flush_once()
+    assert _payloads(archive_stream) == [
+        _row(10, TS_MS),
+        _row(10, TS_MS + 1),
+    ]
+
+
 async def test_the_heartbeat_carries_the_latest_reading_inside_the_deadband(
     build_heartbeat_buffer: Any, archive_stream: Any
 ) -> None:
@@ -392,3 +577,23 @@ async def test_a_point_dropped_from_the_plan_stops_heartbeating(
     clock.advance(HEARTBEAT_MS)
     await buffer.flush_once()
     assert _payloads(archive_stream) == [_row(21.5, TS_MS)]
+
+
+async def test_poll_archive_uses_observation_when_device_clock_is_ahead(
+    build_heartbeat_buffer: Any, archive_stream: Any
+) -> None:
+    clock = FakeClock(TS_MS)
+    buffer = await build_heartbeat_buffer(
+        clock, FakeLiveness(polling=(SOURCE_ID,))
+    )
+    sink = buffer.sink_for(SOURCE_ID)
+    device_ms = TS_MS + 10 * HEARTBEAT_MS
+    sink("outlet_temp", 10, device_ms, "good")
+    for _ in range(3):
+        clock.advance(HEARTBEAT_MS)
+        sink("outlet_temp", 10, device_ms, "good")
+    await buffer.flush_once()
+    assert _payloads(archive_stream) == [
+        _row(10, device_ms),
+        *[_row(10, TS_MS + interval * HEARTBEAT_MS) for interval in (1, 2, 3)],
+    ]

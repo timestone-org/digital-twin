@@ -151,7 +151,9 @@ async def test_a_redelivered_batch_does_not_write_the_row_twice(
     try:
         await stream.append(source_id, [row], maxlen=1000)
         await stream.append(source_id, [row], maxlen=1000)
-        await make_writer(stream, database).flush_once()
+        writer = make_writer(stream, database)
+        assert await writer.flush_once() == 1
+        assert writer.written == 1
         assert await stored_values(database, source_id) == [21.5]
     finally:
         await cleanup(database, client, source_id)

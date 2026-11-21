@@ -16,6 +16,7 @@ from uuid import UUID
 from collector_server.apps.collect import tuning
 from collector_server.apps.collect.archive.admission import (
     DEFAULT_POLICY,
+    DISABLED_POLICY,
     AdmissionGate,
     ArchivePolicy,
     PointKey,
@@ -185,21 +186,28 @@ class ArchiveBuffer:
 
         Args: source_id, point_code, value, ts_ms, quality。
         """
-        if not self._enabled_now():
-            return
+        self._refresh_policies()
         key = (source_id, point_code)
-        policy = self._policies.get(key, DEFAULT_POLICY)
-        if not self._gate.admit(key, policy, (value, ts_ms, quality)):
-            return
-        self._push(
-            source_id,
-            ArchiveRow(
-                point_code=point_code,
-                value=value,
-                ts_ms=ts_ms,
-                quality=quality,
-            ),
+        policy = (
+            self._policies.get(key, DEFAULT_POLICY)
+            if self._enabled_now()
+            else DISABLED_POLICY
         )
+        state = self._liveness
+        is_polling = (
+            state is not None
+            and state.is_online(source_id)
+            and not state.is_subscribing(source_id)
+        )
+        sample = self._gate.admit(
+            key, policy, (value, ts_ms, quality), is_polling=is_polling
+        )
+        if sample is not None:
+            self._push(source_id, ArchiveRow(point_code, *sample))
+
+    def invalidate_point(self, source_id: UUID, point_code: str) -> None:
+        """废弃已失效点位的观测与准入基线。Args: source_id, point_code。"""
+        self._gate.invalidate((source_id, point_code))
 
     def _push(self, source_id: UUID, row: ArchiveRow) -> None:
         """把一行排进缓冲；满了就挤掉最旧的并记账。
@@ -248,12 +256,13 @@ class ArchiveBuffer:
         的值还是不是这个；重连后订阅会把初值重新推一遍，从那一条起再补。
         """
         liveness = self._liveness
-        if liveness is None or not self._enabled_now():
+        if liveness is None:
             return
         now_ms = self._clock()
         if now_ms - self._swept_at_ms < HEARTBEAT_SWEEP_INTERVAL_MS:
             return
         self._swept_at_ms = now_ms
+        is_enabled = self._enabled_now()
         states: dict[UUID, tuple[bool, bool]] = {}
         for key in self._gate.seen_keys():
             source_id = key[0]
@@ -266,7 +275,7 @@ class ArchiveBuffer:
             is_online, is_subscribing = state
             if not is_online:
                 self._gate.forget_seen(key)
-            elif is_subscribing:
+            elif is_subscribing and is_enabled:
                 self._heartbeat_one(key, now_ms)
 
     def _heartbeat_one(self, key: PointKey, now_ms: int) -> None:
@@ -405,7 +414,16 @@ class ArchiveBuffer:
             return
         self._policies = policies_of(plan)
         self._plan_version = plan.version
-        self._gate.retain(frozenset(self._policies))
+        archive_keys = (
+            frozenset(
+                key
+                for key, policy in self._policies.items()
+                if policy.archive_enabled
+            )
+            if self._enabled_now()
+            else frozenset[PointKey]()
+        )
+        self._gate.retain(frozenset(self._policies), archive_keys=archive_keys)
 
     async def _loop(self) -> None:
         """按周期 flush，直到被叫停。"""

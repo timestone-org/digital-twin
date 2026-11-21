@@ -5,6 +5,9 @@
 """
 
 import json
+import sys
+
+import pytest
 
 from collector_server.stream import ROWS_FIELD, decode_entry
 
@@ -40,6 +43,10 @@ def test_an_item_that_is_not_a_pair_is_skipped() -> None:
     assert decode_entry("not-a-pair") is None
 
 
+def test_an_empty_item_is_skipped() -> None:
+    assert decode_entry(()) is None
+
+
 def test_an_entry_without_fields_is_skipped() -> None:
     assert decode_entry(("1-0",)) is None
 
@@ -48,14 +55,32 @@ def test_an_entry_whose_id_is_not_text_is_skipped() -> None:
     assert decode_entry((1, {ROWS_FIELD: "[]"})) is None
 
 
-def test_an_entry_without_the_rows_field_is_skipped() -> None:
-    assert decode_entry(("1-0", {"invented_later": "[]"})) is None
+def test_an_entry_without_the_rows_field_can_still_be_deleted() -> None:
+    decoded = decode_entry(("1-0", {"invented_later": "[]"}))
+    assert decoded is not None
+    assert (decoded.entry_id, decoded.rows) == ("1-0", ())
 
 
 def test_an_entry_whose_body_is_not_json_yields_no_rows() -> None:
     decoded = decode_entry(entry("not-json"))
     assert decoded is not None
     assert decoded.rows == ()
+
+
+@pytest.mark.parametrize(
+    "body",
+    [
+        "[" * 10_000 + "]" * 10_000,
+        "[" + "1" * (sys.get_int_max_str_digits() + 1) + "]",
+    ],
+    ids=["nesting", "integer"],
+)
+def test_a_payload_beyond_json_decoder_limits_can_still_be_deleted(
+    body: str,
+) -> None:
+    decoded = decode_entry(entry(body))
+    assert decoded is not None
+    assert (decoded.entry_id, decoded.rows) == ("1-0", ())
 
 
 def test_an_entry_whose_body_is_not_a_list_yields_no_rows() -> None:

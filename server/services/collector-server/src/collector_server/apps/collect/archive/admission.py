@@ -28,6 +28,7 @@ class ArchivePolicy:
 # ⚠ 计划里查不到的点位按「照常归档」处理：计划刚变而索引还没重建的那一瞬，
 # 宁可多写几行也不要在库里留一段没人察觉的空白
 DEFAULT_POLICY = ArchivePolicy()
+DISABLED_POLICY = ArchivePolicy(archive_enabled=False)
 
 
 def policies_of(plan: CollectPlan) -> dict[PointKey, ArchivePolicy]:
@@ -82,6 +83,7 @@ class _Baseline:
     value: object
     ts_ms: int
     quality: Quality
+    source_ts_ms: int
     anchor_ts_ms: int
     anchor_at_ms: int
 
@@ -98,34 +100,53 @@ class AdmissionGate:
         self._archived: dict[PointKey, _Baseline] = {}
         # 每个点位最近一次**见过**的值与质量，归没归档都记：心跳补的是「此刻
         # 的值」，被死区吞掉的那点变化也算数
-        self._seen: dict[PointKey, tuple[object, Quality]] = {}
+        self._seen: dict[PointKey, Sample] = {}
 
     def admit(
-        self, key: PointKey, policy: ArchivePolicy, sample: Sample
-    ) -> bool:
-        """首值 ∨ 心跳到期 ∨ 质量变了 ∨ 超死区 —— 命中任一就收。
+        self,
+        key: PointKey,
+        policy: ArchivePolicy,
+        sample: Sample,
+        *,
+        is_polling: bool = False,
+    ) -> Sample | None:
+        """首值、心跳到期、质量变化或超死区时，返回应归档的读数。
 
         ⚠ 基线是上一条**已归档**的读数，不是上一条见过的读数：拿见过的当
         基线，一条缓慢爬升的曲线可以永远不触发死区而一行都不落库。
 
-        Args: key, policy, sample。
+        Args: key, policy, sample, is_polling。
         """
+        seen = self._seen.get(key)
+        self._seen[key] = sample
         if not policy.archive_enabled:
-            return False
-        value, _, quality = sample
-        self._seen[key] = (value, quality)
+            self._archived.pop(key, None)
+            return None
+        now_ms = self._clock()
         previous = self._archived.get(key)
-        if previous is None or self._is_due(previous, sample, policy):
-            self._archived[key] = self._baseline_of(sample, policy)
-            return True
-        return False
+        value, ts_ms, quality = sample
+        if previous is None:
+            if is_polling and sample == seen and quality != "bad":
+                # ⚠ 恢复归档时，旧设备时间戳可能已经落过库。
+                sample = (value, max(ts_ms, now_ms), quality)
+        elif not self._is_due(previous, sample, policy, is_polling=is_polling):
+            if not is_polling or not self._poll_due(
+                previous, policy, quality, now_ms
+            ):
+                return None
+            # ⚠ 时间戳停在上次变化时，用本轮成功读取的时刻归档。
+            sample = (value, now_ms, quality)
+        self._archived[key] = self._baseline_of(
+            sample, policy, now_ms, source_ts_ms=ts_ms
+        )
+        return sample
 
     def heartbeat(
         self, key: PointKey, policy: ArchivePolicy, now_ms: int
     ) -> Sample | None:
-        """心跳到期就补一条「值还是这个」的读数；没到期或没资格给 None。
+        """为已开启归档的订阅点位写首值或到期的心跳。
 
-        ⚠ 时间戳落在「锚 + 整数个心跳」的网格上，**不是本地时钟**：① 设备
+        ⚠ 周期心跳落在「锚 + 整数个心跳」的网格上：① 设备
         时钟与本地时钟有偏差时，抄本地时钟会让心跳行排到下一条实测读数之后，
         台账按桶取末值就取到这条陈值；② 整齐的网格保证任何不窄于心跳的桶里
         都恰好落一行，而「到期才发、发时取当下」会因扫描抖动一格比一格晚，
@@ -137,18 +158,21 @@ class AdmissionGate:
         """
         baseline = self._archived.get(key)
         seen = self._seen.get(key)
-        if (
-            baseline is None
-            or seen is None
-            or not policy.archive_enabled
-            or policy.max_interval_ms <= 0
-        ):
+        if seen is None or not policy.archive_enabled:
+            return None
+        value, _, quality = seen
+        if baseline is None:
+            if quality == "bad":
+                return None
+            sample = (value, now_ms, quality)
+            self._archived[key] = self._baseline_of(sample, policy, now_ms)
+            return sample
+        if policy.max_interval_ms <= 0:
             return None
         slots = (now_ms - baseline.anchor_at_ms) // policy.max_interval_ms
         ts_ms = baseline.anchor_ts_ms + slots * policy.max_interval_ms
         if ts_ms <= baseline.ts_ms:
             return None
-        value, quality = seen
         self._archived[key] = replace(
             baseline, value=value, ts_ms=ts_ms, quality=quality
         )
@@ -168,15 +192,26 @@ class AdmissionGate:
         """
         self._seen.pop(key, None)
 
-    def retain(self, keys: frozenset[PointKey]) -> None:
-        """只留这些点位的基线与「见过」，其余丢掉。计划变了时用。
+    def invalidate(self, key: PointKey) -> None:
+        """点位的订阅失效时丢弃旧观测与归档基线。Args: key。"""
+        self._seen.pop(key, None)
+        self._archived.pop(key, None)
+
+    def retain(
+        self,
+        keys: frozenset[PointKey],
+        *,
+        archive_keys: frozenset[PointKey] | None = None,
+    ) -> None:
+        """按计划保留已配置点位的观测和已开启归档的点位基线。
 
         ⚠ 也是「删掉再加回来」的正确解：基线跟着点位一起走，加回来的点位
         因此重新算首值，而不是被一条几个月前的旧基线挡住。
 
-        Args: keys。
+        Args: keys, archive_keys。
         """
-        for key in [key for key in self._archived if key not in keys]:
+        active = keys if archive_keys is None else archive_keys
+        for key in [key for key in self._archived if key not in active]:
             del self._archived[key]
         for key in [key for key in self._seen if key not in keys]:
             del self._seen[key]
@@ -185,7 +220,14 @@ class AdmissionGate:
         """记着基线的点位数。"""
         return len(self._archived)
 
-    def _baseline_of(self, sample: Sample, policy: ArchivePolicy) -> _Baseline:
+    @staticmethod
+    def _baseline_of(
+        sample: Sample,
+        policy: ArchivePolicy,
+        now_ms: int,
+        *,
+        source_ts_ms: int | None = None,
+    ) -> _Baseline:
         """一条刚归档的实测读数当基线，并定下心跳网格的锚。
 
         ⚠ 读数的时刻离本地此刻超过一个心跳就不拿它当锚，改用本地时钟：订阅
@@ -193,22 +235,26 @@ class AdmissionGate:
         整批落进过去、与旧行撞主键而静默丢掉。一个心跳之内的差才当作设备
         时钟与本地时钟的偏差，沿用设备时钟。
 
-        Args: sample, policy。
+        Args: sample, policy, now_ms。
         """
         value, ts_ms, quality = sample
-        now_ms = self._clock()
         is_fresh = abs(now_ms - ts_ms) <= policy.max_interval_ms
         return _Baseline(
             value=value,
             ts_ms=ts_ms,
             quality=quality,
+            source_ts_ms=ts_ms if source_ts_ms is None else source_ts_ms,
             anchor_ts_ms=ts_ms if is_fresh else now_ms,
             anchor_at_ms=now_ms,
         )
 
     @staticmethod
     def _is_due(
-        previous: _Baseline, sample: Sample, policy: ArchivePolicy
+        previous: _Baseline,
+        sample: Sample,
+        policy: ArchivePolicy,
+        *,
+        is_polling: bool,
     ) -> bool:
         """除首值外的三条准入。
 
@@ -219,7 +265,27 @@ class AdmissionGate:
             return True
         if (
             policy.max_interval_ms > 0
-            and ts_ms - previous.ts_ms >= policy.max_interval_ms
+            and ts_ms
+            - (previous.source_ts_ms if is_polling else previous.ts_ms)
+            >= policy.max_interval_ms
         ):
             return True
         return is_beyond_deadband(previous.value, value, policy.deadband)
+
+    @staticmethod
+    def _poll_due(
+        previous: _Baseline,
+        policy: ArchivePolicy,
+        quality: Quality,
+        now_ms: int,
+    ) -> bool:
+        """成功的轮询到期且能产生新时间戳。
+
+        Args: previous, policy, quality, now_ms。
+        """
+        return (
+            quality != "bad"
+            and policy.max_interval_ms > 0
+            and now_ms - previous.anchor_at_ms >= policy.max_interval_ms
+            and now_ms != previous.ts_ms
+        )

@@ -82,9 +82,9 @@ async def test_a_point_the_plan_switched_off_is_kept_out_of_the_buffer(
         plan=build_plan_view(plan),
         options=make_options(),
     )
-    await buffer.flush_once()
     buffer.sink_for(SOURCE_ID)("outlet_temp", 21.5, TS_MS, "good")
-    assert buffer.pending == 0
+    await buffer.flush_once()
+    assert archive_stream.appended == []
 
 
 async def test_the_buffer_drops_the_oldest_row_when_it_is_full(
@@ -231,9 +231,9 @@ async def test_a_new_plan_version_rebuilds_the_admission_table(
             ),
         )
     )
-    await buffer.flush_once()
     buffer.sink_for(SOURCE_ID)("outlet_temp", 1.0, TS_MS, "good")
-    assert buffer.pending == 0
+    await buffer.flush_once()
+    assert archive_stream.appended == []
 
 
 async def test_a_full_stream_is_reported_without_stopping_the_flush(

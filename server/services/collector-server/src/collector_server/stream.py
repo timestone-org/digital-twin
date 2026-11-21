@@ -207,23 +207,28 @@ class RedisArchiveStream:
 
 
 def decode_entry(item: object) -> StreamEntry | None:
-    """把 XRANGE 的一项解成条目；解不出给 None。
+    """把 XRANGE 的一项解成条目，损坏的载荷保留条目 id 供落库端删除。
 
-    ⚠ 一条坏条目不许让落库循环退出，否则它会把整条流永久堵死。
+    ⚠ 丢掉 id 会让 XRANGE 一直读到同一批坏条目，堵住后面的历史。
 
     Args: item。
     """
     if not isinstance(item, list | tuple):
         return None
     pair = cast("Sequence[object]", item)
+    if not pair:
+        return None
     entry_id = pair[0]
     fields = pair[1] if len(pair) > 1 else None
     if not isinstance(entry_id, str) or not isinstance(fields, dict):
         return None
     body = cast("Mapping[str, object]", fields).get(ROWS_FIELD)
-    if not isinstance(body, str):
-        return None
-    return StreamEntry(entry_id=entry_id, rows=_rows(body))
+    if isinstance(body, str):
+        return StreamEntry(entry_id=entry_id, rows=_rows(body))
+    _logger.warning(
+        "archive_entry_undecodable", "归档条目的 rows 字段无效，已跳过载荷"
+    )
+    return StreamEntry(entry_id=entry_id, rows=())
 
 
 def _rows(body: str) -> tuple[Mapping[str, Any], ...]:
@@ -233,9 +238,9 @@ def _rows(body: str) -> tuple[Mapping[str, Any], ...]:
     """
     try:
         decoded: object = json.loads(body)
-    except json.JSONDecodeError:
+    except (ValueError, RecursionError):
         _logger.warning(
-            "archive_entry_undecodable", "归档条目不是合法 JSON，已跳过"
+            "archive_entry_undecodable", "归档条目无法解码，已跳过载荷"
         )
         return ()
     if not isinstance(decoded, list):
