@@ -66,6 +66,15 @@ class AppSettings(EnvSettings):
         return level
 
 
+class HttpAppSettings(AppSettings):
+    """已接入 HTTP 摘流的服务配置。"""
+
+    # HTTP 摘除就绪与停止监听之间的时间
+    app_readiness_withdraw_s: float = Field(
+        default=2.0, gt=0, allow_inf_nan=False
+    )
+
+
 class PostgresSettings(EnvSettings):
     """数据库连接组。密码无默认值。"""
 

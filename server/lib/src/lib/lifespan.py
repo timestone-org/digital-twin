@@ -66,12 +66,7 @@ class LifespanHook:
 
 @dataclass
 class ReadinessGate:
-    """就绪闸。lifespan 关停一开始就置否。
-
-    ⚠ 只有经 `create_app` 起的 HTTP 进程用它，而那里的关停由 uvicorn 驱动：
-    它先停止监听、等连接收完，最后才跑 lifespan 关停，所以置否时已没有人来问
-    `/ready`。它保证不了「先摘流量再停止监听」。
-    """
+    """对探针公开当前就绪状态及原因。"""
 
     is_ready: bool = False
     reason: str = "starting"
@@ -96,6 +91,14 @@ class LifespanRunner:
     # 总预算花光后每个钩子仍保底的时长：排在最后的 flush 与让租约也要有一片
     drain_floor_s: float = 1.0
 
+    shutdown_deadline_s: float | None = field(default=None, init=False)
+    _is_withdrawn: bool = field(default=False, init=False)
+
+    def withdraw(self) -> None:
+        """关闭就绪闸，防止尚未完成的启动钩子将它重新打开。"""
+        self._is_withdrawn = True
+        self.gate.close("shutting_down")
+
     async def startup(self) -> None:
         """按 `startup_order` 升序执行；任一失败先停掉已走过的，再向上抛。"""
         reached: list[LifespanHook] = []
@@ -109,12 +112,17 @@ class LifespanRunner:
                     raise
                 _logger.info("component_started", "", component=hook.name)
             reached.append(hook)
-        self.gate.open()
+        if not self._is_withdrawn:
+            self.gate.open()
 
     async def shutdown(self) -> None:
         """摘就绪 → 按 `shutdown_order` 升序停 → 单钩子超时不阻断其余。"""
         self.gate.close("shutting_down")
-        await self._stop_all(self.hooks)
+        try:
+            await self._stop_all(self.hooks)
+        finally:
+            self._is_withdrawn = False
+            self.shutdown_deadline_s = None
 
     async def _stop_all(self, hooks: Sequence[LifespanHook]) -> None:
         """在同一份总预算里按 `shutdown_order` 升序逐个停。
@@ -122,9 +130,13 @@ class LifespanRunner:
         Args: hooks。
         """
         loop = asyncio.get_running_loop()
-        deadline = loop.time() + self.drain_timeout_s
+        deadline = self.shutdown_deadline_s
+        floor = 0.0
+        if deadline is None:
+            deadline = loop.time() + self.drain_timeout_s
+            floor = self.drain_floor_s
         for hook in sorted(hooks, key=lambda item: item.shutdown_order):
-            budget = max(deadline - loop.time(), self.drain_floor_s)
+            budget = max(deadline - loop.time(), floor)
             await self._stop_one(hook, budget)
 
     async def _stop_one(self, hook: LifespanHook, budget_s: float) -> None:

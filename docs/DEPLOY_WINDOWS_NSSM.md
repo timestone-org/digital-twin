@@ -941,7 +941,7 @@ $py   = 'C:\DigitalTwin\app\server\.venv\Scripts\python.exe'
 | `AppDirectory` = 服务目录 | 进程的 CWD。`.env` 从这里读，`alembic`、`python -m scripts.*` 也按它找自己那份。**设错了不会报错，只是配置全部变成「没配」** |
 | `PYTHONUNBUFFERED=1` | 不设的话 stdout 有缓冲，日志要攒够一块才落盘——**进程崩溃时最后那几行（也就是最有用的几行）永远看不到** |
 | `AppExit Default Restart` + `AppRestartDelay` + `AppThrottle` | Windows 服务依赖只保证「被依赖的服务已启动」，不保证「能应答」。库还没起来时进程会退出，靠这三项自愈；`AppThrottle` 让反复失败的服务退避，不至于把日志刷爆 |
-| `AppStopMethodConsole 25000` | nssm 停服务时先往应用的控制台发 Ctrl+C。**代码在 Windows 上正是靠它优雅关停**（`lib/lifespan.py` 里 `loop.add_signal_handler` 抛 `NotImplementedError` 后退回 `signal.signal`）。25s 要大于 `APP_DRAIN_TIMEOUT_S`（默认 20s）|
+| `AppStopMethodConsole 25000` | nssm 停服务时先往应用的控制台发 Ctrl+C。**代码在 Windows 上正是靠它优雅关停**（`lib/lifespan.py` 里 `loop.add_signal_handler` 抛 `NotImplementedError` 后退回 `signal.signal`）。25s 覆盖 HTTP 默认 2s 摘流及 20s drain。调大服务的 `APP_READINESS_WITHDRAW_S` 或 `APP_DRAIN_TIMEOUT_S` 时同步调大 NSSM 宽限 |
 | **不要设 `AppNoConsole`** | 设了就没有控制台，Ctrl+C 发不出去，nssm 只能一路降级到 `TerminateProcess`——**采集租约不让、在途请求直接断**，重启后要等一个 TTL 才恢复 |
 | `Start SERVICE_DELAYED_AUTO_START` | 延迟自动启动，把开机时的抢跑（Docker 之外最常见的启动失败原因）压下去 |
 
