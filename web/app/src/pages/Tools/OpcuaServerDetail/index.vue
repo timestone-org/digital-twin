@@ -154,12 +154,17 @@ onMounted(() => {
         </div>
 
         <DtNotice
-          v-if="pendingLabels.length > 0"
+          v-if="
+            instance.is_running &&
+            (instance.has_pending_restart || pendingLabels.length > 0)
+          "
           intent="warning"
           icon="alert-triangle"
         >
-          {{ pendingLabels.join('、') }}
-          已保存但尚未生效，重启实例后才对上位机可见。
+          配置已保存但尚未生效，重启实例后才对上位机可见。
+          <span v-if="pendingLabels.length > 0">
+            待生效的实例配置包括{{ pendingLabels.join('、') }}。
+          </span>
         </DtNotice>
 
         <DtNotice
@@ -176,7 +181,11 @@ onMounted(() => {
           <!-- ⚠ 三个分区组件都收 `instance` 这一个 prop。写错 prop 名时
                typecheck 与 lint 双双放行，靠 `sections.contract.spec.ts` 兜 -->
           <RouterView v-slot="{ Component }">
-            <component :is="Component" :instance="instance" />
+            <component
+              :is="Component"
+              :instance="instance"
+              @configuration-changed="load()"
+            />
           </RouterView>
         </div>
       </div>

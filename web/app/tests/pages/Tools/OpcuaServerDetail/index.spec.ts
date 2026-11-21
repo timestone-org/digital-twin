@@ -26,17 +26,28 @@ vi.mock('@/composables/useRealtimeChannel', async () => {
   return { ...actual, useRealtimeChannel: () => channel }
 })
 
-vi.mock('vue-router', () => ({
-  useRouter: () => ({ replace: vi.fn(), push: vi.fn() }),
-  useRoute: () => ({
-    path: '/tools/opcua-servers/i1',
-    params: { instanceId: 'i1' },
-    query: {},
-  }),
-  RouterLink: { props: ['to'], template: '<a :href="to"><slot /></a>' },
-  // 分区是子路由，详情页只留一个出口；出口里放什么由各分区自己的用例去验
-  RouterView: { template: '<div data-test="router-view" />' },
-}))
+vi.mock('vue-router', () => {
+  const section = {
+    props: ['instance'],
+    emits: ['configuration-changed'],
+    template: `<button data-test="router-view" @click="$emit('configuration-changed')">
+      完成节点配置更新
+    </button>`,
+  }
+  return {
+    useRouter: () => ({ replace: vi.fn(), push: vi.fn() }),
+    useRoute: () => ({
+      path: '/tools/opcua-servers/i1',
+      params: { instanceId: 'i1' },
+      query: {},
+    }),
+    RouterLink: { props: ['to'], template: '<a :href="to"><slot /></a>' },
+    RouterView: {
+      setup: () => ({ section }),
+      template: '<slot :Component="section" />',
+    },
+  }
+})
 
 interface ConfirmAsk {
   title: string
@@ -134,13 +145,26 @@ describe('详情页', () => {
   it('⚠ 未生效的字段逐个列出来，不许只说一句「有改动」', async () => {
     const text = (
       await render({
+        is_running: true,
         has_pending_restart: true,
-        pending_fields: ['security_policies', 'namespace_uri'],
+        pending_fields: ['name', 'security_policies', 'namespace_uri'],
       })
     ).text()
+    expect(text).toContain('实例名称')
     expect(text).toContain('安全策略')
     expect(text).toContain('命名空间 URI')
     expect(text).toContain('重启')
+  })
+
+  it('更新节点配置后刷新实例，即使没有待重启的实例字段也显示提示', async () => {
+    const wrapper = await render({ is_running: true, desired_state: 'running' })
+    vi.mocked(opcuaApi.getInstance).mockResolvedValue(
+      instance({ is_running: true, has_pending_restart: true }),
+    )
+    await wrapper.get('[data-test="router-view"]').trigger('click')
+    await flushPromises()
+    expect(opcuaApi.getInstance).toHaveBeenCalledTimes(2)
+    expect(wrapper.text()).toContain('配置已保存但尚未生效')
   })
 
   it('没有未生效字段时不出那条提示', async () => {

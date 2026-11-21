@@ -2,12 +2,7 @@
 /**
  * @fileoverview 新建 / 编辑实例的表单。
  *
- * ⚠ 名称与端口只在新建时定：名称是人给的唯一标识；端口一旦定下，上位机的
- * 组态里就写着它，改端口等于换一个对方连不上的地址。所以两者都不在编辑面上。
- *
- * ⚠ 端口只能从池内的空闲端口里挑。池外的端口没有容器映射，服务能 bind 而
- * 上位机连不上，实例状态却显示「运行中」——所以这里只给可选项，不给自由输入，
- * 后端也会以 42113 拒绝池外取值。
+ * 端口创建时从端口池分配，上位机通过该端口连接实例。
  */
 import { computed, ref, watch } from 'vue'
 import type {
@@ -178,15 +173,12 @@ function setNamespace(value: string): void {
 }
 
 const errors = computed(() =>
-  instanceFieldErrors(
-    {
-      name: name.value,
-      endpointPath: endpointPath.value,
-      namespaceUri: namespaceUri.value,
-      policies: policies.value,
-    },
-    isEdit.value,
-  ),
+  instanceFieldErrors({
+    name: name.value,
+    endpointPath: endpointPath.value,
+    namespaceUri: namespaceUri.value,
+    policies: policies.value,
+  }),
 )
 
 /** 字段错误何时摆出来：点过提交，或者已经填了却不合规。 */
@@ -209,19 +201,29 @@ const canSubmit = computed(
 function submit(): void {
   attempted.value = true
   if (!canSubmit.value) return
+  const target = props.instance
+  const trimmedName = name.value.trim()
+  const trimmedDescription = description.value.trim()
   const shared = {
-    description: description.value.trim() || null,
     endpoint_path: endpointPath.value.trim(),
     namespace_uri: namespaceUri.value.trim(),
     security_policies: policies.value,
     is_anonymous_allowed: anonymous.value,
     is_autostart: autostart.value,
   }
-  if (isEdit.value) {
-    emit('update', shared)
+  if (target !== null) {
+    const update: OpcuaInstanceUpdateInput = { ...shared }
+    if (trimmedName !== target.name) update.name = trimmedName
+    if (trimmedDescription !== (target.description ?? ''))
+      update.description = trimmedDescription
+    emit('update', update)
     return
   }
-  const input: OpcuaInstanceCreateInput = { name: name.value.trim(), ...shared }
+  const input: OpcuaInstanceCreateInput = {
+    name: trimmedName,
+    description: trimmedDescription || null,
+    ...shared,
+  }
   // 自动分配就整个不传这个字段，让服务端去挑
   if (portMode.value === 'manual') input.port = Number(port.value)
   emit('create', input)
@@ -237,19 +239,27 @@ function submit(): void {
     @update:model-value="emit('update:modelValue', $event)"
   >
     <div class="dt-form-grid">
-      <DtNotice v-if="isEdit" intent="warning" icon="alert-triangle">
+      <DtNotice
+        v-if="instance?.is_running"
+        class="dt-form-grid__wide"
+        intent="warning"
+        icon="alert-triangle"
+      >
         {{ restartLabels }}
-        改完要重启实例才生效，重启会断开该实例上全部上位机会话。
+        更新后需重启实例才会生效。重启会断开该实例的所有上位机会话。
       </DtNotice>
 
       <DtField
-        v-if="!isEdit"
+        v-slot="{ id, describedby, invalid }"
         label="名称"
         required
         :error="shown(errors.name, name)"
       >
         <DtInput
+          :id="id"
           v-model="name"
+          :aria-describedby="describedby"
+          :aria-invalid="invalid"
           placeholder="字母开头，可含数字、下划线与短横"
         />
       </DtField>

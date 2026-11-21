@@ -7,6 +7,7 @@
  */
 
 const LABELS: Record<string, string> = {
+  name: '实例名称',
   endpoint_path: '端点路径',
   namespace_uri: '命名空间 URI',
   security_policies: '安全策略',
@@ -21,6 +22,7 @@ const LABELS: Record<string, string> = {
 
 /** 实例上改完要重启才生效的字段，与后端 instance_service.RESTART_FIELDS 同口径。 */
 export const INSTANCE_RESTART_FIELDS: readonly string[] = [
+  'name',
   'endpoint_path',
   'namespace_uri',
   'security_policies',

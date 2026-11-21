@@ -150,6 +150,14 @@ beforeEach(() => {
   setActivePinia(createPinia())
   confirmSpy.mockReset().mockResolvedValue(true)
   errorToast.mockReset()
+  vi.spyOn(opcuaApi, 'getPortPool').mockResolvedValue({
+    total: 2,
+    used: 0,
+    available: 2,
+    max_instances: 2,
+    instance_count: 0,
+    free_ports: [4840, 4841],
+  })
   const codes = ['opcua:view', 'opcua:operate', 'opcua:manage']
   const auth = useAuthStore()
   auth.user = {
@@ -186,21 +194,26 @@ describe('实例表单', () => {
     expect(payload?.endpoint_path).toBe('/digitaltwin')
   })
 
-  it('编辑时铺回实例取值，且不出名称输入框', async () => {
+  it('编辑运行中的实例时回填名称并显示待重启的配置项', async () => {
     mount(InstanceFormDialog, {
-      props: { modelValue: true, instance: instance() },
+      props: {
+        modelValue: true,
+        instance: instance({ is_running: true, desired_state: 'running' }),
+      },
       attachTo: document.body,
     })
     await flushPromises()
     const text = document.body.textContent ?? ''
     expect(text).toContain('编辑实例')
-    // 名称只在新建时可填
-    expect(text).not.toContain('字母开头')
-    // 匿名访问与端点、命名空间、安全策略一样要重启才生效
+    const name = document.body.querySelector<HTMLInputElement>(
+      '.dt-modal input[placeholder="字母开头，可含数字、下划线与短横"]',
+    )
+    expect(name?.value).toBe('plant')
+    expect(text).toContain('实例名称')
     expect(text).toContain('匿名访问')
   })
 
-  it('编辑提交的载荷不含名称——名称不可改', async () => {
+  it('名称与描述未改动时从更新载荷省略', async () => {
     const wrapper = mount(InstanceFormDialog, {
       props: { modelValue: true, instance: instance() },
       attachTo: document.body,
@@ -212,6 +225,7 @@ describe('实例表单', () => {
       Record<string, unknown> | undefined
     expect(payload).toBeDefined()
     expect(payload).not.toHaveProperty('name')
+    expect(payload).not.toHaveProperty('description')
   })
 
   it('安全策略一个都不勾时不许提交', async () => {

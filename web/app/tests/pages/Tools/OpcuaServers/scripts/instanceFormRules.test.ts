@@ -13,7 +13,7 @@ const VALID = {
 }
 
 it('合规取值没有错误', () => {
-  expect(instanceFieldErrors(VALID, false)).toEqual({})
+  expect(instanceFieldErrors(VALID)).toEqual({})
 })
 
 it.each([
@@ -22,18 +22,16 @@ it.each([
   ['中文名', '名称须以字母开头'],
   ['a'.repeat(65), '64'],
 ])('名称 %s 不合规', (name, message) => {
-  expect(instanceFieldErrors({ ...VALID, name }, false).name).toContain(message)
-})
-
-it('编辑态不校验名称', () => {
-  expect(instanceFieldErrors({ ...VALID, name: '' }, true)).toEqual({})
+  expect(instanceFieldErrors({ ...VALID, name }).name).toContain(message)
 })
 
 it('端点路径须以 / 开头，命名空间与安全策略必填', () => {
-  const errors = instanceFieldErrors(
-    { ...VALID, endpointPath: 'dt', namespaceUri: ' ', policies: [] },
-    false,
-  )
+  const errors = instanceFieldErrors({
+    ...VALID,
+    endpointPath: 'dt',
+    namespaceUri: ' ',
+    policies: [],
+  })
   expect(errors.endpointPath).toContain('/')
   expect(errors.namespaceUri).toBe('请填写命名空间 URI')
   expect(errors.policies).toBe('至少勾选一种安全策略')

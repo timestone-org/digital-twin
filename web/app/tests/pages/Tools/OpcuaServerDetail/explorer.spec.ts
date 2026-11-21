@@ -7,8 +7,10 @@
 import { createPinia, setActivePinia } from 'pinia'
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 import { enableAutoUnmount, flushPromises, mount } from '@vue/test-utils'
-import type { OpcuaInstance, OpcuaNode } from '@dt/contracts'
+import type { OpcuaInstance, OpcuaNode, Page } from '@dt/contracts'
+import { DtField, DtInput } from '@dt/ui'
 
+import { BizError } from '@/api/client'
 import * as opcuaApi from '@/api/opcua'
 import NodeExplorer from '@/pages/Tools/OpcuaServerDetail/components/NodeExplorer.vue'
 import { useAuthStore } from '@/stores/auth'
@@ -25,12 +27,19 @@ vi.mock('@/composables/useRealtimeChannel', async () => {
   return { ...actual, useRealtimeChannel: () => channel }
 })
 
+const confirmNode = vi.fn<() => Promise<boolean>>()
+const successToast = vi.fn()
+const errorToast = vi.fn()
 vi.mock('@dt/ui', async () => {
   const actual = await vi.importActual<Record<string, unknown>>('@dt/ui')
   return {
     ...actual,
-    useConfirm: () => ({ ask: () => Promise.resolve(true) }),
-    useToast: () => ({ success: vi.fn(), error: vi.fn(), info: vi.fn() }),
+    useConfirm: () => ({ ask: confirmNode }),
+    useToast: () => ({
+      success: successToast,
+      error: errorToast,
+      info: vi.fn(),
+    }),
   }
 })
 
@@ -120,11 +129,16 @@ const TREE: OpcuaNode[] = [
 ]
 
 async function explorer(rows: OpcuaNode[] = TREE) {
-  vi.spyOn(opcuaApi, 'listNodes').mockResolvedValue({
-    items: rows,
-    page: 1,
-    size: 200,
-    total: rows.length,
+  vi.spyOn(opcuaApi, 'listNodes').mockImplementation((_, query) => {
+    const size = query?.size ?? 200
+    const page = query?.page ?? 1
+    return Promise.resolve({
+      items: rows.slice((page - 1) * size, page * size),
+      page,
+      size,
+      total: rows.length,
+      revision: 'stable-tree',
+    })
   })
   vi.spyOn(opcuaApi, 'readNodeValue').mockResolvedValue({
     node_id: 'ns=2;s=T1',
@@ -133,7 +147,10 @@ async function explorer(rows: OpcuaNode[] = TREE) {
     value: 21.5,
     is_live: true,
   })
-  const wrapper = mount(NodeExplorer, { props: { instance: instance() } })
+  const wrapper = mount(NodeExplorer, {
+    props: { instance: instance() },
+    global: { stubs: { Teleport: true } },
+  })
   await flushPromises()
   return wrapper
 }
@@ -157,6 +174,9 @@ enableAutoUnmount(afterEach)
 
 beforeEach(() => {
   setActivePinia(createPinia())
+  confirmNode.mockReset().mockResolvedValue(true)
+  successToast.mockClear()
+  errorToast.mockClear()
   const codes = ['opcua:view', 'opcua:operate', 'opcua:manage']
   const auth = useAuthStore()
   auth.user = {
@@ -306,34 +326,178 @@ describe('展开与折叠', () => {
   })
 })
 
-describe('分页截断', () => {
-  it('⚠ 拉满一页时说明层级可能不全，不让人以为地址空间本来就长这样', async () => {
-    const many = Array.from({ length: 200 }, (_, index) =>
+describe('完整地址空间', () => {
+  it('可搜索和编辑后续页的节点', async () => {
+    const many = Array.from({ length: 201 }, (_, index) =>
       node({ id: `n${index}`, browse_name: `N${index}` }),
     )
-    expect((await explorer(many)).text()).toContain('更深的层级可能显示不全')
+    const wrapper = await explorer(many)
+    await search(wrapper, 'N200')
+    expect(labels(wrapper)).toEqual(['N200'])
+    await wrapper.get('[role="treeitem"]').trigger('click')
+    await clickButton(wrapper, '编辑配置')
+    expect(wrapper.get('[role="dialog"]').text()).toContain('编辑节点配置')
   })
 
-  it('没拉满就不出这条提示', async () => {
-    expect((await explorer()).text()).not.toContain('更深的层级可能显示不全')
+  it('换实例之后，旧实例的分页结果不能覆盖新地址空间', async () => {
+    const wrapper = await explorer()
+    let finish: (result: Page<OpcuaNode>) => void = () => {}
+    const slow = new Promise<Page<OpcuaNode>>((resolve) => (finish = resolve))
+    const old = node({ browse_name: '旧实例节点' })
+    const next = node({
+      id: 'n2',
+      instance_id: 'i3',
+      browse_name: '新实例节点',
+    })
+    vi.spyOn(opcuaApi, 'listNodes')
+      .mockReturnValueOnce(slow)
+      .mockResolvedValueOnce({ items: [next], page: 1, size: 200, total: 1 })
+    await wrapper.setProps({ instance: instance({ id: 'i2' }) })
+    await wrapper.setProps({ instance: instance({ id: 'i3' }) })
+    finish({ items: [old], page: 1, size: 200, total: 1 })
+    await flushPromises()
+    expect(labels(wrapper)).toEqual(['新实例节点'])
+  })
+})
+
+async function clickButton(
+  wrapper: Awaited<ReturnType<typeof explorer>>,
+  label: string,
+): Promise<void> {
+  const button = wrapper.findAll('button').find((one) => one.text() === label)
+  if (button === undefined) throw new Error(`缺少按钮 ${label}`)
+  await button.trigger('click')
+}
+
+async function renameFirstNode(
+  wrapper: Awaited<ReturnType<typeof explorer>>,
+  name: string,
+): Promise<void> {
+  await clickButton(wrapper, '编辑配置')
+  const field = wrapper
+    .findAllComponents(DtField)
+    .find((one) => one.props('label') === 'BrowseName')
+  if (field === undefined) throw new Error('缺少 BrowseName 字段')
+  field.getComponent(DtInput).vm.$emit('update:modelValue', name)
+  await flushPromises()
+  await clickButton(wrapper, '保存')
+  await flushPromises()
+}
+
+describe('节点配置更新', () => {
+  it('改名保留 NodeId 与选中位置，并按回执提示重启', async () => {
+    const first = node({ id: 'a', node_class: 'object', browse_name: 'Line1' })
+    const save = vi.spyOn(opcuaApi, 'updateNode').mockResolvedValue({
+      node: { ...first, browse_name: '生产线' },
+      pending_fields: ['browse_name'],
+    })
+    const wrapper = await explorer([first])
+    await renameFirstNode(wrapper, '生产线')
+    expect(save).toHaveBeenCalledWith('i1', 'a', { browse_name: '生产线' })
+    expect(labels(wrapper)).toEqual(['生产线'])
+    expect(wrapper.get('[role="treeitem"]').attributes('aria-selected')).toBe(
+      'true',
+    )
+    expect(wrapper.text()).toContain(first.node_id)
+    expect(successToast).toHaveBeenCalledWith(
+      'BrowseName 已保存，重启实例后生效',
+    )
+    expect(wrapper.emitted('configuration-changed')).toHaveLength(1)
+  })
+
+  it('保存失败保留编辑草稿，并显示服务端错误', async () => {
+    vi.spyOn(opcuaApi, 'updateNode').mockRejectedValue(
+      new BizError(42111, '保存失败', 409, 'trace-update'),
+    )
+    const wrapper = await explorer()
+    await renameFirstNode(wrapper, '生产线')
+    expect(wrapper.get('[role="dialog"]').text()).toContain('编辑节点配置')
+    expect(
+      wrapper
+        .findAll('input')
+        .some((input) => input.element.value === '生产线'),
+    ).toBe(true)
+    expect(errorToast).toHaveBeenCalledWith('保存失败')
+    expect(wrapper.emitted('configuration-changed')).toBeUndefined()
+  })
+
+  it('没有管理权限时不显示配置变更操作', async () => {
+    const user = useAuthStore().user
+    if (user === null) throw new Error('需要登录用户')
+    user.permissions = ['opcua:view']
+    const wrapper = await explorer()
+    expect(wrapper.text()).not.toContain('编辑配置')
+    expect(wrapper.text()).not.toContain('删除节点')
   })
 })
 
 describe('选中与删除的联动', () => {
   it('删掉当前选中的节点后右侧回到空态，而不是停在已经没了的节点上', async () => {
     const wrapper = await explorer()
-    vi.spyOn(opcuaApi, 'deleteNode').mockResolvedValue()
+    const remove = vi.spyOn(opcuaApi, 'deleteNode').mockResolvedValue()
     vi.spyOn(opcuaApi, 'listNodes').mockResolvedValue({
       items: [],
       page: 1,
       size: 200,
       total: 0,
     })
-    await wrapper
-      .findAll('button')
-      .find((button) => button.text() === '删除节点')
-      ?.trigger('click')
+    await clickButton(wrapper, '删除节点')
     await flushPromises()
+    expect(remove).toHaveBeenCalledWith('i1', 'a')
     expect(wrapper.text()).toContain('还没有节点')
+    expect(wrapper.emitted('configuration-changed')).toHaveLength(1)
+  })
+
+  it('取消删除后仍保留当前节点', async () => {
+    confirmNode.mockResolvedValue(false)
+    const remove = vi.spyOn(opcuaApi, 'deleteNode')
+    const wrapper = await explorer()
+    await clickButton(wrapper, '删除节点')
+    await flushPromises()
+    expect(remove).not.toHaveBeenCalled()
+    expect(labels(wrapper)).toContain('Line1')
+  })
+
+  it('删除失败时保留节点并显示错误', async () => {
+    vi.spyOn(opcuaApi, 'deleteNode').mockRejectedValue(
+      new BizError(42101, '删除失败', 409, 'trace-delete'),
+    )
+    const wrapper = await explorer()
+    await clickButton(wrapper, '删除节点')
+    await flushPromises()
+    expect(labels(wrapper)).toContain('Line1')
+    expect(errorToast).toHaveBeenCalledWith('删除失败')
+    expect(wrapper.emitted('configuration-changed')).toBeUndefined()
+  })
+})
+
+describe('地址空间的一致性', () => {
+  it('读取期间发生变更时提示重试，保留整树语义', async () => {
+    const wrapper = await explorer()
+    const first = Array.from({ length: 200 }, (_, i) =>
+      node({ id: `n${i}`, browse_name: `N${i}` }),
+    )
+    const page1 = {
+      page: 1,
+      size: 200,
+      total: 201,
+      revision: 'before',
+      items: first,
+    }
+    const page2 = {
+      page: 2,
+      size: 200,
+      total: 201,
+      revision: 'after',
+      items: [node({ id: 'new' })],
+    }
+    vi.mocked(opcuaApi.listNodes)
+      .mockResolvedValueOnce(page1)
+      .mockResolvedValueOnce(page2)
+    await wrapper.setProps({ instance: instance({ id: 'concurrent' }) })
+    await flushPromises()
+    expect(wrapper.text()).toContain('节点列表在读取期间发生变化')
+    expect(wrapper.text()).not.toContain('共 0 个节点')
+    expect(labels(wrapper)).toEqual([])
   })
 })
