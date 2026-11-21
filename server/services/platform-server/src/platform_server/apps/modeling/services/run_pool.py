@@ -8,6 +8,7 @@
 import asyncio
 from collections.abc import Callable
 from concurrent.futures import Executor, ProcessPoolExecutor
+from concurrent.futures.process import BrokenProcessPool
 from functools import partial
 
 from platform_server.apps.modeling.services.node_task import (
@@ -41,12 +42,17 @@ class NodePool:
         Args: job, timeout_s。
         """
         async with self._slot:
+            deadline = asyncio.timeout(timeout_s)
             try:
-                async with asyncio.timeout(timeout_s):
+                async with deadline:
                     return await asyncio.get_running_loop().run_in_executor(
                         self._executor, job
                     )
-            except (Exception, asyncio.CancelledError):
+            except TimeoutError:
+                if deadline.expired():
+                    self.recycle()
+                raise
+            except (BrokenProcessPool, asyncio.CancelledError):
                 self.recycle()
                 raise
 
