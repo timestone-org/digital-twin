@@ -225,6 +225,47 @@ describe('读绑定', () => {
 })
 
 describe('读实时读数', () => {
+  it('兼容未提供分页契约的服务：仍返回前200行；新版显式窗口读取20行', async () => {
+    const { editor, surface } = setup()
+    editor.reset(Array.from({ length: 110 }, (_, n) => node('s' + String(n))))
+    expect(surface.capabilities).toContain(
+      'capability.dashboard.read_values.v2',
+    )
+    expect(surface.tools).not.toContain('capability.dashboard.read_values.v2')
+    const legacy = (await surface.run(
+      call('dashboard.read_values', {}),
+    )) as ValueReport
+    expect(legacy.items).toHaveLength(200)
+    expect(legacy.is_truncated).toBe(true)
+    expect(legacy).not.toHaveProperty('next_offset')
+    expect(legacy.items[0]).not.toHaveProperty('raw_value')
+    const current = (await surface.run(
+      call('dashboard.read_values', { offset: 0 }),
+    )) as ValueReport
+    expect(current.items).toHaveLength(20)
+    expect(current.next_offset).toBe(20)
+  })
+
+  it.each([null, '', '   '])(
+    '空节点范围 %s 与省略一致，并支持续页',
+    async (nodeId) => {
+      const { surface } = setup()
+      const first = (await surface.run(
+        call('dashboard.read_values', { node_id: nodeId, limit: 2 }),
+      )) as ValueReport
+      const next = (await surface.run(
+        call('dashboard.read_values', {
+          node_id: nodeId,
+          limit: 2,
+          offset: first.next_offset,
+        }),
+      )) as ValueReport
+      expect(first.returned).toBe(2)
+      expect(first.has_more).toBe(true)
+      expect(next.returned).toBe(2)
+      expect(next.has_more).toBe(false)
+    },
+  )
   it('读的是画布那份快照缓存，不另发请求', async () => {
     const read = vi.fn(() => ({
       state: 'ok' as const,

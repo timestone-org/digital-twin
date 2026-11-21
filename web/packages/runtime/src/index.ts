@@ -34,6 +34,7 @@ export {
   computeModuleValues,
   applyBindingTransform,
   applyEnumMap,
+  bindingDisplayValue,
   injectFieldValue,
   resolveBindingSpec,
 } from './moduleValues'

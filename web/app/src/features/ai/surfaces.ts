@@ -16,6 +16,8 @@ import type { AssistantSurfaceKind, AssistantToolCall } from '@dt/contracts'
 /** 工作面交出来的一份紧凑快照，直接进提示词。 */
 export type SurfaceSnapshot = Record<string, unknown>
 
+export const PAGED_POINT_VALUES = 'capability.dashboard.read_values.v2'
+
 export interface AiSurface {
   kind: AssistantSurfaceKind
   /** 给人看的页面名，进提示词。 */
@@ -28,6 +30,8 @@ export interface AiSurface {
   snapshot: () => SurfaceSnapshot
   /** 这一页实现了哪些客户端工具。 */
   tools: readonly string[]
+  /** 已实现的客户端协议特征，仅用于协商。 */
+  capabilities?: readonly string[]
   /** 执行一个客户端工具。不认识的一律抛。 */
   run: (call: AssistantToolCall) => Promise<unknown>
 }

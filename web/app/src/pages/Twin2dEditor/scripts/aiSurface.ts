@@ -16,7 +16,11 @@ import type { AssistantToolCall } from '@dt/contracts'
 import { twin2dBindingRows, type Twin2dConfig } from '@dt/twin2d'
 
 import { withSource } from '@/features/ai/bindingSource'
-import type { AiSurface, SurfaceSnapshot } from '@/features/ai/surfaces'
+import {
+  PAGED_POINT_VALUES,
+  type AiSurface,
+  type SurfaceSnapshot,
+} from '@/features/ai/surfaces'
 import { createBinding } from '@/features/dashboard/editorDoc'
 
 import {
@@ -65,6 +69,7 @@ export function createTwin2dSurface(deps: Twin2dSurfaceDeps): AiSurface {
   return {
     kind: 'twin2d-editor',
     label: '2D 孪生编辑器',
+    capabilities: [PAGED_POINT_VALUES],
     tools: TWIN_2D_TOOLS,
     snapshot: () => snapshotOf(deps),
     run: (call) => settle(deps, call),

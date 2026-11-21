@@ -298,7 +298,10 @@ function reportOf(parts: ReportParts): BindingReport {
   return report
 }
 
-function matchesRow(row: BindingRowInput, query: BindingReportQuery): boolean {
+export function matchesRow(
+  row: BindingRowInput,
+  query: BindingReportQuery,
+): boolean {
   if (query.slotKey && row.slotKey !== query.slotKey) return false
   if (
     query.entityId &&

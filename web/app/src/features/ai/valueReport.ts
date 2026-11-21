@@ -7,22 +7,36 @@
  * ⚠ `waiting` 与 `unavailable` **必须分开**：合成一档的话，「刚保存还没到下一拍」
  * 会被模型读成「这个点位是坏的」，然后它去把绑定改掉。
  */
-import { applyBindingTransform, type BindingSlot } from '@dt/runtime'
-import type { BindingView } from '@dt/contracts'
+import {
+  bindingDisplayValue,
+  resolveBindingSpec,
+  type BindingSlot,
+} from '@dt/runtime'
+import type {
+  BindingSpec,
+  BindingView,
+  PointQuality,
+  PointReadingSample,
+} from '@dt/contracts'
 
 import type { ReadPointSample } from '@/runtime/bindingReader'
-import type { BindingRowInput } from './bindingReport'
+import { matchesRow, type BindingRowInput } from './bindingReport'
+import {
+  bindingReportQuery,
+  type BindingReportQuery,
+} from './bindingReportQuery'
 
 /** 一份取值报告最多列几条。整屏几千条时，列到第 200 条也没人读得完。 */
 const MAX_ITEMS = 200
 
 /**
  * 一行此刻的取数结论。
- * `has_value` 有值、`waiting` 订上了还没来第一帧、`unavailable` 取不到、
+ * `has_value` 有值、`waiting` 尚未收到样本、`unavailable` 取不到、
  * `unbound` 压根没配来源。
  */
 export const VALUE_STATUSES = [
   'has_value',
+  'uncertain',
   'empty',
   'waiting',
   'unavailable',
@@ -51,10 +65,12 @@ export interface ValueReportItem {
   node_key: string | null
   source_kind: string | null
   value: unknown
+  raw_value?: unknown
+  is_stale?: boolean
+  quality?: PointQuality
   /** 采样时刻，UTC RFC3339；没有读数时为 null。 */
   at: string | null
   status: ValueStatus
-  is_stale?: boolean
   /**
    * 这一档为什么是这一档，给模型看。
    * ⚠ 没有它的话，画布本来就不展开的序列类绑定（点位历史 / 台账）会被读成
@@ -65,6 +81,12 @@ export interface ValueReportItem {
 
 /** 一次取值报告。 */
 export interface ValueReport {
+  total: number
+  offset: number
+  limit: number
+  returned: number
+  has_more: boolean
+  next_offset: number | null
   items: ValueReportItem[]
   /** 一条来源都没配的行数。 */
   unbound_count: number
@@ -78,6 +100,7 @@ export interface ValueReport {
  * 绑定盖掉前一块的——每一行都读得出值，读的却是别人的点位。
  */
 export interface ValueRow {
+  spec?: BindingSpec
   nodeId?: string
   row: BindingRowInput
   /** 这一行接的绑定；没接给 null。 */
@@ -85,6 +108,7 @@ export interface ValueRow {
 }
 
 export interface ValueReportInput {
+  query?: BindingReportQuery
   rows: readonly ValueRow[]
   /** 画布那份快照缓存的查询函数。 */
   read: ReadPointSample
@@ -101,12 +125,19 @@ const SERIES_NOTE = '当前工作面未提供历史序列快照，无法验收'
 const NO_POINT_NOTE = '实时绑定还没挑点位'
 const NO_SOURCE_NOTE = '这一行还没配来源'
 const NO_CONSTANT_NOTE = '常量绑定没有值'
-const WAITING_NOTE = '已订阅，还没收到第一帧'
+const WAITING_NOTE = '尚未收到样本，订阅和实时读数尚未验证'
 
 /** 一条绑定此刻的结论，不含 `field_key` 与 `entity` 那两格。 */
 type Reading = Pick<
   ValueReportItem,
-  'value' | 'at' | 'status' | 'note' | 'series' | 'is_stale'
+  | 'value'
+  | 'raw_value'
+  | 'quality'
+  | 'is_stale'
+  | 'at'
+  | 'status'
+  | 'note'
+  | 'series'
 >
 
 const UNBOUND: Reading = {
@@ -119,6 +150,18 @@ const UNBOUND: Reading = {
 /** 采样时刻 → RFC3339。 */
 function atOf(timestampMs: number): string {
   return new Date(timestampMs).toISOString()
+}
+
+const QUALITY_NOTE: Record<PointQuality, string> = {
+  good: '',
+  bad: '点位读数质量不可用',
+  uncertain: '点位读数质量存疑',
+}
+
+function readingStatus(sample: PointReadingSample): ValueStatus {
+  if (sample.quality === 'bad') return 'unavailable'
+  if (sample.quality === 'uncertain') return 'uncertain'
+  return sample.value == null ? 'empty' : 'has_value'
 }
 
 /** 实时点位这一档。 */
@@ -135,51 +178,27 @@ function pointReading(nodeKey: string, read: ReadPointSample): Reading {
       note: sample.errorMessage,
     }
   }
-  const at = atOf(sample.timestampMs)
-  if (sample.quality === 'bad') {
-    return {
-      value: null,
-      at,
-      status: 'unavailable',
-      note: ['点位读数质量不可用', sample.errorMessage]
-        .filter(Boolean)
-        .join('。'),
-    }
-  }
-  const isStale = sample.state === 'stale' || sample.quality === 'uncertain'
-  const note = [
-    sample.errorMessage,
-    sample.quality === 'uncertain' ? '点位读数质量存疑' : '',
-  ]
+  const stale = sample.state === 'stale' || sample.quality === 'uncertain'
+  const reason = [sample.errorMessage, QUALITY_NOTE[sample.quality]]
     .filter(Boolean)
     .join('。')
   return {
-    value: sample.value,
-    at,
-    status: 'has_value',
-    ...(isStale ? { is_stale: true } : {}),
-    note: note || (isStale ? '点位读数为最后已知值' : ''),
+    value: sample.quality === 'bad' ? null : sample.value,
+    raw_value: sample.value,
+    quality: sample.quality,
+    at: atOf(sample.timestampMs),
+    status: readingStatus(sample),
+    ...(stale ? { is_stale: true } : {}),
+    note: reason || (stale ? '点位读数为最后已知值' : ''),
   }
 }
 
-/** 一条绑定此刻是什么读数，值已过定值变换。 */
-function readingOf(binding: BindingView, read: ReadPointSample): Reading {
-  const found = rawReadingOf(binding, read)
-  // ⚠ 与画布同一道定值变换：不过的话助手读到 12000、卡片上是 12，模型会去「修」一条好绑定
-  return found.status === 'has_value'
-    ? {
-        ...found,
-        value: applyBindingTransform(found.value, binding.transformJson),
-      }
-    : found
-}
-
 /**
- * 一条绑定此刻的原始读数。
+ * 一条绑定此刻是什么读数。
  * ⚠ `0` / `false` / `''` 都是合法常量，不许按真假判——按真假判会让一屏
  * 「常量 0」全部报成没配过。
  */
-function rawReadingOf(binding: BindingView, read: ReadPointSample): Reading {
+function readingOf(binding: BindingView, read: ReadPointSample): Reading {
   const kind = binding.sourceKind
   if (kind === 'opcua') {
     if (binding.nodeKey === null) {
@@ -216,9 +235,40 @@ function rawReadingOf(binding: BindingView, read: ReadPointSample): Reading {
 export function pairRows(
   rows: readonly BindingRowInput[],
   bindings: readonly BindingView[],
+  specs: readonly BindingSpec[] = [],
 ): ValueRow[] {
   const bound = new Map(bindings.map((one) => [one.fieldKey, one]))
-  return rows.map((row) => ({ row, binding: bound.get(row.fieldKey) ?? null }))
+  return rows.map((row) => {
+    const spec = resolveBindingSpec(specs, row.fieldKey)
+    return {
+      row,
+      binding: bound.get(row.fieldKey) ?? null,
+      ...(spec === undefined ? {} : { spec }),
+    }
+  })
+}
+
+function renderedReading(
+  one: ValueRow,
+  input: ValueReportInput,
+): Reading & { raw_value: unknown } {
+  const { binding, nodeId, spec } = one
+  const reading =
+    binding === null
+      ? UNBOUND
+      : (binding.sourceKind === 'archive' ||
+            binding.sourceKind === 'dataset') &&
+          input.readSeries !== undefined
+        ? seriesReading(input.readSeries(binding, nodeId))
+        : readingOf(binding, input.read)
+  return {
+    ...reading,
+    raw_value: reading.raw_value ?? reading.value,
+    value:
+      binding === null
+        ? reading.value
+        : bindingDisplayValue(reading.value, binding, spec),
+  }
 }
 
 /**
@@ -226,34 +276,82 @@ export function pairRows(
  * @param input 要报的行、画布那份快照缓存、条数上限
  */
 export function valueReport(input: ValueReportInput): ValueReport {
-  const limit = input.maxItems ?? MAX_ITEMS
-  const kept = input.rows.slice(0, limit)
-  const items = kept.map(({ row, binding, nodeId }) => ({
+  const query = input.query ?? {
+    ...bindingReportQuery({}),
+    limit: input.maxItems ?? MAX_ITEMS,
+  }
+  const wanted = input.rows.filter((one) => matchesRow(one.row, query))
+  const kept = wanted.slice(query.offset, query.offset + query.limit)
+  const items = kept.map((one) => ({
+    ...itemIdentity(one),
+    ...renderedReading(one, input),
+  }))
+  if (input.query !== undefined) fitReadWindow(items)
+  const nextOffset = query.offset + items.length
+  const hasMore = nextOffset < wanted.length
+  return {
+    total: wanted.length,
+    offset: query.offset,
+    limit: query.limit,
+    returned: items.length,
+    has_more: hasMore,
+    next_offset: hasMore ? nextOffset : null,
+    items,
+    unbound_count: items.filter((one) => one.status === 'unbound').length,
+    is_truncated: hasMore,
+  }
+}
+
+function fitReadWindow(items: ValueReportItem[]): void {
+  while (items.length > 1 && JSON.stringify(items).length > 11_000) items.pop()
+  if (JSON.stringify(items).length > 11_000)
+    throw new Error('单条读数超过读取预算，请在绑定面板核对该字段')
+}
+
+export type ToolValueReport = Pick<
+  ValueReport,
+  'items' | 'unbound_count' | 'is_truncated'
+>
+
+/** 新服务在协商成功后传入窗口，未传窗口的旧服务沿用原有的200行形状。 */
+export function toolValueReport(
+  args: Record<string, unknown>,
+  input: ValueReportInput,
+): ToolValueReport {
+  if (
+    ['offset', 'limit', 'slot_key', 'entity_id', 'keyword'].some(
+      (key) => args[key] !== undefined,
+    )
+  )
+    return valueReport({ ...input, query: bindingReportQuery(args) })
+  const legacy = valueReport(input)
+  return {
+    items: legacy.items.map(legacyValueItem),
+    unbound_count: legacy.unbound_count,
+    is_truncated: legacy.is_truncated,
+  }
+}
+
+function legacyValueItem(item: ValueReportItem): ValueReportItem {
+  const result = { ...item }
+  delete result.raw_value
+  delete result.quality
+  if (result.status === 'uncertain') result.status = 'has_value'
+  return result
+}
+
+function itemIdentity({ row, binding, nodeId }: ValueRow) {
+  return {
     ...(nodeId === undefined ? {} : { node_id: nodeId }),
     field_key: row.fieldKey,
     entity: row.label,
     node_key: binding?.nodeKey ?? null,
     source_kind: binding?.sourceKind ?? null,
-    ...(binding === null
-      ? UNBOUND
-      : (binding.sourceKind === 'archive' ||
-            binding.sourceKind === 'dataset') &&
-          input.readSeries !== undefined
-        ? seriesReading(input.readSeries(binding, nodeId), binding)
-        : readingOf(binding, input.read)),
-  }))
-  return {
-    items,
-    unbound_count: items.filter((one) => one.status === 'unbound').length,
-    is_truncated: input.rows.length > kept.length,
   }
 }
 
 /** 与画布相同的序列状态；空窗口不是请求失败。 */
-function seriesReading(
-  slot: BindingSlot | undefined,
-  binding: BindingView,
-): Reading {
+function seriesReading(slot: BindingSlot | undefined): Reading {
   if (slot === undefined)
     return {
       value: null,
@@ -273,7 +371,7 @@ function seriesReading(
   const points = slot.points ?? []
   const last = points.at(-1)
   return {
-    value: applyBindingTransform(slot.value, binding.transformJson),
+    value: slot.value,
     at: last === undefined ? null : atOf(last.t),
     status: points.length === 0 ? 'empty' : 'has_value',
     note:

@@ -28,13 +28,16 @@ import {
 import { runSaveTool } from '@/features/ai/saveTool'
 import {
   pairRows,
-  valueReport,
-  type ValueReport,
+  toolValueReport,
+  type ToolValueReport,
   type ValueRow,
 } from '@/features/ai/valueReport'
 import { createBinding, upsertBinding } from '@/features/dashboard/editorDoc'
 import { nodeLabelOf } from '@/features/dashboard/nodeLabel'
-import { bindingReportQuery } from '@/features/ai/bindingReportQuery'
+import {
+  bindingReportQuery,
+  optionalReadNodeId,
+} from '@/features/ai/bindingReportQuery'
 import type { EditorToolDeps } from './aiSurfaceTypes'
 
 /** 这一半实现了哪些工具。⚠ 与规格书 §2 里的名字逐字相同。 */
@@ -98,9 +101,9 @@ function readBindings(
 function readValues(
   deps: EditorToolDeps,
   call: AssistantToolCall,
-): ValueReport {
-  const given = call.arguments.node_id
-  const isWhole = given === undefined || given === null
+): ToolValueReport {
+  const given = optionalReadNodeId(call.arguments)
+  const isWhole = given === null
   const nodes = isWhole
     ? deps.editor.nodes.value
     : [nodeOf(deps, call, 'node_id')]
@@ -111,7 +114,11 @@ function readValues(
       : ''
     // ⚠ 一块一块配对：整屏时十块卡片上的 `itemValues[0].value` 是同一个
     //   fieldKey，先并成一张表再配对会让后一块的绑定盖掉前一块的
-    const paired = pairRows(rowsOf(deps, node), node.bindings)
+    const paired = pairRows(
+      rowsOf(deps, node),
+      node.bindings,
+      deps.getManifest(node.moduleType)?.bindings ?? [],
+    )
     for (const one of paired) {
       rows.push({
         ...one,
@@ -120,7 +127,7 @@ function readValues(
       })
     }
   }
-  return valueReport({
+  return toolValueReport(call.arguments, {
     rows,
     read: deps.readSample,
     ...(deps.readSeries === undefined

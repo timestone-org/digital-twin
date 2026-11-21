@@ -197,6 +197,7 @@ function envelope(input: RunnerInput): AdvanceBody {
       ...BUILTIN_CLIENT_TOOLS,
       ASSISTANT_MCP_CONFIRM_TOOL,
       ...(surface?.tools ?? []),
+      ...(surface?.capabilities ?? []),
     ],
   }
 }

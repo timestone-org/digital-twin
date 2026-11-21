@@ -30,12 +30,17 @@ import { createBinding } from '@/features/dashboard/editorDoc'
 import { nodeLabelOf } from '@/features/dashboard/nodeLabel'
 import { withSource } from '@/features/ai/bindingSource'
 import { captureCanvas } from '@/features/ai/captureWithGl'
-import type { AiSurface, SurfaceSnapshot } from '@/features/ai/surfaces'
+import {
+  PAGED_POINT_VALUES,
+  type AiSurface,
+  type SurfaceSnapshot,
+} from '@/features/ai/surfaces'
 import { BINDING_TOOLS, runBindingTool } from './aiSurfaceBindings'
 import { COMPOSE_TOOLS, runCompose } from './aiSurfaceCompose'
 import { CONFIG_TOOLS, runConfig } from './aiSurfaceConfig'
 import { INTERACTION_TOOLS, runInteraction } from './aiSurfaceInteraction'
 import { PAGE_STYLE_TOOLS, runPageStyle } from './aiSurfacePageStyle'
+import { runCanvasRead } from './aiSurfaceCanvas'
 import type {
   ComposeDeps,
   EditorSurfaceDeps,
@@ -69,6 +74,7 @@ export function createEditorSurface(deps: EditorToolDeps): AiSurface {
   return {
     kind: 'dashboard-editor',
     label: '大屏编辑器',
+    capabilities: [PAGED_POINT_VALUES],
     tools: EDITOR_TOOLS,
     snapshot: () => snapshotOf(deps),
     run: (call) => settle(deps, call),
@@ -138,6 +144,7 @@ function settle(
 type ToolRunner = (deps: EditorToolDeps, call: AssistantToolCall) => unknown
 
 const RUNNERS: readonly ToolRunner[] = [
+  runCanvasRead,
   runBindingTool,
   runCompose,
   runConfig,

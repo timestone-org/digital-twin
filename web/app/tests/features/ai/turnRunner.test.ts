@@ -779,6 +779,24 @@ describe('计划', () => {
     ])
   })
 
+  it('上报页面明确支持的返回格式，能力标记不能作为客户端工具执行', async () => {
+    const capability = 'capability.dashboard.read_values.v2'
+    setSurface({
+      kind: 'twin-editor',
+      label: '孪生编辑器',
+      tools: ['dashboard.read_values'],
+      capabilities: [capability],
+      snapshot: () => ({}),
+      run: () => Promise.resolve({}),
+    })
+    const { advance, bodies } = advanceOf([
+      [frame('turn.done', { reply: '好' })],
+    ])
+    const { sink } = sinkOf()
+    await runTurn(inputOf(advance), sink)
+    expect(bodies[0]?.client_tools).toContain(capability)
+  })
+
   it('没有工作面时也照样报提问：它不归任何一页', async () => {
     // 报空的话，一个工作面都没登记的页面里助手只会闷头改，从不问
     const { advance, bodies } = advanceOf([

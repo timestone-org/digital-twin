@@ -2,6 +2,16 @@
 
 const MAX_ROWS = 20
 
+/** 只读节点范围：空白与省略均表示当前工作面的全部节点。 */
+export function optionalReadNodeId(
+  args: Readonly<Record<string, unknown>>,
+): string | null {
+  const value = args.node_id
+  if (value === undefined || value === null) return null
+  if (typeof value !== 'string') throw new Error('node_id 必须是字符串或 null')
+  return value.trim() === '' ? null : value
+}
+
 export interface BindingReportQuery {
   slotKey: string
   entityId: string
