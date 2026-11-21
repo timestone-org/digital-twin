@@ -108,6 +108,9 @@ HTTP 为只读 JSON 采集，支持常用认证与同响应多个 JSON Pointer �
 `collect` schema 两张表，platform 都只读。**无外键指向 `platform.collect_sources`**——禁跨 schema 外键、JOIN 与事务（ADR-0003）。
 
 - `collect_source_states`：一个数据源一行运行态，主键就是 platform 那边的数据源 id。
+  上报先在短事务领 PostgreSQL 完整事务号，再到 Redis 核对会话绑定的租约，最后按
+  `report_order` 原子比较写入。这样丢主前已经开始的数据库写入也不能覆盖新主运行态。
+  展示更新时间仍读 `updated_at`，存量行在第一次有效上报时自然补齐顺序。
 - `point_history`：点位历史宽表，超表。列契约在 `domain/timeseries`，DDL 的实测理由见 [COLLECT_DESIGN §6](../../../docs/COLLECT_DESIGN.md)。三条不许动的取值：
 
 | 取值 | 为什么 |

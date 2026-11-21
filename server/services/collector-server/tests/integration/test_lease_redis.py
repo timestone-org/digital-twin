@@ -7,6 +7,7 @@
 from uuid import uuid4
 
 import pytest
+from redis.asyncio import Redis
 
 from collector_server.lease import RedisLease
 
@@ -118,3 +119,21 @@ async def test_an_unreachable_redis_means_not_leader() -> None:
         assert await lease.ping() is False
     finally:
         await lease.close()
+
+
+async def test_reacquiring_on_the_same_replica_changes_the_owner(
+    redis_url: str, key: str
+) -> None:
+    lease = _lease(redis_url, key, "replica-a")
+    client = Redis.from_url(redis_url, decode_responses=True)
+    try:
+        assert await lease.acquire()
+        first = await client.get(key)
+        assert first
+        await lease.release()
+        assert await lease.acquire()
+        assert await client.get(key) != first
+    finally:
+        await lease.release()
+        await lease.close()
+        await client.aclose()

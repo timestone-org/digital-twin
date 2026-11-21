@@ -6,7 +6,7 @@ platform 的 `collect_sources`，两张表分属两个 schema，故意不做外�
 
 import uuid
 
-from sqlalchemy import CheckConstraint, Integer, Text, text
+from sqlalchemy import BigInteger, CheckConstraint, Integer, Text, text
 from sqlalchemy.dialects.postgresql import UUID
 from sqlalchemy.orm import Mapped, mapped_column
 
@@ -39,6 +39,8 @@ class SourceState(TimestampMixin, Base):
     error_detail: Mapped[str | None] = mapped_column(Text, nullable=True)
     # 哪个副本在采。单活下只有一个，出问题时要能一眼看出是谁
     leader_instance: Mapped[str] = mapped_column(Text, nullable=False)
+    # 写侧用于拒绝迟到的前任上报，读侧不消费
+    report_order: Mapped[int | None] = mapped_column(BigInteger, nullable=True)
 
     __table_args__ = (
         CheckConstraint(f"state IN ({_STATE_LITERALS})", name="state_valid"),

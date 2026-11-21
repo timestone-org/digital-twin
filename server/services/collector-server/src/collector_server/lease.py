@@ -11,6 +11,7 @@ from redis.asyncio import Redis
 from redis.exceptions import RedisError
 
 from lib.logging import get_logger
+from lib.utils.ids import uuid7
 
 _logger = get_logger("collect.lease")
 
@@ -26,6 +27,11 @@ RELEASE_SCRIPT = """
 if redis.call('get', KEYS[1]) == ARGV[1] then
     return redis.call('del', KEYS[1])
 end
+return 0
+"""
+
+MATCH_SCRIPT = """
+if redis.call('get', KEYS[1]) == ARGV[1] then return 1 end
 return 0
 """
 
@@ -60,7 +66,7 @@ class RedisLease:
     ) -> None:
         """按键与本进程的令牌初始化。
 
-        Args: url, key, token（本进程唯一）, ttl_s, timeout_s。
+        Args: url, key, token（本副本标识）, ttl_s, timeout_s。
         """
         # pyright: ignore 的理由 —— redis-py 的 from_url 形参标成 Unknown
         self._client: Redis = (
@@ -72,19 +78,36 @@ class RedisLease:
             )
         )
         self._key = key
-        self._token = token
+        self._instance = token
+        self._token: str | None = None
         self._ttl_s = ttl_s
 
+    @property
+    def token(self) -> str | None:
+        """本副本最后取得且尚未撤销的租约令牌。"""
+        return self._token
+
+    @property
+    def key(self) -> str:
+        """快照写入时在 Redis 核对的租约键。"""
+        return self._key
+
     async def acquire(self) -> bool:
-        """抢租约。抢到返回 True。"""
-        return await self._guarded(
-            self._client.set(self._key, self._token, ex=self._ttl_s, nx=True),
+        """抢租约；同一个副本再接管时也要换令牌。"""
+        token = f"{self._instance}:{uuid7()}"
+        acquired = await self._guarded(
+            self._client.set(self._key, token, ex=self._ttl_s, nx=True),
             action="acquire",
         )
+        if acquired:
+            self._token = token
+        return acquired
 
     async def renew(self) -> bool:
         """CAS 续约。续不上返回 False，调用方必须立刻停手（renew-or-die）。"""
-        return await self._guarded(
+        if self._token is None:
+            return False
+        renewed = await self._guarded(
             self._client.eval(  # pyright: ignore[reportUnknownMemberType]
                 RENEW_SCRIPT,
                 1,
@@ -94,17 +117,34 @@ class RedisLease:
             ),
             action="renew",
         )
+        if not renewed:
+            self._token = None
+        return renewed
 
     async def release(self) -> None:
         """CAS 释放，主动让位。
 
         ⚠ 让位比等它自然过期快一个 TTL：热备能立刻接管，而不是等 15 秒。
         """
+        token, self._token = self._token, None
+        if token is None:
+            return
         await self._guarded(
             self._client.eval(  # pyright: ignore[reportUnknownMemberType]
-                RELEASE_SCRIPT, 1, self._key, self._token
+                RELEASE_SCRIPT, 1, self._key, token
             ),
             action="release",
+        )
+
+    async def is_current(self, token: str) -> bool:
+        """核对先前取到的令牌是否仍为当前租约。Args: token。"""
+        if token != self._token:
+            return False
+        return await self._guarded(
+            self._client.eval(  # pyright: ignore[reportUnknownMemberType]
+                MATCH_SCRIPT, 1, self._key, token
+            ),
+            action="check",
         )
 
     async def ping(self) -> bool:

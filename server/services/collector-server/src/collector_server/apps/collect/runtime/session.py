@@ -155,8 +155,10 @@ class SourceSession:
                 attempt = 0
                 await self._watch()
             except Exception as error:
-                attempt += 1
-                delay_s = await self._on_failure(error, attempt)
+                self._is_online = False
+                if not self._stopped.is_set():
+                    attempt += 1
+                    delay_s = await self._on_failure(error, attempt)
             await self._close()
             if self._stopped.is_set():
                 return
