@@ -27016,7 +27016,7 @@
         ]
       },
       "put": {
-        "description": "整份保存。保存前会问一遍 opcua-server：节点还在不在、类型对不对。\n\nArgs: model_id, payload, session, nodes, _manager。",
+        "description": "整份保存。保存前会问一遍 opcua-server：节点还在不在、类型对不对。\n\nArgs: model_id, payload, sessions, nodes, _manager。",
         "operationId": "put_publication_api_v1_platform_ac_models__model_id__publication_put",
         "parameters": [
           {

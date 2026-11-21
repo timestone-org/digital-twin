@@ -19,6 +19,7 @@ from platform_server.apps.hvac.crud import (
     ac_model_set_binding_crud,
 )
 from platform_server.apps.hvac.errors import (
+    ModelNotFound,
     OpcuaUnavailable,
     PublicationBindingInvalid,
     PublicationNodeTaken,
@@ -36,6 +37,7 @@ from platform_server.apps.hvac.publications import (
 )
 from platform_server.apps.hvac.schemas import PublicationPutIn, SetBindingIn
 from platform_server.apps.hvac.services import ac_model_service
+from platform_server.apps.hvac.services.sessions import Sessions
 from platform_server.opcua import NodeWriter, OpcuaCallFailed, ResolvedNode
 
 _logger = get_logger("platform.hvac.ac_publication")
@@ -180,7 +182,7 @@ def _skip_reason(
 
 
 async def put_publication(
-    session: AsyncSession,
+    sessions: Sessions,
     nodes: NodeWriter,
     *,
     model_id: uuid.UUID,
@@ -191,13 +193,19 @@ async def put_publication(
     ⚠ 整份保存不是补丁：换了实例，底下每一个 node_id 都得跟着换，逐字段
     PATCH 会让中间态出现「节点属于旧实例」，而那个中间态每分钟往现场写一次。
 
-    Args: session, nodes, model_id, payload。
+    Args: sessions, nodes, model_id, payload。
     """
-    model = await ac_model_service.get_model(session, model_id)
-    _require_known_sets(payload.set_bindings, serving_keys_of(model))
+    async with sessions.session() as read:
+        model = await ac_model_service.get_model(read, model_id)
+        _require_known_sets(payload.set_bindings, serving_keys_of(model))
     _require_distinct_nodes(payload)
     found = await _require_bindable(nodes, payload=payload)
-    return await _save(session, model=model, payload=payload, found=found)
+    async with sessions.session() as write:
+        current = await ac_model_crud.lock(write, model_id)
+        if current is None:
+            raise ModelNotFound("模型不存在")
+        _require_known_sets(payload.set_bindings, serving_keys_of(current))
+        return await _save(write, model=current, payload=payload, found=found)
 
 
 def _require_known_sets(
