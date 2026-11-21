@@ -15,6 +15,7 @@ import { usePointSamples } from '@/composables/usePointSamples'
 import { useDatasetLatestValues } from '@/composables/useDatasetLatestValues'
 import { boundPointKeys } from '@/features/dashboard/editorDoc'
 import {
+  connectedPointReader,
   createBindingReader,
   type ReadPointSample,
 } from '@/runtime/bindingReader'
@@ -37,21 +38,40 @@ export interface DashboardDatasetPorts {
   scope: () => string
 }
 
+interface DashboardValueOptions {
+  connectionState?: (() => ModuleConnectionState) | undefined
+  currentConnection?: (() => ModuleConnectionState | undefined) | undefined
+  hasDatasetAccess?: boolean
+  dataset?: DashboardDatasetPorts
+}
+
 /**
  * 装上取数源并跟着绑定变化重订。须在 setup 内调用。
  * 收渲染子集：编辑器给的是全量草稿节点，公开页给的是窄面，都能装。
  * @param nodes 当前大屏的全部节点
  * @param scope 当前是哪张屏；跨屏跳转时订阅与快照都要跟着翻篇（见 usePointSamples）
- * @param connectionState 实时通道连接态，运行态的两张页面才给
+ * @param options 运行页的连接提示、编辑器的样本生命周期与台账读取端口
  */
 export function useDashboardValues(
   nodes: () => readonly DashboardNodeView[],
   scope: () => string,
-  connectionState?: () => ModuleConnectionState,
-  hasDatasetAccess = true,
-  dataset?: DashboardDatasetPorts,
+  options: DashboardValueOptions = {},
 ): DashboardValues {
-  const samples = usePointSamples(() => boundPointKeys(nodes()), scope)
+  const {
+    connectionState,
+    currentConnection,
+    hasDatasetAccess = true,
+    dataset,
+  } = options
+  const samples = usePointSamples(
+    () => boundPointKeys(nodes()),
+    scope,
+    currentConnection,
+  )
+  const read =
+    currentConnection === undefined
+      ? samples.read
+      : connectedPointReader(samples.read, currentConnection)
   const readDataset = useDatasetLatestValues(
     () => nodes().flatMap((node) => node.bindings),
     dataset?.scope ?? scope,
@@ -59,7 +79,7 @@ export function useDashboardValues(
     dataset?.readLatest,
   )
   const readBinding = (): BindingValueReader =>
-    createBindingReader(samples.read, readDataset)
+    createBindingReader(read, readDataset)
 
   // ⚠ 不给连接态就是「这里没有实时通道」，模块永不标「数据可能过期」：
   // 编辑器画布是设计态，画一枚说通道断了的角标只会让人去查一条不存在的故障
@@ -68,5 +88,5 @@ export function useDashboardValues(
     ...(connectionState === undefined ? {} : { connectionState }),
   })
 
-  return { sampleCount: samples.sampleCount, read: samples.read, readBinding }
+  return { sampleCount: samples.sampleCount, read, readBinding }
 }

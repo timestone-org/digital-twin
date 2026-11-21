@@ -27,9 +27,11 @@ import {
 const subscribed: string[] = []
 const dropped: string[] = []
 let emit: PointValueListener = () => undefined
+const connectionState = ref('open')
 
 vi.mock('@/composables/useRealtimeChannel', () => ({
   useRealtimeChannel: () => ({
+    connectionState,
     subscribe: (topic: string) => {
       subscribed.push(topic)
       return () => {
@@ -107,6 +109,7 @@ function mountLive(dashboardId = 'd1', initial: BindingView[] = [NODE_VALUE]) {
     state: () => latest?.state.value,
     tally: () => latest?.tally.value,
     read: () => latest?.readBinding(),
+    sample: () => latest?.read('src-1:PT101'),
   }
 }
 
@@ -115,6 +118,7 @@ function sample(value: number): PointSample {
 }
 
 beforeEach(() => {
+  connectionState.value = 'open'
   __resetProviders()
   subscribed.length = 0
   dropped.length = 0
@@ -154,6 +158,20 @@ describe('订阅', () => {
 })
 
 describe('取不到的时候要说出口', () => {
+  it('断线后助手与画中画均拒绝缓存值', () => {
+    const live = mountLive()
+    emit('src-1:PT101', sample(3.5))
+    connectionState.value = 'closed'
+    expect(live.sample()).toMatchObject({ state: 'error' })
+    expect(live.read()?.(NODE_VALUE, {})).toMatchObject({ state: 'error' })
+    expect(live.state()).not.toBe('live')
+    connectionState.value = 'open'
+    expect(live.sample()).toBeUndefined()
+    expect(live.read()?.(NODE_VALUE, {})).toEqual({ state: 'pending' })
+    emit('src-1:PT101', sample(4.5))
+    expect(live.sample()).toMatchObject({ state: 'ok', value: 4.5 })
+    live.wrapper.unmount()
+  })
   it('还不知道是哪张屏就说不知道', () => {
     const live = mountLive('')
 

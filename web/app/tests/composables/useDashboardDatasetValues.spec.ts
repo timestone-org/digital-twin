@@ -110,8 +110,7 @@ function mountDashboard(hasDatasetAccess = true, initialNode = NODE) {
       const values = useDashboardValues(
         () => nodes.value,
         () => scope.value,
-        undefined,
-        hasDatasetAccess,
+        { hasDatasetAccess },
       )
       installDashboardSeries({
         readPoint: values.read,

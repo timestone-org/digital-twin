@@ -13,7 +13,11 @@
  */
 
 import { onUnmounted, shallowRef, triggerRef, watch, type Ref } from 'vue'
-import type { PointSample, Unsubscribe } from '@dt/contracts'
+import type {
+  ModuleConnectionState,
+  PointSample,
+  Unsubscribe,
+} from '@dt/contracts'
 import { getProvider, hasProvider } from '@dt/datasources'
 
 import type { ReadPointSample } from '@/runtime/bindingReader'
@@ -37,11 +41,13 @@ export interface PointSamples {
 /**
  * 订上这批点位并缓存它们的快照。须在 setup 内调用。
  * @param keys 当前要订的点位身份，**定序**——次序抖动会让这里反复退订重订
- * @param scope 当前是哪张屏（大屏 id / 公开令牌）；换了就连快照一起翻篇
+ * @param scope 当前的大屏 id 或公开令牌
+ * @param currentConnection 编辑器连接状态；断开时清空本次连接的读数
  */
 export function usePointSamples(
   keys: () => readonly string[],
   scope: () => string,
+  currentConnection?: () => ModuleConnectionState | undefined,
 ): PointSamples {
   const store = new Map<string, PointSample>()
   const samples = shallowRef(store)
@@ -51,6 +57,8 @@ export function usePointSamples(
   let subscribedScope: string | null = null
 
   function record(nodeKey: string, sample: PointSample): void {
+    const state = currentConnection?.()
+    if (state !== undefined && state !== 'open') return
     // ⚠ 就地 set 之后必须 triggerRef：shallowRef 只认引用变化，不触发的话画面上的值
     // 永远停在第一帧；也不能每点复制一份表，一帧几百个点就是几百次整表拷贝
     store.set(nodeKey, sample)
@@ -87,10 +95,27 @@ export function usePointSamples(
     { immediate: true },
   )
 
+  watchConnection(currentConnection, forgetSamples)
+
   onUnmounted(() => {
     stop?.()
     stop = null
   })
 
   return { sampleCount, read: (nodeKey) => samples.value.get(nodeKey) }
+}
+
+function watchConnection(
+  currentConnection: (() => ModuleConnectionState | undefined) | undefined,
+  forgetSamples: () => void,
+): void {
+  if (currentConnection !== undefined) {
+    watch(
+      currentConnection,
+      (state) => {
+        if (state !== undefined && state !== 'open') forgetSamples()
+      },
+      { immediate: true, flush: 'sync' },
+    )
+  }
 }

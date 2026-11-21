@@ -22,7 +22,10 @@ import { usePointSamples } from '@/composables/usePointSamples'
 import { useDatasetLatestValues } from '@/composables/useDatasetLatestValues'
 import { useRealtimeChannel } from '@/composables/useRealtimeChannel'
 import { boundPointKeysOf } from '@/features/dashboard/editorDoc'
-import { createBindingReader } from '@/runtime/bindingReader'
+import {
+  connectedPointReader,
+  createBindingReader,
+} from '@/runtime/bindingReader'
 import type { ReadPointSample } from '@/runtime/bindingReader'
 import { dashboardTopic } from '@/runtime/pointFrames'
 import { createPointSubscribe } from '@/runtime/pointStream'
@@ -101,8 +104,10 @@ export function useTwin2dLiveValues(
   dashboardId: () => string,
   bindings: () => readonly BindingView[],
 ): Twin2dLiveValues {
+  const channel = useRealtimeChannel()
+  const currentConnection = () => channel.connectionState?.value
   installDashboardDataSources({
-    subscribe: createPointSubscribe(useRealtimeChannel(), () => {
+    subscribe: createPointSubscribe(channel, () => {
       const id = dashboardId()
       return id === '' ? null : dashboardTopic(id)
     }),
@@ -111,7 +116,12 @@ export function useTwin2dLiveValues(
   // ⚠ `boundPointKeysOf` 出的是**定序**的去重表：次序一抖，`usePointSamples`
   //   会把「同一批点位」认成换了一批，于是每改一次绑定就退订重订一轮
   const keys = computed(() => boundPointKeysOf(bindings()))
-  const samples = usePointSamples(() => keys.value, dashboardId)
+  const samples = usePointSamples(
+    () => keys.value,
+    dashboardId,
+    currentConnection,
+  )
+  const read = connectedPointReader(samples.read, currentConnection)
   const readDataset = useDatasetLatestValues(bindings, dashboardId)
 
   const tally = computed(() => tallyOf(keys.value, samples.read))
@@ -132,8 +142,8 @@ export function useTwin2dLiveValues(
   })
 
   return {
-    readBinding: () => createBindingReader(samples.read, readDataset),
-    read: samples.read,
+    readBinding: () => createBindingReader(read, readDataset),
+    read,
     state,
     tally,
   }
