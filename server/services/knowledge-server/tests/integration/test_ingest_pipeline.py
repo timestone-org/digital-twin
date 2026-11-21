@@ -11,6 +11,7 @@ from concurrent.futures import ThreadPoolExecutor
 from dataclasses import dataclass, replace
 
 import pytest
+from integration.embedding_support import CertifiedTestEmbedder
 
 from knowledge_server.apps.knowledge import crud
 from knowledge_server.apps.knowledge.services.indexing import (
@@ -90,7 +91,7 @@ class _Missing:
 
 
 @dataclass(frozen=True)
-class _Embedder:
+class _Embedder(CertifiedTestEmbedder):
     """按块正文长度造一条稳定的假向量。
 
     ⚠ 造出来的维数必须**真的等于** `dimensions`：`vector(N)` 的 N 是建表时
@@ -125,7 +126,7 @@ class _NoEmbedder:
         raise AssertionError("不该被调到")
 
 
-class _LateEmbedder:
+class _LateEmbedder(CertifiedTestEmbedder):
     """刷过目录之后才算得出向量的那一路，与生产的动态嵌入档同形。"""
 
     id = "late"

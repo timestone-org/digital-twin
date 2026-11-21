@@ -248,6 +248,7 @@ async def mark_ready(
         .where(KnowledgeDocument.id == document_id)
         .values(
             status="ready",
+            embedding_deferred=False,
             failure_reason="",
             chunk_count=chunk_count,
             ready_at=ready_at,

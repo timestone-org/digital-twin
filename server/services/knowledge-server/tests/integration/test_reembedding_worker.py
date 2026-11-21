@@ -1,12 +1,13 @@
 """真实 pgvector 上的分批构建、取消、冲突及整库切换。"""
 
+import asyncio
 import uuid
 from collections.abc import Callable, Sequence
 
 import pytest
 from integration.conftest import CommittingSession
 from integration.test_ingest_pipeline import _seeded
-from sqlalchemy import select
+from sqlalchemy import select, text
 
 from knowledge_server.apps.knowledge.crud import reembedding as jobs
 from knowledge_server.apps.knowledge.models import (
@@ -191,3 +192,71 @@ async def _assert_published(
             )
         ).all()
         assert set(audit) == {"requested", current.status}
+
+
+@pytest.mark.parametrize("interruption", ["cancel", "edit", "replace-worker"])
+async def test_late_model_reply_cannot_publish_after_losing_authority(
+    db_sessions: Sessions, db_dimensions: int, interruption: str
+) -> None:
+    base, _, ids = await corpus(db_sessions)
+    actor = uuid.uuid4()
+    job = await start_job(db_sessions, base, actor, local_space(db_dimensions))
+    began, resume = asyncio.Event(), asyncio.Event()
+
+    class Paused(LocalEmbedder):
+        async def embed_batch(self, texts: Sequence[str]) -> EmbeddingBatch:
+            began.set()
+            await asyncio.wait_for(resume.wait(), 10)
+            return await super().embed_batch(texts)
+
+    first = asyncio.create_task(
+        ReembeddingSteps(
+            db_sessions, Paused(db_dimensions), unchanged, 4
+        ).run_one()
+    )
+    try:
+        await asyncio.wait_for(began.wait(), 10)
+        other = ReembeddingSteps(
+            db_sessions, LocalEmbedder(db_dimensions), unchanged, 4
+        )
+        assert not await other.run_one()
+        async with db_sessions() as session:
+            if interruption == "cancel":
+                await reembedding.cancel(session, base, job.id, actor)
+            elif interruption == "edit":
+                chunk = await session.get(KnowledgeChunk, ids[0])
+                assert chunk is not None
+                chunk.text = "并发编辑的合成文本"
+            else:
+                await session.execute(
+                    text(
+                        "UPDATE knowledge.kb_reembeddings SET lease_expires_at="
+                        "now()-interval '1 minute' WHERE id=:id"
+                    ),
+                    {"id": job.id},
+                )
+        if interruption == "replace-worker":
+            await other.run_one()
+            await other.run_one()
+    finally:
+        resume.set()
+        await first
+    await _assert_interruption(db_sessions, base, job.id, interruption)
+
+
+async def _assert_interruption(
+    db_sessions: Sessions, base: uuid.UUID, job_id: uuid.UUID, interruption: str
+) -> None:
+    async with db_sessions() as session:
+        final = await reembedding.read(session, base, job_id)
+        assert (
+            final.status
+            == {
+                "cancel": "cancelled",
+                "edit": "failed",
+                "replace-worker": "succeeded",
+            }[interruption]
+        )
+        assert await jobs.count_vectors(session, job_id) == (
+            3 if interruption == "replace-worker" else 0
+        )

@@ -14,6 +14,10 @@ from knowledge_server.apps.knowledge.schemas import (
     SourceOut,
 )
 from knowledge_server.apps.knowledge.services import library_service
+from knowledge_server.apps.knowledge.services.embedding.space import (
+    current,
+    model_label,
+)
 from knowledge_server.catalog import (
     KNOWLEDGE_MANAGE,
     KNOWLEDGE_USE,
@@ -31,6 +35,18 @@ ContainerDep = Annotated[Container, Depends(get_container)]
 UseDep = Annotated[CallerContext, Depends(require(KNOWLEDGE_USE))]
 ManageDep = Annotated[CallerContext, Depends(require(KNOWLEDGE_MANAGE))]
 PageDep = Annotated[PageParams, Depends(page_params)]
+
+
+def _initial_embedding(container: Container) -> library_service.EmbeddingChoice:
+    """取建库时实际可用的嵌入档。Args: container。"""
+    selected = current(container.embedder)
+    return (
+        library_service.EmbeddingChoice(
+            model_label(selected.model), selected.dimensions, selected.identity
+        )
+        if selected is not None
+        else library_service.EmbeddingChoice.of(container.embedding_choice())
+    )
 
 
 @router.post(
@@ -52,7 +68,7 @@ async def create(
 
     Args: session, container, actor, body。
     """
-    embedding = library_service.EmbeddingChoice.of(container.embedding_choice())
+    embedding = _initial_embedding(container)
     owner = str(actor.user_id)
     return ok(
         await library_service.create_base(session, body, owner, embedding)

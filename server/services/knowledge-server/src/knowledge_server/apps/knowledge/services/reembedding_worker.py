@@ -1,7 +1,6 @@
 """后台整库重嵌：每次认领一批，成功后短事务切换活动索引。"""
 
 import asyncio
-import hashlib
 import uuid
 from collections.abc import Awaitable, Callable
 from contextlib import suppress
@@ -11,10 +10,8 @@ from sqlalchemy.ext.asyncio import AsyncSession
 
 from knowledge_server.apps.knowledge.crud import reembedding as jobs
 from knowledge_server.apps.knowledge.models import KnowledgeBase, ReembeddingJob
-from knowledge_server.apps.knowledge.models.knowledge_base import (
-    EMBEDDING_MODEL_MAX_LENGTH,
-)
 from knowledge_server.apps.knowledge.services.embedding import SnapshotEmbedder
+from knowledge_server.apps.knowledge.services.embedding.space import model_label
 from knowledge_server.apps.knowledge.services.ingest_pipeline import Sessions
 from lib.logging import bind_log_context, get_logger, reset_log_context
 from lib.logging.trace import new_span_id, parse_traceparent
@@ -38,13 +35,6 @@ class Work:
     target: str
     dimensions: int
     trace: str
-
-
-def model_label(model: str) -> str:
-    """为既有模型名列保留有界表示。Args: model。"""
-    if len(model) <= EMBEDDING_MODEL_MAX_LENGTH:
-        return model
-    return "sha256:" + hashlib.sha256(model.encode()).hexdigest()
 
 
 def _finish(
@@ -83,7 +73,7 @@ class ReembeddingSteps:
         async with self.sessions() as session:
             row = await jobs.claim(session, LEASE_SECONDS)
             if row is None:
-                return bool(await jobs.sweep(session, self.batch_size))
+                return False
             if row.lease_token is None:
                 raise RuntimeError("重嵌任务未取得处理租约")
             work = Work(
@@ -98,15 +88,23 @@ class ReembeddingSteps:
             trace_id=parse_traceparent(work.trace), span_id=new_span_id()
         )
         try:
-            await self._process(work)
+            try:
+                async with asyncio.timeout(BATCH_TIMEOUT_S):
+                    await self._process(work)
+            except TimeoutError:
+                await self._fail(work, FAILED_BATCH)
         finally:
             reset_log_context(token)
         return True
 
+    async def cleanup(self) -> None:
+        """分批清理所属业务已结束的暂存。"""
+        async with self.sessions() as session:
+            await jobs.sweep(session, self.batch_size)
+
     async def _process(self, work: Work) -> None:
         try:
-            async with asyncio.timeout(BATCH_TIMEOUT_S):
-                await self.refresh()
+            await self.refresh()
         except Exception:
             await self._fail(work, FAILED_BATCH)
             return
@@ -114,10 +112,9 @@ class ReembeddingSteps:
         if not batch:
             return
         try:
-            async with asyncio.timeout(BATCH_TIMEOUT_S):
-                answer = await self.embedder.embed_batch(
-                    [body for _, body in batch]
-                )
+            answer = await self.embedder.embed_batch(
+                [body for _, body in batch]
+            )
         except Exception as error:
             _logger.warning(
                 "reembedding_model_failed",
@@ -169,6 +166,7 @@ class ReembeddingSteps:
             ):
                 _finish(session, job, MOVED)
             else:
+                await jobs.complete_deferred_documents(session, base.id)
                 prior = (
                     base.embedding_space_id,
                     base.active_embedding_generation_id,
@@ -226,12 +224,17 @@ class ReembeddingConsumer:
         self._stop = asyncio.Event()
         self._idle = asyncio.Event()
         self._idle.set()
+        self._cleanup_at = 0.0
 
     async def run(self) -> None:
         while not self._stop.is_set():
             self._idle.clear()
             try:
                 worked = await self._steps.run_one()
+                now = asyncio.get_running_loop().time()
+                if not worked and now >= self._cleanup_at:
+                    self._cleanup_at = now + 60.0
+                    await self._steps.cleanup()
             except Exception as error:
                 _logger.warning(
                     "reembedding_worker_unavailable",

@@ -12,7 +12,7 @@ import hashlib
 import uuid
 from collections.abc import Callable, Sequence
 from contextlib import AbstractAsyncContextManager
-from dataclasses import replace
+from dataclasses import dataclass, replace
 
 from sqlalchemy.ext.asyncio import AsyncSession
 
@@ -128,34 +128,60 @@ def _deduped(rows: list[FigureWrite]) -> list[FigureWrite]:
     return made
 
 
+@dataclass(frozen=True)
+class PreparedFigures:
+    rows: list[FigureWrite]
+    by_ref: dict[str, str]
+
+
+async def prepare_figures(
+    store: ObjectStore,
+    where: tuple[uuid.UUID, uuid.UUID],
+    parsed: ParsedDocument,
+) -> PreparedFigures:
+    """提交对象字节，保留稍后落库的图元数据。Args: store, where, parsed。"""
+    base_id, document_id = where
+    if not parsed.figures:
+        return PreparedFigures([], {})
+    rows: list[FigureWrite] = []
+    by_ref: dict[str, str] = {}
+    for at, one in enumerate(parsed.figures):
+        by_ref[one.ref] = hashed(one.content)
+        rows.append(await _put_one(store, base_id, document_id, (at, one)))
+    return PreparedFigures(_deduped(rows), by_ref)
+
+
+async def persist_figures(
+    session: AsyncSession,
+    where: tuple[uuid.UUID, uuid.UUID],
+    prepared: PreparedFigures,
+) -> dict[str, uuid.UUID]:
+    """把图引用并入文档发布事务。Args: session, where, prepared。"""
+    if not prepared.rows:
+        return {}
+    base_id, document_id = where
+    made = await crud.figure.replace_figures(
+        session, base_id, document_id, prepared.rows
+    )
+    return {
+        ref: made[digest]
+        for ref, digest in prepared.by_ref.items()
+        if digest in made
+    }
+
+
 async def store_figures(
     sessions: Sessions,
     store: ObjectStore,
     where: tuple[uuid.UUID, uuid.UUID],
     parsed: ParsedDocument,
 ) -> dict[str, uuid.UUID]:
-    """把解析出来的图落进对象存储与库，回「`Figure.ref` → 图 id」。
-
-    ⚠ 放字节在事务**之外**、落行在事务之内：放字节是一次外部 IO，包在事务里
-    会让一次对象存储超时把数据库连接占住几十秒。
-
-    Args: sessions（开事务的口子）, store, where（库 id 与文档 id）, parsed。
-    """
-    base_id, document_id = where
-    if not parsed.figures:
+    """独立保存解析图像与元数据。Args: sessions, store, where, parsed。"""
+    prepared = await prepare_figures(store, where, parsed)
+    if not prepared.rows:
         return {}
-    rows: list[FigureWrite] = []
-    by_ref: dict[str, str] = {}
-    for at, one in enumerate(parsed.figures):
-        by_ref[one.ref] = hashed(one.content)
-        rows.append(await _put_one(store, base_id, document_id, (at, one)))
     async with sessions() as session:
-        made = await crud.figure.replace_figures(
-            session, base_id, document_id, _deduped(rows)
-        )
-    return {
-        ref: made[digest] for ref, digest in by_ref.items() if digest in made
-    }
+        return await persist_figures(session, where, prepared)
 
 
 def links_of(

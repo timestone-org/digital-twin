@@ -8,6 +8,7 @@ from datetime import timedelta
 from sqlalchemy import func, select, text
 from sqlalchemy.ext.asyncio import AsyncSession
 
+from knowledge_server.apps.knowledge.crud.vector_format import literal
 from knowledge_server.apps.knowledge.models import (
     KnowledgeBase,
     ReembeddingAudit,
@@ -27,7 +28,9 @@ class Corpus:
 
 _COUNTS = text("""
     SELECT count(*) AS documents, coalesce(sum(rows.n), 0) AS chunks,
-           count(*) FILTER (WHERE d.status != 'ready' OR rows.n IS NULL
+           count(*) FILTER (WHERE (d.status != 'ready' AND NOT
+                (d.status='failed' AND d.embedding_deferred IS TRUE))
+                             OR rows.n IS NULL
                              OR d.chunk_count != rows.n) AS unready
     FROM knowledge.kb_documents d
     LEFT JOIN (
@@ -247,7 +250,7 @@ async def put_vectors(
             {
                 "generation": generation,
                 "chunk": chunk,
-                "vector": "[" + ",".join(map(str, vector)) + "]",
+                "vector": literal(vector),
             }
             for chunk, vector in rows
         ],
@@ -285,4 +288,35 @@ async def sweep(session: AsyncSession, limit: int) -> int:
     """),
         {"limit": limit},
     )
-    return len(rows.all())
+    removed = len(rows.all())
+    temporary = await session.execute(
+        text("""
+        DELETE FROM knowledge.kb_ingest_vectors s USING (
+            SELECT t.document_id, t.attempt, t.ordinal
+            FROM knowledge.kb_ingest_vectors t
+            JOIN knowledge.kb_documents d ON d.id=t.document_id
+            WHERE d.status IN ('ready','failed')
+              AND t.created_at < now() - interval '1 hour'
+            LIMIT :limit FOR UPDATE OF t SKIP LOCKED
+        ) old
+        WHERE (s.document_id,s.attempt,s.ordinal) =
+              (old.document_id,old.attempt,old.ordinal) RETURNING s.ordinal
+    """),
+        {"limit": limit},
+    )
+    return removed + len(temporary.all())
+
+
+async def complete_deferred_documents(
+    session: AsyncSession, base_id: uuid.UUID
+) -> None:
+    """切换时完成已经解析并有全量目标向量的文档。Args: session, base_id。"""
+    await session.execute(
+        text("""
+        UPDATE knowledge.kb_documents
+        SET status='ready', embedding_deferred=false, failure_reason='',
+            ready_at=now(), updated_at=now()
+        WHERE base_id=:base AND status='failed' AND embedding_deferred IS TRUE
+    """),
+        {"base": base_id},
+    )

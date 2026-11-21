@@ -26,6 +26,7 @@ class BaseWrite:
     embedding_model: str | None
     dimensions: int | None
     retrieval_strategy: str
+    embedding_space_id: str | None = None
 
 
 async def insert_base(session: AsyncSession, write: BaseWrite) -> KnowledgeBase:
@@ -41,6 +42,7 @@ async def insert_base(session: AsyncSession, write: BaseWrite) -> KnowledgeBase:
         description=write.description,
         owner_id=write.owner_id,
         embedding_model=write.embedding_model,
+        embedding_space_id=write.embedding_space_id,
         dimensions=write.dimensions,
         retrieval_strategy=write.retrieval_strategy,
     )

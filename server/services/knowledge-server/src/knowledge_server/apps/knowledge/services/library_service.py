@@ -49,6 +49,7 @@ class EmbeddingChoice:
 
     model: str | None
     dimensions: int | None
+    identity: str | None = None
 
     @classmethod
     def of(cls, given: tuple[str | None, int | None]) -> "EmbeddingChoice":
@@ -195,6 +196,7 @@ async def create_base(
             description=body.description,
             owner_id=owner_id,
             embedding_model=embedding.model,
+            embedding_space_id=embedding.identity,
             dimensions=embedding.dimensions,
             retrieval_strategy=body.retrieval_strategy,
         ),

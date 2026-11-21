@@ -12,6 +12,7 @@ from datetime import datetime
 
 from sqlalchemy import (
     BigInteger,
+    Boolean,
     CheckConstraint,
     DateTime,
     ForeignKey,
@@ -96,6 +97,7 @@ class KnowledgeDocument(UuidPrimaryKeyMixin, TimestampMixin, Base):
     chunk_count: Mapped[int] = mapped_column(
         Integer, nullable=False, server_default="0"
     )
+    embedding_deferred: Mapped[bool | None] = mapped_column(Boolean)
     ready_at: Mapped[datetime | None] = mapped_column(
         DateTime(timezone=True), nullable=True
     )
