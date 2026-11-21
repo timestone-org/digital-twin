@@ -200,6 +200,19 @@ def test_asset_bytes_cannot_run_script_in_the_app_origin(filename: str) -> None:
 
 
 @pytest.mark.parametrize("filename", CONFIGS)
+def test_asset_and_error_responses_disable_mime_sniffing(filename: str) -> None:
+    _, blocks = load(filename)
+    assert "proxy_hide_header X-Content-Type-Options;" in (
+        find(blocks, "^~ /oss/").body
+    )
+    for route in ("^~ /oss/", "@dt_oss_denied", "@dt_oss_missing"):
+        assert (
+            "add_header X-Content-Type-Options nosniff always;"
+            in find(blocks, route).body
+        ), route
+
+
+@pytest.mark.parametrize("filename", CONFIGS)
 def test_asset_errors_do_not_leak_the_bucket(filename: str) -> None:
     """对象存储的错误体里带桶名与对象键；对外地址刻意不暴露桶名。"""
     _, blocks = load(filename)
@@ -210,6 +223,8 @@ def test_asset_errors_do_not_leak_the_bucket(filename: str) -> None:
         assert page is not None, status
         named = find(blocks, page.group(1))
         assert "proxy_pass" not in named.body
+        assert "types { }" in named.body
+        assert "default_type text/plain;" in named.body
 
 
 @pytest.mark.parametrize("filename", CONFIGS)
