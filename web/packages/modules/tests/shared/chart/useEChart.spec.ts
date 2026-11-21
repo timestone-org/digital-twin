@@ -91,6 +91,7 @@ const Host = defineComponent({
       default: () => ({}),
     },
     hasChart: { type: Boolean, default: true },
+    hostKey: { type: Number, default: 0 },
     hooks: { type: Object as PropType<ChartHooks>, default: () => ({}) },
   },
   setup(props) {
@@ -108,11 +109,11 @@ const Host = defineComponent({
       onItemClick: props.hooks.onItemClick,
       itemValueOf: props.hooks.itemValueOf,
     })
-    useEChart(options())
-    return { rootRef, chartRef }
+    const { hasLoadError } = useEChart(options())
+    return { rootRef, chartRef, hasLoadError }
   },
   template:
-    '<div ref="rootRef"><div v-if="hasChart" ref="chartRef" class="canvas" /></div>',
+    '<div ref="rootRef" :data-load-error="hasLoadError"><div v-if="hasChart" :key="hostKey" ref="chartRef" class="canvas" /></div>',
 })
 
 async function mountChart(props: Record<string, unknown> = {}) {
@@ -203,6 +204,57 @@ describe('挂载与释放', () => {
 
     expect(handle.dispose).toHaveBeenCalledTimes(1)
     expect(handle.setOption).not.toHaveBeenCalled()
+  })
+})
+
+describe('图表宿主置换', () => {
+  it('旧宿主已失败时，新宿主尚未完成初始化也不显示旧错误', async () => {
+    echarts.createChart.mockRejectedValueOnce(new Error('旧资源下线'))
+    let finish = () => {}
+    echarts.createChart.mockImplementationOnce(
+      (el, init = {}) =>
+        new Promise((resolve) => {
+          finish = () => resolve(echarts.newHandle(el, init))
+        }),
+    )
+    const wrapper = await mountChart()
+    try {
+      expect(wrapper.attributes('data-load-error')).toBe('true')
+      const oldHost = wrapper.get('.canvas').element
+      await wrapper.setProps({ hostKey: 1 })
+      expect(wrapper.get('.canvas').element).not.toBe(oldHost)
+      expect(echarts.createChart).toHaveBeenCalledTimes(2)
+      expect(wrapper.attributes('data-load-error')).toBe('false')
+    } finally {
+      finish()
+      await flushPromises()
+      wrapper.unmount()
+    }
+  })
+
+  it('旧宿主迟到的失败不会覆盖新宿主已经完成的首帧', async () => {
+    let finish = () => {}
+    echarts.createChart.mockImplementationOnce(
+      () =>
+        new Promise((_resolve, reject) => {
+          finish = () => reject(new Error('旧资源下线'))
+        }),
+    )
+    const wrapper = mount(Host, { attachTo: document.body })
+    try {
+      await wrapper.setProps({ hostKey: 1 })
+      await flushPromises()
+      expect(echarts.createChart).toHaveBeenCalledTimes(2)
+      const active = lastHandle()
+      expect(active.setOption).toHaveBeenCalledTimes(1)
+      finish()
+      await flushPromises()
+      expect(wrapper.attributes('data-load-error')).toBe('false')
+      expect(active.dispose).not.toHaveBeenCalled()
+      expect(active.setOption).toHaveBeenCalledTimes(1)
+    } finally {
+      wrapper.unmount()
+    }
   })
 })
 
