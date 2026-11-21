@@ -9,6 +9,9 @@ import asyncio
 from collections.abc import Callable
 from concurrent.futures import BrokenExecutor, Executor, ProcessPoolExecutor
 from dataclasses import dataclass
+from functools import partial
+
+from sqlalchemy.ext.asyncio import AsyncSession
 
 from lib.db import Database
 from lib.errors import DependencyUnavailable
@@ -19,7 +22,12 @@ from lib.logging import (
     reset_log_context,
 )
 from lib.stream import StreamEntry, StreamGroup, StreamLike
-from platform_server.apps.hvac.services import ac_model_queue
+from platform_server.apps.hvac.model_statuses import (
+    MODEL_STATUS_QUEUED,
+    MODEL_STATUS_TRAINING,
+)
+from platform_server.apps.hvac.models import AcModel
+from platform_server.apps.hvac.services import ac_dispatch, ac_model_queue
 from platform_server.apps.hvac.services.ac_model_trainer import (
     TRAIN_RUN_FAILED,
     TRAIN_RUN_ORPHANED,
@@ -182,8 +190,19 @@ class TrainingConsumer:
                     "读不懂的队列消息，直接确认丢弃",
                     entry_id=entry.entry_id,
                 )
-            else:
-                await self._process(message)
+            elif not await ac_dispatch.process_delivery(
+                self._database,
+                ac_dispatch.ConsumerDelivery(
+                    message.dispatch_id,
+                    entry.entry_id,
+                    entry.fields,
+                    ac_dispatch.TRAINING,
+                    self._options.train_timeout_s,
+                ),
+                partial(_should_train, message),
+                partial(self._process, message),
+            ):
+                return
             # ⚠ 确认只在处理走完之后：放进 finally 会把宽限期到点被取消的那条
             # 当成跑完了确认掉，而 drain 的约定恰恰是「没确认，会被认领回去」
             await self._stream.ack(self._options.target, entry.entry_id)
@@ -277,3 +296,15 @@ class TrainingConsumer:
                 "训练失败状态未能落库",
                 error=error,
             )
+
+
+async def _should_train(
+    message: ac_model_queue.TrainMessage, session: AsyncSession
+) -> bool:
+    """确认消息仍属于当前待训任务。Args: message, session。"""
+    model = await session.get(AcModel, message.model_id)
+    return (
+        model is not None
+        and model.training_dispatch_id == message.dispatch_id
+        and model.status in (MODEL_STATUS_QUEUED, MODEL_STATUS_TRAINING)
+    )

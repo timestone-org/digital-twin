@@ -6,6 +6,10 @@ at-least-once，重复投递是常态（docs/agents/runtime-resilience.md §5）
 
 import asyncio
 from dataclasses import dataclass
+from functools import partial
+
+from sqlalchemy import select
+from sqlalchemy.ext.asyncio import AsyncSession
 
 from lib.db import Database
 from lib.errors import DependencyUnavailable
@@ -16,7 +20,8 @@ from lib.logging import (
     reset_log_context,
 )
 from lib.stream import StreamEntry, StreamGroup, StreamLike
-from platform_server.apps.hvac.services import ac_startup_queue
+from platform_server.apps.hvac.models import AcStartupShard
+from platform_server.apps.hvac.services import ac_dispatch, ac_startup_queue
 from platform_server.apps.hvac.services.ac_startup_extract import (
     SHARD_RUN_EXTRACTED,
     SHARD_RUN_SKIPPED,
@@ -28,6 +33,7 @@ from platform_server.apps.hvac.services.ac_startup_service import (
     fail_shard,
     finalize_if_complete,
 )
+from platform_server.apps.hvac.startups import SHARD_STATUS_PENDING
 
 _logger = get_logger("platform.hvac.ac_startup_worker")
 
@@ -150,8 +156,22 @@ class ShardConsumer:
                     "读不懂的队列消息，直接确认丢弃",
                     entry_id=entry.entry_id,
                 )
+            elif not await ac_dispatch.process_delivery(
+                self._database,
+                ac_dispatch.ConsumerDelivery(
+                    message.dispatch_id,
+                    entry.entry_id,
+                    entry.fields,
+                    ac_dispatch.SHARD,
+                    self._options.shard_timeout_s,
+                ),
+                partial(_is_pending, message),
+                partial(self._process, message),
+            ):
+                return
             else:
-                await self._process(message)
+                # 抽取已提交而收尾未完成时，重放只尝试完成批次切换
+                await self._finalize(message)
             # ⚠ 确认只在处理走完之后：放进 finally 的话，宽限期到点被取消的
             # 那一条会被当成跑完了确认掉——它既没落分片状态也没留下任何日志，
             # 而 drain 的约定恰恰是「没确认，会被别人认领回去」
@@ -161,7 +181,7 @@ class ShardConsumer:
             self._idle.set()
 
     async def _process(self, message: ac_startup_queue.ShardMessage) -> None:
-        """跑一片并在全部跑完时收尾，各自一个事务。
+        """抽取分片并记录分片终态。
 
         Args: message。
         """
@@ -184,7 +204,6 @@ class ShardConsumer:
             )
             reason = str(error) or type(error).__name__
             await self._record_failure(message, reason=reason)
-        await self._finalize(message)
 
     async def _run_one(self, message: ac_startup_queue.ShardMessage) -> None:
         async with self._database.session() as session:
@@ -251,3 +270,17 @@ class ShardConsumer:
                 batch_id=str(message.batch_id),
                 error=error,
             )
+
+
+async def _is_pending(
+    message: ac_startup_queue.ShardMessage, session: AsyncSession
+) -> bool:
+    """完成的分片不需要再次抽取。Args: message, session。"""
+    found = await session.scalar(
+        select(AcStartupShard.id).where(
+            AcStartupShard.batch_id == message.batch_id,
+            AcStartupShard.month == message.month,
+            AcStartupShard.status == SHARD_STATUS_PENDING,
+        )
+    )
+    return found is not None

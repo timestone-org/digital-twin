@@ -9,9 +9,10 @@ from datetime import datetime
 
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from lib.db import Database
+from lib.db import commit_before_receipt
 from lib.logging import current_traceparent, get_logger
 from lib.stream import StreamGroup, StreamLike
+from lib.utils.ids import uuid7
 from lib.utils.timeutils import format_rfc3339
 from platform_server.apps.hvac.crud import (
     ac_startup_batch_crud,
@@ -36,6 +37,7 @@ from platform_server.apps.hvac.schemas import (
     StartupRebuildIn,
     TimeWindow,
 )
+from platform_server.apps.hvac.services import ac_dispatch
 from platform_server.apps.hvac.services.ac_room_configuration import (
     load_configuration,
     restore_configuration,
@@ -55,6 +57,7 @@ from platform_server.apps.hvac.services.ac_startup_rules import (
 from platform_server.apps.hvac.services.ac_startup_shards import (
     plan_months,
 )
+from platform_server.apps.hvac.services.sessions import Sessions
 from platform_server.apps.hvac.startups import (
     BATCH_RETENTION,
     BATCH_STATUS_FAILED,
@@ -195,11 +198,8 @@ async def request_rebuild(
     session.add(batch)
     await session.flush()
     await ac_startup_shard_crud.seed(session, batch.id, months)
-    # ⚠ 就地提交，不能等依赖退出时再提交：FastAPI 把「发响应」放在 yield 依赖
-    # 的退出栈**里面**，后台任务又由 `Response.__call__` 就地 await——投递因此
-    # 排在 `get_session` 提交之前。消费者拿到头几条消息时批次行还看不见，那几
-    # 片会被当成迟到消息跳过：线上两轮全史重算都卡在最早的两个月，就是这么来的
-    await session.commit()
+    messages = _stage_shards(session, batch, months)
+    await commit_before_receipt(session)
     _logger.info(
         "ac_startup_batch_requested",
         "抽取批次已入队",
@@ -207,26 +207,25 @@ async def request_rebuild(
         batch_id=str(batch.id),
         shard_total=len(months),
     )
-    return RebuildPlan(batch=batch, messages=_shard_messages(batch, months))
+    return RebuildPlan(batch=batch, messages=messages)
 
 
-def _shard_messages(
-    batch: AcStartupBatch, months: list[str]
+def _stage_shards(
+    session: AsyncSession, batch: AcStartupBatch, months: list[str]
 ) -> tuple[ShardMessage, ...]:
-    """一个批次要投出去的全部分片消息。
-
-    Args: batch, months。
-    """
+    """把所有分片投递写入同一事务。Args: session, batch, months。"""
     traceparent = current_traceparent()
-    return tuple(
-        ShardMessage(
-            batch_id=batch.id,
-            room_id=batch.room_id,
-            month=month,
-            traceparent=traceparent,
+    messages: list[ShardMessage] = []
+    for month in months:
+        dispatch_id = uuid7()
+        message = ShardMessage(
+            batch.id, batch.room_id, month, traceparent, dispatch_id
         )
-        for month in months
-    )
+        ac_dispatch.stage_dispatch(
+            session, dispatch_id, ac_dispatch.SHARD, message.to_fields()
+        )
+        messages.append(message)
+    return tuple(messages)
 
 
 def _new_batch(
@@ -406,7 +405,7 @@ async def _require_no_running_batch(
 
 async def dispatch_shards(
     stream: StreamLike,
-    database: Database,
+    database: Sessions,
     *,
     target: StreamGroup,
     plan: ShardDispatch,
@@ -417,6 +416,16 @@ async def dispatch_shards(
     没有任何一条消息在路上——页面看起来还在算，其实永远算不完。
     Args: stream, database, target, plan。
     """
+    dispatch_ids = tuple(
+        message.dispatch_id
+        for message in plan.messages
+        if message.dispatch_id is not None
+    )
+    if len(dispatch_ids) == len(plan.messages):
+        await ac_dispatch.publish_waiting(
+            database, stream, {ac_dispatch.SHARD: target.stream}, dispatch_ids
+        )
+        return
     try:
         await publish_shards(
             stream, target=target, messages=list(plan.messages)
@@ -447,7 +456,7 @@ async def fail_batch(
     return await _fail(session, batch)
 
 
-async def _open_and_fail(database: Database, batch_id: uuid.UUID) -> None:
+async def _open_and_fail(database: Sessions, batch_id: uuid.UUID) -> None:
     """另开一个事务把批次判失败——原来那个事务早已提交。
 
     Args: database, batch_id。

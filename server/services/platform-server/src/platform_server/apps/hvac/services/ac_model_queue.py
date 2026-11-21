@@ -18,6 +18,7 @@ ENVELOPE_VERSION = "1"
 _FIELD_VERSION = "envelope_version"
 _FIELD_MODEL = "model_id"
 _FIELD_TRACEPARENT = "traceparent"
+_FIELD_DISPATCH = "dispatch_id"
 
 
 @dataclass(frozen=True)
@@ -26,22 +27,28 @@ class TrainMessage:
 
     model_id: uuid.UUID
     traceparent: str
+    dispatch_id: uuid.UUID | None = None
 
     def to_fields(self) -> dict[str, str]:
         """摊成扁平的字符串字段，便于用 redis-cli 直接看。"""
-        return {
+        fields = {
             _FIELD_VERSION: ENVELOPE_VERSION,
             _FIELD_MODEL: str(self.model_id),
             _FIELD_TRACEPARENT: self.traceparent,
         }
+        if self.dispatch_id is not None:
+            fields[_FIELD_DISPATCH] = str(self.dispatch_id)
+        return fields
 
 
-def new_message(model_id: uuid.UUID) -> TrainMessage:
+def new_message(
+    model_id: uuid.UUID, dispatch_id: uuid.UUID | None = None
+) -> TrainMessage:
     """当前链路上的一条训练消息。
 
-    Args: model_id。
+    Args: model_id, dispatch_id。
     """
-    return TrainMessage(model_id=model_id, traceparent=current_traceparent())
+    return TrainMessage(model_id, current_traceparent(), dispatch_id)
 
 
 def decode(fields: Mapping[str, str]) -> TrainMessage | None:
@@ -58,9 +65,11 @@ def decode(fields: Mapping[str, str]) -> TrainMessage | None:
         return None
     try:
         model_id = uuid.UUID(raw)
+        dispatch = fields.get(_FIELD_DISPATCH)
+        dispatch_id = uuid.UUID(dispatch) if dispatch is not None else None
     except ValueError:
         return None
-    return TrainMessage(model_id=model_id, traceparent=traceparent)
+    return TrainMessage(model_id, traceparent, dispatch_id)
 
 
 async def publish_training(

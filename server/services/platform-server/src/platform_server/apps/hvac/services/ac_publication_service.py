@@ -11,6 +11,7 @@ from dataclasses import dataclass
 from sqlalchemy.exc import IntegrityError
 from sqlalchemy.ext.asyncio import AsyncSession
 
+from lib.db import commit_before_receipt
 from lib.logging import get_logger
 from platform_server.apps.hvac.crud import (
     ac_model_crud,
@@ -341,7 +342,7 @@ async def _save(
         ],
     )
     await _flush(session)
-    await session.commit()
+    await commit_before_receipt(session)
     _logger.info(
         "ac_publication_saved",
         "预测下发配置已保存",
@@ -418,7 +419,7 @@ async def delete_publication(
     """
     await ac_model_service.get_model(session, model_id)
     removed = await ac_model_publication_crud.delete_by_model(session, model_id)
-    await session.commit()
+    await commit_before_receipt(session)
     if removed:
         _logger.info(
             "ac_publication_cleared",

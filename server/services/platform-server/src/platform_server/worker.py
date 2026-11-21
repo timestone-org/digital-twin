@@ -31,6 +31,7 @@ from platform_server.apps.dataset.services.retention import (
     RetentionAnchor,
     RetentionContext,
 )
+from platform_server.apps.hvac.deps import build_ac_dispatcher
 from platform_server.apps.hvac.services.ac_daily_worker import (
     DailyConsumer,
     DailyConsumerOptions,
@@ -530,8 +531,7 @@ async def serve(settings: Settings, *, wait: Wait) -> None:
     await selfcheck(container)
     # 单 worker 进程池：训练一次只跑一个，防止两次训练互相抢核
     pool = TrainerPool()
-    # 建模的算子池与它分开：一次训练跑几分钟，共用一个池的话建模会被空调训练
-    # 整个堵住，而两边的超时口径也不一样
+    # 建模使用独立算子池，防止长时间的空调训练阻塞建模。
     node_pool = NodePool()
     word_pool = WordPool()
     publisher = build_publish_loop(container)
@@ -544,6 +544,7 @@ async def serve(settings: Settings, *, wait: Wait) -> None:
                 consumers=(
                     build_consumer(container),
                     build_trainer(container, pool=pool),
+                    build_ac_dispatcher(container),
                     publisher,
                     scheduler,
                     build_daily_consumer(container),

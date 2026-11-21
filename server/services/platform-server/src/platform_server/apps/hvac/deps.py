@@ -8,21 +8,26 @@ from dataclasses import dataclass
 from typing import Annotated
 
 from fastapi import BackgroundTasks, Depends
+from sqlalchemy.ext.asyncio import AsyncSession
 
 from lib.auth import CallerContext
-from lib.db import Database
 from lib.stream import StreamGroup, StreamLike
 from platform_server.apps.hvac.catalog import AC_MANAGE
+from platform_server.apps.hvac.services.ac_dispatch import (
+    SHARD,
+    TRAINING,
+    AcDispatchWorker,
+)
 from platform_server.apps.hvac.services.ac_model_queue import TrainMessage
 from platform_server.apps.hvac.services.ac_model_service import (
     dispatch_training,
 )
-from platform_server.apps.hvac.services.ac_publish_service import Sessions
 from platform_server.apps.hvac.services.ac_source_reader import AcSourceReader
 from platform_server.apps.hvac.services.ac_startup_service import (
     ShardDispatch,
     dispatch_shards,
 )
+from platform_server.apps.hvac.services.sessions import Sessions
 from platform_server.container import Container
 from platform_server.deps import (
     WriteGate,
@@ -60,7 +65,7 @@ class Dispatcher:
     stream: StreamLike
     target: StreamGroup
     model_target: StreamGroup
-    database: Database
+    database: Sessions
     tasks: BackgroundTasks
 
     def after_commit(self, plan: ShardDispatch) -> None:
@@ -90,13 +95,26 @@ class Dispatcher:
         )
 
 
+def get_sessions(
+    container: Annotated[Container, Depends(get_container)],
+) -> Sessions:
+    """开短事务的那一面。预测下发要开三个互不相干的短事务，不能借请求那条。
+
+    ⚠ 测试用 `dependency_overrides` 换成用例那条回滚事务。
+
+    Args: container。
+    """
+    return container.database
+
+
 def get_dispatcher(
     container: Annotated[Container, Depends(get_container)],
     tasks: BackgroundTasks,
+    sessions: Annotated[Sessions, Depends(get_sessions)],
 ) -> Dispatcher:
     """装出提交后投递用的那只手。测试用 `dependency_overrides` 换成假件。
 
-    Args: container, tasks。
+    Args: container, tasks, sessions。
     """
     settings = container.settings
     return Dispatcher(
@@ -111,7 +129,7 @@ def get_dispatcher(
             group=settings.acmodel_group,
             consumer=settings.app_instance,
         ),
-        database=container.database,
+        database=sessions,
         tasks=tasks,
     )
 
@@ -135,18 +153,6 @@ def get_hvac_timezone(
     return container.settings.acsource_timezone
 
 
-def get_sessions(
-    container: Annotated[Container, Depends(get_container)],
-) -> Sessions:
-    """开短事务的那一面。预测下发要开三个互不相干的短事务，不能借请求那条。
-
-    ⚠ 测试用 `dependency_overrides` 换成用例那条回滚事务。
-
-    Args: container。
-    """
-    return container.database
-
-
 def get_node_writer(
     container: Annotated[Container, Depends(get_container)],
 ) -> NodeWriter:
@@ -161,13 +167,25 @@ def get_manage_gate(
     container: Annotated[Container, Depends(get_container)],
     caller: Annotated[CallerContext, Depends(require(AC_MANAGE))],
     idempotency_key: Annotated[str | None, Depends(get_idempotency_key)],
+    session: Annotated[AsyncSession, Depends(get_session)],
 ) -> WriteGate:
     """长任务入口用的写上下文：`ac:manage` 身份 + 可选的幂等键。
 
-    Args: container, caller, idempotency_key。
+    Args: container, caller, idempotency_key, session。
     """
     return WriteGate(
         idempotency=container.idempotency,
         idempotency_key=idempotency_key,
         caller=caller,
+        receipt_session=session,
+    )
+
+
+def build_ac_dispatcher(container: Container) -> AcDispatchWorker:
+    """装配 HVAC 待投递任务的补投循环。Args: container。"""
+    settings = container.settings
+    return AcDispatchWorker(
+        container.database,
+        container.stream,
+        {TRAINING: settings.acmodel_stream, SHARD: settings.acstartup_stream},
     )
