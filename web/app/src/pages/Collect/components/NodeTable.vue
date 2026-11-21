@@ -87,15 +87,35 @@ const editing = usePointEditing(ops, () => list.reload())
 const archive = useArchiveOps(() => list.reload())
 const removal = useForceDelete<CollectPoint>(
   (point, force) => collect.deletePoint(point.id, force),
-  (_point, message) => `${message}。强制删除会让那些大屏上的绑定就此失效。`,
+  (_point, message) => `${message}。强制删除会使这些引用失效。`,
   () => list.reload(),
 )
-const batchRemoval = useForceDelete<readonly string[]>(
-  (pointIds, force) => collect.deletePoints(pointIds, force),
-  (_pointIds, message) => `${message}。强制删除会让那些大屏上的绑定就此失效。`,
+const batchRemoval = useForceDelete<readonly CollectPoint[]>(
+  (points, force) =>
+    collect.deletePoints(
+      points.map((point) => point.id),
+      force,
+    ),
+  (_points, message) => `${message}。强制删除会使这些引用失效。`,
   () => list.reload(),
-  (pointIds) => `已删除 ${pointIds.length} 个点位`,
+  (points) => `已删除 ${points.length} 个点位`,
 )
+const selectedRows = computed(() =>
+  list.items.value.filter((point) => archive.selected.value.has(point.id)),
+)
+const batchConflictDetails = computed(() => {
+  const points = new Map(
+    batchRemoval.target.value?.map((point) => [
+      `points[${point.id}]`,
+      point.code,
+    ]),
+  )
+  return batchRemoval.details.value.flatMap((detail) => {
+    const code = points.get(detail.field)
+    if (detail.code !== 'point_bound' || code === undefined) return []
+    return [{ ...detail, message: `${code} · ${detail.message}` }]
+  })
+})
 
 const hasPoints = computed(() => list.total.value > 0)
 const hasRows = computed(() => list.items.value.length > 0)
@@ -121,9 +141,7 @@ async function reload(): Promise<void> {
 }
 
 function openBatchEdit(): void {
-  batchEditing.value = list.items.value.filter((row) =>
-    archive.selected.value.has(row.id),
-  )
+  batchEditing.value = selectedRows.value
 }
 
 function selectPage(): void {
@@ -179,7 +197,7 @@ watch(list.items, (rows) => {
         :busy="archive.batchBusy.value"
         @edit="openBatchEdit"
         @batch="archive.batchArchive"
-        @remove="batchRemoval.ask([...archive.selected.value])"
+        @remove="batchRemoval.ask(selectedRows)"
         @clear="archive.clearSelection"
       />
 
@@ -436,6 +454,7 @@ watch(list.items, (rows) => {
       :name="batchDeleteName"
       message="它们已归档的历史会保留，按编码存放。此操作不可撤销。"
       :conflict="batchRemoval.conflict.value"
+      :details="batchConflictDetails"
       :loading="batchRemoval.busy.value"
       @confirm="batchRemoval.confirm"
     />

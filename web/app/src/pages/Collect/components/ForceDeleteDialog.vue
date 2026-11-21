@@ -6,6 +6,7 @@
  * `conflict` 文案 → 升级为二级：展示警告 + 「强制删除」按钮 → confirm(true)。
  * ⚠ 强删的后果（引用失效）必须写在 `conflict` 文案里——按钮本身不解释。
  */
+import type { FieldError } from '@dt/contracts'
 import { computed } from 'vue'
 import { DtButton, DtIcon, DtModal } from '@dt/ui'
 
@@ -21,12 +22,14 @@ const props = withDefaults(
     message?: string | undefined
     /** 409 引用冲突文案；非空 → 进入强制删除二级确认。 */
     conflict?: string | null | undefined
+    details?: readonly FieldError[]
     loading?: boolean | undefined
   }>(),
   {
     title: '删除确认',
     message: '此操作不可撤销。',
     conflict: null,
+    details: () => [],
     loading: false,
   },
 )
@@ -73,6 +76,15 @@ const modalTitle = computed(() =>
         <DtIcon name="alert-triangle" :size="14" class="mt-px shrink-0" />
         <span>{{ conflict }}</span>
       </p>
+      <ul
+        v-if="hasConflict && props.details.length > 0"
+        aria-label="引用详情"
+        class="m-0 max-h-40 list-none overflow-auto p-0 text-xs text-text-secondary"
+      >
+        <li v-for="detail in props.details" :key="detail.field" class="py-1">
+          {{ detail.message }}
+        </li>
+      </ul>
     </div>
 
     <template #footer>

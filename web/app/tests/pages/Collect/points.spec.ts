@@ -855,17 +855,57 @@ describe('批量删除', () => {
     expect(listed.mock.calls.length).toBeGreaterThan(before)
   })
 
-  it('⚠ 被大屏绑着时先摆二次确认，绝不直接强删', async () => {
-    const remove = vi
-      .spyOn(collectApi, 'deletePoints')
-      .mockRejectedValueOnce(BOUND)
-    await askToDelete([point()])
+  it.each(['还被大屏绑着', '仍有台账列引用'])(
+    '%s时先打开二次确认',
+    async (reason) => {
+      const remove = vi
+        .spyOn(collectApi, 'deletePoints')
+        .mockRejectedValueOnce(new BizError(41105, reason, 409, 't'))
+      await askToDelete([point()])
+      bodyButton('删除').click()
+      await flushPromises()
+
+      expect(remove).toHaveBeenCalledTimes(1)
+      expect(document.body.textContent).toContain(reason)
+      expect(document.body.textContent).toContain('强制删除会使这些引用失效')
+    },
+  )
+
+  it('批量引用冲突只展示受阻的已选点位编码和计数', async () => {
+    vi.spyOn(collectApi, 'deletePoints').mockRejectedValueOnce(
+      new BizError(41105, '这批里有 1 个点位仍有台账列引用', 409, 't', [
+        {
+          field: 'points[p1]',
+          code: 'point_bound',
+          message: '出口温度 被 2 个台账列绑着',
+        },
+        {
+          field: 'dataset_columns',
+          code: 'point_bound',
+          message: '不可展示的台账列',
+        },
+        {
+          field: 'points[unselected]',
+          code: 'point_bound',
+          message: '未选点位',
+        },
+      ]),
+    )
+    await askToDelete([
+      point({ code: 'OUTLET_TEMP' }),
+      point({ id: 'p2', code: 'INLET_TEMP', name: '进口温度' }),
+    ])
     bodyButton('删除').click()
     await flushPromises()
 
-    expect(remove).toHaveBeenCalledTimes(1)
-    expect(document.body.textContent).toContain('还被大屏绑着')
-    expect(document.body.textContent).toContain('绑定就此失效')
+    const details = document.body.querySelector('[aria-label="引用详情"]')
+    expect(details).not.toBeNull()
+    expect(details?.textContent).toContain('OUTLET_TEMP')
+    expect(details?.textContent).toContain('2 个台账列')
+    expect(details?.querySelectorAll('li')).toHaveLength(1)
+    expect(details?.textContent).not.toContain('INLET_TEMP')
+    expect(document.body.textContent).not.toContain('不可展示的台账列')
+    expect(document.body.textContent).not.toContain('未选点位')
   })
 
   it('二次确认按下去才带 force，后果已经在文案里说过了', async () => {
