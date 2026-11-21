@@ -42,6 +42,7 @@ from platform_server.apps.modeling.schemas import (
 )
 from platform_server.apps.modeling.schemas.command import CommandResourceOut
 from platform_server.apps.modeling.schemas.management import DeploymentSwitchIn
+from platform_server.apps.modeling.services.constraints import violates
 from platform_server.apps.modeling.services.deployment_version_change import (
     change_version,
     require_revision,
@@ -57,6 +58,7 @@ from platform_server.apps.modeling.services.serving_contract import (
 
 # 调用量默认回看多少天
 STATS_WINDOW_DAYS = 30
+DEPLOYMENT_CODE_CONSTRAINT = "uq_modeling_deployments_code"
 
 
 @dataclass(frozen=True)
@@ -110,6 +112,8 @@ async def create_deployment(
     try:
         await session.flush()
     except IntegrityError as error:
+        if not violates(error, DEPLOYMENT_CODE_CONSTRAINT):
+            raise
         raise DeploymentCodeTaken(
             f"对外标识「{payload.code}」已经被别的服务占了"
         ) from error
