@@ -46,17 +46,47 @@ def _graph(side_operator: str | None) -> dict[str, Any]:
     return graph
 
 
-@pytest.mark.parametrize("side_operator", [None, "clip_outlier", "lag_feature"])
-async def test_a_source_branch_does_not_change_the_deployed_prediction(
+def _with_separate_scalers(graph: dict[str, Any]) -> dict[str, Any]:
+    """把标准化分别接到训练支与测试支。Args: graph。"""
+    graph["nodes"].append(node("test_scaler", "standardize"))
+    graph["edges"] = [
+        item
+        for item in graph["edges"]
+        if item["id"] not in {"e2", "e3", "e4", "e5"}
+    ]
+    graph["edges"].extend(
+        [
+            edge("fill-split", "f", "frame", "p", "frame"),
+            edge("test-scale", "p", "test", "test_scaler", "frame"),
+            edge("train-scale", "p", "train", "z", "frame"),
+            edge("scale-train", "z", "frame", "m", "train"),
+            edge("scale-test", "test_scaler", "frame", "m", "test"),
+        ]
+    )
+    return graph
+
+
+@pytest.mark.parametrize(
+    ("side_operator", "is_post_split"),
+    [
+        (None, False),
+        ("clip_outlier", False),
+        ("lag_feature", False),
+        (None, True),
+    ],
+)
+async def test_deployed_prediction_uses_only_the_model_training_path(
     app_client: httpx.AsyncClient,
     db_session: AsyncSession,
     worker_sessions: MakerSessions,
     side_operator: str | None,
+    is_post_split: bool,
 ) -> None:
     await _seed_ledger(app_client, db_session, "serving-path-data")
-    pipeline = await create_pipeline(
-        app_client, "serving-path", _graph(side_operator)
-    )
+    graph = _graph(side_operator)
+    if is_post_split:
+        graph = _with_separate_scalers(graph)
+    pipeline = await create_pipeline(app_client, "serving-path", graph)
     run = await _run_pipeline(app_client, worker_sessions, pipeline["id"])
     assert run["status"] == "succeeded"
     response = await app_client.post(

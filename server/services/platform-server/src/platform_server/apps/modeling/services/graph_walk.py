@@ -206,11 +206,22 @@ def _incoming_ports(
 
 
 def prediction_path(graph: PipelineGraph, model_id: str) -> set[str]:
-    """收集模型祖先、模型本身及打分口后的连续后处理。Args: graph, model_id。"""
+    """收集模型的推理上游、模型及打分后的步骤。Args: graph, model_id。"""
     nodes = graph.node_by_id()
+    operator = registry.get(nodes[model_id].operator)
+    uses_train_input = operator.MODEL_TASK in {
+        "regression",
+        "classification",
+    } and any(port.name == "train" for port in operator.INPUTS)
     upstream: dict[str, list[str]] = defaultdict(list)
     postprocess: dict[str, list[str]] = defaultdict(list)
     for edge in graph.edges:
+        if (
+            uses_train_input
+            and edge.to_node == model_id
+            and edge.to_port != "train"
+        ):
+            continue
         upstream[edge.to_node].append(edge.from_node)
         if edge.from_port == "scored" and edge.to_port == "scored":
             target = registry.get(nodes[edge.to_node].operator)
