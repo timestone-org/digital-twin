@@ -293,9 +293,8 @@ class PlatformClient:
     ) -> object | None:
         """按 `(source_id, code)` 找那一个点位；没有就给 None。
 
-        ⚠ 上游没有按编码精确取一条的端点，`q` 是名字/编码的模糊匹配；
-        这里按 `q=code` 逐页取、本地按编码逐字比对。⚠ 要翻页：短编码能匹配上
-        多于一页的条目，精确那条排在后面时只看第一页会说成「库里没有」。
+        新平台按 `code` 精确筛选。旧平台忽略它，按 `q` 模糊查找，仍需逐页按原
+        编码核对。
 
         Args: headers, source_id, code。
         """
@@ -315,6 +314,7 @@ class PlatformClient:
                 "page": page,
                 "size": self._page_size,
                 "source_id": source_id,
+                "code": code,
                 "q": code,
             }
             body = await self._get(_POINTS, query, headers)
