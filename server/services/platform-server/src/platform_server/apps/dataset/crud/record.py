@@ -263,6 +263,13 @@ class RecordCrud(CrudBase[DatasetRecord]):
             session, window=window, wanted=limit + 1, is_newest_first=False
         )
 
+    async def has_rows_in(
+        self, session: AsyncSession, window: RecordWindow
+    ) -> bool:
+        """检查范围内有无待算行。Args: session, window。"""
+        query = window.narrow(select(DatasetRecord.row_id)).limit(1)
+        return await session.scalar(query) is not None
+
     async def has_rows_after(
         self, session: AsyncSession, *, table_id: uuid.UUID, ts: datetime
     ) -> bool:

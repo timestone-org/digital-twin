@@ -20,6 +20,7 @@ from lib.utils.timeutils import format_rfc3339, utcnow
 from platform_server.apps.dataset.crud import (
     RecordWindow,
     column_crud,
+    record_crud,
     table_crud,
 )
 from platform_server.apps.dataset.errors import (
@@ -43,6 +44,7 @@ from platform_server.apps.dataset.services.record_compute import (
     log_recompute,
     recompute_range,
 )
+from platform_server.apps.dataset.services.record_history import prepare_models
 from platform_server.apps.dataset.services.sessions import Sessions
 
 _logger = get_logger("platform.dataset.compute")
@@ -257,21 +259,28 @@ async def _recompute_once(
     Args: context, state。
     """
     table_id = uuid.UUID(state.table_id)
+    window = RecordWindow(
+        table_id=table_id, since=state.since, until=state.until
+    )
     async with context.sessions.session() as session:
         table = await table_crud.get(session, table_id)
         if table is None:
             raise DatasetBackfillInvalid("这张台账已被删除，重算中止")
-        columns = await column_crud.list_by_table(session, table.id)
+        columns = await column_crud.list_by_table(session, table_id)
         scope = await build_scope(
             session, columns=columns, timezone=context.timezone
         )
+        if scope.plan.model_refs and not await record_crud.has_rows_in(
+            session, window
+        ):
+            return RecomputeOutcome(0, 0, False, MAX_RECOMPUTE_ROWS)
+    scope = await prepare_models(context.sessions, scope)
+    async with context.sessions.session() as session:
+        table = await table_crud.get(session, table_id)
+        if table is None:
+            raise DatasetBackfillInvalid("这张台账已被删除，重算中止")
         outcome = await recompute_range(
-            session,
-            scope,
-            table_id=table.id,
-            window=RecordWindow(
-                table_id=table.id, since=state.since, until=state.until
-            ),
+            session, scope, table_id=table_id, window=window
         )
         if outcome.recomputed:
             await session.flush()
