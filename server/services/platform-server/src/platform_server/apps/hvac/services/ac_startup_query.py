@@ -52,7 +52,7 @@ from platform_server.apps.hvac.services.ac_startup_rules import ExtractionRules
 from platform_server.apps.hvac.services.sessions import Sessions
 from platform_server.apps.hvac.startups import (
     BATCH_RETENTION,
-    OUTCOMES,
+    READ_OUTCOMES,
     SHARD_STATUS_DONE,
 )
 
@@ -111,7 +111,7 @@ def parse_filters(outcome: str | None, running_set: str | None) -> EpisodePage:
     否则「K12,K11」会一条都查不到而看起来像没有数据。
     Args: outcome, running_set。
     """
-    if outcome is not None and outcome not in OUTCOMES:
+    if outcome is not None and outcome not in READ_OUTCOMES:
         raise _rejected("outcome", "结果取值不在目录内")
     serials = _parse_serials(running_set)
     return EpisodePage(limit=0, outcome=outcome, running_set=serials)

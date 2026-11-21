@@ -19,11 +19,11 @@ from lib.db import TimestampMixin, UuidPrimaryKeyMixin
 from platform_server.apps.hvac.models.base import Base
 from platform_server.apps.hvac.startups import (
     OUTCOME_USABLE,
-    OUTCOMES,
+    READ_OUTCOMES,
     sql_values,
 )
 
-_OUTCOME_VALUES = sql_values(OUTCOMES)
+_OUTCOME_VALUES = sql_values(READ_OUTCOMES)
 
 
 class AcStartupEpisode(UuidPrimaryKeyMixin, TimestampMixin, Base):

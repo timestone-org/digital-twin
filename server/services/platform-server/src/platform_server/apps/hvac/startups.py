@@ -46,6 +46,10 @@ OUTCOMES: frozenset[str] = frozenset(
     }
 )
 
+# 读面先兼容，抽取写入在部署下一阶段启用。
+READ_ONLY_OUTCOME_UNASSESSED = "unassessed"
+READ_OUTCOMES = OUTCOMES | {READ_ONLY_OUTCOME_UNASSESSED}
+
 # 每个房间保留最近几个批次，更老的清理（§4.1）
 BATCH_RETENTION = 3
 
