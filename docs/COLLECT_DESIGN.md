@@ -336,7 +336,7 @@ POST   /api/v1/platform/collect-sources/{id}:test        连通性测试（走�
 POST   /api/v1/platform/collect-sources/{id}:browse      地址空间浏览一页（默认 200、最大 500 条，10s 超时）
 POST   /api/v1/platform/collect-sources/{id}:browse-subtree  有界遍历子树（最多 2000 节点，15s 超时）
 
-GET    /api/v1/platform/collect-points?source_id=&q=&status= 分页 + 搜索 + 全量状态筛选
+GET    /api/v1/platform/collect-points?source_id=&q=&code=&status= 分页 + 搜索 + 全量状态筛选
 POST   /api/v1/platform/collect-points                   支持批量
 POST   /api/v1/platform/collect-points:import             按源与编码新增或更新，空白保留
 PATCH  /api/v1/platform/collect-points/{id}
@@ -354,8 +354,9 @@ POST   /api/v1/platform/point-histories:aggregate         分桶聚合，回 is_
 GET    /internal/v1/platform/collect-plan                collector 拉计划，服务级密钥
 ```
 
-点位列表的 `status` 是可选白名单参数，默认 `all`。`source_id`、`q` 与状态条件
-共同限定结果；**先筛选全部候选点位，再分页**，`total` 是全部匹配数。
+点位列表的 `status` 是可选白名单参数，默认 `all`。`code` 按原编码区分大小写，和
+`source_id` 一起可定位一个点位。`q` 仍按名称和编码模糊匹配，所有已提供的条件共同
+限定结果。**先筛选全部候选点位，再分页**，`total` 是全部匹配数。
 
 | `status` | 查询口径 |
 |---|---|

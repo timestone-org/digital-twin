@@ -64,6 +64,44 @@ def online(collect_fakes: CollectFakes, source_id: str) -> None:
     )
 
 
+@pytest.mark.parametrize("status", ["all", "abnormal"])
+async def test_exact_code_is_applied_before_pagination_and_status_filtering(
+    app_client: httpx.AsyncClient,
+    collect_fakes: CollectFakes,
+    snapshots: FakeSnapshotSource,
+    status: str,
+) -> None:
+    source = await create_source(app_client)
+    other = await create_source(app_client, code="line-2")
+    await create_points(
+        app_client, source["id"], point_item("a-pump"), point_item("pump")
+    )
+    await create_points(app_client, other["id"], point_item("pump"))
+    online(collect_fakes, source["id"])
+    snapshots.readings.update(
+        {
+            f"{source['id']}:a-pump": PointReading(None, 1, "bad"),
+            f"{source['id']}:pump": PointReading(None, 1, "bad"),
+        }
+    )
+    response = await app_client.get(
+        POINTS,
+        params={
+            "source_id": source["id"],
+            "q": "pump",
+            "code": "pump",
+            "status": status,
+            "size": 1,
+        },
+    )
+    assert response.status_code == 200
+    data = payload(response)
+    assert data["total"] == 1
+    assert [(row["source_id"], row["code"]) for row in data["items"]] == [
+        (source["id"], "pump")
+    ]
+
+
 async def test_abnormal_filter_finds_points_beyond_the_unfiltered_first_page(
     app_client: httpx.AsyncClient,
     collect_fakes: CollectFakes,
@@ -379,7 +417,9 @@ async def test_runtime_reads_release_the_configuration_transaction(
     result = await list_points(
         db_session,
         context,
-        filters=PointFilters(uuid.UUID(source["id"]), None, "abnormal"),
+        filters=PointFilters(
+            source_id=uuid.UUID(source["id"]), status="abnormal"
+        ),
         page=PageParams(page=1, size=20),
     )
     assert result.total == 1

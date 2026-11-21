@@ -81,7 +81,7 @@ async def test_query_budget_cancels_pending_database_work(
             await list_points(
                 session,
                 context,
-                filters=PointFilters(None, None, "abnormal"),
+                filters=PointFilters(status="abnormal"),
                 page=PageParams(page=1, size=20),
             )
     assert canceled.is_set()

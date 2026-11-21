@@ -16,7 +16,11 @@ from lib.errors.base import FieldError
 from lib.logging import get_logger
 from lib.web import Page, PageParams
 from platform_server.apps.collect.crud import point_crud
-from platform_server.apps.collect.crud.point import DEFAULT_ORDER, SORTABLE
+from platform_server.apps.collect.crud.point import (
+    DEFAULT_ORDER,
+    SORTABLE,
+    PointLookup,
+)
 from platform_server.apps.collect.errors import (
     PointCodeTaken,
     PointInvalid,
@@ -60,17 +64,16 @@ POINT_CODE_CONSTRAINT = "uq_collect_points_source_id_code"
 async def list_points(
     session: AsyncSession,
     *,
-    source_id: uuid.UUID | None,
-    keyword: str | None,
+    lookup: PointLookup,
     page: PageParams,
     sort: str | None,
 ) -> Page[PointOut]:
     """点位列表。Agent 按名字找点也走它。
 
-    Args: session, source_id, keyword, page, sort。
+    Args: session, lookup, page, sort。
     """
     statement = point_crud.order_by_whitelist(
-        point_crud.build_query(source_id=source_id, keyword=keyword),
+        point_crud.build_query(lookup),
         sort=sort,
         allowed=dict(SORTABLE),
         default=DEFAULT_ORDER,

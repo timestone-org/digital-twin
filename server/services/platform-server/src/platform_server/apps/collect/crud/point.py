@@ -46,6 +46,15 @@ PLAN_PAGE_ROWS: Final[int] = 2000
 
 
 @dataclass(frozen=True)
+class PointLookup:
+    """可组合的点位配置筛选条件。"""
+
+    source_id: uuid.UUID | None = None
+    keyword: str | None = None
+    code: str | None = None
+
+
+@dataclass(frozen=True)
 class PlanPointRow:
     """构建采集计划所需的点位字段。"""
 
@@ -115,18 +124,15 @@ class PointCrud(CrudBase[CollectPoint]):
         self,
         session: AsyncSession,
         *,
-        filters: tuple[uuid.UUID | None, str | None],
+        lookup: PointLookup,
         after: PointCursor | None,
         limit: int,
     ) -> list[PointCandidate]:
         """按稳定锚点读取一批候选。
 
-        Args: session, filters, after, limit。
+        Args: session, lookup, after, limit。
         """
-        source_id, keyword = filters
-        statement = self.build_query(
-            source_id=source_id, keyword=keyword
-        ).with_only_columns(
+        statement = self.build_query(lookup).with_only_columns(
             CollectPoint.id, CollectPoint.source_id, CollectPoint.code
         )
         if after is not None:
@@ -312,20 +318,22 @@ class PointCrud(CrudBase[CollectPoint]):
         return int(rows.scalar_one())
 
     @staticmethod
-    def build_query(
-        *, source_id: uuid.UUID | None, keyword: str | None
-    ) -> Select[tuple[CollectPoint]]:
+    def build_query(lookup: PointLookup) -> Select[tuple[CollectPoint]]:
         """按过滤条件构造列表查询。
 
-        Args: source_id, keyword（Agent 按名字找点用）。
+        Args: lookup。
         """
         statement = select(CollectPoint)
-        if source_id is not None:
-            statement = statement.where(CollectPoint.source_id == source_id)
-        if keyword:
+        if lookup.source_id is not None:
             statement = statement.where(
-                CollectPoint.name.icontains(keyword, autoescape=True)
-                | CollectPoint.code.icontains(keyword, autoescape=True)
+                CollectPoint.source_id == lookup.source_id
+            )
+        if lookup.code is not None:
+            statement = statement.where(CollectPoint.code == lookup.code)
+        if lookup.keyword:
+            statement = statement.where(
+                CollectPoint.name.icontains(lookup.keyword, autoescape=True)
+                | CollectPoint.code.icontains(lookup.keyword, autoescape=True)
             )
         return statement
 

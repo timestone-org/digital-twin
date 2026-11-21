@@ -64,9 +64,14 @@ def list_filters(
     source_id: uuid.UUID | None = None,
     q: str | None = None,
     status: PointStatus = "all",
+    code: Annotated[
+        str | None, Query(description="按点位编码区分大小写精确匹配")
+    ] = None,
 ) -> PointFilters:
-    """点位列表的组合查询条件。Args: source_id, q, status。"""
-    return PointFilters(source_id=source_id, keyword=q, status=status)
+    """点位列表的组合查询条件。Args: source_id, q, status, code。"""
+    return PointFilters(
+        source_id=source_id, keyword=q, code=code, status=status
+    )
 
 
 FilterDep = Annotated[PointFilters, Depends(list_filters)]

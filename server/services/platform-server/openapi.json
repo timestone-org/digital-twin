@@ -28910,6 +28910,24 @@
               "title": "Status",
               "type": "string"
             }
+          },
+          {
+            "description": "按点位编码区分大小写精确匹配",
+            "in": "query",
+            "name": "code",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "description": "按点位编码区分大小写精确匹配",
+              "title": "Code"
+            }
           }
         ],
         "responses": {
