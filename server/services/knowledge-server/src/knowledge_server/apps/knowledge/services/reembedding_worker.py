@@ -9,12 +9,13 @@ from dataclasses import dataclass
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from knowledge_server.apps.knowledge.crud import reembedding as jobs
+from knowledge_server.apps.knowledge.crud import source_records
 from knowledge_server.apps.knowledge.models import KnowledgeBase, ReembeddingJob
 from knowledge_server.apps.knowledge.services.embedding import SnapshotEmbedder
 from knowledge_server.apps.knowledge.services.embedding.space import model_label
 from knowledge_server.apps.knowledge.services.ingest_pipeline import Sessions
 from lib.logging import bind_log_context, get_logger, reset_log_context
-from lib.logging.trace import new_span_id, parse_traceparent
+from lib.logging.trace import new_span_id, new_trace_id, parse_traceparent
 from lib.utils.timeutils import utcnow
 from llmcore.embedding_snapshot import EmbeddingBatch
 
@@ -22,6 +23,7 @@ _logger = get_logger("knowledge.reembedding")
 BATCH_TIMEOUT_S = 60.0
 LEASE_SECONDS = 90
 POLL_SECONDS = 1.0
+SOURCE_RECOVERIES_PER_TICK = 8
 MOVED = "库内容在重嵌期间发生了变化，请重新预览"
 CONTENDED = "原文行正在被占用或已改变，本次未切换，请重新预览"
 SWITCHED = "目标嵌入空间已改变，请重新预览"
@@ -170,7 +172,12 @@ class ReembeddingSteps:
                 if not await jobs.deferred_are_writable(session, base.id):
                     _finish(session, job, CONTENDED)
                     return []
-                await jobs.complete_deferred_documents(session, base.id)
+                async with session.begin_nested() as publication:
+                    await jobs.complete_deferred_documents(session, base.id)
+                    if not await source_records.publish_ready(session, base.id):
+                        await publication.rollback()
+                        _finish(session, job, CONTENDED)
+                        return []
                 prior = (
                     base.embedding_space_id,
                     base.active_embedding_generation_id,
@@ -228,8 +235,14 @@ class ReembeddingSteps:
 class ReembeddingConsumer:
     """由知识 worker 运行的持久队列消费循环。"""
 
-    def __init__(self, steps: ReembeddingSteps) -> None:
+    def __init__(
+        self,
+        steps: ReembeddingSteps,
+        recover_sources: Callable[[], Awaitable[bool]] | None = None,
+    ) -> None:
         self._steps = steps
+        self._source_recovery = recover_sources
+        self._next_source_check = 0.0
         self._stop = asyncio.Event()
         self._idle = asyncio.Event()
         self._idle.set()
@@ -239,6 +252,7 @@ class ReembeddingConsumer:
         while not self._stop.is_set():
             self._idle.clear()
             try:
+                await self._recover_source_version()
                 worked = await self._steps.run_one()
                 now = asyncio.get_running_loop().time()
                 if not worked and now >= self._cleanup_at:
@@ -256,6 +270,25 @@ class ReembeddingConsumer:
             if not worked:
                 with suppress(TimeoutError):
                     await asyncio.wait_for(self._stop.wait(), POLL_SECONDS)
+
+    async def _recover_source_version(self) -> None:
+        now = asyncio.get_running_loop().time()
+        if self._source_recovery is None or now < self._next_source_check:
+            return
+        self._next_source_check = now + POLL_SECONDS
+        token = bind_log_context(trace_id=new_trace_id(), span_id=new_span_id())
+        try:
+            for _ in range(SOURCE_RECOVERIES_PER_TICK):
+                if not await self._source_recovery():
+                    break
+        except Exception as error:
+            _logger.warning(
+                "source_version_recovery_unavailable",
+                "来源版本暂时无法接续",
+                reason=type(error).__name__,
+            )
+        finally:
+            reset_log_context(token)
 
     def stop(self) -> None:
         self._stop.set()

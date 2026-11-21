@@ -14,6 +14,7 @@ from knowledge_server.apps.knowledge.services.ingest_pipeline import IngestDeps
 from knowledge_server.apps.knowledge.services.ingest_worker import (
     ConsumerOptions,
     IngestConsumer,
+    IngestStreams,
 )
 from lib.db import Database
 from lib.stream import StreamEntry, StreamGroup, StreamLike
@@ -118,3 +119,34 @@ async def test_the_loop_survives_when_recording_the_failure_also_fails(
     await _consumer(stream).run()
 
     assert stream.acked == ["2-0"], "落不了终态的那条要留给重新认领"
+
+
+async def test_the_worker_finishes_one_lane_before_parsing_the_other(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    regular, version = uuid.uuid4(), uuid.uuid4()
+    ordinary = _Stream([_entry("1-0", regular)])
+    versions = _Stream([_entry("2-0", version)])
+    combined = IngestStreams(_consumer(ordinary), _consumer(versions), 20)
+    ordinary.stop = lambda: None
+    versions.stop = combined.stop
+    parsed: list[uuid.UUID] = []
+
+    async def ingest(
+        session: object,
+        deps: object,
+        document: uuid.UUID,
+        generation: uuid.UUID,
+    ) -> None:
+        del session, deps, generation
+        if document == version:
+            assert ordinary.acked == ["1-0"]
+        parsed.append(document)
+
+    monkeypatch.setattr(ingest_worker, "ingest", ingest)
+
+    await combined.run()
+    await combined.drain(0.5)
+
+    assert parsed == [regular, version]
+    assert versions.acked == ["2-0"]

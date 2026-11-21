@@ -28,6 +28,7 @@ class DocumentWrite:
     byte_size: int
     content_hash: str
     ingest_generation: uuid.UUID | None = None
+    source_revision_state: str | None = None
 
 
 async def insert_document(session: AsyncSession, write: DocumentWrite) -> None:
@@ -52,6 +53,7 @@ async def insert_document(session: AsyncSession, write: DocumentWrite) -> None:
             byte_size=write.byte_size,
             content_hash=write.content_hash,
             ingest_generation=write.ingest_generation,
+            source_revision_state=write.source_revision_state,
         )
     )
     await session.flush()
@@ -155,11 +157,6 @@ async def mark_status(
                 "historical"
             ),
         )
-        .where(
-            KnowledgeDocument.source_revision_state.is_distinct_from(
-                "historical"
-            )
-        )
         .values(status=status, failure_reason=reason)
     )
     # cast 的理由 —— DML 的 execute 运行期返回 CursorResult，而 AsyncSession
@@ -247,6 +244,9 @@ async def mark_requeued(
         .where(
             KnowledgeDocument.id == document_id,
             KnowledgeDocument.status.in_(("pending", "ready", "failed")),
+            KnowledgeDocument.source_revision_state.is_distinct_from(
+                "historical"
+            ),
         )
         .values(
             status="pending",

@@ -20,6 +20,9 @@ from knowledge_server.apps.knowledge.models.reembedding import (
     ReembeddingJob,
 )
 from knowledge_server.apps.knowledge.models.source import KnowledgeSource
+from knowledge_server.apps.knowledge.models.source_record import (
+    KnowledgeSourceRecord,
+)
 
 __all__ = [
     "FIGURE_KINDS",
@@ -29,6 +32,7 @@ __all__ = [
     "KnowledgeDocument",
     "KnowledgeFigure",
     "KnowledgeSource",
+    "KnowledgeSourceRecord",
     "ReembeddingAudit",
     "ReembeddingJob",
 ]

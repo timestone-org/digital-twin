@@ -104,12 +104,20 @@ class IngestConsumer:
         ⚠ 每一轮先认领一次掉队的消息：某个副本在跑到一半时被杀掉，它手上那条
         既没确认也没人管，不认领就永远卡在待处理列表里。
         """
+        await self.start_consuming()
+        while not self._is_stopping:
+            await self.consume_batch()
+
+    async def start_consuming(self) -> None:
+        """建立本流的消费组。"""
         await self._stream.ensure_group(self._options.target)
         _logger.info("knowledge_ingest_started", "摄取消费者已启动")
-        while not self._is_stopping:
-            entries = await self._taken()
-            for entry in entries:
-                await self._handle_guarded(entry)
+
+    async def consume_batch(self, poll_ms: int | None = None) -> None:
+        """读取并完整处理一批，处理时保持续租。Args: poll_ms。"""
+        entries = await self._taken(poll_ms)
+        for entry in entries:
+            await self._handle_guarded(entry)
 
     async def _handle_guarded(self, entry: StreamEntry) -> None:
         """跑一条；收场本身出错时不确认，留给重新认领，循环继续。
@@ -126,7 +134,7 @@ class IngestConsumer:
                 error=error,
             )
 
-    async def _taken(self) -> list[StreamEntry]:
+    async def _taken(self, poll_ms: int | None = None) -> list[StreamEntry]:
         """取一批：先认领掉队的，没有再等新的。"""
         try:
             stale = await self._stream.claim_stale(
@@ -139,7 +147,7 @@ class IngestConsumer:
             return await self._stream.read_group(
                 self._options.target,
                 count=self._options.batch,
-                block_ms=self._options.block_ms,
+                block_ms=self._options.block_ms if poll_ms is None else poll_ms,
             )
         except Exception as error:
             _logger.error(
@@ -360,3 +368,33 @@ class IngestConsumer:
                 "确认前消息所有权已转移，未确认",
                 entry_id=entry.entry_id,
             )
+
+
+class IngestStreams:
+    """交替消费通用流和来源版本流，同一进程同时只解析一份原件。"""
+
+    def __init__(
+        self, regular: IngestConsumer, versions: IngestConsumer, poll_ms: int
+    ) -> None:
+        self._poll_ms = max(1, poll_ms // 2)
+        self._consumers = (regular, versions)
+        self._is_stopping = False
+
+    async def run(self) -> None:
+        for consumer in self._consumers:
+            await consumer.start_consuming()
+        while not self._is_stopping:
+            for consumer in self._consumers:
+                if self._is_stopping:
+                    return
+                await consumer.consume_batch(self._poll_ms)
+
+    def stop(self) -> None:
+        self._is_stopping = True
+        for consumer in self._consumers:
+            consumer.stop()
+
+    async def drain(self, timeout_s: float) -> None:
+        await asyncio.gather(
+            *(consumer.drain(timeout_s) for consumer in self._consumers)
+        )

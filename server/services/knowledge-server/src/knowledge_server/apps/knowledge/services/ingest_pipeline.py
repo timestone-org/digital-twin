@@ -154,6 +154,7 @@ class _Pending:
     external_ref: str
     object_key: str
     generation: uuid.UUID | None
+    saved_chunk_count: int
 
 
 async def _raw_of(
@@ -342,6 +343,11 @@ async def _claimed(
             external_ref=row.external_ref,
             object_key=row.object_key,
             generation=row.ingest_generation,
+            saved_chunk_count=(
+                row.chunk_count
+                if row.source_revision_state in ("current", "pending")
+                else 0
+            ),
         )
 
 
@@ -424,6 +430,9 @@ async def ingest(
             document_id=str(document_id),
         )
         return "skipped"
+    if document.saved_chunk_count:
+        await _reindex_saved(sessions, deps, document)
+        return READY
     await _embeddable(sessions, deps, document.base_id)
     raw = await _raw_of(sessions, deps, document)
     # ⚠ 先落派生物再解析，避免 PDF 与带图的 ParsedDocument 同时占住内存
@@ -440,6 +449,27 @@ async def ingest(
     )
     await _publish_parsed(sessions, deps, document, parsed, chunks)
     return READY
+
+
+async def _reindex_saved(
+    sessions: Sessions, deps: IngestDeps, document: _Pending
+) -> None:
+    await deps.refresh()
+    source = ingest_vectors.Source(
+        document.base_id, document.document_id, document.generation
+    )
+    await _staged(sessions, document.document_id, "embedding")
+    try:
+        await ingest_vectors.reindex_saved(
+            sessions,
+            source,
+            deps.embedder,
+            deps.batch_size,
+            document.saved_chunk_count,
+        )
+    except EmbeddingUnavailable as error:
+        await ingest_vectors.defer_saved(sessions, source, str(error))
+        raise IngestFailed(str(error)) from error
 
 
 async def _publish_parsed(
@@ -464,7 +494,7 @@ async def _publish_parsed(
         ) as batch:
             figures = await _figures_of(deps, document, parsed)
             async with sessions() as session:
-                await ingest_vectors.publish(
+                await ingest_vectors.publish_document(
                     session, batch, deps.embedder, chunks, figures
                 )
     except EmbeddingUnavailable as error:
