@@ -18,13 +18,8 @@ import { computed, onBeforeUnmount, onMounted, provide, ref, watch } from 'vue'
 
 import { GroundGridLayer } from './groundGrid'
 import { GameNavigationControls } from './gameNavigationControls'
-import {
-  executePreviewAction,
-  previewTargetBox,
-  type TwinPreviewAction,
-} from './previewActions'
-import type { TwinSceneSelection } from './pickTargets'
-import { PreviewIsolation } from './previewIsolation'
+import { executePreviewAction, type TwinPreviewAction } from './previewActions'
+import { useScenePreview, type ScenePreviewTarget } from './useScenePreview'
 import { ModelAnimations } from './modelAnimations'
 import TwinGameHint from './TwinGameHint.vue'
 import TwinPartModal from './TwinPartModal.vue'
@@ -60,7 +55,8 @@ import {
 const props = defineProps<{
   /** ⚠ 必须是 `normalizeTwinConfig` 的输出：这里按引用比对，就地改字段不会重绘。 */
   config: TwinConfig
-  previewTarget?: TwinSceneSelection | null
+  /** 配置预览的取景目标和工作面。 */
+  preview?: ScenePreviewTarget
   previewAction?: TwinPreviewAction | null
   /** 配置预览隔离的模型节点；缺省使用正常场景显隐。 */
   previewNodes?: readonly string[] | undefined
@@ -100,9 +96,6 @@ let layers: SceneLayers | null = null
 let groundGrid: GroundGridLayer | null = null
 let animations: ModelAnimations | null = null
 let gameNavigation: GameNavigationControls | null = null
-const isolation = new PreviewIsolation()
-let previewKey = ''
-let targetKey = ''
 
 /** 摆放之后量下的模型包围盒对角线；`placeModel` 里更新。 */
 let spanCache = 0
@@ -122,6 +115,17 @@ const sceneCamera = useSceneCamera({
 // 切视点/详情/定位共用的那段飞行；用户一碰轨道控制器就取消（onMounted 里挂）
 const flight = sceneCamera.flight
 
+const scenePreview = useScenePreview({
+  core: () => core,
+  config: () => props.config,
+  root: () => model.root(),
+  index: () => model.index(),
+  nodes: () => props.previewNodes,
+  target: () => props.preview?.target,
+  span: modelSpan,
+  camera: sceneCamera,
+})
+
 const model = useTwinModelLoad({
   core: () => core,
   asset: () => props.config.model.asset,
@@ -129,9 +133,7 @@ const model = useTwinModelLoad({
   parts: () => props.config.parts,
   onBeforeClear: () => {
     spanCache = 0
-    isolation.restore()
-    targetKey = ''
-    previewKey = ''
+    scenePreview.clear()
     flight.cancel()
     animations?.dispose()
     animations = null
@@ -149,7 +151,7 @@ const model = useTwinModelLoad({
     structure.rebuild()
     refreshLayers()
     sceneCamera.applyView(props.focusView)
-    applyTargetPreview()
+    scenePreview.applyTarget()
     runPreviewAction()
     // ⚠ 换模型后弹窗里克隆的那份对象已经不在场上了：补这一下让它按新模型重建
     detail.sync(props.config.parts)
@@ -274,7 +276,7 @@ const tintValues = computed(() => sceneValuesOf(props).parts)
 
 function refreshLayers(): void {
   if (core === null) return
-  isolation.restore()
+  scenePreview.restore()
   syncNavigationMode()
   // ⚠ 摆放要跟着配置重算：只在装载时应用的话，编辑器里改缩放/位移/旋转
   // 会一直到换模型才生效，中间那段是「调了没反应」
@@ -284,40 +286,10 @@ function refreshLayers(): void {
   layers?.build(props.config, liveValues(), model.index())
   // ⚠ 建完立刻按当前机位算一次：等下一帧的话，配了近距隐藏的元素会先露一帧
   layers?.applyDistanceRules(distanceContextOf(core))
-  applyPreview()
-  applyTargetPreview()
+  scenePreview.applyNodes()
+  scenePreview.applyTarget()
 }
 
-function applyPreview(): void {
-  const root = model.root()
-  if (root === null || core === null) return
-  const names = props.previewNodes
-  if (names === undefined) {
-    if (previewKey !== '') sceneCamera.applyInitial(root)
-    previewKey = ''
-    return
-  }
-  const box = isolation.apply(root, model.index(), names)
-  const key = JSON.stringify(names)
-  if (key !== previewKey && box !== null) flight.flyToBox(core, box)
-  previewKey = key
-}
-
-function applyTargetPreview(): void {
-  if (core === null || model.root() === null) return
-  const box = previewTargetBox(props.config, props.previewTarget, modelSpan())
-  if (box === null) {
-    targetKey = ''
-    return
-  }
-  const key = JSON.stringify([
-    props.previewTarget,
-    box.min.toArray(),
-    box.max.toArray(),
-  ])
-  if (key !== targetKey) flight.flyToBox(core, box)
-  targetKey = key
-}
 function runPreviewAction(): void {
   executePreviewAction(props.previewAction, {
     config: props.config,
@@ -395,7 +367,7 @@ function disposeLayers(): void {
 
 onBeforeUnmount(() => {
   // ⚠ 先让在途装载作废再释放：晚一步回来的那次会往已 dispose 的场景里挂模型
-  isolation.restore()
+  scenePreview.restore()
   model.abort()
   viewpoints.detach()
   flight.cancel()
@@ -419,7 +391,15 @@ watch(model.status, (status) => {
 })
 watch(() => props.focusView, sceneCamera.applyView)
 watch(() => props.previewNodes, refreshLayers)
-watch(() => props.previewTarget, applyTargetPreview)
+watch(() => props.preview?.target, scenePreview.applyTarget)
+watch(
+  () => props.preview?.context,
+  () => {
+    detail.close()
+    roam.pause()
+    scenePreview.reset(props.focusView)
+  },
+)
 watch(() => props.previewAction, runPreviewAction)
 watch([() => roam.progress.value, () => roam.playing.value], () =>
   emit('roamProgress', { ...roam.progress.value, playing: roam.playing.value }),

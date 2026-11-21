@@ -83,9 +83,9 @@ const focusView = computed(() =>
     : preview.value.view,
 )
 // 编辑期间保留弹窗；普通预览清除取景时重新框住部件。
-const sceneKey = computed(
+const previewContext = computed(
   () =>
-    `${simulation.value}:${partMode.value}:${request.value?.kind === 'detail-edit' ? 'view-editor' : partMode.value === 'detail' && focusView.value !== null}`,
+    `${partMode.value}:${request.value?.kind === 'detail-edit' ? 'view-editor' : partMode.value === 'detail' && focusView.value !== null}`,
 )
 const testLabel = computed(
   () =>
@@ -284,11 +284,10 @@ watch(
         :style="{ aspectRatio: `${node?.w || 16} / ${node?.h || 9}` }"
       >
         <Scene
-          :key="sceneKey"
           :config="config"
           :values="sceneValues"
           :preview-nodes="nodes"
-          :preview-target="preview.target ?? null"
+          :preview="{ target: preview.target ?? null, context: previewContext }"
           :preview-action="request"
           :focus-view="focusView"
           @preview-result="result = $event"
