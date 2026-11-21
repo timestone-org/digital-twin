@@ -23,12 +23,11 @@ from sqlalchemy.ext.asyncio import (
 )
 
 from knowledge_server.app import build_app
-from knowledge_server.container import IDEMPOTENCY_NAMESPACE, Container
+from knowledge_server.container import Container
 from knowledge_server.deps import get_session, get_sync_sessions
 from knowledge_server.settings import Settings
 from lib.config import load_settings
 from lib.db import run_after_commit_hooks
-from lib.idempotency import IdempotencyStore
 from lib.objectstore import PresignedPost, UploadLimits
 from lib.testing import InMemoryCache
 
@@ -152,9 +151,7 @@ def _wire(application: FastAPI, connection: AsyncConnection) -> SessionMaker:
     )
     application.state.container = replace(
         built,
-        idempotency=IdempotencyStore(
-            cache=InMemoryCache(), namespace=IDEMPOTENCY_NAMESPACE
-        ),
+        idempotency=replace(built.idempotency, cache=InMemoryCache()),
         objectstore=_NoStore(),  # pyright: ignore[reportArgumentType]
         stream=_NoStream(),  # pyright: ignore[reportArgumentType]
     )

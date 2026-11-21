@@ -192,8 +192,8 @@ def build_container(settings: Settings) -> Container:
         skills=_build_skills(settings),
         database=_build_database(settings),
         cache=cache,
-        idempotency=IdempotencyStore(
-            cache=cache, namespace=IDEMPOTENCY_NAMESPACE
+        idempotency=IdempotencyStore.for_database_writes(
+            cache, IDEMPOTENCY_NAMESPACE
         ),
         objectstore=store,
         stream=_build_stream(settings),
