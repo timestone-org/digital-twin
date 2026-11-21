@@ -78,6 +78,141 @@ function harness(canEdit = true): Harness {
 }
 
 describe('报告模板 AI 工作面', () => {
+  it('报告长正文可以续读，并用原文核对后修改已有段落', async () => {
+    const got = harness()
+    const text = '甲'.repeat(300) + '最后的条件'
+    got.draft().doc_json = {
+      type: 'doc',
+      content: [
+        { type: 'paragraph', content: [{ type: 'text', text }] },
+        { type: 'paragraph', content: [{ type: 'text', text: '保留段落' }] },
+      ],
+    }
+    expect(
+      await got.surface.run(
+        tool('report.read_content', { path: '0', offset: 300 }),
+      ),
+    ).toMatchObject({ text: '最后的条件', has_more: false })
+    await got.surface.run(
+      tool('report.replace_text', {
+        path: '0',
+        expected_text: text,
+        text: '改进后的段落',
+      }),
+    )
+    expect(got.draft().doc_json).toEqual({
+      type: 'doc',
+      content: [
+        {
+          type: 'paragraph',
+          content: [{ type: 'text', text: '改进后的段落' }],
+        },
+        { type: 'paragraph', content: [{ type: 'text', text: '保留段落' }] },
+      ],
+    })
+    await expect(
+      got.surface.run(
+        tool('report.replace_text', {
+          path: '0',
+          expected_text: text,
+          text: '重复写入',
+        }),
+      ),
+    ).rejects.toThrow(/变化/)
+  })
+
+  it('续读按字符计数，窗口边界不会把单个字符拆开', async () => {
+    const got = harness()
+    got.draft().doc_json = {
+      type: 'doc',
+      content: [
+        { type: 'heading', content: [{ type: 'text', text: '甲🌡乙' }] },
+      ],
+    }
+    expect(
+      await got.surface.run(
+        tool('report.read_content', { path: '0', offset: 1, limit: 1 }),
+      ),
+    ).toMatchObject({
+      text: '🌡',
+      total_chars: 3,
+      next_offset: 2,
+    })
+    expect(
+      await got.surface.run(
+        tool('report.read_content', { path: '0', offset: 2, limit: 1 }),
+      ),
+    ).toMatchObject({
+      text: '乙',
+      has_more: false,
+      next_offset: null,
+    })
+  })
+
+  it('混合文字格式允许读取但保留原草稿', async () => {
+    const got = harness()
+    const document = {
+      type: 'doc',
+      content: [
+        {
+          type: 'paragraph',
+          content: [
+            { type: 'text', text: '甲', marks: [{ type: 'bold' }] },
+            { type: 'text', text: '乙' },
+          ],
+        },
+      ],
+    }
+    got.draft().doc_json = document
+    expect(
+      await got.surface.run(tool('report.read_content', { path: '0' })),
+    ).toMatchObject({
+      text: '甲乙',
+      can_replace_text: false,
+    })
+    await expect(
+      got.surface.run(
+        tool('report.replace_text', {
+          path: '0',
+          expected_text: '甲乙',
+          text: '新值',
+        }),
+      ),
+    ).rejects.toThrow(/复杂内容|文本格式/)
+    expect(got.draft().doc_json).toEqual(document)
+  })
+
+  it('报告结构可以读取第120项以后的内容', async () => {
+    const got = harness()
+    got.draft().doc_json = {
+      type: 'doc',
+      content: Array.from({ length: 121 }, (_, index) => ({
+        type: 'paragraph',
+        content: [{ type: 'text', text: `段落${String(index)}` }],
+      })),
+    }
+    const legacy = await got.surface.run(tool('report.read_draft'))
+    expect(legacy).toMatchObject({ document: { is_truncated: true } })
+    if (
+      typeof legacy !== 'object' ||
+      legacy === null ||
+      !('document' in legacy)
+    )
+      throw new Error('缺少报告提纲')
+    expect(legacy.document).toHaveProperty('items.length', 120)
+    expect(legacy.document).not.toHaveProperty('next_offset')
+    const current = await got.surface.run(
+      tool('report.read_draft', { offset: 0 }),
+    )
+    expect(current).toMatchObject({
+      document: { returned: 20, next_offset: 20 },
+    })
+    expect(
+      await got.surface.run(tool('report.read_draft', { offset: 120 })),
+    ).toMatchObject({
+      document: { has_more: false, items: [{ path: '119' }, { path: '120' }] },
+    })
+  })
   it('快照提供指标、页面设置和有界正文提纲', () => {
     const got = harness().surface.snapshot()
     expect(got['template_id']).toBe('report-1')
@@ -398,6 +533,18 @@ describe('报告模板 AI 工作面', () => {
     await expect(got.surface.run(tool('report.read_draft'))).resolves.toEqual(
       expect.objectContaining({ template_id: 'report-1' }),
     )
+    await expect(
+      got.surface.run(tool('report.read_content', { path: '0' })),
+    ).resolves.toMatchObject({ text: '运行摘要' })
+    await expect(
+      got.surface.run(
+        tool('report.replace_text', {
+          path: '0',
+          expected_text: '运行摘要',
+          text: '替换',
+        }),
+      ),
+    ).rejects.toThrow('不能修改')
     await expect(
       got.surface.run(tool('report.set_template', { name: '不该改' })),
     ).rejects.toThrow('不能修改')
