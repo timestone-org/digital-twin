@@ -5,6 +5,7 @@ from collections.abc import Callable
 from types import SimpleNamespace
 
 from asyncua import ua
+from asyncua.ua.ua_binary import nodeid_to_binary
 
 from collector_server.apps.collect.drivers.base import (
     DriverConnection,
@@ -72,6 +73,8 @@ class FakeSubscription:
         assert queuesize == opcua_driver.QUEUE_SIZE
         if self.error is not None:
             raise self.error
+        for node in nodes:
+            nodeid_to_binary(node.nodeid)
         taken = list(range(self.next_handle, self.next_handle + len(nodes)))
         self.next_handle += len(nodes)
         self.handles.extend(taken)
@@ -90,6 +93,11 @@ class FakeSubscription:
             reading.Value.Value if reading.Value is not None else None,
             SimpleNamespace(monitored_item=SimpleNamespace(Value=reading)),
         )
+
+    def notify_status(self, status: ua.StatusCode) -> None:
+        callback = getattr(self.handler, "status_change_notification", None)
+        if callback is not None:
+            callback(ua.StatusChangeNotification(Status=status))
 
     async def unsubscribe(self, handle: list[int]) -> None:
         if self.error is not None:
@@ -135,6 +143,7 @@ class FakeClient:
         # 现场的 MaxNodesPerRead；超了整批回 BadTooManyOperations
         self.max_nodes_per_read: int | None = None
         self.read_errors: dict[str, BaseException] = {}
+        self.read_responses: dict[str, list[ua.DataValue]] = {}
         self.on_read: Callable[[], None] | None = None
 
     async def browse(
@@ -220,6 +229,8 @@ class FakeClient:
         if attribute != ua.AttributeIds.DataType:
             if self.on_read is not None:
                 self.on_read()
+            if addresses and addresses[0] in self.read_responses:
+                return self.read_responses[addresses[0]]
             return [self._value_of(address) for address in addresses]
         if self.type_error is not None:
             raise self.type_error

@@ -149,6 +149,28 @@ async def test_heartbeat_asks_the_connection() -> None:
     assert built[0].is_checked is True
 
 
+async def test_heartbeat_detects_subscription_expiry() -> None:
+    made, built = make_driver()
+    await made.connect()
+    await made.subscribe([make_spec("stable")], lambda *_: None)
+    built[0].subscription.notify_status(
+        ua.StatusCode(ua.StatusCodes.BadTimeout)
+    )
+
+    with pytest.raises(DriverNotConnected, match="BadTimeout"):
+        await made.healthcheck()
+
+
+async def test_heartbeat_preserves_a_subscription_with_good_status() -> None:
+    made, built = make_driver()
+    await made.connect()
+    await made.subscribe([make_spec("stable")], lambda *_: None)
+    built[0].subscription.notify_status(ua.StatusCode(ua.StatusCodes.Good))
+
+    await made.healthcheck()
+    assert built[0].is_checked is True
+
+
 async def test_a_connect_timeout_closes_the_half_open_socket() -> None:
     made, built = make_driver(connect_s=0.01, is_connect_hung=True)
     with pytest.raises(TimeoutError):
@@ -222,6 +244,28 @@ async def test_subscribe_splits_batches_per_sampling_interval() -> None:
     )
     assert set(result.accepted) == {"fast", "slow"}
     assert built[0].subscription.batches == [(1, 200.0), (1, 2000.0)]
+
+
+@pytest.mark.parametrize(
+    "address", ["ns=-1;s=bad", "ns=65536;s=bad", "i=-1", "i=4294967296"]
+)
+async def test_out_of_range_node_id_does_not_block_other_points(
+    address: str,
+) -> None:
+    made, built = make_driver()
+    await made.connect()
+    points = [PointSpec("broken", address, 1000), make_spec("ok")]
+    built[0].values["ns=2;s=ok"] = ua.DataValue(Value=ua.Variant(3.5))
+
+    result = await made.subscribe(points, lambda *_: None)
+
+    assert result.accepted == ("ok",)
+    assert [point.point_code for point in result.rejected] == ["broken"]
+    assert built[0].subscription.batches == [(1, 1000.0)]
+    assert await made.read_many(["broken", "ok"]) == [
+        (None, NOW_MS, "bad"),
+        (3.5, NOW_MS, "good"),
+    ]
 
 
 async def test_subscribe_reads_a_stable_point_without_notifications() -> None:
@@ -313,6 +357,26 @@ async def test_read_many_keeps_the_order_across_the_batch_seam() -> None:
     built[0].max_nodes_per_read = MAX_NODES
     await made.read_many(codes)
     assert [len(asked) for _, asked in built[0].asked] == [MAX_NODES, 2]
+
+
+@pytest.mark.parametrize("response_size", [MAX_NODES - 1, MAX_NODES + 1])
+async def test_read_many_discards_misaligned_batch_only(
+    response_size: int,
+) -> None:
+    made, built = make_driver()
+    await made.connect()
+    codes = [f"p{index}" for index in range(MAX_NODES + 2)]
+    made.load_points([make_spec(code) for code in codes])
+    built[0].values = make_readings(codes)
+    built[0].read_responses["ns=2;s=p0"] = [
+        ua.DataValue(Value=ua.Variant(900.0))
+    ] * response_size
+
+    assert await made.read_many(codes) == [
+        *([(None, NOW_MS, "bad")] * MAX_NODES),
+        (float(MAX_NODES), NOW_MS, "good"),
+        (float(MAX_NODES + 1), NOW_MS, "good"),
+    ]
 
 
 async def test_browse_from_the_root_uses_the_objects_folder() -> None:

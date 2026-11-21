@@ -29,24 +29,26 @@ def build_batches(
     ordered = sorted(points, key=lambda item: (item.area, item.offset))
     batches: list[ReadBatch] = []
     current: list[ModbusPoint] = []
+    end = 0
     for point in ordered:
         limit = max_bits if point.area in BIT_AREAS else max_registers
         if point.width > limit:
             raise AddressInvalid("点位宽度超过单次读取上限")
-        if current and _fits(current, point, limit):
+        point_end = point.offset + point.width
+        if current and _fits(current[0], point, end, limit):
             current.append(point)
+            end = max(end, point_end)
             continue
         if current:
-            batches.append(_batch(current))
+            batches.append(_batch(current, end))
         current = [point]
+        end = point_end
     if current:
-        batches.append(_batch(current))
+        batches.append(_batch(current, end))
     return tuple(batches)
 
 
-def _fits(current: list[ModbusPoint], point: ModbusPoint, limit: int) -> bool:
-    first = current[0]
-    end = max(item.offset + item.width for item in current)
+def _fits(first: ModbusPoint, point: ModbusPoint, end: int, limit: int) -> bool:
     return (
         first.area == point.area
         and point.offset <= end
@@ -54,9 +56,8 @@ def _fits(current: list[ModbusPoint], point: ModbusPoint, limit: int) -> bool:
     )
 
 
-def _batch(points: list[ModbusPoint]) -> ReadBatch:
+def _batch(points: list[ModbusPoint], end: int) -> ReadBatch:
     start = points[0].offset
-    end = max(point.offset + point.width for point in points)
     return ReadBatch(
         area=points[0].area,
         offset=start,

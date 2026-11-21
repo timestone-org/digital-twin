@@ -60,24 +60,34 @@ asyncio.run(main())
 class StuckActivation(Client):
     """卡在 activate 的客户端：握手与建会话都是真的，此时后台任务已起。"""
 
+    activation_started: asyncio.Event | None
+
     async def activate_session(
         self, *_args: object, **_kwargs: object
     ) -> object:
+        if self.activation_started is not None:
+            self.activation_started.set()
         await asyncio.Event().wait()
 
 
 def _driver(
-    endpoint: str, built: list[Client], *, connect_s: float, request_s: float
+    endpoint: str,
+    built: list[Client],
+    *,
+    connect_s: float,
+    request_s: float,
+    activation_started: asyncio.Event | None = None,
 ) -> OpcuaDriver:
     """造一个卡在 activate 的驱动。
 
-    Args: endpoint, built, connect_s, request_s。
+    Args: endpoint, built, connect_s, request_s, activation_started。
     """
 
     def factory(connection: DriverConnection) -> Client:
         client = StuckActivation(
             url=connection.endpoint, timeout=connection.timeouts.request_s
         )
+        client.activation_started = activation_started
         built.append(client)
         return client
 
@@ -151,6 +161,35 @@ async def test_a_timeout_after_create_session_tells_the_server_to_close_it(
         with pytest.raises(TimeoutError):
             await made.connect()
         assert process.stdout is not None
+        line = await asyncio.wait_for(process.stdout.readline(), 1.0)
+    assert line.decode().strip() == CLOSE_SESSION_SEEN
+
+
+async def test_cancellation_closes_the_server_session_and_background_tasks(
+    unused_tcp_port: int,
+) -> None:
+    endpoint = f"opc.tcp://127.0.0.1:{unused_tcp_port}/connect-cancel"
+    built: list[Client] = []
+    activation_started = asyncio.Event()
+    made = _driver(
+        endpoint,
+        built,
+        connect_s=PROBE_DEADLINE_S,
+        request_s=TEARDOWN_BUDGET_S,
+        activation_started=activation_started,
+    )
+    async with _server(endpoint) as process:
+        connecting = asyncio.create_task(made.connect())
+        try:
+            await asyncio.wait_for(activation_started.wait(), PROBE_DEADLINE_S)
+        finally:
+            connecting.cancel()
+            with pytest.raises(asyncio.CancelledError):
+                await connecting
+        client = built[0]
+        assert process.stdout is not None
+        tasks = (client._renew_channel_task, client._monitor_server_task)
+        assert all(task is not None and task.done() for task in tasks)
         line = await asyncio.wait_for(process.stdout.readline(), 1.0)
     assert line.decode().strip() == CLOSE_SESSION_SEEN
 

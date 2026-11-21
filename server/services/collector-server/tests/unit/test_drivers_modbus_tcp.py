@@ -158,6 +158,22 @@ def test_only_adjacent_approved_ranges_are_batched() -> None:
     ]
 
 
+def test_an_overlapping_point_does_not_shorten_the_batch_range() -> None:
+    points = [
+        parse_point(_spec("next", "holding:4:uint16", "int")),
+        parse_point(_spec("wide", "holding:0:float64")),
+        parse_point(_spec("overlap", "holding:1:uint16", "int")),
+    ]
+    batches = build_batches(points, max_registers=5, max_bits=2000)
+
+    assert [(batch.offset, batch.count) for batch in batches] == [(0, 5)]
+    assert [point.point_code for point in batches[0].points] == [
+        "wide",
+        "overlap",
+        "next",
+    ]
+
+
 def test_a_wide_value_cannot_exceed_the_configured_request_limit() -> None:
     point = parse_point(_spec("temp", "holding:1:float32"))
     with pytest.raises(AddressInvalid):
