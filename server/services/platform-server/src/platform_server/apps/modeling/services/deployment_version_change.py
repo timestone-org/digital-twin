@@ -35,7 +35,7 @@ from platform_server.apps.modeling.services.management_guard import (
 )
 from platform_server.apps.modeling.services.pipeline_service import Actor
 from platform_server.apps.modeling.services.serving import (
-    SERVING_FORMAT_VERSION,
+    SERVING_FROZEN_DEFAULT_FORMATS,
 )
 from platform_server.apps.modeling.services.template_service import record_audit
 
@@ -178,7 +178,7 @@ def _confirmed_frozen_defaults(
     serving = version.serving_json
     if (
         version.task not in {"regression", "classification"}
-        or serving.get("format_version") != SERVING_FORMAT_VERSION
+        or serving.get("format_version") not in SERVING_FROZEN_DEFAULT_FORMATS
         or serving.get("task") != version.task
     ):
         return {}

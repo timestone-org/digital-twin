@@ -26,6 +26,7 @@ from platform_server.apps.modeling.operators.frame import (
     numbers_of,
 )
 from platform_server.apps.modeling.operators.timefeature import (
+    FITTED_TIMEZONE,
     TimeFeature,
     has_legacy_utc_offset,
 )
@@ -41,6 +42,11 @@ from platform_server.apps.modeling.services.jsonshape import (
 
 # `serving_json` 的线形版本。发布写的是它，加载期据此分派
 SERVING_FORMAT_VERSION = "2.1"
+SERVING_NAMED_TIMEZONE_VERSION = "2.2"
+SERVING_FROZEN_DEFAULT_FORMATS = (
+    SERVING_FORMAT_VERSION,
+    SERVING_NAMED_TIMEZONE_VERSION,
+)
 SERVING_FORMAT_V2 = "2.0"
 # 头一版：入口契约取 `input_columns`，且每一步的期望列都是同一份特征列。
 # ⚠ 这条加载路径**一行都不许改**：模型版本不可变，历史版本必须按它当初的口径
@@ -236,18 +242,19 @@ def compile_model(
     features = _entry_keys_of(serving)
     if not features:
         raise OperatorError("这个模型版本没有输入契约")
+    steps = tuple(_step_of(item) for item in as_list(serving.get(_FIELD_STEPS)))
+    if serving.get(_FIELD_VERSION) == SERVING_NAMED_TIMEZONE_VERSION:
+        _require_frozen_timezone(steps)
     compiled = CompiledModel(
         features=features,
-        steps=tuple(
-            _step_of(item) for item in as_list(serving.get(_FIELD_STEPS))
-        ),
+        steps=steps,
         estimator=estimator,
         input_defaults=(
             leading_input_defaults(
                 [as_dict(item) for item in as_list(serving.get(_FIELD_STEPS))]
             )
             if (
-                serving.get(_FIELD_VERSION) == SERVING_FORMAT_VERSION
+                serving.get(_FIELD_VERSION) in SERVING_FROZEN_DEFAULT_FORMATS
                 and serving.get("task") != TASK_ANOMALY
             )
             else None
@@ -258,6 +265,26 @@ def compile_model(
     return compiled
 
 
+def serving_format_for_steps(steps: list[dict[str, Any]]) -> str:
+    """含命名时区的步骤要求新的冻结格式。Args: steps。"""
+    if any(
+        step.get(_FIELD_OPERATOR) == TimeFeature.CODE
+        and FITTED_TIMEZONE in as_dict(step.get(_FIELD_FITTED))
+        for step in steps
+    ):
+        return SERVING_NAMED_TIMEZONE_VERSION
+    return SERVING_FORMAT_VERSION
+
+
+def _require_frozen_timezone(steps: tuple[_Step, ...]) -> None:
+    """2.2 的时间特征必须采用明确冻结的业务时区。Args: steps。"""
+    time_steps = [step for step in steps if step.operator == TimeFeature.CODE]
+    if not time_steps or any(
+        FITTED_TIMEZONE not in step.fitted for step in time_steps
+    ):
+        raise OperatorError("模型版本没有冻结时间特征的业务时区")
+
+
 def _entry_keys_of(serving: dict[str, Any]) -> tuple[str, ...]:
     """调用方要提供的那几列，按序。
 
@@ -266,7 +293,7 @@ def _entry_keys_of(serving: dict[str, Any]) -> tuple[str, ...]:
     version = as_text(serving.get(_FIELD_VERSION))
     if version == SERVING_FORMAT_V1:
         return tuple(as_texts(serving.get(_FIELD_INPUTS)))
-    if version in (SERVING_FORMAT_V2, SERVING_FORMAT_VERSION):
+    if version in (SERVING_FORMAT_V2, *SERVING_FROZEN_DEFAULT_FORMATS):
         return tuple(
             as_text(as_dict(item).get(_FIELD_KEY))
             for item in as_list(serving.get(_FIELD_ENTRY))

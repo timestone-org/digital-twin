@@ -52,8 +52,8 @@ from platform_server.apps.modeling.services.jsonshape import (
 from platform_server.apps.modeling.services.model_schema import build_schema
 from platform_server.apps.modeling.services.serving import (
     PREDICTION_KEY,
-    SERVING_FORMAT_VERSION,
     compile_model,
+    serving_format_for_steps,
 )
 
 
@@ -279,7 +279,7 @@ def _serving_of(
     Args: publishing, steps, entry。
     """
     return {
-        "format_version": SERVING_FORMAT_VERSION,
+        "format_version": serving_format_for_steps(steps),
         "task": as_text(publishing.payload.get("task")),
         "entry_columns": [
             {"key": item.key, "dtype": item.dtype} for item in entry
