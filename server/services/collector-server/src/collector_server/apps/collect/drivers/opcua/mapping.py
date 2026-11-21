@@ -84,6 +84,8 @@ _DATA_TYPE_BY_BUILTIN: dict[int, DataType] = {
 }
 # 内建类型都在 0 号命名空间；自定义类型（结构体、枚举的子类）不在本表里
 _BUILTIN_NAMESPACE = 0
+MAX_NAMESPACE_INDEX = (1 << 16) - 1
+MAX_NUMERIC_NODE_ID = (1 << 32) - 1
 
 
 def data_types_of(
@@ -186,6 +188,15 @@ def node_id_of(address: str) -> ua.NodeId:
     Args: address。
     """
     # pyright: ignore 的理由 —— asyncua 的 from_string 形参标成 Unknown
-    return ua.NodeId.from_string(  # pyright: ignore[reportUnknownMemberType]
+    node_id = ua.NodeId.from_string(  # pyright: ignore[reportUnknownMemberType]
         address
     )
+    if not 0 <= node_id.NamespaceIndex <= MAX_NAMESPACE_INDEX:
+        raise UaStringParsingError("OPC UA 命名空间索引超出范围")
+    identifier = node_id.Identifier
+    if (
+        isinstance(identifier, int)
+        and not 0 <= identifier <= MAX_NUMERIC_NODE_ID
+    ):
+        raise UaStringParsingError("OPC UA 数字节点标识超出范围")
+    return node_id

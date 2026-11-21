@@ -23,7 +23,7 @@ async def open_session(client: Client, timeouts: DriverTimeouts) -> None:
     try:
         async with asyncio.timeout(timeouts.connect_s):
             await client.connect()
-    except TimeoutError:
+    except (TimeoutError, asyncio.CancelledError):
         await _abandon(client, timeouts)
         raise
     except BaseException:
@@ -46,7 +46,7 @@ async def close_session(client: Client, timeouts: DriverTimeouts) -> None:
 
 
 async def _abandon(client: Client, timeouts: DriverTimeouts) -> None:
-    """回收超时的半成品连接。
+    """回收超时或取消的半成品连接。
 
     ⚠ 会话建起来之后只关 socket 不够：续约任务要睡满通道寿命的 0.75（默认约
     45 分钟）才醒，每次重连都留下一个，服务端会话也要等它自己过期。没有会话

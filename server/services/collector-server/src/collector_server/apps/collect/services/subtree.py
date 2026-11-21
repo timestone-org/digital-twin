@@ -1,5 +1,6 @@
 """按页遍历子树，以时间和节点预算限制现场负载及应答大小。"""
 
+import asyncio
 from collections import deque
 from collections.abc import Awaitable, Callable, Sequence
 from dataclasses import dataclass, field
@@ -64,9 +65,9 @@ class _Walk:
     expansions: int = 0
     is_truncated: bool = False
 
-    def is_spent(self) -> bool:
-        """这次请求的时间还够不够再打一趟设备。"""
-        return self.clock() + DEADLINE_RESERVE_MS >= self.deadline_ms
+    def remaining_s(self) -> float:
+        """取下一次现场往返可用的时间。"""
+        return (self.deadline_ms - self.clock() - DEADLINE_RESERVE_MS) / 1000
 
     def absorb(
         self, parent: str | None, children: Sequence[BrowseItem]
@@ -111,10 +112,21 @@ async def walk_subtree(
         walk.seen.add(root)
     try:
         while walk.pending:
-            if walk.is_spent() or len(walk.entries) >= MAX_SUBTREE_ITEMS:
+            remaining_s = walk.remaining_s()
+            if remaining_s <= 0 and walk.expansions == 0:
+                raise TimeoutError("子树首层浏览超时")
+            if remaining_s <= 0 or len(walk.entries) >= MAX_SUBTREE_ITEMS:
                 walk.is_truncated = True
                 break
-            await _advance(walk, browse, release)
+            budget = asyncio.timeout(remaining_s)
+            try:
+                async with budget:
+                    await _advance(walk, browse, release)
+            except TimeoutError:
+                if not budget.expired() or walk.expansions == 0:
+                    raise
+                walk.is_truncated = True
+                break
     finally:
         if release is not None:
             for _, token in walk.pending:

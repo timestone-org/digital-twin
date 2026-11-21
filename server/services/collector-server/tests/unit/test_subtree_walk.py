@@ -1,5 +1,7 @@
 """守子树遍历的层级、分页、时间及节点预算。"""
 
+import asyncio
+
 import pytest
 
 from collector_server.apps.collect.drivers.base import BrowseItem, BrowsePage
@@ -177,6 +179,63 @@ async def test_the_callers_deadline_stops_the_walk_before_it_expires() -> None:
 
     assert space.asked == ["a"]
     assert result.is_truncated is True
+
+
+@pytest.mark.parametrize(
+    "available_ms", [0, 10], ids=["before-read", "during-read"]
+)
+async def test_a_deadline_before_any_page_is_a_browse_failure(
+    available_ms: int,
+) -> None:
+    async def browse(
+        _parent: str | None,
+        *,
+        limit: int = 200,
+        continuation_token: str | None = None,
+    ) -> BrowsePage:
+        del limit, continuation_token
+        await asyncio.Event().wait()
+        raise AssertionError("超时后不能继续读取")
+
+    with pytest.raises(TimeoutError):
+        await walk_subtree(
+            browse,
+            "ch",
+            deadline_ms=NOW_MS + DEADLINE_RESERVE_MS + available_ms,
+            clock=lambda: NOW_MS,
+        )
+
+
+async def test_a_slow_continuation_returns_the_pages_already_read() -> None:
+    released: list[str] = []
+
+    async def browse(
+        parent: str | None,
+        *,
+        limit: int = 200,
+        continuation_token: str | None = None,
+    ) -> BrowsePage:
+        del parent, limit
+        if continuation_token is None:
+            return BrowsePage((tag("first"),), "next")
+        await asyncio.Event().wait()
+        raise AssertionError("超时后不能继续读取")
+
+    async def release(token: str) -> None:
+        released.append(token)
+
+    async with asyncio.timeout(0.2):
+        result = await walk_subtree(
+            browse,
+            "ch",
+            deadline_ms=NOW_MS + DEADLINE_RESERVE_MS + 10,
+            clock=lambda: NOW_MS,
+            release=release,
+        )
+
+    assert [one.item.address for one in result.entries] == ["first"]
+    assert result.is_truncated is True
+    assert released == ["next"]
 
 
 async def test_a_dead_first_layer_is_raised_not_swallowed() -> None:

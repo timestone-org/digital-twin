@@ -339,6 +339,8 @@ class OpcuaDriver:
         client = self._require_client()
         async with asyncio.timeout(self._connection.timeouts.request_s):
             await client.check_connection()
+        if self._notifier is not None:
+            self._notifier.check_subscription()
 
     async def subscribe(
         self, points: Sequence[PointSpec], on_value: ValueSink
@@ -391,12 +393,24 @@ class OpcuaDriver:
         queried, nodes = self._nodes_for(point_codes)
         if not nodes:
             return [(None, now_ms, "bad") for _ in point_codes]
+        read_codes: list[str] = []
         values: list[ua.DataValue] = []
         for start in range(0, len(nodes), MAX_NODES_PER_READ):
-            batch = nodes[start : start + MAX_NODES_PER_READ]
+            end = start + MAX_NODES_PER_READ
+            batch = nodes[start:end]
             async with asyncio.timeout(self._connection.timeouts.request_s):
-                values.extend(await client.read_attributes(batch))
-        return align_samples(point_codes, queried, values, now_ms=now_ms)
+                readings = await client.read_attributes(batch)
+            if len(readings) != len(batch):
+                _logger.warning(
+                    "opcua_read_count_mismatch",
+                    "OPC UA 回包数量与请求不符，该批点位标为 bad",
+                    expected_count=len(batch),
+                    received_count=len(readings),
+                )
+                continue
+            read_codes.extend(queried[start:end])
+            values.extend(readings)
+        return align_samples(point_codes, read_codes, values, now_ms=now_ms)
 
     async def write(self, point_code: str, value: object) -> None:
         """下发写值。

@@ -5,10 +5,14 @@
 
 from collections.abc import Sequence
 
-from asyncua import Node
+from asyncua import Node, ua
 from asyncua.common.subscription import DataChangeNotif
 
-from collector_server.apps.collect.drivers.base import Sample, ValueSink
+from collector_server.apps.collect.drivers.base import (
+    DriverNotConnected,
+    Sample,
+    ValueSink,
+)
 from collector_server.apps.collect.drivers.opcua import mapping
 from collector_server.clock import Clock
 
@@ -28,6 +32,21 @@ class DataChangeNotifier:
         self._versions: dict[str, int] = {}
         self._next_version = 0
         self._provisional: dict[str, Sample | None] = {}
+        self._failed_status: ua.StatusCode | None = None
+
+    def status_change_notification(
+        self, status: ua.StatusChangeNotification
+    ) -> None:
+        """记住订阅失效，由会话心跳统一重连。"""
+        if status.Status.is_bad():
+            self._failed_status = status.Status
+
+    def check_subscription(self) -> None:
+        """连接仍可读时也应发现订阅已失效。"""
+        if self._failed_status is not None:
+            raise DriverNotConnected(
+                f"OPC UA 订阅已失效：{self._failed_status.name}"
+            )
 
     def track(self, node_id: str, point_code: str) -> None:
         """登记一个 NodeId 对应的点位，保留同地址别名。"""
