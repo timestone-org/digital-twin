@@ -1,34 +1,14 @@
 """代表用户去打 platform 时要转发的那几个签名头。
 
-⚠ **原样逐字转发**。签名覆盖的是 `user_id|role|permissions_b64|expires_at` 的
-拼接，不含 path 也不含目标服务，所以转过去就验得过；而 platform 按**用户自己
-的**权限码判定——知识库因此不是绕过权限的通道，它读不到用户本来读不到的东西。
-
-⚠ 解析成 UUID 再转回会归一化，验签当场失败。别碰它们，原样带走。
+账号名、角色、权限和到期时间均按签发时的字节传递，由接收服务核验。
+转换 UUID 或还原百分号编码都会改变签名输入。
 """
 
 from collections.abc import Mapping
 
-from lib.auth.edge_headers import (
-    HEADER_EXPIRES,
-    HEADER_PERMISSIONS,
-    HEADER_ROLE,
-    HEADER_SIGNATURE,
-    HEADER_TRUNCATED,
-    HEADER_USER_ID,
-    HEADER_USERNAME,
-)
+from lib.auth import IDENTITY_HEADERS
 
-# 要转发的那几个。⚠ 少一个就是验签失败，多转无关头没有意义
-FORWARDED = (
-    HEADER_USER_ID,
-    HEADER_USERNAME,
-    HEADER_ROLE,
-    HEADER_PERMISSIONS,
-    HEADER_TRUNCATED,
-    HEADER_EXPIRES,
-    HEADER_SIGNATURE,
-)
+FORWARDED = IDENTITY_HEADERS
 
 
 def caller_headers(given: Mapping[str, str]) -> dict[str, str]:
