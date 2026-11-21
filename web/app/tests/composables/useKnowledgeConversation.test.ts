@@ -19,7 +19,7 @@ function frame(name: string, body: unknown): string {
   return `event: ${name}\ndata: ${JSON.stringify(body)}\n\n`
 }
 
-function detailOf(text: string): KnowledgeChatSessionDetail {
+function detailOf(text: string, failed = false): KnowledgeChatSessionDetail {
   return {
     id: 's1',
     user_id: 'u1',
@@ -27,7 +27,7 @@ function detailOf(text: string): KnowledgeChatSessionDetail {
     base_scope: null,
     is_archived: false,
     row_version: 1,
-    last_error: null,
+    last_error: failed ? '这一轮没跑完，请重试' : null,
     created_at: '',
     updated_at: '',
     messages: [
@@ -36,7 +36,7 @@ function detailOf(text: string): KnowledgeChatSessionDetail {
         session_id: 's1',
         seq: 1,
         role: 'user',
-        content_json: { text },
+        content_json: failed ? { text, turn_failed: true } : { text },
         usage_json: null,
         steps: [],
         citations: [],
@@ -100,6 +100,51 @@ describe('知识库对话的运行态', () => {
     expect(roles).toEqual(['user', 'assistant'])
     expect(chat.entries.value[1]?.text).toBe('上限 65 ℃')
     expect(chat.isRunning.value).toBe(false)
+  })
+
+  it('重开后同问重试复用原气泡，再次失败仍可重试', async () => {
+    const chat = conversation(
+      advanceOf([
+        [frame('error', { message: '暂时失败' })],
+        [frame('turn.done', { reply: '已查询' })],
+      ]),
+    )
+    chat.restore(detailOf('上限多少', true))
+    const original = chat.entries.value[0]
+
+    await chat.send('上限多少')
+
+    expect(chat.entries.value.map((entry) => entry.role)).toEqual([
+      'user',
+      'error',
+    ])
+    expect(chat.entries.value[0]?.id).toBe(original?.id)
+
+    await chat.send('上限多少')
+
+    expect(chat.entries.value.map((entry) => entry.role)).toEqual([
+      'user',
+      'assistant',
+    ])
+    expect(chat.entries.value[0]?.id).toBe(original?.id)
+  })
+
+  it.each([
+    [true, '下限多少'],
+    [false, '上限多少'],
+  ])('只有末尾标记的同问才复用气泡 (%s, %s)', async (failed, next) => {
+    const chat = conversation(
+      advanceOf([[frame('turn.done', { reply: '已查询' })]]),
+    )
+    chat.restore(detailOf('上限多少', failed))
+
+    await chat.send(next)
+
+    expect(
+      chat.entries.value
+        .filter((entry) => entry.role === 'user')
+        .map((entry) => entry.text),
+    ).toEqual(['上限多少', next])
   })
 
   it('反问：卡片摆上时间线、输入上锁；用户点了就解锁并继续', async () => {

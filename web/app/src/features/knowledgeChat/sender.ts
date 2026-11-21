@@ -7,11 +7,13 @@
 import type { Ref } from 'vue'
 
 import {
+  sealed,
   withCitations,
   withDelta,
   withReply,
   withSaid,
   withStep,
+  type ChatEntry,
   type ConversationLog,
 } from '@/features/ai/conversationLog'
 import type { RunState } from '@/features/ai/conversationSender'
@@ -26,6 +28,7 @@ export interface KnowledgeSenderParts {
   advance: KnowledgeAdvanceStream
   state: RunState
   isRunning: Ref<boolean>
+  failedQuestion: Ref<ChatEntry | null>
   edit: (next: (given: ConversationLog) => ConversationLog) => void
   /** 掐掉上一个回合，但**不往时间线上写字**。 */
   abort: () => void
@@ -49,7 +52,7 @@ export function createKnowledgeSender(
     const controller = new AbortController()
     parts.state.running = controller
     parts.isRunning.value = true
-    parts.edit((log) => withSaid(log, 'user', text))
+    prepareQuestion(parts, text)
     const scoped = guardedParts(parts, controller)
     try {
       await runKnowledgeTurn(
@@ -76,6 +79,25 @@ export function createKnowledgeSender(
   }
 }
 
+/** 开始一次提问，精确重试时复用回放的气泡。 */
+function prepareQuestion(parts: KnowledgeSenderParts, text: string): void {
+  const failed = parts.failedQuestion.value
+  if (failed?.text !== text) {
+    parts.failedQuestion.value = null
+    parts.edit((log) => withSaid(log, 'user', text))
+    return
+  }
+  parts.edit((log) => {
+    const at = log.entries.findIndex((entry) => entry.id === failed.id)
+    if (at < 0) return withSaid(log, 'user', text)
+    return {
+      ...sealed(log),
+      entries: log.entries.slice(0, at + 1),
+      saidTextId: null,
+    }
+  })
+}
+
 function sinkOf(parts: KnowledgeSenderParts): KnowledgeRunnerSink {
   return {
     onDelta: (channel, text) =>
@@ -83,7 +105,10 @@ function sinkOf(parts: KnowledgeSenderParts): KnowledgeRunnerSink {
     onStep: (step) => parts.edit((log) => withStep(log, step)),
     onToolsRun: (steps) => parts.edit((log) => steps.reduce(withStep, log)),
     onDone: (reply) => {
-      parts.edit((log) => withReply(log, reply))
+      parts.edit((log) => {
+        parts.failedQuestion.value = null
+        return withReply(log, reply)
+      })
       parts.onCompleted?.()
     },
     onError: (message) => parts.edit((log) => withSaid(log, 'error', message)),
