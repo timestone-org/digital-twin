@@ -19,6 +19,7 @@ from platform_server.apps.modeling.operators import (
     PredictionPostprocess,
     registry,
 )
+from platform_server.apps.modeling.operators.anomaly import TASK_ANOMALY
 from platform_server.apps.modeling.operators.frame import numbers_of
 from platform_server.apps.modeling.operators.timefeature import (
     TimeFeature,
@@ -238,7 +239,10 @@ def compile_model(
             leading_input_defaults(
                 [as_dict(item) for item in as_list(serving.get(_FIELD_STEPS))]
             )
-            if serving.get(_FIELD_VERSION) == SERVING_FORMAT_VERSION
+            if (
+                serving.get(_FIELD_VERSION) == SERVING_FORMAT_VERSION
+                and serving.get("task") != TASK_ANOMALY
+            )
             else None
         ),
     )
