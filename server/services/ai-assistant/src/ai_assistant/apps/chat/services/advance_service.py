@@ -39,6 +39,7 @@ from ai_assistant.apps.chat.services.context_stream import (
 from ai_assistant.apps.chat.services.context_summary import (
     summary_of as _summary_of,
 )
+from ai_assistant.apps.chat.services.context_tags import IMAGE_CALL_ID
 from ai_assistant.apps.chat.services.intent import select as tool_select
 from ai_assistant.apps.chat.services.memory import state_block
 from ai_assistant.apps.chat.services.memory.page_context import (
@@ -123,6 +124,7 @@ class AdvanceDeps:
     codes: frozenset[str] | None = None
     skills: SkillCatalog | None = None
     context_tokens: int = 32_768
+    vision_context_tokens: int = 0
 
 
 def deps_of(
@@ -171,6 +173,7 @@ def deps_of(
         codes=codes,
         skills=container.skills,
         context_tokens=container.settings.model_context_tokens,
+        vision_context_tokens=container.settings.vision_context_tokens,
     )
 
 
@@ -223,8 +226,14 @@ def incoming_messages(payload: AdvanceInput) -> list[BaseMessage]:
     ]
     # ⚠ 图统一排在这一批工具消息**之后**：夹在中间的话，工具消息与它对应的
     # 调用就不再相邻，而有的端点按相邻性校验这一段
-    pictures = [one.image() for one in payload.tool_results]
-    return replies + [vision.image_message(one) for one in pictures if one]
+    pictures = [
+        vision.image_message(image).model_copy(
+            update={"additional_kwargs": {IMAGE_CALL_ID: result.call_id}}
+        )
+        for result in payload.tool_results
+        if (image := result.image())
+    ]
+    return replies + pictures
 
 
 def assemble(
@@ -369,28 +378,11 @@ async def advance(
     selected = (deps.skills or default_catalog()).select(
         payload.surface_kind, path_of(payload.surface_context), deps.codes
     )
-    messages, choice = await _opened(deps, chat_session_id, payload, selected)
-    plans = plan_service.PlanTools(
-        sessions=deps.sessions, chat_session_id=chat_session_id
+    opened = await _opened(deps, chat_session_id, payload, selected)
+    turn, updates, plans = _new_turn(
+        deps, payload, chat_session_id, selected, opened
     )
-    specs = tool_select.specs_for(
-        payload.surface_kind,
-        payload.client_tools,
-        codes=deps.codes,
-        extra=deps.extra_specs,
-        skills=selected,
-    )
-    updates: asyncio.Queue[ContextEvent | Exception | None] = asyncio.Queue()
-    turn = TurnDeps(
-        model=context_model(
-            deps, choice, updates.put_nowait, payload.user_text
-        ),
-        specs=specs,
-        run_tool=ToolExecutor(
-            specs, selected, _with_plan_tools(plans, deps.server_tools)
-        ),
-        choice=choice,
-    )
+    messages = opened[0]
     produced: list[TurnStep] = []
     outcome: TurnOutcome | None = None
     async for item in stream_context(turn, messages, updates):
@@ -406,6 +398,58 @@ async def advance(
     if outcome is not None:
         await _persist_turn(deps, chat_session_id, payload, outcome, produced)
         yield outcome
+
+
+def _new_turn(
+    deps: AdvanceDeps,
+    payload: AdvanceInput,
+    chat_session_id: uuid.UUID,
+    selected: tuple[SkillManifest, ...],
+    opened: tuple[list[BaseMessage], ModelChoice, str | None],
+) -> tuple[
+    TurnDeps,
+    asyncio.Queue[ContextEvent | Exception | None],
+    plan_service.PlanTools,
+]:
+    """按本次调用的模型、工具与状态建立回合。"""
+    _, choice, request = opened
+    plans = plan_service.PlanTools(
+        sessions=deps.sessions, chat_session_id=chat_session_id
+    )
+    specs = tool_select.specs_for(
+        payload.surface_kind,
+        payload.client_tools,
+        codes=deps.codes,
+        extra=deps.extra_specs,
+        skills=selected,
+    )
+    updates: asyncio.Queue[ContextEvent | Exception | None] = asyncio.Queue()
+    model = context_model(deps, choice, updates.put_nowait, request)
+    model.skills = selected
+    snapshot = snapshot_of(payload.surface_context, payload.surface_label)
+
+    async def persist_partial(result: TurnOutcome) -> None:
+        await _persist_turn(
+            deps, chat_session_id, payload, result, result.steps
+        )
+
+    turn = TurnDeps(
+        model=model,
+        specs=specs,
+        run_tool=ToolExecutor(
+            specs,
+            selected,
+            _with_plan_tools(plans, deps.server_tools),
+            result_reserve_chars=256,
+        ),
+        choice=choice,
+        prepare_messages=lambda given: state_block.current_view(
+            given, snapshot, plans
+        ),
+        remaining_tool_chars=model.remaining_tool_chars,
+        persist_partial=persist_partial,
+    )
+    return turn, updates, plans
 
 
 async def _persist_turn(
@@ -435,7 +479,7 @@ async def _opened(
     chat_session_id: uuid.UUID,
     payload: AdvanceInput,
     selected: tuple[SkillManifest, ...],
-) -> tuple[list[BaseMessage], ModelChoice]:
+) -> tuple[list[BaseMessage], ModelChoice, str | None]:
     """读原料 → 折叠 → 拼上下文。
 
     ⚠ 原料一次会话里读完：分两次开的话，中途改过模型的那一轮会读到两份不一致
@@ -465,7 +509,19 @@ async def _opened(
         summary=summary,
         skills=selected,
     )
-    return messages, loaded.choice
+    request = payload.user_text or next(
+        (
+            str(row.content_json["text"])
+            for row in reversed(loaded.rows)
+            if row.role == "user"
+            and isinstance(row.content_json.get("text"), str)
+            and str(row.content_json["text"])
+            .replace(vision.PLACEHOLDER, "")
+            .strip()
+        ),
+        None,
+    )
+    return messages, loaded.choice, request
 
 
 def _choice_of(row: ChatSession | None, payload: AdvanceInput) -> ModelChoice:

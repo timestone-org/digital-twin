@@ -28,6 +28,13 @@ class UnknownModelProfile(AppError):
     http_status = 400
 
 
+class ChatContextTooLarge(AppError):
+    """当前请求的必要内容无法放入模型窗口。"""
+
+    code = 42203
+    http_status = 413
+
+
 class McpWriteDeadlineExpired(AppError):
     """写验证预算耗尽；确认调用不能自动重试。"""
 

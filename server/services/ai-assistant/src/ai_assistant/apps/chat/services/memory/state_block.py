@@ -12,10 +12,12 @@
 而模型分不出哪一份是此刻的。库里只留真实发生过的对话（`history.py` 文件头）。
 """
 
+from collections.abc import Sequence
 from typing import Any
 
 from langchain_core.messages import BaseMessage, HumanMessage
 
+from ai_assistant.apps.chat.services.context_tags import STATE_SLOT
 from ai_assistant.apps.chat.services.perception import surface_context
 from ai_assistant.apps.chat.services.planning import plan as plan_service
 
@@ -48,4 +50,25 @@ def messages_of(
     Args: context, plan。
     """
     body = render(context, plan)
-    return [HumanMessage(content=body)] if body else []
+    return (
+        [HumanMessage(content=body, additional_kwargs={STATE_SLOT: True})]
+        if body
+        else []
+    )
+
+
+def current_view(
+    messages: Sequence[BaseMessage],
+    context: dict[str, Any] | None,
+    plans: plan_service.PlanTools,
+) -> list[BaseMessage]:
+    """将当前计划和页面快照放在本次调用末尾。Args: messages, context, plans。"""
+    retained = [
+        one for one in messages if not one.additional_kwargs.get(STATE_SLOT)
+    ]
+    latest = plans.latest
+    if latest is None:
+        return retained + [
+            one for one in messages if one.additional_kwargs.get(STATE_SLOT)
+        ]
+    return retained + messages_of(context, latest)

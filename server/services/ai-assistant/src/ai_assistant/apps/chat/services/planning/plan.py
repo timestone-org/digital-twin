@@ -227,6 +227,7 @@ class PlanTools:
         )
         return {
             "ok": True,
+            "plan": plan,
             "state": plan["state"],
             "done": done,
             "total": len(plan["items"]),

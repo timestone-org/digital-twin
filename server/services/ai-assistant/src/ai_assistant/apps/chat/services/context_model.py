@@ -8,18 +8,26 @@ from langchain_core.messages import AIMessage, BaseMessage
 from langchain_core.tools import BaseTool
 from openai import OpenAIError
 
+from ai_assistant.apps.chat.errors import ChatContextTooLarge
 from ai_assistant.apps.chat.services.context_budget import (
     bounded_fold,
+    required_messages,
     rows_of,
     split_messages,
     text_tokens,
     tokens_of,
+)
+from ai_assistant.apps.chat.services.context_tags import (
+    STATE_SLOT,
+    model_messages,
 )
 from llmcore.deltas import DeltaChannel, DeltaSink
 from llmcore.errors import ModelRejected, detail_of
 from llmcore.memory import Summarizer, Summary, summarize
 from llmcore.output.payloads import ContextPayload
 from llmcore.ports import ModelChoice
+from llmcore.skills import SkillManifest
+from llmcore.skills.context import restored_from_messages
 from llmcore.turn.ports import Responder
 
 DELTA_USAGE_STEP_TOKENS = 128
@@ -38,11 +46,26 @@ class ContextModel:
     compression_count: int = 0
     dropped_ids: set[str] = field(default_factory=set[str])
     ratio: float = 1.0
+    skills: tuple[SkillManifest, ...] = ()
 
     @property
     def budget(self) -> int:
         """保留输出空间后的输入高水位。"""
         return int((self.max_tokens - min(4096, self.max_tokens // 4)) * 0.85)
+
+    def remaining_tool_chars(
+        self, messages: Sequence[BaseMessage], schemas: Sequence[dict[str, Any]]
+    ) -> int:
+        """计算本次工具可用空间。Args: messages, schemas。"""
+        limit = int(self.budget / self.ratio)
+        projected = self._project(messages)
+        restored = restored_from_messages(
+            messages,
+            projected,
+            self.skills,
+            max(0, limit - tokens_of(projected, schemas)),
+        )
+        return max(0, limit - tokens_of([*projected, *restored], schemas))
 
     async def respond(
         self,
@@ -55,6 +78,7 @@ class ContextModel:
         """压缩后调用当前步骤；Args: choice, messages, tools, on_delta。"""
         projected = self._project(messages)
         projected = await self._prepare(projected, tools, should_force=False)
+        projected = self._fit(messages, projected, tools)
         self._emit(tokens_of(projected, tools), "ready")
         progress = _Progress(
             on_delta,
@@ -65,7 +89,7 @@ class ContextModel:
         try:
             reply = await self.model.respond(
                 choice=choice,
-                messages=projected,
+                messages=model_messages(projected),
                 tools=tools,
                 on_delta=progress.emit if on_delta is not None else None,
             )
@@ -75,15 +99,61 @@ class ContextModel:
             smaller = await self._prepare(projected, tools, should_force=True)
             if tokens_of(smaller, tools) >= tokens_of(projected, tools):
                 raise
-            projected = smaller
+            projected = self._fit(messages, smaller, tools)
             reply = await self.model.respond(
                 choice=choice,
-                messages=projected,
+                messages=model_messages(projected),
                 tools=tools,
                 on_delta=progress.emit if on_delta is not None else None,
             )
         self._answered(reply, tokens_of(projected, tools))
         return reply
+
+    def _fit(
+        self,
+        original: Sequence[BaseMessage],
+        projected: list[BaseMessage],
+        tools: Sequence[dict[str, Any] | BaseTool],
+    ) -> list[BaseMessage]:
+        """检查最终送出的输入。
+
+        Args: original, projected, tools。
+        """
+        hard = int(
+            (self.max_tokens - min(4096, self.max_tokens // 4)) / self.ratio
+        )
+        remaining = hard - tokens_of([], tools)
+        before = projected
+        if tokens_of(projected) > remaining:
+            _, projected = split_messages(
+                projected, remaining, self.pinned_text
+            )
+        if tokens_of(projected, tools) > hard:
+            projected = required_messages(projected, self.pinned_text)
+        restored = restored_from_messages(
+            original,
+            projected,
+            self.skills,
+            max(0, hard - tokens_of(projected, tools)),
+        )
+        if restored:
+            start = (
+                len(projected) - 1
+                if projected and projected[-1].additional_kwargs.get(STATE_SLOT)
+                else len(projected)
+            )
+            projected = [*projected[:start], *restored, *projected[start:]]
+        if tokens_of(projected, tools) > hard:
+            self._emit(tokens_of(projected, tools), "ready")
+            raise ChatContextTooLarge(
+                f"必要输入约 {tokens_of(projected, tools)} token，"
+                f"本轮输入预算 {hard} token；请缩小本次任务。"
+            )
+        kept_ids = {id(one) for one in projected}
+        self.dropped_ids.update(
+            _key(one) for one in before if id(one) not in kept_ids
+        )
+        return projected
 
     def _project(self, messages: Sequence[BaseMessage]) -> list[BaseMessage]:
         """复用切点并替换内部摘要；Args: messages。"""

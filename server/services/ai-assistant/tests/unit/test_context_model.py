@@ -355,7 +355,7 @@ async def test_a_second_overflow_and_other_rejections_are_not_looped() -> None:
 async def test_failed_summary_leaves_input_and_reports_ready() -> None:
     model = AsyncMock()
     model.respond.return_value = AIMessage(content="继续")
-    context = _context(model, [])
+    context = _context(model, [], capacity=9000)
     folder = context.summarizer.fold
     assert isinstance(folder, AsyncMock)
     folder.return_value = None
@@ -430,7 +430,7 @@ async def test_no_compressible_history_resets_compressing_state() -> None:
     context = _context(model, updates)
     await context.respond(
         choice=ModelChoice(),
-        messages=[SystemMessage(content="规则" * 3000)],
+        messages=[SystemMessage(content="规则" * 1350)],
         tools=[],
     )
     assert updates[0].state == "compressing"

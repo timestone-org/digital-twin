@@ -41,7 +41,12 @@ async def summary_of(
 
     Args: deps, chat_session_id, loaded。
     """
-    dropped, kept = summary_partition(loaded.rows, deps.context_tokens)
+    window = (
+        (deps.vision_context_tokens or deps.context_tokens)
+        if loaded.choice.kind == "vision"
+        else deps.context_tokens
+    )
+    dropped, kept = summary_partition(loaded.rows, window)
     if not dropped:
         return None
     through = kept[0].seq if kept else dropped[-1].seq + 1
@@ -55,7 +60,7 @@ async def summary_of(
         and stored.through_seq >= through
     ):
         return stored
-    fold_rows, previous = bounded_fold(dropped, stored, deps.context_tokens)
+    fold_rows, previous = bounded_fold(dropped, stored, window)
     folded = await deps.summarizer(loaded.choice.profile).fold(
         fold_rows, through, previous
     )
