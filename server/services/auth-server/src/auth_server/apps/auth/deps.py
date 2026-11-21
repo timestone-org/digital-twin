@@ -45,7 +45,7 @@ def get_container(request: Request) -> Container:
     return container
 
 
-async def get_session(
+async def _request_transaction(
     container: Annotated[Container, Depends(get_container)],
 ) -> AsyncIterator[AsyncSession]:
     """一个请求一个事务：正常出块提交，异常回滚。
@@ -54,6 +54,15 @@ async def get_session(
     """
     async with container.database.session() as session:
         yield session
+
+
+async def get_session(
+    session: Annotated[
+        AsyncSession, Depends(_request_transaction, scope="function")
+    ],
+) -> AsyncSession:
+    """在响应发送前完成请求事务。Args: session。"""
+    return session
 
 
 async def get_identity(
