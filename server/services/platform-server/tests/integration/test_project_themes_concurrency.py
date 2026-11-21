@@ -13,9 +13,10 @@ from collections.abc import AsyncIterator
 from dataclasses import dataclass
 
 import pytest
-from sqlalchemy import delete
+from sqlalchemy import delete, select, text
 
 from lib.db import Database
+from platform_server.apps.dashboard.errors import VersionConflict
 from platform_server.apps.dashboard.models import DashboardProject
 from platform_server.apps.dashboard.schemas.theme import ThemeCreateIn
 from platform_server.apps.dashboard.services import theme_service
@@ -55,12 +56,19 @@ async def live_project(settings: Settings) -> AsyncIterator[LiveProject]:
     await database.dispose()
 
 
-async def add_theme(live: LiveProject, name: str) -> None:
+async def add_theme(
+    live: LiveProject, name: str, *, timeout_setting: str | None = None
+) -> None:
     """在自己的事务里加一套主题。
 
-    Args: live, name。
+    Args: live, name, timeout_setting。
     """
     async with live.database.session() as session:
+        if timeout_setting is not None:
+            await session.execute(
+                text("SELECT set_config(:setting, '50ms', true)"),
+                {"setting": timeout_setting},
+            )
         await theme_service.create_theme(
             session,
             project_id=live.project_id,
@@ -104,3 +112,28 @@ async def test_a_crowd_adding_themes_at_once_loses_none_of_them(
         timeout=LOCK_WAIT_TIMEOUT_S,
     )
     assert await names_in(live_project) == wanted
+
+
+@pytest.mark.usefixtures("app_context")
+@pytest.mark.parametrize(
+    "timeout_setting", ["lock_timeout", "statement_timeout"]
+)
+async def test_a_busy_project_returns_a_conflict_and_preserves_existing_themes(
+    live_project: LiveProject, timeout_setting: str
+) -> None:
+    await add_theme(live_project, "原有主题")
+    async with live_project.database.session() as holder:
+        await holder.execute(
+            select(DashboardProject.id)
+            .where(DashboardProject.id == live_project.project_id)
+            .with_for_update()
+        )
+        with pytest.raises(VersionConflict) as conflict:
+            await add_theme(
+                live_project, "另一个主题", timeout_setting=timeout_setting
+            )
+
+    assert conflict.value.http_status == 409
+    assert await names_in(live_project) == {"原有主题"}
+    await add_theme(live_project, "另一个主题")
+    assert await names_in(live_project) == {"原有主题", "另一个主题"}

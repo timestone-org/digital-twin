@@ -14,6 +14,7 @@ from platform_server.apps.dashboard.crud.dashboard import (
 )
 from platform_server.apps.dashboard.crud.thumbnail import thumbnail_crud
 from platform_server.apps.dashboard.errors import (
+    LOCK_WAIT_EXPIRED,
     DashboardNotFound,
     VersionConflict,
 )
@@ -46,9 +47,6 @@ from platform_server.apps.dashboard.services.validation import (
 )
 
 _logger = get_logger("platform.dashboard.dashboard")
-
-# 排队等行锁耗尽预算的 SQLSTATE：语句超时、锁超时
-LOCK_WAIT_EXPIRED = frozenset({"57014", "55P03"})
 
 
 async def list_dashboards(
