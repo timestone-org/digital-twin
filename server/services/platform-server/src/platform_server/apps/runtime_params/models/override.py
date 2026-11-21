@@ -31,6 +31,10 @@ class RuntimeParamOverride(Base):
     updated_by: Mapped[str] = mapped_column(
         Text, nullable=False, server_default=""
     )
+    updated_by_name: Mapped[str | None] = mapped_column(Text, nullable=True)
+    updated_by_name_at: Mapped[datetime | None] = mapped_column(
+        DateTime(timezone=True), nullable=True
+    )
     updated_at: Mapped[datetime] = mapped_column(
         DateTime(timezone=True),
         nullable=False,

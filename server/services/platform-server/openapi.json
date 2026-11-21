@@ -23818,6 +23818,17 @@
             ],
             "title": "Updated By"
           },
+          "updated_by_name": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Updated By Name"
+          },
           "value": {
             "anyOf": [
               {

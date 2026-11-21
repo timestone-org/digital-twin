@@ -1,6 +1,7 @@
 """覆盖行的数据访问。只做查询与写入，**不提交**——事务边界归 service 层。"""
 
 from dataclasses import dataclass
+from datetime import datetime
 
 from sqlalchemy import delete, func, select
 from sqlalchemy.dialects.postgresql import insert
@@ -12,17 +13,15 @@ from platform_server.apps.runtime_params.models import RuntimeParamOverride
 
 @dataclass(frozen=True)
 class OverrideWrite:
-    """写一行覆盖要的全套。
-
-    ⚠ 打成一包不是为了好看：函数的形参上限是 5，而一行覆盖天然需要
-    「哪一组的哪一项、改成多少、此前多少、谁改的」五件事。
-    """
+    """一次运行参数覆盖的前后值与修改者快照。"""
 
     section: str
     key: str
     value: ParamValue
     previous: ParamValue
     actor: str
+    actor_name: str | None
+    updated_at: datetime
 
 
 async def list_section(
@@ -36,8 +35,16 @@ async def list_section(
         select(RuntimeParamOverride)
         .where(RuntimeParamOverride.section == section)
         .order_by(RuntimeParamOverride.key)
+        # 核心层 upsert 不会刷新本次请求先读过的 ORM 实例。
+        .execution_options(populate_existing=True)
     )
     return list(rows.scalars().all())
+
+
+async def write_time(session: AsyncSession) -> datetime:
+    """读取当前 PostgreSQL 事务的时间。"""
+    result = await session.execute(select(func.now()))
+    return result.scalar_one()
 
 
 async def upsert(session: AsyncSession, write: OverrideWrite) -> None:
@@ -49,6 +56,7 @@ async def upsert(session: AsyncSession, write: OverrideWrite) -> None:
     核心层的 upsert 走不到它，不写就永远停在第一次覆盖的时刻。
     Args: session, write。
     """
+    name_at = write.updated_at if write.actor_name is not None else None
     statement = (
         insert(RuntimeParamOverride)
         .values(
@@ -57,6 +65,9 @@ async def upsert(session: AsyncSession, write: OverrideWrite) -> None:
             value_json=write.value,
             previous_value_json=write.previous,
             updated_by=write.actor,
+            updated_by_name=write.actor_name,
+            updated_by_name_at=name_at,
+            updated_at=write.updated_at,
         )
         .on_conflict_do_update(
             index_elements=[
@@ -67,7 +78,9 @@ async def upsert(session: AsyncSession, write: OverrideWrite) -> None:
                 "value_json": write.value,
                 "previous_value_json": write.previous,
                 "updated_by": write.actor,
-                "updated_at": func.now(),
+                "updated_by_name": write.actor_name,
+                "updated_by_name_at": name_at,
+                "updated_at": write.updated_at,
             },
         )
     )

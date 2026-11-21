@@ -13,6 +13,7 @@ from typing import Any
 
 from sqlalchemy.ext.asyncio import AsyncSession
 
+from lib.auth import CallerContext
 from lib.errors import FieldError, ValidationFailed
 from lib.logging import get_logger
 from platform_server.apps.runtime_params.catalog import (
@@ -49,6 +50,7 @@ class Effective:
     previous: ParamValue | None
     updated_at: datetime | None
     updated_by: str | None
+    updated_by_name: str | None = None
 
 
 async def read_items(
@@ -108,13 +110,16 @@ async def write_section(
     settings: Settings,
     section: str,
     payload: RuntimeParamWriteIn,
-    actor: str,
+    caller: CallerContext,
 ) -> list[RuntimeParamOut]:
     """改一个分组里的若干项。没给的项不动。
 
-    Args: session, settings, section, payload, actor。
+    Args: session, settings, section, payload, caller。
     """
     require_specs(section)
+    actor = str(caller.user_id)
+    actor_name = _account_name(caller, actor)
+    updated_at = await override_crud.write_time(session)
     stored = await stored_rows(session, section)
     for key, given in payload.values.items():
         spec = require_spec(section, key)
@@ -131,6 +136,8 @@ async def write_section(
                 value=value,
                 previous=current.value,
                 actor=actor,
+                actor_name=actor_name,
+                updated_at=updated_at,
             ),
         )
     await session.flush()
@@ -141,6 +148,13 @@ async def write_section(
         keys=sorted(payload.values),
     )
     return await section_items(session, settings=settings, section=section)
+
+
+def _account_name(caller: CallerContext, actor: str) -> str | None:
+    """旧签名只提供已验证的 UUID。"""
+    if caller.is_service or caller.username in ("", actor):
+        return None
+    return caller.username
 
 
 async def reset_section(
@@ -246,6 +260,7 @@ def to_param_out(
         is_overridden=current.updated_at is not None,
         updated_at=current.updated_at,
         updated_by=current.updated_by,
+        updated_by_name=current.updated_by_name,
     )
 
 
@@ -272,6 +287,7 @@ def effective_of(
         previous=stored_value(spec, row.previous_value_json),
         updated_at=row.updated_at,
         updated_by=row.updated_by or None,
+        updated_by_name=_stored_account_name(row),
     )
 
 
@@ -309,6 +325,13 @@ def require_spec(section: str, key: str) -> ParamSpec:
     if spec is None:
         raise RuntimeParamUnknown(f"运行参数目录里没有「{key}」这一项")
     return spec
+
+
+def _stored_account_name(row: RuntimeParamOverride) -> str | None:
+    """旧写入者只更新 updated_at，不能沿用上次写入的名字。"""
+    if row.updated_by_name_at != row.updated_at:
+        return None
+    return row.updated_by_name
 
 
 def validated(spec: ParamSpec, value: ParamValue) -> ParamValue:
