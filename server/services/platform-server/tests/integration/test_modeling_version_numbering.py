@@ -2,6 +2,7 @@
 
 import asyncio
 import uuid
+from datetime import timedelta
 from typing import Any
 
 import pytest
@@ -15,7 +16,7 @@ from unit.modeling_fakes import (
     linear_graph,
 )
 
-from lib.db import Database
+from lib.db import Database, PoolProfile
 from lib.utils.ids import uuid7
 from platform_server.apps.modeling.crud import (
     deployment_crud,
@@ -247,9 +248,22 @@ async def test_cross_type_updates_refresh_cached_references_and_lock_deployment(
     settings: Settings, app_context: AppContext
 ) -> None:
     del app_context
-    database = Database(dsn=settings.dsn(), search_path="platform")
+    database = Database(
+        dsn=settings.dsn(),
+        search_path="platform",
+        profile=PoolProfile(
+            statement_timeout_ms=settings.postgres_statement_timeout_ms
+        ),
+    )
     pipeline_id = uuid7()
     try:
+        async with database.session() as session:
+            deadline = await session.scalar(
+                text("SELECT current_setting('statement_timeout')::interval")
+            )
+        assert deadline == timedelta(
+            milliseconds=settings.postgres_statement_timeout_ms
+        )
         model_id, rule_id, expected = await _exercise_switching(
             database, pipeline_id
         )
