@@ -10,6 +10,7 @@
 """
 
 import re
+from collections.abc import Mapping
 
 # 三段连续的码位凑出 1–50。⚠ 分三段是 Unicode 自己的排布，不是我们挑的：
 # ①–⑳ 之后并不接着 ㉑
@@ -68,3 +69,27 @@ def _number_of(one: str) -> int:
         if 0 <= at <= high - low:
             return low + at
     return 0
+
+
+_ASCII_IDENTIFIER = re.compile(r"[A-Za-z0-9_]")
+
+
+def historical_text(text: str, references: Mapping[int, str]) -> str:
+    """保留旧依据的块身份，去掉可被误用成本轮角标的记号。"""
+
+    def substitute(found: re.Match[str]) -> str:
+        raw = found.group(1)
+        number = int(raw) if raw else _number_of(found.group(0))
+        chunk_id = references.get(number)
+        if raw:
+            prefix = text[max(0, found.start() - 1) : found.start()]
+            # 括号贴着技术标识时保留函数参数，如 f(3)。
+            if _ASCII_IDENTIFIER.fullmatch(prefix):
+                return found.group(0)
+            if number <= MAX_CIRCLED and marker_of(number) in text:
+                return found.group(0)
+        if chunk_id is not None:
+            return f"（历史资料块 {chunk_id}）"
+        return found.group(0) if raw else f"（{number}）"
+
+    return _PATTERN.sub(substitute, text)
