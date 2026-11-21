@@ -134,3 +134,27 @@ def test_a_corrected_dimension_count_rebuilds_the_client() -> None:
     )
     assert widened is not first
     assert widened.dimensions == 4
+
+
+async def test_catalog_change_during_request_keeps_the_original_space(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    switch = _Switch(_endpoint())
+    made = DynamicEmbeddingAdapter(resolve=switch.resolve)
+
+    class SwitchingInner(_FakeInner):
+        async def embed(self, texts: list[str]) -> list[list[float]]:
+            switch.endpoint = _endpoint(model="embed-2")
+            return await super().embed(texts)
+
+    monkeypatch.setattr(
+        made, "_adapter_for", lambda _: SwitchingInner("embed-1")
+    )
+    first_space = made.identity
+    batch = await made.embed_batch(["甲"])
+    assert batch.vectors == [[1.0, 0.0, 0.0]]
+    assert batch.model == "embed-1"
+    assert batch.identity == first_space
+    assert batch.identity != made.identity
+    switch.endpoint = _endpoint(key="rotated")
+    assert made.identity == first_space

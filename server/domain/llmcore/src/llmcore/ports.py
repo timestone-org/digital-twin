@@ -17,6 +17,8 @@ from typing import Literal, Protocol, runtime_checkable
 
 from langchain_core.language_models import BaseChatModel
 
+from llmcore.embedding_snapshot import EmbeddingBatch
+
 # 对话用与看图用分两档：视觉模型的单价与延迟都高得多，混成一档等于每次
 # 对话都按视觉计费
 # ⚠ `summary` 单列一档不是为了换模型，是为了**换断路器**：折叠是后台性质的
@@ -156,3 +158,13 @@ class EmbeddingAdapter(Protocol):
         Args: texts。
         """
         ...
+
+
+@runtime_checkable
+class SnapshotEmbeddingAdapter(EmbeddingAdapter, Protocol):
+    """能够返回请求实际使用的向量空间的嵌入适配器。"""
+
+    @property
+    def identity(self) -> str | None: ...
+
+    async def embed_batch(self, texts: Sequence[str]) -> EmbeddingBatch: ...

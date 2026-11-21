@@ -12,6 +12,7 @@ from collections.abc import Awaitable, Callable, Sequence
 
 from openai import AsyncOpenAI
 
+from llmcore.embedding_snapshot import EmbeddingBatch, embedding_identity
 from llmcore.endpoints import EmbeddingEndpoint
 from llmcore.errors import ModelDisabled
 from llmcore.openai_embedding import (
@@ -64,17 +65,35 @@ class DynamicEmbeddingAdapter:
         endpoint = self._resolve()
         return 0 if endpoint is None else endpoint.dimensions
 
+    @property
+    def identity(self) -> str | None:
+        """当前目录指向的向量空间。"""
+        endpoint = self._resolve()
+        return None if endpoint is None else self._identity_of(endpoint)
+
+    def _identity_of(self, endpoint: EmbeddingEndpoint) -> str:
+        return embedding_identity(
+            endpoint.base_url, endpoint.model, endpoint.dimensions, self.id
+        )
+
     async def embed(self, texts: Sequence[str]) -> list[list[float]]:
         """把一批文本转成向量，顺序与入参一一对应。
 
         Args: texts。
         """
+        return (await self.embed_batch(texts)).vectors
+
+    async def embed_batch(self, texts: Sequence[str]) -> EmbeddingBatch:
+        """用同一份端点配置计算向量并标记结果。Args: texts。"""
         if self._refresh is not None:
             await self._refresh()
         endpoint = self._resolve()
         if endpoint is None:
             raise ModelDisabled("这套部署没有接嵌入档")
-        return await self._adapter_for(endpoint).embed(texts)
+        vectors = await self._adapter_for(endpoint).embed(texts)
+        return EmbeddingBatch(
+            self._identity_of(endpoint), endpoint.model, vectors
+        )
 
     def _adapter_for(
         self, endpoint: EmbeddingEndpoint
