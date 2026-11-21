@@ -440,7 +440,6 @@ async def app_context(
     external_fakes: ExternalFakes,
 ) -> AsyncIterator[AppContext]:
     """整装应用 + 同连接的会话，每条用例一个回滚事务。
-
     ⚠ 外库与 Redis 一律换成假件：用例不许打网络，CI 里也没有它们。
     """
     if not postgres_available:
@@ -482,6 +481,7 @@ async def app_context(
         )
     await transaction.rollback()
     await connection.close()
+    await container.realtime.close()
     await container.database.dispose()
 
 

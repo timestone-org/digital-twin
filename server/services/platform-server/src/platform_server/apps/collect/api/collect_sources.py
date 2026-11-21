@@ -33,6 +33,7 @@ from platform_server.apps.collect.services import (
     source_service,
 )
 from platform_server.apps.collect.services.source_service import SourceContext
+from platform_server.apps.collect.services.topics import declare_source
 from platform_server.settings import API_PREFIX
 
 router = APIRouter(
@@ -108,6 +109,7 @@ async def create_source(
     Args: payload, session, context, response, write。
     """
     created = await _create_once(payload, session, context, write)
+    await declare_source(context.realtime, created.id)
     await write.plans.notify(reason=REASON_SOURCE_CHANGED)
     _set_location(response, created.id)
     return ok(created, message="数据源已创建")

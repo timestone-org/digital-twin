@@ -4,8 +4,7 @@
 对账）。两边各跑各的，靠不同的 `publisher` 名字互不越界——共用一个名字的话，
 一方对账时会把另一方的主题当成「多出来的」全部注销掉。
 
-⚠ 主题未登记时 hub 一律拒订，所以对账周期同时是「新建的数据源多久之后可被
-订阅」的上界。
+主题创建后的登记失败时，对账负责补登记；hub 只接受已登记的主题订阅。
 """
 
 import uuid
@@ -17,7 +16,7 @@ from lib.logging import get_logger
 from platform_server.apps.collect.crud import source_crud
 from platform_server.apps.collect.services.topics import (
     PUBLISHER_NAME,
-    TOPIC_REQUIRED_CODE,
+    declare_source,
     topic_of,
 )
 from platform_server.realtime import TopicRegistrar
@@ -98,13 +97,7 @@ class CollectTopicReconciler:
         for source_id in live:
             if topic_of(source_id) in actual:
                 continue
-            declared += int(
-                await self._realtime.declare(
-                    topic=topic_of(source_id),
-                    required_code=TOPIC_REQUIRED_CODE,
-                    publisher=PUBLISHER_NAME,
-                )
-            )
+            declared += int(await declare_source(self._realtime, source_id))
         return declared
 
     async def _revoke_extra(self, expected: set[str], actual: set[str]) -> int:

@@ -49,6 +49,7 @@ from platform_server.apps.collect.services.transactions import (
     release_read_transaction,
     violated_constraint,
 )
+from platform_server.realtime import TopicRegistrar
 
 _logger = get_logger("platform.collect.source")
 MIN_MODBUS_POLL_INTERVAL_MS = 1000
@@ -61,6 +62,7 @@ class SourceContext:
 
     states: SourceStateSource
     cipher: CredentialCipher
+    realtime: TopicRegistrar
 
 
 async def list_sources(

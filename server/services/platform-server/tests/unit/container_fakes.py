@@ -3,7 +3,10 @@
 从 `conftest.py` 拆出来：那份夹具文件贴着 600 行的上限。
 """
 
-from dataclasses import dataclass, replace
+import json
+from dataclasses import dataclass, field, replace
+
+import httpx
 
 from lib.idempotency import IdempotencyStore
 from lib.testing import InMemoryCache
@@ -43,6 +46,9 @@ class CollectFakes:
     bus: FakeCommandTransport
     plans: FakeChannelPublisher
     history: FakeHistorySource
+    topics: list[dict[str, object]] = field(
+        default_factory=list[dict[str, object]]
+    )
 
 
 @dataclass(frozen=True)
@@ -64,7 +70,6 @@ def faked_container(
     built: Container, fakes: ExternalFakes, sessions: MakerSessions
 ) -> Container:
     """把会打网络的长生命周期对象换成进程内假件。
-
     ⚠ 用例不许打网络，而 Redis 与归档库在 CI 里也不存在。
     ⚠ 回填的起跑口换成**只记不跑**的替身：用例那条会话是一条回滚事务上的
     单连接，后台任务会在同一条连接上另开短事务，一交错就是
@@ -75,6 +80,7 @@ def faked_container(
     dirty = DatasetDirtyLog(sink=fakes.dirty)
     # ⚠ 回填与重算共用一个存储：两者抢的是同一把按表的锁
     jobs_store = InMemoryCache()
+    built.realtime._transport = _topic_transport(fakes.collect)
     return replace(
         built,
         dataset=replace(
@@ -110,6 +116,22 @@ def faked_container(
         ),
         history=fakes.collect.history,
     )
+
+
+def _topic_transport(fakes: CollectFakes) -> httpx.MockTransport:
+    """拦住 app 对主题登记接口的请求。Args: fakes。"""
+
+    def reply(request: httpx.Request) -> httpx.Response:
+        if (
+            request.method != "POST"
+            or request.url.path != "/internal/v1/realtime/topics"
+        ):
+            raise AssertionError("整装应用用例发出了未预期的实时调用")
+        message: dict[str, object] = json.loads(request.content)
+        fakes.topics.append(message)
+        return httpx.Response(204)
+
+    return httpx.MockTransport(reply)
 
 
 def recording_recompute(container: Container) -> RecordingRecomputeRunner:

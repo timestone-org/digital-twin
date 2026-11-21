@@ -142,7 +142,9 @@ async def test_racing_source_codes_read_as_taken(
 ) -> None:
     install_source_fakes(monkeypatch)
     context = source_service.SourceContext(
-        states=cast(Any, object()), cipher=cast(Any, object())
+        states=cast(Any, object()),
+        cipher=cast(Any, object()),
+        realtime=cast(Any, object()),
     )
 
     with pytest.raises(SourceCodeTaken):
