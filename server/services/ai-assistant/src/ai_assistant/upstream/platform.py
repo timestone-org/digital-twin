@@ -15,6 +15,7 @@
 调用方拿着入站那组头一路传就行（`upstream/identity.py` 的文件头记着为什么）。
 """
 
+import asyncio
 import uuid
 from typing import Any, cast
 from urllib.parse import quote
@@ -298,6 +299,17 @@ class PlatformClient:
 
         Args: headers, source_id, code。
         """
+        try:
+            async with asyncio.timeout(self._timeout_s):
+                return await self._find_point_pages(headers, source_id, code)
+        except TimeoutError as error:
+            raise PlatformUnavailable("点位查询未完成：读取超时") from error
+
+    async def _find_point_pages(
+        self, headers: dict[str, str], source_id: str, code: str
+    ) -> object | None:
+        initial_total: int | None = None
+        seen: set[str] = set()
         for page in range(1, MAX_FIND_PAGES + 1):
             query: dict[str, Any] = {
                 "page": page,
@@ -306,13 +318,17 @@ class PlatformClient:
                 "q": code,
             }
             body = await self._get(_POINTS, query, headers)
-            rows = _items_of(body)
-            found = next((row for row in rows if _code_of(row) == code), None)
-            if found is not None:
-                return found
-            if not rows or page * self._page_size >= _total_of(body):
+            total, rows = _point_page(body, page, self._page_size)
+            indexed = _index_page(rows, seen)
+            if initial_total is not None and total != initial_total:
+                raise PlatformUnavailable("点位查询未完成：总数在读取期间变化")
+            initial_total = total
+            if code in indexed:
+                return indexed[code]
+            offset = (page - 1) * self._page_size
+            if offset + len(rows) >= total:
                 return None
-        return None
+        raise PlatformUnavailable("点位查询未完成：达到分页上限，请缩小范围")
 
     async def validate_dashboard(
         self, headers: dict[str, str], dashboard_id: str
@@ -437,12 +453,45 @@ def _items_of(body: object) -> list[object]:
     return cast("list[object]", items)
 
 
-def _total_of(body: object) -> int:
-    """分页体里的 total；没有就当 0（即「没有下一页」）。Args: body。"""
+def _point_page(body: object, page: int, size: int) -> tuple[int, list[object]]:
+    """确认页号、页大小和实际返回数量。Args: body, page, size。"""
     if not isinstance(body, dict):
-        return 0
-    total = cast("dict[str, object]", body).get("total")
-    return total if type(total) is int else 0
+        raise PlatformUnavailable("点位查询未完成：上游未返回分页对象")
+    fields = cast("dict[str, object]", body)
+    total, current, width = (
+        fields.get("total"),
+        fields.get("page"),
+        fields.get("size"),
+    )
+    if (
+        type(total) is not int
+        or total < 0
+        or type(current) is not int
+        or type(width) is not int
+    ):
+        raise PlatformUnavailable("点位查询未完成：缺少有效的分页信息")
+    expected = min(size, max(0, total - (page - 1) * size))
+    items = fields.get("items")
+    if (
+        current != page
+        or width != size
+        or not isinstance(items, list)
+        or len(cast("list[object]", items)) != expected
+    ):
+        raise PlatformUnavailable("点位查询未完成：分页结果缺失或已变化")
+    return total, cast("list[object]", items)
+
+
+def _index_page(rows: list[object], seen: set[str]) -> dict[str, object]:
+    """按源内唯一编码检测跨页漂移。Args: rows, seen。"""
+    indexed: dict[str, object] = {}
+    for row in rows:
+        code = _code_of(row)
+        if code is None or code in seen:
+            raise PlatformUnavailable("点位查询未完成：编码缺失或分页出现重复")
+        seen.add(code)
+        indexed[code] = row
+    return indexed
 
 
 def _rows_of(body: object) -> list[object]:

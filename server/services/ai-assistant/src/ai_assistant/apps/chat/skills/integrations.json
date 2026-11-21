@@ -133,7 +133,8 @@
     ],
     "server_tools": [
       "knowledge.list_bases",
-      "knowledge.search"
+      "knowledge.search",
+      "knowledge.read_chunk"
     ],
     "client_tools": []
   },

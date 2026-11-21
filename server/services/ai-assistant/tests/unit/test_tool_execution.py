@@ -128,3 +128,14 @@ async def test_schema_external_references_never_open_a_network_connection(
     result = json.loads(str(caught.value))
     assert result["code"] == "invalid_tool_schema"
     assert visited == []
+
+
+async def test_chunk_window_never_clips_while_claiming_end() -> None:
+    async def read(_name: str, _arguments: dict[str, Any]) -> object:
+        return {"text": "原文" * 2000, "has_more": False, "next_offset": None}
+
+    executor = ToolExecutor(TOOL_SPECS, (), read, result_reserve_chars=512)
+    with pytest.raises(ToolExecutionError, match="完整"):
+        await executor.run_with_budget(
+            "knowledge.read_chunk", {"base_id": "b", "chunk_id": "c"}, 1000
+        )

@@ -74,6 +74,7 @@ CROSS_MODULE_READ_TOOLS: tuple[str, ...] = (
     # 哪一页无关，跟着工作面走反而会让「在大屏页问得到的，回台账页就问不到」
     "knowledge.list_bases",
     "knowledge.search",
+    "knowledge.read_chunk",
 )
 
 
