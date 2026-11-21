@@ -5,8 +5,6 @@ import time
 from collections.abc import Mapping
 from dataclasses import replace
 
-from sqlalchemy.ext.asyncio import AsyncSession
-
 from lib.errors import AppError
 from platform_server.apps.modeling.errors import (
     DeploymentUnservable,
@@ -33,14 +31,12 @@ DECIMAL_PATTERN = re.compile(
 
 
 async def calculate_and_record(
-    session: AsyncSession,
     *,
     deps: OpenModelDeps,
     resolved: ResolvedCall,
     payload: OpenModelCalculateIn,
 ) -> OpenModelCalculateOut:
-    """校验、执行并登记调用状态。Args: session, deps, resolved, payload。"""
-    del session
+    """校验、执行并登记调用状态。Args: deps, resolved, payload。"""
     started = time.monotonic()
     counted = replace(resolved, row_count=len(payload.rows))
     try:

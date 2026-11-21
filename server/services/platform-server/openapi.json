@@ -39953,7 +39953,7 @@
     },
     "/api/v1/platform/open-models/{code}:calculate": {
       "post": {
-        "description": "返回按模型规则计算的逐行明细。Args: payload, session, deps, call。",
+        "description": "返回按模型规则计算的逐行明细。Args: payload, deps, call。",
         "operationId": "calculate_api_v1_platform_open_models__code__calculate_post",
         "parameters": [
           {
@@ -40011,7 +40011,7 @@
     },
     "/api/v1/platform/open-models/{code}:detect": {
       "post": {
-        "description": "按模型阈值判断一批设备实时输入。Args: payload, session, deps, call。",
+        "description": "按模型阈值判断一批设备实时输入。Args: payload, deps, call。",
         "operationId": "detect_api_v1_platform_open_models__code__detect_post",
         "parameters": [
           {
@@ -40069,7 +40069,7 @@
     },
     "/api/v1/platform/open-models/{code}:predict": {
       "post": {
-        "description": "算一批数。\n\nArgs: payload, session, deps, call。",
+        "description": "算一批数。\n\nArgs: payload, deps, call。",
         "operationId": "predict_api_v1_platform_open_models__code__predict_post",
         "parameters": [
           {

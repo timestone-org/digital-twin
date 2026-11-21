@@ -7,7 +7,6 @@ from typing import cast
 
 import pytest
 from pydantic import ValidationError
-from sqlalchemy.ext.asyncio import AsyncSession
 
 from platform_server.apps.modeling.errors import PredictRequestInvalid
 from platform_server.apps.modeling.models import (
@@ -142,7 +141,6 @@ async def test_a_result_that_is_not_finite_is_a_recorded_failure(
     monkeypatch.setattr(open_model_service, "record_call", record)
     with pytest.raises(PredictRequestInvalid, match="第 2 行"):
         await predict_and_record(
-            cast("AsyncSession", object()),
             deps=cast("OpenModelDeps", object()),
             resolved=resolved_call(),
             payload=OpenModelPredictIn.model_validate(
@@ -163,7 +161,6 @@ async def test_a_blank_result_is_still_an_answer(
     monkeypatch.setattr(open_model_service, "_compiled", compiled)
     monkeypatch.setattr(open_model_service, "_warnings_of", lambda *_: [])
     answer = await open_model_service.predict(
-        cast("AsyncSession", object()),
         deps=cast("OpenModelDeps", object()),
         resolved=resolved_call(),
         payload=OpenModelPredictIn.model_validate(

@@ -140,7 +140,6 @@ async def guard_rate(
 
 
 async def predict_and_record(
-    session: AsyncSession,
     *,
     deps: OpenModelDeps,
     resolved: ResolvedCall,
@@ -153,14 +152,12 @@ async def predict_and_record(
     ⚠ 鉴权与限流那几种失败**不记**：它们在 `resolve_call` 里就被拒了，还没
     归到任何一个部署的账上；而记下来正好给了未授权的调用者一个撑爆这张表的
     办法（防线 ⑬）。
-    Args: session, deps, resolved, payload。
+    Args: deps, resolved, payload。
     """
     started = time.monotonic()
     counted = replace(resolved, row_count=len(payload.rows))
     try:
-        answer = await predict(
-            session, deps=deps, resolved=counted, payload=payload
-        )
+        answer = await predict(deps=deps, resolved=counted, payload=payload)
     except AppError as error:
         await record_call(deps, counted, started, error.http_status, error.code)
         raise
@@ -207,7 +204,6 @@ async def record_call(
 
 
 async def predict(
-    session: AsyncSession,
     *,
     deps: OpenModelDeps,
     resolved: ResolvedCall,
@@ -217,7 +213,7 @@ async def predict(
 
     ⚠ 整批一次算完（`predict_many`），不逐行调：通道 B 逐行调等于逐行付一次
     到 C 的往返。
-    Args: session, deps, resolved, payload。
+    Args: deps, resolved, payload。
     """
     if resolved.version.task == "rule_calculation":
         raise PredictRequestInvalid(
@@ -228,7 +224,7 @@ async def predict(
             f"一次最多算 {resolved.deployment.max_rows_per_call} 行，"
             f"这次给了 {len(payload.rows)} 行"
         )
-    compiled = await _compiled(session, deps, resolved.version)
+    compiled = await _compiled(deps, resolved.version)
     entry = _entry_of(resolved.version)
     rows = [
         _as_args(row, entry, index) for index, row in enumerate(payload.rows)
@@ -260,45 +256,43 @@ def _require_finite(predictions: list[float | None]) -> None:
 
 
 async def _compiled(
-    session: AsyncSession, deps: OpenModelDeps, version: ModelVersion
+    deps: OpenModelDeps, version: ModelVersion
 ) -> CompiledModel:
     """把版本编译成可调用对象，通道 B 顺带把模型本体装回来。
 
-    Args: session, deps, version。
+    Args: deps, version。
     """
     try:
         return compile_model(
             dict(version.serving_json),
-            estimator=await _estimator(session, deps, version),
+            estimator=await _estimator(deps, version),
         )
     except (ArtifactRejected, OperatorError) as error:
         raise DeploymentUnservable(str(error)) from error
 
 
 async def _estimator(
-    session: AsyncSession, deps: OpenModelDeps, version: ModelVersion
+    deps: OpenModelDeps, version: ModelVersion
 ) -> object | None:
     """通道 B 的模型本体；通道 A 给 `None`。
 
-    Args: session, deps, version。
+    Args: deps, version。
     """
     if version.serving_channel != CHANNEL_BINARY:
         return None
     if deps.store is None:
         raise ArtifactRejected("本部署没有配对象存储，这个模型用不了")
-    row = await model_artifact_crud.get_by_version(session, version.id)
-    if row is None:
-        raise ArtifactRejected("这个模型版本没有留下模型产物")
-    return await artifact_io.fetch(
-        deps.store,
-        {
+    async with deps.sessions.session() as session:
+        row = await model_artifact_crud.get_by_version(session, version.id)
+        if row is None:
+            raise ArtifactRejected("这个模型版本没有留下模型产物")
+        meta = {
             "object_key": row.object_key,
             "digest": row.digest,
             "format_version": row.format_version,
             "runtime": dict(row.runtime_json),
-        },
-        deps.artifacts,
-    )
+        }
+    return await artifact_io.fetch(deps.store, meta, deps.artifacts)
 
 
 def _entry_of(version: ModelVersion) -> list[dict[str, object]]:
