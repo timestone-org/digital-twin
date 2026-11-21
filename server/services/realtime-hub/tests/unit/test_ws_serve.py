@@ -12,7 +12,7 @@ from typing import Any, cast
 
 import anyio
 from fastapi import WebSocket, WebSocketDisconnect
-from realtime_hub.apps.channel.api.ws import _serve
+from realtime_hub.apps.channel.api.ws import _decode, _serve
 from realtime_hub.apps.channel.services import (
     Connection,
     ConnectionRegistry,
@@ -56,11 +56,11 @@ class SlowSession:
 class SilentSocket:
     """永远收不到下一帧的连接——用例要的是「停在收帧那一步再被取消」。
 
-    ⚠ 只有 `receive_text`：这条路径上发帧与关连接都没人调，补出来的空方法
+    ⚠ 只有 `receive`：这条路径上发帧与关连接都没人调，补出来的空方法
     只会让人以为它们参与了断言。
     """
 
-    async def receive_text(self) -> str:
+    async def receive(self) -> dict[str, object]:
         await asyncio.Event().wait()
         raise AssertionError("到不了这里")  # pragma: no cover - 上一行不返回
 
@@ -118,3 +118,9 @@ async def test_a_peer_that_left_during_open_ends_quietly() -> None:
     await _serve(cast("WebSocket", SilentSocket()), container, _handshake())
 
     assert session.closed == []
+
+
+def test_frame_with_no_text_has_no_decoded_command() -> None:
+    assert _decode(None) is None
+    assert _decode('{"type":"ping"}') == {"type": "ping"}
+    assert _decode("[]") is None

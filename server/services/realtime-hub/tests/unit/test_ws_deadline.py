@@ -43,11 +43,14 @@ class RecordingSocket:
         self._delivered = False
         self.closed: list[tuple[int, datetime]] = []
 
-    async def receive_text(self) -> str:
+    async def receive(self) -> dict[str, object]:
         if self._token is not None and not self._delivered:
             await self._warning_sent.wait()
             self._delivered = True
-            return json.dumps({"action": "reauth", "token": self._token})
+            return {
+                "type": "websocket.receive",
+                "text": json.dumps({"action": "reauth", "token": self._token}),
+            }
         await asyncio.Event().wait()
         raise AssertionError("静默连接不会收到入站帧")
 
