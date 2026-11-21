@@ -11,6 +11,7 @@ from collections.abc import Iterable, Sequence
 from dataclasses import dataclass, replace
 from datetime import datetime, tzinfo
 from itertools import chain, groupby
+from time import monotonic
 from typing import Any
 
 from sqlalchemy.ext.asyncio import AsyncSession
@@ -60,10 +61,9 @@ _logger = get_logger("platform.dataset.compute")
 
 # 一次重算最多改写多少行。触顶时如实上报，不静默截断
 MAX_RECOMPUTE_ROWS = 200_000
-# 每处理这么多行让出一次事件循环。⚠ 不用 `asyncio.to_thread`——线程里改
-# ORM 实例会碰 SQLAlchemy 的线程安全边界。⚠ 宽表一行要毫秒级，攒太多行才让
-# 一次，同进程别的请求读不到库的回包，会被库按语句超时掐掉
+# 便宜行的数量上限与宽窗口的连续求值时间预算
 YIELD_EVERY = 50
+YIELD_BUDGET_S = 0.02
 # `*_ALL` 指向公式列时要多跑几趟才收敛，上限就这么多
 _MAX_PASSES = 3
 
@@ -340,6 +340,7 @@ class _Batch:
     models: dict[str, AnalysisModel | AnalysisUnavailable]
     #: 这一批共用的 `PREDICT` 备忘；没开批量相位时是 `None`
     memo: ModelMemo | None = None
+    yield_deadline_s: float = 0.0
 
 
 async def _one_pass(
@@ -362,6 +363,7 @@ async def _one_pass(
     index = WindowIndex()
     failed = 0
     has_changed = False
+    batch.yield_deadline_s = monotonic() + YIELD_BUDGET_S
     for moment, records in groupby(enumerate(targets), key=_record_time):
         cache = _cache_of(scope, series, whole, batch, index)
         peers = batch.peers.get(moment)
@@ -417,9 +419,11 @@ async def _evaluate_group(
             record.compute_error = errors or None
             failed += 1 if errors else 0
         rows.append(RowSnapshot(ts=record.ts, values={**values, **computed}))
-        # 宽表重算时给同进程的请求留出处理机会
-        if (position + 1) % YIELD_EVERY == 0:
+        if (
+            position + 1
+        ) % YIELD_EVERY == 0 or monotonic() >= batch.yield_deadline_s:
             await asyncio.sleep(0)
+            batch.yield_deadline_s = monotonic() + YIELD_BUDGET_S
     return rows, failed, has_changed
 
 
@@ -474,14 +478,30 @@ async def _seed_rows(
             window=RecordWindow(table_id=table_id, since=before, before=start),
         )
     missing = scope.max_prev - len(rows)
-    if missing <= 0:
-        return [to_snapshot(row) for row in rows]
-    previous = await record_crud.list_before(
-        session,
-        window=RecordWindow(table_id=table_id, before=before),
-        limit=missing,
-    )
-    return [to_snapshot(row) for row in [*reversed(previous), *rows]]
+    rows.reverse()
+    if missing > 0:
+        rows.extend(
+            await record_crud.list_before(
+                session,
+                window=RecordWindow(table_id=table_id, before=before),
+                limit=missing,
+            )
+        )
+    return await _seed_snapshots(rows)
+
+
+async def _seed_snapshots(
+    newest_first: list[DatasetRecord],
+) -> list[RowSnapshot]:
+    """按升序转换并逐行释放历史 ORM 对象。Args: newest_first。"""
+    snapshots: list[RowSnapshot] = []
+    deadline_s = monotonic() + YIELD_BUDGET_S
+    while newest_first:
+        snapshots.append(to_snapshot(newest_first.pop()))
+        if monotonic() >= deadline_s:
+            await asyncio.sleep(0)
+            deadline_s = monotonic() + YIELD_BUDGET_S
+    return snapshots
 
 
 def _needs_extra_passes(scope: ComputeScope) -> bool:
