@@ -12,10 +12,16 @@ from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from knowledge_server.apps.knowledge import crud
+from knowledge_server.apps.knowledge.errors import ChunkNotFound
 from knowledge_server.apps.knowledge.models import (
     KnowledgeChunk,
     KnowledgeDocument,
 )
+from knowledge_server.apps.knowledge.schemas.chunk import (
+    ChunkWindowIn,
+    ChunkWindowOut,
+)
+from knowledge_server.apps.knowledge.schemas.search import LocatorOut
 
 # 前后各带几块
 NEIGHBOURS = 1
@@ -75,4 +81,35 @@ async def read_around(
         after=tuple(
             one.text for one in neighbours if one.ordinal > row.ordinal
         ),
+    )
+
+
+async def read_window(
+    session: AsyncSession,
+    base_id: uuid.UUID,
+    chunk_id: uuid.UUID,
+    window: ChunkWindowIn,
+) -> ChunkWindowOut:
+    """按所属库与原块标识读取正文及续读位置。
+
+    Args: session, base_id, chunk_id, window。
+    """
+    part = await crud.chunk.read_slice(
+        session, base_id, chunk_id, window.offset, window.limit
+    )
+    if part is None:
+        raise ChunkNotFound("知识块不存在，请重新检索取得当前块身份")
+    following = window.offset + len(part.text)
+    more = following < part.total_chars
+    return ChunkWindowOut(
+        base_id=base_id,
+        chunk_id=chunk_id,
+        document_title=part.title,
+        heading_path=part.heading,
+        locator=LocatorOut.model_validate(part.locator),
+        text=part.text,
+        offset=window.offset,
+        total_chars=part.total_chars,
+        has_more=more,
+        next_offset=following if more else None,
     )
