@@ -39,6 +39,18 @@ from platform_server.apps.dataset.models import DatasetRecord
 # 反扫的排序：最新在前。⚠ 第二键不能省——同一个 ts 上可以有多行（人工补录与
 # 采集各一行），只按 ts 排时两次翻页会重复或漏掉其中一行
 NEWEST_FIRST = (DatasetRecord.ts.desc(), DatasetRecord.row_id.desc())
+
+
+def _by_identity(
+    table_id: uuid.UUID, row_id: uuid.UUID
+) -> Select[tuple[DatasetRecord]]:
+    """按台账和行 id 限定候选。Args: table_id, row_id。"""
+    return select(DatasetRecord).where(
+        DatasetRecord.table_id == table_id,
+        DatasetRecord.row_id == row_id,
+    )
+
+
 OLDEST_FIRST = (DatasetRecord.ts.asc(), DatasetRecord.row_id.asc())
 # 整行扫描一条语句最多搬多少行。⚠ `statement_timeout` 把结果传回客户端的时间
 # 也算在内：一行带着三列 JSON 能有十几 KB，一条语句整搬一天的行跨网就是好几秒，
@@ -181,14 +193,32 @@ class RecordCrud(CrudBase[DatasetRecord]):
 
         Args: session, table_id, row_id, ts。
         """
-        statement = select(DatasetRecord).where(
-            DatasetRecord.table_id == table_id,
-            DatasetRecord.row_id == row_id,
-        )
+        statement = _by_identity(table_id, row_id)
         if ts is not None:
             statement = statement.where(DatasetRecord.ts == ts)
         rows = await session.execute(statement.limit(1))
         return rows.scalars().first()
+
+    async def legacy_matches(
+        self,
+        session: AsyncSession,
+        *,
+        table_id: uuid.UUID,
+        row_id: uuid.UUID,
+        millisecond: datetime | None,
+    ) -> Sequence[DatasetRecord]:
+        """取最多两个候选，供调用方识别歧义。
+
+        Args: session, table_id, row_id, millisecond。
+        """
+        statement = _by_identity(table_id, row_id)
+        if millisecond is not None:
+            end = millisecond.replace(microsecond=millisecond.microsecond + 999)
+            statement = statement.where(
+                DatasetRecord.ts.between(millisecond, end)
+            )
+        rows = await session.scalars(statement.limit(2))
+        return rows.all()
 
     async def latest(
         self, session: AsyncSession, table_id: uuid.UUID

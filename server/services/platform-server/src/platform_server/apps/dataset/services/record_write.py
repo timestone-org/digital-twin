@@ -28,6 +28,7 @@ from platform_server.apps.dataset.crud import (
 )
 from platform_server.apps.dataset.crud.table import AGGREGATE_MODE
 from platform_server.apps.dataset.errors import (
+    DatasetRecordAmbiguous,
     DatasetRecordInvalid,
     DatasetRecordNotFound,
     DatasetRecordSlotTaken,
@@ -120,6 +121,16 @@ class RecordLocator:
     table_id: uuid.UUID
     row_id: uuid.UUID
     ts: datetime | None = None
+    is_legacy: bool = False
+
+    @property
+    def is_millisecond(self) -> bool:
+        """旧查询传入的是完整毫秒。"""
+        return (
+            self.is_legacy
+            and self.ts is not None
+            and self.ts.microsecond % 1_000 == 0
+        )
 
 
 async def create_record(
@@ -293,7 +304,12 @@ async def update_record(
     values = sanitize(payload.values, columns, actor=writer.actor)
     merged = merge_values(record.values_json, values)
     overrides = merge_overrides(record.overrides_json, values)
-    stamp = record.ts if payload.ts is None else to_utc(payload.ts)
+    stamp = record.ts
+    if payload.ts is not None:
+        requested = to_utc(payload.ts)
+        # 旧表单提交原毫秒时间时保留数据库里更精确的原值。
+        if not locator.is_millisecond or requested != locator.ts:
+            stamp = requested
     _require_bucket_kept(record, stamp)
     saved = await _persist(
         session,
@@ -513,12 +529,25 @@ async def require_record(
 
     Args: session, locator。
     """
-    record = await record_crud.get_one(
-        session,
-        table_id=locator.table_id,
-        row_id=locator.row_id,
-        ts=locator.ts,
-    )
+    if locator.is_millisecond or (locator.is_legacy and locator.ts is None):
+        matches = await record_crud.legacy_matches(
+            session,
+            table_id=locator.table_id,
+            row_id=locator.row_id,
+            millisecond=locator.ts,
+        )
+        if len(matches) > 1:
+            raise DatasetRecordAmbiguous(
+                "同一时间范围内有多条数据行，请刷新后使用精确时间定位"
+            )
+        record = matches[0] if matches else None
+    else:
+        record = await record_crud.get_one(
+            session,
+            table_id=locator.table_id,
+            row_id=locator.row_id,
+            ts=locator.ts,
+        )
     if record is None:
         raise DatasetRecordNotFound("这张台账下没有这一行")
     return record

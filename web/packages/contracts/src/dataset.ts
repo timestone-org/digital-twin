@@ -249,6 +249,8 @@ export interface DatasetOverride {
 export interface DatasetRecord {
   row_id: string
   ts: string
+  /** 定位数据行的完整 UTC 时刻。旧平台只提供毫秒 ts。 */
+  locator_ts?: string | null
   /** 生效值：人工修正优先于采集与录入值。 */
   values: Record<string, unknown>
   /** 整行没有修正时是 null，不是空对象。 */

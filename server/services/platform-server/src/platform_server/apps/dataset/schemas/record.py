@@ -5,10 +5,12 @@ D4）：前端不必也不该再叠一遍 `overrides[].value`。修正前的原�
 """
 
 import uuid
+from datetime import datetime
 from typing import Annotated, Any
 
-from pydantic import Field
+from pydantic import Field, PlainSerializer
 
+from lib.utils.timeutils import to_utc
 from platform_server.apps.dataset.protocols import (
     RecomputeStatus,
     RecordSource,
@@ -25,6 +27,17 @@ from platform_server.apps.dataset.schemas.common import (
 MAX_VALUE_KEYS = 500
 # 一次批量撤销最多点名多少列
 MAX_CLEAR_KEYS = 200
+
+
+def _locator_time(value: datetime) -> str:
+    """保留行分区键的全部精度。Args: value。"""
+    return (
+        to_utc(value).isoformat(timespec="microseconds").removesuffix("+00:00")
+        + "Z"
+    )
+
+
+LocatorTime = Annotated[Utc, PlainSerializer(_locator_time, return_type=str)]
 # `:series` 一次最多问多少列
 MAX_SERIES_KEYS = 50
 # `:series` 一次最多回多少行。触顶时留下的是**最新**那批（§6.2）
@@ -54,6 +67,7 @@ class RecordOut(OutputModel):
 
     row_id: uuid.UUID
     ts: Utc
+    locator_ts: LocatorTime | None = None
     #: 生效值：人工修正优先于采集与录入值
     values: dict[str, Any]
     #: 整行没有修正时给 null 而不是空字典，前端少判一层

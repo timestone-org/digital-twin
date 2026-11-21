@@ -159,16 +159,20 @@ def get_record_locator(
     table_id: uuid.UUID,
     row_id: uuid.UUID,
     ts: Annotated[datetime | None, Query()] = None,
+    locator_ts: Annotated[
+        datetime | None, Query(description="数据行精确时间，优先于 ts")
+    ] = None,
 ) -> RecordLocator:
     """从路径与查询参数拼出一行的定位。
 
-    ⚠ `ts` 是分区键：带上直接命中 chunk，不带就是跨 chunk 扫描（§6.1）。
-    Args: table_id, row_id, ts。
+    Args: table_id, row_id, ts, locator_ts。
     """
+    stamp = locator_ts if locator_ts is not None else ts
     return RecordLocator(
         table_id=table_id,
         row_id=row_id,
-        ts=None if ts is None else to_utc(ts),
+        ts=None if stamp is None else to_utc(stamp),
+        is_legacy=locator_ts is None,
     )
 
 

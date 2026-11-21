@@ -21983,6 +21983,18 @@
             ],
             "title": "Created By Name"
           },
+          "locator_ts": {
+            "anyOf": [
+              {
+                "format": "date-time",
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Locator Ts"
+          },
           "overrides": {
             "anyOf": [
               {
@@ -33635,6 +33647,25 @@
               ],
               "title": "Ts"
             }
+          },
+          {
+            "description": "数据行精确时间，优先于 ts",
+            "in": "query",
+            "name": "locator_ts",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "format": "date-time",
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "description": "数据行精确时间，优先于 ts",
+              "title": "Locator Ts"
+            }
           }
         ],
         "responses": {
@@ -33703,6 +33734,25 @@
                 }
               ],
               "title": "Ts"
+            }
+          },
+          {
+            "description": "数据行精确时间，优先于 ts",
+            "in": "query",
+            "name": "locator_ts",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "format": "date-time",
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "description": "数据行精确时间，优先于 ts",
+              "title": "Locator Ts"
             }
           }
         ],
@@ -33784,6 +33834,25 @@
                 }
               ],
               "title": "Ts"
+            }
+          },
+          {
+            "description": "数据行精确时间，优先于 ts",
+            "in": "query",
+            "name": "locator_ts",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "format": "date-time",
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "description": "数据行精确时间，优先于 ts",
+              "title": "Locator Ts"
             }
           }
         ],
@@ -33870,6 +33939,25 @@
                 }
               ],
               "title": "Ts"
+            }
+          },
+          {
+            "description": "数据行精确时间，优先于 ts",
+            "in": "query",
+            "name": "locator_ts",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "format": "date-time",
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "description": "数据行精确时间，优先于 ts",
+              "title": "Locator Ts"
             }
           }
         ],

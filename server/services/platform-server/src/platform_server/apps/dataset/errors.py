@@ -28,6 +28,13 @@ class DatasetRecordNotFound(AppError):
     http_status = 404
 
 
+class DatasetRecordAmbiguous(AppError):
+    """行定位的时间范围内有多个候选。"""
+
+    code = 41214
+    http_status = 409
+
+
 class DatasetRecordSlotTaken(AppError):
     """按周期聚合的台账上，这个桶在查与插之间被别的写入占了。
 
