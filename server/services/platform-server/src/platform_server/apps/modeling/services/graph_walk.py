@@ -4,7 +4,7 @@
 （docs/MODELING_DESIGN.md §5.3、§6.1）。
 """
 
-from collections import deque
+from collections import defaultdict, deque
 from dataclasses import dataclass
 from typing import Any, cast
 
@@ -13,6 +13,7 @@ from pydantic import ValidationError
 from platform_server.apps.modeling.operators import (
     ColumnKeys,
     ColumnsByPort,
+    PredictionPostprocess,
     registry,
 )
 from platform_server.apps.modeling.schemas.graph import GraphNode, PipelineGraph
@@ -202,6 +203,32 @@ def _incoming_ports(
             edge.from_port,
         )
     return edges
+
+
+def prediction_path(graph: PipelineGraph, model_id: str) -> set[str]:
+    """收集模型祖先、模型本身及打分口后的连续后处理。Args: graph, model_id。"""
+    nodes = graph.node_by_id()
+    upstream: dict[str, list[str]] = defaultdict(list)
+    postprocess: dict[str, list[str]] = defaultdict(list)
+    for edge in graph.edges:
+        upstream[edge.to_node].append(edge.from_node)
+        if edge.from_port == "scored" and edge.to_port == "scored":
+            target = registry.get(nodes[edge.to_node].operator)
+            if issubclass(target, PredictionPostprocess):
+                postprocess[edge.from_node].append(edge.to_node)
+    return _reachable(upstream, model_id) | _reachable(postprocess, model_id)
+
+
+def _reachable(edges: dict[str, list[str]], start: str) -> set[str]:
+    """沿指定方向收集节点。Args: edges, start。"""
+    seen: set[str] = set()
+    pending = [start]
+    while pending:
+        node = pending.pop()
+        if node not in seen:
+            seen.add(node)
+            pending.extend(edges.get(node, ()))
+    return seen
 
 
 def topological_order(graph: PipelineGraph) -> list[str]:
