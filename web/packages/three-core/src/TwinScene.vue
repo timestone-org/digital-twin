@@ -411,8 +411,12 @@ watch(
   [() => props.config.model.asset, () => props.config.model.variant],
   () => void model.load(),
 )
-// 模型清掉时没有 refreshLayers 这一步，靠状态变化摘掉旧模型算出来的剖切面
-watch(() => model.status.value, tools.reapplyClipping)
+// 模型清掉时没有 refreshLayers 这一步，靠状态变化摘掉旧模型算出来的剖切面。
+// 成功换模仍由 onReady 重建详情；当前装载失败才关闭之前打开的弹窗。
+watch(model.status, (status) => {
+  if (status === 'error' && detail.part.value !== null) closePartDetail()
+  tools.reapplyClipping()
+})
 watch(() => props.focusView, sceneCamera.applyView)
 watch(() => props.previewNodes, refreshLayers)
 watch(() => props.previewTarget, applyTargetPreview)
