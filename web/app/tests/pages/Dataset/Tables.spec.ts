@@ -521,6 +521,40 @@ describe('两段式删除', () => {
     expect(remove).toHaveBeenLastCalledWith('t1', true)
   })
 
+  it.each([true, false])(
+    '列出跨表公式与历史，按确认结果决定强制删除 %s',
+    async (confirmed) => {
+      const remove = vi
+        .spyOn(dataset, 'deleteDatasetTable')
+        .mockRejectedValueOnce(
+          new BizError(41209, '有 1 列公式引用这张台账', 409, 'trace', [
+            {
+              field: 'records',
+              code: 'table_not_empty',
+              message: '共 9 行历史数据会被一并删除',
+            },
+            {
+              field: 'columns[plant.total]',
+              code: 'table_referenced',
+              message: '全厂汇总的总产量将无法从这张台账取数',
+            },
+          ]),
+        )
+        .mockResolvedValueOnce()
+      const wrapper = await renderWithHosts(['dataset:view', 'dataset:manage'])
+      await wrapper.find('[aria-label="删除台账"]').trigger('click')
+      await flushPromises()
+      await clickInConfirm('删除')
+
+      expect(document.body.textContent).toContain('共 9 行历史数据会被一并删除')
+      expect(document.body.textContent).toContain('全厂汇总的总产量')
+      expect(remove).toHaveBeenCalledTimes(1)
+      await clickInConfirm(confirmed ? '仍然删除' : '取消')
+      if (confirmed) expect(remove).toHaveBeenLastCalledWith('t1', true)
+      else expect(remove).toHaveBeenCalledTimes(1)
+    },
+  )
+
   it('第二段点取消就到此为止，历史一行不动', async () => {
     const remove = vi
       .spyOn(dataset, 'deleteDatasetTable')

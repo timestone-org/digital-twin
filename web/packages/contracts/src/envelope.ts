@@ -79,6 +79,8 @@ export const ERROR_CODES = {
    * 这一条问「那几条公式就此算不出数，仍然删吗」，两句话的后果完全不同。
    */
   datasetColumnInUse: 41206,
+  /** 其他台账的公式引用该表。删除确认展示受影响的列及历史数据。 */
+  datasetTableInUse: 41209,
   /** 已有历史桶回填任务，读取实际进度；不重试开始请求。 */
   datasetBackfillBusy: 41231,
   /** 取消时任务已不在运行，读取实际终态。 */

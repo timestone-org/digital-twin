@@ -63,6 +63,13 @@ class DatasetTableNotEmpty(AppError):
     http_status = 409
 
 
+class DatasetTableInUse(AppError):
+    """其他台账有公式引用这张台账。"""
+
+    code = 41209
+    http_status = 409
+
+
 class DatasetColumnInUse(AppError):
     """还有别的列的公式引用着这一列。"""
 

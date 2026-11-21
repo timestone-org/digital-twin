@@ -1,6 +1,7 @@
 """台账管理面。事务边界在这一层：crud 不提交，api 不写业务。"""
 
 import uuid
+from typing import Literal
 
 from sqlalchemy.ext.asyncio import AsyncSession
 
@@ -18,6 +19,7 @@ from platform_server.apps.dataset.crud.table import (
 )
 from platform_server.apps.dataset.errors import (
     DatasetTableCodeTaken,
+    DatasetTableInUse,
     DatasetTableNotEmpty,
     DatasetTableNotFound,
 )
@@ -133,25 +135,14 @@ async def update_table(
 async def delete_table(
     session: AsyncSession, *, table_id: uuid.UUID, is_forced: bool = False
 ) -> None:
-    """删台账。下面还有数据行时拒绝；`is_forced` 连历史一起删。
+    """删除台账及其历史行，默认检查其他表的公式引用。
 
-    ⚠ 默认不连坐历史：台账定义没了，行还在也查不出来，而删除操作本身看起来
-    完全成功。要连历史一起删就显式 `force`，界面必须在二次确认里说清这一句。
     Args: session, table_id, is_forced。
     """
-    table = await require_table(session, table_id)
+    table = await require_table(session, table_id, lock="delete")
     record_count = await record_crud.count_by_table(session, table.id)
-    if record_count > 0 and not is_forced:
-        raise DatasetTableNotEmpty(
-            f"这张台账下还有 {record_count} 行数据",
-            details=(
-                FieldError(
-                    field="records",
-                    code="table_not_empty",
-                    message=f"共 {record_count} 行历史数据会被一并删除",
-                ),
-            ),
-        )
+    if not is_forced:
+        await _check_deletion(session, table, record_count)
     _logger.info(
         "dataset_table_deleted",
         "台账已删除",
@@ -161,6 +152,39 @@ async def delete_table(
     )
     await record_crud.delete_by_table(session, table.id)
     await table_crud.delete(session, table)
+
+
+async def _check_deletion(
+    session: AsyncSession, table: DatasetTable, record_count: int
+) -> None:
+    """汇总历史与依赖影响，供第二次确认。Args: session, table, record_count。"""
+    details: list[FieldError] = []
+    if record_count:
+        details.append(
+            FieldError(
+                field="records",
+                code="table_not_empty",
+                message=f"共 {record_count} 行历史数据会被一并删除",
+            )
+        )
+    dependents = await column_crud.external_dependents_of(session, table=table)
+    if dependents:
+        details.extend(
+            FieldError(
+                field=f"columns[{owner.code}.{column.key}]",
+                code="table_referenced",
+                message=f"「{owner.name}」的「{column.name}」将无法从这张台账取数",
+            )
+            for column, owner in dependents
+        )
+        raise DatasetTableInUse(
+            f"其他台账有 {len(dependents)} 列公式引用这张台账",
+            details=tuple(details),
+        )
+    if details:
+        raise DatasetTableNotEmpty(
+            f"这张台账下还有 {record_count} 行数据", details=tuple(details)
+        )
 
 
 async def resolve_table_code(session: AsyncSession, code: str) -> uuid.UUID:
@@ -176,13 +200,22 @@ async def resolve_table_code(session: AsyncSession, code: str) -> uuid.UUID:
 
 
 async def require_table(
-    session: AsyncSession, table_id: uuid.UUID
+    session: AsyncSession,
+    table_id: uuid.UUID,
+    *,
+    lock: Literal["reference", "delete"] | None = None,
 ) -> DatasetTable:
-    """取台账，取不到即 404。
+    """取台账，按操作锁住定义至事务结束。
 
-    Args: session, table_id。
+    Args: session, table_id, lock。
     """
-    table = await table_crud.get(session, table_id)
+    table = (
+        await table_crud.get(session, table_id)
+        if lock is None
+        else await table_crud.get_locked(
+            session, table_id, is_deleting=lock == "delete"
+        )
+    )
     if table is None:
         raise DatasetTableNotFound("台账不存在")
     return table

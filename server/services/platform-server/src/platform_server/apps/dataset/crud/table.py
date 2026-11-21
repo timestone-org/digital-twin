@@ -53,6 +53,35 @@ class TableCrud(CrudBase[DatasetTable]):
         )
         return rows.scalars().first()
 
+    async def get_locked(
+        self, session: AsyncSession, table_id: uuid.UUID, *, is_deleting: bool
+    ) -> DatasetTable | None:
+        """删除独占表定义，写入方持共享键锁。
+
+        Args: session, table_id, is_deleting。
+        """
+        statement = select(DatasetTable).where(DatasetTable.id == table_id)
+        return await session.scalar(
+            statement.with_for_update(
+                read=not is_deleting, key_share=not is_deleting
+            )
+        )
+
+    async def lock_reference_codes(
+        self, session: AsyncSession, codes: set[str]
+    ) -> set[str]:
+        """锁定公式引用的表，返回等锁后仍存在的编码。
+
+        Args: session, codes。
+        """
+        rows = await session.scalars(
+            select(DatasetTable.code)
+            .where(DatasetTable.code.in_(codes))
+            .order_by(DatasetTable.code)
+            .with_for_update(read=True, key_share=True)
+        )
+        return set(rows)
+
     async def aggregating_ids(self, session: AsyncSession) -> list[uuid.UUID]:
         """按周期聚合、且没被停用的台账 id，顺序写死。
 

@@ -176,11 +176,9 @@ export async function updateDatasetTable(
 
 /**
  * 删一张台账。
- * ⚠ 台账下还有数据行时后端回 409（`datasetTableNotEmpty`）而不是静默连坐：
- * 定义没了、行还在，查不出来也删不掉，而删除操作本身看起来完全成功。
- * 要连历史一起删就显式 `isForced`，且必须在二次确认里说清这一句。
+ * 409 会列出将删除的历史行和其他台账中受影响的公式。确认后可强制删除。
  * @param tableId 台账 id
- * @param isForced 连同历史数据行一并删除
+ * @param isForced 用户已确认删除历史及中断跨表取值
  * @param key 幂等键，缺省现生成一个——两段式删除的两次调用各用各的，
  *   共用一个会让第二次拿回第一次那份 409
  */

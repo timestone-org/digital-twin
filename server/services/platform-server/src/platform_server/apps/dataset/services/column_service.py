@@ -106,7 +106,7 @@ async def create_column(
 
     Args: session, table_id, payload。
     """
-    table = await require_table(session, table_id)
+    table = await require_table(session, table_id, lock="reference")
     if await column_crud.get_by_key(session, table.id, payload.key) is not None:
         raise DatasetColumnKeyTaken(f"这张台账下已有同名列：{payload.key}")
     check_point_binding(source=payload.source, node_key=payload.node_key)
@@ -149,6 +149,7 @@ async def update_column(
 
     Args: session, table_id, column_id, payload。
     """
+    await require_table(session, table_id, lock="reference")
     column = await require_column(
         session, table_id=table_id, column_id=column_id, should_lock=True
     )
