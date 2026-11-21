@@ -342,12 +342,12 @@ async def test_a_fingerprint_mismatch_skips_instead_of_mixing_two_rulesets(
     assert episodes == []
 
 
-async def test_an_older_logic_version_skips_too(
-    db_session: AsyncSession, worker_sessions: MakerSessions
+@pytest.mark.parametrize("logic_version", [2, 5], ids=["older", "future"])
+async def test_an_incompatible_logic_version_skips(
+    db_session: AsyncSession, worker_sessions: MakerSessions, logic_version: int
 ) -> None:
-    """抽取逻辑升过版的批次同样不许往里追。"""
     room_id = await make_room(db_session, "版本")
-    await seed_batch(db_session, room_id, logic_version=LOGIC_VERSION - 1)
+    await seed_batch(db_session, room_id, logic_version=logic_version)
     run = await append_day(
         worker_sessions,
         context_for(one_startup(STARTED_AT, COMPLIED_AT)),
@@ -357,6 +357,21 @@ async def test_an_older_logic_version_skips_too(
     )
     assert run.outcome == DAILY_RUN_SKIPPED
     assert "抽取逻辑" in (run.reason or "")
+
+
+async def test_default_daily_extraction_can_continue_a_compatible_v3_batch(
+    db_session: AsyncSession, worker_sessions: MakerSessions
+) -> None:
+    room_id = await make_room(db_session, "兼容版本")
+    await seed_batch(db_session, room_id, logic_version=3)
+    run = await append_day(
+        worker_sessions,
+        context_for(one_startup(STARTED_AT, COMPLIED_AT)),
+        room_id=room_id,
+        day=DAY,
+        timezone=SHANGHAI,
+    )
+    assert run.outcome == DAILY_RUN_APPENDED
 
 
 async def test_a_manual_exclusion_survives_the_window_replace(

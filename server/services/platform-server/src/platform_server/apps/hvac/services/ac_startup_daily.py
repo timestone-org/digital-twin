@@ -34,6 +34,7 @@ from platform_server.apps.hvac.services.ac_startup_extract import (
 from platform_server.apps.hvac.services.ac_startup_rules import (
     LOGIC_VERSION,
     Episode,
+    fingerprint_logic_version,
 )
 from platform_server.apps.hvac.services.ac_startup_shards import daily_range
 from platform_server.apps.hvac.services.sessions import Sessions
@@ -188,7 +189,9 @@ def _fingerprint_mismatch(
 
     Args: batch, context。
     """
-    if batch.logic_version != LOGIC_VERSION:
+    if fingerprint_logic_version(batch.logic_version) != (
+        fingerprint_logic_version(LOGIC_VERSION)
+    ):
         return (
             f"当前批次按抽取逻辑 v{batch.logic_version} 算，"
             f"现在是 v{LOGIC_VERSION}，请先全量重算"

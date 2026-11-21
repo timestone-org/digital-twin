@@ -28,8 +28,8 @@ from platform_server.apps.hvac.services.ac_startup_rules import (
 from platform_server.apps.hvac.startups import (
     BATCH_STATUS_READY,
     OUTCOME_SET_CHANGED,
+    OUTCOME_UNASSESSED,
     OUTCOME_USABLE,
-    READ_ONLY_OUTCOME_UNASSESSED,
 )
 
 PREFIX = "/api/v1/platform"
@@ -267,21 +267,21 @@ async def test_reader_returns_a_stored_unassessed_episode(
         batch,
         minute=20,
         running_set=["K11"],
-        outcome=READ_ONLY_OUTCOME_UNASSESSED,
+        outcome=OUTCOME_UNASSESSED,
     )
     path = f"{PREFIX}/rooms/{room_id}/startup-episodes"
     listing = await app_client.get(path)
     assert listing.status_code == 200, listing.text
     assert [item["outcome"] for item in listing.json()["data"]["items"]] == [
-        READ_ONLY_OUTCOME_UNASSESSED,
+        OUTCOME_UNASSESSED,
         OUTCOME_USABLE,
     ]
     filtered = await app_client.get(
-        path, params={"outcome": READ_ONLY_OUTCOME_UNASSESSED}
+        path, params={"outcome": OUTCOME_UNASSESSED}
     )
     assert filtered.status_code == 200, filtered.text
     [found] = filtered.json()["data"]["items"]
-    assert found["outcome"] == READ_ONLY_OUTCOME_UNASSESSED
+    assert found["outcome"] == OUTCOME_UNASSESSED
     assert found["complied_at"] is None
     assert found["duration_minutes"] is None
 

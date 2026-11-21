@@ -14,12 +14,21 @@ from platform_server.apps.hvac.startups import (
     OUTCOME_DATA_GAP,
     OUTCOME_SET_CHANGED,
     OUTCOME_TIMEOUT,
+    OUTCOME_UNASSESSED,
     OUTCOME_USABLE,
 )
 
 # ⚠ 改抽取逻辑的人手动 +1，不对代码求哈希：否则一次格式化就触发全量重算提醒，
 # 很快没人理它（docs/AC_STARTUP_DESIGN.md §5）。
-LOGIC_VERSION = 3
+LOGIC_VERSION = 4
+# v4 只区分无条件事件的标签。已有模型继续使用 v3 的配置指纹。
+_FINGERPRINT_COMPATIBILITY = {4: 3}
+
+
+def fingerprint_logic_version(version: int) -> int:
+    """按明确的兼容决定选指纹版本。Args: version。"""
+    return _FINGERPRINT_COMPATIBILITY.get(version, version)
+
 
 _ONE_MINUTE = timedelta(minutes=1)
 
@@ -64,7 +73,7 @@ class ExtractionRules:
         ⚠ 字段名进指纹、且按名字排序：只把取值拼起来的话，两个参数互换取值
         会算出同一个指纹，而它们描述的是两套完全不同的规则。
         """
-        parts = [f"logic_version={LOGIC_VERSION}"]
+        parts = [f"logic_version={fingerprint_logic_version(LOGIC_VERSION)}"]
         parts.extend(
             f"{field.name}={getattr(self, field.name)}"
             for field in sorted(fields(self), key=lambda item: item.name)
@@ -115,7 +124,7 @@ def extract_episodes(
     frames: Sequence[Frame],
     *,
     rules: ExtractionRules,
-    compliance: Callable[[Frame, datetime], bool] | None = None,
+    compliance: Callable[[Frame, datetime], bool | None] | None = None,
 ) -> list[Episode]:
     """按 §3 的规则从一段按时刻升序的帧序列里抽出开机事件。
 
@@ -203,7 +212,7 @@ class _Machine:
     def __init__(
         self,
         rules: ExtractionRules,
-        compliance: Callable[[Frame, datetime], bool] | None = None,
+        compliance: Callable[[Frame, datetime], bool | None] | None = None,
     ) -> None:
         self._rules = rules
         self._compliance = compliance
@@ -308,6 +317,8 @@ class _Machine:
             if self._compliance is None
             else self._compliance(frame, episode.started_at)
         )
+        if compliant is None and self._rules.is_cold_start_required:
+            return _closed(episode, OUTCOME_UNASSESSED)
         if not compliant:
             episode.compliant_streak = 0
             episode.compliant_since = None

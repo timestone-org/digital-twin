@@ -41,8 +41,9 @@ from platform_server.apps.hvac.services.ac_compliance_service import (
 from platform_server.apps.hvac.services.ac_room_configuration import (
     BoundUnit,
     RoomConfiguration,
+    legacy_startup_assessment,
     load_configuration,
-    restore_configuration,
+    read_batch_configuration,
 )
 from platform_server.apps.hvac.services.ac_source_reader import AcSourceReader
 from platform_server.apps.hvac.services.ac_startup_extract import (
@@ -50,9 +51,12 @@ from platform_server.apps.hvac.services.ac_startup_extract import (
 )
 from platform_server.apps.hvac.services.ac_startup_rules import ExtractionRules
 from platform_server.apps.hvac.services.sessions import Sessions
+from platform_server.apps.hvac.startup_assessment import ColdStartAssessment
 from platform_server.apps.hvac.startups import (
     BATCH_RETENTION,
-    READ_OUTCOMES,
+    OUTCOME_UNASSESSED,
+    OUTCOME_USABLE,
+    OUTCOMES,
     SHARD_STATUS_DONE,
 )
 
@@ -90,17 +94,18 @@ async def list_episodes(
         outcome=filters.outcome,
         running_set=filters.running_set,
     )
+    configuration = read_batch_configuration(current)
+    assessment = legacy_startup_assessment(current, configuration)
     rows = await ac_startup_episode_crud.page_by_batch(
-        session, current.id, window=window
+        session, current.id, window=window, assessment=assessment
     )
     excluded = await ac_startup_exclusion_crud.map_by_room(session, room_id)
-    configuration = (
-        None
-        if current.configuration_snapshot is None
-        else restore_configuration(current.configuration_snapshot)
-    )
     return _to_page(
-        rows, limit=cursor.limit, excluded=excluded, configuration=configuration
+        rows,
+        limit=cursor.limit,
+        excluded=excluded,
+        configuration=configuration,
+        assessment=assessment,
     )
 
 
@@ -111,7 +116,7 @@ def parse_filters(outcome: str | None, running_set: str | None) -> EpisodePage:
     否则「K12,K11」会一条都查不到而看起来像没有数据。
     Args: outcome, running_set。
     """
-    if outcome is not None and outcome not in READ_OUTCOMES:
+    if outcome is not None and outcome not in OUTCOMES:
         raise _rejected("outcome", "结果取值不在目录内")
     serials = _parse_serials(running_set)
     return EpisodePage(limit=0, outcome=outcome, running_set=serials)
@@ -163,10 +168,11 @@ def _to_page(
     limit: int,
     excluded: dict[datetime, AcStartupExclusion],
     configuration: RoomConfiguration | None = None,
+    assessment: ColdStartAssessment | None = None,
 ) -> CursorPage[StartupEpisodeOut]:
     """多取的那一行只用来判断还有没有下一页。
 
-    Args: rows, limit, excluded。
+    Args: rows, limit, excluded, configuration, assessment。
     """
     has_more = len(rows) > limit
     visible = rows[:limit]
@@ -178,7 +184,10 @@ def _to_page(
         else None
     )
     return CursorPage[StartupEpisodeOut](
-        items=[_to_episode(row, excluded, configuration) for row in visible],
+        items=[
+            _to_episode(row, excluded, configuration, assessment)
+            for row in visible
+        ],
         next=next_cursor,
         has_more=has_more,
     )
@@ -188,18 +197,24 @@ def _to_episode(
     row: AcStartupEpisode,
     excluded: dict[datetime, AcStartupExclusion],
     configuration: RoomConfiguration | None = None,
+    assessment: ColdStartAssessment | None = None,
 ) -> StartupEpisodeOut:
     """事件行 → 对外模型，顺带套上人工排除。
 
-    Args: row, excluded。
+    Args: row, excluded, configuration, assessment。
     """
     exclusion = excluded.get(row.started_at)
+    is_unassessed = (
+        row.outcome == OUTCOME_USABLE
+        and assessment is not None
+        and not assessment.allows(row.started_at)
+    )
     return StartupEpisodeOut(
         started_at=row.started_at,
         running_set=list(row.running_set),
-        complied_at=row.complied_at,
-        duration_minutes=row.duration_minutes,
-        outcome=row.outcome,
+        complied_at=None if is_unassessed else row.complied_at,
+        duration_minutes=None if is_unassessed else row.duration_minutes,
+        outcome=OUTCOME_UNASSESSED if is_unassessed else row.outcome,
         readings=dict(row.readings),
         idle_minutes=row.idle_minutes,
         is_excluded=exclusion is not None,
@@ -296,7 +311,12 @@ async def _coverage(
     """
     if current is None:
         return []
-    rows = await ac_startup_episode_crud.coverage(session, current.id)
+    assessment = legacy_startup_assessment(
+        current, read_batch_configuration(current)
+    )
+    rows = await ac_startup_episode_crud.coverage(
+        session, current.id, assessment=assessment
+    )
     return [
         CombinationCoverageOut(running_set=running_set, usable_count=total)
         for running_set, total in rows
