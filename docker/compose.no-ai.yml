@@ -397,6 +397,7 @@ services:
       start_period: 10s
     restart: unless-stopped
 
+  # 共享桶的素材暂存到期由存储管理员合并，见 docker/README.md。
   minio-init:
     image: digitaltwin/minio-client:2025.08.13-7394ce0d
     pull_policy: build

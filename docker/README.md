@@ -375,6 +375,39 @@ worker 把 DOCX 派生为私有 PDF，浏览器优先画 PDF。关掉生成开�
 ⚠ **浏览器开麦要 HTTPS 或 localhost**，这是浏览器的安全上下文要求，与本仓无关：
 `http://` 的页面上 `getUserMedia` 根本不存在。现场部署要给边缘配 TLS。
 
+### 素材直传暂存到期
+
+MinIO 保存原始上传七天，按对象最后修改时间计算。适用前缀为
+`staging/model/`、`staging/image/`、`staging/icon/` 和 `staging/replacements/`。
+签名凭证有效 900 秒。首次确认的 `staging/confirmations/` 副本和
+`upload-claims/` 认领是中断恢复的依据，应排除在生命周期规则外。
+`models/`、`images/`、`icons/`、模型历史版本和私有知识库前缀也应排除。
+
+Linux 完整栈与无 AI 栈的 `minio-init` 负责建桶及设置匿名读取策略。生命周期由
+对象存储管理员在独占配置变更窗口执行，避免 MinIO 的整份配置更新与另一个写者互相覆盖。
+在该窗口内用配置好的 `mc` 别名与实际素材桶名替换下面的 `alias/bucket`。
+先将导出文件保留为回滚依据。如果服务明确返回 `NoSuchLifecycleConfiguration`，
+用 `{"Rules":[]}` 作为输入；认证、网络或其他失败必须先解决。
+
+```sh
+mc ilm rule export alias/bucket > lifecycle.before.json
+python3 docker/minio/merge_staging_lifecycle.py lifecycle.before.json > lifecycle.proposed.json
+```
+
+核对差异应只有缺少的到期规则，已有规则应逐条保留；如出现重叠或 ID 冲突，脚本会
+停止，需由管理员先确认既有规则。已有四条规则时 `--check` 返回成功，直接结束本次
+变更。需要新增规则时，在仍持有独占变更窗口的情况下导入并重新读取核对：
+
+```sh
+mc ilm rule import alias/bucket < lifecycle.proposed.json
+mc ilm rule export alias/bucket > lifecycle.after.json
+python3 docker/minio/merge_staging_lifecycle.py --check lifecycle.after.json
+```
+
+对比导出结果与原配置，确认其他规则仍在。MinIO 后台扫描异步执行到期；
+启用后已超过七天的匹配对象也会到期。如果素材桶已启用版本控制，这些规则只管理
+当前对象，非当前版本与删除标记的回收由对象存储管理员另行决定。
+
 ## 迁移与种子（自动）
 
 一个 `database-migrate` 作业依次调用八个服务的 Alembic 链，并执行 auth/platform

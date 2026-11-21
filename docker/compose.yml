@@ -763,6 +763,7 @@ services:
   # ⚠ `staging/` 刻意不在列：未验证的字节不许有一个本站链接。
   # ⚠ 失败即退出、不重试：桶策略配歪了要当场看见，让它悄悄重试的结果是
   # 匿名前缀没设上，而现象要等到现场大屏机取模型时才是一个 403。
+  # 共享桶的素材暂存到期由存储管理员合并，见 docker/README.md。
   minio-init:
     image: minio/mc:RELEASE.2025-04-16T18-13-26Z
     environment:

@@ -535,6 +535,11 @@ cd C:\DigitalTwin\tools\minio
 
 ⚠ **`staging/` 不许设**：未验证的字节不许有一个本站链接。
 
+素材直传的四条七天到期规则使用[同一套合并与核对流程](../docker/README.md#素材直传暂存到期)。
+在仓库根目录运行脚本，可用 `py -3 docker\minio\merge_staging_lifecycle.py`。
+Windows PowerShell 5.1 可通过 `cmd.exe /c` 使用原生重定向，以保留 `mc.exe` 导出和
+导入文件的 UTF-8 字节；生命周期变更由存储管理员在同一个独占变更窗口完成。
+
 ⚠ **`knowledge/` 也不许设**，理由不同：知识库的原件与插图落在**同一个桶**的
 `knowledge/` 前缀下，里面可能有涉密图纸。它们一律经 knowledge-server 的受管端点
 取字节（前端拿到的是 object URL，不是桶地址），匿名放开等于把整个知识库摊在
