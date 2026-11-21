@@ -5,6 +5,8 @@
 顺序断言守。
 """
 
+import asyncio
+from dataclasses import replace
 from typing import Any
 
 import pytest
@@ -121,3 +123,55 @@ async def test_hitting_the_step_ceiling_arrives_as_an_app_error() -> None:
 
     with pytest.raises(TurnStepLimitReached):
         await _drain(deps)
+
+
+async def test_model_failure_persists_only_completed_tools_once() -> None:
+    call = tool_call("kb.search", {}, "once")
+    responder = ScriptedResponder([AIMessage(content="", tool_calls=[call])])
+    saved: list[TurnOutcome] = []
+
+    async def persist(outcome: TurnOutcome) -> None:
+        saved.append(outcome)
+
+    deps = replace(_deps(responder), persist_partial=persist)
+    with pytest.raises(AssertionError, match="剧本"):
+        await _drain(deps)
+    assert len(saved) == 1
+    assert [
+        step.name for step in saved[0].steps if step.kind == "server_tool"
+    ] == ["kb.search"]
+    assert saved[0].pending == ()
+
+
+async def test_cancelling_inside_a_batch_keeps_the_completed_receipt() -> None:
+    calls = [tool_call("kb.search", {"at": at}, str(at)) for at in (1, 2)]
+    responder = ScriptedResponder([AIMessage(content="", tool_calls=calls)])
+    waiting = asyncio.Event()
+    released = asyncio.Event()
+    saved: list[TurnOutcome] = []
+
+    async def execute(_name: str, arguments: dict[str, Any]) -> object:
+        if arguments["at"] == 2:
+            waiting.set()
+            await released.wait()
+        return "已完成"
+
+    async def record(outcome: TurnOutcome) -> None:
+        saved.append(outcome)
+
+    deps = replace(_deps(responder), run_tool=execute, persist_partial=record)
+    worker = asyncio.create_task(_drain(deps))
+    try:
+        async with asyncio.timeout(5):
+            await waiting.wait()
+            worker.cancel()
+            with pytest.raises(asyncio.CancelledError):
+                await worker
+    finally:
+        released.set()
+        worker.cancel()
+        await asyncio.gather(worker, return_exceptions=True)
+    assert len(saved) == 1
+    assert [
+        step.input_json for step in saved[0].steps if step.kind == "server_tool"
+    ] == [{"at": 1}]

@@ -1,32 +1,9 @@
-"""一个回合的编排：模型 ↔ 工具，直到给出答复或停下来等浏览器。
-
-图长这样：
-
-    START → think →（没有工具调用）──────────────────→ END
-                  →（有服务端工具）→ use_tools →（还有待办）→ END
-                                              →（没有待办）→ think
-                  →（只有客户端工具）─────────────────→ END
-
-⚠ **客户端工具不在这里执行**。它们要下发到浏览器、由编辑器改那份本地草稿
-（ADR-0023）。走到那一步回合就地结束，待办随 `TurnOutcome.pending` 交出去。
-
-⚠ 服务端与客户端工具混在同一批时，**服务端那几个先就地跑完**再交出去。否则
-浏览器回来时模型手上缺半批结果——它看到的是「我问了四件事，回来两件」，
-而那通常会让它把没答的重问一遍。
-
-⚠ 服务端工具失败也必须回一条工具消息。不回的话，模型那次调用永远没有答复，
-下一轮请求会被端点判成不合法——报出来的是一条与失败原因毫无关系的 400。
-
-⚠ `StateGraph.add_node` / `.add_conditional_edges` / `.compile` 在 langgraph
-当前版本上是「部分未知类型」，pyright strict 会红。压制**全部收在
-`_build_graph` 这一个函数里**：扩散出去之后，就没人知道到底有多少地方在跟这个
-库的类型缝隙打交道了。
-"""
+"""回合编排：模型、服务端工具与浏览器待办。见 docs/adr/0037。"""
 
 import asyncio
-import json
 import operator
 from collections.abc import AsyncIterator, Awaitable, Callable, Sequence
+from contextlib import suppress
 from dataclasses import dataclass, field, replace
 from typing import Annotated, Any, TypedDict
 from uuid import uuid4
@@ -43,7 +20,6 @@ from llmcore import (
     ModelChoice,
 )
 from llmcore.deltas import text_of
-from llmcore.memory.history import sized
 from llmcore.output.tool_text import format_tool_output
 from llmcore.textcalls import salvage
 from llmcore.tools.names import restore_offered_aliases
@@ -52,9 +28,12 @@ from llmcore.tools.shapes import (
     ToolSpec,
     openai_schema,
 )
+from llmcore.turn import budget as tool_limits
+from llmcore.turn.budget import RemainingBudget, ToolBudget
 from llmcore.turn.ceiling import step_ceiling
 from llmcore.turn.exclusive import isolate_exclusive_call
 from llmcore.turn.ports import Responder
+from llmcore.turn.progress import PersistPartial, TurnProgress
 from llmcore.turn.types import (
     ClientToolCall,
     TurnDelta,
@@ -69,7 +48,7 @@ DEFAULT_MAX_STEPS = 24
 DEFAULT_MAX_TOOL_RESULT_CHARS = 20_000
 # 再挤也要给工具产出留这么多字。⚠ 回一个空壳会被模型读成「查过了，没有」，
 # 而那与「这个库里确实没这句话」分辨不出来
-MIN_TOOL_RESULT_CHARS = 400
+MIN_TOOL_RESULT_CHARS = tool_limits.MIN_TOOL_RESULT_CHARS
 
 # ⚠ 记作 `chat.turn` 而不是 `assistant.turn`：这一份被两个服务共用，写死某一家
 # 的名字会让另一家的日志谎报出处。哪个服务发的由日志信封里的 `service` 字段答
@@ -134,6 +113,16 @@ class TurnDeps:
     prepare_messages: (
         Callable[[Sequence[BaseMessage]], list[BaseMessage]] | None
     ) = None
+    remaining_tool_chars: RemainingBudget | None = None
+    persist_partial: PersistPartial | None = None
+
+    def tool_budget(self, schemas: list[dict[str, Any]]) -> ToolBudget:
+        return ToolBudget(
+            schemas,
+            self.max_context_chars,
+            self.max_tool_result_chars,
+            self.remaining_tool_chars,
+        )
 
 
 async def run_turn(deps: TurnDeps, messages: list[BaseMessage]) -> TurnOutcome:
@@ -141,10 +130,14 @@ async def run_turn(deps: TurnDeps, messages: list[BaseMessage]) -> TurnOutcome:
 
     Args: deps, messages。
     """
-    graph = _build_graph(deps)
+    progress = TurnProgress(len(messages), deps.persist_partial)
+    graph = _build_graph(deps, progress)
     seed: TurnState = {"messages": messages, "steps": [], "pending": ()}
-    with step_ceiling():
-        final = await graph.ainvoke(seed, {"recursion_limit": deps.max_steps})
+    async with progress.preserve():
+        with step_ceiling():
+            final = await graph.ainvoke(
+                seed, {"recursion_limit": deps.max_steps}
+            )
     return _outcome(final, len(messages))
 
 
@@ -178,6 +171,8 @@ async def stream_turn(
         # ⚠ 消费方半途撒手（用户按了停）时必须掐掉：不掐的话图会一直跑到自己
         # 结束，而它每一步都在花模型的钱
         worker.cancel()
+        with suppress(asyncio.CancelledError):
+            await worker
 
 
 def _pusher(queue: asyncio.Queue[TurnEvent | object]) -> DeltaSink:
@@ -225,19 +220,21 @@ async def _walk(
 
     Args: deps, messages。
     """
-    graph = _build_graph(deps)
+    progress = TurnProgress(len(messages), deps.persist_partial)
+    graph = _build_graph(deps, progress)
     seed: TurnState = {"messages": messages, "steps": [], "pending": ()}
     seen = 0
     latest: dict[str, Any] = {}
-    with step_ceiling():
-        async for state in graph.astream(  # type: ignore[reportUnknownMemberType]  # 理由：见文件头
-            seed, {"recursion_limit": deps.max_steps}, stream_mode="values"
-        ):
-            latest = dict(state)
-            steps = list(latest.get("steps") or [])
-            for step in steps[seen:]:
-                yield step
-            seen = len(steps)
+    async with progress.preserve():
+        with step_ceiling():
+            async for state in graph.astream(  # type: ignore[reportUnknownMemberType]  # 理由：见文件头
+                seed, {"recursion_limit": deps.max_steps}, stream_mode="values"
+            ):
+                latest = dict(state)
+                steps = list(latest.get("steps") or [])
+                for step in steps[seen:]:
+                    yield step
+                seen = len(steps)
     yield _outcome(latest, len(messages))
 
 
@@ -254,14 +251,14 @@ def _as_event(item: TurnEvent | object) -> TurnEvent:
     raise TypeError(f"回合里冒出了一个不认识的东西：{type(item).__name__}")
 
 
-def _build_graph(deps: TurnDeps) -> Any:
+def _build_graph(deps: TurnDeps, progress: TurnProgress) -> Any:
     """接线。本函数是与 langgraph 类型缝隙打交道的唯一一处。
 
     Args: deps。
     """
     graph = StateGraph(TurnState)
     graph.add_node(_THINK, _thinker(deps))  # type: ignore[reportUnknownMemberType]  # 理由：见文件头
-    graph.add_node(_USE_TOOLS, _tool_step(deps))  # type: ignore[reportUnknownMemberType]  # 理由：见文件头
+    graph.add_node(_USE_TOOLS, _tool_step(deps, progress))  # type: ignore[reportUnknownMemberType]  # 理由：见文件头
     graph.add_edge(START, _THINK)
     graph.add_conditional_edges(  # type: ignore[reportUnknownMemberType]  # 理由：见文件头
         _THINK, _after_think, {_USE_TOOLS: _USE_TOOLS, END: END}
@@ -281,7 +278,7 @@ def _thinker(deps: TurnDeps) -> Callable[[TurnState], Awaitable[TurnUpdate]]:
         spec.name for spec in deps.specs if spec.runs_on == "client"
     )
     schemas = [openai_schema(spec) for spec in deps.specs]
-    overhead = _overhead(schemas)
+    budget = deps.tool_budget(schemas)
     offered = frozenset(spec.name for spec in deps.specs)
     exclusive_names = frozenset(
         spec.name for spec in deps.specs if spec.is_exclusive
@@ -291,7 +288,7 @@ def _thinker(deps: TurnDeps) -> Callable[[TurnState], Awaitable[TurnUpdate]]:
         # ⚠ 没地方了这一轮就不发工具，捡回那一步也要跟着关：捡回来的调用照样
         # 会跑，于是「地方用完就收手」这条闸被绕开，上下文接着飘
         messages = _prepared(deps, state["messages"])
-        roomy = _has_room(deps, _used(messages, overhead))
+        roomy = budget.can_offer(messages)
         answered = await deps.model.respond(
             choice=deps.choice,
             messages=messages,
@@ -305,6 +302,8 @@ def _thinker(deps: TurnDeps) -> Callable[[TurnState], Awaitable[TurnUpdate]]:
             ),
             exclusive_names,
         )
+        if reply.tool_calls:
+            budget.check_batch([*messages, reply], len(reply.tool_calls))
         pending = _client_calls(reply, client_names)
         return {
             "messages": [reply],
@@ -360,6 +359,7 @@ def _salvaged(reply: AIMessage, offered: frozenset[str]) -> AIMessage:
 
 def _tool_step(
     deps: TurnDeps,
+    progress: TurnProgress,
 ) -> Callable[[TurnState], Awaitable[TurnUpdate]]:
     """造出「跑服务端工具」这个节点。
 
@@ -368,22 +368,25 @@ def _tool_step(
     client_names = frozenset(
         spec.name for spec in deps.specs if spec.runs_on == "client"
     )
-    overhead = _overhead([openai_schema(spec) for spec in deps.specs])
+    budget = deps.tool_budget([openai_schema(spec) for spec in deps.specs])
 
     async def use_tools(state: TurnState) -> TurnUpdate:
         asked = _tool_calls(state["messages"])
         outputs: list[BaseMessage] = []
         steps: list[TurnStep] = []
-        used = _used(_prepared(deps, state["messages"]), overhead)
-        for call in asked:
-            if call.name in client_names:
-                continue
+        server_calls = [call for call in asked if call.name not in client_names]
+        for index, call in enumerate(server_calls):
+            messages = _prepared(deps, [*state["messages"], *outputs])
             message, step = await _run_one(
-                deps.run_tool, call, _room(deps, used)
+                deps.run_tool,
+                call,
+                budget.share(messages, len(asked) - index),
             )
             outputs.append(message)
             steps.append(step)
-            used += sized(message)
+            progress.completed(
+                state["messages"], state["steps"], outputs, steps
+            )
         # ⚠ 不回 `pending`：上一步定下来的待办要原样留着
         return {"messages": outputs, "steps": steps}
 
@@ -407,6 +410,10 @@ async def _run_one(
     # 「这个工具失败了」之后往往能换一条路走
     except Exception as error:
         reason = f"{type(error).__name__}: {error}"
+        if len(reason) + len("失败：") > max_chars:
+            reason = "工具失败，执行结果未知；写操作请先读回核验。"[
+                : max(0, max_chars - len("失败："))
+            ]
         _logger.warning("server_tool_failed", "服务端工具失败", tool=call.name)
         return (
             ToolMessage(content=f"失败：{reason}", tool_call_id=call.call_id),
@@ -443,59 +450,6 @@ def _prepared(
         if deps.prepare_messages
         else list(messages)
     )
-
-
-def _overhead(schemas: Sequence[dict[str, Any]]) -> int:
-    """工具声明本身占多少字。
-
-    ⚠ 每一次调用都要**连工具声明一起**发出去，而它不在消息列表里。不算进去的
-    表现是：预算算得比真实宽出一大截，于是「按剩余地方收紧」这条闸看着在起
-    作用、实际每一轮都往上飘，最后还是 400（实测那台端点上，声明加提示词的
-    固定前缀就将近 2000 token）。
-
-    Args: schemas。
-    """
-    return len(json.dumps(schemas, ensure_ascii=False))
-
-
-def _used(messages: Sequence[BaseMessage], overhead: int) -> int:
-    """这一轮到此刻占了多少字，连工具声明一起。
-
-    Args: messages, overhead。
-    """
-    return overhead + sum(sized(one) for one in messages)
-
-
-def _has_room(deps: TurnDeps, used: int) -> bool:
-    """还有地方再查一次吗。
-
-    ⚠ 没地方了就**不再下发工具**，让模型拿现有资料作答。继续下发的表现是它
-    接着查、每次只拿得到几百字、而上下文仍在往上飘——最后整个回合以一句
-    「模型端点认为请求不合法」告终，用户一个字都拿不到。少答几条总比不答好。
-
-    Args: deps, used。
-    """
-    if deps.max_context_chars <= 0:
-        return True
-    return used + MIN_TOOL_RESULT_CHARS < deps.max_context_chars
-
-
-def _room(deps: TurnDeps, used: int) -> int:
-    """这一次的工具产出还剩多少地方。
-
-    ⚠ 一个回合里连查三次是常事，而每一次都在单次上限之内——顶穿窗口的是**它们
-    加起来**。按剩余地方逐次收紧之后，后面几次拿到的越来越少，模型据此收手，
-    而不是整个回合以一句「模型端点认为请求不合法」告终。
-
-    ⚠ 地方不够时也留 `MIN_TOOL_RESULT_CHARS`：回一个空壳与回一句「已截断」在
-    模型眼里是两件事，前者会被读成「查过了，没有」。
-
-    Args: deps, used（这一轮已经占掉多少字）。
-    """
-    if deps.max_context_chars <= 0:
-        return deps.max_tool_result_chars
-    left = deps.max_context_chars - used
-    return max(MIN_TOOL_RESULT_CHARS, min(deps.max_tool_result_chars, left))
 
 
 def _after_think(state: TurnState) -> str:
