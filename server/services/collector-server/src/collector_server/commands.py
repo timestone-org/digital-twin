@@ -5,23 +5,27 @@
 """
 
 import json
-from collections.abc import Mapping, Sequence
+from asyncio import get_running_loop, sleep
+from collections.abc import Mapping
 from typing import Any, Protocol, cast
 
 from redis.asyncio import Redis
 from redis.exceptions import RedisError
 
-from collectwire import (
-    BLOCK_SOCKET_MARGIN_S,
-    REPLY_PAIR_LENGTH,
-    REQUEST_KEY,
-    TRACEPARENT_KEY,
-    reply_key,
-)
+from collector_server.lease import RedisLease
+from collectwire import REQUEST_KEY, TRACEPARENT_KEY, reply_key
 from lib.errors import DependencyUnavailable
 from lib.logging import current_traceparent, get_logger
 
 _logger = get_logger("collect.commands")
+
+POLL_INTERVAL_S = 0.1
+_TAKE_SCRIPT = """
+if redis.call('GET', KEYS[1]) == ARGV[1] then
+    return redis.call('RPOP', KEYS[2])
+end
+return false
+"""
 
 
 class CommandTransport(Protocol):
@@ -39,34 +43,48 @@ class CommandTransport(Protocol):
 class RedisCommandTransport:
     """Redis list 实现。"""
 
-    def __init__(self, *, url: str, block_s: float) -> None:
+    def __init__(
+        self, *, url: str, lease: RedisLease, timeout_s: float
+    ) -> None:
         """按连接串初始化。
 
-        Args: url, block_s（一次阻塞取请求的时长）。
+        Args: url, lease, timeout_s。
         """
         # pyright: ignore 的理由 —— redis-py 的 from_url 形参标成 Unknown
         self._client: Redis = (
             Redis.from_url(  # pyright: ignore[reportUnknownMemberType]
                 url,
                 decode_responses=True,
-                socket_timeout=block_s + BLOCK_SOCKET_MARGIN_S,
-                socket_connect_timeout=block_s + BLOCK_SOCKET_MARGIN_S,
+                socket_timeout=timeout_s,
+                socket_connect_timeout=timeout_s,
             )
         )
+        self._lease = lease
 
     async def take(self, *, block_s: float) -> dict[str, Any] | None:
-        """阻塞取一条请求；这一拍内没有就给 None。
+        """在等待预算内取一条仍由本次租约持有的请求。
 
         Args: block_s。
         """
-        raw = await self._run(
-            self._client.brpop(
-                [REQUEST_KEY], timeout=block_s
-            )  # pyright: ignore[reportUnknownMemberType]
-        )
-        if raw is None:
+        loop = get_running_loop()
+        deadline = loop.time() + block_s
+        token = self._lease.token
+        if token is None:
+            await sleep(block_s)
             return None
-        return _decode(raw)
+        while token == self._lease.token and loop.time() < deadline:
+            raw: object = await self._run(
+                self._client.eval(  # pyright: ignore[reportUnknownMemberType]
+                    _TAKE_SCRIPT, 2, self._lease.key, REQUEST_KEY, token
+                )
+            )
+            if raw is not None:
+                return _decode(raw)
+            remaining_s = deadline - loop.time()
+            if remaining_s <= 0:
+                break
+            await sleep(min(POLL_INTERVAL_S, remaining_s))
+        return None
 
     async def reply(
         self, request_id: str, payload: Mapping[str, Any], *, ttl_s: int
@@ -102,22 +120,16 @@ class RedisCommandTransport:
 
 
 def _decode(raw: object) -> dict[str, Any] | None:
-    """把 BRPOP 的回包解成请求信封；解不出给 None。
+    """把 Redis 中的载荷解成请求信封；解不出给 None。
 
     ⚠ 一条坏消息不许让消费循环退出——那会让整个采集副本停止响应命令。
 
     Args: raw。
     """
-    if not isinstance(raw, list | tuple):
-        return None
-    fields = cast("Sequence[object]", raw)
-    if len(fields) < REPLY_PAIR_LENGTH:
-        return None
-    body = fields[1]
-    if not isinstance(body, str):
+    if not isinstance(raw, str):
         return None
     try:
-        decoded: object = json.loads(body)
+        decoded: object = json.loads(raw)
     except json.JSONDecodeError:
         _logger.warning(
             "command_payload_undecodable", "请求不是合法 JSON，已跳过"
