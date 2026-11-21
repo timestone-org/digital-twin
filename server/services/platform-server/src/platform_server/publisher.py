@@ -125,7 +125,7 @@ class Lane:
 
 
 class PublisherRuntime:
-    """发布循环：持租约 → 逐条链路对账 → 逐条链路推一拍。"""
+    """发布循环：持租约后，两条链路各自对账和批推。"""
 
     def __init__(
         self,
@@ -200,10 +200,12 @@ class PublisherRuntime:
             async with asyncio.timeout(self._options.tick_budget_s()):
                 if is_reconcile_due:
                     await self._refresh_knobs()
-                for lane in self._lanes:
-                    await self._run_lane(
-                        lane, is_reconcile_due=is_reconcile_due
+                await asyncio.gather(
+                    *(
+                        self._run_lane(lane, is_reconcile_due=is_reconcile_due)
+                        for lane in self._lanes
                     )
+                )
         except TimeoutError:
             self._forget_all()
             _logger.warning(

@@ -4,10 +4,12 @@
 那批数据就永远补不回来，而日志里只有一条推送失败。
 """
 
+import asyncio
 import logging
 import uuid
 from collections.abc import Mapping, Sequence
 from dataclasses import dataclass, field
+from typing import Any
 
 import pytest
 
@@ -463,3 +465,93 @@ async def test_a_tick_with_nobody_watching_asks_for_an_empty_batch() -> None:
     harness = build_harness(readings={OUTLET: reading(21.5)})
     await harness.publisher.publish_once()
     assert harness.plans.batches == [()]
+
+
+class _SlowScreens:
+    """慢屏通过信号控制，健康屏记录真实发送。"""
+
+    def __init__(self, screens: list[uuid.UUID]) -> None:
+        self.slow = {topic_of(screen) for screen in screens[:6]}
+        self.started: list[str] = []
+        self.sent: set[str] = set()
+        self.wave = asyncio.Event()
+        self.release = asyncio.Event()
+        self.in_flight = 0
+        self.peak = 0
+
+    async def publish(
+        self,
+        *,
+        topic: str,
+        items: list[dict[str, Any]],
+        traceparent: str | None = None,
+    ) -> bool:
+        assert items
+        assert traceparent
+        self.started.append(topic)
+        self.in_flight += 1
+        self.peak = max(self.peak, self.in_flight)
+        if self.in_flight == 3:
+            self.wave.set()
+        try:
+            if topic in self.slow:
+                await self.release.wait()
+            self.sent.add(topic)
+            return True
+        finally:
+            self.in_flight -= 1
+
+
+def _nine_screens() -> tuple[DashboardPublisher, list[uuid.UUID], _SlowScreens]:
+    screens = [uuid.UUID(int=i) for i in range(1, 10)]
+    harness = build_harness(readings={OUTLET: reading(21.5)})
+    harness.watch(*[(screen, screen) for screen in screens])
+    for screen in screens:
+        harness.plans.plans[screen] = plan_of(OUTLET)
+    realtime = _SlowScreens(screens)
+    harness.publisher.realtime = realtime
+    return harness.publisher, screens, realtime
+
+
+async def test_slow_screens_do_not_block_the_three_healthy_tail_screens() -> (
+    None
+):
+    publisher, screens, realtime = _nine_screens()
+    task = asyncio.create_task(publisher.publish_once())
+    try:
+        await asyncio.wait_for(realtime.wave.wait(), timeout=1)
+        realtime.release.set()
+        report = await asyncio.wait_for(task, timeout=1)
+        assert report.items == 9
+        assert {topic_of(screen) for screen in screens[-3:]} <= realtime.sent
+        assert realtime.peak == 3
+    finally:
+        if not task.done():
+            task.cancel()
+            await asyncio.gather(task, return_exceptions=True)
+
+
+async def test_cancelled_round_drains_senders_and_advances_cursor() -> None:
+    publisher, screens, realtime = _nine_screens()
+    first = asyncio.create_task(publisher.publish_once())
+    try:
+        await asyncio.wait_for(realtime.wave.wait(), timeout=1)
+    finally:
+        first.cancel()
+        await asyncio.gather(first, return_exceptions=True)
+    assert realtime.in_flight == 0
+
+    publisher.forget_all()
+    realtime.wave.clear()
+    second = asyncio.create_task(publisher.publish_once())
+    try:
+        await asyncio.wait_for(realtime.wave.wait(), timeout=1)
+        assert realtime.started[3:6] == [
+            topic_of(screen) for screen in screens[3:6]
+        ]
+        realtime.release.set()
+        await asyncio.wait_for(second, timeout=1)
+    finally:
+        if not second.done():
+            second.cancel()
+            await asyncio.gather(second, return_exceptions=True)

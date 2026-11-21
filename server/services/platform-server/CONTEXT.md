@@ -398,7 +398,7 @@ HTTP 浏览与点位写值返回明确的不支持，且不向命令总线投递
 
 ```
 publisher.py                 角色装配 + 发布循环（租约、合并窗口、对账节奏、关停）
-                             ⚠ 循环持有 Lane 元组，逐条跑并**逐条兜错**
+                             ⚠ 两条 Lane 同拍独立推进、分别兜错，共用一轮租约预算
 lease.py                     Redis 租约（⚠ 与 collector-server 同源的刻意重复）
 realtime.py                  hub 内部端点的瘦客户端 + FramePublisher/TopicRegistrar 协议
 apps/dashboard/services/     —— 大屏那条链路
