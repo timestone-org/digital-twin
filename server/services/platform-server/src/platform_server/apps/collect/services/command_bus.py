@@ -62,6 +62,11 @@ from platform_server.apps.collect.services.command_transport import (
 _logger = get_logger("platform.collect.command")
 
 _MS_PER_S = 1000
+REASON_NO_REPLY = "no_reply"
+
+
+class _CollectorNoReply(CollectorUnreachable):
+    """命令已投递，预算内未等到应答。"""
 
 
 @dataclass(frozen=True)
@@ -120,6 +125,14 @@ class AddressVerdict:
     address: str
     is_valid: bool
     detail: str | None
+
+
+@dataclass(frozen=True)
+class AddressVerification:
+    """一批寻址串的结论及未校验原因。"""
+
+    verdicts: tuple[AddressVerdict, ...] = ()
+    reason: str | None = None
 
 
 @dataclass(frozen=True)
@@ -223,15 +236,15 @@ class CommandBus:
 
     async def verify_addresses(
         self, source_id: uuid.UUID, addresses: Sequence[str]
-    ) -> tuple[AddressVerdict, ...] | None:
-        """让现场校验一批寻址串。**没结论时返回 None，不当作通过**。
+    ) -> AddressVerification:
+        """让现场校验一批寻址串，并返回未校验的原因。
 
         ⚠ 采集侧联系不上也走「没结论」这条路，不抛：保存点位不该因为采集进程
         没起来就整个失败，但用户必须看见这条寻址串还没被现场确认过。
         Args: source_id, addresses。
         """
         if not addresses:
-            return ()
+            return AddressVerification()
         try:
             outcome = await self._call(
                 action=ACTION_VALIDATE,
@@ -239,19 +252,26 @@ class CommandBus:
                 timeout_s=self.command_timeout_s,
                 fields={"addresses": list(addresses)},
             )
+        except _CollectorNoReply:
+            reason = REASON_NO_REPLY
         except CollectorUnreachable:
-            outcome = CommandOutcome(
-                is_ok=False, data={}, reason=REASON_COLLECTOR_UNREACHABLE
-            )
-        if not outcome.is_ok:
-            _logger.warning(
-                "address_check_unverified",
-                "寻址串未能在现场校验，按未校验回报",
-                source_id=str(source_id),
-                reason=outcome.reason,
-            )
-            return None
-        return tuple(_verdict(item) for item in _items(outcome.data, "results"))
+            reason = REASON_COLLECTOR_UNREACHABLE
+        else:
+            if outcome.is_ok:
+                return AddressVerification(
+                    verdicts=tuple(
+                        _verdict(item)
+                        for item in _items(outcome.data, "results")
+                    )
+                )
+            reason = outcome.reason
+        _logger.warning(
+            "address_check_unverified",
+            "寻址串未能在现场校验，按未校验回报",
+            source_id=str(source_id),
+            reason=reason,
+        )
+        return AddressVerification(reason=reason)
 
     async def write(
         self, source_id: uuid.UUID, point_code: str, value: object
@@ -279,7 +299,7 @@ class CommandBus:
         timeout_s: float,
         fields: dict[str, Any],
     ) -> CommandOutcome:
-        """发一条命令并等应答。超时也是一种结论，不抛。
+        """发一条命令并等应答，区分总线不可达和等待超时。
 
         Args: action, source_id, timeout_s, fields。
         """
@@ -308,7 +328,10 @@ class CommandBus:
                 action=action,
                 source_id=str(source_id),
             )
-            raise _unreachable_error(action, "采集侧没有在预算内答复")
+            message = "采集侧没有在预算内答复"
+            if action == ACTION_VALIDATE:
+                raise _CollectorNoReply(message)
+            raise _unreachable_error(action, message)
         return _outcome(reply)
 
 
