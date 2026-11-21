@@ -140,6 +140,7 @@ async def _run_claimed(
                     _Sinks(
                         store=options.store,
                         is_keeping_frames=claimed.is_keeping_frames,
+                        pool=options.pool,
                     ),
                 ),
             ),
@@ -272,6 +273,7 @@ class _Sinks:
 
     store: ObjectStore | None
     is_keeping_frames: bool
+    pool: NodePool | None
 
 
 async def _persist(
@@ -296,7 +298,7 @@ async def _persist(
     )
     frames = (
         await frame_export.write_all(
-            sinks.store, str(run_id), node.node_id, node.frames
+            sinks.store, str(run_id), node.node_id, node.frames, pool=sinks.pool
         )
         if sinks.is_keeping_frames
         else {}

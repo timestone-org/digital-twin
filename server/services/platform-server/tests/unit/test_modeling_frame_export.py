@@ -5,9 +5,17 @@
 （docs/MODELING_PLATFORM_DESIGN.md D12）。
 """
 
+from collections.abc import Iterator
+from concurrent.futures import ThreadPoolExecutor
+from pathlib import Path
+
+import pytest
+
+from lib.objectstore import ObjectStoreError
 from lib.testing import FakeObjectStore
 from platform_server.apps.modeling.operators import Frame, FrameColumn
 from platform_server.apps.modeling.services import frame_export
+from platform_server.apps.modeling.services.run_pool import NodePool
 
 TEMPERATURE = "温度"
 LOAD = "负荷"
@@ -65,7 +73,45 @@ def test_an_oversized_frame_is_cut_and_says_so() -> None:
     assert is_truncated is True
 
 
-async def test_writing_lands_under_the_run_prefix() -> None:
+@pytest.fixture
+def pool() -> Iterator[NodePool]:
+    opened = NodePool(factory=lambda: ThreadPoolExecutor(max_workers=1))
+    try:
+        yield opened
+    finally:
+        opened.shutdown()
+
+
+async def test_uploads_the_encoded_file_and_cleans_it(
+    pool: NodePool, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    store = FakeObjectStore()
+    upload = store.upload_from
+    paths: list[Path] = []
+
+    async def capture(key: str, path: Path, *, content_type: str) -> None:
+        paths.append(path)
+        await upload(key, path, content_type=content_type)
+
+    monkeypatch.setattr(store, "upload_from", capture)
+    frame = _frame(3)
+    written = await frame_export.write_all(
+        store, "run-1", "node-1", {"frame": frame}, pool=pool
+    )
+    [path] = paths
+    assert not path.exists()
+    key = frame_export.frame_key("run-1", "node-1", "frame")
+    payload, kept, truncated = frame_export.to_csv(frame)
+    assert await store.get_bytes(key) == payload
+    assert written["frame"] == {
+        "object_key": key,
+        "row_count": kept,
+        "size_bytes": len(payload),
+        "is_truncated": truncated,
+    }
+
+
+async def test_writing_lands_under_the_run_prefix(pool: NodePool) -> None:
     """写出去的键落在这次运行自己的前缀底下。
 
     ⚠ 保留期清理按 `modeling/runs/{run_id}/` 整片删；落在别处的 CSV 永远不会
@@ -73,7 +119,7 @@ async def test_writing_lands_under_the_run_prefix() -> None:
     """
     store = FakeObjectStore()
     written = await frame_export.write_all(
-        store, "run-1", "node-1", {"frame": _frame(3)}
+        store, "run-1", "node-1", {"frame": _frame(3)}, pool=pool
     )
     assert written["frame"]["object_key"].startswith("modeling/runs/run-1/")
     assert set(store.objects) == {
@@ -84,18 +130,38 @@ async def test_writing_lands_under_the_run_prefix() -> None:
 async def test_nothing_is_written_without_a_store() -> None:
     """没配对象存储时什么都不写，也不抛。"""
     assert (
-        await frame_export.write_all(None, "run-1", "n", {"frame": _frame(1)})
+        await frame_export.write_all(
+            None, "run-1", "n", {"frame": _frame(1)}, pool=None
+        )
         == {}
     )
 
 
-async def test_a_storage_hiccup_does_not_lose_the_other_ports() -> None:
+async def test_a_storage_hiccup_does_not_lose_the_other_ports(
+    pool: NodePool, monkeypatch: pytest.MonkeyPatch
+) -> None:
     """某个端口写不进去时，别的端口照样写完。
 
     ⚠ 全量产物是附加品：为它把一次跑通的训练判成失败是本末倒置。
     """
     store = FakeObjectStore()
+    upload = store.upload_from
+    paths: list[Path] = []
+
+    async def reject_test(key: str, path: Path, *, content_type: str) -> None:
+        paths.append(path)
+        if key.endswith(".test.csv"):
+            raise ObjectStoreError("暂不可写")
+        await upload(key, path, content_type=content_type)
+
+    monkeypatch.setattr(store, "upload_from", reject_test)
     written = await frame_export.write_all(
-        store, "run-2", "node-1", {"train": _frame(2), "test": _frame(2)}
+        store,
+        "run-2",
+        "node-1",
+        {"train": _frame(2), "test": _frame(2)},
+        pool=pool,
     )
-    assert sorted(written) == ["test", "train"]
+    assert list(written) == ["train"]
+    assert len(paths) == 2
+    assert all(not path.exists() for path in paths)
