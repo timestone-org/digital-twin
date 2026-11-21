@@ -30,6 +30,7 @@ _RUN_OPERATIONS = frozenset(
         "create_instance",
         "configure_instance",
         "train_instance",
+        "run_pipeline",
         "archive_instance",
         "restore_instance",
         "cancel_run",
@@ -56,7 +57,11 @@ class Operation:
     @property
     def scope(self) -> str:
         suffix = f".{self.resource_id}" if self.resource_id else ""
-        return f"modeling.{self.name}{suffix}"
+        # 新旧副本通过相同的账号、实体和幂等键竞争同一个数据库预约。
+        reservation = (
+            "train_instance" if self.name == "run_pipeline" else self.name
+        )
+        return f"modeling.{reservation}{suffix}"
 
     @property
     def permission(self) -> str:
@@ -72,7 +77,7 @@ class Operation:
             return 201
         if self.name in _DELETING:
             return 204
-        return 202 if self.name == "train_instance" else 200
+        return 202 if self.name in {"run_pipeline", "train_instance"} else 200
 
 
 def choose_operation(

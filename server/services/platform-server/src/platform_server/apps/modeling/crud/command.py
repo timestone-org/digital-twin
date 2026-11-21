@@ -29,6 +29,7 @@ async def reserve(
             id=candidate.id,
             account_user_id=candidate.account_user_id,
             scope=candidate.scope,
+            requested_operation=candidate.requested_operation,
             key_hash=candidate.key_hash,
             request_hash=candidate.request_hash,
             state="pending",
